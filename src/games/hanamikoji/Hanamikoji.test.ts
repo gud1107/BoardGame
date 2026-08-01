@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   GEISHAS,
+  applyAction,
   chooseCompete,
   chooseGift,
   chooseSecret,
@@ -12,24 +13,14 @@ import {
   resolveCompeteResponse,
   resolveGiftResponse,
   scoreRound,
+  seededRng,
   startRound,
   tally,
+  type EngineAction,
   type GeishaOwnership,
   type HanamikojiState,
   type ItemCard,
 } from "./engine";
-
-/** Deterministic PRNG (mulberry32) so dealing/shuffling is reproducible in tests. */
-function seededRng(seed: number) {
-  let s = seed;
-  return () => {
-    s |= 0;
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 function card(geishaId: string, n: number): ItemCard {
   return { id: `${geishaId}-${n}`, geishaId };
@@ -208,6 +199,50 @@ describe("startRound (card dealing)", () => {
     expect(state.roundStarter).toBe("p2");
     expect(state.roundNumber).toBe(3);
     expect(state.turnInRound).toBe(0);
+  });
+});
+
+describe("online-match determinism (two independent clients from one shared seed)", () => {
+  it("deals an identical hand from the same seed, regardless of call site", () => {
+    // This is the whole trick behind syncing two browsers over Realtime
+    // broadcast without transmitting the deck: both clients call
+    // startRound with the same seed and must land on bit-identical state.
+    const a = startRound(1, "p1", createInitialOwnership(), seededRng(12345));
+    const b = startRound(1, "p1", createInitialOwnership(), seededRng(12345));
+    expect(a.players.p1.hand.map((c) => c.id)).toEqual(b.players.p1.hand.map((c) => c.id));
+    expect(a.players.p2.hand.map((c) => c.id)).toEqual(b.players.p2.hand.map((c) => c.id));
+    expect(a.deck.map((c) => c.id)).toEqual(b.deck.map((c) => c.id));
+    expect(a.removedCard?.id).toBe(b.removedCard?.id);
+  });
+
+  it("deals a different hand from a different seed (sanity check against a no-op RNG)", () => {
+    const a = startRound(1, "p1", createInitialOwnership(), seededRng(1));
+    const b = startRound(1, "p1", createInitialOwnership(), seededRng(2));
+    expect(a.players.p1.hand.map((c) => c.id)).not.toEqual(b.players.p1.hand.map((c) => c.id));
+  });
+
+  it("applyAction replays identically on two independent state trees dealt from the same seed", () => {
+    let a = startRound(1, "p1", createInitialOwnership(), seededRng(777));
+    let b = startRound(1, "p1", createInitialOwnership(), seededRng(777));
+
+    // Simulate a short exchange: p1 draws + goes secret, p2 draws + trade-off.
+    const actions: EngineAction[] = [
+      { type: "draw" },
+      { type: "secret", cardId: a.players.p1.hand[0].id },
+    ];
+    for (const action of actions) {
+      a = applyAction(a, action);
+      b = applyAction(b, action);
+    }
+    expect(a).toEqual(b);
+
+    const nextRoundAction: EngineAction = { type: "next-round", seed: 999 };
+    a = { ...a, phase: "round-end" };
+    b = { ...b, phase: "round-end" };
+    a = applyAction(a, nextRoundAction);
+    b = applyAction(b, nextRoundAction);
+    expect(a.players.p1.hand.map((c) => c.id)).toEqual(b.players.p1.hand.map((c) => c.id));
+    expect(a.roundNumber).toBe(2);
   });
 });
 

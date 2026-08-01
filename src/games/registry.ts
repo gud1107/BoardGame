@@ -20,6 +20,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     tags: ["2인전용", "블러핑", "심리전"],
     playable: true,
     supportsAutoRanking: true,
+    onlineMultiplayer: true,
   },
   {
     id: "splendor",

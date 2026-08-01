@@ -69,6 +69,14 @@ export interface GameMeta {
    * player must enter final standings manually after playing.
    */
   supportsAutoRanking: boolean;
+  /**
+   * True for games that run as an online room (each participant on their
+   * own device, synced via Supabase Realtime) instead of local pass-and-play.
+   * When true, `/games/[gameId]` skips its own participant-selection step —
+   * the game component runs its own room create/join lobby and determines
+   * participant identity itself.
+   */
+  onlineMultiplayer?: boolean;
 }
 
 /**

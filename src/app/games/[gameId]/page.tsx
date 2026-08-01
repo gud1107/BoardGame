@@ -26,7 +26,9 @@ export default function GamePlayPage() {
   }, [init]);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [stage, setStage] = useState<Stage>("select");
+  // Online-multiplayer games run their own room lobby (create/join/waiting)
+  // in place of this page's local participant-selection step.
+  const [stage, setStage] = useState<Stage>(game?.onlineMultiplayer ? "playing" : "select");
   const [result, setResult] = useState<GameCompletionResult | null>(null);
 
   const min = game?.players.min ?? 2;
@@ -96,11 +98,18 @@ export default function GamePlayPage() {
     await saveGameResult({
       gameId: game!.id,
       gameName: game!.name,
-      participantIds: activeParticipants.map((p) => p.id),
+      // Rankings are always exactly who played — a more reliable source than
+      // activeParticipants, which online-multiplayer games leave empty since
+      // they resolve identity through their own room instead.
+      participantIds: res.rankings.map((r) => r.playerId),
       rankedPlayerIds: res.rankings.sort((a, b) => a.rank - b.rank).map((r) => r.playerId),
       playedAt: res.finishedAt,
       bettingSessionId: session?.id,
     });
+    // Online games own their own post-game screen (rematch/leave) inside the
+    // room; swapping this page's stage away from "playing" would unmount it
+    // mid-transition and tear the Realtime channel down before it ever shows.
+    if (game?.onlineMultiplayer) return;
     setStage(session ? "record" : "done");
   }
 

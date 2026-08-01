@@ -54,6 +54,22 @@ function buildDeck(): ItemCard[] {
   return deck;
 }
 
+/**
+ * Deterministic PRNG (mulberry32). Used so two independent clients in an
+ * online match can deal identical hands from just a shared numeric seed,
+ * instead of transmitting the whole shuffled deck.
+ */
+export function seededRng(seed: number): () => number {
+  let s = seed;
+  return () => {
+    s |= 0;
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 function shuffle<T>(arr: T[], rng: () => number = Math.random): T[] {
   const copy = [...arr];
   for (let i = copy.length - 1; i > 0; i--) {
@@ -375,4 +391,49 @@ export function tally(ownership: GeishaOwnership) {
   const p1Points = GEISHAS.filter((g) => ownership[g.id] === "p1").reduce((s, g) => s + g.value, 0);
   const p2Points = GEISHAS.filter((g) => ownership[g.id] === "p2").reduce((s, g) => s + g.value, 0);
   return { p1GeishaCount, p2GeishaCount, p1Points, p2Points };
+}
+
+/**
+ * Every state transition a player can trigger, as a serializable message —
+ * this is exactly what an online match broadcasts between the two clients.
+ * `next-round` carries its own seed (rather than defaulting to Math.random)
+ * so both clients deal the identical next hand from one shared number.
+ */
+export type EngineAction =
+  | { type: "draw" }
+  | { type: "secret"; cardId: string }
+  | { type: "tradeoff"; cardIds: [string, string] }
+  | { type: "gift"; cardIds: [string, string, string] }
+  | { type: "compete"; setA: [string, string]; setB: [string, string] }
+  | { type: "gift-response"; cardId: string }
+  | { type: "compete-response"; index: 0 | 1 }
+  | { type: "next-round"; seed: number };
+
+/** Single entry point applying any `EngineAction` to a state — the whole engine as one reducer. */
+export function applyAction(state: HanamikojiState, action: EngineAction): HanamikojiState {
+  switch (action.type) {
+    case "draw":
+      return drawCard(state);
+    case "secret":
+      return chooseSecret(state, action.cardId);
+    case "tradeoff":
+      return chooseTradeoff(state, action.cardIds);
+    case "gift":
+      return chooseGift(state, action.cardIds);
+    case "compete":
+      return chooseCompete(state, action.setA, action.setB);
+    case "gift-response":
+      return resolveGiftResponse(state, action.cardId);
+    case "compete-response":
+      return resolveCompeteResponse(state, action.index);
+    case "next-round":
+      return startRound(
+        state.roundNumber + 1,
+        other(state.roundStarter),
+        state.geishaOwnership,
+        seededRng(action.seed),
+      );
+    default:
+      return state;
+  }
 }
