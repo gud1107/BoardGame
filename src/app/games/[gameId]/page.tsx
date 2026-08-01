@@ -26,22 +26,34 @@ export default function GamePlayPage() {
   }, [init]);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [adHocNames, setAdHocNames] = useState<string[]>([]);
   const [stage, setStage] = useState<Stage>("select");
   const [result, setResult] = useState<GameCompletionResult | null>(null);
 
   const min = game?.players.min ?? 2;
   const max = game?.players.max ?? 2;
 
+  // Default ad-hoc names are pre-filled (not just placeholders) so the
+  // "게임 시작" button works immediately without typing anything — this is
+  // what actually makes it "always enabled" for fixed player-count games
+  // (min === max), where the count never changes and a placeholder-only
+  // empty array would render zero inputs.
   const [adHocCount, setAdHocCount] = useState(min);
-  const [namesForCount, setNamesForCount] = useState(adHocCount);
+  const [adHocNames, setAdHocNames] = useState<string[]>(() =>
+    Array.from({ length: min }, (_, i) => `Player ${i + 1}`),
+  );
+  const [namesForCount, setNamesForCount] = useState(min);
   if (adHocCount !== namesForCount) {
     setNamesForCount(adHocCount);
-    setAdHocNames((prev) => {
-      const next = [...prev];
-      next.length = adHocCount;
-      return next.map((n, i) => n ?? `플레이어${i + 1}`);
-    });
+    setAdHocNames((prev) => Array.from({ length: adHocCount }, (_, i) => prev[i] ?? `Player ${i + 1}`));
+  }
+
+  // When a betting session is active, default the roster selection to its
+  // first `min` participants so their nicknames drive the game immediately
+  // — still freely adjustable via the buttons below.
+  const [autoSelectedSessionId, setAutoSelectedSessionId] = useState<string | null>(null);
+  if (session && session.id !== autoSelectedSessionId && selectedIds.length === 0) {
+    setAutoSelectedSessionId(session.id);
+    setSelectedIds(session.participants.slice(0, min).map((p) => p.playerId));
   }
 
   const activeParticipants = useMemo(() => {
@@ -98,9 +110,12 @@ export default function GamePlayPage() {
   }
 
   const canSelectFromRoster = Boolean(session);
+  // Betting (roster) mode still needs a valid selection count, since it maps
+  // straight into the payout table. Free-play (ad-hoc) mode always has
+  // default names pre-filled, so its start button is always enabled.
   const selectionValid = canSelectFromRoster
     ? selectedIds.length >= min && selectedIds.length <= max
-    : activeParticipants.length >= min;
+    : true;
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">

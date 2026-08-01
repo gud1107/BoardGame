@@ -323,7 +323,17 @@ function countByGeisha(cards: ItemCard[], geishaId: string): number {
   return cards.filter((c) => c.geishaId === geishaId).length;
 }
 
-function scoreRound(state: HanamikojiState): HanamikojiState {
+/** Pure win-condition check, split out from `scoreRound` so it can be unit tested directly. */
+export function determineMatchWinner(ownership: GeishaOwnership): Owner | null {
+  const t = tally(ownership);
+  const p1Wins = t.p1GeishaCount >= 4 || t.p1Points >= 11;
+  const p2Wins = t.p2GeishaCount >= 4 || t.p2Points >= 11;
+  if (!p1Wins && !p2Wins) return null;
+  if (p1Wins && p2Wins) return t.p1Points >= t.p2Points ? "p1" : "p2";
+  return p1Wins ? "p1" : "p2";
+}
+
+export function scoreRound(state: HanamikojiState): HanamikojiState {
   // Reveal secret cards into each player's won pile.
   const p1Won = [
     ...state.players.p1.wonCards,
@@ -347,30 +357,8 @@ function scoreRound(state: HanamikojiState): HanamikojiState {
     geishaResults.push({ geishaId: geisha.id, p1Count, p2Count, winner });
   }
 
-  const p1GeishaCount = Object.values(nextOwnership).filter((o) => o === "p1").length;
-  const p2GeishaCount = Object.values(nextOwnership).filter((o) => o === "p2").length;
-  const p1Points = GEISHAS.filter((g) => nextOwnership[g.id] === "p1").reduce(
-    (s, g) => s + g.value,
-    0,
-  );
-  const p2Points = GEISHAS.filter((g) => nextOwnership[g.id] === "p2").reduce(
-    (s, g) => s + g.value,
-    0,
-  );
-
-  const p1Wins = p1GeishaCount >= 4 || p1Points >= 11;
-  const p2Wins = p2GeishaCount >= 4 || p2Points >= 11;
-
-  let matchWinner: Owner | null = null;
-  let phase: RoundPhase = "round-end";
-  if (p1Wins || p2Wins) {
-    if (p1Wins && p2Wins) {
-      matchWinner = p1Points >= p2Points ? "p1" : "p2";
-    } else {
-      matchWinner = p1Wins ? "p1" : "p2";
-    }
-    phase = "match-end";
-  }
+  const matchWinner = determineMatchWinner(nextOwnership);
+  const phase: RoundPhase = matchWinner ? "match-end" : "round-end";
 
   return {
     ...state,

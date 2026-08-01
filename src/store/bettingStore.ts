@@ -10,10 +10,14 @@ import {
 import { validatePayoutTable } from "@/lib/betting/zeroSum";
 import { computeFinalStandings, computeRoundDeltas, mergeDeltasIntoTotals } from "@/lib/betting/ledger";
 import { backupDailyRecord } from "@/lib/supabase/sync";
+import { renamePlayer } from "@/lib/db/repository";
 
 interface BettingStore {
   session: BettingSessionRecord | null;
   hydrated: boolean;
+  /** UI-only, not persisted: whether the always-available management sidebar is open. */
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
   init: () => Promise<void>;
   startSession: (
     participants: BettingParticipant[],
@@ -24,12 +28,18 @@ interface BettingStore {
     gameName: string,
     ranks: Record<string, number>,
   ) => Promise<void>;
+  /** Renames a participant mid-session. Persists immediately; also updates the player's alias history. */
+  updateParticipantName: (playerId: string, name: string) => Promise<void>;
+  /** Replaces the active session's payout table. Rejects (no-op on storage) if it isn't zero-sum. */
+  updatePayoutTable: (table: number[]) => Promise<{ ok: true } | { ok: false; error: string }>;
   endSession: () => Promise<DailyRecord | null>;
 }
 
 export const useBettingStore = create<BettingStore>((set, get) => ({
   session: null,
   hydrated: false,
+  sidebarOpen: false,
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
   init: async () => {
     if (get().hydrated) return;
@@ -88,6 +98,40 @@ export const useBettingStore = create<BettingStore>((set, get) => ({
     };
     await saveBettingSession(updated);
     set({ session: updated });
+  },
+
+  updateParticipantName: async (playerId, name) => {
+    const session = get().session;
+    const trimmed = name.trim();
+    if (!session || !trimmed) return;
+    const updated: BettingSessionRecord = {
+      ...session,
+      participants: session.participants.map((p) =>
+        p.playerId === playerId ? { ...p, name: trimmed } : p,
+      ),
+    };
+    await saveBettingSession(updated);
+    void renamePlayer(playerId, trimmed);
+    set({ session: updated });
+  },
+
+  updatePayoutTable: async (table) => {
+    const session = get().session;
+    if (!session) return { ok: false, error: "진행 중인 내기가 없습니다." };
+    if (table.length !== session.participants.length) {
+      return { ok: false, error: "참가자 수와 순위표 항목 수가 일치해야 합니다." };
+    }
+    const check = validatePayoutTable(table);
+    if (!check.valid) {
+      return {
+        ok: false,
+        error: `상금/벌금 합계가 0원이어야 합니다. (현재 합계: ${check.sum.toLocaleString()}원)`,
+      };
+    }
+    const updated: BettingSessionRecord = { ...session, payoutTable: table };
+    await saveBettingSession(updated);
+    set({ session: updated });
+    return { ok: true };
   },
 
   endSession: async () => {
