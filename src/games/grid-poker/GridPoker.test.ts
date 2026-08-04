@@ -78,6 +78,46 @@ describe("evaluateHand", () => {
     expect(hand.ranks).toEqual([14]);
     expect(hand.cards.every((c) => c.suit === "S")).toBe(true);
   });
+
+  it("labels an ace-high straight flush as a royal flush, distinct from a plain straight flush", () => {
+    const royal = evaluateHand([std(14, "S"), std(13, "S"), std(12, "S"), std(11, "S"), std(10, "S")]);
+    expect(royal.categoryName).toBe("로열 스트레이트 플러시");
+    const plain = evaluateHand([std(9, "H"), std(8, "H"), std(7, "H"), std(6, "H"), std(5, "H")]);
+    expect(plain.categoryName).toBe("스트레이트 플러시");
+    // Still the same category number — ranks alone already rank royal above
+    // any other straight flush, no separate tier number is needed.
+    expect(royal.category).toBe(plain.category);
+    expect(compareHands(royal, plain)).toBeGreaterThan(0);
+  });
+
+  it("when a flush isn't the winning category, jokers still pick the suit that maximizes the final tiebreak instead of blindly matching the fixed cards' suit", () => {
+    // 9D, 2D fixed (same suit) + three jokers. The straight/flush a diamond
+    // suit could reach (2 and 9 are too far apart for a straight, and a
+    // 9-2-x-x-x diamond flush is only category 5) loses to four-of-a-kind
+    // nines (category 7, made from the fixed 9D plus three wild 9s) — so the
+    // wilds should resolve as spades (best tiebreak suit) rather than being
+    // forced into diamonds just because the two fixed cards happen to share
+    // a suit.
+    const hand = evaluateHand([
+      std(9, "D"),
+      std(2, "D"),
+      joker("j1"),
+      joker("j2"),
+      joker("j3"),
+    ]);
+    expect(hand.category).toBe(7);
+    expect(hand.ranks).toEqual([9, 2]);
+    const jokerCards = hand.cards.filter((c) => c.fromJoker);
+    expect(jokerCards).toHaveLength(3);
+    expect(jokerCards.every((c) => c.suit === "S")).toBe(true);
+    expect(hand.topSuitValue).toBe(4); // spade, not the fixed cards' diamond (3)
+
+    // Cross-check against an opponent who legitimately holds four diamond
+    // nines (no jokers involved): the joker-built quad's spade-resolved
+    // nines must outrank the all-diamond quad on the final suit tiebreak.
+    const allDiamondQuad = evaluateHand([std(9, "D"), std(9, "D", "9D-2"), std(9, "D", "9D-3"), std(9, "D", "9D-4"), std(2, "D")]);
+    expect(compareHands(hand, allDiamondQuad)).toBeGreaterThan(0);
+  });
 });
 
 describe("compareHands", () => {

@@ -405,10 +405,20 @@ function rankCombos(n: number): number[][] {
  * Best achievable 5-card poker hand from a line's cards, treating Jokers as
  * fully wild (any rank, any suit). Brute-forces every rank assignment for
  * the wild cards (cheap: at most 13^5 combos, and realistically 0-1 wilds
- * per line), and for each, fills the wilds' suit to complete a flush when
- * the fixed cards' suits allow one — otherwise defaults to spades, which is
- * both harmless (suit only matters for flush/straight-flush category or the
- * final tiebreaker) and optimal for that tiebreaker.
+ * per line), and for each, tries every *uniform* suit assignment for the
+ * wilds that could possibly be optimal: the suit that completes a flush
+ * (when the fixed cards' suits allow one) AND spades (the suit-value
+ * maximizer used whenever no flush is in play). Trying only the
+ * flush-completing suit is not enough — when a non-flush category (e.g.
+ * four of a kind) turns out to beat any flush the wilds could reach, the
+ * wild cards' suit no longer needs to match the fixed cards at all, and
+ * spades yields a strictly better final suit-tiebreak than reusing the
+ * fixed suit would. Both candidates are always safe to compare: mixing
+ * suits within a single wild assignment is never better than one of these
+ * two uniform choices, since a flush/straight-flush needs every card
+ * (including every wild) to share one suit to register at all, while the
+ * suit of any wild that isn't part of the hand's top rank never affects
+ * the outcome either way.
  */
 export function evaluateHand(cards: Card[]): HandResult {
   const fixed: { rank: number; suit: Suit }[] = [];
@@ -422,7 +432,7 @@ export function evaluateHand(cards: Card[]): HandResult {
   const flushAchievable = fixedSuits.length <= 1;
   const candidateSuits: Suit[] = flushAchievable
     ? fixedSuits.length === 1
-      ? [fixedSuits[0]]
+      ? Array.from(new Set<Suit>([fixedSuits[0], "S"]))
       : SUITS
     : ["S"];
 
@@ -443,9 +453,17 @@ export function evaluateHand(cards: Card[]): HandResult {
 
   const result = best!;
   const fixedCount = fixed.length;
+  // Royal flush (로티플) is the ace-high case of straight-flush (category 8) —
+  // it already outranks every other straight flush via the rank tiebreak
+  // (ranks=[14] beats any lower straightHigh), so no separate category
+  // number is needed for correct comparisons. But the spec names it as its
+  // own distinct tier (로티플 > 스티플), and the UI surfaces `categoryName`
+  // directly to players, so give it its own label here.
+  const categoryName =
+    result.category === 8 && result.ranks[0] === 14 ? "로열 스트레이트 플러시" : CATEGORY_NAMES[result.category];
   return {
     category: result.category,
-    categoryName: CATEGORY_NAMES[result.category],
+    categoryName,
     ranks: result.ranks,
     topSuitValue: result.topSuitValue,
     // bestCards is always built as [...fixed, ...resolvedWilds], in that order.
