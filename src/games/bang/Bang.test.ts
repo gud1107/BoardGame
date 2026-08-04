@@ -342,6 +342,24 @@ describe("end-turn", () => {
     expect(accepted.players[0].hand.length).toBe(5);
   });
 
+  it("does NOT block playing cards mid-turn just because the hand already exceeds the life limit — the limit is only checked when actually ending the turn (regression: the UI used to force discard-only mode the instant hand > life, before any card could be played)", () => {
+    const state = makeState({
+      players: [
+        makePlayer(0, "sheriff", {
+          life: 2,
+          hand: [card("beer", "a"), card("bang", "b"), card("bang", "c"), card("bang", "d")],
+        }),
+        makePlayer(1, "outlaw"),
+        makePlayer(2, "outlaw"),
+        makePlayer(3, "renegade"),
+      ],
+    });
+    expect(state.players[0].hand.length).toBeGreaterThan(state.players[0].life); // set up: already over the limit
+    const next = applyAction(state, { type: "play-beer", cardId: "a" });
+    expect(next.players[0].hand.some((c) => c.id === "a")).toBe(false); // card was actually played
+    expect(next.players[0].life).toBe(3);
+  });
+
   it("advances to the next living seat, skipping the dead, and increments turnNumber", () => {
     const state = makeState({
       players: [

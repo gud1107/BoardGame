@@ -264,6 +264,13 @@ export default function BangBoard({ state, viewerSeat, names, connectedSeats, on
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [discardSelection, setDiscardSelection] = useState<string[]>([]);
+  // Only true once the viewer has actually chosen to end their turn while
+  // over the hand limit — the real rule discards down to life *at end of
+  // turn*, not throughout the whole action phase. Gating on hand-size alone
+  // (regardless of this flag) used to force discard-only mode the instant a
+  // low-life player drew back up over their limit, before they could play
+  // anything at all. See BangBoard bug write-up in HANDOFF.md.
+  const [discarding, setDiscarding] = useState(false);
 
   const viewer = state.players[viewerSeat];
   const myTurn = state.turnSeat === viewerSeat;
@@ -295,21 +302,37 @@ export default function BangBoard({ state, viewerSeat, names, connectedSeats, on
   }
 
   const hand = viewer.hand;
-  const mustDiscard = state.turnPhase === "action" && myTurn && hand.length > viewer.life;
+  const overHandLimit = state.turnPhase === "action" && myTurn && hand.length > viewer.life;
   const excessCount = Math.max(0, hand.length - viewer.life);
 
   function toggleDiscard(cardId: string) {
     setDiscardSelection((prev) => (prev.includes(cardId) ? prev.filter((id) => id !== cardId) : prev.length < excessCount ? [...prev, cardId] : prev));
   }
 
-  function confirmEndTurn() {
+  // Entry point for the "턴 종료" button: only the *attempt* to end turn should
+  // ever require discarding down to the hand limit — playing cards during the
+  // action phase must stay available even while over the limit (the player
+  // may well play their way back under it instead of discarding).
+  function requestEndTurn() {
+    if (overHandLimit) {
+      setDiscarding(true);
+      setDiscardSelection([]);
+      resetSelection();
+      return;
+    }
     onAction({ type: "end-turn", discardCardIds: [] });
     setDiscardSelection([]);
     resetSelection();
   }
 
+  function cancelDiscard() {
+    setDiscarding(false);
+    setDiscardSelection([]);
+  }
+
   function confirmDiscardAndEndTurn() {
     onAction({ type: "end-turn", discardCardIds: discardSelection });
+    setDiscarding(false);
     setDiscardSelection([]);
     resetSelection();
   }
@@ -485,21 +508,33 @@ export default function BangBoard({ state, viewerSeat, names, connectedSeats, on
             >
               턴 시작 (다이너마이트/감옥 확인 · 카드 뽑기)
             </button>
-          ) : mustDiscard ? (
+          ) : discarding && overHandLimit ? (
             <div className="flex flex-col gap-2">
               <p className="text-xs text-amber-100/70">
                 체력({viewer.life})보다 카드가 많아요. {excessCount}장을 버리세요. ({discardSelection.length}/{excessCount} 선택됨)
               </p>
-              <button
-                disabled={discardSelection.length !== excessCount}
-                onClick={confirmDiscardAndEndTurn}
-                className="w-full rounded-xl bg-rose-600 py-2 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
-              >
-                선택한 카드 버리고 턴 종료
-              </button>
+              <div className="flex gap-2">
+                <button
+                  disabled={discardSelection.length !== excessCount}
+                  onClick={confirmDiscardAndEndTurn}
+                  className="flex-1 rounded-xl bg-rose-600 py-2 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+                >
+                  선택한 카드 버리고 턴 종료
+                </button>
+                <button
+                  onClick={cancelDiscard}
+                  className="rounded-xl border border-white/15 px-3 py-2 text-sm text-white/70 transition hover:border-white/30"
+                >
+                  취소
+                </button>
+              </div>
             </div>
           ) : (
-            <p className="text-xs text-amber-100/60">카드를 내거나, 턴을 종료하세요.</p>
+            <p className="text-xs text-amber-100/60">
+              {overHandLimit
+                ? `카드를 내거나, 턴을 종료하세요. (턴 종료 시 ${excessCount}장을 버려야 해요)`
+                : "카드를 내거나, 턴을 종료하세요."}
+            </p>
           )}
         </div>
       )}
@@ -532,7 +567,7 @@ export default function BangBoard({ state, viewerSeat, names, connectedSeats, on
         <div className="flex justify-center pt-2">
           {hand.map((c, i) => {
             const interactive = myTurn && state.turnPhase === "action" && !pending;
-            const inDiscardMode = mustDiscard;
+            const inDiscardMode = discarding && overHandLimit;
             const isSelectedToPlay = selectedCardId === c.id;
             const isSelectedToDiscard = discardSelection.includes(c.id);
             return (
@@ -553,12 +588,12 @@ export default function BangBoard({ state, viewerSeat, names, connectedSeats, on
             );
           })}
         </div>
-        {!mustDiscard && myTurn && state.turnPhase === "action" && !pending && (
+        {!(discarding && overHandLimit) && myTurn && state.turnPhase === "action" && !pending && (
           <button
-            onClick={confirmEndTurn}
+            onClick={requestEndTurn}
             className="mt-3 w-full rounded-xl border border-white/15 py-2 text-sm text-white/70 transition hover:border-white/30"
           >
-            턴 종료
+            턴 종료{overHandLimit ? ` (버릴 카드 선택 필요: ${excessCount}장)` : ""}
           </button>
         )}
       </div>
