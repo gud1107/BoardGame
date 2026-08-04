@@ -59,16 +59,23 @@ const GEISHA_STYLE: Record<string, { grad: string; text: string }> = {
 };
 
 const ACTION_LABEL: Record<ActionType, { label: string; desc: string; count: number }> = {
-  secret: { label: "비밀", desc: "카드 1장을 숨깁니다 (라운드 종료 시 공개)", count: 1 },
-  tradeoff: { label: "거래", desc: "카드 2장을 버립니다 (이번 라운드엔 집계되지 않음)", count: 2 },
+  secret: { label: "밀서", desc: "카드 1장을 숨깁니다 (라운드 종료 시 공개)", count: 1 },
+  tradeoff: { label: "제거", desc: "카드 2장을 제거합니다 (이번 라운드엔 집계되지 않음)", count: 2 },
   gift: { label: "선물", desc: "카드 3장을 보여주면 상대가 1장을 가져갑니다", count: 3 },
   compete: { label: "경쟁", desc: "카드 4장을 눌러 2장씩 A·B 두 묶음으로 나누면 상대가 1세트를 가져갑니다", count: 4 },
 };
 
-// A physical lacquerware table panel, reused across every screen of the
-// board so the "playing" and end-of-round states feel like one table.
+const ACTION_ICON: Record<ActionType, string> = {
+  secret: "🤫",
+  tradeoff: "❌",
+  gift: "🎁",
+  compete: "⚔️",
+};
+
+// A dark charcoal table panel, reused across every screen of the board so
+// the "playing" and end-of-round states feel like one table.
 const TABLE_PANEL =
-  "relative overflow-hidden rounded-3xl border border-black/50 bg-gradient-to-b from-[#241019] via-[#170a10] to-[#0c0509] shadow-[0_0_50px_-18px_rgba(244,63,94,0.35)]";
+  "relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-[#1c1c1e] via-[#121214] to-[#050506] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
 
 function TableTexture() {
   return (
@@ -146,9 +153,27 @@ function fanStyle(index: number, total: number, overlapPx: number): CSSPropertie
   };
 }
 
+/** The small "win marker" chip that sits above a geisha tile, showing who currently leads the public count for her. */
+function GeishaMarker({ p1Count, p2Count, owner }: { p1Count: number; p2Count: number; owner: Owner | null }) {
+  const leader: Owner | null = owner ?? (p1Count > p2Count ? "p1" : p2Count > p1Count ? "p2" : null);
+  return (
+    <div
+      className={`flex h-5 min-w-[38px] items-center justify-center gap-1 rounded-md border px-1 text-[9px] font-bold sm:h-6 sm:min-w-[42px] sm:text-[10px] ${
+        leader === "p1"
+          ? "border-rose-400/70 bg-rose-500/20 text-rose-200"
+          : leader === "p2"
+            ? "border-sky-400/70 bg-sky-500/20 text-sky-200"
+            : "border-white/10 bg-white/5 text-white/30"
+      }`}
+    >
+      {owner ? "👑" : leader ? `${leader === "p1" ? "P1" : "P2"} ${leader === "p1" ? p1Count : p2Count}` : "–"}
+    </div>
+  );
+}
+
 function GeishaBoard({ state, names }: { state: HanamikojiState; names: Record<Owner, string> }) {
   return (
-    <div className="flex flex-wrap justify-center gap-2 pb-1">
+    <div className="flex justify-center gap-1.5 overflow-x-auto pb-1 sm:gap-2.5">
       {GEISHAS.map((g) => {
         const owner = state.geishaOwnership[g.id];
         const style = GEISHA_STYLE[g.id];
@@ -156,29 +181,69 @@ function GeishaBoard({ state, names }: { state: HanamikojiState; names: Record<O
         const p2Public = state.players.p2.wonCards.filter((c) => c.geishaId === g.id).length;
         const ownerLabel = owner ? `현재 ${names[owner]}님이 확보했습니다.` : "아직 아무도 확보하지 못했습니다.";
         return (
-          <Tooltip key={g.id} text={`${g.name} · 호감도 ${g.value}점. ${ownerLabel}`}>
-            <div
-              className={`relative flex min-w-[66px] flex-col items-center gap-0.5 rounded-2xl border-2 bg-gradient-to-b p-2 shadow-[0_3px_8px_rgba(0,0,0,0.45)] ${style.grad} ${
-                owner === "p1"
-                  ? "border-rose-300 ring-2 ring-rose-400/70"
-                  : owner === "p2"
-                    ? "border-sky-300 ring-2 ring-sky-400/70"
-                    : "border-white/40"
-              }`}
-            >
-              {owner && <span className="absolute -top-2.5 -right-2 text-sm">👑</span>}
-              <span className="text-xl drop-shadow-sm">{GEISHA_EMOJI[g.id]}</span>
-              <span className={`text-xs font-semibold ${style.text}`}>{g.name}</span>
-              <span className={`text-[10px] ${style.text} opacity-80`}>호감 {g.value}</span>
-              <div className="mt-0.5 flex items-center gap-1 rounded-full bg-black/40 px-1.5 py-0.5 text-[10px]">
-                <span className="text-rose-200">P1 {p1Public}</span>
-                <span className="text-white/40">·</span>
-                <span className="text-sky-200">P2 {p2Public}</span>
+          <div key={g.id} className="flex shrink-0 flex-col items-center gap-1">
+            <Tooltip text={`공개된 카드: P1 ${p1Public}장 · P2 ${p2Public}장. ${ownerLabel}`}>
+              <GeishaMarker p1Count={p1Public} p2Count={p2Public} owner={owner} />
+            </Tooltip>
+            <Tooltip text={`${g.name} · 호감도 ${g.value}점. ${ownerLabel}`}>
+              <div
+                className={`relative flex w-[50px] flex-col items-center gap-0.5 rounded-xl border-2 bg-gradient-to-b p-1.5 shadow-[0_3px_8px_rgba(0,0,0,0.45)] sm:w-[66px] sm:p-2 ${style.grad} ${
+                  owner === "p1"
+                    ? "border-rose-300 ring-2 ring-rose-400/70"
+                    : owner === "p2"
+                      ? "border-sky-300 ring-2 ring-sky-400/70"
+                      : "border-white/40"
+                }`}
+              >
+                <span className={`absolute left-1 top-1 text-[8px] font-bold sm:text-[9px] ${style.text}`}>
+                  {g.value}
+                </span>
+                <span className="text-lg drop-shadow-sm sm:text-xl">{GEISHA_EMOJI[g.id]}</span>
+                <span className={`text-[9px] font-semibold sm:text-xs ${style.text}`}>{g.name}</span>
               </div>
-            </div>
-          </Tooltip>
+            </Tooltip>
+          </div>
         );
       })}
+    </div>
+  );
+}
+
+/** One of the four action tiles below the geisha row — icon + label, highlighted while selected. */
+function ActionTile({
+  type,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  type: ActionType;
+  selected: boolean;
+  disabled: boolean;
+  onSelect: () => void;
+}) {
+  const meta = ACTION_LABEL[type];
+  return (
+    <div className="relative flex flex-col items-center">
+      {selected && (
+        <span className="absolute -top-6 whitespace-nowrap rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-black shadow-md">
+          {meta.label} 선택됨
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={onSelect}
+        disabled={disabled}
+        className={`flex h-14 w-14 flex-col items-center justify-center gap-0.5 rounded-xl border-2 text-[10px] font-semibold transition sm:h-16 sm:w-16 ${
+          disabled
+            ? "cursor-not-allowed border-white/5 bg-white/[0.03] text-white/20"
+            : selected
+              ? "scale-105 border-amber-300 bg-amber-400/20 text-amber-100 shadow-[0_0_0_3px_rgba(251,191,36,0.35)]"
+              : "border-white/15 bg-white/5 text-white/70 hover:border-white/30 hover:bg-white/10"
+        }`}
+      >
+        <span className="text-lg sm:text-xl">{ACTION_ICON[type]}</span>
+        <span>{meta.label}</span>
+      </button>
     </div>
   );
 }
@@ -355,9 +420,9 @@ export default function HanamikojiBoard({
 
         {connectionBanner}
 
-        <GeishaBoard state={state} names={names} />
-
-        {/* Opponent's hand: count-only, face-down, fanned like a real hand of cards. */}
+        {/* Opponent's side of the table: count-only face-down hand + which
+            actions they've already spent this round, both up top since
+            that's "across the table" from the viewer. */}
         <div>
           <p className="mb-1 text-center text-xs text-white/50">
             {names[opponentRole]} (상대) · {opponentHandCount}장
@@ -369,7 +434,41 @@ export default function HanamikojiBoard({
               </div>
             ))}
           </div>
+          <div className="mt-1.5 flex justify-center gap-1">
+            {ACTION_TYPES.map((a) => {
+              const used = state.players[opponentRole].actionsUsed.includes(a);
+              return (
+                <span
+                  key={a}
+                  className={`flex h-5 w-5 items-center justify-center rounded-md border text-[10px] ${
+                    used ? "border-white/5 bg-white/[0.03] text-white/15" : "border-white/15 bg-white/5 text-white/50"
+                  }`}
+                >
+                  {ACTION_ICON[a]}
+                </span>
+              );
+            })}
+          </div>
         </div>
+
+        <GeishaBoard state={state} names={names} />
+
+        {/* My action tiles: the four action markers, always shown, greyed
+            out once spent for the round. Selecting one is the only way to
+            start choosing cards below. */}
+        {myTurn && state.phase === "awaiting-action" && (
+          <div className="flex justify-center gap-3 pt-6 sm:gap-4">
+            {ACTION_TYPES.map((a) => (
+              <ActionTile
+                key={a}
+                type={a}
+                selected={selectedAction === a}
+                disabled={!available.includes(a)}
+                onSelect={() => selectAction(a)}
+              />
+            ))}
+          </div>
+        )}
 
         {state.phase === "awaiting-response" && state.pendingOffer && responder ? (
           iAmResponder ? (
@@ -440,46 +539,29 @@ export default function HanamikojiBoard({
               >
                 카드 뽑기
               </button>
-            ) : (
-              <>
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {available.map((a) => (
-                    <button
-                      key={a}
-                      onClick={() => selectAction(a)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                        selectedAction === a
-                          ? "border-rose-400 bg-rose-500/30 text-white"
-                          : "border-white/15 text-white/70 hover:border-white/30"
-                      }`}
-                    >
-                      {ACTION_LABEL[a].label}
-                    </button>
-                  ))}
-                </div>
-                {selectedAction && (
-                  <p className="mb-3 text-xs text-white/50">
-                    {ACTION_LABEL[selectedAction].desc}
-                    {selectedAction === "compete" ? (
-                      <>
-                        {" · "}
-                        <span className={competeGroupA.length === 2 ? "text-rose-300" : "text-white/50"}>
-                          묶음 A {competeGroupA.length}/2
-                        </span>
-                        {" · "}
-                        <span className={competeGroupB.length === 2 ? "text-sky-300" : "text-white/50"}>
-                          묶음 B {competeGroupB.length}/2
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        {" · "}
-                        {selectedCardIds.length}/{ACTION_LABEL[selectedAction].count} 선택됨
-                      </>
-                    )}
-                  </p>
+            ) : selectedAction ? (
+              <p className="text-xs text-white/50">
+                {ACTION_LABEL[selectedAction].desc}
+                {selectedAction === "compete" ? (
+                  <>
+                    {" · "}
+                    <span className={competeGroupA.length === 2 ? "text-rose-300" : "text-white/50"}>
+                      묶음 A {competeGroupA.length}/2
+                    </span>
+                    {" · "}
+                    <span className={competeGroupB.length === 2 ? "text-sky-300" : "text-white/50"}>
+                      묶음 B {competeGroupB.length}/2
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    {" · "}
+                    {selectedCardIds.length}/{ACTION_LABEL[selectedAction].count} 선택됨
+                  </>
                 )}
-              </>
+              </p>
+            ) : (
+              <p className="text-xs text-white/40">위에서 행동을 선택하세요.</p>
             )}
           </div>
         )}
@@ -502,7 +584,11 @@ export default function HanamikojiBoard({
                     disabled={!interactive}
                     onClick={() => (selectedAction === "compete" ? toggleCompeteCard(card.id) : toggleCard(card.id))}
                     className={`relative block rounded-xl transition ${
-                      isSelected ? "-translate-y-3" : interactive ? "hover:-translate-y-1.5" : ""
+                      isSelected
+                        ? "-translate-y-3 ring-2 ring-amber-300 ring-offset-2 ring-offset-transparent"
+                        : interactive
+                          ? "hover:-translate-y-1.5"
+                          : ""
                     } ${!interactive ? "opacity-90" : ""}`}
                   >
                     <CardChip card={card} badge={competeBadge} />
@@ -512,13 +598,22 @@ export default function HanamikojiBoard({
             })}
           </div>
           {myTurn && state.phase === "awaiting-action" && selectedAction && (
-            <button
-              disabled={confirmDisabled}
-              onClick={confirmAction}
-              className="mt-3 w-full rounded-xl bg-emerald-500 py-3 font-medium text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
-            >
-              {selectedAction === "compete" ? "2장씩 나눠 제시하기" : "확정"}
-            </button>
+            <>
+              <button
+                disabled={confirmDisabled}
+                onClick={confirmAction}
+                className="mt-3 w-full rounded-xl bg-emerald-500 py-3 font-medium text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+              >
+                {selectedAction === "compete" ? "2장씩 나눠 제시하기" : "확정"}
+              </button>
+              {confirmDisabled && (
+                <p className="mt-1.5 text-center text-[11px] text-white/40">
+                  {selectedAction === "compete"
+                    ? "카드 4장을 눌러 2장씩 A·B 묶음을 채우면 제출할 수 있어요."
+                    : `카드를 ${ACTION_LABEL[selectedAction].count}장 선택하면 제출할 수 있어요.`}
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>
