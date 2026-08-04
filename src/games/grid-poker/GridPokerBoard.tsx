@@ -6,6 +6,7 @@ import { CardChip } from "./cardDisplay";
 import {
   BOARD_SIZE,
   LINES,
+  evaluateHand,
   opponentLiveCell,
   visibleOpponentBoard,
   type EngineAction,
@@ -181,6 +182,10 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
             {LINES.map((cells, lineIndex) => {
               const used = viewer.usedLines[lineIndex];
               const cards = cells.map((c) => viewer.board[c]!);
+              // Every cell in the line is filled by this point (submitting
+              // only starts once the whole board is full), so the hand for
+              // an unused line is always fully resolved and safe to preview.
+              const hand = evaluateHand(cards);
               return (
                 <button
                   key={lineIndex}
@@ -200,6 +205,10 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
                       <CardChip key={c.id} card={c} size="sm" />
                     ))}
                   </div>
+                  <span className="text-[10px] font-semibold text-emerald-300">
+                    {hand.categoryName}
+                    <span className="ml-1 font-normal text-white/40">({hand.category + 1}/9)</span>
+                  </span>
                 </button>
               );
             })}
