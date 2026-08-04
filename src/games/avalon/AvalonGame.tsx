@@ -74,6 +74,14 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
   const playerCountRef = useRef(targetPlayerCount);
   const isHost = intent === "create";
 
+  // Kept in sync so the `state-request` broadcast handler (registered once,
+  // inside the channel-setup effect below) always sees the latest state
+  // instead of the stale value it would otherwise close over.
+  const gameStateRef = useRef<AvalonState | null>(null);
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
   function enterRoom() {
     setFormError(null);
     if (!getSupabase()) {
@@ -118,6 +126,26 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
 
+    // A client that (re)joins after the game already started never saw the
+    // one-time `game-start` broadcast, so it would otherwise sit on the
+    // waiting screen forever even though the game is live. Any peer that
+    // already has state answers with a full snapshot; the requester adopts
+    // it directly instead of replaying `startGame` (which would require the
+    // original seed and re-derive the same thing anyway).
+    channel.on("broadcast", { event: "state-request" }, () => {
+      if (gameStateRef.current) {
+        channel.send({ type: "broadcast", event: "state-sync", payload: { state: gameStateRef.current } });
+      }
+    });
+
+    channel.on("broadcast", { event: "state-sync" }, ({ payload }) => {
+      const state = payload?.state as AvalonState | undefined;
+      if (!state) return;
+      setGameState(state);
+      setFinalResult(null);
+      setPhase("playing");
+    });
+
     // Resolves the first time a presence "sync" fires, so seat-claiming below
     // can wait for at least one real snapshot instead of reading
     // `presenceState()` the instant SUBSCRIBED fires — that state is not
@@ -144,9 +172,19 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
         let seat = getStoredSeat(roomCode);
         if (seat === null) {
           const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
-          const taken = new Set(Object.values(raw).flat().map((o) => o.seat));
+          const existing = Object.values(raw).flat();
+          const taken = new Set(existing.map((o) => o.seat));
           seat = 0;
           while (taken.has(seat)) seat++;
+          // Reject once the room's own declared target is full — only
+          // checked when we can actually see the host's presence record
+          // (an unknown target must never block the legitimate case of the
+          // host being the very first person to claim a seat).
+          const hostRecord = existing.find((o) => o.isHost);
+          if (hostRecord && seat >= hostRecord.targetPlayerCount!) {
+            setPhase("room-full");
+            return;
+          }
           storeSeat(roomCode, seat);
         }
         setMySeat(seat);
@@ -156,6 +194,10 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
           name: myName,
           ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
         } satisfies Occupant);
+        // Ask any already-in-game peer for a state snapshot in case this is
+        // a reconnect (see the `state-request`/`state-sync` handlers above).
+        // A no-op when the game hasn't started yet — nobody has state to answer with.
+        channel.send({ type: "broadcast", event: "state-request", payload: {} });
         setPhase((p) => (p === "connecting" ? "waiting" : p));
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         setPhase("channel-error");
