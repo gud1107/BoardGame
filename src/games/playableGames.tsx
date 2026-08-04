@@ -11,4 +11,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   hanamikoji: dynamic(() => import("./hanamikoji/HanamikojiGame"), { ssr: false }),
   bang: dynamic(() => import("./bang/BangGame"), { ssr: false }),
   "grid-poker": dynamic(() => import("./grid-poker/GridPokerGame"), { ssr: false }),
+  avalon: dynamic(() => import("./avalon/AvalonGame"), { ssr: false }),
 };

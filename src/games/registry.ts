@@ -89,8 +89,9 @@ export const GAME_REGISTRY: GameMeta[] = [
     category: "deduction",
     thumbnail: { emoji: "🗡️", gradient: ["#f87171", "#b91c1c"] },
     tags: ["정체은폐", "파티", "대인원"],
-    playable: false,
-    supportsAutoRanking: false,
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
   },
   {
     id: "codenames",
