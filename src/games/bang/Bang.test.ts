@@ -766,6 +766,68 @@ describe("elimination pipeline", () => {
     expect(next.players[0].hand.length).toBe(0);
     expect(next.discard.some((c) => c.id === "h1")).toBe(true);
   });
+
+  it("also discards the Sheriff's equipment (not just hand) for killing their own Deputy, per rule 7", () => {
+    const state = makeState({
+      turnPhase: "pending",
+      pending: { kind: "group", cause: "bang", source: 0, requiredCard: "missed", barrelAllowed: true, outstanding: [1] },
+      players: [
+        makePlayer(0, "sheriff", {
+          hand: [card("bang", "h1")],
+          equipment: { ...emptyEquipment(), weapon: card("winchester", "w1"), scope: card("scope", "sc1") },
+        }),
+        makePlayer(1, "deputy", { life: 1 }),
+        makePlayer(2, "outlaw"),
+        makePlayer(3, "renegade"),
+      ],
+    });
+    const next = applyAction(state, { type: "group-respond", seat: 1, mode: "take-hit" });
+    expect(next.players[0].hand.length).toBe(0);
+    expect(next.players[0].equipment.weapon).toBeNull();
+    expect(next.players[0].equipment.scope).toBeNull();
+    expect(next.discard.some((c) => c.id === "w1")).toBe(true);
+    expect(next.discard.some((c) => c.id === "sc1")).toBe(true);
+  });
+
+  it("an emergency Beer in hand saves a player from elimination, bringing them to 1 life instead", () => {
+    const state = makeState({
+      turnPhase: "pending",
+      pending: { kind: "group", cause: "bang", source: 0, requiredCard: "missed", barrelAllowed: true, outstanding: [1] },
+      players: [
+        makePlayer(0, "sheriff"),
+        makePlayer(1, "outlaw", { life: 1, hand: [card("beer", "emergency-beer")] }),
+        makePlayer(2, "outlaw"),
+        makePlayer(3, "renegade"),
+      ],
+    });
+    const next = applyAction(state, { type: "group-respond", seat: 1, mode: "take-hit" });
+    expect(next.players[1].alive).toBe(true);
+    expect(next.players[1].life).toBe(1);
+    expect(next.players[1].hand.length).toBe(0);
+    expect(next.discard.some((c) => c.id === "emergency-beer")).toBe(true);
+    expect(next.winner).toBeNull();
+  });
+
+  it("an emergency Beer does NOT save a player when only 2 players remain alive", () => {
+    const state = makeState({
+      turnPhase: "pending",
+      pending: { kind: "group", cause: "bang", source: 0, requiredCard: "missed", barrelAllowed: true, outstanding: [1] },
+      players: [
+        makePlayer(0, "sheriff"),
+        makePlayer(1, "outlaw", { life: 1, hand: [card("beer", "emergency-beer")] }),
+        makePlayer(2, "outlaw", { alive: false, roleRevealed: true }),
+        makePlayer(3, "renegade", { alive: false, roleRevealed: true }),
+      ],
+      // Enough deck depth that the Outlaw-kill 3-card reward draw doesn't need
+      // to reshuffle the discard pile (which would otherwise pull the just-
+      // discarded emergency Beer back out of discard, muddying the assertion).
+      deck: [card("bang", "r1"), card("bang", "r2"), card("bang", "r3")],
+    });
+    const next = applyAction(state, { type: "group-respond", seat: 1, mode: "take-hit" });
+    expect(next.players[1].alive).toBe(false);
+    expect(next.players[1].hand.length).toBe(0); // discarded on elimination, not consumed as a save
+    expect(next.discard.some((c) => c.id === "emergency-beer")).toBe(true);
+  });
 });
 
 describe("win-condition priority", () => {

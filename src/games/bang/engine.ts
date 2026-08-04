@@ -433,10 +433,11 @@ function eliminate(state: BangState, seat: SeatIndex, killerSeat: SeatIndex | nu
     }
     if (s.players[killerSeat].role === "sheriff" && player.role === "deputy") {
       const killer = s.players[killerSeat];
+      const killerEquip = Object.values(killer.equipment).filter((c): c is Card => c !== null);
       s = {
         ...s,
-        discard: [...s.discard, ...killer.hand],
-        players: s.players.map((p, i) => (i === killerSeat ? { ...p, hand: [] } : p)),
+        discard: [...s.discard, ...killer.hand, ...killerEquip],
+        players: s.players.map((p, i) => (i === killerSeat ? { ...p, hand: [], equipment: emptyEquipment() } : p)),
       };
     }
   }
@@ -444,6 +445,21 @@ function eliminate(state: BangState, seat: SeatIndex, killerSeat: SeatIndex | nu
   const winner = checkWinner(s);
   if (winner) return { ...s, winner, turnPhase: "game-end", pending: null };
   return s;
+}
+
+/** Rule 7's "last-gasp Beer": a player whose life would hit 0 survives instead
+ * if they hold a Beer card, discarding it to come back to 1 life — except
+ * when only 2 players remain alive, where Beer (this included) has no effect. */
+function tryEmergencyBeerSave(state: BangState, seat: SeatIndex): BangState | null {
+  const aliveCount = state.players.filter((p) => p.alive).length;
+  if (aliveCount <= 2) return null;
+  const player = state.players[seat];
+  const beerIdx = player.hand.findIndex((c) => c.type === "beer");
+  if (beerIdx === -1) return null;
+  const card = player.hand[beerIdx];
+  const hand = [...player.hand.slice(0, beerIdx), ...player.hand.slice(beerIdx + 1)];
+  const players = state.players.map((p, i) => (i === seat ? { ...p, hand, life: 1 } : p));
+  return { ...state, players, discard: [...state.discard, card] };
 }
 
 function applyDamage(
@@ -458,7 +474,10 @@ function applyDamage(
   const life = Math.max(0, player.life - amount);
   const players = state.players.map((p, i) => (i === seat ? { ...p, life } : p));
   let s = { ...state, players };
-  if (life <= 0) s = eliminate(s, seat, killerSeat, seed);
+  if (life <= 0) {
+    const saved = tryEmergencyBeerSave(s, seat);
+    s = saved ?? eliminate(s, seat, killerSeat, seed);
+  }
   return s;
 }
 
