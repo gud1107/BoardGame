@@ -5,6 +5,7 @@ import {
   compareHands,
   evaluateHand,
   LINES,
+  opponentLiveCell,
   startGame,
   visibleOpponentBoard,
   type Card,
@@ -211,6 +212,32 @@ describe("game flow", () => {
     s = applyAction(s, { type: "submit-line", seat: 2, lineIndex: 0 });
     const visible = visibleOpponentBoard(s.players[1]);
     for (const cell of LINES[2]) expect(visible[cell]).not.toBeNull();
+  });
+
+  it("lastPlacedCell tracks a live 'just placed here' marker that clears on the next draw", () => {
+    let s = startGame(2);
+    s = applyAction(s, { type: "draw-common", seed: 1 });
+    s = applyAction(s, { type: "place", seat: 0, cellIndex: 7 });
+    expect(opponentLiveCell(s, s.players[0])).toBe(7);
+    expect(s.players[1].lastPlacedCell).toBeNull(); // seat 1 hasn't placed yet this round
+
+    s = applyAction(s, { type: "place", seat: 1, cellIndex: 12 });
+    // round complete for both players -> currentCard is cleared, but the
+    // "just placed here" marker itself stays put until the *next* draw
+    expect(opponentLiveCell(s, s.players[0])).toBe(7);
+    expect(opponentLiveCell(s, s.players[1])).toBe(12);
+
+    s = applyAction(s, { type: "draw-common", seed: 2 });
+    expect(s.players[0].lastPlacedCell).toBeNull();
+    expect(s.players[1].lastPlacedCell).toBeNull();
+    expect(opponentLiveCell(s, s.players[0])).toBeNull();
+  });
+
+  it("opponentLiveCell only applies during the placing phase, even though the field itself retains the last value", () => {
+    const s = fillBoards(startGame(2));
+    expect(s.phase).toBe("submitting");
+    expect(s.players[0].lastPlacedCell).not.toBeNull();
+    expect(opponentLiveCell(s, s.players[0])).toBeNull();
   });
 
   it("3+ player game runs all 12 rounds unless someone reaches 7 wins early", () => {

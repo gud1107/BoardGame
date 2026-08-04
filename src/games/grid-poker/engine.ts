@@ -58,6 +58,13 @@ export interface PlayerState {
   seat: SeatIndex;
   board: (Card | null)[]; // length 25
   firstPlacedCell: number | null;
+  /**
+   * Cell index this player placed the *current* draft round's common card
+   * into, so opponents can see "where they're putting it" live. Cleared back
+   * to null the moment a fresh common card is drawn (`draw-common`) — only
+   * ever holds this one most-recent placement, never a history.
+   */
+  lastPlacedCell: number | null;
   usedLines: boolean[]; // length 12
   score: number;
 }
@@ -131,6 +138,7 @@ export function startGame(playerCount: number): GridPokerState {
     seat,
     board: Array(BOARD_SIZE).fill(null),
     firstPlacedCell: null,
+    lastPlacedCell: null,
     usedLines: Array(LINES.length).fill(false),
     score: 0,
   }));
@@ -186,6 +194,10 @@ function drawCommon(state: GridPokerState, seed: number | undefined): GridPokerS
     currentCard: withId(drawRandomCard(rng), `card-${drawCount}`),
     drawCount,
     placedThisRound: Array(state.playerCount).fill(false),
+    // A fresh common card means every "who's placing where" marker from the
+    // previous round is now stale — clear it so opponents' boards stop
+    // showing last round's placement the instant a new card is drafted.
+    players: state.players.map((p) => ({ ...p, lastPlacedCell: null })),
   };
 }
 
@@ -199,7 +211,9 @@ function place(state: GridPokerState, seat: SeatIndex, cellIndex: number): GridP
   const board = [...player.board];
   board[cellIndex] = state.currentCard;
   const firstPlacedCell = player.firstPlacedCell ?? cellIndex;
-  const players = state.players.map((p, i) => (i === seat ? { ...p, board, firstPlacedCell } : p));
+  const players = state.players.map((p, i) =>
+    i === seat ? { ...p, board, firstPlacedCell, lastPlacedCell: cellIndex } : p
+  );
   const placedThisRound = state.placedThisRound.map((v, i) => (i === seat ? true : v));
 
   let s: GridPokerState = { ...state, players, placedThisRound };
@@ -296,6 +310,20 @@ export function visibleOpponentBoard(player: PlayerState): (Card | null)[] {
     if (used) LINES[li].forEach((cell) => revealed.add(cell));
   });
   return player.board.map((card, i) => (revealed.has(i) ? card : null));
+}
+
+/**
+ * The one live "here's where they just put this round's common card"
+ * marker for an opponent, distinct from (and layered on top of)
+ * `visibleOpponentBoard`'s permanent reveals. Only meaningful during the
+ * placing phase — `lastPlacedCell` is cleared on every fresh `draw-common`,
+ * so this always reflects at most the single most recent placement, never
+ * an accumulated history. Returns null once submitting/scoring starts,
+ * since there's no more common card being drafted at that point.
+ */
+export function opponentLiveCell(state: GridPokerState, player: PlayerState): number | null {
+  if (state.phase !== "placing") return null;
+  return player.lastPlacedCell;
 }
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,15 @@
 import { useState } from "react";
 import RulebookModal from "./RulebookModal";
 import { CardChip } from "./cardDisplay";
-import { BOARD_SIZE, LINES, visibleOpponentBoard, type EngineAction, type GridPokerState, type SeatIndex } from "./engine";
+import {
+  BOARD_SIZE,
+  LINES,
+  opponentLiveCell,
+  visibleOpponentBoard,
+  type EngineAction,
+  type GridPokerState,
+  type SeatIndex,
+} from "./engine";
 
 /**
  * Pure game UI + rules driver — same contract as HanamikojiBoard/BangBoard:
@@ -45,7 +53,11 @@ function Cell({ card, highlight, onClick }: { card: { kind: "std"; rank: number;
       />
     );
   }
-  return <CardChip card={card} size="sm" dim={false} />;
+  return (
+    <span className={`inline-block rounded-md ${highlight ? "ring-2 ring-amber-400/80" : ""}`}>
+      <CardChip card={card} size="sm" dim={false} />
+    </span>
+  );
 }
 
 export default function GridPokerBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: GridPokerBoardProps) {
@@ -232,18 +244,25 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
 
       {opponents.length > 0 && (
         <div className="relative z-10 flex flex-col gap-1.5">
-          <p className="text-xs text-white/50">상대 보드판 (처음 배치한 칸 + 공개된 라인만 보임)</p>
+          <p className="text-xs text-white/50">상대 보드판 (처음 배치한 칸 + 공개된 라인 + 이번 카드 배치 위치만 보임)</p>
           <div className="flex flex-wrap gap-2">
-            {opponents.map((p) => (
-              <div key={p.seat} className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-2">
-                <span className="text-[11px] text-white/60">{names[p.seat]}</span>
-                <div className="grid grid-cols-5 gap-0.5">
-                  {visibleOpponentBoard(p).map((card, i) => (
-                    <Cell key={i} card={card} />
-                  ))}
+            {opponents.map((p) => {
+              const board = visibleOpponentBoard(p);
+              const liveCell = opponentLiveCell(state, p);
+              return (
+                <div key={p.seat} className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-2">
+                  <span className="flex items-center gap-1 text-[11px] text-white/60">
+                    {names[p.seat]}
+                    {liveCell !== null && <span className="text-[10px] text-amber-300">· 배치 중</span>}
+                  </span>
+                  <div className="grid grid-cols-5 gap-0.5">
+                    {board.map((card, i) => (
+                      <Cell key={i} card={i === liveCell ? p.board[i] : card} highlight={i === liveCell} />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
