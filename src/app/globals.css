@@ -44,3 +44,35 @@ body {
     opacity: 1;
   }
 }
+
+/* No Thanks!'s "coin toss" (see AuctionEffects.tsx / FlyingToken) — layered
+   on top of a plain left/top CSS *transition* that carries the token in a
+   straight line from the passing player's seat to the auction card. This
+   keyframe only adds the flip/bob flourish; every step re-applies the
+   translate(-50%,-50%) anchor so the element stays centered on its
+   (JS-driven) left/top position throughout. */
+@keyframes coin-toss-arc {
+  0% {
+    transform: translate(-50%, -50%) translateY(0) scale(0.6) rotate(0deg);
+  }
+  40% {
+    transform: translate(-50%, -50%) translateY(-26px) scale(1.15) rotate(180deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) translateY(0) scale(1) rotate(360deg);
+  }
+}
+
+/* No Thanks!'s "take" flourish — the card + chip stack shrink and fade as
+   they slide (via the same left/top transition technique as the coin toss)
+   into the taking player's row. */
+@keyframes card-collect-fade {
+  0% {
+    transform: translate(-50%, -50%) scale(1) rotate(-4deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(0.5) rotate(6deg);
+    opacity: 0.25;
+  }
+}

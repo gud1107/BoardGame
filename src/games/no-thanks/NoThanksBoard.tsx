@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { detectAuctionEvent, FlyingToken, type AnimEvent } from "./AuctionEffects";
 import RulebookModal from "./RulebookModal";
 import {
   computeGroups,
@@ -10,6 +11,8 @@ import {
   type ScoreGroup,
   type SeatIndex,
 } from "./engine";
+
+const REVEAL_CHIPS_STORAGE_KEY = "no-thanks-reveal-opponent-chips";
 
 /**
  * Pure game UI + rules driver — mirrors AvalonBoard/BangBoard/GridPokerBoard's
@@ -71,12 +74,74 @@ function CardGroupBadge({ group, size = "sm" }: { group: ScoreGroup; size?: "sm"
 export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: NoThanksBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
 
+  // Local-only, per-viewer practice/debug toggle — the rulebook keeps
+  // everyone else's chip count secret by default (see the component-level
+  // doc comment), but nothing about the trust model in this project stops a
+  // player from *choosing* to reveal it to themselves for a friendlier
+  // practice round. Persisted like the other UI toggles in this codebase
+  // (e.g. the sound engine's mute flag), not synced to other clients.
+  const [revealOpponentChips, setRevealOpponentChips] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(REVEAL_CHIPS_STORAGE_KEY) === "1";
+  });
+  function toggleRevealOpponentChips() {
+    setRevealOpponentChips((prev) => {
+      const next = !prev;
+      window.localStorage.setItem(REVEAL_CHIPS_STORAGE_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Auction effects (coin toss / card+chip collect) — see AuctionEffects.tsx.
+  // `state` is fully controlled by the caller, so the only way to notice
+  // "a pass or a take just happened" is to diff consecutive snapshots; this
+  // follows the same render-time "adjust state when a prop changes" pattern
+  // used elsewhere in this project's boards (e.g. AvalonBoard's role-modal
+  // reset) rather than a `useEffect` with `setState` inside it.
+  // -------------------------------------------------------------------------
+  const [trackedState, setTrackedState] = useState(state);
+  const [effects, setEffects] = useState<AnimEvent[]>([]);
+  if (trackedState !== state) {
+    const detected = detectAuctionEvent(trackedState, state);
+    setTrackedState(state);
+    if (detected) {
+      setEffects((prev) => [...prev, { ...detected, id: (prev.at(-1)?.id ?? 0) + 1 }]);
+    }
+  }
+  const handleEffectDone = useCallback((id: number) => {
+    setEffects((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+
+  const centerCardRef = useRef<HTMLDivElement | null>(null);
+  const seatRefs = useRef(new Map<SeatIndex, HTMLDivElement>());
+  function setSeatRef(seat: SeatIndex) {
+    return (el: HTMLDivElement | null) => {
+      if (el) seatRefs.current.set(seat, el);
+      else seatRefs.current.delete(seat);
+    };
+  }
+
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
       className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
     >
       📖 노땡스 룰북
+    </button>
+  );
+
+  const revealChipsButton = (
+    <button
+      onClick={toggleRevealOpponentChips}
+      title="연습/디버그용: 상대방의 칩 개수를 나에게만 숫자로 보여줍니다 (원작 규칙은 비공개, 다른 사람 화면엔 영향 없음)"
+      className={`rounded-full border px-2.5 py-1 text-[11px] transition ${
+        revealOpponentChips
+          ? "border-amber-300/60 bg-amber-400/10 text-amber-200"
+          : "border-white/15 text-white/60 hover:border-white/30 hover:text-white"
+      }`}
+    >
+      {revealOpponentChips ? "👁️ 상대 칩 공개 중" : "🙈 상대 칩 비공개"}
     </button>
   );
 
@@ -164,7 +229,10 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
         <span>
           {state.playerCount}인 · 남은 카드 {cardsRemaining}장
         </span>
-        {rulebookButton}
+        <div className="flex gap-1.5">
+          {revealChipsButton}
+          {rulebookButton}
+        </div>
       </div>
 
       {/* Central auction area */}
@@ -173,7 +241,10 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
           {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
         </p>
 
-        <div className="relative flex h-28 w-20 items-center justify-center rounded-2xl border-2 border-white/20 bg-gradient-to-b from-white to-neutral-200 text-4xl font-black text-neutral-900 shadow-lg sm:h-36 sm:w-24 sm:text-5xl">
+        <div
+          ref={centerCardRef}
+          className="relative flex h-28 w-20 items-center justify-center rounded-2xl border-2 border-white/20 bg-gradient-to-b from-white to-neutral-200 text-4xl font-black text-neutral-900 shadow-lg sm:h-36 sm:w-24 sm:text-5xl"
+        >
           {state.currentCard}
           {state.chipsOnCard > 0 && (
             <div className="absolute -bottom-3 flex items-center gap-1 rounded-full border border-amber-300/60 bg-amber-500/90 px-2.5 py-1 text-xs font-bold text-black shadow">
@@ -210,9 +281,11 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
           const isSelf = seat === viewerSeat;
           const isActive = state.activeSeat === seat;
           const groups = computeGroups(player.cards);
+          const chipsVisible = isSelf || revealOpponentChips;
           return (
             <div
               key={seat}
+              ref={setSeatRef(seat)}
               className={`flex flex-col gap-1.5 rounded-xl border p-2.5 transition ${
                 isActive ? "border-amber-300/60 bg-amber-400/10" : "border-white/10 bg-black/20"
               }`}
@@ -224,8 +297,8 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
                   {names[seat]}
                   {isSelf && <span className="text-amber-200">(나)</span>}
                 </span>
-                <span className="flex items-center gap-1 font-bold text-amber-200">
-                  🪙 {isSelf ? player.chips : "?"}
+                <span className={`flex items-center gap-1 font-bold ${chipsVisible ? "text-amber-200" : "text-white/30"}`}>
+                  🪙 {chipsVisible ? player.chips : "?"}
                 </span>
               </div>
               <div className="flex flex-wrap gap-1">
@@ -241,6 +314,16 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
       </div>
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+
+      {effects.map((effect) => (
+        <FlyingToken
+          key={effect.id}
+          event={effect}
+          getSourceEl={() => (effect.kind === "pass" ? (seatRefs.current.get(effect.seat) ?? null) : centerCardRef.current)}
+          getTargetEl={() => (effect.kind === "pass" ? centerCardRef.current : (seatRefs.current.get(effect.seat) ?? null))}
+          onDone={handleEffectDone}
+        />
+      ))}
     </div>
   );
 }
