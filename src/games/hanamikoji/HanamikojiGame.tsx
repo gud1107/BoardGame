@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel, RealtimePresenceState } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
 import { getDeviceId } from "@/lib/identity/deviceId";
+import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import {
   applyAction,
@@ -29,7 +30,13 @@ import HanamikojiBoard from "./HanamikojiBoard";
  * opponent's hand — full anti-cheat would require a real server).
  */
 
-type Occupant = { deviceId: string; role: Owner; name: string };
+type Occupant = {
+  deviceId: string;
+  role: Owner;
+  name: string;
+  /** Real betting-system playerId, present only when this occupant joined by picking themselves from an active betting session's roster — see RoomNicknameField. */
+  playerId?: string;
+};
 type Phase =
   | "choose"
   | "enter-name"
@@ -62,13 +69,14 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
 
   const [phase, setPhase] = useState<Phase>(roomFromUrl ? "enter-name" : "choose");
   const [intent, setIntent] = useState<"create" | "join">(roomFromUrl ? "join" : "create");
-  const [nameInput, setNameInput] = useState("");
+  const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [formError, setFormError] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<Owner | null>(null);
   const [myName, setMyName] = useState("");
+  const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<HanamikojiState | null>(null);
   const [finalResult, setFinalResult] = useState<{ winnerId: string; winnerName: string } | null>(null);
@@ -84,10 +92,16 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
       p2: (myRole === "p2" ? myName : byRole("p2")) ?? "상대",
     };
   }, [occupants, myRole, myName]);
-  const ids: Record<Owner, string> = useMemo(
-    () => ({ p1: `${roomCode}:p1`, p2: `${roomCode}:p2` }),
-    [roomCode],
-  );
+  // Prefer the real betting-system playerId (present when that role's
+  // occupant joined by picking themselves from an active session's roster —
+  // see RoomNicknameField) over the synthetic per-room id.
+  const ids: Record<Owner, string> = useMemo(() => {
+    const byRole = (r: Owner) => occupants.find((o) => o.role === r)?.playerId;
+    return {
+      p1: byRole("p1") ?? `${roomCode}:p1`,
+      p2: byRole("p2") ?? `${roomCode}:p2`,
+    };
+  }, [roomCode, occupants]);
   const opponentConnected = opponentRole ? occupants.some((o) => o.role === opponentRole) : false;
 
   function enterRoom() {
@@ -99,7 +113,7 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
       setPhase("supabase-missing");
       return;
     }
-    const name = nameInput.trim() || "플레이어";
+    const name = identity.name.trim() || "플레이어";
     const code = intent === "create" ? generateRoomCode() : codeInput.trim();
     if (intent === "join" && !/^\d{4}$/.test(code)) {
       setFormError("4자리 초대 코드를 정확히 입력하세요.");
@@ -109,6 +123,7 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     storeRole(code, role);
     window.history.replaceState(null, "", `${window.location.pathname}?room=${code}`);
     setMyName(name);
+    setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
     setMyRole(role);
     setRoomCode(code);
     setPhase("connecting");
@@ -145,7 +160,7 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
 
     channel.subscribe(async (status) => {
       if (status === "SUBSCRIBED") {
-        await channel.track({ deviceId, role: myRole, name: myName } satisfies Occupant);
+        await channel.track({ deviceId, role: myRole, name: myName, playerId: myPlayerId } satisfies Occupant);
         setPhase((p) => (p === "connecting" ? "waiting" : p));
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         setPhase("channel-error");
@@ -156,7 +171,7 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
       supabase.removeChannel(channel);
       if (channelRef.current === channel) channelRef.current = null;
     };
-  }, [roomCode, myRole, myName]);
+  }, [roomCode, myRole, myName, myPlayerId]);
 
   // Someone else is already occupying my role in this room (rare code
   // collision, or a stale localStorage role from a different session).
@@ -224,7 +239,8 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     setOccupants([]);
     setGameState(null);
     setFinalResult(null);
-    setNameInput("");
+    setIdentity({ name: "" });
+    setMyPlayerId(undefined);
     setCodeInput("");
     setPhase("choose");
   }
@@ -322,15 +338,10 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
         <h2 className="text-base font-bold text-white">
           {intent === "create" ? "방 만들기" : "초대 코드로 참여"}
         </h2>
-        <label className="flex flex-col gap-1.5 text-sm text-white/70">
+        <div className="flex flex-col gap-1.5 text-sm text-white/70">
           내 닉네임
-          <input
-            value={nameInput}
-            onChange={(e) => setNameInput(e.target.value)}
-            placeholder="닉네임을 입력하세요"
-            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
-          />
-        </label>
+          <RoomNicknameField value={identity} onChange={setIdentity} accent="rose" />
+        </div>
         {intent === "join" && (
           <label className="flex flex-col gap-1.5 text-sm text-white/70">
             초대 코드 (4자리)
