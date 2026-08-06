@@ -15,9 +15,16 @@ export default function RoundResultEntry({ participants, autoRanking, onConfirm 
   const initialRanks = useMemo(() => {
     const ranks: Record<string, number> = {};
     for (const entry of autoRanking) ranks[entry.playerId] = entry.rank;
-    const nextRank = autoRanking.length > 0 ? Math.max(...autoRanking.map((e) => e.rank)) + 1 : 1;
+    // Each unmatched participant gets its own sequential rank after the
+    // auto-filled ones (not all sharing a single value) — otherwise every
+    // manually-entered participant would land in one big tied group by
+    // default, which is essentially never what actually happened.
+    let nextRank = autoRanking.length > 0 ? Math.max(...autoRanking.map((e) => e.rank)) + 1 : 1;
     for (const p of participants) {
-      if (!(p.playerId in ranks)) ranks[p.playerId] = nextRank;
+      if (!(p.playerId in ranks)) {
+        ranks[p.playerId] = nextRank;
+        nextRank += 1;
+      }
     }
     return ranks;
   }, [participants, autoRanking]);
