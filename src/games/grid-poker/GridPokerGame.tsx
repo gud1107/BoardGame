@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel, RealtimePresenceState } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
 import { getDeviceId } from "@/lib/identity/deviceId";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
+import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import { applyAction, startGame, type EngineAction, type GridPokerState, type SeatIndex } from "./engine";
 import GridPokerBoard from "./GridPokerBoard";
@@ -22,7 +24,15 @@ import GridPokerBoard from "./GridPokerBoard";
  * effect that watches for `phase === "placing" && currentCard === null`.
  */
 
-type Occupant = { deviceId: string; seat: SeatIndex; name: string; isHost?: boolean; targetPlayerCount?: number };
+type Occupant = {
+  deviceId: string;
+  seat: SeatIndex;
+  name: string;
+  /** Real betting-system playerId, present only when this occupant joined by picking themselves from an active betting session's roster — see RoomNicknameField. */
+  playerId?: string;
+  isHost?: boolean;
+  targetPlayerCount?: number;
+};
 type Phase =
   | "choose"
   | "enter-name"
@@ -61,7 +71,7 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
 
   const [phase, setPhase] = useState<Phase>(roomFromUrl ? "enter-name" : "choose");
   const [intent, setIntent] = useState<"create" | "join">(roomFromUrl ? "join" : "create");
-  const [nameInput, setNameInput] = useState("");
+  const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [targetPlayerCount, setTargetPlayerCount] = useState(2);
   const [formError, setFormError] = useState<string | null>(null);
@@ -69,6 +79,7 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [mySeat, setMySeat] = useState<SeatIndex | null>(null);
   const [myName, setMyName] = useState("");
+  const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<GridPokerState | null>(null);
   const [finalResult, setFinalResult] = useState<{ winnerLabel: string } | null>(null);
@@ -86,13 +97,26 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
     gameStateRef.current = gameState;
   }, [gameState]);
 
+  // Tense background music plays only while an actual match is underway —
+  // started/stopped by this one effect so every path back to "playing"
+  // (fresh game, rematch, reconnect-via-state-sync) restarts it and every
+  // path away (post-game, leaving, unmount) reliably stops it.
+  useEffect(() => {
+    if (phase !== "playing") return;
+    getSoundEngine().startBgm();
+    return () => getSoundEngine().stopBgm();
+  }, [phase]);
+
   function enterRoom() {
     setFormError(null);
+    // First user gesture in the flow — also a convenient place to unlock
+    // the shared AudioContext ahead of the BGM/SFX that start once playing.
+    getSoundEngine().unlock();
     if (!getSupabase()) {
       setPhase("supabase-missing");
       return;
     }
-    const name = nameInput.trim() || "플레이어";
+    const name = identity.name.trim() || "플레이어";
     const code = intent === "create" ? generateRoomCode() : codeInput.trim();
     if (intent === "join" && !/^\d{4}$/.test(code)) {
       setFormError("4자리 초대 코드를 정확히 입력하세요.");
@@ -100,6 +124,7 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
     }
     playerCountRef.current = targetPlayerCount;
     setMyName(name);
+    setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
     setRoomCode(code);
     setPhase("connecting");
   }
@@ -189,6 +214,7 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
           deviceId,
           seat,
           name: myName,
+          playerId: myPlayerId,
           ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
         } satisfies Occupant);
         // Ask any already-in-game peer for a state snapshot in case this is
@@ -205,7 +231,7 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
       supabase.removeChannel(channel);
       if (channelRef.current === channel) channelRef.current = null;
     };
-  }, [roomCode, myName, isHost]);
+  }, [roomCode, myName, myPlayerId, isHost]);
 
   const deviceId = typeof window !== "undefined" ? getDeviceId() : "";
   const host = occupants.find((o) => o.isHost);
@@ -235,9 +261,10 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
       deviceId,
       seat: next,
       name: myName,
+      playerId: myPlayerId,
       ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
     } satisfies Occupant);
-  }, [occupants, mySeat, phase, deviceId, roomCode, myName, isHost]);
+  }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
   function sendGameStart() {
     startSentRef.current = true;
@@ -269,12 +296,20 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
     }
   }, [isHost, phase, gameState]);
 
+  // Prefer the real betting-system playerId (present when that seat's
+  // occupant joined by picking themselves from an active session's roster —
+  // see RoomNicknameField) over the synthetic per-room id, so a finished
+  // game's rankings actually land on the right betting participant instead
+  // of an id the ledger has never seen before.
   const ids: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
     const count = gameState?.playerCount ?? knownTargetPlayerCount;
-    for (let seat = 0; seat < count; seat++) map[seat] = `${roomCode}:${seat}`;
+    for (let seat = 0; seat < count; seat++) {
+      const occ = occupants.find((o) => o.seat === seat);
+      map[seat] = occ?.playerId ?? `${roomCode}:${seat}`;
+    }
     return map;
-  }, [roomCode, gameState, knownTargetPlayerCount]);
+  }, [roomCode, gameState, knownTargetPlayerCount, occupants]);
 
   const names: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
@@ -318,7 +353,8 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
     setOccupants([]);
     setGameState(null);
     setFinalResult(null);
-    setNameInput("");
+    setIdentity({ name: "" });
+    setMyPlayerId(undefined);
     setCodeInput("");
     setPhase("choose");
   }
@@ -409,15 +445,10 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
     return (
       <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
         <h2 className="text-base font-bold text-white">{intent === "create" ? "방 만들기" : "초대 코드로 참여"}</h2>
-        <label className="flex flex-col gap-1.5 text-sm text-white/70">
+        <div className="flex flex-col gap-1.5 text-sm text-white/70">
           내 닉네임
-          <input
-            value={nameInput}
-            onChange={(e) => setNameInput(e.target.value)}
-            placeholder="닉네임을 입력하세요"
-            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-emerald-400 focus:outline-none"
-          />
-        </label>
+          <RoomNicknameField value={identity} onChange={setIdentity} accent="emerald" />
+        </div>
         {intent === "join" && (
           <label className="flex flex-col gap-1.5 text-sm text-white/70">
             초대 코드 (4자리)

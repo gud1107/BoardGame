@@ -26,3 +26,21 @@ body {
   background: rgba(255, 255, 255, 0.15);
   border-radius: 999px;
 }
+
+/* Grid Poker's dealer-style common-card reveal (see DealerReveal.tsx) — a
+   card sliding out of the deck and flipping face-up. Re-keyed per draw so
+   this replays every round instead of only once on mount. */
+@keyframes deal-flip {
+  0% {
+    transform: translateX(-28px) rotateY(90deg) scale(0.7);
+    opacity: 0;
+  }
+  55% {
+    transform: translateX(0) rotateY(0deg) scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(0) rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+}

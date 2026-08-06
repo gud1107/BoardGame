@@ -1,18 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import RulebookModal from "./RulebookModal";
+import DealerReveal from "./DealerReveal";
 import { CardChip } from "./cardDisplay";
+import { useCountdown } from "./useCountdown";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
 import {
   BOARD_SIZE,
   LINES,
   evaluateHand,
   opponentLiveCell,
   visibleOpponentBoard,
+  type Card,
   type EngineAction,
   type GridPokerState,
   type SeatIndex,
 } from "./engine";
+
+const PLACING_SECONDS = 20;
+const SUBMITTING_SECONDS = 15;
+const URGENT_THRESHOLD = 5;
+
+function randomFrom<T>(items: T[]): T | undefined {
+  if (items.length === 0) return undefined;
+  return items[Math.floor(Math.random() * items.length)];
+}
 
 /**
  * Pure game UI + rules driver — same contract as HanamikojiBoard/BangBoard:
@@ -42,13 +55,51 @@ const LINE_LABELS = [
   "대각선 ↙",
 ];
 
-function Cell({ card, highlight, onClick }: { card: { kind: "std"; rank: number; suit: "S" | "D" | "H" | "C" } | { kind: "joker" } | null; highlight?: boolean; onClick?: () => void }) {
+const CELL_DIMS = {
+  main: "h-14 w-10 sm:h-16 sm:w-12",
+  mini: "h-11 w-8 sm:h-12 sm:w-9",
+};
+
+/**
+ * `hiddenOccupied` is the "opponent already placed something here but we
+ * can't see what" state — visually distinct from a genuinely empty cell so
+ * the board reads as progressively darkening/filling in, not as if nothing
+ * happened there. Every client holds the opponent's full board in memory
+ * (see engine.ts's trust-trade-off note); this is purely a rendering choice
+ * to *not* show it.
+ */
+function Cell({
+  card,
+  hiddenOccupied = false,
+  highlight,
+  onClick,
+  size = "main",
+}: {
+  card: Card | null;
+  hiddenOccupied?: boolean;
+  highlight?: boolean;
+  onClick?: () => void;
+  size?: "main" | "mini";
+}) {
+  const dims = CELL_DIMS[size];
+  if (hiddenOccupied) {
+    return (
+      <span
+        title="상대가 이미 카드를 놓은 칸 (공개 전)"
+        className={`inline-flex ${dims} items-center justify-center rounded-md border border-white/5 bg-black/75 text-white/15 shadow-[inset_0_0_8px_rgba(0,0,0,0.8)] ${
+          highlight ? "ring-2 ring-amber-400/80" : ""
+        }`}
+      >
+        <span className="text-xs">🂠</span>
+      </span>
+    );
+  }
   if (!card) {
     return (
       <button
         onClick={onClick}
         disabled={!onClick}
-        className={`h-12 w-9 rounded-md border border-dashed transition sm:h-14 sm:w-10 ${
+        className={`${dims} rounded-md border border-dashed transition ${
           onClick ? "border-white/25 bg-white/[0.03] hover:border-emerald-400/60 hover:bg-emerald-400/10" : "border-white/10 bg-white/[0.02]"
         } ${highlight ? "ring-2 ring-amber-400/70" : ""}`}
       />
@@ -56,8 +107,29 @@ function Cell({ card, highlight, onClick }: { card: { kind: "std"; rank: number;
   }
   return (
     <span className={`inline-block rounded-md ${highlight ? "ring-2 ring-amber-400/80" : ""}`}>
-      <CardChip card={card} size="sm" dim={false} />
+      <CardChip card={card} size={size === "main" ? "md" : "sm"} dim={false} />
     </span>
+  );
+}
+
+/** Numeric countdown bar, red-hot once inside the urgent threshold. */
+function CountdownBar({ timeLeft, total }: { timeLeft: number; total: number }) {
+  const urgent = timeLeft <= URGENT_THRESHOLD;
+  const pct = Math.max(0, Math.min(100, (timeLeft / total) * 100));
+  return (
+    <div className="flex w-full max-w-[220px] items-center gap-2">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+        <div
+          className={`h-full rounded-full transition-[width] duration-1000 ease-linear ${
+            urgent ? "bg-rose-500" : "bg-emerald-400"
+          }`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className={`w-6 text-right text-xs font-bold tabular-nums ${urgent ? "animate-pulse text-rose-300" : "text-white/60"}`}>
+        {timeLeft}
+      </span>
+    </div>
   );
 }
 
@@ -72,6 +144,64 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
       className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
     >
       📖 족보 · 룰북
+    </button>
+  );
+
+  // All hooks (countdowns, the SFX effect, the mute-toggle state) must run
+  // unconditionally on every render, so this whole block lives above the
+  // early `game-end` return below rather than after it.
+  const filledCells = viewer.board.filter((c) => c !== null).length;
+  const myTurnToPlace = state.phase === "placing" && state.currentCard !== null && !state.placedThisRound[viewerSeat];
+  const mySubmission = state.submissions[viewerSeat];
+
+  function placeAt(cellIndex: number) {
+    if (!myTurnToPlace || viewer.board[cellIndex] !== null) return;
+    onAction({ type: "place", seat: viewerSeat, cellIndex });
+  }
+
+  function submitLine(lineIndex: number) {
+    if (state.phase !== "submitting" || mySubmission !== null || viewer.usedLines[lineIndex]) return;
+    onAction({ type: "submit-line", seat: viewerSeat, lineIndex });
+  }
+
+  // Per-viewer countdowns (see useCountdown.ts) — each client only ever
+  // auto-acts for its own seat on expiry, matching the lockstep model.
+  // `resetKey` ties each timer to "this specific draw/round" so a rerender
+  // mid-countdown never restarts it early, and a fresh draw/round always does.
+  const { timeLeft: placingTimeLeft } = useCountdown(PLACING_SECONDS, state.drawCount, myTurnToPlace, () => {
+    const emptyCells = viewer.board.map((c, i) => (c === null ? i : -1)).filter((i) => i >= 0);
+    const cell = randomFrom(emptyCells);
+    if (cell !== undefined) placeAt(cell);
+  });
+  const submittingActive = state.phase === "submitting" && mySubmission === null;
+  const { timeLeft: submittingTimeLeft } = useCountdown(SUBMITTING_SECONDS, state.roundNumber, submittingActive, () => {
+    const unused = LINES.map((_, i) => i).filter((i) => !viewer.usedLines[i]);
+    const line = randomFrom(unused);
+    if (line !== undefined) submitLine(line);
+  });
+
+  const urgentTimeLeft = myTurnToPlace ? placingTimeLeft : submittingActive ? submittingTimeLeft : null;
+  const isUrgent = urgentTimeLeft !== null && urgentTimeLeft <= URGENT_THRESHOLD && urgentTimeLeft > 0;
+  useEffect(() => {
+    const engine = getSoundEngine();
+    if (isUrgent) engine.startFuseCrackle();
+    else engine.stopFuseCrackle();
+    return () => engine.stopFuseCrackle();
+  }, [isUrgent]);
+
+  const [muted, setMuted] = useState(() => getSoundEngine().isMuted());
+  const soundToggle = (
+    <button
+      onClick={() => {
+        const engine = getSoundEngine();
+        engine.unlock();
+        engine.setMuted(!muted);
+        setMuted(!muted);
+      }}
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      aria-label={muted ? "소리 켜기" : "소리 끄기"}
+    >
+      {muted ? "🔇" : "🔊"}
     </button>
   );
 
@@ -109,20 +239,6 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
     );
   }
 
-  const filledCells = viewer.board.filter((c) => c !== null).length;
-  const myTurnToPlace = state.phase === "placing" && state.currentCard !== null && !state.placedThisRound[viewerSeat];
-  const mySubmission = state.submissions[viewerSeat];
-
-  function placeAt(cellIndex: number) {
-    if (!myTurnToPlace || viewer.board[cellIndex] !== null) return;
-    onAction({ type: "place", seat: viewerSeat, cellIndex });
-  }
-
-  function submitLine(lineIndex: number) {
-    if (state.phase !== "submitting" || mySubmission !== null || viewer.usedLines[lineIndex]) return;
-    onAction({ type: "submit-line", seat: viewerSeat, lineIndex });
-  }
-
   return (
     <div className={`${TABLE_PANEL} flex flex-col gap-4 p-3 sm:p-4`}>
       <div className="relative z-10 flex items-center justify-between text-xs text-white/60">
@@ -131,7 +247,10 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
             ? `배치 중 · ${filledCells}/${BOARD_SIZE}칸`
             : `제출 라운드 ${Math.min(state.roundNumber, state.totalScoringRounds)}/${state.totalScoringRounds}`}
         </span>
-        {rulebookButton}
+        <div className="flex items-center gap-1.5">
+          {soundToggle}
+          {rulebookButton}
+        </div>
       </div>
 
       <div className="relative z-10 flex flex-wrap gap-2">
@@ -150,23 +269,24 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
 
       {state.phase === "placing" && (
         <div className="relative z-10 flex flex-col items-center gap-2">
-          <p className="text-xs text-white/50">공통 카드</p>
-          {state.currentCard ? (
-            <div className="flex flex-col items-center gap-2">
-              <CardChip card={state.currentCard} />
-              <p className="text-xs text-white/50">
-                {myTurnToPlace ? "빈 칸을 눌러 배치하세요" : "배치 완료 · 다른 플레이어를 기다리는 중..."}
-              </p>
-            </div>
-          ) : (
-            <p className="text-xs text-white/40">다음 카드를 뽑는 중...</p>
-          )}
+          <DealerReveal
+            card={state.currentCard}
+            drawCount={state.drawCount}
+            caption={
+              !state.currentCard
+                ? "다음 카드를 뽑는 중..."
+                : myTurnToPlace
+                  ? "빈 칸을 눌러 배치하세요"
+                  : "배치 완료 · 다른 플레이어를 기다리는 중..."
+            }
+          />
+          {myTurnToPlace && <CountdownBar timeLeft={placingTimeLeft} total={PLACING_SECONDS} />}
         </div>
       )}
 
-      <div className="relative z-10 flex flex-col items-center gap-1">
+      <div className="relative z-10 flex flex-col items-center gap-1.5">
         <p className="text-xs text-white/50">내 보드판</p>
-        <div className="grid grid-cols-5 gap-1 rounded-2xl border border-white/10 bg-black/20 p-2">
+        <div className="grid grid-cols-5 gap-1.5 rounded-2xl border border-white/10 bg-black/20 p-2.5 sm:gap-2 sm:p-3">
           {viewer.board.map((card, i) => (
             <Cell key={i} card={card} onClick={myTurnToPlace && card === null ? () => placeAt(i) : undefined} />
           ))}
@@ -174,10 +294,11 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
       </div>
 
       {state.phase === "submitting" && (
-        <div className="relative z-10 flex flex-col gap-2">
+        <div className="relative z-10 flex flex-col items-center gap-2">
           <p className="text-center text-xs text-white/50">
             {mySubmission !== null ? "제출 완료 · 다른 플레이어를 기다리는 중..." : "제출할 라인을 하나 고르세요"}
           </p>
+          {submittingActive && <CountdownBar timeLeft={submittingTimeLeft} total={SUBMITTING_SECONDS} />}
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             {LINES.map((cells, lineIndex) => {
               const used = viewer.usedLines[lineIndex];
@@ -264,10 +385,26 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
                     {names[p.seat]}
                     {liveCell !== null && <span className="text-[10px] text-amber-300">· 배치 중</span>}
                   </span>
-                  <div className="grid grid-cols-5 gap-0.5">
-                    {board.map((card, i) => (
-                      <Cell key={i} card={i === liveCell ? p.board[i] : card} highlight={i === liveCell} />
-                    ))}
+                  <div className="grid grid-cols-5 gap-1">
+                    {board.map((card, i) => {
+                      const isLive = i === liveCell;
+                      const displayCard = isLive ? p.board[i] : card;
+                      // Revealed-null but actually filled (per the full
+                      // state every client holds) = they placed here in an
+                      // earlier round and it's still hidden — render dark,
+                      // not empty, and it accumulates automatically as more
+                      // cells fill in (p.board never clears).
+                      const hiddenOccupied = !isLive && displayCard === null && p.board[i] !== null;
+                      return (
+                        <Cell
+                          key={i}
+                          card={displayCard}
+                          hiddenOccupied={hiddenOccupied}
+                          highlight={isLive}
+                          size="mini"
+                        />
+                      );
+                    })}
                   </div>
                 </div>
               );
