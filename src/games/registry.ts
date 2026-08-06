@@ -138,6 +138,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "no-thanks",
+    name: "노땡스",
+    nameEn: "No Thanks!",
+    description:
+      "3~35 숫자 카드를 놓고 벌이는 마이너스 경매 게임. 칩을 내고 넘기거나 카드를 가져와 벌점을 최소화해야 합니다. 연속된 숫자를 모으면 가장 작은 숫자만 벌점으로 계산됩니다.",
+    players: { min: 3, max: 7 },
+    playTime: { minMinutes: 15, maxMinutes: 25 },
+    category: "card",
+    thumbnail: { emoji: "🙅", gradient: ["#fbbf24", "#92400e"] },
+    tags: ["경매", "심리전", "카드"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "mafia",
     name: "마피아",
     nameEn: "Mafia",
