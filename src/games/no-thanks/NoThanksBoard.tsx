@@ -4,8 +4,11 @@ import { useCallback, useRef, useState } from "react";
 import { detectAuctionEvent, FlyingToken, type AnimEvent } from "./AuctionEffects";
 import RulebookModal from "./RulebookModal";
 import {
+  CARD_MAX,
+  CARD_MIN,
   computeGroups,
   computeRankings,
+  REMOVE_COUNT,
   type EngineAction,
   type NoThanksState,
   type ScoreGroup,
@@ -67,6 +70,61 @@ function CardGroupBadge({ group, size = "sm" }: { group: ScoreGroup; size?: "sm"
           {card}
         </div>
       ))}
+    </div>
+  );
+}
+
+// Largest possible `cardsRemaining` value, i.e. right after `startGame`
+// (24 cards enter play once the 9 removed cards are set aside, one of which
+// is immediately flipped as the first auction card) — used only to scale the
+// deck-stack visual below, not part of any rules calculation.
+const MAX_CARDS_IN_PLAY = CARD_MAX - CARD_MIN + 1 - REMOVE_COUNT;
+
+/**
+ * The face-down draw pile sitting next to the flipped auction card. Purely
+ * decorative (the real numbers live in `NoThanksState.deck`/`currentCard`),
+ * but built to visibly thin out as `count` drops — a handful of stacked
+ * layers fanned by a small offset, capped low so it never grows unwieldy,
+ * collapsing to an empty dashed slot once the deck is exhausted.
+ */
+function DeckStack({ count }: { count: number }) {
+  if (count <= 0) {
+    return (
+      <div className="flex h-28 w-16 items-center justify-center rounded-2xl border-2 border-dashed border-white/15 text-[10px] text-white/25 sm:h-36 sm:w-20">
+        빈 덱
+      </div>
+    );
+  }
+
+  const ratio = Math.min(1, count / MAX_CARDS_IN_PLAY);
+  const layers = Math.max(1, Math.round(ratio * 5)); // 1-5 fanned layers
+
+  return (
+    <div className="relative h-28 w-16 sm:h-36 sm:w-20">
+      {Array.from({ length: layers }, (_, i) => {
+        const depth = layers - 1 - i; // 0 = frontmost layer (top of the pile)
+        return (
+          <div
+            key={i}
+            aria-hidden
+            className="absolute inset-0 rounded-2xl border-2 border-white/20 bg-gradient-to-br from-slate-600 to-slate-800"
+            style={{
+              transform: `translate(${-depth * 2.5}px, ${-depth * 2.5}px)`,
+              zIndex: i,
+              boxShadow: depth === 0 ? "0 4px 10px rgba(0,0,0,0.5)" : undefined,
+            }}
+          />
+        );
+      })}
+      <div className="absolute inset-0 z-10 flex items-center justify-center">
+        <div className="h-6 w-6 rotate-45 rounded-sm border-2 border-white/15 sm:h-8 sm:w-8" />
+      </div>
+      <div
+        title="아직 뒤집히지 않은 덱 카드 수 (공개된 경매 카드는 제외)"
+        className="absolute -bottom-3 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/25 bg-black/70 px-2 py-0.5 text-[11px] font-bold text-white shadow"
+      >
+        덱 {count}장
+      </div>
     </div>
   );
 }
@@ -254,16 +312,19 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
           {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
         </p>
 
-        <div
-          ref={centerCardRef}
-          className="relative flex h-28 w-20 items-center justify-center rounded-2xl border-2 border-white/20 bg-gradient-to-b from-white to-neutral-200 text-4xl font-black text-neutral-900 shadow-lg sm:h-36 sm:w-24 sm:text-5xl"
-        >
-          {state.currentCard}
-          {state.chipsOnCard > 0 && (
-            <div className="absolute -bottom-3 flex items-center gap-1 rounded-full border border-amber-300/60 bg-amber-500/90 px-2.5 py-1 text-xs font-bold text-black shadow">
-              🪙 {state.chipsOnCard}
-            </div>
-          )}
+        <div className="flex items-center gap-4 sm:gap-6">
+          <DeckStack count={state.deck.length} />
+          <div
+            ref={centerCardRef}
+            className="relative flex h-28 w-20 items-center justify-center rounded-2xl border-2 border-white/20 bg-gradient-to-b from-white to-neutral-200 text-4xl font-black text-neutral-900 shadow-lg sm:h-36 sm:w-24 sm:text-5xl"
+          >
+            {state.currentCard}
+            {state.chipsOnCard > 0 && (
+              <div className="absolute -bottom-3 flex items-center gap-1 rounded-full border border-amber-300/60 bg-amber-500/90 px-2.5 py-1 text-xs font-bold text-black shadow">
+                🪙 {state.chipsOnCard}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="mt-2 flex w-full max-w-xs gap-2">
