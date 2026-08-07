@@ -22,6 +22,23 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">게임 모드 (칩 공개 여부)</h3>
+          <p className="text-white/70">
+            방장이 방을 만들 때 아래 두 모드 중 하나를 고릅니다. 게임 도중에는 바뀌지 않습니다.
+          </p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
+              <p className="mb-1 font-medium text-white/90">🔒 비밀 모드 (공식 룰)</p>
+              <p className="text-xs text-white/60">각자 자기 칩 개수만 확인할 수 있습니다. 상대의 칩은 상시 &quot;?&quot;로 표시됩니다.</p>
+            </div>
+            <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
+              <p className="mb-1 font-medium text-amber-200">👁️ 공개 모드 (커스텀 룰)</p>
+              <p className="text-xs text-white/60">모든 플레이어의 칩 개수가 항상 숫자로 공개됩니다.</p>
+            </div>
+          </div>
+        </section>
+
+        <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">준비</h3>
           <p className="text-white/70">
             3~35 숫자 카드 33장 중 <span className="text-amber-300">무작위 9장을 아무도 보지 않고 완전히 제외</span>하고

@@ -10,6 +10,7 @@ import {
   applyAction,
   computeRankings,
   startGame,
+  type ChipVisibility,
   type EngineAction,
   type NoThanksState,
   type SeatIndex,
@@ -34,6 +35,8 @@ type Occupant = {
   playerId?: string;
   isHost?: boolean;
   targetPlayerCount?: number;
+  /** Host's choice, see engine.ts's `ChipVisibility` — shown to waiting joiners so they know which mode they're about to play. */
+  chipVisibility?: ChipVisibility;
 };
 type Phase =
   | "choose"
@@ -76,6 +79,10 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
   const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [targetPlayerCount, setTargetPlayerCount] = useState(4);
+  // Rulebook §2 "게임 모드 설정" — host-only choice made once before the room
+  // fills up, applies identically to every seat (unlike the board's separate
+  // local-only practice-reveal toggle). Defaults to the official rule.
+  const [chipVisibility, setChipVisibility] = useState<ChipVisibility>("secret");
   const [formError, setFormError] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -89,6 +96,7 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
   const channelRef = useRef<RealtimeChannel | null>(null);
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
+  const chipVisibilityRef = useRef(chipVisibility);
   const isHost = intent === "create";
 
   // Kept in sync so the `state-request` broadcast handler (registered once,
@@ -112,6 +120,7 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
       return;
     }
     playerCountRef.current = targetPlayerCount;
+    chipVisibilityRef.current = chipVisibility;
     setMyName(name);
     setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
     setRoomCode(code);
@@ -133,8 +142,10 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seed = payload?.seed as number;
       const playerCount = payload?.playerCount as number;
+      const visibility = (payload?.chipVisibility as ChipVisibility | undefined) ?? "secret";
       playerCountRef.current = playerCount;
-      setGameState(startGame(playerCount, seed));
+      chipVisibilityRef.current = visibility;
+      setGameState(startGame(playerCount, seed, visibility));
       setFinalResult(null);
       setPhase("playing");
     });
@@ -211,7 +222,9 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
           seat,
           name: myName,
           playerId: myPlayerId,
-          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
+          ...(isHost
+            ? { isHost: true, targetPlayerCount: playerCountRef.current, chipVisibility: chipVisibilityRef.current }
+            : {}),
         } satisfies Occupant);
         // Ask any already-in-game peer for a state snapshot in case this is
         // a reconnect (see the `state-request`/`state-sync` handlers above).
@@ -232,6 +245,7 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
   const deviceId = typeof window !== "undefined" ? getDeviceId() : "";
   const host = occupants.find((o) => o.isHost);
   const knownTargetPlayerCount = host?.targetPlayerCount ?? targetPlayerCount;
+  const knownChipVisibility = host?.chipVisibility ?? chipVisibility;
   const reclaimAttemptsRef = useRef(0);
 
   // Two seats can genuinely collide when players join within the same
@@ -263,7 +277,9 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
       seat: next,
       name: myName,
       playerId: myPlayerId,
-      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
+      ...(isHost
+        ? { isHost: true, targetPlayerCount: playerCountRef.current, chipVisibility: chipVisibilityRef.current }
+        : {}),
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
@@ -272,7 +288,7 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({
       type: "broadcast",
       event: "game-start",
-      payload: { seed: randomSeed(), playerCount: playerCountRef.current },
+      payload: { seed: randomSeed(), playerCount: playerCountRef.current, chipVisibility: chipVisibilityRef.current },
     });
   }
 
@@ -471,6 +487,37 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
             </div>
           </label>
         )}
+        {intent === "create" && (
+          <div className="flex flex-col gap-1.5 text-sm text-white/70">
+            칩 공개 모드 (룰북 §2)
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setChipVisibility("secret")}
+                className={`flex-1 rounded-xl border px-3 py-2 text-left text-xs transition ${
+                  chipVisibility === "secret"
+                    ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-100"
+                    : "border-white/15 text-white/60 hover:border-white/30"
+                }`}
+              >
+                <p className="font-semibold">🔒 비밀 모드</p>
+                <p className="text-white/50">공식 룰 · 내 칩만 나에게 보임</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setChipVisibility("public")}
+                className={`flex-1 rounded-xl border px-3 py-2 text-left text-xs transition ${
+                  chipVisibility === "public"
+                    ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-100"
+                    : "border-white/15 text-white/60 hover:border-white/30"
+                }`}
+              >
+                <p className="font-semibold">👁️ 공개 모드</p>
+                <p className="text-white/50">커스텀 룰 · 모두의 칩이 공개됨</p>
+              </button>
+            </div>
+          </div>
+        )}
         {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">{formError}</p>}
         <div className="flex gap-2">
           <button
@@ -507,6 +554,9 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
             </button>
             <p className="text-xs text-white/50">
               {occupants.length} / {knownTargetPlayerCount}명 참여 중
+            </p>
+            <p className="text-xs text-white/40">
+              {knownChipVisibility === "public" ? "👁️ 공개 모드 (모두의 칩이 보임)" : "🔒 비밀 모드 (내 칩만 나에게 보임)"}
             </p>
             <div className="mt-2 flex flex-col gap-1.5">
               {Array.from({ length: knownTargetPlayerCount }, (_, seat) => {

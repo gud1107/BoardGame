@@ -73,13 +73,18 @@ function CardGroupBadge({ group, size = "sm" }: { group: ScoreGroup; size?: "sm"
 
 export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: NoThanksBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const publicMode = state.chipVisibility === "public";
 
-  // Local-only, per-viewer practice/debug toggle — the rulebook keeps
-  // everyone else's chip count secret by default (see the component-level
-  // doc comment), but nothing about the trust model in this project stops a
-  // player from *choosing* to reveal it to themselves for a friendlier
-  // practice round. Persisted like the other UI toggles in this codebase
-  // (e.g. the sound engine's mute flag), not synced to other clients.
+  // Local-only, per-viewer practice/debug toggle — only meaningful in
+  // "secret" mode, where the rulebook keeps everyone else's chip count
+  // hidden by default (see the component-level doc comment). Nothing about
+  // the trust model in this project stops a player from *choosing* to
+  // reveal it to themselves for a friendlier practice round regardless of
+  // the host's chosen mode. Persisted like the other UI toggles in this
+  // codebase (e.g. the sound engine's mute flag), not synced to other
+  // clients — in "public" mode the host's choice already reveals every
+  // chip count to everyone, so this toggle is hidden rather than shown as
+  // redundant.
   const [revealOpponentChips, setRevealOpponentChips] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(REVEAL_CHIPS_STORAGE_KEY) === "1";
@@ -226,11 +231,19 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
     <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
       <TableTexture />
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-emerald-100/60">
-        <span>
+        <span className="flex items-center gap-1.5">
           {state.playerCount}인 · 남은 카드 {cardsRemaining}장
+          <span
+            title={publicMode ? "공개 모드: 모두의 칩이 항상 공개됩니다" : "비밀 모드: 각자 자기 칩만 볼 수 있습니다"}
+            className={`rounded-full border px-1.5 py-0.5 text-[10px] ${
+              publicMode ? "border-amber-300/40 text-amber-200" : "border-white/15 text-white/40"
+            }`}
+          >
+            {publicMode ? "👁️ 공개 모드" : "🔒 비밀 모드"}
+          </span>
         </span>
         <div className="flex gap-1.5">
-          {revealChipsButton}
+          {!publicMode && revealChipsButton}
           {rulebookButton}
         </div>
       </div>
@@ -281,7 +294,7 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
           const isSelf = seat === viewerSeat;
           const isActive = state.activeSeat === seat;
           const groups = computeGroups(player.cards);
-          const chipsVisible = isSelf || revealOpponentChips;
+          const chipsVisible = isSelf || publicMode || revealOpponentChips;
           return (
             <div
               key={seat}
