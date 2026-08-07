@@ -182,7 +182,6 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
       console.log("📥 남은 덱 순서 (배열 맨 앞이 다음에 뒤집힐 카드):", s.deck);
       console.log("👀 지금 중앙에 공개된 카드:", s.currentCard);
     };
-    console.log("%c콘솔에 노땡스() 라고 입력하면 제외된 카드/남은 카드 순서를 볼 수 있어요.", "color:#34d399");
     return () => {
       delete win.노땡스;
     };
