@@ -14,4 +14,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   avalon: dynamic(() => import("./avalon/AvalonGame"), { ssr: false }),
   "no-thanks": dynamic(() => import("./no-thanks/NoThanksGame"), { ssr: false }),
   perudo: dynamic(() => import("./perudo/PerudoGame"), { ssr: false }),
+  century: dynamic(() => import("./century/CenturyGame"), { ssr: false }),
 };

@@ -168,6 +168,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "century",
+    name: "센추리: 향신료의 길",
+    nameEn: "Century: Spice Road",
+    description:
+      "향신료 상인이 되어 자원을 생산·업그레이드·교환해 점수 카드를 모으는 엔진 빌딩 게임. 카드 사용, 상인 카드 획득, 휴식, 점수 카드 완성 중 매 턴 하나를 골라 무역로를 개척합니다.",
+    players: { min: 2, max: 5 },
+    playTime: { minMinutes: 30, maxMinutes: 45 },
+    category: "strategy",
+    thumbnail: { emoji: "🌶️", gradient: ["#f59e0b", "#78350f"] },
+    tags: ["엔진빌딩", "자원관리", "카드"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "mafia",
     name: "마피아",
     nameEn: "Mafia",
