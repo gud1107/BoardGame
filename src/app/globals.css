@@ -76,3 +76,42 @@ body {
     opacity: 0.25;
   }
 }
+
+/* Perudo's dice-cup shake (see PerudoBoard.tsx's ShakingCup) — a fast small
+   jitter (rotate + tiny translate) looped for the shake duration, paired
+   with soundEngine.ts's playDiceRattle click bursts. */
+@keyframes cup-shake {
+  0%,
+  100% {
+    transform: rotate(0deg) translateX(0);
+  }
+  20% {
+    transform: rotate(-8deg) translateX(-3px);
+  }
+  40% {
+    transform: rotate(6deg) translateX(2px);
+  }
+  60% {
+    transform: rotate(-5deg) translateX(-2px);
+  }
+  80% {
+    transform: rotate(7deg) translateX(3px);
+  }
+}
+
+/* Perudo's dice reveal — once the cup stops shaking, the real pip dice pop
+   in (paired with soundEngine.ts's playCupThud). */
+@keyframes dice-reveal-pop {
+  0% {
+    transform: scale(0.75);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}

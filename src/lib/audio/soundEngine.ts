@@ -9,6 +9,9 @@
  *  - `startBgm`/`stopBgm`: a tiny "playlist" of tense ambient motifs, one
  *    picked at random each time a loop finishes, so the background music
  *    plays some mix of random + cycling for as long as a game is active.
+ *  - `playDiceRattle`/`playCupThud`: Perudo's dice-cup shake/reveal SFX — a
+ *    burst of short filtered noise "clicks" that thin out as the shake
+ *    settles, then a low pitch-dropping thump for the cup landing.
  *
  * Browsers refuse to start audio before a user gesture, so `unlock()` (or
  * any of the play/start methods, which call it internally) must be invoked
@@ -213,6 +216,70 @@ class SoundEngine {
     const motif = MOTIFS[Math.floor(Math.random() * MOTIFS.length)];
     const durationSeconds = motif(this.ctx, this.bgmGain);
     this.bgmTimer = setTimeout(() => this.scheduleNextMotif(token), durationSeconds * 1000);
+  }
+
+  private diceClick() {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.master) return;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 2000 + Math.random() * 2000;
+    filter.Q.value = 8 + Math.random() * 8;
+    const gain = ctx.createGain();
+    const now = ctx.currentTime;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.22, now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05 + Math.random() * 0.03);
+    src.connect(filter).connect(gain).connect(this.master);
+    src.start();
+    src.stop(now + 0.1);
+  }
+
+  /** A burst of dice-in-cup "click" noises that thin out toward the end of `durationMs`, self-scheduling via setTimeout (no AudioContext-relative scheduling needed since each click is independent). */
+  playDiceRattle(durationMs = 800) {
+    if (!this.ensureContext()) return;
+    const start = performance.now();
+    const scheduleClick = () => {
+      const elapsed = performance.now() - start;
+      if (elapsed >= durationMs) return;
+      this.diceClick();
+      const progress = elapsed / durationMs;
+      const nextDelay = 35 + progress * 90 + Math.random() * 40; // clicks get sparser as the shake settles
+      setTimeout(scheduleClick, nextDelay);
+    };
+    scheduleClick();
+  }
+
+  /** Low pitch-dropping thump + a short noise "knock" transient — the cup landing/flipping down after a shake. */
+  playCupThud() {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.master) return;
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(150, now);
+    osc.frequency.exponentialRampToValueAtTime(45, now + 0.18);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.35, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    osc.connect(gain).connect(this.master);
+    osc.start(now);
+    osc.stop(now + 0.25);
+
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 900;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.25, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+    src.connect(filter).connect(noiseGain).connect(this.master);
+    src.start(now);
+    src.stop(now + 0.1);
   }
 
   stopBgm() {

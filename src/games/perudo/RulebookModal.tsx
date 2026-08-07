@@ -1,6 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
+import PerudoFaceIcon from "./PerudoFaceIcon";
 
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
   return (
@@ -15,10 +16,13 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">핵심 규칙: 파코 (💀 1번 눈)</h3>
+          <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-white/50 uppercase">
+            핵심 규칙: 페루도 <PerudoFaceIcon className="h-4 w-4 text-red-400" /> (1번 눈)
+          </h3>
           <p className="text-white/70">
-            1(파코)은 <span className="text-amber-300">2~6 모든 숫자로 조커처럼 합산</span>됩니다. 예: &quot;4가 5개&quot;를
-            셀 때는 실제 4의 개수 + 파코의 개수를 더합니다. 단, 팔라피코 라운드에서는 조커 기능이 사라집니다.
+            주사위 눈금 1은 <span className="text-amber-300">페루도</span>라고 부릅니다.{" "}
+            <span className="text-amber-300">2~6 모든 숫자로 조커처럼 합산</span>됩니다. 예: &quot;4가 5개&quot;를
+            셀 때는 실제 4의 개수 + 페루도(1)의 개수를 더합니다. 단, 팔라피코 라운드에서는 조커 기능이 사라집니다.
           </p>
         </section>
 
@@ -30,15 +34,19 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               <p className="text-xs text-white/60">개수를 올리거나(숫자는 자유), 개수를 유지한 채 숫자만 더 높게.</p>
             </div>
             <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
-              <p className="mb-1 font-medium text-white/90">일반 → 파코(💀)</p>
-              <p className="text-xs text-white/60">필요 개수를 절반으로 (소수점 올림). 예: 5개 → 파코 3개↑</p>
+              <p className="mb-1 flex items-center gap-1 font-medium text-white/90">
+                일반 → 페루도 <PerudoFaceIcon className="h-3.5 w-3.5 text-red-400" />
+              </p>
+              <p className="text-xs text-white/60">필요 개수를 절반으로 (소수점 올림). 예: 5개 → 페루도 3개↑</p>
             </div>
             <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
-              <p className="mb-1 font-medium text-white/90">파코(💀) → 일반</p>
-              <p className="text-xs text-white/60">필요 개수는 (파코 개수 × 2) + 1. 예: 파코 3개 → 숫자 7개↑</p>
+              <p className="mb-1 flex items-center gap-1 font-medium text-white/90">
+                페루도 <PerudoFaceIcon className="h-3.5 w-3.5 text-red-400" /> → 일반
+              </p>
+              <p className="text-xs text-white/60">필요 개수는 (페루도 개수 × 2) + 1. 예: 페루도 3개 → 숫자 7개↑</p>
             </div>
             <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
-              <p className="mb-1 font-medium text-white/90">파코 → 파코</p>
+              <p className="mb-1 font-medium text-white/90">페루도 → 페루도</p>
               <p className="text-xs text-white/60">숫자는 그대로, 개수만 더 높게 올릴 수 있습니다.</p>
             </div>
           </div>
@@ -75,7 +83,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             적용됩니다.
           </p>
           <ul className="mt-2 list-inside list-disc text-xs text-white/60">
-            <li>파코(1)의 조커 기능이 사라집니다 — 그냥 숫자 1로만 취급.</li>
+            <li>페루도(1)의 조커 기능이 사라집니다 — 그냥 숫자 1로만 취급.</li>
             <li>선이 처음 선언한 숫자가 고정되고, 이후에는 개수만 올릴 수 있습니다.</li>
             <li>&quot;맞아!&quot;를 외칠 수 없습니다.</li>
           </ul>
