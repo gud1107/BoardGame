@@ -158,7 +158,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     nameEn: "Perudo",
     description:
       "각자 주사위 5개를 컵에 숨기고 테이블 전체의 숫자 개수를 예측해 선언을 올리는 주사위 블러핑 게임. 거짓말을 의심하는 '페루도!'와 정확히 맞히는 '맞아!'로 상대의 주사위를 모두 잃게 만들면 승리합니다.",
-    players: { min: 2, max: 6 },
+    players: { min: 2, max: 8 },
     playTime: { minMinutes: 15, maxMinutes: 30 },
     category: "deduction",
     thumbnail: { emoji: "🎲", gradient: ["#f43f5e", "#7f1d1d"] },

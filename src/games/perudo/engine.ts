@@ -4,8 +4,9 @@
  * alive player hides 5 dice under a cup, the round's leader opens a bid on
  * "at least N dice showing face F across the whole table", each following
  * player must either raise the bid, call "페루도!" (dudo — doubt the bid) or
- * call "맞아!" (calza — claim the bid is exactly right), and 1s ("파코") act
- * as wild jokers for every face except during a "팔라피코" round.
+ * call "맞아!" (calza — claim the bid is exactly right), and 1s ("페루도" the
+ * face, not to be confused with the "페루도!" doubt call above) act as wild
+ * jokers for every face except during a "팔라피코" round.
  *
  * Same online-multiplayer trust model as every other game in this project:
  * every connected client computes and holds the FULL state (every seat's
@@ -29,11 +30,14 @@
 export type SeatIndex = number;
 
 export const MIN_PLAYERS = 2;
-export const MAX_PLAYERS = 6;
+// The physical box only ships 6 colored cups, but this digital implementation
+// deliberately extends beyond that hardware limit — 8 is a common house-rule
+// cap for Perudo/Dudo when playing with more dice sets pooled together.
+export const MAX_PLAYERS = 8;
 export const STARTING_DICE = 5;
 export const MAX_DICE = 5;
 
-/** 1 is "파코" (Paco) — a skull/joker face, not a plain pip. */
+/** 1 is "페루도" — a joker face marked with the game's own crest, not a plain pip. */
 export type Face = 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface Bid {

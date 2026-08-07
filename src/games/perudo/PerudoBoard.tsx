@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
+import PerudoFaceIcon from "./PerudoFaceIcon";
 import {
   computeRankings,
   isPalafico,
+  MAX_PLAYERS,
   minValidQuantityForFace,
+  STARTING_DICE,
   totalDiceInPlay,
   type EngineAction,
   type Face,
@@ -22,6 +26,10 @@ import {
  * memory — this component only ever *renders* the viewer's own dice for
  * real and every other seat's as face-down backs until "reveal"/"gameOver".
  * See engine.ts and README for the accepted trust trade-off.
+ *
+ * Terminology note: the die value 1 is called "페루도" throughout this file
+ * (never "파코") per the rulebook's current wording — not to be confused
+ * with the "페루도!" doubt call, which is a different action entirely.
  */
 export interface PerudoBoardProps {
   state: PerudoState;
@@ -54,7 +62,19 @@ function TableTexture() {
 }
 
 function faceLabel(face: Face): string {
-  return face === 1 ? "💀 파코" : `${face}`;
+  return face === 1 ? "페루도" : `${face}`;
+}
+
+/** Always-visible stat bar (rulebook UX request #4, top area) — the one number every player needs at a glance regardless of phase. */
+function TotalDiceBanner({ state }: { state: PerudoState }) {
+  return (
+    <div className="relative z-10 flex items-center justify-center gap-2 rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-1.5 text-center">
+      <span className="text-base">🎲</span>
+      <span className="text-sm font-bold text-amber-100">
+        현재 전체 주사위: {totalDiceInPlay(state)}개
+      </span>
+    </div>
+  );
 }
 
 const SIZE_CLASS = {
@@ -71,7 +91,7 @@ const PIP_LAYOUT: Record<number, number[]> = {
   6: [0, 2, 3, 5, 6, 8],
 };
 
-/** One face-up die — a skull for 파코(1), otherwise a standard pip layout. */
+/** One face-up die — the red-crested 페루도 face for value 1 (matching the physical die's red-on-white coloring), otherwise a standard white pip die. */
 function DieFace({ value, size = "md", ring }: { value: number; size?: keyof typeof SIZE_CLASS; ring?: "match" | "wild" }) {
   const ringClass =
     ring === "match"
@@ -79,13 +99,18 @@ function DieFace({ value, size = "md", ring }: { value: number; size?: keyof typ
       : ring === "wild"
         ? "ring-2 ring-violet-300"
         : "ring-1 ring-black/30";
+  const isPerudo = value === 1;
   return (
     <div
-      className={`flex items-center justify-center rounded-md border border-white/40 bg-gradient-to-b from-white to-neutral-200 font-black text-neutral-900 shadow ${SIZE_CLASS[size]} ${ringClass}`}
-      title={value === 1 ? "파코 (조커)" : `${value}`}
+      className={`flex items-center justify-center rounded-md border font-black shadow ${SIZE_CLASS[size]} ${ringClass} ${
+        isPerudo
+          ? "border-red-950 bg-gradient-to-b from-red-500 to-red-700 text-white"
+          : "border-white/40 bg-gradient-to-b from-white to-neutral-200 text-neutral-900"
+      }`}
+      title={isPerudo ? "페루도 (조커)" : `${value}`}
     >
-      {value === 1 ? (
-        <span aria-hidden>💀</span>
+      {isPerudo ? (
+        <PerudoFaceIcon className="h-[65%] w-[65%]" />
       ) : (
         <div className="grid h-full w-full grid-cols-3 grid-rows-3 gap-[1px] p-1">
           {Array.from({ length: 9 }, (_, i) => (
@@ -107,6 +132,21 @@ function DieBack({ size = "sm" }: { size?: keyof typeof SIZE_CLASS }) {
       className={`flex items-center justify-center rounded-md border border-black/40 bg-gradient-to-br from-rose-900 to-rose-950 text-rose-300/50 ${SIZE_CLASS[size]}`}
     >
       🎲
+    </div>
+  );
+}
+
+/** Cup-shake connect: a wooden dice cup jitters (CSS keyframe, see globals.css) while `soundEngine.playDiceRattle` clatters, shown in place of the real dice until the reveal timer in PerudoBoard elapses. */
+function ShakingCup() {
+  return (
+    <div className="flex flex-col items-center gap-1.5 py-1">
+      <div className="relative h-16 w-14">
+        <div
+          className="absolute inset-x-0 bottom-0 h-16 w-full origin-bottom animate-[cup-shake_0.13s_ease-in-out_infinite] rounded-b-xl rounded-t-md border-2 border-black/50 bg-gradient-to-b from-amber-700 to-amber-950 shadow-lg"
+          style={{ clipPath: "polygon(12% 0%, 88% 0%, 100% 100%, 0% 100%)" }}
+        />
+      </div>
+      <p className="animate-pulse text-[11px] text-amber-200/70">🥃 컵을 흔드는 중...</p>
     </div>
   );
 }
@@ -136,12 +176,172 @@ function FacePicker({
                 ? "border-amber-300 bg-amber-400/20 text-amber-100"
                 : "border-white/15 text-white/60 hover:border-white/30"
             } ${disabled ? "cursor-not-allowed opacity-30" : ""}`}
-            title={face === 1 ? "파코 (조커)" : `숫자 ${face}`}
+            title={face === 1 ? "페루도 (조커)" : `숫자 ${face}`}
           >
-            {face === 1 ? "💀" : face}
+            {face === 1 ? <PerudoFaceIcon className="mx-auto h-5 w-5" /> : face}
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Bid track — a perimeter loop of clickable quantity cells wrapping the
+// central play area, echoing the physical board's numbered outer track (see
+// boardGameRule/Perudo.md's box photo). TRACK_LENGTH = MAX_PLAYERS *
+// STARTING_DICE, the highest a bid quantity could ever meaningfully reach
+// (every die that could ever be in play at once). The grid dimensions are
+// *derived* from that length (not hand-solved magic numbers) so the track
+// never silently mismatches again if MAX_PLAYERS/STARTING_DICE change —
+// exactly the kind of drift that bit the earlier hardcoded 9x8/30 version
+// the moment MAX_PLAYERS grew from 6 to 8.
+// ---------------------------------------------------------------------------
+const TRACK_LENGTH = MAX_PLAYERS * STARTING_DICE;
+
+/**
+ * A rectangular grid's border cell count is `2*cols + 2*rows - 4`, so
+ * `cols + rows = length/2 + 2`. Splits that sum as evenly as possible for a
+ * roughly square/landscape track. `length` must be even (border counts
+ * always are) — true for every MAX_PLAYERS this project has ever shipped
+ * (MAX_PLAYERS * STARTING_DICE with STARTING_DICE=5 is even iff MAX_PLAYERS
+ * is even, which it has always been).
+ */
+function computeTrackDimensions(length: number): { cols: number; rows: number } {
+  if (length % 2 !== 0 || length < 8) {
+    throw new Error(`Perudo bid track length must be an even number >= 8, got ${length}`);
+  }
+  const sum = length / 2 + 2;
+  const rows = Math.floor(sum / 2);
+  const cols = sum - rows;
+  return { cols, rows };
+}
+const { cols: TRACK_COLS, rows: TRACK_ROWS } = computeTrackDimensions(TRACK_LENGTH);
+
+interface TrackCell {
+  quantity: number;
+  col: number;
+  row: number;
+}
+
+function buildTrackCells(): TrackCell[] {
+  const cells: TrackCell[] = [];
+  let q = 1;
+  for (let col = 1; col <= TRACK_COLS; col++) cells.push({ quantity: q++, col, row: 1 }); // top, left->right
+  for (let row = 2; row <= TRACK_ROWS; row++) cells.push({ quantity: q++, col: TRACK_COLS, row }); // right, top->bottom
+  for (let col = TRACK_COLS - 1; col >= 1; col--) cells.push({ quantity: q++, col, row: TRACK_ROWS }); // bottom, right->left
+  for (let row = TRACK_ROWS - 1; row >= 2; row--) cells.push({ quantity: q++, col: 1, row }); // left, bottom->top
+  return cells;
+}
+const TRACK_CELLS: TrackCell[] = buildTrackCells();
+if (TRACK_CELLS.length !== TRACK_LENGTH) {
+  // Backstop only — computeTrackDimensions derives TRACK_COLS/TRACK_ROWS
+  // from TRACK_LENGTH by construction, so this should never actually trip.
+  throw new Error(`Perudo bid track expected ${TRACK_LENGTH} cells, got ${TRACK_CELLS.length}`);
+}
+
+/**
+ * Direct-click betting surface (rulebook UX request #2): clicking a
+ * quantity cell immediately raises to `{ quantity: cell, face: selectedFace }`.
+ * Cells that wouldn't be a legal raise over the current bid (per
+ * `minValidQuantityForFace`) render disabled — "이전 베팅 이하의 칸은 클릭 불가".
+ * The interior of the loop hosts the rest of the round UI via `children`.
+ */
+function BidTrack({
+  state,
+  isMyTurn,
+  selectedFace,
+  palafico,
+  onPick,
+  children,
+}: {
+  state: PerudoState;
+  isMyTurn: boolean;
+  selectedFace: Face;
+  palafico: boolean;
+  onPick: (quantity: number) => void;
+  children: ReactNode;
+}) {
+  const minQty = minValidQuantityForFace(state.currentBid, selectedFace, palafico);
+  return (
+    <div
+      className="relative mx-auto grid w-full max-w-xl gap-[3px]"
+      style={{
+        gridTemplateColumns: `repeat(${TRACK_COLS}, 1fr)`,
+        gridTemplateRows: `repeat(${TRACK_ROWS}, minmax(1.85rem, 1fr))`,
+        aspectRatio: `${TRACK_COLS} / ${TRACK_ROWS}`,
+      }}
+    >
+      {TRACK_CELLS.map((cell) => {
+        const enabled = isMyTurn && minQty !== null && cell.quantity >= minQty;
+        const isCurrentBidCell = state.currentBid?.quantity === cell.quantity && state.currentBid.face === selectedFace;
+        return (
+          <button
+            key={cell.quantity}
+            type="button"
+            disabled={!enabled}
+            onClick={() => onPick(cell.quantity)}
+            style={{ gridColumn: `${cell.col}`, gridRow: `${cell.row}` }}
+            className={`flex items-center justify-center rounded-[4px] border text-[10px] font-bold transition sm:text-xs ${
+              isCurrentBidCell
+                ? "border-amber-300 bg-amber-400/40 text-amber-50"
+                : enabled
+                  ? "cursor-pointer border-emerald-400/50 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/30"
+                  : "cursor-not-allowed border-white/10 bg-black/25 text-white/20"
+            }`}
+            title={
+              !isMyTurn
+                ? "지금은 당신의 차례가 아니에요"
+                : enabled
+                  ? `${faceLabel(selectedFace)} ${cell.quantity}개 이상 선언하기`
+                  : "지금 선택한 눈금으로는 여기를 선언할 수 없어요"
+            }
+          >
+            {cell.quantity}
+          </button>
+        );
+      })}
+      <div
+        style={{ gridColumn: `2 / ${TRACK_COLS}`, gridRow: `2 / ${TRACK_ROWS}` }}
+        className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/40 p-2"
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** "내 주사위 통계 요약" + "1/3 기대값" (rulebook UX request #4, bottom area). */
+function MyDiceStatsPanel({ state, myDice }: { state: PerudoState; myDice: number[] }) {
+  const faces: Face[] = [1, 2, 3, 4, 5, 6];
+  const counts = faces.map((face) => ({ face, count: myDice.filter((d) => d === face).length }));
+  const total = totalDiceInPlay(state);
+  const expected = total / 3;
+  const lo = Math.floor(expected);
+  const hi = Math.ceil(expected);
+
+  return (
+    <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-white/10 bg-black/25 p-2.5">
+      <p className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">내 주사위 통계</p>
+      <div className="flex flex-wrap gap-1.5">
+        {counts.map(({ face, count }) => (
+          <span
+            key={face}
+            className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
+              count > 0 ? "border-amber-300/40 bg-amber-400/10 text-amber-100" : "border-white/10 text-white/30"
+            }`}
+          >
+            {face === 1 ? <PerudoFaceIcon className="h-3 w-3" /> : <span className="font-bold">{face}</span>}
+            {face === 1 ? "페루도" : `숫자 ${face}`}: {count}개
+          </span>
+        ))}
+      </div>
+      <p className="text-[11px] text-white/50">
+        전체 주사위: <span className="text-white/80">{total}개</span> · 1/3 기대값:{" "}
+        <span className="text-amber-200">
+          {expected.toFixed(1)}개{lo === hi ? ` (약 ${lo}개)` : ` (약 ${lo}~${hi}개)`}
+        </span>
+      </p>
     </div>
   );
 }
@@ -155,18 +355,52 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
 
   const [selectedFace, setSelectedFace] = useState<Face>(state.currentBid?.face ?? 2);
   const effectiveFace: Face = palafico && state.currentBid ? state.currentBid.face : selectedFace;
-  const minQuantity = minValidQuantityForFace(state.currentBid, effectiveFace, palafico) ?? 1;
-  const [quantityOverride, setQuantityOverride] = useState<number | null>(null);
-  const quantity = Math.max(minQuantity, quantityOverride ?? minQuantity);
-
   function pickFace(face: Face) {
     setSelectedFace(face);
-    setQuantityOverride(null);
   }
 
   const disabledFaces = new Set<Face>();
   if (palafico && state.currentBid) {
     for (const f of [1, 2, 3, 4, 5, 6] as Face[]) if (f !== state.currentBid.face) disabledFaces.add(f);
+  }
+
+  // -------------------------------------------------------------------------
+  // Cup shake -> reveal (rulebook UX request #3): every time a new round's
+  // dice are rolled (roundNumber changes, including the very first mount),
+  // hide the real pip values behind a shaking-cup animation + rattle SFX for
+  // a beat, then "flip the cup" (thud SFX) to reveal them. Purely a local
+  // cosmetic delay — the real values already sit in `state`, synced via the
+  // same lockstep broadcast as everything else; nothing about the network
+  // waits on this timer.
+  // -------------------------------------------------------------------------
+  const [revealing, setRevealing] = useState(true);
+  // Render-time state adjustment (same "adjust state when a prop changes"
+  // pattern as NoThanksBoard's `trackedState`) rather than an effect that
+  // calls setState synchronously as its first act — `revealedRound` just
+  // remembers which round we've already kicked the shake off for, so this
+  // block fires exactly once per `roundNumber` change (including mount).
+  const [revealedRound, setRevealedRound] = useState<number | null>(null);
+  if (revealedRound !== state.roundNumber) {
+    setRevealedRound(state.roundNumber);
+    setRevealing(true);
+  }
+  useEffect(() => {
+    if (!revealing) return;
+    const engine = getSoundEngine();
+    engine.unlock(); // best-effort — a user gesture already happened earlier in the room lobby
+    engine.playDiceRattle(750);
+    const timeout = setTimeout(() => {
+      setRevealing(false);
+      engine.playCupThud();
+    }, 800);
+    return () => clearTimeout(timeout);
+  }, [revealing]);
+
+  const [muted, setMuted] = useState(() => getSoundEngine().isMuted());
+  function toggleMuted() {
+    const next = !muted;
+    getSoundEngine().setMuted(next);
+    setMuted(next);
   }
 
   const rulebookButton = (
@@ -178,14 +412,25 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
     </button>
   );
 
-  // ---------------------------------------------------------------------
+  const muteButton = (
+    <button
+      onClick={toggleMuted}
+      title={muted ? "효과음 켜기" : "효과음 끄기"}
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+    >
+      {muted ? "🔇" : "🔊"}
+    </button>
+  );
+
+  // -------------------------------------------------------------------------
   // Game over
-  // ---------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   if (state.phase === "gameOver") {
     const rankings = computeRankings(state);
     return (
-      <div className={`${TABLE_PANEL} flex flex-col items-center gap-5 p-4 text-center sm:p-8`}>
+      <div className={`${TABLE_PANEL} flex flex-col items-center gap-4 p-4 text-center sm:p-8`}>
         <TableTexture />
+        <TotalDiceBanner state={state} />
         <span className="relative z-10 text-5xl">🏆</span>
         <h2 className="relative z-10 text-2xl font-bold text-amber-100">{names[rankings[0]?.seat]}님 승리!</h2>
         <p className="relative z-10 text-xs text-white/50">마지막까지 주사위를 지킨 사람이 이기는 게임입니다.</p>
@@ -214,9 +459,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
           </table>
         </div>
 
-        {state.lastResolution && (
-          <RevealPanel state={state} names={names} viewerSeat={viewerSeat} />
-        )}
+        {state.lastResolution && <RevealPanel state={state} names={names} viewerSeat={viewerSeat} />}
 
         <button
           onClick={onGameEnd}
@@ -228,19 +471,24 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
     );
   }
 
-  // ---------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Reveal (between rounds)
-  // ---------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   if (state.phase === "reveal" && state.lastResolution) {
     const res = state.lastResolution;
-    const success =
-      res.kind === "dudo" ? res.affectedSeat !== res.actorSeat : res.diceDelta === 1;
+    const success = res.kind === "dudo" ? res.affectedSeat !== res.actorSeat : res.diceDelta === 1;
     return (
-      <div className={`${TABLE_PANEL} flex flex-col gap-4 p-3 sm:p-4`}>
+      <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
         <TableTexture />
+        <TotalDiceBanner state={state} />
         <div className="relative z-10 flex items-center justify-between text-xs text-rose-100/60">
-          <span>{state.playerCount}인 · {state.roundNumber}라운드 결과</span>
-          {rulebookButton}
+          <span>
+            {state.playerCount}인 · {state.roundNumber}라운드 결과
+          </span>
+          <div className="flex gap-1.5">
+            {muteButton}
+            {rulebookButton}
+          </div>
         </div>
         <div className="relative z-10 rounded-2xl border border-white/10 bg-black/30 p-4 text-center">
           <p className="text-sm font-semibold text-amber-100">
@@ -273,18 +521,19 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
     );
   }
 
-  // ---------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Playing
-  // ---------------------------------------------------------------------
-  const wild = !palafico;
+  // -------------------------------------------------------------------------
   const seatOrder = Array.from({ length: state.playerCount }, (_, i) => i);
 
   return (
     <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
       <TableTexture />
+      <TotalDiceBanner state={state} />
+
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-rose-100/60">
         <span className="flex items-center gap-1.5">
-          {state.playerCount}인 · {state.roundNumber}라운드 · 총 주사위 {totalDiceInPlay(state)}개
+          {state.playerCount}인 · {state.roundNumber}라운드
           {palafico && (
             <span
               title="선(先) 플레이어가 주사위 1개만 남아 팔라피코 라운드입니다: 조커 없음, 선언한 숫자 고정, 맞아! 불가"
@@ -294,95 +543,88 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
             </span>
           )}
         </span>
-        {rulebookButton}
-      </div>
-
-      {/* Current bid */}
-      <div className="relative z-10 flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5">
-        <p className={`text-xs font-medium ${isMyTurn ? "text-amber-200" : "text-white/50"}`}>
-          {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
-        </p>
-        {state.currentBid ? (
-          <div className="flex items-center gap-3 text-center">
-            <span className="text-xs text-white/50">{names[state.currentBid.seat]}님의 선언</span>
-            <span className="text-3xl font-black text-amber-100">
-              {faceLabel(state.currentBid.face)} × {state.currentBid.quantity}개↑
-            </span>
-          </div>
-        ) : (
-          <p className="text-sm text-white/50">{names[state.activeSeat]}님이 이번 라운드를 엽니다 — 첫 선언 대기 중</p>
-        )}
-      </div>
-
-      {/* My dice */}
-      <div className="relative z-10 flex flex-col items-center gap-1.5 rounded-2xl border border-white/10 bg-black/20 p-3">
-        <p className="text-[11px] text-white/50">내 주사위 ({me.diceCount}개)</p>
-        <div className="flex flex-wrap justify-center gap-1.5">
-          {me.dice.map((d, i) => {
-            const matchesBid = state.currentBid ? d === state.currentBid.face : false;
-            const isWild = wild && state.currentBid && state.currentBid.face !== 1 && d === 1;
-            return <DieFace key={i} value={d} size="lg" ring={matchesBid ? "match" : isWild ? "wild" : undefined} />;
-          })}
-          {!iAmAlive && <p className="text-xs text-rose-300/70">탈락했습니다 — 관전 중</p>}
+        <div className="flex gap-1.5">
+          {muteButton}
+          {rulebookButton}
         </div>
       </div>
 
-      {/* Actions */}
-      {iAmAlive && (
-        <div className="relative z-10 flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/20 p-3">
-          {isMyTurn && (
-            <div className="flex flex-col gap-2">
-              <p className="text-[11px] text-white/50">선언 올리기</p>
-              <FacePicker selected={effectiveFace} onSelect={pickFace} disabledFaces={disabledFaces} />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setQuantityOverride(Math.max(minQuantity, quantity - 1))}
-                  className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
-                >
-                  −
-                </button>
-                <span className="w-10 text-center text-lg font-semibold text-white">{quantity}</span>
-                <button
-                  type="button"
-                  onClick={() => setQuantityOverride(quantity + 1)}
-                  className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
-                >
-                  +
-                </button>
-                <span className="text-[11px] text-white/40">(최소 {minQuantity}개)</span>
-              </div>
+      <p className={`relative z-10 text-center text-xs font-medium ${isMyTurn ? "text-amber-200" : "text-white/50"}`}>
+        {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
+      </p>
+
+      <div className="relative z-10 flex flex-col items-center gap-1.5">
+        <p className="text-[11px] text-white/50">선언할 눈금 선택 (아래 트랙에서 개수를 눌러 선언)</p>
+        <FacePicker selected={effectiveFace} onSelect={pickFace} disabledFaces={disabledFaces} />
+      </div>
+
+      <div className="relative z-10">
+        <BidTrack
+          state={state}
+          isMyTurn={isMyTurn}
+          selectedFace={effectiveFace}
+          palafico={palafico}
+          onPick={(quantity) => onAction({ type: "raise", seat: viewerSeat, quantity, face: effectiveFace })}
+        >
+          {state.currentBid ? (
+            <div className="flex flex-col items-center gap-0.5 text-center">
+              <span className="text-[10px] text-white/50">{names[state.currentBid.seat]}님의 선언</span>
+              <span className="text-2xl font-black text-amber-100 sm:text-3xl">
+                {faceLabel(state.currentBid.face)} × {state.currentBid.quantity}개↑
+              </span>
+            </div>
+          ) : (
+            <p className="px-2 text-center text-xs text-white/50">
+              {names[state.activeSeat]}님이 이번 라운드를 엽니다 — 첫 선언 대기 중
+            </p>
+          )}
+
+          {iAmAlive && (
+            <div className="flex gap-2">
               <button
-                onClick={() => onAction({ type: "raise", seat: viewerSeat, quantity, face: effectiveFace })}
-                className="rounded-xl bg-amber-600 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500"
+                disabled={!isMyTurn || !state.currentBid}
+                onClick={() => onAction({ type: "dudo", seat: viewerSeat })}
+                className="rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 sm:px-4 sm:py-2 sm:text-xs"
               >
-                📢 {faceLabel(effectiveFace)} {quantity}개 이상! 선언하기
+                🚨 페루도!
+              </button>
+              <button
+                disabled={palafico || !state.currentBid}
+                onClick={() => onAction({ type: "calza", seat: viewerSeat })}
+                title="차례와 상관없이 외칠 수 있어요"
+                className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 sm:px-4 sm:py-2 sm:text-xs"
+              >
+                🎯 맞아!
               </button>
             </div>
           )}
-          <div className="flex gap-2">
-            <button
-              disabled={!isMyTurn || !state.currentBid}
-              onClick={() => onAction({ type: "dudo", seat: viewerSeat })}
-              className="flex-1 rounded-xl bg-rose-700 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
-            >
-              🚨 페루도! (의심)
-            </button>
-            <button
-              disabled={palafico || !state.currentBid}
-              onClick={() => onAction({ type: "calza", seat: viewerSeat })}
-              title="차례와 상관없이 외칠 수 있어요"
-              className="flex-1 rounded-xl bg-emerald-700 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
-            >
-              🎯 맞아! (정확히 일치)
-            </button>
-          </div>
-          {palafico && <p className="text-center text-[11px] text-rose-300/80">팔라피코 라운드에서는 &quot;맞아!&quot;를 외칠 수 없어요.</p>}
-        </div>
-      )}
+          {palafico && <p className="text-center text-[10px] text-rose-300/80">팔라피코 라운드: &quot;맞아!&quot; 불가</p>}
+        </BidTrack>
+      </div>
 
-      {/* Player strip */}
-      <div className="relative z-10 flex flex-col gap-2">
+      {/* My dice — hidden behind a shaking cup for a beat after each reroll, then revealed. */}
+      <div className="relative z-10 flex flex-col items-center gap-1.5 rounded-2xl border border-white/10 bg-black/20 p-3">
+        <p className="text-[11px] text-white/50">내 주사위 ({me.diceCount}개)</p>
+        {revealing ? (
+          <ShakingCup />
+        ) : (
+          <div className="flex flex-wrap justify-center gap-1.5 [animation:dice-reveal-pop_0.35s_ease-out]">
+            {me.dice.map((d, i) => {
+              const matchesBid = state.currentBid ? d === state.currentBid.face : false;
+              const isWild = !palafico && state.currentBid && state.currentBid.face !== 1 && d === 1;
+              return <DieFace key={i} value={d} size="lg" ring={matchesBid ? "match" : isWild ? "wild" : undefined} />;
+            })}
+            {!iAmAlive && <p className="text-xs text-rose-300/70">탈락했습니다 — 관전 중</p>}
+          </div>
+        )}
+      </div>
+
+      <MyDiceStatsPanel state={state} myDice={me.dice} />
+
+      {/* Player strip — a responsive grid (not a single flex column) so it
+          stays readable up to the full 8-player table instead of forcing a
+          tall single-file scroll; wraps to 2 columns once there's room. */}
+      <div className="relative z-10 grid grid-cols-1 gap-2 sm:grid-cols-2">
         {seatOrder.map((seat) => {
           const player = state.players.find((p) => p.seat === seat)!;
           const isSelf = seat === viewerSeat;
@@ -391,26 +633,24 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
           return (
             <div
               key={seat}
-              className={`flex items-center justify-between rounded-xl border p-2.5 transition ${
+              className={`flex items-center justify-between gap-2 rounded-xl border p-2.5 transition ${
                 isActive ? "border-amber-300/60 bg-amber-400/10" : "border-white/10 bg-black/20"
               } ${eliminated ? "opacity-40" : ""}`}
             >
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-white/90">
-                <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+              <span className="flex min-w-0 items-center gap-1.5 truncate text-xs font-semibold text-white/90">
+                <span
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`}
+                />
                 {isActive && <span title="차례">👉</span>}
                 {eliminated && <span title="탈락">💀</span>}
-                {names[seat]}
-                {isSelf && <span className="text-amber-200">(나)</span>}
+                <span className="truncate">{names[seat]}</span>
+                {isSelf && <span className="shrink-0 text-amber-200">(나)</span>}
               </span>
-              <div className="flex items-center gap-1">
+              <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-1">
                 {eliminated ? (
                   <span className="text-[11px] text-white/30">탈락</span>
                 ) : (
-                  <>
-                    {Array.from({ length: player.diceCount }, (_, i) => (
-                      <DieBack key={i} />
-                    ))}
-                  </>
+                  Array.from({ length: player.diceCount }, (_, i) => <DieBack key={i} />)
                 )}
               </div>
             </div>

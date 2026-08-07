@@ -61,9 +61,15 @@ describe("startGame — setup", () => {
 
   it("throws for unsupported player counts", () => {
     expect(() => startGame(1, 1)).toThrow();
-    expect(() => startGame(7, 1)).toThrow();
+    expect(() => startGame(9, 1)).toThrow();
     expect(MIN_PLAYERS).toBe(2);
-    expect(MAX_PLAYERS).toBe(6);
+    expect(MAX_PLAYERS).toBe(8);
+  });
+
+  it("supports the full 8-player table (extends beyond the physical box's 6 cups)", () => {
+    const state = startGame(8, 1);
+    expect(state.players).toHaveLength(8);
+    expect(totalDiceInPlay(state)).toBe(8 * STARTING_DICE);
   });
 });
 
@@ -98,8 +104,8 @@ describe("validateRaise — rulebook §3 formulas", () => {
     });
   });
 
-  describe("normal -> paco(1)", () => {
-    it("rulebook's worked example: 4가 5개 -> 파코 3개 이상 (ceil(5/2)=3)", () => {
+  describe("normal -> 페루도(1)", () => {
+    it("rulebook's worked example: 4가 5개 -> 페루도 3개 이상 (ceil(5/2)=3)", () => {
       const prev: Bid = { seat: 0, quantity: 5, face: 4 };
       expect(validateRaise(prev, { quantity: 2, face: 1 }, false)).toBe(false);
       expect(validateRaise(prev, { quantity: 3, face: 1 }, false)).toBe(true);
@@ -107,8 +113,8 @@ describe("validateRaise — rulebook §3 formulas", () => {
     });
   });
 
-  describe("paco(1) -> normal", () => {
-    it("rulebook's worked example: 파코 3개 -> 숫자 7개 이상 (3*2+1=7)", () => {
+  describe("페루도(1) -> normal", () => {
+    it("rulebook's worked example: 페루도 3개 -> 숫자 7개 이상 (3*2+1=7)", () => {
       const prev: Bid = { seat: 0, quantity: 3, face: 1 };
       expect(validateRaise(prev, { quantity: 6, face: 2 }, false)).toBe(false);
       expect(validateRaise(prev, { quantity: 7, face: 2 }, false)).toBe(true);
@@ -116,7 +122,7 @@ describe("validateRaise — rulebook §3 formulas", () => {
     });
   });
 
-  describe("paco -> paco", () => {
+  describe("페루도 -> 페루도", () => {
     it("only a strictly higher quantity is a valid raise", () => {
       const prev: Bid = { seat: 0, quantity: 3, face: 1 };
       expect(validateRaise(prev, { quantity: 3, face: 1 }, false)).toBe(false);
@@ -143,7 +149,7 @@ describe("countMatching", () => {
     { seat: 0, diceCount: 3, dice: [1, 4, 4] },
     { seat: 1, diceCount: 2, dice: [4, 6] },
   ];
-  it("counts 1s (파코) as wild for any other face when wild=true", () => {
+  it("counts 1s (페루도) as wild for any other face when wild=true", () => {
     expect(countMatching(players, 4, true)).toBe(4); // three real 4s + one wild 1
   });
   it("does not apply wilds when wild=false (Palafico rounds)", () => {
