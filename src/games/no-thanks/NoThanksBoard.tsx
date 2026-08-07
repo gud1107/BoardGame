@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { detectAuctionEvent, FlyingToken, type AnimEvent } from "./AuctionEffects";
 import RulebookModal from "./RulebookModal";
 import {
@@ -154,6 +154,39 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
       return next;
     });
   }
+
+  // -------------------------------------------------------------------------
+  // Console debug helper — every client already computes and holds the FULL
+  // state (deck order, the 9 removed cards, every seat's chips) in memory
+  // regardless of what this component chooses to render (see the doc
+  // comment above and README's documented trust trade-off); a curious
+  // player can already reach all of it via React DevTools or by replaying
+  // the shared seed by hand. This just gives that the same friendly,
+  // supported read path as the chip-reveal toggle above, instead of leaving
+  // it as something only found via devtools archaeology.
+  //
+  // `stateRef` is updated in its own effect (not written during render —
+  // the same ref-mirroring pattern NoThanksGame.tsx uses for
+  // `gameStateRef`) so the console function registered below always reads
+  // the latest state no matter when it was originally installed.
+  // -------------------------------------------------------------------------
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+  useEffect(() => {
+    const win = window as unknown as { 노땡스?: () => void };
+    win.노땡스 = () => {
+      const s = stateRef.current;
+      console.log("🙈 이번 판에서 완전히 제외된 9장 (아무도 못 봄):", s.removedCards);
+      console.log("📥 남은 덱 순서 (배열 맨 앞이 다음에 뒤집힐 카드):", s.deck);
+      console.log("👀 지금 중앙에 공개된 카드:", s.currentCard);
+    };
+    console.log("%c콘솔에 노땡스() 라고 입력하면 제외된 카드/남은 카드 순서를 볼 수 있어요.", "color:#34d399");
+    return () => {
+      delete win.노땡스;
+    };
+  }, []);
 
   // -------------------------------------------------------------------------
   // Auction effects (coin toss / card+chip collect) — see AuctionEffects.tsx.
