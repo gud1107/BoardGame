@@ -352,7 +352,7 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
           >
             {state.currentCard}
             {state.chipsOnCard > 0 && (
-              <div className="absolute -bottom-3 flex items-center gap-1 rounded-full border border-amber-300/60 bg-amber-500/90 px-2.5 py-1 text-xs font-bold text-black shadow">
+              <div className="absolute -bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-full border border-amber-300/60 bg-amber-500/90 px-2.5 py-1 text-xs font-bold text-black shadow">
                 🪙 {state.chipsOnCard}
               </div>
             )}
