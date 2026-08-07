@@ -44,10 +44,13 @@ function randomSeed(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
 
-// A deep crimson "leather dice table" panel — distinct from the other
-// games' navy / wood / purple / felt-green boards.
+// A dark stone/gunmetal "temple ruins" panel — echoes the physical board
+// mat's grey-stone outer bezel (see boardGameRule/Perudo.md's box photo),
+// distinct from the other games' navy / wood / purple / felt-green boards.
+// The warm gold/jungle palette from that same photo lives inside — see
+// BidTrack's wood-tile cells and golden interior plaque below.
 const TABLE_PANEL =
-  "relative overflow-hidden rounded-3xl border border-black/50 bg-gradient-to-b from-[#3a0f14] via-[#240a0d] to-[#130506] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
+  "relative overflow-hidden rounded-3xl border border-black/60 bg-gradient-to-b from-[#2b2f37] via-[#1b1e24] to-[#0c0d10] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
 
 function TableTexture() {
   return (
@@ -91,32 +94,40 @@ const PIP_LAYOUT: Record<number, number[]> = {
   6: [0, 2, 3, 5, 6, 8],
 };
 
-/** One face-up die — the red-crested 페루도 face for value 1 (matching the physical die's red-on-white coloring), otherwise a standard white pip die. */
+/**
+ * One face-up die — high-contrast, "lacquered" styling: a gold-rimmed ivory
+ * die with a crisp inset gloss highlight for values 2-6, and a gold-rimmed
+ * red die (matching the physical die's red-on-white coloring) with the
+ * white sun-mask crest for the 페루도 face. The inset box-shadows give both
+ * a subtle carved/raised depth instead of flat color fills.
+ */
 function DieFace({ value, size = "md", ring }: { value: number; size?: keyof typeof SIZE_CLASS; ring?: "match" | "wild" }) {
   const ringClass =
     ring === "match"
       ? "ring-2 ring-amber-300"
       : ring === "wild"
         ? "ring-2 ring-violet-300"
-        : "ring-1 ring-black/30";
+        : "ring-1 ring-black/40";
   const isPerudo = value === 1;
   return (
     <div
-      className={`flex items-center justify-center rounded-md border font-black shadow ${SIZE_CLASS[size]} ${ringClass} ${
+      className={`flex items-center justify-center rounded-md border-2 font-black ${SIZE_CLASS[size]} ${ringClass} ${
         isPerudo
-          ? "border-red-950 bg-gradient-to-b from-red-500 to-red-700 text-white"
-          : "border-white/40 bg-gradient-to-b from-white to-neutral-200 text-neutral-900"
+          ? "border-amber-300 bg-gradient-to-br from-red-500 via-red-600 to-red-800 text-white shadow-[inset_0_2px_3px_rgba(255,255,255,0.4),inset_0_-3px_5px_rgba(0,0,0,0.4)]"
+          : "border-amber-300/80 bg-gradient-to-br from-white via-amber-50 to-neutral-200 text-neutral-950 shadow-[inset_0_2px_3px_rgba(255,255,255,0.9),inset_0_-3px_5px_rgba(0,0,0,0.2)]"
       }`}
       title={isPerudo ? "페루도 (조커)" : `${value}`}
     >
       {isPerudo ? (
-        <PerudoFaceIcon className="h-[65%] w-[65%]" />
+        <PerudoFaceIcon className="h-[65%] w-[65%] drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]" />
       ) : (
         <div className="grid h-full w-full grid-cols-3 grid-rows-3 gap-[1px] p-1">
           {Array.from({ length: 9 }, (_, i) => (
             <span
               key={i}
-              className={`m-auto h-[22%] w-[22%] rounded-full ${PIP_LAYOUT[value]?.includes(i) ? "bg-neutral-900" : "bg-transparent"}`}
+              className={`m-auto h-[24%] w-[24%] rounded-full ${
+                PIP_LAYOUT[value]?.includes(i) ? "bg-neutral-950 shadow-[inset_0_1px_1px_rgba(0,0,0,0.6)]" : "bg-transparent"
+              }`}
             />
           ))}
         </div>
@@ -125,11 +136,11 @@ function DieFace({ value, size = "md", ring }: { value: number; size?: keyof typ
   );
 }
 
-/** A hidden opponent die — no pips, just a themed back. */
+/** A hidden opponent die — no pips, just a themed wood/bronze back matching the board's carved-medallion palette. */
 function DieBack({ size = "sm" }: { size?: keyof typeof SIZE_CLASS }) {
   return (
     <div
-      className={`flex items-center justify-center rounded-md border border-black/40 bg-gradient-to-br from-rose-900 to-rose-950 text-rose-300/50 ${SIZE_CLASS[size]}`}
+      className={`flex items-center justify-center rounded-md border-2 border-amber-950 bg-gradient-to-br from-amber-700 to-amber-950 text-amber-200/50 shadow-[inset_0_-2px_3px_rgba(0,0,0,0.5)] ${SIZE_CLASS[size]}`}
     >
       🎲
     </div>
@@ -171,10 +182,10 @@ function FacePicker({
             type="button"
             disabled={disabled}
             onClick={() => onSelect(face)}
-            className={`flex h-9 w-9 items-center justify-center rounded-lg border text-sm font-bold transition ${
+            className={`flex h-9 w-9 items-center justify-center rounded-lg border-2 text-sm font-bold transition ${
               selected === face
-                ? "border-amber-300 bg-amber-400/20 text-amber-100"
-                : "border-white/15 text-white/60 hover:border-white/30"
+                ? "border-amber-200 bg-gradient-to-b from-amber-300 to-amber-500 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.35)]"
+                : "border-white/15 bg-black/20 text-white/60 hover:border-white/30"
             } ${disabled ? "cursor-not-allowed opacity-30" : ""}`}
             title={face === 1 ? "페루도 (조커)" : `숫자 ${face}`}
           >
@@ -264,48 +275,60 @@ function BidTrack({
 }) {
   const minQty = minValidQuantityForFace(state.currentBid, selectedFace, palafico);
   return (
-    <div
-      className="relative mx-auto grid w-full max-w-xl gap-[3px]"
-      style={{
-        gridTemplateColumns: `repeat(${TRACK_COLS}, 1fr)`,
-        gridTemplateRows: `repeat(${TRACK_ROWS}, minmax(1.85rem, 1fr))`,
-        aspectRatio: `${TRACK_COLS} / ${TRACK_ROWS}`,
-      }}
-    >
-      {TRACK_CELLS.map((cell) => {
-        const enabled = isMyTurn && minQty !== null && cell.quantity >= minQty;
-        const isCurrentBidCell = state.currentBid?.quantity === cell.quantity && state.currentBid.face === selectedFace;
-        return (
-          <button
-            key={cell.quantity}
-            type="button"
-            disabled={!enabled}
-            onClick={() => onPick(cell.quantity)}
-            style={{ gridColumn: `${cell.col}`, gridRow: `${cell.row}` }}
-            className={`flex items-center justify-center rounded-[4px] border text-[10px] font-bold transition sm:text-xs ${
-              isCurrentBidCell
-                ? "border-amber-300 bg-amber-400/40 text-amber-50"
-                : enabled
-                  ? "cursor-pointer border-emerald-400/50 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/30"
-                  : "cursor-not-allowed border-white/10 bg-black/25 text-white/20"
-            }`}
-            title={
-              !isMyTurn
-                ? "지금은 당신의 차례가 아니에요"
-                : enabled
-                  ? `${faceLabel(selectedFace)} ${cell.quantity}개 이상 선언하기`
-                  : "지금 선택한 눈금으로는 여기를 선언할 수 없어요"
-            }
-          >
-            {cell.quantity}
-          </button>
-        );
-      })}
+    // Outer "stone bezel" frame, echoing the physical mat's grey-stone
+    // border around the wood tile track.
+    <div className="relative rounded-[1.5rem] border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1.5 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-2">
       <div
-        style={{ gridColumn: `2 / ${TRACK_COLS}`, gridRow: `2 / ${TRACK_ROWS}` }}
-        className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/40 p-2"
+        className="relative mx-auto grid w-full max-w-xl gap-[3px]"
+        style={{
+          gridTemplateColumns: `repeat(${TRACK_COLS}, 1fr)`,
+          gridTemplateRows: `repeat(${TRACK_ROWS}, minmax(1.85rem, 1fr))`,
+          aspectRatio: `${TRACK_COLS} / ${TRACK_ROWS}`,
+        }}
       >
-        {children}
+        {TRACK_CELLS.map((cell) => {
+          const enabled = isMyTurn && minQty !== null && cell.quantity >= minQty;
+          const isCurrentBidCell = state.currentBid?.quantity === cell.quantity && state.currentBid.face === selectedFace;
+          const isStart = cell.quantity === 1;
+          // Every 4th wood tile gets a faint carved sun-mask watermark,
+          // echoing the board mat's alternating number/medallion tiles
+          // without sacrificing any of the 1..TRACK_LENGTH clickable range.
+          const showMedallion = cell.quantity % 4 === 0;
+          return (
+            <button
+              key={cell.quantity}
+              type="button"
+              disabled={!enabled}
+              onClick={() => onPick(cell.quantity)}
+              style={{ gridColumn: `${cell.col}`, gridRow: `${cell.row}` }}
+              className={`relative flex items-center justify-center overflow-hidden rounded-[4px] border-2 text-[10px] font-bold transition sm:text-xs ${
+                isCurrentBidCell
+                  ? "border-amber-200 bg-gradient-to-b from-amber-300 to-amber-500 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.5)]"
+                  : enabled
+                    ? "cursor-pointer border-amber-950/70 bg-gradient-to-b from-amber-700 to-amber-900 text-amber-100 hover:from-amber-600 hover:to-amber-800"
+                    : "cursor-not-allowed border-black/40 bg-gradient-to-b from-neutral-800 to-neutral-900 text-white/25"
+              }`}
+              title={
+                !isMyTurn
+                  ? "지금은 당신의 차례가 아니에요"
+                  : enabled
+                    ? `${faceLabel(selectedFace)} ${cell.quantity}개 이상 선언하기`
+                    : "지금 선택한 눈금으로는 여기를 선언할 수 없어요"
+              }
+            >
+              {showMedallion && <PerudoFaceIcon className="pointer-events-none absolute inset-0 m-auto h-2/3 w-2/3 text-black/25" />}
+              <span className="relative z-10">{cell.quantity}</span>
+              {isStart && <span className="absolute -top-0.5 -right-0.5 text-[8px] leading-none">🎲</span>}
+            </button>
+          );
+        })}
+        {/* Golden interior plaque — echoes the mat's central "PERUDO" plaque. */}
+        <div
+          style={{ gridColumn: `2 / ${TRACK_COLS}`, gridRow: `2 / ${TRACK_ROWS}` }}
+          className="flex flex-col items-center justify-center gap-2 rounded-[1.25rem] border-4 border-amber-800 bg-gradient-to-br from-amber-100 via-yellow-200 to-amber-300 p-2 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)]"
+        >
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -568,13 +591,13 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
         >
           {state.currentBid ? (
             <div className="flex flex-col items-center gap-0.5 text-center">
-              <span className="text-[10px] text-white/50">{names[state.currentBid.seat]}님의 선언</span>
-              <span className="text-2xl font-black text-amber-100 sm:text-3xl">
+              <span className="text-[10px] text-amber-900/70">{names[state.currentBid.seat]}님의 선언</span>
+              <span className="text-2xl font-black text-red-900 drop-shadow-[0_1px_0_rgba(255,255,255,0.4)] sm:text-3xl">
                 {faceLabel(state.currentBid.face)} × {state.currentBid.quantity}개↑
               </span>
             </div>
           ) : (
-            <p className="px-2 text-center text-xs text-white/50">
+            <p className="px-2 text-center text-xs text-amber-900/70">
               {names[state.activeSeat]}님이 이번 라운드를 엽니다 — 첫 선언 대기 중
             </p>
           )}
@@ -584,7 +607,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
               <button
                 disabled={!isMyTurn || !state.currentBid}
                 onClick={() => onAction({ type: "dudo", seat: viewerSeat })}
-                className="rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 sm:px-4 sm:py-2 sm:text-xs"
+                className="rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
               >
                 🚨 페루도!
               </button>
@@ -592,13 +615,13 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
                 disabled={palafico || !state.currentBid}
                 onClick={() => onAction({ type: "calza", seat: viewerSeat })}
                 title="차례와 상관없이 외칠 수 있어요"
-                className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 sm:px-4 sm:py-2 sm:text-xs"
+                className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
               >
                 🎯 맞아!
               </button>
             </div>
           )}
-          {palafico && <p className="text-center text-[10px] text-rose-300/80">팔라피코 라운드: &quot;맞아!&quot; 불가</p>}
+          {palafico && <p className="text-center text-[10px] font-semibold text-rose-800">팔라피코 라운드: &quot;맞아!&quot; 불가</p>}
         </BidTrack>
       </div>
 

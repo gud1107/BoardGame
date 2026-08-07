@@ -1,35 +1,32 @@
 /**
- * The 페루도 face (die value 1) — replaces the earlier skull emoji placeholder
- * with a hand-drawn recreation of the actual die's engraved crest (spike +
- * open crescent bracket + two eye dots + a scalloped dot-fringe), based on
- * the physical die reference photo. A good-faith stylized recreation of the
- * general iconographic impression, not a pixel copy of any copyrighted mark.
- * `currentColor`-driven so callers control color via a text-color class —
- * used white-on-red (see the die-face background in PerudoBoard.tsx) to
- * match the physical die's white-on-red engraving.
+ * The 페루도 face (die value 1) — a symmetric Aztec/Mayan sun-mask medallion
+ * (dashed ray ring + two round eyes + a zigzag toothy grin + a nose bump),
+ * matching the repeating carved-medallion motif on the physical board mat
+ * (see boardGameRule/Perudo.md's box photo). A good-faith stylized
+ * recreation of the general iconographic impression, not a pixel copy of
+ * any copyrighted mark. `currentColor`-driven so callers control color via
+ * a text-color class — reused both on the die face (white-on-red) and as a
+ * decorative watermark on the bid track's wood tiles (see PerudoBoard.tsx).
  */
 export default function PerudoFaceIcon({ className = "h-full w-full" }: { className?: string }) {
   return (
     <svg viewBox="0 0 100 100" className={className} aria-hidden="true">
-      {/* spike/ear */}
-      <polygon points="14,40 36,15 36,48" fill="currentColor" />
-      {/* open crescent bracket */}
+      {/* outer ray ring */}
+      <circle cx="50" cy="50" r="44" fill="none" stroke="currentColor" strokeWidth="5" strokeDasharray="7 6" strokeLinecap="round" />
+      {/* eyes */}
+      <circle cx="34" cy="42" r="9" fill="currentColor" />
+      <circle cx="66" cy="42" r="9" fill="currentColor" />
+      {/* nose bump */}
+      <rect x="45" y="48" width="10" height="12" rx="3" fill="currentColor" />
+      {/* zigzag toothy grin */}
       <path
-        d="M44,20 A28,28 0 0 1 44,80"
+        d="M25,68 L33,77 L41,68 L49,77 L57,68 L65,77 L73,68"
         fill="none"
         stroke="currentColor"
-        strokeWidth="7"
+        strokeWidth="6"
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
-      {/* eyes */}
-      <circle cx="45" cy="40" r="5" fill="currentColor" />
-      <circle cx="60" cy="40" r="5" fill="currentColor" />
-      {/* scalloped dot-fringe */}
-      <circle cx="38" cy="64" r="4" fill="currentColor" />
-      <circle cx="48" cy="72" r="4" fill="currentColor" />
-      <circle cx="60" cy="74" r="4" fill="currentColor" />
-      <circle cx="71" cy="69" r="4" fill="currentColor" />
-      <circle cx="78" cy="59" r="4" fill="currentColor" />
     </svg>
   );
 }
