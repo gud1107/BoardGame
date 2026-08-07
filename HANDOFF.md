@@ -1,184 +1,103 @@
-# 세션 인수인계서 (Handoff)
+# HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-08 (Part 5 추가)_
-_이 문서는 다음 Claude 세션에 그대로 붙여넣어 맥락을 전달하기 위해 작성됨._
+_최종 갱신: 2026-08-08_
 
----
-
-## 1. 프로젝트/작업 개요 및 최종 목적
-
-**보드게임 허브** — 여러 보드게임을 한 곳에서 플레이하고, 게임 결과에 연동된 "내기(베팅)" 정산까지 관리하는 Next.js 웹앱. 실제 배포 URL: **https://board-game-tau-navy.vercel.app**
-
-현재 실제로 플레이 가능한 게임은 **하나미코지 · 뱅!(Bang!) · 그리드 포커 · 아발론(Avalon) · 노땡스(No Thanks!)** 5종. 나머지(스플렌더, 카탄 등)는 대시보드에 "준비중" 카드로만 노출됨(`src/games/types.ts`의 `GameMeta.playable` 플래그로 제어, 버그 아니라 의도된 상태).
-
-**이번 세션의 요청 (총 4건, 순차 진행, 모두 같은 날)**:
-- **Part 1**: `boardGameRule/noThanks.md` 룰북을 기반으로 신규 게임 **노땡스(No Thanks!, 마이너스 경매)** 전체 구현 — 순수 엔진, 온라인 대전 UI, 다른 게임들과 동일한 락스텝 멀티플레이어 동기화, 단위 테스트.
-- **Part 2**: 노땡스의 **칩(코인) 표시 로직 점검/개선**(본인은 항상 숫자, 상대는 기본 비공개 + 연습용 공개 토글 추가) + **"노 땡스!"/"가져오기" 선택 시 코인 토스 / 카드+칩 수거 애니메이션 이펙트** 추가(새 라이브러리 없이 순수 CSS).
-- **Part 3**: 사용자가 `boardGameRule/noThanks.md`를 직접 편집해 **§2 "게임 모드 설정"**(비밀 모드=공식 룰 / 공개 모드=커스텀 룰, 방장이 방 생성 시 선택)을 룰북에 명문화 → 이를 실제 게임 규칙으로 구현. Part 2의 "상대 칩 공개" 토글은 **로컬 전용 연습 기능**이라 다른 사람 화면에 영향이 없었던 반면, 이번 Part 3의 모드는 `chipVisibility`를 엔진 상태(`NoThanksState`)에 넣고 `game-start` 브로드캐스트로 실어 보내 **모든 클라이언트에 동일하게 적용되는 진짜 공유 규칙**으로 승격시킨 것이 핵심 차이.
-- **Part 4**: 중앙 경매판의 "뒤집힌 덱 카드 영역" UI 개선 요청 — (a) 남은 덱 카드 장수를 숫자로 명확히 표시, (b) 남은 장수에 비례해 두께가 변하는 입체 덱 스택(카드가 줄수록 얇아지다 0장이면 빈 슬롯) 시각화. `NoThanksBoard.tsx`에 `DeckStack` 컴포넌트를 신설해 해결.
-- **Part 5** (다음 날 이어짐, "코인이 가끔 숫자를 가리는 버그"): **1차 시도는 근본 원인을 잘못 짚어 실패**했음 — 중앙 카드 위 `chipsOnCard` 뱃지가 `absolute -bottom-3`만 있고 `left`가 없어 브라우저의 flex 자식 static-position 계산에 맡겨져 있던 걸 발견하고 `left-1/2 -translate-x-1/2`로 수평 중앙 고정만 했는데, 사용자가 실제 iPhone Safari 스크린샷을 보내와 **여전히(오히려 더 확실하게) 숫자 위에 코인이 얹힌 걸 확인**함. 진짜 원인은 `AuctionEffects.tsx`의 "노 땡스!" 코인 토스 애니메이션이 **카드 박스 정중앙(`centerCardRef`, 숫자가 있는 바로 그 지점)을 착지 지점으로 삼고 있던 것** — 애니메이션이 끝나갈수록 정확히 숫자 위로 코인이 날아와 앉는 구조적 문제였음(정적 뱃지 위치를 아무리 다듬어도 해결 불가). **최종 수정**: 카드 박스와 칩 뱃지를 `absolute` 겹침이 아니라 **완전히 분리된 두 개의 flow 블록**(카드 → 아래에 고정 높이 `h-7` 슬롯 안의 뱃지)으로 재구성하고, 코인 토스 애니메이션의 착지 지점(`getTargetEl`)도 카드가 아니라 그 뱃지 슬롯(`coinLandingRef`)으로 변경 — 구조적으로 코인이 숫자와 같은 박스에 존재할 수 없게 만들어 칩이 몇 개든(두 자리 수 포함) 영구적으로 안 겹침.
-
-다섯 파트 모두 **완료**, `tsc`/`lint`/`vitest`(Part 5 기준 189개 전부 통과, 순수 레이아웃/CSS 수정이라 신규 유닛테스트 없음) 검증 + `next build` 프로덕션 빌드 통과 완료, **여러 건의 기능 단위 커밋 + `origin/main` 푸시 + Vercel 프로덕션 배포까지 완료**됨(정확한 커밋 해시 목록은 §3 각 Part 표와 `git log` 참고) — **이번 세션 목적은 100% 달성된 상태.**
+> **이 문서는 "지금 이 순간"의 스냅샷만 담는다.** 새 세션이 `/clear` 직후 가장 먼저 읽어야 할 문서이며, 여기 담긴 정보만으로 이전 맥락을 복원할 수 있어야 한다. **시간순 기록(무엇을 왜 그 순서로 만들었는가)은 [docs/history.md](./docs/history.md)로, 버그 대응 이력은 [docs/troubleshooting.md](./docs/troubleshooting.md)로 넘어갔다** — 이 파일 자체는 계속 짧게 유지하고, 완료된 세션 내용은 매번 `history.md`로 옮겨 적을 것(§2026-08-08 문서 체계 재정비 참고, [docs/history.md Phase 8](./docs/history.md#phase-8--인수인계-문서-체계-재정비-2026-08-08)).
 
 ---
 
-## 2. 확정된 핵심 규칙 · 기술 스택 · 가이드라인
+## 1. Executive Summary
+
+### 목표
+**보드게임 허브** — 여러 보드게임을 한 곳에서 플레이하고, 게임 결과에 연동된 "내기(베팅)" 정산까지 관리하는 Next.js 웹앱. 완전 오프라인 동작(IndexedDB 1차 저장소)이 기본이고, Supabase는 온라인 대전 5종에만 필수인 선택적 보강 레이어. 실제 배포 URL: **https://board-game-tau-navy.vercel.app**
+
+### 현재 달성률
+- 카탈로그 19종 중 **5종 실제 플레이 가능**: 하나미코지 · 뱅!(Bang!) · 그리드 포커 · 아발론(Avalon) · **노땡스(No Thanks!, 최신 추가)**. 나머지 14종은 `playable: false`로 "준비중" 카드만 노출(의도된 상태, 버그 아님).
+- `npx tsc --noEmit` / `npm run lint` / `npx vitest run`(**189개 전부 통과**) / `npm run build` 전부 그린.
+- `origin/main` 최신 상태로 푸시 완료, Vercel 프로덕션 배포 완료.
+- 개발자 문서(`docs/`) 6종 + 이번에 신설된 `docs/history.md` 전부 노땡스 기준으로 최신화됨.
+
+### 직전 세션 주요 변경 사항
+1. **노땡스(No Thanks!) 신규 게임 5-Part 연속 세션** 완료 — 엔진/보드/온라인 방 신규 구현 → 칩 표시 개선+코인 애니메이션 → "칩 공개 여부"를 host-선택 실제 게임 규칙으로 승격 → 덱 스택 시각화 → 콘솔 디버그 헬퍼(`노땡스()`) + **"코인이 카드 숫자를 가리는" 버그의 근본 수정**(1차 시도는 사용자 스크린샷으로 실패가 드러났고, 2차 시도에서 정적 배지 위치가 아니라 코인 애니메이션의 착지 지점 자체가 원인임을 밝혀내 카드/배지 레이아웃을 구조적으로 분리). 상세 내용·커밋 해시는 [docs/history.md Phase 7](./docs/history.md#phase-7--노땡스no-thanks-신규-게임-5-part-세션-2026-08-0708), 버그 원인 분석은 [docs/troubleshooting.md #7](./docs/troubleshooting.md#7-노땡스-코인칩-배지가-중앙-카드의-숫자를-가리는-버그-1차-시도-실패--구조적-재수정).
+2. **인수인계 문서 체계 재정비**(이 문서 포함) — `HANDOFF.md`를 "Part를 계속 쌓아가는 로그"에서 이 4-섹션 스냅샷 템플릿으로 재구성하고, 시간순 기록은 신설된 `docs/history.md`로, 오늘 발견된 버그는 `docs/troubleshooting.md`(#7)로 이전. `docs/README.md`·`architecture.md`·`features.md`·`cloud-sync.md`의 게임 수(4→5)·테스트 수(134→189) 등 뒤처진 수치도 동기화.
+
+---
+
+## 2. 현재 시스템 상태 및 구조
 
 ### 기술 스택
-Next.js 16(App Router, Turbopack) · TypeScript · Tailwind CSS v4 · Zustand · IndexedDB(`idb`, 로컬 1차 저장소) · Supabase(`@supabase/supabase-js`, 선택적 — **하나미코지·뱅!·그리드 포커·아발론·노땡스의 온라인 대전만 필수**). **새 라이브러리를 추가하지 않고** 순수 CSS(`left`/`top` 트랜지션 + `@keyframes`)만으로 애니메이션을 구현하는 것이 이 프로젝트의 확립된 방침(Framer Motion 등은 선택지로 제시됐지만 채택하지 않음).
-
-### 게임 모듈 공통 아키텍처 (5게임 전부 동일 패턴 — 새 게임 추가 시 그대로 복제)
-```
-src/games/<game-id>/
-  engine.ts          순수 함수 리듀서. EngineAction/applyAction, I/O 없음, React 모름.
-  <Game>Board.tsx     제어 컴포넌트. state를 props로만 받고 onAction으로만 의도 전달.
-  <Game>Game.tsx      방 생성/참여 로비 + Supabase Realtime Presence/Broadcast 동기화.
-  RulebookModal.tsx   룰북 모달.
-  <Game>.test.ts      Vitest 단위 테스트 — **engine.ts(및 이번에 추가된 것처럼 순수 로직이면 UI 보조 파일도) 대상, `<Game>Board.tsx`(React 컴포넌트)는 테스트 대상 밖**(jsdom/@testing-library 미설치, `vitest.config.mts`의 environment는 `node`). UI 컴포넌트에 숨은 버그는 기존 스위트가 못 잡음 — React 컴포넌트 로직을 고칠 때는 유닛 테스트 통과만으로 안심하지 말고 코드를 직접 다시 읽어 검증할 것.
-  meta.ts             `export const <GAME>_ID = "<game-id>";` 한 줄짜리 상수 파일.
-```
-동작 원리(락스텝, 서버 권위 없음): 방장이 시드 하나를 브로드캐스트 → 각 클라이언트가 독립적으로 동일 초기 상태 계산 → 이후 모든 액션을 `EngineAction`으로 브로드캐스트해 같은 순수 리듀서(`applyAction`)로 재생.
-
-### 신규 확립된 패턴: "상태 스냅샷 diff로 애니메이션 트리거"
-보드 컴포넌트는 원시 `EngineAction`이 아니라 리듀서가 만든 **결과 `state`만** props로 받는 구조라("state가 fully controlled by the caller" 원칙), "방금 어떤 행동이 있었는지"를 알아내려면 **연속된 두 상태 스냅샷을 비교(diff)**하는 수밖에 없음. 이번 세션에 노땡스에서 이 패턴을 처음 확립했음(`src/games/no-thanks/AuctionEffects.tsx`의 `detectAuctionEvent`):
-- 엔진의 리듀서는 거부된/no-op 액션에 대해 **항상 원래 state와 동일한 객체 참조**를 반환하는 컨벤션을 갖고 있어서(`engine.ts` 전체에 이미 적용된 관례), `prev !== next` 체크만으로 "진짜 상태가 바뀐 것"과 "거부된 액션"을 확실히 구분할 수 있음.
-- 이 diff는 **행동을 한 사람뿐 아니라 같은 방의 모든 클라이언트**에서 똑같이 계산되므로, 애니메이션이 브로드캐스트를 받는 모든 화면에서 동일하게 재생됨(멀티플레이어 락스텝과 자연스럽게 맞물림 — 새로 발견한 좋은 부수효과).
-- 트리거 자체는 `useEffect`가 아니라 **렌더링 중 `trackedState !== state` 비교 후 즉시 setState**하는, 이 프로젝트에 이미 있던 "prop이 바뀌면 렌더 중 상태 조정" 패턴을 그대로 재사용함(AvalonBoard의 역할모달 리셋과 동일 패턴).
-- 다른 게임(뱅!, 그리드 포커 등)에 비슷한 이펙트를 추가할 때 `AuctionEffects.tsx`를 참고용 템플릿으로 재사용 가능.
-
-### 신뢰 트레이드오프 (의도된 설계, 계속 유지)
-모든 클라이언트가 전체 상태(다른 사람의 손패·비밀 역할·**칩 개수**·전체 보드 포함)를 항상 메모리에 갖고 렌더링 시점에만 필터링 — 개발자도구를 열면 원리적으로 상대 정보를 알아낼 수 있음. 노땡스는 이번 세션에 **"상대 칩 공개" 토글**을 로컬 전용(다른 사람 화면엔 영향 없음, `localStorage` 저장)으로 명시적으로 노출해서 이 트레이드오프를 오히려 UX 기능으로 승격시킴 — 연습/디버그 목적이라는 점을 title 툴팁과 README에 명시.
-
-### 코딩/커밋 가이드라인 (사용자 선호, 계속 유지)
-- **파생 상태(derived state) 금지 원칙**: 두 개의 파생 상태를 따로 두지 말고 상호 배타적인 명시적 상태로 모델링.
-- **좌석 배정 ≠ 역할 배정**: join 순서로 좌석이 채워지지만 역할/세력은 좌석과 무관하게 별도로 셔플.
-- **커밋은 기능 단위로 잘게 분리**할 것을 사용자가 선호함(conventional commits: `feat(game):`, `fix(game):`, `docs:`, `refactor(game):`, `test(game):`). 각 커밋 시점에도 빌드가 깨지지 않는 것을 최우선으로 삼아 파일 단위로 묶어 커밋.
-- **커밋/푸시/배포는 매번 명시적으로 승인받고 진행** — 이번 세션은 두 파트 각각 사용자가 명시적으로 "커밋하고 푸쉬해서 배포해주세요"라고 요청한 뒤에만 진행함. 다음 세션에서도 별도 승인 없이 먼저 커밋/푸시/배포하지 말 것.
-- React Hooks 관련 엄격한 eslint 규칙(early-return 뒤 훅 호출 금지 / 렌더 중 ref 쓰기 금지 / effect 안 동기 setState 금지)이 여전히 유효. 이번 세션엔 콜백 ref(커밋 시점에 호출되므로 허용)와 마운트 전용 `useLayoutEffect`(의도적으로 빈 deps 배열 + `eslint-disable-next-line react-hooks/exhaustive-deps` 명시적 주석 처리 — disable 코멘트는 **경고가 실제로 리포트되는 줄 바로 위**에 있어야 먹힘, 함수 호출부가 아니라 `}, []);` 줄 위에 둬야 했음)를 새로 사용함.
-
----
-
-## 3. 완료된 작업 목록 (이번 세션)
-
-### Part 1 — 노땡스 신규 구현 (`src/games/no-thanks/`)
-| 파일 | 내용 |
-|---|---|
-| `engine.ts` | 3~35 숫자 카드 33장 중 시드 기반 9장 무작위 제외(24장 진행), 인원별 시작 칩(3~5인 11개/6인 9개/7인 7개), `pass`(칩 0개면 no-op으로 거부)/`take`(카드+칩 획득 후 즉시 다음 카드 공개, 같은 플레이어가 턴 유지) 리듀서, `computeGroups`(연속 구간 묶기 — 가장 작은 숫자만 벌점), `computePlayerScore`, `computeRankings`(표준 competition ranking, 동점이면 칩 많은 쪽 우선). |
-| `NoThanks.test.ts` | 33개 테스트 — 9장 제외/24장 소진/33장 커버리지, 시드 결정론, 룰북 예시(7·8·9·15·28·29+칩6→벌점44) 재현, 강제 인수, 자동 플레이 시뮬레이션, 순위 동점. |
-| `NoThanksBoard.tsx` | 중앙 경매 카드(숫자+칩 뱃지) + "🙅 노 땡스!"/"✅ 가져오기" 버튼 + 인원별 스트립(칩·획득카드 그룹화) + 게임종료 시 전원 채점표. |
-| `NoThanksGame.tsx` | 3~7인 방 생성/참여 + Realtime 동기화, Avalon과 동일 패턴. |
-| `RulebookModal.tsx`, `meta.ts` | 룰북 모달, `NO_THANKS_ID` 상수. |
-| `registry.ts`, `playableGames.tsx` | 게임 카탈로그 등록. |
-| `README.md` | "5번째 게임: 노땡스" 섹션 신설. |
-| `boardGameRule/noThanks.md` | 룰북 원본, 다른 3게임 룰북과 같은 폴더에 커밋. |
-
-### Part 2 — 칩 표시 개선 + 애니메이션 (같은 디렉터리 추가/수정)
-| 파일 | 내용 |
-|---|---|
-| `AuctionEffects.tsx` (신규) | `detectAuctionEvent`(연속 상태 diff로 pass/take 및 행위자 좌석 추론, §2 참고) + `FlyingToken`(포탈 기반 `position: fixed` 요소, `left`/`top` CSS 트랜지션으로 좌석↔중앙카드 직선 이동 + `globals.css`의 keyframe으로 토스 아크/회전 또는 축소·페이드 플레어). |
-| `AuctionEffects.test.ts` (신규) | 6개 테스트 — pass/take 판별과 행위자 귀속, 덱 소진 시의 take, **리매치(새 `startGame()`) 시 오탐 없음**, 참조 불변 no-op에서 null 반환. |
-| `NoThanksBoard.tsx` (수정) | 상단에 **"🙈 상대 칩 비공개" / "👁️ 상대 칩 공개 중" 토글**(로컬 전용, `localStorage` 저장) 추가, 중앙카드/좌석 행에 ref 연결, 이펙트 레이어 렌더링. 본인 칩은 원래부터 항상 숫자로 정확히 표시됨을 확인(수정 불필요). 게임종료 화면은 원래부터 토글과 무관하게 전원 칩 즉시 공개(수정 불필요, 확인만). |
-| `globals.css` (수정) | `coin-toss-arc`(토스+회전+통통 튀는 스케일), `card-collect-fade`(축소+페이드) keyframe 추가. |
-| `README.md` (수정) | 위 두 기능 문서화 + 디렉터리 트리 갱신. |
-
-### Part 3 — 칩 공개 여부를 host-선택 게임 모드로 승격 (`src/games/no-thanks/`)
-| 파일 | 내용 |
-|---|---|
-| `engine.ts` | `ChipVisibility = "secret" \| "public"` 타입 + `NoThanksState.chipVisibility` 필드 추가, `startGame(playerCount, seed, chipVisibility = "secret")` 세 번째 파라미터. |
-| `NoThanksGame.tsx` | "방 만들기" 화면에 인원수 스테퍼 옆 🔒비밀모드/👁️공개모드 선택 UI(호스트 전용) 추가. `chipVisibilityRef`로 들고 있다가 `game-start` 브로드캐스트 payload와 호스트의 presence record(`Occupant.chipVisibility`)에 실어 보내 늦게 들어온 참가자도 대기 화면에서 현재 모드를 볼 수 있음. 리매치(`sendGameStart` 재사용)에도 동일하게 적용. |
-| `NoThanksBoard.tsx` | 헤더에 현재 모드 배지(🔒/👁️) 표시. `chipsVisible = isSelf \|\| publicMode \|\| revealOpponentChips`로 계산 — 공개 모드면 로컬 토글 버튼 자체를 숨김(이미 전원 공개라 의미가 없으므로). |
-| `RulebookModal.tsx` | 룰북 §2에 맞춰 두 모드 설명 섹션 추가. |
-| `NoThanks.test.ts`, `AuctionEffects.test.ts` | `makeState` 헬퍼에 `chipVisibility: "secret"` 기본값 추가(타입 필수 필드가 되어서), `startGame`의 기본값/명시 모드 테스트 2건 신설. |
-| `boardGameRule/noThanks.md` | 사용자가 이번 세션에 직접 §2 "게임 모드 설정" 섹션을 추가해 편집한 룰북 원본(다른 구조 손질 포함) — Part 3 구현의 근거 문서. |
-| `README.md` | 위 게임 모드 기능을 로컬 연습 토글과 구분해서 문서화. |
-
-### Part 4 — 덱 스택 시각화 (`src/games/no-thanks/NoThanksBoard.tsx`만 수정)
 | 항목 | 내용 |
 |---|---|
-| `MAX_CARDS_IN_PLAY` | `CARD_MAX - CARD_MIN + 1 - REMOVE_COUNT` (=24, engine.ts의 상수를 그대로 import해 재사용) — 스택 두께 비율 계산용 기준값(게임 시작 직후 최대치), 룰 계산과는 무관한 순수 시각 효과용. |
-| `DeckStack` (신규 컴포넌트) | 중앙 경매 카드(뒤집힌 숫자 카드) **왼쪽**에 배치. `state.deck.length`(공개된 경매 카드는 제외한, 진짜 뒤집히지 않은 매수)를 받아: (1) 하단에 `덱 {count}장` 배지로 정확한 숫자 표시(헤더의 기존 `남은 카드 {cardsRemaining}장`은 경매 카드 포함 총합이라 의도적으로 다른 값 — 툴팁으로 구분 명시), (2) 시작 시점 최대 매수 대비 비율로 1~5장의 카드 레이어를 `transform: translate(...)` 오프셋으로 fan-out시켜 쌓은 입체 스택 → 장수가 줄수록 레이어가 얇아짐, (3) 0장이면 점선 테두리 빈 슬롯(`빈 덱`)으로 전환. 새 라이브러리 없이 순수 CSS(inline `transform`/`box-shadow`)만 사용, `AuctionEffects.tsx`가 참조하는 `centerCardRef`는 그대로 유지해 기존 코인토스 애니메이션과 충돌 없음. |
-| 유닛테스트 | **신설 없음** — `NoThanksBoard.tsx`는 React 컴포넌트라 이 프로젝트의 테스트 인프라 밖(§2 아키텍처 표 참고, jsdom 미설치). Part 4는 UI/스타일 전용 변경이라 기존 `NoThanks.test.ts`/`AuctionEffects.test.ts`(순수 로직 대상)엔 손댈 지점이 없었음 — `tsc`/`lint`/`vitest`/`build` 전부 그린이었지만 **실제 브라우저 육안 확인은 아직 안 함**(§4 next steps 참고). |
+| 프레임워크 | Next.js 16(App Router, Turbopack) + React 19 + TypeScript(strict) |
+| 스타일 | Tailwind CSS v4 |
+| 클라이언트 상태 | Zustand(`useBettingStore`) |
+| 주 데이터베이스 | 브라우저 IndexedDB(`idb` 래퍼) — 완전 오프라인 동작 |
+| 클라우드(선택) | Supabase — Realtime(Broadcast/Presence)이 온라인 대전 5종의 통신 수단 자체, Postgres 2테이블(기기 식별 힌트, 내기 기록 백업)은 완전 선택 |
+| 배포 | Vercel, 프로덕션 자동 별칭 `board-game-tau-navy.vercel.app` |
+| 테스트 | Vitest **189개**(게임 엔진 5종 유닛 테스트만 — **UI 컴포넌트 테스트 인프라 없음**, jsdom 미설치) |
 
-### Part 5 — 콘솔 디버그 헬퍼 + "코인이 숫자를 가리는 버그" 근본 수정 (`src/games/no-thanks/NoThanksBoard.tsx`)
-| 항목 | 내용 |
+### 핵심 파일 구조
+```
+src/
+  app/                  Next.js 라우팅만 (대시보드, /games/[gameId] 스테이지 머신, /history)
+  components/           범용 UI + 내기 사이드바 일체
+  games/
+    registry.ts          GAME_REGISTRY(순수 데이터, 19종)
+    playableGames.tsx     GameId → 동적 import 매핑(5종만 실제 등록)
+    <game-id>/            게임마다 동일한 5파일 패턴:
+      engine.ts             순수 리듀서. React/네트워크/시간 모름. 랜덤은 시드 인자.
+      <Game>Board.tsx        제어 컴포넌트. state는 props로만, 클릭은 onAction으로만.
+      <Game>Game.tsx          방 로비 + Supabase Realtime 동기화(락스텝).
+      RulebookModal.tsx, meta.ts, <Game>.test.ts
+  lib/                  db(IndexedDB) / betting(정산 원장) / identity(기기·플레이어 매핑) / supabase
+  store/bettingStore.ts  Zustand — 내기 세션 오케스트레이션
+boardGameRule/*.md      게임별 공식 룰 원문 — 엔진 구현의 근거 자료(5게임 전부 있음, noThanks.md 포함)
+docs/                   개발자 심화 문서(아래 "관련 문서" 참고)
+```
+전체 디렉토리 규칙과 계층 의존 방향은 [docs/architecture.md §5](./docs/architecture.md#5-디렉토리-구조-및-계층-규칙)에 도식으로 정리되어 있음.
+
+### 현재 작동 중인 주요 로직
+- **온라인 대전 5종 전부 같은 락스텝(lockstep) 패턴**: 방장이 시드 하나만 브로드캐스트 → 모든 클라이언트가 독립적으로 동일 초기 상태 계산 → 이후 액션은 `EngineAction`으로 브로드캐스트해 같은 순수 리듀서로 재생. 서버 권위 엔진 없음(의도적, [docs/architecture.md §2](./docs/architecture.md#2-온라인-대전의-신뢰-모델-문서화된-의도적-한계)). 재접속(`state-request`/`state-sync`)과 좌석 충돌 자가치유(deviceId 사전순)도 5게임 공통 적용됨([docs/cloud-sync.md](./docs/cloud-sync.md)).
+- **파생 상태(derived state) 금지 원칙**: 같은 사실을 두 상태로 따로 표현하지 않기 — 하나미코지·뱅!에서 이 원칙 위반으로 실제 치명 버그가 두 번 났던 뒤 프로젝트 전역 원칙으로 굳어짐([docs/architecture.md §1.4](./docs/architecture.md#14-파생-상태derived-state-금지-원칙)).
+- **노땡스 최신 기능 3가지**: (1) `ChipVisibility`("secret"/"public") — 방장이 방 생성 시 고르는 실제 게임 규칙, 엔진 상태에 포함되어 전원에게 동일 적용. (2) `window.노땡스()` 콘솔 디버그 헬퍼 — 제외된 9장/남은 덱 순서 확인용. (3) 코인 토스 애니메이션 착지 지점과 칩 배지를 카드 숫자 박스에서 완전히 분리한 레이아웃(오늘 막 수정, §3의 1번 항목 참고).
+- **"엔진 테스트 100% 통과 ≠ UI 정상"**: `<Game>Board.tsx`는 5게임 전부 자동 테스트 대상 밖(jsdom 미설치). 실제로 이 사각지대에서 발생한 버그가 3건 있음([docs/troubleshooting.md](./docs/troubleshooting.md) #1, #6, #7) — React 컴포넌트를 고칠 때는 테스트 통과만 믿지 말고 코드를 직접 추적/검증할 것.
+
+### 작업 규칙 (이 저장소에서 계속 지킬 것)
+- **커밋은 기능 단위로 잘게 분리**(conventional commits: `feat(game):`, `fix(game):`, `docs:`, `test(game):`). 각 커밋 시점에도 빌드가 깨지지 않게 파일 단위로 묶어 커밋.
+- **커밋/푸시/배포는 매번 명시적으로 승인받고 진행** — 사용자가 매번 "커밋하고 푸쉬해서 배포해주세요"라고 명시한 뒤에만 진행. 다음 세션에서도 먼저 나서서 배포하지 말 것.
+- **시각적/레이아웃 버그는 코드 리뷰만으로 "고쳤다"고 단정하지 말 것** — 오늘 정확히 이 실수로 1차 수정이 틀렸다는 게 사용자 스크린샷으로 드러났다([docs/troubleshooting.md #7](./docs/troubleshooting.md#7-노땡스-코인칩-배지가-중앙-카드의-숫자를-가리는-버그-1차-시도-실패--구조적-재수정)). 가능하면 실제 화면 확인을 요청하거나, 최소한 "코드 검증만 했고 육안 확인은 안 됨"을 솔직히 밝힐 것.
+- React Hooks 엄격 lint 규칙 유효(early-return 뒤 훅 호출 금지 / 렌더 중 ref 쓰기 금지 / effect 안 동기 setState 금지). `eslint-disable-next-line`은 **경고가 실제로 리포트되는 줄 바로 위**에 둬야 먹힌다(의존성 배열 줄 `}, []);` 기준).
+- `.clinerules.md`/`instructions.md`(저장소 루트, 미확인 파일)는 **Cline 전용 자동화 규칙**(승인 없이 자동 커밋·배포 지시)이라 이 프로젝트의 실제 지침이 아님 — 계속 무시할 것. 실제 지침은 `CLAUDE.md`→`AGENTS.md`뿐.
+- Vercel/GitHub 인증은 이미 세팅됨(`.vercel/project.json` 링크됨) — 별도 로그인 없이 `git push` / `npx vercel deploy --prod` 바로 가능.
+
+### 관련 문서
+| 문서 | 언제 볼 것 |
 |---|---|
-| `노땡스()` 콘솔 헬퍼 (신규) | `window.노땡스`에 함수를 등록해 브라우저 콘솔에서 `노땡스()`라고 치면 제외된 9장/남은 덱 순서/현재 공개 카드를 출력. 락스텝 구조상 모든 클라이언트가 이미 메모리에 들고 있는 정보(§2 "신뢰 트레이드오프")를 React DevTools 없이도 확인할 수 있는 지원되는 창구로 노출한 것 — 최신 state를 항상 읽도록 ref를 별도 effect로 갱신(`gameStateRef`와 동일 패턴). 사용자 요청으로 마운트 시 자동 출력되던 안내 `console.log` 문구는 곧바로 제거함(기능은 유지, 자동 안내만 삭제). |
-| **"코인이 숫자를 가리는" 버그 — 1차 시도 (실패)** | 중앙 카드의 `chipsOnCard` 배지가 `absolute -bottom-3`만 있고 `left`가 없어 브라우저별 flex 자식 static-position 계산에 좌우된다고 보고 `left-1/2 -translate-x-1/2`로 수평 중앙 고정만 함. **사용자가 iPhone Safari 실제 스크린샷을 첨부해 재현** — 여전히(오히려 매번 더 정확하게 가운데로) 숫자 위에 코인이 얹혀 보임을 확인시켜줌. **교훈: 시각적 버그는 코드 추론만으로 "고쳤다"고 단정하지 말 것 — 이번처럼 실제 스크린샷/육안 확인 전엔 틀릴 수 있음.** |
-| **진짜 원인** | `AuctionEffects.tsx`의 "노 땡스!"(pass) 코인 토스 애니메이션이 **카드 박스 정중앙(`centerCardRef`, 숫자가 있는 바로 그 지점)을 착지 지점(`getTargetEl`)으로 삼고 있었음** — 정적 배지 위치를 아무리 조정해도, 애니메이션이 끝나갈 때 코인이 정확히 숫자 위로 날아와 앉는 구조적 문제라 해결 불가능했음. |
-| **최종 수정** | 카드 박스와 칩 배지를 `absolute` 겹침 구조에서 **완전히 분리된 두 개의 일반 flow 블록**(카드 → 그 아래 고정 높이 `h-7` 슬롯 안의 배지, `flex-col`로 쌓음)으로 재구성. 코인 토스 애니메이션의 착지 지점도 카드(`centerCardRef`)가 아니라 새로 만든 배지 슬롯(`coinLandingRef`)으로 변경. 구조적으로 코인/배지가 숫자와 같은 박스 안에 존재할 수 없어, 칩이 몇 개든(두 자리 수 포함) 애니메이션 도중이든 정적 상태든 영구적으로 안 겹침. |
-| 유닛테스트 | 신설 없음(Part 4와 동일한 이유 — 순수 레이아웃/애니메이션 타겟 변경, React 컴포넌트라 테스트 인프라 밖). **이번에도 실제 브라우저 육안 확인은 아직 안 된 상태**(1차 시도가 실제로 실패했던 전례가 있으므로 §4에서 최우선 순위로 남겨둠). |
-
-### 검증 결과 (Part 1~5 각각 + 최종 통합 모두 그린)
-- `npx tsc --noEmit`: 에러 0건.
-- `npm run lint`: 경고/에러 0건.
-- `npx vitest run`: **189개 테스트 전부 통과**(Part 1/2의 187개 + Part 3의 `startGame` chipVisibility 테스트 2건; Part 4·5는 순수 UI/레이아웃 변경이라 신규 테스트 없음, 기존 189개가 그대로 통과함만 확인).
-- `npm run build` (Part 3·4·5 각각 추가로 실행): 프로덕션 빌드 통과.
-
-### 커밋/배포 (모두 사용자 명시 승인 후 진행, `origin/main`에 푸시 + Vercel 프로덕션 배포 완료)
-| 커밋 | 내용 |
-|---|---|
-| `67252f9` docs | `boardGameRule/noThanks.md` 룰북 문서 커밋 |
-| `5d42daf` feat | 노땡스 순수 엔진 + 유닛테스트 33건 |
-| `310497e` feat | 노땡스 보드 UI + 룰북 모달 + 온라인 방 컴포넌트 |
-| `e06621d` feat | 게임 카탈로그 등록 |
-| `0ce0c9a` docs | README에 "5번째 게임: 노땡스" 섹션 추가 |
-| `e6561c9` docs | HANDOFF.md 갱신 (Part 1 완료 시점) |
-| `6388b24` feat | 상태-diff 기반 이펙트 엔진(`AuctionEffects.tsx` + 테스트) |
-| `1fe1f8c` feat | 코인토스/수거 애니메이션 + 상대 칩 공개 토글 배선 |
-| `3c1be79` docs | README에 애니메이션/토글 기능 문서화 |
-| `d65dac9` docs | HANDOFF.md 갱신 (Part 2 완료 시점) |
-| `ffcd16a` docs | 룰북에 §2 칩 공개 모드 섹션 반영(사용자 편집분 커밋) |
-| `50ea10c` feat | 엔진에 `chipVisibility` 게임 모드 추가 |
-| `6d7d602` feat | 방 생성 UI에 모드 선택 + 보드에 배선 |
-| `5543c9d` docs | README에 게임 모드 기능 문서화 |
-| `06e67d9` docs | HANDOFF.md 갱신 (Part 3 완료 시점) |
-| `ac3f5f7` feat | 중앙 경매판에 `DeckStack`(남은 장수 배지 + 입체 스택 시각화) 추가 |
-| `4e87a41` feat | `노땡스()` 콘솔 디버그 헬퍼 추가 |
-| `fc6176f` docs | README에 콘솔 디버그 헬퍼 문서화 |
-| `6e98909` fix | 마운트 시 자동 출력되던 콘솔 안내 문구 제거 |
-| `2e8707c` fix | (1차 시도, 근본 원인 아니었음) 중앙 카드 칩 배지 수평 중앙 고정 |
-| `e778f40` fix | 카드/배지 완전 분리 구조 + 코인 애니메이션 착지 지점 변경 — 진짜 원인 수정 |
-
-Vercel 프로덕션 배포 완료, `https://board-game-tau-navy.vercel.app` 정상 서빙 확인.
+| [docs/README.md](./docs/README.md) | `docs/` 전체 색인 + 개발 명령어 |
+| [docs/architecture.md](./docs/architecture.md) | "왜 이렇게 설계했는가" — 항상 유효한 현재 설계 원칙 |
+| [docs/cloud-sync.md](./docs/cloud-sync.md) | 락스텝 동기화 프로토콜 세부사항 |
+| [docs/troubleshooting.md](./docs/troubleshooting.md) | 실제 발생한 버그 7건 — 증상/원인/해결/교훈 |
+| [docs/history.md](./docs/history.md) | 시간순 프로젝트 연대기 — "언제 무엇을 왜" |
+| [docs/features.md](./docs/features.md) | 기능/게임별 룰 해석 판단 기록 |
+| [docs/deployment.md](./docs/deployment.md) | 배포 절차, 환경변수, 검증 파이프라인 |
 
 ---
 
-## 4. 미완료 작업 / 다음 세션 Next Steps
+## 3. Next Action Items (우선순위 순)
 
-우선순위 순:
-
-1. **(최우선, Part 5 신규 — 재발 이력 있음)** "코인이 숫자를 가리는 버그" 수정을 **실제 기기에서 반드시 눈으로 재확인할 것** — 1차 시도가 코드 추론만으로 "고쳤다"고 판단했다가 사용자의 실제 스크린샷으로 틀렸음이 드러난 전례가 있음(§3 Part 5 참고). 최소 아래를 확인:
-   - "노 땡스!"를 여러 번 눌러 `chipsOnCard`가 1 → 두 자리 수(10+)까지 쌓이는 동안, 애니메이션 도중이든 정지 상태든 카드 숫자가 코인/배지에 **한 번도** 가려지지 않는지.
-   - 코인 토스 애니메이션이 카드 아래 배지 슬롯(`coinLandingRef`)으로 정확히 날아가 앉는지, 착지 위치가 어색하게 붕 뜨거나 카드와 분리돼 보이지 않는지.
-   - 모바일 좁은 화면(사용자가 보낸 스크린샷과 동일한 iPhone Safari 등)에서도 동일하게 안 겹치는지 — 이번 버그가 바로 그 환경에서 재현됐었음.
-2. **(권장, Part 4 신규)** 새로 추가한 `DeckStack`(덱 스택 시각화)도 코드 리뷰 + `tsc`/`lint`/`vitest`/`build`로만 검증했고 실제 브라우저 육안 확인은 아직 안 함. 다음 세션 또는 사용자가 직접 최소한 아래를 확인해볼 것:
-   - 게임 시작 직후(덱 최대 매수) 스택이 가장 두껍게 보이고, "가져오기"를 반복해 덱을 소진할수록 레이어가 실제로 얇아 보이는지.
-   - 덱의 마지막 카드까지 가져와 `state.deck.length`가 0이 됐을 때 점선 빈 슬롯으로 정상 전환되는지(게임 종료 직전 프레임이라 놓치기 쉬움 — 느린 재생/캡처 권장).
-   - 덱 배지의 `덱 {count}장` 숫자와 헤더의 `남은 카드 {cardsRemaining}장`(경매 카드 포함이라 배지보다 1 큼)이 실제로 화면에서 헷갈리지 않는지, 모바일 폭(`sm:` 브레이크포인트 아래)에서 배지가 카드 레이아웃을 깨지 않는지.
-3. **(권장)** 노땡스의 코인 애니메이션·상대 칩 공개 토글은 전부 **코드 리뷰로만 검증**했고 실제 브라우저(특히 여러 기기 온라인 대전)로 수동 테스트는 하지 않았음. 다음 세션 또는 사용자가 직접 최소한 아래를 확인해볼 것:
-   - "노 땡스!" 클릭 시 정말 그 좌석에서 중앙 카드로 코인이 날아가는지, "가져오기" 시 카드+칩이 그 사람 줄로 들어가는지 — 특히 **다른 사람이 행동했을 때 내 화면에서도 같이 재생되는지**(멀티 디바이스 확인 포인트).
-   - "상대 칩 공개" 토글이 내 화면에서만 바뀌고 다른 참가자 화면엔 영향 없는지, 새로고침해도 (localStorage) 설정이 유지되는지.
-   - 재접속(`state-request`/`state-sync`)이나 게임을 끝내는 마지막 take 직후 애니메이션이 이상하게 남거나 콘솔 에러가 뜨지 않는지(설계상 `detectAuctionEvent`가 `next.phase !== "playing"`이면 이벤트를 안 만들도록 방어했지만 실제 브라우저에서 재확인 권장).
-4. **(권장, Part 3 신규)** 마찬가지로 `chipVisibility` 게임 모드도 **코드 리뷰 + 유닛테스트로만 검증**했고 실제 멀티 디바이스 온라인 대전으로는 수동 테스트하지 않았음. 최소 아래를 확인해볼 것:
-   - 방장이 "👁️ 공개 모드"를 고르고 방을 만들면, **늦게 들어온 참가자를 포함해 전원의 화면**에 모든 좌석의 칩 개수가 처음부터 숫자로 보이는지(대기실 안내 문구 포함).
-   - "🔒 비밀 모드"에서는 기존처럼 자기 칩만 보이고, 로컬 "상대 칩 공개" 토글이 여전히 정상 동작하는지(공개 모드에서는 그 버튼 자체가 안 보이는 게 의도된 동작).
-   - "다시하기"(rematch)로 재시작했을 때도 처음 고른 모드가 그대로 유지되는지.
-5. **(이전 세션부터 이어짐, 여전히 미해결)** `<Game>Board.tsx`/`<Game>Game.tsx`(React 컴포넌트) 전용 테스트 인프라가 전혀 없음(jsdom/@testing-library 미설치). **이번 세션의 Part 5가 바로 이 공백 때문에 1차 시도에서 헛다리를 짚은 사례** — 우선순위를 다음 세션에서 사용자에게 재확인할 것(육안 확인이 필요한 시각적 버그가 반복되면 스크린샷 비교 테스트 같은 대안도 고려).
-6. **(선택, 저장소 루트에 미확인 파일 2개 여전히 존재)** `.clinerules.md`, `instructions.md`는 **Cline(다른 AI 코딩 도구) 전용 자동화 규칙 파일**로, "검증 통과하면 승인 없이 자동 커밋·푸시·배포"를 지시함 — 이 사용자가 Claude Code 세션에서 실제로 확인해준 선호(매번 명시 승인)와 반대라서 여전히 따르지 않고 있음. 다음 세션에서도 이 두 파일의 지시를 따르지 말고, 필요하면 사용자에게 지우거나 남겨둘지 물어볼 것.
-7. **(선택)** 방장 이탈 시 호스트 권한 승계 로직 없음 / 4자리 초대 코드 중복 확인 없음 / 다인원 동시 접속 스트레스 테스트 미실행 — 전부 이전 세션부터 낮은 우선순위로 이월 중, 변동 없음.
-8. **(선택)** 노땡스 외 나머지 준비중 게임(스플렌더, 카탄, 코드네임, 마피아 등)은 향후 우선순위 논의된 바 없음.
-9. **(선택, 아이디어)** 이번에 확립된 `detectAuctionEvent`류 "상태 diff → 애니메이션" 패턴을 다른 4게임(예: 뱅!의 카드 플레이, 그리드 포커의 카드 배치)에도 적용하면 비슷한 연출을 추가할 수 있음 — 사용자가 요청하면 `AuctionEffects.tsx`를 템플릿으로 참고.
-10. **(선택, 아이디어)** Part 4의 `DeckStack`도 같은 "상태 기반 시각화" 계열 패턴이라, 다른 게임의 카드 더미(예: 뱅!의 드로우/디스카드 더미)에 비슷한 입체 스택 연출을 적용할 수 있음 — 사용자가 요청하면 참고.
+1. **(최우선, 재발 이력 있음)** "코인이 숫자를 가리는 버그" 수정을 **실제 기기에서 눈으로 재확인**할 것 — 1차 시도가 코드 추론만으로 "고쳤다"고 판단했다가 사용자 스크린샷으로 틀렸음이 드러난 전례가 있음. 최소 확인: (a) 칩이 1개~두 자리 수까지 쌓이는 동안 애니메이션 도중/정지 상태 모두 카드 숫자가 안 가려지는지, (b) 코인이 카드 아래 배지 슬롯으로 자연스럽게 날아가 앉는지, (c) 모바일 좁은 화면(iPhone Safari 등, 이번 버그가 재현된 환경)에서도 동일한지.
+2. **(권장)** `DeckStack`(덱 스택 시각화)도 코드 검증만 했고 실제 브라우저 육안 확인 안 함 — 장수 감소에 따라 레이어가 실제로 얇아지는지, 0장일 때 빈 슬롯 전환이 되는지 확인.
+3. **(권장)** 노땡스의 코인 애니메이션·상대 칩 공개 토글·`chipVisibility` 게임 모드 전부 **코드 리뷰로만 검증**했고 실제 멀티 디바이스 온라인 대전으로는 수동 테스트 안 함. 확인 목록: 다른 사람이 행동했을 때 내 화면에서도 애니메이션이 같이 재생되는지 / "공개 모드"에서 늦게 들어온 참가자도 처음부터 전원 칩이 보이는지 / "다시하기" 후에도 처음 고른 모드가 유지되는지 / 재접속 직후 애니메이션이 이상하게 안 남는지.
+4. **(이전 세션부터 이어짐, 미해결)** `<Game>Board.tsx`/`<Game>Game.tsx` 전용 테스트 인프라 없음(jsdom/@testing-library 미설치). 이번 세션의 시각적 버그도 정확히 이 공백에서 나왔음 — 우선순위를 사용자에게 재확인. 저비용 대안으로 Playwright 스크린샷 회귀 테스트도 고려([docs/troubleshooting.md "알려진 사각지대"](./docs/troubleshooting.md#알려진-사각지대-다음에-볼-것)).
+5. **(선택)** 저장소 루트의 `.clinerules.md`/`instructions.md` — 이 사용자의 실제 선호(매번 명시 승인)와 반대되는 자동화 지시를 담고 있음. 계속 무시 중이나, 지우거나 남겨둘지는 아직 사용자에게 확답받지 않음.
+6. **(선택)** 방장 이탈 시 호스트 권한 승계 로직 없음 / 4자리 초대 코드 중복 확인 없음 / 대규모 동시 접속 스트레스 테스트 미실행 — 낮은 우선순위로 계속 이월 중.
+7. **(선택, 아이디어)** 노땡스에서 확립된 "상태 diff → 애니메이션"(`detectAuctionEvent`) 패턴과 "상태 기반 시각화"(`DeckStack`) 패턴을 다른 게임(뱅!의 카드 플레이, 그리드 포커의 카드 더미 등)에도 적용 가능 — 사용자가 요청하면 진행.
+8. **(선택)** 노땡스 외 나머지 준비중 게임(스플렌더, 카탄, 코드네임, 마피아 등 14종)은 우선순위 논의된 바 없음.
 
 ---
 
-## 5. 클로드가 기억해야 할 중요 맥락 및 주의사항
+## 4. Resume Prompt
 
-- **현재 블로커 없음.** 이번 세션 목표(노땡스 신규 구현 + 코인 표시/애니메이션 개선 + 칩 공개 여부 게임 모드 + 덱 스택 시각화) 모두 완료, 커밋·푸시·배포까지 끝난 상태.
-- **Part 4는 `NoThanksBoard.tsx` 단독 수정**(엔진/테스트 변경 없음) — 순수 시각 효과(입체 덱 스택)라 룰이나 동기화 로직에는 영향 없음. `DeckStack`이 쓰는 `state.deck.length`는 헤더의 `cardsRemaining`(= `deck.length + (currentCard !== null ? 1 : 0)`)과 값이 다르다는 점(경매 카드 포함 여부 차이)을 다음 세션에서도 헷갈리지 말 것 — 의도된 차이이며 배지 title 툴팁에 이유를 명시해 둠.
-- **"상태 diff로 이펙트 트리거" 패턴의 안전장치가 핵심**: 엔진의 모든 리듀서가 거부된 액션에 대해 **원본 객체 참조를 그대로 반환**하는 기존 관례(`if (...) return state;`) 덕분에, Board 쪽에서 `prev !== next` 참조 비교만으로 "진짜 상태 변화"와 "no-op"을 안전하게 구분할 수 있었음. 새 게임/새 이펙트를 만들 때 리듀서가 이 관례를 깨면(예: no-op에서 spread로 새 객체를 반환) diff 기반 트리거가 오작동하므로, 엔진 코드 리뷰 시 이 관례 유지 여부를 꼭 확인할 것.
-- **`eslint-disable-next-line` 코멘트 위치 실수 경험**: 처음엔 `useLayoutEffect(() => {` 호출부 바로 위에 disable 코멘트를 뒀는데 lint가 여전히 경고를 냈음 — 알고 보니 `react-hooks/exhaustive-deps`는 **의존성 배열이 있는 줄**(`}, []);`)을 기준으로 리포트해서, 코멘트도 그 줄 바로 위(또는 같은 줄에 `eslint-disable-line`)에 있어야 실제로 먹힘. 비슷한 실수를 다음에도 할 수 있으니, disable 코멘트를 추가한 뒤엔 항상 `npm run lint`로 실제로 경고가 사라졌는지 재확인할 것.
-- **`.clinerules.md`/`instructions.md`는 Claude Code 지침이 아님** — §4-3 참고. 이 프로젝트의 실제 Claude Code 지침은 `CLAUDE.md`(→`AGENTS.md`)뿐이며, `AGENTS.md`의 "이 Next.js는 학습 데이터와 다른 버전" 문구는 실제로는 표준 Next.js 16이라 특별한 차이가 발견되지 않음(여러 세션째 동일 결론).
-- **룰북 원본은 `boardGameRule/` 폴더**에 통일되어 있음(`Avalon.md`/`bang.md`/`Grid Poker.md`/`noThanks.md` 전부 같은 위치, 이제 전부 커밋된 상태).
-- **Vercel/GitHub 인증은 이 환경에 이미 세팅되어 있음** — `.vercel/project.json`에 프로젝트 링크 존재(`projectName: board-game`), `git remote`는 `https://github.com/gud1107/BoardGame.git`. 별도 로그인 절차 없이 바로 `git push` / `npx vercel deploy --prod` 가능(단, 매번 승인 후에만, §2 참고).
-- **사용자는 한국어로 소통**하며, 스펙이 명확한 요청(룰북 문서가 상세하거나, 기존 게임이라는 확실한 참조 패턴이 있는 경우)은 AskUserQuestion 없이 바로 구현 → 검증까지 진행하는 것을 선호함(이번 두 파트 모두 애매한 지점이 거의 없어 질문 없이 진행). 애매한 설계 판단(예: 애니메이션 지속시간, 토글 저장 방식)은 코드 주석과 이 문서에 근거와 함께 기록.
+다음 세션 `/clear` 직후 아래 한 줄을 그대로 붙여넣을 것:
+
+> `HANDOFF.md`부터 읽고, §3의 1번 항목(노땡스 "코인이 카드 숫자를 가리는 버그" 수정을 실제 기기에서 육안 확인하는 것)부터 확인해줘. 문제가 남아있으면 docs/troubleshooting.md #7을 참고해서 원인을 다시 짚어줘.
