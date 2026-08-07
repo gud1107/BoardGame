@@ -209,6 +209,14 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
   }, []);
 
   const centerCardRef = useRef<HTMLDivElement | null>(null);
+  // Separate landing spot for the "pass" coin-toss animation and the static
+  // chipsOnCard badge, deliberately OUTSIDE `centerCardRef`'s box (see the
+  // block below) so neither can ever visually overlap the big card number —
+  // previously both the badge and the flying coin's flight target were tied
+  // to the card element itself (an absolutely-positioned badge inside it,
+  // and `centerCardRef` as the toss's destination), which put a coin right
+  // on top of the digits at least at the end of every "pass" animation.
+  const coinLandingRef = useRef<HTMLDivElement | null>(null);
   const seatRefs = useRef(new Map<SeatIndex, HTMLDivElement>());
   function setSeatRef(seat: SeatIndex) {
     return (el: HTMLDivElement | null) => {
@@ -346,16 +354,29 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
 
         <div className="flex items-center gap-4 sm:gap-6">
           <DeckStack count={state.deck.length} />
-          <div
-            ref={centerCardRef}
-            className="relative flex h-28 w-20 items-center justify-center rounded-2xl border-2 border-white/20 bg-gradient-to-b from-white to-neutral-200 text-4xl font-black text-neutral-900 shadow-lg sm:h-36 sm:w-24 sm:text-5xl"
-          >
-            {state.currentCard}
-            {state.chipsOnCard > 0 && (
-              <div className="absolute -bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-full border border-amber-300/60 bg-amber-500/90 px-2.5 py-1 text-xs font-bold text-black shadow">
-                🪙 {state.chipsOnCard}
-              </div>
-            )}
+          {/*
+            The card box and the chip badge are now two fully separate boxes
+            stacked in normal flow (not `absolute`), so there is structurally
+            no way for the badge — or the coin-toss animation that lands on
+            it, see `coinLandingRef`/AuctionEffects — to overlap the card
+            number, regardless of chip-count digit width, font metrics, or
+            animation timing. A fixed-height slot always renders (even at 0
+            chips) so the card doesn't shift up/down as chips come and go.
+          */}
+          <div className="flex flex-col items-center gap-1.5">
+            <div
+              ref={centerCardRef}
+              className="flex h-28 w-20 items-center justify-center rounded-2xl border-2 border-white/20 bg-gradient-to-b from-white to-neutral-200 text-4xl font-black text-neutral-900 shadow-lg sm:h-36 sm:w-24 sm:text-5xl"
+            >
+              {state.currentCard}
+            </div>
+            <div ref={coinLandingRef} className="flex h-7 items-center justify-center">
+              {state.chipsOnCard > 0 && (
+                <div className="flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-300/60 bg-amber-500/90 px-2.5 py-1 text-xs font-bold text-black shadow">
+                  🪙 {state.chipsOnCard}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -426,7 +447,7 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
           key={effect.id}
           event={effect}
           getSourceEl={() => (effect.kind === "pass" ? (seatRefs.current.get(effect.seat) ?? null) : centerCardRef.current)}
-          getTargetEl={() => (effect.kind === "pass" ? centerCardRef.current : (seatRefs.current.get(effect.seat) ?? null))}
+          getTargetEl={() => (effect.kind === "pass" ? coinLandingRef.current : (seatRefs.current.get(effect.seat) ?? null))}
           onDone={handleEffectDone}
         />
       ))}
