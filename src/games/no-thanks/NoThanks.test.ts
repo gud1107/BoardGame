@@ -30,6 +30,7 @@ function makeState(overrides: Partial<NoThanksState> = {}): NoThanksState {
     activeSeat: 0,
     phase: "playing",
     removedCards: [],
+    chipVisibility: "secret",
     ...overrides,
   };
 }
@@ -87,6 +88,16 @@ describe("startGame — setup", () => {
     expect(state.chipsOnCard).toBe(0);
     expect(state.currentCard).not.toBeNull();
     expect(state.phase).toBe("playing");
+  });
+
+  it("defaults to 'secret' chip visibility (the official rulebook mode) when not specified", () => {
+    const state = startGame(4, 1);
+    expect(state.chipVisibility).toBe("secret");
+  });
+
+  it("honors an explicit chip-visibility mode (host's rulebook §2 choice)", () => {
+    expect(startGame(4, 1, "secret").chipVisibility).toBe("secret");
+    expect(startGame(4, 1, "public").chipVisibility).toBe("public");
   });
 });
 

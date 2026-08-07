@@ -10,10 +10,13 @@
  * Same online-multiplayer trust model as Hanamikoji/Bang/Grid Poker/Avalon:
  * every connected client computes and holds the FULL state (every seat's
  * private chip count) from a shared RNG seed plus replayed `EngineAction`s —
- * there is no server authority. The view layer only ever *renders* the
- * viewer's own chip count as a number and every other seat's as "?" (chips
- * are the only secret in this game — acquired cards are always public per
- * the rulebook). See README for the accepted trust trade-off.
+ * there is no server authority. Per the rulebook's §2 game-mode option
+ * (`ChipVisibility`), the view layer renders the viewer's own chip count as a
+ * number always, and every other seat's either as a number ("public" mode,
+ * the rulebook's custom option) or as "?" ("secret" mode, the official
+ * rule) — chips are the only thing that can ever be secret in this game,
+ * acquired cards are always public per the rulebook. See README for the
+ * accepted trust trade-off.
  */
 
 export type SeatIndex = number;
@@ -33,6 +36,18 @@ export interface PlayerState {
 
 export type Phase = "playing" | "gameOver";
 
+/**
+ * Host-chosen game mode from the rulebook's §2 "게임 모드 설정":
+ * - "secret" (비밀 모드, the official rule): only the owner ever sees their
+ *   own chip count; everyone else's is hidden in the view layer.
+ * - "public" (공개 모드, the rulebook's custom option): every seat's chip
+ *   count is shown to every player. Chosen once by the host before the game
+ *   starts and applies identically to all seats — this is a real shared game
+ *   rule, distinct from the board's separate local-only "practice reveal"
+ *   toggle which only ever affects the viewer's own screen.
+ */
+export type ChipVisibility = "secret" | "public";
+
 export interface NoThanksState {
   playerCount: number;
   players: PlayerState[];
@@ -45,6 +60,8 @@ export interface NoThanksState {
   phase: Phase;
   /** The 9 cards excluded at setup — never dealt, kept only for tests/debugging. */
   removedCards: number[];
+  /** Chosen once at `startGame` by the host, see `ChipVisibility`. */
+  chipVisibility: ChipVisibility;
 }
 
 export type EngineAction = { type: "pass"; seat: SeatIndex } | { type: "take"; seat: SeatIndex };
@@ -85,7 +102,7 @@ function nextSeat(seat: SeatIndex, playerCount: number): SeatIndex {
 // Setup
 // ---------------------------------------------------------------------------
 
-export function startGame(playerCount: number, seed: number): NoThanksState {
+export function startGame(playerCount: number, seed: number, chipVisibility: ChipVisibility = "secret"): NoThanksState {
   if (playerCount < MIN_PLAYERS || playerCount > MAX_PLAYERS) {
     throw new Error(`Unsupported player count: ${playerCount}`);
   }
@@ -114,6 +131,7 @@ export function startGame(playerCount: number, seed: number): NoThanksState {
     activeSeat,
     phase: "playing",
     removedCards,
+    chipVisibility,
   };
 }
 

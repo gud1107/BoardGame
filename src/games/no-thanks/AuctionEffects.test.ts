@@ -16,6 +16,7 @@ function makeState(overrides: Partial<NoThanksState> = {}): NoThanksState {
     activeSeat: 0,
     phase: "playing",
     removedCards: [],
+    chipVisibility: "secret",
     ...overrides,
   };
 }
