@@ -80,11 +80,11 @@ function TotalDiceBanner({ state }: { state: PerudoState }) {
   );
 }
 
-const SIZE_CLASS = {
-  sm: "h-6 w-6 text-[10px]",
-  md: "h-9 w-9 text-sm",
-  lg: "h-12 w-12 text-base",
-} as const;
+// Physical pixel size for each named die size — the 3D cube geometry below
+// needs real numbers (translateZ offsets, face centering) that Tailwind
+// classes can't express, so every die size is defined here directly.
+const SIZE_PX = { sm: 24, md: 36, lg: 48 } as const;
+type DieSize = keyof typeof SIZE_PX;
 
 const PIP_LAYOUT: Record<number, number[]> = {
   2: [0, 8],
@@ -94,60 +94,156 @@ const PIP_LAYOUT: Record<number, number[]> = {
   6: [0, 2, 3, 5, 6, 8],
 };
 
+interface CubeColorway {
+  /** Tailwind classes for the front face's background gradient + text color. */
+  front: string;
+  /** Tailwind classes for the top/right bevel faces — a darker shade of the same hue, standing in for the shadowed sides of a real cube. */
+  bevel: string;
+  /** Shared border color class for every face. */
+  border: string;
+}
+
+const IVORY_CUBE: CubeColorway = {
+  front: "bg-gradient-to-br from-white via-neutral-50 to-neutral-200 text-neutral-950",
+  bevel: "bg-gradient-to-br from-neutral-300 to-neutral-500",
+  border: "border-neutral-400",
+};
+const PERUDO_CUBE: CubeColorway = {
+  front: "bg-gradient-to-br from-red-400 via-red-600 to-red-800 text-white",
+  bevel: "bg-gradient-to-br from-red-800 to-red-950",
+  border: "border-red-950",
+};
+const PURPLE_CUBE: CubeColorway = {
+  front: "bg-gradient-to-br from-violet-400 via-purple-600 to-fuchsia-800 text-white",
+  bevel: "bg-gradient-to-br from-purple-800 to-fuchsia-950",
+  border: "border-violet-950",
+};
+const WOOD_CUBE: CubeColorway = {
+  front: "bg-gradient-to-br from-amber-700 via-amber-800 to-amber-950 text-amber-200/60",
+  bevel: "bg-gradient-to-br from-amber-900 to-amber-950",
+  border: "border-amber-950",
+};
+
 /**
- * One face-up die — a rounded, lacquered "physical cube" look modeled on
- * the reference photo: a chunky rounded-square body, a bright top-left
- * gloss highlight streak, and a layered inset shadow for real edge bevel
- * (not a flat color fill). Ivory dice for values 2-6, and the signature
- * red-on-white 페루도 die (gold rim, white skull-mask crest) for face 1.
+ * Shared 3D cube shell — every die in this game (ivory face dice, the red
+ * 페루도/skull die, the purple betting die, hidden wood-backed dice still in
+ * the cup) renders through this ONE primitive so they share real physical
+ * depth: three true `transform-style: preserve-3d` faces (front + top bevel
+ * + right bevel), not a flat square faked with a gradient. Only three of the
+ * cube's six faces are built since the other three (back/bottom/left) are
+ * never toward the camera at this fixed viewing angle — cheaper DOM, same
+ * silhouette. `depth` is deliberately shallow (≈28% of the face size) rather
+ * than a literal W×W×W cube: a full cube's screen footprint balloons badly
+ * once rotated, which would blow out the tight flex-wrap rows this project
+ * packs dice into (a player's 5-die hand, the 8-seat roster strip); a shallow
+ * bevel reads as unmistakably 3D while staying close to its footprint.
  */
-function DieFace({ value, size = "md", ring }: { value: number; size?: keyof typeof SIZE_CLASS; ring?: "match" | "wild" }) {
-  const ringClass =
+function DiceCube({
+  size = "md",
+  colorway,
+  ring,
+  glossy = true,
+  title,
+  children,
+}: {
+  size?: DieSize;
+  colorway: CubeColorway;
+  ring?: "match" | "wild";
+  glossy?: boolean;
+  title?: string;
+  children: ReactNode;
+}) {
+  const w = SIZE_PX[size];
+  const depth = Math.max(4, Math.round(w * 0.28));
+  const ringShadow =
     ring === "match"
-      ? "ring-[3px] ring-amber-300 ring-offset-2 ring-offset-black/30"
+      ? "0 0 0 3px rgba(252,211,77,0.95), 0 0 10px 2px rgba(252,211,77,0.55)"
       : ring === "wild"
-        ? "ring-[3px] ring-violet-300 ring-offset-2 ring-offset-black/30"
-        : "ring-1 ring-black/50";
-  const isPerudo = value === 1;
+        ? "0 0 0 3px rgba(196,181,253,0.95), 0 0 10px 2px rgba(196,181,253,0.55)"
+        : "none";
   return (
     <div
-      className={`relative flex items-center justify-center overflow-hidden rounded-[10px] border-[3px] font-black ${SIZE_CLASS[size]} ${ringClass} ${
-        isPerudo
-          ? "border-red-950 bg-gradient-to-br from-red-400 via-red-600 to-red-800 text-white shadow-[inset_0_3px_4px_rgba(255,255,255,0.5),inset_0_-4px_6px_rgba(0,0,0,0.45),0_2px_4px_rgba(0,0,0,0.4)]"
-          : "border-neutral-400 bg-gradient-to-br from-white via-neutral-50 to-neutral-200 text-neutral-950 shadow-[inset_0_3px_4px_rgba(255,255,255,0.95),inset_0_-4px_6px_rgba(0,0,0,0.25),0_2px_4px_rgba(0,0,0,0.4)]"
-      }`}
-      title={isPerudo ? "페루도 (조커)" : `${value}`}
+      className="relative inline-block shrink-0"
+      style={{
+        width: w,
+        height: w,
+        perspective: w * 4.5,
+        filter: "drop-shadow(0 3px 3px rgba(0,0,0,0.45))",
+      }}
+      title={title}
     >
-      {/* gloss highlight streak — top-left sheen for a rounded-cube look */}
-      <div className="pointer-events-none absolute -top-1/3 -left-1/3 h-2/3 w-2/3 rotate-12 rounded-full bg-white/35 blur-[2px]" />
-      {isPerudo ? (
-        <PerudoFaceIcon className="relative h-[68%] w-[68%] drop-shadow-[0_1px_1.5px_rgba(0,0,0,0.6)]" />
-      ) : (
-        <div className="relative grid h-full w-full grid-cols-3 grid-rows-3 gap-[1px] p-1">
-          {Array.from({ length: 9 }, (_, i) => (
-            <span
-              key={i}
-              className={`m-auto h-[26%] w-[26%] rounded-full ${
-                PIP_LAYOUT[value]?.includes(i)
-                  ? "bg-neutral-950 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),0_1px_1px_rgba(0,0,0,0.35)]"
-                  : "bg-transparent"
-              }`}
-            />
-          ))}
+      <div
+        className="absolute inset-0 rounded-[22%]"
+        style={{ transformStyle: "preserve-3d", transform: "rotateX(16deg) rotateY(-24deg)", boxShadow: ringShadow }}
+      >
+        {/* front face — the readable side, pips/icon live here */}
+        <div
+          className={`absolute inset-0 flex items-center justify-center overflow-hidden rounded-[22%] border-[2px] font-black ${colorway.front} ${colorway.border}`}
+          style={{ transform: `translateZ(${depth / 2}px)` }}
+        >
+          {glossy && (
+            <div className="pointer-events-none absolute -top-1/3 -left-1/3 h-2/3 w-2/3 rotate-12 rounded-full bg-white/35 blur-[2px]" />
+          )}
+          <div className="relative h-full w-full">{children}</div>
         </div>
-      )}
+        {/* top bevel — the cube's shadowed upper edge, gives real depth instead of a flat gradient pretending to be one */}
+        <div
+          className={`absolute rounded-t-[22%] border-x-[2px] border-t-[2px] ${colorway.bevel} ${colorway.border}`}
+          style={{ width: w, height: depth, left: 0, top: (w - depth) / 2, transform: `rotateX(90deg) translateZ(${w / 2}px)` }}
+        />
+        {/* right bevel — the cube's shadowed side edge */}
+        <div
+          className={`absolute rounded-r-[22%] border-y-[2px] border-r-[2px] ${colorway.bevel} ${colorway.border}`}
+          style={{ width: depth, height: w, top: 0, left: (w - depth) / 2, transform: `rotateY(90deg) translateZ(${w / 2}px)` }}
+        />
+      </div>
     </div>
   );
 }
 
-/** A hidden opponent die — no pips, just a themed wood/bronze back matching the board's carved-medallion palette. */
-function DieBack({ size = "sm" }: { size?: keyof typeof SIZE_CLASS }) {
+function DiePips({ value, light = false }: { value: number; light?: boolean }) {
   return (
-    <div
-      className={`flex items-center justify-center rounded-md border-2 border-amber-950 bg-gradient-to-br from-amber-700 to-amber-950 text-amber-200/50 shadow-[inset_0_-2px_3px_rgba(0,0,0,0.5)] ${SIZE_CLASS[size]}`}
-    >
-      🎲
+    <div className="grid h-full w-full grid-cols-3 grid-rows-3 gap-[1px] p-1">
+      {Array.from({ length: 9 }, (_, i) => (
+        <span
+          key={i}
+          className={`m-auto h-[26%] w-[26%] rounded-full ${
+            PIP_LAYOUT[value]?.includes(i)
+              ? light
+                ? "bg-white shadow-[0_1px_1px_rgba(0,0,0,0.4)]"
+                : "bg-neutral-950 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),0_1px_1px_rgba(0,0,0,0.35)]"
+              : "bg-transparent"
+          }`}
+        />
+      ))}
     </div>
+  );
+}
+
+/**
+ * One face-up die — a real 3D cube (via `DiceCube`) modeled on the reference
+ * photo: ivory dice for values 2-6, and the signature red 페루도 die (white
+ * skull-mask crest) for face 1, engraved onto the cube's front face.
+ */
+function DieFace({ value, size = "md", ring }: { value: number; size?: DieSize; ring?: "match" | "wild" }) {
+  const isPerudo = value === 1;
+  return (
+    <DiceCube size={size} colorway={isPerudo ? PERUDO_CUBE : IVORY_CUBE} ring={ring} title={isPerudo ? "페루도 (조커)" : `${value}`}>
+      {isPerudo ? (
+        <PerudoFaceIcon className="relative mx-auto h-[68%] w-[68%] drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.65)]" />
+      ) : (
+        <DiePips value={value} />
+      )}
+    </DiceCube>
+  );
+}
+
+/** A hidden opponent die — no pips, just a themed wood/bronze cube back matching the board's carved-medallion palette. */
+function DieBack({ size = "sm" }: { size?: DieSize }) {
+  return (
+    <DiceCube size={size} colorway={WOOD_CUBE} glossy={false} title="비공개 주사위">
+      <span className="flex h-full w-full items-center justify-center text-[0.9em]">🎲</span>
+    </DiceCube>
   );
 }
 
@@ -218,27 +314,15 @@ function BettingDie({ face, interactive, onClick }: { face: Face; interactive: b
       disabled={!interactive}
       onClick={onClick}
       title={interactive ? "클릭해서 베팅 눈금 바꾸기" : "현재 선언된 베팅 위치"}
-      className={`relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-[8px] border-[3px] font-black text-white transition sm:h-9 sm:w-9 ${
-        interactive
-          ? "cursor-pointer border-violet-950 bg-gradient-to-br from-violet-400 via-purple-600 to-fuchsia-800 shadow-[0_0_12px_2px_rgba(168,85,247,0.65),inset_0_2px_3px_rgba(255,255,255,0.45),inset_0_-3px_5px_rgba(0,0,0,0.4)] hover:scale-110 active:scale-95"
-          : "cursor-default border-violet-950/80 bg-gradient-to-br from-violet-500 via-purple-700 to-fuchsia-900 shadow-[0_0_8px_1px_rgba(168,85,247,0.4),inset_0_2px_3px_rgba(255,255,255,0.3),inset_0_-3px_5px_rgba(0,0,0,0.4)]"
-      }`}
+      className={`relative inline-flex transition ${interactive ? "cursor-pointer hover:scale-110 active:scale-95" : "cursor-default"}`}
     >
-      <div className="pointer-events-none absolute -top-1/3 -left-1/3 h-2/3 w-2/3 rotate-12 rounded-full bg-white/40 blur-[2px]" />
-      {face === 1 ? (
-        <PerudoFaceIcon className="relative h-[62%] w-[62%] drop-shadow-[0_1px_1.5px_rgba(0,0,0,0.6)]" />
-      ) : (
-        <div className="relative grid h-full w-full grid-cols-3 grid-rows-3 gap-[1px] p-1">
-          {Array.from({ length: 9 }, (_, i) => (
-            <span
-              key={i}
-              className={`m-auto h-[26%] w-[26%] rounded-full ${
-                PIP_LAYOUT[face]?.includes(i) ? "bg-white shadow-[0_1px_1px_rgba(0,0,0,0.4)]" : "bg-transparent"
-              }`}
-            />
-          ))}
-        </div>
-      )}
+      <DiceCube size="md" colorway={PURPLE_CUBE} title="">
+        {face === 1 ? (
+          <PerudoFaceIcon className="relative mx-auto h-[62%] w-[62%] drop-shadow-[0_1px_1.5px_rgba(0,0,0,0.6)]" />
+        ) : (
+          <DiePips value={face} light />
+        )}
+      </DiceCube>
       {interactive && <span className="pointer-events-none absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[9px] leading-none">✋</span>}
     </button>
   );
@@ -623,7 +707,8 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
   // -------------------------------------------------------------------------
   if (state.phase === "reveal" && state.lastResolution) {
     const res = state.lastResolution;
-    const success = res.kind === "dudo" ? res.affectedSeat !== res.actorSeat : res.diceDelta === 1;
+    const success = res.kind === "dudo" ? res.affectedSeat !== res.actorSeat : res.diceDelta > 0;
+    const lossAmount = Math.abs(res.diceDelta);
     return (
       <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
         <TableTexture />
@@ -648,11 +733,11 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
           <p className={`mt-2 text-sm font-bold ${success ? "text-emerald-300" : "text-rose-300"}`}>
             {res.kind === "dudo"
               ? res.affectedSeat === res.bid.seat
-                ? `📉 선언이 틀렸습니다 — ${names[res.bid.seat]}님이 주사위 1개를 잃었습니다.`
-                : `📈 선언이 맞았습니다 — ${names[res.actorSeat]}님이 주사위 1개를 잃었습니다.`
-              : res.diceDelta === 1
+                ? `📉 선언이 틀렸습니다 — ${names[res.bid.seat]}님이 주사위 ${lossAmount}개를 잃었습니다.`
+                : `📈 선언이 맞았습니다 — ${names[res.actorSeat]}님이 주사위 ${lossAmount}개를 잃었습니다.`
+              : res.diceDelta > 0
                 ? `🎉 정확히 맞췄습니다! ${names[res.actorSeat]}님이 주사위 1개를 되찾았습니다.`
-                : `❌ 틀렸습니다 — ${names[res.actorSeat]}님이 주사위 1개를 잃었습니다.`}
+                : `❌ 틀렸습니다 — ${names[res.actorSeat]}님이 주사위 ${lossAmount}개를 잃었습니다.`}
           </p>
         </div>
 
