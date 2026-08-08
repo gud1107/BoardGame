@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
-import ResourceIcon from "./ResourceIcon";
+import ResourceIcon, { ResourceCube, RESOURCE_META } from "./ResourceIcon";
 import { detectAcquireEvent, FlyingResourceBurst, type AcquireAnimEvent } from "./MerchantEffects";
 import {
   RESOURCE_ORDER,
@@ -46,13 +46,44 @@ export interface CenturyBoardProps {
   onGameEnd: () => void;
 }
 
-const PANEL =
-  "relative overflow-hidden rounded-3xl border border-black/50 bg-gradient-to-b from-[#2b1c0f] via-[#1c1208] to-[#0f0a05] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
+// ---------------------------------------------------------------------------
+// Physical-game-mat visual language shared across the whole board — an outer
+// "wood tabletop" frame (MAT) holding an inner "persian rug/felt" playing
+// surface (FELT) for the market and a "carved wood caravan board" surface
+// (CARAVAN) for the player's own cart, so the screen reads as a real board
+// game box lid rather than a flat UI panel. Built entirely from layered CSS
+// gradients + box-shadow (no image asset — same convention as CARD_FRAME_STYLE
+// / CoinStack below, which predate this pass).
+// ---------------------------------------------------------------------------
+const MAT = "relative overflow-hidden rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4";
+const MAT_STYLE: React.CSSProperties = {
+  background:
+    "radial-gradient(ellipse 140% 60% at 50% -10%, rgba(255,205,130,0.10), transparent 55%)," +
+    "repeating-linear-gradient(102deg, rgba(0,0,0,0.05) 0px, rgba(0,0,0,0.05) 1px, transparent 1px, transparent 4px)," +
+    "linear-gradient(160deg, #4a2f16 0%, #2c1a0c 45%, #160d06 100%)",
+  boxShadow: "inset 0 0 0 2px rgba(0,0,0,0.55), inset 0 0 50px rgba(0,0,0,0.55), inset 0 2px 0 rgba(255,255,255,0.06)",
+};
+
+const FELT = "relative overflow-hidden rounded-2xl border p-2 sm:p-3";
+const FELT_STYLE: React.CSSProperties = {
+  background:
+    "radial-gradient(circle at 50% 0%, rgba(160,40,40,0.16), transparent 60%)," +
+    "repeating-radial-gradient(circle at 50% 50%, rgba(200,160,90,0.045) 0px, rgba(200,160,90,0.045) 2px, transparent 2px, transparent 34px)," +
+    "linear-gradient(135deg, #241015 0%, #180d10 55%, #110a0b 100%)",
+  borderColor: "rgba(198,160,90,0.35)",
+  boxShadow: "inset 0 0 0 1px rgba(198,160,90,0.2), inset 0 0 30px rgba(0,0,0,0.6)",
+};
+
+const CARAVAN_STYLE: React.CSSProperties = {
+  background: "linear-gradient(160deg, #5a3b1c 0%, #3c260f 55%, #2a1a0a 100%)",
+  borderColor: "rgba(198,160,90,0.4)",
+  boxShadow: "inset 0 0 0 1px rgba(198,160,90,0.25), inset 0 2px 8px rgba(0,0,0,0.5), 0 8px 20px -10px rgba(0,0,0,0.75)",
+};
 
 function ResourceChip({ resource, count, size = "h-4 w-4" }: { resource: Resource; count: number; size?: string }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/30 px-1.5 py-0.5 text-[11px] font-semibold text-white/90">
-      <ResourceIcon resource={resource} className={size} />
+      <ResourceCube resource={resource} className={size} />
       {count}
     </span>
   );
@@ -71,55 +102,66 @@ function BundleRow({ bundle, size = "h-4 w-4" }: { bundle: ResourceBundle; size?
 }
 
 /**
- * Renders a player's cart as `limit` (HAND_LIMIT, 10) fixed inventory
- * slots — filled slots show the resource cube that occupies them, empty
- * slots stay dashed/faint, so "how full is my cart" is legible at a glance
- * instead of requiring the viewer to add up a row of count badges. Cubes
- * fill slots in `RESOURCE_ORDER` (ascending value) so color groups stay
- * visually together rather than shuffling around as counts change.
+ * Renders a player's caravan cart as `limit` (HAND_LIMIT, 10) fixed,
+ * concave "well" slots carved into the board — filled slots show the glossy
+ * resource cube sitting in the well, empty slots stay a plain dark hollow, so
+ * "how full is my cart" is legible at a glance instead of requiring the
+ * viewer to add up a row of count badges. Cubes fill slots in
+ * `RESOURCE_ORDER` (ascending value) so color groups stay visually together
+ * rather than shuffling around as counts change.
  *
- * The 10-slot limit is only ever exceeded transiently (between drawing
- * past it and resolving the forced `discardToLimit` gate, see
- * `mustDiscard` in the main component) — any resource beyond the 10th slot
- * still renders, in a visually distinct rose-bordered "overflow" slot, so
- * that moment isn't silently clipped.
+ * `full` renders a real 5×2 caravan grid (the main board's own cart);
+ * `compact` (used for the other-players' summary rows, where horizontal
+ * space is tight) falls back to a wrapping row of tiny wells instead.
+ *
+ * The 10-slot limit is only ever exceeded transiently (between drawing past
+ * it and resolving the forced `discardToLimit` gate, see `mustDiscard` in
+ * the main component) — any resource beyond the 10th slot still renders, in
+ * a visually distinct rose-bordered "overflow" well, so that moment isn't
+ * silently clipped.
  */
 function CartInventory({
   resources,
   limit,
-  slotClass = "h-7 w-7",
-  iconClass = "h-5 w-5",
+  compact = false,
+  slotClass,
+  cubeClass,
 }: {
   resources: ResourceBundle;
   limit: number;
+  compact?: boolean;
   slotClass?: string;
-  iconClass?: string;
+  cubeClass?: string;
 }) {
+  const resolvedSlot = slotClass ?? (compact ? "h-3.5 w-3.5" : "h-8 w-8 sm:h-9 sm:w-9");
+  const resolvedCube = cubeClass ?? (compact ? "h-2.5 w-2.5" : "h-5 w-5 sm:h-6 sm:w-6");
   const cubes: Resource[] = [];
   for (const r of RESOURCE_ORDER) {
     for (let i = 0; i < (resources[r] ?? 0); i++) cubes.push(r);
   }
   const slots = Array.from({ length: limit }, (_, i) => cubes[i] ?? null);
   const overflowCubes = cubes.slice(limit);
+  const wellStyle = (filled: boolean): React.CSSProperties => ({
+    background: "radial-gradient(circle at 50% 38%, #241708 0%, #100b04 72%)",
+    boxShadow: filled
+      ? "inset 0 2px 5px rgba(0,0,0,0.8), inset 0 -1px 1px rgba(255,255,255,0.06), 0 1px 0 rgba(255,255,255,0.05)"
+      : "inset 0 2px 4px rgba(0,0,0,0.65)",
+    border: "1px solid rgba(198,160,90,0.28)",
+  });
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className={compact ? "flex flex-wrap gap-1" : "grid grid-cols-5 gap-1.5 sm:gap-2"}>
       {slots.map((r, i) => (
-        <div
-          key={i}
-          className={`flex items-center justify-center rounded-md border transition ${slotClass} ${
-            r ? "border-white/15 bg-white/5" : "border-dashed border-white/15 bg-black/10"
-          }`}
-        >
-          {r ? <ResourceIcon resource={r} className={iconClass} /> : <span className="h-1.5 w-1.5 rounded-full bg-white/10" />}
+        <div key={i} className={`flex items-center justify-center rounded-full ${resolvedSlot}`} style={wellStyle(!!r)}>
+          {r ? <ResourceCube resource={r} className={resolvedCube} /> : <span className="h-1 w-1 rounded-full bg-white/10" />}
         </div>
       ))}
       {overflowCubes.map((r, i) => (
         <div
           key={`overflow-${i}`}
-          className={`flex items-center justify-center rounded-md border-2 border-rose-400/70 bg-rose-500/10 shadow-[0_0_8px_-1px_rgba(244,63,94,0.6)] ${slotClass}`}
+          className={`flex items-center justify-center rounded-full border-2 border-rose-400/70 bg-rose-500/10 shadow-[0_0_10px_-1px_rgba(244,63,94,0.7)] ${resolvedSlot}`}
           title="10개 한도 초과 — 버려야 합니다"
         >
-          <ResourceIcon resource={r} className={iconClass} />
+          <ResourceCube resource={r} className={resolvedCube} />
         </div>
       ))}
     </div>
@@ -239,8 +281,14 @@ function CoinStack({ kind, count, capacity }: { kind: "gold" | "silver"; count: 
                   ? "radial-gradient(circle at 32% 28%, #fff8d6 0%, #f7d264 35%, #d79b1e 68%, #8a5a0c 100%)"
                   : "radial-gradient(circle at 32% 28%, #ffffff 0%, #e4e8ec 35%, #aab2bb 68%, #6b727a 100%)",
                 border: `1px solid ${isGold ? "#6b4306" : "#4b5157"}`,
+                // A faint light ring on every visible coin, independent of
+                // its own color — without it, a dark-gold coin's edge blends
+                // almost invisibly into this board's dark felt background
+                // (silver's pale edge has enough natural contrast on its
+                // own), which made a full gold stack look like a single
+                // coin next to a clearly-tall silver stack at equal counts.
                 boxShadow: visible
-                  ? "0 2px 2px rgba(0,0,0,0.55), inset 0 1px 1px rgba(255,255,255,0.65), inset 0 -1px 1px rgba(0,0,0,0.25)"
+                  ? "0 0 0 1px rgba(255,255,255,0.22), 0 2px 2px rgba(0,0,0,0.55), inset 0 1px 1px rgba(255,255,255,0.65), inset 0 -1px 1px rgba(0,0,0,0.25)"
                   : "none",
                 opacity: visible ? 1 : 0,
                 transform: `translateX(-50%) ${visible ? "translateY(0) scale(1)" : "translateY(6px) scale(0.5)"}`,
@@ -287,7 +335,13 @@ function PointCardFace({
       style={CARD_FRAME_STYLE}
     >
       {slotBonus && (
-        <div className="absolute -top-9 left-1/2 -translate-x-1/2">
+        // z-20 (plus pointer-events-none, since this is decorative) forces
+        // this coin stack to always paint above the card's own content —
+        // without it, whether this ends up above or partly clipped behind
+        // the card depended on the card's own conditional classes (its
+        // `affordable` glow/opacity), which was never a property this stack
+        // should have had to care about.
+        <div className="pointer-events-none absolute -top-9 left-1/2 z-20 -translate-x-1/2">
           <CoinStack kind={slotBonus} count={slotBonus === "gold" ? goldSupply : silverSupply} capacity={coinCapacity} />
         </div>
       )}
@@ -307,6 +361,88 @@ function PointCardFace({
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * A remaining-card-count "deck" — a handful of overlapping parchment card
+ * backs (same frame technique as `CARD_FRAME_STYLE`) stacked with a slight
+ * vertical offset per visible layer, so the pile visibly gets shorter as the
+ * deck depletes; a printed count badge on the top card keeps the exact
+ * number legible at a glance even though the stack height itself is capped
+ * for physical plausibility (never taller than 5 layers).
+ */
+function DeckStack({ label, count, accent }: { label: string; count: number; accent: string }) {
+  const visualLayers = Math.max(1, Math.min(count, 5));
+  if (count === 0) {
+    return (
+      <div className="flex flex-col items-center gap-1">
+        <div className="flex h-[58px] w-11 items-center justify-center rounded-md border border-dashed border-white/15 text-[8px] text-white/30 sm:h-[64px] sm:w-12">
+          소진
+        </div>
+        <span className="text-[9px] font-semibold text-white/40">{label}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div className="relative" style={{ width: 46, height: 58 + (visualLayers - 1) * 2.5 }}>
+        {Array.from({ length: visualLayers }, (_, i) => (
+          <div
+            key={i}
+            className="absolute left-0 flex h-[58px] w-11 flex-col items-center justify-center gap-0.5 rounded-md border border-[#7a5a2e] sm:h-16 sm:w-12"
+            style={{
+              bottom: i * 2.5,
+              background: "linear-gradient(160deg,#e7d3a3 0%,#cdac71 60%,#a9814a 100%)",
+              boxShadow: "inset 0 0 0 2px rgba(255,250,235,0.35), 0 2px 3px rgba(0,0,0,0.5)",
+            }}
+          >
+            {i === visualLayers - 1 && (
+              <>
+                <span className="text-[7px] font-bold uppercase tracking-widest" style={{ color: accent }}>
+                  {label}
+                </span>
+                <span className="text-sm font-black" style={{ color: "#3f2408" }}>
+                  {count}
+                </span>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Decorative communal spice-supply bowl for one resource color. The
+ * rulebook's shared 105-cube bowl is intentionally NOT modeled as a finite
+ * bank (see engine.ts's module doc — production/trade gains are never
+ * blocked by scarcity), so this renders a fixed handful of cubes rather than
+ * a live count; it exists purely to make the mat read as "a real spice
+ * board" the way the physical game's four bowls sit at the head of the
+ * board, not as a functional resource picker.
+ */
+function SpiceBowl({ resource }: { resource: Resource }) {
+  const meta = RESOURCE_META[resource];
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div
+        className="relative flex h-9 w-12 items-end justify-center overflow-hidden rounded-b-[999px] rounded-t-md pb-1 sm:h-11 sm:w-14"
+        style={{
+          background: "linear-gradient(180deg, #d8c9a3 0%, #b89a68 55%, #7c5f38 100%)",
+          boxShadow: "inset 0 4px 6px rgba(0,0,0,0.45), inset 0 -2px 2px rgba(255,255,255,0.25), 0 3px 4px rgba(0,0,0,0.5)",
+          border: "1px solid #4a3617",
+        }}
+      >
+        <div className="flex flex-wrap items-center justify-center gap-0.5 px-1">
+          {Array.from({ length: 5 }, (_, i) => (
+            <ResourceCube key={i} resource={resource} className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+          ))}
+        </div>
+      </div>
+      <span className="text-[8px] font-semibold tracking-wide text-white/50 sm:text-[9px]">{meta.label.split(" ")[0]}</span>
     </div>
   );
 }
@@ -397,7 +533,7 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
   if (state.phase === "gameOver") {
     const rankings = computeRankings(state);
     return (
-      <div className={`${PANEL} flex flex-col items-center gap-5 p-4 text-center sm:p-8`}>
+      <div className={`${MAT} flex flex-col items-center gap-5 text-center sm:p-8`} style={MAT_STYLE}>
         <span className="text-5xl">🏆</span>
         <h2 className="text-2xl font-bold text-amber-100">{names[rankings[0].seat]}님 승리!</h2>
         <div className="w-full overflow-x-auto">
@@ -494,8 +630,8 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
   // Render
   // ---------------------------------------------------------------------
   return (
-    <div className={`${PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
-      <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-amber-100/60">
+    <div className={`${MAT} flex flex-col gap-3`} style={MAT_STYLE}>
+      <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-amber-100/70">
         <span>
           {state.playerCount}인 · {state.pointCardGoal}장 달성 시 게임 종료
           {state.endTriggered && <span className="ml-1 text-rose-300">· 마지막 라운드 진행 중</span>}
@@ -511,142 +647,178 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
             : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
       </p>
 
-      {/* Point card market */}
-      <section className="rounded-2xl border border-white/10 bg-black/25 p-2.5">
-        <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-orange-200/70 uppercase">점수 카드</h3>
-        <div className="grid grid-cols-5 gap-1.5 pt-9">
-          {Array.from({ length: POINT_MARKET_SIZE }, (_, i) => {
-            const card = state.pointMarket[i];
-            const bonus: "gold" | "silver" | null = i === 0 ? "gold" : i === 1 ? "silver" : null;
-            if (!card) return <div key={i} className="rounded-xl border border-dashed border-white/10" />;
-            const affordable = isMyTurn && canClaimPoint(me, card);
-            return (
-              <button
-                key={card.id}
-                disabled={!affordable}
-                onClick={() => claimPoint(i)}
-                className={`text-left transition ${affordable ? "cursor-pointer hover:scale-[1.03]" : "cursor-not-allowed opacity-90"}`}
-              >
-                <PointCardFace
-                  card={card}
-                  affordable={affordable}
-                  slotBonus={bonus}
-                  goldSupply={state.goldSupply}
-                  silverSupply={state.silverSupply}
-                  coinCapacity={state.playerCount * 2}
-                />
-              </button>
-            );
-          })}
+      {/* Central market board — a felt/carpet surface holding the spice
+          bowls, the point-card market (with its gold/silver coin stacks and
+          deck), and the merchant-card market (with its own deck). */}
+      <section className={FELT} style={FELT_STYLE}>
+        <div className="mb-2.5 flex items-center justify-center gap-2.5 sm:gap-5">
+          {RESOURCE_ORDER.map((r) => (
+            <SpiceBowl key={r} resource={r} />
+          ))}
         </div>
-      </section>
 
-      {/* Merchant card market */}
-      <section className="rounded-2xl border border-white/10 bg-black/25 p-2.5">
-        <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-emerald-200/70 uppercase">상인 카드</h3>
-        <div className="grid grid-cols-3 gap-2 pt-2.5 sm:grid-cols-6">
-          {Array.from({ length: MERCHANT_MARKET_SIZE }, (_, i) => {
-            const card = state.merchantMarket[i];
-            const staked = state.merchantMarketResources[i] ?? {};
-            const stakedEntries: Resource[] = [];
-            for (const r of RESOURCE_ORDER) for (let k = 0; k < (staked[r] ?? 0); k++) stakedEntries.push(r);
-            if (!card) return <div key={i} ref={setMerchantSlotRef(i)} className="rounded-xl border border-dashed border-white/10" />;
-            const affordable = isMyTurn && canAcquireMerchant(me, i);
-            return (
-              <div key={card.id} ref={setMerchantSlotRef(i)} className="relative">
-                {/* Resources staked onto this card sit visually on top of it — see
-                    MerchantEffects.tsx for the "collected together" flourish that
-                    plays when the card (and these cubes) are taken into a hand. */}
-                {stakedEntries.length > 0 && (
-                  <div className="pointer-events-none absolute -top-2.5 right-0 left-0 z-10 flex flex-wrap items-end justify-center gap-0.5">
-                    {stakedEntries.map((r, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-block drop-shadow-[0_2px_2px_rgba(0,0,0,0.6)]"
-                        style={{ transform: `rotate(${(idx % 2 === 0 ? -1 : 1) * (8 + idx * 3)}deg) translateY(${idx % 2}px)` }}
-                      >
-                        <ResourceIcon resource={r} className="h-4 w-4" />
-                      </span>
-                    ))}
+        {/* Point card market + its deck */}
+        <div className="mb-3 flex items-start gap-1.5 sm:gap-2.5">
+          <div className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/25 p-2 sm:p-2.5">
+            <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-orange-200/70 uppercase">점수 카드</h3>
+            <div className="grid grid-cols-5 gap-1.5 pt-9">
+              {Array.from({ length: POINT_MARKET_SIZE }, (_, i) => {
+                const card = state.pointMarket[i];
+                const bonus: "gold" | "silver" | null = i === 0 ? "gold" : i === 1 ? "silver" : null;
+                if (!card) return <div key={i} className="rounded-xl border border-dashed border-white/10" />;
+                const affordable = isMyTurn && canClaimPoint(me, card);
+                return (
+                  <button
+                    key={card.id}
+                    disabled={!affordable}
+                    onClick={() => claimPoint(i)}
+                    className={`text-left transition ${affordable ? "cursor-pointer hover:scale-[1.03]" : "cursor-not-allowed opacity-90"}`}
+                  >
+                    <PointCardFace
+                      card={card}
+                      affordable={affordable}
+                      slotBonus={bonus}
+                      goldSupply={state.goldSupply}
+                      silverSupply={state.silverSupply}
+                      coinCapacity={state.playerCount * 2}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <DeckStack label="점수 덱" count={state.pointDeck.length} accent="#92400e" />
+        </div>
+
+        {/* Merchant card market + its deck */}
+        <div className="flex items-start gap-1.5 sm:gap-2.5">
+          <div className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/25 p-2 sm:p-2.5">
+            <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-emerald-200/70 uppercase">상인 카드</h3>
+            <div className="grid grid-cols-3 gap-2 pt-2.5 sm:grid-cols-6">
+              {Array.from({ length: MERCHANT_MARKET_SIZE }, (_, i) => {
+                const card = state.merchantMarket[i];
+                const staked = state.merchantMarketResources[i] ?? {};
+                const stakedEntries: Resource[] = [];
+                for (const r of RESOURCE_ORDER) for (let k = 0; k < (staked[r] ?? 0); k++) stakedEntries.push(r);
+                if (!card) return <div key={i} ref={setMerchantSlotRef(i)} className="rounded-xl border border-dashed border-white/10" />;
+                const affordable = isMyTurn && canAcquireMerchant(me, i);
+                return (
+                  <div key={card.id} ref={setMerchantSlotRef(i)} className="relative">
+                    {/* Resources staked onto this card sit visually on top of
+                        it — see MerchantEffects.tsx for the "collected
+                        together" flourish that plays when the card (and
+                        these cubes) are taken into a hand. */}
+                    {stakedEntries.length > 0 && (
+                      <div className="pointer-events-none absolute -top-2.5 right-0 left-0 z-10 flex flex-wrap items-end justify-center gap-0.5">
+                        {stakedEntries.map((r, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-block drop-shadow-[0_2px_2px_rgba(0,0,0,0.6)]"
+                            style={{ transform: `rotate(${(idx % 2 === 0 ? -1 : 1) * (8 + idx * 3)}deg) translateY(${idx % 2}px)` }}
+                          >
+                            <ResourceCube resource={r} className="h-4 w-4" />
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      disabled={!affordable}
+                      onClick={() => startAcquire(i)}
+                      className={`flex w-full flex-col items-center gap-1 rounded-xl border p-1.5 transition ${
+                        affordable
+                          ? "cursor-pointer border-emerald-300/50 bg-emerald-400/10 hover:scale-[1.03]"
+                          : "cursor-not-allowed border-white/10 bg-black/20 opacity-80"
+                      }`}
+                    >
+                      <span className="text-[9px] text-white/40">{i === 0 ? "무료" : `자원 ${i}개`}</span>
+                      <MerchantCardFace card={card} />
+                    </button>
                   </div>
-                )}
-                <button
-                  disabled={!affordable}
-                  onClick={() => startAcquire(i)}
-                  className={`flex w-full flex-col items-center gap-1 rounded-xl border p-1.5 transition ${
-                    affordable
-                      ? "cursor-pointer border-emerald-300/50 bg-emerald-400/10 hover:scale-[1.03]"
-                      : "cursor-not-allowed border-white/10 bg-black/20 opacity-80"
-                  }`}
-                >
-                  <span className="text-[9px] text-white/40">{i === 0 ? "무료" : `자원 ${i}개`}</span>
-                  <MerchantCardFace card={card} />
-                </button>
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          </div>
+          <DeckStack label="상인 덱" count={state.merchantDeck.length} accent="#065f46" />
         </div>
       </section>
 
-      {/* My cart */}
-      <section ref={cartRef} className="rounded-2xl border border-amber-300/20 bg-amber-400/[0.05] p-2.5">
-        <div className="mb-1.5 flex items-center justify-between">
-          <h3 className="text-[11px] font-semibold tracking-wide text-amber-200/80 uppercase">내 수레</h3>
+      {/* My caravan board — a carved wooden cart holding my 10 resource
+          wells, gold/silver/point totals, my fanned-out hand, and my
+          discard pile (recovered by "휴식"). */}
+      <section ref={cartRef} className="rounded-2xl border p-2.5 sm:p-3" style={CARAVAN_STYLE}>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-1.5">
+          <h3 className="text-[11px] font-semibold tracking-wide text-amber-200/90 uppercase">🐫 내 수레 (Caravan)</h3>
           <span
             className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${
-              bundleTotal(me.resources) > HAND_LIMIT ? "border-rose-400/60 text-rose-300" : "border-white/15 text-white/70"
+              bundleTotal(me.resources) > HAND_LIMIT ? "border-rose-400/60 text-rose-300" : "border-amber-200/30 text-amber-100/80"
             }`}
           >
             {bundleTotal(me.resources)} / {HAND_LIMIT}
           </span>
         </div>
         <CartInventory resources={me.resources} limit={HAND_LIMIT} />
-        <div className="mt-1.5 flex gap-3 text-xs text-white/70">
+        <div className="mt-2.5 flex flex-wrap gap-3 text-xs text-amber-50/80">
           <span>🪙 금화 {me.gold}</span>
           <span>🥈 은화 {me.silver}</span>
           <span>🏆 점수 카드 {me.pointCards.length}장</span>
         </div>
-      </section>
 
-      {/* My hand + played cards */}
-      <section className="rounded-2xl border border-white/10 bg-black/20 p-2.5">
-        <h3 className="mb-1.5 text-[11px] font-semibold tracking-wide text-sky-200/70 uppercase">내 손패</h3>
-        <div className="flex flex-wrap gap-1.5">
-          {me.hand.length === 0 && <span className="text-[11px] text-white/30">손패 없음</span>}
-          {me.hand.map((card) => (
-            <button
-              key={card.id}
-              disabled={!isMyTurn}
-              onClick={() => playCard(card)}
-              className={`rounded-xl border p-2 transition ${
-                isMyTurn ? "cursor-pointer border-sky-300/40 bg-sky-400/10 hover:scale-[1.03]" : "cursor-not-allowed border-white/10 bg-black/20 opacity-70"
-              } ${card.id === highlightedCardId ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-[#1c1208]" : ""}`}
-            >
-              <MerchantCardFace card={card} />
-            </button>
-          ))}
-        </div>
-        {me.playedCards.length > 0 && (
-          <>
-            <h4 className="mt-2 mb-1 text-[10px] font-semibold tracking-wide text-white/40 uppercase">
-              사용한 카드 (휴식 시 회수)
-            </h4>
-            <div className="flex flex-wrap gap-1.5">
-              {me.playedCards.map((card) => (
-                <div key={card.id} className="rounded-xl border border-white/10 bg-black/30 p-2 opacity-60 grayscale">
+        <div className="mt-3 rounded-xl border border-black/30 bg-black/20 p-2 sm:p-2.5">
+          <h4 className="mb-1 text-[11px] font-semibold tracking-wide text-sky-200/80 uppercase">내 손패 (Hand)</h4>
+          <div className="flex flex-wrap items-end justify-center gap-y-2 py-1.5">
+            {me.hand.length === 0 && <span className="text-[11px] text-white/30">손패 없음</span>}
+            {me.hand.map((card, i) => {
+              const mid = (me.hand.length - 1) / 2;
+              const offset = i - mid;
+              return (
+                <button
+                  key={card.id}
+                  disabled={!isMyTurn}
+                  onClick={() => playCard(card)}
+                  style={{
+                    transform: `rotate(${offset * 4}deg) translateY(${Math.abs(offset) * 5}px)`,
+                    marginLeft: i === 0 ? 0 : -14,
+                    zIndex: i,
+                  }}
+                  className={`relative rounded-xl border p-2 transition ${
+                    isMyTurn
+                      ? "cursor-pointer border-sky-300/40 bg-sky-400/10 hover:z-20 hover:brightness-110"
+                      : "cursor-not-allowed border-white/10 bg-black/20 opacity-70"
+                  } ${card.id === highlightedCardId ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-[#1c1208]" : ""}`}
+                >
                   <MerchantCardFace card={card} />
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-        <button
-          disabled={!isMyTurn || me.playedCards.length === 0}
-          onClick={() => onAction({ type: "rest", seat: viewerSeat })}
-          className="mt-2.5 w-full rounded-xl bg-indigo-600 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
-        >
-          😴 휴식 (사용한 카드 전부 회수)
-        </button>
+                </button>
+              );
+            })}
+          </div>
+
+          {me.playedCards.length > 0 && (
+            <>
+              <h4 className="mt-2 mb-1 text-[10px] font-semibold tracking-wide text-white/40 uppercase">
+                버린 카드 더미 (Discarded — 휴식 시 회수)
+              </h4>
+              <div className="flex flex-wrap items-center py-1 pl-3">
+                {me.playedCards.map((card, i) => (
+                  <div
+                    key={card.id}
+                    style={{ marginLeft: i === 0 ? 0 : -26, transform: `rotate(${(i % 2 === 0 ? -1 : 1) * (3 + (i % 4))}deg)`, zIndex: i }}
+                    className="rounded-xl border border-white/10 bg-black/30 p-2 opacity-60 grayscale"
+                  >
+                    <MerchantCardFace card={card} />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          <button
+            disabled={!isMyTurn || me.playedCards.length === 0}
+            onClick={() => onAction({ type: "rest", seat: viewerSeat })}
+            className="mt-2.5 w-full rounded-xl bg-indigo-600 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+          >
+            😴 휴식 (사용한 카드 전부 회수)
+          </button>
+        </div>
       </section>
 
       {/* Other players */}
@@ -779,7 +951,9 @@ function PlayerSummaryRow({
   return (
     <div
       ref={setRef}
-      className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs ${isActive ? "border-amber-300/60 bg-amber-400/10" : "border-white/10 bg-black/20"}`}
+      className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs ${
+        isActive ? "border-amber-300/60 bg-amber-400/10" : "border-white/10 bg-black/20"
+      }`}
     >
       <span className="flex items-center gap-1.5 font-semibold text-white/90">
         <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-400" : "bg-white/20"}`} />
@@ -787,7 +961,7 @@ function PlayerSummaryRow({
         {name}
       </span>
       <div className="flex flex-wrap items-center gap-2 text-white/70">
-        <CartInventory resources={player.resources} limit={HAND_LIMIT} slotClass="h-3.5 w-3.5" iconClass="h-2.5 w-2.5" />
+        <CartInventory resources={player.resources} limit={HAND_LIMIT} compact />
         <span>🪙{player.gold}</span>
         <span>🥈{player.silver}</span>
         <span>🏆{player.pointCards.length}</span>
@@ -805,8 +979,14 @@ function PlayerSummaryRow({
 function ModalShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-      <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-white/10 bg-[#1c1208] p-5 shadow-2xl sm:rounded-2xl">
-        <h3 className="mb-3 text-sm font-bold text-white">{title}</h3>
+      <div
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl border p-5 shadow-2xl sm:rounded-2xl"
+        style={{
+          background: "linear-gradient(165deg, #2c1c0e 0%, #1c1208 55%, #120b05 100%)",
+          borderColor: "rgba(198,160,90,0.3)",
+        }}
+      >
+        <h3 className="mb-3 text-sm font-bold text-amber-50">{title}</h3>
         {children}
       </div>
     </div>
@@ -890,9 +1070,9 @@ function UpgradeModal({
             key={r}
             disabled={steps.length >= maxSteps}
             onClick={() => onChangeSteps([...steps, r])}
-            className="flex items-center gap-1 rounded-full border border-sky-300/40 bg-sky-400/10 px-2.5 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-full border border-sky-300/40 bg-sky-400/10 px-2.5 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <ResourceIcon resource={r} className="h-4 w-4" /> 업그레이드
+            <ResourceCube resource={r} className="h-4 w-4" /> 업그레이드
           </button>
         ))}
       </div>
@@ -1005,9 +1185,9 @@ function AcquireModal({
                 key={r}
                 disabled={done || (remaining[r] ?? 0) <= 0}
                 onClick={() => onChangePayment([...payment, r])}
-                className="flex items-center gap-1 rounded-full border border-emerald-300/40 bg-emerald-400/10 px-2.5 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex items-center gap-1.5 rounded-full border border-emerald-300/40 bg-emerald-400/10 px-2.5 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <ResourceIcon resource={r} className="h-4 w-4" /> {remaining[r] ?? 0}
+                <ResourceCube resource={r} className="h-4 w-4" /> {remaining[r] ?? 0}
               </button>
             ))}
           </div>
@@ -1058,7 +1238,7 @@ function DiscardModal({
       <div className="mb-3 flex flex-wrap gap-1.5">
         {RESOURCE_ORDER.filter((r) => (me.resources[r] ?? 0) > 0).map((r) => (
           <div key={r} className="flex items-center gap-1 rounded-full border border-rose-300/40 bg-rose-400/10 px-2 py-1">
-            <ResourceIcon resource={r} className="h-4 w-4" />
+            <ResourceCube resource={r} className="h-4 w-4" />
             <button onClick={() => onUndo(r)} className="px-1 text-white/70 hover:text-white">
               −
             </button>
