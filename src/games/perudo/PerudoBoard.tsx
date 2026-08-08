@@ -201,6 +201,49 @@ function FacePicker({
   );
 }
 
+/**
+ * The purple "betting die" — a dedicated piece (distinct from the ivory/red
+ * dice used for actual rolls) that physically represents *where the current
+ * bid sits on the track*, echoing the rulebook UX request to bet like moving
+ * a board piece rather than picking from an abstract stepper. Rendered on
+ * top of whichever `BidTrack` cell matches the live bid quantity. Interactive
+ * (bigger hover/press feedback, a little "✋" hint badge) only while it's the
+ * viewer's turn and there's a legal face to spin to; otherwise it's a plain
+ * read-only marker every seat sees sitting on the actual committed bid.
+ */
+function BettingDie({ face, interactive, onClick }: { face: Face; interactive: boolean; onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      disabled={!interactive}
+      onClick={onClick}
+      title={interactive ? "클릭해서 베팅 눈금 바꾸기" : "현재 선언된 베팅 위치"}
+      className={`relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-[8px] border-[3px] font-black text-white transition sm:h-9 sm:w-9 ${
+        interactive
+          ? "cursor-pointer border-violet-950 bg-gradient-to-br from-violet-400 via-purple-600 to-fuchsia-800 shadow-[0_0_12px_2px_rgba(168,85,247,0.65),inset_0_2px_3px_rgba(255,255,255,0.45),inset_0_-3px_5px_rgba(0,0,0,0.4)] hover:scale-110 active:scale-95"
+          : "cursor-default border-violet-950/80 bg-gradient-to-br from-violet-500 via-purple-700 to-fuchsia-900 shadow-[0_0_8px_1px_rgba(168,85,247,0.4),inset_0_2px_3px_rgba(255,255,255,0.3),inset_0_-3px_5px_rgba(0,0,0,0.4)]"
+      }`}
+    >
+      <div className="pointer-events-none absolute -top-1/3 -left-1/3 h-2/3 w-2/3 rotate-12 rounded-full bg-white/40 blur-[2px]" />
+      {face === 1 ? (
+        <PerudoFaceIcon className="relative h-[62%] w-[62%] drop-shadow-[0_1px_1.5px_rgba(0,0,0,0.6)]" />
+      ) : (
+        <div className="relative grid h-full w-full grid-cols-3 grid-rows-3 gap-[1px] p-1">
+          {Array.from({ length: 9 }, (_, i) => (
+            <span
+              key={i}
+              className={`m-auto h-[26%] w-[26%] rounded-full ${
+                PIP_LAYOUT[face]?.includes(i) ? "bg-white shadow-[0_1px_1px_rgba(0,0,0,0.4)]" : "bg-transparent"
+              }`}
+            />
+          ))}
+        </div>
+      )}
+      {interactive && <span className="pointer-events-none absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[9px] leading-none">✋</span>}
+    </button>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Bid track — a perimeter loop of clickable quantity cells wrapping the
 // central play area, echoing the physical board's numbered outer track (see
@@ -256,28 +299,46 @@ if (TRACK_CELLS.length !== TRACK_LENGTH) {
 }
 
 /**
- * Direct-click betting surface (rulebook UX request #2): clicking a
- * quantity cell immediately raises to `{ quantity: cell, face: selectedFace }`.
- * Cells that wouldn't be a legal raise over the current bid (per
- * `minValidQuantityForFace`) render disabled — "이전 베팅 이하의 칸은 클릭 불가".
+ * Board-piece betting surface: the purple `BettingDie` sits on whichever
+ * cell matches `dieQuantity` (the live bid — draft while it's the viewer's
+ * turn, committed otherwise). Track cells only ever *move that die*
+ * (`onCellClick`), they no longer raise directly — the actual bid is only
+ * submitted once the caller's "베팅 확정" button fires. Cells below the
+ * legal minimum for the draft face (rulebook §3, via `minValidQuantityForFace`,
+ * passed in as `minQty`) render disabled, which is what makes "이전 베팅보다
+ *낮은 칸으로 이동 불가" a hard UI constraint rather than just a validation
+ * check. `floorQuantity` — the actual committed bid's quantity — gets its own
+ * dim marker so the boundary the draft can't cross backward stays visible
+ * even while the purple die itself has already moved further up the track.
  * The interior of the loop hosts the rest of the round UI via `children`.
  */
 function BidTrack({
-  state,
   isMyTurn,
-  selectedFace,
-  palafico,
-  onPick,
+  minQty,
+  floorQuantity,
+  dieQuantity,
+  dieFace,
+  dieInteractive,
+  onCellClick,
+  onDieClick,
   children,
 }: {
-  state: PerudoState;
   isMyTurn: boolean;
-  selectedFace: Face;
-  palafico: boolean;
-  onPick: (quantity: number) => void;
+  minQty: number | null;
+  floorQuantity: number | null;
+  dieQuantity: number | null;
+  dieFace: Face | null;
+  dieInteractive: boolean;
+  onCellClick: (quantity: number) => void;
+  onDieClick: () => void;
   children: ReactNode;
 }) {
-  const minQty = minValidQuantityForFace(state.currentBid, selectedFace, palafico);
+  // The draft can outgrow the physical track in rare extreme-endgame paco
+  // jumps (rulebook's "paco -> normal: quantity >= prev*2+1" formula can
+  // exceed TRACK_LENGTH once a paco bid itself got large) — pin the die
+  // visual to the last cell in that case rather than making it vanish; the
+  // confirm button below still shows/submits the real, larger number.
+  const dieCell = dieQuantity !== null ? TRACK_CELLS.find((c) => c.quantity === Math.min(dieQuantity, TRACK_LENGTH)) : undefined;
   return (
     // Outer "stone bezel" frame, echoing the physical mat's grey-stone
     // border around the wood tile track.
@@ -292,7 +353,7 @@ function BidTrack({
       >
         {TRACK_CELLS.map((cell) => {
           const enabled = isMyTurn && minQty !== null && cell.quantity >= minQty;
-          const isCurrentBidCell = state.currentBid?.quantity === cell.quantity && state.currentBid.face === selectedFace;
+          const isFloorCell = floorQuantity === cell.quantity;
           const isStart = cell.quantity === 1;
           // Every 4th wood tile gets a faint carved sun-mask watermark,
           // echoing the board mat's alternating number/medallion tiles
@@ -303,10 +364,10 @@ function BidTrack({
               key={cell.quantity}
               type="button"
               disabled={!enabled}
-              onClick={() => onPick(cell.quantity)}
+              onClick={() => onCellClick(cell.quantity)}
               style={{ gridColumn: `${cell.col}`, gridRow: `${cell.row}` }}
               className={`relative flex items-center justify-center overflow-hidden rounded-[4px] border-2 text-[10px] font-bold transition sm:text-xs ${
-                isCurrentBidCell
+                isFloorCell
                   ? "border-amber-200 bg-gradient-to-b from-amber-300 to-amber-500 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.5)]"
                   : enabled
                     ? "cursor-pointer border-amber-950/70 bg-gradient-to-b from-amber-700 to-amber-900 text-amber-100 hover:from-amber-600 hover:to-amber-800"
@@ -316,8 +377,8 @@ function BidTrack({
                 !isMyTurn
                   ? "지금은 당신의 차례가 아니에요"
                   : enabled
-                    ? `${faceLabel(selectedFace)} ${cell.quantity}개 이상 선언하기`
-                    : "지금 선택한 눈금으로는 여기를 선언할 수 없어요"
+                    ? `보라색 베팅 주사위를 여기(${cell.quantity}개)로 옮기기`
+                    : "이전 베팅보다 낮은 칸으로는 옮길 수 없어요"
               }
             >
               {showMedallion && <PerudoFaceIcon className="pointer-events-none absolute inset-0 m-auto h-2/3 w-2/3 text-black/25" />}
@@ -326,6 +387,20 @@ function BidTrack({
             </button>
           );
         })}
+        {/* The purple betting die itself — shares its cell's grid slot so it
+            sits precisely on top of the track tile it represents, scaled up
+            a touch to read as a piece resting *on* the board rather than
+            just another tile. */}
+        {dieCell && dieFace !== null && (
+          <div
+            style={{ gridColumn: `${dieCell.col}`, gridRow: `${dieCell.row}` }}
+            className="relative z-20 flex items-center justify-center"
+          >
+            <div className="scale-125">
+              <BettingDie face={dieFace} interactive={dieInteractive} onClick={onDieClick} />
+            </div>
+          </div>
+        )}
         {/* Golden interior plaque — echoes the mat's central "PERUDO" plaque. */}
         <div
           style={{ gridColumn: `2 / ${TRACK_COLS}`, gridRow: `2 / ${TRACK_ROWS}` }}
@@ -382,16 +457,59 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
   const isMyTurn = state.activeSeat === viewerSeat && state.phase === "playing";
   const iAmAlive = me.diceCount > 0;
 
-  const [selectedFace, setSelectedFace] = useState<Face>(state.currentBid?.face ?? 2);
-  const effectiveFace: Face = palafico && state.currentBid ? state.currentBid.face : selectedFace;
-  function pickFace(face: Face) {
-    setSelectedFace(face);
-  }
-
   const disabledFaces = new Set<Face>();
   if (palafico && state.currentBid) {
     for (const f of [1, 2, 3, 4, 5, 6] as Face[]) if (f !== state.currentBid.face) disabledFaces.add(f);
   }
+
+  // -------------------------------------------------------------------------
+  // Purple betting die draft — local to this client, re-synced from
+  // `state.currentBid` every time it actually changes (new round, or anyone's
+  // opening bid/raise) using the same render-time "adjust state when a prop
+  // changes" pattern as `revealedRound` below, rather than an effect that
+  // would flash a stale draft for a frame. While it's my turn the purple die
+  // on the track shows this draft (movable/spinnable); the rest of the time
+  // it shows the actual committed `state.currentBid` position instead, so
+  // every seat always sees exactly where the bid currently sits.
+  // -------------------------------------------------------------------------
+  const bidKey = `${state.roundNumber}:${state.currentBid ? `${state.currentBid.seat}-${state.currentBid.quantity}-${state.currentBid.face}` : "none"}`;
+  const [syncedBidKey, setSyncedBidKey] = useState<string | null>(null);
+  const [pendingFace, setPendingFace] = useState<Face>(2);
+  const [pendingQuantity, setPendingQuantity] = useState<number>(1);
+  if (syncedBidKey !== bidKey) {
+    setSyncedBidKey(bidKey);
+    const initFace: Face = palafico && state.currentBid ? state.currentBid.face : (state.currentBid?.face ?? 2);
+    const initMinQty = minValidQuantityForFace(state.currentBid, initFace, palafico) ?? (state.currentBid ? state.currentBid.quantity + 1 : 1);
+    setPendingFace(initFace);
+    setPendingQuantity(initMinQty);
+  }
+
+  /** Move the draft face, clamping the draft quantity back up to whatever the new face's minimum legal raise is (rulebook §3 formulas, via `minValidQuantityForFace`) — the draft can never end up sitting on an illegal cell after a face change. */
+  function pickFace(face: Face) {
+    if (disabledFaces.has(face)) return;
+    const newMinQty = minValidQuantityForFace(state.currentBid, face, palafico);
+    if (newMinQty === null) return;
+    setPendingFace(face);
+    setPendingQuantity((prev) => Math.max(prev, newMinQty));
+  }
+
+  /** Clicking the purple die itself cycles to the next selectable face — the "touch the die directly" interaction requested alongside the FacePicker controller. */
+  function cycleFace() {
+    const order: Face[] = [1, 2, 3, 4, 5, 6];
+    const startIdx = order.indexOf(pendingFace);
+    for (let step = 1; step <= order.length; step++) {
+      const candidate = order[(startIdx + step) % order.length];
+      if (!disabledFaces.has(candidate)) {
+        pickFace(candidate);
+        return;
+      }
+    }
+  }
+
+  const dieMinQty = isMyTurn ? minValidQuantityForFace(state.currentBid, pendingFace, palafico) : null;
+  const dieQuantity = isMyTurn ? pendingQuantity : (state.currentBid?.quantity ?? null);
+  const dieFace: Face | null = isMyTurn ? pendingFace : (state.currentBid?.face ?? null);
+  const canConfirmBet = isMyTurn && iAmAlive && dieMinQty !== null && pendingQuantity >= dieMinQty && pendingQuantity <= TRACK_LENGTH;
 
   // -------------------------------------------------------------------------
   // Cup shake -> reveal (rulebook UX request #3): every time a new round's
@@ -582,18 +700,16 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
         {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
       </p>
 
-      <div className="relative z-10 flex flex-col items-center gap-1.5">
-        <p className="text-[11px] text-white/50">선언할 눈금 선택 (아래 트랙에서 개수를 눌러 선언)</p>
-        <FacePicker selected={effectiveFace} onSelect={pickFace} disabledFaces={disabledFaces} />
-      </div>
-
       <div className="relative z-10">
         <BidTrack
-          state={state}
           isMyTurn={isMyTurn}
-          selectedFace={effectiveFace}
-          palafico={palafico}
-          onPick={(quantity) => onAction({ type: "raise", seat: viewerSeat, quantity, face: effectiveFace })}
+          minQty={dieMinQty}
+          floorQuantity={state.currentBid?.quantity ?? null}
+          dieQuantity={dieQuantity}
+          dieFace={dieFace}
+          dieInteractive={isMyTurn && iAmAlive}
+          onCellClick={(quantity) => setPendingQuantity(quantity)}
+          onDieClick={cycleFace}
         >
           {state.currentBid ? (
             <div className="flex flex-col items-center gap-0.5 text-center">
@@ -606,6 +722,23 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
             <p className="px-2 text-center text-xs text-amber-900/70">
               {names[state.activeSeat]}님이 이번 라운드를 엽니다 — 첫 선언 대기 중
             </p>
+          )}
+
+          {isMyTurn && iAmAlive && (
+            <div className="flex flex-col items-center gap-1.5 rounded-xl border border-violet-900/25 bg-violet-950/5 px-2.5 py-2">
+              <p className="text-center text-[10px] font-semibold text-violet-900/70">
+                🟣 보라색 주사위를 클릭해 눈금 변경, 트랙 칸을 클릭해 개수 이동
+              </p>
+              <FacePicker selected={pendingFace} onSelect={pickFace} disabledFaces={disabledFaces} />
+              <button
+                type="button"
+                disabled={!canConfirmBet}
+                onClick={() => onAction({ type: "raise", seat: viewerSeat, quantity: pendingQuantity, face: pendingFace })}
+                className="rounded-full bg-violet-700 px-4 py-1.5 text-xs font-semibold text-white shadow-[0_0_0_2px_rgba(168,85,247,0.3)] transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 disabled:shadow-none"
+              >
+                ✅ {faceLabel(pendingFace)} × {pendingQuantity}개로 베팅 확정
+              </button>
+            </div>
           )}
 
           {iAmAlive && (
