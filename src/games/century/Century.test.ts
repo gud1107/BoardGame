@@ -93,23 +93,27 @@ describe("startGame — setup", () => {
     expect(a).toEqual(b);
   });
 
-  it("never deals a market/deck merchant card matching either starting card's effect", () => {
-    // Every seat already starts with one {production, gain:{yellow:2}} and one
-    // {upgrade, upgrades:2} card (see basicProductionCard/basicUpgradeCard) —
-    // createMerchantDeck() must exclude both effect shapes so the shuffled
-    // market/deck can never hand out a duplicate of a card players already
-    // hold from turn 1.
+  it("deals the full 32-card merchant deck and 36-card point deck from Century.md (starting cards excluded)", () => {
+    // createMerchantDeck()/createPointDeck() are transcribed 1:1 from
+    // Century.md's card-list appendix (see cards.ts's doc comment) — every
+    // card should show up somewhere across the market + draw pile, and the
+    // basic starting cards (which are dealt straight into hands, never into
+    // these decks) shouldn't appear a second time here.
     for (const seed of [1, 2, 3, 42, 1000]) {
       const state = startGame(5, seed);
       const allMerchantCards = [...state.merchantMarket.filter((c): c is MerchantCard => c !== null), ...state.merchantDeck];
-      for (const card of allMerchantCards) {
-        if (card.effect.kind === "production") {
-          expect(card.effect.gain).not.toEqual({ yellow: 2 });
-        }
-        if (card.effect.kind === "upgrade") {
-          expect(card.effect.upgrades).not.toBe(2);
-        }
-      }
+      const allPointCards = [...state.pointMarket.filter((c): c is PointCard => c !== null), ...state.pointDeck];
+      expect(allMerchantCards).toHaveLength(32);
+      expect(allPointCards).toHaveLength(36);
+      expect(new Set(allMerchantCards.map((c) => c.id)).size).toBe(32);
+      expect(new Set(allPointCards.map((c) => c.id)).size).toBe(36);
+      // The rulebook explicitly calls out one *extra* {upgrade, upgrades:2}
+      // card in the 32-card deck, in addition to every seat's own starting
+      // upgrade card — confirm it's really there (a former session's "fix"
+      // used to strip this out before the authoritative card list settled
+      // that the overlap is intentional, see cards.ts's doc comment).
+      const upgradeTwoCards = allMerchantCards.filter((c) => c.effect.kind === "upgrade" && c.effect.upgrades === 2);
+      expect(upgradeTwoCards).toHaveLength(1);
     }
   });
 

@@ -317,6 +317,15 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
   const [upgrading, setUpgrading] = useState<{ cardId: string; steps: Resource[] } | null>(null);
   const [trading, setTrading] = useState<{ cardId: string; repeats: number } | null>(null);
   const [discardPick, setDiscardPick] = useState<ResourceBundle>({});
+  // Production-card plays and point-card claims used to dispatch straight
+  // off a single click with no way to back out of a misclick — unlike
+  // upgrade/trade/acquire, which already stage their choice in local state
+  // behind a modal's "취소"/"확정" pair. These two mirror that same
+  // stage-then-confirm shape (see ConfirmActionModal below) purely so a
+  // misclick can be cancelled before anything reaches `onAction` — nothing
+  // is ever sent to the engine (and thus the network) until "확정".
+  const [confirmingProduction, setConfirmingProduction] = useState<MerchantCard | null>(null);
+  const [confirmingClaim, setConfirmingClaim] = useState<number | null>(null);
 
   // Whenever the state prop changes (my own action resolved, or an
   // opponent's action arrived over the network), any in-progress local
@@ -336,6 +345,8 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
     setUpgrading(null);
     setTrading(null);
     setDiscardPick({});
+    setConfirmingProduction(null);
+    setConfirmingClaim(null);
     if (detected) {
       setEffects((prev) => [...prev, { ...detected, id: (prev.at(-1)?.id ?? 0) + 1 }]);
     }
@@ -433,7 +444,10 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
   function playCard(card: MerchantCard) {
     if (!isMyTurn) return;
     if (card.effect.kind === "production") {
-      onAction({ type: "playProduction", seat: viewerSeat, cardId: card.id });
+      // No resources to choose here, but still staged behind a confirm step
+      // (rather than dispatched immediately) so a misclick on the wrong
+      // hand card can be cancelled — see the state doc comment above.
+      setConfirmingProduction(card);
     } else if (card.effect.kind === "upgrade") {
       setUpgrading({ cardId: card.id, steps: [] });
     } else {
@@ -443,11 +457,10 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
 
   function startAcquire(index: number) {
     if (!isMyTurn || !state.merchantMarket[index]) return;
-    if (index === 0) {
-      onAction({ type: "acquireMerchant", seat: viewerSeat, index: 0, payment: [] });
-      return;
-    }
-    if (!canAcquireMerchant(me, index)) return;
+    if (index > 0 && !canAcquireMerchant(me, index)) return;
+    // Slot 0 is always free (no resources to stake), but still routes
+    // through AcquireModal rather than dispatching immediately — see
+    // AcquireModal's `index === 0` branch — so a misclick can be cancelled.
     setAcquiring({ index, payment: [] });
   }
 
@@ -455,7 +468,7 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
     if (!isMyTurn) return;
     const card = state.pointMarket[index];
     if (!card || !canClaimPoint(me, card)) return;
-    onAction({ type: "claimPoint", seat: viewerSeat, index });
+    setConfirmingClaim(index);
   }
 
   function toggleDiscard(resource: Resource) {
@@ -714,7 +727,36 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
           remaining={discardRemaining}
           onPick={toggleDiscard}
           onUndo={undoDiscard}
+          onReset={() => setDiscardPick({})}
           onConfirm={() => onAction({ type: "discardToLimit", seat: viewerSeat, discard: discardPick })}
+        />
+      )}
+
+      {confirmingProduction && (
+        <ConfirmActionModal
+          title="생산 카드 사용"
+          description="이 카드를 사용해 아래 자원을 수레에 획득합니다. 잘못 눌렀다면 취소할 수 있습니다."
+          preview={<BundleRow bundle={confirmingProduction.effect.kind === "production" ? confirmingProduction.effect.gain : {}} size="h-5 w-5" />}
+          confirmColorClass="bg-sky-600"
+          onCancel={() => setConfirmingProduction(null)}
+          onConfirm={() => {
+            onAction({ type: "playProduction", seat: viewerSeat, cardId: confirmingProduction.id });
+            setConfirmingProduction(null);
+          }}
+        />
+      )}
+
+      {confirmingClaim !== null && state.pointMarket[confirmingClaim] && (
+        <ConfirmActionModal
+          title="점수 카드 완성"
+          description={`이 점수 카드를 아래 자원으로 지불하고 획득합니다 (+${state.pointMarket[confirmingClaim]!.points}점). 잘못 눌렀다면 취소할 수 있습니다.`}
+          preview={<BundleRow bundle={state.pointMarket[confirmingClaim]!.cost} size="h-5 w-5" />}
+          confirmColorClass="bg-orange-600"
+          onCancel={() => setConfirmingClaim(null)}
+          onConfirm={() => {
+            onAction({ type: "claimPoint", seat: viewerSeat, index: confirmingClaim });
+            setConfirmingClaim(null);
+          }}
         />
       )}
     </div>
@@ -768,6 +810,46 @@ function ModalShell({ title, children }: { title: string; children: React.ReactN
         {children}
       </div>
     </div>
+  );
+}
+
+/**
+ * Shared "review then confirm or cancel" step for actions that have nothing
+ * to choose (production cards, point-card claims) but previously dispatched
+ * straight off a single click — see `confirmingProduction`/`confirmingClaim`
+ * above. Nothing reaches `onAction` until "확정" is pressed, so "취소" always
+ * leaves the hand/cart exactly as it was.
+ */
+function ConfirmActionModal({
+  title,
+  description,
+  preview,
+  confirmLabel = "확정",
+  confirmColorClass = "bg-emerald-600",
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  description: string;
+  preview?: React.ReactNode;
+  confirmLabel?: string;
+  confirmColorClass?: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <ModalShell title={title}>
+      <p className="mb-3 text-xs text-white/60">{description}</p>
+      {preview && <div className="mb-3 rounded-lg border border-white/10 bg-black/25 p-2">{preview}</div>}
+      <div className="flex gap-2">
+        <button onClick={onCancel} className="flex-1 rounded-xl border border-white/15 py-2 text-sm text-white/70 hover:border-white/30">
+          취소
+        </button>
+        <button onClick={onConfirm} className={`flex-1 rounded-xl py-2 text-sm font-semibold text-white ${confirmColorClass}`}>
+          {confirmLabel}
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 
@@ -907,27 +989,34 @@ function AcquireModal({
 }) {
   const remaining = subtractBundle(me.resources, payment.reduce<ResourceBundle>((acc, r) => ({ ...acc, [r]: (acc[r] ?? 0) + 1 }), {}));
   const done = payment.length === index;
+  const isFree = index === 0;
   return (
-    <ModalShell title={`상인 카드 획득 — 자원 ${index}개 배치`}>
+    <ModalShell title={isFree ? "상인 카드 획득 — 무료" : `상인 카드 획득 — 자원 ${index}개 배치`}>
       <p className="mb-2 text-xs text-white/60">
-        앞에 놓인 {index}장의 카드 위에 자원을 1개씩 올려야 합니다 ({payment.length}/{index}).
+        {isFree
+          ? "가장 왼쪽 카드는 대가 없이 무료로 가져옵니다. 잘못 눌렀다면 취소할 수 있습니다."
+          : `앞에 놓인 ${index}장의 카드 위에 자원을 1개씩 올려야 합니다 (${payment.length}/${index}).`}
       </p>
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        {RESOURCE_ORDER.map((r) => (
-          <button
-            key={r}
-            disabled={done || (remaining[r] ?? 0) <= 0}
-            onClick={() => onChangePayment([...payment, r])}
-            className="flex items-center gap-1 rounded-full border border-emerald-300/40 bg-emerald-400/10 px-2.5 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ResourceIcon resource={r} className="h-4 w-4" /> {remaining[r] ?? 0}
-          </button>
-        ))}
-      </div>
-      <div className="mb-3 rounded-lg border border-white/10 bg-black/25 p-2">
-        <p className="mb-1 text-[10px] text-white/40 uppercase">배치할 자원</p>
-        <BundleRow bundle={payment.reduce<ResourceBundle>((acc, r) => ({ ...acc, [r]: (acc[r] ?? 0) + 1 }), {})} size="h-5 w-5" />
-      </div>
+      {!isFree && (
+        <>
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {RESOURCE_ORDER.map((r) => (
+              <button
+                key={r}
+                disabled={done || (remaining[r] ?? 0) <= 0}
+                onClick={() => onChangePayment([...payment, r])}
+                className="flex items-center gap-1 rounded-full border border-emerald-300/40 bg-emerald-400/10 px-2.5 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ResourceIcon resource={r} className="h-4 w-4" /> {remaining[r] ?? 0}
+              </button>
+            ))}
+          </div>
+          <div className="mb-3 rounded-lg border border-white/10 bg-black/25 p-2">
+            <p className="mb-1 text-[10px] text-white/40 uppercase">배치할 자원</p>
+            <BundleRow bundle={payment.reduce<ResourceBundle>((acc, r) => ({ ...acc, [r]: (acc[r] ?? 0) + 1 }), {})} size="h-5 w-5" />
+          </div>
+        </>
+      )}
       <div className="flex gap-2">
         <button onClick={onCancel} className="flex-1 rounded-xl border border-white/15 py-2 text-sm text-white/70 hover:border-white/30">
           취소
@@ -951,6 +1040,7 @@ function DiscardModal({
   remaining,
   onPick,
   onUndo,
+  onReset,
   onConfirm,
 }: {
   me: PlayerState;
@@ -958,8 +1048,10 @@ function DiscardModal({
   remaining: number;
   onPick: (r: Resource) => void;
   onUndo: (r: Resource) => void;
+  onReset: () => void;
   onConfirm: () => void;
 }) {
+  const hasPicks = bundleTotal(discardPick) > 0;
   return (
     <ModalShell title="자원 10개 초과 — 버릴 자원 선택">
       <p className="mb-2 text-xs text-white/60">{remaining > 0 ? `${remaining}개 더 버려야 합니다.` : "정확히 10개가 되었습니다."}</p>
@@ -977,13 +1069,20 @@ function DiscardModal({
           </div>
         ))}
       </div>
-      <button
-        onClick={onConfirm}
-        disabled={remaining !== 0}
-        className="w-full rounded-xl bg-rose-600 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
-      >
-        버리기 확정
-      </button>
+      <div className="flex gap-2">
+        {hasPicks && (
+          <button onClick={onReset} className="flex-1 rounded-xl border border-white/15 py-2 text-sm text-white/70 hover:border-white/30">
+            선택 해제
+          </button>
+        )}
+        <button
+          onClick={onConfirm}
+          disabled={remaining !== 0}
+          className="flex-1 rounded-xl bg-rose-600 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+        >
+          버리기 확정
+        </button>
+      </div>
     </ModalShell>
   );
 }
