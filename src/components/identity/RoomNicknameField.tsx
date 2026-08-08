@@ -13,7 +13,7 @@ interface Props {
   value: RoomIdentityValue;
   onChange: (value: RoomIdentityValue) => void;
   placeholder?: string;
-  accent?: "emerald" | "amber" | "rose";
+  accent?: "emerald" | "amber" | "rose" | "fuchsia";
 }
 
 // Tailwind's scanner needs literal class strings, not `border-${accent}-400`
@@ -23,6 +23,7 @@ const ACCENT_CLASSES: Record<NonNullable<Props["accent"]>, { input: string; chip
   emerald: { input: "focus:border-emerald-400", chipSelected: "border-emerald-400 bg-emerald-500/20 text-white" },
   amber: { input: "focus:border-amber-400", chipSelected: "border-amber-400 bg-amber-500/20 text-white" },
   rose: { input: "focus:border-rose-400", chipSelected: "border-rose-400 bg-rose-500/20 text-white" },
+  fuchsia: { input: "focus:border-fuchsia-400", chipSelected: "border-fuchsia-400 bg-fuchsia-500/20 text-white" },
 };
 
 /**

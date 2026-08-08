@@ -308,6 +308,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: false,
     supportsAutoRanking: false,
   },
+  {
+    id: "spot-difference",
+    name: "틀린 그림 찾기",
+    nameEn: "Spot the Difference",
+    description:
+      "원본과 살짝 다른 그림을 나란히 놓고 두 팀이 동시에 차이를 찾는 실시간 팀 대결 게임. 내 사진을 업로드해 자동으로 문제를 만드는 커스텀 모드도 지원합니다.",
+    players: { min: 2, max: 8 },
+    playTime: { minMinutes: 5, maxMinutes: 15 },
+    category: "family",
+    thumbnail: { emoji: "🔍", gradient: ["#e879f9", "#6b21a8"] },
+    tags: ["팀전", "관찰력", "커스텀사진"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {

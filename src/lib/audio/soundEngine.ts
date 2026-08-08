@@ -12,6 +12,9 @@
  *  - `playDiceRattle`/`playCupThud`: Perudo's dice-cup shake/reveal SFX — a
  *    burst of short filtered noise "clicks" that thin out as the shake
  *    settles, then a low pitch-dropping thump for the cup landing.
+ *  - `playCorrectDing`/`playWrongBuzz`: Spot the Difference's found/missed
+ *    click feedback — a bright ascending two-note chime vs. a short flat
+ *    buzz timed to the wrong-click penalty lock.
  *
  * Browsers refuse to start audio before a user gesture, so `unlock()` (or
  * any of the play/start methods, which call it internally) must be invoked
@@ -280,6 +283,43 @@ class SoundEngine {
     src.connect(filter).connect(noiseGain).connect(this.master);
     src.start(now);
     src.stop(now + 0.1);
+  }
+
+  /** Bright ascending two-note chime — a spot-the-difference correct click. */
+  playCorrectDing() {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.master) return;
+    const now = ctx.currentTime;
+    [880, 1318.5].forEach((freq, i) => {
+      const at = now + i * 0.09;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.3, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.28);
+      osc.connect(gain).connect(this.master!);
+      osc.start(at);
+      osc.stop(at + 0.3);
+    });
+  }
+
+  /** Short flat buzz — a spot-the-difference wrong click (paired with the penalty lock). */
+  playWrongBuzz() {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.master) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(160, now);
+    osc.frequency.linearRampToValueAtTime(110, now + 0.22);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.22, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    osc.connect(gain).connect(this.master);
+    osc.start(now);
+    osc.stop(now + 0.25);
   }
 
   stopBgm() {

@@ -115,3 +115,34 @@ body {
     opacity: 1;
   }
 }
+
+/* Spot the Difference's found-spot marker (see SpotDifferenceBoard.tsx) —
+   the emerald ring pops in with a small overshoot the instant either team
+   confirms a difference, on both the original and modified panel. */
+@keyframes spot-diff-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(0.2);
+    opacity: 0;
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(1.25);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Spot the Difference's hint reveal — a dashed amber ring that wiggles in
+   place over an undiscovered spot until it's found, visible only to the
+   team that spent the hint (see engine.ts's `activeHint`). */
+@keyframes spot-diff-wiggle {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.12) rotate(6deg);
+  }
+}
