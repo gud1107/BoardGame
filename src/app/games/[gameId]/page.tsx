@@ -9,6 +9,7 @@ import type { GameCompletionResult } from "@/games/types";
 import { useBettingStore } from "@/store/bettingStore";
 import { saveGameResult } from "@/lib/db/repository";
 import RoundResultEntry from "@/components/betting/RoundResultEntry";
+import GameThumbnail from "@/components/GameThumbnail";
 
 type Stage = "select" | "playing" | "record" | "done";
 
@@ -81,7 +82,9 @@ export default function GamePlayPage() {
   if (!game.playable) {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
-        <div className="text-5xl">{game.thumbnail.emoji}</div>
+        <div className="relative mx-auto flex h-24 w-20 items-center justify-center overflow-hidden rounded-lg">
+          <GameThumbnail game={game} className="text-5xl" />
+        </div>
         <h1 className="mt-4 text-xl font-bold text-white">{game.name}</h1>
         <p className="mt-2 text-sm text-white/50">아직 준비 중인 게임입니다. 곧 만나보실 수 있어요!</p>
         <Link href="/" className="mt-6 inline-block text-rose-300 underline">
@@ -129,7 +132,9 @@ export default function GamePlayPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
       <div className="mb-6 flex items-center gap-3">
-        <span className="text-3xl">{game.thumbnail.emoji}</span>
+        <div className="relative flex h-14 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md">
+          <GameThumbnail game={game} className="text-3xl" imageSizes="44px" />
+        </div>
         <div>
           <h1 className="text-xl font-bold text-white">{game.name}</h1>
           <p className="text-xs text-white/45">

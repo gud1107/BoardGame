@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { GameMeta } from "@/games/types";
+import GameThumbnail from "./GameThumbnail";
 
 function formatPlayers(g: GameMeta) {
   const { min, max } = g.players;
@@ -19,12 +20,12 @@ export default function GameCard({ game }: { game: GameMeta }) {
       }`}
     >
       <div
-        className="relative flex h-28 items-center justify-center text-5xl sm:h-32"
+        className="relative flex h-28 items-center justify-center overflow-hidden text-5xl sm:h-32"
         style={{
           background: `linear-gradient(135deg, ${game.thumbnail.gradient[0]}, ${game.thumbnail.gradient[1]})`,
         }}
       >
-        <span className="drop-shadow-sm">{game.thumbnail.emoji}</span>
+        <GameThumbnail game={game} className="drop-shadow-sm" imageSizes="(min-width: 640px) 240px, 50vw" />
         {!game.playable && (
           <span className="absolute top-2 right-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white/80 backdrop-blur">
             준비중

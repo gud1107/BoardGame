@@ -50,10 +50,22 @@ export interface GameMeta {
   players: PlayerRange;
   playTime: PlayTime;
   category: GameCategory;
-  /** Thumbnail accent used to render a generated (no external asset) card visual. */
+  /**
+   * Thumbnail shown on the dashboard card + detail page header. `emoji` +
+   * `gradient` are always present and drive a generated (no external asset)
+   * card visual for every "준비중" placeholder title — this is what lets the
+   * catalog scale to dozens of not-yet-built games without needing box art
+   * for each one. `image` is an optional real box-cover photo (see
+   * `public/games/`) that, when present, takes over the card visual instead
+   * (see `GameThumbnail.tsx`); `emoji`/`gradient` still stay filled in as
+   * the fallback for any spot that can't render an `<img>` (or if the photo
+   * fails to load).
+   */
   thumbnail: {
     emoji: string;
     gradient: [string, string];
+    /** Path under `public/`, e.g. `/games/perudo.jpg`. */
+    image?: string;
   };
   tags?: string[];
   /**
