@@ -95,38 +95,42 @@ const PIP_LAYOUT: Record<number, number[]> = {
 };
 
 /**
- * One face-up die — high-contrast, "lacquered" styling: a gold-rimmed ivory
- * die with a crisp inset gloss highlight for values 2-6, and a gold-rimmed
- * red die (matching the physical die's red-on-white coloring) with the
- * white sun-mask crest for the 페루도 face. The inset box-shadows give both
- * a subtle carved/raised depth instead of flat color fills.
+ * One face-up die — a rounded, lacquered "physical cube" look modeled on
+ * the reference photo: a chunky rounded-square body, a bright top-left
+ * gloss highlight streak, and a layered inset shadow for real edge bevel
+ * (not a flat color fill). Ivory dice for values 2-6, and the signature
+ * red-on-white 페루도 die (gold rim, white skull-mask crest) for face 1.
  */
 function DieFace({ value, size = "md", ring }: { value: number; size?: keyof typeof SIZE_CLASS; ring?: "match" | "wild" }) {
   const ringClass =
     ring === "match"
-      ? "ring-2 ring-amber-300"
+      ? "ring-[3px] ring-amber-300 ring-offset-2 ring-offset-black/30"
       : ring === "wild"
-        ? "ring-2 ring-violet-300"
-        : "ring-1 ring-black/40";
+        ? "ring-[3px] ring-violet-300 ring-offset-2 ring-offset-black/30"
+        : "ring-1 ring-black/50";
   const isPerudo = value === 1;
   return (
     <div
-      className={`flex items-center justify-center rounded-md border-2 font-black ${SIZE_CLASS[size]} ${ringClass} ${
+      className={`relative flex items-center justify-center overflow-hidden rounded-[10px] border-[3px] font-black ${SIZE_CLASS[size]} ${ringClass} ${
         isPerudo
-          ? "border-amber-300 bg-gradient-to-br from-red-500 via-red-600 to-red-800 text-white shadow-[inset_0_2px_3px_rgba(255,255,255,0.4),inset_0_-3px_5px_rgba(0,0,0,0.4)]"
-          : "border-amber-300/80 bg-gradient-to-br from-white via-amber-50 to-neutral-200 text-neutral-950 shadow-[inset_0_2px_3px_rgba(255,255,255,0.9),inset_0_-3px_5px_rgba(0,0,0,0.2)]"
+          ? "border-red-950 bg-gradient-to-br from-red-400 via-red-600 to-red-800 text-white shadow-[inset_0_3px_4px_rgba(255,255,255,0.5),inset_0_-4px_6px_rgba(0,0,0,0.45),0_2px_4px_rgba(0,0,0,0.4)]"
+          : "border-neutral-400 bg-gradient-to-br from-white via-neutral-50 to-neutral-200 text-neutral-950 shadow-[inset_0_3px_4px_rgba(255,255,255,0.95),inset_0_-4px_6px_rgba(0,0,0,0.25),0_2px_4px_rgba(0,0,0,0.4)]"
       }`}
       title={isPerudo ? "페루도 (조커)" : `${value}`}
     >
+      {/* gloss highlight streak — top-left sheen for a rounded-cube look */}
+      <div className="pointer-events-none absolute -top-1/3 -left-1/3 h-2/3 w-2/3 rotate-12 rounded-full bg-white/35 blur-[2px]" />
       {isPerudo ? (
-        <PerudoFaceIcon className="h-[65%] w-[65%] drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]" />
+        <PerudoFaceIcon className="relative h-[68%] w-[68%] drop-shadow-[0_1px_1.5px_rgba(0,0,0,0.6)]" />
       ) : (
-        <div className="grid h-full w-full grid-cols-3 grid-rows-3 gap-[1px] p-1">
+        <div className="relative grid h-full w-full grid-cols-3 grid-rows-3 gap-[1px] p-1">
           {Array.from({ length: 9 }, (_, i) => (
             <span
               key={i}
-              className={`m-auto h-[24%] w-[24%] rounded-full ${
-                PIP_LAYOUT[value]?.includes(i) ? "bg-neutral-950 shadow-[inset_0_1px_1px_rgba(0,0,0,0.6)]" : "bg-transparent"
+              className={`m-auto h-[26%] w-[26%] rounded-full ${
+                PIP_LAYOUT[value]?.includes(i)
+                  ? "bg-neutral-950 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),0_1px_1px_rgba(0,0,0,0.35)]"
+                  : "bg-transparent"
               }`}
             />
           ))}
@@ -334,18 +338,22 @@ function BidTrack({
   );
 }
 
-/** "내 주사위 통계 요약" + "1/3 기대값" (rulebook UX request #4, bottom area). */
+/**
+ * Stats dashboard placed directly below the "페루도!"/"맞아!" action buttons
+ * (rulebook UX request #4): my own cup's dice counts by face, plus the
+ * "전체 주사위 ÷ 3" expected-value guide that drives Perudo doubt/call
+ * strategy — the two numbers a player checks right after deciding whether
+ * to challenge the current bid.
+ */
 function MyDiceStatsPanel({ state, myDice }: { state: PerudoState; myDice: number[] }) {
   const faces: Face[] = [1, 2, 3, 4, 5, 6];
   const counts = faces.map((face) => ({ face, count: myDice.filter((d) => d === face).length }));
   const total = totalDiceInPlay(state);
   const expected = total / 3;
-  const lo = Math.floor(expected);
-  const hi = Math.ceil(expected);
 
   return (
     <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-white/10 bg-black/25 p-2.5">
-      <p className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">내 주사위 통계</p>
+      <p className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">📊 통계 현황판</p>
       <div className="flex flex-wrap gap-1.5">
         {counts.map(({ face, count }) => (
           <span
@@ -355,15 +363,13 @@ function MyDiceStatsPanel({ state, myDice }: { state: PerudoState; myDice: numbe
             }`}
           >
             {face === 1 ? <PerudoFaceIcon className="h-3 w-3" /> : <span className="font-bold">{face}</span>}
-            {face === 1 ? "페루도" : `숫자 ${face}`}: {count}개
+            {face === 1 ? "페루도(1)" : `숫자 ${face}`}: {count}개
           </span>
         ))}
       </div>
       <p className="text-[11px] text-white/50">
         전체 주사위: <span className="text-white/80">{total}개</span> · 1/3 기대값:{" "}
-        <span className="text-amber-200">
-          {expected.toFixed(1)}개{lo === hi ? ` (약 ${lo}개)` : ` (약 ${lo}~${hi}개)`}
-        </span>
+        <span className="text-amber-200">{expected.toFixed(1)}개</span>
       </p>
     </div>
   );
@@ -625,6 +631,9 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
         </BidTrack>
       </div>
 
+      {/* Stats dashboard — right below the 페루도!/맞아! action buttons above. */}
+      <MyDiceStatsPanel state={state} myDice={me.dice} />
+
       {/* My dice — hidden behind a shaking cup for a beat after each reroll, then revealed. */}
       <div className="relative z-10 flex flex-col items-center gap-1.5 rounded-2xl border border-white/10 bg-black/20 p-3">
         <p className="text-[11px] text-white/50">내 주사위 ({me.diceCount}개)</p>
@@ -641,8 +650,6 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
           </div>
         )}
       </div>
-
-      <MyDiceStatsPanel state={state} myDice={me.dice} />
 
       {/* Player strip — a responsive grid (not a single flex column) so it
           stays readable up to the full 8-player table instead of forcing a
