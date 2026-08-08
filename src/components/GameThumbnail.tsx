@@ -32,7 +32,7 @@ export default function GameThumbnail({
         alt={`${game.name} 박스 이미지`}
         fill
         sizes={imageSizes ?? "200px"}
-        className={imageClassName ?? "object-cover"}
+        className={imageClassName ?? "object-contain"}
       />
     );
   }

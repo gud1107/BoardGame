@@ -20,24 +20,34 @@ export default function GameCard({ game }: { game: GameMeta }) {
       }`}
     >
       <div
-        className="relative flex h-28 items-center justify-center overflow-hidden text-5xl sm:h-32"
+        className="relative flex aspect-[4/5] items-center justify-center overflow-hidden text-6xl"
         style={{
           background: `linear-gradient(135deg, ${game.thumbnail.gradient[0]}, ${game.thumbnail.gradient[1]})`,
         }}
       >
-        <GameThumbnail game={game} className="drop-shadow-sm" imageSizes="(min-width: 640px) 240px, 50vw" />
+        {/* object-contain (not cover) so the box-cover photos — mostly
+            portrait, and not necessarily this exact ratio — show their full
+            artwork with no top/bottom/side cropping; the padding lets the
+            gradient behind show through as a natural letterbox border
+            instead of the image butting against the card edge. */}
+        <GameThumbnail
+          game={game}
+          className="drop-shadow-sm"
+          imageClassName="object-contain p-4"
+          imageSizes="(min-width: 640px) 240px, 50vw"
+        />
         {!game.playable && (
           <span className="absolute top-2 right-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white/80 backdrop-blur">
             준비중
           </span>
         )}
       </div>
-      <div className="flex flex-1 flex-col gap-2 p-4">
-        <h3 className="text-base font-semibold text-white">{game.name}</h3>
+      <div className="flex flex-1 flex-col gap-2.5 p-4 sm:p-5">
+        <h3 className="text-base font-semibold text-white sm:text-lg">{game.name}</h3>
         <p className="line-clamp-2 flex-1 text-xs leading-relaxed text-white/55">{game.description}</p>
-        <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-white/60">
-          <span className="rounded-full bg-white/10 px-2 py-0.5">👥 {formatPlayers(game)}</span>
-          <span className="rounded-full bg-white/10 px-2 py-0.5">⏱ {formatTime(game)}</span>
+        <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-white/60">
+          <span className="rounded-full bg-white/10 px-2.5 py-1">👥 {formatPlayers(game)}</span>
+          <span className="rounded-full bg-white/10 px-2.5 py-1">⏱ {formatTime(game)}</span>
         </div>
       </div>
     </div>

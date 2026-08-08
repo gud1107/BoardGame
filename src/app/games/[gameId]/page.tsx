@@ -82,8 +82,17 @@ export default function GamePlayPage() {
   if (!game.playable) {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
-        <div className="relative mx-auto flex h-24 w-20 items-center justify-center overflow-hidden rounded-lg">
-          <GameThumbnail game={game} className="text-5xl" />
+        <div className="relative mx-auto flex h-28 w-24 items-center justify-center overflow-hidden rounded-lg bg-white/5">
+          {/* imageClassName padding (not container padding) actually insets
+              the art — next/image's `fill` positions absolutely against the
+              container's padding box, so container padding alone wouldn't
+              shrink it. */}
+          <GameThumbnail
+            game={game}
+            className="text-5xl"
+            imageClassName="object-contain p-2"
+            imageSizes="96px"
+          />
         </div>
         <h1 className="mt-4 text-xl font-bold text-white">{game.name}</h1>
         <p className="mt-2 text-sm text-white/50">아직 준비 중인 게임입니다. 곧 만나보실 수 있어요!</p>
@@ -132,8 +141,13 @@ export default function GamePlayPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
       <div className="mb-6 flex items-center gap-3">
-        <div className="relative flex h-14 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md">
-          <GameThumbnail game={game} className="text-3xl" imageSizes="44px" />
+        <div className="relative flex h-14 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/5">
+          <GameThumbnail
+            game={game}
+            className="text-3xl"
+            imageClassName="object-contain p-1"
+            imageSizes="44px"
+          />
         </div>
         <div>
           <h1 className="text-xl font-bold text-white">{game.name}</h1>
