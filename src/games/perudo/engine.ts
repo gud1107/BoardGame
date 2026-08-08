@@ -64,7 +64,13 @@ export interface RoundResolution {
   actualCount: number;
   /** Seat whose dice count just changed as a result of this call. */
   affectedSeat: SeatIndex;
-  diceDelta: 1 | -1;
+  /**
+   * Signed change applied to `affectedSeat`'s `diceCount` (before the
+   * [0, MAX_DICE] clamp). Differential-penalty rules (see module doc): a
+   * losing call can cost more than 1 die depending on how far off the bid
+   * was, while a successful "맞아!" always regains exactly 1.
+   */
+  diceDelta: number;
   /** Full table reveal at the moment of the call, captured before any reroll — seat -> that seat's dice. */
   revealedDice: Record<SeatIndex, number[]>;
   wasPalafico: boolean;
@@ -253,7 +259,7 @@ function raise(state: PerudoState, seat: SeatIndex, quantity: number, face: Face
 function applyResolution(
   state: PerudoState,
   affectedSeat: SeatIndex,
-  delta: 1 | -1,
+  delta: number,
   meta: { kind: "dudo" | "calza"; actorSeat: SeatIndex; bid: Bid; actualCount: number },
 ): PerudoState {
   const revealedDice: Record<SeatIndex, number[]> = {};
@@ -264,7 +270,7 @@ function applyResolution(
     p.seat === affectedSeat ? { ...p, diceCount: clamp(p.diceCount + delta, 0, MAX_DICE) } : p,
   );
   const affectedNowDice = players.find((p) => p.seat === affectedSeat)!.diceCount;
-  const justEliminated = delta === -1 && affectedNowDice === 0;
+  const justEliminated = delta < 0 && affectedNowDice === 0;
   const eliminationOrder = justEliminated ? [...state.eliminationOrder, affectedSeat] : state.eliminationOrder;
 
   const resolution: RoundResolution = { ...meta, affectedSeat, diceDelta: delta, revealedDice, wasPalafico };
@@ -293,7 +299,17 @@ function applyResolution(
   };
 }
 
-/** "페루도!" — doubt the current bid. Turn-restricted like `raise` (rulebook §4①: "자기 차례에 외칩니다"). */
+/**
+ * "페루도!" — doubt the current bid. Turn-restricted like `raise` (rulebook
+ * §4①: "자기 차례에 외칩니다"). Differential penalty (rulebook §4① 판정): the
+ * loser doesn't just drop 1 die flat — they lose exactly as many dice as
+ * their call was wrong by.
+ * - Bid was too high (actualCount < bid.quantity): the bidder loses
+ *   `bid.quantity - actualCount` dice.
+ * - Bid held up (actualCount >= bid.quantity): the doubter loses
+ *   `actualCount - bid.quantity + 1` dice (always >= 1, even for an exact
+ *   match, since doubting a dead-on bid is still a bad call).
+ */
 function dudo(state: PerudoState, seat: SeatIndex): PerudoState {
   if (state.phase !== "playing") return state;
   if (seat !== state.activeSeat) return state;
@@ -303,12 +319,19 @@ function dudo(state: PerudoState, seat: SeatIndex): PerudoState {
   const wild = !isPalafico(state);
   const actualCount = countMatching(state.players, bid.face, wild);
   const bidWasTooHigh = actualCount < bid.quantity;
-  // Bidder loses a die when caught bluffing; the doubter loses one for a bad call.
   const affected = bidWasTooHigh ? bid.seat : seat;
-  return applyResolution(state, affected, -1, { kind: "dudo", actorSeat: seat, bid, actualCount });
+  const loss = bidWasTooHigh ? bid.quantity - actualCount : actualCount - bid.quantity + 1;
+  return applyResolution(state, affected, -loss, { kind: "dudo", actorSeat: seat, bid, actualCount });
 }
 
-/** "맞아!" — claim the current bid is exactly right. Deliberately NOT turn-restricted, see module doc. Unavailable during a Palafico round (rulebook §5-4). */
+/**
+ * "맞아!" — claim the current bid is exactly right. Deliberately NOT
+ * turn-restricted, see module doc. Unavailable during a Palafico round
+ * (rulebook §5-4). Differential penalty (rulebook §4② 판정): a correct call
+ * always regains exactly 1 die (capped at MAX_DICE), but a wrong call costs
+ * the caller `|actualCount - bid.quantity|` dice — the exact margin they
+ * misjudged by, in either direction.
+ */
 function calza(state: PerudoState, seat: SeatIndex): PerudoState {
   if (state.phase !== "playing") return state;
   if (isPalafico(state)) return state;
@@ -319,7 +342,7 @@ function calza(state: PerudoState, seat: SeatIndex): PerudoState {
 
   const actualCount = countMatching(state.players, bid.face, true);
   const exact = actualCount === bid.quantity;
-  const delta: 1 | -1 = exact ? 1 : -1; // success regains a die (capped at MAX_DICE), failure costs one
+  const delta = exact ? 1 : -Math.abs(actualCount - bid.quantity);
   return applyResolution(state, seat, delta, { kind: "calza", actorSeat: seat, bid, actualCount });
 }
 

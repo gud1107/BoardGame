@@ -59,15 +59,17 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               <p className="mb-1 font-medium text-rose-200">🚨 페루도! (의심)</p>
               <p className="text-xs text-white/60">
                 자기 차례에만 외칠 수 있습니다. 모두 주사위를 공개해 앞 선언과 비교합니다. 실제 개수가{" "}
-                <span className="text-white">선언보다 적으면 직전 선언자</span>가, 선언 이상이면{" "}
-                <span className="text-white">의심한 사람</span>이 주사위 1개를 잃습니다.
+                <span className="text-white">선언보다 적으면 직전 선언자</span>가 [선언 개수 − 실제 개수]개를, 선언 이상이면{" "}
+                <span className="text-white">의심한 사람</span>이 [실제 개수 − 선언 개수 + 1]개를 잃습니다 — 틀린 차이만큼
+                차등으로 잃는 페널티입니다.
               </p>
             </div>
             <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3">
               <p className="mb-1 font-medium text-emerald-200">🎯 맞아! (정확히 일치)</p>
               <p className="text-xs text-white/60">
                 <span className="text-white">차례와 상관없이</span> 아무 때나 외칠 수 있습니다. 정확히 일치하면 주사위 1개를
-                되찾고(최대 5개), 틀리면 자신의 주사위 1개를 잃습니다. 팔라피코 라운드에서는 사용할 수 없습니다.
+                되찾고(최대 5개), 틀리면 |실제 개수 − 선언 개수|개(절댓값 오차)를 한 번에 잃습니다. 팔라피코 라운드에서는
+                사용할 수 없습니다.
               </p>
             </div>
           </div>

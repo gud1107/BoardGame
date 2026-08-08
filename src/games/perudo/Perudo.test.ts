@@ -207,8 +207,8 @@ describe("dudo (페루도!)", () => {
     expect(next).toEqual(state);
   });
 
-  it("penalizes the bidder when the bid was too high", () => {
-    // Table has three 4s + no 1s = 3 actual, but seat 2 bid 5.
+  it("penalizes the bidder by the exact shortfall when the bid was too high (rulebook §4①: 선언 개수 - 실제 개수)", () => {
+    // Table has three 4s + no 1s = 3 actual, but seat 2 bid 5 -> shortfall of 2.
     const state = makeState({
       activeSeat: 0,
       currentBid: { seat: 2, quantity: 5, face: 4 },
@@ -219,13 +219,13 @@ describe("dudo (페루도!)", () => {
       ],
     });
     const next = applyAction(state, { type: "dudo", seat: 0 });
-    expect(next.players.find((p) => p.seat === 2)!.diceCount).toBe(4);
-    expect(next.lastResolution).toMatchObject({ kind: "dudo", actorSeat: 0, affectedSeat: 2, diceDelta: -1, actualCount: 3 });
+    expect(next.players.find((p) => p.seat === 2)!.diceCount).toBe(3); // 5 - (5-3) = 3
+    expect(next.lastResolution).toMatchObject({ kind: "dudo", actorSeat: 0, affectedSeat: 2, diceDelta: -2, actualCount: 3 });
     expect(next.phase).toBe("reveal");
     expect(next.roundStarter).toBe(2); // penalized player leads the next round
   });
 
-  it("penalizes the doubter when the bid was accurate or conservative", () => {
+  it("penalizes the doubter by the exact overshoot+1 when the bid was accurate or conservative (rulebook §4①: 실제 개수 - 선언 개수 + 1)", () => {
     const state = makeState({
       activeSeat: 0,
       currentBid: { seat: 2, quantity: 2, face: 4 },
@@ -236,9 +236,24 @@ describe("dudo (페루도!)", () => {
       ],
     });
     const next = applyAction(state, { type: "dudo", seat: 0 });
-    expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(4);
-    expect(next.lastResolution).toMatchObject({ affectedSeat: 0, diceDelta: -1 });
+    expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(3); // 5 - (3-2+1) = 3
+    expect(next.lastResolution).toMatchObject({ affectedSeat: 0, diceDelta: -2 });
     expect(next.roundStarter).toBe(0);
+  });
+
+  it("matches the rulebook's worked example — 5개 선언, 실제 2개면 3개 상실", () => {
+    const state = makeState({
+      activeSeat: 0,
+      currentBid: { seat: 2, quantity: 5, face: 4 },
+      players: [
+        { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
+        { seat: 1, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+        { seat: 2, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+      ],
+    });
+    const next = applyAction(state, { type: "dudo", seat: 0 });
+    expect(next.lastResolution).toMatchObject({ actualCount: 2, diceDelta: -3 });
+    expect(next.players.find((p) => p.seat === 2)!.diceCount).toBe(2); // 5 - 3
   });
 
   it("ends the game once only one player has dice left", () => {
@@ -313,7 +328,8 @@ describe("calza (맞아!)", () => {
     expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(MAX_DICE); // capped, was already at max
   });
 
-  it("loses a die on a wrong call", () => {
+  it("loses dice equal to the exact absolute margin on a wrong call (rulebook §4②: |실제 개수 - 선언 개수|)", () => {
+    // face-4 count: seat0's two 4s + seat1's wild 1 = 3 actual, bid was 5 -> |3-5| = 2.
     const state = makeState({
       currentBid: { seat: 2, quantity: 5, face: 4 },
       players: [
@@ -323,7 +339,36 @@ describe("calza (맞아!)", () => {
       ],
     });
     const next = applyAction(state, { type: "calza", seat: 0 });
-    expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(4);
+    expect(next.lastResolution).toMatchObject({ actualCount: 3, diceDelta: -2 });
+    expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(3);
+  });
+
+  it("matches the rulebook's worked example — 4개라 외쳤으나 실제 7개면 3개 상실", () => {
+    const state = makeState({
+      currentBid: { seat: 2, quantity: 4, face: 4 },
+      players: [
+        { seat: 0, diceCount: 5, dice: [4, 4, 4, 4, 5] },
+        { seat: 1, diceCount: 5, dice: [4, 4, 4, 3, 5] },
+        { seat: 2, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+      ],
+    });
+    const next = applyAction(state, { type: "calza", seat: 0 });
+    expect(next.lastResolution).toMatchObject({ actualCount: 7, diceDelta: -3 });
+    expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(2); // 5 - 3
+  });
+
+  it("clamps the loss at 0 dice rather than going negative when the margin exceeds the caller's stock", () => {
+    const state = makeState({
+      currentBid: { seat: 2, quantity: 30, face: 4 },
+      players: [
+        { seat: 0, diceCount: 2, dice: [4, 5] },
+        { seat: 1, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+        { seat: 2, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+      ],
+    });
+    const next = applyAction(state, { type: "calza", seat: 0 });
+    expect(next.lastResolution).toMatchObject({ actualCount: 1, diceDelta: -29 });
+    expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(0);
   });
 
   it("is disallowed during a Palafico round", () => {
