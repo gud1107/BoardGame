@@ -55,7 +55,8 @@ export interface PointCard {
 
 // ---------------------------------------------------------------------------
 // Basic starting merchant cards (rulebook §3.2-3) — every player gets their
-// own instance of both, outside the 32-card shuffled market deck.
+// own instance of both, dealt straight into `startGame()`'s starting hands
+// and never mixed into the shuffled market deck below.
 // ---------------------------------------------------------------------------
 
 export function basicProductionCard(seat: number): MerchantCard {
@@ -66,8 +67,43 @@ export function basicUpgradeCard(seat: number): MerchantCard {
   return { id: `basic-upgrade-${seat}`, effect: { kind: "upgrade", upgrades: 2 } };
 }
 
+/** The two starting cards' effects, by shape rather than id — used to keep them out of `createMerchantDeck()`. */
+const STARTER_MERCHANT_EFFECTS: MerchantCardEffect[] = [
+  basicProductionCard(0).effect,
+  basicUpgradeCard(0).effect,
+];
+
+/**
+ * True if `effect` is identical (in kind + numbers, not id) to one of the
+ * two starting cards. Every player already owns one of each starting card
+ * from turn 1 (rulebook §3.2-3) — a market/deck card with the exact same
+ * effect would look, to a player, like "my starting card came back", which
+ * isn't how the physical game's 32-card deck works (those two cards are
+ * printed on distinct card backs and never shuffled in). Compared
+ * structurally rather than by id so this still catches a future edit to
+ * `createMerchantDeck()` that accidentally reintroduces the same numbers
+ * under a new id.
+ */
+function isStarterMerchantEffect(effect: MerchantCardEffect): boolean {
+  return STARTER_MERCHANT_EFFECTS.some((starter) => {
+    if (starter.kind !== effect.kind) return false;
+    if (starter.kind === "production" && effect.kind === "production") {
+      return RESOURCE_ORDER.every((r) => (starter.gain[r] ?? 0) === (effect.gain[r] ?? 0));
+    }
+    if (starter.kind === "upgrade" && effect.kind === "upgrade") {
+      return starter.upgrades === effect.upgrades;
+    }
+    return false;
+  });
+}
+
 // ---------------------------------------------------------------------------
-// Merchant deck (32 cards, rulebook §2/§3.1-4) — shuffled, 6 kept face-up.
+// Merchant deck (rulebook §2/§3.1-4) — shuffled, 6 kept face-up. Filtered
+// through `isStarterMerchantEffect` below so the market/draw deck can never
+// contain a card duplicating either starting card's effect (see doc comment
+// above) — two of the raw entries below (`merchant-u3`/`merchant-u4`, both
+// "upgrade any resource twice") exactly match `basicUpgradeCard`'s effect
+// and are dropped by that filter, leaving 30 cards in the actual deck.
 // ---------------------------------------------------------------------------
 
 export function createMerchantDeck(): MerchantCard[] {
@@ -111,7 +147,7 @@ export function createMerchantDeck(): MerchantCard[] {
     { id: "merchant-t17", effect: { kind: "trade", cost: { yellow: 5 }, gain: { green: 2 } } },
     { id: "merchant-t18", effect: { kind: "trade", cost: { red: 3 }, gain: { brown: 2 } } },
   ];
-  return cards;
+  return cards.filter((c) => !isStarterMerchantEffect(c.effect));
 }
 
 // ---------------------------------------------------------------------------

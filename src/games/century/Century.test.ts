@@ -93,6 +93,26 @@ describe("startGame — setup", () => {
     expect(a).toEqual(b);
   });
 
+  it("never deals a market/deck merchant card matching either starting card's effect", () => {
+    // Every seat already starts with one {production, gain:{yellow:2}} and one
+    // {upgrade, upgrades:2} card (see basicProductionCard/basicUpgradeCard) —
+    // createMerchantDeck() must exclude both effect shapes so the shuffled
+    // market/deck can never hand out a duplicate of a card players already
+    // hold from turn 1.
+    for (const seed of [1, 2, 3, 42, 1000]) {
+      const state = startGame(5, seed);
+      const allMerchantCards = [...state.merchantMarket.filter((c): c is MerchantCard => c !== null), ...state.merchantDeck];
+      for (const card of allMerchantCards) {
+        if (card.effect.kind === "production") {
+          expect(card.effect.gain).not.toEqual({ yellow: 2 });
+        }
+        if (card.effect.kind === "upgrade") {
+          expect(card.effect.upgrades).not.toBe(2);
+        }
+      }
+    }
+  });
+
   it("throws for unsupported player counts", () => {
     expect(() => startGame(1, 1)).toThrow();
     expect(() => startGame(6, 1)).toThrow();

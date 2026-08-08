@@ -70,6 +70,62 @@ function BundleRow({ bundle, size = "h-4 w-4" }: { bundle: ResourceBundle; size?
   );
 }
 
+/**
+ * Renders a player's cart as `limit` (HAND_LIMIT, 10) fixed inventory
+ * slots — filled slots show the resource cube that occupies them, empty
+ * slots stay dashed/faint, so "how full is my cart" is legible at a glance
+ * instead of requiring the viewer to add up a row of count badges. Cubes
+ * fill slots in `RESOURCE_ORDER` (ascending value) so color groups stay
+ * visually together rather than shuffling around as counts change.
+ *
+ * The 10-slot limit is only ever exceeded transiently (between drawing
+ * past it and resolving the forced `discardToLimit` gate, see
+ * `mustDiscard` in the main component) — any resource beyond the 10th slot
+ * still renders, in a visually distinct rose-bordered "overflow" slot, so
+ * that moment isn't silently clipped.
+ */
+function CartInventory({
+  resources,
+  limit,
+  slotClass = "h-7 w-7",
+  iconClass = "h-5 w-5",
+}: {
+  resources: ResourceBundle;
+  limit: number;
+  slotClass?: string;
+  iconClass?: string;
+}) {
+  const cubes: Resource[] = [];
+  for (const r of RESOURCE_ORDER) {
+    for (let i = 0; i < (resources[r] ?? 0); i++) cubes.push(r);
+  }
+  const slots = Array.from({ length: limit }, (_, i) => cubes[i] ?? null);
+  const overflowCubes = cubes.slice(limit);
+  return (
+    <div className="flex flex-wrap gap-1">
+      {slots.map((r, i) => (
+        <div
+          key={i}
+          className={`flex items-center justify-center rounded-md border transition ${slotClass} ${
+            r ? "border-white/15 bg-white/5" : "border-dashed border-white/15 bg-black/10"
+          }`}
+        >
+          {r ? <ResourceIcon resource={r} className={iconClass} /> : <span className="h-1.5 w-1.5 rounded-full bg-white/10" />}
+        </div>
+      ))}
+      {overflowCubes.map((r, i) => (
+        <div
+          key={`overflow-${i}`}
+          className={`flex items-center justify-center rounded-md border-2 border-rose-400/70 bg-rose-500/10 shadow-[0_0_8px_-1px_rgba(244,63,94,0.6)] ${slotClass}`}
+          title="10개 한도 초과 — 버려야 합니다"
+        >
+          <ResourceIcon resource={r} className={iconClass} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Antique-card styling shared by merchant + point card faces — a layered
 // inset box-shadow standing in for an engraved parchment border (no image
@@ -531,7 +587,7 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
             {bundleTotal(me.resources)} / {HAND_LIMIT}
           </span>
         </div>
-        <BundleRow bundle={me.resources} size="h-5 w-5" />
+        <CartInventory resources={me.resources} limit={HAND_LIMIT} />
         <div className="mt-1.5 flex gap-3 text-xs text-white/70">
           <span>🪙 금화 {me.gold}</span>
           <span>🥈 은화 {me.silver}</span>
@@ -689,7 +745,7 @@ function PlayerSummaryRow({
         {name}
       </span>
       <div className="flex flex-wrap items-center gap-2 text-white/70">
-        <BundleRow bundle={player.resources} size="h-3.5 w-3.5" />
+        <CartInventory resources={player.resources} limit={HAND_LIMIT} slotClass="h-3.5 w-3.5" iconClass="h-2.5 w-2.5" />
         <span>🪙{player.gold}</span>
         <span>🥈{player.silver}</span>
         <span>🏆{player.pointCards.length}</span>
