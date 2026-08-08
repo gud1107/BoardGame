@@ -97,6 +97,32 @@ export interface RoundResult {
   winnerSeat: SeatIndex | null; // null = a genuine tie, no point awarded
 }
 
+export type TimerMode = "limited" | "unlimited";
+
+/**
+ * Room-level per-phase countdown lengths, chosen by the host at room-create
+ * time and carried inside `GridPokerState` (set once by `startGame`, then
+ * along for the ride via every `{...state, ...}` spread in the reducer) so
+ * every client's `useCountdown` reads the exact same numbers without a
+ * separate sync channel. The timers themselves stay pure per-client UX (see
+ * useCountdown.ts) — only the *lengths* need to be agreed on, not the ticking.
+ */
+export interface TimerSettings {
+  mode: TimerMode;
+  /** Countdown length during the "placing" phase (one shared card drafted per round). */
+  placingSeconds: number;
+  /** Countdown length during the "submitting" phase (blind line pick per scoring round). */
+  submittingSeconds: number;
+}
+
+export const DEFAULT_PLACING_SECONDS = 40;
+export const DEFAULT_SUBMITTING_SECONDS = 30;
+export const DEFAULT_TIMER_SETTINGS: TimerSettings = {
+  mode: "limited",
+  placingSeconds: DEFAULT_PLACING_SECONDS,
+  submittingSeconds: DEFAULT_SUBMITTING_SECONDS,
+};
+
 export interface GridPokerState {
   playerCount: number;
   players: PlayerState[];
@@ -110,6 +136,7 @@ export interface GridPokerState {
   winThreshold: number; // 6 for 2p, 7 for 3+p
   lastRoundResult: RoundResult | null;
   winner: SeatIndex[] | null; // length 1 = clear winner, length >1 = tied
+  timerSettings: TimerSettings;
 }
 
 export type EngineAction =
@@ -133,7 +160,7 @@ export function seededRng(seed: number): () => number {
 // Setup
 // ---------------------------------------------------------------------------
 
-export function startGame(playerCount: number): GridPokerState {
+export function startGame(playerCount: number, timerSettings: TimerSettings = DEFAULT_TIMER_SETTINGS): GridPokerState {
   const players: PlayerState[] = Array.from({ length: playerCount }, (_, seat) => ({
     seat,
     board: Array(BOARD_SIZE).fill(null),
@@ -155,6 +182,7 @@ export function startGame(playerCount: number): GridPokerState {
     winThreshold: playerCount === 2 ? 6 : 7,
     lastRoundResult: null,
     winner: null,
+    timerSettings,
   };
 }
 

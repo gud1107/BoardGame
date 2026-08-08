@@ -3,6 +3,7 @@ import {
   applyAction,
   BOARD_SIZE,
   compareHands,
+  DEFAULT_TIMER_SETTINGS,
   evaluateHand,
   LINES,
   opponentLiveCell,
@@ -238,6 +239,26 @@ describe("game flow", () => {
     expect(s.phase).toBe("submitting");
     expect(s.players[0].lastPlacedCell).not.toBeNull();
     expect(opponentLiveCell(s, s.players[0])).toBeNull();
+  });
+
+  it("defaults to a 40s placing / 30s submitting limited timer when no room settings are given", () => {
+    const s = startGame(2);
+    expect(s.timerSettings).toEqual(DEFAULT_TIMER_SETTINGS);
+    expect(s.timerSettings.mode).toBe("limited");
+    expect(s.timerSettings.placingSeconds).toBe(40);
+    expect(s.timerSettings.submittingSeconds).toBe(30);
+  });
+
+  it("carries a room's custom timer settings through the whole game, including an unlimited mode", () => {
+    const custom = { mode: "unlimited" as const, placingSeconds: 55, submittingSeconds: 12 };
+    let s = startGame(2, custom);
+    expect(s.timerSettings).toEqual(custom);
+    // Every reducer branch spreads `{...state, ...}`, so the room's chosen
+    // settings must still be present after actions mutate other fields.
+    s = applyAction(s, { type: "draw-common", seed: 1 });
+    s = applyAction(s, { type: "place", seat: 0, cellIndex: 0 });
+    s = applyAction(s, { type: "place", seat: 1, cellIndex: 0 });
+    expect(s.timerSettings).toEqual(custom);
   });
 
   it("3+ player game runs all 12 rounds unless someone reaches 7 wins early", () => {

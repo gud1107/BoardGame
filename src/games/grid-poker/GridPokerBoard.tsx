@@ -18,8 +18,6 @@ import {
   type SeatIndex,
 } from "./engine";
 
-const PLACING_SECONDS = 20;
-const SUBMITTING_SECONDS = 15;
 const URGENT_THRESHOLD = 5;
 
 function randomFrom<T>(items: T[]): T | undefined {
@@ -164,23 +162,32 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
     onAction({ type: "submit-line", seat: viewerSeat, lineIndex });
   }
 
+  // Room-chosen per-phase countdown lengths (see engine.ts's `TimerSettings`
+  // doc) — set once by the host at room-create time and carried inside
+  // `state` itself, so every client's countdown reads the exact same
+  // numbers with no separate sync channel. `mode === "unlimited"` gates the
+  // countdowns off entirely: `active` stays false, so `useCountdown` never
+  // ticks or auto-acts, and the bar itself doesn't render.
+  const { placingSeconds, submittingSeconds } = state.timerSettings;
+  const timeLimited = state.timerSettings.mode === "limited";
+
   // Per-viewer countdowns (see useCountdown.ts) — each client only ever
   // auto-acts for its own seat on expiry, matching the lockstep model.
   // `resetKey` ties each timer to "this specific draw/round" so a rerender
   // mid-countdown never restarts it early, and a fresh draw/round always does.
-  const { timeLeft: placingTimeLeft } = useCountdown(PLACING_SECONDS, state.drawCount, myTurnToPlace, () => {
+  const { timeLeft: placingTimeLeft } = useCountdown(placingSeconds, state.drawCount, myTurnToPlace && timeLimited, () => {
     const emptyCells = viewer.board.map((c, i) => (c === null ? i : -1)).filter((i) => i >= 0);
     const cell = randomFrom(emptyCells);
     if (cell !== undefined) placeAt(cell);
   });
-  const submittingActive = state.phase === "submitting" && mySubmission === null;
-  const { timeLeft: submittingTimeLeft } = useCountdown(SUBMITTING_SECONDS, state.roundNumber, submittingActive, () => {
+  const submittingActive = state.phase === "submitting" && mySubmission === null && timeLimited;
+  const { timeLeft: submittingTimeLeft } = useCountdown(submittingSeconds, state.roundNumber, submittingActive, () => {
     const unused = LINES.map((_, i) => i).filter((i) => !viewer.usedLines[i]);
     const line = randomFrom(unused);
     if (line !== undefined) submitLine(line);
   });
 
-  const urgentTimeLeft = myTurnToPlace ? placingTimeLeft : submittingActive ? submittingTimeLeft : null;
+  const urgentTimeLeft = !timeLimited ? null : myTurnToPlace ? placingTimeLeft : submittingActive ? submittingTimeLeft : null;
   const isUrgent = urgentTimeLeft !== null && urgentTimeLeft <= URGENT_THRESHOLD && urgentTimeLeft > 0;
   useEffect(() => {
     const engine = getSoundEngine();
@@ -280,7 +287,7 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
                   : "배치 완료 · 다른 플레이어를 기다리는 중..."
             }
           />
-          {myTurnToPlace && <CountdownBar timeLeft={placingTimeLeft} total={PLACING_SECONDS} />}
+          {myTurnToPlace && timeLimited && <CountdownBar timeLeft={placingTimeLeft} total={placingSeconds} />}
         </div>
       )}
 
@@ -298,7 +305,7 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
           <p className="text-center text-xs text-white/50">
             {mySubmission !== null ? "제출 완료 · 다른 플레이어를 기다리는 중..." : "제출할 라인을 하나 고르세요"}
           </p>
-          {submittingActive && <CountdownBar timeLeft={submittingTimeLeft} total={SUBMITTING_SECONDS} />}
+          {submittingActive && <CountdownBar timeLeft={submittingTimeLeft} total={submittingSeconds} />}
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             {LINES.map((cells, lineIndex) => {
               const used = viewer.usedLines[lineIndex];

@@ -7,7 +7,18 @@ import { getDeviceId } from "@/lib/identity/deviceId";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
-import { applyAction, startGame, type EngineAction, type GridPokerState, type SeatIndex } from "./engine";
+import {
+  applyAction,
+  startGame,
+  DEFAULT_PLACING_SECONDS,
+  DEFAULT_SUBMITTING_SECONDS,
+  DEFAULT_TIMER_SETTINGS,
+  type EngineAction,
+  type GridPokerState,
+  type SeatIndex,
+  type TimerMode,
+  type TimerSettings,
+} from "./engine";
 import GridPokerBoard from "./GridPokerBoard";
 
 /**
@@ -63,6 +74,78 @@ function randomSeed(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
 
+const PLACING_SECONDS_PRESETS = [20, 30, 40, 60];
+const SUBMITTING_SECONDS_PRESETS = [10, 15, 20, 30];
+const MIN_TIMER_SECONDS = 5;
+const MAX_TIMER_SECONDS = 300;
+
+function clampSeconds(n: number): number {
+  if (!Number.isFinite(n)) return MIN_TIMER_SECONDS;
+  return Math.min(MAX_TIMER_SECONDS, Math.max(MIN_TIMER_SECONDS, Math.round(n)));
+}
+
+type SecondsChoice = number | "custom";
+
+/** Preset pill buttons + a "직접 입력" custom numeric field, used for both per-phase timer lengths on the room-create form. */
+function TimerSecondsField({
+  label,
+  options,
+  choice,
+  onChoiceChange,
+  customValue,
+  onCustomChange,
+}: {
+  label: string;
+  options: number[];
+  choice: SecondsChoice;
+  onChoiceChange: (v: SecondsChoice) => void;
+  customValue: number;
+  onCustomChange: (v: number) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-1.5 text-sm text-white/70">
+      {label}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {options.map((opt) => (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onChoiceChange(opt)}
+            className={`rounded-full border px-3 py-1 text-xs transition ${
+              choice === opt
+                ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200"
+                : "border-white/15 text-white/60 hover:border-white/30"
+            }`}
+          >
+            {opt}초
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => onChoiceChange("custom")}
+          className={`rounded-full border px-3 py-1 text-xs transition ${
+            choice === "custom"
+              ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200"
+              : "border-white/15 text-white/60 hover:border-white/30"
+          }`}
+        >
+          직접 입력
+        </button>
+        {choice === "custom" && (
+          <input
+            type="number"
+            min={MIN_TIMER_SECONDS}
+            max={MAX_TIMER_SECONDS}
+            value={customValue}
+            onChange={(e) => onCustomChange(Number(e.target.value))}
+            className="w-16 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-center text-xs text-white focus:border-emerald-400 focus:outline-none"
+          />
+        )}
+      </div>
+    </label>
+  );
+}
+
 export default function GridPokerGame({ onComplete }: PlayableGameProps) {
   const [roomFromUrl] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
@@ -74,7 +157,24 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
   const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [targetPlayerCount, setTargetPlayerCount] = useState(2);
+  // Room timer settings (host-only, chosen on the room-create form and
+  // carried into `GridPokerState` by `startGame` — see engine.ts's
+  // `TimerSettings` doc). Defaults match the spec: 40s to place, 30s to submit.
+  const [timerMode, setTimerMode] = useState<TimerMode>("limited");
+  const [placingChoice, setPlacingChoice] = useState<SecondsChoice>(DEFAULT_PLACING_SECONDS);
+  const [placingCustom, setPlacingCustom] = useState(DEFAULT_PLACING_SECONDS);
+  const [submittingChoice, setSubmittingChoice] = useState<SecondsChoice>(DEFAULT_SUBMITTING_SECONDS);
+  const [submittingCustom, setSubmittingCustom] = useState(DEFAULT_SUBMITTING_SECONDS);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const timerSettings: TimerSettings = useMemo(
+    () => ({
+      mode: timerMode,
+      placingSeconds: clampSeconds(placingChoice === "custom" ? placingCustom : placingChoice),
+      submittingSeconds: clampSeconds(submittingChoice === "custom" ? submittingCustom : submittingChoice),
+    }),
+    [timerMode, placingChoice, placingCustom, submittingChoice, submittingCustom]
+  );
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [mySeat, setMySeat] = useState<SeatIndex | null>(null);
@@ -87,6 +187,11 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
   const channelRef = useRef<RealtimeChannel | null>(null);
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
+  // Host's chosen timer settings, broadcast in the `game-start` payload so
+  // every client's `startGame` (and therefore every client's countdown UI)
+  // agrees on the exact same per-phase lengths. Mirrors `playerCountRef`'s
+  // "latest value inside a ref for use in event handlers/effects" pattern.
+  const timerSettingsRef = useRef<TimerSettings>(DEFAULT_TIMER_SETTINGS);
   const isHost = intent === "create";
 
   // Kept in sync so the `state-request` broadcast handler (registered once,
@@ -123,6 +228,7 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
       return;
     }
     playerCountRef.current = targetPlayerCount;
+    timerSettingsRef.current = timerSettings;
     setMyName(name);
     setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
     setRoomCode(code);
@@ -143,8 +249,10 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
 
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const playerCount = payload?.playerCount as number;
+      const startTimerSettings = (payload?.timerSettings as TimerSettings | undefined) ?? DEFAULT_TIMER_SETTINGS;
       playerCountRef.current = playerCount;
-      setGameState(startGame(playerCount));
+      timerSettingsRef.current = startTimerSettings;
+      setGameState(startGame(playerCount, startTimerSettings));
       setFinalResult(null);
       setPhase("playing");
     });
@@ -271,7 +379,7 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({
       type: "broadcast",
       event: "game-start",
-      payload: { playerCount: playerCountRef.current },
+      payload: { playerCount: playerCountRef.current, timerSettings: timerSettingsRef.current },
     });
   }
 
@@ -482,6 +590,57 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
               </button>
             </div>
           </label>
+        )}
+        {intent === "create" && (
+          <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <label className="flex flex-col gap-1.5 text-sm text-white/70">
+              제한시간 모드
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTimerMode("limited")}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                    timerMode === "limited"
+                      ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200"
+                      : "border-white/15 text-white/60 hover:border-white/30"
+                  }`}
+                >
+                  ⏱️ 시간 제한 모드
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTimerMode("unlimited")}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                    timerMode === "unlimited"
+                      ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200"
+                      : "border-white/15 text-white/60 hover:border-white/30"
+                  }`}
+                >
+                  ⏳ 시간 제한 없음
+                </button>
+              </div>
+            </label>
+            {timerMode === "limited" && (
+              <>
+                <TimerSecondsField
+                  label="카드 배치 제한시간 (1인당 매 라운드)"
+                  options={PLACING_SECONDS_PRESETS}
+                  choice={placingChoice}
+                  onChoiceChange={setPlacingChoice}
+                  customValue={placingCustom}
+                  onCustomChange={setPlacingCustom}
+                />
+                <TimerSecondsField
+                  label="라인 제출(마지막 배팅) 제한시간"
+                  options={SUBMITTING_SECONDS_PRESETS}
+                  choice={submittingChoice}
+                  onChoiceChange={setSubmittingChoice}
+                  customValue={submittingCustom}
+                  onCustomChange={setSubmittingCustom}
+                />
+              </>
+            )}
+          </div>
         )}
         {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">{formError}</p>}
         <div className="flex gap-2">
