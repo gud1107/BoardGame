@@ -16,6 +16,16 @@ import {
   type PerudoState,
   type SeatIndex,
 } from "./engine";
+import { DiceCup3D } from "./dice3d/DiceCup3D";
+import { DieTile } from "./dice3d/DiceMesh";
+import { DiceStageRoot, DiceView, useWebglSupport } from "./dice3d/DiceStage";
+import {
+  BETTING_COLORWAY,
+  PERUDO_MARK_COLORWAY,
+  PLAYER_COLORWAYS,
+  playerColorwayForSeat,
+  type DiceColorway,
+} from "./dice3d/colorways";
 
 /**
  * Pure game UI + rules driver — mirrors every other board in this project
@@ -224,8 +234,13 @@ function DiePips({ value, light = false }: { value: number; light?: boolean }) {
  * One face-up die — a real 3D cube (via `DiceCube`) modeled on the reference
  * photo: ivory dice for values 2-6, and the signature red 페루도 die (white
  * skull-mask crest) for face 1, engraved onto the cube's front face.
+ *
+ * This is the CSS fallback path (see `DieFace` below for the dispatcher) —
+ * kept fully intact rather than deleted, since it's the proven, screenshot-
+ * verified renderer this game shipped with for SSR / no-WebGL / user
+ * "3D 끄기" cases (see `PerudoBoard`'s `active3D`).
  */
-function DieFace({ value, size = "md", ring }: { value: number; size?: DieSize; ring?: "match" | "wild" }) {
+function DieFaceCss({ value, size = "md", ring }: { value: number; size?: DieSize; ring?: "match" | "wild" }) {
   const isPerudo = value === 1;
   return (
     <DiceCube size={size} colorway={isPerudo ? PERUDO_CUBE : IVORY_CUBE} ring={ring} title={isPerudo ? "페루도 (조커)" : `${value}`}>
@@ -238,12 +253,83 @@ function DieFace({ value, size = "md", ring }: { value: number; size?: DieSize; 
   );
 }
 
-/** A hidden opponent die — no pips, just a themed wood/bronze cube back matching the board's carved-medallion palette. */
-function DieBack({ size = "sm" }: { size?: DieSize }) {
+/** A hidden opponent die — no pips, just a themed wood/bronze cube back matching the board's carved-medallion palette. CSS fallback path, see `DieFaceCss`. */
+function DieBackCss({ size = "sm" }: { size?: DieSize }) {
   return (
     <DiceCube size={size} colorway={WOOD_CUBE} glossy={false} title="비공개 주사위">
       <span className="flex h-full w-full items-center justify-center text-[0.9em]">🎲</span>
     </DiceCube>
+  );
+}
+
+/**
+ * The 3D↔CSS ring glow wrapper — the old `DiceCube`'s `ring` prop drew this
+ * as a `box-shadow` directly on the cube's own rotated 3D layer; a `DiceView`
+ * is an opaque WebGL canvas rectangle instead, so the glow lives on a plain
+ * wrapping `<div>` around it instead. Kept as one shared helper so both
+ * `DieFace`'s and `BettingDie`'s 3D paths draw the exact same ring.
+ */
+function DiceGlowRing({ ring, size, children }: { ring?: "match" | "wild"; size: number; children: ReactNode }) {
+  const ringShadow =
+    ring === "match"
+      ? "0 0 0 3px rgba(252,211,77,0.95), 0 0 10px 2px rgba(252,211,77,0.55)"
+      : ring === "wild"
+        ? "0 0 0 3px rgba(196,181,253,0.95), 0 0 10px 2px rgba(196,181,253,0.55)"
+        : "none";
+  return (
+    <div
+      className="relative inline-block shrink-0 rounded-[22%]"
+      style={{ width: size, height: size, boxShadow: ringShadow, filter: "drop-shadow(0 3px 3px rgba(0,0,0,0.45))" }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * One face-up die — dispatches between the real WebGL die (`DiceView` +
+ * `DieTile`, see `dice3d/`) and the original CSS `DiceCube` fallback
+ * (`DieFaceCss`) based on `active3D` (computed once in `PerudoBoard` from
+ * `useWebglSupport()` + the user's own "3D 끄기" preference — see there).
+ * The face-1 페루도 skull die is ALWAYS `PERUDO_MARK_COLORWAY` regardless of
+ * whose die it is or what `colorway` was passed — see `dice3d/colorways.ts`'s
+ * file header for why that convention is deliberately untouched.
+ */
+function DieFace({
+  value,
+  size = "md",
+  ring,
+  active3D,
+  colorway,
+}: {
+  value: number;
+  size?: DieSize;
+  ring?: "match" | "wild";
+  active3D: boolean;
+  colorway: DiceColorway;
+}) {
+  if (!active3D) return <DieFaceCss value={value} size={size} ring={ring} />;
+  const px = SIZE_PX[size];
+  const isPerudo = value === 1;
+  return (
+    <DiceGlowRing ring={ring} size={px}>
+      <DiceView size={px}>
+        <DieTile value={value as 1 | 2 | 3 | 4 | 5 | 6} colorway={isPerudo ? PERUDO_MARK_COLORWAY : colorway} />
+      </DiceView>
+    </DiceGlowRing>
+  );
+}
+
+/** A hidden opponent die — dispatches between the 3D and CSS wood/bronze cube back, see `DieFace`. Tinted with that seat's own player colorway (see `PerudoBoard`'s roster strip) so, unlike the old uniform-wood back, whose stash is whose reads at a glance even before anyone's dice count is checked. */
+function DieBack({ size = "sm", active3D, colorway }: { size?: DieSize; active3D: boolean; colorway: DiceColorway }) {
+  if (!active3D) return <DieBackCss size={size} />;
+  const px = SIZE_PX[size];
+  return (
+    <DiceGlowRing size={px}>
+      <DiceView size={px}>
+        <DieTile colorway={colorway} blank />
+      </DiceView>
+    </DiceGlowRing>
   );
 }
 
@@ -306,8 +392,11 @@ function FacePicker({
  * (bigger hover/press feedback, a little "✋" hint badge) only while it's the
  * viewer's turn and there's a legal face to spin to; otherwise it's a plain
  * read-only marker every seat sees sitting on the actual committed bid.
+ *
+ * Unrelated to any one player — stays the fixed purple colorway in both the
+ * CSS and 3D paths below, never a per-seat player colorway.
  */
-function BettingDie({ face, interactive, onClick }: { face: Face; interactive: boolean; onClick?: () => void }) {
+function BettingDieCss({ face, interactive, onClick }: { face: Face; interactive: boolean; onClick?: () => void }) {
   return (
     <button
       type="button"
@@ -323,6 +412,28 @@ function BettingDie({ face, interactive, onClick }: { face: Face; interactive: b
           <DiePips value={face} light />
         )}
       </DiceCube>
+      {interactive && <span className="pointer-events-none absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[9px] leading-none">✋</span>}
+    </button>
+  );
+}
+
+/** Dispatches between the 3D and CSS betting-die renderers — see `DieFace` for the same pattern. */
+function BettingDie({ face, interactive, onClick, active3D }: { face: Face; interactive: boolean; onClick?: () => void; active3D: boolean }) {
+  if (!active3D) return <BettingDieCss face={face} interactive={interactive} onClick={onClick} />;
+  const px = SIZE_PX.md;
+  return (
+    <button
+      type="button"
+      disabled={!interactive}
+      onClick={onClick}
+      title={interactive ? "클릭해서 베팅 눈금 바꾸기" : "현재 선언된 베팅 위치"}
+      className={`relative inline-flex transition ${interactive ? "cursor-pointer hover:scale-110 active:scale-95" : "cursor-default"}`}
+    >
+      <DiceGlowRing size={px}>
+        <DiceView size={px}>
+          <DieTile value={face} colorway={BETTING_COLORWAY} />
+        </DiceView>
+      </DiceGlowRing>
       {interactive && <span className="pointer-events-none absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[9px] leading-none">✋</span>}
     </button>
   );
@@ -403,6 +514,7 @@ function BidTrack({
   dieQuantity,
   dieFace,
   dieInteractive,
+  active3D,
   onCellClick,
   onDieClick,
   children,
@@ -413,6 +525,7 @@ function BidTrack({
   dieQuantity: number | null;
   dieFace: Face | null;
   dieInteractive: boolean;
+  active3D: boolean;
   onCellClick: (quantity: number) => void;
   onDieClick: () => void;
   children: ReactNode;
@@ -481,7 +594,7 @@ function BidTrack({
             className="relative z-20 flex items-center justify-center"
           >
             <div className="scale-125">
-              <BettingDie face={dieFace} interactive={dieInteractive} onClick={onDieClick} />
+              <BettingDie face={dieFace} interactive={dieInteractive} onClick={onDieClick} active3D={active3D} />
             </div>
           </div>
         )}
@@ -540,6 +653,38 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
   const me = state.players.find((p) => p.seat === viewerSeat)!;
   const isMyTurn = state.activeSeat === viewerSeat && state.phase === "playing";
   const iAmAlive = me.diceCount > 0;
+
+  // -------------------------------------------------------------------------
+  // 3D dice — `supports3D` answers `false` during SSR/first paint (see
+  // `useWebglSupport`'s own doc comment) and flips to the real answer right
+  // after hydration, so `active3D` only ever turns on once the browser has
+  // actually confirmed WebGL, on top of the user's own "3D 끄기" toggle.
+  // Every render path below falls back to the original, screenshot-verified
+  // CSS dice (`*Css` components) when `active3D` is false, so nothing here
+  // can leave the game unplayable on an old device.
+  // -------------------------------------------------------------------------
+  const supports3D = useWebglSupport();
+  const [use3DPreference, setUse3DPreference] = useState(true);
+  const active3D = supports3D && use3DPreference;
+
+  // My own dice's colorway: defaults to a seat-derived pick (see
+  // `playerColorwareForSeat`) so every player looks different out of the
+  // box, but is purely a local cosmetic preference the viewer can override
+  // via the swatch picker — never synced, same trust tier as `muted` below.
+  const [colorwayOverride, setColorwayOverride] = useState<DiceColorway | null>(null);
+  const myColorway = colorwayOverride ?? playerColorwayForSeat(viewerSeat);
+
+  // Cup peek toggle (rulebook UX request in this session's brief: "컵을 살짝
+  // 들어 올려 자신의 주사위 눈만 보는 시점 전환"). Starts closed each time a
+  // new round's dice are rolled — same render-time "adjust state when a prop
+  // changes" pattern as `revealedRound`/`syncedBidKey` elsewhere in this
+  // file — and only opens when the viewer actually asks to look.
+  const [peekedRound, setPeekedRound] = useState<number | null>(null);
+  const [peeking, setPeeking] = useState(false);
+  if (peekedRound !== state.roundNumber) {
+    setPeekedRound(state.roundNumber);
+    setPeeking(false);
+  }
 
   const disabledFaces = new Set<Face>();
   if (palafico && state.currentBid) {
@@ -616,7 +761,11 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
     setRevealing(true);
   }
   useEffect(() => {
-    if (!revealing) return;
+    // The 3D path plays its own rattle/thud from `DiceCup3D`'s
+    // `onRollStart`/`onSettled` callbacks below, timed to the actual physics
+    // roll rather than this fixed 800ms guess — skip this timer entirely so
+    // the two paths can't both fire sound for the same roll.
+    if (!revealing || active3D) return;
     const engine = getSoundEngine();
     engine.unlock(); // best-effort — a user gesture already happened earlier in the room lobby
     engine.playDiceRattle(750);
@@ -625,7 +774,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
       engine.playCupThud();
     }, 800);
     return () => clearTimeout(timeout);
-  }, [revealing]);
+  }, [revealing, active3D]);
 
   const [muted, setMuted] = useState(() => getSoundEngine().isMuted());
   function toggleMuted() {
@@ -653,6 +802,36 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
     </button>
   );
 
+  // Only offered once the browser has actually confirmed WebGL support —
+  // no point advertising a toggle for a mode that can never turn on.
+  const dice3DToggleButton = supports3D && (
+    <button
+      onClick={() => setUse3DPreference((prev) => !prev)}
+      title={use3DPreference ? "입체 렌더링을 끄고 가벼운 2D 카드로 표시" : "물리 기반 3D 주사위로 표시"}
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+    >
+      {use3DPreference ? "🧊 3D 끄기" : "◻️ 3D 켜기"}
+    </button>
+  );
+
+  const colorwayPicker = active3D && (
+    <div className="flex items-center gap-1" title="내 주사위 색상 선택">
+      {PLAYER_COLORWAYS.map((c) => (
+        <button
+          key={c.id}
+          type="button"
+          onClick={() => setColorwayOverride(c)}
+          title={c.label}
+          aria-label={`주사위 색상: ${c.label}`}
+          className={`h-4 w-4 rounded-full border-2 transition ${
+            myColorway.id === c.id ? "scale-110 border-white" : "border-white/25 hover:border-white/60"
+          }`}
+          style={{ backgroundColor: c.body }}
+        />
+      ))}
+    </div>
+  );
+
   // -------------------------------------------------------------------------
   // Game over
   // -------------------------------------------------------------------------
@@ -660,6 +839,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
     const rankings = computeRankings(state);
     return (
       <div className={`${TABLE_PANEL} flex flex-col items-center gap-4 p-4 text-center sm:p-8`}>
+        {active3D && <DiceStageRoot />}
         <TableTexture />
         <TotalDiceBanner state={state} />
         <span className="relative z-10 text-5xl">🏆</span>
@@ -690,7 +870,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
           </table>
         </div>
 
-        {state.lastResolution && <RevealPanel state={state} names={names} viewerSeat={viewerSeat} />}
+        {state.lastResolution && <RevealPanel state={state} names={names} viewerSeat={viewerSeat} active3D={active3D} myColorway={myColorway} />}
 
         <button
           onClick={onGameEnd}
@@ -711,6 +891,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
     const lossAmount = Math.abs(res.diceDelta);
     return (
       <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
+        {active3D && <DiceStageRoot />}
         <TableTexture />
         <TotalDiceBanner state={state} />
         <div className="relative z-10 flex items-center justify-between text-xs text-rose-100/60">
@@ -718,6 +899,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
             {state.playerCount}인 · {state.roundNumber}라운드 결과
           </span>
           <div className="flex gap-1.5">
+            {dice3DToggleButton}
             {muteButton}
             {rulebookButton}
           </div>
@@ -741,7 +923,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
           </p>
         </div>
 
-        <RevealPanel state={state} names={names} viewerSeat={viewerSeat} />
+        <RevealPanel state={state} names={names} viewerSeat={viewerSeat} active3D={active3D} myColorway={myColorway} />
 
         <button
           onClick={() => onAction({ type: "continue", seed: randomSeed() })}
@@ -760,6 +942,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
 
   return (
     <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
+      {active3D && <DiceStageRoot />}
       <TableTexture />
       <TotalDiceBanner state={state} />
 
@@ -776,6 +959,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
           )}
         </span>
         <div className="flex gap-1.5">
+          {dice3DToggleButton}
           {muteButton}
           {rulebookButton}
         </div>
@@ -793,6 +977,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
           dieQuantity={dieQuantity}
           dieFace={dieFace}
           dieInteractive={isMyTurn && iAmAlive}
+          active3D={active3D}
           onCellClick={(quantity) => setPendingQuantity(quantity)}
           onDieClick={cycleFace}
         >
@@ -852,17 +1037,64 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
       {/* Stats dashboard — right below the 페루도!/맞아! action buttons above. */}
       <MyDiceStatsPanel state={state} myDice={me.dice} />
 
-      {/* My dice — hidden behind a shaking cup for a beat after each reroll, then revealed. */}
+      {/* My dice — the 3D path rolls physically inside `DiceCup3D` and stays
+          under a closed cup lid until peeked open; the CSS fallback keeps
+          the original fixed-timer shake -> auto-reveal. */}
       <div className="relative z-10 flex flex-col items-center gap-1.5 rounded-2xl border border-white/10 bg-black/20 p-3">
-        <p className="text-[11px] text-white/50">내 주사위 ({me.diceCount}개)</p>
-        {revealing ? (
+        <div className="flex w-full items-center justify-between px-1">
+          <p className="text-[11px] text-white/50">내 주사위 ({me.diceCount}개)</p>
+          {colorwayPicker}
+        </div>
+        {active3D ? (
+          iAmAlive ? (
+            <>
+              <DiceCup3D
+                dice={me.dice}
+                colorway={myColorway}
+                rollToken={state.roundNumber}
+                peeking={peeking}
+                ringForIndex={(i) => {
+                  const d = me.dice[i];
+                  const matchesBid = state.currentBid ? d === state.currentBid.face : false;
+                  if (matchesBid) return "match";
+                  if (!palafico && state.currentBid && state.currentBid.face !== 1 && d === 1) return "wild";
+                  return undefined;
+                }}
+                onRollStart={() => {
+                  const engine = getSoundEngine();
+                  engine.unlock(); // best-effort — a user gesture already happened earlier in the room lobby
+                  engine.playDiceRattle(750);
+                }}
+                onSettled={() => getSoundEngine().playCupThud()}
+              />
+              <button
+                type="button"
+                onClick={() => setPeeking((prev) => !prev)}
+                className="rounded-full border border-amber-300/30 bg-amber-400/10 px-3 py-1 text-[11px] font-medium text-amber-100 transition hover:bg-amber-400/20"
+              >
+                {peeking ? "🫣 컵 덮기" : "🥃 컵 들어서 보기"}
+              </button>
+            </>
+          ) : (
+            <p className="text-xs text-rose-300/70">탈락했습니다 — 관전 중</p>
+          )
+        ) : revealing ? (
           <ShakingCup />
         ) : (
           <div className="flex flex-wrap justify-center gap-1.5 [animation:dice-reveal-pop_0.35s_ease-out]">
             {me.dice.map((d, i) => {
               const matchesBid = state.currentBid ? d === state.currentBid.face : false;
               const isWild = !palafico && state.currentBid && state.currentBid.face !== 1 && d === 1;
-              return <DieFace key={i} value={d} size="lg" ring={matchesBid ? "match" : isWild ? "wild" : undefined} />;
+              return (
+                <DieFace
+                  key={i}
+                  value={d}
+                  size="lg"
+                  ring={matchesBid ? "match" : isWild ? "wild" : undefined}
+                  active3D={active3D}
+                  colorway={myColorway}
+                />
+              );
             })}
             {!iAmAlive && <p className="text-xs text-rose-300/70">탈락했습니다 — 관전 중</p>}
           </div>
@@ -898,7 +1130,9 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
                 {eliminated ? (
                   <span className="text-[11px] text-white/30">탈락</span>
                 ) : (
-                  Array.from({ length: player.diceCount }, (_, i) => <DieBack key={i} />)
+                  Array.from({ length: player.diceCount }, (_, i) => (
+                    <DieBack key={i} active3D={active3D} colorway={seat === viewerSeat ? myColorway : playerColorwayForSeat(seat)} />
+                  ))
                 )}
               </div>
             </div>
@@ -912,7 +1146,19 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
 }
 
 /** Full-table dice reveal shown during "reveal"/"gameOver", highlighting whichever dice counted toward the resolved bid. */
-function RevealPanel({ state, names, viewerSeat }: { state: PerudoState; names: Record<SeatIndex, string>; viewerSeat: SeatIndex }) {
+function RevealPanel({
+  state,
+  names,
+  viewerSeat,
+  active3D,
+  myColorway,
+}: {
+  state: PerudoState;
+  names: Record<SeatIndex, string>;
+  viewerSeat: SeatIndex;
+  active3D: boolean;
+  myColorway: DiceColorway;
+}) {
   const res = state.lastResolution;
   if (!res) return null;
   const wild = !res.wasPalafico;
@@ -933,7 +1179,16 @@ function RevealPanel({ state, names, viewerSeat }: { state: PerudoState; names: 
                 dice.map((d, i) => {
                   const matches = d === res.bid.face;
                   const isWild = wild && res.bid.face !== 1 && d === 1;
-                  return <DieFace key={i} value={d} size="sm" ring={matches ? "match" : isWild ? "wild" : undefined} />;
+                  return (
+                    <DieFace
+                      key={i}
+                      value={d}
+                      size="sm"
+                      ring={matches ? "match" : isWild ? "wild" : undefined}
+                      active3D={active3D}
+                      colorway={seat === viewerSeat ? myColorway : playerColorwayForSeat(seat)}
+                    />
+                  );
                 })
               )}
             </div>
