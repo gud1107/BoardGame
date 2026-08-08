@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
 import ResourceIcon from "./ResourceIcon";
+import { detectAcquireEvent, FlyingResourceBurst, type AcquireAnimEvent } from "./MerchantEffects";
 import {
   RESOURCE_ORDER,
   bundleTotal,
@@ -69,58 +70,187 @@ function BundleRow({ bundle, size = "h-4 w-4" }: { bundle: ResourceBundle; size?
   );
 }
 
+// ---------------------------------------------------------------------------
+// Antique-card styling shared by merchant + point card faces — a layered
+// inset box-shadow standing in for an engraved parchment border (no image
+// asset, same "pure inline SVG/CSS, no external art" convention as
+// ResourceIcon.tsx) so both card types read as "real cardboard" rather than
+// a plain UI chip.
+// ---------------------------------------------------------------------------
+const CARD_FRAME_STYLE: React.CSSProperties = {
+  background: "linear-gradient(160deg,#f6ecd2 0%,#e7d3a3 50%,#cdac71 100%)",
+  boxShadow:
+    "inset 0 0 0 1px rgba(120,90,40,0.55), inset 0 0 0 3px rgba(255,250,235,0.5), inset 0 2px 4px rgba(255,255,255,0.5), inset 0 -3px 6px rgba(90,60,20,0.3), 0 1px 2px rgba(0,0,0,0.4)",
+};
+
+/** A small purple engraved arrow, matching the physical card's "production/conversion" glyph. */
+function ArrowGlyph({ className = "h-4 w-4 text-violet-700" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <rect x="9" y="1" width="6" height="10" rx="1" />
+      <polygon points="3,11 21,11 12,22" />
+    </svg>
+  );
+}
+
+/** "Any cube → next tier cube" glyph for upgrade cards, abstracted since no card art exists. */
+function UpgradeGlyph() {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="h-3.5 w-3.5 rounded-sm border border-black/25 bg-white/80 shadow-inner" />
+      <ArrowGlyph className="h-4 w-4 -rotate-90 text-sky-700" />
+      <span className="h-3.5 w-3.5 rounded-sm border border-black/25 bg-gradient-to-br from-amber-300 to-amber-600 shadow-inner" />
+    </div>
+  );
+}
+
+/** Resource cubes stacked/wrapped together, mimicking the physical card's stacked-cube icon column. */
+function CubeStack({ bundle }: { bundle: ResourceBundle }) {
+  const entries: Resource[] = [];
+  for (const r of RESOURCE_ORDER) {
+    for (let i = 0; i < (bundle[r] ?? 0); i++) entries.push(r);
+  }
+  if (entries.length === 0) return <span className="text-[9px] text-black/30">—</span>;
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-0.5">
+      {entries.map((r, i) => (
+        <ResourceIcon key={i} resource={r} className="h-4 w-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.4)]" />
+      ))}
+    </div>
+  );
+}
+
 function MerchantCardFace({ card }: { card: MerchantCard }) {
+  const frameClass = "relative flex w-full flex-col items-center gap-1 rounded-md border border-[#7a5a2e] px-1.5 py-2";
   if (card.effect.kind === "production") {
     return (
-      <div className="flex flex-col items-center gap-1">
-        <span className="text-[10px] font-semibold tracking-wide text-emerald-300/80 uppercase">생산</span>
-        <BundleRow bundle={card.effect.gain} />
+      <div className={frameClass} style={CARD_FRAME_STYLE}>
+        <span className="text-[8px] font-bold uppercase tracking-widest text-emerald-800">생산</span>
+        <ArrowGlyph className="h-3.5 w-3.5 text-emerald-700" />
+        <CubeStack bundle={card.effect.gain} />
       </div>
     );
   }
   if (card.effect.kind === "upgrade") {
     return (
-      <div className="flex flex-col items-center gap-1">
-        <span className="text-[10px] font-semibold tracking-wide text-sky-300/80 uppercase">업그레이드</span>
-        <span className="text-lg font-black text-white">×{card.effect.upgrades}</span>
+      <div className={frameClass} style={CARD_FRAME_STYLE}>
+        <span className="text-[8px] font-bold uppercase tracking-widest text-sky-800">업그레이드</span>
+        <UpgradeGlyph />
+        <span className="text-sm font-black text-sky-900">×{card.effect.upgrades}</span>
       </div>
     );
   }
   return (
-    <div className="flex flex-col items-center gap-1">
-      <span className="text-[10px] font-semibold tracking-wide text-amber-300/80 uppercase">교환</span>
-      <div className="flex items-center gap-1">
-        <BundleRow bundle={card.effect.cost} />
-        <span className="text-white/50">→</span>
-        <BundleRow bundle={card.effect.gain} />
-      </div>
+    <div className={frameClass} style={CARD_FRAME_STYLE}>
+      <span className="text-[8px] font-bold uppercase tracking-widest text-amber-900">교환</span>
+      <CubeStack bundle={card.effect.cost} />
+      <ArrowGlyph className="h-4 w-4 text-violet-700" />
+      <CubeStack bundle={card.effect.gain} />
     </div>
   );
 }
 
-function PointCardFace({ card, affordable, slotBonus }: { card: PointCard; affordable: boolean; slotBonus: "gold" | "silver" | null }) {
+/**
+ * Stacked, overlapping 3D coin visual for the gold(3점)/silver(1점) bonus
+ * slots — every capped supply slot (`capacity`, i.e. `playerCount * 2`, see
+ * engine.ts's `goldSupply`/`silverSupply` init) is always rendered so a coin
+ * being spent is a CSS *transition* (opacity/transform) on that slot rather
+ * than a DOM add/remove, giving a smooth "stack gets shorter" shrink instead
+ * of an abrupt count change. Rendered slots are capped at 8 for physical
+ * stack height even when `capacity` is higher (5p games start at 10).
+ */
+function CoinStack({ kind, count, capacity }: { kind: "gold" | "silver"; count: number; capacity: number }) {
+  const isGold = kind === "gold";
+  const coinSize = 20;
+  const gap = 3.5;
+  const visualCapacity = Math.max(1, Math.min(capacity, 8));
+  const visualCount = Math.min(count, visualCapacity);
+  return (
+    <div className="flex flex-col items-center" aria-label={`${isGold ? "금화" : "은화"} ${count}개 남음`} role="img">
+      <div className="relative" style={{ width: coinSize + 4, height: coinSize + (visualCapacity - 1) * gap }}>
+        {Array.from({ length: visualCapacity }, (_, i) => {
+          const visible = i < visualCount;
+          const isTop = i === visualCount - 1;
+          return (
+            <div
+              key={i}
+              className="absolute left-1/2 rounded-full transition-all duration-500 ease-out"
+              style={{
+                bottom: i * gap,
+                width: coinSize,
+                height: coinSize,
+                background: isGold
+                  ? "radial-gradient(circle at 32% 28%, #fff8d6 0%, #f7d264 35%, #d79b1e 68%, #8a5a0c 100%)"
+                  : "radial-gradient(circle at 32% 28%, #ffffff 0%, #e4e8ec 35%, #aab2bb 68%, #6b727a 100%)",
+                border: `1px solid ${isGold ? "#6b4306" : "#4b5157"}`,
+                boxShadow: visible
+                  ? "0 2px 2px rgba(0,0,0,0.55), inset 0 1px 1px rgba(255,255,255,0.65), inset 0 -1px 1px rgba(0,0,0,0.25)"
+                  : "none",
+                opacity: visible ? 1 : 0,
+                transform: `translateX(-50%) ${visible ? "translateY(0) scale(1)" : "translateY(6px) scale(0.5)"}`,
+                zIndex: i,
+              }}
+            >
+              {visible && isTop && (
+                <span
+                  className="flex h-full w-full select-none items-center justify-center text-[9px] font-black"
+                  style={{ color: isGold ? "#5c3a08" : "#3a4046" }}
+                >
+                  {isGold ? "3" : "1"}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <span className="mt-0.5 text-[9px] font-bold text-white/70">{count}개</span>
+    </div>
+  );
+}
+
+function PointCardFace({
+  card,
+  affordable,
+  slotBonus,
+  goldSupply,
+  silverSupply,
+  coinCapacity,
+}: {
+  card: PointCard;
+  affordable: boolean;
+  slotBonus: "gold" | "silver" | null;
+  goldSupply: number;
+  silverSupply: number;
+  coinCapacity: number;
+}) {
   return (
     <div
-      className={`relative flex w-full flex-col items-center gap-1.5 rounded-xl border p-2 transition ${
-        affordable
-          ? "border-amber-300/70 bg-amber-400/10 shadow-[0_0_16px_-2px_rgba(251,191,36,0.6)]"
-          : "border-white/10 bg-black/25"
+      className={`relative flex w-full flex-col items-center gap-1 rounded-lg border px-1.5 pb-1.5 pt-2 transition ${
+        affordable ? "border-amber-300 shadow-[0_0_16px_-2px_rgba(251,191,36,0.75)]" : "border-[#8a6d3b]"
       }`}
+      style={CARD_FRAME_STYLE}
     >
       {slotBonus && (
-        <span
-          className="absolute -top-2.5 right-1.5 rounded-full border border-black/40 px-1.5 py-0.5 text-[10px] font-bold shadow"
-          style={
-            slotBonus === "gold"
-              ? { background: "linear-gradient(135deg,#fde68a,#d97706)", color: "#3f2408" }
-              : { background: "linear-gradient(135deg,#e5e7eb,#9ca3af)", color: "#1f2937" }
-          }
-        >
-          {slotBonus === "gold" ? "🪙금" : "🥈은"}
-        </span>
+        <div className="absolute -top-9 left-1/2 -translate-x-1/2">
+          <CoinStack kind={slotBonus} count={slotBonus === "gold" ? goldSupply : silverSupply} capacity={coinCapacity} />
+        </div>
       )}
-      <span className="text-xl font-black text-orange-200">{card.points}</span>
-      <BundleRow bundle={card.cost} />
+      <span
+        className="text-2xl leading-none font-black"
+        style={{ color: "#5c3a12", fontFamily: "Georgia, 'Times New Roman', serif", textShadow: "0 1px 0 rgba(255,255,255,0.5)" }}
+      >
+        {card.points}
+      </span>
+      <div className="mt-1 flex flex-wrap items-center justify-center gap-1 rounded-md border border-black/10 bg-black/5 px-1.5 py-1">
+        {RESOURCE_ORDER.filter((r) => (card.cost[r] ?? 0) > 0).map((r) => (
+          <span key={r} className="flex items-center gap-0.5">
+            <ResourceIcon resource={r} className="h-4 w-4" />
+            <span className="text-[10px] font-bold" style={{ color: "#3f2408" }}>
+              ×{card.cost[r]}
+            </span>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -136,15 +266,50 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
   // opponent's action arrived over the network), any in-progress local
   // selection is now stale — clear it. Adjusting state during render off a
   // prop-identity diff (not inside a useEffect) mirrors the pattern already
-  // used by NoThanksBoard/AvalonBoard in this project.
+  // used by NoThanksBoard/AvalonBoard in this project. This is also where we
+  // notice "a merchant card was just acquired" (see MerchantEffects.tsx) —
+  // the same diff-two-snapshots technique NoThanksBoard uses for its
+  // coin-toss/card-collect flourishes, so every connected client (not just
+  // whoever clicked "확정") renders the same collection effect.
   const [trackedState, setTrackedState] = useState(state);
+  const [effects, setEffects] = useState<AcquireAnimEvent[]>([]);
   if (trackedState !== state) {
+    const detected = detectAcquireEvent(trackedState, state);
     setTrackedState(state);
     setAcquiring(null);
     setUpgrading(null);
     setTrading(null);
     setDiscardPick({});
+    if (detected) {
+      setEffects((prev) => [...prev, { ...detected, id: (prev.at(-1)?.id ?? 0) + 1 }]);
+    }
   }
+  const handleEffectDone = useCallback((id: number) => {
+    setEffects((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+
+  // Slot-index-keyed (not card-id-keyed — see MerchantEffects.tsx's doc
+  // comment) refs so a flying-resource animation can read "where the
+  // acquired card used to sit" even after the market has already shifted.
+  const merchantSlotRefs = useRef(new Map<number, HTMLElement>());
+  function setMerchantSlotRef(index: number) {
+    return (el: HTMLDivElement | null) => {
+      if (el) merchantSlotRefs.current.set(index, el);
+      else merchantSlotRefs.current.delete(index);
+    };
+  }
+  const cartRef = useRef<HTMLDivElement | null>(null);
+  const playerSummaryRefs = useRef(new Map<SeatIndex, HTMLElement>());
+  function setPlayerSummaryRef(seat: SeatIndex) {
+    return (el: HTMLDivElement | null) => {
+      if (el) playerSummaryRefs.current.set(seat, el);
+      else playerSummaryRefs.current.delete(seat);
+    };
+  }
+  // The card that just landed in a hand via an in-flight collection effect —
+  // used to give it a brief highlight ring so "the resources you saw fly in
+  // became this card" reads clearly.
+  const highlightedCardId = effects.find((e) => e.seat === viewerSeat)?.cardId ?? null;
 
   const me = state.players.find((p) => p.seat === viewerSeat)!;
   const isMyTurn = state.phase === "playing" && state.activeSeat === viewerSeat;
@@ -279,10 +444,8 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
 
       {/* Point card market */}
       <section className="rounded-2xl border border-white/10 bg-black/25 p-2.5">
-        <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-orange-200/70 uppercase">
-          점수 카드 (금화 {state.goldSupply} · 은화 {state.silverSupply} 남음)
-        </h3>
-        <div className="grid grid-cols-5 gap-1.5">
+        <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-orange-200/70 uppercase">점수 카드</h3>
+        <div className="grid grid-cols-5 gap-1.5 pt-9">
           {Array.from({ length: POINT_MARKET_SIZE }, (_, i) => {
             const card = state.pointMarket[i];
             const bonus: "gold" | "silver" | null = i === 0 ? "gold" : i === 1 ? "silver" : null;
@@ -295,7 +458,14 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
                 onClick={() => claimPoint(i)}
                 className={`text-left transition ${affordable ? "cursor-pointer hover:scale-[1.03]" : "cursor-not-allowed opacity-90"}`}
               >
-                <PointCardFace card={card} affordable={affordable} slotBonus={bonus} />
+                <PointCardFace
+                  card={card}
+                  affordable={affordable}
+                  slotBonus={bonus}
+                  goldSupply={state.goldSupply}
+                  silverSupply={state.silverSupply}
+                  coinCapacity={state.playerCount * 2}
+                />
               </button>
             );
           })}
@@ -305,39 +475,52 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
       {/* Merchant card market */}
       <section className="rounded-2xl border border-white/10 bg-black/25 p-2.5">
         <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-emerald-200/70 uppercase">상인 카드</h3>
-        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+        <div className="grid grid-cols-3 gap-2 pt-2.5 sm:grid-cols-6">
           {Array.from({ length: MERCHANT_MARKET_SIZE }, (_, i) => {
             const card = state.merchantMarket[i];
             const staked = state.merchantMarketResources[i] ?? {};
-            if (!card) return <div key={i} className="rounded-xl border border-dashed border-white/10" />;
+            const stakedEntries: Resource[] = [];
+            for (const r of RESOURCE_ORDER) for (let k = 0; k < (staked[r] ?? 0); k++) stakedEntries.push(r);
+            if (!card) return <div key={i} ref={setMerchantSlotRef(i)} className="rounded-xl border border-dashed border-white/10" />;
             const affordable = isMyTurn && canAcquireMerchant(me, i);
             return (
-              <button
-                key={card.id}
-                disabled={!affordable}
-                onClick={() => startAcquire(i)}
-                className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition ${
-                  affordable
-                    ? "cursor-pointer border-emerald-300/50 bg-emerald-400/10 hover:scale-[1.03]"
-                    : "cursor-not-allowed border-white/10 bg-black/20 opacity-80"
-                }`}
-              >
-                <span className="text-[10px] text-white/40">{i === 0 ? "무료" : `자원 ${i}개`}</span>
-                <MerchantCardFace card={card} />
-                {bundleTotal(staked) > 0 && (
-                  <div className="mt-0.5 flex items-center gap-1 text-[10px] text-amber-200">
-                    <span>+</span>
-                    <BundleRow bundle={staked} size="h-3.5 w-3.5" />
+              <div key={card.id} ref={setMerchantSlotRef(i)} className="relative">
+                {/* Resources staked onto this card sit visually on top of it — see
+                    MerchantEffects.tsx for the "collected together" flourish that
+                    plays when the card (and these cubes) are taken into a hand. */}
+                {stakedEntries.length > 0 && (
+                  <div className="pointer-events-none absolute -top-2.5 right-0 left-0 z-10 flex flex-wrap items-end justify-center gap-0.5">
+                    {stakedEntries.map((r, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-block drop-shadow-[0_2px_2px_rgba(0,0,0,0.6)]"
+                        style={{ transform: `rotate(${(idx % 2 === 0 ? -1 : 1) * (8 + idx * 3)}deg) translateY(${idx % 2}px)` }}
+                      >
+                        <ResourceIcon resource={r} className="h-4 w-4" />
+                      </span>
+                    ))}
                   </div>
                 )}
-              </button>
+                <button
+                  disabled={!affordable}
+                  onClick={() => startAcquire(i)}
+                  className={`flex w-full flex-col items-center gap-1 rounded-xl border p-1.5 transition ${
+                    affordable
+                      ? "cursor-pointer border-emerald-300/50 bg-emerald-400/10 hover:scale-[1.03]"
+                      : "cursor-not-allowed border-white/10 bg-black/20 opacity-80"
+                  }`}
+                >
+                  <span className="text-[9px] text-white/40">{i === 0 ? "무료" : `자원 ${i}개`}</span>
+                  <MerchantCardFace card={card} />
+                </button>
+              </div>
             );
           })}
         </div>
       </section>
 
       {/* My cart */}
-      <section className="rounded-2xl border border-amber-300/20 bg-amber-400/[0.05] p-2.5">
+      <section ref={cartRef} className="rounded-2xl border border-amber-300/20 bg-amber-400/[0.05] p-2.5">
         <div className="mb-1.5 flex items-center justify-between">
           <h3 className="text-[11px] font-semibold tracking-wide text-amber-200/80 uppercase">내 수레</h3>
           <span
@@ -368,7 +551,7 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
               onClick={() => playCard(card)}
               className={`rounded-xl border p-2 transition ${
                 isMyTurn ? "cursor-pointer border-sky-300/40 bg-sky-400/10 hover:scale-[1.03]" : "cursor-not-allowed border-white/10 bg-black/20 opacity-70"
-              }`}
+              } ${card.id === highlightedCardId ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-[#1c1208]" : ""}`}
             >
               <MerchantCardFace card={card} />
             </button>
@@ -402,9 +585,27 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
         {state.players
           .filter((p) => p.seat !== viewerSeat)
           .map((p) => (
-            <PlayerSummaryRow key={p.seat} player={p} name={names[p.seat]} isActive={state.activeSeat === p.seat} connected={connectedSeats.has(p.seat)} />
+            <PlayerSummaryRow
+              key={p.seat}
+              player={p}
+              name={names[p.seat]}
+              isActive={state.activeSeat === p.seat}
+              connected={connectedSeats.has(p.seat)}
+              setRef={setPlayerSummaryRef(p.seat)}
+            />
           ))}
       </section>
+
+      {/* Merchant-card resource collection flourishes — see MerchantEffects.tsx. */}
+      {effects.map((e) => (
+        <FlyingResourceBurst
+          key={e.id}
+          event={e}
+          getSourceEl={() => merchantSlotRefs.current.get(e.fromIndex) ?? null}
+          getTargetEl={() => (e.seat === viewerSeat ? cartRef.current : (playerSummaryRefs.current.get(e.seat) ?? null))}
+          onDone={handleEffectDone}
+        />
+      ))}
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
 
@@ -464,9 +665,24 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
   );
 }
 
-function PlayerSummaryRow({ player, name, isActive, connected }: { player: PlayerState; name: string; isActive: boolean; connected: boolean }) {
+function PlayerSummaryRow({
+  player,
+  name,
+  isActive,
+  connected,
+  setRef,
+}: {
+  player: PlayerState;
+  name: string;
+  isActive: boolean;
+  connected: boolean;
+  setRef: (el: HTMLDivElement | null) => void;
+}) {
   return (
-    <div className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs ${isActive ? "border-amber-300/60 bg-amber-400/10" : "border-white/10 bg-black/20"}`}>
+    <div
+      ref={setRef}
+      className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs ${isActive ? "border-amber-300/60 bg-amber-400/10" : "border-white/10 bg-black/20"}`}
+    >
       <span className="flex items-center gap-1.5 font-semibold text-white/90">
         <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-400" : "bg-white/20"}`} />
         {isActive && <span title="차례">👉</span>}
