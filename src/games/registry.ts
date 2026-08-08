@@ -329,6 +329,25 @@ export function getGameMeta(id: string): GameMeta | undefined {
   return GAME_REGISTRY.find((g) => g.id === id);
 }
 
+/**
+ * Shared default-sort helper: playable games first, "준비중" (not yet
+ * implemented) games pushed to the end. Relies on `Array.prototype.sort`
+ * being a stable sort (guaranteed since ES2019, true for every runtime this
+ * app targets) so games within each group keep their existing relative
+ * order (catalog order, or whatever order/filter was applied upstream —
+ * e.g. a search/category filter run before this).
+ *
+ * Any list of games shown to the user (dashboard grid, future category
+ * views, etc.) should run through this before rendering, so "준비중" items
+ * consistently sink to the bottom regardless of what search/filter state
+ * produced the list.
+ */
+export function sortByPlayability<T extends Pick<GameMeta, "playable">>(
+  games: T[],
+): T[] {
+  return [...games].sort((a, b) => Number(b.playable) - Number(a.playable));
+}
+
 export const PLAYABLE_GAME_IDS = GAME_REGISTRY.filter((g) => g.playable).map(
   (g) => g.id,
 );

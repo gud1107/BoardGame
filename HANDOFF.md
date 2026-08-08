@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-08 (게임 카드 이미지 잘림 수정 + 대시보드 그리드 레이아웃 개편 세션)_
+_최종 갱신: 2026-08-09 (대시보드 기본 정렬: 플레이 가능한 게임 우선 노출 세션)_
 
 > **이 문서는 "지금 이 순간"의 스냅샷만 담는다.** 새 세션이 `/clear` 직후 가장 먼저 읽어야 할 문서이며, 여기 담긴 정보만으로 이전 맥락을 복원할 수 있어야 한다. **시간순 기록(무엇을 왜 그 순서로 만들었는가)은 [docs/history.md](./docs/history.md)로, 버그 대응 이력은 [docs/troubleshooting.md](./docs/troubleshooting.md)로 넘어갔다** — 이 파일 자체는 계속 짧게 유지하고, 완료된 세션 내용은 매번 `history.md`로 옮겨 적을 것.
 
@@ -13,19 +13,17 @@ _최종 갱신: 2026-08-08 (게임 카드 이미지 잘림 수정 + 대시보드
 
 ### 현재 달성률
 - 카탈로그 21종 중 **8종 실제 플레이 가능**: 하나미코지 · 뱅!(Bang!) · 그리드 포커 · 아발론(Avalon) · 노땡스(No Thanks!) · 페루도(Perudo) · 센추리: 향신료의 길(Century: Spice Road) · 틀린 그림 찾기(Spot the Difference). 나머지 13종은 `playable: false`로 "준비중" 카드만 노출(의도된 상태, 버그 아님).
-- `npx tsc --noEmit` / `npm run lint`(경고 0) / `npx vitest run`(**308개 전부 통과**) / `npm run build` 전부 그린(이번 세션에 두 기능 모두 별도로 재실행해 확인).
+- `npx tsc --noEmit` / `npm run lint`(경고 0) / `npx vitest run`(**312개 전부 통과**) / `npm run build` 전부 그린.
 - 이번 세션 작업은 **커밋·푸시·배포까지 완료됨**(사용자가 이번 요청에 명시적으로 포함해 요청).
 
 ### 이번 세션 주요 변경 사항
-직전 세션(Phase 22)이 남긴 "박스 표지 사진이 카드 썸네일에서 `object-cover`로 위아래가 일부 잘린다"는 후속 항목을 사용자가 직접 지적하며, 대시보드/게임 카드 전반의 이미지 잘림 수정과 그리드 레이아웃 개편을 요청했다. 상세 설계 판단은 [docs/history.md Phase 23](./docs/history.md#phase-23--게임-카드-이미지-잘림-수정object-contain--대시보드-그리드-레이아웃-개편-2026-08-08-같은-날-열다섯-번째-세션) 참고.
+대시보드가 `GAME_REGISTRY` 등록 순서를 그대로 노출해 플레이 가능 8종과 "준비중" 13종이 뒤섞여 있던 것을, 플레이 가능한 게임이 먼저 보이고 "준비중" 게임은 뒤로 밀리도록 기본 정렬을 바꿔달라는 요청. 상세 설계 판단은 [docs/history.md Phase 24](./docs/history.md#phase-24--대시보드-기본-정렬-플레이-가능한-게임-우선-노출-2026-08-09) 참고.
 
-1. **이미지 잘림 수정** — `GameThumbnail.tsx`의 기본 `imageClassName`을 `object-cover` → `object-contain`으로 변경(박스 표지 5장이 전부 세로형이라 가로로 넓은 슬롯에서 위아래가 크게 잘리고 있었음). 컨테이너에는 배경 그라디언트/`bg-white/5`를 그대로 두고 이미지 자체에 `p-1~p-4` 패딩을 얹어 레터박스가 자연스러운 여백처럼 보이게 함(적용처 3곳: 대시보드 카드, 게임 준비중 페이지, 상세 페이지 헤더 아이콘).
-2. **`GameCard` 썸네일을 `aspect-[4/5]`로** — 기존 랜드스케이프 고정 높이(`h-28/h-32`) 대신 박스 표지 종횡비에 가까운 세로형 비율로 바꿔 실사 이미지가 레터박스 없이 크게 보이도록 함. 이모지+그라디언트 카드(16종)에도 부수적으로 더 깔끔한 정사각형에 가까운 색면 효과.
-3. **그리드 최대 4열로 캡** — `grid-cols-2 sm:3 md:4 lg:5 xl:6`(넓은 화면일수록 계속 줄어들던 카드)를 `grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`로 교체 — 모바일/태블릿 2열, 데스크톱만 3~4열로 확장.
-4. **검증** — `npx tsc --noEmit`/`npm run lint`(경고 0)/`npx vitest run`(**308개 전부 통과**, UI만 변경이라 엔진 테스트 무변화)/`npm run build`(예정) 전부 그린. `npm run dev` + `npx playwright screenshot`으로 데스크톱(1440px)·태블릿(820px)·모바일(390px) 3개 뷰포트 육안 확인.
-5. **가짜 버그 하나 만남(교훈)** — 첫 데스크톱 **풀페이지** 스크린샷에서 카드 텍스트가 통째로 사라진 것처럼 보였으나, `getBoundingClientRect`/`textContent`로 실제 DOM을 찍어보니 정상이었고 뷰포트 스크린샷도 정상 — Playwright CLI `--full-page`가 `position:fixed` 플로팅 버튼과 얽혀 만든 캡처 자체의 스티칭 아티팩트였다(docs/history.md Phase 23 §4).
+1. **`sortByPlayability` 공용 helper 신설** — `registry.ts`에 `GameMeta.playable`만 보고 "플레이 가능 그룹 먼저 / 준비중 그룹 나중" 순서를 강제하는 정렬 함수를 추가. `Array.prototype.sort`의 안정 정렬(stable sort, ES2019+ 보장) 특성을 이용해 각 그룹 **내부** 순서(카탈로그 순서 혹은 그 앞에 적용된 검색/필터 결과 순서)는 그대로 보존, 원본 배열은 변경하지 않음(`[...games].sort(...)`).
+2. **대시보드 필터링 파이프라인 마지막 단계로 적용** — `src/app/page.tsx`의 검색어/인원수 필터 `useMemo`가 걸러낸 결과에 `sortByPlayability`를 통과시켜, 사용자가 검색어를 입력하거나 인원수 필터를 바꿔도 필터링된 하위집합 안에서 항상 "준비중" 항목이 뒤로 가도록 유지.
+3. **검증** — `registry.test.ts` 신설(4개 케이스). `npx tsc --noEmit`/`npm run lint`(경고 0)/`npx vitest run`(**312개 전부 통과**, 신규 4개 포함)/`npm run build` 전부 그린. 배열 정렬 순서만 바꾼 것이라 `GameGrid`/`GameCard` 자체는 무변경 — 별도 스크린샷 검증은 생략(docs/history.md Phase 24 §3 판단 근거).
 
-**직전 세션(페루도 실제 WebGL 3D 주사위 + 게임 카드 실사 이미지)**은 [docs/history.md Phase 22](./docs/history.md#phase-22--페루도-실제-webgl-3d-주사위threejsr3frapier--게임-카드-실사-이미지-2026-08-08-같은-날-열네-번째-세션)에, **페루도 차등 페널티 + CSS 3D 주사위**는 [Phase 21](./docs/history.md#phase-21--페루도-차등-페널티-룰-변경--3d-입체-주사위-ui-2026-08-08-같은-날-열세-번째-세션)에, **틀린 그림 찾기 신규 게임**은 [Phase 20](./docs/history.md#phase-20--틀린-그림-찾기spot-the-difference-신규-게임-2026-08-08)에, **그리드 포커 커스텀 제한시간**은 [Phase 19](./docs/history.md#phase-19--그리드-포커-방-설정에-커스텀-제한시간초-옵션-추가-2026-08-08-같은-날-열한-번째-세션)에, **센추리 UI 전면 개편**은 [Phase 18](./docs/history.md#phase-18--센추리-ui-전면-개편-실물-스파이스-로드-보드판-리스킨-2026-08-08-같은-날-열-번째-세션)에, **센추리 신규 구현**은 [Phase 12](./docs/history.md#phase-12--센추리-향신료의-길-신규-게임-2026-08-08)에 전부 기록되어 있다.
+**직전 세션(게임 카드 이미지 잘림 수정 + 대시보드 그리드 레이아웃 개편)**은 [docs/history.md Phase 23](./docs/history.md#phase-23--게임-카드-이미지-잘림-수정object-contain--대시보드-그리드-레이아웃-개편-2026-08-08-같은-날-열다섯-번째-세션)에, **페루도 실제 WebGL 3D 주사위 + 게임 카드 실사 이미지**는 [Phase 22](./docs/history.md#phase-22--페루도-실제-webgl-3d-주사위threejsr3frapier--게임-카드-실사-이미지-2026-08-08-같은-날-열네-번째-세션)에, **페루도 차등 페널티 + CSS 3D 주사위**는 [Phase 21](./docs/history.md#phase-21--페루도-차등-페널티-룰-변경--3d-입체-주사위-ui-2026-08-08-같은-날-열세-번째-세션)에, **틀린 그림 찾기 신규 게임**은 [Phase 20](./docs/history.md#phase-20--틀린-그림-찾기spot-the-difference-신규-게임-2026-08-08)에, **그리드 포커 커스텀 제한시간**은 [Phase 19](./docs/history.md#phase-19--그리드-포커-방-설정에-커스텀-제한시간초-옵션-추가-2026-08-08-같은-날-열한-번째-세션)에, **센추리 UI 전면 개편**은 [Phase 18](./docs/history.md#phase-18--센추리-ui-전면-개편-실물-스파이스-로드-보드판-리스킨-2026-08-08-같은-날-열-번째-세션)에, **센추리 신규 구현**은 [Phase 12](./docs/history.md#phase-12--센추리-향신료의-길-신규-게임-2026-08-08)에 전부 기록되어 있다.
 
 ---
 
@@ -40,7 +38,7 @@ _최종 갱신: 2026-08-08 (게임 카드 이미지 잘림 수정 + 대시보드
 | 주 데이터베이스 | 브라우저 IndexedDB(`idb` 래퍼) — 완전 오프라인 동작 |
 | 클라우드(선택) | Supabase — Realtime(Broadcast/Presence)이 온라인 대전 8종의 통신 수단 자체, Postgres 2테이블(기기 식별 힌트, 내기 기록 백업)은 완전 선택 |
 | 배포 | Vercel, 프로덕션 자동 별칭 `board-game-tau-navy.vercel.app` |
-| 테스트 | Vitest **304개**(게임 엔진 8종 유닛 테스트만 — **UI 컴포넌트 테스트 인프라 없음**, jsdom 미설치) |
+| 테스트 | Vitest **312개**(게임 엔진 8종 + 카탈로그 정렬 helper 유닛 테스트 — **UI 컴포넌트 테스트 인프라 없음**, jsdom 미설치) |
 
 ### 주요 의존성 (`package.json`)
 | 패키지 | 역할 |

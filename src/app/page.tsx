@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { GAME_REGISTRY } from "@/games/registry";
+import { GAME_REGISTRY, sortByPlayability } from "@/games/registry";
 import GameGrid from "@/components/GameGrid";
 
 const PLAYER_FILTERS = [
@@ -18,12 +18,16 @@ export default function DashboardPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filter = PLAYER_FILTERS[filterIdx];
-    return GAME_REGISTRY.filter((g) => {
+    const matched = GAME_REGISTRY.filter((g) => {
       const matchesQuery =
         !q || g.name.toLowerCase().includes(q) || g.nameEn?.toLowerCase().includes(q);
       const matchesPlayers = filter.test(g.players.min, g.players.max);
       return matchesQuery && matchesPlayers;
     });
+    // Default sort: playable games surface first, "준비중" games sink to the
+    // end — kept in sync with search/category filtering above so it applies
+    // no matter what the user typed or selected.
+    return sortByPlayability(matched);
   }, [query, filterIdx]);
 
   const playableCount = GAME_REGISTRY.filter((g) => g.playable).length;

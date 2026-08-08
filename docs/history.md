@@ -476,6 +476,23 @@ Phase 22 §9에 남겨둔 "박스 표지 사진이 가로로 넓은 썸네일 �
 
 ---
 
+## Phase 24 — 대시보드 기본 정렬: 플레이 가능한 게임 우선 노출 (2026-08-09)
+
+**커밋**: `feat(hub): sort coming-soon board games to the end of default list`
+
+대시보드가 `GAME_REGISTRY` 등록 순서를 그대로 노출하던 탓에 플레이 가능 8종과 "준비중" 13종이 뒤섞여 있었다. 사용자가 플레이 가능한 게임이 먼저 보이고 "준비중" 게임은 뒤로 밀리도록 기본 정렬을 요청했다.
+
+### 1. `sortByPlayability` 공용 helper 신설
+`registry.ts`에 `GameMeta.playable`만 보고 정렬하는 `sortByPlayability<T extends Pick<GameMeta, "playable">>(games: T[]): T[]`를 추가했다. `Array.prototype.sort`가 ES2019부터 표준 사양상 안정 정렬(stable sort)임을 이용해 `Number(b.playable) - Number(a.playable)` 비교자 하나로 "플레이 가능 그룹 먼저, 준비중 그룹 나중" 순서만 강제하고, 각 그룹 **내부** 순서는 입력 배열(카탈로그 순서, 혹은 그 앞에 적용된 검색/카테고리 필터 결과 순서)을 그대로 보존한다. 원본 배열을 변경하지 않도록 `[...games].sort(...)`로 복사본에 적용.
+
+### 2. 대시보드 필터링 파이프라인에 적용
+`src/app/page.tsx`의 `filtered` `useMemo`가 검색어(`query`)/인원수 필터(`filterIdx`)로 걸러낸 뒤 `sortByPlayability`를 마지막 단계로 통과시키도록 수정 — 검색어를 입력하거나 인원수 필터를 바꿔도 필터링된 결과 안에서 항상 "준비중" 항목이 뒤로 가는 게 유지된다(정렬이 필터 *이후* 단계라 필터가 걸러낸 하위집합에 대해 매번 다시 적용됨).
+
+### 3. 검증
+`registry.test.ts` 신설(4개 케이스: 플레이 가능 우선 배치, 그룹 내 안정 정렬 유지, 원본 배열 비변경, 전부 같은 상태일 때 순서 무변화). `npx tsc --noEmit`/`npm run lint`(경고 0)/`npx vitest run`(**312개 전부 통과**, 신규 4개 포함)/`npm run build` 전부 그린. UI 컴포넌트(`GameGrid`/`GameCard`) 자체는 변경하지 않고 상위에서 넘기는 배열 순서만 바꿨으므로 화면 레이아웃 회귀 위험은 낮다고 판단해 별도 스크린샷 검증은 생략했다.
+
+---
+
 ## 앞으로 이 문서에 추가할 때
 
 - 새 게임을 추가하거나 큰 기능을 완료하면, 그 세션이 끝날 때 루트 `HANDOFF.md`의 "직전 세션 변경 사항"에 짧게만 적고, **그 내용을 다음 Phase 항목으로 이 문서에 옮겨 적으며 커밋 해시를 정확히 남길 것**(`HANDOFF.md`가 무한정 길어지지 않도록).
