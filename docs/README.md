@@ -29,7 +29,7 @@
 |---|---|
 | [architecture.md](./architecture.md) | 핵심 설계 원칙(파생 상태 금지, 게임/내기 로직 분리 등), IndexedDB 데이터 모델·인덱스 전략, 게임 카탈로그 확장 설계, 디렉토리 구조 |
 | [cloud-sync.md](./cloud-sync.md) | 7개 온라인 대전 게임이 공유하는 락스텝(lockstep) 동기화 패턴, 방 생명주기, 재접속(`state-request`/`state-sync`), 좌석 충돌 자가치유 |
-| [troubleshooting.md](./troubleshooting.md) | 실제로 발생했던 버그 8건 — 증상/원인/해결법/교훈/검증 방법. "알려진 사각지대" 포함 |
+| [troubleshooting.md](./troubleshooting.md) | 실제로 발생했던 버그 9건 — 증상/원인/해결법/교훈/검증 방법. "알려진 사각지대" 포함 |
 | [history.md](./history.md) | **시간순** 프로젝트 히스토리 — Phase별 마일스톤과 "왜 그 시점에 그렇게 결정했는가". troubleshooting.md/architecture.md와 달리 연대기 순서로 읽는 문서 |
 | [ai.md](./ai.md) | AI/LLM 연동 현황(없음, 확인 완료) + 오인하기 쉬운 로직 경계 정리 |
 | [deployment.md](./deployment.md) | Vercel 배포 절차, 환경변수, 빌드/검증 파이프라인, Supabase 스키마 배포, PWA 해당 없음 확인 |

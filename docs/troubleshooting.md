@@ -188,6 +188,27 @@ UI 컴포넌트 테스트 인프라가 없어(아래 "알려진 사각지대" �
 
 ---
 
+## 9. 센추리: 자원 번들에 값이 0인 키가 남아 업그레이드 테스트가 계속 실패함
+
+**커밋**: `135d716` (수정된 채로 최초 커밋됨, 아래 "정직하게 밝혀두면" 참고) · **파일**: `src/games/century/engine.ts`
+
+### 증상
+**이것도 8번 항목과 같은 방식으로 정직하게 밝혀두면, 사용자가 실제로 겪은 버그가 아니라 구현 도중 vitest가 바로 잡아낸 케이스다** — 업그레이드 카드 관련 유닛 테스트 3개(`chains a single cube through multiple tiers`, `spreads upgrades across two different cubes`, `allows using fewer upgrade steps than the card's maximum`)가 계속 실패했다. 예: 노란색 2개를 전부 빨간색으로 업그레이드하면 결과가 `{ red: 2 }`여야 하는데 실제로는 `{ yellow: 0, red: 2 }`가 나와 `toEqual`이 실패했다.
+
+### 원인
+`playUpgrade`(엔진의 업그레이드 처리 함수)가 `working[from] = have - 1`로 자원 개수를 그냥 덮어썼다 — 개수가 0이 되어도 **키 자체를 지우지 않았다**. `ResourceBundle`은 "없는 키 = 0개"를 값으로 삼는 sparse map 타입(`Partial<Record<Resource, number>>`)으로 설계했는데(`cards.ts`의 `addBundle`/`subtractBundle`은 이미 0이 되면 키를 지우도록 짜여 있었음), 새로 짠 업그레이드 로직만 이 불변식을 안 지키고 있었다.
+
+### 해결법
+`have - 1 === 0`이면 `delete working[from]`, 아니면 `working[from] = have - 1`로 분기하도록 고쳤다(`simulateUpgrade`, engine.ts). 같은 파일 안에 이미 이 불변식을 지키는 `subtractBundle`류 헬퍼가 있었으므로, 그 관례를 따라가지 못한 새 코드를 기존 패턴에 맞춘 것뿐이다.
+
+### 교훈
+sparse map(부분 레코드)을 값으로 쓰는 타입은 "0이 된 키는 지운다"는 불변식을 파일 전체가 지켜야 `toEqual`류 구조적 비교(및 `bundleTotal`처럼 `Object.keys`를 순회하는 헬퍼)가 어긋나지 않는다. 같은 타입을 다루는 함수를 새로 추가할 때는 그 타입을 이미 다루고 있는 다른 함수(`addBundle`/`subtractBundle`)의 불변식을 먼저 확인하고 그대로 재사용하거나 명시적으로 따라야 한다 — 이번엔 유닛 테스트가 커밋 전에 즉시 잡아냈지만, `toEqual` 대신 개별 필드만 비교하는 테스트였다면 조용히 통과했을 수 있다(구조적 동등성 비교가 이런 종류의 버그에 특히 강하다는 부수적 교훈).
+
+### 검증 방법
+`npx vitest run src/games/century/Century.test.ts`로 실패하던 3개 테스트가 통과로 바뀌는 것 확인, 이후 `npx tsc --noEmit`/`npm run lint`/`npx vitest run`(272개)/`npm run build` 전부 통과 확인. 커밋에는 이미 수정된 버전만 들어갔다(버그가 있던 중간 상태는 커밋되지 않음).
+
+---
+
 ## 알려진 사각지대 (다음에 볼 것)
 
 - **컴포넌트 레벨 테스트 인프라 없음**: `<Game>Board.tsx`(조건부 렌더링, 이벤트 핸들러)는 7게임 전부 자동 테스트 대상 밖이다. 6번 버그가 정확히 이 사각지대에서 나왔다. `@testing-library/react` + jsdom 환경(현재 `vitest.config.mts`는 `environment: "node"`)을 별도 프로젝트/워크스페이스로 추가하는 걸 최우선 후보로 남겨둔다.

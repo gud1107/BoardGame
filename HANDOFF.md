@@ -26,6 +26,7 @@ _최종 갱신: 2026-08-08 (센추리: 향신료의 길 신규 게임 추가 세
 4. **42/36장의 실제 공식 카드 텍스트는 재현하지 않고, 룰북이 설명하는 카드 유형·밸런스 의도를 따른 자체 데이터셋**을 `cards.ts`에 새로 설계했다(공식 카드 원문을 기계가 읽을 수 있는 형태로 구하지 못했기 때문 — 나중에 실제 카드 리스트로 교체 가능하도록 엔진/UI는 카드의 *형태*에만 의존).
 5. 단위 테스트 44개 추가(228→272개) — 자원 10개 초과 버리기 게이트, N번째 상인 카드 획득 시 자원 배치/회수(카드에 자원이 붙어 이동), 업그레이드 체이닝·분산, 교환 반복, 금/은화 지급과 소진, 종료 조건 판정.
 6. 문서 동기화: `docs/architecture.md`(§2 신뢰 모델 표, §4 카탈로그 통계), `docs/features.md`(센추리 절 신설), `docs/README.md`/`docs/cloud-sync.md`(7종으로 갱신), 루트 `README.md`(7번째 게임 절 신설), `docs/history.md`(Phase 12 추가).
+7. `docs/troubleshooting.md`에 9번 항목 추가 — 커밋 전 vitest가 바로 잡아낸 자원 번들(sparse map) 0-키 미삭제 버그(`playUpgrade`). 사용자가 실제로 겪은 버그는 아니고 TDD 도중 발견·수정된 것으로, 8번 항목과 같은 방식으로 정직하게 그렇게 밝혀뒀다.
 
 세부 설계 판단(자원 순서, 코인 대체 규칙, 카드 데이터 재현 범위, 공용 자원 보울 미모델링, 상인 카드 자원의 "카드 귀속 이동" vs 점수 카드 코인의 "슬롯 기반 지급" 구분)은 [docs/history.md Phase 12](./docs/history.md#phase-12--센추리-향신료의-길-신규-게임-2026-08-08)에 전부 기록되어 있다.
 
@@ -43,6 +44,20 @@ _최종 갱신: 2026-08-08 (센추리: 향신료의 길 신규 게임 추가 세
 | 클라우드(선택) | Supabase — Realtime(Broadcast/Presence)이 온라인 대전 7종의 통신 수단 자체, Postgres 2테이블(기기 식별 힌트, 내기 기록 백업)은 완전 선택 |
 | 배포 | Vercel, 프로덕션 자동 별칭 `board-game-tau-navy.vercel.app` |
 | 테스트 | Vitest **272개**(게임 엔진 7종 유닛 테스트만 — **UI 컴포넌트 테스트 인프라 없음**, jsdom 미설치) |
+
+### 주요 의존성 (`package.json`)
+| 패키지 | 역할 |
+|---|---|
+| `next` 16.2.12 / `react`·`react-dom` 19.2.4 | 프레임워크 (App Router, Turbopack) |
+| `@supabase/supabase-js` ^2.111.0 | 온라인 대전 7종의 Realtime(Broadcast/Presence) + 선택적 클라우드 백업 |
+| `idb` ^8.0.3 | IndexedDB 래퍼 — 1차 저장소 전체가 이 위에서 동작 |
+| `zustand` ^5.0.14 | 내기 세션 전역 상태(`useBettingStore`) |
+| `uuid` ^14.0.1 | 플레이어/세션/기록 레코드 ID 생성 |
+| `tailwindcss` ^4 / `@tailwindcss/postcss` | 스타일링 |
+| `vitest` ^4.1.10 | 게임 엔진 유닛 테스트 (jsdom 미설치 — UI 컴포넌트 테스트 불가) |
+| `typescript` ^5 / `eslint` ^9 + `eslint-config-next` | 타입 체크 · 린트 |
+
+**의도적으로 없는 것**: 상태 관리 라이브러리(Redux 등) 추가 없음(Zustand 하나로 충분), ORM 없음(IndexedDB를 `idb`로 직접 다룸), 데이터 페칭 라이브러리(react-query 등) 없음, 테스트 러너 외 e2e/컴포넌트 테스트 도구 없음 — 전부 "이미 있는 도구로 충분한데 새 의존성을 추가하지 않는다"는 이 프로젝트의 반복된 판단([docs/architecture.md §1.2](./docs/architecture.md#12-dexiejs-대신-기존-idb-유지--중복-추상화를-피함), [§1.3](./docs/architecture.md#13-bettingcontext-요청--이미-있는-zustand-스토어)).
 
 ### 핵심 파일 구조
 ```
@@ -88,7 +103,7 @@ docs/                   개발자 심화 문서(아래 "관련 문서" 참고)
 | [docs/README.md](./docs/README.md) | `docs/` 전체 색인 + 개발 명령어 |
 | [docs/architecture.md](./docs/architecture.md) | "왜 이렇게 설계했는가" — 항상 유효한 현재 설계 원칙 |
 | [docs/cloud-sync.md](./docs/cloud-sync.md) | 락스텝 동기화 프로토콜 세부사항 |
-| [docs/troubleshooting.md](./docs/troubleshooting.md) | 실제 발생한 버그 8건 — 증상/원인/해결/교훈 |
+| [docs/troubleshooting.md](./docs/troubleshooting.md) | 실제 발생한 버그 9건 — 증상/원인/해결/교훈 |
 | [docs/history.md](./docs/history.md) | 시간순 프로젝트 연대기 — Phase 12가 이번 세션(센추리) 내용 |
 | [docs/features.md](./docs/features.md) | 기능/게임별 룰 해석 판단 기록(센추리 절 신설됨) |
 | [docs/deployment.md](./docs/deployment.md) | 배포 절차, 환경변수, 검증 파이프라인 |
