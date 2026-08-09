@@ -99,17 +99,9 @@ export type EngineAction =
   | { type: "calza"; seat: SeatIndex }
   | { type: "continue"; seed: number };
 
-/** Deterministic PRNG (mulberry32) — same technique as every other engine in this project. */
-export function seededRng(seed: number): () => number {
-  let s = seed;
-  return () => {
-    s |= 0;
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+/** Deterministic PRNG, shared across every engine — see src/lib/rng.ts. */
+import { seededRng } from "@/lib/rng";
+export { seededRng };
 
 function rollDice(rng: () => number, count: number): number[] {
   return Array.from({ length: count }, () => 1 + Math.floor(rng() * 6));
