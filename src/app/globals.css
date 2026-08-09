@@ -188,3 +188,49 @@ body {
     transform: translate(-50%, -50%) scale(1.12) rotate(6deg);
   }
 }
+
+/* Las Vegas's dice-roll tumble (see DiceEffects.tsx / DiceTray) — plays once
+   per die the instant `currentRoll` goes from null to a fresh roll (every
+   client sees the same lockstep state change, so this replays identically
+   everywhere, not just for whoever tapped "굴리기"). Purely a tumbling
+   flourish over the die's already-final face value — there is no hidden
+   reveal step, since the roll itself is already resolved by the engine. */
+@keyframes dice-roll-tumble {
+  0% {
+    transform: scale(0.4) rotate(0deg);
+    opacity: 0;
+  }
+  35% {
+    transform: scale(1.15) rotate(200deg);
+    opacity: 1;
+  }
+  65% {
+    transform: scale(0.92) rotate(330deg);
+  }
+  100% {
+    transform: scale(1) rotate(360deg);
+    opacity: 1;
+  }
+}
+
+/* Las Vegas's dice-placement flight (see DiceEffects.tsx / FlyingDie) —
+   layered on top of a plain left/top CSS *transition* that carries each die
+   in a straight line from the roller's dice tray to the chosen casino
+   board, same left/top-transition-plus-keyframe-flourish technique as
+   card-play-slide above. Every step re-applies the translate(-50%,-50%)
+   anchor so the element stays centered on its (JS-driven) left/top
+   position throughout. */
+@keyframes dice-slide-fly {
+  0% {
+    transform: translate(-50%, -50%) scale(0.7) rotate(-25deg);
+    opacity: 0;
+  }
+  55% {
+    transform: translate(-50%, -50%) scale(1.1) rotate(10deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}

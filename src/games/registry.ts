@@ -339,6 +339,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
   },
+  {
+    id: "las-vegas",
+    name: "라스베가스",
+    nameEn: "Las Vegas",
+    description:
+      "1번부터 6번까지의 카지노에 주사위를 굴려 배치하고, 동률 상쇄 규칙을 뚫고 가장 높은 지폐를 차지하는 단판 승부 주사위 게임. 같은 개수의 주사위는 색상과 상관없이 모두 무효화되니, 눈치싸움과 물귀신 작전이 핵심입니다.",
+    players: { min: 2, max: 5 },
+    playTime: { minMinutes: 20, maxMinutes: 30 },
+    category: "family",
+    thumbnail: { emoji: "🎰", gradient: ["#fbbf24", "#78350f"], image: "/games/las-vegas.webp" },
+    tags: ["주사위", "확률", "심리전"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {
