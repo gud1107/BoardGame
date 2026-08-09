@@ -33,8 +33,9 @@ export const GAME_REGISTRY: GameMeta[] = [
     category: "strategy",
     thumbnail: { emoji: "💎", gradient: ["#38bdf8", "#6366f1"], image: "/games/splendor.jpg" },
     tags: ["엔진빌딩", "카드"],
-    playable: false,
-    supportsAutoRanking: false,
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
   },
   {
     id: "catan",
