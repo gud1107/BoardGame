@@ -1,8 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
 import { CucumberIcon, CucumberRow } from "./CucumberIcon";
+import {
+  buildCucumberPickupEvents,
+  detectCardPlayEvent,
+  FlyingCucumber,
+  FlyingPlayedCard,
+  type CardPlayEvent,
+  type CucumberPickupEvent,
+} from "./CardEffects";
 import {
   computeRankings,
   cucumberCount,
@@ -68,11 +76,28 @@ function CardFace({ card, className = "" }: { card: Card; className?: string }) 
   );
 }
 
-function TrickSlot({ play, label, isMe }: { play?: PlayedCard; label: string; isMe: boolean }) {
+function TrickSlot({
+  play,
+  label,
+  isMe,
+  slotRef,
+}: {
+  play?: PlayedCard;
+  label: string;
+  isMe: boolean;
+  /** Landing spot for `FlyingPlayedCard` — see FiveCucumbersBoard's `trickSlotRefs`. */
+  slotRef?: (el: HTMLDivElement | null) => void;
+}) {
   return (
     <div className="flex flex-col items-center gap-1">
       <span className={`text-[10px] font-semibold ${isMe ? "text-amber-200" : "text-white/50"}`}>{label}</span>
-      {play ? <CardFace card={play.card} /> : <div className="flex h-24 w-16 items-center justify-center rounded-lg border border-dashed border-white/10" />}
+      {play ? (
+        <div ref={slotRef}>
+          <CardFace card={play.card} />
+        </div>
+      ) : (
+        <div className="flex h-24 w-16 items-center justify-center rounded-lg border border-dashed border-white/10" />
+      )}
     </div>
   );
 }
@@ -83,16 +108,34 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
   // Whenever `state` changes, notice freshly-resolved tricks/rounds and flash
   // a transient banner about them — same "diff consecutive snapshots on
   // render" pattern NoThanksBoard/SplendorBoard use, since this component
-  // never mutates state itself and the caller owns the network sync.
+  // never mutates state itself and the caller owns the network sync. The
+  // same diff also drives the card-play FX (task brief §3) and queues up
+  // sequential cucumber-pickup FX (task brief §4) the instant the 7th
+  // trick's penalty settles — see CardEffects.tsx.
   const [trackedState, setTrackedState] = useState(state);
   const [trickFlash, setTrickFlash] = useState<TrickResult | null>(null);
   const [roundFlash, setRoundFlash] = useState<RoundSummary | null>(null);
+  const [cardFlyEvents, setCardFlyEvents] = useState<CardPlayEvent[]>([]);
+  const [cucumberEvents, setCucumberEvents] = useState<CucumberPickupEvent[]>([]);
   if (trackedState !== state) {
     const newTrick = state.lastTrickResult !== trackedState.lastTrickResult ? state.lastTrickResult : null;
     const newRound = state.lastRoundSummary !== trackedState.lastRoundSummary ? state.lastRoundSummary : null;
+    const cardPlay = detectCardPlayEvent(trackedState, state);
     setTrackedState(state);
     if (newTrick) setTrickFlash(newTrick);
-    if (newRound) setRoundFlash(newRound);
+    if (newRound) {
+      setRoundFlash(newRound);
+      if (newRound.cucumberPenaltyEach > 0) {
+        setCucumberEvents((prev) => {
+          let nextId = (prev.at(-1)?.id ?? 0) + 1;
+          const created = buildCucumberPickupEvents(newRound.winnerSeats, newRound.cucumberPenaltyEach, () => nextId++);
+          return [...prev, ...created];
+        });
+      }
+    }
+    if (cardPlay) {
+      setCardFlyEvents((prev) => [...prev, { ...cardPlay, id: (prev.at(-1)?.id ?? 0) + 1 }]);
+    }
   }
   useEffect(() => {
     if (!trickFlash && !roundFlash) return;
@@ -102,6 +145,40 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
     }, 3600);
     return () => clearTimeout(t);
   }, [trickFlash, roundFlash]);
+  const handleCardFlyDone = useCallback((id: number) => {
+    setCardFlyEvents((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+  const handleCucumberDone = useCallback((id: number) => {
+    setCucumberEvents((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+
+  // Landing/launch spots for the FX above — persistent refs keyed by seat
+  // (scoreboard row + cucumber badge) plus the trick area container and the
+  // viewer's own hand section, same `Map`-of-refs technique NoThanksBoard's
+  // `seatRefs` uses.
+  const seatRowRefs = useRef(new Map<SeatIndex, HTMLElement>());
+  const cucumberBadgeRefs = useRef(new Map<SeatIndex, HTMLElement>());
+  const trickSlotRefs = useRef(new Map<SeatIndex, HTMLElement>());
+  const trickAreaRef = useRef<HTMLElement | null>(null);
+  const handSectionRef = useRef<HTMLElement | null>(null);
+  function setSeatRowRef(seat: SeatIndex) {
+    return (el: HTMLElement | null) => {
+      if (el) seatRowRefs.current.set(seat, el);
+      else seatRowRefs.current.delete(seat);
+    };
+  }
+  function setCucumberBadgeRef(seat: SeatIndex) {
+    return (el: HTMLElement | null) => {
+      if (el) cucumberBadgeRefs.current.set(seat, el);
+      else cucumberBadgeRefs.current.delete(seat);
+    };
+  }
+  function setTrickSlotRef(seat: SeatIndex) {
+    return (el: HTMLElement | null) => {
+      if (el) trickSlotRefs.current.set(seat, el);
+      else trickSlotRefs.current.delete(seat);
+    };
+  }
 
   const rulebookButton = (
     <button
@@ -238,12 +315,18 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
       </p>
 
       {/* Current trick */}
-      <section className="flex flex-wrap items-start justify-center gap-2.5 rounded-2xl border border-white/10 bg-black/25 p-3">
+      <section ref={trickAreaRef} className="flex flex-wrap items-start justify-center gap-2.5 rounded-2xl border border-white/10 bg-black/25 p-3">
         {state.trickPlays.length === 0 ? (
           <p className="py-6 text-xs text-white/30">아직 아무도 카드를 내지 않았어요.</p>
         ) : (
           state.trickPlays.map((play, i) => (
-            <TrickSlot key={play.seat} play={play} label={`${i + 1}. ${names[play.seat]}`} isMe={play.seat === viewerSeat} />
+            <TrickSlot
+              key={play.seat}
+              play={play}
+              label={`${i + 1}. ${names[play.seat]}`}
+              isMe={play.seat === viewerSeat}
+              slotRef={setTrickSlotRef(play.seat)}
+            />
           ))
         )}
       </section>
@@ -257,6 +340,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
           return (
             <div
               key={seat}
+              ref={setSeatRowRef(seat)}
               className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs transition ${
                 p.eliminated
                   ? "border-white/5 bg-black/10 opacity-50"
@@ -275,6 +359,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
               <div className="flex items-center gap-3 text-white/70">
                 <span title="남은 손패 수">🂠 {p.hand.length}장</span>
                 <span
+                  ref={setCucumberBadgeRef(seat)}
                   title={`오이 ${p.cucumbers} / ${state.eliminationThreshold}개`}
                   className={`flex items-center gap-1 rounded-full border px-2 py-0.5 font-bold ${
                     p.cucumbers >= state.eliminationThreshold
@@ -293,7 +378,11 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
       </section>
 
       {/* My hand */}
-      <section className="rounded-2xl border border-emerald-300/20 p-2.5 sm:p-3" style={{ background: "linear-gradient(160deg,#173322 0%,#0f2116 55%,#081108 100%)" }}>
+      <section
+        ref={handSectionRef}
+        className="rounded-2xl border border-emerald-300/20 p-2.5 sm:p-3"
+        style={{ background: "linear-gradient(160deg,#173322 0%,#0f2116 55%,#081108 100%)" }}
+      >
         <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-emerald-200/90 uppercase">🃏 내 손패 ({me.hand.length}장)</h3>
         {me.hand.length === 0 ? (
           <p className="text-xs text-white/30">손패가 없습니다.</p>
@@ -317,6 +406,28 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
       </section>
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+
+      {/* Card-play FX (task brief §3): hand/seat -> central trick area. */}
+      {cardFlyEvents.map((event) => (
+        <FlyingPlayedCard
+          key={event.id}
+          event={event}
+          getSourceEl={() => (event.seat === viewerSeat ? handSectionRef.current : (seatRowRefs.current.get(event.seat) ?? null))}
+          getTargetEl={() => trickSlotRefs.current.get(event.seat) ?? trickAreaRef.current}
+          onDone={handleCardFlyDone}
+        />
+      ))}
+
+      {/* Sequential cucumber-pickup FX (task brief §4): trick area -> winner's scoreboard badge, one token at a time. */}
+      {cucumberEvents.map((event) => (
+        <FlyingCucumber
+          key={event.id}
+          event={event}
+          getSourceEl={() => trickAreaRef.current}
+          getTargetEl={() => cucumberBadgeRefs.current.get(event.seat) ?? seatRowRefs.current.get(event.seat) ?? null}
+          onDone={handleCucumberDone}
+        />
+      ))}
     </div>
   );
 }

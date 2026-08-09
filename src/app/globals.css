@@ -134,6 +134,48 @@ body {
   }
 }
 
+/* Five Cucumbers' card-play flourish (see CardEffects.tsx / FlyingPlayedCard)
+   — layered on top of a plain left/top CSS *transition* that carries the
+   card in a straight line from the playing seat's hand/row to the central
+   trick area. This keyframe adds the slide-in/fade/settle flourish; every
+   step re-applies the translate(-50%,-50%) anchor so the element stays
+   centered on its (JS-driven) left/top position throughout. */
+@keyframes card-play-slide {
+  0% {
+    transform: translate(-50%, -50%) scale(0.75) rotate(-6deg);
+    opacity: 0;
+  }
+  60% {
+    transform: translate(-50%, -50%) scale(1.05) rotate(2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* Five Cucumbers' sequential cucumber pickup (see CardEffects.tsx /
+   FlyingCucumber) — each token in a multi-cucumber penalty starts this pop
+   only once its own staggered delay elapses (JS `setTimeout`, not CSS
+   `animation-delay`, so it lines up with the paired left/top transition
+   that's started the same way), giving a visible one-at-a-time cadence
+   instead of one lump sum. */
+@keyframes cucumber-hop-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(0.4);
+    opacity: 0;
+  }
+  55% {
+    transform: translate(-50%, -50%) scale(1.25);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
 /* Spot the Difference's hint reveal — a dashed amber ring that wiggles in
    place over an undiscovered spot until it's found, visible only to the
    team that spent the hint (see engine.ts's `activeHint`). */

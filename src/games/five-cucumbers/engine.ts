@@ -129,13 +129,21 @@ export function buildDeck(): Card[] {
   return deck;
 }
 
-/** Rulebook §3 cucumber-count tiers, by the winning card's face value. */
+/**
+ * Rulebook §3-1 cucumber-count tiers, by the winning card's face value (see
+ * boardGameRule/오이다섯개/오이다섯개.md's "카드 구성 및 오이 개수 상세표"). Only
+ * card 1 sits alone at tier 0 — it's the "2배 폭탄" special, not a cucumber
+ * count in its own right (handled separately by the ×2-per-'1' multiplier in
+ * `playCard`). This replaced an earlier tier curve that grouped 1-5 together
+ * at tier 0; the folder's table splits 1 out on its own and moves 2-5 up to
+ * tier 1, so every boundary below shifted by one value.
+ */
 export function cucumberCount(value: number): number {
-  if (value <= 5) return 0;
-  if (value <= 9) return 1;
-  if (value <= 11) return 2;
-  if (value <= 13) return 3;
-  if (value === 14) return 4;
+  if (value === 1) return 0;
+  if (value <= 5) return 1;
+  if (value <= 9) return 2;
+  if (value <= 11) return 3;
+  if (value <= 14) return 4;
   return 5; // 15
 }
 

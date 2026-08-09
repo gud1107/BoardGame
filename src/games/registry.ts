@@ -333,7 +333,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     players: { min: 2, max: 6 },
     playTime: { minMinutes: 15, maxMinutes: 25 },
     category: "card",
-    thumbnail: { emoji: "🥒", gradient: ["#65d46e", "#15803d"] },
+    thumbnail: { emoji: "🥒", gradient: ["#65d46e", "#15803d"], image: "/games/five-cucumbers.jpg" },
     tags: ["트릭테이킹", "카드", "역발상"],
     playable: true,
     supportsAutoRanking: true,

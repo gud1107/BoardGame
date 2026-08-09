@@ -4,11 +4,11 @@ import Overlay from "@/components/Overlay";
 import { CucumberIcon, CucumberRow } from "./CucumberIcon";
 
 const TIER_ROWS: { range: string; count: number }[] = [
-  { range: "1 ~ 5", count: 0 },
-  { range: "6 ~ 9", count: 1 },
-  { range: "10 ~ 11", count: 2 },
-  { range: "12 ~ 13", count: 3 },
-  { range: "14", count: 4 },
+  { range: "1 (2배 폭탄)", count: 0 },
+  { range: "2 ~ 5", count: 1 },
+  { range: "6 ~ 9", count: 2 },
+  { range: "10 ~ 11", count: 3 },
+  { range: "12 ~ 14", count: 4 },
   { range: "15", count: 5 },
 ];
 

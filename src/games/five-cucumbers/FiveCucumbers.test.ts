@@ -266,11 +266,11 @@ describe("tricks 1-6 — winner leads next trick, no cucumber penalty", () => {
 
 describe("trick 7 — final-trick cucumber penalty settlement (rulebook §3)", () => {
   it("cucumberCount matches the rulebook's tiers exactly", () => {
-    for (let v = 1; v <= 5; v++) expect(cucumberCount(v)).toBe(0);
-    for (let v = 6; v <= 9; v++) expect(cucumberCount(v)).toBe(1);
-    for (let v = 10; v <= 11; v++) expect(cucumberCount(v)).toBe(2);
-    for (let v = 12; v <= 13; v++) expect(cucumberCount(v)).toBe(3);
-    expect(cucumberCount(14)).toBe(4);
+    expect(cucumberCount(1)).toBe(0); // the ×2-bomb special, not a real tier
+    for (let v = 2; v <= 5; v++) expect(cucumberCount(v)).toBe(1);
+    for (let v = 6; v <= 9; v++) expect(cucumberCount(v)).toBe(2);
+    for (let v = 10; v <= 11; v++) expect(cucumberCount(v)).toBe(3);
+    for (let v = 12; v <= 14; v++) expect(cucumberCount(v)).toBe(4);
     expect(cucumberCount(15)).toBe(5);
   });
 
@@ -330,9 +330,9 @@ describe("trick 7 — final-trick cucumber penalty settlement (rulebook §3)", (
     });
     const next = applyAction(state, { type: "playCard", seat: 2, cardId: "12-1" });
     expect(new Set(next.lastTrickResult?.winnerSeats)).toEqual(new Set([0, 2]));
-    expect(next.lastTrickResult?.cucumberPenaltyEach).toBe(3); // 12 -> tier 3
-    expect(next.players[0].cucumbers).toBe(3);
-    expect(next.players[2].cucumbers).toBe(3);
+    expect(next.lastTrickResult?.cucumberPenaltyEach).toBe(4); // 12 -> tier 4
+    expect(next.players[0].cucumbers).toBe(4);
+    expect(next.players[2].cucumbers).toBe(4);
     expect(next.players[1].cucumbers).toBe(0);
   });
 
