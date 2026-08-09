@@ -354,6 +354,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
   },
+  {
+    id: "summoners-rift",
+    name: "소환사의 협곡",
+    nameEn: "Summoner's Rift",
+    description:
+      "리그 오브 레전드 패러디 '맨덤의 던전' 블러핑 게임. 공유 챔피언과 6개의 아이템을 두고 몬스터를 협곡 더미에 밀어넣거나 아이템을 해제해 숨기다가, 끝까지 패스하지 않은 마지막 1인이 남은 아이템만으로 협곡을 홀로 공략합니다.",
+    players: { min: 2, max: 6 },
+    playTime: { minMinutes: 15, maxMinutes: 25 },
+    category: "party",
+    thumbnail: { emoji: "⚔️", gradient: ["#c8933e", "#1a2332"], image: "/games/summoners-rift.jpg" },
+    tags: ["블러핑", "푸시유어럭", "LoL 패러디"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {
