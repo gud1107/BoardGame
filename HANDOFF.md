@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-09 (스플렌더(Splendor) 신규 게임 구현 세션)_
+_최종 갱신: 2026-08-09 (누락된 게임 박스 이미지 일괄 연결 세션)_
 
 > **이 문서는 "지금 이 순간"의 스냅샷만 담는다.** 새 세션이 `/clear` 직후 가장 먼저 읽어야 할 문서이며, 여기 담긴 정보만으로 이전 맥락을 복원할 수 있어야 한다. **시간순 기록(무엇을 왜 그 순서로 만들었는가)은 [docs/history.md](./docs/history.md)로, 버그 대응 이력은 [docs/troubleshooting.md](./docs/troubleshooting.md)로 넘어갔다** — 이 파일 자체는 계속 짧게 유지하고, 완료된 세션 내용은 매번 `history.md`로 옮겨 적을 것.
 
@@ -12,20 +12,19 @@ _최종 갱신: 2026-08-09 (스플렌더(Splendor) 신규 게임 구현 세션)_
 **보드게임 허브** — 여러 보드게임을 한 곳에서 플레이하고, 게임 결과에 연동된 "내기(베팅)" 정산까지 관리하는 Next.js 웹앱. 완전 오프라인 동작(IndexedDB 1차 저장소)이 기본이고, Supabase는 온라인 대전 8종에만 필수인 선택적 보강 레이어. 실제 배포 URL: **https://board-game-tau-navy.vercel.app**
 
 ### 현재 달성률
-- 카탈로그 21종 중 **9종 실제 플레이 가능**: 하나미코지 · 뱅!(Bang!) · 그리드 포커 · 아발론(Avalon) · 노땡스(No Thanks!) · 페루도(Perudo) · 센추리: 향신료의 길(Century: Spice Road) · 틀린 그림 찾기(Spot the Difference) · **스플렌더(Splendor, 이번 세션 신규)**. 나머지 12종은 `playable: false`로 "준비중" 카드만 노출(의도된 상태, 버그 아님).
-- `npx tsc --noEmit` / `npm run lint`(경고 0) / `npx vitest run`(**344개 전부 통과**) / `npm run build` 전부 그린.
-- 이번 세션 작업은 **커밋·푸시·배포까지 완료됨**(사용자가 이번 요청에 명시적으로 포함해 요청).
+- 카탈로그 21종 중 **9종 실제 플레이 가능**: 하나미코지 · 뱅!(Bang!) · 그리드 포커 · 아발론(Avalon) · 노땡스(No Thanks!) · 페루도(Perudo) · 센추리: 향신료의 길(Century: Spice Road) · 틀린 그림 찾기(Spot the Difference) · 스플렌더(Splendor). 이 중 **9종 전부(+ 준비중인 카탄 포함 10종)가 이제 실사 박스 이미지를 갖춤**(이번 세션에 5종 추가). 나머지 11종은 `playable: false`로 "준비중" 카드만 노출(의도된 상태, 버그 아님).
+- `npx tsc --noEmit` / `npm run lint`(경고 0) / `npx vitest run`(**344개 전부 통과**) 전부 그린.
 
 ### 이번 세션 주요 변경 사항
-스플렌더(Splendor)를 카탈로그의 "준비중" 상태에서 실제 플레이 가능한 9번째 게임으로 구현해달라는 요청. `boardGameRule/스플랜더.md`(이번 세션에 새로 추가)를 근거로 엔진→UI→온라인 방→카탈로그 등록까지 기존 8게임과 동일한 패턴으로 구현했다. 상세 설계 판단은 [docs/history.md Phase 25](./docs/history.md#phase-25--스플렌더splendor-신규-게임-2026-08-09) 참고.
+사용자가 로컬 `image/` 폴더에 추가해둔 보드게임 실사 이미지 10장 중, 아직 카탈로그에 연결되지 않아 이모지+그라디언트 플레이스홀더로 노출되던 5종(하나미코지·카탄·아발론·그리드 포커·틀린 그림 찾기)을 일괄 연결해달라는 요청. 상세 설계 판단은 [docs/history.md Phase 26](./docs/history.md#phase-26--누락된-게임-박스-이미지-일괄-연결-2026-08-09-같은-날-열여섯-번째-세션) 참고.
 
-1. **`src/games/splendor/` 신설** — `cards.ts`(90장 개발 카드 + 귀족 10개, 룰북에 카드 목록 부록이 없어 수량/비용곡선만 지키는 자체 설계 생성기), `engine.ts`(순수 리듀서 — 토큰 획득/카드 예약/카드 구매/10토큰 초과 반납/귀족 방문/15점 종료 전부 구현), `GemToken.tsx`(사용자가 요청한 "아크릴 포커 칩" 비주얼, 이미지 자산 없이 CSS만으로 구성), `SplendorBoard.tsx`(카드 시장 3단 + 토큰 뱅크 + 귀족 타일 + 내 보석상 + 다른 플레이어 요약), `SplendorGame.tsx`(센추리와 동일한 락스텝 온라인 방 패턴), `RulebookModal.tsx`, `meta.ts`.
-2. **결제는 엔진이 자동 계산** — 보유 색 토큰을 먼저 쓰고 부족분만 황금으로 채우는 방식이 항상 최적이라는 판단으로 UI가 결제 조합을 수동 선택하지 않게 단순화(`computeAutoPayment`).
-3. **예약 카드는 UI 계층에서만 은닉** — 온라인 신뢰 모델상 모든 클라이언트가 전체 상태를 들고 있지만(§2), 실물 룰대로 다른 좌석의 예약 카드는 뒷면 아이콘(개수만)으로, 내 예약 카드만 앞면으로 렌더링(아발론/뱅!의 역할 은닉과 같은 기법을 카드 자산에 적용한 첫 사례).
-4. **`registry.ts`/`playableGames.tsx` 등록** — `playable: true`/`supportsAutoRanking: true`/`onlineMultiplayer: true`로 전환, 동적 임포트 등록.
-5. **검증** — `Splendor.test.ts` 신설(32개 케이스: 인원수별 시작 토큰 수량, 3색/2색 토큰 획득 제한, 보너스 할인+황금 결제, 10토큰 초과 반납, 예약 3장 제한, 귀족 방문 조건, 15점 달성 후 라운드 종료). `npx tsc --noEmit`/`npm run lint`(경고 0)/`npx vitest run`(**344개 전부 통과**)/`npm run build` 전부 그린. `npx playwright screenshot`(CLI)로 고정 state 임시 라우트(검증 후 삭제) 렌더링 확인 — 단, 결제/예약/귀족선택 모달의 실제 클릭 흐름과 실제 Supabase 온라인 방 동기화는 미검증(§3 최상단 항목).
+1. **원인 확인** — 이 프로젝트에 깨진 `<img>`(엑박)는 없었다. `GameThumbnail.tsx`가 카탈로그 전체의 유일한 이미지 렌더링 경로이고 `thumbnail.image`가 없으면 항상 이모지로 자동 폴백하도록 이미 설계돼 있어(Phase 23), "비어 보이던" 5종은 실사 이미지 파일 자체가 `public/games/`에 없던 상태였다.
+2. **`image/` → `public/games/` 동기화** — `그리드포커.jpg`·`아발론.jpg`·`카탄.jpg`·`틀린그림찾기.jpg`·`하나미코지.jpg`를 `grid-poker.jpg`·`avalon.jpg`·`catan.jpg`·`spot-difference.jpg`·`hanamikoji.jpg`로 복사(기존 5종과 동일한 "게임 id = 영문 파일명" 관례). `image/`의 나머지 5개(노땡스·뱅·센추리·스플랜더·페루도)는 바이트 크기 대조로 `public/games/`에 이미 동일 파일이 있음을 확인하고 중복 복사하지 않았다.
+3. **`registry.ts` 5개 엔트리에 `thumbnail.image` 추가** — `catan`(`playable: false`)도 함께 채움. `GameThumbnail`이 playable 여부와 무관하게 `thumbnail.image` 유무만으로 분기하므로 일관된 처리.
+4. **object-fit: contain** — Phase 23에서 이미 전역 적용돼 있어 추가 스타일 변경 불필요, 새로 연결한 5장도 잘리지 않고 전체 노출됨.
+5. **검증** — `npx tsc --noEmit`/`npm run lint`(경고 0)/`npx vitest run`(**344개 전부 통과**, 자산/데이터만 바꿔 엔진 테스트 영향 없음) 전부 그린.
 
-**직전 세션(대시보드 기본 정렬)**은 [docs/history.md Phase 24](./docs/history.md#phase-24--대시보드-기본-정렬-플레이-가능한-게임-우선-노출-2026-08-09)에, **게임 카드 이미지 잘림 수정 + 그리드 레이아웃 개편**은 [Phase 23](./docs/history.md#phase-23--게임-카드-이미지-잘림-수정object-contain--대시보드-그리드-레이아웃-개편-2026-08-08-같은-날-열다섯-번째-세션)에, **페루도 실제 WebGL 3D 주사위 + 게임 카드 실사 이미지**는 [Phase 22](./docs/history.md#phase-22--페루도-실제-webgl-3d-주사위threejsr3frapier--게임-카드-실사-이미지-2026-08-08-같은-날-열네-번째-세션)에, **센추리 UI 전면 개편**은 [Phase 18](./docs/history.md#phase-18--센추리-ui-전면-개편-실물-스파이스-로드-보드판-리스킨-2026-08-08-같은-날-열-번째-세션)에, **센추리 신규 구현**은 [Phase 12](./docs/history.md#phase-12--센추리-향신료의-길-신규-게임-2026-08-08)에 전부 기록되어 있다.
+**직전 세션(스플렌더 신규 게임)**은 [docs/history.md Phase 25](./docs/history.md#phase-25--스플렌더splendor-신규-게임-2026-08-09)에, **대시보드 기본 정렬**은 [Phase 24](./docs/history.md#phase-24--대시보드-기본-정렬-플레이-가능한-게임-우선-노출-2026-08-09)에, **게임 카드 이미지 잘림 수정 + 그리드 레이아웃 개편**은 [Phase 23](./docs/history.md#phase-23--게임-카드-이미지-잘림-수정object-contain--대시보드-그리드-레이아웃-개편-2026-08-08-같은-날-열다섯-번째-세션)에, **페루도 실제 WebGL 3D 주사위 + 게임 카드 실사 이미지**는 [Phase 22](./docs/history.md#phase-22--페루도-실제-webgl-3d-주사위threejsr3frapier--게임-카드-실사-이미지-2026-08-08-같은-날-열네-번째-세션)에 전부 기록되어 있다.
 
 ---
 
@@ -82,7 +81,7 @@ src/
       (splendor만) GemToken.tsx         5색 보석 + 황금 토큰 "아크릴 포커 칩" 비주얼, 순수 CSS(이미지 자산 없음)
   lib/                  db(IndexedDB) / betting(정산 원장) / identity(기기·플레이어 매핑) / supabase
   store/bettingStore.ts  Zustand — 내기 세션 오케스트레이션
-public/games/<gameId>.{png,jpg}  게임 카드 실사 박스 표지(5종만, Phase 22) — GameMeta.thumbnail.image가 가리킴, 나머지는 이모지+그라디언트 생성 방식 그대로
+public/games/<gameId>.{png,jpg}  게임 카드 실사 박스 표지(10종, Phase 22/25/26) — GameMeta.thumbnail.image가 가리킴, 나머지는 이모지+그라디언트 생성 방식 그대로
 boardGameRule/*.md      게임별 공식 룰 원문 — 엔진 구현의 근거 자료(hanamikoji 제외 8게임 전부 있음, 스플랜더.md는 Phase 25 신규)
 docs/                   개발자 심화 문서(아래 "관련 문서" 참고)
 ```

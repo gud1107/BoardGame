@@ -520,6 +520,29 @@ Phase 22 §9에 남겨둔 "박스 표지 사진이 가로로 넓은 썸네일 �
 
 ---
 
+## Phase 26 — 누락된 게임 박스 이미지 일괄 연결 (2026-08-09, 같은 날 열여섯 번째 세션)
+
+**커밋**: `fix(hub): populate missing board game images from local image directory`
+
+사용자가 로컬 `image/` 폴더(프로젝트 정적 자산 경로 밖)에 보드게임별 실사 이미지 10장을 새로 추가해두고, 아직 `thumbnail.image`가 비어 있어 이모지+그라디언트 플레이스홀더로 노출되던 게임들에 이미지를 일괄 연결해달라고 요청.
+
+### 1. 실제 원인 확인 — "엑박"이 아니라 의도된 플레이스홀더
+먼저 이 프로젝트에 이미지 로딩 실패로 인한 진짜 깨진 이미지(엑박)가 있는지 확인했다. `GameThumbnail.tsx`가 카탈로그 전체의 유일한 게임-이미지 렌더링 경로이고(대시보드 카드/상세 페이지 헤더/준비중 페이지 전부 이 컴포넌트 하나를 재사용), `thumbnail.image`가 없는 항목은 애초에 `<img>`를 렌더링하지 않고 이모지 `<span>`으로 자동 폴백하도록 설계돼 있다(Phase 23에서 확립). 즉 깨진 `<img>` 태그는 존재하지 않았고, "이미지가 비어 있는 것처럼 보이는" 10종 중 5종(하나미코지·카탄·아발론·그리드 포커·틀린 그림 찾기)은 실사 이미지 자체가 아직 `public/games/`에 없어 의도된 이모지 폴백이 노출되던 상태였다(나머지 5종 스플렌더·뱅!·노땡스·페루도·센추리는 이미 Phase 22/25에서 연결 완료).
+
+### 2. `image/` → `public/games/` 동기화 (영문 파일명으로 리네임)
+`image/그리드포커.jpg`·`아발론.jpg`·`카탄.jpg`·`틀린그림찾기.jpg`·`하나미코지.jpg` 5개 파일을 `public/games/grid-poker.jpg`·`avalon.jpg`·`catan.jpg`·`spot-difference.jpg`·`hanamikoji.jpg`로 복사(기존 5종 파일명 관례 — 게임 `id`와 동일한 영문 슬러그 — 를 그대로 따름). `image/` 폴더의 나머지 5개(노떙스·뱅·센추리·스플랜더·페루도)는 파일 크기를 바이트 단위로 대조해 `public/games/`에 이미 동일한 파일이 존재함을 확인하고 그대로 두었다(중복 복사 불필요).
+
+### 2-2. `registry.ts`에 `thumbnail.image` 5개 추가
+`hanamikoji`/`catan`/`avalon`/`grid-poker`/`spot-difference` 5개 엔트리에 각각 `image: "/games/<id>.jpg"`를 추가했다. `catan`은 `playable: false`("준비중")이지만 `GameThumbnail`이 playable 여부와 무관하게 `thumbnail.image` 유무만으로 렌더링을 분기하므로(상세 페이지의 "준비중" 안내 화면도 동일 컴포넌트 재사용) 이미지가 있으면 그대로 표시되는 것이 기존 설계와 일관된다고 판단해 함께 채웠다.
+
+### 3. object-fit: contain — 이미 Phase 23에서 전역 적용된 상태라 추가 조치 불필요
+`GameThumbnail`의 기본 `imageClassName`이 이미 `object-contain`이고, `GameCard`/상세 페이지 헤더/준비중 페이지 3곳 호출부 모두 `object-contain` 계열 클래스를 명시적으로 넘기고 있어(Phase 23) 새로 연결한 5장도 별도 스타일 변경 없이 잘리지 않고 전체 노출된다.
+
+### 4. 검증
+`npx tsc --noEmit`/`npm run lint`(경고 0)/`npx vitest run`(**344개 전부 통과**, 이미지 자산/데이터 필드만 바꿔 엔진 테스트 영향 없음) 전부 그린. 스크린샷 검증은 생략 — Phase 23이 이미 `object-contain` 폴백 레이아웃을 여러 종횡비로 검증해뒀고, 이번 변경은 그 검증된 경로에 이미지 5장을 추가로 흘려보내는 것뿐이라 회귀 위험이 낮다고 판단.
+
+---
+
 ## 앞으로 이 문서에 추가할 때
 
 - 새 게임을 추가하거나 큰 기능을 완료하면, 그 세션이 끝날 때 루트 `HANDOFF.md`의 "직전 세션 변경 사항"에 짧게만 적고, **그 내용을 다음 Phase 항목으로 이 문서에 옮겨 적으며 커밋 해시를 정확히 남길 것**(`HANDOFF.md`가 무한정 길어지지 않도록).
