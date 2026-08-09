@@ -17,4 +17,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   century: dynamic(() => import("./century/CenturyGame"), { ssr: false }),
   "spot-difference": dynamic(() => import("./spot-difference/SpotDifferenceGame"), { ssr: false }),
   splendor: dynamic(() => import("./splendor/SplendorGame"), { ssr: false }),
+  "five-cucumbers": dynamic(() => import("./five-cucumbers/FiveCucumbersGame"), { ssr: false }),
 };

@@ -324,6 +324,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
   },
+  {
+    id: "five-cucumbers",
+    name: "오이 다섯 개",
+    nameEn: "Five Cucumbers",
+    description:
+      "7번의 트릭 중 마지막 트릭만은 절대 따내면 안 되는 역발상 트릭테이킹 게임. 마지막 트릭의 승자는 오이 토큰을 벌점으로 받으며, 정해둔 개수만큼 모으면 탈락합니다.",
+    players: { min: 2, max: 6 },
+    playTime: { minMinutes: 15, maxMinutes: 25 },
+    category: "card",
+    thumbnail: { emoji: "🥒", gradient: ["#65d46e", "#15803d"] },
+    tags: ["트릭테이킹", "카드", "역발상"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {
