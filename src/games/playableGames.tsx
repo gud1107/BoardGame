@@ -22,4 +22,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "summoners-rift": dynamic(() => import("./summonersRift/SummonersRiftGame"), { ssr: false }),
   dalmuti: dynamic(() => import("./dalmuti/DalmutiGame"), { ssr: false }),
   coyote: dynamic(() => import("./coyote/CoyoteGame"), { ssr: false }),
+  "for-sale": dynamic(() => import("./forSale/ForSaleGame"), { ssr: false }),
 };

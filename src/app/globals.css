@@ -429,3 +429,62 @@ body {
     transform: rotateY(0deg);
   }
 }
+
+/* 포세일's Phase-1 pass-refund flight (see ForSaleEffects.tsx /
+   FlyingPassCard) — the passed property card arcs from the open-card row to
+   the passer's seat while fading in/out, mirroring dalmuti-tax-fly's arc. */
+@keyframes forsale-pass-fly {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  85% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.85);
+  }
+}
+
+/* 포세일's Phase-1 round auto-resolution banner (see ForSaleEffects.tsx /
+   AuctionWinToast) — a brief top-of-screen "낙찰!" toast that drops in, holds,
+   then fades. */
+@keyframes forsale-win-toast {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -12px);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+}
+
+/* 포세일's Phase-2 blind-submission reveal (see ForSaleEffects.tsx /
+   CardFlipWrapper) — identical technique to coyote-card-flip, reused here so
+   every seat's submitted property card visibly turns face-up together. */
+@keyframes forsale-card-flip {
+  0% {
+    transform: rotateY(0deg);
+  }
+  50% {
+    transform: rotateY(90deg);
+  }
+  100% {
+    transform: rotateY(0deg);
+  }
+}

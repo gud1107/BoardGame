@@ -399,6 +399,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
   },
+  {
+    id: "for-sale",
+    name: "포세일",
+    nameEn: "For Sale",
+    description:
+      "부동산 중개인이 되어 두 단계로 겨루는 경매 게임. 1단계에서는 부동산 카드를 낮은 값에 낙찰받거나 포기해 절반 환불을 챙기고, 2단계에서는 확보한 부동산을 뒷면으로 동시에 내어 가장 높은 번호가 가장 비싼 수표를 가져갑니다. 수표 총액과 남은 동전을 합쳐 가장 부유한 사람이 승리합니다.",
+    players: { min: 3, max: 6 },
+    playTime: { minMinutes: 20, maxMinutes: 30 },
+    category: "family",
+    thumbnail: { emoji: "🏠", gradient: ["#38bdf8", "#0f766e"] },
+    tags: ["경매", "블라인드제출", "심리전"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {
