@@ -758,3 +758,96 @@ body {
     opacity: 0.4;
   }
 }
+
+/* 레지스탕스 쿠's influence-card reveal (see CoupEffects.tsx / CardFlipWrapper)
+   — identical technique to coyote-card-flip/loveletter-card-flip, reused here
+   so a challenge resolution or a lost-influence reveal visibly turns the
+   card face-up mid-table instead of just swapping the sprite instantly. */
+@keyframes coup-card-flip {
+  0% {
+    transform: rotateY(0deg);
+  }
+  50% {
+    transform: rotateY(90deg);
+  }
+  100% {
+    transform: rotateY(0deg);
+  }
+}
+
+/* 레지스탕스 쿠's elimination toast pop-in/out (see CoupEffects.tsx /
+   EliminationToast) — identical technique to loveletter-eliminate-pop. */
+@keyframes coup-elim-flash {
+  0% {
+    transform: translateY(-16px) scale(0.9);
+    opacity: 0;
+  }
+  15% {
+    transform: translateY(0) scale(1.04);
+    opacity: 1;
+  }
+  25% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  85% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-10px) scale(0.95);
+    opacity: 0;
+  }
+}
+
+/* 레지스탕스 쿠's game-over full-screen glow (see CoupEffects.tsx /
+   GameOverBanner backdrop) — identical technique to loveletter-glow-flash. */
+@keyframes coup-timer-warn {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* 레지스탕스 쿠's game-over crest burst (see CoupEffects.tsx /
+   GameOverBanner card) — identical technique to loveletter-letter-burst. */
+@keyframes coup-result-burst {
+  0% {
+    transform: scale(0.4) rotate(-3deg);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.12) rotate(1deg);
+    opacity: 1;
+  }
+  60% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* 레지스탕스 쿠's 의심(Challenge)/방어(Counter) response window countdown
+   gauge (see ResponseModal.tsx) — a client-local UX affordance (this game's
+   rulebook has no wall-clock timer rule of its own; "패스" is always a fully
+   legal choice at any point, this bar just adds table tension and, if it
+   drains, auto-submits that same safe pass). Pure width transition driven
+   inline by the component (needs a dynamic duration), this keyframe only
+   adds the pulsing "running low" warning once under ~30% remaining. */
+@keyframes coup-response-warn {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

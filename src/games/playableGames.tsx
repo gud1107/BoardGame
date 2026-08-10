@@ -26,4 +26,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "love-letter": dynamic(() => import("./loveLetter/LoveLetterGame"), { ssr: false }),
   "mal-dalli-ja": dynamic(() => import("./malDalliJa/MalDalliJaGame"), { ssr: false }),
   "pieces-of-language": dynamic(() => import("./piecesOfLanguage/PiecesOfLanguageGame"), { ssr: false }),
+  coup: dynamic(() => import("./coup/CoupGame"), { ssr: false }),
 };

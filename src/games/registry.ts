@@ -459,6 +459,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
   },
+  {
+    id: "coup",
+    name: "레지스탕스 쿠",
+    nameEn: "The Resistance: Coup",
+    description:
+      "거짓말과 의심, 방어로 상대 가문의 영향력을 제거하는 단판 승부 블러핑 게임. 캐릭터 카드가 없어도 있는 척 능력을 선언할 수 있고, 의심이 틀리면 도전자가, 거짓말이 들통나면 선언자가 카드를 잃습니다. 영향력 카드 2장을 모두 잃으면 즉시 탈락, 최후의 1인이 승리합니다.",
+    players: { min: 2, max: 6 },
+    playTime: { minMinutes: 15, maxMinutes: 30 },
+    category: "deduction",
+    thumbnail: { emoji: "👑", gradient: ["#f59e0b", "#78350f"] },
+    tags: ["블러핑", "심리전", "단판승부"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {
