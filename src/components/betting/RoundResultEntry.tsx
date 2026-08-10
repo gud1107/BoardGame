@@ -63,7 +63,7 @@ export default function RoundResultEntry({ participants, autoRanking, onConfirm 
               min={1}
               value={ranks[p.playerId]}
               onChange={(e) => updateRank(p.playerId, Number(e.target.value) || 1)}
-              className="w-16 rounded-md border border-white/15 bg-black/30 px-2 py-1 text-right text-sm text-white outline-none focus:border-rose-400"
+              className="min-h-11 w-16 shrink-0 rounded-md border border-white/15 bg-black/30 px-2 py-1 text-right text-base text-white outline-none focus:border-rose-400"
             />
           </div>
         ))}

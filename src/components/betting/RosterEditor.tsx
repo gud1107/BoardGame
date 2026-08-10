@@ -76,12 +76,12 @@ export default function RosterEditor({ participants, onChange, maxParticipants =
           onKeyDown={(e) => e.key === "Enter" && handleAdd()}
           placeholder="닉네임 입력 후 추가"
           disabled={busy || participants.length >= maxParticipants}
-          className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
+          className="min-h-11 min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
         />
         <button
           onClick={handleAdd}
           disabled={busy || !input.trim() || participants.length >= maxParticipants}
-          className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+          className="min-h-11 shrink-0 rounded-lg bg-rose-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
         >
           추가
         </button>

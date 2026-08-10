@@ -117,7 +117,7 @@ export default function BettingSidebar() {
       )}
 
       <aside
-        className={`fixed inset-y-0 right-0 z-40 flex w-[88vw] max-w-sm flex-col border-l border-white/10 bg-[#12101c] shadow-2xl transition-transform duration-200 sm:w-96 ${
+        className={`fixed inset-y-0 right-0 z-40 flex w-[92vw] max-w-sm flex-col border-l border-white/10 bg-[#12101c] shadow-2xl transition-transform duration-200 sm:w-96 md:w-[26rem] lg:w-[30rem] ${
           sidebarOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -175,27 +175,31 @@ export default function BettingSidebar() {
                     <p className="mb-2 text-sm font-medium text-white/80">
                       참가자 닉네임 · 누적 스코어
                     </p>
-                    <div className="flex flex-col gap-1.5">
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2">
                       {sortedParticipants.map((p) => {
                         const total = session.totals[p.playerId] ?? 0;
                         return (
-                          <div key={p.playerId} className="flex items-center gap-2">
+                          <div
+                            key={p.playerId}
+                            className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-white/5 p-2.5"
+                          >
                             <input
                               defaultValue={p.name}
+                              aria-label="참가자 닉네임"
                               onBlur={(e) => {
                                 if (e.target.value.trim() && e.target.value.trim() !== p.name) {
                                   void updateParticipantName(p.playerId, e.target.value);
                                 }
                               }}
-                              className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-sm text-white outline-none focus:border-rose-400"
+                              className="min-h-11 min-w-0 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-sm text-white outline-none focus:border-rose-400"
                             />
                             <span
-                              className={`w-20 shrink-0 text-right text-sm font-semibold ${
+                              className={`text-right text-base font-bold whitespace-nowrap tabular-nums ${
                                 total >= 0 ? "text-emerald-300" : "text-rose-300"
                               }`}
                             >
                               {total >= 0 ? "+" : ""}
-                              {total.toLocaleString()}
+                              {total.toLocaleString()}원
                             </span>
                           </div>
                         );
