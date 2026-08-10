@@ -488,3 +488,80 @@ body {
     transform: rotateY(0deg);
   }
 }
+
+/* 러브레터's elimination toast (see LoveLetterEffects.tsx / EliminationToast)
+   — a small heartbreak pop that slams in, holds, then fades. Plays
+   identically for every connected client off the shared lockstep
+   eliminationOrder diff, same technique as coyote-howl-burst. */
+@keyframes loveletter-eliminate-pop {
+  0% {
+    transform: scale(0.6) translateY(-16px);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1.05) translateY(0);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) translateY(-6px);
+    opacity: 0;
+  }
+}
+
+/* 러브레터's game-over full-screen glow (see LoveLetterEffects.tsx /
+   GameOverBanner) — same technique as coyote-desert-flash. */
+@keyframes loveletter-glow-flash {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* 러브레터's "공주의 마음을 얻었습니다!" win banner (see
+   LoveLetterEffects.tsx / GameOverBanner) — slams in, holds, then fades,
+   same technique as coyote-howl-burst. */
+@keyframes loveletter-letter-burst {
+  0% {
+    transform: scale(0.5) translateY(40px) rotate(-4deg);
+    opacity: 0;
+  }
+  35% {
+    transform: scale(1.08) translateY(-6px) rotate(2deg);
+    opacity: 1;
+  }
+  55% {
+    transform: scale(1) translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  85% {
+    transform: scale(1) translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.03) translateY(0) rotate(0deg);
+    opacity: 0;
+  }
+}
+
+/* 러브레터's per-seat hand reveal at game over (see LoveLetterEffects.tsx /
+   CardFlipWrapper) — identical technique to coyote-card-flip. */
+@keyframes loveletter-card-flip {
+  0% {
+    transform: rotateY(0deg);
+  }
+  50% {
+    transform: rotateY(90deg);
+  }
+  100% {
+    transform: rotateY(0deg);
+  }
+}

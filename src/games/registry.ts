@@ -400,6 +400,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "love-letter",
+    name: "러브레터",
+    nameEn: "Love Letter",
+    description:
+      "공주에게 편지를 전하기 위해 궁정 인물들의 능력을 활용하는 단판 승부 눈치싸움 카드 게임. 손에 든 2장 중 1장을 내어 경비병의 추리, 남작의 대결, 왕자의 강제 교환 등 효과를 겨루다가 최후까지 살아남거나 덱 소진 시 가장 높은 카드를 든 사람이 즉시 승리합니다.",
+    players: { min: 2, max: 4 },
+    playTime: { minMinutes: 10, maxMinutes: 20 },
+    category: "deduction",
+    thumbnail: { emoji: "💌", gradient: ["#fb7185", "#831843"], image: "/games/love-letter.jpg" },
+    tags: ["블러핑", "심리전", "단판승부"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "for-sale",
     name: "포세일",
     nameEn: "For Sale",

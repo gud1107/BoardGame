@@ -23,4 +23,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   dalmuti: dynamic(() => import("./dalmuti/DalmutiGame"), { ssr: false }),
   coyote: dynamic(() => import("./coyote/CoyoteGame"), { ssr: false }),
   "for-sale": dynamic(() => import("./forSale/ForSaleGame"), { ssr: false }),
+  "love-letter": dynamic(() => import("./loveLetter/LoveLetterGame"), { ssr: false }),
 };
