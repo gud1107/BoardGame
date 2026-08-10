@@ -20,4 +20,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "five-cucumbers": dynamic(() => import("./five-cucumbers/FiveCucumbersGame"), { ssr: false }),
   "las-vegas": dynamic(() => import("./lasVegas/LasVegasGame"), { ssr: false }),
   "summoners-rift": dynamic(() => import("./summonersRift/SummonersRiftGame"), { ssr: false }),
+  dalmuti: dynamic(() => import("./dalmuti/DalmutiGame"), { ssr: false }),
 };

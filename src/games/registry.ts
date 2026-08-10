@@ -355,6 +355,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "dalmuti",
+    name: "달무티",
+    nameEn: "The Great Dalmuti",
+    description:
+      "80장의 계급 카드로 벌이는 단판 승부 트릭테이킹 게임. 달무티부터 대농노까지 신분을 정하고 세금을 주고받은 뒤, 같은 장수·더 높은 계급 카드로 상대를 넘어서며 손패를 가장 먼저 털어내면 승리합니다. 조커 2장을 모두 쥐면 혁명을 선포할 수 있습니다.",
+    players: { min: 3, max: 8 },
+    playTime: { minMinutes: 15, maxMinutes: 25 },
+    category: "card",
+    thumbnail: { emoji: "👑", gradient: ["#c084fc", "#4c1d95"], image: "/games/dalmuti.jpg" },
+    tags: ["트릭테이킹", "카드", "단판승부"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "summoners-rift",
     name: "소환사의 협곡",
     nameEn: "Summoner's Rift",
