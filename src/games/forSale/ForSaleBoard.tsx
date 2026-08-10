@@ -2,14 +2,17 @@
 
 import { useCallback, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
-import { formatDollars, PropertyCard, CheckCard } from "./CardArt";
+import { CheckCard, CoinChip, coinBreakdown, formatDollars, PropertyCard } from "./CardArt";
 import {
   AuctionWinToast,
   CardFlipWrapper,
   detectAuctionWinEvent,
+  detectBidEvent,
   detectPassEvent,
   detectSaleRevealEvent,
+  FlyingBidCoin,
   FlyingPassCard,
+  type BidFlyEvent,
   type PassFlyEvent,
 } from "./ForSaleEffects";
 import { BID_INCREMENT, computeRankings, getPlayerView, type EngineAction, type ForSaleState, type SeatIndex } from "./engine";
@@ -45,15 +48,20 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
   // ForSaleEffects.tsx's module doc.
   const [trackedState, setTrackedState] = useState(state);
   const [passEvents, setPassEvents] = useState<PassFlyEvent[]>([]);
+  const [bidEvents, setBidEvents] = useState<BidFlyEvent[]>([]);
   const [winToast, setWinToast] = useState<{ winnerName: string; card: number; paid: number } | null>(null);
   const [flipRound, setFlipRound] = useState(0);
   if (trackedState !== state) {
     const newPass = detectPassEvent(trackedState, state);
+    const newBid = detectBidEvent(trackedState, state);
     const newWin = detectAuctionWinEvent(trackedState, state);
     const newReveal = detectSaleRevealEvent(trackedState, state);
     setTrackedState(state);
     if (newPass) {
       setPassEvents((prev) => [...prev, { ...newPass, id: (prev.at(-1)?.id ?? 0) + 1 }]);
+    }
+    if (newBid) {
+      setBidEvents((prev) => [...prev, { ...newBid, id: (prev.at(-1)?.id ?? 0) + 1 }]);
     }
     if (newWin && state.lastAuctionResult) {
       setWinToast({ winnerName: names[state.lastAuctionResult.winnerSeat], card: state.lastAuctionResult.winnerCard, paid: state.lastAuctionResult.winnerPaid });
@@ -62,6 +70,9 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
   }
   const handlePassDone = useCallback((id: number) => {
     setPassEvents((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+  const handleBidDone = useCallback((id: number) => {
+    setBidEvents((prev) => prev.filter((e) => e.id !== id));
   }, []);
 
   // The bid stepper resets to "one increment above the current bid" every
@@ -84,6 +95,7 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
     };
   }
   const auctionRowRef = useRef<HTMLElement | null>(null);
+  const potRef = useRef<HTMLDivElement | null>(null);
 
   const rulebookButton = (
     <button
@@ -170,8 +182,18 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
       style={{ background: "linear-gradient(160deg,#0f2532 0%,#0a1922 45%,#050d12 100%)" }}
     >
       <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-sky-100/70">
-        <span>
-          {state.playerCount}인 · {state.phase === "buying" ? "1단계: 부동산 경매" : "2단계: 수표 판매"} · 내 자산 {formatDollars(me.cash)}
+        <span className="flex flex-wrap items-center gap-x-1.5">
+          {state.playerCount}인 · {state.phase === "buying" ? "1단계: 부동산 경매" : "2단계: 수표 판매"} · 남은 현금{" "}
+          <span className="inline-flex items-center gap-1 font-semibold text-amber-200">
+            {coinBreakdown(me.cash).map(({ value, count }) => (
+              <span key={value} className="inline-flex items-center gap-0.5">
+                <CoinChip value={value} size="sm" />×{count}
+              </span>
+            ))}
+            {formatDollars(me.cash)}
+          </span>
+          · 수표 누적{" "}
+          <span className="font-semibold text-emerald-300">{formatDollars(me.checks.reduce((s, c) => s + c, 0))}</span>
         </span>
         <div className="flex gap-1.5">{rulebookButton}</div>
       </div>
@@ -186,11 +208,23 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
                 <PropertyCard key={c} value={c} size="lg" />
               ))}
             </div>
-            <p className="text-xs text-white/70">
-              현재 입찰가:{" "}
-              <span className="font-bold text-sky-300">{formatDollars(state.auction.currentBid)}</span>
-              {state.auction.highBidderSeat !== null && <> ({names[state.auction.highBidderSeat]}님)</>}
-            </p>
+            <div ref={potRef} className="flex flex-col items-center gap-1 rounded-xl border border-amber-300/25 bg-amber-400/5 px-4 py-2">
+              <span className="text-[10px] tracking-wide text-amber-200/70 uppercase">💰 입찰 팟</span>
+              <div className="flex min-h-[2.25rem] flex-wrap items-center justify-center gap-1">
+                {state.auction.currentBid > 0 ? (
+                  coinBreakdown(state.auction.currentBid).flatMap(({ value, count }) =>
+                    Array.from({ length: Math.min(count, 8) }, (_, i) => <CoinChip key={`${value}-${i}`} value={value} size="md" />),
+                  )
+                ) : (
+                  <span className="text-[10px] text-white/30">아직 입찰 없음</span>
+                )}
+              </div>
+              <p className="text-xs text-white/70">
+                현재 입찰가:{" "}
+                <span className="font-bold text-sky-300">{formatDollars(state.auction.currentBid)}</span>
+                {state.auction.highBidderSeat !== null && <> ({names[state.auction.highBidderSeat]}님)</>}
+              </p>
+            </div>
             <p className="text-xs text-white/50">
               {isMyBidTurn ? "🫵 당신 차례입니다!" : `${names[state.auction.activeSeat]}님의 차례를 기다리는 중...`}
             </p>
@@ -237,6 +271,8 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
               const isActive = state.auction!.activeSeats.includes(seat) && state.auction!.activeSeat === seat;
               const isOut = !state.auction!.activeSeats.includes(seat);
               const isSelf = seat === viewerSeat;
+              const seatBid = state.auction!.bidsBySeat[seat] ?? 0;
+              const isHighBidder = state.auction!.highBidderSeat === seat;
               return (
                 <div
                   key={seat}
@@ -251,7 +287,16 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
                     {names[seat]}
                     {isSelf && <span className="text-sky-200">(나)</span>}
                   </span>
-                  <span className="flex items-center gap-3 text-white/70">
+                  <span className="flex items-center gap-2 text-white/70">
+                    {seatBid > 0 && (
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                          isHighBidder ? "border-amber-300/70 bg-amber-400/20 text-amber-200" : "border-white/15 bg-white/5 text-white/50"
+                        }`}
+                      >
+                        {isHighBidder ? "👑" : "🎫"} {formatDollars(seatBid)}
+                      </span>
+                    )}
                     <span title="현금">{isSelf ? formatDollars(p.cash) : "🔒 비공개"}</span>
                     <span title="보유 부동산 카드">🏠 {p.properties.length}장</span>
                   </span>
@@ -306,21 +351,50 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
             </div>
 
             {state.sale.revealed && state.lastSaleResult && (
-              <div className="mt-1 flex flex-col items-center gap-1 text-xs text-white/70">
+              <div className="mt-1 flex flex-col items-center gap-1.5 text-xs text-white/70">
                 <p className="font-semibold text-emerald-200">정산 결과</p>
                 {[...state.lastSaleResult.assignments]
                   .sort((a, b) => b.property - a.property)
-                  .map((a) => (
-                    <p key={a.seat}>
-                      {names[a.seat]}: {a.property}번 부동산 → {formatDollars(a.check)}
-                    </p>
-                  ))}
+                  .map((a) => {
+                    const isMine = a.seat === viewerSeat;
+                    return isMine ? (
+                      <p
+                        key={a.seat}
+                        style={{ animation: "forsale-check-earn-pop 0.5s ease-out" }}
+                        className="flex items-center gap-1.5 rounded-full border border-emerald-300/50 bg-emerald-400/15 px-3 py-1 text-sm font-bold text-emerald-200"
+                      >
+                        🎉 {a.property}번 부동산 판매 → <span className="text-base text-emerald-300">+{formatDollars(a.check)}</span>
+                      </p>
+                    ) : (
+                      <p key={a.seat} className="text-white/60">
+                        {names[a.seat]}: {a.property}번 부동산 → {formatDollars(a.check)}
+                      </p>
+                    );
+                  })}
                 <button
                   onClick={() => onAction({ type: "continueSale" })}
                   className="mt-1 rounded-full bg-emerald-500 px-6 py-2 text-xs font-bold text-black transition hover:bg-emerald-400"
                 >
                   ▶️ 다음 라운드
                 </button>
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-2xl border border-emerald-300/20 p-2.5 sm:p-3" style={{ background: "linear-gradient(160deg,#0c2b3a 0%,#081c26 55%,#040d12 100%)" }}>
+            <h3 className="mb-2 flex flex-wrap items-center justify-between gap-1 text-[11px] font-semibold tracking-wide text-emerald-200/90 uppercase">
+              <span>🧾 내 수표 ({me.checks.length}장)</span>
+              <span className="text-emerald-300">누적 합계 {formatDollars(me.checks.reduce((s, c) => s + c, 0))}</span>
+            </h3>
+            {me.checks.length === 0 ? (
+              <p className="text-xs text-white/30">아직 판매한 수표가 없습니다.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {[...me.checks]
+                  .sort((a, b) => b - a)
+                  .map((c, i) => (
+                    <CheckCard key={i} value={c} size="sm" />
+                  ))}
               </div>
             )}
           </section>
@@ -363,6 +437,9 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
           getSeatEl={(seat) => seatRowRefs.current.get(seat) ?? null}
           onDone={handlePassDone}
         />
+      ))}
+      {bidEvents.map((event) => (
+        <FlyingBidCoin key={event.id} event={event} getSeatEl={(seat) => seatRowRefs.current.get(seat) ?? null} getPotEl={() => potRef.current} onDone={handleBidDone} />
       ))}
       {winToast && <AuctionWinToast winnerName={winToast.winnerName} card={winToast.card} paid={winToast.paid} onDone={() => setWinToast(null)} />}
     </div>

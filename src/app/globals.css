@@ -452,6 +452,30 @@ body {
   }
 }
 
+/* 포세일's Phase-1 bidding flight (see ForSaleEffects.tsx / FlyingBidCoin) —
+   a coin pops off the bidding seat and arcs into the center bidding pot each
+   time that seat raises the table's current bid, mirroring forsale-pass-fly's
+   arc but travelling the opposite direction (seat -> pot instead of
+   auction -> seat). */
+@keyframes forsale-bid-coin-fly {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+  85% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+}
+
 /* 포세일's Phase-1 round auto-resolution banner (see ForSaleEffects.tsx /
    AuctionWinToast) — a brief top-of-screen "낙찰!" toast that drops in, holds,
    then fades. */
@@ -486,6 +510,24 @@ body {
   }
   100% {
     transform: rotateY(0deg);
+  }
+}
+
+/* 포세일's Phase-2 "이번 라운드 획득" highlight (see ForSaleBoard.tsx's own
+   check-result row) — the viewer's own +$X check result pops in and settles,
+   distinguishing it at a glance from the other seats' plain result rows. */
+@keyframes forsale-check-earn-pop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
   }
 }
 

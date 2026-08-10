@@ -423,7 +423,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     players: { min: 3, max: 6 },
     playTime: { minMinutes: 20, maxMinutes: 30 },
     category: "family",
-    thumbnail: { emoji: "🏠", gradient: ["#38bdf8", "#0f766e"] },
+    thumbnail: { emoji: "🏠", gradient: ["#38bdf8", "#0f766e"], image: "/games/for-sale.jpg" },
     tags: ["경매", "블라인드제출", "심리전"],
     playable: true,
     supportsAutoRanking: true,

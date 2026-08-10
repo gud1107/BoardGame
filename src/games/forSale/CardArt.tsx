@@ -1,27 +1,38 @@
 /**
- * Pure presentation data + inline visuals for 포세일 — no game logic. Shared
- * between `ForSaleBoard.tsx` and `ForSaleEffects.tsx` so both render the same
- * card identity (same split as coyote/dalmuti's `CardArt.tsx`). No card
- * photography was provided for this game (see HANDOFF.md), so every card
- * face here is drawn purely with CSS/emoji — property cards read "1번
- * 판잣집 ~ 30번 우주기지" per the task brief's flavor framing, checks are
- * plain green banknotes scaled by value.
+ * Pure presentation data + visuals for 포세일 — no game logic. Shared between
+ * `ForSaleBoard.tsx` and `ForSaleEffects.tsx` so both render the same card
+ * identity (same split as coyote/dalmuti's `CardArt.tsx`).
+ *
+ * Real card-art photos synced from `boardGameRule/포세일/` into
+ * `public/images/for-sale/` (see HANDOFF.md for the crop pipeline): the
+ * 10x3 property-card contact sheet (`포세일카드.jpg`) was sliced into 30
+ * individual per-number files, and the check/coin reference photo
+ * (`포세일돈과 카드.jpg`) yielded a reusable check-card parchment texture
+ * (cropped tight around the center "$" seal so no single baked-in face value
+ * bleeds through — every check value is rendered as our own text over that
+ * shared texture, same reasoning as `formatDollars` already being the single
+ * source for check labels) plus one $1,000 (silver) and one $2,000 (gold)
+ * coin chip photo. Property faces already carry their own printed index
+ * corners like every other photographed deck in this project (see love
+ * letter's `CardArt.tsx` doc), so no redundant number is drawn on top of
+ * them — only checks (whose texture is deliberately number-free) and coins
+ * need a text/tier overlay drawn here.
  */
+import Image from "next/image";
 
-/** Flavor tier by property number, from "1번 판잣집" to "30번 우주기지" (task brief §1). */
-function propertyTier(value: number): { emoji: string; label: string; from: string; to: string; border: string } {
-  if (value >= 30) return { emoji: "🚀", label: "우주기지", from: "#312e81", to: "#0b0a1f", border: "border-indigo-300/60" };
-  if (value >= 26) return { emoji: "🏙️", label: "고층 타워", from: "#4c1d95", to: "#150a2e", border: "border-purple-300/50" };
-  if (value >= 21) return { emoji: "🏰", label: "대저택", from: "#78350f", to: "#241206", border: "border-amber-300/50" };
-  if (value >= 16) return { emoji: "🏢", label: "빌딩", from: "#1e3a5f", to: "#0a141f", border: "border-sky-300/50" };
-  if (value >= 11) return { emoji: "🏡", label: "전원주택", from: "#14532d", to: "#061a10", border: "border-emerald-300/50" };
-  if (value >= 6) return { emoji: "🏠", label: "주택", from: "#3f3a12", to: "#141205", border: "border-lime-300/40" };
-  return { emoji: "🏚️", label: "판잣집", from: "#3a2410", to: "#140d05", border: "border-orange-200/30" };
+/** Tier accent (border/ring color only — the card face itself is now a photo) by property number, "1번 판잣집 ~ 30번 우주기지" (task brief §1 flavor names, kept for `title`). */
+function propertyTier(value: number): { label: string; border: string; ring: string } {
+  if (value >= 30) return { label: "우주기지", border: "border-indigo-300/60", ring: "rgba(129,140,248,0.85)" };
+  if (value >= 26) return { label: "고층 타워", border: "border-purple-300/50", ring: "rgba(216,180,254,0.8)" };
+  if (value >= 21) return { label: "대저택", border: "border-amber-300/50", ring: "rgba(252,211,77,0.8)" };
+  if (value >= 16) return { label: "빌딩", border: "border-sky-300/50", ring: "rgba(125,211,252,0.8)" };
+  if (value >= 11) return { label: "전원주택", border: "border-emerald-300/50", ring: "rgba(110,231,183,0.8)" };
+  if (value >= 6) return { label: "주택", border: "border-lime-300/40", ring: "rgba(190,242,100,0.75)" };
+  return { label: "판잣집", border: "border-orange-200/30", ring: "rgba(254,215,170,0.7)" };
 }
 
-export function propertyGradient(value: number): string {
-  const t = propertyTier(value);
-  return `linear-gradient(160deg,${t.from} 0%,${t.to} 100%)`;
+export function propertyImageSrc(value: number): string {
+  return `/images/for-sale/properties/${value}.jpg`;
 }
 
 /**
@@ -41,6 +52,7 @@ export function PropertyCard({
   size?: "sm" | "md" | "lg";
 }) {
   const dims = size === "sm" ? "h-16 w-11" : size === "lg" ? "h-28 w-20" : "h-20 w-14";
+  const imgPx = size === "lg" ? 120 : size === "sm" ? 64 : 80;
   if (value === null) {
     return (
       <div
@@ -53,14 +65,11 @@ export function PropertyCard({
   const t = propertyTier(value);
   return (
     <div
-      className={`relative flex ${dims} shrink-0 flex-col items-center justify-between rounded-lg border p-1 transition ${t.border} ${
-        highlight ? "shadow-[0_0_14px_-2px_rgba(56,189,248,0.85)] ring-2 ring-sky-300/70" : ""
-      } ${className}`}
-      style={{ background: propertyGradient(value) }}
+      title={`${value}번 ${t.label}`}
+      className={`relative flex ${dims} shrink-0 overflow-hidden rounded-lg border bg-black transition ${t.border} ${className}`}
+      style={highlight ? { boxShadow: `0 0 14px -2px ${t.ring}`, outline: `2px solid ${t.ring}`, outlineOffset: "-1px" } : undefined}
     >
-      <span className="text-sm leading-none">{t.emoji}</span>
-      <span className={`leading-none font-black text-white ${size === "lg" ? "text-2xl" : size === "sm" ? "text-base" : "text-lg"}`}>{value}</span>
-      <span className="max-w-full truncate text-center text-[7px] leading-tight text-white/60">{t.label}</span>
+      <Image src={propertyImageSrc(value)} alt={`${value}번 ${t.label}`} width={imgPx} height={imgPx} className="h-full w-full object-cover" />
     </div>
   );
 }
@@ -69,11 +78,12 @@ export function formatDollars(amount: number): string {
   return `$${amount.toLocaleString("en-US")}`;
 }
 
-function checkTierBg(value: number): string {
-  if (value >= 12000) return "linear-gradient(160deg,#14532d 0%,#052e14 55%,#021208 100%)";
-  if (value >= 6000) return "linear-gradient(160deg,#166534 0%,#062e17 55%,#02150a 100%)";
-  if (value <= 0) return "linear-gradient(160deg,#3f3f46 0%,#18181b 55%,#09090b 100%)";
-  return "linear-gradient(160deg,#1d4d3a 0%,#0a2419 55%,#04120c 100%)";
+/** Tier accent for a check's face value — same green-scales-with-value read as before, now drawn as a corner ribbon over the shared parchment photo instead of the whole background. */
+function checkTierAccent(value: number): string {
+  if (value >= 12000) return "#4ade80";
+  if (value >= 6000) return "#34d399";
+  if (value <= 0) return "#71717a";
+  return "#22c55e";
 }
 
 /** A check card face. `value === null` renders a face-down back (bank deck placeholder). */
@@ -87,6 +97,7 @@ export function CheckCard({
   size?: "sm" | "md" | "lg";
 }) {
   const dims = size === "sm" ? "h-14 w-20" : size === "lg" ? "h-20 w-32" : "h-16 w-24";
+  const imgPx = size === "lg" ? 160 : size === "sm" ? 100 : 120;
   if (value === null) {
     return (
       <div className={`relative flex ${dims} shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-white/25 bg-gradient-to-br from-emerald-950 to-black ${className}`}>
@@ -94,13 +105,51 @@ export function CheckCard({
       </div>
     );
   }
+  const accent = checkTierAccent(value);
   return (
-    <div
-      className={`relative flex ${dims} shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-emerald-300/40 p-1 ${className}`}
-      style={{ background: checkTierBg(value) }}
-    >
-      <span className="text-[9px] leading-none text-emerald-200/70">CHECK</span>
-      <span className={`leading-none font-black text-white ${size === "lg" ? "text-xl" : size === "sm" ? "text-sm" : "text-base"}`}>{formatDollars(value)}</span>
+    <div className={`relative flex ${dims} shrink-0 overflow-hidden rounded-lg border ${className}`} style={{ borderColor: `${accent}66` }}>
+      <Image src="/images/for-sale/check-texture.jpg" alt="수표" width={imgPx} height={imgPx} className={`h-full w-full object-cover ${value <= 0 ? "opacity-50 grayscale" : ""}`} />
+      <span
+        className={`absolute top-0.5 left-1 leading-none font-black drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] ${size === "lg" ? "text-lg" : size === "sm" ? "text-xs" : "text-sm"}`}
+        style={{ color: accent }}
+      >
+        {formatDollars(value)}
+      </span>
+      <span
+        className={`absolute right-1 bottom-0.5 leading-none font-black drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] ${size === "lg" ? "text-lg" : size === "sm" ? "text-xs" : "text-sm"}`}
+        style={{ color: accent }}
+      >
+        {formatDollars(value)}
+      </span>
     </div>
   );
+}
+
+/**
+ * A single cash coin chip — $1,000 (silver) or $2,000 (gold), matching the
+ * two physical denominations in the rulebook (§2). Used for the bidding-pot
+ * flight FX and the leftover-cash breakdown in the scoreboard.
+ */
+export function CoinChip({ value, size = "md", className = "" }: { value: 1000 | 2000; size?: "sm" | "md" | "lg"; className?: string }) {
+  const dims = size === "sm" ? "h-4 w-4" : size === "lg" ? "h-9 w-9" : "h-6 w-6";
+  return (
+    <Image
+      src={value === 1000 ? "/images/for-sale/coin-1000.png" : "/images/for-sale/coin-2000.png"}
+      alt={`${formatDollars(value)} 코인`}
+      width={40}
+      height={40}
+      className={`${dims} shrink-0 rounded-full object-cover shadow-[0_1px_4px_rgba(0,0,0,0.6)] ${className}`}
+    />
+  );
+}
+
+/** Greedily breaks a cash amount into the fewest $2,000/$1,000 chips (every amount in this engine is a $1,000 multiple — bids, refunds, and starting cash all are, per engine.ts). Purely for the visual coin stack; never used for game math. */
+export function coinBreakdown(amount: number): { value: 1000 | 2000; count: number }[] {
+  const safe = Math.max(0, Math.round(amount / 1000)) * 1000;
+  const twoThousands = Math.floor(safe / 2000);
+  const remainder = safe - twoThousands * 2000;
+  const chips: { value: 1000 | 2000; count: number }[] = [];
+  if (twoThousands > 0) chips.push({ value: 2000, count: twoThousands });
+  if (remainder > 0) chips.push({ value: 1000, count: remainder / 1000 });
+  return chips;
 }

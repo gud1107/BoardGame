@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { formatDollars, PropertyCard } from "./CardArt";
+import { CoinChip, formatDollars, PropertyCard } from "./CardArt";
 import type { ForSaleState, SeatIndex } from "./engine";
 
 /**
@@ -15,10 +15,13 @@ import type { ForSaleState, SeatIndex } from "./engine";
  * client renders the same flight/banner for the same state change — not just
  * whoever tapped the button.
  *
- * Three independent event kinds (task brief §2):
+ * Four independent event kinds (task brief §2):
  * - `PassFlyEvent`: "포기(Pass) 시 절반 환불금 정산 시각 연출" — the passed
  *   card flies from the auction's open-card row to the passer's seat, with a
  *   refund badge.
+ * - `BidFlyEvent`: every time a seat raises the table's current bid, a coin
+ *   flies from that seat's row into the shared bidding pot in the auction
+ *   section (the mirror-image direction of `PassFlyEvent`).
  * - `AuctionWinEvent`: the round's automatic resolution (last bidder standing)
  *   — a brief "낙찰!" banner.
  * - Phase-2 blind reveal: `CardFlipWrapper` (identical technique to Coyote's)
@@ -143,6 +146,93 @@ export function AuctionWinToast({ winnerName, card, paid, onDone }: { winnerName
           {winnerName}님이 {card}번 부동산 낙찰! <span className="text-sky-300">{formatDollars(paid)}</span> 지불
         </p>
       </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1 — bidding coin flight to the center pot
+// ---------------------------------------------------------------------------
+
+export interface BidFlyEvent {
+  id: number;
+  seat: SeatIndex;
+  /** The raise amount (new currentBid minus the previous one), purely for the coin-denomination pick and the flying label — not game state. */
+  amount: number;
+}
+
+/**
+ * Detects a bid raise by diffing two consecutive `ForSaleState`s: the table's
+ * `currentBid` strictly increasing with a non-null `highBidderSeat` can only
+ * happen from a `bid` action (a fresh round instead *resets* `currentBid` to
+ * 0, which this strict `>` guard never mistakes for a raise).
+ */
+export function detectBidEvent(prev: ForSaleState, next: ForSaleState): Omit<BidFlyEvent, "id"> | null {
+  if (prev === next) return null;
+  if (prev.phase !== "buying" || next.phase !== "buying" || !prev.auction || !next.auction) return null;
+  if (next.auction.highBidderSeat === null) return null;
+  if (next.auction.currentBid > prev.auction.currentBid) {
+    return { seat: next.auction.highBidderSeat, amount: next.auction.currentBid - prev.auction.currentBid };
+  }
+  return null;
+}
+
+/** Flies a coin from the bidding seat's row to the shared bidding-pot anchor in the auction section. */
+export function FlyingBidCoin({
+  event,
+  getSeatEl,
+  getPotEl,
+  onDone,
+}: {
+  event: BidFlyEvent;
+  getSeatEl: (seat: SeatIndex) => HTMLElement | null;
+  getPotEl: () => HTMLElement | null;
+  onDone: (id: number) => void;
+}) {
+  const elRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = elRef.current;
+    const source = getSeatEl(event.seat);
+    const target = getPotEl();
+    if (!el || !source || !target) {
+      onDone(event.id);
+      return;
+    }
+    const from = rectCenter(source.getBoundingClientRect());
+    const to = rectCenter(target.getBoundingClientRect());
+
+    el.style.transition = "none";
+    el.style.left = `${from.x}px`;
+    el.style.top = `${from.y}px`;
+    void el.offsetHeight; // force layout so the "from" position + transition:none commits before re-enabling the transition
+    el.style.transition = "left 0.5s cubic-bezier(0.22,1,0.36,1), top 0.5s cubic-bezier(0.22,1,0.36,1)";
+
+    const raf = requestAnimationFrame(() => {
+      const live = elRef.current;
+      if (!live) return;
+      live.style.left = `${to.x}px`;
+      live.style.top = `${to.y}px`;
+    });
+    const timeout = setTimeout(() => onDone(event.id), 560);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timeout);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-only, see FlyingPassCard above
+  }, []);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      ref={elRef}
+      className="pointer-events-none fixed z-[70] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5"
+      style={{ left: 0, top: 0, animation: "forsale-bid-coin-fly 0.5s ease-out forwards" }}
+    >
+      <CoinChip value={event.amount >= 2000 ? 2000 : 1000} size="lg" />
+      <p className="text-[10px] font-bold text-amber-300">+{formatDollars(event.amount)}</p>
     </div>,
     document.body,
   );
