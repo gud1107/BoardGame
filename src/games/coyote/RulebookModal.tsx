@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { STARTING_FEATHERS } from "./engine";
+import { STARTING_HEARTS } from "./engine";
 
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
   return (
@@ -85,10 +85,10 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">정산 (§4)</h3>
           <ul className="list-disc space-y-1 pl-4 text-xs text-white/70">
             <li>
-              실제 총합이 <b>선언한 숫자보다 작다</b> (오버 배팅) → <b>직전 선언자</b>가 벌점(깃털 1개 상실).
+              실제 총합이 <b>선언한 숫자보다 작다</b> (오버 배팅) → <b>직전 선언자</b>가 벌점(하트 1개 상실).
             </li>
             <li>
-              실제 총합이 <b>선언한 숫자 이상</b> (안전한 배팅) → <b>&quot;코요테!&quot;를 외친 사람</b>이 벌점(깃털 1개 상실).
+              실제 총합이 <b>선언한 숫자 이상</b> (안전한 배팅) → <b>&quot;코요테!&quot;를 외친 사람</b>이 벌점(하트 1개 상실).
             </li>
           </ul>
         </section>
@@ -96,7 +96,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">게임 종료</h3>
           <p className="text-white/70">
-            깃털을 {STARTING_FEATHERS}개(벌점 토큰 {STARTING_FEATHERS}개) 모두 잃으면 즉시 탈락합니다. 최후까지 살아남은 1명이
+            하트를 {STARTING_HEARTS}개(벌점 토큰 {STARTING_HEARTS}개) 모두 잃으면 즉시 탈락합니다. 최후까지 살아남은 1명이
             최종 승리자입니다.
           </p>
         </section>

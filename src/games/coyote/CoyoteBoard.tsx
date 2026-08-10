@@ -2,9 +2,9 @@
 
 import { type CSSProperties, useState } from "react";
 import RulebookModal from "./RulebookModal";
-import { CardFace, FeatherPips } from "./CardArt";
+import { CardFace, HeartPips } from "./CardArt";
 import { CardFlipWrapper, CoyoteHowlBanner, detectCoyoteCallEvent } from "./CoyoteEffects";
-import { computeRankings, getPlayerView, STARTING_FEATHERS, type CoyoteState, type EngineAction, type SeatIndex } from "./engine";
+import { computeRankings, getPlayerView, STARTING_HEARTS, type CoyoteState, type EngineAction, type SeatIndex } from "./engine";
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -85,14 +85,14 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
       >
         <span className="text-5xl">🐺</span>
         <h2 className="text-2xl font-bold text-amber-100">{names[winner.seat]}님이 최후까지 살아남아 승리했습니다!</h2>
-        <p className="text-xs text-white/50">깃털을 모두 잃은 다른 플레이어들은 탈락했습니다.</p>
+        <p className="text-xs text-white/50">하트를 모두 잃은 다른 플레이어들은 탈락했습니다.</p>
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[360px] border-collapse text-xs">
             <thead>
               <tr className="text-white/50">
                 <th className="border-b border-white/10 px-2 py-2 text-left">순위</th>
                 <th className="border-b border-white/10 px-2 py-2 text-left">플레이어</th>
-                <th className="border-b border-white/10 px-2 py-2 text-left">남은 깃털</th>
+                <th className="border-b border-white/10 px-2 py-2 text-left">남은 하트</th>
               </tr>
             </thead>
             <tbody>
@@ -106,7 +106,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
                       {seat === viewerSeat && <span className="ml-1 text-amber-200">(나)</span>}
                     </td>
                     <td className="border-b border-white/5 px-2 py-2 text-left">
-                      <FeatherPips feathers={player.feathers} max={STARTING_FEATHERS} />
+                      <HeartPips hearts={player.hearts} max={STARTING_HEARTS} />
                     </td>
                   </tr>
                 );
@@ -156,7 +156,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
             {names[seat]}
             {isSelf && <span className="text-amber-200">(나)</span>}
           </span>
-          <FeatherPips feathers={player.feathers} max={STARTING_FEATHERS} />
+          <HeartPips hearts={player.hearts} max={STARTING_HEARTS} />
         </div>
       </div>
     );
@@ -169,7 +169,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     >
       <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-orange-100/70">
         <span>
-          {state.playerCount}인 · {state.roundNumber}라운드 · 깃털 {STARTING_FEATHERS}개 탈락
+          {state.playerCount}인 · {state.roundNumber}라운드 · 하트 {STARTING_HEARTS}개 모두 잃으면 탈락
         </span>
         <div className="flex gap-1.5">{rulebookButton}</div>
       </div>
@@ -253,8 +253,8 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
           {res.nightCardHolderSeat !== null && <p className="text-white/60">🌙 {names[res.nightCardHolderSeat]}님이 다음 라운드의 선이 됩니다</p>}
           <p className="font-semibold text-white">
             {res.loserWasBidder
-              ? `${names[res.bid.seat]}님이 오버 배팅으로 깃털 1개를 잃었습니다.`
-              : `${names[res.callerSeat]}님이 잘못된 코요테 외침으로 깃털 1개를 잃었습니다.`}
+              ? `${names[res.bid.seat]}님이 오버 배팅으로 하트 1개를 잃었습니다.`
+              : `${names[res.callerSeat]}님이 잘못된 코요테 외침으로 하트 1개를 잃었습니다.`}
           </p>
           <button
             onClick={() => onAction({ type: "continue", seed: randomSeed() })}

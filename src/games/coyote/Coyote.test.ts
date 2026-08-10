@@ -8,7 +8,7 @@ import {
   getPlayerView,
   MAX_PLAYERS,
   MIN_PLAYERS,
-  STARTING_FEATHERS,
+  STARTING_HEARTS,
   startGame,
   type Card,
   type CoyoteState,
@@ -21,9 +21,9 @@ function card(id: number, kind: Card["kind"], value = 0): Card {
 
 function makeState(overrides: Partial<CoyoteState> = {}): CoyoteState {
   const players: PlayerState[] = [
-    { seat: 0, feathers: STARTING_FEATHERS },
-    { seat: 1, feathers: STARTING_FEATHERS },
-    { seat: 2, feathers: STARTING_FEATHERS },
+    { seat: 0, hearts: STARTING_HEARTS },
+    { seat: 1, hearts: STARTING_HEARTS },
+    { seat: 2, hearts: STARTING_HEARTS },
   ];
   return {
     playerCount: 3,
@@ -89,7 +89,7 @@ describe("startGame — setup", () => {
     expect(state.players).toHaveLength(4);
     expect(Object.keys(state.tableCards)).toHaveLength(4);
     expect(state.roundDeck).toHaveLength(DECK_SIZE - 4);
-    expect(state.players.every((p) => p.feathers === STARTING_FEATHERS)).toBe(true);
+    expect(state.players.every((p) => p.hearts === STARTING_HEARTS)).toBe(true);
     expect(state.currentBid).toBeNull();
     expect(state.phase).toBe("playing");
     expect(state.roundNumber).toBe(1);
@@ -173,9 +173,9 @@ describe("declare — 숫자 선언 오름차순 유효성", () => {
 
   it("skips eliminated seats when advancing", () => {
     const players: PlayerState[] = [
-      { seat: 0, feathers: STARTING_FEATHERS },
-      { seat: 1, feathers: 0 },
-      { seat: 2, feathers: STARTING_FEATHERS },
+      { seat: 0, hearts: STARTING_HEARTS },
+      { seat: 1, hearts: 0 },
+      { seat: 2, hearts: STARTING_HEARTS },
     ];
     const state = makeState({ players, activeSeat: 0 });
     const next = applyAction(state, { type: "declare", seat: 0, number: 5 });
@@ -287,43 +287,43 @@ describe("showdown 계산 — 룰북 §3 특수 카드 적용 순서", () => {
 });
 
 describe("코요테 판정 — §4 벌점", () => {
-  it("bidder loses a feather when the real total is lower than their declaration (overbid)", () => {
+  it("bidder loses a heart when the real total is lower than their declaration (overbid)", () => {
     // table sums to 18, bidder declared 20 -> overbid.
     const state = makeState({ currentBid: { seat: 0, number: 20 }, activeSeat: 1 });
     const next = applyAction(state, { type: "coyote", seat: 1 });
     expect(next.lastResolution!.loserWasBidder).toBe(true);
     expect(next.lastResolution!.loserSeat).toBe(0);
-    expect(next.players.find((p) => p.seat === 0)!.feathers).toBe(STARTING_FEATHERS - 1);
-    expect(next.players.find((p) => p.seat === 1)!.feathers).toBe(STARTING_FEATHERS);
+    expect(next.players.find((p) => p.seat === 0)!.hearts).toBe(STARTING_HEARTS - 1);
+    expect(next.players.find((p) => p.seat === 1)!.hearts).toBe(STARTING_HEARTS);
   });
 
-  it("caller loses a feather when the declaration was safe (total >= declared number)", () => {
+  it("caller loses a heart when the declaration was safe (total >= declared number)", () => {
     // table sums to 18, bidder declared 18 exactly (safe: total >= declared).
     const state = makeState({ currentBid: { seat: 0, number: 18 }, activeSeat: 1 });
     const next = applyAction(state, { type: "coyote", seat: 1 });
     expect(next.lastResolution!.loserWasBidder).toBe(false);
     expect(next.lastResolution!.loserSeat).toBe(1);
-    expect(next.players.find((p) => p.seat === 1)!.feathers).toBe(STARTING_FEATHERS - 1);
-    expect(next.players.find((p) => p.seat === 0)!.feathers).toBe(STARTING_FEATHERS);
+    expect(next.players.find((p) => p.seat === 1)!.hearts).toBe(STARTING_HEARTS - 1);
+    expect(next.players.find((p) => p.seat === 0)!.hearts).toBe(STARTING_HEARTS);
   });
 
-  it("eliminates a seat once its feathers hit 0 and records elimination order", () => {
+  it("eliminates a seat once its hearts hit 0 and records elimination order", () => {
     const players: PlayerState[] = [
-      { seat: 0, feathers: 1 },
-      { seat: 1, feathers: STARTING_FEATHERS },
-      { seat: 2, feathers: STARTING_FEATHERS },
+      { seat: 0, hearts: 1 },
+      { seat: 1, hearts: STARTING_HEARTS },
+      { seat: 2, hearts: STARTING_HEARTS },
     ];
     const state = makeState({ players, currentBid: { seat: 0, number: 20 }, activeSeat: 1 });
     const next = applyAction(state, { type: "coyote", seat: 1 });
-    expect(next.players.find((p) => p.seat === 0)!.feathers).toBe(0);
+    expect(next.players.find((p) => p.seat === 0)!.hearts).toBe(0);
     expect(next.eliminationOrder).toEqual([0]);
     expect(next.phase).toBe("reveal"); // still 2 alive
   });
 
   it("ends the game once only one seat remains alive", () => {
     const players: PlayerState[] = [
-      { seat: 0, feathers: 1 },
-      { seat: 1, feathers: STARTING_FEATHERS },
+      { seat: 0, hearts: 1 },
+      { seat: 1, hearts: STARTING_HEARTS },
     ];
     const state = makeState({
       playerCount: 2,
@@ -370,9 +370,9 @@ describe("night card — 다음 라운드 선 교체 (module doc assumption #3)"
 
   it("falls back to the next alive seat after the loser if the night-card holder was just eliminated", () => {
     const players: PlayerState[] = [
-      { seat: 0, feathers: STARTING_FEATHERS },
-      { seat: 1, feathers: 1 }, // will be eliminated as the caller-loser below
-      { seat: 2, feathers: STARTING_FEATHERS },
+      { seat: 0, hearts: STARTING_HEARTS },
+      { seat: 1, hearts: 1 }, // will be eliminated as the caller-loser below
+      { seat: 2, hearts: STARTING_HEARTS },
     ];
     const state = makeState({
       players,
@@ -382,7 +382,7 @@ describe("night card — 다음 라운드 선 교체 (module doc assumption #3)"
     });
     const revealed = applyAction(state, { type: "coyote", seat: 1 });
     expect(revealed.lastResolution!.nightCardHolderSeat).toBe(1);
-    expect(revealed.players.find((p) => p.seat === 1)!.feathers).toBe(0);
+    expect(revealed.players.find((p) => p.seat === 1)!.hearts).toBe(0);
     const continued = applyAction(revealed, { type: "continue", seed: 5 });
     // night holder (seat 1) is now eliminated -> fallback to next alive after loser (seat 1) -> seat 2
     expect(continued.activeSeat).toBe(2);
@@ -392,9 +392,9 @@ describe("night card — 다음 라운드 선 교체 (module doc assumption #3)"
 describe("continueRound — 새 라운드 재딜", () => {
   it("re-deals fresh cards to every alive seat only", () => {
     const players: PlayerState[] = [
-      { seat: 0, feathers: STARTING_FEATHERS },
-      { seat: 1, feathers: 0 },
-      { seat: 2, feathers: STARTING_FEATHERS },
+      { seat: 0, hearts: STARTING_HEARTS },
+      { seat: 1, hearts: 0 },
+      { seat: 2, hearts: STARTING_HEARTS },
     ];
     const state = makeState({
       players,
@@ -430,9 +430,9 @@ describe("continueRound — 새 라운드 재딜", () => {
 describe("aliveSeats", () => {
   it("excludes eliminated seats", () => {
     const players: PlayerState[] = [
-      { seat: 0, feathers: 2 },
-      { seat: 1, feathers: 0 },
-      { seat: 2, feathers: 1 },
+      { seat: 0, hearts: 2 },
+      { seat: 1, hearts: 0 },
+      { seat: 2, hearts: 1 },
     ];
     const state = makeState({ players });
     expect(aliveSeats(state)).toEqual([0, 2]);

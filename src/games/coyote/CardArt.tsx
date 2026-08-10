@@ -117,13 +117,13 @@ export function CardFace({
   );
 }
 
-/** Feather (life) pips — task brief's "깃털(목숨)" framing, backed by the rulebook's "벌점 토큰 3개 = 탈락" (see engine.ts module doc #5). */
-export function FeatherPips({ feathers, max }: { feathers: number; max: number }) {
+/** Heart (life) pips — "하트(목숨)" framing, backed by the rulebook's "벌점 토큰 = 탈락" (see engine.ts module doc #5 for the 3→2 house-rule count). */
+export function HeartPips({ hearts, max }: { hearts: number; max: number }) {
   return (
     <span className="inline-flex items-center gap-0.5">
       {Array.from({ length: max }, (_, i) => (
-        <span key={i} className={i < feathers ? "text-amber-300" : "text-white/15"}>
-          🪶
+        <span key={i} className={i < hearts ? "text-rose-400" : "text-white/15"}>
+          {i < hearts ? "❤️" : "🤍"}
         </span>
       ))}
     </span>

@@ -40,18 +40,22 @@
  *    the other three specials. Read literally by name: it contributes 0 to
  *    the sum (same as a plain 0) and its holder becomes the next round's
  *    starting/declaring player instead of the usual "next alive seat after
- *    whoever just lost a feather" rotation — see `resolveCoyoteCall`/
+ *    whoever just lost a heart" rotation — see `resolveCoyoteCall`/
  *    `continueRound`.
  * 4. **MAX→0 target selection.** Only cards of kind "number" are eligible
  *    (specials themselves never compete to be "the highest card"). Ties are
  *    broken toward the lowest forehead seat index holding the max value; if
  *    the unique max only exists among cards drawn via a "?" chain (never
  *    assigned to any seat), that drawn card is zeroed instead.
- * 5. **Feather count.** The task brief frames this as "each player starts
- *    with some lives and loses them", while the rulebook frames it as
- *    "accumulate 3 벌점 토큰 → eliminated" — mathematically identical. This
- *    engine models it as `feathers` starting at `STARTING_FEATHERS` (3) and
- *    decrementing on a loss, elimination at 0.
+ * 5. **Heart (life) count.** The task brief frames this as "each player
+ *    starts with some lives and loses them", while the rulebook frames it as
+ *    "accumulate 3 벌점 토큰 → eliminated" — mathematically identical in
+ *    shape. This engine models it as `hearts` starting at `STARTING_HEARTS`
+ *    and decrementing on a loss, elimination at 0. **Deliberate house-rule
+ *    deviation from the rulebook's literal "3 tokens"**: per explicit
+ *    product request the UI theme was changed from "깃털(feather)" to
+ *    "하트(heart)" and the starting count lowered to 2 — a player is now
+ *    eliminated after their *second* penalty instead of their third.
  * 6. **Player count.** 3~6 per rulebook §1 (추천 4~6) — no conflict with the
  *    task brief here.
  */
@@ -60,7 +64,8 @@ export type SeatIndex = number;
 
 export const MIN_PLAYERS = 3;
 export const MAX_PLAYERS = 6;
-export const STARTING_FEATHERS = 3;
+/** House-rule value (rulebook's literal reading is 3 벌점 토큰) — see module doc assumption #5. */
+export const STARTING_HEARTS = 2;
 
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
@@ -119,7 +124,7 @@ export const DECK_SIZE = buildDeck().length; // 36, verified in Coyote.test.ts
 
 export interface PlayerState {
   seat: SeatIndex;
-  feathers: number;
+  hearts: number;
 }
 
 export interface Bid {
@@ -141,7 +146,7 @@ export interface Resolution {
   doubled: boolean;
   finalTotal: number;
   loserSeat: SeatIndex;
-  /** true = the previous declarer overbid and lost a feather; false = the coyote-caller misjudged a safe bid and lost one instead. */
+  /** true = the previous declarer overbid and lost a heart; false = the coyote-caller misjudged a safe bid and lost one instead. */
   loserWasBidder: boolean;
   /** This round's "밤 카드" holder (an alive forehead), if any — becomes next round's starter per module doc assumption #3. */
   nightCardHolderSeat: SeatIndex | null;
@@ -163,7 +168,7 @@ export interface CoyoteState {
   phase: Phase;
   /** Outcome of the most recent "코요테!" call, kept around through "reveal"/"gameOver" for the UI to render a showdown. Null until the first call of the game. */
   lastResolution: Resolution | null;
-  /** Seats in the order they were eliminated (feathers hit 0) — needed for final rankings. */
+  /** Seats in the order they were eliminated (hearts hit 0) — needed for final rankings. */
   eliminationOrder: SeatIndex[];
   winnerSeat: SeatIndex | null;
 }
@@ -199,7 +204,7 @@ export function startGame(playerCount: number, seed: number): CoyoteState {
 
   return {
     playerCount,
-    players: seats.map((seat) => ({ seat, feathers: STARTING_FEATHERS })),
+    players: seats.map((seat) => ({ seat, hearts: STARTING_HEARTS })),
     tableCards,
     roundDeck,
     currentBid: null,
@@ -218,14 +223,14 @@ export function startGame(playerCount: number, seed: number): CoyoteState {
 // ---------------------------------------------------------------------------
 
 export function aliveSeats(state: CoyoteState): SeatIndex[] {
-  return state.players.filter((p) => p.feathers > 0).map((p) => p.seat);
+  return state.players.filter((p) => p.hearts > 0).map((p) => p.seat);
 }
 
 function nextAliveSeat(seat: SeatIndex, players: PlayerState[], playerCount: number): SeatIndex {
   let next = (seat + 1) % playerCount;
   for (let i = 0; i < playerCount; i++) {
     const p = players.find((pl) => pl.seat === next);
-    if (p && p.feathers > 0) return next;
+    if (p && p.hearts > 0) return next;
     next = (next + 1) % playerCount;
   }
   return seat; // unreachable once the game hasn't already ended, kept only as a safe fallback
@@ -268,7 +273,7 @@ function declare(state: CoyoteState, seat: SeatIndex, number: number): CoyoteSta
   if (state.phase !== "playing") return state;
   if (seat !== state.activeSeat) return state;
   const player = state.players.find((p) => p.seat === seat);
-  if (!player || player.feathers <= 0) return state;
+  if (!player || player.hearts <= 0) return state;
   if (!Number.isInteger(number)) return state;
   if (state.currentBid !== null && number <= state.currentBid.number) return state;
 
@@ -290,7 +295,7 @@ function callCoyote(state: CoyoteState, seat: SeatIndex): CoyoteState {
   const bid = state.currentBid;
   if (!bid) return state;
   const player = state.players.find((p) => p.seat === seat);
-  if (!player || player.feathers <= 0) return state;
+  if (!player || player.hearts <= 0) return state;
 
   return resolveCoyoteCall(state, seat, bid);
 }
@@ -299,7 +304,7 @@ function callCoyote(state: CoyoteState, seat: SeatIndex): CoyoteState {
  * Showdown (rulebook §3): reveal every forehead card, resolve "?" draws (in
  * order, chaining if the drawn card is itself another "?"), apply MAX→0,
  * then x2 — exactly the §3 계산 순서 order. Compares the result against the
- * challenged bid (§4) to decide who loses a feather, and applies it.
+ * challenged bid (§4) to decide who loses a heart, and applies it.
  */
 function resolveCoyoteCall(state: CoyoteState, callerSeat: SeatIndex, bid: Bid): CoyoteState {
   const tableCards = { ...state.tableCards };
@@ -355,8 +360,8 @@ function resolveCoyoteCall(state: CoyoteState, callerSeat: SeatIndex, bid: Bid):
   const nightEntry = Object.entries(tableCards).find(([, c]) => c.kind === "night");
   const nightCardHolderSeat = nightEntry ? Number(nightEntry[0]) : null;
 
-  const players = state.players.map((p) => (p.seat === loserSeat ? { ...p, feathers: p.feathers - 1 } : p));
-  const justEliminated = players.find((p) => p.seat === loserSeat)!.feathers <= 0;
+  const players = state.players.map((p) => (p.seat === loserSeat ? { ...p, hearts: p.hearts - 1 } : p));
+  const justEliminated = players.find((p) => p.seat === loserSeat)!.hearts <= 0;
   const eliminationOrder = justEliminated ? [...state.eliminationOrder, loserSeat] : state.eliminationOrder;
 
   const resolution: Resolution = {
@@ -372,7 +377,7 @@ function resolveCoyoteCall(state: CoyoteState, callerSeat: SeatIndex, bid: Bid):
     nightCardHolderSeat,
   };
 
-  const alive = players.filter((p) => p.feathers > 0).map((p) => p.seat);
+  const alive = players.filter((p) => p.hearts > 0).map((p) => p.seat);
   if (alive.length <= 1) {
     return {
       ...state,
@@ -391,7 +396,7 @@ function resolveCoyoteCall(state: CoyoteState, callerSeat: SeatIndex, bid: Bid):
  * Deals a fresh round (module doc assumption #2) once a showdown has moved
  * the game to "reveal". The next round's starter is the "밤 카드" holder if
  * that seat is still alive (module doc assumption #3), otherwise the next
- * alive seat after whoever just lost a feather.
+ * alive seat after whoever just lost a heart.
  */
 function continueRound(state: CoyoteState, seed: number): CoyoteState {
   if (state.phase !== "reveal") return state;
