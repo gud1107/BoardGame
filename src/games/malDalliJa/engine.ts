@@ -16,23 +16,41 @@
  * verbatim, (b) task instructions verbatim, or (c) a hybrid, and picked (a)
  * — rulebook verbatim, with the Netflix death-game *presentation* (dark neon
  * UI, an elimination-style loss screen) layered on top of the *unmodified*
- * rulebook engine. So: no cards, no dice, no chips, no seed/life system, no
- * betting anywhere in this engine — only the two house rules the rulebook
- * itself names in §5 (single-match mode, and an optional turn timer).
+ * rulebook engine.
  *
- * House rules implemented:
- *  - §5 "단판 승부" is not a toggle — the original 3-games-to-2 match format
- *    isn't implemented at all; a "game" here always is the single round.
- *  - §5 "착수 시간 제한" (optional 30s–60s turn timer) is a *room setting*,
- *    not engine state — see `MalDalliJaGame.tsx`. The engine has no notion
- *    of wall-clock time (per ARCHITECTURE.md §1's purity contract), so a
- *    timed-out turn is just an ordinary `{ type: "pass" }` action that the
- *    active player's own client sends when its local countdown hits zero.
- *    The engine accepts `pass` unconditionally by design (same client-trust
- *    model every other online game in this project already documents in
- *    docs/architecture.md §2 — only the seat entitled to act is ever
- *    expected to send that seat's actions) rather than trying to verify
- *    "did time actually run out", which it structurally cannot do.
+ * **2026-08-11 direct instruction — structural redesign, no rulebook check**
+ * (this diverges from the rulebook above on purpose; it's a fresh direct
+ * user instruction, not a work-order-vs-rulebook conflict, so it wasn't run
+ * past the rulebook the way the paragraph above was): the user identified
+ * the 1-horse-per-seat setup as wrong and instructed (1) each seat now
+ * controls **10 horses** (`HORSES_PER_PLAYER`), split 5-and-5 across **two
+ * diagonal-corner start zones**, and (2) the central "오아시스" square —
+ * along with the win condition built around it — is removed entirely.
+ * Removing the oasis also removes the engine's *only* win condition, and the
+ * corner-zone assignment across the board's 4 corners was genuinely
+ * ambiguous, so both were confirmed via `AskUserQuestion` before
+ * implementing: the user picked **"말 1개 먼저 도달"** (a race — the
+ * instant any one of your horses lands on a cell inside the *opponent's*
+ * start zone, you win immediately, no need to march all 10 across) and
+ * **"플레이어별 대각선 한 쌍"** (the board has exactly 2 diagonals and 4
+ * corners; each diagonal is assigned to one player rather than split between
+ * them — p1 owns both ends of the main diagonal, corners (0,0) and (10,10);
+ * p2 owns both ends of the anti-diagonal, corners (0,10) and (10,0); 5
+ * horses at each end, so the two players' 4 corner zones never overlap).
+ *
+ * Note on "L자 이동 불가" — the task that requested this change described
+ * an "오아시스로 인한 L자 이동 제약" to remove, but that never existed in
+ * this engine: the oasis only ever gated *win detection* (must land exactly
+ * on it), never move legality — knight moves could already jump obstacles
+ * and land on any empty square regardless of the oasis. So there's no
+ * such restriction to strip out here; deleting the oasis-win check below is
+ * the entire scope of that request. What *did* need to change mechanically
+ * once 10 horses per side share the board: `resolveSlide`/knight-landing
+ * previously treated "the opponent's one horse" as the sole obstacle — with
+ * many horses now co-existing, **any** occupied cell (friend or foe) blocks
+ * a slide and blocks a knight landing (a horse can't slide through or land
+ * on another horse, its own included), matching how every other
+ * multi-piece game in this project already treats occupancy.
  */
 
 export type Seat = "p1" | "p2";
@@ -43,20 +61,12 @@ export function otherSeat(seat: Seat): Seat {
 
 /** 11×11 board, 0-indexed rows/cols 0..10 (rulebook's "A1..K11"). */
 export const BOARD_SIZE = 11;
+const LAST = BOARD_SIZE - 1;
 
 export interface Position {
   row: number;
   col: number;
 }
-
-/** §1: center cell (rulebook's "F6", 6th row/6th col 1-indexed = index 5). */
-export const OASIS: Position = { row: 5, col: 5 };
-
-/** §1 setup example: opposite corners. */
-const START_POSITIONS: Record<Seat, Position> = {
-  p1: { row: 0, col: 0 },
-  p2: { row: BOARD_SIZE - 1, col: BOARD_SIZE - 1 },
-};
 
 export function positionsEqual(a: Position, b: Position): boolean {
   return a.row === b.row && a.col === b.col;
@@ -64,6 +74,56 @@ export function positionsEqual(a: Position, b: Position): boolean {
 
 function inBounds(p: Position): boolean {
   return p.row >= 0 && p.row < BOARD_SIZE && p.col >= 0 && p.col < BOARD_SIZE;
+}
+
+function posKey(p: Position): string {
+  return `${p.row},${p.col}`;
+}
+
+/** Each seat's 10 horses, split 5-and-5 across its two corner start zones. */
+export const HORSES_PER_ZONE = 5;
+export const HORSES_PER_PLAYER = HORSES_PER_ZONE * 2;
+
+/**
+ * A 5-cell "corner zone" hugging one literal board corner — 3 cells along
+ * one edge + 2 along the perpendicular edge, a Halma-style triangular camp
+ * symmetric across that corner's own diagonal. `rowDir`/`colDir` point
+ * *inward* from the corner (e.g. corner (0,0) points +1/+1).
+ */
+function cornerZone(cornerRow: number, cornerCol: number, rowDir: 1 | -1, colDir: 1 | -1): Position[] {
+  return [
+    { row: cornerRow, col: cornerCol },
+    { row: cornerRow, col: cornerCol + colDir },
+    { row: cornerRow, col: cornerCol + 2 * colDir },
+    { row: cornerRow + rowDir, col: cornerCol },
+    { row: cornerRow + rowDir, col: cornerCol + colDir },
+  ];
+}
+
+/**
+ * §1 세팅 (2026-08-11 redesign): each seat's home zones are both ends of one
+ * board diagonal — p1 = main diagonal (0,0)+(10,10), p2 = anti-diagonal
+ * (0,10)+(10,0). `HOME_ZONES[seat][0]`/`[1]` are the two 5-cell corner
+ * camps; the flattened 10-cell array is also each seat's starting layout.
+ */
+export const HOME_ZONES: Record<Seat, [Position[], Position[]]> = {
+  p1: [cornerZone(0, 0, 1, 1), cornerZone(LAST, LAST, -1, -1)],
+  p2: [cornerZone(0, LAST, 1, -1), cornerZone(LAST, 0, -1, 1)],
+};
+
+const START_POSITIONS: Record<Seat, Position[]> = {
+  p1: [...HOME_ZONES.p1[0], ...HOME_ZONES.p1[1]],
+  p2: [...HOME_ZONES.p2[0], ...HOME_ZONES.p2[1]],
+};
+
+/** The cells a seat is racing *toward* — the opponent's two home corners. */
+export function targetZoneCells(seat: Seat): Position[] {
+  const [zoneA, zoneB] = HOME_ZONES[otherSeat(seat)];
+  return [...zoneA, ...zoneB];
+}
+
+function isInOpponentZone(seat: Seat, pos: Position): boolean {
+  return targetZoneCells(seat).some((c) => positionsEqual(c, pos));
 }
 
 export type MoveKind = "slide" | "knight";
@@ -82,6 +142,8 @@ export const KNIGHT_OFFSETS: readonly [number, number][] = [
 ];
 
 export interface LegalMove {
+  /** Index into `state.positions[seat]` — which of the seat's 10 horses this move applies to. */
+  horseIndex: number;
   moveKind: MoveKind;
   /** The direction (slide) or offset (knight) vector that produced `to`. */
   dr: number;
@@ -91,6 +153,7 @@ export interface LegalMove {
 
 export interface MoveRecord {
   seat: Seat;
+  horseIndex: number;
   moveKind: MoveKind;
   from: Position;
   to: Position;
@@ -99,7 +162,8 @@ export interface MoveRecord {
 export type GamePhase = "playing" | "gameOver";
 
 export interface MalDalliJaState {
-  positions: Record<Seat, Position>;
+  /** Each seat's 10 horses; array index is that horse's stable id for the game's duration. */
+  positions: Record<Seat, Position[]>;
   activeSeat: Seat;
   turnNumber: number; // 1-based, increments every half-move including passes
   phase: GamePhase;
@@ -116,7 +180,10 @@ export interface MalDalliJaState {
 export function startGame(rng: () => number = Math.random): MalDalliJaState {
   const firstSeat: Seat = rng() < 0.5 ? "p1" : "p2";
   return {
-    positions: { p1: { ...START_POSITIONS.p1 }, p2: { ...START_POSITIONS.p2 } },
+    positions: {
+      p1: START_POSITIONS.p1.map((p) => ({ ...p })),
+      p2: START_POSITIONS.p2.map((p) => ({ ...p })),
+    },
     activeSeat: firstSeat,
     turnNumber: 1,
     phase: "playing",
@@ -125,13 +192,22 @@ export function startGame(rng: () => number = Math.random): MalDalliJaState {
   };
 }
 
-/** §3 "슬라이드 이동": step in one direction until the next step is blocked. */
-function resolveSlide(from: Position, dr: number, dc: number, blocker: Position): Position | null {
+/** All 20 currently-occupied cells (both seats), as a lookup set. */
+function allOccupied(state: MalDalliJaState): Set<string> {
+  const set = new Set<string>();
+  for (const seat of ["p1", "p2"] as const) {
+    for (const p of state.positions[seat]) set.add(posKey(p));
+  }
+  return set;
+}
+
+/** §3 "슬라이드 이동": step in one direction until the next step is blocked by any horse or the edge. */
+function resolveSlide(from: Position, dr: number, dc: number, occupied: Set<string>): Position | null {
   let cur = from;
   let moved = false;
   for (;;) {
     const next: Position = { row: cur.row + dr, col: cur.col + dc };
-    if (!inBounds(next) || positionsEqual(next, blocker)) break;
+    if (!inBounds(next) || occupied.has(posKey(next))) break;
     cur = next;
     moved = true;
   }
@@ -139,54 +215,62 @@ function resolveSlide(from: Position, dr: number, dc: number, blocker: Position)
 }
 
 /**
- * All legal moves for the active seat in `state`. UI and engine share this
- * single function so "which cells can I move to" never drifts from "which
- * moves the engine will actually accept".
+ * All legal moves for every one of the active seat's horses in `state`. UI
+ * and engine share this single function so "which cells can I move to"
+ * never drifts from "which moves the engine will actually accept".
  */
 export function getLegalMoves(state: MalDalliJaState): LegalMove[] {
-  const from = state.positions[state.activeSeat];
-  const blocker = state.positions[otherSeat(state.activeSeat)];
+  const seat = state.activeSeat;
+  const occupied = allOccupied(state);
   const moves: LegalMove[] = [];
 
-  for (const [dr, dc] of SLIDE_DIRECTIONS) {
-    const to = resolveSlide(from, dr, dc, blocker);
-    if (to) moves.push({ moveKind: "slide", dr, dc, to });
-  }
-
-  for (const [dr, dc] of KNIGHT_OFFSETS) {
-    const to: Position = { row: from.row + dr, col: from.col + dc };
-    // §3 "이동 방식 2": lands only on an empty square; obstacles may be jumped.
-    if (inBounds(to) && !positionsEqual(to, blocker)) {
-      moves.push({ moveKind: "knight", dr, dc, to });
+  state.positions[seat].forEach((from, horseIndex) => {
+    for (const [dr, dc] of SLIDE_DIRECTIONS) {
+      const to = resolveSlide(from, dr, dc, occupied);
+      if (to) moves.push({ horseIndex, moveKind: "slide", dr, dc, to });
     }
-  }
+
+    for (const [dr, dc] of KNIGHT_OFFSETS) {
+      const to: Position = { row: from.row + dr, col: from.col + dc };
+      // §3 "이동 방식 2": lands only on an empty square; any horse may be jumped.
+      if (inBounds(to) && !occupied.has(posKey(to))) {
+        moves.push({ horseIndex, moveKind: "knight", dr, dc, to });
+      }
+    }
+  });
 
   return moves;
 }
 
 export type EngineAction =
-  | { type: "move"; moveKind: MoveKind; dr: number; dc: number }
+  | { type: "move"; horseIndex: number; moveKind: MoveKind; dr: number; dc: number }
   | { type: "pass" };
 
 function applyMove(state: MalDalliJaState, action: Extract<EngineAction, { type: "move" }>): MalDalliJaState {
   const legal = getLegalMoves(state).find(
-    (m) => m.moveKind === action.moveKind && m.dr === action.dr && m.dc === action.dc,
+    (m) =>
+      m.horseIndex === action.horseIndex &&
+      m.moveKind === action.moveKind &&
+      m.dr === action.dr &&
+      m.dc === action.dc,
   );
   if (!legal) return state; // illegal move: no-op, mirrors other engines' defensive guards
 
   const seat = state.activeSeat;
-  const from = state.positions[seat];
+  const from = state.positions[seat][action.horseIndex];
   const to = legal.to;
-  const won = positionsEqual(to, OASIS); // §4 "오아시스 착지" — must land exactly on it
+  const won = isInOpponentZone(seat, to); // 2026-08-11: first horse into the opponent's home zone wins
+
+  const nextHorses = state.positions[seat].map((p, i) => (i === action.horseIndex ? to : p));
 
   return {
     ...state,
-    positions: { ...state.positions, [seat]: to },
+    positions: { ...state.positions, [seat]: nextHorses },
     activeSeat: otherSeat(seat),
     turnNumber: state.turnNumber + 1,
     phase: won ? "gameOver" : "playing",
     winner: won ? seat : null,
-    moveHistory: [...state.moveHistory, { seat, moveKind: legal.moveKind, from, to }],
+    moveHistory: [...state.moveHistory, { seat, horseIndex: action.horseIndex, moveKind: legal.moveKind, from, to }],
   };
 }
 
