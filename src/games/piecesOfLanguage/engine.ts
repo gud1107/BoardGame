@@ -1,60 +1,50 @@
 /**
- * Pure "언어의 조각" (넷플릭스 예능 <데스게임>) rules engine — no React, no I/O.
+ * Pure "언어의 조각" rules engine — no React, no I/O.
  *
- * Source of truth: `boardGameRule/언어의조각/언어의조각.md` ("[자율 글자 수
- * 단판 승부 하우스 룰] 정비된 완벽 규칙서").
+ * **Design history**: this game originally shipped as a 1-on-1 Wordle duel
+ * where each player privately chose their *own* secret word for the other to
+ * guess (see git history / HANDOFF.md for that version's rulebook-fidelity
+ * rationale). This module replaces that design per an explicit, direct user
+ * work order (not a rulebook-derived inference) that specifies a different
+ * shape:
  *
- * **Rulebook-vs-task-instruction conflict, resolved via `AskUserQuestion`**:
- * the work order that requested this game described an entirely different
- * genre — a card-deck/supply that continuously spits out random 자음/모음
- * tiles which players drag-and-drop-assemble into words under a per-turn
- * timer, eliminating whoever fails to complete a word. The actual rulebook
- * describes a 1-on-1 Wordle-style deduction duel: before play, both players
- * privately choose their own secret word (their own free choice, typed in —
- * not drawn from any random supply); then on your turn you declare a full
- * guessed word of the agreed length, and your opponent reveals a green
- * (자모 correct & in place) / yellow (자모 present, wrong position) / gray
- * (자모 absent) hint per §3. There is no "continuously generated random
- * letter supply" mechanic anywhere in the rulebook — the rulebook's "자모
- * 타일" are just the *display* medium for the deterministic word/hint
- * exchange, not a randomized draw pool. The user was asked to choose between
- * (a) rulebook verbatim, (b) task instructions verbatim, or (c) a hybrid,
- * and picked (a) — rulebook verbatim, with the Netflix death-game
- * *presentation* (dark countdown UI, elimination-style loss screen) layered
- * on top of the *unmodified* rulebook engine. So: no random letter
- * generator, no drag-and-drop tile supply, no per-turn timeout elimination
- * mechanic in this engine — only what §2~§4 of the rulebook actually specify.
+ *  - **One shared target word**, drawn at random by the system when the game
+ *    starts — neither player chooses it, and neither player's own "secret"
+ *    exists anymore.
+ *  - **Strict turn alternation**: p1 and p2 take turns submitting a guess
+ *    against that *same* target word. Whoever lands the exact match first
+ *    wins the single-round match immediately.
+ *  - **No wall-clock timer** (explicitly decided via `AskUserQuestion` this
+ *    session): "제한시간 내에 먼저 맞히면 승리" is modeled purely as a race
+ *    condition — first exact match wins — with no countdown/timeout/turn-skip
+ *    mechanic. There is nothing to "expire".
+ *  - **Combined attempt cap** (also decided via `AskUserQuestion`): the
+ *    optional §4-style "최대 시도 횟수" house rule (제한없음/6회/8회) now caps
+ *    the *total* guesses across both players combined, not each player's own
+ *    count — since both players are racing toward one shared answer rather
+ *    than each managing their own attempt budget. Once the combined cap is
+ *    hit without an exact match, whoever accumulated more blue/yellow hint
+ *    tiles across their own guesses wins; an exact tie is an explicit draw.
  *
- * House rules implemented (rulebook §4, both already framed as "하우스 룰"
- * in the source document, so no rulebook-vs-instruction conflict here):
- *  - **승리 조건 A (필수)**: guessing the opponent's secret word exactly
- *    (all-green) wins immediately. Modeled as plain string equality —
- *    equivalent to "every 초성/중성/종성 slot green" by construction, since
- *    two words compose to the same syllables iff every jamo matches.
- *  - **승리 조건 B (선택, "최대 시도 횟수")**: a room may cap attempts per
- *    player (e.g. 6~8). Once *both* players have exhausted their cap without
- *    either landing an exact match, whoever "이끌어낸 초록/노랑 힌트"
- *    (sum of green+yellow tiles across their own guesses) is higher wins;
- *    an exact tie is an explicit draw (`isDraw: true`) — the rulebook names
- *    the tiebreak metric but doesn't address a tied score, so a draw is the
- *    most defensible fallback rather than inventing an extra rule.
- *  - The optional attempt cap is a *room setting* (like malDalliJa's turn
- *    timer), broadcast alongside the word-length choice in `game-start` —
- *    see `PiecesOfLanguageGame.tsx`.
+ * Hint color semantics (per this session's work order): a tile is
+ * **blue** when the submitted 자음/모음 matches the target word's jamo *and*
+ * position exactly, **yellow** when that jamo exists in the target word but
+ * at a different position, and **gray** when it doesn't appear in the target
+ * word at all. This is the same classic two-pass Wordle scoring as before,
+ * just relabeled green→blue per the work order's explicit color spec.
  *
- * "자모 단위" comparison granularity: the rulebook says hints compare
- * "자음/모음 단위" at "해당 위치", but doesn't pin down what "위치" means
- * once multi-syllable words are broken into jamo (하나의 5글자 단어도
- * 배치음 유무에 따라 총 자모 개수가 달라져, 단순 순서 나열로는 "위치"가
- * 흔들린다). This engine fixes position as **(음절 순서, 슬롯)** — every
- * word of N syllables always compares as N fixed (초성, 중성, 종성) triples,
- * with "종성 없음" itself treated as a comparable value (JONG_LIST[0] = "").
- * See `compareWords` below and `hangul.ts`'s module doc.
+ * "자모 단위" comparison granularity: comparisons run per **(음절 순서,
+ * 슬롯)** — every word of N syllables always compares as N fixed (초성,
+ * 중성, 종성) triples, with "종성 없음" itself treated as a comparable value
+ * (JONG_LIST[0] = ""). See `compareWords` below and `hangul.ts`'s module doc.
+ * "종성 없음" is excluded from the yellow pass: an absence of a batchim isn't
+ * a "letter" that can be "found elsewhere in the word", so a jong mismatch
+ * where either side has no batchim is gray, never yellow.
  */
 
 import { seededRng } from "@/lib/rng";
 import { decomposeWord } from "./hangul";
-import { isValidWord } from "./words";
+import { isValidWord, wordsOfLength } from "./words";
 
 export { seededRng };
 
@@ -64,7 +54,7 @@ export function otherSeat(seat: Seat): Seat {
   return seat === "p1" ? "p2" : "p1";
 }
 
-export type FeedbackColor = "green" | "yellow" | "gray";
+export type FeedbackColor = "blue" | "yellow" | "gray";
 export type JamoSlot = "cho" | "jung" | "jong";
 
 export interface SyllableFeedback {
@@ -74,32 +64,26 @@ export interface SyllableFeedback {
 }
 
 export interface GuessRecord {
+  /** Which seat submitted this guess — needed since both seats guess the same shared target. */
+  seat: Seat;
   word: string;
   /** One entry per syllable, in word order. */
   feedback: SyllableFeedback[];
-  /** True iff this guess exactly matched the opponent's secret word. */
+  /** True iff this guess exactly matched the shared target word. */
   isMatch: boolean;
 }
 
-export interface PlayerState {
-  /** Opponent-facing secret word this player set for the *other* seat to guess. Null until submitted (setup phase). */
-  secretWord: string | null;
-  /** This player's own guesses against the opponent's secret, in order. */
-  guesses: GuessRecord[];
-}
-
-function emptyPlayerState(): PlayerState {
-  return { secretWord: null, guesses: [] };
-}
-
-export type Phase = "setup" | "playing" | "gameOver";
+export type Phase = "playing" | "gameOver";
 
 export interface PiecesOfLanguageState {
-  /** Agreed syllable count for both secret words (§2, 2~5). */
+  /** Agreed syllable count for the shared target word (2~5). */
   wordLength: number;
-  /** §4 "승리 조건 B" optional attempt cap; null = unlimited (§4 default). */
+  /** Optional combined (both players' guesses summed) attempt cap; null = unlimited. */
   maxAttempts: number | null;
-  players: Record<Seat, PlayerState>;
+  /** The system-generated shared answer both players are racing to guess. Present in state on both clients (same trust model this project already uses elsewhere), but the UI must not reveal it before `phase === "gameOver"`. */
+  targetWord: string;
+  /** Every guess ever submitted, in turn order, by either seat. */
+  history: GuessRecord[];
   activeSeat: Seat;
   turnNumber: number; // 1-based, increments every guess
   phase: Phase;
@@ -108,9 +92,10 @@ export interface PiecesOfLanguageState {
 }
 
 /**
- * §3 "선/후공을 가위바위보나 추첨으로 정한 뒤" — the only randomness this
- * engine needs is picking who guesses first; secret words are the players'
- * own free choice (typed input via `set-secret`, never randomized).
+ * Draws the shared target word and picks who guesses first — the only
+ * randomness this engine needs, both derived from the same seed so every
+ * client in a room reproduces an identical state (ARCHITECTURE.md §1
+ * determinism contract).
  */
 export function startGame(
   wordLength: number,
@@ -118,50 +103,46 @@ export function startGame(
   rng: () => number = Math.random,
 ): PiecesOfLanguageState {
   const firstSeat: Seat = rng() < 0.5 ? "p1" : "p2";
+  const pool = wordsOfLength(wordLength);
+  const targetWord = pool[Math.floor(rng() * pool.length)];
   return {
     wordLength,
     maxAttempts,
-    players: { p1: emptyPlayerState(), p2: emptyPlayerState() },
+    targetWord,
+    history: [],
     activeSeat: firstSeat,
     turnNumber: 1,
-    phase: "setup",
+    phase: "playing",
     winner: null,
     isDraw: false,
   };
 }
 
 /**
- * Compares `guess` against `secret` (both already validated as same-length
+ * Compares `guess` against `target` (both already validated as same-length
  * pure-Hangul words) syllable-by-syllable, jamo-slot-by-jamo-slot, using the
  * classic two-pass Wordle algorithm run *independently per slot type*
  * (초성 only ever compares against other 초성, etc. — categories never mix).
- *
- * "종성 없음" (jong = "") is excluded from the yellow (present-elsewhere)
- * pass: an *absence* of a batchim isn't a "letter" that can be "found
- * elsewhere in the word", so a jong mismatch where either side has no
- * batchim is gray, never yellow — this is a deliberate interpretation (the
- * rulebook doesn't discuss the no-batchim edge case), documented here rather
- * than left implicit.
  */
-export function compareWords(secret: string, guess: string): SyllableFeedback[] {
-  const secretSyllables = decomposeWord(secret);
+export function compareWords(target: string, guess: string): SyllableFeedback[] {
+  const targetSyllables = decomposeWord(target);
   const guessSyllables = decomposeWord(guess);
-  const n = secretSyllables.length;
+  const n = targetSyllables.length;
 
   function scoreSlot(slot: JamoSlot): FeedbackColor[] {
-    const secretValues = secretSyllables.map((s) => s[slot]);
+    const targetValues = targetSyllables.map((s) => s[slot]);
     const guessValues = guessSyllables.map((s) => s[slot]);
     const colors: FeedbackColor[] = new Array(n).fill("gray");
-    const remaining: (string | null)[] = [...secretValues];
+    const remaining: (string | null)[] = [...targetValues];
 
     for (let i = 0; i < n; i++) {
-      if (guessValues[i] === secretValues[i]) {
-        colors[i] = "green";
+      if (guessValues[i] === targetValues[i]) {
+        colors[i] = "blue";
         remaining[i] = null;
       }
     }
     for (let i = 0; i < n; i++) {
-      if (colors[i] === "green") continue;
+      if (colors[i] === "blue") continue;
       const value = guessValues[i];
       if (slot === "jong" && value === "") continue; // no-batchim: never yellow, see doc above
       const idx = remaining.findIndex((v) => v !== null && v !== "" && v === value);
@@ -184,10 +165,11 @@ export function compareWords(secret: string, guess: string): SyllableFeedback[] 
   }));
 }
 
-/** Sum of green+yellow tiles across a player's own guesses — §4 "승리 조건 B" tiebreak metric. */
-export function hintScore(player: PlayerState): number {
+/** Sum of blue+yellow tiles across one seat's own guesses — the combined-cap tiebreak metric. */
+export function hintScore(state: PiecesOfLanguageState, seat: Seat): number {
   let score = 0;
-  for (const g of player.guesses) {
+  for (const g of state.history) {
+    if (g.seat !== seat) continue;
     for (const tile of g.feedback) {
       if (tile.cho !== "gray") score++;
       if (tile.jung !== "gray") score++;
@@ -197,82 +179,45 @@ export function hintScore(player: PlayerState): number {
   return score;
 }
 
-/** Attempts a seat has left against the cap (null = unlimited, per §4 승리 조건 B). */
-export function attemptsRemaining(state: PiecesOfLanguageState, seat: Seat): number | null {
+/** Combined guesses left across both seats against the cap (null = unlimited). */
+export function totalAttemptsRemaining(state: PiecesOfLanguageState): number | null {
   if (state.maxAttempts === null) return null;
-  return Math.max(0, state.maxAttempts - state.players[seat].guesses.length);
+  return Math.max(0, state.maxAttempts - state.history.length);
 }
 
-export type EngineAction =
-  | { type: "set-secret"; seat: Seat; word: string }
-  | { type: "guess"; word: string };
-
-function applySetSecret(
-  state: PiecesOfLanguageState,
-  seat: Seat,
-  word: string,
-): PiecesOfLanguageState {
-  if (state.phase !== "setup") return state;
-  if (!isValidWord(word, state.wordLength)) return state;
-
-  const players: Record<Seat, PlayerState> = {
-    ...state.players,
-    [seat]: { ...state.players[seat], secretWord: word },
-  };
-  const bothReady = players.p1.secretWord !== null && players.p2.secretWord !== null;
-  return { ...state, players, phase: bothReady ? "playing" : "setup" };
-}
+export type EngineAction = { type: "guess"; word: string };
 
 function applyGuess(state: PiecesOfLanguageState, word: string): PiecesOfLanguageState {
   if (state.phase !== "playing") return state;
   if (!isValidWord(word, state.wordLength)) return state;
 
   const guesser = state.activeSeat;
-  const opponent = otherSeat(guesser);
-  const secret = state.players[opponent].secretWord;
-  if (!secret) return state; // defensive: shouldn't happen once phase is "playing"
-
-  const feedback = compareWords(secret, word);
-  const isMatch = word === secret;
-  const record: GuessRecord = { word, feedback, isMatch };
-  const players: Record<Seat, PlayerState> = {
-    ...state.players,
-    [guesser]: { ...state.players[guesser], guesses: [...state.players[guesser].guesses, record] },
-  };
+  const feedback = compareWords(state.targetWord, word);
+  const isMatch = word === state.targetWord;
+  const record: GuessRecord = { seat: guesser, word, feedback, isMatch };
+  const history = [...state.history, record];
 
   if (isMatch) {
-    // §4 승리 조건 A: exact match wins immediately.
-    return { ...state, players, phase: "gameOver", winner: guesser, isDraw: false, turnNumber: state.turnNumber + 1 };
+    // First exact match wins the round immediately — the whole "win condition".
+    return { ...state, history, phase: "gameOver", winner: guesser, isDraw: false, turnNumber: state.turnNumber + 1 };
   }
 
-  if (state.maxAttempts !== null) {
-    const p1Done = players.p1.guesses.length >= state.maxAttempts;
-    const p2Done = players.p2.guesses.length >= state.maxAttempts;
-    if (p1Done && p2Done) {
-      // §4 승리 조건 B: both exhausted their attempt cap without an exact
-      // match — whoever drew more green/yellow hints wins; tie = draw.
-      const s1 = hintScore(players.p1);
-      const s2 = hintScore(players.p2);
-      const winner: Seat | null = s1 === s2 ? null : s1 > s2 ? "p1" : "p2";
-      return {
-        ...state,
-        players,
-        phase: "gameOver",
-        winner,
-        isDraw: s1 === s2,
-        turnNumber: state.turnNumber + 1,
-      };
-    }
+  if (state.maxAttempts !== null && history.length >= state.maxAttempts) {
+    // Combined cap exhausted without an exact match — whoever drew more
+    // blue/yellow hints across their own guesses wins; a tie is a draw.
+    const nextState = { ...state, history };
+    const s1 = hintScore(nextState, "p1");
+    const s2 = hintScore(nextState, "p2");
+    const winner: Seat | null = s1 === s2 ? null : s1 > s2 ? "p1" : "p2";
+    return { ...nextState, phase: "gameOver", winner, isDraw: s1 === s2, turnNumber: state.turnNumber + 1 };
   }
 
-  return { ...state, players, activeSeat: opponent, turnNumber: state.turnNumber + 1 };
+  return { ...state, history, activeSeat: otherSeat(guesser), turnNumber: state.turnNumber + 1 };
 }
 
 /** Single entry point applying any `EngineAction` to a state — the whole engine as one reducer. */
 export function applyAction(state: PiecesOfLanguageState, action: EngineAction): PiecesOfLanguageState {
   switch (action.type) {
-    case "set-secret":
-      return applySetSecret(state, action.seat, action.word);
     case "guess":
       return applyGuess(state, action.word);
     default:

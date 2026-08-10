@@ -4,7 +4,7 @@ import { useState } from "react";
 import RulebookModal from "./RulebookModal";
 import { wordsOfLength } from "./words";
 import {
-  attemptsRemaining,
+  totalAttemptsRemaining,
   otherSeat,
   type EngineAction,
   type GuessRecord,
@@ -19,18 +19,20 @@ import {
  * which owns the Supabase Realtime sync): this component only ever emits
  * intent via `onAction`/`onGameEnd`, never mutates state itself.
  *
- * Word entry is a tap-to-select "조각" chip picker (search-filtered list of
- * `wordsOfLength(wordLength)`) rather than freeform typing — this keeps
- * every submission guaranteed-valid (no dictionary-membership rejection
- * round-trip) while still giving the "글자 조각을 조합한다" tactile feel
- * the work order asked for, without inventing the rulebook-absent random
- * letter-supply mechanic (see engine.ts's module doc).
+ * Both seats race toward one system-generated shared target word
+ * (`state.targetWord`), taking strict turns submitting a guess — this board
+ * never reveals `targetWord` before `phase === "gameOver"`. Word entry is a
+ * tap-to-select "조각" chip picker (search-filtered list of
+ * `wordsOfLength(wordLength)`) rather than freeform typing, keeping every
+ * submission guaranteed-valid while still giving the "글자 조각을
+ * 조합한다" tactile feel.
  *
- * The optional §4 attempt cap is displayed as a depleting bar per seat —
- * this is the death-game "countdown" visual the work order asked for,
- * grounded in the rulebook's own optional attempt-limit house rule rather
- * than an invented wall-clock per-turn timer (which the rulebook doesn't
- * have, unlike e.g. malDalliJa's turn timer, which its own §5 does name).
+ * There is deliberately no wall-clock per-turn timer (confirmed via
+ * `AskUserQuestion`): the "제한시간 내에 먼저 맞히면 승리" win condition is
+ * modeled as a pure race — first exact match wins — with no countdown UI.
+ * The optional combined attempt cap (§4-style house rule, now summed across
+ * both seats since they share one target) is still shown as a depleting bar,
+ * which is the only "countdown"-flavored element this board has.
  */
 export interface PiecesOfLanguageBoardProps {
   state: PiecesOfLanguageState;
@@ -47,8 +49,15 @@ const SEAT_THEME: Record<Seat, { emoji: string; ring: string; text: string; bg: 
   p2: { emoji: "🟠", ring: "border-amber-400", text: "text-amber-300", bg: "bg-amber-500/20" },
 };
 
+// Static class strings (not built via string interpolation) so Tailwind's
+// JIT scanner can actually see and keep them — see WordPicker `accent` usage.
+const SEAT_PICKER_ACCENT: Record<Seat, string> = {
+  p1: "hover:border-violet-400 hover:bg-violet-500/10",
+  p2: "hover:border-amber-400 hover:bg-amber-500/10",
+};
+
 const TILE_COLOR: Record<SyllableFeedback["cho"], string> = {
-  green: "bg-emerald-500/80 border-emerald-300 text-white",
+  blue: "bg-sky-500/80 border-sky-300 text-white",
   yellow: "bg-amber-400/80 border-amber-200 text-black",
   gray: "bg-white/[0.06] border-white/15 text-white/40",
 };
@@ -61,8 +70,8 @@ function SyllableTile({ char, feedback, index }: { char: string; feedback: Sylla
     >
       <div
         className={`grid h-11 w-11 place-items-center rounded-lg border text-lg font-bold sm:h-12 sm:w-12 sm:text-xl ${
-          feedback.cho === "green" && feedback.jung === "green" && feedback.jong === "green"
-            ? "border-emerald-300 bg-emerald-500 text-white shadow-[0_0_14px_2px_rgba(16,185,129,0.5)]"
+          feedback.cho === "blue" && feedback.jung === "blue" && feedback.jong === "blue"
+            ? "border-sky-300 bg-sky-500 text-white shadow-[0_0_14px_2px_rgba(14,165,233,0.5)]"
             : "border-white/15 bg-white/5 text-white"
         }`}
       >
@@ -81,16 +90,19 @@ function SyllableTile({ char, feedback, index }: { char: string; feedback: Sylla
   );
 }
 
-function GuessRow({ guess, index }: { guess: GuessRecord; index: number }) {
+function GuessRow({ guess, index, names }: { guess: GuessRecord; index: number; names: Record<Seat, string> }) {
   return (
     <div className="flex items-center gap-2">
       <span className="w-5 shrink-0 text-right text-[11px] text-white/30">{index + 1}</span>
+      <span className={`shrink-0 text-xs ${SEAT_THEME[guess.seat].text}`} title={names[guess.seat]}>
+        {SEAT_THEME[guess.seat].emoji}
+      </span>
       <div className="flex gap-1.5">
         {[...guess.word].map((char, i) => (
           <SyllableTile key={i} char={char} feedback={guess.feedback[i]} index={i} />
         ))}
       </div>
-      {guess.isMatch && <span className="ml-1 text-xs font-bold text-emerald-300">✔ 정답!</span>}
+      {guess.isMatch && <span className="ml-1 text-xs font-bold text-sky-300">✔ 정답!</span>}
     </div>
   );
 }
@@ -142,93 +154,38 @@ export default function PiecesOfLanguageBoard({
 }: PiecesOfLanguageBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const opponentSeat = otherSeat(viewerSeat);
-  const myAttemptsLeft = attemptsRemaining(state, viewerSeat);
-  const oppAttemptsLeft = attemptsRemaining(state, opponentSeat);
-
-  // ---- Setup phase: each viewer privately picks their own secret word. ----
-  if (state.phase === "setup") {
-    const mySecret = state.players[viewerSeat].secretWord;
-    const oppReady = state.players[opponentSeat].secretWord !== null;
-    return (
-      <div className="flex flex-col gap-4">
-        <Hud state={state} names={names} viewerSeat={viewerSeat} opponentConnected={opponentConnected} onOpenRulebook={() => setRulebookOpen(true)} />
-        <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-[#140a1c] via-[#0c0715] to-black p-5">
-          <h3 className="mb-1 text-base font-bold text-white">🔒 나의 비밀 단어 정하기</h3>
-          <p className="mb-3 text-xs text-white/50">
-            {state.wordLength}글자 단어를 하나 골라주세요 — 상대가 이 단어를 맞혀야 합니다.
-          </p>
-          {mySecret ? (
-            <div className="flex flex-col items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-6 text-center">
-              <span className="text-3xl">✅</span>
-              <p className="text-sm text-white/80">
-                비밀 단어 <b className="text-emerald-300">{mySecret}</b> 제출 완료
-              </p>
-              <p className="text-xs text-white/40">
-                {oppReady ? "상대도 준비를 마쳤어요. 곧 시작합니다..." : `${names[opponentSeat]}님을 기다리는 중...`}
-              </p>
-            </div>
-          ) : (
-            <WordPicker
-              wordLength={state.wordLength}
-              accent="hover:border-violet-400 hover:bg-violet-500/10"
-              onSubmit={(word) => onAction({ type: "set-secret", seat: viewerSeat, word })}
-            />
-          )}
-        </div>
-        {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
-      </div>
-    );
-  }
+  const attemptsLeft = totalAttemptsRemaining(state);
 
   const isMyTurn = state.phase === "playing" && state.activeSeat === viewerSeat;
-  const myGuesses = state.players[viewerSeat].guesses;
-  const oppGuesses = state.players[opponentSeat].guesses;
 
   return (
     <div className="relative flex flex-col gap-4">
       <Hud state={state} names={names} viewerSeat={viewerSeat} opponentConnected={opponentConnected} onOpenRulebook={() => setRulebookOpen(true)} />
 
-      {/* ---- §4 optional attempt-cap countdown bars ---- */}
+      {/* ---- optional combined attempt-cap countdown bar (§4-style house rule) ---- */}
       {state.maxAttempts !== null && (
-        <div className="grid grid-cols-2 gap-3">
-          <AttemptsBar label={`나 (${names[viewerSeat]})`} left={myAttemptsLeft} max={state.maxAttempts} accent="violet" />
-          <AttemptsBar label={`상대 (${names[opponentSeat]})`} left={oppAttemptsLeft} max={state.maxAttempts} accent="amber" />
-        </div>
+        <AttemptsBar left={attemptsLeft} max={state.maxAttempts} />
       )}
 
       <p className="text-center text-xs text-white/40">
-        {isMyTurn ? "내 차례입니다 — 상대의 단어를 추리해 제시하세요" : `${names[opponentSeat]}의 차례를 기다리는 중…`}
+        {isMyTurn ? "내 차례입니다 — 공통 정답 단어를 추리해 제시하세요" : `${names[opponentSeat]}의 차례를 기다리는 중…`}
       </p>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* ---- My guesses against the opponent's secret ---- */}
-        <div className="flex flex-col gap-3 rounded-2xl border border-violet-400/20 bg-gradient-to-b from-[#140a1c] via-[#0c0715] to-black p-4">
-          <h3 className="text-sm font-bold text-white">🎯 내가 추리 중인 {names[opponentSeat]}님의 단어</h3>
-          <div className="flex flex-col gap-2">
-            {myGuesses.map((g, i) => (
-              <GuessRow key={i} guess={g} index={i} />
-            ))}
-            {myGuesses.length === 0 && <p className="text-xs text-white/30">아직 시도한 단어가 없어요.</p>}
-          </div>
-          {isMyTurn && myAttemptsLeft !== 0 && (
-            <WordPicker
-              wordLength={state.wordLength}
-              accent="hover:border-violet-400 hover:bg-violet-500/10"
-              onSubmit={(word) => onAction({ type: "guess", word })}
-            />
-          )}
+      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-gradient-to-b from-[#140a1c] via-[#0c0715] to-black p-4">
+        <h3 className="text-sm font-bold text-white">🎯 공통 정답 단어 추리</h3>
+        <div className="flex flex-col gap-2">
+          {state.history.map((g, i) => (
+            <GuessRow key={i} guess={g} index={i} names={names} />
+          ))}
+          {state.history.length === 0 && <p className="text-xs text-white/30">아직 아무도 시도하지 않았어요.</p>}
         </div>
-
-        {/* ---- Opponent's guesses against my secret (read-only) ---- */}
-        <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/20 bg-gradient-to-b from-[#1c1508] via-[#150f06] to-black p-4">
-          <h3 className="text-sm font-bold text-white">🕵️ {names[opponentSeat]}님이 추리 중인 내 단어</h3>
-          <div className="flex flex-col gap-2">
-            {oppGuesses.map((g, i) => (
-              <GuessRow key={i} guess={g} index={i} />
-            ))}
-            {oppGuesses.length === 0 && <p className="text-xs text-white/30">아직 상대의 시도가 없어요.</p>}
-          </div>
-        </div>
+        {isMyTurn && attemptsLeft !== 0 && (
+          <WordPicker
+            wordLength={state.wordLength}
+            accent={SEAT_PICKER_ACCENT[viewerSeat]}
+            onSubmit={(word) => onAction({ type: "guess", word })}
+          />
+        )}
       </div>
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
@@ -238,8 +195,7 @@ export default function PiecesOfLanguageBoard({
           amIWinner={state.winner === viewerSeat}
           isDraw={state.isDraw}
           winnerName={state.winner ? names[state.winner] : ""}
-          mySecret={state.players[viewerSeat].secretWord ?? ""}
-          opponentSecret={state.players[opponentSeat].secretWord ?? ""}
+          targetWord={state.targetWord}
           onConfirm={() =>
             onGameEnd({ winnerId: state.winner ? ids[state.winner] : null, isDraw: state.isDraw })
           }
@@ -269,7 +225,7 @@ function Hud({
         <div>
           <p className="text-sm font-bold text-white">언어의 조각</p>
           <p className="text-[11px] text-white/40">
-            단판 승부 · {state.wordLength}글자 · 데스게임 하우스 룰
+            공통 정답 단어 · {state.wordLength}글자 · 2인 턴제 맞추기
           </p>
         </div>
       </div>
@@ -305,26 +261,16 @@ function Hud({
   );
 }
 
-function AttemptsBar({
-  label,
-  left,
-  max,
-  accent,
-}: {
-  label: string;
-  left: number | null;
-  max: number;
-  accent: "violet" | "amber";
-}) {
+function AttemptsBar({ left, max }: { left: number | null; max: number }) {
   const remaining = left ?? max;
   const low = remaining <= Math.ceil(max / 3);
-  const barColor = low ? "bg-rose-500" : accent === "violet" ? "bg-violet-400" : "bg-amber-400";
+  const barColor = low ? "bg-rose-500" : "bg-sky-400";
   return (
     <div className="rounded-xl border border-white/10 bg-black/30 p-2.5">
       <div className="mb-1 flex items-center justify-between text-[11px] text-white/50">
-        <span>{label}</span>
+        <span>남은 총 시도 횟수 (양쪽 합산)</span>
         <span className={low ? "font-bold text-rose-300" : "text-white/60"}>
-          시도 {remaining}/{max}
+          {remaining}/{max}
         </span>
       </div>
       <div
@@ -344,15 +290,13 @@ function GameOverOverlay({
   amIWinner,
   isDraw,
   winnerName,
-  mySecret,
-  opponentSecret,
+  targetWord,
   onConfirm,
 }: {
   amIWinner: boolean;
   isDraw: boolean;
   winnerName: string;
-  mySecret: string;
-  opponentSecret: string;
+  targetWord: string;
   onConfirm: () => void;
 }) {
   const bgClass = isDraw
@@ -372,14 +316,14 @@ function GameOverOverlay({
             <p className="text-5xl">🤝</p>
             <h2 className="mt-3 text-3xl font-black tracking-wider text-slate-200 sm:text-5xl">DRAW</h2>
             <p className="mt-2 text-sm text-slate-300/80">
-              양쪽 모두 시도 횟수를 다 썼고, 얻어낸 힌트 수도 같습니다.
+              양쪽 모두 총 시도 횟수를 다 썼고, 얻어낸 힌트 수도 같습니다.
             </p>
           </>
         ) : amIWinner ? (
           <>
             <p className="text-5xl">🏆</p>
             <h2 className="mt-3 text-3xl font-black tracking-wider text-amber-300 sm:text-5xl">WINNER</h2>
-            <p className="mt-2 text-sm text-amber-100/80">상대의 비밀 단어를 먼저 완성했습니다.</p>
+            <p className="mt-2 text-sm text-amber-100/80">공통 정답 단어를 먼저 완성했습니다.</p>
           </>
         ) : (
           <>
@@ -389,14 +333,9 @@ function GameOverOverlay({
           </>
         )}
       </div>
-      <div className="flex gap-6 text-xs text-white/50">
-        <p>
-          내 비밀 단어: <span className="font-semibold text-white/80">{mySecret}</span>
-        </p>
-        <p>
-          상대 비밀 단어: <span className="font-semibold text-white/80">{opponentSecret}</span>
-        </p>
-      </div>
+      <p className="text-xs text-white/50">
+        정답 단어: <span className="font-semibold text-white/80">{targetWord}</span>
+      </p>
       <button
         onClick={onConfirm}
         className="rounded-full bg-white px-8 py-3 text-sm font-semibold text-black transition hover:bg-white/85"

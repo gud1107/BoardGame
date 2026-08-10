@@ -21,15 +21,14 @@ import PiecesOfLanguageBoard from "./PiecesOfLanguageBoard";
 /**
  * Online-room multiplayer entry point — same lockstep pattern as every other
  * 2-player game in this project (see docs/cloud-sync.md, modeled directly on
- * MalDalliJaGame.tsx): the host broadcasts a seed (only used to pick who
- * guesses first, per engine.ts) plus the room's word-length + optional §4
- * attempt-cap house rule, both clients independently derive the identical
- * initial state, and every subsequent `set-secret`/`guess` replays as an
- * `EngineAction` broadcast through the same pure reducer. `set-secret`
- * actions carry their own seat explicitly (both players submit
- * independently during setup, not turn-gated — same "own seat only" trust
- * model as grid-poker's simultaneous `place` actions); `guess` actions are
- * turn-gated so they don't need to.
+ * MalDalliJaGame.tsx): the host broadcasts a seed plus the room's
+ * word-length + optional combined attempt-cap house rule; both clients
+ * independently derive the identical initial state via `startGame` (which
+ * also draws the shared random target word from that same seed — see
+ * engine.ts), and every subsequent `guess` replays as an `EngineAction`
+ * broadcast through the same pure reducer. `guess` actions are turn-gated
+ * (only the active seat's guess has any effect) so they don't need to carry
+ * their own seat.
  */
 
 type Occupant = {
@@ -51,13 +50,13 @@ type Phase =
   | "supabase-missing"
   | "channel-error";
 
-/** §2 "글자 수 자율 지정": 2~5글자, 3글자가 표준 추천. */
+/** 공통 정답 단어의 글자 수: 2~5글자, 3글자가 표준 추천. */
 const WORD_LENGTH_OPTIONS = Array.from(
   { length: MAX_WORD_LENGTH - MIN_WORD_LENGTH + 1 },
   (_, i) => MIN_WORD_LENGTH + i,
 );
 
-/** §4 승리 조건 B: 최대 시도 횟수(선택), 기본은 제한 없음. */
+/** 최대 시도 횟수(선택, 양쪽 합산), 기본은 제한 없음. */
 const ATTEMPT_CAP_OPTIONS: { label: string; value: number | null }[] = [
   { label: "제한 없음", value: null },
   { label: "6회", value: 6 },
@@ -419,7 +418,7 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
         {intent === "create" && (
           <>
             <div className="flex flex-col gap-1.5 text-sm text-white/70">
-              [§2] 글자 수 (2~5, 3글자 추천)
+              글자 수 (2~5, 3글자 추천)
               <div className="grid grid-cols-4 gap-1.5">
                 {WORD_LENGTH_OPTIONS.map((n) => (
                   <button
@@ -438,7 +437,7 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
               </div>
             </div>
             <div className="flex flex-col gap-1.5 text-sm text-white/70">
-              [하우스 룰] §4 승리 조건 B — 최대 시도 횟수 (선택)
+              최대 시도 횟수 — 양쪽 합산 (선택)
               <div className="grid grid-cols-3 gap-1.5">
                 {ATTEMPT_CAP_OPTIONS.map((opt) => (
                   <button
