@@ -607,3 +607,84 @@ body {
     transform: rotateY(0deg);
   }
 }
+
+/* 말달리자's oasis (center win square) ambient glow — a slow breathing
+   pulse so the win target reads as "alive" even when nobody's about to
+   land on it (see MalDalliJaBoard.tsx's OasisCell). */
+@keyframes maldallija-oasis-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 12px 2px rgba(251, 191, 36, 0.35);
+    opacity: 0.85;
+  }
+  50% {
+    box-shadow: 0 0 26px 8px rgba(251, 191, 36, 0.65);
+    opacity: 1;
+  }
+}
+
+/* 말달리자's horse landing bounce — plays once whenever a horse's cell
+   changes (slide or knight move), so a move reads as an arrival rather
+   than a silent teleport (see MalDalliJaBoard.tsx's HorsePiece). */
+@keyframes maldallija-horse-land {
+  0% {
+    transform: scale(0.55);
+  }
+  55% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 말달리자's full-screen "ELIMINATED" red flash shown on the losing
+   viewer's own screen at game over (see MalDalliJaBoard.tsx's
+   GameOverOverlay) — same technique as coyote-desert-flash /
+   loveletter-glow-flash, tuned redder for the death-game theme. */
+@keyframes maldallija-elim-flash {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* 말달리자's "ELIMINATED" / "WINNER" banner text slam-in at game over (see
+   MalDalliJaBoard.tsx's GameOverOverlay) — same technique as
+   coyote-howl-burst / loveletter-letter-burst. */
+@keyframes maldallija-result-burst {
+  0% {
+    transform: scale(0.4) rotate(-3deg);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.12) rotate(1deg);
+    opacity: 1;
+  }
+  60% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* 말달리자's turn-timer low-time warning pulse (see MalDalliJaBoard.tsx's
+   TurnTimerBar) — kicks in once the countdown drops into its last few
+   seconds so the optional §5 house rule reads as urgent. */
+@keyframes maldallija-timer-warn {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
