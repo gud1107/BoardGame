@@ -12,7 +12,13 @@
  * bleeds through — every check value is rendered as our own text over that
  * shared texture, same reasoning as `formatDollars` already being the single
  * source for check labels) plus one $1,000 (silver) and one $2,000 (gold)
- * coin chip photo. Property faces already carry their own printed index
+ * coin chip photo. The 30 per-cell boxes are NOT a naive equal 80x120.33px
+ * grid (the contact sheet has uneven gaps between cards, so that naive
+ * division bled ~15-20px of the neighboring card into every crop — the bug
+ * behind the cropped/blended card faces seen in-app); each of the 30 boxes
+ * was instead measured from the actual photo (per-row column runs + per-row
+ * y-bands, via a luminance-threshold scan) so every crop is exactly one full
+ * card, border to border. Property faces already carry their own printed index
  * corners like every other photographed deck in this project (see love
  * letter's `CardArt.tsx` doc), so no redundant number is drawn on top of
  * them — only checks (whose texture is deliberately number-free) and coins
