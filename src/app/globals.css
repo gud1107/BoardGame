@@ -688,3 +688,73 @@ body {
     opacity: 0.4;
   }
 }
+
+/* 언어의 조각's hint-tile reveal — each syllable's cho/jung/jong chip flips
+   in with a staggered delay (see PiecesOfLanguageBoard.tsx's SyllableTile),
+   mirroring a Wordle-style reveal so a guess reads as a judgment sequence
+   rather than an instant table update. */
+@keyframes pol-tile-flip {
+  0% {
+    transform: rotateX(90deg) scale(0.85);
+    opacity: 0;
+  }
+  60% {
+    transform: rotateX(-8deg) scale(1.03);
+    opacity: 1;
+  }
+  100% {
+    transform: rotateX(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
+/* 언어의 조각's full-screen WINNER/ELIMINATED/DRAW flash shown at game over
+   (see PiecesOfLanguageBoard.tsx's GameOverOverlay) — same technique as
+   maldallija-elim-flash, reused for this game's dark death-game theme. */
+@keyframes pol-elim-flash {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* 언어의 조각's "WINNER" / "ELIMINATED" / "DRAW" banner text slam-in at game
+   over (see PiecesOfLanguageBoard.tsx's GameOverOverlay) — same technique as
+   maldallija-result-burst. */
+@keyframes pol-result-burst {
+  0% {
+    transform: scale(0.4) rotate(-3deg);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.12) rotate(1deg);
+    opacity: 1;
+  }
+  60% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* 언어의 조각's §4 optional attempt-cap bar low-attempts warning pulse (see
+   PiecesOfLanguageBoard.tsx's AttemptsBar) — the death-game "countdown"
+   visual, grounded in the rulebook's own optional attempt-limit house rule
+   rather than an invented wall-clock timer (see engine.ts's module doc). */
+@keyframes pol-attempts-warn {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}

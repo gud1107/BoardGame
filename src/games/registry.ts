@@ -444,6 +444,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
   },
+  {
+    id: "pieces-of-language",
+    name: "언어의 조각",
+    nameEn: "Pieces of Language",
+    description:
+      "넷플릭스 예능 <데스게임> 등장 2인 전용 단어 추리 데스매치. 글자 수(2~5)를 합의해 각자 비밀 단어를 정한 뒤, 턴마다 상대 단어를 추정해 제시하면 초성/중성/종성 단위로 초록(정확)·노랑(포함, 위치 틀림)·회색(불포함) 힌트를 받습니다. 상대 단어를 완벽히 맞히면 즉시 승리하는 단판 승부입니다.",
+    players: { min: 2, max: 2 },
+    playTime: { minMinutes: 10, maxMinutes: 20 },
+    category: "deduction",
+    thumbnail: { emoji: "🧩", gradient: ["#a855f7", "#140a1c"] },
+    tags: ["2인전용", "단어추리", "단판승부", "데스게임"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {
