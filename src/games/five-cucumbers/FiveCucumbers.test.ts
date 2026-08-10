@@ -315,7 +315,7 @@ describe("trick 7 — final-trick cucumber penalty settlement (rulebook §3)", (
     expect(next.players[0].cucumbers).toBe(8);
   });
 
-  it("a tie for highest on trick 7 makes EVERY tied player eat the full penalty each (not split)", () => {
+  it("a tie for highest on trick 7 gives the cucumbers to whoever played it LATER only (rulebook §2-4 tie-break applies to trick 7 too, not a split-the-penalty rule)", () => {
     const state = makeState({
       trickNumber: FINAL_TRICK_NUMBER,
       eliminationThreshold: 6,
@@ -329,11 +329,41 @@ describe("trick 7 — final-trick cucumber penalty settlement (rulebook §3)", (
       trickPlays: [{ seat: 0, card: card(12, 0) }, { seat: 1, card: card(3) }],
     });
     const next = applyAction(state, { type: "playCard", seat: 2, cardId: "12-1" });
-    expect(new Set(next.lastTrickResult?.winnerSeats)).toEqual(new Set([0, 2]));
+    // Seats 0 and 2 tie at 12; seat 2 played later -> seat 2 alone wins the
+    // trick and alone eats the penalty. Seat 0, despite tying the top value,
+    // takes none.
+    expect(next.lastTrickResult?.winnerSeats).toEqual([2]);
     expect(next.lastTrickResult?.cucumberPenaltyEach).toBe(4); // 12 -> tier 4
-    expect(next.players[0].cucumbers).toBe(4);
     expect(next.players[2].cucumbers).toBe(4);
+    expect(next.players[0].cucumbers).toBe(0);
     expect(next.players[1].cucumbers).toBe(0);
+  });
+
+  it("a tie for highest on trick 7 where the EARLIER play was higher-index-seat still resolves to whoever played later, regardless of seat number", () => {
+    // Same tie value (15) but this time seat 0 (lower seat number) plays it
+    // LAST -> seat 0 must win despite seat 2 having a "higher" seat-adjacent
+    // intuition; confirms the tie-break keys off play order, not seat index.
+    const state = makeState({
+      trickNumber: FINAL_TRICK_NUMBER,
+      eliminationThreshold: 6,
+      players: [
+        makePlayer(0, { hand: [card(2)] }),
+        makePlayer(1, { hand: [card(15, 0)] }),
+        makePlayer(2, { hand: [card(15, 1)] }),
+      ],
+      leadSeat: 2,
+      activeSeat: 0,
+      trickPlays: [{ seat: 2, card: card(15, 1) }, { seat: 1, card: card(15, 0) }],
+    });
+    const next = applyAction(state, { type: "playCard", seat: 0, cardId: "2-0" });
+    // 15 vs 15 tie between seats 1 and 2; neither is the last play (seat 0's
+    // trailing 2 isn't the tied top value) — seat 1's 15 came after seat 2's,
+    // so seat 1 (the later of the TWO TIED plays) wins, not seat 0.
+    expect(next.lastTrickResult?.winnerSeats).toEqual([1]);
+    expect(next.lastTrickResult?.cucumberPenaltyEach).toBe(5);
+    expect(next.players[1].cucumbers).toBe(5);
+    expect(next.players[0].cucumbers).toBe(0);
+    expect(next.players[2].cucumbers).toBe(0);
   });
 
   it("TRICKS_PER_ROUND / FINAL_TRICK_NUMBER are both 7", () => {

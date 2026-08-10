@@ -59,8 +59,8 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             마지막(7번째) 트릭 — 오이 정산
           </h3>
           <p className="mb-2 text-white/70">
-            7번째 트릭에서 가장 높은 숫자를 낸 사람(들)이 그 카드의 오이 개수만큼 오이 토큰을 받습니다. 동점이면
-            동점자 <b>모두 각자</b> 같은 개수를 받습니다(나눠 갖지 않음).
+            7번째 트릭에서 가장 높은 숫자를 내서 트릭을 따낸 사람이 그 카드의 오이 개수만큼 오이 토큰을 받습니다.
+            동점이면 위와 동일하게 <b>나중에 낸 사람</b>만 트릭을 따내 오이를 받습니다(먼저 낸 사람은 받지 않음).
           </p>
           <div className="overflow-x-auto rounded-xl border border-white/10">
             <table className="w-full min-w-[280px] border-collapse text-xs">

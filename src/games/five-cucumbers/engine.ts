@@ -77,7 +77,7 @@ export interface TrickResult {
   roundNumber: number;
   trickNumber: number;
   plays: PlayedCard[];
-  /** Exactly 1 seat for tricks 1-6 (later play wins ties, rulebook §2-4); 1+ seats for trick 7 (every tied top card is penalized, rulebook §3). */
+  /** Always exactly 1 seat — later play wins ties, rulebook §2-4, applied uniformly to every trick including the 7th (§3 penalizes only that sole winner, never every tied top card). Kept as an array for shape-compatibility with `RoundSummary.winnerSeats` / existing UI code. */
   winnerSeats: SeatIndex[];
   /** Cucumbers each winner seat gained — 0 for tricks 1-6 (no penalty until the round's last trick). */
   cucumberPenaltyEach: number;
@@ -322,9 +322,18 @@ function playCard(state: FiveCucumbersState, seat: SeatIndex, cardId: string): F
     };
   }
 
-  // 7th (final) trick — rulebook §3: every tied-for-highest player eats the penalty.
-  const maxValue = Math.max(...trickPlays.map((p) => p.card.value));
-  const winnerSeats = trickPlays.filter((p) => p.card.value === maxValue).map((p) => p.seat);
+  // 7th (final) trick — rulebook §2-4/§3: trick-winner determination is the
+  // SAME rule as every other trick, including its tie-break ("나중에 해당
+  // 숫자를 낸 플레이어가 트릭을 따냅니다" — whoever played the tied top card
+  // LATER wins outright); §3 then penalizes only "트릭을 따낸 플레이어"
+  // (singular, the trick's winner), not every seat that happened to tie the
+  // top value. So a tie for highest on trick 7 gives the cucumbers to the
+  // later player alone, exactly like tricks 1-6 give them sole lead of the
+  // next trick — this replaced an earlier reading where every tied seat ate
+  // the penalty.
+  const winnerSeat = resolveLeadingTrickWinner(trickPlays);
+  const winnerSeats = [winnerSeat];
+  const maxValue = trickPlays.find((p) => p.seat === winnerSeat)!.card.value;
   const onesCount = trickPlays.filter((p) => p.card.value === 1).length;
   const multiplier = 2 ** onesCount;
   const penaltyEach = cucumberCount(maxValue) * multiplier;
