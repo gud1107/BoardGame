@@ -21,4 +21,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "las-vegas": dynamic(() => import("./lasVegas/LasVegasGame"), { ssr: false }),
   "summoners-rift": dynamic(() => import("./summonersRift/SummonersRiftGame"), { ssr: false }),
   dalmuti: dynamic(() => import("./dalmuti/DalmutiGame"), { ssr: false }),
+  coyote: dynamic(() => import("./coyote/CoyoteGame"), { ssr: false }),
 };

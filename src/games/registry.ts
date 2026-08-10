@@ -384,6 +384,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
   },
+  {
+    id: "coyote",
+    name: "코요테",
+    nameEn: "Coyote",
+    description:
+      "내 카드는 나만 못 보는 인디언 포커 스타일 블러핑 게임. 모두의 이마 위 카드 숫자 합을 두고 선언을 올리다가, 직전 선언이 오버했다고 판단되면 '코요테!'를 외쳐 승부를 겁니다. 깃털을 모두 잃으면 탈락, 최후의 1인이 승리합니다.",
+    players: { min: 3, max: 6 },
+    playTime: { minMinutes: 15, maxMinutes: 25 },
+    category: "party",
+    thumbnail: { emoji: "🐺", gradient: ["#f97316", "#7c2d12"] },
+    tags: ["블러핑", "심리전", "파티"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {

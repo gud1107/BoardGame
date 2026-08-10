@@ -372,3 +372,60 @@ body {
     opacity: 0;
   }
 }
+
+/* 코요테's showdown backdrop (see CoyoteEffects.tsx / CoyoteHowlBanner) — a
+   desert-toned wash that fades in behind the "코요테!" banner the instant the
+   round leaves "playing" for "reveal"/"gameOver". */
+@keyframes coyote-desert-flash {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* 코요테's "코요테!!!" howl banner (see CoyoteEffects.tsx / CoyoteHowlBanner)
+   — slams in like a wolf lunging into frame, holds, then fades. Plays
+   identically for every connected client off the shared lockstep phase
+   transition, same technique as dalmuti-revolution-burst above. */
+@keyframes coyote-howl-burst {
+  0% {
+    transform: scale(0.5) translateY(40px) rotate(-6deg);
+    opacity: 0;
+  }
+  35% {
+    transform: scale(1.1) translateY(-6px) rotate(2deg);
+    opacity: 1;
+  }
+  55% {
+    transform: scale(1) translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  85% {
+    transform: scale(1) translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.03) translateY(0) rotate(0deg);
+    opacity: 0;
+  }
+}
+
+/* 코요테's per-seat forehead-card reveal (see CoyoteEffects.tsx /
+   CardFlipWrapper) — a single 3D turn so every hidden card visibly flips
+   face-up the moment the showdown reveals it. */
+@keyframes coyote-card-flip {
+  0% {
+    transform: rotateY(0deg);
+  }
+  50% {
+    transform: rotateY(90deg);
+  }
+  100% {
+    transform: rotateY(0deg);
+  }
+}
