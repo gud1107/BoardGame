@@ -38,10 +38,33 @@
  *    *characters* (음절 문자 단위), not over their individual jamo — jamo
  *    only matter for the rotator's composition step in the UI, never for
  *    scoring.
+ *  - **Shared tile pool + hard-rail combination limit** (this session's
+ *    work order, per the revised rulebook §1-2): at game start the engine
+ *    also draws a **common consonant/vowel tile pool** — one tile per
+ *    *unique* jamo the target word's own syllables actually need (a jamo
+ *    used twice across the word still gets one pool tile, since the pool is
+ *    a set of "what's available", not a per-use inventory), each tile shown
+ *    either as that literal jamo or — if it has a rotation partner per
+ *    `hangul.ts`'s `ROTATION_PAIRS` — its rotated stand-in instead (mirrors
+ *    the rulebook's own §1 example: target "가을" needs 초성 ㄱ, but the pool
+ *    displays `ㄴ` since ㄱ↔ㄴ rotate into each other). This is deliberately
+ *    the *minimal* pool — exactly the target's own jamo, no random filler —
+ *    per explicit user confirmation (`AskUserQuestion`) that the rulebook's
+ *    §1 "정답에 쓰인 자모음" example should win over its own §3 example (which
+ *    shows a guess built from jamo absent from the §1 pool — an internal
+ *    contradiction in the rulebook `AskUserQuestion` resolved in §1's favor).
+ *    A guess can now only be submitted if, syllable by syllable, its own
+ *    초성/중성/종성 are each satisfiable from that pool (literally or via
+ *    rotation) — see `wordBuildableFromPool`. Since the pool is built from
+ *    the target's own decomposition, the target word itself always remains
+ *    constructible; what the hard rail actually forecloses is *unrelated*
+ *    wrong guesses, leaving mostly the target's own jamo rearranged into
+ *    other syllable orders/word-bank entries as viable wrong guesses.
  */
 
-import { seededRng } from "@/lib/rng";
+import { seededRng, shuffle } from "@/lib/rng";
 import { isValidWord, wordsOfLength } from "./words";
+import { decomposeWord, jamoSatisfiedByTile, rotationPartner } from "./hangul";
 
 export { seededRng };
 
@@ -76,6 +99,8 @@ export interface PiecesOfLanguageState {
   maxAttempts: number | null;
   /** The system-generated shared answer both players are racing to guess. Present in state on both clients (same trust model this project already uses elsewhere), but the UI must not reveal it before `phase === "gameOver"`. */
   targetWord: string;
+  /** The common consonant/vowel tile pool both seats build guesses from — one tile per unique jamo `targetWord` needs, each possibly shown as its rotation stand-in. See module doc. Fixed for the whole match. */
+  tilePool: string[];
   /** Every guess ever submitted, in turn order, by either seat. */
   history: GuessRecord[];
   activeSeat: Seat;
@@ -97,12 +122,14 @@ export function startGame(
   rng: () => number = Math.random,
 ): PiecesOfLanguageState {
   const firstSeat: Seat = rng() < 0.5 ? "p1" : "p2";
-  const pool = wordsOfLength(wordLength);
-  const targetWord = pool[Math.floor(rng() * pool.length)];
+  const bank = wordsOfLength(wordLength);
+  const targetWord = bank[Math.floor(rng() * bank.length)];
+  const tilePool = buildTilePool(targetWord, rng);
   return {
     wordLength,
     maxAttempts,
     targetWord,
+    tilePool,
     history: [],
     activeSeat: firstSeat,
     turnNumber: 1,
@@ -110,6 +137,38 @@ export function startGame(
     winner: null,
     isDraw: false,
   };
+}
+
+/**
+ * Draws the common tile pool for `targetWord`: one tile per unique jamo its
+ * syllables need (초성/중성/종성, batchim-less 종성 contributes nothing),
+ * each independently shown as itself or — 50/50, via `rng` — its rotation
+ * partner where one exists (see module doc + `hangul.ts`'s `ROTATION_PAIRS`).
+ * Order is shuffled (also via `rng`) so the pool doesn't visually spell out
+ * the target's own 초성→중성→종성 sequence.
+ */
+export function buildTilePool(targetWord: string, rng: () => number): string[] {
+  const required = new Set<string>();
+  for (const syl of decomposeWord(targetWord)) {
+    required.add(syl.cho);
+    required.add(syl.jung);
+    if (syl.jong !== "") required.add(syl.jong);
+  }
+  const tiles = [...required].map((jamo) => {
+    const partner = rotationPartner(jamo);
+    return partner && rng() < 0.5 ? partner : jamo;
+  });
+  return shuffle(tiles, rng);
+}
+
+/** True iff every syllable of `word` can be composed from `pool` tiles (literally or via rotation) — the §2 "조합 제약" hard rail. */
+export function wordBuildableFromPool(word: string, pool: string[]): boolean {
+  return decomposeWord(word).every(
+    (syl) =>
+      pool.some((tile) => jamoSatisfiedByTile(tile, syl.cho)) &&
+      pool.some((tile) => jamoSatisfiedByTile(tile, syl.jung)) &&
+      (syl.jong === "" || pool.some((tile) => jamoSatisfiedByTile(tile, syl.jong))),
+  );
 }
 
 /**
@@ -170,6 +229,7 @@ export type EngineAction = { type: "guess"; word: string };
 function applyGuess(state: PiecesOfLanguageState, word: string): PiecesOfLanguageState {
   if (state.phase !== "playing") return state;
   if (!isValidWord(word, state.wordLength)) return state;
+  if (!wordBuildableFromPool(word, state.tilePool)) return state;
 
   const guesser = state.activeSeat;
   const feedback = compareWords(state.targetWord, word);

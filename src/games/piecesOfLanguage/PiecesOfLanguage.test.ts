@@ -1,17 +1,32 @@
 import { describe, expect, it } from "vitest";
 import { seededRng } from "@/lib/rng";
-import { CHO_LIST, JONG_LIST, JUNG_LIST, composeSyllable, decomposeSyllable, decomposeWord, isPureHangulWord } from "./hangul";
+import {
+  CHO_LIST,
+  JONG_LIST,
+  JUNG_LIST,
+  composeSyllable,
+  decomposeSyllable,
+  decomposeWord,
+  isPureHangulWord,
+  jamoSatisfiedByTile,
+  rotationPartner,
+} from "./hangul";
 import { isValidWord, wordsOfLength, WORD_BANK } from "./words";
 import {
   applyAction,
+  buildTilePool,
   compareWords,
   hintScore,
   otherSeat,
   startGame,
   totalAttemptsRemaining,
+  wordBuildableFromPool,
   type PiecesOfLanguageState,
   type Seat,
 } from "./engine";
+
+/** Every jamo a rotator dial can produce — used so tests unrelated to the tile-pool hard rail don't get blocked by it. */
+const WILDCARD_POOL = [...CHO_LIST, ...JUNG_LIST, ...JONG_LIST.filter((j) => j !== "")];
 
 describe("hangul decomposition", () => {
   it("splits a syllable with a complex vowel and no batchim", () => {
@@ -139,10 +154,16 @@ describe("startGame", () => {
   });
 });
 
-/** Builds a ready-to-guess state with a pinned target word and active seat, for deterministic assertions. */
+/**
+ * Builds a ready-to-guess state with a pinned target word and active seat,
+ * for deterministic assertions. `tilePool` is overridden to a wildcard pool
+ * (every jamo a dial can produce) so these pre-existing scoring/turn tests
+ * aren't incidentally gated by the tile-pool hard rail — that rule gets its
+ * own dedicated tests below.
+ */
 function readyGame(targetWord: string, wordLength: number, maxAttempts: number | null, activeSeat: Seat = "p1"): PiecesOfLanguageState {
   const state = startGame(wordLength, maxAttempts, seededRng(1));
-  return { ...state, targetWord, activeSeat };
+  return { ...state, targetWord, activeSeat, tilePool: WILDCARD_POOL };
 }
 
 describe("guess / 승리 조건 (정답 즉시 승리)", () => {
@@ -244,5 +265,64 @@ describe("otherSeat", () => {
   it("flips between p1 and p2", () => {
     expect(otherSeat("p1")).toBe("p2");
     expect(otherSeat("p2")).toBe("p1");
+  });
+});
+
+describe("rotationPartner / jamoSatisfiedByTile (조각 회전 규칙)", () => {
+  it("ㄱ and ㅡ rotate to the rulebook's explicit examples, and back", () => {
+    expect(rotationPartner("ㄱ")).toBe("ㄴ");
+    expect(rotationPartner("ㄴ")).toBe("ㄱ");
+    expect(rotationPartner("ㅡ")).toBe("ㅣ");
+    expect(rotationPartner("ㅣ")).toBe("ㅡ");
+  });
+
+  it("a jamo outside the rulebook's rotation pairs has no partner", () => {
+    expect(rotationPartner("ㅁ")).toBeNull();
+    expect(rotationPartner("ㅏ")).toBeNull();
+  });
+
+  it("a tile satisfies a requirement either literally or via its rotation partner", () => {
+    expect(jamoSatisfiedByTile("ㄴ", "ㄱ")).toBe(true); // rotated stand-in
+    expect(jamoSatisfiedByTile("ㄱ", "ㄱ")).toBe(true); // literal
+    expect(jamoSatisfiedByTile("ㅁ", "ㄱ")).toBe(false); // no rotation partner, not literal
+  });
+
+  it("an empty (batchim-less) requirement is always satisfied — there's nothing to place", () => {
+    expect(jamoSatisfiedByTile("ㅁ", "")).toBe(true);
+  });
+});
+
+describe("buildTilePool / wordBuildableFromPool (공통 자모음 조각 풀 & 하드 레일 조합 제약)", () => {
+  it("draws exactly one tile per unique jamo the target needs, deduped across repeated jamo", () => {
+    // "가을": 초성 ㄱ/ㅇ, 중성 ㅏ/ㅡ, 종성 ㄹ — 5 unique jamo, no repeats to dedupe here,
+    // but this pins the count so a future change that double-counts would fail loudly.
+    const pool = buildTilePool("가을", seededRng(1));
+    expect(pool).toHaveLength(5);
+  });
+
+  it("dedupes a jamo repeated across syllables into a single pool tile", () => {
+    // "바다": both syllables need 중성 ㅏ — should still be one tile, not two.
+    const pool = buildTilePool("바다", seededRng(1));
+    expect(pool).toHaveLength(3); // ㅂ, ㄷ, ㅏ
+  });
+
+  it("the target word itself is always buildable from its own pool (rotation-aware)", () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const pool = buildTilePool("가을", seededRng(seed));
+      expect(wordBuildableFromPool("가을", pool)).toBe(true);
+    }
+  });
+
+  it("a word needing a jamo entirely absent from the pool is rejected", () => {
+    const pool = buildTilePool("가을", seededRng(1)); // needs only ㄱ/ㅇ/ㅏ/ㅡ/ㄹ (+ㄴ if rotated)
+    expect(wordBuildableFromPool("사과", pool)).toBe(false); // needs ㅅ, absent either way
+  });
+
+  it("startGame wires the pool into state, and applyGuess hard-rails a pool-incompatible guess even if it's a valid dictionary word", () => {
+    let state = readyGame("가을", 2, null, "p1");
+    state = { ...state, tilePool: buildTilePool("가을", seededRng(1)) };
+    const before = state;
+    const blocked = applyAction(state, { type: "guess", word: "사과" }); // valid word, but ㅅ/ㅘ not in "가을"'s pool
+    expect(blocked).toEqual(before); // no-op, same as any other rejected guess
   });
 });

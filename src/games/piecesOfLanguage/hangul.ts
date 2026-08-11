@@ -89,3 +89,35 @@ export function composeSyllable(choIndex: number, jungIndex: number, jongIndex: 
   const offset = (cho * JUNG_COUNT + jung) * JONG_COUNT + jong;
   return String.fromCodePoint(HANGUL_BASE + offset);
 }
+
+/**
+ * The "조각 회전" house rule (`언어의조각.md` §2): a pool tile can stand in
+ * for a different jamo when rotated. The rulebook states exactly two
+ * concrete pairs — "ㄱ을 돌려 ㄴ으로", "ㅡ를 돌려 ㅣ로" — and no general
+ * geometric rule for every other jamo, so this table is intentionally
+ * limited to those two rulebook-literal pairs rather than inventing
+ * additional "plausible-looking" rotations for jamo the rulebook never
+ * mentions. Each pair is symmetric (rotating twice returns the original).
+ */
+const ROTATION_PAIRS: readonly [string, string][] = [
+  ["ㄱ", "ㄴ"],
+  ["ㅡ", "ㅣ"],
+];
+
+const ROTATION_MAP: Record<string, string> = Object.fromEntries(
+  ROTATION_PAIRS.flatMap(([a, b]) => [
+    [a, b],
+    [b, a],
+  ]),
+);
+
+/** The jamo `jamo` becomes when rotated, or `null` if it has no rotation partner (rotating it is a no-op). */
+export function rotationPartner(jamo: string): string | null {
+  return ROTATION_MAP[jamo] ?? null;
+}
+
+/** True iff `poolJamo` — used as-is or rotated — can stand in for `required`. An empty `required` (no batchim) always trivially holds, since there's nothing to place. */
+export function jamoSatisfiedByTile(poolJamo: string, required: string): boolean {
+  if (required === "") return true;
+  return poolJamo === required || rotationPartner(poolJamo) === required;
+}

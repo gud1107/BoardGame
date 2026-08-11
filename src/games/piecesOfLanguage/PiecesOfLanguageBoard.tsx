@@ -3,10 +3,11 @@
 import { useState } from "react";
 import RulebookModal from "./RulebookModal";
 import { isValidWord, wordsOfLength } from "./words";
-import { CHO_LIST, JONG_LIST, JUNG_LIST, composeSyllable, decomposeWord } from "./hangul";
+import { CHO_LIST, JONG_LIST, JUNG_LIST, composeSyllable, decomposeWord, rotationPartner } from "./hangul";
 import {
   totalAttemptsRemaining,
   otherSeat,
+  wordBuildableFromPool,
   type EngineAction,
   type FeedbackColor,
   type GuessRecord,
@@ -35,6 +36,13 @@ import {
  * slot: green (character + position both match the target), yellow
  * (character exists elsewhere in the target), red (character absent
  * entirely) — see `engine.ts`'s `compareWords` module doc.
+ *
+ * The rotator dials are further hard-railed by `state.tilePool` (`TilePool`
+ * below renders it in the shared common area): a composed word only submits
+ * once it's *both* a real word-bank entry *and* buildable from the pool
+ * (literally or via each tile's rotation partner) — see `engine.ts`'s
+ * `buildTilePool`/`wordBuildableFromPool` module doc for why the pool is
+ * deliberately minimal (exactly the target's own jamo, no random filler).
  *
  * There is deliberately no wall-clock per-turn timer (confirmed via
  * `AskUserQuestion`): the "제한시간 내에 먼저 맞히면 승리" win condition is
@@ -84,19 +92,66 @@ function SyllableTile({ char, feedback, index }: { char: string; feedback: Feedb
   );
 }
 
-function GuessRow({ guess, index, names }: { guess: GuessRecord; index: number; names: Record<Seat, string> }) {
+/** One seat's guess, rendered as a cell inside the 2×N history grid — the seat is implied by which column it's in, so no seat badge here (unlike the old single-timeline row). */
+function GuessCell({ guess, turn }: { guess: GuessRecord; turn: number }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="w-5 shrink-0 text-right text-[11px] text-white/30">{index + 1}</span>
-      <span className={`shrink-0 text-xs ${SEAT_THEME[guess.seat].text}`} title={names[guess.seat]}>
-        {SEAT_THEME[guess.seat].emoji}
-      </span>
+    <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.03] px-2 py-1.5">
+      <span className="w-5 shrink-0 text-right text-[11px] text-white/30">{turn}</span>
       <div className="flex gap-1.5">
         {[...guess.word].map((char, i) => (
           <SyllableTile key={i} char={char} feedback={guess.feedback[i]} index={i} />
         ))}
       </div>
-      {guess.isMatch && <span className="ml-1 text-xs font-bold text-sky-300">✔ 정답!</span>}
+      {guess.isMatch && <span className="ml-1 text-xs font-bold text-sky-300">✔</span>}
+    </div>
+  );
+}
+
+/** Empty placeholder cell for a turn this seat hasn't reached yet — keeps the two columns row-aligned. */
+function EmptyGuessCell({ turn }: { turn: number }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-dashed border-white/5 px-2 py-1.5">
+      <span className="w-5 shrink-0 text-right text-[11px] text-white/20">{turn}</span>
+      <span className="text-xs text-white/20">대기 중…</span>
+    </div>
+  );
+}
+
+/**
+ * 2×N grid history (`언어의조각.md` §4): P1's own guesses down the left
+ * column, P2's own guesses down the right column, row *n* pairing each
+ * seat's *n*-th own submission — replaces the old single merged
+ * chronological timeline entirely.
+ */
+function HistoryGrid({ history, names }: { history: GuessRecord[]; names: Record<Seat, string> }) {
+  const bySeat: Record<Seat, GuessRecord[]> = { p1: [], p2: [] };
+  for (const g of history) bySeat[g.seat].push(g);
+  const rows = Math.max(bySeat.p1.length, bySeat.p2.length);
+
+  if (rows === 0) {
+    return <p className="text-xs text-white/30">아직 아무도 시도하지 않았어요.</p>;
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+      {(["p1", "p2"] as const).map((seat) => (
+        <div key={seat} className={`flex items-center gap-1.5 text-xs font-semibold ${SEAT_THEME[seat].text}`}>
+          <span>{SEAT_THEME[seat].emoji}</span>
+          <span className="truncate">{names[seat]}</span>
+        </div>
+      ))}
+      {/* Flat list, not grouped by row — `grid-cols-2`'s default row-major auto-flow
+          lands p1/p2 side by side per row on its own, so no Fragment-per-row wrapper
+          (and no missing-key-on-Fragment footgun) is needed. */}
+      {Array.from({ length: rows }, (_, i) => i).flatMap((i) =>
+        (["p1", "p2"] as const).map((seat) =>
+          bySeat[seat][i] ? (
+            <GuessCell key={`${seat}-${i}`} guess={bySeat[seat][i]} turn={i + 1} />
+          ) : (
+            <EmptyGuessCell key={`${seat}-${i}`} turn={i + 1} />
+          ),
+        ),
+      )}
     </div>
   );
 }
@@ -112,10 +167,17 @@ function wordToDials(word: string): SyllableDialState[] {
   }));
 }
 
-/** Closest-match valid words for the "완성 가능한 조합 힌트" — ranked by how many syllables already match the current (invalid) composition, so the hint gets more specific the closer the rotators get. */
-function suggestCompletions(current: string, wordLength: number, limit = 6): string[] {
+/**
+ * Closest-match valid words for the "완성 가능한 조합 힌트" — ranked by how
+ * many syllables already match the current (invalid) composition, so the
+ * hint gets more specific the closer the rotators get. Restricted to words
+ * the shared tile pool can actually build (§2's hard rail), so a hint never
+ * points at something the pool would reject on submit anyway.
+ */
+function suggestCompletions(current: string, wordLength: number, pool: string[], limit = 6): string[] {
   const currentChars = [...current];
   const ranked = wordsOfLength(wordLength)
+    .filter((w) => wordBuildableFromPool(w, pool))
     .map((w) => {
       const chars = [...w];
       let matches = 0;
@@ -124,6 +186,32 @@ function suggestCompletions(current: string, wordLength: number, limit = 6): str
     })
     .sort((a, b) => b.matches - a.matches);
   return ranked.slice(0, limit).map((r) => r.w);
+}
+
+/** The common consonant/vowel tile pool, rendered in the shared central area both seats build guesses from (`언어의조각.md` §1/§2). */
+function TilePool({ pool }: { pool: string[] }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-sky-400/20 bg-gradient-to-b from-sky-950/40 to-black/20 p-3">
+      <p className="text-center text-xs font-semibold tracking-wide text-sky-200/70">
+        🧵 공통 자모음 조각 풀 — 이 조각(과 회전 변환)으로만 조합 가능
+      </p>
+      <div className="flex flex-wrap justify-center gap-2">
+        {pool.map((jamo, i) => {
+          const partner = rotationPartner(jamo);
+          return (
+            <div
+              key={i}
+              className="flex flex-col items-center gap-0.5 rounded-lg border border-sky-400/30 bg-sky-500/10 px-2.5 py-1.5"
+              title={partner ? `회전하면 ${partner}(으)로도 사용할 수 있어요` : undefined}
+            >
+              <span className="text-lg font-bold text-white">{jamo}</span>
+              {partner && <span className="text-[10px] leading-none text-sky-300">↻{partner}</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function SyllableDial({
@@ -171,10 +259,12 @@ function SyllableDial({
  */
 function SyllableRotator({
   wordLength,
+  pool,
   onSubmit,
   accent,
 }: {
   wordLength: number;
+  pool: string[];
   onSubmit: (word: string) => void;
   accent: string;
 }) {
@@ -190,8 +280,10 @@ function SyllableRotator({
   }
 
   const word = dials.map((d) => composeSyllable(d.cho, d.jung, d.jong)).join("");
-  const valid = isValidWord(word, wordLength);
-  const suggestions = valid ? [] : suggestCompletions(word, wordLength);
+  const isWord = isValidWord(word, wordLength);
+  const poolOk = wordBuildableFromPool(word, pool);
+  const valid = isWord && poolOk;
+  const suggestions = valid ? [] : suggestCompletions(word, wordLength, pool);
 
   return (
     <div className="flex flex-col gap-3">
@@ -219,7 +311,7 @@ function SyllableRotator({
 
       {valid ? (
         <p className="text-center text-xs text-sky-300">✅ &ldquo;{word}&rdquo; — 제출 가능한 단어예요</p>
-      ) : (
+      ) : !isWord ? (
         <div className="flex flex-col items-center gap-1.5">
           <p className="text-center text-xs text-amber-300">
             ⚠️ &ldquo;{word}&rdquo;은(는) 올바른 한글 단어 조합이 아니에요
@@ -227,6 +319,27 @@ function SyllableRotator({
           {suggestions.length > 0 && (
             <div className="flex flex-wrap justify-center gap-1.5">
               <span className="text-[11px] text-white/40">완성 힌트:</span>
+              {suggestions.map((w) => (
+                <button
+                  key={w}
+                  type="button"
+                  onClick={() => setDials(wordToDials(w))}
+                  className={`rounded-full border border-white/15 px-2.5 py-1 text-[11px] font-medium text-white/70 transition hover:text-white ${accent}`}
+                >
+                  {w}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-1.5">
+          <p className="text-center text-xs text-rose-300">
+            🧩 &ldquo;{word}&rdquo;은(는) 단어이지만 지금 조각 풀로는 조합할 수 없어요
+          </p>
+          {suggestions.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-1.5">
+              <span className="text-[11px] text-white/40">조각 풀로 조합 가능한 단어:</span>
               {suggestions.map((w) => (
                 <button
                   key={w}
@@ -278,21 +391,19 @@ export default function PiecesOfLanguageBoard({
         <AttemptsBar left={attemptsLeft} max={state.maxAttempts} />
       )}
 
+      <TilePool pool={state.tilePool} />
+
       <p className="text-center text-xs text-white/40">
         {isMyTurn ? "내 차례입니다 — 공통 정답 단어를 추리해 제시하세요" : `${names[opponentSeat]}의 차례를 기다리는 중…`}
       </p>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-gradient-to-b from-[#140a1c] via-[#0c0715] to-black p-4">
-        <h3 className="text-sm font-bold text-white">🎯 공통 정답 단어 추리</h3>
-        <div className="flex flex-col gap-2">
-          {state.history.map((g, i) => (
-            <GuessRow key={i} guess={g} index={i} names={names} />
-          ))}
-          {state.history.length === 0 && <p className="text-xs text-white/30">아직 아무도 시도하지 않았어요.</p>}
-        </div>
+        <h3 className="text-sm font-bold text-white">🎯 공통 정답 단어 추리 — 기록</h3>
+        <HistoryGrid history={state.history} names={names} />
         {isMyTurn && attemptsLeft !== 0 && (
           <SyllableRotator
             wordLength={state.wordLength}
+            pool={state.tilePool}
             accent={SEAT_PICKER_ACCENT[viewerSeat]}
             onSubmit={(word) => onAction({ type: "guess", word })}
           />
