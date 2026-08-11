@@ -72,3 +72,20 @@ export function decomposeSyllable(char: string): DecomposedSyllable {
 export function decomposeWord(word: string): DecomposedSyllable[] {
   return [...word].map(decomposeSyllable);
 }
+
+/**
+ * Inverse of `decomposeSyllable` — composes one precomposed Hangul syllable
+ * block from a (초성, 중성, 종성) index triple into `CHO_LIST` / `JUNG_LIST` /
+ * `JONG_LIST` (indices wrap via `%` so a rotator UI can spin past either end).
+ * Every index combination yields a structurally valid Unicode syllable block
+ * — Hangul composition has no "invalid" (자음, 모음) pairing — so the rotator
+ * UI's own "이 조합은 등록된 단어가 아니에요" check is a word-bank membership
+ * check (`isValidWord`), never a composition-validity check.
+ */
+export function composeSyllable(choIndex: number, jungIndex: number, jongIndex: number): string {
+  const cho = ((choIndex % CHO_LIST.length) + CHO_LIST.length) % CHO_LIST.length;
+  const jung = ((jungIndex % JUNG_COUNT) + JUNG_COUNT) % JUNG_COUNT;
+  const jong = ((jongIndex % JONG_COUNT) + JONG_COUNT) % JONG_COUNT;
+  const offset = (cho * JUNG_COUNT + jung) * JONG_COUNT + jong;
+  return String.fromCodePoint(HANGUL_BASE + offset);
+}

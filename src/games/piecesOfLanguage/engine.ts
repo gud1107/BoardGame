@@ -23,27 +23,24 @@
  *    the *total* guesses across both players combined, not each player's own
  *    count — since both players are racing toward one shared answer rather
  *    than each managing their own attempt budget. Once the combined cap is
- *    hit without an exact match, whoever accumulated more blue/yellow hint
- *    tiles across their own guesses wins; an exact tie is an explicit draw.
- *
- * Hint color semantics (per this session's work order): a tile is
- * **blue** when the submitted 자음/모음 matches the target word's jamo *and*
- * position exactly, **yellow** when that jamo exists in the target word but
- * at a different position, and **gray** when it doesn't appear in the target
- * word at all. This is the same classic two-pass Wordle scoring as before,
- * just relabeled green→blue per the work order's explicit color spec.
- *
- * "자모 단위" comparison granularity: comparisons run per **(음절 순서,
- * 슬롯)** — every word of N syllables always compares as N fixed (초성,
- * 중성, 종성) triples, with "종성 없음" itself treated as a comparable value
- * (JONG_LIST[0] = ""). See `compareWords` below and `hangul.ts`'s module doc.
- * "종성 없음" is excluded from the yellow pass: an absence of a batchim isn't
- * a "letter" that can be "found elsewhere in the word", so a jong mismatch
- * where either side has no batchim is gray, never yellow.
+ *    hit without an exact match, whoever accumulated more green/yellow hint
+ *    lights across their own guesses wins; an exact tie is an explicit draw.
+ *  - **Letter-rotation entry + one-light-per-completed-글자 judging** (this
+ *    session's work order): guesses are built by rotating 초성/중성/종성
+ *    dials per syllable (see `hangul.ts`'s `composeSyllable`) rather than
+ *    picked whole from a list, and — critically — feedback is no longer 3
+ *    jamo-slot lights per syllable. It's exactly **one light per completed
+ *    글자** (2-syllable word ⇒ 2 lights): **green** when that syllable
+ *    character matches the target's character at the same position exactly,
+ *    **yellow** when that exact syllable character exists elsewhere in the
+ *    target word, **red** when it doesn't appear in the target word at all.
+ *    This is the classic two-pass Wordle algorithm run over whole syllable
+ *    *characters* (음절 문자 단위), not over their individual jamo — jamo
+ *    only matter for the rotator's composition step in the UI, never for
+ *    scoring.
  */
 
 import { seededRng } from "@/lib/rng";
-import { decomposeWord } from "./hangul";
 import { isValidWord, wordsOfLength } from "./words";
 
 export { seededRng };
@@ -54,14 +51,11 @@ export function otherSeat(seat: Seat): Seat {
   return seat === "p1" ? "p2" : "p1";
 }
 
-export type FeedbackColor = "blue" | "yellow" | "gray";
-export type JamoSlot = "cho" | "jung" | "jong";
+/** green = 글자·위치 모두 일치, yellow = 단어에 포함되나 위치가 다름, red = 단어에 전혀 없음. */
+export type FeedbackColor = "green" | "yellow" | "red";
 
-export interface SyllableFeedback {
-  cho: FeedbackColor;
-  jung: FeedbackColor;
-  jong: FeedbackColor;
-}
+/** One color per completed 글자 (syllable) of the guess, in word order — one light per character, not per jamo slot. */
+export type SyllableFeedback = FeedbackColor;
 
 export interface GuessRecord {
   /** Which seat submitted this guess — needed since both seats guess the same shared target. */
@@ -120,60 +114,46 @@ export function startGame(
 
 /**
  * Compares `guess` against `target` (both already validated as same-length
- * pure-Hangul words) syllable-by-syllable, jamo-slot-by-jamo-slot, using the
- * classic two-pass Wordle algorithm run *independently per slot type*
- * (초성 only ever compares against other 초성, etc. — categories never mix).
+ * words) whole-syllable-character by whole-syllable-character, using the
+ * classic two-pass Wordle algorithm: exact-position matches ("green") are
+ * claimed first, then any remaining guessed character is matched against
+ * whatever target characters are still unclaimed ("yellow") — so a
+ * repeated character is never counted more times than it actually appears
+ * in the target. One color comes out per syllable — this is deliberately
+ * *not* a jamo-level comparison (see module doc: rotating cho/jung/jong is
+ * purely how a guess gets composed, not how it gets scored).
  */
 export function compareWords(target: string, guess: string): SyllableFeedback[] {
-  const targetSyllables = decomposeWord(target);
-  const guessSyllables = decomposeWord(guess);
-  const n = targetSyllables.length;
+  const targetChars = [...target];
+  const guessChars = [...guess];
+  const n = targetChars.length;
+  const colors: SyllableFeedback[] = new Array(n).fill("red");
+  const remaining: (string | null)[] = [...targetChars];
 
-  function scoreSlot(slot: JamoSlot): FeedbackColor[] {
-    const targetValues = targetSyllables.map((s) => s[slot]);
-    const guessValues = guessSyllables.map((s) => s[slot]);
-    const colors: FeedbackColor[] = new Array(n).fill("gray");
-    const remaining: (string | null)[] = [...targetValues];
-
-    for (let i = 0; i < n; i++) {
-      if (guessValues[i] === targetValues[i]) {
-        colors[i] = "blue";
-        remaining[i] = null;
-      }
+  for (let i = 0; i < n; i++) {
+    if (guessChars[i] === targetChars[i]) {
+      colors[i] = "green";
+      remaining[i] = null;
     }
-    for (let i = 0; i < n; i++) {
-      if (colors[i] === "blue") continue;
-      const value = guessValues[i];
-      if (slot === "jong" && value === "") continue; // no-batchim: never yellow, see doc above
-      const idx = remaining.findIndex((v) => v !== null && v !== "" && v === value);
-      if (idx !== -1) {
-        colors[i] = "yellow";
-        remaining[idx] = null;
-      }
-    }
-    return colors;
   }
-
-  const choColors = scoreSlot("cho");
-  const jungColors = scoreSlot("jung");
-  const jongColors = scoreSlot("jong");
-
-  return Array.from({ length: n }, (_, i) => ({
-    cho: choColors[i],
-    jung: jungColors[i],
-    jong: jongColors[i],
-  }));
+  for (let i = 0; i < n; i++) {
+    if (colors[i] === "green") continue;
+    const idx = remaining.findIndex((c) => c !== null && c === guessChars[i]);
+    if (idx !== -1) {
+      colors[i] = "yellow";
+      remaining[idx] = null;
+    }
+  }
+  return colors;
 }
 
-/** Sum of blue+yellow tiles across one seat's own guesses — the combined-cap tiebreak metric. */
+/** Sum of green+yellow lights (one per completed 글자) across one seat's own guesses — the combined-cap tiebreak metric. */
 export function hintScore(state: PiecesOfLanguageState, seat: Seat): number {
   let score = 0;
   for (const g of state.history) {
     if (g.seat !== seat) continue;
     for (const tile of g.feedback) {
-      if (tile.cho !== "gray") score++;
-      if (tile.jung !== "gray") score++;
-      if (tile.jong !== "gray") score++;
+      if (tile !== "red") score++;
     }
   }
   return score;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededRng } from "@/lib/rng";
-import { decomposeWord, isPureHangulWord } from "./hangul";
+import { CHO_LIST, JONG_LIST, JUNG_LIST, composeSyllable, decomposeSyllable, decomposeWord, isPureHangulWord } from "./hangul";
 import { isValidWord, wordsOfLength, WORD_BANK } from "./words";
 import {
   applyAction,
@@ -35,6 +35,29 @@ describe("hangul decomposition", () => {
   });
 });
 
+describe("composeSyllable (rotator dial composition)", () => {
+  it("composes the standard cho+jung syllable (no batchim) the rotator UI's example uses", () => {
+    // ㅂ(초성) + ㅏ(중성), 종성 없음 = "바"; ㄷ + ㅏ = "다" — the rulebook's own "바다" example.
+    expect(composeSyllable(CHO_LIST.indexOf("ㅂ"), JUNG_LIST.indexOf("ㅏ"), 0)).toBe("바");
+    expect(composeSyllable(CHO_LIST.indexOf("ㄷ"), JUNG_LIST.indexOf("ㅏ"), 0)).toBe("다");
+  });
+
+  it("round-trips with decomposeSyllable for a syllable that has a batchim", () => {
+    const d = decomposeSyllable("하늘"[1]); // "늘": ㄴ/ㅡ/ㄹ
+    const composed = composeSyllable(
+      CHO_LIST.indexOf(d.cho as (typeof CHO_LIST)[number]),
+      JUNG_LIST.indexOf(d.jung as (typeof JUNG_LIST)[number]),
+      JONG_LIST.indexOf(d.jong as (typeof JONG_LIST)[number]),
+    );
+    expect(composed).toBe("늘");
+  });
+
+  it("wraps out-of-range indices via modulo, so a rotator can spin past either end", () => {
+    expect(composeSyllable(-1, 0, 0)).toBe(composeSyllable(CHO_LIST.length - 1, 0, 0));
+    expect(composeSyllable(CHO_LIST.length, 0, 0)).toBe(composeSyllable(0, 0, 0));
+  });
+});
+
 describe("word bank validity", () => {
   it("every bank entry actually has the syllable count of its own bucket", () => {
     for (const [length, words] of Object.entries(WORD_BANK)) {
@@ -52,47 +75,38 @@ describe("word bank validity", () => {
   });
 });
 
-describe("compareWords (색상 힌트 판정)", () => {
-  it("an exact match is all-blue on every slot", () => {
+describe("compareWords (완성 글자 단위 불빛 판정 — 1글자 = 1불빛)", () => {
+  it("an exact match is all-green, one light per syllable", () => {
     const feedback = compareWords("나무", "나무");
-    expect(feedback).toEqual([
-      { cho: "blue", jung: "blue", jong: "blue" },
-      { cho: "blue", jung: "blue", jong: "blue" },
-    ]);
+    expect(feedback).toEqual(["green", "green"]);
   });
 
-  it("marks a jamo present but in the wrong syllable position as yellow", () => {
-    // target "가지" (ㄱㅏ / ㅈㅣ) vs guess "지가" (ㅈㅣ / ㄱㅏ): every 초성/중성
-    // is present in the target, just at the swapped position.
-    const feedback = compareWords("가지", "지가");
-    expect(feedback[0].cho).toBe("yellow"); // guess ㅈ exists in target's 초성 set (pos 1)
-    expect(feedback[0].jung).toBe("yellow"); // guess ㅣ exists in target's 중성 set (pos 1)
-    expect(feedback[1].cho).toBe("yellow");
-    expect(feedback[1].jung).toBe("yellow");
+  it("marks a syllable present elsewhere in the target as yellow — the rulebook's 바다/다바 example", () => {
+    // target "바다": guessing "다바" swaps both syllables, so each guessed
+    // character exists in the target just at the other position.
+    const feedback = compareWords("바다", "다바");
+    expect(feedback).toEqual(["yellow", "yellow"]);
   });
 
-  it("marks a jamo absent from the target entirely as gray", () => {
+  it("marks a syllable absent from the target entirely as red", () => {
     const feedback = compareWords("나무", "구름");
-    expect(feedback.some((s) => s.cho === "gray" || s.jung === "gray")).toBe(true);
+    expect(feedback).toEqual(["red", "red"]);
   });
 
-  it("never marks a missing batchim as yellow, even if another syllable also lacks one", () => {
-    // "나무": both syllables have jong="" (no batchim). Guessing "무나" (also
-    // both no-batchim) should never produce a yellow jong — always blue
-    // (both absent at that position) since jong[0]===jong[1]==="" for both words.
-    const feedback = compareWords("나무", "무나");
-    for (const s of feedback) {
-      expect(s.jong).not.toBe("yellow");
-    }
+  it("does not double-count a repeated syllable beyond how many times it appears in the target", () => {
+    // target "다리" has exactly one "리" (at position 1), so guessing "리리"
+    // can only mark one of the two as green/yellow. The exact-position match
+    // (pos 1) is claimed first as green, leaving the target's "리" spent —
+    // so pos 0's guessed "리" has nothing left to match and is red.
+    const feedback = compareWords("다리", "리리");
+    expect(feedback).toEqual(["red", "green"]);
   });
 
-  it("does not double-count a repeated jamo beyond how many times it appears in the target", () => {
-    // target "다리" (초성 ㄷㄹ), guess "라라" (ㄹㄹ). Target has exactly one ㄹ
-    // (pos 1), so only one of the two guessed ㄹ's can be marked (blue at
-    // pos1, and pos0 must be gray, not yellow).
-    const feedback = compareWords("다리", "라라");
-    const choColors = feedback.map((s) => s.cho).sort();
-    expect(choColors).toEqual(["blue", "gray"]);
+  it("mixes green/yellow/red within a single guess as appropriate", () => {
+    // target "바다": guess "바구" — "바" matches position 0 (green), "구"
+    // doesn't appear in "바다" at all (red).
+    const feedback = compareWords("바다", "바구");
+    expect(feedback).toEqual(["green", "red"]);
   });
 });
 
