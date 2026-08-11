@@ -519,6 +519,23 @@ export function evaluateHand(cards: Card[]): HandResult {
   };
 }
 
+/**
+ * Display label for a resolved hand. Every category name is rank-invariant
+ * on its own ("플러시", "트리플", ...) since the concrete cards are always
+ * shown right alongside it — except one pair / two pair, where "원 페어" /
+ * "투 페어" alone doesn't say *which* rank(s) paired up. Those two get the
+ * specific rank(s) folded directly into the label instead, e.g. "(8원페어)"
+ * or "(K, 10투페어)" (higher pair first — `ranks` is already sorted that
+ * way by `evaluateConcrete`'s count-desc/rank-desc group ordering). Every
+ * other category is untouched, returning the plain `categoryName`.
+ */
+export function formatHandLabel(hand: HandResult): string {
+  const rankText = (rank: number) => RANK_LABEL[rank] ?? String(rank);
+  if (hand.category === 1) return `(${rankText(hand.ranks[0])}원페어)`;
+  if (hand.category === 2) return `(${rankText(hand.ranks[0])}, ${rankText(hand.ranks[1])}투페어)`;
+  return hand.categoryName;
+}
+
 // ---------------------------------------------------------------------------
 // Reducer
 // ---------------------------------------------------------------------------

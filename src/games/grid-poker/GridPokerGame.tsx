@@ -20,6 +20,7 @@ import {
   type TimerSettings,
 } from "./engine";
 import GridPokerBoard from "./GridPokerBoard";
+import { useGridPokerBgm } from "./useGridPokerBgm";
 
 /**
  * Online-room multiplayer entry point, same pattern as BangGame/HanamikojiGame:
@@ -205,12 +206,16 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
   // Tense background music plays only while an actual match is underway —
   // started/stopped by this one effect so every path back to "playing"
   // (fresh game, rematch, reconnect-via-state-sync) restarts it and every
-  // path away (post-game, leaving, unmount) reliably stops it.
+  // path away (post-game, leaving, unmount) reliably stops it. Defaults to
+  // OFF (see useGridPokerBgm) — this effect also reruns when the player
+  // flips the in-game toggle mid-match, starting/stopping BGM immediately
+  // instead of waiting for the next "playing" transition.
+  const { enabled: bgmEnabled, setEnabled: setBgmEnabled } = useGridPokerBgm();
   useEffect(() => {
-    if (phase !== "playing") return;
+    if (phase !== "playing" || !bgmEnabled) return;
     getSoundEngine().startBgm();
     return () => getSoundEngine().stopBgm();
-  }, [phase]);
+  }, [phase, bgmEnabled]);
 
   function enterRoom() {
     setFormError(null);
@@ -713,6 +718,8 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
         connectedSeats={connectedSeats}
         onAction={handleAction}
         onGameEnd={handleGameEnd}
+        bgmEnabled={bgmEnabled}
+        onToggleBgm={setBgmEnabled}
       />
     );
   }

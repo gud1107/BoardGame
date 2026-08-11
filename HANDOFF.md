@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-11 (버그 리포트 제출 모달 + 게시판 신규 구현. 허브 헤더 링크 + 모든 플레이 가능 게임 페이지의 좌하단 플로팅 버튼에서 접근 가능한 버그 제보 폼(제목/내용/글쓴이/전화번호/이미지 첨부)과 `/bug-reports` 게시판(게임·상태 필터, 상세 모달, 전화번호 마스킹)을 신규 추가. 이전 갱신: 언어의 조각 — 자음/모음 회전 조합 입력 + 완성 글자 1개당 1불빛 판정 개편)_
+_최종 갱신: 2026-08-11 (그리드 포커 — 배경음악(BGM) 기본값을 비활성화(OFF)로 변경하고, 완성된 족보 중 원페어/투페어 표시에 구체적인 카드 숫자를 포함하도록 개편. 이전 갱신: 버그 리포트 제출 모달 + 게시판 신규 구현)_
 
 > **이 문서는 "지금 이 순간"의 스냅샷만 담는다.** 새 세션이 `/clear` 직후 가장 먼저 읽어야 할 문서이며, 여기 담긴 정보만으로 이전 맥락을 복원할 수 있어야 한다. **시간순 기록(무엇을 왜 그 순서로 만들었는가)은 [docs/history.md](./docs/history.md)로, 버그 대응 이력은 [docs/troubleshooting.md](./docs/troubleshooting.md)로 넘어갔다** — 이 파일 자체는 계속 짧게 유지하고, 완료된 세션 내용은 매번 `history.md`로 옮겨 적을 것.
 
@@ -37,11 +37,31 @@ _최종 갱신: 2026-08-11 (버그 리포트 제출 모달 + 게시판 신규 �
 | 언어의 조각 | 2 | ✅ | 단판 승부(고정) + 글자 수 2~5 호스트 선택(3글자 기본) + 최대 시도 횟수 제한없음/6/8회 토글(**양쪽 합산** 캡, 호스트가 방 생성 시 선택) — 시스템이 뽑은 **공통 무작위 정답 단어 1개**를 두 플레이어가 번갈아 추측하는 턴제(벽시계 타이머 없이 순수 "먼저 맞히면 승리" 레이스). 이번 세션에서 입력 방식과 채점 판정 단위를 함께 전면 개편(사용자 직접 작업 지시) — ① 단어 입력을 탭-투-셀렉트 칩 피커에서 **음절별 초성/중성/종성 회전 다이얼**(◀ ▶로 자모를 돌려 조합, 예: ㅂ→ㅏ+ㄷ→ㅏ="바다")로 교체, 조합이 단어 사전에 없으면 제출 버튼을 막고 근접 일치 단어를 "완성 힌트"로 제시. ② 힌트 판정을 초성/중성/종성 3슬롯 개별 채점에서 **완성된 글자 1개당 불빛 1개**로 재설계(green=글자·위치 일치, yellow=단어에 포함되나 위치 다름, red=단어에 없음) — 채점 알고리즘 자체는 음절 개별 자모가 아니라 음절 문자 전체를 대상으로 한 고전 2-패스 Wordle 방식 | 음절별 초성/중성/종성 회전 다이얼 조합 입력 + 완성 글자 1개당 1불빛 타일(Wordle식 플립 리빌 애니메이션, green/yellow/red) + 두 좌석의 시도가 한 타임라인에 섞여 보이는 단일 공유 추리 보드(각 줄에 시도한 좌석 이모지 표시) + 양쪽 합산 시도 횟수 잔여 게이지(데스게임 카운트다운 연출) + 결과 화면 골드(WINNER)/레드(ELIMINATED)/슬레이트(DRAW) 전면 플래시 | ❌(제공된 룰북 폴더에 이미지 자산 없음 — emoji/gradient 대체) |
 | 레지스탕스 쿠 | 2~6 | ✅ | 없음(룰북 자체가 이미 "단판 완결 정식 규칙서" — 다회차/단판 상충 자체가 없었음) | 챌린지/카운터 응답 팝업 모달 + 15초 응답 타이머 게이지(클라이언트 로컬 UX, 시간 만료 시 안전한 기본값인 "패스" 자동 제출) + 영향력 카드 3D 반전 공개 애니메이션 + 탈락 토스트/최후생존자 전면 배너 | ❌(제공된 룰북 폴더에 이미지 자산 없음 — emoji/gradient 대체) |
 
-전체 게임별 파일 구조 표준은 **[ARCHITECTURE.md](./ARCHITECTURE.md)** 참고. 검증 상태: `npx tsc --noEmit` / `npm run lint`(경고 0) / `npx vitest run`(**694개** 전부 통과, 이번 세션 버그 리포트 유효성 검사/전화번호 포맷팅·마스킹/게시판 목록 필터 로직 `BugReports.test.ts` 26개 신규) 전부 그린.
+전체 게임별 파일 구조 표준은 **[ARCHITECTURE.md](./ARCHITECTURE.md)** 참고. 검증 상태: `npx tsc --noEmit` / `npm run lint`(경고 0) / `npx vitest run`(**698개** 전부 통과, 이번 세션 그리드 포커 `formatHandLabel`(원페어/투페어 상세 텍스트 변환) 단위 테스트 4개 신규) 전부 그린.
 
 ### 버그 리포트 시스템 (2026-08-11 신규)
 
 허브 헤더(`SiteHeader.tsx`)와 `/games/[gameId]` 페이지 좌하단 플로팅 버튼(모든 플레이 가능 게임 공용, 게임 ID/이름 자동 매핑)에서 버그 제보 모달을 띄울 수 있고, `/bug-reports`에서 제출된 리포트를 게임별/상태별로 필터링해 볼 수 있다. IndexedDB가 1차 저장소(이 브라우저에 제출된 리포트만 목록에 표시 — `/history`와 동일한 스코프)이고, Supabase가 설정돼 있으면 `bug_reports` 테이블로 best-effort 백업만 이뤄진다(현재 UI는 이 백업을 다시 읽어오지 않음). 상세 내역은 아래 "이번 세션" 절 참고.
+
+### 이번 세션(그리드 포커 — BGM 디폴트 OFF + 원페어/투페어 상세 텍스트 표기) 주요 변경 사항
+
+작업 지시 2가지를 그리드 포커(`src/games/grid-poker/`)에 반영했다.
+
+**① BGM 기본값 비활성화.** 기존엔 `GridPokerGame.tsx`가 `phase === "playing"`이 되는 즉시 `getSoundEngine().startBgm()`을 무조건 호출해 배경음악이 자동 재생됐다. 다만 `soundEngine.ts`의 음소거 토글(`isMuted`/`setMuted`, localStorage 키 `bg_sound_muted`)은 **프로젝트 전체가 공유하는 전역 상태**다 — Perudo의 주사위 SFX, Spot the Difference의 BGM 등 다른 게임도 같은 `master` 게인 노드를 거치므로, 거기서 기본값을 뒤집으면 그리드 포커뿐 아니라 모든 게임의 사운드 기본값이 바뀌는 부작용이 생긴다. 그래서 `soundEngine.ts`는 건드리지 않고, 그리드 포커 전용의 새 persisted 플래그(`useGridPokerBgm.ts` 훅, localStorage 키 `grid-poker-bgm-enabled`, 기본값 `false`)를 추가해 BGM 시작 여부만 이 플래그로 게이팅했다. `GridPokerBoard.tsx`에 기존 음소거 버튼(🔇/🔊, SFX용)과는 별개로 BGM 전용 토글 버튼(🎵/🎵🚫)을 신규 배치해 사용자가 수동으로 켤 수 있게 했다 — 켜짐 상태는 브라우저에 저장되어 재입장·재대결에도 유지된다.
+
+**② 원페어/투페어 상세 텍스트.** 기존엔 `evaluateHand()`가 반환하는 `categoryName`을 그대로 표시해 "원 페어"/"투 페어"처럼 어떤 숫자로 페어를 이뤘는지 알 수 없었다. `engine.ts`에 새 순수 함수 `formatHandLabel(hand)`를 추가해, 카테고리 1(원 페어)은 `(8원페어)`처럼, 카테고리 2(투 페어)는 `(K, 10투페어)`처럼(높은 페어 먼저 — `evaluateConcrete`의 그룹 정렬이 이미 count-desc/rank-desc라 `ranks[0]`이 항상 상위 페어) 랭크를 라벨에 접어 넣고, 그 외 카테고리는 기존 `categoryName`을 그대로 반환한다. `GridPokerBoard.tsx`의 두 표시 지점(제출 전 라인 미리보기, 라운드 결과 목록)에서 `hand.categoryName` 대신 `formatHandLabel(hand)`를 쓰도록 교체했다. 룰북(`RulebookModal.tsx`)의 족보 예시표는 "완성된 족보 판정 결과"가 아니라 정적 참고 예시라 범위 밖으로 판단해 손대지 않았다.
+
+1. **`src/games/grid-poker/useGridPokerBgm.ts`(신규)** — 위 ①의 그리드 포커 전용 BGM 플래그 훅.
+2. **`src/games/grid-poker/GridPokerGame.tsx`** — BGM 시작/정지 이펙트가 `bgmEnabled`도 의존성에 포함하도록 수정(꺼져 있으면 애초에 `startBgm()`을 호출하지 않고, 게임 도중 토글을 켜면 즉시 재생 시작). `bgmEnabled`/`setBgmEnabled`를 `GridPokerBoard`에 prop으로 전달.
+3. **`src/games/grid-poker/GridPokerBoard.tsx`** — `GridPokerBoardProps`에 `bgmEnabled`/`onToggleBgm` 추가, 헤더의 기존 음소거 버튼 옆에 별도 BGM 토글 버튼 신규 배치. `formatHandLabel`을 import해 제출 라인 미리보기와 라운드 결과 목록 두 곳의 족보 표시를 교체(위 ②).
+4. **`src/games/grid-poker/engine.ts`** — `formatHandLabel(hand: HandResult): string` 신규 export(위 ②의 변환 로직).
+5. **`src/games/grid-poker/GridPoker.test.ts`** — `formatHandLabel` 테스트 4개 신규(숫자 원페어, J/Q/K/A 문자 원페어, 투페어 높은순 정렬, 그 외 카테고리는 `categoryName`과 동일함을 확인).
+6. **검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(**698개** 전부 통과, 저장소 전체 25개 테스트 파일) 전부 그린.
+
+**직전 세션(버그 리포트 제출 폼 + 게시판 신규 구현)** 요약은 아래로 접혔다.
+
+<details>
+<summary>직전 세션(버그 리포트 제출 폼 + 게시판 신규 구현) 원문 — 접힘</summary>
 
 ### 이번 세션(버그 리포트 제출 폼 + 게시판 신규 구현) 주요 변경 사항
 
@@ -116,6 +136,8 @@ _최종 갱신: 2026-08-11 (버그 리포트 제출 모달 + 게시판 신규 �
 5. **`MalDalliJaGame.tsx`는 변경 없음** — 이 파일은 `EngineAction`을 그대로 전달만 하는 얇은 온라인 동기화 레이어라, `move` 액션에 `horseIndex`가 추가된 것도 타입 변경만으로 자동 반영됨.
 6. **`MalDalliJa.test.ts` 전면 재작성(20개→28개)** — `HOME_ZONES`/`targetZoneCells`의 기하 불변식(모서리 4곳 20칸이 서로 겹치지 않음, p1/p2 대각선 배정 정확성) 검증을 신규 추가. 슬라이드/나이트 이동 테스트를 `horseIndex` 포함 배열 기반으로 재작성하고 "자기 편 말도 슬라이드를 막는다"/"자기 편 말 위에 나이트 착지 불가" 테스트를 신규 추가. 오아시스 착지 테스트를 상대 진영 착지 테스트로 교체(정확히 도착 vs 못 미쳐 멈춤 vs 자기 진영 도착은 승리 아님 3가지 케이스).
 7. **검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(**663개** 전부 통과) 전부 그린.
+
+</details>
 
 </details>
 

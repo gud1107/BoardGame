@@ -5,6 +5,7 @@ import {
   compareHands,
   DEFAULT_TIMER_SETTINGS,
   evaluateHand,
+  formatHandLabel,
   LINES,
   opponentLiveCell,
   startGame,
@@ -119,6 +120,37 @@ describe("evaluateHand", () => {
     // nines must outrank the all-diamond quad on the final suit tiebreak.
     const allDiamondQuad = evaluateHand([std(9, "D"), std(9, "D", "9D-2"), std(9, "D", "9D-3"), std(9, "D", "9D-4"), std(2, "D")]);
     expect(compareHands(hand, allDiamondQuad)).toBeGreaterThan(0);
+  });
+});
+
+describe("formatHandLabel", () => {
+  it("folds the paired rank into one pair's label as (<rank>원페어)", () => {
+    const hand = evaluateHand([std(8, "S"), std(8, "D"), std(12, "H"), std(6, "C"), std(2, "S")]);
+    expect(hand.category).toBe(1);
+    expect(formatHandLabel(hand)).toBe("(8원페어)");
+  });
+
+  it("uses the face-card letter (not the raw numeric rank) when a pair is J/Q/K/A", () => {
+    const hand = evaluateHand([std(13, "S"), std(13, "D"), std(9, "H"), std(6, "C"), std(2, "S")]);
+    expect(formatHandLabel(hand)).toBe("(K원페어)");
+  });
+
+  it("folds both pair ranks into two pair's label, higher pair first, as (<hi>, <lo>투페어)", () => {
+    const hand = evaluateHand([std(13, "S"), std(13, "D"), std(10, "H"), std(10, "C"), std(2, "S")]);
+    expect(hand.category).toBe(2);
+    expect(formatHandLabel(hand)).toBe("(K, 10투페어)");
+  });
+
+  it("leaves every other category's label exactly as categoryName", () => {
+    const trips = evaluateHand([std(11, "S"), std(11, "D"), std(11, "H"), std(6, "C"), std(2, "S")]);
+    expect(formatHandLabel(trips)).toBe(trips.categoryName);
+    expect(formatHandLabel(trips)).toBe("트리플");
+
+    const flush = evaluateHand([std(2, "H"), std(5, "H"), std(9, "H"), std(11, "H"), std(13, "H")]);
+    expect(formatHandLabel(flush)).toBe("플러시");
+
+    const highCard = evaluateHand([std(14, "S"), std(10, "D"), std(7, "H"), std(5, "C"), std(2, "S")]);
+    expect(formatHandLabel(highCard)).toBe("하이 카드");
   });
 });
 

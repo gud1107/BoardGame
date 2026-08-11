@@ -10,6 +10,7 @@ import {
   BOARD_SIZE,
   LINES,
   evaluateHand,
+  formatHandLabel,
   opponentLiveCell,
   visibleOpponentBoard,
   type Card,
@@ -41,6 +42,9 @@ export interface GridPokerBoardProps {
   connectedSeats: Set<SeatIndex>;
   onAction: (action: EngineAction) => void;
   onGameEnd: () => void;
+  /** Background music preference (defaults to off — see useGridPokerBgm), owned by GridPokerGame so it survives this component's own state resets. */
+  bgmEnabled: boolean;
+  onToggleBgm: (next: boolean) => void;
 }
 
 const TABLE_PANEL =
@@ -131,7 +135,16 @@ function CountdownBar({ timeLeft, total }: { timeLeft: number; total: number }) 
   );
 }
 
-export default function GridPokerBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: GridPokerBoardProps) {
+export default function GridPokerBoard({
+  state,
+  viewerSeat,
+  names,
+  connectedSeats,
+  onAction,
+  onGameEnd,
+  bgmEnabled,
+  onToggleBgm,
+}: GridPokerBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const viewer = state.players[viewerSeat];
   const opponents = state.players.filter((p) => p.seat !== viewerSeat);
@@ -212,6 +225,21 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
     </button>
   );
 
+  // Separate from `soundToggle` above: that one mutes/unmutes shared SFX
+  // (e.g. the urgent-timer fuse crackle) via soundEngine's global toggle,
+  // while this one is Grid Poker's own BGM opt-in, defaulted off — see
+  // useGridPokerBgm.
+  const bgmToggle = (
+    <button
+      onClick={() => onToggleBgm(!bgmEnabled)}
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      aria-label={bgmEnabled ? "배경음악 끄기" : "배경음악 켜기"}
+      title="배경음악 (기본 꺼짐)"
+    >
+      {bgmEnabled ? "🎵" : "🎵🚫"}
+    </button>
+  );
+
   if (state.phase === "game-end") {
     const sorted = [...state.players].sort((a, b) => b.score - a.score);
     return (
@@ -255,6 +283,7 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
             : `제출 라운드 ${Math.min(state.roundNumber, state.totalScoringRounds)}/${state.totalScoringRounds}`}
         </span>
         <div className="flex items-center gap-1.5">
+          {bgmToggle}
           {soundToggle}
           {rulebookButton}
         </div>
@@ -334,7 +363,7 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
                     ))}
                   </div>
                   <span className="text-[10px] font-semibold text-emerald-300">
-                    {hand.categoryName}
+                    {formatHandLabel(hand)}
                     <span className="ml-1 font-normal text-white/40">({hand.category + 1}/9)</span>
                   </span>
                 </button>
@@ -372,7 +401,7 @@ export default function GridPokerBoard({ state, viewerSeat, names, connectedSeat
                     </span>
                   ))}
                 </div>
-                <span className="text-white/50">{sub.hand.categoryName}</span>
+                <span className="text-white/50">{formatHandLabel(sub.hand)}</span>
               </div>
             ))}
           </div>
