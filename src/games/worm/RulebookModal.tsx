@@ -1,15 +1,6 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { TileFace, WormRow } from "./TileFace";
-import { DieFace } from "./DieFace";
-
-const TIER_ROWS: { range: string; worms: number }[] = [
-  { range: "21 ~ 24", worms: 1 },
-  { range: "25 ~ 28", worms: 2 },
-  { range: "29 ~ 32", worms: 3 },
-  { range: "33 ~ 36", worms: 4 },
-];
 
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
   return (
@@ -18,108 +9,83 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">목표</h3>
           <p className="text-white/70">
-            중앙에 놓인 21~36번 타일을 주사위로 따내는 푸시유어럭 게임입니다. 중앙 타일이 모두 소진되면 게임이
-            끝나고, 자기 타일 스택에 그려진 <span className="text-lime-300">🪱 지렁이 개수의 총합</span>이 가장
-            높은 사람이 승리합니다.
+            Slither.io 스타일의 실시간 대전입니다. 바닥에 떨어진 먹이를 먹어 몸집을 키우고, 상대의 몸통을
+            들이받아 꼬리를 잘라 빼앗으면서 제한 시간 3분 동안 살아남으세요. 시간이 다 되면{" "}
+            <span className="text-lime-300">누적 점수</span>가 가장 높은 지렁이가 승리합니다.
           </p>
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">구성품</h3>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex flex-col items-center gap-1">
-              <div className="flex gap-1">
-                <TileFace tileNumber={21} worms={1} size="h-14 w-12" />
-                <TileFace tileNumber={25} worms={2} size="h-14 w-12" />
-                <TileFace tileNumber={30} worms={3} size="h-14 w-12" />
-                <TileFace tileNumber={36} worms={4} size="h-14 w-12" />
-              </div>
-              <span className="text-[11px] text-white/50">타일 21~36 (16장)</span>
-            </div>
-            <div className="flex flex-col items-center gap-1">
-              <div className="flex gap-1">
-                <DieFace face={3} size="h-10 w-10" />
-                <DieFace face="worm" size="h-10 w-10" />
-              </div>
-              <span className="text-[11px] text-white/50">특수 주사위 8개 (1~5 + 🪱)</span>
-            </div>
-          </div>
-          <div className="mt-2 overflow-x-auto rounded-xl border border-white/10">
-            <table className="w-full min-w-[260px] border-collapse text-xs">
-              <thead>
-                <tr className="bg-white/5 text-white/50">
-                  <th className="px-2 py-1.5 text-left">타일 번호</th>
-                  <th className="px-2 py-1.5 text-left">지렁이 개수</th>
-                </tr>
-              </thead>
-              <tbody>
-                {TIER_ROWS.map((row) => (
-                  <tr key={row.range} className="border-t border-white/10">
-                    <td className="px-2 py-1.5 font-semibold text-white/80">{row.range}</td>
-                    <td className="px-2 py-1.5">
-                      <WormRow count={row.worms} size="h-3.5 w-3.5" />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">조작법</h3>
+          <ul className="list-disc space-y-1.5 pl-4 text-white/70">
+            <li>
+              <b>PC</b>: 마우스를 화면 중앙(내 머리) 기준으로 움직인 방향으로 이동합니다. 방향키/WASD를 누르고
+              있으면 그 방향이 우선합니다. <b>스페이스바</b> 또는 마우스 클릭 유지로 부스터(대시)를 씁니다.
+            </li>
+            <li>
+              <b>모바일</b>: 화면 좌하단 가상 조이스틱을 드래그해 방향을 조절하고, 우하단 🚀 버튼을 눌러 부스터를
+              씁니다.
+            </li>
+          </ul>
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">턴 진행 — 굴리기 & 킵</h3>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">핵심 메커니즘</h3>
           <ol className="list-decimal space-y-1.5 pl-4 text-white/70">
-            <li>차례가 되면 주사위 8개를 모두 굴립니다.</li>
             <li>
-              나온 눈금 중 <b>숫자 하나(또는 🪱)</b>를 골라 그 눈금이 나온 주사위를 전부 킵합니다. 한 번 킵한
-              숫자는 이번 턴에는 다시 고를 수 없습니다.
+              <b>먹이 섭취</b>: 바닥에 무작위로 떨어진 먹이 알갱이를 머리로 스치면 즉시 흡수해 몸통이 늘어나고
+              점수가 오릅니다.
             </li>
-            <li>남은 주사위가 있다면 계속 굴리거나, 지금까지 킵한 것만으로 스톱을 선언할 수 있습니다.</li>
             <li>
-              굴린 눈금이 전부 이미 킵한 숫자뿐이라 더 고를 게 없거나, 주사위를 다 썼는데 🪱를 한 번도 못
-              킵했다면 <b>즉시 실패(Bust)</b> 처리됩니다.
+              <b>꼬리 약탈</b>: 내 머리로 상대 몸통의 특정 지점을 들이받으면, 그 지점부터 뒤쪽 꼬리가 전부
+              잘려나가며 그 자리에 먹이로 흩뿌려집니다 — 누구든 즉시 먹어서 흡수할 수 있습니다. 나는 죽지
+              않습니다.
+            </li>
+            <li>
+              <b>머리 vs 머리 충돌</b>: 더 긴 지렁이가 살아남고 짧은 쪽이 사망합니다(전체 꼬리 드랍). 길이가
+              같으면 둘 다 죽지 않고 각자 꼬리 1마디만 잃습니다.
+            </li>
+            <li>
+              <b>자폭</b>: 내 머리가 내 몸통(머리 바로 뒤 몇 마디는 예외)에 부딪히면 즉시 사망하며 몸 전체가
+              먹이로 흩뿌려집니다.
+            </li>
+            <li>
+              <b>벽 충돌</b>: 경기장 바깥 경계에 머리가 닿아도 사망 처리됩니다(자폭과 동일하게 전체 드랍).
+            </li>
+            <li>
+              <b>부스터(대시)</b>: 이동 속도가 약 1.7배 빨라지지만, 사용하는 동안 일정 시간마다 꼬리 1마디씩
+              바닥에 흘리며 몸집이 줄어듭니다. 몸집이 너무 작으면(6마디 이하) 부스터를 쓸 수 없습니다.
+            </li>
+            <li>
+              <b>사망 후 부활</b>: 사망하면 약 1.8초 후 새로운 위치에서 짧은 몸으로 다시 시작합니다. 이미 얻은
+              누적 점수와 최고 길이 기록은 유지됩니다.
             </li>
           </ol>
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">타일 가져오기 & 뺏기</h3>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">HUD & 리더보드</h3>
           <p className="text-white/70">
-            스톱을 선언하려면 킵한 주사위 중 <b>🪱가 최소 1개</b> 있어야 합니다. 킵한 주사위 눈금의 총합(🪱는
-            5로 계산)으로 다음 순서로 타일을 가져옵니다:
-          </p>
-          <ol className="mt-1.5 list-decimal space-y-1 pl-4 text-xs text-white/60">
-            <li>총합과 정확히 같은 번호의 타일이 중앙에 있으면 그걸 가져옵니다.</li>
-            <li>없다면, 총합과 정확히 같은 번호가 상대방 스택 맨 위에 있으면 그 타일을 뺏어옵니다.</li>
-            <li>그것도 아니라면, 중앙에서 총합보다 작은 타일 중 가장 높은 번호의 타일을 가져옵니다.</li>
-            <li>그마저도 없다면(총합보다 낮은 타일이 중앙에 하나도 없음) 실패 처리됩니다.</li>
-          </ol>
-        </section>
-
-        <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">실패(Bust) 처리</h3>
-          <p className="text-white/70">
-            실패하면 <b>내 스택 맨 위 타일을 중앙에 반납</b>하고(스택이 비어 있다면 반납 없이 다음 단계로),
-            그 직후 <b>중앙에 남은 타일 중 가장 높은 번호를 뒤집어(비공개) 게임에서 완전히 제거</b>한 뒤 차례를
-            넘깁니다. 두 단계가 항상 순서대로 일어나므로, 방금 반납한 타일이 곧바로 최고 숫자가 되면 그 타일이
-            그대로 다시 제거될 수도 있습니다.
+            좌상단에서 내 현재 길이·점수·남은 시간을, 우상단 리더보드에서 현재 전장에서 가장 긴 지렁이 TOP 5를
+            실시간으로 확인할 수 있습니다. 몸집이 길어질수록 카메라가 살짝 넓게 보여줍니다(다이나믹 줌아웃).
           </p>
         </section>
 
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">종료 & 승리</h3>
           <p className="text-white/70">
-            중앙 타일이 모두 사라지면(가져갔거나 뒤집혀 제거됨) 게임이 끝납니다. 각자 스택에 있는 타일들의 🪱
-            개수를 모두 더해 가장 많은 사람이 승리합니다(동점이면 공동 우승).
+            제한 시간 3분이 지나면 즉시 게임이 끝납니다. 순위는 죽어도 사라지지 않는{" "}
+            <b>누적 점수</b>(먹이를 먹어 얻은 총합)로 매기고, 점수가 같으면 그동안 도달한{" "}
+            <b>최고 길이</b>로 동점을 가릅니다.
           </p>
         </section>
 
         <section className="rounded-xl border border-amber-300/20 bg-amber-400/5 p-3">
-          <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-amber-200/90 uppercase">참고 — 하우스 룰 안내</h3>
+          <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-amber-200/90 uppercase">참고</h3>
           <p className="text-xs text-white/60">
-            이 구현은 작업 요청에 직접 명시된 규칙을 그대로 따릅니다. 특히 위 &ldquo;실패 처리&rdquo;의 두 단계(내 타일
-            반납 + 중앙 최고 타일 제거)는 <b>항상 둘 다 일어나는 것</b>으로 구현했습니다 — 원작 Heckmeck/Pickomino의
-            &ldquo;내 타일이 있으면 그것만, 없을 때만 중앙 최고 타일&rdquo; 조건부 규칙과는 다른 하우스 룰입니다.
+            이 게임은 각자 다른 기기에서 접속하는 실시간 온라인 전용 대전입니다. 방을 만든 사람의 기기가 물리
+            연산을 담당하고(호스트), 나머지는 그 결과를 실시간으로 전달받아 화면에 그립니다 — 호스트 탭을 닫으면
+            그 판은 더 이상 진행되지 않으니 유의하세요.
           </p>
         </section>
       </div>

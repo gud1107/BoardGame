@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="지렁이 — 실시간 지렁이 대전 게임 커버">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0%" stop-color="#132b0f"/>
+      <stop offset="55%" stop-color="#0a1a08"/>
+      <stop offset="100%" stop-color="#050a04"/>
+    </radialGradient>
+    <linearGradient id="snake" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#bef264"/>
+      <stop offset="55%" stop-color="#65d69a"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+    <radialGradient id="head" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#ecfccb"/>
+      <stop offset="100%" stop-color="#a3e635"/>
+    </radialGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="36" fill="url(#bg)"/>
+
+  <!-- faint world grid -->
+  <g stroke="#a3e635" stroke-opacity="0.08" stroke-width="1">
+    <path d="M0 64H512M0 128H512M0 192H512M0 256H512M0 320H512M0 384H512M0 448H512"/>
+    <path d="M64 0V512M128 0V512M192 0V512M256 0V512M320 0V512M384 0V512M448 0V512"/>
+  </g>
+
+  <!-- food pellets scattered across the field -->
+  <g filter="url(#glow)">
+    <circle cx="96" cy="120" r="6" fill="#fde047"/>
+    <circle cx="430" cy="96" r="5" fill="#f472b6"/>
+    <circle cx="410" cy="360" r="6" fill="#60a5fa"/>
+    <circle cx="120" cy="410" r="5" fill="#fb923c"/>
+    <circle cx="330" cy="440" r="5" fill="#f87171"/>
+    <circle cx="70" cy="300" r="4.5" fill="#c084fc"/>
+  </g>
+
+  <!-- coiling snake body, tapering tail to head -->
+  <g filter="url(#glow)">
+    <path d="M 90 380 C 150 430, 230 430, 250 360 C 268 296, 200 270, 168 310 C 140 346, 190 372, 220 340 C 252 306, 300 210, 260 150 C 226 98, 150 96, 130 150"
+          fill="none" stroke="url(#snake)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- head -->
+  <g>
+    <circle cx="130" cy="150" r="26" fill="url(#head)"/>
+    <circle cx="122" cy="142" r="4.5" fill="#0b1a0b"/>
+    <circle cx="140" cy="138" r="4.5" fill="#0b1a0b"/>
+  </g>
+
+  <!-- ranked leaderboard flourish, top-right, echoing the in-game HUD -->
+  <g transform="translate(336,54)" opacity="0.85">
+    <rect width="130" height="70" rx="12" fill="#000000" fill-opacity="0.35" stroke="#a3e635" stroke-opacity="0.35"/>
+    <text x="12" y="22" font-family="sans-serif" font-size="12" fill="#bef264" font-weight="700">🏆 TOP 5</text>
+    <text x="12" y="40" font-family="sans-serif" font-size="10" fill="#e7ffd0">1. ●●●●●●</text>
+    <text x="12" y="54" font-family="sans-serif" font-size="10" fill="#cbe9b0">2. ●●●●</text>
+    <text x="12" y="66" font-family="sans-serif" font-size="9" fill="#9fbf87">3. ●●●</text>
+  </g>
+</svg>

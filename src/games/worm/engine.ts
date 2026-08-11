@@ -1,59 +1,63 @@
 /**
  * Pure "지렁이" rules engine — no React, no I/O.
  *
- * ⚠️ Spec provenance (important, see HANDOFF.md for the full story): the only
- * rule document that actually exists at `boardGameRule/지렁이/지렁이.md` describes
- * a *completely different* game (a real-time Slither.io-style tail-cutting
- * action game). It does not match this engine at all. The task brief instead
- * spelled out — directly, in full — a turn-based dice/tile-collecting ruleset
- * that is a house-rule variant of the classic Reiner Knizia game "Heckmeck am
- * Bratwurmeck" / "Pickomino": 16 tiles numbered 21-36 (each worth 1-4 "worm"
- * icons), 8 special dice (faces 1-5 plus a "worm" face worth 5 pips), a
- * roll/keep/stop push-your-luck loop, and a tile-claim/steal/bust resolution.
- * This engine implements *that* brief literally (confirmed with the user via
- * AskUserQuestion before writing any code — the mismatched .md file was
- * deliberately not used as a source of truth). Every rule below is either
- * quoted directly from the brief or documented as a reasonable inference
- * where the brief left a gap.
+ * ⚠️ Spec history (see HANDOFF.md / docs/history.md for the full story): the
+ * previous version of this file implemented a turn-based dice/tile-collecting
+ * game (a Pickomino/Heckmeck house rule) taken literally from an earlier task
+ * brief, deliberately ignoring the rule doc at
+ * `boardGameRule/지렁이/지렁이.md` because the two disagreed and the user was
+ * asked which to build. **That decision has since been reversed by explicit
+ * user instruction**: the dice/tile engine is discarded outright and this
+ * file now implements the `.md` doc's actual design — a real-time,
+ * Slither.io-style growth/raiding game (continuous movement, food pellets,
+ * boost, tail-cutting, head/body collisions).
  *
- * Same online-multiplayer trust model as every other game in this project:
- * every connected client computes and holds the FULL state from a shared RNG
- * seed plus replayed `EngineAction`s — there is no server authority.
+ * ## Why this is NOT a per-frame reducer (and why that's fine)
  *
- * Documented inferences (brief didn't spell these out, filled in from the
- * classic game's own mechanics per the task brief's explicit permission to
- * do so):
- * - A player may voluntarily `stop` at any point after keeping at least one
- *   die group (not just once a worm has been kept) — the brief's "지렁이
- *   필수 포함 규칙" only gates whether a `stop` *succeeds* at claiming a tile,
- *   not whether `stop` itself is a legal action. Stopping without a kept
- *   worm die is simply a guaranteed bust (see `stop` below).
- * - Tile-claim precedence when the kept-dice sum doesn't exactly match a
- *   center tile: the brief only defines "정확히 일치 -> 중앙에서 가져오기",
- *   "정확히 일치하지 않으면 -> 중앙의 낮은 타일", and separately "상대 스택
- *   맨 위와 정확히 일치하면 뺏기". Since every tile number is unique
- *   game-wide (it's either in the center, on top of exactly one stack, or
- *   buried), this engine checks in order: (1) exact match in the center,
- *   (2) exact match against any *opponent's* top tile (steal), (3) the
- *   highest center tile strictly below the sum. A tile buried under other
- *   tiles in a stack (yours or an opponent's) is unreachable, same as if it
- *   didn't exist for this turn.
- * - Bust resolution ("실패 시: 내 타일 스택 맨 위의 타일을 중앙에 반납하고,
- *   중앙 타일 중 가장 높은 숫자 타일을 비공개 처리") is implemented
- *   *literally and unconditionally* exactly as written: both steps always
- *   run in order (return-own-top-tile, THEN flip-current-highest-center-
- *   tile) whenever a bust occurs, regardless of whether the player has a
- *   stack. This deliberately differs from the classic Pickomino rule (which
- *   is an "either/or": flip your own top tile OR, only if you have none,
- *   the center's highest) — the brief's wording has no "only if" branch, so
- *   a player who just returned their own tile to the center can watch it
- *   immediately become the new highest and get flipped right back out if
- *   nothing else in the center is higher. This is intentional, not a bug.
- * - Player count: the physical Pickomino box supports 2-7; nothing in the
- *   brief overrides that, so this engine keeps the same range.
- * - Starting player: picked deterministically from the shared seed, same
- *   convention as every other game in this project (Avalon/No
- *   Thanks/Perudo/...) — the brief doesn't specify a physical tiebreak.
+ * Every other engine in this project is a discrete-action reducer
+ * (`applyAction(state, action)`) driven by user clicks, replayed lockstep
+ * over Supabase Realtime (see ARCHITECTURE.md §1, docs/cloud-sync.md). That
+ * shape doesn't fit a continuous physics simulation — there is no
+ * "action", just "time passed, here is everyone's current heading/boost
+ * input". So this engine's one entry point is a **fixed-step advance
+ * function**, `stepWorm(state, dtMs, inputs, rng)`, called repeatedly (the
+ * project's convention of injecting a seeded `rng` per call is kept, but
+ * unlike other engines it's expected to be called many times per second with
+ * the *same* long-lived rng closure rather than once per user action).
+ *
+ * This is still a pure function (no `Date.now()`, no `Math.random()`, no
+ * React, no network) — determinism holds given the same `(state, dtMs,
+ * inputs, rng-state)` — but the *online multiplayer adapter* built on top of
+ * it necessarily differs from every other game's lockstep protocol. See
+ * `WormGame.tsx`'s module doc and docs/cloud-sync.md §5 ("호스트 권위 실시간
+ * 동기화") for how that's handled: one client (the host) is the sole caller
+ * of `stepWorm`, broadcasting the resulting snapshots; nobody else replays
+ * the simulation. This is a deliberate, documented exception to
+ * ARCHITECTURE.md's "don't invent a new sync protocol" rule.
+ *
+ * ## Documented inferences (rule doc left gaps, filled in from the doc's own
+ * stated intent and this project's conventions)
+ * - The doc never specifies an arena boundary or a match-length win
+ *   condition beyond "제한 시간 내에 가장 길거나 큰 뱀을 만들거나, 상대방을
+ *   완전히 제압하여 살아남기". This engine adds a bounded rectangular arena
+ *   (touching the edge kills you, same drop-your-body-as-food treatment as
+ *   any other death — arcade-genre convention, not spelled out but implied
+ *   by "제한 시간 내" needing *some* finite playfield) and a fixed match
+ *   timer (`MATCH_DURATION_MS`), after which final rankings are computed.
+ * - Ranking metric: the doc's win condition is peak size, so
+ *   `computeRankings` sorts by lifetime cumulative food-score (never
+ *   decreases, even across deaths/respawns — a snake that got cut right
+ *   before the buzzer isn't unfairly punished for a single bad instant),
+ *   tie-broken by the single highest length ever reached (`bestLength`).
+ * - Head-vs-head tie (exactly equal length): doc says "둘 다 마디 1개씩
+ *   상실" — implemented literally as both losing exactly 1 segment, neither
+ *   dying.
+ * - All numeric speed/turn/boost constants below are this engine's own
+ *   scale (world units, not the doc's abstract "Speed - Length*0.05"
+ *   placeholder units) — chosen to produce the doc's *described feel*
+ *   (longer = ohly slightly slower; boost ~1.5-2x; boost costs ~1
+ *   segment/second) rather than its literal formula, since the doc's units
+ *   were never grounded to an actual coordinate system.
  */
 
 import { seededRng } from "@/lib/rng";
@@ -62,330 +66,476 @@ export { seededRng };
 export type SeatIndex = number;
 
 export const MIN_PLAYERS = 2;
-export const MAX_PLAYERS = 7;
-export const DICE_COUNT = 8;
-export const TILE_MIN = 21;
-export const TILE_MAX = 36;
+export const MAX_PLAYERS = 8;
 
-/** 1-5 are plain pips; the 6th die face is the "지렁이"(worm) face, worth 5 pips toward the sum but also the mandatory ingredient for a valid claim. */
-export type PipFace = 1 | 2 | 3 | 4 | 5;
-export type Face = PipFace | "worm";
-
-/** Sum contribution of each face — the worm face counts as a 5, same as the highest pip face. */
-export const FACE_VALUE: Record<Face, number> = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, worm: 5 };
-
-export interface TileInfo {
-  number: number;
-  /** Worm-icon count printed on the tile — 21-24:1, 25-28:2, 29-32:3, 33-36:4 (standard Pickomino tile distribution). */
-  worms: number;
+export interface Vec2 {
+  x: number;
+  y: number;
 }
 
-function buildTiles(): TileInfo[] {
-  const tiles: TileInfo[] = [];
-  for (let n = TILE_MIN; n <= TILE_MAX; n++) {
-    tiles.push({ number: n, worms: Math.floor((n - TILE_MIN) / 4) + 1 });
-  }
-  return tiles;
+export interface ArenaSize {
+  width: number;
+  height: number;
 }
 
-/** All 16 tiles (21-36), static — same data every game, only their location (center/removed/whose stack) changes. */
-export const TILES: TileInfo[] = buildTiles();
+export const ARENA_SIZE = 3000;
+export const DEFAULT_ARENA: ArenaSize = { width: ARENA_SIZE, height: ARENA_SIZE };
 
-export function wormsOnTile(tileNumber: number): number {
-  return TILES.find((t) => t.number === tileNumber)?.worms ?? 0;
+export const SEGMENT_SPACING = 16;
+export const START_LENGTH = 8;
+export const HEAD_RADIUS = 11;
+export const BODY_RADIUS = 9;
+export const FOOD_RADIUS = 7;
+
+export const BASE_SPEED = 240; // world units / second at zero length
+export const SPEED_LENGTH_PENALTY = 0.6; // world units/sec shaved off per segment of length
+export const MIN_SPEED = 90;
+export const BOOST_MULTIPLIER = 1.7;
+export const MIN_LENGTH_TO_BOOST = 6;
+export const BOOST_DRAIN_MS = 350; // lose 1 segment every this many ms of boosting
+export const TURN_RATE = Math.PI * 2.6; // max radians/sec the head can turn
+
+export const FOOD_COUNT_TARGET = 160;
+export const FOOD_VALUE_MIN = 1;
+export const FOOD_VALUE_MAX = 3;
+
+export const RESPAWN_DELAY_MS = 1800;
+export const MATCH_DURATION_MS = 3 * 60 * 1000;
+export const SELF_COLLISION_SKIP = 6; // segments nearest the head ignored for self-collision
+
+/** Hue (0-360, for `hsl()`) assigned per seat, cycling if `playerCount > SEAT_HUES.length`. */
+export const SEAT_HUES = [140, 195, 300, 30, 265, 5, 90, 170];
+
+export interface SnakeInput {
+  angle: number;
+  boosting: boolean;
 }
 
-export function sumKept(dice: Face[]): number {
-  return dice.reduce((sum, f) => sum + FACE_VALUE[f], 0);
+export interface SnakeState {
+  seat: SeatIndex;
+  alive: boolean;
+  angle: number;
+  targetAngle: number;
+  boosting: boolean;
+  speed: number;
+  /** Head trajectory history, most-recent-first (`path[0]` is the head). Trimmed each tick to only what `segments` needs. */
+  path: Vec2[];
+  /** Resampled body points at `SEGMENT_SPACING` intervals, head first — what gets rendered/collision-checked. */
+  segments: Vec2[];
+  length: number;
+  /** Highest `length` ever reached (survives death/respawn) — the tie-break ranking metric. */
+  bestLength: number;
+  /** Cumulative food value eaten (survives death/respawn) — the primary ranking metric. */
+  score: number;
+  boostAccumMs: number;
+  deadAtMs: number | null;
+  hue: number;
 }
 
-/** Narrative of the most recently resolved turn — purely for the UI's flourish/toast, never read by the engine itself. */
-export type TurnEvent =
-  | { kind: "claimed"; seat: SeatIndex; tileNumber: number }
-  | { kind: "stolen"; seat: SeatIndex; tileNumber: number; fromSeat: SeatIndex }
-  | { kind: "bustedNoWorm"; seat: SeatIndex; sum: number; returnedTile: number | null; removedTile: number | null }
-  | { kind: "bustedNoClaimTarget"; seat: SeatIndex; sum: number; returnedTile: number | null; removedTile: number | null }
-  | { kind: "bustedNoMoves"; seat: SeatIndex; returnedTile: number | null; removedTile: number | null };
+export interface FoodItem {
+  id: number;
+  x: number;
+  y: number;
+  value: number;
+  hue: number;
+}
 
 export interface WormState {
   playerCount: number;
-  /** Tile numbers currently face-up and claimable in the center. */
-  centerTiles: number[];
-  /** Tile numbers permanently flipped face-down (removed from play forever) by a bust. */
-  removedTiles: number[];
-  /** Each seat's claimed tiles, oldest first — the LAST entry is the visible top of that stack. */
-  stacks: Record<SeatIndex, number[]>;
-  activeSeat: SeatIndex;
-  /** The current turn's most recent roll, awaiting a `keep` choice. Empty once resolved (or before the first roll of the turn). */
-  currentRoll: Face[];
-  /** Dice not yet rolled-and-kept this turn; the next `roll` rolls exactly this many. */
-  diceRemaining: number;
-  /** Every die kept so far this turn, across all keeps. */
-  keptDice: Face[];
-  /** Face values already chosen via `keep` this turn — cannot be chosen again (rule: "한 번 킵한 숫자는 해당 턴 동안 다시 선택할 수 없음"). */
-  usedFaces: Face[];
-  turnNumber: number;
-  phase: "rolling" | "gameOver";
-  /** Set only once `phase` is "gameOver". More than one seat when tied on total worms. */
-  winnerSeats: SeatIndex[] | null;
-  lastEvent: TurnEvent | null;
-}
-
-export type EngineAction =
-  | { type: "roll"; seat: SeatIndex; seed: number }
-  | { type: "keep"; seat: SeatIndex; face: Face }
-  | { type: "stop"; seat: SeatIndex };
-
-function rollOneDie(rng: () => number): Face {
-  const r = 1 + Math.floor(rng() * 6);
-  return r === 6 ? "worm" : (r as PipFace);
-}
-
-function rollDice(rng: () => number, count: number): Face[] {
-  return Array.from({ length: count }, () => rollOneDie(rng));
+  snakes: Record<SeatIndex, SnakeState>;
+  food: FoodItem[];
+  nextFoodId: number;
+  elapsedMs: number;
+  arena: ArenaSize;
+  phase: "playing" | "gameOver";
 }
 
 // ---------------------------------------------------------------------------
-// Setup
+// Small vector/angle helpers
 // ---------------------------------------------------------------------------
 
-export function startGame(playerCount: number, seed: number): WormState {
+function dist(a: Vec2, b: Vec2): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function lerp(a: Vec2, b: Vec2, t: number): Vec2 {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
+
+/** Normalizes to (-PI, PI]. */
+export function normalizeAngle(a: number): number {
+  let x = a % (Math.PI * 2);
+  if (x <= -Math.PI) x += Math.PI * 2;
+  if (x > Math.PI) x -= Math.PI * 2;
+  return x;
+}
+
+function angleDiff(from: number, to: number): number {
+  return normalizeAngle(to - from);
+}
+
+// ---------------------------------------------------------------------------
+// Food & random placement
+// ---------------------------------------------------------------------------
+
+function randomFoodValue(rng: () => number): number {
+  return FOOD_VALUE_MIN + Math.floor(rng() * (FOOD_VALUE_MAX - FOOD_VALUE_MIN + 1));
+}
+
+function randomPointInArena(arena: ArenaSize, rng: () => number): Vec2 {
+  return { x: rng() * arena.width, y: rng() * arena.height };
+}
+
+function scatter(pos: Vec2, arena: ArenaSize, rng: () => number): Vec2 {
+  return {
+    x: clamp(pos.x + (rng() - 0.5) * 40, 0, arena.width),
+    y: clamp(pos.y + (rng() - 0.5) * 40, 0, arena.height),
+  };
+}
+
+function makeFood(id: number, pos: Vec2, value: number, rng: () => number): FoodItem {
+  return { id, x: pos.x, y: pos.y, value, hue: Math.floor(rng() * 360) };
+}
+
+// ---------------------------------------------------------------------------
+// Path -> body resampling
+// ---------------------------------------------------------------------------
+
+/** Drops path history beyond what `length` segments could ever need (plus a small buffer), keeping the array bounded. */
+function trimPath(path: Vec2[], length: number): Vec2[] {
+  const needed = length * SEGMENT_SPACING + SEGMENT_SPACING * 2;
+  let acc = 0;
+  for (let i = 1; i < path.length; i++) {
+    acc += dist(path[i - 1], path[i]);
+    if (acc >= needed) return path.slice(0, i + 1);
+  }
+  return path;
+}
+
+/** Walks the head's trajectory history and places `length` body points at fixed `spacing` intervals — the classic IK-free "follow the leader's breadcrumbs" snake technique. O(path.length + length). */
+export function computeSegments(path: Vec2[], length: number, spacing: number): Vec2[] {
+  if (path.length === 0) return [];
+  const segments: Vec2[] = [path[0]];
+  const cum: number[] = [0];
+  for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + dist(path[i - 1], path[i]));
+  const totalLen = cum[cum.length - 1];
+  let ptr = 0;
+  for (let i = 1; i < length; i++) {
+    const target = i * spacing;
+    if (target >= totalLen) {
+      segments.push(path[path.length - 1]);
+      continue;
+    }
+    while (ptr < cum.length - 2 && cum[ptr + 1] < target) ptr++;
+    const segStart = cum[ptr];
+    const segEnd = cum[ptr + 1];
+    const t = segEnd > segStart ? (target - segStart) / (segEnd - segStart) : 0;
+    segments.push(lerp(path[ptr], path[ptr + 1], t));
+  }
+  return segments;
+}
+
+// ---------------------------------------------------------------------------
+// Setup / respawn
+// ---------------------------------------------------------------------------
+
+function spawnSnake(seat: SeatIndex, pos: Vec2, heading: number, prev?: SnakeState): SnakeState {
+  const behind = {
+    x: pos.x - Math.cos(heading) * START_LENGTH * SEGMENT_SPACING,
+    y: pos.y - Math.sin(heading) * START_LENGTH * SEGMENT_SPACING,
+  };
+  const path = [pos, behind];
+  return {
+    seat,
+    alive: true,
+    angle: heading,
+    targetAngle: heading,
+    boosting: false,
+    speed: BASE_SPEED,
+    path,
+    segments: computeSegments(path, START_LENGTH, SEGMENT_SPACING),
+    length: START_LENGTH,
+    bestLength: Math.max(START_LENGTH, prev?.bestLength ?? 0),
+    score: prev?.score ?? 0,
+    boostAccumMs: 0,
+    deadAtMs: null,
+    hue: prev?.hue ?? SEAT_HUES[seat % SEAT_HUES.length],
+  };
+}
+
+export function startGame(playerCount: number, seed: number, arena: ArenaSize = DEFAULT_ARENA): WormState {
   if (playerCount < MIN_PLAYERS || playerCount > MAX_PLAYERS) {
     throw new Error(`Unsupported player count: ${playerCount}`);
   }
   const rng = seededRng(seed);
-  const stacks: Record<SeatIndex, number[]> = {};
-  for (let seat = 0; seat < playerCount; seat++) stacks[seat] = [];
-  const starter = Math.floor(rng() * playerCount);
-
-  return {
-    playerCount,
-    centerTiles: TILES.map((t) => t.number),
-    removedTiles: [],
-    stacks,
-    activeSeat: starter,
-    currentRoll: [],
-    diceRemaining: DICE_COUNT,
-    keptDice: [],
-    usedFaces: [],
-    turnNumber: 1,
-    phase: "rolling",
-    winnerSeats: null,
-    lastEvent: null,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Derived helpers
-// ---------------------------------------------------------------------------
-
-export function totalWorms(state: WormState, seat: SeatIndex): number {
-  return (state.stacks[seat] ?? []).reduce((sum, n) => sum + wormsOnTile(n), 0);
-}
-
-/** Which seat currently owns `tileNumber` (anywhere in their stack, not just the top), or null if it's face-up in the center or already removed. UI-only helper (e.g. rendering "누구 스택에 가 있는지" for a slot that's neither in the center nor removed). */
-export function ownerOfTile(state: WormState, tileNumber: number): SeatIndex | null {
-  for (let seat = 0; seat < state.playerCount; seat++) {
-    if (state.stacks[seat]?.includes(tileNumber)) return seat;
+  const snakes: Record<SeatIndex, SnakeState> = {};
+  const cx = arena.width / 2;
+  const cy = arena.height / 2;
+  const radius = Math.min(arena.width, arena.height) * 0.3;
+  for (let seat = 0; seat < playerCount; seat++) {
+    const spawnAngle = (seat / playerCount) * Math.PI * 2;
+    const pos = { x: cx + Math.cos(spawnAngle) * radius, y: cy + Math.sin(spawnAngle) * radius };
+    const heading = normalizeAngle(spawnAngle + Math.PI); // face the center
+    snakes[seat] = spawnSnake(seat, pos, heading);
   }
-  return null;
-}
-
-type ClaimTarget = { kind: "center"; number: number } | { kind: "steal"; number: number; fromSeat: SeatIndex };
-
-/** See module doc's "Documented inferences" §2 for the precedence this implements. */
-function findClaimTarget(state: WormState, seat: SeatIndex, sum: number): ClaimTarget | null {
-  if (state.centerTiles.includes(sum)) return { kind: "center", number: sum };
-  for (let other = 0; other < state.playerCount; other++) {
-    if (other === seat) continue;
-    const stack = state.stacks[other];
-    if (stack.length > 0 && stack[stack.length - 1] === sum) {
-      return { kind: "steal", number: sum, fromSeat: other };
-    }
+  let nextFoodId = 0;
+  const food: FoodItem[] = [];
+  while (food.length < FOOD_COUNT_TARGET) {
+    food.push(makeFood(nextFoodId++, randomPointInArena(arena, rng), randomFoodValue(rng), rng));
   }
-  const lower = state.centerTiles.filter((n) => n < sum);
-  if (lower.length === 0) return null;
-  return { kind: "center", number: Math.max(...lower) };
+  return { playerCount, snakes, food, nextFoodId, elapsedMs: 0, arena, phase: "playing" };
 }
 
 // ---------------------------------------------------------------------------
-// Actions
+// Input sanitizing (defensive parsing of network payloads, same
+// reject-as-no-op spirit as every other engine's action guards)
 // ---------------------------------------------------------------------------
 
-function roll(state: WormState, seat: SeatIndex, seed: number): WormState {
-  if (state.phase !== "rolling" || seat !== state.activeSeat) return state;
-  if (state.diceRemaining <= 0 || state.currentRoll.length > 0) return state;
-
-  const rng = seededRng(seed);
-  const rolled = rollDice(rng, state.diceRemaining);
-  const distinctFaces = Array.from(new Set(rolled));
-  const anyKeepable = distinctFaces.some((f) => !state.usedFaces.includes(f));
-  // Rule: "굴린 주사위 눈금들이 이미 모두 킵한 숫자라 더 이상 선택할 수 없는 경우" — forced bust, no `keep` is possible on this roll.
-  if (!anyKeepable) return bust(state, seat, "bustedNoMoves");
-
-  return { ...state, currentRoll: rolled };
+export function sanitizeInput(raw: unknown): SnakeInput | null {
+  if (!raw || typeof raw !== "object") return null;
+  const angle = (raw as Record<string, unknown>).angle;
+  const boosting = (raw as Record<string, unknown>).boosting;
+  if (typeof angle !== "number" || !Number.isFinite(angle)) return null;
+  return { angle: normalizeAngle(angle), boosting: !!boosting };
 }
 
-function keep(state: WormState, seat: SeatIndex, face: Face): WormState {
-  if (state.phase !== "rolling" || seat !== state.activeSeat) return state;
-  if (state.currentRoll.length === 0) return state;
-  if (state.usedFaces.includes(face)) return state; // rule: can't re-pick an already-kept number this turn
-  const matching = state.currentRoll.filter((f) => f === face);
-  if (matching.length === 0) return state;
-
-  return {
-    ...state,
-    currentRoll: [],
-    diceRemaining: state.diceRemaining - matching.length,
-    keptDice: [...state.keptDice, ...matching],
-    usedFaces: [...state.usedFaces, face],
-  };
-}
-
-function stop(state: WormState, seat: SeatIndex): WormState {
-  if (state.phase !== "rolling" || seat !== state.activeSeat) return state;
-  if (state.currentRoll.length > 0) return state; // must `keep` (or already forced-bust) before stopping
-  if (state.usedFaces.length === 0) return state; // nothing kept yet — nothing to stop with
-
-  const sum = sumKept(state.keptDice);
-  // Rule: "지렁이 필수 포함 규칙" — a stop without any kept worm die is a guaranteed bust.
-  if (!state.keptDice.includes("worm")) return bust(state, seat, "bustedNoWorm", sum);
-
-  const target = findClaimTarget(state, seat, sum);
-  if (!target) return bust(state, seat, "bustedNoClaimTarget", sum);
-
-  let centerTiles = state.centerTiles;
-  let stacks = state.stacks;
-  let event: TurnEvent;
-  if (target.kind === "center") {
-    centerTiles = centerTiles.filter((n) => n !== target.number);
-    stacks = { ...stacks, [seat]: [...stacks[seat], target.number] };
-    event = { kind: "claimed", seat, tileNumber: target.number };
-  } else {
-    stacks = {
-      ...stacks,
-      [target.fromSeat]: stacks[target.fromSeat].slice(0, -1),
-      [seat]: [...stacks[seat], target.number],
-    };
-    event = { kind: "stolen", seat, tileNumber: target.number, fromSeat: target.fromSeat };
-  }
-  return advanceTurn({ ...state, centerTiles, stacks, lastEvent: event });
-}
+// ---------------------------------------------------------------------------
+// The one advance function
+// ---------------------------------------------------------------------------
 
 /**
- * Literal, unconditional two-step bust resolution — see module doc's
- * "Documented inferences" §3 for why this doesn't branch on whether the
- * player has a stack to return from.
+ * Advances the whole field by `dtMs` given each alive snake's latest known
+ * input (missing entries keep coasting on their last heading, no boost).
+ * `rng` drives food placement/scatter only — never movement — so replaying
+ * the exact same `(state, dtMs, inputs)` sequence against a fresh
+ * `seededRng` reproduces the exact same food layout, same determinism
+ * contract as every other engine in this project.
  */
-function bust(
-  state: WormState,
-  seat: SeatIndex,
-  kind: "bustedNoWorm" | "bustedNoClaimTarget" | "bustedNoMoves",
-  sum?: number,
+export function stepWorm(
+  prev: WormState,
+  dtMs: number,
+  inputs: Partial<Record<SeatIndex, SnakeInput>>,
+  rng: () => number = Math.random,
 ): WormState {
-  let centerTiles = state.centerTiles;
-  let stacks = state.stacks;
+  if (prev.phase === "gameOver" || dtMs <= 0) return prev;
+  // Clamp dt so a throttled background tab (or a slow first tick) can't fling a snake across the whole arena in one step.
+  const dtSec = Math.min(dtMs, 250) / 1000;
+  const elapsedMs = prev.elapsedMs + dtMs;
+  const arena = prev.arena;
 
-  let returnedTile: number | null = null;
-  const myStack = stacks[seat];
-  if (myStack.length > 0) {
-    returnedTile = myStack[myStack.length - 1];
-    stacks = { ...stacks, [seat]: myStack.slice(0, -1) };
-    centerTiles = [...centerTiles, returnedTile];
-  }
+  // 1. Move every alive snake: turn toward its input angle at a bounded
+  //    rate, integrate position, drain a segment periodically while boosting.
+  const moved: Record<SeatIndex, SnakeState> = {};
+  let foodIdCounter = prev.nextFoodId;
+  const drops: FoodItem[] = [];
 
-  let removedTile: number | null = null;
-  if (centerTiles.length > 0) {
-    removedTile = Math.max(...centerTiles);
-    centerTiles = centerTiles.filter((n) => n !== removedTile);
-  }
+  for (let seat = 0; seat < prev.playerCount; seat++) {
+    const snake = prev.snakes[seat];
+    if (!snake.alive) {
+      moved[seat] = snake;
+      continue;
+    }
+    const input = inputs[seat];
+    const targetAngle = input ? input.angle : snake.targetAngle;
+    const boosting = !!input?.boosting && snake.length > MIN_LENGTH_TO_BOOST;
+    const maxTurn = TURN_RATE * dtSec;
+    const turn = clamp(angleDiff(snake.angle, targetAngle), -maxTurn, maxTurn);
+    const angle = normalizeAngle(snake.angle + turn);
+    const speedBase = Math.max(MIN_SPEED, BASE_SPEED - snake.length * SPEED_LENGTH_PENALTY);
+    const speed = boosting ? speedBase * BOOST_MULTIPLIER : speedBase;
+    const prevHead = snake.path[0];
+    const head = { x: prevHead.x + Math.cos(angle) * speed * dtSec, y: prevHead.y + Math.sin(angle) * speed * dtSec };
+    const path = trimPath([head, ...snake.path], snake.length);
 
-  const event: TurnEvent =
-    kind === "bustedNoMoves"
-      ? { kind, seat, returnedTile, removedTile }
-      : { kind, seat, sum: sum!, returnedTile, removedTile };
+    let length = snake.length;
+    let boostAccumMs = snake.boostAccumMs;
+    if (boosting) {
+      boostAccumMs += dtMs;
+      while (boostAccumMs >= BOOST_DRAIN_MS && length > MIN_LENGTH_TO_BOOST) {
+        boostAccumMs -= BOOST_DRAIN_MS;
+        length -= 1;
+        const tail = path[path.length - 1] ?? head;
+        drops.push(makeFood(foodIdCounter++, tail, 1, rng));
+      }
+    } else {
+      boostAccumMs = 0;
+    }
 
-  return advanceTurn({
-    ...state,
-    centerTiles,
-    stacks,
-    removedTiles: removedTile !== null ? [...state.removedTiles, removedTile] : state.removedTiles,
-    lastEvent: event,
-  });
-}
-
-/** Resets per-turn scratch state and hands off to the next seat, or ends the game once the center is exhausted (rule: "중앙 타일이 모두 소진되면 게임이 종료"). */
-function advanceTurn(state: WormState): WormState {
-  if (state.centerTiles.length === 0) {
-    return {
-      ...state,
-      phase: "gameOver",
-      winnerSeats: computeWinners(state),
-      currentRoll: [],
-      diceRemaining: 0,
-      keptDice: [],
-      usedFaces: [],
+    moved[seat] = {
+      ...snake,
+      angle,
+      targetAngle,
+      boosting,
+      speed,
+      path,
+      length,
+      segments: computeSegments(path, length, SEGMENT_SPACING),
+      boostAccumMs,
     };
   }
-  return {
-    ...state,
-    activeSeat: (state.activeSeat + 1) % state.playerCount,
-    currentRoll: [],
-    diceRemaining: DICE_COUNT,
-    keptDice: [],
-    usedFaces: [],
-    turnNumber: state.turnNumber + 1,
-  };
-}
 
-function computeWinners(state: WormState): SeatIndex[] {
-  let best = -1;
-  let winners: SeatIndex[] = [];
-  for (let seat = 0; seat < state.playerCount; seat++) {
-    const worms = totalWorms(state, seat);
-    if (worms > best) {
-      best = worms;
-      winners = [seat];
-    } else if (worms === best) {
-      winners.push(seat);
+  // 2. Food consumption — head vs. every uneaten pellet, first seat (in seat
+  //    order) to reach it this tick wins a simultaneous-arrival tie.
+  const eaten = new Set<number>();
+  for (let seat = 0; seat < prev.playerCount; seat++) {
+    const snake = moved[seat];
+    if (!snake.alive) continue;
+    for (const food of prev.food) {
+      if (eaten.has(food.id)) continue;
+      if (dist(snake.path[0], food) < HEAD_RADIUS + FOOD_RADIUS) {
+        eaten.add(food.id);
+        moved[seat] = { ...moved[seat], length: moved[seat].length + food.value, score: moved[seat].score + food.value * 10 };
+      }
     }
   }
-  return winners;
-}
-
-/** Single entry point applying any `EngineAction` to a state — the whole engine as one reducer. */
-export function applyAction(state: WormState, action: EngineAction): WormState {
-  switch (action.type) {
-    case "roll":
-      return roll(state, action.seat, action.seed);
-    case "keep":
-      return keep(state, action.seat, action.face);
-    case "stop":
-      return stop(state, action.seat);
-    default:
-      return state;
+  for (let seat = 0; seat < prev.playerCount; seat++) {
+    const s = moved[seat];
+    if (!s.alive) continue;
+    moved[seat] = { ...s, segments: computeSegments(s.path, s.length, SEGMENT_SPACING), bestLength: Math.max(s.bestLength, s.length) };
   }
+
+  // 3. Collision detection — table straight from boardGameRule/지렁이/지렁이.md §2(2):
+  //    [머리 vs 바닥 아이템] handled above · [머리 vs 머리] · [머리 vs 몸통(자기/상대)].
+  const deaths = new Set<SeatIndex>();
+  const cuts: Record<SeatIndex, number> = {}; // seat -> new (shortened) length
+
+  for (let seat = 0; seat < prev.playerCount; seat++) {
+    const s = moved[seat];
+    if (!s.alive) continue;
+    const h = s.path[0];
+    if (h.x < 0 || h.x > arena.width || h.y < 0 || h.y > arena.height) deaths.add(seat);
+  }
+
+  // Pairs already fully resolved by a head-to-head hit this tick (kill or
+  // tie) — their heads are, by definition, within `HEAD_RADIUS * 2` of each
+  // other, which almost always also puts each snake's own segment #1 within
+  // `HEAD_RADIUS + BODY_RADIUS` of the *other* snake's coincident head. That
+  // would spuriously re-trigger as a body cut/self-kill in the pass below,
+  // so a pair the head-to-head check already adjudicated is excluded from
+  // the head-to-body pass for this same tick.
+  const resolvedPairs = new Set<string>();
+
+  for (let a = 0; a < prev.playerCount; a++) {
+    if (!moved[a].alive || deaths.has(a)) continue;
+    for (let b = a + 1; b < prev.playerCount; b++) {
+      if (!moved[b].alive || deaths.has(b)) continue;
+      if (dist(moved[a].path[0], moved[b].path[0]) < HEAD_RADIUS * 2) {
+        resolvedPairs.add(`${a}-${b}`);
+        if (moved[a].length > moved[b].length) deaths.add(b);
+        else if (moved[b].length > moved[a].length) deaths.add(a);
+        else {
+          cuts[a] = Math.max(1, moved[a].length - 1);
+          cuts[b] = Math.max(1, moved[b].length - 1);
+        }
+      }
+    }
+  }
+
+  for (let a = 0; a < prev.playerCount; a++) {
+    const attacker = moved[a];
+    if (!attacker.alive || deaths.has(a)) continue;
+    for (let b = 0; b < prev.playerCount; b++) {
+      const target = moved[b];
+      if (!target.alive || deaths.has(b)) continue;
+      const isSelf = a === b;
+      if (!isSelf && resolvedPairs.has(a < b ? `${a}-${b}` : `${b}-${a}`)) continue;
+      const startIdx = isSelf ? SELF_COLLISION_SKIP : 1; // idx 0 is the head, already resolved above
+      for (let k = startIdx; k < target.segments.length; k++) {
+        if (dist(attacker.path[0], target.segments[k]) < HEAD_RADIUS + BODY_RADIUS) {
+          if (isSelf) deaths.add(a);
+          else cuts[b] = Math.min(cuts[b] ?? target.length, k);
+          break;
+        }
+      }
+    }
+  }
+
+  // 4. Apply deaths/cuts: dead snakes drop their whole body as food and go
+  //    into a respawn countdown; cut snakes drop the severed tail only.
+  const finalSnakes: Record<SeatIndex, SnakeState> = {};
+  for (let seat = 0; seat < prev.playerCount; seat++) {
+    const s = moved[seat];
+    if (deaths.has(seat)) {
+      for (const seg of s.segments) {
+        if (rng() < 0.7) drops.push(makeFood(foodIdCounter++, scatter(seg, arena, rng), randomFoodValue(rng), rng));
+      }
+      finalSnakes[seat] = { ...s, alive: false, deadAtMs: elapsedMs, path: [], segments: [] };
+    } else if (cuts[seat] !== undefined && s.alive) {
+      const cutAt = Math.min(cuts[seat], s.segments.length);
+      const removed = s.segments.slice(cutAt);
+      for (const seg of removed) {
+        if (rng() < 0.8) drops.push(makeFood(foodIdCounter++, scatter(seg, arena, rng), randomFoodValue(rng), rng));
+      }
+      finalSnakes[seat] = { ...s, length: cutAt, segments: s.segments.slice(0, cutAt) };
+    } else {
+      finalSnakes[seat] = s;
+    }
+  }
+
+  // 5. Respawns.
+  for (let seat = 0; seat < prev.playerCount; seat++) {
+    const s = finalSnakes[seat];
+    if (!s.alive && s.deadAtMs !== null && elapsedMs - s.deadAtMs >= RESPAWN_DELAY_MS) {
+      const pos = randomPointInArena(arena, rng);
+      const heading = rng() * Math.PI * 2;
+      finalSnakes[seat] = spawnSnake(seat, pos, heading, s);
+    }
+  }
+
+  // 6. Food bookkeeping: drop eaten pellets, add drops, top back up to target.
+  const food = prev.food.filter((f) => !eaten.has(f.id)).concat(drops);
+  while (food.length < FOOD_COUNT_TARGET) {
+    food.push(makeFood(foodIdCounter++, randomPointInArena(arena, rng), randomFoodValue(rng), rng));
+  }
+
+  const phase = elapsedMs >= MATCH_DURATION_MS ? "gameOver" : "playing";
+
+  return { ...prev, snakes: finalSnakes, food, nextFoodId: foodIdCounter, elapsedMs, phase };
 }
 
 // ---------------------------------------------------------------------------
-// Final rankings
+// Leaderboard / final rankings
 // ---------------------------------------------------------------------------
+
+export interface LeaderboardEntry {
+  seat: SeatIndex;
+  length: number;
+  score: number;
+  alive: boolean;
+}
+
+/** Live HUD leaderboard — sorted by current length per the rule doc ("가장 긴 뱀 TOP 5의 닉네임과 길이"). */
+export function computeLeaderboard(state: WormState, limit = 5): LeaderboardEntry[] {
+  return Object.values(state.snakes)
+    .map((s) => ({ seat: s.seat, length: s.length, score: s.score, alive: s.alive }))
+    .sort((a, b) => b.length - a.length)
+    .slice(0, limit);
+}
 
 export interface RankedSeat {
   seat: SeatIndex;
   rank: number;
-  worms: number;
+  score: number;
+  bestLength: number;
 }
 
-/** Only meaningful once `state.phase === "gameOver"`. Ties (same total worm count) share a rank, same competition-ranking convention as five-cucumbers/century. */
+/** Only meaningful once `state.phase === "gameOver"`. Ties share a rank, same competition-ranking convention as five-cucumbers/century. */
 export function computeRankings(state: WormState): RankedSeat[] {
-  const scored = Array.from({ length: state.playerCount }, (_, seat) => ({ seat, worms: totalWorms(state, seat) }));
-  const sorted = [...scored].sort((a, b) => b.worms - a.worms);
+  const scored = Array.from({ length: state.playerCount }, (_, seat) => ({
+    seat,
+    score: state.snakes[seat].score,
+    bestLength: state.snakes[seat].bestLength,
+  }));
+  const sorted = [...scored].sort((a, b) => b.score - a.score || b.bestLength - a.bestLength);
   const ranked: RankedSeat[] = [];
   let rank = 1;
   sorted.forEach((entry, i) => {
-    if (i > 0 && sorted[i - 1].worms !== entry.worms) rank = i + 1;
-    ranked.push({ seat: entry.seat, rank, worms: entry.worms });
+    if (i > 0 && (sorted[i - 1].score !== entry.score || sorted[i - 1].bestLength !== entry.bestLength)) rank = i + 1;
+    ranked.push({ ...entry, rank });
   });
   return ranked;
 }

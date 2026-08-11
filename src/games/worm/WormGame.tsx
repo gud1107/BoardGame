@@ -7,26 +7,53 @@ import { getDeviceId } from "@/lib/identity/deviceId";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import {
-  applyAction,
   computeRankings,
   MAX_PLAYERS,
   MIN_PLAYERS,
+  sanitizeInput,
+  seededRng,
   startGame,
-  type EngineAction,
+  stepWorm,
+  type RankedSeat,
   type SeatIndex,
+  type SnakeInput,
   type WormState,
 } from "./engine";
-import WormBoard from "./WormBoard";
+import WormCanvas from "./WormCanvas";
 
 /**
- * Online-room multiplayer entry point, same lockstep pattern as
- * PerudoGame/NoThanksGame/AvalonGame: every connected client independently
- * computes the full `WormState` from a shared RNG seed plus replayed
- * `EngineAction`s broadcast over Supabase Realtime — there is no
- * server-authoritative engine. Nothing in this game is hidden information
- * (unlike a card hand), so there's no trust trade-off to note beyond the
- * usual "a client could send an illegal action" (rejected as a no-op by
- * engine.ts's guards either way).
+ * Online-room multiplayer entry point.
+ *
+ * ⚠️ **Deliberately NOT this project's usual lockstep pattern** (see
+ * engine.ts's module doc for why a continuous physics field doesn't fit
+ * "replay the same discrete actions on every client"; full write-up in
+ * docs/cloud-sync.md §5). Instead:
+ *
+ * - The room's **host is the sole authority**: only the host calls
+ *   `stepWorm` (in a fixed-step accumulator loop driven by
+ *   `requestAnimationFrame`) and broadcasts the resulting `WormState`
+ *   snapshot at a throttled rate (`BROADCAST_INTERVAL_MS`). Every other
+ *   client just renders whatever snapshot it last received — no local
+ *   simulation, no reconciliation. This trades a little responsiveness for
+ *   non-host players (bounded by one broadcast interval + realtime latency)
+ *   for a much simpler, still-fully-synchronized mental model appropriate
+ *   for a casual party-game scope.
+ * - Every client (host included) broadcasts its own `{angle, boosting}`
+ *   input on `player-input` whenever `WormCanvas` reports a change (already
+ *   throttled there to ~14/sec). The host merges the latest known input per
+ *   seat into each simulation tick; non-host clients ignore `player-input`
+ *   entirely (only the host consumes it). The host also merges its OWN
+ *   local input directly (bypassing the network round-trip) so its own
+ *   snake never pays broadcast latency against itself.
+ * - Room lifecycle (create/join, seat assignment + self-healing, `?room=`
+ *   share links, reconnect via `state-request`/`state-sync`, room-full
+ *   guard) is unchanged from every other game's protocol — none of that is
+ *   specific to lockstep vs. host-authoritative, so it's reused verbatim.
+ *
+ * Known limitation (documented, not a bug): if the host's tab closes mid-
+ * match, the simulation simply stops advancing for everyone (no host
+ * migration) — same "known unresolved item" the project already tracks for
+ * lobby-stage host loss (see docs/cloud-sync.md §4).
  */
 
 type Occupant = {
@@ -47,6 +74,9 @@ type Phase =
   | "room-full"
   | "supabase-missing"
   | "channel-error";
+
+const TICK_MS = 50; // host's fixed simulation step (20Hz)
+const BROADCAST_INTERVAL_MS = 90; // ~11 state snapshots/sec over the wire
 
 function generateRoomCode(): string {
   return String(Math.floor(1000 + Math.random() * 9000));
@@ -86,7 +116,7 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
   const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<WormState | null>(null);
-  const [finalResult, setFinalResult] = useState<{ winnerName: string } | null>(null);
+  const [finalRankings, setFinalRankings] = useState<RankedSeat[] | null>(null);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const startSentRef = useRef(false);
@@ -97,6 +127,22 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  // Latest input every seat is known to want — updated by `player-input`
+  // broadcasts (host reads this every tick; non-host clients keep it around
+  // harmlessly but never consume it).
+  const inputsRef = useRef<Partial<Record<SeatIndex, SnakeInput>>>({});
+  // This client's own latest local input — merged in directly by the host
+  // loop for zero-latency self-control, and what gets broadcast out.
+  const localInputRef = useRef<SnakeInput>({ angle: 0, boosting: false });
+  // Seed used to seed the *continuing* simulation rng (food spawns after
+  // the game starts) — distinct from the `startGame` seed so the initial
+  // food layout and the ongoing spawn stream aren't the same sequence.
+  const simSeedRef = useRef(0);
+  const mySeatRef = useRef<SeatIndex | null>(null);
+  useEffect(() => {
+    mySeatRef.current = mySeat;
+  }, [mySeat]);
 
   function enterRoom() {
     setFormError(null);
@@ -132,14 +178,24 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
       const seed = payload?.seed as number;
       const playerCount = payload?.playerCount as number;
       playerCountRef.current = playerCount;
+      simSeedRef.current = seed + 1;
+      inputsRef.current = {};
       setGameState(startGame(playerCount, seed));
-      setFinalResult(null);
+      setFinalRankings(null);
       setPhase("playing");
     });
 
-    channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
-      const action = payload?.action as EngineAction;
-      setGameState((prev) => (prev ? applyAction(prev, action) : prev));
+    channel.on("broadcast", { event: "state-snapshot" }, ({ payload }) => {
+      if (isHost) return; // host is authoritative for itself, never overwritten by its own echo
+      const state = payload?.state as WormState | undefined;
+      if (state) setGameState(state);
+    });
+
+    channel.on("broadcast", { event: "player-input" }, ({ payload }) => {
+      const seat = payload?.seat as SeatIndex | undefined;
+      const input = sanitizeInput(payload?.input);
+      if (seat === undefined || !input) return;
+      inputsRef.current = { ...inputsRef.current, [seat]: input };
     });
 
     channel.on("broadcast", { event: "state-request" }, () => {
@@ -152,7 +208,7 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
       const state = payload?.state as WormState | undefined;
       if (!state) return;
       setGameState(state);
-      setFinalResult(null);
+      setFinalRankings(null);
       setPhase("playing");
     });
 
@@ -258,8 +314,50 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
     }
   }, [occupants, phase, knownTargetPlayerCount, isHost]);
 
-  function handleAction(action: EngineAction) {
-    channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
+  // ---------------------------------------------------------------------
+  // Host-only fixed-step simulation loop — see module doc for why this
+  // exists instead of lockstep action replay. Deliberately NOT depending on
+  // `gameState` (which changes every tick) — it seeds its local mutable
+  // `sim` copy once from the state present when the match just started, then
+  // owns it exclusively until the effect tears down.
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    if (!isHost || phase !== "playing" || !gameStateRef.current) return;
+    let raf = 0;
+    let last = performance.now();
+    let acc = 0;
+    let lastBroadcast = 0;
+    let sim = gameStateRef.current;
+    const rng = seededRng(simSeedRef.current);
+
+    function tick(now: number) {
+      const dt = Math.min(now - last, 250);
+      last = now;
+      acc += dt;
+      const seat = mySeatRef.current;
+      const inputs = seat === null ? inputsRef.current : { ...inputsRef.current, [seat]: localInputRef.current };
+      while (acc >= TICK_MS && sim.phase !== "gameOver") {
+        sim = stepWorm(sim, TICK_MS, inputs, rng);
+        acc -= TICK_MS;
+      }
+      setGameState(sim);
+      if (now - lastBroadcast >= BROADCAST_INTERVAL_MS) {
+        lastBroadcast = now;
+        channelRef.current?.send({ type: "broadcast", event: "state-snapshot", payload: { state: sim } });
+      }
+      if (sim.phase !== "gameOver") raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // Intentionally NOT depending on `gameState` — this effect seeds its own
+    // mutable `sim` copy once from `gameStateRef.current` at match-start and
+    // then owns it exclusively; re-running per tick would restart the loop.
+  }, [isHost, phase]);
+
+  function handleInput(input: SnakeInput) {
+    localInputRef.current = input;
+    if (mySeat === null) return;
+    channelRef.current?.send({ type: "broadcast", event: "player-input", payload: { seat: mySeat, input } });
   }
 
   const ids: Record<SeatIndex, string> = useMemo(() => {
@@ -285,13 +383,14 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
   const connectedSeats = useMemo(() => new Set(occupants.map((o) => o.seat)), [occupants]);
 
   function handleGameEnd() {
-    if (!gameState || gameState.phase !== "gameOver") return;
-    const rankings = computeRankings(gameState);
+    const sim = gameStateRef.current;
+    if (!sim || sim.phase !== "gameOver") return;
+    const rankings = computeRankings(sim);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
       finishedAt: new Date().toISOString(),
     });
-    setFinalResult({ winnerName: names[rankings.find((r) => r.rank === 1)!.seat] });
+    setFinalRankings(rankings);
     setPhase("post-game");
   }
 
@@ -310,7 +409,7 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
     setMySeat(null);
     setOccupants([]);
     setGameState(null);
-    setFinalResult(null);
+    setFinalRankings(null);
     setIdentity({ name: "" });
     setMyPlayerId(undefined);
     setCodeInput("");
@@ -367,9 +466,9 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
     return (
       <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">🪱</span>
-        <h2 className="text-lg font-bold text-white">지렁이 온라인 대전</h2>
+        <h2 className="text-lg font-bold text-white">지렁이 실시간 대전</h2>
         <p className="text-sm text-white/50">
-          {MIN_PLAYERS}~{MAX_PLAYERS}명이 각자 기기로 접속해서 실시간으로 플레이해요.
+          {MIN_PLAYERS}~{MAX_PLAYERS}명이 각자 기기로 접속해서 Slither.io 스타일로 실시간 대전해요.
         </p>
         <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
           <button
@@ -492,22 +591,53 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "playing" && gameState && mySeat !== null) {
     return (
-      <WormBoard
+      <WormCanvas
         state={gameState}
         viewerSeat={mySeat}
         names={names}
         connectedSeats={connectedSeats}
-        onAction={handleAction}
+        onInput={handleInput}
         onGameEnd={handleGameEnd}
       />
     );
   }
 
-  if (phase === "post-game" && finalResult) {
+  if (phase === "post-game" && finalRankings) {
     return (
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
-        <span className="text-4xl">🏆</span>
-        <p className="text-white/80">{finalResult.winnerName} 님 우승으로 게임이 끝났어요.</p>
+      <div
+        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        style={{ background: "linear-gradient(160deg,#1a2e05 0%,#101d03 55%,#070c01 100%)" }}
+      >
+        <span className="text-5xl">🏆</span>
+        <h2 className="text-2xl font-bold text-lime-100">
+          {names[finalRankings.find((r) => r.rank === 1)!.seat]}님 승리!
+        </h2>
+        <p className="text-xs text-white/50">제한 시간이 끝났습니다 — 누적 점수가 가장 높은 지렁이가 승리합니다.</p>
+        <div className="w-full overflow-x-auto">
+          <table className="w-full min-w-[380px] border-collapse text-xs">
+            <thead>
+              <tr className="text-white/50">
+                <th className="border-b border-white/10 px-2 py-2 text-left">순위</th>
+                <th className="border-b border-white/10 px-2 py-2 text-left">플레이어</th>
+                <th className="border-b border-white/10 px-2 py-2 text-right">최고 길이</th>
+                <th className="border-b border-white/10 px-2 py-2 text-right">점수</th>
+              </tr>
+            </thead>
+            <tbody>
+              {finalRankings.map(({ seat, rank, bestLength, score }) => (
+                <tr key={seat} className={rank === 1 ? "bg-lime-400/10" : ""}>
+                  <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-lime-200">{rank === 1 ? "🏆 1" : rank}</td>
+                  <td className="border-b border-white/5 px-2 py-2 text-left text-white">
+                    {names[seat]}
+                    {seat === mySeat && <span className="ml-1 text-lime-200">(나)</span>}
+                  </td>
+                  <td className="border-b border-white/5 px-2 py-2 text-right text-lime-200">🪱 {bestLength}</td>
+                  <td className="border-b border-white/5 px-2 py-2 text-right text-white/70">{score}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <div className="flex gap-2">
           <button onClick={handleLeave} className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30">
             나가기

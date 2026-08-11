@@ -77,30 +77,10 @@ body {
   }
 }
 
-/* Perudo's dice-cup shake (see PerudoBoard.tsx's ShakingCup) — a fast small
-   jitter (rotate + tiny translate) looped for the shake duration, paired
-   with soundEngine.ts's playDiceRattle click bursts. */
-@keyframes cup-shake {
-  0%,
-  100% {
-    transform: rotate(0deg) translateX(0);
-  }
-  20% {
-    transform: rotate(-8deg) translateX(-3px);
-  }
-  40% {
-    transform: rotate(6deg) translateX(2px);
-  }
-  60% {
-    transform: rotate(-5deg) translateX(-2px);
-  }
-  80% {
-    transform: rotate(7deg) translateX(3px);
-  }
-}
-
-/* Perudo's dice reveal — once the cup stops shaking, the real pip dice pop
-   in (paired with soundEngine.ts's playCupThud). */
+/* Perudo's dice reveal — a quick pop-in for the CSS-fallback dice grid each
+   new round (paired with soundEngine.ts's playCupThud). No cup shake plays
+   before it anymore — a player's own dice are always visible immediately,
+   see PerudoBoard.tsx's "My dice" section. */
 @keyframes dice-reveal-pop {
   0% {
     transform: scale(0.75);
@@ -837,63 +817,8 @@ body {
   }
 }
 
-/* 지렁이's dice-roll tumble (see WormBoard.tsx's `DieFace`) — plays once per
-   die the instant a fresh `currentRoll` appears in lockstep state, same
-   tumble-over-an-already-resolved-value technique as Las Vegas's
-   `dice-roll-tumble` (kept as its own game-scoped keyframe per this
-   project's per-game CSS ownership convention rather than reaching into
-   another game's keyframe). */
-@keyframes worm-dice-tumble {
-  0% {
-    transform: scale(0.4) rotate(0deg);
-    opacity: 0;
-  }
-  35% {
-    transform: scale(1.15) rotate(200deg);
-    opacity: 1;
-  }
-  65% {
-    transform: scale(0.92) rotate(330deg);
-  }
-  100% {
-    transform: scale(1) rotate(360deg);
-    opacity: 1;
-  }
-}
-
-/* 지렁이's tile claim/steal flight (see WormEffects.tsx's `FlyingTile`) —
-   layered on top of a plain left/top CSS *transition* that carries a tile
-   from the center grid (or an opponent's stack) to the claiming seat's
-   stack, same left/top-transition-plus-keyframe-flourish technique as
-   five-cucumbers/CardEffects.tsx and lasVegas/DiceEffects.tsx. */
-@keyframes worm-tile-fly {
-  0% {
-    transform: translate(-50%, -50%) scale(0.75) rotate(-12deg);
-    opacity: 0;
-  }
-  55% {
-    transform: translate(-50%, -50%) scale(1.12) rotate(6deg);
-    opacity: 1;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(1) rotate(0deg);
-    opacity: 1;
-  }
-}
-
-/* 지렁이's bust banner flourish (see WormBoard.tsx) — a short attention pulse
-   on the "실패" toast, no cross-element flight involved. */
-@keyframes worm-bust-flash {
-  0% {
-    transform: scale(0.9);
-    opacity: 0;
-  }
-  40% {
-    transform: scale(1.04);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
+/* 지렁이 has no CSS-keyframe FX — its previous dice/tile flourishes were
+   deleted along with the dice-based engine (see engine.ts's module doc);
+   the real-time Slither.io-style replacement draws everything on a Canvas
+   2D surface every frame instead (see WormCanvas.tsx), so there is nothing
+   here for globals.css to own. */

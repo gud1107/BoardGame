@@ -64,7 +64,7 @@ src/games/<gameId>/
 |---|---|---|
 | `seededRng(seed)`, `shuffle(arr, rng)` | `src/lib/rng.ts` | 결정론적 난수/셔플. 게임마다 새로 구현하지 말 것. |
 | `PlayableGameProps`, `GameMeta`, `GameCompletionResult` | `src/games/types.ts` | 카탈로그·내기 시스템과 맞물리는 계약 타입. |
-| 락스텝 온라인 동기화 패턴(시드 브로드캐스트 → 각자 계산 → `EngineAction` 재생, 재접속 `state-request`/`state-sync`, 좌석 충돌 자가치유) | [docs/cloud-sync.md](./docs/cloud-sync.md) | 10개 게임의 `<Game>Game.tsx`가 전부 이 프로토콜을 그대로 재사용한다. 새 게임도 새 프로토콜을 발명하지 말 것. |
+| 락스텝 온라인 동기화 패턴(시드 브로드캐스트 → 각자 계산 → `EngineAction` 재생, 재접속 `state-request`/`state-sync`, 좌석 충돌 자가치유) | [docs/cloud-sync.md](./docs/cloud-sync.md) | 대부분의 `<Game>Game.tsx`가 이 프로토콜을 그대로 재사용한다. 새 게임도 새 프로토콜을 발명하지 말 것 — **단, 지렁이처럼 이산 액션이 아니라 연속 물리 시뮬레이션인 장르는 예외**([docs/cloud-sync.md §5](./docs/cloud-sync.md#5-예외-지렁이는-락스텝이-아니라-호스트-권위-실시간-동기화를-쓴다)의 호스트 권위 스냅샷 패턴을 재사용할 것). |
 | 파생 상태(derived state) 금지 원칙 | [docs/architecture.md §1.4](./docs/architecture.md#14-파생-상태derived-state-금지-원칙) | 같은 사실을 두 상태로 따로 표현하지 말 것 — 과거 버그 3건의 공통 원인. |
 | 게임 로직 ↔ 내기(정산) 로직 분리 | [docs/architecture.md §1.5](./docs/architecture.md#15-게임-로직과-내기정산-로직의-완전한-분리) | `<Game>Board.tsx`/`engine.ts`는 내기 시스템의 존재를 몰라야 한다. `<Game>Game.tsx`가 유일한 변환 지점. |
 

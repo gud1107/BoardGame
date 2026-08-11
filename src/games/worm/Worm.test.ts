@@ -1,51 +1,90 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyAction,
+  computeLeaderboard,
   computeRankings,
-  DICE_COUNT,
-  FACE_VALUE,
+  computeSegments,
+  DEFAULT_ARENA,
+  FOOD_COUNT_TARGET,
+  BOOST_DRAIN_MS,
+  MATCH_DURATION_MS,
   MAX_PLAYERS,
+  MIN_LENGTH_TO_BOOST,
   MIN_PLAYERS,
-  sumKept,
-  TILE_MAX,
-  TILE_MIN,
-  TILES,
-  totalWorms,
+  RESPAWN_DELAY_MS,
+  SEAT_HUES,
+  SEGMENT_SPACING,
+  START_LENGTH,
+  TURN_RATE,
+  normalizeAngle,
+  sanitizeInput,
+  seededRng,
   startGame,
-  wormsOnTile,
-  type Face,
+  stepWorm,
+  type FoodItem,
+  type SeatIndex,
+  type SnakeState,
+  type Vec2,
   type WormState,
 } from "./engine";
 
-function makeState(overrides: Partial<WormState> = {}): WormState {
+/** A straight two-point trail long enough that `computeSegments(path, length, ...)` never has to clamp-duplicate its tail point — real gameplay always has this much history behind a snake's head. */
+function straightPath(head: Vec2, headingAngle: number, length: number): Vec2[] {
+  const tailDist = length * SEGMENT_SPACING + SEGMENT_SPACING * 2;
+  const tail = { x: head.x - Math.cos(headingAngle) * tailDist, y: head.y - Math.sin(headingAngle) * tailDist };
+  return [head, tail];
+}
+
+function makeSnake(seat: SeatIndex, overrides: Partial<SnakeState> = {}): SnakeState {
+  const length = overrides.length ?? START_LENGTH;
+  const angle = overrides.angle ?? 0;
+  const path = overrides.path ?? straightPath({ x: 100 + seat * 400, y: 100 }, angle, length);
   return {
-    playerCount: 3,
-    centerTiles: TILES.map((t) => t.number),
-    removedTiles: [],
-    stacks: { 0: [], 1: [], 2: [] },
-    activeSeat: 0,
-    currentRoll: [],
-    diceRemaining: DICE_COUNT,
-    keptDice: [],
-    usedFaces: [],
-    turnNumber: 1,
-    phase: "rolling",
-    winnerSeats: null,
-    lastEvent: null,
+    seat,
+    alive: true,
+    angle: 0,
+    targetAngle: 0,
+    boosting: false,
+    speed: 0,
+    path,
+    segments: computeSegments(path, length, SEGMENT_SPACING),
+    length,
+    bestLength: length,
+    score: 0,
+    boostAccumMs: 0,
+    deadAtMs: null,
+    hue: SEAT_HUES[seat % SEAT_HUES.length],
     ...overrides,
   };
 }
 
+function buildState(snakes: SnakeState[], overrides: Partial<WormState> = {}): WormState {
+  const map: Record<SeatIndex, SnakeState> = {};
+  for (const s of snakes) map[s.seat] = s;
+  return {
+    playerCount: snakes.length,
+    snakes: map,
+    food: [],
+    nextFoodId: 0,
+    elapsedMs: 0,
+    arena: DEFAULT_ARENA,
+    phase: "playing",
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+
 describe("startGame — setup", () => {
-  it("seeds all 16 tiles (21-36) face-up in the center, nobody's stack, starter within range", () => {
+  it("spawns every seat alive at START_LENGTH and fills the field with food up to the target", () => {
     const state = startGame(4, 1);
-    expect(state.centerTiles.slice().sort((a, b) => a - b)).toEqual(TILES.map((t) => t.number));
-    expect(state.removedTiles).toEqual([]);
-    expect(Object.values(state.stacks).every((s) => s.length === 0)).toBe(true);
-    expect(state.activeSeat).toBeGreaterThanOrEqual(0);
-    expect(state.activeSeat).toBeLessThan(4);
-    expect(state.diceRemaining).toBe(DICE_COUNT);
-    expect(state.phase).toBe("rolling");
+    expect(Object.keys(state.snakes)).toHaveLength(4);
+    for (let seat = 0; seat < 4; seat++) {
+      expect(state.snakes[seat].alive).toBe(true);
+      expect(state.snakes[seat].length).toBe(START_LENGTH);
+      expect(state.snakes[seat].score).toBe(0);
+    }
+    expect(state.food).toHaveLength(FOOD_COUNT_TARGET);
+    expect(state.phase).toBe("playing");
   });
 
   it("is deterministic for a given seed", () => {
@@ -54,331 +93,235 @@ describe("startGame — setup", () => {
 
   it("throws for unsupported player counts", () => {
     expect(() => startGame(1, 1)).toThrow();
-    expect(() => startGame(8, 1)).toThrow();
+    expect(() => startGame(MAX_PLAYERS + 1, 1)).toThrow();
     expect(MIN_PLAYERS).toBe(2);
-    expect(MAX_PLAYERS).toBe(7);
   });
 });
 
-describe("tile data", () => {
-  it("has exactly 16 tiles numbered 21-36 with worm counts 1-4 in blocks of 4", () => {
-    expect(TILES).toHaveLength(16);
-    expect(TILE_MIN).toBe(21);
-    expect(TILE_MAX).toBe(36);
-    for (const t of TILES) {
-      const expectedWorms = Math.floor((t.number - 21) / 4) + 1;
-      expect(t.worms).toBe(expectedWorms);
-      expect(t.worms).toBeGreaterThanOrEqual(1);
-      expect(t.worms).toBeLessThanOrEqual(4);
-    }
-    expect(wormsOnTile(21)).toBe(1);
-    expect(wormsOnTile(24)).toBe(1);
-    expect(wormsOnTile(25)).toBe(2);
-    expect(wormsOnTile(32)).toBe(3);
-    expect(wormsOnTile(36)).toBe(4);
-    expect(wormsOnTile(999)).toBe(0); // unknown tile -> 0, doesn't throw
-  });
-});
-
-describe("sumKept — worm face counts as 5 pips", () => {
-  it("sums plain pip faces directly", () => {
-    expect(sumKept([1, 2, 3])).toBe(6);
-  });
-  it("counts a worm die as 5", () => {
-    expect(FACE_VALUE.worm).toBe(5);
-    expect(sumKept(["worm", "worm", 4])).toBe(14);
-  });
-});
-
-describe("roll — turn ownership and pending-roll guards", () => {
-  it("rejects a roll from a non-active seat", () => {
-    const state = makeState({ activeSeat: 0 });
-    const next = applyAction(state, { type: "roll", seat: 1, seed: 1 });
-    expect(next).toBe(state);
-  });
-
-  it("rejects rolling again while a roll is still pending a keep", () => {
-    const state = makeState({ currentRoll: [1, 2, "worm"], diceRemaining: 5 });
-    const next = applyAction(state, { type: "roll", seat: 0, seed: 1 });
-    expect(next).toBe(state);
-  });
-
-  it("rejects rolling once no dice remain", () => {
-    const state = makeState({ diceRemaining: 0 });
-    const next = applyAction(state, { type: "roll", seat: 0, seed: 1 });
-    expect(next).toBe(state);
-  });
-
-  it("rolls exactly `diceRemaining` dice, every value a valid Face", () => {
-    const state = makeState({ diceRemaining: 5 });
-    const next = applyAction(state, { type: "roll", seat: 0, seed: 12345 });
-    expect(next.currentRoll).toHaveLength(5);
-    for (const f of next.currentRoll) {
-      expect([1, 2, 3, 4, 5, "worm"]).toContain(f);
+describe("computeSegments — path resampling", () => {
+  it("places body points at fixed SEGMENT_SPACING intervals along a straight trail", () => {
+    const path: Vec2[] = Array.from({ length: 20 }, (_, i) => ({ x: -i * 4, y: 0 }));
+    const segments = computeSegments(path, 5, SEGMENT_SPACING);
+    expect(segments).toHaveLength(5);
+    expect(segments[0].x).toBeCloseTo(0, 10);
+    expect(segments[0].y).toBeCloseTo(0, 10);
+    for (let i = 1; i < segments.length; i++) {
+      const d = Math.hypot(segments[i].x - segments[i - 1].x, segments[i].y - segments[i - 1].y);
+      expect(d).toBeCloseTo(SEGMENT_SPACING, 5);
     }
   });
 
-  it("forces a bust when every rolled face is already used up (no legal `keep` possible)", () => {
-    // usedFaces covers all 6 possible faces -> whatever gets rolled, anyKeepable is always false.
-    const state = makeState({
-      activeSeat: 0,
-      diceRemaining: 2,
-      usedFaces: [1, 2, 3, 4, 5, "worm"],
-      keptDice: [1, 2, 3, 4, 5, "worm"],
-      stacks: { 0: [24], 1: [], 2: [] },
-      centerTiles: TILES.map((t) => t.number).filter((n) => n !== 24),
-    });
-    const next = applyAction(state, { type: "roll", seat: 0, seed: 999 });
-    expect(next.lastEvent).toMatchObject({ kind: "bustedNoMoves", seat: 0 });
-    // Own top tile (24) returned to center, then the new highest center tile flipped face-down.
-    expect(next.stacks[0]).toEqual([]);
-    expect(next.centerTiles).toContain(24);
-    expect(next.removedTiles).toEqual([36]);
-    expect(next.centerTiles).not.toContain(36);
-    // Turn passed on, per-turn scratch state reset.
-    expect(next.activeSeat).toBe(1);
-    expect(next.diceRemaining).toBe(DICE_COUNT);
-    expect(next.usedFaces).toEqual([]);
+  it("clamps to the last known point when the trail is shorter than needed", () => {
+    const path: Vec2[] = [{ x: 0, y: 0 }, { x: -5, y: 0 }];
+    const segments = computeSegments(path, 6, SEGMENT_SPACING);
+    expect(segments[5]).toEqual(path[path.length - 1]);
   });
 });
 
-describe("keep — duplicate-face lockout and face-matching", () => {
-  it("rejects keeping a face not present in the current roll", () => {
-    const state = makeState({ currentRoll: [1, 2, 3] });
-    const next = applyAction(state, { type: "keep", seat: 0, face: "worm" });
-    expect(next).toBe(state);
+describe("stepWorm — movement & turning", () => {
+  it("integrates the head forward along the current heading by speed * dt", () => {
+    const snake = makeSnake(0, { angle: 0, targetAngle: 0 });
+    const state = buildState([snake]);
+    const result = stepWorm(state, 200, { 0: { angle: 0, boosting: false } }, seededRng(1));
+    const head = result.snakes[0].path[0];
+    expect(head.x).toBeGreaterThan(snake.path[0].x);
+    expect(head.y).toBeCloseTo(snake.path[0].y, 1);
   });
 
-  it("rejects keeping with nothing rolled yet", () => {
-    const state = makeState({ currentRoll: [] });
-    const next = applyAction(state, { type: "keep", seat: 0, face: 1 });
-    expect(next).toBe(state);
+  it("turns toward the input angle at a bounded rate rather than snapping instantly", () => {
+    const snake = makeSnake(0, { angle: 0, targetAngle: 0 });
+    const state = buildState([snake]);
+    const dtMs = 40;
+    const result = stepWorm(state, dtMs, { 0: { angle: Math.PI, boosting: false } }, seededRng(1));
+    const maxTurn = TURN_RATE * (dtMs / 1000);
+    expect(result.snakes[0].angle).toBeCloseTo(maxTurn, 5);
+    expect(result.snakes[0].angle).not.toBeCloseTo(Math.PI, 1);
   });
 
-  it("rejects a non-active seat's keep", () => {
-    const state = makeState({ activeSeat: 0, currentRoll: [1, 2] });
-    const next = applyAction(state, { type: "keep", seat: 1, face: 1 });
-    expect(next).toBe(state);
+  it("a snake with no input this tick keeps its previous target angle and keeps moving", () => {
+    const snake = makeSnake(0, { angle: 0, targetAngle: 0 });
+    const state = buildState([snake]);
+    const result = stepWorm(state, 100, {}, seededRng(1));
+    expect(result.snakes[0].targetAngle).toBe(0);
+    expect(result.snakes[0].path[0].x).toBeGreaterThan(snake.path[0].x);
   });
 
-  it("moves every matching die into keptDice, marks the face used, clears currentRoll", () => {
-    const state = makeState({ currentRoll: [3, 3, 1, "worm"], diceRemaining: 4 });
-    const next = applyAction(state, { type: "keep", seat: 0, face: 3 });
-    expect(next.keptDice).toEqual([3, 3]);
-    expect(next.usedFaces).toEqual([3]);
-    expect(next.currentRoll).toEqual([]);
-    expect(next.diceRemaining).toBe(2);
+  it("a dead snake does not move and stays dead before its respawn delay elapses", () => {
+    const snake = makeSnake(0, { alive: false, deadAtMs: 0, path: [], segments: [] });
+    const state = buildState([snake]);
+    const result = stepWorm(state, 100, { 0: { angle: 0, boosting: false } }, seededRng(1));
+    expect(result.snakes[0].alive).toBe(false);
   });
 
-  it("rejects re-keeping a face already used this turn, even if it reappears in a later roll", () => {
-    const kept = makeState({ currentRoll: [3, 3, 1, "worm"], diceRemaining: 4 });
-    const afterFirstKeep = applyAction(kept, { type: "keep", seat: 0, face: 3 });
-    // Simulate a fresh roll of the remaining dice that happens to show a 3 again.
-    const rerolled = { ...afterFirstKeep, currentRoll: [3, "worm"] as Face[] };
-    const blocked = applyAction(rerolled, { type: "keep", seat: 0, face: 3 });
-    expect(blocked).toBe(rerolled); // no-op: face 3 is locked out for the rest of this turn
-  });
-});
-
-describe("stop — worm requirement", () => {
-  it("rejects stopping before anything has been kept", () => {
-    const state = makeState({ usedFaces: [] });
-    const next = applyAction(state, { type: "stop", seat: 0 });
-    expect(next).toBe(state);
-  });
-
-  it("rejects stopping while a roll is still pending a keep", () => {
-    const state = makeState({ usedFaces: [1], keptDice: [1], currentRoll: [2, 3] });
-    const next = applyAction(state, { type: "stop", seat: 0 });
-    expect(next).toBe(state);
-  });
-
-  it("busts if the kept dice never included a worm, even with a valid-looking sum", () => {
-    const state = makeState({
-      activeSeat: 0,
-      usedFaces: [4, 3],
-      keptDice: [4, 4, 3], // sum 11, no worm
-      stacks: { 0: [], 1: [], 2: [] },
-    });
-    const next = applyAction(state, { type: "stop", seat: 0 });
-    expect(next.lastEvent).toMatchObject({ kind: "bustedNoWorm", seat: 0, sum: 11 });
-    expect(next.activeSeat).toBe(1); // turn passed
+  it("respawns a dead snake once RESPAWN_DELAY_MS has elapsed, keeping score/bestLength", () => {
+    const snake = makeSnake(0, { alive: false, deadAtMs: 0, path: [], segments: [], score: 500, bestLength: 40 });
+    const state = buildState([snake]);
+    const result = stepWorm(state, RESPAWN_DELAY_MS + 10, { 0: { angle: 0, boosting: false } }, seededRng(1));
+    expect(result.snakes[0].alive).toBe(true);
+    expect(result.snakes[0].length).toBe(START_LENGTH);
+    expect(result.snakes[0].score).toBe(500);
+    expect(result.snakes[0].bestLength).toBe(40);
   });
 });
 
-describe("stop — claiming from the center", () => {
-  it("claims the exact-match center tile", () => {
-    const state = makeState({
-      activeSeat: 0,
-      usedFaces: ["worm"],
-      keptDice: ["worm", "worm", "worm", "worm", "worm"], // sum 25
-    });
-    const next = applyAction(state, { type: "stop", seat: 0 });
-    expect(next.lastEvent).toEqual({ kind: "claimed", seat: 0, tileNumber: 25 });
-    expect(next.stacks[0]).toEqual([25]);
-    expect(next.centerTiles).not.toContain(25);
-  });
-
-  it("falls back to the highest center tile strictly below the sum when there's no exact match", () => {
-    const state = makeState({
-      activeSeat: 0,
-      usedFaces: ["worm"],
-      keptDice: ["worm", "worm", "worm", "worm"], // sum 20 — below every tile (21-36)
-      centerTiles: [21, 22, 23], // no exact 20; nothing below 20 either -> should bust (covered separately)
-    });
-    // Adjust to a sum that DOES have tiles below it but no exact match.
-    const state2 = { ...state, keptDice: ["worm", "worm", "worm", "worm", 3] as Face[], centerTiles: [21, 22, 30, 31] };
-    const sum = sumKept(state2.keptDice); // 5*4 + 3 = 23, no exact 23 in center
-    expect(sum).toBe(23);
-    const next = applyAction(state2, { type: "stop", seat: 0 });
-    expect(next.lastEvent).toEqual({ kind: "claimed", seat: 0, tileNumber: 22 }); // highest tile < 23
-    expect(next.stacks[0]).toEqual([22]);
-    expect(next.centerTiles).not.toContain(22);
-  });
-
-  it("busts when the sum is below every remaining center tile (no valid claim target)", () => {
-    const state = makeState({
-      activeSeat: 0,
-      usedFaces: ["worm"],
-      keptDice: ["worm", "worm", "worm", "worm"], // sum 20
-      centerTiles: [21, 22, 23],
-      stacks: { 0: [], 1: [], 2: [] },
-    });
-    const next = applyAction(state, { type: "stop", seat: 0 });
-    expect(next.lastEvent).toMatchObject({ kind: "bustedNoClaimTarget", seat: 0, sum: 20 });
+describe("stepWorm — food", () => {
+  it("eating a pellet grows length/score, removes it, and backfills the food count to the target", () => {
+    const snake = makeSnake(0, { path: [{ x: 100, y: 100 }, { x: 84, y: 100 }], angle: 0, targetAngle: 0 });
+    const food: FoodItem[] = [{ id: 1, x: 102, y: 100, value: 3, hue: 0 }];
+    const state = buildState([snake], { food, nextFoodId: 2 });
+    const result = stepWorm(state, 16, { 0: { angle: 0, boosting: false } }, seededRng(7));
+    expect(result.snakes[0].length).toBe(START_LENGTH + 3);
+    expect(result.snakes[0].score).toBe(30);
+    expect(result.food.some((f) => f.id === 1)).toBe(false);
+    expect(result.food).toHaveLength(FOOD_COUNT_TARGET);
   });
 });
 
-describe("stop — stealing an opponent's top tile", () => {
-  it("steals the exact-match tile off an opponent's stack top when the center has no exact match", () => {
-    const state = makeState({
-      activeSeat: 0,
-      usedFaces: ["worm"],
-      keptDice: ["worm", "worm", "worm", "worm", "worm"], // sum 25
-      centerTiles: TILES.map((t) => t.number).filter((n) => n !== 25), // 25 is NOT in the center...
-      stacks: { 0: [], 1: [21, 25], 2: [] }, // ...it's on top of seat 1's stack instead
-    });
-    const next = applyAction(state, { type: "stop", seat: 0 });
-    expect(next.lastEvent).toEqual({ kind: "stolen", seat: 0, tileNumber: 25, fromSeat: 1 });
-    expect(next.stacks[0]).toEqual([25]);
-    expect(next.stacks[1]).toEqual([21]); // 21 stays, only the top (25) is taken
+describe("stepWorm — boost", () => {
+  it("boosting drains a segment every BOOST_DRAIN_MS and drops food behind the tail", () => {
+    const snake = makeSnake(0, { length: 20, bestLength: 20 });
+    const food: FoodItem[] = Array.from({ length: FOOD_COUNT_TARGET }, (_, i) => ({ id: i, x: 10, y: 10, value: 1, hue: 0 }));
+    const state = buildState([snake], { food, nextFoodId: FOOD_COUNT_TARGET });
+    const result = stepWorm(state, BOOST_DRAIN_MS * 3, { 0: { angle: 0, boosting: true } }, seededRng(1));
+    expect(result.snakes[0].length).toBe(17);
+    expect(result.food).toHaveLength(FOOD_COUNT_TARGET + 3);
   });
 
-  it("cannot steal a tile that is buried (not the top of a stack)", () => {
-    const state = makeState({
-      activeSeat: 0,
-      usedFaces: ["worm"],
-      keptDice: ["worm", "worm", "worm", "worm", "worm"], // sum 25
-      centerTiles: TILES.map((t) => t.number).filter((n) => n !== 25 && n !== 26),
-      stacks: { 0: [], 1: [25, 26], 2: [] }, // 25 is buried under 26 -> unreachable
-    });
-    const next = applyAction(state, { type: "stop", seat: 0 });
-    // No exact match anywhere reachable; falls back to highest center tile below 25.
-    expect(next.lastEvent).toMatchObject({ kind: "claimed", seat: 0 });
-    expect((next.lastEvent as { tileNumber: number }).tileNumber).toBeLessThan(25);
-    expect(next.stacks[1]).toEqual([25, 26]); // untouched
+  it("ignores the boost flag (no speed bonus, no drain) once length is at or below MIN_LENGTH_TO_BOOST", () => {
+    const snake = makeSnake(0, { length: MIN_LENGTH_TO_BOOST });
+    const state = buildState([snake]);
+    const result = stepWorm(state, 500, { 0: { angle: 0, boosting: true } }, seededRng(1));
+    expect(result.snakes[0].boosting).toBe(false);
+    expect(result.snakes[0].length).toBe(MIN_LENGTH_TO_BOOST);
   });
 });
 
-describe("stop — bust resolution (literal two-step: return own top tile, then flip current-highest center tile)", () => {
-  it("returns the busting player's own top tile to the center before flipping the highest one down", () => {
-    const state = makeState({
-      activeSeat: 0,
-      usedFaces: [4],
-      keptDice: [4, 4], // sum 8, no worm -> guaranteed bust
-      stacks: { 0: [24], 1: [], 2: [] },
-      centerTiles: [21, 22, 23, 30, 31],
-    });
-    const next = applyAction(state, { type: "stop", seat: 0 });
-    expect(next.stacks[0]).toEqual([]); // 24 returned
-    expect(next.removedTiles).toEqual([31]); // highest AFTER the return (24 < 31) gets flipped
-    expect(next.centerTiles.slice().sort((a, b) => a - b)).toEqual([21, 22, 23, 24, 30]);
-  });
-
-  it("a returned tile that becomes the new highest gets immediately flipped back out (literal spec reading)", () => {
-    const state = makeState({
-      activeSeat: 0,
-      usedFaces: [4],
-      keptDice: [4, 4],
-      stacks: { 0: [36], 1: [], 2: [] }, // 36 is the highest possible tile
-      centerTiles: [21, 22],
-    });
-    const next = applyAction(state, { type: "stop", seat: 0 });
-    expect(next.stacks[0]).toEqual([]);
-    expect(next.removedTiles).toEqual([36]); // returned, then immediately re-flipped — net no-op for the center
-    expect(next.centerTiles.slice().sort((a, b) => a - b)).toEqual([21, 22]);
-  });
-
-  it("has nothing to return when the busting player's stack is empty — only the center flip happens", () => {
-    const state = makeState({
-      activeSeat: 0,
-      usedFaces: [4],
-      keptDice: [4, 4],
-      stacks: { 0: [], 1: [], 2: [] },
-      centerTiles: [21, 22, 30],
-    });
-    const next = applyAction(state, { type: "stop", seat: 0 });
-    expect(next.stacks[0]).toEqual([]);
-    expect(next.removedTiles).toEqual([30]);
-    expect(next.centerTiles.slice().sort((a, b) => a - b)).toEqual([21, 22]);
+describe("stepWorm — arena boundary", () => {
+  it("a head crossing the arena edge kills the snake and drops its body as food", () => {
+    const arena = { width: 200, height: 200 };
+    const snake = makeSnake(0, { path: [{ x: 195, y: 100 }, { x: 179, y: 100 }], angle: 0, targetAngle: 0 });
+    const state = buildState([snake], { arena });
+    const result = stepWorm(state, 100, { 0: { angle: 0, boosting: false } }, seededRng(3));
+    expect(result.snakes[0].alive).toBe(false);
+    expect(result.snakes[0].deadAtMs).toBe(100);
+    expect(result.food.length).toBeGreaterThan(0);
   });
 });
 
-describe("game over — center exhausted, winner by total worm count", () => {
-  it("ends the game the instant the last center tile is claimed, ranking by total worms", () => {
-    const state = makeState({
-      activeSeat: 0,
-      usedFaces: ["worm"],
-      keptDice: ["worm", "worm", "worm", "worm", "worm"], // sum 25
-      centerTiles: [25], // the last tile left anywhere in the game
-      stacks: { 0: [21, 22], 1: [23, 24], 2: [] }, // seat0: 1+1=2 worms, seat1: 1+1=2 worms (pre-claim)
-    });
-    const next = applyAction(state, { type: "stop", seat: 0 });
-    expect(next.centerTiles).toEqual([]);
-    expect(next.phase).toBe("gameOver");
-    // seat 0 now holds 21,22,25 -> worms 1+1+2 = 4, the sole winner.
-    expect(totalWorms(next, 0)).toBe(4);
-    expect(next.winnerSeats).toEqual([0]);
+describe("stepWorm — collisions (boardGameRule/지렁이/지렁이.md §2(2))", () => {
+  it("head-to-head: the longer snake survives untouched, the shorter one dies and drops everything", () => {
+    const long = makeSnake(0, { path: straightPath({ x: 100, y: 100 }, 0, 15), length: 15, angle: 0, targetAngle: 0 });
+    const short = makeSnake(1, { path: straightPath({ x: 100, y: 100 }, Math.PI, 8), length: 8, angle: Math.PI, targetAngle: Math.PI });
+    const state = buildState([long, short]);
+    const result = stepWorm(state, 10, { 0: { angle: 0, boosting: false }, 1: { angle: Math.PI, boosting: false } }, seededRng(1));
+    expect(result.snakes[1].alive).toBe(false);
+    expect(result.snakes[0].alive).toBe(true);
+    expect(result.snakes[0].length).toBe(15);
   });
 
-  it("computeRankings shares a rank across tied total worm counts", () => {
-    const state = makeState({
-      phase: "gameOver",
-      centerTiles: [],
-      stacks: { 0: [21, 25], 1: [22, 26], 2: [36] }, // seat0: 1+2=3, seat1: 1+2=3, seat2: 4
+  it("head-to-head tie (equal length): neither dies, each loses exactly one segment", () => {
+    const a = makeSnake(0, { path: straightPath({ x: 100, y: 100 }, 0, 10), length: 10, angle: 0, targetAngle: 0 });
+    const b = makeSnake(1, { path: straightPath({ x: 100, y: 100 }, Math.PI, 10), length: 10, angle: Math.PI, targetAngle: Math.PI });
+    const state = buildState([a, b]);
+    const result = stepWorm(state, 10, { 0: { angle: 0, boosting: false }, 1: { angle: Math.PI, boosting: false } }, seededRng(1));
+    expect(result.snakes[0].alive).toBe(true);
+    expect(result.snakes[1].alive).toBe(true);
+    expect(result.snakes[0].length).toBe(9);
+    expect(result.snakes[1].length).toBe(9);
+  });
+
+  it("head-vs-opponent-body: cuts the victim's tail at the hit point (dropped as food) without harming the attacker", () => {
+    // Kept comfortably inside DEFAULT_ARENA (starts at x=0,y=0) — negative
+    // coordinates here would trigger the wall-death check instead.
+    const victimHead = { x: 1000, y: 1000 };
+    const victimPath: Vec2[] = Array.from({ length: 10 }, (_, i) => ({ x: victimHead.x - i * SEGMENT_SPACING, y: victimHead.y }));
+    const victim = makeSnake(1, { path: victimPath, length: 8, angle: 0, targetAngle: 0 });
+    // Attacker's head sits right on top of one of the victim's mid-body segments.
+    const attacker = makeSnake(0, {
+      path: straightPath(victimPath[4], Math.PI / 2, 8),
+      length: 8,
+      angle: Math.PI / 2,
+      targetAngle: Math.PI / 2,
     });
-    const rankings = computeRankings(state);
-    const bySeat = Object.fromEntries(rankings.map((r) => [r.seat, r]));
-    expect(bySeat[2]).toEqual({ seat: 2, rank: 1, worms: 4 });
-    expect(bySeat[0].rank).toBe(2);
-    expect(bySeat[1].rank).toBe(2); // tied with seat 0, same rank
-    expect(bySeat[0].worms).toBe(3);
-    expect(bySeat[1].worms).toBe(3);
+    const state = buildState([attacker, victim]);
+    const result = stepWorm(state, 5, { 0: { angle: Math.PI / 2, boosting: false }, 1: { angle: 0, boosting: false } }, seededRng(2));
+    expect(result.snakes[0].alive).toBe(true);
+    expect(result.snakes[0].length).toBe(8);
+    expect(result.snakes[1].alive).toBe(true);
+    expect(result.snakes[1].length).toBeLessThan(8);
+    expect(result.snakes[1].length).toBeGreaterThan(0);
+    expect(result.food.length).toBeGreaterThan(0);
+  });
+
+  it("self-collision: a head hitting its own body beyond the near-head skip zone kills it", () => {
+    const length = 20;
+    const totalPathLen = length * SEGMENT_SPACING;
+    const radius = totalPathLen / (Math.PI * 2);
+    const points = 60;
+    const path: Vec2[] = Array.from({ length: points }, (_, i) => {
+      const theta = (i / points) * Math.PI * 2;
+      return { x: radius * Math.cos(theta), y: radius * Math.sin(theta) };
+    });
+    // Tangent heading at theta=0 for this counter-clockwise parametrization is straight "down" (angle = PI/2).
+    const snake = makeSnake(0, { path, length, angle: Math.PI / 2, targetAngle: Math.PI / 2 });
+    const state = buildState([snake]);
+    const result = stepWorm(state, 1, { 0: { angle: Math.PI / 2, boosting: false } }, seededRng(1));
+    expect(result.snakes[0].alive).toBe(false);
   });
 });
 
-describe("full turn integration via applyAction (roll -> keep -> keep -> stop)", () => {
-  it("plays a deterministic turn end to end from a real seed", () => {
-    let state = startGame(3, 7);
-    state = { ...state, activeSeat: 0 };
-    state = applyAction(state, { type: "roll", seat: 0, seed: 2024 });
-    expect(state.currentRoll).toHaveLength(DICE_COUNT);
+describe("stepWorm — match end", () => {
+  it("flips to gameOver once MATCH_DURATION_MS has elapsed, and further steps become no-ops", () => {
+    const snake = makeSnake(0);
+    const state = buildState([snake], { elapsedMs: MATCH_DURATION_MS - 10 });
+    const result = stepWorm(state, 20, { 0: { angle: 0, boosting: false } }, seededRng(1));
+    expect(result.phase).toBe("gameOver");
+    const again = stepWorm(result, 100, { 0: { angle: 0, boosting: false } }, seededRng(1));
+    expect(again).toBe(result);
+  });
+});
 
-    // Keep the first distinct face that shows up.
-    const firstFace = state.currentRoll[0];
-    const before = state;
-    state = applyAction(state, { type: "keep", seat: 0, face: firstFace });
-    expect(state.usedFaces).toEqual([firstFace]);
-    expect(state.diceRemaining).toBeLessThan(DICE_COUNT);
-    expect(state).not.toBe(before);
+describe("computeRankings / computeLeaderboard", () => {
+  it("ranks by cumulative score desc, ties broken by bestLength, sharing rank numbers", () => {
+    const state = buildState([
+      makeSnake(0, { score: 100, bestLength: 30 }),
+      makeSnake(1, { score: 100, bestLength: 40 }),
+      makeSnake(2, { score: 50, bestLength: 60 }),
+    ]);
+    const ranked = computeRankings(state);
+    expect(ranked.find((r) => r.seat === 1)!.rank).toBe(1);
+    expect(ranked.find((r) => r.seat === 0)!.rank).toBe(2);
+    expect(ranked.find((r) => r.seat === 2)!.rank).toBe(3);
+  });
 
-    // Re-keeping the same face is now blocked even after a fresh roll.
-    if (state.diceRemaining > 0) {
-      state = applyAction(state, { type: "roll", seat: 0, seed: 55 });
-      const rejected = applyAction(state, { type: "keep", seat: 0, face: firstFace });
-      if (state.currentRoll.includes(firstFace)) {
-        expect(rejected).toBe(state);
-      }
-    }
+  it("computeLeaderboard returns the top N seats sorted by current length", () => {
+    const state = buildState([makeSnake(0, { length: 10 }), makeSnake(1, { length: 50 }), makeSnake(2, { length: 30 })]);
+    const board = computeLeaderboard(state, 2);
+    expect(board.map((b) => b.seat)).toEqual([1, 2]);
+  });
+});
+
+describe("sanitizeInput", () => {
+  it("accepts a well-formed payload and normalizes the angle into (-PI, PI]", () => {
+    const result = sanitizeInput({ angle: Math.PI * 3, boosting: 1 });
+    expect(result).not.toBeNull();
+    expect(result!.boosting).toBe(true);
+    expect(result!.angle).toBeGreaterThan(-Math.PI);
+    expect(result!.angle).toBeLessThanOrEqual(Math.PI);
+  });
+
+  it("rejects malformed payloads as a no-op-friendly null", () => {
+    expect(sanitizeInput(null)).toBeNull();
+    expect(sanitizeInput(42)).toBeNull();
+    expect(sanitizeInput({ angle: "east" })).toBeNull();
+    expect(sanitizeInput({ angle: Number.NaN })).toBeNull();
+  });
+});
+
+describe("normalizeAngle", () => {
+  it("wraps any angle into (-PI, PI]", () => {
+    expect(normalizeAngle(0)).toBeCloseTo(0, 10);
+    expect(normalizeAngle(Math.PI * 2)).toBeCloseTo(0, 5);
+    expect(normalizeAngle(-Math.PI * 3)).toBeCloseTo(Math.PI, 5);
   });
 });
