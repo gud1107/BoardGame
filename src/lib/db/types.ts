@@ -85,3 +85,28 @@ export interface GameResultRecord {
   playedAt: string;
   bettingSessionId?: string;
 }
+
+export type BugReportStatus = "접수됨" | "확인 중" | "수정 완료";
+
+export interface BugReportAttachment {
+  fileName: string;
+  mimeType: string;
+  /** Base64 `data:` URI. Images are downscaled client-side before storage — see `lib/bugReports/attachment.ts`. */
+  dataUrl: string;
+}
+
+export interface BugReportRecord {
+  id: string;
+  /** Which game this bug happened in. Absent for hub-level (game-agnostic) reports. */
+  gameId?: string;
+  /** Denormalized snapshot of the game's display name at submission time, so the board still reads fine even if the game is later renamed/removed from the registry. */
+  gameName?: string;
+  title: string;
+  description: string;
+  author: string;
+  /** Unmasked, formatted phone (e.g. "010-1234-5678"). Mask only at render time — see `maskPhoneNumber`. */
+  phone?: string;
+  attachment?: BugReportAttachment;
+  status: BugReportStatus;
+  createdAt: string;
+}

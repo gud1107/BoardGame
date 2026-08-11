@@ -1,6 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type {
   BettingSessionRecord,
+  BugReportRecord,
   DailyRecord,
   DeviceIdentityRecord,
   GameResultRecord,
@@ -8,7 +9,7 @@ import type {
 } from "./types";
 
 const DB_NAME = "boardgame-db";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 interface BoardGameDB extends DBSchema {
   players: {
@@ -36,6 +37,11 @@ interface BoardGameDB extends DBSchema {
     value: GameResultRecord;
     indexes: { "by-game": string };
   };
+  bugReports: {
+    key: string;
+    value: BugReportRecord;
+    indexes: { "by-status": string; "by-game": string };
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<BoardGameDB>> | null = null;
@@ -51,25 +57,37 @@ export function getDb(): Promise<IDBPDatabase<BoardGameDB>> {
   }
   if (!dbPromise) {
     dbPromise = openDB<BoardGameDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        const players = db.createObjectStore("players", { keyPath: "id" });
-        players.createIndex("by-name", "name");
+      // Guarded by `oldVersion` so a version bump only *adds* stores for
+      // returning users — re-running `createObjectStore` on a store that
+      // already exists throws. New stores go in their own `oldVersion <`
+      // block instead of being appended to the block below.
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          const players = db.createObjectStore("players", { keyPath: "id" });
+          players.createIndex("by-name", "name");
 
-        const identities = db.createObjectStore("identities", {
-          keyPath: "deviceId",
-        });
-        identities.createIndex("by-player", "playerId");
+          const identities = db.createObjectStore("identities", {
+            keyPath: "deviceId",
+          });
+          identities.createIndex("by-player", "playerId");
 
-        const sessions = db.createObjectStore("bettingSessions", {
-          keyPath: "id",
-        });
-        sessions.createIndex("by-status", "status");
+          const sessions = db.createObjectStore("bettingSessions", {
+            keyPath: "id",
+          });
+          sessions.createIndex("by-status", "status");
 
-        const daily = db.createObjectStore("dailyRecords", { keyPath: "id" });
-        daily.createIndex("by-date", "date");
+          const daily = db.createObjectStore("dailyRecords", { keyPath: "id" });
+          daily.createIndex("by-date", "date");
 
-        const results = db.createObjectStore("gameResults", { keyPath: "id" });
-        results.createIndex("by-game", "gameId");
+          const results = db.createObjectStore("gameResults", { keyPath: "id" });
+          results.createIndex("by-game", "gameId");
+        }
+
+        if (oldVersion < 2) {
+          const bugReports = db.createObjectStore("bugReports", { keyPath: "id" });
+          bugReports.createIndex("by-status", "status");
+          bugReports.createIndex("by-game", "gameId");
+        }
       },
     });
   }

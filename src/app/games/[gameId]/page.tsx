@@ -10,6 +10,7 @@ import { useBettingStore } from "@/store/bettingStore";
 import { saveGameResult } from "@/lib/db/repository";
 import RoundResultEntry from "@/components/betting/RoundResultEntry";
 import GameThumbnail from "@/components/GameThumbnail";
+import BugReportFloatingButton from "@/components/bugReport/BugReportFloatingButton";
 
 type Stage = "select" | "playing" | "record" | "done";
 
@@ -288,6 +289,8 @@ export default function GamePlayPage() {
           </div>
         </div>
       )}
+
+      <BugReportFloatingButton gameId={game.id} gameName={game.name} />
     </div>
   );
 }

@@ -18,6 +18,9 @@ export default function SiteHeader() {
           <Link href="/history" className="text-xs text-white/50 hover:text-white/80 sm:text-sm">
             기록
           </Link>
+          <Link href="/bug-reports" className="text-xs text-white/50 hover:text-white/80 sm:text-sm">
+            🐛 버그 리포트
+          </Link>
           <button
             onClick={() => setSidebarOpen(true)}
             className="rounded-full border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-rose-400 hover:text-white"

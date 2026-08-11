@@ -2,6 +2,8 @@ import { v4 as uuid } from "uuid";
 import { getDb } from "./client";
 import type {
   BettingSessionRecord,
+  BugReportRecord,
+  BugReportStatus,
   DailyRecord,
   DeviceIdentityRecord,
   GameResultRecord,
@@ -156,4 +158,40 @@ export async function listGameResultsForGame(
 ): Promise<GameResultRecord[]> {
   const db = await getDb();
   return db.getAllFromIndex("gameResults", "by-game", gameId);
+}
+
+// ---------------------------------------------------------------------------
+// Bug reports
+// ---------------------------------------------------------------------------
+
+export async function createBugReport(
+  input: Omit<BugReportRecord, "id" | "status" | "createdAt">,
+): Promise<BugReportRecord> {
+  const db = await getDb();
+  const record: BugReportRecord = {
+    ...input,
+    id: uuid(),
+    status: "접수됨",
+    createdAt: nowIso(),
+  };
+  await db.put("bugReports", record);
+  return record;
+}
+
+export async function listBugReports(): Promise<BugReportRecord[]> {
+  const db = await getDb();
+  const all = await db.getAll("bugReports");
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function updateBugReportStatus(
+  id: string,
+  status: BugReportStatus,
+): Promise<BugReportRecord | undefined> {
+  const db = await getDb();
+  const record = await db.get("bugReports", id);
+  if (!record) return undefined;
+  const updated: BugReportRecord = { ...record, status };
+  await db.put("bugReports", updated);
+  return updated;
 }

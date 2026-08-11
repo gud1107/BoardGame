@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-11 (언어의 조각 — 자음/모음 회전 조합 입력 + 완성 글자 1개당 1불빛 판정 개편. 탭-투-셀렉트 단어 칩 피커를 초성/중성/종성 다이얼 회전 조합 UI로 교체하고, 초성·중성·종성 3슬롯 개별 채점을 폐지해 "완성된 글자 1개당 불빛 1개"(green/yellow/red)로 재설계. 이전 갱신: 말달리자 — 4개 대각선 모서리 구역의 초기 말 배치 좌표 버그 수정)_
+_최종 갱신: 2026-08-11 (버그 리포트 제출 모달 + 게시판 신규 구현. 허브 헤더 링크 + 모든 플레이 가능 게임 페이지의 좌하단 플로팅 버튼에서 접근 가능한 버그 제보 폼(제목/내용/글쓴이/전화번호/이미지 첨부)과 `/bug-reports` 게시판(게임·상태 필터, 상세 모달, 전화번호 마스킹)을 신규 추가. 이전 갱신: 언어의 조각 — 자음/모음 회전 조합 입력 + 완성 글자 1개당 1불빛 판정 개편)_
 
 > **이 문서는 "지금 이 순간"의 스냅샷만 담는다.** 새 세션이 `/clear` 직후 가장 먼저 읽어야 할 문서이며, 여기 담긴 정보만으로 이전 맥락을 복원할 수 있어야 한다. **시간순 기록(무엇을 왜 그 순서로 만들었는가)은 [docs/history.md](./docs/history.md)로, 버그 대응 이력은 [docs/troubleshooting.md](./docs/troubleshooting.md)로 넘어갔다** — 이 파일 자체는 계속 짧게 유지하고, 완료된 세션 내용은 매번 `history.md`로 옮겨 적을 것.
 
@@ -37,7 +37,41 @@ _최종 갱신: 2026-08-11 (언어의 조각 — 자음/모음 회전 조합 입
 | 언어의 조각 | 2 | ✅ | 단판 승부(고정) + 글자 수 2~5 호스트 선택(3글자 기본) + 최대 시도 횟수 제한없음/6/8회 토글(**양쪽 합산** 캡, 호스트가 방 생성 시 선택) — 시스템이 뽑은 **공통 무작위 정답 단어 1개**를 두 플레이어가 번갈아 추측하는 턴제(벽시계 타이머 없이 순수 "먼저 맞히면 승리" 레이스). 이번 세션에서 입력 방식과 채점 판정 단위를 함께 전면 개편(사용자 직접 작업 지시) — ① 단어 입력을 탭-투-셀렉트 칩 피커에서 **음절별 초성/중성/종성 회전 다이얼**(◀ ▶로 자모를 돌려 조합, 예: ㅂ→ㅏ+ㄷ→ㅏ="바다")로 교체, 조합이 단어 사전에 없으면 제출 버튼을 막고 근접 일치 단어를 "완성 힌트"로 제시. ② 힌트 판정을 초성/중성/종성 3슬롯 개별 채점에서 **완성된 글자 1개당 불빛 1개**로 재설계(green=글자·위치 일치, yellow=단어에 포함되나 위치 다름, red=단어에 없음) — 채점 알고리즘 자체는 음절 개별 자모가 아니라 음절 문자 전체를 대상으로 한 고전 2-패스 Wordle 방식 | 음절별 초성/중성/종성 회전 다이얼 조합 입력 + 완성 글자 1개당 1불빛 타일(Wordle식 플립 리빌 애니메이션, green/yellow/red) + 두 좌석의 시도가 한 타임라인에 섞여 보이는 단일 공유 추리 보드(각 줄에 시도한 좌석 이모지 표시) + 양쪽 합산 시도 횟수 잔여 게이지(데스게임 카운트다운 연출) + 결과 화면 골드(WINNER)/레드(ELIMINATED)/슬레이트(DRAW) 전면 플래시 | ❌(제공된 룰북 폴더에 이미지 자산 없음 — emoji/gradient 대체) |
 | 레지스탕스 쿠 | 2~6 | ✅ | 없음(룰북 자체가 이미 "단판 완결 정식 규칙서" — 다회차/단판 상충 자체가 없었음) | 챌린지/카운터 응답 팝업 모달 + 15초 응답 타이머 게이지(클라이언트 로컬 UX, 시간 만료 시 안전한 기본값인 "패스" 자동 제출) + 영향력 카드 3D 반전 공개 애니메이션 + 탈락 토스트/최후생존자 전면 배너 | ❌(제공된 룰북 폴더에 이미지 자산 없음 — emoji/gradient 대체) |
 
-전체 게임별 파일 구조 표준은 **[ARCHITECTURE.md](./ARCHITECTURE.md)** 참고. 검증 상태: `npx tsc --noEmit` / `npm run lint`(경고 0) / `npx vitest run`(**667개** 전부 통과, 이번 세션 언어의 조각 `composeSyllable` 라운드트립/랩어라운드 테스트 3개 신규 + `compareWords`/`hintScore` 테스트를 신규 채점 모델 기준으로 재작성) 전부 그린.
+전체 게임별 파일 구조 표준은 **[ARCHITECTURE.md](./ARCHITECTURE.md)** 참고. 검증 상태: `npx tsc --noEmit` / `npm run lint`(경고 0) / `npx vitest run`(**694개** 전부 통과, 이번 세션 버그 리포트 유효성 검사/전화번호 포맷팅·마스킹/게시판 목록 필터 로직 `BugReports.test.ts` 26개 신규) 전부 그린.
+
+### 버그 리포트 시스템 (2026-08-11 신규)
+
+허브 헤더(`SiteHeader.tsx`)와 `/games/[gameId]` 페이지 좌하단 플로팅 버튼(모든 플레이 가능 게임 공용, 게임 ID/이름 자동 매핑)에서 버그 제보 모달을 띄울 수 있고, `/bug-reports`에서 제출된 리포트를 게임별/상태별로 필터링해 볼 수 있다. IndexedDB가 1차 저장소(이 브라우저에 제출된 리포트만 목록에 표시 — `/history`와 동일한 스코프)이고, Supabase가 설정돼 있으면 `bug_reports` 테이블로 best-effort 백업만 이뤄진다(현재 UI는 이 백업을 다시 읽어오지 않음). 상세 내역은 아래 "이번 세션" 절 참고.
+
+### 이번 세션(버그 리포트 제출 폼 + 게시판 신규 구현) 주요 변경 사항
+
+허브/게임 공통으로 버그를 제보할 수 있는 기능이 이번 세션 전까지 전혀 없었다. 작업 지시대로 제출 모달(제목/내용/글쓴이 필수, 전화번호/첨부파일 선택)과 `/bug-reports` 게시판(목록+검색+필터+상세+상태 관리)을 신규로 설계·구현했다. 기존 아키텍처 원칙(§1 순수 엔진 계약은 게임에만 해당하지만, "IndexedDB 1차 저장소 + Supabase는 선택적 best-effort 백업", "파생 상태 금지", "UI 레이어는 vitest 대상 밖" 등 프로젝트 전반의 컨벤션)을 그대로 따랐다:
+
+- **저장 계층**: `daily_records`/`gameResults`와 동일한 패턴 — IndexedDB(`bugReports` 오브젝트 스토어, `DB_VERSION` 1→2로 버전업)가 유일한 읽기 소스이고, Supabase가 설정돼 있으면 `bug_reports` 테이블로 best-effort 백업만 한다(현재 UI는 이 백업을 다시 읽어오지 않음 — `/history` 페이지가 "이 브라우저 기기의 기록만 표시"라고 명시하는 것과 동일한 스코프 결정, 코드 주석에도 명시). `client.ts`의 `upgrade()` 콜백은 `oldVersion` 가드 없이 전 스토어를 무조건 `createObjectStore`했었는데, 버전을 그대로 올리면 기존 스토어 재생성 시도로 예외가 나므로 `oldVersion < 1` / `oldVersion < 2` 블록으로 나눠 기존 사용자도 안전하게 마이그레이션되도록 고쳤다.
+- **게임 내 접근 지점**: 게임마다 개별 `<Game>Board.tsx`(19개)에 버튼을 복붙하는 대신, 모든 플레이 가능 게임이 공통으로 거치는 `src/app/games/[gameId]/page.tsx` 래퍼 한 곳에 `BugReportFloatingButton`(좌하단 고정, `game.id`/`game.name` 자동 매핑)을 추가했다 — ARCHITECTURE.md의 "게임 간 코드 결합 0" 원칙과 "새 게임 100종으로 늘어도 안 무거워짐" 철학에 맞춰 게임별 코드를 건드리지 않는 방향을 택함. **위치 주의**: 우하단은 `BettingSidebar`의 내기 관리 토글(z-40, site-wide)이 이미 차지하고 있어 같은 자리에 두면 완전히 가려지므로(Playwright 스크린샷으로 실제 발견) 좌하단(z-30)으로 배치했다.
+- **입력 검증/포맷팅은 순수 함수로 분리**: `src/lib/bugReports/validate.ts`(제목/내용/글쓴이 필수 검증, 전화번호는 선택이지만 입력 시 형식 검증, `formatPhoneNumber`/`maskPhoneNumber`, 첨부파일 MIME/용량 검증)와 `src/lib/bugReports/board.ts`(제출 성공 시 목록 맨 앞에 추가하는 `prependReport`, 상태 변경 `updateReportStatusInList`, 게임/상태/제목검색 필터 `filterReports`)로 나눠 vitest의 `environment: "node"`(jsdom 없음, `bettingStore`/`ledger.ts` 등 기존 프로젝트 전반이 따르는 분리 방식과 동일)에서도 100% 유닛 테스트 가능하게 했다. FileReader/Canvas가 필요한 이미지 압축(`attachment.ts`)은 브라우저 전용이라 테스트 대상 밖 — Playwright 스크린샷으로 육안 검증했다(아래 §검증 참고).
+- **전화번호**: "선택/필수 처리"라는 모호한 요구를 "값이 없으면 통과, 값이 있으면 형식 검증"으로 해석해 필수 항목으로 만들지 않았다(연락처 없이도 제보 자체를 막지 않는 게 접근성상 더 낫다고 판단, `AskUserQuestion` 없이 문서화만으로 진행). 마스킹은 스펙 예시 "010-\*\*\*\*-1234"와 동일하게 중간 그룹만 마스킹.
+- **첨부파일**: 드래그앤드롭 + 파일선택 둘 다 지원, 업로드 즉시 `<canvas>`로 최대 1280px 다운스케일 + JPEG 압축(GIF는 애니메이션 보존을 위해 원본 유지) 후 base64 `data:` URI로 IndexedDB 레코드에 저장. 상세 모달에서 미리보기 + `download` 속성 다운로드 링크 제공.
+- **게시판 처리 상태**: 작업 지시에 명시적 요구는 없었지만 목록/필터가 의미 있으려면 상태가 실제로 바뀌어야 하므로, 상세 모달에 접수됨/확인 중/수정 완료 드롭다운을 추가해 `updateStatus`로 바로 반영되게 했다(가벼운 추가라 스코프 내로 판단).
+
+1. **`src/lib/db/types.ts`** — `BugReportStatus`/`BugReportAttachment`/`BugReportRecord` 신규 타입 추가.
+2. **`src/lib/db/client.ts`** — `DB_VERSION` 1→2, `bugReports` 스토어(`by-status`/`by-game` 인덱스) 추가, `upgrade()`를 `oldVersion` 가드 기반으로 재작성(위 설명 참고).
+3. **`src/lib/db/repository.ts`** — `createBugReport`/`listBugReports`(최신순)/`updateBugReportStatus` 추가.
+4. **`src/lib/supabase/sync.ts`** — `backupBugReport` best-effort 백업 함수 추가(`backupDailyRecord`와 동일 패턴), 스키마 주석에 `bug_reports` 테이블 추가.
+5. **`src/lib/bugReports/validate.ts`, `board.ts`, `attachment.ts`(신규 디렉터리)** — 위에서 설명한 순수 검증/포맷/목록 로직과 브라우저 전용 이미지 헬퍼.
+6. **`src/store/bugReportStore.ts`(신규)** — `useBugReportStore`(zustand, `bettingStore`와 동일한 `hydrated`+`init()` 패턴), `submitReport`/`updateStatus`가 repository + 순수 함수(`board.ts`) + `backupBugReport`를 엮음.
+7. **`src/components/bugReport/`(신규 디렉터리)** — `BugReportModal.tsx`(제출 폼, `Overlay` 재사용, `gameId` prop 있으면 게임 뱃지 잠금·없으면 게임 선택 드롭다운), `BugReportDetailModal.tsx`(상세 + 마스킹된 전화번호 + 첨부 미리보기/다운로드 + 상태 변경), `BugReportFloatingButton.tsx`(게임 페이지용 좌하단 진입점).
+8. **`src/app/bug-reports/page.tsx`(신규)** — 목록(번호/관련게임/제목/작성자/등록일/상태) + 제목 검색 + 게임별/상태별 필터 + "새 리포트 작성" 버튼.
+9. **`src/components/SiteHeader.tsx`** — "🐛 버그 리포트" 링크 추가(허브 헤더 진입점).
+10. **`src/app/games/[gameId]/page.tsx`** — `BugReportFloatingButton` 장착(위 설명 참고).
+11. **`src/lib/bugReports/BugReports.test.ts`(신규, 26개)** — 유효성 검사(제목/내용/글쓴이 미입력 시 거부, 전화번호는 선택), 전화번호 포맷팅/마스킹, 첨부파일 MIME/용량 검증, `prependReport`(제출 성공 시 목록 갱신), `updateReportStatusInList`, `filterReports`(게임/상태/검색 조합, 빈 문자열 gameId로 "허브 전용" 필터링 구분) 전부 커버.
+12. **Playwright로 실제 렌더링 육안 검증**(임시 스크립트, 세션 종료 시 삭제) — 헤더 링크, 게시판 빈 상태/목록, 폼 유효성 에러, 첨부파일 미리보기, 제출 성공 화면, 게임 페이지 플로팅 버튼(게임 뱃지 잠금 확인), 상세 모달의 마스킹된 전화번호+이미지+다운로드 링크까지 스크린샷으로 전부 확인, 콘솔 에러 0건. 이 과정에서 위 "좌하단 배치" 버그(우하단 두면 내기 버튼에 완전히 가려짐)를 실제로 발견해 수정했다 — 엔진 테스트만으로는 못 잡는 UI 버그의 실사례(ARCHITECTURE.md §2 "알려진 사각지대").
+13. **검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(**694개** 전부 통과, 저장소 전체 25개 테스트 파일) 전부 그린.
+
+**직전 세션(언어의 조각 — 자음/모음 회전 조합 입력 + 완성 글자 1개당 1불빛 판정 개편)** 요약은 아래로 접혔다.
+
+<details>
+<summary>직전 세션(언어의 조각 — 자음/모음 회전 조합 입력 + 완성 글자 1개당 1불빛 판정 개편) 원문 — 접힘</summary>
 
 ### 이번 세션(언어의 조각 — 자음/모음 회전 조합 입력 + 완성 글자 1개당 1불빛 판정 개편) 주요 변경 사항
 
@@ -50,6 +84,8 @@ _최종 갱신: 2026-08-11 (언어의 조각 — 자음/모음 회전 조합 입
 5. **`PiecesOfLanguageGame.tsx`는 변경 없음** — `EngineAction`을 그대로 전달만 하는 얇은 온라인 동기화 레이어라, `guess` 액션의 검증/채점 로직이 바뀐 것과 무관하게 자동 반영됨.
 6. **`PiecesOfLanguage.test.ts`** — `compareWords` 테스트 블록을 신규 채점 모델(음절 전체 문자 단위, green/yellow/red) 기준으로 전면 재작성(룰북의 "바다"/"다바" 예시를 그대로 재현하는 케이스 포함). `composeSyllable`의 라운드트립(`decomposeSyllable`과의 왕복 일치)과 인덱스 랩어라운드 테스트 3개를 신규 추가.
 7. **검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(**667개** 전부 통과, 저장소 전체 24개 테스트 파일) 전부 그린.
+
+</details>
 
 **직전 세션(말달리자 — 4개 대각선 모서리 초기 말 배치 좌표 버그 수정)** 요약은 아래로 접혔다.
 

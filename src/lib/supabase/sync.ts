@@ -1,5 +1,5 @@
 import { getSupabase } from "./client";
-import type { DailyRecord } from "@/lib/db/types";
+import type { BugReportRecord, DailyRecord } from "@/lib/db/types";
 
 /**
  * Cross-device identity matching (same IP, different browser/localStorage)
@@ -10,6 +10,7 @@ import type { DailyRecord } from "@/lib/db/types";
  * Expected Supabase schema (see README for the SQL):
  *   device_sightings(ip text, device_id text, player_id text, name text, seen_at timestamptz)
  *   daily_records(id text primary key, payload jsonb, created_at timestamptz)
+ *   bug_reports(id text primary key, payload jsonb, created_at timestamptz)
  */
 
 const RECENT_WINDOW_DAYS = 14;
@@ -66,6 +67,27 @@ export async function backupDailyRecord(record: DailyRecord): Promise<void> {
   if (!supabase) return;
   try {
     await supabase.from("daily_records").upsert({
+      id: record.id,
+      payload: record,
+      created_at: record.createdAt,
+    });
+  } catch {
+    // IndexedDB already has the authoritative copy; cloud backup is best-effort.
+  }
+}
+
+/**
+ * Best-effort mirror only — like `backupDailyRecord`, this never blocks or
+ * throws into the caller. The bug report board itself still reads from
+ * IndexedDB only (same "this browser's data only" scope as `/history`), so
+ * this backup exists purely so reports survive outside one browser's local
+ * storage even though the current UI doesn't read it back yet.
+ */
+export async function backupBugReport(record: BugReportRecord): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  try {
+    await supabase.from("bug_reports").upsert({
       id: record.id,
       payload: record,
       created_at: record.createdAt,
