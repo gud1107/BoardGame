@@ -85,10 +85,19 @@ export const HORSES_PER_ZONE = 5;
 export const HORSES_PER_PLAYER = HORSES_PER_ZONE * 2;
 
 /**
- * A 5-cell "corner zone" hugging one literal board corner — 3 cells along
- * one edge + 2 along the perpendicular edge, a Halma-style triangular camp
- * symmetric across that corner's own diagonal. `rowDir`/`colDir` point
- * *inward* from the corner (e.g. corner (0,0) points +1/+1).
+ * A 5-cell "corner zone" hugging one literal board corner in an L-shape: 3
+ * cells running along one edge from the corner vertex, plus 2 more running
+ * along the perpendicular edge from that same vertex — e.g. corner (0,0)
+ * yields (0,0),(0,1),(0,2),(1,0),(2,0). `rowDir`/`colDir` point *inward*
+ * from the corner (e.g. corner (0,0) points +1/+1).
+ *
+ * **2026-08-11 corner-shape fix**: the 5th cell used to be the diagonal
+ * neighbor `(cornerRow + rowDir, cornerCol + colDir)` (e.g. (1,1) for the
+ * (0,0) corner) instead of extending the perpendicular-edge run to
+ * `(cornerRow + 2*rowDir, cornerCol)` (e.g. (2,0)) — that put a horse one
+ * step off the corner's own diagonal instead of completing the L, and was
+ * reported as a misplaced horse sitting at (1,1). Fixed to the L-shape
+ * pattern the user specified for all 4 corners.
  */
 function cornerZone(cornerRow: number, cornerCol: number, rowDir: 1 | -1, colDir: 1 | -1): Position[] {
   return [
@@ -96,7 +105,7 @@ function cornerZone(cornerRow: number, cornerCol: number, rowDir: 1 | -1, colDir
     { row: cornerRow, col: cornerCol + colDir },
     { row: cornerRow, col: cornerCol + 2 * colDir },
     { row: cornerRow + rowDir, col: cornerCol },
-    { row: cornerRow + rowDir, col: cornerCol + colDir },
+    { row: cornerRow + 2 * rowDir, col: cornerCol },
   ];
 }
 

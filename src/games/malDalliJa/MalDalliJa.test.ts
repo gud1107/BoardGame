@@ -41,6 +41,60 @@ describe("home zones (§1 세팅, 2026-08-11 redesign — 10 horses split across
     expect(new Set(keys).size).toBe(20);
   });
 
+  it("each corner zone is the L-shaped 5-cell pattern hugging its vertex, not the diagonal-adjacent cell", () => {
+    // 2026-08-11 corner-shape fix regression test: the 5th cell must complete
+    // the L along the perpendicular edge (e.g. (2,0)), never the diagonal
+    // neighbor (e.g. (1,1)) — see engine.ts's cornerZone doc.
+    const MAX = BOARD_SIZE - 1;
+    const expectedByZone: [Position[], Position[]][] = [
+      [
+        // Top-Left
+        [{ row: 0, col: 0 }, { row: 0, col: 1 }, { row: 0, col: 2 }, { row: 1, col: 0 }, { row: 2, col: 0 }],
+        // Bottom-Right
+        [
+          { row: MAX, col: MAX },
+          { row: MAX, col: MAX - 1 },
+          { row: MAX, col: MAX - 2 },
+          { row: MAX - 1, col: MAX },
+          { row: MAX - 2, col: MAX },
+        ],
+      ],
+      [
+        // Top-Right
+        [
+          { row: 0, col: MAX },
+          { row: 0, col: MAX - 1 },
+          { row: 0, col: MAX - 2 },
+          { row: 1, col: MAX },
+          { row: 2, col: MAX },
+        ],
+        // Bottom-Left
+        [{ row: MAX, col: 0 }, { row: MAX - 1, col: 0 }, { row: MAX - 2, col: 0 }, { row: MAX, col: 1 }, { row: MAX, col: 2 }],
+      ],
+    ];
+    const actualByZone: [Position[], Position[]][] = [HOME_ZONES.p1, HOME_ZONES.p2];
+
+    for (let seatIdx = 0; seatIdx < 2; seatIdx++) {
+      for (let zoneIdx = 0; zoneIdx < 2; zoneIdx++) {
+        expect(actualByZone[seatIdx][zoneIdx].map(posKey).sort()).toEqual(
+          expectedByZone[seatIdx][zoneIdx].map(posKey).sort(),
+        );
+      }
+    }
+
+    // The forbidden diagonal-adjacent cells must not appear anywhere.
+    const forbidden = [
+      { row: 1, col: 1 },
+      { row: 1, col: MAX - 1 },
+      { row: MAX - 1, col: 1 },
+      { row: MAX - 1, col: MAX - 1 },
+    ].map(posKey);
+    const allCells = [...HOME_ZONES.p1[0], ...HOME_ZONES.p1[1], ...HOME_ZONES.p2[0], ...HOME_ZONES.p2[1]].map(posKey);
+    for (const f of forbidden) {
+      expect(allCells).not.toContain(f);
+    }
+  });
+
   it("targetZoneCells(seat) is exactly the opponent's flattened home zones", () => {
     expect(targetZoneCells("p1").map(posKey).sort()).toEqual(
       [...HOME_ZONES.p2[0], ...HOME_ZONES.p2[1]].map(posKey).sort(),
@@ -218,10 +272,10 @@ describe("opponent-zone win condition (§4, 2026-08-11 redesign)", () => {
   });
 
   it("landing on the opponent zone via a knight move also wins", () => {
-    const state = forceState({ positions: { p1: [{ row: 3, col: 8 }], p2: [{ row: 9, col: 9 }] } });
+    const state = forceState({ positions: { p1: [{ row: 4, col: 9 }], p2: [{ row: 9, col: 9 }] } });
     const next = applyAction(state, { type: "move", horseIndex: 0, moveKind: "knight", dr: -2, dc: 1 });
-    expect(next.positions.p1[0]).toEqual({ row: 1, col: 9 });
-    expect(targetZoneCells("p1")).toContainEqual({ row: 1, col: 9 });
+    expect(next.positions.p1[0]).toEqual({ row: 2, col: 10 });
+    expect(targetZoneCells("p1")).toContainEqual({ row: 2, col: 10 });
     expect(next.winner).toBe("p1");
   });
 
