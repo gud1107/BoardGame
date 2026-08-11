@@ -474,6 +474,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
   },
+  {
+    id: "worm",
+    name: "지렁이",
+    nameEn: "Worm",
+    description:
+      "21~36번 타일을 두고 벌이는 푸시유어럭 주사위 게임. 특수 주사위 8개를 굴려 눈금 하나씩 킵하다가, 지렁이 눈을 포함해 스톱을 선언하면 합계와 일치하는 타일을 중앙에서 가져오거나 상대 스택 맨 위 타일을 뺏습니다. 실패하면 내 타일을 반납하고 중앙 최고 타일이 제거됩니다. 최종적으로 지렁이 개수를 가장 많이 모은 사람이 승리합니다.",
+    players: { min: 2, max: 7 },
+    playTime: { minMinutes: 20, maxMinutes: 30 },
+    category: "family",
+    thumbnail: { emoji: "🪱", gradient: ["#a3e635", "#3f6212"] },
+    tags: ["주사위", "타일수집", "푸시유어럭"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {

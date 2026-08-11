@@ -836,3 +836,64 @@ body {
     opacity: 0.5;
   }
 }
+
+/* 지렁이's dice-roll tumble (see WormBoard.tsx's `DieFace`) — plays once per
+   die the instant a fresh `currentRoll` appears in lockstep state, same
+   tumble-over-an-already-resolved-value technique as Las Vegas's
+   `dice-roll-tumble` (kept as its own game-scoped keyframe per this
+   project's per-game CSS ownership convention rather than reaching into
+   another game's keyframe). */
+@keyframes worm-dice-tumble {
+  0% {
+    transform: scale(0.4) rotate(0deg);
+    opacity: 0;
+  }
+  35% {
+    transform: scale(1.15) rotate(200deg);
+    opacity: 1;
+  }
+  65% {
+    transform: scale(0.92) rotate(330deg);
+  }
+  100% {
+    transform: scale(1) rotate(360deg);
+    opacity: 1;
+  }
+}
+
+/* 지렁이's tile claim/steal flight (see WormEffects.tsx's `FlyingTile`) —
+   layered on top of a plain left/top CSS *transition* that carries a tile
+   from the center grid (or an opponent's stack) to the claiming seat's
+   stack, same left/top-transition-plus-keyframe-flourish technique as
+   five-cucumbers/CardEffects.tsx and lasVegas/DiceEffects.tsx. */
+@keyframes worm-tile-fly {
+  0% {
+    transform: translate(-50%, -50%) scale(0.75) rotate(-12deg);
+    opacity: 0;
+  }
+  55% {
+    transform: translate(-50%, -50%) scale(1.12) rotate(6deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* 지렁이's bust banner flourish (see WormBoard.tsx) — a short attention pulse
+   on the "실패" toast, no cross-element flight involved. */
+@keyframes worm-bust-flash {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
