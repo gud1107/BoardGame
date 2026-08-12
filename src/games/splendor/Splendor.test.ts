@@ -3,11 +3,13 @@ import { createDevelopmentDeck, createNobles, type DevelopmentCard, type Noble }
 import {
   applyAction,
   canAffordCard,
+  chooseBotAction,
   computeAutoPayment,
   computeEffectiveCost,
   computePlayerScore,
   computeQualifyingNobles,
   computeRankings,
+  getValidMoves,
   GOLD_SUPPLY,
   MARKET_SIZE,
   MAX_PLAYERS,
@@ -17,6 +19,7 @@ import {
   TOKEN_LIMIT,
   TOKEN_SUPPLY_BY_PLAYER_COUNT,
   WIN_SCORE,
+  type EngineAction,
   type PlayerState,
   type SplendorState,
 } from "./engine";
@@ -399,5 +402,106 @@ describe("win at 15 points + final round", () => {
   it("TOKEN_LIMIT and WIN_SCORE match the rulebook", () => {
     expect(TOKEN_LIMIT).toBe(10);
     expect(WIN_SCORE).toBe(15);
+  });
+});
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("during 'playing', offers every affordable token-take and nothing for the idle seat", () => {
+    const state = makeState(); // 5 of each gem + gold, empty markets/decks -> no reserve/purchase moves possible
+    const moves = getValidMoves(state, 0);
+    expect(moves.filter((m) => m.type === "takeThreeDifferent")).toHaveLength(10); // C(5,3)
+    expect(moves.filter((m) => m.type === "takeTwoSame")).toHaveLength(5); // every color has >=4 in supply
+    expect(moves.filter((m) => m.type === "reserveCard" || m.type === "purchaseCard")).toHaveLength(0);
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("offers a market reserve only for a visible card, and a purchase once affordable", () => {
+    const card: DevelopmentCard = { id: "card-1", tier: 1, bonus: "white", cost: { white: 3 }, points: 1 };
+    const state = makeState({
+      markets: {
+        1: [card, null, null, null],
+        2: Array.from({ length: MARKET_SIZE }, () => null),
+        3: Array.from({ length: MARKET_SIZE }, () => null),
+      },
+    });
+    const noTokenMoves = getValidMoves(state, 0);
+    expect(noTokenMoves).toContainEqual({ type: "reserveCard", seat: 0, tier: 1, marketIndex: 0 });
+    expect(noTokenMoves.some((m) => m.type === "purchaseCard")).toBe(false); // can't afford yet
+
+    const funded = makeState({
+      players: [makePlayer(0, { tokens: { white: 3 } }), makePlayer(1), makePlayer(2)],
+      markets: state.markets,
+    });
+    const fundedMoves = getValidMoves(funded, 0);
+    expect(fundedMoves).toContainEqual({ type: "purchaseCard", seat: 0, cardId: "card-1", source: "market" });
+  });
+
+  it("during 'discarding', enumerates every way to shed exactly the overage", () => {
+    const state = makeState({
+      phase: "discarding",
+      awaitingDiscardSeat: 0,
+      players: [makePlayer(0, { tokens: { white: 6, blue: 5 } }), makePlayer(1), makePlayer(2)], // 11 tokens, 1 over
+    });
+    const moves = getValidMoves(state, 0);
+    expect(moves).toHaveLength(2); // discard 1 white OR discard 1 blue
+    expect(moves).toContainEqual({ type: "discardTokens", seat: 0, discard: { white: 1 } });
+    expect(moves).toContainEqual({ type: "discardTokens", seat: 0, discard: { blue: 1 } });
+    expect(getValidMoves(state, 1)).toEqual([]); // not the awaiting seat
+  });
+
+  it("during 'choosingNoble', offers only the seat's own qualifying nobles", () => {
+    const noble: Noble = { id: "noble-1", cost: { white: 3 }, points: 3 };
+    const otherNoble: Noble = { id: "noble-2", cost: { black: 3 }, points: 3 };
+    const state = makeState({
+      phase: "choosingNoble",
+      awaitingNobleSeat: 0,
+      nobles: [noble, otherNoble],
+      players: [
+        makePlayer(0, { purchasedCards: [{ id: "c1", tier: 1, bonus: "white", cost: {}, points: 0 }, { id: "c2", tier: 1, bonus: "white", cost: {}, points: 0 }, { id: "c3", tier: 1, bonus: "white", cost: {}, points: 0 }] }),
+        makePlayer(1),
+        makePlayer(2),
+      ],
+    });
+    const moves = getValidMoves(state, 0);
+    expect(moves).toEqual([{ type: "chooseNoble", seat: 0, nobleId: "noble-1" }]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("returns null for a seat with nothing to decide", () => {
+    const state = makeState();
+    expect(chooseBotAction(state, 1)).toBeNull();
+  });
+
+  it("prefers buying an affordable high-point card over merely taking tokens", () => {
+    const card: DevelopmentCard = { id: "card-1", tier: 3, bonus: "white", cost: { blue: 2 }, points: 5 };
+    const state = makeState({
+      markets: {
+        1: Array.from({ length: MARKET_SIZE }, () => null),
+        2: Array.from({ length: MARKET_SIZE }, () => null),
+        3: [card, null, null, null],
+      },
+      players: [makePlayer(0, { tokens: { blue: 2 } }), makePlayer(1), makePlayer(2)],
+    });
+    const action = chooseBotAction(state, 0);
+    expect(action).toEqual({ type: "purchaseCard", seat: 0, cardId: "card-1", source: "market" });
+  });
+
+  it("always returns a legal move — driving every seat via the bot reaches gameOver", () => {
+    let state = startGame(3, 99);
+    let guard = 0;
+    while (state.phase !== "gameOver" && guard < 1000) {
+      guard++;
+      const actor =
+        state.phase === "discarding"
+          ? state.awaitingDiscardSeat!
+          : state.phase === "choosingNoble"
+            ? state.awaitingNobleSeat!
+            : state.activeSeat;
+      const action: EngineAction | null = chooseBotAction(state, actor, () => 0.5);
+      expect(action).not.toBeNull();
+      state = applyAction(state, action!);
+    }
+    expect(state.phase).toBe("gameOver");
   });
 });

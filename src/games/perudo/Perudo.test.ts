@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   applyAction,
+  chooseBotAction,
   computeRankings,
   countMatching,
+  getValidMoves,
   isPalafico,
   MAX_DICE,
   MAX_PLAYERS,
@@ -12,6 +14,7 @@ import {
   totalDiceInPlay,
   validateRaise,
   type Bid,
+  type EngineAction,
   type Face,
   type PerudoState,
   type PlayerState,
@@ -495,3 +498,85 @@ describe("full game simulation", () => {
 function aliveCount(state: PerudoState): number {
   return state.players.filter((p) => p.diceCount > 0).length;
 }
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("gives the active seat opening raises for every face and nothing to anyone else", () => {
+    const state = makeState({ activeSeat: 0 });
+    const moves = getValidMoves(state, 0);
+    expect(moves.length).toBeGreaterThan(0);
+    expect(moves.every((m) => m.type === "raise")).toBe(true); // no pending bid yet -> no dudo/calza
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("includes dudo and calza once a bid is pending (outside Palafico)", () => {
+    const state = makeState({ activeSeat: 1, currentBid: { seat: 0, quantity: 2, face: 3 } });
+    const moves = getValidMoves(state, 1);
+    expect(moves.some((m) => m.type === "dudo")).toBe(true);
+    expect(moves.some((m) => m.type === "calza")).toBe(true);
+  });
+
+  it("omits calza during a Palafico round and locks every raise to the opening face", () => {
+    const state = makeState({
+      activeSeat: 1,
+      roundStarter: 0,
+      currentBid: { seat: 0, quantity: 2, face: 4 },
+      players: [
+        { seat: 0, diceCount: 1, dice: [4] },
+        { seat: 1, diceCount: 5, dice: [1, 2, 3, 4, 5] },
+        { seat: 2, diceCount: 5, dice: [1, 2, 3, 4, 5] },
+      ],
+    });
+    expect(isPalafico(state)).toBe(true);
+    const moves = getValidMoves(state, 1);
+    expect(moves.some((m) => m.type === "calza")).toBe(false);
+    expect(moves.filter((m) => m.type === "raise").every((m) => m.type === "raise" && m.face === 4)).toBe(true);
+  });
+
+  it("returns nothing for an already-eliminated seat", () => {
+    const state = makeState({
+      activeSeat: 0,
+      players: [
+        { seat: 0, diceCount: 0, dice: [] },
+        { seat: 1, diceCount: 5, dice: [1, 2, 3, 4, 5] },
+        { seat: 2, diceCount: 5, dice: [1, 2, 3, 4, 5] },
+      ],
+    });
+    expect(getValidMoves(state, 0)).toEqual([]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("returns null for a seat that isn't up", () => {
+    const state = makeState({ activeSeat: 0 });
+    expect(chooseBotAction(state, 1)).toBeNull();
+  });
+
+  it("calls dudo when the pending bid is far beyond a fair estimate", () => {
+    const state = makeState({
+      activeSeat: 1,
+      currentBid: { seat: 0, quantity: 15, face: 2 },
+      players: [
+        { seat: 0, diceCount: 5, dice: [3, 3, 3, 3, 3] },
+        { seat: 1, diceCount: 5, dice: [3, 3, 3, 3, 3] }, // no 2s, no 1s in my own hand
+        { seat: 2, diceCount: 5, dice: [3, 3, 3, 3, 3] },
+      ],
+    });
+    expect(chooseBotAction(state, 1)).toEqual({ type: "dudo", seat: 1 });
+  });
+
+  it("always returns a legal move — driving every seat via the bot reaches gameOver", () => {
+    let state = startGame(4, 123);
+    let guard = 0;
+    while (state.phase !== "gameOver" && guard < 3000) {
+      guard++;
+      if (state.phase === "reveal") {
+        state = applyAction(state, { type: "continue", seed: guard });
+        continue;
+      }
+      const action: EngineAction | null = chooseBotAction(state, state.activeSeat, () => 0.5);
+      expect(action).not.toBeNull();
+      state = applyAction(state, action!);
+    }
+    expect(state.phase).toBe("gameOver");
+  });
+});

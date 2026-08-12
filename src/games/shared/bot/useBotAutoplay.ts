@@ -1,0 +1,68 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+
+/**
+ * Generic "a bot seat acts on its own turn" scheduler, reused by every
+ * `<Game>Game.tsx` that supports mixed human+bot lobbies (see
+ * ARCHITECTURE.md §7, "신규 게임은 AI 플레이어 지원을 기본 내장한다").
+ *
+ * Bots have no device of their own, so exactly ONE client — the room's
+ * host — should ever mount this with `active: true`. The host simulates the
+ * bot's decision locally and calls `dispatch`, which broadcasts the
+ * resulting `EngineAction` over the exact same channel a human's click
+ * would use. Every other client just replays that action like any other —
+ * this preserves the lockstep protocol's single-writer invariant
+ * (docs/cloud-sync.md §1) without inventing a second sync mechanism.
+ *
+ * `currentActor`/`chooseAction` should be plain, stateless functions
+ * (module-scope, not inline closures) so their identity stays stable across
+ * renders — that keeps this effect from re-scheduling on unrelated
+ * re-renders. `botSeats` should be memoized by the caller for the same
+ * reason.
+ */
+export interface UseBotAutoplayOptions<State, Action, Actor> {
+  /** Only true on the host's client. */
+  active: boolean;
+  state: State | null;
+  /** Whose decision is currently pending, or null if nobody is blocked on one (e.g. a shared "continue" screen a human always handles). */
+  currentActor: (state: State) => Actor | null;
+  botSeats: ReadonlySet<Actor>;
+  /** Returns the action to broadcast for that bot seat, or null if it has no legal move (defensive — should not normally happen since `currentActor` already implies one exists). */
+  chooseAction: (state: State, actor: Actor) => Action | null;
+  dispatch: (action: Action) => void;
+  /** Natural-feeling "thinking" delay before the bot acts. Defaults to 500–1500ms per the project's bot UX standard. */
+  minDelayMs?: number;
+  maxDelayMs?: number;
+}
+
+export function useBotAutoplay<State, Action, Actor>({
+  active,
+  state,
+  currentActor,
+  botSeats,
+  chooseAction,
+  dispatch,
+  minDelayMs = 500,
+  maxDelayMs = 1500,
+}: UseBotAutoplayOptions<State, Action, Actor>): void {
+  // A given state object is only ever acted on once, even though this effect
+  // re-runs whenever any dependency changes identity (e.g. a fresh
+  // `botSeats` Set every render if the caller didn't memoize it).
+  const actedForRef = useRef<State | null>(null);
+
+  useEffect(() => {
+    if (!active || !state) return;
+    const actor = currentActor(state);
+    if (actor === null || !botSeats.has(actor)) return;
+    if (actedForRef.current === state) return;
+    actedForRef.current = state;
+
+    const delay = minDelayMs + Math.random() * Math.max(0, maxDelayMs - minDelayMs);
+    const timer = window.setTimeout(() => {
+      const action = chooseAction(state, actor);
+      if (action) dispatch(action);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [active, state, currentActor, botSeats, chooseAction, dispatch, minDelayMs, maxDelayMs]);
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel, RealtimePresenceState } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
 import { getDeviceId } from "@/lib/identity/deviceId";
@@ -8,6 +8,7 @@ import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity
 import type { PlayableGameProps } from "@/games/types";
 import {
   applyAction,
+  chooseBotAction,
   createInitialOwnership,
   other,
   seededRng,
@@ -17,6 +18,24 @@ import {
   type Owner,
 } from "./engine";
 import HanamikojiBoard from "./HanamikojiBoard";
+import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
+import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
+
+/**
+ * Which seat/role must act right now, for `useBotAutoplay` — mirrors
+ * `getValidMoves`'s own phase gating exactly (see engine.ts), just without
+ * enumerating the moves themselves.
+ */
+function hanamikojiCurrentActor(state: HanamikojiState): Owner | null {
+  if (state.phase === "awaiting-draw" || state.phase === "awaiting-action") return state.activePlayer;
+  if (state.phase === "awaiting-response" && state.pendingOffer) return other(state.pendingOffer.offeredBy);
+  return null;
+}
+
+function hanamikojiChooseAction(state: HanamikojiState, actor: Owner): EngineAction | null {
+  return chooseBotAction(state, actor);
+}
 
 /**
  * Online-room multiplayer entry point. Each of the two players is on their
@@ -80,18 +99,29 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<HanamikojiState | null>(null);
   const [finalResult, setFinalResult] = useState<{ winnerId: string; winnerName: string } | null>(null);
+  // Roles currently played by an AI bot instead of a human — host-controlled
+  // (see ARCHITECTURE.md §7), broadcast to every client via "bot-roster" so
+  // everyone renders the same lobby/board without a server.
+  const [botRoles, setBotRoles] = useState<Owner[]>([]);
+  const botRolesRef = useRef<Owner[]>([]);
+  useEffect(() => {
+    botRolesRef.current = botRoles;
+  }, [botRoles]);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const startSentRef = useRef(false);
+  const isHost = myRole === "p1";
 
   const opponentRole = myRole ? other(myRole) : null;
+  const botRoleSet = useMemo(() => new Set(botRoles), [botRoles]);
   const names: Record<Owner, string> = useMemo(() => {
     const byRole = (r: Owner) => occupants.find((o) => o.role === r)?.name;
+    const botIndex = (r: Owner) => botRoles.indexOf(r);
     return {
-      p1: (myRole === "p1" ? myName : byRole("p1")) ?? "상대",
-      p2: (myRole === "p2" ? myName : byRole("p2")) ?? "상대",
+      p1: (myRole === "p1" ? myName : byRole("p1")) ?? (botIndex("p1") >= 0 ? botDisplayName(botIndex("p1")) : "상대"),
+      p2: (myRole === "p2" ? myName : byRole("p2")) ?? (botIndex("p2") >= 0 ? botDisplayName(botIndex("p2")) : "상대"),
     };
-  }, [occupants, myRole, myName]);
+  }, [occupants, myRole, myName, botRoles]);
   // Prefer the real betting-system playerId (present when that role's
   // occupant joined by picking themselves from an active session's roster —
   // see RoomNicknameField) over the synthetic per-room id.
@@ -102,7 +132,9 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
       p2: byRole("p2") ?? `${roomCode}:p2`,
     };
   }, [roomCode, occupants]);
-  const opponentConnected = opponentRole ? occupants.some((o) => o.role === opponentRole) : false;
+  const opponentConnected = opponentRole
+    ? occupants.some((o) => o.role === opponentRole) || botRoleSet.has(opponentRole)
+    : false;
 
   function enterRoom() {
     setFormError(null);
@@ -143,6 +175,9 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
 
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seed = payload?.seed as number;
+      const roles = (payload?.botRoles as Owner[] | undefined) ?? [];
+      botRolesRef.current = roles;
+      setBotRoles(roles);
       setGameState(startRound(1, "p1", createInitialOwnership(), seededRng(seed)));
       setFinalResult(null);
       setPhase("playing");
@@ -151,6 +186,15 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
       const action = payload?.action as EngineAction;
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
+    });
+
+    // Host-authoritative AI bot roster — broadcast whenever the host
+    // adds/removes a bot seat in the waiting room (see `addBot`/`removeBot`
+    // below), so every client renders the same lobby/board without a server.
+    channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => {
+      const roles = (payload?.botRoles as Owner[] | undefined) ?? [];
+      botRolesRef.current = roles;
+      setBotRoles(roles);
     });
 
     channel.on("presence", { event: "sync" }, () => {
@@ -184,24 +228,77 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     if (conflict) setPhase("room-full");
   }
 
-  // Host deals the first hand as soon as both seats are filled.
+  const sendGameStart = useCallback(() => {
+    startSentRef.current = true;
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "game-start",
+      payload: { seed: Math.floor(Math.random() * 1_000_000_000), botRoles: botRolesRef.current },
+    });
+  }, []);
+
+  // Host deals the first hand as soon as both seats are filled — a seat
+  // counts as "filled" whether it's a connected human or a bot the host added.
   useEffect(() => {
     if (phase !== "waiting" || myRole !== "p1" || startSentRef.current) return;
     const hasP1 = occupants.some((o) => o.role === "p1");
-    const hasP2 = occupants.some((o) => o.role === "p2");
-    if (hasP1 && hasP2) {
-      startSentRef.current = true;
-      channelRef.current?.send({
-        type: "broadcast",
-        event: "game-start",
-        payload: { seed: Math.floor(Math.random() * 1_000_000_000) },
-      });
-    }
-  }, [occupants, phase, myRole]);
+    const hasP2 = occupants.some((o) => o.role === "p2") || botRoles.includes("p2");
+    if (hasP1 && hasP2) sendGameStart();
+  }, [occupants, phase, myRole, botRoles, sendGameStart]);
 
-  function handleAction(action: EngineAction) {
-    channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
+  // Host-only: fill/empty the p2 seat with an AI bot (§7 of ARCHITECTURE.md).
+  // Only ever offered for an *empty* seat — a connected human is never
+  // forcibly replaced. If a human later joins a seat a bot was occupying,
+  // the eviction effect below automatically drops the bot for them.
+  const addBot = useCallback(() => {
+    if (!isHost || botRolesRef.current.includes("p2")) return;
+    if (occupants.some((o) => o.role === "p2")) return;
+    const next: Owner[] = [...botRolesRef.current, "p2"];
+    botRolesRef.current = next;
+    setBotRoles(next);
+    channelRef.current?.send({ type: "broadcast", event: "bot-roster", payload: { botRoles: next } });
+  }, [isHost, occupants]);
+
+  const removeBot = useCallback(
+    (role: Owner) => {
+      if (!isHost) return;
+      const next = botRolesRef.current.filter((r) => r !== role);
+      botRolesRef.current = next;
+      setBotRoles(next);
+      channelRef.current?.send({ type: "broadcast", event: "bot-roster", payload: { botRoles: next } });
+    },
+    [isHost],
+  );
+
+  // A human physically claiming a seat always wins over a bot placeholder —
+  // derived during render (not an effect), same "compare and setState during
+  // render" pattern as the role-conflict check above: a plain idempotent
+  // one-extra-render bail-out instead of a setState-in-effect cascade. Only
+  // updates the HOST's own local roster (no broadcast needed here) — it's
+  // exactly what gates the host-only auto-start/manual-start logic below,
+  // and every other client already prefers a seat's real Presence occupant
+  // over a stale bot badge when rendering names (see `names` above), so
+  // nobody else needs to hear about this until the next `game-start`/
+  // `bot-roster` broadcast picks up the corrected roster anyway.
+  if (isHost && botRoles.length > 0) {
+    const stillBot = botRoles.filter((r) => !occupants.some((o) => o.role === r));
+    // botRolesRef is re-synced by the effect above once this commits — not
+    // updated here too, since refs (like state) must not be written during render.
+    if (stillBot.length !== botRoles.length) setBotRoles(stillBot);
   }
+
+  const handleAction = useCallback((action: EngineAction) => {
+    channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
+  }, []);
+
+  useBotAutoplay<HanamikojiState, EngineAction, Owner>({
+    active: isHost && phase === "playing",
+    state: gameState,
+    currentActor: hanamikojiCurrentActor,
+    botSeats: botRoleSet,
+    chooseAction: hanamikojiChooseAction,
+    dispatch: handleAction,
+  });
 
   function handleGameEnd(winnerId: string) {
     if (!gameState || !myRole) return;
@@ -219,12 +316,7 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
   }
 
   function handleRematch() {
-    startSentRef.current = true;
-    channelRef.current?.send({
-      type: "broadcast",
-      event: "game-start",
-      payload: { seed: Math.floor(Math.random() * 1_000_000_000) },
-    });
+    sendGameStart();
   }
 
   function handleLeave() {
@@ -392,15 +484,22 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
             <div className="mt-2 flex flex-col gap-1.5">
               {(["p1", "p2"] as const).map((role) => {
                 const occ = occupants.find((o) => o.role === role);
+                const botIdx = botRoles.indexOf(role);
+                const isBot = botIdx >= 0;
                 return (
-                  <p key={role} className="text-sm text-white/70">
-                    {role === myRole ? "나" : role === "p1" ? "1번" : "2번"}:{" "}
-                    {occ ? occ.name : <span className="text-white/30">대기 중...</span>}
-                  </p>
+                  <div key={role} className="flex items-center justify-between gap-3 text-sm text-white/70">
+                    <span>
+                      {role === myRole ? "나" : role === "p1" ? "1번" : "2번"}:{" "}
+                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx)} /> : <span className="text-white/30">대기 중...</span>}
+                    </span>
+                    {isHost && role !== myRole && !occ && (
+                      isBot ? <RemoveBotButton onClick={() => removeBot(role)} /> : <AddBotButton onClick={addBot} />
+                    )}
+                  </div>
                 );
               })}
             </div>
-            <p className="text-xs text-white/40">2명이 모이면 자동으로 게임이 시작됩니다.</p>
+            <p className="text-xs text-white/40">2명이 모이면 자동으로 게임이 시작됩니다. AI 봇으로도 채울 수 있어요.</p>
           </>
         )}
       </div>

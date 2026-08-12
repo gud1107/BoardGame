@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-12 (지렁이 — Pickomino식 주사위 엔진 전면 폐기 후 Slither.io식 실시간 Canvas 2D 액션 게임으로 재구현. 이전 갱신: 언어의 조각 공통 자모음 조각 풀 개편)_
+_최종 갱신: 2026-08-12 (공통 AI 봇 대전 시스템 신규 구축 — 하나미코지/노땡스/페루도/스플렌더 4종 파일럿 적용 + 신규 게임 필수 표준화. 이전 갱신: 지렁이 Pickomino식 주사위 엔진 전면 폐기 후 Slither.io식 실시간 Canvas 2D 액션 게임으로 재구현)_
 
 > **이 문서는 "지금 이 순간"의 스냅샷만 담는다.** 새 세션이 `/clear` 직후 가장 먼저 읽어야 할 문서이며, 여기 담긴 정보만으로 이전 맥락을 복원할 수 있어야 한다. **시간순 기록(무엇을 왜 그 순서로 만들었는가)은 [docs/history.md](./docs/history.md)로, 버그 대응 이력은 [docs/troubleshooting.md](./docs/troubleshooting.md)로 넘어갔다** — 이 파일 자체는 계속 짧게 유지하고, 완료된 세션 내용은 매번 `history.md`로 옮겨 적을 것.
 
@@ -38,11 +38,36 @@ _최종 갱신: 2026-08-12 (지렁이 — Pickomino식 주사위 엔진 전면 �
 | 레지스탕스 쿠 | 2~6 | ✅ | 없음(룰북 자체가 이미 "단판 완결 정식 규칙서" — 다회차/단판 상충 자체가 없었음) | 챌린지/카운터 응답 팝업 모달 + 15초 응답 타이머 게이지(클라이언트 로컬 UX, 시간 만료 시 안전한 기본값인 "패스" 자동 제출) + 영향력 카드 3D 반전 공개 애니메이션 + 탈락 토스트/최후생존자 전면 배너 | ❌(제공된 룰북 폴더에 이미지 자산 없음 — emoji/gradient 대체) |
 | 지렁이 | 2~8 | ✅(호스트 권위 실시간 동기화, 락스텝 아님 — docs/cloud-sync.md §5) | 제한 시간 3분 고정 + 랭킹 지표는 누적 점수(죽어도 안 깎임, 동점이면 최고 길이로 타이브레이크) — 아래 "이번 세션" 참고 | HTML5 Canvas 2D 실시간 렌더링(다이나믹 줌아웃 카메라) + 마우스/키보드/터치 조이스틱 통합 입력 + 리더보드/HUD | ✅(자체 제작 SVG 벡터 커버, `public/games/worm.svg`) |
 
-전체 게임별 파일 구조 표준은 **[ARCHITECTURE.md](./ARCHITECTURE.md)** 참고. 검증 상태: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(**731개** 전부 통과, 저장소 전체 26개 테스트 파일 — 이번 세션에서 지렁이의 기존 30개 Pickomino 테스트를 전부 삭제하고 새 물리 엔진 기준 24개로 교체, 순증감 -6) 전부 그린.
+전체 게임별 파일 구조 표준은 **[ARCHITECTURE.md](./ARCHITECTURE.md)** 참고. 검증 상태: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(**762개** 전부 통과, 저장소 전체 26개 테스트 파일 — 이번 세션 AI 봇 지원 추가로 31개 신규) 전부 그린.
 
 ### 버그 리포트 시스템 (2026-08-11 신규)
 
-허브 헤더(`SiteHeader.tsx`)와 `/games/[gameId]` 페이지 좌하단 플로팅 버튼(모든 플레이 가능 게임 공용, 게임 ID/이름 자동 매핑)에서 버그 제보 모달을 띄울 수 있고, `/bug-reports`에서 제출된 리포트를 게임별/상태별로 필터링해 볼 수 있다. IndexedDB가 1차 저장소(이 브라우저에 제출된 리포트만 목록에 표시 — `/history`와 동일한 스코프)이고, Supabase가 설정돼 있으면 `bug_reports` 테이블로 best-effort 백업만 이뤄진다(현재 UI는 이 백업을 다시 읽어오지 않음). 상세 내역은 아래 "이번 세션" 절 참고.
+허브 헤더(`SiteHeader.tsx`)와 `/games/[gameId]` 페이지 좌하단 플로팅 버튼(모든 플레이 가능 게임 공용, 게임 ID/이름 자동 매핑)에서 버그 제보 모달을 띄울 수 있고, `/bug-reports`에서 제출된 리포트를 게임별/상태별로 필터링해 볼 수 있다. IndexedDB가 1차 저장소(이 브라우저에 제출된 리포트만 목록에 표시 — `/history`와 동일한 스코프)이고, Supabase가 설정돼 있으면 `bug_reports` 테이블로 best-effort 백업만 이뤄진다(현재 UI는 이 백업을 다시 읽어오지 않음). 상세 내역은 [docs/history.md](./docs/history.md) 참고.
+
+### 공통 AI 봇 대전 시스템 (2026-08-12 신규 — 파일럿 4종만 적용, 나머지 15종은 미적용)
+
+사람 접속 없이(또는 일부만) 즉시 플레이할 수 있도록, 대기실에서 빈 좌석을 **🤖 AI 봇**으로 채울 수 있는 공통 인프라를 구축했다. **하나미코지·노땡스·페루도·스플렌더 4종에만 실제로 적용**했고(대표 메커니즘 각각: 2인 고정 좌석 + 응답 서브페이즈 / N인 단일 액션 / N인 비딩·불확실 정보 / N인 다중 액션 리소스 관리), 나머지 15종(뱅!·그리드 포커·아발론·센추리·틀린 그림 찾기·오이 다섯 개·라스베가스·소환사의 협곡·달무티·코요테·포세일·러브레터·말달리자·언어의 조각·레지스탕스 쿠)과 락스텝이 아닌 지렁이는 아직 미적용이다 — 다음에 그 게임들을 만지는 세션에서 이 절 하단 "적용 안 된 게임" 표를 갱신하며 하나씩 적용할 것. 신규로 만드는 모든 온라인 대전 게임은 **처음부터 이 계약을 지켜야 한다**([ARCHITECTURE.md §7](./ARCHITECTURE.md#7-ai-플레이어-지원-모든-신규-게임-필수-계약)).
+
+- **공통 인프라**(게임 간 재사용, 신규): `src/games/shared/bot/useBotAutoplay.ts`(범용 봇 자동 진행 훅 — 호스트 클라이언트에서만 활성화되어 0.5~1.5초 딜레이 후 봇의 액션을 사람과 동일하게 브로드캐스트), `src/games/shared/bot/botNaming.ts`(`botLabel`/`botDisplayName`, "🤖 AI 봇 N" 표기 통일), `src/components/lobby/BotSeatControls.tsx`(`AddBotButton`/`RemoveBotButton`/`BotSeatBadge`).
+- **엔진 계약**: 각 파일럿 게임의 `engine.ts`에 `getValidMoves(state, seat)`(합법 액션 열거, 각 액션 핸들러의 가드를 그대로 반영)와 `chooseBotAction(state, seat, rng?)`(휴리스틱 최고점 액션 선택, 동점은 rng 타이브레이크)를 신규 export. 휴리스틱은 완전탐색이 아니라 게임별 간단한 점수 함수(하나미코지: 카드 가치, 노땡스: 체인 연결/칩 기댓값, 페루도: 자기 주사위+공개 정보 기반 EV 근사 — **다른 좌석의 숨겨진 주사위는 절대 읽지 않아 정보 공정성 유지**, 스플렌더: 포인트·색상 유틸리티 그리디).
+- **로비 UI**: 대기실에서 호스트만 **빈 좌석**에 봇 추가/제거 가능(접속 중인 사람은 강제 대체 안 함). 호스트의 로컬 봇 로스터가 `bot-roster` 브로드캐스트 + `game-start`/`state-sync` 페이로드에 실려 모든 클라이언트·재접속자에게 전파된다. 사람이 나중에 봇 좌석을 실제로 점유하면 호스트가 자동으로 로스터에서 제외(렌더 중 파생 상태 패턴 — `useEffect` 내 `setState`는 `react-hooks/set-state-in-effect` 린트에 걸려서 피함). "N명 모이면 자동 시작" 카운트는 사람+봇 합산.
+- **검증**: 4개 게임 각각 `<Game>.test.ts`에 `getValidMoves`/`chooseBotAction` 단위 테스트 + "봇끼리 끝까지 자동 진행해도 예외/무한루프 없이 게임 종료" 풀 시뮬레이션 테스트 신규(총 31개 신규 테스트). §2 "알려진 사각지대"(Board/Game 컴포넌트는 자동 테스트 밖)가 로비 봇 버튼 UI에도 적용되므로 실사용 전 수동 확인 권장.
+
+1. **`src/games/shared/bot/useBotAutoplay.ts`(신규)**, **`src/games/shared/bot/botNaming.ts`(신규)** — 범용 봇 인프라.
+2. **`src/components/lobby/BotSeatControls.tsx`(신규)** — 로비 봇 슬롯 UI 공용 컴포넌트.
+3. **`src/games/hanamikoji/engine.ts`/`HanamikojiGame.tsx`/`Hanamikoji.test.ts`** — `getValidMoves`/`chooseBotAction` + `botRoles` 로비 연동 + 9개 신규 테스트.
+4. **`src/games/no-thanks/engine.ts`/`NoThanksGame.tsx`/`NoThanks.test.ts`** — 동일 패턴, `botSeats` + 8개 신규 테스트.
+5. **`src/games/perudo/engine.ts`/`PerudoGame.tsx`/`Perudo.test.ts`** — 동일 패턴, `botSeats` + 7개 신규 테스트(자기 주사위만 보는 EV 휴리스틱).
+6. **`src/games/splendor/engine.ts`/`SplendorGame.tsx`/`Splendor.test.ts`** — 동일 패턴, `botSeats` + 7개 신규 테스트(가장 복잡한 액션 공간 — discard/noble 서브페이즈 포함).
+7. **`ARCHITECTURE.md`(§6 체크리스트 항목 추가, §7 신규)** — "모든 신규 게임은 AI 봇 지원을 기본 내장한다" 표준을 명문화, 4단계 신규 게임 체크리스트.
+8. **검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0, `react-hooks/set-state-in-effect`·`react-hooks/refs` 위반을 렌더 중 파생 상태 패턴으로 해결) / `npx vitest run`(**762개** 전부 통과, 저장소 전체 26개 테스트 파일, 이번 세션 31개 신규) 전부 그린.
+
+**적용 안 된 게임(다음 세션에서 이어서 적용)**: 뱅!, 그리드 포커, 아발론, 센추리, 틀린 그림 찾기, 오이 다섯 개, 라스베가스, 소환사의 협곡, 달무티, 코요테, 포세일, 러브레터, 말달리자, 언어의 조각, 레지스탕스 쿠(15종 — 이 프로젝트 관행대로 락스텝 패턴을 그대로 따르는 게임들이라 파일럿 4종과 동일한 방식이 그대로 적용될 것으로 예상), 지렁이(호스트 권위 실시간 동기화 장르라 §7의 "활성 좌석" 개념 자체를 다시 설계해야 함 — 별도 설계 필요).
+
+### 이전 세션(지렁이 — Pickomino식 주사위 엔진 전면 폐기 → Slither.io식 실시간 Canvas 2D 액션 게임 재구현) 요약은 아래로 접혔다.
+
+<details>
+<summary>이전 세션(지렁이 — Pickomino식 주사위 엔진 전면 폐기 → Slither.io식 실시간 Canvas 2D 액션 게임 재구현) 원문 — 접힘</summary>
 
 ### 이번 세션(지렁이 — Pickomino식 주사위 엔진 전면 폐기 → Slither.io식 실시간 Canvas 2D 액션 게임 재구현) 주요 변경 사항
 
@@ -68,10 +93,12 @@ _최종 갱신: 2026-08-12 (지렁이 — Pickomino식 주사위 엔진 전면 �
 10. **`docs/cloud-sync.md`(§5 신규)**, **`ARCHITECTURE.md`(§4 각주)** — 호스트 권위 실시간 동기화를 락스텝의 유일한 예외로 문서화.
 11. **검증**: 아래 "전체 게임별 파일 구조 표준" 문단의 최신 테스트 카운트 참고. 이 게임은 ARCHITECTURE.md §2가 명시한 "알려진 사각지대"(Board/Game 컴포넌트는 자동 테스트 밖)에 더해 **캔버스 렌더링 자체도 vitest(jsdom 미설치, node 환경)로 검증 불가** — 실사용 전 실제 브라우저로 2탭 이상 온라인 대전 수동 확인을 강력히 권장.
 
-**직전 세션(언어의 조각 — 공통 자모음 조각 풀 + 자음/모음 회전 조합 하드 레일 + 2×N 그리드 히스토리 UI 개편)** 요약은 아래로 접혔다.
+</details>
+
+**그 이전 세션(언어의 조각 — 공통 자모음 조각 풀 + 자음/모음 회전 조합 하드 레일 + 2×N 그리드 히스토리 UI 개편)** 요약은 아래로 접혔다.
 
 <details>
-<summary>직전 세션(언어의 조각 — 공통 자모음 조각 풀 + 자음/모음 회전 조합 하드 레일 + 2×N 그리드 히스토리 UI 개편) 원문 — 접힘</summary>
+<summary>그 이전 세션(언어의 조각 — 공통 자모음 조각 풀 + 자음/모음 회전 조합 하드 레일 + 2×N 그리드 히스토리 UI 개편) 원문 — 접힘</summary>
 
 ### 이번 세션(언어의 조각 — 공통 자모음 조각 풀 + 자음/모음 회전 조합 하드 레일 + 2×N 그리드 히스토리 UI 개편) 주요 변경 사항
 

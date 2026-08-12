@@ -81,3 +81,61 @@ src/games/<gameId>/
 - [ ] `<Game>.test.ts`가 시드를 고정해 승리 조건/엣지 케이스를 결정론적으로 검증하는가
 - [ ] 온라인 대전이라면 `<Game>Game.tsx`가 [docs/cloud-sync.md](./docs/cloud-sync.md)의 표준 락스텝 프로토콜을 그대로 따르는가(새 동기화 채널을 발명하지 않았는가)
 - [ ] UI 변경분을 실제 렌더링(스크린샷 등)으로 육안 확인했는가 — 엔진 테스트 통과는 UI 정상 동작을 보장하지 않는다(§2 "알려진 사각지대")
+- [ ] **엔진이 `getValidMoves`/`chooseBotAction`을 export하는가, `<Game>Game.tsx`가 `useBotAutoplay`와 로비 봇 슬롯 UI를 연결했는가** — §7 참고, **모든 신규 온라인 대전 게임의 필수 계약**이다.
+
+## 7. AI 플레이어 지원 (모든 신규 게임 필수 계약)
+
+**사람이 한 명도 없어도(또는 일부만 있어도) 즉시 플레이할 수 있어야 한다.** 온라인 대전 게임(`onlineMultiplayer: true`)을 새로 추가할 때는 반드시 아래 세 가지를 함께 구현한다 — "나중에 추가"가 아니라 최초 구현 시점의 기본 계약이다. 2026-08-12 세션에서 하나미코지·노땡스·페루도·스플렌더 4종에 파일럿으로 전면 적용해 패턴을 확립했다(`git log`에서 `feat(bot):`로 검색). 나머지 기존 게임(15종)은 아직 이 계약 적용 전이므로, 그 게임들을 다음에 만지는 세션에서 함께 적용할 것 — 신규 게임은 처음부터 이 계약을 지켜야 한다.
+
+### 7.1 엔진: `getValidMoves` + `chooseBotAction`
+
+`engine.ts`가 두 함수를 추가로 export한다:
+
+```ts
+/** seat가 지금 제출할 수 있는 모든 합법 EngineAction. applyAction의 가드를 그대로 거울처럼 반영 — 여기서 만든 액션은 절대 no-op으로 거부되지 않는다. */
+export function getValidMoves(state: State, seat: Seat): EngineAction[]
+
+/** getValidMoves 중 최고점 액션을 고른다(동점은 rng로 타이브레이크). seat가 지금 할 게 없으면 null. rng는 기본 Math.random — 봇 판단은 로컬 UX일 뿐 엔진 결정론 계약(§1) 밖이다. */
+export function chooseBotAction(state: State, seat: Seat, rng?: () => number): EngineAction | null
+```
+
+`getValidMoves`는 각 액션 핸들러가 이미 쓰는 가드(현재 phase, 활성 좌석 등)를 그대로 재사용해서 액션을 열거한다 — 새 검증 로직을 따로 만들지 않는다. 응답 대기(예: 하나미코지의 gift/compete 응답, 스플렌더의 discard/noble 선택)처럼 "활성 좌석"이 아니라 다른 좌석이 결정할 차례인 phase가 있다면, `getValidMoves(state, seat)`가 그 phase에서 실제 결정권자에게만 비어있지 않은 배열을 반환하도록 한다 — 호출자는 phase를 따로 분기하지 않고 "이 seat가 지금 뭘 할 수 있는지"만 물어보면 된다.
+
+`chooseBotAction`의 점수 매기기는 **완전 탐색이 아니라 간단한 휴리스틱**이면 충분하다(각 게임 engine.ts의 `scoreMove` 참고 — 예: 하나미코지는 카드 가치 기준 최선/최악 헤아리기, 페루도는 EV 근사, 스플렌더는 그리디 포인트/색상 유틸리티). 단, **정보 공정성을 지킨다** — 이 프로젝트의 모든 클라이언트는 상대방의 숨겨진 정보(카드/주사위 등)까지 포함한 전체 상태를 들고 있지만([docs/architecture.md §2](./docs/architecture.md#2-온라인-대전의-신뢰-모델-문서화된-의도적-한계)의 신뢰 모델), 봇은 그 상태 중 **자신의 seat가 실제로 볼 수 있는 정보만** 판단에 써야 한다(페루도의 `estimateExpectedCount`가 다른 좌석의 `dice` 배열을 절대 읽지 않는 것이 예시).
+
+### 7.2 컨트롤러: `useBotAutoplay`
+
+`src/games/shared/bot/useBotAutoplay.ts`의 범용 훅을 그대로 재사용한다(새로 만들지 않는다):
+
+```ts
+useBotAutoplay<State, Action, Seat>({
+  active: isHost && phase === "playing", // 호스트 클라이언트에서만 true
+  state: gameState,
+  currentActor: gameCurrentActor,        // 모듈 스코프 순수 함수 — 지금 누가 결정할 차례인지
+  botSeats: botSeatSet,                  // useMemo(() => new Set(botSeats), [botSeats])
+  chooseAction: gameChooseAction,        // (state, actor) => chooseBotAction(state, actor)
+  dispatch: handleAction,
+});
+```
+
+**호스트만 봇을 굴린다** — 봇은 자기 기기가 없으므로, 방을 만든 호스트 클라이언트가 봇의 결정을 로컬로 계산해서 사람의 액션과 똑같이 `game-action`으로 브로드캐스트한다. 다른 클라이언트는 그 결과를 그냥 재생만 한다 — 락스텝의 단일 쓰기자 불변조건(§1, [docs/cloud-sync.md §1](./docs/cloud-sync.md#1-왜-서버-권위-엔진이-아니라-락스텝인가))을 그대로 지킨다. 0.5~1.5초 랜덤 딜레이는 훅 기본값 그대로 쓴다(사람처럼 "생각하는" 텀).
+
+`currentActor`/`chooseAction`은 **컴포넌트 밖, 모듈 스코프의 순수 함수**로 선언한다(인라인 클로저 금지) — 매 렌더마다 새 함수 참조가 생기면 훅의 effect가 불필요하게 재구동된다.
+
+### 7.3 로비: 봇 슬롯 추가/제거
+
+`src/components/lobby/BotSeatControls.tsx`(`AddBotButton`/`RemoveBotButton`/`BotSeatBadge`)와 `src/games/shared/bot/botNaming.ts`(`botLabel`/`botDisplayName`, "🤖 AI 봇 N" 표기)를 재사용한다. 대기실(`waiting` phase) UI에서:
+
+- **빈 좌석만** 봇으로 채울 수 있다 — 이미 접속한 사람을 강제로 대체하지 않는다(호스트 전용 컨트롤).
+- 호스트의 로컬 `botSeats`/`botRoles` 상태가 유일한 진실 공급원이다. 추가/제거 시 `bot-roster` 브로드캐스트 이벤트로 다른 클라이언트에 알리고, `game-start`/`state-sync` 페이로드에도 실어 보내 재접속·매치 시작 시점에도 항상 동일한 로스터가 재현되게 한다(새 이벤트 타입이지만 기존 락스텝 프로토콜을 확장하는 것이지 새로 발명하는 게 아니다).
+- 사람이 나중에 봇이 있던 좌석을 실제로 점유하면, 호스트가 자동으로 그 좌석을 로스터에서 제외한다(렌더 중 파생 상태로 처리 — `useEffect` 안에서 `setState`하면 `react-hooks/set-state-in-effect` 린트 규칙에 걸리므로, §2의 "좌석 충돌 자가치유"와 같은 "compare and setState during render" 패턴을 그대로 쓴다. 단, 렌더 중에는 `ref` 쓰기나 네트워크 브로드캐스트 같은 부수효과를 절대 실행하지 않는다 — 호스트 전용 시작 조건만 갱신하면 충분하고, 다른 클라이언트는 어차피 실제 Presence 접속자를 봇 배지보다 우선해서 렌더링하므로 즉시 알 필요가 없다).
+- "N명이 모이면 자동 시작" 카운트는 `occupants.length + botSeats.length`로 계산한다 — 봇도 좌석을 채운 것으로 취급.
+
+### 7.4 신규 게임 체크리스트
+
+새 온라인 대전 게임을 추가할 때:
+
+1. `engine.ts`에 `getValidMoves`/`chooseBotAction` 작성(§7.1).
+2. `<Game>Game.tsx`에 `botSeats`/`botRoles` 상태 + `bot-roster` 브로드캐스트 + 대기실 봇 추가/제거 버튼(§7.3) + `useBotAutoplay` 연결(§7.2).
+3. `<Game>.test.ts`에 최소한: (a) `getValidMoves`가 활성/비활성 좌석을 올바르게 가르는지, (b) `chooseBotAction`이 항상 합법 액션을 반환하는지(널 아님), (c) 봇끼리 끝까지 자동 진행시켜도 게임이 정상 종료하는지(무한루프/예외 없음) — 세 가지를 반드시 커버한다.
+4. §2의 "알려진 사각지대"(Board/Game 컴포넌트는 자동 테스트 밖)가 여기도 적용된다 — 로비 봇 버튼/자동 턴 진행의 실제 UI 동작은 엔진 테스트로 보장되지 않으니 실제 렌더링으로 육안 확인할 것.

@@ -3,9 +3,11 @@ import {
   applyAction,
   CARD_MAX,
   CARD_MIN,
+  chooseBotAction,
   computeGroups,
   computePlayerScore,
   computeRankings,
+  getValidMoves,
   MAX_PLAYERS,
   MIN_PLAYERS,
   REMOVE_COUNT,
@@ -310,5 +312,70 @@ describe("computeRankings", () => {
     expect(bySeat[0]).toBe(1);
     expect(bySeat[1]).toBe(1);
     expect(bySeat[2]).toBe(3); // standard competition ranking skips rank 2
+  });
+});
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("offers only the active seat both 'take' and 'pass' (chips remaining)", () => {
+    const state = makeState();
+    expect(getValidMoves(state, 0)).toEqual([{ type: "take", seat: 0 }, { type: "pass", seat: 0 }]);
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("omits 'pass' once the seat is out of chips — 'take' is the only legal move", () => {
+    const state = makeState({ players: [{ seat: 0, chips: 0, cards: [] }, { seat: 1, chips: 11, cards: [] }, { seat: 2, chips: 11, cards: [] }] });
+    expect(getValidMoves(state, 0)).toEqual([{ type: "take", seat: 0 }]);
+  });
+
+  it("offers nothing once the game is over", () => {
+    const state = makeState({ phase: "gameOver" });
+    expect(getValidMoves(state, 0)).toEqual([]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("returns null for a seat that isn't up", () => {
+    const state = makeState();
+    expect(chooseBotAction(state, 1)).toBeNull();
+  });
+
+  it("is forced to take when out of chips, even with a costly unconnected card", () => {
+    const state = makeState({
+      currentCard: 30,
+      chipsOnCard: 0,
+      players: [{ seat: 0, chips: 0, cards: [] }, { seat: 1, chips: 11, cards: [] }, { seat: 2, chips: 11, cards: [] }],
+    });
+    expect(chooseBotAction(state, 0)).toEqual({ type: "take", seat: 0 });
+  });
+
+  it("takes a card that connects to one already in hand, even with 0 chips on it", () => {
+    const state = makeState({
+      currentCard: 11,
+      chipsOnCard: 0,
+      players: [{ seat: 0, chips: 5, cards: [10] }, { seat: 1, chips: 11, cards: [] }, { seat: 2, chips: 11, cards: [] }],
+    });
+    expect(chooseBotAction(state, 0)).toEqual({ type: "take", seat: 0 });
+  });
+
+  it("passes on a big unconnected card with few chips on it and chips left to spend", () => {
+    const state = makeState({ currentCard: 30, chipsOnCard: 1 });
+    expect(chooseBotAction(state, 0)).toEqual({ type: "pass", seat: 0 });
+  });
+
+  it("takes a big card once enough chips have piled up on it", () => {
+    const state = makeState({ currentCard: 20, chipsOnCard: 21 });
+    expect(chooseBotAction(state, 0)).toEqual({ type: "take", seat: 0 });
+  });
+
+  it("always returns a legal move — driving every seat via the bot never throws", () => {
+    let state = startGame(4, 7);
+    let guard = 0;
+    while (state.phase !== "gameOver" && guard < 500) {
+      guard++;
+      const action = chooseBotAction(state, state.activeSeat, () => 0.5);
+      expect(action).not.toBeNull();
+      state = applyAction(state, action!);
+    }
+    expect(state.phase).toBe("gameOver");
   });
 });

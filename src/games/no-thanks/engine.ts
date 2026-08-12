@@ -159,6 +159,54 @@ function take(state: NoThanksState, seat: SeatIndex): NoThanksState {
   return { ...state, players, chipsOnCard: 0, currentCard: nextCard, deck: restDeck };
 }
 
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
+// chooseBotAction so a host client can drive a bot-occupied seat).
+// ---------------------------------------------------------------------------
+
+/** Every legal `EngineAction` `seat` may submit right now. Mirrors `pass`/`take`'s own guards exactly. */
+export function getValidMoves(state: NoThanksState, seat: SeatIndex): EngineAction[] {
+  if (state.phase !== "playing" || seat !== state.activeSeat) return [];
+  const player = state.players.find((p) => p.seat === seat);
+  if (!player) return [];
+  const moves: EngineAction[] = [{ type: "take", seat }];
+  if (player.chips > 0) moves.push({ type: "pass", seat }); // no chips left -> must take, rulebook §4
+  return moves;
+}
+
+/**
+ * Simple expected-value heuristic: taking is worth (chips currently on the
+ * card) minus the card's penalty — except a card that extends a run already
+ * in hand (adjacent to a card the seat already owns) costs nothing extra, so
+ * it's always worth taking. Passing is scored as a flat -1 (the chip it
+ * costs), which is directly comparable since both scores are on the same
+ * "net chip value" scale.
+ */
+function scoreMove(state: NoThanksState, seat: SeatIndex, move: EngineAction): number {
+  if (move.type === "pass") return -1;
+  const player = state.players.find((p) => p.seat === seat)!;
+  const card = state.currentCard!;
+  const connectsRun = player.cards.some((c) => c === card - 1 || c === card + 1);
+  const penalty = connectsRun ? 0 : card;
+  return state.chipsOnCard - penalty;
+}
+
+/**
+ * Picks the highest-scoring legal move for `seat` (ties broken randomly via
+ * `rng`), or null if it isn't `seat`'s turn. `rng` defaults to `Math.random`
+ * — bot decisions are local UX, not part of the deterministic engine
+ * contract; the resulting `EngineAction` still runs through the ordinary,
+ * fully deterministic `applyAction`.
+ */
+export function chooseBotAction(state: NoThanksState, seat: SeatIndex, rng: () => number = Math.random): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move) }));
+  const best = Math.max(...scored.map((s) => s.score));
+  const bestMoves = scored.filter((s) => s.score === best).map((s) => s.move);
+  return bestMoves[Math.floor(rng() * bestMoves.length)];
+}
+
 /** Single entry point applying any `EngineAction` to a state — the whole engine as one reducer. */
 export function applyAction(state: NoThanksState, action: EngineAction): NoThanksState {
   switch (action.type) {

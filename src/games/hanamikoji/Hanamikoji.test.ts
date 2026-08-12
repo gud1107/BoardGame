@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   GEISHAS,
   applyAction,
+  chooseBotAction,
   chooseCompete,
   chooseGift,
   chooseSecret,
@@ -9,6 +10,7 @@ import {
   createInitialOwnership,
   determineMatchWinner,
   drawCard,
+  getValidMoves,
   other,
   resolveCompeteResponse,
   resolveGiftResponse,
@@ -331,5 +333,97 @@ describe("full-round action phase transitions", () => {
     const round2 = startRound(2, "p2", ownershipAfterRound1, seededRng(9));
     expect(round2.geishaOwnership.g5).toBe("p1");
     expect(round2.roundNumber).toBe(2);
+  });
+});
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("only offers 'draw' to the active player during awaiting-draw", () => {
+    const state = startRound(1, "p1", createInitialOwnership(), seededRng(1));
+    expect(getValidMoves(state, "p1")).toEqual([{ type: "draw" }]);
+    expect(getValidMoves(state, "p2")).toEqual([]);
+  });
+
+  it("enumerates every unused action, sized by hand combinatorics, and nothing for the idle seat", () => {
+    let state = startRound(1, "p1", createInitialOwnership(), seededRng(1));
+    state = drawCard(state); // -> awaiting-action, p1's hand is now 7 cards
+    const n = state.players.p1.hand.length;
+    const moves = getValidMoves(state, "p1");
+    const byType = (t: EngineAction["type"]) => moves.filter((m) => m.type === t).length;
+    expect(byType("secret")).toBe(n);
+    expect(byType("tradeoff")).toBe((n * (n - 1)) / 2);
+    expect(byType("gift")).toBe((n * (n - 1) * (n - 2)) / 6);
+    expect(byType("compete")).toBe(((n * (n - 1) * (n - 2) * (n - 3)) / 24) * 3);
+    expect(getValidMoves(state, "p2")).toEqual([]);
+  });
+
+  it("restricts gift/compete responses to the responder only", () => {
+    let state = startRound(1, "p1", createInitialOwnership(), seededRng(1));
+    state = drawCard(state);
+    const [a, b, c] = state.players.p1.hand;
+    state = chooseGift(state, [a.id, b.id, c.id]);
+    expect(getValidMoves(state, "p2")).toHaveLength(3);
+    expect(getValidMoves(state, "p1")).toEqual([]);
+  });
+
+  it("offers nothing once a round has ended (a shared button, not a per-seat move)", () => {
+    let state = startRound(1, "p1", createInitialOwnership(), seededRng(1));
+    state = { ...state, phase: "round-end" };
+    expect(getValidMoves(state, "p1")).toEqual([]);
+    expect(getValidMoves(state, "p2")).toEqual([]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("returns null when the seat has nothing to do", () => {
+    const state = startRound(1, "p1", createInitialOwnership(), seededRng(1));
+    expect(chooseBotAction(state, "p2")).toBeNull();
+  });
+
+  it("always returns a legal move — driving both seats end-to-end never stalls or throws", () => {
+    let state = startRound(1, "p1", createInitialOwnership(), seededRng(42));
+    let guard = 0;
+    while (state.phase !== "match-end" && guard < 500) {
+      guard++;
+      if (state.phase === "round-end") {
+        state = applyAction(state, { type: "next-round", seed: guard });
+        continue;
+      }
+      const active = state.activePlayer;
+      const seat =
+        state.phase === "awaiting-response" && state.pendingOffer ? other(state.pendingOffer.offeredBy) : active;
+      const action = chooseBotAction(state, seat, seededRng(guard));
+      expect(action).not.toBeNull();
+      state = applyAction(state, action!);
+    }
+    expect(state.phase).toBe("match-end");
+    expect(state.matchWinner).not.toBeNull();
+  });
+
+  it("secret: keeps the highest-value card in hand", () => {
+    const base = startRound(1, "p1", createInitialOwnership(), seededRng(1));
+    const hand: ItemCard[] = [card("g2a", 0), card("g5", 0), card("g3a", 0)];
+    const state: HanamikojiState = {
+      ...base,
+      phase: "awaiting-action",
+      activePlayer: "p1",
+      players: { ...base.players, p1: { ...base.players.p1, hand, actionsUsed: [] } },
+    };
+    const action = chooseBotAction(state, "p1");
+    expect(action).toEqual({ type: "secret", cardId: "g5-0" });
+  });
+
+  it("gift-response: takes the highest-value offered card", () => {
+    const base = startRound(1, "p1", createInitialOwnership(), seededRng(1));
+    const state: HanamikojiState = {
+      ...base,
+      phase: "awaiting-response",
+      pendingOffer: {
+        kind: "gift",
+        offeredBy: "p1",
+        cards: [card("g2a", 0), card("g5", 0), card("g3a", 0)],
+      },
+    };
+    const action = chooseBotAction(state, "p2");
+    expect(action).toEqual({ type: "gift-response", cardId: "g5-0" });
   });
 });

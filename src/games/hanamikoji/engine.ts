@@ -388,6 +388,156 @@ export type EngineAction =
   | { type: "compete-response"; index: 0 | 1 }
   | { type: "next-round"; seed: number };
 
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
+// chooseBotAction so a host client can drive a bot-occupied seat).
+// ---------------------------------------------------------------------------
+
+const GEISHA_VALUE_BY_ID: Record<string, number> = Object.fromEntries(GEISHAS.map((g) => [g.id, g.value]));
+
+function cardValue(card: ItemCard): number {
+  return GEISHA_VALUE_BY_ID[card.geishaId] ?? 0;
+}
+
+function sumValues(cards: ItemCard[]): number {
+  return cards.reduce((sum, c) => sum + cardValue(c), 0);
+}
+
+/** All k-element subsets of `items`, order-preserving. */
+function combinations<T>(items: T[], k: number): T[][] {
+  if (k === 0) return [[]];
+  if (items.length < k) return [];
+  const [first, ...rest] = items;
+  const withFirst = combinations(rest, k - 1).map((c) => [first, ...c]);
+  const withoutFirst = combinations(rest, k);
+  return [...withFirst, ...withoutFirst];
+}
+
+/** The 3 ways to split 4 items into 2 unordered pairs. */
+function pairSplits<T>([a, b, c, d]: [T, T, T, T]): [[T, T], [T, T]][] {
+  return [
+    [
+      [a, b],
+      [c, d],
+    ],
+    [
+      [a, c],
+      [b, d],
+    ],
+    [
+      [a, d],
+      [b, c],
+    ],
+  ];
+}
+
+/**
+ * Every legal `EngineAction` `seat` may submit right now — the sole contract
+ * a bot controller needs (see `useBotAutoplay`). Mirrors the exact guards
+ * `applyAction`'s handlers use, so nothing here can produce a move the
+ * reducer would silently reject as a no-op.
+ */
+export function getValidMoves(state: HanamikojiState, seat: Owner): EngineAction[] {
+  if (state.phase === "awaiting-draw") {
+    return state.activePlayer === seat ? [{ type: "draw" }] : [];
+  }
+  if (state.phase === "awaiting-action") {
+    if (state.activePlayer !== seat) return [];
+    const p = state.players[seat];
+    const used = new Set(p.actionsUsed);
+    const ids = p.hand.map((c) => c.id);
+    const moves: EngineAction[] = [];
+    if (!used.has("secret")) {
+      for (const id of ids) moves.push({ type: "secret", cardId: id });
+    }
+    if (!used.has("tradeoff")) {
+      for (const pair of combinations(ids, 2)) moves.push({ type: "tradeoff", cardIds: pair as [string, string] });
+    }
+    if (!used.has("gift")) {
+      for (const triple of combinations(ids, 3)) moves.push({ type: "gift", cardIds: triple as [string, string, string] });
+    }
+    if (!used.has("compete")) {
+      for (const quad of combinations(ids, 4)) {
+        for (const [setA, setB] of pairSplits(quad as [string, string, string, string])) {
+          moves.push({ type: "compete", setA, setB });
+        }
+      }
+    }
+    return moves;
+  }
+  if (state.phase === "awaiting-response" && state.pendingOffer) {
+    const responder = other(state.pendingOffer.offeredBy);
+    if (responder !== seat) return [];
+    if (state.pendingOffer.kind === "gift") {
+      return state.pendingOffer.cards.map((c) => ({ type: "gift-response", cardId: c.id }) as EngineAction);
+    }
+    return [0, 1].map((i) => ({ type: "compete-response", index: i as 0 | 1 }) as EngineAction);
+  }
+  // "round-end"/"match-end" advance via a shared "next round"/"confirm result"
+  // button any viewer can click — not a per-seat decision, so bots don't need
+  // to handle it (the human always in the room clicks through, same as any
+  // all-bot-opponent match still has exactly one real device: the host).
+  return [];
+}
+
+/** How good `move` looks for `seat` — higher is better, used only to rank candidates from `getValidMoves`. Simple heuristics, not a full search. */
+function scoreMove(state: HanamikojiState, seat: Owner, move: EngineAction): number {
+  const p = state.players[seat];
+  const byId = new Map(p.hand.map((c) => [c.id, c]));
+  const cardsOf = (ids: string[]) => ids.map((id) => byId.get(id)!);
+
+  switch (move.type) {
+    case "draw":
+      return 0;
+    case "secret":
+      // Keep the most valuable card for yourself.
+      return cardValue(byId.get(move.cardId)!);
+    case "tradeoff":
+      // Cards are removed from the game entirely — sacrifice your cheapest ones.
+      return -sumValues(cardsOf(move.cardIds));
+    case "gift":
+      // Opponent picks the best of the 3 you offer; keep the rest of your
+      // hand strong by offering your weakest cards.
+      return -sumValues(cardsOf(move.cardIds));
+    case "compete": {
+      // Opponent always takes the stronger pair, so your guaranteed floor is
+      // the weaker one — maximize that floor by keeping the two pairs close
+      // in value instead of dumping your best cards into one pile.
+      const sumA = sumValues(cardsOf(move.setA));
+      const sumB = sumValues(cardsOf(move.setB));
+      return -Math.abs(sumA - sumB);
+    }
+    case "gift-response": {
+      const offer = state.pendingOffer;
+      const card = offer?.kind === "gift" ? offer.cards.find((c) => c.id === move.cardId) : undefined;
+      return card ? cardValue(card) : 0;
+    }
+    case "compete-response": {
+      const offer = state.pendingOffer;
+      if (offer?.kind !== "compete") return 0;
+      return sumValues(offer.sets[move.index]);
+    }
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Picks the highest-scoring legal move for `seat` (ties broken randomly via
+ * `rng`), or null if `seat` has nothing to do right now. `rng` defaults to
+ * `Math.random` since bot decisions are local UX, not part of the
+ * deterministic engine contract — the resulting `EngineAction` is still
+ * applied through the ordinary, fully deterministic `applyAction`.
+ */
+export function chooseBotAction(state: HanamikojiState, seat: Owner, rng: () => number = Math.random): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move) }));
+  const best = Math.max(...scored.map((s) => s.score));
+  const bestMoves = scored.filter((s) => s.score === best).map((s) => s.move);
+  return bestMoves[Math.floor(rng() * bestMoves.length)];
+}
+
 /** Single entry point applying any `EngineAction` to a state — the whole engine as one reducer. */
 export function applyAction(state: HanamikojiState, action: EngineAction): HanamikojiState {
   switch (action.type) {

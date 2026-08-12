@@ -353,6 +353,100 @@ function continueRound(state: PerudoState, seed: number): PerudoState {
   };
 }
 
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
+// chooseBotAction so a host client can drive a bot-occupied seat).
+// ---------------------------------------------------------------------------
+
+/** The cheapest legal raise for each face right now — never more than 6 candidates (fewer during Palafico, where only the locked face qualifies). */
+function raiseMoves(state: PerudoState): EngineAction[] {
+  const palafico = isPalafico(state);
+  const moves: EngineAction[] = [];
+  for (let face = 1; face <= 6; face++) {
+    const quantity = minValidQuantityForFace(state.currentBid, face as Face, palafico);
+    if (quantity === null) continue;
+    moves.push({ type: "raise", seat: state.activeSeat, quantity, face: face as Face });
+  }
+  return moves;
+}
+
+/**
+ * Every legal `EngineAction` `seat` may submit right now. Deliberately
+ * narrower than the human UI in one documented way: the rulebook lets ANY
+ * seat call "맞아!(calza)" out of turn (see module doc), but bots here only
+ * ever act on their own turn — out-of-turn calza-sniping is left as a
+ * human-only tactic, not modeled for bots.
+ */
+export function getValidMoves(state: PerudoState, seat: SeatIndex): EngineAction[] {
+  if (state.phase !== "playing" || seat !== state.activeSeat) return [];
+  const player = state.players.find((p) => p.seat === seat);
+  if (!player || player.diceCount <= 0) return [];
+  const moves = raiseMoves(state);
+  if (state.currentBid) {
+    moves.push({ type: "dudo", seat });
+    if (!isPalafico(state)) moves.push({ type: "calza", seat });
+  }
+  return moves;
+}
+
+/**
+ * How many dice on the table are expected to show `face`, using ONLY
+ * information `seat` could fairly know (their own hidden dice + the
+ * publicly-known dice counts of everyone else) — deliberately never reads
+ * another seat's `dice` array, even though this client's state technically
+ * holds it (see engine module doc's trust-model note), so the bot doesn't
+ * play with information a human opponent wouldn't have.
+ */
+function estimateExpectedCount(state: PerudoState, seat: SeatIndex, face: Face): number {
+  const me = state.players.find((p) => p.seat === seat)!;
+  const wild = !isPalafico(state) && face !== 1;
+  const ownMatches = countMatching([me], face, wild);
+  const othersDice = totalDiceInPlay(state) - me.diceCount;
+  const p = wild ? 1 / 3 : 1 / 6;
+  return ownMatches + othersDice * p;
+}
+
+/** A simple expected-value heuristic — not full Bayesian-optimal play, just enough to look like a plausible opponent. */
+function scoreMove(state: PerudoState, seat: SeatIndex, move: EngineAction): number {
+  switch (move.type) {
+    case "raise": {
+      const expected = estimateExpectedCount(state, seat, move.face);
+      // A credible raise is one the bot's own estimate still supports.
+      return expected - move.quantity;
+    }
+    case "dudo": {
+      const bid = state.currentBid!;
+      const expected = estimateExpectedCount(state, seat, bid.face);
+      // The more the bid outstrips the estimate, the better a dudo call looks.
+      return bid.quantity - expected;
+    }
+    case "calza": {
+      const bid = state.currentBid!;
+      const expected = estimateExpectedCount(state, seat, bid.face);
+      // Best right when the bid looks exactly on the money.
+      return 3 - Math.abs(expected - bid.quantity) * 4;
+    }
+    default:
+      return -Infinity;
+  }
+}
+
+/**
+ * Picks the highest-scoring legal move for `seat` (ties broken randomly via
+ * `rng`), or null if it isn't `seat`'s turn. `rng` defaults to `Math.random`
+ * — bot decisions are local UX, not part of the deterministic engine
+ * contract; the resulting `EngineAction` still runs through the ordinary,
+ * fully deterministic `applyAction`.
+ */
+export function chooseBotAction(state: PerudoState, seat: SeatIndex, rng: () => number = Math.random): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move) }));
+  const best = Math.max(...scored.map((s) => s.score));
+  const bestMoves = scored.filter((s) => s.score === best).map((s) => s.move);
+  return bestMoves[Math.floor(rng() * bestMoves.length)];
+}
+
 /** Single entry point applying any `EngineAction` to a state — the whole engine as one reducer. */
 export function applyAction(state: PerudoState, action: EngineAction): PerudoState {
   switch (action.type) {

@@ -410,6 +410,152 @@ function chooseNoble(state: SplendorState, seat: SeatIndex, nobleId: string): Sp
   return advanceTurn(assignNoble(state, seat, nobleId), seat);
 }
 
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
+// chooseBotAction so a host client can drive a bot-occupied seat).
+// ---------------------------------------------------------------------------
+
+/** Every 3-different-color combo the token supply can currently pay out. */
+function threeDifferentCombos(tokenSupply: TokenBundle): GemColor[][] {
+  const available = GEM_ORDER.filter((c) => (tokenSupply[c] ?? 0) >= 1);
+  const combos: GemColor[][] = [];
+  for (let i = 0; i < available.length; i++) {
+    for (let j = i + 1; j < available.length; j++) {
+      for (let k = j + 1; k < available.length; k++) {
+        combos.push([available[i], available[j], available[k]]);
+      }
+    }
+  }
+  return combos;
+}
+
+/**
+ * Every combination of exactly `overage` tokens `player` could discard —
+ * bounded by how far over `TOKEN_LIMIT` they are (never more than 3 in
+ * practice, since a single turn can add at most 3 tokens), so this stays
+ * cheap regardless of how many colors the player is holding.
+ */
+function discardCombos(player: PlayerState, overage: number): TokenBundle[] {
+  if (overage <= 0) return [{}];
+  const colors = TOKEN_COLORS.filter((c) => (player.tokens[c] ?? 0) > 0);
+  const results: TokenBundle[] = [];
+  function walk(idx: number, remaining: number, acc: TokenBundle) {
+    if (remaining === 0) {
+      results.push({ ...acc });
+      return;
+    }
+    if (idx >= colors.length) return;
+    const color = colors[idx];
+    const maxTake = Math.min(remaining, player.tokens[color] ?? 0);
+    for (let take = 0; take <= maxTake; take++) {
+      walk(idx + 1, remaining - take, take > 0 ? { ...acc, [color]: take } : acc);
+    }
+  }
+  walk(0, overage, {});
+  return results;
+}
+
+/**
+ * Every legal `EngineAction` `seat` may submit right now. Mirrors each
+ * handler's own guards exactly, across all three phases a turn can be
+ * blocked on (`playing`/`discarding`/`choosingNoble`).
+ */
+export function getValidMoves(state: SplendorState, seat: SeatIndex): EngineAction[] {
+  if (state.phase === "discarding") {
+    if (state.awaitingDiscardSeat !== seat) return [];
+    const player = findPlayer(state, seat)!;
+    const overage = tokenTotal(player.tokens) - TOKEN_LIMIT;
+    return discardCombos(player, overage).map((discard) => ({ type: "discardTokens", seat, discard }));
+  }
+  if (state.phase === "choosingNoble") {
+    if (state.awaitingNobleSeat !== seat) return [];
+    return computeQualifyingNobles(state, seat).map((n) => ({ type: "chooseNoble", seat, nobleId: n.id }));
+  }
+  if (state.phase !== "playing" || state.activeSeat !== seat) return [];
+
+  const player = findPlayer(state, seat)!;
+  const moves: EngineAction[] = [];
+  for (const colors of threeDifferentCombos(state.tokenSupply)) moves.push({ type: "takeThreeDifferent", seat, colors });
+  for (const color of GEM_ORDER) if (canTakeTwoSame(state, color)) moves.push({ type: "takeTwoSame", seat, color });
+  if (canReserve(player)) {
+    for (const tier of [1, 2, 3] as Tier[]) {
+      state.markets[tier].forEach((card, marketIndex) => {
+        if (card) moves.push({ type: "reserveCard", seat, tier, marketIndex });
+      });
+      if (state.decks[tier].length > 0) moves.push({ type: "reserveCard", seat, tier });
+    }
+  }
+  for (const tier of [1, 2, 3] as Tier[]) {
+    for (const card of state.markets[tier]) {
+      if (card && canAffordCard(player, card)) moves.push({ type: "purchaseCard", seat, cardId: card.id, source: "market" });
+    }
+  }
+  for (const card of player.reservedCards) {
+    if (canAffordCard(player, card)) moves.push({ type: "purchaseCard", seat, cardId: card.id, source: "reserved" });
+  }
+  return moves;
+}
+
+/** How many market-visible cards currently need more of `color` than `seat` already holds — a cheap "how useful is this color right now" proxy. */
+function colorUtility(state: SplendorState, seat: SeatIndex, color: GemColor): number {
+  const player = findPlayer(state, seat)!;
+  let utility = 0;
+  for (const tier of [1, 2, 3] as Tier[]) {
+    for (const card of state.markets[tier]) {
+      if (!card) continue;
+      const effective = computeEffectiveCost(card, player.purchasedCards);
+      if ((effective[color] ?? 0) > (player.tokens[color] ?? 0)) utility += 1;
+    }
+  }
+  return utility;
+}
+
+/** A simple greedy heuristic — buy points when affordable, otherwise gather tokens useful for the visible market. Not a full lookahead search. */
+function scoreMove(state: SplendorState, seat: SeatIndex, move: EngineAction): number {
+  switch (move.type) {
+    case "purchaseCard": {
+      const card =
+        move.source === "reserved"
+          ? findPlayer(state, seat)!.reservedCards.find((c) => c.id === move.cardId)
+          : ([1, 2, 3] as Tier[]).flatMap((t) => state.markets[t]).find((c) => c?.id === move.cardId);
+      if (!card) return -Infinity;
+      return card.points * 20 + colorUtility(state, seat, card.bonus) * 2;
+    }
+    case "reserveCard": {
+      const card = move.marketIndex !== undefined ? state.markets[move.tier][move.marketIndex] : null;
+      return 4 + (card ? card.points * 2 : 1);
+    }
+    case "takeThreeDifferent":
+      return 3 + move.colors.reduce((sum, c) => sum + colorUtility(state, seat, c), 0);
+    case "takeTwoSame":
+      return 2 + colorUtility(state, seat, move.color) * 2;
+    case "discardTokens": {
+      const entries = Object.entries(move.discard) as [GemColor | "gold", number][];
+      return -entries.reduce((sum, [color, count]) => sum + (color === "gold" ? 5 : colorUtility(state, seat, color)) * count, 0);
+    }
+    case "chooseNoble":
+      return costTotal(state.nobles.find((n) => n.id === move.nobleId)?.cost ?? {});
+    default:
+      return -Infinity;
+  }
+}
+
+/**
+ * Picks the highest-scoring legal move for `seat` (ties broken randomly via
+ * `rng`), or null if it isn't `seat`'s decision right now. `rng` defaults to
+ * `Math.random` — bot decisions are local UX, not part of the deterministic
+ * engine contract; the resulting `EngineAction` still runs through the
+ * ordinary, fully deterministic `applyAction`.
+ */
+export function chooseBotAction(state: SplendorState, seat: SeatIndex, rng: () => number = Math.random): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move) }));
+  const best = Math.max(...scored.map((s) => s.score));
+  const bestMoves = scored.filter((s) => s.score === best).map((s) => s.move);
+  return bestMoves[Math.floor(rng() * bestMoves.length)];
+}
+
 /** Single entry point applying any `EngineAction` to a state — the whole engine as one reducer. */
 export function applyAction(state: SplendorState, action: EngineAction): SplendorState {
   switch (action.type) {
