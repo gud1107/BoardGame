@@ -505,6 +505,135 @@ export function applyAction(state: SummonersRiftState, action: EngineAction): Su
 }
 
 // ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
+// chooseBotAction so a host client can drive a bot-occupied seat). Levels
+// 1–10 route through the shared `pickByLevel` noise curve (botDifficulty.ts)
+// on top of `scoreMove` below.
+// ---------------------------------------------------------------------------
+
+import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
+
+/**
+ * seat가 지금 제출할 수 있는 모든 합법 EngineAction — bidding/declaringSpatula/
+ * resolvingRift 각 핸들러의 가드를 그대로 반영. A seat mid-`pendingDraw` can
+ * only push or strip an item off; an active bidding seat with nothing
+ * pending can only pass, plus draw if the deck isn't empty.
+ */
+export function getValidMoves(state: SummonersRiftState, seat: SeatIndex): EngineAction[] {
+  if (state.phase === "bidding") {
+    if (state.pendingDraw) {
+      if (state.pendingDraw.seat !== seat) return [];
+      const moves: EngineAction[] = [{ type: "pushToRift", seat }];
+      for (const itemId of state.equippedItemIds) moves.push({ type: "removeItem", seat, itemId });
+      return moves;
+    }
+    if (state.activeSeat !== seat) return [];
+    const player = findPlayer(state, seat);
+    if (player.eliminated || player.passed) return [];
+    const moves: EngineAction[] = [{ type: "pass", seat }];
+    if (state.deck.length > 0) moves.push({ type: "drawCard", seat });
+    return moves;
+  }
+  if (state.phase === "declaringSpatula") {
+    if (state.challengerSeat !== seat) return [];
+    return MONSTER_CATALOG.map((m) => ({ type: "declareSpatula", seat, monsterThreat: m.threat }) satisfies EngineAction);
+  }
+  if (state.phase === "resolvingRift") {
+    if (state.challengerSeat !== seat || state.riftPile.length === 0) return [];
+    return [{ type: "revealNextMonster", seat }];
+  }
+  return [];
+}
+
+/**
+ * Expected damage a random still-unseen monster deals under `equippedItemIds`
+ * (0 if some equipped item auto-kills it), averaged over the FULL 13-card
+ * catalog composition — legitimate public knowledge (the deck's contents are
+ * common knowledge; which specific cards already left it is not, so this
+ * deliberately does NOT read `state.deck`/`state.riftPile` identities, only
+ * their public *counts* — info fairness, same principle as Coyote's
+ * `estimateTotal`).
+ */
+function expectedDamagePerMonster(equippedItemIds: ItemId[]): number {
+  const survivingDamageSum = MONSTER_CATALOG.reduce((sum, m) => {
+    if (findKiller(equippedItemIds, null, m.threat)) return sum;
+    return sum + m.threat * m.copies;
+  }, 0);
+  return survivingDamageSum / MONSTER_DECK_SIZE;
+}
+
+/** Current HP minus the expected total damage the Rift pile (its size is public, its contents are not) would deal if fought right now with the current equipment — positive = comfortably survivable on average, negative = expected to die. This is the "성공 확률" proxy the work order asks Level 8–10 to compute. */
+function survivalMargin(state: SummonersRiftState): number {
+  const totalHp = computeTotalHp(state.equippedItemIds);
+  return totalHp - expectedDamagePerMonster(state.equippedItemIds) * state.riftPile.length;
+}
+
+/**
+ * Core levels (4–7): a rough "pile is getting bigger than my item cushion"
+ * proxy. Expert levels (8–10): the actual expected-damage survival margin —
+ * "장비 체력/아이템 능력치와 덱 누적 데미지를 계산하여 성공 확률 100%에 가까울
+ * 때만 진입" — pass hard once that margin goes negative, keep drawing while
+ * it stays comfortably positive.
+ */
+function scorePassOrDraw(state: SummonersRiftState, isPass: boolean, deep: boolean): number {
+  const signal = deep ? survivalMargin(state) : state.equippedItemIds.length - state.riftPile.length;
+  return isPass ? -signal : signal;
+}
+
+function scorePendingDrawMove(state: SummonersRiftState, move: EngineAction): number {
+  const card = state.pendingDraw!.card;
+  if (move.type === "pushToRift") {
+    const mitigated = findKiller(state.equippedItemIds, null, card.threat) !== null;
+    return -(mitigated ? card.threat * 0.3 : card.threat);
+  }
+  if (move.type !== "removeItem") return 0;
+  const item = getItemDef(move.itemId);
+  const hidingBenefit = card.threat;
+  const cost = item.hpBonus * 1.5 + item.kills.length * 2 + (item.isGoldenSpatula ? 3 : 0);
+  return hidingBenefit - cost;
+}
+
+/** Prefers declaring the highest expected-value monster threat (threat × how common it is in the 13-card deck) that isn't already covered for free by another equipped item — a redundant declaration wastes the spatula's flexibility. */
+function scoreDeclareSpatula(state: SummonersRiftState, move: Extract<EngineAction, { type: "declareSpatula" }>): number {
+  const def = getMonsterDef(move.monsterThreat);
+  const alreadyCovered = state.equippedItemIds.some((id) => id !== 5 && getItemDef(id).kills.includes(move.monsterThreat));
+  const value = def.threat * (def.copies / MONSTER_DECK_SIZE);
+  return alreadyCovered ? value * 0.1 : value;
+}
+
+function scoreMove(state: SummonersRiftState, move: EngineAction, level: BotLevel): number {
+  const deep = botTier(level) === "expert";
+  switch (move.type) {
+    case "pass":
+      return scorePassOrDraw(state, true, deep);
+    case "drawCard":
+      return scorePassOrDraw(state, false, deep);
+    case "pushToRift":
+    case "removeItem":
+      return scorePendingDrawMove(state, move);
+    case "declareSpatula":
+      return scoreDeclareSpatula(state, move);
+    case "revealNextMonster":
+      return 0; // the only legal move whenever offered — never actually chosen among alternatives
+    default:
+      return 0;
+  }
+}
+
+/** getValidMoves 중 level(1~10)에 맞는 액션을 고른다 — 점수 매기기+노이즈는 botDifficulty.ts의 공용 커브. seat가 지금 할 게 없으면 null. */
+export function chooseBotAction(
+  state: SummonersRiftState,
+  seat: SeatIndex,
+  level: BotLevel = 5,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, move, level) }));
+  return pickByLevel(scored, level, rng);
+}
+
+// ---------------------------------------------------------------------------
 // Final scoring
 // ---------------------------------------------------------------------------
 

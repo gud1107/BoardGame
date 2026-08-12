@@ -3,11 +3,13 @@ import {
   applyAction,
   BASE_HP,
   buildMonsterDeck,
+  chooseBotAction,
   computeRankings,
   computeTotalHp,
   findKiller,
   FAILURE_TOKENS_TO_ELIMINATE,
   getItemDef,
+  getValidMoves,
   ITEM_CATALOG,
   MAX_PLAYERS,
   MIN_PLAYERS,
@@ -17,6 +19,7 @@ import {
   SUCCESS_TOKENS_TO_WIN,
   type MonsterCard,
   type PlayerState,
+  type SeatIndex,
   type SummonersRiftState,
 } from "./engine";
 
@@ -470,5 +473,136 @@ describe("end-to-end round wiring", () => {
     expect(state.deck).toHaveLength(13); // fresh shuffled deck
     expect(state.riftPile).toEqual([]);
     expect(others.every((s) => state.players.find((p) => p.seat === s)!.passed === false)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("bidding, no pending draw: offers pass + drawCard (deck non-empty), and nothing for a non-active seat", () => {
+    const state = makeState({ activeSeat: 0 });
+    const moves = getValidMoves(state, 0);
+    expect(moves).toContainEqual({ type: "pass", seat: 0 });
+    expect(moves).toContainEqual({ type: "drawCard", seat: 0 });
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("bidding, no pending draw, empty deck: only pass is offered", () => {
+    const state = makeState({ activeSeat: 0, deck: [] });
+    expect(getValidMoves(state, 0)).toEqual([{ type: "pass", seat: 0 }]);
+  });
+
+  it("bidding, pending draw: offers pushToRift + one removeItem per equipped item, only to the drawing seat", () => {
+    const state = makeState({ activeSeat: 0, pendingDraw: { seat: 0, card: monster(5) }, equippedItemIds: [1, 3] });
+    const moves = getValidMoves(state, 0);
+    expect(moves).toEqual([
+      { type: "pushToRift", seat: 0 },
+      { type: "removeItem", seat: 0, itemId: 1 },
+      { type: "removeItem", seat: 0, itemId: 3 },
+    ]);
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("declaringSpatula: offers one declareSpatula per monster type, only to the challenger", () => {
+    const state = makeState({ phase: "declaringSpatula", challengerSeat: 1, activeSeat: 1 });
+    expect(getValidMoves(state, 1)).toHaveLength(MONSTER_CATALOG.length);
+    expect(getValidMoves(state, 0)).toEqual([]);
+  });
+
+  it("resolvingRift: offers revealNextMonster only to the challenger while the pile isn't empty", () => {
+    const state = makeState({
+      phase: "resolvingRift",
+      challengerSeat: 1,
+      activeSeat: 1,
+      totalHp: 5,
+      currentHp: 5,
+      riftPile: [monster(2)],
+    });
+    expect(getValidMoves(state, 1)).toEqual([{ type: "revealNextMonster", seat: 1 }]);
+    expect(getValidMoves(state, 0)).toEqual([]);
+    expect(getValidMoves({ ...state, riftPile: [] }, 1)).toEqual([]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null for a seat with nothing to decide", () => {
+    const state = makeState({ activeSeat: 0 });
+    expect(chooseBotAction(state, 1, 5)).toBeNull();
+  });
+
+  it("always returns a legal move regardless of level", () => {
+    const state = makeState({ activeSeat: 0, pendingDraw: { seat: 0, card: monster(5) } });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 0, level, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(state, 0)).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) can feed an unmitigated threat-9 monster straight into the pile, while Level 10 strips a cheap item to hide it instead", () => {
+    // No item covers threat 9 here (강타/item 6 is unequipped), so pushing it
+    // is a straight loss of a scary card into the shared pile; stripping the
+    // cheapest item (루비, only +3 HP, no kill coverage) to hide it entirely
+    // is the clearly better play.
+    const state = makeState({
+      activeSeat: 0,
+      pendingDraw: { seat: 0, card: monster(9) },
+      equippedItemIds: [1, 2, 3, 4],
+    });
+
+    expect(getValidMoves(state, 0)).toEqual([
+      { type: "pushToRift", seat: 0 },
+      { type: "removeItem", seat: 0, itemId: 1 },
+      { type: "removeItem", seat: 0, itemId: 2 },
+      { type: "removeItem", seat: 0, itemId: 3 },
+      { type: "removeItem", seat: 0, itemId: 4 },
+    ]);
+
+    // rng() always 0 -> always below Level 1's mistake chance -> candidates[0].
+    const level1Action = chooseBotAction(state, 0, 1, () => 0);
+    expect(level1Action).toEqual({ type: "pushToRift", seat: 0 });
+
+    // Level 10 has 0% mistake chance -> true argmax -> strip item 1 (루비).
+    const level10Action = chooseBotAction(state, 0, 10, () => 0);
+    expect(level10Action).toEqual({ type: "removeItem", seat: 0, itemId: 1 });
+  });
+});
+
+function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: SeatIndex) => number): SummonersRiftState {
+  let state = startGame(playerCount, seed);
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 5000) {
+    guard++;
+    let acted = false;
+    for (let seat = 0; seat < playerCount; seat++) {
+      const action = chooseBotAction(state, seat, levelOf(seat));
+      if (action) {
+        state = applyAction(state, action);
+        acted = true;
+        break;
+      }
+    }
+    if (!acted) break; // safety valve — should be unreachable while the game hasn't ended
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const n of [2, 3, 4, 5, 6]) {
+    it(`completes a ${n}-player all-Level-10 game with every seat ranked`, () => {
+      const state = playFullBotGame(n, 300 + n, () => 10);
+      expect(state.phase).toBe("gameOver");
+      const rankings = computeRankings(state);
+      expect(rankings).toHaveLength(n);
+      expect(new Set(rankings.map((r) => r.seat)).size).toBe(n);
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(4, 888, (seat) => (seat % 2 === 0 ? 1 : 10));
+    expect(state.phase).toBe("gameOver");
+    expect(computeRankings(state)).toHaveLength(4);
   });
 });

@@ -537,6 +537,124 @@ export function formatHandLabel(hand: HandResult): string {
 }
 
 // ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
+// chooseBotAction so a host client can drive a bot-occupied seat). Levels
+// 1–10 route through the shared `pickByLevel` noise curve (botDifficulty.ts)
+// on top of `scoreMove` below.
+// ---------------------------------------------------------------------------
+
+import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
+
+/** Every line each cell belongs to, precomputed once — a corner/edge cell is in 2-3 lines, the center cell is in 4 (row+col+both diagonals). */
+const LINES_BY_CELL: number[][][] = Array.from({ length: BOARD_SIZE }, (_, cell) => LINES.filter((line) => line.includes(cell)));
+
+/**
+ * seat가 지금 제출할 수 있는 모든 합법 EngineAction. Both "placing" and
+ * "submitting" are simultaneous-by-rule (every seat decides independently
+ * each round, not turn order), so this only gates on whether `seat` itself
+ * still has a pending decision this round — never on any "active seat"
+ * concept, since this engine has none. `draw-common` isn't tied to any
+ * player's seat at all (the host broadcasts it on a timer-independent
+ * effect — see GridPokerGame.tsx) and is never offered here.
+ */
+export function getValidMoves(state: GridPokerState, seat: SeatIndex): EngineAction[] {
+  if (seat < 0 || seat >= state.playerCount) return [];
+  if (state.phase === "placing") {
+    if (!state.currentCard || state.placedThisRound[seat]) return [];
+    const moves: EngineAction[] = [];
+    state.players[seat].board.forEach((c, cellIndex) => {
+      if (c === null) moves.push({ type: "place", seat, cellIndex });
+    });
+    return moves;
+  }
+  if (state.phase === "submitting") {
+    if (state.submissions[seat] !== null) return [];
+    const moves: EngineAction[] = [];
+    state.players[seat].usedLines.forEach((used, lineIndex) => {
+      if (!used) moves.push({ type: "submit-line", seat, lineIndex });
+    });
+    return moves;
+  }
+  return [];
+}
+
+/**
+ * How well `candidate` fits into a line alongside its already-placed cards
+ * (excluding the cell being scored). Core levels (4–7) just count rank/suit
+ * matches — "기본 규칙과 확률을 고려한" pattern matching. Expert levels (8–10)
+ * additionally weigh how *far along* the line already is (an expected-value
+ * matrix over completion, per the work order) and nudge toward higher ranks
+ * as a tiebreak-ish bonus once category odds are otherwise close.
+ */
+function lineAffinity(placed: Card[], candidate: Card, deep: boolean): number {
+  if (candidate.kind === "joker") {
+    return 3 + placed.length * (deep ? 1.5 : 1); // wild is always flexible; more so the further along the line is
+  }
+  let rankMatches = 0;
+  let suitMatches = 0;
+  let wilds = 0;
+  for (const c of placed) {
+    if (c.kind === "joker") {
+      wilds++;
+      continue;
+    }
+    if (c.rank === candidate.rank) rankMatches++;
+    if (c.suit === candidate.suit) suitMatches++;
+  }
+  let score = rankMatches * 4 + suitMatches * 2 + wilds * 2;
+  if (deep) {
+    score += placed.length * 0.5; // reward committing toward a line that's already closer to a concrete 5-card payoff
+    score += (candidate.rank - 2) * 0.1; // mild high-card nudge once category odds are close
+  }
+  return score;
+}
+
+function estimateCellValue(player: PlayerState, cellIndex: number, card: Card, deep: boolean): number {
+  let total = 0;
+  for (const line of LINES_BY_CELL[cellIndex]) {
+    const placed = line.filter((i) => i !== cellIndex).map((i) => player.board[i]).filter((c): c is Card => c !== null);
+    total += lineAffinity(placed, card, deep);
+  }
+  return total;
+}
+
+/** Numeric proxy for `compareHands` ordering — category dominates, then each ranks[] entry in order, then the suit tiebreak, all folded into one comparable number for `scoreMove`. */
+function handStrengthScore(hand: HandResult): number {
+  let score = hand.category * 1_000_000;
+  let mult = 1;
+  for (const r of hand.ranks) {
+    score += r * mult;
+    mult /= 20; // ranks never exceed 14, so dividing by >14 keeps each successive tiebreak strictly less significant
+  }
+  return score + hand.topSuitValue * 0.001;
+}
+
+function scoreMove(state: GridPokerState, seat: SeatIndex, move: EngineAction, level: BotLevel): number {
+  const player = state.players[seat];
+  if (move.type === "place") {
+    return estimateCellValue(player, move.cellIndex, state.currentCard!, botTier(level) === "expert");
+  }
+  if (move.type === "submit-line") {
+    const cards = LINES[move.lineIndex].map((i) => player.board[i]!);
+    return handStrengthScore(evaluateHand(cards));
+  }
+  return 0;
+}
+
+/** getValidMoves 중 level(1~10)에 맞는 액션을 고른다 — 점수 매기기+노이즈는 botDifficulty.ts의 공용 커브. seat가 지금 할 게 없으면 null. */
+export function chooseBotAction(
+  state: GridPokerState,
+  seat: SeatIndex,
+  level: BotLevel = 5,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move, level) }));
+  return pickByLevel(scored, level, rng);
+}
+
+// ---------------------------------------------------------------------------
 // Reducer
 // ---------------------------------------------------------------------------
 

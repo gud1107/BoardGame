@@ -341,6 +341,117 @@ function applySettlementToPlayers(players: PlayerState[], settlement: CasinoSett
 }
 
 // ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
+// chooseBotAction so a host client can drive a bot-occupied seat). Levels
+// 1–10 route through the shared `pickByLevel` noise curve (botDifficulty.ts)
+// on top of `scoreMove` below.
+// ---------------------------------------------------------------------------
+
+import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
+
+/**
+ * seat가 지금 제출할 수 있는 모든 합법 EngineAction — roll/place의 가드를 그대로
+ * 반영. `rollDice`는 결과가 seed에 좌우되지만 이 함수는 (state, seat)만 받으므로
+ * seed는 0짜리 자리표시자만 채워둔다 — 진짜 난수 seed는 `chooseBotAction`이
+ * 자신의 `rng`로 직접 뽑아 채운다(아래 참고).
+ */
+export function getValidMoves(state: LasVegasState, seat: SeatIndex): EngineAction[] {
+  if (state.phase !== "playing" || seat !== state.activeSeat) return [];
+  if (state.currentRoll === null) {
+    const player = state.players.find((p) => p.seat === seat);
+    if (!player || totalDiceInHand(player) === 0) return [];
+    return [{ type: "rollDice", seat, seed: 0 }];
+  }
+  const faces = Array.from(new Set(state.currentRoll.map((d) => d.face))) as Face[];
+  return faces.map((face) => ({ type: "placeDice", seat, face }));
+}
+
+function averageRemainingBillValue(casino: CasinoState): number {
+  return casino.bills.length > 0 ? casino.bills.reduce((s, v) => s + v, 0) / casino.bills.length : 0;
+}
+
+/**
+ * Core levels (4–7): "기본 규칙과 확률을 고려한" — reward committing dice to
+ * money-rich casinos, ignoring the finer cancellation dynamics.
+ *
+ * Expert levels (8–10): "동점자 상쇄 유도 및 상쇄 회피, 주사위 개수 대비 지폐
+ * 배당 효율 최적화" — simulates the resulting dice-count groups at this
+ * casino (mine + every other owner's, including the neutral bucket) to (a)
+ * avoid landing on a count that gets ME cancelled, (b) rank my surviving
+ * pile against the others to estimate which bill I'd actually collect, and
+ * (c) credit a "denial bonus" when my placement ties out a rival who was
+ * otherwise about to win a bill.
+ */
+function scoreMove(state: LasVegasState, seat: SeatIndex, move: EngineAction, level: BotLevel): number {
+  if (move.type !== "placeDice") return 0; // rollDice is the only legal move whenever offered — never actually scored/chosen among alternatives
+  const casino = state.casinos.find((c) => c.number === move.face)!;
+  const matching = state.currentRoll!.filter((d) => d.face === move.face);
+  const ownCount = matching.filter((d) => d.owner === "own").length;
+  const neutralCount = matching.filter((d) => d.owner === "neutral").length;
+  const myExisting = casino.diceCounts[seat] ?? 0;
+  const myNewCount = myExisting + ownCount;
+
+  if (botTier(level) !== "expert") {
+    return myNewCount * averageRemainingBillValue(casino);
+  }
+
+  const resultCounts = new Map<DiceOwner, number>();
+  for (const [ownerKey, count] of Object.entries(casino.diceCounts) as [string, number][]) {
+    const owner = (ownerKey === NEUTRAL_OWNER ? NEUTRAL_OWNER : Number(ownerKey)) as DiceOwner;
+    if (owner === seat) continue;
+    resultCounts.set(owner, count);
+  }
+  if (neutralCount > 0) resultCounts.set(NEUTRAL_OWNER, (resultCounts.get(NEUTRAL_OWNER) ?? 0) + neutralCount);
+  resultCounts.set(seat, myNewCount);
+
+  const tally = new Map<number, number>();
+  for (const c of resultCounts.values()) {
+    if (c <= 0) continue;
+    tally.set(c, (tally.get(c) ?? 0) + 1);
+  }
+
+  const myCancelled = myNewCount > 0 && (tally.get(myNewCount) ?? 0) >= 2;
+  const survivors = [...resultCounts.entries()].filter(([, c]) => c > 0 && (tally.get(c) ?? 0) < 2).sort((a, b) => b[1] - a[1]);
+  const myRank = myCancelled ? -1 : survivors.findIndex(([owner]) => owner === seat);
+  const expectedBill = !myCancelled && myRank >= 0 && myRank < casino.bills.length ? casino.bills[myRank] : 0;
+
+  // Denial bonus: rivals my join ties out (and thus cancels), weighted by
+  // what they'd likely have won had I placed elsewhere.
+  const withoutMe = [...resultCounts.entries()].filter(([owner]) => owner !== seat);
+  const withoutMeTally = new Map<number, number>();
+  for (const [, c] of withoutMe) withoutMeTally.set(c, (withoutMeTally.get(c) ?? 0) + 1);
+  const withoutMeSurvivors = withoutMe.filter(([, c]) => (withoutMeTally.get(c) ?? 0) < 2).sort((a, b) => b[1] - a[1]);
+
+  let denialBonus = 0;
+  for (const [owner, count] of resultCounts) {
+    if (owner === seat || owner === NEUTRAL_OWNER || myNewCount <= 0) continue;
+    if (count === myNewCount) {
+      const rank = withoutMeSurvivors.findIndex(([o]) => o === owner);
+      const wouldHaveWon = rank >= 0 && rank < casino.bills.length ? casino.bills[rank] : 0;
+      denialBonus += wouldHaveWon * 0.3;
+    }
+  }
+
+  return expectedBill + denialBonus;
+}
+
+/** getValidMoves 중 level(1~10)에 맞는 액션을 고른다 — 점수 매기기+노이즈는 botDifficulty.ts의 공용 커브. seat가 지금 할 게 없으면 null. */
+export function chooseBotAction(
+  state: LasVegasState,
+  seat: SeatIndex,
+  level: BotLevel = 5,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  if (moves.length === 1 && moves[0].type === "rollDice") {
+    return { type: "rollDice", seat, seed: Math.floor(rng() * 1_000_000_000) };
+  }
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move, level) }));
+  return pickByLevel(scored, level, rng);
+}
+
+// ---------------------------------------------------------------------------
 // Final scoring — rulebook §5
 // ---------------------------------------------------------------------------
 

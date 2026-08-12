@@ -2,16 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   applyAction,
   BOARD_SIZE,
+  chooseBotAction,
   compareHands,
   DEFAULT_TIMER_SETTINGS,
   evaluateHand,
   formatHandLabel,
+  getValidMoves,
   LINES,
   opponentLiveCell,
   startGame,
   visibleOpponentBoard,
   type Card,
   type GridPokerState,
+  type SeatIndex,
   type Suit,
 } from "./engine";
 
@@ -307,5 +310,141 @@ describe("game flow", () => {
     const before = s;
     const after = applyAction(s, { type: "submit-line", seat: 0, lineIndex: 5 });
     expect(after).toBe(before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("offers nothing while waiting on the host's draw-common", () => {
+    const s = startGame(2);
+    expect(getValidMoves(s, 0)).toEqual([]);
+  });
+
+  it("offers one place per empty cell once a common card is out, and nothing once that seat has already placed", () => {
+    let s = startGame(2);
+    s = applyAction(s, { type: "draw-common", seed: 1 });
+    expect(getValidMoves(s, 0)).toHaveLength(BOARD_SIZE);
+    s = applyAction(s, { type: "place", seat: 0, cellIndex: 3 });
+    expect(getValidMoves(s, 0)).toEqual([]);
+    expect(getValidMoves(s, 1)).toHaveLength(BOARD_SIZE); // each player has their own independent board — seat 0 placing doesn't touch seat 1's
+  });
+
+  it("offers one submit-line per still-unused line during submitting, and nothing once that seat has submitted", () => {
+    function fillBoards(state: GridPokerState): GridPokerState {
+      let s = state;
+      let seed = 1;
+      while (s.phase === "placing") {
+        s = applyAction(s, { type: "draw-common", seed: seed++ });
+        const cellIndex = s.drawCount - 1;
+        for (let seat = 0; seat < s.playerCount; seat++) s = applyAction(s, { type: "place", seat, cellIndex });
+      }
+      return s;
+    }
+    let s = fillBoards(startGame(2));
+    expect(getValidMoves(s, 0)).toHaveLength(LINES.length);
+    s = applyAction(s, { type: "submit-line", seat: 0, lineIndex: 4 });
+    expect(getValidMoves(s, 0)).toEqual([]);
+    expect(getValidMoves(s, 1)).toHaveLength(LINES.length);
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null while waiting on the host's draw-common", () => {
+    const s = startGame(2);
+    expect(chooseBotAction(s, 0, 5)).toBeNull();
+  });
+
+  it("always returns a legal move regardless of level", () => {
+    let s = startGame(2);
+    s = applyAction(s, { type: "draw-common", seed: 1 });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(s, 0, level, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(s, 0)).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) can waste a wild on a barely-connected edge cell, while Level 10 always takes the far-more-connected center cell", () => {
+    function fullBoard(exclude: number[]): (Card | null)[] {
+      return Array.from({ length: BOARD_SIZE }, (_, i) => (exclude.includes(i) ? null : std(2, "C", `filler${i}`)));
+    }
+    const state: GridPokerState = {
+      playerCount: 2,
+      players: [
+        { seat: 0, board: fullBoard([1, 12]), firstPlacedCell: 0, lastPlacedCell: null, usedLines: Array(LINES.length).fill(false), score: 0 },
+        { seat: 1, board: fullBoard([]), firstPlacedCell: 0, lastPlacedCell: null, usedLines: Array(LINES.length).fill(false), score: 0 },
+      ],
+      phase: "placing",
+      currentCard: joker("wild-1"),
+      placedThisRound: [false, false],
+      drawCount: 24,
+      submissions: [null, null],
+      roundNumber: 1,
+      totalScoringRounds: 10,
+      winThreshold: 6,
+      lastRoundResult: null,
+      winner: null,
+      timerSettings: DEFAULT_TIMER_SETTINGS,
+    };
+
+    // Cell 1 (edge, only 2 lines through it) is the first empty cell found ->
+    // candidates[0]. Cell 12 (center, 4 lines through it, each already
+    // nearly full) is strictly more valuable under both the core and expert
+    // scoring formulas.
+    expect(getValidMoves(state, 0)).toEqual([
+      { type: "place", seat: 0, cellIndex: 1 },
+      { type: "place", seat: 0, cellIndex: 12 },
+    ]);
+
+    // rng() always 0 -> always below Level 1's mistake chance -> always candidates[0].
+    const level1Action = chooseBotAction(state, 0, 1, () => 0);
+    expect(level1Action).toEqual({ type: "place", seat: 0, cellIndex: 1 });
+
+    // Level 10 has 0% mistake chance -> true argmax -> the center cell.
+    const level10Action = chooseBotAction(state, 0, 10, () => 0);
+    expect(level10Action).toEqual({ type: "place", seat: 0, cellIndex: 12 });
+  });
+});
+
+function playFullBotGame(playerCount: number, levelOf: (seat: SeatIndex) => number): GridPokerState {
+  let state = startGame(playerCount);
+  let guard = 0;
+  let seed = 1;
+  while (state.phase !== "game-end" && guard < 5000) {
+    guard++;
+    if (state.phase === "placing" && state.currentCard === null) {
+      state = applyAction(state, { type: "draw-common", seed: seed++ });
+      continue;
+    }
+    let actedAny = false;
+    for (let seat = 0; seat < playerCount; seat++) {
+      const action = chooseBotAction(state, seat, levelOf(seat));
+      if (action) {
+        state = applyAction(state, action);
+        actedAny = true;
+      }
+    }
+    if (!actedAny) break; // safety valve — should be unreachable given the draw-common handling above
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 game-end까지 완주)", () => {
+  for (const n of [2, 3, 4, 5, 6]) {
+    it(`completes a ${n}-player all-Level-10 game with a ranked winner`, () => {
+      const state = playFullBotGame(n, () => 10);
+      expect(state.phase).toBe("game-end");
+      expect(state.winner).not.toBeNull();
+      expect(state.winner!.length).toBeGreaterThan(0);
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(4, (seat) => (seat % 2 === 0 ? 1 : 10));
+    expect(state.phase).toBe("game-end");
+    expect(state.winner).not.toBeNull();
   });
 });

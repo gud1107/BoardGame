@@ -3,9 +3,11 @@ import {
   aliveSeats,
   applyAction,
   buildDeck,
+  chooseBotAction,
   computeRankings,
   DECK_SIZE,
   getPlayerView,
+  getValidMoves,
   MAX_PLAYERS,
   MIN_PLAYERS,
   STARTING_HEARTS,
@@ -13,6 +15,7 @@ import {
   type Card,
   type CoyoteState,
   type PlayerState,
+  type SeatIndex,
 } from "./engine";
 
 function card(id: number, kind: Card["kind"], value = 0): Card {
@@ -436,5 +439,120 @@ describe("aliveSeats", () => {
     ];
     const state = makeState({ players });
     expect(aliveSeats(state)).toEqual([0, 2]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("offers only declare candidates (no coyote) on the opening declaration, and nothing for an idle seat", () => {
+    const state = makeState({ currentBid: null, activeSeat: 0 });
+    const moves = getValidMoves(state, 0);
+    expect(moves.length).toBeGreaterThan(0);
+    expect(moves.every((m) => m.type === "declare")).toBe(true);
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("offers declare candidates plus coyote once there's a bid to challenge", () => {
+    const state = makeState({ currentBid: { seat: 1, number: 20 }, activeSeat: 0 });
+    const moves = getValidMoves(state, 0);
+    expect(moves).toContainEqual({ type: "coyote", seat: 0 });
+    expect(moves.filter((m) => m.type === "declare").length).toBeGreaterThan(0);
+    for (const m of moves) {
+      if (m.type === "declare") expect(m.number).toBeGreaterThan(20);
+    }
+  });
+
+  it("returns [] for an eliminated seat even if somehow marked active", () => {
+    const state = makeState({
+      activeSeat: 0,
+      players: [
+        { seat: 0, hearts: 0 },
+        { seat: 1, hearts: STARTING_HEARTS },
+        { seat: 2, hearts: STARTING_HEARTS },
+      ],
+    });
+    expect(getValidMoves(state, 0)).toEqual([]);
+  });
+
+  it("returns [] outside the 'playing' phase", () => {
+    const state = makeState({ phase: "reveal" });
+    expect(getValidMoves(state, state.activeSeat)).toEqual([]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null for a seat with nothing to decide", () => {
+    const state = makeState({ activeSeat: 0 });
+    expect(chooseBotAction(state, 1, 5)).toBeNull();
+  });
+
+  it("always returns a legal move regardless of level", () => {
+    const state = makeState({ currentBid: { seat: 1, number: 8 }, activeSeat: 0 });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 0, level, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(state, 0)).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) blindly raises into an obviously-lost bid, while Level 10 sharply calls 코요테", () => {
+    // seat 1/2 visibly hold small cards (5, 3) — any reasonable estimate of
+    // the true total is nowhere near 500, so a standing bid of 500 is an
+    // obvious overshoot a sharp caller should challenge immediately.
+    const state = makeState({
+      tableCards: { 0: card(0, "number", 5), 1: card(1, "number", 5), 2: card(2, "number", 3) },
+      currentBid: { seat: 1, number: 500 },
+      activeSeat: 0,
+    });
+
+    // rng() always 0 -> always below Level 1's mistake chance -> always
+    // candidates[0], which getValidMoves puts first: the smallest declare raise.
+    const level1Action = chooseBotAction(state, 0, 1, () => 0);
+    expect(level1Action?.type).toBe("declare");
+
+    // Level 10 has 0% mistake chance and 0 tie margin -> true argmax, which
+    // here must be calling coyote on the clearly-inflated bid.
+    const level10Action = chooseBotAction(state, 0, 10, () => 0);
+    expect(level10Action).toEqual({ type: "coyote", seat: 0 });
+  });
+});
+
+function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: SeatIndex) => number): CoyoteState {
+  let state = startGame(playerCount, seed);
+  let guard = 0;
+  let continueSeed = seed * 7919; // arbitrary distinct stream from the deal seed
+  while (state.phase !== "gameOver" && guard < 5000) {
+    guard++;
+    if (state.phase === "reveal") {
+      continueSeed += 1;
+      state = applyAction(state, { type: "continue", seed: continueSeed });
+      continue;
+    }
+    const seat = state.activeSeat;
+    const action = chooseBotAction(state, seat, levelOf(seat));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action!);
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const n of [3, 4, 5, 6]) {
+    it(`completes a ${n}-player all-Level-10 game with every seat ranked`, () => {
+      const state = playFullBotGame(n, 100 + n, () => 10);
+      expect(state.phase).toBe("gameOver");
+      const rankings = computeRankings(state);
+      expect(rankings).toHaveLength(n);
+      expect(new Set(rankings.map((r) => r.seat)).size).toBe(n);
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(5, 777, (seat) => (seat % 2 === 0 ? 1 : 10));
+    expect(state.phase).toBe("gameOver");
+    expect(computeRankings(state)).toHaveLength(5);
   });
 });

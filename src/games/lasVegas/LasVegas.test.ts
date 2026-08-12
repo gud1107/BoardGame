@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   applyAction,
   buildMoneyDeck,
+  chooseBotAction,
   computeRankings,
+  getValidMoves,
   MIN_CASINO_TOTAL,
   MONEY_COPIES_PER_VALUE,
   MONEY_VALUES,
@@ -18,6 +20,7 @@ import {
   type CasinoState,
   type LasVegasState,
   type PlayerState,
+  type SeatIndex,
 } from "./engine";
 
 function makePlayer(seat: number, overrides: Partial<PlayerState> = {}): PlayerState {
@@ -354,5 +357,134 @@ describe("player count bounds", () => {
   it("exposes MIN_PLAYERS=2 / MAX_PLAYERS=5, matching the 5-color box", () => {
     expect(MIN_PLAYERS).toBe(2);
     expect(MAX_PLAYERS).toBe(5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("offers exactly one rollDice candidate before a roll, and nothing for an idle seat", () => {
+    const state = makeState({ activeSeat: 0, players: [makePlayer(0, { ownDiceInHand: 8 }), makePlayer(1), makePlayer(2)] });
+    const moves = getValidMoves(state, 0);
+    expect(moves).toHaveLength(1);
+    expect(moves[0]).toMatchObject({ type: "rollDice", seat: 0 });
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("offers nothing when the active seat has no dice left in hand", () => {
+    const state = makeState({ activeSeat: 0, players: [makePlayer(0, { ownDiceInHand: 0, neutralDiceInHand: 0 }), makePlayer(1), makePlayer(2)] });
+    expect(getValidMoves(state, 0)).toEqual([]);
+  });
+
+  it("offers one placeDice per distinct rolled face once a roll is pending", () => {
+    const state = makeState({
+      activeSeat: 0,
+      currentRoll: [
+        { owner: "own", face: 5 },
+        { owner: "own", face: 5 },
+        { owner: "neutral", face: 3 },
+      ],
+    });
+    const moves = getValidMoves(state, 0);
+    expect(moves).toEqual([
+      { type: "placeDice", seat: 0, face: 5 },
+      { type: "placeDice", seat: 0, face: 3 },
+    ]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null for a seat with nothing to decide", () => {
+    const state = makeState({ activeSeat: 0 });
+    expect(chooseBotAction(state, 1, 5)).toBeNull();
+  });
+
+  it("rolls when no roll is pending, drawing its own seed", () => {
+    const state = makeState({ activeSeat: 0, players: [makePlayer(0, { ownDiceInHand: 8 }), makePlayer(1), makePlayer(2)] });
+    const action = chooseBotAction(state, 0, 7);
+    expect(action?.type).toBe("rollDice");
+    expect(action).toMatchObject({ seat: 0 });
+  });
+
+  it("always returns a legal placeDice move regardless of level", () => {
+    const state = makeState({
+      activeSeat: 0,
+      currentRoll: [
+        { owner: "own", face: 2 },
+        { owner: "own", face: 4 },
+      ],
+    });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 0, level, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(state, 0)).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) can commit to the far weaker casino, while Level 10 always chases the richer one", () => {
+    const state = makeState({
+      activeSeat: 0,
+      casinos: [
+        makeCasino(1, [50_000]),
+        makeCasino(2, [50_000]),
+        makeCasino(3, [90_000, 90_000, 90_000]), // rich casino
+        makeCasino(4, [50_000]),
+        makeCasino(5, [10_000]), // weak casino
+        makeCasino(6, [50_000]),
+      ],
+      currentRoll: [
+        // face 5 (weak casino) rolled first -> getValidMoves lists it as candidates[0]
+        { owner: "own", face: 5 },
+        { owner: "own", face: 5 },
+        { owner: "own", face: 3 },
+        { owner: "own", face: 3 },
+        { owner: "own", face: 3 },
+      ],
+    });
+
+    // rng() always 0 -> always below Level 1's mistake chance -> always
+    // candidates[0] == placeDice on the weak $10,000 casino (face 5).
+    const level1Action = chooseBotAction(state, 0, 1, () => 0);
+    expect(level1Action).toEqual({ type: "placeDice", seat: 0, face: 5 });
+
+    // Level 10 has 0% mistake chance -> true argmax, which chases the
+    // 3-bill $90,000 casino instead.
+    const level10Action = chooseBotAction(state, 0, 10, () => 0);
+    expect(level10Action).toEqual({ type: "placeDice", seat: 0, face: 3 });
+  });
+});
+
+function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: SeatIndex) => number): LasVegasState {
+  let state = startGame(playerCount, seed);
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 2000) {
+    guard++;
+    const seat = state.activeSeat;
+    const action = chooseBotAction(state, seat, levelOf(seat));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action!);
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const n of [2, 3, 4, 5]) {
+    it(`completes a ${n}-player all-Level-10 game with every casino settled`, () => {
+      const state = playFullBotGame(n, 200 + n, () => 10);
+      expect(state.phase).toBe("gameOver");
+      expect(state.settlement).not.toBeNull();
+      expect(state.settlement).toHaveLength(CASINO_COUNT);
+      const rankings = computeRankings(state);
+      expect(rankings).toHaveLength(n);
+      expect(new Set(rankings.map((r) => r.seat)).size).toBe(n);
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(4, 777, (seat) => (seat % 2 === 0 ? 1 : 10));
+    expect(state.phase).toBe("gameOver");
+    expect(computeRankings(state)).toHaveLength(4);
   });
 });

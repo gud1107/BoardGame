@@ -461,6 +461,114 @@ export interface RankedSeat {
   total: number;
 }
 
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
+// chooseBotAction so a host client can drive a bot-occupied seat). Levels
+// 1–10 route through the shared `pickByLevel` noise curve (botDifficulty.ts)
+// on top of `scoreMove` below — see that module's doc for the tier design.
+// ---------------------------------------------------------------------------
+
+import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
+
+/** seat가 지금 제출할 수 있는 모든 합법 EngineAction — bid/pass의 가드를 그대로 반영. */
+export function getValidMoves(state: ForSaleState, seat: SeatIndex): EngineAction[] {
+  if (state.phase === "buying" && state.auction) {
+    const auction = state.auction;
+    if (seat !== auction.activeSeat || !auction.activeSeats.includes(seat)) return [];
+    const player = state.players.find((p) => p.seat === seat);
+    if (!player) return [];
+    const moves: EngineAction[] = [{ type: "pass", seat }];
+    for (let amount = auction.currentBid + BID_INCREMENT; amount <= player.cash; amount += BID_INCREMENT) {
+      moves.push({ type: "bid", seat, amount });
+    }
+    return moves;
+  }
+  if (state.phase === "selling" && state.sale && !state.sale.revealed && state.sale.submissions[seat] === undefined) {
+    const player = state.players.find((p) => p.seat === seat);
+    if (!player) return [];
+    return player.properties.map((property) => ({ type: "submitCard", seat, property }) satisfies EngineAction);
+  }
+  return [];
+}
+
+/** Rough dollar value of holding property `card` — property numbers are the game's only rank signal, so a linear map onto the check deck's $0..$14,000 range is the simplest unbiased estimate every level shares. */
+function propertyValueEstimate(card: number): number {
+  return (card / PROPERTY_COUNT) * 14000;
+}
+
+/**
+ * Phase 1 (buying) scoring. `pass` nets the estimated value of the lowest
+ * remaining card minus the half-refund it costs; `bid` nets the estimated
+ * value of the highest remaining card (what you're chasing if you win the
+ * round) minus the amount committed. Expert level (Lv.8–10) additionally
+ * shades both toward preserving cash — "절반 환불금을 계산한 입찰 포기 타이밍"
+ * from the work order is exactly the pass-side term below.
+ */
+function scoreBuyingMove(state: ForSaleState, seat: SeatIndex, move: EngineAction, level: BotLevel): number {
+  const auction = state.auction!;
+  const player = state.players.find((p) => p.seat === seat)!;
+  const cashWeight = botTier(level) === "expert" ? 0.05 : 0;
+
+  if (move.type === "pass") {
+    const ownBid = auction.bidsBySeat[seat] ?? 0;
+    const refundPaid = Math.floor(ownBid / 2000) * 1000;
+    const lowestCard = Math.min(...auction.openCards);
+    return propertyValueEstimate(lowestCard) - refundPaid + cashWeight * player.cash;
+  }
+  if (move.type !== "bid") return 0; // unreachable from getValidMoves during "buying", kept only to satisfy the union
+
+  const highestCard = Math.max(...auction.openCards);
+  return propertyValueEstimate(highestCard) - move.amount + cashWeight * (player.cash - move.amount);
+}
+
+/**
+ * Phase 2 (selling) scoring. Blind-submits are scored by how well the
+ * submitted property's rank among the seat's *remaining* properties matches
+ * how attractive this round's open checks are relative to the long-run
+ * average — a strong property should be saved for a strong check round and
+ * "dumped" while checks are weak, matching the work order's "수표 카드 배당을
+ * 극대화하는 블라인드 비교 카드 제출". Levels 8–10 use the *actual* mean of
+ * the still-undealt check deck (derivable from public state — every round's
+ * check values are revealed before being claimed, so the remaining
+ * composition is honest deck-counting, not hidden opponent info) instead of
+ * the flat $7,000 theoretical mean core levels use.
+ */
+function scoreSellingMove(state: ForSaleState, seat: SeatIndex, move: Extract<EngineAction, { type: "submitCard" }>, level: BotLevel): number {
+  const sale = state.sale!;
+  const player = state.players.find((p) => p.seat === seat)!;
+  const checkAvg = sale.openChecks.reduce((s, c) => s + c, 0) / sale.openChecks.length;
+  const referenceAvg =
+    botTier(level) === "expert" && state.checkDeck.length > 0
+      ? state.checkDeck.reduce((s, c) => s + c, 0) / state.checkDeck.length
+      : 7000;
+  const roundQuality = checkAvg - referenceAvg;
+
+  const sorted = [...player.properties].sort((a, b) => a - b);
+  const rankIndex = sorted.indexOf(move.property);
+  const relativeRank = sorted.length > 1 ? rankIndex / (sorted.length - 1) : 0.5;
+
+  return roundQuality * relativeRank;
+}
+
+function scoreMove(state: ForSaleState, seat: SeatIndex, move: EngineAction, level: BotLevel): number {
+  if (state.phase === "buying") return scoreBuyingMove(state, seat, move, level);
+  if (move.type === "submitCard") return scoreSellingMove(state, seat, move, level);
+  return 0;
+}
+
+/** getValidMoves 중 level(1~10)에 맞는 액션을 고른다 — 점수 매기기+노이즈는 botDifficulty.ts의 공용 커브. seat가 지금 할 게 없으면 null. */
+export function chooseBotAction(
+  state: ForSaleState,
+  seat: SeatIndex,
+  level: BotLevel = 5,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move, level) }));
+  return pickByLevel(scored, level, rng);
+}
+
 /**
  * Only meaningful once `state.phase === "gameOver"`. Total = sum of won
  * checks + leftover cash (rulebook §5). Ties broken by leftover cash; if

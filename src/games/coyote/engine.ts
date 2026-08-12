@@ -435,6 +435,113 @@ export function applyAction(state: CoyoteState, action: EngineAction): CoyoteSta
 }
 
 // ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
+// chooseBotAction so a host client can drive a bot-occupied seat). Levels
+// 1–10 route through the shared `pickByLevel` noise curve (botDifficulty.ts)
+// on top of `scoreMove` below.
+// ---------------------------------------------------------------------------
+
+import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
+
+/**
+ * "숫자 선언하기" has no rule-mandated ceiling (any integer strictly greater
+ * than the current bid is legal), so a truly exhaustive `getValidMoves` is
+ * impossible to enumerate. This returns a representative finite sample —
+ * small conservative raises (+1..+6) through larger bluffing jumps
+ * (+10/+20/+30/+50) above the current bid — which is what every level's
+ * `chooseBotAction` actually picks from. Documented simplification, same
+ * spirit as Perudo's dice-bounded bid enumeration but Coyote's declare has
+ * no natural cap to enumerate exhaustively.
+ */
+function declareCandidates(state: CoyoteState): number[] {
+  const floor = state.currentBid?.number ?? -20; // opening declare has no floor at all; -20 covers the worst-case all-negative-specials table
+  const offsets = [1, 2, 3, 4, 5, 6, 10, 20, 30, 50];
+  return offsets.map((o) => floor + o);
+}
+
+/** seat가 지금 제출할 수 있는 모든 합법 EngineAction(대표 표본) — declare/coyote의 가드를 그대로 반영. */
+export function getValidMoves(state: CoyoteState, seat: SeatIndex): EngineAction[] {
+  if (state.phase !== "playing" || seat !== state.activeSeat) return [];
+  const player = state.players.find((p) => p.seat === seat);
+  if (!player || player.hearts <= 0) return [];
+  const moves: EngineAction[] = declareCandidates(state).map((number) => ({ type: "declare", seat, number }));
+  if (state.currentBid) moves.push({ type: "coyote", seat });
+  return moves;
+}
+
+/**
+ * Expected value of the table's true total, using ONLY what `seat` can
+ * legally see (info fairness — never reads `state.tableCards[seat]` itself,
+ * only `getPlayerView`'s redaction of it). The seat's own hidden card (and
+ * every card still in the undrawn round deck) is unknown, so its expected
+ * value is approximated as the mean of the full 36-card deck composition
+ * minus whatever's visible to this seat — legitimate deck-counting since
+ * `buildDeck()`'s composition is public knowledge, not another seat's
+ * private info.
+ *
+ * `applySpecials` gates whether the maxZero/double specials' *behavioral*
+ * effect (not just their at-rest value of 0) gets folded in — Level 8–10
+ * ("특수 카드 적용 기대값을 수학적으로 합산") does; core levels use the flatter
+ * raw-sum estimate.
+ */
+function estimateTotal(state: CoyoteState, seat: SeatIndex, applySpecials: boolean): number {
+  const view = getPlayerView(state, seat);
+  const visibleCards = view.filter((v): v is { seat: SeatIndex; card: Card } => v.card !== null).map((v) => v.card);
+  const visibleSum = visibleCards.reduce((s, c) => s + c.value, 0);
+
+  const fullDeck = buildDeck();
+  const seenIds = new Set(visibleCards.map((c) => c.id));
+  const unseenDeck = fullDeck.filter((c) => !seenIds.has(c.id));
+  const avgUnseenValue = unseenDeck.length > 0 ? unseenDeck.reduce((s, c) => s + c.value, 0) / unseenDeck.length : 0;
+
+  let total = visibleSum + avgUnseenValue; // + this seat's own unknown card, approximated by the pool average
+
+  if (!applySpecials) return total;
+
+  const hasDouble = visibleCards.some((c) => c.kind === "double");
+  if (hasDouble) total *= 2;
+
+  const hasMaxZero = visibleCards.some((c) => c.kind === "maxZero");
+  if (hasMaxZero) {
+    const visibleMax = Math.max(0, ...visibleCards.filter((c) => c.kind === "number").map((c) => c.value));
+    total -= Math.max(visibleMax, avgUnseenValue);
+  }
+
+  return total;
+}
+
+function scoreMove(state: CoyoteState, seat: SeatIndex, move: EngineAction, level: BotLevel): number {
+  const expert = botTier(level) === "expert";
+  const total = estimateTotal(state, seat, expert);
+
+  if (move.type === "coyote") {
+    const bid = state.currentBid!;
+    // "무리하지 않은 sharp한 코요테" — only worth calling when the declared
+    // number plausibly overshoots the estimated true total.
+    return bid.number - total;
+  }
+  if (move.type !== "declare") return 0;
+
+  const base = state.currentBid?.number ?? -20;
+  const margin = total - move.number; // positive = still believably under the true total (safe)
+  const efficiencyPenalty = (move.number - base) * 0.1; // prefer the smallest raise that's still plausible
+  return margin - efficiencyPenalty;
+}
+
+/** getValidMoves 중 level(1~10)에 맞는 액션을 고른다 — 점수 매기기+노이즈는 botDifficulty.ts의 공용 커브. seat가 지금 할 게 없으면 null. */
+export function chooseBotAction(
+  state: CoyoteState,
+  seat: SeatIndex,
+  level: BotLevel = 5,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move, level) }));
+  return pickByLevel(scored, level, rng);
+}
+
+// ---------------------------------------------------------------------------
 // Final rankings
 // ---------------------------------------------------------------------------
 

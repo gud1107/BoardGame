@@ -3,13 +3,16 @@ import {
   applyAction,
   buildCheckDeck,
   CHECK_DECK_SIZE,
+  chooseBotAction,
   computeRankings,
   getPlayerView,
+  getValidMoves,
   MAX_PLAYERS,
   MIN_PLAYERS,
   PLAYER_SETUP,
   PROPERTY_COUNT,
   startGame,
+  type EngineAction,
   type ForSaleState,
   type SeatIndex,
 } from "./engine";
@@ -494,5 +497,136 @@ describe("computeRankings — 룰북 §5 최종 점수 계산 및 동점자 처�
     expect(rankings.find((r) => r.seat === 0)!.rank).toBe(1);
     expect(rankings.find((r) => r.seat === 1)!.rank).toBe(1);
     expect(rankings.find((r) => r.seat === 2)!.rank).toBe(3); // standard competition ranking skips rank 2
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("during buying, offers every $1,000-increment bid up to the seat's cash plus pass, and nothing for an idle seat", () => {
+    const state = startGame(3, 5);
+    const activeSeat = state.auction!.activeSeat;
+    const idleSeat = state.auction!.activeSeats.find((s) => s !== activeSeat)!;
+    const moves = getValidMoves(state, activeSeat);
+    expect(moves).toContainEqual({ type: "pass", seat: activeSeat });
+    const player = state.players.find((p) => p.seat === activeSeat)!;
+    expect(moves.filter((m) => m.type === "bid")).toHaveLength(player.cash / 1000);
+    expect(getValidMoves(state, idleSeat)).toEqual([]);
+  });
+
+  it("during selling, offers one submitCard per still-held property and nothing once already submitted", () => {
+    let state = startGame(4, 7);
+    state = playAllPassesUntilSelling(state);
+    const seat = 0;
+    const hand = state.players.find((p) => p.seat === seat)!.properties;
+    const moves = getValidMoves(state, seat);
+    expect(moves).toHaveLength(hand.length);
+    for (const property of hand) {
+      expect(moves).toContainEqual({ type: "submitCard", seat, property });
+    }
+    const submitted = applyAction(state, { type: "submitCard", seat, property: hand[0] });
+    expect(getValidMoves(submitted, seat)).toEqual([]);
+  });
+
+  it("returns [] for every seat once nobody has a pending decision (e.g. mid-reveal)", () => {
+    let state = startGame(3, 9);
+    state = playAllPassesUntilSelling(state);
+    for (const seat of seatsOf(state)) {
+      const hand = state.players.find((p) => p.seat === seat)!.properties;
+      state = applyAction(state, { type: "submitCard", seat, property: Math.min(...hand) });
+    }
+    expect(state.sale!.revealed).toBe(true);
+    for (const seat of seatsOf(state)) {
+      expect(getValidMoves(state, seat)).toEqual([]);
+    }
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null for a seat with nothing to decide", () => {
+    const state = startGame(3, 5);
+    const idleSeat = state.auction!.activeSeats.find((s) => s !== state.auction!.activeSeat)!;
+    expect(chooseBotAction(state, idleSeat, 5)).toBeNull();
+  });
+
+  it("always returns a legal move regardless of level", () => {
+    const state = startGame(3, 5);
+    const activeSeat = state.auction!.activeSeat;
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, activeSeat, level, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(state, activeSeat)).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) can pick the very first candidate even when it scores worst, while Level 10 always plays the top-scored move", () => {
+    // Auction with a huge gap between the cheap "pass and take the low card"
+    // option and a clearly profitable near-minimum bid on a very high card —
+    // engineered so scoreBuyingMove ranks "pass" (candidates[0]) far below
+    // the best bid.
+    let state = startGame(3, 3);
+    const auction = state.auction!;
+    state = {
+      ...state,
+      players: state.players.map((p) => ({ ...p, cash: 14000 })),
+      auction: { ...auction, openCards: [1, 30], currentBid: 0, bidsBySeat: {} },
+    };
+    const seat = state.auction!.activeSeat;
+
+    // rng() always 0 -> always below Level 1's ~55% mistake chance -> always
+    // takes candidates[Math.floor(0 * length)] === candidates[0] === "pass".
+    const level1Action = chooseBotAction(state, seat, 1, () => 0);
+    expect(level1Action).toEqual({ type: "pass", seat });
+
+    // Level 10 has a 0% mistake chance and 0 tie margin -> always the true
+    // argmax regardless of rng, which here is a bid chasing the $30-value card.
+    const level10Action = chooseBotAction(state, seat, 10, () => 0);
+    expect(level10Action).not.toEqual({ type: "pass", seat });
+    expect(level10Action?.type).toBe("bid");
+  });
+});
+
+function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: SeatIndex) => number): ForSaleState {
+  let state = startGame(playerCount, seed);
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 5000) {
+    guard++;
+    if (state.phase === "buying") {
+      const seat = state.auction!.activeSeat;
+      const action = chooseBotAction(state, seat, levelOf(seat));
+      expect(action).not.toBeNull();
+      state = applyAction(state, action!);
+      continue;
+    }
+    // selling: everyone submits (order doesn't matter, blind by rule), then continue
+    for (const seat of seatsOf(state)) {
+      if (state.sale!.submissions[seat] !== undefined) continue;
+      const action = chooseBotAction(state, seat, levelOf(seat));
+      expect(action).not.toBeNull();
+      state = applyAction(state, action!);
+    }
+    const advanced: EngineAction = { type: "continueSale" };
+    state = applyAction(state, advanced);
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const n of [3, 4, 5, 6]) {
+    it(`completes a ${n}-player all-Level-10 game with a fully resolved final score`, () => {
+      const state = playFullBotGame(n, 100 + n, () => 10);
+      expect(state.phase).toBe("gameOver");
+      const rankings = computeRankings(state);
+      expect(rankings).toHaveLength(n);
+      expect(new Set(rankings.map((r) => r.seat)).size).toBe(n);
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(5, 777, (seat) => (seat % 2 === 0 ? 1 : 10));
+    expect(state.phase).toBe("gameOver");
+    expect(computeRankings(state)).toHaveLength(5);
   });
 });
