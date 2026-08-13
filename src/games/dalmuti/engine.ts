@@ -59,6 +59,7 @@
 
 import { seededRng, shuffle } from "@/lib/rng";
 export { seededRng };
+import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
 
 export type SeatIndex = number;
 
@@ -563,4 +564,164 @@ export interface RankedPlayer {
 /** Only meaningful once `state.phase === "gameOver"`: `finishOrder` is already a strict permutation of every seat (rulebook §4 "카드를 털어낸 순서대로 2등, 3등... 꼴찌"), so no tie-handling is needed here (unlike round-based elimination games in this project). */
 export function computeRankings(state: DalmutiState): RankedPlayer[] {
   return state.finishOrder.map((seat, i) => ({ seat, rank: i + 1 }));
+}
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7) — getValidMoves / scoreMove /
+// chooseBotAction(state, seat, level, rng?). Every phase (revolution
+// decision, tax return, trick play/pass) only ever asks the bot to judge
+// its own hand + already-public trick/tribute state — no other seat's
+// hidden hand is ever read.
+// ---------------------------------------------------------------------------
+
+/** All k-element subsets of `items` (order-independent, small k only — used for tax-return combos where k is 1 or 2). */
+function combinations(items: string[], k: number): string[][] {
+  if (k === 0) return [[]];
+  if (items.length < k) return [];
+  const [first, ...rest] = items;
+  const withFirst = combinations(rest, k - 1).map((c) => [first, ...c]);
+  const withoutFirst = combinations(rest, k);
+  return [...withFirst, ...withoutFirst];
+}
+
+/** Expands one `legalPlayOptions` rank-group into concrete card-id sets for each legal count (leading: every count 1..maxCount; following: only the fixed required count), padding with jokers once real cards of that rank run out. */
+function buildRankCandidates(option: LegalRankOption): string[][] {
+  const { cardIds, jokerCardIds, maxCount, requiredCount } = option;
+  const counts = requiredCount === 0 ? Array.from({ length: maxCount }, (_, i) => i + 1) : [requiredCount];
+  const results: string[][] = [];
+  for (const count of counts) {
+    if (count < 1 || count > maxCount) continue;
+    if (count <= cardIds.length) {
+      results.push(cardIds.slice(0, count));
+    } else {
+      results.push([...cardIds, ...jokerCardIds.slice(0, count - cardIds.length)]);
+    }
+  }
+  return results;
+}
+
+export function getValidMoves(state: DalmutiState, seat: SeatIndex): EngineAction[] {
+  if (state.phase === "revolutionOption") {
+    if (!state.pendingRevolution || state.pendingRevolution.seat !== seat) return [];
+    return [
+      { type: "declareRevolution", seat },
+      { type: "declineRevolution", seat },
+    ];
+  }
+
+  if (state.phase === "taxReturn") {
+    const record = state.tributes.find((t) => t.toSeat === seat && !t.resolved);
+    if (!record) return [];
+    const player = findPlayer(state, seat);
+    if (!player) return [];
+    return combinations(
+      player.hand.map((c) => c.id),
+      record.givenCardIds.length,
+    ).map((cardIds) => ({ type: "returnTax", seat, cardIds }) as EngineAction);
+  }
+
+  if (state.phase === "trick") {
+    if (state.activeSeat !== seat) return [];
+    const moves: EngineAction[] = [];
+    for (const option of legalPlayOptions(state, seat)) {
+      for (const cardIds of buildRankCandidates(option)) {
+        moves.push({ type: "playCards", seat, cardIds });
+      }
+    }
+    if (state.trick.count > 0) moves.push({ type: "pass", seat });
+    return moves;
+  }
+
+  return [];
+}
+
+/**
+ * Higher = more desirable for the bot. Tiers per ARCHITECTURE.md §7.5:
+ * novice ~ uniform over legal moves; core applies simple single-factor
+ * rules (dump low-value cards, conserve small counts, return your weakest
+ * cards as tax); expert (Lv.8-10, per the task brief) optimizes the tax
+ * exchange, maximizes same-rank-plus-joker "대량 털기" dumps while leading a
+ * trick, and is choosier about spending jokers.
+ */
+export function scoreMove(state: DalmutiState, seat: SeatIndex, move: EngineAction, tier: BotTier): number {
+  if (tier === "novice") return 0;
+  const player = findPlayer(state, seat);
+  if (!player) return 0;
+
+  if (move.type === "declareRevolution" || move.type === "declineRevolution") {
+    const info = state.pendingRevolution;
+    if (!info) return 0;
+    if (info.isGrand) return move.type === "declareRevolution" ? 1000 : -1000; // flips this seat straight to 달무티.
+    // Non-grand: declaring skips the tax phase entirely this round — good
+    // for whoever would have owed tribute, bad for whoever would have
+    // received it.
+    const pos = rankPositionOfSeat(state, seat);
+    const n = state.playerCount;
+    let delta = 0;
+    if (pos === n - 1) delta = 60; // 대농노: skips giving away its 2 best cards.
+    else if (pos === n - 2 && n >= 4) delta = 30; // 소농노: skips giving away 1 card.
+    else if (pos === 0) delta = -60; // 달무티: loses its free 2-card tribute.
+    else if (pos === 1 && n >= 4) delta = -30; // 총리: loses its free 1-card tribute.
+    return move.type === "declareRevolution" ? delta : -delta;
+  }
+
+  if (move.type === "returnTax") {
+    // Give back the weakest cards possible (highest rank number); jokers
+    // are far too valuable to hand back voluntarily.
+    let score = 0;
+    for (const id of move.cardIds) {
+      const card = player.hand.find((c) => c.id === id);
+      if (!card) continue;
+      score += card.isJoker ? -1000 : card.rank;
+    }
+    return score;
+  }
+
+  if (move.type === "pass") {
+    const options = legalPlayOptions(state, seat);
+    const everyOptionNeedsAJoker = options.length > 0 && options.every((o) => o.cardIds.length < o.requiredCount);
+    let score = -5; // mild default preference to play over pass when a reasonable option exists.
+    if (tier === "expert" && everyOptionNeedsAJoker) score += 20; // save the joker for a better trick instead.
+    return score;
+  }
+
+  // playCards
+  const idSet = new Set(move.cardIds);
+  const cards = player.hand.filter((c) => idSet.has(c.id));
+  const nonJokerRanks = new Set(cards.filter((c) => !c.isJoker).map((c) => c.rank));
+  const rankValue = nonJokerRanks.size > 0 ? Math.min(...nonJokerRanks) : JOKER_RANK;
+  const usesJoker = cards.some((c) => c.isJoker);
+  const count = cards.length;
+  const finishedNow = player.hand.length - count === 0;
+  const leading = state.trick.count === 0;
+
+  if (leading) {
+    let score =
+      tier === "expert"
+        ? count * 15 + rankValue - (usesJoker ? 5 : 0) // expert: maximize the "대량 털기" dump size while leading.
+        : rankValue * 2 - count * 8; // core: conserve hand size, just shed the weakest cards a few at a time.
+    if (finishedNow) score += 1000;
+    return score;
+  }
+
+  // Following: use the weakest card that still legally beats the trick
+  // (highest rankValue among the legal — already-filtered — options),
+  // saving stronger cards and jokers for later.
+  let score = rankValue * 3;
+  score -= usesJoker ? (tier === "expert" && !finishedNow ? 60 : 30) : 0;
+  if (finishedNow) score += 1000; // going out first wins the whole round.
+  return score;
+}
+
+export function chooseBotAction(
+  state: DalmutiState,
+  seat: SeatIndex,
+  level: BotLevel,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const tier = botTier(level);
+  const candidates: ScoredCandidate<EngineAction>[] = moves.map((move) => ({ move, score: scoreMove(state, seat, move, tier) }));
+  return pickByLevel(candidates, level, rng);
 }

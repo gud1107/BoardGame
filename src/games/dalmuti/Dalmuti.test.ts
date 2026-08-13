@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   applyAction,
   buildDeck,
+  chooseBotAction,
   computeRankings,
+  getValidMoves,
   isLegalPlay,
   JOKER_COUNT,
   JOKER_RANK,
@@ -14,7 +16,9 @@ import {
   startGame,
   type Card,
   type DalmutiState,
+  type EngineAction,
   type PlayerState,
+  type SeatIndex,
 } from "./engine";
 
 // Per engine.ts's module doc §0: the task brief described a repeating
@@ -432,5 +436,131 @@ describe("rankTitle", () => {
     expect(rankTitle(0, 3)).toBe("달무티");
     expect(rankTitle(1, 3)).toBe("총리");
     expect(rankTitle(2, 3)).toBe("대농노");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("revolutionOption: only the pending seat gets declare/decline, in that order", () => {
+    const state = makeState({ phase: "revolutionOption", pendingRevolution: { seat: 1, isGrand: false } });
+    expect(getValidMoves(state, 1)).toEqual([
+      { type: "declareRevolution", seat: 1 },
+      { type: "declineRevolution", seat: 1 },
+    ]);
+    expect(getValidMoves(state, 0)).toEqual([]);
+  });
+
+  it("taxReturn: only the unresolved recipient gets returnTax combos of the right size", () => {
+    const state = makeState({
+      phase: "taxReturn",
+      tributes: [{ fromSeat: 3, toSeat: 0, givenCardIds: ["9-0", "9-1"], returnedCardIds: [], resolved: false }],
+      players: [
+        makePlayer(0, { hand: [card(1), card(2), card(9, 0), card(9, 1)] }),
+        makePlayer(1),
+        makePlayer(2),
+        makePlayer(3),
+      ],
+    });
+    const moves = getValidMoves(state, 0);
+    expect(moves.length).toBeGreaterThan(0);
+    for (const m of moves) {
+      expect(m.type).toBe("returnTax");
+      expect((m as { cardIds: string[] }).cardIds).toHaveLength(2);
+    }
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("trick: leading offers every count for every rank group, no pass; following is scoped to the current player's turn", () => {
+    const state = makeState({
+      players: [makePlayer(0, { hand: [card(5), card(5, 1), card(7)] }), makePlayer(1), makePlayer(2), makePlayer(3)],
+      activeSeat: 0,
+    });
+    const moves = getValidMoves(state, 0);
+    expect(moves.some((m) => m.type === "pass")).toBe(false);
+    expect(moves.every((m) => m.type === "playCards")).toBe(true);
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null once nobody has a pending decision (e.g. an idle seat mid-trick)", () => {
+    const state = makeState({ players: [makePlayer(0, { hand: [card(4)] }), makePlayer(1, { hand: [card(6)] }), makePlayer(2), makePlayer(3)], activeSeat: 0 });
+    expect(chooseBotAction(state, 1, 5)).toBeNull();
+  });
+
+  it("always returns a legal move regardless of level", () => {
+    const state = makeState({
+      players: [makePlayer(0, { hand: [card(3), card(3, 1), card(8)] }), makePlayer(1), makePlayer(2), makePlayer(3)],
+      activeSeat: 0,
+    });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 0, level, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(state, 0)).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) declares a non-grand revolution it would be better off declining, while Level 10 declines to keep its tribute income", () => {
+    // Seat 0 sits at rank position 0 (달무티) — declining a non-grand
+    // revolution keeps its free 2-card tribute, so declare is the wrong
+    // call here. getValidMoves lists declare before decline, so Level 1's
+    // forced-random path (rng always 0 -> candidates[0]) lands on declare.
+    const state = makeState({
+      phase: "revolutionOption",
+      rankOrder: [0, 1, 2, 3],
+      pendingRevolution: { seat: 0, isGrand: false },
+    });
+
+    const level1Action = chooseBotAction(state, 0, 1, () => 0);
+    expect(level1Action).toEqual({ type: "declareRevolution", seat: 0 });
+
+    const level10Action = chooseBotAction(state, 0, 10, () => 0);
+    expect(level10Action).toEqual({ type: "declineRevolution", seat: 0 });
+  });
+});
+
+function currentActorForTest(state: DalmutiState): SeatIndex | null {
+  if (state.phase === "revolutionOption") return state.pendingRevolution?.seat ?? null;
+  if (state.phase === "taxReturn") {
+    const unresolved = state.tributes.filter((t) => !t.resolved);
+    if (unresolved.length === 0) return null;
+    return Math.min(...unresolved.map((t) => t.toSeat));
+  }
+  if (state.phase === "trick") return state.activeSeat;
+  return null;
+}
+
+function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: SeatIndex) => number): DalmutiState {
+  let state = startGame(playerCount, seed);
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 5000) {
+    guard++;
+    const seat = currentActorForTest(state);
+    if (seat === null) break;
+    const action = chooseBotAction(state, seat, levelOf(seat));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action as EngineAction);
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const n of [3, 4, 5, 6, 7, 8]) {
+    it(`completes a ${n}-player all-Level-10 game with every seat ranked`, () => {
+      const state = playFullBotGame(n, 200 + n, () => 10);
+      expect(state.phase).toBe("gameOver");
+      const rankings = computeRankings(state);
+      expect(rankings).toHaveLength(n);
+      expect(new Set(rankings.map((r) => r.seat)).size).toBe(n);
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(5, 888, (seat) => (seat % 2 === 0 ? 1 : 10));
+    expect(state.phase).toBe("gameOver");
+    expect(computeRankings(state)).toHaveLength(5);
   });
 });
