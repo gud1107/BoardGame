@@ -80,6 +80,7 @@ export type EngineAction =
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
 export { seededRng };
+import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
 
 // ---------------------------------------------------------------------------
 // Role composition & quest tables (exact per-player-count spec, deliberately
@@ -335,6 +336,154 @@ function assassinate(state: AvalonState, action: Extract<EngineAction, { type: "
     return { ...state, phase: "gameOver", winner: "evil", winReason: "assassin-correct" };
   }
   return { ...state, phase: "gameOver", winner: "good", winReason: "three-successes" };
+}
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7) — getValidMoves / scoreMove /
+// chooseBotAction(state, seat, level, rng?). Information fairness is the
+// central constraint in this game: every scorer below reads only
+// `getKnowledge(state, seat)` (the exact information that seat's role
+// actually grants) plus fully public state (`questResults`, `proposedTeam`,
+// `votes`) — never another seat's true hidden role directly.
+//
+// Simultaneous-decision phases (`voting` has every seat decide at once,
+// `quest` has every proposed-team seat decide at once) can't expose a
+// single "whose turn" the way team-proposal/assassination do — `<Game>Game.tsx`
+// resolves this with the project's usual "lowest seat still undecided"
+// workaround (see ARCHITECTURE.md §7.5's forSale/grid-poker note).
+// ---------------------------------------------------------------------------
+
+/** All k-length combinations of seats 0..playerCount-1, in ascending order — used to enumerate team proposals (bounded: at most C(10,5)=252 for this game's largest table). */
+function seatCombinations(playerCount: number, k: number): SeatIndex[][] {
+  const all = Array.from({ length: playerCount }, (_, i) => i);
+  function combos(items: SeatIndex[], k: number): SeatIndex[][] {
+    if (k === 0) return [[]];
+    if (items.length < k) return [];
+    const [first, ...rest] = items;
+    return [...combos(rest, k - 1).map((c) => [first, ...c]), ...combos(rest, k)];
+  }
+  return combos(all, k);
+}
+
+/** How many failed quests each seat has ridden along on — fully public (every quest's team + outcome is visible to everyone), the classic Avalon "who keeps showing up on bad teams" tell. */
+function suspicionFromFailedQuests(state: AvalonState): Record<SeatIndex, number> {
+  const scores: Record<SeatIndex, number> = {};
+  for (let s = 0; s < state.playerCount; s++) scores[s] = 0;
+  for (const q of state.questResults) if (!q.success) for (const s of q.team) scores[s] += 1;
+  return scores;
+}
+
+/** How many successful quests each seat has been part of — also fully public; used by the Assassin's expert-tier Merlin guess (a real Merlin tends to end up steering successful teams). */
+function successParticipation(state: AvalonState): Record<SeatIndex, number> {
+  const scores: Record<SeatIndex, number> = {};
+  for (let s = 0; s < state.playerCount; s++) scores[s] = 0;
+  for (const q of state.questResults) if (q.success) for (const s of q.team) scores[s] += 1;
+  return scores;
+}
+
+export function getValidMoves(state: AvalonState, seat: SeatIndex): EngineAction[] {
+  switch (state.phase) {
+    case "team-proposal": {
+      if (state.leader !== seat) return [];
+      const size = state.teamSizes[state.round - 1];
+      return seatCombinations(state.playerCount, size).map((seats) => ({ type: "propose-team", seats }) as EngineAction);
+    }
+    case "voting": {
+      if (state.votes[seat] !== undefined) return [];
+      return [
+        { type: "vote", seat, vote: "approve" },
+        { type: "vote", seat, vote: "reject" },
+      ];
+    }
+    case "quest": {
+      if (!state.proposedTeam.includes(seat) || state.questCards[seat] !== undefined) return [];
+      const player = state.players[seat];
+      const cards: QuestCard[] = player.team === "good" ? ["success"] : ["success", "fail"];
+      return cards.map((card) => ({ type: "play-quest-card", seat, card }) as EngineAction);
+    }
+    case "assassination": {
+      const player = state.players[seat];
+      if (player.role !== "assassin") return [];
+      return Array.from({ length: state.playerCount }, (_, s) => s)
+        .filter((s) => s !== seat)
+        .map((targetSeat) => ({ type: "assassinate", targetSeat }) as EngineAction);
+    }
+    default:
+      return [];
+  }
+}
+
+/**
+ * Higher = more desirable for the bot. Tiers per ARCHITECTURE.md §7.5:
+ * novice ~ uniform over every legal move. core uses only the seat's own
+ * *direct* role knowledge (Merlin/evil's known-evil set) with no historical
+ * pattern reading, and is otherwise close to random (team proposals, evil's
+ * voting). expert (Lv.8-10, per the task brief) additionally reads public
+ * quest history (`suspicionFromFailedQuests`/`successParticipation`) to
+ * propose/vote more convincingly and to guess Merlin at the Assassination.
+ */
+export function scoreMove(state: AvalonState, seat: SeatIndex, move: EngineAction, tier: BotTier): number {
+  if (tier === "novice") return 0;
+  const expert = tier === "expert";
+  const knowledge = getKnowledge(state, seat);
+
+  switch (move.type) {
+    case "propose-team": {
+      const evilKnown = new Set(knowledge.evilSeatsKnown);
+      if (knowledge.team === "good") {
+        if (!expert) return 0;
+        const evilIncluded = move.seats.filter((s) => evilKnown.has(s)).length;
+        return -evilIncluded * 100 + (move.seats.includes(seat) ? 2 : 0);
+      }
+      // Evil leader: exactly one evil seat (ideally self) on the team is the
+      // sweet spot — enough to fail it, not so many it's an obvious tell.
+      if (!expert) return 0;
+      const evilTeammates = new Set<SeatIndex>([seat, ...knowledge.evilSeatsKnown]);
+      const evilIncluded = move.seats.filter((s) => evilTeammates.has(s)).length;
+      return -Math.abs(evilIncluded - 1) * 50;
+    }
+    case "vote": {
+      const team = state.proposedTeam;
+      if (knowledge.team === "good") {
+        const evilKnownInTeam = team.filter((s) => knowledge.evilSeatsKnown.includes(s)).length;
+        const patternSuspicion = expert ? team.reduce((sum, s) => sum + (suspicionFromFailedQuests(state)[s] ?? 0), 0) : 0;
+        const badness = evilKnownInTeam * 100 + patternSuspicion * 5;
+        return move.vote === "approve" ? -badness : badness;
+      }
+      if (!expert) return 0; // core evil: no reliable read, stays close to random
+      const evilTeammates = new Set<SeatIndex>([seat, ...knowledge.evilSeatsKnown]);
+      const hasEvilTeammate = team.some((s) => evilTeammates.has(s));
+      if (move.vote === "approve") return hasEvilTeammate ? 20 : -5;
+      return hasEvilTeammate ? -20 : 5;
+    }
+    case "play-quest-card": {
+      // Good seats only ever get "success" as a candidate (getValidMoves),
+      // so this branch only meaningfully discriminates for evil seats.
+      if (move.card === "success") return tier === "core" ? 9.5 : 0; // core: near-tied with fail -> genuinely probabilistic via pickByLevel's own noise
+      return 10; // fail — expert always defects when it can, core usually does
+    }
+    case "assassinate": {
+      const evilKnown = new Set(knowledge.evilSeatsKnown);
+      if (evilKnown.has(move.targetSeat)) return -1000; // never shoot a known teammate
+      if (!expert) return 0;
+      return successParticipation(state)[move.targetSeat] ?? 0; // guess whoever's steered the most successful quests
+    }
+    default:
+      return 0;
+  }
+}
+
+export function chooseBotAction(
+  state: AvalonState,
+  seat: SeatIndex,
+  level: BotLevel,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const tier = botTier(level);
+  const candidates: ScoredCandidate<EngineAction>[] = moves.map((move) => ({ move, score: scoreMove(state, seat, move, tier) }));
+  return pickByLevel(candidates, level, rng);
 }
 
 // ---------------------------------------------------------------------------

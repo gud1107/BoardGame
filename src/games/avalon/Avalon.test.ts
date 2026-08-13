@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   applyAction,
+  chooseBotAction,
   failThreshold,
   getKnowledge,
+  getValidMoves,
   ROLE_SETS,
   startGame,
   TEAM_SIZE_TABLE,
   teamForRole,
   type AvalonState,
+  type EngineAction,
   type PlayerState,
   type Role,
+  type SeatIndex,
 } from "./engine";
 
 function makePlayers(roles: Role[]): PlayerState[] {
@@ -350,5 +354,139 @@ describe("win-condition priority", () => {
     const state = makeState({ phase: "team-proposal" });
     const s = applyAction(state, { type: "assassinate", targetSeat: 0 });
     expect(s).toEqual(state);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("team-proposal: only the leader gets candidates, one per valid-size team", () => {
+    const state = makeState(); // leader 0, round 1 -> team size 2
+    const moves = getValidMoves(state, 0);
+    expect(moves).toHaveLength(10); // C(5,2)
+    expect(moves.every((m) => m.type === "propose-team" && m.seats.length === 2)).toBe(true);
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("voting: every not-yet-voted seat gets approve/reject, a voted seat gets none", () => {
+    const state = makeState({ phase: "voting", proposedTeam: [0, 1], votes: { 2: "approve" } });
+    expect(getValidMoves(state, 0)).toEqual([
+      { type: "vote", seat: 0, vote: "approve" },
+      { type: "vote", seat: 0, vote: "reject" },
+    ]);
+    expect(getValidMoves(state, 2)).toEqual([]);
+  });
+
+  it("quest: only proposed-team seats decide; Good is restricted to 'success', Evil gets both", () => {
+    const state = makeState({ phase: "quest", proposedTeam: [0, 3] }); // 0=merlin(good), 3=morgana(evil)
+    expect(getValidMoves(state, 0)).toEqual([{ type: "play-quest-card", seat: 0, card: "success" }]);
+    const evilMoves = getValidMoves(state, 3);
+    expect(evilMoves.map((m) => (m as { card: string }).card).sort()).toEqual(["fail", "success"]);
+    expect(getValidMoves(state, 1)).toEqual([]); // not on the team
+  });
+
+  it("assassination: only the Assassin gets candidates, one per other seat", () => {
+    const state = makeState({ phase: "assassination" });
+    const moves = getValidMoves(state, 4); // assassin
+    expect(moves).toHaveLength(4);
+    expect(moves.every((m) => m.type === "assassinate" && m.targetSeat !== 4)).toBe(true);
+    expect(getValidMoves(state, 0)).toEqual([]);
+  });
+
+  it("returns [] in gameOver", () => {
+    const state = makeState({ phase: "gameOver" });
+    expect(getValidMoves(state, 0)).toEqual([]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null for a seat with nothing to decide", () => {
+    const state = makeState(); // team-proposal, leader 0
+    expect(chooseBotAction(state, 1, 5)).toBeNull();
+  });
+
+  it("always returns a legal move regardless of level", () => {
+    const state = makeState({ phase: "assassination" });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 4, level, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(state, 4)).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) approves a team with Merlin's known Evil on it, while Level 10 correctly rejects", () => {
+    // Seat 0 is Merlin and knows seat 3 (Morgana) is Evil. getValidMoves
+    // lists approve before reject, so Level 1's forced-random path (rng
+    // always 0 -> candidates[0]) lands on approve.
+    const state = makeState({ phase: "voting", proposedTeam: [1, 3], votes: {} });
+
+    const level1Action = chooseBotAction(state, 0, 1, () => 0);
+    expect(level1Action).toEqual({ type: "vote", seat: 0, vote: "approve" });
+
+    const level10Action = chooseBotAction(state, 0, 10, () => 0);
+    expect(level10Action).toEqual({ type: "vote", seat: 0, vote: "reject" });
+  });
+});
+
+function avalonCurrentActorForTest(state: AvalonState): SeatIndex | null {
+  if (state.phase === "team-proposal") return state.leader;
+  if (state.phase === "voting") {
+    for (let s = 0; s < state.playerCount; s++) if (state.votes[s] === undefined) return s;
+    return null;
+  }
+  if (state.phase === "quest") {
+    const pending = state.proposedTeam.filter((s) => state.questCards[s] === undefined);
+    return pending.length > 0 ? Math.min(...pending) : null;
+  }
+  if (state.phase === "assassination") {
+    const assassin = state.players.find((p) => p.role === "assassin");
+    return assassin ? assassin.seat : null;
+  }
+  return null;
+}
+
+function playFullBotGame(roles: Role[], seed: number, levelOf: (seat: SeatIndex) => number): AvalonState {
+  let state: AvalonState = { ...makeState(), players: makePlayers(roles), playerCount: roles.length, teamSizes: TEAM_SIZE_TABLE[roles.length] };
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 2000) {
+    guard++;
+    const seat = avalonCurrentActorForTest(state);
+    if (seat === null) break;
+    const action = chooseBotAction(state, seat, levelOf(seat), seededSequenceRng(seed + guard));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action as EngineAction);
+  }
+  return state;
+}
+
+/** A tiny deterministic rng so full-game simulations stay reproducible across runs (ties/mistake-rolls still exercised, just not flaky). */
+function seededSequenceRng(seed: number): () => number {
+  let x = seed % 2147483647 || 1;
+  return () => {
+    x = (x * 48271) % 2147483647;
+    return (x - 1) / 2147483646;
+  };
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const roles of [
+    ["merlin", "percival", "loyalist", "morgana", "assassin"] as Role[],
+    ["merlin", "percival", "loyalist", "loyalist", "morgana", "assassin"] as Role[],
+    ["merlin", "percival", "loyalist", "loyalist", "morgana", "assassin", "mordred"] as Role[],
+  ]) {
+    it(`completes a ${roles.length}-player all-Level-10 game with a winner declared`, () => {
+      const state = playFullBotGame(roles, 100 + roles.length, () => 10);
+      expect(state.phase).toBe("gameOver");
+      expect(state.winner).not.toBeNull();
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const roles: Role[] = ["merlin", "percival", "loyalist", "loyalist", "morgana", "assassin"];
+    const state = playFullBotGame(roles, 999, (seat) => (seat % 2 === 0 ? 1 : 10));
+    expect(state.phase).toBe("gameOver");
+    expect(state.winner).not.toBeNull();
   });
 });

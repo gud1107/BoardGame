@@ -1,13 +1,40 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel, RealtimePresenceState } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
 import { getDeviceId } from "@/lib/identity/deviceId";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
-import { applyAction, startGame, type AvalonState, type EngineAction, type SeatIndex, type Team } from "./engine";
+import { applyAction, chooseBotAction, startGame, type AvalonState, type EngineAction, type SeatIndex, type Team } from "./engine";
 import AvalonBoard from "./AvalonBoard";
+import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
+import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
+import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+
+/**
+ * Whose decision `useBotAutoplay` should drive right now. `voting` (every
+ * seat decides at once) and `quest` (every proposed-team seat decides at
+ * once) have no single active seat — same "lowest still-undecided seat"
+ * workaround every other simultaneous-decision phase in this project uses.
+ */
+function avalonCurrentActor(state: AvalonState): SeatIndex | null {
+  if (state.phase === "team-proposal") return state.leader;
+  if (state.phase === "voting") {
+    for (let s = 0; s < state.playerCount; s++) if (state.votes[s] === undefined) return s;
+    return null;
+  }
+  if (state.phase === "quest") {
+    const pending = state.proposedTeam.filter((s) => state.questCards[s] === undefined);
+    return pending.length > 0 ? Math.min(...pending) : null;
+  }
+  if (state.phase === "assassination") {
+    const assassin = state.players.find((p) => p.role === "assassin");
+    return assassin ? assassin.seat : null;
+  }
+  return null;
+}
 
 /**
  * Online-room multiplayer entry point, same lockstep pattern as
@@ -78,6 +105,21 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<AvalonState | null>(null);
   const [finalResult, setFinalResult] = useState<{ winner: Team } | null>(null);
+  // Seats currently played by an AI bot instead of a human — host-controlled
+  // (ARCHITECTURE.md §7), broadcast via "bot-roster" so every client renders
+  // the same lobby/board without a server. `botLevels[i]` is the Level 1–10
+  // difficulty for `botSeats[i]` (parallel arrays, same index).
+  const [botSeats, setBotSeats] = useState<SeatIndex[]>([]);
+  const botSeatsRef = useRef<SeatIndex[]>([]);
+  useEffect(() => {
+    botSeatsRef.current = botSeats;
+  }, [botSeats]);
+  const [botLevels, setBotLevels] = useState<BotLevel[]>([]);
+  const botLevelsRef = useRef<BotLevel[]>([]);
+  useEffect(() => {
+    botLevelsRef.current = botLevels;
+  }, [botLevels]);
+  const botSeatSet = useMemo(() => new Set(botSeats), [botSeats]);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const startSentRef = useRef(false);
@@ -126,7 +168,13 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seed = payload?.seed as number;
       const playerCount = payload?.playerCount as number;
+      const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
       playerCountRef.current = playerCount;
+      botSeatsRef.current = roster;
+      setBotSeats(roster);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
       setGameState(startGame(playerCount, seed));
       setFinalResult(null);
       setPhase("playing");
@@ -137,6 +185,18 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
 
+    // Host-authoritative AI bot roster — broadcast whenever the host
+    // adds/removes a bot seat in the waiting room, so every client renders
+    // the same lobby/board without a server.
+    channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => {
+      const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      botSeatsRef.current = roster;
+      setBotSeats(roster);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
+    });
+
     // A client that (re)joins after the game already started never saw the
     // one-time `game-start` broadcast, so it would otherwise sit on the
     // waiting screen forever even though the game is live. Any peer that
@@ -145,13 +205,25 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
     // original seed and re-derive the same thing anyway).
     channel.on("broadcast", { event: "state-request" }, () => {
       if (gameStateRef.current) {
-        channel.send({ type: "broadcast", event: "state-sync", payload: { state: gameStateRef.current } });
+        channel.send({
+          type: "broadcast",
+          event: "state-sync",
+          payload: { state: gameStateRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
+        });
+      } else if (isHost) {
+        channel.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: botSeatsRef.current, botLevels: botLevelsRef.current } });
       }
     });
 
     channel.on("broadcast", { event: "state-sync" }, ({ payload }) => {
       const state = payload?.state as AvalonState | undefined;
       if (!state) return;
+      const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      botSeatsRef.current = roster;
+      setBotSeats(roster);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
       setGameState(state);
       setFinalResult(null);
       setPhase("playing");
@@ -184,7 +256,7 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
         if (seat === null) {
           const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
           const existing = Object.values(raw).flat();
-          const taken = new Set(existing.map((o) => o.seat));
+          const taken = new Set([...existing.map((o) => o.seat), ...botSeatsRef.current]);
           seat = 0;
           while (taken.has(seat)) seat++;
           // Reject once the room's own declared target is full — only
@@ -245,7 +317,10 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
       return;
     }
     reclaimAttemptsRef.current += 1;
-    const taken = new Set(occupants.filter((o) => o.deviceId !== deviceId).map((o) => o.seat));
+    const taken = new Set([
+      ...occupants.filter((o) => o.deviceId !== deviceId).map((o) => o.seat),
+      ...botSeatsRef.current,
+    ]);
     let next = 0;
     while (taken.has(next)) next++;
     storeSeat(roomCode, next);
@@ -259,26 +334,90 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
-  function sendGameStart() {
+  const sendGameStart = useCallback(() => {
     startSentRef.current = true;
     channelRef.current?.send({
       type: "broadcast",
       event: "game-start",
-      payload: { seed: randomSeed(), playerCount: playerCountRef.current },
+      payload: { seed: randomSeed(), playerCount: playerCountRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
     });
-  }
+  }, []);
 
-  // Host deals the first hand as soon as the target seat count is filled.
+  // Host deals the first hand as soon as the target seat count is filled (a
+  // seat counts as "filled" whether it's a connected human or a bot the
+  // host added).
   useEffect(() => {
     if (phase !== "waiting" || !isHost || startSentRef.current) return;
-    if (occupants.length >= knownTargetPlayerCount) {
+    if (occupants.length + botSeats.length >= knownTargetPlayerCount) {
       sendGameStart();
     }
-  }, [occupants, phase, knownTargetPlayerCount, isHost]);
+  }, [occupants, botSeats, phase, knownTargetPlayerCount, isHost, sendGameStart]);
 
-  function handleAction(action: EngineAction) {
-    channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
+  // Host-only: fill/empty an empty seat with an AI bot (ARCHITECTURE.md §7).
+  // Only ever offered for a seat with no connected human — a real player is
+  // never forcibly replaced. If a human later claims a seat a bot was
+  // occupying, the eviction logic below automatically drops the bot.
+  const addBotAtSeat = useCallback(
+    (seat: SeatIndex, level: BotLevel) => {
+      if (!isHost) return;
+      if (botSeatsRef.current.includes(seat) || occupants.some((o) => o.seat === seat)) return;
+      const nextSeats = [...botSeatsRef.current, seat];
+      const nextLevels = [...botLevelsRef.current, level];
+      botSeatsRef.current = nextSeats;
+      setBotSeats(nextSeats);
+      botLevelsRef.current = nextLevels;
+      setBotLevels(nextLevels);
+      channelRef.current?.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: nextSeats, botLevels: nextLevels } });
+    },
+    [isHost, occupants],
+  );
+
+  const removeBotAtSeat = useCallback(
+    (seat: SeatIndex) => {
+      if (!isHost) return;
+      const idx = botSeatsRef.current.indexOf(seat);
+      if (idx === -1) return;
+      const nextSeats = botSeatsRef.current.filter((_, i) => i !== idx);
+      const nextLevels = botLevelsRef.current.filter((_, i) => i !== idx);
+      botSeatsRef.current = nextSeats;
+      setBotSeats(nextSeats);
+      botLevelsRef.current = nextLevels;
+      setBotLevels(nextLevels);
+      channelRef.current?.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: nextSeats, botLevels: nextLevels } });
+    },
+    [isHost],
+  );
+
+  // A human physically claiming a seat always wins over a bot placeholder —
+  // derived during render (not an effect), same "compare and setState during
+  // render" pattern the seat-conflict self-heal above uses.
+  if (isHost && botSeats.length > 0) {
+    const humanSeats = new Set(occupants.map((o) => o.seat));
+    const keepIdx = botSeats.map((s, i) => (humanSeats.has(s) ? -1 : i)).filter((i) => i !== -1);
+    if (keepIdx.length !== botSeats.length) {
+      setBotSeats(keepIdx.map((i) => botSeats[i]));
+      setBotLevels(keepIdx.map((i) => botLevels[i]));
+    }
   }
+
+  const handleAction = useCallback((action: EngineAction) => {
+    channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
+  }, []);
+
+  const chooseAction = useCallback((state: AvalonState, actor: SeatIndex): EngineAction | null => {
+    const idx = botSeatsRef.current.indexOf(actor);
+    const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
+    return chooseBotAction(state, actor, level);
+  }, []);
+
+  useBotAutoplay<AvalonState, EngineAction, SeatIndex>({
+    active: isHost && phase === "playing",
+    state: gameState,
+    currentActor: avalonCurrentActor,
+    botSeats: botSeatSet,
+    chooseAction,
+    dispatch: handleAction,
+  });
 
   // Prefer the real betting-system playerId (present when that seat's
   // occupant joined by picking themselves from an active session's roster —
@@ -298,12 +437,16 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
     const count = gameState?.playerCount ?? knownTargetPlayerCount;
     for (let seat = 0; seat < count; seat++) {
       const occ = occupants.find((o) => o.seat === seat);
-      map[seat] = seat === mySeat ? myName : (occ?.name ?? "상대");
+      const botIdx = botSeats.indexOf(seat);
+      map[seat] = seat === mySeat ? myName : (occ?.name ?? (botIdx >= 0 ? botDisplayName(botIdx, botLevels[botIdx]) : "상대"));
     }
     return map;
-  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount]);
+  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels]);
 
-  const connectedSeats = useMemo(() => new Set(occupants.map((o) => o.seat)), [occupants]);
+  const connectedSeats = useMemo(
+    () => new Set([...occupants.map((o) => o.seat), ...botSeats]),
+    [occupants, botSeats],
+  );
 
   function handleGameEnd() {
     if (!gameState || !gameState.winner) return;
@@ -336,6 +479,10 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
     setIdentity({ name: "" });
     setMyPlayerId(undefined);
     setCodeInput("");
+    botSeatsRef.current = [];
+    setBotSeats([]);
+    botLevelsRef.current = [];
+    setBotLevels([]);
     setPhase("choose");
   }
 
@@ -498,25 +645,39 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
               🔗 초대 링크 복사
             </button>
             <p className="text-xs text-white/50">
-              {occupants.length} / {knownTargetPlayerCount}명 참여 중
+              {occupants.length + botSeats.length} / {knownTargetPlayerCount}명 참여 중
             </p>
             <div className="mt-2 flex flex-col gap-1.5">
               {Array.from({ length: knownTargetPlayerCount }, (_, seat) => {
                 const occ = occupants.find((o) => o.seat === seat);
+                const botIdx = botSeats.indexOf(seat);
+                const isBot = botIdx >= 0;
                 return (
-                  <p key={seat} className="text-sm text-white/70">
-                    {seat === mySeat ? "나" : `${seat + 1}번`}: {occ ? occ.name : <span className="text-white/30">대기 중...</span>}
+                  <p key={seat} className="flex items-center justify-between gap-2 text-sm text-white/70">
+                    <span>
+                      {seat === mySeat ? "나" : `${seat + 1}번`}:{" "}
+                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30">대기 중...</span>}
+                    </span>
+                    {isHost && !occ && (
+                      <span>
+                        {isBot ? (
+                          <RemoveBotButton onClick={() => removeBotAtSeat(seat)} />
+                        ) : (
+                          <AddBotButton onAddWithLevel={(level) => addBotAtSeat(seat, level)} />
+                        )}
+                      </span>
+                    )}
                   </p>
                 );
               })}
             </div>
             <p className="text-xs text-white/40">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다.</p>
-            {isHost && occupants.length >= 5 && occupants.length < knownTargetPlayerCount && (
+            {isHost && occupants.length + botSeats.length >= 5 && occupants.length + botSeats.length < knownTargetPlayerCount && (
               <button
                 onClick={sendGameStart}
                 className="rounded-full bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-500"
               >
-                지금 시작 ({occupants.length}명)
+                지금 시작 ({occupants.length + botSeats.length}명)
               </button>
             )}
           </>
