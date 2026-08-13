@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel, RealtimePresenceState } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
 import { getDeviceId } from "@/lib/identity/deviceId";
@@ -10,6 +10,7 @@ import { seededRng } from "@/lib/rng";
 import { MAX_WORD_LENGTH, MIN_WORD_LENGTH } from "./words";
 import {
   applyAction,
+  chooseBotAction,
   otherSeat,
   startGame,
   type EngineAction,
@@ -17,6 +18,16 @@ import {
   type Seat,
 } from "./engine";
 import PiecesOfLanguageBoard from "./PiecesOfLanguageBoard";
+import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
+import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
+import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+
+/** Whose decision `useBotAutoplay` should drive right now. */
+function polCurrentActor(state: PiecesOfLanguageState): Seat | null {
+  if (state.phase !== "playing") return null;
+  return state.activeSeat;
+}
 
 /**
  * Online-room multiplayer entry point — same lockstep pattern as every other
@@ -97,6 +108,21 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<PiecesOfLanguageState | null>(null);
   const [finalResult, setFinalResult] = useState<{ winnerId: string | null; winnerName: string; isDraw: boolean } | null>(null);
+  // Roles currently played by an AI bot instead of a human — host-controlled
+  // (ARCHITECTURE.md §7), broadcast via "bot-roster" so every client renders
+  // the same lobby/board without a server. `botLevels[i]` is the Level 1–10
+  // difficulty for `botRoles[i]` (parallel arrays, same index).
+  const [botRoles, setBotRoles] = useState<Seat[]>([]);
+  const botRolesRef = useRef<Seat[]>([]);
+  useEffect(() => {
+    botRolesRef.current = botRoles;
+  }, [botRoles]);
+  const [botLevels, setBotLevels] = useState<BotLevel[]>([]);
+  const botLevelsRef = useRef<BotLevel[]>([]);
+  useEffect(() => {
+    botLevelsRef.current = botLevels;
+  }, [botLevels]);
+  const botRoleSet = useMemo(() => new Set(botRoles), [botRoles]);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const startSentRef = useRef(false);
@@ -112,11 +138,16 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
   const opponentSeat = myRole ? otherSeat(myRole) : null;
   const names: Record<Seat, string> = useMemo(() => {
     const byRole = (r: Seat) => occupants.find((o) => o.role === r)?.name;
-    return {
-      p1: (myRole === "p1" ? myName : byRole("p1")) ?? "상대",
-      p2: (myRole === "p2" ? myName : byRole("p2")) ?? "상대",
+    const botIdx = (r: Seat) => botRoles.indexOf(r);
+    const fallback = (r: Seat) => {
+      const idx = botIdx(r);
+      return idx >= 0 ? botDisplayName(idx, botLevels[idx]) : "상대";
     };
-  }, [occupants, myRole, myName]);
+    return {
+      p1: (myRole === "p1" ? myName : byRole("p1")) ?? fallback("p1"),
+      p2: (myRole === "p2" ? myName : byRole("p2")) ?? fallback("p2"),
+    };
+  }, [occupants, myRole, myName, botRoles, botLevels]);
   // Prefer the real betting-system playerId (present when that seat's
   // occupant joined by picking themselves from an active session's roster —
   // see RoomNicknameField) over the synthetic per-room id.
@@ -127,7 +158,8 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
       p2: byRole("p2") ?? `${roomCode}:p2`,
     };
   }, [roomCode, occupants]);
-  const opponentConnected = opponentSeat ? occupants.some((o) => o.role === opponentSeat) : false;
+  const opponentIsBot = opponentSeat ? botRoles.includes(opponentSeat) : false;
+  const opponentConnected = (opponentSeat ? occupants.some((o) => o.role === opponentSeat) : false) || opponentIsBot;
 
   function enterRoom() {
     setFormError(null);
@@ -170,6 +202,12 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
       const seed = payload?.seed as number;
       const wordLength = (payload?.wordLength as number | undefined) ?? 3;
       const maxAttempts = (payload?.maxAttempts as number | null | undefined) ?? null;
+      const roster = (payload?.botRoles as Seat[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      botRolesRef.current = roster;
+      setBotRoles(roster);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
       setGameState(startGame(wordLength, maxAttempts, seededRng(seed)));
       setFinalResult(null);
       setPhase("playing");
@@ -180,14 +218,41 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
 
+    // Host-authoritative AI bot roster — broadcast whenever the host
+    // adds/removes a bot role in the waiting room, so every client renders
+    // the same lobby/board without a server.
+    channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => {
+      const roster = (payload?.botRoles as Seat[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      botRolesRef.current = roster;
+      setBotRoles(roster);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
+    });
+
     channel.on("broadcast", { event: "state-request" }, () => {
-      if (!gameStateRef.current) return;
-      channel.send({ type: "broadcast", event: "state-sync", payload: { state: gameStateRef.current } });
+      if (!gameStateRef.current) {
+        if (myRole === "p1") {
+          channel.send({ type: "broadcast", event: "bot-roster", payload: { botRoles: botRolesRef.current, botLevels: botLevelsRef.current } });
+        }
+        return;
+      }
+      channel.send({
+        type: "broadcast",
+        event: "state-sync",
+        payload: { state: gameStateRef.current, botRoles: botRolesRef.current, botLevels: botLevelsRef.current },
+      });
     });
 
     channel.on("broadcast", { event: "state-sync" }, ({ payload }) => {
       const syncedState = payload?.state as PiecesOfLanguageState | undefined;
       if (!syncedState) return;
+      const roster = (payload?.botRoles as Seat[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      botRolesRef.current = roster;
+      setBotRoles(roster);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
       setGameState(syncedState);
       setPhase((p) => (p === "connecting" || p === "waiting" ? "playing" : p));
     });
@@ -226,11 +291,14 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
     if (conflict) setPhase("room-full");
   }
 
-  // Host deals the opening state as soon as both seats are filled.
+  const isHost = myRole === "p1";
+
+  // Host deals the opening state as soon as both seats are filled (a role
+  // counts as "filled" whether it's a connected human or a bot the host added).
   useEffect(() => {
-    if (phase !== "waiting" || myRole !== "p1" || startSentRef.current) return;
-    const hasP1 = occupants.some((o) => o.role === "p1");
-    const hasP2 = occupants.some((o) => o.role === "p2");
+    if (phase !== "waiting" || !isHost || startSentRef.current) return;
+    const hasP1 = occupants.some((o) => o.role === "p1") || botRoles.includes("p1");
+    const hasP2 = occupants.some((o) => o.role === "p2") || botRoles.includes("p2");
     if (hasP1 && hasP2) {
       startSentRef.current = true;
       channelRef.current?.send({
@@ -240,14 +308,78 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
           seed: Math.floor(Math.random() * 1_000_000_000),
           wordLength: wordLengthChoice,
           maxAttempts: attemptCapChoice,
+          botRoles: botRolesRef.current,
+          botLevels: botLevelsRef.current,
         },
       });
     }
-  }, [occupants, phase, myRole, wordLengthChoice, attemptCapChoice]);
+  }, [occupants, botRoles, phase, isHost, wordLengthChoice, attemptCapChoice]);
 
-  function handleAction(action: EngineAction) {
-    channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
+  // Host-only: fill/empty an empty role with an AI bot (ARCHITECTURE.md §7).
+  // Only ever offered for a role with no connected human — a real player is
+  // never forcibly replaced. If a human later claims a role a bot was
+  // occupying, the eviction logic below automatically drops the bot.
+  const addBotAtRole = useCallback(
+    (role: Seat, level: BotLevel) => {
+      if (!isHost) return;
+      if (botRolesRef.current.includes(role) || occupants.some((o) => o.role === role)) return;
+      const nextRoles = [...botRolesRef.current, role];
+      const nextLevels = [...botLevelsRef.current, level];
+      botRolesRef.current = nextRoles;
+      setBotRoles(nextRoles);
+      botLevelsRef.current = nextLevels;
+      setBotLevels(nextLevels);
+      channelRef.current?.send({ type: "broadcast", event: "bot-roster", payload: { botRoles: nextRoles, botLevels: nextLevels } });
+    },
+    [isHost, occupants],
+  );
+
+  const removeBotAtRole = useCallback(
+    (role: Seat) => {
+      if (!isHost) return;
+      const idx = botRolesRef.current.indexOf(role);
+      if (idx === -1) return;
+      const nextRoles = botRolesRef.current.filter((_, i) => i !== idx);
+      const nextLevels = botLevelsRef.current.filter((_, i) => i !== idx);
+      botRolesRef.current = nextRoles;
+      setBotRoles(nextRoles);
+      botLevelsRef.current = nextLevels;
+      setBotLevels(nextLevels);
+      channelRef.current?.send({ type: "broadcast", event: "bot-roster", payload: { botRoles: nextRoles, botLevels: nextLevels } });
+    },
+    [isHost],
+  );
+
+  // A human physically claiming a role always wins over a bot placeholder —
+  // derived during render (not an effect), same "compare and setState
+  // during render" pattern used elsewhere in this file.
+  if (isHost && botRoles.length > 0) {
+    const humanRoles = new Set(occupants.map((o) => o.role));
+    const keepIdx = botRoles.map((r, i) => (humanRoles.has(r) ? -1 : i)).filter((i) => i !== -1);
+    if (keepIdx.length !== botRoles.length) {
+      setBotRoles(keepIdx.map((i) => botRoles[i]));
+      setBotLevels(keepIdx.map((i) => botLevels[i]));
+    }
   }
+
+  const handleAction = useCallback((action: EngineAction) => {
+    channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
+  }, []);
+
+  const chooseAction = useCallback((state: PiecesOfLanguageState, actor: Seat): EngineAction | null => {
+    const idx = botRolesRef.current.indexOf(actor);
+    const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
+    return chooseBotAction(state, actor, level);
+  }, []);
+
+  useBotAutoplay<PiecesOfLanguageState, EngineAction, Seat>({
+    active: isHost && phase === "playing",
+    state: gameState,
+    currentActor: polCurrentActor,
+    botSeats: botRoleSet,
+    chooseAction,
+    dispatch: handleAction,
+  });
 
   function handleGameEnd(result: { winnerId: string | null; isDraw: boolean }) {
     if (!gameState) return;
@@ -284,6 +416,8 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
         seed: Math.floor(Math.random() * 1_000_000_000),
         wordLength: gameState?.wordLength ?? wordLengthChoice,
         maxAttempts: gameState?.maxAttempts ?? attemptCapChoice,
+        botRoles: botRolesRef.current,
+        botLevels: botLevelsRef.current,
       },
     });
   }
@@ -303,6 +437,10 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
     setIdentity({ name: "" });
     setMyPlayerId(undefined);
     setCodeInput("");
+    botRolesRef.current = [];
+    setBotRoles([]);
+    botLevelsRef.current = [];
+    setBotLevels([]);
     setPhase("choose");
   }
 
@@ -495,10 +633,23 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
             <div className="mt-2 flex flex-col gap-1.5">
               {(["p1", "p2"] as const).map((role) => {
                 const occ = occupants.find((o) => o.role === role);
+                const botIdx = botRoles.indexOf(role);
+                const isBot = botIdx >= 0;
                 return (
-                  <p key={role} className="text-sm text-white/70">
-                    {role === myRole ? "나" : role === "p1" ? "1번" : "2번"}:{" "}
-                    {occ ? occ.name : <span className="text-white/30">대기 중...</span>}
+                  <p key={role} className="flex items-center justify-between gap-2 text-sm text-white/70">
+                    <span>
+                      {role === myRole ? "나" : role === "p1" ? "1번" : "2번"}:{" "}
+                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30">대기 중...</span>}
+                    </span>
+                    {isHost && !occ && (
+                      <span>
+                        {isBot ? (
+                          <RemoveBotButton onClick={() => removeBotAtRole(role)} />
+                        ) : (
+                          <AddBotButton onAddWithLevel={(level) => addBotAtRole(role, level)} />
+                        )}
+                      </span>
+                    )}
                   </p>
                 );
               })}

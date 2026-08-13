@@ -15,12 +15,16 @@ import { isValidWord, wordsOfLength, WORD_BANK } from "./words";
 import {
   applyAction,
   buildTilePool,
+  chooseBotAction,
   compareWords,
+  getValidMoves,
   hintScore,
   otherSeat,
   startGame,
   totalAttemptsRemaining,
   wordBuildableFromPool,
+  type EngineAction,
+  type GuessRecord,
   type PiecesOfLanguageState,
   type Seat,
 } from "./engine";
@@ -324,5 +328,93 @@ describe("buildTilePool / wordBuildableFromPool (공통 자모음 조각 풀 & �
     const before = state;
     const blocked = applyAction(state, { type: "guess", word: "사과" }); // valid word, but ㅅ/ㅘ not in "가을"'s pool
     expect(blocked).toEqual(before); // no-op, same as any other rejected guess
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("offers every pool-buildable word of the right length for the active seat, and nothing for the idle seat", () => {
+    const state = readyGame("사과", 2, null, "p1"); // WILDCARD_POOL -> every 2-syllable bank word is buildable
+    const moves = getValidMoves(state, "p1");
+    expect(moves).toHaveLength(wordsOfLength(2).length);
+    expect(moves.every((m) => m.type === "guess")).toBe(true);
+    expect(getValidMoves(state, "p2")).toEqual([]);
+  });
+
+  it("returns [] outside the 'playing' phase", () => {
+    const state = { ...readyGame("사과", 2, null, "p1"), phase: "gameOver" as const };
+    expect(getValidMoves(state, "p1")).toEqual([]);
+  });
+
+  it("respects the tile-pool hard rail — a pool-incompatible word never appears as a candidate", () => {
+    const pool = buildTilePool("가을", seededRng(1));
+    const state = { ...readyGame("가을", 2, null, "p1"), tilePool: pool };
+    const moves = getValidMoves(state, "p1");
+    expect(moves.some((m) => (m as { word: string }).word === "사과")).toBe(false); // needs ㅅ, absent from "가을"'s pool
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null for the idle seat", () => {
+    const state = readyGame("사과", 2, null, "p1");
+    expect(chooseBotAction(state, "p2", 5)).toBeNull();
+  });
+
+  it("always returns a legal move regardless of level", () => {
+    const state = readyGame("사과", 2, null, "p1");
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, "p1", level, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(state, "p1")).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) repeats a guess already disproven by history, while Level 10 does constraint propagation to guess a still-consistent word", () => {
+    // A single past guess of "나무" that came back all-red rules "나무"
+    // itself out (guessing it again would have to be green-green) and
+    // narrows the field to words sharing no characters with 나/무 — "사과"
+    // (the next word in bank order that qualifies) is the deterministic
+    // winner once ties are broken by getValidMoves' own array order (rng
+    // always 0 -> the first tied top-scorer, same convention as every
+    // other game's divergence test here).
+    const history: GuessRecord[] = [{ seat: "p1", word: "나무", feedback: ["red", "red"], isMatch: false }];
+    const state: PiecesOfLanguageState = { ...readyGame("무관", 2, null, "p1"), history };
+
+    const level1Action = chooseBotAction(state, "p1", 1, () => 0);
+    expect(level1Action).toEqual({ type: "guess", word: "나무" });
+
+    const level10Action = chooseBotAction(state, "p1", 10, () => 0);
+    expect(level10Action).toEqual({ type: "guess", word: "사과" });
+  });
+});
+
+function playFullBotGame(wordLength: number, maxAttempts: number | null, seed: number, levelOf: (seat: Seat) => number): PiecesOfLanguageState {
+  let state = startGame(wordLength, maxAttempts, seededRng(seed));
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 500) {
+    guard++;
+    const seat = state.activeSeat;
+    const action = chooseBotAction(state, seat, levelOf(seat));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action as EngineAction);
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const wordLength of [2, 3, 4, 5]) {
+    it(`completes a ${wordLength}-syllable all-Level-10 game without a combined attempt cap`, () => {
+      const state = playFullBotGame(wordLength, null, 900 + wordLength, () => 10);
+      expect(state.phase).toBe("gameOver");
+      expect(state.winner).not.toBeNull(); // an uncapped race always ends in an exact match, never a draw
+    });
+  }
+
+  it("also completes with a combined attempt cap and a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(3, 8, 42, (seat) => (seat === "p1" ? 1 : 10));
+    expect(state.phase).toBe("gameOver");
   });
 });

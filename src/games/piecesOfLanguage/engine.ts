@@ -65,6 +65,7 @@
 import { seededRng, shuffle } from "@/lib/rng";
 import { isValidWord, wordsOfLength } from "./words";
 import { decomposeWord, jamoSatisfiedByTile, rotationPartner } from "./hangul";
+import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
 
 export { seededRng };
 
@@ -263,4 +264,66 @@ export function applyAction(state: PiecesOfLanguageState, action: EngineAction):
     default:
       return state;
   }
+}
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7) — getValidMoves / scoreMove /
+// chooseBotAction(state, seat, level, rng?). Information fairness: the bot
+// never reads `state.targetWord` directly — every candidate is judged only
+// by whether it's buildable from the shared public `tilePool` and whether
+// it's still *logically consistent* with every green/yellow/red light
+// either seat has already publicly seen (`consistentWithHistory`), exactly
+// what a sharp human player could work out from the same board.
+// ---------------------------------------------------------------------------
+
+function arraysEqual<T>(a: readonly T[], b: readonly T[]): boolean {
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
+/** True iff, were `word` secretly the target, every past guess in `history` would have produced exactly the feedback it actually got — the classic Wordle-solver constraint check, run entirely over public history. */
+function consistentWithHistory(word: string, history: GuessRecord[]): boolean {
+  return history.every((g) => arraysEqual(compareWords(word, g.word), g.feedback));
+}
+
+export function getValidMoves(state: PiecesOfLanguageState, seat: Seat): EngineAction[] {
+  if (state.phase !== "playing" || state.activeSeat !== seat) return [];
+  return wordsOfLength(state.wordLength)
+    .filter((w) => wordBuildableFromPool(w, state.tilePool))
+    .map((word) => ({ type: "guess", word }) as EngineAction);
+}
+
+/**
+ * Higher = more desirable for the bot. Tiers per ARCHITECTURE.md §7.5:
+ * novice ~ uniform over every buildable word (may guess something already
+ * disproven by earlier feedback). core filters down to words still
+ * logically consistent with every past light and picks uniformly among
+ * those. expert (Lv.8-10, per the task brief) does the same constraint
+ * propagation but additionally rewards the narrowest surviving candidate
+ * set — the fewer words remain consistent, the more confidently it commits
+ * to one of them, converging on (and submitting) the exact answer as soon
+ * as the history pins it down to one.
+ */
+export function scoreMove(state: PiecesOfLanguageState, seat: Seat, move: EngineAction, tier: BotTier): number {
+  if (tier === "novice" || move.type !== "guess") return 0;
+  if (tier === "core") return consistentWithHistory(move.word, state.history) ? 10 : 0;
+
+  // expert
+  const candidates = wordsOfLength(state.wordLength).filter(
+    (w) => wordBuildableFromPool(w, state.tilePool) && consistentWithHistory(w, state.history),
+  );
+  if (!candidates.includes(move.word)) return 0;
+  return 1000 / candidates.length; // narrower surviving field -> higher confidence
+}
+
+export function chooseBotAction(
+  state: PiecesOfLanguageState,
+  seat: Seat,
+  level: BotLevel,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const tier = botTier(level);
+  const candidates: ScoredCandidate<EngineAction>[] = moves.map((move) => ({ move, score: scoreMove(state, seat, move, tier) }));
+  return pickByLevel(candidates, level, rng);
 }
