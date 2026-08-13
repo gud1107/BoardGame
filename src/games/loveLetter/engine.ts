@@ -68,6 +68,7 @@ export const MAX_PLAYERS = 4;
 
 import { seededRng, shuffle } from "@/lib/rng";
 export { seededRng };
+import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
 
 // ---------------------------------------------------------------------------
 // Deck
@@ -603,4 +604,148 @@ export function computeRankings(state: LoveLetterState): RankedSeat[] {
     rank += tier.length;
   }
   return ranks;
+}
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7) — getValidMoves / scoreMove /
+// chooseBotAction(state, seat, level, rng?). Information fairness: the only
+// "deck tracking" used below is `unseenNumberCounts`, built purely from
+// public information (every discard pile, the 2-player visible-removed
+// trio, and the bot's own hand) — never another seat's hidden hand or
+// today's actual `removedCard`/deck order.
+// ---------------------------------------------------------------------------
+
+const DECK_NUMBER_COUNTS: Record<CardNumber, number> = { 1: 5, 2: 2, 3: 2, 4: 2, 5: 2, 6: 1, 7: 1, 8: 1 };
+
+/** How many copies of each number are still "unseen" by `seat` — i.e. could be in the draw deck, the single face-down reserve, or any alive opponent's hand. Used to approximate Guard guesses, Baron odds, and King swap value from public information only. */
+function unseenNumberCounts(state: LoveLetterState, seat: SeatIndex): Record<CardNumber, number> {
+  const counts = { ...DECK_NUMBER_COUNTS };
+  const dec = (n: CardNumber) => {
+    counts[n] = Math.max(0, counts[n] - 1);
+  };
+  const actor = state.players.find((p) => p.seat === seat);
+  if (actor) for (const c of actor.hand) dec(c.number);
+  for (const p of state.players) for (const c of p.discardPile) dec(c.number);
+  for (const c of state.visibleRemovedCards) dec(c.number);
+  return counts;
+}
+
+function totalUnseen(counts: Record<CardNumber, number>): number {
+  return ([1, 2, 3, 4, 5, 6, 7, 8] as CardNumber[]).reduce((sum, n) => sum + counts[n], 0);
+}
+
+function expectedUnseenValue(counts: Record<CardNumber, number>, total: number): number {
+  if (total === 0) return 4.5; // fallback: deck midpoint
+  return ([1, 2, 3, 4, 5, 6, 7, 8] as CardNumber[]).reduce((sum, n) => sum + n * counts[n], 0) / total;
+}
+
+export function getValidMoves(state: LoveLetterState, seat: SeatIndex): EngineAction[] {
+  if (state.phase !== "playing" || state.activeSeat !== seat) return [];
+  const actor = state.players.find((p) => p.seat === seat);
+  if (!actor || !actor.alive || actor.hand.length !== 2) return [];
+
+  const forcedCountess = isForcedCountess(actor.hand);
+  const moves: EngineAction[] = [];
+  for (const card of actor.hand) {
+    if (forcedCountess && card.number !== 7) continue;
+    if (!needsTarget(card.number)) {
+      moves.push({ type: "playCard", seat, cardId: card.id });
+      continue;
+    }
+    const targets = validTargets(state, seat, card.number);
+    if (targets.length === 0) {
+      moves.push({ type: "playCard", seat, cardId: card.id }); // fizzle — nobody legal to target
+      continue;
+    }
+    for (const targetSeat of targets) {
+      if (needsGuess(card.number)) {
+        for (let guess = 2; guess <= 8; guess++) {
+          moves.push({ type: "playCard", seat, cardId: card.id, targetSeat, guessNumber: guess as CardNumber });
+        }
+      } else {
+        moves.push({ type: "playCard", seat, cardId: card.id, targetSeat });
+      }
+    }
+  }
+  return moves;
+}
+
+/**
+ * Higher = more desirable for the bot. Tiers per ARCHITECTURE.md §7.5:
+ * novice ~ uniform over legal plays. core applies simple single-factor
+ * rules (never volunteer the Princess, swap away a weak kept card, play
+ * Baron only holding a strong kept card). expert (Lv.8-10, per the task
+ * brief) tracks every publicly-seen card to estimate the true remaining
+ * distribution, uses it to pick the single most-likely Guard guess,
+ * computes Baron's actual expected win probability, and weighs Prince
+ * targets by the estimated chance the target is holding the Princess.
+ */
+export function scoreMove(state: LoveLetterState, seat: SeatIndex, move: EngineAction, tier: BotTier): number {
+  if (tier === "novice") return 0;
+  const actor = state.players.find((p) => p.seat === seat)!;
+  const played = actor.hand.find((c) => c.id === move.cardId)!;
+  const kept = actor.hand.find((c) => c.id !== move.cardId)!;
+  const keptNumber = kept.number;
+  const expert = tier === "expert";
+  const counts = expert ? unseenNumberCounts(state, seat) : null;
+  const total = counts ? totalUnseen(counts) : 0;
+
+  switch (played.number) {
+    case 1: { // 경비병 (Guard)
+      if (move.targetSeat === undefined) return -20; // fizzled — no legal target existed
+      if (expert && total > 0) return counts![move.guessNumber!] * 20; // guess whichever number has the most unseen copies left
+      return 10;
+    }
+    case 2: // 사제 (Priest)
+      return move.targetSeat === undefined ? 5 : 15;
+    case 3: { // 남작 (Baron)
+      if (move.targetSeat === undefined) return -10;
+      if (expert && total > 0) {
+        let winP = 0;
+        let loseP = 0;
+        for (const n of [1, 2, 3, 4, 5, 6, 7, 8] as CardNumber[]) {
+          const p = counts![n] / total;
+          if (n < keptNumber) winP += p;
+          else if (n > keptNumber) loseP += p;
+        }
+        return (winP - loseP) * 100; // real expected-value counter, per the task brief's "최적 카운터 계산"
+      }
+      return (keptNumber - 4) * 10; // core: only duel with an already-strong kept card
+    }
+    case 4: // 하녀 (Handmaid)
+      return expert ? 12 : 8;
+    case 5: { // 왕자 (Prince)
+      const targetSeat = move.targetSeat!;
+      if (targetSeat === seat) {
+        if (keptNumber === 8) return -1000; // never force-discard our own Princess
+        return expert ? (keptNumber <= 3 ? 10 : -5) : 0;
+      }
+      if (expert && total > 0) return (counts![8] / total) * 300 + 10; // weight by the odds the target is holding the Princess
+      return 15;
+    }
+    case 6: { // 왕 (King)
+      if (move.targetSeat === undefined) return -10;
+      if (expert && total > 0) return (expectedUnseenValue(counts!, total) - keptNumber) * 15;
+      return keptNumber <= 3 ? 15 : -5; // core: only swap away an already-weak kept card
+    }
+    case 7: // 백작부인 (Countess)
+      return 3;
+    case 8: // 공주 (Princess)
+      return -1000; // never volunteer the Princess — the task brief's "버림 위험 회피"
+    default:
+      return 0;
+  }
+}
+
+export function chooseBotAction(
+  state: LoveLetterState,
+  seat: SeatIndex,
+  level: BotLevel,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const tier = botTier(level);
+  const candidates: ScoredCandidate<EngineAction>[] = moves.map((move) => ({ move, score: scoreMove(state, seat, move, tier) }));
+  return pickByLevel(candidates, level, rng);
 }

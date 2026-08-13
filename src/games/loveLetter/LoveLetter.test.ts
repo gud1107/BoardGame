@@ -3,17 +3,21 @@ import {
   aliveSeats,
   applyAction,
   buildDeck,
+  chooseBotAction,
   computeRankings,
   DECK_SIZE,
   getPlayerView,
+  getValidMoves,
   isForcedCountess,
   MAX_PLAYERS,
   MIN_PLAYERS,
   startGame,
   validTargets,
   type Card,
+  type EngineAction,
   type LoveLetterState,
   type PlayerState,
+  type SeatIndex,
 } from "./engine";
 
 function card(id: number, number: Card["number"]): Card {
@@ -511,5 +515,119 @@ describe("computeRankings", () => {
   it("returns an empty list before the game is over", () => {
     const state = makeState({ phase: "playing" });
     expect(computeRankings(state)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("enumerates every card/target/guess combo for the active seat, and nothing for an idle seat", () => {
+    const state = makeState({
+      players: [player(0, { hand: [card(1, 1), card(2, 4)] }), player(1), player(2)],
+      activeSeat: 0,
+    });
+    const moves = getValidMoves(state, 0);
+    expect(moves.length).toBeGreaterThan(0);
+    expect(moves.every((m) => m.type === "playCard" && m.seat === 0)).toBe(true);
+    // Guard (1) needs a target + a guess 2-8 for each of the 2 other alive seats.
+    expect(moves.filter((m) => m.cardId === 1)).toHaveLength(2 * 7);
+    // Handmaid (4) needs neither.
+    expect(moves.filter((m) => m.cardId === 2)).toEqual([{ type: "playCard", seat: 0, cardId: 2 }]);
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("forces the Countess when holding it alongside a Prince or King", () => {
+    const state = makeState({
+      players: [player(0, { hand: [card(1, 7), card(2, 6)] }), player(1), player(2)],
+      activeSeat: 0,
+    });
+    const moves = getValidMoves(state, 0);
+    expect(moves).toEqual([{ type: "playCard", seat: 0, cardId: 1 }]);
+  });
+
+  it("returns [] outside the 'playing' phase and for an eliminated seat", () => {
+    const state = makeState({ phase: "gameOver" });
+    expect(getValidMoves(state, state.activeSeat)).toEqual([]);
+    const elimState = makeState({
+      activeSeat: 0,
+      players: [player(0, { alive: false, hand: [] }), player(1), player(2)],
+    });
+    expect(getValidMoves(elimState, 0)).toEqual([]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null for a seat that isn't the active seat", () => {
+    const state = makeState({ players: [player(0, { hand: [card(1, 4), card(2, 6)] }), player(1), player(2)], activeSeat: 0 });
+    expect(chooseBotAction(state, 1, 5)).toBeNull();
+  });
+
+  it("always returns a legal move regardless of level", () => {
+    const state = makeState({
+      players: [player(0, { hand: [card(1, 1), card(2, 3)] }), player(1), player(2)],
+      activeSeat: 0,
+    });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 0, level, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(state, 0)).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) volunteers the Princess, while Level 10 tracks discards to play a smart Guard guess instead", () => {
+    // 2-player table. Seat 0 holds the Princess (8) and a Guard (1). No
+    // discards have named 2/3/4/5 yet, but this scenario pre-discards one
+    // copy each of 3/4/5 (publicly visible) so guessing "2" is the unique
+    // best-tracked Guard call for Level 10. getValidMoves lists the
+    // Princess (needs no target) before the Guard's 7 targeted guesses, so
+    // Level 1's forced-random path (rng always 0 -> candidates[0]) lands on
+    // the Princess.
+    const state = makeState({
+      playerCount: 2,
+      players: [
+        player(0, { hand: [card(1, 8), card(2, 1)] }),
+        player(1, { discardPile: [card(50, 3), card(51, 4), card(52, 5)] }),
+      ],
+      activeSeat: 0,
+    });
+
+    const level1Action = chooseBotAction(state, 0, 1, () => 0);
+    expect(level1Action).toEqual({ type: "playCard", seat: 0, cardId: 1 });
+
+    const level10Action = chooseBotAction(state, 0, 10, () => 0);
+    expect(level10Action).toEqual({ type: "playCard", seat: 0, cardId: 2, targetSeat: 1, guessNumber: 2 });
+  });
+});
+
+function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: SeatIndex) => number): LoveLetterState {
+  let state = startGame(playerCount, seed);
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 5000) {
+    guard++;
+    const seat = state.activeSeat;
+    const action = chooseBotAction(state, seat, levelOf(seat));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action as EngineAction);
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const n of [2, 3, 4]) {
+    it(`completes a ${n}-player all-Level-10 game with every seat ranked`, () => {
+      const state = playFullBotGame(n, 300 + n, () => 10);
+      expect(state.phase).toBe("gameOver");
+      const rankings = computeRankings(state);
+      expect(rankings).toHaveLength(n);
+      expect(new Set(rankings.map((r) => r.seat)).size).toBe(n);
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(4, 999, (seat) => (seat % 2 === 0 ? 1 : 10));
+    expect(state.phase).toBe("gameOver");
+    expect(computeRankings(state)).toHaveLength(4);
   });
 });
