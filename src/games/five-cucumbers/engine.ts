@@ -117,6 +117,7 @@ export type EngineAction = { type: "playCard"; seat: SeatIndex; cardId: string }
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
 export { seededRng };
+import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
 
 /** The full 60-card deck: values 1-15, 4 copies each (rulebook §1). */
 export function buildDeck(): Card[] {
@@ -418,4 +419,101 @@ export function computeRankings(state: FiveCucumbersState): RankedPlayer[] {
     ranked.push({ seat: entry.seat, rank, cucumbers: entry.cucumbers, eliminatedAtRound: entry.eliminatedAtRound });
   });
   return ranked;
+}
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7) — getValidMoves / scoreMove /
+// chooseBotAction(state, seat, level, rng?). Information fairness: every
+// value used below (own hand, `trickPlays` so far this trick, round/trick
+// numbers) is either the bot's own private hand or already-public info
+// visible to every seat at the table — no other seat's hidden hand is ever
+// read.
+// ---------------------------------------------------------------------------
+
+export function getValidMoves(state: FiveCucumbersState, seat: SeatIndex): EngineAction[] {
+  return Array.from(legalCardIds(state, seat)).map((cardId) => ({ type: "playCard", seat, cardId }));
+}
+
+function countAtValue(values: number[], value: number): number {
+  return values.filter((v) => v === value).length;
+}
+
+/**
+ * Higher = more desirable for the bot to play. Tiers per ARCHITECTURE.md
+ * §7.5: novice ignores the score curve almost entirely (near-uniform),
+ * core applies a simple "shed low cards" rule, expert follows the task
+ * brief's Lv.10 spec — minimize winning tricks 1-6, reserve the hand's
+ * lowest card for the 7th (final) trick so it's never forced to eat
+ * cucumbers, and exploit the "later tie wins" rule to pass a dangerous tie
+ * forward instead of exceeding it.
+ */
+export function scoreMove(state: FiveCucumbersState, seat: SeatIndex, move: EngineAction, tier: BotTier): number {
+  if (move.type !== "playCard") return 0;
+  if (tier === "novice") return 0; // every legal card equally likely — pickByLevel's own noise does the rest.
+
+  const player = findPlayer(state, seat)!;
+  const card = player.hand.find((c) => c.id === move.cardId)!;
+  const value = card.value;
+  const handValues = player.hand.map((c) => c.value);
+  const handMin = Math.min(...handValues);
+  const activeCount = activeSeats(state.players).length;
+  const isLastToAct = state.trickPlays.length === activeCount - 1;
+  const isFinalTrick = state.trickNumber === FINAL_TRICK_NUMBER;
+  const currentMax = state.trickPlays.length > 0 ? Math.max(...state.trickPlays.map((p) => p.card.value)) : null;
+  const projectedWinner = isLastToAct ? resolveLeadingTrickWinner([...state.trickPlays, { seat, card }]) : null;
+  const wouldWinNow = projectedWinner === seat;
+
+  if (tier === "core") {
+    let score = -value; // dump low cards first — simple, not necessarily optimal.
+    if (isFinalTrick && isLastToAct && wouldWinNow) score -= 50;
+    return score;
+  }
+
+  // expert (Lv.8-10)
+  if (isFinalTrick) {
+    if (isLastToAct) {
+      if (wouldWinNow) {
+        const onesSoFar = countAtValue(state.trickPlays.map((p) => p.card.value), 1) + (value === 1 ? 1 : 0);
+        const penalty = cucumberCount(value) * 2 ** onesSoFar;
+        return -1000 - penalty * 10; // forced to eat cucumbers — rank by how bad.
+      }
+      return 500; // safely ducks the final trick.
+    }
+    if (state.trickPlays.length === 0) return -value * 5; // lead the final trick as low as possible.
+    if (value < currentMax!) return 300 - value; // safe duck below the current max.
+    if (value === currentMax) return 100; // tie passes the "later tie wins" risk forward to the next player.
+    return 50 - value; // forced to exceed — prefer the smallest possible exceedance.
+  }
+
+  // Tricks 1-6: winning isn't directly penalized, but reserve the hand's
+  // unique lowest card for the approaching final trick, and mildly prefer
+  // not winning (keeps future lead choices flexible).
+  const ticksUntilFinal = FINAL_TRICK_NUMBER - state.trickNumber;
+  const reserveBonus = value === handMin && countAtValue(handValues, handMin) === 1 ? -80 / Math.max(1, ticksUntilFinal) : 0;
+  let score: number;
+  if (isLastToAct) {
+    score = wouldWinNow ? -20 : 40;
+  } else if (state.trickPlays.length === 0) {
+    score = -value;
+  } else if (value < currentMax!) {
+    score = 30 - value;
+  } else if (value === currentMax) {
+    score = 10;
+  } else {
+    score = -value;
+  }
+  return score + reserveBonus;
+}
+
+export function chooseBotAction(
+  state: FiveCucumbersState,
+  seat: SeatIndex,
+  level: BotLevel,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const tier = botTier(level);
+  const candidates: ScoredCandidate<EngineAction>[] = moves.map((move) => ({ move, score: scoreMove(state, seat, move, tier) }));
+  return pickByLevel(candidates, level, rng);
 }

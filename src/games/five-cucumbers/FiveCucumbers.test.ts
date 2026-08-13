@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyAction,
   buildDeck,
+  chooseBotAction,
   computeRankings,
   cucumberCount,
   CARD_MAX,
@@ -9,6 +10,7 @@ import {
   COPIES_PER_VALUE,
   DEFAULT_ELIMINATION_THRESHOLD,
   FINAL_TRICK_NUMBER,
+  getValidMoves,
   HAND_SIZE,
   legalCardIds,
   MAX_PLAYERS,
@@ -16,8 +18,10 @@ import {
   startGame,
   TRICKS_PER_ROUND,
   type Card,
+  type EngineAction,
   type FiveCucumbersState,
   type PlayerState,
+  type SeatIndex,
 } from "./engine";
 
 function card(value: number, copy = 0): Card {
@@ -501,5 +505,121 @@ describe("computeRankings — survival order", () => {
     expect(rankings.find((r) => r.seat === 2)!.rank).toBe(1);
     expect(rankings.find((r) => r.seat === 0)!.rank).toBe(2);
     expect(rankings.find((r) => r.seat === 1)!.rank).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("returns exactly the legalCardIds set as playCard actions, and nothing for the idle seat", () => {
+    const state = makeState({
+      players: [
+        makePlayer(0, { hand: [card(3), card(9), card(12)] }),
+        makePlayer(1, { hand: [card(5), card(7)] }),
+        makePlayer(2, { hand: [card(2), card(11)] }),
+      ],
+      activeSeat: 0,
+    });
+    const moves = getValidMoves(state, 0);
+    expect(moves.length).toBeGreaterThan(0);
+    expect(moves.every((m) => m.type === "playCard" && m.seat === 0)).toBe(true);
+    expect(new Set(moves.map((m) => (m as { cardId: string }).cardId))).toEqual(legalCardIds(state, 0));
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("returns [] outside the 'playing' phase and for an eliminated seat", () => {
+    const state = makeState({ phase: "gameOver" });
+    expect(getValidMoves(state, state.activeSeat)).toEqual([]);
+    const elimState = makeState({
+      activeSeat: 0,
+      players: [makePlayer(0, { eliminated: true, hand: [] }), makePlayer(1), makePlayer(2)],
+    });
+    expect(getValidMoves(elimState, 0)).toEqual([]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null for a seat that isn't the active seat", () => {
+    const state = makeState({ activeSeat: 0, players: [makePlayer(0, { hand: [card(5)] }), makePlayer(1, { hand: [card(6)] }), makePlayer(2)] });
+    expect(chooseBotAction(state, 1, 5)).toBeNull();
+  });
+
+  it("always returns a legal move regardless of level", () => {
+    const state = makeState({
+      trickPlays: [{ seat: 1, card: { id: "p1", value: 8 } }],
+      players: [
+        makePlayer(0, { hand: [card(2), card(9), card(11)] }),
+        makePlayer(1, { hand: [] }),
+        makePlayer(2, { hand: [card(4)] }),
+      ],
+      activeSeat: 0,
+    });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 0, level, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(state, 0)).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) risks winning the final trick by tying the max, while Level 10 safely ducks with its lowest card", () => {
+    // 3-player table, seat 0 is last to act on the FINAL (7th) trick. Its
+    // hand offers exactly two legal cards: a 10 that ties the current max
+    // (10) — which, per the "later tie wins" rule, would make seat 0 win the
+    // trick and eat cucumbers — and a 3 (hand minimum, always legal), which
+    // safely stays below the max and ducks. 'a' (the losing tie) comes first
+    // in hand order, so Level 1's forced-random path (rng always 0 ->
+    // candidates[0]) lands on it, while Level 10's argmax must pick 'b'.
+    const state = makeState({
+      trickNumber: FINAL_TRICK_NUMBER,
+      trickPlays: [
+        { seat: 1, card: { id: "p1", value: 10 } },
+        { seat: 2, card: { id: "p2", value: 4 } },
+      ],
+      players: [
+        makePlayer(0, { hand: [{ id: "a", value: 10 }, { id: "b", value: 3 }] }),
+        makePlayer(1, { hand: [] }),
+        makePlayer(2, { hand: [] }),
+      ],
+      activeSeat: 0,
+    });
+
+    const level1Action = chooseBotAction(state, 0, 1, () => 0);
+    expect(level1Action).toEqual({ type: "playCard", seat: 0, cardId: "a" });
+
+    const level10Action = chooseBotAction(state, 0, 10, () => 0);
+    expect(level10Action).toEqual({ type: "playCard", seat: 0, cardId: "b" });
+  });
+});
+
+function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: SeatIndex) => number): FiveCucumbersState {
+  let state = startGame(playerCount, seed);
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 5000) {
+    guard++;
+    const seat = state.activeSeat;
+    const action = chooseBotAction(state, seat, levelOf(seat));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action as EngineAction);
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const n of [2, 3, 4, 5, 6]) {
+    it(`completes a ${n}-player all-Level-10 game with every seat ranked`, () => {
+      const state = playFullBotGame(n, 100 + n, () => 10);
+      expect(state.phase).toBe("gameOver");
+      const rankings = computeRankings(state);
+      expect(rankings).toHaveLength(n);
+      expect(new Set(rankings.map((r) => r.seat)).size).toBe(n);
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(5, 777, (seat) => (seat % 2 === 0 ? 1 : 10));
+    expect(state.phase).toBe("gameOver");
+    expect(computeRankings(state)).toHaveLength(5);
   });
 });
