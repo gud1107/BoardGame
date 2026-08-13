@@ -4,8 +4,10 @@ import {
   applyAction,
   canAcquireMerchant,
   canClaimPoint,
+  chooseBotAction,
   computePlayerScore,
   computeRankings,
+  getValidMoves,
   MAX_PLAYERS,
   maxTradeRepeats,
   MIN_PLAYERS,
@@ -13,7 +15,9 @@ import {
   POINT_MARKET_SIZE,
   startGame,
   type CenturyState,
+  type EngineAction,
   type PlayerState,
+  type SeatIndex,
 } from "./engine";
 
 function makePlayer(seat: number, overrides: Partial<PlayerState> = {}): PlayerState {
@@ -553,5 +557,131 @@ describe("full game simulation", () => {
 
     const rankings = computeRankings(state);
     expect(rankings[0].seat).toBe(0); // only seat with a point card
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("always includes 'rest' for the active seat, and nothing for an idle seat", () => {
+    const state = makeState({ activeSeat: 0 });
+    const moves = getValidMoves(state, 0);
+    expect(moves).toContainEqual({ type: "rest", seat: 0 });
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("offers a playProduction candidate per production card in hand", () => {
+    const state = makeState({
+      players: [makePlayer(0, { hand: [PRODUCTION_CARD] }), makePlayer(1), makePlayer(2)],
+      activeSeat: 0,
+    });
+    expect(getValidMoves(state, 0)).toContainEqual({ type: "playProduction", seat: 0, cardId: PRODUCTION_CARD.id });
+  });
+
+  it("offers only affordable claimPoint candidates", () => {
+    const state = makeState({
+      players: [makePlayer(0, { hand: [], resources: { yellow: 2, red: 1 } }), makePlayer(1), makePlayer(2)],
+      pointMarket: [POINT_CARD, { id: "pt-2", cost: { green: 5 }, points: 20 }, null, null, null],
+      activeSeat: 0,
+    });
+    const moves = getValidMoves(state, 0);
+    expect(moves).toContainEqual({ type: "claimPoint", seat: 0, index: 0 }); // affordable
+    expect(moves.some((m) => m.type === "claimPoint" && m.index === 1)).toBe(false); // unaffordable (no green)
+  });
+
+  it("discarding phase: offers cheapest-first and priciest-first candidates, and nothing for a non-awaiting seat", () => {
+    const state = makeState({
+      phase: "discarding",
+      awaitingDiscardSeat: 0,
+      players: [makePlayer(0, { resources: { yellow: 8, brown: 4 } }), makePlayer(1), makePlayer(2)], // 12 total, excess 2
+      activeSeat: 0,
+    });
+    const moves = getValidMoves(state, 0);
+    expect(moves.length).toBeGreaterThan(0);
+    for (const m of moves) {
+      expect(m.type).toBe("discardToLimit");
+      if (m.type === "discardToLimit") {
+        const total = Object.values(m.discard).reduce((a, b) => a + (b ?? 0), 0);
+        expect(total).toBe(2);
+      }
+    }
+    expect(moves).toContainEqual({ type: "discardToLimit", seat: 0, discard: { yellow: 2 } }); // cheapest-first
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("returns [] outside 'playing'/'discarding'", () => {
+    const state = makeState({ phase: "gameOver" });
+    expect(getValidMoves(state, state.activeSeat)).toEqual([]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null for a seat that isn't the active seat", () => {
+    const state = makeState({ activeSeat: 0 });
+    expect(chooseBotAction(state, 1, 5)).toBeNull();
+  });
+
+  it("always returns a legal move regardless of level", () => {
+    const state = makeState({
+      players: [makePlayer(0, { hand: [PRODUCTION_CARD, TRADE_CARD], resources: { yellow: 4 } }), makePlayer(1), makePlayer(2)],
+      pointMarket: [POINT_CARD, null, null, null, null],
+      activeSeat: 0,
+    });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 0, level, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(state, 0)).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) plays a weak production card, while Level 10 claims a big point card instead", () => {
+    // Seat 0 has only its basic production card (worth very little) and
+    // enough resources to immediately claim a 9-point card. getValidMoves
+    // lists hand cards before claimPoint, so Level 1's forced-random path
+    // (rng always 0 -> candidates[0]) lands on the weak production play.
+    const state = makeState({
+      players: [makePlayer(0, { hand: [PRODUCTION_CARD], resources: { yellow: 5, red: 3 } }), makePlayer(1), makePlayer(2)],
+      pointMarket: [POINT_CARD, null, null, null, null], // cost {yellow:2, red:1}, 9 points
+      activeSeat: 0,
+    });
+
+    const level1Action = chooseBotAction(state, 0, 1, () => 0);
+    expect(level1Action).toEqual({ type: "playProduction", seat: 0, cardId: PRODUCTION_CARD.id });
+
+    const level10Action = chooseBotAction(state, 0, 10, () => 0);
+    expect(level10Action).toEqual({ type: "claimPoint", seat: 0, index: 0 });
+  });
+});
+
+function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: SeatIndex) => number): CenturyState {
+  let state = startGame(playerCount, seed);
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 5000) {
+    guard++;
+    const seat = state.phase === "discarding" ? state.awaitingDiscardSeat! : state.activeSeat;
+    const action = chooseBotAction(state, seat, levelOf(seat));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action as EngineAction);
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const n of [2, 3, 4, 5]) {
+    it(`completes a ${n}-player all-Level-10 game with every seat ranked`, () => {
+      const state = playFullBotGame(n, 700 + n, () => 10);
+      expect(state.phase).toBe("gameOver");
+      const rankings = computeRankings(state);
+      expect(rankings).toHaveLength(n);
+      expect(new Set(rankings.map((r) => r.seat)).size).toBe(n);
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(4, 777, (seat) => (seat % 2 === 0 ? 1 : 10));
+    expect(state.phase).toBe("gameOver");
+    expect(computeRankings(state)).toHaveLength(4);
   });
 });

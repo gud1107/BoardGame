@@ -127,6 +127,7 @@ export type EngineAction =
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
 export { seededRng };
+import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
 
 function findPlayer(state: CenturyState, seat: SeatIndex): PlayerState | undefined {
   return state.players.find((p) => p.seat === seat);
@@ -483,4 +484,231 @@ export function computeRankings(state: CenturyState): RankedSeat[] {
   const scores = state.players.map(computePlayerScore);
   const sorted = [...scores].sort((a, b) => b.total - a.total || b.seat - a.seat);
   return sorted.map((score, i) => ({ seat: score.seat, rank: i + 1, score }));
+}
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7) — getValidMoves / scoreMove /
+// chooseBotAction(state, seat, level, rng?). Information fairness: every
+// hand/market/resource pool used below is either the bot's own seat or
+// already-public shared state (this project's lowest-leak-severity game,
+// per the module doc) — no other seat's private state matters here since
+// hands ARE public market-knowledge in Century, but the bot still only
+// scores its own choices.
+// ---------------------------------------------------------------------------
+
+function bundleValue(bundle: ResourceBundle): number {
+  return RESOURCE_ORDER.reduce((sum, r) => sum + (bundle[r] ?? 0) * (RESOURCE_ORDER.indexOf(r) + 1), 0);
+}
+
+/** All upgrade-step sequences of length 0..maxLen over the 3 upgradeable colors (brown has no target) — small enough to brute force (upgrade cards rarely allow more than 2-3 steps), then filtered down to the ones `simulateUpgrade` actually accepts for the current hand. */
+function enumerateUpgradeSequences(maxLen: number): Resource[][] {
+  const colors: Resource[] = ["yellow", "red", "green"];
+  const results: Resource[][] = [[]];
+  function rec(prefix: Resource[]) {
+    if (prefix.length >= maxLen) return;
+    for (const c of colors) {
+      const next = [...prefix, c];
+      results.push(next);
+      rec(next);
+    }
+  }
+  rec([]);
+  return results;
+}
+
+/** Stakes the seat's own cheapest-first resources (yellow before red before green before brown) — always the dominant choice for §5-B-2 staking, since a staked resource is simply lost to the market slot. Returns null if `resources` can't cover `count` at all. */
+function cheapestPaymentColors(resources: ResourceBundle, count: number): Resource[] | null {
+  const working: ResourceBundle = { ...resources };
+  const payment: Resource[] = [];
+  for (let i = 0; i < count; i++) {
+    const color = RESOURCE_ORDER.find((r) => (working[r] ?? 0) > 0);
+    if (!color) return null;
+    payment.push(color);
+    working[color] = (working[color] ?? 0) - 1;
+  }
+  return payment;
+}
+
+/** Greedily discards `amount` resources following `order` (cheapest-first or priciest-first) — the two candidates `getValidMoves` offers for the mandatory §6 discard. Returns null if `resources` can't cover `amount`. */
+function buildDiscardBundle(resources: ResourceBundle, amount: number, order: Resource[]): ResourceBundle | null {
+  const discard: ResourceBundle = {};
+  let remaining = amount;
+  for (const r of order) {
+    if (remaining <= 0) break;
+    const take = Math.min(resources[r] ?? 0, remaining);
+    if (take > 0) {
+      discard[r] = take;
+      remaining -= take;
+    }
+  }
+  return remaining === 0 ? discard : null;
+}
+
+function bundlesEqual(a: ResourceBundle, b: ResourceBundle | null): boolean {
+  if (!b) return false;
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of keys) if ((a[k as Resource] ?? 0) !== (b[k as Resource] ?? 0)) return false;
+  return true;
+}
+
+export function getValidMoves(state: CenturyState, seat: SeatIndex): EngineAction[] {
+  if (seat !== state.activeSeat) return [];
+  const player = findPlayer(state, seat);
+  if (!player) return [];
+
+  if (state.phase === "discarding") {
+    if (state.awaitingDiscardSeat !== seat) return [];
+    const excess = bundleTotal(player.resources) - HAND_LIMIT;
+    if (excess <= 0) return [];
+    const moves: EngineAction[] = [];
+    const cheap = buildDiscardBundle(player.resources, excess, RESOURCE_ORDER);
+    if (cheap) moves.push({ type: "discardToLimit", seat, discard: cheap });
+    const pricey = buildDiscardBundle(player.resources, excess, [...RESOURCE_ORDER].reverse());
+    if (pricey && !bundlesEqual(pricey, cheap)) moves.push({ type: "discardToLimit", seat, discard: pricey });
+    return moves;
+  }
+  if (state.phase !== "playing") return [];
+
+  const moves: EngineAction[] = [];
+  for (const card of player.hand) {
+    if (card.effect.kind === "production") {
+      moves.push({ type: "playProduction", seat, cardId: card.id });
+    } else if (card.effect.kind === "upgrade") {
+      for (const seq of enumerateUpgradeSequences(card.effect.upgrades)) {
+        if (simulateUpgrade(player.resources, seq)) {
+          moves.push({ type: "playUpgrade", seat, cardId: card.id, upgrades: seq });
+        }
+      }
+    } else {
+      const maxRepeats = maxTradeRepeats(player, card.effect.cost);
+      for (let repeats = 1; repeats <= maxRepeats; repeats++) {
+        moves.push({ type: "playTrade", seat, cardId: card.id, repeats });
+      }
+    }
+  }
+
+  for (let index = 0; index < MERCHANT_MARKET_SIZE; index++) {
+    if (!state.merchantMarket[index]) continue;
+    const payment = index === 0 ? [] : cheapestPaymentColors(player.resources, index);
+    if (index > 0 && !payment) continue;
+    moves.push({ type: "acquireMerchant", seat, index, payment: payment ?? [] });
+  }
+
+  moves.push({ type: "rest", seat }); // always legal — guarantees this list is never empty for the active seat
+
+  for (let index = 0; index < POINT_MARKET_SIZE; index++) {
+    const card = state.pointMarket[index];
+    if (card && canAfford(player.resources, card.cost)) {
+      moves.push({ type: "claimPoint", seat, index });
+    }
+  }
+
+  return moves;
+}
+
+/** The point-market card currently cheapest to reach (smallest weighted resource gap) — expert tier's "목표 포인트 카드까지 필요한 자원 갭" target. */
+function bestGapTarget(state: CenturyState, player: PlayerState): ResourceBundle | null {
+  let best: ResourceBundle | null = null;
+  let bestValue = Infinity;
+  for (const card of state.pointMarket) {
+    if (!card) continue;
+    const gap: ResourceBundle = {};
+    for (const r of RESOURCE_ORDER) {
+      const need = (card.cost[r] ?? 0) - (player.resources[r] ?? 0);
+      if (need > 0) gap[r] = need;
+    }
+    const gapValue = bundleValue(gap);
+    if (gapValue < bestValue) {
+      bestValue = gapValue;
+      best = gap;
+    }
+  }
+  return best;
+}
+
+/**
+ * Higher = more desirable for the bot. Tiers per ARCHITECTURE.md §7.5:
+ * novice ~ uniform over every legal move. core scores each action by its
+ * immediate resource/point value (net gain for production/trade/acquire,
+ * step count for upgrades, points for claims), with no lookahead. expert
+ * (Lv.8-10, per the task brief) additionally identifies the cheapest-to-
+ * reach point card in the market and rewards production/upgrade/trade/
+ * acquire moves that make progress specifically toward *that* card's gap,
+ * plus races harder for points once anyone has triggered the endgame.
+ */
+export function scoreMove(state: CenturyState, seat: SeatIndex, move: EngineAction, tier: BotTier): number {
+  if (tier === "novice") return 0;
+  const player = findPlayer(state, seat)!;
+  const expert = tier === "expert";
+  const gapTarget = expert ? bestGapTarget(state, player) : null;
+
+  const gapBonusFor = (gain: ResourceBundle): number => {
+    if (!gapTarget) return 0;
+    let bonus = 0;
+    for (const r of RESOURCE_ORDER) {
+      const need = gapTarget[r] ?? 0;
+      if (need > 0) bonus += Math.min(need, gain[r] ?? 0) * 4;
+    }
+    return bonus;
+  };
+
+  switch (move.type) {
+    case "playProduction": {
+      const card = player.hand.find((c) => c.id === move.cardId);
+      const gain = card?.effect.kind === "production" ? card.effect.gain : {};
+      return bundleValue(gain) + gapBonusFor(gain);
+    }
+    case "playUpgrade": {
+      let score = move.upgrades.length * 2; // each step is exactly +1 tier of value
+      if (gapTarget) {
+        const after = simulateUpgrade(player.resources, move.upgrades) ?? player.resources;
+        const gained: ResourceBundle = {};
+        for (const r of RESOURCE_ORDER) {
+          const delta = (after[r] ?? 0) - (player.resources[r] ?? 0);
+          if (delta > 0) gained[r] = delta;
+        }
+        score += gapBonusFor(gained);
+      }
+      return score;
+    }
+    case "playTrade": {
+      const card = player.hand.find((c) => c.id === move.cardId);
+      if (card?.effect.kind !== "trade") return 0;
+      const gain = scaleBundle(card.effect.gain, move.repeats);
+      const cost = scaleBundle(card.effect.cost, move.repeats);
+      return bundleValue(gain) - bundleValue(cost) + gapBonusFor(gain);
+    }
+    case "acquireMerchant": {
+      const paymentCost: ResourceBundle = {};
+      for (const r of move.payment) paymentCost[r] = (paymentCost[r] ?? 0) + 1;
+      const gained = state.merchantMarketResources[move.index] ?? {};
+      return 8 + bundleValue(gained) - bundleValue(paymentCost); // flat "new card in hand" utility + net stake value
+    }
+    case "rest":
+      return player.playedCards.length * 2;
+    case "claimPoint": {
+      const card = state.pointMarket[move.index];
+      const points = card?.points ?? 0;
+      const bonus = move.index === 0 ? 3 : move.index === 1 ? 1 : 0; // gold/silver slot
+      const urgency = expert && state.endTriggered ? 20 : 0; // race harder once someone has triggered the endgame
+      return points * 10 + bonus + urgency;
+    }
+    case "discardToLimit":
+      return -bundleValue(move.discard); // discard the least valuable resources first
+    default:
+      return 0;
+  }
+}
+
+export function chooseBotAction(
+  state: CenturyState,
+  seat: SeatIndex,
+  level: BotLevel,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const tier = botTier(level);
+  const candidates: ScoredCandidate<EngineAction>[] = moves.map((move) => ({ move, score: scoreMove(state, seat, move, tier) }));
+  return pickByLevel(candidates, level, rng);
 }
