@@ -3,8 +3,10 @@ import {
   applyAction,
   buildCardCatalog,
   canBang,
+  chooseBotAction,
   circleDistance,
   effectiveDistance,
+  getValidMoves,
   livingSeatsInOrder,
   ROLE_SETS,
   startGame,
@@ -12,12 +14,14 @@ import {
   type BangState,
   type Card,
   type CardType,
+  type EngineAction,
   type EquipSlot,
   type PendingDuel,
   type PendingGeneralStore,
   type PendingGroupResponse,
   type PlayerState,
   type Role,
+  type SeatIndex,
   type Suit,
 } from "./engine";
 
@@ -926,5 +930,174 @@ describe("deterministic reshuffle", () => {
     const next = applyAction(state, { type: "play-wells-fargo", cardId: "wf1", seed: 7 });
     expect(next.players[0].hand.length).toBe(1);
     expect(next.deck.length + next.discard.length).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("action phase: enumerates hand-driven plays plus end-turn, and nothing for an idle seat", () => {
+    const state = makeState({
+      players: [
+        makePlayer(0, "sheriff", { hand: [card("bang", "bg1"), card("beer", "be1")] }),
+        makePlayer(1, "outlaw"),
+        makePlayer(2, "outlaw"),
+        makePlayer(3, "renegade"),
+      ],
+    });
+    const moves = getValidMoves(state, 0);
+    expect(moves.some((m) => m.type === "end-turn")).toBe(true);
+    expect(moves.some((m) => m.type === "play-beer")).toBe(true);
+    expect(moves.some((m) => m.type === "play-bang")).toBe(true);
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("begin-turn phase: offers only 'begin-turn', only to the turn seat", () => {
+    const state = makeState({ turnPhase: "begin-turn" });
+    expect(getValidMoves(state, 0)).toEqual([{ type: "begin-turn" }]);
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("group-response pending: offers the required card, barrel (if equipped), and take-hit as a guaranteed fallback", () => {
+    const state = makeState({
+      turnPhase: "pending",
+      players: [
+        makePlayer(0, "sheriff"),
+        makePlayer(1, "outlaw", { hand: [card("missed", "m1")] }),
+        makePlayer(2, "outlaw"),
+        makePlayer(3, "renegade"),
+      ],
+      pending: { kind: "group", cause: "bang", source: 0, requiredCard: "missed", barrelAllowed: true, outstanding: [1] } satisfies PendingGroupResponse,
+    });
+    const moves = getValidMoves(state, 1);
+    expect(moves).toContainEqual({ type: "group-respond", seat: 1, mode: "card", cardId: "m1" });
+    expect(moves).toContainEqual({ type: "group-respond", seat: 1, mode: "take-hit" });
+    expect(moves.some((m) => m.type === "group-respond" && m.mode === "barrel")).toBe(false); // no barrel equipped
+    expect(getValidMoves(state, 2)).toEqual([]); // not outstanding
+  });
+
+  it("duel pending: offers Bang cards plus a concede fallback, only to turnToRespond", () => {
+    const state = makeState({
+      turnPhase: "pending",
+      players: [
+        makePlayer(0, "sheriff", { hand: [card("bang", "bg1")] }),
+        makePlayer(1, "outlaw"),
+        makePlayer(2, "outlaw"),
+        makePlayer(3, "renegade"),
+      ],
+      pending: { kind: "duel", attacker: 1, defender: 0, turnToRespond: 0 } satisfies PendingDuel,
+    });
+    const moves = getValidMoves(state, 0);
+    expect(moves).toContainEqual({ type: "duel-respond", seat: 0, cardId: "bg1" });
+    expect(moves).toContainEqual({ type: "duel-respond", seat: 0, cardId: null });
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("general-store pending: one candidate per revealed card, only for whoever's turn to pick", () => {
+    const state = makeState({
+      turnPhase: "pending",
+      pending: {
+        kind: "general-store",
+        revealed: [card("bang", "r1"), card("beer", "r2")],
+        pickOrder: [0, 1, 2, 3],
+        nextPickIndex: 0,
+      } satisfies PendingGeneralStore,
+    });
+    expect(getValidMoves(state, 0)).toEqual([
+      { type: "general-store-pick", seat: 0, cardId: "r1" },
+      { type: "general-store-pick", seat: 0, cardId: "r2" },
+    ]);
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("returns [] once a winner is set", () => {
+    const state = makeState({ winner: "law" });
+    expect(getValidMoves(state, 0)).toEqual([]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null for a seat with nothing to decide", () => {
+    const state = makeState();
+    expect(chooseBotAction(state, 1, 5)).toBeNull();
+  });
+
+  it("always returns a legal move regardless of level", () => {
+    const state = makeState({
+      players: [
+        makePlayer(0, "sheriff", { hand: [card("jail", "j1"), card("bang", "bg1")] }),
+        makePlayer(1, "outlaw"),
+        makePlayer(2, "outlaw"),
+        makePlayer(3, "renegade"),
+      ],
+    });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 0, level, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(state, 0)).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) jails an unrevealed seat, while Level 10 correctly targets the revealed Outlaw", () => {
+    // Seat 0 (Sheriff) holds only a Jail card. Seat 2 is a publicly revealed
+    // Outlaw (a legitimate target); seats 1/3 are still secret. getValidMoves
+    // lists targets in turn order (1, 2, 3) before end-turn, so Level 1's
+    // forced-random path (rng always 0 -> candidates[0]) lands on seat 1.
+    const state = makeState({
+      players: [
+        makePlayer(0, "sheriff", { hand: [card("jail", "j1")] }),
+        makePlayer(1, "outlaw", { roleRevealed: false }),
+        makePlayer(2, "outlaw", { roleRevealed: true }),
+        makePlayer(3, "renegade", { roleRevealed: false }),
+      ],
+    });
+
+    const level1Action = chooseBotAction(state, 0, 1, () => 0);
+    expect(level1Action).toEqual({ type: "play-jail", cardId: "j1", targetSeat: 1 });
+
+    const level10Action = chooseBotAction(state, 0, 10, () => 0);
+    expect(level10Action).toEqual({ type: "play-jail", cardId: "j1", targetSeat: 2 });
+  });
+});
+
+function bangCurrentActorForTest(state: BangState): SeatIndex | null {
+  if (state.winner) return null;
+  if (state.pending) {
+    const p = state.pending;
+    if (p.kind === "group") return p.outstanding.length > 0 ? Math.min(...p.outstanding) : null;
+    if (p.kind === "duel") return p.turnToRespond;
+    return p.pickOrder[p.nextPickIndex] ?? null;
+  }
+  if (state.turnPhase === "begin-turn" || state.turnPhase === "action") return state.turnSeat;
+  return null;
+}
+
+function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: SeatIndex) => number): BangState {
+  let state = startGame(playerCount, seed);
+  let guard = 0;
+  while (state.turnPhase !== "game-end" && !state.winner && guard < 8000) {
+    guard++;
+    const seat = bangCurrentActorForTest(state);
+    if (seat === null) break;
+    const action = chooseBotAction(state, seat, levelOf(seat));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action as EngineAction);
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 게임 종료까지 완주)", () => {
+  for (const n of [4, 5, 6, 7]) {
+    it(`completes a ${n}-player all-Level-10 game with a winning team declared`, () => {
+      const state = playFullBotGame(n, 200 + n, () => 10);
+      expect(state.winner).not.toBeNull();
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(6, 555, (seat) => (seat % 2 === 0 ? 1 : 10));
+    expect(state.winner).not.toBeNull();
   });
 });

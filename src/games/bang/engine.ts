@@ -155,6 +155,7 @@ export type EngineAction =
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
 export { seededRng };
+import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
 
 // ---------------------------------------------------------------------------
 // The 80-card deck. Exact per-card suit/rank assignment isn't reliably
@@ -964,4 +965,297 @@ export function applyAction(state: BangState, action: EngineAction): BangState {
     default:
       return state;
   }
+}
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7) — getValidMoves / scoreMove /
+// chooseBotAction(state, seat, level, rng?). Information fairness: this
+// engine has no `getPlayerView`-style redaction helper of its own (every
+// role is redacted only in the UI layer) — the bot compensates by only ever
+// treating another seat's role as known when `roleRevealed` is true (public
+// per the sheriff's always-revealed status and the reveal-on-death rule),
+// falling back to "unknown" (neutral) otherwise. Its own seat's role is
+// always legitimately known. Actions that carry an optional `seed`
+// (stagecoach/wells-fargo/panic/cat-balou/general-store/barrel-response) are
+// simply left seedless here — `rngFor`'s own state-derived fallback already
+// makes the reducer deterministic without one, so there's nothing for
+// `chooseBotAction` to fill in after the fact (unlike coup/lasVegas).
+// ---------------------------------------------------------------------------
+
+const EQUIP_SLOTS: EquipSlot[] = ["weapon", "scope", "mustang", "barrel", "jail", "dynamite"];
+
+function teamOf(role: Role): Team {
+  if (role === "sheriff" || role === "deputy") return "law";
+  if (role === "outlaw") return "outlaw";
+  return "renegade";
+}
+
+/** The viewer's best legitimate read on `targetSeat`'s team — their own team if it's the viewer's own seat, the real team once `roleRevealed` makes it public, "unknown" otherwise. Never reads another seat's still-secret role. */
+function apparentTeam(state: BangState, viewerSeat: SeatIndex, targetSeat: SeatIndex): Team | "unknown" {
+  if (targetSeat === viewerSeat) return teamOf(state.players[viewerSeat].role);
+  const target = state.players[targetSeat];
+  return target.roleRevealed ? teamOf(target.role) : "unknown";
+}
+
+const CARD_VALUE: Partial<Record<CardType, number>> = {
+  volcanic: 6, schofield: 6, remington: 6, "rev-carbine": 6, winchester: 6,
+  bang: 5, missed: 4, duel: 4, beer: 3, barrel: 3, mustang: 3, scope: 3,
+  panic: 3, "cat-balou": 3, indians: 3, gatling: 3,
+  jail: 2, dynamite: 2, "general-store": 2, saloon: 2, stagecoach: 2, "wells-fargo": 2,
+};
+
+function cardValue(c: Card): number {
+  return CARD_VALUE[c.type] ?? 1;
+}
+
+/** Which cards `end-turn` would discard right now — greedily keeps the highest-value cards and sheds the rest, only when over the hand-size limit (no-op otherwise). */
+function discardSelectionFor(player: PlayerState): string[] {
+  const excess = player.hand.length - player.life;
+  if (excess <= 0) return [];
+  return [...player.hand]
+    .sort((a, b) => cardValue(a) - cardValue(b))
+    .slice(0, excess)
+    .map((c) => c.id);
+}
+
+export function getValidMoves(state: BangState, seat: SeatIndex): EngineAction[] {
+  if (state.winner) return [];
+
+  if (state.pending) {
+    const pending = state.pending;
+    if (pending.kind === "group") {
+      if (!pending.outstanding.includes(seat)) return [];
+      const player = state.players[seat];
+      const moves: EngineAction[] = [];
+      for (const c of player.hand) {
+        if (c.type === pending.requiredCard) moves.push({ type: "group-respond", seat, mode: "card", cardId: c.id });
+      }
+      if (pending.barrelAllowed && player.equipment.barrel) moves.push({ type: "group-respond", seat, mode: "barrel" });
+      moves.push({ type: "group-respond", seat, mode: "take-hit" }); // always legal — guarantees this list is never empty
+      return moves;
+    }
+    if (pending.kind === "duel") {
+      if (pending.turnToRespond !== seat) return [];
+      const player = state.players[seat];
+      const moves: EngineAction[] = [];
+      for (const c of player.hand) if (c.type === "bang") moves.push({ type: "duel-respond", seat, cardId: c.id });
+      moves.push({ type: "duel-respond", seat, cardId: null }); // concede — always legal
+      return moves;
+    }
+    // general-store
+    if (pending.pickOrder[pending.nextPickIndex] !== seat) return [];
+    return pending.revealed.map((c) => ({ type: "general-store-pick", seat, cardId: c.id }) as EngineAction);
+  }
+
+  if (state.turnPhase === "begin-turn") {
+    return seat === state.turnSeat ? [{ type: "begin-turn" }] : [];
+  }
+  if (state.turnPhase !== "action" || seat !== state.turnSeat) return [];
+
+  const player = state.players[seat];
+  const aliveOthers = livingSeatsInOrder(state).filter((s) => s !== seat);
+  const aliveCount = state.players.filter((p) => p.alive).length;
+  const moves: EngineAction[] = [];
+
+  for (const card of player.hand) {
+    switch (card.type) {
+      case "bang": {
+        const cap = player.equipment.weapon?.type === "volcanic" ? Infinity : 1;
+        if (player.bangPlayedThisTurn < cap) {
+          for (const target of aliveOthers) {
+            if (canBang(state, seat, target)) moves.push({ type: "play-bang", cardId: card.id, targetSeat: target });
+          }
+        }
+        break;
+      }
+      case "beer":
+        if (aliveCount > 2) moves.push({ type: "play-beer", cardId: card.id });
+        break;
+      case "saloon":
+        moves.push({ type: "play-saloon", cardId: card.id });
+        break;
+      case "stagecoach":
+        moves.push({ type: "play-stagecoach", cardId: card.id });
+        break;
+      case "wells-fargo":
+        moves.push({ type: "play-wells-fargo", cardId: card.id });
+        break;
+      case "volcanic":
+      case "schofield":
+      case "remington":
+      case "rev-carbine":
+      case "winchester":
+        moves.push({ type: "play-weapon", cardId: card.id });
+        break;
+      case "scope":
+        moves.push({ type: "play-scope", cardId: card.id });
+        break;
+      case "mustang":
+        moves.push({ type: "play-mustang", cardId: card.id });
+        break;
+      case "barrel":
+        moves.push({ type: "play-barrel", cardId: card.id });
+        break;
+      case "dynamite":
+        moves.push({ type: "play-dynamite", cardId: card.id });
+        break;
+      case "panic":
+        for (const target of aliveOthers) {
+          if (effectiveDistance(state, seat, target) > 1) continue;
+          const t = state.players[target];
+          if (t.hand.length > 0) moves.push({ type: "play-panic", cardId: card.id, targetSeat: target, from: "hand" });
+          for (const slot of EQUIP_SLOTS) {
+            const equipCard = t.equipment[slot];
+            if (equipCard) moves.push({ type: "play-panic", cardId: card.id, targetSeat: target, from: "equip", equipCardId: equipCard.id });
+          }
+        }
+        break;
+      case "cat-balou":
+        for (const target of aliveOthers) {
+          const t = state.players[target];
+          if (t.hand.length > 0) moves.push({ type: "play-cat-balou", cardId: card.id, targetSeat: target, from: "hand" });
+          for (const slot of EQUIP_SLOTS) {
+            const equipCard = t.equipment[slot];
+            if (equipCard) moves.push({ type: "play-cat-balou", cardId: card.id, targetSeat: target, from: "equip", equipCardId: equipCard.id });
+          }
+        }
+        break;
+      case "jail":
+        for (const target of aliveOthers) {
+          if (state.players[target].role !== "sheriff") moves.push({ type: "play-jail", cardId: card.id, targetSeat: target });
+        }
+        break;
+      case "duel":
+        for (const target of aliveOthers) moves.push({ type: "play-duel", cardId: card.id, targetSeat: target });
+        break;
+      case "indians":
+        moves.push({ type: "play-indians", cardId: card.id });
+        break;
+      case "gatling":
+        moves.push({ type: "play-gatling", cardId: card.id });
+        break;
+      case "general-store":
+        moves.push({ type: "play-general-store", cardId: card.id });
+        break;
+      default:
+        break; // "missed" has no action-phase effect — response-only.
+    }
+  }
+
+  moves.push({ type: "end-turn", discardCardIds: discardSelectionFor(player) }); // always legal — guarantees this list is never empty
+  return moves;
+}
+
+/**
+ * Higher = more desirable for the bot. Tiers per ARCHITECTURE.md §7.5:
+ * novice ~ uniform over every legal move. core reacts to immediate danger
+ * (plays Beer when actually hurt, desperately avoids "take the hit"/concede
+ * once at 1 life) but targets attacks without any role read. expert
+ * (Lv.8-10, per the task brief) additionally weighs targets by apparent
+ * team via `apparentTeam` — law hunts revealed Outlaws/Renegades and never
+ * hits a revealed teammate, Outlaws prioritize the Sheriff above all else,
+ * and Renegades hang back from open attacks once only 3 players remain
+ * (angling to be the last one standing rather than tipping the balance).
+ */
+export function scoreMove(state: BangState, seat: SeatIndex, move: EngineAction, tier: BotTier): number {
+  if (tier === "novice") return 0;
+  const expert = tier === "expert";
+  const player = state.players[seat];
+  const myTeam = teamOf(player.role);
+  const aliveCount = state.players.filter((p) => p.alive).length;
+
+  const hostility = (targetSeat: SeatIndex): number => {
+    const apparent = apparentTeam(state, seat, targetSeat);
+    if (myTeam === "law") {
+      if (apparent === "outlaw" || apparent === "renegade") return 2;
+      if (apparent === "law") return -3; // never want to hit a revealed teammate
+      return 0; // unknown seat — no reliable read
+    }
+    if (myTeam === "outlaw") {
+      if (apparent === "law" && state.players[targetSeat].role === "sheriff") return 3; // killing the Sheriff wins outright
+      if (apparent === "law") return 2;
+      if (apparent === "renegade") return 1;
+      return 0.5;
+    }
+    // renegade
+    if (aliveCount <= 3) return -1; // hang back near the endgame — angling to be last standing
+    if (apparent === "law") return 2;
+    if (apparent === "outlaw") return 1;
+    return 0.5;
+  };
+
+  switch (move.type) {
+    case "begin-turn":
+      return 0; // the only candidate in this phase
+    case "play-bang":
+      return 8 + (expert ? hostility(move.targetSeat) * 5 : 3);
+    case "play-duel":
+      return 7 + (expert ? hostility(move.targetSeat) * 5 : 2);
+    case "play-jail":
+      return 4 + (expert ? hostility(move.targetSeat) * 4 : 1);
+    case "play-indians":
+    case "play-gatling": {
+      // Hits everyone else at once — much better when most of "everyone else" is hostile.
+      const others = livingSeatsInOrder(state).filter((s) => s !== seat);
+      const net = expert ? others.reduce((sum, s) => sum + hostility(s), 0) : others.length;
+      return 6 + net;
+    }
+    case "play-panic":
+      return 5 + (expert ? hostility(move.targetSeat) * 3 : 1); // steals (keeps the card), so scores a touch above Cat Balou
+    case "play-cat-balou":
+      return 4 + (expert ? hostility(move.targetSeat) * 3 : 1);
+    case "play-beer": {
+      const missing = player.maxLife - player.life;
+      if (!expert) return missing > 0 ? 9 : 1; // core: only heals when actually hurt
+      return 4 + missing * 3;
+    }
+    case "play-saloon": {
+      const missing = player.maxLife - player.life;
+      return 3 + missing * 2;
+    }
+    case "play-weapon":
+    case "play-scope":
+    case "play-mustang":
+    case "play-barrel":
+    case "play-dynamite":
+      return 6; // equipment upgrades are almost always worth playing immediately
+    case "play-stagecoach":
+      return 5;
+    case "play-wells-fargo":
+      return 6;
+    case "play-general-store":
+      return 4;
+    case "end-turn": {
+      if (!expert) return player.life <= player.maxLife / 2 ? -2 : 0; // core: reluctant to pass while hurt if anything else was on offer
+      return -1; // ending the turn is a legal fallback but usually the worst option available
+    }
+    case "group-respond": {
+      if (move.mode === "take-hit") return player.life <= 1 ? -20 : -2; // desperate to avoid this near death
+      if (move.mode === "barrel") return 3; // a free (no card spent) chance to dodge
+      return 6; // spending a real card to guarantee the dodge
+    }
+    case "duel-respond": {
+      if (move.cardId === null) return player.life <= 1 ? -20 : -2;
+      return 6;
+    }
+    case "general-store-pick": {
+      const card = state.pending?.kind === "general-store" ? state.pending.revealed.find((c) => c.id === move.cardId) : undefined;
+      return card ? cardValue(card) : 0;
+    }
+    default:
+      return 0;
+  }
+}
+
+export function chooseBotAction(
+  state: BangState,
+  seat: SeatIndex,
+  level: BotLevel,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const tier = botTier(level);
+  const candidates: ScoredCandidate<EngineAction>[] = moves.map((move) => ({ move, score: scoreMove(state, seat, move, tier) }));
+  return pickByLevel(candidates, level, rng);
 }
