@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-13 (같은 날 후속 세션 — AI 봇이 아예 없던 나머지 10종 전부에 Level 1~10 난이도 신규 연동: 오이 다섯 개/달무티/러브레터/레지스탕스 쿠/언어의 조각/말달리자/틀린 그림 찾기/센추리/아발론/뱅!. 지렁이는 실시간 물리 시뮬레이션 장르라 이번 범위에서 명시적으로 제외. 이전 갱신: AI 봇 Level 1~10 난이도 시스템 신규 구축 + 포세일/코요테/라스베가스/그리드 포커/소환사의 협곡 5종에 연동. 그 이전: 공통 AI 봇 대전 시스템 신규 구축 — 하나미코지/노땡스/페루도/스플렌더 4종 파일럿 적용 + 신규 게임 필수 표준화)_
+_최종 갱신: 2026-08-13 (같은 날 세 번째 세션 — 계정/구독/게스트 모드/관리자 대시보드 **1단계(기반)** 신규 구축: Supabase Auth 로그인, 구독·사용량 데이터 모델(실결제 미연동, 관리자 수동 등급 부여), 게스트/회원 전역 스위치, `/admin` 대시보드 스켈레톤, 최소 HUD. 방문자 통계/지오로케이션, 퀘스트 5종, 쿠폰 시스템은 다음 세션으로 명시적으로 미룸 — 아래 참고. 이전 갱신: AI 봇이 아예 없던 나머지 10종 전부에 Level 1~10 난이도 신규 연동. 그 이전: AI 봇 Level 1~10 난이도 시스템 신규 구축 + 포세일/코요테/라스베가스/그리드 포커/소환사의 협곡 5종에 연동. 그 이전: 공통 AI 봇 대전 시스템 신규 구축 — 하나미코지/노땡스/페루도/스플렌더 4종 파일럿 적용 + 신규 게임 필수 표준화)_
 
 > **이 문서는 "지금 이 순간"의 스냅샷만 담는다.** 새 세션이 `/clear` 직후 가장 먼저 읽어야 할 문서이며, 여기 담긴 정보만으로 이전 맥락을 복원할 수 있어야 한다. **시간순 기록(무엇을 왜 그 순서로 만들었는가)은 [docs/history.md](./docs/history.md)로, 버그 대응 이력은 [docs/troubleshooting.md](./docs/troubleshooting.md)로 넘어갔다** — 이 파일 자체는 계속 짧게 유지하고, 완료된 세션 내용은 매번 `history.md`로 옮겨 적을 것.
 
@@ -38,11 +38,40 @@ _최종 갱신: 2026-08-13 (같은 날 후속 세션 — AI 봇이 아예 없던
 | 레지스탕스 쿠 | 2~6 | ✅ | 없음(룰북 자체가 이미 "단판 완결 정식 규칙서" — 다회차/단판 상충 자체가 없었음) | 챌린지/카운터 응답 팝업 모달 + 15초 응답 타이머 게이지(클라이언트 로컬 UX, 시간 만료 시 안전한 기본값인 "패스" 자동 제출) + 영향력 카드 3D 반전 공개 애니메이션 + 탈락 토스트/최후생존자 전면 배너 | ❌(제공된 룰북 폴더에 이미지 자산 없음 — emoji/gradient 대체) |
 | 지렁이 | 2~8 | ✅(호스트 권위 실시간 동기화, 락스텝 아님 — docs/cloud-sync.md §5) | 제한 시간 3분 고정 + 랭킹 지표는 누적 점수(죽어도 안 깎임, 동점이면 최고 길이로 타이브레이크) — 아래 "이번 세션" 참고 | HTML5 Canvas 2D 실시간 렌더링(다이나믹 줌아웃 카메라) + 마우스/키보드/터치 조이스틱 통합 입력 + 리더보드/HUD | ✅(자체 제작 SVG 벡터 커버, `public/games/worm.svg`) |
 
-전체 게임별 파일 구조 표준은 **[ARCHITECTURE.md](./ARCHITECTURE.md)** 참고. 검증 상태: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(**938개** 전부 통과, 저장소 전체 26개 테스트 파일 — 이번 세션 Level 1~10 봇 난이도 10종 추가로 115개 신규) 전부 그린.
+전체 게임별 파일 구조 표준은 **[ARCHITECTURE.md](./ARCHITECTURE.md)** 참고. 검증 상태: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(**948개** 전부 통과, 저장소 전체 27개 테스트 파일 — 이번 세션 계정/구독 엔타이틀먼트 순수 로직에 10개 신규) 전부 그린.
 
 ### 버그 리포트 시스템 (2026-08-11 신규)
 
 허브 헤더(`SiteHeader.tsx`)와 `/games/[gameId]` 페이지 좌하단 플로팅 버튼(모든 플레이 가능 게임 공용, 게임 ID/이름 자동 매핑)에서 버그 제보 모달을 띄울 수 있고, `/bug-reports`에서 제출된 리포트를 게임별/상태별로 필터링해 볼 수 있다. IndexedDB가 1차 저장소(이 브라우저에 제출된 리포트만 목록에 표시 — `/history`와 동일한 스코프)이고, Supabase가 설정돼 있으면 `bug_reports` 테이블로 best-effort 백업만 이뤄진다(현재 UI는 이 백업을 다시 읽어오지 않음). 상세 내역은 [docs/history.md](./docs/history.md) 참고.
+
+### 계정 / 구독 / 게스트 모드 / 관리자 대시보드 — 1단계(기반) (2026-08-13 같은 날 세 번째 세션 신규)
+
+사용자가 요청한 전체 범위(방문자 통계+지오로케이션, 게스트/회원 구독 전환, 요금제 5종, 퀘스트 5종+보상 미니게임, 관리자 대시보드, 로그인 유저 HUD, 자동 배포)는 7개 대형 시스템이라 한 세션에 전부 만들면 검증이 어렵다고 판단, **AskUserQuestion으로 확인 후 1단계(기반)만 이번 세션에서 구축**했다. 이 프로젝트는 그 전까지 **계정/인증 개념이 전혀 없는 그린필드 상태**였다(플레이어 식별은 `localStorage` 랜덤 UUID + 자유 입력 닉네임 + 약한 IP 상관관계뿐, `device_sightings` 스키마 주석 자체가 "이 앱엔 인증 레이어가 없다"고 명시하던 상태).
+
+- **사용자 확정 사항 3가지**: (1) 포세일 퀘스트 임계값("수표 7만5천원 이상")은 실제 엔진 범위(0~14,000)와 안 맞아 **"고액 수표(≥12,000) 2회"로 재조정**(다음 세션 퀘스트 구현 시 적용 — 이번엔 기록만). (2) 요금제는 **실결제 미연동** — 구독 데이터 모델 + 관리자 수동 등급 부여로 구현, 실제 PG(토스페이먼츠/포트원 등) 연동은 가맹점 키가 준비되면 추후 진행. (3) 코인형/시간형 과금은 **관리자가 사이트 전역에서 하나를 고르는 토글**(게스트/회원 모드 토글과 동일 패턴)이지, 동시 이중 캐핑이 아님.
+- **Next.js 16 컨벤션 확인**: 이 버전은 `middleware.ts`가 폐기되고 **`proxy.ts`(`export function proxy`)로 개명**됐다(`node_modules/next/dist/docs/.../file-conventions/proxy.md`, AGENTS.md의 "breaking changes 문서 확인" 경고가 실제로 해당한 사례). `src/proxy.ts` 신규 — `/admin/**` 접근 시에만 세션+role 확인(매처 `["/admin/:path*"]`로 스코프 한정, 모든 요청에 걸지 않음).
+- **인증**: Supabase Auth(email+password). 기존 `@supabase/supabase-js`(로컬스토리지 세션, 데이터 전용 `getSupabase()`)와 별개로 **`@supabase/ssr` 신규 추가** — 쿠키 기반 세션이 필요해 브라우저용 `src/lib/supabase/authClient.ts`(`createBrowserClient`)와 서버용 `src/lib/supabase/server.ts`(`createServerClient`, `await cookies()`)를 새로 분리했다. 로그인 상태와 무관한 기존 기능(`device_sightings`/`daily_records`/`bug_reports`/`guest_usage`)은 계속 기존 `client.ts`(로컬스토리지 anon 클라이언트)를 쓴다 — 섞으면 서버가 세션을 못 읽는다.
+- **RLS 설계 중 실제 버그 발견/수정**: 처음엔 "본인 구독 행의 `cancel_at_period_end`만 토글 가능"하게 하려고 `for update using(user_id=auth.uid())` 정책을 그대로 썼는데, **Postgres RLS는 컬럼 단위 제한이 불가능**해서 이 정책은 사실상 로그인 유저가 자기 `tier`를 `max`로 직접 고쳐 무료로 등급을 올릴 수 있는 구멍이었다. 이 정책 자체를 제거하고, 해지예약 토글은 `src/app/api/subscription/toggle-cancel`(서버, service-role, 세션에서 얻은 `user_id`만 사용)로 대체해 막았다.
+- **서버 인가 3단 구조**: 클라이언트 anon 클라이언트(공개 읽기만) → 쿠키 기반 서버 클라이언트(`server.ts`, 본인 행 RLS 읽기 + role 확인용) → service-role 클라이언트(`serviceClient.ts`, `SUPABASE_SERVICE_ROLE_KEY` 서버 전용 시크릿, RLS 우회, 관리자 API 안에서 role 확인 통과 후에만 사용). 관리자 부트스트랩은 `ADMIN_EMAILS`(서버 전용 env, 콤마 구분) 목록에 있는 이메일이 가입하면 `profiles.role='admin'`으로 자동 승격 — SQL을 수동으로 안 돌려도 첫 관리자 계정을 만들 수 있다.
+- **엔타이틀먼트(구독/사용량) 체크**: `src/lib/entitlements/`(신규) — `evaluate.ts`(순수 함수, IO 없음: `evaluateEntitlement`가 `metering_mode`에 맞는 축 하나만 캡 검사, `effectiveTier`가 `period_end` 지난 구독을 읽는 시점에 free로 강등)와 `repository.ts`(Supabase IO). 19개 게임 엔진은 전혀 건드리지 않고 **게임 진입 지점 한 곳**(`src/app/games/[gameId]/page.tsx`)에서만 게이팅 — 하이드레이션 직후 한 번만 결정하고 그 뒤로는 재평가하지 않는 방식(`GateStatus`를 렌더 중 파생 상태로 고정)이라, 온라인 대전 방에 이미 들어간 사람이 플레이 도중 사용량이 넘어가도 강제로 쫓겨나지 않는다.
+- **로그인 유저 사용량 쓰기는 서버 경유**: `usage_daily`는 RLS가 본인 select만 허용하고 insert/update는 아예 없음(클라가 자기 남은 횟수를 직접 조작 못 하게) — `/api/usage/record`가 세션 쿠키로 얻은 `user_id`로만 증가시킨다. 게스트(`guest_usage`)는 세션이 없어 기존 `device_sightings`처럼 anon 키에 열어뒀다(약한 신호, 로컬스토리지 초기화로 우회 가능 — 문서화된 한계).
+- **60일 무료체험**: 별도 쿠폰 코드 시스템 없이, 가입 후 첫 호출되는 `/api/auth/bootstrap`(idempotent — 프로필 없으면 생성, 있으면 no-op)이 `subscriptions` 행을 `tier='lite', source='trial', period_end=+60일`로 바로 만든다. 다음 세션에 일반 쿠폰 시스템이 생기면 "trial 쿠폰 자동 지급"으로 자연스럽게 흡수 가능.
+- **UI**: `SiteHeader.tsx`에 티어 뱃지 + 오늘 잔여 횟수/시간(hover 툴팁), `/login`·`/signup`·`/account`(해지예약 토글) 신규, `/admin`(게스트모드·과금방식·티어별 한도 편집 + 유저 목록/등급 수동변경/오늘 사용량 초기화 — 방문자 통계 섹션은 "다음 단계 예정" 플레이스홀더만).
+- **미완성/다음 세션으로 명시적으로 미룸**: 방문자 통계·PV/UV·IP 지오로케이션 대시보드(수집 자체를 아직 시작 안 함), 퀘스트 5종 + 보상 미니게임(19개 게임 중 최소 3개의 `handleGameEnd()`를 건드리거나 `GameCompletionResult` 계약 확장 필요, 아직 손 안 댐), 일반 쿠폰 코드 시스템, 실제 PG 결제 연동.
+- **라이브 반영 필요(수동 단계)**: `supabase/schema.sql`에 추가된 `profiles`/`subscriptions`/`usage_daily`/`guest_usage`/`app_settings` 테이블은 SQL 파일로만 작성됨 — 실제 Supabase 프로젝트에는 SQL 에디터나 CLI로 직접 반영해야 하고, `SUPABASE_SERVICE_ROLE_KEY`/`ADMIN_EMAILS`를 `.env.local`과 Vercel 프로젝트 환경변수에 추가해야 로그인/관리자 기능이 동작한다(README/`.env.example` 참고).
+
+1. **`supabase/schema.sql`** — `profiles`/`subscriptions`/`usage_daily`/`guest_usage`/`app_settings` 5개 테이블 + RLS 정책 신규.
+2. **`src/lib/supabase/authClient.ts`/`server.ts`/`serviceClient.ts`/`adminGuard.ts`(신규)** — 3단 인가 구조.
+3. **`src/proxy.ts`(신규)** — `/admin/**` 세션+role 가드(Next 16 `middleware.ts`→`proxy.ts` 개명 반영).
+4. **`src/lib/entitlements/`(신규)** — `types.ts`/`evaluate.ts`(+`evaluate.test.ts`)/`repository.ts`.
+5. **`src/store/subscriptionStore.ts`(신규)** — 기존 `bettingStore.ts`/`bugReportStore.ts`와 동일한 Zustand 패턴.
+6. **`src/app/login/`·`src/app/signup/`·`src/app/account/`(신규 페이지)**, **`src/app/api/auth/bootstrap`·`src/app/api/usage/record`·`src/app/api/subscription/toggle-cancel`·`src/app/api/admin/users`·`src/app/api/admin/settings`(신규 Route Handler)**.
+7. **`src/app/admin/page.tsx`(신규)** — 관리자 대시보드 스켈레톤.
+8. **`src/components/SiteHeader.tsx`(수정)** — HUD 뱃지. **`src/app/games/[gameId]/page.tsx`(수정)** — 엔타이틀먼트 게이팅 + 플레이 시간 기록. **`src/components/SupabaseRequiredNotice.tsx`(신규)** — 공용 미설정 안내.
+9. **검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(**948개** 전부 통과, 저장소 전체 27개 테스트 파일, 이번 세션 10개 신규 — `src/lib/entitlements/evaluate.test.ts`) 전부 그린. Supabase 관련 IO 코드(`repository.ts`, Route Handler)는 이 프로젝트에 기존 Supabase 목킹 테스트 패턴이 없어 유닛테스트 대상에서 제외했고, 대신 순수 결정 로직(`evaluate.ts`)만 테스트로 커버했다 — 실제 라우트 동작 검증은 로컬 스모크(아래 참고)로 대체.
+
+<details>
+<summary>이전 세션(공통 AI 봇 대전 시스템 + Level 1~10 난이도 — AI 봇이 아예 없던 나머지 10종 전부에 신규 연동) 원문 — 접힘</summary>
 
 ### 공통 AI 봇 대전 시스템 + Level 1~10 난이도 (2026-08-13 같은 날 후속 세션 갱신 — AI 봇이 아예 없던 나머지 10종 전부에 레벨 시스템 신규 연동, 온라인 대전 19종 중 파일럿 4종만 제외한 15종 완료)
 
@@ -79,6 +108,8 @@ _최종 갱신: 2026-08-13 (같은 날 후속 세션 — AI 봇이 아예 없던
 11. **검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(**938개** 전부 통과, 저장소 전체 26개 테스트 파일, 이번 세션 115개 신규) 전부 그린.
 
 **적용 안 된 게임**: 파일럿 4종(하나미코지·노땡스·페루도·스플렌더)은 봇은 있지만 아직 Level 1~10 난이도가 없다 — 다음에 그 게임들을 만지는 세션에서 `chooseBotAction`을 `botDifficulty.ts`의 `pickByLevel`을 쓰도록 리팩터링하며 레벨을 추가할 것. 지렁이는 실시간 물리 시뮬레이션 장르라 표준 봇 패턴 자체가 안 맞아 별도 설계가 필요(미착수).
+
+</details>
 
 ### 이전 세션(포세일/코요테/라스베가스/그리드 포커/소환사의 협곡 5종에 Level 1~10 난이도 신규 연동) 요약은 아래로 접혔다.
 

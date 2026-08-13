@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getGameMeta } from "@/games/registry";
 import { PLAYABLE_GAME_COMPONENTS } from "@/games/playableGames";
 import type { GameCompletionResult } from "@/games/types";
 import { useBettingStore } from "@/store/bettingStore";
+import { useSubscriptionStore } from "@/store/subscriptionStore";
 import { saveGameResult } from "@/lib/db/repository";
 import RoundResultEntry from "@/components/betting/RoundResultEntry";
 import GameThumbnail from "@/components/GameThumbnail";
 import BugReportFloatingButton from "@/components/bugReport/BugReportFloatingButton";
 
 type Stage = "select" | "playing" | "record" | "done";
+/** Frozen once per page load right after the subscription store hydrates — see the entitlement gate below. */
+type GateStatus = "checking" | "ok" | "login-required" | "limit-reached";
 
 export default function GamePlayPage() {
   const params = useParams<{ gameId: string }>();
@@ -27,11 +30,51 @@ export default function GamePlayPage() {
     void init();
   }, [init]);
 
+  // Entitlement gate: resolved once, right after the subscription store
+  // finishes hydrating, and then frozen — never re-evaluated mid-game, so a
+  // usage count ticking over while an online-multiplayer room is already in
+  // progress can never yank a player out of it. It only decides whether
+  // this page render *starts* a game at all.
+  const subHydrated = useSubscriptionStore((s) => s.hydrated);
+  const subConfigured = useSubscriptionStore((s) => s.configured);
+  const loginRequired = useSubscriptionStore((s) => s.loginRequired);
+  const entitlement = useSubscriptionStore((s) => s.entitlement);
+  const initSubscription = useSubscriptionStore((s) => s.init);
+  const recordPlay = useSubscriptionStore((s) => s.recordPlay);
+
+  useEffect(() => {
+    void initSubscription();
+  }, [initSubscription]);
+
+  const [gateStatus, setGateStatus] = useState<GateStatus>("checking");
+  if (gateStatus === "checking" && subHydrated) {
+    if (!subConfigured) {
+      setGateStatus("ok"); // Accounts feature disabled entirely — behave exactly like before this feature existed.
+    } else if (loginRequired) {
+      setGateStatus("login-required");
+    } else if (entitlement && !entitlement.allowed) {
+      setGateStatus("limit-reached");
+    } else {
+      setGateStatus("ok");
+    }
+  }
+
+  const playStartedAtRef = useRef<number | null>(null);
+
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   // Online-multiplayer games run their own room lobby (create/join/waiting)
   // in place of this page's local participant-selection step.
   const [stage, setStage] = useState<Stage>(game?.onlineMultiplayer ? "playing" : "select");
   const [result, setResult] = useState<GameCompletionResult | null>(null);
+
+  useEffect(() => {
+    if (stage === "playing" && playStartedAtRef.current === null) {
+      playStartedAtRef.current = Date.now();
+    }
+    if (stage === "select") {
+      playStartedAtRef.current = null; // "이 게임 다시하기" restarts the elapsed-time clock too.
+    }
+  }, [stage]);
 
   const min = game?.players.min ?? 2;
   const max = game?.players.max ?? 2;
@@ -104,10 +147,61 @@ export default function GamePlayPage() {
     );
   }
 
+  if (gateStatus === "login-required") {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <span className="text-4xl">🔒</span>
+        <h1 className="mt-4 text-xl font-bold text-white">로그인이 필요합니다</h1>
+        <p className="mt-2 text-sm text-white/50">지금은 게스트 모드가 꺼져 있어 로그인한 회원만 플레이할 수 있어요.</p>
+        <Link
+          href={`/login?next=${encodeURIComponent(`/games/${game.id}`)}`}
+          className="mt-6 inline-block rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-400"
+        >
+          로그인하러 가기
+        </Link>
+      </div>
+    );
+  }
+
+  if (gateStatus === "limit-reached") {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <span className="text-4xl">⏳</span>
+        <h1 className="mt-4 text-xl font-bold text-white">오늘의 이용 한도를 모두 사용했어요</h1>
+        <p className="mt-2 text-sm text-white/50">
+          {entitlement?.unit === "minutes"
+            ? `오늘 이용 시간(${entitlement.cap}분)을 모두 사용했습니다.`
+            : `오늘 게임 횟수(${entitlement?.cap}회)를 모두 사용했습니다.`}{" "}
+          내일 다시 초기화되거나, 구독을 업그레이드하면 더 많이 플레이할 수 있어요.
+        </p>
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <Link
+            href="/account"
+            className="rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-400"
+          >
+            구독 업그레이드
+          </Link>
+          <button
+            disabled
+            title="준비 중인 기능입니다"
+            className="cursor-not-allowed rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/40"
+          >
+            코인 충전 (준비중)
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const GameComponent = PLAYABLE_GAME_COMPONENTS[game.id];
 
   async function handleGameComplete(res: GameCompletionResult) {
     setResult(res);
+    if (subConfigured) {
+      const startedAt = playStartedAtRef.current ?? Date.now();
+      const minutes = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
+      void recordPlay(minutes);
+    }
     await saveGameResult({
       gameId: game!.id,
       gameName: game!.name,
