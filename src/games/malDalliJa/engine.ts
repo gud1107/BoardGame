@@ -53,6 +53,8 @@
  * multi-piece game in this project already treats occupancy.
  */
 
+import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
+
 export type Seat = "p1" | "p2";
 
 export function otherSeat(seat: Seat): Seat {
@@ -303,4 +305,86 @@ export function applyAction(state: MalDalliJaState, action: EngineAction): MalDa
     default:
       return state;
   }
+}
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7) — getValidMoves / scoreMove /
+// chooseBotAction(state, seat, level, rng?). No information-fairness
+// concern here at all — every horse's position is physically visible to
+// both players on the shared board, so the bot may freely reason about the
+// opponent's horses too (unlike every other game in this project).
+// ---------------------------------------------------------------------------
+
+export function getValidMoves(state: MalDalliJaState, seat: Seat): EngineAction[] {
+  if (state.phase !== "playing" || state.activeSeat !== seat) return [];
+  const moves: EngineAction[] = getLegalMoves(state).map((m) => ({
+    type: "move",
+    horseIndex: m.horseIndex,
+    moveKind: m.moveKind,
+    dr: m.dr,
+    dc: m.dc,
+  }));
+  // Structurally near-impossible with 10 horses on a mostly-open 11x11
+  // board, but `applyPass` is a legal no-target action the reducer already
+  // supports — offer it as a last resort so this never returns [] while a
+  // seat is genuinely up.
+  return moves.length > 0 ? moves : [{ type: "pass" }];
+}
+
+/** How many of `opponentPositions`' currently-open slide lanes get newly shortened by a horse landing at `to` — a fully public-information "블로킹" signal (every horse is visible to both players). */
+function countBlockedLanes(before: Set<string>, after: Set<string>, opponentPositions: Position[]): number {
+  let count = 0;
+  for (const op of opponentPositions) {
+    for (const [dr, dc] of SLIDE_DIRECTIONS) {
+      const reachBefore = resolveSlide(op, dr, dc, before);
+      const reachAfter = resolveSlide(op, dr, dc, after);
+      if (reachBefore && (!reachAfter || !positionsEqual(reachBefore, reachAfter))) count++;
+    }
+  }
+  return count;
+}
+
+/**
+ * Higher = more desirable for the bot. Tiers per ARCHITECTURE.md §7.5:
+ * novice ~ uniform over every legal move. core greedily minimizes the
+ * moved horse's Chebyshev distance to the nearest cell of the opponent's
+ * home zone (a rough stand-in for "moves left to win", since a slide can
+ * cross several cells at once). expert (Lv.8-10, per the task brief) adds
+ * `countBlockedLanes` — how many of the opponent's own slide lanes this
+ * move newly shortens — on top of the same distance heuristic.
+ */
+export function scoreMove(state: MalDalliJaState, seat: Seat, move: EngineAction, tier: BotTier): number {
+  if (tier === "novice" || move.type !== "move") return 0;
+
+  const occupied = allOccupied(state);
+  const from = state.positions[seat][move.horseIndex];
+  const to =
+    move.moveKind === "slide" ? resolveSlide(from, move.dr, move.dc, occupied) : { row: from.row + move.dr, col: from.col + move.dc };
+  if (!to) return -1e6; // structurally unreachable — getValidMoves only ever offers legal moves
+
+  if (isInOpponentZone(seat, to)) return 1e5; // immediate win
+
+  const nearest = Math.min(...targetZoneCells(seat).map((c) => Math.max(Math.abs(c.row - to.row), Math.abs(c.col - to.col))));
+  let score = -nearest * 10;
+
+  if (tier === "expert") {
+    const occupiedAfterMove = new Set(occupied);
+    occupiedAfterMove.delete(posKey(from));
+    occupiedAfterMove.add(posKey(to));
+    score += countBlockedLanes(occupied, occupiedAfterMove, state.positions[otherSeat(seat)]) * 5;
+  }
+  return score;
+}
+
+export function chooseBotAction(
+  state: MalDalliJaState,
+  seat: Seat,
+  level: BotLevel,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const tier = botTier(level);
+  const candidates: ScoredCandidate<EngineAction>[] = moves.map((move) => ({ move, score: scoreMove(state, seat, move, tier) }));
+  return pickByLevel(candidates, level, rng);
 }

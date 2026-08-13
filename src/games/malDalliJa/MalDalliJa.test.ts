@@ -6,12 +6,16 @@ import {
   HORSES_PER_PLAYER,
   HORSES_PER_ZONE,
   applyAction,
+  chooseBotAction,
   getLegalMoves,
+  getValidMoves,
   otherSeat,
   startGame,
   targetZoneCells,
+  type EngineAction,
   type MalDalliJaState,
   type Position,
+  type Seat,
 } from "./engine";
 
 function posKey(p: Position) {
@@ -326,5 +330,83 @@ describe("getLegalMoves / applyAction agreement", () => {
     const moves = getLegalMoves(state);
     const horsesWithMoves = new Set(moves.map((m) => m.horseIndex));
     expect(horsesWithMoves.size).toBe(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("mirrors getLegalMoves as move actions for the active seat, and nothing for the idle seat", () => {
+    const state = forceState({ positions: { p1: [{ row: 5, col: 5 }], p2: [{ row: 9, col: 9 }] } });
+    const moves = getValidMoves(state, "p1");
+    expect(moves).toHaveLength(getLegalMoves(state).length);
+    expect(moves.every((m) => m.type === "move")).toBe(true);
+    expect(getValidMoves(state, "p2")).toEqual([]);
+  });
+
+  it("returns [] outside the 'playing' phase", () => {
+    const state = forceState({ phase: "gameOver" });
+    expect(getValidMoves(state, state.activeSeat)).toEqual([]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null for a seat that isn't the active seat", () => {
+    const state = forceState({ positions: { p1: [{ row: 5, col: 5 }], p2: [{ row: 9, col: 9 }] } });
+    expect(chooseBotAction(state, "p2", 5)).toBeNull();
+  });
+
+  it("always returns a legal move regardless of level", () => {
+    const state = forceState({ positions: { p1: [{ row: 5, col: 5 }], p2: [{ row: 6, col: 6 }] } });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, "p1", level, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(state, "p1")).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) slides away from the goal, while Level 10 spots the immediate win", () => {
+    // p1's lone horse sits dead center. Every slide direction is
+    // unobstructed (p2's horse at (6,6) only blocks the down-right
+    // diagonal). getLegalMoves lists slide dir (-1,-1) first (SLIDE_DIRECTIONS'
+    // own order) -> to (0,0), which is far from p2's home zones (distance
+    // 5 -> 8, strictly worse). Slide dir (-1,1) -> (0,10) lands exactly
+    // inside p2's zone, an immediate win.
+    const state = forceState({ positions: { p1: [{ row: 5, col: 5 }], p2: [{ row: 6, col: 6 }] } });
+
+    const level1Action = chooseBotAction(state, "p1", 1, () => 0);
+    expect(level1Action).toEqual({ type: "move", horseIndex: 0, moveKind: "slide", dr: -1, dc: -1 });
+
+    const level10Action = chooseBotAction(state, "p1", 10, () => 0);
+    expect(level10Action).toEqual({ type: "move", horseIndex: 0, moveKind: "slide", dr: -1, dc: 1 });
+  });
+});
+
+function playFullBotGame(seed: number, levelOf: (seat: Seat) => number): MalDalliJaState {
+  let state = startGame(seededRng(seed));
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 2000) {
+    guard++;
+    const seat = state.activeSeat;
+    const action = chooseBotAction(state, seat, levelOf(seat));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action as EngineAction);
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  it("completes an all-Level-10 game with a winner declared", () => {
+    const state = playFullBotGame(123, () => 10);
+    expect(state.phase).toBe("gameOver");
+    expect(state.winner).not.toBeNull();
+  });
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(456, (seat) => (seat === "p1" ? 1 : 10));
+    expect(state.phase).toBe("gameOver");
+    expect(state.winner).not.toBeNull();
   });
 });
