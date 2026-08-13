@@ -78,6 +78,7 @@
  */
 
 import { seededRng, shuffle } from "@/lib/rng";
+import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
 
 export type SeatIndex = number;
 
@@ -474,7 +475,19 @@ function proceedAfterClaimSurvives(state: CoupState, seed: number | undefined): 
     return startExchange(state, pending.actorSeat, seed);
   }
 
-  // assassinate / steal — survive the claim, now offer the target a block window (§3-B).
+  // assassinate / steal — survive the claim, now offer the target a block
+  // window (§3-B). Edge case not spelled out by the rulebook: if the
+  // target was ALSO the one who challenged this claim and lost (paying the
+  // penalty with their last influence card, resolved just before this call
+  // via `challengeActionFailed_penalty`), they're already eliminated —
+  // opening a block window for a seat with nothing left to reveal would
+  // otherwise soft-lock the game (nobody can ever supply a valid
+  // `revealInfluence` for the `assassinateEffect` this window leads to).
+  // There's nothing left to assassinate/steal from, so just end the turn.
+  const target = getPlayer(state, pending.targetSeat!);
+  if (!target || !isAlive(target)) {
+    return endTurn({ ...state, pendingAction: null });
+  }
   return { ...state, phase: "blockWindow", awaitingSeats: [pending.targetSeat!] };
 }
 
@@ -820,4 +833,214 @@ export function computeRankings(state: CoupState): RankedSeat[] {
   if (state.winnerSeat !== null) ranks.push({ seat: state.winnerSeat, rank: 1 });
   [...state.eliminationOrder].reverse().forEach((seat, i) => ranks.push({ seat, rank: 2 + i }));
   return ranks;
+}
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7) — getValidMoves / scoreMove /
+// chooseBotAction(state, seat, level, rng?). Information fairness: bluff
+// reasoning below never reads another seat's hidden `influence` — only
+// public `revealed` piles and (for challenge decisions, which are made
+// from the challenger's own vantage) the bot's own hand. This project has
+// no per-opponent behavioral memory in `CoupState`, so "상대방의 의심 성향
+// 추론" (per the task brief) is approximated by how statistically credible
+// a claim looks table-wide (how many copies of that character are already
+// publicly dead) rather than a literal per-seat challenge-history model.
+// Like lasVegas's `rollDice`, `pass`/`revealInfluence` sometimes need a
+// fresh seed to resolve a mid-game draw (§4-1 replace, 제상 exchange) that a
+// pure `getValidMoves` can't generate — `getValidMoves` returns seedless
+// placeholders, and `chooseBotAction` fills one in via `rng` afterward.
+// ---------------------------------------------------------------------------
+
+const CHAR_COPIES = 3;
+
+function revealedCountOf(state: CoupState, character: Character): number {
+  return state.players.reduce((sum, p) => sum + p.revealed.filter((c) => c.character === character).length, 0);
+}
+
+function totalRevealedCount(state: CoupState): number {
+  return state.players.reduce((sum, p) => sum + p.revealed.length, 0);
+}
+
+/** From `seat`'s own info-fair vantage (their hand + public reveals only): estimated probability the claimed character copy the actor is holding is real. Used when `seat` is the one deciding whether to challenge. */
+function claimCredibility(state: CoupState, seat: SeatIndex, character: Character): number {
+  const revealed = revealedCountOf(state, character);
+  const ownHand = getPlayer(state, seat)?.influence ?? [];
+  const ownCopies = ownHand.filter((c) => c.character === character).length;
+  const unseenOfChar = Math.max(0, CHAR_COPIES - revealed - ownCopies);
+  const unseenTotal = Math.max(1, DECK_SIZE - totalRevealedCount(state) - ownHand.length);
+  return unseenOfChar / unseenTotal;
+}
+
+/** Seat-agnostic, public-only version — a stand-in for "how sketchy does this claim look to the rest of the table", used when the bot itself is deciding whether to make/bluff a claim (it can't read anyone else's hand to know their actual read). */
+function publicCredibility(state: CoupState, character: Character): number {
+  const revealed = revealedCountOf(state, character);
+  const unseenOfChar = Math.max(0, CHAR_COPIES - revealed);
+  const unseenTotal = Math.max(1, DECK_SIZE - totalRevealedCount(state));
+  return unseenOfChar / unseenTotal;
+}
+
+/** All k-element subsets of `items` (small k only — used for the exchange's keep-count, at most 2 of up to 4 options). */
+function combinations<T>(items: T[], k: number): T[][] {
+  if (k === 0) return [[]];
+  if (items.length < k) return [];
+  const [first, ...rest] = items;
+  const withFirst = combinations(rest, k - 1).map((c) => [first, ...c]);
+  const withoutFirst = combinations(rest, k);
+  return [...withFirst, ...withoutFirst];
+}
+
+export function getValidMoves(state: CoupState, seat: SeatIndex): EngineAction[] {
+  switch (state.phase) {
+    case "action": {
+      if (state.activeSeat !== seat) return [];
+      const actor = getPlayer(state, seat);
+      if (!actor || !isAlive(actor)) return [];
+      const targets = aliveSeats(state).filter((s) => s !== seat);
+      const candidateActions: ActionKind[] = mustCoup(actor.coins)
+        ? ["coup"]
+        : ["income", "foreignAid", "tax", "exchange", "coup", "assassinate", "steal"];
+      const moves: EngineAction[] = [];
+      for (const action of candidateActions) {
+        if (ACTION_COST[action] > actor.coins) continue;
+        if (needsDeclareTarget(action)) {
+          for (const targetSeat of targets) moves.push({ type: "declareAction", seat, action, targetSeat });
+        } else {
+          moves.push({ type: "declareAction", seat, action });
+        }
+      }
+      return moves;
+    }
+    case "actionChallengeWindow":
+    case "blockChallengeWindow":
+      if (!state.awaitingSeats.includes(seat)) return [];
+      return [
+        { type: "pass", seat },
+        { type: "challenge", seat },
+      ];
+    case "blockWindow": {
+      if (!state.awaitingSeats.includes(seat)) return [];
+      const moves: EngineAction[] = [{ type: "pass", seat }];
+      for (const character of BLOCK_CHARACTERS[state.pendingAction!.action]) {
+        moves.push({ type: "declareBlock", seat, character });
+      }
+      return moves;
+    }
+    case "exchange": {
+      if (!state.pendingExchange || state.pendingExchange.seat !== seat) return [];
+      const { keepCount, options } = state.pendingExchange;
+      return combinations(
+        options.map((c) => c.id),
+        keepCount,
+      ).map((keepCardIds) => ({ type: "resolveExchange", seat, keepCardIds }) as EngineAction);
+    }
+    case "loseInfluence": {
+      if (!state.pendingLoseInfluence || state.pendingLoseInfluence.seat !== seat) return [];
+      const player = getPlayer(state, seat);
+      return player ? player.influence.map((c) => ({ type: "revealInfluence", seat, cardId: c.id }) as EngineAction) : [];
+    }
+    default:
+      return [];
+  }
+}
+
+/** Rough generic value of each character to a hand — used for exchange keep choices and which card to sacrifice first (never information about anyone else's hand). */
+const CHARACTER_VALUE: Record<Character, number> = { assassin: 5, duke: 5, captain: 4, ambassador: 3, contessa: 3 };
+
+/**
+ * Higher = more desirable for the bot. Tiers per ARCHITECTURE.md §7.5:
+ * novice ~ uniform over legal moves. core applies simple single-factor
+ * rules (only claim/block with the real character, never bluff, favor
+ * `tax`/`coup`). expert (Lv.8-10, per the task brief) estimates opponents'
+ * challenge/suspicion via `publicCredibility`/`claimCredibility`, times
+ * bluffs around that estimate, and counter-challenges when a claim looks
+ * statistically unlikely to be real.
+ */
+export function scoreMove(state: CoupState, seat: SeatIndex, move: EngineAction, tier: BotTier): number {
+  if (tier === "novice") return 0;
+  const expert = tier === "expert";
+  const self = getPlayer(state, seat)!;
+
+  switch (move.type) {
+    case "declareAction": {
+      switch (move.action) {
+        case "coup": {
+          const target = getPlayer(state, move.targetSeat!)!;
+          return 200 - target.influence.length * 5; // always strong; prefer whichever target is closer to elimination
+        }
+        case "income":
+          return 5;
+        case "foreignAid":
+          return expert ? 9 - (aliveSeats(state).length - 1) : 8; // more rivals at the table -> more likely someone holds a blocking Duke
+        case "exchange":
+          return expert ? 9 : 6;
+        case "tax": {
+          if (self.influence.some((c) => c.character === "duke")) return 20; // real claim — safe and the best coin rate in the game
+          if (!expert) return -5; // core never bluffs
+          const credibility = publicCredibility(state, "duke");
+          return credibility * 30 - (1 - credibility) * 15;
+        }
+        case "steal": {
+          const target = getPlayer(state, move.targetSeat!)!;
+          if (target.coins === 0) return -20;
+          const base = 10 + target.coins;
+          if (self.influence.some((c) => c.character === "captain")) return base + 10;
+          if (!expert) return base - 15;
+          const credibility = publicCredibility(state, "captain");
+          return base * credibility - (1 - credibility) * 15;
+        }
+        case "assassinate": {
+          const target = getPlayer(state, move.targetSeat!)!;
+          const base = 25 - target.influence.length * 3; // extra valuable against a seat already down to 1 influence
+          if (self.influence.some((c) => c.character === "assassin")) return base + 15;
+          if (!expert) return base - 20;
+          const credibility = publicCredibility(state, "assassin");
+          return base * credibility - (1 - credibility) * 20;
+        }
+      }
+      return 0;
+    }
+    case "declareBlock": {
+      if (self.influence.some((c) => c.character === move.character)) return 100; // real card — always safe to block with it
+      if (!expert) return -30; // core never bluff-blocks
+      const credibility = publicCredibility(state, move.character);
+      // Bluffing a block often still beats not blocking at all — not blocking guarantees the hit lands.
+      return credibility * 60 - (1 - credibility) * 25 + 10;
+    }
+    case "challenge": {
+      const claimedCharacter = state.phase === "blockChallengeWindow" ? state.pendingBlock!.claimedCharacter : state.pendingAction!.claimedCharacter!;
+      if (!expert) return -10; // core never challenges — no reliable read at this tier
+      const credibility = claimCredibility(state, seat, claimedCharacter);
+      return (1 - credibility) * 60 - credibility * 40; // only pays off when the claim looks unlikely to be real
+    }
+    case "pass":
+      return expert ? 5 : (state.phase === "blockWindow" ? 6 : 8);
+    case "resolveExchange":
+      return move.keepCardIds.reduce((sum, id) => {
+        const c = state.pendingExchange?.options.find((o) => o.id === id);
+        return sum + (c ? CHARACTER_VALUE[c.character] : 0);
+      }, 0);
+    case "revealInfluence": {
+      const card = self.influence.find((c) => c.id === move.cardId);
+      return card ? -CHARACTER_VALUE[card.character] : 0; // give up the least useful remaining character first
+    }
+    default:
+      return 0;
+  }
+}
+
+export function chooseBotAction(
+  state: CoupState,
+  seat: SeatIndex,
+  level: BotLevel,
+  rng: () => number = Math.random,
+): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  const tier = botTier(level);
+  const candidates: ScoredCandidate<EngineAction>[] = moves.map((move) => ({ move, score: scoreMove(state, seat, move, tier) }));
+  const chosen = pickByLevel(candidates, level, rng);
+  if (chosen.type === "pass" || chosen.type === "revealInfluence") {
+    return { ...chosen, seed: Math.floor(rng() * 1_000_000_000) };
+  }
+  return chosen;
 }

@@ -3,10 +3,13 @@ import {
   aliveSeats,
   applyAction,
   buildDeck,
+  chooseBotAction,
   computeRankings,
+  currentResponders,
   DECK_SIZE,
   FORCED_COUP_THRESHOLD,
   getPlayerView,
+  getValidMoves,
   isAlive,
   MAX_PLAYERS,
   MIN_PLAYERS,
@@ -14,7 +17,9 @@ import {
   startGame,
   type Card,
   type CoupState,
+  type EngineAction,
   type PlayerState,
+  type SeatIndex,
 } from "./engine";
 
 function card(id: number, character: Card["character"]): Card {
@@ -292,6 +297,21 @@ describe("암살(assassinate) — 백작부인으로만 방해, §4-2 Double Kil
     expect(resolved.eliminationOrder).toEqual([1]);
   });
 
+  it("a target who challenges the action claim itself and loses (eliminating them) doesn't get offered a phantom block window", () => {
+    // seat 1 is both the assassinate target AND the one who challenges seat
+    // 0's (real, true) Assassin claim. Losing that challenge costs seat 1
+    // their only remaining card, eliminating them before any block window
+    // would even open — engine bug fix: this must end the turn instead of
+    // setting a `pendingLoseInfluence` nobody can ever satisfy.
+    let state = applyAction(assassinateState([card(2, "captain")]), { type: "declareAction", seat: 0, action: "assassinate", targetSeat: 1 });
+    state = applyAction(state, { type: "challenge", seat: 1 });
+    expect(state.pendingLoseInfluence).toEqual({ seat: 1, reason: "challengeActionFailed_penalty" });
+    const resolved = applyAction(state, { type: "revealInfluence", seat: 1, cardId: 2, seed: 9 });
+    expect(isAlive(resolved.players.find((p) => p.seat === 1)!)).toBe(false);
+    expect(resolved.phase).toBe("action"); // turn ends instead of opening a block window for an already-eliminated seat
+    expect(resolved.eliminationOrder).toEqual([1]);
+  });
+
   it("a true Contessa block, wrongly challenged, keeps the target's card and costs the challenger one", () => {
     let state = applyAction(assassinateState([card(2, "contessa"), card(3, "captain")]), { type: "declareAction", seat: 0, action: "assassinate", targetSeat: 1 });
     state = applyAction(state, { type: "pass", seat: 1 });
@@ -429,5 +449,145 @@ describe("MIN_PLAYERS/MAX_PLAYERS", () => {
   it("matches §1 인원 2명~6명", () => {
     expect(MIN_PLAYERS).toBe(2);
     expect(MAX_PLAYERS).toBe(6);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty)
+// ---------------------------------------------------------------------------
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("action phase: enumerates every affordable declareAction, and nothing for the idle seat", () => {
+    const state = makeState(); // activeSeat 0, coins 2 each
+    const moves = getValidMoves(state, 0);
+    expect(moves.every((m) => m.type === "declareAction")).toBe(true);
+    const actions = new Set(moves.map((m) => (m as { action: string }).action));
+    expect(actions).toEqual(new Set(["income", "foreignAid", "tax", "exchange", "steal"])); // coup(7)/assassinate(3) unaffordable at 2 coins
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("action phase: forces coup-only once coins >= 10", () => {
+    const base = makeState();
+    const state = makeState({ players: base.players.map((p) => (p.seat === 0 ? { ...p, coins: 10 } : p)) });
+    const moves = getValidMoves(state, 0);
+    expect(moves.length).toBeGreaterThan(0);
+    expect(moves.every((m) => m.type === "declareAction" && m.action === "coup")).toBe(true);
+  });
+
+  it("actionChallengeWindow: only an awaiting seat gets pass/challenge", () => {
+    const state = makeState({
+      phase: "actionChallengeWindow",
+      pendingAction: { actorSeat: 0, action: "tax", targetSeat: null, claimedCharacter: "duke" },
+      awaitingSeats: [1, 2],
+    });
+    expect(getValidMoves(state, 1)).toEqual([
+      { type: "pass", seat: 1 },
+      { type: "challenge", seat: 1 },
+    ]);
+    expect(getValidMoves(state, 0)).toEqual([]);
+  });
+
+  it("blockWindow: offers pass plus every character that can block this action", () => {
+    const state = makeState({
+      phase: "blockWindow",
+      pendingAction: { actorSeat: 0, action: "assassinate", targetSeat: 1, claimedCharacter: "assassin" },
+      awaitingSeats: [1],
+    });
+    expect(getValidMoves(state, 1)).toEqual([
+      { type: "pass", seat: 1 },
+      { type: "declareBlock", seat: 1, character: "contessa" },
+    ]);
+  });
+
+  it("exchange: every keepCount-sized combo of the pending options", () => {
+    const state = makeState({
+      phase: "exchange",
+      pendingExchange: { seat: 0, keepCount: 2, options: [card(0, "duke"), card(1, "assassin"), card(100, "captain"), card(101, "contessa")] },
+    });
+    const moves = getValidMoves(state, 0);
+    expect(moves).toHaveLength(6); // C(4,2)
+    expect(getValidMoves(state, 1)).toEqual([]);
+  });
+
+  it("loseInfluence: one revealInfluence candidate per remaining influence card", () => {
+    const state = makeState({ phase: "loseInfluence", pendingLoseInfluence: { seat: 1, reason: "coup" } });
+    const moves = getValidMoves(state, 1);
+    expect(moves).toEqual([
+      { type: "revealInfluence", seat: 1, cardId: 2 },
+      { type: "revealInfluence", seat: 1, cardId: 3 },
+    ]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("returns null for a seat with nothing to decide", () => {
+    const state = makeState();
+    expect(chooseBotAction(state, 1, 5)).toBeNull();
+  });
+
+  it("always returns a legal move regardless of level (pass/revealInfluence may carry an extra rng-filled seed, per lasVegas's rollDice precedent)", () => {
+    const state = makeState({
+      phase: "blockWindow",
+      pendingAction: { actorSeat: 0, action: "assassinate", targetSeat: 1, claimedCharacter: "assassin" },
+      awaitingSeats: [1],
+    });
+    const validMoves = getValidMoves(state, 1);
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 1, level, () => 0.5) as EngineAction & { seed?: number };
+      expect(action).not.toBeNull();
+      const withoutSeed = { ...action };
+      delete withoutSeed.seed;
+      expect(validMoves).toContainEqual(withoutSeed);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) settles for plain income, while Level 10 recognizes it can safely claim tax with its real Duke", () => {
+    // Default makeState(): seat 0 holds a real Duke, 2 coins, 3-seat table.
+    // getValidMoves lists income before tax, so Level 1's forced-random path
+    // (rng always 0 -> candidates[0]) lands on income.
+    const state = makeState();
+
+    const level1Action = chooseBotAction(state, 0, 1, () => 0);
+    expect(level1Action).toEqual({ type: "declareAction", seat: 0, action: "income" });
+
+    const level10Action = chooseBotAction(state, 0, 10, () => 0);
+    expect(level10Action).toEqual({ type: "declareAction", seat: 0, action: "tax" });
+  });
+});
+
+function currentActorForTest(state: CoupState): SeatIndex | null {
+  const responders = currentResponders(state);
+  return responders.length > 0 ? Math.min(...responders) : null;
+}
+
+function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: SeatIndex) => number): CoupState {
+  let state = startGame(playerCount, seed);
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 5000) {
+    guard++;
+    const seat = currentActorForTest(state);
+    if (seat === null) break;
+    const action = chooseBotAction(state, seat, levelOf(seat));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action as EngineAction);
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const n of [2, 3, 4, 5, 6]) {
+    it(`completes a ${n}-player all-Level-10 game with every seat ranked`, () => {
+      const state = playFullBotGame(n, 400 + n, () => 10);
+      expect(state.phase).toBe("gameOver");
+      const rankings = computeRankings(state);
+      expect(rankings).toHaveLength(n);
+      expect(new Set(rankings.map((r) => r.seat)).size).toBe(n);
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(5, 555, (seat) => (seat % 2 === 0 ? 1 : 10));
+    expect(state.phase).toBe("gameOver");
+    expect(computeRankings(state)).toHaveLength(5);
   });
 });
