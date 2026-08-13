@@ -9,6 +9,7 @@ import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity
 import type { PlayableGameProps } from "@/games/types";
 import {
   applyAction,
+  chooseBotAction,
   computeRankings,
   computeTeamRankings,
   defaultTeamAssignment,
@@ -24,6 +25,9 @@ import {
 } from "./engine";
 import { BUILTIN_SCENES } from "./scenes";
 import SpotDifferenceBoard from "./SpotDifferenceBoard";
+import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
+import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
 
 /**
  * Online-room multiplayer entry point, same lockstep pattern as every other
@@ -150,6 +154,23 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<SpotDifferenceState | null>(null);
   const [finalResult, setFinalResult] = useState<{ tied: boolean; winningTeam: TeamId } | null>(null);
+  // Seats currently played by an AI bot instead of a human — host-controlled
+  // (ARCHITECTURE.md §7), broadcast via "bot-roster" so every client renders
+  // the same lobby/board without a server. `botLevels[i]` is the Level 1–10
+  // difficulty for `botSeats[i]` (parallel arrays, same index). This game's
+  // free-for-all real-time clicking (no single "active seat") can't use the
+  // shared `useBotAutoplay` hook — see the custom per-bot-seat timer effect
+  // below instead (engine.ts's bot-support module doc explains why).
+  const [botSeats, setBotSeats] = useState<SeatIndex[]>([]);
+  const botSeatsRef = useRef<SeatIndex[]>([]);
+  useEffect(() => {
+    botSeatsRef.current = botSeats;
+  }, [botSeats]);
+  const [botLevels, setBotLevels] = useState<BotLevel[]>([]);
+  const botLevelsRef = useRef<BotLevel[]>([]);
+  useEffect(() => {
+    botLevelsRef.current = botLevels;
+  }, [botLevels]);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const startSentRef = useRef(false);
@@ -231,11 +252,17 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       const stageCountPayload = payload?.stageCount as number | undefined;
       const diffCountPayload = payload?.diffCount as number | undefined;
       const timerSecondsPayload = payload?.timerSeconds as number | undefined;
+      const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
       playerCountRef.current = playerCount;
       sourceRef.current = source;
       stageCountRef.current = stageCountPayload ?? 1;
       diffCountRef.current = diffCountPayload ?? 5;
       timerSecondsRef.current = timerSecondsPayload ?? DEFAULT_TIMER_SECONDS;
+      botSeatsRef.current = roster;
+      setBotSeats(roster);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
       setGameState(
         startGame(playerCount, seed, {
           source,
@@ -253,15 +280,39 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
 
+    // Host-authoritative AI bot roster — broadcast whenever the host
+    // adds/removes a bot seat in the waiting room, so every client renders
+    // the same lobby/board without a server.
+    channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => {
+      const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      botSeatsRef.current = roster;
+      setBotSeats(roster);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
+    });
+
     channel.on("broadcast", { event: "state-request" }, () => {
       if (gameStateRef.current) {
-        channel.send({ type: "broadcast", event: "state-sync", payload: { state: gameStateRef.current } });
+        channel.send({
+          type: "broadcast",
+          event: "state-sync",
+          payload: { state: gameStateRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
+        });
+      } else if (isHost) {
+        channel.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: botSeatsRef.current, botLevels: botLevelsRef.current } });
       }
     });
 
     channel.on("broadcast", { event: "state-sync" }, ({ payload }) => {
       const state = payload?.state as SpotDifferenceState | undefined;
       if (!state) return;
+      const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      botSeatsRef.current = roster;
+      setBotSeats(roster);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
       setGameState(state);
       setFinalResult(null);
       setPhase("playing");
@@ -289,7 +340,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
         if (seat === null) {
           const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
           const existing = Object.values(raw).flat();
-          const taken = new Set(existing.map((o) => o.seat));
+          const taken = new Set([...existing.map((o) => o.seat), ...botSeatsRef.current]);
           seat = 0;
           while (taken.has(seat)) seat++;
           const hostRecord = existing.find((o) => o.isHost);
@@ -339,7 +390,10 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       return;
     }
     reclaimAttemptsRef.current += 1;
-    const taken = new Set(occupants.filter((o) => o.deviceId !== deviceId).map((o) => o.seat));
+    const taken = new Set([
+      ...occupants.filter((o) => o.deviceId !== deviceId).map((o) => o.seat),
+      ...botSeatsRef.current,
+    ]);
     let next = 0;
     while (taken.has(next)) next++;
     storeSeat(roomCode, next);
@@ -365,20 +419,97 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
         stageCount: stageCountRef.current,
         diffCount: diffCountRef.current,
         timerSeconds: timerSecondsRef.current,
+        botSeats: botSeatsRef.current,
+        botLevels: botLevelsRef.current,
       },
     });
   }
 
+  // A seat counts as "filled" whether it's a connected human or a bot the host added.
   useEffect(() => {
     if (phase !== "waiting" || !isHost || startSentRef.current) return;
-    if (occupants.length >= knownTargetPlayerCount) {
+    if (occupants.length + botSeats.length >= knownTargetPlayerCount) {
       sendGameStart();
     }
-  }, [occupants, phase, knownTargetPlayerCount, isHost]);
+  }, [occupants, botSeats, phase, knownTargetPlayerCount, isHost]);
+
+  // Host-only: fill/empty an empty seat with an AI bot (ARCHITECTURE.md §7).
+  // Only ever offered for a seat with no connected human — a real player is
+  // never forcibly replaced. If a human later claims a seat a bot was
+  // occupying, the eviction logic below automatically drops the bot.
+  function addBotAtSeat(seat: SeatIndex, level: BotLevel) {
+    if (!isHost) return;
+    if (botSeatsRef.current.includes(seat) || occupants.some((o) => o.seat === seat)) return;
+    const nextSeats = [...botSeatsRef.current, seat];
+    const nextLevels = [...botLevelsRef.current, level];
+    botSeatsRef.current = nextSeats;
+    setBotSeats(nextSeats);
+    botLevelsRef.current = nextLevels;
+    setBotLevels(nextLevels);
+    channelRef.current?.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: nextSeats, botLevels: nextLevels } });
+  }
+
+  function removeBotAtSeat(seat: SeatIndex) {
+    if (!isHost) return;
+    const idx = botSeatsRef.current.indexOf(seat);
+    if (idx === -1) return;
+    const nextSeats = botSeatsRef.current.filter((_, i) => i !== idx);
+    const nextLevels = botLevelsRef.current.filter((_, i) => i !== idx);
+    botSeatsRef.current = nextSeats;
+    setBotSeats(nextSeats);
+    botLevelsRef.current = nextLevels;
+    setBotLevels(nextLevels);
+    channelRef.current?.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: nextSeats, botLevels: nextLevels } });
+  }
+
+  // A human physically claiming a seat always wins over a bot placeholder —
+  // derived during render (not an effect), same "compare and setState during
+  // render" pattern the seat-conflict self-heal above uses.
+  if (isHost && botSeats.length > 0) {
+    const humanSeats = new Set(occupants.map((o) => o.seat));
+    const keepIdx = botSeats.map((s, i) => (humanSeats.has(s) ? -1 : i)).filter((i) => i !== -1);
+    if (keepIdx.length !== botSeats.length) {
+      setBotSeats(keepIdx.map((i) => botSeats[i]));
+      setBotLevels(keepIdx.map((i) => botLevels[i]));
+    }
+  }
 
   function handleAction(action: EngineAction) {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }
+
+  // Real-time free-for-all: there's no single "active seat", so the shared
+  // `useBotAutoplay` hook (built around one pending decision at a time)
+  // doesn't fit — see engine.ts's bot-support module doc. Instead, every bot
+  // seat gets its own independent repeating timer (host-only) that tries a
+  // click roughly every 0.7-1.8s, same human-like "thinking" cadence as
+  // every other game's single-decision bot delay.
+  useEffect(() => {
+    if (!isHost || phase !== "playing" || botSeats.length === 0) return;
+    const timers: number[] = [];
+    let cancelled = false;
+
+    botSeats.forEach((seat, idx) => {
+      const level = botLevels[idx] ?? DEFAULT_BOT_LEVEL;
+      const tick = () => {
+        if (cancelled) return;
+        const state = gameStateRef.current;
+        if (state && state.phase === "playing") {
+          const action = chooseBotAction(state, seat, level);
+          if (action) handleAction(action);
+        }
+        if (!cancelled && gameStateRef.current?.phase === "playing") {
+          timers.push(window.setTimeout(tick, 700 + Math.random() * 1100));
+        }
+      };
+      timers.push(window.setTimeout(tick, 700 + Math.random() * 1100));
+    });
+
+    return () => {
+      cancelled = true;
+      timers.forEach((id) => window.clearTimeout(id));
+    };
+  }, [isHost, phase, botSeats, botLevels]);
 
   const ids: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
@@ -395,12 +526,16 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
     const count = gameState?.playerCount ?? knownTargetPlayerCount;
     for (let seat = 0; seat < count; seat++) {
       const occ = occupants.find((o) => o.seat === seat);
-      map[seat] = seat === mySeat ? myName : (occ?.name ?? "상대");
+      const botIdx = botSeats.indexOf(seat);
+      map[seat] = seat === mySeat ? myName : (occ?.name ?? (botIdx >= 0 ? botDisplayName(botIdx, botLevels[botIdx]) : "상대"));
     }
     return map;
-  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount]);
+  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels]);
 
-  const connectedSeats = useMemo(() => new Set(occupants.map((o) => o.seat)), [occupants]);
+  const connectedSeats = useMemo(
+    () => new Set([...occupants.map((o) => o.seat), ...botSeats]),
+    [occupants, botSeats],
+  );
   const previewTeamOf = useMemo(() => defaultTeamAssignment(knownTargetPlayerCount), [knownTargetPlayerCount]);
 
   function handleGameEnd() {
@@ -438,6 +573,10 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
     setCodeInput("");
     setPhotoDataUrl(null);
     setPhotoError(null);
+    botSeatsRef.current = [];
+    setBotSeats([]);
+    botLevelsRef.current = [];
+    setBotLevels([]);
     setPhase("choose");
   }
 
@@ -712,27 +851,41 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
               🔗 초대 링크 복사
             </button>
             <p className="text-xs text-white/50">
-              {occupants.length} / {knownTargetPlayerCount}명 참여 중
+              {occupants.length + botSeats.length} / {knownTargetPlayerCount}명 참여 중
             </p>
             <div className="mt-2 flex flex-col gap-1.5">
               {Array.from({ length: knownTargetPlayerCount }, (_, seat) => {
                 const occ = occupants.find((o) => o.seat === seat);
                 const team = previewTeamOf[seat];
+                const botIdx = botSeats.indexOf(seat);
+                const isBot = botIdx >= 0;
                 return (
-                  <p key={seat} className="text-sm text-white/70">
-                    <span className={team === "A" ? "text-sky-300" : "text-rose-300"}>[{team}팀]</span>{" "}
-                    {seat === mySeat ? "나" : `${seat + 1}번`}: {occ ? occ.name : <span className="text-white/30">대기 중...</span>}
+                  <p key={seat} className="flex items-center justify-between gap-2 text-sm text-white/70">
+                    <span>
+                      <span className={team === "A" ? "text-sky-300" : "text-rose-300"}>[{team}팀]</span>{" "}
+                      {seat === mySeat ? "나" : `${seat + 1}번`}:{" "}
+                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30">대기 중...</span>}
+                    </span>
+                    {isHost && !occ && (
+                      <span>
+                        {isBot ? (
+                          <RemoveBotButton onClick={() => removeBotAtSeat(seat)} />
+                        ) : (
+                          <AddBotButton onAddWithLevel={(level) => addBotAtSeat(seat, level)} />
+                        )}
+                      </span>
+                    )}
                   </p>
                 );
               })}
             </div>
             <p className="text-xs text-white/40">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다.</p>
-            {isHost && occupants.length >= MIN_PLAYERS && occupants.length < knownTargetPlayerCount && (
+            {isHost && occupants.length + botSeats.length >= MIN_PLAYERS && occupants.length + botSeats.length < knownTargetPlayerCount && (
               <button
                 onClick={sendGameStart}
                 className="rounded-full bg-fuchsia-600 px-4 py-2 text-xs font-semibold text-white hover:bg-fuchsia-500"
               >
-                지금 시작 ({occupants.length}명)
+                지금 시작 ({occupants.length + botSeats.length}명)
               </button>
             )}
           </>

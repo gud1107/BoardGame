@@ -1,18 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   applyAction,
+  chooseBotAction,
   computeRankings,
   computeTeamRankings,
   computeTeamScores,
   defaultTeamAssignment,
   foundSpotCount,
   generatePhotoDiffSpots,
+  getValidMoves,
   HINTS_PER_TEAM,
   MAX_PHOTO_DIFFS,
   MIN_PHOTO_DIFFS,
   startGame,
   totalSpotCount,
   WRONG_CLICK_PENALTY_MS,
+  type EngineAction,
   type SpotDifferenceState,
 } from "./engine";
 import { BUILTIN_SCENES } from "./scenes";
@@ -251,5 +254,110 @@ describe("defaultTeamAssignment / totalSpotCount", () => {
   it("counts total spots across every stage", () => {
     const state = freshState({ stageCount: 2 });
     expect(totalSpotCount(state)).toBe(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 / Level 1–10 difficulty) — this game's
+// real-time free-for-all genre exception is documented in engine.ts's
+// bot-support module doc.
+// ---------------------------------------------------------------------------
+
+/** Replaces stage 0 with 3 hand-picked spots, well clear of each other and of the synthetic (2,2) miss target, for fully controlled bot tests. */
+function customSpotsState(): SpotDifferenceState {
+  const base = freshState({});
+  const spots = [
+    { id: "s0", xPct: 20, yPct: 20, rPct: 5 },
+    { id: "s1", xPct: 50, yPct: 50, rPct: 5 },
+    { id: "s2", xPct: 80, yPct: 80, rPct: 5 },
+  ];
+  return { ...base, stages: [{ spots, foundBy: {} }], currentStageIndex: 0 };
+}
+
+describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
+  it("offers one click per undiscovered spot plus the synthetic miss candidate", () => {
+    const state = customSpotsState();
+    const moves = getValidMoves(state, 0, 0);
+    expect(moves).toHaveLength(4); // 3 spots + 1 miss
+    expect(moves.every((m) => m.type === "click" && m.seat === 0)).toBe(true);
+  });
+
+  it("excludes spots already found by either team", () => {
+    let state = customSpotsState();
+    state = applyAction(state, { type: "click", seat: 0, xPct: 20, yPct: 20, atMs: 0 });
+    const moves = getValidMoves(state, 1, 100);
+    expect(moves).toHaveLength(3); // 2 remaining spots + 1 miss
+  });
+
+  it("returns [] while a seat is penalty-locked", () => {
+    let state = customSpotsState();
+    state = applyAction(state, { type: "click", seat: 0, xPct: 2, yPct: 2, atMs: 0 }); // wrong click -> locked until 2000
+    expect(getValidMoves(state, 0, 500)).toEqual([]);
+    expect(getValidMoves(state, 0, 2500)).not.toEqual([]); // lock has expired
+  });
+
+  it("returns [] outside the 'playing' phase", () => {
+    const state = { ...customSpotsState(), phase: "gameOver" as const };
+    expect(getValidMoves(state, 0, 0)).toEqual([]);
+  });
+});
+
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
+  it("always returns a legal move regardless of level", () => {
+    const state = customSpotsState();
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 0, level, () => 0.5, 0);
+      expect(action).not.toBeNull();
+      expect(getValidMoves(state, 0, 0)).toContainEqual(action);
+    }
+  });
+
+  it("Level 1 (forced onto its mistake path) clicks the first-listed spot, while Level 10 prioritizes its team's actively-hinted spot", () => {
+    // seat 0 is on team A (defaultTeamAssignment). An active hint points at
+    // "s2" — not the first spot in stage order — so Level 10's argmax must
+    // beat every other equally-legitimate spot to reach it, while Level 1's
+    // forced-random path (rng always 0 -> candidates[0]) lands on "s0".
+    const state = { ...customSpotsState(), activeHint: { team: "A" as const, spotId: "s2" } };
+
+    const level1Action = chooseBotAction(state, 0, 1, () => 0, 0);
+    expect(level1Action).toEqual({ type: "click", seat: 0, xPct: 20, yPct: 20, atMs: 0 });
+
+    const level10Action = chooseBotAction(state, 0, 10, () => 0, 0);
+    expect(level10Action).toEqual({ type: "click", seat: 0, xPct: 80, yPct: 80, atMs: 0 });
+  });
+});
+
+function playFullBotGame(
+  playerCount: number,
+  seed: number,
+  stageCount: number,
+  levelOf: (seat: number) => number,
+): SpotDifferenceState {
+  let state = startGame(playerCount, seed, { source: { kind: "builtin" }, stageCount });
+  let atMs = 0;
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 500) {
+    guard++;
+    for (let seat = 0; seat < playerCount; seat++) {
+      const action = chooseBotAction(state, seat, levelOf(seat), Math.random, atMs);
+      if (action) state = applyAction(state, action as EngineAction);
+      if (state.phase === "gameOver") break;
+    }
+    atMs += 1000; // advance the wall clock a full second each round, clearing any wrong-click penalty lock
+  }
+  return state;
+}
+
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  it("an all-Level-10 team finds every spot without a crash or infinite loop", () => {
+    const state = playFullBotGame(4, 900, 1, () => 10);
+    expect(state.phase).toBe("gameOver");
+    expect(foundSpotCount(state)).toBe(totalSpotCount(state));
+  });
+
+  it("also completes with a mixed Level 1 / Level 10 table across multiple stages", () => {
+    const state = playFullBotGame(6, 901, 2, (seat) => (seat % 2 === 0 ? 1 : 10));
+    expect(state.phase).toBe("gameOver");
+    expect(foundSpotCount(state)).toBe(totalSpotCount(state));
   });
 });

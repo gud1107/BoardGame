@@ -48,6 +48,7 @@ import { BUILTIN_SCENES, TOLERANCE_RADIUS_PCT, type BuiltinScene } from "./scene
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
 export { seededRng };
+import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
 
 export interface Spot {
   id: string;
@@ -308,4 +309,85 @@ export function computeRankings(state: SpotDifferenceState): { seat: SeatIndex; 
   const rankOf: Record<TeamId, number> = { A: 0, B: 0 };
   for (const t of computeTeamRankings(state)) rankOf[t.team] = t.rank;
   return Object.entries(state.teamOf).map(([seat, team]) => ({ seat: Number(seat), rank: rankOf[team] }));
+}
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7) — getValidMoves / scoreMove /
+// chooseBotAction(state, seat, level, rng?). Information fairness: every
+// spot's real coordinates are already public in `state` for every seat (the
+// rulebook's whole premise is a shared visible board), so unlike every other
+// game here there's no hidden information to accidentally leak.
+//
+// Genre exception (documented in HANDOFF.md/ARCHITECTURE.md §7.5): this is
+// a real-time free-for-all, not a turn-based game — every connected seat
+// may click at any moment, there is no single "active seat". `getValidMoves`
+// therefore needs a wall-clock `atMs` to evaluate the same penalty-lock
+// guard `click` itself uses (module doc: `atMs` travels inside actions, not
+// read internally, to keep `applyAction` pure) — this is the one engine
+// query function in the project that isn't itself wall-clock-free, mirroring
+// the exception this game's own `EngineAction`s already carry. Because there
+// is no discrete "whose turn is it", `<Game>Game.tsx` cannot use the shared
+// `useBotAutoplay` hook (built around exactly one pending decision at a
+// time) — it runs its own repeating per-bot-seat timer instead (see
+// SpotDifferenceGame.tsx).
+// ---------------------------------------------------------------------------
+
+/** A synthetic off-target click, safely outside every possible spot's radius (spots only ever live in the 12–88% band with a single-digit rPct, see `generatePhotoDiffSpots`/`scenes.ts`) — lets novice-tier bots occasionally whiff a real wrong click, same as a distracted human. */
+const MISS_XPCT = 2;
+const MISS_YPCT = 2;
+
+export function getValidMoves(state: SpotDifferenceState, seat: SeatIndex, atMs: number): EngineAction[] {
+  if (state.phase !== "playing") return [];
+  const team = state.teamOf[seat];
+  if (!team) return [];
+  if (isLocked(state, seat, atMs)) return [];
+  const stage = state.stages[state.currentStageIndex];
+  if (!stage) return [];
+  const undiscovered = stage.spots.filter((s) => !stage.foundBy[s.id]);
+  if (undiscovered.length === 0) return [];
+  const moves: EngineAction[] = undiscovered.map((s) => ({ type: "click", seat, xPct: s.xPct, yPct: s.yPct, atMs }));
+  moves.push({ type: "click", seat, xPct: MISS_XPCT, yPct: MISS_YPCT, atMs });
+  return moves;
+}
+
+/**
+ * Higher = more desirable for the bot. Tiers per ARCHITECTURE.md §7.5:
+ * novice scores every real spot only barely above the miss candidate, so
+ * `pickByLevel`'s own high mistake rate at low levels does most of the
+ * "occasionally whiffs" work. core/expert never deliberately whiff; expert
+ * (Lv.8-10, per the task brief) additionally prioritizes whichever spot its
+ * own team currently has an active hint on (a "sure thing" already
+ * highlighted for teammates) over an unhinted one.
+ */
+export function scoreMove(state: SpotDifferenceState, seat: SeatIndex, move: EngineAction, tier: BotTier): number {
+  if (move.type !== "click") return 0;
+  const stage = state.stages[state.currentStageIndex];
+  const hit = stage?.spots.find((s) => Math.hypot(s.xPct - move.xPct, s.yPct - move.yPct) <= s.rPct);
+
+  if (tier === "novice") return hit ? 1 : 0;
+  if (!hit) return -1000; // core/expert never deliberately whiff
+
+  if (tier === "core") return 10;
+  const team = state.teamOf[seat];
+  const hinted = state.activeHint !== null && state.activeHint.team === team && state.activeHint.spotId === hit.id;
+  return 10 + (hinted ? 50 : 0);
+}
+
+/**
+ * `atMs` defaults to the real wall clock — bot judgment is local UX only,
+ * outside the engine's determinism contract (§1), same exemption
+ * `pass`/`revealInfluence`'s seeded mid-cascade draws use in coup.
+ */
+export function chooseBotAction(
+  state: SpotDifferenceState,
+  seat: SeatIndex,
+  level: BotLevel,
+  rng: () => number = Math.random,
+  atMs: number = Date.now(),
+): EngineAction | null {
+  const moves = getValidMoves(state, seat, atMs);
+  if (moves.length === 0) return null;
+  const tier = botTier(level);
+  const candidates: ScoredCandidate<EngineAction>[] = moves.map((move) => ({ move, score: scoreMove(state, seat, move, tier) }));
+  return pickByLevel(candidates, level, rng);
 }
