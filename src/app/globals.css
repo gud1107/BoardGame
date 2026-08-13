@@ -590,16 +590,17 @@ body {
 
 /* 말달리자's oasis (center win square) ambient glow — a slow breathing
    pulse so the win target reads as "alive" even when nobody's about to
-   land on it (see MalDalliJaBoard.tsx). Restored 2026-08-13/14 alongside
-   the oasis itself — see engine.ts's module doc for the revert history. */
+   land on it (see MalDalliJaBoard.tsx). Retinted sky-blue 2026-08-14 to
+   match 말달리자판.png's light-blue center tile (was amber) — see
+   engine.ts's module doc for the image-based redesign. */
 @keyframes maldallija-oasis-pulse {
   0%,
   100% {
-    box-shadow: 0 0 12px 2px rgba(251, 191, 36, 0.35);
+    box-shadow: 0 0 12px 2px rgba(56, 189, 248, 0.35);
     opacity: 0.85;
   }
   50% {
-    box-shadow: 0 0 26px 8px rgba(251, 191, 36, 0.65);
+    box-shadow: 0 0 26px 8px rgba(56, 189, 248, 0.65);
     opacity: 1;
   }
 }

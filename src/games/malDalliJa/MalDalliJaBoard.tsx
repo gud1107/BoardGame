@@ -6,6 +6,7 @@ import {
   BOARD_SIZE,
   OASIS,
   getLegalMoves,
+  isOasisZoneCell,
   otherSeat,
   positionsEqual,
   type EngineAction,
@@ -25,13 +26,17 @@ import {
  * note in `engine.ts`'s module doc for why the countdown lives here instead
  * of in the engine.
  *
- * 2026-08-13/14 session: back to the 1-horse-per-seat design (see
- * engine.ts's module doc for the full revert history) — a move is a single
- * tap on a highlighted destination cell, no piece-selection gesture needed.
- * The oasis cell (`OASIS`) renders with a pulsing amber "desert oasis" tint;
- * §3/§4 give it no special color in the rulebook (there's no board image on
- * file to match), this just reuses the treatment this file had the last time
- * the oasis existed, before the 2026-08-11 redesign removed it.
+ * **2026-08-14 session (image-based redesign, see engine.ts's module doc)**:
+ * each seat now has 10 horses across two diagonal corners instead of 1, so a
+ * move is a two-tap gesture — tap one of your own horses to select it
+ * (highlighting *that* horse's legal destinations), then tap a highlighted
+ * cell to move it. `selectedHorseIndex` below is purely local UI state; the
+ * engine has no notion of "selection", only of completed `move` actions
+ * carrying a `horseIndex`. The oasis renders as a diamond-shaped zone
+ * (pixel-matched to `말달리자판.png`): a large pulsing blue circle on the
+ * dead-center cell, ringed by 12 green-circle cells — knight (L자) moves are
+ * blocked anywhere in that 13-cell zone (`isOasisZoneCell`), only slide
+ * moves work there.
  */
 export interface MalDalliJaBoardProps {
   state: MalDalliJaState;
@@ -67,9 +72,32 @@ export default function MalDalliJaBoard({
   const opponentSeat = otherSeat(viewerSeat);
   const isMyTurn = state.phase === "playing" && state.activeSeat === viewerSeat;
 
-  const legalMoves: LegalMove[] = isMyTurn ? getLegalMoves(state) : [];
+  // ---- Horse selection (local UI-only state) — reset the instant a new
+  // turn begins, via the same "adjust state while rendering" pattern used
+  // for the turn-timer reset below (avoids an extra render from a
+  // setState-in-effect).
+  const [selectedHorseIndex, setSelectedHorseIndex] = useState<number | null>(null);
+  const [trackedSelectionTurn, setTrackedSelectionTurn] = useState(state.turnNumber);
+  if (trackedSelectionTurn !== state.turnNumber) {
+    setTrackedSelectionTurn(state.turnNumber);
+    setSelectedHorseIndex(null);
+  }
+
+  const allLegalMoves: LegalMove[] = isMyTurn ? getLegalMoves(state) : [];
   const legalByCell = new Map<string, LegalMove>();
-  for (const move of legalMoves) legalByCell.set(cellKey(move.to.row, move.to.col), move);
+  if (selectedHorseIndex !== null) {
+    for (const move of allLegalMoves) {
+      if (move.horseIndex === selectedHorseIndex) legalByCell.set(cellKey(move.to.row, move.to.col), move);
+    }
+  }
+  const movableHorseIndices = new Set(allLegalMoves.map((m) => m.horseIndex));
+
+  const horseByCell = new Map<string, { seat: Seat; horseIndex: number }>();
+  (["p1", "p2"] as const).forEach((seat) => {
+    state.positions[seat].forEach((p, horseIndex) => {
+      horseByCell.set(cellKey(p.row, p.col), { seat, horseIndex });
+    });
+  });
 
   // ---- §5 optional turn timer: a plain local countdown, reset every time
   // it becomes a new turn. Only the seat whose turn it actually is sends
@@ -108,40 +136,54 @@ export default function MalDalliJaBoard({
 
   function handleCellClick(row: number, col: number) {
     if (!isMyTurn) return;
-    const move = legalByCell.get(cellKey(row, col));
-    if (!move) return;
-    onAction({ type: "move", moveKind: move.moveKind, dr: move.dr, dc: move.dc });
+    const key = cellKey(row, col);
+
+    const move = legalByCell.get(key);
+    if (move) {
+      onAction({ type: "move", horseIndex: move.horseIndex, moveKind: move.moveKind, dr: move.dr, dc: move.dc });
+      setSelectedHorseIndex(null);
+      return;
+    }
+
+    const occupant = horseByCell.get(key);
+    if (occupant && occupant.seat === viewerSeat && movableHorseIndices.has(occupant.horseIndex)) {
+      setSelectedHorseIndex((prev) => (prev === occupant.horseIndex ? null : occupant.horseIndex));
+    }
   }
 
   const cells = [];
   for (let row = 0; row < BOARD_SIZE; row++) {
     for (let col = 0; col < BOARD_SIZE; col++) {
-      const isOasis = row === OASIS.row && col === OASIS.col;
-      const move = legalByCell.get(cellKey(row, col));
-      const horseSeat: Seat | null = positionsEqual(state.positions.p1, { row, col })
-        ? "p1"
-        : positionsEqual(state.positions.p2, { row, col })
-          ? "p2"
-          : null;
+      const key = cellKey(row, col);
+      const pos = { row, col };
+      const isOasisCenter = positionsEqual(pos, OASIS);
+      const isOasisRing = !isOasisCenter && isOasisZoneCell(pos);
+      const move = legalByCell.get(key);
+      const occupant = horseByCell.get(key);
+      const isSelectableHorse =
+        isMyTurn && occupant?.seat === viewerSeat && movableHorseIndices.has(occupant.horseIndex);
+      const isSelected = isSelectableHorse && occupant!.horseIndex === selectedHorseIndex;
 
       cells.push(
         <button
-          key={cellKey(row, col)}
+          key={key}
           type="button"
-          disabled={!move}
+          disabled={!move && !isSelectableHorse}
           onClick={() => handleCellClick(row, col)}
           className={`relative aspect-square border border-white/[0.06] transition ${
-            isOasis ? "bg-amber-500/10" : (row + col) % 2 === 0 ? "bg-white/[0.02]" : "bg-black/20"
-          } ${move ? "cursor-pointer" : "cursor-default"}`}
+            (row + col) % 2 === 0 ? "bg-white/[0.02]" : "bg-black/20"
+          } ${move || isSelectableHorse ? "cursor-pointer" : "cursor-default"}`}
         >
-          {isOasis && (
+          {/* 말달리자판.png 기준 오아시스 다이아몬드 존 — 중앙 파란 원 + 초록 원 12개 */}
+          {isOasisCenter && (
             <span
-              className="absolute inset-1 rounded-full border border-amber-400/60 bg-amber-400/20"
+              className="absolute inset-[15%] rounded-full border-2 border-sky-200/80 bg-sky-400/60"
               style={{ animation: "maldallija-oasis-pulse 2.2s ease-in-out infinite" }}
             />
           )}
-          {isOasis && !horseSeat && (
-            <span className="absolute inset-0 grid place-items-center text-[10px] text-amber-300/80 sm:text-xs">🌴</span>
+          {isOasisRing && <span className="absolute inset-[28%] rounded-full bg-emerald-400/50 ring-1 ring-emerald-300/60" />}
+          {!isOasisCenter && !isOasisRing && (
+            <span className="absolute inset-[40%] rounded-full bg-amber-200/20" />
           )}
           {move && (
             <span
@@ -152,13 +194,15 @@ export default function MalDalliJaBoard({
               }`}
             />
           )}
-          {horseSeat && (
+          {occupant && (
             <span
-              key={`${horseSeat}-${row}-${col}`}
-              className={`absolute inset-[8%] grid place-items-center rounded-full border-2 bg-black/70 text-sm sm:text-lg ${SEAT_THEME[horseSeat].ring} ${SEAT_THEME[horseSeat].glow}`}
+              key={`${occupant.seat}-${occupant.horseIndex}-${row}-${col}`}
+              className={`absolute inset-[12%] grid place-items-center rounded-full border-2 bg-black/70 text-xs sm:text-sm ${SEAT_THEME[occupant.seat].ring} ${
+                isSelected ? `${SEAT_THEME[occupant.seat].glow} scale-110` : ""
+              }`}
               style={{ animation: "maldallija-horse-land 0.35s ease-out" }}
             >
-              {SEAT_THEME[horseSeat].emoji}
+              {SEAT_THEME[occupant.seat].emoji}
             </span>
           )}
         </button>,
@@ -231,7 +275,9 @@ export default function MalDalliJaBoard({
 
       <p className="text-center text-xs text-white/40">
         {isMyTurn
-          ? "내 차례입니다 — 하이라이트된 칸으로 말을 이동하세요 (파랑=슬라이드, 자홍=나이트 · 🌴=오아시스, 나이트로는 진입 불가)"
+          ? selectedHorseIndex === null
+            ? "내 차례입니다 — 이동 가능한 말을 선택하세요 (🔵 = 오아시스, 도착하면 즉시 승리 · 🟢 오아시스 구역에서는 나이트 이동 불가)"
+            : "하이라이트된 칸으로 이동하세요 (파랑=슬라이드, 자홍=나이트 · 다시 탭하면 선택 해제)"
           : `${names[opponentSeat]}의 차례를 기다리는 중…`}
       </p>
 
