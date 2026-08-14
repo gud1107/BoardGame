@@ -15,6 +15,23 @@ export type GameCategory =
   | "deduction"
   | "family";
 
+/**
+ * "Feel" genres shown on the dashboard for browsing — a separate axis from
+ * `GameCategory` above (which is closer to "game format"/structure and isn't
+ * actually surfaced in the UI). A game can belong to more than one genre
+ * (e.g. Perudo is both bluffing and luck), so this is an array. See
+ * `src/games/genres.ts` for the label/emoji/accent shown for each value.
+ */
+export type GameGenre = "strategy" | "bluffing" | "luck" | "party" | "family";
+
+/**
+ * Groups a handful of games into a named, cross-catalog collection shown as
+ * its own featured row on the dashboard (e.g. games that all appeared in
+ * Netflix's <데스게임> show) — independent of both `category` and `genres`.
+ * See `src/games/collections.ts` for the label/description per id.
+ */
+export type GameCollectionId = "netflix-death-game";
+
 export interface PlayerRange {
   min: number;
   max: number;
@@ -68,6 +85,18 @@ export interface GameMeta {
     image?: string;
   };
   tags?: string[];
+  /**
+   * "Feel" genres for dashboard browsing (see `GameGenre` above). Optional —
+   * the older placeholder entries predate this field and just don't show up
+   * in any genre section, which is fine (they still show in the flat "전체"
+   * grid via search/player-count filters).
+   */
+  genres?: GameGenre[];
+  /**
+   * Named cross-catalog collection this game belongs to (see
+   * `GameCollectionId` above), e.g. the Netflix <데스게임> series. Optional.
+   */
+  collectionId?: GameCollectionId;
   /**
    * Whether this game has a real, playable implementation registered in
    * `playableGames` below. Everything else renders as "준비중" (coming soon)

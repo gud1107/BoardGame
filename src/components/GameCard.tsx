@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { GameMeta } from "@/games/types";
 import GameThumbnail from "./GameThumbnail";
+import { GENRE_META } from "@/games/genres";
+import { GAME_COLLECTIONS } from "@/games/collections";
 
 function formatPlayers(g: GameMeta) {
   const { min, max } = g.players;
@@ -13,11 +15,13 @@ function formatTime(g: GameMeta) {
 }
 
 export default function GameCard({ game }: { game: GameMeta }) {
+  const collection = game.collectionId ? GAME_COLLECTIONS[game.collectionId] : undefined;
+
   const content = (
     <div
-      className={`group flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] transition ${
-        game.playable ? "hover:-translate-y-1 hover:border-white/25 hover:bg-white/[0.06]" : "opacity-70"
-      }`}
+      className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-white/[0.03] transition ${
+        collection ? "border-red-500/25" : "border-white/10"
+      } ${game.playable ? "hover:-translate-y-1 hover:border-white/25 hover:bg-white/[0.06]" : "opacity-70"}`}
     >
       <div
         className="relative flex aspect-[4/5] items-center justify-center overflow-hidden text-6xl"
@@ -36,6 +40,11 @@ export default function GameCard({ game }: { game: GameMeta }) {
           imageClassName="object-contain p-4"
           imageSizes="(min-width: 640px) 240px, 50vw"
         />
+        {collection && (
+          <span className="absolute top-2 left-2 rounded-full bg-red-600/90 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+            {collection.emoji} 데스게임
+          </span>
+        )}
         {!game.playable && (
           <span className="absolute top-2 right-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white/80 backdrop-blur">
             준비중
@@ -49,6 +58,22 @@ export default function GameCard({ game }: { game: GameMeta }) {
           <span className="rounded-full bg-white/10 px-2.5 py-1">👥 {formatPlayers(game)}</span>
           <span className="rounded-full bg-white/10 px-2.5 py-1">⏱ {formatTime(game)}</span>
         </div>
+        {game.genres && game.genres.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {game.genres.map((genre) => {
+              const meta = GENRE_META[genre];
+              return (
+                <span
+                  key={genre}
+                  className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                  style={{ color: meta.accent, backgroundColor: `${meta.accent}1a` }}
+                >
+                  {meta.emoji} {meta.label}
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
