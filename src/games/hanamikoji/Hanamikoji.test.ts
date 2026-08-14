@@ -22,6 +22,7 @@ import {
   type GeishaOwnership,
   type HanamikojiState,
   type ItemCard,
+  type Owner,
 } from "./engine";
 
 function card(geishaId: string, n: number): ItemCard {
@@ -373,33 +374,23 @@ describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
   });
 });
 
-describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
   it("returns null when the seat has nothing to do", () => {
     const state = startRound(1, "p1", createInitialOwnership(), seededRng(1));
-    expect(chooseBotAction(state, "p2")).toBeNull();
+    expect(chooseBotAction(state, "p2", 5)).toBeNull();
   });
 
-  it("always returns a legal move — driving both seats end-to-end never stalls or throws", () => {
-    let state = startRound(1, "p1", createInitialOwnership(), seededRng(42));
-    let guard = 0;
-    while (state.phase !== "match-end" && guard < 500) {
-      guard++;
-      if (state.phase === "round-end") {
-        state = applyAction(state, { type: "next-round", seed: guard });
-        continue;
-      }
-      const active = state.activePlayer;
-      const seat =
-        state.phase === "awaiting-response" && state.pendingOffer ? other(state.pendingOffer.offeredBy) : active;
-      const action = chooseBotAction(state, seat, seededRng(guard));
+  it("always returns a legal move across every level", () => {
+    let state = startRound(1, "p1", createInitialOwnership(), seededRng(1));
+    state = drawCard(state);
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, "p1", level, () => 0.5);
       expect(action).not.toBeNull();
-      state = applyAction(state, action!);
+      expect(getValidMoves(state, "p1")).toContainEqual(action);
     }
-    expect(state.phase).toBe("match-end");
-    expect(state.matchWinner).not.toBeNull();
   });
 
-  it("secret: keeps the highest-value card in hand", () => {
+  it("secret: keeps the highest-value card in hand (core levels)", () => {
     const base = startRound(1, "p1", createInitialOwnership(), seededRng(1));
     const hand: ItemCard[] = [card("g2a", 0), card("g5", 0), card("g3a", 0)];
     const state: HanamikojiState = {
@@ -408,11 +399,13 @@ describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
       activePlayer: "p1",
       players: { ...base.players, p1: { ...base.players.p1, hand, actionsUsed: [] } },
     };
-    const action = chooseBotAction(state, "p1");
+    // rng forced high enough to stay outside Level 5's ~12% mistake chance,
+    // so this exercises the actual scored decision rather than the noise curve.
+    const action = chooseBotAction(state, "p1", 5, () => 0.99);
     expect(action).toEqual({ type: "secret", cardId: "g5-0" });
   });
 
-  it("gift-response: takes the highest-value offered card", () => {
+  it("gift-response: takes the highest-value offered card (core levels)", () => {
     const base = startRound(1, "p1", createInitialOwnership(), seededRng(1));
     const state: HanamikojiState = {
       ...base,
@@ -423,7 +416,94 @@ describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
         cards: [card("g2a", 0), card("g5", 0), card("g3a", 0)],
       },
     };
-    const action = chooseBotAction(state, "p2");
+    const action = chooseBotAction(state, "p2", 5, () => 0.99);
     expect(action).toEqual({ type: "gift-response", cardId: "g5-0" });
+  });
+
+  it("Level 1 (forced onto its mistake path) can diverge from Level 10, which always plays the top-scored move", () => {
+    const base = startRound(1, "p1", createInitialOwnership(), seededRng(1));
+    const hand: ItemCard[] = [card("g2a", 0), card("g5", 0), card("g3a", 0)];
+    const state: HanamikojiState = {
+      ...base,
+      phase: "awaiting-action",
+      activePlayer: "p1",
+      players: { ...base.players, p1: { ...base.players.p1, hand, actionsUsed: [] } },
+    };
+
+    // rng() always 0 -> always below Level 1's ~55% mistake chance -> always
+    // takes candidates[Math.floor(0 * length)] === the first enumerated move
+    // (a "secret" on the first hand card, g2a-0), not the best-scored one.
+    const level1Action = chooseBotAction(state, "p1", 1, () => 0);
+    expect(level1Action).toEqual({ type: "secret", cardId: "g2a-0" });
+
+    // Level 10 has a 0% mistake chance and 0 tie margin -> always the true
+    // argmax regardless of rng: keep the highest-value card (g5).
+    const level10Action = chooseBotAction(state, "p1", 10, () => 0);
+    expect(level10Action).toEqual({ type: "secret", cardId: "g5-0" });
+    expect(level1Action).not.toEqual(level10Action);
+  });
+
+  it("Level 8+ reasons about which geisha are already decided from visible info, deprioritizing a locked-in geisha over a still-contested one even when its face value is lower", () => {
+    const base = startRound(1, "p1", createInitialOwnership(), seededRng(1));
+    // p1 already holds 2 of g3a's 3 cards (visible in wonCards) — the 3rd is
+    // in hand, but even winning it can't be caught up by p2, so g3a is
+    // "locked" for p1. g2a (value 2, both cards still unaccounted for) is
+    // fully contested. A raw-value heuristic prefers the value-3 g3a card;
+    // an info-aware Lv.8+ heuristic prefers securing the contested g2a card.
+    const hand: ItemCard[] = [card("g3a", 2), card("g2a", 1)];
+    const state: HanamikojiState = {
+      ...base,
+      removedCard: null,
+      phase: "awaiting-action",
+      activePlayer: "p1",
+      players: {
+        p1: { ...base.players.p1, hand, actionsUsed: [], wonCards: [card("g3a", 0), card("g3a", 1)] },
+        p2: base.players.p2,
+      },
+    };
+
+    // Core level (no lock-awareness): picks the higher face-value card.
+    const coreAction = chooseBotAction(state, "p1", 5, () => 0.99);
+    expect(coreAction).toEqual({ type: "secret", cardId: "g3a-2" });
+
+    // Expert level (lock-aware): picks the still-contested card instead.
+    const expertAction = chooseBotAction(state, "p1", 10, () => 0.5);
+    expect(expertAction).toEqual({ type: "secret", cardId: "g2a-1" });
+  });
+});
+
+function playFullBotGame(seed: number, levelOf: (seat: Owner) => number): HanamikojiState {
+  let state = startRound(1, "p1", createInitialOwnership(), seededRng(seed));
+  let guard = 0;
+  while (state.phase !== "match-end" && guard < 2000) {
+    guard++;
+    if (state.phase === "round-end") {
+      state = applyAction(state, { type: "next-round", seed: seed * 1000 + guard });
+      continue;
+    }
+    const seat: Owner =
+      state.phase === "awaiting-response" && state.pendingOffer
+        ? other(state.pendingOffer.offeredBy)
+        : state.activePlayer;
+    const action = chooseBotAction(state, seat, levelOf(seat));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action!);
+  }
+  return state;
+}
+
+describe("Level 1–10 풀 시뮬레이션 (버그 없이 match-end까지 완주)", () => {
+  for (const level of [1, 4, 7, 10]) {
+    it(`completes an all-Level-${level} match with a decided winner`, () => {
+      const state = playFullBotGame(1000 + level, () => level);
+      expect(state.phase).toBe("match-end");
+      expect(state.matchWinner).not.toBeNull();
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(4242, (seat) => (seat === "p1" ? 1 : 10));
+    expect(state.phase).toBe("match-end");
+    expect(state.matchWinner).not.toBeNull();
   });
 });

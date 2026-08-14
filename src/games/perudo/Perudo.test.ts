@@ -14,7 +14,6 @@ import {
   totalDiceInPlay,
   validateRaise,
   type Bid,
-  type EngineAction,
   type Face,
   type PerudoState,
   type PlayerState,
@@ -545,10 +544,10 @@ describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
   });
 });
 
-describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
   it("returns null for a seat that isn't up", () => {
     const state = makeState({ activeSeat: 0 });
-    expect(chooseBotAction(state, 1)).toBeNull();
+    expect(chooseBotAction(state, 1, 5)).toBeNull();
   });
 
   it("calls dudo when the pending bid is far beyond a fair estimate", () => {
@@ -561,22 +560,75 @@ describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
         { seat: 2, diceCount: 5, dice: [3, 3, 3, 3, 3] },
       ],
     });
-    expect(chooseBotAction(state, 1)).toEqual({ type: "dudo", seat: 1 });
+    // rng forced high enough to stay outside Level 5's ~12% mistake chance,
+    // so this exercises the actual scored decision rather than the noise curve.
+    expect(chooseBotAction(state, 1, 5, () => 0.99)).toEqual({ type: "dudo", seat: 1 });
   });
 
-  it("always returns a legal move — driving every seat via the bot reaches gameOver", () => {
-    let state = startGame(4, 123);
-    let guard = 0;
-    while (state.phase !== "gameOver" && guard < 3000) {
-      guard++;
-      if (state.phase === "reveal") {
-        state = applyAction(state, { type: "continue", seed: guard });
-        continue;
-      }
-      const action: EngineAction | null = chooseBotAction(state, state.activeSeat, () => 0.5);
+  it("always returns a legal move across every level", () => {
+    const state = makeState({ activeSeat: 0 });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 0, level, () => 0.5);
       expect(action).not.toBeNull();
-      state = applyAction(state, action!);
+      expect(getValidMoves(state, 0)).toContainEqual(action);
     }
+  });
+
+  it("Level 1 (forced onto its mistake path) can pick a far worse move than Level 10's argmax", () => {
+    const state = makeState({
+      activeSeat: 1,
+      currentBid: { seat: 0, quantity: 15, face: 2 },
+      players: [
+        { seat: 0, diceCount: 5, dice: [3, 3, 3, 3, 3] },
+        { seat: 1, diceCount: 5, dice: [3, 3, 3, 3, 3] },
+        { seat: 2, diceCount: 5, dice: [3, 3, 3, 3, 3] },
+      ],
+    });
+
+    // rng() always 0 -> always below Level 1's ~55% mistake chance -> always
+    // takes candidates[Math.floor(0 * length)] === the first enumerated move
+    // (a raise on face 1), not the obviously-correct call.
+    const level1Action = chooseBotAction(state, 1, 1, () => 0);
+    expect(level1Action?.type).toBe("raise");
+
+    // Level 10 has a 0% mistake chance and 0 tie margin -> always the true
+    // argmax. This bid (15 of a face with none in my own hand and only 10
+    // unseen dice left on the whole table) can never hold — holdProbability
+    // is exactly 0 — so an expert bot always doubts it.
+    const level10Action = chooseBotAction(state, 1, 10, () => 0);
+    expect(level10Action).toEqual({ type: "dudo", seat: 1 });
+    expect(level1Action).not.toEqual(level10Action);
+  });
+});
+
+function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: number) => number): PerudoState {
+  let state = startGame(playerCount, seed);
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 3000) {
+    guard++;
+    if (state.phase === "reveal") {
+      state = applyAction(state, { type: "continue", seed: seed * 1000 + guard });
+      continue;
+    }
+    const action = chooseBotAction(state, state.activeSeat, levelOf(state.activeSeat));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action!);
+  }
+  return state;
+}
+
+describe("Level 1–10 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const level of [1, 4, 7, 10]) {
+    it(`completes an all-Level-${level} game with a decided winner`, () => {
+      const state = playFullBotGame(4, 1000 + level, () => level);
+      expect(state.phase).toBe("gameOver");
+      expect(computeRankings(state)).toHaveLength(4);
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(5, 4242, (seat) => (seat % 2 === 0 ? 1 : 10));
     expect(state.phase).toBe("gameOver");
+    expect(computeRankings(state)).toHaveLength(5);
   });
 });

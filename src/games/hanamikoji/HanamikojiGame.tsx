@@ -21,6 +21,7 @@ import HanamikojiBoard from "./HanamikojiBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
+import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
 
 /**
  * Which seat/role must act right now, for `useBotAutoplay` — mirrors
@@ -33,8 +34,8 @@ function hanamikojiCurrentActor(state: HanamikojiState): Owner | null {
   return null;
 }
 
-function hanamikojiChooseAction(state: HanamikojiState, actor: Owner): EngineAction | null {
-  return chooseBotAction(state, actor);
+function hanamikojiChooseAction(state: HanamikojiState, actor: Owner, level: BotLevel): EngineAction | null {
+  return chooseBotAction(state, actor, level);
 }
 
 /**
@@ -107,6 +108,12 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
   useEffect(() => {
     botRolesRef.current = botRoles;
   }, [botRoles]);
+  // `botLevels[i]` is the Level 1–10 difficulty for `botRoles[i]` (parallel arrays, same index).
+  const [botLevels, setBotLevels] = useState<BotLevel[]>([]);
+  const botLevelsRef = useRef<BotLevel[]>([]);
+  useEffect(() => {
+    botLevelsRef.current = botLevels;
+  }, [botLevels]);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const startSentRef = useRef(false);
@@ -118,10 +125,14 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     const byRole = (r: Owner) => occupants.find((o) => o.role === r)?.name;
     const botIndex = (r: Owner) => botRoles.indexOf(r);
     return {
-      p1: (myRole === "p1" ? myName : byRole("p1")) ?? (botIndex("p1") >= 0 ? botDisplayName(botIndex("p1")) : "상대"),
-      p2: (myRole === "p2" ? myName : byRole("p2")) ?? (botIndex("p2") >= 0 ? botDisplayName(botIndex("p2")) : "상대"),
+      p1:
+        (myRole === "p1" ? myName : byRole("p1")) ??
+        (botIndex("p1") >= 0 ? botDisplayName(botIndex("p1"), botLevels[botIndex("p1")]) : "상대"),
+      p2:
+        (myRole === "p2" ? myName : byRole("p2")) ??
+        (botIndex("p2") >= 0 ? botDisplayName(botIndex("p2"), botLevels[botIndex("p2")]) : "상대"),
     };
-  }, [occupants, myRole, myName, botRoles]);
+  }, [occupants, myRole, myName, botRoles, botLevels]);
   // Prefer the real betting-system playerId (present when that role's
   // occupant joined by picking themselves from an active session's roster —
   // see RoomNicknameField) over the synthetic per-room id.
@@ -176,8 +187,11 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seed = payload?.seed as number;
       const roles = (payload?.botRoles as Owner[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
       botRolesRef.current = roles;
       setBotRoles(roles);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
       setGameState(startRound(1, "p1", createInitialOwnership(), seededRng(seed)));
       setFinalResult(null);
       setPhase("playing");
@@ -193,8 +207,11 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     // below), so every client renders the same lobby/board without a server.
     channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => {
       const roles = (payload?.botRoles as Owner[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
       botRolesRef.current = roles;
       setBotRoles(roles);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
     });
 
     channel.on("presence", { event: "sync" }, () => {
@@ -233,7 +250,11 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({
       type: "broadcast",
       event: "game-start",
-      payload: { seed: Math.floor(Math.random() * 1_000_000_000), botRoles: botRolesRef.current },
+      payload: {
+        seed: Math.floor(Math.random() * 1_000_000_000),
+        botRoles: botRolesRef.current,
+        botLevels: botLevelsRef.current,
+      },
     });
   }, []);
 
@@ -250,22 +271,41 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
   // Only ever offered for an *empty* seat — a connected human is never
   // forcibly replaced. If a human later joins a seat a bot was occupying,
   // the eviction effect below automatically drops the bot for them.
-  const addBot = useCallback(() => {
-    if (!isHost || botRolesRef.current.includes("p2")) return;
-    if (occupants.some((o) => o.role === "p2")) return;
-    const next: Owner[] = [...botRolesRef.current, "p2"];
-    botRolesRef.current = next;
-    setBotRoles(next);
-    channelRef.current?.send({ type: "broadcast", event: "bot-roster", payload: { botRoles: next } });
-  }, [isHost, occupants]);
+  const addBot = useCallback(
+    (level: BotLevel) => {
+      if (!isHost || botRolesRef.current.includes("p2")) return;
+      if (occupants.some((o) => o.role === "p2")) return;
+      const nextRoles: Owner[] = [...botRolesRef.current, "p2"];
+      const nextLevels: BotLevel[] = [...botLevelsRef.current, level];
+      botRolesRef.current = nextRoles;
+      setBotRoles(nextRoles);
+      botLevelsRef.current = nextLevels;
+      setBotLevels(nextLevels);
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "bot-roster",
+        payload: { botRoles: nextRoles, botLevels: nextLevels },
+      });
+    },
+    [isHost, occupants],
+  );
 
   const removeBot = useCallback(
     (role: Owner) => {
       if (!isHost) return;
-      const next = botRolesRef.current.filter((r) => r !== role);
-      botRolesRef.current = next;
-      setBotRoles(next);
-      channelRef.current?.send({ type: "broadcast", event: "bot-roster", payload: { botRoles: next } });
+      const idx = botRolesRef.current.indexOf(role);
+      if (idx < 0) return;
+      const nextRoles = botRolesRef.current.filter((_, i) => i !== idx);
+      const nextLevels = botLevelsRef.current.filter((_, i) => i !== idx);
+      botRolesRef.current = nextRoles;
+      setBotRoles(nextRoles);
+      botLevelsRef.current = nextLevels;
+      setBotLevels(nextLevels);
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "bot-roster",
+        payload: { botRoles: nextRoles, botLevels: nextLevels },
+      });
     },
     [isHost],
   );
@@ -281,14 +321,24 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
   // nobody else needs to hear about this until the next `game-start`/
   // `bot-roster` broadcast picks up the corrected roster anyway.
   if (isHost && botRoles.length > 0) {
-    const stillBot = botRoles.filter((r) => !occupants.some((o) => o.role === r));
-    // botRolesRef is re-synced by the effect above once this commits — not
-    // updated here too, since refs (like state) must not be written during render.
-    if (stillBot.length !== botRoles.length) setBotRoles(stillBot);
+    const keepIdx = botRoles.map((r, i) => (occupants.some((o) => o.role === r) ? -1 : i)).filter((i) => i !== -1);
+    // botRolesRef/botLevelsRef are re-synced by the effects above once this
+    // commits — not updated here too, since refs (like state) must not be
+    // written during render.
+    if (keepIdx.length !== botRoles.length) {
+      setBotRoles(keepIdx.map((i) => botRoles[i]));
+      setBotLevels(keepIdx.map((i) => botLevels[i]));
+    }
   }
 
   const handleAction = useCallback((action: EngineAction) => {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
+  }, []);
+
+  const chooseAction = useCallback((state: HanamikojiState, actor: Owner) => {
+    const idx = botRolesRef.current.indexOf(actor);
+    const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
+    return hanamikojiChooseAction(state, actor, level);
   }, []);
 
   useBotAutoplay<HanamikojiState, EngineAction, Owner>({
@@ -296,7 +346,7 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     state: gameState,
     currentActor: hanamikojiCurrentActor,
     botSeats: botRoleSet,
-    chooseAction: hanamikojiChooseAction,
+    chooseAction,
     dispatch: handleAction,
   });
 
@@ -490,10 +540,10 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
                   <div key={role} className="flex items-center justify-between gap-3 text-sm text-white/70">
                     <span>
                       {role === myRole ? "나" : role === "p1" ? "1번" : "2번"}:{" "}
-                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx)} /> : <span className="text-white/30">대기 중...</span>}
+                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30">대기 중...</span>}
                     </span>
                     {isHost && role !== myRole && !occ && (
-                      isBot ? <RemoveBotButton onClick={() => removeBot(role)} /> : <AddBotButton onClick={addBot} />
+                      isBot ? <RemoveBotButton onClick={() => removeBot(role)} /> : <AddBotButton onAddWithLevel={addBot} />
                     )}
                   </div>
                 );

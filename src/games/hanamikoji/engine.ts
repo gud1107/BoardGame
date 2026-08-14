@@ -390,8 +390,12 @@ export type EngineAction =
 
 // ---------------------------------------------------------------------------
 // AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
-// chooseBotAction so a host client can drive a bot-occupied seat).
+// chooseBotAction so a host client can drive a bot-occupied seat). Levels
+// 1–10 route through the shared `pickByLevel` noise curve (botDifficulty.ts)
+// on top of `scoreMove` below — see that module's doc for the tier design.
 // ---------------------------------------------------------------------------
+
+import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
 
 const GEISHA_VALUE_BY_ID: Record<string, number> = Object.fromEntries(GEISHAS.map((g) => [g.id, g.value]));
 
@@ -480,42 +484,88 @@ export function getValidMoves(state: HanamikojiState, seat: Owner): EngineAction
   return [];
 }
 
-/** How good `move` looks for `seat` — higher is better, used only to rank candidates from `getValidMoves`. Simple heuristics, not a full search. */
-function scoreMove(state: HanamikojiState, seat: Owner, move: EngineAction): number {
+/**
+ * A geisha whose remaining (still-in-play) item cards can no longer flip the
+ * current-round majority is "locked" — deciding who wins it is already
+ * settled from *visible* information alone (won piles + discards + the
+ * face-down removed card, none of which requires reading either hand), so
+ * Lv.8+ stops spending resources contesting it and instead prioritizes
+ * geisha still genuinely up for grabs.
+ */
+type GeishaLock = "self" | "opp" | "contested";
+
+function geishaLocks(state: HanamikojiState, seat: Owner): Record<string, GeishaLock> {
+  const opp = other(seat);
+  const locks: Record<string, GeishaLock> = {};
+  for (const g of GEISHAS) {
+    const selfWon = countByGeisha(state.players[seat].wonCards, g.id);
+    const oppWon = countByGeisha(state.players[opp].wonCards, g.id);
+    const selfDiscarded = countByGeisha(state.players[seat].discarded, g.id);
+    const oppDiscarded = countByGeisha(state.players[opp].discarded, g.id);
+    const removed = state.removedCard?.geishaId === g.id ? 1 : 0;
+    const remaining = g.value - selfWon - oppWon - selfDiscarded - oppDiscarded - removed;
+    const oppCanCatchUp = oppWon + remaining > selfWon;
+    const selfCanCatchUp = selfWon + remaining > oppWon;
+    if (!oppCanCatchUp && selfWon > oppWon) locks[g.id] = "self";
+    else if (!selfCanCatchUp && oppWon > selfWon) locks[g.id] = "opp";
+    else locks[g.id] = "contested";
+  }
+  return locks;
+}
+
+/** Lv.8+ card weight: contested geisha matter most, already-lost-this-round geisha are cheap to part with, already-secured ones are worth less urgency. */
+function expertCardWeight(card: ItemCard, locks: Record<string, GeishaLock>): number {
+  const base = cardValue(card);
+  const lock = locks[card.geishaId];
+  if (lock === "opp") return base * 0.15;
+  if (lock === "self") return base * 0.6;
+  return base * 1.3;
+}
+
+function expertSum(cards: ItemCard[], locks: Record<string, GeishaLock>): number {
+  return cards.reduce((sum, c) => sum + expertCardWeight(c, locks), 0);
+}
+
+/** How good `move` looks for `seat` — higher is better, used only to rank candidates from `getValidMoves`. Lv.1–7 use a flat per-card value heuristic; Lv.8–10 (`botTier(level) === "expert"`) additionally reason about which geisha are already decided from visible info (see `geishaLocks`) to focus effort on genuinely contested ones. */
+function scoreMove(state: HanamikojiState, seat: Owner, move: EngineAction, level: BotLevel): number {
   const p = state.players[seat];
   const byId = new Map(p.hand.map((c) => [c.id, c]));
   const cardsOf = (ids: string[]) => ids.map((id) => byId.get(id)!);
+  const expert = botTier(level) === "expert";
+  const locks = expert ? geishaLocks(state, seat) : null;
+  const weight = (card: ItemCard) => (locks ? expertCardWeight(card, locks) : cardValue(card));
+  const weightSum = (cards: ItemCard[]) => (locks ? expertSum(cards, locks) : sumValues(cards));
 
   switch (move.type) {
     case "draw":
       return 0;
     case "secret":
       // Keep the most valuable card for yourself.
-      return cardValue(byId.get(move.cardId)!);
+      return weight(byId.get(move.cardId)!);
     case "tradeoff":
       // Cards are removed from the game entirely — sacrifice your cheapest ones.
-      return -sumValues(cardsOf(move.cardIds));
+      return -weightSum(cardsOf(move.cardIds));
     case "gift":
       // Opponent picks the best of the 3 you offer; keep the rest of your
       // hand strong by offering your weakest cards.
-      return -sumValues(cardsOf(move.cardIds));
+      return -weightSum(cardsOf(move.cardIds));
     case "compete": {
       // Opponent always takes the stronger pair, so your guaranteed floor is
       // the weaker one — maximize that floor by keeping the two pairs close
       // in value instead of dumping your best cards into one pile.
-      const sumA = sumValues(cardsOf(move.setA));
-      const sumB = sumValues(cardsOf(move.setB));
+      const sumA = weightSum(cardsOf(move.setA));
+      const sumB = weightSum(cardsOf(move.setB));
       return -Math.abs(sumA - sumB);
     }
     case "gift-response": {
       const offer = state.pendingOffer;
       const card = offer?.kind === "gift" ? offer.cards.find((c) => c.id === move.cardId) : undefined;
-      return card ? cardValue(card) : 0;
+      return card ? weight(card) : 0;
     }
     case "compete-response": {
       const offer = state.pendingOffer;
       if (offer?.kind !== "compete") return 0;
-      return sumValues(offer.sets[move.index]);
+      return weightSum(offer.sets[move.index]);
     }
     default:
       return 0;
@@ -523,19 +573,23 @@ function scoreMove(state: HanamikojiState, seat: Owner, move: EngineAction): num
 }
 
 /**
- * Picks the highest-scoring legal move for `seat` (ties broken randomly via
- * `rng`), or null if `seat` has nothing to do right now. `rng` defaults to
- * `Math.random` since bot decisions are local UX, not part of the
- * deterministic engine contract — the resulting `EngineAction` is still
+ * Picks a move for `seat` per the shared Level 1–10 curve (`pickByLevel`,
+ * botDifficulty.ts): scores every legal move with `scoreMove`, then lets the
+ * level decide how reliably the best-scored one actually gets played. `rng`
+ * defaults to `Math.random` since bot decisions are local UX, not part of
+ * the deterministic engine contract — the resulting `EngineAction` is still
  * applied through the ordinary, fully deterministic `applyAction`.
  */
-export function chooseBotAction(state: HanamikojiState, seat: Owner, rng: () => number = Math.random): EngineAction | null {
+export function chooseBotAction(
+  state: HanamikojiState,
+  seat: Owner,
+  level: BotLevel = 5,
+  rng: () => number = Math.random,
+): EngineAction | null {
   const moves = getValidMoves(state, seat);
   if (moves.length === 0) return null;
-  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move) }));
-  const best = Math.max(...scored.map((s) => s.score));
-  const bestMoves = scored.filter((s) => s.score === best).map((s) => s.move);
-  return bestMoves[Math.floor(rng() * bestMoves.length)];
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move, level) }));
+  return pickByLevel(scored, level, rng);
 }
 
 /** Single entry point applying any `EngineAction` to a state — the whole engine as one reducer. */

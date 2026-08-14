@@ -92,7 +92,8 @@ export type EngineAction =
   | { type: "reserveCard"; seat: SeatIndex; tier: Tier; marketIndex?: number }
   | { type: "purchaseCard"; seat: SeatIndex; cardId: string; source: "market" | "reserved" }
   | { type: "discardTokens"; seat: SeatIndex; discard: TokenBundle }
-  | { type: "chooseNoble"; seat: SeatIndex; nobleId: string };
+  | { type: "chooseNoble"; seat: SeatIndex; nobleId: string }
+  | { type: "pass"; seat: SeatIndex };
 
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
@@ -411,9 +412,27 @@ function chooseNoble(state: SplendorState, seat: SeatIndex, nobleId: string): Sp
 }
 
 // ---------------------------------------------------------------------------
-// AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
-// chooseBotAction so a host client can drive a bot-occupied seat).
+// E. Pass — the extremely rare last-resort case where `seat` genuinely has
+// no legal A/B/C/D action (token supply too depleted to take any color combo,
+// reserve pile already full, and nothing on the market or in hand is
+// affordable). `getValidMoves` only ever offers this when every other action
+// is unavailable (see below), so neither a human's UI nor a bot ever "skips"
+// a turn it could otherwise take.
 // ---------------------------------------------------------------------------
+
+function pass(state: SplendorState, seat: SeatIndex): SplendorState {
+  if (state.phase !== "playing" || seat !== state.activeSeat) return state;
+  return finishTurn(state, seat);
+}
+
+// ---------------------------------------------------------------------------
+// AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
+// chooseBotAction so a host client can drive a bot-occupied seat). Levels
+// 1–10 route through the shared `pickByLevel` noise curve (botDifficulty.ts)
+// on top of `scoreMove` below.
+// ---------------------------------------------------------------------------
+
+import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
 
 /** Every 3-different-color combo the token supply can currently pay out. */
 function threeDifferentCombos(tokenSupply: TokenBundle): GemColor[][] {
@@ -493,6 +512,10 @@ export function getValidMoves(state: SplendorState, seat: SeatIndex): EngineActi
   for (const card of player.reservedCards) {
     if (canAffordCard(player, card)) moves.push({ type: "purchaseCard", seat, cardId: card.id, source: "reserved" });
   }
+  // Last resort per the rulebook: if literally nothing else is legal (token
+  // supply too depleted for any take, reserve pile full, nothing affordable),
+  // the only thing left to do is pass the turn — see the "E. Pass" section.
+  if (moves.length === 0) return [{ type: "pass", seat }];
   return moves;
 }
 
@@ -510,8 +533,47 @@ function colorUtility(state: SplendorState, seat: SeatIndex, color: GemColor): n
   return utility;
 }
 
-/** A simple greedy heuristic — buy points when affordable, otherwise gather tokens useful for the visible market. Not a full lookahead search. */
-function scoreMove(state: SplendorState, seat: SeatIndex, move: EngineAction): number {
+/** How many visible-but-unclaimed nobles still need more of `color` than `seat` already has in permanent bonuses — a "does this color also build toward a noble visit" proxy, on top of `colorUtility`'s "is it useful for buyable cards" one. */
+function nobleUtility(state: SplendorState, seat: SeatIndex, color: GemColor): number {
+  const player = findPlayer(state, seat)!;
+  const bonus = computeBonusCounts(player.purchasedCards);
+  let utility = 0;
+  for (const noble of state.nobles) {
+    if ((noble.cost[color] ?? 0) > (bonus[color] ?? 0)) utility += 1;
+  }
+  return utility;
+}
+
+/**
+ * How close the strongest rival (by current score) is to affording `card`
+ * right now, as a 0–1 fraction of its cost colors they already cover with
+ * PUBLIC information only (their tokens + permanent bonuses — never their
+ * hidden reserved pile, same info-fairness rule `estimateExpectedCount`
+ * follows elsewhere in this project). Used to weigh reserving a card as
+ * denial, not just as a pick for yourself later.
+ */
+function cardDenialValue(state: SplendorState, seat: SeatIndex, card: DevelopmentCard): number {
+  const rivals = state.players.filter((p) => p.seat !== seat);
+  if (rivals.length === 0) return 0;
+  const rival = rivals.reduce((best, p) => (computePlayerScore(p) > computePlayerScore(best) ? p : best));
+  const effective = computeEffectiveCost(card, rival.purchasedCards);
+  const needed = GEM_ORDER.filter((c) => (effective[c] ?? 0) > 0);
+  if (needed.length === 0) return 1; // rival's bonuses alone already cover it
+  const covered = needed.filter((c) => (rival.tokens[c] ?? 0) >= (effective[c] ?? 0)).length;
+  return covered / needed.length;
+}
+
+/**
+ * How good `move` looks for `seat` — higher is better. Lv.1–7 use a simple
+ * greedy heuristic (buy points when affordable, otherwise gather tokens
+ * useful for the visible market — not a full lookahead search). Lv.8–10
+ * (`botTier(level) === "expert"`) additionally weigh a color's usefulness
+ * toward the still-unclaimed nobles (`nobleUtility`) and, when reserving,
+ * how much that reserve denies the strongest rival (`cardDenialValue`) —
+ * both computed from information every seat can fairly see.
+ */
+function scoreMove(state: SplendorState, seat: SeatIndex, move: EngineAction, level: BotLevel): number {
+  const expert = botTier(level) === "expert";
   switch (move.type) {
     case "purchaseCard": {
       const card =
@@ -519,41 +581,58 @@ function scoreMove(state: SplendorState, seat: SeatIndex, move: EngineAction): n
           ? findPlayer(state, seat)!.reservedCards.find((c) => c.id === move.cardId)
           : ([1, 2, 3] as Tier[]).flatMap((t) => state.markets[t]).find((c) => c?.id === move.cardId);
       if (!card) return -Infinity;
-      return card.points * 20 + colorUtility(state, seat, card.bonus) * 2;
+      const base = card.points * 20 + colorUtility(state, seat, card.bonus) * 2;
+      return expert ? base + nobleUtility(state, seat, card.bonus) * 3 : base;
     }
     case "reserveCard": {
       const card = move.marketIndex !== undefined ? state.markets[move.tier][move.marketIndex] : null;
-      return 4 + (card ? card.points * 2 : 1);
+      const base = 4 + (card ? card.points * 2 : 1);
+      return expert && card ? base + cardDenialValue(state, seat, card) * 10 : base;
     }
-    case "takeThreeDifferent":
-      return 3 + move.colors.reduce((sum, c) => sum + colorUtility(state, seat, c), 0);
-    case "takeTwoSame":
-      return 2 + colorUtility(state, seat, move.color) * 2;
+    case "takeThreeDifferent": {
+      const base = 3 + move.colors.reduce((sum, c) => sum + colorUtility(state, seat, c), 0);
+      return expert ? base + move.colors.reduce((sum, c) => sum + nobleUtility(state, seat, c), 0) * 1.5 : base;
+    }
+    case "takeTwoSame": {
+      const base = 2 + colorUtility(state, seat, move.color) * 2;
+      return expert ? base + nobleUtility(state, seat, move.color) * 1.5 : base;
+    }
     case "discardTokens": {
       const entries = Object.entries(move.discard) as [GemColor | "gold", number][];
       return -entries.reduce((sum, [color, count]) => sum + (color === "gold" ? 5 : colorUtility(state, seat, color)) * count, 0);
     }
     case "chooseNoble":
       return costTotal(state.nobles.find((n) => n.id === move.nobleId)?.cost ?? {});
+    case "pass":
+      // Only ever the sole candidate (see `getValidMoves`'s last-resort
+      // fallback) — the score is irrelevant since there's nothing to rank it
+      // against, kept at 0 rather than -Infinity just so it doesn't read as
+      // a rejected move if anyone logs `scored` for debugging.
+      return 0;
     default:
       return -Infinity;
   }
 }
 
 /**
- * Picks the highest-scoring legal move for `seat` (ties broken randomly via
- * `rng`), or null if it isn't `seat`'s decision right now. `rng` defaults to
+ * Picks a move for `seat` per the shared Level 1–10 curve (`pickByLevel`,
+ * botDifficulty.ts): scores every legal move with `scoreMove`, then lets the
+ * level decide how reliably the best-scored one actually gets played, or
+ * null if it isn't `seat`'s decision right now. `rng` defaults to
  * `Math.random` — bot decisions are local UX, not part of the deterministic
  * engine contract; the resulting `EngineAction` still runs through the
  * ordinary, fully deterministic `applyAction`.
  */
-export function chooseBotAction(state: SplendorState, seat: SeatIndex, rng: () => number = Math.random): EngineAction | null {
+export function chooseBotAction(
+  state: SplendorState,
+  seat: SeatIndex,
+  level: BotLevel = 5,
+  rng: () => number = Math.random,
+): EngineAction | null {
   const moves = getValidMoves(state, seat);
   if (moves.length === 0) return null;
-  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move) }));
-  const best = Math.max(...scored.map((s) => s.score));
-  const bestMoves = scored.filter((s) => s.score === best).map((s) => s.move);
-  return bestMoves[Math.floor(rng() * bestMoves.length)];
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move, level) }));
+  return pickByLevel(scored, level, rng);
 }
 
 /** Single entry point applying any `EngineAction` to a state — the whole engine as one reducer. */
@@ -571,6 +650,8 @@ export function applyAction(state: SplendorState, action: EngineAction): Splendo
       return discardTokens(state, action.seat, action.discard);
     case "chooseNoble":
       return chooseNoble(state, action.seat, action.nobleId);
+    case "pass":
+      return pass(state, action.seat);
     default:
       return state;
   }

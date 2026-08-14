@@ -19,8 +19,8 @@ import {
   TOKEN_LIMIT,
   TOKEN_SUPPLY_BY_PLAYER_COUNT,
   WIN_SCORE,
-  type EngineAction,
   type PlayerState,
+  type SeatIndex,
   type SplendorState,
 } from "./engine";
 
@@ -465,12 +465,37 @@ describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
     const moves = getValidMoves(state, 0);
     expect(moves).toEqual([{ type: "chooseNoble", seat: 0, nobleId: "noble-1" }]);
   });
+
+  it("falls back to a single 'pass' move — and only that — when no A/B/C/D action is legal", () => {
+    // Discovered via the Level 1–10 full-simulation stress test (bots can
+    // legitimately drain the token supply and fill their reserve pile to
+    // the point where nothing is left to do): token supply too depleted for
+    // any take, reserve pile full, and nothing on the market is affordable.
+    const card: DevelopmentCard = { id: "card-1", tier: 1, bonus: "white", cost: { white: 99 }, points: 1 };
+    const state = makeState({
+      tokenSupply: { white: 0, blue: 0, green: 0, red: 0, black: 0, gold: 0 },
+      markets: {
+        1: [card, null, null, null],
+        2: Array.from({ length: MARKET_SIZE }, () => null),
+        3: Array.from({ length: MARKET_SIZE }, () => null),
+      },
+      players: [
+        makePlayer(0, { reservedCards: Array.from({ length: RESERVE_LIMIT }, () => card) }),
+        makePlayer(1),
+        makePlayer(2),
+      ],
+    });
+    expect(getValidMoves(state, 0)).toEqual([{ type: "pass", seat: 0 }]);
+
+    const next = applyAction(state, { type: "pass", seat: 0 });
+    expect(next.activeSeat).toBe(1); // turn advances exactly like any other action
+  });
 });
 
-describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
   it("returns null for a seat with nothing to decide", () => {
     const state = makeState();
-    expect(chooseBotAction(state, 1)).toBeNull();
+    expect(chooseBotAction(state, 1, 5)).toBeNull();
   });
 
   it("prefers buying an affordable high-point card over merely taking tokens", () => {
@@ -483,25 +508,85 @@ describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
       },
       players: [makePlayer(0, { tokens: { blue: 2 } }), makePlayer(1), makePlayer(2)],
     });
-    const action = chooseBotAction(state, 0);
+    // rng forced high enough to stay outside Level 5's ~12% mistake chance,
+    // so this exercises the actual scored decision rather than the noise curve.
+    const action = chooseBotAction(state, 0, 5, () => 0.99);
     expect(action).toEqual({ type: "purchaseCard", seat: 0, cardId: "card-1", source: "market" });
   });
 
-  it("always returns a legal move — driving every seat via the bot reaches gameOver", () => {
-    let state = startGame(3, 99);
-    let guard = 0;
-    while (state.phase !== "gameOver" && guard < 1000) {
-      guard++;
-      const actor =
-        state.phase === "discarding"
-          ? state.awaitingDiscardSeat!
-          : state.phase === "choosingNoble"
-            ? state.awaitingNobleSeat!
-            : state.activeSeat;
-      const action: EngineAction | null = chooseBotAction(state, actor, () => 0.5);
+  it("always returns a legal move across every level", () => {
+    const card: DevelopmentCard = { id: "card-1", tier: 3, bonus: "white", cost: { blue: 2 }, points: 5 };
+    const state = makeState({
+      markets: {
+        1: Array.from({ length: MARKET_SIZE }, () => null),
+        2: Array.from({ length: MARKET_SIZE }, () => null),
+        3: [card, null, null, null],
+      },
+      players: [makePlayer(0, { tokens: { blue: 2 } }), makePlayer(1), makePlayer(2)],
+    });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 0, level, () => 0.5);
       expect(action).not.toBeNull();
-      state = applyAction(state, action!);
+      expect(getValidMoves(state, 0)).toContainEqual(action);
     }
+  });
+
+  it("Level 1 (forced onto its mistake path) can pick a far worse move than Level 10's argmax", () => {
+    const card: DevelopmentCard = { id: "card-1", tier: 3, bonus: "white", cost: { blue: 2 }, points: 5 };
+    const state = makeState({
+      markets: {
+        1: Array.from({ length: MARKET_SIZE }, () => null),
+        2: Array.from({ length: MARKET_SIZE }, () => null),
+        3: [card, null, null, null],
+      },
+      players: [makePlayer(0, { tokens: { blue: 2 } }), makePlayer(1), makePlayer(2)],
+    });
+
+    // rng() always 0 -> always below Level 1's ~55% mistake chance -> always
+    // takes candidates[Math.floor(0 * length)] === the first enumerated move
+    // (a "takeThreeDifferent"), not the clearly-correct purchase.
+    const level1Action = chooseBotAction(state, 0, 1, () => 0);
+    expect(level1Action?.type).not.toBe("purchaseCard");
+
+    // Level 10 has a 0% mistake chance and 0 tie margin -> always the true
+    // argmax regardless of rng: buy the affordable 5-point card.
+    const level10Action = chooseBotAction(state, 0, 10, () => 0);
+    expect(level10Action).toEqual({ type: "purchaseCard", seat: 0, cardId: "card-1", source: "market" });
+    expect(level1Action).not.toEqual(level10Action);
+  });
+});
+
+function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: SeatIndex) => number): SplendorState {
+  let state = startGame(playerCount, seed);
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 3000) {
+    guard++;
+    const actor =
+      state.phase === "discarding"
+        ? state.awaitingDiscardSeat!
+        : state.phase === "choosingNoble"
+          ? state.awaitingNobleSeat!
+          : state.activeSeat;
+    const action = chooseBotAction(state, actor, levelOf(actor));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action!);
+  }
+  return state;
+}
+
+describe("Level 1–10 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const level of [1, 4, 7, 10]) {
+    it(`completes an all-Level-${level} game with a fully resolved final score`, () => {
+      const state = playFullBotGame(3, 1000 + level, () => level);
+      expect(state.phase).toBe("gameOver");
+      const rankings = computeRankings(state);
+      expect(rankings).toHaveLength(3);
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(4, 4242, (seat) => (seat % 2 === 0 ? 1 : 10));
     expect(state.phase).toBe("gameOver");
+    expect(computeRankings(state)).toHaveLength(4);
   });
 });

@@ -161,8 +161,12 @@ function take(state: NoThanksState, seat: SeatIndex): NoThanksState {
 
 // ---------------------------------------------------------------------------
 // AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
-// chooseBotAction so a host client can drive a bot-occupied seat).
+// chooseBotAction so a host client can drive a bot-occupied seat). Levels
+// 1–10 route through the shared `pickByLevel` noise curve (botDifficulty.ts)
+// on top of `scoreMove` below.
 // ---------------------------------------------------------------------------
+
+import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
 
 /** Every legal `EngineAction` `seat` may submit right now. Mirrors `pass`/`take`'s own guards exactly. */
 export function getValidMoves(state: NoThanksState, seat: SeatIndex): EngineAction[] {
@@ -181,30 +185,54 @@ export function getValidMoves(state: NoThanksState, seat: SeatIndex): EngineActi
  * it's always worth taking. Passing is scored as a flat -1 (the chip it
  * costs), which is directly comparable since both scores are on the same
  * "net chip value" scale.
+ *
+ * Lv.8–10 (`botTier(level) === "expert"`) sharpen this two ways: (a) a card
+ * that fills the gap between two runs already in hand doesn't just cost
+ * nothing, it *merges* those runs — erasing what would have been a whole
+ * separate `penaltyCard` — so it's worth even more than a plain free take;
+ * (b) passing is weighed against the seat's own remaining chips, since
+ * running out of chips forces taking whatever's next with zero control.
  */
-function scoreMove(state: NoThanksState, seat: SeatIndex, move: EngineAction): number {
-  if (move.type === "pass") return -1;
+function scoreMove(state: NoThanksState, seat: SeatIndex, move: EngineAction, level: BotLevel): number {
   const player = state.players.find((p) => p.seat === seat)!;
+  const expert = botTier(level) === "expert";
+
+  if (move.type === "pass") {
+    if (!expert) return -1;
+    const scarcity = player.chips <= 2 ? 1.5 : player.chips <= 5 ? 1.15 : 1;
+    return -scarcity;
+  }
+
   const card = state.currentCard!;
-  const connectsRun = player.cards.some((c) => c === card - 1 || c === card + 1);
+  const connectsDown = player.cards.includes(card - 1);
+  const connectsUp = player.cards.includes(card + 1);
+  if (expert && connectsDown && connectsUp) {
+    return state.chipsOnCard + card;
+  }
+  const connectsRun = connectsDown || connectsUp;
   const penalty = connectsRun ? 0 : card;
   return state.chipsOnCard - penalty;
 }
 
 /**
- * Picks the highest-scoring legal move for `seat` (ties broken randomly via
- * `rng`), or null if it isn't `seat`'s turn. `rng` defaults to `Math.random`
- * — bot decisions are local UX, not part of the deterministic engine
- * contract; the resulting `EngineAction` still runs through the ordinary,
- * fully deterministic `applyAction`.
+ * Picks a move for `seat` per the shared Level 1–10 curve (`pickByLevel`,
+ * botDifficulty.ts): scores every legal move with `scoreMove`, then lets the
+ * level decide how reliably the best-scored one actually gets played, or
+ * null if it isn't `seat`'s turn. `rng` defaults to `Math.random` — bot
+ * decisions are local UX, not part of the deterministic engine contract; the
+ * resulting `EngineAction` still runs through the ordinary, fully
+ * deterministic `applyAction`.
  */
-export function chooseBotAction(state: NoThanksState, seat: SeatIndex, rng: () => number = Math.random): EngineAction | null {
+export function chooseBotAction(
+  state: NoThanksState,
+  seat: SeatIndex,
+  level: BotLevel = 5,
+  rng: () => number = Math.random,
+): EngineAction | null {
   const moves = getValidMoves(state, seat);
   if (moves.length === 0) return null;
-  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move) }));
-  const best = Math.max(...scored.map((s) => s.score));
-  const bestMoves = scored.filter((s) => s.score === best).map((s) => s.move);
-  return bestMoves[Math.floor(rng() * bestMoves.length)];
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move, level) }));
+  return pickByLevel(scored, level, rng);
 }
 
 /** Single entry point applying any `EngineAction` to a state — the whole engine as one reducer. */

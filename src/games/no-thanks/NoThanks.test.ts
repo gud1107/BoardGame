@@ -333,10 +333,10 @@ describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
   });
 });
 
-describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
+describe("chooseBotAction (AI bot support, Level 1–10)", () => {
   it("returns null for a seat that isn't up", () => {
     const state = makeState();
-    expect(chooseBotAction(state, 1)).toBeNull();
+    expect(chooseBotAction(state, 1, 5)).toBeNull();
   });
 
   it("is forced to take when out of chips, even with a costly unconnected card", () => {
@@ -345,7 +345,7 @@ describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
       chipsOnCard: 0,
       players: [{ seat: 0, chips: 0, cards: [] }, { seat: 1, chips: 11, cards: [] }, { seat: 2, chips: 11, cards: [] }],
     });
-    expect(chooseBotAction(state, 0)).toEqual({ type: "take", seat: 0 });
+    expect(chooseBotAction(state, 0, 5)).toEqual({ type: "take", seat: 0 });
   });
 
   it("takes a card that connects to one already in hand, even with 0 chips on it", () => {
@@ -354,28 +354,74 @@ describe("chooseBotAction (AI bot support, ARCHITECTURE.md §7)", () => {
       chipsOnCard: 0,
       players: [{ seat: 0, chips: 5, cards: [10] }, { seat: 1, chips: 11, cards: [] }, { seat: 2, chips: 11, cards: [] }],
     });
-    expect(chooseBotAction(state, 0)).toEqual({ type: "take", seat: 0 });
+    // rng forced high enough to stay outside Level 5's ~12% mistake chance,
+    // so this exercises the actual scored decision rather than the noise curve.
+    expect(chooseBotAction(state, 0, 5, () => 0.99)).toEqual({ type: "take", seat: 0 });
   });
 
   it("passes on a big unconnected card with few chips on it and chips left to spend", () => {
     const state = makeState({ currentCard: 30, chipsOnCard: 1 });
-    expect(chooseBotAction(state, 0)).toEqual({ type: "pass", seat: 0 });
+    expect(chooseBotAction(state, 0, 5, () => 0.99)).toEqual({ type: "pass", seat: 0 });
   });
 
   it("takes a big card once enough chips have piled up on it", () => {
     const state = makeState({ currentCard: 20, chipsOnCard: 21 });
-    expect(chooseBotAction(state, 0)).toEqual({ type: "take", seat: 0 });
+    expect(chooseBotAction(state, 0, 5, () => 0.99)).toEqual({ type: "take", seat: 0 });
   });
 
-  it("always returns a legal move — driving every seat via the bot never throws", () => {
-    let state = startGame(4, 7);
-    let guard = 0;
-    while (state.phase !== "gameOver" && guard < 500) {
-      guard++;
-      const action = chooseBotAction(state, state.activeSeat, () => 0.5);
+  it("always returns a legal move across every level", () => {
+    const state = makeState({ currentCard: 30, chipsOnCard: 1 });
+    for (let level = 1; level <= 10; level++) {
+      const action = chooseBotAction(state, 0, level, () => 0.5);
       expect(action).not.toBeNull();
-      state = applyAction(state, action!);
+      expect(getValidMoves(state, 0)).toContainEqual(action);
     }
+  });
+
+  it("Level 1 (forced onto its mistake path) can pick the worse-scored move, while Level 10 always plays the top-scored one", () => {
+    // Passing is clearly better here (score -1 vs. take's -29), so a
+    // never-mistaken bot always passes.
+    const state = makeState({ currentCard: 30, chipsOnCard: 1 });
+
+    // rng() always 0 -> always below Level 1's ~55% mistake chance -> always
+    // takes candidates[Math.floor(0 * length)] === candidates[0] === "take"
+    // (getValidMoves lists "take" before "pass"), the worse-scored move.
+    const level1Action = chooseBotAction(state, 0, 1, () => 0);
+    expect(level1Action).toEqual({ type: "take", seat: 0 });
+
+    // Level 10 has a 0% mistake chance and 0 tie margin -> always the true
+    // argmax regardless of rng.
+    const level10Action = chooseBotAction(state, 0, 10, () => 0);
+    expect(level10Action).toEqual({ type: "pass", seat: 0 });
+  });
+});
+
+function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: number) => number) {
+  let state = startGame(playerCount, seed);
+  let guard = 0;
+  while (state.phase !== "gameOver" && guard < 2000) {
+    guard++;
+    const action = chooseBotAction(state, state.activeSeat, levelOf(state.activeSeat));
+    expect(action).not.toBeNull();
+    state = applyAction(state, action!);
+  }
+  return state;
+}
+
+describe("Level 1–10 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  for (const level of [1, 4, 7, 10]) {
+    it(`completes an all-Level-${level} game with a fully resolved final score`, () => {
+      const state = playFullBotGame(4, 1000 + level, () => level);
+      expect(state.phase).toBe("gameOver");
+      const rankings = computeRankings(state);
+      expect(rankings).toHaveLength(4);
+      expect(new Set(rankings.map((r) => r.seat)).size).toBe(4);
+    });
+  }
+
+  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
+    const state = playFullBotGame(5, 4242, (seat) => (seat % 2 === 0 ? 1 : 10));
     expect(state.phase).toBe("gameOver");
+    expect(computeRankings(state)).toHaveLength(5);
   });
 });

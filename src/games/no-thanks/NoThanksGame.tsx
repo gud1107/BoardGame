@@ -21,14 +21,15 @@ import NoThanksBoard from "./NoThanksBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
+import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
 
 /** Whose decision is pending, for `useBotAutoplay` — No Thanks has no sub-phase like Hanamikoji's response offers, so this is just the active seat. */
 function noThanksCurrentActor(state: NoThanksState): SeatIndex | null {
   return state.phase === "playing" ? state.activeSeat : null;
 }
 
-function noThanksChooseAction(state: NoThanksState, actor: SeatIndex): EngineAction | null {
-  return chooseBotAction(state, actor);
+function noThanksChooseAction(state: NoThanksState, actor: SeatIndex, level: BotLevel): EngineAction | null {
+  return chooseBotAction(state, actor, level);
 }
 
 /**
@@ -114,6 +115,12 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
   useEffect(() => {
     botSeatsRef.current = botSeats;
   }, [botSeats]);
+  // `botLevels[i]` is the Level 1–10 difficulty for `botSeats[i]` (parallel arrays, same index).
+  const [botLevels, setBotLevels] = useState<BotLevel[]>([]);
+  const botLevelsRef = useRef<BotLevel[]>([]);
+  useEffect(() => {
+    botLevelsRef.current = botLevels;
+  }, [botLevels]);
   const botSeatSet = useMemo(() => new Set(botSeats), [botSeats]);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -167,10 +174,13 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
       const playerCount = payload?.playerCount as number;
       const visibility = (payload?.chipVisibility as ChipVisibility | undefined) ?? "secret";
       const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
       playerCountRef.current = playerCount;
       chipVisibilityRef.current = visibility;
       botSeatsRef.current = roster;
       setBotSeats(roster);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
       setGameState(startGame(playerCount, seed, visibility));
       setFinalResult(null);
       setPhase("playing");
@@ -181,8 +191,11 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
     // below), so every client renders the same lobby/board without a server.
     channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => {
       const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
       botSeatsRef.current = roster;
       setBotSeats(roster);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
     });
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
@@ -201,13 +214,17 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
         channel.send({
           type: "broadcast",
           event: "state-sync",
-          payload: { state: gameStateRef.current, botSeats: botSeatsRef.current },
+          payload: { state: gameStateRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
         });
       } else if (isHost) {
         // Pre-game reconnect: no match state to hand over yet, but the host
         // still owns the bot roster and should re-announce it so a rejoining
         // client's waiting room shows the same bot seats.
-        channel.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: botSeatsRef.current } });
+        channel.send({
+          type: "broadcast",
+          event: "bot-roster",
+          payload: { botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
+        });
       }
     });
 
@@ -215,8 +232,11 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
       const state = payload?.state as NoThanksState | undefined;
       if (!state) return;
       const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
+      const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
       botSeatsRef.current = roster;
       setBotSeats(roster);
+      botLevelsRef.current = levels;
+      setBotLevels(levels);
       setGameState(state);
       setFinalResult(null);
       setPhase("playing");
@@ -343,6 +363,7 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
         playerCount: playerCountRef.current,
         chipVisibility: chipVisibilityRef.current,
         botSeats: botSeatsRef.current,
+        botLevels: botLevelsRef.current,
       },
     });
   }, []);
@@ -362,13 +383,20 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
   // never forcibly replaced. If a human later claims a seat a bot was
   // occupying, the eviction effect below automatically drops the bot.
   const addBotAtSeat = useCallback(
-    (seat: SeatIndex) => {
+    (seat: SeatIndex, level: BotLevel) => {
       if (!isHost) return;
       if (botSeatsRef.current.includes(seat) || occupants.some((o) => o.seat === seat)) return;
-      const next = [...botSeatsRef.current, seat];
-      botSeatsRef.current = next;
-      setBotSeats(next);
-      channelRef.current?.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: next } });
+      const nextSeats = [...botSeatsRef.current, seat];
+      const nextLevels = [...botLevelsRef.current, level];
+      botSeatsRef.current = nextSeats;
+      setBotSeats(nextSeats);
+      botLevelsRef.current = nextLevels;
+      setBotLevels(nextLevels);
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "bot-roster",
+        payload: { botSeats: nextSeats, botLevels: nextLevels },
+      });
     },
     [isHost, occupants],
   );
@@ -376,10 +404,19 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
   const removeBotAtSeat = useCallback(
     (seat: SeatIndex) => {
       if (!isHost) return;
-      const next = botSeatsRef.current.filter((s) => s !== seat);
-      botSeatsRef.current = next;
-      setBotSeats(next);
-      channelRef.current?.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: next } });
+      const idx = botSeatsRef.current.indexOf(seat);
+      if (idx < 0) return;
+      const nextSeats = botSeatsRef.current.filter((_, i) => i !== idx);
+      const nextLevels = botLevelsRef.current.filter((_, i) => i !== idx);
+      botSeatsRef.current = nextSeats;
+      setBotSeats(nextSeats);
+      botLevelsRef.current = nextLevels;
+      setBotLevels(nextLevels);
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "bot-roster",
+        payload: { botSeats: nextSeats, botLevels: nextLevels },
+      });
     },
     [isHost],
   );
@@ -396,14 +433,24 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
   // `game-start`/`bot-roster` broadcast picks up the corrected roster anyway.
   if (isHost && botSeats.length > 0) {
     const humanSeats = new Set(occupants.map((o) => o.seat));
-    const stillBot = botSeats.filter((s) => !humanSeats.has(s));
-    // botSeatsRef is re-synced by the effect above once this commits — not
-    // updated here too, since refs (like state) must not be written during render.
-    if (stillBot.length !== botSeats.length) setBotSeats(stillBot);
+    const keepIdx = botSeats.map((s, i) => (humanSeats.has(s) ? -1 : i)).filter((i) => i !== -1);
+    // botSeatsRef/botLevelsRef are re-synced by the effects above once this
+    // commits — not updated here too, since refs (like state) must not be
+    // written during render.
+    if (keepIdx.length !== botSeats.length) {
+      setBotSeats(keepIdx.map((i) => botSeats[i]));
+      setBotLevels(keepIdx.map((i) => botLevels[i]));
+    }
   }
 
   const handleAction = useCallback((action: EngineAction) => {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
+  }, []);
+
+  const chooseAction = useCallback((state: NoThanksState, actor: SeatIndex): EngineAction | null => {
+    const idx = botSeatsRef.current.indexOf(actor);
+    const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
+    return noThanksChooseAction(state, actor, level);
   }, []);
 
   useBotAutoplay<NoThanksState, EngineAction, SeatIndex>({
@@ -411,7 +458,7 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
     state: gameState,
     currentActor: noThanksCurrentActor,
     botSeats: botSeatSet,
-    chooseAction: noThanksChooseAction,
+    chooseAction,
     dispatch: handleAction,
   });
 
@@ -434,10 +481,10 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
     for (let seat = 0; seat < count; seat++) {
       const occ = occupants.find((o) => o.seat === seat);
       const botIdx = botSeats.indexOf(seat);
-      map[seat] = seat === mySeat ? myName : (occ?.name ?? (botIdx >= 0 ? botDisplayName(botIdx) : "상대"));
+      map[seat] = seat === mySeat ? myName : (occ?.name ?? (botIdx >= 0 ? botDisplayName(botIdx, botLevels[botIdx]) : "상대"));
     }
     return map;
-  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats]);
+  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels]);
 
   const connectedSeats = useMemo(
     () => new Set([...occupants.map((o) => o.seat), ...botSeats]),
@@ -477,6 +524,8 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
     setCodeInput("");
     botSeatsRef.current = [];
     setBotSeats([]);
+    botLevelsRef.current = [];
+    setBotLevels([]);
     setPhase("choose");
   }
 
@@ -684,13 +733,13 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
                   <div key={seat} className="flex items-center justify-between gap-3 text-sm text-white/70">
                     <span>
                       {seat === mySeat ? "나" : `${seat + 1}번`}:{" "}
-                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx)} /> : <span className="text-white/30">대기 중...</span>}
+                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30">대기 중...</span>}
                     </span>
                     {isHost && seat !== mySeat && !occ && (
                       isBot ? (
                         <RemoveBotButton onClick={() => removeBotAtSeat(seat)} />
                       ) : (
-                        <AddBotButton onClick={() => addBotAtSeat(seat)} />
+                        <AddBotButton onAddWithLevel={(level) => addBotAtSeat(seat, level)} />
                       )
                     )}
                   </div>

@@ -355,8 +355,12 @@ function continueRound(state: PerudoState, seed: number): PerudoState {
 
 // ---------------------------------------------------------------------------
 // AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
-// chooseBotAction so a host client can drive a bot-occupied seat).
+// chooseBotAction so a host client can drive a bot-occupied seat). Levels
+// 1–10 route through the shared `pickByLevel` noise curve (botDifficulty.ts)
+// on top of `scoreMove` below.
 // ---------------------------------------------------------------------------
+
+import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
 
 /** The cheapest legal raise for each face right now — never more than 6 candidates (fewer during Palafico, where only the locked face qualifies). */
 function raiseMoves(state: PerudoState): EngineAction[] {
@@ -406,22 +410,80 @@ function estimateExpectedCount(state: PerudoState, seat: SeatIndex, face: Face):
   return ownMatches + othersDice * p;
 }
 
-/** A simple expected-value heuristic — not full Bayesian-optimal play, just enough to look like a plausible opponent. */
-function scoreMove(state: PerudoState, seat: SeatIndex, move: EngineAction): number {
+function nCr(n: number, r: number): number {
+  if (r < 0 || r > n) return 0;
+  const k = Math.min(r, n - r);
+  let result = 1;
+  for (let i = 0; i < k; i++) result = (result * (n - i)) / (i + 1);
+  return result;
+}
+
+function binomialPmf(n: number, k: number, p: number): number {
+  if (k < 0 || k > n) return 0;
+  return nCr(n, k) * p ** k * (1 - p) ** (n - k);
+}
+
+/**
+ * P(table-wide count of `face` >= `quantity`), computed as a true binomial
+ * tail probability over just the *other* seats' dice (own dice are exactly
+ * known, never guessed) — same "only fairly-known info" rule as
+ * `estimateExpectedCount`, just a properly-integrated distribution instead
+ * of a linear mean-gap approximation. Lv.8+ routes through this for a real
+ * EV read on how safe a bid is instead of the core heuristic's rough mean.
+ */
+function holdProbability(state: PerudoState, seat: SeatIndex, quantity: number, face: Face): number {
+  const me = state.players.find((p) => p.seat === seat)!;
+  const wild = !isPalafico(state) && face !== 1;
+  const ownMatches = countMatching([me], face, wild);
+  const othersDice = totalDiceInPlay(state) - me.diceCount;
+  const need = quantity - ownMatches;
+  if (need <= 0) return 1;
+  if (need > othersDice) return 0;
+  const p = wild ? 1 / 3 : 1 / 6;
+  let total = 0;
+  for (let k = need; k <= othersDice; k++) total += binomialPmf(othersDice, k, p);
+  return total;
+}
+
+/** P(table-wide count of `face` === `quantity` exactly) — what "맞아!(calza)" actually needs to be right about. */
+function exactProbability(state: PerudoState, seat: SeatIndex, quantity: number, face: Face): number {
+  const me = state.players.find((p) => p.seat === seat)!;
+  const wild = !isPalafico(state) && face !== 1;
+  const ownMatches = countMatching([me], face, wild);
+  const othersDice = totalDiceInPlay(state) - me.diceCount;
+  const need = quantity - ownMatches;
+  if (need < 0 || need > othersDice) return 0;
+  const p = wild ? 1 / 3 : 1 / 6;
+  return binomialPmf(othersDice, need, p);
+}
+
+/**
+ * How good `move` looks for `seat` — higher is better. Lv.1–7 use a simple
+ * expected-value heuristic (mean-gap, not full Bayesian play). Lv.8–10
+ * (`botTier(level) === "expert"`) instead score every move on the same 0–1
+ * true-probability scale (`holdProbability`/`exactProbability`), which is
+ * directly comparable across raise/dudo/calza instead of mixing three
+ * differently-scaled formulas.
+ */
+function scoreMove(state: PerudoState, seat: SeatIndex, move: EngineAction, level: BotLevel): number {
+  const expert = botTier(level) === "expert";
   switch (move.type) {
     case "raise": {
+      if (expert) return holdProbability(state, seat, move.quantity, move.face);
       const expected = estimateExpectedCount(state, seat, move.face);
       // A credible raise is one the bot's own estimate still supports.
       return expected - move.quantity;
     }
     case "dudo": {
       const bid = state.currentBid!;
+      if (expert) return 1 - holdProbability(state, seat, bid.quantity, bid.face);
       const expected = estimateExpectedCount(state, seat, bid.face);
       // The more the bid outstrips the estimate, the better a dudo call looks.
       return bid.quantity - expected;
     }
     case "calza": {
       const bid = state.currentBid!;
+      if (expert) return exactProbability(state, seat, bid.quantity, bid.face);
       const expected = estimateExpectedCount(state, seat, bid.face);
       // Best right when the bid looks exactly on the money.
       return 3 - Math.abs(expected - bid.quantity) * 4;
@@ -432,19 +494,24 @@ function scoreMove(state: PerudoState, seat: SeatIndex, move: EngineAction): num
 }
 
 /**
- * Picks the highest-scoring legal move for `seat` (ties broken randomly via
- * `rng`), or null if it isn't `seat`'s turn. `rng` defaults to `Math.random`
- * — bot decisions are local UX, not part of the deterministic engine
- * contract; the resulting `EngineAction` still runs through the ordinary,
- * fully deterministic `applyAction`.
+ * Picks a move for `seat` per the shared Level 1–10 curve (`pickByLevel`,
+ * botDifficulty.ts): scores every legal move with `scoreMove`, then lets the
+ * level decide how reliably the best-scored one actually gets played, or
+ * null if it isn't `seat`'s turn. `rng` defaults to `Math.random` — bot
+ * decisions are local UX, not part of the deterministic engine contract; the
+ * resulting `EngineAction` still runs through the ordinary, fully
+ * deterministic `applyAction`.
  */
-export function chooseBotAction(state: PerudoState, seat: SeatIndex, rng: () => number = Math.random): EngineAction | null {
+export function chooseBotAction(
+  state: PerudoState,
+  seat: SeatIndex,
+  level: BotLevel = 5,
+  rng: () => number = Math.random,
+): EngineAction | null {
   const moves = getValidMoves(state, seat);
   if (moves.length === 0) return null;
-  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move) }));
-  const best = Math.max(...scored.map((s) => s.score));
-  const bestMoves = scored.filter((s) => s.score === best).map((s) => s.move);
-  return bestMoves[Math.floor(rng() * bestMoves.length)];
+  const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move, level) }));
+  return pickByLevel(scored, level, rng);
 }
 
 /** Single entry point applying any `EngineAction` to a state — the whole engine as one reducer. */
