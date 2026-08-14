@@ -28,7 +28,7 @@ import type { DiceColorway } from "./colorways";
  *
  * A `DiceMesh` is always a "raw" die: faces 1-6 are painted onto fixed local
  * directions (1=+y, 6=-y, 2=+z, 5=-z, 3=+x, 4=-x — opposite faces sum to 7)
- * and it never rotates itself. Both the physics roll (`DiceCup3D`, which
+ * and it never rotates itself. Both the physics roll (`DiceTray3D`, which
  * animates toward `quaternionForFaceUp` frame by frame) and every static,
  * non-physics tile (`DieTile` below — the bid-track die, reveal-panel
  * tiles, etc.) bring a specific value "up" the exact same way: by wrapping

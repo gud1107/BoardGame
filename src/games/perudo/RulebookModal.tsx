@@ -10,7 +10,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">목표</h3>
           <p className="text-white/70">
-            각자 주사위 5개로 시작합니다. 자신의 주사위는 컵 속에 숨기고, 다른 플레이어의 선언을 의심하거나 넘겨서
+            각자 주사위 5개로 시작합니다. 자신의 주사위는 나에게만 보이고 남에게는 숨긴 채로, 다른 플레이어의 선언을 의심하거나 넘겨서
             주사위를 잃게 만드세요. <span className="text-amber-300">끝까지 주사위를 지킨 마지막 1인</span>이 승리합니다.
           </p>
         </section>

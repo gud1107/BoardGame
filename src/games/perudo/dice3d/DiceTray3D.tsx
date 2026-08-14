@@ -11,7 +11,16 @@ import type { DiceColorway } from "./colorways";
 
 /**
  * The physics rolling spectacle for "내 주사위" (requirement #2: real
- * tumble/collide physics; requirement #3: lift-the-cup peek toggle).
+ * tumble/collide physics). Dice tumble across an open tray and settle
+ * showing their engine-decided face — always in plain view.
+ *
+ * This used to be `DiceCup3D.tsx`: a liftable cup shell sat over the tray
+ * and a "컵 들어서 보기" toggle had to be pressed before the dice underneath
+ * were visible. That occlusion was removed per the 2026-08 페루도 UI 개편
+ * (사용자 요청): a player's own dice must always be legible without an extra
+ * interaction, so there is no cup mesh anywhere in this file — only the
+ * invisible physics pen below (`Pen`) and the dice themselves, visible the
+ * instant they finish tumbling.
  *
  * Important trust-model note (see also `faceMath.ts`'s header): Rapier's
  * solver is local to this browser tab and NOT part of the lockstep sync —
@@ -23,18 +32,15 @@ import type { DiceColorway } from "./colorways";
  * from "freshly tossed" to a pose this component forces frame-by-frame
  * during the "settling" phase, landing exactly on `quaternionForFaceUp`.
  *
- * The cup's physical boundary is a plain rectangular pen (`CuboidCollider`
- * walls) hidden behind a round decorative cup mesh — modelling the actual
- * concave interior of a real cup would need a concave (trimesh) collider,
- * which is unnecessary complexity here since dice never get close enough to
- * the mismatch between "round shell" and "square pen" to make it visible in
- * the ~1s the dice are ever moving.
+ * The tray's physical boundary is a plain rectangular pen (`CuboidCollider`
+ * walls, invisible) rather than a modeled physical container — nothing
+ * needs to be rendered for it since there's no cup shell to hide dice
+ * behind anymore.
  */
 
 const DIE_SIZE = 0.62;
 const TUMBLE_MS = 950;
 const SETTLE_MS = 320;
-const LID_LERP_SPEED = 6.5; // per second, exponential approach
 
 function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
@@ -49,7 +55,7 @@ function settledSlot(index: number, diceCount: number): THREE.Vector3 {
   return new THREE.Vector3(x, DIE_SIZE / 2, 0);
 }
 
-/** Static invisible walls + floor — see file header for why this is a simple box pen rather than a true concave cup collider. */
+/** Static invisible walls + floor — dice never leave this pen, but nothing about it is ever rendered. */
 function Pen({ halfWidth }: { halfWidth: number }) {
   const wallHeight = 1.7;
   const t = 0.08;
@@ -64,36 +70,6 @@ function Pen({ halfWidth }: { halfWidth: number }) {
   );
 }
 
-/**
- * The visible cup shell — purely decorative (no collider of its own),
- * lifted straight up by the parent scene to reveal the dice underneath
- * rather than "opening" in place. That's deliberate: the cylinder below has
- * closed caps (no `openEnded`), i.e. it's a solid, fully opaque vessel from
- * every angle — an open-topped tube would let the elevated camera used here
- * look straight down into it and see the dice through the "closed" cup,
- * which would silently defeat the whole peek toggle.
- */
-function CupShell({ colorway, halfWidth }: { colorway: DiceColorway; halfWidth: number }) {
-  const radius = halfWidth * 1.28;
-  const height = 2.0;
-  return (
-    <group>
-      <mesh position={[0, height / 2 - 0.15, 0]}>
-        <cylinderGeometry args={[radius * 1.05, radius * 0.85, height, 28]} />
-        <meshStandardMaterial color={colorway.body} roughness={0.65} metalness={0.04} side={THREE.DoubleSide} />
-      </mesh>
-      <mesh position={[0, height - 0.15, 0]}>
-        <torusGeometry args={[radius * 1.05, 0.045, 12, 32]} />
-        <meshStandardMaterial color={colorway.shadow} roughness={0.5} metalness={0.1} />
-      </mesh>
-      <mesh position={[0, -0.15, 0]}>
-        <cylinderGeometry args={[radius * 0.85, radius * 0.85, 0.05, 28]} />
-        <meshStandardMaterial color={colorway.shadow} roughness={0.7} metalness={0.05} />
-      </mesh>
-    </group>
-  );
-}
-
 type RollPhase = "tumbling" | "settling" | "settled";
 
 interface Snapshot {
@@ -101,11 +77,10 @@ interface Snapshot {
   quat: THREE.Quaternion;
 }
 
-function CupScene({
+function TrayScene({
   dice,
   colorway,
   rollToken,
-  peeking,
   ringForIndex,
   onRollStart,
   onSettled,
@@ -113,7 +88,6 @@ function CupScene({
   dice: number[];
   colorway: DiceColorway;
   rollToken: number | string;
-  peeking: boolean;
   ringForIndex?: (index: number) => "match" | "wild" | undefined;
   onRollStart?: () => void;
   onSettled?: () => void;
@@ -124,8 +98,6 @@ function CupScene({
   const phaseStartedAt = useRef<number | null>(null);
   const fromSnapshot = useRef<Snapshot[]>([]);
   const toSnapshot = useRef<Snapshot[]>([]);
-  const lidLift = useRef(0);
-  const cupGroupRef = useRef<THREE.Group>(null);
   const onRollStartRef = useRef(onRollStart);
   const onSettledRef = useRef(onSettled);
   // Refs may only be written outside render (this project's stricter
@@ -143,8 +115,8 @@ function CupScene({
   // header's trust-model note), but "should the rings be in the DOM at all"
   // is a legitimate one-shot render decision, not a per-frame animation.
   // Reset via the same render-time "adjust state when a prop changes"
-  // pattern `PerudoBoard.tsx` uses elsewhere (`revealedRound`, `peekedRound`)
-  // rather than an effect that would call `setIsSettled` synchronously.
+  // pattern `PerudoBoard.tsx` uses elsewhere rather than an effect that
+  // would call `setIsSettled` synchronously.
   const [resetForToken, setResetForToken] = useState<number | string | null>(null);
   const [isSettled, setIsSettled] = useState(false);
   if (resetForToken !== rollToken) {
@@ -175,7 +147,7 @@ function CupScene({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- launchRoll intentionally re-reads latest `dice`/refs each call; only `rollToken` should retrigger it.
   }, [rollToken]);
 
-  useFrame((state, delta) => {
+  useFrame((state) => {
     const nowMs = state.clock.elapsedTime * 1000;
     if (phaseStartedAt.current === null) phaseStartedAt.current = nowMs;
 
@@ -220,15 +192,6 @@ function CupScene({
         onSettledRef.current?.();
       }
     }
-
-    // Cup lid: exponential approach toward 0 (down/closed) or 1 (up/open) — imperative transform, no React state, so this never re-renders anything.
-    const target = peeking ? 1 : 0;
-    lidLift.current += (target - lidLift.current) * Math.min(1, delta * LID_LERP_SPEED);
-    if (cupGroupRef.current) {
-      cupGroupRef.current.position.y = lidLift.current * 1.9;
-      cupGroupRef.current.rotation.x = -lidLift.current * 0.35;
-      cupGroupRef.current.rotation.z = lidLift.current * 0.12;
-    }
   });
 
   return (
@@ -268,22 +231,17 @@ function CupScene({
             </mesh>
           );
         })}
-      <group ref={cupGroupRef}>
-        <CupShell colorway={colorway} halfWidth={halfWidth} />
-      </group>
     </>
   );
 }
 
-export interface DiceCup3DProps {
+export interface DiceTray3DProps {
   /** The already-decided, engine-authoritative dice values (1-6) to land on — see file header. */
   dice: number[];
   colorway: DiceColorway;
   /** Bump this (e.g. `state.roundNumber`) to replay the toss animation; the actual `dice` values driving where it lands can (and should) already reflect the new round. */
   rollToken: number | string;
-  /** Whether the cup is currently lifted so the dice show through. */
-  peeking: boolean;
-  /** Per-die match/wild highlight (same idea as the CSS dice's `ring` prop) — see `CupScene`'s floor-marker comment for why this isn't drawn directly on the die. */
+  /** Per-die match/wild highlight (same idea as the CSS dice's `ring` prop) — see `TrayScene`'s floor-marker comment for why this isn't drawn directly on the die. */
   ringForIndex?: (index: number) => "match" | "wild" | undefined;
   onRollStart?: () => void;
   onSettled?: () => void;
@@ -292,7 +250,7 @@ export interface DiceCup3DProps {
 }
 
 /** Self-contained canvas (not part of the shared `DiceStage` — see that file's header for why static thumbnails share one canvas but this one-off physics spectacle gets its own). */
-export function DiceCup3D({ dice, colorway, rollToken, peeking, ringForIndex, onRollStart, onSettled, heightPx = 132 }: DiceCup3DProps) {
+export function DiceTray3D({ dice, colorway, rollToken, ringForIndex, onRollStart, onSettled, heightPx = 132 }: DiceTray3DProps) {
   if (dice.length === 0) return null;
   return (
     <Canvas style={{ width: "100%", height: heightPx }} gl={{ antialias: true, alpha: true }} dpr={[1, 1.5]}>
@@ -301,7 +259,7 @@ export function DiceCup3D({ dice, colorway, rollToken, peeking, ringForIndex, on
       <directionalLight position={[2, 4, 3]} intensity={1.1} castShadow={false} />
       <directionalLight position={[-2, 1.5, -2]} intensity={0.25} />
       <Physics gravity={[0, -9.81, 0]}>
-        <CupScene dice={dice} colorway={colorway} rollToken={rollToken} peeking={peeking} ringForIndex={ringForIndex} onRollStart={onRollStart} onSettled={onSettled} />
+        <TrayScene dice={dice} colorway={colorway} rollToken={rollToken} ringForIndex={ringForIndex} onRollStart={onRollStart} onSettled={onSettled} />
       </Physics>
     </Canvas>
   );

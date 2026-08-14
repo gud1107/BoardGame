@@ -1,8 +1,28 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-15 (AI 봇 Level 1~10 난이도 **전수 점검 세션** — 마지막까지 남아있던 파일럿 4종(하나미코지·노땡스·페루도·스플렌더)에 레벨 시스템을 마저 연동해, 온라인 대전 19종 전부(지렁이 제외)가 Level 1~10을 지원하게 됨. 스플렌더에서 봇 풀 시뮬레이션 스트레스 테스트 도중 실제 소프트락 버그(토큰 고갈+예약 꽉 참+아무것도 못 사는 상황에서 `getValidMoves`가 빈 배열을 반환해 봇이 멈추는 문제, 사람 플레이에서도 이론상 재현 가능)를 찾아 `pass` 액션 신규 추가로 수정. 상세는 아래 "AI 봇 Level 1~10 전수 점검" 섹션 참고. 이전 갱신: 말달리자 이미지 기반 4모서리/10말 재설계. 그 이전: 말달리자 오아시스 존 복원(이미지 없이 룰북 원문으로 회귀) + 신규 하우스 룰. 그 이전: 계정/구독/게스트 모드/관리자 대시보드 **1단계(기반)** 신규 구축. 그 이전: AI 봇이 아예 없던 나머지 10종 전부에 Level 1~10 난이도 신규 연동. 그 이전: AI 봇 Level 1~10 난이도 시스템 신규 구축 + 포세일/코요테/라스베가스/그리드 포커/소환사의 협곡 5종에 연동. 그 이전: 공통 AI 봇 대전 시스템 신규 구축 — 하나미코지/노땡스/페루도/스플렌더 4종 파일럿 적용 + 신규 게임 필수 표준화)_
+_최종 갱신: 2026-08-15 (페루도 UI 전면 개편 **세션** — 페루도 전용 보드판(중앙 비딩 트랙) 디자인, 컵 개폐 제거, 플레이어별 고유 주사위 색상을 적용. 상세는 아래 "페루도 UI 전면 개편" 섹션 참고. 이전 갱신: AI 봇 Level 1~10 난이도 전수 점검 세션 — 마지막까지 남아있던 파일럿 4종(하나미코지·노땡스·페루도·스플렌더)에 레벨 시스템을 마저 연동해, 온라인 대전 19종 전부(지렁이 제외)가 Level 1~10을 지원하게 됨. 스플렌더에서 봇 풀 시뮬레이션 스트레스 테스트 도중 실제 소프트락 버그(토큰 고갈+예약 꽉 참+아무것도 못 사는 상황에서 `getValidMoves`가 빈 배열을 반환해 봇이 멈추는 문제, 사람 플레이에서도 이론상 재현 가능)를 찾아 `pass` 액션 신규 추가로 수정. 그 이전: 말달리자 이미지 기반 4모서리/10말 재설계. 그 이전: 말달리자 오아시스 존 복원(이미지 없이 룰북 원문으로 회귀) + 신규 하우스 룰. 그 이전: 계정/구독/게스트 모드/관리자 대시보드 **1단계(기반)** 신규 구축. 그 이전: AI 봇이 아예 없던 나머지 10종 전부에 Level 1~10 난이도 신규 연동. 그 이전: AI 봇 Level 1~10 난이도 시스템 신규 구축 + 포세일/코요테/라스베가스/그리드 포커/소환사의 협곡 5종에 연동. 그 이전: 공통 AI 봇 대전 시스템 신규 구축 — 하나미코지/노땡스/페루도/스플렌더 4종 파일럿 적용 + 신규 게임 필수 표준화)_
 
-### AI 봇 Level 1~10 전수 점검 — 마지막 파일럿 4종(하나미코지·노땡스·페루도·스플렌더) 연동 완료 (2026-08-15 신규)
+### 페루도 UI 전면 개편 — 페루도판 디자인 / 컵 개폐 제거 / 플레이어별 주사위 색상 (2026-08-15 신규, 같은 날 두 번째 세션)
+
+사용자 요청으로 페루도(`src/games/perudo/`) UI를 페루도 실물 보드판(`boardGameRule/페루도/페루도판.jpg`)의 감성으로 전면 개편. 착수 시점에 이미 작업 트리에 상당 부분이 커밋되지 않은 상태로 구현돼 있었음(같은 날 앞선 세션에서 진행하다 중단된 것으로 보임) — 그 내용을 검증·완성하고 나머지를 마저 적용했다.
+
+1. **중앙 비딩 트랙 보드판 (`PerudoBoard.tsx`의 `BidTrack`)**: 실물 보드의 나무 타일 트랙을 본뜬 사각 루프형 트랙을 중앙에 배치, `1..TRACK_LENGTH`(=`MAX_PLAYERS × STARTING_DICE`) 칸을 자동 계산된 격자로 렌더링. 보라색 "베팅 주사위"(`BettingDie`)가 현재 선언 개수 칸 위에 보드게임 말처럼 얹혀 있고, 트랙 안쪽 황금 명패(실물 보드의 중앙 "PERUDO" 명판을 오마주)에 현재 최고 선언(`{숫자} × {개수}개↑`)과 선/직전 플레이어 이름을 강조 노출. 매 4칸마다 페루도 마크 워터마크로 실물 타일의 메달리온 패턴을 재현.
+2. **컵 개폐 제거 + 간결한 주사위 트레이**: 예전에 있었던 "컵 들어서 보기" 인터랙션(`DiceCup3D.tsx`)을 완전히 삭제하고 `DiceTray3D.tsx`(신규)로 교체 — 내 주사위는 물리 굴림이 끝나는 즉시, 별도 클릭 없이 항상 선명하게 공개. 상대 좌석은 스코어보드에 그 좌석 보유 개수만큼 자기 색상의 빈 주사위(무늬 없는 실루엣, `DieBack`)로 정렬 표시. "페루도!"/"맞아!" 판정 시(`reveal`/`gameOver` phase)에만 `RevealPanel`이 전원의 주사위를 한 번에 공개(Showdown).
+3. **플레이어별 고유 주사위 색상 (`dice3d/colorways.ts`의 `PLAYER_COLORWAYS`)**: 요청받은 정확한 배색으로 확정 — 1번 좌석 빨강(`#c1272d`)·2번 파랑(`#1d4fbf`)·3번 노랑(`#eab308`)·4번 초록(`#1f8a4c`)·5번 보라(`#7e22ce`)·6번 주황(`#e2711d`), 7·8번은 mod 6으로 순환(`playerColorwayForSeat`). CSS 폴백(`DiceCube`)과 실제 WebGL 렌더(`DiceMesh`/`diceTexture.ts`) 양쪽 다 이 한 `DiceColorway` 레코드를 그대로 소비하므로 face 1(페루도 마크 = 조커)을 포함한 모든 눈금이 소유자 색으로 통일 렌더링됨. 각 플레이어는 스와치 피커로 자기 색만 로컬 오버라이드 가능(동기화 안 됨, 기존 `muted` 토글과 같은 신뢰 등급).
+4. **비딩/도전 액션 컨트롤**: 요청된 "하단 액션 독" 대신, 실물 보드 트랙 안쪽 명패에 숫자 선택(`FacePicker`, 페루도 조커 포함 1~6)·"베팅 확정" 버튼·"🚨 페루도!"/"🎯 맞아!" 버튼을 한데 묶어 배치 — 개수는 스텝퍼(+) 대신 트랙 칸을 직접 클릭해 보라색 말을 옮기는 방식으로 의도적으로 대체(요청 #1의 "보드 말처럼 베팅" 취지와 일치하는 디자인 선택, `BidTrack` 모듈 주석 참고).
+5. 남은 갭이었던 배색표(`PLAYER_COLORWAYS`)만 이번 세션에서 신규로 요청된 6색으로 교체했고, 나머지(보드판/컵 제거/showdown)는 이미 구현돼 있던 것을 확인·검증만 했다.
+
+- **최종 검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(**983개** 전부 통과, 27개 테스트 파일) 전부 그린.
+- **범위**: `src/games/perudo/` 내부만 — 다른 게임은 건드리지 않음.
+
+1. **`src/games/perudo/dice3d/colorways.ts`** — `PLAYER_COLORWAYS` 6색을 빨강/파랑/노랑/초록/보라/주황으로 교체(요청받은 정확한 배색).
+2. **`src/games/perudo/PerudoBoard.tsx`** — 페루도판 `BidTrack`, showdown 전용 공개, 컵 없는 주사위 노출(이미 작업 트리에 있던 내용, 이번 세션에서 검증).
+3. **`src/games/perudo/dice3d/DiceTray3D.tsx`(신규, `DiceCup3D.tsx` 대체)** — 컵 셸 없는 물리 굴림 트레이.
+
+<details>
+<summary>이전 세션(AI 봇 Level 1~10 전수 점검 — 마지막 파일럿 4종 연동, 2026-08-15) 원문 — 접힘</summary>
+
+### AI 봇 Level 1~10 전수 점검 — 마지막 파일럿 4종(하나미코지·노땡스·페루도·스플렌더) 연동 완료 (2026-08-15)
 
 먼저 온라인 대전 19종(지렁이 제외) 전체를 `chooseBotAction` 시그니처 기준으로 감사(audit)했다 — HANDOFF의 이전 세션 기록대로, 15종은 이미 `chooseBotAction(state, seat, level, rng?)`로 Level 1~10이 연동돼 있었고, **하나미코지·노땡스·페루도·스플렌더 4종(2026-08-12 세션의 "파일럿" 게임들)만 `chooseBotAction(state, seat, rng?)`로 레벨 인자가 아예 없는 상태**로 확인됐다. 로비 UI도 이 4종만 `AddBotButton`에 `onAddWithLevel`을 안 넘겨(`onClick`만 사용) Lv.1~10 드롭다운이 없었다 — `BotSeatControls.tsx`/`botNaming.ts`는 애초에 두 계약을 다 지원하도록 설계돼 있어(레벨 있으면 `[Lv.N]` 접두, 없으면 원래 표기) 공용 인프라는 전혀 안 건드리고 이 4종만 리팩터링했다.
 
@@ -22,6 +42,8 @@ _최종 갱신: 2026-08-15 (AI 봇 Level 1~10 난이도 **전수 점검 세션**
 2. **`src/games/no-thanks/engine.ts`/`NoThanksGame.tsx`/`NoThanks.test.ts`** — 동일 + 런 병합/칩 희소성 Lv.8+ 휴리스틱.
 3. **`src/games/perudo/engine.ts`/`PerudoGame.tsx`/`Perudo.test.ts`** — 동일 + 이항분포 확률 기반 Lv.8+ 휴리스틱.
 4. **`src/games/splendor/engine.ts`/`SplendorGame.tsx`/`Splendor.test.ts`** — 동일 + 노블 유틸리티/견제가치 Lv.8+ 휴리스틱 + 신규 `pass` 액션(소프트락 수정).
+
+</details>
 
 <details>
 <summary>이전 세션(말달리자 이미지 기반 4모서리/10말 재설계, 2026-08-14 같은 날 세 번째 세션) 원문 — 접힘</summary>
@@ -763,7 +785,7 @@ src/
     registry.ts          GAME_REGISTRY(순수 데이터, 28종)
     playableGames.tsx     GameId → 동적 import 매핑(15종 실제 등록)
     <game-id>/            표준 레이아웃(ARCHITECTURE.md §2) + 게임별 추가 파일:
-      (perudo만) PerudoFaceIcon.tsx / dice3d/  실제 WebGL 3D 주사위(Phase 22) — DiceMesh/DiceStage/DiceCup3D/faceMath/colorways/diceTexture
+      (perudo만) PerudoFaceIcon.tsx / dice3d/  실제 WebGL 3D 주사위(Phase 22, 2026-08-15 페루도 UI 개편에서 DiceCup3D→DiceTray3D로 교체·컵 개폐 제거) — DiceMesh/DiceStage/DiceTray3D/faceMath/colorways/diceTexture
       (century만) cards.ts / ResourceIcon.tsx / MerchantEffects.tsx  상인 32장/점수 36장 카드 데이터, 4색 자원 아이콘 2종, 자원 수거 플라잉 이펙트
       (spot-difference만) scenes.ts / SpotDifferenceScene.tsx / PhotoStageCanvas.tsx  기본 스테이지 씬 데이터, SVG 렌더러, 사진 업로드 모드 Canvas 픽셀 변형
       (splendor만) cards.ts / GemToken.tsx  개발 카드 90장 + 귀족 10개(자체 생성기, Phase 25), 보석 토큰 비주얼

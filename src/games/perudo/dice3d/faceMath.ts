@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
 /**
- * The physics roll (`DiceCup3D.tsx`) is purely decorative chaos — the
+ * The physics roll (`DiceTray3D.tsx`) is purely decorative chaos — the
  * authoritative die values already sit in `engine.ts`'s state, synced to
  * every client the same way every other lockstep action is (see
  * `HANDOFF.md` §2's "온라인 대전 8종 전부 같은 락스텝 패턴"). Rapier's solver

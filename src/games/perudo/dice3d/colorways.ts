@@ -6,17 +6,18 @@
  * `meshStandardMaterial` can't consume Tailwind gradient classes.
  *
  * Two different kinds of colorway live here on purpose:
- *   - "Role" colorways (`IVORY`/`PERUDO_MARK`/`BETTING`/`CUP_WOOD`) are tied
- *     to what a die *means*, not who owns it, and are unconditional: a die
- *     showing face 1 is ALWAYS the red 페루도 skull die, on every seat's
- *     dice, exactly like the CSS version before it (Phase 21) — this was a
- *     deliberate legibility choice (spot the joker at a glance across the
- *     whole table) and this session's player-color feature deliberately does
- *     NOT touch it, to avoid regressing an already screenshot-verified UX.
- *   - "Player" colorways (`PLAYER_COLORWAYS`) are the new per-seat/personal
- *     identity layer this session adds: they only ever tint a die's 2-6
- *     faces and the dice-cup shell, never the face-1 skull die or the
- *     purple betting marker.
+ *   - "Role" colorways (`IVORY`/`BETTING`) are tied to what a die *means*,
+ *     not who owns it: the purple betting marker on the bid track is always
+ *     `BETTING_COLORWAY` regardless of whose turn it is.
+ *   - "Player" colorways (`PLAYER_COLORWAYS`) are the per-seat/personal
+ *     identity layer: every one of a seat's dice — faces 2-6 AND the face-1
+ *     페루도 joker mark — renders in that seat's own body/ink colors (see
+ *     `diceTexture.ts`'s `drawPerudoMark`, which always paints with whatever
+ *     colorway it's handed). An earlier version force-painted every face-1
+ *     die a fixed universal red regardless of owner; that was changed on
+ *     user request (2026-08 페루도 UI 개편) so the joker mark reads as an
+ *     embossed crest on the OWNING player's own colored die rather than a
+ *     one-size-fits-all skin — see `PerudoBoard.tsx`'s `DieFace`.
  */
 
 export interface DiceColorway {
@@ -45,17 +46,6 @@ export const IVORY_COLORWAY: DiceColorway = {
   metalness: 0.04,
 };
 
-/** The universal red/white 페루도 (face value 1) skull die — see file header. */
-export const PERUDO_MARK_COLORWAY: DiceColorway = {
-  id: "perudo-mark",
-  label: "페루도",
-  body: "#b3182c",
-  shadow: "#5c0d16",
-  ink: "#fdf2f2",
-  roughness: 0.3,
-  metalness: 0.05,
-};
-
 /** The purple board-piece betting die — unrelated to any one player. */
 export const BETTING_COLORWAY: DiceColorway = {
   id: "betting",
@@ -67,33 +57,25 @@ export const BETTING_COLORWAY: DiceColorway = {
   metalness: 0.08,
 };
 
-/** Hidden opponent dice / the cup's own default wood shell before a player color is layered on. */
-export const CUP_WOOD_COLORWAY: DiceColorway = {
-  id: "cup-wood",
-  label: "원목",
-  body: "#7a4a22",
-  shadow: "#3a2410",
-  ink: "#e7c98f",
-  roughness: 0.75,
-  metalness: 0,
-};
-
 /**
  * Six selectable player identities — echoes real Cacho/Perudo boxed sets,
- * which ship as full-color dice+cup pairs per player. `playerColorwayForSeat`
- * gives every seat a sensible default (cycling mod 6 past 6 players, since
- * this game allows up to `MAX_PLAYERS = 8`); each viewer can additionally
- * override their OWN colorway locally (see `PerudoBoard.tsx`'s swatch
- * picker) — purely a client-local cosmetic preference, never synced, the
- * same trust tier as the existing `muted` toggle.
+ * which ship as full-color dice+cup pairs per player, and pins the exact
+ * seat→color mapping requested for this UI overhaul (2026-08 페루도 UI 전면
+ * 개편): seat 1 red, seat 2 blue, seat 3 yellow, seat 4 green, seat 5
+ * purple, seat 6 orange. `playerColorwayForSeat` gives every seat a sensible
+ * default (cycling mod 6 past 6 players, since this game allows up to
+ * `MAX_PLAYERS = 8`); each viewer can additionally override their OWN
+ * colorway locally (see `PerudoBoard.tsx`'s swatch picker) — purely a
+ * client-local cosmetic preference, never synced, the same trust tier as the
+ * existing `muted` toggle.
  */
 export const PLAYER_COLORWAYS: DiceColorway[] = [
-  { id: "player-crimson", label: "다홍", body: "#c1432c", shadow: "#5e1c11", ink: "#fdf4ee", roughness: 0.4, metalness: 0.05 },
-  { id: "player-cobalt", label: "코발트", body: "#2b5fc1", shadow: "#12275c", ink: "#f0f5ff", roughness: 0.4, metalness: 0.05 },
-  { id: "player-emerald", label: "에메랄드", body: "#1f8a58", shadow: "#0d3f28", ink: "#eefff5", roughness: 0.4, metalness: 0.05 },
-  { id: "player-amber", label: "호박", body: "#d69a1f", shadow: "#6b4a0c", ink: "#241601", roughness: 0.4, metalness: 0.05 },
-  { id: "player-slate", label: "먹색", body: "#3a3d44", shadow: "#131417", ink: "#f5f6f8", roughness: 0.45, metalness: 0.1 },
-  { id: "player-ivory", label: "설백", body: "#e9e4d8", shadow: "#a39c88", ink: "#161513", roughness: 0.35, metalness: 0.02 },
+  { id: "player-red", label: "빨강", body: "#c1272d", shadow: "#5e0f12", ink: "#fdf1f0", roughness: 0.4, metalness: 0.05 },
+  { id: "player-blue", label: "파랑", body: "#1d4fbf", shadow: "#0c2660", ink: "#eef3ff", roughness: 0.4, metalness: 0.05 },
+  { id: "player-yellow", label: "노랑", body: "#eab308", shadow: "#7a5c05", ink: "#1c1400", roughness: 0.4, metalness: 0.05 },
+  { id: "player-green", label: "초록", body: "#1f8a4c", shadow: "#0d4020", ink: "#eafff0", roughness: 0.4, metalness: 0.05 },
+  { id: "player-purple", label: "보라", body: "#7e22ce", shadow: "#3b0764", ink: "#f5ecff", roughness: 0.4, metalness: 0.05 },
+  { id: "player-orange", label: "주황", body: "#e2711d", shadow: "#7a3805", ink: "#2a1200", roughness: 0.4, metalness: 0.05 },
 ];
 
 export function playerColorwayForSeat(seat: number): DiceColorway {
