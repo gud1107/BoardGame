@@ -1,12 +1,22 @@
+import type { CSSProperties } from "react";
+
 /**
  * Pure inline-SVG "오이" (cucumber) token visual — no external image asset,
  * same convention as splendor/GemToken.tsx, century/ResourceIcon.tsx, and
  * perudo/PerudoFaceIcon.tsx. Used both on card faces (cucumber-count icons,
  * task brief §2) and the player scoreboard (cucumber-token tally).
  */
-export function CucumberIcon({ className = "h-4 w-4", title = "오이" }: { className?: string; title?: string }) {
+export function CucumberIcon({
+  className = "h-4 w-4",
+  title = "오이",
+  style,
+}: {
+  className?: string;
+  title?: string;
+  style?: CSSProperties;
+}) {
   return (
-    <svg viewBox="0 0 24 24" className={className} role="img" aria-label={title}>
+    <svg viewBox="0 0 24 24" className={className} style={style} role="img" aria-label={title}>
       <title>{title}</title>
       <defs>
         <linearGradient id="cucumber-body" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -49,5 +59,64 @@ export function CucumberRow({ count, size = "h-3 w-3" }: { count: number; size?:
         <CucumberIcon key={i} className={size} />
       ))}
     </span>
+  );
+}
+
+/**
+ * Hand-scattered pile positions (percent of container, plus a per-icon tilt)
+ * for 0-5 cucumbers, one preset per count — mirrors the loose cluster look
+ * of the real card art (`boardGameRule/오이다섯개/오이카드구성.jpg`) instead
+ * of a tidy row/grid. Icon size shrinks as the count grows so a 5-cucumber
+ * pile still fits the same card-face footprint as a single lone cucumber.
+ */
+const CLUSTER_LAYOUT: Record<number, { x: number; y: number; rotate: number }[]> = {
+  1: [{ x: 50, y: 52, rotate: -4 }],
+  2: [
+    { x: 36, y: 40, rotate: -20 },
+    { x: 64, y: 62, rotate: 14 },
+  ],
+  3: [
+    { x: 50, y: 28, rotate: 2 },
+    { x: 28, y: 64, rotate: -22 },
+    { x: 72, y: 64, rotate: 20 },
+  ],
+  4: [
+    { x: 30, y: 30, rotate: -18 },
+    { x: 70, y: 32, rotate: 16 },
+    { x: 32, y: 70, rotate: -8 },
+    { x: 70, y: 70, rotate: 10 },
+  ],
+  5: [
+    { x: 50, y: 22, rotate: 0 },
+    { x: 24, y: 42, rotate: -24 },
+    { x: 76, y: 42, rotate: 24 },
+    { x: 34, y: 76, rotate: -12 },
+    { x: 66, y: 76, rotate: 12 },
+  ],
+};
+
+const CLUSTER_ICON_SIZE: Record<number, string> = {
+  1: "h-[48%] w-[48%]",
+  2: "h-[40%] w-[40%]",
+  3: "h-[34%] w-[34%]",
+  4: "h-[30%] w-[30%]",
+  5: "h-[26%] w-[26%]",
+};
+
+/** Scattered cucumber pile used on card faces (task brief §1/§2) — fills its parent, so give it a sized `relative` wrapper. */
+export function CucumberCluster({ count, className = "" }: { count: number; className?: string }) {
+  const layout = CLUSTER_LAYOUT[count];
+  if (!layout) return null;
+  const iconSize = CLUSTER_ICON_SIZE[count];
+  return (
+    <div className={`relative h-full w-full ${className}`} title={`오이 ${count}개`}>
+      {layout.map((pos, i) => (
+        <CucumberIcon
+          key={i}
+          className={`absolute drop-shadow-sm ${iconSize}`}
+          style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: `translate(-50%, -50%) rotate(${pos.rotate}deg)` }}
+        />
+      ))}
+    </div>
   );
 }

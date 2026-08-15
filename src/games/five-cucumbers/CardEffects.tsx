@@ -137,11 +137,11 @@ export function FlyingPlayedCard({
       className="pointer-events-none fixed z-[70] -translate-x-1/2 -translate-y-1/2"
       style={{ left: 0, top: 0, animation: "card-play-slide 0.45s ease-out forwards" }}
     >
-      <div className="flex h-16 w-11 flex-col items-center justify-between rounded-md border border-white/40 bg-gradient-to-b from-emerald-800 to-emerald-950 p-1 shadow-[0_8px_20px_-6px_rgba(0,0,0,0.8)]">
-        <span className="text-base leading-none font-black text-white">{event.card.value}</span>
+      <div className="flex h-20 w-14 flex-col items-center justify-between rounded-lg border border-white/40 bg-gradient-to-b from-emerald-800 to-emerald-950 p-1.5 shadow-[0_8px_20px_-6px_rgba(0,0,0,0.8)]">
+        <span className="text-lg leading-none font-black text-white">{event.card.value}</span>
         {cucumbers > 0 && (
-          <span className="flex items-center gap-0.5 text-[9px] text-white/70">
-            <CucumberIcon className="h-2.5 w-2.5" />
+          <span className="flex items-center gap-0.5 text-[10px] text-white/70">
+            <CucumberIcon className="h-3 w-3" />
             {cucumbers}
           </span>
         )}

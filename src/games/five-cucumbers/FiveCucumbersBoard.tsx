@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import RulebookModal from "./RulebookModal";
-import { CucumberIcon, CucumberRow } from "./CucumberIcon";
+import { CucumberCluster, CucumberIcon } from "./CucumberIcon";
 import {
   buildCucumberPickupEvents,
   detectCardPlayEvent,
@@ -44,34 +44,65 @@ export interface FiveCucumbersBoardProps {
   onGameEnd: () => void;
 }
 
-/** Card background tiers by cucumber-danger level (0-5) — the higher the risk of eating cucumbers on trick 7, the hotter the color. */
-const CUCUMBER_TIER_BG: Record<number, string> = {
-  0: "linear-gradient(160deg,#0d3324 0%,#0a2018 60%,#061309 100%)",
-  1: "linear-gradient(160deg,#3a3406 0%,#242006 60%,#141203 100%)",
-  2: "linear-gradient(160deg,#3a2306 0%,#241606 60%,#140c03 100%)",
-  3: "linear-gradient(160deg,#3a1406 0%,#240d06 60%,#140703 100%)",
-  4: "linear-gradient(160deg,#3a0a12 0%,#24060b 60%,#140306 100%)",
-  5: "linear-gradient(160deg,#4a0a1a 0%,#2c0610 60%,#170308 100%)",
-};
-const CUCUMBER_TIER_BORDER: Record<number, string> = {
-  0: "border-emerald-400/40",
-  1: "border-lime-400/40",
-  2: "border-amber-400/40",
-  3: "border-orange-400/45",
-  4: "border-rose-400/50",
-  5: "border-rose-400/70",
+/**
+ * Card size, shared by the hand and the trick area so a card reads as the
+ * "same physical object" wherever it appears — bumped up from the original
+ * h-24 w-16 (task brief: cards read as too small) while keeping the real
+ * card's ~5:7 index-card ratio (`오이카드구성.jpg`).
+ */
+const CARD_SIZE_CLASSES = "h-28 w-20 sm:h-36 sm:w-24 lg:h-40 lg:w-28";
+
+/**
+ * Danger-tier accent (0-5 cucumbers) — the real card art doesn't color-code
+ * this, but surfacing it as a glow/ring around an otherwise-authentic green
+ * card face is a legibility aid worth keeping (higher trick-7 risk = hotter
+ * ring), same idea as the previous fully-recolored background just toned
+ * down to a border/glow instead of replacing the base card color.
+ */
+const CUCUMBER_TIER_RING: Record<number, string> = {
+  0: "shadow-[0_10px_22px_-12px_rgba(0,0,0,0.7)]",
+  1: "shadow-[0_10px_22px_-12px_rgba(0,0,0,0.7)]",
+  2: "shadow-[0_0_0_2px_rgba(251,191,36,0.35),0_10px_22px_-12px_rgba(0,0,0,0.7)]",
+  3: "shadow-[0_0_0_2px_rgba(251,146,60,0.45),0_10px_22px_-12px_rgba(0,0,0,0.7)]",
+  4: "shadow-[0_0_0_2px_rgba(251,113,133,0.5),0_10px_22px_-12px_rgba(0,0,0,0.7)]",
+  5: "shadow-[0_0_0_3px_rgba(244,63,94,0.65),0_10px_22px_-12px_rgba(0,0,0,0.75)]",
 };
 
+/** Mottled light-green card stock, layered radial highlights over a green base — matches the real card art's watercolor swirl (`오이카드구성.jpg`) without an external image asset (same convention as CucumberIcon.tsx). */
+const CARD_STOCK_BG =
+  "radial-gradient(circle at 26% 18%, rgba(255,255,255,0.55) 0%, transparent 45%)," +
+  "radial-gradient(circle at 78% 72%, rgba(255,255,255,0.35) 0%, transparent 42%)," +
+  "radial-gradient(circle at 60% 15%, rgba(255,255,255,0.3) 0%, transparent 38%)," +
+  "radial-gradient(circle at 50% 55%, #bfdd8c 0%, #a4cf6c 55%, #8bbd52 100%)";
+
+/**
+ * One playing card, styled to match the real "Five Cucumbers" card stock:
+ * white index-card border, mottled green face, a corner index top-left and
+ * a mirrored (180°-rotated) index bottom-right so it reads right-side-up
+ * from either side of the table, and a scattered cucumber pile centered on
+ * the face (task brief §1). Card 1 additionally carries the "×2" bomb badge
+ * from the real card art — it's the only card with 0 cucumbers of its own
+ * but doubles whoever wins the trick's penalty (see engine.ts).
+ */
 function CardFace({ card, className = "" }: { card: Card; className?: string }) {
   const cucumbers = cucumberCount(card.value);
   return (
     <div
-      className={`relative flex h-24 w-16 shrink-0 flex-col items-center justify-between rounded-lg border p-1 ${CUCUMBER_TIER_BORDER[cucumbers]} ${className}`}
-      style={{ background: CUCUMBER_TIER_BG[cucumbers] }}
+      className={`relative shrink-0 rounded-xl border-[3px] p-1 ${CARD_SIZE_CLASSES} ${CUCUMBER_TIER_RING[cucumbers]} ${className}`}
+      style={{ background: CARD_STOCK_BG, borderColor: "#f6fadf" }}
     >
-      <CucumberRow count={cucumbers} size="h-2.5 w-2.5" />
-      <span className="text-xl leading-none font-black text-white">{card.value}</span>
-      <CucumberRow count={cucumbers} size="h-2.5 w-2.5" />
+      <span className="absolute top-1 left-1.5 text-sm leading-none font-black text-[#213409] sm:text-base">{card.value}</span>
+      <span className="absolute right-1.5 bottom-1 rotate-180 text-sm leading-none font-black text-[#213409] sm:text-base">
+        {card.value}
+      </span>
+      {card.value === 1 && (
+        // Kept in the top-LEFT quadrant (beside its own index, not the trailing
+        // edge) so it stays attached to card 1 even when a fanned hand's next
+        // card overlaps this card's right side — see task brief §1's "1번은
+        // 오이 2배 폭탄" badge from the real card art.
+        <span className="absolute top-6 left-1.5 rotate-[-6deg] text-[9px] font-black text-red-600 sm:top-7 sm:text-[11px]">×2</span>
+      )}
+      <CucumberCluster count={cucumbers} className="py-3" />
     </div>
   );
 }
@@ -96,10 +127,22 @@ function TrickSlot({
           <CardFace card={play.card} />
         </div>
       ) : (
-        <div className="flex h-24 w-16 items-center justify-center rounded-lg border border-dashed border-white/10" />
+        <div className={`flex items-center justify-center rounded-xl border border-dashed border-white/10 ${CARD_SIZE_CLASSES}`} />
       )}
     </div>
   );
+}
+
+/** Slight arc + overlap so a hand of cards reads like it's fanned out by hand, not stacked in a grid — same technique as hanamikoji/HanamikojiBoard.tsx's `fanStyle`. */
+function fanStyle(index: number, total: number, overlapPx: number): CSSProperties {
+  if (total <= 1) return { zIndex: index };
+  const mid = (total - 1) / 2;
+  const offset = index - mid;
+  return {
+    transform: `rotate(${offset * 5}deg) translateY(${Math.abs(offset) * 6}px)`,
+    marginLeft: index === 0 ? 0 : -overlapPx,
+    zIndex: index,
+  };
 }
 
 export default function FiveCucumbersBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: FiveCucumbersBoardProps) {
@@ -387,18 +430,24 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
         {me.hand.length === 0 ? (
           <p className="text-xs text-white/30">손패가 없습니다.</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            {me.hand.map((c) => {
+          // Fanned overlap (task brief §2) instead of a wrapping grid — up to
+          // 7 cards at round start still fit a phone-width hand at the
+          // bigger card size, and each card pops forward on hover/tap.
+          <div className="flex flex-wrap justify-center pt-3 sm:pt-4">
+            {me.hand.map((c, i) => {
               const isLegal = isMyTurn && legal.has(c.id);
               return (
-                <button
-                  key={c.id}
-                  disabled={!isLegal}
-                  onClick={() => playCard(c.id)}
-                  className={`transition ${isLegal ? "cursor-pointer hover:-translate-y-1" : "cursor-not-allowed opacity-40"}`}
-                >
-                  <CardFace card={c} className={isLegal ? "shadow-[0_0_14px_-2px_rgba(251,191,36,0.85)] ring-2 ring-amber-300/70" : ""} />
-                </button>
+                <div key={c.id} className="relative" style={fanStyle(i, me.hand.length, 42)}>
+                  <button
+                    disabled={!isLegal}
+                    onClick={() => playCard(c.id)}
+                    className={`relative block transition ${
+                      isLegal ? "cursor-pointer hover:z-30 hover:-translate-y-4 hover:scale-105" : "cursor-not-allowed opacity-40"
+                    }`}
+                  >
+                    <CardFace card={c} className={isLegal ? "shadow-[0_0_18px_-2px_rgba(251,191,36,0.9)] ring-2 ring-amber-300/80" : ""} />
+                  </button>
+                </div>
               );
             })}
           </div>
