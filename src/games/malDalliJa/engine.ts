@@ -451,15 +451,114 @@ export function scoreMove(state: MalDalliJaState, seat: Seat, move: EngineAction
   return score;
 }
 
+// ---------------------------------------------------------------------------
+// Level 8-10 "expert" bot: iterative-deepening alpha-beta minimax.
+//
+// See shared/bot/alphaBeta.ts's module doc for why the search depth comes
+// from a wall-clock budget rather than a hardcoded ply count: 10 horses per
+// seat, each with up to 16 candidate moves, makes a fixed depth-8 minimax
+// combinatorially infeasible before pruning even gets a chance to help.
+// Iterative deepening reaches whatever depth (6-10+ in practice, per the
+// budgets below) the time budget allows, always playing the deepest fully-
+// searched move.
+// ---------------------------------------------------------------------------
+
+import { iterativeDeepeningSearch, type AlphaBetaGame, type SearchBudget } from "@/games/shared/bot/alphaBeta";
+
+function chebyshevDistance(a: Position, b: Position): number {
+  return Math.max(Math.abs(a.row - b.row), Math.abs(a.col - b.col));
+}
+
+/** Legal-move count for `seat` regardless of whose turn `state.activeSeat` actually is — `getLegalMoves` only reads `state.positions`/`state.activeSeat`, so a shallow clone with `activeSeat` swapped is a safe read-only probe (no fairness concern for this game — see this section's own module doc: every horse is physically visible to both players already). */
+function mobility(state: MalDalliJaState, seat: Seat): number {
+  if (state.positions[seat].length === 0) return 0;
+  return getLegalMoves({ ...state, activeSeat: seat }).length;
+}
+
+/**
+ * Static evaluation from `seat`'s POV — higher is better for `seat`. A
+ * terminal state scores a large flat win/loss value (dwarfing anything a
+ * mid-search cutoff could produce, so the search always prefers a forced win
+ * over merely a good position). Otherwise: how much closer `seat`'s nearest
+ * horse is to the oasis than the opponent's nearest horse (the single
+ * decision-relevant distance, since only one horse needs to actually land
+ * there), plus a mobility differential — how many legal moves each side has
+ * right now, a standard positional signal that also rewards moves which
+ * shrink the opponent's open slide lanes without recomputing per-lane detail
+ * (`scoreMove`'s `countBlockedLanes` does that directly for the shallower
+ * non-expert tiers; full-depth search gets the same effect "for free" a few
+ * plies out from mobility alone).
+ */
+function evaluateState(state: MalDalliJaState, seat: Seat): number {
+  if (state.phase === "gameOver") {
+    if (state.winner === seat) return 1_000_000;
+    if (state.winner === otherSeat(seat)) return -1_000_000;
+    return 0;
+  }
+  const opp = otherSeat(seat);
+  const myDist = Math.min(...state.positions[seat].map((p) => chebyshevDistance(p, OASIS)));
+  const oppDist = Math.min(...state.positions[opp].map((p) => chebyshevDistance(p, OASIS)));
+  const distanceScore = (oppDist - myDist) * 15;
+  const mobilityScore = (mobility(state, seat) - mobility(state, opp)) * 0.5;
+  return distanceScore + mobilityScore;
+}
+
+/**
+ * Distance-only stand-in for `evaluateState`, used just for move ordering
+ * (see `AlphaBetaGame.orderingHeuristic`'s doc) — `evaluateState`'s mobility
+ * term calls `getLegalMoves` for both seats, and the ordering pass calls
+ * this once per candidate at EVERY node, so paying that cost twice per
+ * candidate there would let move ordering itself dominate the search's time
+ * budget instead of the actual search.
+ */
+function orderingHeuristic(state: MalDalliJaState, seat: Seat): number {
+  if (state.phase === "gameOver") {
+    if (state.winner === seat) return 1_000_000;
+    if (state.winner === otherSeat(seat)) return -1_000_000;
+    return 0;
+  }
+  const opp = otherSeat(seat);
+  const myDist = Math.min(...state.positions[seat].map((p) => chebyshevDistance(p, OASIS)));
+  const oppDist = Math.min(...state.positions[opp].map((p) => chebyshevDistance(p, OASIS)));
+  return (oppDist - myDist) * 15;
+}
+
+const alphaBetaAdapter: AlphaBetaGame<MalDalliJaState, EngineAction> = {
+  getMoves: (state) => getValidMoves(state, state.activeSeat),
+  applyMove: (state, move) => applyAction(state, move),
+  isTerminal: (state) => state.phase === "gameOver",
+  activeSeat: (state) => state.activeSeat,
+  evaluate: (state, seat) => evaluateState(state, seat as Seat),
+  orderingHeuristic: (state, seat) => orderingHeuristic(state, seat as Seat),
+};
+
+/** Per-level search budgets — deeper levels get more time, which iterative deepening turns directly into more depth (see module doc). Tunable via `chooseBotAction`'s `opts.alphaBetaBudget` (used by the self-play benchmark to run a much smaller budget so 1,000 games finish quickly). */
+const ALPHA_BETA_BUDGETS: Record<number, SearchBudget> = {
+  8: { maxDepth: 6, timeBudgetMs: 150 },
+  9: { maxDepth: 8, timeBudgetMs: 300 },
+  10: { maxDepth: 10, timeBudgetMs: 500 },
+};
+
 export function chooseBotAction(
   state: MalDalliJaState,
   seat: Seat,
   level: BotLevel,
   rng: () => number = Math.random,
+  opts?: { alphaBetaBudget?: SearchBudget },
 ): EngineAction | null {
   const moves = getValidMoves(state, seat);
   if (moves.length === 0) return null;
   const tier = botTier(level);
+
+  if (tier === "expert") {
+    const budget = opts?.alphaBetaBudget ?? ALPHA_BETA_BUDGETS[level] ?? ALPHA_BETA_BUDGETS[10];
+    const result = iterativeDeepeningSearch(alphaBetaAdapter, state, seat, budget);
+    if (result.move) return result.move;
+    // Structurally unreachable (getValidMoves above already confirmed >=1
+    // legal move) — kept only so a search-layer bug degrades to the
+    // ordinary heuristic instead of stalling a real game.
+  }
+
   const candidates: ScoredCandidate<EngineAction>[] = moves.map((move) => ({ move, score: scoreMove(state, seat, move, tier) }));
   return pickByLevel(candidates, level, rng);
 }

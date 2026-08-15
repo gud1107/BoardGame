@@ -21,14 +21,27 @@ import PerudoBoard from "./PerudoBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
-import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { botTier, DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { requestBotAction } from "@/games/shared/bot/botWorkerClient";
 
 /** Whose decision is pending, for `useBotAutoplay` — just the active seat (Perudo has no separate response sub-phase). */
 function perudoCurrentActor(state: PerudoState): SeatIndex | null {
   return state.phase === "playing" ? state.activeSeat : null;
 }
 
-function perudoChooseAction(state: PerudoState, actor: SeatIndex, level: BotLevel): EngineAction | null {
+/**
+ * Levels 1-7 are one cheap heuristic pass — computed inline, same as
+ * before. Level 8-10 (expert tier) runs ISMCTS-lite (100+ trials, see
+ * engine.ts) off the main thread via the shared bot Worker so it never
+ * freezes the UI; `requestBotAction` transparently falls back to the same
+ * synchronous call if a Worker isn't available in this environment.
+ */
+function perudoChooseAction(state: PerudoState, actor: SeatIndex, level: BotLevel): EngineAction | null | Promise<EngineAction | null> {
+  if (botTier(level) === "expert") {
+    return requestBotAction<EngineAction>("perudo", state, actor, level, Math.floor(Math.random() * 1_000_000_000), () =>
+      chooseBotAction(state, actor, level),
+    );
+  }
   return chooseBotAction(state, actor, level);
 }
 
@@ -432,7 +445,7 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }, []);
 
-  const chooseAction = useCallback((state: PerudoState, actor: SeatIndex): EngineAction | null => {
+  const chooseAction = useCallback((state: PerudoState, actor: SeatIndex): EngineAction | null | Promise<EngineAction | null> => {
     const idx = botSeatsRef.current.indexOf(actor);
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
     return perudoChooseAction(state, actor, level);

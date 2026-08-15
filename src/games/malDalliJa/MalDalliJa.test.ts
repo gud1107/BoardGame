@@ -408,6 +408,11 @@ describe("chooseBotAction (AI bot support, Level 1–10)", () => {
     expect(chooseBotAction(state, "p2", 5)).toBeNull();
   });
 
+  // Levels 8-10 now run real iterative-deepening alpha-beta with a
+  // wall-clock budget (see engine.ts's ALPHA_BETA_BUDGETS) instead of one
+  // cheap heuristic pass, so looping every level (and, below, every level ×
+  // several rng samples) genuinely costs real time — both bumped well past
+  // vitest's 5s default, generously enough to absorb CI/parallel-test load.
   it("always returns a legal move regardless of level", () => {
     const state = forceState({ positions: { p1: [{ row: 2, col: 2 }], p2: [{ row: 7, col: 7 }] } });
     for (let level = 1; level <= 10; level++) {
@@ -415,7 +420,7 @@ describe("chooseBotAction (AI bot support, Level 1–10)", () => {
       expect(action).not.toBeNull();
       expect(getValidMoves(state, "p1")).toContainEqual(action);
     }
-  });
+  }, 30_000);
 
   it("never proposes a knight move that the oasis-zone house rule blocks", () => {
     const state = forceState({ positions: { p1: [{ row: 3, col: 5 }], p2: [{ row: 10, col: 10 }] } });
@@ -429,7 +434,7 @@ describe("chooseBotAction (AI bot support, Level 1–10)", () => {
         }
       }
     }
-  });
+  }, 60_000);
 
   it("Level 1 (forced onto its mistake path) slides away from the oasis, while Level 10 spots the immediate win", () => {
     // p1 at (3,3); p2 at (6,6) blocks the down-right diagonal exactly one
@@ -461,15 +466,19 @@ function playFullBotGame(seed: number, levelOf: (seat: Seat) => number): MalDall
 }
 
 describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+  // Level 8-10 now run real iterative-deepening alpha-beta (up to a 500ms
+  // wall-clock budget per move at Level 10, see engine.ts's
+  // ALPHA_BETA_BUDGETS) instead of a single cheap heuristic pass, so a full
+  // game genuinely takes real time — bumped well past vitest's 5s default.
   it("completes an all-Level-10 game with a winner declared", () => {
     const state = playFullBotGame(123, () => 10);
     expect(state.phase).toBe("gameOver");
     expect(state.winner).not.toBeNull();
-  });
+  }, 180_000);
 
   it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
     const state = playFullBotGame(456, (seat) => (seat === "p1" ? 1 : 10));
     expect(state.phase).toBe("gameOver");
     expect(state.winner).not.toBeNull();
-  });
+  }, 180_000);
 });

@@ -20,7 +20,8 @@ import MalDalliJaBoard from "./MalDalliJaBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
-import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { botTier, DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { requestBotAction } from "@/games/shared/bot/botWorkerClient";
 
 /** Whose decision `useBotAutoplay` should drive right now. */
 function mddjCurrentActor(state: MalDalliJaState): Seat | null {
@@ -369,9 +370,19 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }, []);
 
-  const chooseAction = useCallback((state: MalDalliJaState, actor: Seat): EngineAction | null => {
+  // Level 1-7 stay a cheap inline heuristic pass. Level 8-10 (expert tier)
+  // runs iterative-deepening alpha-beta (see engine.ts) off the main thread
+  // via the shared bot Worker so it never freezes the UI; `requestBotAction`
+  // transparently falls back to this same synchronous call if a Worker
+  // isn't available in this environment.
+  const chooseAction = useCallback((state: MalDalliJaState, actor: Seat): EngineAction | null | Promise<EngineAction | null> => {
     const idx = botRolesRef.current.indexOf(actor);
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
+    if (botTier(level) === "expert") {
+      return requestBotAction<EngineAction>("malDalliJa", state, actor, level, Math.floor(Math.random() * 1_000_000_000), () =>
+        chooseBotAction(state, actor, level),
+      );
+    }
     return chooseBotAction(state, actor, level);
   }, []);
 

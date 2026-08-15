@@ -47,6 +47,7 @@ function makeState(overrides: Partial<FiveCucumbersState> = {}): FiveCucumbersSt
     lastTrickResult: null,
     lastRoundSummary: null,
     initialSeed: 1,
+    roundPlayedCards: [],
     ...overrides,
   };
 }
@@ -606,20 +607,33 @@ function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: Seat
   return state;
 }
 
+// Level 8-10 now run real PIMC (100-200 determinizations + a rollout per
+// candidate, see engine.ts's "Level 8-10 expert bot" section) instead of one
+// cheap heuristic pass, so a full multi-round game genuinely takes real
+// time (more so with more seats, since PIMC re-runs every turn) — bumped
+// well past vitest's 5s default.
 describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
   for (const n of [2, 3, 4, 5, 6]) {
-    it(`completes a ${n}-player all-Level-10 game with every seat ranked`, () => {
-      const state = playFullBotGame(n, 100 + n, () => 10);
-      expect(state.phase).toBe("gameOver");
-      const rankings = computeRankings(state);
-      expect(rankings).toHaveLength(n);
-      expect(new Set(rankings.map((r) => r.seat)).size).toBe(n);
-    });
+    it(
+      `completes a ${n}-player all-Level-10 game with every seat ranked`,
+      () => {
+        const state = playFullBotGame(n, 100 + n, () => 10);
+        expect(state.phase).toBe("gameOver");
+        const rankings = computeRankings(state);
+        expect(rankings).toHaveLength(n);
+        expect(new Set(rankings.map((r) => r.seat)).size).toBe(n);
+      },
+      30_000,
+    );
   }
 
-  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
-    const state = playFullBotGame(5, 777, (seat) => (seat % 2 === 0 ? 1 : 10));
-    expect(state.phase).toBe("gameOver");
-    expect(computeRankings(state)).toHaveLength(5);
-  });
+  it(
+    "also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)",
+    () => {
+      const state = playFullBotGame(5, 777, (seat) => (seat % 2 === 0 ? 1 : 10));
+      expect(state.phase).toBe("gameOver");
+      expect(computeRankings(state)).toHaveLength(5);
+    },
+    30_000,
+  );
 });

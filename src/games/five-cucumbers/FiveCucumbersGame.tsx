@@ -23,7 +23,8 @@ import FiveCucumbersBoard from "./FiveCucumbersBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
-import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { botTier, DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { requestBotAction } from "@/games/shared/bot/botWorkerClient";
 
 /** Whose decision `useBotAutoplay` should drive right now. */
 function fiveCucumbersCurrentActor(state: FiveCucumbersState): SeatIndex | null {
@@ -400,9 +401,19 @@ export default function FiveCucumbersGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }, []);
 
-  const chooseAction = useCallback((state: FiveCucumbersState, actor: SeatIndex): EngineAction | null => {
+  // Level 1-7 stay a cheap inline heuristic pass. Level 8-10 (expert tier)
+  // runs PIMC (100+ determinizations, see engine.ts) off the main thread via
+  // the shared bot Worker so it never freezes the UI; `requestBotAction`
+  // transparently falls back to this same synchronous call if a Worker
+  // isn't available in this environment.
+  const chooseAction = useCallback((state: FiveCucumbersState, actor: SeatIndex): EngineAction | null | Promise<EngineAction | null> => {
     const idx = botSeatsRef.current.indexOf(actor);
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
+    if (botTier(level) === "expert") {
+      return requestBotAction<EngineAction>("five-cucumbers", state, actor, level, Math.floor(Math.random() * 1_000_000_000), () =>
+        chooseBotAction(state, actor, level),
+      );
+    }
     return chooseBotAction(state, actor, level);
   }, []);
 

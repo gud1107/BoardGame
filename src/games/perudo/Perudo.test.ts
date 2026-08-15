@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { seededRng } from "@/lib/rng";
 import {
   applyAction,
   chooseBotAction,
@@ -574,7 +575,7 @@ describe("chooseBotAction (AI bot support, Level 1–10)", () => {
     }
   });
 
-  it("Level 1 (forced onto its mistake path) can pick a far worse move than Level 10's argmax", () => {
+  it("Level 1 (forced onto its mistake path) can pick a far worse move than Level 10's usual call", () => {
     const state = makeState({
       activeSeat: 1,
       currentBid: { seat: 0, quantity: 15, face: 2 },
@@ -590,14 +591,38 @@ describe("chooseBotAction (AI bot support, Level 1–10)", () => {
     // (a raise on face 1), not the obviously-correct call.
     const level1Action = chooseBotAction(state, 1, 1, () => 0);
     expect(level1Action?.type).toBe("raise");
+    expect(level1Action).not.toEqual({ type: "dudo", seat: 1 });
+  });
 
-    // Level 10 has a 0% mistake chance and 0 tie margin -> always the true
-    // argmax. This bid (15 of a face with none in my own hand and only 10
-    // unseen dice left on the whole table) can never hold — holdProbability
-    // is exactly 0 — so an expert bot always doubts it.
-    const level10Action = chooseBotAction(state, 1, 10, () => 0);
-    expect(level10Action).toEqual({ type: "dudo", seat: 1 });
-    expect(level1Action).not.toEqual(level10Action);
+  // Level 8-10 route through ISMCTS-lite + live regret-matching (see
+  // engine.ts's "Level 8-10 expert bot" section) instead of the shared
+  // `pickByLevel` curve, specifically so expert play stays a genuinely mixed
+  // strategy (real bluffing) rather than a flat, perfectly predictable
+  // argmax — so unlike the deterministic tiers above, this can't assert a
+  // single rng draw always produces one exact action. Instead: this bid (15
+  // of a face with only 15 dice on the whole table, none of them the
+  // deciding seat's own) can never hold — holdProbability is exactly 0 — so
+  // across many independent decisions, an expert bot should overwhelmingly
+  // (not universally, since a genuine mixed strategy leaves room for an
+  // occasional credible bluff/raise) resolve it by calling dudo.
+  it("Level 10 overwhelmingly calls dudo on a bid that can never hold, without being perfectly deterministic about it", () => {
+    const state = makeState({
+      activeSeat: 1,
+      currentBid: { seat: 0, quantity: 15, face: 2 },
+      players: [
+        { seat: 0, diceCount: 5, dice: [3, 3, 3, 3, 3] },
+        { seat: 1, diceCount: 5, dice: [3, 3, 3, 3, 3] },
+        { seat: 2, diceCount: 5, dice: [3, 3, 3, 3, 3] },
+      ],
+    });
+
+    const trials = 200;
+    let dudoCount = 0;
+    for (let i = 0; i < trials; i++) {
+      const action = chooseBotAction(state, 1, 10, seededRng(i));
+      if (action?.type === "dudo") dudoCount++;
+    }
+    expect(dudoCount / trials).toBeGreaterThan(0.8);
   });
 });
 

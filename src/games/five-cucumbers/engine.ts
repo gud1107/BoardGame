@@ -110,6 +110,15 @@ export interface FiveCucumbersState {
   lastRoundSummary: RoundSummary | null;
   /** Seed the very first deal used; later rounds derive a fresh deterministic seed from this + roundNumber so every client reshuffles identically without needing a new network broadcast. */
   initialSeed: number;
+  /**
+   * Every card played so far this round, across all resolved tricks (reset
+   * on each `dealRound`). Only consumer today is the Level 8-10 PIMC bot
+   * (see "AI bot support" below): to determinize opponents' unseen hands
+   * fairly it needs the exact set of cards no longer in anyone's hand, and
+   * `lastTrickResult` alone only remembers the *most recent* trick, not the
+   * whole round.
+   */
+  roundPlayedCards: Card[];
 }
 
 export type EngineAction = { type: "playCard"; seat: SeatIndex; cardId: string };
@@ -206,6 +215,7 @@ function dealRound(state: FiveCucumbersState, preferredLeadSeats: SeatIndex[]): 
     leadSeat,
     activeSeat: leadSeat,
     phase: "playing",
+    roundPlayedCards: [],
   };
 }
 
@@ -237,6 +247,7 @@ export function startGame(
     lastTrickResult: null,
     lastRoundSummary: null,
     initialSeed: seed,
+    roundPlayedCards: [],
   };
   return dealRound(base, []);
 }
@@ -297,9 +308,13 @@ function playCard(state: FiveCucumbersState, seat: SeatIndex, cardId: string): F
   let players = state.players.map((p) => (p.seat === seat ? { ...p, hand } : p));
   const trickPlays = [...state.trickPlays, { seat, card }];
   const activeCount = activeSeats(players).length;
+  // Tracked from the moment a card leaves a hand (not only once the trick
+  // resolves) so a bot deciding mid-trick already sees its own just-played
+  // card excluded from "unseen" — see `roundPlayedCards`'s doc.
+  const roundPlayedCards = [...state.roundPlayedCards, card];
 
   if (trickPlays.length < activeCount) {
-    return { ...state, players, trickPlays, activeSeat: nextActiveSeat(players, seat) };
+    return { ...state, players, trickPlays, activeSeat: nextActiveSeat(players, seat), roundPlayedCards };
   }
 
   // Trick complete.
@@ -320,6 +335,7 @@ function playCard(state: FiveCucumbersState, seat: SeatIndex, cardId: string): F
       leadSeat: winnerSeat,
       activeSeat: winnerSeat,
       lastTrickResult,
+      roundPlayedCards,
     };
   }
 
@@ -368,7 +384,7 @@ function playCard(state: FiveCucumbersState, seat: SeatIndex, cardId: string): F
     newlyEliminatedSeats,
   };
 
-  const settled: FiveCucumbersState = { ...state, players, trickPlays: [], lastTrickResult, lastRoundSummary };
+  const settled: FiveCucumbersState = { ...state, players, trickPlays: [], lastTrickResult, lastRoundSummary, roundPlayedCards };
   const remaining = activeSeats(players);
   if (remaining.length <= 1) {
     return { ...settled, phase: "gameOver" };
@@ -505,15 +521,137 @@ export function scoreMove(state: FiveCucumbersState, seat: SeatIndex, move: Engi
   return score + reserveBonus;
 }
 
+// ---------------------------------------------------------------------------
+// Level 8-10 "expert" bot: Perfect Information Monte Carlo (PIMC).
+//
+// A genuinely exhaustive minimax here is infeasible with 4-6 players and up
+// to 6 remaining tricks — the game tree's branching factor compounds across
+// every seat's turn within every trick, unlike a 2-player game. Real PIMC
+// bots for trick-taking games (Bridge/Skat solvers included) handle exactly
+// this by determinizing the hidden hands into N concrete "worlds", then
+// playing each one out with a FAST heuristic rollout policy rather than
+// exhaustively searching it — that's what `simulateRoundOutcome` below does,
+// using the existing "core"-tier `scoreMove` as that rollout policy for
+// every seat (including this bot's own future turns). The move whose
+// average outcome (fewest cucumbers eaten by the 7th trick, across all
+// sampled worlds) wins is what gets played.
+// ---------------------------------------------------------------------------
+
+import { evaluateMovesByDeterminization } from "@/games/shared/bot/montecarlo";
+
+export const DEFAULT_PIMC_TRIALS = 150; // within the 100-200 determinizations the task spec calls for.
+const PIMC_ROLLOUT_MOVE_GUARD = 200; // defensive cap — a round can't structurally take this many single-card plays before resolving.
+
+/**
+ * Cards no seat but `seat` could already be holding: everyone's cards are
+ * drawn from the same 60-card deck, and `roundPlayedCards`/`trickPlays`
+ * cover every card that's left a hand so far this round (see
+ * `roundPlayedCards`'s doc on `FiveCucumbersState`) — the complement of
+ * (own hand ∪ already-played) is exactly the pool every opponent's hidden
+ * hand was dealt from.
+ */
+function unseenCardsFor(state: FiveCucumbersState, seat: SeatIndex): Card[] {
+  const me = findPlayer(state, seat)!;
+  const known = new Set<string>([
+    ...me.hand.map((c) => c.id),
+    ...state.roundPlayedCards.map((c) => c.id),
+    ...state.trickPlays.map((p) => p.card.id),
+  ]);
+  return buildDeck().filter((c) => !known.has(c.id));
+}
+
+/**
+ * One determinized "world": every other active seat's hand is a random deal
+ * from the unseen pool, sized to that seat's real (publicly known) hand
+ * length — `seat`'s own hand is left exactly as-is, never guessed. Fairness
+ * note matches the module doc: this only ever reads hand *sizes* for other
+ * seats (public info), never their actual `hand` contents.
+ */
+function determinizeHands(state: FiveCucumbersState, seat: SeatIndex, rng: () => number): FiveCucumbersState {
+  const pool = shuffle(unseenCardsFor(state, seat), rng);
+  let idx = 0;
+  const players = state.players.map((p) => {
+    if (p.seat === seat || p.eliminated) return p;
+    const size = p.hand.length;
+    const hand = pool.slice(idx, idx + size);
+    idx += size;
+    return { ...p, hand };
+  });
+  return { ...state, players };
+}
+
+/** Fast deterministic policy (argmax of the existing "expert" heuristic — the sophisticated final-trick-avoidance scoring, not a recursive PIMC call) used to roll every seat's *subsequent* turns forward inside a PIMC trial — a full recursive PIMC-inside-PIMC would defeat the point of sampling many worlds cheaply, and a weaker rollout policy (e.g. "core") would make every trial systematically underrate how well a good final-trick strategy actually plays out. */
+function fastRolloutMove(state: FiveCucumbersState, seat: SeatIndex): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  let best = moves[0];
+  let bestScore = -Infinity;
+  for (const move of moves) {
+    const score = scoreMove(state, seat, move, "expert");
+    if (score > bestScore) {
+      bestScore = score;
+      best = move;
+    }
+  }
+  return best;
+}
+
+/**
+ * Plays `firstMove` in `world`, then rolls every subsequent seat's turn
+ * forward with `fastRolloutMove` until this round's 7th trick resolves
+ * (`dealRound`/`gameOver` both change `roundNumber`/`phase` out from under
+ * the loop condition, so it stops exactly there — see call sites). Returns
+ * how many FEWER cucumbers `seat` ate than the worst case, i.e. higher is
+ * better, matching every other `scoreMove`'s "higher = more desirable"
+ * convention in this file.
+ */
+function simulateRoundOutcome(world: FiveCucumbersState, seat: SeatIndex, firstMove: EngineAction): number {
+  let s = applyAction(world, firstMove);
+  const before = findPlayer(world, seat)!.cucumbers;
+  const targetRound = world.roundNumber;
+  let guard = 0;
+  while (s.phase === "playing" && s.roundNumber === targetRound && guard < PIMC_ROLLOUT_MOVE_GUARD) {
+    const move = fastRolloutMove(s, s.activeSeat);
+    if (!move) break;
+    s = applyAction(s, move);
+    guard++;
+  }
+  const after = findPlayer(s, seat)?.cucumbers ?? before;
+  return -(after - before);
+}
+
+function pimcScoreMoves(
+  state: FiveCucumbersState,
+  seat: SeatIndex,
+  moves: EngineAction[],
+  rng: () => number,
+  trials: number,
+): ScoredCandidate<EngineAction>[] {
+  const evaluated = evaluateMovesByDeterminization(moves, {
+    determinize: (r) => determinizeHands(state, seat, r),
+    evaluateInWorld: (world, move) => simulateRoundOutcome(world, seat, move),
+    trials,
+    rng,
+  });
+  return evaluated.map((e) => ({ move: e.move, score: e.averageValue }));
+}
+
 export function chooseBotAction(
   state: FiveCucumbersState,
   seat: SeatIndex,
   level: BotLevel,
   rng: () => number = Math.random,
+  opts?: { pimcTrials?: number },
 ): EngineAction | null {
   const moves = getValidMoves(state, seat);
   if (moves.length === 0) return null;
   const tier = botTier(level);
+
+  if (tier === "expert") {
+    const candidates = pimcScoreMoves(state, seat, moves, rng, opts?.pimcTrials ?? DEFAULT_PIMC_TRIALS);
+    return pickByLevel(candidates, level, rng);
+  }
+
   const candidates: ScoredCandidate<EngineAction>[] = moves.map((move) => ({ move, score: scoreMove(state, seat, move, tier) }));
   return pickByLevel(candidates, level, rng);
 }

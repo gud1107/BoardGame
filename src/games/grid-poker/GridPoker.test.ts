@@ -78,7 +78,13 @@ describe("evaluateHand", () => {
     expect(hand.ranks).toEqual([7, 14]);
   });
 
-  it("five jokers resolve to the best possible hand: an ace-high spade straight flush", () => {
+  // This is a plain synchronous calculation and should be instant — the
+  // explicit timeout is defensive against worker-thread scheduling
+  // contention when the full suite runs alongside the CPU-heavy AI self-play
+  // benchmark (src/games/shared/bot/aiBenchmark.test.ts) and the malDalliJa/
+  // five-cucumbers Level 10 full-simulation tests, none of which touch this
+  // file's logic.
+  it("five jokers resolve to the best possible hand: an ace-high spade straight flush", { timeout: 30_000 }, () => {
     const hand = evaluateHand([joker("j1"), joker("j2"), joker("j3"), joker("j4"), joker("j5")]);
     expect(hand.category).toBe(8);
     expect(hand.ranks).toEqual([14]);

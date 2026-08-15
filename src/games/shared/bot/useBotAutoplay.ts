@@ -20,6 +20,14 @@ import { useEffect, useRef } from "react";
  * renders — that keeps this effect from re-scheduling on unrelated
  * re-renders. `botSeats` should be memoized by the caller for the same
  * reason.
+ *
+ * `chooseAction` may return a plain value OR a Promise — most games' Level
+ * 1-7 bots are one cheap heuristic pass and stay synchronous, but
+ * five-cucumbers/perudo/malDalliJa route Level 8-10 through a Web Worker
+ * (PIMC/ISMCTS/alpha-beta — see each engine.ts and botWorkerClient.ts) to
+ * keep a 100+-trial simulation off the UI thread, which makes their
+ * `chooseAction` async. Both shapes are handled identically below via
+ * `Promise.resolve`.
  */
 export interface UseBotAutoplayOptions<State, Action, Actor> {
   /** Only true on the host's client. */
@@ -28,8 +36,8 @@ export interface UseBotAutoplayOptions<State, Action, Actor> {
   /** Whose decision is currently pending, or null if nobody is blocked on one (e.g. a shared "continue" screen a human always handles). */
   currentActor: (state: State) => Actor | null;
   botSeats: ReadonlySet<Actor>;
-  /** Returns the action to broadcast for that bot seat, or null if it has no legal move (defensive — should not normally happen since `currentActor` already implies one exists). */
-  chooseAction: (state: State, actor: Actor) => Action | null;
+  /** Returns (or resolves to) the action to broadcast for that bot seat, or null if it has no legal move (defensive — should not normally happen since `currentActor` already implies one exists). */
+  chooseAction: (state: State, actor: Actor) => Action | null | Promise<Action | null>;
   dispatch: (action: Action) => void;
   /** Natural-feeling "thinking" delay before the bot acts. Defaults to 500–1500ms per the project's bot UX standard. */
   minDelayMs?: number;
@@ -58,11 +66,20 @@ export function useBotAutoplay<State, Action, Actor>({
     if (actedForRef.current === state) return;
     actedForRef.current = state;
 
+    let cancelled = false;
     const delay = minDelayMs + Math.random() * Math.max(0, maxDelayMs - minDelayMs);
     const timer = window.setTimeout(() => {
-      const action = chooseAction(state, actor);
-      if (action) dispatch(action);
+      // The "thinking" delay and the (possibly async, worker-backed) search
+      // itself overlap rather than stack — chooseAction is kicked off right
+      // when the delay fires, same as the fully-synchronous case always did.
+      void Promise.resolve(chooseAction(state, actor)).then((action) => {
+        if (cancelled || !action) return;
+        dispatch(action);
+      });
     }, delay);
-    return () => window.clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [active, state, currentActor, botSeats, chooseAction, dispatch, minDelayMs, maxDelayMs]);
 }

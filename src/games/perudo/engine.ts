@@ -493,23 +493,143 @@ function scoreMove(state: PerudoState, seat: SeatIndex, move: EngineAction, leve
   }
 }
 
+// ---------------------------------------------------------------------------
+// Level 8-10 "expert" bot: Information Set Monte Carlo Tree Search
+// (ISMCTS)-lite + live regret-matching bluff mixing.
+//
+// A full ISMCTS builds and revisits a tree of information sets across many
+// iterations; what's implemented here is its determinization step (sample N
+// plausible worlds for the opponents' hidden dice, consistent only with
+// their publicly-known dice *counts*) paired with a single-ply Monte Carlo
+// rollout per candidate move (see `simulateRoundValue`) instead of a
+// persistent tree — the same practical simplification `montecarlo.ts`'s doc
+// makes for PIMC, and for the same reason (a real per-node tree revisited
+// over hundreds of iterations is a different, much heavier project than a
+// per-turn decision function). The bluffing half of the spec — mixed
+// strategies instead of a deterministic argmax — comes from
+// `regretMatching.ts`: every candidate's simulated value feeds a live
+// regret-matching distribution, and the actual move is *sampled* from it
+// (see regretMatching.ts's doc on why this is real-time regret matching,
+// not a fully-trained CFR equilibrium).
+// ---------------------------------------------------------------------------
+
+import { evaluateMovesByDeterminization } from "@/games/shared/bot/montecarlo";
+import { regretMatchingDistribution, sampleFromDistribution } from "@/games/shared/bot/regretMatching";
+
+export const DEFAULT_ISMCTS_TRIALS = 120;
+const ISMCTS_ROLLOUT_TURN_GUARD = 40; // defensive cap — raises strictly increase quantity/face each turn, so a round is structurally bounded, but a hard guard keeps a rollout from ever looping.
+
+/** One determinized world: every OTHER alive seat's hidden dice are re-rolled uniformly at random, sized to their real (public) `diceCount` — `seat`'s own dice are left untouched, never guessed. */
+function determinizeOpponentDice(state: PerudoState, seat: SeatIndex, rng: () => number): PerudoState {
+  const players = state.players.map((p) => (p.seat === seat || p.diceCount === 0 ? p : { ...p, dice: rollDice(rng, p.diceCount) }));
+  return { ...state, players };
+}
+
+/** Fast deterministic policy (argmax of the existing expert-tier `scoreMove`) used to roll every seat's *subsequent* turns forward inside an ISMCTS trial. */
+function fastRolloutMove(state: PerudoState, seat: SeatIndex): EngineAction | null {
+  const moves = getValidMoves(state, seat);
+  if (moves.length === 0) return null;
+  let best = moves[0];
+  let bestScore = -Infinity;
+  for (const move of moves) {
+    const score = scoreMove(state, seat, move, 10);
+    if (score > bestScore) {
+      bestScore = score;
+      best = move;
+    }
+  }
+  return best;
+}
+
 /**
- * Picks a move for `seat` per the shared Level 1–10 curve (`pickByLevel`,
- * botDifficulty.ts): scores every legal move with `scoreMove`, then lets the
- * level decide how reliably the best-scored one actually gets played, or
- * null if it isn't `seat`'s turn. `rng` defaults to `Math.random` — bot
- * decisions are local UX, not part of the deterministic engine contract; the
- * resulting `EngineAction` still runs through the ordinary, fully
- * deterministic `applyAction`.
+ * Plays `firstMove` in `world`, then rolls subsequent turns forward with
+ * `fastRolloutMove` until the round resolves (phase leaves "playing" — a
+ * dudo/calza call, or the round/game ending outright). The payoff is
+ * `seat`'s dice-count swing over that span, plus a flat bonus/penalty for an
+ * outright win/loss — comparably scaled with the raw dice delta so a genuine
+ * game-ending result isn't drowned out by (nor dwarfs) an ordinary round.
+ */
+function simulateRoundValue(world: PerudoState, seat: SeatIndex, firstMove: EngineAction): number {
+  let s = applyAction(world, firstMove);
+  const before = world.players.find((p) => p.seat === seat)!.diceCount;
+  let guard = 0;
+  while (s.phase === "playing" && guard < ISMCTS_ROLLOUT_TURN_GUARD) {
+    const move = fastRolloutMove(s, s.activeSeat);
+    if (!move) break;
+    s = applyAction(s, move);
+    guard++;
+  }
+  const after = s.players.find((p) => p.seat === seat)?.diceCount ?? 0;
+  let value = after - before;
+  if (s.phase === "gameOver") value += s.winnerSeat === seat ? 5 : -5;
+  return value;
+}
+
+/**
+ * Combines the existing analytical "expert" `scoreMove` (holdProbability /
+ * exactProbability — an exact 0-1 closed-form probability, not an
+ * approximation) with a bounded ISMCTS-lite rollout nudge, rather than
+ * replacing one with the other. Empirically (see the self-play benchmark),
+ * the closed-form probability alone is a MORE precise read on "does this
+ * exact bid hold" than a 25-120 trial Monte Carlo rollout can be — the
+ * rollout also has to simulate several subsequent turns of a heuristic
+ * opponent policy, so its noise compounds beyond just the dice draw. What a
+ * rollout genuinely adds beyond the single-bid probability is a forward-
+ * looking read on how the position *develops* (e.g. among several
+ * similarly-safe raises, which one leaves the round in the best shape one
+ * or two turns out) — exactly the kind of thing a static probability can't
+ * see. So the rollout is folded in as a small, tanh-bounded adjustment on
+ * top of the analytical score: never large enough to flip a clearly-correct
+ * call into a clearly-wrong one, but enough to break ties between options
+ * the analytical formula alone can't distinguish (which is also where a
+ * genuine bluff should live, per the regret-matching sampling below).
+ */
+function ismctsScoreMoves(state: PerudoState, seat: SeatIndex, moves: EngineAction[], rng: () => number, trials: number) {
+  const rolled = evaluateMovesByDeterminization(moves, {
+    determinize: (r) => determinizeOpponentDice(state, seat, r),
+    evaluateInWorld: (world, move) => simulateRoundValue(world, seat, move),
+    trials,
+    rng,
+  });
+  return rolled.map((r) => {
+    const analytical = scoreMove(state, seat, r.move, 10);
+    const nudge = Math.tanh(r.averageValue / 5) * 0.15;
+    return { move: r.move, averageValue: analytical + nudge };
+  });
+}
+
+/**
+ * Picks a move for `seat`. Levels 1-7 use the shared Level 1–10 curve
+ * (`pickByLevel`, botDifficulty.ts): score every legal move with
+ * `scoreMove`, then let the level decide how reliably the best-scored one
+ * actually gets played. Levels 8-10 (expert tier) bypass that curve
+ * entirely in favor of ISMCTS-lite + regret-matching sampling (see above) —
+ * `pickByLevel`'s expert tier is a *deterministic* argmax (0% mistake
+ * chance, 0 tie margin), which is exactly wrong for a bluffing game: a
+ * bot that always plays its single highest-scored move is fully
+ * predictable and can never credibly bluff. `rng` defaults to
+ * `Math.random` either way — bot decisions are local UX, not part of the
+ * deterministic engine contract; the resulting `EngineAction` still runs
+ * through the ordinary, fully deterministic `applyAction`.
  */
 export function chooseBotAction(
   state: PerudoState,
   seat: SeatIndex,
   level: BotLevel = 5,
   rng: () => number = Math.random,
+  opts?: { ismctsTrials?: number },
 ): EngineAction | null {
   const moves = getValidMoves(state, seat);
   if (moves.length === 0) return null;
+
+  if (botTier(level) === "expert") {
+    const evaluated = ismctsScoreMoves(state, seat, moves, rng, opts?.ismctsTrials ?? DEFAULT_ISMCTS_TRIALS);
+    // sharpness=2: see regretMatching.ts's doc — keeps genuine bluffing among
+    // genuinely close candidates without diluting an already-clear best call.
+    const distribution = regretMatchingDistribution(evaluated.map((e) => ({ move: e.move, value: e.averageValue })), 2);
+    return sampleFromDistribution(distribution, rng);
+  }
+
   const scored = moves.map((move) => ({ move, score: scoreMove(state, seat, move, level) }));
   return pickByLevel(scored, level, rng);
 }
