@@ -220,17 +220,28 @@ function EquipRow({ player }: { player: PlayerState }) {
   );
 }
 
+// Card face styling follows the physical Korean-localized deck
+// (boardGameRule/뱅/카드1.jpg, 카드2.jpg): a cream parchment panel inside a
+// tan double border, a bold small-caps western title (English callout above
+// a Korean label, e.g. "BANG! 뱅!"), and the suit+rank tucked in the
+// top-left/bottom-right corners like a real playing card — no illustration
+// is copied, `meta.icon` stands in for the artwork as before.
 function CardFace({ card, size = "md" }: { card: Card; size?: "sm" | "md" }) {
   const meta = CARD_META[card.type];
-  const dims = size === "sm" ? "h-16 w-11" : "h-24 w-16";
+  const dims = size === "sm" ? "h-16 w-11" : "h-28 w-20";
+  const titleSize = size === "sm" ? "text-[6px]" : "text-[8px]";
   return (
     <Tooltip text={`${meta.label} — ${meta.desc}`}>
       <div
-        className={`relative flex ${dims} flex-col items-center justify-between rounded-xl border-2 border-white/70 bg-gradient-to-b from-amber-100 via-amber-200 to-amber-400 px-1 py-1 text-amber-950 shadow-[0_4px_10px_rgba(0,0,0,0.5)]`}
+        className={`relative flex ${dims} flex-col items-center justify-between rounded-lg border-[3px] border-amber-700/80 bg-gradient-to-b from-amber-50 via-amber-100 to-amber-200 px-1 py-1 text-amber-950 shadow-[0_4px_10px_rgba(0,0,0,0.5)]`}
       >
-        <span className="text-[9px] font-bold leading-none">{card.suit}</span>
+        <span className="absolute top-0.5 left-1 text-[8px] font-bold leading-none">{card.suit}</span>
+        <span className="absolute right-1 bottom-0.5 rotate-180 text-[8px] font-bold leading-none">{card.suit}</span>
+        <span className={`${titleSize} mt-1.5 max-w-full truncate px-1 text-center font-black tracking-tight text-amber-900 uppercase`}>
+          {meta.label}
+        </span>
         <span className="text-xl drop-shadow-sm">{meta.icon}</span>
-        <span className="rotate-180 text-[9px] font-bold leading-none">{card.suit}</span>
+        <span className="mb-1 h-1" />
       </div>
     </Tooltip>
   );

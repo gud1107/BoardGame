@@ -1,25 +1,29 @@
 /**
- * Pure presentation for the 5 캐릭터 cards — no game logic. This game has no
- * provided card photography (`boardGameRule/레지스탕스 쿠/` holds only the
- * rulebook markdown), so every card face is drawn with CSS/emoji, same
- * approach as coyote/CardArt.tsx.
+ * Pure presentation for the 5 캐릭터 cards — no game logic. `boardGameRule/
+ * 레지스탕스 쿠/카드1.jpg` (added since the last pass) shows the real card
+ * photography, so the per-character palette below now tracks each card's
+ * actual dominant color (Duke = magenta/purple ornate border, Contessa =
+ * warm rust-red, Ambassador = gold/amber robe, Assassin = near-black
+ * tactical, Captain = cool blue) instead of the earlier arbitrary mapping.
+ * No portrait art is reproduced — every card face is still drawn with
+ * CSS/emoji only, same approach as coyote/CardArt.tsx.
  */
 import { CHARACTER_EMOJI, CHARACTER_NAMES, type Card, type Character } from "./engine";
 
 const CHARACTER_BG: Record<Character, string> = {
-  duke: "linear-gradient(160deg,#4a3010 0%,#241808 55%,#100c03 100%)",
-  assassin: "linear-gradient(160deg,#3a1024 0%,#1e0a15 55%,#0a0308 100%)",
-  contessa: "linear-gradient(160deg,#123a2e 0%,#0a2118 55%,#04120c 100%)",
+  duke: "linear-gradient(160deg,#4a1048 0%,#260826 55%,#100310 100%)",
+  assassin: "linear-gradient(160deg,#20242c 0%,#121418 55%,#050608 100%)",
+  contessa: "linear-gradient(160deg,#5a2010 0%,#2c1008 55%,#120602 100%)",
   captain: "linear-gradient(160deg,#123048 0%,#0a1a28 55%,#040d14 100%)",
-  ambassador: "linear-gradient(160deg,#2a1848 0%,#160c28 55%,#0a0514 100%)",
+  ambassador: "linear-gradient(160deg,#4a3010 0%,#241808 55%,#100c03 100%)",
 };
 
 const CHARACTER_BORDER: Record<Character, string> = {
-  duke: "border-amber-300/50",
-  assassin: "border-rose-400/50",
-  contessa: "border-emerald-300/50",
+  duke: "border-fuchsia-300/50",
+  assassin: "border-slate-300/40",
+  contessa: "border-orange-400/50",
   captain: "border-sky-300/50",
-  ambassador: "border-purple-300/50",
+  ambassador: "border-amber-300/50",
 };
 
 export { CHARACTER_EMOJI, CHARACTER_NAMES };

@@ -66,9 +66,9 @@ export interface DiceViewProps {
  * The camera sits almost directly overhead on purpose: a true 3/4 corner
  * view (tried first, see this session's history.md) shows two full faces at
  * once on a real cube, and since every die physically has all six faces on
- * it, one of those two visible faces is the universal red 페루도 skull face
+ * it, one of those two visible faces is the universal red 페루도 mark face
  * roughly a third of the time — a *correct* rendering, but a misleading one
- * for gameplay, since a passing glance could misread a skull sliver on some
+ * for gameplay, since a passing glance could misread a mark sliver on some
  * OTHER value's die as an extra joker in play. Every use of `DiceView` here
  * is a gameplay-critical read (bid track, hand, reveal panel), so legibility
  * wins over cinematic angle — steep enough that the only face that reads

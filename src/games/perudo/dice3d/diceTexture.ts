@@ -7,7 +7,7 @@ import type { DiceColorway } from "./colorways";
  * with **no external image assets** (see `PerudoFaceIcon.tsx`'s header
  * comment: "순수 인라인 SVG 아이콘"), and that constraint carries over here:
  * every die face is procedurally drawn, not loaded from a PNG/GLB. The
- * skull-mark path data below is a 1:1 port of `PerudoFaceIcon.tsx`'s SVG
+ * ladybug-mark path data below is a 1:1 port of `PerudoFaceIcon.tsx`'s SVG
  * paths (same 100x100 coordinate space) so the WebGL die's face-1 mark and
  * the flat 2D icon used elsewhere (face picker, rulebook, badges) stay
  * visually identical.
@@ -70,55 +70,31 @@ function drawPips(ctx: CanvasRenderingContext2D, value: number, ink: string) {
   }
 }
 
-/** Port of `PerudoFaceIcon.tsx`'s skull-mark SVG paths onto a 2D canvas context (same 0-100 coordinate space, scaled by `s`). */
+/**
+ * 1:1 canvas port of `PerudoFaceIcon.tsx`'s ladybug-mark SVG path (same
+ * 0-100 coordinate space, scaled by `s`) — built from the identical `d`
+ * string via `Path2D` + an even-odd fill so the split line and spots punch
+ * through as holes exactly like the SVG version, rather than re-deriving
+ * the geometry with separate `arc`/`bezier` calls that could drift out of
+ * sync with the flat icon over time.
+ */
+const PERUDO_MARK_PATH =
+  "M50,14 C70,14 85,32 85,55 C85,76 69,90 50,90 C31,90 15,76 15,55 C15,32 30,14 50,14 Z" +
+  "M50,3 L41,15 L59,15 Z" +
+  "M46.5,16 L53.5,16 L53.5,87 L46.5,87 Z" +
+  "M36,40 A6,6 0 1,0 24,40 A6,6 0 1,0 36,40 Z" +
+  "M31.5,63 A5.5,5.5 0 1,0 20.5,63 A5.5,5.5 0 1,0 31.5,63 Z" +
+  "M44.5,76 A4.5,4.5 0 1,0 35.5,76 A4.5,4.5 0 1,0 44.5,76 Z" +
+  "M76,40 A6,6 0 1,0 64,40 A6,6 0 1,0 76,40 Z" +
+  "M79.5,63 A5.5,5.5 0 1,0 68.5,63 A5.5,5.5 0 1,0 79.5,63 Z" +
+  "M64.5,76 A4.5,4.5 0 1,0 55.5,76 A4.5,4.5 0 1,0 64.5,76 Z";
+
 function drawPerudoMark(ctx: CanvasRenderingContext2D, ink: string) {
   const s = TEX_SIZE / 100;
   ctx.save();
   ctx.scale(s, s);
-  ctx.strokeStyle = ink;
   ctx.fillStyle = ink;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-
-  // outer ring
-  ctx.lineWidth = 7;
-  ctx.beginPath();
-  ctx.arc(50, 50, 45, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // eye sockets
-  ctx.beginPath();
-  ctx.arc(33, 41, 12, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(67, 41, 12, 0, Math.PI * 2);
-  ctx.fill();
-
-  // nose
-  ctx.beginPath();
-  ctx.moveTo(50, 50);
-  ctx.lineTo(44, 62);
-  ctx.lineTo(56, 62);
-  ctx.closePath();
-  ctx.fill();
-
-  // jagged grin
-  ctx.lineWidth = 7.5;
-  ctx.beginPath();
-  const grin: [number, number][] = [
-    [22, 72],
-    [30, 82],
-    [38, 72],
-    [46, 82],
-    [54, 72],
-    [62, 82],
-    [70, 72],
-    [78, 82],
-  ];
-  ctx.moveTo(grin[0][0], grin[0][1]);
-  for (const [x, y] of grin.slice(1)) ctx.lineTo(x, y);
-  ctx.stroke();
-
+  ctx.fill(new Path2D(PERUDO_MARK_PATH), "evenodd");
   ctx.restore();
 }
 

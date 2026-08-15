@@ -28,7 +28,7 @@ export interface DiceColorway {
   body: string;
   /** Darker shade for ambient-occlusion-ish crevices / cup shadow gradient. */
   shadow: string;
-  /** Pip / skull ink color — must contrast against `body`. */
+  /** Pip / ladybug-mark ink color — must contrast against `body`. */
   ink: string;
   /** `meshStandardMaterial` roughness (0 = mirror, 1 = chalk). */
   roughness: number;

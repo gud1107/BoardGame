@@ -9,7 +9,7 @@ import type { DiceColorway } from "./colorways";
 
 /**
  * The one shared 3D die primitive — every die in this game (ivory face dice,
- * the red 페루도/skull die, the purple betting die, hidden dice still in the
+ * the red 페루도 die, the purple betting die, hidden dice still in the
  * cup) renders through this component, matching the "one primitive, many
  * colorways" pattern the old CSS `DiceCube` established (see its own header
  * comment in `PerudoBoard.tsx`, and Century's `ResourceCube`).

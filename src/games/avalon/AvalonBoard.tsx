@@ -213,16 +213,19 @@ export default function AvalonBoard({ state, viewerSeat, names, connectedSeats, 
         </div>
       </div>
 
-      {/* Round history track */}
+      {/* Round history track — mirrors the physical rulebook's quest-size row (boardGameRule/아발론/아발론보드게임.jpg):
+          one tile per round showing the team size, with the round that needs 2 fail cards picked out in red like the
+          board's own "2 fails" callout instead of only being mentioned in the text banner above. */}
       <div className="relative z-10 flex justify-center gap-1.5">
         {state.teamSizes.map((size, i) => {
           const roundNumber = i + 1;
           const result = state.questResults[i];
           const isCurrent = state.round === roundNumber;
+          const needsTwoFails = failThreshold(state.playerCount, roundNumber) > 1;
           return (
             <div
               key={roundNumber}
-              className={`flex h-14 w-11 flex-col items-center justify-center rounded-xl border text-[10px] ${
+              className={`relative flex h-14 w-11 flex-col items-center justify-center rounded-xl border text-[10px] ${
                 result
                   ? result.success
                     ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-200"
@@ -232,6 +235,14 @@ export default function AvalonBoard({ state, viewerSeat, names, connectedSeats, 
                     : "border-white/10 bg-white/5 text-white/40"
               }`}
             >
+              {needsTwoFails && (
+                <span
+                  title="이 라운드는 실패 카드 2장 이상이어야 실패"
+                  className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-rose-300 bg-rose-600 text-[8px] font-bold text-white"
+                >
+                  2
+                </span>
+              )}
               <span>{roundNumber}R</span>
               <span className="text-sm font-bold">{size}인</span>
               <span>{result ? (result.success ? "✅" : "❌") : "—"}</span>
