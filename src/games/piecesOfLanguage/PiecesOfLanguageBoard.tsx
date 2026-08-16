@@ -5,6 +5,8 @@ import RulebookModal from "./RulebookModal";
 import { isValidWord, wordsOfLength } from "./words";
 import { CHO_LIST, JONG_LIST, JUNG_LIST, composeSyllable, decomposeWord, rotationPartner } from "./hangul";
 import {
+  buildHint,
+  isHintUnlocked,
   totalAttemptsRemaining,
   otherSeat,
   wordBuildableFromPool,
@@ -50,6 +52,12 @@ import {
  * The optional combined attempt cap (§4-style house rule, now summed across
  * both seats since they share one target) is still shown as a depleting bar,
  * which is the only "countdown"-flavored element this board has.
+ *
+ * `HintPanel` (below) is each viewer's own gated, partial-reveal hint of
+ * `targetWord` (engine.ts's `isHintUnlocked`/`buildHint`): locked until that
+ * viewer has submitted at least one wrong guess of their own, then showing
+ * exactly half its characters (random positions) masked as `_` otherwise —
+ * see engine.ts's module doc for why.
  */
 export interface PiecesOfLanguageBoardProps {
   state: PiecesOfLanguageState;
@@ -209,6 +217,42 @@ function TilePool({ pool }: { pool: string[] }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The viewer's own partial-reveal hint (`engine.ts`'s `isHintUnlocked`/
+ * `buildHint`): locked until the viewer has submitted at least one wrong
+ * guess of their own, then shows exactly half of the target word's
+ * characters (random positions) with the rest masked as `_` — never the
+ * whole word, and never before anyone's actually missed.
+ */
+function HintPanel({ state, seat }: { state: PiecesOfLanguageState; seat: Seat }) {
+  if (!isHintUnlocked(state, seat)) {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 bg-black/20 px-3 py-2.5 text-xs text-white/30">
+        <span>🔒</span>
+        <span>힌트는 내가 오답을 1회 이상 제출해야 해금돼요</span>
+      </div>
+    );
+  }
+  const revealed = buildHint(state.targetWord, seat);
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-sky-400/20 bg-sky-500/5 px-3 py-2.5">
+      <span className="text-xs font-semibold text-sky-200/70">💡 힌트</span>
+      <div className="flex gap-1.5">
+        {revealed.map((ch, i) => (
+          <span
+            key={i}
+            className={`grid h-8 w-8 place-items-center rounded-md border text-sm font-bold ${
+              ch === "_" ? "border-white/10 bg-white/5 text-white/25" : "border-sky-300/40 bg-sky-500/15 text-white"
+            }`}
+          >
+            {ch}
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -392,6 +436,8 @@ export default function PiecesOfLanguageBoard({
       )}
 
       <TilePool pool={state.tilePool} />
+
+      <HintPanel state={state} seat={viewerSeat} />
 
       <p className="text-center text-xs text-white/40">
         {isMyTurn ? "내 차례입니다 — 공통 정답 단어를 추리해 제시하세요" : `${names[opponentSeat]}의 차례를 기다리는 중…`}

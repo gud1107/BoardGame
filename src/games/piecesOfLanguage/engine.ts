@@ -60,6 +60,15 @@
  *    constructible; what the hard rail actually forecloses is *unrelated*
  *    wrong guesses, leaving mostly the target's own jamo rearranged into
  *    other syllable orders/word-bank entries as viable wrong guesses.
+ *  - **Gated, partial-reveal hint** (2026-08-16 work order — the previous
+ *    behavior let a hint-style UI affordance surface too early / too much):
+ *    a seat's hint is locked until that seat has submitted **at least one
+ *    wrong guess of its own** (`wrongAttemptCount`/`isHintUnlocked` — a
+ *    seat's own miss unlocks its own hint, not the opponent's), and even
+ *    once unlocked it only ever reveals **exactly half** of the target
+ *    word's syllable characters (`K = floor(L / 2)`), picked at random
+ *    positions (`hintRevealIndices`) with the rest shown as `_`
+ *    (`buildHint`) — never the whole word.
  */
 
 import { seededRng, shuffle } from "@/lib/rng";
@@ -223,6 +232,51 @@ export function hintScore(state: PiecesOfLanguageState, seat: Seat): number {
 export function totalAttemptsRemaining(state: PiecesOfLanguageState): number | null {
   if (state.maxAttempts === null) return null;
   return Math.max(0, state.maxAttempts - state.history.length);
+}
+
+/** How many of `seat`'s own guesses so far did *not* exactly match the target — the gate `isHintUnlocked` checks. Derived from `history` rather than a separately-tracked counter, same pattern as `hintScore`/`totalAttemptsRemaining` above. */
+export function wrongAttemptCount(state: PiecesOfLanguageState, seat: Seat): number {
+  return state.history.filter((g) => g.seat === seat && !g.isMatch).length;
+}
+
+/** A seat's hint stays locked until that seat has submitted at least one wrong guess of its own (module doc: "Gated, partial-reveal hint") — the opponent missing doesn't unlock *your* hint. */
+export function isHintUnlocked(state: PiecesOfLanguageState, seat: Seat): boolean {
+  return wrongAttemptCount(state, seat) >= 1;
+}
+
+/** Tiny string hash (not cryptographic — just needs to spread `word`+`seat` into a seed) so `hintRevealIndices` can drive `seededRng` without adding a persisted random field to `PiecesOfLanguageState`. */
+function hashSeed(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return h;
+}
+
+/**
+ * Which `K = floor(L / 2)` syllable indices of `word` a hint reveals for
+ * `seat`. Seeded off `word`+`seat` (via the same `seededRng` every engine
+ * in this project already uses — see `@/lib/rng`) rather than
+ * `Math.random()`, so the chosen indices stay stable across re-renders
+ * instead of reshuffling on every keystroke; keying the seed by `seat` too
+ * means p1 and p2 each get their own independent half rather than always
+ * revealing the identical half to both. Nothing here needs to be
+ * broadcast/synced — `state.targetWord` already lives in state on both
+ * clients (module doc's existing trust model), so only *which half to
+ * display* is being decided, locally, on each client.
+ */
+export function hintRevealIndices(word: string, seat: Seat): Set<number> {
+  const length = [...word].length;
+  const reveal = Math.floor(length / 2);
+  const order = shuffle(
+    Array.from({ length }, (_, i) => i),
+    seededRng(hashSeed(`${word}:${seat}`)),
+  );
+  return new Set(order.slice(0, reveal));
+}
+
+/** The masked hint itself: `word`'s own characters at `hintRevealIndices`, `_` everywhere else. Callers must gate this behind `isHintUnlocked` themselves — this function has no opinion on whether the hint should be shown at all, only on what it looks like once it is. */
+export function buildHint(word: string, seat: Seat): string[] {
+  const revealed = hintRevealIndices(word, seat);
+  return [...word].map((ch, i) => (revealed.has(i) ? ch : "_"));
 }
 
 export type EngineAction = { type: "guess"; word: string };

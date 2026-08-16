@@ -14,15 +14,19 @@ import {
 import { isValidWord, wordsOfLength, WORD_BANK } from "./words";
 import {
   applyAction,
+  buildHint,
   buildTilePool,
   chooseBotAction,
   compareWords,
   getValidMoves,
+  hintRevealIndices,
   hintScore,
+  isHintUnlocked,
   otherSeat,
   startGame,
   totalAttemptsRemaining,
   wordBuildableFromPool,
+  wrongAttemptCount,
   type EngineAction,
   type GuessRecord,
   type PiecesOfLanguageState,
@@ -262,6 +266,65 @@ describe("guess / 최대 시도 횟수(양쪽 합산) + 힌트 점수 동점 처
 
     const unlimited = readyGame("사과", 2, null, "p1");
     expect(totalAttemptsRemaining(unlimited)).toBeNull();
+  });
+});
+
+describe("힌트 해금 조건 + 50% 부분 마스킹 (wrongAttemptCount / isHintUnlocked / buildHint)", () => {
+  it("a seat with zero guesses of its own has the hint locked", () => {
+    const state = readyGame("사과", 2, null, "p1");
+    expect(wrongAttemptCount(state, "p1")).toBe(0);
+    expect(isHintUnlocked(state, "p1")).toBe(false);
+  });
+
+  it("a wrong guess unlocks the hint for the seat that submitted it, not the other seat", () => {
+    let state = readyGame("구름", 2, null, "p1");
+    state = applyAction(state, { type: "guess", word: "나무" }); // p1 guesses wrong
+    expect(wrongAttemptCount(state, "p1")).toBe(1);
+    expect(isHintUnlocked(state, "p1")).toBe(true);
+    expect(wrongAttemptCount(state, "p2")).toBe(0);
+    expect(isHintUnlocked(state, "p2")).toBe(false);
+  });
+
+  it("an exact-match (winning) guess does not itself count as a wrong attempt", () => {
+    const state = readyGame("사과", 2, null, "p1");
+    const won = applyAction(state, { type: "guess", word: "사과" });
+    expect(wrongAttemptCount(won, "p1")).toBe(0);
+    expect(isHintUnlocked(won, "p1")).toBe(false);
+  });
+
+  it("reveals exactly K = floor(L/2) characters for a 2-syllable word (1 revealed, 1 masked)", () => {
+    const revealed = hintRevealIndices("사과", "p1");
+    expect(revealed.size).toBe(1);
+    const hint = buildHint("사과", "p1");
+    expect(hint).toHaveLength(2);
+    expect(hint.filter((c) => c !== "_")).toHaveLength(1);
+    expect(hint.filter((c) => c === "_")).toHaveLength(1);
+  });
+
+  it("reveals exactly K = floor(L/2) characters for a 4-syllable word (2 revealed, 2 masked)", () => {
+    const target = wordsOfLength(4)[0];
+    const revealed = hintRevealIndices(target, "p1");
+    expect(revealed.size).toBe(2);
+    const hint = buildHint(target, "p1");
+    expect(hint).toHaveLength(4);
+    expect(hint.filter((c) => c !== "_")).toHaveLength(2);
+    expect(hint.filter((c) => c === "_")).toHaveLength(2);
+  });
+
+  it("every revealed character actually matches the target word at that position, masked slots are always '_'", () => {
+    const target = "가지";
+    const revealed = hintRevealIndices(target, "p2");
+    const hint = buildHint(target, "p2");
+    [...target].forEach((ch, i) => {
+      expect(hint[i]).toBe(revealed.has(i) ? ch : "_");
+    });
+  });
+
+  it("is deterministic for the same word+seat (stable across re-renders), independent per seat", () => {
+    expect(buildHint("사과", "p1")).toEqual(buildHint("사과", "p1"));
+    // Not asserting p1 !== p2 here (a coin-flip could coincide) — just that
+    // both are independently valid half-reveals of the same word.
+    expect(buildHint("사과", "p2").filter((c) => c !== "_")).toHaveLength(1);
   });
 });
 
