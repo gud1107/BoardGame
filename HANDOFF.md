@@ -19,6 +19,8 @@ _최종 갱신: 2026-08-17 (언어의 조각 힌트 로직 개편 세션 — "�
 
 - **검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / 타깃 `npx vitest run src/games/piecesOfLanguage`(**53/53 통과** — 기존 45 + 신규 8) / 전체 `npx vitest run`(**997/998 통과, 1개 실패** — 실패는 `src/games/shared/bot/aiBenchmark.test.ts`의 `malDalliJa: Level 10 wins >= 85% of 1000 games vs Level 1-3` 하나뿐이며, 이번 세션이 전혀 건드리지 않은 파일(말달리자 AI 벤치마크, `piecesOfLanguage`와 무관)이자 이번 diff에도 포함되지 않은 파일 — 자가 대진 1,000판 승률 임계값 기반의 확률적 벤치마크라 세션 간 흔들릴 수 있는 성격의 테스트로 판단, 이번 작업과 무관한 기존 이슈로 남겨둠(다음 세션에서 별도 확인 권장)).
 
+**배포**: `npx vercel deploy`(프리뷰) READY — https://board-game-1d5487q8t-me-3871.vercel.app (main 미머지 브랜치라 prod 승격은 이번에도 보류, 직전 세션들과 같은 판단). 커밋 `e026683 fix(language-fragments): unlock hint only after at least 1 failed attempt and reveal 50 percent characters` → `git push` 완료.
+
 
 
 **요청**: "이전 플레이어가 5를 2개 선언했을 때 다음 플레이어가 1을 6개로 선언하는 등 가치가 역행/비정상 비딩이 허용되는 버그"를 고쳐 정규 비딩 상승 규칙(일반↔일반 상승, 일반→1번 전환 `nextQ ≥ ⌈Q/2⌉`, 1번→일반 복귀 `nextQ ≥ 2Q+1`)을 엔진(`isValidBid`)과 하단 액션 UI 양쪽에서 엄격히 적용해 달라는 요청.
