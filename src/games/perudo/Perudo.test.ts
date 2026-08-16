@@ -105,6 +105,18 @@ describe("validateRaise — rulebook §3 formulas", () => {
     it("lower quantity — always rejected regardless of face", () => {
       expect(validateRaise(prev, { quantity: 3, face: 6 }, false)).toBe(false);
     });
+
+    it("regression example (5가 2개 -> 5가 1개, same face without raising quantity) is rejected", () => {
+      const bid52: Bid = { seat: 0, quantity: 2, face: 5 };
+      expect(validateRaise(bid52, { quantity: 1, face: 5 }, false)).toBe(false);
+      expect(validateRaise(bid52, { quantity: 2, face: 5 }, false)).toBe(false); // exact same bid is not a raise either
+    });
+
+    it("regression example (5가 2개 -> 3이 2개, lower face without raising quantity) is rejected", () => {
+      const bid52: Bid = { seat: 0, quantity: 2, face: 5 };
+      expect(validateRaise(bid52, { quantity: 2, face: 3 }, false)).toBe(false);
+      expect(validateRaise(bid52, { quantity: 1, face: 3 }, false)).toBe(false);
+    });
   });
 
   describe("normal -> 페루도(1)", () => {
@@ -114,6 +126,17 @@ describe("validateRaise — rulebook §3 formulas", () => {
       expect(validateRaise(prev, { quantity: 3, face: 1 }, false)).toBe(true);
       expect(validateRaise(prev, { quantity: 4, face: 1 }, false)).toBe(true);
     });
+
+    it("5가 2개 -> 페루도(1)로 전환 시 최소 요구 수량은 ceil(2/2)=1개 (그 미만은 거절, 1개 이상은 전부 허용)", () => {
+      const prev: Bid = { seat: 0, quantity: 2, face: 5 };
+      // quantity 0 is already rejected by the general "quantity < 1" guard above.
+      expect(validateRaise(prev, { quantity: 1, face: 1 }, false)).toBe(true);
+      expect(validateRaise(prev, { quantity: 2, face: 1 }, false)).toBe(true);
+      // Bidding well above the minimum (e.g. 5x2 -> 1x6) is still a legal —
+      // if generous — raise, not a "regression": the paco-conversion formula
+      // only sets a floor, never a ceiling, on the new quantity.
+      expect(validateRaise(prev, { quantity: 6, face: 1 }, false)).toBe(true);
+    });
   });
 
   describe("페루도(1) -> normal", () => {
@@ -122,6 +145,15 @@ describe("validateRaise — rulebook §3 formulas", () => {
       expect(validateRaise(prev, { quantity: 6, face: 2 }, false)).toBe(false);
       expect(validateRaise(prev, { quantity: 7, face: 2 }, false)).toBe(true);
       expect(validateRaise(prev, { quantity: 7, face: 6 }, false)).toBe(true);
+    });
+
+    it("(2*Q)+1 미만 수량은 어떤 일반 눈금으로도 거절되고, 그 문턱 이상은 전부 허용된다", () => {
+      const prev: Bid = { seat: 0, quantity: 4, face: 1 };
+      const threshold = prev.quantity * 2 + 1; // 9
+      for (const face of [2, 3, 4, 5, 6] as Face[]) {
+        expect(validateRaise(prev, { quantity: threshold - 1, face }, false)).toBe(false);
+        expect(validateRaise(prev, { quantity: threshold, face }, false)).toBe(true);
+      }
     });
   });
 
