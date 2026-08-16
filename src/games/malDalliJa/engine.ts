@@ -58,6 +58,18 @@
  * Slide moves are completely unaffected — sliding onto the oasis center
  * still wins per §4, sliding through/onto the green ring is just a normal
  * stop, and sliding past the center still doesn't win.
+ *
+ * **2026-08-16 session — 4방향 직교 슬라이드 하우스 룰**: a bug report claimed
+ * diagonal slide movement was a bug. It isn't — 말달리자.md §3 "이동 방식 1"
+ * explicitly specifies "상, 하, 좌, 우 및 4개 대각선 방향 (총 8방향)". Surfaced
+ * this to the user via `AskUserQuestion` given it contradicts the rulebook
+ * text this engine cites as its source of truth (and multiple earlier
+ * sessions' confirmed design, see the timeline above); the user confirmed
+ * they want a new house rule anyway: slide moves restricted to just the 4
+ * orthogonal directions (diagonal slide offsets removed from
+ * `SLIDE_DIRECTIONS` entirely), rulebook doc updated to match. L자(나이트)
+ * moves (§3 "이동 방식 2") are explicitly unaffected — confirmed kept as-is,
+ * including the oasis-zone knight restriction above.
  */
 
 import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
@@ -156,11 +168,15 @@ const START_POSITIONS: Record<Seat, Position[]> = {
 
 export type MoveKind = "slide" | "knight";
 
-/** The 8 slide directions (§3 "이동 방식 1"), as unit (dRow, dCol) vectors. */
+/**
+ * The 4 orthogonal slide directions, as unit (dRow, dCol) vectors —
+ * up/down/left/right only. §3 "이동 방식 1" in 말달리자.md originally
+ * specifies 8 directions (4 orthogonal + 4 diagonal); the 2026-08-16 session
+ * house rule (see module doc) removes the 4 diagonal offsets, confirmed with
+ * the user after surfacing that the diagonal behavior wasn't actually a bug.
+ */
 export const SLIDE_DIRECTIONS: readonly [number, number][] = [
-  [-1, -1], [-1, 0], [-1, 1],
-  [0, -1], [0, 1],
-  [1, -1], [1, 0], [1, 1],
+  [0, 1], [0, -1], [1, 0], [-1, 0],
 ];
 
 /** The 8 chess-knight offsets (§3 "이동 방식 2"). */

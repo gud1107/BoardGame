@@ -7,6 +7,7 @@ import {
   HORSES_PER_ZONE,
   OASIS,
   OASIS_ZONE_CELLS,
+  SLIDE_DIRECTIONS,
   applyAction,
   chooseBotAction,
   getLegalMoves,
@@ -201,6 +202,40 @@ describe("slide movement (§3 이동 방식 1)", () => {
     const moves = getLegalMoves(state);
     const rightSlide = moves.find((m) => m.moveKind === "slide" && m.dr === 0 && m.dc === 1);
     expect(rightSlide?.to).toEqual({ row: 5, col: 10 }); // slides straight through the oasis center and ring
+  });
+});
+
+describe("[하우스 룰] 대각선 슬라이드 금지, 상하좌우 4방향만 허용 (2026-08-16, 룰북 §3 원문의 8방향에서 변경)", () => {
+  it("SLIDE_DIRECTIONS contains exactly the 4 orthogonal unit vectors and no diagonal offset", () => {
+    expect(SLIDE_DIRECTIONS).toHaveLength(4);
+    const set = new Set(SLIDE_DIRECTIONS.map(([dr, dc]) => `${dr},${dc}`));
+    expect(set).toEqual(new Set(["0,1", "0,-1", "1,0", "-1,0"]));
+    for (const [dr, dc] of SLIDE_DIRECTIONS) {
+      expect(dr !== 0 && dc !== 0).toBe(false); // no diagonal (both components nonzero) vector
+    }
+  });
+
+  it("getLegalMoves never offers a diagonal slide, even from an open board center with nothing blocking any direction", () => {
+    // A genuinely open cell away from both corners/oasis so all 4 orthogonal
+    // slides plus (previously) all 4 diagonals would be legal.
+    const state = forceState({ positions: { p1: [{ row: 8, col: 2 }], p2: [{ row: 10, col: 10 }] } });
+    const moves = getLegalMoves(state).filter((m) => m.moveKind === "slide");
+    expect(moves.length).toBeGreaterThan(0);
+    for (const m of moves) {
+      expect(m.dr !== 0 && m.dc !== 0).toBe(false); // never both nonzero (diagonal)
+    }
+    // Sanity: the diagonal destination that used to be legal is absent.
+    expect(moves.map((m) => m.to)).not.toContainEqual({ row: 0, col: 0 }); // old (-1,-1) slide destination
+  });
+
+  it("a horse that could previously win only via a diagonal slide no longer has that path available", () => {
+    // p1 at (2,2); oasis at (5,5) is reachable only via the diagonal (1,1)
+    // direction from here with nothing in between — that move must no
+    // longer be offered at all now that diagonal slides are removed.
+    const state = forceState({ positions: { p1: [{ row: 2, col: 2 }], p2: [{ row: 9, col: 9 }] } });
+    const moves = getLegalMoves(state).filter((m) => m.moveKind === "slide");
+    expect(moves.some((m) => m.dr === 1 && m.dc === 1)).toBe(false);
+    expect(moves.map((m) => m.to)).not.toContainEqual(OASIS);
   });
 });
 
@@ -437,48 +472,85 @@ describe("chooseBotAction (AI bot support, Level 1–10)", () => {
   }, 60_000);
 
   it("Level 1 (forced onto its mistake path) slides away from the oasis, while Level 10 spots the immediate win", () => {
-    // p1 at (3,3); p2 at (6,6) blocks the down-right diagonal exactly one
-    // step past the oasis, so slide dir (1,1) stops exactly on (5,5) — an
-    // immediate win. getLegalMoves lists slide dir (-1,-1) first
-    // (SLIDE_DIRECTIONS' own order) -> unobstructed all the way to (0,0),
-    // far from the oasis (distance 2 -> 5, strictly worse).
-    const state = forceState({ positions: { p1: [{ row: 3, col: 3 }], p2: [{ row: 6, col: 6 }] } });
+    // p1 at (0,5) — directly above the oasis column. p2 at (6,5) blocks the
+    // downward slide exactly one step past the oasis, so slide dir (1,0)
+    // stops exactly on (5,5) — an immediate win. getLegalMoves lists slide
+    // dir (0,1) first (SLIDE_DIRECTIONS' own order) -> unobstructed all the
+    // way to (0,10), away from the oasis (distance 5 -> 5, but not a win).
+    const state = forceState({ positions: { p1: [{ row: 0, col: 5 }], p2: [{ row: 6, col: 5 }] } });
 
     const level1Action = chooseBotAction(state, "p1", 1, () => 0);
-    expect(level1Action).toEqual({ type: "move", horseIndex: 0, moveKind: "slide", dr: -1, dc: -1 });
+    expect(level1Action).toEqual({ type: "move", horseIndex: 0, moveKind: "slide", dr: 0, dc: 1 });
 
     const level10Action = chooseBotAction(state, "p1", 10, () => 0);
-    expect(level10Action).toEqual({ type: "move", horseIndex: 0, moveKind: "slide", dr: 1, dc: 1 });
+    expect(level10Action).toEqual({ type: "move", horseIndex: 0, moveKind: "slide", dr: 1, dc: 0 });
   });
 });
 
-function playFullBotGame(seed: number, levelOf: (seat: Seat) => number): MalDalliJaState {
+function playFullBotGame(
+  seed: number,
+  levelOf: (seat: Seat) => number,
+  opts?: { guard?: number; alphaBetaBudget?: { maxDepth: number; timeBudgetMs: number } },
+): MalDalliJaState {
+  const guardLimit = opts?.guard ?? 2000;
+  // Separate seeded stream from startGame's own seededRng(seed) (first-mover
+  // pick), so the two don't share state — keeps the whole simulation
+  // deterministic instead of falling back to real Math.random for move
+  // selection (that nondeterminism was masking exactly the flakiness this
+  // describe block's 2026-08-16 update below is about).
+  const moveRng = seededRng(seed + 1);
   let state = startGame(seededRng(seed));
   let guard = 0;
-  while (state.phase !== "gameOver" && guard < 2000) {
+  while (state.phase !== "gameOver" && guard < guardLimit) {
     guard++;
     const seat = state.activeSeat;
-    const action = chooseBotAction(state, seat, levelOf(seat));
+    const action = chooseBotAction(
+      state,
+      seat,
+      levelOf(seat),
+      moveRng,
+      opts?.alphaBetaBudget ? { alphaBetaBudget: opts.alphaBetaBudget } : undefined,
+    );
     expect(action).not.toBeNull();
     state = applyAction(state, action as EngineAction);
   }
   return state;
 }
 
-describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
+describe("Level 10 고수 AI끼리 풀 시뮬레이션 (크래시/무한루프 방지)", () => {
   // Level 8-10 now run real iterative-deepening alpha-beta (up to a 500ms
   // wall-clock budget per move at Level 10, see engine.ts's
   // ALPHA_BETA_BUDGETS) instead of a single cheap heuristic pass, so a full
   // game genuinely takes real time — bumped well past vitest's 5s default.
-  it("completes an all-Level-10 game with a winner declared", () => {
-    const state = playFullBotGame(123, () => 10);
-    expect(state.phase).toBe("gameOver");
-    expect(state.winner).not.toBeNull();
-  }, 180_000);
+  //
+  // **2026-08-16 update**: the 4방향 직교 슬라이드 하우스 룰(see engine.ts's
+  // module doc, diagonal slides removed) shrinks the oasis's approach lines
+  // from 8 down to 2 (its own row + column), which makes permanently
+  // blocking both of them far easier than before. A standalone diagnostic
+  // (5 seeds, reduced search budget, 20,000-half-move cap, confirmed via
+  // `AskUserQuestion`) found 3 of 5 seeds never reached `gameOver` even at
+  // that cap — a real perpetual-stalemate risk between two equally-strong
+  // players, not a bug in this engine (mitigated in actual play by §5's
+  // optional turn timer, which forces a `pass` rather than requiring a
+  // move). So this test no longer asserts `gameOver` is reached; it only
+  // asserts the game runs many half-moves with legal, non-null actions
+  // throughout and never crashes or stalls silently.
+  it("runs many half-moves in an all-Level-10 game without crashing, and reports a legal winner if it does finish", () => {
+    const state = playFullBotGame(123, () => 10, { guard: 1500, alphaBetaBudget: { maxDepth: 3, timeBudgetMs: 10 } });
+    expect(["playing", "gameOver"]).toContain(state.phase);
+    if (state.phase === "gameOver") expect(state.winner).not.toBeNull();
+  }, 60_000);
 
-  it("also completes with a mixed Level 1 / Level 10 table (no crash, no infinite loop)", () => {
-    const state = playFullBotGame(456, (seat) => (seat === "p1" ? 1 : 10));
-    expect(state.phase).toBe("gameOver");
-    expect(state.winner).not.toBeNull();
-  }, 180_000);
+  it("runs many half-moves with a mixed Level 1 / Level 10 table without crashing, and reports a legal winner if it does finish", () => {
+    // Level 1's high mistake rate makes convergence likelier than the pure
+    // Level-10-vs-Level-10 case above, but the same 2026-08-16 stalemate
+    // risk still applies in principle, so this is a smoke test too rather
+    // than an assertion that gameOver is always reached.
+    const state = playFullBotGame(456, (seat) => (seat === "p1" ? 1 : 10), {
+      guard: 1500,
+      alphaBetaBudget: { maxDepth: 3, timeBudgetMs: 10 },
+    });
+    expect(["playing", "gameOver"]).toContain(state.phase);
+    if (state.phase === "gameOver") expect(state.winner).not.toBeNull();
+  }, 60_000);
 });

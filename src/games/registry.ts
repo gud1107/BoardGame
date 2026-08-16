@@ -464,7 +464,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     name: "말달리자",
     nameEn: "Mal Dalli Ja",
     description:
-      "넷플릭스 예능 <데스게임> 등장 2인 전용 두뇌 게임. 11×11 사막 보드 위에서 매 턴 8방향 슬라이드 또는 체스 나이트식 L자 이동 중 하나로 내 말을 움직여, 중앙 오아시스에 먼저 정확히 입성하면 즉시 승리하는 단판 승부입니다.",
+      "넷플릭스 예능 <데스게임> 등장 2인 전용 두뇌 게임. 11×11 사막 보드 위에서 매 턴 상하좌우 4방향 슬라이드 또는 체스 나이트식 L자 이동 중 하나로 내 말을 움직여, 중앙 오아시스에 먼저 정확히 입성하면 즉시 승리하는 단판 승부입니다.",
     players: { min: 2, max: 2 },
     playTime: { minMinutes: 10, maxMinutes: 20 },
     category: "strategy",

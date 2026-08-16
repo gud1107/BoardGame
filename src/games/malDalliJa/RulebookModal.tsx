@@ -18,7 +18,8 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <p className="mt-2 text-xs text-white/40">
             [하우스 룰] 룰북 원문은 &ldquo;플레이어당 말 1개&rdquo;지만, 이 방은 제공된 보드판 이미지(
             말달리자판.png) 기준으로 4개 모서리에 말 5개씩(모서리당) 배치되는 세팅을
-            채택했습니다. 이동 규칙(§3/§4)은 룰북 원문 그대로입니다.
+            채택했습니다. 슬라이드 이동은 아래 [하우스 룰]대로 상하좌우 4방향으로 제한되며, 그
+            외 이동 규칙(§3 L자 이동/§4)은 룰북 원문 그대로입니다.
           </p>
         </section>
 
@@ -30,9 +31,13 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
               <p className="mb-1 font-medium text-white">➡️ 슬라이드 이동</p>
               <p className="text-xs text-white/60">
-                상하좌우+대각선 8방향 중 하나로, 다른 말(내 말/상대 말 모두)이나 보드판 끝에
-                부딪혀 막힐 때까지 직선으로 끝까지 미끄러집니다. 중간에 멈춰 설 수 없습니다.
-                오아시스 칸에 정확히 멈춰야 승리로 인정되며, 지나쳐 가는 것은 승리가 아닙니다.
+                상하좌우 4방향 중 하나로, 다른 말(내 말/상대 말 모두)이나 보드판 끝에 부딪혀
+                막힐 때까지 직선으로 끝까지 미끄러집니다. 중간에 멈춰 설 수 없습니다. 오아시스
+                칸에 정확히 멈춰야 승리로 인정되며, 지나쳐 가는 것은 승리가 아닙니다.{" "}
+                <span className="text-white/40">
+                  [하우스 룰] 룰북 원문은 대각선 4방향을 포함한 8방향이지만, 이 방은 대각선
+                  슬라이드를 금지하는 하우스 룰을 적용합니다.
+                </span>
               </p>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
