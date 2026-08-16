@@ -117,6 +117,13 @@ describe("validateRaise — rulebook §3 formulas", () => {
       expect(validateRaise(bid52, { quantity: 2, face: 3 }, false)).toBe(false);
       expect(validateRaise(bid52, { quantity: 1, face: 3 }, false)).toBe(false);
     });
+
+    it("regression example (Q=2, D=4 base): same quantity + lower face rejected, same quantity + higher face accepted, higher quantity + lower face accepted", () => {
+      const base: Bid = { seat: 0, quantity: 2, face: 4 };
+      expect(validateRaise(base, { quantity: 2, face: 3 }, false)).toBe(false);
+      expect(validateRaise(base, { quantity: 2, face: 5 }, false)).toBe(true);
+      expect(validateRaise(base, { quantity: 3, face: 2 }, false)).toBe(true);
+    });
   });
 
   describe("normal -> 페루도(1)", () => {
