@@ -77,21 +77,33 @@ body {
   }
 }
 
-/* Perudo's dice reveal — a quick pop-in for the CSS-fallback dice grid each
-   new round (paired with soundEngine.ts's playCupThud). No cup shake plays
-   before it anymore — a player's own dice are always visible immediately,
-   see PerudoBoard.tsx's "My dice" section. */
-@keyframes dice-reveal-pop {
+/* Perudo's dice roll — a CSS-only shake-then-settle played by DiceRollTray
+   (src/games/perudo/dice/PerudoDie.tsx) every new round, replacing the
+   earlier WebGL physics tumble (removed 2026-08-16, see HANDOFF.md) and the
+   even earlier flat pop-in it had before that. Reads `--tilt` (set inline
+   per die, a small deterministic resting angle) so the shake settles onto
+   that die's own scattered-on-the-tray tilt rather than dead level, and
+   paired with soundEngine.ts's playDiceRattle/playCupThud timed to
+   DICE_ROLL_MS. No cup ever hides a player's own dice first — they're
+   visible from the very first frame of the shake, see PerudoBoard.tsx's
+   "My dice" section. */
+@keyframes perudo-dice-settle {
   0% {
-    transform: scale(0.75);
+    transform: scale(0.55) rotate(calc(var(--tilt, 0deg) - 26deg));
     opacity: 0;
   }
-  70% {
-    transform: scale(1.06);
+  35% {
+    transform: scale(1.1) rotate(calc(var(--tilt, 0deg) + 16deg));
     opacity: 1;
   }
+  60% {
+    transform: scale(0.94) rotate(calc(var(--tilt, 0deg) - 10deg));
+  }
+  82% {
+    transform: scale(1.04) rotate(calc(var(--tilt, 0deg) + 4deg));
+  }
   100% {
-    transform: scale(1);
+    transform: scale(1) rotate(var(--tilt, 0deg));
     opacity: 1;
   }
 }

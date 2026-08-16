@@ -40,7 +40,7 @@ src/games/<gameId>/
   (선택, 게임별로 필요할 때만 추가 — 기본 계약엔 없음)
   cards.ts               카드/타일 등 대량 정적 데이터 + 관련 연산 헬퍼 (예: century, splendor)
   <Feature>Icon.tsx       순수 인라인 SVG 아이콘 (외부 이미지 자산 없이 그 게임 전용 비주얼)
-  dice3d/ 등 하위 폴더    그 게임에만 필요한 복잡한 렌더링 서브모듈 (예: perudo의 실제 3D 주사위)
+  dice/ 등 하위 폴더      그 게임에만 필요한 복잡한 렌더링 서브모듈 (예: perudo의 탑뷰 CSS/SVG 주사위)
 ```
 
 3계층(엔진 / 보드 UI / 네트워크 어댑터)이 서로 알면 안 되는 것에 대한 상세 표와 근거는 [docs/architecture.md §1.6](./docs/architecture.md#16-순수-엔진--제어-컴포넌트--얇은-네트워크-어댑터-3계층)을 보라.
