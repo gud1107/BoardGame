@@ -27,7 +27,9 @@ _최종 갱신: 2026-08-18 (**운명전쟁39 신규 게임 구현 세션** — �
 
 **검증**: `npx tsc --noEmit`(프로젝트 전체, 에러 0) / `npm run lint`(프로젝트 전체, 경고 0 — 최초 1건의 미사용 변수 워닝을 테스트 코드에서 수정) / `npx vitest run src/games/destinyWar39 src/games/registry.test.ts`(40/40 통과, 신규 게임 로직 36개 — 덱 구성/22개 점수 벡터 전부/턴 판정 결정 트리 전 분기/라운드-턴 구조/예측 범위/히든 1회 제한 및 비공개/전체 9라운드 시뮬레이션/공동 등수 등). 전체 `npx vitest run`은 이 세션에서도 배경 실행 중 관찰 가능한 진행 표시 없이 장시간 지속돼(과거 여러 세션에 반복 기록된 "전체 스위트 실행 이슈"와 동일 증상) 완료를 기다리지 않고 판단 — 이번 변경이 `registry.ts`/`playableGames.tsx`에 각 1줄 추가하는 것 외엔 전부 신규 자기완결 폴더(`src/games/destinyWar39/`)에 한정돼 다른 게임 로직과 무관하다는 점, 그리고 `tsc`/`lint`가 프로젝트 전체를 대상으로 깨끗했던 점을 근거로 진행. **다음 세션에서 단독 실행으로 전체 스위트 재확인 권장.**
 
-**배포**: 상세는 아래 배포 결과 참고.
+**커밋/푸시**: `43bcc6d feat(games): implement destiny-war-39 board game engine and ui` → `git push origin main` 완료(fast-forward, `7ca6078..43bcc6d`).
+
+**배포**: `npx vercel deploy --prod` 실행 — CLI가 빌드 완료 후 상태 조회 단계에서 `{"status":"error","reason":"deploy_failed","message":"Not authorized"}`를 출력했으나, 이는 CLI의 배포-후 상태 확인 호출이 실패한 것일 뿐 실제 배포 자체는 성공했음을 `vercel ls`/`vercel inspect`로 직접 재확인함 — 새 배포(`dpl_72s2ppL8nB5Mhbn4eaYYo3cRoS7w`, target: production, status: Ready)가 프로덕션 도메인 3개(`board-game-tau-navy.vercel.app`/`board-game-me-3871.vercel.app`/`board-game-git-main-me-3871.vercel.app`) 전부에 정상 별칭됨. `curl`로 프로덕션 루트(`/`, 200)와 신규 게임 라우트(`/games/destiny-war-39`, 200) 둘 다 직접 응답 확인.
 
 ### 2026-08-17 — main 머지 + 프로덕션 승격
 
