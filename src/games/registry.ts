@@ -173,7 +173,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     players: { min: 2, max: 8 },
     playTime: { minMinutes: 15, maxMinutes: 30 },
     category: "deduction",
-    thumbnail: { emoji: "🎲", gradient: ["#f43f5e", "#7f1d1d"], image: "/games/perudo.jpg" },
+    thumbnail: { emoji: "🎲", gradient: ["#f43f5e", "#7f1d1d"], image: "/assets/games/perudo/board.jpg" },
     tags: ["주사위", "블러핑", "심리전"],
     genres: ["luck", "bluffing"],
     playable: true,

@@ -22,7 +22,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <p className="text-white/70">
             주사위 눈금 1은 <span className="text-amber-300">페루도</span>라고 부릅니다.{" "}
             <span className="text-amber-300">2~6 모든 숫자로 조커처럼 합산</span>됩니다. 예: &quot;4가 5개&quot;를
-            셀 때는 실제 4의 개수 + 페루도(1)의 개수를 더합니다. 단, 팔라피코 라운드에서는 조커 기능이 사라집니다.
+            셀 때는 실제 4의 개수 + 페루도(1)의 개수를 더합니다.
           </p>
         </section>
 
@@ -67,28 +67,15 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3">
               <p className="mb-1 font-medium text-emerald-200">🎯 맞아! (정확히 일치)</p>
               <p className="text-xs text-white/60">
-                <span className="text-white">차례와 상관없이</span> 아무 때나 외칠 수 있습니다. 정확히 일치하면 주사위 1개를
-                되찾고(최대 5개), 틀리면 |실제 개수 − 선언 개수|개(절댓값 오차)를 한 번에 잃습니다. 팔라피코 라운드에서는
-                사용할 수 없습니다.
+                <span className="text-white">차례와 상관없이</span> 아무 때나 외칠 수 있습니다. 정확히 일치하면 주사위 1개를{" "}
+                <span className="text-white">되찾습니다(개수 제한 없음)</span>, 틀리면 |실제 개수 − 선언 개수|개(절댓값 오차)를
+                한 번에 잃습니다.
               </p>
             </div>
           </div>
           <p className="mt-2 text-xs text-amber-300/80">
             ⚠️ 페널티를 받은 사람이 다음 라운드의 선(先)이 되어 모두 다시 굴립니다.
           </p>
-        </section>
-
-        <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">⚠️ 팔라피코 (Palafico)</h3>
-          <p className="text-white/70">
-            선 플레이어의 주사위가 <span className="text-rose-300">딱 1개</span>가 되는 순간, 그 라운드는 특수 규칙이
-            적용됩니다.
-          </p>
-          <ul className="mt-2 list-inside list-disc text-xs text-white/60">
-            <li>페루도(1)의 조커 기능이 사라집니다 — 그냥 숫자 1로만 취급.</li>
-            <li>선이 처음 선언한 숫자가 고정되고, 이후에는 개수만 올릴 수 있습니다.</li>
-            <li>&quot;맞아!&quot;를 외칠 수 없습니다.</li>
-          </ul>
         </section>
 
         <section>

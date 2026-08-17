@@ -6,8 +6,6 @@ import {
   computeRankings,
   countMatching,
   getValidMoves,
-  isPalafico,
-  MAX_DICE,
   MAX_PLAYERS,
   MIN_PLAYERS,
   STARTING_DICE,
@@ -78,88 +76,101 @@ describe("startGame — setup", () => {
 
 describe("validateRaise — rulebook §3 formulas", () => {
   it("always accepts the round's opening bid", () => {
-    expect(validateRaise(null, { quantity: 1, face: 1 }, false)).toBe(true);
-    expect(validateRaise(null, { quantity: 99, face: 6 }, false)).toBe(true);
+    expect(validateRaise(null, { quantity: 1, face: 1 })).toBe(true);
+    expect(validateRaise(null, { quantity: 99, face: 6 })).toBe(true);
   });
 
   it("rejects an out-of-range face or non-positive quantity", () => {
-    expect(validateRaise(null, { quantity: 1, face: 0 as Face }, false)).toBe(false);
-    expect(validateRaise(null, { quantity: 1, face: 7 as Face }, false)).toBe(false);
-    expect(validateRaise(null, { quantity: 0, face: 3 }, false)).toBe(false);
+    expect(validateRaise(null, { quantity: 1, face: 0 as Face })).toBe(false);
+    expect(validateRaise(null, { quantity: 1, face: 7 as Face })).toBe(false);
+    expect(validateRaise(null, { quantity: 0, face: 3 })).toBe(false);
   });
 
   describe("normal(2-6) -> normal(2-6)", () => {
     const prev: Bid = { seat: 0, quantity: 4, face: 3 };
     it("quantity up, face unchanged or changed — both allowed (rulebook's worked example)", () => {
-      expect(validateRaise(prev, { quantity: 5, face: 3 }, false)).toBe(true);
-      expect(validateRaise(prev, { quantity: 5, face: 5 }, false)).toBe(true);
+      expect(validateRaise(prev, { quantity: 5, face: 3 })).toBe(true);
+      expect(validateRaise(prev, { quantity: 5, face: 5 })).toBe(true);
     });
     it("same quantity, higher face — allowed", () => {
-      expect(validateRaise(prev, { quantity: 4, face: 4 }, false)).toBe(true);
-      expect(validateRaise(prev, { quantity: 4, face: 6 }, false)).toBe(true);
+      expect(validateRaise(prev, { quantity: 4, face: 4 })).toBe(true);
+      expect(validateRaise(prev, { quantity: 4, face: 6 })).toBe(true);
     });
     it("same quantity, lower or equal face — rejected", () => {
-      expect(validateRaise(prev, { quantity: 4, face: 2 }, false)).toBe(false);
-      expect(validateRaise(prev, { quantity: 4, face: 3 }, false)).toBe(false);
+      expect(validateRaise(prev, { quantity: 4, face: 2 })).toBe(false);
+      expect(validateRaise(prev, { quantity: 4, face: 3 })).toBe(false);
     });
     it("lower quantity — always rejected regardless of face", () => {
-      expect(validateRaise(prev, { quantity: 3, face: 6 }, false)).toBe(false);
+      expect(validateRaise(prev, { quantity: 3, face: 6 })).toBe(false);
     });
 
     it("regression example (5가 2개 -> 5가 1개, same face without raising quantity) is rejected", () => {
       const bid52: Bid = { seat: 0, quantity: 2, face: 5 };
-      expect(validateRaise(bid52, { quantity: 1, face: 5 }, false)).toBe(false);
-      expect(validateRaise(bid52, { quantity: 2, face: 5 }, false)).toBe(false); // exact same bid is not a raise either
+      expect(validateRaise(bid52, { quantity: 1, face: 5 })).toBe(false);
+      expect(validateRaise(bid52, { quantity: 2, face: 5 })).toBe(false); // exact same bid is not a raise either
     });
 
     it("regression example (5가 2개 -> 3이 2개, lower face without raising quantity) is rejected", () => {
       const bid52: Bid = { seat: 0, quantity: 2, face: 5 };
-      expect(validateRaise(bid52, { quantity: 2, face: 3 }, false)).toBe(false);
-      expect(validateRaise(bid52, { quantity: 1, face: 3 }, false)).toBe(false);
+      expect(validateRaise(bid52, { quantity: 2, face: 3 })).toBe(false);
+      expect(validateRaise(bid52, { quantity: 1, face: 3 })).toBe(false);
     });
 
     it("regression example (Q=2, D=4 base): same quantity + lower face rejected, same quantity + higher face accepted, higher quantity + lower face accepted", () => {
       const base: Bid = { seat: 0, quantity: 2, face: 4 };
-      expect(validateRaise(base, { quantity: 2, face: 3 }, false)).toBe(false);
-      expect(validateRaise(base, { quantity: 2, face: 5 }, false)).toBe(true);
-      expect(validateRaise(base, { quantity: 3, face: 2 }, false)).toBe(true);
+      expect(validateRaise(base, { quantity: 2, face: 3 })).toBe(false);
+      expect(validateRaise(base, { quantity: 2, face: 5 })).toBe(true);
+      expect(validateRaise(base, { quantity: 3, face: 2 })).toBe(true);
     });
   });
 
   describe("normal -> 페루도(1)", () => {
     it("rulebook's worked example: 4가 5개 -> 페루도 3개 이상 (ceil(5/2)=3)", () => {
       const prev: Bid = { seat: 0, quantity: 5, face: 4 };
-      expect(validateRaise(prev, { quantity: 2, face: 1 }, false)).toBe(false);
-      expect(validateRaise(prev, { quantity: 3, face: 1 }, false)).toBe(true);
-      expect(validateRaise(prev, { quantity: 4, face: 1 }, false)).toBe(true);
+      expect(validateRaise(prev, { quantity: 2, face: 1 })).toBe(false);
+      expect(validateRaise(prev, { quantity: 3, face: 1 })).toBe(true);
+      expect(validateRaise(prev, { quantity: 4, face: 1 })).toBe(true);
     });
 
     it("5가 2개 -> 페루도(1)로 전환 시 최소 요구 수량은 ceil(2/2)=1개 (그 미만은 거절, 1개 이상은 전부 허용)", () => {
       const prev: Bid = { seat: 0, quantity: 2, face: 5 };
       // quantity 0 is already rejected by the general "quantity < 1" guard above.
-      expect(validateRaise(prev, { quantity: 1, face: 1 }, false)).toBe(true);
-      expect(validateRaise(prev, { quantity: 2, face: 1 }, false)).toBe(true);
+      expect(validateRaise(prev, { quantity: 1, face: 1 })).toBe(true);
+      expect(validateRaise(prev, { quantity: 2, face: 1 })).toBe(true);
       // Bidding well above the minimum (e.g. 5x2 -> 1x6) is still a legal —
       // if generous — raise, not a "regression": the paco-conversion formula
       // only sets a floor, never a ceiling, on the new quantity.
-      expect(validateRaise(prev, { quantity: 6, face: 1 }, false)).toBe(true);
+      expect(validateRaise(prev, { quantity: 6, face: 1 })).toBe(true);
+    });
+
+    // 2026-08-17 룰북 정리: 룰북 본문에 잠깐 등장했던 "숫자3에 두었을 때는
+    // 페루도2 이상만 가능", "숫자4에 두었을 때는 페루도3 이상만 가능"이라는
+    // 하드코딩 케이스는 숫자5·6/역방향 공식이 빠진 불완전한 예외 조항이라
+    // 반영하지 않기로 확인받았다 — 그 두 케이스가 우연히도 기존 ceil(Q/2)
+    // 공식과 맞아떨어지는지만 회귀로 남겨 둔다(맞아떨어지므로 일반 공식을
+    // 그대로 유지해도 이 두 예시와 모순되지 않는다).
+    it("숫자3->페루도2, 숫자4->페루도3 예시도 기존 ceil(Q/2) 공식과 일치한다(하드코딩 없이도 성립)", () => {
+      expect(validateRaise({ seat: 0, quantity: 3, face: 3 }, { quantity: 2, face: 1 })).toBe(true); // ceil(3/2)=2
+      expect(validateRaise({ seat: 0, quantity: 3, face: 3 }, { quantity: 1, face: 1 })).toBe(false);
+      expect(validateRaise({ seat: 0, quantity: 4, face: 4 }, { quantity: 3, face: 1 })).toBe(true); // ceil(4/2)=2, so 3 clears easily
+      expect(validateRaise({ seat: 0, quantity: 4, face: 4 }, { quantity: 1, face: 1 })).toBe(false);
     });
   });
 
   describe("페루도(1) -> normal", () => {
     it("rulebook's worked example: 페루도 3개 -> 숫자 7개 이상 (3*2+1=7)", () => {
       const prev: Bid = { seat: 0, quantity: 3, face: 1 };
-      expect(validateRaise(prev, { quantity: 6, face: 2 }, false)).toBe(false);
-      expect(validateRaise(prev, { quantity: 7, face: 2 }, false)).toBe(true);
-      expect(validateRaise(prev, { quantity: 7, face: 6 }, false)).toBe(true);
+      expect(validateRaise(prev, { quantity: 6, face: 2 })).toBe(false);
+      expect(validateRaise(prev, { quantity: 7, face: 2 })).toBe(true);
+      expect(validateRaise(prev, { quantity: 7, face: 6 })).toBe(true);
     });
 
     it("(2*Q)+1 미만 수량은 어떤 일반 눈금으로도 거절되고, 그 문턱 이상은 전부 허용된다", () => {
       const prev: Bid = { seat: 0, quantity: 4, face: 1 };
       const threshold = prev.quantity * 2 + 1; // 9
       for (const face of [2, 3, 4, 5, 6] as Face[]) {
-        expect(validateRaise(prev, { quantity: threshold - 1, face }, false)).toBe(false);
-        expect(validateRaise(prev, { quantity: threshold, face }, false)).toBe(true);
+        expect(validateRaise(prev, { quantity: threshold - 1, face })).toBe(false);
+        expect(validateRaise(prev, { quantity: threshold, face })).toBe(true);
       }
     });
   });
@@ -167,21 +178,8 @@ describe("validateRaise — rulebook §3 formulas", () => {
   describe("페루도 -> 페루도", () => {
     it("only a strictly higher quantity is a valid raise", () => {
       const prev: Bid = { seat: 0, quantity: 3, face: 1 };
-      expect(validateRaise(prev, { quantity: 3, face: 1 }, false)).toBe(false);
-      expect(validateRaise(prev, { quantity: 4, face: 1 }, false)).toBe(true);
-    });
-  });
-
-  describe("Palafico round (§5) — face locked, quantity-only raises", () => {
-    it("rejects any face change even if it would otherwise be a legal raise", () => {
-      const prev: Bid = { seat: 0, quantity: 2, face: 3 };
-      expect(validateRaise(prev, { quantity: 3, face: 4 }, true)).toBe(false);
-      expect(validateRaise(prev, { quantity: 3, face: 1 }, true)).toBe(false);
-    });
-    it("accepts same-face, higher-quantity raises", () => {
-      const prev: Bid = { seat: 0, quantity: 2, face: 3 };
-      expect(validateRaise(prev, { quantity: 3, face: 3 }, true)).toBe(true);
-      expect(validateRaise(prev, { quantity: 2, face: 3 }, true)).toBe(false);
+      expect(validateRaise(prev, { quantity: 3, face: 1 })).toBe(false);
+      expect(validateRaise(prev, { quantity: 4, face: 1 })).toBe(true);
     });
   });
 });
@@ -191,14 +189,11 @@ describe("countMatching", () => {
     { seat: 0, diceCount: 3, dice: [1, 4, 4] },
     { seat: 1, diceCount: 2, dice: [4, 6] },
   ];
-  it("counts 1s (페루도) as wild for any other face when wild=true", () => {
-    expect(countMatching(players, 4, true)).toBe(4); // three real 4s + one wild 1
-  });
-  it("does not apply wilds when wild=false (Palafico rounds)", () => {
-    expect(countMatching(players, 4, false)).toBe(3);
+  it("counts 1s (페루도) as wild for any other face — always, no more Palafico exception (2026-08-17 룰북 정리)", () => {
+    expect(countMatching(players, 4)).toBe(4); // three real 4s + one wild 1
   });
   it("counting face 1 itself never double-counts via the wild branch", () => {
-    expect(countMatching(players, 1, true)).toBe(1);
+    expect(countMatching(players, 1)).toBe(1);
   });
 });
 
@@ -314,29 +309,27 @@ describe("dudo (페루도!)", () => {
     expect(next.eliminationOrder).toEqual([1]);
   });
 
-  it("does not apply the wild joker during a Palafico round", () => {
-    // Round starter (seat 0) has exactly 1 die -> Palafico. Bid is on face 4;
-    // the lone 1 must NOT count as a wild, so actualCount should be 1, not 2.
+  // 2026-08-17 룰북 정리: 팔라피코(Palafico) 특수 라운드가 최신 룰북에서
+  // 완전히 삭제됐다 — 라운드 선의 주사위가 1개뿐이어도 조커(1) 기능이 그대로
+  // 살아있는 일반 라운드와 동일하게 진행돼야 한다(이전엔 이 상황에서 1이
+  // 와일드로 집계되지 않는 특수 분기를 탔었다).
+  it("a round starter with only 1 die left still plays a normal round — 1 still counts as wild, no Palafico branch", () => {
     const state = makeState({
       roundStarter: 0,
       activeSeat: 1,
       currentBid: { seat: 0, quantity: 2, face: 4 },
       players: [
         { seat: 0, diceCount: 1, dice: [4] },
-        { seat: 1, diceCount: 5, dice: [1, 2, 3, 5, 6] },
+        { seat: 1, diceCount: 5, dice: [1, 2, 3, 5, 6] }, // one wild 1
         { seat: 2, diceCount: 5, dice: [2, 2, 3, 3, 5] },
       ],
     });
-    expect(isPalafico(state)).toBe(true);
     const next = applyAction(state, { type: "dudo", seat: 1 });
-    expect(next.lastResolution?.actualCount).toBe(1);
-    expect(next.lastResolution?.wasPalafico).toBe(true);
-    // Bid of 2 was too high given the real count of 1 -> bidder (seat 0) is penalized and eliminated,
-    // but seats 1 and 2 both still have dice, so the game continues (not a win).
-    expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(0);
-    expect(next.eliminationOrder).toEqual([0]);
-    expect(next.phase).toBe("reveal");
-    expect(next.roundStarter).toBe(1); // seat 0 is eliminated, so the next alive seat leads
+    // Real 4s (just seat 0's) + seat 1's wild 1 = 2, matching the bid exactly
+    // -> bid held up, so the doubter (seat 1) is penalized, not the bidder.
+    expect(next.lastResolution?.actualCount).toBe(2);
+    expect(next.lastResolution).not.toHaveProperty("wasPalafico");
+    expect(next.players.find((p) => p.seat === 1)!.diceCount).toBe(4); // 5 - (2-2+1) = 4
   });
 });
 
@@ -356,18 +349,42 @@ describe("calza (맞아!)", () => {
     expect(next.phase).toBe("reveal");
   });
 
-  it("regains a die on an exact match, capped at MAX_DICE", () => {
+  // 2026-08-17 룰북 정리: "맞아!" 성공 시 되찾는 주사위 개수 상한(구 MAX_DICE=5
+  // 캡)이 완전히 제거됐다 — 이미 5개를 보유한 채로 성공하면 6개 이상으로도
+  // 정상 누적돼야 한다(최신 룰북 문구: "최대 개수 제한없음").
+  it("regains a die on an exact match with NO upper cap — 5개 보유 상태에서 성공하면 6개로 증가한다", () => {
     const state = makeState({
       currentBid: { seat: 2, quantity: 2, face: 4 },
       players: [
-        { seat: 0, diceCount: MAX_DICE, dice: [4, 4, 2, 3, 5] },
+        { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
         { seat: 1, diceCount: 5, dice: [2, 2, 3, 3, 5] },
         { seat: 2, diceCount: 5, dice: [2, 2, 3, 3, 5] },
       ],
     });
     const next = applyAction(state, { type: "calza", seat: 0 });
     expect(next.lastResolution).toMatchObject({ kind: "calza", diceDelta: 1, actualCount: 2 });
-    expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(MAX_DICE); // capped, was already at max
+    expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(6); // was already at 5, uncapped -> 6
+  });
+
+  it("keeps regaining dice past 6, 7, 8... across repeated exact-match successes — genuinely unbounded", () => {
+    let state = makeState({
+      currentBid: { seat: 2, quantity: 2, face: 4 },
+      players: [
+        { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
+        { seat: 1, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+        { seat: 2, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+      ],
+    });
+    for (let i = 0; i < 4; i++) {
+      state = applyAction(state, { type: "calza", seat: 0 });
+      // calza moves the game to "reveal"; reset back to "playing" with the
+      // same fixed dice/bid (rather than going through `continue`, whose
+      // random reroll would make the "exact match" setup unreliable across
+      // iterations) so the next calza call in the loop has something
+      // identical to act on again.
+      state = { ...state, phase: "playing", currentBid: { seat: 2, quantity: 2, face: 4 } };
+    }
+    expect(state.players.find((p) => p.seat === 0)!.diceCount).toBe(9); // 5 + four successive +1s, no cap
   });
 
   it("loses dice equal to the exact absolute margin on a wrong call (rulebook §4②: |실제 개수 - 선언 개수|)", () => {
@@ -413,7 +430,10 @@ describe("calza (맞아!)", () => {
     expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(0);
   });
 
-  it("is disallowed during a Palafico round", () => {
+  // 2026-08-17 룰북 정리: 팔라피코가 완전히 삭제됐으므로, 라운드 선의 주사위가
+  // 1개뿐이어도 "맞아!"는 다른 라운드와 똑같이 허용돼야 한다(이전엔 여기서
+  // 거절되는 특수 분기가 있었다).
+  it("is still allowed even when the round starter has only 1 die left (no more Palafico restriction)", () => {
     const state = makeState({
       roundStarter: 0,
       currentBid: { seat: 0, quantity: 1, face: 4 },
@@ -424,7 +444,8 @@ describe("calza (맞아!)", () => {
       ],
     });
     const next = applyAction(state, { type: "calza", seat: 1 });
-    expect(next).toEqual(state);
+    expect(next.phase).toBe("reveal");
+    expect(next.lastResolution?.kind).toBe("calza");
   });
 
   it("is a no-op for a seat that's already eliminated", () => {
@@ -514,7 +535,7 @@ describe("full game simulation", () => {
     expect(state.eliminationOrder).toHaveLength(3);
   });
 
-  it("also terminates under a mixed raise/dudo policy without dice counts ever going out of [0, MAX_DICE]", () => {
+  it("also terminates under a mixed raise/dudo policy without dice counts ever going negative (this policy never calls calza, so it stays <= STARTING_DICE too — see the separate uncapped-calza tests above for the no-longer-capped growth case)", () => {
     let state = startGame(3, 777);
     let guard = 0;
     while (state.phase !== "gameOver" && guard < 3000) {
@@ -530,7 +551,7 @@ describe("full game simulation", () => {
       guard++;
     }
     expect(state.phase).toBe("gameOver");
-    expect(state.players.every((p) => p.diceCount >= 0 && p.diceCount <= MAX_DICE)).toBe(true);
+    expect(state.players.every((p) => p.diceCount >= 0 && p.diceCount <= STARTING_DICE)).toBe(true);
   });
 });
 
@@ -547,14 +568,17 @@ describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
     expect(getValidMoves(state, 1)).toEqual([]);
   });
 
-  it("includes dudo and calza once a bid is pending (outside Palafico)", () => {
+  it("includes dudo and calza once a bid is pending", () => {
     const state = makeState({ activeSeat: 1, currentBid: { seat: 0, quantity: 2, face: 3 } });
     const moves = getValidMoves(state, 1);
     expect(moves.some((m) => m.type === "dudo")).toBe(true);
     expect(moves.some((m) => m.type === "calza")).toBe(true);
   });
 
-  it("omits calza during a Palafico round and locks every raise to the opening face", () => {
+  // 2026-08-17 룰북 정리: 팔라피코가 삭제됐으므로 라운드 선의 주사위가 1개뿐인
+  // 상황에서도 calza가 포함되고, raise 후보의 눈금도 4로 고정되지 않아야 한다
+  // (이전엔 여기서 calza 제외 + 눈금 고정 특수 분기가 있었다).
+  it("still includes calza and offers raises across every face even when the round starter has only 1 die left", () => {
     const state = makeState({
       activeSeat: 1,
       roundStarter: 0,
@@ -565,10 +589,9 @@ describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
         { seat: 2, diceCount: 5, dice: [1, 2, 3, 4, 5] },
       ],
     });
-    expect(isPalafico(state)).toBe(true);
     const moves = getValidMoves(state, 1);
-    expect(moves.some((m) => m.type === "calza")).toBe(false);
-    expect(moves.filter((m) => m.type === "raise").every((m) => m.type === "raise" && m.face === 4)).toBe(true);
+    expect(moves.some((m) => m.type === "calza")).toBe(true);
+    expect(moves.filter((m) => m.type === "raise").some((m) => m.type === "raise" && m.face !== 4)).toBe(true);
   });
 
   it("returns nothing for an already-eliminated seat", () => {

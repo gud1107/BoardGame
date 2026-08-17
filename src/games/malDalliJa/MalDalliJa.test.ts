@@ -13,6 +13,7 @@ import {
   getLegalMoves,
   getValidMoves,
   isOasisZoneCell,
+  isOrthogonalStep,
   otherSeat,
   startGame,
   type EngineAction,
@@ -236,6 +237,99 @@ describe("[하우스 룰] 대각선 슬라이드 금지, 상하좌우 4방향만
     const moves = getLegalMoves(state).filter((m) => m.moveKind === "slide");
     expect(moves.some((m) => m.dr === 1 && m.dc === 1)).toBe(false);
     expect(moves.map((m) => m.to)).not.toContainEqual(OASIS);
+  });
+
+  it("dispatching an explicit diagonal MOVE action (dr:1,dc:1) is a no-op — state is untouched, not even the turn advances", () => {
+    // Same open-board setup as above: (2,2) -> (5,5) would have been a legal
+    // diagonal slide before the 2026-08-16 house rule. Forging that action
+    // directly (bypassing whatever the UI would offer) must still be
+    // rejected by applyMove's own legal-move lookup, exactly like any other
+    // fabricated illegal action.
+    const state = forceState({ positions: { p1: [{ row: 2, col: 2 }], p2: [{ row: 9, col: 9 }] } });
+    const diagonalAction: EngineAction = { type: "move", horseIndex: 0, moveKind: "slide", dr: 1, dc: 1 };
+    const next = applyAction(state, diagonalAction);
+    expect(next).toEqual(state);
+    expect(next.positions.p1[0]).toEqual({ row: 2, col: 2 }); // horse never moved
+    expect(next.activeSeat).toBe(state.activeSeat); // turn did not advance
+  });
+
+  it.each([
+    [-1, -1],
+    [-1, 1],
+    [1, -1],
+    [1, 1],
+  ] as const)("dispatching diagonal MOVE dr:%d dc:%d is a no-op from every diagonal quadrant", (dr, dc) => {
+    const state = forceState({ positions: { p1: [{ row: 5, col: 5 - dc }], p2: [{ row: 0, col: 10 }] } });
+    // Move the p1 horse just off-center so OASIS-landing isn't a confound;
+    // any diagonal offset should be rejected regardless of destination.
+    const before = structuredClone(state);
+    const next = applyAction(state, { type: "move", horseIndex: 0, moveKind: "slide", dr, dc });
+    expect(next).toEqual(before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2026-08-17 session — bug report was recurring in production because `main`
+// never merged the 2026-08-16 fix (see engine.ts's module doc timeline).
+// This block adds defense-in-depth coverage for the new `isOrthogonalStep`
+// guard in `resolveSlide`/`applyMove`, plus an exhaustive random-board sweep
+// so this can never silently regress again.
+// ---------------------------------------------------------------------------
+
+describe("[방어 로직 2026-08-17] isOrthogonalStep — 슬라이드 전용 직교 불변식 가드", () => {
+  it("accepts the 4 orthogonal unit vectors", () => {
+    for (const [dr, dc] of SLIDE_DIRECTIONS) {
+      expect(isOrthogonalStep(dr, dc)).toBe(true);
+    }
+  });
+
+  it("rejects every diagonal vector (both components nonzero)", () => {
+    for (const dr of [-1, 1]) {
+      for (const dc of [-1, 1]) {
+        expect(isOrthogonalStep(dr, dc)).toBe(false);
+      }
+    }
+  });
+
+  it("does NOT reject knight offsets when misused as a slide vector — this guard is purely (dr,dc)-shaped, callers are responsible for scoping it to moveKind 'slide' only (see applyMove)", () => {
+    // Sanity check on the primitive itself: (2,1)-shaped offsets are also
+    // "both nonzero", so isOrthogonalStep correctly reports them as
+    // non-orthogonal too — it's applyMove's `moveKind === "slide"` scoping
+    // (not this function) that keeps knight moves unaffected.
+    expect(isOrthogonalStep(2, 1)).toBe(false);
+    expect(isOrthogonalStep(-2, 1)).toBe(false);
+  });
+});
+
+describe("[방어 로직 2026-08-17] getLegalMoves 전수 검증 — 임의의 보드 배치에서도 slide 이동은 항상 직교", () => {
+  it("every slide destination getLegalMoves ever offers has row===from.row or col===from.col, across many random board layouts", () => {
+    const rng = seededRng(2026_08_17);
+    for (let trial = 0; trial < 200; trial++) {
+      const randCell = () => ({ row: Math.floor(rng() * BOARD_SIZE), col: Math.floor(rng() * BOARD_SIZE) });
+      const p1Cell = randCell();
+      let p2Cell = randCell();
+      while (posKey(p2Cell) === posKey(p1Cell)) p2Cell = randCell(); // keep the two horses on distinct cells
+      const state = forceState({ positions: { p1: [p1Cell], p2: [p2Cell] } });
+
+      for (const move of getLegalMoves(state).filter((m) => m.moveKind === "slide")) {
+        const from = state.positions.p1[move.horseIndex];
+        expect(move.to.row === from.row || move.to.col === from.col).toBe(true);
+        expect(isOrthogonalStep(move.dr, move.dc)).toBe(true);
+      }
+    }
+  });
+
+  it("applyMove rejects a forged diagonal slide action even when getLegalMoves is never consulted first (isOrthogonalStep short-circuits inside applyMove itself)", () => {
+    // Regression guard for the exact defense-in-depth path added this
+    // session: even if some future bug made a diagonal vector slip past
+    // getLegalMoves's own filtering, applyMove's own `isOrthogonalStep`
+    // check (engine.ts) rejects it independently before the legal-move
+    // lookup even runs.
+    const state = forceState({ positions: { p1: [{ row: 4, col: 4 }], p2: [{ row: 9, col: 9 }] } });
+    for (const [dr, dc] of [[-2, -2], [-3, 3], [5, -5]] as const) {
+      const next = applyAction(state, { type: "move", horseIndex: 0, moveKind: "slide", dr, dc });
+      expect(next).toEqual(state);
+    }
   });
 });
 

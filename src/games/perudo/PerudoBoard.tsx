@@ -6,7 +6,6 @@ import RulebookModal from "./RulebookModal";
 import PerudoFaceIcon from "./PerudoFaceIcon";
 import {
   computeRankings,
-  isPalafico,
   MAX_PLAYERS,
   minValidQuantityForFace,
   STARTING_DICE,
@@ -52,13 +51,13 @@ function randomSeed(): number {
 }
 
 // A warm, woven fabric mat — echoes the physical board's own photos
-// (boardGameRule/페루도/페루도판.jpg: a carved wood/jungle temple tile track
-// sitting on a dark textile surface; 페루도주사위.jpg: dice pooled inside a
-// solid-color cup). The base panel is a deep terracotta/umber gradient
-// (cloth, not cold grey stone like the earlier version) and `TableTexture`
-// below layers the woven crosshatch + Andean-stripe trim bands on top of it.
-// The warm gold/jungle palette from the board photo lives inside — see
-// BidTrack's wood-tile cells and golden interior plaque below.
+// (boardGameRule/페루도/페루도판.jpg, now also loaded for real as
+// public/assets/games/perudo/board.jpg — see `TableTexture`'s photo layer
+// below). The base panel is a deep terracotta/umber gradient (cloth, not
+// cold grey stone like the earlier version) and `TableTexture` below layers
+// the real board photo + a woven crosshatch + Andean-stripe trim bands on
+// top of it. The warm gold/jungle palette from the board photo lives inside
+// — see BidTrack's wood-tile cells and golden interior plaque below.
 const TABLE_PANEL =
   "relative overflow-hidden rounded-3xl border border-black/60 bg-gradient-to-b from-[#2a1c14] via-[#1d130d] to-[#0d0805] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
 
@@ -66,10 +65,30 @@ const TABLE_PANEL =
 const FABRIC_TRIM_GRADIENT =
   "repeating-linear-gradient(90deg, #b5482f 0 14px, #d9a441 14px 28px, #1f6f6f 28px 42px, #e8d9b5 42px 56px, #7a1f2b 56px 70px)";
 
-/** The fabric mat's texture layer: a woven crosshatch across the whole panel plus a colorful trim band along the top/bottom edges, standing in for a real South American textile mat under the board. */
+/** The fabric mat's texture layer: the real board photo as a faint backdrop, a woven crosshatch across the whole panel, plus a colorful trim band along the top/bottom edges, standing in for a real South American textile mat under the board. */
 function TableTexture() {
   return (
     <>
+      {/* Real photo of the physical board (boardGameRule/페루도/페루도판.jpg,
+          copied into the app at public/assets/games/perudo/board.jpg) as a
+          faint, desaturated backdrop behind the whole mat — an actual loaded
+          image asset now, not just a design reference cited in a comment.
+          Kept low-opacity rather than used as the literal clickable track
+          surface: `BidTrack` below is *computed* from MAX_PLAYERS/
+          STARTING_DICE (2-8 players, see TRACK_LENGTH), so its cell count
+          and grid shape vary by table size, while the physical board photo
+          has one fixed printed layout — stretching that photo to be the
+          literal interactive grid would misalign for every player count the
+          real board wasn't printed for. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 opacity-[0.16] grayscale-[0.25]"
+        style={{
+          backgroundImage: "url(/assets/games/perudo/board.jpg)",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      />
       <div
         className="pointer-events-none absolute inset-x-0 top-0 z-10 h-2 opacity-90 sm:h-2.5"
         style={{ backgroundImage: FABRIC_TRIM_GRADIENT }}
@@ -110,10 +129,13 @@ function TotalDiceBanner({ state }: { state: PerudoState }) {
  * has ever lost this game collects here instead of just vanishing from the
  * roster count, so the whole table can see at a glance how depleted the
  * overall dice pool is. Purely derived from `state.players`
- * (`STARTING_DICE - diceCount` per seat, since a seat's `diceCount` never
- * exceeds `STARTING_DICE` — see engine.ts's `MAX_DICE`) — nothing new is
- * tracked, consistent with this project's "파생 상태 금지" principle
- * (docs/architecture.md §1.4). Grouped per seat so the pile also reads as
+ * (`STARTING_DICE - diceCount` per seat) — nothing new is tracked, consistent
+ * with this project's "파생 상태 금지" principle. Since a successful "맞아!"
+ * no longer caps a seat's `diceCount` at `STARTING_DICE` (2026-08-17 룰북
+ * 정리 — 상한 제거), that subtraction can go negative for a seat sitting on
+ * more dice than it started with; the `.filter((x) => x.lost > 0)` below
+ * simply excludes such seats from the tray rather than showing a negative
+ * loss (see docs/architecture.md §1.4). Grouped per seat so the pile also reads as
  * "who's been bleeding dice": each seat's losses render as an overlapping
  * stack of THAT seat's own dice colorway (reinforcing requirement #2's
  * color-matching), dimmed/desaturated so a graveyard die reads as spent and
@@ -170,37 +192,25 @@ function DieBack({ size = "sm", colorway }: { size?: DieSize; colorway: DiceColo
   return <PerudoDie size={size} colorway={colorway} blank glossy={false} title="비공개 주사위" />;
 }
 
-function FacePicker({
-  selected,
-  onSelect,
-  disabledFaces,
-}: {
-  selected: Face;
-  onSelect: (face: Face) => void;
-  disabledFaces: Set<Face>;
-}) {
+function FacePicker({ selected, onSelect }: { selected: Face; onSelect: (face: Face) => void }) {
   const faces: Face[] = [1, 2, 3, 4, 5, 6];
   return (
     <div className="flex gap-1.5">
-      {faces.map((face) => {
-        const disabled = disabledFaces.has(face);
-        return (
-          <button
-            key={face}
-            type="button"
-            disabled={disabled}
-            onClick={() => onSelect(face)}
-            className={`flex h-9 w-9 items-center justify-center rounded-lg border-2 text-sm font-bold transition ${
-              selected === face
-                ? "border-amber-200 bg-gradient-to-b from-amber-300 to-amber-500 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.35)]"
-                : "border-white/15 bg-black/20 text-white/60 hover:border-white/30"
-            } ${disabled ? "cursor-not-allowed opacity-30" : ""}`}
-            title={face === 1 ? "페루도 (조커)" : `숫자 ${face}`}
-          >
-            {face === 1 ? <PerudoFaceIcon className="mx-auto h-5 w-5" /> : face}
-          </button>
-        );
-      })}
+      {faces.map((face) => (
+        <button
+          key={face}
+          type="button"
+          onClick={() => onSelect(face)}
+          className={`flex h-9 w-9 items-center justify-center rounded-lg border-2 text-sm font-bold transition ${
+            selected === face
+              ? "border-amber-200 bg-gradient-to-b from-amber-300 to-amber-500 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.35)]"
+              : "border-white/15 bg-black/20 text-white/60 hover:border-white/30"
+          }`}
+          title={face === 1 ? "페루도 (조커)" : `숫자 ${face}`}
+        >
+          {face === 1 ? <PerudoFaceIcon className="mx-auto h-5 w-5" /> : face}
+        </button>
+      ))}
     </div>
   );
 }
@@ -441,7 +451,6 @@ function MyDiceStatsPanel({ state, myDice }: { state: PerudoState; myDice: numbe
 
 export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: PerudoBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
-  const palafico = isPalafico(state);
   const me = state.players.find((p) => p.seat === viewerSeat)!;
   const isMyTurn = state.activeSeat === viewerSeat && state.phase === "playing";
   const iAmAlive = me.diceCount > 0;
@@ -452,11 +461,6 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
   // via the swatch picker — never synced, same trust tier as `muted` below.
   const [colorwayOverride, setColorwayOverride] = useState<DiceColorway | null>(null);
   const myColorway = colorwayOverride ?? playerColorwayForSeat(viewerSeat);
-
-  const disabledFaces = new Set<Face>();
-  if (palafico && state.currentBid) {
-    for (const f of [1, 2, 3, 4, 5, 6] as Face[]) if (f !== state.currentBid.face) disabledFaces.add(f);
-  }
 
   // -------------------------------------------------------------------------
   // Purple betting die draft — local to this client, re-synced from
@@ -475,38 +479,37 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
   const [pendingQuantity, setPendingQuantity] = useState<number>(1);
   if (syncedBidKey !== bidKey) {
     setSyncedBidKey(bidKey);
-    const initFace: Face = palafico && state.currentBid ? state.currentBid.face : (state.currentBid?.face ?? 2);
-    const initMinQty = minValidQuantityForFace(state.currentBid, initFace, palafico) ?? (state.currentBid ? state.currentBid.quantity + 1 : 1);
+    const initFace: Face = state.currentBid?.face ?? 2;
+    const initMinQty = minValidQuantityForFace(state.currentBid, initFace) ?? (state.currentBid ? state.currentBid.quantity + 1 : 1);
     setPendingFace(initFace);
     setPendingQuantity(initMinQty);
   }
 
   /** Move the draft face, clamping the draft quantity back up to whatever the new face's minimum legal raise is (rulebook §3 formulas, via `minValidQuantityForFace`) — the draft can never end up sitting on an illegal cell after a face change. */
   function pickFace(face: Face) {
-    if (disabledFaces.has(face)) return;
-    const newMinQty = minValidQuantityForFace(state.currentBid, face, palafico);
+    const newMinQty = minValidQuantityForFace(state.currentBid, face);
     if (newMinQty === null) return;
     setPendingFace(face);
     setPendingQuantity((prev) => Math.max(prev, newMinQty));
   }
 
-  /** Clicking the purple die itself cycles to the next selectable face — the "touch the die directly" interaction requested alongside the FacePicker controller. */
+  /** Clicking the purple die itself cycles to the next face — the "touch the die directly" interaction requested alongside the FacePicker controller. */
   function cycleFace() {
     const order: Face[] = [1, 2, 3, 4, 5, 6];
     const startIdx = order.indexOf(pendingFace);
-    for (let step = 1; step <= order.length; step++) {
-      const candidate = order[(startIdx + step) % order.length];
-      if (!disabledFaces.has(candidate)) {
-        pickFace(candidate);
-        return;
-      }
-    }
+    pickFace(order[(startIdx + 1) % order.length]);
   }
 
-  const dieMinQty = isMyTurn ? minValidQuantityForFace(state.currentBid, pendingFace, palafico) : null;
+  const dieMinQty = isMyTurn ? minValidQuantityForFace(state.currentBid, pendingFace) : null;
   const dieQuantity = isMyTurn ? pendingQuantity : (state.currentBid?.quantity ?? null);
   const dieFace: Face | null = isMyTurn ? pendingFace : (state.currentBid?.face ?? null);
-  const canConfirmBet = isMyTurn && iAmAlive && dieMinQty !== null && pendingQuantity >= dieMinQty && pendingQuantity <= TRACK_LENGTH;
+  // No `<= TRACK_LENGTH` upper bound here (see `BidTrack`'s doc comment on
+  // `dieCell`): now that "맞아!" no longer caps a seat's dice count (module
+  // engine.ts doc, 2026-08-17), a long game's total dice pool can genuinely
+  // exceed the track's 40 printed cells, and a legally-required minimum bid
+  // can exceed it too — the confirm button must still work in that case
+  // (the purple die visual just pins to the last cell, per that doc comment).
+  const canConfirmBet = isMyTurn && iAmAlive && dieMinQty !== null && pendingQuantity >= dieMinQty;
 
   // Roll sound cue: `DiceRollTray`'s `onRollStart`/`onSettled` callbacks
   // (wired up below, "My dice" section) fire the rattle/thud SFX beat timed
@@ -636,7 +639,6 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
           </p>
           <p className="mt-1 text-xs text-white/60">
             선언: {faceLabel(res.bid.face)} {res.bid.quantity}개 이상 · 실제: {res.actualCount}개
-            {res.wasPalafico && <span className="ml-1 text-rose-300">(팔라피코 — 조커 없음)</span>}
           </p>
           <p className={`mt-2 text-sm font-bold ${success ? "text-emerald-300" : "text-rose-300"}`}>
             {res.kind === "dudo"
@@ -675,14 +677,6 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-rose-100/60">
         <span className="flex items-center gap-1.5">
           {state.playerCount}인 · {state.roundNumber}라운드
-          {palafico && (
-            <span
-              title="선(先) 플레이어가 주사위 1개만 남아 팔라피코 라운드입니다: 조커 없음, 선언한 숫자 고정, 맞아! 불가"
-              className="rounded-full border border-rose-300/40 px-1.5 py-0.5 text-[10px] text-rose-200"
-            >
-              ⚠️ 팔라피코
-            </span>
-          )}
         </span>
         <div className="flex gap-1.5">
           {muteButton}
@@ -729,7 +723,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
               <p className="text-center text-[10px] font-semibold text-violet-900/70">
                 🟣 보라색 주사위를 클릭해 눈금 변경, 트랙 칸을 클릭해 개수 이동
               </p>
-              <FacePicker selected={pendingFace} onSelect={pickFace} disabledFaces={disabledFaces} />
+              <FacePicker selected={pendingFace} onSelect={pickFace} />
               <button
                 type="button"
                 disabled={!canConfirmBet}
@@ -751,7 +745,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
                 🚨 페루도!
               </button>
               <button
-                disabled={palafico || !state.currentBid}
+                disabled={!state.currentBid}
                 onClick={() => onAction({ type: "calza", seat: viewerSeat })}
                 title="차례와 상관없이 외칠 수 있어요"
                 className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
@@ -760,7 +754,6 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
               </button>
             </div>
           )}
-          {palafico && <p className="text-center text-[10px] font-semibold text-rose-800">팔라피코 라운드: &quot;맞아!&quot; 불가</p>}
         </BidTrack>
       </div>
 
@@ -790,7 +783,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
               const d = me.dice[i];
               const matchesBid = state.currentBid ? d === state.currentBid.face : false;
               if (matchesBid) return "match";
-              if (!palafico && state.currentBid && state.currentBid.face !== 1 && d === 1) return "wild";
+              if (state.currentBid && state.currentBid.face !== 1 && d === 1) return "wild";
               return undefined;
             }}
             onRollStart={() => {
@@ -873,7 +866,6 @@ function RevealPanel({
 }) {
   const res = state.lastResolution;
   if (!res) return null;
-  const wild = !res.wasPalafico;
   return (
     <div className="relative z-10 flex w-full flex-col gap-2">
       {Object.entries(res.revealedDice).map(([seatStr, dice]) => {
@@ -890,7 +882,7 @@ function RevealPanel({
               ) : (
                 dice.map((d, i) => {
                   const matches = d === res.bid.face;
-                  const isWild = wild && res.bid.face !== 1 && d === 1;
+                  const isWild = res.bid.face !== 1 && d === 1;
                   return (
                     <DieFace
                       key={i}

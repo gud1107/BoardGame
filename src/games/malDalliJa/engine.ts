@@ -70,6 +70,24 @@
  * `SLIDE_DIRECTIONS` entirely), rulebook doc updated to match. L자(나이트)
  * moves (§3 "이동 방식 2") are explicitly unaffected — confirmed kept as-is,
  * including the oasis-zone knight restriction above.
+ *
+ * **2026-08-17 session — diagonal-slide bug report, still recurring**: a new
+ * bug report showed diagonal slide movement still happening in production.
+ * Investigation found the 2026-08-16 fix above was real and correct in this
+ * branch, but `main` never merged it (`8d430d7` is not an ancestor of
+ * `main` — confirmed via `git merge-base --is-ancestor`) and every session
+ * since has withheld prod promotion pending that merge (see HANDOFF.md), so
+ * production was still running the pre-fix 8-direction `SLIDE_DIRECTIONS`.
+ * Surfaced via `AskUserQuestion` whether "diagonal" meant the L자(나이트)
+ * jump or bishop-style continuous diagonal sliding — user confirmed the
+ * latter (knight L자 movement itself is fine and must stay) and asked for it
+ * to be fully eliminated. Since `SLIDE_DIRECTIONS` was already orthogonal-only
+ * here, this session's actual change is defense-in-depth: `resolveSlide` and
+ * `applyMove` now both refuse a diagonal `(dr, dc)` outright via the new
+ * `isOrthogonalStep` guard (scoped to `moveKind: "slide"` only — knight moves
+ * are untouched), so even a crafted/corrupted `EngineAction` arriving over
+ * the network (see `MalDalliJaGame.tsx`'s broadcast `"game-action"` handler)
+ * or a future `SLIDE_DIRECTIONS` regression can't produce a diagonal slide.
  */
 
 import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
@@ -272,8 +290,32 @@ function allOccupied(state: MalDalliJaState): Set<string> {
   return set;
 }
 
-/** §3 "슬라이드 이동": step in one direction until the next step is blocked by any horse or the edge. */
+/**
+ * Orthogonal-step guard for **slide** moves only — `dr`/`dc` must not both be
+ * nonzero (a diagonal step). Deliberately *not* applied to knight moves:
+ * §3 "이동 방식 2" 나이트(L자) 이동 is defined by offsets where both
+ * components are always nonzero (e.g. (±2,±1)) and stays fully allowed, per
+ * the 2026-08-17 session's explicit user confirmation (bug report was about
+ * *sliding* diagonally like a bishop, not the L자 jump). See `applyMove`'s
+ * defensive check below for where this actually blocks bad input.
+ */
+export function isOrthogonalStep(dr: number, dc: number): boolean {
+  return dr === 0 || dc === 0;
+}
+
+/**
+ * §3 "슬라이드 이동": step in one direction until the next step is blocked by
+ * any horse or the edge. **2026-08-17 hardening**: refuses to even enter the
+ * loop for a diagonal `(dr, dc)` — redundant with `SLIDE_DIRECTIONS` only
+ * ever containing orthogonal vectors since the 2026-08-16 house rule, but
+ * this is the actual "슬라이딩 충돌 알고리즘" entry point a future regression
+ * (e.g. `SLIDE_DIRECTIONS` accidentally regaining a diagonal entry, as it had
+ * before that session) would hit — failing closed here means such a
+ * regression can never produce a diagonal slide destination at all, not even
+ * one `applyMove`'s lookup would need to catch downstream.
+ */
 function resolveSlide(from: Position, dr: number, dc: number, occupied: Set<string>): Position | null {
+  if (!isOrthogonalStep(dr, dc)) return null;
   let cur = from;
   let moved = false;
   for (;;) {
@@ -319,6 +361,15 @@ export type EngineAction =
   | { type: "pass" };
 
 function applyMove(state: MalDalliJaState, action: Extract<EngineAction, { type: "move" }>): MalDalliJaState {
+  // 2026-08-17 hardening: reject a diagonal *slide* before even consulting
+  // getLegalMoves — this game's actions travel over the network (Supabase
+  // Realtime broadcast from the opponent's own client, see
+  // MalDalliJaGame.tsx's "game-action" handler), so a crafted/corrupted
+  // action must never reach the legal-move lookup below at all. Scoped to
+  // moveKind "slide" only — knight (L자) moves legitimately have both dr/dc
+  // nonzero and are unaffected (see isOrthogonalStep's doc).
+  if (action.moveKind === "slide" && !isOrthogonalStep(action.dr, action.dc)) return state;
+
   const legal = getLegalMoves(state).find(
     (m) =>
       m.horseIndex === action.horseIndex &&
