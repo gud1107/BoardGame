@@ -27,5 +27,6 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "mal-dalli-ja": dynamic(() => import("./malDalliJa/MalDalliJaGame"), { ssr: false }),
   "pieces-of-language": dynamic(() => import("./piecesOfLanguage/PiecesOfLanguageGame"), { ssr: false }),
   coup: dynamic(() => import("./coup/CoupGame"), { ssr: false }),
+  "destiny-war-39": dynamic(() => import("./destinyWar39/DestinyWar39Game"), { ssr: false }),
   worm: dynamic(() => import("./worm/WormGame"), { ssr: false }),
 };

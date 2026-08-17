@@ -510,6 +510,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "destiny-war-39",
+    name: "운명전쟁39",
+    nameEn: "Destiny War 39",
+    description:
+      "9라운드 동안 매 라운드 자신의 승수를 예측하는 심리·확률 카드 게임. 라운드 R마다 카드 R장을 받아 R번의 턴으로 승부하며, 0/데스카드/리버스(11·22·33)가 뒤엉킨 승부 속에서 많이 이기는 게 아니라 정확히 예측한 만큼만 이겨야 점수를 얻습니다.",
+    players: { min: 5, max: 5 },
+    playTime: { minMinutes: 25, maxMinutes: 40 },
+    category: "card",
+    thumbnail: { emoji: "🔮", gradient: ["#c026d3", "#3b0764"] },
+    tags: ["예측", "심리전", "카드"],
+    genres: ["strategy", "bluffing"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "worm",
     name: "지렁이",
     nameEn: "Worm",

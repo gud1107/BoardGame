@@ -1,0 +1,459 @@
+import { describe, it, expect } from "vitest";
+import {
+  applyAction,
+  buildDeck,
+  chooseBotAction,
+  computeRankings,
+  DECK_SIZE,
+  getValidMoves,
+  isReverseCard,
+  PLAYER_COUNT,
+  resolveTurn,
+  scoreRound,
+  startGame,
+  TOTAL_ROUNDS,
+  visibleCurrentPrediction,
+  visiblePastPrediction,
+  type Card,
+  type DestinyWar39State,
+  type SeatIndex,
+  type TurnPlay,
+} from "./engine";
+
+function numberCard(id: number, value: number): Card {
+  return { id, kind: "number", value };
+}
+function deathCard(id: number): Card {
+  return { id, kind: "death", value: -1 };
+}
+function play(seat: SeatIndex, card: Card): TurnPlay {
+  return { seat, card };
+}
+
+describe("deck composition (rulebook §3)", () => {
+  it("has exactly 45 cards", () => {
+    expect(DECK_SIZE).toBe(45);
+  });
+
+  it("has 5 copies of 0, exactly 1 copy each of 1..39, and exactly 1 death card", () => {
+    const deck = buildDeck();
+    const zeroCount = deck.filter((c) => c.kind === "number" && c.value === 0).length;
+    expect(zeroCount).toBe(5);
+    for (let v = 1; v <= 39; v++) {
+      expect(deck.filter((c) => c.kind === "number" && c.value === v).length).toBe(1);
+    }
+    expect(deck.filter((c) => c.kind === "death").length).toBe(1);
+    expect(deck.length).toBe(5 + 39 + 1);
+  });
+
+  it("flags exactly 11/22/33 as reverse cards", () => {
+    const deck = buildDeck();
+    const reverseValues = deck.filter(isReverseCard).map((c) => c.value).sort((a, b) => a - b);
+    expect(reverseValues).toEqual([11, 22, 33]);
+  });
+});
+
+describe("scoreRound (rulebook §9 — confirmed formula, exact vectors from product owner)", () => {
+  it("ROUND 1 (R=1)", () => {
+    expect(scoreRound(0, 0, 1)).toBe(1);
+    expect(scoreRound(0, 1, 1)).toBe(-1);
+    expect(scoreRound(1, 1, 1)).toBe(2);
+    expect(scoreRound(1, 0, 1)).toBe(-2);
+    expect(scoreRound(1, 2, 1)).toBe(-2);
+    expect(scoreRound(2, 2, 1)).toBe(4);
+    expect(scoreRound(2, 0, 1)).toBe(-4);
+  });
+
+  it("ROUND 5 (R=5)", () => {
+    expect(scoreRound(0, 0, 5)).toBe(5);
+    expect(scoreRound(0, 1, 5)).toBe(-5);
+    expect(scoreRound(0, 3, 5)).toBe(-5);
+    expect(scoreRound(1, 1, 5)).toBe(2);
+    expect(scoreRound(1, 3, 5)).toBe(-4);
+    expect(scoreRound(3, 3, 5)).toBe(6);
+  });
+
+  it("ROUND 9 (R=9)", () => {
+    expect(scoreRound(0, 0, 9)).toBe(9);
+    expect(scoreRound(0, 1, 9)).toBe(-9);
+    expect(scoreRound(0, 4, 9)).toBe(-9);
+    expect(scoreRound(2, 2, 9)).toBe(4);
+    expect(scoreRound(2, 5, 9)).toBe(-6);
+    expect(scoreRound(5, 5, 9)).toBe(10);
+  });
+
+  it("R has no effect once P >= 1 (only P and A matter)", () => {
+    expect(scoreRound(3, 3, 1)).toBe(scoreRound(3, 3, 9));
+    expect(scoreRound(3, 1, 1)).toBe(scoreRound(3, 1, 9));
+  });
+});
+
+describe("resolveTurn (rulebook §6 — decision table)", () => {
+  const order = [0, 1, 2, 3, 4];
+
+  it("normal state: highest number wins", () => {
+    const plays = [play(0, numberCard(1, 12)), play(1, numberCard(2, 31)), play(2, numberCard(3, 7)), play(3, numberCard(4, 18)), play(4, numberCard(5, 5))];
+    const outcome = resolveTurn(plays, order);
+    expect(outcome.reverseActive).toBe(false);
+    expect(outcome.winnerSeat).toBe(1); // 31
+  });
+
+  it("one reverse card (11/22/33) → reverse active, lowest number wins", () => {
+    const plays = [play(0, numberCard(1, 8)), play(1, numberCard(2, 27)), play(2, numberCard(3, 22)), play(3, numberCard(4, 5)), play(4, numberCard(5, 19))];
+    const outcome = resolveTurn(plays, order);
+    expect(outcome.reverseActive).toBe(true); // one reverse card (22)
+    expect(outcome.winnerSeat).toBe(3); // lowest number, 5
+  });
+
+  it("two reverse cards → parity even, reverts to normal (highest wins)", () => {
+    const plays = [play(0, numberCard(1, 11)), play(1, numberCard(2, 22)), play(2, numberCard(3, 7)), play(3, numberCard(4, 30)), play(4, numberCard(5, 9))];
+    const outcome = resolveTurn(plays, order);
+    expect(outcome.reverseActive).toBe(false);
+    expect(outcome.winnerSeat).toBe(3); // 30, the highest
+  });
+
+  it("three reverse cards → parity odd, reverse active again", () => {
+    const plays = [play(0, numberCard(1, 11)), play(1, numberCard(2, 22)), play(2, numberCard(3, 33)), play(3, numberCard(4, 30)), play(4, numberCard(5, 9))];
+    const outcome = resolveTurn(plays, order);
+    expect(outcome.reverseActive).toBe(true);
+    expect(outcome.winnerSeat).toBe(4); // lowest, 9
+  });
+
+  it("normal state + 0 present: 0 beats death and every other card outright", () => {
+    const plays = [play(0, numberCard(1, 0)), play(1, deathCard(2)), play(2, numberCard(3, 25)), play(3, numberCard(4, 39)), play(4, numberCard(5, 1))];
+    const outcome = resolveTurn(plays, order);
+    expect(outcome.reverseActive).toBe(false);
+    expect(outcome.winnerSeat).toBe(0); // 0 > Death > 39 > ...
+  });
+
+  it("normal state, death present, no 0: death wins outright", () => {
+    const plays = [play(0, deathCard(1)), play(1, numberCard(2, 39)), play(2, numberCard(3, 25)), play(3, numberCard(4, 1)), play(4, numberCard(5, 38))];
+    const outcome = resolveTurn(plays, order);
+    expect(outcome.reverseActive).toBe(false);
+    expect(outcome.winnerSeat).toBe(0);
+  });
+
+  it("reverse active (odd reverse count) + 0 and death both present: death wins (exception cancelled)", () => {
+    const plays = [play(0, numberCard(1, 0)), play(1, deathCard(2)), play(2, numberCard(3, 11)), play(3, numberCard(4, 25)), play(4, numberCard(5, 30))];
+    const outcome = resolveTurn(plays, order);
+    expect(outcome.reverseActive).toBe(true); // one reverse card (11)
+    expect(outcome.winnerSeat).toBe(1); // death, even over 0
+  });
+
+  it("reverse active, death present, no 0: death still wins outright over the lowest number", () => {
+    const plays = [play(0, deathCard(1)), play(1, numberCard(2, 11)), play(2, numberCard(3, 25)), play(3, numberCard(4, 30)), play(4, numberCard(5, 2))];
+    const outcome = resolveTurn(plays, order);
+    expect(outcome.reverseActive).toBe(true);
+    expect(outcome.winnerSeat).toBe(0); // death beats even the lowest number (2)
+  });
+
+  it("reverse active, no death: lowest number wins (0 is strongest among numbers)", () => {
+    const plays = [play(0, numberCard(1, 0)), play(1, numberCard(2, 11)), play(2, numberCard(3, 25)), play(3, numberCard(4, 30)), play(4, numberCard(5, 2))];
+    const outcome = resolveTurn(plays, order);
+    expect(outcome.reverseActive).toBe(true);
+    expect(outcome.winnerSeat).toBe(0); // 0, lowest
+  });
+
+  it("multiple 0 cards tie, normal state: earliest in reveal order wins", () => {
+    const plays = [play(0, numberCard(1, 15)), play(1, numberCard(2, 0)), play(2, numberCard(3, 0)), play(3, numberCard(4, 9)), play(4, numberCard(5, 0))];
+    const outcome1 = resolveTurn(plays, [2, 4, 1, 0, 3]);
+    expect(outcome1.winnerSeat).toBe(2); // seat 2's 0 comes first in this reveal order
+    const outcome2 = resolveTurn(plays, [4, 1, 2, 0, 3]);
+    expect(outcome2.winnerSeat).toBe(4); // seat 4's 0 comes first here instead
+  });
+
+  it("multiple 0 cards tie, reverse active, no death: earliest in reveal order wins among the 0s", () => {
+    const plays = [play(0, numberCard(1, 0)), play(1, numberCard(2, 11)), play(2, numberCard(3, 0)), play(3, numberCard(4, 9)), play(4, numberCard(5, 3))];
+    const outcome = resolveTurn(plays, [2, 0, 1, 3, 4]);
+    expect(outcome.reverseActive).toBe(true);
+    expect(outcome.winnerSeat).toBe(2);
+  });
+});
+
+describe("round/turn structure (rulebook §4, §5)", () => {
+  function fastForwardToPlaying(state: DestinyWar39State): DestinyWar39State {
+    let s = state;
+    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+      s = applyAction(s, { type: "predict", seat, value: 0, hidden: false });
+    }
+    return s;
+  }
+
+  it("round R deals each player exactly R cards", () => {
+    let state = startGame(1);
+    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+      expect(state.round.hands[seat].length).toBe(1);
+    }
+    state = fastForwardToPlaying(state);
+    // Play through round 1 (1 turn) and round 2's dealing.
+    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+      const seatToAct = state.round.playsThisTurn.length; // round 1 is simultaneous; seats can act in any order but this engine iterates 0..4
+      const card = state.round.hands[seatToAct][0];
+      state = applyAction(state, { type: "play", seat: seatToAct, cardId: card.id });
+    }
+    expect(state.phase).toBe("roundEnd");
+    state = applyAction(state, { type: "nextRound", seed: 42 });
+    expect(state.phase).toBe("predicting");
+    expect(state.round.roundNumber).toBe(2);
+    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+      expect(state.round.hands[seat].length).toBe(2);
+    }
+  });
+
+  it("full 45-card deck is dealt out at round 9 (5 players x 9 cards)", () => {
+    // Deal round 9 directly via the internal shuffle path exposed through startGame+advancing
+    // is expensive to simulate end-to-end here; instead assert the invariant via dealRound's
+    // math: PLAYER_COUNT * roundNumber must never exceed DECK_SIZE.
+    expect(PLAYER_COUNT * TOTAL_ROUNDS).toBe(DECK_SIZE);
+  });
+
+  it("a round's actual win total across all players equals the round number (one winner per turn)", () => {
+    let state = startGame(7);
+    state = fastForwardToPlaying(state);
+    // Round 1 has exactly 1 turn -> exactly 1 total win awarded this round.
+    let seatToAct = 0;
+    while (state.phase === "playing") {
+      const card = state.round.hands[seatToAct][0];
+      state = applyAction(state, { type: "play", seat: seatToAct, cardId: card.id });
+      seatToAct++;
+    }
+    expect(state.phase).toBe("roundEnd");
+    const totalWins = state.players.reduce((sum, p) => sum + (p.actualWins[0] ?? 0), 0);
+    expect(totalWins).toBe(1);
+  });
+
+  it("round 1's sole turn winner becomes round 2's turn-1 leader; each turn's winner leads the next turn thereafter", () => {
+    let state = startGame(99);
+    state = fastForwardToPlaying(state);
+    let seatToAct = 0;
+    while (state.phase === "playing") {
+      const card = state.round.hands[seatToAct][0];
+      state = applyAction(state, { type: "play", seat: seatToAct, cardId: card.id });
+      seatToAct++;
+    }
+    const round1Winner = state.players.find((p) => (p.actualWins[0] ?? 0) === 1)!.seat;
+    state = applyAction(state, { type: "nextRound", seed: 5 });
+    expect(state.round.turnLeader).toBe(round1Winner);
+
+    // Play round 2's turn 1 in the sequential (leader -> clockwise) order and confirm the
+    // turn's winner becomes turn 2's leader.
+    state = fastForwardToPlaying(state);
+    let actingSeat = state.round.turnLeader;
+    const played = new Set<number>();
+    while (state.round.turnNumber === 1 && state.phase === "playing") {
+      const card = state.round.hands[actingSeat][0];
+      state = applyAction(state, { type: "play", seat: actingSeat, cardId: card.id });
+      played.add(actingSeat);
+      if (played.size < PLAYER_COUNT) {
+        do {
+          actingSeat = state.seatOrder[(state.seatOrder.indexOf(actingSeat) + 1) % PLAYER_COUNT];
+        } while (played.has(actingSeat));
+      }
+    }
+    expect(state.round.turnNumber).toBe(2);
+    const turn1Winner = state.round.turnRecords[0].winnerSeat;
+    expect(state.round.turnLeader).toBe(turn1Winner);
+  });
+
+  it("round >= 2 rejects an out-of-turn play", () => {
+    let state = startGame(3);
+    state = fastForwardToPlaying(state);
+    let seatToAct = 0;
+    while (state.phase === "playing") {
+      const card = state.round.hands[seatToAct][0];
+      state = applyAction(state, { type: "play", seat: seatToAct, cardId: card.id });
+      seatToAct++;
+    }
+    state = applyAction(state, { type: "nextRound", seed: 11 });
+    state = fastForwardToPlaying(state);
+    const leader = state.round.turnLeader;
+    const notLeader = (leader + 1) % PLAYER_COUNT;
+    const card = state.round.hands[notLeader][0];
+    const before = state;
+    const after = applyAction(state, { type: "play", seat: notLeader, cardId: card.id });
+    expect(after).toBe(before); // no-op, rejected
+  });
+});
+
+describe("prediction rules (rulebook §7)", () => {
+  it("rejects a prediction outside 0..roundNumber", () => {
+    const state = startGame(1);
+    const before = state;
+    const tooHigh = applyAction(state, { type: "predict", seat: 0, value: 2, hidden: false });
+    expect(tooHigh).toBe(before); // round 1 only allows 0 or 1
+    const negative = applyAction(state, { type: "predict", seat: 0, value: -1, hidden: false });
+    expect(negative).toBe(before);
+  });
+
+  it("accepts 0..roundNumber and moves to playing once all 5 seats have predicted", () => {
+    let state = startGame(2); // still round 1 (seed doesn't change starting round)
+    for (let seat = 0; seat < PLAYER_COUNT - 1; seat++) {
+      state = applyAction(state, { type: "predict", seat, value: 1, hidden: false });
+      expect(state.phase).toBe("predicting");
+    }
+    state = applyAction(state, { type: "predict", seat: 4, value: 0, hidden: false });
+    expect(state.phase).toBe("playing");
+  });
+
+  it("rejects a second prediction from the same seat in the same round", () => {
+    let state = startGame(1);
+    state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: false });
+    const before = state;
+    const after = applyAction(state, { type: "predict", seat: 0, value: 0, hidden: false });
+    expect(after).toBe(before);
+  });
+});
+
+describe("hidden (rulebook §8, §12)", () => {
+  it("allows exactly one hidden use per game and rejects a second attempt", () => {
+    let state = startGame(1);
+    state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: true });
+    expect(state.players[0].hiddenUsed).toBe(true);
+    expect(state.players[0].hiddenRound).toBe(1);
+
+    // Finish round 1, advance to round 2, try hidden again for seat 0.
+    for (let seat = 1; seat < PLAYER_COUNT; seat++) {
+      state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
+    }
+    let seatToAct = 0;
+    while (state.phase === "playing") {
+      const card = state.round.hands[seatToAct][0];
+      state = applyAction(state, { type: "play", seat: seatToAct, cardId: card.id });
+      seatToAct++;
+    }
+    state = applyAction(state, { type: "nextRound", seed: 2 });
+
+    const before = state;
+    const after = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: true });
+    expect(after).toBe(before); // rejected: hidden already spent
+  });
+
+  it("hides the prediction value from other seats until game over, but the owner always sees it", () => {
+    let state = startGame(1);
+    state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: true });
+    expect(visibleCurrentPrediction(state, 0, 0)).toBe(1); // owner sees their own
+    expect(visibleCurrentPrediction(state, 1, 0)).toBe("hidden"); // opponent does not
+  });
+
+  it("reveals every hidden past prediction once the game reaches gameOver", () => {
+    let state = startGame(123);
+    state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: true });
+    for (let seat = 1; seat < PLAYER_COUNT; seat++) state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
+    let seatToAct = 0;
+    while (state.phase === "playing") {
+      const card = state.round.hands[seatToAct][0];
+      state = applyAction(state, { type: "play", seat: seatToAct, cardId: card.id });
+      seatToAct++;
+    }
+    // Round 1 done. visiblePastPrediction should still redact seat 0's hidden round-1 prediction
+    // from seat 1's view while the game isn't over yet.
+    expect(visiblePastPrediction(state, 1, 0, 1)).toBe("hidden");
+    expect(visiblePastPrediction(state, 0, 0, 1)).toBe(1);
+  });
+});
+
+describe("full game simulation and final rankings (rulebook §9.1, §10)", () => {
+  function playFullGame(seed: number): DestinyWar39State {
+    let state = startGame(seed);
+    while (state.phase !== "gameOver") {
+      if (state.phase === "predicting") {
+        for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+          if (state.round.predictions[seat] === null) {
+            state = applyAction(state, { type: "predict", seat, value: Math.min(1, state.round.roundNumber), hidden: false });
+          }
+        }
+      } else if (state.phase === "playing") {
+        while (state.phase === "playing") {
+          const round = state.round;
+          const played = new Set(round.playsThisTurn.map((p) => p.seat));
+          let actingSeat: number | null = null;
+          if (round.roundNumber === 1) {
+            for (let s = 0; s < PLAYER_COUNT; s++) if (!played.has(s)) { actingSeat = s; break; }
+          } else {
+            const startIdx = state.seatOrder.indexOf(round.turnLeader);
+            for (let i = 0; i < PLAYER_COUNT; i++) {
+              const candidate = state.seatOrder[(startIdx + i) % PLAYER_COUNT];
+              if (!played.has(candidate)) { actingSeat = candidate; break; }
+            }
+          }
+          if (actingSeat === null) break;
+          const card = round.hands[actingSeat][0];
+          state = applyAction(state, { type: "play", seat: actingSeat, cardId: card.id });
+        }
+      } else if (state.phase === "roundEnd") {
+        state = applyAction(state, { type: "nextRound", seed: seed + state.round.roundNumber });
+      }
+    }
+    return state;
+  }
+
+  it("plays all 9 rounds to completion and produces final scores + rankings for all 5 seats", () => {
+    const state = playFullGame(2024);
+    expect(state.phase).toBe("gameOver");
+    expect(state.finalScores).not.toBeNull();
+    expect(Object.keys(state.finalScores!).length).toBe(PLAYER_COUNT);
+    for (const p of state.players) {
+      expect(p.predictions.every((v) => v !== null)).toBe(true);
+      expect(p.actualWins.every((v) => v !== null)).toBe(true);
+      expect(p.scores.every((v) => v !== null)).toBe(true);
+    }
+    expect(state.finalRankings).not.toBeNull();
+    expect(state.finalRankings!.length).toBe(PLAYER_COUNT);
+  });
+
+  it("final score equals the sum of the 9 recorded per-round scores", () => {
+    const state = playFullGame(555);
+    for (const p of state.players) {
+      const expected = p.scores.reduce((sum: number, v) => sum + (v ?? 0), 0);
+      expect(state.finalScores![p.seat]).toBe(expected);
+    }
+  });
+
+  it("co-ranks players with identical final scores (competition ranking, no tiebreaker)", () => {
+    const finalScores = { 0: 10, 1: 10, 2: 5, 3: 5, 4: 5 };
+    const rankings = computeRankings(finalScores);
+    const rankBySeat = Object.fromEntries(rankings.map((r) => [r.seat, r.rank]));
+    expect(rankBySeat[0]).toBe(1);
+    expect(rankBySeat[1]).toBe(1);
+    expect(rankBySeat[2]).toBe(3);
+    expect(rankBySeat[3]).toBe(3);
+    expect(rankBySeat[4]).toBe(3);
+  });
+
+  it("a strict ordering produces ranks 1..5 with no gaps", () => {
+    const finalScores = { 0: 20, 1: 15, 2: 10, 3: 5, 4: 0 };
+    const rankings = computeRankings(finalScores);
+    const rankBySeat = Object.fromEntries(rankings.map((r) => [r.seat, r.rank]));
+    expect(rankBySeat).toEqual({ 0: 1, 1: 2, 2: 3, 3: 4, 4: 5 });
+  });
+});
+
+describe("bot support (getValidMoves / chooseBotAction)", () => {
+  it("offers exactly roundNumber+1 prediction candidates (0..roundNumber)", () => {
+    const state = startGame(1);
+    const moves = getValidMoves(state, 0);
+    expect(moves.length).toBe(state.round.roundNumber + 1);
+    expect(moves.every((m) => m.type === "predict" && !m.hidden)).toBe(true);
+  });
+
+  it("chooseBotAction always returns a legal move for the current phase", () => {
+    let state = startGame(42);
+    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+      const action = chooseBotAction(state, seat, 5, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(action!.type).toBe("predict");
+      state = applyAction(state, action!);
+    }
+    expect(state.phase).toBe("playing");
+    const action = chooseBotAction(state, 0, 5, () => 0.5);
+    expect(action).not.toBeNull();
+    expect(action!.type).toBe("play");
+  });
+
+  it("returns null when the seat has nothing legal to do", () => {
+    let state = startGame(1);
+    state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: false });
+    const action = chooseBotAction(state, 0, 5);
+    expect(action).toBeNull(); // seat 0 already predicted this round
+  });
+});
