@@ -428,6 +428,143 @@ describe("full game simulation and final rankings (rulebook §9.1, §10)", () =>
   });
 });
 
+describe("lastCompletedRound — card history for the UI's '직전 라운드' view", () => {
+  function fastForwardToPlaying(state: DestinyWar39State): DestinyWar39State {
+    let s = state;
+    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+      s = applyAction(s, { type: "predict", seat, value: 0, hidden: false });
+    }
+    return s;
+  }
+
+  it("is null before any round has finished", () => {
+    const state = startGame(1);
+    expect(state.lastCompletedRound).toBeNull();
+  });
+
+  it("records every player's exact card in round.turnRecords once a turn resolves", () => {
+    let state = startGame(4);
+    state = fastForwardToPlaying(state);
+    const expectedBySeat = new Map(Array.from({ length: PLAYER_COUNT }, (_, seat) => [seat, state.round.hands[seat][0]]));
+    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+      const card = state.round.hands[seat][0];
+      state = applyAction(state, { type: "play", seat, cardId: card.id });
+    }
+    expect(state.phase).toBe("roundEnd");
+    const turnRecord = state.round.turnRecords[0];
+    expect(turnRecord.plays).toHaveLength(PLAYER_COUNT);
+    for (const { seat, card } of turnRecord.plays) {
+      expect(card).toEqual(expectedBySeat.get(seat));
+    }
+  });
+
+  it("snapshots the finished round into state.lastCompletedRound as soon as it completes", () => {
+    let state = startGame(4);
+    state = fastForwardToPlaying(state);
+    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+      const card = state.round.hands[seat][0];
+      state = applyAction(state, { type: "play", seat, cardId: card.id });
+    }
+    expect(state.lastCompletedRound).not.toBeNull();
+    expect(state.lastCompletedRound!.roundNumber).toBe(1);
+    expect(state.lastCompletedRound!.turnRecords).toEqual(state.round.turnRecords);
+  });
+
+  it("keeps the previous round's card history available after nextRound deals the following round", () => {
+    let state = startGame(4);
+    state = fastForwardToPlaying(state);
+    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+      const card = state.round.hands[seat][0];
+      state = applyAction(state, { type: "play", seat, cardId: card.id });
+    }
+    const round1History = state.lastCompletedRound!;
+    state = applyAction(state, { type: "nextRound", seed: 9 });
+    // round now points at round 2's fresh (empty) turn history...
+    expect(state.round.roundNumber).toBe(2);
+    expect(state.round.turnRecords).toEqual([]);
+    // ...but round 1's card-by-card history is still fully inspectable.
+    expect(state.lastCompletedRound).toEqual(round1History);
+    expect(state.lastCompletedRound!.roundNumber).toBe(1);
+    expect(state.lastCompletedRound!.turnRecords[0].plays).toHaveLength(PLAYER_COUNT);
+  });
+
+  it("also snapshots the final round (9) into lastCompletedRound when the game ends", () => {
+    let state = startGame(4);
+    while (state.phase !== "gameOver") {
+      if (state.phase === "predicting") {
+        state = fastForwardToPlaying(state);
+      } else if (state.phase === "playing") {
+        const round = state.round;
+        const played = new Set(round.playsThisTurn.map((p) => p.seat));
+        let actingSeat = 0;
+        if (round.roundNumber >= 2) {
+          const startIdx = state.seatOrder.indexOf(round.turnLeader);
+          for (let i = 0; i < PLAYER_COUNT; i++) {
+            const candidate = state.seatOrder[(startIdx + i) % PLAYER_COUNT];
+            if (!played.has(candidate)) {
+              actingSeat = candidate;
+              break;
+            }
+          }
+        } else {
+          for (let s = 0; s < PLAYER_COUNT; s++) if (!played.has(s)) { actingSeat = s; break; }
+        }
+        const card = round.hands[actingSeat][0];
+        state = applyAction(state, { type: "play", seat: actingSeat, cardId: card.id });
+      } else if (state.phase === "roundEnd") {
+        state = applyAction(state, { type: "nextRound", seed: 4 + state.round.roundNumber });
+      }
+    }
+    expect(state.lastCompletedRound).not.toBeNull();
+    expect(state.lastCompletedRound!.roundNumber).toBe(TOTAL_ROUNDS);
+    expect(state.lastCompletedRound!.turnRecords).toHaveLength(TOTAL_ROUNDS);
+  });
+});
+
+describe("prediction vs. actual-wins tracking (status board)", () => {
+  it("round.winsThisRound increments only the turn winner, and stays at 0 for everyone else", () => {
+    let state = startGame(4);
+    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+      state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
+    }
+    expect(state.phase).toBe("playing");
+    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+      expect(state.round.winsThisRound[seat]).toBe(0);
+    }
+    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+      const card = state.round.hands[seat][0];
+      state = applyAction(state, { type: "play", seat, cardId: card.id });
+    }
+    const totalWins = Object.values(state.round.winsThisRound).reduce((sum, v) => sum + v, 0);
+    expect(totalWins).toBe(1); // round 1 has exactly 1 turn
+    const winners = Object.entries(state.round.winsThisRound).filter(([, wins]) => wins > 0);
+    expect(winners).toHaveLength(1);
+  });
+
+  it("folds each player's prediction + actual wins + score into their permanent record when the round ends", () => {
+    let state = startGame(4);
+    // Round 1 only allows predicting 0 or 1; seat 0 predicts 1, everyone else predicts 0.
+    state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: false });
+    for (let seat = 1; seat < PLAYER_COUNT; seat++) {
+      state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
+    }
+    let seatToAct = 0;
+    while (state.phase === "playing") {
+      const card = state.round.hands[seatToAct][0];
+      state = applyAction(state, { type: "play", seat: seatToAct, cardId: card.id });
+      seatToAct++;
+    }
+    expect(state.phase).toBe("roundEnd");
+    for (const p of state.players) {
+      const A = state.round.winsThisRound[p.seat] ?? 0;
+      expect(p.actualWins[0]).toBe(A);
+      const expectedP = p.seat === 0 ? 1 : 0;
+      expect(p.predictions[0]).toBe(expectedP);
+      expect(p.scores[0]).toBe(scoreRound(expectedP, A, 1));
+    }
+  });
+});
+
 describe("bot support (getValidMoves / chooseBotAction)", () => {
   it("offers exactly roundNumber+1 prediction candidates (0..roundNumber)", () => {
     const state = startGame(1);

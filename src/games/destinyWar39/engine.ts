@@ -154,6 +154,15 @@ export interface DestinyWar39State {
   players: PlayerRecord[];
   finalScores: Record<SeatIndex, number> | null;
   finalRankings: RankedSeat[] | null;
+  /**
+   * Snapshot of the most recently *completed* round (all its `turnRecords`
+   * included), kept around after `nextRound`/game-over moves `round` on to
+   * the next one — the sole source for the UI's "직전 라운드 카드 조합"
+   * history view, so it stays inspectable at any point in the following
+   * round instead of vanishing the instant dealing resets `round`. Null
+   * only before round 1 has finished.
+   */
+  lastCompletedRound: RoundState | null;
 }
 
 export type EngineAction =
@@ -223,6 +232,7 @@ export function startGame(seed: number): DestinyWar39State {
     players,
     finalScores: null,
     finalRankings: null,
+    lastCompletedRound: null,
   };
 }
 
@@ -396,9 +406,17 @@ function resolveTurnAndAdvance(state: DestinyWar39State, round: RoundState): Des
   if (R === TOTAL_ROUNDS) {
     const finalScores: Record<SeatIndex, number> = {};
     for (const p of players) finalScores[p.seat] = p.scores.reduce((sum: number, v) => sum + (v ?? 0), 0);
-    return { ...state, round: finishedRound, players, phase: "gameOver", finalScores, finalRankings: computeRankings(finalScores) };
+    return {
+      ...state,
+      round: finishedRound,
+      players,
+      phase: "gameOver",
+      finalScores,
+      finalRankings: computeRankings(finalScores),
+      lastCompletedRound: finishedRound,
+    };
   }
-  return { ...state, round: finishedRound, players, phase: "roundEnd" };
+  return { ...state, round: finishedRound, players, phase: "roundEnd", lastCompletedRound: finishedRound };
 }
 
 /** Deals the next round (needs a fresh seed since dealing must stay a pure function of the broadcast action for online lockstep sync — see Coyote's `continueRound` for the same pattern). Any connected client may trigger this from the "roundEnd" summary screen. */
