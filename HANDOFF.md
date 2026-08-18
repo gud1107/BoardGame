@@ -14,7 +14,9 @@ _최종 갱신: 2026-08-18 (**운명전쟁39 UI/UX 개선 세션** — 직전 �
 
 **검증**: `npx tsc --noEmit`(프로젝트 전체, 에러 0) / `npm run lint`(프로젝트 전체, 경고 0) / `npx vitest run src/games/destinyWar39 src/games/registry.test.ts`(47/47 통과 — 기존 40개 + 신규 7개: `lastCompletedRound`가 라운드 완료 전 null / 턴 해결 시 전원 카드가 `turnRecords`에 정확히 기록 / 라운드 완료 즉시 스냅샷 / `nextRound` 이후에도 스냅샷 유지 / 9라운드 게임 종료 시에도 스냅샷 / `winsThisRound`가 턴 승자에게만 증가 / 라운드 종료 시 각 플레이어의 예측·실제·점수가 영구 기록(`predictions`/`actualWins`/`scores`)에 정확히 반영). 전체 `npx vitest run`은 과거 여러 세션에 반복 기록된 것과 동일하게 진행 표시 없이 장시간 지속돼 완료를 기다리지 않고 판단 — 이번 변경이 `engine.ts`(필드 1개 추가 + 라운드 완료 두 분기에 값 채우기)와 `DestinyWar39Board.tsx`+신규 2개 컴포넌트 파일에 한정되고 다른 게임 로직과 전혀 무관하다는 점, `tsc`/`lint`가 프로젝트 전체 기준 깨끗했던 점을 근거로 진행.
 
-**커밋/푸시/배포**: 아래 참고.
+**커밋/푸시**: `4f5547d feat(destiny-war-39): add prediction scoreboard, trick transition delay, and last round card history view` → `git push origin main` 완료(`104ef49..4f5547d`).
+
+**배포**: `npx vercel deploy --prod` 실행 — 직전 세션과 동일한 CLI 증상(빌드 완료 후 상태 조회 단계에서 `{"status":"error","reason":"deploy_failed","message":"Not authorized"}` 출력)이 재현됐으나, `vercel ls`/`vercel inspect`로 직접 재확인한 결과 실제 배포 자체는 정상 완료(`dpl_ADfHan7q8HP6vy4zPs8FPJ41Nuc5`, target: production, status: Ready)돼 프로덕션 도메인 3개(`board-game-tau-navy.vercel.app`/`board-game-me-3871.vercel.app`/`board-game-git-main-me-3871.vercel.app`) 전부에 정상 별칭됨. `curl`로 프로덕션 루트(`/`, 200)와 운명전쟁39 라우트(`/games/destiny-war-39`, 200) 둘 다 직접 응답 확인.
 
 ### 2026-08-18 — 운명전쟁39 신규 구현
 
