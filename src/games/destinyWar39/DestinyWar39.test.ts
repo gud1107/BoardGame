@@ -119,11 +119,11 @@ describe("resolveTurn (rulebook §6 — decision table)", () => {
     expect(outcome.winnerSeat).toBe(4); // lowest, 9
   });
 
-  it("normal state + 0 present: 0 beats death and every other card outright", () => {
+  it("normal state, death and 0 both present: 0 counters death (its only upset — not the other numbers)", () => {
     const plays = [play(0, numberCard(1, 0)), play(1, deathCard(2)), play(2, numberCard(3, 25)), play(3, numberCard(4, 39)), play(4, numberCard(5, 1))];
     const outcome = resolveTurn(plays, order);
     expect(outcome.reverseActive).toBe(false);
-    expect(outcome.winnerSeat).toBe(0); // 0 > Death > 39 > ...
+    expect(outcome.winnerSeat).toBe(0); // 0 beats Death specifically; Death would otherwise have beaten 39
   });
 
   it("normal state, death present, no 0: death wins outright", () => {
@@ -131,6 +131,20 @@ describe("resolveTurn (rulebook §6 — decision table)", () => {
     const outcome = resolveTurn(plays, order);
     expect(outcome.reverseActive).toBe(false);
     expect(outcome.winnerSeat).toBe(0);
+  });
+
+  it("normal state, 0 present but no death: 0 is just the weakest number and loses to the highest (e.g. 35 vs 0 → 35 wins)", () => {
+    const plays = [play(0, numberCard(1, 0)), play(1, numberCard(2, 35)), play(2, numberCard(3, 7)), play(3, numberCard(4, 18)), play(4, numberCard(5, 2))];
+    const outcome = resolveTurn(plays, order);
+    expect(outcome.reverseActive).toBe(false);
+    expect(outcome.winnerSeat).toBe(1); // 35, the highest — 0 does NOT auto-win outside the death counter
+  });
+
+  it("reverse active (one reverse card) + 0 present, no death: 0 wins even against a much higher number (e.g. 11-reverse + 0 vs 35 → 0 wins)", () => {
+    const plays = [play(0, numberCard(1, 0)), play(1, numberCard(2, 11)), play(2, numberCard(3, 35)), play(3, numberCard(4, 18)), play(4, numberCard(5, 6))];
+    const outcome = resolveTurn(plays, order);
+    expect(outcome.reverseActive).toBe(true); // one reverse card (11)
+    expect(outcome.winnerSeat).toBe(0); // 0, lowest — reverse makes it the strongest ordinary number
   });
 
   it("reverse active (odd reverse count) + 0 and death both present: death wins (exception cancelled)", () => {
@@ -154,8 +168,10 @@ describe("resolveTurn (rulebook §6 — decision table)", () => {
     expect(outcome.winnerSeat).toBe(0); // 0, lowest
   });
 
-  it("multiple 0 cards tie, normal state: earliest in reveal order wins", () => {
-    const plays = [play(0, numberCard(1, 15)), play(1, numberCard(2, 0)), play(2, numberCard(3, 0)), play(3, numberCard(4, 9)), play(4, numberCard(5, 0))];
+  it("multiple 0 cards tie, normal state with death present (0's counter is live): earliest in reveal order wins", () => {
+    // Without a death card, 0 is just the weakest number and wouldn't be the winning value at all
+    // (see the "0 is just the weakest number" test above) — a death card is needed to put 0 in contention.
+    const plays = [play(0, deathCard(1)), play(1, numberCard(2, 0)), play(2, numberCard(3, 0)), play(3, numberCard(4, 9)), play(4, numberCard(5, 0))];
     const outcome1 = resolveTurn(plays, [2, 4, 1, 0, 3]);
     expect(outcome1.winnerSeat).toBe(2); // seat 2's 0 comes first in this reveal order
     const outcome2 = resolveTurn(plays, [4, 1, 2, 0, 3]);

@@ -1,18 +1,8 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { PLAYER_COUNT, visiblePastPrediction, type Card, type DestinyWar39State, type SeatIndex } from "./engine";
-
-function cardLabel(card: Card): string {
-  return card.kind === "death" ? "💀" : String(card.value);
-}
-
-function cardBadgeClasses(card: Card): string {
-  if (card.kind === "death") return "border-rose-400/60 bg-rose-950/60 text-rose-200";
-  if (card.value === 0) return "border-amber-400/60 bg-amber-950/50 text-amber-200";
-  if ([11, 22, 33].includes(card.value)) return "border-fuchsia-400/60 bg-fuchsia-950/50 text-fuchsia-200";
-  return "border-white/20 bg-white/5 text-white/90";
-}
+import { CardFace } from "./CardFace";
+import { PLAYER_COUNT, visiblePastPrediction, type DestinyWar39State, type SeatIndex } from "./engine";
 
 export interface LastRoundHistoryModalProps {
   state: DestinyWar39State;
@@ -62,13 +52,7 @@ export default function LastRoundHistoryModal({ state, viewerSeat, names, onClos
                           {seatLabel(seat)}
                           {isWinner ? " 🏆" : ""}
                         </span>
-                        <span
-                          className={`grid h-11 w-8 place-items-center rounded-lg border text-sm font-bold ${cardBadgeClasses(p.card)} ${
-                            isWinner ? "ring-2 ring-amber-300/70" : ""
-                          }`}
-                        >
-                          {cardLabel(p.card)}
-                        </span>
+                        <CardFace card={p.card} size="sm" className={isWinner ? "ring-2 ring-amber-300/70" : ""} />
                       </div>
                     );
                   })}

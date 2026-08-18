@@ -30,7 +30,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               <tbody>
                 <tr className="border-t border-white/10">
                   <td className="px-2 py-1.5 font-semibold text-white/80">0</td>
-                  <td className="px-2 py-1.5">가장 약해 보이지만, 특정 조건에서 가장 강함</td>
+                  <td className="px-2 py-1.5">평소엔 가장 약하지만, 데스카드를 만나면 역전승. 리버스 상태에선 가장 강함</td>
                   <td className="px-2 py-1.5 text-right">5장</td>
                 </tr>
                 <tr className="border-t border-white/10">
@@ -71,7 +71,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <ul className="list-disc space-y-1 pl-4 text-xs text-white/70">
             <li>그 턴에 나온 5장 중 리버스 카드(11/22/33) 개수가 <b>홀수</b>면 리버스 활성(작은 숫자 승리), <b>짝수</b>면 비활성(큰 숫자 승리)</li>
             <li>
-              리버스 <b>비활성</b>: 0 카드가 있으면 <b>0이 데스카드까지 포함해 무조건 승리</b>. 0이 없으면 데스카드가 있으면 데스카드 승리, 없으면 가장 큰 숫자 승리
+              리버스 <b>비활성</b>: 데스카드가 있고 0도 있으면 <b>0이 승리</b>(0의 유일한 카운터 상성). 데스카드만 있으면 데스카드 승리. 데스카드가 없으면 <b>가장 큰 숫자 승리</b> — 0은 이때 가장 약한 숫자라 다른 숫자에는 항상 진다(예: 35 vs 0 → 35 승리)
             </li>
             <li>
               리버스 <b>활성</b>: 데스카드가 있으면 <b>데스카드가 0까지 포함해 무조건 승리</b>. 데스카드가 없으면 가장 작은 숫자 승리(0이 가장 강함)

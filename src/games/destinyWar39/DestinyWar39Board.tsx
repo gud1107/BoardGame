@@ -4,12 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
 import PredictionStatusBoard from "./PredictionStatusBoard";
 import LastRoundHistoryModal from "./LastRoundHistoryModal";
+import { CardFace } from "./CardFace";
 import {
   PLAYER_COUNT,
   TOTAL_ROUNDS,
   visibleCurrentPrediction,
   visiblePastPrediction,
-  type Card,
   type DestinyWar39State,
   type EngineAction,
   type SeatIndex,
@@ -46,17 +46,6 @@ export interface DestinyWar39BoardProps {
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 1_000_000_000);
-}
-
-function cardLabel(card: Card): string {
-  return card.kind === "death" ? "💀" : String(card.value);
-}
-
-function cardBadgeClasses(card: Card): string {
-  if (card.kind === "death") return "border-rose-400/60 bg-rose-950/60 text-rose-200";
-  if (card.value === 0) return "border-amber-400/60 bg-amber-950/50 text-amber-200";
-  if ([11, 22, 33].includes(card.value)) return "border-fuchsia-400/60 bg-fuchsia-950/50 text-fuchsia-200";
-  return "border-white/20 bg-white/5 text-white/90";
 }
 
 export default function DestinyWar39Board({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: DestinyWar39BoardProps) {
@@ -142,13 +131,11 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
                   {seatLabel(seat)}
                   {isWinner ? " 🏆" : ""}
                 </span>
-                <span
-                  className={`grid h-16 w-11 place-items-center rounded-lg border text-lg font-bold transition ${cardBadgeClasses(p.card)} ${
-                    isWinner ? "scale-110 ring-4 ring-amber-300/70 shadow-[0_0_25px_rgba(252,211,77,0.55)]" : ""
-                  }`}
-                >
-                  {cardLabel(p.card)}
-                </span>
+                <CardFace
+                  card={p.card}
+                  size="lg"
+                  className={isWinner ? "scale-110 ring-4 ring-amber-300/70 shadow-[0_0_25px_rgba(252,211,77,0.55)]" : ""}
+                />
               </div>
             );
           })}
@@ -311,9 +298,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
           </p>
           <div className="flex flex-wrap gap-2">
             {round.hands[viewerSeat].map((c) => (
-              <span key={c.id} className={`grid h-12 w-9 place-items-center rounded-lg border text-sm font-bold ${cardBadgeClasses(c)}`}>
-                {cardLabel(c)}
-              </span>
+              <CardFace key={c.id} card={c} size="sm" />
             ))}
           </div>
 
@@ -434,9 +419,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
               <div key={seat} className="flex flex-col items-center gap-1">
                 <span className="text-[11px] text-white/50">{seatLabel(seat)}</span>
                 {p ? (
-                  <span className={`grid h-14 w-10 place-items-center rounded-lg border text-base font-bold ${cardBadgeClasses(p.card)}`}>
-                    {cardLabel(p.card)}
-                  </span>
+                  <CardFace card={p.card} size="md" />
                 ) : (
                   <span className="grid h-14 w-10 place-items-center rounded-lg border border-dashed border-white/15 text-white/20">?</span>
                 )}
@@ -450,13 +433,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
             <p className="text-xs text-white/50">낼 카드를 선택하세요 (남은 손패 {myHand.length}장)</p>
             <div className="flex flex-wrap gap-2">
               {myHand.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => onAction({ type: "play", seat: viewerSeat, cardId: c.id })}
-                  className={`grid h-14 w-10 place-items-center rounded-lg border text-base font-bold transition hover:-translate-y-1 ${cardBadgeClasses(c)}`}
-                >
-                  {cardLabel(c)}
-                </button>
+                <CardFace key={c.id} card={c} size="md" interactive onClick={() => onAction({ type: "play", seat: viewerSeat, cardId: c.id })} className="hover:-translate-y-1" />
               ))}
             </div>
           </div>

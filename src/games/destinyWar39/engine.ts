@@ -1,6 +1,6 @@
 /**
  * Pure "운명전쟁39" rules engine — no React, no I/O. Implements the rulebook
- * at boardGameRule/운명전쟁39/운명전쟁39.md (Version 2.0, 공식 확정본).
+ * at boardGameRule/운명전쟁39/운명전쟁39.md (Version 2.1, 공식 확정본).
  *
  * Same online-multiplayer trust model as every other game in this project
  * (see Coyote/Avalon's module docs): every connected client independently
@@ -23,9 +23,13 @@
  *    last-turn winner), so there is no separate "round winner" concept.
  *  - Turn resolution: reverse is active iff the count of reverse cards
  *    (11/22/33) among that turn's 5 cards is odd. Death card is normally the
- *    strongest card but loses outright to 0 when reverse is inactive; when
- *    reverse is active that exception is cancelled and Death is strongest
- *    again (beats 0 too). Ties are only possible among 0 cards (every other
+ *    strongest card but loses outright to 0 when reverse is inactive — that
+ *    counter is narrowly scoped to the Death-vs-0 matchup only: with reverse
+ *    inactive and no Death in play, 0 is just the weakest ordinary number
+ *    (highest number wins as usual). When reverse is active the Death/0
+ *    exception is cancelled and Death is strongest again (beats 0 too), and
+ *    0 becomes the strongest ordinary number (lowest value wins). Ties are
+ *    only possible among 0 cards (every other
  *    value 1-39 is unique in the deck) and are broken by whoever revealed
  *    earliest — the fixed random seat order for round 1's simultaneous
  *    reveal, or the turn's actual reveal sequence otherwise.
@@ -263,6 +267,13 @@ export interface TurnOutcome {
  * §6.2's decision table. `revealOrder` is the reference order used only to
  * break 0-vs-0 ties (§6.3) — the round 1 fixed seat order for simultaneous
  * reveals, or that turn's actual sequential reveal order otherwise.
+ *
+ * The 0-vs-Death counter is narrowly scoped: 0 only beats Death, never
+ * ordinary numbers. With reverse inactive and no Death in play, 0 is just
+ * the weakest ordinary number and loses to whatever is highest (e.g. 35
+ * beats 0). Reverse flips the ordinary-number comparison (lowest wins),
+ * which is what makes 0 the strongest *ordinary* card once reverse is
+ * active — that is a side effect of the flip, not a separate 0 rule.
  */
 export function resolveTurn(plays: TurnPlay[], revealOrder: SeatIndex[]): TurnOutcome {
   const reverseActive = computeReverseActive(plays);
@@ -272,10 +283,10 @@ export function resolveTurn(plays: TurnPlay[], revealOrder: SeatIndex[]): TurnOu
 
   let winnerSeat: SeatIndex;
   if (!reverseActive) {
-    if (zeroPlays.length > 0) {
-      winnerSeat = firstByOrder(zeroPlays, revealOrder);
-    } else if (deathPlay) {
-      winnerSeat = deathPlay.seat;
+    if (deathPlay) {
+      // 0's sole counter: beats Death specifically, even though 0 is
+      // otherwise the weakest ordinary number in this (non-reverse) state.
+      winnerSeat = zeroPlays.length > 0 ? firstByOrder(zeroPlays, revealOrder) : deathPlay.seat;
     } else {
       const maxValue = Math.max(...numberPlays.map((p) => p.card.value));
       winnerSeat = numberPlays.find((p) => p.card.value === maxValue)!.seat;
@@ -500,10 +511,10 @@ export function computeRankings(finalScores: Record<SeatIndex, number>): RankedS
 
 import { pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
 
-/** Rough 0..1 "how likely this card is to win a turn against 4 unknown opponents" proxy — ignores reverse dynamics entirely (documented simplification; still gives bots a sane 0/death/high-number preference ordering). */
+/** Rough 0..1 "how likely this card is to win a turn against 4 unknown opponents" proxy — ignores reverse dynamics entirely (documented simplification; still gives bots a sane death/high-number/0 preference ordering). */
 function cardStrength(card: Card): number {
-  if (card.kind === "death") return 0.95; // strong, but the 0-card upset keeps it just under 0 itself
-  if (card.value === 0) return 1;
+  if (card.kind === "death") return 1; // strongest overall in the common (non-reverse) case; the 0 counter is rare (1 of 45 cards) and ignored by this proxy
+  if (card.value === 0) return 0; // weakest ordinary number outside its narrow Death-counter upside, which this proxy ignores
   return card.value / 39;
 }
 
