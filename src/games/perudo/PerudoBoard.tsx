@@ -50,14 +50,16 @@ function randomSeed(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
 
-// A warm, woven fabric mat — echoes the physical board's own photos
-// (boardGameRule/페루도/페루도판.jpg, now also loaded for real as
-// public/assets/games/perudo/board.jpg — see `TableTexture`'s photo layer
-// below). The base panel is a deep terracotta/umber gradient (cloth, not
+// A warm, woven fabric mat — echoes the physical board's own photo
+// (boardGameRule/페루도/변경후이미지.jpg, loaded for real as
+// public/assets/games/perudo/board.jpg — see `BidTrack`'s own photo layer,
+// which is now the actual in-game board surface, not just decorative
+// texture). The base panel is a deep terracotta/umber gradient (cloth, not
 // cold grey stone like the earlier version) and `TableTexture` below layers
-// the real board photo + a woven crosshatch + Andean-stripe trim bands on
-// top of it. The warm gold/jungle palette from the board photo lives inside
-// — see BidTrack's wood-tile cells and golden interior plaque below.
+// a woven crosshatch + Andean-stripe trim bands on top of it, standing in
+// for the textile mat the real board sits on. The warm gold/jungle palette
+// from the board photo lives inside — see BidTrack's wood-tile cells and
+// translucent interior plaque below.
 const TABLE_PANEL =
   "relative overflow-hidden rounded-3xl border border-black/60 bg-gradient-to-b from-[#2a1c14] via-[#1d130d] to-[#0d0805] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
 
@@ -65,30 +67,10 @@ const TABLE_PANEL =
 const FABRIC_TRIM_GRADIENT =
   "repeating-linear-gradient(90deg, #b5482f 0 14px, #d9a441 14px 28px, #1f6f6f 28px 42px, #e8d9b5 42px 56px, #7a1f2b 56px 70px)";
 
-/** The fabric mat's texture layer: the real board photo as a faint backdrop, a woven crosshatch across the whole panel, plus a colorful trim band along the top/bottom edges, standing in for a real South American textile mat under the board. */
+/** The fabric mat's texture layer: a woven crosshatch across the whole panel plus a colorful trim band along the top/bottom edges, standing in for a real South American textile mat under the board. The real board photo itself now renders inside `BidTrack` (see its own doc comment) rather than here — this layer is just the mat *under* the board. */
 function TableTexture() {
   return (
     <>
-      {/* Real photo of the physical board (boardGameRule/페루도/페루도판.jpg,
-          copied into the app at public/assets/games/perudo/board.jpg) as a
-          faint, desaturated backdrop behind the whole mat — an actual loaded
-          image asset now, not just a design reference cited in a comment.
-          Kept low-opacity rather than used as the literal clickable track
-          surface: `BidTrack` below is *computed* from MAX_PLAYERS/
-          STARTING_DICE (2-8 players, see TRACK_LENGTH), so its cell count
-          and grid shape vary by table size, while the physical board photo
-          has one fixed printed layout — stretching that photo to be the
-          literal interactive grid would misalign for every player count the
-          real board wasn't printed for. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-[0.16] grayscale-[0.25]"
-        style={{
-          backgroundImage: "url(/assets/games/perudo/board.jpg)",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      />
       <div
         className="pointer-events-none absolute inset-x-0 top-0 z-10 h-2 opacity-90 sm:h-2.5"
         style={{ backgroundImage: FABRIC_TRIM_GRADIENT }}
@@ -350,6 +332,36 @@ function BidTrack({
           aspectRatio: `${TRACK_COLS} / ${TRACK_ROWS}`,
         }}
       >
+        {/* The real physical board photo (boardGameRule/페루도/변경후이미지.jpg,
+            copied into the app at public/assets/games/perudo/board.jpg) —
+            this is now the actual in-game board surface, not a low-opacity
+            texture: shown at full color/opacity, `object-fit: contain`-style
+            (backgroundSize: "contain") so the whole photo letterboxes inside
+            the track area without cropping or distortion. It sits at the
+            bottom of this stacking context (z-0); every cell button and the
+            interior plaque above render with a translucent (not opaque)
+            background so the photo reads through underneath them instead of
+            being hidden behind solid tiles.
+            One deliberate limitation: this computed grid's cell count varies
+            with table size (TRACK_LENGTH = MAX_PLAYERS * STARTING_DICE, see
+            above), while the photographed board has one fixed 40-cell
+            printed layout — so the clickable cells are only an *approximate*
+            visual match to the photo's own printed numbers, not a literal
+            pixel-for-pixel overlay. That's unavoidable for any player count
+            other than the one the physical board happened to be printed
+            for; `object-fit: contain` at least keeps the whole photo
+            visible and undistorted so it still reads as "the real board"
+            rather than a stretched crop. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-0 rounded-[1rem]"
+          style={{
+            backgroundImage: "url(/assets/games/perudo/board.jpg)",
+            backgroundSize: "contain",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+          }}
+        />
         {TRACK_CELLS.map((cell) => {
           const enabled = isMyTurn && minQty !== null && cell.quantity >= minQty;
           const isFloorCell = floorQuantity === cell.quantity;
@@ -365,12 +377,12 @@ function BidTrack({
               disabled={!enabled}
               onClick={() => onCellClick(cell.quantity)}
               style={{ gridColumn: `${cell.col}`, gridRow: `${cell.row}` }}
-              className={`relative flex items-center justify-center overflow-hidden rounded-[4px] border-2 text-[10px] font-bold transition sm:text-xs ${
+              className={`relative z-10 flex items-center justify-center overflow-hidden rounded-[4px] border-2 text-[10px] font-bold [text-shadow:0_1px_2px_rgba(0,0,0,0.8)] transition sm:text-xs ${
                 isFloorCell
-                  ? "border-amber-200 bg-gradient-to-b from-amber-300 to-amber-500 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.5)]"
+                  ? "border-amber-200 bg-gradient-to-b from-amber-300/85 to-amber-500/85 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.5)]"
                   : enabled
-                    ? "cursor-pointer border-amber-950/70 bg-gradient-to-b from-amber-700 to-amber-900 text-amber-100 hover:from-amber-600 hover:to-amber-800"
-                    : "cursor-not-allowed border-black/40 bg-gradient-to-b from-neutral-800 to-neutral-900 text-white/25"
+                    ? "cursor-pointer border-amber-950/70 bg-gradient-to-b from-amber-700/55 to-amber-900/55 text-amber-100 hover:from-amber-600/70 hover:to-amber-800/70"
+                    : "cursor-not-allowed border-black/40 bg-gradient-to-b from-neutral-900/55 to-neutral-950/55 text-white/40"
               }`}
               title={
                 !isMyTurn
@@ -400,10 +412,16 @@ function BidTrack({
             </div>
           </div>
         )}
-        {/* Golden interior plaque — echoes the mat's central "PERUDO" plaque. */}
+        {/* Interior plaque — translucent (not opaque) now that the real
+            board photo sits right underneath it (see the photo layer
+            above): a light frosted wash + backdrop-blur keeps the live bid
+            text and betting controls fully legible while still letting the
+            photo's own printed center art softly show through, so this
+            reads as "content resting on the real board" rather than a flat
+            card pasted over it. */}
         <div
           style={{ gridColumn: `2 / ${TRACK_COLS}`, gridRow: `2 / ${TRACK_ROWS}` }}
-          className="flex flex-col items-center justify-center gap-2 rounded-[1.25rem] border-4 border-amber-800 bg-gradient-to-br from-amber-100 via-yellow-200 to-amber-300 p-2 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)]"
+          className="relative z-10 flex flex-col items-center justify-center gap-2 rounded-[1.25rem] border-4 border-amber-800 bg-amber-100/75 p-2 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)] backdrop-blur-sm"
         >
           {children}
         </div>
