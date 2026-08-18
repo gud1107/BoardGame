@@ -16,6 +16,8 @@ _최종 갱신: 2026-08-19 (**페루도 — 인게임 보드 중앙에 실제 �
 
 **검증**: `npx tsc --noEmit`(프로젝트 전체, 에러 0) / `npm run lint`(프로젝트 전체, 경고 0) / `npx vitest run src/games/perudo`(60/60 통과, 2.67초 — 순수 표현 계층 변경이라 엔진/테스트 무변경). 전체 `npx vitest run`은 과거 여러 세션에서 이미 원인이 규명된 `aiBenchmark.test.ts`(무관한 무거운 동기 자가 대진 벤치마크)로 인해 장시간 무출력 상태가 지속돼, 이번 변경이 `PerudoBoard.tsx` 한 파일의 순수 스타일/레이아웃 변경(엔진·상태·다른 게임 모듈 무관, `grep`으로 확인)이라는 근거로 완료를 기다리지 않고 타깃 테스트 결과로 판단, 남은 백그라운드 프로세스는 정리.
 
+**커밋/배포**: 커밋 `9fdbfcb refactor(perudo): replace game board UI with updated in-game board asset` → `git push origin main` 완료(이 저장소는 기존에도 main에 직접 커밋해온 컨벤션). `npx vercel deploy`(프리뷰) 1차 시도는 `"Not authorized"`로 실패(직후 재시도는 바로 성공 — 동시 세션/토큰 갱신 지연 등 일시적 원인으로 추정, 이전 세션들이 기록한 "동시 세션 경합" 패턴과 유사) → 2차 시도 정상 완주(Turbopack 빌드+TS 전체 재검사 포함), READY — `https://board-game-bqwe26v9f-me-3871.vercel.app`. 사용자가 "production"을 명시하지 않아 이번에도 프리뷰까지만 진행하고 prod 승격은 보류(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
+
 ### 2026-08-18 — 운명전쟁39 0 카드 판정 정정 + 리버스 카드 UI
 
 **요청**: 리버스 카드(11/22/33)의 시각적 인지도 개선 + "일반 상태에서 35 vs 0 대전 시 0이 승리해버리는 버그" 수정.
