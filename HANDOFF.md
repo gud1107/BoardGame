@@ -17,6 +17,10 @@ _최종 갱신: 2026-08-18 (**허브 카테고리 재분류 + 레지스탕스 �
 - **SPRT(순차 확률비 검정) 조기 종료**: 체스 엔진 테스트(Stockfish 등)에서 쓰는 표준 기법 — 매판 우도비를 누적하다 통계적으로 충분히 확신이 서면 1,000판을 다 돌리기 전에 통과/실패 조기 확정. 과거 실측 승률(97.1%/96.9%/89.8%, "Level 10 AI 코어 아키텍처 고도화" 섹션 참고)이 85% 문턱을 넉넉히 넘고 있어 평균적으로 100~300판 안에 끝날 가능성이 높음. 순수 로직 변경이라 인프라 리스크는 적지만, "정확히 1,000판 중 850승 이상"이라는 현재 판정 방식이 "통계적으로 유의미하게 임계값을 초과"로 바뀌는 의미 변화가 있음 — 사용자 확인 필요.
 - 두 방향 모두 미구현 상태이며, 다음 세션에서 사용자와 방향을 먼저 확정한 뒤 진행할 것.
 
+**커밋/푸시**: `e3993e6 refactor(hub): group destiny war under death game category and update cover images for coup and coyote` → `git push origin main` 완료(`38d361f..e3993e6`).
+
+**배포**: `npx vercel deploy --prod` 실행 — 빌드(Turbopack, TypeScript 전체 재검사 포함) 22초 만에 정상 완주, `target: production`/`status: READY`(`dpl_8W2YzTF3ifVJDbLkux4fHnLmZJUs`)로 확인되고 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭(alias) 완료. `curl`로 프로덕션 루트(`/`)·`/games/destiny-war-39`·`/games/coyote`·`/games/coup` 4개 라우트 전부 200 확인 + 신규 이미지 에셋 2개(`/games/coyote.jpg`→`image/jpeg` 200, `/games/coup.webp`→`image/webp` 200) 직접 응답 확인.
+
 ### 2026-08-18 — 말달리자 체스말 에셋 교체
 
 **요청**: 룰북 폴더(`boardGameRule/말달리자/`)에 새로 올라온 체스 나이트 형태 말 토큰 이미지(`검정색말.jpg`/`하얀색말.jpg`)로 기존 온보드 말 그래픽(이모지 🐴/🐎)을 교체 — 정적 에셋 경로로 복사·연결, `MalDalliJaBoard.tsx` 렌더링 갱신(크기/여백/드롭섀도우, 선택 하이라이트·이동 애니메이션 정상 작동 유지), 검증·문서화·커밋·배포까지 완료.
