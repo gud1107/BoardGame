@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import RulebookModal from "./RulebookModal";
 import {
@@ -37,6 +38,12 @@ import {
  * dead-center cell, ringed by 12 green-circle cells — knight (L자) moves are
  * blocked anywhere in that 13-cell zone (`isOasisZoneCell`), only slide
  * moves work there.
+ *
+ * **2026-08-18 session (rulebook piece-photo swap)**: on-board horse tokens
+ * render `SEAT_THEME[seat].pieceImage` (the real knight-chess-piece photos
+ * from `boardGameRule/말달리자/`) instead of a bare 🐴/🐎 emoji — see
+ * `SEAT_THEME`'s doc comment for the asset path and why the tile is
+ * rectangular (`object-contain`) rather than a circular crop.
  */
 export interface MalDalliJaBoardProps {
   state: MalDalliJaState;
@@ -49,9 +56,34 @@ export interface MalDalliJaBoardProps {
   onGameEnd: (winnerId: string) => void;
 }
 
-const SEAT_THEME: Record<Seat, { name: string; emoji: string; glow: string; ring: string; text: string }> = {
-  p1: { name: "흑마", emoji: "🐴", glow: "shadow-[0_0_18px_4px_rgba(244,63,94,0.55)]", ring: "border-rose-400", text: "text-rose-300" },
-  p2: { name: "백마", emoji: "🐎", glow: "shadow-[0_0_18px_4px_rgba(34,211,238,0.55)]", ring: "border-cyan-300", text: "text-cyan-200" },
+// `pieceImage` files are synced from `boardGameRule/말달리자/{검정색말,하얀색말}.jpg`
+// (see MalDalliJaBoard.tsx's module doc, 2026-08-18 asset-swap session) into
+// `public/images/mal-dallija/`, following the same
+// rulebook-photo-to-`public/images/<kebab-game>/` convention as loveLetter's
+// `CardArt.tsx`. Both source photos are knight-chess-piece line art on a
+// plain white background (not transparent), so the on-board token wraps them
+// in a small cream-colored tile (`object-contain`, not `-cover`, to avoid
+// cropping the mane/ears) rather than the tighter circular badge used when
+// the piece was a bare emoji — a circle crop of a knight silhouette loses
+// too much of the art. The emoji is kept for the compact HUD turn indicator,
+// where a photo tile would be too small to read.
+const SEAT_THEME: Record<Seat, { name: string; emoji: string; pieceImage: string; glow: string; ring: string; text: string }> = {
+  p1: {
+    name: "흑마",
+    emoji: "🐴",
+    pieceImage: "/images/mal-dallija/black-horse.jpg",
+    glow: "shadow-[0_0_18px_4px_rgba(244,63,94,0.55)]",
+    ring: "border-rose-400",
+    text: "text-rose-300",
+  },
+  p2: {
+    name: "백마",
+    emoji: "🐎",
+    pieceImage: "/images/mal-dallija/white-horse.jpg",
+    glow: "shadow-[0_0_18px_4px_rgba(34,211,238,0.55)]",
+    ring: "border-cyan-300",
+    text: "text-cyan-200",
+  },
 };
 
 function cellKey(row: number, col: number) {
@@ -197,12 +229,18 @@ export default function MalDalliJaBoard({
           {occupant && (
             <span
               key={`${occupant.seat}-${occupant.horseIndex}-${row}-${col}`}
-              className={`absolute inset-[12%] grid place-items-center rounded-full border-2 bg-black/70 text-xs sm:text-sm ${SEAT_THEME[occupant.seat].ring} ${
+              className={`absolute inset-[10%] overflow-hidden rounded-lg border-2 bg-[#f5f0e6] shadow-[0_3px_8px_-1px_rgba(0,0,0,0.65)] transition ${SEAT_THEME[occupant.seat].ring} ${
                 isSelected ? `${SEAT_THEME[occupant.seat].glow} scale-110` : ""
               }`}
               style={{ animation: "maldallija-horse-land 0.35s ease-out" }}
             >
-              {SEAT_THEME[occupant.seat].emoji}
+              <Image
+                src={SEAT_THEME[occupant.seat].pieceImage}
+                alt={`${SEAT_THEME[occupant.seat].name} 말`}
+                width={64}
+                height={64}
+                className="h-full w-full object-contain p-[8%]"
+              />
             </span>
           )}
         </button>,
