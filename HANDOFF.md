@@ -22,7 +22,7 @@ _최종 갱신: 2026-08-19 (**페루도 — 보드 트랙 시퀀스(선형 전�
 
 **결론**: 페루도 비딩이 이제 공식 룰북 수량/눈금 공식이 아니라 사용자가 지정한 고정 37칸 트랙의 순전한 순방향 진행으로 동작 — `engine.ts` 모듈 최상단 doc과 이 트랙 섹션 doc에 이 결정이 2026-08-17 세션의 "공식 룰북 그대로" 방향과 배치되는 명시적 하우스 룰임을 남겨, 다음 세션이 "버그"로 오인해 되돌리지 않도록 표시해뒀다.
 
-**배포**: 커밋(`refactor(perudo): apply new linear board track sequence and prevent backwards bidding`) → `git push origin main` → `npx vercel deploy --prod` 예정(§ 아래 배포 로그 참고).
+**배포**: 커밋 `bd0d618 refactor(perudo): apply new linear board track sequence and prevent backwards bidding` → `git push origin main` 완료(기존 컨벤션대로 main 직접 커밋) → `npx vercel deploy`(프리뷰, 빌드 중 TypeScript 전체 재검사 포함 정상 완주) — `https://board-game-gt4rt68e8-me-3871.vercel.app`. 사용자가 "production"을 명시하지 않아 과거 세션들과 동일 기준으로 프리뷰까지만 진행하고 prod 승격은 보류 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-19 — 언어의 조각 힌트 노출 글자 수 검증
 
