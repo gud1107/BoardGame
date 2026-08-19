@@ -27,27 +27,27 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">선언 올리기</h3>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">선언 올리기 — 보드 트랙</h3>
+          <p className="mb-2 text-xs text-white/60">
+            2026-08-19 개편: 이제 모든 선언은 보드 위에 그려진 <span className="text-amber-300">고정된 한 줄짜리 트랙</span>(1 →
+            [페루도1] → 2 → 3 → [페루도2] → 4 → ... → [페루도10] → 20, 총 37칸)의 한 칸에 대응합니다. 다음 선언은{" "}
+            <span className="text-amber-300">반드시 지금 선언이 놓인 칸보다 트랙 상 더 뒤에 있는 칸</span>이어야 하며, 같거나
+            이전 칸으로는 절대 되돌아갈 수 없습니다(역행 차단). 숫자 라벨 자체는 커졌다 작아지는 구간이 있지만, 유효성은 오직{" "}
+            <span className="text-amber-300">트랙 상의 위치</span>로만 판정됩니다 — 예: 트랙이 &quot;...6 → 7 → 4 → [페루도4]...&quot;
+            순서라면, 7 다음에 숫자만 보면 더 작아 보이는 4라도 트랙 상 아직 지나지 않은 뒤 칸이므로 유효한 선언입니다.
+          </p>
           <div className="mt-1 grid gap-2 sm:grid-cols-2">
             <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
-              <p className="mb-1 font-medium text-white/90">일반(2~6) → 일반(2~6)</p>
-              <p className="text-xs text-white/60">개수를 올리거나(숫자는 자유), 개수를 유지한 채 숫자만 더 높게.</p>
+              <p className="mb-1 font-medium text-white/90">일반 숫자 칸(2~6 눈금)</p>
+              <p className="text-xs text-white/60">칸에 적힌 개수로, 2~6 중 원하는 눈금을 자유롭게 선택해 선언합니다.</p>
             </div>
             <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
               <p className="mb-1 flex items-center gap-1 font-medium text-white/90">
-                일반 → 페루도 <PerudoFaceIcon className="h-3.5 w-3.5 text-red-400" />
+                <PerudoFaceIcon className="h-3.5 w-3.5 text-red-400" /> [페루도 N] 칸
               </p>
-              <p className="text-xs text-white/60">필요 개수를 절반으로 (소수점 올림). 예: 5개 → 페루도 3개↑</p>
-            </div>
-            <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
-              <p className="mb-1 flex items-center gap-1 font-medium text-white/90">
-                페루도 <PerudoFaceIcon className="h-3.5 w-3.5 text-red-400" /> → 일반
+              <p className="text-xs text-white/60">
+                페루도(눈금 1)는 오직 트랙에 표시된 [페루도 N] 칸으로만 선언할 수 있습니다 — 자유롭게 개수를 고를 수 없습니다.
               </p>
-              <p className="text-xs text-white/60">필요 개수는 (페루도 개수 × 2) + 1. 예: 페루도 3개 → 숫자 7개↑</p>
-            </div>
-            <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
-              <p className="mb-1 font-medium text-white/90">페루도 → 페루도</p>
-              <p className="text-xs text-white/60">숫자는 그대로, 개수만 더 높게 올릴 수 있습니다.</p>
             </div>
           </div>
         </section>

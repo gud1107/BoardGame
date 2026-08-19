@@ -5,11 +5,12 @@ import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
 import PerudoFaceIcon from "./PerudoFaceIcon";
 import {
+  BOARD_TRACK_SEQUENCE,
   computeRankings,
-  MAX_PLAYERS,
-  minValidQuantityForFace,
   STARTING_DICE,
   totalDiceInPlay,
+  trackIndexForBid,
+  type BoardTrackNode,
   type EngineAction,
   type Face,
   type PerudoState,
@@ -226,205 +227,152 @@ function BettingDie({ face, interactive, onClick }: { face: Face; interactive: b
 }
 
 // ---------------------------------------------------------------------------
-// Bid track — a perimeter loop of clickable quantity cells wrapping the
-// central play area, echoing the physical board's numbered outer track (see
-// boardGameRule/Perudo.md's box photo). TRACK_LENGTH = MAX_PLAYERS *
-// STARTING_DICE, the highest a bid quantity could ever meaningfully reach
-// (every die that could ever be in play at once). The grid dimensions are
-// *derived* from that length (not hand-solved magic numbers) so the track
-// never silently mismatches again if MAX_PLAYERS/STARTING_DICE change —
-// exactly the kind of drift that bit the earlier hardcoded 9x8/30 version
-// the moment MAX_PLAYERS grew from 6 to 8.
+// Bid track — 2026-08-19 board track redesign (see engine.ts's matching
+// module doc note): a FIXED 37-cell path, `BOARD_TRACK_SEQUENCE`, walked in a
+// strict boustrophedon ("snake") layout — left-to-right on even rows,
+// right-to-left on odd — rather than the old hollow perimeter loop. A snake
+// layout (unlike a rectangular border, which only tiles cleanly for an
+// *even* cell count) works for any track length, and this one is fixed at 37
+// regardless of table size now — MAX_PLAYERS/STARTING_DICE no longer factor
+// into it at all, since every table now walks the exact same custom
+// sequence. Every bid maps to exactly one cell's `index` (`Bid.trackIndex`);
+// the only legal next bid is a cell with a strictly greater index than the
+// one currently occupied (`isValidBid`/`validateRaise` in engine.ts), so this
+// component never needs its own "is this a valid raise" logic beyond that
+// one index comparison.
 // ---------------------------------------------------------------------------
-const TRACK_LENGTH = MAX_PLAYERS * STARTING_DICE;
+const TRACK_COLS = 8;
+const TRACK_ROWS = Math.ceil(BOARD_TRACK_SEQUENCE.length / TRACK_COLS);
 
-/**
- * A rectangular grid's border cell count is `2*cols + 2*rows - 4`, so
- * `cols + rows = length/2 + 2`. Splits that sum as evenly as possible for a
- * roughly square/landscape track. `length` must be even (border counts
- * always are) — true for every MAX_PLAYERS this project has ever shipped
- * (MAX_PLAYERS * STARTING_DICE with STARTING_DICE=5 is even iff MAX_PLAYERS
- * is even, which it has always been).
- */
-function computeTrackDimensions(length: number): { cols: number; rows: number } {
-  if (length % 2 !== 0 || length < 8) {
-    throw new Error(`Perudo bid track length must be an even number >= 8, got ${length}`);
-  }
-  const sum = length / 2 + 2;
-  const rows = Math.floor(sum / 2);
-  const cols = sum - rows;
-  return { cols, rows };
-}
-const { cols: TRACK_COLS, rows: TRACK_ROWS } = computeTrackDimensions(TRACK_LENGTH);
-
-interface TrackCell {
-  quantity: number;
-  col: number;
-  row: number;
-}
-
-function buildTrackCells(): TrackCell[] {
-  const cells: TrackCell[] = [];
-  let q = 1;
-  for (let col = 1; col <= TRACK_COLS; col++) cells.push({ quantity: q++, col, row: 1 }); // top, left->right
-  for (let row = 2; row <= TRACK_ROWS; row++) cells.push({ quantity: q++, col: TRACK_COLS, row }); // right, top->bottom
-  for (let col = TRACK_COLS - 1; col >= 1; col--) cells.push({ quantity: q++, col, row: TRACK_ROWS }); // bottom, right->left
-  for (let row = TRACK_ROWS - 1; row >= 2; row--) cells.push({ quantity: q++, col: 1, row }); // left, bottom->top
-  return cells;
-}
-const TRACK_CELLS: TrackCell[] = buildTrackCells();
-if (TRACK_CELLS.length !== TRACK_LENGTH) {
-  // Backstop only — computeTrackDimensions derives TRACK_COLS/TRACK_ROWS
-  // from TRACK_LENGTH by construction, so this should never actually trip.
-  throw new Error(`Perudo bid track expected ${TRACK_LENGTH} cells, got ${TRACK_CELLS.length}`);
+/** Snake/boustrophedon grid position for track cell `index` — row 0 flows left->right, row 1 right->left, etc., so the printed path visually zig-zags like a classic board-game track instead of needing a (now impossible, since 37 is odd) hollow rectangle border. */
+function snakeGridPosition(index: number): { col: number; row: number } {
+  const row = Math.floor(index / TRACK_COLS);
+  const posInRow = index % TRACK_COLS;
+  const col = row % 2 === 0 ? posInRow : TRACK_COLS - 1 - posInRow;
+  return { col: col + 1, row: row + 1 }; // CSS grid lines are 1-indexed
 }
 
 /**
- * Board-piece betting surface: the purple `BettingDie` sits on whichever
- * cell matches `dieQuantity` (the live bid — draft while it's the viewer's
- * turn, committed otherwise). Track cells only ever *move that die*
- * (`onCellClick`), they no longer raise directly — the actual bid is only
- * submitted once the caller's "베팅 확정" button fires. Cells below the
- * legal minimum for the draft face (rulebook §3, via `minValidQuantityForFace`,
- * passed in as `minQty`) render disabled, which is what makes "이전 베팅보다
- *낮은 칸으로 이동 불가" a hard UI constraint rather than just a validation
- * check. `floorQuantity` — the actual committed bid's quantity — gets its own
- * dim marker so the boundary the draft can't cross backward stays visible
- * even while the purple die itself has already moved further up the track.
- * The interior of the loop hosts the rest of the round UI via `children`.
+ * The perimeter-loop track's replacement: a single snake grid of all 37
+ * `BOARD_TRACK_SEQUENCE` cells. `currentTrackIndex` is the live committed
+ * bid's cell (-1 before anyone has bid this round) — every cell at or before
+ * it is permanently disabled (feature request §3: "이전이거나 동일한 칸은
+ * 선택 불가"), regardless of whose turn it is or what quantity/face is
+ * printed on it, since the only rule left is "strictly later cell".
+ * `pendingTrackIndex` is the *viewer's own, not-yet-confirmed* draft pick —
+ * only meaningful while it's their turn — rendered with the purple
+ * `BettingDie` piece; `currentTrackIndex`'s own cell always additionally
+ * carries its own amber marker so the boundary the draft can't cross back
+ * over stays visible even once the purple die has moved further ahead. Every
+ * "perudo" cell (feature request §2: 페루도 전용 칸 제약) gets its own
+ * rose-tinted styling + the crest icon so it reads as a distinct checkpoint
+ * from the plain numbered cells around it.
  */
 function BidTrack({
   isMyTurn,
-  minQty,
-  floorQuantity,
-  dieQuantity,
-  dieFace,
+  currentTrackIndex,
+  pendingTrackIndex,
+  pendingFace,
   dieInteractive,
   onCellClick,
   onDieClick,
   children,
 }: {
   isMyTurn: boolean;
-  minQty: number | null;
-  floorQuantity: number | null;
-  dieQuantity: number | null;
-  dieFace: Face | null;
+  currentTrackIndex: number;
+  pendingTrackIndex: number | null;
+  pendingFace: Face | null;
   dieInteractive: boolean;
-  onCellClick: (quantity: number) => void;
+  onCellClick: (node: BoardTrackNode) => void;
   onDieClick: () => void;
   children: ReactNode;
 }) {
-  // The draft can outgrow the physical track in rare extreme-endgame paco
-  // jumps (rulebook's "paco -> normal: quantity >= prev*2+1" formula can
-  // exceed TRACK_LENGTH once a paco bid itself got large) — pin the die
-  // visual to the last cell in that case rather than making it vanish; the
-  // confirm button below still shows/submits the real, larger number.
-  const dieCell = dieQuantity !== null ? TRACK_CELLS.find((c) => c.quantity === Math.min(dieQuantity, TRACK_LENGTH)) : undefined;
+  const dieCell = pendingTrackIndex !== null ? BOARD_TRACK_SEQUENCE[pendingTrackIndex] : undefined;
   return (
     // Outer "stone bezel" frame, echoing the physical mat's grey-stone
     // border around the wood tile track.
     <div className="relative rounded-[1.5rem] border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1.5 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-2">
       <div
-        className="relative mx-auto grid w-full max-w-xl gap-[3px]"
+        className="relative mx-auto grid w-full max-w-2xl gap-[3px]"
         style={{
           gridTemplateColumns: `repeat(${TRACK_COLS}, 1fr)`,
-          gridTemplateRows: `repeat(${TRACK_ROWS}, minmax(1.85rem, 1fr))`,
-          aspectRatio: `${TRACK_COLS} / ${TRACK_ROWS}`,
+          gridTemplateRows: `repeat(${TRACK_ROWS}, minmax(2.1rem, 1fr))`,
         }}
       >
         {/* The real physical board photo (boardGameRule/페루도/변경후이미지.jpg,
             copied into the app at public/assets/games/perudo/board.jpg) —
-            this is now the actual in-game board surface, not a low-opacity
-            texture: shown at full color/opacity, `object-fit: contain`-style
-            (backgroundSize: "contain") so the whole photo letterboxes inside
-            the track area without cropping or distortion. It sits at the
-            bottom of this stacking context (z-0); every cell button and the
-            interior plaque above render with a translucent (not opaque)
-            background so the photo reads through underneath them instead of
-            being hidden behind solid tiles.
-            One deliberate limitation: this computed grid's cell count varies
-            with table size (TRACK_LENGTH = MAX_PLAYERS * STARTING_DICE, see
-            above), while the photographed board has one fixed 40-cell
-            printed layout — so the clickable cells are only an *approximate*
-            visual match to the photo's own printed numbers, not a literal
-            pixel-for-pixel overlay. That's unavoidable for any player count
-            other than the one the physical board happened to be printed
-            for; `object-fit: contain` at least keeps the whole photo
-            visible and undistorted so it still reads as "the real board"
-            rather than a stretched crop. */}
+            kept as a dimmed backdrop texture behind the new custom snake
+            track (the photo's own printed 40-cell layout no longer matches
+            this game's cell count or path shape at all now that the track is
+            a fixed custom sequence rather than a perimeter loop derived from
+            table size, so it reads as atmospheric texture, not a literal
+            overlay target anymore). */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 z-0 rounded-[1rem]"
           style={{
             backgroundImage: "url(/assets/games/perudo/board.jpg)",
-            backgroundSize: "contain",
+            backgroundSize: "cover",
             backgroundPosition: "center",
             backgroundRepeat: "no-repeat",
+            opacity: 0.25,
           }}
         />
-        {TRACK_CELLS.map((cell) => {
-          const enabled = isMyTurn && minQty !== null && cell.quantity >= minQty;
-          const isFloorCell = floorQuantity === cell.quantity;
-          const isStart = cell.quantity === 1;
-          // Every 4th wood tile gets a faint carved sun-mask watermark,
-          // echoing the board mat's alternating number/medallion tiles
-          // without sacrificing any of the 1..TRACK_LENGTH clickable range.
-          const showMedallion = cell.quantity % 4 === 0;
+        {BOARD_TRACK_SEQUENCE.map((node) => {
+          const { col, row } = snakeGridPosition(node.index);
+          const enabled = isMyTurn && node.index > currentTrackIndex;
+          const isCurrentCell = currentTrackIndex === node.index;
+          const isPerudoCell = node.kind === "perudo";
           return (
             <button
-              key={cell.quantity}
+              key={node.index}
               type="button"
               disabled={!enabled}
-              onClick={() => onCellClick(cell.quantity)}
-              style={{ gridColumn: `${cell.col}`, gridRow: `${cell.row}` }}
-              className={`relative z-10 flex items-center justify-center overflow-hidden rounded-[4px] border-2 text-[10px] font-bold [text-shadow:0_1px_2px_rgba(0,0,0,0.8)] transition sm:text-xs ${
-                isFloorCell
+              onClick={() => onCellClick(node)}
+              style={{ gridColumn: `${col}`, gridRow: `${row}` }}
+              className={`relative z-10 flex flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[4px] border-2 text-[10px] leading-none font-bold [text-shadow:0_1px_2px_rgba(0,0,0,0.8)] transition sm:text-xs ${
+                isCurrentCell
                   ? "border-amber-200 bg-gradient-to-b from-amber-300/85 to-amber-500/85 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.5)]"
                   : enabled
-                    ? "cursor-pointer border-amber-950/70 bg-gradient-to-b from-amber-700/55 to-amber-900/55 text-amber-100 hover:from-amber-600/70 hover:to-amber-800/70"
+                    ? isPerudoCell
+                      ? "cursor-pointer border-rose-800/70 bg-gradient-to-b from-rose-700/55 to-rose-900/55 text-rose-100 hover:from-rose-600/70 hover:to-rose-800/70"
+                      : "cursor-pointer border-amber-950/70 bg-gradient-to-b from-amber-700/55 to-amber-900/55 text-amber-100 hover:from-amber-600/70 hover:to-amber-800/70"
                     : "cursor-not-allowed border-black/40 bg-gradient-to-b from-neutral-900/55 to-neutral-950/55 text-white/40"
               }`}
               title={
                 !isMyTurn
                   ? "지금은 당신의 차례가 아니에요"
                   : enabled
-                    ? `보라색 베팅 주사위를 여기(${cell.quantity}개)로 옮기기`
-                    : "이전 베팅보다 낮은 칸으로는 옮길 수 없어요"
+                    ? `${isPerudoCell ? `[페루도 ${node.quantity}]` : `${node.quantity}`} 칸으로 베팅 이동`
+                    : "현재 베팅 칸과 같거나 이전인 칸으로는 이동할 수 없어요 (역행 불가)"
               }
             >
-              {showMedallion && <PerudoFaceIcon className="pointer-events-none absolute inset-0 m-auto h-2/3 w-2/3 text-black/25" />}
-              <span className="relative z-10">{cell.quantity}</span>
-              {isStart && <span className="absolute -top-0.5 -right-0.5 text-[8px] leading-none">🎲</span>}
+              {isPerudoCell && <PerudoFaceIcon className="pointer-events-none h-3 w-3 sm:h-3.5 sm:w-3.5" />}
+              <span className="relative z-10">{node.quantity}</span>
+              {node.index === 0 && <span className="absolute -top-0.5 -right-0.5 text-[8px] leading-none">🎲</span>}
             </button>
           );
         })}
         {/* The purple betting die itself — shares its cell's grid slot so it
-            sits precisely on top of the track tile it represents, scaled up
-            a touch to read as a piece resting *on* the board rather than
-            just another tile. */}
-        {dieCell && dieFace !== null && (
+            sits precisely on top of the track tile it represents, marking
+            exactly where the viewer's (or, once committed, the whole
+            table's) bid currently sits on the track. */}
+        {dieCell && pendingFace !== null && (
           <div
-            style={{ gridColumn: `${dieCell.col}`, gridRow: `${dieCell.row}` }}
+            style={{ gridColumn: `${snakeGridPosition(dieCell.index).col}`, gridRow: `${snakeGridPosition(dieCell.index).row}` }}
             className="relative z-20 flex items-center justify-center"
           >
             <div className="scale-125">
-              <BettingDie face={dieFace} interactive={dieInteractive} onClick={onDieClick} />
+              <BettingDie face={pendingFace} interactive={dieInteractive} onClick={onDieClick} />
             </div>
           </div>
         )}
-        {/* Interior plaque — translucent (not opaque) now that the real
-            board photo sits right underneath it (see the photo layer
-            above): a light frosted wash + backdrop-blur keeps the live bid
-            text and betting controls fully legible while still letting the
-            photo's own printed center art softly show through, so this
-            reads as "content resting on the real board" rather than a flat
-            card pasted over it. */}
-        <div
-          style={{ gridColumn: `2 / ${TRACK_COLS}`, gridRow: `2 / ${TRACK_ROWS}` }}
-          className="relative z-10 flex flex-col items-center justify-center gap-2 rounded-[1.25rem] border-4 border-amber-800 bg-amber-100/75 p-2 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)] backdrop-blur-sm"
-        >
-          {children}
-        </div>
+      </div>
+      {/* Info/controls plaque — now rendered below the track (a snake path
+          has no natural hollow center to nest it inside, unlike the old
+          perimeter loop) rather than overlaid on top of it. */}
+      <div className="relative z-10 mt-2 flex flex-col items-center justify-center gap-2 rounded-[1.25rem] border-4 border-amber-800 bg-amber-100/90 p-2 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)]">
+        {children}
       </div>
     </div>
   );
@@ -486,29 +434,53 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
   // opening bid/raise) using a render-time "adjust state when a prop
   // changes" pattern (same idea as `syncedBidKey` just below it uses on
   // itself), rather than an effect that would flash a stale draft for a
-  // frame. While it's my turn the purple die
-  // on the track shows this draft (movable/spinnable); the rest of the time
-  // it shows the actual committed `state.currentBid` position instead, so
-  // every seat always sees exactly where the bid currently sits.
+  // frame. 2026-08-19 board track redesign: the draft is now just one
+  // `pendingTrackIndex` into `BOARD_TRACK_SEQUENCE` (quantity/kind read
+  // straight off that cell) plus a remembered `pendingNormalFace` (2-6) for
+  // whichever specific non-joker face to bid once landed on a "normal" cell
+  // — the track itself never distinguishes faces 2-6 from each other, only
+  // joker vs. non-joker (see engine.ts's `trackIndexForBid` doc). While it's
+  // my turn the purple die on the track shows this draft (movable/
+  // spinnable); the rest of the time it shows the actual committed
+  // `state.currentBid` position instead, so every seat always sees exactly
+  // where the bid currently sits.
   // -------------------------------------------------------------------------
-  const bidKey = `${state.roundNumber}:${state.currentBid ? `${state.currentBid.seat}-${state.currentBid.quantity}-${state.currentBid.face}` : "none"}`;
+  const currentTrackIndex = state.currentBid?.trackIndex ?? -1;
+  const bidKey = `${state.roundNumber}:${state.currentBid ? `${state.currentBid.seat}-${state.currentBid.trackIndex}` : "none"}`;
   const [syncedBidKey, setSyncedBidKey] = useState<string | null>(null);
-  const [pendingFace, setPendingFace] = useState<Face>(2);
-  const [pendingQuantity, setPendingQuantity] = useState<number>(1);
+  const [pendingTrackIndex, setPendingTrackIndex] = useState<number>(0);
+  const [pendingNormalFace, setPendingNormalFace] = useState<Face>(2);
   if (syncedBidKey !== bidKey) {
     setSyncedBidKey(bidKey);
-    const initFace: Face = state.currentBid?.face ?? 2;
-    const initMinQty = minValidQuantityForFace(state.currentBid, initFace) ?? (state.currentBid ? state.currentBid.quantity + 1 : 1);
-    setPendingFace(initFace);
-    setPendingQuantity(initMinQty);
+    // Default draft: the very next cell on the track — always strictly
+    // ahead of `currentTrackIndex`, except once the track itself is
+    // exhausted (currentTrackIndex already the last cell), where it just
+    // pins to that same last cell and `canConfirmBet` below goes false.
+    setPendingTrackIndex(Math.min(currentTrackIndex + 1, BOARD_TRACK_SEQUENCE.length - 1));
   }
+  const pendingNode = BOARD_TRACK_SEQUENCE[pendingTrackIndex];
+  const pendingQuantity = pendingNode.quantity;
+  const pendingFace: Face = pendingNode.kind === "perudo" ? 1 : pendingNormalFace;
 
-  /** Move the draft face, clamping the draft quantity back up to whatever the new face's minimum legal raise is (rulebook §3 formulas, via `minValidQuantityForFace`) — the draft can never end up sitting on an illegal cell after a face change. */
+  /**
+   * Move the draft to the nearest still-legal (strictly-ahead) cell matching
+   * `face` — 1 always means the nearest "perudo" cell ahead (preferring one
+   * that keeps the current draft quantity, if such a cell still exists
+   * ahead), 2-6 means the nearest "normal" cell ahead. No-op if no such cell
+   * remains ahead of `currentTrackIndex` at all (board track exhausted for
+   * that kind).
+   */
   function pickFace(face: Face) {
-    const newMinQty = minValidQuantityForFace(state.currentBid, face);
-    if (newMinQty === null) return;
-    setPendingFace(face);
-    setPendingQuantity((prev) => Math.max(prev, newMinQty));
+    if (face === 1) {
+      const sameQty = trackIndexForBid(currentTrackIndex, pendingQuantity, 1);
+      const nextIdx = sameQty ?? BOARD_TRACK_SEQUENCE.findIndex((n) => n.index > currentTrackIndex && n.kind === "perudo");
+      if (nextIdx !== null && nextIdx !== -1) setPendingTrackIndex(nextIdx);
+      return;
+    }
+    setPendingNormalFace(face);
+    const sameQty = trackIndexForBid(currentTrackIndex, pendingQuantity, face);
+    const nextIdx = sameQty ?? BOARD_TRACK_SEQUENCE.findIndex((n) => n.index > currentTrackIndex && n.kind === "normal");
+    if (nextIdx !== null && nextIdx !== -1) setPendingTrackIndex(nextIdx);
   }
 
   /** Clicking the purple die itself cycles to the next face — the "touch the die directly" interaction requested alongside the FacePicker controller. */
@@ -518,16 +490,13 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
     pickFace(order[(startIdx + 1) % order.length]);
   }
 
-  const dieMinQty = isMyTurn ? minValidQuantityForFace(state.currentBid, pendingFace) : null;
-  const dieQuantity = isMyTurn ? pendingQuantity : (state.currentBid?.quantity ?? null);
-  const dieFace: Face | null = isMyTurn ? pendingFace : (state.currentBid?.face ?? null);
-  // No `<= TRACK_LENGTH` upper bound here (see `BidTrack`'s doc comment on
-  // `dieCell`): now that "맞아!" no longer caps a seat's dice count (module
-  // engine.ts doc, 2026-08-17), a long game's total dice pool can genuinely
-  // exceed the track's 40 printed cells, and a legally-required minimum bid
-  // can exceed it too — the confirm button must still work in that case
-  // (the purple die visual just pins to the last cell, per that doc comment).
-  const canConfirmBet = isMyTurn && iAmAlive && dieMinQty !== null && pendingQuantity >= dieMinQty;
+  /** A board-track cell was clicked directly — moves the draft to exactly that cell (the one the viewer can see and clicked), never re-derived from quantity alone (duplicate-labelled cells like the two "4"s would otherwise be ambiguous — see engine.ts's module doc). */
+  function selectCell(node: BoardTrackNode) {
+    if (node.index <= currentTrackIndex) return; // guarded again here even though the UI also disables it
+    setPendingTrackIndex(node.index);
+  }
+
+  const canConfirmBet = isMyTurn && iAmAlive && pendingTrackIndex > currentTrackIndex;
 
   // Roll sound cue: `DiceRollTray`'s `onRollStart`/`onSettled` callbacks
   // (wired up below, "My dice" section) fire the rattle/thud SFX beat timed
@@ -715,12 +684,11 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
         </div>
         <BidTrack
           isMyTurn={isMyTurn}
-          minQty={dieMinQty}
-          floorQuantity={state.currentBid?.quantity ?? null}
-          dieQuantity={dieQuantity}
-          dieFace={dieFace}
+          currentTrackIndex={currentTrackIndex}
+          pendingTrackIndex={isMyTurn ? pendingTrackIndex : (state.currentBid?.trackIndex ?? null)}
+          pendingFace={isMyTurn ? pendingFace : (state.currentBid?.face ?? null)}
           dieInteractive={isMyTurn && iAmAlive}
-          onCellClick={(quantity) => setPendingQuantity(quantity)}
+          onCellClick={selectCell}
           onDieClick={cycleFace}
         >
           {state.currentBid ? (
