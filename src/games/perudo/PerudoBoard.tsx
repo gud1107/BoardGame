@@ -51,16 +51,16 @@ function randomSeed(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
 
-// A warm, woven fabric mat — echoes the physical board's own photo
-// (boardGameRule/페루도/변경후이미지.jpg, loaded for real as
-// public/assets/games/perudo/board.jpg — see `BidTrack`'s own photo layer,
-// which is now the actual in-game board surface, not just decorative
-// texture). The base panel is a deep terracotta/umber gradient (cloth, not
+// A warm, woven fabric mat — a deep terracotta/umber gradient (cloth, not
 // cold grey stone like the earlier version) and `TableTexture` below layers
 // a woven crosshatch + Andean-stripe trim bands on top of it, standing in
-// for the textile mat the real board sits on. The warm gold/jungle palette
-// from the board photo lives inside — see BidTrack's wood-tile cells and
-// translucent interior plaque below.
+// for the textile mat the real board sits on. 2026-08-20: the board photo
+// (boardGameRule/페루도/변경후이미지.jpg, public/assets/games/perudo/board.jpg)
+// that used to sit dimmed behind `BidTrack` as a backdrop texture was removed
+// on user request (readability + "clean solid/theme background" ask) — the
+// warm gold/jungle palette it inspired still lives on in BidTrack's own
+// wood-tile cell gradients and translucent interior plaque, just without the
+// literal photo layer underneath.
 const TABLE_PANEL =
   "relative overflow-hidden rounded-3xl border border-black/60 bg-gradient-to-b from-[#2a1c14] via-[#1d130d] to-[#0d0805] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
 
@@ -210,6 +210,19 @@ function FacePicker({ selected, onSelect }: { selected: Face; onSelect: (face: F
  *
  * Unrelated to any one player — stays the fixed purple colorway, never a
  * per-seat player colorway.
+ *
+ * 2026-08-20 visibility pass: the die used to render at one fixed pixel size
+ * ("sm", 24px) regardless of the cell it sat in — small on the tight
+ * interior cells, but noticeably *tiny and lost* on the roomier corner cells
+ * (24px in a 44px corner). It now fills a fixed 80% of whichever cell it's
+ * actually placed in (via the `<span>` sized in %, resolved against this
+ * button's own `h-full w-full` box — see the call site's doc comment for why
+ * both wrapper layers need an explicit size for that % chain to resolve at
+ * all), so it both scales up automatically wherever there's room *and* can
+ * never spill past its own cell's border — user-confirmed direction: enlarge
+ * the marker, but strictly within its cell, never overlapping a neighbor.
+ * `size` is passed through to `PerudoDie` only as its base-pixel fallback;
+ * the actual rendered size always comes from the 100%-of-80% style chain.
  */
 function BettingDie({
   face,
@@ -228,10 +241,18 @@ function BettingDie({
       disabled={!interactive}
       onClick={onClick}
       title={interactive ? "클릭해서 베팅 눈금 바꾸기" : "현재 선언된 베팅 위치"}
-      className={`relative inline-flex transition ${interactive ? "cursor-pointer hover:scale-110 active:scale-95" : "cursor-default"}`}
+      className={`relative flex h-full w-full items-center justify-center ${interactive ? "cursor-pointer" : "cursor-default"}`}
     >
-      <PerudoDie value={face} size={size} colorway={BETTING_COLORWAY} />
-      {interactive && <span className="pointer-events-none absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[9px] leading-none">✋</span>}
+      <span className="relative inline-flex" style={{ width: "80%", height: "80%" }}>
+        <PerudoDie
+          value={face}
+          size={size}
+          colorway={BETTING_COLORWAY}
+          className={`transition ${interactive ? "hover:scale-110 active:scale-95" : ""}`}
+          style={{ width: "100%", height: "100%" }}
+        />
+        {interactive && <span className="pointer-events-none absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[9px] leading-none">✋</span>}
+      </span>
     </button>
   );
 }
@@ -257,8 +278,11 @@ function BettingDie({
 // bottom has 11 — a real asymmetry in the user-confirmed sequence, not a
 // layout bug), so this can't be one uniform CSS grid the way a Monopoly-style
 // rectangle would be; instead each side is its own independently-divided
-// flex strip (own cell count, evenly dividing that side's available length)
-// that only lines up with its neighbors at the four shared corner cells.
+// strip (own cell count, evenly dividing that side's available length) that
+// only lines up with its neighbors at the four shared corner cells. Top/
+// bottom are each their own small CSS grid of `minmax(0,1fr)` tracks (see
+// `interiorRow` in `BidTrack`, 2026-08-20); left/right stay flex columns,
+// since a column's height was never the thing overflowing the viewport.
 // ---------------------------------------------------------------------------
 const TOP_INTERIOR = [1, 2, 3, 4, 5, 6, 7, 8];
 const RIGHT_INTERIOR = [10, 11, 12, 13, 14, 15, 16];
@@ -272,7 +296,7 @@ const CORNER_BL = 29;
 /** One track cell (corner or interior) — shared rendering for every side so the enable/disable + current/perudo styling logic lives in exactly one place. */
 function TrackCellButton({
   node,
-  corner,
+  fixedWidth,
   isMyTurn,
   currentTrackIndex,
   pendingTrackIndex,
@@ -282,7 +306,8 @@ function TrackCellButton({
   onDieClick,
 }: {
   node: BoardTrackNode;
-  corner?: boolean;
+  /** True for the 4 corner cells AND the left/right side columns — cells that sit in a fixed-width flex column rather than one of the flexible `minmax(0,1fr)` top/bottom rows, and so need their own explicit (viewport-clamped) width instead of stretching to fill a grid track. See the sizing comment below. */
+  fixedWidth?: boolean;
   isMyTurn: boolean;
   currentTrackIndex: number;
   pendingTrackIndex: number | null;
@@ -296,12 +321,50 @@ function TrackCellButton({
   const isPerudoCell = node.kind === "perudo";
   const showDie = pendingTrackIndex === node.index && pendingFace !== null;
   return (
-    <button
-      type="button"
-      disabled={!enabled}
-      onClick={() => onCellClick(node)}
-      className={`relative z-10 flex shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[4px] border-2 text-[10px] leading-none font-bold [text-shadow:0_1px_2px_rgba(0,0,0,0.8)] transition sm:text-xs ${
-        corner ? "aspect-square w-9 sm:w-11" : "aspect-square min-w-[1.7rem] flex-1 sm:min-w-[2.1rem]"
+    // A `<div role="button">`, not a real `<button>` — while the pending
+    // draft sits on this exact cell (`showDie`), it needs to host
+    // `BettingDie`'s own, separately-clickable `<button>` on top of it (cell
+    // click moves the draft to this quantity; die click cycles the face —
+    // two different actions on two different targets). Nesting a real
+    // `<button>` inside a `<button>` is invalid HTML and was already
+    // triggering a React hydration warning before this pass touched
+    // anything (spotted during this session's required browser
+    // verification, see HANDOFF.md) — `role="button"` + manual
+    // tabIndex/keydown restores the same semantics/keyboard operability
+    // without the nesting violation.
+    <div
+      role="button"
+      tabIndex={enabled ? 0 : -1}
+      aria-disabled={!enabled}
+      onClick={() => {
+        if (enabled) onCellClick(node);
+      }}
+      onKeyDown={(e) => {
+        if (!enabled) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onCellClick(node);
+        }
+      }}
+      // Sizing (2026-08-20 responsive redesign, replacing the fixed
+      // `min-w-[1.7rem]`/`min-w-[34rem]`-floor approach that forced a
+      // horizontal scrollbar on any viewport narrower than ~34rem — the
+      // right side's quantity-7~11 column would then sit past the visible
+      // edge until a viewer discovered they had to scroll, read by the user
+      // as the track getting "clipped"/pushed off-screen). `fixedWidth`
+      // cells (corners + the left/right side columns) use a `clamp()` width
+      // that scales with the viewport between a legible floor and the old
+      // fixed size as a ceiling. Interior top/bottom cells instead take NO
+      // width of their own at all — their side's wrapper is now a CSS grid
+      // of `minmax(0,1fr)` tracks (see `BidTrack`), so the 8- or 11-cell row
+      // always divides exactly however much width its parent actually has,
+      // with zero risk of forcing the row (and everything after it) wider
+      // than the viewport. `min-w-0` strips this button's own implicit
+      // content-based minimum (the classic grid/flex-item "min-width: auto"
+      // trap — without it, the quantity digits' own intrinsic width could
+      // still force the track wider despite the `minmax(0, ...)` template).
+      className={`relative z-10 flex min-w-0 shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[4px] border-2 text-[9px] leading-none font-bold [text-shadow:0_1px_2px_rgba(0,0,0,0.8)] transition sm:text-xs ${
+        fixedWidth ? "aspect-square w-[clamp(1.6rem,8vw,2.75rem)]" : "aspect-square w-full"
       } ${
         isCurrentCell
           ? "border-amber-200 bg-gradient-to-b from-amber-300/85 to-amber-500/85 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.5)]"
@@ -323,18 +386,19 @@ function TrackCellButton({
       <span className="relative z-10">{node.quantity}</span>
       {node.index === 0 && <span className="absolute -top-0.5 -right-0.5 text-[8px] leading-none">🎲</span>}
       {showDie && (
-        // Sized "sm" (not the old snake-grid's "md" @ scale-125) so the
-        // marker fits inside a single cell without visually bleeding into
-        // its neighbors — the rectangle's interior cells (esp. the crowded
-        // 11-cell south side) are noticeably smaller than the old uniform
-        // snake grid's cells.
+        // 2026-08-20: `BettingDie` now sizes itself as a percentage of
+        // whatever this cell actually renders at (see its own doc comment)
+        // rather than a fixed pixel size — so both wrapper divs need an
+        // explicit `h-full w-full` all the way down for that percentage
+        // chain to resolve against the real cell box, not an auto-sized
+        // shrink-to-fit ancestor.
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
-          <div className="pointer-events-auto">
+          <div className="pointer-events-auto h-full w-full">
             <BettingDie face={pendingFace!} interactive={dieInteractive} onClick={onDieClick} size="sm" />
           </div>
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -392,11 +456,11 @@ function BidTrack({
   onDieClick: () => void;
   centerContent: ReactNode;
 }) {
-  const cell = (index: number, corner = false) => (
+  const cell = (index: number, fixedWidth = false) => (
     <TrackCellButton
       key={index}
       node={BOARD_TRACK_SEQUENCE[index]}
-      corner={corner}
+      fixedWidth={fixedWidth}
       isMyTurn={isMyTurn}
       currentTrackIndex={currentTrackIndex}
       pendingTrackIndex={pendingTrackIndex}
@@ -406,60 +470,61 @@ function BidTrack({
       onDieClick={onDieClick}
     />
   );
+  // Top/bottom interior rows (2026-08-20 responsive redesign): a CSS grid of
+  // `minmax(0, 1fr)` tracks, not a flexbox — a `flex-1` row can still be
+  // forced wider than its parent by its children's summed `min-width`
+  // floors (that's exactly what the old fixed `min-w-[1.7rem]` cells did),
+  // but a `minmax(0, 1fr)` grid track has no such floor: the row always
+  // divides however much width its parent actually has, full stop. This is
+  // what makes the whole rectangle immune to overflowing the viewport (see
+  // this component's own doc comment) — the crowded 11-cell south side is
+  // exactly where that used to bite hardest.
+  const interiorRow = (indices: number[]) => (
+    <div className="relative grid gap-[2px] sm:gap-[3px]" style={{ gridTemplateColumns: `repeat(${indices.length}, minmax(0, 1fr))` }}>
+      {indices.map((i) => cell(i))}
+    </div>
+  );
   return (
     // Outer "stone bezel" frame, echoing the physical mat's grey-stone
-    // border around the wood tile track. `min-w-[34rem]` is the floor the
-    // 11-cell south side needs to stay legible at each cell's own
-    // `min-w-[1.7rem]` (see `TrackCellButton`) — below that width, the
-    // parent's `overflow-x-auto` (see call site) takes over instead of the
-    // cells shrinking further.
-    <div className="relative min-w-[34rem] rounded-[1.5rem] border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1.5 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-2">
-      {/* The real physical board photo (boardGameRule/페루도/변경후이미지.jpg,
-          copied into the app at public/assets/games/perudo/board.jpg) — kept
-          as a dimmed backdrop texture behind the whole rectangle (feature
-          request: keep the photo, just dimmed — not replaced by flat CSS). */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-0 rounded-[1rem]"
-        style={{
-          backgroundImage: "url(/assets/games/perudo/board.jpg)",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
-          opacity: 0.25,
-        }}
-      />
+    // border around the wood tile track. Just `w-full` now (2026-08-20) —
+    // no more fixed `min-w-[34rem]` floor forcing a scrollbar on narrower
+    // viewports (see `interiorRow`'s doc comment just above and
+    // `TrackCellButton`'s own doc comment for the full mechanism). The
+    // physical board photo that used to sit dimmed behind this whole
+    // rectangle was also removed here per user request (2026-08-20 UI pass —
+    // "배경 이미지 제거") in favor of the plain gradient bezel below.
+    <div className="relative w-full rounded-[1.5rem] border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1.5 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-2">
       <div
         className="relative z-10 grid gap-[3px]"
         style={{ gridTemplateColumns: "auto 1fr auto", gridTemplateRows: "auto minmax(6rem, 1fr) auto" }}
       >
         <div className="relative">{cell(CORNER_TL, true)}</div>
-        <div className="relative flex gap-[3px]">
-          {TOP_INTERIOR.map((i) => cell(i))}
+        <div className="relative">
+          {interiorRow(TOP_INTERIOR)}
           <DirectionArrow side="top" />
         </div>
         <div className="relative">{cell(CORNER_TR, true)}</div>
 
-        <div className="relative flex w-9 flex-col gap-[3px] sm:w-11">
-          {[...LEFT_INTERIOR].reverse().map((i) => cell(i))}
+        <div className="relative flex flex-col gap-[2px] sm:gap-[3px]">
+          {[...LEFT_INTERIOR].reverse().map((i) => cell(i, true))}
           <DirectionArrow side="left" />
         </div>
         <div className="relative z-10 flex min-h-0 flex-col items-center justify-center gap-2 overflow-y-auto rounded-[1rem] border-2 border-dashed border-amber-800/40 bg-black/25 p-2">
           {centerContent}
         </div>
-        <div className="relative flex w-9 flex-col gap-[3px] sm:w-11">
-          {RIGHT_INTERIOR.map((i) => cell(i))}
+        <div className="relative flex flex-col gap-[2px] sm:gap-[3px]">
+          {RIGHT_INTERIOR.map((i) => cell(i, true))}
           <DirectionArrow side="right" />
         </div>
 
         <div className="relative">{cell(CORNER_BL, true)}</div>
-        <div className="relative flex gap-[3px]">
+        <div className="relative">
           {/* Bottom side walks 코너BR(17)→...→코너BL(29) — i.e. index 18 (right
               after BR) sits nearest the RIGHT edge and 28 (right before BL)
               sits nearest the LEFT edge, so the ascending index array is
-              reversed before rendering in normal (non-reversed) flex-row
-              order, same technique as the LEFT strip below. */}
-          {[...BOTTOM_INTERIOR].reverse().map((i) => cell(i))}
+              reversed before rendering in normal (non-reversed) row order,
+              same technique as the LEFT strip above. */}
+          {interiorRow([...BOTTOM_INTERIOR].reverse())}
           <DirectionArrow side="bottom" />
         </div>
         <div className="relative">{cell(CORNER_BR, true)}</div>
@@ -776,13 +841,19 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
             bid-declaration controls that used to nest inside the track now
             render as their own card right below it instead. The south side
             alone needs 11 cells (vs. the north side's 8 — see `BidTrack`'s
-            own doc comment on the confirmed side-length asymmetry), so on
-            narrow phones those cells would otherwise get crushed past
-            legibility; wrapping in `overflow-x-auto` with the track's own
-            `min-w-[34rem]` floor (set on `BidTrack`'s outer frame) lets the
-            whole rectangle scroll horizontally instead of squashing digits
-            (feature request §3: "숫자가 깨지거나 찌그러지지 않도록"). */}
-        <div className="overflow-x-auto pb-1">
+            own doc comment on the confirmed side-length asymmetry). 2026-08-20:
+            this used to be wrapped in `overflow-x-auto` alongside a fixed
+            `min-w-[34rem]` floor on `BidTrack`'s outer frame, so the south
+            row's cells never got crushed past legibility — but that also
+            meant the whole rectangle (right side's quantity-7~11 column
+            included) sat past the visible viewport edge, requiring a
+            horizontal scroll a lot of players never discovered, which read
+            as the track getting clipped/cut off. `BidTrack`'s cells are now
+            responsive instead (see its own doc comment) — no scroll
+            container needed, and `overflow: visible` (the default here)
+            keeps the direction-arrow badges that intentionally poke slightly
+            outside the frame from getting clipped either. */}
+        <div className="pb-1">
           <BidTrack
             isMyTurn={isMyTurn}
             currentTrackIndex={currentTrackIndex}
