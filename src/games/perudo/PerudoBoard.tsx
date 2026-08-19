@@ -211,7 +211,17 @@ function FacePicker({ selected, onSelect }: { selected: Face; onSelect: (face: F
  * Unrelated to any one player — stays the fixed purple colorway, never a
  * per-seat player colorway.
  */
-function BettingDie({ face, interactive, onClick }: { face: Face; interactive: boolean; onClick?: () => void }) {
+function BettingDie({
+  face,
+  interactive,
+  onClick,
+  size = "md",
+}: {
+  face: Face;
+  interactive: boolean;
+  onClick?: () => void;
+  size?: DieSize;
+}) {
   return (
     <button
       type="button"
@@ -220,53 +230,148 @@ function BettingDie({ face, interactive, onClick }: { face: Face; interactive: b
       title={interactive ? "클릭해서 베팅 눈금 바꾸기" : "현재 선언된 베팅 위치"}
       className={`relative inline-flex transition ${interactive ? "cursor-pointer hover:scale-110 active:scale-95" : "cursor-default"}`}
     >
-      <PerudoDie value={face} size="md" colorway={BETTING_COLORWAY} />
+      <PerudoDie value={face} size={size} colorway={BETTING_COLORWAY} />
       {interactive && <span className="pointer-events-none absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[9px] leading-none">✋</span>}
     </button>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Bid track — 2026-08-19 board track redesign (see engine.ts's matching
-// module doc note): a FIXED 37-cell path, `BOARD_TRACK_SEQUENCE`, walked in a
-// strict boustrophedon ("snake") layout — left-to-right on even rows,
-// right-to-left on odd — rather than the old hollow perimeter loop. A snake
-// layout (unlike a rectangular border, which only tiles cleanly for an
-// *even* cell count) works for any track length, and this one is fixed at 37
-// regardless of table size now — MAX_PLAYERS/STARTING_DICE no longer factor
-// into it at all, since every table now walks the exact same custom
-// sequence. Every bid maps to exactly one cell's `index` (`Bid.trackIndex`);
-// the only legal next bid is a cell with a strictly greater index than the
-// one currently occupied (`isValidBid`/`validateRaise` in engine.ts), so this
-// component never needs its own "is this a valid raise" logic beyond that
-// one index comparison.
+// Bid track — 2026-08-19 rectangular 4-side redesign (this same session,
+// replacing the earlier snake grid from *earlier today*). The 37-cell
+// `BOARD_TRACK_SEQUENCE` data itself is completely unchanged (user
+// confirmed: "그 칸 데이터/로직은 유지한 채 배치 모양만 사각형으로") — only
+// how those 37 cells are laid out visually changed, from a boustrophedon
+// zig-zag to a hollow rectangle border echoing the physical board photo
+// (boardGameRule/페루도/변경후이미지.jpg). The sequence splits into four
+// sides sharing exactly one cell at each of the four corners (user-verified
+// 1:1 against the existing array, index-for-index — see PR/commit message):
+//   - 북(top,    →): index  0 (코너, quantity 1)  ~ index  9 (코너, quantity 7)
+//   - 동(right,  ↓): index  9 (코너, quantity 7)  ~ index 17 (코너, quantity 11)
+//   - 남(bottom, ←): index 17 (코너, quantity 11) ~ index 29 (코너, quantity 17)
+//   - 서(left,   ↑): index 29 (코너, quantity 17) ~ index 36, wrapping back to
+//     index 0's corner cell to close the loop
+// Each corner index renders as exactly ONE shared cell (feature request:
+// "모서리는 1칸으로 처리" — never duplicated between its two adjacent sides).
+// Opposite sides don't have equal cell counts (top has 8 interior cells,
+// bottom has 11 — a real asymmetry in the user-confirmed sequence, not a
+// layout bug), so this can't be one uniform CSS grid the way a Monopoly-style
+// rectangle would be; instead each side is its own independently-divided
+// flex strip (own cell count, evenly dividing that side's available length)
+// that only lines up with its neighbors at the four shared corner cells.
 // ---------------------------------------------------------------------------
-const TRACK_COLS = 8;
-const TRACK_ROWS = Math.ceil(BOARD_TRACK_SEQUENCE.length / TRACK_COLS);
+const TOP_INTERIOR = [1, 2, 3, 4, 5, 6, 7, 8];
+const RIGHT_INTERIOR = [10, 11, 12, 13, 14, 15, 16];
+const BOTTOM_INTERIOR = [18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28];
+const LEFT_INTERIOR = [30, 31, 32, 33, 34, 35, 36];
+const CORNER_TL = 0;
+const CORNER_TR = 9;
+const CORNER_BR = 17;
+const CORNER_BL = 29;
 
-/** Snake/boustrophedon grid position for track cell `index` — row 0 flows left->right, row 1 right->left, etc., so the printed path visually zig-zags like a classic board-game track instead of needing a (now impossible, since 37 is odd) hollow rectangle border. */
-function snakeGridPosition(index: number): { col: number; row: number } {
-  const row = Math.floor(index / TRACK_COLS);
-  const posInRow = index % TRACK_COLS;
-  const col = row % 2 === 0 ? posInRow : TRACK_COLS - 1 - posInRow;
-  return { col: col + 1, row: row + 1 }; // CSS grid lines are 1-indexed
+/** One track cell (corner or interior) — shared rendering for every side so the enable/disable + current/perudo styling logic lives in exactly one place. */
+function TrackCellButton({
+  node,
+  corner,
+  isMyTurn,
+  currentTrackIndex,
+  pendingTrackIndex,
+  pendingFace,
+  dieInteractive,
+  onCellClick,
+  onDieClick,
+}: {
+  node: BoardTrackNode;
+  corner?: boolean;
+  isMyTurn: boolean;
+  currentTrackIndex: number;
+  pendingTrackIndex: number | null;
+  pendingFace: Face | null;
+  dieInteractive: boolean;
+  onCellClick: (node: BoardTrackNode) => void;
+  onDieClick: () => void;
+}) {
+  const enabled = isMyTurn && node.index > currentTrackIndex;
+  const isCurrentCell = currentTrackIndex === node.index;
+  const isPerudoCell = node.kind === "perudo";
+  const showDie = pendingTrackIndex === node.index && pendingFace !== null;
+  return (
+    <button
+      type="button"
+      disabled={!enabled}
+      onClick={() => onCellClick(node)}
+      className={`relative z-10 flex shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[4px] border-2 text-[10px] leading-none font-bold [text-shadow:0_1px_2px_rgba(0,0,0,0.8)] transition sm:text-xs ${
+        corner ? "aspect-square w-9 sm:w-11" : "aspect-square min-w-[1.7rem] flex-1 sm:min-w-[2.1rem]"
+      } ${
+        isCurrentCell
+          ? "border-amber-200 bg-gradient-to-b from-amber-300/85 to-amber-500/85 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.5)]"
+          : enabled
+            ? isPerudoCell
+              ? "cursor-pointer border-rose-800/70 bg-gradient-to-b from-rose-700/55 to-rose-900/55 text-rose-100 hover:from-rose-600/70 hover:to-rose-800/70"
+              : "cursor-pointer border-amber-950/70 bg-gradient-to-b from-amber-700/55 to-amber-900/55 text-amber-100 hover:from-amber-600/70 hover:to-amber-800/70"
+            : "cursor-not-allowed border-black/40 bg-gradient-to-b from-neutral-900/55 to-neutral-950/55 text-white/40"
+      }`}
+      title={
+        !isMyTurn
+          ? "지금은 당신의 차례가 아니에요"
+          : enabled
+            ? `${isPerudoCell ? `[페루도 ${node.quantity}]` : `${node.quantity}`} 칸으로 베팅 이동`
+            : "현재 베팅 칸과 같거나 이전인 칸으로는 이동할 수 없어요 (역행 불가)"
+      }
+    >
+      {isPerudoCell && <PerudoFaceIcon className="pointer-events-none h-3 w-3 sm:h-3.5 sm:w-3.5" />}
+      <span className="relative z-10">{node.quantity}</span>
+      {node.index === 0 && <span className="absolute -top-0.5 -right-0.5 text-[8px] leading-none">🎲</span>}
+      {showDie && (
+        // Sized "sm" (not the old snake-grid's "md" @ scale-125) so the
+        // marker fits inside a single cell without visually bleeding into
+        // its neighbors — the rectangle's interior cells (esp. the crowded
+        // 11-cell south side) are noticeably smaller than the old uniform
+        // snake grid's cells.
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+          <div className="pointer-events-auto">
+            <BettingDie face={pendingFace!} interactive={dieInteractive} onClick={onDieClick} size="sm" />
+          </div>
+        </div>
+      )}
+    </button>
+  );
+}
+
+/** Small non-interactive arrow badge marking a side's bidding direction (feature request: "진행방향에 대한 화살표 표시") — floats just outside the frame at that side's midpoint, purely decorative/orientational, never intercepts clicks on the cells beneath it. */
+function DirectionArrow({ side }: { side: "top" | "right" | "bottom" | "left" }) {
+  const glyph = { top: "→", right: "↓", bottom: "←", left: "↑" }[side];
+  const position = {
+    top: "-top-2.5 left-1/2 -translate-x-1/2",
+    right: "top-1/2 -right-2.5 -translate-y-1/2",
+    bottom: "-bottom-2.5 left-1/2 -translate-x-1/2",
+    left: "top-1/2 -left-2.5 -translate-y-1/2",
+  }[side];
+  return (
+    <span
+      aria-hidden="true"
+      className={`pointer-events-none absolute ${position} z-30 flex h-5 w-5 items-center justify-center rounded-full border border-amber-300/50 bg-neutral-900 text-[11px] font-bold text-amber-200 shadow-[0_0_0_2px_rgba(0,0,0,0.6)]`}
+    >
+      {glyph}
+    </span>
+  );
 }
 
 /**
- * The perimeter-loop track's replacement: a single snake grid of all 37
- * `BOARD_TRACK_SEQUENCE` cells. `currentTrackIndex` is the live committed
- * bid's cell (-1 before anyone has bid this round) — every cell at or before
- * it is permanently disabled (feature request §3: "이전이거나 동일한 칸은
- * 선택 불가"), regardless of whose turn it is or what quantity/face is
- * printed on it, since the only rule left is "strictly later cell".
- * `pendingTrackIndex` is the *viewer's own, not-yet-confirmed* draft pick —
- * only meaningful while it's their turn — rendered with the purple
- * `BettingDie` piece; `currentTrackIndex`'s own cell always additionally
- * carries its own amber marker so the boundary the draft can't cross back
- * over stays visible even once the purple die has moved further ahead. Every
- * "perudo" cell (feature request §2: 페루도 전용 칸 제약) gets its own
- * rose-tinted styling + the crest icon so it reads as a distinct checkpoint
- * from the plain numbered cells around it.
+ * The perimeter rectangle track (2026-08-19 redesign, replacing this same
+ * session's earlier snake grid): a hollow 4-side border built from
+ * `BOARD_TRACK_SEQUENCE`'s existing 37 cells (unchanged data — see the
+ * module doc above), around a `centerContent` slot now dedicated to the dice
+ * graveyard (feature request: "무덤 전용 + 조작 UI 바깥 이동" — the
+ * bid-declaration controls that used to live in this component's center
+ * plaque now render as their own card below the whole track, in
+ * `PerudoBoard`). `currentTrackIndex`/`pendingTrackIndex`/`pendingFace` and
+ * the enable/disable + purple-die-marker semantics are all unchanged from
+ * the snake version, just re-laid-out — the purple die now renders as an
+ * overlay inside whichever single cell it belongs to (via
+ * `TrackCellButton`'s own `showDie` check) instead of a separately
+ * grid-coordinate-positioned sibling, since cells are no longer all siblings
+ * on one shared grid.
  */
 function BidTrack({
   isMyTurn,
@@ -276,7 +381,7 @@ function BidTrack({
   dieInteractive,
   onCellClick,
   onDieClick,
-  children,
+  centerContent,
 }: {
   isMyTurn: boolean;
   currentTrackIndex: number;
@@ -285,94 +390,79 @@ function BidTrack({
   dieInteractive: boolean;
   onCellClick: (node: BoardTrackNode) => void;
   onDieClick: () => void;
-  children: ReactNode;
+  centerContent: ReactNode;
 }) {
-  const dieCell = pendingTrackIndex !== null ? BOARD_TRACK_SEQUENCE[pendingTrackIndex] : undefined;
+  const cell = (index: number, corner = false) => (
+    <TrackCellButton
+      key={index}
+      node={BOARD_TRACK_SEQUENCE[index]}
+      corner={corner}
+      isMyTurn={isMyTurn}
+      currentTrackIndex={currentTrackIndex}
+      pendingTrackIndex={pendingTrackIndex}
+      pendingFace={pendingFace}
+      dieInteractive={dieInteractive}
+      onCellClick={onCellClick}
+      onDieClick={onDieClick}
+    />
+  );
   return (
     // Outer "stone bezel" frame, echoing the physical mat's grey-stone
-    // border around the wood tile track.
-    <div className="relative rounded-[1.5rem] border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1.5 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-2">
+    // border around the wood tile track. `min-w-[34rem]` is the floor the
+    // 11-cell south side needs to stay legible at each cell's own
+    // `min-w-[1.7rem]` (see `TrackCellButton`) — below that width, the
+    // parent's `overflow-x-auto` (see call site) takes over instead of the
+    // cells shrinking further.
+    <div className="relative min-w-[34rem] rounded-[1.5rem] border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1.5 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-2">
+      {/* The real physical board photo (boardGameRule/페루도/변경후이미지.jpg,
+          copied into the app at public/assets/games/perudo/board.jpg) — kept
+          as a dimmed backdrop texture behind the whole rectangle (feature
+          request: keep the photo, just dimmed — not replaced by flat CSS). */}
       <div
-        className="relative mx-auto grid w-full max-w-2xl gap-[3px]"
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-0 rounded-[1rem]"
         style={{
-          gridTemplateColumns: `repeat(${TRACK_COLS}, 1fr)`,
-          gridTemplateRows: `repeat(${TRACK_ROWS}, minmax(2.1rem, 1fr))`,
+          backgroundImage: "url(/assets/games/perudo/board.jpg)",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          opacity: 0.25,
         }}
+      />
+      <div
+        className="relative z-10 grid gap-[3px]"
+        style={{ gridTemplateColumns: "auto 1fr auto", gridTemplateRows: "auto minmax(6rem, 1fr) auto" }}
       >
-        {/* The real physical board photo (boardGameRule/페루도/변경후이미지.jpg,
-            copied into the app at public/assets/games/perudo/board.jpg) —
-            kept as a dimmed backdrop texture behind the new custom snake
-            track (the photo's own printed 40-cell layout no longer matches
-            this game's cell count or path shape at all now that the track is
-            a fixed custom sequence rather than a perimeter loop derived from
-            table size, so it reads as atmospheric texture, not a literal
-            overlay target anymore). */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-0 rounded-[1rem]"
-          style={{
-            backgroundImage: "url(/assets/games/perudo/board.jpg)",
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            backgroundRepeat: "no-repeat",
-            opacity: 0.25,
-          }}
-        />
-        {BOARD_TRACK_SEQUENCE.map((node) => {
-          const { col, row } = snakeGridPosition(node.index);
-          const enabled = isMyTurn && node.index > currentTrackIndex;
-          const isCurrentCell = currentTrackIndex === node.index;
-          const isPerudoCell = node.kind === "perudo";
-          return (
-            <button
-              key={node.index}
-              type="button"
-              disabled={!enabled}
-              onClick={() => onCellClick(node)}
-              style={{ gridColumn: `${col}`, gridRow: `${row}` }}
-              className={`relative z-10 flex flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[4px] border-2 text-[10px] leading-none font-bold [text-shadow:0_1px_2px_rgba(0,0,0,0.8)] transition sm:text-xs ${
-                isCurrentCell
-                  ? "border-amber-200 bg-gradient-to-b from-amber-300/85 to-amber-500/85 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.5)]"
-                  : enabled
-                    ? isPerudoCell
-                      ? "cursor-pointer border-rose-800/70 bg-gradient-to-b from-rose-700/55 to-rose-900/55 text-rose-100 hover:from-rose-600/70 hover:to-rose-800/70"
-                      : "cursor-pointer border-amber-950/70 bg-gradient-to-b from-amber-700/55 to-amber-900/55 text-amber-100 hover:from-amber-600/70 hover:to-amber-800/70"
-                    : "cursor-not-allowed border-black/40 bg-gradient-to-b from-neutral-900/55 to-neutral-950/55 text-white/40"
-              }`}
-              title={
-                !isMyTurn
-                  ? "지금은 당신의 차례가 아니에요"
-                  : enabled
-                    ? `${isPerudoCell ? `[페루도 ${node.quantity}]` : `${node.quantity}`} 칸으로 베팅 이동`
-                    : "현재 베팅 칸과 같거나 이전인 칸으로는 이동할 수 없어요 (역행 불가)"
-              }
-            >
-              {isPerudoCell && <PerudoFaceIcon className="pointer-events-none h-3 w-3 sm:h-3.5 sm:w-3.5" />}
-              <span className="relative z-10">{node.quantity}</span>
-              {node.index === 0 && <span className="absolute -top-0.5 -right-0.5 text-[8px] leading-none">🎲</span>}
-            </button>
-          );
-        })}
-        {/* The purple betting die itself — shares its cell's grid slot so it
-            sits precisely on top of the track tile it represents, marking
-            exactly where the viewer's (or, once committed, the whole
-            table's) bid currently sits on the track. */}
-        {dieCell && pendingFace !== null && (
-          <div
-            style={{ gridColumn: `${snakeGridPosition(dieCell.index).col}`, gridRow: `${snakeGridPosition(dieCell.index).row}` }}
-            className="relative z-20 flex items-center justify-center"
-          >
-            <div className="scale-125">
-              <BettingDie face={pendingFace} interactive={dieInteractive} onClick={onDieClick} />
-            </div>
-          </div>
-        )}
-      </div>
-      {/* Info/controls plaque — now rendered below the track (a snake path
-          has no natural hollow center to nest it inside, unlike the old
-          perimeter loop) rather than overlaid on top of it. */}
-      <div className="relative z-10 mt-2 flex flex-col items-center justify-center gap-2 rounded-[1.25rem] border-4 border-amber-800 bg-amber-100/90 p-2 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)]">
-        {children}
+        <div className="relative">{cell(CORNER_TL, true)}</div>
+        <div className="relative flex gap-[3px]">
+          {TOP_INTERIOR.map((i) => cell(i))}
+          <DirectionArrow side="top" />
+        </div>
+        <div className="relative">{cell(CORNER_TR, true)}</div>
+
+        <div className="relative flex w-9 flex-col gap-[3px] sm:w-11">
+          {[...LEFT_INTERIOR].reverse().map((i) => cell(i))}
+          <DirectionArrow side="left" />
+        </div>
+        <div className="relative z-10 flex min-h-0 flex-col items-center justify-center gap-2 overflow-y-auto rounded-[1rem] border-2 border-dashed border-amber-800/40 bg-black/25 p-2">
+          {centerContent}
+        </div>
+        <div className="relative flex w-9 flex-col gap-[3px] sm:w-11">
+          {RIGHT_INTERIOR.map((i) => cell(i))}
+          <DirectionArrow side="right" />
+        </div>
+
+        <div className="relative">{cell(CORNER_BL, true)}</div>
+        <div className="relative flex gap-[3px]">
+          {/* Bottom side walks 코너BR(17)→...→코너BL(29) — i.e. index 18 (right
+              after BR) sits nearest the RIGHT edge and 28 (right before BL)
+              sits nearest the LEFT edge, so the ascending index array is
+              reversed before rendering in normal (non-reversed) flex-row
+              order, same technique as the LEFT strip below. */}
+          {[...BOTTOM_INTERIOR].reverse().map((i) => cell(i))}
+          <DirectionArrow side="bottom" />
+        </div>
+        <div className="relative">{cell(CORNER_BR, true)}</div>
       </div>
     </div>
   );
@@ -659,7 +749,6 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
     <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
       <TableTexture />
       <TotalDiceBanner state={state} />
-      <LostDiceTray state={state} viewerSeat={viewerSeat} myColorway={myColorway} />
 
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-rose-100/60">
         <span className="flex items-center gap-1.5">
@@ -682,65 +771,84 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
             🎯 배팅 구역 · BID TRACK
           </span>
         </div>
-        <BidTrack
-          isMyTurn={isMyTurn}
-          currentTrackIndex={currentTrackIndex}
-          pendingTrackIndex={isMyTurn ? pendingTrackIndex : (state.currentBid?.trackIndex ?? null)}
-          pendingFace={isMyTurn ? pendingFace : (state.currentBid?.face ?? null)}
-          dieInteractive={isMyTurn && iAmAlive}
-          onCellClick={selectCell}
-          onDieClick={cycleFace}
-        >
-          {state.currentBid ? (
-            <div className="flex flex-col items-center gap-0.5 text-center">
-              <span className="text-[10px] text-amber-900/70">{names[state.currentBid.seat]}님의 선언</span>
-              <span className="text-2xl font-black text-red-900 drop-shadow-[0_1px_0_rgba(255,255,255,0.4)] sm:text-3xl">
-                {faceLabel(state.currentBid.face)} × {state.currentBid.quantity}개↑
-              </span>
-            </div>
-          ) : (
-            <p className="px-2 text-center text-xs text-amber-900/70">
-              {names[state.activeSeat]}님이 이번 라운드를 엽니다 — 첫 선언 대기 중
+        {/* Rectangle track's hollow center is now dedicated to the dice
+            graveyard (feature request: "무덤 전용 + 조작 UI 바깥 이동") — the
+            bid-declaration controls that used to nest inside the track now
+            render as their own card right below it instead. The south side
+            alone needs 11 cells (vs. the north side's 8 — see `BidTrack`'s
+            own doc comment on the confirmed side-length asymmetry), so on
+            narrow phones those cells would otherwise get crushed past
+            legibility; wrapping in `overflow-x-auto` with the track's own
+            `min-w-[34rem]` floor (set on `BidTrack`'s outer frame) lets the
+            whole rectangle scroll horizontally instead of squashing digits
+            (feature request §3: "숫자가 깨지거나 찌그러지지 않도록"). */}
+        <div className="overflow-x-auto pb-1">
+          <BidTrack
+            isMyTurn={isMyTurn}
+            currentTrackIndex={currentTrackIndex}
+            pendingTrackIndex={isMyTurn ? pendingTrackIndex : (state.currentBid?.trackIndex ?? null)}
+            pendingFace={isMyTurn ? pendingFace : (state.currentBid?.face ?? null)}
+            dieInteractive={isMyTurn && iAmAlive}
+            onCellClick={selectCell}
+            onDieClick={cycleFace}
+            centerContent={<LostDiceTray state={state} viewerSeat={viewerSeat} myColorway={myColorway} />}
+          />
+        </div>
+      </div>
+
+      {/* Bid-declaration controls — moved out from the track's center (see
+          `BidTrack`'s `centerContent` above) into their own card directly
+          beneath the whole rectangle. */}
+      <div className="relative z-10 flex flex-col items-center justify-center gap-2 rounded-[1.25rem] border-4 border-amber-800 bg-amber-100/90 p-2 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)]">
+        {state.currentBid ? (
+          <div className="flex flex-col items-center gap-0.5 text-center">
+            <span className="text-[10px] text-amber-900/70">{names[state.currentBid.seat]}님의 선언</span>
+            <span className="text-2xl font-black text-red-900 drop-shadow-[0_1px_0_rgba(255,255,255,0.4)] sm:text-3xl">
+              {faceLabel(state.currentBid.face)} × {state.currentBid.quantity}개↑
+            </span>
+          </div>
+        ) : (
+          <p className="px-2 text-center text-xs text-amber-900/70">
+            {names[state.activeSeat]}님이 이번 라운드를 엽니다 — 첫 선언 대기 중
+          </p>
+        )}
+
+        {isMyTurn && iAmAlive && (
+          <div className="flex flex-col items-center gap-1.5 rounded-xl border border-violet-900/25 bg-violet-950/5 px-2.5 py-2">
+            <p className="text-center text-[10px] font-semibold text-violet-900/70">
+              🟣 보라색 주사위를 클릭해 눈금 변경, 트랙 칸을 클릭해 개수 이동
             </p>
-          )}
+            <FacePicker selected={pendingFace} onSelect={pickFace} />
+            <button
+              type="button"
+              disabled={!canConfirmBet}
+              onClick={() => onAction({ type: "raise", seat: viewerSeat, quantity: pendingQuantity, face: pendingFace })}
+              className="rounded-full bg-violet-700 px-4 py-1.5 text-xs font-semibold text-white shadow-[0_0_0_2px_rgba(168,85,247,0.3)] transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 disabled:shadow-none"
+            >
+              ✅ {faceLabel(pendingFace)} × {pendingQuantity}개로 베팅 확정
+            </button>
+          </div>
+        )}
 
-          {isMyTurn && iAmAlive && (
-            <div className="flex flex-col items-center gap-1.5 rounded-xl border border-violet-900/25 bg-violet-950/5 px-2.5 py-2">
-              <p className="text-center text-[10px] font-semibold text-violet-900/70">
-                🟣 보라색 주사위를 클릭해 눈금 변경, 트랙 칸을 클릭해 개수 이동
-              </p>
-              <FacePicker selected={pendingFace} onSelect={pickFace} />
-              <button
-                type="button"
-                disabled={!canConfirmBet}
-                onClick={() => onAction({ type: "raise", seat: viewerSeat, quantity: pendingQuantity, face: pendingFace })}
-                className="rounded-full bg-violet-700 px-4 py-1.5 text-xs font-semibold text-white shadow-[0_0_0_2px_rgba(168,85,247,0.3)] transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 disabled:shadow-none"
-              >
-                ✅ {faceLabel(pendingFace)} × {pendingQuantity}개로 베팅 확정
-              </button>
-            </div>
-          )}
-
-          {iAmAlive && (
-            <div className="flex gap-2">
-              <button
-                disabled={!isMyTurn || !state.currentBid}
-                onClick={() => onAction({ type: "dudo", seat: viewerSeat })}
-                className="rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
-              >
-                🚨 페루도!
-              </button>
-              <button
-                disabled={!state.currentBid}
-                onClick={() => onAction({ type: "calza", seat: viewerSeat })}
-                title="차례와 상관없이 외칠 수 있어요"
-                className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
-              >
-                🎯 맞아!
-              </button>
-            </div>
-          )}
-        </BidTrack>
+        {iAmAlive && (
+          <div className="flex gap-2">
+            <button
+              disabled={!isMyTurn || !state.currentBid}
+              onClick={() => onAction({ type: "dudo", seat: viewerSeat })}
+              className="rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
+            >
+              🚨 페루도!
+            </button>
+            <button
+              disabled={!state.currentBid}
+              onClick={() => onAction({ type: "calza", seat: viewerSeat })}
+              title="차례와 상관없이 외칠 수 있어요"
+              className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
+            >
+              🎯 맞아!
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Stats dashboard — right below the 페루도!/맞아! action buttons above. */}
