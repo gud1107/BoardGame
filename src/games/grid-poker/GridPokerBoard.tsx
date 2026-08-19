@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
 import DealerReveal from "./DealerReveal";
 import { CardChip } from "./cardDisplay";
 import { useCountdown } from "./useCountdown";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { detectNewlyCompletedLines, HandRankFloatingBadge, type LineCompleteEvent } from "./GridPokerEffects";
 import {
   BOARD_SIZE,
   LINES,
@@ -70,16 +71,21 @@ const CELL_DIMS = {
  * (see engine.ts's trust-trade-off note); this is purely a rendering choice
  * to *not* show it.
  */
+/** Which completed-line sweep (if any) a cell should play right now — `eventId` keys the sweep span so an overlapping second completion on the same cell (rare: a corner/center cell shared by two lines finished by the same placement) still remounts and restarts the animation instead of silently no-opping. */
+type CellGlow = { delayMs: number; eventId: number };
+
 function Cell({
   card,
   hiddenOccupied = false,
   highlight,
+  glow = null,
   onClick,
   size = "main",
 }: {
   card: Card | null;
   hiddenOccupied?: boolean;
   highlight?: boolean;
+  glow?: CellGlow | null;
   onClick?: () => void;
   size?: "main" | "mini";
 }) {
@@ -108,8 +114,27 @@ function Cell({
     );
   }
   return (
-    <span className={`inline-block rounded-md ${highlight ? "ring-2 ring-amber-400/80" : ""}`}>
-      <CardChip card={card} size={size === "main" ? "md" : "sm"} dim={false} />
+    <span className={`relative inline-block rounded-md ${highlight ? "ring-2 ring-amber-400/80" : ""}`}>
+      {/* Keyed by card.id: a cell only ever transitions null -> Card once, so
+          this remounts (replaying the mount-only gp-card-place/gp-cell-pulse
+          keyframes — see globals.css) exactly on that placement, never again
+          on later unrelated re-renders. */}
+      <span key={card.id} className="block animate-[gp-card-place_0.42s_cubic-bezier(0.34,1.56,0.64,1)_both]">
+        <CardChip card={card} size={size === "main" ? "md" : "sm"} dim={false} />
+      </span>
+      <span
+        key={`${card.id}-pulse`}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-md animate-[gp-cell-pulse_0.6s_ease-out_forwards]"
+      />
+      {glow && (
+        <span
+          key={glow.eventId}
+          aria-hidden
+          className="pointer-events-none absolute -inset-1 rounded-lg animate-[gp-line-glow_0.9s_ease-out_forwards]"
+          style={{ animationDelay: `${glow.delayMs}ms` }}
+        />
+      )}
     </span>
   );
 }
@@ -164,6 +189,45 @@ export default function GridPokerBoard({
   const filledCells = viewer.board.filter((c) => c !== null).length;
   const myTurnToPlace = state.phase === "placing" && state.currentCard !== null && !state.placedThisRound[viewerSeat];
   const mySubmission = state.submissions[viewerSeat];
+
+  // Line-completion flourish (see GridPokerEffects.tsx's module doc) —
+  // `viewer.board`'s array reference only ever changes when *this* seat's
+  // own `place()` actually mutates it (engine.ts's reducer leaves every
+  // other player's `board` reference untouched on any other action), so
+  // comparing it against the last-seen reference is exactly "did I just
+  // place a card" with no extra bookkeeping. Detection + state update happen
+  // directly during render (not inside a useEffect) — same "compare then
+  // conditionally setState while rendering" pattern this project already
+  // uses for its other diff-driven flourishes (see e.g. coup/CoupBoard.tsx).
+  const [trackedBoard, setTrackedBoard] = useState(viewer.board);
+  const [lineEvents, setLineEvents] = useState<LineCompleteEvent[]>([]);
+  const lineEventIdRef = useRef(0);
+  if (trackedBoard !== viewer.board) {
+    const newlyCompleted = detectNewlyCompletedLines(trackedBoard, viewer.board);
+    setTrackedBoard(viewer.board);
+    if (newlyCompleted.length > 0) {
+      const board = viewer.board;
+      setLineEvents((events) => [
+        ...events,
+        ...newlyCompleted.map((lineIndex) => ({
+          id: ++lineEventIdRef.current,
+          lineIndex,
+          hand: evaluateHand(LINES[lineIndex].map((cellIndex) => board[cellIndex]!)),
+        })),
+      ]);
+    }
+  }
+  // Which cell (if any) should play the gold sweep right now, and with how
+  // much delay along its line (so the sweep visibly travels across the 5
+  // cells instead of all popping at once) — derived fresh each render from
+  // `lineEvents`, not stored separately, so it always matches exactly the
+  // still-active events below.
+  const glowByCell = new Map<number, { delayMs: number; eventId: number }>();
+  for (const event of lineEvents) {
+    LINES[event.lineIndex].forEach((cellIndex, i) => {
+      if (!glowByCell.has(cellIndex)) glowByCell.set(cellIndex, { delayMs: i * 70, eventId: event.id });
+    });
+  }
 
   function placeAt(cellIndex: number) {
     if (!myTurnToPlace || viewer.board[cellIndex] !== null) return;
@@ -324,10 +388,19 @@ export default function GridPokerBoard({
         <p className="text-xs text-white/50">내 보드판</p>
         <div className="grid grid-cols-5 gap-1.5 rounded-2xl border border-white/10 bg-black/20 p-2.5 sm:gap-2 sm:p-3">
           {viewer.board.map((card, i) => (
-            <Cell key={i} card={card} onClick={myTurnToPlace && card === null ? () => placeAt(i) : undefined} />
+            <Cell key={i} card={card} glow={glowByCell.get(i) ?? null} onClick={myTurnToPlace && card === null ? () => placeAt(i) : undefined} />
           ))}
         </div>
       </div>
+
+      {lineEvents.map((event, i) => (
+        <HandRankFloatingBadge
+          key={event.id}
+          event={event}
+          stackIndex={i}
+          onDone={(id) => setLineEvents((events) => events.filter((e) => e.id !== id))}
+        />
+      ))}
 
       {state.phase === "submitting" && (
         <div className="relative z-10 flex flex-col items-center gap-2">

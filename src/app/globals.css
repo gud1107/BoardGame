@@ -851,3 +851,103 @@ body {
    the real-time Slither.io-style replacement draws everything on a Canvas
    2D surface every frame instead (see WormCanvas.tsx), so there is nothing
    here for globals.css to own. */
+
+/* 그리드 포커's card-placement "slam" (see GridPokerBoard.tsx's `Cell`) — an
+   overshoot scale pop settling with a heavier drop-shadow, so a placed card
+   reads as landing with some weight instead of just appearing. Replayed via
+   a `key={card.id}` remount the instant a cell goes null -> filled, same
+   "key-remount to replay a mount-only keyframe" technique as
+   DealerReveal.tsx's own deal-flip above. */
+@keyframes gp-card-place {
+  0% {
+    transform: scale(1.22) translateY(-3px);
+    filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55));
+  }
+  45% {
+    transform: scale(0.93) translateY(1px);
+    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+  }
+  70% {
+    transform: scale(1.04) translateY(0);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+  }
+}
+
+/* 그리드 포커's "착지 펄스" — a soft ring wave that expands out from a cell's
+   own border and fades, layered on top of gp-card-place above (same
+   key={card.id}-driven remount) to make the placement read as unambiguous
+   even at a glance. */
+@keyframes gp-cell-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55);
+    opacity: 1;
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(52, 211, 153, 0);
+    opacity: 0;
+  }
+}
+
+/* 그리드 포커's line-completion sweep (see GridPokerEffects.tsx's
+   `detectNewlyCompletedLines`) — every cell along a just-filled line plays
+   this gold glow ring, staggered by each cell's position in the line (via an
+   inline `animationDelay`) so it reads as a sweep travelling across the five
+   cells rather than five rings popping at once. */
+@keyframes gp-line-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.9), inset 0 0 0 0 rgba(251, 191, 36, 0.5);
+    opacity: 1;
+  }
+  40% {
+    box-shadow: 0 0 14px 3px rgba(251, 191, 36, 0.85), inset 0 0 10px 1px rgba(251, 191, 36, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+    opacity: 0;
+  }
+}
+
+/* 그리드 포커's completed-hand toast (see GridPokerEffects.tsx's
+   `HandRankFloatingBadge`) — floats up and fades, same "float up + fade"
+   shape as forSale's forsale-win-toast above but travelling further since
+   this one isn't anchored to a fixed header slot. */
+@keyframes gp-hand-badge-float {
+  0% {
+    transform: translate(-50%, 0) scale(0.85);
+    opacity: 0;
+  }
+  15% {
+    transform: translate(-50%, -6px) scale(1.05);
+    opacity: 1;
+  }
+  75% {
+    transform: translate(-50%, -34px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -52px) scale(0.95);
+    opacity: 0;
+  }
+}
+
+/* 그리드 포커's high-tier hand sparkle (see GridPokerEffects.tsx's
+   `HandRankFloatingBadge`, category >= 5 i.e. 플러시 and above) — each ✨
+   particle spins in and shrinks back out around the badge, staggered per
+   particle via inline `animationDelay`. */
+@keyframes gp-sparkle-twinkle {
+  0% {
+    transform: scale(0) rotate(0deg);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.15) rotate(90deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.4) rotate(200deg);
+    opacity: 0;
+  }
+}
