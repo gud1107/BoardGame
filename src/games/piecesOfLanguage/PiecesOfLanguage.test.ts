@@ -301,6 +301,16 @@ describe("힌트 해금 조건 + 50% 부분 마스킹 (wrongAttemptCount / isHin
     expect(hint.filter((c) => c === "_")).toHaveLength(1);
   });
 
+  it("reveals exactly K = floor(L/2) characters for a 3-syllable word (1 revealed, 2 masked)", () => {
+    const target = wordsOfLength(3)[0];
+    const revealed = hintRevealIndices(target, "p1");
+    expect(revealed.size).toBe(1);
+    const hint = buildHint(target, "p1");
+    expect(hint).toHaveLength(3);
+    expect(hint.filter((c) => c !== "_")).toHaveLength(1);
+    expect(hint.filter((c) => c === "_")).toHaveLength(2);
+  });
+
   it("reveals exactly K = floor(L/2) characters for a 4-syllable word (2 revealed, 2 masked)", () => {
     const target = wordsOfLength(4)[0];
     const revealed = hintRevealIndices(target, "p1");
