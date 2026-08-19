@@ -20,6 +20,8 @@ _최종 갱신: 2026-08-19 (**언어의 조각 — 힌트 노출 글자 수 내�
 
 **결론**: 순수 검증 + 테스트 커버리지 보강 세션. 엔진/UI 동작 변경 없음(`hintRevealIndices`/`buildHint`/`isHintUnlocked` 등 무변경).
 
+**배포**: `git push origin main`(커밋 `bbf3334`) 후 `npx vercel deploy --prod` 실행 — CLI가 `"status":"error","reason":"deploy_failed","message":"Not authorized"` JSON을 출력했으나(원인 미규명, 과거 세션엔 없던 증상), `vercel ls board-game`/`vercel inspect`로 직접 확인한 결과 배포 자체(`dpl_L81uMpQrgkrk9aQuAYmi62E8HhuC`, target: production, status: Ready)는 실제로 완료돼 프로덕션 도메인 `https://board-game-tau-navy.vercel.app`에 정상 별칭(alias)됐고 `curl` HTTP 200도 확인 — CLI가 표시한 에러 메시지와 서버 측 실제 배포 결과가 불일치했던 것으로 보이며, 원인은 이번 세션에서 규명하지 않음(다음 세션 참고용으로 남김).
+
 ### 2026-08-19 — 페루도 실제 게임판(변경후) 이미지 인게임 전면 적용
 
 **요청**: `boardGameRule/페루도/`에 `변경전이미지.png`(현재 인게임 스크린샷)와 `변경후이미지.jpg`(실사 보드판) 2장을 근거로, 인게임 화면에 잘못 들어가 있는 "룰북 표지/대표 컷" 이미지를 내리고 실제 게임판(보드판 트랙) 이미지로 전면 교체 + 비딩 마커/주사위 좌표·스케일 정돈.
