@@ -304,31 +304,32 @@ function TrackCellButton({
 }
 
 /**
- * The physical board's fixed rectangular track: quantities 1-20 running
- * clockwise around 4 sides — 북 1→7, 동 7→11, 남 11→17, 서 17→20 — with corners
- * 7/11/17 each a single cell shared by both adjoining sides (2026-08-20 사각형
- * 트랙 세션, 사용자 확인 완료: "모서리 칸 1개를 공유"). Every `trackCellAt` index
- * from the old scrolling strip (0..39 — quantities 1-20, normal+perudo paired
- * 1:1 exactly as before) still appears here exactly once; this only changes
- * *where* each cell renders, never what cells exist. Quantity 1's own perudo
- * cell (index 1) opens the north strip, and so on around each corner — see
- * the index comments below for the full walk.
+ * The physical board's fixed rectangular track (2026-08-21 "수정필요1" 30칸
+ * 세션 — see engine.ts's module doc for the exact 30-slot sequence and its
+ * index formula, `boardGameRule/페루도/수정필요1.png` for the reference
+ * photo). Every `trackCellAt` index 0..29 (숫자1, [페루도1], 숫자2, 숫자3,
+ * [페루도2], ..., [페루도10], 숫자20 — NOT a 1:1 normal/perudo pairing like
+ * the old 40-slot layout; a [페루도] cell only opens after every *odd*
+ * 숫자 cell) appears here exactly once, split across 4 sides with 4 shared
+ * corner cells (숫자1/숫자6/숫자11/숫자16 — chosen to split the 30 slots as
+ * evenly as the sequence allows: 4 corners + 7+6+7+6 cells per side).
+ * 2026-08-21 세션의 핵심 변경은 legality 쪽(`validateRaise`가 이제 이 트랙의
+ * 인덱스 순서 자체를 유일한 판정 근거로 삼는다 — engine.ts 참고)이지, 이
+ * 함수는 여전히 순수 렌더링 배치일 뿐이다.
  */
-const BOARD_MAX_QUANTITY = 20;
-/** Last valid `trackCellAt` index that still fits on the fixed board — anything past this (quantity > 20, legal since dice counts are uncapped) falls off the physical rectangle and is surfaced via a badge instead (사용자 확인: "트랙을 20에서 고정하고 초과분은 배지로 표시"). */
-const BOARD_LAST_INDEX = BOARD_MAX_QUANTITY * 2 - 1;
+const BOARD_LAST_INDEX = 29;
 
 function buildRectFrame() {
   const at = trackCellAt;
   return {
-    cornerTL: at(0), // quantity 1
-    north: Array.from({ length: 11 }, (_, i) => at(1 + i)), // 1..11: perudo1..normal6,perudo6
-    cornerTR: at(12), // quantity 7
-    east: Array.from({ length: 7 }, (_, i) => at(13 + i)), // 13..19: perudo7..normal10,perudo10
-    cornerBR: at(20), // quantity 11
-    south: Array.from({ length: 11 }, (_, i) => at(21 + i)), // 21..31: perudo11..normal16,perudo16
-    cornerBL: at(32), // quantity 17
-    west: Array.from({ length: 7 }, (_, i) => at(33 + i)), // 33..39: perudo17..normal20,perudo20
+    cornerTL: at(0), // 숫자 1
+    north: Array.from({ length: 7 }, (_, i) => at(1 + i)), // 1..7: 페루도1, 숫자2~3, 페루도2, 숫자4~5, 페루도3
+    cornerTR: at(8), // 숫자 6
+    east: Array.from({ length: 6 }, (_, i) => at(9 + i)), // 9..14: 숫자7, 페루도4, 숫자8~9, 페루도5, 숫자10
+    cornerBR: at(15), // 숫자 11
+    south: Array.from({ length: 7 }, (_, i) => at(16 + i)), // 16..22: 페루도6, 숫자12~13, 페루도7, 숫자14~15, 페루도8
+    cornerBL: at(23), // 숫자 16
+    west: Array.from({ length: 6 }, (_, i) => at(24 + i)), // 24..29: 숫자17, 페루도9, 숫자18~19, 페루도10, 숫자20
   };
 }
 

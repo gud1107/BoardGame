@@ -27,29 +27,29 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">선언 올리기</h3>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">선언 올리기 — 보드 트랙 30칸</h3>
           <p className="mb-2 text-xs text-white/60">
-            다음 선언은 반드시 직전 선언보다 <span className="text-amber-300">더 강해야</span> 합니다:{" "}
-            <span className="text-amber-300">개수를 늘리면 눈금은 무엇이든 자유롭게</span> 고를 수 있고, 개수를 그대로 둔다면{" "}
-            <span className="text-amber-300">눈금을 반드시 더 높은 쪽으로만</span> 올릴 수 있습니다 — 예: &quot;5가 3개&quot;
-            다음에는 같은 3개로 눈금 2·3·4·5로는 갈 수 없고 오직 6으로만 갈 수 있으며, 개수를 4개 이상으로 늘리면 눈금은 다시
-            자유입니다. 보드 위 트랙 칸(개수를 따라 나열된 숫자/[페루도 N] 칸)은 이 규칙을 보여주는 시각 요소일 뿐{" "}
-            <span className="text-amber-300">칸 위치 자체가 유효성을 정하지는 않습니다</span> — 클릭해서 바로 그 개수로
-            이동할 수 있는 보조 수단입니다.
+            보드 테두리에는 실물 보드 그대로 <span className="text-amber-300">숫자 1~20 칸 + [페루도] 1~10 칸, 총 30칸</span>이
+            정해진 순서로 이어져 있습니다: 1 → [페루도1] → 2 → 3 → [페루도2] → 4 → 5 → [페루도3] → ... → [페루도10] → 20.
+            다음 선언은 이 트랙에서{" "}
+            <span className="text-amber-300">반드시 지금 칸보다 앞으로 나아간 칸</span>이어야 합니다 — 이미 지나온 칸(더
+            낮은 눈금의 [페루도] 칸 포함)으로는 절대 되돌아갈 수 없습니다. 같은 숫자 칸에 머무를 때만 예외로{" "}
+            <span className="text-amber-300">눈금이 더 높은 쪽으로</span> 올리는 선언이 허용됩니다 — 예: &quot;3이 2개&quot;
+            (숫자 2 칸) 다음에는 같은 2개로 눈금 4·5·6으로는 갈 수 있어도, 그보다 앞선 [페루도1]이나 숫자 1 칸으로는 갈 수
+            없습니다.
           </p>
           <div className="mt-1 grid gap-2 sm:grid-cols-2">
             <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
-              <p className="mb-1 font-medium text-white/90">일반 눈금(2~6) ↔ 일반 눈금</p>
-              <p className="text-xs text-white/60">개수가 늘면 눈금 자유, 개수가 같으면 눈금은 반드시 더 높아야 합니다.</p>
+              <p className="mb-1 font-medium text-white/90">같은 숫자 칸에 머무를 때</p>
+              <p className="text-xs text-white/60">개수는 그대로 두고 눈금만 더 높은 쪽으로 올릴 수 있습니다.</p>
             </div>
             <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
               <p className="mb-1 flex items-center gap-1 font-medium text-white/90">
-                <PerudoFaceIcon className="h-3.5 w-3.5 text-red-400" /> 페루도(눈금 1) 전환
+                <PerudoFaceIcon className="h-3.5 w-3.5 text-red-400" /> 다른 칸으로 이동할 때
               </p>
               <p className="text-xs text-white/60">
-                일반→페루도는 개수 <span className="text-amber-300">⌈직전 개수 ÷ 2⌉</span> 이상, 페루도→일반은 개수{" "}
-                <span className="text-amber-300">직전 개수 × 2 + 1</span> 이상이어야 합니다. 페루도→페루도는 개수가 반드시
-                더 커야 합니다.
+                [페루도] 칸이든 숫자 칸이든, 트랙에서 지금 칸보다 앞선 칸이기만 하면 됩니다 — 트랙 위 칸 위치 자체가
+                유효성을 정합니다.
               </p>
             </div>
           </div>

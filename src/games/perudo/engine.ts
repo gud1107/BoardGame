@@ -53,22 +53,46 @@
  * 2026-08-20 같은 날 트랙/마커 재도입 세션 — 사용자가 "버그2" 스크린샷을
  * 근거로 트랙·마커 시각 요소를 다시 요청(`AskUserQuestion`으로 롤백 범위·칸
  * 의미·파일 구조 3가지를 확인받은 뒤 진행, 칸 라벨 의미는 "로직을 알아서
- * 재설계"로 위임받음). 그래서 이번엔 트랙을 **판정 권한이 없는 순수 시각
- * 요소**로만 재도입했다:
- * - `validateRaise`는 여전히 (3)의 공식 수량/눈금 공식이 유일한 판정
- *   근거다 — 트랙 칸/인덱스는 이제 그 판정 결과를 절대 좌우하지 않는다.
- * - 마커가 표시될 칸은 `trackCellForBid({quantity, face})`라는 순수 함수로
- *   **그때그때 직접 계산**한다(옛 `trackIndexForBid`처럼 "현재 칸 이후 가장
- *   가까운 칸을 탐색"하는 상태 의존적 방식이 아니다 — 그 "가장 가까운 칸"
- *   탐색 방식 자체가 옛 세션에서 실제 확정 비딩과 다른 칸에 마커가 앉는
- *   버그의 원인이었다). 공식: `index = (quantity-1)*2 + (face===1?1:0)` —
- *   수량 1의 일반 칸, 수량 1의 [페루도] 칸, 수량 2의 일반 칸, ... 순서로
- *   단조 증가하는 무한 시퀀스라 옛 배열의 비단조 반복 라벨 문제도, 고정
- *   37칸이라는 상한 문제(맞아! 성공 시 주사위 상한 없음 — 위 (1) 참고 — 이라
- *   수량도 이론상 무한정 커질 수 있음)도 함께 해소된다. **face:1(조커)일
- *   때만 [페루도] 칸에 매핑되고, face:2~6은 전부 "일반" 칸에 매핑된다** —
- *   버그2가 신고한 "얼굴 2, 수량 1 비딩인데 마커가 [페루도] 칸에 있다" 증상은
- *   이 매핑이 결정적(deterministic)이라 구조적으로 재발할 수 없다.
+ * 재설계"로 위임받음). 그래서 그때는 트랙을 **판정 권한이 없는 순수 시각
+ * 요소**로만 재도입했었다(공식: `index = (quantity-1)*2 + (face===1?1:0)`,
+ * 일반↔페루도 1:1 페어링 무한 시퀀스) — `validateRaise`는 여전히 (3)의 공식
+ * 수량/눈금 공식이 유일한 판정 근거였고, 트랙 칸/인덱스는 그 판정 결과를
+ * 전혀 좌우하지 않았다.
+ *
+ * 2026-08-21 "수정필요1" 30칸 실물 보드 세션 — 사용자가 실제 보드 사진
+ * (`boardGameRule/페루도/수정필요1.png`)을 근거로 트랙을 **정확히 30칸,
+ * 정확히 지정된 순서**(1, [페루도1], 2, 3, [페루도2], 4, 5, [페루도3], 6, 7,
+ * [페루도4], 8, 9, [페루도5], 10, 11, [페루도6], 12, 13, [페루도7], 14, 15,
+ * [페루도8], 16, 17, [페루도9], 18, 19, [페루도10], 20)로 재정의하고, **이
+ * 트랙의 인덱스 순서 자체를 다시 비딩 유효성의 유일한 판정 기준으로
+ * 삼아달라**고 명시적으로 요청했다 — 정확히 위 2026-08-20 세션이 "공식
+ * 룰북 §3과 근본적으로 양립 불가능하다"며 폐기했던 것과 같은 종류의 하우스
+ * 룰이라, 구현 전 `AskUserQuestion`으로 "일반↔일반 구간은 두 방식이 완전히
+ * 동일하게 동작하지만, 페루도↔일반 전환 구간에서는 두 방식이 갈린다(예:
+ * 페루도 2개→숫자4: 트랙만 보면 허용, 기존 `2Q+1` 공식으론 수량 5 미만이라
+ * 불허)"는 구체적 분기 사례를 제시해 확인받았고, 사용자가 "트랙 인덱스로
+ * 완전 대체"를 선택 — 그래서 이번엔 (3)의 `⌈Q/2⌉`/`2Q+1` 공식을 완전히
+ * 폐기하고, 아래 새 `trackIndexForBid`(30칸 시퀀스를 무한 확장한 닫힌 형태
+ * 공식)의 인덱스 비교만이 `validateRaise`의 유일한 판정 근거다. 새 공식은
+ * 정확히 사용자가 지정한 30개 라벨(index 0~29)을 재현하고, 그 너머(수량>20
+ * 일반 / 수량>10 페루도, 위 (1)에 따라 이론상 무한 성장 가능)도 같은 패턴을
+ * 그대로 이어간다 — 보드 렌더링(`PerudoBoard.tsx`)은 실물 보드와 같은 고정
+ * 30칸만 그리고, 그 너머는 기존 `OverflowBadge`로 표시한다.
+ *
+ * 새 30칸 시퀀스의 구조: [숫자1], [페루도1], 그 다음부터는 (숫자 2m,
+ * 숫자 2m+1, [페루도 m+1])이 반복되는 게 아니라 — 홀수 숫자 칸이 먼저
+ * [페루도] 칸을 열고, 그 다음 짝수 숫자 칸이 이어진다: 숫자(2m-1) →
+ * [페루도 m] → 숫자(2m) → 숫자(2m+1) → [페루도 m+1] → ... 즉 "일반 칸
+ * 인덱스"는 수량이 1 오를 때마다 인덱스가 홀수번째 스텝엔 +2, 짝수번째
+ * 스텝엔 +1 하는 식으로 번갈아 증가하고(0,2,3,5,6,8,9,...), "[페루도] 칸
+ * 인덱스"는 그 홀수 숫자 칸 바로 다음 자리에 얹힌다. 닫힌 형태:
+ * - 일반(face 2-6) 칸: 수량 Q가 홀수면 `index = 3*(Q-1)/2`, 짝수면
+ *   `index = 3*(Q/2) - 1`.
+ * - [페루도](face 1) 칸: 수량 Q(=페루도 Q번)면 `index = 3*Q - 2`.
+ * 두 공식 다 Q에 대해 단조 순증가라(스텝마다 인덱스가 +1 또는 +2만큼만
+ * 늘어남), "다음 비딩의 트랙 인덱스가 항상 더 크다"는 아래 규칙1이 그대로
+ * `minValidQuantityForFace`의 기존 브루트포스 탐색(1부터 순차 증가)과도
+ * 아무 수정 없이 맞물린다.
  */
 
 export type SeatIndex = number;
@@ -90,13 +114,17 @@ export interface Bid {
 }
 
 // ---------------------------------------------------------------------------
-// Board track (2026-08-20 재도입 — module doc note above) — a purely visual,
-// derived-on-demand cell sequence for rendering the marker; it has NO say in
-// whether a raise is legal (`validateRaise` below is the only judge of
-// that). Not a stored array: `trackCellForBid`/`trackCellAt` are plain pure
-// functions of (quantity, face) / (index), so there is nothing here that can
-// drift out of sync with a confirmed or draft bid the way the old
-// state-dependent "nearest cell after the current one" search could.
+// Board track (2026-08-21 "수정필요1" 30칸 세션 — module doc note above) — the
+// exact 30-slot sequence from the physical board, extended past quantity 20 /
+// 페루도 10 with the same closed-form pattern (dice counts are uncapped, see
+// module doc (1)). NOW the sole authority on bid legality too: `validateRaise`
+// below does nothing but compare `trackIndexForBid` indices — see the module
+// doc's "AskUserQuestion-confirmed: 트랙 인덱스로 완전 대체" note for why the
+// older (3) formulas (`⌈Q/2⌉`/`2Q+1`) are gone rather than kept alongside this.
+// Not a stored array: `trackIndexForBid`/`trackCellForBid`/`trackCellAt` are
+// plain pure functions of (quantity, face) / (index), so there is nothing
+// here that can drift out of sync with a confirmed or draft bid the way an
+// old state-dependent "nearest cell after the current one" search could.
 // ---------------------------------------------------------------------------
 
 export type TrackCellKind = "normal" | "perudo";
@@ -106,6 +134,23 @@ export interface TrackCell {
   kind: TrackCellKind;
   /** The number printed on the cell — for "perudo" cells this is the 페루도 N ordinal (== that bid's quantity when face is the joker); for "normal" cells it's the bid quantity shared by every non-joker face 2-6. */
   quantity: number;
+}
+
+/**
+ * The trackIndex for a `{ quantity, face }` bid — the single source of truth
+ * both `trackCellForBid` (below, for rendering) and `validateRaise` (this bid's
+ * legality) build on, so the two can never disagree about where a bid sits.
+ * face 1 (조커) always lands on a "perudo" slot (`3*quantity - 2`); faces 2-6
+ * always share one "normal" slot per quantity (`3*(quantity-1)/2` for odd
+ * quantities, `3*(quantity/2) - 1` for even ones) — see module doc for the
+ * closed-form derivation from the 30-slot physical sequence. Strictly
+ * increasing in quantity within each kind, which is what lets `validateRaise`
+ * reduce to a plain index comparison and `minValidQuantityForFace`'s existing
+ * brute-force search (1, 2, 3, ...) still find the true minimum unmodified.
+ */
+export function trackIndexForBid(bid: { quantity: number; face: Face }): number {
+  if (bid.face === 1) return 3 * bid.quantity - 2;
+  return bid.quantity % 2 === 1 ? (3 * (bid.quantity - 1)) / 2 : 3 * (bid.quantity / 2) - 1;
 }
 
 /**
@@ -119,15 +164,24 @@ export interface TrackCell {
  */
 export function trackCellForBid(bid: { quantity: number; face: Face }): TrackCell {
   const kind: TrackCellKind = bid.face === 1 ? "perudo" : "normal";
-  const index = (bid.quantity - 1) * 2 + (bid.face === 1 ? 1 : 0);
-  return { index, kind, quantity: bid.quantity };
+  return { index: trackIndexForBid(bid), kind, quantity: bid.quantity };
 }
 
-/** Inverse of `trackCellForBid` — the cell at board position `index` (>= 0), for rendering an arbitrary window of the (conceptually unbounded — dice counts have no upper cap, see module doc) track. */
+/**
+ * Inverse of `trackCellForBid` — the cell at board position `index` (>= 0),
+ * for rendering an arbitrary window of the (conceptually unbounded — dice
+ * counts have no upper cap, see module doc) track. Derived from
+ * `trackIndexForBid`'s closed form by inspecting `index % 3`: perudo cells
+ * land on `index ≡ 1 (mod 3)`, odd-quantity normal cells on `index ≡ 0`, and
+ * even-quantity normal cells on `index ≡ 2` — see module doc's worked table
+ * for why the 30-slot sequence falls into exactly this 3-wide repeating
+ * pattern.
+ */
 export function trackCellAt(index: number): TrackCell {
-  const quantity = Math.floor(index / 2) + 1;
-  const kind: TrackCellKind = index % 2 === 0 ? "normal" : "perudo";
-  return { index, kind, quantity };
+  const r = ((index % 3) + 3) % 3;
+  if (r === 1) return { index, kind: "perudo", quantity: (index + 2) / 3 };
+  if (r === 0) return { index, kind: "normal", quantity: (2 * index) / 3 + 1 };
+  return { index, kind: "normal", quantity: ((index + 1) / 3) * 2 };
 }
 
 export interface PlayerState {
@@ -248,23 +302,29 @@ function nextAliveSeat(seat: SeatIndex, players: PlayerState[], playerCount: num
 
 /**
  * Whether `next` is a legal raise over `prev` (null = the round's opening
- * bid, always legal). The sole authority on bid legality — the board track
- * above never gates this (see module doc). Implements the rulebook §3
- * formulas exactly:
- * - normal(2-6) -> normal: quantity must strictly increase, OR stay equal
- *   while the face strictly increases.
- * - normal -> paco(1): quantity >= ceil(prev quantity / 2).
- * - paco -> normal: quantity >= prev quantity * 2 + 1.
- * - paco -> paco: quantity must strictly increase (face is fixed at 1).
+ * bid, always legal). The sole authority on bid legality. 2026-08-21
+ * "수정필요1" 세션(module doc, AskUserQuestion-confirmed "트랙 인덱스로 완전
+ * 대체"): this used to implement the rulebook §3 formulas directly
+ * (`⌈prev/2⌉`/`prev*2+1` for normal↔paco conversions); it now instead
+ * reduces entirely to comparing `trackIndexForBid` positions on the 30-slot
+ * board track —
+ * - Rule 1 (다른 칸으로 이동): `next`'s track index must be strictly greater
+ *   than `prev`'s.
+ * - Rule 2 (동일 칸, 눈금만 상향): if the two land on the exact same index
+ *   (only possible for two normal-face bids sharing one quantity's cell —
+ *   see module doc), it's legal only if `next.face > prev.face`.
+ * A bid identical to `prev` always fails both (same index, face not
+ * strictly higher), so "동일한 배팅 재선언"는 여전히 항상 거절된다.
  */
 export function validateRaise(prev: Bid | null, next: { quantity: number; face: Face }): boolean {
   if (!Number.isInteger(next.quantity) || next.quantity < 1) return false;
   if (!Number.isInteger(next.face) || next.face < 1 || next.face > 6) return false;
   if (prev === null) return true;
-  if (prev.face === 1 && next.face === 1) return next.quantity > prev.quantity;
-  if (prev.face === 1 && next.face !== 1) return next.quantity >= prev.quantity * 2 + 1;
-  if (prev.face !== 1 && next.face === 1) return next.quantity >= Math.ceil(prev.quantity / 2);
-  return next.quantity > prev.quantity || (next.quantity === prev.quantity && next.face > prev.face);
+  const prevIndex = trackIndexForBid(prev);
+  const nextIndex = trackIndexForBid(next);
+  if (nextIndex > prevIndex) return true;
+  if (nextIndex === prevIndex) return next.face > prev.face;
+  return false;
 }
 
 /**
