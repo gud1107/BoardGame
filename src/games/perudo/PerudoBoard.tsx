@@ -224,13 +224,34 @@ function FacePicker({ selected, onSelect }: { selected: Face; onSelect: (face: F
 // this cell's quantity" every other cell does. See `selectCell`.
 // ---------------------------------------------------------------------------
 
-/** How a track cell sizes itself: `"corner"` is fixed both ways (the 4 shared corner tiles at quantities 1/7/11/17), `"row"` has a fixed height but stretches to fill its side's width (north/south strips), `"col"` has a fixed width but stretches to fill its side's height (east/west strips). The fixed cross-axis size (h-9/w-9, sm:h-11/w-11) is intentionally identical across all three variants — that's what keeps the rectangle's corners flush against the strips instead of stair-stepping (see `RectBidTrack`). */
+/**
+ * How a track cell sizes itself. All three variants resolve to the exact
+ * same fixed `h-9 w-9`/`sm:h-11 sm:w-11` square — kept as a distinct type
+ * (rather than collapsing to one constant) because callers still reason
+ * about "am I in a corner vs. a side strip" for corner-decoration purposes
+ * (see the 💀 badge in `RectBidTrack`), and the shared literal is what keeps
+ * the rectangle's corners flush against the strips instead of stair-
+ * stepping.
+ *
+ * 2026-08-21 균등화 세션: `"row"`/`"col"` used to stretch via `flex-1` to
+ * fill their side's variable-width strip (7 or 6 cells sharing whatever
+ * space was left after the two fixed corners), which meant a side cell's
+ * width could differ from its own fixed height depending on viewport width
+ * — a non-square cell that visibly squished/stretched whatever die graphic
+ * sat on it (see `보드GameRule/페루도/칸이커지면서 뭉개진주사위.png` and
+ * `TrackCellButton`'s marker overlay, which sizes itself to 80% of the
+ * cell's own box). Every cell is now this one fixed square no matter which
+ * side it's on; `RectBidTrack`'s side containers use `justify-between`
+ * instead of relying on the cells themselves to grow, so the fixed-size
+ * squares still spread edge-to-edge across each side (user-confirmed
+ * AskUserQuestion direction) without ever changing shape.
+ */
 type CellSizing = "corner" | "row" | "col";
 
 const CELL_SIZING_CLASS: Record<CellSizing, string> = {
   corner: "h-9 w-9 shrink-0 sm:h-11 sm:w-11",
-  row: "h-9 min-w-0 flex-1 sm:h-11",
-  col: "w-9 min-h-0 flex-1 sm:w-11",
+  row: "h-9 w-9 shrink-0 sm:h-11 sm:w-11",
+  col: "h-9 w-9 shrink-0 sm:h-11 sm:w-11",
 };
 
 /** One track cell — a plain quantity/조커 cell, no click-eligibility baked in (the caller decides `enabled` from `validateRaise`, not from track position). */
@@ -405,20 +426,20 @@ function RectBidTrack({
           💀
         </span>
       </div>
-      <div className="col-start-2 row-start-1 flex min-w-0 gap-0.5 sm:gap-1">{frame.north.map((c) => renderCell(c, "row"))}</div>
+      <div className="col-start-2 row-start-1 flex min-w-0 justify-between gap-0.5 sm:gap-1">{frame.north.map((c) => renderCell(c, "row"))}</div>
       <div className="col-start-3 row-start-1">{renderCell(frame.cornerTR, "corner")}</div>
 
-      <div className="col-start-1 row-start-2 flex min-h-0 flex-col gap-0.5 sm:gap-1">
+      <div className="col-start-1 row-start-2 flex min-h-0 flex-col justify-between gap-0.5 sm:gap-1">
         {frame.west
           .slice()
           .reverse()
           .map((c) => renderCell(c, "col"))}
       </div>
       <div className="col-start-2 row-start-2 flex min-w-0 items-center justify-center p-1.5 sm:p-2.5">{children}</div>
-      <div className="col-start-3 row-start-2 flex min-h-0 flex-col gap-0.5 sm:gap-1">{frame.east.map((c) => renderCell(c, "col"))}</div>
+      <div className="col-start-3 row-start-2 flex min-h-0 flex-col justify-between gap-0.5 sm:gap-1">{frame.east.map((c) => renderCell(c, "col"))}</div>
 
       <div className="col-start-1 row-start-3">{renderCell(frame.cornerBL, "corner")}</div>
-      <div className="col-start-2 row-start-3 flex min-w-0 flex-row-reverse gap-0.5 sm:gap-1">{frame.south.map((c) => renderCell(c, "row"))}</div>
+      <div className="col-start-2 row-start-3 flex min-w-0 flex-row-reverse justify-between gap-0.5 sm:gap-1">{frame.south.map((c) => renderCell(c, "row"))}</div>
       <div className="col-start-3 row-start-3">{renderCell(frame.cornerBR, "corner")}</div>
     </div>
   );
