@@ -8,6 +8,7 @@ import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity
 import type { PlayableGameProps } from "@/games/types";
 import { applyAction, chooseBotAction, startGame, type BangState, type EngineAction, type SeatIndex, type Team } from "./engine";
 import BangBoard from "./BangBoard";
+import { deriveCenterEvent, type CenterPlayEvent } from "./BangEffects";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
@@ -101,6 +102,13 @@ export default function BangGame({ onComplete }: PlayableGameProps) {
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<BangState | null>(null);
   const [finalResult, setFinalResult] = useState<{ winner: Team } | null>(null);
+  // Queue of "a card was just played" flourishes for BangBoard's
+  // CenterPlayBanner (see BangEffects.tsx's module doc) — appended to
+  // whenever the "game-action" handler below sees a qualifying action, drained
+  // one at a time by BangBoard as each banner finishes its ~1.8s display.
+  // Reset on every fresh/resynced game so a stale banner never survives into
+  // the next hand (see the "game-start"/"state-sync" handlers below).
+  const [centerEvents, setCenterEvents] = useState<CenterPlayEvent[]>([]);
   // Seats currently played by an AI bot instead of a human — host-controlled
   // (ARCHITECTURE.md §7), broadcast via "bot-roster" so every client renders
   // the same lobby/board without a server. `botLevels[i]` is the Level 1–10
@@ -173,12 +181,26 @@ export default function BangGame({ onComplete }: PlayableGameProps) {
       setBotLevels(levels);
       setGameState(startGame(playerCount, seed));
       setFinalResult(null);
+      setCenterEvents([]);
       setPhase("playing");
     });
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
       const action = payload?.action as EngineAction;
-      setGameState((prev) => (prev ? applyAction(prev, action) : prev));
+      // Derived from the state as it was JUST BEFORE this action (gameStateRef
+      // is only updated after a commit — see its own comment above — so at
+      // the moment this broadcast callback runs it still holds the prior
+      // snapshot, same trust already placed in it by the "state-request"
+      // handler below).
+      const prev = gameStateRef.current;
+      if (prev) {
+        const event = deriveCenterEvent(prev, action);
+        // Cap the backlog at 3 so a burst of rapid-fire bot actions (see
+        // useBotAutoplay's 500-1500ms "thinking" delay) can't queue up an
+        // ever-growing trail of banners the viewer is still catching up on.
+        if (event) setCenterEvents((q) => [...q.slice(-2), event]);
+      }
+      setGameState((p) => (p ? applyAction(p, action) : p));
     });
 
     // Host-authoritative AI bot roster — broadcast whenever the host
@@ -222,6 +244,7 @@ export default function BangGame({ onComplete }: PlayableGameProps) {
       setBotLevels(levels);
       setGameState(state);
       setFinalResult(null);
+      setCenterEvents([]);
       setPhase("playing");
     });
 
@@ -485,6 +508,7 @@ export default function BangGame({ onComplete }: PlayableGameProps) {
     setOccupants([]);
     setGameState(null);
     setFinalResult(null);
+    setCenterEvents([]);
     setIdentity({ name: "" });
     setMyPlayerId(undefined);
     setCodeInput("");
@@ -704,6 +728,8 @@ export default function BangGame({ onComplete }: PlayableGameProps) {
         connectedSeats={connectedSeats}
         onAction={handleAction}
         onGameEnd={handleGameEnd}
+        centerEvents={centerEvents}
+        onCenterEventDone={(id) => setCenterEvents((q) => q.filter((e) => e.id !== id))}
       />
     );
   }

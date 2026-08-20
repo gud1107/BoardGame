@@ -1,8 +1,11 @@
 "use client";
 
 import { type CSSProperties, useMemo, useState } from "react";
-import Tooltip from "@/components/Tooltip";
 import RulebookModal from "./RulebookModal";
+import { CardFace, CardBack } from "./CardFace";
+import { CARD_META, EQUIP_ORDER, ROLE_LABEL, TEAM_LABEL, type CardKind } from "./cardMeta";
+import { MyEquipmentRow } from "./EquipSlotCard";
+import { CenterPlayBanner, useLifeFlash, type CenterPlayEvent } from "./BangEffects";
 import {
   canBang,
   effectiveDistance,
@@ -11,13 +14,10 @@ import {
   type Card,
   type CardType,
   type EngineAction,
-  type EquipSlot,
   type PendingGeneralStore,
   type PendingGroupResponse,
   type PlayerState,
-  type Role,
   type SeatIndex,
-  type Team,
 } from "./engine";
 
 /**
@@ -37,56 +37,13 @@ export interface BangBoardProps {
   connectedSeats: Set<SeatIndex>;
   onAction: (action: EngineAction) => void;
   onGameEnd: () => void;
+  /** Queue of "a card was just played" flourishes owned by BangGame.tsx (see BangEffects.tsx's module doc) — only the head is ever rendered at a time. */
+  centerEvents: CenterPlayEvent[];
+  onCenterEventDone: (id: number) => void;
 }
 
-type CardKind =
-  | "self"
-  | "none"
-  | "target-bang"
-  | "target-range1"
-  | "target-any-alive"
-  | "target-non-sheriff"
-  | "response-only";
-
-const CARD_META: Record<CardType, { label: string; icon: string; desc: string; kind: CardKind }> = {
-  bang: { label: "뱅!", icon: "💥", desc: "사거리 내의 상대 1명을 조준합니다. 상대는 '빗나감!'을 내거나 체력 1을 잃습니다.", kind: "target-bang" },
-  missed: { label: "빗나감!", icon: "🛡️", desc: "뱅!이나 개틀링에 대한 방어 카드입니다. 응답할 때만 낼 수 있어요.", kind: "response-only" },
-  beer: { label: "맥주", icon: "🍺", desc: "체력을 1 회복합니다 (생존자가 2명뿐일 때는 효과가 없어요).", kind: "self" },
-  saloon: { label: "선술집", icon: "🍻", desc: "생존한 모든 플레이어가 체력을 1씩 회복합니다.", kind: "self" },
-  duel: { label: "듀얼", icon: "🤠", desc: "상대 1명과 결투합니다. 번갈아 뱅!을 내다 먼저 못 내면 체력 1을 잃습니다 (거리 무관).", kind: "target-any-alive" },
-  indians: { label: "인디언!", icon: "🏹", desc: "나를 제외한 모두가 뱅!을 버리거나 체력 1을 잃습니다.", kind: "none" },
-  gatling: { label: "개틀링", icon: "🔫", desc: "나를 제외한 모두에게 뱅!과 같은 효과입니다 (거리 무관, 빗나감!으로 방어 가능).", kind: "none" },
-  "general-store": { label: "종합 상점", icon: "🏪", desc: "생존자 수만큼 카드를 공개하고, 순서대로 한 장씩 가져갑니다.", kind: "none" },
-  stagecoach: { label: "역마차", icon: "🐎", desc: "카드를 2장 더 뽑습니다.", kind: "self" },
-  "wells-fargo": { label: "웰스파고", icon: "🚂", desc: "카드를 3장 더 뽑습니다.", kind: "self" },
-  panic: { label: "패닉!", icon: "😱", desc: "거리 1 이내의 상대에게서 카드 1장(패 또는 장비)을 빼앗습니다.", kind: "target-range1" },
-  "cat-balou": { label: "고양이 발톱", icon: "🐈", desc: "거리와 상관없이 상대의 카드 1장(패 또는 장비)을 버리게 합니다.", kind: "target-any-alive" },
-  jail: { label: "감옥", icon: "🔒", desc: "보안관을 제외한 상대 1명에게 씌웁니다. 다음 턴 시작 시 하트를 뽑지 못하면 턴을 건너뜁니다.", kind: "target-non-sheriff" },
-  dynamite: { label: "다이너마이트", icon: "🧨", desc: "자신에게 장착합니다. 매 턴 시작 시 스페이드 2~9를 뽑으면 폭발(체력 3 손실), 아니면 다음 사람에게 넘어갑니다.", kind: "self" },
-  volcanic: { label: "볼카닉", icon: "🔫", desc: "사거리 1 무기. 장착한 턴부터 뱅!을 여러 번 낼 수 있게 해줍니다.", kind: "self" },
-  schofield: { label: "스코필드", icon: "🔫", desc: "사거리 2 무기.", kind: "self" },
-  remington: { label: "레밍턴", icon: "🔫", desc: "사거리 3 무기.", kind: "self" },
-  "rev-carbine": { label: "레버액션 카빈", icon: "🔫", desc: "사거리 4 무기.", kind: "self" },
-  winchester: { label: "윈체스터", icon: "🔫", desc: "사거리 5 무기.", kind: "self" },
-  barrel: { label: "술통", icon: "🛢️", desc: "뱅!이나 개틀링을 맞았을 때 카드를 뽑아 하트가 나오면 방어합니다.", kind: "self" },
-  scope: { label: "쌍안경", icon: "🔭", desc: "내가 상대를 조준할 때 거리가 1 가까워집니다.", kind: "self" },
-  mustang: { label: "무스탕", icon: "🐎", desc: "상대가 나를 조준할 때 거리가 1 멀어집니다.", kind: "self" },
-};
-
-const ROLE_LABEL: Record<Role, { label: string; icon: string }> = {
-  sheriff: { label: "보안관", icon: "⭐" },
-  deputy: { label: "부보안관", icon: "🥈" },
-  outlaw: { label: "무법자", icon: "🥷" },
-  renegade: { label: "배신자", icon: "🃏" },
-};
-
-const TEAM_LABEL: Record<Team, string> = {
-  law: "보안관 팀 승리!",
-  outlaw: "무법자 팀 승리!",
-  renegade: "배신자 단독 승리!",
-};
-
-const EQUIP_ORDER: EquipSlot[] = ["weapon", "scope", "mustang", "barrel", "dynamite", "jail"];
+/** Fan overlap tuned for CardFace's new 128px-wide "md" face (2026-08-21 redesign, see HANDOFF.md) — roughly the same ~30%-of-width overlap the old 80px face used, scaled up. */
+const HAND_FAN_OVERLAP_PX = 40;
 
 // A wooden saloon-table panel — warm, dark wood tones instead of Hanamikoji's
 // lacquerware palette, so the two games read as visually distinct rooms.
@@ -114,7 +71,7 @@ function fanStyle(index: number, total: number, overlapPx: number): CSSPropertie
   const mid = (total - 1) / 2;
   const offset = index - mid;
   return {
-    transform: `rotate(${offset * 6}deg) translateY(${Math.abs(offset) * 5}px)`,
+    transform: `rotate(${offset * 6}deg) translateY(${Math.abs(offset) * 8}px)`,
     marginLeft: index === 0 ? 0 : -overlapPx,
     zIndex: index,
   };
@@ -201,63 +158,67 @@ function HeartPips({ life, maxLife }: { life: number; maxLife: number }) {
   );
 }
 
+/**
+ * The viewer's own HP + role, item 2 of the 2026-08-21 redesign (see
+ * HANDOFF.md) — previously only OTHER seats got a life/role readout
+ * (`HeartPips`/`EquipRow` in each seat badge around the oval); the viewer's
+ * own seat was never rendered there at all (they sit at the bottom via the
+ * hand panel instead), so this was the one seat with no HP display anywhere.
+ * Placed directly above "내 카드" — the "화면 하단 중앙" the request asked for.
+ */
+function MyLifeAndRoleBadge({ viewer, viewerName }: { viewer: PlayerState; viewerName: string }) {
+  const flash = useLifeFlash(viewer.life);
+  const role = ROLE_LABEL[viewer.role];
+  return (
+    <div className="relative z-10 flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+      <div
+        className={`flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 transition ${
+          flash === "hit" ? "border-rose-400 bg-rose-500/20" : flash === "heal" ? "border-emerald-400 bg-emerald-500/20" : "border-white/15 bg-black/40"
+        }`}
+        style={flash ? { animation: `bang-hp-${flash} 0.7s ease-out` } : undefined}
+      >
+        <span className="flex gap-0.5 text-lg leading-none" aria-hidden>
+          {Array.from({ length: viewer.maxLife }).map((_, i) => (
+            <span key={i} className={i < viewer.life ? "text-rose-400" : "text-white/15"}>
+              ❤
+            </span>
+          ))}
+        </span>
+        <span className="text-sm font-bold text-white">
+          {viewer.life} / {viewer.maxLife}
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5 rounded-full border-2 border-amber-400/60 bg-amber-500/15 px-3 py-1.5">
+        <span className="text-lg leading-none">{role.icon}</span>
+        <span className="text-sm font-bold text-amber-100">{role.label}</span>
+      </div>
+      <span className="text-xs text-amber-100/50">{viewerName} (나)</span>
+    </div>
+  );
+}
+
+// Compact icon+range chip for the OTHER seats around the oval table — no
+// room for full prose per opponent without crowding every seat badge (see
+// EquipSlotCard.tsx's `EquipSlotCard`/`MyEquipmentRow`, used instead for the
+// viewer's own equipment panel). No Tooltip wrap any more (2026-08-21
+// redesign, see HANDOFF.md item 1's "제거" instruction) — this was the last
+// remaining Tooltip usage in the bang folder.
 function EquipRow({ player }: { player: PlayerState }) {
   const items = EQUIP_ORDER.map((slot) => player.equipment[slot]).filter((c): c is Card => c !== null);
   if (items.length === 0) return null;
   return (
     <div className="flex flex-wrap justify-center gap-1">
       {items.map((c) => (
-        <Tooltip key={c.id} text={`${CARD_META[c.type].label} — ${CARD_META[c.type].desc}`}>
-          <span className="flex h-5 min-w-5 items-center justify-center gap-0.5 rounded border border-white/20 bg-black/40 px-0.5 text-[10px]">
-            {CARD_META[c.type].icon}
-            {c.type === "volcanic" || c.type === "schofield" || c.type === "remington" || c.type === "rev-carbine" || c.type === "winchester"
-              ? weaponRange(player)
-              : ""}
-          </span>
-        </Tooltip>
-      ))}
-    </div>
-  );
-}
-
-// Card face styling follows the physical Korean-localized deck
-// (boardGameRule/뱅/카드1.jpg, 카드2.jpg): a cream parchment panel inside a
-// tan double border, a bold small-caps western title (English callout above
-// a Korean label, e.g. "BANG! 뱅!"), and the suit+rank tucked in the
-// top-left/bottom-right corners like a real playing card — no illustration
-// is copied, `meta.icon` stands in for the artwork as before.
-function CardFace({ card, size = "md" }: { card: Card; size?: "sm" | "md" }) {
-  const meta = CARD_META[card.type];
-  const dims = size === "sm" ? "h-16 w-11" : "h-28 w-20";
-  const titleSize = size === "sm" ? "text-[6px]" : "text-[8px]";
-  return (
-    <Tooltip text={`${meta.label} — ${meta.desc}`}>
-      <div
-        className={`relative flex ${dims} flex-col items-center justify-between rounded-lg border-[3px] border-amber-700/80 bg-gradient-to-b from-amber-50 via-amber-100 to-amber-200 px-1 py-1 text-amber-950 shadow-[0_4px_10px_rgba(0,0,0,0.5)]`}
-      >
-        <span className="absolute top-0.5 left-1 text-[8px] font-bold leading-none">{card.suit}</span>
-        <span className="absolute right-1 bottom-0.5 rotate-180 text-[8px] font-bold leading-none">{card.suit}</span>
-        <span className={`${titleSize} mt-1.5 max-w-full truncate px-1 text-center font-black tracking-tight text-amber-900 uppercase`}>
-          {meta.label}
+        <span
+          key={c.id}
+          className="flex h-5 min-w-5 items-center justify-center gap-0.5 rounded border border-white/20 bg-black/40 px-0.5 text-[10px]"
+        >
+          {CARD_META[c.type].icon}
+          {c.type === "volcanic" || c.type === "schofield" || c.type === "remington" || c.type === "rev-carbine" || c.type === "winchester"
+            ? weaponRange(player)
+            : ""}
         </span>
-        <span className="text-xl drop-shadow-sm">{meta.icon}</span>
-        <span className="mb-1 h-1" />
-      </div>
-    </Tooltip>
-  );
-}
-
-function CardBack({ size = "sm" }: { size?: "sm" | "md" }) {
-  const dims = size === "sm" ? "h-16 w-11" : "h-24 w-16";
-  return (
-    <div
-      className={`flex ${dims} items-center justify-center rounded-xl border-2 border-white/15 shadow-[0_4px_10px_rgba(0,0,0,0.5)]`}
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 2px, transparent 2px, transparent 8px), linear-gradient(160deg, #4a2f14, #1c1108)",
-      }}
-    >
-      <span className="rounded-full border border-white/25 bg-black/30 p-1 text-sm">🤠</span>
+      ))}
     </div>
   );
 }
@@ -271,9 +232,24 @@ function seatPosition(relativeIndex: number, total: number): CSSProperties {
   return { left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)" };
 }
 
-export default function BangBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: BangBoardProps) {
+export default function BangBoard({
+  state,
+  viewerSeat,
+  names,
+  connectedSeats,
+  onAction,
+  onGameEnd,
+  centerEvents,
+  onCenterEventDone,
+}: BangBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  // Which hand card currently has the mouse over it, so its wrapper's
+  // z-index can be bumped above sibling cards on hover — a CSS `:hover`
+  // class alone can't do this (see CardFace.tsx's module doc: every fanned
+  // wrapper below already has its own inline-styled z-index from `fanStyle`,
+  // and a plain stylesheet `:hover` rule never outranks an inline style).
+  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const [discardSelection, setDiscardSelection] = useState<string[]>([]);
   // Only true once the viewer has actually chosen to end their turn while
   // over the hand limit — the real rule discards down to life *at end of
@@ -403,6 +379,9 @@ export default function BangBoard({ state, viewerSeat, names, connectedSeats, on
   return (
     <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
       <TableTexture />
+      {centerEvents[0] && (
+        <CenterPlayBanner key={centerEvents[0].id} event={centerEvents[0]} names={names} onDone={() => onCenterEventDone(centerEvents[0].id)} />
+      )}
       <div className="relative z-10 flex items-center justify-between text-xs text-amber-100/60">
         <span>
           {state.playerCount}인 · 턴 {state.turnNumber} · 남은 카드 {state.deck.length}장
@@ -569,28 +548,52 @@ export default function BangBoard({ state, viewerSeat, names, connectedSeats, on
         </div>
       )}
 
+      {/* Own HP/role, always visible — item 2 of the 2026-08-21 redesign, see MyLifeAndRoleBadge's doc. */}
+      <MyLifeAndRoleBadge viewer={viewer} viewerName={names[viewerSeat]} />
+      {/* Own equipped items, full name+range+effect text — item 3 of the same redesign (EquipSlotCard.tsx). */}
+      <div className="relative z-10">
+        <MyEquipmentRow player={viewer} />
+      </div>
+
       {/* My hand: fanned, face up, always visible. */}
       <div className="relative z-10">
-        <p className="mb-1 text-center text-xs text-amber-100/50">
-          {/* A player always knows their own role — only OTHER seats' roles are gated by public/revealed status. */}
-          내 카드 · {names[viewerSeat]} (나) · {ROLE_LABEL[viewer.role].icon} {ROLE_LABEL[viewer.role].label}
-        </p>
-        <div className="flex justify-center pt-2">
+        <p className="mb-1 text-center text-xs text-amber-100/50">내 카드</p>
+        <div className="flex justify-center pt-2 pb-2">
           {hand.map((c, i) => {
             const interactive = myTurn && state.turnPhase === "action" && !pending;
             const inDiscardMode = discarding && overHandLimit;
             const isSelectedToPlay = selectedCardId === c.id;
             const isSelectedToDiscard = discardSelection.includes(c.id);
+            const isHovered = hoveredCardId === c.id;
+            const isSelected = isSelectedToPlay || isSelectedToDiscard;
+            // A single source for the transform utilities so a selected card
+            // that's ALSO currently hovered doesn't end up with two
+            // conflicting `-translate-y-*` classes fighting for the same CSS
+            // property (Tailwind can't merge them — whichever lands later in
+            // the generated stylesheet silently wins).
+            const transformClass =
+              interactive && isHovered
+                ? "-translate-y-9 scale-[1.18] shadow-[0_25px_50px_-10px_rgba(0,0,0,0.9)]"
+                : isSelected
+                  ? "-translate-y-3"
+                  : interactive
+                    ? "hover:-translate-y-1.5"
+                    : "";
             return (
-              <div key={c.id} style={fanStyle(i, hand.length, 24)}>
+              <div
+                key={c.id}
+                style={{ ...fanStyle(i, hand.length, HAND_FAN_OVERLAP_PX), zIndex: isHovered ? 200 : i }}
+                onMouseEnter={() => setHoveredCardId(c.id)}
+                onMouseLeave={() => setHoveredCardId((prev) => (prev === c.id ? null : prev))}
+              >
                 <button
                   disabled={!interactive}
                   onClick={() => {
                     if (inDiscardMode) toggleDiscard(c.id);
                     else setSelectedCardId((prev) => (prev === c.id ? null : c.id));
                   }}
-                  className={`relative block rounded-xl transition ${
-                    isSelectedToPlay || isSelectedToDiscard ? "-translate-y-3 ring-2 ring-amber-300" : interactive ? "hover:-translate-y-1.5" : ""
+                  className={`relative block origin-bottom rounded-xl transition-transform duration-200 ease-out ${transformClass} ${
+                    isSelected ? "ring-2 ring-amber-300" : ""
                   } ${!interactive ? "opacity-90" : ""}`}
                 >
                   <CardFace card={c} />
