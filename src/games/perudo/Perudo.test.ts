@@ -2,18 +2,18 @@ import { describe, expect, it } from "vitest";
 import { seededRng } from "@/lib/rng";
 import {
   applyAction,
-  BOARD_TRACK_SEQUENCE,
   chooseBotAction,
   computeRankings,
   countMatching,
   getValidMoves,
-  isValidBid,
+  minValidQuantityForFace,
   MIN_PLAYERS,
   MAX_PLAYERS,
   STARTING_DICE,
   startGame,
   totalDiceInPlay,
-  trackIndexForBid,
+  trackCellAt,
+  trackCellForBid,
   validateRaise,
   type Bid,
   type Face,
@@ -42,13 +42,6 @@ function makeState(overrides: Partial<PerudoState> = {}): PerudoState {
   };
 }
 
-/** Finds a track cell's index by (kind, quantity) — a small test helper, distinct from `trackIndexForBid` which only searches *ahead* of a given position. */
-function trackIndexOf(kind: "normal" | "perudo", quantity: number, occurrence: 1 | 2 = 1): number {
-  const matches = BOARD_TRACK_SEQUENCE.filter((n) => n.kind === kind && n.quantity === quantity);
-  const node = matches[occurrence - 1];
-  if (!node) throw new Error(`no ${kind} cell with quantity ${quantity} (occurrence ${occurrence})`);
-  return node.index;
-}
 
 describe("startGame — setup", () => {
   it("deals 5 dice to every player and picks a starter within range", () => {
@@ -86,127 +79,131 @@ describe("startGame — setup", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2026-08-19 board track redesign — bidding validity is no longer the
-// rulebook §3 quantity/face formulas at all; it's a single fixed sequence
-// (`BOARD_TRACK_SEQUENCE`, 37 cells) that every bid maps to a cell of, and
-// the only rule is "the next bid's cell must have a strictly greater index
-// than the current bid's cell" (`isValidBid`). See engine.ts's module doc
-// note for why the raw number labels aren't monotonic (e.g.
-// "...6→7→4→[페루도4]→8...") without that being a contradiction — validity
-// only ever looks at array index, never the printed label.
+// 2026-08-20 트랙/마커 재도입 세션 (see engine.ts's module doc for the full
+// history): `trackCellForBid`/`trackCellAt` are pure, stateless functions
+// used ONLY for where the UI draws a marker — they have no say in bid
+// legality (that's `validateRaise`, tested separately below). Deterministic
+// and total: every `(quantity, face)` has exactly one cell, so face 2-6
+// never lands on a [페루도] cell and vice versa — the exact mapping bug
+// `boardGameRule/페루도/버그2.png` reported.
 // ---------------------------------------------------------------------------
-describe("BOARD_TRACK_SEQUENCE — the fixed linear board track", () => {
-  it("has exactly 37 cells, matching the user-specified sequence 1→[페루도1]→2→...→[페루도10]→20", () => {
-    expect(BOARD_TRACK_SEQUENCE).toHaveLength(37);
-    expect(BOARD_TRACK_SEQUENCE[0]).toMatchObject({ index: 0, kind: "normal", quantity: 1 });
-    expect(BOARD_TRACK_SEQUENCE[1]).toMatchObject({ index: 1, kind: "perudo", quantity: 1 });
-    expect(BOARD_TRACK_SEQUENCE[36]).toMatchObject({ index: 36, kind: "normal", quantity: 20 });
+describe("trackCellForBid / trackCellAt — pure display-only board position", () => {
+  it("maps quantity 1 to index 0 (normal) for any non-joker face, and index 1 ([페루도 1]) only for face 1", () => {
+    expect(trackCellForBid({ quantity: 1, face: 2 })).toEqual({ index: 0, kind: "normal", quantity: 1 });
+    expect(trackCellForBid({ quantity: 1, face: 6 })).toEqual({ index: 0, kind: "normal", quantity: 1 });
+    expect(trackCellForBid({ quantity: 1, face: 1 })).toEqual({ index: 1, kind: "perudo", quantity: 1 });
   });
 
-  it("reproduces the exact confirmed label sequence, including its non-monotonic dips (e.g. ...7→4→[페루도4]...)", () => {
-    const labels = BOARD_TRACK_SEQUENCE.map((n) => (n.kind === "perudo" ? `페루도${n.quantity}` : `${n.quantity}`));
-    expect(labels).toEqual([
-      "1", "페루도1",
-      "2", "3", "페루도2",
-      "4", "5", "페루도3",
-      "6", "7", "4", "페루도4",
-      "8", "9", "5", "페루도5",
-      "10", "11", "6", "페루도6",
-      "12", "13", "7", "페루도7",
-      "14", "15", "8", "페루도8",
-      "16", "17", "9", "페루도9",
-      "18", "19", "10", "페루도10",
-      "20",
-    ]);
+  it("버그2 회귀: 수량 1·눈금 2(조커 아님) 비딩은 절대 [페루도] 칸에 매핑되지 않는다", () => {
+    const cell = trackCellForBid({ quantity: 1, face: 2 });
+    expect(cell.kind).toBe("normal");
+    expect(cell.quantity).toBe(1);
   });
 
-  it("[페루도2]에서 3(트랙 상 이전 칸)으로 비딩 시도 시 실패(false)", () => {
-    const perudo2 = trackIndexOf("perudo", 2);
-    const three = trackIndexOf("normal", 3);
-    expect(isValidBid(perudo2, three)).toBe(false);
+  it("faces 2-6 all share the exact same cell for a given quantity — the track never distinguishes among them", () => {
+    const faces: Face[] = [2, 3, 4, 5, 6];
+    const cells = faces.map((face) => trackCellForBid({ quantity: 3, face }));
+    for (const cell of cells) expect(cell).toEqual({ index: 4, kind: "normal", quantity: 3 });
   });
 
-  it("[페루도2]에서 4 또는 [페루도3]으로 비딩 시도 시 성공(true)", () => {
-    const perudo2 = trackIndexOf("perudo", 2);
-    const four = trackIndexOf("normal", 4);
-    const perudo3 = trackIndexOf("perudo", 3);
-    expect(isValidBid(perudo2, four)).toBe(true);
-    expect(isValidBid(perudo2, perudo3)).toBe(true);
-  });
-
-  it("트랙을 처음부터 끝까지 한 칸씩 전진하면 매번 유효하다 (전체 순서 검증)", () => {
-    for (let i = 1; i < BOARD_TRACK_SEQUENCE.length; i++) {
-      expect(isValidBid(i - 1, i)).toBe(true);
+  it("is strictly monotonic in quantity — every higher quantity lands on a strictly later index, joker or not", () => {
+    for (let q = 1; q < 30; q++) {
+      expect(trackCellForBid({ quantity: q + 1, face: 2 }).index).toBeGreaterThan(trackCellForBid({ quantity: q, face: 1 }).index);
+      expect(trackCellForBid({ quantity: q, face: 1 }).index).toBeGreaterThan(trackCellForBid({ quantity: q, face: 2 }).index);
     }
   });
 
-  it("같은 칸이거나 이전 칸으로는 이동할 수 없다 (역행 차단)", () => {
-    for (let i = 0; i < BOARD_TRACK_SEQUENCE.length; i++) {
-      expect(isValidBid(i, i)).toBe(false);
-      if (i > 0) expect(isValidBid(i, i - 1)).toBe(false);
+  it("has no upper bound — arbitrarily large quantities (uncapped calza growth) still resolve to a real cell", () => {
+    expect(trackCellForBid({ quantity: 500, face: 3 })).toEqual({ index: 998, kind: "normal", quantity: 500 });
+  });
+
+  it("trackCellAt is the exact inverse of trackCellForBid", () => {
+    for (let index = 0; index < 40; index++) {
+      const cell = trackCellAt(index);
+      expect(cell.index).toBe(index);
+      expect(trackCellForBid({ quantity: cell.quantity, face: cell.kind === "perudo" ? 1 : 2 })).toEqual(cell);
     }
-  });
-
-  it("트랙 범위를 벗어난 인덱스는 거절된다", () => {
-    expect(isValidBid(0, -1)).toBe(false);
-    expect(isValidBid(0, BOARD_TRACK_SEQUENCE.length)).toBe(false);
-  });
-
-  it("prev=null(개장 선언)은 트랙 내 아무 칸이나 허용한다", () => {
-    expect(isValidBid(null, 0)).toBe(true);
-    expect(isValidBid(null, 36)).toBe(true);
-  });
-
-  it("trackIndexForBid finds the nearest matching cell strictly ahead of a position, or null if none remains", () => {
-    expect(trackIndexForBid(-1, 1, 2)).toBe(0); // opening bid "1"
-    expect(trackIndexForBid(-1, 1, 1)).toBe(1); // opening bid "페루도1"
-    expect(trackIndexForBid(trackIndexOf("normal", 7), 4, 2)).toBe(trackIndexOf("normal", 4, 2)); // second "4", since the first is already behind
-    expect(trackIndexForBid(0, 1, 2)).toBeNull(); // quantity 1 never recurs later on the track
-    expect(trackIndexForBid(0, 21, 2)).toBeNull(); // quantity 21 never appears on the track at all
-    expect(trackIndexForBid(0, 11, 1)).toBeNull(); // 페루도11 never appears (perudo cells only go up to 10)
   });
 });
 
-describe("validateRaise — board-track index comparison (rulebook §3 formulas no longer apply)", () => {
-  it("always accepts the round's opening bid, as long as it lands on a real track cell", () => {
+describe("validateRaise — rulebook §3 formulas (the board track above never gates this)", () => {
+  it("always accepts the round's opening bid", () => {
     expect(validateRaise(null, { quantity: 1, face: 1 })).toBe(true);
-    expect(validateRaise(null, { quantity: 20, face: 6 })).toBe(true);
+    expect(validateRaise(null, { quantity: 99, face: 6 })).toBe(true);
   });
 
-  it("rejects an out-of-range face, non-positive quantity, or a quantity that never appears on the track", () => {
+  it("rejects an out-of-range face or non-positive quantity", () => {
     expect(validateRaise(null, { quantity: 1, face: 0 as Face })).toBe(false);
     expect(validateRaise(null, { quantity: 1, face: 7 as Face })).toBe(false);
     expect(validateRaise(null, { quantity: 0, face: 3 })).toBe(false);
-    expect(validateRaise(null, { quantity: 99, face: 6 })).toBe(false); // no cell for quantity 99
-    expect(validateRaise(null, { quantity: 11, face: 1 })).toBe(false); // no 페루도11 cell
   });
 
-  it("[페루도2]에 놓인 뒤: 3/2/[페루도1]/1 등 트랙 상 이전 칸으로는 거절된다", () => {
-    const prev: Bid = { seat: 0, trackIndex: trackIndexOf("perudo", 2), quantity: 2, face: 1 };
-    expect(validateRaise(prev, { quantity: 3, face: 2 })).toBe(false);
-    expect(validateRaise(prev, { quantity: 2, face: 2 })).toBe(false);
-    expect(validateRaise(prev, { quantity: 1, face: 1 })).toBe(false);
-    expect(validateRaise(prev, { quantity: 1, face: 2 })).toBe(false);
+  describe("normal(2-6) -> normal(2-6)", () => {
+    const prev: Bid = { seat: 0, quantity: 4, face: 3 };
+    it("quantity up, face unchanged or changed — both allowed (rulebook's worked example)", () => {
+      expect(validateRaise(prev, { quantity: 5, face: 3 })).toBe(true);
+      expect(validateRaise(prev, { quantity: 5, face: 5 })).toBe(true);
+    });
+    it("same quantity, higher face — allowed", () => {
+      expect(validateRaise(prev, { quantity: 4, face: 4 })).toBe(true);
+      expect(validateRaise(prev, { quantity: 4, face: 6 })).toBe(true);
+    });
+    it("same quantity, lower or equal face — rejected", () => {
+      expect(validateRaise(prev, { quantity: 4, face: 2 })).toBe(false);
+      expect(validateRaise(prev, { quantity: 4, face: 3 })).toBe(false);
+    });
+    it("lower quantity — always rejected regardless of face", () => {
+      expect(validateRaise(prev, { quantity: 3, face: 6 })).toBe(false);
+    });
   });
 
-  it("[페루도2]에 놓인 뒤: 4, 5, [페루도3], 6... 등 트랙 상 이후 칸은 모두 허용된다", () => {
-    const prev: Bid = { seat: 0, trackIndex: trackIndexOf("perudo", 2), quantity: 2, face: 1 };
-    expect(validateRaise(prev, { quantity: 4, face: 2 })).toBe(true);
-    expect(validateRaise(prev, { quantity: 5, face: 3 })).toBe(true);
-    expect(validateRaise(prev, { quantity: 3, face: 1 })).toBe(true); // [페루도3]
-    expect(validateRaise(prev, { quantity: 6, face: 5 })).toBe(true);
+  // "버그2" 재현 케이스: 눈금 2 · 수량 1 선언 뒤, 동일 수량(1)에서 눈금만
+  // 3/4/5/6으로 올리는 비딩 전부가 합법이어야 한다(그 다음 상대의 비딩까지
+  // 포함해 3->4->5->6 연쇄도 전부 허용).
+  it("버그2: quantity:1,face:2 다음 동일 수량 1에서 face 3/4/5/6은 전부 합법, face<=2는 거절", () => {
+    const prev: Bid = { seat: 0, quantity: 1, face: 2 };
+    expect(validateRaise(prev, { quantity: 1, face: 3 })).toBe(true);
+    expect(validateRaise(prev, { quantity: 1, face: 4 })).toBe(true);
+    expect(validateRaise(prev, { quantity: 1, face: 5 })).toBe(true);
+    expect(validateRaise(prev, { quantity: 1, face: 6 })).toBe(true);
+    expect(validateRaise(prev, { quantity: 1, face: 2 })).toBe(false); // 같은 눈금은 상향이 아님
+    // face:1(조커)은 "더 높은 일반 눈금"이 아니라 별도의 normal->paco 공식
+    // (quantity >= ceil(prev/2))을 따른다 — prev quantity 1이면 ceil(1/2)=1이라
+    // 같은 수량 1로도 조커 전환은 여전히 합법이다(아래 별도 describe에서 그
+    // 공식 자체를 더 폭넓게 검증).
+    expect(validateRaise(prev, { quantity: 1, face: 1 })).toBe(true);
+    // 눈금 3 다음 곧바로 눈금 6으로도(중간 단계를 거치지 않고) 갈 수 있다.
+    expect(validateRaise({ seat: 0, quantity: 1, face: 3 }, { quantity: 1, face: 6 })).toBe(true);
   });
 
-  it("같은 수량이라도 이미 지나간 칸이 아니라 트랙 상 더 뒤에 있는 동일 라벨 칸이면 유효하다 (예: 두 번째 '4')", () => {
-    // Sitting at "7" (index of the first "7"), the *later* duplicate "4" cell
-    // (after "6, 7") is still strictly ahead on the track, even though 4 < 7.
-    const prev: Bid = { seat: 0, trackIndex: trackIndexOf("normal", 7), quantity: 7, face: 2 };
-    expect(validateRaise(prev, { quantity: 4, face: 3 })).toBe(true);
+  describe("normal -> paco(1) / paco(1) -> normal / paco -> paco", () => {
+    it("normal -> paco: quantity >= ceil(prev/2)", () => {
+      const prev: Bid = { seat: 0, quantity: 5, face: 4 };
+      expect(validateRaise(prev, { quantity: 3, face: 1 })).toBe(true); // ceil(5/2) = 3
+      expect(validateRaise(prev, { quantity: 2, face: 1 })).toBe(false);
+    });
+    it("paco -> normal: quantity >= prev*2 + 1", () => {
+      const prev: Bid = { seat: 0, quantity: 2, face: 1 };
+      expect(validateRaise(prev, { quantity: 5, face: 2 })).toBe(true); // 2*2+1 = 5
+      expect(validateRaise(prev, { quantity: 4, face: 6 })).toBe(false);
+    });
+    it("paco -> paco: quantity must strictly increase", () => {
+      const prev: Bid = { seat: 0, quantity: 2, face: 1 };
+      expect(validateRaise(prev, { quantity: 3, face: 1 })).toBe(true);
+      expect(validateRaise(prev, { quantity: 2, face: 1 })).toBe(false);
+    });
   });
+});
 
-  it("페루도(1)는 오직 트랙에 명시된 [페루도 N] 칸으로만 비딩할 수 있다 — 존재하지 않는 페루도 수량은 거절", () => {
-    expect(validateRaise(null, { quantity: 11, face: 1 })).toBe(false);
-    expect(validateRaise(null, { quantity: 1, face: 1 })).toBe(true); // [페루도1] exists
+describe("minValidQuantityForFace", () => {
+  it("is 1 for the opening bid, any face", () => {
+    expect(minValidQuantityForFace(null, 2)).toBe(1);
+    expect(minValidQuantityForFace(null, 1)).toBe(1);
+  });
+  it("matches the same-quantity-higher-face allowance for a normal prev bid", () => {
+    const prev: Bid = { seat: 0, quantity: 1, face: 2 };
+    expect(minValidQuantityForFace(prev, 3)).toBe(1); // same quantity, higher face still legal
+    expect(minValidQuantityForFace(prev, 2)).toBe(2); // same face needs a higher quantity
   });
 });
 
@@ -230,30 +227,29 @@ describe("raise (action)", () => {
     expect(next).toEqual(state);
   });
 
-  it("is a no-op for an invalid raise (a quantity with no cell strictly ahead of the current one)", () => {
+  it("is a no-op for an invalid raise (lower quantity, regardless of face)", () => {
     const state = makeState({
       activeSeat: 0,
-      currentBid: { seat: 2, trackIndex: trackIndexOf("normal", 4), quantity: 4, face: 3 },
+      currentBid: { seat: 2, quantity: 4, face: 3 },
     });
-    // Quantity 3 only ever appears once on the track, at an index before "4" — nothing ahead can match it.
     const next = applyAction(state, { type: "raise", seat: 0, quantity: 3, face: 6 });
     expect(next).toEqual(state);
   });
 
-  it("updates currentBid (with its resolved trackIndex) and advances to the next alive seat", () => {
+  it("updates currentBid and advances to the next alive seat", () => {
     const state = makeState({ activeSeat: 0 });
     const next = applyAction(state, { type: "raise", seat: 0, quantity: 2, face: 3 });
-    expect(next.currentBid).toEqual({ seat: 0, trackIndex: trackIndexOf("normal", 2), quantity: 2, face: 3 });
+    expect(next.currentBid).toEqual({ seat: 0, quantity: 2, face: 3 });
     expect(next.activeSeat).toBe(1);
   });
 
-  it("landing on a later duplicate-labelled cell is a legal raise even though the printed quantity looks smaller", () => {
+  it("same quantity, strictly higher face is a legal raise (버그2 회귀 — the old board-track house rule couldn't express this at all)", () => {
     const state = makeState({
       activeSeat: 0,
-      currentBid: { seat: 1, trackIndex: trackIndexOf("normal", 7), quantity: 7, face: 2 },
+      currentBid: { seat: 1, quantity: 1, face: 2 },
     });
-    const next = applyAction(state, { type: "raise", seat: 0, quantity: 4, face: 5 });
-    expect(next.currentBid).toEqual({ seat: 0, trackIndex: trackIndexOf("normal", 4, 2), quantity: 4, face: 5 });
+    const next = applyAction(state, { type: "raise", seat: 0, quantity: 1, face: 5 });
+    expect(next.currentBid).toEqual({ seat: 0, quantity: 1, face: 5 });
   });
 
   it("skips eliminated seats when advancing", () => {
@@ -280,7 +276,7 @@ describe("dudo (페루도!)", () => {
   it("is a no-op when it isn't that seat's turn", () => {
     const state = makeState({
       activeSeat: 0,
-      currentBid: { seat: 2, trackIndex: trackIndexOf("normal", 3), quantity: 3, face: 4 },
+      currentBid: { seat: 2, quantity: 3, face: 4 },
     });
     const next = applyAction(state, { type: "dudo", seat: 1 });
     expect(next).toEqual(state);
@@ -290,7 +286,7 @@ describe("dudo (페루도!)", () => {
     // Table has three 4s + no 1s = 3 actual, but seat 2 bid 5 -> shortfall of 2.
     const state = makeState({
       activeSeat: 0,
-      currentBid: { seat: 2, trackIndex: trackIndexOf("normal", 5), quantity: 5, face: 4 },
+      currentBid: { seat: 2, quantity: 5, face: 4 },
       players: [
         { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
         { seat: 1, diceCount: 5, dice: [4, 2, 2, 3, 5] },
@@ -307,7 +303,7 @@ describe("dudo (페루도!)", () => {
   it("penalizes the doubter by the exact overshoot+1 when the bid was accurate or conservative (rulebook §4①: 실제 개수 - 선언 개수 + 1)", () => {
     const state = makeState({
       activeSeat: 0,
-      currentBid: { seat: 2, trackIndex: trackIndexOf("normal", 2), quantity: 2, face: 4 },
+      currentBid: { seat: 2, quantity: 2, face: 4 },
       players: [
         { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
         { seat: 1, diceCount: 5, dice: [4, 2, 2, 3, 5] },
@@ -323,7 +319,7 @@ describe("dudo (페루도!)", () => {
   it("matches the rulebook's worked example — 5개 선언, 실제 2개면 3개 상실", () => {
     const state = makeState({
       activeSeat: 0,
-      currentBid: { seat: 2, trackIndex: trackIndexOf("normal", 5), quantity: 5, face: 4 },
+      currentBid: { seat: 2, quantity: 5, face: 4 },
       players: [
         { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
         { seat: 1, diceCount: 5, dice: [2, 2, 3, 3, 5] },
@@ -339,7 +335,7 @@ describe("dudo (페루도!)", () => {
     const state = makeState({
       playerCount: 2,
       activeSeat: 0,
-      currentBid: { seat: 1, trackIndex: trackIndexOf("normal", 6), quantity: 6, face: 4 },
+      currentBid: { seat: 1, quantity: 6, face: 4 },
       players: [
         { seat: 0, diceCount: 1, dice: [4] },
         { seat: 1, diceCount: 1, dice: [2] },
@@ -359,7 +355,7 @@ describe("dudo (페루도!)", () => {
     const state = makeState({
       roundStarter: 0,
       activeSeat: 1,
-      currentBid: { seat: 0, trackIndex: trackIndexOf("normal", 2), quantity: 2, face: 4 },
+      currentBid: { seat: 0, quantity: 2, face: 4 },
       players: [
         { seat: 0, diceCount: 1, dice: [4] },
         { seat: 1, diceCount: 5, dice: [1, 2, 3, 5, 6] }, // one wild 1
@@ -379,7 +375,7 @@ describe("calza (맞아!)", () => {
   it("is not restricted to the active seat", () => {
     const state = makeState({
       activeSeat: 0,
-      currentBid: { seat: 2, trackIndex: trackIndexOf("normal", 2), quantity: 2, face: 4 },
+      currentBid: { seat: 2, quantity: 2, face: 4 },
       players: [
         { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
         { seat: 1, diceCount: 5, dice: [1, 2, 2, 3, 5] },
@@ -396,7 +392,7 @@ describe("calza (맞아!)", () => {
   // 정상 누적돼야 한다(최신 룰북 문구: "최대 개수 제한없음").
   it("regains a die on an exact match with NO upper cap — 5개 보유 상태에서 성공하면 6개로 증가한다", () => {
     const state = makeState({
-      currentBid: { seat: 2, trackIndex: trackIndexOf("normal", 2), quantity: 2, face: 4 },
+      currentBid: { seat: 2, quantity: 2, face: 4 },
       players: [
         { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
         { seat: 1, diceCount: 5, dice: [2, 2, 3, 3, 5] },
@@ -410,7 +406,7 @@ describe("calza (맞아!)", () => {
 
   it("keeps regaining dice past 6, 7, 8... across repeated exact-match successes — genuinely unbounded", () => {
     let state = makeState({
-      currentBid: { seat: 2, trackIndex: trackIndexOf("normal", 2), quantity: 2, face: 4 },
+      currentBid: { seat: 2, quantity: 2, face: 4 },
       players: [
         { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
         { seat: 1, diceCount: 5, dice: [2, 2, 3, 3, 5] },
@@ -424,7 +420,7 @@ describe("calza (맞아!)", () => {
       // random reroll would make the "exact match" setup unreliable across
       // iterations) so the next calza call in the loop has something
       // identical to act on again.
-      state = { ...state, phase: "playing", currentBid: { seat: 2, trackIndex: trackIndexOf("normal", 2), quantity: 2, face: 4 } };
+      state = { ...state, phase: "playing", currentBid: { seat: 2, quantity: 2, face: 4 } };
     }
     expect(state.players.find((p) => p.seat === 0)!.diceCount).toBe(9); // 5 + four successive +1s, no cap
   });
@@ -432,7 +428,7 @@ describe("calza (맞아!)", () => {
   it("loses dice equal to the exact absolute margin on a wrong call (rulebook §4②: |실제 개수 - 선언 개수|)", () => {
     // face-4 count: seat0's two 4s + seat1's wild 1 = 3 actual, bid was 5 -> |3-5| = 2.
     const state = makeState({
-      currentBid: { seat: 2, trackIndex: trackIndexOf("normal", 5), quantity: 5, face: 4 },
+      currentBid: { seat: 2, quantity: 5, face: 4 },
       players: [
         { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
         { seat: 1, diceCount: 5, dice: [1, 2, 2, 3, 5] },
@@ -446,7 +442,7 @@ describe("calza (맞아!)", () => {
 
   it("matches the rulebook's worked example — 4개라 외쳤으나 실제 7개면 3개 상실", () => {
     const state = makeState({
-      currentBid: { seat: 2, trackIndex: trackIndexOf("normal", 4), quantity: 4, face: 4 },
+      currentBid: { seat: 2, quantity: 4, face: 4 },
       players: [
         { seat: 0, diceCount: 5, dice: [4, 4, 4, 4, 5] },
         { seat: 1, diceCount: 5, dice: [4, 4, 4, 3, 5] },
@@ -460,7 +456,7 @@ describe("calza (맞아!)", () => {
 
   it("clamps the loss at 0 dice rather than going negative when the margin exceeds the caller's stock", () => {
     const state = makeState({
-      currentBid: { seat: 2, trackIndex: 36, quantity: 30, face: 4 }, // quantity 30 never appears on the track itself — only reachable directly via state override, exercising the "margin exceeds stock" clamp regardless
+      currentBid: { seat: 2, quantity: 30, face: 4 }, // exaggerated quantity via direct state override, purely to exercise the "margin exceeds stock" clamp
       players: [
         { seat: 0, diceCount: 2, dice: [4, 5] },
         { seat: 1, diceCount: 5, dice: [2, 2, 3, 3, 5] },
@@ -478,7 +474,7 @@ describe("calza (맞아!)", () => {
   it("is still allowed even when the round starter has only 1 die left (no more Palafico restriction)", () => {
     const state = makeState({
       roundStarter: 0,
-      currentBid: { seat: 0, trackIndex: trackIndexOf("normal", 1), quantity: 1, face: 4 },
+      currentBid: { seat: 0, quantity: 1, face: 4 },
       players: [
         { seat: 0, diceCount: 1, dice: [4] },
         { seat: 1, diceCount: 5, dice: [1, 2, 2, 3, 5] },
@@ -492,7 +488,7 @@ describe("calza (맞아!)", () => {
 
   it("is a no-op for a seat that's already eliminated", () => {
     const state = makeState({
-      currentBid: { seat: 2, trackIndex: trackIndexOf("normal", 2), quantity: 2, face: 4 },
+      currentBid: { seat: 2, quantity: 2, face: 4 },
       players: [
         { seat: 0, diceCount: 0, dice: [] },
         { seat: 1, diceCount: 5, dice: [1, 2, 2, 3, 5] },
@@ -516,7 +512,7 @@ describe("continue (round transition)", () => {
       phase: "reveal",
       roundNumber: 1,
       roundStarter: 1,
-      currentBid: { seat: 0, trackIndex: trackIndexOf("normal", 2), quantity: 2, face: 3 },
+      currentBid: { seat: 0, quantity: 2, face: 3 },
       players: [
         { seat: 0, diceCount: 4, dice: [4, 4, 2, 3] },
         { seat: 1, diceCount: 0, dice: [] },
@@ -613,7 +609,7 @@ describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
   it("includes dudo and calza once a bid is pending", () => {
     const state = makeState({
       activeSeat: 1,
-      currentBid: { seat: 0, trackIndex: trackIndexOf("normal", 2), quantity: 2, face: 3 },
+      currentBid: { seat: 0, quantity: 2, face: 3 },
     });
     const moves = getValidMoves(state, 1);
     expect(moves.some((m) => m.type === "dudo")).toBe(true);
@@ -627,7 +623,7 @@ describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
     const state = makeState({
       activeSeat: 1,
       roundStarter: 0,
-      currentBid: { seat: 0, trackIndex: trackIndexOf("normal", 2), quantity: 2, face: 4 },
+      currentBid: { seat: 0, quantity: 2, face: 4 },
       players: [
         { seat: 0, diceCount: 1, dice: [4] },
         { seat: 1, diceCount: 5, dice: [1, 2, 3, 4, 5] },
@@ -661,12 +657,12 @@ describe("chooseBotAction (AI bot support, Level 1–10)", () => {
   it("calls dudo when the pending bid is far beyond a fair estimate", () => {
     const state = makeState({
       activeSeat: 1,
-      // [페루도10] — the track's second-to-last cell, so the only raise left
-      // ahead of it is the final "20" cell (index 36): needing 10 wild-1s out
-      // of 15 total dice is already a bad bid, and every raise candidate left
-      // on the track from here is strictly worse (an outright-impossible
-      // quantity-20 bid), so dudo should read as clearly best regardless.
-      currentBid: { seat: 0, trackIndex: trackIndexOf("perudo", 10), quantity: 10, face: 1 },
+      // 페루도(1)×10 — needing 10 wild-1s out of 15 total dice is already a
+      // bad bid, and every legal raise from here is strictly worse (paco ->
+      // paco needs quantity > 10; paco -> normal needs quantity >= 21,
+      // impossible with only 15 dice in play), so dudo should read as
+      // clearly best regardless.
+      currentBid: { seat: 0, quantity: 10, face: 1 },
       players: [
         { seat: 0, diceCount: 5, dice: [3, 3, 3, 3, 3] },
         { seat: 1, diceCount: 5, dice: [3, 3, 3, 3, 3] }, // no 1s in my own hand
@@ -690,10 +686,10 @@ describe("chooseBotAction (AI bot support, Level 1–10)", () => {
   it("Level 1 (forced onto its mistake path) can pick a far worse move than Level 10's usual call", () => {
     const state = makeState({
       activeSeat: 1,
-      // Same [페루도10] setup as above — face 1 has no raise candidate left at
-      // all (this *is* the last perudo cell), so the first enumerated raise
-      // is face 2's jump to the track's final "20" cell.
-      currentBid: { seat: 0, trackIndex: trackIndexOf("perudo", 10), quantity: 10, face: 1 },
+      // Same 페루도(1)×10 setup as above — every legal raise from here (paco
+      // -> paco quantity 11, or paco -> normal at quantity >= 21) is a bad
+      // bid with only 15 dice in play.
+      currentBid: { seat: 0, quantity: 10, face: 1 },
       players: [
         { seat: 0, diceCount: 5, dice: [3, 3, 3, 3, 3] },
         { seat: 1, diceCount: 5, dice: [3, 3, 3, 3, 3] },
@@ -703,9 +699,9 @@ describe("chooseBotAction (AI bot support, Level 1–10)", () => {
 
     // rng() always 0 -> always below Level 1's ~55% mistake chance -> always
     // takes candidates[Math.floor(0 * length)] === the first enumerated move
-    // (a raise to the track's final "20" cell — the only quantity left ahead
-    // of [페루도10] at all — a bid that can never hold since only 15 dice are
-    // in play), not the obviously-correct call.
+    // (raiseMoves walks face 1..6 — face 1's own raise, quantity 11, comes
+    // first — a bid that can never hold since only 15 dice are in play),
+    // not the obviously-correct call.
     const level1Action = chooseBotAction(state, 1, 1, () => 0);
     expect(level1Action?.type).toBe("raise");
     expect(level1Action).not.toEqual({ type: "dudo", seat: 1 });
@@ -717,17 +713,17 @@ describe("chooseBotAction (AI bot support, Level 1–10)", () => {
   // strategy (real bluffing) rather than a flat, perfectly predictable
   // argmax — so unlike the deterministic tiers above, this can't assert a
   // single rng draw always produces one exact action. Instead: this bid
-  // ([페루도10] — 10 wild-1s needed out of only 15 total dice) can never
+  // (페루도(1)×10 — 10 wild-1s needed out of only 15 total dice) can never
   // hold — holdProbability is exactly 0 — and every raise still reachable
-  // from here (only the track's final "20" cell remains ahead) is at least
-  // as bad (quantity 20 exceeds every die in play, an outright-impossible
-  // bid), so across many independent decisions an expert bot should
+  // from here (paco -> paco quantity 11, or paco -> normal quantity >= 21)
+  // is at least as bad (both exceed every die in play), so across many
+  // independent decisions an expert bot should
   // overwhelmingly (not universally, since a genuine mixed strategy leaves
   // room for an occasional credible bluff/raise) resolve it by calling dudo.
   it("Level 10 overwhelmingly calls dudo on a bid that can never hold, without being perfectly deterministic about it", () => {
     const state = makeState({
       activeSeat: 1,
-      currentBid: { seat: 0, trackIndex: trackIndexOf("perudo", 10), quantity: 10, face: 1 },
+      currentBid: { seat: 0, quantity: 10, face: 1 },
       players: [
         { seat: 0, diceCount: 5, dice: [3, 3, 3, 3, 3] },
         { seat: 1, diceCount: 5, dice: [3, 3, 3, 3, 3] },
