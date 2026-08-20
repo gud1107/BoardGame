@@ -14,7 +14,7 @@ _최종 갱신: 2026-08-20 (**페루도 — 트랙/마커 재도입(판정과 �
 
 **검증**: `npx tsc --noEmit`(전체, 0 에러) / `npm run lint`(전체, 0 경고) / `npx vitest run src/games/perudo/Perudo.test.ts`(64/64 통과, 2.2초 — `engine.ts` 무변경, 순수 `PerudoBoard.tsx` 표현 계층 변경). 전체 `npx vitest run`은 이전 세션들과 동일 사유(`aiBenchmark.test.ts`)로 백그라운드에 걸어두고 이번 세션 안에 완료를 기다리지 않음(§3 0번 항목 참고). **주의**: 이번 세션 중 백그라운드 vitest를 세 번 연속 실행했다가 두 번은 취소 처리(`TaskStop`)만 하고 실제 자식 프로세스(`vitest.mjs`/`workers/forks.js`)는 살아남아 세 인스턴스가 동시에 같은 저장소를 물고 있던 것을 뒤늦게 `Get-CimInstance Win32_Process`로 발견해 전부 정리했음 — `TaskStop`이 npm/npx 래퍼만 죽이고 실제 워커는 살려둘 수 있다는 걸 이 세션에서 확인했으니, 다음에 vitest 백그라운드 실행을 취소할 땐 `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where CommandLine -match 'vitest'`로 실제 잔존 프로세스를 반드시 재확인할 것.
 
-**커밋/배포**: 커밋 `95c2f15 feat(perudo): implement rectangular 4-side border track layout from 1 to 20` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 실행. "production" 명시 없어 프리뷰까지만 진행(08-20 세션과 동일 관례).
+**커밋/배포**: 커밋 `95c2f15 feat(perudo): implement rectangular 4-side border track layout from 1 to 20` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주(빌드 중 `tsc`/정적 페이지 생성 전부 그린), READY — `https://board-game-3km8akd4u-me-3871.vercel.app`. "production" 명시 없어 프리뷰까지만 진행(08-20 세션과 동일 관례).
 
 ### 2026-08-20 — 페루도 트랙/마커 재도입 (판정과 분리된 순수 시각 요소) + '버그2' 해결
 
