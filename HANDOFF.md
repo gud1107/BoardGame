@@ -14,7 +14,7 @@ _최종 갱신: 2026-08-21 (**페루도 '수정필요1' 30칸 실물 보드 트�
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0 — 리뷰 중 미사용 `trackIndexForBid` import 1건 발견해 제거) / `npx vitest run src/games/perudo`(73/73 통과) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1063/1063 통과, 47초) / 페루도 AI 자가 대진 벤치마크(Level 10 vs Level 1-3, 1,000판, `npx vitest run src/games/shared/bot/aiBenchmark.test.ts -t "perudo:"`로 격리 실행) 85% 승률 문턱 정상 통과 — 트랙 규칙이 페루도→일반 전환의 최소 합법 수량을 낮춰(21→20) 봇의 합법 수 후보 집합이 미세하게 바뀌었음에도 강세가 유지됨을 확인.
 
-**커밋/배포**: 커밋 `TBD fix(perudo): update board to 30-slot track sequence and prevent backwards bidding to previous perudo slots` → `git push origin main` → `npx vercel deploy`(프리뷰). 상세 결과는 본 세션 요약 응답 참고.
+**커밋/배포**: 커밋 `f72558c fix(perudo): update board to 30-slot track sequence and prevent backwards bidding to previous perudo slots` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 첫 시도는 과거 세션들과 동일한 `{"status":"error","reason":"deploy_failed","message":"Not authorized"}`로 실패 → 즉시 재시도하니 정상 빌드(Turbopack, TypeScript 전체 재검사 포함)·배포되어 READY — `https://board-game-g0ji6sdmw-me-3871.vercel.app`. 사용자가 "production"을 명시하지 않아 이번에도 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-21 — 페루도 '버그3': 마커를 확정 비딩 칸에 정확히 고정 + 마커 클릭 눈금 상향 인터랙션 신규 + 동일 배팅 확정 차단 안내
 
