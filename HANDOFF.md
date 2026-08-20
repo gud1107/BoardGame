@@ -18,7 +18,7 @@ _이전 갱신: 2026-08-21 (**페루도 트랙 슬롯 크기 균등화(주사위
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/perudo`(73/73 통과) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1063/1063 통과, 42.89초) — `engine.ts` 무변경이라 순수 `PerudoBoard.tsx` 레이아웃 변경이 게임 로직에 전혀 영향 없음을 재확인.
 
-**커밋/배포**: 커밋 예정 `refactor(perudo): tighten track slot gaps and normalize uniform layout spacing`.
+**커밋/배포**: 커밋 `5d9a6ac refactor(perudo): tighten track slot gaps and normalize uniform layout spacing` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주(Turbopack 빌드+TS 전체 재검사 포함, 임시 dev 라우트는 삭제돼 있어 빌드 라우트 목록에도 나타나지 않음 재확인), READY — `https://board-game-3xpk1lagb-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-21 — 페루도 트랙 30칸 슬롯 크기 균등화 + 주사위 UI 정갈함 유지 확인
 
