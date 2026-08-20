@@ -126,6 +126,33 @@ describe("trackCellForBid / trackCellAt — pure display-only board position", (
   });
 });
 
+// ---------------------------------------------------------------------------
+// 2026-08-21 "버그3" 회귀: `boardGameRule/페루도/버그3.png`가 신고한 증상은
+// `trackCellForBid`/`validateRaise` 자체의 버그가 아니라 `PerudoBoard.tsx`의
+// UI 초안(draft) 기본값이 "다음 최소 합법 인상"(quantity+1)으로 미리 밀려
+// 있어, 상대의 실제 확정 비딩(예: 2가 2개)과 보드 마커가 어긋나 보이던
+// 문제였다(수정은 PerudoBoard.tsx의 bid-composer 기본값 쪽 — 여기 아래
+// 테스트들은 그 수정이 딛고 서는 엔진 계약(마커 매핑이 실제 비딩 그대로를
+// 정확히 가리키는지, 동일 비딩이 항상 거절되는지, 동일 수량에서 눈금
+// 상향이 항상 허용되는지)이 깨지지 않았음을 고정한다.
+// ---------------------------------------------------------------------------
+describe("버그3 회귀 — 마커 위치 매핑 및 동일 비딩 거절/눈금 상향 허용", () => {
+  it("currentBid = { quantity: 2, face: 2 } 는 정확히 '수량 2' 슬롯(인덱스 2, normal)에 매핑된다", () => {
+    expect(trackCellForBid({ quantity: 2, face: 2 })).toEqual({ index: 2, kind: "normal", quantity: 2 });
+  });
+
+  it("동일 배팅 { quantity: 2, face: 2 } 재선언은 항상 거절된다", () => {
+    const prev: Bid = { seat: 0, quantity: 2, face: 2 };
+    expect(validateRaise(prev, { quantity: 2, face: 2 })).toBe(false);
+  });
+
+  it("같은 수량(2)에서 눈금만 3~6으로 올리는 재선언은 전부 허용된다", () => {
+    const prev: Bid = { seat: 0, quantity: 2, face: 2 };
+    const faces: Face[] = [3, 4, 5, 6];
+    for (const face of faces) expect(validateRaise(prev, { quantity: 2, face })).toBe(true);
+  });
+});
+
 describe("validateRaise — rulebook §3 formulas (the board track above never gates this)", () => {
   it("always accepts the round's opening bid", () => {
     expect(validateRaise(null, { quantity: 1, face: 1 })).toBe(true);

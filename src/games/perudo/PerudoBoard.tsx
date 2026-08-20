@@ -215,6 +215,13 @@ function FacePicker({ selected, onSelect }: { selected: Face; onSelect: (face: F
 // can drift out of sync with the confirmed or draft bid it's supposed to
 // represent. Legality (which cells are clickable) is decided entirely by
 // `validateRaise`, never by track position.
+//
+// 2026-08-21 "버그3" 세션: the draft now defaults to sitting EXACTLY on the
+// current bid's own cell (see `PerudoBoard`'s bid-composer doc) rather than
+// the next legal raise, so clicking THAT cell again — i.e. clicking the
+// purple marker itself — is now its own gesture: raise the draft's face by
+// one step (2→3→4→5→6) in place, rather than the generic "jump the draft to
+// this cell's quantity" every other cell does. See `selectCell`.
 // ---------------------------------------------------------------------------
 
 /** How a track cell sizes itself: `"corner"` is fixed both ways (the 4 shared corner tiles at quantities 1/7/11/17), `"row"` has a fixed height but stretches to fill its side's width (north/south strips), `"col"` has a fixed width but stretches to fill its side's height (east/west strips). The fixed cross-axis size (h-9/w-9, sm:h-11/w-11) is intentionally identical across all three variants — that's what keeps the rectangle's corners flush against the strips instead of stair-stepping (see `RectBidTrack`). */
@@ -253,7 +260,11 @@ function TrackCellButton({
       onClick={onClick}
       title={
         enabled
-          ? `${isPerudoCell ? `[페루도 ${cell.quantity}]` : `${cell.quantity}`} 칸으로 베팅 이동`
+          ? isPending && !isPerudoCell
+            ? pendingFace < 6
+              ? `🟣 마커 클릭 — 눈금 ${pendingFace} → ${pendingFace + 1}로 올리기`
+              : "🟣 마커 — 눈금이 이미 최고치(6)입니다. 수량을 올려주세요"
+            : `${isPerudoCell ? `[페루도 ${cell.quantity}]` : `${cell.quantity}`} 칸으로 베팅 이동`
           : isCurrent
             ? "현재 확정된 베팅 칸입니다"
             : "지금은 여기로 베팅할 수 없어요"
@@ -276,7 +287,12 @@ function TrackCellButton({
         // actual selected face as its pips, always positioned via the exact
         // same `trackCellForBid` the confirm button validates against — no
         // separate "which cell is the marker on" bookkeeping to fall out of
-        // sync.
+        // sync. `pointer-events-none` so it never itself receives the click —
+        // it sits on top of this same `<button>`, whose `onClick` already
+        // special-cases "this is the marker's own cell" as a face-raise
+        // gesture (2026-08-21 "버그3" 세션, see `selectCell`), so clicking
+        // anywhere on this cell (i.e. visually "clicking the marker") does
+        // the right thing without the overlay needing its own handler.
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
           <span className="relative inline-flex" style={{ width: "80%", height: "80%" }}>
             <PerudoDie value={pendingFace} size="sm" colorway={BETTING_COLORWAY} style={{ width: "100%", height: "100%" }} />
@@ -467,9 +483,21 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
   // `{ pendingQuantity, pendingFace }` pair — legality is decided solely by
   // `validateRaise`, and the track's marker cell is *derived* from this pair
   // via `trackCellForBid` wherever it's rendered, never stored separately.
-  // Default draft on a fresh bid: same face as the current bid (if any) at
-  // the smallest quantity that's actually a legal raise over it — i.e. the
-  // cheapest possible next bid, which the player can then adjust upward.
+  //
+  // 2026-08-21 "버그3" 세션: default draft on a fresh bid used to be the
+  // *cheapest legal raise* over the current bid (same face, quantity+1),
+  // which put the purple marker one cell past whatever the opponent had
+  // actually just bid on — reading as "the marker is wrong" even though the
+  // underlying `trackCellForBid` math was correct. Anchoring the default to
+  // the current bid's EXACT `{ quantity, face }` instead makes the marker
+  // land precisely where the opponent's bid sits, and — for free, via the
+  // same `validateRaise` the confirm button already gates on — starts the
+  // confirm button disabled (an untouched draft is by definition identical
+  // to the current bid, which is never a legal raise) until the player
+  // raises the face (FacePicker, or clicking the marker itself — see
+  // `selectCell`) or the quantity (steppers/a different cell). Round openers
+  // (`state.currentBid === null`) keep the old cheapest-opening default —
+  // there's no prior bid to anchor to. (AskUserQuestion-confirmed scope.)
   // -------------------------------------------------------------------------
   const bidKey = `${state.roundNumber}:${state.currentBid ? `${state.currentBid.seat}-${state.currentBid.quantity}-${state.currentBid.face}` : "none"}`;
   const [syncedBidKey, setSyncedBidKey] = useState<string | null>(null);
@@ -477,11 +505,15 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
   const [pendingQuantity, setPendingQuantity] = useState<number>(1);
   if (syncedBidKey !== bidKey) {
     setSyncedBidKey(bidKey);
-    const defaultFace = state.currentBid?.face ?? 2;
-    setPendingFace(defaultFace);
-    setPendingQuantity(minValidQuantityForFace(state.currentBid, defaultFace) ?? 1);
+    if (state.currentBid) {
+      setPendingFace(state.currentBid.face);
+      setPendingQuantity(state.currentBid.quantity);
+    } else {
+      setPendingFace(2);
+      setPendingQuantity(1);
+    }
   }
-  /** The smallest quantity that's still a legal raise for `pendingFace` right now — the stepper's floor. */
+  /** The smallest quantity that's still a legal raise for `pendingFace` right now — the stepper's floor. Can be ABOVE the freshly-synced `pendingQuantity` right after landing on the current bid's own cell (see sync block above) — that's intentional, it's exactly what keeps "−" disabled and the confirm button off until the player actually raises something. */
   const pendingFloor = minValidQuantityForFace(state.currentBid, pendingFace) ?? 1;
 
   /** Switch the draft's face, bumping quantity up to whatever that face's own minimum legal raise requires (never down — a manually-raised quantity survives a face change as long as it's still legal, since a higher quantity is always at least as legal as the floor). */
@@ -495,22 +527,66 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
     setPendingQuantity((q) => Math.max(pendingFloor, q + delta));
   }
 
-  /** A board-track cell was clicked directly — sets the draft's quantity to that cell's, and its face to 1 for a [페루도] cell or (keeping the current face if it's already non-joker) the smallest legal non-joker face otherwise. Only ever called for a cell `cellEnabled` already reported legal, but re-validated here too. */
+  /**
+   * A board-track cell was clicked. Two distinct behaviors depending on
+   * which cell (2026-08-21 "버그3" 세션, AskUserQuestion-confirmed scope):
+   * - The cell the draft/purple marker is ALREADY sitting on (whatever
+   *   quantity that happens to be — not just the freshly-synced default)
+   *   reads as "clicking the marker itself": bumps the draft's face up by
+   *   one step (2→3→4→5→6), quantity unchanged. A no-op once face is
+   *   already 6, or on a [페루도] cell (조커/face 1 has no "next face" to
+   *   step to — raising from there means raising the quantity instead,
+   *   still available via the steppers or a different cell).
+   * - Any other enabled cell → jumps the draft straight to that cell's
+   *   quantity (unchanged from before), with face 1 for a [페루도] cell or
+   *   (keeping the current face if it's already non-joker) the smallest
+   *   legal non-joker face otherwise.
+   * Only ever called for a cell `cellEnabled` already reported legal, but
+   * re-validated here too.
+   */
+  /** The cell the draft/purple marker is currently sitting on — computed once and shared by `selectCell` and `cellEnabled` so "is this the marker's own cell" is asked (and answered) exactly one way. */
+  const markerCell = trackCellForBid({ quantity: pendingQuantity, face: pendingFace });
+  /**
+   * Whether clicking the marker's own cell right now would legally bump its
+   * face by one step. Deliberately NOT the same question `validateRaise`
+   * answers for an arbitrary cell click below — a plain identical-bid check
+   * would always read the marker's own cell as illegal the moment it's
+   * synced to the current bid (an untouched draft literally IS the current
+   * bid — see the bid-composer doc above), which would leave the marker
+   * permanently disabled/unclickable right when a player most needs to
+   * click it (2026-08-21 "버그3" 세션 — caught live via a Playwright check
+   * before this was ever committed). `false` at face 6 (no next face to
+   * step to) or on any [페루도] cell (no face-stepping lane at all).
+   */
+  function markerCanBumpFace(): boolean {
+    if (pendingFace >= 6) return false;
+    return validateRaise(state.currentBid, { quantity: pendingQuantity, face: (pendingFace + 1) as Face });
+  }
+
   function selectCell(cell: TrackCell) {
+    if (cell.index === markerCell.index && cell.kind === "normal") {
+      if (!markerCanBumpFace()) return;
+      setPendingFace((pendingFace + 1) as Face);
+      return;
+    }
     const face: Face = cell.kind === "perudo" ? 1 : pendingFace === 1 ? 2 : pendingFace;
     if (!validateRaise(state.currentBid, { quantity: cell.quantity, face })) return;
     setPendingFace(face);
     setPendingQuantity(cell.quantity);
   }
 
-  /** Whether `cell` is currently choosable — i.e. whether *some* face for that cell's kind (1 for [페루도], the viewer's current pick or the smallest legal non-joker face otherwise) is a legal raise right now. Purely `validateRaise`-driven, never track position. */
+  /** Whether `cell` is currently choosable. The marker's own cell (see `markerCanBumpFace`) is a special case — clicking it steps the face, not the quantity, so its legality is judged by "can the face still go up", not by whether the (already-selected) exact quantity+face combo is itself a legal raise. Every other cell asks the original question: whether *some* face for that cell's kind (1 for [페루도], the viewer's current pick or the smallest legal non-joker face otherwise) is a legal raise right now. Purely `validateRaise`-driven, never track position. */
   function cellEnabled(cell: TrackCell): boolean {
     if (!isMyTurn || !iAmAlive) return false;
+    if (cell.index === markerCell.index && cell.kind === "normal") return markerCanBumpFace();
     const face: Face = cell.kind === "perudo" ? 1 : pendingFace === 1 ? 2 : pendingFace;
     return validateRaise(state.currentBid, { quantity: cell.quantity, face });
   }
 
   const canConfirmBet = isMyTurn && iAmAlive && validateRaise(state.currentBid, { quantity: pendingQuantity, face: pendingFace });
+  /** True exactly when the confirm button is disabled *because* the untouched draft still matches the current bid verbatim — the only way `canConfirmBet` can be false while it's actually my turn (2026-08-21 "버그3" 세션: surfaced as an always-visible hint rather than a silent disable, per user request + AskUserQuestion confirmation). */
+  const isIdenticalToCurrentBid =
+    state.currentBid !== null && pendingQuantity === state.currentBid.quantity && pendingFace === state.currentBid.face;
 
   // The fixed rectangular board (`RectBidTrack`) only has cells for
   // quantities 1-20 — a bid past that (legal; dice counts are uncapped, see
@@ -783,6 +859,16 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
                 >
                   ✅ {faceLabel(pendingFace)} × {pendingQuantity}개로 베팅 확정
                 </button>
+                {/* Always-visible hint (not just a disabled button — 2026-08-21
+                    "버그3" 세션, AskUserQuestion-confirmed: 비활성화 + 상시 안내
+                    문구) for the one way this composer's confirm can be
+                    disabled while it's actually my turn: the untouched draft
+                    still matches the current bid verbatim. */}
+                {isIdenticalToCurrentBid && (
+                  <p className="max-w-[220px] text-center text-[10px] font-medium text-rose-700">
+                    ⚠️ 동일한 배팅은 할 수 없습니다. 눈금을 올리거나 수량을 올려주세요.
+                  </p>
+                )}
               </div>
             )}
 
