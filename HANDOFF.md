@@ -19,7 +19,7 @@ _최종 갱신: 2026-08-21 (**뱅! 카드 호버 UX 개편 + 체력/직업 UI �
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/bang`(71/71 통과 — `engine.ts` 완전 무변경이라 순수 UI 리팩터링이 엔진 로직에 전혀 영향 없음을 재확인) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1063/1063 통과) — jsdom 미설치로 이 저장소는 UI 컴포넌트 자체의 렌더/인터랙션 단위 테스트가 애초에 불가능한 제약이라(HANDOFF.md 기존 §의존성 표 참고) 이번에도 엔진 테스트 전수 통과로 회귀 없음만 확인, 실제 화면 확인은 배포된 프리뷰 URL로 사용자가 직접 검증 필요.
 
-**커밋/배포**: 커밋 `PLACEHOLDER_COMMIT feat(bang): redesign card hover UX, enhance HP and role visibility, add center card play banner and action effects` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) — PLACEHOLDER_DEPLOY_RESULT.
+**커밋/배포**: 커밋 `3b20e38 feat(bang): redesign card hover UX, enhance HP and role visibility, add center card play banner and action effects` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주(Turbopack 빌드+TS 전체 재검사 포함), READY — `https://board-game-fzkbr2mfp-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-21 — 페루도 30칸 실물 보드 트랙 재구성 + 역행 비딩 원천 차단
 
