@@ -36,22 +36,20 @@
  *     원래의 일반 공식을 그대로 싣고 있어, 그쪽을 "최신 룰북 기준"으로
  *     채택 — 사용자 확인 완료).
  *
- * 2026-08-20 보드 트랙 하우스룰 폐지 세션 — 2026-08-19에 도입했던
- * `BOARD_TRACK_SEQUENCE`(37칸 고정 트랙 인덱스 비교) 하우스룰을 사용자
- * 요청으로 완전히 폐지하고, 위 (3)에 적힌 공식 룰북 §3 수량/눈금 공식으로
- * 되돌렸다(`validateRaise`가 다시 `prev.face`/`prev.quantity`를 직접 비교 —
- * `Bid`에서 `trackIndex` 필드와 `BOARD_TRACK_SEQUENCE`/`trackIndexForBid`/
- * `isValidBid`/`BoardTrackNode`는 이 파일 어디에도 남아있지 않다). 계기: 실제
- * 플레이 스크린샷(`boardGameRule/페루도/버그.png`)에서 트랙 UI의 "다음 칸
- * 미리보기" 마커가 실제 확정된 선언과 다른 칸을 가리키는 것처럼 보여 혼란을
- * 유발했고, 사용자가 트랙 시스템 자체보다 공식 룰북의 "동일 수량이면 눈금만
- * 상향 가능(더 낮은 눈금으로는 못 감)" 단방향 제약을 원한다고 명시적으로
- * 확인했다 — 트랙 인덱스 비교 방식과 공식 눈금 비교 방식은 근본적으로
- * 양립 불가능(트랙은 같은 숫자 라벨이 여러 칸에 반복되는 비단조 시퀀스라
- * "눈금"이라는 개념 자체가 없었다)해 트랙 쪽을 통째로 되돌리는 쪽으로
- * 결정 — 보드 트랙 UI(`PerudoBoard.tsx`의 `BidTrack`/사각형 트랙 렌더링)도
- * 이 세션에서 함께 걷어내고 공식 수량/눈금 스텝퍼 UI로 교체했다. 상세는
- * HANDOFF.md 참고.
+ * 2026-08-19 보드 트랙 개편 세션 — 사용자가 명시적으로 요청/확인한 **하우스
+ * 룰**: 비딩 유효성 판정을 위 (2)/(3)의 공식 룰북 수량·눈금 공식에서 완전히
+ * 떼어내, 고정된 단일 순서 배열 `BOARD_TRACK_SEQUENCE`(칸 37개, 인덱스
+ * 0~36)로 교체했다. 모든 비딩(수량+눈금)은 그 배열의 특정 칸에 매핑되고,
+ * 다음 비딩은 반드시 현재 칸보다 인덱스가 큰 칸이어야 유효하다(`isValidBid`).
+ * 이 시퀀스는 실제 페루도 공식 룰북에 없는, 사용자가 직접 지정한 커스텀
+ * 보드로, 라벨(칸에 적힌 숫자)이 커졌다 작아지는 구간이 있다 — 예:
+ * "...6→7→4→[페루도4]→8..." — 하지만 유효성은 그 숫자 라벨이 아니라 오직
+ * **배열 인덱스**로만 판정되므로 모순이 아니다(사용자에게 이 비단조성을
+ * 명시적으로 확인받음). `validateRaise(prev, {quantity, face})`는 이제 내부적으로
+ * `trackIndexForBid`를 통해 그 (quantity, face) 조합이 가리키는 칸을 찾고,
+ * 그 칸이 `prev.trackIndex`보다 뒤에 있는지만 검사한다 — 예전의 "같은 수량
+ * 더 높은 눈금" 류 규칙은 더 이상 적용되지 않는다(같은 수량이라도 트랙 상
+ * 다른 칸을 가리키면 그 칸의 인덱스로 판정).
  */
 
 export type SeatIndex = number;
@@ -68,8 +66,87 @@ export type Face = 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface Bid {
   seat: SeatIndex;
+  /** Canonical position on `BOARD_TRACK_SEQUENCE` this bid occupies — see the 2026-08-19 board track module doc note. `quantity`/`face` below are kept in sync with this cell and exist for display + dice-counting convenience, but forward-progression validity is decided purely by comparing this index (see `isValidBid`). */
+  trackIndex: number;
   quantity: number;
   face: Face;
+}
+
+// ---------------------------------------------------------------------------
+// Board track (2026-08-19 하우스 룰 — module doc note above) — the fixed,
+// single-file bidding sequence every game now walks along instead of the
+// rulebook's quantity/face formulas. `BOARD_TRACK_SEQUENCE[i].quantity` is
+// the number printed on that cell; "normal" cells accept any non-joker face
+// 2-6 (freely chosen, same as before — the track only gates *quantity*
+// progression for those), "perudo" cells are locked to face 1 and their
+// `quantity` is that cell's own ordinal (페루도 N -> quantity N), exactly as
+// the user specified. Deliberately transcribed literally rather than
+// "cleverly" derived from a formula — the user confirmed the raw label
+// sequence (including its repeats/dips) is intentional, and a hand-rolled
+// generator risks silently drifting from what was actually approved.
+// ---------------------------------------------------------------------------
+
+export type BoardTrackNodeKind = "normal" | "perudo";
+
+export interface BoardTrackNode {
+  index: number;
+  kind: BoardTrackNodeKind;
+  /** The number printed on the cell — for "perudo" cells this is the 페루도 N ordinal itself (also used as that bid's quantity), not a running board-cell count. */
+  quantity: number;
+}
+
+const RAW_BOARD_TRACK_SEQUENCE: ReadonlyArray<readonly [BoardTrackNodeKind, number]> = [
+  ["normal", 1], ["perudo", 1],
+  ["normal", 2], ["normal", 3], ["perudo", 2],
+  ["normal", 4], ["normal", 5], ["perudo", 3],
+  ["normal", 6], ["normal", 7], ["normal", 4], ["perudo", 4],
+  ["normal", 8], ["normal", 9], ["normal", 5], ["perudo", 5],
+  ["normal", 10], ["normal", 11], ["normal", 6], ["perudo", 6],
+  ["normal", 12], ["normal", 13], ["normal", 7], ["perudo", 7],
+  ["normal", 14], ["normal", 15], ["normal", 8], ["perudo", 8],
+  ["normal", 16], ["normal", 17], ["normal", 9], ["perudo", 9],
+  ["normal", 18], ["normal", 19], ["normal", 10], ["perudo", 10],
+  ["normal", 20],
+];
+
+export const BOARD_TRACK_SEQUENCE: readonly BoardTrackNode[] = RAW_BOARD_TRACK_SEQUENCE.map(([kind, quantity], index) => ({
+  index,
+  kind,
+  quantity,
+}));
+
+/**
+ * Finds the nearest track cell strictly after `afterIndex` (pass
+ * `prev?.trackIndex ?? -1` for "anywhere on the track" as an opening bid)
+ * whose kind/quantity matches `quantity`+`face` (face 1 -> "perudo" cells,
+ * any of 2-6 -> "normal" cells, matched by that cell's own `quantity`
+ * regardless of which specific face 2-6 was picked — the track never
+ * distinguishes faces 2-6 from each other, only joker vs. non-joker). Null
+ * if no such cell exists ahead (including "that quantity never appears on
+ * the track at all", e.g. normal quantity > 20 or perudo quantity > 10).
+ */
+export function trackIndexForBid(afterIndex: number, quantity: number, face: Face): number | null {
+  const kind: BoardTrackNodeKind = face === 1 ? "perudo" : "normal";
+  for (let i = afterIndex + 1; i < BOARD_TRACK_SEQUENCE.length; i++) {
+    const node = BOARD_TRACK_SEQUENCE[i];
+    if (node.kind === kind && node.quantity === quantity) return i;
+  }
+  return null;
+}
+
+/**
+ * The strict-forward-progression rule itself (feature request §2/§3):
+ * `nextTrackIndex` is only a legal next bid if it's a real cell on the track
+ * AND strictly after `prevTrackIndex` (null = round's opening bid, any real
+ * cell is legal). This is the literal "$I_{next} > I_{current}$" check the
+ * board-track redesign asked for — kept as its own named export, separate
+ * from `validateRaise`, so both the engine and the UI can call the exact
+ * same index comparison directly.
+ */
+export function isValidBid(prevTrackIndex: number | null, nextTrackIndex: number): boolean {
+  if (!Number.isInteger(nextTrackIndex) || nextTrackIndex < 0 || nextTrackIndex >= BOARD_TRACK_SEQUENCE.length) return false;
+  if (prevTrackIndex === null) return true;
+  return nextTrackIndex > prevTrackIndex;
 }
 
 export interface PlayerState {
@@ -190,21 +267,21 @@ function nextAliveSeat(seat: SeatIndex, players: PlayerState[], playerCount: num
 
 /**
  * Whether `next` is a legal raise over `prev` (null = the round's opening
- * bid, always legal). Implements the rulebook §3 formulas exactly:
- * - normal(2-6) -> normal: quantity must strictly increase, OR stay equal
- *   while the face strictly increases.
- * - normal -> paco(1): quantity >= ceil(prev quantity / 2).
- * - paco -> normal: quantity >= prev quantity * 2 + 1.
- * - paco -> paco: quantity must strictly increase (face is fixed at 1).
+ * bid — legal as long as `next` lands on a real board-track cell). Per the
+ * 2026-08-19 board track module doc note, this no longer implements the
+ * rulebook §3 formulas at all: `next` is legal iff its (quantity, face)
+ * resolves (via `trackIndexForBid`) to a real cell strictly after `prev`'s
+ * own `trackIndex` (or anywhere on the track, for an opening bid). The old
+ * "same quantity, higher face" allowance is gone — even an unchanged
+ * quantity only counts as a raise if it lands on a *later* track cell than
+ * the one `prev` already occupies (which duplicate-labelled cells like the
+ * two "4"s make possible).
  */
 export function validateRaise(prev: Bid | null, next: { quantity: number; face: Face }): boolean {
   if (!Number.isInteger(next.quantity) || next.quantity < 1) return false;
   if (!Number.isInteger(next.face) || next.face < 1 || next.face > 6) return false;
-  if (prev === null) return true;
-  if (prev.face === 1 && next.face === 1) return next.quantity > prev.quantity;
-  if (prev.face === 1 && next.face !== 1) return next.quantity >= prev.quantity * 2 + 1;
-  if (prev.face !== 1 && next.face === 1) return next.quantity >= Math.ceil(prev.quantity / 2);
-  return next.quantity > prev.quantity || (next.quantity === prev.quantity && next.face > prev.face);
+  const afterIndex = prev?.trackIndex ?? -1;
+  return trackIndexForBid(afterIndex, next.quantity, next.face) !== null;
 }
 
 /**
@@ -244,10 +321,13 @@ function raise(state: PerudoState, seat: SeatIndex, quantity: number, face: Face
   const player = state.players.find((p) => p.seat === seat);
   if (!player || player.diceCount <= 0) return state;
   if (!validateRaise(state.currentBid, { quantity, face })) return state;
+  // Non-null by construction: validateRaise above already confirmed this
+  // exact (quantity, face) resolves to a real cell ahead of the current one.
+  const trackIndex = trackIndexForBid(state.currentBid?.trackIndex ?? -1, quantity, face)!;
 
   return {
     ...state,
-    currentBid: { seat, quantity, face },
+    currentBid: { seat, trackIndex, quantity, face },
     activeSeat: nextAliveSeat(seat, state.players, state.playerCount),
   };
 }
