@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
 import PerudoFaceIcon from "./PerudoFaceIcon";
@@ -58,11 +58,14 @@ function randomSeed(): number {
 // a woven crosshatch + Andean-stripe trim bands on top of it, standing in
 // for the textile mat the real board sits on. 2026-08-20: the board photo
 // (boardGameRule/페루도/변경후이미지.jpg, public/assets/games/perudo/board.jpg)
-// that used to sit dimmed behind `BidTrack` as a backdrop texture was removed
-// on user request (readability + "clean solid/theme background" ask) — the
-// warm gold/jungle palette it inspired still lives on in BidTrack's own
-// wood-tile cell gradients and translucent interior plaque, just without the
-// literal photo layer underneath.
+// that used to sit dimmed behind the bid track as a backdrop texture was
+// removed on user request (readability + "clean solid/theme background"
+// ask) — the warm gold/jungle palette it inspired still lives on in
+// `RectBidTrack`'s own wood-tile cell gradients and translucent interior
+// plaque, just without the literal photo layer underneath. 2026-08-20 사각형
+// 트랙 세션: that photo's actual layout (4-side rectangle, quantities 1-20,
+// shared corners at 7/11/17) is now the literal reference for `RectBidTrack`
+// below, not just a mood-board inspiration.
 const TABLE_PANEL =
   "relative overflow-hidden rounded-3xl border border-black/60 bg-gradient-to-b from-[#2a1c14] via-[#1d130d] to-[#0d0805] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
 
@@ -70,7 +73,7 @@ const TABLE_PANEL =
 const FABRIC_TRIM_GRADIENT =
   "repeating-linear-gradient(90deg, #b5482f 0 14px, #d9a441 14px 28px, #1f6f6f 28px 42px, #e8d9b5 42px 56px, #7a1f2b 56px 70px)";
 
-/** The fabric mat's texture layer: a woven crosshatch across the whole panel plus a colorful trim band along the top/bottom edges, standing in for a real South American textile mat under the board. The real board photo itself now renders inside `BidTrack` (see its own doc comment) rather than here — this layer is just the mat *under* the board. */
+/** The fabric mat's texture layer: a woven crosshatch across the whole panel plus a colorful trim band along the top/bottom edges, standing in for a real South American textile mat under the board. The real board itself now renders as `RectBidTrack` (see its own doc comment) rather than here — this layer is just the mat *under* the board. */
 function TableTexture() {
   return (
     <>
@@ -214,9 +217,19 @@ function FacePicker({ selected, onSelect }: { selected: Face; onSelect: (face: F
 // `validateRaise`, never by track position.
 // ---------------------------------------------------------------------------
 
+/** How a track cell sizes itself: `"corner"` is fixed both ways (the 4 shared corner tiles at quantities 1/7/11/17), `"row"` has a fixed height but stretches to fill its side's width (north/south strips), `"col"` has a fixed width but stretches to fill its side's height (east/west strips). The fixed cross-axis size (h-9/w-9, sm:h-11/w-11) is intentionally identical across all three variants — that's what keeps the rectangle's corners flush against the strips instead of stair-stepping (see `RectBidTrack`). */
+type CellSizing = "corner" | "row" | "col";
+
+const CELL_SIZING_CLASS: Record<CellSizing, string> = {
+  corner: "h-9 w-9 shrink-0 sm:h-11 sm:w-11",
+  row: "h-9 min-w-0 flex-1 sm:h-11",
+  col: "w-9 min-h-0 flex-1 sm:w-11",
+};
+
 /** One track cell — a plain quantity/조커 cell, no click-eligibility baked in (the caller decides `enabled` from `validateRaise`, not from track position). */
 function TrackCellButton({
   cell,
+  sizing = "corner",
   isCurrent,
   isPending,
   pendingFace,
@@ -224,6 +237,7 @@ function TrackCellButton({
   onClick,
 }: {
   cell: TrackCell;
+  sizing?: CellSizing;
   isCurrent: boolean;
   isPending: boolean;
   pendingFace: Face;
@@ -244,7 +258,7 @@ function TrackCellButton({
             ? "현재 확정된 베팅 칸입니다"
             : "지금은 여기로 베팅할 수 없어요"
       }
-      className={`relative flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[6px] border-2 text-xs leading-none font-bold [text-shadow:0_1px_2px_rgba(0,0,0,0.8)] transition sm:h-12 sm:w-12 sm:text-sm ${
+      className={`relative flex flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[6px] border-2 text-[10px] leading-none font-bold [text-shadow:0_1px_2px_rgba(0,0,0,0.8)] transition sm:text-xs ${CELL_SIZING_CLASS[sizing]} ${
         isCurrent
           ? "border-amber-200 bg-gradient-to-b from-amber-300/85 to-amber-500/85 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.5)]"
           : enabled
@@ -254,7 +268,7 @@ function TrackCellButton({
             : "cursor-not-allowed border-black/40 bg-gradient-to-b from-neutral-900/55 to-neutral-950/55 text-white/40"
       }`}
     >
-      {isPerudoCell && <PerudoFaceIcon className="pointer-events-none h-3 w-3 sm:h-3.5 sm:w-3.5" />}
+      {isPerudoCell && <PerudoFaceIcon className="pointer-events-none h-2.5 w-2.5 sm:h-3 sm:w-3" />}
       <span className="relative z-10">{cell.quantity}</span>
       {isPending && (
         // The purple "betting die" marker — a fixed 80%-of-cell overlay (see
@@ -274,55 +288,121 @@ function TrackCellButton({
 }
 
 /**
- * The scrolling track strip itself. `cells` is just a rendering window (see
- * `PerudoBoard`'s own `maxQuantityShown` calc) — always starts at quantity 1
- * so the very first bid's marker is visible without scrolling, and grows to
- * keep both the confirmed bid and the live draft in view. Auto-scrolls the
- * pending (or, once it's not the viewer's turn, the confirmed) cell into
- * view whenever it moves, so a high-quantity bid doesn't strand the marker
- * off-screen.
+ * The physical board's fixed rectangular track: quantities 1-20 running
+ * clockwise around 4 sides — 북 1→7, 동 7→11, 남 11→17, 서 17→20 — with corners
+ * 7/11/17 each a single cell shared by both adjoining sides (2026-08-20 사각형
+ * 트랙 세션, 사용자 확인 완료: "모서리 칸 1개를 공유"). Every `trackCellAt` index
+ * from the old scrolling strip (0..39 — quantities 1-20, normal+perudo paired
+ * 1:1 exactly as before) still appears here exactly once; this only changes
+ * *where* each cell renders, never what cells exist. Quantity 1's own perudo
+ * cell (index 1) opens the north strip, and so on around each corner — see
+ * the index comments below for the full walk.
  */
-function BidTrack({
-  cells,
+const BOARD_MAX_QUANTITY = 20;
+/** Last valid `trackCellAt` index that still fits on the fixed board — anything past this (quantity > 20, legal since dice counts are uncapped) falls off the physical rectangle and is surfaced via a badge instead (사용자 확인: "트랙을 20에서 고정하고 초과분은 배지로 표시"). */
+const BOARD_LAST_INDEX = BOARD_MAX_QUANTITY * 2 - 1;
+
+function buildRectFrame() {
+  const at = trackCellAt;
+  return {
+    cornerTL: at(0), // quantity 1
+    north: Array.from({ length: 11 }, (_, i) => at(1 + i)), // 1..11: perudo1..normal6,perudo6
+    cornerTR: at(12), // quantity 7
+    east: Array.from({ length: 7 }, (_, i) => at(13 + i)), // 13..19: perudo7..normal10,perudo10
+    cornerBR: at(20), // quantity 11
+    south: Array.from({ length: 11 }, (_, i) => at(21 + i)), // 21..31: perudo11..normal16,perudo16
+    cornerBL: at(32), // quantity 17
+    west: Array.from({ length: 7 }, (_, i) => at(33 + i)), // 33..39: perudo17..normal20,perudo20
+  };
+}
+
+/** A compact pill for whichever of (confirmed bid / live draft) currently sits past quantity 20 — the fixed board has no cell for it, so this is the only place that bid is visible at all. */
+function OverflowBadge({ label, tone, quantity, face }: { label: string; tone: "amber" | "violet"; quantity: number; face: Face }) {
+  const toneClass = tone === "amber" ? "border-amber-300/50 bg-amber-950/70 text-amber-100" : "border-violet-300/50 bg-violet-950/70 text-violet-100";
+  return (
+    <div className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${toneClass}`}>
+      <span>{label}</span>
+      <span>
+        {faceLabel(face)} × {quantity}개
+      </span>
+      <span className="opacity-60">· 트랙 범위 밖</span>
+    </div>
+  );
+}
+
+/**
+ * The board frame itself — a 3×3 CSS grid (4 fixed-size corners, 2 flexible
+ * horizontal strips, 2 flexible vertical strips, and a hollow flexible
+ * center) so the corner tiles stay flush against the strips at any viewport
+ * width instead of stair-stepping (see `CELL_SIZING_CLASS`'s doc comment).
+ * `children` renders inside the hollow center — per user request (2026-08-20)
+ * that now holds the dice graveyard, the bid/액션 panel, and the viewer's own
+ * dice, so the whole board reads as one big physical-board-sized panel
+ * instead of a thin strip with everything else stacked below it.
+ */
+function RectBidTrack({
   currentCell,
   pendingCell,
   pendingFace,
   showPending,
   cellEnabled,
   onCellClick,
+  children,
 }: {
-  cells: TrackCell[];
   currentCell: TrackCell | null;
   pendingCell: TrackCell | null;
   pendingFace: Face;
   showPending: boolean;
   cellEnabled: (cell: TrackCell) => boolean;
   onCellClick: (cell: TrackCell) => void;
+  children: React.ReactNode;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const focusIndex = (showPending ? pendingCell?.index : currentCell?.index) ?? 0;
-  useEffect(() => {
-    const container = scrollRef.current;
-    if (!container) return;
-    const target = container.querySelector<HTMLElement>(`[data-track-index="${focusIndex}"]`);
-    target?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
-  }, [focusIndex]);
+  const frame = buildRectFrame();
+
+  function renderCell(cell: TrackCell, sizing: CellSizing) {
+    return (
+      <TrackCellButton
+        key={cell.index}
+        cell={cell}
+        sizing={sizing}
+        isCurrent={currentCell?.index === cell.index}
+        isPending={showPending && pendingCell?.index === cell.index}
+        pendingFace={pendingFace}
+        enabled={cellEnabled(cell)}
+        onClick={() => onCellClick(cell)}
+      />
+    );
+  }
 
   return (
-    <div className="relative w-full rounded-2xl border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1.5 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-2">
-      <div ref={scrollRef} className="flex gap-1 overflow-x-auto scroll-smooth pb-0.5 sm:gap-1.5">
-        {cells.map((cell) => (
-          <TrackCellButton
-            key={cell.index}
-            cell={cell}
-            isCurrent={currentCell?.index === cell.index}
-            isPending={showPending && pendingCell?.index === cell.index}
-            pendingFace={pendingFace}
-            enabled={cellEnabled(cell)}
-            onClick={() => onCellClick(cell)}
-          />
-        ))}
+    <div
+      className="grid w-full gap-1 rounded-2xl border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1.5 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:gap-1.5 sm:p-2"
+      style={{ gridTemplateColumns: "auto 1fr auto", gridTemplateRows: "auto 1fr auto" }}
+    >
+      <div className="relative col-start-1 row-start-1">
+        {renderCell(frame.cornerTL, "corner")}
+        <span
+          className="pointer-events-none absolute -top-1.5 -left-1.5 z-20 text-[10px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]"
+          title="시작 칸"
+        >
+          💀
+        </span>
       </div>
+      <div className="col-start-2 row-start-1 flex min-w-0 gap-0.5 sm:gap-1">{frame.north.map((c) => renderCell(c, "row"))}</div>
+      <div className="col-start-3 row-start-1">{renderCell(frame.cornerTR, "corner")}</div>
+
+      <div className="col-start-1 row-start-2 flex min-h-0 flex-col gap-0.5 sm:gap-1">
+        {frame.west
+          .slice()
+          .reverse()
+          .map((c) => renderCell(c, "col"))}
+      </div>
+      <div className="col-start-2 row-start-2 flex min-w-0 items-center justify-center p-1.5 sm:p-2.5">{children}</div>
+      <div className="col-start-3 row-start-2 flex min-h-0 flex-col gap-0.5 sm:gap-1">{frame.east.map((c) => renderCell(c, "col"))}</div>
+
+      <div className="col-start-1 row-start-3">{renderCell(frame.cornerBL, "corner")}</div>
+      <div className="col-start-2 row-start-3 flex min-w-0 flex-row-reverse gap-0.5 sm:gap-1">{frame.south.map((c) => renderCell(c, "row"))}</div>
+      <div className="col-start-3 row-start-3">{renderCell(frame.cornerBR, "corner")}</div>
     </div>
   );
 }
@@ -432,15 +512,15 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
 
   const canConfirmBet = isMyTurn && iAmAlive && validateRaise(state.currentBid, { quantity: pendingQuantity, face: pendingFace });
 
-  // Track rendering window: always starts at quantity 1 (so the very first
-  // bid's marker/cells are visible without scrolling) and grows to comfortably
-  // fit both the confirmed bid and the live draft plus a little headroom —
-  // there's no fixed upper bound to run out of (dice counts are uncapped,
-  // see engine.ts module doc), unlike the old fixed 37-cell array.
+  // The fixed rectangular board (`RectBidTrack`) only has cells for
+  // quantities 1-20 — a bid past that (legal; dice counts are uncapped, see
+  // engine.ts module doc) has no cell to land on, so it's flagged here and
+  // surfaced as an `OverflowBadge` inside the board's center instead of
+  // being forced onto a cell that doesn't exist.
   const currentCell = state.currentBid ? trackCellForBid(state.currentBid) : null;
   const pendingCell = trackCellForBid({ quantity: pendingQuantity, face: pendingFace });
-  const maxQuantityShown = Math.max(10, (state.currentBid?.quantity ?? 1) + 4, pendingQuantity + 4);
-  const trackCells = Array.from({ length: maxQuantityShown * 2 }, (_, i) => trackCellAt(i));
+  const currentOverflows = currentCell !== null && currentCell.index > BOARD_LAST_INDEX;
+  const pendingOverflows = pendingCell.index > BOARD_LAST_INDEX;
 
   // Roll sound cue: `DiceRollTray`'s `onRollStart`/`onSettled` callbacks
   // (wired up below, "My dice" section) fire the rattle/thud SFX beat timed
@@ -618,151 +698,157 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
         {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
       </p>
 
-      <LostDiceTray state={state} viewerSeat={viewerSeat} myColorway={myColorway} />
-
-      <div className="relative z-10">
-        {/* Betting-zone label — a fabric-patch tag echoing the mat's own labeled zones (see boardGameRule/페루도's board photo). */}
-        <div className="mb-1.5 flex items-center justify-center">
-          <span className="rounded-full border border-dashed border-amber-700/50 bg-amber-950/30 px-3 py-1 text-[10px] font-semibold tracking-[0.15em] text-amber-200/70">
-            🎯 배팅 구역 · BID TRACK
-          </span>
-        </div>
-        {/* Purely visual quantity/[페루도] strip (2026-08-20 재도입, see
-            engine.ts's module doc) — never gates legality itself, only shows
-            where the confirmed bid (amber) and, while it's my turn, the live
-            draft (purple die) sit. Cells are generated fresh from
-            `trackCellForBid`/`trackCellAt` every render, so the marker can
-            never land on the wrong cell the way the old state-dependent
-            "nearest cell" search could (that mismatch — a non-joker bid's
-            marker ending up on a [페루도] cell — is exactly what
-            `boardGameRule/페루도/버그2.png` reported). */}
-        <BidTrack
-          cells={trackCells}
-          currentCell={currentCell}
-          pendingCell={pendingCell}
-          pendingFace={pendingFace}
-          showPending={isMyTurn && iAmAlive}
-          cellEnabled={cellEnabled}
-          onCellClick={selectCell}
-        />
-      </div>
-
-      {/* Bid-declaration controls — the confirmed bid, plus (on my turn) the
-          FacePicker + quantity stepper composer. Both the composer's
-          "확정" button and every track cell above ultimately gate on the
-          same `validateRaise` call, so a same-quantity face raise (예:
-          "2가 1개" → "3이 1개") is never blocked by one path while allowed
-          by the other. */}
-      <div className="relative z-10 flex flex-col items-center justify-center gap-2 rounded-[1.25rem] border-4 border-amber-800 bg-amber-100/90 p-2 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)]">
-        {state.currentBid ? (
-          <div className="flex flex-col items-center gap-0.5 text-center">
-            <span className="text-[10px] text-amber-900/70">{names[state.currentBid.seat]}님의 선언</span>
-            <span className="text-2xl font-black text-red-900 drop-shadow-[0_1px_0_rgba(255,255,255,0.4)] sm:text-3xl">
-              {faceLabel(state.currentBid.face)} × {state.currentBid.quantity}개↑
-            </span>
-          </div>
-        ) : (
-          <p className="px-2 text-center text-xs text-amber-900/70">
-            {names[state.activeSeat]}님이 이번 라운드를 엽니다 — 첫 선언 대기 중
-          </p>
-        )}
-
-        {isMyTurn && iAmAlive && (
-          <div className="flex flex-col items-center gap-1.5 rounded-xl border border-violet-900/25 bg-violet-950/5 px-2.5 py-2">
-            <p className="text-center text-[10px] font-semibold text-violet-900/70">
-              🟣 눈금을 고르고 개수를 정하거나, 트랙 칸을 눌러 이동하세요
-            </p>
-            <FacePicker selected={pendingFace} onSelect={pickFace} />
-            <div className="flex items-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => stepQuantity(-1)}
-                disabled={pendingQuantity <= pendingFloor}
-                title="개수 줄이기"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-violet-900/30 bg-white/60 text-sm font-bold text-violet-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30"
-              >
-                −
-              </button>
-              <span className="min-w-[3ch] text-center text-lg font-black text-violet-950">{pendingQuantity}개</span>
-              <button
-                type="button"
-                onClick={() => stepQuantity(1)}
-                title="개수 늘리기"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-violet-900/30 bg-white/60 text-sm font-bold text-violet-900 transition hover:bg-white"
-              >
-                +
-              </button>
+      {/* The rectangular board itself (2026-08-20 사각형 트랙 세션) — quantities
+          1-20 around 4 sides (see `RectBidTrack`'s doc comment), sized to
+          hold the dice graveyard, the bid/액션 panel, and the viewer's own
+          dice all inside its hollow center per user request, so the whole
+          thing reads as one big physical-board-sized panel rather than a
+          thin strip with everything else stacked below it. */}
+      <RectBidTrack
+        currentCell={currentCell}
+        pendingCell={pendingCell}
+        pendingFace={pendingFace}
+        showPending={isMyTurn && iAmAlive}
+        cellEnabled={cellEnabled}
+        onCellClick={selectCell}
+      >
+        <div className="flex w-full max-w-md flex-col items-center gap-2.5">
+          {/* Bids past quantity 20 (legal — dice counts are uncapped) have no
+              cell on the fixed board, so they show up here instead (사용자
+              확인: "트랙을 20에서 고정하고 초과분은 배지로 표시"). */}
+          {(currentOverflows || (isMyTurn && iAmAlive && pendingOverflows)) && (
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              {currentOverflows && state.currentBid && (
+                <OverflowBadge label="확정" tone="amber" quantity={state.currentBid.quantity} face={state.currentBid.face} />
+              )}
+              {isMyTurn && iAmAlive && pendingOverflows && (
+                <OverflowBadge label="내 초안" tone="violet" quantity={pendingQuantity} face={pendingFace} />
+              )}
             </div>
-            <button
-              type="button"
-              disabled={!canConfirmBet}
-              onClick={() => onAction({ type: "raise", seat: viewerSeat, quantity: pendingQuantity, face: pendingFace })}
-              className="rounded-full bg-violet-700 px-4 py-1.5 text-xs font-semibold text-white shadow-[0_0_0_2px_rgba(168,85,247,0.3)] transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 disabled:shadow-none"
-            >
-              ✅ {faceLabel(pendingFace)} × {pendingQuantity}개로 베팅 확정
-            </button>
+          )}
+
+          <LostDiceTray state={state} viewerSeat={viewerSeat} myColorway={myColorway} />
+
+          {/* Bid-declaration controls — the confirmed bid, plus (on my turn) the
+              FacePicker + quantity stepper composer. Both the composer's
+              "확정" button and every track cell around this panel ultimately
+              gate on the same `validateRaise` call, so a same-quantity face
+              raise (예: "2가 1개" → "3이 1개") is never blocked by one path
+              while allowed by the other. */}
+          <div className="relative z-10 flex w-full flex-col items-center justify-center gap-2 rounded-[1.25rem] border-4 border-amber-800 bg-amber-100/90 p-2 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)]">
+            {state.currentBid ? (
+              <div className="flex flex-col items-center gap-0.5 text-center">
+                <span className="text-[10px] text-amber-900/70">{names[state.currentBid.seat]}님의 선언</span>
+                <span className="text-2xl font-black text-red-900 drop-shadow-[0_1px_0_rgba(255,255,255,0.4)] sm:text-3xl">
+                  {faceLabel(state.currentBid.face)} × {state.currentBid.quantity}개↑
+                </span>
+              </div>
+            ) : (
+              <p className="px-2 text-center text-xs text-amber-900/70">
+                {names[state.activeSeat]}님이 이번 라운드를 엽니다 — 첫 선언 대기 중
+              </p>
+            )}
+
+            {isMyTurn && iAmAlive && (
+              <div className="flex flex-col items-center gap-1.5 rounded-xl border border-violet-900/25 bg-violet-950/5 px-2.5 py-2">
+                <p className="text-center text-[10px] font-semibold text-violet-900/70">
+                  🟣 눈금을 고르고 개수를 정하거나, 트랙 칸을 눌러 이동하세요
+                </p>
+                <FacePicker selected={pendingFace} onSelect={pickFace} />
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => stepQuantity(-1)}
+                    disabled={pendingQuantity <= pendingFloor}
+                    title="개수 줄이기"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-violet-900/30 bg-white/60 text-sm font-bold text-violet-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    −
+                  </button>
+                  <span className="min-w-[3ch] text-center text-lg font-black text-violet-950">{pendingQuantity}개</span>
+                  <button
+                    type="button"
+                    onClick={() => stepQuantity(1)}
+                    title="개수 늘리기"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-violet-900/30 bg-white/60 text-sm font-bold text-violet-900 transition hover:bg-white"
+                  >
+                    +
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  disabled={!canConfirmBet}
+                  onClick={() => onAction({ type: "raise", seat: viewerSeat, quantity: pendingQuantity, face: pendingFace })}
+                  className="rounded-full bg-violet-700 px-4 py-1.5 text-xs font-semibold text-white shadow-[0_0_0_2px_rgba(168,85,247,0.3)] transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 disabled:shadow-none"
+                >
+                  ✅ {faceLabel(pendingFace)} × {pendingQuantity}개로 베팅 확정
+                </button>
+              </div>
+            )}
+
+            {iAmAlive && (
+              <div className="flex gap-2">
+                <button
+                  disabled={!isMyTurn || !state.currentBid}
+                  onClick={() => onAction({ type: "dudo", seat: viewerSeat })}
+                  className="rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
+                >
+                  🚨 페루도!
+                </button>
+                <button
+                  disabled={!state.currentBid}
+                  onClick={() => onAction({ type: "calza", seat: viewerSeat })}
+                  title="차례와 상관없이 외칠 수 있어요"
+                  className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
+                >
+                  🎯 맞아!
+                </button>
+              </div>
+            )}
           </div>
-        )}
 
-        {iAmAlive && (
-          <div className="flex gap-2">
-            <button
-              disabled={!isMyTurn || !state.currentBid}
-              onClick={() => onAction({ type: "dudo", seat: viewerSeat })}
-              className="rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
-            >
-              🚨 페루도!
-            </button>
-            <button
-              disabled={!state.currentBid}
-              onClick={() => onAction({ type: "calza", seat: viewerSeat })}
-              title="차례와 상관없이 외칠 수 있어요"
-              className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
-            >
-              🎯 맞아!
-            </button>
+          {/* My dice — always fully visible, no cup or lid ever occludes them
+              (2026-08 페루도 UI 개편, 사용자 요청). `DiceRollTray` replays a short
+              CSS shake-then-settle every new round (see `dice/PerudoDie.tsx`'s
+              file header for why this replaced the earlier WebGL physics tray),
+              but never hides the settled values behind an extra "open me"
+              interaction. Moved inside the board's center (2026-08-20 사각형
+              트랙 세션, 사용자 요청: "보드판 사이즈를 좀 더 키워서 내 주사위까지
+              보이게 해주세요"). */}
+          <div className="relative z-10 flex w-full flex-col items-center gap-1.5 rounded-2xl border-2 border-amber-900/40 bg-gradient-to-b from-black/25 to-black/35 p-3 shadow-[inset_0_2px_10px_rgba(0,0,0,0.35),0_4px_14px_-6px_rgba(0,0,0,0.6)]">
+            <div className="flex w-full items-center justify-between px-1">
+              <p className="text-[11px] font-semibold text-amber-100/70">🎲 내 주사위 ({me.diceCount}개)</p>
+              {colorwayPicker}
+            </div>
+            {!iAmAlive ? (
+              <p className="text-xs text-rose-300/70">탈락했습니다 — 관전 중</p>
+            ) : (
+              <DiceRollTray
+                dice={me.dice}
+                colorway={myColorway}
+                rollToken={state.roundNumber}
+                size="lg"
+                ringForIndex={(i) => {
+                  const d = me.dice[i];
+                  const matchesBid = state.currentBid ? d === state.currentBid.face : false;
+                  if (matchesBid) return "match";
+                  if (state.currentBid && state.currentBid.face !== 1 && d === 1) return "wild";
+                  return undefined;
+                }}
+                onRollStart={() => {
+                  const engine = getSoundEngine();
+                  engine.unlock(); // best-effort — a user gesture already happened earlier in the room lobby
+                  engine.playDiceRattle(600);
+                }}
+                onSettled={() => getSoundEngine().playCupThud()}
+              />
+            )}
           </div>
-        )}
-      </div>
-
-      {/* Stats dashboard — right below the 페루도!/맞아! action buttons above. */}
-      <MyDiceStatsPanel state={state} myDice={me.dice} />
-
-      {/* My dice — always fully visible, no cup or lid ever occludes them
-          (2026-08 페루도 UI 개편, 사용자 요청). `DiceRollTray` replays a short
-          CSS shake-then-settle every new round (see `dice/PerudoDie.tsx`'s
-          file header for why this replaced the earlier WebGL physics tray),
-          but never hides the settled values behind an extra "open me"
-          interaction. */}
-      <div className="relative z-10 flex flex-col items-center gap-1.5 rounded-2xl border-2 border-amber-900/40 bg-gradient-to-b from-black/25 to-black/35 p-3 shadow-[inset_0_2px_10px_rgba(0,0,0,0.35),0_4px_14px_-6px_rgba(0,0,0,0.6)]">
-        <div className="flex w-full items-center justify-between px-1">
-          <p className="text-[11px] font-semibold text-amber-100/70">🎲 내 주사위 ({me.diceCount}개)</p>
-          {colorwayPicker}
         </div>
-        {!iAmAlive ? (
-          <p className="text-xs text-rose-300/70">탈락했습니다 — 관전 중</p>
-        ) : (
-          <DiceRollTray
-            dice={me.dice}
-            colorway={myColorway}
-            rollToken={state.roundNumber}
-            size="lg"
-            ringForIndex={(i) => {
-              const d = me.dice[i];
-              const matchesBid = state.currentBid ? d === state.currentBid.face : false;
-              if (matchesBid) return "match";
-              if (state.currentBid && state.currentBid.face !== 1 && d === 1) return "wild";
-              return undefined;
-            }}
-            onRollStart={() => {
-              const engine = getSoundEngine();
-              engine.unlock(); // best-effort — a user gesture already happened earlier in the room lobby
-              engine.playDiceRattle(600);
-            }}
-            onSettled={() => getSoundEngine().playCupThud()}
-          />
-        )}
-      </div>
+      </RectBidTrack>
+
+      {/* Stats dashboard — right below the board panel above. */}
+      <MyDiceStatsPanel state={state} myDice={me.dice} />
 
       {/* Scoreboard — a responsive grid (not a single flex column) so it
           stays readable up to the full 8-player table instead of forcing a
