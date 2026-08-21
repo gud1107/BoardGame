@@ -241,9 +241,16 @@ export default function GamePlayPage() {
   // container — its rectangular board's responsive cell size (see
   // `PerudoBoard.tsx`'s `--perudo-cell` CSS var) can grow up to ~78px/tile on
   // wide viewports, which needs more than the standard 2xl column has to
-  // avoid the board pressing right up against the page gutter.
+  // avoid the board pressing right up against the page gutter. 2026-08-21
+  // 아발론 역할/목표 가이드 패널 세션: 아발론도 같은 이유로 5xl — its new
+  // `AvalonRoleGuideSidebar` (see AvalonBoard.tsx) sits fixed beside the
+  // round table on desktop, same sidebar-driven layout as 소환사의 협곡.
   const pageMaxWidth =
-    game.id === "summoners-rift" ? "max-w-5xl" : game.id === "perudo" ? "max-w-4xl" : "max-w-2xl";
+    game.id === "summoners-rift" || game.id === "avalon"
+      ? "max-w-5xl"
+      : game.id === "perudo"
+        ? "max-w-4xl"
+        : "max-w-2xl";
 
   return (
     <div className={`mx-auto ${pageMaxWidth} px-4 py-8 sm:px-6`}>

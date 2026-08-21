@@ -1,8 +1,22 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-21 (**코요테 8인 확장 + 원형 테이블 레이아웃 최적화 세션** — 자세한 내용은 아래 `### 2026-08-21 — 코요테 8인 플레이 확장 + 원형 테이블 레이아웃 최적화` 절 참고. 커밋 `cfefc96 feat(coyote): expand maximum players to 8 and optimize radial table layout` → 배포 프리뷰 `https://board-game-c2tupjzyk-me-3871.vercel.app`.)_
+_최종 갱신: 2026-08-21 (**아발론 우측 '내 역할 & 목표' 상시 가이드 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 아발론 우측 역할 능력 및 진영 목표 가이드 패널` 절 참고. 커밋 예정 `feat(avalon): add right sidebar panel for player role abilities and team objectives` → 배포 프리뷰 커밋 직후 갱신 예정.)_
 
-_이전 갱신: 2026-08-21 (**소환사의 협곡 직전 라운드 결과 조회 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 소환사의 협곡 직전 라운드 결과 조회 패널 및 상세 로그 UI` 절 참고. 커밋 `fa4cc6e feat(summoners-rift): add previous round history summary panel` → 배포 프리뷰 `https://board-game-plzsvqw0t-me-3871.vercel.app`.)_
+_이전 갱신: 2026-08-21 (**코요테 8인 확장 + 원형 테이블 레이아웃 최적화 세션** — 자세한 내용은 아래 `### 2026-08-21 — 코요테 8인 플레이 확장 + 원형 테이블 레이아웃 최적화` 절 참고. 커밋 `cfefc96 feat(coyote): expand maximum players to 8 and optimize radial table layout` → 배포 프리뷰 `https://board-game-c2tupjzyk-me-3871.vercel.app`.)_
+
+### 2026-08-21 — 아발론 우측 역할 능력 및 진영 목표 가이드 패널
+
+**요청**: `HANDOFF.md`와 아발론 코드(요청 문구는 `src/games/avalon/` 하위 `Board.tsx`/`AvalonBoard.tsx`/`Sidebar.tsx`/`PlayerRole.tsx`/`types.ts`를 지목)를 먼저 확인한 뒤, 게임 화면 우측에 상시 노출되는 "내 역할 & 목표" 가이드 패널을 신설해 (1) 내 진영/구체적 직업 뱃지, (2) 역할 고유 능력 설명(멀린/퍼시벌/충신/모르가나/모드레드/오베론/암살자), (3) 진영별 승리 목표(선/악), (4) 현재 페이즈에서 할 일 한 줄 요약을 보여 달라는 요청. 사이드 패널 배치·모바일 접이식 대응·특수 직업 설명 텍스트 등 확인이 필요한 사항은 절대 임의로 추정하지 말고 사전에 질문해 확정하라고 명시.
+
+**조사**: 요청이 가리킨 `Board.tsx`/`Sidebar.tsx`/`PlayerRole.tsx`/`types.ts`는 이 저장소에 존재하지 않고, 실제로는 `AvalonBoard.tsx`(보드+역할 모달) + `AvalonGame.tsx`(로비/Supabase 동기화) + `engine.ts`(규칙+`getKnowledge`) 구성임을 확인. 현재는 게임 시작 시 `RoleModal`이 한 번 뜨고 "🎭 내 역할 다시 보기" 버튼으로만 재열람 가능한 구조라 상시 참고 패널이 없음을 확인. 유사 선례로 소환사의 협곡의 `SummonersRiftGuideSidebar.tsx`(항상 보이는 플레이어 보조 사이드바, `[gameId]/page.tsx`가 해당 게임만 `max-w-5xl`로 페이지 폭을 넓혀 보드 옆에 배치)를 찾아 동일 패턴을 채택하기로 함 — 다만 그 사이드바는 좁은 화면에서 단순히 아래로 쌓이기만 하고 접이식 토글은 없어, 이번 요청의 "모바일 접이식" 요구사항은 별도로 구현해야 함을 확인.
+
+**모호점 확인(`AskUserQuestion`, 3문항)**: ① 기존 `RoleModal`(게임 시작 시 1회 팝업 + 재열람 버튼) 처리 — "모달 유지 + 패널 신설" vs "모달 제거, 패널로 전면 대체" → **"모달 유지 + 패널 신설"** 선택(새 패널은 상시 참고용, 최초 공개 임팩트는 모달이 그대로 담당). ② 모바일 접이식 형태 — "화면 가장자리 탭 → 슬라이드 드로어" vs "보드 하단 접이식 아코디언" → **"화면 가장자리 탭 → 슬라이드 드로어"** 선택. ③ 데스크톱 배치 — "페이지 폭 확장(소환사의 협곡과 동일하게 `max-w-5xl`) + 보드 옆 고정 사이드바" vs "현재 폭 유지 + 보드 위/아래 접이식" → **"페이지 폭 확장 + 고정 사이드바"** 선택.
+
+**구현**: 신규 `AvalonRoleGuideSidebar.tsx` — `GuideContent` 내부 컴포넌트 하나를 데스크톱 사이드바(`lg:flex`, 항상 노출)와 모바일 드로어(`lg:hidden`, 화면 우측 중앙 세로 탭 버튼 → 열면 우측에서 슬라이드 인, 배경 클릭/✕로 닫힘) 양쪽에서 공유. 내용은 4개 섹션: (1) 역할 아이콘+이름+진영 뱃지, (2) 정적 `ROLE_ABILITY` 텍스트(7개 역할 전부, 사용자 예시 문구 톤을 따라 신규 작성) + `getKnowledge`가 실제로 주는 정보(`evilSeatsKnown`/`merlinPercivalCandidates`)를 이름으로 풀어 함께 표시, (3) 정적 `TEAM_OBJECTIVES`(선/악 각각 사용자가 예시로 든 목표 문구 그대로 반영, 4라운드 7인+ 실패 2장 규칙은 해당 라운드에서만 경고로 추가 노출), (4) `currentActionGuide(state, viewerSeat)` — 현재 `phase`(원정대 구성/투표/원정 수행/암살)와 내 상황(리더 여부, 투표/제출 완료 여부, 원정대 포함 여부, 선/악 진영)을 조합해 한 줄로 지금 할 일을 요약. `AvalonBoard.tsx`는 최상위 반환을 `flex flex-col lg:flex-row` 컨테이너로 감싸 기존 원탁 패널을 `flex-1`로, 신규 사이드바를 그 옆에 배치(게임오버 화면은 이미 결과가 전원 공개되므로 사이드바 미부착, 기존 그대로). `[gameId]/page.tsx`의 게임별 `pageMaxWidth` 분기에 `game.id === "avalon"`을 소환사의 협곡과 같은 `max-w-5xl`로 추가.
+
+**검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/avalon/Avalon.test.ts`(50/50 통과 — `engine.ts` 무변경, 순수 UI 계층 추가) / `npx vitest run --exclude "**/aiBenchmark.test.ts"`(27개 파일 1093/1093 통과, 43초 — 이 저장소의 확립된 "전체 vitest는 `aiBenchmark.test.ts` 때문에 45분+ 걸려 완주 확인이 어렵다"는 과거 세션들의 판단과 동일하게, 그 파일만 제외한 전체 스위트로 대체 검증). 세션 시작 시 `Get-Process`로 확인한 결과 다른 두 개의 활성 Claude Code 세션(`boardgame-6f`/`boardgame-f8`, 약 1시간 전부터 실행 중)이 같은 저장소에서 이미 자체 전체 `vitest run`을 돌리고 있었음(§3의 "동시 세션" 알려진 이슈와 동일 패턴) — CPU 경합으로 처음 백그라운드로 건 무제한 전체 실행이 40분 넘게 끝나지 않아 중단하고, 위 `--exclude` 버전으로 대체해 빠르게 완주 확인. `git status`로 avalon 관련 파일이 다른 세션과 충돌 없이 이 세션의 변경분(`page.tsx`/`AvalonBoard.tsx`/신규 `AvalonRoleGuideSidebar.tsx`)뿐임을 커밋 직전 재확인.
+
+**커밋/배포**: 커밋 예정(`feat(avalon): add right sidebar panel for player role abilities and team objectives`) → `git push origin main` → `npx vercel deploy`(프리뷰) 진행 예정 — 실제 커밋 해시와 배포 URL은 커밋/배포 직후 별도 `docs(handoff)` 커밋으로 이 절과 상단 배너를 갱신할 것.
 
 ### 2026-08-21 — 코요테 8인 플레이 확장 + 원형 테이블 레이아웃 최적화
 
