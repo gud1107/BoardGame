@@ -4,6 +4,7 @@ import {
   BOARD_SIZE,
   chooseBotAction,
   compareHands,
+  completedLineCount,
   DEFAULT_TIMER_SETTINGS,
   evaluateHand,
   formatHandLabel,
@@ -316,6 +317,78 @@ describe("game flow", () => {
     const before = s;
     const after = applyAction(s, { type: "submit-line", seat: 0, lineIndex: 5 });
     expect(after).toBe(before);
+  });
+
+  // -------------------------------------------------------------------------
+  // 8-player mode (grid-poker mobile/8p expansion)
+  // -------------------------------------------------------------------------
+
+  it("startGame(8) creates 8 players with independent, empty 5x5 boards and the 3+ round/threshold config", () => {
+    const s = startGame(8);
+    expect(s.playerCount).toBe(8);
+    expect(s.players).toHaveLength(8);
+    expect(s.totalScoringRounds).toBe(12);
+    expect(s.winThreshold).toBe(7);
+    for (const p of s.players) {
+      expect(p.board).toHaveLength(BOARD_SIZE);
+      expect(p.board.every((c) => c === null)).toBe(true);
+      expect(p.usedLines).toHaveLength(LINES.length);
+      expect(p.score).toBe(0);
+    }
+    // Boards must be genuinely independent arrays, not shared references —
+    // otherwise placing for one seat would corrupt every other seat's board.
+    expect(s.players[0].board).not.toBe(s.players[1].board);
+  });
+
+  it("fills an 8-player board over exactly 25 draws, every seat placing independently each round, and moves to submitting", () => {
+    const s = fillBoards(startGame(8));
+    expect(s.phase).toBe("submitting");
+    expect(s.drawCount).toBe(BOARD_SIZE);
+    for (const p of s.players) {
+      expect(p.board.every((c) => c !== null)).toBe(true);
+      expect(p.firstPlacedCell).toBe(0);
+    }
+  });
+
+  it("completedLineCount rises independently per player as their own lines fill in, before the whole board is done", () => {
+    let s = startGame(8);
+    const seat0Cells = [0, 1, 2, 3, 4]; // row 0 — completes exactly one line for seat 0
+    const otherCells = [1, 7, 13, 19, 20]; // scattered across distinct rows/cols/diagonals — completes none
+    for (let round = 0; round < 5; round++) {
+      s = applyAction(s, { type: "draw-common", seed: round + 1 });
+      for (let seat = 0; seat < 8; seat++) {
+        const cellIndex = seat === 0 ? seat0Cells[round] : otherCells[round];
+        s = applyAction(s, { type: "place", seat, cellIndex });
+      }
+    }
+    expect(completedLineCount(s.players[0])).toBe(1);
+    for (let seat = 1; seat < 8; seat++) {
+      expect(completedLineCount(s.players[seat])).toBe(0);
+    }
+  });
+
+  it("8-player submitting phase resolves round by round (simultaneous blind picks) to a consistent final ranking", () => {
+    let s = fillBoards(startGame(8));
+    expect(s.phase).toBe("submitting");
+    let rounds = 0;
+    while (s.phase === "submitting" && rounds < 12) {
+      for (let seat = 0; seat < 8; seat++) {
+        s = applyAction(s, { type: "submit-line", seat, lineIndex: rounds });
+      }
+      rounds++;
+    }
+    expect(s.phase).toBe("game-end");
+    expect(s.winner).not.toBeNull();
+    expect(s.winner!.length).toBeGreaterThanOrEqual(1);
+    expect(s.roundNumber - 1).toBeLessThanOrEqual(12);
+    for (const p of s.players) {
+      expect(p.usedLines.filter(Boolean).length).toBeGreaterThan(0);
+      expect(p.usedLines.filter(Boolean).length).toBeLessThanOrEqual(12);
+    }
+    // A tie awards no point, so total points handed out can never exceed the
+    // number of scoring rounds actually resolved.
+    const totalScore = s.players.reduce((sum, p) => sum + p.score, 0);
+    expect(totalScore).toBeLessThanOrEqual(s.roundNumber - 1);
   });
 });
 

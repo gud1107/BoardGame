@@ -723,7 +723,7 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
         )}
         {intent === "create" && (
           <label className="flex flex-col gap-1.5 text-sm text-white/70">
-            인원 수 (2~6명)
+            인원 수 (2~8명)
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -735,7 +735,7 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
               <span className="w-8 text-center text-lg font-semibold text-white">{targetPlayerCount}</span>
               <button
                 type="button"
-                onClick={() => setTargetPlayerCount((n) => Math.min(6, n + 1))}
+                onClick={() => setTargetPlayerCount((n) => Math.min(8, n + 1))}
                 className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
               >
                 +

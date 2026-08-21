@@ -346,6 +346,17 @@ export function opponentLiveCell(state: GridPokerState, player: PlayerState): nu
   return player.lastPlacedCell;
 }
 
+/**
+ * How many of a player's 12 lines are fully filled with cards right now,
+ * regardless of whether they've been submitted for scoring yet. Unlike
+ * `visibleOpponentBoard`, this never leaks a card's rank/suit — it's just a
+ * count — so it's safe to surface for every player (own board and
+ * opponents' alike), e.g. in a mobile summary strip/tab.
+ */
+export function completedLineCount(player: PlayerState): number {
+  return LINES.filter((line) => line.every((cell) => player.board[cell] !== null)).length;
+}
+
 // ---------------------------------------------------------------------------
 // Hand evaluation (standard poker, wild Jokers)
 // ---------------------------------------------------------------------------

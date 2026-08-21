@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Overlay from "@/components/Overlay";
 import RulebookModal from "./RulebookModal";
 import DealerReveal from "./DealerReveal";
 import { CardChip } from "./cardDisplay";
@@ -10,6 +11,7 @@ import { detectNewlyCompletedLines, HandRankFloatingBadge, type LineCompleteEven
 import {
   BOARD_SIZE,
   LINES,
+  completedLineCount,
   evaluateHand,
   formatHandLabel,
   opponentLiveCell,
@@ -17,6 +19,7 @@ import {
   type Card,
   type EngineAction,
   type GridPokerState,
+  type PlayerState,
   type SeatIndex,
 } from "./engine";
 
@@ -25,6 +28,17 @@ const URGENT_THRESHOLD = 5;
 function randomFrom<T>(items: T[]): T | undefined {
   if (items.length === 0) return undefined;
   return items[Math.floor(Math.random() * items.length)];
+}
+
+/**
+ * Score-descending standings with competition ranking (ties share a rank,
+ * the next distinct score skips ahead — e.g. 1,1,3), used by the always-
+ * visible top badge strip so an 8-player game reads as a leaderboard rather
+ * than an unordered seat list.
+ */
+function rankedPlayers(players: PlayerState[]): { player: PlayerState; rank: number }[] {
+  const sorted = [...players].sort((a, b) => b.score - a.score);
+  return sorted.map((player) => ({ player, rank: sorted.findIndex((p) => p.score === player.score) + 1 }));
 }
 
 /**
@@ -139,6 +153,31 @@ function Cell({
   );
 }
 
+/**
+ * An opponent's board as seen by everyone else: `visibleOpponentBoard`'s
+ * permanent reveals (first-placed cell + already-submitted lines), with
+ * `opponentLiveCell`'s "placing it right now" marker layered on top and
+ * everything else darkened via `hiddenOccupied`. Shared by the desktop
+ * inline grid and the mobile tap-to-view popup so the two never drift.
+ */
+function OpponentBoardGrid({ state, player, size = "mini" }: { state: GridPokerState; player: PlayerState; size?: "main" | "mini" }) {
+  const board = visibleOpponentBoard(player);
+  const liveCell = opponentLiveCell(state, player);
+  return (
+    <div className="grid grid-cols-5 gap-1">
+      {board.map((card, i) => {
+        const isLive = i === liveCell;
+        const displayCard = isLive ? player.board[i] : card;
+        // Revealed-null but actually filled (per the full state every
+        // client holds) = placed here in an earlier round and still
+        // hidden — render dark, not empty.
+        const hiddenOccupied = !isLive && displayCard === null && player.board[i] !== null;
+        return <Cell key={i} card={displayCard} hiddenOccupied={hiddenOccupied} highlight={isLive} size={size} />;
+      })}
+    </div>
+  );
+}
+
 /** Numeric countdown bar, red-hot once inside the urgent threshold. */
 function CountdownBar({ timeLeft, total }: { timeLeft: number; total: number }) {
   const urgent = timeLeft <= URGENT_THRESHOLD;
@@ -171,6 +210,10 @@ export default function GridPokerBoard({
   onToggleBgm,
 }: GridPokerBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  // Which opponent's board the mobile tap-to-view popup currently shows
+  // (see the opponent tab strip below) — null means no popup is open.
+  // Desktop never sets this; it renders every opponent's board inline.
+  const [viewedSeat, setViewedSeat] = useState<SeatIndex | null>(null);
   const viewer = state.players[viewerSeat];
   const opponents = state.players.filter((p) => p.seat !== viewerSeat);
 
@@ -353,15 +396,21 @@ export default function GridPokerBoard({
         </div>
       </div>
 
-      <div className="relative z-10 flex flex-wrap gap-2">
-        {state.players.map((p) => (
+      {/* Always-visible leaderboard strip — ranked, not seat order, so an
+          8-player game reads as standings at a glance without an extra tap.
+          Scrolls horizontally on narrow phones instead of wrapping to
+          multiple lines, so it never eats into the board area below;
+          desktop has the room to wrap instead. */}
+      <div className="relative z-10 -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+        {rankedPlayers(state.players).map(({ player: p, rank }) => (
           <div
             key={p.seat}
-            className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ${
               p.seat === viewerSeat ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-white/10 bg-white/5 text-white/60"
             }`}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(p.seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+            <span className="font-semibold text-amber-300/90">{rank === 1 ? "🏆" : `${rank}위`}</span>
             {names[p.seat]} · {p.score}승
           </div>
         ))}
@@ -484,42 +533,58 @@ export default function GridPokerBoard({
       {opponents.length > 0 && (
         <div className="relative z-10 flex flex-col gap-1.5">
           <p className="text-xs text-white/50">상대 보드판 (처음 배치한 칸 + 공개된 라인 + 이번 카드 배치 위치만 보임)</p>
-          <div className="flex flex-wrap gap-2">
+
+          {/* Mobile (< sm): a scrollable strip of summary chips — tap one to
+              pop the board open in `viewedSeat`'s popup below, instead of
+              cramming up to 7 mini-grids onto a phone screen at once. */}
+          <div className="flex gap-2 overflow-x-auto pb-1 sm:hidden">
             {opponents.map((p) => {
-              const board = visibleOpponentBoard(p);
+              const liveCell = opponentLiveCell(state, p);
+              return (
+                <button
+                  key={p.seat}
+                  onClick={() => setViewedSeat(p.seat)}
+                  className="flex shrink-0 flex-col items-start gap-0.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-left transition active:border-emerald-400/50 active:bg-emerald-400/10"
+                >
+                  <span className="flex items-center gap-1 text-[11px] font-medium text-white/80">
+                    {names[p.seat]}
+                    {liveCell !== null && <span className="h-1.5 w-1.5 rounded-full bg-amber-400" title="배치 중" />}
+                  </span>
+                  <span className="text-[10px] text-white/50">
+                    {p.score}승 · 라인 {completedLineCount(p)}개
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Desktop/tablet (>= sm): room enough to show every board inline. */}
+          <div className="hidden flex-wrap gap-2 sm:flex">
+            {opponents.map((p) => {
               const liveCell = opponentLiveCell(state, p);
               return (
                 <div key={p.seat} className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-2">
                   <span className="flex items-center gap-1 text-[11px] text-white/60">
-                    {names[p.seat]}
+                    {names[p.seat]} · {p.score}승 · 라인 {completedLineCount(p)}개
                     {liveCell !== null && <span className="text-[10px] text-amber-300">· 배치 중</span>}
                   </span>
-                  <div className="grid grid-cols-5 gap-1">
-                    {board.map((card, i) => {
-                      const isLive = i === liveCell;
-                      const displayCard = isLive ? p.board[i] : card;
-                      // Revealed-null but actually filled (per the full
-                      // state every client holds) = they placed here in an
-                      // earlier round and it's still hidden — render dark,
-                      // not empty, and it accumulates automatically as more
-                      // cells fill in (p.board never clears).
-                      const hiddenOccupied = !isLive && displayCard === null && p.board[i] !== null;
-                      return (
-                        <Cell
-                          key={i}
-                          card={displayCard}
-                          hiddenOccupied={hiddenOccupied}
-                          highlight={isLive}
-                          size="mini"
-                        />
-                      );
-                    })}
-                  </div>
+                  <OpponentBoardGrid state={state} player={p} size="mini" />
                 </div>
               );
             })}
           </div>
         </div>
+      )}
+
+      {viewedSeat !== null && (
+        <Overlay
+          title={`${names[state.players[viewedSeat].seat]} · ${state.players[viewedSeat].score}승 · 라인 ${completedLineCount(state.players[viewedSeat])}개`}
+          onClose={() => setViewedSeat(null)}
+        >
+          <div className="flex justify-center">
+            <OpponentBoardGrid state={state} player={state.players[viewedSeat]} size="main" />
+          </div>
+        </Overlay>
       )}
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}

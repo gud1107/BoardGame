@@ -137,7 +137,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     nameEn: "Grid Poker",
     description:
       "5×5 보드판에 공통 카드를 배치해 포커 족보 라인을 완성하고, 상대와 족보를 겨루는 넷플릭스 데스게임 변형 카드 게임.",
-    players: { min: 2, max: 6 },
+    players: { min: 2, max: 8 },
     playTime: { minMinutes: 20, maxMinutes: 35 },
     category: "card",
     thumbnail: { emoji: "🃏", gradient: ["#34d399", "#0f766e"], image: "/games/grid-poker.jpg" },
