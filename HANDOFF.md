@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-21 (**운명전쟁39 8인 모드 추가(72장 덱 + 리버스 5종) 세션** — 자세한 내용은 아래 `### 2026-08-21 — 운명전쟁39 8인 모드 지원 + 카드 덱/라운드 규칙 확장` 절 참고. 커밋 `148cfc4 feat(destiny-war-39): add 8-player mode with 72-card deck and 5 reverse cards` → 배포 프리뷰 `https://board-game-bu37h53h1-me-3871.vercel.app`.)_
+_최종 갱신: 2026-08-21 (**운명전쟁39 8인 모드 추가(72장 덱 + 리버스 5종) 세션** — 자세한 내용은 아래 `### 2026-08-21 — 운명전쟁39 8인 모드 지원 + 카드 덱/라운드 규칙 확장` 절 참고. 커밋 `148cfc4 feat(destiny-war-39): add 8-player mode with 72-card deck and 5 reverse cards` + `ba1eb63 fix(destiny-war-39): update dashboard listing to reflect 8-player mode` → 배포 프리뷰 `https://board-game-r1pxeucmp-me-3871.vercel.app`.)_
 
 _이전 갱신: 2026-08-21 (**페루도 무여백(Zero-Gap) 대칭 트랙 연결 + 보드판 확장 세션** — 자세한 내용은 아래 `### 2026-08-21 — 페루도 무여백(Zero-Gap) 대칭 트랙 연결 + 보드판 확장` 절 참고.)_
 
@@ -22,7 +22,7 @@ _이전 갱신: 2026-08-21 (**페루도 무여백(Zero-Gap) 대칭 트랙 연결
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/destinyWar39`(61/61 통과) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1080/1080 통과).
 
-**커밋/배포**: 커밋 `148cfc4 feat(destiny-war-39): add 8-player mode with 72-card deck and 5 reverse cards` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주(Turbopack 빌드+TS 전체 재검사 포함), READY — `https://board-game-bu37h53h1-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
+**커밋/배포**: 커밋 `148cfc4 feat(destiny-war-39): add 8-player mode with 72-card deck and 5 reverse cards` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주, READY — `https://board-game-bu37h53h1-me-3871.vercel.app`. 이후 대시보드 카드의 게임 목록 메타데이터(`registry.ts`)가 여전히 `players: { min: 5, max: 5 }`로 남아있고 설명 문구도 5인 모드 리버스 카드(11·22·33)만 언급하던 것을 발견해 `players: { min: 5, max: 8 }` + 두 모드를 모두 설명하는 문구로 후속 수정 — 커밋 `ba1eb63 fix(destiny-war-39): update dashboard listing to reflect 8-player mode` → 푸시 → 재배포, READY — `https://board-game-r1pxeucmp-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-21 — 페루도 무여백(Zero-Gap) 대칭 트랙 연결 + 보드판 확장
 
