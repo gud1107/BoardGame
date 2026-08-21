@@ -27,12 +27,24 @@ function randomSeed(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
 
-/** Position of a seat around the round table, relative to the viewer always sitting at the bottom — same technique as avalon/AvalonBoard.tsx's `seatPosition`. */
+/**
+ * Position of a seat around the round table, relative to the viewer always
+ * sitting at the bottom — same technique as avalon/AvalonBoard.tsx's
+ * `seatPosition`. At 7-8 players the ellipse widens slightly (45/41 vs
+ * 42/38) so the extra seats' cards spread further from the center instead of
+ * crowding closer together at the same radius — paired with the taller/wider
+ * table container and the smaller "xs" card size below (CoyoteBoard's
+ * `compact` branch) per product decision to keep a single ellipse rather than
+ * an inner/outer double-ring layout.
+ */
 function seatPosition(relativeIndex: number, total: number): CSSProperties {
   const angleDeg = 90 + (relativeIndex / total) * 360;
   const angleRad = (angleDeg * Math.PI) / 180;
-  const x = 50 + 42 * Math.cos(angleRad);
-  const y = 50 + 38 * Math.sin(angleRad);
+  const compact = total > 6;
+  const radiusX = compact ? 45 : 42;
+  const radiusY = compact ? 41 : 38;
+  const x = 50 + radiusX * Math.cos(angleRad);
+  const y = 50 + radiusY * Math.sin(angleRad);
   return { left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)" };
 }
 
@@ -135,6 +147,9 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   const canDeclare = isMyTurn && Number.isInteger(declareValue) && declareValue > (state.currentBid?.number ?? -Infinity);
   const canCoyote = isMyTurn && state.currentBid !== null;
   const res = state.lastResolution;
+  // 7-8인일 때만 카드/이름표를 한 단계 줄여 타원 위 겹침을 방지 — 레이아웃 방식(단일 타원 유지)은
+  // 그대로 두고 크기/간격만 반응형으로 축소하는 쪽으로 제품 확정.
+  const compact = state.playerCount > 6;
 
   function renderSeat(seat: SeatIndex, style: CSSProperties, isSelf: boolean) {
     const player = state.players.find((p) => p.seat === seat)!;
@@ -143,18 +158,18 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     return (
       <div key={seat} className="absolute flex flex-col items-center gap-1" style={style}>
         <CardFlipWrapper flipKey={`${seat}-${state.roundNumber}-${revealed}`} revealed={revealed}>
-          <CardFace card={card} highlight={isActive} size="sm" />
+          <CardFace card={card} highlight={isActive} size={compact ? "xs" : "sm"} />
         </CardFlipWrapper>
         <div
-          className={`flex flex-col items-center gap-0.5 rounded-xl border px-2 py-1 text-center text-[10px] ${
+          className={`flex flex-col items-center gap-0.5 rounded-xl border text-center ${compact ? "max-w-[70px] px-1.5 py-0.5 text-[9px]" : "px-2 py-1 text-[10px]"} ${
             isActive ? "border-amber-300/60 bg-amber-400/10" : "border-white/10 bg-black/30"
           }`}
         >
-          <span className="flex items-center gap-1 font-semibold text-white/90">
-            <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+          <span className="flex max-w-full items-center gap-1 truncate font-semibold text-white/90">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
             {isActive && <span title="차례">👉</span>}
-            {names[seat]}
-            {isSelf && <span className="text-amber-200">(나)</span>}
+            <span className="truncate">{names[seat]}</span>
+            {isSelf && <span className="shrink-0 text-amber-200">(나)</span>}
           </span>
           <HeartPips hearts={player.hearts} max={STARTING_HEARTS} />
         </div>
@@ -174,8 +189,8 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
         <div className="flex gap-1.5">{rulebookButton}</div>
       </div>
 
-      {/* Round table: every seat's forehead card placed around an ellipse, viewer at the bottom. */}
-      <div className="relative z-10 mx-auto h-[280px] w-full max-w-md sm:h-[320px]">
+      {/* Round table: every seat's forehead card placed around an ellipse, viewer at the bottom. Widens for 7-8 players (see `compact`) so seatPosition's slightly larger radius has more physical room to spread cards apart. */}
+      <div className={`relative z-10 mx-auto w-full ${compact ? "h-[320px] max-w-lg sm:h-[380px]" : "h-[280px] max-w-md sm:h-[320px]"}`}>
         <div className="absolute inset-[10%] rounded-[50%] border-4 border-orange-900/50 bg-gradient-to-b from-orange-950/50 to-black/70 shadow-inner" />
         {renderSeat(viewerSeat, seatPosition(0, state.playerCount), true)}
         {otherSeats.map((seat, i) => renderSeat(seat, seatPosition(i + 1, state.playerCount), false))}

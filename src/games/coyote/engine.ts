@@ -56,14 +56,20 @@
  *    product request the UI theme was changed from "깃털(feather)" to
  *    "하트(heart)" and the starting count lowered to 2 — a player is now
  *    eliminated after their *second* penalty instead of their third.
- * 6. **Player count.** 3~6 per rulebook §1 (추천 4~6) — no conflict with the
- *    task brief here.
+ * 6. **Player count.** Rulebook §1 lists 3~6 (추천 4~6). **Deliberate house-rule
+ *    extension from the rulebook's literal range**: per explicit product
+ *    request (2026-08-21) the cap was raised to 8 so larger tables can play
+ *    online. The physical 36-card deck is unchanged (module doc assumption
+ *    #1) — confirmed with the user rather than assumed, since at 8 players
+ *    only 8 of the 36 cards are dealt (28 remain in the round deck for "?"
+ *    draws), the same "no shortage" margin every smaller table already has,
+ *    so no deck rebalancing was needed for the larger cap.
  */
 
 export type SeatIndex = number;
 
 export const MIN_PLAYERS = 3;
-export const MAX_PLAYERS = 6;
+export const MAX_PLAYERS = 8;
 /** House-rule value (rulebook's literal reading is 3 벌점 토큰) — see module doc assumption #5. */
 export const STARTING_HEARTS = 2;
 

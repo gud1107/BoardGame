@@ -1,8 +1,28 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-21 (**소환사의 협곡 직전 라운드 결과 조회 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 소환사의 협곡 직전 라운드 결과 조회 패널 및 상세 로그 UI` 절 참고. 커밋 `fa4cc6e feat(summoners-rift): add previous round history summary panel` → 배포 프리뷰 `https://board-game-plzsvqw0t-me-3871.vercel.app`.)_
+_최종 갱신: 2026-08-21 (**코요테 8인 확장 + 원형 테이블 레이아웃 최적화 세션** — 자세한 내용은 아래 `### 2026-08-21 — 코요테 8인 플레이 확장 + 원형 테이블 레이아웃 최적화` 절 참고. 커밋/배포 정보는 해당 절 및 뒤이은 `docs(handoff)` 후속 커밋 참고.)_
 
-_이전 갱신: 2026-08-21 (**보드게임 허브 인원 필터에 '8인' 옵션 추가 세션** — 자세한 내용은 아래 `### 2026-08-21 — 보드게임 허브 인원 필터 '8인' 옵션 추가` 절 참고. 커밋 `9ec9198 feat(hub): add 8-player filter option to game list` → 배포 프리뷰 `https://board-game-ca8ovie4j-me-3871.vercel.app`.)_
+_이전 갱신: 2026-08-21 (**소환사의 협곡 직전 라운드 결과 조회 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 소환사의 협곡 직전 라운드 결과 조회 패널 및 상세 로그 UI` 절 참고. 커밋 `fa4cc6e feat(summoners-rift): add previous round history summary panel` → 배포 프리뷰 `https://board-game-plzsvqw0t-me-3871.vercel.app`.)_
+
+### 2026-08-21 — 코요테 8인 플레이 확장 + 원형 테이블 레이아웃 최적화
+
+**요청**: `HANDOFF.md`와 코요테 코드(요청 문구는 `src/games/coyote/` 하위 `engine.ts`/`types.ts`/`constants.ts`/`CoyoteBoard.tsx`/`PlayerArea.tsx`/`Lobby.tsx`, `src/config/games.ts`를 지목)를 먼저 확인한 뒤 (1) 로비/허브 메타데이터 8인 확장, (2) 8인 대응 원형/타원형 테이블·이마 카드 UI 최적화(카드 겹침 방지, 이마 카드 비공개/상대 카드 공개 유지, 라이프·턴 하이라이트 시인성), (3) 8인 대응 덱/엔진 규칙 점검(카드 수량 부족 여부, 코요테 선언 합산 특수 로직), (4) `Coyote.test.ts` 단위 테스트 보강(8인 생성/배분/합산/특수카드, 탈락 시 턴 넘김, 최종 승자 판정), (5) `tsc`/`lint`/`vitest` 검증 → HANDOFF 갱신 → 커밋(`feat(coyote): expand maximum players to 8 and optimize radial table layout`) → 푸시 → 배포 요청. 원형/방사형 배치와 덱 구성(특수 카드 수량 등)에 확인이 필요한 사항은 절대 임의로 추정하지 말고 사전에 질문해 확정하라고 명시.
+
+**조사**: 요청이 가리킨 `types.ts`/`constants.ts`/`Lobby.tsx`/`PlayerArea.tsx`/`src/config/games.ts`는 이 저장소에 존재하지 않고, 실제로는 인원/메타데이터는 `src/games/registry.ts`(`GAME_REGISTRY`), 인원 선택 UI는 로비 역할을 겸하는 `CoyoteGame.tsx`의 "enter-name" 단계(이미 `MIN_PLAYERS`/`MAX_PLAYERS` 상수 기반이라 상수만 올리면 스테퍼 라벨/한도가 자동 반영), 원형 테이블·카드·라이프 UI는 `CoyoteBoard.tsx` 하나에 통합, 덱/규칙/봇 로직은 `engine.ts` 하나에 통합된 구성임을 확인. `engine.ts`의 `seatPosition`(`CoyoteBoard.tsx`)은 이미 `relativeIndex / total * 360` 공식으로 인원수에 완전히 제너릭해 8인도 그대로 동작하지만 카드/이름표 크기가 고정(`size="sm"`, 고정 패딩)이라 8인이면 타원 위 카드 간 간격이 좁아질 수 있음을 확인. 덱은 실제 코요테 보드게임 고정 36장 구성(`NUMBER_CARD_SPEC` — 26 코요테카드 + 0×3 + -5×2 + -10×1 + 밤/물음표/MAX0/x2 각 1장)이라 8인이어도 8장만 배분하고 28장이 라운드 덱에 남아(6인 기준 30장과 큰 차이 없음) 수량 부족이 전혀 없음을 계산으로 확인 — 다만 이 판단을 임의로 확정하지 않고 질문으로 확인받음.
+
+**모호점 확인(`AskUserQuestion`, 2문항)**: ① 8인 덱 구성 — "고정 36장 덱 유지(3~6인과 동일, 실제 수량 부족 없음)" vs "8인 전용 덱 확장(특수/숫자카드 수량 증량 하우스룰)" → **"고정 36장 덱 유지"** 선택. ② 8인 원형 테이블 레이아웃 확장 방식 — "단일 타원 유지 + 반응형 축소(카드/간격만 줄여 겹침 방지)" vs "이중(내/외곽) 링 배치로 전환" → **"단일 타원 유지 + 반응형 축소"** 선택.
+
+**엔진 변경** (`engine.ts`): `MAX_PLAYERS` 6 → **8**(`MIN_PLAYERS`는 3 그대로) — 모듈 최상단 doc의 "player count" 가정 항목에 2026-08-21 하우스룰 확장 근거(질문으로 확인받은 "덱 수량 부족 없음" 계산 포함)를 명문화. 딜링(`dealRound`)·좌석 순환(`nextAliveSeat`)·코요테 판정(`resolveCoyoteCall`)·랭킹(`computeRankings`)·봇 로직(`getValidMoves`/`chooseBotAction`/`estimateTotal`)은 전부 이미 `playerCount`/`state.players` 배열 기반 제너릭 구현이라 무변경 — 상수 한 줄만 올려도 8인까지 규칙상 문제없이 동작함을 신규 테스트로 확인.
+
+**인원 확장** (`registry.ts`): 코요테 항목 `players: { min: 3, max: 6 }` → `{ min: 3, max: 8 }` — `src/app/page.tsx`의 "8인" 허브 필터(`min <= 8 && max >= 8`)에 자동으로 노출됨을 확인(별도 필터 로직 수정 불필요).
+
+**레이아웃 개편** (`CoyoteBoard.tsx`, `CardArt.tsx`): 확인받은 대로 기존 단일 타원 배치는 그대로 두고 7-8인일 때만 반응형으로 축소/확장 — `seatPosition`의 타원 반경을 7인 이상이면 42/38(%) → 45/41(%)로 살짝 넓혀 더 많은 좌석이 중심에서 더 멀리 퍼지도록 하고, 테이블 컨테이너를 `h-[280px] max-w-md sm:h-[320px]` → `h-[320px] max-w-lg sm:h-[380px]`로 확대해 넓어진 반경이 실제 물리적 여유 공간을 갖도록 함. `CardFace`(`CardArt.tsx`)에 신규 `"xs"` 사이즈(`h-12 w-9`, 라벨/이모지 폰트 한 단계 축소) 추가 후 7-8인일 때 좌석 카드에 `size="xs"` 적용(6인 이하는 기존 `"sm"` 그대로). 좌석 이름표도 7-8인일 때 `max-w-[70px] truncate` + 패딩/폰트 한 단계 축소(`px-1.5 py-0.5 text-[9px]`)로 긴 닉네임이 레이아웃을 밀어내지 않도록 함 — 이마 카드 비공개(`getPlayerView`)/상대 카드 공개, 라이프(`HeartPips`)·턴 하이라이트(`isActive` 링/배경)는 로직·시각 구분 전부 무변경으로 8인에서도 동일하게 유지.
+
+**테스트 보강** (`Coyote.test.ts`, 54개 → **60개**): 기존 "인원수 초과 시 예외" 테스트를 7인(이제 합법) 대신 9인 초과로 갱신 + `MAX_PLAYERS` 기대값 8로 갱신. 8인 전용 `describe` 블록 신규 추가 — 8명 생성/`STARTING_HEARTS` 초기화/8장 배분(카드 id 중복 없음), 고정 36장 덱이 8인에서도 라운드 덱에 28장이 남아 전체 36장이 소진 없이 보존되는지, 8인 전원의 이마 카드 합산에 MAX→0·x2가 §3 순서대로 정상 적용되는지(더블+맥스제로+숫자 6장 조합), 8인 중 한 좌석이 탈락한 상태에서 선언 시 턴이 그 좌석을 건너뛰고 다음 생존 좌석으로 넘어가는지, `playFullBotGame`(기존 헬퍼 재사용)으로 8인 전원이 라운드를 거듭해 최종 1인 승자와 완전한 순위(`computeRankings`)로 수렴하는지 확인. 기존 "Level 10 고수 AI끼리 풀 시뮬레이션" 루프도 `[3,4,5,6]` → `[3,4,5,6,7,8]`로 확장해 7·8인 전체 게임이 봇 시뮬레이션으로도 버그 없이 완주됨을 확인.
+
+**검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/coyote/Coyote.test.ts`(60/60 통과) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1093/1093 통과).
+
+**커밋/배포**: (아래 `docs(handoff)` 후속 커밋에서 확정 해시와 배포 URL을 기록.)
 
 ### 2026-08-21 — 소환사의 협곡 직전 라운드 결과 조회 패널 및 상세 로그 UI
 

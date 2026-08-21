@@ -113,9 +113,71 @@ describe("startGame — setup", () => {
 
   it("throws for unsupported player counts", () => {
     expect(() => startGame(2, 1)).toThrow();
-    expect(() => startGame(7, 1)).toThrow();
+    expect(() => startGame(9, 1)).toThrow();
     expect(MIN_PLAYERS).toBe(3);
-    expect(MAX_PLAYERS).toBe(6);
+    expect(MAX_PLAYERS).toBe(8);
+  });
+});
+
+describe("8인 확장 (2026-08-21 하우스룰 — module doc assumption #6)", () => {
+  it("creates all 8 players at STARTING_HEARTS and deals one card per seat", () => {
+    const state = startGame(8, 1);
+    expect(state.players).toHaveLength(8);
+    expect(state.players.every((p) => p.hearts === STARTING_HEARTS)).toBe(true);
+    expect(Object.keys(state.tableCards)).toHaveLength(8);
+    expect(new Set(Object.values(state.tableCards).map((c) => c.id)).size).toBe(8);
+  });
+
+  it("leaves the fixed 36-card deck with 28 cards in the round deck — no shortage at the new cap", () => {
+    const state = startGame(8, 1);
+    expect(state.roundDeck).toHaveLength(DECK_SIZE - 8);
+    const allIds = [...Object.values(state.tableCards).map((c) => c.id), ...state.roundDeck.map((c) => c.id)];
+    expect(new Set(allIds).size).toBe(DECK_SIZE);
+  });
+
+  it("sums all 8 foreheads and still applies MAX→0 then x2 in order at full capacity", () => {
+    const players: PlayerState[] = Array.from({ length: 8 }, (_, seat) => ({ seat, hearts: STARTING_HEARTS }));
+    const state = makeState({
+      playerCount: 8,
+      players,
+      tableCards: {
+        0: card(0, "double"),
+        1: card(1, "maxZero"),
+        2: card(2, "number", 20),
+        3: card(3, "number", 5),
+        4: card(4, "number", 3),
+        5: card(5, "number", 1),
+        6: card(6, "number", -5),
+        7: card(7, "number", -10),
+      },
+      currentBid: { seat: 0, number: 1 },
+      activeSeat: 1,
+    });
+    const next = applyAction(state, { type: "coyote", seat: 1 });
+    // raw sum 20+5+3+1-5-10 = 14, minus the zeroed max(20) -> -6, doubled -> -12
+    expect(next.lastResolution!.maxZeroTarget).toEqual({ seat: 2, card: card(2, "number", 20) });
+    expect(next.lastResolution!.doubled).toBe(true);
+    expect(next.lastResolution!.finalTotal).toBe(-12);
+  });
+
+  it("passes the turn to the next alive seat, skipping an eliminated one, at 8인", () => {
+    const players: PlayerState[] = Array.from({ length: 8 }, (_, seat) => ({
+      seat,
+      hearts: seat === 3 ? 0 : STARTING_HEARTS,
+    }));
+    const state = makeState({ playerCount: 8, players, activeSeat: 2 });
+    const next = applyAction(state, { type: "declare", seat: 2, number: 5 });
+    expect(next.activeSeat).toBe(4); // seat 3 eliminated, skipped
+  });
+
+  it("eliminates seats one by one down to a single 8인 winner via computeRankings", () => {
+    const state = playFullBotGame(8, 808, () => 5);
+    expect(state.phase).toBe("gameOver");
+    expect(state.winnerSeat).not.toBeNull();
+    const rankings = computeRankings(state);
+    expect(rankings).toHaveLength(8);
+    expect(new Set(rankings.map((r) => r.seat)).size).toBe(8);
+    expect(rankings.find((r) => r.rank === 1)!.seat).toBe(state.winnerSeat);
   });
 });
 
@@ -540,7 +602,7 @@ function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: Seat
 }
 
 describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
-  for (const n of [3, 4, 5, 6]) {
+  for (const n of [3, 4, 5, 6, 7, 8]) {
     it(`completes a ${n}-player all-Level-10 game with every seat ranked`, () => {
       const state = playFullBotGame(n, 100 + n, () => 10);
       expect(state.phase).toBe("gameOver");

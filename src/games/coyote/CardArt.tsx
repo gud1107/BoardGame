@@ -90,16 +90,17 @@ export function CardFace({
   card: Card | null;
   className?: string;
   highlight?: boolean;
-  size?: "sm" | "md";
+  /** "xs" is only used by CoyoteBoard's 7-8인 compact table layout, to keep 8 seats from crowding the ellipse. */
+  size?: "xs" | "sm" | "md";
 }) {
-  const dims = size === "sm" ? "h-14 w-10" : "h-20 w-14";
+  const dims = size === "xs" ? "h-12 w-9" : size === "sm" ? "h-14 w-10" : "h-20 w-14";
   if (!card) {
     return (
       <div
         className={`relative flex ${dims} shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-white/25 bg-black/50 ${className}`}
         title="내 이마 위 카드 (나에게는 숨겨져 있어요)"
       >
-        <span className="text-xl">❓</span>
+        <span className={size === "xs" ? "text-lg" : "text-xl"}>❓</span>
       </div>
     );
   }
@@ -110,8 +111,10 @@ export function CardFace({
       } ${className}`}
       style={{ background: cardTierBg(card) }}
     >
-      <span className="text-sm leading-none">{cardEmoji(card)}</span>
-      <span className={`leading-none font-black text-white ${size === "sm" ? "text-base" : "text-lg"}`}>{cardLabel(card)}</span>
+      <span className={`leading-none ${size === "xs" ? "text-xs" : "text-sm"}`}>{cardEmoji(card)}</span>
+      <span className={`leading-none font-black text-white ${size === "md" ? "text-lg" : size === "sm" ? "text-base" : "text-sm"}`}>
+        {cardLabel(card)}
+      </span>
       <span className="max-w-full truncate text-center text-[7px] leading-tight text-white/60">{cardCaption(card)}</span>
     </div>
   );
