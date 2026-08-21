@@ -35,7 +35,7 @@ function bangCurrentActor(state: BangState): SeatIndex | null {
 
 /**
  * Online-room multiplayer entry point, generalizing HanamikojiGame's 2-seat
- * pattern to 4-7 seats. Same trust model: every client independently
+ * pattern to 4-8 seats. Same trust model: every client independently
  * computes the full `BangState` (all hands, all secret roles) from a shared
  * RNG seed plus replayed `EngineAction`s broadcast over Supabase Realtime —
  * there is no server-authoritative engine. See README for the accepted
@@ -576,7 +576,7 @@ export default function BangGame({ onComplete }: PlayableGameProps) {
       <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">🤠</span>
         <h2 className="text-lg font-bold text-white">뱅! 온라인 대전</h2>
-        <p className="text-sm text-white/50">4~7명이 각자 기기로 접속해서 실시간으로 플레이해요.</p>
+        <p className="text-sm text-white/50">4~8명이 각자 기기로 접속해서 실시간으로 플레이해요.</p>
         <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
           <button
             onClick={() => {
@@ -623,7 +623,7 @@ export default function BangGame({ onComplete }: PlayableGameProps) {
         )}
         {intent === "create" && (
           <label className="flex flex-col gap-1.5 text-sm text-white/70">
-            인원 수 (4~7명)
+            인원 수 (4~8명)
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -635,7 +635,7 @@ export default function BangGame({ onComplete }: PlayableGameProps) {
               <span className="w-8 text-center text-lg font-semibold text-white">{targetPlayerCount}</span>
               <button
                 type="button"
-                onClick={() => setTargetPlayerCount((n) => Math.min(7, n + 1))}
+                onClick={() => setTargetPlayerCount((n) => Math.min(8, n + 1))}
                 className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
               >
                 +

@@ -1,7 +1,9 @@
 /**
  * Pure BANG! rules engine — no React, no I/O. Implements the standard
  * base-game ruleset (80-card deck, 4 roles: Sheriff/Deputy/Outlaw/Renegade)
- * for 4-7 players, MINUS the ~16 unique character special-ability cards
+ * for 4-8 players (the 8-player table adds a second, independent Renegade —
+ * see ROLE_SETS and checkWinner's doc below), MINUS the ~16 unique character
+ * special-ability cards
  * (Willy the Kid, Bart Cassidy, etc.) — every player is a generic role-only
  * player. This is the one deliberate content cut; everything else (every
  * card type, both win-condition edge cases, weapon ranges, distance
@@ -235,11 +237,17 @@ const WEAPON_RANGE: Partial<Record<CardType, number>> = {
 // Roles & setup
 // ---------------------------------------------------------------------------
 
+/**
+ * 8-player table adds a second Renegade (official Dodge City / 8-player
+ * expansion distribution) instead of a 4th Outlaw or 3rd Deputy — see
+ * `checkWinner`'s doc for how the two Renegades resolve independently.
+ */
 export const ROLE_SETS: Record<number, Role[]> = {
   4: ["sheriff", "outlaw", "outlaw", "renegade"],
   5: ["sheriff", "deputy", "outlaw", "outlaw", "renegade"],
   6: ["sheriff", "deputy", "outlaw", "outlaw", "outlaw", "renegade"],
   7: ["sheriff", "deputy", "deputy", "outlaw", "outlaw", "outlaw", "renegade"],
+  8: ["sheriff", "deputy", "deputy", "outlaw", "outlaw", "outlaw", "renegade", "renegade"],
 };
 
 function emptyEquipment(): Record<EquipSlot, Card | null> {
@@ -379,6 +387,21 @@ function drawN(state: BangState, seat: SeatIndex, n: number, rng: () => number):
   return { ...s, players };
 }
 
+/**
+ * Role-count-agnostic by construction, which is exactly what makes the
+ * 8-player table's second, independent Renegade (ROLE_SETS[8]) fall out for
+ * free with zero extra logic: each Renegade is racing every other seat
+ * (Law, Outlaws, *and* the other Renegade — never allied with them) to be
+ * the lone survivor. The moment the Sheriff dies, the check below fires on
+ * however many players are alive at *that* instant — if it's exactly one
+ * (a Renegade), that Renegade wins solo, precisely the "survivors were
+ * [Sheriff + one Renegade]" case; with either Renegade still alive alongside
+ * anyone else (including the other Renegade), it's an Outlaw win instead,
+ * same as the single-Renegade tables. A table can therefore end with one
+ * Renegade already dead and the other going on to win, or both Renegades
+ * alive when the Sheriff falls losing to an instant Outlaw win — both are
+ * correct per the official 2-Renegade rule.
+ */
 function checkWinner(state: BangState): Team | null {
   const alive = state.players.filter((p) => p.alive);
   if (alive.length === 1 && alive[0].role === "renegade") return "renegade";

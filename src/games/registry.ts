@@ -120,8 +120,8 @@ export const GAME_REGISTRY: GameMeta[] = [
     name: "뱅!",
     nameEn: "Bang!",
     description:
-      "보안관, 부관, 무법자, 배신자로 나뉘어 서부극 속 총격전을 벌이는 정체 은폐 카드 게임.",
-    players: { min: 4, max: 7 },
+      "보안관, 부관, 무법자, 배신자로 나뉘어 서부극 속 총격전을 벌이는 정체 은폐 카드 게임. 8인 플레이 시 배신자가 2명으로 늘어납니다.",
+    players: { min: 4, max: 8 },
     playTime: { minMinutes: 30, maxMinutes: 45 },
     category: "deduction",
     thumbnail: { emoji: "🤠", gradient: ["#f59e0b", "#92400e"], image: "/games/bang.png" },

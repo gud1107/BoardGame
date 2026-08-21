@@ -117,10 +117,19 @@ describe("deck composition", () => {
 });
 
 describe("startGame", () => {
-  it.each([4, 5, 6, 7])("assigns the correct role multiset for %i players", (n) => {
+  it.each([4, 5, 6, 7, 8])("assigns the correct role multiset for %i players", (n) => {
     const state = startGame(n, 12345);
     const roles = state.players.map((p) => p.role).sort();
     expect(roles).toEqual([...ROLE_SETS[n]].sort());
+  });
+
+  it("8-player table seats exactly Sheriff×1, Deputy×2, Outlaw×3, Renegade×2", () => {
+    const state = startGame(8, 2468);
+    const counts = state.players.reduce<Record<string, number>>((acc, p) => {
+      acc[p.role] = (acc[p.role] ?? 0) + 1;
+      return acc;
+    }, {});
+    expect(counts).toEqual({ sheriff: 1, deputy: 2, outlaw: 3, renegade: 2 });
   });
 
   it("always seats the sheriff first in turn order", () => {
@@ -158,6 +167,25 @@ describe("distance helpers", () => {
     expect(circleDistance(state, 0, 1)).toBe(1);
     expect(circleDistance(state, 0, 2)).toBe(2);
     expect(circleDistance(state, 0, 3)).toBe(1);
+  });
+
+  it("computes symmetric circle distance (1-4) around an 8-seat table", () => {
+    const state = makeState({
+      turnOrder: [0, 1, 2, 3, 4, 5, 6, 7],
+      players: [0, 1, 2, 3, 4, 5, 6, 7].map((seat) =>
+        makePlayer(seat, seat === 0 ? "sheriff" : "outlaw"),
+      ),
+      playerCount: 8,
+    });
+    // Adjacent seats are distance 1 on both sides; the seat directly across
+    // the table (4 seats away either direction) is the max, distance 4.
+    expect(circleDistance(state, 0, 1)).toBe(1);
+    expect(circleDistance(state, 0, 7)).toBe(1);
+    expect(circleDistance(state, 0, 2)).toBe(2);
+    expect(circleDistance(state, 0, 6)).toBe(2);
+    expect(circleDistance(state, 0, 3)).toBe(3);
+    expect(circleDistance(state, 0, 5)).toBe(3);
+    expect(circleDistance(state, 0, 4)).toBe(4);
   });
 
   it("closes up the circle when a seat is eliminated", () => {
@@ -904,6 +932,98 @@ describe("win-condition priority", () => {
   });
 });
 
+describe("8-player table: 2-Renegade win condition", () => {
+  // 8-seat table: 0 sheriff, 1-2 deputy, 3-5 outlaw, 6-7 renegade (two
+  // independent Renegades — not a team, see engine.ts's checkWinner doc).
+  function makeEightState(overrides: Partial<BangState> = {}): BangState {
+    const players = [
+      makePlayer(0, "sheriff"),
+      makePlayer(1, "deputy"),
+      makePlayer(2, "deputy"),
+      makePlayer(3, "outlaw"),
+      makePlayer(4, "outlaw"),
+      makePlayer(5, "outlaw"),
+      makePlayer(6, "renegade"),
+      makePlayer(7, "renegade"),
+    ];
+    return {
+      turnOrder: [0, 1, 2, 3, 4, 5, 6, 7],
+      players,
+      deck: [],
+      discard: [],
+      turnSeat: 0,
+      turnPhase: "action",
+      pending: null,
+      turnNumber: 1,
+      winner: null,
+      playerCount: 8,
+      ...overrides,
+    };
+  }
+
+  it("Outlaws win once the Sheriff dies while both Renegades are still alive", () => {
+    const state = makeEightState({
+      turnPhase: "pending",
+      pending: { kind: "group", cause: "bang", source: 3, requiredCard: "missed", barrelAllowed: true, outstanding: [0] },
+      players: [
+        makePlayer(0, "sheriff", { life: 1 }),
+        makePlayer(1, "deputy", { alive: false, roleRevealed: true }),
+        makePlayer(2, "deputy", { alive: false, roleRevealed: true }),
+        makePlayer(3, "outlaw"),
+        makePlayer(4, "outlaw", { alive: false, roleRevealed: true }),
+        makePlayer(5, "outlaw", { alive: false, roleRevealed: true }),
+        makePlayer(6, "renegade"),
+        makePlayer(7, "renegade"),
+      ],
+    });
+    const next = applyAction(state, { type: "group-respond", seat: 0, mode: "take-hit" });
+    expect(next.winner).toBe("outlaw");
+    expect(next.turnPhase).toBe("game-end");
+  });
+
+  it("Sheriff/Deputies (law) win once all 3 Outlaws and both Renegades are dead", () => {
+    const state = makeEightState({
+      turnPhase: "pending",
+      pending: { kind: "group", cause: "bang", source: 0, requiredCard: "missed", barrelAllowed: true, outstanding: [7] },
+      players: [
+        makePlayer(0, "sheriff"),
+        makePlayer(1, "deputy"),
+        makePlayer(2, "deputy", { alive: false, roleRevealed: true }),
+        makePlayer(3, "outlaw", { alive: false, roleRevealed: true }),
+        makePlayer(4, "outlaw", { alive: false, roleRevealed: true }),
+        makePlayer(5, "outlaw", { alive: false, roleRevealed: true }),
+        makePlayer(6, "renegade", { alive: false, roleRevealed: true }),
+        makePlayer(7, "renegade", { life: 1 }),
+      ],
+    });
+    const next = applyAction(state, { type: "group-respond", seat: 7, mode: "take-hit" });
+    expect(next.winner).toBe("law");
+  });
+
+  it("a lone surviving Renegade wins solo when the Sheriff dies with only [Sheriff + that Renegade] left, even though the other Renegade died earlier", () => {
+    const state = makeEightState({
+      turnPhase: "pending",
+      // Renegade at seat 7 already dead; everyone but the sheriff and the
+      // other renegade (seat 6) is dead too — the sheriff's last hit point
+      // is about to fall to the survivor at seat 6.
+      pending: { kind: "group", cause: "bang", source: 6, requiredCard: "missed", barrelAllowed: true, outstanding: [0] },
+      players: [
+        makePlayer(0, "sheriff", { life: 1 }),
+        makePlayer(1, "deputy", { alive: false, roleRevealed: true }),
+        makePlayer(2, "deputy", { alive: false, roleRevealed: true }),
+        makePlayer(3, "outlaw", { alive: false, roleRevealed: true }),
+        makePlayer(4, "outlaw", { alive: false, roleRevealed: true }),
+        makePlayer(5, "outlaw", { alive: false, roleRevealed: true }),
+        makePlayer(6, "renegade"),
+        makePlayer(7, "renegade", { alive: false, roleRevealed: true }),
+      ],
+    });
+    const next = applyAction(state, { type: "group-respond", seat: 0, mode: "take-hit" });
+    expect(next.winner).toBe("renegade");
+    expect(next.players[6].alive).toBe(true);
+  });
+});
+
 describe("deterministic reshuffle", () => {
   it("reshuffles the discard pile into the deck when it runs dry mid-draw", () => {
     const state = makeState({
@@ -1089,7 +1209,7 @@ function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: Seat
 }
 
 describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 게임 종료까지 완주)", () => {
-  for (const n of [4, 5, 6, 7]) {
+  for (const n of [4, 5, 6, 7, 8]) {
     it(`completes a ${n}-player all-Level-10 game with a winning team declared`, () => {
       const state = playFullBotGame(n, 200 + n, () => 10);
       expect(state.winner).not.toBeNull();

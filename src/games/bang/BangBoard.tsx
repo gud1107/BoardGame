@@ -223,13 +223,31 @@ function EquipRow({ player }: { player: PlayerState }) {
   );
 }
 
-/** Position of a non-viewer seat around the oval table, relative to the viewer always sitting at the bottom. */
+/**
+ * Position of a non-viewer seat around the oval table, relative to the
+ * viewer always sitting at the bottom. Radius grows a little past 6 players
+ * so the extra seat badges spread further apart instead of just packing
+ * closer together at a fixed radius — paired with `seatBadgeScale`'s
+ * shrinking badge/text/gap sizes below, this is what keeps an 8-player
+ * table's badges from overlapping near the ellipse's top and sides.
+ */
 function seatPosition(relativeIndex: number, total: number): CSSProperties {
   const angleDeg = 90 + (relativeIndex / total) * 360;
   const angleRad = (angleDeg * Math.PI) / 180;
-  const x = 50 + 42 * Math.cos(angleRad);
-  const y = 50 + 36 * Math.sin(angleRad);
+  const radiusX = total >= 7 ? 46 : 42;
+  const radiusY = total >= 7 ? 40 : 36;
+  const x = 50 + radiusX * Math.cos(angleRad);
+  const y = 50 + radiusY * Math.sin(angleRad);
   return { left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)" };
+}
+
+/** Seat-badge padding/gap/text sizing, scaled down as the table gets more
+ * crowded (7-8 players) so badges keep clear of each other around the oval —
+ * at 4-6 players this matches the original fixed sizing exactly. */
+function seatBadgeScale(total: number): { pad: string; gap: string; name: string; role: string } {
+  if (total >= 8) return { pad: "px-1.5 py-0.5", gap: "gap-px", name: "text-[9px]", role: "text-[8px]" };
+  if (total === 7) return { pad: "px-2 py-1", gap: "gap-0.5", name: "text-[10px]", role: "text-[9px]" };
+  return { pad: "px-2 py-1", gap: "gap-0.5", name: "text-[11px]", role: "text-[10px]" };
 }
 
 export default function BangBoard({
@@ -389,8 +407,13 @@ export default function BangBoard({
         {rulebookButton}
       </div>
 
-      {/* Oval saloon table: every other seat placed around an ellipse, viewer always at the bottom. */}
-      <div className="relative z-10 mx-auto h-[280px] w-full max-w-md sm:h-[320px]">
+      {/* Oval saloon table: every other seat placed around an ellipse, viewer always at the bottom.
+          Container grows a bit past 6 players so seatPosition's wider radius has more room to work with. */}
+      <div
+        className={`relative z-10 mx-auto w-full max-w-md ${
+          state.playerCount >= 7 ? "h-[320px] sm:h-[380px]" : "h-[280px] sm:h-[320px]"
+        }`}
+      >
         <div
           className="absolute inset-[6%] rounded-[50%] border-4 border-emerald-900/60 bg-gradient-to-b from-emerald-800/70 to-emerald-950/70 shadow-inner"
         />
@@ -401,6 +424,7 @@ export default function BangBoard({
           const isLegalTarget = isTargeting && targets.includes(seat);
           const showRole = player.role === "sheriff" || player.roleRevealed;
           const roleMeta = showRole ? ROLE_LABEL[player.role] : null;
+          const scale = seatBadgeScale(state.playerCount);
           return (
             <div
               key={seat}
@@ -408,7 +432,7 @@ export default function BangBoard({
               className="absolute flex flex-col items-center gap-0.5"
             >
               <div
-                className={`flex flex-col items-center gap-0.5 rounded-xl border-2 px-2 py-1 text-center shadow-md transition ${
+                className={`flex flex-col items-center ${scale.gap} rounded-xl border-2 ${scale.pad} text-center shadow-md transition ${
                   !player.alive
                     ? "border-white/10 bg-black/40 opacity-50"
                     : state.turnSeat === seat
@@ -417,11 +441,11 @@ export default function BangBoard({
                 } ${isLegalTarget ? "cursor-pointer ring-4 ring-amber-300" : isTargeting ? "opacity-40" : ""}`}
                 onClick={() => isLegalTarget && pickTarget(seat)}
               >
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-white/90">
+                <span className={`flex items-center gap-1 font-semibold text-white/90 ${scale.name}`}>
                   <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
                   {names[seat]}
                 </span>
-                <span className="text-[10px] text-amber-200">
+                <span className={`text-amber-200 ${scale.role}`}>
                   {roleMeta ? `${roleMeta.icon} ${roleMeta.label}` : "❔ 비공개"}
                 </span>
                 <HeartPips life={player.life} maxLife={player.maxLife} />
