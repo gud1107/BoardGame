@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-21 (**보드게임 허브 인원 필터에 '8인' 옵션 추가 세션** — 자세한 내용은 아래 `### 2026-08-21 — 보드게임 허브 인원 필터 '8인' 옵션 추가` 절 참고. 커밋 `feat(hub): add 8-player filter option to game list` → 배포 프리뷰 대기.)_
+_최종 갱신: 2026-08-21 (**보드게임 허브 인원 필터에 '8인' 옵션 추가 세션** — 자세한 내용은 아래 `### 2026-08-21 — 보드게임 허브 인원 필터 '8인' 옵션 추가` 절 참고. 커밋 `9ec9198 feat(hub): add 8-player filter option to game list` → 배포 프리뷰 `https://board-game-ca8ovie4j-me-3871.vercel.app`.)_
 
 _이전 갱신: 2026-08-21 (**소환사의 협곡 제거 장비 가로 순차 나열 + 던전 공략 실시간 관전 UI + 몬스터 히스토리 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 소환사의 협곡 제거 장비 가로 순차 나열 + 던전 공략 실시간 관전 UI + 몬스터 히스토리 패널` 절 참고. 커밋 `a331ed6 feat(summoners-rift): display discarded items linearly and add shared dungeon combat viewer with monster log` → 배포 프리뷰 `https://board-game-epqt0optf-me-3871.vercel.app`.)_
 
@@ -16,7 +16,7 @@ _이전 갱신: 2026-08-21 (**소환사의 협곡 제거 장비 가로 순차 �
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1084/1084 통과, 43.02초) — 이번 변경이 순수 대시보드 필터 UI(`src/app/page.tsx`)에 국한돼 게임 엔진 테스트에는 영향 없음. 도중 `--exclude` 없이 백그라운드로 걸어둔 전체 `npx vitest run`이 이전 세션들에 이미 기록된 패턴대로 5분 넘게 응답 없어 `TaskStop` 후 `Get-CimInstance Win32_Process`로 잔존 vitest 워커 3개를 `Stop-Process -Force`로 정리하고 `--exclude` 버전으로 재실행해 정상 완료.
 
-**커밋/배포**: 커밋 예정 `feat(hub): add 8-player filter option to game list` → 푸시 → `npx vercel deploy` 진행 예정(본 절 하단 갱신 예정).
+**커밋/배포**: 커밋 `9ec9198 feat(hub): add 8-player filter option to game list` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주, READY — `https://board-game-ca8ovie4j-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-21 — 소환사의 협곡 제거 장비 가로 순차 나열 + 던전 공략 실시간 관전 UI + 몬스터 히스토리 패널
 
