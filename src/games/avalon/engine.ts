@@ -61,7 +61,7 @@ export interface AvalonState {
   leader: SeatIndex;
   proposedTeam: SeatIndex[];
   phase: Phase;
-  votes: Partial<Record<SeatIndex, Vote>>; // cleared every new proposal
+  votes: Partial<Record<SeatIndex, Vote>>; // cleared every new proposal (propose-team); left populated with the just-resolved tally between a vote resolving and the next proposal — see resolveVotes's doc
   consecutiveRejects: number;
   questResults: QuestResult[];
   questCards: Partial<Record<SeatIndex, QuestCard>>; // cleared every new quest
@@ -216,12 +216,22 @@ function resolveVotes(state: AvalonState): AvalonState {
   const approveCount = Object.values(state.votes).filter((v) => v === "approve").length;
   const rejectCount = state.playerCount - approveCount;
 
+  // `state.votes` is deliberately left populated (the full, just-resolved
+  // tally) in every branch below rather than cleared here — the view layer's
+  // vote-reveal overlay (see AvalonEffects.tsx's `detectAvalonRevealEvents`)
+  // needs the very last vote's actual value, which otherwise only ever
+  // existed transiently inside `castVote`'s local merge and would never
+  // reach an observable state snapshot. Harmless to leave around: every
+  // reader of `state.votes` elsewhere is already gated on `phase ===
+  // "voting"` (see its field doc below), and the next `propose-team` action
+  // resets it fresh regardless (`proposeTeam` sets `votes: {}` itself).
+
   if (approveCount > rejectCount) {
     // Approved: the team heads to the quest with the SAME leader who
     // proposed it. The leader marker only advances once this round's
     // quest actually resolves (see `resolveQuest`), matching physical
     // Avalon's "leader passes after the round completes" flow.
-    return { ...state, phase: "quest", votes: {}, questCards: {} };
+    return { ...state, phase: "quest", questCards: {} };
   }
 
   // Rejected (including ties): leader passes immediately so someone new
@@ -234,7 +244,6 @@ function resolveVotes(state: AvalonState): AvalonState {
       phase: "gameOver",
       winner: "evil",
       winReason: "five-rejects",
-      votes: {},
       consecutiveRejects,
       leader,
     };
@@ -243,7 +252,6 @@ function resolveVotes(state: AvalonState): AvalonState {
     ...state,
     phase: "team-proposal",
     proposedTeam: [],
-    votes: {},
     consecutiveRejects,
     leader,
   };

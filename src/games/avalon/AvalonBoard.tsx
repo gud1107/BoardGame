@@ -4,6 +4,16 @@ import { type CSSProperties, useMemo, useState } from "react";
 import RulebookModal from "./RulebookModal";
 import AvalonRoleGuideSidebar from "./AvalonRoleGuideSidebar";
 import {
+  AssassinCrosshair,
+  AssassinSlash,
+  AssassinSpotlightOverlay,
+  QuestRevealOverlay,
+  RoleAuraBackdrop,
+  SubmittedPulseBadge,
+  VoteRevealOverlay,
+  useAvalonReveals,
+} from "./AvalonEffects";
+import {
   failThreshold,
   getKnowledge,
   type AvalonState,
@@ -91,6 +101,18 @@ export default function AvalonBoard({
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [roleModalOpen, setRoleModalOpen] = useState(true);
   const [selection, setSelection] = useState<SeatIndex[]>([]);
+  // Snap-lock animation state for the vote/quest-card buttons themselves —
+  // set the instant the viewer clicks, cleared whenever a new round/phase
+  // starts (alongside `selection` below). Purely cosmetic: the actual submit
+  // already happened via `onAction` by the time this is read.
+  const [votePulse, setVotePulse] = useState<"approve" | "reject" | null>(null);
+  const [questPulse, setQuestPulse] = useState<"success" | "fail" | null>(null);
+  // Assassin phase: which target is hovered (crosshair) and which one was
+  // just confirmed (slash impact) — the real `assassinate` dispatch is
+  // delayed until the slash animation finishes, see `confirmAssassinate`.
+  const [hoveredTarget, setHoveredTarget] = useState<SeatIndex | null>(null);
+  const [slashTarget, setSlashTarget] = useState<SeatIndex | null>(null);
+  const { current: reveal, dismissCurrent: dismissReveal } = useAvalonReveals(state);
 
   // `state.players` is only ever set once, inside startGame — no action
   // mutates it afterward — so its object identity is a reliable signal for
@@ -111,6 +133,10 @@ export default function AvalonBoard({
   if (trackedRoundPhaseKey !== roundPhaseKey) {
     setTrackedRoundPhaseKey(roundPhaseKey);
     setSelection([]);
+    setVotePulse(null);
+    setQuestPulse(null);
+    setHoveredTarget(null);
+    setSlashTarget(null);
   }
 
   const viewer = state.players[viewerSeat];
@@ -212,15 +238,22 @@ export default function AvalonBoard({
   }
 
   function castVote(vote: "approve" | "reject") {
+    setVotePulse(vote);
     onAction({ type: "vote", seat: viewerSeat, vote });
   }
 
   function submitQuestCard(card: "success" | "fail") {
+    setQuestPulse(card);
     onAction({ type: "play-quest-card", seat: viewerSeat, card });
   }
 
-  function assassinate(target: SeatIndex) {
-    onAction({ type: "assassinate", targetSeat: target });
+  // Holds the real dispatch until the ~0.4s slash-impact animation lands
+  // (see AssassinSlash in AvalonEffects.tsx) so the hit visually resolves
+  // before the game-over screen can appear.
+  function confirmAssassinate(target: SeatIndex) {
+    if (slashTarget !== null) return;
+    setSlashTarget(target);
+    setTimeout(() => onAction({ type: "assassinate", targetSeat: target }), 450);
   }
 
   const otherSeats = Array.from(
@@ -357,12 +390,14 @@ export default function AvalonBoard({
                 <div className="flex justify-center gap-2">
                   <button
                     onClick={() => castVote("approve")}
+                    style={votePulse === "approve" ? { animation: "avalon-snap-lock 0.25s ease-out" } : undefined}
                     className="rounded-full bg-emerald-600 px-5 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
                   >
                     👍 찬성
                   </button>
                   <button
                     onClick={() => castVote("reject")}
+                    style={votePulse === "reject" ? { animation: "avalon-snap-lock 0.25s ease-out" } : undefined}
                     className="rounded-full bg-rose-600 px-5 py-2 text-xs font-semibold text-white hover:bg-rose-500"
                   >
                     👎 반대
@@ -389,6 +424,7 @@ export default function AvalonBoard({
                 </p>
                 <button
                   onClick={() => submitQuestCard("success")}
+                  style={questPulse === "success" ? { animation: "avalon-snap-lock 0.25s ease-out" } : undefined}
                   className="rounded-full bg-emerald-600 px-6 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
                 >
                   ✅ 성공 제출
@@ -402,12 +438,14 @@ export default function AvalonBoard({
                 <div className="flex gap-2">
                   <button
                     onClick={() => submitQuestCard("success")}
+                    style={questPulse === "success" ? { animation: "avalon-snap-lock 0.25s ease-out" } : undefined}
                     className="rounded-full bg-emerald-600 px-5 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
                   >
                     ✅ 성공
                   </button>
                   <button
                     onClick={() => submitQuestCard("fail")}
+                    style={questPulse === "fail" ? { animation: "avalon-snap-lock 0.25s ease-out" } : undefined}
                     className="rounded-full bg-rose-600 px-5 py-2 text-xs font-semibold text-white hover:bg-rose-500"
                   >
                     ❌ 실패
@@ -416,9 +454,10 @@ export default function AvalonBoard({
               </div>
             ))}
 
+          {state.phase === "assassination" && <AssassinSpotlightOverlay />}
           {state.phase === "assassination" &&
             (isAssassin ? (
-              <div className="flex flex-col gap-2">
+              <div className="relative flex flex-col gap-2">
                 <p className="text-xs text-amber-100/80">
                   원정 3회 성공! 메를린으로 의심되는 사람을 지목해 암살하세요.
                   정확히 맞히면 악한 세력이 역전 승리합니다.
@@ -429,16 +468,21 @@ export default function AvalonBoard({
                     .map((p) => (
                       <button
                         key={p.seat}
-                        onClick={() => assassinate(p.seat)}
-                        className="rounded-full border border-rose-400/40 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-100 hover:border-rose-400/70 hover:bg-rose-500/20"
+                        disabled={slashTarget !== null}
+                        onMouseEnter={() => setHoveredTarget(p.seat)}
+                        onMouseLeave={() => setHoveredTarget((s) => (s === p.seat ? null : s))}
+                        onClick={() => confirmAssassinate(p.seat)}
+                        className="relative rounded-full border border-rose-400/40 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-100 transition hover:border-rose-400/70 hover:bg-rose-500/20 disabled:cursor-not-allowed"
                       >
                         🏹 {names[p.seat]}
+                        {hoveredTarget === p.seat && slashTarget === null && <AssassinCrosshair />}
+                        {slashTarget === p.seat && <AssassinSlash />}
                       </button>
                     ))}
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-amber-100/50">
+              <p className="relative text-xs text-amber-100/50">
                 원정 3회 성공!{" "}
                 {assassinSeat !== null ? names[assassinSeat] : "암살자"}님이
                 메를린을 지목하는 중...
@@ -457,6 +501,13 @@ export default function AvalonBoard({
             knowledge={knowledge}
             onClose={() => setRoleModalOpen(false)}
           />
+        )}
+
+        {reveal?.type === "vote-reveal" && (
+          <VoteRevealOverlay key={reveal.id} event={reveal} names={names} onDone={dismissReveal} />
+        )}
+        {reveal?.type === "quest-reveal" && (
+          <QuestRevealOverlay key={reveal.id} event={reveal} onDone={dismissReveal} />
         )}
       </div>
       <AvalonRoleGuideSidebar
@@ -499,13 +550,17 @@ function SeatChip({
     state.phase === "quest" &&
     state.proposedTeam.includes(seat) &&
     state.questCards[seat] !== undefined;
+  // Own-seat-only particle pulse (session-confirmed scope: the request's
+  // "본인 프로필 및 내 위치" marker, not a table-wide effect) — shown for as
+  // long as the viewer has submitted and is waiting on the rest of the table.
+  const showSubmittedPulse = isSelf && (votedAlready || questSubmittedAlready);
 
   return (
     <div style={style} className="absolute flex flex-col items-center gap-0.5">
       <button
         disabled={!isSelectable}
         onClick={() => onClick(seat)}
-        className={`flex flex-col items-center gap-0.5 rounded-xl border-2 px-2 py-1.5 text-center shadow-md transition ${
+        className={`relative flex flex-col items-center gap-0.5 rounded-xl border-2 px-2 py-1.5 text-center shadow-md transition ${
           isSelected
             ? "border-amber-300 bg-amber-500/20 ring-2 ring-amber-300"
             : inProposedTeam
@@ -515,6 +570,7 @@ function SeatChip({
                 : "border-white/15 bg-black/40"
         } ${isSelectable ? "cursor-pointer hover:border-amber-300/60" : ""}`}
       >
+        {showSubmittedPulse && <SubmittedPulseBadge />}
         <span className="flex items-center gap-1 text-[11px] font-semibold text-white/90">
           <span
             className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`}
@@ -548,54 +604,62 @@ function RoleModal({
   const meta = ROLE_META[viewer.role];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-amber-400/30 bg-[#1a1128] p-6 text-center shadow-2xl">
-        <p className="mb-1 text-xs text-white/40">
-          {names[viewerSeat]}님의 비밀 정보
-        </p>
-        <div className="mb-3 text-5xl">{meta.icon}</div>
-        <h2
-          className={`mb-1 text-xl font-bold ${meta.team === "good" ? "text-sky-300" : "text-rose-300"}`}
-        >
-          {meta.label}
-        </h2>
-        <p className="mb-4 text-sm text-white/60">
-          당신은 {meta.team === "good" ? "선한 세력" : "악한 세력"}입니다.
-        </p>
+      <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-amber-400/30 bg-[#1a1128] p-6 text-center shadow-2xl">
+        {/* Mystical hologram magic-circle + team-tinted aura pulse — gives
+          Merlin/Percival's info-reveal moment (and every other role's, for
+          visual consistency) the requested blue/violet mysticism. Painted
+          first so it sits behind the `relative z-10` content below, same
+          convention as TableTexture above. */}
+        <RoleAuraBackdrop team={meta.team} />
+        <div className="relative z-10">
+          <p className="mb-1 text-xs text-white/40">
+            {names[viewerSeat]}님의 비밀 정보
+          </p>
+          <div className="mb-3 text-5xl">{meta.icon}</div>
+          <h2
+            className={`mb-1 text-xl font-bold ${meta.team === "good" ? "text-sky-300" : "text-rose-300"}`}
+          >
+            {meta.label}
+          </h2>
+          <p className="mb-4 text-sm text-white/60">
+            당신은 {meta.team === "good" ? "선한 세력" : "악한 세력"}입니다.
+          </p>
 
-        {knowledge.evilSeatsKnown.length > 0 && (
-          <div className="mb-3 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">
-            <p className="mb-1 font-medium">악의 세력으로 확인된 사람</p>
-            <p>{knowledge.evilSeatsKnown.map((s) => names[s]).join(", ")}</p>
-          </div>
-        )}
-
-        {knowledge.merlinPercivalCandidates.length > 0 && (
-          <div className="mb-3 rounded-xl border border-sky-400/30 bg-sky-500/10 p-3 text-sm text-sky-100">
-            <p className="mb-1 font-medium">메를린 또는 모르가나</p>
-            <p>
-              {knowledge.merlinPercivalCandidates
-                .map((s) => names[s])
-                .join(", ")}
-            </p>
-            <p className="mt-1 text-xs text-sky-200/60">
-              둘 중 누가 진짜 메를린인지는 알 수 없습니다.
-            </p>
-          </div>
-        )}
-
-        {knowledge.evilSeatsKnown.length === 0 &&
-          knowledge.merlinPercivalCandidates.length === 0 && (
-            <p className="mb-3 text-xs text-white/40">
-              이 역할은 다른 사람에 대한 추가 정보가 없습니다.
-            </p>
+          {knowledge.evilSeatsKnown.length > 0 && (
+            <div className="mb-3 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">
+              <p className="mb-1 font-medium">악의 세력으로 확인된 사람</p>
+              <p>{knowledge.evilSeatsKnown.map((s) => names[s]).join(", ")}</p>
+            </div>
           )}
 
-        <button
-          onClick={onClose}
-          className="mt-2 w-full rounded-xl bg-amber-600 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500"
-        >
-          확인했어요
-        </button>
+          {knowledge.merlinPercivalCandidates.length > 0 && (
+            <div className="mb-3 rounded-xl border border-sky-400/30 bg-sky-500/10 p-3 text-sm text-sky-100">
+              <p className="mb-1 font-medium">메를린 또는 모르가나</p>
+              <p>
+                {knowledge.merlinPercivalCandidates
+                  .map((s) => names[s])
+                  .join(", ")}
+              </p>
+              <p className="mt-1 text-xs text-sky-200/60">
+                둘 중 누가 진짜 메를린인지는 알 수 없습니다.
+              </p>
+            </div>
+          )}
+
+          {knowledge.evilSeatsKnown.length === 0 &&
+            knowledge.merlinPercivalCandidates.length === 0 && (
+              <p className="mb-3 text-xs text-white/40">
+                이 역할은 다른 사람에 대한 추가 정보가 없습니다.
+              </p>
+            )}
+
+          <button
+            onClick={onClose}
+            className="mt-2 w-full rounded-xl bg-amber-600 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500"
+          >
+            확인했어요
+          </button>
+        </div>
       </div>
     </div>
   );
