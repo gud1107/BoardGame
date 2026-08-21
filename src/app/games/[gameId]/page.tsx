@@ -236,8 +236,14 @@ export default function GamePlayPage() {
   // 소환사의 협곡 alone gets a wider page container so its always-visible
   // player-aid sidebar (SummonersRiftGuideSidebar) can sit beside the board
   // on desktop instead of squeezing both into the standard max-w-2xl column
-  // every other game here uses.
-  const pageMaxWidth = game.id === "summoners-rift" ? "max-w-5xl" : "max-w-2xl";
+  // every other game here uses. 2026-08-21 페루도 무여백 트랙 세션: 페루도 also
+  // gets a bumped-up (but not as wide as 소환사의 협곡's sidebar-driven 5xl)
+  // container — its rectangular board's responsive cell size (see
+  // `PerudoBoard.tsx`'s `--perudo-cell` CSS var) can grow up to ~78px/tile on
+  // wide viewports, which needs more than the standard 2xl column has to
+  // avoid the board pressing right up against the page gutter.
+  const pageMaxWidth =
+    game.id === "summoners-rift" ? "max-w-5xl" : game.id === "perudo" ? "max-w-4xl" : "max-w-2xl";
 
   return (
     <div className={`mx-auto ${pageMaxWidth} px-4 py-8 sm:px-6`}>

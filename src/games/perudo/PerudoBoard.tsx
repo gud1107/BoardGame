@@ -225,80 +225,43 @@ function FacePicker({ selected, onSelect }: { selected: Face; onSelect: (face: F
 // ---------------------------------------------------------------------------
 
 /**
- * How a track cell sizes itself. All three variants resolve to the exact
- * same fixed `h-9 w-9`/`sm:h-11 sm:w-11` square — kept as a distinct type
- * (rather than collapsing to one constant) because callers still reason
- * about "am I in a corner vs. a side strip" for corner-decoration purposes
- * (see the 💀 badge in `RectBidTrack`), and the shared literal is what keeps
- * the rectangle's corners flush against the strips instead of stair-
- * stepping.
+ * The single source of truth for every tile's size on the board — one CSS
+ * custom property, `--perudo-cell`, set once on `RectBidTrack`'s own grid
+ * root (`BOARD_SIZE_STYLE`) and consumed via `var(--perudo-cell)` by every
+ * corner/strip cell and by the strips' own `calc()` lengths below. Every
+ * cell being driven by this ONE variable is what keeps them all IDENTICAL
+ * in size — no separate corner/row/col sizing to drift apart, and no gap
+ * between cells to accumulate error (see `TrackCellButton`'s marker
+ * overlay, which sizes itself to 80% of the cell's own box either way).
  *
- * 2026-08-21 균등화 세션: `"row"`/`"col"` used to stretch via `flex-1` to
- * fill their side's variable-width strip (7 or 6 cells sharing whatever
- * space was left after the two fixed corners), which meant a side cell's
- * width could differ from its own fixed height depending on viewport width
- * — a non-square cell that visibly squished/stretched whatever die graphic
- * sat on it (see `보드GameRule/페루도/칸이커지면서 뭉개진주사위.png` and
- * `TrackCellButton`'s marker overlay, which sizes itself to 80% of the
- * cell's own box). Every cell is now this one fixed square no matter which
- * side it's on.
- *
- * 2026-08-21 간격 정돈 세션: the side strips used to spread these fixed
- * squares via `justify-between` across whatever width the (`1fr`,
- * viewport-stretched) center grid column happened to be — which meant the
- * gap BETWEEN cells grew without bound as the browser window widened,
- * while the gap between a corner and its adjacent strip cell (set by the
- * outer grid's own `gap-1`/`sm:gap-1.5`) stayed fixed — an increasingly
- * lopsided, "spread out" board on wide viewports (user-reported). Fixed by
- * making every gap the SAME literal value as the outer grid's own
- * corner↔strip gap (`TRACK_GAP_CLASS`, reused rather than invented) and
- * sizing each strip to its own exact fixed content width/height
- * (`STRIP_LENGTH_CLASS`) instead of stretching — see `RectBidTrack`'s own
- * doc comment for why the whole board is no longer forced to fill the
- * viewport width (AskUserQuestion-confirmed: fixed-size board, centered on
- * the mat, rather than growing gaps to fill wide screens).
+ * 2026-08-21 무여백 대칭 트랙 세션 (요구사항 1/2, AskUserQuestion-confirmed):
+ * replaces the old two-breakpoint fixed `36px`/`44px sm:` sizing plus the
+ * `gap-1`/`sm:gap-1.5` that used to sit BETWEEN every pair of cells — a
+ * `clamp()` so the board scales continuously with viewport width (반응형,
+ * 넓은 화면에서 더 커짐) with zero inter-cell gap (완전한 무여백 연결), floored
+ * at roughly the old size scaled up ~1.4× (확장 규모 — 모바일 ~50px, sm ~62px)
+ * and capped at 78px so tiles never balloon past a comfortably-large square
+ * on very wide screens. Individual tiles keep their own rounded corners
+ * (다른 AskUserQuestion 확인 — 낱개 타일 둥근 모서리 유지) rather than squaring
+ * off into a literal edge-to-edge grid, so two adjacent tiles' corners can
+ * still peek a sliver of the wooden frame behind them at each seam — same
+ * as the physical board's slightly-torn tile art
+ * (`boardGameRule/페루도/변경후이미지.jpg`) — while the flat sides between
+ * them touch with zero gap and just a 1px divider border.
  */
-type CellSizing = "corner" | "row" | "col";
+const CELL_VAR = "var(--perudo-cell)";
+const CELL_STYLE: React.CSSProperties = { width: CELL_VAR, height: CELL_VAR };
+/** Set once on `RectBidTrack`'s grid root; every descendant reads `--perudo-cell` back via `CELL_VAR`. */
+const BOARD_SIZE_STYLE = { "--perudo-cell": "clamp(50px, calc(33px + 4.5vw), 78px)" } as React.CSSProperties;
 
-const CELL_SIZING_CLASS: Record<CellSizing, string> = {
-  corner: "h-9 w-9 shrink-0 sm:h-11 sm:w-11",
-  row: "h-9 w-9 shrink-0 sm:h-11 sm:w-11",
-  col: "h-9 w-9 shrink-0 sm:h-11 sm:w-11",
-};
+/** A strip's exact content length — `cellCount * var(--perudo-cell)`, zero gap between cells (north/south hold 7 cells, west/east hold 6 — see `buildRectFrame`). */
+function stripLength(cellCount: number): string {
+  return `calc(${CELL_VAR} * ${cellCount})`;
+}
 
-/**
- * The one gap value used EVERYWHERE on the board — between a corner and its
- * neighboring strip cell (the outer grid's own `gap`), between two adjacent
- * cells within a strip, and (via `RectBidTrack`'s own `p-1 sm:p-1.5`) between
- * the wooden frame border and the corner cells themselves. Literally the
- * same class list applied in all three spots so there is exactly one number
- * to tune, never three that can drift apart (2026-08-21 간격 정돈 세션,
- * AskUserQuestion-confirmed: reuse the value the outer grid already had —
- * `4px`/`sm:6px` — rather than inventing a new one).
- */
-const TRACK_GAP_CLASS = "gap-1 sm:gap-1.5";
-
-/**
- * Each strip's own exact content size — `cellCount * cellPx + (cellCount-1)
- * * gapPx`, computed by hand from `CELL_SIZING_CLASS` (36px/44px) and
- * `TRACK_GAP_CLASS` (4px/6px) — north/south hold 7 cells, west/east hold 6
- * (see `buildRectFrame`). Giving each strip this exact fixed length (instead
- * of letting it stretch to fill whatever space the grid track happens to
- * have) is what actually stops the gap-inflation bug: a strip that's already
- * exactly as wide/tall as its own cells+gaps has zero slack space left for
- * `justify-between` (or anything else) to spread apart.
- */
-const STRIP_LENGTH_CLASS = {
-  /** North/south (7 cells): 7×36+6×4=276px mobile, 7×44+6×6=344px sm. */
-  row: "w-[276px] sm:w-[344px]",
-  /** West/east (6 cells): 6×36+5×4=236px mobile, 6×44+5×6=294px sm. */
-  col: "h-[236px] sm:h-[294px]",
-} as const;
-
-/** One track cell — a plain quantity/조커 cell, no click-eligibility baked in (the caller decides `enabled` from `validateRaise`, not from track position). */
+/** One track cell — a plain quantity/조커 cell, no click-eligibility baked in (the caller decides `enabled` from `validateRaise`, not from track position). Sized purely off `--perudo-cell` (`CELL_STYLE`) — see that constant's doc comment for why every cell, corner or side, shares the exact same box. */
 function TrackCellButton({
   cell,
-  sizing = "corner",
   isCurrent,
   isPending,
   pendingFace,
@@ -306,7 +269,6 @@ function TrackCellButton({
   onClick,
 }: {
   cell: TrackCell;
-  sizing?: CellSizing;
   isCurrent: boolean;
   isPending: boolean;
   pendingFace: Face;
@@ -320,6 +282,7 @@ function TrackCellButton({
       data-track-index={cell.index}
       disabled={!enabled}
       onClick={onClick}
+      style={CELL_STYLE}
       title={
         enabled
           ? isPending && !isPerudoCell
@@ -331,7 +294,16 @@ function TrackCellButton({
             ? "현재 확정된 베팅 칸입니다"
             : "지금은 여기로 베팅할 수 없어요"
       }
-      className={`relative flex flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[6px] border-2 text-[10px] leading-none font-bold [text-shadow:0_1px_2px_rgba(0,0,0,0.8)] transition sm:text-xs ${CELL_SIZING_CLASS[sizing]} ${
+      // 2026-08-21 무여백 대칭 트랙 세션: `border` (1px, was `border-2`) is the
+      // "얇은 내부 구분선" requirement — every cell uses the SAME 1px weight
+      // (요구사항 1) so no cell reads as visually "thicker" than its
+      // neighbor; with the outer/inter-cell gap now zero (see `RectBidTrack`),
+      // two adjacent cells' borders sit flush against each other and read as
+      // one continuous divider line rather than a gap. Font/icon sizes are
+      // now `clamp()`-based (via inline `style` below) instead of a fixed
+      // `text-[10px] sm:text-xs` pair so they scale smoothly with
+      // `--perudo-cell` instead of jumping at one breakpoint.
+      className={`relative flex shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[8px] border p-0.5 leading-none font-bold [text-shadow:0_1px_2px_rgba(0,0,0,0.8)] transition ${
         isCurrent
           ? "border-amber-200 bg-gradient-to-b from-amber-300/85 to-amber-500/85 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.5)]"
           : enabled
@@ -341,8 +313,12 @@ function TrackCellButton({
             : "cursor-not-allowed border-black/40 bg-gradient-to-b from-neutral-900/55 to-neutral-950/55 text-white/40"
       }`}
     >
-      {isPerudoCell && <PerudoFaceIcon className="pointer-events-none h-2.5 w-2.5 sm:h-3 sm:w-3" />}
-      <span className="relative z-10">{cell.quantity}</span>
+      {isPerudoCell && (
+        <PerudoFaceIcon className="pointer-events-none w-[calc(var(--perudo-cell)*0.26)] h-[calc(var(--perudo-cell)*0.26)]" />
+      )}
+      <span className="relative z-10" style={{ fontSize: "calc(var(--perudo-cell) * 0.3)" }}>
+        {cell.quantity}
+      </span>
       {isPending && (
         // The purple "betting die" marker — a fixed 80%-of-cell overlay (see
         // 2026-08-20 visibility history in engine.ts) showing the draft's
@@ -410,30 +386,33 @@ function OverflowBadge({ label, tone, quantity, face }: { label: string; tone: "
 }
 
 /**
- * The board frame itself — a 3×3 CSS grid (4 fixed-size corners, 2 fixed-
- * width horizontal strips, 2 fixed-height vertical strips, and a hollow
- * center) so every cell↔cell and corner↔cell gap is the exact same fixed
- * pixel value (see `CELL_SIZING_CLASS`'s doc comment, `TRACK_GAP_CLASS`,
- * `STRIP_LENGTH_CLASS`). `children` renders inside the hollow center — per
- * user request (2026-08-20) that now holds the dice graveyard, the
- * bid/액션 panel, and the viewer's own dice, so the whole board reads as
- * one big physical-board-sized panel instead of a thin strip with
- * everything else stacked below it.
+ * The board frame itself — a 3×3 CSS grid (4 corners, 2 horizontal strips, 2
+ * vertical strips, and a hollow center), every cell sized off the one
+ * `--perudo-cell` var (`CELL_VAR`/`CELL_STYLE`) with **zero gap** anywhere in
+ * the grid — corner↔strip and cell↔cell alike — so the whole rectangle reads
+ * as one continuous connected border track with only each tile's own 1px
+ * divider border between neighbors (요구사항 1/2, 2026-08-21 무여백 대칭 트랙
+ * 세션, AskUserQuestion-confirmed). `children` renders inside the hollow
+ * center — holding the dice graveyard, the bid/액션 panel, and the viewer's
+ * own dice (2026-08-20 사용자 요청, reconfirmed 2026-08-21: keep everything in
+ * the center rather than splitting it out below the board) — so the whole
+ * board reads as one big physical-board-sized panel instead of a thin strip
+ * with everything else stacked below it.
  *
- * 2026-08-21 간격 정돈 세션: this used to be `w-full` with an `1fr` center
- * grid column, which let the whole board (and therefore the gap between
- * its fixed-size cells) stretch to match whatever width its parent
- * happened to have — the direct cause of the reported "칸 간격이 과도하게
- * 벌어짐" bug on wide viewports. The grid is now sized to its own exact
- * content (`w-fit`, no `1fr`) and centered on the fabric mat instead — a
- * fixed-size board, like a real physical one, rather than one that grows
- * gaps to fill the screen (AskUserQuestion-confirmed: mat margin showing on
- * wide screens is the accepted trade-off). The center column's own content
- * is capped to `STRIP_LENGTH_CLASS.row` too (see the `RectBidTrack` call
- * site in `PerudoBoard`) so it can never force that grid column wider than
- * the north/south strips sitting right above/below it — `DiceRollTray`
- * already `flex-wrap`s, so a fuller-than-usual dice hand just wraps to an
- * extra row instead of stretching the board.
+ * Sizing history: an earlier session pinned the board to a `w-fit` literal
+ * pixel size specifically to stop cell↔cell gaps from inflating on wide
+ * viewports (간격 정돈 세션). That bug can't recur now that inter-cell gap is
+ * hard-zero everywhere — so the board is free to actually be responsive
+ * again (AskUserQuestion-confirmed: 반응형, 넓은 화면에서 더 커짐), scaling via
+ * `--perudo-cell`'s own `clamp()` instead of a fixed pixel size. `w-fit`
+ * (sized to its own content, not stretched) is kept for the same reason as
+ * before — centered on the fabric mat rather than force-stretched to fill an
+ * arbitrary parent width. The center column's own content is capped to
+ * `stripLength(7)` (see the `RectBidTrack` call site in `PerudoBoard`) so it
+ * can never force that grid column wider than the north/south strips sitting
+ * right above/below it — `DiceRollTray` already `flex-wrap`s, so a
+ * fuller-than-usual dice hand just wraps to an extra row instead of
+ * stretching the board.
  */
 function RectBidTrack({
   currentCell,
@@ -454,12 +433,11 @@ function RectBidTrack({
 }) {
   const frame = buildRectFrame();
 
-  function renderCell(cell: TrackCell, sizing: CellSizing) {
+  function renderCell(cell: TrackCell) {
     return (
       <TrackCellButton
         key={cell.index}
         cell={cell}
-        sizing={sizing}
         isCurrent={currentCell?.index === cell.index}
         isPending={showPending && pendingCell?.index === cell.index}
         pendingFace={pendingFace}
@@ -471,11 +449,11 @@ function RectBidTrack({
 
   return (
     <div
-      className={`grid w-fit mx-auto rounded-2xl border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-1.5 ${TRACK_GAP_CLASS}`}
-      style={{ gridTemplateColumns: "auto auto auto", gridTemplateRows: "auto auto auto" }}
+      className="grid w-fit mx-auto gap-0 rounded-2xl border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-1.5"
+      style={{ ...BOARD_SIZE_STYLE, gridTemplateColumns: "auto auto auto", gridTemplateRows: "auto auto auto" }}
     >
       <div className="relative col-start-1 row-start-1">
-        {renderCell(frame.cornerTL, "corner")}
+        {renderCell(frame.cornerTL)}
         <span
           className="pointer-events-none absolute -top-1.5 -left-1.5 z-20 text-[10px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]"
           title="시작 칸"
@@ -483,21 +461,27 @@ function RectBidTrack({
           💀
         </span>
       </div>
-      <div className={`col-start-2 row-start-1 flex shrink-0 ${STRIP_LENGTH_CLASS.row} ${TRACK_GAP_CLASS}`}>{frame.north.map((c) => renderCell(c, "row"))}</div>
-      <div className="col-start-3 row-start-1">{renderCell(frame.cornerTR, "corner")}</div>
+      <div className="col-start-2 row-start-1 flex shrink-0" style={{ width: stripLength(7) }}>
+        {frame.north.map(renderCell)}
+      </div>
+      <div className="col-start-3 row-start-1">{renderCell(frame.cornerTR)}</div>
 
-      <div className={`col-start-1 row-start-2 flex shrink-0 flex-col self-center ${STRIP_LENGTH_CLASS.col} ${TRACK_GAP_CLASS}`}>
+      <div className="col-start-1 row-start-2 flex shrink-0 flex-col self-center" style={{ height: stripLength(6) }}>
         {frame.west
           .slice()
           .reverse()
-          .map((c) => renderCell(c, "col"))}
+          .map(renderCell)}
       </div>
       <div className="col-start-2 row-start-2 flex items-center justify-center p-1.5 sm:p-2.5">{children}</div>
-      <div className={`col-start-3 row-start-2 flex shrink-0 flex-col self-center ${STRIP_LENGTH_CLASS.col} ${TRACK_GAP_CLASS}`}>{frame.east.map((c) => renderCell(c, "col"))}</div>
+      <div className="col-start-3 row-start-2 flex shrink-0 flex-col self-center" style={{ height: stripLength(6) }}>
+        {frame.east.map(renderCell)}
+      </div>
 
-      <div className="col-start-1 row-start-3">{renderCell(frame.cornerBL, "corner")}</div>
-      <div className={`col-start-2 row-start-3 flex shrink-0 flex-row-reverse ${STRIP_LENGTH_CLASS.row} ${TRACK_GAP_CLASS}`}>{frame.south.map((c) => renderCell(c, "row"))}</div>
-      <div className="col-start-3 row-start-3">{renderCell(frame.cornerBR, "corner")}</div>
+      <div className="col-start-1 row-start-3">{renderCell(frame.cornerBL)}</div>
+      <div className="col-start-2 row-start-3 flex shrink-0 flex-row-reverse" style={{ width: stripLength(7) }}>
+        {frame.south.map(renderCell)}
+      </div>
+      <div className="col-start-3 row-start-3">{renderCell(frame.cornerBR)}</div>
     </div>
   );
 }
@@ -858,16 +842,31 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
           hold the dice graveyard, the bid/액션 panel, and the viewer's own
           dice all inside its hollow center per user request, so the whole
           thing reads as one big physical-board-sized panel rather than a
-          thin strip with everything else stacked below it. */}
-      <RectBidTrack
-        currentCell={currentCell}
-        pendingCell={pendingCell}
-        pendingFace={pendingFace}
-        showPending={isMyTurn && iAmAlive}
-        cellEnabled={cellEnabled}
-        onCellClick={selectCell}
-      >
-        <div className={`flex w-full flex-col items-center gap-2.5 ${STRIP_LENGTH_CLASS.row}`}>
+          thin strip with everything else stacked below it.
+
+          2026-08-21 무여백 대칭 트랙 세션: the board's `--perudo-cell` now
+          scales up to ~78px (요구사항 2 확장 규모) via `clamp()`, which on the
+          narrowest phone viewports (~360-400px) makes the board's own content
+          width wider than the space `TABLE_PANEL`'s padding leaves — and
+          `TABLE_PANEL` itself is `overflow-hidden` (needed to clip
+          `TableTexture`'s decorative layers to the panel's rounded corners),
+          so without this wrapper the board's edge would be silently clipped
+          instead of scrollable (Playwright-caught at 390px before this was
+          added — see HANDOFF.md). `overflow-x-auto` here (same pattern
+          already used for the game-over ranking table below) turns that into
+          a horizontal scroll/pan on narrow phones rather than lost content;
+          `RectBidTrack`'s own `mx-auto` still centers it whenever it's
+          narrower than the scroll area, i.e. on every viewport past mobile. */}
+      <div className="relative z-10 w-full overflow-x-auto">
+        <RectBidTrack
+          currentCell={currentCell}
+          pendingCell={pendingCell}
+          pendingFace={pendingFace}
+          showPending={isMyTurn && iAmAlive}
+          cellEnabled={cellEnabled}
+          onCellClick={selectCell}
+        >
+          <div className="flex w-full flex-col items-center gap-2.5" style={{ maxWidth: stripLength(7) }}>
           {/* Capped to the exact same width as the north/south strips
               (2026-08-21 간격 정돈 세션) — otherwise this panel's natural
               width could force the board's center grid column wider than
@@ -1017,7 +1016,8 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
             )}
           </div>
         </div>
-      </RectBidTrack>
+        </RectBidTrack>
+      </div>
 
       {/* Stats dashboard — right below the board panel above. */}
       <MyDiceStatsPanel state={state} myDice={me.dice} />
