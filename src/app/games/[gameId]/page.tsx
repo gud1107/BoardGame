@@ -245,12 +245,18 @@ export default function GamePlayPage() {
   // 아발론 역할/목표 가이드 패널 세션: 아발론도 같은 이유로 5xl — its new
   // `AvalonRoleGuideSidebar` (see AvalonBoard.tsx) sits fixed beside the
   // round table on desktop, same sidebar-driven layout as 소환사의 협곡.
+  // 2026-08-22 운명전쟁39 좌우 패널 분리 세션: 운명전쟁39는 좌측 `RankedLeaderboard`
+  // + 우측 `PredictionStatusBoard` 두 개의 고정폭 사이드 패널을 동시에 메인
+  // 보드 옆에 두므로(3열 레이아웃), 사이드바가 하나뿐인 위 게임들보다 폭이 더
+  // 필요해 6xl을 씀.
   const pageMaxWidth =
     game.id === "summoners-rift" || game.id === "avalon"
       ? "max-w-5xl"
-      : game.id === "perudo"
-        ? "max-w-4xl"
-        : "max-w-2xl";
+      : game.id === "destiny-war-39"
+        ? "max-w-6xl"
+        : game.id === "perudo"
+          ? "max-w-4xl"
+          : "max-w-2xl";
 
   return (
     <div className={`mx-auto ${pageMaxWidth} px-4 py-8 sm:px-6`}>

@@ -1104,3 +1104,31 @@ body {
     box-shadow: 0 0 0 8px rgba(52, 211, 153, 0.5);
   }
 }
+
+/* 운명전쟁39's left-side RankedLeaderboard: the floating "+30"/"-15" delta
+   that pops up beside a player's cumulative score whenever a round settles
+   (see RankedLeaderboard.tsx's AnimatedScore) — rises and fades while
+   pulsing brighter partway through so it reads as a fresh event, not just a
+   label. Re-keyed per delta so it replays on every consecutive change. */
+@keyframes destinywar39-score-delta-float {
+  0% {
+    transform: translateY(4px) scale(0.85);
+    opacity: 0;
+  }
+  15% {
+    transform: translateY(-2px) scale(1.2);
+    opacity: 1;
+  }
+  30% {
+    transform: translateY(-8px) scale(1);
+    opacity: 1;
+  }
+  75% {
+    transform: translateY(-22px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-32px) scale(0.9);
+    opacity: 0;
+  }
+}

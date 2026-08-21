@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import RulebookModal from "./RulebookModal";
 import PredictionStatusBoard from "./PredictionStatusBoard";
+import RankedLeaderboard from "./RankedLeaderboard";
 import LastRoundHistoryModal from "./LastRoundHistoryModal";
 import { CardFace } from "./CardFace";
 import {
   TOTAL_ROUNDS,
-  visibleCurrentPrediction,
   visiblePastPrediction,
   type DestinyWar39State,
   type EngineAction,
@@ -33,6 +33,14 @@ const TRICK_REVEAL_MS = 2800;
  * via `onAction`). Every client holds the FULL state per this project's
  * lockstep trust model; hidden-prediction secrecy is enforced only here, at
  * render time, via `visibleCurrentPrediction`/`visiblePastPrediction`.
+ *
+ * Layout is a persistent 3-column shell: `RankedLeaderboard` (left) is
+ * mounted across every phase — it owns cumulative score exclusively, with
+ * its own count-up/floating-delta/rank-reorder effects reacting whenever the
+ * underlying totals change. The center column below is phase-specific
+ * (`centerContent`). `PredictionStatusBoard` (right) is scoped to the active
+ * round like before and owns the prediction picker itself now, so it only
+ * mounts during predicting/playing (`showPredictionPanel`).
  */
 export interface DestinyWar39BoardProps {
   state: DestinyWar39State;
@@ -50,8 +58,6 @@ function randomSeed(): number {
 export default function DestinyWar39Board({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: DestinyWar39BoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [predictionChoice, setPredictionChoice] = useState<number | null>(null);
-  const [useHidden, setUseHidden] = useState(false);
 
   const round = state.round;
   const R = round.roundNumber;
@@ -98,10 +104,9 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
   const historyModal = historyOpen && <LastRoundHistoryModal state={state} viewerSeat={viewerSeat} names={names} onClose={() => setHistoryOpen(false)} />;
 
   const seatLabel = (seat: SeatIndex) => (seat === viewerSeat ? `${names[seat]} (나)` : names[seat]);
-  const scoreboard = state.players.map((p) => ({
-    seat: p.seat,
-    total: p.scores.reduce((sum: number, v) => sum + (v ?? 0), 0),
-  }));
+
+  let centerContent: ReactNode;
+  let showPredictionPanel = false;
 
   // ---------------------------------------------------------------------
   // Trick just resolved — freeze-frame it (winner glowing) before showing
@@ -110,7 +115,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
   // ---------------------------------------------------------------------
   if (resolvingTurn) {
     const t = resolvingTurn;
-    return (
+    centerContent = (
       <div className="flex flex-col gap-5 rounded-2xl border border-amber-400/25 bg-white/[0.03] p-5 sm:p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-white">
@@ -144,14 +149,12 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
         <p className="text-center text-sm font-semibold text-amber-200">{seatLabel(t.winnerSeat)}님이 이 턴을 가져갔습니다!</p>
       </div>
     );
-  }
-
-  // ---------------------------------------------------------------------
-  // Game over
-  // ---------------------------------------------------------------------
-  if (state.phase === "gameOver") {
+  } else if (state.phase === "gameOver") {
+    // ---------------------------------------------------------------------
+    // Game over
+    // ---------------------------------------------------------------------
     const winners = state.finalRankings!.filter((r) => r.rank === 1).map((r) => names[r.seat]);
-    return (
+    centerContent = (
       <div
         className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
         style={{ background: "linear-gradient(160deg,#241033 0%,#160a20 55%,#0a0510 100%)" }}
@@ -204,13 +207,11 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
         {historyModal}
       </div>
     );
-  }
-
-  // ---------------------------------------------------------------------
-  // Round-end summary
-  // ---------------------------------------------------------------------
-  if (state.phase === "roundEnd") {
-    return (
+  } else if (state.phase === "roundEnd") {
+    // ---------------------------------------------------------------------
+    // Round-end summary
+    // ---------------------------------------------------------------------
+    centerContent = (
       <div className="flex flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-white">ROUND {round.roundNumber} 결과</h2>
@@ -253,16 +254,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between text-xs text-white/50">
-          <span>누적 점수</span>
-          <span className="flex flex-wrap gap-3">
-            {scoreboard.map((s) => (
-              <span key={s.seat} className="text-white/70">
-                {seatLabel(s.seat)}: <b className="text-white">{s.total}</b>
-              </span>
-            ))}
-          </span>
-        </div>
+        <p className="text-center text-[11px] text-white/40">누적 순위는 좌측 랭킹판에서 실시간으로 확인할 수 있어요.</p>
         <button
           onClick={() => onAction({ type: "nextRound", seed: randomSeed() })}
           className="w-full rounded-xl bg-fuchsia-600 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-500"
@@ -273,124 +265,56 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
         {historyModal}
       </div>
     );
-  }
-
-  // ---------------------------------------------------------------------
-  // Predicting phase
-  // ---------------------------------------------------------------------
-  if (state.phase === "predicting") {
-    const myPlayer = state.players.find((p) => p.seat === viewerSeat)!;
-    const alreadySubmitted = round.predictions[viewerSeat] !== null;
-    const hiddenAvailable = !myPlayer.hiddenUsed;
-    const submittedCount = Object.values(round.predictions).filter((v) => v !== null).length;
-
-    return (
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-        <div className="flex flex-1 flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-white">ROUND {R} — 예측</h2>
-            <div className="flex gap-2">
-              {historyButton}
-              {rulebookButton}
-            </div>
+  } else if (state.phase === "predicting") {
+    // ---------------------------------------------------------------------
+    // Predicting phase — hand only; the picker itself now lives in the
+    // right-side PredictionStatusBoard panel (see module doc above).
+    // ---------------------------------------------------------------------
+    showPredictionPanel = true;
+    centerContent = (
+      <div className="flex flex-1 flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold text-white">ROUND {R} — 예측</h2>
+          <div className="flex gap-2">
+            {historyButton}
+            {rulebookButton}
           </div>
-          <p className="text-xs text-white/50">
-            이번 라운드는 {R}턴 진행됩니다. 손패 {R}장을 확인하고 이번 라운드에서 몇 번 이길지 예측하세요 (0~{R}).
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {round.hands[viewerSeat].map((c) => (
-              <CardFace key={c.id} card={c} playerCount={playerCount} size="sm" />
-            ))}
-          </div>
-
-          {!alreadySubmitted ? (
-            <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-              <div className="flex flex-wrap gap-2">
-                {Array.from({ length: R + 1 }, (_, v) => v).map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setPredictionChoice(v)}
-                    className={`h-10 min-w-10 rounded-lg border px-3 text-sm font-semibold transition ${
-                      predictionChoice === v
-                        ? "border-fuchsia-400 bg-fuchsia-500/20 text-fuchsia-200"
-                        : "border-white/15 text-white/70 hover:border-white/30"
-                    }`}
-                  >
-                    {v}승
-                  </button>
-                ))}
-              </div>
-              {hiddenAvailable && (
-                <label className="flex items-center gap-2 text-xs text-white/60">
-                  <input type="checkbox" checked={useHidden} onChange={(e) => setUseHidden(e.target.checked)} className="h-4 w-4 accent-fuchsia-500" />
-                  🙈 히든으로 제출 (게임당 1회, 9라운드 종료까지 비공개)
-                </label>
-              )}
-              <button
-                disabled={predictionChoice === null}
-                onClick={() => {
-                  if (predictionChoice === null) return;
-                  onAction({ type: "predict", seat: viewerSeat, value: predictionChoice, hidden: useHidden });
-                  setPredictionChoice(null);
-                  setUseHidden(false);
-                }}
-                className="rounded-xl bg-fuchsia-600 py-2.5 text-sm font-semibold text-white transition hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                예측 확정
-              </button>
-            </div>
-          ) : (
-            <p className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200">
-              예측을 확정했습니다. 다른 플레이어들의 예측을 기다리는 중… ({submittedCount}/{playerCount})
-            </p>
-          )}
-
-          <div className="flex flex-wrap gap-2 text-xs">
-            {Array.from({ length: playerCount }, (_, seat) => {
-              const visible = visibleCurrentPrediction(state, viewerSeat, seat);
-              const submitted = round.predictions[seat] !== null;
-              return (
-                <span
-                  key={seat}
-                  className={`rounded-full border px-3 py-1 ${
-                    submitted ? "border-white/20 text-white/70" : "border-white/10 text-white/30"
-                  } ${!connectedSeats.has(seat) ? "opacity-40" : ""}`}
-                >
-                  {seatLabel(seat)}: {submitted ? (visible === "hidden" ? "🙈 히든" : `${visible}승`) : "예측 중…"}
-                </span>
-              );
-            })}
-          </div>
-          {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} playerCount={playerCount} />}
-          {historyModal}
         </div>
-        <PredictionStatusBoard state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} />
+        <p className="text-xs text-white/50">
+          이번 라운드는 {R}턴 진행됩니다. 손패 {R}장을 확인하고, 우측 예측 패널에서 이번 라운드에 몇 번 이길지 예측하세요 (0~{R}).
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {round.hands[viewerSeat].map((c) => (
+            <CardFace key={c.id} card={c} playerCount={playerCount} size="sm" />
+          ))}
+        </div>
+        {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} playerCount={playerCount} />}
+        {historyModal}
       </div>
     );
-  }
-
-  // ---------------------------------------------------------------------
-  // Playing phase — one turn's card reveal
-  // ---------------------------------------------------------------------
-  const played = new Set(round.playsThisTurn.map((p) => p.seat));
-  const myHand = round.hands[viewerSeat] ?? [];
-  const myPlayed = played.has(viewerSeat);
-  const isSimultaneous = round.roundNumber === 1;
-  let actingSeat: SeatIndex | null = null;
-  if (!isSimultaneous) {
-    const startIdx = state.seatOrder.indexOf(round.turnLeader);
-    for (let i = 0; i < playerCount; i++) {
-      const candidate = state.seatOrder[(startIdx + i) % playerCount];
-      if (!played.has(candidate)) {
-        actingSeat = candidate;
-        break;
+  } else {
+    // ---------------------------------------------------------------------
+    // Playing phase — one turn's card reveal
+    // ---------------------------------------------------------------------
+    showPredictionPanel = true;
+    const played = new Set(round.playsThisTurn.map((p) => p.seat));
+    const myHand = round.hands[viewerSeat] ?? [];
+    const myPlayed = played.has(viewerSeat);
+    const isSimultaneous = round.roundNumber === 1;
+    let actingSeat: SeatIndex | null = null;
+    if (!isSimultaneous) {
+      const startIdx = state.seatOrder.indexOf(round.turnLeader);
+      for (let i = 0; i < playerCount; i++) {
+        const candidate = state.seatOrder[(startIdx + i) % playerCount];
+        if (!played.has(candidate)) {
+          actingSeat = candidate;
+          break;
+        }
       }
     }
-  }
-  const myTurnToAct = isSimultaneous ? !myPlayed : actingSeat === viewerSeat;
+    const myTurnToAct = isSimultaneous ? !myPlayed : actingSeat === viewerSeat;
 
-  return (
-    <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+    centerContent = (
       <div className="flex flex-1 flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-white">
@@ -457,7 +381,16 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
         {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} playerCount={playerCount} />}
         {historyModal}
       </div>
-      <PredictionStatusBoard state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
+      <RankedLeaderboard state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} />
+      <div className="flex min-w-0 flex-1 flex-col gap-5">{centerContent}</div>
+      {showPredictionPanel && (
+        <PredictionStatusBoard state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} onAction={onAction} />
+      )}
     </div>
   );
 }
