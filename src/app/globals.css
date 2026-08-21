@@ -1414,3 +1414,48 @@ body {
   }
 }
 
+/* 지렁이's center-screen kill announcement banner (see WormCanvas.tsx's
+   `killBanners` overlay, kill-FX session 2026-08-22). Percentages are tuned
+   to that session's confirmed 0.3s scale-in / 1.0s hold / 0.5s fade split
+   over the element's 1800ms `animation-duration` (300ms = 16.67%, 1300ms =
+   72.22%) — deliberately not proportioned like this file's other
+   burst/pop keyframes (e.g. dalmuti-revolution-burst), which run shorter
+   overall and don't need to hold a fixed real-time reading window. */
+@keyframes worm-kill-banner {
+  0% {
+    transform: scale(0.55) translateY(-10px);
+    opacity: 0;
+  }
+  10% {
+    transform: scale(1.12) translateY(0);
+    opacity: 1;
+  }
+  16.67% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+  72.22% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.04) translateY(-6px);
+    opacity: 0;
+  }
+}
+
+/* Pulsing glow on the "DOUBLE KILL!" / streak label above the banner text
+   above — loops for as long as its parent banner element is mounted. */
+@keyframes worm-kill-combo-pulse {
+  0%,
+  100% {
+    text-shadow:
+      0 0 12px rgba(255, 140, 0, 0.9),
+      0 0 28px rgba(255, 60, 60, 0.6);
+  }
+  50% {
+    text-shadow:
+      0 0 22px rgba(255, 200, 0, 1),
+      0 0 46px rgba(255, 80, 80, 0.85);
+  }
+}

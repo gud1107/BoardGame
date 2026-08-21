@@ -40,7 +40,7 @@ import { BODY_RADIUS, HEAD_RADIUS, type ArenaSize, type SeatIndex, type Vec2, ty
 export type WormEvent =
   | { type: "eat"; seat: SeatIndex; pos: Vec2; value: number; hue: number }
   | { type: "cut"; targetSeat: SeatIndex; attackerSeat: SeatIndex | null; pos: Vec2; hue: number }
-  | { type: "death"; seat: SeatIndex; cause: "self" | "wall" | "head"; pos: Vec2; segments: Vec2[]; hue: number };
+  | { type: "death"; seat: SeatIndex; cause: "self" | "wall" | "head"; attackerSeat: SeatIndex | null; pos: Vec2; segments: Vec2[]; hue: number };
 
 const HEAD_TO_HEAD_DIST = HEAD_RADIUS * 2 + 6;
 const WALL_MARGIN = HEAD_RADIUS + 6;
@@ -102,19 +102,29 @@ export function detectWormEvents(prev: WormState, next: WormState): WormEvent[] 
     } else if (before.alive && !after.alive) {
       const pos = before.path[0] ?? { x: 0, y: 0 };
       let cause: "self" | "wall" | "head" = "self";
+      // For a "head" death (the only cause another player can be credited
+      // with — see `stepWorm`'s collision table, `engine.ts:422-436`: a body
+      // cut can never itself be lethal), attribute it to the closest
+      // surviving head in range, same nearest-attacker pattern as the cut
+      // event above — this is what drives the kill banner/gold-aura FX.
+      let attackerSeat: SeatIndex | null = null;
       if (nearWall(pos, prev.arena)) {
         cause = "wall";
       } else {
+        let bestDist = HEAD_TO_HEAD_DIST;
         for (let b = 0; b < prev.playerCount; b++) {
           if (b === seat) continue;
           const other = prev.snakes[b];
-          if (other?.alive && dist(other.path[0], pos) < HEAD_TO_HEAD_DIST) {
+          if (!other?.alive) continue;
+          const d = dist(other.path[0], pos);
+          if (d < bestDist) {
+            bestDist = d;
             cause = "head";
-            break;
+            attackerSeat = b;
           }
         }
       }
-      events.push({ type: "death", seat, cause, pos, segments: before.segments, hue: before.hue });
+      events.push({ type: "death", seat, cause, attackerSeat, pos, segments: before.segments, hue: before.hue });
     }
   }
 
@@ -210,6 +220,30 @@ const FLOAT_TEXT_MS = 800;
 const FLOAT_TEXT_RISE = 60; // world units
 const BOOST_TRAIL_INTERVAL_MS = 45;
 
+// ---------------------------------------------------------------------------
+// Kill FX (opponent eliminated via a head-to-head collision — the only death
+// cause another player can be credited with, see `detectWormEvents` above).
+// Deliberately bigger/longer than the self-destruct explosion above per the
+// kill-FX request session's confirmed answers: shake ~12px/200ms (stronger
+// than self-destruct's 6px/180ms), applied to both the killer's and victim's
+// own screens; orb lifespan kept inside the request's explicit 0.5–0.8s
+// budget so a crowded match never queues more than one lifespan's worth of
+// kill particles per pooled slot.
+// ---------------------------------------------------------------------------
+const KILL_RING_MS = 620;
+const KILL_RING_RADIUS = 130;
+const KILL_RING_SECONDARY_LIFE_MULT = 0.7;
+const KILL_RING_SECONDARY_RADIUS_MULT = 0.6;
+const KILL_FLASH_MS = 200;
+const KILL_FLASH_RADIUS_MULT = 0.75;
+const KILL_DEBRIS_COUNT = 46; // multi-color neon debris (point 1: "다색 불꽃 파티클")
+const KILL_SPARK_COUNT = 26;
+const KILL_ORB_LIFE_MS: [number, number] = [520, 780]; // "에너지 구슬" body-segment collapse, 0.5-0.8s per the request
+const KILL_SHAKE_MS = 200;
+const KILL_SHAKE_MAGNITUDE = 12; // CSS px — user-confirmed stronger-than-self-destruct tier
+const KILL_SCREEN_FLASH_MS = 180;
+const GOLD_AURA_MS = 1300; // killer's gold aura pulse — stays lit roughly through the kill banner's hold phase
+
 /**
  * Owns every pooled FX layer plus the small per-seat transient maps (head
  * scale-pulse, hit-glow, boost-trail throttling). One instance lives for the
@@ -232,11 +266,16 @@ export class WormEffectsManager {
   private headPulseExpiry = new Map<SeatIndex, number>();
   private hitGlowExpiry = new Map<SeatIndex, number>();
   private lastBoostSpawn = new Map<SeatIndex, number>();
+  /** Gold aura pulse expiry per seat — set on whoever just landed a kill (`onDeath`'s "head" cause), read by `killerAuraAlpha`. */
+  private killerAuraExpiry = new Map<SeatIndex, number>();
 
   /** Internal clock, advanced by `update`; every expiry above is stored as an absolute time on this clock. */
   private clock = 0;
   private shakeTimeLeft = 0;
+  private shakeTotalMs = SELF_SHAKE_MS;
   private shakeMagnitude = 0;
+  /** Full-screen white/neon kill flash (point 2) — separate from the world-space `flashes` pool since this one is drawn in screen space, after the shake translate. */
+  private screenFlashTimeLeft = 0;
 
   private spawnParticle(init: Omit<Particle, "alive" | "age">) {
     this.particleCursor = spawnSlot(this.particles, this.particleCursor, { ...init, age: 0 });
@@ -299,24 +338,66 @@ export class WormEffectsManager {
   }
 
   private onDeath(ev: Extract<WormEvent, { type: "death" }>, viewerSeat: SeatIndex) {
+    const isKill = ev.cause === "head" && ev.attackerSeat !== null;
+
     // General disintegration: every remembered body segment drifts outward
-    // and fades — applies to every death cause per the request's point 4.
+    // and fades — applies to every death cause per the request's point 4. A
+    // kill death (opponent eliminated) gets the brighter "energy orb"
+    // treatment instead of the plain corpse-fade dots (point 2: "에너지 구슬
+    // 변환"), still within the request's explicit 0.5-0.8s particle budget.
     for (const seg of ev.segments) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = 15 + Math.random() * 35;
-      this.spawnParticle({ x: seg.x, y: seg.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: CORPSE_FADE_MS * (0.7 + Math.random() * 0.5), size: 3 + Math.random() * 2.5, hue: ev.hue, sat: 55, light: 45, baseAlpha: 0.85, drag: 1.4 });
+      if (isKill) {
+        const speed = 30 + Math.random() * 70;
+        this.spawnParticle({ x: seg.x, y: seg.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: KILL_ORB_LIFE_MS[0] + Math.random() * (KILL_ORB_LIFE_MS[1] - KILL_ORB_LIFE_MS[0]), size: 4.5 + Math.random() * 3, hue: ev.hue, sat: 92, light: 76, baseAlpha: 1, drag: 1.1 });
+      } else {
+        const speed = 15 + Math.random() * 35;
+        this.spawnParticle({ x: seg.x, y: seg.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: CORPSE_FADE_MS * (0.7 + Math.random() * 0.5), size: 3 + Math.random() * 2.5, hue: ev.hue, sat: 55, light: 45, baseAlpha: 0.85, drag: 1.4 });
+      }
     }
-    if (ev.cause !== "self") return;
-    // Self-destruct only: the explosion is reserved for "A의 머리 vs A의
-    // 몸통 (자폭)" per the rule doc, not every death (see the
-    // self-destruct-scope question this session confirmed).
-    this.ringCursor = spawnSlot(this.rings, this.ringCursor, { x: ev.pos.x, y: ev.pos.y, age: 0, life: EXPLOSION_RING_MS, maxRadius: EXPLOSION_RING_RADIUS, hue: 26 });
-    this.flashCursor = spawnSlot(this.flashes, this.flashCursor, { x: ev.pos.x, y: ev.pos.y, age: 0, life: EXPLOSION_FLASH_MS, radius: EXPLOSION_RING_RADIUS * 0.7, hue: 40 });
-    this.spawnBurst(ev.pos, EXPLOSION_DEBRIS_COUNT, { speed: [80, 260], size: [2, 5], life: [280, 560], hue: 22, sat: 95, light: 58, drag: 1.8 });
-    if (ev.seat === viewerSeat) {
-      this.shakeTimeLeft = SELF_SHAKE_MS;
-      this.shakeMagnitude = SELF_SHAKE_MAGNITUDE;
+
+    if (ev.cause === "self") {
+      // Self-destruct: the explosion is reserved for "A의 머리 vs A의 몸통
+      // (자폭)" per the rule doc, not every death (see the self-destruct-scope
+      // question the prior FX session confirmed).
+      this.ringCursor = spawnSlot(this.rings, this.ringCursor, { x: ev.pos.x, y: ev.pos.y, age: 0, life: EXPLOSION_RING_MS, maxRadius: EXPLOSION_RING_RADIUS, hue: 26 });
+      this.flashCursor = spawnSlot(this.flashes, this.flashCursor, { x: ev.pos.x, y: ev.pos.y, age: 0, life: EXPLOSION_FLASH_MS, radius: EXPLOSION_RING_RADIUS * 0.7, hue: 40 });
+      this.spawnBurst(ev.pos, EXPLOSION_DEBRIS_COUNT, { speed: [80, 260], size: [2, 5], life: [280, 560], hue: 22, sat: 95, light: 58, drag: 1.8 });
+      if (ev.seat === viewerSeat) {
+        this.shakeTimeLeft = SELF_SHAKE_MS;
+        this.shakeTotalMs = SELF_SHAKE_MS;
+        this.shakeMagnitude = SELF_SHAKE_MAGNITUDE;
+      }
+      return;
     }
+
+    if (!isKill || ev.attackerSeat === null) return; // wall death — no shockwave/shake beyond the general disintegration above
+    const attackerSeat = ev.attackerSeat; // narrowed non-null by the check above
+
+    // ---- Massive kill explosion (point 1: "처치 지점 대형 폭발 파티클") ----
+    // Two overlapping rings (own hue + a shifted accent hue) read as a
+    // fuller shockwave than a single ring, plus a bigger, multi-hue debris
+    // burst than the self-destruct explosion above.
+    this.ringCursor = spawnSlot(this.rings, this.ringCursor, { x: ev.pos.x, y: ev.pos.y, age: 0, life: KILL_RING_MS, maxRadius: KILL_RING_RADIUS, hue: ev.hue });
+    this.ringCursor = spawnSlot(this.rings, this.ringCursor, { x: ev.pos.x, y: ev.pos.y, age: 0, life: KILL_RING_MS * KILL_RING_SECONDARY_LIFE_MULT, maxRadius: KILL_RING_RADIUS * KILL_RING_SECONDARY_RADIUS_MULT, hue: (ev.hue + 40) % 360 });
+    this.flashCursor = spawnSlot(this.flashes, this.flashCursor, { x: ev.pos.x, y: ev.pos.y, age: 0, life: KILL_FLASH_MS, radius: KILL_RING_RADIUS * KILL_FLASH_RADIUS_MULT, hue: 48 });
+    this.spawnBurst(ev.pos, KILL_DEBRIS_COUNT, { speed: [90, 320], size: [2, 5.5], life: [420, 780], hue: ev.hue, sat: 95, light: 62, drag: 1.5 });
+    this.spawnBurst(ev.pos, KILL_SPARK_COUNT, { speed: [140, 380], size: [1, 2.6], life: [280, 520], hue: (ev.hue + 150) % 360, sat: 95, light: 80, drag: 2.6 });
+
+    // ---- Screen shake + white/neon flash (point 2) — killer's AND
+    // victim's own screens, per this session's confirmed answer (not every
+    // spectator's, to keep the jolt tied to the two players actually in the
+    // exchange). ----
+    if (viewerSeat === attackerSeat || viewerSeat === ev.seat) {
+      this.shakeTimeLeft = KILL_SHAKE_MS;
+      this.shakeTotalMs = KILL_SHAKE_MS;
+      this.shakeMagnitude = KILL_SHAKE_MAGNITUDE;
+      this.screenFlashTimeLeft = KILL_SCREEN_FLASH_MS;
+    }
+
+    // ---- Killer gold aura pulse (point 2) — world-space, so visible to
+    // everyone watching the killer's head, not just the killer. ----
+    this.killerAuraExpiry.set(attackerSeat, this.clock + GOLD_AURA_MS);
   }
 
   // -------------------------------------------------------------------
@@ -379,6 +460,7 @@ export class WormEffectsManager {
       if (s.age >= s.life) s.alive = false;
     }
     this.shakeTimeLeft = Math.max(0, this.shakeTimeLeft - dtMs);
+    this.screenFlashTimeLeft = Math.max(0, this.screenFlashTimeLeft - dtMs);
   }
 
   // -------------------------------------------------------------------
@@ -403,12 +485,32 @@ export class WormEffectsManager {
     return remaining / HIT_GLOW_MS;
   }
 
-  /** Screen-space (CSS px) camera jitter while a viewer-triggered self-destruct shake is active. */
+  /** Screen-space (CSS px) camera jitter while a viewer-triggered self-destruct or kill shake is active. */
   consumeShakeOffset(): { dx: number; dy: number } {
     if (this.shakeTimeLeft <= 0) return { dx: 0, dy: 0 };
-    const t = this.shakeTimeLeft / SELF_SHAKE_MS;
+    // `shakeTotalMs` is whichever duration (self-destruct or kill tier) the
+    // active shake started with, so the linear decay below is correct for
+    // either one without needing to know which triggered it.
+    const t = this.shakeTimeLeft / this.shakeTotalMs;
     const m = this.shakeMagnitude * t;
     return { dx: (Math.random() * 2 - 1) * m, dy: (Math.random() * 2 - 1) * m };
+  }
+
+  /** 0..1 alpha for the full-screen white/neon flash on a kill (point 2), for the killer's and victim's own screens only. */
+  screenFlashAlpha(): number {
+    if (this.screenFlashTimeLeft <= 0) return 0;
+    return this.screenFlashTimeLeft / KILL_SCREEN_FLASH_MS;
+  }
+
+  /** 0..1 alpha for the gold aura pulse drawn around a recent kill's attacker head (point 2), visible to every viewer. */
+  killerAuraAlpha(seat: SeatIndex): number {
+    const expiry = this.killerAuraExpiry.get(seat);
+    if (expiry === undefined) return 0;
+    const remaining = expiry - this.clock;
+    if (remaining <= 0) return 0;
+    const fade = remaining / GOLD_AURA_MS; // 1 -> 0 envelope
+    const pulse = 0.65 + 0.35 * Math.sin(this.clock / 90); // continuous breathing while active
+    return fade * pulse;
   }
 
   // -------------------------------------------------------------------

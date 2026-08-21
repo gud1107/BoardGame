@@ -380,13 +380,23 @@ describe("detectWormEvents", () => {
     expect(events).toEqual([expect.objectContaining({ type: "death", seat: 0, cause: "wall" })]);
   });
 
-  it("classifies a death next to another surviving head as a head-vs-head death", () => {
+  it("classifies a death next to another surviving head as a head-vs-head death, attributed to that survivor", () => {
     const dead = makeSnake(0, { path: [{ x: 500, y: 500 }, { x: 520, y: 500 }] });
     const winner = makeSnake(1, { path: [{ x: 510, y: 500 }, { x: 900, y: 500 }] });
     const before = buildState([dead, winner]);
     const after = buildState([makeSnake(0, { alive: false, deadAtMs: 0, path: [], segments: [] }), winner]);
     const events = detectWormEvents(before, after);
-    expect(events).toEqual([expect.objectContaining({ type: "death", seat: 0, cause: "head" })]);
+    expect(events).toEqual([expect.objectContaining({ type: "death", seat: 0, cause: "head", attackerSeat: 1 })]);
+  });
+
+  it("attributes a head-vs-head kill to the closest surviving head when more than one is in range", () => {
+    const dead = makeSnake(0, { path: [{ x: 500, y: 500 }, { x: 520, y: 500 }] });
+    const nearer = makeSnake(1, { path: [{ x: 508, y: 500 }, { x: 900, y: 500 }] });
+    const farther = makeSnake(2, { path: [{ x: 517, y: 500 }, { x: 800, y: 500 }] });
+    const before = buildState([dead, nearer, farther]);
+    const after = buildState([makeSnake(0, { alive: false, deadAtMs: 0, path: [], segments: [] }), nearer, farther]);
+    const events = detectWormEvents(before, after);
+    expect(events).toEqual([expect.objectContaining({ type: "death", seat: 0, cause: "head", attackerSeat: 1 })]);
   });
 
   it("falls back to a self-destruct death when neither the wall nor another head explains it", () => {

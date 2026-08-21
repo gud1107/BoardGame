@@ -34,6 +34,19 @@ const EMIT_INTERVAL_MS = 70;
 const JOYSTICK_RADIUS = 46;
 const JOYSTICK_DEADZONE = 8;
 
+// Kill announcement banner (see the kill-FX session's confirmed answers):
+// center screen, 1.8s total (worm-kill-banner keyframe in globals.css owns
+// the 0.3s scale-in / 1.0s hold / 0.5s fade split), and a same-killer streak
+// within this window gets a "DOUBLE/TRIPLE KILL" callout.
+const KILL_BANNER_DURATION_MS = 1800;
+const KILL_COMBO_WINDOW_MS = 5000;
+
+interface KillBanner {
+  id: number;
+  text: string;
+  comboLabel: string | null;
+}
+
 export interface WormCanvasProps {
   state: WormState;
   viewerSeat: SeatIndex;
@@ -103,14 +116,39 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
   // same events each time).
   const [effects] = useState(() => new WormEffectsManager());
   const lastDiffedStateRef = useRef(state);
+
+  // Kill announcement banners — DOM/CSS overlay (screen-space typography,
+  // not a fit for the canvas-only WormEffectsManager above). One entry per
+  // opponent-elimination death event; `killComboRef` tracks each killer's
+  // recent kill timestamps to label a same-killer streak within
+  // KILL_COMBO_WINDOW_MS as a "DOUBLE/TRIPLE KILL".
+  const [killBanners, setKillBanners] = useState<KillBanner[]>([]);
+  const killBannerIdRef = useRef(0);
+  const killComboRef = useRef<Map<SeatIndex, { count: number; lastAt: number }>>(new Map());
+
   useEffect(() => {
     const prevSnapshot = lastDiffedStateRef.current;
     if (prevSnapshot !== state) {
       const events = detectWormEvents(prevSnapshot, state);
       effects.handleEvents(events, viewerSeat);
+      for (const ev of events) {
+        if (ev.type !== "death" || ev.cause !== "head" || ev.attackerSeat === null) continue;
+        const now = performance.now();
+        const prevCombo = killComboRef.current.get(ev.attackerSeat);
+        const comboCount = prevCombo && now - prevCombo.lastAt <= KILL_COMBO_WINDOW_MS ? prevCombo.count + 1 : 1;
+        killComboRef.current.set(ev.attackerSeat, { count: comboCount, lastAt: now });
+        const victimName = namesRef.current[ev.seat] ?? `#${ev.seat}`;
+        const comboLabel = comboCount === 2 ? "DOUBLE KILL!" : comboCount === 3 ? "TRIPLE KILL!" : comboCount >= 4 ? `${comboCount} KILL STREAK!` : null;
+        const id = ++killBannerIdRef.current;
+        setKillBanners((prev) => [...prev, { id, text: `${victimName} 처치! / ELIMINATED!`, comboLabel }]);
+      }
       lastDiffedStateRef.current = state;
     }
   }, [state, viewerSeat, effects]);
+
+  function removeKillBanner(id: number) {
+    setKillBanners((prev) => prev.filter((b) => b.id !== id));
+  }
 
   // ---------------------------------------------------------------------
   // Keyboard
@@ -336,6 +374,33 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
           </div>
         )}
 
+        {/* Kill announcement banner(s) — center screen, scale-in → hold →
+            fade over KILL_BANNER_DURATION_MS (see this file's module doc). */}
+        {killBanners.length > 0 && (
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
+            {killBanners.map((b) => (
+              <div
+                key={b.id}
+                onAnimationEnd={() => removeKillBanner(b.id)}
+                className="flex flex-col items-center"
+                style={{ animation: `worm-kill-banner ${KILL_BANNER_DURATION_MS}ms cubic-bezier(0.16, 1, 0.3, 1) forwards` }}
+              >
+                {b.comboLabel && (
+                  <span
+                    className="mb-1 text-sm font-extrabold tracking-[0.25em] text-amber-300 uppercase sm:text-base"
+                    style={{ animation: "worm-kill-combo-pulse 0.5s ease-in-out infinite" }}
+                  >
+                    {b.comboLabel}
+                  </span>
+                )}
+                <span className="rounded-2xl border border-rose-300/40 bg-black/55 px-6 py-2.5 text-xl font-black tracking-wide text-rose-100 uppercase shadow-[0_0_30px_rgba(248,113,113,0.55)] sm:text-2xl">
+                  {b.text}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Touch controls */}
         {touchCapable && (
           <>
@@ -497,6 +562,21 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
       ctx.stroke();
     }
 
+    // Killer gold aura pulse: a breathing golden ring around whoever just
+    // landed a kill (WormEffects.ts's killerAuraAlpha), visible to everyone
+    // watching, not just the killer.
+    const auraAlpha = effects.killerAuraAlpha(seat);
+    if (auraAlpha > 0) {
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(255, 213, 92, ${Math.min(1, auraAlpha)})`;
+      ctx.lineWidth = Math.max(1.5, 4 * scale);
+      ctx.shadowColor = "rgba(255, 196, 60, 0.9)";
+      ctx.shadowBlur = 14 * scale;
+      ctx.arc(hx, hy, Math.max(3, 19 * scale), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
     // Name label above the head.
     const label = names[seat] ?? `#${seat}`;
     ctx.font = `${Math.max(10, 12 * scale)}px sans-serif`;
@@ -508,4 +588,15 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
   // Particles/floating text/shockwaves/flashes/slash trails — always drawn
   // last so they sit above the snakes/food they're reacting to.
   effects.draw(ctx, toScreen, scale);
+
+  // Full-screen white/neon kill flash (killer's/victim's own screens only —
+  // WormEffects.ts's screenFlashAlpha), drawn in screen space last so it
+  // washes over everything else. A small overscan covers the shake
+  // translate applied at the top of this function so no seam shows at the
+  // jittered edges.
+  const flashAlpha = effects.screenFlashAlpha();
+  if (flashAlpha > 0) {
+    ctx.fillStyle = `rgba(255, 250, 235, ${flashAlpha * 0.55})`;
+    ctx.fillRect(-20, -20, cssW + 40, cssH + 40);
+  }
 }
