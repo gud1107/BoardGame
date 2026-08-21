@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-22 (**운명전쟁39 좌측 랭킹 점수판 / 우측 예측 전용 패널 분리 + 점수 변동 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 운명전쟁39 좌측 랭킹 점수판 / 우측 예측 전용 패널 분리 및 점수 변동 이펙트` 절 참고. 커밋/배포 정보는 해당 절 하단 참고 — 이 줄은 후속 `docs(handoff)` 커밋에서 실제 해시/URL로 갱신 예정.)_
+_최종 갱신: 2026-08-22 (**운명전쟁39 좌측 랭킹 점수판 / 우측 예측 전용 패널 분리 + 점수 변동 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 운명전쟁39 좌측 랭킹 점수판 / 우측 예측 전용 패널 분리 및 점수 변동 이펙트` 절 참고. 커밋 `641fd83 feat(destiny-war-39): split left ranked leaderboard and right prediction panel with score update animations` → 배포 프리뷰 `https://board-game-1jewyzyy0-me-3871.vercel.app`.)_
 
 _이전 갱신: 2026-08-21 (**아발론 우측 '내 역할 & 목표' 상시 가이드 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 아발론 우측 역할 능력 및 진영 목표 가이드 패널` 절 참고. 커밋 `7c72b39 feat(avalon): add right sidebar panel for player role abilities and team objectives` → 배포 프리뷰 `https://board-game-cucreyal0-me-3871.vercel.app`.)_
 
@@ -21,7 +21,7 @@ _이전 갱신: 2026-08-21 (**아발론 우측 '내 역할 & 목표' 상시 가�
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/destinyWar39 src/games/registry.test.ts`(65/65 통과 — 엔진 로직 무변경, 순수 UI 계층 변경). **브라우저 실측 검증** (Playwright, `npm install --no-save playwright@1.62.1`로 임시 설치 후 검증 완료 뒤 `npm uninstall --no-save playwright`로 원복 — `package.json`/`package-lock.json` 변경 없음): 임시 dev 라우트(`src/app/dev-destinywar39-preview` — `DestinyWar39Board`를 실제 `startGame`/`applyAction`으로 라운드 1을 완주시켜 누적 점수를 만든 뒤 라운드 2 예측 단계로 진입시킨 고정 상태 + "라운드 2 플레이→정산" 버튼으로 실시간 상태 전이를 트리거하는 구조로 구성, 검증 후 삭제)를 만들어 1280px(데스크톱 3열)/390px(모바일 드로어) 두 뷰포트에서 스크린샷 촬영. **확인 결과**: 데스크톱에서 좌(🏆 누적 순위, 뱃지+내 카드 강조)/중앙(손패·턴 진행)/우(🎯 승수 예측, 선택 버튼+히든 체크박스+확정 버튼이 패널 안에서 정상 동작) 3열이 겹침 없이 배치됨을 확인. "라운드 2 플레이→정산" 클릭 직후 좌측 랭킹판에서 각 플레이어 점수 옆에 녹색(+)/빨강(-) 플로팅 델타 배지가 솟아오르는 것과, 순위가 실제 총점(엔진 재계산으로 대조한 값: 도윤 0, 지호 0, 서연 -1, 하은 -1, 민준 -6)에 맞춰 정확히 내림차순 재정렬되는 것을 확인(최초 스크린샷 판독 시 작은 글자의 "-6"을 "-2"로 오독해 순간적으로 정렬이 틀린 것처럼 보였으나, 동일 시나리오를 `vitest` 임시 디버그 테스트로 재계산해 실제 값을 대조한 결과 정렬은 정확했음을 재확인 — 오독이었고 실제 버그 아님). 모바일에서는 좌측 "순위"/우측 "예측" 두 가장자리 탭이 겹치지 않고 각각 정상적으로 드로어를 열고 닫음을 확인. `page.on("pageerror"/"console")` 전수 수집 결과 페이지 에러 0건, 이번 변경과 무관한 사전 존재 404 2건(게스트 사용량/앱 설정 Supabase 조회, 과거 세션들과 동일 패턴)만 발견. 검증에 쓴 임시 라우트·디버그 테스트·스크립트는 저장소에 흔적 없이 삭제.
 
-**커밋/배포**: [이 세션 진행 중 — 아래에 실제 커밋 해시/배포 URL로 갱신 예정]
+**커밋/배포**: 커밋 `641fd83 feat(destiny-war-39): split left ranked leaderboard and right prediction panel with score update animations` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주, READY — `https://board-game-1jewyzyy0-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-21 — 아발론 우측 역할 능력 및 진영 목표 가이드 패널
 
