@@ -20,7 +20,7 @@ _이전 갱신: 2026-08-21 (**페루도 트랙 칸 간격 축소 + 보드 전체
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/summonersRift`(52/52 통과 — `removedItemIds` 관련 신규 테스트 2개 포함) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1064/1064 통과) — `engine.ts` 변경은 순수 부가 필드 추가뿐이라 기존 룰 판정 테스트 전부 그대로 통과.
 
-**커밋/배포**: (다음 커밋에서 기록 예정)
+**커밋/배포**: 커밋 `dc6fcf5 feat(summoners-rift): add dungeon deck count, equipment removal overlay, hero card UI, and rule guide panel` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 첫 시도는 "Not authorized" 일시 오류로 실패했으나 재시도에서 정상 완주(Turbopack 빌드+TS 전체 재검사 포함, 임시 dev 라우트는 삭제돼 있어 빌드 라우트 목록에도 나타나지 않음 확인), READY — `https://board-game-go4gtsh1f-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-21 — 페루도 트랙 칸 간격 축소 + 보드 전체 균등 여백 정돈
 
