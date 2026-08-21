@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-22 (**운명전쟁39 히든/카드 제출/예측 결과 시각 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 운명전쟁39 히든 발동·카드 제출·예측 성공/초과/미달 결과 이펙트` 절 참고. 커밋 `<PENDING>` → 배포 프리뷰 `<PENDING>`.)_
+_최종 갱신: 2026-08-22 (**운명전쟁39 히든/카드 제출/예측 결과 시각 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 운명전쟁39 히든 발동·카드 제출·예측 성공/초과/미달 결과 이펙트` 절 참고. 커밋 `add0189 feat(destinyWar39): add hidden reveal, card play, and prediction result visual effects` — 이 세션에서는 별도 배포를 진행하지 않음(다음 배포 시 함께 반영됨).)_
 
 _이전 갱신: 2026-08-22 (**지렁이 실시간 액션 시각/파티클 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 지렁이 먹이/자폭/꼬리절단/충돌 액션 파티클 이펙트` 절 참고. 커밋 `3a85ebb feat(worm): add visual particle effects for eating food, self-destruction, cutting tails, and core actions` → 배포 프리뷰 `https://board-game-l1hcua27f-me-3871.vercel.app`.)_
 
@@ -20,7 +20,7 @@ _이전 갱신: 2026-08-22 (**지렁이 실시간 액션 시각/파티클 이펙
 
 **파일 변경**: 1) `src/games/destinyWar39/DestinyWar39Effects.tsx`(신규) — `PlayedCardSlot`/`ReverseSwishOverlay`/`HiddenActivationBadge`/`HiddenRevealCell`/`RoundResultBadge`. 2) `src/app/globals.css` — `destinywar39-` 접두사 키프레임 14개 신규(`card-slide-drop`/`card-flip`/`zero-pulse`/`death-glitch`/`death-smoke-puff`/`reverse-swish`/`hidden-activate-glow`/`hidden-sparkle`/`hidden-shatter-flash`/`hidden-shatter-fragment`/`stamp-bounce`/`particle-burst`/`badge-shake`/`badge-drop-fade`). 3) `DestinyWar39Board.tsx` — played-card 슬롯(실시간+프리즈프레임)을 `PlayedCardSlot`으로 교체, 기존 `resolvingTurn` 감지 이펙트에 `reverseSwish` 상태 추가, roundEnd 테이블에 `RoundResultBadge` + 라운드별 remount key, gameOver 테이블의 히든 예측 셀에 `HiddenRevealCell` 래핑. 4) `PredictionStatusBoard.tsx` — 🙈 아이콘을 `HiddenActivationBadge`로 교체. 엔진(`engine.ts`)은 순수 표시 레이어만 건드렸으므로 전혀 변경하지 않음.
 
-**검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 에러 0 — 처음에 `if (justResolved.reverseActive) setReverseSwish(true)`가 `react-hooks/set-state-in-effect`에 걸려 조건부 setState 호출 대신 `setReverseSwish(justResolved.reverseActive)` 무조건 호출로 수정) / `npx vitest run src/games/destinyWar39`(61/61 통과 — 엔진을 안 건드렸으므로 전부 그대로 통과) / `npx vitest run`(전체 스위트, `<PENDING>`). **브라우저 실측(파티클/플립/스와시 육안 확인)은 이번 세션에 수행하지 않음** — 지렁이 세션과 동일하게 실시간 CSS 애니메이션 타이밍·겹침은 이 저장소가 이미 문서화한 vitest 커버리지 밖 영역이라 실사용 전 수동 확인 권장.
+**검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 에러 0 — 처음에 `if (justResolved.reverseActive) setReverseSwish(true)`가 `react-hooks/set-state-in-effect`에 걸려 조건부 setState 호출 대신 `setReverseSwish(justResolved.reverseActive)` 무조건 호출로 수정) / `npx vitest run src/games/destinyWar39`(61/61 통과 — 엔진을 안 건드렸으므로 전부 그대로 통과) / `npx vitest run`(전체 스위트 — 이 커밋 자체로는 별도 실행하지 않았고, 바로 다음의 지렁이 킬 이펙트 세션이 자기 변경분과 함께 전체 스위트를 돌려 1110/1110 통과로 이 변경분도 함께 검증됨). **브라우저 실측(파티클/플립/스와시 육안 확인)은 이번 세션에 수행하지 않음** — 지렁이 세션과 동일하게 실시간 CSS 애니메이션 타이밍·겹침은 이 저장소가 이미 문서화한 vitest 커버리지 밖 영역이라 실사용 전 수동 확인 권장.
 
 **커밋/배포**: `<PENDING>`.
 
