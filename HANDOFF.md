@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-22 (**지렁이 상대 처치(Kill) 대형 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 지렁이 상대 처치(Kill) 대형 폭발·화면 연출·킬 배너` 절 참고. 커밋 `<PENDING>` → 배포 프리뷰 `<PENDING>`.)_
+_최종 갱신: 2026-08-22 (**지렁이 상대 처치(Kill) 대형 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 지렁이 상대 처치(Kill) 대형 폭발·화면 연출·킬 배너` 절 참고. 커밋 `fbf867c feat(worm): add massive kill visual effects, shockwave particles, and elimination banner` → 배포 프리뷰 `https://board-game-dehnnqfjr-me-3871.vercel.app`.)_
 
 _이전 갱신: 2026-08-22 (**운명전쟁39 히든/카드 제출/예측 결과 시각 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 운명전쟁39 히든 발동·카드 제출·예측 성공/초과/미달 결과 이펙트` 절 참고. 커밋 `add0189 feat(destinyWar39): add hidden reveal, card play, and prediction result visual effects` — 이 세션에서는 별도 배포를 진행하지 않음(다음 배포 시 함께 반영됨).)_
 
@@ -27,7 +27,7 @@ _이전 갱신: 2026-08-22 (**운명전쟁39 히든/카드 제출/예측 결과 
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 에러 0) / `npx vitest run src/games/worm`(34/34 통과, 신규 1개+수정 1개 포함) / `npx vitest run --exclude "**/aiBenchmark.test.ts"`(전체 스위트, 27개 파일 1110/1110 통과 — 직전 세션의 운명전쟁39 변경분도 이 실행으로 함께 재검증됨). **브라우저 실측(파티클/셰이크/배너 타이밍 육안 확인)은 이번 세션에 수행하지 않음** — 이전 지렁이/운명전쟁39 세션들과 동일하게 실시간 캔버스 렌더·CSS 애니메이션 타이밍은 이 저장소가 이미 문서화한 vitest 커버리지 밖 영역이라 실사용 전 수동 확인 권장.
 
-**커밋/배포**: `<PENDING>`.
+**커밋/배포**: 커밋 `fbf867c feat(worm): add massive kill visual effects, shockwave particles, and elimination banner` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주, READY — `https://board-game-dehnnqfjr-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행.
 
 ### 2026-08-22 — 운명전쟁39 히든 발동·카드 제출·예측 성공/초과/미달 결과 이펙트
 
@@ -47,7 +47,7 @@ _이전 갱신: 2026-08-22 (**운명전쟁39 히든/카드 제출/예측 결과 
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 에러 0 — 처음에 `if (justResolved.reverseActive) setReverseSwish(true)`가 `react-hooks/set-state-in-effect`에 걸려 조건부 setState 호출 대신 `setReverseSwish(justResolved.reverseActive)` 무조건 호출로 수정) / `npx vitest run src/games/destinyWar39`(61/61 통과 — 엔진을 안 건드렸으므로 전부 그대로 통과) / `npx vitest run`(전체 스위트 — 이 커밋 자체로는 별도 실행하지 않았고, 바로 다음의 지렁이 킬 이펙트 세션이 자기 변경분과 함께 전체 스위트를 돌려 1110/1110 통과로 이 변경분도 함께 검증됨). **브라우저 실측(파티클/플립/스와시 육안 확인)은 이번 세션에 수행하지 않음** — 지렁이 세션과 동일하게 실시간 CSS 애니메이션 타이밍·겹침은 이 저장소가 이미 문서화한 vitest 커버리지 밖 영역이라 실사용 전 수동 확인 권장.
 
-**커밋/배포**: `<PENDING>`.
+**커밋/배포**: 커밋 `add0189 feat(destinyWar39): add hidden reveal, card play, and prediction result visual effects`(+ 후속 `a2c6df6 docs(handoff): record destinyWar39 visual-effects commit hash`) → `git push origin main` 완료. 이 세션 자체에서는 별도 배포를 진행하지 않았고, 바로 다음 지렁이 킬 이펙트 세션의 배포에 함께 반영됨.
 
 ### 2026-08-22 — 지렁이 먹이/자폭/꼬리절단/충돌 액션 파티클 이펙트
 
