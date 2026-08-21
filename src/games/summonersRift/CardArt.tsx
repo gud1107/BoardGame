@@ -124,12 +124,18 @@ export function ItemSlot({
     >
       <div
         className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg border-2 ${dims} ${
-          highlighted ? "ring-2 ring-amber-300/80" : ""
+          highlighted ? "ring-4 ring-amber-300" : ""
         }`}
         style={{
           borderColor: equipped ? "rgba(200,170,110,0.65)" : "rgba(255,255,255,0.15)",
           boxShadow: equipped ? "0 0 12px -2px rgba(200,170,110,0.55)" : "none",
           background: "#05070b",
+          // Task brief §2 "보유 장비 효과 발동 이펙트" — the same golden pulse
+          // `HpBanner`'s kill-flash plays (see globals.css), reused here so the
+          // item that just neutralized a monster visibly flares in sync with it
+          // rather than relying on a static ring alone against an
+          // already-gold equipped border.
+          animation: highlighted ? "rift-hp-kill-pulse 1700ms ease-out" : undefined,
         }}
       >
         <Image src={ITEM_IMAGES[itemId]} alt={item.name} width={imgSize} height={imgSize} className="h-full w-full object-cover" />
@@ -137,6 +143,11 @@ export function ItemSlot({
           <div className="absolute inset-0 flex items-center justify-center bg-black/55">
             <span className="rounded-full border border-rose-300/60 px-1.5 py-0.5 text-[9px] font-bold text-rose-200">해제됨</span>
           </div>
+        )}
+        {highlighted && (
+          <span className="absolute -top-1.5 -right-1.5 rounded-full border border-black/40 bg-emerald-400 px-1 py-0.5 text-[8px] font-black text-black">
+            발동!
+          </span>
         )}
       </div>
       {/* Name label only — the card art itself already carries the effect text (see assets.ts's doc), so no redundant caption here. */}
@@ -178,39 +189,42 @@ export function MonsterFace({
 
 /**
  * Per-player "which items did *this* seat strip off the champion this round"
- * ownership marker (task brief §2) — a face-down monster marker (the drawn
- * card they hid instead of rifting it) with every item they've since removed
- * fanned out on top of it at increasing tilt, so the whole table can tell at
- * a glance who's holding what without opening anyone's hand. Renders nothing
- * once `removedItemIds` is empty.
+ * ownership readout (task brief §1) — every item they've removed this round,
+ * in removal order, laid out left-to-right as its own dedicated strip below
+ * that seat's scoreboard row (see `SummonersRiftBoard.tsx`) rather than
+ * piled on a face-down card, so the icon/name/effect of each never overlaps
+ * another's. Wraps to a second line on narrow screens instead of clipping or
+ * scrolling. Renders nothing once `removedItemIds` is empty.
  */
-export function HiddenEquipmentStack({ removedItemIds }: { removedItemIds: ItemId[] }) {
+export function RemovedItemsRow({ removedItemIds }: { removedItemIds: ItemId[] }) {
   if (removedItemIds.length === 0) return null;
-  const title = `해제한 장비: ${removedItemIds.map((id) => getItemDef(id).name).join(", ")}`;
   return (
     <div
-      className="relative flex h-9 shrink-0 items-center"
-      style={{ width: `${30 + (removedItemIds.length - 1) * 7}px` }}
-      title={title}
+      className="flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed p-1.5"
+      style={{ borderColor: "rgba(200,170,110,0.2)" }}
     >
-      <div className="absolute top-0 left-0" style={{ zIndex: 0 }}>
-        <DeckBack className="h-9 w-7" />
-      </div>
-      {removedItemIds.map((id, i) => (
-        <div
-          key={i}
-          className="absolute h-8 w-6 overflow-hidden rounded border shadow-[0_2px_6px_-1px_rgba(0,0,0,0.6)]"
-          style={{
-            left: `${3 + i * 7}px`,
-            top: `${-1 + (i % 2)}px`,
-            zIndex: i + 1,
-            transform: `rotate(${-16 + i * 9}deg)`,
-            borderColor: "rgba(200,170,110,0.7)",
-          }}
-        >
-          <Image src={ITEM_IMAGES[id]} alt={getItemDef(id).name} width={24} height={32} className="h-full w-full object-cover" />
-        </div>
-      ))}
+      <span className="shrink-0 text-[9px] font-semibold tracking-wide text-white/35 uppercase">해제한 장비</span>
+      {removedItemIds.map((id, i) => {
+        const item = getItemDef(id);
+        return (
+          <div
+            key={i}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border px-1.5 py-1"
+            style={{ borderColor: "rgba(200,170,110,0.35)", background: "rgba(0,0,0,0.25)" }}
+          >
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-black/40 text-[9px] font-bold text-white/40">
+              {i + 1}
+            </span>
+            <div className="relative h-8 w-6 shrink-0 overflow-hidden rounded border" style={{ borderColor: "rgba(200,170,110,0.5)" }}>
+              <Image src={ITEM_IMAGES[id]} alt={item.name} width={24} height={32} className="h-full w-full object-cover" />
+            </div>
+            <div className="flex flex-col leading-tight">
+              <span className="text-[10px] font-semibold text-amber-100/90">{item.name}</span>
+              <span className="max-w-[150px] text-[9px] text-white/45">{item.effect}</span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

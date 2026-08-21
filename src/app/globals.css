@@ -313,6 +313,45 @@ body {
   }
 }
 
+/* Summoner's Rift — the large shared HP banner's per-monster resolution
+   flash (see SummonersRiftBoard.tsx's `HpBanner`), fired once per live
+   `combatLog` entry during the dungeon phase and timed to roughly match
+   rift-monster-slay/strike above so the reveal slot and the HP banner
+   settle together. */
+@keyframes rift-hp-kill-pulse {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  40% {
+    transform: scale(1.12);
+    filter: brightness(1.5) drop-shadow(0 0 10px rgba(255, 215, 120, 0.85));
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+@keyframes rift-hp-damage-flash {
+  0%,
+  100% {
+    transform: translateX(0);
+    color: #ff8a8a;
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
 /* 달무티's tax-tribute flight (see DalmutiEffects.tsx / FlyingTaxCard) —
    layered on top of a plain left/top CSS *transition* that carries a card
    in a straight line between the giver's and recipient's seat rows, same

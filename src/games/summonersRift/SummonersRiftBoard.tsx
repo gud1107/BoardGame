@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
 import SummonersRiftGuideSidebar from "./SummonersRiftGuideSidebar";
-import { CardPileStack, HeroCard, HiddenEquipmentStack, ItemSlot, MonsterFace } from "./CardArt";
+import { CardPileStack, HeroCard, ItemSlot, MonsterFace, RemovedItemsRow } from "./CardArt";
 import { detectRiftPushEvent, FlyingRiftCard, type RiftPushEvent } from "./SummonersRiftEffects";
 import {
   computeRankings,
@@ -12,6 +12,7 @@ import {
   MONSTER_CATALOG,
   SUCCESS_TOKENS_TO_WIN,
   FAILURE_TOKENS_TO_ELIMINATE,
+  type CombatLogEntry,
   type EngineAction,
   type ItemId,
   type RoundResult,
@@ -51,6 +52,96 @@ function combatBadge(entry: RoundResult["combatLog"][number]) {
   );
 }
 
+/** A single `combatLog` entry mid-animation, plus the HP it resolved *from* — `entry.hpAfter` alone can't reconstruct that once later entries have moved on. Drives both `HpBanner`'s transition text and which `ItemSlot`/turn-panel button locks for the duration (task brief §2/§4 "전투 연출 템포"). */
+interface CombatFlashState {
+  entry: CombatLogEntry;
+  hpBefore: number;
+}
+
+/** How long the flip+resolve choreography takes before the reveal slot's own `rift-monster-slay`/`rift-monster-strike` keyframes finish (see globals.css) — the HP banner's flash and the challenger's "다음 몬스터 공개" button lock are timed to match so every connected client (not just the challenger) finishes watching one monster resolve before the next can be revealed. */
+const COMBAT_FLASH_MS = 1700;
+
+/** Task brief §2 "용사의 현재 체력(HP)을 중앙에 크게" — a large, always-visible HP readout for the dungeon-combat phases, replacing the small header badge with an oversized number that also carries the per-monster resolution flash (kill effect / damage flash) while `flash` is set. Renders nothing outside `declaringSpatula`/`resolvingRift` (i.e. whenever `currentHp` isn't live). */
+function HpBanner({ state, flash }: { state: SummonersRiftState; flash: CombatFlashState | null }) {
+  if (state.currentHp === null || state.totalHp === null) return null;
+  return (
+    <section
+      className="flex flex-col items-center gap-1 rounded-2xl border p-3"
+      style={{ borderColor: "rgba(200,170,110,0.3)", background: "linear-gradient(160deg,#241418 0%,#160c0e 55%,#0a0506 100%)" }}
+    >
+      <span className="text-[10px] font-semibold tracking-wide uppercase" style={{ color: "#c8aa6e" }}>
+        ❤️ 용사 체력
+      </span>
+      {flash ? (
+        flash.entry.killedBy ? (
+          <div
+            className="flex items-center gap-2"
+            style={{ animation: `rift-hp-kill-pulse ${COMBAT_FLASH_MS}ms ease-out` }}
+          >
+            <span className="text-2xl font-black text-emerald-300">⚔️ 처치!</span>
+            <span className="text-lg font-bold text-white/70">HP {flash.hpBefore} 유지</span>
+          </div>
+        ) : (
+          <div
+            className="flex items-center gap-2 text-3xl font-black text-white"
+            style={{ animation: `rift-hp-damage-flash ${COMBAT_FLASH_MS}ms ease-out` }}
+          >
+            <span>{flash.hpBefore}</span>
+            <span className="text-xl text-white/40">➔</span>
+            <span className="text-rose-300">{flash.entry.hpAfter}</span>
+            <span className="text-base font-semibold text-rose-300/80">(-{flash.entry.damageTaken})</span>
+          </div>
+        )
+      ) : (
+        <span className="text-3xl font-black text-white">
+          {state.currentHp} <span className="text-lg font-semibold text-white/40">/ {state.totalHp}</span>
+        </span>
+      )}
+    </section>
+  );
+}
+
+/** Task brief §3 "좌측 던전 출현 몬스터 누적 나열 패널" — every monster revealed so far *this dungeon run*, oldest first, each badged with its outcome. Rendered as the leftmost of three columns on wide screens and the topmost block on narrow ones (see the root layout in `SummonersRiftBoard`'s default export) — only while there's an active challenge (`declaringSpatula`/`resolvingRift`), matching `HpBanner`'s same live-HP window. Auto-scrolls to the newest entry so a long dungeon run never needs a manual scroll to see what just happened. */
+function MonsterHistoryPanel({ state }: { state: SummonersRiftState }) {
+  const entries = state.phase === "resolvingRift" ? state.combatLog : [];
+  const listRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [entries.length]);
+
+  return (
+    <aside
+      className="flex w-full shrink-0 flex-col gap-2 rounded-[24px] border p-3 text-xs lg:w-56"
+      style={{ borderColor: "rgba(200,170,110,0.25)", background: "linear-gradient(160deg,#151b28 0%,#0d121c 45%,#06090f 100%)" }}
+    >
+      <h3 className="text-[11px] font-semibold tracking-wide uppercase" style={{ color: "#c8aa6e" }}>
+        📜 등장 몬스터 기록
+      </h3>
+      {entries.length === 0 ? (
+        <p className="px-1 py-4 text-center text-[10px] leading-relaxed text-white/35">
+          {state.phase === "declaringSpatula" ? "황금 뒤집개 지정 후 몬스터가 공개되면 여기 기록됩니다." : "아직 공개된 몬스터가 없습니다."}
+        </p>
+      ) : (
+        <div ref={listRef} className="flex max-h-64 flex-col gap-1.5 overflow-y-auto pr-0.5 lg:max-h-[65vh]">
+          {entries.map((entry, i) => (
+            <div
+              key={entry.monster.id}
+              className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 p-1.5"
+            >
+              <span className="w-4 shrink-0 text-center text-[9px] font-bold text-white/30">{i + 1}</span>
+              <MonsterFace threat={entry.monster.threat} size="sm" />
+              <div className="flex flex-1 flex-col items-start gap-1">
+                {combatBadge(entry)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </aside>
+  );
+}
+
 export default function SummonersRiftBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: SummonersRiftBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
 
@@ -60,18 +151,37 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
   const [trackedState, setTrackedState] = useState(state);
   const [roundFlash, setRoundFlash] = useState<RoundResult | null>(null);
   const [pushEvents, setPushEvents] = useState<RiftPushEvent[]>([]);
+  const [combatFlash, setCombatFlash] = useState<CombatFlashState | null>(null);
   if (trackedState !== state) {
     const newRound = state.lastRoundResult !== trackedState.lastRoundResult ? state.lastRoundResult : null;
     const push = detectRiftPushEvent(trackedState, state);
+    // Captured before `trackedState` is replaced below, so it's "how many
+    // entries this dungeon run had last render" — `combatLog` resets to `[]`
+    // at both `enterDungeon` and the next `dealRound`, so comparing against
+    // this (rather than a persistent counter) already restarts at 0 for
+    // every fresh challenge with no separate reset step needed (task brief
+    // §2/§4 "전투 연출 템포": flash exactly the newest live entry once).
+    const priorCombatLogLength = trackedState.combatLog.length;
     setTrackedState(state);
     if (newRound) setRoundFlash(newRound);
     if (push) setPushEvents((prev) => [...prev, { ...push, id: (prev.at(-1)?.id ?? 0) + 1 }]);
+
+    if (state.phase === "resolvingRift" && state.combatLog.length > priorCombatLogLength) {
+      const index = priorCombatLogLength;
+      const hpBefore = index === 0 ? state.totalHp! : state.combatLog[index - 1].hpAfter;
+      setCombatFlash({ entry: state.combatLog[index], hpBefore });
+    }
   }
   useEffect(() => {
     if (!roundFlash) return;
     const t = setTimeout(() => setRoundFlash(null), 5200);
     return () => clearTimeout(t);
   }, [roundFlash]);
+  useEffect(() => {
+    if (!combatFlash) return;
+    const t = setTimeout(() => setCombatFlash(null), COMBAT_FLASH_MS);
+    return () => clearTimeout(t);
+  }, [combatFlash]);
   const handlePushDone = useCallback((id: number) => {
     setPushEvents((prev) => prev.filter((e) => e.id !== id));
   }, []);
@@ -162,13 +272,20 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
   const seatOrder = Array.from({ length: state.playerCount }, (_, i) => i);
   const isChallenger = state.challengerSeat === viewerSeat;
   const liveTotalHp = state.phase === "bidding" ? computeTotalHp(state.equippedItemIds) : state.totalHp;
+  // Task brief §2 "보유 장비 효과 발동 이펙트" — while a kill flash is playing, highlight the specific equipped item (or the golden spatula, id 5) that neutralized the monster, reusing `ItemSlot`'s already-present-but-previously-unused `highlighted` prop.
+  const flashKillerItemId =
+    combatFlash?.entry.killedBy && ("itemId" in combatFlash.entry.killedBy ? combatFlash.entry.killedBy.itemId : 5);
+
+  const dungeonPhaseActive = state.phase === "declaringSpatula" || state.phase === "resolvingRift";
 
   return (
-    // Board card + the always-visible player-aid sidebar (task brief §4) side
-    // by side on wide screens, stacked below the board on narrow ones — the
-    // `[gameId]` page widens its container specifically for this game id so
-    // the sidebar has room to sit beside the board instead of squeezing it.
+    // Three columns wide, narrowing to a single stack: the monster history
+    // panel (task brief §3, dungeon-phase only) leftmost/topmost, the board
+    // in the middle, and the always-visible player-aid sidebar (task brief
+    // §4) rightmost/bottom-most — the `[gameId]` page widens its container
+    // specifically for this game id so all three have room on wide screens.
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
+      {dungeonPhaseActive && <MonsterHistoryPanel state={state} />}
       <div
         className="flex min-w-0 flex-1 flex-col gap-3 rounded-[28px] border p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
         style={{ borderColor: "rgba(200,170,110,0.3)", background: "linear-gradient(160deg,#151b28 0%,#0d121c 45%,#06090f 100%)" }}
@@ -215,10 +332,9 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
             <h3 className="text-[11px] font-semibold tracking-wide uppercase" style={{ color: "#c8aa6e" }}>
               ⚔️ 공유 챔피언
             </h3>
-            {liveTotalHp !== null && (
-              <span className="flex items-center gap-1 text-xs font-bold text-white">
-                ❤️ {state.phase === "resolvingRift" || state.phase === "declaringSpatula" ? `${state.currentHp} / ${liveTotalHp}` : liveTotalHp}
-              </span>
+            {/* Combat phases now own the live HP readout via the large `HpBanner` below — this small badge is only the bidding-phase equip preview, so the two never show conflicting numbers side by side. */}
+            {state.phase === "bidding" && liveTotalHp !== null && (
+              <span className="flex items-center gap-1 text-xs font-bold text-white">❤️ {liveTotalHp}</span>
             )}
           </div>
           {/* Task brief §3: the base HP-3 champion tile, physically-set-up-style — the hero card centered above the items equipped onto it. */}
@@ -227,10 +343,18 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
           </div>
           <div className="flex flex-wrap justify-center gap-2">
             {ITEM_CATALOG.map((item) => (
-              <ItemSlot key={item.id} itemId={item.id} equipped={state.equippedItemIds.includes(item.id)} />
+              <ItemSlot
+                key={item.id}
+                itemId={item.id}
+                equipped={state.equippedItemIds.includes(item.id)}
+                highlighted={flashKillerItemId === item.id}
+              />
             ))}
           </div>
         </section>
+
+        {/* Task brief §2: a large, central live HP readout for the dungeon-combat phases, with the per-monster kill/damage flash baked in. */}
+        <HpBanner state={state} flash={combatFlash} />
 
         {/* Card piles: the monster draw deck (task brief §1) beside the Rift accumulation pile — both face-down, remaining count badged on top. */}
         <section className="flex flex-wrap items-start justify-center gap-4 rounded-2xl border border-white/10 bg-black/25 p-3">
@@ -266,7 +390,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
           </div>
         </section>
 
-        <TurnPanel state={state} viewerSeat={viewerSeat} me={me} isChallenger={isChallenger} onAction={onAction} />
+        <TurnPanel state={state} viewerSeat={viewerSeat} me={me} isChallenger={isChallenger} onAction={onAction} revealLocked={combatFlash !== null} />
 
         {/* Scoreboard */}
         <section className="flex flex-col gap-1.5">
@@ -275,29 +399,30 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
             const isActive = state.activeSeat === seat && !p.eliminated;
             const isSelf = seat === viewerSeat;
             return (
-              <div
-                key={seat}
-                ref={setSeatRowRef(seat)}
-                className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs transition ${
-                  p.eliminated ? "border-white/5 bg-black/10 opacity-50" : isActive ? "bg-amber-400/10" : "border-white/10 bg-black/20"
-                }`}
-                style={isActive ? { borderColor: "rgba(200,170,110,0.6)" } : undefined}
-              >
-                <span className="flex items-center gap-1.5 font-semibold text-white/90">
-                  <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
-                  {isActive && <span title="차례">👉</span>}
-                  {state.challengerSeat === seat && (state.phase === "declaringSpatula" || state.phase === "resolvingRift") && <span title="도전자">🛡️</span>}
-                  {names[seat]}
-                  {isSelf && <span style={{ color: "#e8c77a" }}>(나)</span>}
-                  {p.passed && state.phase === "bidding" && <span className="text-white/40">(패스)</span>}
-                  {p.eliminated && <span className="text-rose-300">💀 탈락</span>}
-                </span>
-                {/* Task brief §2: who pulled which item off the champion this round — a face-down hidden-monster marker with every item they've removed fanned on top, right beside their row. */}
-                <HiddenEquipmentStack removedItemIds={p.removedItemIds} />
-                <div className="flex items-center gap-2 text-white/70">
-                  <span title={`성공 ${p.successTokens}/${SUCCESS_TOKENS_TO_WIN}`}>{"🏆".repeat(p.successTokens)}{"·".repeat(Math.max(0, SUCCESS_TOKENS_TO_WIN - p.successTokens))}</span>
-                  <span title={`실패 ${p.failureTokens}/${FAILURE_TOKENS_TO_ELIMINATE}`}>{"💀".repeat(p.failureTokens)}{"·".repeat(Math.max(0, FAILURE_TOKENS_TO_ELIMINATE - p.failureTokens))}</span>
+              // Task brief §1: the row itself stays a single line (name/turn/tokens), with removed items relocated to their own dedicated strip right below it instead of stacked on top of a face-down card — see `RemovedItemsRow`.
+              <div key={seat} className="flex flex-col gap-1">
+                <div
+                  ref={setSeatRowRef(seat)}
+                  className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs transition ${
+                    p.eliminated ? "border-white/5 bg-black/10 opacity-50" : isActive ? "bg-amber-400/10" : "border-white/10 bg-black/20"
+                  }`}
+                  style={isActive ? { borderColor: "rgba(200,170,110,0.6)" } : undefined}
+                >
+                  <span className="flex items-center gap-1.5 font-semibold text-white/90">
+                    <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+                    {isActive && <span title="차례">👉</span>}
+                    {state.challengerSeat === seat && (state.phase === "declaringSpatula" || state.phase === "resolvingRift") && <span title="도전자">🛡️</span>}
+                    {names[seat]}
+                    {isSelf && <span style={{ color: "#e8c77a" }}>(나)</span>}
+                    {p.passed && state.phase === "bidding" && <span className="text-white/40">(패스)</span>}
+                    {p.eliminated && <span className="text-rose-300">💀 탈락</span>}
+                  </span>
+                  <div className="flex items-center gap-2 text-white/70">
+                    <span title={`성공 ${p.successTokens}/${SUCCESS_TOKENS_TO_WIN}`}>{"🏆".repeat(p.successTokens)}{"·".repeat(Math.max(0, SUCCESS_TOKENS_TO_WIN - p.successTokens))}</span>
+                    <span title={`실패 ${p.failureTokens}/${FAILURE_TOKENS_TO_ELIMINATE}`}>{"💀".repeat(p.failureTokens)}{"·".repeat(Math.max(0, FAILURE_TOKENS_TO_ELIMINATE - p.failureTokens))}</span>
+                  </div>
                 </div>
+                <RemovedItemsRow removedItemIds={p.removedItemIds} />
               </div>
             );
           })}
@@ -329,12 +454,15 @@ function TurnPanel({
   me,
   isChallenger,
   onAction,
+  revealLocked,
 }: {
   state: SummonersRiftState;
   viewerSeat: SeatIndex;
   me: SummonersRiftState["players"][number];
   isChallenger: boolean;
   onAction: (action: EngineAction) => void;
+  /** Task brief §4 "전투 연출 템포" — true while the last-revealed monster's kill/damage flash is still playing (see `HpBanner`), so the challenger can't reveal the next one until every connected client has finished watching this one resolve. */
+  revealLocked: boolean;
 }) {
   const panelStyle = { borderColor: "rgba(200,170,110,0.25)", background: "linear-gradient(160deg,#20180a 0%,#150f06 55%,#0a0603 100%)" };
 
@@ -445,17 +573,18 @@ function TurnPanel({
   return (
     <section className="flex flex-col items-center gap-2 rounded-2xl border p-3" style={panelStyle}>
       <p className="text-xs font-medium" style={{ color: "#e8c77a" }}>
-        🛡️ 당신이 협곡 최종 도전자입니다! HP {state.currentHp} / {state.totalHp} · 남은 몬스터 {state.riftPile.length}마리
+        🛡️ 당신이 협곡 최종 도전자입니다! 남은 몬스터 {state.riftPile.length}마리
       </p>
       {state.spatulaDeclaredThreat !== null && (
         <p className="text-[10px] text-white/40">🥄 지정한 몬스터: 위협도 {state.spatulaDeclaredThreat}</p>
       )}
       <button
+        disabled={revealLocked}
         onClick={() => onAction({ type: "revealNextMonster", seat: viewerSeat })}
-        className="rounded-full px-6 py-2.5 text-xs font-semibold text-black transition hover:brightness-110"
+        className="rounded-full px-6 py-2.5 text-xs font-semibold text-black transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
         style={{ background: "linear-gradient(135deg,#e05a5a,#a12f2f)" }}
       >
-        ⚔️ 다음 몬스터 공개
+        {revealLocked ? "⏳ 전투 연출 재생 중..." : "⚔️ 다음 몬스터 공개"}
       </button>
     </section>
   );
