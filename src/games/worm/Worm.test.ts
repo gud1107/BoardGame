@@ -26,6 +26,7 @@ import {
   type Vec2,
   type WormState,
 } from "./engine";
+import { detectWormEvents } from "./WormEffects";
 
 /** A straight two-point trail long enough that `computeSegments(path, length, ...)` never has to clamp-duplicate its tail point — real gameplay always has this much history behind a snake's head. */
 function straightPath(head: Vec2, headingAngle: number, length: number): Vec2[] {
@@ -323,5 +324,83 @@ describe("normalizeAngle", () => {
     expect(normalizeAngle(0)).toBeCloseTo(0, 10);
     expect(normalizeAngle(Math.PI * 2)).toBeCloseTo(0, 5);
     expect(normalizeAngle(-Math.PI * 3)).toBeCloseTo(Math.PI, 5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectWormEvents (WormEffects.ts) — the client-local snapshot diff that
+// drives the FX layer. Pure and deterministic given two states, so it's
+// tested the same way as the engine itself even though it lives outside it.
+// ---------------------------------------------------------------------------
+
+describe("detectWormEvents", () => {
+  it("emits an eat event sized to the score delta when a still-alive snake's score rises", () => {
+    const before = buildState([makeSnake(0, { score: 0 })]);
+    const after = buildState([makeSnake(0, { score: 20 })]);
+    const events = detectWormEvents(before, after);
+    expect(events).toEqual([{ type: "eat", seat: 0, pos: after.snakes[0].path[0], value: 20, hue: after.snakes[0].hue }]);
+  });
+
+  it("does not emit an eat event when score is unchanged", () => {
+    const before = buildState([makeSnake(0, { score: 10 })]);
+    const after = buildState([makeSnake(0, { score: 10 })]);
+    expect(detectWormEvents(before, after)).toEqual([]);
+  });
+
+  it("does not treat a single-segment boost drain as a cut", () => {
+    const before = buildState([makeSnake(0, { length: 10 })]);
+    const after = buildState([makeSnake(0, { length: 9 })]);
+    expect(detectWormEvents(before, after)).toEqual([]);
+  });
+
+  it("emits a cut event (with no attacker) when length drops by more than one and no other snake's head is nearby", () => {
+    const before = buildState([makeSnake(0, { length: 10 })]);
+    const after = buildState([makeSnake(0, { length: 4 })]);
+    const events = detectWormEvents(before, after);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: "cut", targetSeat: 0, attackerSeat: null });
+  });
+
+  it("attributes a cut to the nearest other alive head within striking distance", () => {
+    const target = makeSnake(0, { length: 10 });
+    const cutPos = target.segments[4];
+    const attacker = makeSnake(1, { path: [{ x: cutPos.x + 5, y: cutPos.y }, { x: cutPos.x - 400, y: cutPos.y }] });
+    const bystander = makeSnake(2, { path: [{ x: cutPos.x + 2000, y: cutPos.y }, { x: cutPos.x + 1600, y: cutPos.y }] });
+    const before = buildState([target, attacker, bystander]);
+    const after = buildState([makeSnake(0, { length: 4 }), attacker, bystander]);
+    const events = detectWormEvents(before, after);
+    const cut = events.find((e) => e.type === "cut");
+    expect(cut).toMatchObject({ targetSeat: 0, attackerSeat: 1 });
+  });
+
+  it("classifies a death near the arena boundary as a wall death", () => {
+    const before = buildState([makeSnake(0, { path: [{ x: 3, y: 500 }, { x: 20, y: 500 }] })]);
+    const after = buildState([makeSnake(0, { alive: false, deadAtMs: 0, path: [], segments: [] })]);
+    const events = detectWormEvents(before, after);
+    expect(events).toEqual([expect.objectContaining({ type: "death", seat: 0, cause: "wall" })]);
+  });
+
+  it("classifies a death next to another surviving head as a head-vs-head death", () => {
+    const dead = makeSnake(0, { path: [{ x: 500, y: 500 }, { x: 520, y: 500 }] });
+    const winner = makeSnake(1, { path: [{ x: 510, y: 500 }, { x: 900, y: 500 }] });
+    const before = buildState([dead, winner]);
+    const after = buildState([makeSnake(0, { alive: false, deadAtMs: 0, path: [], segments: [] }), winner]);
+    const events = detectWormEvents(before, after);
+    expect(events).toEqual([expect.objectContaining({ type: "death", seat: 0, cause: "head" })]);
+  });
+
+  it("falls back to a self-destruct death when neither the wall nor another head explains it", () => {
+    const before = buildState([makeSnake(0, { path: [{ x: 1500, y: 1500 }, { x: 1520, y: 1500 }] })]);
+    const after = buildState([makeSnake(0, { alive: false, deadAtMs: 0, path: [], segments: [] })]);
+    const events = detectWormEvents(before, after);
+    expect(events).toEqual([expect.objectContaining({ type: "death", seat: 0, cause: "self" })]);
+  });
+
+  it("carries the pre-death segments through so corpse-scatter FX has something to animate", () => {
+    const snake = makeSnake(0, { length: 6 });
+    const before = buildState([snake]);
+    const after = buildState([makeSnake(0, { alive: false, deadAtMs: 0, path: [], segments: [] })]);
+    const events = detectWormEvents(before, after);
+    expect(events[0]).toMatchObject({ type: "death", segments: snake.segments });
   });
 });

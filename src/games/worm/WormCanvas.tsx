@@ -10,6 +10,7 @@ import {
   type SnakeInput,
   type WormState,
 } from "./engine";
+import { detectWormEvents, WormEffectsManager } from "./WormEffects";
 
 /**
  * Canvas 2D real-time renderer + input capture, the "board" layer for this
@@ -88,6 +89,28 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
   const [joystickVisual, setJoystickVisual] = useState<{ dx: number; dy: number } | null>(null);
 
   const gameEndFiredRef = useRef(false);
+
+  // ---------------------------------------------------------------------
+  // Visual FX layer (particles/shockwaves/flashes/screen-shake) — see
+  // WormEffects.ts's module doc for why this has to diff snapshots instead
+  // of reacting to actions. `effects` is one long-lived manager instance for
+  // the component's whole mount (lazy `useState` initializer, same pattern
+  // as `touchCapable` above — a ref can't be read during render under this
+  // project's lint rules, and this value's identity never needs to change).
+  // `lastDiffedStateRef` tracks which incoming `state` prop it has already
+  // diffed so each new network snapshot is only diffed once (the RAF loop
+  // below reads `stateRef` many times per snapshot, but must not re-fire the
+  // same events each time).
+  const [effects] = useState(() => new WormEffectsManager());
+  const lastDiffedStateRef = useRef(state);
+  useEffect(() => {
+    const prevSnapshot = lastDiffedStateRef.current;
+    if (prevSnapshot !== state) {
+      const events = detectWormEvents(prevSnapshot, state);
+      effects.handleEvents(events, viewerSeat);
+      lastDiffedStateRef.current = state;
+    }
+  }, [state, viewerSeat, effects]);
 
   // ---------------------------------------------------------------------
   // Keyboard
@@ -173,6 +196,7 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
   useEffect(() => {
     let raf = 0;
     let lastEmit = 0;
+    let lastFrameTime = performance.now();
 
     function computeAngle(cssW: number, cssH: number): number {
       const keys = keysRef.current;
@@ -191,12 +215,20 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
     }
 
     function frame(now: number) {
+      // FX physics/lifecycle run at true render framerate, decoupled from
+      // the ~11Hz network snapshot rate that actually feeds `stateRef`
+      // (that's what makes particles/shake feel smooth instead of choppy).
+      const dt = Math.min(now - lastFrameTime, 100);
+      lastFrameTime = now;
+      effects.updateLiveBoost(stateRef.current);
+      effects.update(dt);
+
       const canvas = canvasRef.current;
       if (canvas) {
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const cssW = canvas.width / dpr;
         const cssH = canvas.height / dpr;
-        draw(canvas, dpr, cssW, cssH, stateRef.current, viewerSeat, namesRef.current);
+        draw(canvas, dpr, cssW, cssH, stateRef.current, viewerSeat, namesRef.current, effects);
 
         const angle = computeAngle(cssW, cssH);
         lastAngleRef.current = angle;
@@ -210,7 +242,7 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
     }
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [viewerSeat]);
+  }, [viewerSeat, effects]);
 
   // ---------------------------------------------------------------------
   // Game end detection (match timer elapsed).
@@ -352,11 +384,16 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
 // ---------------------------------------------------------------------
 // Pure canvas drawing — no React, no state mutation, just paints the frame.
 // ---------------------------------------------------------------------
-function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number, state: WormState, viewerSeat: SeatIndex, names: Record<SeatIndex, string>) {
+function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number, state: WormState, viewerSeat: SeatIndex, names: Record<SeatIndex, string>, effects: WormEffectsManager) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssW, cssH);
+  // Self-destruct screen shake (viewer-local only, see WormEffects.ts) — a
+  // small translate applied to the whole frame before anything is drawn, so
+  // world, grid, and FX all shift together like a real camera jolt.
+  const shake = effects.consumeShakeOffset();
+  if (shake.dx !== 0 || shake.dy !== 0) ctx.translate(shake.dx, shake.dy);
 
   const viewer = state.snakes[viewerSeat];
   const camera = viewer?.alive ? viewer.path[0] : { x: state.arena.width / 2, y: state.arena.height / 2 };
@@ -424,7 +461,10 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
       const [sx, sy] = toScreen(seg.x, seg.y);
       if (sx < -30 || sx > cssW + 30 || sy < -30 || sy > cssH + 30) continue;
       const t = 1 - i / snake.segments.length;
-      const r = (6 + t * 6) * scale;
+      // Head gets a brief scale-pulse on eating a pellet (WormEffects.ts's
+      // headScale, eases back to 1 once the pulse expires).
+      const headPulse = i === 0 ? effects.headScale(seat) : 1;
+      const r = (6 + t * 6) * scale * headPulse;
       ctx.beginPath();
       ctx.fillStyle = color;
       ctx.globalAlpha = i === 0 ? 1 : 0.92;
@@ -446,6 +486,17 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
       ctx.fill();
     }
 
+    // Hit-impact glow: a brief bright ring around an attacker's head right
+    // after it lands a tail-cut (WormEffects.ts's headGlowAlpha).
+    const glowAlpha = effects.headGlowAlpha(seat);
+    if (glowAlpha > 0) {
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(255, 241, 150, ${glowAlpha})`;
+      ctx.lineWidth = Math.max(1, 3 * scale);
+      ctx.arc(hx, hy, Math.max(2, 13 * scale), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // Name label above the head.
     const label = names[seat] ?? `#${seat}`;
     ctx.font = `${Math.max(10, 12 * scale)}px sans-serif`;
@@ -453,4 +504,8 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
     ctx.fillStyle = seat === viewerSeat ? "#d9f99d" : "rgba(255,255,255,0.7)";
     ctx.fillText(label, hx, hy - 18 * scale - 4);
   }
+
+  // Particles/floating text/shockwaves/flashes/slash trails — always drawn
+  // last so they sit above the snakes/food they're reacting to.
+  effects.draw(ctx, toScreen, scale);
 }
