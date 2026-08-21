@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-21 (**아발론 우측 '내 역할 & 목표' 상시 가이드 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 아발론 우측 역할 능력 및 진영 목표 가이드 패널` 절 참고. 커밋 예정 `feat(avalon): add right sidebar panel for player role abilities and team objectives` → 배포 프리뷰 커밋 직후 갱신 예정.)_
+_최종 갱신: 2026-08-21 (**아발론 우측 '내 역할 & 목표' 상시 가이드 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 아발론 우측 역할 능력 및 진영 목표 가이드 패널` 절 참고. 커밋 `7c72b39 feat(avalon): add right sidebar panel for player role abilities and team objectives` → 배포 프리뷰 `https://board-game-cucreyal0-me-3871.vercel.app`.)_
 
 _이전 갱신: 2026-08-21 (**코요테 8인 확장 + 원형 테이블 레이아웃 최적화 세션** — 자세한 내용은 아래 `### 2026-08-21 — 코요테 8인 플레이 확장 + 원형 테이블 레이아웃 최적화` 절 참고. 커밋 `cfefc96 feat(coyote): expand maximum players to 8 and optimize radial table layout` → 배포 프리뷰 `https://board-game-c2tupjzyk-me-3871.vercel.app`.)_
 
@@ -16,7 +16,7 @@ _이전 갱신: 2026-08-21 (**코요테 8인 확장 + 원형 테이블 레이아
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/avalon/Avalon.test.ts`(50/50 통과 — `engine.ts` 무변경, 순수 UI 계층 추가) / `npx vitest run --exclude "**/aiBenchmark.test.ts"`(27개 파일 1093/1093 통과, 43초 — 이 저장소의 확립된 "전체 vitest는 `aiBenchmark.test.ts` 때문에 45분+ 걸려 완주 확인이 어렵다"는 과거 세션들의 판단과 동일하게, 그 파일만 제외한 전체 스위트로 대체 검증). 세션 시작 시 `Get-Process`로 확인한 결과 다른 두 개의 활성 Claude Code 세션(`boardgame-6f`/`boardgame-f8`, 약 1시간 전부터 실행 중)이 같은 저장소에서 이미 자체 전체 `vitest run`을 돌리고 있었음(§3의 "동시 세션" 알려진 이슈와 동일 패턴) — CPU 경합으로 처음 백그라운드로 건 무제한 전체 실행이 40분 넘게 끝나지 않아 중단하고, 위 `--exclude` 버전으로 대체해 빠르게 완주 확인. `git status`로 avalon 관련 파일이 다른 세션과 충돌 없이 이 세션의 변경분(`page.tsx`/`AvalonBoard.tsx`/신규 `AvalonRoleGuideSidebar.tsx`)뿐임을 커밋 직전 재확인.
 
-**커밋/배포**: 커밋 예정(`feat(avalon): add right sidebar panel for player role abilities and team objectives`) → `git push origin main` → `npx vercel deploy`(프리뷰) 진행 예정 — 실제 커밋 해시와 배포 URL은 커밋/배포 직후 별도 `docs(handoff)` 커밋으로 이 절과 상단 배너를 갱신할 것.
+**커밋/배포**: 커밋 `7c72b39 feat(avalon): add right sidebar panel for player role abilities and team objectives` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 1차 시도는 과거 세션들과 동일한 `{"status":"error","reason":"deploy_failed","message":"Not authorized"}`로 실패 → 즉시 재시도해 정상 빌드(Turbopack + TypeScript 전체 재검사 포함)·배포되어 READY — `https://board-game-cucreyal0-me-3871.vercel.app`. 미리보기 URL은 Vercel SSO 배포 보호가 걸려 있어 `curl`은 302(SSO 리다이렉트)만 확인됨(팀 로그인 없이는 직접 200 확인 불가 — 과거 세션들도 이 팀 보호 미리보기 URL을 curl로 직접 검증하지 않고 `readyState: READY` + 빌드 로그의 TypeScript 재검사 통과를 성공 근거로 삼아온 것과 동일 판단). 사용자가 "production"을 명시하지 않아 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-21 — 코요테 8인 플레이 확장 + 원형 테이블 레이아웃 최적화
 
