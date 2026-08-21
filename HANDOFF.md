@@ -20,7 +20,7 @@ _이전 갱신: 2026-08-21 (**소환사의 협곡 던전 덱 카운트 + 장비 
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/perudo`(73/73 통과, 2.29초) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1064/1064 통과, 42.48초) — `engine.ts` 무변경이라 순수 `PerudoBoard.tsx`/`page.tsx` 레이아웃 변경이 게임 로직에 전혀 영향 없음을 재확인. **주의**: 검증 도중 백그라운드로 걸어둔 `--exclude` 없는 무제한 `npx vitest run`이 5분 넘게 응답이 없어 `TaskStop`으로 취소했으나, §2에 이미 기록된 패턴대로 `TaskStop`이 자식 워커 프로세스까지는 못 죽여 `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where CommandLine -match 'vitest'`로 잔존 프로세스 3개(`npx`/`vitest.mjs`/`workers/forks.js`)를 발견해 전부 `Stop-Process -Force`로 종료한 뒤 `--exclude '**/aiBenchmark.test.ts'`로 재실행해 정상 완료.
 
-**커밋/배포**: 커밋 예정 — `refactor(perudo): implement seamless symmetrical connected track layout with zero gap` → `git push origin main` → `npx vercel deploy`(프리뷰). 결과는 후속 `docs(handoff)` 커밋으로 기록.
+**커밋/배포**: 커밋 `2aebd0f refactor(perudo): implement seamless symmetrical connected track layout with zero gap` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주(Turbopack 빌드+TS 전체 재검사 포함, 임시 dev 라우트는 삭제돼 있어 빌드 라우트 목록에도 나타나지 않음 확인), READY — `https://board-game-dldzbygxn-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-21 — 소환사의 협곡 던전 덱 카운트 + 장비 탈착 소유자 연출 + 용사 카드 UI + 룰 가이드 사이드바
 
