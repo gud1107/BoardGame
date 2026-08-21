@@ -5,9 +5,9 @@ import {
   chooseBotAction,
   computeRankings,
   DECK_SIZE,
+  deckSizeFor,
   getValidMoves,
   isReverseCard,
-  PLAYER_COUNT,
   resolveTurn,
   scoreRound,
   startGame,
@@ -16,6 +16,7 @@ import {
   visiblePastPrediction,
   type Card,
   type DestinyWar39State,
+  type PlayerCount,
   type SeatIndex,
   type TurnPlay,
 } from "./engine";
@@ -30,13 +31,13 @@ function play(seat: SeatIndex, card: Card): TurnPlay {
   return { seat, card };
 }
 
-describe("deck composition (rulebook §3)", () => {
+describe("deck composition (rulebook §3) — 5-player mode", () => {
   it("has exactly 45 cards", () => {
     expect(DECK_SIZE).toBe(45);
   });
 
   it("has 5 copies of 0, exactly 1 copy each of 1..39, and exactly 1 death card", () => {
-    const deck = buildDeck();
+    const deck = buildDeck(5);
     const zeroCount = deck.filter((c) => c.kind === "number" && c.value === 0).length;
     expect(zeroCount).toBe(5);
     for (let v = 1; v <= 39; v++) {
@@ -47,9 +48,37 @@ describe("deck composition (rulebook §3)", () => {
   });
 
   it("flags exactly 11/22/33 as reverse cards", () => {
-    const deck = buildDeck();
-    const reverseValues = deck.filter(isReverseCard).map((c) => c.value).sort((a, b) => a - b);
+    const deck = buildDeck(5);
+    const reverseValues = deck.filter((c) => isReverseCard(c, 5)).map((c) => c.value).sort((a, b) => a - b);
     expect(reverseValues).toEqual([11, 22, 33]);
+  });
+});
+
+describe("deck composition (rulebook §3) — 8-player mode", () => {
+  it("has exactly 72 cards", () => {
+    expect(deckSizeFor(8)).toBe(72);
+  });
+
+  it("has 8 copies of 0, exactly 1 copy each of 1..62, and exactly 2 death cards", () => {
+    const deck = buildDeck(8);
+    const zeroCount = deck.filter((c) => c.kind === "number" && c.value === 0).length;
+    expect(zeroCount).toBe(8);
+    for (let v = 1; v <= 62; v++) {
+      expect(deck.filter((c) => c.kind === "number" && c.value === v).length).toBe(1);
+    }
+    expect(deck.filter((c) => c.kind === "death").length).toBe(2);
+    expect(deck.length).toBe(8 + 62 + 2);
+  });
+
+  it("flags exactly 11/22/33/44/55 as reverse cards", () => {
+    const deck = buildDeck(8);
+    const reverseValues = deck.filter((c) => isReverseCard(c, 8)).map((c) => c.value).sort((a, b) => a - b);
+    expect(reverseValues).toEqual([11, 22, 33, 44, 55]);
+  });
+
+  it("66 would be the next multiple of 11 but exceeds maxNumber (62), so it is NOT a reverse value", () => {
+    const deck = buildDeck(8);
+    expect(deck.some((c) => c.kind === "number" && c.value === 66)).toBe(false);
   });
 });
 
@@ -88,82 +117,82 @@ describe("scoreRound (rulebook §9 — confirmed formula, exact vectors from pro
   });
 });
 
-describe("resolveTurn (rulebook §6 — decision table)", () => {
+describe("resolveTurn (rulebook §6 — decision table) — 5-player mode", () => {
   const order = [0, 1, 2, 3, 4];
 
   it("normal state: highest number wins", () => {
     const plays = [play(0, numberCard(1, 12)), play(1, numberCard(2, 31)), play(2, numberCard(3, 7)), play(3, numberCard(4, 18)), play(4, numberCard(5, 5))];
-    const outcome = resolveTurn(plays, order);
+    const outcome = resolveTurn(plays, order, 5);
     expect(outcome.reverseActive).toBe(false);
     expect(outcome.winnerSeat).toBe(1); // 31
   });
 
   it("one reverse card (11/22/33) → reverse active, lowest number wins", () => {
     const plays = [play(0, numberCard(1, 8)), play(1, numberCard(2, 27)), play(2, numberCard(3, 22)), play(3, numberCard(4, 5)), play(4, numberCard(5, 19))];
-    const outcome = resolveTurn(plays, order);
+    const outcome = resolveTurn(plays, order, 5);
     expect(outcome.reverseActive).toBe(true); // one reverse card (22)
     expect(outcome.winnerSeat).toBe(3); // lowest number, 5
   });
 
   it("two reverse cards → parity even, reverts to normal (highest wins)", () => {
     const plays = [play(0, numberCard(1, 11)), play(1, numberCard(2, 22)), play(2, numberCard(3, 7)), play(3, numberCard(4, 30)), play(4, numberCard(5, 9))];
-    const outcome = resolveTurn(plays, order);
+    const outcome = resolveTurn(plays, order, 5);
     expect(outcome.reverseActive).toBe(false);
     expect(outcome.winnerSeat).toBe(3); // 30, the highest
   });
 
   it("three reverse cards → parity odd, reverse active again", () => {
     const plays = [play(0, numberCard(1, 11)), play(1, numberCard(2, 22)), play(2, numberCard(3, 33)), play(3, numberCard(4, 30)), play(4, numberCard(5, 9))];
-    const outcome = resolveTurn(plays, order);
+    const outcome = resolveTurn(plays, order, 5);
     expect(outcome.reverseActive).toBe(true);
     expect(outcome.winnerSeat).toBe(4); // lowest, 9
   });
 
   it("normal state, death and 0 both present: 0 counters death (its only upset — not the other numbers)", () => {
     const plays = [play(0, numberCard(1, 0)), play(1, deathCard(2)), play(2, numberCard(3, 25)), play(3, numberCard(4, 39)), play(4, numberCard(5, 1))];
-    const outcome = resolveTurn(plays, order);
+    const outcome = resolveTurn(plays, order, 5);
     expect(outcome.reverseActive).toBe(false);
     expect(outcome.winnerSeat).toBe(0); // 0 beats Death specifically; Death would otherwise have beaten 39
   });
 
   it("normal state, death present, no 0: death wins outright", () => {
     const plays = [play(0, deathCard(1)), play(1, numberCard(2, 39)), play(2, numberCard(3, 25)), play(3, numberCard(4, 1)), play(4, numberCard(5, 38))];
-    const outcome = resolveTurn(plays, order);
+    const outcome = resolveTurn(plays, order, 5);
     expect(outcome.reverseActive).toBe(false);
     expect(outcome.winnerSeat).toBe(0);
   });
 
   it("normal state, 0 present but no death: 0 is just the weakest number and loses to the highest (e.g. 35 vs 0 → 35 wins)", () => {
     const plays = [play(0, numberCard(1, 0)), play(1, numberCard(2, 35)), play(2, numberCard(3, 7)), play(3, numberCard(4, 18)), play(4, numberCard(5, 2))];
-    const outcome = resolveTurn(plays, order);
+    const outcome = resolveTurn(plays, order, 5);
     expect(outcome.reverseActive).toBe(false);
     expect(outcome.winnerSeat).toBe(1); // 35, the highest — 0 does NOT auto-win outside the death counter
   });
 
   it("reverse active (one reverse card) + 0 present, no death: 0 wins even against a much higher number (e.g. 11-reverse + 0 vs 35 → 0 wins)", () => {
     const plays = [play(0, numberCard(1, 0)), play(1, numberCard(2, 11)), play(2, numberCard(3, 35)), play(3, numberCard(4, 18)), play(4, numberCard(5, 6))];
-    const outcome = resolveTurn(plays, order);
+    const outcome = resolveTurn(plays, order, 5);
     expect(outcome.reverseActive).toBe(true); // one reverse card (11)
     expect(outcome.winnerSeat).toBe(0); // 0, lowest — reverse makes it the strongest ordinary number
   });
 
   it("reverse active (odd reverse count) + 0 and death both present: death wins (exception cancelled)", () => {
     const plays = [play(0, numberCard(1, 0)), play(1, deathCard(2)), play(2, numberCard(3, 11)), play(3, numberCard(4, 25)), play(4, numberCard(5, 30))];
-    const outcome = resolveTurn(plays, order);
+    const outcome = resolveTurn(plays, order, 5);
     expect(outcome.reverseActive).toBe(true); // one reverse card (11)
     expect(outcome.winnerSeat).toBe(1); // death, even over 0
   });
 
   it("reverse active, death present, no 0: death still wins outright over the lowest number", () => {
     const plays = [play(0, deathCard(1)), play(1, numberCard(2, 11)), play(2, numberCard(3, 25)), play(3, numberCard(4, 30)), play(4, numberCard(5, 2))];
-    const outcome = resolveTurn(plays, order);
+    const outcome = resolveTurn(plays, order, 5);
     expect(outcome.reverseActive).toBe(true);
     expect(outcome.winnerSeat).toBe(0); // death beats even the lowest number (2)
   });
 
   it("reverse active, no death: lowest number wins (0 is strongest among numbers)", () => {
     const plays = [play(0, numberCard(1, 0)), play(1, numberCard(2, 11)), play(2, numberCard(3, 25)), play(3, numberCard(4, 30)), play(4, numberCard(5, 2))];
-    const outcome = resolveTurn(plays, order);
+    const outcome = resolveTurn(plays, order, 5);
     expect(outcome.reverseActive).toBe(true);
     expect(outcome.winnerSeat).toBe(0); // 0, lowest
   });
@@ -172,37 +201,109 @@ describe("resolveTurn (rulebook §6 — decision table)", () => {
     // Without a death card, 0 is just the weakest number and wouldn't be the winning value at all
     // (see the "0 is just the weakest number" test above) — a death card is needed to put 0 in contention.
     const plays = [play(0, deathCard(1)), play(1, numberCard(2, 0)), play(2, numberCard(3, 0)), play(3, numberCard(4, 9)), play(4, numberCard(5, 0))];
-    const outcome1 = resolveTurn(plays, [2, 4, 1, 0, 3]);
+    const outcome1 = resolveTurn(plays, [2, 4, 1, 0, 3], 5);
     expect(outcome1.winnerSeat).toBe(2); // seat 2's 0 comes first in this reveal order
-    const outcome2 = resolveTurn(plays, [4, 1, 2, 0, 3]);
+    const outcome2 = resolveTurn(plays, [4, 1, 2, 0, 3], 5);
     expect(outcome2.winnerSeat).toBe(4); // seat 4's 0 comes first here instead
   });
 
   it("multiple 0 cards tie, reverse active, no death: earliest in reveal order wins among the 0s", () => {
     const plays = [play(0, numberCard(1, 0)), play(1, numberCard(2, 11)), play(2, numberCard(3, 0)), play(3, numberCard(4, 9)), play(4, numberCard(5, 3))];
-    const outcome = resolveTurn(plays, [2, 0, 1, 3, 4]);
+    const outcome = resolveTurn(plays, [2, 0, 1, 3, 4], 5);
     expect(outcome.reverseActive).toBe(true);
     expect(outcome.winnerSeat).toBe(2);
   });
 });
 
-describe("round/turn structure (rulebook §4, §5)", () => {
+describe("resolveTurn (rulebook §6 — decision table) — 8-player mode", () => {
+  const order = [0, 1, 2, 3, 4, 5, 6, 7];
+  function fill(seat: SeatIndex, card: Card): TurnPlay {
+    return play(seat, card);
+  }
+  /** 8 plays where every seat but the ones explicitly overridden gets a harmless mid-range number card. */
+  function eightPlays(overrides: Record<number, Card>): TurnPlay[] {
+    const filler = [40, 41, 42, 43, 45, 46, 47, 48]; // avoid 44 (reverse) and the overridden seats' values
+    let f = 0;
+    return Array.from({ length: 8 }, (_, seat) => (overrides[seat] ? fill(seat, overrides[seat]) : fill(seat, numberCard(100 + seat, filler[f++]))));
+  }
+
+  it("normal state: highest number (up to 62) wins", () => {
+    const plays = eightPlays({ 3: numberCard(1, 62), 5: numberCard(2, 61) });
+    const outcome = resolveTurn(plays, order, 8);
+    expect(outcome.reverseActive).toBe(false);
+    expect(outcome.winnerSeat).toBe(3); // 62, the deck's max number
+  });
+
+  it("44 and 55 are reverse cards too: one of them → reverse active, lowest wins", () => {
+    const plays = eightPlays({ 2: numberCard(1, 44), 6: numberCard(2, 3) });
+    const outcome = resolveTurn(plays, order, 8);
+    expect(outcome.reverseActive).toBe(true); // one reverse card (44)
+    expect(outcome.winnerSeat).toBe(6); // lowest, 3
+  });
+
+  it("55 alone also triggers reverse", () => {
+    const plays = eightPlays({ 4: numberCard(1, 55), 1: numberCard(2, 2) });
+    const outcome = resolveTurn(plays, order, 8);
+    expect(outcome.reverseActive).toBe(true);
+    expect(outcome.winnerSeat).toBe(1); // lowest, 2
+  });
+
+  it("11 + 44 (two reverse cards) → parity even, reverts to normal (highest wins)", () => {
+    const plays = eightPlays({ 0: numberCard(1, 11), 1: numberCard(2, 44), 7: numberCard(3, 60) });
+    const outcome = resolveTurn(plays, order, 8);
+    expect(outcome.reverseActive).toBe(false);
+    expect(outcome.winnerSeat).toBe(7); // 60, the highest
+  });
+
+  it("two Death cards in the same turn, reverse inactive, no 0: earliest revealer of the two wins (product-owner-confirmed extension of the §6.3 0-tie rule)", () => {
+    const plays = eightPlays({ 2: deathCard(1), 6: deathCard(2) });
+    const outcome1 = resolveTurn(plays, [6, 2, 0, 1, 3, 4, 5, 7], 8);
+    expect(outcome1.reverseActive).toBe(false);
+    expect(outcome1.winnerSeat).toBe(6); // seat 6's Death revealed first in this order
+    const outcome2 = resolveTurn(plays, [2, 6, 0, 1, 3, 4, 5, 7], 8);
+    expect(outcome2.winnerSeat).toBe(2); // seat 2's Death revealed first here instead
+  });
+
+  it("two Death cards in the same turn, reverse active: earliest revealer of the two still wins", () => {
+    const plays = eightPlays({ 0: numberCard(9, 11), 2: deathCard(1), 6: deathCard(2) });
+    const outcome = resolveTurn(plays, [6, 2, 0, 1, 3, 4, 5, 7], 8);
+    expect(outcome.reverseActive).toBe(true); // one reverse card (11)
+    expect(outcome.winnerSeat).toBe(6);
+  });
+
+  it("two Death cards + a 0, reverse inactive: the 0 still beats both Deaths outright (its narrow counter is not limited to a single Death)", () => {
+    const plays = eightPlays({ 1: numberCard(9, 0), 2: deathCard(1), 6: deathCard(2) });
+    const outcome = resolveTurn(plays, order, 8);
+    expect(outcome.reverseActive).toBe(false);
+    expect(outcome.winnerSeat).toBe(1); // the 0
+  });
+
+  it("0-card ties still resolve by reveal order in 8-player mode (more candidates, same rule)", () => {
+    const plays = eightPlays({ 0: deathCard(1), 1: numberCard(2, 0), 3: numberCard(3, 0), 5: numberCard(4, 0) });
+    const outcome = resolveTurn(plays, [5, 3, 1, 0, 2, 4, 6, 7], 8);
+    expect(outcome.reverseActive).toBe(false);
+    expect(outcome.winnerSeat).toBe(5); // seat 5's 0 comes first in this reveal order
+  });
+});
+
+describe("round/turn structure (rulebook §4, §5) — 5-player mode", () => {
+  const PC: PlayerCount = 5;
   function fastForwardToPlaying(state: DestinyWar39State): DestinyWar39State {
     let s = state;
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    for (let seat = 0; seat < PC; seat++) {
       s = applyAction(s, { type: "predict", seat, value: 0, hidden: false });
     }
     return s;
   }
 
   it("round R deals each player exactly R cards", () => {
-    let state = startGame(1);
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    let state = startGame(PC, 1);
+    for (let seat = 0; seat < PC; seat++) {
       expect(state.round.hands[seat].length).toBe(1);
     }
     state = fastForwardToPlaying(state);
     // Play through round 1 (1 turn) and round 2's dealing.
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    for (let seat = 0; seat < PC; seat++) {
       const seatToAct = state.round.playsThisTurn.length; // round 1 is simultaneous; seats can act in any order but this engine iterates 0..4
       const card = state.round.hands[seatToAct][0];
       state = applyAction(state, { type: "play", seat: seatToAct, cardId: card.id });
@@ -211,7 +312,7 @@ describe("round/turn structure (rulebook §4, §5)", () => {
     state = applyAction(state, { type: "nextRound", seed: 42 });
     expect(state.phase).toBe("predicting");
     expect(state.round.roundNumber).toBe(2);
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    for (let seat = 0; seat < PC; seat++) {
       expect(state.round.hands[seat].length).toBe(2);
     }
   });
@@ -219,12 +320,12 @@ describe("round/turn structure (rulebook §4, §5)", () => {
   it("full 45-card deck is dealt out at round 9 (5 players x 9 cards)", () => {
     // Deal round 9 directly via the internal shuffle path exposed through startGame+advancing
     // is expensive to simulate end-to-end here; instead assert the invariant via dealRound's
-    // math: PLAYER_COUNT * roundNumber must never exceed DECK_SIZE.
-    expect(PLAYER_COUNT * TOTAL_ROUNDS).toBe(DECK_SIZE);
+    // math: playerCount * roundNumber must never exceed the deck size.
+    expect(PC * TOTAL_ROUNDS).toBe(DECK_SIZE);
   });
 
   it("a round's actual win total across all players equals the round number (one winner per turn)", () => {
-    let state = startGame(7);
+    let state = startGame(PC, 7);
     state = fastForwardToPlaying(state);
     // Round 1 has exactly 1 turn -> exactly 1 total win awarded this round.
     let seatToAct = 0;
@@ -239,7 +340,7 @@ describe("round/turn structure (rulebook §4, §5)", () => {
   });
 
   it("round 1's sole turn winner becomes round 2's turn-1 leader; each turn's winner leads the next turn thereafter", () => {
-    let state = startGame(99);
+    let state = startGame(PC, 99);
     state = fastForwardToPlaying(state);
     let seatToAct = 0;
     while (state.phase === "playing") {
@@ -260,9 +361,9 @@ describe("round/turn structure (rulebook §4, §5)", () => {
       const card = state.round.hands[actingSeat][0];
       state = applyAction(state, { type: "play", seat: actingSeat, cardId: card.id });
       played.add(actingSeat);
-      if (played.size < PLAYER_COUNT) {
+      if (played.size < PC) {
         do {
-          actingSeat = state.seatOrder[(state.seatOrder.indexOf(actingSeat) + 1) % PLAYER_COUNT];
+          actingSeat = state.seatOrder[(state.seatOrder.indexOf(actingSeat) + 1) % PC];
         } while (played.has(actingSeat));
       }
     }
@@ -272,7 +373,7 @@ describe("round/turn structure (rulebook §4, §5)", () => {
   });
 
   it("round >= 2 rejects an out-of-turn play", () => {
-    let state = startGame(3);
+    let state = startGame(PC, 3);
     state = fastForwardToPlaying(state);
     let seatToAct = 0;
     while (state.phase === "playing") {
@@ -283,7 +384,7 @@ describe("round/turn structure (rulebook §4, §5)", () => {
     state = applyAction(state, { type: "nextRound", seed: 11 });
     state = fastForwardToPlaying(state);
     const leader = state.round.turnLeader;
-    const notLeader = (leader + 1) % PLAYER_COUNT;
+    const notLeader = (leader + 1) % PC;
     const card = state.round.hands[notLeader][0];
     const before = state;
     const after = applyAction(state, { type: "play", seat: notLeader, cardId: card.id });
@@ -293,7 +394,7 @@ describe("round/turn structure (rulebook §4, §5)", () => {
 
 describe("prediction rules (rulebook §7)", () => {
   it("rejects a prediction outside 0..roundNumber", () => {
-    const state = startGame(1);
+    const state = startGame(5, 1);
     const before = state;
     const tooHigh = applyAction(state, { type: "predict", seat: 0, value: 2, hidden: false });
     expect(tooHigh).toBe(before); // round 1 only allows 0 or 1
@@ -302,8 +403,8 @@ describe("prediction rules (rulebook §7)", () => {
   });
 
   it("accepts 0..roundNumber and moves to playing once all 5 seats have predicted", () => {
-    let state = startGame(2); // still round 1 (seed doesn't change starting round)
-    for (let seat = 0; seat < PLAYER_COUNT - 1; seat++) {
+    let state = startGame(5, 2); // still round 1 (seed doesn't change starting round)
+    for (let seat = 0; seat < 5 - 1; seat++) {
       state = applyAction(state, { type: "predict", seat, value: 1, hidden: false });
       expect(state.phase).toBe("predicting");
     }
@@ -312,7 +413,7 @@ describe("prediction rules (rulebook §7)", () => {
   });
 
   it("rejects a second prediction from the same seat in the same round", () => {
-    let state = startGame(1);
+    let state = startGame(5, 1);
     state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: false });
     const before = state;
     const after = applyAction(state, { type: "predict", seat: 0, value: 0, hidden: false });
@@ -322,13 +423,13 @@ describe("prediction rules (rulebook §7)", () => {
 
 describe("hidden (rulebook §8, §12)", () => {
   it("allows exactly one hidden use per game and rejects a second attempt", () => {
-    let state = startGame(1);
+    let state = startGame(5, 1);
     state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: true });
     expect(state.players[0].hiddenUsed).toBe(true);
     expect(state.players[0].hiddenRound).toBe(1);
 
     // Finish round 1, advance to round 2, try hidden again for seat 0.
-    for (let seat = 1; seat < PLAYER_COUNT; seat++) {
+    for (let seat = 1; seat < 5; seat++) {
       state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
     }
     let seatToAct = 0;
@@ -345,16 +446,16 @@ describe("hidden (rulebook §8, §12)", () => {
   });
 
   it("hides the prediction value from other seats until game over, but the owner always sees it", () => {
-    let state = startGame(1);
+    let state = startGame(5, 1);
     state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: true });
     expect(visibleCurrentPrediction(state, 0, 0)).toBe(1); // owner sees their own
     expect(visibleCurrentPrediction(state, 1, 0)).toBe("hidden"); // opponent does not
   });
 
   it("reveals every hidden past prediction once the game reaches gameOver", () => {
-    let state = startGame(123);
+    let state = startGame(5, 123);
     state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: true });
-    for (let seat = 1; seat < PLAYER_COUNT; seat++) state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
+    for (let seat = 1; seat < 5; seat++) state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
     let seatToAct = 0;
     while (state.phase === "playing") {
       const card = state.round.hands[seatToAct][0];
@@ -368,57 +469,57 @@ describe("hidden (rulebook §8, §12)", () => {
   });
 });
 
-describe("full game simulation and final rankings (rulebook §9.1, §10)", () => {
-  function playFullGame(seed: number): DestinyWar39State {
-    let state = startGame(seed);
-    while (state.phase !== "gameOver") {
-      if (state.phase === "predicting") {
-        for (let seat = 0; seat < PLAYER_COUNT; seat++) {
-          if (state.round.predictions[seat] === null) {
-            state = applyAction(state, { type: "predict", seat, value: Math.min(1, state.round.roundNumber), hidden: false });
-          }
+function playFullGame(playerCount: PlayerCount, seed: number): DestinyWar39State {
+  let state = startGame(playerCount, seed);
+  while (state.phase !== "gameOver") {
+    if (state.phase === "predicting") {
+      for (let seat = 0; seat < playerCount; seat++) {
+        if (state.round.predictions[seat] === null) {
+          state = applyAction(state, { type: "predict", seat, value: Math.min(1, state.round.roundNumber), hidden: false });
         }
-      } else if (state.phase === "playing") {
-        while (state.phase === "playing") {
-          const round = state.round;
-          const played = new Set(round.playsThisTurn.map((p) => p.seat));
-          let actingSeat: number | null = null;
-          if (round.roundNumber === 1) {
-            for (let s = 0; s < PLAYER_COUNT; s++) if (!played.has(s)) { actingSeat = s; break; }
-          } else {
-            const startIdx = state.seatOrder.indexOf(round.turnLeader);
-            for (let i = 0; i < PLAYER_COUNT; i++) {
-              const candidate = state.seatOrder[(startIdx + i) % PLAYER_COUNT];
-              if (!played.has(candidate)) { actingSeat = candidate; break; }
-            }
-          }
-          if (actingSeat === null) break;
-          const card = round.hands[actingSeat][0];
-          state = applyAction(state, { type: "play", seat: actingSeat, cardId: card.id });
-        }
-      } else if (state.phase === "roundEnd") {
-        state = applyAction(state, { type: "nextRound", seed: seed + state.round.roundNumber });
       }
+    } else if (state.phase === "playing") {
+      while (state.phase === "playing") {
+        const round = state.round;
+        const played = new Set(round.playsThisTurn.map((p) => p.seat));
+        let actingSeat: number | null = null;
+        if (round.roundNumber === 1) {
+          for (let s = 0; s < playerCount; s++) if (!played.has(s)) { actingSeat = s; break; }
+        } else {
+          const startIdx = state.seatOrder.indexOf(round.turnLeader);
+          for (let i = 0; i < playerCount; i++) {
+            const candidate = state.seatOrder[(startIdx + i) % playerCount];
+            if (!played.has(candidate)) { actingSeat = candidate; break; }
+          }
+        }
+        if (actingSeat === null) break;
+        const card = round.hands[actingSeat][0];
+        state = applyAction(state, { type: "play", seat: actingSeat, cardId: card.id });
+      }
+    } else if (state.phase === "roundEnd") {
+      state = applyAction(state, { type: "nextRound", seed: seed + state.round.roundNumber });
     }
-    return state;
   }
+  return state;
+}
 
+describe("full game simulation and final rankings (rulebook §9.1, §10) — 5-player mode", () => {
   it("plays all 9 rounds to completion and produces final scores + rankings for all 5 seats", () => {
-    const state = playFullGame(2024);
+    const state = playFullGame(5, 2024);
     expect(state.phase).toBe("gameOver");
     expect(state.finalScores).not.toBeNull();
-    expect(Object.keys(state.finalScores!).length).toBe(PLAYER_COUNT);
+    expect(Object.keys(state.finalScores!).length).toBe(5);
     for (const p of state.players) {
       expect(p.predictions.every((v) => v !== null)).toBe(true);
       expect(p.actualWins.every((v) => v !== null)).toBe(true);
       expect(p.scores.every((v) => v !== null)).toBe(true);
     }
     expect(state.finalRankings).not.toBeNull();
-    expect(state.finalRankings!.length).toBe(PLAYER_COUNT);
+    expect(state.finalRankings!.length).toBe(5);
   });
 
   it("final score equals the sum of the 9 recorded per-round scores", () => {
-    const state = playFullGame(555);
+    const state = playFullGame(5, 555);
     for (const p of state.players) {
       const expected = p.scores.reduce((sum: number, v) => sum + (v ?? 0), 0);
       expect(state.finalScores![p.seat]).toBe(expected);
@@ -444,40 +545,104 @@ describe("full game simulation and final rankings (rulebook §9.1, §10)", () =>
   });
 });
 
+describe("full game simulation and final rankings — 8-player mode", () => {
+  it("plays all 9 rounds to completion with 8 players and produces final scores + rankings for all 8 seats", () => {
+    const state = playFullGame(8, 2024);
+    expect(state.phase).toBe("gameOver");
+    expect(state.playerCount).toBe(8);
+    expect(state.finalScores).not.toBeNull();
+    expect(Object.keys(state.finalScores!).length).toBe(8);
+    for (const p of state.players) {
+      expect(p.predictions.every((v) => v !== null)).toBe(true);
+      expect(p.actualWins.every((v) => v !== null)).toBe(true);
+      expect(p.scores.every((v) => v !== null)).toBe(true);
+    }
+    expect(state.finalRankings).not.toBeNull();
+    expect(state.finalRankings!.length).toBe(8);
+  });
+
+  it("round 9 deals each of the 8 players exactly 9 cards, using the entire 72-card deck with nothing left over", () => {
+    let state = startGame(8, 4);
+    while (state.round.roundNumber < 9) {
+      state = playFullGameOneRound(state);
+    }
+    for (let seat = 0; seat < 8; seat++) {
+      expect(state.round.hands[seat].length).toBe(9);
+    }
+    const totalDealt = Object.values(state.round.hands).reduce((sum, hand) => sum + hand.length, 0);
+    expect(totalDealt).toBe(72); // 8 players x 9 cards = the full deck
+  });
+
+  it("final score equals the sum of the 9 recorded per-round scores, with 8 players", () => {
+    const state = playFullGame(8, 555);
+    for (const p of state.players) {
+      const expected = p.scores.reduce((sum: number, v) => sum + (v ?? 0), 0);
+      expect(state.finalScores![p.seat]).toBe(expected);
+    }
+  });
+
+  /** Advances `state` (already in "predicting") through one full round (predict all + play every turn), landing back in "predicting" for the next round. */
+  function playFullGameOneRound(state: DestinyWar39State): DestinyWar39State {
+    let s = state;
+    const playerCount = s.playerCount;
+    for (let seat = 0; seat < playerCount; seat++) {
+      s = applyAction(s, { type: "predict", seat, value: 0, hidden: false });
+    }
+    while (s.phase === "playing") {
+      const round = s.round;
+      const played = new Set(round.playsThisTurn.map((p) => p.seat));
+      let actingSeat: number | null = null;
+      if (round.roundNumber === 1) {
+        for (let seat = 0; seat < playerCount; seat++) if (!played.has(seat)) { actingSeat = seat; break; }
+      } else {
+        const startIdx = s.seatOrder.indexOf(round.turnLeader);
+        for (let i = 0; i < playerCount; i++) {
+          const candidate = s.seatOrder[(startIdx + i) % playerCount];
+          if (!played.has(candidate)) { actingSeat = candidate; break; }
+        }
+      }
+      if (actingSeat === null) break;
+      const card = round.hands[actingSeat][0];
+      s = applyAction(s, { type: "play", seat: actingSeat, cardId: card.id });
+    }
+    return applyAction(s, { type: "nextRound", seed: state.round.roundNumber * 1000 + 7 });
+  }
+});
+
 describe("lastCompletedRound — card history for the UI's '직전 라운드' view", () => {
   function fastForwardToPlaying(state: DestinyWar39State): DestinyWar39State {
     let s = state;
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    for (let seat = 0; seat < 5; seat++) {
       s = applyAction(s, { type: "predict", seat, value: 0, hidden: false });
     }
     return s;
   }
 
   it("is null before any round has finished", () => {
-    const state = startGame(1);
+    const state = startGame(5, 1);
     expect(state.lastCompletedRound).toBeNull();
   });
 
   it("records every player's exact card in round.turnRecords once a turn resolves", () => {
-    let state = startGame(4);
+    let state = startGame(5, 4);
     state = fastForwardToPlaying(state);
-    const expectedBySeat = new Map(Array.from({ length: PLAYER_COUNT }, (_, seat) => [seat, state.round.hands[seat][0]]));
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    const expectedBySeat = new Map(Array.from({ length: 5 }, (_, seat) => [seat, state.round.hands[seat][0]]));
+    for (let seat = 0; seat < 5; seat++) {
       const card = state.round.hands[seat][0];
       state = applyAction(state, { type: "play", seat, cardId: card.id });
     }
     expect(state.phase).toBe("roundEnd");
     const turnRecord = state.round.turnRecords[0];
-    expect(turnRecord.plays).toHaveLength(PLAYER_COUNT);
+    expect(turnRecord.plays).toHaveLength(5);
     for (const { seat, card } of turnRecord.plays) {
       expect(card).toEqual(expectedBySeat.get(seat));
     }
   });
 
   it("snapshots the finished round into state.lastCompletedRound as soon as it completes", () => {
-    let state = startGame(4);
+    let state = startGame(5, 4);
     state = fastForwardToPlaying(state);
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    for (let seat = 0; seat < 5; seat++) {
       const card = state.round.hands[seat][0];
       state = applyAction(state, { type: "play", seat, cardId: card.id });
     }
@@ -487,9 +652,9 @@ describe("lastCompletedRound — card history for the UI's '직전 라운드' vi
   });
 
   it("keeps the previous round's card history available after nextRound deals the following round", () => {
-    let state = startGame(4);
+    let state = startGame(5, 4);
     state = fastForwardToPlaying(state);
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    for (let seat = 0; seat < 5; seat++) {
       const card = state.round.hands[seat][0];
       state = applyAction(state, { type: "play", seat, cardId: card.id });
     }
@@ -501,11 +666,11 @@ describe("lastCompletedRound — card history for the UI's '직전 라운드' vi
     // ...but round 1's card-by-card history is still fully inspectable.
     expect(state.lastCompletedRound).toEqual(round1History);
     expect(state.lastCompletedRound!.roundNumber).toBe(1);
-    expect(state.lastCompletedRound!.turnRecords[0].plays).toHaveLength(PLAYER_COUNT);
+    expect(state.lastCompletedRound!.turnRecords[0].plays).toHaveLength(5);
   });
 
   it("also snapshots the final round (9) into lastCompletedRound when the game ends", () => {
-    let state = startGame(4);
+    let state = startGame(5, 4);
     while (state.phase !== "gameOver") {
       if (state.phase === "predicting") {
         state = fastForwardToPlaying(state);
@@ -515,15 +680,15 @@ describe("lastCompletedRound — card history for the UI's '직전 라운드' vi
         let actingSeat = 0;
         if (round.roundNumber >= 2) {
           const startIdx = state.seatOrder.indexOf(round.turnLeader);
-          for (let i = 0; i < PLAYER_COUNT; i++) {
-            const candidate = state.seatOrder[(startIdx + i) % PLAYER_COUNT];
+          for (let i = 0; i < 5; i++) {
+            const candidate = state.seatOrder[(startIdx + i) % 5];
             if (!played.has(candidate)) {
               actingSeat = candidate;
               break;
             }
           }
         } else {
-          for (let s = 0; s < PLAYER_COUNT; s++) if (!played.has(s)) { actingSeat = s; break; }
+          for (let s = 0; s < 5; s++) if (!played.has(s)) { actingSeat = s; break; }
         }
         const card = round.hands[actingSeat][0];
         state = applyAction(state, { type: "play", seat: actingSeat, cardId: card.id });
@@ -539,15 +704,15 @@ describe("lastCompletedRound — card history for the UI's '직전 라운드' vi
 
 describe("prediction vs. actual-wins tracking (status board)", () => {
   it("round.winsThisRound increments only the turn winner, and stays at 0 for everyone else", () => {
-    let state = startGame(4);
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    let state = startGame(5, 4);
+    for (let seat = 0; seat < 5; seat++) {
       state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
     }
     expect(state.phase).toBe("playing");
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    for (let seat = 0; seat < 5; seat++) {
       expect(state.round.winsThisRound[seat]).toBe(0);
     }
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    for (let seat = 0; seat < 5; seat++) {
       const card = state.round.hands[seat][0];
       state = applyAction(state, { type: "play", seat, cardId: card.id });
     }
@@ -558,10 +723,10 @@ describe("prediction vs. actual-wins tracking (status board)", () => {
   });
 
   it("folds each player's prediction + actual wins + score into their permanent record when the round ends", () => {
-    let state = startGame(4);
+    let state = startGame(5, 4);
     // Round 1 only allows predicting 0 or 1; seat 0 predicts 1, everyone else predicts 0.
     state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: false });
-    for (let seat = 1; seat < PLAYER_COUNT; seat++) {
+    for (let seat = 1; seat < 5; seat++) {
       state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
     }
     let seatToAct = 0;
@@ -583,15 +748,15 @@ describe("prediction vs. actual-wins tracking (status board)", () => {
 
 describe("bot support (getValidMoves / chooseBotAction)", () => {
   it("offers exactly roundNumber+1 prediction candidates (0..roundNumber)", () => {
-    const state = startGame(1);
+    const state = startGame(5, 1);
     const moves = getValidMoves(state, 0);
     expect(moves.length).toBe(state.round.roundNumber + 1);
     expect(moves.every((m) => m.type === "predict" && !m.hidden)).toBe(true);
   });
 
   it("chooseBotAction always returns a legal move for the current phase", () => {
-    let state = startGame(42);
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    let state = startGame(5, 42);
+    for (let seat = 0; seat < 5; seat++) {
       const action = chooseBotAction(state, seat, 5, () => 0.5);
       expect(action).not.toBeNull();
       expect(action!.type).toBe("predict");
@@ -604,9 +769,25 @@ describe("bot support (getValidMoves / chooseBotAction)", () => {
   });
 
   it("returns null when the seat has nothing legal to do", () => {
-    let state = startGame(1);
+    let state = startGame(5, 1);
     state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: false });
     const action = chooseBotAction(state, 0, 5);
     expect(action).toBeNull(); // seat 0 already predicted this round
+  });
+
+  it("also produces legal moves in 8-player mode (bot strength normalizes against the mode's own max number, 62)", () => {
+    let state = startGame(8, 42);
+    for (let seat = 0; seat < 8; seat++) {
+      const action = chooseBotAction(state, seat, 5, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(action!.type).toBe("predict");
+      state = applyAction(state, action!);
+    }
+    expect(state.phase).toBe("playing");
+    for (let seat = 0; seat < 8; seat++) {
+      const action = chooseBotAction(state, seat, 5, () => 0.5);
+      expect(action).not.toBeNull();
+      expect(action!.type).toBe("play");
+    }
   });
 });

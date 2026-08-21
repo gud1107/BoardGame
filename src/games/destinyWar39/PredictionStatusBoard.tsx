@@ -1,6 +1,6 @@
 "use client";
 
-import { PLAYER_COUNT, visibleCurrentPrediction, type DestinyWar39State, type SeatIndex } from "./engine";
+import { visibleCurrentPrediction, type DestinyWar39State, type SeatIndex } from "./engine";
 
 export interface PredictionStatusBoardProps {
   state: DestinyWar39State;
@@ -22,7 +22,7 @@ export default function PredictionStatusBoard({ state, viewerSeat, names, connec
     <aside className="flex w-full shrink-0 flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3 lg:w-64">
       <h3 className="px-1 text-xs font-semibold tracking-wide text-white/50 uppercase">예측 현황</h3>
       <div className="flex flex-col gap-1.5">
-        {Array.from({ length: PLAYER_COUNT }, (_, seat) => {
+        {Array.from({ length: state.playerCount }, (_, seat) => {
           const isMe = seat === viewerSeat;
           const player = state.players.find((p) => p.seat === seat)!;
           const total = player.scores.reduce((sum: number, v) => sum + (v ?? 0), 0);

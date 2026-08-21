@@ -2,7 +2,7 @@
 
 import Overlay from "@/components/Overlay";
 import { CardFace } from "./CardFace";
-import { PLAYER_COUNT, visiblePastPrediction, type DestinyWar39State, type SeatIndex } from "./engine";
+import { visiblePastPrediction, type DestinyWar39State, type SeatIndex } from "./engine";
 
 export interface LastRoundHistoryModalProps {
   state: DestinyWar39State;
@@ -42,7 +42,7 @@ export default function LastRoundHistoryModal({ state, viewerSeat, names, onClos
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2.5">
-                  {Array.from({ length: PLAYER_COUNT }, (_, seat) => {
+                  {Array.from({ length: state.playerCount }, (_, seat) => {
                     const p = t.plays.find((x) => x.seat === seat);
                     if (!p) return null;
                     const isWinner = seat === t.winnerSeat;
@@ -52,7 +52,7 @@ export default function LastRoundHistoryModal({ state, viewerSeat, names, onClos
                           {seatLabel(seat)}
                           {isWinner ? " 🏆" : ""}
                         </span>
-                        <CardFace card={p.card} size="sm" className={isWinner ? "ring-2 ring-amber-300/70" : ""} />
+                        <CardFace card={p.card} playerCount={state.playerCount} size="sm" className={isWinner ? "ring-2 ring-amber-300/70" : ""} />
                       </div>
                     );
                   })}
@@ -72,7 +72,7 @@ export default function LastRoundHistoryModal({ state, viewerSeat, names, onClos
                 </tr>
               </thead>
               <tbody>
-                {Array.from({ length: PLAYER_COUNT }, (_, seat) => {
+                {Array.from({ length: state.playerCount }, (_, seat) => {
                   const idx = round.roundNumber - 1;
                   const player = state.players.find((p) => p.seat === seat)!;
                   const visible = visiblePastPrediction(state, viewerSeat, seat, round.roundNumber);

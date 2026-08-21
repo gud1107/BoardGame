@@ -1,9 +1,14 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { PLAYER_COUNT, TOTAL_ROUNDS } from "./engine";
+import { deckModeConfig, deckSizeFor, reverseValuesFor, TOTAL_ROUNDS, type PlayerCount } from "./engine";
 
-export default function RulebookModal({ onClose }: { onClose: () => void }) {
+export default function RulebookModal({ onClose, playerCount }: { onClose: () => void; playerCount: PlayerCount }) {
+  const { zeroCount, deathCount, maxNumber } = deckModeConfig(playerCount);
+  const deckSize = deckSizeFor(playerCount);
+  const reverseValues = reverseValuesFor(playerCount);
+  const reverseLabel = reverseValues.join(" / ");
+
   return (
     <Overlay title="📖 운명전쟁39 룰북" onClose={onClose} wide>
       <div className="flex flex-col gap-5 text-sm text-white/80">
@@ -12,12 +17,12 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <p className="text-white/70">
             매 라운드 자신이 몇 번 승리할지 예측하고, 실제 승수가 정확히 그 예측과 일치해야 점수를 얻습니다.
             <span className="text-fuchsia-300"> 많이 이기는 게 아니라, 정확히 예측한 만큼만 이기는 것</span>이 핵심입니다.
-            {PLAYER_COUNT}인 고정, 총 {TOTAL_ROUNDS}라운드로 진행됩니다.
+            {playerCount}인 모드, 총 {TOTAL_ROUNDS}라운드로 진행됩니다.
           </p>
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">카드 구성 (총 45장)</h3>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">카드 구성 (총 {deckSize}장)</h3>
           <div className="overflow-x-auto rounded-xl border border-white/10">
             <table className="w-full min-w-[380px] border-collapse text-xs">
               <thead>
@@ -31,36 +36,41 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
                 <tr className="border-t border-white/10">
                   <td className="px-2 py-1.5 font-semibold text-white/80">0</td>
                   <td className="px-2 py-1.5">평소엔 가장 약하지만, 데스카드를 만나면 역전승. 리버스 상태에선 가장 강함</td>
-                  <td className="px-2 py-1.5 text-right">5장</td>
+                  <td className="px-2 py-1.5 text-right">{zeroCount}장</td>
                 </tr>
                 <tr className="border-t border-white/10">
-                  <td className="px-2 py-1.5 font-semibold text-white/80">1 ~ 39</td>
-                  <td className="px-2 py-1.5">숫자가 클수록 강함 (11 / 22 / 33은 리버스 카드 겸용)</td>
+                  <td className="px-2 py-1.5 font-semibold text-white/80">1 ~ {maxNumber}</td>
+                  <td className="px-2 py-1.5">숫자가 클수록 강함 ({reverseLabel}은 리버스 카드 겸용)</td>
                   <td className="px-2 py-1.5 text-right">각 1장</td>
                 </tr>
                 <tr className="border-t border-white/10">
                   <td className="px-2 py-1.5 font-semibold text-white/80">💀 데스카드</td>
-                  <td className="px-2 py-1.5">평소 가장 강한 카드</td>
-                  <td className="px-2 py-1.5 text-right">1장</td>
+                  <td className="px-2 py-1.5">
+                    평소 가장 강한 카드
+                    {deathCount > 1 && ". 이 모드는 2장이 모두 풀려 있어, 같은 턴에 서로 다른 두 명이 동시에 낼 수도 있습니다 — 그 경우 먼저 공개한 쪽이 승리"}
+                  </td>
+                  <td className="px-2 py-1.5 text-right">{deathCount}장</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-xs text-white/50">매 라운드 시작 시 45장 전체를 다시 섞어 배분합니다. 사용된 카드도 폐기되지 않고 다음 라운드에 다시 등장할 수 있습니다.</p>
+          <p className="mt-2 text-xs text-white/50">
+            매 라운드 시작 시 {deckSize}장 전체를 다시 섞어 배분합니다. 사용된 카드도 폐기되지 않고 다음 라운드에 다시 등장할 수 있습니다.
+          </p>
         </section>
 
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">라운드 구조 — &quot;라운드 R은 R장, R턴&quot;</h3>
           <p className="text-white/70">
             라운드 번호가 R이면, 각자 카드 <b>R장</b>을 받고 그 라운드는 <b>R번의 턴</b>으로 진행됩니다. (1라운드=1턴, 2라운드=2턴 … 9라운드=9턴)
-            각 턴마다 5명이 카드를 1장씩 내고 승부해 그 턴의 승자를 정하며, 한 라운드의 <b>실제 승수</b>는 그 라운드에서 이긴 턴의 개수(0~R)입니다.
+            각 턴마다 {playerCount}명이 카드를 1장씩 내고 승부해 그 턴의 승자를 정하며, 한 라운드의 <b>실제 승수</b>는 그 라운드에서 이긴 턴의 개수(0~R)입니다.
           </p>
         </section>
 
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">카드 공개 순서</h3>
           <ul className="list-disc space-y-1 pl-4 text-xs text-white/70">
-            <li>1라운드: 5명 전원 동시 공개 (선/후공 없음)</li>
+            <li>1라운드: {playerCount}명 전원 동시 공개 (선/후공 없음)</li>
             <li>2라운드부터: 그 턴의 승자가 곧바로 다음 턴의 선공이 되고, 이후 좌석 순서(시계방향)로 공개</li>
             <li>2라운드부터는 그 라운드에 받은 손패 중 원하는 카드를 자유롭게 골라 낼 수 있습니다</li>
           </ul>
@@ -69,7 +79,9 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">승부 판정</h3>
           <ul className="list-disc space-y-1 pl-4 text-xs text-white/70">
-            <li>그 턴에 나온 5장 중 리버스 카드(11/22/33) 개수가 <b>홀수</b>면 리버스 활성(작은 숫자 승리), <b>짝수</b>면 비활성(큰 숫자 승리)</li>
+            <li>
+              그 턴에 나온 카드 중 리버스 카드({reverseLabel}) 개수가 <b>홀수</b>면 리버스 활성(작은 숫자 승리), <b>짝수</b>면 비활성(큰 숫자 승리)
+            </li>
             <li>
               리버스 <b>비활성</b>: 데스카드가 있고 0도 있으면 <b>0이 승리</b>(0의 유일한 카운터 상성). 데스카드만 있으면 데스카드 승리. 데스카드가 없으면 <b>가장 큰 숫자 승리</b> — 0은 이때 가장 약한 숫자라 다른 숫자에는 항상 진다(예: 35 vs 0 → 35 승리)
             </li>
@@ -77,6 +89,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               리버스 <b>활성</b>: 데스카드가 있으면 <b>데스카드가 0까지 포함해 무조건 승리</b>. 데스카드가 없으면 가장 작은 숫자 승리(0이 가장 강함)
             </li>
             <li>0 카드끼리 동률이면 그 턴(1라운드는 무작위 고정 좌석 순서 기준)에서 먼저 낸 사람이 승리</li>
+            {deathCount > 1 && <li>이 모드는 데스카드가 2장이라 같은 턴에 둘 다 나올 수 있습니다 — 그때도 0 카드와 동일하게 먼저 낸 사람이 승리</li>}
           </ul>
         </section>
 

@@ -6,7 +6,6 @@ import PredictionStatusBoard from "./PredictionStatusBoard";
 import LastRoundHistoryModal from "./LastRoundHistoryModal";
 import { CardFace } from "./CardFace";
 import {
-  PLAYER_COUNT,
   TOTAL_ROUNDS,
   visibleCurrentPrediction,
   visiblePastPrediction,
@@ -56,6 +55,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
 
   const round = state.round;
   const R = round.roundNumber;
+  const playerCount = state.playerCount;
 
   // Freeze-frame the trick that just resolved (winner glowing) for
   // TRICK_REVEAL_MS before letting the next turn / round-end summary render
@@ -121,7 +121,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
           )}
         </div>
         <div className="flex flex-wrap justify-center gap-4 py-2">
-          {Array.from({ length: PLAYER_COUNT }, (_, seat) => {
+          {Array.from({ length: playerCount }, (_, seat) => {
             const p = t.plays.find((x) => x.seat === seat);
             if (!p) return null;
             const isWinner = seat === t.winnerSeat;
@@ -133,6 +133,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
                 </span>
                 <CardFace
                   card={p.card}
+                  playerCount={playerCount}
                   size="lg"
                   className={isWinner ? "scale-110 ring-4 ring-amber-300/70 shadow-[0_0_25px_rgba(252,211,77,0.55)]" : ""}
                 />
@@ -268,7 +269,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
         >
           {round.roundNumber < TOTAL_ROUNDS ? `ROUND ${round.roundNumber + 1} 시작` : "최종 결과 보기"}
         </button>
-        {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+        {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} playerCount={playerCount} />}
         {historyModal}
       </div>
     );
@@ -298,7 +299,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
           </p>
           <div className="flex flex-wrap gap-2">
             {round.hands[viewerSeat].map((c) => (
-              <CardFace key={c.id} card={c} size="sm" />
+              <CardFace key={c.id} card={c} playerCount={playerCount} size="sm" />
             ))}
           </div>
 
@@ -340,12 +341,12 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
             </div>
           ) : (
             <p className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200">
-              예측을 확정했습니다. 다른 플레이어들의 예측을 기다리는 중… ({submittedCount}/{PLAYER_COUNT})
+              예측을 확정했습니다. 다른 플레이어들의 예측을 기다리는 중… ({submittedCount}/{playerCount})
             </p>
           )}
 
           <div className="flex flex-wrap gap-2 text-xs">
-            {Array.from({ length: PLAYER_COUNT }, (_, seat) => {
+            {Array.from({ length: playerCount }, (_, seat) => {
               const visible = visibleCurrentPrediction(state, viewerSeat, seat);
               const submitted = round.predictions[seat] !== null;
               return (
@@ -360,7 +361,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
               );
             })}
           </div>
-          {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+          {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} playerCount={playerCount} />}
           {historyModal}
         </div>
         <PredictionStatusBoard state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} />
@@ -378,8 +379,8 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
   let actingSeat: SeatIndex | null = null;
   if (!isSimultaneous) {
     const startIdx = state.seatOrder.indexOf(round.turnLeader);
-    for (let i = 0; i < PLAYER_COUNT; i++) {
-      const candidate = state.seatOrder[(startIdx + i) % PLAYER_COUNT];
+    for (let i = 0; i < playerCount; i++) {
+      const candidate = state.seatOrder[(startIdx + i) % playerCount];
       if (!played.has(candidate)) {
         actingSeat = candidate;
         break;
@@ -404,7 +405,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/50">
           <span>{isSimultaneous ? "전원 동시 공개" : `선공: ${seatLabel(round.turnLeader)}`}</span>
           <span className="flex flex-wrap gap-3">
-            {Array.from({ length: PLAYER_COUNT }, (_, seat) => (
+            {Array.from({ length: playerCount }, (_, seat) => (
               <span key={seat} className="text-white/70">
                 {seatLabel(seat)}: {round.winsThisRound[seat] ?? 0}승
               </span>
@@ -413,13 +414,13 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
         </div>
 
         <div className="flex flex-wrap gap-3">
-          {Array.from({ length: PLAYER_COUNT }, (_, seat) => {
+          {Array.from({ length: playerCount }, (_, seat) => {
             const p = round.playsThisTurn.find((x) => x.seat === seat);
             return (
               <div key={seat} className="flex flex-col items-center gap-1">
                 <span className="text-[11px] text-white/50">{seatLabel(seat)}</span>
                 {p ? (
-                  <CardFace card={p.card} size="md" />
+                  <CardFace card={p.card} playerCount={playerCount} size="md" />
                 ) : (
                   <span className="grid h-14 w-10 place-items-center rounded-lg border border-dashed border-white/15 text-white/20">?</span>
                 )}
@@ -433,7 +434,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
             <p className="text-xs text-white/50">낼 카드를 선택하세요 (남은 손패 {myHand.length}장)</p>
             <div className="flex flex-wrap gap-2">
               {myHand.map((c) => (
-                <CardFace key={c.id} card={c} size="md" interactive onClick={() => onAction({ type: "play", seat: viewerSeat, cardId: c.id })} className="hover:-translate-y-1" />
+                <CardFace key={c.id} card={c} playerCount={playerCount} size="md" interactive onClick={() => onAction({ type: "play", seat: viewerSeat, cardId: c.id })} className="hover:-translate-y-1" />
               ))}
             </div>
           </div>
@@ -453,7 +454,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
             </ul>
           </details>
         )}
-        {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+        {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} playerCount={playerCount} />}
         {historyModal}
       </div>
       <PredictionStatusBoard state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} />

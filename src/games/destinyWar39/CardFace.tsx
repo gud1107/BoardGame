@@ -1,6 +1,6 @@
 "use client";
 
-import { isReverseCard, type Card } from "./engine";
+import { isReverseCard, type Card, type PlayerCount } from "./engine";
 
 /**
  * Shared card-face rendering for 운명전쟁39 — used by every place a card is
@@ -31,15 +31,17 @@ export function cardLabel(card: Card): string {
 }
 
 /** Border/background/text classes for a card badge. Reverse cards intentionally do NOT reuse this alone — see `CardFace` for the full banner+watermark treatment. */
-export function cardBadgeClasses(card: Card): string {
+export function cardBadgeClasses(card: Card, playerCount: PlayerCount): string {
   if (card.kind === "death") return "border-rose-400/60 bg-rose-950/60 text-rose-200";
   if (card.value === 0) return "border-amber-400/60 bg-amber-950/50 text-amber-200";
-  if (isReverseCard(card)) return "border-fuchsia-400 bg-fuchsia-950/70 text-fuchsia-100";
+  if (isReverseCard(card, playerCount)) return "border-fuchsia-400 bg-fuchsia-950/70 text-fuchsia-100";
   return "border-white/20 bg-white/5 text-white/90";
 }
 
 export interface CardFaceProps {
   card: Card;
+  /** Which deck mode `card` was dealt from — needed to tell whether it's a reverse card (11/22/33 for 5-player, plus 44/55 for 8-player). */
+  playerCount: PlayerCount;
   size?: CardFaceSize;
   /** Renders a <button> (clickable hand card) instead of a <span> (display-only). */
   interactive?: boolean;
@@ -48,8 +50,8 @@ export interface CardFaceProps {
   className?: string;
 }
 
-export function CardFace({ card, size = "md", interactive = false, onClick, className = "" }: CardFaceProps) {
-  const reverse = isReverseCard(card);
+export function CardFace({ card, playerCount, size = "md", interactive = false, onClick, className = "" }: CardFaceProps) {
+  const reverse = isReverseCard(card, playerCount);
   const { box, reverseBox, num, banner, watermark } = SIZE_MAP[size];
   const Tag = interactive ? "button" : "span";
 
@@ -57,7 +59,7 @@ export function CardFace({ card, size = "md", interactive = false, onClick, clas
     <Tag
       onClick={onClick}
       aria-label={reverse ? `리버스 카드 ${card.value}` : undefined}
-      className={`relative overflow-hidden rounded-lg border font-bold transition ${reverse ? reverseBox : box} ${num} ${cardBadgeClasses(card)} ${
+      className={`relative overflow-hidden rounded-lg border font-bold transition ${reverse ? reverseBox : box} ${num} ${cardBadgeClasses(card, playerCount)} ${
         // `outline` + `drop-shadow` (filter), deliberately NOT `ring`/`shadow` (box-shadow) — callers append their
         // own `ring-*`/`shadow-*` for winner emphasis via `className`, and box-shadow-based utilities would silently
         // clobber each other depending on Tailwind's generated CSS order. Different CSS properties compose safely.

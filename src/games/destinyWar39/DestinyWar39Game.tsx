@@ -10,10 +10,14 @@ import {
   applyAction,
   chooseBotAction,
   computeRankings,
-  PLAYER_COUNT,
+  DEFAULT_PLAYER_COUNT,
+  MAX_PLAYERS,
+  MIN_PLAYERS,
   startGame,
+  SUPPORTED_PLAYER_COUNTS,
   type DestinyWar39State,
   type EngineAction,
+  type PlayerCount,
   type SeatIndex,
 } from "./engine";
 import DestinyWar39Board from "./DestinyWar39Board";
@@ -32,21 +36,22 @@ import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficul
  * game's shared reveal->continue screen.
  */
 function destinyWar39CurrentActor(state: DestinyWar39State): SeatIndex | null {
+  const playerCount = state.playerCount;
   if (state.phase === "predicting") {
-    for (let s = 0; s < PLAYER_COUNT; s++) if (state.round.predictions[s] === null) return s;
+    for (let s = 0; s < playerCount; s++) if (state.round.predictions[s] === null) return s;
     return null;
   }
   if (state.phase === "playing") {
     const round = state.round;
     const played = new Set(round.playsThisTurn.map((p) => p.seat));
-    if (played.size >= PLAYER_COUNT) return null;
+    if (played.size >= playerCount) return null;
     if (round.roundNumber === 1) {
-      for (let s = 0; s < PLAYER_COUNT; s++) if (!played.has(s)) return s;
+      for (let s = 0; s < playerCount; s++) if (!played.has(s)) return s;
       return null;
     }
     const startIdx = state.seatOrder.indexOf(round.turnLeader);
-    for (let i = 0; i < PLAYER_COUNT; i++) {
-      const candidate = state.seatOrder[(startIdx + i) % PLAYER_COUNT];
+    for (let i = 0; i < playerCount; i++) {
+      const candidate = state.seatOrder[(startIdx + i) % playerCount];
       if (!played.has(candidate)) return candidate;
     }
     return null;
@@ -56,13 +61,18 @@ function destinyWar39CurrentActor(state: DestinyWar39State): SeatIndex | null {
 
 /**
  * Online-room multiplayer entry point — same lockstep pattern as every other
- * `<Game>Game.tsx` in this project (closely modeled on coyote/CoyoteGame.tsx),
- * simplified for a FIXED 5-player table (no adjustable player-count slider):
- * every connected client independently computes the full `DestinyWar39State`
- * from a shared RNG seed plus replayed `EngineAction`s broadcast over
- * Supabase Realtime — there is no server-authoritative engine. Hidden
- * predictions stay unredacted inside the state itself; secrecy is enforced
- * purely at the UI layer (`DestinyWar39Board.tsx`'s use of
+ * `<Game>Game.tsx` in this project (closely modeled on coyote/CoyoteGame.tsx).
+ * Table size is chosen once by the host at room-creation time from the two
+ * supported modes (5 or 8 players, `SUPPORTED_PLAYER_COUNTS`) — same
+ * "host picks `targetPlayerCount`, tracks it into presence, everyone else
+ * reads it off the host's presence record" pattern coup/CoupGame.tsx uses
+ * for its continuous 3–6 range, just restricted to the two discrete deck
+ * configurations this game's rulebook defines (§2). Every connected client
+ * independently computes the full `DestinyWar39State` from a shared RNG
+ * seed plus replayed `EngineAction`s broadcast over Supabase Realtime —
+ * there is no server-authoritative engine. Hidden predictions stay
+ * unredacted inside the state itself; secrecy is enforced purely at the UI
+ * layer (`DestinyWar39Board.tsx`'s use of
  * `visibleCurrentPrediction`/`visiblePastPrediction`).
  */
 
@@ -72,6 +82,7 @@ type Occupant = {
   name: string;
   playerId?: string;
   isHost?: boolean;
+  targetPlayerCount?: PlayerCount;
 };
 type Phase =
   | "choose"
@@ -113,6 +124,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
   const [intent, setIntent] = useState<"create" | "join">(roomFromUrl ? "join" : "create");
   const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
+  const [targetPlayerCount, setTargetPlayerCount] = useState<PlayerCount>(DEFAULT_PLAYER_COUNT);
   const [formError, setFormError] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -136,6 +148,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const startSentRef = useRef(false);
+  const playerCountRef = useRef(targetPlayerCount);
   const isHost = intent === "create";
 
   const gameStateRef = useRef<DestinyWar39State | null>(null);
@@ -155,6 +168,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
       setFormError("4자리 초대 코드를 정확히 입력하세요.");
       return;
     }
+    playerCountRef.current = targetPlayerCount;
     setMyName(name);
     setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
     setRoomCode(code);
@@ -174,13 +188,15 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
 
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seed = payload?.seed as number;
+      const playerCount = (payload?.playerCount as PlayerCount | undefined) ?? DEFAULT_PLAYER_COUNT;
       const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      playerCountRef.current = playerCount;
       botSeatsRef.current = roster;
       setBotSeats(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
-      setGameState(startGame(seed));
+      setGameState(startGame(playerCount, seed));
       setFinalResult(null);
       setPhase("playing");
     });
@@ -250,7 +266,8 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
           const taken = new Set([...existing.map((o) => o.seat), ...botSeatsRef.current]);
           seat = 0;
           while (taken.has(seat)) seat++;
-          if (seat >= PLAYER_COUNT) {
+          const hostRecord = existing.find((o) => o.isHost);
+          if (hostRecord && seat >= hostRecord.targetPlayerCount!) {
             setPhase("room-full");
             return;
           }
@@ -262,7 +279,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
           seat,
           name: myName,
           playerId: myPlayerId,
-          ...(isHost ? { isHost: true } : {}),
+          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
         } satisfies Occupant);
         channel.send({ type: "broadcast", event: "state-request", payload: {} });
         setPhase((p) => (p === "connecting" ? "waiting" : p));
@@ -278,6 +295,8 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
   }, [roomCode, myName, myPlayerId, isHost]);
 
   const deviceId = typeof window !== "undefined" ? getDeviceId() : "";
+  const host = occupants.find((o) => o.isHost);
+  const knownTargetPlayerCount = host?.targetPlayerCount ?? targetPlayerCount;
   const reclaimAttemptsRef = useRef(0);
 
   useEffect(() => {
@@ -304,7 +323,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
       seat: next,
       name: myName,
       playerId: myPlayerId,
-      ...(isHost ? { isHost: true } : {}),
+      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
@@ -313,16 +332,16 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({
       type: "broadcast",
       event: "game-start",
-      payload: { seed: randomSeed(), botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
+      payload: { seed: randomSeed(), playerCount: playerCountRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
     });
   }, []);
 
   useEffect(() => {
     if (phase !== "waiting" || !isHost || startSentRef.current) return;
-    if (occupants.length + botSeats.length >= PLAYER_COUNT) {
+    if (occupants.length + botSeats.length >= knownTargetPlayerCount) {
       sendGameStart();
     }
-  }, [occupants, botSeats, phase, isHost, sendGameStart]);
+  }, [occupants, botSeats, phase, knownTargetPlayerCount, isHost, sendGameStart]);
 
   const addBotAtSeat = useCallback(
     (seat: SeatIndex, level: BotLevel) => {
@@ -385,23 +404,25 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
 
   const names: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    const count = gameState?.playerCount ?? knownTargetPlayerCount;
+    for (let seat = 0; seat < count; seat++) {
       const occ = occupants.find((o) => o.seat === seat);
       const botIdx = botSeats.indexOf(seat);
       map[seat] = seat === mySeat ? myName : (occ?.name ?? (botIdx >= 0 ? botDisplayName(botIdx, botLevels[botIdx]) : "상대"));
     }
     return map;
-  }, [occupants, mySeat, myName, botSeats, botLevels]);
+  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels]);
 
   const connectedSeats = useMemo(() => new Set([...occupants.map((o) => o.seat), ...botSeats]), [occupants, botSeats]);
   const ids: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
-    for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+    const count = gameState?.playerCount ?? knownTargetPlayerCount;
+    for (let seat = 0; seat < count; seat++) {
       const occ = occupants.find((o) => o.seat === seat);
       map[seat] = occ?.playerId ?? `${roomCode}:${seat}`;
     }
     return map;
-  }, [roomCode, occupants]);
+  }, [roomCode, gameState, knownTargetPlayerCount, occupants]);
 
   function handleGameEnd() {
     if (!gameState || gameState.phase !== "gameOver" || !gameState.finalScores) return;
@@ -489,7 +510,9 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
       <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">🔮</span>
         <h2 className="text-lg font-bold text-white">운명전쟁39 온라인 대전</h2>
-        <p className="text-sm text-white/50">정확히 {PLAYER_COUNT}명이 각자 기기로 접속해서 9라운드 예측 승부를 겨뤄요.</p>
+        <p className="text-sm text-white/50">
+          {MIN_PLAYERS}인 또는 {MAX_PLAYERS}인 모드로 각자 기기에서 접속해 9라운드 예측 승부를 겨뤄요.
+        </p>
         <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
           <button
             onClick={() => {
@@ -534,6 +557,27 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
             />
           </label>
         )}
+        {intent === "create" && (
+          <div className="flex flex-col gap-1.5 text-sm text-white/70">
+            인원수
+            <div className="flex gap-2">
+              {SUPPORTED_PLAYER_COUNTS.map((count) => (
+                <button
+                  key={count}
+                  type="button"
+                  onClick={() => setTargetPlayerCount(count)}
+                  className={`flex-1 rounded-xl border py-2.5 text-sm font-semibold transition ${
+                    targetPlayerCount === count
+                      ? "border-fuchsia-400 bg-fuchsia-500/20 text-fuchsia-200"
+                      : "border-white/15 text-white/70 hover:border-white/30"
+                  }`}
+                >
+                  {count}인 모드
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">{formError}</p>}
         <div className="flex gap-2">
           <button onClick={() => setPhase("choose")} className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30">
@@ -560,10 +604,10 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
               🔗 초대 링크 복사
             </button>
             <p className="text-xs text-white/50">
-              {occupants.length + botSeats.length} / {PLAYER_COUNT}명 참여 중
+              {occupants.length + botSeats.length} / {knownTargetPlayerCount}명 참여 중 ({knownTargetPlayerCount}인 모드)
             </p>
             <div className="mt-2 flex flex-col gap-1.5">
-              {Array.from({ length: PLAYER_COUNT }, (_, seat) => {
+              {Array.from({ length: knownTargetPlayerCount }, (_, seat) => {
                 const occ = occupants.find((o) => o.seat === seat);
                 const botIdx = botSeats.indexOf(seat);
                 const isBot = botIdx >= 0;
@@ -586,7 +630,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
                 );
               })}
             </div>
-            <p className="text-xs text-white/40">{PLAYER_COUNT}명이 모이면 자동으로 게임이 시작됩니다.</p>
+            <p className="text-xs text-white/40">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다.</p>
           </>
         )}
       </div>

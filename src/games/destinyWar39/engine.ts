@@ -1,6 +1,6 @@
 /**
  * Pure "운명전쟁39" rules engine — no React, no I/O. Implements the rulebook
- * at boardGameRule/운명전쟁39/운명전쟁39.md (Version 2.1, 공식 확정본).
+ * at boardGameRule/운명전쟁39/운명전쟁39.md (Version 2.2, 공식 확정본).
  *
  * Same online-multiplayer trust model as every other game in this project
  * (see Coyote/Avalon's module docs): every connected client independently
@@ -12,27 +12,34 @@
  *
  * Core structure (all confirmed via extensive back-and-forth with the
  * product owner — see the rulebook's §0 changelog):
- *  - Fixed 5 players, 9 rounds. Round R deals each player R cards (freshly
- *    reshuffled from the full 45-card deck every round — nothing is ever
- *    discarded) and consists of R turns. A turn = all 5 players reveal one
- *    card; a round's "actual win count" is how many of its R turns a player
- *    won (0..R).
+ *  - Two selectable player counts, 5 or 8 (rulebook §2) — chosen once at
+ *    room creation (same `startGame(playerCount, seed)` + host-picks-target
+ *    pattern as coup/engine.ts), fixed for the whole game. 9 rounds either
+ *    way. Round R deals each player R cards (freshly reshuffled from the
+ *    mode's full deck every round — nothing is ever discarded) and consists
+ *    of R turns. A turn = all `playerCount` players reveal one card; a
+ *    round's "actual win count" is how many of its R turns a player won
+ *    (0..R).
  *  - Round 1 is simultaneous reveal (no lead order). From round 2 on, each
  *    turn's winner immediately becomes the next turn's leader — this chains
  *    across round boundaries too (round R's turn-1 leader = round R-1's
  *    last-turn winner), so there is no separate "round winner" concept.
  *  - Turn resolution: reverse is active iff the count of reverse cards
- *    (11/22/33) among that turn's 5 cards is odd. Death card is normally the
- *    strongest card but loses outright to 0 when reverse is inactive — that
- *    counter is narrowly scoped to the Death-vs-0 matchup only: with reverse
- *    inactive and no Death in play, 0 is just the weakest ordinary number
- *    (highest number wins as usual). When reverse is active the Death/0
- *    exception is cancelled and Death is strongest again (beats 0 too), and
- *    0 becomes the strongest ordinary number (lowest value wins). Ties are
- *    only possible among 0 cards (every other
- *    value 1-39 is unique in the deck) and are broken by whoever revealed
- *    earliest — the fixed random seat order for round 1's simultaneous
- *    reveal, or the turn's actual reveal sequence otherwise.
+ *    (multiples of 11 up to the mode's max number — 11/22/33 for 5-player,
+ *    plus 44/55 for 8-player) among that turn's cards is odd. Death card is
+ *    normally the strongest card but loses outright to 0 when reverse is
+ *    inactive — that counter is narrowly scoped to the Death-vs-0 matchup
+ *    only: with reverse inactive and no Death in play, 0 is just the
+ *    weakest ordinary number (highest number wins as usual). When reverse
+ *    is active the Death/0 exception is cancelled and Death is strongest
+ *    again (beats 0 too), and 0 becomes the strongest ordinary number
+ *    (lowest value wins). Ties are only possible among 0 cards (every other
+ *    number value is unique in the deck) or, in 8-player mode only, among
+ *    the deck's 2 Death cards if both land in the same turn — both cases
+ *    break by whoever revealed earliest (product owner's explicit call:
+ *    same convention as the 0-tie rule) — the fixed random seat order for
+ *    round 1's simultaneous reveal, or the turn's actual reveal sequence
+ *    otherwise.
  *  - Each player predicts a fresh win count (0..R) every round, independent
  *    of prior rounds. Score per round: P>=1 → success +P*2 / fail
  *    -|P-A|*2 (R irrelevant). P==0 → success +R / fail -R.
@@ -46,15 +53,24 @@
 
 export type SeatIndex = number;
 
-export const PLAYER_COUNT = 5;
 export const TOTAL_ROUNDS = 9;
+
+/** The two selectable table sizes (rulebook §2) — chosen once at room creation, fixed for the whole game. */
+export const SUPPORTED_PLAYER_COUNTS = [5, 8] as const;
+export type PlayerCount = (typeof SUPPORTED_PLAYER_COUNTS)[number];
+export const DEFAULT_PLAYER_COUNT: PlayerCount = 5;
+export const MIN_PLAYERS: PlayerCount = 5;
+export const MAX_PLAYERS: PlayerCount = 8;
 
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
 export { seededRng };
 
 // ---------------------------------------------------------------------------
-// Deck — 45 cards: 0×5, 1..39×1 each, Death×1 (rulebook §3).
+// Deck (rulebook §3) — per-mode composition, deck size always
+// playerCount × TOTAL_ROUNDS (round 9 deals the full deck out with nothing
+// left over): 5-player = 45 cards (0×5, 1..39×1, Death×1), 8-player = 72
+// cards (0×8, 1..62×1, Death×2).
 // ---------------------------------------------------------------------------
 
 export type CardKind = "number" | "death";
@@ -62,31 +78,61 @@ export type CardKind = "number" | "death";
 export interface Card {
   id: number;
   kind: CardKind;
-  /** Meaningful only for kind === "number" (0-39); unused (-1) for "death". */
+  /** Meaningful only for kind === "number" (0..maxNumber for the mode); unused (-1) for "death". */
   value: number;
 }
 
-const REVERSE_VALUES = new Set([11, 22, 33]);
-
-/** 11/22/33 are ordinary number cards that also count toward that turn's reverse parity (rulebook §3, §6.1). */
-export function isReverseCard(card: Card): boolean {
-  return card.kind === "number" && REVERSE_VALUES.has(card.value);
+export interface DeckModeConfig {
+  playerCount: PlayerCount;
+  zeroCount: number;
+  deathCount: number;
+  /** Highest ordinary number card in the deck (1..maxNumber, one of each). */
+  maxNumber: number;
 }
 
-export function buildDeck(): Card[] {
+const DECK_MODE_CONFIG: Record<PlayerCount, DeckModeConfig> = {
+  5: { playerCount: 5, zeroCount: 5, deathCount: 1, maxNumber: 39 },
+  8: { playerCount: 8, zeroCount: 8, deathCount: 2, maxNumber: 62 },
+};
+
+export function deckModeConfig(playerCount: PlayerCount): DeckModeConfig {
+  return DECK_MODE_CONFIG[playerCount];
+}
+
+/** Reverse cards are every multiple of 11 up to the mode's max number — 11/22/33 for 5-player (max 39), plus 44/55 for 8-player (max 62). */
+export function reverseValuesFor(playerCount: PlayerCount): number[] {
+  const { maxNumber } = deckModeConfig(playerCount);
+  const values: number[] = [];
+  for (let v = 11; v <= maxNumber; v += 11) values.push(v);
+  return values;
+}
+
+/** 11/22/33(/44/55 in 8-player mode) are ordinary number cards that also count toward that turn's reverse parity (rulebook §3, §6.1). */
+export function isReverseCard(card: Card, playerCount: PlayerCount): boolean {
+  if (card.kind !== "number" || card.value === 0) return false;
+  return card.value % 11 === 0 && card.value <= deckModeConfig(playerCount).maxNumber;
+}
+
+export function buildDeck(playerCount: PlayerCount = DEFAULT_PLAYER_COUNT): Card[] {
+  const { zeroCount, deathCount, maxNumber } = deckModeConfig(playerCount);
   const cards: Card[] = [];
   let id = 0;
-  for (let i = 0; i < 5; i++) cards.push({ id: id++, kind: "number", value: 0 });
-  for (let v = 1; v <= 39; v++) cards.push({ id: id++, kind: "number", value: v });
-  cards.push({ id: id++, kind: "death", value: -1 });
+  for (let i = 0; i < zeroCount; i++) cards.push({ id: id++, kind: "number", value: 0 });
+  for (let v = 1; v <= maxNumber; v++) cards.push({ id: id++, kind: "number", value: v });
+  for (let i = 0; i < deathCount; i++) cards.push({ id: id++, kind: "death", value: -1 });
   return cards;
 }
 
-export const DECK_SIZE = buildDeck().length; // 45, verified in DestinyWar39.test.ts
+export function deckSizeFor(playerCount: PlayerCount): number {
+  return buildDeck(playerCount).length;
+}
+
+/** Kept for the classic 5-player mode (still `45`, verified in DestinyWar39.test.ts). Use `deckSizeFor` for other modes. */
+export const DECK_SIZE = deckSizeFor(DEFAULT_PLAYER_COUNT);
 
 // ---------------------------------------------------------------------------
 // Scoring (rulebook §9 — confirmed formula, do not alter without re-checking
-// the §9.2 test vectors).
+// the §9.2 test vectors). Player-count independent — only R, P, A matter.
 // ---------------------------------------------------------------------------
 
 export function scoreRound(prediction: number, actual: number, roundNumber: number): number {
@@ -123,7 +169,7 @@ export interface TurnPlay {
 
 export interface TurnRecord {
   turnNumber: number;
-  /** All 5 plays, in reveal order (see resolveTurn's revealOrder param). */
+  /** All `playerCount` plays, in reveal order (see resolveTurn's revealOrder param). */
   plays: TurnPlay[];
   reverseActive: boolean;
   winnerSeat: SeatIndex;
@@ -152,6 +198,8 @@ export interface RankedSeat {
 
 export interface DestinyWar39State {
   phase: Phase;
+  /** Table size chosen at room creation (rulebook §2) — fixed for the whole game. */
+  playerCount: PlayerCount;
   /** Fixed clockwise seating, randomized once at game start — doubles as round 1's tie-break priority order (rulebook §5.1, §6.3). */
   seatOrder: SeatIndex[];
   round: RoundState;
@@ -175,26 +223,26 @@ export type EngineAction =
   | { type: "nextRound"; seed: number };
 
 // ---------------------------------------------------------------------------
-// Setup / dealing (rulebook §4.1 — full 45-card reshuffle every round, no discard)
+// Setup / dealing (rulebook §4.1 — full-deck reshuffle every round, no discard)
 // ---------------------------------------------------------------------------
 
-function dealRound(roundNumber: number, rng: () => number): Record<SeatIndex, Card[]> {
-  const deck = shuffle(buildDeck(), rng);
+function dealRound(roundNumber: number, rng: () => number, playerCount: PlayerCount): Record<SeatIndex, Card[]> {
+  const deck = shuffle(buildDeck(playerCount), rng);
   const hands: Record<SeatIndex, Card[]> = {};
   let idx = 0;
-  for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+  for (let seat = 0; seat < playerCount; seat++) {
     hands[seat] = deck.slice(idx, idx + roundNumber);
     idx += roundNumber;
   }
   return hands;
 }
 
-function freshRound(roundNumber: number, rng: () => number, turnLeader: SeatIndex): RoundState {
-  const hands = dealRound(roundNumber, rng);
+function freshRound(roundNumber: number, rng: () => number, turnLeader: SeatIndex, playerCount: PlayerCount): RoundState {
+  const hands = dealRound(roundNumber, rng, playerCount);
   const predictions: Record<SeatIndex, number | null> = {};
   const hiddenThisRound: Record<SeatIndex, boolean> = {};
   const winsThisRound: Record<SeatIndex, number> = {};
-  for (let seat = 0; seat < PLAYER_COUNT; seat++) {
+  for (let seat = 0; seat < playerCount; seat++) {
     predictions[seat] = null;
     hiddenThisRound[seat] = false;
     winsThisRound[seat] = 0;
@@ -212,15 +260,15 @@ function freshRound(roundNumber: number, rng: () => number, turnLeader: SeatInde
   };
 }
 
-export function startGame(seed: number): DestinyWar39State {
+export function startGame(playerCount: PlayerCount, seed: number): DestinyWar39State {
   const rng = seededRng(seed);
   const seatOrder = shuffle(
-    Array.from({ length: PLAYER_COUNT }, (_, i) => i),
+    Array.from({ length: playerCount }, (_, i) => i),
     rng,
   );
   // Round 1 is simultaneous — turnLeader is set but unused (see `play` below).
-  const round = freshRound(1, rng, seatOrder[0]);
-  const players: PlayerRecord[] = Array.from({ length: PLAYER_COUNT }, (_, seat) => ({
+  const round = freshRound(1, rng, seatOrder[0], playerCount);
+  const players: PlayerRecord[] = Array.from({ length: playerCount }, (_, seat) => ({
     seat,
     hiddenUsed: false,
     hiddenRound: null,
@@ -231,6 +279,7 @@ export function startGame(seed: number): DestinyWar39State {
   }));
   return {
     phase: "predicting",
+    playerCount,
     seatOrder,
     round,
     players,
@@ -244,12 +293,12 @@ export function startGame(seed: number): DestinyWar39State {
 // Turn resolution (rulebook §6)
 // ---------------------------------------------------------------------------
 
-function computeReverseActive(plays: TurnPlay[]): boolean {
-  const count = plays.filter((p) => isReverseCard(p.card)).length;
+function computeReverseActive(plays: TurnPlay[], playerCount: PlayerCount): boolean {
+  const count = plays.filter((p) => isReverseCard(p.card, playerCount)).length;
   return count % 2 === 1;
 }
 
-/** Earliest-in-`order` seat among `candidates` — used only to break 0-card ties (every other value is unique in the deck). */
+/** Earliest-in-`order` seat among `candidates` — used to break 0-card ties, and (8-player mode only) Death-card ties. */
 function firstByOrder(candidates: TurnPlay[], order: SeatIndex[]): SeatIndex {
   for (const seat of order) {
     const found = candidates.find((p) => p.seat === seat);
@@ -264,9 +313,9 @@ export interface TurnOutcome {
 }
 
 /**
- * §6.2's decision table. `revealOrder` is the reference order used only to
- * break 0-vs-0 ties (§6.3) — the round 1 fixed seat order for simultaneous
- * reveals, or that turn's actual sequential reveal order otherwise.
+ * §6.2's decision table. `revealOrder` is the reference order used to break
+ * ties (§6.3) — the round 1 fixed seat order for simultaneous reveals, or
+ * that turn's actual sequential reveal order otherwise.
  *
  * The 0-vs-Death counter is narrowly scoped: 0 only beats Death, never
  * ordinary numbers. With reverse inactive and no Death in play, 0 is just
@@ -274,26 +323,38 @@ export interface TurnOutcome {
  * beats 0). Reverse flips the ordinary-number comparison (lowest wins),
  * which is what makes 0 the strongest *ordinary* card once reverse is
  * active — that is a side effect of the flip, not a separate 0 rule.
+ *
+ * 8-player mode ships 2 Death cards, so two different players can reveal
+ * Death in the same turn — a situation the 5-player rulebook never had to
+ * cover. Confirmed with the product owner: it resolves exactly like a
+ * multi-0 tie (§6.3) — whoever revealed Death earliest in `revealOrder`
+ * wins, whether Death is winning outright (reverse active, or reverse
+ * inactive with no 0 in play) or off the board entirely (reverse inactive
+ * with a 0 present, which still just goes to that 0's own §6.3 tie-break).
  */
-export function resolveTurn(plays: TurnPlay[], revealOrder: SeatIndex[]): TurnOutcome {
-  const reverseActive = computeReverseActive(plays);
+export function resolveTurn(plays: TurnPlay[], revealOrder: SeatIndex[], playerCount: PlayerCount): TurnOutcome {
+  const reverseActive = computeReverseActive(plays, playerCount);
   const zeroPlays = plays.filter((p) => p.card.kind === "number" && p.card.value === 0);
-  const deathPlay = plays.find((p) => p.card.kind === "death");
+  const deathPlays = plays.filter((p) => p.card.kind === "death");
   const numberPlays = plays.filter((p) => p.card.kind === "number");
 
   let winnerSeat: SeatIndex;
   if (!reverseActive) {
-    if (deathPlay) {
+    if (deathPlays.length > 0) {
       // 0's sole counter: beats Death specifically, even though 0 is
       // otherwise the weakest ordinary number in this (non-reverse) state.
-      winnerSeat = zeroPlays.length > 0 ? firstByOrder(zeroPlays, revealOrder) : deathPlay.seat;
+      if (zeroPlays.length > 0) {
+        winnerSeat = firstByOrder(zeroPlays, revealOrder);
+      } else {
+        winnerSeat = deathPlays.length > 1 ? firstByOrder(deathPlays, revealOrder) : deathPlays[0].seat;
+      }
     } else {
       const maxValue = Math.max(...numberPlays.map((p) => p.card.value));
       winnerSeat = numberPlays.find((p) => p.card.value === maxValue)!.seat;
     }
   } else {
-    if (deathPlay) {
-      winnerSeat = deathPlay.seat;
+    if (deathPlays.length > 0) {
+      winnerSeat = deathPlays.length > 1 ? firstByOrder(deathPlays, revealOrder) : deathPlays[0].seat;
     } else {
       const minValue = Math.min(...numberPlays.map((p) => p.card.value));
       const minPlays = numberPlays.filter((p) => p.card.value === minValue);
@@ -352,9 +413,9 @@ export function nextToActInTurn(state: DestinyWar39State): SeatIndex | null {
   if (state.phase !== "playing") return null;
   const round = state.round;
   const played = new Set(round.playsThisTurn.map((p) => p.seat));
-  if (played.size >= PLAYER_COUNT) return null;
+  if (played.size >= state.playerCount) return null;
   if (round.roundNumber === 1) {
-    for (let s = 0; s < PLAYER_COUNT; s++) if (!played.has(s)) return s;
+    for (let s = 0; s < state.playerCount; s++) if (!played.has(s)) return s;
     return null;
   }
   return clockwiseFrom(state.seatOrder, round.turnLeader, played);
@@ -377,7 +438,7 @@ function play(state: DestinyWar39State, seat: SeatIndex, cardId: number): Destin
   const hands = { ...round.hands, [seat]: hand.filter((c) => c.id !== cardId) };
   const playsThisTurn = [...round.playsThisTurn, { seat, card }];
 
-  if (playsThisTurn.length < PLAYER_COUNT) {
+  if (playsThisTurn.length < state.playerCount) {
     return { ...state, round: { ...round, hands, playsThisTurn } };
   }
   return resolveTurnAndAdvance(state, { ...round, hands, playsThisTurn });
@@ -386,7 +447,7 @@ function play(state: DestinyWar39State, seat: SeatIndex, cardId: number): Destin
 /** Completes the just-finished turn, then either starts the round's next turn or finalizes the round (rulebook §5.3, §6, §9, §11). */
 function resolveTurnAndAdvance(state: DestinyWar39State, round: RoundState): DestinyWar39State {
   const revealOrder = round.roundNumber === 1 ? state.seatOrder : round.playsThisTurn.map((p) => p.seat);
-  const { reverseActive, winnerSeat } = resolveTurn(round.playsThisTurn, revealOrder);
+  const { reverseActive, winnerSeat } = resolveTurn(round.playsThisTurn, revealOrder, state.playerCount);
 
   const winsThisRound = { ...round.winsThisRound, [winnerSeat]: (round.winsThisRound[winnerSeat] ?? 0) + 1 };
   const turnRecords = [...round.turnRecords, { turnNumber: round.turnNumber, plays: round.playsThisTurn, reverseActive, winnerSeat }];
@@ -435,7 +496,7 @@ function nextRound(state: DestinyWar39State, seed: number): DestinyWar39State {
   if (state.phase !== "roundEnd") return state;
   const rng = seededRng(seed);
   const lastTurn = state.round.turnRecords[state.round.turnRecords.length - 1];
-  const round = freshRound(state.round.roundNumber + 1, rng, lastTurn.winnerSeat);
+  const round = freshRound(state.round.roundNumber + 1, rng, lastTurn.winnerSeat, state.playerCount);
   return { ...state, round, phase: "predicting" };
 }
 
@@ -511,15 +572,15 @@ export function computeRankings(finalScores: Record<SeatIndex, number>): RankedS
 
 import { pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
 
-/** Rough 0..1 "how likely this card is to win a turn against 4 unknown opponents" proxy — ignores reverse dynamics entirely (documented simplification; still gives bots a sane death/high-number/0 preference ordering). */
-function cardStrength(card: Card): number {
-  if (card.kind === "death") return 1; // strongest overall in the common (non-reverse) case; the 0 counter is rare (1 of 45 cards) and ignored by this proxy
+/** Rough 0..1 "how likely this card is to win a turn against unknown opponents" proxy — ignores reverse dynamics entirely (documented simplification; still gives bots a sane death/high-number/0 preference ordering). Normalized against the mode's max number card so it stays 0..1 in both 5- and 8-player decks. */
+function cardStrength(card: Card, playerCount: PlayerCount): number {
+  if (card.kind === "death") return 1; // strongest overall in the common (non-reverse) case; the 0 counter is rare and ignored by this proxy
   if (card.value === 0) return 0; // weakest ordinary number outside its narrow Death-counter upside, which this proxy ignores
-  return card.value / 39;
+  return card.value / deckModeConfig(playerCount).maxNumber;
 }
 
-function estimatedWinsForHand(hand: Card[]): number {
-  return hand.reduce((sum, c) => sum + Math.pow(cardStrength(c), 4), 0);
+function estimatedWinsForHand(hand: Card[], playerCount: PlayerCount): number {
+  return hand.reduce((sum, c) => sum + Math.pow(cardStrength(c, playerCount), 4), 0);
 }
 
 export function getValidMoves(state: DestinyWar39State, seat: SeatIndex): EngineAction[] {
@@ -543,13 +604,13 @@ export function getValidMoves(state: DestinyWar39State, seat: SeatIndex): Engine
 
 function scoreMove(state: DestinyWar39State, seat: SeatIndex, move: EngineAction): number {
   if (move.type === "predict") {
-    const estimate = estimatedWinsForHand(state.round.hands[seat] ?? []);
+    const estimate = estimatedWinsForHand(state.round.hands[seat] ?? [], state.playerCount);
     return -Math.abs(move.value - estimate);
   }
   if (move.type === "play") {
     const round = state.round;
     const card = round.hands[seat].find((c) => c.id === move.cardId)!;
-    const strength = cardStrength(card);
+    const strength = cardStrength(card, state.playerCount);
     const currentWins = round.winsThisRound[seat] ?? 0;
     const prediction = round.predictions[seat] ?? 0;
     const remainingTurns = round.roundNumber - round.turnNumber + 1;
