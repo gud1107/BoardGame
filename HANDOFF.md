@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-21 (**코요테 8인 확장 + 원형 테이블 레이아웃 최적화 세션** — 자세한 내용은 아래 `### 2026-08-21 — 코요테 8인 플레이 확장 + 원형 테이블 레이아웃 최적화` 절 참고. 커밋/배포 정보는 해당 절 및 뒤이은 `docs(handoff)` 후속 커밋 참고.)_
+_최종 갱신: 2026-08-21 (**코요테 8인 확장 + 원형 테이블 레이아웃 최적화 세션** — 자세한 내용은 아래 `### 2026-08-21 — 코요테 8인 플레이 확장 + 원형 테이블 레이아웃 최적화` 절 참고. 커밋 `cfefc96 feat(coyote): expand maximum players to 8 and optimize radial table layout` → 배포 프리뷰 `https://board-game-c2tupjzyk-me-3871.vercel.app`.)_
 
 _이전 갱신: 2026-08-21 (**소환사의 협곡 직전 라운드 결과 조회 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 소환사의 협곡 직전 라운드 결과 조회 패널 및 상세 로그 UI` 절 참고. 커밋 `fa4cc6e feat(summoners-rift): add previous round history summary panel` → 배포 프리뷰 `https://board-game-plzsvqw0t-me-3871.vercel.app`.)_
 
@@ -22,7 +22,7 @@ _이전 갱신: 2026-08-21 (**소환사의 협곡 직전 라운드 결과 조회
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/coyote/Coyote.test.ts`(60/60 통과) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1093/1093 통과).
 
-**커밋/배포**: (아래 `docs(handoff)` 후속 커밋에서 확정 해시와 배포 URL을 기록.)
+**커밋/배포**: 커밋 `cfefc96 feat(coyote): expand maximum players to 8 and optimize radial table layout` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주, READY — `https://board-game-c2tupjzyk-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-21 — 소환사의 협곡 직전 라운드 결과 조회 패널 및 상세 로그 UI
 
