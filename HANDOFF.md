@@ -25,7 +25,7 @@ _그 이전 갱신: 2026-08-22 (**지렁이 상대 처치(Kill) 대형 이펙트
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 에러 0 — 처음에 퀘스트 리빌의 `Math.random`/`useRef(...).current` 렌더 중 접근이 `react-hooks/purity`/`react-hooks/refs`에 걸려 위 "결정론적 회전 배치 + 하드코딩 오프셋 배열" 방식으로 고침) / `npx vitest run src/games/avalon`(50/50 통과 — 엔진 변경분(`votes` 초기화 제거)도 기존 테스트 그대로 통과, 별도 회귀 없음 확인) / `npx vitest run --exclude "**/aiBenchmark.test.ts"`(전체 스위트, 27개 파일 1110/1110 통과). **브라우저 실측(오라 펄스/스포트라이트/스냅/3D 플립/컨페티 타이밍 육안 확인)은 이번 세션에 수행하지 않음** — 이전 세션들과 동일하게 실시간 CSS 애니메이션 타이밍·겹침은 이 저장소가 이미 문서화한 vitest 커버리지 밖 영역이라 실사용 전 수동 확인 권장.
 
-**커밋/배포**: 아래 참고 (커밋 해시는 커밋 완료 후 갱신).
+**커밋/배포**: 커밋 `5900184 feat(avalon): add visual effects for hero abilities, vote submissions, and quest reveal outcomes` → `git push origin main` 완료 → `npx vercel deploy`(스코프 없이)가 `"Not authorized"`로 실패 — `npx vercel whoami`(로그인은 `gud1107`로 정상)와 `.vercel/project.json`(orgId가 `team_VsYB837j4CbBk3Dr4KY7St9J`)을 대조해보니 CLI가 기본으로 잡는 스코프가 그 팀이 아니었던 것으로 보임. `npx vercel deploy --scope me-3871`로 재시도해 정상 완주, READY — `https://board-game-q5ufd2rao-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행.
 
 ### 2026-08-22 — 운명전쟁39 턴 순서 배지(Order Badge) + 카드 제출 대형 임팩트
 
