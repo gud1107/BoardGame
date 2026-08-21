@@ -1,8 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-21 (**그리드 포커 8인 플레이 확장 + 모바일 반응형 UI/UX 개편 세션** — 자세한 내용은 아래 `### 2026-08-21 — 그리드 포커 8인 플레이 확장 + 모바일 반응형 웹 UI/UX 최적화` 절 참고. 커밋 `34cf09f feat(grid-poker): support up to 8 players and optimize mobile responsive web UI` → 배포 프리뷰 `https://board-game-im38euq90-me-3871.vercel.app`.)_
+_최종 갱신: 2026-08-21 (**소환사의 협곡 제거 장비 가로 순차 나열 + 던전 공략 실시간 관전 UI + 몬스터 히스토리 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 소환사의 협곡 제거 장비 가로 순차 나열 + 던전 공략 실시간 관전 UI + 몬스터 히스토리 패널` 절 참고. 커밋 `a331ed6 feat(summoners-rift): display discarded items linearly and add shared dungeon combat viewer with monster log` → 배포 프리뷰 `https://board-game-epqt0optf-me-3871.vercel.app`.)_
 
-_이전 갱신: 2026-08-21 (**운명전쟁39 8인 모드 추가(72장 덱 + 리버스 5종) 세션** — 자세한 내용은 아래 `### 2026-08-21 — 운명전쟁39 8인 모드 지원 + 카드 덱/라운드 규칙 확장` 절 참고. 커밋 `148cfc4 feat(destiny-war-39): add 8-player mode with 72-card deck and 5 reverse cards` + `ba1eb63 fix(destiny-war-39): update dashboard listing to reflect 8-player mode` → 배포 프리뷰 `https://board-game-r1pxeucmp-me-3871.vercel.app`.)_
+_이전 갱신: 2026-08-21 (**그리드 포커 8인 플레이 확장 + 모바일 반응형 UI/UX 개편 세션** — 자세한 내용은 아래 `### 2026-08-21 — 그리드 포커 8인 플레이 확장 + 모바일 반응형 웹 UI/UX 최적화` 절 참고. 커밋 `34cf09f feat(grid-poker): support up to 8 players and optimize mobile responsive web UI` → 배포 프리뷰 `https://board-game-im38euq90-me-3871.vercel.app`.)_
 
 ### 2026-08-21 — 소환사의 협곡 제거 장비 가로 순차 나열 + 던전 공략 실시간 관전 UI + 몬스터 히스토리 패널
 
@@ -17,6 +17,8 @@ _이전 갱신: 2026-08-21 (**운명전쟁39 8인 모드 추가(72장 덱 + 리�
 **브라우저 실측 검증** (Playwright, `npm install --no-save playwright@1.62.1`로 임시 설치 후 검증 완료 뒤 `npm uninstall --no-save playwright`로 원복 — `package.json`/`package-lock.json` 변경 없음): 임시 dev 라우트(`src/app/dev-summoners-rift-preview` — `SummonersRiftBoard`를 프로덕션과 동일한 `mx-auto max-w-5xl` 래퍼로 감싸고 4인 `resolvingRift` 상태를 직접 구성해 Supabase Realtime 로비를 우회, 마운트 후 0.5초/3초 지연으로 콤뱃 로그 항목을 2건 추가 주입해 처치 플래시·피격 플래시를 각각 재생시킴, 검증 후 삭제)를 만들어 1280px(3열 데스크톱)/390px(히스토리→보드→가이드 세로 스택) 두 뷰포트에서 단계별 스크린샷 촬영. **확인 결과**: 데스크톱 3열 배치, 모바일 히스토리 최상단 배치 모두 확인. 제거 장비 3개(겹침 없이 번호+아이콘+이름+효과 칩, 줄바꿈으로 자연 정돈) 확인. 대형 HP 배너가 평상시 "N / M", 처치 시 "⚔️ 처치! HP N 유지"(골드 펄스), 피격 시 "N ➔ M (−X)"(레드 시프트)로 정확히 전환되는 것을 스크린샷 3장으로 확인, 이 과정에서 최초 구현의 `ItemSlot` 하이라이트가 기존 골드 테두리에 묻혀 육안으로 거의 안 보이는 문제를 발견해 `ring-4`+펄스 애니메이션+"발동!" 배지로 강화 후 재검증 완료. "다음 몬스터 공개" 버튼이 연출 중 "⏳ 전투 연출 재생 중..."으로 잠기고 이후 재활성화되는 것도 확인. 히스토리 패널이 항목을 오래된 순서로 누적하며 badge가 정확한 것도 확인. `page.on("response")`로 4xx/5xx 응답을 전수 수집한 결과 이번 변경과 무관한 사전 존재 404 2건(게스트 사용량/앱 설정 Supabase 조회, 과거 세션들과 동일 패턴)만 발견, `pageerror` 0건. 검증에 쓴 임시 라우트·스크립트는 저장소에 흔적 없이 삭제.
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0 — 최초 구현이 렌더 중 ref를 mutate해 `react-hooks/refs` 에러 6건 발생시켰던 것을 §"구현"의 재작성으로 해소) / `npx vitest run src/games/summonersRift`(50/50 통과 — `engine.ts` 무변경이라 전부 회귀 없이 통과) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1084/1084 통과).
+
+**커밋/배포**: 커밋 `a331ed6 feat(summoners-rift): display discarded items linearly and add shared dungeon combat viewer with monster log` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주, READY — `https://board-game-epqt0optf-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-21 — 그리드 포커 8인 플레이 확장 + 모바일 반응형 웹 UI/UX 최적화
 
