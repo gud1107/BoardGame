@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
-import { DeckBack, ItemSlot, MonsterFace } from "./CardArt";
+import SummonersRiftGuideSidebar from "./SummonersRiftGuideSidebar";
+import { CardPileStack, HeroCard, HiddenEquipmentStack, ItemSlot, MonsterFace } from "./CardArt";
 import { detectRiftPushEvent, FlyingRiftCard, type RiftPushEvent } from "./SummonersRiftEffects";
 import {
   computeRankings,
@@ -76,7 +77,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
   }, []);
 
   const seatRowRefs = useRef(new Map<SeatIndex, HTMLElement>());
-  const riftStackRef = useRef<HTMLElement | null>(null);
+  const riftStackRef = useRef<HTMLDivElement | null>(null);
   function setSeatRowRef(seat: SeatIndex) {
     return (el: HTMLElement | null) => {
       if (el) seatRowRefs.current.set(seat, el);
@@ -163,145 +164,160 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
   const liveTotalHp = state.phase === "bidding" ? computeTotalHp(state.equippedItemIds) : state.totalHp;
 
   return (
-    <div
-      className="flex flex-col gap-3 rounded-[28px] border p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
-      style={{ borderColor: "rgba(200,170,110,0.3)", background: "linear-gradient(160deg,#151b28 0%,#0d121c 45%,#06090f 100%)" }}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs" style={{ color: "#c8aa6e" }}>
-        <span className="flex items-center gap-1.5">
-          {state.playerCount}인 · 라운드 {state.roundNumber}
-          <span className="rounded-full border border-white/15 px-1.5 py-0.5 text-[10px] text-white/50">
-            🃏 덱 {state.deck.length}장
+    // Board card + the always-visible player-aid sidebar (task brief §4) side
+    // by side on wide screens, stacked below the board on narrow ones — the
+    // `[gameId]` page widens its container specifically for this game id so
+    // the sidebar has room to sit beside the board instead of squeezing it.
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
+      <div
+        className="flex min-w-0 flex-1 flex-col gap-3 rounded-[28px] border p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
+        style={{ borderColor: "rgba(200,170,110,0.3)", background: "linear-gradient(160deg,#151b28 0%,#0d121c 45%,#06090f 100%)" }}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs" style={{ color: "#c8aa6e" }}>
+          <span className="flex items-center gap-1.5">
+            {state.playerCount}인 · 라운드 {state.roundNumber}
+            <span className="rounded-full border border-white/15 px-1.5 py-0.5 text-[10px] text-white/50">
+              🃏 덱 {state.deck.length}장
+            </span>
+            <span className="rounded-full border border-white/15 px-1.5 py-0.5 text-[10px] text-white/50">
+              🗡️ 협곡 더미 {state.riftPile.length}장
+            </span>
           </span>
-          <span className="rounded-full border border-white/15 px-1.5 py-0.5 text-[10px] text-white/50">
-            🗡️ 협곡 더미 {state.riftPile.length}장
-          </span>
-        </span>
-        <div className="flex gap-1.5">{rulebookButton}</div>
+          <div className="flex gap-1.5">{rulebookButton}</div>
+        </div>
+
+        {roundFlash && (
+          <div className="rounded-xl border px-3 py-2 text-xs" style={{ borderColor: "rgba(200,170,110,0.4)", background: "rgba(200,170,110,0.08)" }}>
+            <p className={`text-center font-semibold ${roundFlash.outcome === "success" ? "text-emerald-200" : "text-rose-200"}`}>
+              {roundFlash.outcome === "success"
+                ? `✅ ${names[roundFlash.challengerSeat]}님이 협곡 공략 성공! (총 HP ${roundFlash.totalHp})`
+                : `💀 ${names[roundFlash.challengerSeat]}님이 협곡 공략 실패...${roundFlash.newlyEliminated ? " (탈락!)" : ""}`}
+            </p>
+            {roundFlash.combatLog.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1.5">
+                {roundFlash.combatLog.map((entry, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 rounded-full bg-black/25 px-1.5 py-0.5 text-[10px] text-white/70">
+                    {entry.monster.threat}
+                    {combatBadge(entry)}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Shared champion + item HUD */}
+        <section
+          className="flex flex-col gap-2 rounded-2xl border p-2.5 sm:p-3"
+          style={{ borderColor: "rgba(200,170,110,0.25)", background: "linear-gradient(160deg,#1c2434 0%,#131a26 55%,#0a0e15 100%)" }}
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-[11px] font-semibold tracking-wide uppercase" style={{ color: "#c8aa6e" }}>
+              ⚔️ 공유 챔피언
+            </h3>
+            {liveTotalHp !== null && (
+              <span className="flex items-center gap-1 text-xs font-bold text-white">
+                ❤️ {state.phase === "resolvingRift" || state.phase === "declaringSpatula" ? `${state.currentHp} / ${liveTotalHp}` : liveTotalHp}
+              </span>
+            )}
+          </div>
+          {/* Task brief §3: the base HP-3 champion tile, physically-set-up-style — the hero card centered above the items equipped onto it. */}
+          <div className="flex justify-center">
+            <HeroCard />
+          </div>
+          <div className="flex flex-wrap justify-center gap-2">
+            {ITEM_CATALOG.map((item) => (
+              <ItemSlot key={item.id} itemId={item.id} equipped={state.equippedItemIds.includes(item.id)} />
+            ))}
+          </div>
+        </section>
+
+        {/* Card piles: the monster draw deck (task brief §1) beside the Rift accumulation pile — both face-down, remaining count badged on top. */}
+        <section className="flex flex-wrap items-start justify-center gap-4 rounded-2xl border border-white/10 bg-black/25 p-3">
+          <div className="flex flex-col items-center gap-2">
+            <h3 className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">🃏 던전 입장 카드더미</h3>
+            <CardPileStack count={state.deck.length} emptyHint="덱 소진" />
+          </div>
+          <div ref={riftStackRef} className="flex flex-col items-center gap-2">
+            <h3 className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">🗡️ 협곡 더미</h3>
+            {state.riftPile.length === 0 && state.phase === "bidding" ? (
+              <div className="flex h-16 w-12 items-center justify-center">
+                <p className="text-center text-[9px] leading-tight text-white/30">아직 없음</p>
+              </div>
+            ) : (
+              <CardPileStack count={state.riftPile.length} />
+            )}
+
+            {/* Dungeon phase: current reveal slot — keyed remount replays the flip/resolve animation each new combatLog entry (task brief §2 "카드 제거 애니메이션"). */}
+            {state.phase === "resolvingRift" && state.combatLog.length > 0 && (
+              <div
+                key={state.combatLog.length}
+                className="flex flex-col items-center gap-1"
+                style={{
+                  animation: state.combatLog.at(-1)!.killedBy
+                    ? "rift-monster-flip 0.4s ease-out, rift-monster-slay 0.5s ease-in 1.1s forwards"
+                    : "rift-monster-flip 0.4s ease-out, rift-monster-strike 0.6s ease-in 1.1s forwards",
+                }}
+              >
+                <MonsterFace threat={state.combatLog.at(-1)!.monster.threat} size="md" />
+                {combatBadge(state.combatLog.at(-1)!)}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <TurnPanel state={state} viewerSeat={viewerSeat} me={me} isChallenger={isChallenger} onAction={onAction} />
+
+        {/* Scoreboard */}
+        <section className="flex flex-col gap-1.5">
+          {seatOrder.map((seat) => {
+            const p = state.players.find((pl) => pl.seat === seat)!;
+            const isActive = state.activeSeat === seat && !p.eliminated;
+            const isSelf = seat === viewerSeat;
+            return (
+              <div
+                key={seat}
+                ref={setSeatRowRef(seat)}
+                className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs transition ${
+                  p.eliminated ? "border-white/5 bg-black/10 opacity-50" : isActive ? "bg-amber-400/10" : "border-white/10 bg-black/20"
+                }`}
+                style={isActive ? { borderColor: "rgba(200,170,110,0.6)" } : undefined}
+              >
+                <span className="flex items-center gap-1.5 font-semibold text-white/90">
+                  <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+                  {isActive && <span title="차례">👉</span>}
+                  {state.challengerSeat === seat && (state.phase === "declaringSpatula" || state.phase === "resolvingRift") && <span title="도전자">🛡️</span>}
+                  {names[seat]}
+                  {isSelf && <span style={{ color: "#e8c77a" }}>(나)</span>}
+                  {p.passed && state.phase === "bidding" && <span className="text-white/40">(패스)</span>}
+                  {p.eliminated && <span className="text-rose-300">💀 탈락</span>}
+                </span>
+                {/* Task brief §2: who pulled which item off the champion this round — a face-down hidden-monster marker with every item they've removed fanned on top, right beside their row. */}
+                <HiddenEquipmentStack removedItemIds={p.removedItemIds} />
+                <div className="flex items-center gap-2 text-white/70">
+                  <span title={`성공 ${p.successTokens}/${SUCCESS_TOKENS_TO_WIN}`}>{"🏆".repeat(p.successTokens)}{"·".repeat(Math.max(0, SUCCESS_TOKENS_TO_WIN - p.successTokens))}</span>
+                  <span title={`실패 ${p.failureTokens}/${FAILURE_TOKENS_TO_ELIMINATE}`}>{"💀".repeat(p.failureTokens)}{"·".repeat(Math.max(0, FAILURE_TOKENS_TO_ELIMINATE - p.failureTokens))}</span>
+                </div>
+              </div>
+            );
+          })}
+        </section>
+
+        {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+
+        {/* Rift-pile accumulation FX (task brief §2): pushing seat's row -> the pile stack. */}
+        {pushEvents.map((event) => (
+          <FlyingRiftCard
+            key={event.id}
+            event={event}
+            getSourceEl={() => seatRowRefs.current.get(event.seat) ?? null}
+            getTargetEl={() => riftStackRef.current}
+            onDone={handlePushDone}
+          />
+        ))}
       </div>
 
-      {roundFlash && (
-        <div className="rounded-xl border px-3 py-2 text-xs" style={{ borderColor: "rgba(200,170,110,0.4)", background: "rgba(200,170,110,0.08)" }}>
-          <p className={`text-center font-semibold ${roundFlash.outcome === "success" ? "text-emerald-200" : "text-rose-200"}`}>
-            {roundFlash.outcome === "success"
-              ? `✅ ${names[roundFlash.challengerSeat]}님이 협곡 공략 성공! (총 HP ${roundFlash.totalHp})`
-              : `💀 ${names[roundFlash.challengerSeat]}님이 협곡 공략 실패...${roundFlash.newlyEliminated ? " (탈락!)" : ""}`}
-          </p>
-          {roundFlash.combatLog.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1.5">
-              {roundFlash.combatLog.map((entry, i) => (
-                <span key={i} className="inline-flex items-center gap-1 rounded-full bg-black/25 px-1.5 py-0.5 text-[10px] text-white/70">
-                  {entry.monster.threat}
-                  {combatBadge(entry)}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Shared champion + item HUD */}
-      <section
-        className="flex flex-col gap-2 rounded-2xl border p-2.5 sm:p-3"
-        style={{ borderColor: "rgba(200,170,110,0.25)", background: "linear-gradient(160deg,#1c2434 0%,#131a26 55%,#0a0e15 100%)" }}
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-[11px] font-semibold tracking-wide uppercase" style={{ color: "#c8aa6e" }}>
-            ⚔️ 공유 챔피언
-          </h3>
-          {liveTotalHp !== null && (
-            <span className="flex items-center gap-1 text-xs font-bold text-white">
-              ❤️ {state.phase === "resolvingRift" || state.phase === "declaringSpatula" ? `${state.currentHp} / ${liveTotalHp}` : liveTotalHp}
-            </span>
-          )}
-        </div>
-        <div className="flex flex-wrap justify-center gap-2">
-          {ITEM_CATALOG.map((item) => (
-            <ItemSlot key={item.id} itemId={item.id} equipped={state.equippedItemIds.includes(item.id)} />
-          ))}
-        </div>
-      </section>
-
-      {/* Rift pile stack */}
-      <section ref={riftStackRef} className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/25 p-3">
-        <h3 className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">🗡️ 협곡 더미</h3>
-        {state.riftPile.length === 0 && state.phase === "bidding" ? (
-          <p className="py-2 text-xs text-white/30">아직 협곡에 들어간 몬스터가 없습니다.</p>
-        ) : (
-          <div className="relative flex h-16 items-center">
-            {Array.from({ length: Math.min(state.riftPile.length, 8) }).map((_, i) => (
-              <div key={i} className="absolute" style={{ left: `${i * 8}px`, zIndex: i }}>
-                <DeckBack className="h-16 w-12" />
-              </div>
-            ))}
-            {state.riftPile.length === 0 && <DeckBack className="h-16 w-12 opacity-0" />}
-          </div>
-        )}
-
-        {/* Dungeon phase: current reveal slot — keyed remount replays the flip/resolve animation each new combatLog entry (task brief §2 "카드 제거 애니메이션"). */}
-        {state.phase === "resolvingRift" && state.combatLog.length > 0 && (
-          <div
-            key={state.combatLog.length}
-            className="flex flex-col items-center gap-1"
-            style={{
-              animation: state.combatLog.at(-1)!.killedBy
-                ? "rift-monster-flip 0.4s ease-out, rift-monster-slay 0.5s ease-in 1.1s forwards"
-                : "rift-monster-flip 0.4s ease-out, rift-monster-strike 0.6s ease-in 1.1s forwards",
-            }}
-          >
-            <MonsterFace threat={state.combatLog.at(-1)!.monster.threat} size="md" />
-            {combatBadge(state.combatLog.at(-1)!)}
-          </div>
-        )}
-      </section>
-
-      <TurnPanel state={state} viewerSeat={viewerSeat} me={me} isChallenger={isChallenger} onAction={onAction} />
-
-      {/* Scoreboard */}
-      <section className="flex flex-col gap-1.5">
-        {seatOrder.map((seat) => {
-          const p = state.players.find((pl) => pl.seat === seat)!;
-          const isActive = state.activeSeat === seat && !p.eliminated;
-          const isSelf = seat === viewerSeat;
-          return (
-            <div
-              key={seat}
-              ref={setSeatRowRef(seat)}
-              className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs transition ${
-                p.eliminated ? "border-white/5 bg-black/10 opacity-50" : isActive ? "bg-amber-400/10" : "border-white/10 bg-black/20"
-              }`}
-              style={isActive ? { borderColor: "rgba(200,170,110,0.6)" } : undefined}
-            >
-              <span className="flex items-center gap-1.5 font-semibold text-white/90">
-                <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
-                {isActive && <span title="차례">👉</span>}
-                {state.challengerSeat === seat && (state.phase === "declaringSpatula" || state.phase === "resolvingRift") && <span title="도전자">🛡️</span>}
-                {names[seat]}
-                {isSelf && <span style={{ color: "#e8c77a" }}>(나)</span>}
-                {p.passed && state.phase === "bidding" && <span className="text-white/40">(패스)</span>}
-                {p.eliminated && <span className="text-rose-300">💀 탈락</span>}
-              </span>
-              <div className="flex items-center gap-2 text-white/70">
-                <span title={`성공 ${p.successTokens}/${SUCCESS_TOKENS_TO_WIN}`}>{"🏆".repeat(p.successTokens)}{"·".repeat(Math.max(0, SUCCESS_TOKENS_TO_WIN - p.successTokens))}</span>
-                <span title={`실패 ${p.failureTokens}/${FAILURE_TOKENS_TO_ELIMINATE}`}>{"💀".repeat(p.failureTokens)}{"·".repeat(Math.max(0, FAILURE_TOKENS_TO_ELIMINATE - p.failureTokens))}</span>
-              </div>
-            </div>
-          );
-        })}
-      </section>
-
-      {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
-
-      {/* Rift-pile accumulation FX (task brief §2): pushing seat's row -> the pile stack. */}
-      {pushEvents.map((event) => (
-        <FlyingRiftCard
-          key={event.id}
-          event={event}
-          getSourceEl={() => seatRowRefs.current.get(event.seat) ?? null}
-          getTargetEl={() => riftStackRef.current}
-          onDone={handlePushDone}
-        />
-      ))}
+      <SummonersRiftGuideSidebar />
     </div>
   );
 }

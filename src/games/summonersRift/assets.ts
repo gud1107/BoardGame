@@ -12,6 +12,9 @@ import type { ItemId } from "./engine";
  * `CardArt.tsx`) instead, matching how every other game in this project
  * renders hidden-card backs.
  */
+/** The shared champion tile (rulebook §2-A, base HP 3) — synced from `boardGameRule/소환사의 협곡/용사.png`. Its "HP:3" label is baked into the art itself (the base HP never changes), so this is rendered as a static tile; the *live* total HP (base + equipped item bonuses) is computed separately (see `computeTotalHp`) and shown alongside it, never overlaid on this image. */
+export const HERO_IMAGE = "/images/summoners-rift/champion/hero.png";
+
 export const ITEM_IMAGES: Record<ItemId, string> = {
   1: "/images/summoners-rift/items/i1-ruby-crystal.jpg",
   2: "/images/summoners-rift/items/i2-javelin.jpg",

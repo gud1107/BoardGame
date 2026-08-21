@@ -233,8 +233,14 @@ export default function GamePlayPage() {
     ? selectedIds.length >= min && selectedIds.length <= max
     : true;
 
+  // 소환사의 협곡 alone gets a wider page container so its always-visible
+  // player-aid sidebar (SummonersRiftGuideSidebar) can sit beside the board
+  // on desktop instead of squeezing both into the standard max-w-2xl column
+  // every other game here uses.
+  const pageMaxWidth = game.id === "summoners-rift" ? "max-w-5xl" : "max-w-2xl";
+
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
+    <div className={`mx-auto ${pageMaxWidth} px-4 py-8 sm:px-6`}>
       <div className="mb-6 flex items-center gap-3">
         <div className="relative flex h-14 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/5">
           <GameThumbnail

@@ -143,6 +143,8 @@ export interface PlayerState {
   passed: boolean;
   /** How many drawn monsters this seat has hidden away via item removal this round — UI/flavor only, not itself consulted by any rule. */
   hiddenCardCount: number;
+  /** Which items (in removal order) this seat personally stripped off the shared champion this round — reset every `dealRound` alongside `hiddenCardCount`, which its length always equals. UI-only (task brief §2's "누가 어떤 장비를 뺐는지" ownership overlay); no rule ever reads it. */
+  removedItemIds: ItemId[];
 }
 
 export type Phase = "bidding" | "declaringSpatula" | "resolvingRift" | "gameOver";
@@ -278,7 +280,7 @@ function dealRound(state: SummonersRiftState, startSeat: SeatIndex): SummonersRi
   const rng = seededRng(state.initialSeed + roundNumber * 104729);
   const deck = shuffle(buildMonsterDeck(), rng);
 
-  const players = state.players.map((p) => (p.eliminated ? p : { ...p, passed: false, hiddenCardCount: 0 }));
+  const players = state.players.map((p) => (p.eliminated ? p : { ...p, passed: false, hiddenCardCount: 0, removedItemIds: [] }));
 
   return {
     ...state,
@@ -310,6 +312,7 @@ export function startGame(playerCount: number, seed: number): SummonersRiftState
     eliminated: false,
     passed: false,
     hiddenCardCount: 0,
+    removedItemIds: [],
   }));
   const rng = seededRng(seed);
   const startSeat = Math.floor(rng() * playerCount);
@@ -361,7 +364,9 @@ function removeItem(state: SummonersRiftState, seat: SeatIndex, itemId: ItemId):
   if (!state.equippedItemIds.includes(itemId)) return state;
 
   const equippedItemIds = state.equippedItemIds.filter((id) => id !== itemId);
-  const players = state.players.map((p) => (p.seat === seat ? { ...p, hiddenCardCount: p.hiddenCardCount + 1 } : p));
+  const players = state.players.map((p) =>
+    p.seat === seat ? { ...p, hiddenCardCount: p.hiddenCardCount + 1, removedItemIds: [...p.removedItemIds, itemId] } : p,
+  );
   const advanced = { ...state, equippedItemIds, players, pendingDraw: null };
   return advanceBiddingTurn(advanced, seat);
 }

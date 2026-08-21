@@ -28,7 +28,7 @@ function monster(threat: number, copy = 0): MonsterCard {
 }
 
 function makePlayer(seat: number, overrides: Partial<PlayerState> = {}): PlayerState {
-  return { seat, successTokens: 0, failureTokens: 0, eliminated: false, passed: false, hiddenCardCount: 0, ...overrides };
+  return { seat, successTokens: 0, failureTokens: 0, eliminated: false, passed: false, hiddenCardCount: 0, removedItemIds: [], ...overrides };
 }
 
 function makeState(overrides: Partial<SummonersRiftState> = {}): SummonersRiftState {
@@ -187,7 +187,17 @@ describe("bidding turn — draw a card, then choose push-to-rift or remove-item"
     expect(next.riftPile).toEqual([]); // the drawn card never enters the rift pile
     expect(next.pendingDraw).toBeNull();
     expect(next.players.find((p) => p.seat === 0)!.hiddenCardCount).toBe(1);
+    expect(next.players.find((p) => p.seat === 0)!.removedItemIds).toEqual([6]);
     expect(next.activeSeat).toBe(1);
+  });
+
+  it("removeItem appends to removedItemIds in removal order across multiple draws by the same seat", () => {
+    let state = makeState({ pendingDraw: { seat: 0, card: monster(9) } });
+    state = applyAction(state, { type: "removeItem", seat: 0, itemId: 6 });
+    state = { ...state, activeSeat: 0, pendingDraw: { seat: 0, card: monster(1) } };
+    state = applyAction(state, { type: "removeItem", seat: 0, itemId: 3 });
+    expect(state.players.find((p) => p.seat === 0)!.removedItemIds).toEqual([6, 3]);
+    expect(state.players.find((p) => p.seat === 0)!.hiddenCardCount).toBe(2);
   });
 
   it("removeItem rejects an item that's already been removed", () => {
@@ -473,6 +483,7 @@ describe("end-to-end round wiring", () => {
     expect(state.deck).toHaveLength(13); // fresh shuffled deck
     expect(state.riftPile).toEqual([]);
     expect(others.every((s) => state.players.find((p) => p.seat === s)!.passed === false)).toBe(true);
+    expect(state.players.every((p) => p.removedItemIds.length === 0)).toBe(true); // cleared for the new round
   });
 });
 
