@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-22 (**운명전쟁39 턴 순서 배지 + 카드 제출 대형 임팩트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 운명전쟁39 턴 순서 배지(Order Badge) + 카드 제출 대형 임팩트` 절 참고. 커밋 `<PENDING>` → 배포 프리뷰 `<PENDING>`.)_
+_최종 갱신: 2026-08-22 (**운명전쟁39 턴 순서 배지 + 카드 제출 대형 임팩트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 운명전쟁39 턴 순서 배지(Order Badge) + 카드 제출 대형 임팩트` 절 참고. 커밋 `0096d51 feat(destiny-war-39): add visual turn order badges and massive play card impact animations` → 배포 프리뷰 `https://board-game-bbxijkctt-me-3871.vercel.app`.)_
 
 _이전 갱신: 2026-08-22 (**지렁이 상대 처치(Kill) 대형 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 지렁이 상대 처치(Kill) 대형 폭발·화면 연출·킬 배너` 절 참고. 커밋 `fbf867c feat(worm): add massive kill visual effects, shockwave particles, and elimination banner` → 배포 프리뷰 `https://board-game-dehnnqfjr-me-3871.vercel.app`.)_
 
@@ -21,7 +21,7 @@ _이전 갱신: 2026-08-22 (**지렁이 상대 처치(Kill) 대형 이펙트 세
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 에러 0 — 처음에 데스카드 셰이크 이펙트가 `react-hooks/set-state-in-effect`에 걸려 위 무조건 호출 방식으로 수정) / `npx vitest run src/games/destinyWar39`(61/61 통과 — 엔진 무변경이라 전부 그대로 통과) / `npx vitest run --exclude "**/aiBenchmark.test.ts"`(전체 스위트, 27개 파일 1110/1110 통과). **브라우저 실측(슬램 모션/충격파/셰이크 타이밍 육안 확인)은 이번 세션에 수행하지 않음** — 이전 세션들과 동일하게 실시간 CSS 애니메이션 타이밍·겹침은 이 저장소가 이미 문서화한 vitest 커버리지 밖 영역이라 실사용 전 수동 확인 권장.
 
-**커밋/배포**: `<PENDING>`.
+**커밋/배포**: 커밋 `0096d51 feat(destiny-war-39): add visual turn order badges and massive play card impact animations` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주, READY — `https://board-game-bbxijkctt-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행.
 
 ### 2026-08-22 — 지렁이 상대 처치(Kill) 대형 폭발·화면 연출·킬 배너
 
