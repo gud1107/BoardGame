@@ -1,8 +1,22 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-21 (**소환사의 협곡 제거 장비 가로 순차 나열 + 던전 공략 실시간 관전 UI + 몬스터 히스토리 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 소환사의 협곡 제거 장비 가로 순차 나열 + 던전 공략 실시간 관전 UI + 몬스터 히스토리 패널` 절 참고. 커밋 `a331ed6 feat(summoners-rift): display discarded items linearly and add shared dungeon combat viewer with monster log` → 배포 프리뷰 `https://board-game-epqt0optf-me-3871.vercel.app`.)_
+_최종 갱신: 2026-08-21 (**보드게임 허브 인원 필터에 '8인' 옵션 추가 세션** — 자세한 내용은 아래 `### 2026-08-21 — 보드게임 허브 인원 필터 '8인' 옵션 추가` 절 참고. 커밋 `feat(hub): add 8-player filter option to game list` → 배포 프리뷰 대기.)_
 
-_이전 갱신: 2026-08-21 (**그리드 포커 8인 플레이 확장 + 모바일 반응형 UI/UX 개편 세션** — 자세한 내용은 아래 `### 2026-08-21 — 그리드 포커 8인 플레이 확장 + 모바일 반응형 웹 UI/UX 최적화` 절 참고. 커밋 `34cf09f feat(grid-poker): support up to 8 players and optimize mobile responsive web UI` → 배포 프리뷰 `https://board-game-im38euq90-me-3871.vercel.app`.)_
+_이전 갱신: 2026-08-21 (**소환사의 협곡 제거 장비 가로 순차 나열 + 던전 공략 실시간 관전 UI + 몬스터 히스토리 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 소환사의 협곡 제거 장비 가로 순차 나열 + 던전 공략 실시간 관전 UI + 몬스터 히스토리 패널` 절 참고. 커밋 `a331ed6 feat(summoners-rift): display discarded items linearly and add shared dungeon combat viewer with monster log` → 배포 프리뷰 `https://board-game-epqt0optf-me-3871.vercel.app`.)_
+
+### 2026-08-21 — 보드게임 허브 인원 필터 '8인' 옵션 추가
+
+**요청**: `HANDOFF.md`와 보드게임 메인/허브 관련 코드(`src/pages/Lobby.tsx`, `src/pages/Home.tsx`, `src/components/GameFilter.tsx`, `src/config/games.ts` 등)를 먼저 확인한 뒤 (1) 허브 화면 인원 필터에 '8인' 칩 추가 + 모바일/데스크톱 레이아웃 정돈, (2) 최근 8인 모드가 추가된 운명전쟁39·그리드 포커를 포함해 8인 지원 게임의 인원 범위(`maxPlayers: 8` 등)를 일관되게 정의, (3) `min <= 8 && max >= 8` 조건으로 정확히 필터링, (4) `tsc`/`lint`/`vitest` 검증 후 HANDOFF 갱신 → 커밋 `feat(hub): add 8-player filter option to game list` → 푸시 → 배포까지 요청. 필터 UI 위치·게임 메타데이터 설정에 확인이 필요하면 절대 임의로 추정하지 말고 사전에 질문해 확정하라고 명시.
+
+**조사**: 요청이 가리킨 `src/pages/Lobby.tsx`/`Home.tsx`/`src/components/GameFilter.tsx`/`src/config/games.ts`는 이 저장소에 존재하지 않음을 확인 — 실제 구조는 Next.js App Router 기반으로, 허브 화면은 [src/app/page.tsx](src/app/page.tsx)에 인라인 `PLAYER_FILTERS` 배열(`전체`/`2인`/`3~4인`/`5인+` 4개, `5인+`는 `max >= 5`)로 구현돼 있고 게임 메타데이터는 [src/games/registry.ts](src/games/registry.ts)(`GAME_REGISTRY: GameMeta[]`) + [src/games/types.ts](src/games/types.ts)(`players: { min, max }`)에 있음을 확인. 그리드 포커(`players: { min: 2, max: 8 }`, 직전 08-21 세션에서 확장됨)와 운명전쟁39(`players: { min: 5, max: 8 }`, 그 이전 08-21 세션에서 확장됨) 모두 이미 8인 메타데이터가 정확히 반영돼 있어 요청 2번(메타데이터 정비) 항목은 추가 작업이 불필요함을 확인. 기존 `5인+` 필터가 이미 `max >= 5` 조건이라 8인 게임도 노출은 되고 있었지만, 그대로 `8인` 칩만 추가하면 `5인+`와 범위가 겹치는 필터가 되는 점을 확인.
+
+**모호점 확인(`AskUserQuestion`, 2문항)**: ① '8인' 필터 추가 시 기존 '5인+' 옵션 처리 — "5~7인 + 8인으로 분리"(겹침 없이 명확히 구분) vs "5인+ 유지하고 8인만 추가"(겹치는 필터 허용) → **"5~7인 + 8인으로 분리"** 선택. ② 모바일 인원 필터 칩 레이아웃 — "가로 스크롤 스트립으로 전환"(`overflow-x-auto`, 필터가 늘어나도 세로 공간 안 먹음) vs "기존 flex-wrap 유지"(공간 부족 시 줄바꿈) → **"가로 스크롤 스트립으로 전환"** 선택.
+
+**구현** (`src/app/page.tsx`만 수정 — `registry.ts`/`types.ts`는 조사에서 확인한 대로 이미 정확해 무변경): `PLAYER_FILTERS`의 `{ label: "5인+", test: (min, max) => max >= 5 }` 한 항목을 `{ label: "5~7인", test: (min, max) => min <= 7 && max >= 5 }` + `{ label: "8인", test: (min, max) => min <= 8 && max >= 8 }` 두 항목으로 분리(요청에 명시된 조건 그대로 사용) — 이제 그리드 포커/운명전쟁39/페루도/달무티/아발론/지렁이(모두 `max: 8` 이상)는 `5~7인`과 `8인` 양쪽에 걸쳐 노출되고(정상 — 실제로 5~8인 모두 플레이 가능한 게임이므로), 뱅!(`max: 7`)처럼 8인이 안 되는 게임은 `5~7인`에서만, `min > 8`이거나 `max < 8`인 게임은 `8인` 칩에서 정확히 제외됨을 확인. 인원 필터 칩 컨테이너를 `flex flex-wrap gap-2`에서 `-mx-1 flex gap-2 overflow-x-auto px-1 pb-1`로 교체하고 각 칩 버튼에 `shrink-0`을 추가(그리드 포커 보드의 기존 모바일 가로 스크롤 스트립 패턴과 동일한 관례를 재사용) — 칩 개수가 4개→5개로 늘어나도 모바일 폭에서 줄바꿈으로 세로 공간을 잡아먹지 않고 한 줄로 스와이프됨, 데스크톱은 폭이 충분하면 스크롤 없이 한 줄에 그대로 표시됨. 장르 필터 행(`GENRE_ORDER` 기반, 바로 아래)은 이번 요청 대상이 아니라 기존 `flex-wrap` 그대로 무변경.
+
+**검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1084/1084 통과, 43.02초) — 이번 변경이 순수 대시보드 필터 UI(`src/app/page.tsx`)에 국한돼 게임 엔진 테스트에는 영향 없음. 도중 `--exclude` 없이 백그라운드로 걸어둔 전체 `npx vitest run`이 이전 세션들에 이미 기록된 패턴대로 5분 넘게 응답 없어 `TaskStop` 후 `Get-CimInstance Win32_Process`로 잔존 vitest 워커 3개를 `Stop-Process -Force`로 정리하고 `--exclude` 버전으로 재실행해 정상 완료.
+
+**커밋/배포**: 커밋 예정 `feat(hub): add 8-player filter option to game list` → 푸시 → `npx vercel deploy` 진행 예정(본 절 하단 갱신 예정).
 
 ### 2026-08-21 — 소환사의 협곡 제거 장비 가로 순차 나열 + 던전 공략 실시간 관전 UI + 몬스터 히스토리 패널
 

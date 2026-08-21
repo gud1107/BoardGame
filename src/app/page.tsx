@@ -11,7 +11,8 @@ const PLAYER_FILTERS = [
   { label: "전체", test: () => true },
   { label: "2인", test: (min: number, max: number) => min <= 2 && max >= 2 },
   { label: "3~4인", test: (min: number, max: number) => min <= 4 && max >= 3 },
-  { label: "5인+", test: (min: number, max: number) => max >= 5 },
+  { label: "5~7인", test: (min: number, max: number) => min <= 7 && max >= 5 },
+  { label: "8인", test: (min: number, max: number) => min <= 8 && max >= 8 },
 ];
 
 type GenreFilter = GameGenre | "all";
@@ -65,12 +66,12 @@ export default function DashboardPage() {
           placeholder="게임 이름 검색..."
           className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none sm:max-w-xs"
         />
-        <div className="flex flex-wrap gap-2">
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
           {PLAYER_FILTERS.map((f, idx) => (
             <button
               key={f.label}
               onClick={() => setFilterIdx(idx)}
-              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+              className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                 filterIdx === idx
                   ? "border-rose-400 bg-rose-500/20 text-white"
                   : "border-white/10 text-white/60 hover:border-white/25"
