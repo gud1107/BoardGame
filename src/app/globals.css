@@ -1132,3 +1132,285 @@ body {
     opacity: 0;
   }
 }
+
+/* 운명전쟁39's played-card slide & drop (see DestinyWar39Effects.tsx's
+   `PlayedCardSlot`) — every card that lands in a table slot during the
+   "playing" phase plays this once on mount (`key={card.id}` remount, same
+   convention documented in grid-poker/GridPokerEffects.tsx's module doc). A
+   fixed relative-offset entrance rather than real hand->table coordinate
+   tracking (this game's hand/table layout is a responsive flex-wrap with no
+   stable per-card DOM anchor to measure from, unlike Five Cucumbers'
+   FlyingPlayedCard) — still reads clearly as "sliding in and dropping into
+   place" without that complexity. */
+@keyframes destinywar39-card-slide-drop {
+  0% {
+    transform: translateY(-40px) scale(0.7) rotate(-10deg);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(4px) scale(1.08) rotate(3deg);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(-2px) scale(0.97) rotate(-1deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* 운명전쟁39's card-flip — shared by the hidden-prediction activate/reveal
+   flourish (see DestinyWar39Effects.tsx's `CardFlipWrapper`), identical
+   technique to coup/loveLetter/forSale's own `*-card-flip`: the content
+   already reflects the post-flip state at render time, this keyframe just
+   spins the wrapper edge-on (90deg, invisible) at the midpoint so the swap
+   reads as a physical flip rather than an instant content change. */
+@keyframes destinywar39-card-flip {
+  0% {
+    transform: rotateY(0deg);
+  }
+  50% {
+    transform: rotateY(90deg);
+  }
+  100% {
+    transform: rotateY(0deg);
+  }
+}
+
+/* 운명전쟁39's 0-카드 impact — a blue pulse aura ring the instant a 0 card
+   lands in a table slot (see PlayedCardSlot). Plays once; 0's actual game
+   significance (the narrow Death-counter upside, see engine.ts) doesn't
+   change how often this fires — every 0 reveal gets it, win or lose. */
+@keyframes destinywar39-zero-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.85);
+  }
+  60% {
+    box-shadow: 0 0 0 10px rgba(56, 189, 248, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+  }
+}
+
+/* 운명전쟁39's 데스카드 impact — a brief dark-energy glitch jitter on the
+   card itself (paired with `destinywar39-death-smoke-puff` particles below)
+   the instant a Death card lands in a table slot. */
+@keyframes destinywar39-death-glitch {
+  0%,
+  100% {
+    transform: translate(0, 0) skew(0deg);
+    filter: none;
+  }
+  20% {
+    transform: translate(-2px, 1px) skew(-2deg);
+    filter: hue-rotate(20deg) brightness(1.3);
+  }
+  40% {
+    transform: translate(2px, -1px) skew(2deg);
+    filter: hue-rotate(-15deg) brightness(0.8);
+  }
+  60% {
+    transform: translate(-1px, 2px) skew(-1deg);
+    filter: brightness(1.2);
+  }
+  80% {
+    transform: translate(1px, -2px) skew(1deg);
+    filter: brightness(0.9);
+  }
+}
+
+/* 운명전쟁39's 데스카드 dark-energy particles — small smoke puffs drifting
+   up and fading from behind the card (see PlayedCardSlot's DEATH_PARTICLE_
+   offsets), staggered a few ms apart per puff for a wisping-smoke read
+   instead of one uniform pop. */
+@keyframes destinywar39-death-smoke-puff {
+  0% {
+    transform: translate(-50%, -50%) scale(0.4);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(-50%, -150%) scale(1.7);
+    opacity: 0;
+  }
+}
+
+/* 운명전쟁39's 리버스 발동 — a full-screen border swish the instant a turn
+   resolves with reverseActive true (see DestinyWar39Board.tsx's
+   `resolvingTurn` effect and DestinyWar39Effects.tsx's `ReverseSwishOverlay`)
+   — tied to the turn's FINAL parity result, not to any individual reverse
+   card landing, since two reverse cards in one turn cancel each other out
+   (rulebook §6.1). Gold sweeping into fuchsia/neon, inset so it reads as the
+   screen edge itself reacting rather than a centered popup. */
+@keyframes destinywar39-reverse-swish {
+  0% {
+    opacity: 0;
+    box-shadow: inset 0 0 0 0 rgba(232, 121, 249, 0);
+  }
+  25% {
+    opacity: 1;
+    box-shadow: inset 0 0 80px 18px rgba(250, 204, 21, 0.55);
+  }
+  55% {
+    opacity: 1;
+    box-shadow: inset 0 0 100px 22px rgba(232, 121, 249, 0.6);
+  }
+  100% {
+    opacity: 0;
+    box-shadow: inset 0 0 0 0 rgba(232, 121, 249, 0);
+  }
+}
+
+/* 운명전쟁39's 히든 발동 — a soft purple glow forming around the "🙈" badge
+   the instant a player spends their lifetime hidden token (see
+   PredictionStatusBoard.tsx's per-seat row), paired with
+   `destinywar39-hidden-sparkle` twinkles. Shared across every connected
+   client the moment `hiddenUsed` flips true, same as everything else in this
+   lockstep-state game. */
+@keyframes destinywar39-hidden-activate-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(232, 121, 249, 0.9);
+    opacity: 0.4;
+  }
+  50% {
+    box-shadow: 0 0 14px 6px rgba(232, 121, 249, 0.65);
+    opacity: 1;
+  }
+  100% {
+    box-shadow: 0 0 4px 2px rgba(232, 121, 249, 0.35);
+    opacity: 1;
+  }
+}
+
+/* 운명전쟁39's 히든 발동 sparkle twinkle — same shape as grid-poker's
+   `gp-sparkle-twinkle`, kept as its own copy so future edits to one game's
+   particle feel don't silently drift the other's. */
+@keyframes destinywar39-hidden-sparkle {
+  0% {
+    transform: scale(0.3) rotate(0deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1) rotate(90deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.2) rotate(180deg);
+    opacity: 0;
+  }
+}
+
+/* 운명전쟁39's 히든 오픈 — the game-over reveal of a previously-hidden
+   prediction (see DestinyWar39Board.tsx's gameOver table): a bright flash
+   pulse behind the cell... */
+@keyframes destinywar39-hidden-shatter-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  30% {
+    opacity: 0.9;
+    transform: scale(1.4);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2);
+  }
+}
+
+/* ...paired with this — small "?" fragment shards flying outward from the
+   cell as it opens (direction per-fragment via the `--dx`/`--dy` custom
+   properties set inline, one keyframe reused for every shard instead of a
+   separate keyframe per direction). */
+@keyframes destinywar39-hidden-shatter-fragment {
+  0% {
+    transform: translate(-50%, -50%) translate(0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(var(--dx, 0px), var(--dy, 0px)) scale(0.15) rotate(var(--rot, 90deg));
+    opacity: 0;
+  }
+}
+
+/* 운명전쟁39's 예측 성공(Exact Hit) 스탬프 — an overshoot bounce-in with a
+   settled resting scale (see DestinyWar39Effects.tsx's `RoundResultBadge`),
+   landing on the round-end summary table row the instant it's confirmed the
+   player's actual wins matched their prediction exactly. */
+@keyframes destinywar39-stamp-bounce {
+  0% {
+    transform: scale(2.2) rotate(-8deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(0.9) rotate(3deg);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(1.15) rotate(-2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* 운명전쟁39's round-result particle burst — one keyframe reused for every
+   outcome's scatter (gold/green confetti on Exact Hit, orange embers on
+   Over, blue frost flecks on Under), direction/distance per-particle via
+   the `--dx`/`--dy` custom properties set inline, same technique as
+   `destinywar39-hidden-shatter-fragment` above. */
+@keyframes destinywar39-particle-burst {
+  0% {
+    transform: translate(-50%, -50%) translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(var(--dx, 0px), var(--dy, 40px)) rotate(var(--rot, 180deg)) scale(0.6);
+    opacity: 0;
+  }
+}
+
+/* 운명전쟁39's 예측 초과(Over) 뱃지 — a settling shake, paired with the
+   warm-toned particle burst above. */
+@keyframes destinywar39-badge-shake {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  20% {
+    transform: translateX(-3px) rotate(-4deg);
+  }
+  40% {
+    transform: translateX(3px) rotate(4deg);
+  }
+  60% {
+    transform: translateX(-2px) rotate(-3deg);
+  }
+  80% {
+    transform: translateX(2px) rotate(3deg);
+  }
+}
+
+/* 운명전쟁39's 미달(Under) 뱃지 — drops and settles half-faded, a
+   low-energy "fell short" read paired with the cool-toned particle burst
+   above. Ends mid-animation (not back at 0) deliberately — the badge stays
+   visibly slumped for as long as the round-end table is on screen. */
+@keyframes destinywar39-badge-drop-fade {
+  0% {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+  30% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(10px);
+    opacity: 0.55;
+  }
+}
+

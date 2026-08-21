@@ -6,6 +6,7 @@ import PredictionStatusBoard from "./PredictionStatusBoard";
 import RankedLeaderboard from "./RankedLeaderboard";
 import LastRoundHistoryModal from "./LastRoundHistoryModal";
 import { CardFace } from "./CardFace";
+import { HiddenRevealCell, PlayedCardSlot, ReverseSwishOverlay, RoundResultBadge, type RoundOutcome } from "./DestinyWar39Effects";
 import {
   TOTAL_ROUNDS,
   visiblePastPrediction,
@@ -70,6 +71,12 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
   // change resets turnRecords to a shorter array and must NOT be mistaken
   // for a resolved trick.
   const [resolvingTurn, setResolvingTurn] = useState<TurnRecord | null>(null);
+  // Screen-wide border swish the instant a turn resolves with reverse active
+  // (see DestinyWar39Effects.tsx's `ReverseSwishOverlay` doc) — tied to the
+  // SAME "a turn just resolved" signal as `resolvingTurn` below, not to any
+  // individual reverse card landing, since reverse parity is a whole-turn
+  // property (two reverse cards in one turn cancel out, rulebook §6.1).
+  const [reverseSwish, setReverseSwish] = useState(false);
   const prevRoundNumberRef = useRef(round.roundNumber);
   const prevTurnCountRef = useRef(round.turnRecords.length);
   useEffect(() => {
@@ -78,7 +85,9 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
     prevRoundNumberRef.current = round.roundNumber;
     prevTurnCountRef.current = round.turnRecords.length;
     if (!turnCountGrew) return;
-    setResolvingTurn(round.turnRecords[round.turnRecords.length - 1]);
+    const justResolved = round.turnRecords[round.turnRecords.length - 1];
+    setResolvingTurn(justResolved);
+    setReverseSwish(justResolved.reverseActive);
     const timer = setTimeout(() => setResolvingTurn(null), TRICK_REVEAL_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -136,7 +145,8 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
                   {seatLabel(seat)}
                   {isWinner ? " 🏆" : ""}
                 </span>
-                <CardFace
+                <PlayedCardSlot
+                  key={p.card.id}
                   card={p.card}
                   playerCount={playerCount}
                   size="lg"
@@ -189,7 +199,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
                       <td className="px-2 py-1.5 font-medium text-white/90">{seatLabel(seat)}</td>
                       {Array.from({ length: TOTAL_ROUNDS }, (_, i) => (
                         <td key={i} className="px-1.5 py-1.5 text-center text-white/70">
-                          {player.predictions[i]}→{player.actualWins[i]}
+                          {player.hidden[i] ? <HiddenRevealCell>{player.predictions[i]}</HiddenRevealCell> : player.predictions[i]}→{player.actualWins[i]}
                           <span className="ml-1 text-white/40">({(player.scores[i] ?? 0) >= 0 ? "+" : ""}{player.scores[i]})</span>
                         </td>
                       ))}
@@ -212,7 +222,10 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
     // Round-end summary
     // ---------------------------------------------------------------------
     centerContent = (
-      <div className="flex flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+      // Keyed by round number so every round-end visit remounts fresh —
+      // required for RoundResultBadge's mount-only confetti/stamp to replay
+      // each round instead of only ever firing once for round 1's table.
+      <div key={`round-end-${round.roundNumber}`} className="flex flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-white">ROUND {round.roundNumber} 결과</h2>
           <div className="flex gap-2">
@@ -236,14 +249,29 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
                 const idx = round.roundNumber - 1;
                 const visible = visiblePastPrediction(state, viewerSeat, p.seat, round.roundNumber);
                 const isHiddenFromMe = visible === "hidden";
-                const success = p.predictions[idx] === p.actualWins[idx];
+                const predicted = p.predictions[idx]!;
+                const actual = p.actualWins[idx]!;
+                const success = predicted === actual;
+                // Never computed/shown for a row hidden from the viewer — a
+                // distinct outcome badge would leak exactly what that
+                // redaction is meant to hide (see RoundResultBadge's doc).
+                const outcome: RoundOutcome = success ? "success" : actual > predicted ? "over" : "under";
+                const outcomeLabel = success ? "성공" : outcome === "over" ? "초과" : "미달";
+                const outcomeClass = success ? "text-emerald-400" : outcome === "over" ? "text-orange-300" : "text-sky-300";
                 return (
                   <tr key={p.seat} className="border-t border-white/10">
                     <td className="px-2 py-1.5 font-medium text-white/90">{seatLabel(p.seat)}</td>
-                    <td className="px-2 py-1.5 text-center text-white/70">{isHiddenFromMe ? "🙈" : p.predictions[idx]}</td>
-                    <td className="px-2 py-1.5 text-center text-white/70">{p.actualWins[idx]}</td>
-                    <td className={`px-2 py-1.5 text-center font-semibold ${isHiddenFromMe ? "text-white/40" : success ? "text-emerald-400" : "text-rose-400"}`}>
-                      {isHiddenFromMe ? "비공개" : success ? "성공" : "실패"}
+                    <td className="px-2 py-1.5 text-center text-white/70">{isHiddenFromMe ? "🙈" : predicted}</td>
+                    <td className="px-2 py-1.5 text-center text-white/70">{actual}</td>
+                    <td className={`px-2 py-1.5 text-center font-semibold ${isHiddenFromMe ? "text-white/40" : outcomeClass}`}>
+                      {isHiddenFromMe ? (
+                        "비공개"
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5">
+                          {outcomeLabel}
+                          <RoundResultBadge outcome={outcome} />
+                        </span>
+                      )}
                     </td>
                     <td className="px-2 py-1.5 text-right text-white/80">
                       {isHiddenFromMe ? "?" : `${(p.scores[idx] ?? 0) >= 0 ? "+" : ""}${p.scores[idx]}`}
@@ -344,7 +372,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
               <div key={seat} className="flex flex-col items-center gap-1">
                 <span className="text-[11px] text-white/50">{seatLabel(seat)}</span>
                 {p ? (
-                  <CardFace card={p.card} playerCount={playerCount} size="md" />
+                  <PlayedCardSlot key={p.card.id} card={p.card} playerCount={playerCount} size="md" />
                 ) : (
                   <span className="grid h-14 w-10 place-items-center rounded-lg border border-dashed border-white/15 text-white/20">?</span>
                 )}
@@ -391,6 +419,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
       {showPredictionPanel && (
         <PredictionStatusBoard state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} onAction={onAction} />
       )}
+      {reverseSwish && <ReverseSwishOverlay onDone={() => setReverseSwish(false)} />}
     </div>
   );
 }

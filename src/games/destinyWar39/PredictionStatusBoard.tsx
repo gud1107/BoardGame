@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { HiddenActivationBadge } from "./DestinyWar39Effects";
 import { visibleCurrentPrediction, type DestinyWar39State, type EngineAction, type SeatIndex } from "./engine";
 
 export interface PredictionStatusBoardProps {
@@ -111,7 +112,7 @@ function PredictionContent({ state, viewerSeat, names, connectedSeats, onAction 
                   {isMe ? " (나)" : ""}
                 </span>
                 {player.hiddenUsed && (
-                  <span title={player.hiddenRound === round.roundNumber ? "이번 라운드 히든 사용 중" : "히든 사용 완료"}>🙈</span>
+                  <HiddenActivationBadge title={player.hiddenRound === round.roundNumber ? "이번 라운드 히든 사용 중" : "히든 사용 완료"} />
                 )}
               </div>
               <div className="flex items-center justify-between text-white/60">
