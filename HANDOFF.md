@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-22 (**지렁이 실시간 액션 시각/파티클 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 지렁이 먹이/자폭/꼬리절단/충돌 액션 파티클 이펙트` 절 참고. 커밋 `<TBD> feat(worm): add visual particle effects for eating food, self-destruction, cutting tails, and core actions` → 배포 프리뷰 `<TBD>`.)_
+_최종 갱신: 2026-08-22 (**지렁이 실시간 액션 시각/파티클 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 지렁이 먹이/자폭/꼬리절단/충돌 액션 파티클 이펙트` 절 참고. 커밋 `3a85ebb feat(worm): add visual particle effects for eating food, self-destruction, cutting tails, and core actions` → 배포 프리뷰 `https://board-game-l1hcua27f-me-3871.vercel.app`.)_
 
 _이전 갱신: 2026-08-22 (**뱅! 8인 플레이 확장 + 2배신자 밸런스 세션** — 자세한 내용은 아래 `### 2026-08-22 — 뱅! 8인 플레이 확장 + 공식 직업 밸런스(2배신자)` 절 참고. 커밋 `9491616 feat(bang): support 8-player mode with official role distribution and 2-renegade balance` → 배포 프리뷰 `https://board-game-e0hkckmev-me-3871.vercel.app`.)_
 
@@ -24,7 +24,7 @@ _이전 갱신: 2026-08-22 (**뱅! 8인 플레이 확장 + 2배신자 밸런스 
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/worm`(33/33 통과, 신규 9개 포함) / `npx vitest run --exclude "**/aiBenchmark.test.ts"`(27개 파일 1109개 중 1108 통과 — `src/games/perudo/Perudo.test.ts`의 "all-Level-10 게임 완주" 시뮬레이션 테스트 1개가 병렬 실행 부하로 5초 타임아웃, **이번 세션이 건드리지 않은 페루도 코드**이고 단독 재실행 시 2.4초 만에 정상 통과함을 확인해 병렬 실행 환경에 따른 사전 존재 플레이키니스로 판단, 이번 변경과 무관) / `npm run build`(프로덕션 빌드 성공, Turbopack). **브라우저 실측(파티클 육안 확인)은 이번 세션에 수행하지 않음** — Canvas 2D 렌더 로직과 이벤트 diff 순수 함수만 코드/단위 테스트로 확인했고, 실제 파티클 타이밍·겹침·프레임 드랍 여부는 실사용 전 수동 확인 권장(§3 Next Action Items 참고, `<Game>Canvas.tsx`의 실시간 렌더는 이 저장소가 이미 알려진 사각지대로 문서화한 vitest 커버리지 밖 영역).
 
-**커밋/배포**: <이 절 뒤에 실제 커밋 해시/배포 URL로 갱신>
+**커밋/배포**: 커밋 `3a85ebb feat(worm): add visual particle effects for eating food, self-destruction, cutting tails, and core actions` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주, READY — `https://board-game-l1hcua27f-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-22 — 뱅! 8인 플레이 확장 + 공식 직업 밸런스(2배신자)
 
