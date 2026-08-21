@@ -6,7 +6,7 @@ import PredictionStatusBoard from "./PredictionStatusBoard";
 import RankedLeaderboard from "./RankedLeaderboard";
 import LastRoundHistoryModal from "./LastRoundHistoryModal";
 import { CardFace } from "./CardFace";
-import { HiddenRevealCell, PlayedCardSlot, ReverseSwishOverlay, RoundResultBadge, type RoundOutcome } from "./DestinyWar39Effects";
+import { HiddenRevealCell, PlayedCardSlot, ReverseSwishOverlay, RoundResultBadge, TurnOrderBadge, type RoundOutcome } from "./DestinyWar39Effects";
 import {
   TOTAL_ROUNDS,
   visiblePastPrediction,
@@ -27,6 +27,9 @@ import {
  * `round.turnRecords` growing — see the effect below.
  */
 const TRICK_REVEAL_MS = 2800;
+
+/** Duration of the global screen judder a Death card triggers on landing (see `screenShake` below) — 8px/200ms, this session's confirmed answer, matched against `destinywar39-death-impact-shake` in globals.css. */
+const DEATH_SHAKE_MS = 200;
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -93,6 +96,27 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [round.roundNumber, round.turnRecords.length]);
 
+  // Global screen judder the instant ANY seat reveals a Death card in the
+  // live "playing" phase (see globals.css's `destinywar39-death-impact-shake`
+  // doc) — fires on the reveal itself, not on turn resolution, since playing
+  // a Death card is never cancelled/undone by anything else landing the same
+  // turn (unlike the reverse swirl below, which does wait for resolution).
+  const [screenShake, setScreenShake] = useState(false);
+  const prevPlaysCountRef = useRef(round.playsThisTurn.length);
+  useEffect(() => {
+    const grew = round.playsThisTurn.length > prevPlaysCountRef.current;
+    prevPlaysCountRef.current = round.playsThisTurn.length;
+    const justPlayedDeath = grew && round.playsThisTurn[round.playsThisTurn.length - 1].card.kind === "death";
+    // Unconditional setState (not `if (justPlayedDeath) setScreenShake(true)`)
+    // — same react-hooks/set-state-in-effect fix the reverseSwish effect
+    // above already needed (see HANDOFF.md's destinyWar39 session).
+    setScreenShake(justPlayedDeath);
+    if (!justPlayedDeath) return;
+    const timer = setTimeout(() => setScreenShake(false), DEATH_SHAKE_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [round.playsThisTurn.length]);
+
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
@@ -150,6 +174,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
                   card={p.card}
                   playerCount={playerCount}
                   size="lg"
+                  reverseActiveThisTurn={t.reverseActive}
                   className={isWinner ? "scale-110 ring-4 ring-amber-300/70 shadow-[0_0_25px_rgba(252,211,77,0.55)]" : ""}
                 />
               </div>
@@ -329,15 +354,20 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
     const myHand = round.hands[viewerSeat] ?? [];
     const myPlayed = played.has(viewerSeat);
     const isSimultaneous = round.roundNumber === 1;
+    // Turn-order badges (①②③…) and the currently-acting seat, both derived
+    // from the same clockwise-from-turnLeader rotation — round 1 gets
+    // neither: it's a simultaneous reveal with no lead player at all
+    // (engine.ts's `nextToActInTurn` doc), so a numbered sequence would
+    // contradict the rule itself (this session's confirmed answer).
     let actingSeat: SeatIndex | null = null;
+    let turnOrderBySeat: Record<SeatIndex, number> | null = null;
     if (!isSimultaneous) {
       const startIdx = state.seatOrder.indexOf(round.turnLeader);
+      turnOrderBySeat = {};
       for (let i = 0; i < playerCount; i++) {
-        const candidate = state.seatOrder[(startIdx + i) % playerCount];
-        if (!played.has(candidate)) {
-          actingSeat = candidate;
-          break;
-        }
+        const seat = state.seatOrder[(startIdx + i) % playerCount];
+        turnOrderBySeat[seat] = i + 1;
+        if (actingSeat === null && !played.has(seat)) actingSeat = seat;
       }
     }
     const myTurnToAct = isSimultaneous ? !myPlayed : actingSeat === viewerSeat;
@@ -368,13 +398,21 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
         <div className="flex flex-wrap gap-3">
           {Array.from({ length: playerCount }, (_, seat) => {
             const p = round.playsThisTurn.find((x) => x.seat === seat);
+            const order = turnOrderBySeat?.[seat] ?? null;
+            const isActingSeat = actingSeat === seat;
             return (
               <div key={seat} className="flex flex-col items-center gap-1">
+                {order !== null && <TurnOrderBadge order={order} isActive={isActingSeat} isDone={!!p} />}
                 <span className="text-[11px] text-white/50">{seatLabel(seat)}</span>
                 {p ? (
                   <PlayedCardSlot key={p.card.id} card={p.card} playerCount={playerCount} size="md" />
                 ) : (
-                  <span className="grid h-14 w-10 place-items-center rounded-lg border border-dashed border-white/15 text-white/20">?</span>
+                  <span
+                    className={`grid h-14 w-10 place-items-center rounded-lg border border-dashed text-white/20 ${isActingSeat ? "border-amber-300/70" : "border-white/15"}`}
+                    style={isActingSeat ? { animation: "destinywar39-turn-badge-pulse 1.1s ease-in-out infinite" } : undefined}
+                  >
+                    ?
+                  </span>
                 )}
               </div>
             );
@@ -413,7 +451,10 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
   }
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
+    <div
+      className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4"
+      style={screenShake ? { animation: "destinywar39-death-impact-shake 200ms ease-in-out" } : undefined}
+    >
       <RankedLeaderboard state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} />
       <div className="flex min-w-0 flex-1 flex-col gap-5">{centerContent}</div>
       {showPredictionPanel && (

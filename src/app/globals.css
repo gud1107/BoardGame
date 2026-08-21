@@ -1459,3 +1459,129 @@ body {
       0 0 46px rgba(255, 80, 80, 0.85);
   }
 }
+
+/* 운명전쟁39's turn-order/card-impact escalation session (2026-08-22) — see
+   DestinyWar39Effects.tsx's `PlayedCardSlot`/`TurnOrderBadge` doc for how
+   each of these is wired up. */
+
+/* Generic landing shockwave ring under a played card — the "every card"
+   base impact (silvery/neutral so it doesn't compete with a card's own
+   type color), paired with `destinywar39-particle-burst`-driven spark dots.
+   Bigger radius than the existing `destinywar39-zero-pulse` on purpose —
+   this is the escalated "massive impact" pass, that one predates it. */
+@keyframes destinywar39-land-shockwave {
+  0% {
+    box-shadow: 0 0 0 0 rgba(226, 232, 240, 0.85);
+    opacity: 1;
+  }
+  70% {
+    box-shadow: 0 0 0 22px rgba(226, 232, 240, 0);
+    opacity: 0.5;
+  }
+  100% {
+    box-shadow: 0 0 0 26px rgba(226, 232, 240, 0);
+    opacity: 0;
+  }
+}
+
+/* Death card's own landing shockwave — a dark-red variant of the ring
+   above, layered on top of the existing glitch+smoke impact as the "검붉은
+   에너지 폭풍" escalation. Bigger spread than the generic ring since Death
+   is meant to read as the heaviest landing in the deck. */
+@keyframes destinywar39-land-shockwave-death {
+  0% {
+    box-shadow: 0 0 0 0 rgba(190, 18, 60, 0.9);
+    opacity: 1;
+  }
+  70% {
+    box-shadow: 0 0 0 30px rgba(190, 18, 60, 0);
+    opacity: 0.55;
+  }
+  100% {
+    box-shadow: 0 0 0 34px rgba(190, 18, 60, 0);
+    opacity: 0;
+  }
+}
+
+/* Ordinary number card glow, scaled continuously by that card's value
+   relative to the deck's max (see PlayedCardSlot's `--glow-alpha`/
+   `--glow-blur` custom properties) — "숫자의 위력에 비례하는 발광". Fixed
+   gold color; only the intensity varies per card. */
+@keyframes destinywar39-number-glow-burst {
+  0% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0);
+  }
+  40% {
+    box-shadow: 0 0 var(--glow-blur, 12px) 2px rgba(250, 204, 21, var(--glow-alpha, 0.4));
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0);
+  }
+}
+
+/* Reverse card's own per-card swirl — ONLY ever applied once a turn's FINAL
+   reverse parity resolves active (see `PlayedCardSlot`'s
+   `reverseActiveThisTurn` prop doc — animating this at play() time would
+   misrepresent a reverse that later gets cancelled by an even count,
+   rulebook §6.1). Gold sweeping into fuchsia, echoing the existing
+   screen-wide `destinywar39-reverse-swish` palette at card scale. */
+@keyframes destinywar39-reverse-card-swirl {
+  0% {
+    transform: scale(1) rotate(0deg);
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0);
+    filter: brightness(1) saturate(1);
+  }
+  30% {
+    transform: scale(1.1) rotate(9deg);
+    box-shadow: 0 0 22px 6px rgba(250, 204, 21, 0.75);
+    filter: brightness(1.35) saturate(1.4);
+  }
+  60% {
+    transform: scale(1.05) rotate(-7deg);
+    box-shadow: 0 0 26px 8px rgba(232, 121, 249, 0.65);
+    filter: brightness(1.2) hue-rotate(10deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    box-shadow: 0 0 0 0 rgba(232, 121, 249, 0);
+    filter: brightness(1) saturate(1);
+  }
+}
+
+/* Death card's global screen judder — fires the instant ANY seat reveals a
+   Death card in the live "playing" phase (see DestinyWar39Board.tsx's
+   `screenShake` effect), 8px/200ms per this session's confirmed answer.
+   Not tied to turn resolution (unlike the reverse swirl above) since
+   playing a Death card is never itself cancelled/undone by anything else
+   landing the same turn. */
+@keyframes destinywar39-death-impact-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-8px, 3px);
+  }
+  40% {
+    transform: translate(7px, -4px);
+  }
+  60% {
+    transform: translate(-6px, 4px);
+  }
+  80% {
+    transform: translate(5px, -3px);
+  }
+}
+
+/* Active turn-order badge's glow pulse (see DestinyWar39Effects.tsx's
+   `TurnOrderBadge`) — loops for as long as it's that seat's turn to act,
+   not a one-shot mount animation like everything else in this file. */
+@keyframes destinywar39-turn-badge-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 14px 4px rgba(250, 204, 21, 0.75);
+  }
+}

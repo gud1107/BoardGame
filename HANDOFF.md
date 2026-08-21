@@ -1,8 +1,27 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-22 (**지렁이 상대 처치(Kill) 대형 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 지렁이 상대 처치(Kill) 대형 폭발·화면 연출·킬 배너` 절 참고. 커밋 `fbf867c feat(worm): add massive kill visual effects, shockwave particles, and elimination banner` → 배포 프리뷰 `https://board-game-dehnnqfjr-me-3871.vercel.app`.)_
+_최종 갱신: 2026-08-22 (**운명전쟁39 턴 순서 배지 + 카드 제출 대형 임팩트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 운명전쟁39 턴 순서 배지(Order Badge) + 카드 제출 대형 임팩트` 절 참고. 커밋 `<PENDING>` → 배포 프리뷰 `<PENDING>`.)_
 
-_이전 갱신: 2026-08-22 (**운명전쟁39 히든/카드 제출/예측 결과 시각 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 운명전쟁39 히든 발동·카드 제출·예측 성공/초과/미달 결과 이펙트` 절 참고. 커밋 `add0189 feat(destinyWar39): add hidden reveal, card play, and prediction result visual effects` — 이 세션에서는 별도 배포를 진행하지 않음(다음 배포 시 함께 반영됨).)_
+_이전 갱신: 2026-08-22 (**지렁이 상대 처치(Kill) 대형 이펙트 세션** — 자세한 내용은 아래 `### 2026-08-22 — 지렁이 상대 처치(Kill) 대형 폭발·화면 연출·킬 배너` 절 참고. 커밋 `fbf867c feat(worm): add massive kill visual effects, shockwave particles, and elimination banner` → 배포 프리뷰 `https://board-game-dehnnqfjr-me-3871.vercel.app`.)_
+
+### 2026-08-22 — 운명전쟁39 턴 순서 배지(Order Badge) + 카드 제출 대형 임팩트
+
+**요청**: `HANDOFF.md`와 운명전쟁39 코드(`src/games/destinyWar39/`)를 먼저 확인한 뒤 (1) 트릭마다 리드 플레이어 기준 카드 내는 순서를 ①②③ 배지로 표시하고 현재 차례는 활성화 펄스, 이미 낸 사람은 체크/반투명 처리, (2) 카드 제출 시 중앙 슬램(Slam) 모션+착지 충격파·파티클을 기본으로 깔고 데스(검붉은 에너지 폭풍+화면 흔들림)/리버스(황금 회오리+공간왜곡)/0(빙결 파티클)/고숫자(비례 발광) 속성별 강화 연출을 추가해달라는 요청. 배지 노출 위치, 선(리드) 표시 방식, 대형 이펙트 스타일 등은 절대 임의로 넘겨짚지 말고 질문으로 확인하라고 명시. 요청 문구가 지목한 `Card.tsx`/`PlayerSlot.tsx`는 이 저장소에 없고, 실제로는 `CardFace.tsx`(카드 렌더 공용 컴포넌트)와 `DestinyWar39Board.tsx`(플레이어 슬롯이 이 파일 안에 인라인)임을 확인.
+
+**조사**: `engine.ts`를 뜯어본 결과 요청과 정면으로 충돌하는 지점 하나를 발견 — **1라운드는 룰상 선(리드) 플레이어가 아예 없는 전원 동시 공개**(`nextToActInTurn`의 독스트링에 "Round 1 has no fixed order (any not-yet-played seat may act)"라고 명시)라서, "리드 플레이어 기준 순서"라는 개념 자체가 1라운드엔 존재하지 않음. 2라운드부터는 `round.turnLeader`에서 시작해 `state.seatOrder`를 시계방향으로 도는 고정 순서가 실제로 있음(이미 `actingSeat` 계산 로직이 이 회전을 하고 있었음). 또한 리버스 카드(11/22/33/44/55)는 직전 세션에서 "한 턴에 짝수 개 나오면 서로 상쇄"되는 규칙 때문에 화면 전체 스위시를 턴의 최종 판정 결과에만 연동시켰던 전례가 있어, 이번에 요청한 "개별 카드 리버스 이펙트"도 즉시 재생 시 같은 오연출 위험이 그대로 있음을 확인.
+
+**모호점 확인(`AskUserQuestion`, 4문항)**: ① 1라운드(순서 없음)의 배지 처리 — **"배지를 표시하지 않음(추천)"** / "seatOrder 기준 참고용 번호 표시" / "번호 대신 동시 아이콘" → 배지 미표시 선택(룰과 모순 방지). ② 리버스 카드 개별 이펙트 시점 — **"턴 최종 판정 확정 후에만 재생(추천)"** / "카드 놓이는 즉시 재생" → 최종 판정 후 선택(기존 `ReverseSwishOverlay`와 동일 타이밍, 상쇄된 리버스를 미리 보여주는 오연출 방지). ③ 데스카드 화면 흔들림 강도 — "약하게 4px/150ms" / **"중간: 8px/200ms(추천)"** / "강하게 14px/250ms" → 중간 선택(이 게임엔 기존 셰이크 연출이 전혀 없어 신규 결정 필요했음). ④ 순서 배지 스타일 — **"①②③ 원형 숫자 배지(추천)"** / "1st/2nd/3rd 텍스트 배지" → 원형 숫자 배지 선택.
+
+**구현**:
+- **턴 순서 배지** (`TurnOrderBadge`, 신규): `DestinyWar39Board.tsx`의 "playing" 단계에서 `actingSeat` 계산과 같은 회전(`turnLeader`에서 시작해 `seatOrder`를 시계방향)을 재사용해 `turnOrderBySeat: Record<seat, 1-indexed order> | null`을 함께 계산 — 1라운드(`isSimultaneous`)일 때는 `null`로 남겨 배지 자체가 마운트되지 않음. 각 좌석 슬롯 위에 원형 숫자 배지를 얹고, 현재 차례(`actingSeat === seat`)면 `destinywar39-turn-badge-pulse`(무한 반복 금색 글로우 펄스)로 강조, 이미 낸 좌석(`p`가 존재)이면 배지를 반투명 처리(`opacity-60`)하고 우측 상단에 초록 체크(✓) 오버레이 — "체크 표시 또는 반투명"을 굳이 양자택일하지 않고 결합. 아직 안 낸 빈 슬롯(`?` placeholder)도 현재 차례 좌석이면 테두리가 같은 펄스로 빛나게 해 "프로필 테두리 활성화 펄스" 요구까지 함께 충족.
+- **카드 착지 대형 임팩트** (`PlayedCardSlot` 확장): 기존 슬라이드&드롭(0.35초)이 끝나는 시점에 맞춰(동일한 0.35초 딜레이 컨벤션) 새 레이어를 추가 — (1) 모든 카드 공통: 은색 착지 충격파 링(`destinywar39-land-shockwave`)+카드 하단에서 사방으로 튀는 스파크 점 6개(기존 `destinywar39-particle-burst` 재사용, 색만 카드 타입별로 다름), (2) 데스카드: 기존 글리치+연기에 더해 더 큰 반경의 검붉은 링(`destinywar39-land-shockwave-death`)+빨간 스파크, (3) 0 카드: 기존 파란 펄스 링 유지 + 파란 스파크로 "빙결 파티클" 보강, (4) 일반 숫자 카드: `value/maxNumber` 비율에 연속적으로 비례하는 금색 발광(`destinywar39-number-glow-burst`, `--glow-alpha`/`--glow-blur` CSS 커스텀 프로퍼티로 세기 조절 — 임의의 "고숫자 컷오프" 없이 전체 구간에 걸쳐 자연스럽게 스케일), (5) 리버스 카드: `reverseActiveThisTurn` prop이 `true`일 때만(=턴의 최종 판정이 확정된 뒤, 즉 `resolvingTurn` 프리즈프레임에서만 이 prop을 넘김) 금색→퓨시아로 번지는 회전 스월(`destinywar39-reverse-card-swirl`) 재생 — "playing" 단계의 실시간 슬롯에서는 이 prop을 절대 넘기지 않아 상쇄 가능성이 있는 카드를 미리 화려하게 보여주는 오연출을 원천 차단.
+- **데스카드 화면 흔들림**: `DestinyWar39Board.tsx`에 `round.playsThisTurn.length`가 늘어난 시점을 감지하는 신규 이펙트 추가(기존 `resolvingTurn` 감지와 같은 "배열 길이 증가 감지" 패턴) — 방금 추가된 play의 카드가 `death`면 `screenShake` state를 켜서 최상위 래퍼에 `destinywar39-death-impact-shake`(8px/200ms) 적용. 리버스 스위시(턴 판정 후)와 달리 데스 흔들림은 **카드가 공개되는 즉시**(턴 결과와 무관하게) 발동 — 데스카드를 냈다는 사실 자체는 나중에 상쇄되거나 취소되지 않으므로 오연출 위험이 없음. 락스텝 상태라 모든 클라이언트가 동시에 같은 흔들림을 봄(뷰어별 분기 불필요, 지렁이 세션과 달리 이 게임은 호스트 스냅샷이 아니라 전원이 같은 액션을 리플레이하는 구조라 "누구 화면만" 개념이 없음). `setScreenShake(true)`를 조건부로 호출하다 `react-hooks/set-state-in-effect` lint 에러가 나서, 직전 `reverseSwish` 수정과 동일하게 `setScreenShake(justPlayedDeath)` 무조건 호출로 고침.
+
+**파일 변경**: 1) `src/games/destinyWar39/DestinyWar39Effects.tsx` — `PlayedCardSlot`에 착지 충격파/스파크/숫자발광/리버스스월 레이어 추가(`reverseActiveThisTurn` prop 신규), `TurnOrderBadge` 컴포넌트 신규. 2) `src/games/destinyWar39/DestinyWar39Board.tsx` — `turnOrderBySeat` 계산(기존 `actingSeat` 로직과 통합), 좌석 슬롯에 `TurnOrderBadge` 부착, 데스카드 감지+`screenShake` 이펙트 신규, 프리즈프레임 `PlayedCardSlot`에 `reverseActiveThisTurn={t.reverseActive}` 전달. 3) `src/app/globals.css` — `destinywar39-land-shockwave`/`-land-shockwave-death`/`-number-glow-burst`/`-reverse-card-swirl`/`-death-impact-shake`/`-turn-badge-pulse` 키프레임 6개 신규. 엔진(`engine.ts`)은 전혀 건드리지 않음(순수 표시 레이어).
+
+**검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 에러 0 — 처음에 데스카드 셰이크 이펙트가 `react-hooks/set-state-in-effect`에 걸려 위 무조건 호출 방식으로 수정) / `npx vitest run src/games/destinyWar39`(61/61 통과 — 엔진 무변경이라 전부 그대로 통과) / `npx vitest run --exclude "**/aiBenchmark.test.ts"`(전체 스위트, 27개 파일 1110/1110 통과). **브라우저 실측(슬램 모션/충격파/셰이크 타이밍 육안 확인)은 이번 세션에 수행하지 않음** — 이전 세션들과 동일하게 실시간 CSS 애니메이션 타이밍·겹침은 이 저장소가 이미 문서화한 vitest 커버리지 밖 영역이라 실사용 전 수동 확인 권장.
+
+**커밋/배포**: `<PENDING>`.
 
 ### 2026-08-22 — 지렁이 상대 처치(Kill) 대형 폭발·화면 연출·킬 배너
 
