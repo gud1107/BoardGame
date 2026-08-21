@@ -1,8 +1,26 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-21 (**보드게임 허브 인원 필터에 '8인' 옵션 추가 세션** — 자세한 내용은 아래 `### 2026-08-21 — 보드게임 허브 인원 필터 '8인' 옵션 추가` 절 참고. 커밋 `9ec9198 feat(hub): add 8-player filter option to game list` → 배포 프리뷰 `https://board-game-ca8ovie4j-me-3871.vercel.app`.)_
+_최종 갱신: 2026-08-21 (**소환사의 협곡 직전 라운드 결과 조회 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 소환사의 협곡 직전 라운드 결과 조회 패널 및 상세 로그 UI` 절 참고. 커밋 예정 `feat(summoners-rift): add previous round history summary panel` → 배포 프리뷰 대기.)_
 
-_이전 갱신: 2026-08-21 (**소환사의 협곡 제거 장비 가로 순차 나열 + 던전 공략 실시간 관전 UI + 몬스터 히스토리 패널 세션** — 자세한 내용은 아래 `### 2026-08-21 — 소환사의 협곡 제거 장비 가로 순차 나열 + 던전 공략 실시간 관전 UI + 몬스터 히스토리 패널` 절 참고. 커밋 `a331ed6 feat(summoners-rift): display discarded items linearly and add shared dungeon combat viewer with monster log` → 배포 프리뷰 `https://board-game-epqt0optf-me-3871.vercel.app`.)_
+_이전 갱신: 2026-08-21 (**보드게임 허브 인원 필터에 '8인' 옵션 추가 세션** — 자세한 내용은 아래 `### 2026-08-21 — 보드게임 허브 인원 필터 '8인' 옵션 추가` 절 참고. 커밋 `9ec9198 feat(hub): add 8-player filter option to game list` → 배포 프리뷰 `https://board-game-ca8ovie4j-me-3871.vercel.app`.)_
+
+### 2026-08-21 — 소환사의 협곡 직전 라운드 결과 조회 패널 및 상세 로그 UI
+
+**요청**: `HANDOFF.md`와 소환사의 협곡 코드(`src/games/summonersRift/` 하위 `Board.tsx`/`RoundResult.tsx`/`HistoryPanel.tsx`/`engine.ts`/`types.ts` 등), 운명전쟁39의 히스토리 조회 구현 방식(`src/games/destinyWar39/` 라운드 요약/히스토리 뷰)을 먼저 확인한 뒤 (1) 운명전쟁 스타일 "직전 라운드 결과" 요약 UI(게임 화면 상단/사이드에 토글 버튼, 던전 진입자·공략 성공/실패·남은 체력/최대 체력 표시), (2) 상세 내역 브레이크다운(플레이어별 제외 장비 목록, 등장 몬스터와 격파 과정을 순서대로 시각화), (3) 라운드 종료 시점 전투 결과 스냅샷을 게임 상태에 저장해 다음 라운드 진행 중에도 실시간 조회 가능하도록 바인딩 요청. 패널 노출 위치·모달/드로어 방식 등은 절대 임의로 추정하지 말고 사전에 질문해 확정하라고 명시.
+
+**조사**: 요청이 가리킨 `Board.tsx`/`RoundResult.tsx`/`HistoryPanel.tsx`는 이 저장소에 존재하지 않고, 실제로는 `SummonersRiftBoard.tsx`(보드 전체) + `engine.ts`(규칙) 구성임을 확인. 운명전쟁39는 헤더의 `🕓 직전 라운드 보기` 토글 버튼(완료된 라운드가 없으면 disabled) → 공용 `Overlay` 컴포넌트로 모달을 띄우고, 그 안에 요약 표 + 턴별 상세를 한 모달에 함께 보여주는 `LastRoundHistoryModal.tsx` 패턴임을 확인. 소환사의 협곡 `engine.ts`엔 이미 `SummonersRiftState.lastRoundResult: RoundResult | null`가 있고 `RoundResult`가 진입자(`challengerSeat`)/성공-실패(`outcome`)/장착 아이템/전투 로그(몬스터별 처치 주체·피해량·그 시점 HP)까지 담고 있어, 요청 3번(스냅샷 저장)이 대부분 이미 구현돼 있음을 확인 — 즉 이번 요청의 실질 공백은 "이 기존 데이터를 보여줄 UI가 없다"는 점이었음. 단 하나 빠진 데이터가 있었음: "누가 어떤 장비를 제외했는지"(`PlayerState.removedItemIds`)는 라운드가 끝나자마자 같은 틱 안에서 실행되는 다음 `dealRound`가 모든 활성 좌석의 `removedItemIds`를 `[]`로 초기화해버려서, 라운드 종료 후엔 이 정보가 사라지는 구조임을 확인 — `RoundResult`에 스냅샷 필드 추가가 필요함을 조사 단계에서 미리 확인.
+
+**모호점 확인(`AskUserQuestion`, 3문항)**: ① 직전 라운드 결과 접근 트리거/배치 — "헤더 토글 버튼(운명전쟁39와 동일하게 룰북 버튼 옆에 배치, 화면 공간 안 차지)" vs "상시 노출 사이드 패널(몬스터 히스토리 패널처럼 항상 보이는 블록 추가)" → **"헤더 토글 버튼"** 선택. ② 여는 방식 — "모달 오버레이(운명전쟁39의 `LastRoundHistoryModal`과 동일하게 공용 `Overlay` 컴포넌트 재사용)" vs "슬라이드 드로어(이 프로젝트에 아직 없는 새 패턴)" → **"모달 오버레이"** 선택. ③ 요청 1번(요약)과 2번(상세)의 UI 구성 — "한 모달에 전부(운명전쟁39처럼 상단 요약 뱃지 + 하단 상세 섹션을 함께 배치)" vs "2단계(요약만 먼저 보여주고 상세는 접힌 `<details>`로 펼쳐야 보이게)" → **"한 모달에 전부"** 선택.
+
+**엔진 변경** (`engine.ts`): `RoundResult`에 두 필드 신규 추가 — `finalHp: number`(라운드 종료 시점 챌린저 HP; 빈 협곡 더미로 전투 없이 즉시 클리어됐으면 `totalHp` 그대로, 그 외엔 마지막 `combatLog` 엔트리의 `hpAfter`, 실패 시 0 이하로 내려갈 수 있음) / `removedByPlayer: { seat, itemIds }[]`(제외 아이템이 하나라도 있는 좌석만 포함, 조사에서 확인한 대로 `player.removedItemIds`가 다음 `dealRound`에 초기화되기 전에 `finishRound`에서 스냅샷). 두 필드 모두 `finishRound`에서 `state.players`/`state.currentHp`를 다음 라운드로 넘기기 직전에 그대로 읽어 채움 — 기존 로직·다른 필드는 무변경.
+
+**UI 구현**: 신규 `SummonersRiftLastRoundModal.tsx` — 운명전쟁39 `LastRoundHistoryModal.tsx`와 동일하게 공용 `Overlay`(`wide`)로 감싸 (1) 요약 줄(라운드 번호, 진입자 이름, ✅공략 성공/💀공략 실패 뱃지, 실패로 탈락했으면 🪦탈락 뱃지 추가, 남은 체력/최대 체력 — 음수 HP는 표시상 0으로 클램프), 황금 뒤집개를 지정했으면 그 몬스터 표기, (2) 제외된 장비 목록 — 좌석별로 이름 라벨 아래 기존 `CardArt.tsx`의 `RemovedItemsRow`(번호+아이콘+이름+효과 칩, 직전 세션에서 이미 구현된 컴포넌트)를 그대로 재사용해 순서를 그대로 보존, (3) 등장 몬스터 & 격파 과정 — `combatLog`를 등장 순서대로 `MonsterFace` + 처치/피해 뱃지로 나열(뱃지는 `SummonersRiftBoard.tsx`의 기존 `combatBadge` 헬퍼를 export해 재사용, 로직 중복 없음). `SummonersRiftBoard.tsx`: 헤더(`rulebookButton` 옆)와 게임오버 화면 양쪽에 `🕓 직전 라운드 결과` 토글 버튼 추가(`state.lastRoundResult`가 없으면 `disabled`, 운명전쟁39의 `historyButton`과 동일한 패턴) + 모달 오픈 상태 훅.
+
+**테스트 보강** (`SummonersRift.test.ts`, 50개 → **52개**): `finalHp`가 전투 없는 즉시 클리어 시 `totalHp`와 같은지, 전투가 있었을 때 마지막 `combatLog.hpAfter`와 일치하는지 검증. `removedByPlayer`가 라운드 중 여러 좌석이 각각 다른 아이템을 제외했을 때 좌석별로 정확히 스냅샷되는지, 그리고 그 직후(같은 액션이 트리거한 다음 `dealRound`) 모든 활성 좌석의 살아있는 `player.removedItemIds`가 이미 `[]`로 리셋되어 `lastRoundResult.removedByPlayer`만이 그 정보가 남아있는 유일한 곳임을 확인하는 테스트 추가.
+
+**검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/summonersRift`(52/52 통과) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1086/1086 통과, 42.45초) — 도중 `--exclude` 없이 백그라운드로 걸어둔 전체 `npx vitest run`이 이전 세션들에 이미 기록된 패턴대로 응답이 느려 `TaskStop` 후 vitest 관련 잔존 `node.exe` 3개만(`next dev` 서버 프로세스는 건드리지 않음) `Stop-Process -Force`로 정리하고 `--exclude` 버전으로 재실행해 정상 완료.
+
+**커밋/배포**: 커밋 예정 `feat(summoners-rift): add previous round history summary panel` → 푸시 → `npx vercel deploy` 진행 예정(본 절 하단 갱신 예정).
 
 ### 2026-08-21 — 보드게임 허브 인원 필터 '8인' 옵션 추가
 

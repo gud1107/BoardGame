@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
+import SummonersRiftLastRoundModal from "./SummonersRiftLastRoundModal";
 import SummonersRiftGuideSidebar from "./SummonersRiftGuideSidebar";
 import { CardPileStack, HeroCard, ItemSlot, MonsterFace, RemovedItemsRow } from "./CardArt";
 import { detectRiftPushEvent, FlyingRiftCard, type RiftPushEvent } from "./SummonersRiftEffects";
@@ -40,7 +41,8 @@ export interface SummonersRiftBoardProps {
   onGameEnd: () => void;
 }
 
-function combatBadge(entry: RoundResult["combatLog"][number]) {
+/** Exported so `SummonersRiftLastRoundModal.tsx` can render the exact same kill/damage badge for a completed round's `combatLog` entries. */
+export function combatBadge(entry: RoundResult["combatLog"][number]) {
   return entry.killedBy ? (
     <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/50 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200">
       ✅ 처치
@@ -144,6 +146,7 @@ function MonsterHistoryPanel({ state }: { state: SummonersRiftState }) {
 
 export default function SummonersRiftBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: SummonersRiftBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const [lastRoundOpen, setLastRoundOpen] = useState(false);
 
   // Diff consecutive lockstep snapshots to notice a freshly-resolved round
   // (flash banner) and freshly-pushed Rift cards (fly-in FX) — same pattern
@@ -203,6 +206,19 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
       📖 소환사의 협곡 룰북
     </button>
   );
+  // Task brief §1 — "운명전쟁 스타일 직전 라운드 요약 UI": header toggle button,
+  // disabled until a round has actually finished, opening the combined
+  // summary+breakdown modal. Same pattern as destinyWar39's historyButton.
+  const lastRoundButton = (
+    <button
+      onClick={() => setLastRoundOpen(true)}
+      disabled={!state.lastRoundResult}
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+    >
+      🕓 직전 라운드 결과
+    </button>
+  );
+  const lastRoundModal = lastRoundOpen && <SummonersRiftLastRoundModal state={state} names={names} onClose={() => setLastRoundOpen(false)} />;
 
   // ---------------------------------------------------------------------
   // Game over
@@ -224,6 +240,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
             ? `성공 토큰 ${SUCCESS_TOKENS_TO_WIN}개를 가장 먼저 모아 승리했습니다.`
             : "다른 모든 소환사가 탈락해 최후의 생존자로 승리했습니다."}
         </p>
+        <div className="flex justify-center">{lastRoundButton}</div>
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[420px] border-collapse text-xs">
             <thead>
@@ -261,6 +278,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
         >
           결과 확정하고 계속하기
         </button>
+        {lastRoundModal}
       </div>
     );
   }
@@ -300,7 +318,10 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
               🗡️ 협곡 더미 {state.riftPile.length}장
             </span>
           </span>
-          <div className="flex gap-1.5">{rulebookButton}</div>
+          <div className="flex gap-1.5">
+            {lastRoundButton}
+            {rulebookButton}
+          </div>
         </div>
 
         {roundFlash && (
@@ -429,6 +450,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
         </section>
 
         {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+        {lastRoundModal}
 
         {/* Rift-pile accumulation FX (task brief §2): pushing seat's row -> the pile stack. */}
         {pushEvents.map((event) => (

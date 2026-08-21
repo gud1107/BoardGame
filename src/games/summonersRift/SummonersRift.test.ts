@@ -366,6 +366,35 @@ describe("declareSpatula + revealNextMonster — combat resolution", () => {
     expect(next.players.find((p) => p.seat === 2)!.failureTokens).toBe(1);
   });
 
+  it("lastRoundResult snapshots finalHp and each seat's removed items, since the next dealRound resets player.removedItemIds", () => {
+    const state = inDungeon({
+      equippedItemIds: [1],
+      totalHp: 6,
+      currentHp: 6,
+      riftPile: [monster(5)],
+      players: [makePlayer(0, { removedItemIds: [2, 3] }), makePlayer(1), makePlayer(2, { removedItemIds: [4] })],
+    });
+    const next = applyAction(state, { type: "revealNextMonster", seat: 2 });
+    expect(next.lastRoundResult?.finalHp).toBe(1); // 6 - 5, and the pile is now empty so the round finishes as a success
+    expect(next.lastRoundResult?.outcome).toBe("success");
+    expect(next.lastRoundResult?.removedByPlayer).toEqual([
+      { seat: 0, itemIds: [2, 3] },
+      { seat: 2, itemIds: [4] },
+    ]);
+    // The very next `dealRound` (triggered by this same action, since the
+    // round ended) already wiped every active seat's live `removedItemIds` —
+    // confirming `lastRoundResult.removedByPlayer` above is the only place
+    // this round's removals survive.
+    expect(next.players.every((p) => p.removedItemIds.length === 0)).toBe(true);
+  });
+
+  it("an empty rift pile clear's lastRoundResult.finalHp equals totalHp (no combat happened)", () => {
+    let state = makeState({ riftPile: [] });
+    state = applyAction(state, { type: "pass", seat: 0 });
+    state = applyAction(state, { type: "pass", seat: 1 });
+    expect(state.lastRoundResult?.finalHp).toBe(state.lastRoundResult?.totalHp);
+  });
+
   it("only the challenger seat may reveal", () => {
     const state = inDungeon({ riftPile: [monster(1)] });
     expect(applyAction(state, { type: "revealNextMonster", seat: 0 })).toBe(state);

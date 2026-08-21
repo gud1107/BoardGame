@@ -163,9 +163,21 @@ export interface RoundResult {
   outcome: "success" | "failure";
   equippedItemIds: ItemId[];
   totalHp: number;
+  /** Challenger's HP once the round finished — `totalHp` untouched on a trivial empty-pile clear, the last `combatLog` entry's `hpAfter` otherwise (can go ≤0 on a failure). */
+  finalHp: number;
   spatulaDeclaredThreat: number | null;
   combatLog: CombatLogEntry[];
   newlyEliminated: boolean;
+  /**
+   * Which items each seat personally stripped off the shared champion this
+   * round, snapshotted here because `player.removedItemIds` (the live
+   * per-seat source) gets wiped by the very next `dealRound` call that runs
+   * immediately after this round finishes (see `dealRound`) — without this
+   * copy, a "직전 라운드" UI opened after the next round has already started
+   * would find every seat's `removedItemIds` back at `[]`. Only seats with at
+   * least one removal are included.
+   */
+  removedByPlayer: { seat: SeatIndex; itemIds: ItemId[] }[];
 }
 
 export interface SummonersRiftState {
@@ -467,9 +479,13 @@ function finishRound(state: SummonersRiftState, outcome: "success" | "failure"):
     outcome,
     equippedItemIds: state.equippedItemIds,
     totalHp: state.totalHp!,
+    finalHp: state.currentHp!,
     spatulaDeclaredThreat: state.spatulaDeclaredThreat,
     combatLog: state.combatLog,
     newlyEliminated,
+    removedByPlayer: state.players
+      .filter((p) => p.removedItemIds.length > 0)
+      .map((p) => ({ seat: p.seat, itemIds: p.removedItemIds })),
   };
   const settled: SummonersRiftState = { ...state, players, lastRoundResult: result };
 
