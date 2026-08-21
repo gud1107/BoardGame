@@ -1,8 +1,28 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-21 (**운명전쟁39 8인 모드 추가(72장 덱 + 리버스 5종) 세션** — 자세한 내용은 아래 `### 2026-08-21 — 운명전쟁39 8인 모드 지원 + 카드 덱/라운드 규칙 확장` 절 참고. 커밋 `148cfc4 feat(destiny-war-39): add 8-player mode with 72-card deck and 5 reverse cards` + `ba1eb63 fix(destiny-war-39): update dashboard listing to reflect 8-player mode` → 배포 프리뷰 `https://board-game-r1pxeucmp-me-3871.vercel.app`.)_
+_최종 갱신: 2026-08-21 (**그리드 포커 8인 플레이 확장 + 모바일 반응형 UI/UX 개편 세션** — 자세한 내용은 아래 `### 2026-08-21 — 그리드 포커 8인 플레이 확장 + 모바일 반응형 웹 UI/UX 최적화` 절 참고. 커밋 `34cf09f feat(grid-poker): support up to 8 players and optimize mobile responsive web UI` → 배포 프리뷰 `https://board-game-im38euq90-me-3871.vercel.app`.)_
 
-_이전 갱신: 2026-08-21 (**페루도 무여백(Zero-Gap) 대칭 트랙 연결 + 보드판 확장 세션** — 자세한 내용은 아래 `### 2026-08-21 — 페루도 무여백(Zero-Gap) 대칭 트랙 연결 + 보드판 확장` 절 참고.)_
+_이전 갱신: 2026-08-21 (**운명전쟁39 8인 모드 추가(72장 덱 + 리버스 5종) 세션** — 자세한 내용은 아래 `### 2026-08-21 — 운명전쟁39 8인 모드 지원 + 카드 덱/라운드 규칙 확장` 절 참고. 커밋 `148cfc4 feat(destiny-war-39): add 8-player mode with 72-card deck and 5 reverse cards` + `ba1eb63 fix(destiny-war-39): update dashboard listing to reflect 8-player mode` → 배포 프리뷰 `https://board-game-r1pxeucmp-me-3871.vercel.app`.)_
+
+### 2026-08-21 — 그리드 포커 8인 플레이 확장 + 모바일 반응형 웹 UI/UX 최적화
+
+**요청**: `HANDOFF.md`와 그리드 포커 코드(`src/games/grid-poker/` 하위 `engine.ts`/`GridPokerBoard.tsx`/`GridPokerGame.tsx` 등)를 먼저 확인한 뒤 (1) 최대 8인 플레이 지원(로비 인원 2~8 가변, 멀티 보드 상태 관리, 공용 덱/라운드 동기화), (2) 모바일 반응형 UI/UX 최적화(내 보드 중심 뷰, 8인 대응 상대 탭/캐러셀, 접이식/고정 스코어보드, 터치 친화적 2-Step 탭 배치+드래그앤드롭) 구현 요청. 모바일 화면 분할 방식이나 턴 진행 룰에 확인이 필요하면 절대 임의로 추정하지 말고 먼저 질문 목록을 제시해 확인받으라고 명시.
+
+**조사**: `engine.ts`가 이미 `playerCount`를 상수화하지 않고 `startGame(playerCount, ...)`로 완전히 가변 처리하고 있음을 확인 — 좌석별 상태(`players[]`, `placedThisRound`, `submissions`)가 전부 `playerCount` 길이 배열이고, 공용 카드는 "뽑을 때마다 즉시 덱에 복원"되는 복원추출 방식이라 애초에 덱 소진 동기화 이슈 자체가 없으며(주석에 이미 명문화), `totalScoringRounds`/`winThreshold`도 `playerCount === 2 ? ... : 12/7`로 3인 이상은 이미 공통 분기라 8인도 그대로 적용됨을 확인 — 즉 엔진 자체는 8인 확장에 룰 변경이 전혀 필요 없었음. 실제 캡은 `registry.ts`의 `players: { min: 2, max: 6 }`와 `GridPokerGame.tsx` 방-만들기 단계 인원 스테퍼의 `Math.min(6, n + 1)` 딱 두 곳에만 하드코딩돼 있었음을 확인. UI 쪽은 `GridPokerBoard.tsx`가 상대 보드를 `flex flex-wrap` 미니 그리드로 전원 동시 노출하는 방식이라 8인(상대 7명)이면 모바일 폭에서 줄바꿈이 과도해 화면을 크게 잠식함을 확인. 배치 인터랙션은 매 라운드 "공용 카드 1장"만 존재해 고를 카드 자체가 없는 구조(빈 칸 탭 → 즉시 배치)라, 요청에 적힌 "카드 터치 → 타일 터치" 2-Step 문구가 이 게임 실제 메커니즘과 맞지 않음을 확인 — 임의로 해석해 구현하지 않고 질문 목록에 포함.
+
+**모호점 확인(`AskUserQuestion`, 3문항)**: ① 모바일에서 상대 보드 요약 탭 터치 시 상세 뷰 표시 방식 — "미니 팝업 모달" vs "탭 스트립 인라인 아코디언 확장" → **"미니 팝업 모달"** 선택. ② 8인 실시간 점수판 배치 — "상단 고정 뱃지 스트립(항상 노출)" vs "접이식 아코디언/드로어(기본 접힘)" → **"상단 고정 뱃지 스트립"** 선택. ③ 공용 카드 1장뿐이라 "고를 카드"가 없는 구조에서 터치 배치 방식 — "현재 방식(1탭 즉시 배치) 유지" vs "2-Step 탭(카드 선택→타일 확정)" vs "드래그 앤 드롭 추가" → **"현재 방식 유지: 1탭 즉시 배치"** 선택 — 카드가 하나뿐이라 이미 가장 빠르고 실수 위험이 적은 모바일 친화적 방식이라는 이유.
+
+**엔진 변경** (`engine.ts`): `completedLineCount(player)` 신규 export — 그 플레이어의 12개 라인 중 실제로 몇 개가 이미 다 채워졌는지(제출 여부 무관) 세는 순수 함수. 카드 정체(랭크/문양)는 전혀 드러내지 않는 "개수만" 정보라 상대에게도 안전하게 노출 가능 — 모바일 상대 요약 탭의 "라인 N개" 표시에 사용. 그 외 플레이 인원/라운드/승리 조건 로직은 이미 가변 처리돼 있어 무변경.
+
+**인원 확장** (`registry.ts`, `GridPokerGame.tsx`): `players: { min: 2, max: 6 }` → `{ min: 2, max: 8 }`, 방-만들기 인원 스테퍼 라벨 "인원 수 (2~6명)" → "(2~8명)" + 상한 `Math.min(6, n+1)` → `Math.min(8, n+1)`. 봇 좌석 로직(`AddBotButton`/좌석 정원 체크/자동 시작 조건)은 이미 전부 `targetPlayerCount`/`knownTargetPlayerCount` 파생이라 두 곳 수정만으로 8인까지 자연스럽게 연쇄 적용됨을 확인(별도 하드코딩 없음).
+
+**모바일 UI 개편** (`GridPokerBoard.tsx`): (1) 상단 리더보드를 기존 "좌석 순서 연결상태 알약 목록"에서 점수 내림차순 **경쟁 순위**(동점은 같은 순위, 다음 순위는 건너뜀) 스트립으로 교체 — 1위는 🏆, 나머지는 "N위" 배지. 모바일에서는 `overflow-x-auto`로 한 줄 가로 스크롤(화면 세로 공간을 잡아먹지 않음), `sm:` 이상에서는 기존처럼 `flex-wrap`. (2) 상대 보드 렌더링 로직(첫 배치 칸/공개 라인/실시간 배치 마커 처리)을 신규 `OpponentBoardGrid` 공유 컴포넌트로 추출해 데스크톱 인라인 그리드와 모바일 팝업 뷰가 로직 drift 없이 동일 소스를 사용. (3) 모바일(`sm:hidden`)은 상대 7명을 가로 스크롤 요약 칩 스트립(닉네임/점수/`completedLineCount` 기반 "라인 N개")으로 축약, 칩 탭 시 기존 `Overlay` 공유 컴포넌트(룰북 모달과 동일 패턴)로 해당 상대의 5×5 보드 팝업. 데스크톱(`hidden sm:flex`)은 기존처럼 전원 인라인 노출 유지. (4) 배치 인터랙션은 확인받은 대로 기존 1탭 즉시 배치 그대로 두고 변경하지 않음 — 내 보드가 이미 최소한의 상단 UI(상태줄+리더보드 스트립+공용 카드 리빌) 바로 아래, 페이지에서 가장 먼저 나오는 큰 시각 요소라 "메인 포커스" 요건은 기존 레이아웃 순서로 충족된다고 판단, 별도 `position: sticky` 없이 진행.
+
+**테스트 보강** (`GridPoker.test.ts`, 42개 → **46개**): 8인 전용 케이스 추가 — `startGame(8)`이 8명의 독립된 빈 5×5 보드(참조 분리 확인 포함) + 12라운드/7승 문턱을 만드는지, `fillBoards`(기존 헬퍼가 이미 `playerCount` 제네릭이라 무수정 재사용)로 25번의 드로우가 8인 전원 동시 배치를 거쳐 정확히 submitting으로 넘어가는지, `completedLineCount`가 보드가 다 차기 전에도 플레이어별로 독립적으로 올라가는지(한 명은 가로줄 완성, 나머지 7명은 의도적으로 12개 라인 중 어느 것도 완성되지 않는 5칸 산개 배치로 대조), 8인이 라운드마다 동시에 블라인드 라인을 제출해 game-end까지 완주하며 승자/점수 합계가 일관되는지(무승부 라운드는 점수를 주지 않으므로 총점 ≤ 진행된 라운드 수).
+
+**검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0 — 신규 `rankedPlayers` 헬퍼의 미사용 매개변수 경고 1건 발견 즉시 수정) / `npx vitest run src/games/grid-poker/GridPoker.test.ts`(46/46 통과) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1084/1084 통과, 42.22초) — 도중 제외 플래그 없이 백그라운드로 걸어둔 전체 `npx vitest run`이 §2에 이미 기록된 패턴대로 5분 넘게 응답이 없어 `TaskStop` 후 `Get-CimInstance Win32_Process`로 잔존 `node.exe`(vitest 워커) 3개를 `Stop-Process -Force`로 정리하고 `--exclude` 버전으로 재실행해 정상 완료.
+
+**커밋/배포**: 커밋 `34cf09f feat(grid-poker): support up to 8 players and optimize mobile responsive web UI` → `git push origin main` 완료 → `npx vercel deploy`(프리뷰) 정상 완주, READY — `https://board-game-im38euq90-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-21 — 운명전쟁39 8인 모드 지원 + 카드 덱/라운드 규칙 확장
 
