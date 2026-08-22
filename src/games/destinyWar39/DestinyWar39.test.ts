@@ -390,6 +390,92 @@ describe("round/turn structure (rulebook §4, §5) — 5-player mode", () => {
     const after = applyAction(state, { type: "play", seat: notLeader, cardId: card.id });
     expect(after).toBe(before); // no-op, rejected
   });
+
+  it("a played card stays in round.playsThisTurn (never cleared/overwritten) as later seats take their turn, and playsThisTurn only resets once the WHOLE turn resolves — regression test for the 2026-08-22 'played card vanishes before the trick ends' bug report", () => {
+    // Round 2 (>= 2 turns per round, sequential leader -> clockwise order) so we can observe
+    // a turn resolving WITHOUT the round itself ending — round 1 only has 1 turn, so its only
+    // turn's resolution is indistinguishable from the round ending.
+    let state = startGame(PC, 3);
+    state = fastForwardToPlaying(state);
+    let seatToAct = 0;
+    while (state.phase === "playing") {
+      const card = state.round.hands[seatToAct][0];
+      state = applyAction(state, { type: "play", seat: seatToAct, cardId: card.id });
+      seatToAct++;
+    }
+    state = applyAction(state, { type: "nextRound", seed: 11 });
+    state = fastForwardToPlaying(state);
+    expect(state.round.roundNumber).toBe(2);
+
+    const actingOrder: SeatIndex[] = [];
+    let acting = state.round.turnLeader;
+    for (let i = 0; i < PC; i++) {
+      actingOrder.push(acting);
+      acting = state.seatOrder[(state.seatOrder.indexOf(acting) + 1) % PC];
+    }
+
+    // First actor (the turn leader) plays.
+    const firstSeat = actingOrder[0];
+    const firstCard = state.round.hands[firstSeat][0];
+    state = applyAction(state, { type: "play", seat: firstSeat, cardId: firstCard.id });
+    expect(state.phase).toBe("playing"); // turn not resolved yet — 4 seats still to act
+    expect(state.round.playsThisTurn).toEqual([{ seat: firstSeat, card: firstCard }]);
+
+    // Second actor plays — the first actor's play must still be present, unchanged, at the
+    // SAME array position, not cleared/reset/overwritten by the second play.
+    const secondSeat = actingOrder[1];
+    const secondCard = state.round.hands[secondSeat][0];
+    state = applyAction(state, { type: "play", seat: secondSeat, cardId: secondCard.id });
+    expect(state.round.playsThisTurn).toEqual([
+      { seat: firstSeat, card: firstCard },
+      { seat: secondSeat, card: secondCard },
+    ]);
+
+    // Third and fourth actors play — every earlier play keeps accumulating, none disappear.
+    const thirdSeat = actingOrder[2];
+    const thirdCard = state.round.hands[thirdSeat][0];
+    state = applyAction(state, { type: "play", seat: thirdSeat, cardId: thirdCard.id });
+    const fourthSeat = actingOrder[3];
+    const fourthCard = state.round.hands[fourthSeat][0];
+    state = applyAction(state, { type: "play", seat: fourthSeat, cardId: fourthCard.id });
+    expect(state.phase).toBe("playing");
+    expect(state.round.playsThisTurn.map((p) => p.seat)).toEqual([firstSeat, secondSeat, thirdSeat, fourthSeat]);
+    expect(state.round.playsThisTurn.find((p) => p.seat === firstSeat)!.card).toEqual(firstCard);
+
+    // Fifth (last) actor plays — the turn resolves, but round 2 has a second turn left, so play
+    // stays in "playing" phase. The just-finished turn's record must hold every seat's exact
+    // card (including the first seat's, still intact), and only NOW does playsThisTurn reset to
+    // [] for the next turn.
+    const fifthSeat = actingOrder[4];
+    const fifthCard = state.round.hands[fifthSeat][0];
+    state = applyAction(state, { type: "play", seat: fifthSeat, cardId: fifthCard.id });
+    expect(state.phase).toBe("playing");
+    expect(state.round.turnNumber).toBe(2);
+    expect(state.round.playsThisTurn).toEqual([]); // cleared only after the full trick resolved
+    const resolved = state.round.turnRecords[state.round.turnRecords.length - 1];
+    expect(resolved.plays).toHaveLength(5);
+    expect(resolved.plays.find((p) => p.seat === firstSeat)!.card).toEqual(firstCard);
+    expect(resolved.plays.find((p) => p.seat === secondSeat)!.card).toEqual(secondCard);
+    expect(resolved.plays.find((p) => p.seat === thirdSeat)!.card).toEqual(thirdCard);
+    expect(resolved.plays.find((p) => p.seat === fourthSeat)!.card).toEqual(fourthCard);
+    expect(resolved.plays.find((p) => p.seat === fifthSeat)!.card).toEqual(fifthCard);
+    expect(actingOrder).toContain(resolved.winnerSeat); // sanity: winner is one of this turn's 5 actors
+  });
+
+  it("the played card's own hand loses exactly that card while every other seat's hand is untouched — hand/field separation (rulebook §4.2)", () => {
+    let state = startGame(PC, 21);
+    state = fastForwardToPlaying(state);
+    const handsBefore = state.round.hands;
+    const card = state.round.hands[0][0];
+    state = applyAction(state, { type: "play", seat: 0, cardId: card.id });
+    expect(state.round.hands[0]).toEqual([]); // the acting seat's hand loses the played card
+    expect(state.round.hands[0]).not.toContainEqual(card);
+    for (let seat = 1; seat < PC; seat++) {
+      expect(state.round.hands[seat]).toEqual(handsBefore[seat]); // untouched
+    }
+    // The card is not gone — it now lives on the field (playsThisTurn), findable by seat.
+    expect(state.round.playsThisTurn.find((p) => p.seat === 0)!.card).toEqual(card);
+  });
 });
 
 describe("prediction rules (rulebook §7)", () => {

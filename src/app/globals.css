@@ -1469,18 +1469,29 @@ body {
    type color), paired with `destinywar39-particle-burst`-driven spark dots.
    Bigger radius than the existing `destinywar39-zero-pulse` on purpose —
    this is the escalated "massive impact" pass, that one predates it. */
+/* NOTE: intentionally does NOT animate `opacity` — this runs on the SAME
+   wrapper span as the card's own face (`PlayedCardSlot`), stacked after
+   `destinywar39-card-slide-drop` in that element's `animation` shorthand.
+   Per the CSS spec, when two animations on one element both touch the same
+   property, the one listed LAST wins for that property — so an `opacity`
+   here would silently override slide-drop's (correct, settled-at-1) value
+   with whatever THIS keyframe's `opacity` is at, for as long as this
+   animation's `fill: both` holds. This animation used to fade 1 → 0.5 → 0,
+   which meant every played card visibly faded to fully invisible ~0.85s
+   after landing (this animation's delay + duration) and stayed that way —
+   the 2026-08-22 "played cards vanish mid-trick" bug report. The box-shadow
+   alpha channel already fades the ring to nothing on its own (0.85 → 0 →
+   0), so the extra `opacity` keyframe was redundant for the ring AND
+   harmful to the card underneath — removed, not replaced. */
 @keyframes destinywar39-land-shockwave {
   0% {
     box-shadow: 0 0 0 0 rgba(226, 232, 240, 0.85);
-    opacity: 1;
   }
   70% {
     box-shadow: 0 0 0 22px rgba(226, 232, 240, 0);
-    opacity: 0.5;
   }
   100% {
     box-shadow: 0 0 0 26px rgba(226, 232, 240, 0);
-    opacity: 0;
   }
 }
 
@@ -1488,18 +1499,18 @@ body {
    above, layered on top of the existing glitch+smoke impact as the "검붉은
    에너지 폭풍" escalation. Bigger spread than the generic ring since Death
    is meant to read as the heaviest landing in the deck. */
+/* Same `opacity`-omission reasoning as `destinywar39-land-shockwave` above
+   — this is the Death-card variant of the same wrapper-level ring, and
+   would silently blank out every Death card played for the same reason. */
 @keyframes destinywar39-land-shockwave-death {
   0% {
     box-shadow: 0 0 0 0 rgba(190, 18, 60, 0.9);
-    opacity: 1;
   }
   70% {
     box-shadow: 0 0 0 30px rgba(190, 18, 60, 0);
-    opacity: 0.55;
   }
   100% {
     box-shadow: 0 0 0 34px rgba(190, 18, 60, 0);
-    opacity: 0;
   }
 }
 
