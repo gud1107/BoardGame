@@ -62,11 +62,11 @@ function destinyWar39CurrentActor(state: DestinyWar39State): SeatIndex | null {
 /**
  * Online-room multiplayer entry point — same lockstep pattern as every other
  * `<Game>Game.tsx` in this project (closely modeled on coyote/CoyoteGame.tsx).
- * Table size is chosen once by the host at room-creation time from the two
- * supported modes (5 or 8 players, `SUPPORTED_PLAYER_COUNTS`) — same
+ * Table size is chosen once by the host at room-creation time from the four
+ * supported modes (5/6/7/8 players, `SUPPORTED_PLAYER_COUNTS`) — same
  * "host picks `targetPlayerCount`, tracks it into presence, everyone else
  * reads it off the host's presence record" pattern coup/CoupGame.tsx uses
- * for its continuous 3–6 range, just restricted to the two discrete deck
+ * for its continuous 3–6 range, just restricted to the four discrete deck
  * configurations this game's rulebook defines (§2). Every connected client
  * independently computes the full `DestinyWar39State` from a shared RNG
  * seed plus replayed `EngineAction`s broadcast over Supabase Realtime —
@@ -511,7 +511,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
         <span className="text-4xl">🔮</span>
         <h2 className="text-lg font-bold text-white">운명전쟁39 온라인 대전</h2>
         <p className="text-sm text-white/50">
-          {MIN_PLAYERS}인 또는 {MAX_PLAYERS}인 모드로 각자 기기에서 접속해 9라운드 예측 승부를 겨뤄요.
+          {MIN_PLAYERS}~{MAX_PLAYERS}인 모드로 각자 기기에서 접속해 9라운드 예측 승부를 겨뤄요.
         </p>
         <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
           <button
@@ -560,13 +560,13 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
         {intent === "create" && (
           <div className="flex flex-col gap-1.5 text-sm text-white/70">
             인원수
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {SUPPORTED_PLAYER_COUNTS.map((count) => (
                 <button
                   key={count}
                   type="button"
                   onClick={() => setTargetPlayerCount(count)}
-                  className={`flex-1 rounded-xl border py-2.5 text-sm font-semibold transition ${
+                  className={`rounded-xl border py-2.5 text-sm font-semibold transition ${
                     targetPlayerCount === count
                       ? "border-fuchsia-400 bg-fuchsia-500/20 text-fuchsia-200"
                       : "border-white/15 text-white/70 hover:border-white/30"

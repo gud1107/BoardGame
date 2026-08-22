@@ -12,7 +12,7 @@
  *
  * Core structure (all confirmed via extensive back-and-forth with the
  * product owner — see the rulebook's §0 changelog):
- *  - Two selectable player counts, 5 or 8 (rulebook §2) — chosen once at
+ *  - Four selectable player counts, 5/6/7/8 (rulebook §2) — chosen once at
  *    room creation (same `startGame(playerCount, seed)` + host-picks-target
  *    pattern as coup/engine.ts), fixed for the whole game. 9 rounds either
  *    way. Round R deals each player R cards (freshly reshuffled from the
@@ -26,20 +26,21 @@
  *    last-turn winner), so there is no separate "round winner" concept.
  *  - Turn resolution: reverse is active iff the count of reverse cards
  *    (multiples of 11 up to the mode's max number — 11/22/33 for 5-player,
- *    plus 44/55 for 8-player) among that turn's cards is odd. Death card is
- *    normally the strongest card but loses outright to 0 when reverse is
- *    inactive — that counter is narrowly scoped to the Death-vs-0 matchup
- *    only: with reverse inactive and no Death in play, 0 is just the
- *    weakest ordinary number (highest number wins as usual). When reverse
- *    is active the Death/0 exception is cancelled and Death is strongest
- *    again (beats 0 too), and 0 becomes the strongest ordinary number
- *    (lowest value wins). Ties are only possible among 0 cards (every other
- *    number value is unique in the deck) or, in 8-player mode only, among
- *    the deck's 2 Death cards if both land in the same turn — both cases
- *    break by whoever revealed earliest (product owner's explicit call:
- *    same convention as the 0-tie rule) — the fixed random seat order for
- *    round 1's simultaneous reveal, or the turn's actual reveal sequence
- *    otherwise.
+ *    11/22/33/44 for 6-player, 11/22/33/44/55 for 7- and 8-player) among
+ *    that turn's cards is odd. Death card is normally the strongest card
+ *    but loses outright to 0 when reverse is inactive — that counter is
+ *    narrowly scoped to the Death-vs-0 matchup only: with reverse inactive
+ *    and no Death in play, 0 is just the weakest ordinary number (highest
+ *    number wins as usual). When reverse is active the Death/0 exception is
+ *    cancelled and Death is strongest again (beats 0 too), and 0 becomes
+ *    the strongest ordinary number (lowest value wins). Ties are only
+ *    possible among 0 cards (every other number value is unique in the
+ *    deck) or, in 8-player mode only (the sole mode with 2 Death cards),
+ *    among the deck's Death cards if both land in the same turn — both
+ *    cases break by whoever revealed earliest (product owner's explicit
+ *    call: same convention as the 0-tie rule) — the fixed random seat order
+ *    for round 1's simultaneous reveal, or the turn's actual reveal
+ *    sequence otherwise.
  *  - Each player predicts a fresh win count (0..R) every round, independent
  *    of prior rounds. Score per round: P>=1 → success +P*2 / fail
  *    -|P-A|*2 (R irrelevant). P==0 → success +R / fail -R.
@@ -55,8 +56,8 @@ export type SeatIndex = number;
 
 export const TOTAL_ROUNDS = 9;
 
-/** The two selectable table sizes (rulebook §2) — chosen once at room creation, fixed for the whole game. */
-export const SUPPORTED_PLAYER_COUNTS = [5, 8] as const;
+/** The four selectable table sizes (rulebook §2) — chosen once at room creation, fixed for the whole game. */
+export const SUPPORTED_PLAYER_COUNTS = [5, 6, 7, 8] as const;
 export type PlayerCount = (typeof SUPPORTED_PLAYER_COUNTS)[number];
 export const DEFAULT_PLAYER_COUNT: PlayerCount = 5;
 export const MIN_PLAYERS: PlayerCount = 5;
@@ -69,8 +70,9 @@ export { seededRng };
 // ---------------------------------------------------------------------------
 // Deck (rulebook §3) — per-mode composition, deck size always
 // playerCount × TOTAL_ROUNDS (round 9 deals the full deck out with nothing
-// left over): 5-player = 45 cards (0×5, 1..39×1, Death×1), 8-player = 72
-// cards (0×8, 1..62×1, Death×2).
+// left over): 5-player = 45 cards (0×5, 1..39×1, Death×1), 6-player = 54
+// cards (0×6, 1..47×1, Death×1), 7-player = 63 cards (0×7, 1..55×1,
+// Death×1), 8-player = 72 cards (0×8, 1..62×1, Death×2).
 // ---------------------------------------------------------------------------
 
 export type CardKind = "number" | "death";
@@ -92,6 +94,8 @@ export interface DeckModeConfig {
 
 const DECK_MODE_CONFIG: Record<PlayerCount, DeckModeConfig> = {
   5: { playerCount: 5, zeroCount: 5, deathCount: 1, maxNumber: 39 },
+  6: { playerCount: 6, zeroCount: 6, deathCount: 1, maxNumber: 47 },
+  7: { playerCount: 7, zeroCount: 7, deathCount: 1, maxNumber: 55 },
   8: { playerCount: 8, zeroCount: 8, deathCount: 2, maxNumber: 62 },
 };
 

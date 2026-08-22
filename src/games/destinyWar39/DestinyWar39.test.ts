@@ -82,6 +82,62 @@ describe("deck composition (rulebook §3) — 8-player mode", () => {
   });
 });
 
+describe("deck composition (rulebook §3) — 6-player mode", () => {
+  it("has exactly 54 cards (6 players x 9 rounds)", () => {
+    expect(deckSizeFor(6)).toBe(54);
+  });
+
+  it("has 6 copies of 0, exactly 1 copy each of 1..47, and exactly 1 death card", () => {
+    const deck = buildDeck(6);
+    const zeroCount = deck.filter((c) => c.kind === "number" && c.value === 0).length;
+    expect(zeroCount).toBe(6);
+    for (let v = 1; v <= 47; v++) {
+      expect(deck.filter((c) => c.kind === "number" && c.value === v).length).toBe(1);
+    }
+    expect(deck.filter((c) => c.kind === "death").length).toBe(1);
+    expect(deck.length).toBe(6 + 47 + 1);
+  });
+
+  it("flags exactly 11/22/33/44 as reverse cards", () => {
+    const deck = buildDeck(6);
+    const reverseValues = deck.filter((c) => isReverseCard(c, 6)).map((c) => c.value).sort((a, b) => a - b);
+    expect(reverseValues).toEqual([11, 22, 33, 44]);
+  });
+
+  it("55 would be the next multiple of 11 but exceeds maxNumber (47), so it is NOT a reverse value", () => {
+    const deck = buildDeck(6);
+    expect(deck.some((c) => c.kind === "number" && c.value === 55)).toBe(false);
+  });
+});
+
+describe("deck composition (rulebook §3) — 7-player mode", () => {
+  it("has exactly 63 cards (7 players x 9 rounds)", () => {
+    expect(deckSizeFor(7)).toBe(63);
+  });
+
+  it("has 7 copies of 0, exactly 1 copy each of 1..55, and exactly 1 death card", () => {
+    const deck = buildDeck(7);
+    const zeroCount = deck.filter((c) => c.kind === "number" && c.value === 0).length;
+    expect(zeroCount).toBe(7);
+    for (let v = 1; v <= 55; v++) {
+      expect(deck.filter((c) => c.kind === "number" && c.value === v).length).toBe(1);
+    }
+    expect(deck.filter((c) => c.kind === "death").length).toBe(1);
+    expect(deck.length).toBe(7 + 55 + 1);
+  });
+
+  it("flags exactly 11/22/33/44/55 as reverse cards", () => {
+    const deck = buildDeck(7);
+    const reverseValues = deck.filter((c) => isReverseCard(c, 7)).map((c) => c.value).sort((a, b) => a - b);
+    expect(reverseValues).toEqual([11, 22, 33, 44, 55]);
+  });
+
+  it("66 would be the next multiple of 11 but exceeds maxNumber (55), so it is NOT a reverse value", () => {
+    const deck = buildDeck(7);
+    expect(deck.some((c) => c.kind === "number" && c.value === 66)).toBe(false);
+  });
+});
+
 describe("scoreRound (rulebook §9 — confirmed formula, exact vectors from product owner)", () => {
   it("ROUND 1 (R=1)", () => {
     expect(scoreRound(0, 0, 1)).toBe(1);
@@ -694,6 +750,104 @@ describe("full game simulation and final rankings — 8-player mode", () => {
     return applyAction(s, { type: "nextRound", seed: state.round.roundNumber * 1000 + 7 });
   }
 });
+
+describe.each([
+  { playerCount: 6 as PlayerCount, deckSize: 54 },
+  { playerCount: 7 as PlayerCount, deckSize: 63 },
+])("full game simulation and final rankings — $playerCount-player mode", ({ playerCount, deckSize }) => {
+  it(`plays all 9 rounds to completion with ${playerCount} players and produces final scores + rankings for all ${playerCount} seats`, () => {
+    const state = playFullGame(playerCount, 2024);
+    expect(state.phase).toBe("gameOver");
+    expect(state.playerCount).toBe(playerCount);
+    expect(state.finalScores).not.toBeNull();
+    expect(Object.keys(state.finalScores!).length).toBe(playerCount);
+    for (const p of state.players) {
+      expect(p.predictions.every((v) => v !== null)).toBe(true);
+      expect(p.actualWins.every((v) => v !== null)).toBe(true);
+      expect(p.scores.every((v) => v !== null)).toBe(true);
+    }
+    expect(state.finalRankings).not.toBeNull();
+    expect(state.finalRankings!.length).toBe(playerCount);
+  });
+
+  it(`round 9 deals each of the ${playerCount} players exactly 9 cards, using the entire ${deckSize}-card deck with nothing left over`, () => {
+    let state = startGame(playerCount, 4);
+    while (state.round.roundNumber < 9) {
+      state = playFullGameOneRound(state);
+    }
+    for (let seat = 0; seat < playerCount; seat++) {
+      expect(state.round.hands[seat].length).toBe(9);
+    }
+    const totalDealt = Object.values(state.round.hands).reduce((sum, hand) => sum + hand.length, 0);
+    expect(totalDealt).toBe(deckSize); // playerCount x 9 cards = the full deck
+  });
+
+  it(`final score equals the sum of the 9 recorded per-round scores, with ${playerCount} players`, () => {
+    const state = playFullGame(playerCount, 555);
+    for (const p of state.players) {
+      const expected = p.scores.reduce((sum: number, v) => sum + (v ?? 0), 0);
+      expect(state.finalScores![p.seat]).toBe(expected);
+    }
+  });
+
+  it(`a full turn's trick winner and reverse state are recorded correctly with ${playerCount} players (round 2's first trick)`, () => {
+    let state = startGame(playerCount, 9);
+    for (let seat = 0; seat < playerCount; seat++) {
+      state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
+    }
+    let seatToAct = 0;
+    while (state.phase === "playing") {
+      const card = state.round.hands[seatToAct][0];
+      state = applyAction(state, { type: "play", seat: seatToAct, cardId: card.id });
+      seatToAct++;
+    }
+    state = applyAction(state, { type: "nextRound", seed: 11 });
+    for (let seat = 0; seat < playerCount; seat++) {
+      state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
+    }
+    expect(state.round.roundNumber).toBe(2);
+    let acting = state.round.turnLeader;
+    const actedOrder: SeatIndex[] = [];
+    for (let i = 0; i < playerCount; i++) {
+      const card = state.round.hands[acting][0];
+      state = applyAction(state, { type: "play", seat: acting, cardId: card.id });
+      actedOrder.push(acting);
+      acting = state.seatOrder[(state.seatOrder.indexOf(acting) + 1) % playerCount];
+    }
+    const resolved = state.round.turnRecords[state.round.turnRecords.length - 1];
+    expect(resolved.plays).toHaveLength(playerCount);
+    expect(actedOrder).toContain(resolved.winnerSeat);
+    const totalWins = Object.values(state.round.winsThisRound).reduce((sum, v) => sum + v, 0);
+    expect(totalWins).toBe(1); // exactly one turn resolved so far this round
+  });
+});
+
+/** Advances `state` (already in "predicting") through one full round (predict all + play every turn), landing back in "predicting" for the next round. Shared by every playerCount's "round 9 deals exactly 9 cards" test above and the 8-player suite below. */
+function playFullGameOneRound(state: DestinyWar39State): DestinyWar39State {
+  let s = state;
+  const playerCount = s.playerCount;
+  for (let seat = 0; seat < playerCount; seat++) {
+    s = applyAction(s, { type: "predict", seat, value: 0, hidden: false });
+  }
+  while (s.phase === "playing") {
+    const round = s.round;
+    const played = new Set(round.playsThisTurn.map((p) => p.seat));
+    let actingSeat: number | null = null;
+    if (round.roundNumber === 1) {
+      for (let seat = 0; seat < playerCount; seat++) if (!played.has(seat)) { actingSeat = seat; break; }
+    } else {
+      const startIdx = s.seatOrder.indexOf(round.turnLeader);
+      for (let i = 0; i < playerCount; i++) {
+        const candidate = s.seatOrder[(startIdx + i) % playerCount];
+        if (!played.has(candidate)) { actingSeat = candidate; break; }
+      }
+    }
+    if (actingSeat === null) break;
+    const card = round.hands[actingSeat][0];
+    s = applyAction(s, { type: "play", seat: actingSeat, cardId: card.id });
+  }
+  return applyAction(s, { type: "nextRound", seed: state.round.roundNumber * 1000 + 7 });
+}
 
 describe("lastCompletedRound — card history for the UI's '직전 라운드' view", () => {
   function fastForwardToPlaying(state: DestinyWar39State): DestinyWar39State {
