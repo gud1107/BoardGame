@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import RulebookModal from "./RulebookModal";
 import PredictionStatusBoard from "./PredictionStatusBoard";
 import RankedLeaderboard from "./RankedLeaderboard";
@@ -82,7 +82,22 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
   const [reverseSwish, setReverseSwish] = useState(false);
   const prevRoundNumberRef = useRef(round.roundNumber);
   const prevTurnCountRef = useRef(round.turnRecords.length);
-  useEffect(() => {
+  // `useLayoutEffect`, NOT `useEffect` — this is the fix for played cards
+  // appearing to vanish the instant the turn's last card lands (2026-08-22
+  // "필드 카드 유지" bug report). The state update that clears
+  // `round.playsThisTurn` and grows `turnRecords` (engine.ts's
+  // `resolveTurnAndAdvance`) arrives as a single prop change, so THIS
+  // component's very first render of it already has an empty
+  // `playsThisTurn` — with a plain `useEffect`, that empty-table frame gets
+  // painted to the screen before the effect (which runs after paint) has a
+  // chance to set `resolvingTurn` and show the freeze-frame, i.e. every
+  // submitted card genuinely flashes to blank for one frame. `useLayoutEffect`
+  // fires synchronously after the DOM update but before the browser paints,
+  // so the corrective `setResolvingTurn` re-render is flushed into the SAME
+  // paint — the user only ever sees the freeze-frame, never the empty
+  // in-between state. Same convention this game's own `RankedLeaderboard.tsx`
+  // already uses for its count-up/reorder effects.
+  useLayoutEffect(() => {
     const roundChanged = round.roundNumber !== prevRoundNumberRef.current;
     const turnCountGrew = !roundChanged && round.turnRecords.length > prevTurnCountRef.current;
     prevRoundNumberRef.current = round.roundNumber;
