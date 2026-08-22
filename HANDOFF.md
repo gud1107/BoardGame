@@ -22,9 +22,9 @@ _그 이전 갱신: 2026-08-22 (**아발론 영웅 능력/투표 제출/원정 �
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/destinyWar39`(63/63 통과, 신규 2개 포함). 임시 라우트(`temp-dw39-preview`, 확인 후 삭제).
 
-**커밋/푸시**: `f9d5dfa fix(destiny-war-39): stop played cards fading to invisible mid-trick via landing-shockwave opacity conflict` → `git push origin main` 완료.
+**커밋/푸시**: `f9d5dfa fix(destiny-war-39): stop played cards fading to invisible mid-trick via landing-shockwave opacity conflict` → `git push origin main` 완료(`d832b02..2b53ce0`, 후속 `2b53ce0 docs(handoff): record destiny-war-39 opacity-fade fix commit hash` 포함).
 
-**배포**: 아래 참고(진행 중 — 완료 시 이 문단 갱신).
+**배포**: `npx vercel deploy --prod` 실행 — 빌드(Turbopack, TypeScript 전체 재검사 포함) 정상 완주, `target: production`/`status: READY`로 확인되고 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭(alias) 완료(`dpl_FFjvWPrvDNHCMYMMZJsCteauvqxT`). `curl`로 프로덕션 루트(`/`, 200)와 운명전쟁39 라우트(`/games/destiny-war-39`, 200) 둘 다 직접 응답 확인.
 
 ### 2026-08-22 — 운명전쟁39 제출 카드 즉시 소멸 버그 수정 (필드 유지 정산 연출)
 
