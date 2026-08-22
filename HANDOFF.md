@@ -20,6 +20,8 @@ _그 이전 갱신: 2026-08-22 (**운명전쟁39 제출 카드 필드 유지(즉
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/destinyWar39`(79/79 통과) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1128/1128 통과 — 다른 게임 회귀 없음).
 
+**커밋/배포**: 커밋 `25dcbe3 feat(destiny-war-39): enable 6p and 7p modes with custom deck configurations` → `git push origin main` 완료(`f494fa0..25dcbe3`) → `npx vercel deploy`(프리뷰) 첫 시도는 과거 세션들과 동일한 `{"status":"error","reason":"deploy_failed","message":"Not authorized"}`로 실패 → 즉시 재시도해 정상 빌드(Turbopack, TypeScript 전체 재검사 포함)·배포되어 READY — `https://board-game-ogdo3vj33-me-3871.vercel.app`. "production" 명시 없어 이번에도 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
+
 ### 2026-08-22 — 운명전쟁39 트릭 내 제출 카드 소멸 버그 근본 수정 (CSS 랜딩 애니메이션 opacity 충돌)
 
 **요청**: "선플레이어가 낸 카드가 다음 플레이어 턴으로 넘어가면 사라진다"는 재차 접수된 버그 리포트 — 트릭이 끝날 때까지(1번→마지막 플레이어) 필드에 카드가 계속 보여야 하고, 손패/필드 분리, 모바일/데스크톱 동기화, 단위 테스트, 검증까지 요청. 모호한 점(트릭별 카드 풀 저장 방식, 정산 딜레이 연출 등)이 있으면 임의로 넘겨짚지 말고 먼저 질문하라는 명시적 지시.
