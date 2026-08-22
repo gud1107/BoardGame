@@ -20,6 +20,10 @@ _그 이전 갱신: 2026-08-22 (**운명전쟁39 턴 순서 배지 + 카드 제�
 
 **파일 변경**: `src/games/destinyWar39/DestinyWar39Board.tsx` — `useLayoutEffect` import 추가, `resolvingTurn`/`reverseSwish`를 세팅하는 이펙트를 `useEffect`→`useLayoutEffect`로 교체 + 근거 주석 추가. 그 외 파일 변경 없음.
 
+**커밋/푸시**: `f495463 fix(destiny-war-39): keep played cards visible on field during trick evaluation instead of instant disappearance` → `git push origin main` 완료(`ab3519d..f495463`).
+
+**배포**: `npx vercel deploy --prod` 실행 — 빌드(Turbopack, TypeScript 전체 재검사 포함) 정상 완주, `target: production`/`status: READY`로 확인되고 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭(alias) 완료(`dpl_EW28v6UZwcku8FGipRfMR75kQJQe`). `curl`로 프로덕션 루트(`/`, 200)와 운명전쟁39 라우트(`/games/destiny-war-39`, 200) 둘 다 직접 응답 확인.
+
 ### 2026-08-22 — 아발론 역할 확인 오라·투표 스냅·팀투표/퀘스트 결과 공개 대형 이펙트
 
 **요청**: `HANDOFF.md`와 아발론 코드(요청 문구는 `src/games/avalon/` 하위 `Board.tsx`/`AvalonBoard.tsx`/`VotePanel.tsx`/`QuestResult.tsx`/`RoleModal.tsx`/`AssassinPhase.tsx`/CSS 모듈을 지목)를 먼저 확인한 뒤 (1) 멀린/퍼시벌 정보 확인 마법진 오라 + 레이디 오브 더 레이크 물결 이펙트 + 암살자 스포트라이트/조준선/단검 슬래시, (2) 투표·원정카드 제출 스냅락 애니메이션 + 본인 좌석 체크/파티클 펄스 + 전원 제출 시 봉인 마크, (3) 팀투표 3D 플립 공개(승인 골드 플래시+배너 / 부결 흔들림+스탬프+연속부결 강조)와 퀘스트 카드 셔플→플립 공개(성공 컨페티+성배 / 실패 크랙+안개)까지 3대 상황의 전용 이펙트를 요청. 연출 타이밍·색상 테마 등은 절대 임의로 넘겨짚지 말고 질문 목록으로 먼저 확인하라고 명시.
