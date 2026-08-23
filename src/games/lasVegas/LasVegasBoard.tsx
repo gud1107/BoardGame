@@ -1,15 +1,19 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
-import { CasinoTileArt, CASINO_THEME_NAMES } from "./CasinoEmblem";
+import { CASINO_THEME_NAMES } from "./CasinoEmblem";
+import { CasinoMatArt } from "./CasinoPhotoArt";
+import { MoneyBillArt } from "./MoneyBillArt";
 import { DiceFace, diceColorForSeat, NEUTRAL_DICE_COLOR } from "./DiceIcon";
-import { detectPlacementEvent, FlyingDicePlacement, type PlacementEvent } from "./DiceEffects";
+import { detectPlacementEvent, FlyingDicePlacement, PayoutMoneyFly, type PlacementEvent } from "./DiceEffects";
 import {
   computeRankings,
   NEUTRAL_OWNER,
+  tallyDiceGroups,
   type CasinoNumber,
   type CasinoState,
+  type DiceOwner,
   type EngineAction,
   type Face,
   type LasVegasState,
@@ -55,13 +59,56 @@ const CASINO_ACCENTS: Record<CasinoNumber, { border: string }> = {
   6: { border: "border-sky-300/70" },
 };
 
-function DiceBadge({ owner, count, seat }: { owner: string; count: number; seat?: SeatIndex }) {
+/**
+ * One owner's dice pile at a casino, rendered as that many individual dice
+ * (not a "×N" text badge — 2026-08-23 요청) each showing this casino's own
+ * face value, since that's physically what's sitting there: every die here
+ * got placed *because* it rolled this casino's number. `tied` dims the
+ * whole group to grayscale with a hairline crack overlay — rulebook §4
+ * 규칙 1's cancellation, shown live/provisionally per `tallyDiceGroups`
+ * (see engine.ts) rather than only once the game actually ends.
+ */
+function DiceGroupRow({
+  owner,
+  count,
+  seat,
+  face,
+  tied,
+}: {
+  owner: DiceOwner;
+  count: number;
+  seat?: SeatIndex;
+  face: Face;
+  tied: boolean;
+}) {
   const color = owner === NEUTRAL_OWNER ? NEUTRAL_DICE_COLOR : diceColorForSeat(seat!);
   return (
-    <span className="flex items-center gap-1 rounded-full border border-white/10 bg-black/30 px-1.5 py-0.5 text-[10px] font-semibold text-white/80">
-      <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-      ×{count}
-    </span>
+    <div
+      className={`relative flex items-center gap-[3px] rounded-md px-1 py-0.5 transition-all duration-300 ${
+        tied ? "opacity-45 grayscale" : ""
+      }`}
+      style={tied ? { filter: "grayscale(0.85)" } : undefined}
+    >
+      {Array.from({ length: count }, (_, i) => (
+        <DiceFace key={i} face={face} color={color} size="h-3.5 w-3.5" />
+      ))}
+      {tied && (
+        <svg
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          style={{ animation: "lasvegas-crack-flicker 1.8s ease-in-out infinite" }}
+          viewBox="0 0 100 24"
+          preserveAspectRatio="none"
+        >
+          <path
+            d="M4 2 L28 12 L18 8 L40 22 L34 10 L58 14 L48 4 L74 18 L64 9 L96 15"
+            fill="none"
+            stroke="#f87171"
+            strokeWidth="1.4"
+            opacity="0.85"
+          />
+        </svg>
+      )}
+    </div>
   );
 }
 
@@ -92,10 +139,10 @@ function MoneyStack({ bills }: { bills: number[] }) {
         {bills.map((bill, i) => (
           <div
             key={i}
-            className="absolute inset-x-0 grid h-9 place-items-center rounded-md border border-yellow-200/60 bg-gradient-to-b from-emerald-800 to-emerald-950 text-[11px] font-black text-yellow-100 shadow-[0_4px_10px_-3px_rgba(0,0,0,0.9)]"
+            className="absolute inset-x-0 h-9 overflow-hidden rounded-md shadow-[0_4px_10px_-3px_rgba(0,0,0,0.9)]"
             style={{ top: i * 11, zIndex: i + 1 }}
           >
-            {money(bill)}
+            <MoneyBillArt value={bill} />
           </div>
         ))}
       </div>
@@ -108,52 +155,91 @@ function MoneyStack({ bills }: { bills: number[] }) {
 
 /**
  * Three-tier casino block — per HANDOFF.md's Las Vegas section (2026-08-23
- * "외곽 지폐 스택" layout), each of the 6 casinos is now a *stack of three
+ * "외곽 지폐 스택" layout), each of the 6 casinos is a *stack of three
  * non-overlapping zones* instead of a single art tile with money/dice laid
- * on top (that overlay design was the previous session's approach; this
- * request explicitly reverses it so bills never sit over the illustration):
- *   1. Money stack (top) — `MoneyStack`, cascading bill cards, outside the art.
- *   2. Theme illustration (middle) — `CasinoTileArt` at its native 3:4 ratio,
- *      now with the *entire* card to itself (no bottom overlay reserved for
- *      money any more), so it reads noticeably larger/cleaner than before
- *      even though the SVG's own aspect ratio is unchanged. Number+name
- *      badge stays pinned to its top-left corner per the rulebook's "카지노
- *      번호로 식별" requirement.
- *   3. Dice betting mat (bottom) — `DiceBadge` pool, also its own zone below
- *      the art rather than overlaid on it.
- * `isRollDestination` drives the gold glow-pulse ring on the whole block:
- * true while the viewer has an active roll whose chosen-face buttons would
- * send dice to *this* casino — i.e. exactly the moment "betting on this
- * casino" is live.
+ * on top:
+ *   1. Money stack (top) — `MoneyStack`, cascading illustrated bill notes.
+ *   2. Theme mat (middle) — `CasinoMatArt` at its native 3:4 ratio: a real
+ *      synced photo for 5 of the 6 casinos, the original SVG scene for the
+ *      6th (see `CasinoPhotoArt.tsx`'s doc for why). Number+name badge
+ *      stays pinned to its top-left corner per the rulebook's "카지노 번호로
+ *      식별" requirement.
+ *   3. Dice betting mat (bottom) — one `DiceGroupRow` per owner, each
+ *      individual die drawn (not a "×N" badge), dimmed+cracked live the
+ *      instant that owner's count ties another's (rulebook §4 규칙 1,
+ *      computed provisionally every render via `tallyDiceGroups`).
+ * `isRollDestination` drives the gold glow-pulse ring on the whole block.
+ * `impactKey`/`clashKey` are bumped by the parent (see `LasVegasBoard`) to
+ * replay, respectively, the placement-landing impact ring/tile-shake and
+ * the tie-just-happened X-mark flourish — both plain key-remount CSS
+ * animations, no timers, same idiom as this file's existing `rollFlashId`.
  */
 function CasinoTile({
   casino,
   viewerSeat,
   isRollDestination,
+  impactKey,
+  clashKey,
   tileRef,
 }: {
   casino: CasinoState;
   viewerSeat: SeatIndex;
   isRollDestination: boolean;
+  impactKey: number;
+  clashKey: number;
   tileRef: (el: HTMLDivElement | null) => void;
 }) {
   const accent = CASINO_ACCENTS[casino.number];
-  const groups = (Object.entries(casino.diceCounts) as [string, number][]).filter(([, c]) => c > 0);
-  const iHaveDiceHere = groups.some(([owner]) => owner !== NEUTRAL_OWNER && Number(owner) === viewerSeat);
+  const groups = tallyDiceGroups(casino.diceCounts).sort((a, b) => b.count - a.count);
+  const iHaveDiceHere = groups.some((g) => g.owner !== NEUTRAL_OWNER && g.owner === viewerSeat);
+  const anyTiedNow = groups.some((g) => g.tied);
 
   return (
     <div
       ref={tileRef}
-      className={`flex w-full flex-col gap-1.5 rounded-2xl border-2 ${accent.border} p-1.5 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.4)] transition-shadow duration-300 hover:shadow-[inset_0_0_0_1px_rgba(252,211,77,0.4),0_0_20px_-6px_rgba(252,211,77,0.65)]`}
+      className={`relative flex w-full flex-col gap-1.5 rounded-2xl border-2 ${accent.border} p-1.5 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.4)] transition-shadow duration-300 hover:shadow-[inset_0_0_0_1px_rgba(252,211,77,0.4),0_0_20px_-6px_rgba(252,211,77,0.65)]`}
       style={isRollDestination ? { animation: "lasvegas-mat-glow-pulse 1.6s ease-in-out infinite" } : undefined}
     >
+      {/* Placement-landing impact: gold ring burst + tiny local shake, key-remounted per landing so it always replays. */}
+      {impactKey > 0 && (
+        <div
+          key={impactKey}
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-20 overflow-hidden rounded-2xl"
+          style={{ animation: "lasvegas-tile-shake 0.32s ease-out" }}
+        >
+          <div
+            className="absolute left-1/2 top-1/2 h-16 w-16 rounded-full border-amber-300"
+            style={{ animation: "lasvegas-impact-ring 0.55s ease-out forwards" }}
+          />
+        </div>
+      )}
+
+      {/* Tie-just-happened flourish: red X + sparks over the whole tile. */}
+      {clashKey > 0 && (
+        <div key={clashKey} aria-hidden className="pointer-events-none absolute inset-0 z-30 grid place-items-center">
+          <span
+            className="text-4xl font-black text-rose-500 drop-shadow-[0_0_10px_rgba(244,63,94,0.9)]"
+            style={{ animation: "lasvegas-tie-clash-x 0.9s ease-out forwards" }}
+          >
+            ✕
+          </span>
+          {[0, 60, 120, 180, 240, 300].map((angle) => (
+            <span
+              key={angle}
+              className="absolute h-1.5 w-1.5 rounded-full bg-amber-300"
+              style={{ ["--spark-angle" as string]: `${angle}deg`, animation: "lasvegas-tie-spark 0.7s ease-out forwards" }}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Zone 1: money stack, entirely outside the illustration below. */}
       <MoneyStack bills={casino.bills} />
 
-      {/* Zone 2: enlarged theme illustration — gets the full 3:4 card now
-          that money/dice no longer share this space. */}
+      {/* Zone 2: theme mat — real photo (5/6 casinos) or original SVG scene. */}
       <div className="relative aspect-[3/4] w-full overflow-hidden rounded-xl">
-        <CasinoTileArt casino={casino.number} className="absolute inset-0 h-full w-full" />
+        <CasinoMatArt casino={casino.number} className="absolute inset-0 h-full w-full" />
         {/* Light top-corner scrim, just enough to keep the badge legible over any part of the art. */}
         <div
           className="pointer-events-none absolute inset-0"
@@ -167,25 +253,28 @@ function CasinoTile({
         </div>
       </div>
 
-      {/* Zone 3: dice betting mat — its own bar below the art, not overlaid on it. */}
+      {/* Zone 3: dice betting mat — individual dice per owner, its own bar below the art. */}
       <div className="flex min-h-[44px] w-full flex-col items-center justify-center gap-1 rounded-lg border border-white/10 bg-black/25 p-1.5">
         <div className="flex w-full flex-wrap items-center justify-center gap-1">
           {groups.length === 0 ? (
             <span className="text-[9px] text-white/45">주사위 없음</span>
           ) : (
-            groups
-              .sort((a, b) => Number(b[1]) - Number(a[1]))
-              .map(([owner, count]) => (
-                <DiceBadge
-                  key={owner}
-                  owner={owner}
-                  count={count}
-                  seat={owner === NEUTRAL_OWNER ? undefined : Number(owner)}
-                />
-              ))
+            groups.map((g) => (
+              <DiceGroupRow
+                key={g.owner}
+                owner={g.owner}
+                count={g.count}
+                face={casino.number}
+                tied={g.tied}
+                seat={g.owner === NEUTRAL_OWNER ? undefined : (g.owner as SeatIndex)}
+              />
+            ))
           )}
         </div>
         {iHaveDiceHere && <span className="text-[9px] font-semibold text-amber-200">내 주사위 있음</span>}
+        {anyTiedNow && (
+          <span className="text-[9px] font-semibold text-rose-300">⚔️ 동수 상쇄 잠정 — 정산 시 확정</span>
+        )}
       </div>
     </div>
   );
@@ -199,16 +288,43 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
   const [trackedState, setTrackedState] = useState(state);
   const [placementEvents, setPlacementEvents] = useState<PlacementEvent[]>([]);
   const [rollFlashId, setRollFlashId] = useState(0);
+  // Per-casino key-remount counters (0 = "never played yet") driving the
+  // placement-impact ring/shake and the tie-just-happened X-clash flourish
+  // in `CasinoTile` — bumping the relevant casino's counter replays its CSS
+  // animation with no timers needed, same idiom as `rollFlashId` above.
+  const [impactKeys, setImpactKeys] = useState<Partial<Record<CasinoNumber, number>>>({});
+  const [clashKeys, setClashKeys] = useState<Partial<Record<CasinoNumber, number>>>({});
   if (trackedState !== state) {
     const placement = detectPlacementEvent(trackedState, state);
     const justRolled = trackedState.currentRoll === null && state.currentRoll !== null;
+    // Tie-clash detection: for each casino, did a dice owner newly become
+    // "tied" this tick (per the live `tallyDiceGroups` read, not
+    // `state.settlement` — that's only ever set once at game end)?
+    const newlyClashedCasinos = state.casinos.filter((casino) => {
+      const before = trackedState.casinos.find((c) => c.number === casino.number);
+      const prevTied = new Set(tallyDiceGroups(before?.diceCounts ?? {}).filter((g) => g.tied).map((g) => g.owner));
+      const nowTied = tallyDiceGroups(casino.diceCounts).filter((g) => g.tied);
+      return nowTied.some((g) => !prevTied.has(g.owner));
+    });
     setTrackedState(state);
     if (placement) setPlacementEvents((prev) => [...prev, { ...placement, id: (prev.at(-1)?.id ?? 0) + 1 }]);
     if (justRolled) setRollFlashId((n) => n + 1);
+    if (newlyClashedCasinos.length > 0) {
+      setClashKeys((prev) => {
+        const next = { ...prev };
+        for (const c of newlyClashedCasinos) next[c.number] = (next[c.number] ?? 0) + 1;
+        return next;
+      });
+    }
   }
-  const handlePlacementDone = useCallback((id: number) => {
-    setPlacementEvents((prev) => prev.filter((e) => e.id !== id));
-  }, []);
+  const handlePlacementDone = useCallback(
+    (id: number) => {
+      const landed = placementEvents.find((e) => e.id === id);
+      if (landed) setImpactKeys((prev) => ({ ...prev, [landed.casino]: (prev[landed.casino] ?? 0) + 1 }));
+      setPlacementEvents((prev) => prev.filter((e) => e.id !== id));
+    },
+    [placementEvents],
+  );
 
   const casinoTileRefs = useRef(new Map<CasinoNumber, HTMLDivElement>());
   const seatRowRefs = useRef(new Map<SeatIndex, HTMLElement>());
@@ -223,6 +339,28 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
     return (el: HTMLElement | null) => {
       if (el) seatRowRefs.current.set(seat, el);
       else seatRowRefs.current.delete(seat);
+    };
+  }
+
+  // Payout FX (game-over screen only): once per game-over, fly the #1
+  // seat(s)' own won bills from the trophy header into their ranking row's
+  // money badge (see `PayoutMoneyFly` in DiceEffects.tsx). A ref-guarded
+  // one-shot rather than a state diff, since there's no further mid-game
+  // state to diff once `phase === "gameOver"` — this only ever fires once.
+  const trophyRef = useRef<HTMLSpanElement | null>(null);
+  const winnerMoneyRefs = useRef(new Map<SeatIndex, HTMLElement>());
+  const [payoutQueue, setPayoutQueue] = useState<SeatIndex[]>([]);
+  const payoutStartedRef = useRef(false);
+  useEffect(() => {
+    if (state.phase === "gameOver" && state.settlement && !payoutStartedRef.current) {
+      payoutStartedRef.current = true;
+      setPayoutQueue(computeRankings(state).filter((r) => r.rank === 1).map((r) => r.seat));
+    }
+  }, [state]);
+  function setWinnerMoneyRef(seat: SeatIndex) {
+    return (el: HTMLElement | null) => {
+      if (el) winnerMoneyRefs.current.set(seat, el);
+      else winnerMoneyRefs.current.delete(seat);
     };
   }
 
@@ -247,7 +385,9 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
         className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
         style={{ background: "linear-gradient(160deg,#241405 0%,#170d02 55%,#0a0601 100%)" }}
       >
-        <span className="text-5xl">{tied ? "🎰" : "🏆"}</span>
+        <span ref={trophyRef} className="text-5xl">
+          {tied ? "🎰" : "🏆"}
+        </span>
         <h2 className="text-2xl font-bold text-amber-100">
           {tied ? "공동 우승!" : `${names[winners[0].seat]}님 최고 상금 획득 승리!`}
         </h2>
@@ -271,13 +411,34 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
                     {names[seat]}
                     {seat === viewerSeat && <span className="ml-1 text-amber-200">(나)</span>}
                   </td>
-                  <td className="border-b border-white/5 px-2 py-2 text-right font-semibold text-emerald-200">{money(total)}</td>
+                  <td className="border-b border-white/5 px-2 py-2 text-right">
+                    <span
+                      ref={rank === 1 ? setWinnerMoneyRef(seat) : undefined}
+                      className={`inline-block rounded-full px-2 py-0.5 font-semibold text-emerald-200 ${
+                        rank === 1 ? "bg-amber-400/10" : ""
+                      }`}
+                      style={rank === 1 ? { animation: "lasvegas-gold-burst-pulse 1.8s ease-in-out infinite" } : undefined}
+                    >
+                      {money(total)}
+                    </span>
+                  </td>
                   <td className="border-b border-white/5 px-2 py-2 text-right text-white/60">{billCount}장</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+
+        {/* Payout FX: winner(s)' own bills fly from the trophy above into their money badge, once. */}
+        {payoutQueue.map((seat) => (
+          <PayoutMoneyFly
+            key={seat}
+            bills={state.players.find((p) => p.seat === seat)?.money ?? []}
+            getSourceEl={() => trophyRef.current}
+            getTargetEl={() => winnerMoneyRefs.current.get(seat) ?? null}
+            onDone={() => setPayoutQueue((prev) => prev.filter((s) => s !== seat))}
+          />
+        ))}
 
         <details className="w-full rounded-xl border border-white/10 bg-white/[0.03] p-3 text-left text-[11px] text-white/60">
           <summary className="cursor-pointer text-white/80">카지노별 정산 내역 보기</summary>
@@ -369,28 +530,42 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
             casino={casino}
             viewerSeat={viewerSeat}
             isRollDestination={isMyTurn && rollGroups.some((g) => g.face === casino.number)}
+            impactKey={impactKeys[casino.number] ?? 0}
+            clashKey={clashKeys[casino.number] ?? 0}
             tileRef={setCasinoTileRef(casino.number)}
           />
         ))}
       </section>
 
-      {/* Scoreboard */}
+      {/* Scoreboard — each seat's own dice color is now a bold neon border/badge (2026-08-23 요청), not just a small dot, so "whose color is this" reads at a glance. */}
       <section className="flex flex-col gap-1.5">
         {seatOrder.map((seat) => {
           const p = state.players.find((pl) => pl.seat === seat)!;
           const isActive = state.activeSeat === seat;
           const isSelf = seat === viewerSeat;
           const total = p.money.reduce((s, v) => s + v, 0);
+          const seatColor = diceColorForSeat(seat);
           return (
             <div
               key={seat}
               ref={setSeatRowRef(seat)}
-              className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs transition ${
-                isActive ? "border-amber-300/60 bg-amber-400/10" : "border-white/10 bg-black/20"
-              }`}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border-2 bg-black/20 p-2 text-xs transition"
+              style={{
+                borderColor: seatColor,
+                boxShadow: `0 0 0 1px ${seatColor}55, 0 0 14px -2px ${seatColor}aa${isActive ? ", 0 0 22px 2px rgba(252,211,77,0.4)" : ""}`,
+                background: isActive
+                  ? `linear-gradient(90deg, ${seatColor}22 0%, rgba(0,0,0,0.2) 60%)`
+                  : `linear-gradient(90deg, ${seatColor}14 0%, rgba(0,0,0,0.2) 45%)`,
+              }}
             >
-              <span className="flex items-center gap-1.5 font-semibold text-white/90">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: diceColorForSeat(seat) }} />
+              <span className="flex items-center gap-2 font-semibold text-white/90">
+                <span
+                  className="grid h-5 w-5 place-items-center rounded-full text-[10px] font-black text-black shadow-[0_0_8px_2px_rgba(255,255,255,0.25)]"
+                  style={{ background: seatColor }}
+                  title={`${names[seat]}의 주사위 색상`}
+                >
+                  {seat + 1}
+                </span>
                 <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
                 {isActive && <span title="차례">👉</span>}
                 {names[seat]}
@@ -410,9 +585,21 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
       {/* My dice tray */}
       <section
         ref={diceTrayRef}
-        className="rounded-2xl border border-amber-300/20 p-2.5 sm:p-3"
+        className="relative overflow-hidden rounded-2xl border border-amber-300/20 p-2.5 sm:p-3"
         style={{ background: "linear-gradient(160deg,#332008 0%,#1c1204 55%,#0a0601 100%)" }}
       >
+        {/* Roll flourish: a dice-cup glyph shakes then flings away, replayed via key={rollFlashId} the instant currentRoll goes null->fresh. */}
+        {rollFlashId > 0 && (
+          <div
+            key={rollFlashId}
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 text-4xl"
+            style={{ animation: "lasvegas-cup-shake 0.42s ease-in-out" }}
+          >
+            🎲
+          </div>
+        )}
+
         <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-amber-200/90 uppercase">
           🎲 내 주사위 ({me.ownDiceInHand}개 + 중립 {me.neutralDiceInHand}개)
         </h3>

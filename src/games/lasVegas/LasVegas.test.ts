@@ -13,6 +13,7 @@ import {
   settleCasino,
   settleCasinos,
   startGame,
+  tallyDiceGroups,
   DICE_PER_PLAYER,
   CASINO_COUNT,
   MIN_PLAYERS,
@@ -275,6 +276,29 @@ describe("settleCasino — tie cancellation + ranked payout", () => {
     const casinos = [6, 5, 4, 3, 2, 1].map((n) => makeCasino(n as 1, [10_000], { 0: 1 }));
     const results = settleCasinos(casinos);
     expect(results.map((r) => r.casino)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("tallyDiceGroups — live/provisional tie read (LasVegasBoard.tsx's mid-round FX, not just final settlement)", () => {
+  it("flags exactly the tied owners as `tied: true`, matching settleCasino's cancelledOwners for the same diceCounts", () => {
+    const diceCounts: CasinoState["diceCounts"] = { 0: 3, 1: 3, 2: 1, [NEUTRAL_OWNER]: 1 };
+    const groups = tallyDiceGroups(diceCounts);
+    expect(new Set(groups.filter((g) => g.tied).map((g) => g.owner))).toEqual(new Set([0, 1, 2, NEUTRAL_OWNER]));
+    expect(groups.every((g) => g.tied)).toBe(true);
+  });
+
+  it("reads live mid-round diceCounts before a casino ever settles — no bills/settlement required", () => {
+    const groups = tallyDiceGroups({ 0: 2, 1: 2, 2: 5 });
+    expect(groups.find((g) => g.owner === 2)?.tied).toBe(false);
+    expect(groups.find((g) => g.owner === 0)?.tied).toBe(true);
+    expect(groups.find((g) => g.owner === 1)?.tied).toBe(true);
+  });
+
+  it("omits zero-count owners and returns an empty list for an empty casino", () => {
+    expect(tallyDiceGroups({ 0: 0, 1: 0 })).toEqual([]);
+    expect(tallyDiceGroups({})).toEqual([]);
   });
 });
 

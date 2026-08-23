@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { DiceFace, diceColorForSeat, NEUTRAL_DICE_COLOR } from "./DiceIcon";
+import { MoneyBillIcon } from "./MoneyBillArt";
 import type { CasinoNumber, Face, LasVegasState, SeatIndex } from "./engine";
 
 /**
@@ -126,6 +127,114 @@ export function FlyingDicePlacement({
         >
           <DiceFace face={event.face} color={d.color} size="h-6 w-6" />
         </div>
+      ))}
+    </>,
+    document.body,
+  );
+}
+
+const MONEY_FLIGHT_MS = 560;
+const MONEY_STAGGER_MS = 90;
+
+/**
+ * Payout flourish for `LasVegasBoard.tsx`'s game-over screen: flies the
+ * winning seat's bill notes, one by one, from the trophy header down into
+ * that seat's ranking-row money badge, each landing with a small sparkle —
+ * same left/top-CSS-transition-plus-portal technique as
+ * `FlyingDicePlacement` above, just triggered once on mount (there is no
+ * further mid-game state to diff once `phase === "gameOver"`) rather than
+ * off a state-diff. Scoped to the #1 seat(s) only, not every award across
+ * all 6 casinos to every player — keeps the flourish focused on "you won"
+ * instead of turning the results screen into a 54-card money shower.
+ */
+export function PayoutMoneyFly({
+  bills,
+  getSourceEl,
+  getTargetEl,
+  onDone,
+}: {
+  bills: number[];
+  getSourceEl: () => HTMLElement | null;
+  getTargetEl: () => HTMLElement | null;
+  onDone: () => void;
+}) {
+  const refs = useRef<(HTMLDivElement | null)[]>([]);
+  const sparkleRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useLayoutEffect(() => {
+    const source = getSourceEl();
+    const target = getTargetEl();
+    if (!source || !target || bills.length === 0) {
+      onDone();
+      return;
+    }
+    const from = rectCenter(source.getBoundingClientRect());
+    const to = rectCenter(target.getBoundingClientRect());
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
+    const rafs: number[] = [];
+
+    refs.current.forEach((el, i) => {
+      if (!el) return;
+      const jitter = (n: number) => n + (Math.random() - 0.5) * 22;
+      el.style.transition = "none";
+      el.style.left = `${jitter(from.x)}px`;
+      el.style.top = `${jitter(from.y)}px`;
+      void el.offsetHeight;
+      const startDelay = i * MONEY_STAGGER_MS;
+      const t = setTimeout(() => {
+        el.style.transition = `left ${MONEY_FLIGHT_MS}ms cubic-bezier(0.22,1,0.36,1), top ${MONEY_FLIGHT_MS}ms cubic-bezier(0.22,1,0.36,1)`;
+        const raf = requestAnimationFrame(() => {
+          el.style.left = `${jitter(to.x)}px`;
+          el.style.top = `${jitter(to.y)}px`;
+        });
+        rafs.push(raf);
+        const landTimeout = setTimeout(() => {
+          const sparkle = sparkleRefs.current[i];
+          if (sparkle) {
+            sparkle.style.left = `${to.x}px`;
+            sparkle.style.top = `${to.y}px`;
+            sparkle.style.animation = "lasvegas-money-land-sparkle 0.5s ease-out forwards";
+          }
+        }, MONEY_FLIGHT_MS - 60);
+        timeouts.push(landTimeout);
+      }, startDelay);
+      timeouts.push(t);
+    });
+
+    const doneTimeout = setTimeout(onDone, bills.length * MONEY_STAGGER_MS + MONEY_FLIGHT_MS + 150);
+    return () => {
+      timeouts.forEach(clearTimeout);
+      rafs.forEach(cancelAnimationFrame);
+      clearTimeout(doneTimeout);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-only
+  }, []);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <>
+      {bills.map((bill, i) => (
+        <div
+          key={i}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
+          className="pointer-events-none fixed z-[80]"
+          style={{ left: 0, top: 0, animation: "lasvegas-money-fly 0.4s ease-out forwards" }}
+        >
+          <MoneyBillIcon value={bill} className="h-6 w-10 drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" />
+        </div>
+      ))}
+      {bills.map((_, i) => (
+        <div
+          key={`spark-${i}`}
+          ref={(el) => {
+            sparkleRefs.current[i] = el;
+          }}
+          className="pointer-events-none fixed z-[80] h-6 w-6 rounded-full"
+          style={{ left: -9999, top: -9999, background: "radial-gradient(circle, rgba(252,211,77,0.9) 0%, rgba(252,211,77,0) 70%)" }}
+        />
       ))}
     </>,
     document.body,

@@ -57,6 +57,14 @@ function readableInk(hexColor: string): string {
   return luminance > 0.6 ? "#1a1a1a" : "#ffffff";
 }
 
+/**
+ * 2026-08-23 "실물 주사위 느낌" upgrade: still pure flat CSS/SVG (no WebGL —
+ * Perudo's own `dice3d/` → CSS/SVG migration on 2026-08-16 is the standing
+ * precedent this project follows, see this module's header comment), but
+ * layered radial highlight + darker base shadow + inset chamfer border so
+ * each cube reads as a lit physical die instead of a flat colored square.
+ * Pips also get a subtle drilled-well shadow instead of flat dots.
+ */
 export function DiceFace({
   face,
   color,
@@ -72,10 +80,18 @@ export function DiceFace({
 }) {
   const layout = PIP_LAYOUTS[Math.round(face)] ?? PIP_LAYOUTS[1];
   const ink = readableInk(color);
+  const glossOverlay =
+    "radial-gradient(120% 120% at 28% 18%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.12) 28%, rgba(255,255,255,0) 55%)," +
+    "linear-gradient(165deg, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.28) 100%)";
   return (
     <div
-      className={`relative shrink-0 rounded-[22%] border shadow-[0_2px_5px_-1px_rgba(0,0,0,0.6)] ${size} ${className}`}
-      style={{ background: color, borderColor: "rgba(0,0,0,0.35)", ...style }}
+      className={`relative shrink-0 rounded-[22%] border ${size} ${className}`}
+      style={{
+        background: `${glossOverlay}, ${color}`,
+        borderColor: "rgba(0,0,0,0.4)",
+        boxShadow: "0 3px 6px -1px rgba(0,0,0,0.65), inset 0 1px 1px rgba(255,255,255,0.5), inset 0 -2px 3px rgba(0,0,0,0.35)",
+        ...style,
+      }}
     >
       {layout.map((i) => {
         const [left, top] = PIP_POSITIONS[i];
@@ -93,6 +109,7 @@ export function DiceFace({
               minHeight: 3,
               borderRadius: "9999px",
               background: ink,
+              boxShadow: `inset 0 1px 1.5px rgba(0,0,0,0.55), 0 0.5px 0 rgba(255,255,255,0.25)`,
             }}
           />
         );

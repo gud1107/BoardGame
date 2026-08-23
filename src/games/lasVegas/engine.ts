@@ -293,6 +293,30 @@ export function applyAction(state: LasVegasState, action: EngineAction): LasVega
 // ---------------------------------------------------------------------------
 
 /**
+ * Rulebook §4 규칙 1's tie-cancellation tally, shared by two callers:
+ *  - `settleCasino` below, at the (only rules-authoritative) moment a casino
+ *    actually settles.
+ *  - `LasVegasBoard.tsx`'s live UI, which calls this on every render against
+ *    each casino's current (still-mid-round) `diceCounts` purely to show a
+ *    provisional "these groups are tied *right now*" flourish — a cosmetic
+ *    read of the same data, not a second source of truth. Nothing is
+ *    actually cancelled/awarded until `placeDice` drives the real hand empty
+ *    and `settleCasino` runs for real.
+ */
+export function tallyDiceGroups(
+  diceCounts: Partial<Record<DiceOwner, number>>,
+): { owner: DiceOwner; count: number; tied: boolean }[] {
+  const groups = (Object.entries(diceCounts) as [string, number][])
+    .filter(([, count]) => count > 0)
+    .map(([owner, count]) => ({ owner: (owner === NEUTRAL_OWNER ? NEUTRAL_OWNER : Number(owner)) as DiceOwner, count }));
+
+  const countTally = new Map<number, number>();
+  for (const g of groups) countTally.set(g.count, (countTally.get(g.count) ?? 0) + 1);
+
+  return groups.map((g) => ({ ...g, tied: (countTally.get(g.count) ?? 0) >= 2 }));
+}
+
+/**
  * Settles one casino: owners tied on dice count (including the neutral
  * bucket as a single group) cancel each other out entirely (규칙 1), then
  * surviving groups take the highest remaining bill in descending dice-count
@@ -301,17 +325,9 @@ export function applyAction(state: LasVegasState, action: EngineAction): LasVega
  * 맨 아래로 버립니다") — `applySettlementToPlayers` only ever pays real seats.
  */
 export function settleCasino(casino: CasinoState): CasinoSettlementResult {
-  const groups = (Object.entries(casino.diceCounts) as [string, number][])
-    .filter(([, count]) => count > 0)
-    .map(([owner, count]) => ({ owner: (owner === NEUTRAL_OWNER ? NEUTRAL_OWNER : Number(owner)) as DiceOwner, count }));
-
-  const countTally = new Map<number, number>();
-  for (const g of groups) countTally.set(g.count, (countTally.get(g.count) ?? 0) + 1);
-
-  const cancelledOwners = groups.filter((g) => (countTally.get(g.count) ?? 0) >= 2).map((g) => g.owner);
-  const survivors = groups
-    .filter((g) => (countTally.get(g.count) ?? 0) < 2)
-    .sort((a, b) => b.count - a.count);
+  const groups = tallyDiceGroups(casino.diceCounts);
+  const cancelledOwners = groups.filter((g) => g.tied).map((g) => g.owner);
+  const survivors = groups.filter((g) => !g.tied).sort((a, b) => b.count - a.count);
 
   const awards: CasinoAward[] = survivors.map((g, i) => ({
     owner: g.owner,

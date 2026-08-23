@@ -1918,3 +1918,173 @@ body {
       0 0 34px 8px rgba(252, 211, 77, 0.55);
   }
 }
+
+/* Las Vegas roll action (see LasVegasBoard.tsx's dice tray) — a dice-cup
+   glyph shakes in place then flings/fades away, replayed via a `key={
+   rollFlashId}` remount every time `currentRoll` goes null->fresh (same
+   remount-to-replay idiom this file already uses for dice-roll-tumble on
+   that same state edge). Purely decorative overlay on top of the tray. */
+@keyframes lasvegas-cup-shake {
+  0% {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  12% {
+    transform: translateY(-2px) rotate(-14deg) scale(1.03);
+  }
+  24% {
+    transform: translateY(0) rotate(12deg) scale(1);
+  }
+  36% {
+    transform: translateY(-2px) rotate(-10deg) scale(1.03);
+  }
+  48% {
+    transform: translateY(0) rotate(8deg) scale(1);
+  }
+  60% {
+    transform: translateY(-1px) rotate(-4deg) scale(1.02);
+  }
+  75% {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(6px) rotate(0deg) scale(0.7);
+    opacity: 0;
+  }
+}
+
+/* Las Vegas placement impact (see LasVegasBoard.tsx's CasinoTile) — a gold
+   ring expands and fades from the tile's center, and the tile itself gets a
+   tiny (2-3px) local shake, both replayed via a per-casino key-remount bump
+   the instant `FlyingDicePlacement`'s flight lands on that tile. Kept
+   local to the one landed-on tile rather than a whole-page shake so a busy
+   multiplayer round of frequent placements never feels like screen-wide
+   jitter for everyone watching. */
+@keyframes lasvegas-impact-ring {
+  0% {
+    transform: translate(-50%, -50%) scale(0.25);
+    opacity: 0.9;
+    border-width: 3px;
+  }
+  70% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.7);
+    opacity: 0;
+    border-width: 0.5px;
+  }
+}
+@keyframes lasvegas-tile-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-2px, 1px);
+  }
+  40% {
+    transform: translate(2px, -1px);
+  }
+  60% {
+    transform: translate(-1.5px, -1px);
+  }
+  80% {
+    transform: translate(1.5px, 1px);
+  }
+}
+
+/* Las Vegas tie cancellation (rulebook §4 규칙 1, see LasVegasBoard.tsx's
+   `DiceGroupGrid`) — the transient "they just tied!" flourish: a red X
+   slashes across the two dice groups with small spark particles, replayed
+   via key-remount the instant a casino's live tally (computed every render
+   from `engine.ts`'s `tallyDiceGroups`, NOT gated behind final settlement)
+   gains a newly-tied pair. The *persistent* dim/grayscale + crack look on
+   already-tied groups is plain conditional styling, not an animation. */
+@keyframes lasvegas-tie-clash-x {
+  0% {
+    transform: scale(0.4) rotate(-8deg);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1.25) rotate(4deg);
+    opacity: 1;
+  }
+  40% {
+    transform: scale(1) rotate(-2deg);
+  }
+  75% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.9) rotate(0deg);
+    opacity: 0;
+  }
+}
+@keyframes lasvegas-tie-spark {
+  0% {
+    transform: translate(-50%, -50%) rotate(var(--spark-angle, 0deg)) translateX(0) scale(0.4);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(var(--spark-angle, 0deg)) translateX(16px) scale(1);
+    opacity: 0;
+  }
+}
+@keyframes lasvegas-crack-flicker {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* Las Vegas payout screen (see LasVegasBoard.tsx's game-over branch) — the
+   #1 ranking row breathes a warm gold halo (loops for as long as the
+   summary screen is up), and `DiceEffects.tsx`'s `PayoutMoneyFly` flies
+   individual bill notes from the trophy header down into that row's money
+   badge once on mount, each landing with a small sparkle burst. */
+@keyframes lasvegas-gold-burst-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(252, 211, 77, 0.5),
+      0 0 18px 2px rgba(252, 211, 77, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(252, 211, 77, 0.9),
+      0 0 40px 10px rgba(252, 211, 77, 0.65);
+  }
+}
+@keyframes lasvegas-money-fly {
+  0% {
+    transform: translate(-50%, -50%) scale(0.6) rotate(-20deg);
+    opacity: 0;
+  }
+  55% {
+    transform: translate(-50%, -50%) scale(1.15) rotate(8deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+@keyframes lasvegas-money-land-sparkle {
+  0% {
+    transform: translate(-50%, -50%) scale(0.3);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.2);
+    opacity: 0;
+  }
+}

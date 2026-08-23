@@ -18,11 +18,16 @@ import type { CasinoNumber } from "./engine";
  * — see HANDOFF.md's existing licensing-caution note on `public/games/`).
  *
  * Two renders of the same 6 scenes are exported:
- *  - `CasinoTileArt`  — the full-bleed 3:4 background used by
- *    `LasVegasBoard.tsx`'s `CasinoTile` ("table mat" card face).
+ *  - `CasinoTileArt`  — the full-bleed 3:4 background. As of 2026-08-23,
+ *    `LasVegasBoard.tsx`'s `CasinoTile` no longer calls this directly for
+ *    5 of the 6 casinos — see `CasinoPhotoArt.tsx`'s `CasinoMatArt`, which
+ *    swapped in real casino photos per explicit user decision (accepting
+ *    the licensing caveat this file originally declined) and falls back to
+ *    this SVG only for casino 2 (Caesars Palace), whose only supplied photo
+ *    carried a stock-agency watermark. Still exported/used standalone
+ *    wherever a licensing-safe original illustration is wanted instead.
  *  - `CasinoEmblem`   — the original small circular medallion, kept in case
- *    a compact badge is ever wanted again (dashboard card, rulebook, etc.);
- *    no longer used by the board itself now that the tile shows full art.
+ *    a compact badge is ever wanted again (dashboard card, rulebook, etc.).
  */
 
 export const CASINO_THEME_NAMES: Record<CasinoNumber, { ko: string; en: string }> = {
