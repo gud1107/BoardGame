@@ -66,14 +66,65 @@ function DiceBadge({ owner, count, seat }: { owner: string; count: number; seat?
 }
 
 /**
- * "Table mat" casino tile — the full 3:4 rectangle is the casino's theme art
- * (`CasinoTileArt`), with the number badge, money card and dice pool laid on
- * top of it as an overlay (see design decisions in HANDOFF.md's Las Vegas
- * section: full-bleed SVG art kept in the existing no-external-image style,
- * 3:4 portrait tiles, medium-tone vignette/glass for legibility, corner
- * badge). `isRollDestination` drives the gold glow-pulse ring: true while
- * the viewer has an active roll whose chosen-face buttons would send dice to
- * *this* casino — i.e. exactly the moment "betting on this casino" is live.
+ * Cascading money stack — every bill on the casino gets its own card, offset
+ * downward in a staircase so all values stay individually readable (per
+ * user decision: show every bill, not just the top one + a "+N" badge, since
+ * setup can deal up to ~5 bills onto one casino before the $50k floor is
+ * met). Lives in its own zone *outside* the theme art (see `CasinoTile`) so
+ * a casino with several bills never grows on top of the illustration.
+ */
+function MoneyStack({ bills }: { bills: number[] }) {
+  const total = bills.reduce((s, v) => s + v, 0);
+  if (bills.length === 0) {
+    return (
+      <div className="flex h-14 w-full items-center justify-center rounded-lg border border-dashed border-white/20 bg-black/20 text-[9px] text-white/40">
+        지폐 없음
+      </div>
+    );
+  }
+  // Reserve enough height for the full cascade (each card peeks ~11px past
+  // the one above it) plus the final card's own height, so the last bill's
+  // full face is never clipped by the container.
+  const stackHeight = 34 + (bills.length - 1) * 11;
+  return (
+    <div className="flex w-full flex-col items-center gap-1">
+      <div className="relative w-full" style={{ height: stackHeight }}>
+        {bills.map((bill, i) => (
+          <div
+            key={i}
+            className="absolute inset-x-0 grid h-9 place-items-center rounded-md border border-yellow-200/60 bg-gradient-to-b from-emerald-800 to-emerald-950 text-[11px] font-black text-yellow-100 shadow-[0_4px_10px_-3px_rgba(0,0,0,0.9)]"
+            style={{ top: i * 11, zIndex: i + 1 }}
+          >
+            {money(bill)}
+          </div>
+        ))}
+      </div>
+      <span className="rounded-full border border-white/20 bg-black/50 px-2 py-0.5 text-[9px] font-semibold whitespace-nowrap text-emerald-200">
+        총 {money(total)} · {bills.length}장
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Three-tier casino block — per HANDOFF.md's Las Vegas section (2026-08-23
+ * "외곽 지폐 스택" layout), each of the 6 casinos is now a *stack of three
+ * non-overlapping zones* instead of a single art tile with money/dice laid
+ * on top (that overlay design was the previous session's approach; this
+ * request explicitly reverses it so bills never sit over the illustration):
+ *   1. Money stack (top) — `MoneyStack`, cascading bill cards, outside the art.
+ *   2. Theme illustration (middle) — `CasinoTileArt` at its native 3:4 ratio,
+ *      now with the *entire* card to itself (no bottom overlay reserved for
+ *      money any more), so it reads noticeably larger/cleaner than before
+ *      even though the SVG's own aspect ratio is unchanged. Number+name
+ *      badge stays pinned to its top-left corner per the rulebook's "카지노
+ *      번호로 식별" requirement.
+ *   3. Dice betting mat (bottom) — `DiceBadge` pool, also its own zone below
+ *      the art rather than overlaid on it.
+ * `isRollDestination` drives the gold glow-pulse ring on the whole block:
+ * true while the viewer has an active roll whose chosen-face buttons would
+ * send dice to *this* casino — i.e. exactly the moment "betting on this
+ * casino" is live.
  */
 function CasinoTile({
   casino,
@@ -88,60 +139,39 @@ function CasinoTile({
 }) {
   const accent = CASINO_ACCENTS[casino.number];
   const groups = (Object.entries(casino.diceCounts) as [string, number][]).filter(([, c]) => c > 0);
-  const topBill = casino.bills[0];
-  const restCount = casino.bills.length - 1;
-  const restTotal = casino.bills.slice(1).reduce((s, v) => s + v, 0);
   const iHaveDiceHere = groups.some(([owner]) => owner !== NEUTRAL_OWNER && Number(owner) === viewerSeat);
 
   return (
     <div
       ref={tileRef}
-      className={`relative aspect-[3/4] w-full overflow-hidden rounded-2xl border-2 ${accent.border} shadow-[inset_0_0_0_1px_rgba(252,211,77,0.4)] transition-shadow duration-300 hover:shadow-[inset_0_0_0_1px_rgba(252,211,77,0.4),0_0_20px_-6px_rgba(252,211,77,0.65)]`}
+      className={`flex w-full flex-col gap-1.5 rounded-2xl border-2 ${accent.border} p-1.5 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.4)] transition-shadow duration-300 hover:shadow-[inset_0_0_0_1px_rgba(252,211,77,0.4),0_0_20px_-6px_rgba(252,211,77,0.65)]`}
       style={isRollDestination ? { animation: "lasvegas-mat-glow-pulse 1.6s ease-in-out infinite" } : undefined}
     >
-      {/* Background layer: full-tile theme art, "cover"-filled (see CasinoTileArt). */}
-      <CasinoTileArt casino={casino.number} className="absolute inset-0 h-full w-full" />
+      {/* Zone 1: money stack, entirely outside the illustration below. */}
+      <MoneyStack bills={casino.bills} />
 
-      {/* Medium-tone vignette + bottom-up glass wash so money/dice text stays readable over any part of the art. */}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/10 via-black/10 to-black/85" />
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{ background: "radial-gradient(120% 65% at 50% 6%, transparent 40%, rgba(0,0,0,0.4) 100%)" }}
-      />
-
-      {/* Top-left corner badge: die-pip number + theme name. */}
-      <div className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-full border border-white/25 bg-black/55 py-0.5 pl-0.5 pr-2 backdrop-blur-sm">
-        <DiceFace face={casino.number} color="#f4f4f5" size="h-4 w-4" />
-        <span className="text-[9px] font-bold whitespace-nowrap text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">
-          {CASINO_THEME_NAMES[casino.number].ko}
-        </span>
+      {/* Zone 2: enlarged theme illustration — gets the full 3:4 card now
+          that money/dice no longer share this space. */}
+      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-xl">
+        <CasinoTileArt casino={casino.number} className="absolute inset-0 h-full w-full" />
+        {/* Light top-corner scrim, just enough to keep the badge legible over any part of the art. */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{ background: "radial-gradient(60% 40% at 8% 8%, rgba(0,0,0,0.55) 0%, transparent 70%)" }}
+        />
+        <div className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-full border border-white/25 bg-black/55 py-0.5 pl-0.5 pr-2 backdrop-blur-sm">
+          <DiceFace face={casino.number} color="#f4f4f5" size="h-4 w-4" />
+          <span className="text-[9px] font-bold whitespace-nowrap text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">
+            {CASINO_THEME_NAMES[casino.number].ko}
+          </span>
+        </div>
       </div>
 
-      {/* Money card + dice pool "sitting" on the mat, bottom-anchored. The
-          top bill and the "+N more" badge are stacked (not overlaid) so a
-          casino with several bills never garbles the headline amount —
-          see HANDOFF.md's Las Vegas section for the overlap this replaced. */}
-      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-1 p-2">
-        <div className="flex h-14 w-16 flex-col items-center justify-center">
-          {topBill !== undefined ? (
-            <div className="grid h-full w-full place-items-center rounded-lg border border-yellow-200/60 bg-gradient-to-b from-emerald-800 to-emerald-950 text-[11px] font-black text-yellow-100 shadow-[0_6px_14px_-4px_rgba(0,0,0,0.9)]">
-              {money(topBill)}
-            </div>
-          ) : (
-            <div className="grid h-full w-full place-items-center rounded-lg border border-dashed border-white/25 bg-black/35 text-[9px] text-white/55">
-              지폐 없음
-            </div>
-          )}
-        </div>
-        {restCount > 0 && (
-          <span className="rounded-full border border-white/30 bg-black/80 px-1.5 py-0.5 text-[9px] whitespace-nowrap text-white/85 [text-shadow:0_1px_1px_rgba(0,0,0,0.9)]">
-            +{restCount}장 ({money(restTotal)})
-          </span>
-        )}
-
-        <div className="flex min-h-[20px] w-full flex-wrap items-center justify-center gap-1">
+      {/* Zone 3: dice betting mat — its own bar below the art, not overlaid on it. */}
+      <div className="flex min-h-[44px] w-full flex-col items-center justify-center gap-1 rounded-lg border border-white/10 bg-black/25 p-1.5">
+        <div className="flex w-full flex-wrap items-center justify-center gap-1">
           {groups.length === 0 ? (
-            <span className="text-[9px] text-white/45 [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">주사위 없음</span>
+            <span className="text-[9px] text-white/45">주사위 없음</span>
           ) : (
             groups
               .sort((a, b) => Number(b[1]) - Number(a[1]))
@@ -155,9 +185,7 @@ function CasinoTile({
               ))
           )}
         </div>
-        {iHaveDiceHere && (
-          <span className="text-[9px] font-semibold text-amber-200 [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">내 주사위 있음</span>
-        )}
+        {iHaveDiceHere && <span className="text-[9px] font-semibold text-amber-200">내 주사위 있음</span>}
       </div>
     </div>
   );
