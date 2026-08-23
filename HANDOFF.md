@@ -23,9 +23,9 @@ _그 이전 갱신: 2026-08-23 (**라스베가스 1~6번 카지노 배팅존 테
 - `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/lasVegas`(40/40 통과, 순수 UI 변경이라 엔진 로직 영향 없음 확인 목적).
 - **브라우저 실측**: Phase 14 방식대로 `LasVegasBoard`를 고정 fixture(`startGame(4, 42)`의 상태를 카지노별로 수동 변형 — 1번 카지노에 $10,000×5장의 이론상 최댓값 캐스케이드, 6번엔 지폐 없음 케이스, 나머지는 2~3장 혼합 + 다양한 색상/중립 주사위 조합)로 렌더링하는 임시 라우트(`src/app/dev-lasvegas-preview`, 확인 후 삭제 완료)를 만들어 `npx playwright screenshot`으로 데스크톱(1280px, `lg:grid-cols-6`)과 모바일(375px, `grid-cols-2`) 두 폭 확인: (1) 5장 캐스케이드가 전부 개별 금액과 함께 잘리지 않고 계단형으로 쌓여 보임, (2) 지폐 없는 카지노도 플레이스홀더로 정상 표시, (3) 확장된 일러스트가 6개 전부 그림 전체를 온전히 드러내며 이전보다 눈에 띄게 큼직해 보임, (4) 주사위 배지 바가 그림과 겹치지 않고 하단에 명확히 분리, (5) 모바일 2열 그리드에서도 찌그러짐 없이 3단 구조가 유지(다만 타일 자체는 세로로 상당히 길어짐 — 질문 ④에서 사용자가 이 트레이드오프를 감수하고 기존 그리드 유지를 선택). **여전히 미검증**: 실제 마우스 `:hover`/골드 글로우 펄스 애니메이션 재생(정적 스크린샷 한계), `dice-roll-tumble`/`dice-slide-fly` FX가 새 3단 레이아웃 위에서 실제로 재생되는 모습, 온라인 2대 이상 기기 동기화.
 
-**커밋/푸시**: (이 문서 갱신 직후 커밋 예정 — 커밋 해시는 아래 참고)
+**커밋/푸시**: `d223f5a feat(las-vegas): enlarge top casino artwork rects and position money cards outside illustration` → `git push origin main` 완료(`132e333..d223f5a`).
 
-**배포**: (커밋 직후 진행 예정)
+**배포**: `npx vercel deploy`(프리뷰) 정상 완주(Turbopack 빌드+TypeScript 전체 재검사 포함), READY — `https://board-game-29605qn4t-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 이번에도 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 ### 2026-08-23 — 라스베가스 1~6번 카지노 배팅존 풀 배경 테이블 매트 개편
 
