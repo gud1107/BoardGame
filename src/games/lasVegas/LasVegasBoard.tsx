@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
-import { CasinoEmblem, CASINO_THEME_NAMES } from "./CasinoEmblem";
+import { CasinoTileArt, CASINO_THEME_NAMES } from "./CasinoEmblem";
 import { DiceFace, diceColorForSeat, NEUTRAL_DICE_COLOR } from "./DiceIcon";
 import { detectPlacementEvent, FlyingDicePlacement, type PlacementEvent } from "./DiceEffects";
 import {
@@ -41,13 +41,18 @@ function money(v: number): string {
   return `$${v.toLocaleString("en-US")}`;
 }
 
-const CASINO_ACCENTS: Record<CasinoNumber, { border: string; glow: string }> = {
-  1: { border: "border-amber-400/40", glow: "shadow-[0_0_18px_-8px_rgba(251,191,36,0.7)]" },
-  2: { border: "border-orange-400/40", glow: "shadow-[0_0_18px_-8px_rgba(251,146,60,0.7)]" },
-  3: { border: "border-pink-400/40", glow: "shadow-[0_0_18px_-8px_rgba(244,114,182,0.7)]" },
-  4: { border: "border-rose-500/40", glow: "shadow-[0_0_18px_-8px_rgba(244,63,94,0.7)]" },
-  5: { border: "border-teal-400/40", glow: "shadow-[0_0_18px_-8px_rgba(45,212,191,0.7)]" },
-  6: { border: "border-sky-400/40", glow: "shadow-[0_0_18px_-8px_rgba(56,189,248,0.7)]" },
+// Per-casino neon frame color — an inner gold hairline (via inset box-shadow,
+// applied once in CasinoTile below) stays constant across all 6 for the
+// "luxury casino frame" read, while this outer border carries each casino's
+// own accent so the 6 tiles stay tell-apart-able at a glance even before you
+// register the background art.
+const CASINO_ACCENTS: Record<CasinoNumber, { border: string }> = {
+  1: { border: "border-amber-300/70" },
+  2: { border: "border-orange-300/70" },
+  3: { border: "border-pink-300/70" },
+  4: { border: "border-rose-400/70" },
+  5: { border: "border-teal-300/70" },
+  6: { border: "border-sky-300/70" },
 };
 
 function DiceBadge({ owner, count, seat }: { owner: string; count: number; seat?: SeatIndex }) {
@@ -60,13 +65,25 @@ function DiceBadge({ owner, count, seat }: { owner: string; count: number; seat?
   );
 }
 
+/**
+ * "Table mat" casino tile — the full 3:4 rectangle is the casino's theme art
+ * (`CasinoTileArt`), with the number badge, money card and dice pool laid on
+ * top of it as an overlay (see design decisions in HANDOFF.md's Las Vegas
+ * section: full-bleed SVG art kept in the existing no-external-image style,
+ * 3:4 portrait tiles, medium-tone vignette/glass for legibility, corner
+ * badge). `isRollDestination` drives the gold glow-pulse ring: true while
+ * the viewer has an active roll whose chosen-face buttons would send dice to
+ * *this* casino — i.e. exactly the moment "betting on this casino" is live.
+ */
 function CasinoTile({
   casino,
   viewerSeat,
+  isRollDestination,
   tileRef,
 }: {
   casino: CasinoState;
   viewerSeat: SeatIndex;
+  isRollDestination: boolean;
   tileRef: (el: HTMLDivElement | null) => void;
 }) {
   const accent = CASINO_ACCENTS[casino.number];
@@ -74,61 +91,74 @@ function CasinoTile({
   const topBill = casino.bills[0];
   const restCount = casino.bills.length - 1;
   const restTotal = casino.bills.slice(1).reduce((s, v) => s + v, 0);
+  const iHaveDiceHere = groups.some(([owner]) => owner !== NEUTRAL_OWNER && Number(owner) === viewerSeat);
 
   return (
     <div
       ref={tileRef}
-      className={`flex flex-col items-center gap-2 rounded-2xl border bg-black/30 p-2.5 ${accent.border} ${accent.glow}`}
+      className={`relative aspect-[3/4] w-full overflow-hidden rounded-2xl border-2 ${accent.border} shadow-[inset_0_0_0_1px_rgba(252,211,77,0.4)] transition-shadow duration-300 hover:shadow-[inset_0_0_0_1px_rgba(252,211,77,0.4),0_0_20px_-6px_rgba(252,211,77,0.65)]`}
+      style={isRollDestination ? { animation: "lasvegas-mat-glow-pulse 1.6s ease-in-out infinite" } : undefined}
     >
-      <div className="flex flex-col items-center gap-1">
-        <CasinoEmblem casino={casino.number} className="h-9 w-9 sm:h-11 sm:w-11" />
-        <div className="flex items-center gap-1.5">
-          <DiceFace face={casino.number} color="#f4f4f5" size="h-6 w-6" />
-          <div className="flex flex-col items-start leading-tight">
-            <span className="text-[10px] font-bold text-white/90">{CASINO_THEME_NAMES[casino.number].ko}</span>
-            <span className="text-[8px] text-white/40">카지노 {casino.number}</span>
-          </div>
-        </div>
+      {/* Background layer: full-tile theme art, "cover"-filled (see CasinoTileArt). */}
+      <CasinoTileArt casino={casino.number} className="absolute inset-0 h-full w-full" />
+
+      {/* Medium-tone vignette + bottom-up glass wash so money/dice text stays readable over any part of the art. */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/10 via-black/10 to-black/85" />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: "radial-gradient(120% 65% at 50% 6%, transparent 40%, rgba(0,0,0,0.4) 100%)" }}
+      />
+
+      {/* Top-left corner badge: die-pip number + theme name. */}
+      <div className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-full border border-white/25 bg-black/55 py-0.5 pl-0.5 pr-2 backdrop-blur-sm">
+        <DiceFace face={casino.number} color="#f4f4f5" size="h-4 w-4" />
+        <span className="text-[9px] font-bold whitespace-nowrap text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">
+          {CASINO_THEME_NAMES[casino.number].ko}
+        </span>
       </div>
 
-      <div className="relative flex h-16 w-16 flex-col items-center justify-center">
-        {topBill !== undefined ? (
-          <>
-            <div className="absolute inset-0 grid place-items-center rounded-lg border border-yellow-200/50 bg-gradient-to-b from-emerald-800 to-emerald-950 text-[11px] font-black text-yellow-100 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.8)]">
+      {/* Money card + dice pool "sitting" on the mat, bottom-anchored. The
+          top bill and the "+N more" badge are stacked (not overlaid) so a
+          casino with several bills never garbles the headline amount —
+          see HANDOFF.md's Las Vegas section for the overlap this replaced. */}
+      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-1 p-2">
+        <div className="flex h-14 w-16 flex-col items-center justify-center">
+          {topBill !== undefined ? (
+            <div className="grid h-full w-full place-items-center rounded-lg border border-yellow-200/60 bg-gradient-to-b from-emerald-800 to-emerald-950 text-[11px] font-black text-yellow-100 shadow-[0_6px_14px_-4px_rgba(0,0,0,0.9)]">
               {money(topBill)}
             </div>
-            {restCount > 0 && (
-              <span className="absolute -right-1 -bottom-1 rounded-full border border-white/20 bg-black/70 px-1.5 py-0.5 text-[9px] text-white/60">
-                +{restCount}장 ({money(restTotal)})
-              </span>
-            )}
-          </>
-        ) : (
-          <div className="grid h-full w-full place-items-center rounded-lg border border-dashed border-white/10 text-[10px] text-white/30">
-            지폐 없음
-          </div>
+          ) : (
+            <div className="grid h-full w-full place-items-center rounded-lg border border-dashed border-white/25 bg-black/35 text-[9px] text-white/55">
+              지폐 없음
+            </div>
+          )}
+        </div>
+        {restCount > 0 && (
+          <span className="rounded-full border border-white/30 bg-black/80 px-1.5 py-0.5 text-[9px] whitespace-nowrap text-white/85 [text-shadow:0_1px_1px_rgba(0,0,0,0.9)]">
+            +{restCount}장 ({money(restTotal)})
+          </span>
         )}
-      </div>
 
-      <div className="flex min-h-[22px] flex-wrap items-center justify-center gap-1">
-        {groups.length === 0 ? (
-          <span className="text-[10px] text-white/25">주사위 없음</span>
-        ) : (
-          groups
-            .sort((a, b) => Number(b[1]) - Number(a[1]))
-            .map(([owner, count]) => (
-              <DiceBadge
-                key={owner}
-                owner={owner}
-                count={count}
-                seat={owner === NEUTRAL_OWNER ? undefined : Number(owner)}
-              />
-            ))
+        <div className="flex min-h-[20px] w-full flex-wrap items-center justify-center gap-1">
+          {groups.length === 0 ? (
+            <span className="text-[9px] text-white/45 [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">주사위 없음</span>
+          ) : (
+            groups
+              .sort((a, b) => Number(b[1]) - Number(a[1]))
+              .map(([owner, count]) => (
+                <DiceBadge
+                  key={owner}
+                  owner={owner}
+                  count={count}
+                  seat={owner === NEUTRAL_OWNER ? undefined : Number(owner)}
+                />
+              ))
+          )}
+        </div>
+        {iHaveDiceHere && (
+          <span className="text-[9px] font-semibold text-amber-200 [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">내 주사위 있음</span>
         )}
       </div>
-      {groups.some(([owner]) => owner !== NEUTRAL_OWNER && Number(owner) === viewerSeat) && (
-        <span className="text-[9px] text-amber-200/70">내 주사위 있음</span>
-      )}
     </div>
   );
 }
@@ -303,10 +333,16 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
           : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
       </p>
 
-      {/* Casino boards */}
-      <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      {/* Casino boards — table-mat tiles, full theme art with dice/money laid on top. */}
+      <section className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
         {state.casinos.map((casino) => (
-          <CasinoTile key={casino.number} casino={casino} viewerSeat={viewerSeat} tileRef={setCasinoTileRef(casino.number)} />
+          <CasinoTile
+            key={casino.number}
+            casino={casino}
+            viewerSeat={viewerSeat}
+            isRollDestination={isMyTurn && rollGroups.some((g) => g.face === casino.number)}
+            tileRef={setCasinoTileRef(casino.number)}
+          />
         ))}
       </section>
 
