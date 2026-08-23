@@ -30,9 +30,9 @@ _그 이전 갱신: 2026-08-23 (**라스베가스 1~6번 카지노 상단 일러
 - **전체 `npx vitest run`은 이번에도 8분+ 경과 후 출력 0바이트로 멈춰 완주 확인 못함** — §0/직전 세션들에 이미 기록된 동일 증상, 이번 세션이 새로 만든 문제가 아님(변경 범위가 라스베가스 UI 컴포넌트뿐이고 타깃 스위트가 통과했으므로 회귀는 아닌 것으로 판단).
 - **브라우저 실측**: Phase 14 방식대로 `LasVegasBoard`를 고정 fixture(`startGame(4, 42)` + 카지노 1(선명한 1위/2위), 카지노 2(1위 자리를 중립이 차지), 카지노 3(동수로 전원 무효) 케이스를 수동 주입, `activeSeat`를 상대 좌석으로 설정해 롤 뷰어가 상대방 라벨로 뜨는지 확인)로 렌더링하는 임시 라우트(`src/app/dev-lasvegas-preview`, 확인 후 삭제 완료)를 만들어 `npx playwright screenshot`으로 데스크톱(900px)과 모바일(375px) 확인: (1) 카지노 번호 배지에 이름 없이 숫자만 크게 보임, (2) 롤 뷰어 패널이 카지노 그리드와 스코어보드 사이에 정확히 위치하고 "AI 봇 1님이 굴린 주사위 (6개)"로 정확히 라벨링됨, (3) 카지노 1엔 "👑 1st 플레이어(나)", 카지노 2엔 "🚫 중립 · 폐기 예정"과 "🥈 2nd AI 봇 2"가 **둘 다** 보임(위 z-index 버그 수정 후), 카지노 3(동수)엔 리더 뱃지 없음 — 전부 기대대로 동작. **여전히 미검증**: 실제 배치 클릭 시 하이라이트→비행 2단계 연출(HOLD_MS 300ms)이 매끄럽게 재생되는지는 정적 스크린샷으로 확인 불가 — Playwright의 Node API가 이 프로젝트에 설치돼 있지 않아(CLI 스크린샷만 가능) 클릭 인터랙션 테스트는 진행하지 못함, 코드 리뷰와 기존 `dice-slide-fly`/`lasvegas-cup-shake` 등 동일 idiom 재사용으로 신뢰도를 높였지만 다음 세션에서 실제 브라우저로 재생 확인 필요. 온라인 2대 이상 기기 동기화도 미확인.
 
-**커밋/푸시**: 아래 참고.
+**커밋/푸시**: `3fe1ffd feat(las-vegas): add opponent roll viewer, fix overlapping dice layout, and display real-time payout winner indicators` → `git push origin main` 완료(`4dd6b99..3fe1ffd`).
 
-**배포**: 아래 참고.
+**배포**: `npx vercel deploy`(프리뷰) 정상 완주(Turbopack 빌드+TypeScript 전체 재검사 포함), READY — `https://board-game-a8af1q212-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 이번에도 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 **미해결/다음 세션**:
 - 전체 `npx vitest run` 미완주 문제는 여전히 미해결(§0 백로그와 동일, 이 세션의 회귀 아님).
