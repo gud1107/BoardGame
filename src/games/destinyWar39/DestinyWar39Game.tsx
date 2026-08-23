@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { RealtimeChannel, RealtimePresenceState } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
 import { getDeviceId } from "@/lib/identity/deviceId";
+import Overlay from "@/components/Overlay";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import {
@@ -462,10 +463,77 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
     setPhase("choose");
   }
 
+  // ---------------------------------------------------------------------
+  // Mobile back-gesture / browser back-button exit guard (2026-08-23 bug
+  // report: a back gesture instantly kicked the player out of the game with
+  // no confirmation). This game never does a real route change while inside
+  // a room (join/create/play/leave are all handled by internal `phase`
+  // state on this one mounted component — see module doc above), so the
+  // only way "back" can eject the player is the browser's own history
+  // stack: this component's page is still just one entry in it, and a
+  // back gesture pops straight past it.
+  //
+  // Standard "history trap": the moment a room is joined (`roomCode` set —
+  // covers connecting/waiting/playing/post-game, this session's confirmed
+  // answer: guard the entire in-room lifetime, not just the active
+  // "playing" phase), push one extra same-URL history entry. A back
+  // gesture then fires `popstate` here (instead of actually navigating)
+  // because the browser pops that extra entry first; the handler
+  // immediately pushes it right back (cancelling the effective navigation)
+  // and opens the confirm modal instead. [계속하기] just closes the modal
+  // (the re-armed entry is already back in place); [나가기] calls the
+  // existing `handleLeave()` to return to this game's own lobby screen
+  // in-place (this session's confirmed answer — no real cross-page
+  // navigation happens either way, matching how every other exit path in
+  // this component already works).
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+  useEffect(() => {
+    if (!roomCode) return;
+    window.history.pushState({ destinyWar39ExitGuard: true }, "", window.location.href);
+    const onPopState = () => {
+      window.history.pushState({ destinyWar39ExitGuard: true }, "", window.location.href);
+      setExitConfirmOpen(true);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [roomCode]);
+
+  function withGuard(node: ReactNode) {
+    return (
+      <>
+        {node}
+        {exitConfirmOpen && (
+          <Overlay title="게임을 나가시겠습니까?" onClose={() => setExitConfirmOpen(false)}>
+            <div className="flex flex-col gap-4 text-sm text-white/80">
+              <p>진행 중인 게임에서 나가면 다시 들어오기 전까지 참여할 수 없어요.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setExitConfirmOpen(false)}
+                  className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm font-semibold text-white/80 hover:border-white/30"
+                >
+                  계속하기
+                </button>
+                <button
+                  onClick={() => {
+                    setExitConfirmOpen(false);
+                    handleLeave();
+                  }}
+                  className="flex-1 rounded-xl bg-rose-600 py-2.5 text-sm font-semibold text-white hover:bg-rose-500"
+                >
+                  나가기
+                </button>
+              </div>
+            </div>
+          </Overlay>
+        )}
+      </>
+    );
+  }
+
   const shareUrl = typeof window !== "undefined" && roomCode ? `${window.location.origin}${window.location.pathname}?room=${roomCode}` : "";
 
   if (phase === "supabase-missing") {
-    return (
+    return withGuard(
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-8 text-center">
         <span className="text-3xl">⚠️</span>
         <h2 className="text-lg font-bold text-white">온라인 대전을 사용할 수 없어요</h2>
@@ -481,7 +549,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "room-full") {
-    return (
+    return withGuard(
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center">
         <span className="text-3xl">🚫</span>
         <h2 className="text-lg font-bold text-white">이미 다른 사람이 참여 중인 방이에요</h2>
@@ -494,7 +562,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "channel-error") {
-    return (
+    return withGuard(
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center">
         <span className="text-3xl">📡</span>
         <h2 className="text-lg font-bold text-white">연결에 실패했습니다</h2>
@@ -506,7 +574,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "choose") {
-    return (
+    return withGuard(
       <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">🔮</span>
         <h2 className="text-lg font-bold text-white">운명전쟁39 온라인 대전</h2>
@@ -538,7 +606,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "enter-name") {
-    return (
+    return withGuard(
       <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
         <h2 className="text-base font-bold text-white">{intent === "create" ? "방 만들기" : "초대 코드로 참여"}</h2>
         <div className="flex flex-col gap-1.5 text-sm text-white/70">
@@ -592,7 +660,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "connecting" || phase === "waiting") {
-    return (
+    return withGuard(
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         {phase === "connecting" ? (
           <p className="text-sm text-white/50">연결하는 중...</p>
@@ -638,13 +706,13 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "playing" && gameState && mySeat !== null) {
-    return (
+    return withGuard(
       <DestinyWar39Board state={gameState} viewerSeat={mySeat} names={names} connectedSeats={connectedSeats} onAction={handleAction} onGameEnd={handleGameEnd} />
     );
   }
 
   if (phase === "post-game" && finalResult) {
-    return (
+    return withGuard(
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">🔮</span>
         <p className="text-white/80">{finalResult.winnerNames.join(", ")} 님이 운명전쟁39에서 승리했어요.</p>

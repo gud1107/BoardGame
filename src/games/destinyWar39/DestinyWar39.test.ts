@@ -594,6 +594,17 @@ describe("hidden (rulebook §8, §12)", () => {
     expect(visibleCurrentPrediction(state, 1, 0)).toBe("hidden"); // opponent does not
   });
 
+  it("keeps a hidden prediction masked as 'hidden' even after the round's first trick begins (unlike an ordinary prediction, which reveals then)", () => {
+    let state = startGame(5, 1);
+    state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: true });
+    for (let seat = 1; seat < 5; seat++) {
+      state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
+    }
+    expect(state.phase).toBe("playing"); // first trick has begun
+    expect(visibleCurrentPrediction(state, 1, 0)).toBe("hidden"); // seat 0's hidden pick stays masked
+    expect(visibleCurrentPrediction(state, 0, 0)).toBe(1); // owner still sees their own
+  });
+
   it("reveals every hidden past prediction once the game reaches gameOver", () => {
     let state = startGame(5, 123);
     state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: true });
@@ -608,6 +619,84 @@ describe("hidden (rulebook §8, §12)", () => {
     // from seat 1's view while the game isn't over yet.
     expect(visiblePastPrediction(state, 1, 0, 1)).toBe("hidden");
     expect(visiblePastPrediction(state, 0, 0, 1)).toBe(1);
+  });
+});
+
+describe("prediction blind masking (2026-08-23 bug fix — non-hidden predictions leaked in real time during the predicting phase)", () => {
+  it("masks an ordinary (non-hidden) prediction from other seats as 'submitted' while the round is still predicting, but always shows it to its owner", () => {
+    let state = startGame(5, 1);
+    state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: false }); // round 1 only allows 0..1
+    expect(state.phase).toBe("predicting"); // round 1 has 5 predictions to collect — still open
+    expect(visibleCurrentPrediction(state, 0, 0)).toBe(1); // owner sees the real value
+    expect(visibleCurrentPrediction(state, 1, 0)).toBe("submitted"); // everyone else only sees "submitted"
+  });
+
+  it("reports 'pending' (not 'submitted') for a seat that hasn't predicted yet, to both its owner and everyone else", () => {
+    const state = startGame(5, 1);
+    expect(visibleCurrentPrediction(state, 0, 0)).toBe("pending");
+    expect(visibleCurrentPrediction(state, 1, 0)).toBe("pending");
+  });
+
+  it("reveals every ordinary prediction to everyone the instant the round's first trick begins (phase -> playing)", () => {
+    let state = startGame(5, 1);
+    for (let seat = 0; seat < 5; seat++) {
+      state = applyAction(state, { type: "predict", seat, value: seat % 2, hidden: false });
+    }
+    expect(state.phase).toBe("playing");
+    for (let seat = 0; seat < 5; seat++) {
+      // Every seat's prediction is now visible to every other seat, not just its owner.
+      expect(visibleCurrentPrediction(state, (seat + 1) % 5, seat)).toBe(seat % 2);
+    }
+  });
+});
+
+/** Plays out every remaining turn of the CURRENT round only (predicting all-zero for any unsubmitted seat, then auto-playing each acting seat's first card) — lands on "roundEnd" (or "gameOver" if this was round 9). Round 2+ must follow the actual clockwise-from-turnLeader acting order (unlike round 1's any-order simultaneous reveal), same logic `playFullGame`'s inner loop below uses. */
+function finishCurrentRound(state: DestinyWar39State): DestinyWar39State {
+  const playerCount = state.playerCount;
+  if (state.phase === "predicting") {
+    for (let seat = 0; seat < playerCount; seat++) {
+      if (state.round.predictions[seat] === null) state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
+    }
+  }
+  while (state.phase === "playing") {
+    const round = state.round;
+    const played = new Set(round.playsThisTurn.map((p) => p.seat));
+    let actingSeat: SeatIndex | null = null;
+    if (round.roundNumber === 1) {
+      for (let s = 0; s < playerCount; s++) if (!played.has(s)) { actingSeat = s; break; }
+    } else {
+      const startIdx = state.seatOrder.indexOf(round.turnLeader);
+      for (let i = 0; i < playerCount; i++) {
+        const candidate = state.seatOrder[(startIdx + i) % playerCount];
+        if (!played.has(candidate)) { actingSeat = candidate; break; }
+      }
+    }
+    if (actingSeat === null) break;
+    const card = round.hands[actingSeat][0];
+    state = applyAction(state, { type: "play", seat: actingSeat, cardId: card.id });
+  }
+  return state;
+}
+
+describe("hidden badge round-scoping (2026-08-23 fix — the UI's 'hidden used' badge must not linger past the round it was spent on)", () => {
+  it("keeps hiddenRound pinned to the round it was spent on as roundNumber keeps advancing, so a `roundNumber === hiddenRound` check (what the UI badge gates on) flips from true to false the very next round and never flips back", () => {
+    let state = startGame(5, 1);
+    state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: true });
+    expect(state.round.roundNumber).toBe(1);
+    expect(state.players[0].hiddenRound).toBe(1);
+    expect(state.round.roundNumber === state.players[0].hiddenRound).toBe(true); // badge visible in round 1
+
+    state = finishCurrentRound(state);
+    state = applyAction(state, { type: "nextRound", seed: 2 });
+    expect(state.round.roundNumber).toBe(2);
+    expect(state.players[0].hiddenRound).toBe(1); // never resets/advances — the lifetime token itself is unaffected
+    expect(state.round.roundNumber === state.players[0].hiddenRound).toBe(false); // badge now hidden
+
+    // Advance one more round to confirm it stays gone rather than somehow reappearing.
+    state = finishCurrentRound(state);
+    state = applyAction(state, { type: "nextRound", seed: 3 });
+    expect(state.round.roundNumber).toBe(3);
+    expect(state.round.roundNumber === state.players[0].hiddenRound).toBe(false);
   });
 });
 

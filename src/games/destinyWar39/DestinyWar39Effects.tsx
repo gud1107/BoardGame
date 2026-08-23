@@ -245,11 +245,16 @@ const HIDDEN_SPARKLE_OFFSETS: { x: number; y: number; delayMs: number }[] = [
  * The 🙈 badge a seat's row gets the instant they spend their lifetime
  * hidden token (see PredictionStatusBoard.tsx) — a purple glow ring +
  * a few sparkle twinkles, shared by every connected client since
- * `hiddenUsed` is ordinary lockstep state everyone sees flip at once.
- * Relies on this element only ever mounting once (`hiddenUsed` never resets
- * back to false) for the "plays once" read — no extra "just activated"
- * tracking needed, a plain re-render of an already-mounted element does not
- * restart its CSS `animation`.
+ * `hiddenUsed`/`hiddenRound` is ordinary lockstep state everyone sees flip
+ * at once. Scoped to the round it was spent on (2026-08-23 confirmed
+ * answer): PredictionStatusBoard.tsx only mounts this while
+ * `round.roundNumber === player.hiddenRound`, so it disappears once
+ * `nextRound` advances past that round and never reappears (the lifetime
+ * token itself stays spent — this is purely a "which round" spotlight, not
+ * a running "already used" indicator). Relies on this element only ever
+ * mounting once per game for the "plays once" read — no extra "just
+ * activated" tracking needed, a plain re-render of an already-mounted
+ * element does not restart its CSS `animation`.
  */
 export function HiddenActivationBadge({ title }: { title: string }) {
   return (

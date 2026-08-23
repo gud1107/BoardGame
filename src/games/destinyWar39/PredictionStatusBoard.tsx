@@ -88,17 +88,24 @@ function PredictionContent({ state, viewerSeat, names, connectedSeats, onAction 
         {Array.from({ length: state.playerCount }, (_, seat) => {
           const isMe = seat === viewerSeat;
           const player = state.players.find((p) => p.seat === seat)!;
-          const predicted = round.predictions[seat];
           const visible = visibleCurrentPrediction(state, viewerSeat, seat);
           const current = round.winsThisRound[seat] ?? 0;
-          const submitted = predicted !== null;
-          // "Doomed"/"on target" are only ever provable mid-round in one
-          // direction: actual wins can only go up, so once it passes the
-          // prediction that prediction can never come true again this
-          // round. Landing exactly on it is promising but not final until
-          // the round actually ends (more turns could still push it past).
-          const exceeded = submitted && current > predicted;
-          const onTarget = submitted && current === predicted;
+          const submitted = visible !== "pending";
+          // Revealed-to-me numeric value, or null while it's still blind
+          // ("submitted"/"hidden") — "doomed"/"on target" would themselves
+          // leak a masked prediction's progress toward its (still-secret)
+          // target, so both stay unset until `visible` is an actual number
+          // (own row, or an opponent's once their non-hidden prediction
+          // reveals at the round's first trick — see engine.ts's
+          // `visibleCurrentPrediction` doc). "Doomed"/"on target" are only
+          // ever provable mid-round in one direction: actual wins can only
+          // go up, so once it passes the prediction that prediction can
+          // never come true again this round. Landing exactly on it is
+          // promising but not final until the round actually ends (more
+          // turns could still push it past).
+          const revealedValue = typeof visible === "number" ? visible : null;
+          const exceeded = revealedValue !== null && current > revealedValue;
+          const onTarget = revealedValue !== null && current === revealedValue;
           return (
             <div
               key={seat}
@@ -111,13 +118,16 @@ function PredictionContent({ state, viewerSeat, names, connectedSeats, onAction 
                   {names[seat]}
                   {isMe ? " (나)" : ""}
                 </span>
-                {player.hiddenUsed && (
-                  <HiddenActivationBadge title={player.hiddenRound === round.roundNumber ? "이번 라운드 히든 사용 중" : "히든 사용 완료"} />
-                )}
+                {/* Round-scoped, NOT `player.hiddenUsed` alone (2026-08-23 confirmed answer) — the lifetime
+                    once-per-game token itself never resets (engine.ts), but this badge is a one-round
+                    spotlight on which round it was spent, not a running "already used" scoreboard: it
+                    shows only while `round.roundNumber` still matches `hiddenRound`, and disappears the
+                    moment `nextRound` advances past it, never to reappear this game. */}
+                {player.hiddenRound === round.roundNumber && <HiddenActivationBadge title="이번 라운드 히든 사용 중" />}
               </div>
               <div className="flex items-center justify-between text-white/60">
                 <span>
-                  예측 {submitted ? (visible === "hidden" ? "🙈" : `${visible}승`) : "…"} / 현재{" "}
+                  예측 {visible === "pending" ? "?" : visible === "submitted" ? "완료" : visible === "hidden" ? "🙈" : `${visible}승`} / 현재{" "}
                   <b className={onTarget ? "text-emerald-300" : exceeded ? "text-rose-300" : "text-white/80"}>{current}승</b>
                 </span>
                 {state.phase === "playing" && submitted && (

@@ -524,15 +524,32 @@ export function applyAction(state: DestinyWar39State, action: EngineAction): Des
 // time, exactly like Coyote's `getPlayerView`.
 // ---------------------------------------------------------------------------
 
-export type VisiblePrediction = number | "hidden" | "pending";
+export type VisiblePrediction = number | "hidden" | "pending" | "submitted";
 
-/** The current (in-progress) round's prediction for `targetSeat`, as `viewerSeat` is allowed to see it right now. */
+/**
+ * The current (in-progress) round's prediction for `targetSeat`, as
+ * `viewerSeat` is allowed to see it right now.
+ *
+ * Two distinct kinds of "not shown" here, both bug-report-confirmed
+ * (2026-08-23 masking session): a `hidden`-flagged prediction (the lifetime
+ * once-per-game token) stays `"hidden"` no matter the phase — it only ever
+ * reveals via `visiblePastPrediction` once `state.phase === "gameOver"`
+ * (rulebook §8). An ordinary (non-hidden) prediction is ALSO blind to every
+ * other seat while `state.phase === "predicting"` — only whether it's been
+ * submitted at all is visible (`"submitted"` vs `"pending"`) — and then
+ * reveals in full the instant the round's first trick begins
+ * (`state.phase` moves to `"playing"`), matching every other seat's reveal
+ * at once. Before this session, a non-hidden prediction's raw value was
+ * visible to every opponent the moment it was submitted, mid-"predicting"
+ * — this function is the fix.
+ */
 export function visibleCurrentPrediction(state: DestinyWar39State, viewerSeat: SeatIndex, targetSeat: SeatIndex): VisiblePrediction {
   const value = state.round.predictions[targetSeat];
+  if (targetSeat === viewerSeat) return value === null ? "pending" : value;
   if (value === null) return "pending";
-  if (!state.round.hiddenThisRound[targetSeat]) return value;
-  if (targetSeat === viewerSeat) return value;
-  return "hidden";
+  if (state.round.hiddenThisRound[targetSeat]) return "hidden";
+  if (state.phase === "predicting") return "submitted";
+  return value;
 }
 
 /** A already-finished round's prediction for `targetSeat` (1-indexed `roundNumber`), as `viewerSeat` is allowed to see it. Hidden predictions stay redacted until `state.phase === "gameOver"` (rulebook §8: "게임의 모든 결과가 전부 공개된 시점"). */
