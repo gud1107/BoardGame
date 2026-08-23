@@ -27,6 +27,10 @@ _그 이전 갱신: 2026-08-22 (**운명전쟁39 트릭 진행 중 카드가 opa
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(전체, 경고 0) / `npx vitest run src/games/destinyWar39`(84/84 통과) / `npx vitest run --exclude '**/aiBenchmark.test.ts'`(27개 파일 1133/1133 통과 — 다른 게임 회귀 없음). **브라우저 실측(뒤로가기 제스처/모달, 블라인드 마크 실시간 전환)은 이번 세션에 수행하지 않음** — 이 저장소가 이미 문서화한 vitest 커버리지 밖 영역(실시간 히스토리 API 상호작용)이라 실사용 전 수동 확인 권장.
 
+**커밋/푸시**: `74437ed fix(destiny-war-39): mask opponent predictions, secure hidden cards, prevent back navigation, and reset round hidden effects` → `git push origin main` 완료(`b777bde..74437ed`).
+
+**배포**: `npx vercel deploy --prod` 첫 시도는 과거 세션들과 동일한 `{"status":"error","reason":"deploy_failed","message":"Not authorized"}`로 실패 → 즉시 재시도해 정상 빌드(Turbopack, TypeScript 전체 재검사 포함)·배포 완료, `target: production`/`readyState: READY`로 확인되고 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭(alias) 완료(`dpl_2divD64xmngawDm9BGpiYtktmXN9`). `curl`로 프로덕션 루트(`/`, 200)와 운명전쟁39 라우트(`/games/destiny-war-39`, 200) 둘 다 직접 응답 확인.
+
 ### 2026-08-22 — 운명전쟁39 6인·7인 플레이어 모드 활성화 (54장/63장 덱 구성)
 
 **요청**: `HANDOFF.md`와 운명전쟁39 코드(요청 문구는 `src/games/destinyWar39/` 하위 `constants.ts`/`engine.ts`/`deck.ts`/`types.ts`/`Lobby.tsx`/`Board.tsx`/`DestinyWar39Board.tsx`, `src/config/games.ts`를 지목)를 먼저 확인한 뒤 (1) 6인(54장 덱=0×6+데스×1+1~47 숫자 47장)/7인(63장 덱=0×7+데스×1+1~55 숫자 55장) 덱 구성, (2) 로비 인원 선택에 6/7인 옵션 노출 + 허브 메타데이터 연동, (3) 6/7인 대응 타원형/방사형 테이블 레이아웃과 좌/우 패널 최적화, (4) `DestinyWar39.test.ts`에 6/7인 덱 구성·분배·트릭 판정 테스트, (5) `tsc`/`lint`/`vitest` 통과 후 HANDOFF 갱신 → 커밋 `feat(destiny-war-39): enable 6p and 7p modes with custom deck configurations` → 푸시 → 배포까지 요청. 숫자 카드 최대 범위, 리버스 카드 포함 수량, 좌표 계산 등 확인이 필요하면 절대 임의로 넘겨짚지 말고 먼저 질문 목록을 제시해 확인받으라고 명시.
