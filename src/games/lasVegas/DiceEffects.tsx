@@ -14,7 +14,8 @@ import type { CasinoNumber, Face, LasVegasState, SeatIndex } from "./engine";
  * five-cucumbers/CardEffects.tsx, so every connected client renders the same
  * flight for the same placement — not just whoever rolled. The roll itself
  * (dice tumbling in place) doesn't need this cross-element flight — it's
- * animated directly where it's shown, see LasVegasBoard.tsx's `DiceTray`.
+ * animated directly where it's shown, see LasVegasBoard.tsx's
+ * `RollViewerPanel`.
  */
 
 export interface PlacementEvent {
@@ -45,12 +46,21 @@ function rectCenter(rect: DOMRect) {
 
 const FLIGHT_MS = 480;
 const STAGGER_MS = 55;
+// 2026-08-23 요청: "선택된 주사위들이 강조(Glow/Scale)된 후... 카지노로 날아가는
+// 모션" — every die now holds in place at the roll viewer, glowing/scaling
+// up via `lasvegas-selection-glow`, for this long *before* the existing
+// flight transition starts (applied uniformly to mine and every opponent's
+// placement alike, per user decision — one shared component, one behavior).
+const HOLD_MS = 300;
 
 /**
  * Flies every die from one placement (own-color dice tagged to the placing
- * seat, neutral dice tagged separately) from the roller's dice tray/seat row
- * to the target casino tile, each with a small stagger so a big same-face
- * roll visibly arrives as a little cascade instead of one lump. Portaled to
+ * seat, neutral dice tagged separately) from the shared roll viewer panel
+ * (2026-08-23 요청 — one panel now shows mine AND every opponent's roll, so
+ * it's the flight source either way) to the target casino tile. Each die
+ * first holds in place glowing/scaling up (`HOLD_MS`, "선택 하이라이트") before
+ * flying, with a small stagger on the flight itself so a big same-face roll
+ * visibly arrives as a little cascade instead of one lump. Portaled to
  * `document.body` so `position: fixed` coordinates aren't affected by any
  * ancestor's transform/overflow.
  */
@@ -89,11 +99,16 @@ export function FlyingDicePlacement({
       el.style.transition = "none";
       el.style.left = `${jitter(from.x)}px`;
       el.style.top = `${jitter(from.y)}px`;
+      // Hold phase: highlight in place (glow + scale up) before flying —
+      // all dice glow together, at once, since they were all "selected" by
+      // the same one face choice (only the flight itself is staggered).
+      el.style.animation = "lasvegas-selection-glow 0.3s ease-out forwards";
       void el.offsetHeight; // force layout so "from" + transition:none commits before re-enabling the transition
-      const startDelay = i * STAGGER_MS;
+      const startDelay = HOLD_MS + i * STAGGER_MS;
       const t = setTimeout(() => {
         const live = el;
         live.style.transition = `left ${FLIGHT_MS}ms cubic-bezier(0.22,1,0.36,1), top ${FLIGHT_MS}ms cubic-bezier(0.22,1,0.36,1)`;
+        live.style.animation = "dice-slide-fly 0.48s ease-out forwards";
         const raf = requestAnimationFrame(() => {
           live.style.left = `${jitter(to.x)}px`;
           live.style.top = `${jitter(to.y)}px`;
@@ -103,7 +118,7 @@ export function FlyingDicePlacement({
       timeouts.push(t);
     });
 
-    const doneTimeout = setTimeout(onDone.bind(null, event.id), dice.length * STAGGER_MS + FLIGHT_MS + 120);
+    const doneTimeout = setTimeout(onDone.bind(null, event.id), HOLD_MS + dice.length * STAGGER_MS + FLIGHT_MS + 120);
     return () => {
       timeouts.forEach(clearTimeout);
       rafs.forEach(cancelAnimationFrame);
@@ -123,7 +138,7 @@ export function FlyingDicePlacement({
             refs.current[i] = el;
           }}
           className="pointer-events-none fixed z-[70]"
-          style={{ left: 0, top: 0, animation: "dice-slide-fly 0.48s ease-out forwards" }}
+          style={{ left: 0, top: 0, animation: "lasvegas-selection-glow 0.3s ease-out forwards" }}
         >
           <DiceFace face={event.face} color={d.color} size="h-6 w-6" />
         </div>

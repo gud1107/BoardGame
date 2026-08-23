@@ -2088,3 +2088,46 @@ body {
     opacity: 0;
   }
 }
+
+/* Las Vegas opponent-roll viewer (see LasVegasBoard.tsx's `RollViewerPanel`
+   + DiceEffects.tsx's `FlyingDicePlacement`) — 2026-08-23 요청: the chosen
+   dice glow and scale up in place for a beat ("선택 하이라이트") before the
+   existing slide-to-casino flight (`dice-slide-fly`) takes over, so the
+   choice reads as a deliberate pick rather than an instant teleport. Both
+   keyframes share `dice-slide-fly`'s `translate(-50%, -50%)` base so a die
+   doesn't visibly jump position when the animation hands off mid-flight. */
+@keyframes lasvegas-selection-glow {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    filter: drop-shadow(0 0 0 rgba(252, 211, 77, 0));
+  }
+  55% {
+    transform: translate(-50%, -50%) scale(1.35);
+    filter: drop-shadow(0 0 12px rgba(252, 211, 77, 0.95));
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.12);
+    filter: drop-shadow(0 0 7px rgba(252, 211, 77, 0.7));
+  }
+}
+
+/* Las Vegas live payout leader (see LasVegasBoard.tsx's `MoneyStack`) — the
+   bill card a casino's current rank-1/rank-2 dice owner would win right now
+   breathes an aura ring in that seat's own dice color, recomputed live every
+   render from `tallyDiceGroups` (same idiom as `lasvegas-mat-glow-pulse`
+   above, just parameterized per-seat via the `--aura-soft`/`--aura-strong`
+   custom properties each card sets inline, since the color isn't fixed gold
+   here). */
+@keyframes lasvegas-leader-aura-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1.5px var(--aura-soft),
+      0 0 14px 2px var(--aura-soft);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2.5px var(--aura-strong),
+      0 0 28px 6px var(--aura-strong);
+  }
+}

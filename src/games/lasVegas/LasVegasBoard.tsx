@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
-import { CASINO_THEME_NAMES } from "./CasinoEmblem";
 import { CasinoMatArt } from "./CasinoPhotoArt";
 import { MoneyBillArt } from "./MoneyBillArt";
 import { DiceFace, diceColorForSeat, NEUTRAL_DICE_COLOR } from "./DiceIcon";
@@ -17,6 +16,7 @@ import {
   type EngineAction,
   type Face,
   type LasVegasState,
+  type RolledDie,
   type SeatIndex,
 } from "./engine";
 
@@ -43,6 +43,15 @@ function randomSeed(): number {
 
 function money(v: number): string {
   return `$${v.toLocaleString("en-US")}`;
+}
+
+/** `#rrggbb` -> `rgba(r,g,b,alpha)`, for the live leader aura glow below (each seat color needs two alpha variants for the pulse keyframe's CSS custom properties). */
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 // Per-casino neon frame color — an inner gold hairline (via inset box-shadow,
@@ -119,8 +128,33 @@ function DiceGroupRow({
  * setup can deal up to ~5 bills onto one casino before the $50k floor is
  * met). Lives in its own zone *outside* the theme art (see `CasinoTile`) so
  * a casino with several bills never grows on top of the illustration.
+ *
+ * 2026-08-23 실시간 상금 수령자 표시 추가: `leaders[0]`/`leaders[1]` are this
+ * casino's current (provisional, live) rank-1/rank-2 dice owners — the exact
+ * same non-tied, count-descending order `settleCasino` would award bills in
+ * (see `CasinoTile`, which derives them from `tallyDiceGroups`). Since
+ * `settleCasino` hands out bills top-of-stack-first in that same order, bill
+ * index 0 IS what rank-1 would currently win, and index 1 is rank-2's —
+ * so the badge maps onto the literal card the rulebook would hand over,
+ * not an arbitrary separate indicator. A neutral-owned rank gets a muted
+ * "폐기 예정" tag instead of a colored aura/crown, since it has no player
+ * color and the rulebook discards that bill rather than paying anyone
+ * (§4 규칙 2 "중립 주사위가 상금을 받게 되는 경우"). The aura ring + badge for
+ * each rank render as a *separate* absolutely-positioned overlay layer
+ * (z-index 50+), not baked into that bill's own cascade card — cascade
+ * cards intentionally cover each other's lower portion (later card = higher
+ * z-index, per the staircase look), which would otherwise hide rank-1's
+ * badge behind rank-2's card whenever a casino has 2+ bills.
  */
-function MoneyStack({ bills }: { bills: number[] }) {
+function MoneyStack({
+  bills,
+  leaders,
+  names,
+}: {
+  bills: number[];
+  leaders: (DiceOwner | undefined)[];
+  names: Record<SeatIndex, string>;
+}) {
   const total = bills.reduce((s, v) => s + v, 0);
   if (bills.length === 0) {
     return (
@@ -145,6 +179,43 @@ function MoneyStack({ bills }: { bills: number[] }) {
             <MoneyBillArt value={bill} />
           </div>
         ))}
+        {/* Live rank-1/2 aura+badge overlay — deliberately its own layer above
+            every cascade card (z-index 50+), see this component's doc. */}
+        {leaders.map((leader, i) => {
+          if (leader === undefined || i >= bills.length) return null;
+          const isNeutralLeader = leader === NEUTRAL_OWNER;
+          const seatColor = isNeutralLeader ? null : diceColorForSeat(leader as SeatIndex);
+          return (
+            <div
+              key={`leader-${i}`}
+              className="pointer-events-none absolute inset-x-0 h-9 rounded-md"
+              style={{
+                top: i * 11,
+                zIndex: 50 + i,
+                ...(seatColor
+                  ? {
+                      animation: "lasvegas-leader-aura-pulse 1.8s ease-in-out infinite",
+                      ["--aura-soft" as string]: hexToRgba(seatColor, 0.4),
+                      ["--aura-strong" as string]: hexToRgba(seatColor, 0.9),
+                    }
+                  : { boxShadow: "0 0 0 1.5px rgba(148,163,184,0.55)" }),
+              }}
+            >
+              {seatColor ? (
+                <span
+                  className="absolute -right-1 -bottom-1.5 rounded-full border px-1.5 py-0.5 text-[8px] font-bold whitespace-nowrap text-white shadow-[0_2px_4px_rgba(0,0,0,0.7)]"
+                  style={{ borderColor: seatColor, background: "rgba(0,0,0,0.78)" }}
+                >
+                  {i === 0 ? "👑 1st" : "🥈 2nd"} {names[leader as SeatIndex]}
+                </span>
+              ) : (
+                <span className="absolute -right-1 -bottom-1.5 rounded-full border border-slate-400/60 bg-black/78 px-1.5 py-0.5 text-[8px] font-semibold whitespace-nowrap text-slate-300 shadow-[0_2px_4px_rgba(0,0,0,0.7)]">
+                  🚫 중립 · 폐기 예정
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
       <span className="rounded-full border border-white/20 bg-black/50 px-2 py-0.5 text-[9px] font-semibold whitespace-nowrap text-emerald-200">
         총 {money(total)} · {bills.length}장
@@ -161,9 +232,10 @@ function MoneyStack({ bills }: { bills: number[] }) {
  *   1. Money stack (top) — `MoneyStack`, cascading illustrated bill notes.
  *   2. Theme mat (middle) — `CasinoMatArt` at its native 3:4 ratio: a real
  *      synced photo for 5 of the 6 casinos, the original SVG scene for the
- *      6th (see `CasinoPhotoArt.tsx`'s doc for why). Number+name badge
- *      stays pinned to its top-left corner per the rulebook's "카지노 번호로
- *      식별" requirement.
+ *      6th (see `CasinoPhotoArt.tsx`'s doc for why). A number-only badge
+ *      (enlarged die-pip icon + bold numeral, no theme name — 2026-08-23
+ *      요청) stays pinned to its top-left corner, since the rulebook
+ *      identifies casinos by their 1-6 face value, not a name.
  *   3. Dice betting mat (bottom) — one `DiceGroupRow` per owner, each
  *      individual die drawn (not a "×N" badge), dimmed+cracked live the
  *      instant that owner's count ties another's (rulebook §4 규칙 1,
@@ -177,6 +249,7 @@ function MoneyStack({ bills }: { bills: number[] }) {
 function CasinoTile({
   casino,
   viewerSeat,
+  names,
   isRollDestination,
   impactKey,
   clashKey,
@@ -184,6 +257,7 @@ function CasinoTile({
 }: {
   casino: CasinoState;
   viewerSeat: SeatIndex;
+  names: Record<SeatIndex, string>;
   isRollDestination: boolean;
   impactKey: number;
   clashKey: number;
@@ -193,6 +267,10 @@ function CasinoTile({
   const groups = tallyDiceGroups(casino.diceCounts).sort((a, b) => b.count - a.count);
   const iHaveDiceHere = groups.some((g) => g.owner !== NEUTRAL_OWNER && g.owner === viewerSeat);
   const anyTiedNow = groups.some((g) => g.tied);
+  // Live rank-1/rank-2 for the money-stack aura badges below — same
+  // non-tied, count-descending order `settleCasino` awards bills in.
+  const liveSurvivors = groups.filter((g) => !g.tied);
+  const liveLeaders: (DiceOwner | undefined)[] = [liveSurvivors[0]?.owner, liveSurvivors[1]?.owner];
 
   return (
     <div
@@ -234,8 +312,8 @@ function CasinoTile({
         </div>
       )}
 
-      {/* Zone 1: money stack, entirely outside the illustration below. */}
-      <MoneyStack bills={casino.bills} />
+      {/* Zone 1: money stack, entirely outside the illustration below. Live rank-1/2 aura+badges attached per-bill (see MoneyStack doc). */}
+      <MoneyStack bills={casino.bills} leaders={liveLeaders} names={names} />
 
       {/* Zone 2: theme mat — real photo (5/6 casinos) or original SVG scene. */}
       <div className="relative aspect-[3/4] w-full overflow-hidden rounded-xl">
@@ -245,10 +323,15 @@ function CasinoTile({
           className="pointer-events-none absolute inset-0"
           style={{ background: "radial-gradient(60% 40% at 8% 8%, rgba(0,0,0,0.55) 0%, transparent 70%)" }}
         />
-        <div className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-full border border-white/25 bg-black/55 py-0.5 pl-0.5 pr-2 backdrop-blur-sm">
-          <DiceFace face={casino.number} color="#f4f4f5" size="h-4 w-4" />
-          <span className="text-[9px] font-bold whitespace-nowrap text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">
-            {CASINO_THEME_NAMES[casino.number].ko}
+        {/* Casino identity badge — 2026-08-23 요청: theme name text dropped
+            entirely, the die-pip icon enlarged and paired with a bold plain
+            numeral so "which of the 6 casinos is this" reads instantly from
+            its actual 1-6 face value (per rulebook §1, casinos are
+            identified by number, not name) rather than a small caption. */}
+        <div className="absolute left-1.5 top-1.5 flex items-center gap-1.5 rounded-full border-2 border-white/45 bg-black/65 py-1 pr-2.5 pl-1 shadow-[0_0_10px_rgba(0,0,0,0.6)] backdrop-blur-sm">
+          <DiceFace face={casino.number} color="#f4f4f5" size="h-6 w-6" />
+          <span className="text-base leading-none font-black text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
+            {casino.number}
           </span>
         </div>
       </div>
@@ -277,6 +360,93 @@ function CasinoTile({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * 2026-08-23 요청: shared roll-result viewer, sitting between the casino
+ * grid and the scoreboard ("플레이어와 배팅카드 가운데로 배치") — shows
+ * whichever seat just rolled, mine or an opponent's, with the exact same
+ * full face-by-face breakdown either way, since the rulebook has no hidden
+ * information here (every rolled die is public the instant it's rolled).
+ * Replaces the previous "내 주사위" tray's `currentRoll` rendering, which
+ * displayed the active roll under a fixed "내 주사위" label even during an
+ * opponent's turn — this panel labels itself dynamically per `activeSeat`
+ * instead. The roll-cup flourish and the "선택 후 배치" buttons live here
+ * too, since both only ever make sense right next to the actual rolled
+ * dice. Always mounted (even with `roll === null`, showing an idle
+ * placeholder) so `panelRef` stays a stable `FlyingDicePlacement` source
+ * across the very state transition that clears `currentRoll` on placement.
+ */
+function RollViewerPanel({
+  roll,
+  activeSeat,
+  isMyTurn,
+  names,
+  rollGroups,
+  onPlace,
+  rollFlashId,
+  panelRef,
+}: {
+  roll: RolledDie[] | null;
+  activeSeat: SeatIndex;
+  isMyTurn: boolean;
+  names: Record<SeatIndex, string>;
+  rollGroups: { face: Face; ownCount: number; neutralCount: number }[];
+  onPlace: (face: Face) => void;
+  rollFlashId: number;
+  panelRef: (el: HTMLDivElement | null) => void;
+}) {
+  const rollerColor = diceColorForSeat(activeSeat);
+  return (
+    <section
+      ref={panelRef}
+      className="relative flex min-h-[64px] flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl border border-amber-300/20 p-2.5 sm:p-3"
+      style={{ background: "linear-gradient(160deg,#332008 0%,#1c1204 55%,#0a0601 100%)" }}
+    >
+      {/* Roll flourish: a dice-cup glyph shakes then flings away, replayed via key={rollFlashId} the instant currentRoll goes null->fresh — moved here from the old "내 주사위" tray so it plays next to whoever's actual roll, not just mine. */}
+      {rollFlashId > 0 && (
+        <div
+          key={rollFlashId}
+          aria-hidden
+          className="pointer-events-none absolute top-1 left-1/2 z-10 -translate-x-1/2 text-4xl"
+          style={{ animation: "lasvegas-cup-shake 0.42s ease-in-out" }}
+        >
+          🎲
+        </div>
+      )}
+
+      {roll ? (
+        <div key={rollFlashId} className="flex w-full flex-col items-center gap-2">
+          <h3 className="text-[11px] font-semibold tracking-wide uppercase" style={{ color: rollerColor }}>
+            {isMyTurn ? "🫵 당신이 굴린 주사위" : `🎲 ${names[activeSeat]}님이 굴린 주사위`} ({roll.length}개)
+          </h3>
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {roll.map((d, i) => (
+              <div key={i} style={{ animation: `dice-roll-tumble 0.5s ease-out ${(i % 12) * 25}ms both` }}>
+                <DiceFace face={d.face} color={d.owner === "own" ? rollerColor : NEUTRAL_DICE_COLOR} size="h-8 w-8" />
+              </div>
+            ))}
+          </div>
+          {isMyTurn && (
+            <div className="flex flex-wrap justify-center gap-2">
+              {rollGroups.map((g) => (
+                <button
+                  key={g.face}
+                  onClick={() => onPlace(g.face)}
+                  className="flex items-center gap-1.5 rounded-xl border border-amber-300/50 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-400/20"
+                >
+                  <DiceFace face={g.face} color="#f4f4f5" size="h-5 w-5" />
+                  눈금 {g.face} 전체 배치 ({g.ownCount + g.neutralCount}개)
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="text-[11px] text-white/25">🎲 다음 굴림을 기다리는 중...</p>
+      )}
+    </section>
   );
 }
 
@@ -327,18 +497,17 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
   );
 
   const casinoTileRefs = useRef(new Map<CasinoNumber, HTMLDivElement>());
-  const seatRowRefs = useRef(new Map<SeatIndex, HTMLElement>());
-  const diceTrayRef = useRef<HTMLDivElement | null>(null);
+  // 2026-08-23 요청: the roll viewer is now a single shared panel (see
+  // `RollViewerPanel` below) that shows whichever seat just rolled, mine or
+  // an opponent's — so every placement's flight now starts from this one
+  // ref regardless of who placed, instead of the old per-seat scoreboard-row
+  // source. Always mounted (see its own doc) so this ref stays valid across
+  // the very state transition that clears `currentRoll`.
+  const rollPanelRef = useRef<HTMLDivElement | null>(null);
   function setCasinoTileRef(n: CasinoNumber) {
     return (el: HTMLDivElement | null) => {
       if (el) casinoTileRefs.current.set(n, el);
       else casinoTileRefs.current.delete(n);
-    };
-  }
-  function setSeatRowRef(seat: SeatIndex) {
-    return (el: HTMLElement | null) => {
-      if (el) seatRowRefs.current.set(seat, el);
-      else seatRowRefs.current.delete(seat);
     };
   }
 
@@ -529,6 +698,7 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
             key={casino.number}
             casino={casino}
             viewerSeat={viewerSeat}
+            names={names}
             isRollDestination={isMyTurn && rollGroups.some((g) => g.face === casino.number)}
             impactKey={impactKeys[casino.number] ?? 0}
             clashKey={clashKeys[casino.number] ?? 0}
@@ -536,6 +706,20 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
           />
         ))}
       </section>
+
+      {/* Roll viewer — shared panel between the betting cards and the player list (2026-08-23 요청 "플레이어와 배팅카드 가운데로 배치"), shows whoever just rolled. */}
+      <RollViewerPanel
+        roll={state.currentRoll}
+        activeSeat={state.activeSeat}
+        isMyTurn={isMyTurn}
+        names={names}
+        rollGroups={rollGroups}
+        onPlace={place}
+        rollFlashId={rollFlashId}
+        panelRef={(el) => {
+          rollPanelRef.current = el;
+        }}
+      />
 
       {/* Scoreboard — each seat's own dice color is now a bold neon border/badge (2026-08-23 요청), not just a small dot, so "whose color is this" reads at a glance. */}
       <section className="flex flex-col gap-1.5">
@@ -548,7 +732,6 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
           return (
             <div
               key={seat}
-              ref={setSeatRowRef(seat)}
               className="flex flex-wrap items-center justify-between gap-2 rounded-xl border-2 bg-black/20 p-2 text-xs transition"
               style={{
                 borderColor: seatColor,
@@ -582,52 +765,19 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
         })}
       </section>
 
-      {/* My dice tray */}
+      {/* My dice tray — personal hand reserve + roll trigger only now; the actual rolled dice and placement choice moved into the shared RollViewerPanel above (2026-08-23 요청). */}
       <section
-        ref={diceTrayRef}
         className="relative overflow-hidden rounded-2xl border border-amber-300/20 p-2.5 sm:p-3"
         style={{ background: "linear-gradient(160deg,#332008 0%,#1c1204 55%,#0a0601 100%)" }}
       >
-        {/* Roll flourish: a dice-cup glyph shakes then flings away, replayed via key={rollFlashId} the instant currentRoll goes null->fresh. */}
-        {rollFlashId > 0 && (
-          <div
-            key={rollFlashId}
-            aria-hidden
-            className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 text-4xl"
-            style={{ animation: "lasvegas-cup-shake 0.42s ease-in-out" }}
-          >
-            🎲
-          </div>
-        )}
-
         <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-amber-200/90 uppercase">
           🎲 내 주사위 ({me.ownDiceInHand}개 + 중립 {me.neutralDiceInHand}개)
         </h3>
 
         {state.currentRoll ? (
-          <div key={rollFlashId} className="flex flex-col gap-2">
-            <div className="flex flex-wrap gap-1.5">
-              {state.currentRoll.map((d, i) => (
-                <div key={i} style={{ animation: `dice-roll-tumble 0.5s ease-out ${(i % 12) * 25}ms both` }}>
-                  <DiceFace face={d.face} color={d.owner === "own" ? diceColorForSeat(viewerSeat) : NEUTRAL_DICE_COLOR} size="h-8 w-8" />
-                </div>
-              ))}
-            </div>
-            {isMyTurn && (
-              <div className="flex flex-wrap gap-2">
-                {rollGroups.map((g) => (
-                  <button
-                    key={g.face}
-                    onClick={() => place(g.face)}
-                    className="flex items-center gap-1.5 rounded-xl border border-amber-300/50 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-400/20"
-                  >
-                    <DiceFace face={g.face} color="#f4f4f5" size="h-5 w-5" />
-                    눈금 {g.face} 전체 배치 ({g.ownCount + g.neutralCount}개)
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <p className="text-xs text-white/30">
+            {isMyTurn ? "☝️ 위 롤 뷰어에서 배치할 눈금을 선택하세요." : "☝️ 위 롤 뷰어에서 결과를 확인할 수 있습니다."}
+          </p>
         ) : myDiceInHand === 0 ? (
           <p className="text-xs text-white/30">배치할 주사위가 남지 않았습니다 — 자동 패스됩니다.</p>
         ) : isMyTurn ? (
@@ -644,12 +794,12 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
 
-      {/* Dice-placement flight FX — dice tray/opponent seat row -> the chosen casino tile. */}
+      {/* Dice-placement flight FX — the shared roll viewer panel -> the chosen casino tile, for mine and every opponent's placement alike (2026-08-23 요청, Q2 "전원 동일 적용"). */}
       {placementEvents.map((event) => (
         <FlyingDicePlacement
           key={event.id}
           event={event}
-          getSourceEl={() => (event.seat === viewerSeat ? diceTrayRef.current : (seatRowRefs.current.get(event.seat) ?? null))}
+          getSourceEl={() => rollPanelRef.current}
           getTargetEl={() => casinoTileRefs.current.get(event.casino) ?? null}
           onDone={handlePlacementDone}
         />
