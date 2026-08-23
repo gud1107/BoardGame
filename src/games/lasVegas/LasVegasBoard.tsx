@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
+import { CasinoEmblem, CASINO_THEME_NAMES } from "./CasinoEmblem";
 import { DiceFace, diceColorForSeat, NEUTRAL_DICE_COLOR } from "./DiceIcon";
 import { detectPlacementEvent, FlyingDicePlacement, type PlacementEvent } from "./DiceEffects";
 import {
@@ -79,9 +80,15 @@ function CasinoTile({
       ref={tileRef}
       className={`flex flex-col items-center gap-2 rounded-2xl border bg-black/30 p-2.5 ${accent.border} ${accent.glow}`}
     >
-      <div className="flex items-center gap-1.5">
-        <DiceFace face={casino.number} color="#f4f4f5" size="h-8 w-8" />
-        <span className="text-xs font-bold text-white/80">카지노 {casino.number}</span>
+      <div className="flex flex-col items-center gap-1">
+        <CasinoEmblem casino={casino.number} className="h-9 w-9 sm:h-11 sm:w-11" />
+        <div className="flex items-center gap-1.5">
+          <DiceFace face={casino.number} color="#f4f4f5" size="h-6 w-6" />
+          <div className="flex flex-col items-start leading-tight">
+            <span className="text-[10px] font-bold text-white/90">{CASINO_THEME_NAMES[casino.number].ko}</span>
+            <span className="text-[8px] text-white/40">카지노 {casino.number}</span>
+          </div>
+        </div>
       </div>
 
       <div className="relative flex h-16 w-16 flex-col items-center justify-center">
