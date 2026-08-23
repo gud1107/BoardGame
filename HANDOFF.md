@@ -39,8 +39,13 @@ _그 이전 갱신: 2026-08-23 (**라스베가스 1~6번 카지노 배팅존 "�
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npx eslint src/games/lasVegas`+`npm run lint`(전체, 경고 0) / `npx vitest run src/games/lasVegas`(신규 `tallyDiceGroups` 테스트 3건 추가, 43/43 통과) / `npm run build`(Turbopack 프로덕션 빌드+TypeScript 전체 재검사 모두 정상 완주, 16개 라우트 정상 생성 — `next/image`로 바뀐 실사 카지노 사진·avif 포함 전부 정상 컴파일/번들). **`npx vitest run`(전체 스위트, 라스베가스 외 전 게임 포함)은 이번 세션에서 3회 시도 모두 8분+ 경과 후에도 출력 0바이트로 멈춰 완주 확인 못함** — HANDOFF §3 0번 항목에 이미 기록된 "전체 vitest run 완주 확인" 미해결 백로그와 동일 증상(이번 세션이 새로 만든 문제가 아님). 동시 실행 중이던 다른 Claude Code 세션/프로세스는 `tasklist`로 확인한 바 없었음 — 원인 미상.
 
+**커밋/푸시**: `33e64b7 feat(las-vegas): replace with real image assets, render individual dice rows, add tie cancellation and action effects` → 곧이어 사용자가 "테스트니 워터마크 그대로 반영해달라"고 재요청해 `70aeebd feat(las-vegas): use the watermarked Caesars Palace photo as-is per explicit test-build request` 추가 커밋 → `git push origin main` 완료(`6adcbb7..70aeebd`).
+
+**배포**: `npx vercel deploy`(프리뷰) 정상 완주(Turbopack 빌드+TypeScript 전체 재검사 포함), READY — `https://board-game-gzi1xnm6f-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 이번에도 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
+
 **미해결/다음 세션**:
 - 위 검증 항목의 전체 `npx vitest run` 미완주 — 다음 세션에서 개별 게임 스위트를 하나씩 순차 실행하거나 `--pool=forks --poolOptions.forks.singleFork` 같은 옵션으로 어느 파일에서 멈추는지 이분 탐색해 원인을 좁힐 필요.
+- 프리뷰 배포는 Vercel SSO 배포 보호가 걸려 있을 가능성이 있어 `curl` 직접 200 확인은 하지 않음(과거 세션들의 동일 판단 기준 — `readyState: READY` + 빌드 로그의 TypeScript 재검사 통과를 성공 근거로 삼음). 실제 브라우저 육안 확인은 다음 세션 몫.
 - 브라우저 실측(실제 hover 글로우/컵 셰이크/임팩트 링/타이 클래시/머니 플라이 애니메이션이 실제로 매끄럽게 재생되는지, 특히 동수 상쇄가 "라이브"로 매 배치마다 올바르게 갱신되는지) 미완료 — 다음 세션에서 Playwright 스크린샷 또는 실제 브라우저로 확인 필요.
 - 룩소르5.avif는 이 세션의 로컬 sharp 빌드가 avif 디코딩을 지원하지 않아 워터마크 유무를 육안 확인하지 못함(페루도의 `public/assets/games/perudo/mark.avif`가 이미 프로덕션에서 정상 동작 중이라는 전례를 근거로 그대로 진행 — Vercel 배포 환경에서 실제 렌더링 확인 필요).
 - 카지노 2번(시저스 팰리스)은 위 "후속" 항목대로 워터마크 있는 실사 사진으로 반영 완료 — 다만 워터마크가 그대로 노출되므로, 테스트 단계를 벗어나 실제로 더 넓게 배포/홍보할 계획이 생기면 워터마크 없는 사진으로 교체 필요(`boardGameRule/라스베가스/`와 `public/images/lasVegas/`에 새 파일만 넣으면 `CasinoPhotoArt.tsx`의 `CASINO_PHOTOS` 맵 경로 한 줄 교체로 끝).
