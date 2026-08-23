@@ -77,8 +77,10 @@ export function MoneyBillArt({
           <circle r="1.3" fill={theme.ink} />
         </g>
       ))}
-      {/* center denomination */}
-      <text x="50" y="21" textAnchor="middle" fontSize="12.5" fontWeight="800" fill={theme.ink} fontFamily="ui-sans-serif, system-ui, sans-serif">
+      {/* center denomination — 2026-08-23 요청: 하단 배치 전환과 함께 액면가 폰트
+          확대(12.5 → 15.5, 세로 정렬은 그대로 y=21 기준 유지, 최장 라벨
+          "$90,000"(7자)도 100 단위 너비에 여유 있게 들어맞음). */}
+      <text x="50" y="21" textAnchor="middle" fontSize="15.5" fontWeight="800" fill={theme.ink} fontFamily="ui-sans-serif, system-ui, sans-serif">
         ${digitsOf(value)}
       </text>
       <text x="50" y="32.5" textAnchor="middle" fontSize="4.2" fontWeight="700" letterSpacing="2.5" fill={theme.ink} opacity="0.75">

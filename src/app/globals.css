@@ -1919,40 +1919,12 @@ body {
   }
 }
 
-/* Las Vegas roll action (see LasVegasBoard.tsx's dice tray) — a dice-cup
-   glyph shakes in place then flings/fades away, replayed via a `key={
-   rollFlashId}` remount every time `currentRoll` goes null->fresh (same
-   remount-to-replay idiom this file already uses for dice-roll-tumble on
-   that same state edge). Purely decorative overlay on top of the tray. */
-@keyframes lasvegas-cup-shake {
-  0% {
-    transform: translateY(0) rotate(0deg) scale(1);
-    opacity: 1;
-  }
-  12% {
-    transform: translateY(-2px) rotate(-14deg) scale(1.03);
-  }
-  24% {
-    transform: translateY(0) rotate(12deg) scale(1);
-  }
-  36% {
-    transform: translateY(-2px) rotate(-10deg) scale(1.03);
-  }
-  48% {
-    transform: translateY(0) rotate(8deg) scale(1);
-  }
-  60% {
-    transform: translateY(-1px) rotate(-4deg) scale(1.02);
-  }
-  75% {
-    transform: translateY(0) rotate(0deg) scale(1);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(6px) rotate(0deg) scale(0.7);
-    opacity: 0;
-  }
-}
+/* lasvegas-cup-shake removed 2026-08-23: the 🎲 roll-cup flourish it drove
+   in LasVegasBoard.tsx's RollViewerPanel never actually left the DOM once
+   played (no unmount timer), so it sat parked over the panel's heading for
+   the rest of the game — the "매번 흔들리며... 시야를 방해하던 흰색
+   주사위" the user flagged. The flourish element was removed outright
+   (confirmed with the user); this keyframe is dead with it. */
 
 /* Las Vegas placement impact (see LasVegasBoard.tsx's CasinoTile) — a gold
    ring expands and fades from the tile's center, and the tile itself gets a
