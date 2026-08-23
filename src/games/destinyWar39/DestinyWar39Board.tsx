@@ -351,9 +351,9 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
         <p className="text-xs text-white/50">
           이번 라운드는 {R}턴 진행됩니다. 손패 {R}장을 확인하고, 우측 예측 패널에서 이번 라운드에 몇 번 이길지 예측하세요 (0~{R}).
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2.5">
           {round.hands[viewerSeat].map((c) => (
-            <CardFace key={c.id} card={c} playerCount={playerCount} size="sm" />
+            <CardFace key={c.id} card={c} playerCount={playerCount} size="md" />
           ))}
         </div>
         {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} playerCount={playerCount} />}
@@ -420,10 +420,10 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
                 {order !== null && <TurnOrderBadge order={order} isActive={isActingSeat} isDone={!!p} />}
                 <span className="text-[11px] text-white/50">{seatLabel(seat)}</span>
                 {p ? (
-                  <PlayedCardSlot key={p.card.id} card={p.card} playerCount={playerCount} size="md" />
+                  <PlayedCardSlot key={p.card.id} card={p.card} playerCount={playerCount} size="sm" />
                 ) : (
                   <span
-                    className={`grid h-14 w-10 place-items-center rounded-lg border border-dashed text-white/20 ${isActingSeat ? "border-amber-300/70" : "border-white/15"}`}
+                    className={`grid h-[84px] w-[60px] place-items-center rounded-lg border border-dashed text-2xl text-white/20 ${isActingSeat ? "border-amber-300/70" : "border-white/15"}`}
                     style={isActingSeat ? { animation: "destinywar39-turn-badge-pulse 1.1s ease-in-out infinite" } : undefined}
                   >
                     ?
@@ -437,9 +437,22 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
         {myTurnToAct ? (
           <div className="flex flex-col gap-2">
             <p className="text-xs text-white/50">낼 카드를 선택하세요 (남은 손패 {myHand.length}장)</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2.5">
               {myHand.map((c) => (
-                <CardFace key={c.id} card={c} playerCount={playerCount} size="md" interactive onClick={() => onAction({ type: "play", seat: viewerSeat, cardId: c.id })} className="hover:-translate-y-1" />
+                <CardFace
+                  key={c.id}
+                  card={c}
+                  playerCount={playerCount}
+                  size="md"
+                  interactive
+                  onClick={() => onAction({ type: "play", seat: viewerSeat, cardId: c.id })}
+                  // Pop-up scale on touch/hover/keyboard-focus instead of fan-out
+                  // overlap (this session's confirmed answer) — cards stay laid
+                  // out in a plain wrapping row, but the one under the
+                  // finger/cursor jumps up and grows so it's easy to confirm
+                  // which card is about to be played on small touch screens.
+                  className="hover:z-20 hover:-translate-y-3 hover:scale-125 active:z-20 active:-translate-y-3 active:scale-125 focus-visible:z-20 focus-visible:-translate-y-3 focus-visible:scale-125"
+                />
               ))}
             </div>
           </div>
