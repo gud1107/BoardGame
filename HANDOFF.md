@@ -36,7 +36,7 @@ _그 이전 갱신: 2026-08-23 (**라스베가스 실제 이미지 에셋 전면
 
 **커밋/푸시**: `a045609 feat(las-vegas): polish betting zone UI with bottom money display, 1st place color borders, and roll/cumulative dice counters` → `git push origin main` 완료.
 
-**배포**: `npx vercel deploy`(프리뷰) — 요청 문구에 "production" 명시가 없어 이번에도 프리뷰까지만 진행(과거 세션들과 동일 판단 기준, 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것). 결과 URL은 아래 참고.
+**배포**: `npx vercel deploy`(프리뷰) 정상 완주(Turbopack 빌드+TypeScript 전체 재검사 포함), READY — `https://board-game-la0nm1fxy-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 이번에도 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것.
 
 **미해결/다음 세션**:
 - 전체 `npx vitest run` 미완주 문제는 여전히 미해결(§0 백로그와 동일, 이 세션의 회귀 아님).
