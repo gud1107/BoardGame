@@ -20,12 +20,15 @@ import type { CasinoNumber } from "./engine";
  * Two renders of the same 6 scenes are exported:
  *  - `CasinoTileArt`  — the full-bleed 3:4 background. As of 2026-08-23,
  *    `LasVegasBoard.tsx`'s `CasinoTile` no longer calls this directly for
- *    5 of the 6 casinos — see `CasinoPhotoArt.tsx`'s `CasinoMatArt`, which
+ *    any of the 6 casinos — see `CasinoPhotoArt.tsx`'s `CasinoMatArt`, which
  *    swapped in real casino photos per explicit user decision (accepting
- *    the licensing caveat this file originally declined) and falls back to
- *    this SVG only for casino 2 (Caesars Palace), whose only supplied photo
- *    carried a stock-agency watermark. Still exported/used standalone
- *    wherever a licensing-safe original illustration is wanted instead.
+ *    the licensing caveat this file originally declined), including casino
+ *    2 (Caesars Palace) whose only supplied photo carries a stock-agency
+ *    watermark — used as-is, watermark visible, per a later explicit "this
+ *    is a test build" request (see `CasinoPhotoArt.tsx`'s doc). This SVG
+ *    stays wired as `CasinoMatArt`'s fallback for any casino without a
+ *    synced photo, and is still exported/used standalone wherever a
+ *    licensing-safe original illustration is wanted instead.
  *  - `CasinoEmblem`   — the original small circular medallion, kept in case
  *    a compact badge is ever wanted again (dashboard card, rulebook, etc.).
  */
