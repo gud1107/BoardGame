@@ -33,6 +33,10 @@ _그 이전 갱신: 2026-08-23 (**운명전쟁39 리버스 카드 숫자 가독�
 
 **참고 — 실제 UI 렌더링 미검증**: HANDOFF §2 "현재 작동 중인 주요 로직"의 `<Game>Board.tsx` 테스트 사각지대(jsdom 미설치)와 동일하게, 이번 리더보드 도트/M-N승 표기와 재정렬된 라인 미리보기 그리드도 엔진 테스트로만 검증했고 실제 브라우저 렌더링(도트 간격, 모바일 가로 스크롤 칩 폭, 재정렬된 그리드의 시각적 위화감 여부)은 아직 육안 확인하지 않았음.
 
+**커밋/푸시**: `a20be4b feat(grid-poker): display round win counters and set default hand ranking sort to high-first` → `git push origin main` 완료. 그리드 포커 파일 3개(`engine.ts`/`GridPokerBoard.tsx`/`GridPoker.test.ts`) + 이 HANDOFF 절만 스테이징해 커밋 — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(라스베가스 배팅존 세션·저작권/상표권 정리 세션의 `lasVegas/*`, `registry.ts`, `public/games`·`public/images/lasVegas` 삭제 등, 위 두 절 참고)은 이번 작업과 무관하므로 건드리지 않고 그대로 작업 트리에 남겨둠.
+
+**배포**: `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주(Turbopack 빌드+TypeScript 전체 재검사 포함), READY — `https://board-game-9fe48kz9p-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준). 단, 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로 위 "커밋/푸시" 항목에 적은 다른 세션들의 미커밋 변경(실물 박스아트/카지노 실사진 삭제 등)도 함께 반영된 상태로 배포됨 — 이 그리드 포커 세션이 그 변경들을 검증하거나 의도한 것은 아님.
+
 ### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보
 
 **요청**: 배팅존 지폐 카드들이 서로 겹쳐(staircase 캐스케이드) 있어 아래에 깔린 지폐의 금액/장수를 한눈에 파악하기 어려움 — 겹침을 완전히 풀고 가로/세로로 나란히 배치해 각 지폐의 액면가와 등수별 상금이 가림 없이 보이도록 개선. 카지노당 최대 지폐 개수에 따른 배치 방향·모바일 줄바꿈 등은 임의로 정하지 말고 먼저 질문하라는 명시적 지시(Strict No-Assumption Rule).
