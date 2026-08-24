@@ -38,9 +38,9 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **참고 — 실제 재현/재검증 미완료**: 이 레이스는 실제 네트워크 순단 타이밍에 의존하는 현상이라, 이번 세션에서는 정적 분석 + 가드 로직의 유닛 테스트로만 검증했고 실제 두 기기/두 탭 간 재접속 시나리오로 재현·재검증하지는 못했음 — 다음 세션(혹은 배포 후) 실기기 재현 테스트 권장.
 
-**커밋/푸시**: (아래 커밋 해시로 갱신 예정)
+**커밋/푸시**: `760fcef fix(horse-race): guard state-sync reconnect against stale-snapshot races` → `git push origin main` 완료. 4개 파일(`engine.ts`/`MalDalliJaGame.tsx`/`MalDalliJa.test.ts`/이 HANDOFF 절)만 스테이징해 커밋 — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.gitignore`, `public/games`·`public/images/lasVegas` 실물 이미지 삭제, `lasVegas/*`, `registry.ts`, `boardGameRule/` 신규 파일, `저작권, 상표권.md`, `orca충돌및확인.md` 등)은 이번 작업과 무관하므로 건드리지 않고 그대로 작업 트리에 남겨둠.
 
-**배포**: (아래 배포 URL로 갱신 예정)
+**배포**: `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주(Turbopack 빌드+TypeScript 전체 재검사 포함), READY — `https://board-game-cpeal5x3z-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준). 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위 "커밋/푸시" 항목에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨 — 이 말달리자 세션이 그 변경들을 검증하거나 의도한 것은 아님.
 
 ### 2026-08-25 — 달무티 평민 자유 선택 교환 모달·비공개 마스킹·화려한 교환 VFX
 
