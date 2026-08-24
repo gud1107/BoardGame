@@ -991,6 +991,140 @@ body {
   }
 }
 
+/* 그리드 포커's round-win celebration overlay (see RoundResultOverlay.tsx,
+   2026-08-24 라운드 승리 연출 강화 세션) — a full-screen portal shown while
+   `state.phase === "round-result"` (engine.ts's module doc "Flow" section).
+   The six keyframes below are this overlay's own effects; none are reused
+   from the per-cell flourishes above (gp-card-place etc.), which stay scoped
+   to the live board grid during placing/submitting. */
+
+/* Backdrop + content fade/scale-in on mount. */
+@keyframes gp-round-overlay-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* The slow-rotating ray layer behind the winner headline — a
+   repeating-conic-gradient (see RoundResultOverlay.tsx) spun continuously
+   for as long as the overlay is mounted, giving the "황금빛 빛줄기" a sense of
+   radiating outward without ever needing per-frame JS. */
+@keyframes gp-sunburst-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* One confetti piece's fall — start position/delay/color/size/drift are all
+   supplied per-particle via inline style (RoundResultOverlay.tsx's fixed
+   deterministic `CONFETTI_PIECES` list, same "fixed scatter reads just as
+   lively as randomizing, without size/position jitter between runs"
+   rationale as this file's own gp-sparkle-twinkle above). */
+@keyframes gp-confetti-fall {
+  0% {
+    transform: translate(var(--confetti-drift-start, 0px), -12vh) rotate(0deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--confetti-drift-end, 24px), 108vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+/* "[ ROUND N WIN! ]" emblem slamming into place — starts oversized and
+   rotated, overshoots past its resting size/angle, settles with a slight
+   permanent tilt so it reads as physically stamped rather than just faded
+   in. Paired with gp-round-overlay-shake below (both fire at mount, see
+   RoundResultOverlay.tsx's `VictoryStamp`). */
+@keyframes gp-victory-stamp-in {
+  0% {
+    transform: scale(2.4) rotate(-14deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(0.92) rotate(-2deg);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1.06) rotate(-4deg);
+  }
+  100% {
+    transform: scale(1) rotate(-3deg);
+    opacity: 1;
+  }
+}
+
+/* The whole overlay's brief screen-shake "impact" (see gp-victory-stamp-in
+   above) — applied once to the overlay's own full-screen fixed wrapper, not
+   `body`, so it reads as the screen jolting without touching page scroll
+   position or any layout outside the portal. */
+@keyframes gp-round-overlay-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  15% {
+    transform: translate(-6px, 3px);
+  }
+  30% {
+    transform: translate(5px, -4px);
+  }
+  45% {
+    transform: translate(-4px, -2px);
+  }
+  60% {
+    transform: translate(4px, 3px);
+  }
+  75% {
+    transform: translate(-2px, 1px);
+  }
+  90% {
+    transform: translate(2px, -1px);
+  }
+}
+
+/* The winning line's 5 cards growing in and settling slightly risen — paired
+   with gp-winline-float below for a continuous gentle hover for as long as
+   the overlay stays up (RoundResultOverlay.tsx's `WinningLineGrid`). */
+@keyframes gp-winline-pulse-in {
+  0% {
+    transform: scale(0.55) translateY(10px);
+    opacity: 0;
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+  60% {
+    transform: scale(1.16) translateY(-7px);
+    opacity: 1;
+    box-shadow: 0 0 22px 6px rgba(251, 191, 36, 0.75);
+  }
+  100% {
+    transform: scale(1) translateY(-3px);
+    opacity: 1;
+    box-shadow: 0 0 14px 3px rgba(251, 191, 36, 0.55);
+  }
+}
+
+@keyframes gp-winline-float {
+  0%,
+  100% {
+    transform: translateY(-3px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
 /* 뱅!'s center-table card reveal — the face-up card + banner pop up together
    whenever anyone plays a card (see BangEffects.tsx's `CenterPlayBanner`,
    2026-08-21 hover/HP/center-banner redesign session, HANDOFF.md). A

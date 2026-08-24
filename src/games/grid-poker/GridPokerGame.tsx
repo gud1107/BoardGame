@@ -14,6 +14,7 @@ import {
   DEFAULT_PLACING_SECONDS,
   DEFAULT_SUBMITTING_SECONDS,
   DEFAULT_TIMER_SETTINGS,
+  ROUND_RESULT_SECONDS,
   type EngineAction,
   type GridPokerState,
   type SeatIndex,
@@ -532,6 +533,27 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
       handleAction({ type: "draw-common", seed: randomSeed() });
     }
   }, [isHost, phase, gameState]);
+
+  // "round-result" (the round-win celebration overlay's on-the-clock pause —
+  // see engine.ts's module doc and RoundResultOverlay.tsx) is the same
+  // "shared clock, no one seat's move" shape as the draw-common effect right
+  // above: the host alone broadcasts the advance once ROUND_RESULT_SECONDS
+  // has elapsed, and every client (including the host) just renders the same
+  // synced state in the meantime — the countdown bar each client shows
+  // locally (GridPokerBoard.tsx) is cosmetic only, this timer is what
+  // actually moves the game on. Keyed off `lastRoundResult`'s own
+  // `roundNumber` (not the outer `roundNumber`, which has already ticked
+  // forward for the *next* round by this point) so a mid-countdown rerender
+  // never restarts the timer early.
+  useEffect(() => {
+    if (!isHost || phase !== "playing" || !gameState) return;
+    if (gameState.phase !== "round-result") return;
+    const id = setTimeout(() => {
+      handleAction({ type: "advance-round-result" });
+    }, ROUND_RESULT_SECONDS * 1000);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed to the round-result episode itself, same pattern as the draw-common effect above
+  }, [isHost, phase, gameState?.phase, gameState?.lastRoundResult?.roundNumber]);
 
   const chooseAction = useCallback((state: GridPokerState, actor: SeatIndex): EngineAction | null => {
     const idx = botSeatsRef.current.indexOf(actor);

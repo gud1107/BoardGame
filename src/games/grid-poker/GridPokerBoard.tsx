@@ -8,9 +8,12 @@ import { CardChip } from "./cardDisplay";
 import { useCountdown } from "./useCountdown";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { detectNewlyCompletedLines, HandRankFloatingBadge, type LineCompleteEvent } from "./GridPokerEffects";
+import RoundResultOverlay from "./RoundResultOverlay";
 import {
   BOARD_SIZE,
+  LINE_LABELS,
   LINES,
+  ROUND_RESULT_SECONDS,
   completedLineCount,
   evaluateHand,
   formatHandLabel,
@@ -88,13 +91,6 @@ export interface GridPokerBoardProps {
 
 const TABLE_PANEL =
   "relative overflow-hidden rounded-3xl border border-black/50 bg-gradient-to-b from-[#151a2e] via-[#0f1322] to-[#0a0d17] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
-
-const LINE_LABELS = [
-  ...Array.from({ length: 5 }, (_, i) => `가로 ${i + 1}`),
-  ...Array.from({ length: 5 }, (_, i) => `세로 ${i + 1}`),
-  "대각선 ↘",
-  "대각선 ↙",
-];
 
 const CELL_DIMS = {
   main: "h-14 w-10 sm:h-16 sm:w-12",
@@ -331,6 +327,20 @@ export default function GridPokerBoard({
     if (line !== undefined) submitLine(line);
   });
 
+  // Round-result's "다음 라운드 준비" bar (RoundResultOverlay.tsx) — a purely
+  // cosmetic local clock every client runs to *display*, in step with the
+  // host's own real advance timer (GridPokerGame.tsx's `advance-round-result`
+  // broadcast). Always active while parked here regardless of the room's
+  // placing/submitting timer mode — this isn't a per-room configurable
+  // option, see `ROUND_RESULT_SECONDS`'s own doc — so no `timeLimited` gate
+  // and a no-op `onExpire` (the phase transition itself is the host's job).
+  const { timeLeft: roundResultTimeLeft } = useCountdown(
+    ROUND_RESULT_SECONDS,
+    state.lastRoundResult?.roundNumber,
+    state.phase === "round-result",
+    () => {},
+  );
+
   const urgentTimeLeft = !timeLimited ? null : myTurnToPlace ? placingTimeLeft : submittingActive ? submittingTimeLeft : null;
   const isUrgent = urgentTimeLeft !== null && urgentTimeLeft <= URGENT_THRESHOLD && urgentTimeLeft > 0;
   useEffect(() => {
@@ -339,6 +349,15 @@ export default function GridPokerBoard({
     else engine.stopFuseCrackle();
     return () => engine.stopFuseCrackle();
   }, [isUrgent]);
+
+  // A short positive "ding" the instant the round-result overlay appears —
+  // there's no bespoke fanfare/victory jingle anywhere in this project's
+  // sound engine to draw from (checked: only playCorrectDing/playWrongBuzz/
+  // dice/BGM exist), so this reuses the same generic positive sound already
+  // used elsewhere rather than adding new audio synthesis for one flourish.
+  useEffect(() => {
+    if (state.phase === "round-result") getSoundEngine().playCorrectDing();
+  }, [state.phase, state.lastRoundResult?.roundNumber]);
 
   const [muted, setMuted] = useState(() => getSoundEngine().isMuted());
   const soundToggle = (
@@ -411,7 +430,9 @@ export default function GridPokerBoard({
         <span>
           {state.phase === "placing"
             ? `배치 중 · ${filledCells}/${BOARD_SIZE}칸`
-            : `제출 라운드 ${Math.min(state.roundNumber, state.totalScoringRounds)}/${state.totalScoringRounds}`}
+            : state.phase === "round-result"
+              ? `${state.lastRoundResult?.roundNumber ?? state.roundNumber}라운드 결과`
+              : `제출 라운드 ${Math.min(state.roundNumber, state.totalScoringRounds)}/${state.totalScoringRounds}`}
         </span>
         <div className="flex items-center gap-1.5">
           {bgmToggle}
@@ -614,6 +635,18 @@ export default function GridPokerBoard({
       )}
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+
+      {state.phase === "round-result" && state.lastRoundResult && (
+        <RoundResultOverlay
+          result={state.lastRoundResult}
+          players={state.players}
+          names={names}
+          winThreshold={state.winThreshold}
+          viewerSeat={viewerSeat}
+          timeLeft={roundResultTimeLeft}
+          secondsTotal={ROUND_RESULT_SECONDS}
+        />
+      )}
     </div>
   );
 }

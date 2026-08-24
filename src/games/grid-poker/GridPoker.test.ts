@@ -12,6 +12,7 @@ import {
   LINES,
   linesByHandStrengthDesc,
   opponentLiveCell,
+  ROUND_RESULT_SECONDS,
   startGame,
   visibleOpponentBoard,
   type Card,
@@ -233,6 +234,10 @@ describe("game flow", () => {
       // different one, so both players' usedLines advance independently.
       s = applyAction(s, { type: "submit-line", seat: 0, lineIndex: usedLine });
       s = applyAction(s, { type: "submit-line", seat: 1, lineIndex: usedLine });
+      // Every non-clinching round parks in "round-result" (see engine.ts's
+      // module doc) — advance past the celebration pause to reach the next
+      // round's line-picking, same as GridPokerGame.tsx's host timer does.
+      if (s.phase === "round-result") s = applyAction(s, { type: "advance-round-result" });
       usedLine++;
     }
     expect(s.phase).toBe("game-end");
@@ -376,6 +381,7 @@ describe("game flow", () => {
       for (let seat = 0; seat < 8; seat++) {
         s = applyAction(s, { type: "submit-line", seat, lineIndex: rounds });
       }
+      if (s.phase === "round-result") s = applyAction(s, { type: "advance-round-result" });
       rounds++;
     }
     expect(s.phase).toBe("game-end");
@@ -482,10 +488,103 @@ describe("round win tracker — score/winThreshold binding behind the leaderboar
     while (s.phase === "submitting" && usedLine < 10) {
       s = applyAction(s, { type: "submit-line", seat: 0, lineIndex: usedLine });
       s = applyAction(s, { type: "submit-line", seat: 1, lineIndex: usedLine });
+      if (s.phase === "round-result") s = applyAction(s, { type: "advance-round-result" });
       usedLine++;
     }
     expect(s.phase).toBe("game-end");
     for (const p of s.players) expect(p.score).toBeLessThanOrEqual(s.winThreshold);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round-result phase — the round-win celebration's shared pause between
+// scoring rounds (RoundResultOverlay.tsx / GridPokerGame.tsx's host-only
+// advance timer). See engine.ts's module doc "Flow" section.
+// ---------------------------------------------------------------------------
+
+describe("round-result phase (round-win celebration pause)", () => {
+  function fullBoardWith(overrides: Record<number, Card>): (Card | null)[] {
+    const board: (Card | null)[] = Array.from({ length: BOARD_SIZE }, (_, i) => std(2, "C", `filler${i}`));
+    for (const [cell, card] of Object.entries(overrides)) board[Number(cell)] = card;
+    return board;
+  }
+
+  function submittingState(overrides: Partial<GridPokerState> = {}): GridPokerState {
+    const board0 = fullBoardWith({ 0: std(9, "S"), 1: std(9, "D"), 2: std(9, "H"), 3: std(9, "C"), 4: std(3, "S") });
+    const board1 = fullBoardWith({ 0: std(2, "S"), 1: std(5, "D"), 2: std(7, "H"), 3: std(11, "C"), 4: std(14, "S") });
+    return {
+      playerCount: 2,
+      players: [
+        { seat: 0, board: board0, firstPlacedCell: 0, lastPlacedCell: null, usedLines: Array(LINES.length).fill(false), score: 0 },
+        { seat: 1, board: board1, firstPlacedCell: 0, lastPlacedCell: null, usedLines: Array(LINES.length).fill(false), score: 0 },
+      ],
+      phase: "submitting",
+      currentCard: null,
+      placedThisRound: [true, true],
+      drawCount: BOARD_SIZE,
+      submissions: [null, null],
+      roundNumber: 1,
+      totalScoringRounds: 10,
+      winThreshold: 6,
+      lastRoundResult: null,
+      winner: null,
+      timerSettings: DEFAULT_TIMER_SETTINGS,
+      ...overrides,
+    };
+  }
+
+  it("a non-clinching round parks in 'round-result' instead of reopening line-picking immediately", () => {
+    let s = submittingState();
+    s = applyAction(s, { type: "submit-line", seat: 0, lineIndex: 0 });
+    s = applyAction(s, { type: "submit-line", seat: 1, lineIndex: 0 });
+    expect(s.phase).toBe("round-result");
+    expect(s.lastRoundResult).not.toBeNull();
+    expect(s.lastRoundResult!.winnerSeat).toBe(0);
+    // The next round's blind picks are already reset and waiting — only the
+    // *phase* gates re-entry, not this array.
+    expect(s.submissions).toEqual([null, null]);
+  });
+
+  it("no seat has any legal move while parked in 'round-result'", () => {
+    let s = submittingState();
+    s = applyAction(s, { type: "submit-line", seat: 0, lineIndex: 0 });
+    s = applyAction(s, { type: "submit-line", seat: 1, lineIndex: 0 });
+    expect(s.phase).toBe("round-result");
+    expect(getValidMoves(s, 0)).toEqual([]);
+    expect(getValidMoves(s, 1)).toEqual([]);
+  });
+
+  it("advance-round-result reopens line-picking without touching scores, lastRoundResult, or roundNumber", () => {
+    let s = submittingState();
+    s = applyAction(s, { type: "submit-line", seat: 0, lineIndex: 0 });
+    s = applyAction(s, { type: "submit-line", seat: 1, lineIndex: 0 });
+    const { lastRoundResult, roundNumber, players } = s;
+    s = applyAction(s, { type: "advance-round-result" });
+    expect(s.phase).toBe("submitting");
+    expect(s.lastRoundResult).toBe(lastRoundResult);
+    expect(s.roundNumber).toBe(roundNumber);
+    expect(s.players).toBe(players);
+  });
+
+  it("advance-round-result is a no-op outside 'round-result' (returns the exact same state)", () => {
+    const placing = submittingState({ phase: "placing" });
+    expect(applyAction(placing, { type: "advance-round-result" })).toBe(placing);
+    const submitting = submittingState();
+    expect(applyAction(submitting, { type: "advance-round-result" })).toBe(submitting);
+  });
+
+  it("the match-clinching round skips 'round-result' entirely and lands straight on 'game-end'", () => {
+    const s = submittingState({ winThreshold: 1 });
+    const resolved = applyAction(
+      applyAction(s, { type: "submit-line", seat: 0, lineIndex: 0 }),
+      { type: "submit-line", seat: 1, lineIndex: 0 },
+    );
+    expect(resolved.phase).toBe("game-end");
+    expect(resolved.winner).toEqual([0]);
+  });
+
+  it("ROUND_RESULT_SECONDS (the overlay/host-timer pacing constant) is 6", () => {
+    expect(ROUND_RESULT_SECONDS).toBe(6);
   });
 });
 
@@ -646,6 +745,14 @@ function playFullBotGame(playerCount: number, levelOf: (seat: SeatIndex) => numb
     guard++;
     if (state.phase === "placing" && state.currentCard === null) {
       state = applyAction(state, { type: "draw-common", seed: seed++ });
+      continue;
+    }
+    // Round-result is a host-broadcast pause, not any seat's move (see
+    // engine.ts's module doc) — chooseBotAction returns null for every seat
+    // here, so without this the loop's "no one acted" safety valve below
+    // would stop the simulation short instead of ever reaching game-end.
+    if (state.phase === "round-result") {
+      state = applyAction(state, { type: "advance-round-result" });
       continue;
     }
     let actedAny = false;

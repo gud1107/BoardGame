@@ -12,10 +12,19 @@
  * board, independently. (2) "submitting" phase — once every board is full,
  * players repeatedly blind-pick one of their own still-unused lines (5 rows +
  * 5 cols + 2 diagonals = 12 total); once everyone has picked for the round,
- * hands are revealed and compared, best hand scores a point. 2 players play
- * 10 of the 12 rounds (first to 6 wins ends immediately, 2 lines go
- * unsubmitted by construction); 3+ players play all 12 rounds (immediate end
- * at 7 wins), highest score after the last round wins.
+ * hands are revealed and compared, best hand scores a point, and — unless
+ * that scoring round just ended the match — the state parks in a brief
+ * (3) "round-result" phase (see `ROUND_RESULT_SECONDS`) instead of reopening
+ * line-picking immediately: this is the round-win celebration's on-the-clock
+ * pause (RoundResultOverlay.tsx), a shared/unowned transition the host alone
+ * advances past via `advance-round-result` (same "host broadcasts, no one
+ * seat's move" pattern as `draw-common` — see GridPokerGame.tsx), same as
+ * every other client just waits it out locally. 2 players play 10 of the 12
+ * rounds (first to 6 wins ends immediately, 2 lines go unsubmitted by
+ * construction); 3+ players play all 12 rounds (immediate end at 7 wins),
+ * highest score after the last round wins. The match-clinching round skips
+ * "round-result" entirely and goes straight to "game-end" — no pause before
+ * the existing final-standings screen.
  *
  * Same online-multiplayer trust model as Hanamikoji/Bang: every connected
  * client computes and holds the FULL state (every player's entire board)
@@ -41,6 +50,14 @@ export const LINES: number[][] = [
   ...[0, 1, 2, 3, 4].map((c) => [0, 1, 2, 3, 4].map((r) => r * 5 + c)),
   [0, 6, 12, 18, 24],
   [4, 8, 12, 16, 20],
+];
+
+/** Human-readable label for each of `LINES`' 12 entries, in the same fixed order — shared by GridPokerBoard.tsx's line-picker and RoundResultOverlay.tsx's winning-line callout. */
+export const LINE_LABELS: string[] = [
+  ...Array.from({ length: 5 }, (_, i) => `가로 ${i + 1}`),
+  ...Array.from({ length: 5 }, (_, i) => `세로 ${i + 1}`),
+  "대각선 ↘",
+  "대각선 ↙",
 ];
 
 export const RANKS: number[] = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
@@ -69,7 +86,7 @@ export interface PlayerState {
   score: number;
 }
 
-export type Phase = "placing" | "submitting" | "game-end";
+export type Phase = "placing" | "submitting" | "round-result" | "game-end";
 
 export interface ResolvedHandCard {
   rank: number;
@@ -123,6 +140,16 @@ export const DEFAULT_TIMER_SETTINGS: TimerSettings = {
   submittingSeconds: DEFAULT_SUBMITTING_SECONDS,
 };
 
+/**
+ * How long the "round-result" phase's celebration overlay holds the game
+ * before the host auto-advances back to "submitting" (RoundResultOverlay.tsx
+ * + GridPokerGame.tsx's host-only advance timer). Unlike `TimerSettings`,
+ * this isn't a per-room configurable option — it's a fixed pacing constant,
+ * the same for every room, so it lives here as a plain export rather than
+ * inside `TimerSettings`/`startGame`.
+ */
+export const ROUND_RESULT_SECONDS = 6;
+
 export interface GridPokerState {
   playerCount: number;
   players: PlayerState[];
@@ -142,7 +169,8 @@ export interface GridPokerState {
 export type EngineAction =
   | { type: "draw-common"; seed?: number }
   | { type: "place"; seat: SeatIndex; cellIndex: number }
-  | { type: "submit-line"; seat: SeatIndex; lineIndex: number };
+  | { type: "submit-line"; seat: SeatIndex; lineIndex: number }
+  | { type: "advance-round-result" };
 
 /** Deterministic PRNG, shared across every engine — see src/lib/rng.ts. */
 import { seededRng } from "@/lib/rng";
@@ -304,11 +332,31 @@ function resolveRound(state: GridPokerState): GridPokerState {
     submissions: Array(state.playerCount).fill(null),
     lastRoundResult: { roundNumber: state.roundNumber, submissions, winnerSeat },
     roundNumber: state.roundNumber + 1,
+    // Park in the round-result celebration pause instead of reopening
+    // line-picking immediately — see the module doc's Flow section and
+    // `advanceRoundResult` below. Overridden to "game-end" just below when
+    // this round happened to clinch the match, so the final round skips
+    // straight to the existing final-standings screen with no extra pause.
+    phase: "round-result",
   };
 
   const winners = checkGameEnd(s);
   if (winners) s = { ...s, phase: "game-end", winner: winners };
   return s;
+}
+
+/**
+ * The one legal move out of "round-result": the host broadcasts this once
+ * `ROUND_RESULT_SECONDS` has elapsed (GridPokerGame.tsx), reopening
+ * line-picking for the next scoring round. Not tied to any seat — same
+ * "shared clock, no one player's turn" shape as `drawCommon` — so
+ * `getValidMoves` never offers it to any seat; it only ever arrives as a
+ * host broadcast. A no-op outside "round-result" (e.g. a stray duplicate
+ * broadcast, or an out-of-order replay) so it's always safe to dispatch.
+ */
+function advanceRoundResult(state: GridPokerState): GridPokerState {
+  if (state.phase !== "round-result") return state;
+  return { ...state, phase: "submitting" };
 }
 
 // ---------------------------------------------------------------------------
@@ -583,7 +631,10 @@ const LINES_BY_CELL: number[][][] = Array.from({ length: BOARD_SIZE }, (_, cell)
  * still has a pending decision this round — never on any "active seat"
  * concept, since this engine has none. `draw-common` isn't tied to any
  * player's seat at all (the host broadcasts it on a timer-independent
- * effect — see GridPokerGame.tsx) and is never offered here.
+ * effect — see GridPokerGame.tsx) and is never offered here; same story for
+ * `advance-round-result` while `phase === "round-result"` — no seat has a
+ * decision to make during the round-win celebration pause, so this falls
+ * through to the empty-array default below.
  */
 export function getValidMoves(state: GridPokerState, seat: SeatIndex): EngineAction[] {
   if (seat < 0 || seat >= state.playerCount) return [];
@@ -694,6 +745,8 @@ export function applyAction(state: GridPokerState, action: EngineAction): GridPo
       return place(state, action.seat, action.cellIndex);
     case "submit-line":
       return submitLine(state, action.seat, action.lineIndex);
+    case "advance-round-result":
+      return advanceRoundResult(state);
     default:
       return state;
   }
