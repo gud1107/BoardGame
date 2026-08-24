@@ -33,7 +33,9 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **참고 — 실제 UI 렌더링 미검증**: HANDOFF에 반복 기록된 `<Game>Board.tsx` 테스트 사각지대(jsdom 미설치)와 동일하게, 이번 갤럽 홉/파티클의 실제 화면 체감(칸 경계와 오버레이 좌표계의 픽셀 정합, 모바일에서의 파티클 크기감, 60fps 실측)은 엔진/타입/린트 검증만 마쳤고 아직 육안 확인하지 않음 — 다음 세션에서 실제 플레이로 재확인 권장.
 
-**커밋/배포**: 아래 참고.
+**커밋/푸시**: `b95fbaf feat(horse-race): add dynamic gallop animation, dust trail, and landing impact effects on horse movement` → `git push origin main` 완료. 4개 파일(`globals.css`/`MalDalliJaBoard.tsx`/신규 `MoveEffects.tsx`/이 HANDOFF 절)만 스테이징해 커밋 — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.gitignore`, `public/games`·`public/images/lasVegas` 실물 이미지 삭제, `lasVegas/*`, `registry.ts`, `boardGameRule/` 신규 파일, `저작권, 상표권.md`, `orca충돌및확인.md` 등)은 이번 작업과 무관하므로 건드리지 않고 그대로 작업 트리에 남겨둠.
+
+**배포**: `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주(Turbopack 빌드+TypeScript 전체 재검사 포함), READY — `https://board-game-rbt7p41cy-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준). 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위 "커밋/푸시" 항목에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨 — 이 말달리자 세션이 그 변경들을 검증하거나 의도한 것은 아님.
 
 ### 2026-08-24 — 그리드 포커 라운드 승리 비주얼 이펙트 강화 및 승자 결과창 통합
 
