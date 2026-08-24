@@ -14,6 +14,7 @@ import {
   completedLineCount,
   evaluateHand,
   formatHandLabel,
+  linesByHandStrengthDesc,
   opponentLiveCell,
   visibleOpponentBoard,
   type Card,
@@ -39,6 +40,29 @@ function randomFrom<T>(items: T[]): T | undefined {
 function rankedPlayers(players: PlayerState[]): { player: PlayerState; rank: number }[] {
   const sorted = [...players].sort((a, b) => b.score - a.score);
   return sorted.map((player) => ({ player, rank: sorted.findIndex((p) => p.score === player.score) + 1 }));
+}
+
+/**
+ * Per-player "how close to the win threshold" dots for the leaderboard
+ * strip — one dot per round win needed to end the game (`state.winThreshold`,
+ * 6 for 2p / 7 for 3+p), filled left-to-right as `wins` climbs. Deliberately
+ * keyed to the threshold rather than `totalScoringRounds`: the game can (and
+ * usually does) end the instant someone hits the threshold, well before every
+ * scoring round is played, so the threshold is the number that actually
+ * tells a player "this many rounds until it's over" (see engine.ts's
+ * `checkGameEnd`).
+ */
+function WinDots({ wins, threshold }: { wins: number; threshold: number }) {
+  return (
+    <span className="flex items-center gap-[3px]" aria-hidden>
+      {Array.from({ length: threshold }, (_, i) => (
+        <span
+          key={i}
+          className={`h-1.5 w-1.5 rounded-full ${i < wins ? "bg-amber-300" : "border border-white/25 bg-transparent"}`}
+        />
+      ))}
+    </span>
+  );
 }
 
 /**
@@ -405,13 +429,15 @@ export default function GridPokerBoard({
         {rankedPlayers(state.players).map(({ player: p, rank }) => (
           <div
             key={p.seat}
+            title={`목표 ${state.winThreshold}승 중 ${p.score}승 · ${Math.max(state.winThreshold - p.score, 0)}승 남음`}
             className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ${
               p.seat === viewerSeat ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-white/10 bg-white/5 text-white/60"
             }`}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(p.seat) ? "bg-emerald-400" : "bg-white/20"}`} />
             <span className="font-semibold text-amber-300/90">{rank === 1 ? "🏆" : `${rank}위`}</span>
-            {names[p.seat]} · {p.score}승
+            {names[p.seat]} · {p.score}/{state.winThreshold}승
+            <WinDots wins={p.score} threshold={state.winThreshold} />
           </div>
         ))}
       </div>
@@ -458,13 +484,13 @@ export default function GridPokerBoard({
           </p>
           {submittingActive && <CountdownBar timeLeft={submittingTimeLeft} total={submittingSeconds} />}
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-            {LINES.map((cells, lineIndex) => {
+            {/* Default-sorted strongest hand first (linesByHandStrengthDesc,
+                engine.ts) — matches the rulebook's high-to-low ordering
+                (RulebookModal.tsx's HAND_EXAMPLES) so the best line to submit
+                always leads the list without any extra sort toggle. */}
+            {linesByHandStrengthDesc(viewer).map(({ lineIndex, hand }) => {
               const used = viewer.usedLines[lineIndex];
-              const cards = cells.map((c) => viewer.board[c]!);
-              // Every cell in the line is filled by this point (submitting
-              // only starts once the whole board is full), so the hand for
-              // an unused line is always fully resolved and safe to preview.
-              const hand = evaluateHand(cards);
+              const cards = LINES[lineIndex].map((c) => viewer.board[c]!);
               return (
                 <button
                   key={lineIndex}

@@ -10,6 +10,7 @@ import {
   formatHandLabel,
   getValidMoves,
   LINES,
+  linesByHandStrengthDesc,
   opponentLiveCell,
   startGame,
   visibleOpponentBoard,
@@ -389,6 +390,155 @@ describe("game flow", () => {
     // number of scoring rounds actually resolved.
     const totalScore = s.players.reduce((sum, p) => sum + p.score, 0);
     expect(totalScore).toBeLessThanOrEqual(s.roundNumber - 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round win tracker (leaderboard "M/N승" + win-progress dots — GridPokerBoard.tsx)
+// ---------------------------------------------------------------------------
+
+describe("round win tracker — score/winThreshold binding behind the leaderboard's M/N승", () => {
+  function fullBoardWith(overrides: Record<number, Card>): (Card | null)[] {
+    const board: (Card | null)[] = Array.from({ length: BOARD_SIZE }, (_, i) => std(2, "C", `filler${i}`));
+    for (const [cell, card] of Object.entries(overrides)) board[Number(cell)] = card;
+    return board;
+  }
+
+  function submittingState(board0: (Card | null)[], board1: (Card | null)[]): GridPokerState {
+    return {
+      playerCount: 2,
+      players: [
+        { seat: 0, board: board0, firstPlacedCell: 0, lastPlacedCell: null, usedLines: Array(LINES.length).fill(false), score: 0 },
+        { seat: 1, board: board1, firstPlacedCell: 0, lastPlacedCell: null, usedLines: Array(LINES.length).fill(false), score: 0 },
+      ],
+      phase: "submitting",
+      currentCard: null,
+      placedThisRound: [true, true],
+      drawCount: BOARD_SIZE,
+      submissions: [null, null],
+      roundNumber: 1,
+      totalScoringRounds: 10,
+      winThreshold: 6,
+      lastRoundResult: null,
+      winner: null,
+      timerSettings: DEFAULT_TIMER_SETTINGS,
+    };
+  }
+
+  it("resolving a round increments exactly the winning seat's score by 1 (the 'M' in the leaderboard's M/N승) and leaves every other seat's score untouched", () => {
+    // Seat 0's row 0 is four of a kind, seat 1's row 0 is a bare high-card
+    // scatter — a clean, deterministic (non-tied) winner.
+    const board0 = fullBoardWith({ 0: std(9, "S"), 1: std(9, "D"), 2: std(9, "H"), 3: std(9, "C"), 4: std(3, "S") });
+    const board1 = fullBoardWith({ 0: std(2, "S"), 1: std(5, "D"), 2: std(7, "H"), 3: std(11, "C"), 4: std(14, "S") });
+    let s = submittingState(board0, board1);
+    expect(s.players.every((p) => p.score === 0)).toBe(true);
+
+    s = applyAction(s, { type: "submit-line", seat: 0, lineIndex: 0 });
+    s = applyAction(s, { type: "submit-line", seat: 1, lineIndex: 0 });
+
+    expect(s.lastRoundResult!.winnerSeat).toBe(0);
+    expect(s.players[0].score).toBe(1);
+    expect(s.players[1].score).toBe(0);
+  });
+
+  it("a genuine tie (identical resolved hands) leaves every seat's score unchanged, awarding no point", () => {
+    const identicalRow = { 0: std(9, "S"), 1: std(9, "D"), 2: std(9, "H"), 3: std(9, "C"), 4: std(3, "S") };
+    let s = submittingState(fullBoardWith(identicalRow), fullBoardWith(identicalRow));
+
+    s = applyAction(s, { type: "submit-line", seat: 0, lineIndex: 0 });
+    s = applyAction(s, { type: "submit-line", seat: 1, lineIndex: 0 });
+
+    expect(s.lastRoundResult!.winnerSeat).toBeNull();
+    expect(s.players[0].score).toBe(0);
+    expect(s.players[1].score).toBe(0);
+  });
+
+  it("winThreshold (the 'N' denominator) stays fixed per player count across every action — 6 for 2p, 7 for 3p+", () => {
+    let s2 = startGame(2);
+    expect(s2.winThreshold).toBe(6);
+    s2 = applyAction(s2, { type: "draw-common", seed: 1 });
+    s2 = applyAction(s2, { type: "place", seat: 0, cellIndex: 0 });
+    expect(s2.winThreshold).toBe(6); // untouched by unrelated actions, same "every reducer spreads {...state}" contract as timerSettings
+
+    let s3 = startGame(4);
+    expect(s3.winThreshold).toBe(7);
+    s3 = applyAction(s3, { type: "draw-common", seed: 1 });
+    expect(s3.winThreshold).toBe(7);
+  });
+
+  it("game-end never lets a seat's score exceed winThreshold — the leaderboard's M/N승 never shows M > N", () => {
+    function fillBoards(state: GridPokerState): GridPokerState {
+      let s = state;
+      let seed = 1;
+      while (s.phase === "placing") {
+        s = applyAction(s, { type: "draw-common", seed: seed++ });
+        const cellIndex = s.drawCount - 1;
+        for (let seat = 0; seat < s.playerCount; seat++) s = applyAction(s, { type: "place", seat, cellIndex });
+      }
+      return s;
+    }
+    let s = fillBoards(startGame(2));
+    let usedLine = 0;
+    while (s.phase === "submitting" && usedLine < 10) {
+      s = applyAction(s, { type: "submit-line", seat: 0, lineIndex: usedLine });
+      s = applyAction(s, { type: "submit-line", seat: 1, lineIndex: usedLine });
+      usedLine++;
+    }
+    expect(s.phase).toBe("game-end");
+    for (const p of s.players) expect(p.score).toBeLessThanOrEqual(s.winThreshold);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Default hand-ranking sort — "submitting" phase's own-line preview grid
+// (linesByHandStrengthDesc, GridPokerBoard.tsx)
+// ---------------------------------------------------------------------------
+
+describe("linesByHandStrengthDesc (default '족보 높은 순' sort)", () => {
+  function fillBoards(state: GridPokerState): GridPokerState {
+    let s = state;
+    let seed = 1;
+    while (s.phase === "placing") {
+      s = applyAction(s, { type: "draw-common", seed: seed++ });
+      const cellIndex = s.drawCount - 1;
+      for (let seat = 0; seat < s.playerCount; seat++) s = applyAction(s, { type: "place", seat, cellIndex });
+    }
+    return s;
+  }
+
+  it("returns every one of the 12 lines exactly once", () => {
+    const s = fillBoards(startGame(2));
+    const result = linesByHandStrengthDesc(s.players[0]);
+    expect(result).toHaveLength(LINES.length);
+    expect(new Set(result.map((r) => r.lineIndex)).size).toBe(LINES.length);
+  });
+
+  it("is sorted strongest hand first: every entry's hand is >= the one right after it", () => {
+    const s = fillBoards(startGame(3));
+    for (const p of s.players) {
+      const result = linesByHandStrengthDesc(p);
+      for (let i = 0; i < result.length - 1; i++) {
+        expect(compareHands(result[i].hand, result[i + 1].hand)).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it("ranks a genuinely strong line (four of a kind) ahead of a weak one (high card) even though the weak line's fixed LINES index is lower", () => {
+    // Row 0 (LINES[0], listed first in the fixed row/column/diagonal order)
+    // is a bare high-card scatter; row 4 (LINES[4], listed fifth) is four of
+    // a kind. The default sort must invert that fixed-order position.
+    const board: (Card | null)[] = Array.from({ length: BOARD_SIZE }, (_, i) => std(2, "C", `filler${i}`));
+    [0, 1, 2, 3, 4].forEach((cell, i) => {
+      board[cell] = [std(2, "S"), std(5, "D"), std(9, "H"), std(11, "C"), std(14, "S")][i];
+    });
+    [20, 21, 22, 23, 24].forEach((cell, i) => {
+      board[cell] = [std(7, "S"), std(7, "D"), std(7, "H"), std(7, "C"), std(3, "S")][i];
+    });
+    const player = { seat: 0, board, firstPlacedCell: 0, lastPlacedCell: null, usedLines: Array(LINES.length).fill(false), score: 0 };
+
+    const result = linesByHandStrengthDesc(player);
+    expect(result[0].lineIndex).toBe(4);
+    expect(result[0].hand.category).toBe(7); // 포카드
   });
 });
 

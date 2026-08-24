@@ -547,6 +547,23 @@ export function formatHandLabel(hand: HandResult): string {
   return hand.categoryName;
 }
 
+/**
+ * A player's 12 lines paired with their evaluated hand, strongest hand
+ * first (ties keep `LINES`' original row/column/diagonal order — `.sort` is
+ * stable). Only meaningful once the board is full (every line's 5 cells
+ * resolve to a concrete hand), which is guaranteed by the time `submitting`
+ * phase starts (see `place`'s `boardFull` transition). Used by the
+ * "submitting" phase's own-line preview grid so it defaults to the same
+ * high-to-low ordering as the rulebook's `HAND_EXAMPLES` list, without a
+ * separate sort toggle.
+ */
+export function linesByHandStrengthDesc(player: PlayerState): { lineIndex: number; hand: HandResult }[] {
+  return LINES.map((cells, lineIndex) => ({
+    lineIndex,
+    hand: evaluateHand(cells.map((cell) => player.board[cell]!)),
+  })).sort((a, b) => compareHands(b.hand, a.hand));
+}
+
 // ---------------------------------------------------------------------------
 // AI bot support (ARCHITECTURE.md §7 — every game exposes getValidMoves +
 // chooseBotAction so a host client can drive a bot-occupied seat). Levels
