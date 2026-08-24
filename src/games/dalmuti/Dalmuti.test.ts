@@ -50,6 +50,7 @@ function makeState(overrides: Partial<DalmutiState> = {}): DalmutiState {
     phase: "trick",
     pendingRevolution: null,
     tributes: [],
+    commonerExchange: null,
     trick: { rankValue: null, count: 0, plays: [], leaderSeat: rankOrder[0], consecutivePasses: 0 },
     activeSeat: rankOrder[0],
     finishOrder: [],
@@ -135,7 +136,7 @@ describe("startGame", () => {
     expect(sawTax).toBe(true);
   });
 
-  it("skips the 소농노↔총리 exchange at exactly 3 players (same seat would trade with itself)", () => {
+  it("skips the 거지(Beggar)↔귀족(Noble) exchange at exactly 3 players (same seat would trade with itself)", () => {
     for (let seed = 0; seed < 200; seed++) {
       const state = startGame(3, seed);
       if (state.phase === "taxReturn") {
@@ -154,11 +155,11 @@ describe("startGame", () => {
 // ---------------------------------------------------------------------------
 
 describe("tax phase", () => {
-  it("forces the 대농노's 2 highest non-joker cards to the 달무티, exempting jokers", () => {
+  it("forces the 노예(Slave)'s 2 highest non-joker cards to the 왕(King), exempting jokers", () => {
     const players = [
-      makePlayer(0, { hand: [card(6), card(7)] }), // 달무티
-      makePlayer(1, { hand: [card(5), card(5, 1)] }), // 총리 (also 소농노 here since n=3... use n=4 below instead)
-      makePlayer(2, { hand: [card(1), card(2), card(9), joker(0)] }), // 대농노: highest = 1, 2 (joker excluded)
+      makePlayer(0, { hand: [card(6), card(7)] }), // 왕
+      makePlayer(1, { hand: [card(5), card(5, 1)] }), // 귀족 (also 거지 here since n=3... use n=4 below instead)
+      makePlayer(2, { hand: [card(1), card(2), card(9), joker(0)] }), // 노예: highest = 1, 2 (joker excluded)
     ];
     const state = makeState({ playerCount: 3, players, rankOrder: [0, 1, 2], phase: "revolutionOption", pendingRevolution: { seat: 2, isGrand: false } });
     const next = applyAction(state, { type: "declineRevolution", seat: 2 });
@@ -176,15 +177,15 @@ describe("tax phase", () => {
     expect(dalmuti.hand.some((c) => c.id === "2-0")).toBe(true);
   });
 
-  it("also runs the 소농노↔총리 (1 card) exchange when n >= 4", () => {
+  it("also runs the 거지(Beggar)↔귀족(Noble) (1 card) exchange when n >= 4", () => {
     const players = [
-      makePlayer(0, { hand: [card(8)] }), // 달무티
-      makePlayer(1, { hand: [card(6)] }), // 총리
-      makePlayer(2, { hand: [card(9)] }), // 중농
-      makePlayer(3, { hand: [card(1), card(2), card(3)] }), // 대농노
+      makePlayer(0, { hand: [card(8)] }), // 왕
+      makePlayer(1, { hand: [card(6)] }), // 귀족
+      makePlayer(2, { hand: [card(9)] }), // 평민
+      makePlayer(3, { hand: [card(1), card(2), card(3)] }), // 노예
     ];
     const state = makeState({ playerCount: 4, players, rankOrder: [0, 1, 2, 3], phase: "revolutionOption", pendingRevolution: { seat: 3, isGrand: false } });
-    // No 소농노 hand set up with a card to give — add one via seat 2 (rankOrder[n-2]=rankOrder[2]=2).
+    // No 거지 hand set up with a card to give — add one via seat 2 (rankOrder[n-2]=rankOrder[2]=2).
     const withLesserPeonHand: DalmutiState = {
       ...state,
       players: state.players.map((p) => (p.seat === 2 ? { ...p, hand: [card(4)] } : p)),
@@ -225,6 +226,184 @@ describe("tax phase", () => {
     expect(dalmutiAfter.hand.map((c) => c.id).sort()).toEqual(["1-0", "2-0"]);
     expect(greatPeon.hand.map((c) => c.id).sort()).toEqual(["6-0", "7-0", "9-0"]);
     expect(resolved.activeSeat).toBe(resolved.rankOrder[0]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Commoner (평민) voluntary mutual exchange (§5, 2026-08-25) — opt-in only
+// (no partner selection, per user confirmation), engine pairs everyone who
+// opted in two-at-a-time in rank order, odd leftover sits out untouched.
+// ---------------------------------------------------------------------------
+
+describe("commoner mutual exchange", () => {
+  it("resolving the last tribute enters commonerExchange with exactly the 평민-tier seats when there are >= 2 of them (n=6)", () => {
+    const players = [
+      makePlayer(0, { hand: [] }),
+      makePlayer(1, { hand: [card(9, 0)] }), // 귀족, already holding the forced tribute from 거지
+      makePlayer(2, { hand: [card(3), card(4)] }), // 평민
+      makePlayer(3, { hand: [card(5), card(6)] }), // 평민
+      makePlayer(4, { hand: [] }), // 거지
+      makePlayer(5, { hand: [] }), // 노예
+    ];
+    const state = makeState({
+      playerCount: 6,
+      players,
+      rankOrder: [0, 1, 2, 3, 4, 5],
+      phase: "taxReturn",
+      tributes: [
+        { fromSeat: 5, toSeat: 0, givenCardIds: [], returnedCardIds: [], resolved: true },
+        { fromSeat: 4, toSeat: 1, givenCardIds: ["9-0"], returnedCardIds: [], resolved: false },
+      ],
+    });
+    const next = applyAction(state, { type: "returnTax", seat: 1, cardIds: ["9-0"] });
+    expect(next.phase).toBe("commonerExchange");
+    expect(next.commonerExchange).not.toBeNull();
+    expect(next.commonerExchange!.participants.map((p) => p.seat).sort()).toEqual([2, 3]);
+    expect(next.commonerExchange!.participants.every((p) => p.participate === null)).toBe(true);
+    expect(next.commonerExchange!.pairs).toHaveLength(0);
+  });
+
+  it("skips straight to trick when fewer than 2 평민 seats exist (n=4)", () => {
+    const players = [makePlayer(0), makePlayer(1, { hand: [card(9, 0)] }), makePlayer(2), makePlayer(3)];
+    const state = makeState({
+      playerCount: 4,
+      players,
+      rankOrder: [0, 1, 2, 3],
+      phase: "taxReturn",
+      tributes: [
+        { fromSeat: 3, toSeat: 0, givenCardIds: [], returnedCardIds: [], resolved: true },
+        { fromSeat: 2, toSeat: 1, givenCardIds: ["9-0"], returnedCardIds: [], resolved: false },
+      ],
+    });
+    const next = applyAction(state, { type: "returnTax", seat: 1, cardIds: ["9-0"] });
+    expect(next.phase).toBe("trick");
+    expect(next.commonerExchange).toBeNull();
+    expect(next.activeSeat).toBe(next.rankOrder[0]);
+  });
+
+  it("both commoners opting in pairs them; each privately picks a card and the swap lands in the other's hand, then the phase advances to trick", () => {
+    const state = makeState({
+      playerCount: 6,
+      rankOrder: [0, 1, 2, 3, 4, 5],
+      phase: "commonerExchange",
+      players: [
+        makePlayer(0),
+        makePlayer(1),
+        makePlayer(2, { hand: [card(3), card(4)] }),
+        makePlayer(3, { hand: [card(10), card(11)] }),
+        makePlayer(4),
+        makePlayer(5),
+      ],
+      commonerExchange: {
+        participants: [
+          { seat: 2, participate: null },
+          { seat: 3, participate: null },
+        ],
+        pairs: [],
+      },
+    });
+
+    const afterOptIns = [
+      { type: "commonerOptIn", seat: 2, participate: true },
+      { type: "commonerOptIn", seat: 3, participate: true },
+    ].reduce<DalmutiState>((s, a) => applyAction(s, a as EngineAction), state);
+    expect(afterOptIns.phase).toBe("commonerExchange");
+    expect(afterOptIns.commonerExchange!.pairs).toEqual([{ seatA: 2, seatB: 3, cardIdA: null, cardIdB: null, resolved: false }]);
+
+    // Seat 2 offers its card first — no swap yet, seat 3 hasn't picked.
+    const afterFirstOffer = applyAction(afterOptIns, { type: "commonerOfferCard", seat: 2, cardId: "3-0" });
+    expect(afterFirstOffer.phase).toBe("commonerExchange");
+    expect(afterFirstOffer.players.find((p) => p.seat === 2)!.hand.map((c) => c.id)).toEqual(["3-0", "4-0"]); // not yet moved
+
+    // Seat 3 offers its card — both sides picked, swap applies immediately and the phase advances.
+    const resolved = applyAction(afterFirstOffer, { type: "commonerOfferCard", seat: 3, cardId: "10-0" });
+    expect(resolved.phase).toBe("trick");
+    expect(resolved.commonerExchange).toBeNull();
+    const seat2After = resolved.players.find((p) => p.seat === 2)!;
+    const seat3After = resolved.players.find((p) => p.seat === 3)!;
+    expect(seat2After.hand.map((c) => c.id).sort()).toEqual(["10-0", "4-0"]);
+    expect(seat3After.hand.map((c) => c.id).sort()).toEqual(["11-0", "3-0"]);
+  });
+
+  it("either side declining means no pair forms and the phase advances straight to trick (no exchange)", () => {
+    const state = makeState({
+      playerCount: 6,
+      rankOrder: [0, 1, 2, 3, 4, 5],
+      phase: "commonerExchange",
+      players: Array.from({ length: 6 }, (_, seat) => makePlayer(seat, { hand: seat === 2 || seat === 3 ? [card(5)] : [] })),
+      commonerExchange: {
+        participants: [
+          { seat: 2, participate: null },
+          { seat: 3, participate: null },
+        ],
+        pairs: [],
+      },
+    });
+    const afterAccept = applyAction(state, { type: "commonerOptIn", seat: 2, participate: true });
+    const afterDecline = applyAction(afterAccept, { type: "commonerOptIn", seat: 3, participate: false });
+    expect(afterDecline.phase).toBe("trick");
+    expect(afterDecline.commonerExchange).toBeNull();
+    // Nobody's hand changed — no exchange happened.
+    expect(afterDecline.players.find((p) => p.seat === 2)!.hand.map((c) => c.id)).toEqual(["5-0"]);
+    expect(afterDecline.players.find((p) => p.seat === 3)!.hand.map((c) => c.id)).toEqual(["5-0"]);
+  });
+
+  it("an odd number of opted-in commoners leaves one seat unpaired, and the phase still advances once the single pair resolves", () => {
+    const state = makeState({
+      playerCount: 7,
+      rankOrder: [0, 1, 2, 3, 4, 5, 6],
+      phase: "commonerExchange",
+      players: [
+        makePlayer(0),
+        makePlayer(1),
+        makePlayer(2, { hand: [card(1)] }),
+        makePlayer(3, { hand: [card(2)] }),
+        makePlayer(4, { hand: [card(8)] }), // will opt in, stays unpaired (odd one out)
+        makePlayer(5),
+        makePlayer(6),
+      ],
+      commonerExchange: {
+        participants: [
+          { seat: 2, participate: null },
+          { seat: 3, participate: null },
+          { seat: 4, participate: null },
+        ],
+        pairs: [],
+      },
+    });
+    const afterOptIns = [2, 3, 4]
+      .map((seat) => ({ type: "commonerOptIn" as const, seat, participate: true }))
+      .reduce<DalmutiState>((s, a) => applyAction(s, a as EngineAction), state);
+    expect(afterOptIns.commonerExchange!.pairs).toEqual([{ seatA: 2, seatB: 3, cardIdA: null, cardIdB: null, resolved: false }]);
+
+    const resolved = [
+      { type: "commonerOfferCard" as const, seat: 2, cardId: "1-0" },
+      { type: "commonerOfferCard" as const, seat: 3, cardId: "2-0" },
+    ].reduce<DalmutiState>((s, a) => applyAction(s, a as EngineAction), afterOptIns);
+    expect(resolved.phase).toBe("trick"); // seat 4's untouched hand didn't block the transition
+    expect(resolved.players.find((p) => p.seat === 4)!.hand.map((c) => c.id)).toEqual(["8-0"]);
+  });
+
+  it("rejects an out-of-turn or already-decided opt-in, and a card the seat doesn't hold", () => {
+    const state = makeState({
+      playerCount: 6,
+      rankOrder: [0, 1, 2, 3, 4, 5],
+      phase: "commonerExchange",
+      players: Array.from({ length: 6 }, (_, seat) => makePlayer(seat, { hand: seat === 2 ? [card(5)] : [] })),
+      commonerExchange: {
+        participants: [
+          { seat: 2, participate: null },
+          { seat: 3, participate: null },
+        ],
+        pairs: [],
+      },
+    });
+    // Seat 0 isn't a commoner participant at all.
+    expect(applyAction(state, { type: "commonerOptIn", seat: 0, participate: true })).toBe(state);
+
+    const afterOptIn = applyAction(state, { type: "commonerOptIn", seat: 2, participate: true });
+    // Seat 2 already decided — a second opt-in is a no-op.
+    expect(applyAction(afterOptIn, { type: "commonerOptIn", seat: 2, participate: false })).toBe(afterOptIn);
   });
 });
 
@@ -423,19 +602,34 @@ describe("computeRankings", () => {
 // 6. Player-standing titles
 // ---------------------------------------------------------------------------
 
-describe("rankTitle", () => {
+describe("rankTitle (5-tier 왕/귀족/평민/거지/노예 rename, 2026-08-25)", () => {
   it("names the extremes and the standard middle roles for n >= 4", () => {
-    expect(rankTitle(0, 5)).toBe("달무티");
-    expect(rankTitle(1, 5)).toBe("총리");
-    expect(rankTitle(2, 5)).toBe("중농");
-    expect(rankTitle(3, 5)).toBe("소농노");
-    expect(rankTitle(4, 5)).toBe("대농노");
+    expect(rankTitle(0, 5)).toBe("왕");
+    expect(rankTitle(1, 5)).toBe("귀족");
+    expect(rankTitle(2, 5)).toBe("평민");
+    expect(rankTitle(3, 5)).toBe("거지");
+    expect(rankTitle(4, 5)).toBe("노예");
   });
 
-  it("folds 소농노 into 총리 at n=3 (same seat, no self-trade)", () => {
-    expect(rankTitle(0, 3)).toBe("달무티");
-    expect(rankTitle(1, 3)).toBe("총리");
-    expect(rankTitle(2, 3)).toBe("대농노");
+  it("folds 거지 into 귀족 at n=3 (same seat, no self-trade)", () => {
+    expect(rankTitle(0, 3)).toBe("왕");
+    expect(rankTitle(1, 3)).toBe("귀족");
+    expect(rankTitle(2, 3)).toBe("노예");
+  });
+
+  it("assigns exactly the confirmed slot table for every supported player count (3-8): 1 왕, 1 귀족 (folded into 왕's opposite at n=3), 1 거지, 1 노예, remainder 평민", () => {
+    const expectedCommonerCount: Record<number, number> = { 3: 0, 4: 0, 5: 1, 6: 2, 7: 3, 8: 4 };
+    for (let n = MIN_PLAYERS; n <= MAX_PLAYERS; n++) {
+      const titles = Array.from({ length: n }, (_, pos) => rankTitle(pos, n));
+      expect(titles[0]).toBe("왕");
+      expect(titles[n - 1]).toBe("노예");
+      if (n >= 4) {
+        expect(titles[1]).toBe("귀족");
+        expect(titles[n - 2]).toBe("거지");
+      }
+      const commoners = titles.filter((t) => t === "평민");
+      expect(commoners).toHaveLength(expectedCommonerCount[n]);
+    }
   });
 });
 
@@ -528,6 +722,19 @@ function currentActorForTest(state: DalmutiState): SeatIndex | null {
     const unresolved = state.tributes.filter((t) => !t.resolved);
     if (unresolved.length === 0) return null;
     return Math.min(...unresolved.map((t) => t.toSeat));
+  }
+  if (state.phase === "commonerExchange") {
+    const ex = state.commonerExchange;
+    if (!ex) return null;
+    const undecided = ex.participants.filter((p) => p.participate === null).map((p) => p.seat);
+    if (undecided.length > 0) return Math.min(...undecided);
+    const needsCard: SeatIndex[] = [];
+    for (const pair of ex.pairs) {
+      if (pair.resolved) continue;
+      if (pair.cardIdA === null) needsCard.push(pair.seatA);
+      if (pair.cardIdB === null) needsCard.push(pair.seatB);
+    }
+    return needsCard.length > 0 ? Math.min(...needsCard) : null;
   }
   if (state.phase === "trick") return state.activeSeat;
   return null;

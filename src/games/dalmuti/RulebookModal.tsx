@@ -53,8 +53,8 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">게임 시작 — 초기 신분 결정 & 카드 분배</h3>
           <p className="text-white/70">
-            모든 플레이어의 초기 신분(<b>달무티</b> ~ <b>대농노</b>)이 무작위로 정해진 뒤, 달무티부터 시계 방향으로 카드가 균등하게
-            나눠집니다(남는 카드는 이번 판에 쓰이지 않고 치워둡니다).
+            모든 플레이어의 초기 신분(<b>왕👑</b> ~ <b>노예⛓️</b>, 5단계: 왕 → 귀족🎩 → 평민🌾 → 거지🪵 → 노예)이 무작위로 정해진 뒤,
+            왕부터 시계 방향으로 카드가 균등하게 나눠집니다(남는 카드는 이번 판에 쓰이지 않고 치워둡니다).
           </p>
         </section>
 
@@ -65,10 +65,10 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           </p>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-white/60">
             <li>
-              <b>일반 혁명</b>(달무티~중농~소농노가 선포): 세금 바치기가 취소되고 바로 카드 내기로 들어갑니다.
+              <b>일반 혁명</b>(왕~평민~거지가 선포): 세금 바치기가 취소되고 바로 평민 교환 단계(아래 참고)로 들어갑니다.
             </li>
             <li>
-              <b>대혁명</b>(대농노가 선포): 세금도 취소되고, <b>모든 신분이 정반대로 뒤집힙니다</b>(대농노 → 달무티 등).
+              <b>대혁명</b>(노예가 선포): 세금도 취소되고, <b>모든 신분이 정반대로 뒤집힙니다</b>(노예 → 왕 등).
             </li>
           </ul>
         </section>
@@ -77,15 +77,28 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">세금 바치기 (혁명이 없을 때)</h3>
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
-              <p className="mb-1 font-medium text-white/90">대농노 ↔ 달무티</p>
-              <p className="text-xs text-white/60">대농노는 가장 높은 계급 카드 2장을 자동으로 바치고, 달무티는 원하는 카드 2장을 돌려줍니다.</p>
+              <p className="mb-1 font-medium text-white/90">노예⛓️ ↔ 왕👑</p>
+              <p className="text-xs text-white/60">노예는 가장 높은 계급 카드 2장을 자동으로 바치고, 왕은 원하는 카드 2장을 돌려줍니다.</p>
             </div>
             <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
-              <p className="mb-1 font-medium text-white/90">소농노 ↔ 총리</p>
-              <p className="text-xs text-white/60">소농노는 가장 높은 계급 카드 1장을 자동으로 바치고, 총리는 원하는 카드 1장을 돌려줍니다.</p>
+              <p className="mb-1 font-medium text-white/90">거지🪵 ↔ 귀족🎩</p>
+              <p className="text-xs text-white/60">거지는 가장 높은 계급 카드 1장을 자동으로 바치고, 귀족은 원하는 카드 1장을 돌려줍니다.</p>
             </div>
           </div>
-          <p className="mt-2 text-xs text-white/60">조커는 세금 대상에서 제외됩니다. (3인 게임은 소농노=총리라 두 번째 교환이 없습니다.)</p>
+          <p className="mt-2 text-xs text-white/60">조커는 세금 대상에서 제외됩니다. (3인 게임은 거지=귀족이라 두 번째 교환이 없습니다.)</p>
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">🌾 평민 카드 교환 (선택)</h3>
+          <p className="text-white/70">
+            세금 바치기가 끝나면(혁명이 선포됐다면 바로), <b>평민🌾</b> 신분의 플레이어끼리 카드를 맞바꿀 기회가 주어집니다. 평민이
+            2명 미만이면 이 단계 없이 바로 카드 내기로 넘어갑니다.
+          </p>
+          <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-white/60">
+            <li>각 평민은 교환 참여 여부만 개별적으로 선택합니다(특정 상대를 지정할 수 없습니다).</li>
+            <li>참여를 선택한 평민들은 순서대로 2명씩 짝지어지며, 인원이 홀수면 마지막 1명은 이번 판에 교환하지 않습니다.</li>
+            <li>짝이 된 두 사람은 각자 손패에서 상대에게 줄 카드 1장을 비공개로 고르고, 양쪽이 모두 고르면 그 즉시 맞교환됩니다.</li>
+          </ul>
         </section>
 
         <section>
@@ -93,7 +106,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
               <p className="mb-1 font-medium text-white/90">① 선 플레이어</p>
-              <p className="text-xs text-white/60">달무티가 첫 트릭의 선입니다. 원하는 계급의 카드를 1장 이상(동일 숫자 세트) 냅니다.</p>
+              <p className="text-xs text-white/60">왕👑이 첫 트릭의 선입니다. 원하는 계급의 카드를 1장 이상(동일 숫자 세트) 냅니다.</p>
             </div>
             <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3">
               <p className="mb-1 font-medium text-white/90">② 다음 플레이어들</p>
@@ -112,7 +125,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">게임 종료</h3>
           <p className="text-white/70">
-            손패를 가장 먼저 전부 털어낸 사람이 최종 승리자(진정한 달무티)입니다. 이후 카드를 턴 순서대로 2등, 3등...이 정해지고,
+            손패를 가장 먼저 전부 털어낸 사람이 최종 승리자(진정한 왕👑)입니다. 이후 카드를 턴 순서대로 2등, 3등...이 정해지고,
             단 한 명만 남으면 그 사람은 자동으로 꼴찌가 되며 게임이 끝납니다.
           </p>
         </section>

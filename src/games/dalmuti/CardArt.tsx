@@ -67,17 +67,22 @@ export function CardFace({
   );
 }
 
-/** Small role badge next to a seat's name — task brief §2 "계급별 좌석 시각화". */
+/**
+ * Small role badge next to a seat's name — task brief §2 "계급별 좌석
+ * 시각화". 5-tier rename (2026-08-25, §5 of engine.ts): 달무티→왕(King)
+ * 👑, 총리→귀족(Noble) 🎩, 중농→평민(Commoner) 🌾, 소농노→거지(Beggar) 🪵,
+ * 대농노→노예(Slave) ⛓️, per the task brief's requested emblems.
+ */
 export const ROLE_BADGE: Record<string, { emoji: string; color: string }> = {
-  달무티: { emoji: "👑", color: "text-amber-200" },
-  총리: { emoji: "🎗️", color: "text-sky-200" },
-  중농: { emoji: "🧑‍🌾", color: "text-emerald-200" },
-  소농노: { emoji: "🧺", color: "text-lime-200" },
-  대농노: { emoji: "🧹", color: "text-white/60" },
+  왕: { emoji: "👑", color: "text-amber-200" },
+  귀족: { emoji: "🎩", color: "text-sky-200" },
+  평민: { emoji: "🌾", color: "text-emerald-200" },
+  거지: { emoji: "🪵", color: "text-lime-200" },
+  노예: { emoji: "⛓️", color: "text-white/60" },
 };
 
 export function RoleBadge({ title, className = "" }: { title: string; className?: string }) {
-  const info = ROLE_BADGE[title] ?? ROLE_BADGE["중농"];
+  const info = ROLE_BADGE[title] ?? ROLE_BADGE["평민"];
   return (
     <span
       title={title}

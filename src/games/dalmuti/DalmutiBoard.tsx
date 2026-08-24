@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
 import { CardFace, RoleBadge } from "./CardArt";
-import { detectTaxEvents, FlyingTaxCard, RevolutionBanner, type TaxFlyEvent } from "./DalmutiEffects";
+import { detectCommonerSwapEvents, detectTaxEvents, FlyingTaxCard, RevolutionBanner, type TaxFlyEvent } from "./DalmutiEffects";
 import {
   computeRankings,
   isLegalPlay,
@@ -45,25 +45,35 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   const [taxEvents, setTaxEvents] = useState<TaxFlyEvent[]>([]);
   const [trickFlash, setTrickFlash] = useState<TrickResult | null>(null);
   const [revolutionBanner, setRevolutionBanner] = useState<{ seat: SeatIndex; isGrand: boolean } | null>(null);
+  const [commonerSwapFlash, setCommonerSwapFlash] = useState<{ seatA: SeatIndex; seatB: SeatIndex } | null>(null);
   if (trackedState !== state) {
     const newTax = detectTaxEvents(trackedState, state);
+    const newCommonerSwaps = detectCommonerSwapEvents(trackedState, state);
     const newTrick = state.lastTrickResult !== trackedState.lastTrickResult ? state.lastTrickResult : null;
     const newRevolution = state.revolutionDeclared !== trackedState.revolutionDeclared ? state.revolutionDeclared : null;
     setTrackedState(state);
-    if (newTax.length > 0) {
+    if (newTax.length > 0 || newCommonerSwaps.length > 0) {
       setTaxEvents((prev) => {
         let nextId = (prev.at(-1)?.id ?? 0) + 1;
-        return [...prev, ...newTax.map((e) => ({ ...e, id: nextId++ }))];
+        return [...prev, ...[...newTax, ...newCommonerSwaps].map((e) => ({ ...e, id: nextId++ }))];
       });
     }
     if (newTrick) setTrickFlash(newTrick);
     if (newRevolution) setRevolutionBanner(newRevolution);
+    // Commoner-swap events come in pairs (one per direction) — surface the
+    // "교환 완료" popup once per completed pair, not once per direction.
+    if (newCommonerSwaps.length > 0) setCommonerSwapFlash({ seatA: newCommonerSwaps[0].seat, seatB: newCommonerSwaps[0].targetSeat });
   }
   useEffect(() => {
     if (!trickFlash) return;
     const t = setTimeout(() => setTrickFlash(null), 3200);
     return () => clearTimeout(t);
   }, [trickFlash]);
+  useEffect(() => {
+    if (!commonerSwapFlash) return;
+    const t = setTimeout(() => setCommonerSwapFlash(null), 3200);
+    return () => clearTimeout(t);
+  }, [commonerSwapFlash]);
   const handleTaxDone = useCallback((id: number) => {
     setTaxEvents((prev) => prev.filter((e) => e.id !== id));
   }, []);
@@ -109,7 +119,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
         style={{ background: "linear-gradient(160deg,#241a3a 0%,#160f26 55%,#0a0714 100%)" }}
       >
         <span className="text-5xl">👑</span>
-        <h2 className="text-2xl font-bold text-amber-100">{names[winner.seat]}님이 진정한 달무티가 되었습니다!</h2>
+        <h2 className="text-2xl font-bold text-amber-100">{names[winner.seat]}님이 진정한 왕이 되었습니다!</h2>
         <p className="text-xs text-white/50">손패를 가장 먼저 털어낸 사람이 이기는 단판 승부입니다.</p>
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[420px] border-collapse text-xs">
@@ -161,6 +171,13 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   const isMyTaxTurn = state.phase === "taxReturn" && !!myTribute;
   const isMyRevolutionTurn = state.phase === "revolutionOption" && state.pendingRevolution?.seat === viewerSeat;
 
+  const myCommonerParticipant = state.commonerExchange?.participants.find((p) => p.seat === viewerSeat) ?? null;
+  const isMyCommonerOptInTurn = state.phase === "commonerExchange" && !!myCommonerParticipant && myCommonerParticipant.participate === null;
+  const myCommonerPair = state.commonerExchange?.pairs.find((p) => !p.resolved && (p.seatA === viewerSeat || p.seatB === viewerSeat)) ?? null;
+  const myCommonerPairIsA = myCommonerPair?.seatA === viewerSeat;
+  const myCommonerAlreadyPicked = !!myCommonerPair && (myCommonerPairIsA ? myCommonerPair.cardIdA !== null : myCommonerPair.cardIdB !== null);
+  const isMyCommonerOfferTurn = state.phase === "commonerExchange" && !!myCommonerPair && !myCommonerAlreadyPicked;
+
   const selectedCards = me.hand.filter((c) => selected.has(c.id));
   const selectedNonJokerRanks = new Set(selectedCards.filter((c) => !c.isJoker).map((c) => c.rank));
 
@@ -198,11 +215,14 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
         if (next.size >= myTribute.givenCardIds.length) return prev;
         return new Set(next).add(card.id);
       });
+    } else if (state.phase === "commonerExchange" && isMyCommonerOfferTurn) {
+      setSelected((prev) => (prev.has(card.id) ? new Set() : new Set([card.id])));
     }
   }
 
   const canSubmitPlay = state.phase === "trick" && isMyTrickTurn && selected.size > 0 && isLegalPlay(state, viewerSeat, Array.from(selected));
   const canReturnTax = isMyTaxTurn && !!myTribute && selected.size === myTribute.givenCardIds.length;
+  const canOfferCommonerCard = isMyCommonerOfferTurn && selected.size === 1;
 
   function submitPlay() {
     if (!canSubmitPlay) return;
@@ -216,12 +236,18 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     if (!canReturnTax) return;
     onAction({ type: "returnTax", seat: viewerSeat, cardIds: Array.from(selected) });
   }
+  function submitCommonerOffer() {
+    if (!canOfferCommonerCard) return;
+    onAction({ type: "commonerOfferCard", seat: viewerSeat, cardId: Array.from(selected)[0] });
+  }
 
-  const cardIsClickable = (state.phase === "trick" && isMyTrickTurn) || (state.phase === "taxReturn" && isMyTaxTurn);
+  const cardIsClickable =
+    (state.phase === "trick" && isMyTrickTurn) || (state.phase === "taxReturn" && isMyTaxTurn) || (state.phase === "commonerExchange" && isMyCommonerOfferTurn);
   const cardIsHighlighted = (card: Card) => {
     if (selected.has(card.id)) return true;
     if (state.phase === "trick") return isMyTrickTurn && isSelectableForTrick(card);
     if (state.phase === "taxReturn") return isMyTaxTurn && !!myTribute && selected.size < myTribute.givenCardIds.length;
+    if (state.phase === "commonerExchange") return isMyCommonerOfferTurn && selected.size < 1;
     return false;
   };
 
@@ -282,6 +308,58 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
           {isMyTaxTurn && myTribute && (
             <p className="mt-1 text-center font-medium text-amber-100">
               🫵 아래 손패에서 돌려줄 카드 {myTribute.givenCardIds.length}장을 고른 뒤 확정하세요.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Commoner (평민) mutual exchange phase */}
+      {state.phase === "commonerExchange" && state.commonerExchange && (
+        <div className="flex flex-col gap-1.5 rounded-xl border border-emerald-300/30 bg-emerald-400/10 px-3 py-2.5 text-xs">
+          <p className="text-center font-semibold text-emerald-200">🌾 평민 카드 교환</p>
+          {commonerSwapFlash && (
+            <p className="text-center text-emerald-100">
+              ✅ {names[commonerSwapFlash.seatA]}님과 {names[commonerSwapFlash.seatB]}님이 카드를 교환했습니다!
+            </p>
+          )}
+          <div className="flex flex-col gap-1">
+            {state.commonerExchange.participants.map((p) => {
+              const pair = state.commonerExchange!.pairs.find((pr) => pr.seatA === p.seat || pr.seatB === p.seat);
+              let status: string;
+              if (p.participate === null) status = "⏳ 참여 여부 결정 중";
+              else if (p.participate === false) status = "🙅 교환 미참여";
+              else if (!pair) status = "🙅 짝 없음(참여자 홀수)";
+              else if (pair.resolved) status = "✅ 교환 완료";
+              else status = "⏳ 카드 선택 중";
+              return (
+                <p key={p.seat} className="text-center text-white/70">
+                  {names[p.seat]}: {status}
+                </p>
+              );
+            })}
+          </div>
+          {isMyCommonerOptInTurn && (
+            <div className="mt-1 flex flex-col items-center gap-2">
+              <p className="font-medium text-emerald-100">🫵 다른 평민과 카드 1장을 맞교환하시겠습니까?</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => onAction({ type: "commonerOptIn", seat: viewerSeat, participate: true })}
+                  className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-bold text-black hover:bg-emerald-400"
+                >
+                  🤝 교환 요청
+                </button>
+                <button
+                  onClick={() => onAction({ type: "commonerOptIn", seat: viewerSeat, participate: false })}
+                  className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 hover:border-white/40"
+                >
+                  ❌ 거절
+                </button>
+              </div>
+            </div>
+          )}
+          {isMyCommonerOfferTurn && (
+            <p className="mt-1 text-center font-medium text-emerald-100">
+              🫵 상대에게 줄 카드 1장을 아래 손패에서 골라 제안하세요 (상대의 선택은 서로 확정 전까지 비공개입니다).
             </p>
           )}
         </div>
@@ -414,6 +492,17 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
               className="rounded-full bg-amber-500 px-5 py-2 text-xs font-bold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-30"
             >
               💰 {selected.size}/{myTribute?.givenCardIds.length ?? 0}장 돌려주기
+            </button>
+          </div>
+        )}
+        {state.phase === "commonerExchange" && isMyCommonerOfferTurn && (
+          <div className="mt-3 flex justify-center">
+            <button
+              onClick={submitCommonerOffer}
+              disabled={!canOfferCommonerCard}
+              className="rounded-full bg-emerald-500 px-5 py-2 text-xs font-bold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              🌾 {selected.size}/1장 제안하기
             </button>
           </div>
         )}

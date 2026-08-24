@@ -27,11 +27,11 @@
  *
  * §2 note on player count: the rulebook never states a min/max player count
  * (a physical 80-card deck is normally played 4-8). This engine allows
- * 3-8 — 3 is the smallest count where the 대농노↔달무티 tax exchange is
- * meaningful, and 8 keeps every player's hand a non-trivial size (80/8=10
- * cards each). At exactly 3 players the "총리"/"소농노" tax exchange target
- * the same seat (rank position 1 of 0..2), so that second exchange is
- * skipped entirely — see `computeTributes`.
+ * 3-8 — 3 is the smallest count where the 노예(Slave)↔왕(King) tax exchange
+ * is meaningful, and 8 keeps every player's hand a non-trivial size
+ * (80/8=10 cards each). At exactly 3 players the "귀족(Noble)"/"거지
+ * (Beggar)" tax exchange target the same seat (rank position 1 of 0..2), so
+ * that second exchange is skipped entirely — see `computeTributes`.
  *
  * §3 note on trick-passing: rulebook §3-4-B-2 explicitly says a pass within
  * one trick does **not** lock you out of that same trick — "한 트릭 내에서
@@ -48,6 +48,35 @@
  * mirrors) is that the next still-active seat after the empty-handed winner
  * leads the next trick instead — implemented in `pass`'s trick-resolution
  * branch.
+ *
+ * §5 (2026-08-25) 5-tier role rename + commoner mutual exchange, resolved via
+ * AskUserQuestion (task brief asked for 왕(King)/귀족(Noble)/평민(Commoner)/
+ * 거지(Beggar)/노예(Slave) but conflicted with itself on tribute pairing —
+ * see below):
+ * - Position *titles* only changed (달무티→왕, 총리→귀족, 중농→평민,
+ *   소농노→거지, 대농노→노예, all still via `rankTitle`); the underlying
+ *   slot table, forced-tribute pairing (best↔worst 2 cards, 2nd↔2nd-worst 1
+ *   card, both auto-selecting the giver's lowest-numbered non-joker cards,
+ *   2nd exchange skipped at n=3), and card-rank flavor names in
+ *   `CardArt.tsx`'s `CARD_RANK_INFO` (e.g. rank 1 = "위대한 달무티", a card
+ *   name, not a player title) are all unchanged — user confirmed reusing the
+ *   existing 중농 slot math and the existing best↔worst pairing rather than
+ *   the brief's self-contradictory literal wording (왕↔거지 + 귀족↔노예).
+ *   Jokers stay exempt from the forced tribute's auto-selected cards too
+ *   (user confirmed keeping that existing rulebook-based behavior).
+ * - New: a voluntary `commonerExchange` phase between `taxReturn` and
+ *   `trick`, for 평민(Commoner)-tier seats only (positions strictly between
+ *   1 and n-2 — 0 commoners at n=3/4, up to 4 at n=8). Each commoner
+ *   independently opts in/out (no partner selection, per user confirmation);
+ *   the engine pairs everyone who opted in, two at a time in rank order,
+ *   leaving an odd leftover unpaired; each paired seat then privately picks
+ *   one card to swap, and the swap applies the instant both sides have
+ *   picked. Fewer than 2 opted-in commoners (or fewer than 2 commoner seats
+ *   at all) skips straight to `trick` — see `enterCommonerExchangePhase`.
+ *   Runs even after a revolution (which only cancels the *forced* tribute,
+ *   not this separate voluntary peer trade) — not covered by the task
+ *   brief; documented default, same "reasoned convention over another
+ *   question round" approach as §4 above.
  *
  * Same online-multiplayer trust model as every other game in this project:
  * every connected client computes and holds the FULL state (every seat's
@@ -84,9 +113,9 @@ export interface PlayerState {
   finishedAtOrder: number | null;
 }
 
-export type Phase = "revolutionOption" | "taxReturn" | "trick" | "gameOver";
+export type Phase = "revolutionOption" | "taxReturn" | "commonerExchange" | "trick" | "gameOver";
 
-/** The one seat holding both jokers right after the deal, and whether declaring flips every rank (only true when that seat sits at the 대농노 position). */
+/** The one seat holding both jokers right after the deal, and whether declaring flips every rank (only true when that seat sits at the 노예(Slave) position). */
 export interface RevolutionInfo {
   seat: SeatIndex;
   isGrand: boolean;
@@ -106,6 +135,33 @@ export interface TributeRecord {
   givenCardIds: string[];
   returnedCardIds: string[];
   resolved: boolean;
+}
+
+/** One 평민(Commoner) seat's opt-in decision for the voluntary mutual exchange (§5). `participate` stays null until the seat answers. */
+export interface CommonerParticipant {
+  seat: SeatIndex;
+  participate: boolean | null;
+}
+
+/**
+ * One paired swap between two commoners who both opted in (§5). `cardIdA`/
+ * `cardIdB` stay null until that side privately picks a card — the swap
+ * itself applies the instant both sides have picked, so a player never sees
+ * their partner's choice ahead of committing their own ("비공개로
+ * 맞교환" per the task brief).
+ */
+export interface CommonerExchangePair {
+  seatA: SeatIndex;
+  seatB: SeatIndex;
+  cardIdA: string | null;
+  cardIdB: string | null;
+  resolved: boolean;
+}
+
+/** State for the voluntary `commonerExchange` phase (§5) — null outside that phase. */
+export interface CommonerExchangeState {
+  participants: CommonerParticipant[];
+  pairs: CommonerExchangePair[];
 }
 
 export interface TrickPlay {
@@ -136,12 +192,14 @@ export interface TrickResult {
 export interface DalmutiState {
   playerCount: number;
   players: PlayerState[];
-  /** rankOrder[0] = 달무티's seat .. rankOrder[n-1] = 대농노's seat. Decided once at game start; only a grand revolution (§ above) reverses it, also once. */
+  /** rankOrder[0] = 왕(King)'s seat .. rankOrder[n-1] = 노예(Slave)'s seat. Decided once at game start; only a grand revolution (§ above) reverses it, also once. */
   rankOrder: SeatIndex[];
   phase: Phase;
   pendingRevolution: RevolutionInfo | null;
   /** Set once (either immediately at deal, or after `declineRevolution`); empty forever if a revolution was declared. */
   tributes: TributeRecord[];
+  /** Non-null only during the `commonerExchange` phase (§5); null before it starts and after it resolves into `trick`. */
+  commonerExchange: CommonerExchangeState | null;
   trick: CurrentTrick;
   activeSeat: SeatIndex;
   /** Seats in the order they emptied their hand (or were auto-assigned last place). Length === playerCount only once phase is "gameOver". */
@@ -155,6 +213,8 @@ export type EngineAction =
   | { type: "declareRevolution"; seat: SeatIndex }
   | { type: "declineRevolution"; seat: SeatIndex }
   | { type: "returnTax"; seat: SeatIndex; cardIds: string[] }
+  | { type: "commonerOptIn"; seat: SeatIndex; participate: boolean }
+  | { type: "commonerOfferCard"; seat: SeatIndex; cardId: string }
   | { type: "playCards"; seat: SeatIndex; cardIds: string[] }
   | { type: "pass"; seat: SeatIndex };
 
@@ -176,13 +236,13 @@ export function buildDeck(): Card[] {
   return deck;
 }
 
-/** Player-standing title for a rank position (0-based, 0 = 달무티). See §2 for why n=3 folds 소농노 into 총리. */
+/** Player-standing title for a rank position (0-based, 0 = 왕/King). See §2 for why n=3 folds 거지(Beggar) into 귀족(Noble), and §5 for the 2026-08-25 rename from the rulebook's 달무티/총리/중농/소농노/대농노 titles. */
 export function rankTitle(rankPosition: number, playerCount: number): string {
-  if (rankPosition === 0) return "달무티";
-  if (rankPosition === playerCount - 1) return "대농노";
-  if (rankPosition === 1) return "총리";
-  if (rankPosition === playerCount - 2) return "소농노";
-  return "중농";
+  if (rankPosition === 0) return "왕";
+  if (rankPosition === playerCount - 1) return "노예";
+  if (rankPosition === 1) return "귀족";
+  if (rankPosition === playerCount - 2) return "거지";
+  return "평민";
 }
 
 export function rankPositionOfSeat(state: DalmutiState, seat: SeatIndex): number {
@@ -197,7 +257,7 @@ function activeSeatsWithCards(players: PlayerState[]): SeatIndex[] {
   return players.filter((p) => p.finishedAtOrder === null).map((p) => p.seat);
 }
 
-/** Next seat in rank order (clockwise from 달무티), skipping any seat that has already emptied its hand. */
+/** Next seat in rank order (clockwise from the 왕/King), skipping any seat that has already emptied its hand. */
 function nextActiveSeatInRankOrder(state: DalmutiState, fromSeat: SeatIndex): SeatIndex {
   const order = state.rankOrder;
   const n = order.length;
@@ -222,7 +282,7 @@ function determineInitialRankOrder(playerCount: number, rng: () => number): Seat
   return shuffle(seats, rng);
 }
 
-/** Rulebook §3-1: shuffle the full deck and deal evenly starting from 달무티, clockwise; any remainder is set aside untouched for the rest of the game. */
+/** Rulebook §3-1: shuffle the full deck and deal evenly starting from the 왕(King), clockwise; any remainder is set aside untouched for the rest of the game. */
 function dealCards(rankOrder: SeatIndex[], rng: () => number): Map<SeatIndex, Card[]> {
   const deck = shuffle(buildDeck(), rng);
   const n = rankOrder.length;
@@ -241,7 +301,7 @@ function selectHighestCards(hand: Card[], count: number): Card[] {
   return sorted.slice(0, count);
 }
 
-/** Rulebook §3: 대농노→달무티 (2 cards) always; 소농노→총리 (1 card) only when those are distinct seats (n >= 4, see §2). */
+/** Rulebook §3 (roles renamed per §5): 노예(Slave)→왕(King) (2 cards) always; 거지(Beggar)→귀족(Noble) (1 card) only when those are distinct seats (n >= 4, see §2). */
 function computeTributes(players: PlayerState[], rankOrder: SeatIndex[]): TributeRecord[] {
   const n = rankOrder.length;
   const dalmutiSeat = rankOrder[0];
@@ -310,6 +370,7 @@ export function startGame(playerCount: number, seed: number): DalmutiState {
   const base: Omit<DalmutiState, "phase" | "pendingRevolution" | "tributes" | "players"> = {
     playerCount,
     rankOrder,
+    commonerExchange: null,
     trick: emptyTrick(rankOrder[0]),
     activeSeat: rankOrder[0],
     finishOrder: [],
@@ -348,15 +409,16 @@ function declareRevolution(state: DalmutiState, seat: SeatIndex): DalmutiState {
   if (state.phase !== "revolutionOption" || !state.pendingRevolution || state.pendingRevolution.seat !== seat) return state;
   const { isGrand } = state.pendingRevolution;
   const rankOrder = isGrand ? [...state.rankOrder].reverse() : state.rankOrder;
-  return {
+  // Revolution cancels the *forced* tribute only (rulebook §3-2) — the
+  // voluntary commoner exchange (§5) still runs, against the new rankOrder
+  // if this was a grand revolution.
+  return enterCommonerExchangePhase({
     ...state,
     rankOrder,
-    phase: "trick",
     pendingRevolution: null,
     revolutionDeclared: { seat, isGrand },
-    trick: emptyTrick(rankOrder[0]),
-    activeSeat: rankOrder[0],
-  };
+    tributes: [],
+  });
 }
 
 function declineRevolution(state: DalmutiState, seat: SeatIndex): DalmutiState {
@@ -387,15 +449,96 @@ function returnTax(state: DalmutiState, seat: SeatIndex, cardIds: string[]): Dal
   });
   const tributes = state.tributes.map((t) => (t === record ? { ...t, returnedCardIds: cardIds, resolved: true } : t));
   const allResolved = tributes.every((t) => t.resolved);
+  const next = { ...state, players, tributes };
 
+  return allResolved ? enterCommonerExchangePhase(next) : { ...next, phase: "taxReturn" as const };
+}
+
+// ---------------------------------------------------------------------------
+// Commoner mutual exchange (§5) — voluntary, 평민(Commoner)-tier seats only.
+// ---------------------------------------------------------------------------
+
+function startTrickPhase(state: DalmutiState): DalmutiState {
+  return { ...state, phase: "trick", commonerExchange: null, trick: emptyTrick(state.rankOrder[0]), activeSeat: state.rankOrder[0] };
+}
+
+/** Seats at rank positions strictly between 귀족(Noble, position 1) and 거지(Beggar, position n-2) — exactly the positions `rankTitle` labels 평민(Commoner). Empty for n <= 4. */
+function commonerSeats(rankOrder: SeatIndex[]): SeatIndex[] {
+  const n = rankOrder.length;
+  const seats: SeatIndex[] = [];
+  for (let pos = 2; pos <= n - 3; pos++) seats.push(rankOrder[pos]);
+  return seats;
+}
+
+/** Entered after the forced tribute resolves (or is skipped by a revolution). Fewer than 2 commoners means no possible pair, so it skips straight to `trick`. */
+function enterCommonerExchangePhase(state: DalmutiState): DalmutiState {
+  const seats = commonerSeats(state.rankOrder);
+  if (seats.length < 2) return startTrickPhase(state);
   return {
     ...state,
-    players,
-    tributes,
-    phase: allResolved ? "trick" : "taxReturn",
-    trick: allResolved ? emptyTrick(state.rankOrder[0]) : state.trick,
-    activeSeat: allResolved ? state.rankOrder[0] : state.activeSeat,
+    phase: "commonerExchange",
+    commonerExchange: { participants: seats.map((seat) => ({ seat, participate: null })), pairs: [] },
   };
+}
+
+function commonerOptIn(state: DalmutiState, seat: SeatIndex, participate: boolean): DalmutiState {
+  if (state.phase !== "commonerExchange" || !state.commonerExchange) return state;
+  const ex = state.commonerExchange;
+  const idx = ex.participants.findIndex((p) => p.seat === seat);
+  if (idx === -1 || ex.participants[idx].participate !== null) return state;
+
+  const participants = ex.participants.map((p, i) => (i === idx ? { ...p, participate } : p));
+  if (participants.some((p) => p.participate === null)) {
+    return { ...state, commonerExchange: { ...ex, participants } };
+  }
+
+  // Everyone has answered — pair up every seat that opted in, two at a time
+  // in rank order (no partner selection, per user confirmation); an odd
+  // leftover simply sits out with no exchange this round.
+  const opted = participants.filter((p) => p.participate).map((p) => p.seat);
+  opted.sort((a, b) => state.rankOrder.indexOf(a) - state.rankOrder.indexOf(b));
+  const pairs: CommonerExchangePair[] = [];
+  for (let i = 0; i + 1 < opted.length; i += 2) {
+    pairs.push({ seatA: opted[i], seatB: opted[i + 1], cardIdA: null, cardIdB: null, resolved: false });
+  }
+
+  if (pairs.length === 0) return startTrickPhase(state);
+  return { ...state, commonerExchange: { participants, pairs } };
+}
+
+function commonerOfferCard(state: DalmutiState, seat: SeatIndex, cardId: string): DalmutiState {
+  if (state.phase !== "commonerExchange" || !state.commonerExchange) return state;
+  const ex = state.commonerExchange;
+  const pairIdx = ex.pairs.findIndex((p) => !p.resolved && (p.seatA === seat || p.seatB === seat));
+  if (pairIdx === -1) return state;
+  const pair = ex.pairs[pairIdx];
+  const isA = pair.seatA === seat;
+  if (isA ? pair.cardIdA !== null : pair.cardIdB !== null) return state;
+  const player = findPlayer(state, seat);
+  if (!player || !player.hand.some((c) => c.id === cardId)) return state;
+
+  let updatedPair: CommonerExchangePair = isA ? { ...pair, cardIdA: cardId } : { ...pair, cardIdB: cardId };
+  let players = state.players;
+
+  // Both sides have now privately picked — swap immediately (neither side
+  // ever observes the other's pick before committing their own, satisfying
+  // the task brief's "비공개로 맞교환").
+  if (updatedPair.cardIdA !== null && updatedPair.cardIdB !== null) {
+    const cardAId = updatedPair.cardIdA;
+    const cardBId = updatedPair.cardIdB;
+    const cardFromA = findPlayer(state, pair.seatA)!.hand.find((c) => c.id === cardAId)!;
+    const cardFromB = findPlayer(state, pair.seatB)!.hand.find((c) => c.id === cardBId)!;
+    players = state.players.map((p) => {
+      if (p.seat === pair.seatA) return { ...p, hand: [...p.hand.filter((c) => c.id !== cardAId), cardFromB] };
+      if (p.seat === pair.seatB) return { ...p, hand: [...p.hand.filter((c) => c.id !== cardBId), cardFromA] };
+      return p;
+    });
+    updatedPair = { ...updatedPair, resolved: true };
+  }
+
+  const pairs = ex.pairs.map((p, i) => (i === pairIdx ? updatedPair : p));
+  const next = { ...state, players, commonerExchange: { ...ex, pairs } };
+  return pairs.every((p) => p.resolved) ? startTrickPhase(next) : next;
 }
 
 // ---------------------------------------------------------------------------
@@ -543,6 +686,10 @@ export function applyAction(state: DalmutiState, action: EngineAction): DalmutiS
       return declineRevolution(state, action.seat);
     case "returnTax":
       return returnTax(state, action.seat, action.cardIds);
+    case "commonerOptIn":
+      return commonerOptIn(state, action.seat, action.participate);
+    case "commonerOfferCard":
+      return commonerOfferCard(state, action.seat, action.cardId);
     case "playCards":
       return playCards(state, action.seat, action.cardIds);
     case "pass":
@@ -569,9 +716,10 @@ export function computeRankings(state: DalmutiState): RankedPlayer[] {
 // ---------------------------------------------------------------------------
 // AI bot support (ARCHITECTURE.md §7) — getValidMoves / scoreMove /
 // chooseBotAction(state, seat, level, rng?). Every phase (revolution
-// decision, tax return, trick play/pass) only ever asks the bot to judge
-// its own hand + already-public trick/tribute state — no other seat's
-// hidden hand is ever read.
+// decision, tax return, commoner exchange opt-in/card pick, trick
+// play/pass) only ever asks the bot to judge its own hand +
+// already-public trick/tribute/exchange state — no other seat's hidden
+// hand is ever read.
 // ---------------------------------------------------------------------------
 
 /** All k-element subsets of `items` (order-independent, small k only — used for tax-return combos where k is 1 or 2). */
@@ -620,6 +768,28 @@ export function getValidMoves(state: DalmutiState, seat: SeatIndex): EngineActio
     ).map((cardIds) => ({ type: "returnTax", seat, cardIds }) as EngineAction);
   }
 
+  if (state.phase === "commonerExchange") {
+    const ex = state.commonerExchange;
+    if (!ex) return [];
+    const participant = ex.participants.find((p) => p.seat === seat);
+    if (participant && participant.participate === null) {
+      return [
+        { type: "commonerOptIn", seat, participate: true },
+        { type: "commonerOptIn", seat, participate: false },
+      ];
+    }
+    const pair = ex.pairs.find((p) => !p.resolved && (p.seatA === seat || p.seatB === seat));
+    if (pair) {
+      const isA = pair.seatA === seat;
+      const alreadyPicked = isA ? pair.cardIdA : pair.cardIdB;
+      if (alreadyPicked === null) {
+        const player = findPlayer(state, seat);
+        if (player) return player.hand.map((c) => ({ type: "commonerOfferCard", seat, cardId: c.id }) as EngineAction);
+      }
+    }
+    return [];
+  }
+
   if (state.phase === "trick") {
     if (state.activeSeat !== seat) return [];
     const moves: EngineAction[] = [];
@@ -651,17 +821,17 @@ export function scoreMove(state: DalmutiState, seat: SeatIndex, move: EngineActi
   if (move.type === "declareRevolution" || move.type === "declineRevolution") {
     const info = state.pendingRevolution;
     if (!info) return 0;
-    if (info.isGrand) return move.type === "declareRevolution" ? 1000 : -1000; // flips this seat straight to 달무티.
+    if (info.isGrand) return move.type === "declareRevolution" ? 1000 : -1000; // flips this seat straight to 왕(King).
     // Non-grand: declaring skips the tax phase entirely this round — good
     // for whoever would have owed tribute, bad for whoever would have
     // received it.
     const pos = rankPositionOfSeat(state, seat);
     const n = state.playerCount;
     let delta = 0;
-    if (pos === n - 1) delta = 60; // 대농노: skips giving away its 2 best cards.
-    else if (pos === n - 2 && n >= 4) delta = 30; // 소농노: skips giving away 1 card.
-    else if (pos === 0) delta = -60; // 달무티: loses its free 2-card tribute.
-    else if (pos === 1 && n >= 4) delta = -30; // 총리: loses its free 1-card tribute.
+    if (pos === n - 1) delta = 60; // 노예(Slave): skips giving away its 2 best cards.
+    else if (pos === n - 2 && n >= 4) delta = 30; // 거지(Beggar): skips giving away 1 card.
+    else if (pos === 0) delta = -60; // 왕(King): loses its free 2-card tribute.
+    else if (pos === 1 && n >= 4) delta = -30; // 귀족(Noble): loses its free 1-card tribute.
     return move.type === "declareRevolution" ? delta : -delta;
   }
 
@@ -675,6 +845,20 @@ export function scoreMove(state: DalmutiState, seat: SeatIndex, move: EngineActi
       score += card.isJoker ? -1000 : card.rank;
     }
     return score;
+  }
+
+  if (move.type === "commonerOptIn") {
+    // Mildly prefer trying the swap — a real gamble either way since a
+    // commoner can't see what their (randomly matched) partner will offer,
+    // so there's no sharper signal to score this on.
+    return move.participate ? 5 : 0;
+  }
+
+  if (move.type === "commonerOfferCard") {
+    // Same "give away the weakest card, keep jokers" heuristic as returnTax.
+    const card = player.hand.find((c) => c.id === move.cardId);
+    if (!card) return 0;
+    return card.isJoker ? -1000 : card.rank;
   }
 
   if (move.type === "pass") {

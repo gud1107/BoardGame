@@ -26,9 +26,11 @@ import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficul
 /**
  * Whose decision `useBotAutoplay` should drive right now. `taxReturn` can
  * have up to two seats with an independent unresolved tribute to return at
- * once (달무티 and 총리) — same "lowest seat among the undecided" workaround
- * every other simultaneous-decision phase in this project uses (see
- * ARCHITECTURE.md §7.2/§7.5 note on forSale/grid-poker).
+ * once (왕 and 귀족), and `commonerExchange` (§5, 2026-08-25) can likewise
+ * have several 평민 seats with an independent pending opt-in or card pick —
+ * same "lowest seat among the undecided" workaround every other
+ * simultaneous-decision phase in this project uses (see ARCHITECTURE.md
+ * §7.2/§7.5 note on forSale/grid-poker).
  */
 function dalmutiCurrentActor(state: DalmutiState): SeatIndex | null {
   if (state.phase === "revolutionOption") return state.pendingRevolution?.seat ?? null;
@@ -36,6 +38,19 @@ function dalmutiCurrentActor(state: DalmutiState): SeatIndex | null {
     const unresolved = state.tributes.filter((t) => !t.resolved);
     if (unresolved.length === 0) return null;
     return Math.min(...unresolved.map((t) => t.toSeat));
+  }
+  if (state.phase === "commonerExchange") {
+    const ex = state.commonerExchange;
+    if (!ex) return null;
+    const undecided = ex.participants.filter((p) => p.participate === null).map((p) => p.seat);
+    if (undecided.length > 0) return Math.min(...undecided);
+    const needsCard: SeatIndex[] = [];
+    for (const pair of ex.pairs) {
+      if (pair.resolved) continue;
+      if (pair.cardIdA === null) needsCard.push(pair.seatA);
+      if (pair.cardIdB === null) needsCard.push(pair.seatB);
+    }
+    return needsCard.length > 0 ? Math.min(...needsCard) : null;
   }
   if (state.phase === "trick") return state.activeSeat;
   return null;
@@ -659,7 +674,7 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
     return (
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">👑</span>
-        <p className="text-white/80">{finalResult.winnerName} 님이 진정한 달무티가 되어 게임이 끝났어요.</p>
+        <p className="text-white/80">{finalResult.winnerName} 님이 진정한 왕이 되어 게임이 끝났어요.</p>
         <div className="flex gap-2">
           <button onClick={handleLeave} className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30">
             나가기

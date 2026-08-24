@@ -16,18 +16,21 @@ import type { Card, DalmutiState, SeatIndex } from "./engine";
  * the same flight/banner for the same state change — not just whoever
  * tapped the button.
  *
- * Two independent event kinds (task brief §2 "세금 카드 교환 애니메이션" and
- * "광대 2장 보유 시 '혁명!' 이펙트"):
+ * Three independent event kinds (task brief §2 "세금 카드 교환 애니메이션",
+ * "광대 2장 보유 시 '혁명!' 이펙트", and (2026-08-25, §5) the 평민 mutual
+ * exchange's own "카드 이동 애니메이션"):
  * - `TaxFlyEvent`: a card sliding between two seat rows, once for the
- *   automatic forced tribute (the instant tax phase starts) and again for
- *   whatever the recipient chooses to give back (`returnTax`).
+ *   automatic forced tribute (the instant tax phase starts), again for
+ *   whatever the recipient chooses to give back (`returnTax`), and — reusing
+ *   the same component — once per direction when a 평민(Commoner) pair's
+ *   mutual swap completes (`detectCommonerSwapEvents`).
  * - Revolution: a full-board banner via `RevolutionBanner`, driven directly
  *   off `state.revolutionDeclared` in the caller (no diff helper needed —
  *   it's a single nullable field, not a growing list).
  */
 
 // ---------------------------------------------------------------------------
-// Tax tribute flight
+// Tax tribute flight (also reused for the commoner mutual exchange, §5)
 // ---------------------------------------------------------------------------
 
 export interface TaxFlyEvent {
@@ -37,7 +40,7 @@ export interface TaxFlyEvent {
   /** Seat the card is flying TO. */
   targetSeat: SeatIndex;
   cards: Card[];
-  kind: "give" | "return";
+  kind: "give" | "return" | "commoner";
 }
 
 function findCardsByIds(state: DalmutiState, holderSeat: SeatIndex, cardIds: string[]): Card[] {
@@ -75,6 +78,45 @@ export function detectTaxEvents(prev: DalmutiState, next: DalmutiState): Omit<Ta
     if (pt && !pt.resolved && nt.resolved) {
       events.push({ seat: nt.toSeat, targetSeat: nt.fromSeat, cards: findCardsByIds(next, nt.fromSeat, nt.returnedCardIds), kind: "return" });
     }
+  }
+
+  return events;
+}
+
+/**
+ * Detects a 평민(Commoner) pair's swap completing (§5) by diffing two
+ * consecutive states' `commonerExchange.pairs` against the actual hands.
+ * `next.commonerExchange` may already be null by the time this runs — the
+ * phase advances to `trick` the instant the *last* pending pair resolves —
+ * so this reads `prev`'s pair list (still around) and confirms the swap
+ * actually landed by checking whether the giver's hand picked up a new
+ * card, rather than trusting a `resolved` flag that might already be gone.
+ */
+export function detectCommonerSwapEvents(prev: DalmutiState, next: DalmutiState): Omit<TaxFlyEvent, "id">[] {
+  if (prev === next) return [];
+  const prevPairs = prev.commonerExchange?.pairs ?? [];
+  const events: Omit<TaxFlyEvent, "id">[] = [];
+
+  for (const pair of prevPairs) {
+    if (pair.resolved) continue;
+    const aPicked = pair.cardIdA !== null;
+    const bPicked = pair.cardIdB !== null;
+    if (aPicked === bPicked) continue; // neither side had picked yet — nothing could have completed on this transition
+
+    const giverSeat = aPicked ? pair.seatA : pair.seatB;
+    const otherSeat = aPicked ? pair.seatB : pair.seatA;
+    const givenCardId = (aPicked ? pair.cardIdA : pair.cardIdB)!;
+
+    const giverHandBeforeIds = new Set((prev.players.find((p) => p.seat === giverSeat)?.hand ?? []).map((c) => c.id));
+    const giverHandAfter = next.players.find((p) => p.seat === giverSeat)?.hand ?? [];
+    const receivedCard = giverHandAfter.find((c) => !giverHandBeforeIds.has(c.id));
+    if (!receivedCard) continue; // the other side hasn't picked yet — swap hasn't happened
+
+    const givenCard = (next.players.find((p) => p.seat === otherSeat)?.hand ?? []).find((c) => c.id === givenCardId);
+    if (!givenCard) continue; // defensive — should always be found alongside receivedCard
+
+    events.push({ seat: giverSeat, targetSeat: otherSeat, cards: [givenCard], kind: "commoner" });
+    events.push({ seat: otherSeat, targetSeat: giverSeat, cards: [receivedCard], kind: "commoner" });
   }
 
   return events;
@@ -136,8 +178,12 @@ export function FlyingTaxCard({
           <CardFace key={c.id} card={c} className="scale-75" />
         ))}
       </div>
-      <p className={`mt-1 text-center text-[10px] font-bold ${event.kind === "give" ? "text-amber-300" : "text-sky-300"}`}>
-        {event.kind === "give" ? "세금 진상" : "하사품"}
+      <p
+        className={`mt-1 text-center text-[10px] font-bold ${
+          event.kind === "give" ? "text-amber-300" : event.kind === "return" ? "text-sky-300" : "text-emerald-300"
+        }`}
+      >
+        {event.kind === "give" ? "세금 진상" : event.kind === "return" ? "하사품" : "평민 교환"}
       </p>
     </div>,
     document.body,
