@@ -93,3 +93,41 @@ export function RoleBadge({ title, className = "" }: { title: string; className?
     </span>
   );
 }
+
+/**
+ * Card-exchange VFX tiers (2026-08-25 후속 세션, task brief "신분별 계급 아우라
+ * & 파티클") — which forced-tribute pairing (or the voluntary 평민 swap) a
+ * flying/masked card belongs to, driving both its aura/particle color in
+ * `DalmutiEffects.tsx`'s `FlyingExchangeCard` and its sound in
+ * `lib/audio/soundEngine.ts`'s `playExchangeLaunch`/`playExchangeArrival`.
+ * "king" = 노예↔왕 tribute, "noble" = 거지↔귀족 tribute, "commoner" = the
+ * voluntary 평민↔평민 mutual swap.
+ */
+export type AuraTier = "king" | "noble" | "commoner";
+
+export const EXCHANGE_TIER_STYLE: Record<AuraTier, { spark: string; glow: string; ring: string; icon: string }> = {
+  king: { spark: "#fde68a", glow: "rgba(251,191,36,0.65)", ring: "border-amber-300/70", icon: "👑" },
+  noble: { spark: "#e9d5ff", glow: "rgba(196,181,253,0.6)", ring: "border-fuchsia-200/60", icon: "🎩" },
+  commoner: { spark: "#6ee7b7", glow: "rgba(52,211,153,0.6)", ring: "border-emerald-300/60", icon: "🌾" },
+};
+
+/**
+ * Face-down placeholder for a card mid-exchange, rendered to every viewer
+ * who isn't a party to that specific exchange (task brief "카드 교환 내용 타
+ * 플레이어 비공개 처리" — see `DalmutiEffects.tsx`'s module doc for the
+ * documented limit of this masking: UI-layer only, same as every other
+ * secret-info game in this project, per docs/architecture.md §2). Same
+ * footprint as `CardFace` so it drops into the same flight/hand layouts.
+ */
+export function CardBack({ tier, className = "" }: { tier: AuraTier; className?: string }) {
+  const style = EXCHANGE_TIER_STYLE[tier];
+  return (
+    <div
+      className={`relative flex h-24 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border ${style.ring} ${className}`}
+      style={{ background: "linear-gradient(160deg,#241a3a 0%,#160f26 55%,#0a0714 100%)", boxShadow: `0 0 14px -2px ${style.glow}` }}
+    >
+      <span className="text-lg leading-none">{style.icon}</span>
+      <span className="text-xl leading-none font-black text-white/40">?</span>
+    </div>
+  );
+}

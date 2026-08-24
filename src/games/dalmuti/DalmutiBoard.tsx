@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
+import CardExchangeModal from "./CardExchangeModal";
 import { CardFace, RoleBadge } from "./CardArt";
-import { detectCommonerSwapEvents, detectTaxEvents, FlyingTaxCard, RevolutionBanner, type TaxFlyEvent } from "./DalmutiEffects";
+import { detectCommonerSwapEvents, detectTaxEvents, FlyingExchangeCard, RevolutionBanner, type TaxFlyEvent } from "./DalmutiEffects";
 import {
   computeRankings,
   isLegalPlay,
@@ -37,6 +39,25 @@ export interface DalmutiBoardProps {
 export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: DalmutiBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Card-exchange VFX (2026-08-25 후속 세션) added this game's first sound —
+  // browsers refuse to start audio before a user gesture, so every local
+  // action dispatch below routes through this instead of `onAction`
+  // directly, unlocking the shared AudioContext on the same click that
+  // fires the action (same `unlock()`-inside-a-handler technique Perudo
+  // uses for its dice SFX).
+  const [muted, setMuted] = useState(() => getSoundEngine().isMuted());
+  function toggleMuted() {
+    const next = !muted;
+    getSoundEngine().setMuted(next);
+    setMuted(next);
+  }
+  function dispatch(action: EngineAction) {
+    getSoundEngine().unlock();
+    onAction(action);
+  }
+  /** Role title for a seat, independent of the viewer — used by the exchange FX's third-party message. */
+  const titleFor = useCallback((seat: SeatIndex) => rankTitle(state.rankOrder.indexOf(seat), state.playerCount), [state.rankOrder, state.playerCount]);
 
   // Same "diff consecutive lockstep snapshots on render" pattern every other
   // Board in this project uses to drive purely cosmetic flourishes — see
@@ -104,6 +125,16 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
       className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
     >
       📖 달무티 룰북
+    </button>
+  );
+
+  const muteButton = (
+    <button
+      onClick={toggleMuted}
+      title={muted ? "효과음 켜기" : "효과음 끄기"}
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+    >
+      {muted ? "🔇" : "🔊"}
     </button>
   );
 
@@ -177,6 +208,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   const myCommonerPairIsA = myCommonerPair?.seatA === viewerSeat;
   const myCommonerAlreadyPicked = !!myCommonerPair && (myCommonerPairIsA ? myCommonerPair.cardIdA !== null : myCommonerPair.cardIdB !== null);
   const isMyCommonerOfferTurn = state.phase === "commonerExchange" && !!myCommonerPair && !myCommonerAlreadyPicked;
+  const myCommonerPartnerSeat = myCommonerPair ? (myCommonerPairIsA ? myCommonerPair.seatB : myCommonerPair.seatA) : null;
 
   const selectedCards = me.hand.filter((c) => selected.has(c.id));
   const selectedNonJokerRanks = new Set(selectedCards.filter((c) => !c.isJoker).map((c) => c.rank));
@@ -194,6 +226,9 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     return true;
   }
 
+  // commonerExchange's card pick no longer shares this inline hand-click
+  // flow — it gets its own dedicated `CardExchangeModal` (task brief §1,
+  // 2026-08-25 후속 세션), rendered further down.
   function toggleCard(card: Card) {
     if (state.phase === "trick") {
       if (!isMyTrickTurn) return;
@@ -215,39 +250,33 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
         if (next.size >= myTribute.givenCardIds.length) return prev;
         return new Set(next).add(card.id);
       });
-    } else if (state.phase === "commonerExchange" && isMyCommonerOfferTurn) {
-      setSelected((prev) => (prev.has(card.id) ? new Set() : new Set([card.id])));
     }
   }
 
   const canSubmitPlay = state.phase === "trick" && isMyTrickTurn && selected.size > 0 && isLegalPlay(state, viewerSeat, Array.from(selected));
   const canReturnTax = isMyTaxTurn && !!myTribute && selected.size === myTribute.givenCardIds.length;
-  const canOfferCommonerCard = isMyCommonerOfferTurn && selected.size === 1;
 
   function submitPlay() {
     if (!canSubmitPlay) return;
-    onAction({ type: "playCards", seat: viewerSeat, cardIds: Array.from(selected) });
+    dispatch({ type: "playCards", seat: viewerSeat, cardIds: Array.from(selected) });
   }
   function passTurn() {
     if (state.phase !== "trick" || !isMyTrickTurn || state.trick.count === 0) return;
-    onAction({ type: "pass", seat: viewerSeat });
+    dispatch({ type: "pass", seat: viewerSeat });
   }
   function submitReturnTax() {
     if (!canReturnTax) return;
-    onAction({ type: "returnTax", seat: viewerSeat, cardIds: Array.from(selected) });
+    dispatch({ type: "returnTax", seat: viewerSeat, cardIds: Array.from(selected) });
   }
-  function submitCommonerOffer() {
-    if (!canOfferCommonerCard) return;
-    onAction({ type: "commonerOfferCard", seat: viewerSeat, cardId: Array.from(selected)[0] });
+  function submitCommonerOffer(cardId: string) {
+    dispatch({ type: "commonerOfferCard", seat: viewerSeat, cardId });
   }
 
-  const cardIsClickable =
-    (state.phase === "trick" && isMyTrickTurn) || (state.phase === "taxReturn" && isMyTaxTurn) || (state.phase === "commonerExchange" && isMyCommonerOfferTurn);
+  const cardIsClickable = (state.phase === "trick" && isMyTrickTurn) || (state.phase === "taxReturn" && isMyTaxTurn);
   const cardIsHighlighted = (card: Card) => {
     if (selected.has(card.id)) return true;
     if (state.phase === "trick") return isMyTrickTurn && isSelectableForTrick(card);
     if (state.phase === "taxReturn") return isMyTaxTurn && !!myTribute && selected.size < myTribute.givenCardIds.length;
-    if (state.phase === "commonerExchange") return isMyCommonerOfferTurn && selected.size < 1;
     return false;
   };
 
@@ -261,7 +290,10 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
           {state.playerCount}인 · 단판 승부 ·{" "}
           <RoleBadge title={myTitle} />
         </span>
-        <div className="flex gap-1.5">{rulebookButton}</div>
+        <div className="flex gap-1.5">
+          {muteButton}
+          {rulebookButton}
+        </div>
       </div>
 
       {/* Revolution option */}
@@ -274,13 +306,13 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
               </p>
               <div className="flex gap-2">
                 <button
-                  onClick={() => onAction({ type: "declareRevolution", seat: viewerSeat })}
+                  onClick={() => dispatch({ type: "declareRevolution", seat: viewerSeat })}
                   className="rounded-full bg-rose-500 px-4 py-2 text-xs font-bold text-white hover:bg-rose-400"
                 >
                   {state.pendingRevolution.isGrand ? "🔥 대혁명 선포" : "⚡ 혁명 선포"}
                 </button>
                 <button
-                  onClick={() => onAction({ type: "declineRevolution", seat: viewerSeat })}
+                  onClick={() => dispatch({ type: "declineRevolution", seat: viewerSeat })}
                   className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 hover:border-white/40"
                 >
                   선포하지 않기
@@ -343,13 +375,13 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
               <p className="font-medium text-emerald-100">🫵 다른 평민과 카드 1장을 맞교환하시겠습니까?</p>
               <div className="flex gap-2">
                 <button
-                  onClick={() => onAction({ type: "commonerOptIn", seat: viewerSeat, participate: true })}
+                  onClick={() => dispatch({ type: "commonerOptIn", seat: viewerSeat, participate: true })}
                   className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-bold text-black hover:bg-emerald-400"
                 >
                   🤝 교환 요청
                 </button>
                 <button
-                  onClick={() => onAction({ type: "commonerOptIn", seat: viewerSeat, participate: false })}
+                  onClick={() => dispatch({ type: "commonerOptIn", seat: viewerSeat, participate: false })}
                   className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 hover:border-white/40"
                 >
                   ❌ 거절
@@ -358,9 +390,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
             </div>
           )}
           {isMyCommonerOfferTurn && (
-            <p className="mt-1 text-center font-medium text-emerald-100">
-              🫵 상대에게 줄 카드 1장을 아래 손패에서 골라 제안하세요 (상대의 선택은 서로 확정 전까지 비공개입니다).
-            </p>
+            <p className="mt-1 text-center font-medium text-emerald-100">🫵 팝업 창에서 상대에게 건넬 카드를 골라주세요.</p>
           )}
         </div>
       )}
@@ -495,24 +525,26 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
             </button>
           </div>
         )}
-        {state.phase === "commonerExchange" && isMyCommonerOfferTurn && (
-          <div className="mt-3 flex justify-center">
-            <button
-              onClick={submitCommonerOffer}
-              disabled={!canOfferCommonerCard}
-              className="rounded-full bg-emerald-500 px-5 py-2 text-xs font-bold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              🌾 {selected.size}/1장 제안하기
-            </button>
-          </div>
-        )}
       </section>
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
 
-      {/* Tax tribute FX */}
+      {/* 평민 카드 교환 — 원하는 카드 1장 자유 선택 모달 (task brief §1) */}
+      {isMyCommonerOfferTurn && myCommonerPartnerSeat !== null && (
+        <CardExchangeModal hand={me.hand} partnerName={names[myCommonerPartnerSeat]} onSubmit={submitCommonerOffer} />
+      )}
+
+      {/* Tax/tribute + 평민 교환 FX — masked to CardBack for any viewer who isn't a party to that specific exchange (task brief §2) */}
       {taxEvents.map((event) => (
-        <FlyingTaxCard key={event.id} event={event} getSeatEl={(seat) => seatRowRefs.current.get(seat) ?? null} onDone={handleTaxDone} />
+        <FlyingExchangeCard
+          key={event.id}
+          event={event}
+          viewerSeat={viewerSeat}
+          names={names}
+          titleFor={titleFor}
+          getSeatEl={(seat) => seatRowRefs.current.get(seat) ?? null}
+          onDone={handleTaxDone}
+        />
       ))}
 
       {/* Revolution banner */}

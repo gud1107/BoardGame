@@ -114,7 +114,7 @@ export function FlyingPassCard({
       cancelAnimationFrame(raf);
       clearTimeout(timeout);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-only, see dalmuti/DalmutiEffects.tsx's FlyingTaxCard for the same pattern
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-only, see dalmuti/DalmutiEffects.tsx's FlyingExchangeCard for the same pattern
   }, []);
 
   if (typeof document === "undefined") return null;

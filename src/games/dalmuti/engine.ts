@@ -78,6 +78,28 @@
  *   brief; documented default, same "reasoned convention over another
  *   question round" approach as §4 above.
  *
+ * §6 (2026-08-25 후속 세션) 평민 카드 교환 UI/보안/VFX 세션 — no engine logic
+ * changed here; `commonerOfferCard` (§5 above) was already a true free
+ * choice of any card in hand, so this session's "원하는 카드 1장 자유 선택"
+ * requirement landed entirely in `CardExchangeModal.tsx` (a dedicated modal
+ * replacing the old shared inline hand-click flow). Two things resolved via
+ * AskUserQuestion (Strict No-Assumption Rule per the task brief):
+ * - **Masking scope**: the task brief asked that exchanged cards never leak
+ *   to a third party via "네트워크 페이로드나 프론트 상태값". Per
+ *   docs/architecture.md §2 this project has no server-authoritative engine
+ *   — every client already holds this same `DalmutiState` (every seat's
+ *   real hand) in memory, the same trust trade-off every other secret-info
+ *   game here accepts. The user confirmed proceeding with UI-layer-only
+ *   masking (same convention as hand secrecy itself) rather than a
+ *   project-wide server-authoritative rewrite (explicitly out of scope) —
+ *   see `DalmutiEffects.tsx`'s `isExchangeParticipant`/`FlyingExchangeCard`.
+ * - **No decision timer**: commoner opt-in/card-pick stays untimed, same as
+ *   `taxReturn` always has been.
+ * - Sound effects were also added this session (user confirmed) — this is
+ *   the first audio in this project; see `lib/audio/soundEngine.ts`'s
+ *   `playExchangeLaunch`/`playExchangeArrival` and the new mute toggle in
+ *   `DalmutiBoard.tsx`.
+ *
  * Same online-multiplayer trust model as every other game in this project:
  * every connected client computes and holds the FULL state (every seat's
  * hand) from a shared RNG seed plus replayed `EngineAction`s — there is no

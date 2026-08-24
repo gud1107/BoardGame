@@ -15,6 +15,12 @@
  *  - `playCorrectDing`/`playWrongBuzz`: Spot the Difference's found/missed
  *    click feedback — a bright ascending two-note chime vs. a short flat
  *    buzz timed to the wrong-click penalty lock.
+ *  - `playExchangeLaunch`/`playExchangeArrival`: 달무티's card-exchange VFX
+ *    sound (2026-08-25 후속 세션, task brief "화려한 카드 교환 연출") — a
+ *    tier-tinted whoosh+chord when a tribute/평민 swap card takes flight, and
+ *    a brighter tier-tinted ding when it lands. Tier ("king"/"noble"/
+ *    "commoner") mirrors `CardArt.tsx`'s `EXCHANGE_TIER_STYLE` so the sound
+ *    and the visual aura always agree.
  *
  * Browsers refuse to start audio before a user gesture, so `unlock()` (or
  * any of the play/start methods, which call it internally) must be invoked
@@ -127,6 +133,13 @@ function dissonantArpMotif(ctx: AudioContext, out: GainNode): number {
 }
 
 const MOTIFS: MotifFn[] = [tenseDroneMotif, heartbeatPulseMotif, dissonantArpMotif];
+
+/** Base pitch per 달무티 exchange tier for `playExchangeLaunch`/`playExchangeArrival` — brightest (king) down to warmest (commoner). */
+const EXCHANGE_TIER_BASE_FREQ: Record<"king" | "noble" | "commoner", number> = {
+  king: 1046.5, // C6
+  noble: 783.99, // G5
+  commoner: 587.33, // D5
+};
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
@@ -320,6 +333,66 @@ class SoundEngine {
     osc.connect(gain).connect(this.master);
     osc.start(now);
     osc.stop(now + 0.25);
+  }
+
+  /** Tier-tinted whoosh (filtered noise sweep) + a short ascending chord — a card-exchange flight taking off. */
+  playExchangeLaunch(tier: "king" | "noble" | "commoner") {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.master) return;
+    const now = ctx.currentTime;
+
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.Q.value = 4;
+    filter.frequency.setValueAtTime(300, now);
+    filter.frequency.exponentialRampToValueAtTime(2200, now + 0.35);
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0, now);
+    noiseGain.gain.linearRampToValueAtTime(0.18, now + 0.05);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    src.connect(filter).connect(noiseGain).connect(this.master);
+    src.start(now);
+    src.stop(now + 0.4);
+
+    const base = EXCHANGE_TIER_BASE_FREQ[tier];
+    const chordSemitones = tier === "king" ? [0, 4, 7, 12] : tier === "noble" ? [0, 3, 7] : [0, 5];
+    chordSemitones.forEach((semi, i) => {
+      const freq = base * Math.pow(2, semi / 12);
+      const at = now + i * 0.03;
+      const osc = ctx.createOscillator();
+      osc.type = tier === "commoner" ? "triangle" : "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(tier === "king" ? 0.22 : 0.16, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.35);
+      osc.connect(gain).connect(this.master!);
+      osc.start(at);
+      osc.stop(at + 0.4);
+    });
+  }
+
+  /** Bright tier-tinted two-note ding — a card-exchange flight landing (glow-burst impact). */
+  playExchangeArrival(tier: "king" | "noble" | "commoner") {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.master) return;
+    const now = ctx.currentTime;
+    const base = EXCHANGE_TIER_BASE_FREQ[tier] * 1.5; // an octave-and-a-half above the launch chord, for the "impact sparkle" register
+    [base, base * 1.25].forEach((freq, i) => {
+      const at = now + i * 0.06;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.26, at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.3);
+      osc.connect(gain).connect(this.master!);
+      osc.start(at);
+      osc.stop(at + 0.32);
+    });
   }
 
   stopBgm() {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { detectCommonerSwapEvents, detectTaxEvents, isExchangeParticipant } from "./DalmutiEffects";
 import {
   applyAction,
   buildDeck,
@@ -384,6 +385,46 @@ describe("commoner mutual exchange", () => {
     expect(resolved.players.find((p) => p.seat === 4)!.hand.map((c) => c.id)).toEqual(["8-0"]);
   });
 
+  it("lets each commoner pick ANY card to hand over — not just their weakest one (true free choice, 2026-08-25 후속 세션 task brief §1)", () => {
+    const state = makeState({
+      playerCount: 6,
+      rankOrder: [0, 1, 2, 3, 4, 5],
+      phase: "commonerExchange",
+      players: [
+        makePlayer(0),
+        makePlayer(1),
+        makePlayer(2, { hand: [card(2), card(11)] }), // rank 2 = its BEST card, rank 11 = its weakest
+        makePlayer(3, { hand: [card(6)] }),
+        makePlayer(4),
+        makePlayer(5),
+      ],
+      commonerExchange: {
+        participants: [
+          { seat: 2, participate: null },
+          { seat: 3, participate: null },
+        ],
+        pairs: [],
+      },
+    });
+    const afterOptIns = [
+      { type: "commonerOptIn", seat: 2, participate: true },
+      { type: "commonerOptIn", seat: 3, participate: true },
+    ].reduce<DalmutiState>((s, a) => applyAction(s, a as EngineAction), state);
+
+    // Deliberately offer the STRONG card (rank 2) rather than the weak one —
+    // proves the engine doesn't silently narrow the pick to a "best/weakest
+    // card only" rule the way the forced tax tribute's auto-selection does.
+    const afterOffer = applyAction(afterOptIns, { type: "commonerOfferCard", seat: 2, cardId: "2-0" });
+    expect(afterOffer.commonerExchange!.pairs[0].cardIdA).toBe("2-0");
+
+    const resolved = applyAction(afterOffer, { type: "commonerOfferCard", seat: 3, cardId: "6-0" });
+    expect(resolved.phase).toBe("trick");
+    const seat2After = resolved.players.find((p) => p.seat === 2)!;
+    const seat3After = resolved.players.find((p) => p.seat === 3)!;
+    expect(seat2After.hand.map((c) => c.id).sort()).toEqual(["11-0", "6-0"]);
+    expect(seat3After.hand.map((c) => c.id)).toEqual(["2-0"]);
+  });
+
   it("rejects an out-of-turn or already-decided opt-in, and a card the seat doesn't hold", () => {
     const state = makeState({
       playerCount: 6,
@@ -753,6 +794,76 @@ function playFullBotGame(playerCount: number, seed: number, levelOf: (seat: Seat
   }
   return state;
 }
+
+// ---------------------------------------------------------------------------
+// 7. Exchange-masking security gate (2026-08-25 후속 세션, task brief §2 "카드
+//    교환 내용 타 플레이어 비공개 처리") — `DalmutiEffects.tsx`'s pure
+//    `isExchangeParticipant`/`detectTaxEvents`/`detectCommonerSwapEvents` are
+//    framework-free, so they're testable here without jsdom/RTL (this
+//    project's `*.test.ts` files otherwise only ever import `engine.ts`, per
+//    docs/architecture.md §1's "boardUI 컴포넌트는 유닛 테스트 대상이 아니다").
+//    This is the masking *gate* every renderer must consult, not a network
+//    boundary — see engine.ts's §6 doc for why true payload-level secrecy is
+//    out of scope under this project's server-less lockstep trust model.
+// ---------------------------------------------------------------------------
+
+describe("isExchangeParticipant (masking gate for FlyingExchangeCard)", () => {
+  it("is true only for the two seats actually party to an exchange, false for every third-party viewer", () => {
+    const event = { seat: 3, targetSeat: 0 }; // e.g. 노예(3) -> 왕(0) tribute
+    expect(isExchangeParticipant(event, 3)).toBe(true);
+    expect(isExchangeParticipant(event, 0)).toBe(true);
+    expect(isExchangeParticipant(event, 1)).toBe(false);
+    expect(isExchangeParticipant(event, 2)).toBe(false);
+  });
+});
+
+describe("detectTaxEvents / detectCommonerSwapEvents auraTier tagging (drives both FX color and which CardBack a masked viewer sees)", () => {
+  it('tags the 노예↔왕 tribute "king" and the 거지↔귀족 tribute "noble"', () => {
+    const prev = makeState({
+      playerCount: 4,
+      rankOrder: [0, 1, 2, 3],
+      tributes: [],
+      players: [makePlayer(0), makePlayer(1), makePlayer(2, { hand: [card(4)] }), makePlayer(3, { hand: [card(1), card(2)] })],
+    });
+    const next: DalmutiState = {
+      ...prev,
+      tributes: [
+        { fromSeat: 3, toSeat: 0, givenCardIds: ["1-0", "2-0"], returnedCardIds: [], resolved: false },
+        { fromSeat: 2, toSeat: 1, givenCardIds: ["4-0"], returnedCardIds: [], resolved: false },
+      ],
+      players: [
+        makePlayer(0, { hand: [card(1), card(2)] }),
+        makePlayer(1, { hand: [card(4)] }),
+        makePlayer(2, { hand: [] }),
+        makePlayer(3, { hand: [] }),
+      ],
+    };
+    const events = detectTaxEvents(prev, next);
+    expect(events).toHaveLength(2);
+    expect(events.find((e) => e.seat === 3)!.auraTier).toBe("king");
+    expect(events.find((e) => e.seat === 2)!.auraTier).toBe("noble");
+  });
+
+  it('tags every 평민 swap event "commoner", both directions', () => {
+    const prev = makeState({
+      playerCount: 6,
+      rankOrder: [0, 1, 2, 3, 4, 5],
+      phase: "commonerExchange",
+      players: [makePlayer(0), makePlayer(1), makePlayer(2, { hand: [card(3)] }), makePlayer(3, { hand: [card(9)] }), makePlayer(4), makePlayer(5)],
+      commonerExchange: {
+        participants: [
+          { seat: 2, participate: true },
+          { seat: 3, participate: true },
+        ],
+        pairs: [{ seatA: 2, seatB: 3, cardIdA: "3-0", cardIdB: null, resolved: false }],
+      },
+    });
+    const next = applyAction(prev, { type: "commonerOfferCard", seat: 3, cardId: "9-0" });
+    const events = detectCommonerSwapEvents(prev, next);
+    expect(events).toHaveLength(2);
+    expect(events.every((e) => e.auraTier === "commoner")).toBe(true);
+  });
+});
 
 describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver까지 완주)", () => {
   for (const n of [3, 4, 5, 6, 7, 8]) {

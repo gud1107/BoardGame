@@ -352,28 +352,99 @@ body {
   }
 }
 
-/* 달무티's tax-tribute flight (see DalmutiEffects.tsx / FlyingTaxCard) —
-   layered on top of a plain left/top CSS *transition* that carries a card
-   in a straight line between the giver's and recipient's seat rows, same
-   left/top-transition-plus-keyframe-flourish technique as
-   card-play-slide/dice-slide-fly/rift-card-toss above. A soft gold glow
-   marks it as a forced tribute rather than an ordinary trick play. */
-@keyframes dalmuti-tax-fly {
+/* 달무티's card-exchange flight (see DalmutiEffects.tsx / FlyingExchangeCard)
+   — 2026-08-25 후속 세션(평민 자유 선택 교환 모달 + 비공개 마스킹 + 화려한 VFX)
+   replaced the older straight-scale-in `dalmuti-tax-fly` with a richer arc.
+   The outer wrapper still drives a plain left/top CSS *transition* between
+   the giver's and recipient's seat rows (same left/top-transition-plus-
+   keyframe-flourish technique as card-play-slide/dice-slide-fly/
+   rift-card-toss above), but the card itself now rides this inner arc
+   keyframe (parabolic dip + spin + bounce) layered on top, plus a radial
+   aura pulse and radial spark particles tinted per exchange tier (king =
+   gold, noble = violet/silver, commoner = emerald — see CardArt.tsx's
+   `EXCHANGE_TIER_STYLE`). */
+@keyframes dalmuti-exchange-arc {
   0% {
-    transform: translate(-50%, -50%) scale(0.7) rotate(-10deg);
+    transform: translate(-50%, -50%) translateY(0) scale(0.6) rotate(-16deg);
     opacity: 0;
-    filter: drop-shadow(0 0 0 rgba(251, 191, 36, 0));
   }
-  55% {
-    transform: translate(-50%, -50%) scale(1.1) rotate(4deg);
+  30% {
     opacity: 1;
-    filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.8));
+  }
+  50% {
+    transform: translate(-50%, -50%) translateY(-46px) scale(1.15) rotate(190deg);
+    opacity: 1;
+  }
+  85% {
+    transform: translate(-50%, -50%) translateY(-6px) scale(1.05) rotate(350deg);
+    opacity: 1;
   }
   100% {
-    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    transform: translate(-50%, -50%) translateY(0) scale(1) rotate(360deg);
     opacity: 1;
-    filter: drop-shadow(0 0 0 rgba(251, 191, 36, 0));
   }
+}
+
+/* Radial glow pulse behind a flying exchange card — color is set inline by
+   the caller (the pulse's *shape* is identical across tiers). */
+@keyframes dalmuti-exchange-aura-pulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(0.85);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.2);
+    opacity: 0.9;
+  }
+}
+
+/* One-shot bigger glow ring the instant the card lands — see
+   `phase === "arrived"` in FlyingExchangeCard. */
+@keyframes dalmuti-exchange-arrival-burst {
+  0% {
+    transform: translate(-50%, -50%) scale(0.6);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.4);
+    opacity: 0;
+  }
+}
+
+/* Radial spark particle — each `<span>` sets its own `--angle` custom
+   property inline, so this one keyframe definition flings every particle,
+   of every tier/direction, outward along its own angle before fading. */
+@keyframes dalmuti-exchange-spark {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(0) scale(1);
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(30px) scale(0.3);
+  }
+}
+
+/* Arrival "shimmer" — a quick glowing ring pulse on the card face itself
+   once it lands in the recipient's hand (task brief "수령 임팩트: 카드가
+   손패에 꽂히는 순간 카드가 빛나며 테두리가 펄스"). */
+@keyframes dalmuti-exchange-shimmer {
+  0% {
+    box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+  }
+  40% {
+    box-shadow: 0 0 22px 4px rgba(255, 255, 255, 0.85);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+  }
+}
+.dalmuti-exchange-shimmer {
+  animation: dalmuti-exchange-shimmer 0.5s ease-out;
 }
 
 /* 달무티's "혁명!" declaration banner (see DalmutiEffects.tsx /

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { CardFace } from "./CardArt";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { CardBack, CardFace, EXCHANGE_TIER_STYLE, type AuraTier } from "./CardArt";
 import type { Card, DalmutiState, SeatIndex } from "./engine";
 
 /**
@@ -19,14 +20,32 @@ import type { Card, DalmutiState, SeatIndex } from "./engine";
  * Three independent event kinds (task brief §2 "세금 카드 교환 애니메이션",
  * "광대 2장 보유 시 '혁명!' 이펙트", and (2026-08-25, §5) the 평민 mutual
  * exchange's own "카드 이동 애니메이션"):
- * - `TaxFlyEvent`: a card sliding between two seat rows, once for the
- *   automatic forced tribute (the instant tax phase starts), again for
- *   whatever the recipient chooses to give back (`returnTax`), and — reusing
- *   the same component — once per direction when a 평민(Commoner) pair's
- *   mutual swap completes (`detectCommonerSwapEvents`).
+ * - `TaxFlyEvent`: a card flying between two seat rows via `FlyingExchangeCard`
+ *   — once for the automatic forced tribute (the instant tax phase starts),
+ *   again for whatever the recipient chooses to give back (`returnTax`), and
+ *   once per direction when a 평민(Commoner) pair's mutual swap completes
+ *   (`detectCommonerSwapEvents`).
  * - Revolution: a full-board banner via `RevolutionBanner`, driven directly
  *   off `state.revolutionDeclared` in the caller (no diff helper needed —
  *   it's a single nullable field, not a growing list).
+ *
+ * 2026-08-25 후속 세션 (평민 자유 선택 교환 모달 + 비공개 마스킹 + 화려한 VFX):
+ * `FlyingExchangeCard` (renamed from `FlyingTaxCard`) now takes a
+ * `viewerSeat` and only renders the *real* card face to the two seats
+ * actually party to that exchange (`isExchangeParticipant`) — every other
+ * viewer gets a tier-colored `CardBack` and a role-title-only system
+ * message, never the rank. This is UI-layer masking only: per
+ * docs/architecture.md §2 this project has no server-authoritative engine,
+ * so every client's `DalmutiState` already holds the real `Card` objects in
+ * memory the same way every other secret (opponent hands, Avalon roles)
+ * does — true network-level secrecy would need a project-wide
+ * server-authoritative rewrite, explicitly out of scope here (confirmed via
+ * AskUserQuestion). The flight also picked up an arc (`dalmuti-exchange-arc`),
+ * tier-colored aura/particles (`dalmuti-exchange-aura-pulse`/
+ * `-spark`), an arrival glow burst (`-arrival-burst`/`-shimmer`), and
+ * matching launch/arrival SFX via `lib/audio/soundEngine.ts` (also new this
+ * session, per user confirmation — no other game in this project has audio
+ * yet, so a mute toggle was added to `DalmutiBoard.tsx` alongside it).
  */
 
 // ---------------------------------------------------------------------------
@@ -41,6 +60,8 @@ export interface TaxFlyEvent {
   targetSeat: SeatIndex;
   cards: Card[];
   kind: "give" | "return" | "commoner";
+  /** VFX/SFX tier — see `CardArt.tsx`'s `EXCHANGE_TIER_STYLE` doc. */
+  auraTier: AuraTier;
 }
 
 function findCardsByIds(state: DalmutiState, holderSeat: SeatIndex, cardIds: string[]): Card[] {
@@ -50,10 +71,25 @@ function findCardsByIds(state: DalmutiState, holderSeat: SeatIndex, cardIds: str
 }
 
 /**
+ * Whether `viewerSeat` is actually a party to `event` — the sole masking
+ * gate every renderer must consult before showing a real `CardFace` for an
+ * exchange event (task brief "교환 당사자 본인들에게만... 노출"). Pure and
+ * framework-free on purpose so it's testable without jsdom/RTL (this
+ * project's `*.test.ts` only ever imports plain functions, per
+ * docs/architecture.md §1), unlike `FlyingExchangeCard` itself.
+ */
+export function isExchangeParticipant(event: Pick<TaxFlyEvent, "seat" | "targetSeat">, viewerSeat: SeatIndex): boolean {
+  return viewerSeat === event.seat || viewerSeat === event.targetSeat;
+}
+
+/**
  * Compares two consecutive `DalmutiState` snapshots and infers which tax
  * cards just moved, purely from the data (the reducer always returns the
  * same object reference for a rejected/no-op action, so a genuine reference
- * change here always corresponds to a real transition).
+ * change here always corresponds to a real transition). `auraTier` relies on
+ * `computeTributes`' fixed push order in engine.ts: the 노예↔왕(King) tribute
+ * is always `tributes[0]`, the 거지↔귀족(Noble) tribute (if it exists at all,
+ * n>=4) is always `tributes[1]`.
  */
 export function detectTaxEvents(prev: DalmutiState, next: DalmutiState): Omit<TaxFlyEvent, "id">[] {
   if (prev === next) return [];
@@ -65,10 +101,10 @@ export function detectTaxEvents(prev: DalmutiState, next: DalmutiState): Omit<Ta
   // flourish is simply skipped, same known limitation as every other game's
   // mount-time FX in this project).
   if (prev.tributes.length === 0 && next.tributes.length > 0) {
-    for (const t of next.tributes) {
-      if (t.givenCardIds.length === 0) continue;
-      events.push({ seat: t.fromSeat, targetSeat: t.toSeat, cards: findCardsByIds(next, t.toSeat, t.givenCardIds), kind: "give" });
-    }
+    next.tributes.forEach((t, i) => {
+      if (t.givenCardIds.length === 0) return;
+      events.push({ seat: t.fromSeat, targetSeat: t.toSeat, cards: findCardsByIds(next, t.toSeat, t.givenCardIds), kind: "give", auraTier: i === 0 ? "king" : "noble" });
+    });
   }
 
   // Return resolution: a tribute record flips resolved false -> true.
@@ -76,7 +112,13 @@ export function detectTaxEvents(prev: DalmutiState, next: DalmutiState): Omit<Ta
     const nt = next.tributes[i];
     const pt = prev.tributes[i];
     if (pt && !pt.resolved && nt.resolved) {
-      events.push({ seat: nt.toSeat, targetSeat: nt.fromSeat, cards: findCardsByIds(next, nt.fromSeat, nt.returnedCardIds), kind: "return" });
+      events.push({
+        seat: nt.toSeat,
+        targetSeat: nt.fromSeat,
+        cards: findCardsByIds(next, nt.fromSeat, nt.returnedCardIds),
+        kind: "return",
+        auraTier: i === 0 ? "king" : "noble",
+      });
     }
   }
 
@@ -115,8 +157,8 @@ export function detectCommonerSwapEvents(prev: DalmutiState, next: DalmutiState)
     const givenCard = (next.players.find((p) => p.seat === otherSeat)?.hand ?? []).find((c) => c.id === givenCardId);
     if (!givenCard) continue; // defensive — should always be found alongside receivedCard
 
-    events.push({ seat: giverSeat, targetSeat: otherSeat, cards: [givenCard], kind: "commoner" });
-    events.push({ seat: otherSeat, targetSeat: giverSeat, cards: [receivedCard], kind: "commoner" });
+    events.push({ seat: giverSeat, targetSeat: otherSeat, cards: [givenCard], kind: "commoner", auraTier: "commoner" });
+    events.push({ seat: otherSeat, targetSeat: giverSeat, cards: [receivedCard], kind: "commoner", auraTier: "commoner" });
   }
 
   return events;
@@ -126,17 +168,46 @@ function rectCenter(rect: DOMRect) {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
-/** Flies one tax event's card(s) from the giving seat's row to the receiving seat's row, staggered slightly if there's more than one card. */
-export function FlyingTaxCard({
+function cardsSummaryText(cards: Card[]): string {
+  return cards.map((c) => (c.isJoker ? "조커" : `${c.rank}번`)).join(", ") + " 카드";
+}
+
+const KIND_VERB: Record<TaxFlyEvent["kind"], string> = {
+  give: "진상했습니다",
+  return: "하사했습니다",
+  commoner: "맞교환했습니다",
+};
+
+const FLIGHT_MS = 900;
+const ARRIVAL_MS = 480;
+
+/**
+ * Flies one exchange event's card(s) from the giving seat's row to the
+ * receiving seat's row along an arc, with tier-colored aura/particles and an
+ * arrival glow burst. Masks the card face to `CardBack` (and the label to a
+ * numberless role-title sentence) for every viewer who isn't
+ * `isExchangeParticipant` — see this file's module doc for the masking
+ * limitation.
+ */
+export function FlyingExchangeCard({
   event,
+  viewerSeat,
+  names,
+  titleFor,
   getSeatEl,
   onDone,
 }: {
   event: TaxFlyEvent;
+  viewerSeat: SeatIndex;
+  names: Record<SeatIndex, string>;
+  titleFor: (seat: SeatIndex) => string;
   getSeatEl: (seat: SeatIndex) => HTMLElement | null;
   onDone: (id: number) => void;
 }) {
   const elRef = useRef<HTMLDivElement | null>(null);
+  const [phase, setPhase] = useState<"flying" | "arrived">("flying");
+  const palette = EXCHANGE_TIER_STYLE[event.auraTier];
+  const participant = isExchangeParticipant(event, viewerSeat);
 
   useLayoutEffect(() => {
     const el = elRef.current;
@@ -149,11 +220,14 @@ export function FlyingTaxCard({
     const from = rectCenter(source.getBoundingClientRect());
     const to = rectCenter(target.getBoundingClientRect());
 
+    const sound = getSoundEngine();
+    sound.playExchangeLaunch(event.auraTier);
+
     el.style.transition = "none";
     el.style.left = `${from.x}px`;
     el.style.top = `${from.y}px`;
     void el.offsetHeight; // force layout so the "from" position + transition:none commits before re-enabling the transition
-    el.style.transition = "left 0.55s cubic-bezier(0.22,1,0.36,1), top 0.55s cubic-bezier(0.22,1,0.36,1)";
+    el.style.transition = `left ${FLIGHT_MS}ms cubic-bezier(0.33,0.9,0.4,1), top ${FLIGHT_MS}ms cubic-bezier(0.33,0.9,0.4,1)`;
 
     const raf = requestAnimationFrame(() => {
       const live = elRef.current;
@@ -161,30 +235,69 @@ export function FlyingTaxCard({
       live.style.left = `${to.x}px`;
       live.style.top = `${to.y}px`;
     });
-    const timeout = setTimeout(() => onDone(event.id), 620);
+    const arriveTimeout = setTimeout(() => {
+      setPhase("arrived");
+      sound.playExchangeArrival(event.auraTier);
+    }, FLIGHT_MS);
+    const doneTimeout = setTimeout(() => onDone(event.id), FLIGHT_MS + ARRIVAL_MS);
     return () => {
       cancelAnimationFrame(raf);
-      clearTimeout(timeout);
+      clearTimeout(arriveTimeout);
+      clearTimeout(doneTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-only, see FlyingPlayedCard in five-cucumbers/CardEffects.tsx for the same pattern
   }, []);
 
   if (typeof document === "undefined") return null;
 
+  // Task brief §2: participants get an exact "누구에게 무엇을 주고/받았는지"
+  // sentence; everyone else gets a numberless "누구와 누가 교환했는지" one.
+  const label =
+    viewerSeat === event.targetSeat
+      ? `🎁 ${titleFor(event.seat)}(${names[event.seat]})로부터 ${cardsSummaryText(event.cards)}을(를) 받았습니다!`
+      : viewerSeat === event.seat
+        ? `📤 ${titleFor(event.targetSeat)}(${names[event.targetSeat]})에게 ${cardsSummaryText(event.cards)}을(를) 주었습니다`
+        : `${titleFor(event.seat)}가 ${titleFor(event.targetSeat)}에게 카드 ${event.cards.length}장을 ${KIND_VERB[event.kind]}`;
+
+  const particleCount = phase === "arrived" ? 10 : 6;
+  const particles = Array.from({ length: particleCount });
+
   return createPortal(
-    <div ref={elRef} className="pointer-events-none fixed z-[70] -translate-x-1/2 -translate-y-1/2" style={{ left: 0, top: 0, animation: "dalmuti-tax-fly 0.55s ease-out forwards" }}>
-      <div className="flex -space-x-6">
-        {event.cards.slice(0, 2).map((c) => (
-          <CardFace key={c.id} card={c} className="scale-75" />
-        ))}
+    <div ref={elRef} className="pointer-events-none fixed z-[70] flex flex-col items-center" style={{ left: 0, top: 0 }}>
+      {/* Tier-colored aura glow, pulsing while airborne, one big burst on arrival */}
+      <div
+        className="absolute top-0 left-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full"
+        style={{
+          background: `radial-gradient(circle, ${palette.glow} 0%, transparent 70%)`,
+          animation: phase === "flying" ? "dalmuti-exchange-aura-pulse 0.5s ease-in-out infinite" : "dalmuti-exchange-arrival-burst 0.45s ease-out forwards",
+        }}
+      />
+      {/* Radial spark particles, tinted per tier via inline style (one shared keyframe, see globals.css) */}
+      {particles.map((_, i) => (
+        <span
+          key={i}
+          className="absolute top-0 left-1/2 h-1.5 w-1.5 rounded-full"
+          style={
+            {
+              background: palette.spark,
+              boxShadow: `0 0 6px 1px ${palette.spark}`,
+              "--angle": `${(360 / particleCount) * i}deg`,
+              animation: `dalmuti-exchange-spark ${phase === "arrived" ? "0.55s" : "0.7s"} ease-out ${(i * 0.04).toFixed(2)}s ${phase === "flying" ? "infinite" : "forwards"}`,
+            } as CSSProperties
+          }
+        />
+      ))}
+      {/* The card(s) themselves, riding the arc/spin keyframe */}
+      <div className="relative flex -space-x-6" style={{ animation: `dalmuti-exchange-arc ${FLIGHT_MS}ms ease-out forwards` }}>
+        {event.cards.slice(0, 2).map((c) =>
+          participant ? (
+            <CardFace key={c.id} card={c} className={`scale-75 ${phase === "arrived" ? "dalmuti-exchange-shimmer" : ""}`} />
+          ) : (
+            <CardBack key={c.id} tier={event.auraTier} className={`scale-75 ${phase === "arrived" ? "dalmuti-exchange-shimmer" : ""}`} />
+          ),
+        )}
       </div>
-      <p
-        className={`mt-1 text-center text-[10px] font-bold ${
-          event.kind === "give" ? "text-amber-300" : event.kind === "return" ? "text-sky-300" : "text-emerald-300"
-        }`}
-      >
-        {event.kind === "give" ? "세금 진상" : event.kind === "return" ? "하사품" : "평민 교환"}
-      </p>
+      <p className={`mt-1 max-w-[220px] text-center text-[10px] font-bold ${participant ? "text-amber-200" : "text-white/60"}`}>{label}</p>
     </div>,
     document.body,
   );
