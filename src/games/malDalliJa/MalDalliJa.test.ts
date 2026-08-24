@@ -15,6 +15,7 @@ import {
   getValidMoves,
   isOasisZoneCell,
   isOrthogonalStep,
+  isStateSyncStale,
   otherSeat,
   startGame,
   type EngineAction,
@@ -699,5 +700,78 @@ describe("move animation timing (MoveEffects.tsx, 2026-08-25 slide-hop accelerat
   it("HOP_MS stays well above a single 60fps frame (~16.7ms), leaving multiple frames per hop even at the faster pace", () => {
     const singleFrameBudgetMs = 1000 / 60;
     expect(HOP_MS).toBeGreaterThan(singleFrameBudgetMs * 5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2026-08-25 session — "슬라이드이동중 사라진 말과 출발지점에 하얀색말로
+// 바뀐부분" bug report. Root cause confirmed via `AskUserQuestion` (Strict
+// No-Assumption Rule) to be `MalDalliJaGame.tsx`'s `state-sync` reconnect
+// handshake accepting a stale snapshot with no staleness check, not the
+// rendering layer — see `isStateSyncStale`'s doc in engine.ts for the full
+// race analysis. `MalDalliJaGame.tsx` itself (Supabase Realtime wiring) has
+// no unit tests in this project (consistent with every other `<Game>.tsx` in
+// this codebase — see the repeated jsdom-not-installed caveats in
+// HANDOFF.md), so the fix is a pure, directly-testable guard function in
+// engine.ts that the network handler just calls.
+// ---------------------------------------------------------------------------
+
+describe("isStateSyncStale (2026-08-25, state-sync reconnect-race guard)", () => {
+  it("never rejects when the caller has no state yet (genuine first-time catch-up)", () => {
+    const synced = forceState({ turnNumber: 1 });
+    expect(isStateSyncStale(null, synced)).toBe(false);
+  });
+
+  it("rejects a synced state whose turnNumber is behind the caller's current state", () => {
+    const current = forceState({ turnNumber: 5 });
+    const synced = forceState({ turnNumber: 4 });
+    expect(isStateSyncStale(current, synced)).toBe(true);
+  });
+
+  it("accepts a synced state with the same turnNumber (harmless no-op resync)", () => {
+    const current = forceState({ turnNumber: 5 });
+    const synced = forceState({ turnNumber: 5 });
+    expect(isStateSyncStale(current, synced)).toBe(false);
+  });
+
+  it("accepts a synced state that's ahead of the caller's current state", () => {
+    const current = forceState({ turnNumber: 5 });
+    const synced = forceState({ turnNumber: 6 });
+    expect(isStateSyncStale(current, synced)).toBe(false);
+  });
+});
+
+describe("move invariants — total horse count and previous-cell cleanup (2026-08-25 regression coverage)", () => {
+  it("a slide move never changes either seat's horse count (no evaporation, no ghost duplication)", () => {
+    const state = forceState({ positions: { p1: [{ row: 5, col: 0 }], p2: [{ row: 5, col: 6 }] } });
+    const next = applyAction(state, { type: "move", horseIndex: 0, moveKind: "slide", dr: 0, dc: 1 });
+    expect(next.positions.p1).toHaveLength(state.positions.p1.length);
+    expect(next.positions.p2).toHaveLength(state.positions.p2.length);
+  });
+
+  it("a knight move never changes either seat's horse count", () => {
+    const state = forceState({ positions: { p1: [{ row: 8, col: 8 }], p2: [{ row: 1, col: 1 }] } });
+    const next = applyAction(state, { type: "move", horseIndex: 0, moveKind: "knight", dr: -2, dc: -1 });
+    expect(next.positions.p1).toHaveLength(state.positions.p1.length);
+    expect(next.positions.p2).toHaveLength(state.positions.p2.length);
+  });
+
+  it("the previous cell is unoccupied immediately after a move — no leftover/ghost token left behind at the origin", () => {
+    const state = forceState({ positions: { p1: [{ row: 5, col: 0 }], p2: [{ row: 5, col: 6 }] } });
+    const next = applyAction(state, { type: "move", horseIndex: 0, moveKind: "slide", dr: 0, dc: 1 });
+    const stillAtOrigin = [...next.positions.p1, ...next.positions.p2].some((p) => posKey(p) === posKey({ row: 5, col: 0 }));
+    expect(stillAtOrigin).toBe(false);
+  });
+
+  it("a multi-horse seat's other 9 horses are untouched by a single horse's move (only the moved horseIndex changes)", () => {
+    const state = forceState({
+      positions: {
+        p1: [{ row: 5, col: 0 }, ...HOME_ZONES.p1[1]],
+        p2: [{ row: 5, col: 6 }],
+      },
+    });
+    const next = applyAction(state, { type: "move", horseIndex: 0, moveKind: "slide", dr: 0, dc: 1 });
+    expect(next.positions.p1[0]).toEqual(OASIS);
+    expect(next.positions.p1.slice(1)).toEqual(state.positions.p1.slice(1)); // untouched
   });
 });

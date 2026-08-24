@@ -281,6 +281,36 @@ export function startGame(rng: () => number = Math.random): MalDalliJaState {
   };
 }
 
+/**
+ * 2026-08-25 fix ("슬라이드이동중 사라진 말과 출발지점에 하얀색말로 바뀐부분"
+ * bug report) — a pure guard for `MalDalliJaGame.tsx`'s `state-sync`
+ * broadcast handler (the reconnect-recovery round trip: any client sends
+ * `state-request` on every channel (re)subscribe, e.g. Supabase Realtime
+ * auto-rejoining after a brief network drop mid-game, and any peer with a
+ * live `gameState` answers with a full snapshot). That snapshot can race a
+ * peer's own just-applied `game-action` broadcast — the two travel as
+ * independent messages and can arrive interleaved — so a client could
+ * receive a `state-sync` payload captured a moment *before* its own most
+ * current state. Blindly accepting it rolls `positions` backward mid-flight:
+ * the just-completed move's destination-cell horse disappears (the flying
+ * `AnimatedHorse` overlay in `MoveEffects.tsx` was keyed off a `MoveRecord`
+ * whose resulting state just got overwritten) and the origin-cell horse
+ * reappears once that overlay unmounts and the static grid re-reads the
+ * (reverted) position — exactly the reported "evaporating horse" / "ghost
+ * horse back at the start cell" symptom.
+ *
+ * `turnNumber` increments by exactly 1 on every applied action — move *or*
+ * pass, see `applyMove`/`applyPass` below — for a match's entire lifetime,
+ * so it's a simple monotonic logical clock: a synced state is stale (should
+ * be rejected) only when the caller already has a state *and* the synced
+ * one's `turnNumber` is strictly behind it. `current === null` (this client
+ * hasn't received a state at all yet — the genuine first-time catch-up
+ * case) always accepts.
+ */
+export function isStateSyncStale(current: MalDalliJaState | null, synced: MalDalliJaState): boolean {
+  return current !== null && synced.turnNumber < current.turnNumber;
+}
+
 /** All 20 currently-occupied cells (both seats), as a lookup set. */
 function allOccupied(state: MalDalliJaState): Set<string> {
   const set = new Set<string>();

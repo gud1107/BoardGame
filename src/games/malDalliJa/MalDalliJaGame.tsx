@@ -10,6 +10,7 @@ import { seededRng } from "@/lib/rng";
 import {
   applyAction,
   chooseBotAction,
+  isStateSyncStale,
   otherSeat,
   startGame,
   type EngineAction,
@@ -250,6 +251,12 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
     channel.on("broadcast", { event: "state-sync" }, ({ payload }) => {
       const syncedState = payload?.state as MalDalliJaState | undefined;
       if (!syncedState) return;
+      // 2026-08-25 fix ("슬라이드이동중 사라진 말과 출발지점에 하얀색말로
+      // 바뀐부분" bug report) — see `isStateSyncStale`'s doc in engine.ts for
+      // the full race analysis. Reject the whole payload if it's a stale
+      // resync (roster/timer fields on it aren't versioned either, so
+      // there's nothing worth salvaging from an otherwise-rejected snapshot).
+      if (isStateSyncStale(gameStateRef.current, syncedState)) return;
       const roster = (payload?.botRoles as Seat[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
       botRolesRef.current = roster;
