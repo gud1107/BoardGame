@@ -38,9 +38,9 @@ _그 이전 갱신: 2026-08-23 (**운명전쟁39 리버스 카드 숫자 가독�
 
 **참고 — 실제 UI 렌더링 미검증**: HANDOFF §2의 `<Game>Board.tsx` 테스트 사각지대(jsdom 미설치)와 동일하게, 이번 오버레이의 실제 화면 배치(모바일 화면 폭에서 콘텐츠가 잘리지 않는지, 컨페티/선버스트의 실제 체감 화려함, 화면 떨림 강도)는 엔진/타입/린트 검증만 마쳤고 아직 육안 확인하지 않았음.
 
-**커밋/푸시**: (아래 커밋 해시로 갱신 예정)
+**커밋/푸시**: `41c87b5 feat(grid-poker): enhance round victory visual effects with gold particles and display round winner profiles` → `git push origin main` 완료. 그리드 포커 파일 5개(`engine.ts`/`GridPokerBoard.tsx`/`GridPokerGame.tsx`/`GridPoker.test.ts`/신규 `RoundResultOverlay.tsx`) + `globals.css` + 이 HANDOFF 절만 스테이징해 커밋 — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.gitignore`, `public/games`·`public/images/lasVegas` 실물 이미지 삭제, `lasVegas/*`, `registry.ts`, `boardGameRule/` 신규 파일, `저작권, 상표권.md`, `orca충돌및확인.md` 등)은 이번 작업과 무관하므로 건드리지 않고 그대로 작업 트리에 남겨둠.
 
-**배포**: (아래 배포 URL로 갱신 예정)
+**배포**: `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주(Turbopack 빌드+TypeScript 전체 재검사 포함), READY — `https://board-game-inbz858s5-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준). 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위 "커밋/푸시" 항목에 적은 다른 세션들의 미커밋 변경(라스베가스 실사 카지노 사진·카탈로그 썸네일 삭제 등)도 함께 반영된 상태로 배포됨 — 이 그리드 포커 세션이 그 변경들을 검증하거나 의도한 것은 아님.
 
 ### 2026-08-24 — 그리드 포커 라운드 승수 표기 및 족보 높은 순 기본 정렬
 
