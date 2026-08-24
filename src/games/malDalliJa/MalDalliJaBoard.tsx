@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AnimatedHorse, MoveParticleLayer, buildMoveAnim, type MoveAnim, type MoveEvent, type MoveParticle } from "./MoveEffects";
 import RulebookModal from "./RulebookModal";
 import {
   BOARD_SIZE,
@@ -44,6 +45,23 @@ import {
  * from `boardGameRule/말달리자/`) instead of a bare 🐴/🐎 emoji — see
  * `SEAT_THEME`'s doc comment for the asset path and why the tile is
  * rectangular (`object-contain`) rather than a circular crop.
+ *
+ * **2026-08-24 session (gallop motion + particle effects, see
+ * MoveEffects.tsx's module doc for the full design rationale and the
+ * user-confirmed answers behind it)**: a completed move no longer just
+ * teleports a horse token to its new cell — the `moveHistory`-diffing effect
+ * below detects each freshly-appended `MoveRecord` (for *both* the local
+ * player's own move and a synced opponent move, since both arrive the same
+ * way: a new `state` prop with a longer `moveHistory`) and hands it to
+ * `buildMoveAnim`, which the `animations` array renders as a flying
+ * `AnimatedHorse` overlaid on the board — hop-by-hop for slides, a single
+ * arc for knight jumps — while the *static* grid-cell token for that horse
+ * is hidden for the animation's duration (`animatingKeys`, its
+ * `state.positions` is already at the final cell the whole time). Dust,
+ * impact-ring, speed-trail, and LEAD-badge particles spawn into the
+ * `particles` array via the same event callback. The game-over overlay is
+ * gated on `animations.length === 0` so a winning move's flight/impact
+ * finishes playing before WINNER/ELIMINATED takes over the screen.
  */
 export interface MalDalliJaBoardProps {
   state: MalDalliJaState;
@@ -130,6 +148,72 @@ export default function MalDalliJaBoard({
       horseByCell.set(cellKey(p.row, p.col), { seat, horseIndex });
     });
   });
+
+  // ---- Move animations (gallop hop / knight arc + dust/impact/speed-trail
+  // /LEAD particles) — see this component's 2026-08-24 module-doc paragraph
+  // and MoveEffects.tsx for the full design. `trackedMoveCount` starts at
+  // the *current* length on mount (not 0) so joining mid-game or a
+  // `state-sync` resync never replays the whole match's move history.
+  //
+  // Deliberately the same "adjust state while rendering" pattern as
+  // `trackedSelectionTurn`/`trackedTurn` below (compare-and-setState
+  // in-render, not a `useEffect`) rather than the pattern used by every
+  // other `<Game>Effects.tsx` in this project — and not just for
+  // consistency with this file's own two other trackers: an effect only
+  // commits `setAnimations` *after* the "gameOver" render has already
+  // painted, so the `animations.length === 0` game-over-overlay gate below
+  // would flash the overlay on for one frame before the flying horse even
+  // appears. Doing it in-render instead means React folds both state
+  // updates into the same paint — see React's docs on "storing information
+  // from previous renders".
+  const [trackedMoveCount, setTrackedMoveCount] = useState(state.moveHistory.length);
+  const [animations, setAnimations] = useState<MoveAnim[]>([]);
+  const [particles, setParticles] = useState<MoveParticle[]>([]);
+  const particleIdRef = useRef(0);
+  if (trackedMoveCount !== state.moveHistory.length) {
+    const nextCount = state.moveHistory.length;
+    // Only animate a normal single-move increment — a resync/catch-up that
+    // jumps by more than one move at once snaps positions instantly instead
+    // (no animation queued), same reasoning as skipping the flood on mount.
+    if (nextCount === trackedMoveCount + 1) {
+      const record = state.moveHistory[nextCount - 1];
+      const gameEndedByThisMove = state.phase === "gameOver" && state.winner === record.seat;
+      const anim = buildMoveAnim(record, gameEndedByThisMove);
+      if (anim) setAnimations((prev) => [...prev, anim]);
+    }
+    setTrackedMoveCount(nextCount);
+  }
+
+  const animatingKeys = new Set(animations.map((a) => `${a.seat}-${a.horseIndex}`));
+
+  function handleAnimEvent(anim: MoveAnim, evt: MoveEvent) {
+    const id = particleIdRef.current++;
+    let particle: MoveParticle;
+    switch (evt.type) {
+      case "dust":
+        particle = { id, kind: "dust", row: evt.row, col: evt.col };
+        break;
+      case "impact":
+        particle = { id, kind: "impact", row: evt.row, col: evt.col, seat: anim.seat };
+        break;
+      case "streak":
+        particle = { id, kind: "streak", row: evt.row, col: evt.col, angleDeg: evt.angleDeg, seat: anim.seat };
+        break;
+      case "knightTrail":
+        particle = { id, kind: "knightTrail", row: evt.row, col: evt.col, liftPct: evt.liftPct };
+        break;
+      case "lead":
+        particle = { id, kind: "lead", row: evt.row, col: evt.col, seat: anim.seat };
+        break;
+    }
+    setParticles((prev) => [...prev, particle]);
+  }
+  function handleAnimDone(animId: number) {
+    setAnimations((prev) => prev.filter((a) => a.id !== animId));
+  }
+  function handleParticleExpire(particleId: number) {
+    setParticles((prev) => prev.filter((p) => p.id !== particleId));
+  }
 
   // ---- §5 optional turn timer: a plain local countdown, reset every time
   // it becomes a new turn. Only the seat whose turn it actually is sends
@@ -226,7 +310,12 @@ export default function MalDalliJaBoard({
               }`}
             />
           )}
-          {occupant && (
+          {/* Suppressed while this exact horse is mid-flight in the
+              `AnimatedHorse` overlay above the grid — its `state.positions`
+              is already at this final cell the whole time (see this
+              component's 2026-08-24 module-doc paragraph), so rendering
+              both here would show it twice. */}
+          {occupant && !animatingKeys.has(`${occupant.seat}-${occupant.horseIndex}`) && (
             <span
               key={`${occupant.seat}-${occupant.horseIndex}-${row}-${col}`}
               className={`absolute inset-[10%] overflow-hidden rounded-lg border-2 bg-[#f5f0e6] shadow-[0_3px_8px_-1px_rgba(0,0,0,0.65)] transition ${SEAT_THEME[occupant.seat].ring} ${
@@ -307,8 +396,28 @@ export default function MalDalliJaBoard({
       )}
 
       {/* ---- Board ---- */}
-      <div className="mx-auto grid w-full max-w-xl grid-cols-11 overflow-hidden rounded-xl border border-white/10 bg-black shadow-[0_0_60px_-15px_rgba(244,63,94,0.35)]">
-        {cells}
+      <div className="relative mx-auto w-full max-w-xl">
+        <div className="grid w-full grid-cols-11 overflow-hidden rounded-xl border border-white/10 bg-black shadow-[0_0_60px_-15px_rgba(244,63,94,0.35)]">
+          {cells}
+        </div>
+        {/* ---- Move-animation overlay: flying horses + their dust/impact/
+            speed-trail/LEAD particles, positioned in the same board-percent
+            coordinate system as the grid beneath it (see MoveEffects.tsx's
+            module doc for why no pixel measurement is needed). */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
+          <MoveParticleLayer particles={particles} onExpire={handleParticleExpire} />
+          {animations.map((anim) => (
+            <AnimatedHorse
+              key={anim.id}
+              anim={anim}
+              pieceImage={SEAT_THEME[anim.seat].pieceImage}
+              altName={`${SEAT_THEME[anim.seat].name} 말`}
+              ringClass={SEAT_THEME[anim.seat].ring}
+              onEvent={(evt) => handleAnimEvent(anim, evt)}
+              onDone={() => handleAnimDone(anim.id)}
+            />
+          ))}
+        </div>
       </div>
 
       <p className="text-center text-xs text-white/40">
@@ -321,7 +430,10 @@ export default function MalDalliJaBoard({
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
 
-      {state.phase === "gameOver" && state.winner && (
+      {/* `animations.length === 0` gate: let the winning move's flight +
+          landing impact finish playing before this full-screen overlay
+          takes over (see this component's 2026-08-24 module-doc paragraph). */}
+      {state.phase === "gameOver" && state.winner && animations.length === 0 && (
         <GameOverOverlay
           amIWinner={state.winner === viewerSeat}
           winnerName={names[state.winner]}

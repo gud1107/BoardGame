@@ -722,6 +722,99 @@ body {
   }
 }
 
+/* 말달리자's hoof dust puff — spawned once per hop landing (every
+   intermediate cell of a multi-cell slide, plus the final cell) by
+   MoveEffects.tsx's AnimatedHorse. Quick expand-and-drift-up fade so a
+   gallop reads as kicking up sand rather than sliding silently. */
+@keyframes maldallija-dust-puff {
+  0% {
+    transform: scale(0.3) translateY(0);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(1.7) translateY(-30%);
+    opacity: 0;
+  }
+}
+
+/* 말달리자's landing-impact ring — spawned once at the *final* cell of any
+   move (slide or knight) by MoveEffects.tsx's AnimatedHorse, layered on top
+   of the smaller per-hop dust puff so the destination cell reads as a real
+   touchdown, not just another hop. */
+@keyframes maldallija-impact-ripple {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+/* 말달리자's motion-trail streak — fired once per hop on a slide of 2+
+   cells only (MoveEffects.tsx's `showSpeedTrail`, this game has no
+   dice/boost mechanic to key a "boosted move" off of otherwise). Rotated to
+   the travel direction via inline `transform`, this keyframe just handles
+   the stretch-and-fade. */
+@keyframes maldallija-speed-streak {
+  0% {
+    opacity: 0;
+    transform: translate(0, -50%) rotate(var(--streak-angle, 0deg)) scaleX(0.3);
+  }
+  30% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(0, -50%) rotate(var(--streak-angle, 0deg)) scaleX(1.5) translateX(-25%);
+  }
+}
+
+/* 말달리자's knight (L자) jump trail dot — 2-3 sampled along the parabolic
+   arc per jump (MoveEffects.tsx's `KNIGHT_TRAIL_CHECKPOINTS`), tinted
+   magenta to visually set the L자 jump apart from a slide's cyan/amber hop
+   trail. Tighter/faster fade than the dust puff since it's a mid-air
+   sparkle, not a ground puff. */
+@keyframes maldallija-knight-trail {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
+
+/* 말달리자's "🔥 질주" LEAD badge — pops up once when a horse's landing
+   cell newly enters the oasis diamond zone from outside it (see
+   MoveEffects.tsx's `showLeadBadge` — this game has no lap/1st-place
+   concept for a literal "overtake", so entering the win-zone is the
+   stand-in signal). Floats up and fades over its ~1.1s lifetime. */
+@keyframes maldallija-lead-badge-pop {
+  0% {
+    transform: translate(-50%, -100%) translateY(6px) scale(0.6);
+    opacity: 0;
+  }
+  20% {
+    transform: translate(-50%, -100%) translateY(-4px) scale(1.12);
+    opacity: 1;
+  }
+  35% {
+    transform: translate(-50%, -100%) translateY(-6px) scale(1);
+    opacity: 1;
+  }
+  80% {
+    transform: translate(-50%, -100%) translateY(-10px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -100%) translateY(-20px) scale(0.9);
+    opacity: 0;
+  }
+}
+
 /* 언어의 조각's hint-tile reveal — each syllable's cho/jung/jong chip flips
    in with a staggered delay (see PiecesOfLanguageBoard.tsx's SyllableTile),
    mirroring a Wordle-style reveal so a guess reads as a judgment sequence
