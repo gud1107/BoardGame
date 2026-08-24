@@ -59,6 +59,21 @@
  * still wins per §4, sliding through/onto the green ring is just a normal
  * stop, and sliding past the center still doesn't win.
  *
+ * **2026-08-25 session — oasis-zone knight restriction relieved to
+ * landing-only**: a bug report (`이동하지못하는 앞왼쪽.png`) showed a horse
+ * already sitting in/near the oasis zone couldn't knight-jump back *out* of
+ * it at all, and a horse elsewhere on the board could have an otherwise-legal
+ * jump refused just because one of its two possible L-shape "elbow"
+ * decompositions happened to graze the zone — both stricter than the
+ * rulebook ever asked for (§4's own oasis-landing rule only ever cares about
+ * the *destination*). Confirmed via `AskUserQuestion` (Strict No-Assumption
+ * Rule in the request) in favor of relief over full removal: the
+ * `from`-cell and both elbow-cell checks are dropped entirely, leaving only
+ * "a knight move that *lands* inside the 13-cell zone is illegal" — slide
+ * remains the only way to enter or win on the zone, but a horse already
+ * there (or merely passing near it mid-arc) can now freely knight-jump
+ * anywhere else on the board.
+ *
  * **2026-08-16 session — 4방향 직교 슬라이드 하우스 룰**: a bug report claimed
  * diagonal slide movement was a bug. It isn't — 말달리자.md §3 "이동 방식 1"
  * explicitly specifies "상, 하, 좌, 우 및 4개 대각선 방향 (총 8방향)". Surfaced
@@ -204,30 +219,15 @@ export const KNIGHT_OFFSETS: readonly [number, number][] = [
 ];
 
 /**
- * The two possible "elbow" cells for a knight move from `from` by `(dr, dc)`
- * — a knight offset with |dr|,|dc| = 2,1 (in either order) can be read as
- * "2 then turn 1" or "1 then turn 2", each implying a different corner cell
- * the L-shape bends around. Used only by the oasis knight-restriction house
- * rule below; the rulebook itself never checks a knight move's path (§3:
- * "장애물을 넘어서 이동할 수 있다").
+ * 2026-08-14 house rule (see module doc), relieved to landing-only on
+ * 2026-08-25 — **not** in the rulebook either way. A knight move that
+ * *lands* inside the oasis zone (blue center or green ring) is illegal —
+ * only slide moves may enter the zone — but the moving horse's own current
+ * cell and its L-shaped path's "elbow" cell no longer matter, so a horse
+ * already in/near the zone can freely knight-jump back out.
  */
-function knightElbowCells(from: Position, dr: number, dc: number): [Position, Position] {
-  return [
-    { row: from.row + dr, col: from.col },
-    { row: from.row, col: from.col + dc },
-  ];
-}
-
-/**
- * 2026-08-14 house rule (see module doc) — **not** in the rulebook. Once a
- * horse is on the oasis zone (blue or green), or an L-move would land in it
- * or bend its path around it (either elbow decomposition), the knight move
- * is illegal — only slide moves remain available in/through the zone.
- */
-function knightBlockedByOasisZone(from: Position, to: Position, dr: number, dc: number): boolean {
-  if (isOasisZoneCell(from) || isOasisZoneCell(to)) return true;
-  const [elbowA, elbowB] = knightElbowCells(from, dr, dc);
-  return isOasisZoneCell(elbowA) || isOasisZoneCell(elbowB);
+function knightBlockedByOasisZone(to: Position): boolean {
+  return isOasisZoneCell(to);
 }
 
 export interface LegalMove {
@@ -346,8 +346,9 @@ export function getLegalMoves(state: MalDalliJaState): LegalMove[] {
     for (const [dr, dc] of KNIGHT_OFFSETS) {
       const to: Position = { row: from.row + dr, col: from.col + dc };
       // §3 "이동 방식 2": lands only on an empty square; any horse may be
-      // jumped. Plus the 2026-08-14 house rule: never in/through the oasis zone.
-      if (inBounds(to) && !occupied.has(posKey(to)) && !knightBlockedByOasisZone(from, to, dr, dc)) {
+      // jumped. Plus the 2026-08-14 house rule (landing-only since 2026-08-25):
+      // never lands inside the oasis zone.
+      if (inBounds(to) && !occupied.has(posKey(to)) && !knightBlockedByOasisZone(to)) {
         moves.push({ horseIndex, moveKind: "knight", dr, dc, to });
       }
     }

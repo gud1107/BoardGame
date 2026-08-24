@@ -36,9 +36,11 @@ import {
  * engine has no notion of "selection", only of completed `move` actions
  * carrying a `horseIndex`. The oasis renders as a diamond-shaped zone
  * (pixel-matched to `말달리자판.png`): a large pulsing blue circle on the
- * dead-center cell, ringed by 12 green-circle cells — knight (L자) moves are
- * blocked anywhere in that 13-cell zone (`isOasisZoneCell`), only slide
- * moves work there.
+ * dead-center cell, ringed by 12 green-circle cells — knight (L자) moves may
+ * not *land* inside that 13-cell zone (`isOasisZoneCell`, landing-cell-only
+ * since the 2026-08-25 relief — see engine.ts's module doc), only slide
+ * moves may enter it, but a horse already on/near the zone can freely
+ * knight-jump back out to anywhere else on the board.
  *
  * **2026-08-18 session (rulebook piece-photo swap)**: on-board horse tokens
  * render `SEAT_THEME[seat].pieceImage` (the real knight-chess-piece photos
@@ -423,7 +425,7 @@ export default function MalDalliJaBoard({
       <p className="text-center text-xs text-white/40">
         {isMyTurn
           ? selectedHorseIndex === null
-            ? "내 차례입니다 — 이동 가능한 말을 선택하세요 (🔵 = 오아시스, 도착하면 즉시 승리 · 🟢 오아시스 구역에서는 나이트 이동 불가)"
+            ? "내 차례입니다 — 이동 가능한 말을 선택하세요 (🔵 = 오아시스, 도착하면 즉시 승리 · 🟢 오아시스 구역으로는 나이트 이동 착지 불가)"
             : "하이라이트된 칸으로 이동하세요 (파랑=슬라이드, 자홍=나이트 · 다시 탭하면 선택 해제)"
           : `${names[opponentSeat]}의 차례를 기다리는 중…`}
       </p>

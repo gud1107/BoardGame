@@ -34,15 +34,62 @@ import { BOARD_SIZE, isOasisZoneCell, type MoveKind, type MoveRecord, type Posit
  *    arc (higher hop peak, single bound, no intermediate cells since there's
  *    nothing to step through) plus a magenta trail of fading dots sampled
  *    along the arc.
+ *
+ * **2026-08-25 session — slide hop accelerated**: per explicit user
+ * confirmation (`AskUserQuestion`, Strict No-Assumption Rule in the
+ * request), the per-cell hop dropped from 250ms to 130ms (roughly 2x
+ * faster) for a snappier "질주감", and the per-hop easing switched from a
+ * plain quadratic ease-out to a `cubic-bezier(0.25, 1, 0.5, 1)`-equivalent
+ * curve (`cubicBezierEase` below) for a more natural accelerate/decelerate
+ * feel — both requested explicitly in the same message, no ambiguity to
+ * confirm there. `KNIGHT_JUMP_MS` was explicitly confirmed to stay at 380ms
+ * (kept feeling like "one deliberate bigger leap" rather than scaling down
+ * with the slide hop).
  */
 
-export const HOP_MS = 250;
+export const HOP_MS = 130;
 /** Single-bound duration for knight moves. Not `steps * HOP_MS` — a knight
  * move has no intermediate cells to step through (`buildPath` below returns
  * just `[from, to]`), so this is a fixed, feel-tuned duration: longer than
  * one slide hop (reads as a bigger leap) but shorter than two (stays
- * snappy, doesn't drag). */
+ * snappy, doesn't drag). Deliberately left at its original value in the
+ * 2026-08-25 slide-acceleration session (user confirmed via
+ * `AskUserQuestion`) rather than scaling down with `HOP_MS`. */
 export const KNIGHT_JUMP_MS = 380;
+
+/**
+ * Evaluates a CSS-style `cubic-bezier(x1, y1, x2, y2)` timing function at
+ * time-fraction `t` (0..1) — same semantics as the CSS property, just
+ * computed in JS since the per-hop position here is driven imperatively via
+ * `requestAnimationFrame` (see this file's module doc), not a declarative
+ * CSS `transition`. `x1`/`x2` are the curve's horizontal control points
+ * (must keep the curve x-monotonic, as any valid CSS easing does) and
+ * `y1`/`y2` are the vertical ones; solved via a few Newton-Raphson
+ * iterations against the cubic Bézier's `x(s) = t` (cheap enough for a
+ * once-per-frame call — at most a couple of horses animate at once).
+ * 2026-08-25 session: replaces the previous plain `1 - (1-t)^2` quadratic
+ * ease-out with the exact curve the user asked for
+ * (`cubic-bezier(0.25, 1, 0.5, 1)`, confirmed unambiguous in the request —
+ * no `AskUserQuestion` needed for this part).
+ */
+function cubicBezierEase(t: number, x1: number, y1: number, x2: number, y2: number): number {
+  const bezierComponent = (a: number, b: number, s: number) => {
+    const s1 = 1 - s;
+    return 3 * s1 * s1 * s * a + 3 * s1 * s * s * b + s * s * s;
+  };
+  const bezierDerivative = (a: number, b: number, s: number) => {
+    const s1 = 1 - s;
+    return 3 * s1 * s1 * a + 6 * s1 * s * (b - a) + 3 * s * s * (1 - b);
+  };
+  let s = t;
+  for (let i = 0; i < 6; i++) {
+    const dx = bezierComponent(x1, x2, s) - t;
+    const slope = bezierDerivative(x1, x2, s);
+    if (Math.abs(slope) < 1e-6) break;
+    s -= dx / slope;
+  }
+  return bezierComponent(y1, y2, s);
+}
 
 /** One board cell as a percentage of the (square) board's own width/height —
  * every position in this file is expressed in this unit so nothing needs a
@@ -201,7 +248,7 @@ export function AnimatedHorse({
 
       const from = anim.path[segIndex];
       const to = anim.path[segIndex + 1];
-      const eased = 1 - (1 - segT) * (1 - segT); // ease-out — snappy touchdown, not floaty
+      const eased = cubicBezierEase(segT, 0.25, 1, 0.5, 1); // snappy accelerate/decelerate, not floaty
       const row = from.row + (to.row - from.row) * eased;
       const col = from.col + (to.col - from.col) * eased;
       const hopPct = Math.sin(Math.PI * segT) * hopPeakPct;
@@ -328,7 +375,11 @@ function renderParticle(p: MoveParticle, onExpire: (id: number) => void) {
               // instant the animation starts, since they animate the same
               // property.
               "--streak-angle": `${p.angleDeg}deg`,
-              animation: "maldallija-speed-streak 0.32s ease-out forwards",
+              // 2026-08-25: shortened from 0.32s alongside the HOP_MS cut
+              // (250ms -> 130ms) so a multi-hop slide's per-segment streaks
+              // stay crisp, individually-readable flashes instead of piling
+              // up into one blurred smear across several hops.
+              animation: "maldallija-speed-streak 0.18s ease-out forwards",
             } as CSSProperties
           }
           onAnimationEnd={() => onExpire(p.id)}

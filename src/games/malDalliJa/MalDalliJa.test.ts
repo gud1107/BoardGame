@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededRng } from "@/lib/rng";
+import { HOP_MS, KNIGHT_JUMP_MS } from "./MoveEffects";
 import {
   BOARD_SIZE,
   HOME_ZONES,
@@ -414,43 +415,66 @@ describe("oasis win condition (§4 — must land exactly on the single blue cent
 // ---------------------------------------------------------------------------
 // New 2026-08-14 house rule — NOT in the rulebook (§3/§4 have no oasis
 // carve-out for knight moves; §6 even recommends knight moves near the
-// oasis). Zone-wide (13-cell diamond), broader than the single-cell version
-// this session replaces. See engine.ts's module doc for the full context.
+// oasis). Originally zone-wide (origin/landing/either elbow cell inside the
+// 13-cell diamond all blocked); relieved to landing-cell-only on 2026-08-25
+// after a bug report showed it over-blocked legitimate moves. See
+// engine.ts's module doc for the full context.
 // ---------------------------------------------------------------------------
 
-describe("[하우스 룰] 오아시스 구역 L자 이동 제약 (2026-08-14, 룰북에 없는 신규 규칙, 존 전체 적용)", () => {
-  it("blocks a knight move whenever the mover's own cell is already inside the oasis zone, even if the landing/elbow cells are outside it", () => {
+describe("[하우스 룰] 오아시스 구역 L자 이동 제약 (2026-08-14 신규, 2026-08-25 착지-전용으로 완화, 룰북에 없는 규칙)", () => {
+  it("2026-08-25 완화: mover's own cell already inside the oasis zone no longer blocks a knight move landing outside it ('앞왼쪽 이동 불가' bug report)", () => {
     // From (5,3) — inside the zone (distance 2) — offset (1,-2) lands on
-    // (6,1) (distance 5, outside) via elbow cells (6,3) and (5,1) (distances
-    // 3 and 4, both outside) — the only reason this is blocked is "위에서".
+    // (6,1) (distance 5, outside the zone) — previously blocked purely
+    // because the *origin* was inside the zone; now allowed since only the
+    // landing cell is checked.
     const state = forceState({ positions: { p1: [{ row: 5, col: 3 }], p2: [{ row: 10, col: 10 }] } });
     const moves = getLegalMoves(state).filter((m) => m.moveKind === "knight");
-    expect(moves.map((m) => m.to)).not.toContainEqual({ row: 6, col: 1 });
+    expect(moves.map((m) => m.to)).toContainEqual({ row: 6, col: 1 });
   });
 
-  it("blocks a knight move whenever the landing cell alone is inside the oasis zone ('진입')", () => {
+  it("blocks a knight move whenever the landing cell alone is inside the oasis zone ('진입') — unchanged by the 2026-08-25 relief", () => {
     // From (3,2) — outside the zone (distance 5) — offset (2,1) lands on
-    // (5,3), which is inside the zone (distance 2); both elbow cells (5,2)
-    // and (3,3) are outside it.
+    // (5,3), which is inside the zone (distance 2).
     const state = forceState({ positions: { p1: [{ row: 3, col: 2 }], p2: [{ row: 10, col: 10 }] } });
     const moves = getLegalMoves(state).filter((m) => m.moveKind === "knight");
     expect(moves.map((m) => m.to)).not.toContainEqual({ row: 5, col: 3 });
   });
 
-  it("blocks a knight move whenever only an elbow cell passes through the oasis zone ('경유'), even though the mover's cell and landing cell are both outside it (row-first decomposition)", () => {
-    // From (3,3): offset (2,-1) lands on (5,2) (distance 3, outside) but the
-    // "2 rows then turn 1 column" elbow reading is (5,3) (distance 2, inside).
+  it("2026-08-25 완화: an elbow cell merely passing through the oasis zone ('경유') no longer blocks the move (row-first decomposition)", () => {
+    // From (3,3): offset (2,-1) lands on (5,2) (distance 3, outside the
+    // zone) — the "2 rows then turn 1 column" elbow reading (5,3) is inside
+    // the zone (distance 2), but the elbow is no longer checked.
     const state = forceState({ positions: { p1: [{ row: 3, col: 3 }], p2: [{ row: 10, col: 10 }] } });
     const moves = getLegalMoves(state).filter((m) => m.moveKind === "knight");
-    expect(moves.map((m) => m.to)).not.toContainEqual({ row: 5, col: 2 });
+    expect(moves.map((m) => m.to)).toContainEqual({ row: 5, col: 2 });
   });
 
-  it("blocks a knight move via the other elbow decomposition (column-first), same origin", () => {
-    // From (3,3): offset (-1,2) lands on (2,5) (distance 3, outside) but the
-    // "2 columns then turn 1 row" elbow reading is (3,5) (distance 2, inside).
+  it("2026-08-25 완화: the other elbow decomposition (column-first) no longer blocks the move either, same origin", () => {
+    // From (3,3): offset (-1,2) lands on (2,5) (distance 3, outside the
+    // zone) — the "2 columns then turn 1 row" elbow reading (3,5) is inside
+    // the zone (distance 2), but the elbow is no longer checked.
     const state = forceState({ positions: { p1: [{ row: 3, col: 3 }], p2: [{ row: 10, col: 10 }] } });
     const moves = getLegalMoves(state).filter((m) => m.moveKind === "knight");
-    expect(moves.map((m) => m.to)).not.toContainEqual({ row: 2, col: 5 });
+    expect(moves.map((m) => m.to)).toContainEqual({ row: 2, col: 5 });
+  });
+
+  it("regression — 중앙 레인(오아시스 존 안)에 있는 말이 앞-왼쪽(row 감소, col 감소)으로 나이트 이동 가능해야 한다 (이동하지못하는 앞왼쪽.png)", () => {
+    // From (6,4) — inside the zone (distance 2, matches the bug-report
+    // screenshot's blocked horse) — offset (-2,-1) lands on (4,3), outside
+    // the zone (distance 3): a literal "앞-왼쪽" (up-and-left) knight move.
+    const state = forceState({ positions: { p1: [{ row: 6, col: 4 }], p2: [{ row: 10, col: 10 }] } });
+    const moves = getLegalMoves(state).filter((m) => m.moveKind === "knight");
+    expect(moves.map((m) => m.to)).toContainEqual({ row: 4, col: 3 });
+  });
+
+  it("regression — 우측 레인(오아시스 존 오른쪽 바깥)에 있는 말도 앞-왼쪽으로 나이트 이동 가능해야 한다", () => {
+    // From (5,8) — outside the zone (distance 3, to the oasis's right) —
+    // offset (-2,-1) lands on (3,7), outside the zone (distance 4): a
+    // "앞-왼쪽" knight move whose column-first elbow (5,7) sits inside the
+    // zone (distance 2) — previously blocked purely by that elbow.
+    const state = forceState({ positions: { p1: [{ row: 5, col: 8 }], p2: [{ row: 10, col: 10 }] } });
+    const moves = getLegalMoves(state).filter((m) => m.moveKind === "knight");
+    expect(moves.map((m) => m.to)).toContainEqual({ row: 3, col: 7 });
   });
 
   it("never offers a knight move landing exactly on the oasis center", () => {
@@ -647,4 +671,33 @@ describe("Level 10 고수 AI끼리 풀 시뮬레이션 (크래시/무한루프 �
     expect(["playing", "gameOver"]).toContain(state.phase);
     if (state.phase === "gameOver") expect(state.winner).not.toBeNull();
   }, 60_000);
+});
+
+// ---------------------------------------------------------------------------
+// 2026-08-25 session — slide hop acceleration (MoveEffects.tsx). A real
+// browser-rendered frame-drop / 60fps measurement isn't feasible in vitest's
+// jsdom-less environment (no rAF-driven paint pipeline to sample), so this
+// is a regression guard on the constants themselves instead: confirms the
+// user-approved values landed exactly, and that HOP_MS stays comfortably
+// above a single 60fps frame budget (~16.7ms) so a hop can never collapse to
+// a single un-eased frame — the actual per-frame cost is unchanged from the
+// pre-acceleration version (still just a `transform` write on a
+// `will-change: transform` element, see MoveEffects.tsx's module doc; the
+// new `cubicBezierEase` adds a handful of cheap Newton-Raphson iterations of
+// plain arithmetic per frame, negligible next to that).
+// ---------------------------------------------------------------------------
+
+describe("move animation timing (MoveEffects.tsx, 2026-08-25 slide-hop acceleration)", () => {
+  it("HOP_MS was accelerated to the user-confirmed 130ms per cell (from 250ms)", () => {
+    expect(HOP_MS).toBe(130);
+  });
+
+  it("KNIGHT_JUMP_MS was explicitly left at 380ms, not scaled down with HOP_MS", () => {
+    expect(KNIGHT_JUMP_MS).toBe(380);
+  });
+
+  it("HOP_MS stays well above a single 60fps frame (~16.7ms), leaving multiple frames per hop even at the faster pace", () => {
+    const singleFrameBudgetMs = 1000 / 60;
+    expect(HOP_MS).toBeGreaterThan(singleFrameBudgetMs * 5);
+  });
 });
