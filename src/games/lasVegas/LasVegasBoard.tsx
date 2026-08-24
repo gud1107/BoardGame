@@ -122,29 +122,41 @@ function DiceGroupRow({
 }
 
 /**
- * Cascading money stack — every bill on the casino gets its own card, offset
- * downward in a staircase so all values stay individually readable (per
- * user decision: show every bill, not just the top one + a "+N" badge, since
- * setup can deal up to ~5 bills onto one casino before the $50k floor is
- * met). Lives in its own zone *outside* the theme art (see `CasinoTile`) so
- * a casino with several bills never grows on top of the illustration.
+ * Non-overlapping money row/list — every bill on the casino gets its own
+ * fully visible card, never covered by another card (per 2026-08-24 재요청:
+ * the previous staircase-cascade layout, where each later card overlapped
+ * the one above it by ~11px, hid the covered bills' values/counts — see
+ * `boardGameRule/라스베가스/주사위가 가리는 현상.png`). Setup can deal up to ~5
+ * bills onto one casino before the $50k floor is met (`MIN_CASINO_TOTAL` in
+ * `engine.ts`), so the arrangement switches by count (per user decision):
+ *   - **1-2 bills:** one horizontal row (`flex`), each card sharing the
+ *     tile's width equally — plenty of room for 2 side by side.
+ *   - **3-5 bills:** a vertical list (`flex-col`), one full-width card per
+ *     row, so a busy casino grows *taller* instead of squeezing 3+ cards
+ *     into one cramped row (the mobile tile grid itself, `grid-cols-2` at
+ *     `LasVegasBoard.tsx`'s casino `<section>`, stays fixed regardless of
+ *     bill count — confirmed with the user rather than widening busy tiles).
+ * Lives in its own zone *outside* the theme art (see `CasinoTile`) so a
+ * casino with several bills never grows on top of the illustration.
  *
- * 2026-08-23 실시간 상금 수령자 표시 추가: `leaders[0]`/`leaders[1]` are this
- * casino's current (provisional, live) rank-1/rank-2 dice owners — the exact
- * same non-tied, count-descending order `settleCasino` would award bills in
- * (see `CasinoTile`, which derives them from `tallyDiceGroups`). Since
- * `settleCasino` hands out bills top-of-stack-first in that same order, bill
- * index 0 IS what rank-1 would currently win, and index 1 is rank-2's —
- * so the badge maps onto the literal card the rulebook would hand over,
- * not an arbitrary separate indicator. A neutral-owned rank gets a muted
- * "폐기 예정" tag instead of a colored aura/crown, since it has no player
- * color and the rulebook discards that bill rather than paying anyone
- * (§4 규칙 2 "중립 주사위가 상금을 받게 되는 경우"). The aura ring + badge for
- * each rank render as a *separate* absolutely-positioned overlay layer
- * (z-index 50+), not baked into that bill's own cascade card — cascade
- * cards intentionally cover each other's lower portion (later card = higher
- * z-index, per the staircase look), which would otherwise hide rank-1's
- * badge behind rank-2's card whenever a casino has 2+ bills.
+ * 2026-08-23 실시간 상금 수령자 표시(2026-08-24 재구성): `leaders[0]`/`leaders[1]`
+ * are this casino's current (provisional, live) rank-1/rank-2 dice owners —
+ * the exact same non-tied, count-descending order `settleCasino` would award
+ * bills in (see `CasinoTile`, which derives them from `tallyDiceGroups`).
+ * Since `settleCasino` hands out bills top-of-stack-first in that same
+ * order, bill index 0 IS what rank-1 would currently win, and index 1 is
+ * rank-2's. A neutral-owned rank gets a muted "폐기 예정" tag instead of a
+ * colored aura/crown, since it has no player color and the rulebook
+ * discards that bill rather than paying anyone (§4 규칙 2 "중립 주사위가 상금을
+ * 받게 되는 경우"). Now that cards no longer overlap, the aura ring + badge
+ * live directly on each bill's own wrapper (no separate stack-wide overlay
+ * layer needed — that was only there to stay above whichever card the
+ * cascade z-index happened to bury a badge under).
+ *
+ * 2026-08-24 재요청: each card also carries its own small rank corner tag
+ * ("1등"/"2등"/...) so the rank↔value mapping reads off the card itself,
+ * *in addition to* (not replacing) the "1등 $80,000" pill list underneath —
+ * user explicitly asked to keep both rather than drop one for the other.
  */
 function MoneyStack({
   bills,
@@ -155,7 +167,6 @@ function MoneyStack({
   leaders: (DiceOwner | undefined)[];
   names: Record<SeatIndex, string>;
 }) {
-  const total = bills.reduce((s, v) => s + v, 0);
   if (bills.length === 0) {
     return (
       <div className="flex h-14 w-full items-center justify-center rounded-lg border border-dashed border-white/20 bg-black/20 text-[9px] text-white/40">
@@ -163,63 +174,63 @@ function MoneyStack({
       </div>
     );
   }
-  // Reserve enough height for the full cascade (each card peeks ~11px past
-  // the one above it) plus the final card's own height, so the last bill's
-  // full face is never clipped by the container.
-  const stackHeight = 34 + (bills.length - 1) * 11;
+  const isRow = bills.length <= 2;
   return (
     <div className="flex w-full flex-col items-center gap-1">
-      <div className="relative w-full" style={{ height: stackHeight }}>
-        {bills.map((bill, i) => (
-          <div
-            key={i}
-            className="absolute inset-x-0 h-9 overflow-hidden rounded-md shadow-[0_4px_10px_-3px_rgba(0,0,0,0.9)]"
-            style={{ top: i * 11, zIndex: i + 1 }}
-          >
-            <MoneyBillArt value={bill} />
-          </div>
-        ))}
-        {/* Live rank-1/2 aura+badge overlay — deliberately its own layer above
-            every cascade card (z-index 50+), see this component's doc. */}
-        {leaders.map((leader, i) => {
-          if (leader === undefined || i >= bills.length) return null;
+      <div className={isRow ? "flex w-full gap-1.5" : "flex w-full flex-col gap-1.5"}>
+        {bills.map((bill, i) => {
+          const leader = leaders[i];
+          const hasLeader = leader !== undefined;
           const isNeutralLeader = leader === NEUTRAL_OWNER;
-          const seatColor = isNeutralLeader ? null : diceColorForSeat(leader as SeatIndex);
+          const seatColor = hasLeader && !isNeutralLeader ? diceColorForSeat(leader as SeatIndex) : null;
           return (
-            <div
-              key={`leader-${i}`}
-              className="pointer-events-none absolute inset-x-0 h-9 rounded-md"
-              style={{
-                top: i * 11,
-                zIndex: 50 + i,
-                ...(seatColor
-                  ? {
-                      animation: "lasvegas-leader-aura-pulse 1.8s ease-in-out infinite",
-                      ["--aura-soft" as string]: hexToRgba(seatColor, 0.4),
-                      ["--aura-strong" as string]: hexToRgba(seatColor, 0.9),
-                    }
-                  : { boxShadow: "0 0 0 1.5px rgba(148,163,184,0.55)" }),
-              }}
-            >
-              {seatColor ? (
-                <span
-                  className="absolute -right-1 -bottom-1.5 rounded-full border px-1.5 py-0.5 text-[8px] font-bold whitespace-nowrap text-white shadow-[0_2px_4px_rgba(0,0,0,0.7)]"
-                  style={{ borderColor: seatColor, background: "rgba(0,0,0,0.78)" }}
-                >
-                  {i === 0 ? "👑 1st" : "🥈 2nd"} {names[leader as SeatIndex]}
+            <div key={i} className={`relative h-10 ${isRow ? "min-w-0 flex-1" : "w-full"}`}>
+              <div
+                className="relative h-10 w-full overflow-hidden rounded-md shadow-[0_3px_8px_-3px_rgba(0,0,0,0.85)]"
+                style={
+                  hasLeader
+                    ? seatColor
+                      ? {
+                          animation: "lasvegas-leader-aura-pulse 1.8s ease-in-out infinite",
+                          ["--aura-soft" as string]: hexToRgba(seatColor, 0.4),
+                          ["--aura-strong" as string]: hexToRgba(seatColor, 0.9),
+                        }
+                      : { boxShadow: "0 0 0 1.5px rgba(148,163,184,0.55)" }
+                    : undefined
+                }
+              >
+                <MoneyBillArt value={bill} />
+                <span className="absolute top-0.5 left-0.5 rounded-full bg-black/65 px-1 py-px text-[7px] leading-tight font-bold whitespace-nowrap text-white">
+                  {i + 1}등
                 </span>
-              ) : (
-                <span className="absolute -right-1 -bottom-1.5 rounded-full border border-slate-400/60 bg-black/78 px-1.5 py-0.5 text-[8px] font-semibold whitespace-nowrap text-slate-300 shadow-[0_2px_4px_rgba(0,0,0,0.7)]">
-                  🚫 중립 · 폐기 예정
-                </span>
-              )}
+              </div>
+              {hasLeader &&
+                (seatColor ? (
+                  <span
+                    className="pointer-events-none absolute -right-1 -bottom-1.5 z-10 rounded-full border px-1.5 py-0.5 text-[8px] font-bold whitespace-nowrap text-white shadow-[0_2px_4px_rgba(0,0,0,0.7)]"
+                    style={{ borderColor: seatColor, background: "rgba(0,0,0,0.78)" }}
+                  >
+                    {i === 0 ? "👑 1st" : "🥈 2nd"} {names[leader as SeatIndex]}
+                  </span>
+                ) : (
+                  <span className="pointer-events-none absolute -right-1 -bottom-1.5 z-10 rounded-full border border-slate-400/60 bg-black/78 px-1.5 py-0.5 text-[8px] font-semibold whitespace-nowrap text-slate-300 shadow-[0_2px_4px_rgba(0,0,0,0.7)]">
+                    🚫 중립 · 폐기 예정
+                  </span>
+                ))}
             </div>
           );
         })}
       </div>
-      <span className="rounded-full border border-white/20 bg-black/50 px-2 py-0.5 text-[9px] font-semibold whitespace-nowrap text-emerald-200">
-        총 {money(total)} · {bills.length}장
-      </span>
+      <div className="flex w-full flex-col items-center gap-0.5">
+        {bills.map((bill, i) => (
+          <span
+            key={i}
+            className="w-full rounded-full border border-white/20 bg-black/50 px-2 py-0.5 text-center text-[9px] font-semibold whitespace-nowrap text-emerald-200"
+          >
+            {i + 1}등 {money(bill)}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
