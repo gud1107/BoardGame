@@ -31,9 +31,9 @@ _그 이전 갱신: 2026-08-23 (**라스베가스 흰색 롤 플래시 완전 �
 1. `HANDOFF.md`에는 운명전쟁39 세션(`f8958f6`, 이미 푸시 완료)의 문서 항목이 스테이징만 되고 커밋되지 못한 채 남아 있었음 — 이미 완료·푸시된 작업의 기록 누락이라 판단해 이번 커밋에 그대로 포함해 함께 커밋.
 2. `LasVegasBoard.tsx` 작업 트리에는 이번 작업과 무관한 미커밋 변경 두 종류가 섞여 있었음 — (a) `DiceGroupRow`에 "×N" 개수 배지를 추가하는 변경, (b) 저작권/상표권 정리 세션이 남긴 `CasinoTile` 상단 주석(실사 카지노 사진 관련 문구) 수정. 또한 그 저작권/상표권 세션은 `registry.ts`/`CasinoPhotoArt.tsx`/`CasinoEmblem.tsx`와 `public/games`·`public/images/lasVegas`의 실물 이미지 삭제까지 미커밋 상태로 남겨둔 상태였음. 이 변경들은 검증되지 않았고 이번 요청과 무관하므로, `git apply --cached`로 `MoneyStack` 관련 hunk만 골라 스테이징해 이번 커밋에서 의도적으로 제외했음 — 작업 트리에는 그대로 남아 있으므로 해당 세션에서 직접 검증 후 별도로 커밋해야 함.
 
-**커밋/푸시**: 이 커밋 직후 별도의 소규모 문서 커밋으로 실제 해시를 기록(커밋 내용에 자기 자신의 해시를 미리 적을 수 없는 자기참조 문제 회피 — 후속 커밋에서 보완).
+**커밋/푸시**: `4a670be feat(las-vegas): unstack and align money cards side-by-side for clear payout visibility` → `git push origin main` 완료.
 
-**배포**: 아래 후속 문서 커밋에서 결과(URL 또는 미실행 사유)를 기록.
+**배포**: `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주(Turbopack 빌드+TypeScript 전체 재검사 포함), READY — `https://board-game-f91mkfoxl-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준). 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위 "커밋 시점에 확인된 사실"에 적은 다른 세션들의 미커밋 변경(저작권/상표권 정리 세션의 라스베가스 실사 사진·카탈로그 썸네일 삭제, `LasVegasBoard.tsx`의 "×N" 개수 배지 추가 등)도 함께 반영됨 — 사용자에게 확인받고 진행(질문 응답: "지금 그냥 테스트단계니까 커밋, 푸쉬, 배포해주세요").
 
 ### 2026-08-23 — 운명전쟁39 리버스 카드 숫자 가독성 수정 및 모바일 카드/폰트 크기 확대
 
