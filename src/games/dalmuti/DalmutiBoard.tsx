@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
 import CardExchangeModal from "./CardExchangeModal";
-import { CardFace, RoleBadge } from "./CardArt";
-import { detectCommonerSwapEvents, detectTaxEvents, FlyingExchangeCard, RevolutionBanner, type TaxFlyEvent } from "./DalmutiEffects";
+import { CardFace, RoleBadge, type AuraTier } from "./CardArt";
+import { detectCommonerSwapEvents, detectTaxEvents, FlyingExchangeCard, ReceivedCardGlow, RevolutionBanner, type TaxFlyEvent } from "./DalmutiEffects";
 import {
   computeRankings,
   isLegalPlay,
@@ -67,6 +67,13 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   const [trickFlash, setTrickFlash] = useState<TrickResult | null>(null);
   const [revolutionBanner, setRevolutionBanner] = useState<{ seat: SeatIndex; isGrand: boolean } | null>(null);
   const [commonerSwapFlash, setCommonerSwapFlash] = useState<{ seatA: SeatIndex; seatB: SeatIndex } | null>(null);
+  // Cards *this* viewer just received via tax/tribute or 평민 swap — driving
+  // `ReceivedCardGlow`'s persistent 3.5s hand-card highlight (task brief
+  // "수령 카드 3초 이상 지속 이펙트", see DalmutiEffects.tsx's module doc).
+  // Independent of `taxEvents` above: that's the ~1.4s portaled flight
+  // overlay, this is the actual card sitting in the hand staying lit once it
+  // lands, even after the flight overlay is long gone.
+  const [receivedCards, setReceivedCards] = useState<Map<string, AuraTier>>(new Map());
   if (trackedState !== state) {
     const newTax = detectTaxEvents(trackedState, state);
     const newCommonerSwaps = detectCommonerSwapEvents(trackedState, state);
@@ -79,12 +86,28 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
         return [...prev, ...[...newTax, ...newCommonerSwaps].map((e) => ({ ...e, id: nextId++ }))];
       });
     }
+    const newlyReceivedByMe = [...newTax, ...newCommonerSwaps].filter((e) => e.targetSeat === viewerSeat);
+    if (newlyReceivedByMe.length > 0) {
+      setReceivedCards((prev) => {
+        const next = new Map(prev);
+        for (const e of newlyReceivedByMe) for (const c of e.cards) next.set(c.id, e.auraTier);
+        return next;
+      });
+    }
     if (newTrick) setTrickFlash(newTrick);
     if (newRevolution) setRevolutionBanner(newRevolution);
     // Commoner-swap events come in pairs (one per direction) — surface the
     // "교환 완료" popup once per completed pair, not once per direction.
     if (newCommonerSwaps.length > 0) setCommonerSwapFlash({ seatA: newCommonerSwaps[0].seat, seatB: newCommonerSwaps[0].targetSeat });
   }
+  const clearReceivedCard = useCallback((cardId: string) => {
+    setReceivedCards((prev) => {
+      if (!prev.has(cardId)) return prev;
+      const next = new Map(prev);
+      next.delete(cardId);
+      return next;
+    });
+  }, []);
   useEffect(() => {
     if (!trickFlash) return;
     const t = setTimeout(() => setTrickFlash(null), 3200);
@@ -481,7 +504,8 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
               .map((c) => {
                 const clickable = cardIsClickable;
                 const highlighted = cardIsHighlighted(c);
-                return (
+                const receivedTier = receivedCards.get(c.id);
+                const button = (
                   <button
                     key={c.id}
                     disabled={!clickable || (!highlighted && !selected.has(c.id))}
@@ -492,6 +516,14 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
                   >
                     <CardFace card={c} highlight={highlighted} />
                   </button>
+                );
+                // Stacks with (doesn't replace) the "legal to play" gold ring
+                // above — task brief follow-up confirmed via AskUserQuestion.
+                if (!receivedTier) return button;
+                return (
+                  <ReceivedCardGlow key={c.id} tier={receivedTier} onDone={() => clearReceivedCard(c.id)}>
+                    {button}
+                  </ReceivedCardGlow>
                 );
               })}
           </div>

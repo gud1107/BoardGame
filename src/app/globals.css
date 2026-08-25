@@ -447,6 +447,100 @@ body {
   animation: dalmuti-exchange-shimmer 0.5s ease-out;
 }
 
+/* Persistent "just received" hand-card glow (2026-08-25 후속 세션, task
+   brief "수령 카드 3초 이상 지속 이펙트") — distinct from the flight/arrival
+   keyframes above, which only play for the ~1.4s a card is airborne between
+   seat rows. Once a tax/tribute or 평민 swap card actually lands in *this*
+   viewer's own hand, `ReceivedCardGlow` in DalmutiEffects.tsx wraps it with
+   these for a full 3.5s (3.0s at full intensity, then a 0.5s fade-out via
+   `dalmuti-received-fade-out` — confirmed via AskUserQuestion), independent
+   of the shorter flight animation which may already have finished by then.
+   Tier color (king/noble/commoner) reuses `EXCHANGE_TIER_STYLE`, same as the
+   flight VFX (also confirmed via AskUserQuestion), so a card's glow color
+   matches whichever tribute pair it flew in on. */
+@keyframes dalmuti-received-aura-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.97);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+/* Diagonal light beam sweeping across the card face, clipped to its
+   rounded-lg bounds by the caller's `overflow-hidden` wrapper. */
+@keyframes dalmuti-received-shimmer-sweep {
+  0% {
+    transform: translateX(-140%) skewX(-18deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.95;
+  }
+  45% {
+    opacity: 0.95;
+  }
+  60% {
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(240%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+/* Small radial sparkle particles ringing the card, same `--angle`-per-span
+   trick as `dalmuti-exchange-spark` above but tuned for a much smaller
+   footprint (a hand card, not a full-screen flight) and looped (`infinite`)
+   rather than one-shot, since this plays for a full 3s hold. */
+@keyframes dalmuti-received-spark {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(0) scale(0.8);
+  }
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(20px) scale(0.25);
+  }
+}
+
+/* One-shot pop-in for the "🎁 획득" badge — `forwards` so it holds its
+   settled centered position (the badge has no other transform source) until
+   the fade-out below takes over. */
+@keyframes dalmuti-received-badge-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 4px) scale(0.5);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(-50%, -3px) scale(1.15);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+/* Trailing 0.5s fade for the *effects overlay only* — applied to a wrapper
+   sibling of the actual card face (never the card itself), so the card
+   stays fully visible/opaque and only the glow/shimmer/sparkles/badge fade
+   away before the wrapper unmounts. */
+@keyframes dalmuti-received-fade-out {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* 달무티's "혁명!" declaration banner (see DalmutiEffects.tsx /
    RevolutionBanner) — a centered full-board flourish that slams in, holds,
    then fades. Plays identically for every connected client the instant

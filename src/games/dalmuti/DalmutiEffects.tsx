@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useLayoutEffect, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { CardBack, CardFace, EXCHANGE_TIER_STYLE, type AuraTier } from "./CardArt";
@@ -46,6 +46,23 @@ import type { Card, DalmutiState, SeatIndex } from "./engine";
  * matching launch/arrival SFX via `lib/audio/soundEngine.ts` (also new this
  * session, per user confirmation — no other game in this project has audio
  * yet, so a mute toggle was added to `DalmutiBoard.tsx` alongside it).
+ *
+ * 2026-08-25 후속 세션 (수령 카드 3초 이상 지속 이펙트, task brief "카드가
+ * 손패에 들어온 직후 최소 3초 이상... 하이라이트/파티클 이펙트"): the flight
+ * above only lasts ~1.4s (`FLIGHT_MS` + `ARRIVAL_MS`) and is a portaled
+ * overlay, not something attached to the actual card sitting in the hand —
+ * so a *second*, independent effect was needed for "the card, once it's
+ * really in your hand, keeps glowing for a while." `ReceivedCardGlow` below
+ * is that: `DalmutiBoard.tsx` tracks a `Map<cardId, AuraTier>` of "cards this
+ * viewer just received" (derived the same way `taxEvents` is, by filtering
+ * `detectTaxEvents`/`detectCommonerSwapEvents` output for
+ * `targetSeat === viewerSeat`), and wraps any hand card present in that map
+ * with this component instead of rendering it bare. Confirmed via
+ * AskUserQuestion this session: 3.5s total (3.0s full intensity + 0.5s
+ * fade-out), tier color reuses `EXCHANGE_TIER_STYLE` (same palette as the
+ * flight VFX above), badge text is "🎁 획득", and it stacks with (doesn't
+ * replace) the existing "legal to play" gold ring on `CardFace` — both show
+ * at once if a card happens to qualify for both.
  */
 
 // ---------------------------------------------------------------------------
@@ -300,6 +317,108 @@ export function FlyingExchangeCard({
       <p className={`mt-1 max-w-[220px] text-center text-[10px] font-bold ${participant ? "text-amber-200" : "text-white/60"}`}>{label}</p>
     </div>,
     document.body,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Persistent "just received" hand-card glow (2026-08-25 후속 세션, §above)
+// ---------------------------------------------------------------------------
+
+/** Full-intensity hold before the trailing fade begins (AskUserQuestion). */
+const RECEIVED_HOLD_MS = 3000;
+/** Trailing fade-out duration once the hold above elapses (AskUserQuestion). */
+const RECEIVED_FADE_MS = 500;
+/** Total on-screen lifetime of the effect: 3.5s (AskUserQuestion). */
+export const RECEIVED_TOTAL_MS = RECEIVED_HOLD_MS + RECEIVED_FADE_MS;
+
+const RECEIVED_PARTICLE_COUNT = 8;
+const RECEIVED_PARTICLES = Array.from({ length: RECEIVED_PARTICLE_COUNT });
+
+/**
+ * Wraps a hand card (`children` — typically the `<button><CardFace/></button>`
+ * `DalmutiBoard.tsx` already renders per card) with a 3.5s aura pulse +
+ * shimmer sweep + sparkle particles + "🎁 획득" badge, tinted per
+ * `EXCHANGE_TIER_STYLE[tier]`. Self-timing exactly like `FlyingExchangeCard`
+ * above (mount-only effect, cleans up its own timeouts) — the one addition
+ * is that its cleanup *also* calls `onDone` (idempotent on the caller's
+ * side), so a card played away before its 3.5s elapses still gets purged
+ * from the caller's tracking map instead of leaking a dead entry forever.
+ * Deliberately does not touch `children`'s own opacity/visibility — only the
+ * overlay layer (aura/shimmer/sparkles/badge) fades in the final 0.5s, so
+ * the actual card stays fully legible the whole time.
+ */
+export function ReceivedCardGlow({
+  tier,
+  onDone,
+  children,
+}: {
+  tier: AuraTier;
+  onDone: () => void;
+  children: ReactNode;
+}) {
+  const [fading, setFading] = useState(false);
+  const palette = EXCHANGE_TIER_STYLE[tier];
+
+  useEffect(() => {
+    const fadeTimer = setTimeout(() => setFading(true), RECEIVED_HOLD_MS);
+    const doneTimer = setTimeout(onDone, RECEIVED_TOTAL_MS);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(doneTimer);
+      onDone();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-only, see FlyingExchangeCard above for the same pattern
+  }, []);
+
+  return (
+    <span className="relative inline-flex">
+      {children}
+      <span
+        className="pointer-events-none absolute inset-0 z-10 rounded-lg"
+        style={fading ? { animation: `dalmuti-received-fade-out ${RECEIVED_FADE_MS}ms ease-out forwards` } : undefined}
+      >
+        {/* Breathing aura ring, slightly larger than the card itself */}
+        <span
+          className="absolute -inset-1.5 rounded-xl"
+          style={{
+            boxShadow: `0 0 0 2px ${palette.spark}, 0 0 18px 5px ${palette.glow}`,
+            animation: "dalmuti-received-aura-pulse 1.1s ease-in-out infinite",
+          }}
+        />
+        {/* Diagonal shimmer beam, clipped to the card's rounded bounds */}
+        <span className="absolute inset-0 overflow-hidden rounded-lg">
+          <span
+            className="absolute inset-y-0 left-0 w-1/3"
+            style={{
+              background: `linear-gradient(90deg, transparent, ${palette.spark}, transparent)`,
+              animation: "dalmuti-received-shimmer-sweep 1.6s ease-in-out infinite",
+            }}
+          />
+        </span>
+        {/* Radial sparkle particles */}
+        {RECEIVED_PARTICLES.map((_, i) => (
+          <span
+            key={i}
+            className="absolute top-1/2 left-1/2 h-1 w-1 rounded-full"
+            style={
+              {
+                background: palette.spark,
+                boxShadow: `0 0 5px 1px ${palette.spark}`,
+                "--angle": `${(360 / RECEIVED_PARTICLE_COUNT) * i}deg`,
+                animation: `dalmuti-received-spark 1.3s ease-out ${(i * 0.09).toFixed(2)}s infinite`,
+              } as CSSProperties
+            }
+          />
+        ))}
+        {/* "🎁 획득" badge (task brief §2 "수령 인디케이터") */}
+        <span
+          className="absolute -top-2.5 left-1/2 rounded-full border border-white/70 px-1.5 py-0.5 text-[8px] font-black whitespace-nowrap text-black shadow-md"
+          style={{ background: palette.spark, animation: "dalmuti-received-badge-pop 0.35s ease-out forwards" }}
+        >
+          🎁 획득
+        </span>
+      </span>
+    </span>
   );
 }
 
