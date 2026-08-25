@@ -41,6 +41,10 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **참고 — 실제 UI 렌더링 미검증**: 이 프로젝트에 반복 기록된 `<Game>Board.tsx` 테스트 사각지대(jsdom 미설치)와 동일하게, 신규 `ReceivedCardGlow`의 실제 애니메이션 타이밍(3.5초 체감), 쉬머 스윕/스파클 파티클의 실제 좌표 정합, 기존 "낼 수 있는 카드" 금색 링과 동시에 표시될 때 시각적으로 겹치지 않는지는 타입/린트/유닛 테스트만 마쳤고 아직 육안 확인하지 않았음 — 다음 세션에서 실제 플레이로 재확인 권장.
 
+**커밋/푸시**: `5723cd7 feat(dalmuti): add 3-second persistent glowing visual effects for received exchange cards` → `git push origin main` 완료. 4개 파일(`DalmutiBoard.tsx`/`DalmutiEffects.tsx`/`globals.css`/이 HANDOFF 절)만 스테이징해 커밋 — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.gitignore`, `public/games`·`public/images/lasVegas` 실물 이미지 삭제, `lasVegas/*`, `registry.ts`, `boardGameRule/` 신규 파일, `저작권, 상표권.md`, `orca충돌및확인.md` 등)은 이번 작업과 무관하므로 건드리지 않고 그대로 작업 트리에 남겨둠.
+
+**배포**: `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주(Turbopack 빌드+TypeScript 전체 재검사 포함), READY — `https://board-game-n61ui8mpg-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준). 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위 "커밋/푸시" 항목에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨 — 이 달무티 세션이 그 변경들을 검증하거나 의도한 것은 아님.
+
 ### 2026-08-25 — 말달리자 state-sync 재접속 레이스 수정 (사라진 말/고스트 말 버그)
 
 **요청**: 첨부 이미지(`슬라이드이동중 사라진 말과 출발지점에 하얀색말로 바뀐부분.png`) 기준, 슬라이드 이동 애니메이션 중 말이 화면에서 사라지고 출발 지점에 (원래 말과 다른) 하얀색 말이 잔존/복제되는 렌더링 버그를 분석·수정. 요청 원문은 원인을 렌더링 레이어(`Horse.tsx`/`Track.tsx`류 컴포넌트의 키 불안정성, 이전 칸 점유 상태 미정리, fallback 하얀 말 렌더링)로 가정했으나, 구현 세부사항(애니메이션 오버레이 방식, 상태 커밋 타이밍)에 확인이 필요하면 임의로 넘겨짚지 말고 먼저 질문하라는 명시적 지시(Strict No-Assumption Rule). **이번 세션은 로컬 작업 트리에만 반영, 커밋/푸시/배포는 보류하라는 명시적 지시.**
