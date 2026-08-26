@@ -15,7 +15,6 @@ import {
   startGame,
   type EngineAction,
   type MalDalliJaState,
-  type MoveKind,
   type Seat,
 } from "./engine";
 import MalDalliJaBoard from "./MalDalliJaBoard";
@@ -40,13 +39,17 @@ function mddjCurrentActor(state: MalDalliJaState): Seat | null {
 }
 
 /**
- * Small local system-log formatter for the "move" headline action (see
+ * Small local system-log formatter for the game's win condition (see
  * PerudoGame.tsx/DalmutiGame.tsx's `src/lib/chat/systemLog.ts` pattern —
- * kept local here per-game instead of adding to that shared file). e.g.
- * "지수님이 말을 이동했습니다" / "지수님이 말을 나이트로 이동했습니다".
+ * kept local here per-game instead of adding to that shared file).
+ * Replaces the earlier per-move "OO님이 말을 이동했습니다" log (2026-08-26
+ * pilot rollout) — every-move chat spam was reported as a readability
+ * problem, so the headline system-log event for this game is now the win
+ * itself instead of each individual move. e.g. "지수님이 오아시스에
+ * 도착해 승리했습니다".
  */
-function formatMalDalliJaMoveLog(name: string, moveKind: MoveKind): string {
-  return moveKind === "knight" ? `${name}님이 말을 나이트로 이동했습니다` : `${name}님이 말을 이동했습니다`;
+function formatMalDalliJaWinLog(name: string): string {
+  return `${name}님이 오아시스에 도착해 승리했습니다`;
 }
 
 /**
@@ -262,16 +265,25 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
       const action = payload?.action as EngineAction;
       // System-log pilot (see GameMeta.chatEnabled / PerudoGame.tsx): every
       // connected client derives the same human-readable line independently
-      // from the *pre-action* state, exactly like it independently derives
-      // `applyAction` below — no server round-trip, no change to the pure
-      // reducer in engine.ts. Deliberately not persisted to `chat_messages`
-      // (unlike user messages) — every client would otherwise write a
-      // duplicate row, and it's trivially re-derivable from the replayed
-      // action log anyway.
-      if (action.type === "move") {
-        const prevState = gameStateRef.current;
-        if (prevState) {
-          const actorSeat = prevState.activeSeat;
+      // from the *post-action* state — no server round-trip, no change to
+      // the pure reducer in engine.ts. Deliberately not persisted to
+      // `chat_messages` (unlike user messages) — every client would
+      // otherwise write a duplicate row, and it's trivially re-derivable
+      // from the replayed action log anyway.
+      //
+      // Per-move "OO님이 말을 이동했습니다" logging (2026-08-26 pilot
+      // rollout) was removed — every single slide/knight move spammed the
+      // chat feed and drowned out actual conversation. The win itself is
+      // the only headline event logged now, computed here (rather than off
+      // `MalDalliJaBoard.tsx`'s win-banner "확인" click, which only fires
+      // for the viewer who clicks it and would desync the two clients'
+      // chat feeds) so both clients log it exactly once, in lockstep, the
+      // instant the winning move is replayed.
+      const prevState = gameStateRef.current;
+      if (action.type === "move" && prevState && prevState.phase !== "gameOver") {
+        const nextState = applyAction(prevState, action);
+        if (nextState.phase === "gameOver" && nextState.winner) {
+          const winnerSeat = nextState.winner;
           setChatMessages((prev) => [
             ...prev,
             {
@@ -279,7 +291,7 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
               channel: chatChannel,
               deviceId: "system",
               senderName: "시스템",
-              body: formatMalDalliJaMoveLog(namesRef.current[actorSeat] ?? "상대", action.moveKind),
+              body: formatMalDalliJaWinLog(namesRef.current[winnerSeat] ?? "상대"),
               type: "SYSTEM",
               createdAt: new Date().toISOString(),
             },
