@@ -64,7 +64,9 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **알려진 한계**: 시스템 로그 문구는 이번 세션(서브에이전트별 판단)에서 게임당 딱 하나의 "헤드라인 액션"만 선정한 것이라, 다른 중요 액션(예: 아발론의 "팀 제안", 쿠의 "챌린지/블록")은 아직 로그에 안 남음 — 요청하신 범위(파일럿 확산)를 넘어서는 추가 액션 로그는 별도 후속 작업으로 판단. 실제 UI 렌더링(20개 게임 각각의 ChatDrawer 배치가 보드 레이아웃과 겹치지 않는지 등)은 이 저장소의 기존 jsdom 미설치 한계와 동일하게 육안 확인 전.
 
-**커밋/푸시**: <!-- 커밋 해시/배포 URL 채울 것 -->
+**커밋/푸시**: `5797b4c feat(chat): extend room chat and system action log to 18 more online games` → `git push origin main` 완료. 20개 파일(18개 게임 컴포넌트 + `registry.ts` + 이 HANDOFF만) 스테이징 — 세션 시작 시점부터 있던 다른 미커밋 변경(`.gitignore`, 삭제된 이미지들, `lasVegas/CasinoEmblem.tsx`·`CasinoPhotoArt.tsx`·`LasVegasBoard.tsx`, `boardGameRule/` 등)은 이번 작업과 무관하므로 건드리지 않음.
+
+**배포**: `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주, READY — `https://board-game-8sj9w3j6j-me-3871.vercel.app`. 이 배포도 작업 트리 전체를 빌드하므로 위에 적은 다른 세션들의 미커밋 변경이 함께 반영된 상태로 배포됨.
 
 ### 2026-08-26 — 로비/룸 실시간 채팅 및 인게임 시스템 액션 로그 (파일럿: 페루도·달무티)
 
