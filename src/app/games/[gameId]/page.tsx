@@ -9,6 +9,7 @@ import type { GameCompletionResult } from "@/games/types";
 import { useBettingStore } from "@/store/bettingStore";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
 import { saveGameResult } from "@/lib/db/repository";
+import { endGamePlay, startGamePlay } from "@/lib/analytics/track";
 import RoundResultEntry from "@/components/betting/RoundResultEntry";
 import GameThumbnail from "@/components/GameThumbnail";
 import BugReportFloatingButton from "@/components/bugReport/BugReportFloatingButton";
@@ -60,6 +61,9 @@ export default function GamePlayPage() {
   }
 
   const playStartedAtRef = useRef<number | null>(null);
+  // Analytics `game_play_log` row id for the in-progress session, if the
+  // start call succeeded — see the two effects below and `handleGameComplete`.
+  const gamePlayIdRef = useRef<string | null>(null);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   // Online-multiplayer games run their own room lobby (create/join/waiting)
@@ -73,6 +77,7 @@ export default function GamePlayPage() {
     }
     if (stage === "select") {
       playStartedAtRef.current = null; // "이 게임 다시하기" restarts the elapsed-time clock too.
+      gamePlayIdRef.current = null; // ...and starts a fresh analytics play record too.
     }
   }, [stage]);
 
@@ -111,6 +116,33 @@ export default function GamePlayPage() {
     }
     return adHocNames.map((name, i) => ({ id: `adhoc-${i}`, name: name.trim() || `플레이어${i + 1}` }));
   }, [session, selectedIds, adHocNames]);
+
+  // Analytics: log a `game_play_log` row the moment a session actually
+  // starts (stage -> "playing"), covering every game through this one
+  // shared page rather than per-engine instrumentation. Guarded by the ref
+  // (not just `stage` in the deps) so re-renders while still "playing"
+  // (e.g. `activeParticipants` changing reference) never fire a second
+  // start call for the same session.
+  useEffect(() => {
+    if (stage !== "playing" || !game || gamePlayIdRef.current !== null) return;
+    let cancelled = false;
+    void startGamePlay(game.id, activeParticipants.length || min).then((playId) => {
+      if (!cancelled) gamePlayIdRef.current = playId;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [stage, game, activeParticipants, min]);
+
+  // Best-effort abandonment tracking: if this page unmounts (navigated
+  // away) while a play is still open, record it as incomplete. A normal
+  // finish already clears `gamePlayIdRef` in `handleGameComplete` below, so
+  // this only ever fires for genuinely abandoned sessions.
+  useEffect(() => {
+    return () => {
+      if (gamePlayIdRef.current) endGamePlay(gamePlayIdRef.current, false);
+    };
+  }, []);
 
   if (!game) {
     return (
@@ -197,6 +229,8 @@ export default function GamePlayPage() {
 
   async function handleGameComplete(res: GameCompletionResult) {
     setResult(res);
+    endGamePlay(gamePlayIdRef.current, true);
+    gamePlayIdRef.current = null;
     if (subConfigured) {
       const startedAt = playStartedAtRef.current ?? Date.now();
       const minutes = Math.max(1, Math.round((Date.now() - startedAt) / 60000));

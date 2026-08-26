@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { useAdminStore } from "@/store/adminStore";
 import { TIER_LABELS, type Tier } from "@/lib/entitlements/types";
 
@@ -28,7 +29,15 @@ export default function AdminPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
-      <h1 className="mb-6 text-xl font-bold text-white">관리자 대시보드</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-xl font-bold text-white">관리자 대시보드</h1>
+        <Link
+          href="/admin/stats"
+          className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30"
+        >
+          📊 방문/플레이 통계 →
+        </Link>
+      </div>
 
       <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
         <h2 className="mb-4 text-sm font-semibold text-white/80">사이트 전역 설정</h2>
@@ -190,7 +199,8 @@ export default function AdminPage() {
       </section>
 
       <section className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-5 text-sm text-white/40">
-        📊 방문자 통계 / IP 지오로케이션 대시보드는 다음 단계에서 추가될 예정입니다.
+        📊 방문자 통계 / 게임별 플레이 통계는 위의 <Link href="/admin/stats" className="underline">방문/플레이 통계</Link>{" "}
+        페이지로 옮겨졌습니다. IP 지오로케이션 등 추가 세부 지표는 다음 단계에서 검토합니다.
       </section>
     </div>
   );

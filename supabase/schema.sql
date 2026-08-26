@@ -151,3 +151,108 @@ create policy "anon update guest_usage" on guest_usage
 -- (service role), so there is no insert/update policy for anon/authenticated.
 create policy "anyone read app_settings" on app_settings
   for select to anon, authenticated using (true);
+
+-- ---------------------------------------------------------------------------
+-- Analytics: site visit tracking + game play tracking (admin stats
+-- dashboard, see HANDOFF.md). Written by `src/app/api/analytics/*` route
+-- handlers using the anon client (never the service role — see
+-- `src/lib/supabase/serviceClient.ts`'s "admin routes only" rule) and read
+-- exclusively by `src/app/api/admin/analytics/*` via `requireAdmin()` +
+-- the service role.
+-- ---------------------------------------------------------------------------
+
+create extension if not exists pgcrypto;
+
+-- Raw per-visit log. `device_id` is the existing client-generated
+-- `bg_device_id` (src/lib/identity/deviceId.ts) — same "weak signal, not
+-- tamper-proof" caveat as device_sightings/guest_usage above.
+create table if not exists site_visit_log (
+  id uuid primary key default gen_random_uuid(),
+  device_id text not null,
+  path text not null,
+  device_type text not null default 'unknown' check (device_type in ('desktop', 'mobile', 'tablet', 'unknown')),
+  created_at timestamptz not null default now()
+);
+create index if not exists site_visit_log_created_at_idx on site_visit_log (created_at);
+create index if not exists site_visit_log_device_created_idx on site_visit_log (device_id, created_at);
+
+-- Monthly rollup ('YYYY-MM'), maintained ONLY by the trigger below — never
+-- written directly by app code, so it needs no client-reachable RLS policy.
+create table if not exists monthly_visit_stats (
+  month text primary key,
+  total_visits int not null default 0,
+  unique_visitors int not null default 0,
+  updated_at timestamptz not null default now()
+);
+
+-- One row per game session, from "게임 시작" (insert) to "게임 종료"
+-- (update sets ended_at + is_completed). `device_id` is best-effort and may
+-- be null for older/edge-case clients — never required for the count itself.
+create table if not exists game_play_log (
+  id uuid primary key default gen_random_uuid(),
+  game_id text not null,
+  player_count int not null default 0,
+  device_id text,
+  started_at timestamptz not null default now(),
+  ended_at timestamptz,
+  is_completed boolean not null default false
+);
+create index if not exists game_play_log_game_idx on game_play_log (game_id);
+create index if not exists game_play_log_started_idx on game_play_log (started_at);
+
+alter table site_visit_log enable row level security;
+alter table monthly_visit_stats enable row level security;
+alter table game_play_log enable row level security;
+
+-- site_visit_log: anyone can insert (that's the whole point — anonymous
+-- visitors have no session), but nobody can select/update via the anon key.
+-- No select policy means the raw device_id+path history can only be read
+-- with the service role (admin API) — unlike device_sightings/guest_usage,
+-- this table is never read back by its own writer, so it doesn't need one.
+create policy "anon insert site_visit_log" on site_visit_log
+  for insert to anon, authenticated with check (true);
+
+-- game_play_log: insert on start, update on end (isCompleted/ended_at).
+-- Same "soft counter, not a security boundary" caveat as guest_usage/
+-- device_sightings — anyone holding the anon key could in principle flip
+-- another row's is_completed, but no per-player identity or entitlement
+-- decision depends on this table, so that's an acceptable ceiling.
+create policy "anon insert game_play_log" on game_play_log
+  for insert to anon, authenticated with check (true);
+create policy "anon update game_play_log" on game_play_log
+  for update to anon, authenticated using (true);
+
+-- monthly_visit_stats deliberately has NO anon/authenticated policies at
+-- all — see the trigger below.
+
+-- Atomically folds a new site_visit_log row into monthly_visit_stats.
+-- Done as a DB trigger (SECURITY DEFINER, bypasses RLS) rather than an
+-- app-level read-modify-write upsert so that concurrent visits from
+-- different tabs/users can never race each other into an undercount, and
+-- so this table never needs a client-reachable write policy.
+create or replace function bump_monthly_visit_stats() returns trigger as $$
+declare
+  month_key text := to_char(new.created_at, 'YYYY-MM');
+  already_seen boolean;
+begin
+  select exists (
+    select 1 from site_visit_log
+    where device_id = new.device_id
+      and id <> new.id
+      and to_char(created_at, 'YYYY-MM') = month_key
+  ) into already_seen;
+
+  insert into monthly_visit_stats (month, total_visits, unique_visitors, updated_at)
+  values (month_key, 1, case when already_seen then 0 else 1 end, now())
+  on conflict (month) do update set
+    total_visits = monthly_visit_stats.total_visits + 1,
+    unique_visitors = monthly_visit_stats.unique_visitors + (case when already_seen then 0 else 1 end),
+    updated_at = now();
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists trg_bump_monthly_visit_stats on site_visit_log;
+create trigger trg_bump_monthly_visit_stats
+  after insert on site_visit_log
+  for each row execute function bump_monthly_visit_stats();

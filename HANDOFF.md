@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-25 (**달무티 수령 카드 3초 이상 지속 글로우 이펙트(손패 유지형) 추가 세션** — 자세한 내용은 아래 `### 2026-08-25 — 달무티 수령 카드 3초 이상 지속 글로우 이펙트(손패 유지형)` 절 참고.)_
+_최종 갱신: 2026-08-26 (**방문자 트래킹 + 게임 플레이 통계 관리자 대시보드(/admin/stats) 구축 세션** — 자세한 내용은 아래 `### 2026-08-26 — 방문자/게임 플레이 통계 대시보드 구축` 절 참고.)_
+
+_이전 갱신: 2026-08-25 (**달무티 수령 카드 3초 이상 지속 글로우 이펙트(손패 유지형) 추가 세션** — 자세한 내용은 아래 `### 2026-08-25 — 달무티 수령 카드 3초 이상 지속 글로우 이펙트(손패 유지형)` 절 참고.)_
 
 _이전 갱신: 2026-08-25 (**말달리자 `state-sync` 재접속 레이스로 인한 "슬라이드 이동 중 사라진 말/출발지 고스트 말" 버그 수정 세션** — 자세한 내용은 아래 `### 2026-08-25 — 말달리자 state-sync 재접속 레이스 수정 (사라진 말/고스트 말 버그)` 절 참고.)_
 
@@ -19,6 +21,40 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-26 — 방문자/게임 플레이 통계 대시보드 구축
+
+**요청**: 웹사이트 전체 방문율(UV/PV)·월별 방문자 수·게임별(운명전쟁39/라스베가스/그리드포커/말달리자/달무티 등) 플레이 횟수·전체 누적 플레이 수를 집계·시각화하는 관리자 통계 대시보드 구축. DB 구조/관리자 인증 방식/차트 라이브러리 선택 등은 절대 임의로 정하지 말고 먼저 질문 목록을 제시해 확인받으라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사**: Prisma 없음 — 계정/구독/관리자 기능은 이미 Supabase Postgres(`supabase/schema.sql`) + RLS로 구현돼 있고, `src/lib/supabase/adminGuard.ts`의 `requireAdmin()`(profiles.role==='admin')이 모든 `/api/admin/*`에서 이미 쓰이는 중. 차트 라이브러리는 전혀 설치돼 있지 않음. `src/proxy.ts`(Next 16의 `middleware.ts`→`proxy.ts` 개명)는 `/admin/:path*`만 가드. 게임 사용량(`usage_daily`)은 이미 "클라이언트 신고 → 서버 upsert" 신뢰 기반 패턴(`/api/usage/record`)으로 구현돼 있고, 모든 게임이 공통으로 거치는 단일 진입점 `src/app/games/[gameId]/page.tsx`(stage: select→playing→done)가 존재함을 확인 — 이 페이지 하나에 훅을 걸면 게임 엔진 20개를 개별 수정하지 않고도 "공통 훅" 요구사항을 만족할 수 있음.
+
+**모호점 확인(`AskUserQuestion`, 4문항)**:
+① DB/스키마 방식 → **기존 Supabase 확장**(`site_visit_log`/`monthly_visit_stats`/`game_play_log` 테이블 추가, 기존 RLS+service-role 패턴 재사용) 선택.
+② 관리자 인증 → **기존 `requireAdmin()` 재사용** 선택(`src/proxy.ts`의 `/admin/:path*` 매처가 `/admin/stats`도 이미 커버).
+③ 차트 라이브러리 → **Recharts** 선택(신규 의존성 1개 추가).
+④ 방문 트래킹 방식 → **클라이언트 비콘**(세션당 1회 `/api/analytics/visit`로 전송, 서버가 device_id 기반 집계) 선택.
+
+**구현**:
+- **`supabase/schema.sql`**: `site_visit_log`(원본 방문 로그: device_id/path/device_type/created_at) · `monthly_visit_stats`(YYYY-MM별 total_visits/unique_visitors) · `game_play_log`(game_id/player_count/started_at/ended_at/is_completed) 3개 테이블 추가. `monthly_visit_stats`는 앱 레벨 read-modify-write가 아니라 **DB 트리거**(`bump_monthly_visit_stats`, `SECURITY DEFINER`)로 `site_visit_log` insert마다 원자적으로 집계 — 동시 방문 레이스로 인한 언더카운트를 구조적으로 방지하고, 이 테이블은 client-reachable RLS 정책이 아예 없어도 되게 함. `site_visit_log`/`game_play_log`는 anon insert(+`game_play_log`는 update)만 허용하고 **select 정책은 만들지 않음** — `getServiceSupabase()`는 "`/api/admin/*`에서만 사용" 규칙이 이미 문서화돼 있어(`serviceClient.ts`), 공개 트래킹 라우트는 anon 클라이언트로 쓰고 그 대신 원본 로그를 anon 키로 읽지는 못하게 막음(관리자 API만 service role로 읽음).
+- **`src/lib/analytics/`**: `types.ts`(공용 타입) · `deviceType.ts`(UA 기반 desktop/mobile/tablet 판별, 순수함수) · `aggregate.ts`(`monthKey`/`recentMonthKeys`/`momChangePct`/`buildMonthlyTrend`/`buildGameRanking` — 전부 순수함수, API 라우트가 Supabase I/O 후 호출) · `track.ts`(클라이언트 전용: `recordVisit`/`startGamePlay`/`endGamePlay`, `sendBeacon` 우선 + `fetch(keepalive)` 폴백).
+- **`src/components/AnalyticsVisitTracker.tsx`**: 루트 레이아웃(`layout.tsx`)에 마운트되는 클라이언트 컴포넌트. `sessionStorage` 플래그로 탭 세션당 정확히 1회만 `recordVisit` 호출(페이지 이동마다가 아님 — "방문수"이지 PV 카운터가 아님, 확정된 설계대로).
+- **`src/app/api/analytics/visit/route.ts`** · **`game-play/route.ts`**: 인증 없는 공개 트래킹 엔드포인트, anon 클라이언트로 insert/update. `game-play`의 "start"는 **id를 서버에서 직접 생성**(`randomUUID()`)해 넣고 반환 — 처음엔 `.insert().select().single()`로 짰다가, `game_play_log`에 anon select 정책이 없으므로 Postgres RLS가 INSERT의 RETURNING 출력도 SELECT 정책으로 필터링해 **행은 실제로 insert됐는데 응답은 항상 빈 값**이 되는 버그를 발견해 수정함(타입 체크로는 잡히지 않는 RLS 동작이라 리뷰 중 직접 발견).
+- **`src/app/games/[gameId]/page.tsx`**: 기존 `stage==="playing"` 진입 시점(단일 공통 훅)에 `startGamePlay(gameId, playerCount)` 호출 → 반환된 `playId`를 ref에 저장. `handleGameComplete`에서 `endGamePlay(playId, true)`. 페이지 언마운트 시(중도 이탈) cleanup effect가 `endGamePlay(playId, false)`를 호출해 미완료 플레이도 유실 없이 기록. "다시하기"(stage→select) 시 `playId` ref를 초기화해 다음 판이 새 레코드로 잡히게 함.
+- **`src/app/api/admin/analytics/{summary,visits,games}/route.ts`**: `requireAdmin()` + `getServiceSupabase()`. `summary`는 KPI 4종(누적 방문수/이번달 방문수+전월대비%/총 플레이 수/오늘 플레이 수), `visits`는 최근 6~12개월(쿼리파라미터) 월별 방문+플레이 추이, `games`는 게임별 누적/이번달 플레이 수 + 점유율 랭킹(`getGameMeta`로 게임명 매핑).
+- **`src/store/analyticsAdminStore.ts`** + **`src/app/admin/stats/page.tsx`**: KPI 카드 4장 + Recharts 차트 2개(방문 추이는 총방문수 막대+고유방문자 라인 결합, 플레이 추이는 별도 패널 — dataviz 스킬의 "두 축 다른 스케일 지표는 dual-axis 대신 별도 패널" 원칙에 따라 방문/플레이를 한 축에 억지로 합치지 않음) + 게임별 랭킹 테이블. 색상은 프로젝트 dataviz 스킬의 dark-surface 검증된 카테고리 팔레트 슬롯(blue/orange/aqua)을 순서 고정으로 사용. `/admin` 메인 페이지에 `/admin/stats` 진입 링크 추가, 기존 "다음 단계에서 추가 예정" 플레이스홀더 문구 갱신.
+- **`package.json`**: `recharts@^3.10.1` 추가(`npm install recharts`).
+
+**알려진 한계(정직 공개)**:
+- 온라인 멀티플레이 게임(`onlineMultiplayer: true`)은 페이지 마운트 시 곧바로 `stage="playing"`이 되므로(자체 룸 로비 UI), "게임 시작" 카운트가 엄밀히는 "실제 대국 시작"이 아니라 "룸 생성/입장 화면 진입" 시점에 잡힘 — 요청 문구의 "게임 룸 생성 및 실제 게임 시작" 중 앞쪽에 더 가까운 근사치. 게임 엔진 20개 각각의 내부 "실제 대국 시작" 이벤트까지 훅을 내리는 것은 이번 세션의 "공통 훅 1곳" 설계 범위를 벗어나 별도 확인 없이 진행하지 않음.
+- 방문/플레이 카운트는 기존 `usage_daily`/`guest_usage`와 동일하게 **클라이언트 신고 기반**(anon key로 누구나 insert 가능) — 위변조 방지 장치 없음. 이 프로젝트 전반의 기존 신뢰 모델과 동일한 수준이며, 이번 세션에서 새로 낮춘 것은 아님.
+- "오늘"/월 경계는 서버(Supabase, UTC) 기준 `date_trunc`/`to_char`를 그대로 씀 — KST 자정과 최대 9시간 어긋날 수 있음(기존 `usage_daily`의 `date` 컬럼도 동일 기준).
+- Recharts 차트의 실제 렌더링(레이아웃 겹침, 다크모드 대비 등)은 이 프로젝트에 반복 기록된 jsdom 미설치로 인한 `<Game>Board.tsx` 시각적 미검증 사각지대와 동일하게, 타입/린트/유닛 테스트만 통과했고 브라우저 육안 확인은 아직 하지 않음.
+
+**검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(경고 0) / `npx vitest run src/lib/analytics`(신규 17개, 전부 통과 — `deviceType`/`aggregate` 순수함수만 테스트, 실제 Supabase 연동은 이 프로젝트에 테스트 DB가 없어 기존 `evaluate.test.ts` 등과 동일하게 통합 테스트하지 않음). 전체 `npx vitest run`은 §0/여러 직전 세션에 이미 기록된 동일한 사전 존재 이슈(수 분 경과 후에도 출력 0바이트로 미완주)로 이번에도 완주하지 못해 백그라운드에서 중단 — 이번 세션이 새로 만든 회귀가 아니라 이 저장소에 미리 존재하던 별개 이슈이며, 이번 세션이 건드린 기존 파일(`layout.tsx`/`admin/page.tsx`/`games/[gameId]/page.tsx`)은 전부 신규 analytics 훅 추가일 뿐 기존 게임 로직/엔진을 변경하지 않았으므로 과거 세션들과 동일한 판단 기준으로 타깃 스위트 + tsc + lint 통과만으로 충분하다고 판단.
+
+**커밋/푸시**: [[COMMIT_INFO]]
+
+**배포**: [[DEPLOY_INFO]]
 
 ### 2026-08-25 — 달무티 수령 카드 3초 이상 지속 글로우 이펙트(손패 유지형)
 

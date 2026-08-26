@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import SiteHeader from "@/components/SiteHeader";
 import BettingSidebar from "@/components/betting/BettingSidebar";
+import AnalyticsVisitTracker from "@/components/AnalyticsVisitTracker";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,6 +31,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col text-zinc-100">
+        <AnalyticsVisitTracker />
         <SiteHeader />
         <main className="flex-1">{children}</main>
         <BettingSidebar />
