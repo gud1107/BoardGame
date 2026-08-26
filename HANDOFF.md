@@ -52,9 +52,9 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(경고 0) / `npx vitest run src/lib/analytics`(신규 17개, 전부 통과 — `deviceType`/`aggregate` 순수함수만 테스트, 실제 Supabase 연동은 이 프로젝트에 테스트 DB가 없어 기존 `evaluate.test.ts` 등과 동일하게 통합 테스트하지 않음). 전체 `npx vitest run`은 §0/여러 직전 세션에 이미 기록된 동일한 사전 존재 이슈(수 분 경과 후에도 출력 0바이트로 미완주)로 이번에도 완주하지 못해 백그라운드에서 중단 — 이번 세션이 새로 만든 회귀가 아니라 이 저장소에 미리 존재하던 별개 이슈이며, 이번 세션이 건드린 기존 파일(`layout.tsx`/`admin/page.tsx`/`games/[gameId]/page.tsx`)은 전부 신규 analytics 훅 추가일 뿐 기존 게임 로직/엔진을 변경하지 않았으므로 과거 세션들과 동일한 판단 기준으로 타깃 스위트 + tsc + lint 통과만으로 충분하다고 판단.
 
-**커밋/푸시**: [[COMMIT_INFO]]
+**커밋/푸시**: `123e054 feat(analytics): implement visitor tracking, game play metrics, and admin stats dashboard` → `git push origin main` 완료. 이번 작업과 무관한 세션 시작 시점부터의 미커밋 변경(`.gitignore`, `public/games`·`public/images/lasVegas` 실물 이미지 삭제, `lasVegas/*`, `registry.ts`, `boardGameRule/` 신규 파일, `저작권, 상표권.md`, `orca충돌및확인.md` 등)은 이번 커밋에 스테이징하지 않고 그대로 작업 트리에 남겨둠(analytics 관련 21개 파일만 스테이징).
 
-**배포**: [[DEPLOY_INFO]]
+**배포**: `npx vercel deploy`(프리뷰) 첫 시도는 과거 여러 세션과 동일한 `{"status":"error","reason":"deploy_failed","message":"Not authorized"}`로 실패 → 즉시 재시도해 정상 빌드(Turbopack 빌드 + TypeScript 전체 재검사 포함) 완주, READY — `https://board-game-9q5lio9vs-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위 "커밋/푸시" 항목에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨 — 이 analytics 세션이 그 변경들을 검증하거나 의도한 것은 아님.
 
 ### 2026-08-25 — 달무티 수령 카드 3초 이상 지속 글로우 이펙트(손패 유지형)
 
