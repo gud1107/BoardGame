@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import RulebookModal from "./RulebookModal";
 import CardExchangeModal from "./CardExchangeModal";
 import { CardFace, RoleBadge, type AuraTier } from "./CardArt";
@@ -46,14 +47,22 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   // directly, unlocking the shared AudioContext on the same click that
   // fires the action (same `unlock()`-inside-a-handler technique Perudo
   // uses for its dice SFX).
-  const [muted, setMuted] = useState(() => getSoundEngine().isMuted());
+  // Reads the site-wide `audioSettings` store directly (2026-08-26 세션)
+  // instead of a local copy of `soundEngine.isMuted()`, so this button stays
+  // in sync with the header's global toggle and the settings modal.
+  const muted = useAudioSettingsStore((s) => s.masterMuted);
+  const toggleMasterMuted = useAudioSettingsStore((s) => s.toggleMasterMuted);
   function toggleMuted() {
-    const next = !muted;
-    getSoundEngine().setMuted(next);
-    setMuted(next);
+    toggleMasterMuted();
+    getSoundEngine().unlock();
   }
   function dispatch(action: EngineAction) {
-    getSoundEngine().unlock();
+    const engine = getSoundEngine();
+    engine.unlock();
+    // 양피지 카드 제출음 / 조공·세금 금화 소리 — 실제 카드 교환(진상/하사) VFX와는
+    // 별개로, 매 트릭 제출·세금 반환 시점의 SFX (2026-08-26 세션).
+    if (action.type === "playCards") engine.playParchmentSubmit();
+    else if (action.type === "returnTax") engine.playCoinTribute();
     onAction(action);
   }
   /** Role title for a seat, independent of the viewer — used by the exchange FX's third-party message. */
@@ -118,6 +127,15 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     const t = setTimeout(() => setCommonerSwapFlash(null), 3200);
     return () => clearTimeout(t);
   }, [commonerSwapFlash]);
+  // 게임 시작 시 신분 배정 SFX — 왕/귀족 등 상위 신분은 팡파르, 최하위(노예)는
+  // 쇠사슬음. 이 보드가 마운트되는 시점(대국 시작)에 1회만 재생 (2026-08-26 세션).
+  useEffect(() => {
+    const engine = getSoundEngine();
+    const myRankPosition = state.rankOrder.indexOf(viewerSeat);
+    if (myRankPosition === state.playerCount - 1) engine.playChainRattle();
+    else engine.playRankFanfare();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const handleTaxDone = useCallback((id: number) => {
     setTaxEvents((prev) => prev.filter((e) => e.id !== id));
   }, []);

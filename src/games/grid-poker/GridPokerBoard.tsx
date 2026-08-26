@@ -7,6 +7,7 @@ import DealerReveal from "./DealerReveal";
 import { CardChip } from "./cardDisplay";
 import { useCountdown } from "./useCountdown";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import { detectNewlyCompletedLines, HandRankFloatingBadge, type LineCompleteEvent } from "./GridPokerEffects";
 import RoundResultOverlay from "./RoundResultOverlay";
 import {
@@ -84,9 +85,6 @@ export interface GridPokerBoardProps {
   connectedSeats: Set<SeatIndex>;
   onAction: (action: EngineAction) => void;
   onGameEnd: () => void;
-  /** Background music preference (defaults to off — see useGridPokerBgm), owned by GridPokerGame so it survives this component's own state resets. */
-  bgmEnabled: boolean;
-  onToggleBgm: (next: boolean) => void;
 }
 
 const TABLE_PANEL =
@@ -226,8 +224,6 @@ export default function GridPokerBoard({
   connectedSeats,
   onAction,
   onGameEnd,
-  bgmEnabled,
-  onToggleBgm,
 }: GridPokerBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
   // Which opponent's board the mobile tap-to-view popup currently shows
@@ -294,6 +290,10 @@ export default function GridPokerBoard({
 
   function placeAt(cellIndex: number) {
     if (!myTurnToPlace || viewer.board[cellIndex] !== null) return;
+    const engine = getSoundEngine();
+    engine.unlock();
+    engine.playCardFlick(); // pick-and-move flick, then a settling snap once it locks into the cell
+    setTimeout(() => engine.playGridSnap(), 90);
     onAction({ type: "place", seat: viewerSeat, cellIndex });
   }
 
@@ -359,34 +359,38 @@ export default function GridPokerBoard({
     if (state.phase === "round-result") getSoundEngine().playCorrectDing();
   }, [state.phase, state.lastRoundResult?.roundNumber]);
 
-  const [muted, setMuted] = useState(() => getSoundEngine().isMuted());
+  // Both toggles below read/write the site-wide `audioSettings` store, so
+  // they always match the header's global sound widget and the settings
+  // modal — no more per-game-only mute flags (2026-08-26 세션, 통합).
+  const masterMuted = useAudioSettingsStore((s) => s.masterMuted);
+  const toggleMasterMuted = useAudioSettingsStore((s) => s.toggleMasterMuted);
   const soundToggle = (
     <button
       onClick={() => {
-        const engine = getSoundEngine();
-        engine.unlock();
-        engine.setMuted(!muted);
-        setMuted(!muted);
+        toggleMasterMuted();
+        getSoundEngine().unlock();
       }}
       className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
-      aria-label={muted ? "소리 켜기" : "소리 끄기"}
+      aria-label={masterMuted ? "소리 켜기" : "소리 끄기"}
     >
-      {muted ? "🔇" : "🔊"}
+      {masterMuted ? "🔇" : "🔊"}
     </button>
   );
 
-  // Separate from `soundToggle` above: that one mutes/unmutes shared SFX
-  // (e.g. the urgent-timer fuse crackle) via soundEngine's global toggle,
-  // while this one is Grid Poker's own BGM opt-in, defaulted off — see
-  // useGridPokerBgm.
+  // Separate from `soundToggle` above: that one mutes/unmutes everything
+  // (SFX + BGM) via the master flag, while this one only mutes this game's
+  // themed background music (딥 하우스 BGM — see `useGameBgm("gridPoker")`
+  // in GridPokerGame.tsx), independent of the SFX-affecting master toggle.
+  const bgmMuted = useAudioSettingsStore((s) => s.bgmMuted);
+  const toggleBgmMuted = useAudioSettingsStore((s) => s.toggleBgmMuted);
   const bgmToggle = (
     <button
-      onClick={() => onToggleBgm(!bgmEnabled)}
+      onClick={toggleBgmMuted}
       className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
-      aria-label={bgmEnabled ? "배경음악 끄기" : "배경음악 켜기"}
-      title="배경음악 (기본 꺼짐)"
+      aria-label={bgmMuted ? "배경음악 켜기" : "배경음악 끄기"}
+      title="배경음악"
     >
-      {bgmEnabled ? "🎵" : "🎵🚫"}
+      {bgmMuted ? "🎵🚫" : "🎵"}
     </button>
   );
 

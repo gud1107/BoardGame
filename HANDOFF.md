@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-26 (**인게임 채팅/시스템 로그를 파일럿 2종에서 온라인 게임 전체로 확산(18개 게임 추가 연동)한 세션** — 자세한 내용은 아래 `### 2026-08-26 — 인게임 채팅·시스템 로그 전체 게임 확산 (18개 게임, 파일럿 이후)` 절 참고.)_
+_최종 갱신: 2026-08-27 (**6개 허브 게임 맞춤 테마 BGM/SFX 시스템 연동 + 전역 기본 음소거(Default Mute) 적용 세션** — 자세한 내용은 아래 `### 2026-08-27 — 게임별 테마 BGM/SFX 연동 및 전역 기본 음소거` 절 참고.)_
+
+_이전 갱신: 2026-08-26 (**인게임 채팅/시스템 로그를 파일럿 2종에서 온라인 게임 전체로 확산(18개 게임 추가 연동)한 세션** — 자세한 내용은 아래 `### 2026-08-26 — 인게임 채팅·시스템 로그 전체 게임 확산 (18개 게임, 파일럿 이후)` 절 참고.)_
 
 _이전 갱신: 2026-08-26 (**로비 글로벌 채팅 + 인게임(페루도·달무티 파일럿) 플로팅 채팅·시스템 액션 로그 구축 세션** — 자세한 내용은 아래 `### 2026-08-26 — 로비/룸 실시간 채팅 및 인게임 시스템 액션 로그 (파일럿: 페루도·달무티)` 절 참고.)_
 
@@ -25,6 +27,57 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-27 — 게임별 테마 BGM/SFX 연동 및 전역 기본 음소거
+
+**요청**: 6개 게임(로비/허브·운명전쟁39·라스베가스·그리드포커·말달리자·달무티)에 각각 성격이 다른 테마 BGM과 액션 SFX를 연동하고, 모든 BGM/SFX 기본값을 음소거(Default Mute)로 설정 — 헤더에 사운드 토글 버튼 배치, 설정은 localStorage 유지. 구현 전 확인이 필요한 사항(오디오 라이브러리/실제 파일 여부, 기존 4개 게임에 대한 소급 적용 여부, 기본 볼륨, 동시발음 제한)은 임의로 정하지 말고 먼저 질문하라는 명시적 지시가 있어 아래처럼 진행.
+
+**사전 조사에서 발견한 핵심 제약**: 이 프로젝트는 지금까지 실제 오디오 파일을 전혀 쓴 적이 없고(`public/`에 mp3/wav 0개) `src/lib/audio/soundEngine.ts`가 Web Audio API로 완전 합성한 SFX/앰비언트 루프만 제공해왔다 — `저작권, 상표권.md`가 "배경음악"을 저작권 보호 대상으로 명시하고 있어서 내려진 의도적 결정. 또한 기존 사운드 4종(페루도 주사위/틀린그림찾기 BGM+정오답/달무티 교환 SFX/그리드포커 옵트인 BGM)은 전역 `bg_sound_muted` 키를 공유하며 기본값이 "음소거 해제"였고, 그리드포커 세션(HANDOFF 2026-08-24 기록)에서는 "전역 기본값을 바꾸면 이미 출시된 게임들이 갑자기 무음이 된다"는 이유로 **의도적으로 유지**된 바 있음 — 이번 요청은 정확히 그 반대(전역 기본 음소거)를 요구하므로 소급 적용 여부를 반드시 확인해야 했음.
+
+**`AskUserQuestion`으로 확인한 모호점 (2라운드, 총 6문항)**:
+1. BGM 오디오 방식 — "실제 로파이/사이버펑크/스윙재즈/오케스트라/하프시코드" 문구는 실제 프로듀싱된 음악을 의미하는 것으로 보여 확인 → **"혼합: SFX는 합성 유지, BGM만 실제 파일"** 선택(순수 합성 유지/실파일 전면 도입 중 절충).
+2. 기존 4개 게임(페루도/틀린그림찾기/달무티/그리드포커)에 전역 기본 음소거를 소급 적용할지 → **"전체 게임 소급 적용"** 선택.
+3. 음소거 해제 시 기본 볼륨 → **BGM 40% / SFX 70%** 선택.
+4. 동시발음 제한 방식 → **"동일 SFX 타입당 쿨다운 + 전체 동시 채널 상한"** 선택.
+5. (혼합 방식 확정 후 추가 질문) BGM 실제 파일을 어디서 구할지 — Claude는 실제 재생 가능한 음원 파일을 생성/구매/다운로드할 수 없음을 명시 → **"CC0/로열티프리 무료 음원 링크를 찾아 제안해달라"** 선택.
+6. 재생 라이브러리 — Howler.js 신규 의존성 추가 여부 → **"네이티브 `<audio>` 요소로 직접 구현"** 선택(신규 의존성 없음).
+
+**BGM 후보 리서치(`WebSearch`/`WebFetch`, Pixabay)**: 6개 테마별로 Pixabay Music을 검색해 후보 트랙을 찾고, `pixabay.com/service/license-summary/`를 직접 확인해 "Pixabay Content License"(상업적 사용 무료, 크레딧 표시 불필요, 재판매/NFT 금지 — 단 엄밀한 CC0/퍼블릭도메인은 아님)임을 사용자에게 정확히 고지. 실제 mp3 다운로드는 Pixabay가 봇 요청을 403으로 차단하고 다운로드 버튼도 JS 인터랙션이 필요해 자동화 불가능함을 확인(`curl -I https://pixabay.com/` → 403) → 후보 링크만 제시하고 파일 자체는 사용자가 직접 받아 경로에 넣기로 최종 확정(→ 질문 6번 답변). 최종 제안 목록은 `public/assets/sounds/bgm/README.md`에 표로 정리해뒀음(로비: Lofi Jazz Trio Sunny Cafe, 운명전쟁39: Cyberpunk synthwave, 라스베가스: Swing Jazz Midnight Club, 그리드포커: Upbeat Deep House, 말달리자: Epic Action Trailer, 달무티: Harpsichord Mania).
+
+**구현 — 신규 파일**:
+- **`src/lib/audio/audioSettings.ts`(신규)**: 사이트 전체가 공유하는 사운드 설정 단일 소스. `zustand`(이미 프로젝트 의존성, bettingStore/subscriptionStore와 동일 패턴)로 구현해 `getState()`/`subscribe()`를 React 밖(soundEngine.ts, bgmManager.ts)에서도 쓸 수 있게 함. `{ masterMuted, bgmMuted, sfxMuted, bgmVolume, sfxVolume }` 5개 필드, 기본값은 전부 `true`(음소거)/`0.4`/`0.7`. localStorage 키 `boardgame_audio_settings_v1`에 수동 저장(이 프로젝트의 기존 컨벤션 — zustand persist 미들웨어 대신 직접 localStorage 읽기/쓰기, soundEngine.ts의 옛 패턴과 동일). **마이그레이션**: 새 키가 없을 때, 레거시 `bg_sound_muted === "0"`(과거 명시적으로 음소거 해제했던 유저) 또는 `grid-poker-bgm-enabled === "1"`이면 그 선택을 존중해 무음이 아닌 상태로 시작 — 아무 것도 건드리지 않았던(=과거에도 기본값 그대로였던) 절대다수는 새 기본값(음소거)으로 시작.
+- **`src/lib/audio/bgmManager.ts`(신규)**: 6개 게임 테마 BGM의 네이티브 `<audio>` 크로스페이드 재생기(신규 라이브러리 없음). `crossfadeTo(id | null)`이 기존 트랙을 페이드아웃하며 새 트랙을 900ms에 걸쳐 페이드인, 루프 재생. `bgmMuted`/`bgmVolume`을 `audioSettings` 스토어에서 실시간 구독. **파일이 없는 경우**: `<audio>`의 `error` 이벤트를 1회만 잡아 해당 id를 세션 동안 재시도하지 않고 무음 처리 + 콘솔 경고 1회 — 다른 게임/효과음에는 영향 없음(→ "파일 없어도 먼저 전체 구현" 답변대로, mp3가 아직 없어도 앱이 정상 동작).
+- **`src/lib/audio/useGameBgm.ts`(신규)**: `useGameBgm(id)` 한 줄 훅 — 마운트/`id` 변경 시 크로스페이드 인, 언마운트 시 무음으로 페이드 아웃. 6개 게임의 `<Game>Game.tsx`(정확히는 로비 페이지 + 5개 게임)에서 각각 한 줄로 사용.
+- **`src/components/audio/SoundToggleButton.tsx`(신규)**: 헤더용 🔇/🔊 원터치 마스터 토글 + 설정 모달을 여는 ⚙ 버튼. 클릭 시 `getSoundEngine().unlock()`도 함께 호출해 브라우저 자동재생 정책을 만족.
+- **`src/components/audio/SoundSettingsModal.tsx`(신규)**: 기존 `Overlay` 컴포넌트 재사용. 전체 음소거 체크박스 + BGM/SFX 개별 음소거 체크박스·볼륨 슬라이더(0~100%) — 요청된 "개별 볼륨 슬라이더 및 개별 음소거 토글 팝업" 그대로 구현.
+- **`public/assets/sounds/bgm/README.md`(신규)**: 6개 mp3 파일이 들어갈 경로, 각 파일이 없을 때의 동작(자동 무음), Pixabay 후보 링크 표를 문서화 — 실제 오디오 파일 자체는 이 세션에서 저장소에 커밋하지 않음(사용자가 직접 다운로드해 채워야 함).
+
+**구현 — 기존 파일 수정**:
+- **`src/lib/audio/soundEngine.ts`(대폭 확장)**: (1) 자체 `bg_sound_muted` localStorage 직접 관리를 걷어내고 `isMuted()`/`setMuted()`를 `audioSettings` 스토어의 `masterMuted`로 위임하는 얇은 프록시로 변경 — 기존 5개 파일의 호출부는 전혀 안 건드려도 계속 동작. (2) 기존 단일 `master` 게인 노드를 `sfxGain`(SFX 전용)/`bgmGain`(레거시 앰비언트 루프 전용, 틀린그림찾기가 계속 사용)으로 분리해 BGM/SFX 볼륨을 독립적으로 슬라이더 조작 가능하게 함. (3) **동시발음 제한**: `gate(key, cooldownMs)` 사설 메서드 — SFX 타입별 쿨다운 + 전체 동시 채널 상한(8개, 채널당 450ms 후 해제)을 모든 개별 SFX 호출에 적용(단 `playDiceRattle`/`startFuseCrackle` 내부의 연속 클릭·크래클 생성기는 하나의 연속 이펙트이므로 게이트 예외). (4) **신규 SFX 17종 추가**: `playWoodTap`(로비 나무 탭), `playCardDrawWhoosh`/`playCardSubmitImpact`/`playReverseSpark`(운명전쟁39), `playCasinoDiceRoll`/`playChipSettle`/`playTieSpark`(라스베가스), `playCardFlick`/`playGridSnap`(그리드포커 — 기존 `playCorrectDing`을 족보 완성 종소리로 재사용), `playHoofBeat`/`playBoostWind`/`playFinishFanfare`(말달리자), `playRankFanfare`/`playChainRattle`/`playCoinTribute`/`playParchmentSubmit`(달무티 — 기존 `playExchangeLaunch`/`playExchangeArrival`은 카드 교환 VFX 전용으로 유지). 전부 순수 Web Audio 합성(오실레이터/필터드 노이즈), 외부 오디오 파일 없음.
+- **`src/components/SiteHeader.tsx`**: `SoundToggleButton`을 버그 리포트 링크와 내기 관리 버튼 사이에 배치 — 이 헤더가 `layout.tsx`에서 전역 렌더링되므로 모든 페이지(로비 허브 포함, 게임 화면 포함)에서 사운드 토글이 노출됨. 참고로 이전에는 틀린그림찾기 게임에 음소거 버튼이 전혀 없었는데(다른 게임 전용 버튼만 존재) 이번 변경으로 그 공백도 함께 해소됨.
+- **`src/app/page.tsx`**: 게임 허브(루트 `/`) 마운트 중 `useGameBgm("lobby")`로 Lo-fi/Jazz Hop 테마 BGM 재생.
+- **`src/components/GameCard.tsx`**: 게임 카드 클릭(`Link`의 `onClick`) 시 `unlock()` + `playWoodTap()` — "보드게임 나무 말/버튼 탭 소리" 요청 반영.
+- **`src/games/dalmuti/DalmutiGame.tsx`**: `phase === "playing"`일 때만 `useGameBgm("dalmuti")`.
+- **`src/games/dalmuti/DalmutiBoard.tsx`**: 마운트 시 1회 신분 배정 SFX(최하위 좌석은 `playChainRattle`, 그 외는 `playRankFanfare`) 추가. 공용 `dispatch()`에 `playCards`→`playParchmentSubmit`, `returnTax`→`playCoinTribute` 연결. 기존 로컬 `useState(() => getSoundEngine().isMuted())` 음소거 버튼을 `useAudioSettingsStore` 구독으로 교체(헤더 토글과 항상 동기화).
+- **`src/games/lasVegas/LasVegasGame.tsx`**: `phase === "playing"`일 때만 `useGameBgm("lasVegas")`.
+- **`src/games/lasVegas/LasVegasBoard.tsx`**: 주사위를 굴린 순간(`justRolled`) `playCasinoDiceRoll`, 다이스/칩 착지 애니메이션 완료 시(`handlePlacementDone`) `playChipSettle`, 동수 상쇄 감지(`newlyClashedCasinos`) 시 `playTieSpark`. `roll()` 클릭 핸들러에 `unlock()` 추가.
+- **`src/games/grid-poker/GridPokerGame.tsx`**: 기존 `useGridPokerBgm`(게임 전용 opt-in BGM 플래그, 합성 앰비언트 루프)을 폐지하고 `useGameBgm(phase === "playing" ? "gridPoker" : null)`로 교체 — 딥 하우스 테마 mp3로 대체.
+- **`src/games/grid-poker/GridPokerBoard.tsx`**: `bgmEnabled`/`onToggleBgm` prop을 완전히 제거하고 `soundToggle`(마스터 음소거)·`bgmToggle`(BGM 전용 음소거) 둘 다 `useAudioSettingsStore` 직접 구독으로 교체. `placeAt()`에 `playCardFlick` → 90ms 후 `playGridSnap` 연쇄 추가(카드를 집어서 그리드에 안착시키는 두 단계 SFX).
+- **`src/games/malDalliJa/MalDalliJaGame.tsx`**: `phase === "playing"`일 때만 `useGameBgm("malDalliJa")`.
+- **`src/games/malDalliJa/MalDalliJaBoard.tsx`**: 기존 이동 파티클 이벤트(`handleAnimEvent`)의 `"dust"`→`playHoofBeat`, `"streak"`→`playBoostWind`를 같은 타이밍에 연결. 게임 종료 시(이동 애니메이션이 다 끝난 뒤, `animations.length === 0` 확인) 1회 `playFinishFanfare`. `handleCellClick`의 실제 이동 지점에 `unlock()` 추가.
+- **`src/games/destinyWar39/DestinyWar39Game.tsx`**: `phase === "playing"`일 때만 `useGameBgm("destinyWar39")`.
+- **`src/games/destinyWar39/DestinyWar39Board.tsx`**: 라운드 전환(새 예측 카드 배분) 시 `playCardDrawWhoosh`, 카드 제출 클릭 시 `unlock()` + `playCardSubmitImpact`, 턴 해소 시 리버스가 실제 발동했을 때만 `playReverseSpark`(기존 `reverseSwish` 비주얼과 동일 조건).
+- **`src/games/perudo/PerudoBoard.tsx`**: 로컬 `useState` 음소거 버튼을 `useAudioSettingsStore` 구독으로 교체(헤더 토글과 동기화) — 이 게임은 6종 목록에 없어 신규 테마 BGM은 추가하지 않음, 기존 다이스 SFX만 유지.
+
+**삭제**: `src/games/grid-poker/useGridPokerBgm.ts` — 통합 `audioSettings` 스토어의 `bgmMuted`로 완전히 흡수되어 더 이상 필요 없음.
+
+**의도적으로 손대지 않은 것**: 틀린그림찾기(SpotDifference)와 페루도는 이번 6개 게임 목록에 없어 신규 테마 BGM/SFX를 추가하지 않았음 — 다만 둘 다 `soundEngine.ts`의 공유 게인 노드를 거치므로 전역 기본 음소거는 자동으로 적용됨(질문 2번 "전체 게임 소급 적용" 답변대로).
+
+**검증**: `npx tsc --noEmit`(전체, 에러 0) / `npm run lint`(0 에러 0 경고) / `npx vitest run src/games/dalmuti src/games/grid-poker src/games/lasVegas src/games/malDalliJa src/games/destinyWar39 src/games/registry.test.ts`(6개 파일 308/308 통과) / 참고로 전체 `npx vitest run`은 32/33 파일 통과·1202/1204 테스트 통과 후 워커 프로세스 크래시로 1개 unhandled error 발생 — 실패한 개별 테스트(FAIL)는 0건이었고, 이 워커 크래시는 §0 및 여러 직전 세션(예: 2026-08-25 달무티 세션)에 이미 동일하게 기록된 이 저장소의 기존 이슈이므로 이번 세션의 회귀가 아니라고 판단.
+
+**참고 — 미검증 항목**: (1) 이 프로젝트의 `<Game>Board.tsx` 테스트 사각지대(jsdom 미설치, vitest 환경이 `node`)와 마찬가지로 `audioSettings.ts`의 localStorage 마이그레이션 로직·`bgmManager.ts`의 크로스페이드 타이밍·각 SFX의 실제 음향은 타입/린트/기존 유닛 테스트만 통과했고 브라우저에서 육안·귀로 재생 확인은 하지 않았음. (2) **BGM mp3 파일 자체는 저장소에 없음** — `public/assets/sounds/bgm/README.md`의 안내대로 사용자가 6개 파일을 직접 받아 넣기 전까지는 6개 게임 모두 SFX만 들리고 BGM은 무음(정상 동작, 에러 아님). (3) Pixabay 후보 트랙은 실제로 들어보고 고른 것이 아니라 검색 결과 제목/태그 기반 추천이므로, 실제로 받아본 뒤 게임 분위기와 맞지 않으면 다른 트랙으로 교체 권장.
+
+**커밋/배포**: (진행 중 — 커밋 해시와 배포 URL은 이 세션 마무리 시점에 갱신 예정)
 
 ### 2026-08-26 — 인게임 채팅·시스템 로그 전체 게임 확산 (18개 게임, 파일럿 이후)
 

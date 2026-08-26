@@ -5,6 +5,7 @@ import type { RealtimeChannel, RealtimePresenceState } from "@supabase/supabase-
 import { getSupabase } from "@/lib/supabase/client";
 import { getDeviceId } from "@/lib/identity/deviceId";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { useGameBgm } from "@/lib/audio/useGameBgm";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import {
@@ -23,7 +24,6 @@ import {
   type TimerSettings,
 } from "./engine";
 import GridPokerBoard from "./GridPokerBoard";
-import { useGridPokerBgm } from "./useGridPokerBgm";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
@@ -278,19 +278,12 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
   // name for the system log without closing over a stale value.
   const namesRef = useRef<Record<SeatIndex, string>>({});
 
-  // Tense background music plays only while an actual match is underway —
-  // started/stopped by this one effect so every path back to "playing"
-  // (fresh game, rematch, reconnect-via-state-sync) restarts it and every
-  // path away (post-game, leaving, unmount) reliably stops it. Defaults to
-  // OFF (see useGridPokerBgm) — this effect also reruns when the player
-  // flips the in-game toggle mid-match, starting/stopping BGM immediately
-  // instead of waiting for the next "playing" transition.
-  const { enabled: bgmEnabled, setEnabled: setBgmEnabled } = useGridPokerBgm();
-  useEffect(() => {
-    if (phase !== "playing" || !bgmEnabled) return;
-    getSoundEngine().startBgm();
-    return () => getSoundEngine().stopBgm();
-  }, [phase, bgmEnabled]);
+  // Themed 딥 하우스 BGM plays only while an actual match is underway —
+  // `useGameBgm` crossfades in on the "playing" transition and fades back to
+  // silence on every path away (post-game, leaving, unmount), same as every
+  // other hub game (2026-08-26 세션). Muting/volume is the shared
+  // `audioSettings` store now, not a bespoke per-game flag.
+  useGameBgm(phase === "playing" ? "gridPoker" : null);
 
   function enterRoom() {
     setFormError(null);
@@ -1005,8 +998,6 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
         connectedSeats={connectedSeats}
         onAction={handleAction}
         onGameEnd={handleGameEnd}
-        bgmEnabled={bgmEnabled}
-        onToggleBgm={setBgmEnabled}
       />
       <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
       </>

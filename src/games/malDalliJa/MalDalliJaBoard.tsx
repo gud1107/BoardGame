@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { AnimatedHorse, MoveParticleLayer, buildMoveAnim, type MoveAnim, type MoveEvent, type MoveParticle } from "./MoveEffects";
 import RulebookModal from "./RulebookModal";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
 import {
   BOARD_SIZE,
   OASIS,
@@ -186,6 +187,19 @@ export default function MalDalliJaBoard({
     setTrackedMoveCount(nextCount);
   }
 
+  // 결승선 환호/징소리 — 게임 종료 순간 1회. 승리를 만든 이동 애니메이션(위
+  // 홉/부스트 SFX)이 다 끝난 뒤 울리도록 `animations.length === 0`까지 기다린다.
+  const finishFanfarePlayedRef = useRef(false);
+  useEffect(() => {
+    if (state.phase !== "gameOver") {
+      finishFanfarePlayedRef.current = false;
+      return;
+    }
+    if (finishFanfarePlayedRef.current || animations.length > 0) return;
+    finishFanfarePlayedRef.current = true;
+    getSoundEngine().playFinishFanfare();
+  }, [state.phase, animations.length]);
+
   const animatingKeys = new Set(animations.map((a) => `${a.seat}-${a.horseIndex}`));
 
   function handleAnimEvent(anim: MoveAnim, evt: MoveEvent) {
@@ -193,12 +207,16 @@ export default function MalDalliJaBoard({
     let particle: MoveParticle;
     switch (evt.type) {
       case "dust":
+        // 발굽 도약 쿵쿵/먼지 파티클음 — 매 홉(hop)마다, 이 시각 파티클과 정확히 같은 타이밍 (2026-08-26 세션).
+        getSoundEngine().playHoofBeat();
         particle = { id, kind: "dust", row: evt.row, col: evt.col };
         break;
       case "impact":
         particle = { id, kind: "impact", row: evt.row, col: evt.col, seat: anim.seat };
         break;
       case "streak":
+        // 추월/부스트 바람 가르는 소리 — 스피드 트레일 파티클과 같은 타이밍.
+        getSoundEngine().playBoostWind();
         particle = { id, kind: "streak", row: evt.row, col: evt.col, angleDeg: evt.angleDeg, seat: anim.seat };
         break;
       case "knightTrail":
@@ -258,6 +276,7 @@ export default function MalDalliJaBoard({
 
     const move = legalByCell.get(key);
     if (move) {
+      getSoundEngine().unlock();
       onAction({ type: "move", horseIndex: move.horseIndex, moveKind: move.moveKind, dr: move.dr, dc: move.dc });
       setSelectedHorseIndex(null);
       return;

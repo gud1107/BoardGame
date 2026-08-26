@@ -19,6 +19,7 @@ import {
   type SeatIndex,
 } from "./engine";
 import DalmutiBoard from "./DalmutiBoard";
+import { useGameBgm } from "@/lib/audio/useGameBgm";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
@@ -123,6 +124,8 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
   });
 
   const [phase, setPhase] = useState<Phase>(roomFromUrl ? "enter-name" : "choose");
+  // 중세풍 하프시코드 테마 BGM — 실제 대국 중에만 크로스페이드로 재생 (2026-08-26 세션).
+  useGameBgm(phase === "playing" ? "dalmuti" : null);
   const [intent, setIntent] = useState<"create" | "join">(roomFromUrl ? "join" : "create");
   const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");

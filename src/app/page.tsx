@@ -6,6 +6,7 @@ import { GENRE_META, GENRE_ORDER } from "@/games/genres";
 import type { GameGenre } from "@/games/types";
 import GameGrid from "@/components/GameGrid";
 import CollectionShowcase from "@/components/CollectionShowcase";
+import { useGameBgm } from "@/lib/audio/useGameBgm";
 
 const PLAYER_FILTERS = [
   { label: "전체", test: () => true },
@@ -18,6 +19,8 @@ const PLAYER_FILTERS = [
 type GenreFilter = GameGenre | "all";
 
 export default function DashboardPage() {
+  // 편안한 Lo-fi/Jazz Hop 테마 BGM — 게임 허브(이 페이지)에 머무는 동안만 재생.
+  useGameBgm("lobby");
   const [query, setQuery] = useState("");
   const [filterIdx, setFilterIdx] = useState(0);
   const [genreFilter, setGenreFilter] = useState<GenreFilter>("all");

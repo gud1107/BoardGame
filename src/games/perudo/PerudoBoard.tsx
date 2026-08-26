@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import RulebookModal from "./RulebookModal";
 import PerudoFaceIcon from "./PerudoFaceIcon";
 import {
@@ -668,12 +669,11 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
   // A player's own dice are ALWAYS visible the instant they render — no cup
   // or timer ever hides them (2026-08 페루도 UI 개편, 사용자 요청).
 
-  const [muted, setMuted] = useState(() => getSoundEngine().isMuted());
-  function toggleMuted() {
-    const next = !muted;
-    getSoundEngine().setMuted(next);
-    setMuted(next);
-  }
+  // Reads the site-wide `audioSettings` store directly (2026-08-26 세션)
+  // instead of a local copy of `soundEngine.isMuted()`, so this button stays
+  // in sync with the header's global toggle and the settings modal.
+  const muted = useAudioSettingsStore((s) => s.masterMuted);
+  const toggleMuted = useAudioSettingsStore((s) => s.toggleMasterMuted);
 
   const rulebookButton = (
     <button
@@ -686,7 +686,10 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
 
   const muteButton = (
     <button
-      onClick={toggleMuted}
+      onClick={() => {
+        toggleMuted();
+        getSoundEngine().unlock();
+      }}
       title={muted ? "효과음 켜기" : "효과음 끄기"}
       className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
     >

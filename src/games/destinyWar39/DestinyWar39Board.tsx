@@ -7,6 +7,7 @@ import RankedLeaderboard from "./RankedLeaderboard";
 import LastRoundHistoryModal from "./LastRoundHistoryModal";
 import { CardFace } from "./CardFace";
 import { HiddenRevealCell, PlayedCardSlot, ReverseSwishOverlay, RoundResultBadge, TurnOrderBadge, type RoundOutcome } from "./DestinyWar39Effects";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
 import {
   TOTAL_ROUNDS,
   visiblePastPrediction,
@@ -102,10 +103,14 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
     const turnCountGrew = !roundChanged && round.turnRecords.length > prevTurnCountRef.current;
     prevRoundNumberRef.current = round.roundNumber;
     prevTurnCountRef.current = round.turnRecords.length;
+    // 카드 드로우 휙 소리 — 새 라운드가 시작되어 예측 카드가 새로 돌아가는 순간 (2026-08-26 세션).
+    if (roundChanged) getSoundEngine().playCardDrawWhoosh();
     if (!turnCountGrew) return;
     const justResolved = round.turnRecords[round.turnRecords.length - 1];
     setResolvingTurn(justResolved);
     setReverseSwish(justResolved.reverseActive);
+    // 리버스 역재생 스파크 — 이 턴에 리버스가 실제로 발동했을 때만.
+    if (justResolved.reverseActive) getSoundEngine().playReverseSpark();
     const timer = setTimeout(() => setResolvingTurn(null), TRICK_REVEAL_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -445,7 +450,12 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
                   playerCount={playerCount}
                   size="md"
                   interactive
-                  onClick={() => onAction({ type: "play", seat: viewerSeat, cardId: c.id })}
+                  onClick={() => {
+                    const engine = getSoundEngine();
+                    engine.unlock();
+                    engine.playCardSubmitImpact();
+                    onAction({ type: "play", seat: viewerSeat, cardId: c.id });
+                  }}
                   // Pop-up scale on touch/hover/keyboard-focus instead of fan-out
                   // overlap (this session's confirmed answer) — cards stay laid
                   // out in a plain wrapping row, but the one under the

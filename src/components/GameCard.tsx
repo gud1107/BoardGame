@@ -3,6 +3,7 @@ import type { GameMeta } from "@/games/types";
 import GameThumbnail from "./GameThumbnail";
 import { GENRE_META } from "@/games/genres";
 import { GAME_COLLECTIONS } from "@/games/collections";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
 
 function formatPlayers(g: GameMeta) {
   const { min, max } = g.players;
@@ -82,7 +83,15 @@ export default function GameCard({ game }: { game: GameMeta }) {
     return <div className="h-full cursor-not-allowed">{content}</div>;
   }
   return (
-    <Link href={`/games/${game.id}`} className="h-full">
+    <Link
+      href={`/games/${game.id}`}
+      className="h-full"
+      onClick={() => {
+        const engine = getSoundEngine();
+        engine.unlock();
+        engine.playWoodTap();
+      }}
+    >
       {content}
     </Link>
   );

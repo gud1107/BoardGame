@@ -6,6 +6,7 @@ import { CasinoMatArt } from "./CasinoPhotoArt";
 import { MoneyBillArt } from "./MoneyBillArt";
 import { DiceFace, diceColorForSeat, NEUTRAL_DICE_COLOR } from "./DiceIcon";
 import { detectPlacementEvent, FlyingDicePlacement, PayoutMoneyFly, type PlacementEvent } from "./DiceEffects";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
 import {
   computeRankings,
   NEUTRAL_OWNER,
@@ -548,19 +549,26 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
     });
     setTrackedState(state);
     if (placement) setPlacementEvents((prev) => [...prev, { ...placement, id: (prev.at(-1)?.id ?? 0) + 1 }]);
-    if (justRolled) setRollFlashId((n) => n + 1);
+    if (justRolled) {
+      setRollFlashId((n) => n + 1);
+      getSoundEngine().playCasinoDiceRoll();
+    }
     if (newlyClashedCasinos.length > 0) {
       setClashKeys((prev) => {
         const next = { ...prev };
         for (const c of newlyClashedCasinos) next[c.number] = (next[c.number] ?? 0) + 1;
         return next;
       });
+      getSoundEngine().playTieSpark();
     }
   }
   const handlePlacementDone = useCallback(
     (id: number) => {
       const landed = placementEvents.find((e) => e.id === id);
-      if (landed) setImpactKeys((prev) => ({ ...prev, [landed.casino]: (prev[landed.casino] ?? 0) + 1 }));
+      if (landed) {
+        setImpactKeys((prev) => ({ ...prev, [landed.casino]: (prev[landed.casino] ?? 0) + 1 }));
+        getSoundEngine().playChipSettle();
+      }
       setPlacementEvents((prev) => prev.filter((e) => e.id !== id));
     },
     [placementEvents],
@@ -742,6 +750,7 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
 
   function roll() {
     if (!isMyTurn || state.currentRoll || myDiceInHand === 0) return;
+    getSoundEngine().unlock();
     onAction({ type: "rollDice", seat: viewerSeat, seed: randomSeed() });
   }
   function place(face: Face) {
