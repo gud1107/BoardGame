@@ -77,7 +77,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **참고 — 미검증 항목**: (1) 이 프로젝트의 `<Game>Board.tsx` 테스트 사각지대(jsdom 미설치, vitest 환경이 `node`)와 마찬가지로 `audioSettings.ts`의 localStorage 마이그레이션 로직·`bgmManager.ts`의 크로스페이드 타이밍·각 SFX의 실제 음향은 타입/린트/기존 유닛 테스트만 통과했고 브라우저에서 육안·귀로 재생 확인은 하지 않았음. (2) **BGM mp3 파일 자체는 저장소에 없음** — `public/assets/sounds/bgm/README.md`의 안내대로 사용자가 6개 파일을 직접 받아 넣기 전까지는 6개 게임 모두 SFX만 들리고 BGM은 무음(정상 동작, 에러 아님). (3) Pixabay 후보 트랙은 실제로 들어보고 고른 것이 아니라 검색 결과 제목/태그 기반 추천이므로, 실제로 받아본 뒤 게임 분위기와 맞지 않으면 다른 트랙으로 교체 권장.
 
-**커밋/배포**: (진행 중 — 커밋 해시와 배포 URL은 이 세션 마무리 시점에 갱신 예정)
+**커밋/배포**: `44f4a7b feat(audio): implement game-specific BGM and action SFX with default mute mode` → `git push origin main` 완료. 이번 세션이 실제로 만든 파일만 스테이징(신규 오디오 파일 7개 + 게임/헤더/허브 수정 15개 + `useGridPokerBgm.ts` 삭제 + 이 HANDOFF 절, 총 23개) — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.gitignore`, `public/games`·`public/images/lasVegas`·`public/assets/games/perudo` 실물 이미지 삭제, `lasVegas/CasinoEmblem.tsx`·`CasinoPhotoArt.tsx`, `boardGameRule/` 신규 파일, `저작권, 상표권.md`, `orca충돌및확인.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 작업 트리에 남겨둠. 다만 `LasVegasBoard.tsx`는 이 세션이 손대야 했던 파일이면서 동시에 저 미커밋 변경(DiceGroupRow "×N" 배지 등)도 이미 걸쳐 있었던 유일한 파일이라, HEAD 버전에 이번 세션의 사운드 관련 3개 hunk(soundEngine import, 주사위/칩/타이스파크 SFX 호출, roll() unlock)만 골라 적용한 버전을 별도로 스테이징한 뒤 작업 트리는 다시 전체(미커밋 변경 포함) 상태로 복원 — `git diff`로 최종 확인 완료. `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주(Turbopack 빌드+TypeScript 전체 재검사 포함), READY — `https://board-game-pdahyarkn-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod --scope me-3871`로 후속 승격 요청할 것. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨 — 이 오디오 세션이 그 변경들을 검증하거나 의도한 것은 아님.
 
 ### 2026-08-26 — 인게임 채팅·시스템 로그 전체 게임 확산 (18개 게임, 파일럿 이후)
 
