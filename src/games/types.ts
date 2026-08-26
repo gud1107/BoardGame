@@ -118,6 +118,14 @@ export interface GameMeta {
    * participant identity itself.
    */
   onlineMultiplayer?: boolean;
+  /**
+   * True for games that show the floating in-game chat drawer + system
+   * action log (see `src/components/chat/ChatDrawer.tsx`). Piloted on just
+   * Perudo and Dalmuti — a game's room chat piggybacks on its existing
+   * Supabase Realtime room channel rather than opening a second one, so this
+   * flag only makes sense alongside `onlineMultiplayer: true`.
+   */
+  chatEnabled?: boolean;
 }
 
 /**

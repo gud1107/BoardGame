@@ -50,6 +50,9 @@ export default function SiteHeader() {
               )}
             </Link>
           )}
+          <Link href="/lobby" className="text-xs text-white/50 hover:text-white/80 sm:text-sm">
+            💬 로비
+          </Link>
           <Link href="/history" className="text-xs text-white/50 hover:text-white/80 sm:text-sm">
             기록
           </Link>

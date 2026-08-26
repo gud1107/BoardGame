@@ -23,6 +23,14 @@ import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import { botTier, DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import { requestBotAction } from "@/games/shared/bot/botWorkerClient";
+import { v4 as uuid } from "uuid";
+import type { ChatMessage, SendResult } from "@/lib/chat/types";
+import { checkThrottle, recordSend, INITIAL_THROTTLE_STATE, type ThrottleState } from "@/lib/chat/throttle";
+import { filterProfanity } from "@/lib/chat/profanity";
+import { stripControlChars } from "@/lib/chat/sanitize";
+import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
+import { formatPerudoRaiseLog } from "@/lib/chat/systemLog";
+import ChatDrawer from "@/components/chat/ChatDrawer";
 
 /** Whose decision is pending, for `useBotAutoplay` — just the active seat (Perudo has no separate response sub-phase). */
 function perudoCurrentActor(state: PerudoState): SeatIndex | null {
@@ -114,6 +122,12 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<PerudoState | null>(null);
   const [finalResult, setFinalResult] = useState<{ winnerName: string } | null>(null);
+  // Room chat + in-game system log (piloted here and in DalmutiGame.tsx —
+  // see GameMeta.chatEnabled). Shares this component's own room channel
+  // instead of opening a second Realtime subscription.
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatCooldownUntil, setChatCooldownUntil] = useState<number | null>(null);
+  const chatThrottleRef = useRef<ThrottleState>(INITIAL_THROTTLE_STATE);
   // Seats currently played by an AI bot instead of a human — host-controlled
   // (ARCHITECTURE.md §7), broadcast via "bot-roster" so every client renders
   // the same lobby/board without a server.
@@ -142,6 +156,11 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  // Kept in sync so the `game-action` broadcast handler (registered once,
+  // inside the channel-setup effect below) can resolve a seat to its display
+  // name for the system log without closing over a stale value.
+  const namesRef = useRef<Record<SeatIndex, string>>({});
 
   function enterRoom() {
     setFormError(null);
@@ -174,6 +193,17 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
     channelRef.current = channel;
     startSentRef.current = false;
 
+    const chatChannel = `room:perudo:${roomCode}`;
+    void loadRecentMessages(chatChannel).then((history) => {
+      setChatMessages((prev) => mergeHistoryIntoMessages(prev, history));
+    });
+
+    channel.on("broadcast", { event: "chat-message" }, ({ payload }) => {
+      const message = payload?.message as ChatMessage | undefined;
+      if (!message) return;
+      setChatMessages((prev) => [...prev, message]);
+    });
+
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seed = payload?.seed as number;
       const playerCount = payload?.playerCount as number;
@@ -204,6 +234,27 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
       const action = payload?.action as EngineAction;
+      // System-log pilot (see GameMeta.chatEnabled): every connected client
+      // derives the same human-readable line independently, exactly like it
+      // independently derives `applyAction` below — no server round-trip, no
+      // change to the pure reducer in engine.ts. Deliberately not persisted
+      // to `chat_messages` (unlike user messages) — every client would
+      // otherwise write a duplicate row, and this is trivially re-derivable
+      // from the replayed action log anyway.
+      if (action.type === "raise") {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: uuid(),
+            channel: chatChannel,
+            deviceId: "system",
+            senderName: "시스템",
+            body: formatPerudoRaiseLog(namesRef.current[action.seat] ?? "상대", action.quantity, action.face),
+            type: "SYSTEM",
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
 
@@ -445,6 +496,37 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }, []);
 
+  const sendChatMessage = useCallback(
+    (rawBody: string): SendResult => {
+      const now = Date.now();
+      const check = checkThrottle(chatThrottleRef.current, now);
+      if (!check.ok) {
+        setChatCooldownUntil(check.lockedUntil ?? null);
+        return { ok: false, lockedUntil: check.lockedUntil };
+      }
+      const trimmed = stripControlChars(rawBody);
+      if (!trimmed) return { ok: false };
+      const { clean } = filterProfanity(trimmed);
+
+      chatThrottleRef.current = recordSend(chatThrottleRef.current, now);
+      setChatCooldownUntil(chatThrottleRef.current.lockedUntil);
+
+      const message: ChatMessage = {
+        id: uuid(),
+        channel: `room:perudo:${roomCode}`,
+        deviceId,
+        senderName: myName || "게스트",
+        body: clean,
+        type: "USER",
+        createdAt: new Date(now).toISOString(),
+      };
+      channelRef.current?.send({ type: "broadcast", event: "chat-message", payload: { message } });
+      void persistMessage(message);
+      return { ok: true };
+    },
+    [roomCode, myName, deviceId],
+  );
+
   const chooseAction = useCallback((state: PerudoState, actor: SeatIndex): EngineAction | null | Promise<EngineAction | null> => {
     const idx = botSeatsRef.current.indexOf(actor);
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
@@ -483,6 +565,9 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
     }
     return map;
   }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels]);
+  useEffect(() => {
+    namesRef.current = names;
+  }, [names]);
 
   const connectedSeats = useMemo(
     () => new Set([...occupants.map((o) => o.seat), ...botSeats]),
@@ -523,6 +608,9 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
     setBotSeats([]);
     botLevelsRef.current = [];
     setBotLevels([]);
+    setChatMessages([]);
+    setChatCooldownUntil(null);
+    chatThrottleRef.current = INITIAL_THROTTLE_STATE;
     setPhase("choose");
   }
 
@@ -673,6 +761,7 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "connecting" || phase === "waiting") {
     return (
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         {phase === "connecting" ? (
           <p className="text-sm text-white/50">연결하는 중...</p>
@@ -725,11 +814,14 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
           </>
         )}
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="대기실 채팅" />
+      </>
     );
   }
 
   if (phase === "playing" && gameState && mySeat !== null) {
     return (
+      <>
       <PerudoBoard
         state={gameState}
         viewerSeat={mySeat}
@@ -738,11 +830,14 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
         onAction={handleAction}
         onGameEnd={handleGameEnd}
       />
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 
   if (phase === "post-game" && finalResult) {
     return (
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">🏆</span>
         <p className="text-white/80">{finalResult.winnerName} 님 우승으로 게임이 끝났어요.</p>
@@ -761,6 +856,8 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
           </button>
         </div>
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 

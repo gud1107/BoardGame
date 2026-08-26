@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-26 (**방문자 트래킹 + 게임 플레이 통계 관리자 대시보드(/admin/stats) 구축 세션** — 자세한 내용은 아래 `### 2026-08-26 — 방문자/게임 플레이 통계 대시보드 구축` 절 참고.)_
+_최종 갱신: 2026-08-26 (**로비 글로벌 채팅 + 인게임(페루도·달무티 파일럿) 플로팅 채팅·시스템 액션 로그 구축 세션** — 자세한 내용은 아래 `### 2026-08-26 — 로비/룸 실시간 채팅 및 인게임 시스템 액션 로그 (파일럿: 페루도·달무티)` 절 참고.)_
+
+_이전 갱신: 2026-08-26 (**방문자 트래킹 + 게임 플레이 통계 관리자 대시보드(/admin/stats) 구축 세션** — 자세한 내용은 아래 `### 2026-08-26 — 방문자/게임 플레이 통계 대시보드 구축` 절 참고.)_
 
 _이전 갱신: 2026-08-25 (**달무티 수령 카드 3초 이상 지속 글로우 이펙트(손패 유지형) 추가 세션** — 자세한 내용은 아래 `### 2026-08-25 — 달무티 수령 카드 3초 이상 지속 글로우 이펙트(손패 유지형)` 절 참고.)_
 
@@ -21,6 +23,43 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-26 — 로비/룸 실시간 채팅 및 인게임 시스템 액션 로그 (파일럿: 페루도·달무티)
+
+**요청**: 로비(게임 밖) 전체 채팅 + 대기실(룸) 채팅 + 인게임 플로팅 채팅/시스템 액션 로그 통합 + 모바일 빠른 상용구·이모지 원터치 전송을 구현해달라는 `chat_feature_spec.md` 프롬프트. 스펙 자체가 신규 Socket.IO 서버(`src/server/socket/chatHandler.ts`)와 전역 유저 디렉토리를 갖춘 로비 허브를 전제하고 있었음. 실시간 프로토콜 연동 방식·비속어 필터 적용 범위·모바일 키보드 레이아웃 등 구현 전 확인이 필요한 사항은 절대 임의로 정하지 말고 먼저 번호를 매긴 질문 목록을 제시해 확인받으라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사**: `src/server/socket/`, Socket.IO 등은 저장소에 전혀 존재하지 않음 — 이미 구현된 21개 온라인 게임 전부가 게임별로 `supabase.channel("{game}-room-{roomCode}")` 형태의 **Supabase Realtime broadcast+presence** 채널을 각자 만들어 상태를 동기화하는 구조(공용 소켓 서버 없음). `/lobby` 같은 전역 허브 라우트도 없고 진입점은 `/`(카탈로그) → `/games/[gameId]`(방 코드 입장) → 게임별 자체 방 생성/대기 로직. 채팅 이력을 저장할 Supabase 테이블(`chat_messages` 등)도 없음(`supabase/schema.sql`에 없음). 비속어 필터·시스템 로그 프레임워크 모두 전무.
+
+**모호점 확인(`AskUserQuestion`, 2라운드 총 6문항)**:
+① 실시간 전송 계층 → **Supabase Realtime 재사용**(신규 Socket.IO 서버 대신, 기존 24개 게임과 동일한 패턴) 선택.
+② 전역 로비 위치 → **신규 `/lobby` 페이지 신설**(기존 `/games` 카탈로그에 통합하지 않음) 선택.
+③ 채팅 이력 저장 → **Supabase에 영속 저장**(신규 `chat_messages` 테이블 + `limit 30` 리로드) 선택.
+④ 인게임 시스템 로그 롤아웃 범위 → **파일럿 1~2개 게임 먼저**(24개 게임 엔진 동시 개조는 위험) 선택.
+⑤ 비속어 필터링 → **자체 한글/영문 금칙어 목록**(외부 API 없음) 선택.
+⑥ 파일럿 게임 → **페루도 + 달무티**(스펙 예시 문구 "1번 주사위를 3개 베팅"/"왕과 거지가 카드를 교환"이 정확히 이 두 게임의 메커닉과 일치) 선택.
+
+이후 Explore 서브에이전트 2개(페루도·달무티 리얼타임 엔진 내부 구조 / 앱 라우팅·UI 컨벤션) + Plan 서브에이전트 1개로 구현 세부사항(정확한 파일:라인 후크 지점)을 조사한 뒤 계획을 문서화해 승인받고 착수.
+
+**구현**:
+- **`supabase/schema.sql`**: `chat_messages` 테이블(`channel`/`device_id`/`sender_name`/`body`/`msg_type`/`created_at`) + `(channel, created_at desc)` 인덱스 + 기존 `device_sightings`/`guest_usage`와 동일한 anon 허용 RLS 정책(select/insert) 추가. `channel` 값은 로비가 `"global:lobby"`, 룸이 `"room:<gameId>:<roomCode>"`. 정리(retention) 인프라는 만들지 않음 — 로더가 항상 `limit 30`만 읽어 테이블 크기와 무관하게 읽기 비용 고정, 필요시 수동 삭제로 충분하다고 판단.
+- **`src/lib/chat/`**(신규): `types.ts`(`ChatMessage`/`SendResult`) · `throttle.ts`+테스트(순수 함수 `checkThrottle`/`recordSend` — 1초 내 3회 이상 전송 시 3초 잠금, caller가 상태를 들고 있어 클럭에 의존하지 않는 테스트 가능한 형태) · `profanity.ts`+테스트(한글/영문 금칙어 배열 + `filterProfanity`, 공백 우회 정규화 포함) · `sanitize.ts`(제어문자 제거+300자 제한 — HTML 이스케이프는 React 텍스트 렌더링이 기본 처리하므로 별도 구현 없음, `dangerouslySetInnerHTML` 미사용) · `quickPhrases.ts`(상용구 8종 + 이모지 12종, 신규 의존성 없음) · `systemLog.ts`+테스트(순수 포맷터 `formatPerudoRaiseLog`/`formatDalmutiTributeLog` — 각 게임 `engine.ts`는 import하지 않고 이미 해석된 이름/숫자만 받음) · `nickname.ts`(로비 전용 localStorage 닉네임, 베팅 로스터용 `RoomNicknameField`와는 별개 개념) · `history.ts`(`loadRecentMessages`/`persistMessage`/`mergeHistoryIntoMessages` — 항상 no-throw, best-effort) · `useRealtimeChat.ts`(로비 전용 훅 — 자체 채널 생성+presence 접속자 수+이력 로딩+스로틀/필터 적용 전송을 캡슐화, `MalDalliJaGame.tsx`/`PerudoGame.tsx`의 룸 채널 라이프사이클 패턴을 그대로 모델링).
+- **`src/components/chat/`**(신규): `ChatPanel.tsx`(메시지 목록+입력창+상용구 스트립+이모지 팝업, 로비/룸 공용 프레젠테이셔널 컴포넌트) · `LobbyChat.tsx`(`useRealtimeChat` 사용) · `ChatDrawer.tsx`(인게임 플로팅 채팅 — `BettingSidebar.tsx`와 동일한 fixed-toggle+백드롭+슬라이드 드로어 패턴을 좌측(`left-4`)에 배치해 우측을 이미 점유한 `BettingSidebar`와 겹치지 않게 함, 안읽음 뱃지).
+- **`src/app/lobby/page.tsx`**(신규) + **`SiteHeader.tsx`**: `/lobby` 라우트 신설(Supabase 미설정 시 기존 `SupabaseRequiredNotice` 재사용), 헤더 네비에 `💬 로비` 링크 추가.
+- **`src/games/types.ts`/`registry.ts`**: `GameMeta`에 `chatEnabled?: boolean` 필드 추가, `perudo`/`dalmuti` 두 엔트리에만 `true` 설정(다른 22개 게임은 미변경).
+- **`PerudoGame.tsx`/`DalmutiGame.tsx`**: 신규 Realtime 채널을 열지 않고 **각 게임이 이미 갖고 있는 룸 채널을 재사용** — 기존 `game-start`/`game-action`/`bot-roster`/`state-request`/`state-sync` 핸들러 등록부 옆에 `chat-message` 브로드캐스트 핸들러 1개만 추가. 룸 채팅 전송(`sendChatMessage`)은 `handleAction` 옆에 동일 패턴으로 추가(스로틀→새니타이즈→비속어 필터→브로드캐스트→`persistMessage`). 시스템 로그는 **기존** `game-action` 핸들러 안에서 `action.type`을 검사해 파생 — 페루도는 `raise` 액션에서 `formatPerudoRaiseLog`, 달무티는 `returnTax` 액션에서 액션 처리 **직전**(`gameStateRef.current`) 상태의 미해결 `TributeRecord`를 찾아 `rankTitle()`로 왕/귀족/거지 등 칭호를 구해 `formatDalmutiTributeLog` 호출 — 두 게임의 `engine.ts` 순수 리듀서(`applyAction`)는 전혀 수정하지 않음. `ChatDrawer`는 각 게임의 `"connecting"/"waiting"`·`"playing"`·`"post-game"` 3개 phase 분기 return문에 각각 마운트(공용 상위 래퍼가 없어 3곳 필요).
+- **시스템 로그는 DB에 영속하지 않음(설계 결정)**: `broadcast:{self:true}`라 모든 클라이언트가 동일한 `game-action`을 독립적으로 replay하며 각자 동일한 로그 문구를 스스로 파생하므로, 매 클라이언트가 각각 `persistMessage`를 호출하면 N중 중복 저장이 됨 — 유저가 직접 입력한 `USER` 메시지만 저장하고, 시스템 로그는 재접속 시 재현되지 않는 휘발성으로 둠(리플레이로 언제든 동일하게 재생성 가능하므로 손실로 보지 않음).
+
+**모든 채팅 UI에서 지켜진 원칙**: React가 텍스트 콘텐츠를 기본 이스케이프하므로 `dangerouslySetInnerHTML`은 신규 코드 어디에도 쓰지 않았음(XSS 대응).
+
+**알려진 한계(정직 공개)**:
+- 페루도·달무티 2개 게임만 파일럿 — 나머지 19개 온라인 게임(그리드포커/아발론/뱅 등)에는 채팅/시스템 로그가 아직 없음. 확산은 후속 세션으로 명시적으로 미룸(사용자가 선택한 범위).
+- `chat_messages` 테이블은 이 세션이 코드만 추가했을 뿐 실제 Supabase 프로젝트에 SQL을 실행한 적은 없음 — `supabase/schema.sql`을 Supabase SQL Editor에서 직접 실행해야 로비/룸 채팅 이력 리로드(`최근 30개`)가 동작함. SQL을 실행하기 전에도 브로드캐스트 기반 실시간 전송 자체는 정상 동작하고, 이력 리로드만 조용히 빈 배열을 반환함(에러 없음).
+- 비속어 필터는 단순 포함 검사 기반 커스텀 목록 — 적대적 우회(자모 분리, 특수문자 치환 등)까지 방어하는 수준은 아님. 소규모 그룹 채팅용으로 충분하다는 전제.
+- 이 저장소에 반복 기록된 `<Game>Board.tsx`류 실제 UI 렌더링 미검증 사각지대(jsdom 미설치)와 동일하게, 신규 `ChatPanel`/`ChatDrawer`/`LobbyChat`의 실제 레이아웃(모바일 키보드 활성화 시 찌그러짐 여부 포함)은 타입/린트/유닛 테스트만 통과했고 아직 육안 확인하지 않았음.
+
+**검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0, 신규 컴포넌트 3곳에서 `react-hooks/set-state-in-effect` 위반을 최초 커밋에서 잡아 수정 — 효과 내부 동기 `setState` 대신 지연 초기화/렌더 중 파생값 비교 패턴으로 교체, `PerudoGame.tsx`의 기존 "렌더 중 비교 후 setState" 관례를 그대로 재사용). 전체 `npx vitest run`은 이 저장소에 반복 기록된 기존 이슈(파이프 출력이 종료 전까지 0바이트)로 그대로는 완주 확인이 어려워, 원인을 `games/shared/bot/aiBenchmark.test.ts`(의도적으로 오래 걸리는 AI 벤치마크, 이번 세션과 무관한 기존 파일)로 특정한 뒤 `--exclude "**/aiBenchmark.test.ts"`로 나머지를 실행해 **32개 파일 1201개 테스트 전부 통과**(신규 `src/lib/chat/*.test.ts` 3개 파일 11개 테스트 포함) 확인.
+
+**커밋/푸시**: <!-- 커밋 해시/배포 URL 채울 것 -->
 
 ### 2026-08-26 — 방문자/게임 플레이 통계 대시보드 구축
 

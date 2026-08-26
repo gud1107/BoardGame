@@ -256,3 +256,39 @@ drop trigger if exists trg_bump_monthly_visit_stats on site_visit_log;
 create trigger trg_bump_monthly_visit_stats
   after insert on site_visit_log
   for each row execute function bump_monthly_visit_stats();
+
+-- ---------------------------------------------------------------------------
+-- Chat: global lobby ('global:lobby') + per-room waiting/in-game chat
+-- ('room:<gameId>:<roomCode>', e.g. 'room:perudo:4821'). Live delivery
+-- happens over Supabase Realtime broadcast (event 'chat-message') on the
+-- SAME channel each online game already opens for its own state sync — this
+-- table only exists so the last 30 messages can be reloaded on join/refresh,
+-- it is not the live delivery path. Same "anon-permissive, not a security
+-- boundary, fine for a small group app" posture as device_sightings/
+-- guest_usage above — no auth layer gates this.
+-- ---------------------------------------------------------------------------
+
+create table if not exists chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  channel text not null,
+  device_id text not null,
+  sender_name text not null,
+  body text not null,
+  msg_type text not null default 'USER' check (msg_type in ('USER', 'SYSTEM', 'EMOJI')),
+  created_at timestamptz not null default now()
+);
+create index if not exists chat_messages_channel_idx on chat_messages (channel, created_at desc);
+
+alter table chat_messages enable row level security;
+
+create policy "anon read chat_messages" on chat_messages
+  for select to anon using (true);
+create policy "anon insert chat_messages" on chat_messages
+  for insert to anon with check (true);
+
+-- No retention job: this is a small-scale app with no scheduled jobs
+-- anywhere else in the schema either. The loader always does
+-- `... order by created_at desc limit 30`, so read cost never grows with
+-- table size. If this table ever gets large, a manual
+-- `delete from chat_messages where created_at < now() - interval '30 days'`
+-- in the SQL editor is enough — no infrastructure needed for that today.
