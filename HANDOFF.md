@@ -48,7 +48,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(에러 0, 경고 0) / `npx vitest run`(전체 스위트, 32개 파일 통과·1204개 중 1203개 통과 — 유일한 실패는 `src/games/shared/bot/aiBenchmark.test.ts`의 "말달리자 Level 10 AI가 Level 1-3 상대 1000판 중 85% 이상 승리" 벤치마크(0.461로 미달)로, 이 세션이 전혀 건드리지 않은 `engine.ts`/봇 로직에 대한 순수 통계 시뮬레이션 테스트임. 위 HANDOFF의 과거 수십 개 세션에 반복 기록된 대로 이 테스트는 관행적으로 `--exclude`되어 왔던 파일이라 이번 실패도 이 세션의 회귀가 아니라 기존에 알려진 이슈로 판단(git diff상 이번 세션이 건드린 파일은 `MalDalliJaGame.tsx` 1개뿐).
 
-**커밋/배포**: 아래 참고.
+**커밋/배포**: `c801b1f fix(horse-race): exclude horse movement logs from in-game chat messages` → `git push origin main` 완료. 이번 세션이 실제로 만든 파일만 스테이징(`src/games/malDalliJa/MalDalliJaGame.tsx` + 이 HANDOFF 절, 총 2개) — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.gitignore`, `public/games`·`public/images/lasVegas`·`public/assets/games/perudo` 실물 이미지 삭제, `lasVegas/CasinoEmblem.tsx`·`CasinoPhotoArt.tsx`·`LasVegasBoard.tsx`, `boardGameRule/` 신규 파일, `저작권, 상표권.md`, `orca충돌및확인.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 작업 트리에 남겨둠. `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주(Turbopack 빌드 포함), READY — `https://board-game-fssxcjkfk-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod --scope me-3871`로 후속 승격 요청할 것. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨 — 이 세션이 그 변경들을 검증하거나 의도한 것은 아님.
 
 ### 2026-08-27 — 게임별 테마 BGM/SFX 연동 및 전역 기본 음소거
 
