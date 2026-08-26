@@ -59,7 +59,9 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0, 신규 컴포넌트 3곳에서 `react-hooks/set-state-in-effect` 위반을 최초 커밋에서 잡아 수정 — 효과 내부 동기 `setState` 대신 지연 초기화/렌더 중 파생값 비교 패턴으로 교체, `PerudoGame.tsx`의 기존 "렌더 중 비교 후 setState" 관례를 그대로 재사용). 전체 `npx vitest run`은 이 저장소에 반복 기록된 기존 이슈(파이프 출력이 종료 전까지 0바이트)로 그대로는 완주 확인이 어려워, 원인을 `games/shared/bot/aiBenchmark.test.ts`(의도적으로 오래 걸리는 AI 벤치마크, 이번 세션과 무관한 기존 파일)로 특정한 뒤 `--exclude "**/aiBenchmark.test.ts"`로 나머지를 실행해 **32개 파일 1201개 테스트 전부 통과**(신규 `src/lib/chat/*.test.ts` 3개 파일 11개 테스트 포함) 확인.
 
-**커밋/푸시**: <!-- 커밋 해시/배포 URL 채울 것 -->
+**커밋/푸시**: `f16f9eb feat(chat): implement real-time global lobby and in-game floating chat with action logs` → `git push origin main` 완료. 23개 파일(신규 `src/lib/chat/*`·`src/components/chat/*`·`src/app/lobby/page.tsx` + 기존 `SiteHeader.tsx`/`PerudoGame.tsx`/`DalmutiGame.tsx`/`registry.ts`/`types.ts`/`schema.sql`/HANDOFF만 스테이징해 커밋 — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.gitignore`, `public/games`·`public/images/lasVegas` 실물 이미지 삭제, `lasVegas/*`, `boardGameRule/` 신규 파일, `저작권, 상표권.md`, `orca충돌및확인.md` 등)은 이번 작업과 무관하므로 건드리지 않고 그대로 작업 트리에 남겨둠.
+
+**배포**: `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주(Turbopack 빌드 + TypeScript 전체 재검사 포함, `/lobby` 라우트가 정적 프리렌더로 빌드 출력에 확인됨), READY — `https://board-game-nmu0l40xg-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것. **이 배포로 채팅이 실제로 동작하려면 `supabase/schema.sql`(신규 `chat_messages` 테이블 포함)을 Supabase SQL Editor에서 직접 실행해야 함** — 이 세션은 SQL을 작성만 했을 뿐 프로젝트의 실제 Supabase DB에 적용하지 않았음(서비스 자격증명 없이는 내가 직접 실행할 수 없음). 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위 "커밋/푸시" 항목에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨 — 이 채팅 세션이 그 변경들을 검증하거나 의도한 것은 아님.
 
 ### 2026-08-26 — 방문자/게임 플레이 통계 대시보드 구축
 
