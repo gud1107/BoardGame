@@ -22,11 +22,31 @@ import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { v4 as uuid } from "uuid";
+import type { ChatMessage, SendResult } from "@/lib/chat/types";
+import { checkThrottle, recordSend, INITIAL_THROTTLE_STATE, type ThrottleState } from "@/lib/chat/throttle";
+import { filterProfanity } from "@/lib/chat/profanity";
+import { stripControlChars } from "@/lib/chat/sanitize";
+import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
+import ChatDrawer from "@/components/chat/ChatDrawer";
 
 /** Whose decision `useBotAutoplay` should drive right now. */
 function polCurrentActor(state: PiecesOfLanguageState): Seat | null {
   if (state.phase !== "playing") return null;
   return state.activeSeat;
+}
+
+/**
+ * Small local system-log formatter for the "guess" headline action (see
+ * PerudoGame.tsx/DalmutiGame.tsx's `src/lib/chat/systemLog.ts` pattern —
+ * kept local here per-game instead of adding to that shared file). The
+ * guessed word and its feedback are already fully public (both seats see
+ * every guess and its green/yellow/red result — see engine.ts's module
+ * doc), so naming it in the log is not a secrecy leak. e.g.
+ * "지수님이 "사과"를 추측했습니다".
+ */
+function formatPiecesOfLanguageGuessLog(name: string, word: string): string {
+  return `${name}님이 "${word}"를 추측했습니다`;
 }
 
 /**
@@ -108,6 +128,12 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<PiecesOfLanguageState | null>(null);
   const [finalResult, setFinalResult] = useState<{ winnerId: string | null; winnerName: string; isDraw: boolean } | null>(null);
+  // Room chat + in-game system log (see PerudoGame.tsx/DalmutiGame.tsx —
+  // GameMeta.chatEnabled). Shares this component's own room channel instead
+  // of opening a second Realtime subscription.
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatCooldownUntil, setChatCooldownUntil] = useState<number | null>(null);
+  const chatThrottleRef = useRef<ThrottleState>(INITIAL_THROTTLE_STATE);
   // Roles currently played by an AI bot instead of a human — host-controlled
   // (ARCHITECTURE.md §7), broadcast via "bot-roster" so every client renders
   // the same lobby/board without a server. `botLevels[i]` is the Level 1–10
@@ -135,6 +161,11 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
     gameStateRef.current = gameState;
   }, [gameState]);
 
+  // Kept in sync so the `game-action` broadcast handler (registered once,
+  // inside the channel-setup effect below) can resolve a seat to its display
+  // name for the system log without closing over a stale value.
+  const namesRef = useRef<Record<Seat, string>>({ p1: "상대", p2: "상대" });
+
   const opponentSeat = myRole ? otherSeat(myRole) : null;
   const names: Record<Seat, string> = useMemo(() => {
     const byRole = (r: Seat) => occupants.find((o) => o.role === r)?.name;
@@ -148,6 +179,9 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
       p2: (myRole === "p2" ? myName : byRole("p2")) ?? fallback("p2"),
     };
   }, [occupants, myRole, myName, botRoles, botLevels]);
+  useEffect(() => {
+    namesRef.current = names;
+  }, [names]);
   // Prefer the real betting-system playerId (present when that seat's
   // occupant joined by picking themselves from an active session's roster —
   // see RoomNicknameField) over the synthetic per-room id.
@@ -198,6 +232,17 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
     channelRef.current = channel;
     startSentRef.current = false;
 
+    const chatChannel = `room:pieces-of-language:${roomCode}`;
+    void loadRecentMessages(chatChannel).then((history) => {
+      setChatMessages((prev) => mergeHistoryIntoMessages(prev, history));
+    });
+
+    channel.on("broadcast", { event: "chat-message" }, ({ payload }) => {
+      const message = payload?.message as ChatMessage | undefined;
+      if (!message) return;
+      setChatMessages((prev) => [...prev, message]);
+    });
+
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seed = payload?.seed as number;
       const wordLength = (payload?.wordLength as number | undefined) ?? 3;
@@ -215,6 +260,31 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
       const action = payload?.action as EngineAction;
+      // System-log pilot (see GameMeta.chatEnabled / PerudoGame.tsx): every
+      // connected client derives the same human-readable line independently
+      // from the *pre-action* state, exactly like it independently derives
+      // `applyAction` below — no server round-trip, no change to the pure
+      // reducer in engine.ts. Deliberately not persisted to `chat_messages`
+      // (unlike user messages) — every client would otherwise write a
+      // duplicate row, and it's trivially re-derivable from the replayed
+      // action log anyway.
+      if (action.type === "guess") {
+        const actorSeat = gameStateRef.current?.activeSeat;
+        if (actorSeat) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: uuid(),
+              channel: chatChannel,
+              deviceId: "system",
+              senderName: "시스템",
+              body: formatPiecesOfLanguageGuessLog(namesRef.current[actorSeat] ?? "상대", action.word),
+              type: "SYSTEM",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+      }
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
 
@@ -279,6 +349,8 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
       if (channelRef.current === channel) channelRef.current = null;
     };
   }, [roomCode, myRole, myName, myPlayerId]);
+
+  const deviceId = typeof window !== "undefined" ? getDeviceId() : "";
 
   // Someone else is already occupying my seat in this room (rare code
   // collision, or a stale localStorage role from a different session).
@@ -366,6 +438,37 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }, []);
 
+  const sendChatMessage = useCallback(
+    (rawBody: string): SendResult => {
+      const now = Date.now();
+      const check = checkThrottle(chatThrottleRef.current, now);
+      if (!check.ok) {
+        setChatCooldownUntil(check.lockedUntil ?? null);
+        return { ok: false, lockedUntil: check.lockedUntil };
+      }
+      const trimmed = stripControlChars(rawBody);
+      if (!trimmed) return { ok: false };
+      const { clean } = filterProfanity(trimmed);
+
+      chatThrottleRef.current = recordSend(chatThrottleRef.current, now);
+      setChatCooldownUntil(chatThrottleRef.current.lockedUntil);
+
+      const message: ChatMessage = {
+        id: uuid(),
+        channel: `room:pieces-of-language:${roomCode}`,
+        deviceId,
+        senderName: myName || "게스트",
+        body: clean,
+        type: "USER",
+        createdAt: new Date(now).toISOString(),
+      };
+      channelRef.current?.send({ type: "broadcast", event: "chat-message", payload: { message } });
+      void persistMessage(message);
+      return { ok: true };
+    },
+    [roomCode, myName, deviceId],
+  );
+
   const chooseAction = useCallback((state: PiecesOfLanguageState, actor: Seat): EngineAction | null => {
     const idx = botRolesRef.current.indexOf(actor);
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
@@ -441,6 +544,9 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
     setBotRoles([]);
     botLevelsRef.current = [];
     setBotLevels([]);
+    setChatMessages([]);
+    setChatCooldownUntil(null);
+    chatThrottleRef.current = INITIAL_THROTTLE_STATE;
     setPhase("choose");
   }
 
@@ -617,6 +723,7 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
   // ---- Connecting / waiting room. ----
   if (phase === "connecting" || phase === "waiting") {
     return (
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-gradient-to-b from-[#140a1c] via-[#0c0715] to-black p-8 text-center">
         {phase === "connecting" ? (
           <p className="text-sm text-white/50">연결하는 중...</p>
@@ -658,12 +765,15 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
           </>
         )}
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="대기실 채팅" />
+      </>
     );
   }
 
   // ---- Playing. ----
   if (phase === "playing" && gameState && myRole) {
     return (
+      <>
       <PiecesOfLanguageBoard
         state={gameState}
         viewerSeat={myRole}
@@ -673,12 +783,15 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
         onAction={handleAction}
         onGameEnd={handleGameEnd}
       />
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 
   // ---- Post-game. ----
   if (phase === "post-game" && finalResult) {
     return (
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-gradient-to-b from-[#140a1c] via-[#0c0715] to-black p-8 text-center">
         <span className="text-4xl">{finalResult.isDraw ? "🤝" : "🏆"}</span>
         <p className="text-white/80">
@@ -699,6 +812,8 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
           </button>
         </div>
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 

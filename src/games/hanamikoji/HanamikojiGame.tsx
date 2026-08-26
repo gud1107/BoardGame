@@ -22,6 +22,13 @@ import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { v4 as uuid } from "uuid";
+import type { ChatMessage, SendResult } from "@/lib/chat/types";
+import { checkThrottle, recordSend, INITIAL_THROTTLE_STATE, type ThrottleState } from "@/lib/chat/throttle";
+import { filterProfanity } from "@/lib/chat/profanity";
+import { stripControlChars } from "@/lib/chat/sanitize";
+import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
+import ChatDrawer from "@/components/chat/ChatDrawer";
 
 /**
  * Which seat/role must act right now, for `useBotAutoplay` — mirrors
@@ -36,6 +43,19 @@ function hanamikojiCurrentActor(state: HanamikojiState): Owner | null {
 
 function hanamikojiChooseAction(state: HanamikojiState, actor: Owner, level: BotLevel): EngineAction | null {
   return chooseBotAction(state, actor, level);
+}
+
+/**
+ * Pure system-log line formatter for the in-game chat system-log pilot (see
+ * PerudoGame.tsx/DalmutiGame.tsx and `src/lib/chat/systemLog.ts`). Kept local
+ * to this file per the rollout plan (other agents are editing other games'
+ * formatters in parallel) — takes already-resolved plain values instead of
+ * importing engine.ts. "compete" (경쟁) is Hanamikoji's most game-defining
+ * action card: unlike secret/tradeoff/gift, it forces a 4-card split the
+ * opponent must choose between, deciding a geisha's fate outright.
+ */
+function formatHanamikojiCompeteLog(name: string): string {
+  return `${name}님이 "경쟁" 액션 카드를 냈습니다`;
 }
 
 /**
@@ -100,6 +120,12 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<HanamikojiState | null>(null);
   const [finalResult, setFinalResult] = useState<{ winnerId: string; winnerName: string } | null>(null);
+  // Room chat + in-game system log (see GameMeta.chatEnabled, piloted in
+  // PerudoGame.tsx/DalmutiGame.tsx). Shares this component's own room
+  // channel instead of opening a second Realtime subscription.
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatCooldownUntil, setChatCooldownUntil] = useState<number | null>(null);
+  const chatThrottleRef = useRef<ThrottleState>(INITIAL_THROTTLE_STATE);
   // Roles currently played by an AI bot instead of a human — host-controlled
   // (see ARCHITECTURE.md §7), broadcast to every client via "bot-roster" so
   // everyone renders the same lobby/board without a server.
@@ -119,6 +145,20 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
   const startSentRef = useRef(false);
   const isHost = myRole === "p1";
 
+  // Kept in sync so the `game-action` broadcast handler (registered once,
+  // inside the channel-setup effect below) can resolve a role to its display
+  // name for the system log without closing over a stale value.
+  const namesRef = useRef<Record<Owner, string>>({ p1: "상대", p2: "상대" });
+
+  // Kept in sync so the `game-action` broadcast handler can read the
+  // *pre-action* state (whose turn it was) for the system log — this ref is
+  // only re-synced by the effect below after a render commits, so at the
+  // moment that handler runs it still holds the prior snapshot.
+  const gameStateRef = useRef<HanamikojiState | null>(null);
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
   const opponentRole = myRole ? other(myRole) : null;
   const botRoleSet = useMemo(() => new Set(botRoles), [botRoles]);
   const names: Record<Owner, string> = useMemo(() => {
@@ -133,6 +173,9 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
         (botIndex("p2") >= 0 ? botDisplayName(botIndex("p2"), botLevels[botIndex("p2")]) : "상대"),
     };
   }, [occupants, myRole, myName, botRoles, botLevels]);
+  useEffect(() => {
+    namesRef.current = names;
+  }, [names]);
   // Prefer the real betting-system playerId (present when that role's
   // occupant joined by picking themselves from an active session's roster —
   // see RoomNicknameField) over the synthetic per-room id.
@@ -184,6 +227,17 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     channelRef.current = channel;
     startSentRef.current = false;
 
+    const chatChannel = `room:hanamikoji:${roomCode}`;
+    void loadRecentMessages(chatChannel).then((history) => {
+      setChatMessages((prev) => mergeHistoryIntoMessages(prev, history));
+    });
+
+    channel.on("broadcast", { event: "chat-message" }, ({ payload }) => {
+      const message = payload?.message as ChatMessage | undefined;
+      if (!message) return;
+      setChatMessages((prev) => [...prev, message]);
+    });
+
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seed = payload?.seed as number;
       const roles = (payload?.botRoles as Owner[] | undefined) ?? [];
@@ -199,6 +253,30 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
       const action = payload?.action as EngineAction;
+      // System-log pilot (see GameMeta.chatEnabled): every connected client
+      // derives the same human-readable line independently, exactly like it
+      // independently derives `applyAction` below — no server round-trip, no
+      // change to the pure reducer in engine.ts. Deliberately not persisted
+      // to `chat_messages` (unlike user messages) — every client would
+      // otherwise write a duplicate row, and this is trivially re-derivable
+      // from the replayed action log anyway.
+      if (action.type === "compete") {
+        const actor = gameStateRef.current?.activePlayer;
+        if (actor) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: uuid(),
+              channel: chatChannel,
+              deviceId: "system",
+              senderName: "시스템",
+              body: formatHanamikojiCompeteLog(namesRef.current[actor] ?? "상대"),
+              type: "SYSTEM",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+      }
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
 
@@ -233,6 +311,8 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
       if (channelRef.current === channel) channelRef.current = null;
     };
   }, [roomCode, myRole, myName, myPlayerId]);
+
+  const deviceId = typeof window !== "undefined" ? getDeviceId() : "";
 
   // Someone else is already occupying my role in this room (rare code
   // collision, or a stale localStorage role from a different session).
@@ -335,6 +415,37 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }, []);
 
+  const sendChatMessage = useCallback(
+    (rawBody: string): SendResult => {
+      const now = Date.now();
+      const check = checkThrottle(chatThrottleRef.current, now);
+      if (!check.ok) {
+        setChatCooldownUntil(check.lockedUntil ?? null);
+        return { ok: false, lockedUntil: check.lockedUntil };
+      }
+      const trimmed = stripControlChars(rawBody);
+      if (!trimmed) return { ok: false };
+      const { clean } = filterProfanity(trimmed);
+
+      chatThrottleRef.current = recordSend(chatThrottleRef.current, now);
+      setChatCooldownUntil(chatThrottleRef.current.lockedUntil);
+
+      const message: ChatMessage = {
+        id: uuid(),
+        channel: `room:hanamikoji:${roomCode}`,
+        deviceId,
+        senderName: myName || "게스트",
+        body: clean,
+        type: "USER",
+        createdAt: new Date(now).toISOString(),
+      };
+      channelRef.current?.send({ type: "broadcast", event: "chat-message", payload: { message } });
+      void persistMessage(message);
+      return { ok: true };
+    },
+    [roomCode, myName, deviceId],
+  );
+
   const chooseAction = useCallback((state: HanamikojiState, actor: Owner) => {
     const idx = botRolesRef.current.indexOf(actor);
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
@@ -384,6 +495,9 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     setIdentity({ name: "" });
     setMyPlayerId(undefined);
     setCodeInput("");
+    setChatMessages([]);
+    setChatCooldownUntil(null);
+    chatThrottleRef.current = INITIAL_THROTTLE_STATE;
     setPhase("choose");
   }
 
@@ -518,6 +632,7 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
   // ---- Connecting / waiting room. ----
   if (phase === "connecting" || phase === "waiting") {
     return (
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         {phase === "connecting" ? (
           <p className="text-sm text-white/50">연결하는 중...</p>
@@ -553,12 +668,15 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
           </>
         )}
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="대기실 채팅" />
+      </>
     );
   }
 
   // ---- Playing. ----
   if (phase === "playing" && gameState && myRole) {
     return (
+      <>
       <HanamikojiBoard
         state={gameState}
         viewerRole={myRole}
@@ -568,12 +686,15 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
         onAction={handleAction}
         onGameEnd={handleGameEnd}
       />
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 
   // ---- Post-game. ----
   if (phase === "post-game" && finalResult) {
     return (
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">🏆</span>
         <p className="text-white/80">{finalResult.winnerName}님 승리로 게임이 끝났어요.</p>
@@ -592,6 +713,8 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
           </button>
         </div>
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 

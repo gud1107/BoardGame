@@ -22,6 +22,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "splendor",
@@ -38,6 +39,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "catan",
@@ -99,6 +101,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "codenames",
@@ -130,6 +133,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "grid-poker",
@@ -147,6 +151,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "no-thanks",
@@ -163,6 +168,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "perudo",
@@ -196,6 +202,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "mafia",
@@ -347,6 +354,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "five-cucumbers",
@@ -363,6 +371,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "las-vegas",
@@ -379,6 +388,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "dalmuti",
@@ -412,6 +422,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "coyote",
@@ -428,6 +439,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "love-letter",
@@ -444,6 +456,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "for-sale",
@@ -460,6 +473,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "mal-dalli-ja",
@@ -477,6 +491,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "pieces-of-language",
@@ -494,6 +509,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "coup",
@@ -510,6 +526,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "destiny-war-39",
@@ -527,6 +544,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     playable: true,
     supportsAutoRanking: true,
     onlineMultiplayer: true,
+    chatEnabled: true,
   },
   {
     id: "worm",

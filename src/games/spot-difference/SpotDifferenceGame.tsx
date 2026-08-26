@@ -28,6 +28,26 @@ import SpotDifferenceBoard from "./SpotDifferenceBoard";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { v4 as uuid } from "uuid";
+import type { ChatMessage, SendResult } from "@/lib/chat/types";
+import { checkThrottle, recordSend, INITIAL_THROTTLE_STATE, type ThrottleState } from "@/lib/chat/throttle";
+import { filterProfanity } from "@/lib/chat/profanity";
+import { stripControlChars } from "@/lib/chat/sanitize";
+import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
+import ChatDrawer from "@/components/chat/ChatDrawer";
+
+/**
+ * Pure system-log line formatter for the in-game chat system-log pilot (see
+ * GameMeta.chatEnabled, PerudoGame.tsx/DalmutiGame.tsx) — takes an
+ * already-resolved plain name + team label instead of importing engine.ts,
+ * so the pure reducer stays untouched. e.g. "지수님이 (A팀) 틀린 곳을 찾았습니다"
+ * for a `click` action that actually lands on an undiscovered spot — the
+ * single most game-defining "correct guess" moment in Spot the Difference
+ * (vs. a miss, which just locks that seat out for a moment).
+ */
+function formatSpotDifferenceFindLog(name: string, teamLabel: string): string {
+  return `${name}님이 (${teamLabel}) 틀린 곳을 찾았습니다`;
+}
 
 /**
  * Online-room multiplayer entry point, same lockstep pattern as every other
@@ -154,6 +174,12 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<SpotDifferenceState | null>(null);
   const [finalResult, setFinalResult] = useState<{ tied: boolean; winningTeam: TeamId } | null>(null);
+  // Room chat + in-game system log (see GameMeta.chatEnabled, piloted in
+  // PerudoGame.tsx/DalmutiGame.tsx). Shares this component's own room
+  // channel instead of opening a second Realtime subscription.
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatCooldownUntil, setChatCooldownUntil] = useState<number | null>(null);
+  const chatThrottleRef = useRef<ThrottleState>(INITIAL_THROTTLE_STATE);
   // Seats currently played by an AI bot instead of a human — host-controlled
   // (ARCHITECTURE.md §7), broadcast via "bot-roster" so every client renders
   // the same lobby/board without a server. `botLevels[i]` is the Level 1–10
@@ -185,6 +211,11 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  // Kept in sync so the `game-action` broadcast handler (registered once,
+  // inside the channel-setup effect below) can resolve a seat to its display
+  // name for the system log without closing over a stale value.
+  const namesRef = useRef<Record<SeatIndex, string>>({});
 
   useEffect(() => {
     if (phase !== "playing") return;
@@ -245,6 +276,17 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
     channelRef.current = channel;
     startSentRef.current = false;
 
+    const chatChannel = `room:spot-difference:${roomCode}`;
+    void loadRecentMessages(chatChannel).then((history) => {
+      setChatMessages((prev) => mergeHistoryIntoMessages(prev, history));
+    });
+
+    channel.on("broadcast", { event: "chat-message" }, ({ payload }) => {
+      const message = payload?.message as ChatMessage | undefined;
+      if (!message) return;
+      setChatMessages((prev) => [...prev, message]);
+    });
+
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seed = payload?.seed as number;
       const playerCount = payload?.playerCount as number;
@@ -277,6 +319,39 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
       const action = payload?.action as EngineAction;
+      const prevState = gameStateRef.current;
+      // System-log pilot (see GameMeta.chatEnabled): every connected client
+      // derives the same human-readable line independently from comparing
+      // the pre/post-action state — no change to the pure reducer in
+      // engine.ts. A `click` only counts as the headline "found a
+      // difference" event when it actually increases the total found-spot
+      // count (a miss or a redundant re-click of an already-found spot
+      // leaves that total unchanged) — same distinction `click()` itself
+      // makes internally. Deliberately not persisted to `chat_messages`
+      // (unlike user messages), since every client would otherwise write a
+      // duplicate row, and it's trivially re-derivable from the replayed
+      // action log anyway.
+      if (action.type === "click" && prevState) {
+        const nextState = applyAction(prevState, action);
+        const countFound = (s: SpotDifferenceState) => s.stages.reduce((sum, stage) => sum + Object.keys(stage.foundBy).length, 0);
+        if (countFound(nextState) > countFound(prevState)) {
+          const team = prevState.teamOf[action.seat];
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: uuid(),
+              channel: chatChannel,
+              deviceId: "system",
+              senderName: "시스템",
+              body: formatSpotDifferenceFindLog(namesRef.current[action.seat] ?? "상대", team === "A" ? "A팀" : "B팀"),
+              type: "SYSTEM",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+        setGameState(nextState);
+        return;
+      }
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
 
@@ -478,6 +553,34 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }
 
+  function sendChatMessage(rawBody: string): SendResult {
+    const now = Date.now();
+    const check = checkThrottle(chatThrottleRef.current, now);
+    if (!check.ok) {
+      setChatCooldownUntil(check.lockedUntil ?? null);
+      return { ok: false, lockedUntil: check.lockedUntil };
+    }
+    const trimmed = stripControlChars(rawBody);
+    if (!trimmed) return { ok: false };
+    const { clean } = filterProfanity(trimmed);
+
+    chatThrottleRef.current = recordSend(chatThrottleRef.current, now);
+    setChatCooldownUntil(chatThrottleRef.current.lockedUntil);
+
+    const message: ChatMessage = {
+      id: uuid(),
+      channel: `room:spot-difference:${roomCode}`,
+      deviceId,
+      senderName: myName || "게스트",
+      body: clean,
+      type: "USER",
+      createdAt: new Date(now).toISOString(),
+    };
+    channelRef.current?.send({ type: "broadcast", event: "chat-message", payload: { message } });
+    void persistMessage(message);
+    return { ok: true };
+  }
+
   // Real-time free-for-all: there's no single "active seat", so the shared
   // `useBotAutoplay` hook (built around one pending decision at a time)
   // doesn't fit — see engine.ts's bot-support module doc. Instead, every bot
@@ -531,6 +634,9 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
     }
     return map;
   }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels]);
+  useEffect(() => {
+    namesRef.current = names;
+  }, [names]);
 
   const connectedSeats = useMemo(
     () => new Set([...occupants.map((o) => o.seat), ...botSeats]),
@@ -577,6 +683,9 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
     setBotSeats([]);
     botLevelsRef.current = [];
     setBotLevels([]);
+    setChatMessages([]);
+    setChatCooldownUntil(null);
+    chatThrottleRef.current = INITIAL_THROTTLE_STATE;
     setPhase("choose");
   }
 
@@ -837,6 +946,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "connecting" || phase === "waiting") {
     return (
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         {phase === "connecting" ? (
           <p className="text-sm text-white/50">연결하는 중...</p>
@@ -891,11 +1001,14 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
           </>
         )}
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="대기실 채팅" />
+      </>
     );
   }
 
   if (phase === "playing" && gameState && mySeat !== null) {
     return (
+      <>
       <SpotDifferenceBoard
         state={gameState}
         viewerSeat={mySeat}
@@ -904,11 +1017,14 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
         onAction={handleAction}
         onGameEnd={handleGameEnd}
       />
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 
   if (phase === "post-game" && finalResult) {
     return (
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">{finalResult.tied ? "🤝" : "🏆"}</span>
         <p className="text-white/80">
@@ -929,6 +1045,8 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
           </button>
         </div>
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 

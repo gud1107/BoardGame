@@ -22,11 +22,27 @@ import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { v4 as uuid } from "uuid";
+import type { ChatMessage, SendResult } from "@/lib/chat/types";
+import { checkThrottle, recordSend, INITIAL_THROTTLE_STATE, type ThrottleState } from "@/lib/chat/throttle";
+import { filterProfanity } from "@/lib/chat/profanity";
+import { stripControlChars } from "@/lib/chat/sanitize";
+import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
+import ChatDrawer from "@/components/chat/ChatDrawer";
 
 /** Whose decision `useBotAutoplay` should drive right now — Las Vegas has a single strict turn order the whole game (roll, then place), never a shared "continue" screen. */
 function lasVegasCurrentActor(state: LasVegasState): SeatIndex | null {
   if (state.phase !== "playing") return null;
   return state.activeSeat;
+}
+
+/**
+ * System-log pilot (see GameMeta.chatEnabled, PerudoGame.tsx/DalmutiGame.tsx)
+ * — headline action is `placeDice` (rolling is just the setup step; placing
+ * dice into a numbered casino is the decision that actually matters).
+ */
+function formatLasVegasPlaceLog(name: string, casino: number, ownCount: number): string {
+  return `${name}님이 ${casino}번 카지노에 주사위 ${ownCount}개를 놓았습니다`;
 }
 
 /**
@@ -100,6 +116,12 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<LasVegasState | null>(null);
   const [finalResult, setFinalResult] = useState<{ winnerName: string; tied: boolean } | null>(null);
+  // Room chat + in-game system log (piloted in PerudoGame.tsx/DalmutiGame.tsx
+  // — see GameMeta.chatEnabled). Shares this component's own room channel
+  // instead of opening a second Realtime subscription.
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatCooldownUntil, setChatCooldownUntil] = useState<number | null>(null);
+  const chatThrottleRef = useRef<ThrottleState>(INITIAL_THROTTLE_STATE);
   // Seats currently played by an AI bot instead of a human — host-controlled
   // (ARCHITECTURE.md §7), broadcast via "bot-roster" so every client renders
   // the same lobby/board without a server. `botLevels[i]` is the Level 1–10
@@ -125,6 +147,11 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  // Kept in sync so the `game-action` broadcast handler (registered once,
+  // inside the channel-setup effect below) can resolve a seat to its display
+  // name for the system log without closing over a stale value.
+  const namesRef = useRef<Record<SeatIndex, string>>({});
 
   function enterRoom() {
     setFormError(null);
@@ -157,6 +184,17 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
     channelRef.current = channel;
     startSentRef.current = false;
 
+    const chatChannel = `room:las-vegas:${roomCode}`;
+    void loadRecentMessages(chatChannel).then((history) => {
+      setChatMessages((prev) => mergeHistoryIntoMessages(prev, history));
+    });
+
+    channel.on("broadcast", { event: "chat-message" }, ({ payload }) => {
+      const message = payload?.message as ChatMessage | undefined;
+      if (!message) return;
+      setChatMessages((prev) => [...prev, message]);
+    });
+
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seed = payload?.seed as number;
       const playerCount = payload?.playerCount as number;
@@ -174,6 +212,32 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
       const action = payload?.action as EngineAction;
+      // System-log pilot (see GameMeta.chatEnabled): every connected client
+      // derives the same human-readable line independently, exactly like it
+      // independently derives `applyAction` below — no server round-trip, no
+      // change to the pure reducer in engine.ts. Deliberately not persisted
+      // to `chat_messages` (unlike user messages) — every client would
+      // otherwise write a duplicate row, and this is trivially re-derivable
+      // from the replayed action log anyway.
+      if (action.type === "placeDice") {
+        const prevState = gameStateRef.current;
+        const roll = prevState?.currentRoll;
+        if (roll) {
+          const ownCount = roll.filter((d) => d.owner === "own" && d.face === action.face).length;
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: uuid(),
+              channel: chatChannel,
+              deviceId: "system",
+              senderName: "시스템",
+              body: formatLasVegasPlaceLog(namesRef.current[action.seat] ?? "상대", action.face, ownCount),
+              type: "SYSTEM",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+      }
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
 
@@ -378,6 +442,37 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }, []);
 
+  const sendChatMessage = useCallback(
+    (rawBody: string): SendResult => {
+      const now = Date.now();
+      const check = checkThrottle(chatThrottleRef.current, now);
+      if (!check.ok) {
+        setChatCooldownUntil(check.lockedUntil ?? null);
+        return { ok: false, lockedUntil: check.lockedUntil };
+      }
+      const trimmed = stripControlChars(rawBody);
+      if (!trimmed) return { ok: false };
+      const { clean } = filterProfanity(trimmed);
+
+      chatThrottleRef.current = recordSend(chatThrottleRef.current, now);
+      setChatCooldownUntil(chatThrottleRef.current.lockedUntil);
+
+      const message: ChatMessage = {
+        id: uuid(),
+        channel: `room:las-vegas:${roomCode}`,
+        deviceId,
+        senderName: myName || "게스트",
+        body: clean,
+        type: "USER",
+        createdAt: new Date(now).toISOString(),
+      };
+      channelRef.current?.send({ type: "broadcast", event: "chat-message", payload: { message } });
+      void persistMessage(message);
+      return { ok: true };
+    },
+    [roomCode, myName, deviceId],
+  );
+
   const chooseAction = useCallback((state: LasVegasState, actor: SeatIndex): EngineAction | null => {
     const idx = botSeatsRef.current.indexOf(actor);
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
@@ -413,6 +508,9 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
     }
     return map;
   }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels]);
+  useEffect(() => {
+    namesRef.current = names;
+  }, [names]);
 
   const connectedSeats = useMemo(
     () => new Set([...occupants.map((o) => o.seat), ...botSeats]),
@@ -454,6 +552,9 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
     setBotSeats([]);
     botLevelsRef.current = [];
     setBotLevels([]);
+    setChatMessages([]);
+    setChatCooldownUntil(null);
+    chatThrottleRef.current = INITIAL_THROTTLE_STATE;
     setPhase("choose");
   }
 
@@ -589,6 +690,7 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "connecting" || phase === "waiting") {
     return (
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         {phase === "connecting" ? (
           <p className="text-sm text-white/50">연결하는 중...</p>
@@ -635,11 +737,14 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
           </>
         )}
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="대기실 채팅" />
+      </>
     );
   }
 
   if (phase === "playing" && gameState && mySeat !== null) {
     return (
+      <>
       <LasVegasBoard
         state={gameState}
         viewerSeat={mySeat}
@@ -648,11 +753,14 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
         onAction={handleAction}
         onGameEnd={handleGameEnd}
       />
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 
   if (phase === "post-game" && finalResult) {
     return (
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">🏆</span>
         <p className="text-white/80">
@@ -668,6 +776,8 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
           </button>
         </div>
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 

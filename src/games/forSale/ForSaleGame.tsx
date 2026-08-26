@@ -18,10 +18,28 @@ import {
   type SeatIndex,
 } from "./engine";
 import ForSaleBoard from "./ForSaleBoard";
+import { formatDollars } from "./CardArt";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { v4 as uuid } from "uuid";
+import type { ChatMessage, SendResult } from "@/lib/chat/types";
+import { checkThrottle, recordSend, INITIAL_THROTTLE_STATE, type ThrottleState } from "@/lib/chat/throttle";
+import { filterProfanity } from "@/lib/chat/profanity";
+import { stripControlChars } from "@/lib/chat/sanitize";
+import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
+import ChatDrawer from "@/components/chat/ChatDrawer";
+
+/**
+ * Small local system-log formatter for the "bid" headline action (see
+ * PerudoGame.tsx/DalmutiGame.tsx's `src/lib/chat/systemLog.ts` pattern —
+ * kept local here per-game instead of adding to that shared file). e.g.
+ * "지수님이 $3,000에 입찰했습니다".
+ */
+function formatForSaleBidLog(name: string, amount: number): string {
+  return `${name}님이 ${formatDollars(amount)}에 입찰했습니다`;
+}
 
 /**
  * Whose decision `useBotAutoplay` should drive right now. Phase 1 (buying)
@@ -114,6 +132,12 @@ export default function ForSaleGame({ onComplete }: PlayableGameProps) {
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<ForSaleState | null>(null);
   const [finalResult, setFinalResult] = useState<{ winnerNames: string } | null>(null);
+  // Room chat + in-game system log (see PerudoGame.tsx/DalmutiGame.tsx —
+  // GameMeta.chatEnabled). Shares this component's own room channel instead
+  // of opening a second Realtime subscription.
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatCooldownUntil, setChatCooldownUntil] = useState<number | null>(null);
+  const chatThrottleRef = useRef<ThrottleState>(INITIAL_THROTTLE_STATE);
   // Seats currently played by an AI bot instead of a human — host-controlled
   // (ARCHITECTURE.md §7), broadcast via "bot-roster" so every client renders
   // the same lobby/board without a server. `botLevels[i]` is the Level 1–10
@@ -139,6 +163,11 @@ export default function ForSaleGame({ onComplete }: PlayableGameProps) {
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  // Kept in sync so the `game-action` broadcast handler (registered once,
+  // inside the channel-setup effect below) can resolve a seat to its display
+  // name for the system log without closing over a stale value.
+  const namesRef = useRef<Record<SeatIndex, string>>({});
 
   function enterRoom() {
     setFormError(null);
@@ -171,6 +200,17 @@ export default function ForSaleGame({ onComplete }: PlayableGameProps) {
     channelRef.current = channel;
     startSentRef.current = false;
 
+    const chatChannel = `room:for-sale:${roomCode}`;
+    void loadRecentMessages(chatChannel).then((history) => {
+      setChatMessages((prev) => mergeHistoryIntoMessages(prev, history));
+    });
+
+    channel.on("broadcast", { event: "chat-message" }, ({ payload }) => {
+      const message = payload?.message as ChatMessage | undefined;
+      if (!message) return;
+      setChatMessages((prev) => [...prev, message]);
+    });
+
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seed = payload?.seed as number;
       const playerCount = payload?.playerCount as number;
@@ -188,6 +228,26 @@ export default function ForSaleGame({ onComplete }: PlayableGameProps) {
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
       const action = payload?.action as EngineAction;
+      // System-log pilot (see GameMeta.chatEnabled / PerudoGame.tsx): every
+      // connected client derives the same human-readable line independently
+      // — no server round-trip, no change to the pure reducer in engine.ts.
+      // Deliberately not persisted to `chat_messages` (unlike user
+      // messages) — every client would otherwise write a duplicate row, and
+      // it's trivially re-derivable from the replayed action log anyway.
+      if (action.type === "bid") {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: uuid(),
+            channel: chatChannel,
+            deviceId: "system",
+            senderName: "시스템",
+            body: formatForSaleBidLog(namesRef.current[action.seat] ?? "상대", action.amount),
+            type: "SYSTEM",
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
 
@@ -392,6 +452,37 @@ export default function ForSaleGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }, []);
 
+  const sendChatMessage = useCallback(
+    (rawBody: string): SendResult => {
+      const now = Date.now();
+      const check = checkThrottle(chatThrottleRef.current, now);
+      if (!check.ok) {
+        setChatCooldownUntil(check.lockedUntil ?? null);
+        return { ok: false, lockedUntil: check.lockedUntil };
+      }
+      const trimmed = stripControlChars(rawBody);
+      if (!trimmed) return { ok: false };
+      const { clean } = filterProfanity(trimmed);
+
+      chatThrottleRef.current = recordSend(chatThrottleRef.current, now);
+      setChatCooldownUntil(chatThrottleRef.current.lockedUntil);
+
+      const message: ChatMessage = {
+        id: uuid(),
+        channel: `room:for-sale:${roomCode}`,
+        deviceId,
+        senderName: myName || "게스트",
+        body: clean,
+        type: "USER",
+        createdAt: new Date(now).toISOString(),
+      };
+      channelRef.current?.send({ type: "broadcast", event: "chat-message", payload: { message } });
+      void persistMessage(message);
+      return { ok: true };
+    },
+    [roomCode, myName, deviceId],
+  );
+
   const chooseAction = useCallback((state: ForSaleState, actor: SeatIndex): EngineAction | null => {
     const idx = botSeatsRef.current.indexOf(actor);
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
@@ -427,6 +518,9 @@ export default function ForSaleGame({ onComplete }: PlayableGameProps) {
     }
     return map;
   }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels]);
+  useEffect(() => {
+    namesRef.current = names;
+  }, [names]);
 
   const connectedSeats = useMemo(
     () => new Set([...occupants.map((o) => o.seat), ...botSeats]),
@@ -468,6 +562,9 @@ export default function ForSaleGame({ onComplete }: PlayableGameProps) {
     setBotSeats([]);
     botLevelsRef.current = [];
     setBotLevels([]);
+    setChatMessages([]);
+    setChatCooldownUntil(null);
+    chatThrottleRef.current = INITIAL_THROTTLE_STATE;
     setPhase("choose");
   }
 
@@ -603,6 +700,7 @@ export default function ForSaleGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "connecting" || phase === "waiting") {
     return (
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         {phase === "connecting" ? (
           <p className="text-sm text-white/50">연결하는 중...</p>
@@ -649,17 +747,23 @@ export default function ForSaleGame({ onComplete }: PlayableGameProps) {
           </>
         )}
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="대기실 채팅" />
+      </>
     );
   }
 
   if (phase === "playing" && gameState && mySeat !== null) {
     return (
+      <>
       <ForSaleBoard state={gameState} viewerSeat={mySeat} names={names} connectedSeats={connectedSeats} onAction={handleAction} onGameEnd={handleGameEnd} />
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 
   if (phase === "post-game" && finalResult) {
     return (
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">🏠</span>
         <p className="text-white/80">{finalResult.winnerNames} 님이 최고 부동산 중개인이 되어 게임이 끝났어요.</p>
@@ -672,6 +776,8 @@ export default function ForSaleGame({ onComplete }: PlayableGameProps) {
           </button>
         </div>
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 

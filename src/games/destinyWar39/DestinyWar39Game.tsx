@@ -16,6 +16,7 @@ import {
   MIN_PLAYERS,
   startGame,
   SUPPORTED_PLAYER_COUNTS,
+  type Card,
   type DestinyWar39State,
   type EngineAction,
   type PlayerCount,
@@ -26,6 +27,25 @@ import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { v4 as uuid } from "uuid";
+import type { ChatMessage, SendResult } from "@/lib/chat/types";
+import { checkThrottle, recordSend, INITIAL_THROTTLE_STATE, type ThrottleState } from "@/lib/chat/throttle";
+import { filterProfanity } from "@/lib/chat/profanity";
+import { stripControlChars } from "@/lib/chat/sanitize";
+import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
+import ChatDrawer from "@/components/chat/ChatDrawer";
+
+/**
+ * e.g. "지수님이 27 카드를 냈습니다" / "지수님이 사신 카드를 냈습니다" for a
+ * `play` action — this game's single most central/dramatic action type
+ * (every round's turn resolves around who plays what, and a "death" card
+ * is the most dramatic possible play — rulebook §3/§6.1), chosen as the one
+ * system-log headline per the chat pilot's per-game convention (see
+ * PerudoGame.tsx's `raise`/DalmutiGame.tsx's `returnTax`).
+ */
+function formatDestinyWar39PlayLog(name: string, card: Card): string {
+  return card.kind === "death" ? `${name}님이 사신 카드를 냈습니다` : `${name}님이 ${card.value} 카드를 냈습니다`;
+}
 
 /**
  * Whose decision `useBotAutoplay` should drive right now. "predicting" and
@@ -135,6 +155,12 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<DestinyWar39State | null>(null);
   const [finalResult, setFinalResult] = useState<{ winnerNames: string[] } | null>(null);
+  // Room chat + in-game system log (see GameMeta.chatEnabled, piloted in
+  // PerudoGame.tsx/DalmutiGame.tsx). Shares this component's own room
+  // channel instead of opening a second Realtime subscription.
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatCooldownUntil, setChatCooldownUntil] = useState<number | null>(null);
+  const chatThrottleRef = useRef<ThrottleState>(INITIAL_THROTTLE_STATE);
   const [botSeats, setBotSeats] = useState<SeatIndex[]>([]);
   const botSeatsRef = useRef<SeatIndex[]>([]);
   useEffect(() => {
@@ -156,6 +182,11 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  // Kept in sync so the `game-action` broadcast handler (registered once,
+  // inside the channel-setup effect below) can resolve a seat to its display
+  // name for the system log without closing over a stale value.
+  const namesRef = useRef<Record<SeatIndex, string>>({});
 
   function enterRoom() {
     setFormError(null);
@@ -187,6 +218,17 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
     channelRef.current = channel;
     startSentRef.current = false;
 
+    const chatChannel = `room:destiny-war-39:${roomCode}`;
+    void loadRecentMessages(chatChannel).then((history) => {
+      setChatMessages((prev) => mergeHistoryIntoMessages(prev, history));
+    });
+
+    channel.on("broadcast", { event: "chat-message" }, ({ payload }) => {
+      const message = payload?.message as ChatMessage | undefined;
+      if (!message) return;
+      setChatMessages((prev) => [...prev, message]);
+    });
+
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seed = payload?.seed as number;
       const playerCount = (payload?.playerCount as PlayerCount | undefined) ?? DEFAULT_PLAYER_COUNT;
@@ -204,6 +246,32 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
       const action = payload?.action as EngineAction;
+      // System-log pilot (see GameMeta.chatEnabled): every connected client
+      // derives the same human-readable line independently from the
+      // *pre-action* state (`gameStateRef.current`, not yet updated by the
+      // `setGameState` call below) — no change to the pure reducer in
+      // engine.ts. Deliberately not persisted to `chat_messages` (unlike
+      // user messages), since every client would otherwise write a
+      // duplicate row, and it's trivially re-derivable from the replayed
+      // action log anyway.
+      if (action.type === "play") {
+        const prevState = gameStateRef.current;
+        const card = prevState?.round.hands[action.seat]?.find((c) => c.id === action.cardId);
+        if (card) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: uuid(),
+              channel: chatChannel,
+              deviceId: "system",
+              senderName: "시스템",
+              body: formatDestinyWar39PlayLog(namesRef.current[action.seat] ?? "상대", card),
+              type: "SYSTEM",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+      }
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
 
@@ -388,6 +456,37 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }, []);
 
+  const sendChatMessage = useCallback(
+    (rawBody: string): SendResult => {
+      const now = Date.now();
+      const check = checkThrottle(chatThrottleRef.current, now);
+      if (!check.ok) {
+        setChatCooldownUntil(check.lockedUntil ?? null);
+        return { ok: false, lockedUntil: check.lockedUntil };
+      }
+      const trimmed = stripControlChars(rawBody);
+      if (!trimmed) return { ok: false };
+      const { clean } = filterProfanity(trimmed);
+
+      chatThrottleRef.current = recordSend(chatThrottleRef.current, now);
+      setChatCooldownUntil(chatThrottleRef.current.lockedUntil);
+
+      const message: ChatMessage = {
+        id: uuid(),
+        channel: `room:destiny-war-39:${roomCode}`,
+        deviceId,
+        senderName: myName || "게스트",
+        body: clean,
+        type: "USER",
+        createdAt: new Date(now).toISOString(),
+      };
+      channelRef.current?.send({ type: "broadcast", event: "chat-message", payload: { message } });
+      void persistMessage(message);
+      return { ok: true };
+    },
+    [roomCode, myName, deviceId],
+  );
+
   const chooseAction = useCallback((state: DestinyWar39State, actor: SeatIndex): EngineAction | null => {
     const idx = botSeatsRef.current.indexOf(actor);
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
@@ -413,6 +512,9 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
     }
     return map;
   }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels]);
+  useEffect(() => {
+    namesRef.current = names;
+  }, [names]);
 
   const connectedSeats = useMemo(() => new Set([...occupants.map((o) => o.seat), ...botSeats]), [occupants, botSeats]);
   const ids: Record<SeatIndex, string> = useMemo(() => {
@@ -460,6 +562,9 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
     setBotSeats([]);
     botLevelsRef.current = [];
     setBotLevels([]);
+    setChatMessages([]);
+    setChatCooldownUntil(null);
+    chatThrottleRef.current = INITIAL_THROTTLE_STATE;
     setPhase("choose");
   }
 
@@ -661,6 +766,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
 
   if (phase === "connecting" || phase === "waiting") {
     return withGuard(
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         {phase === "connecting" ? (
           <p className="text-sm text-white/50">연결하는 중...</p>
@@ -702,17 +808,23 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
           </>
         )}
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="대기실 채팅" />
+      </>
     );
   }
 
   if (phase === "playing" && gameState && mySeat !== null) {
     return withGuard(
+      <>
       <DestinyWar39Board state={gameState} viewerSeat={mySeat} names={names} connectedSeats={connectedSeats} onAction={handleAction} onGameEnd={handleGameEnd} />
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 
   if (phase === "post-game" && finalResult) {
     return withGuard(
+      <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">🔮</span>
         <p className="text-white/80">{finalResult.winnerNames.join(", ")} 님이 운명전쟁39에서 승리했어요.</p>
@@ -725,6 +837,8 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
           </button>
         </div>
       </div>
+      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </>
     );
   }
 
