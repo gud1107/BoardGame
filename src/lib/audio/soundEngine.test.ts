@@ -1,0 +1,88 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getSoundEngine } from "./soundEngine";
+import { useAudioSettingsStore } from "./audioSettings";
+
+/**
+ * Load/gating tests for the SFX polyphony control described in
+ * `soundEngine.ts`'s file header ("Polyphony control"): `gate()` is a
+ * per-SFX-type cooldown plus a global concurrent-channel cap, not a single
+ * shared debounce — and every one-shot SFX method already creates an
+ * independent Web Audio node per call, so unlike an `HTMLAudioElement`-reuse
+ * design there's no "previous sound hasn't finished" conflict to begin with.
+ *
+ * These tests exercise the real public API (`playCardFlick`/`playGridSnap`,
+ * as called by `GridPokerBoard.tsx`'s `placeAt`) and assert on `gate()`'s
+ * return value via a spy, since in this project's node test environment (no
+ * `window`/`AudioContext`) the methods return early after the gate check and
+ * produce no observable audio side effect.
+ *
+ * Fake timers drive both the simulated click spacing (`vi.advanceTimersByTime`)
+ * and `gate()`'s internal channel-release `setTimeout`s together, so the
+ * channel cap behaves the same way it would in real elapsed time — advancing
+ * a mocked `performance.now()` alone (without also advancing timers) would
+ * let the release callbacks starve and make the channel cap trip early.
+ */
+describe("soundEngine SFX gate — rapid consecutive playback", () => {
+  const engine = getSoundEngine();
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"] });
+    // Unmute for the duration of the test — the store defaults to fully
+    // muted (see audioSettings.ts), which would make every gate() call
+    // return false regardless of cooldown timing.
+    useAudioSettingsStore.getState().setMasterMuted(false);
+    useAudioSettingsStore.getState().setSfxMuted(false);
+    // Reset the engine's internal cooldown/channel bookkeeping between
+    // tests — it's a module-level singleton (`getSoundEngine()` always
+    // returns the same instance), so state from one test would otherwise
+    // leak into the next.
+    (engine as unknown as { lastPlayedAt: Map<string, number> }).lastPlayedAt = new Map();
+    (engine as unknown as { activeChannels: number }).activeChannels = 0;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("plays the same SFX 5 times in a row at 100ms intervals with none dropped", () => {
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    for (let i = 0; i < 5; i++) {
+      engine.playCardFlick();
+      vi.advanceTimersByTime(100);
+    }
+
+    expect(gateSpy).toHaveReturnedTimes(5);
+    expect(gateSpy.mock.results.map((r) => r.value)).toEqual([true, true, true, true, true]);
+  });
+
+  it("triggers every card-flick + grid-snap pair for 5 rapid Grid Poker placements", () => {
+    // Mirrors GridPokerBoard.tsx's placeAt(): a flick immediately, then a
+    // snap 90ms later — repeated for 5 placements spaced 150ms apart (a
+    // brisk but human clicking pace, faster than the old 80ms gridSnap
+    // cooldown would tolerate back-to-back with other SFX noise).
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    for (let i = 0; i < 5; i++) {
+      engine.playCardFlick();
+      vi.advanceTimersByTime(90);
+      engine.playGridSnap();
+      vi.advanceTimersByTime(60); // remainder of the 150ms placement spacing
+    }
+
+    // 5 placements × (1 flick + 1 snap) = 10 gate() calls, none blocked.
+    expect(gateSpy).toHaveReturnedTimes(10);
+    expect(gateSpy.mock.results.every((r) => r.value === true)).toBe(true);
+  });
+
+  it("still throttles calls faster than the tuned cooldown (gate isn't accidentally disabled)", () => {
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    engine.playCardFlick(); // t=0, allowed
+    vi.advanceTimersByTime(10); // well under the 40ms cardFlick cooldown
+    engine.playCardFlick(); // t=10, should be blocked
+
+    expect(gateSpy.mock.results.map((r) => r.value)).toEqual([true, false]);
+  });
+});

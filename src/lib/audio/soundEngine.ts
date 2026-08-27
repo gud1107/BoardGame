@@ -700,9 +700,15 @@ class SoundEngine {
     src.stop(now + 0.16);
   }
 
-  /** 그리드포커 — "부드러운 카드 플릭음": a soft airy tick, lighter/higher than the generic wood tap. */
+  /**
+   * 그리드포커 — "부드러운 카드 플릭음": a soft airy tick, lighter/higher than the generic wood tap.
+   * Gate lowered 60ms→40ms (2026-08-27 세션, 연속 배치 SFX 튜닝 요청) so a user
+   * placing cards in quick succession never has a flick silently dropped —
+   * still well above the ~30ms floor needed to avoid two clicks smearing
+   * into one attack.
+   */
   playCardFlick() {
-    if (!this.gate("cardFlick", 60)) return;
+    if (!this.gate("cardFlick", 40)) return;
     const ctx = this.ensureContext();
     if (!ctx || !this.sfxGain) return;
     const now = ctx.currentTime;
@@ -719,9 +725,15 @@ class SoundEngine {
     src.stop(now + 0.05);
   }
 
-  /** 그리드포커 — "그리드 안착 스냅음": a crisp snap (short high click + tiny thump) for a card locking into a grid cell. */
+  /**
+   * 그리드포커 — "그리드 안착 스냅음": a crisp snap (short high click + tiny thump) for a card locking into a grid cell.
+   * Gate lowered 80ms→50ms (2026-08-27 세션, 연속 배치 SFX 튜닝 요청) to match
+   * `playCardFlick`'s tighter cooldown — this fires 90ms after each flick
+   * (see `GridPokerBoard.tsx`'s `placeAt`), so back-to-back placements under
+   * a second apart no longer risk having the settle-snap swallowed.
+   */
   playGridSnap() {
-    if (!this.gate("gridSnap", 80)) return;
+    if (!this.gate("gridSnap", 50)) return;
     const ctx = this.ensureContext();
     if (!ctx || !this.sfxGain) return;
     const now = ctx.currentTime;
