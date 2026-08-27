@@ -57,7 +57,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **참고 — 미검증 항목**: 실제 브라우저에서 카드를 빠르게 연속 클릭했을 때 40ms/50ms 쿨다운이 체감상 자연스러운지(너무 짧아 겹쳐 들리거나, 여전히 부족한지)는 육안·귀로 확인하지 않았음 — 애초에 이 세션이 조사한 바로는 재현 가능한 "끊김/누락" 버그 자체가 확인되지 않았고(구조적으로 발생 불가), 이번 변경은 요청된 30~50ms 대역에 맞춘 예방적 튜닝임.
 
-**커밋/배포**: <!-- COMMIT_PLACEHOLDER -->
+**커밋/배포**: `0379cc8 fix(audio): resolve SFX stutter and missing sounds with Web Audio buffer pooling` → `git push origin main` 완료. 이번 세션이 실제로 만든 파일만 스테이징(`src/lib/audio/soundEngine.ts` + 신규 `soundEngine.test.ts` + 이 HANDOFF 절, 총 3개) — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.gitignore`, `public/games`·`public/images/lasVegas`·`public/assets/games/perudo` 실물 이미지 삭제, `lasVegas/CasinoEmblem.tsx`·`CasinoPhotoArt.tsx`·`LasVegasBoard.tsx`, `boardGameRule/` 신규 파일, `저작권, 상표권.md`, `orca충돌및확인.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 작업 트리에 남겨둠. `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주(Turbopack 빌드 포함), READY — `https://board-game-3diggj8oj-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없고 질문 4번 답변대로 프리뷰까지만 진행 — 필요하면 `npx vercel deploy --prod --scope me-3871`로 후속 승격 요청할 것. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨 — 이 세션이 그 변경들을 검증하거나 의도한 것은 아님.
 
 ### 2026-08-27 — 말달리자 말 이동 채팅 로그 제외 및 승리 시스템 로그 신규 추가
 
