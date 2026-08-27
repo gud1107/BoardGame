@@ -1,6 +1,6 @@
 import { createServerSupabase } from "./server";
 
-export type AdminCheck = { ok: true; userId: string } | { ok: false; status: 401 | 403 | 503 };
+export type AdminCheck = { ok: true; userId: string; email: string | null } | { ok: false; status: 401 | 403 | 503 };
 
 /**
  * Shared guard for every `src/app/api/admin/*` route. Uses the cookie-based
@@ -25,5 +25,5 @@ export async function requireAdmin(): Promise<AdminCheck> {
   const { data: profile } = await server.from("profiles").select("role").eq("id", user.id).maybeSingle();
   if (profile?.role !== "admin") return { ok: false, status: 403 };
 
-  return { ok: true, userId: user.id };
+  return { ok: true, userId: user.id, email: user.email ?? null };
 }

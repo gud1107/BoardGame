@@ -11,14 +11,16 @@ export function evaluateEntitlement(
   limits: TierLimits,
   usage: DailyUsage,
 ): EntitlementResult {
-  if (settings.meteringMode === "time") {
-    const cap = limits.minutesPerDay;
-    const used = usage.minutesUsed;
-    return { allowed: used < cap, unit: "minutes", used, cap, remaining: Math.max(0, cap - used) };
+  const unit = settings.meteringMode === "time" ? "minutes" : "games";
+  const cap = unit === "minutes" ? limits.minutesPerDay : limits.gamesPerDay;
+  const used = unit === "minutes" ? usage.minutesUsed : usage.gamesUsed;
+  const remaining = Math.max(0, cap - used);
+  // Site-wide kill switch (super-admin only, see src/lib/admin/superAdmin.ts):
+  // usage is still tracked/reported as usual, it just never blocks play.
+  if (!settings.entitlementsEnabled) {
+    return { allowed: true, unit, used, cap, remaining };
   }
-  const cap = limits.gamesPerDay;
-  const used = usage.gamesUsed;
-  return { allowed: used < cap, unit: "games", used, cap, remaining: Math.max(0, cap - used) };
+  return { allowed: used < cap, unit, used, cap, remaining };
 }
 
 /**

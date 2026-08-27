@@ -4,6 +4,7 @@ import { DEFAULT_GUEST_LIMITS, DEFAULT_TIER_LIMITS, type AppSettings, type Subsc
 
 const coinSettings: AppSettings = {
   guestModeEnabled: true,
+  entitlementsEnabled: true,
   meteringMode: "coin",
   tierLimits: DEFAULT_TIER_LIMITS,
   guestLimits: DEFAULT_GUEST_LIMITS,
@@ -43,6 +44,17 @@ describe("evaluateEntitlement", () => {
       minutesUsed: 0,
     });
     expect(result.remaining).toBe(0);
+  });
+
+  it("always allows play when the kill switch is off, even over cap", () => {
+    const disabled: AppSettings = { ...coinSettings, entitlementsEnabled: false };
+    const result = evaluateEntitlement(disabled, DEFAULT_TIER_LIMITS.free, {
+      gamesUsed: 999,
+      minutesUsed: 0,
+    });
+    expect(result.allowed).toBe(true);
+    expect(result.used).toBe(999);
+    expect(result.cap).toBe(7);
   });
 });
 

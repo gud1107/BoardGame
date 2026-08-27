@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/supabase/adminGuard";
 import { getServiceSupabase } from "@/lib/supabase/serviceClient";
+import { SUPER_ADMIN_EMAIL } from "@/lib/admin/superAdmin";
 import type { AppSettings } from "@/lib/entitlements/types";
 
 /**
@@ -21,6 +22,11 @@ export async function POST(request: NextRequest) {
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (typeof body.guestModeEnabled === "boolean") patch.guest_mode_enabled = body.guestModeEnabled;
+  // Kill switch is restricted to the super-admin account server-side too —
+  // the client only hides/disables the control, this is the real boundary.
+  if (typeof body.entitlementsEnabled === "boolean" && admin.email === SUPER_ADMIN_EMAIL) {
+    patch.entitlements_enabled = body.entitlementsEnabled;
+  }
   if (body.meteringMode === "coin" || body.meteringMode === "time") patch.metering_mode = body.meteringMode;
   if (body.tierLimits) patch.tier_limits = body.tierLimits;
   if (body.guestLimits) patch.guest_limits = body.guestLimits;

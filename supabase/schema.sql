@@ -96,6 +96,11 @@ create table if not exists guest_usage (
 create table if not exists app_settings (
   id int primary key default 1,
   guest_mode_enabled boolean not null default true,
+  -- Site-wide kill switch for the entire entitlement/quota gate (see
+  -- src/lib/entitlements/evaluate.ts). Restricted in the admin API to the
+  -- super-admin account (src/lib/admin/superAdmin.ts) — other admins can
+  -- still edit every other setting on this row, just not this one.
+  entitlements_enabled boolean not null default true,
   metering_mode text not null default 'coin' check (metering_mode in ('coin', 'time')),
   tier_limits jsonb not null default '{
     "free": {"gamesPerDay": 7, "minutesPerDay": 60},
@@ -107,6 +112,8 @@ create table if not exists app_settings (
   constraint app_settings_singleton check (id = 1)
 );
 insert into app_settings (id) values (1) on conflict (id) do nothing;
+-- Safe to re-run even if app_settings was already created live before this column existed.
+alter table app_settings add column if not exists entitlements_enabled boolean not null default true;
 
 alter table profiles enable row level security;
 alter table subscriptions enable row level security;

@@ -17,6 +17,7 @@ function todayKey(): string {
 export async function fetchAppSettings(): Promise<AppSettings> {
   const fallback: AppSettings = {
     guestModeEnabled: true,
+    entitlementsEnabled: true,
     meteringMode: "coin",
     tierLimits: DEFAULT_TIER_LIMITS,
     guestLimits: DEFAULT_GUEST_LIMITS,
@@ -26,12 +27,13 @@ export async function fetchAppSettings(): Promise<AppSettings> {
   try {
     const { data, error } = await supabase
       .from("app_settings")
-      .select("guest_mode_enabled, metering_mode, tier_limits, guest_limits")
+      .select("guest_mode_enabled, entitlements_enabled, metering_mode, tier_limits, guest_limits")
       .eq("id", 1)
       .single();
     if (error || !data) return fallback;
     return {
       guestModeEnabled: data.guest_mode_enabled,
+      entitlementsEnabled: data.entitlements_enabled ?? true,
       meteringMode: data.metering_mode,
       tierLimits: data.tier_limits ?? DEFAULT_TIER_LIMITS,
       guestLimits: data.guest_limits ?? DEFAULT_GUEST_LIMITS,
