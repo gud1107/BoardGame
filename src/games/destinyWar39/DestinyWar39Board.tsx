@@ -132,10 +132,28 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
     // above already needed (see HANDOFF.md's destinyWar39 session).
     setScreenShake(justPlayedDeath);
     if (!justPlayedDeath) return;
+    // 데스 카드 페널티음(STATUS_EFFECT 매핑 — AskUserQuestion으로 확정, 2026-08-27 세션 오후) — 화면 흔들림과 같은 타이밍.
+    getSoundEngine().playDeathCardSting();
     const timer = setTimeout(() => setScreenShake(false), DEATH_SHAKE_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [round.playsThisTurn.length]);
+
+  // 라운드 승리/패배음 — `roundEnd` 진입 시점에 1회, 뷰어 본인의 이번 라운드
+  // 점수 부호(+/-)로 판정(AskUserQuestion으로 확정, 2026-08-27 세션 오후).
+  // 이 게임은 트릭마다의 승패가 아니라 예측 적중률 기반 점수제이므로, 0점
+  // 이하(예측=0 실패 포함)는 LOSE로 취급.
+  const prevPhaseRef = useRef(state.phase);
+  useEffect(() => {
+    const enteredRoundEnd = state.phase === "roundEnd" && prevPhaseRef.current !== "roundEnd";
+    prevPhaseRef.current = state.phase;
+    if (!enteredRoundEnd) return;
+    const idx = round.roundNumber - 1;
+    const myScore = state.players.find((p) => p.seat === viewerSeat)?.scores[idx] ?? 0;
+    if (myScore > 0) getSoundEngine().playPredictionWin();
+    else getSoundEngine().playPredictionLose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase]);
 
   const rulebookButton = (
     <button

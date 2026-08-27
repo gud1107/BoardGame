@@ -602,6 +602,8 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
     if (state.phase === "gameOver" && state.settlement && !payoutStartedRef.current) {
       payoutStartedRef.current = true;
       setPayoutQueue(computeRankings(state).filter((r) => r.rank === 1).map((r) => r.seat));
+      // 지폐 세는 소리(MONEY_COLLECT 매핑 — AskUserQuestion으로 확정, 2026-08-27 세션 오후) — 트로피에서 지폐가 날아가기 시작하는 순간 1회.
+      getSoundEngine().playBillCount();
     }
   }, [state]);
   function setWinnerMoneyRef(seat: SeatIndex) {

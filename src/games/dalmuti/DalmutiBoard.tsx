@@ -63,6 +63,8 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     // 별개로, 매 트릭 제출·세금 반환 시점의 SFX (2026-08-26 세션).
     if (action.type === "playCards") engine.playParchmentSubmit();
     else if (action.type === "returnTax") engine.playCoinTribute();
+    // 패스 선언 톤(ACTION_PASS 매핑 — AskUserQuestion으로 확정, 2026-08-27 세션 오후).
+    else if (action.type === "pass") engine.playPassWhiff();
     onAction(action);
   }
   /** Role title for a seat, independent of the viewer — used by the exchange FX's third-party message. */
@@ -104,7 +106,14 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
       });
     }
     if (newTrick) setTrickFlash(newTrick);
-    if (newRevolution) setRevolutionBanner(newRevolution);
+    if (newRevolution) {
+      setRevolutionBanner(newRevolution);
+      // 반란 종소리(REVOLUTION_BELL 매핑 — AskUserQuestion으로 확정, 2026-08-27
+      // 세션 오후). 라스베가스 diff 블록의 playCasinoDiceRoll/playTieSpark와
+      // 같은 패턴으로, 상태 변화 자체를 감지해 모든 뷰어에게 재생(선언한
+      // 본인의 로컬 dispatch()에만 의존하지 않음).
+      getSoundEngine().playRevolutionBell();
+    }
     // Commoner-swap events come in pairs (one per direction) — surface the
     // "교환 완료" popup once per completed pair, not once per direction.
     if (newCommonerSwaps.length > 0) setCommonerSwapFlash({ seatA: newCommonerSwaps[0].seat, seatB: newCommonerSwaps[0].targetSeat });

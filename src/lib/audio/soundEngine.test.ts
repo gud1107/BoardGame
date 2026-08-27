@@ -86,3 +86,78 @@ describe("soundEngine SFX gate — rapid consecutive playback", () => {
     expect(gateSpy.mock.results.map((r) => r.value)).toEqual([true, false]);
   });
 });
+
+/**
+ * Gate-key coverage for the 8 new action SFX added in the 2026-08-27(오후)
+ * "게임별 세부 액션 SFX 완전 바인딩" 세션(destinyWar39/lasVegas/grid-poker/
+ * malDalliJa/dalmuti gap-fill — see HANDOFF.md). Each method must call
+ * `gate()` with its own distinct key/cooldown so it isn't accidentally
+ * sharing a cooldown bucket with an unrelated SFX, and must actually return
+ * (produce a sound) when unmuted and off cooldown, and be blocked by a
+ * same-tick repeat.
+ */
+describe("soundEngine SFX gate — 2026-08-27 신규 세부 액션 SFX", () => {
+  const engine = getSoundEngine();
+
+  const NEW_SFX: { name: string; call: () => void }[] = [
+    { name: "playDeathCardSting", call: () => engine.playDeathCardSting() },
+    { name: "playPredictionWin", call: () => engine.playPredictionWin() },
+    { name: "playPredictionLose", call: () => engine.playPredictionLose() },
+    { name: "playBillCount", call: () => engine.playBillCount() },
+    { name: "playHandFanfare", call: () => engine.playHandFanfare() },
+    { name: "playVictoryStamp", call: () => engine.playVictoryStamp() },
+    { name: "playRaceDiceClatter", call: () => engine.playRaceDiceClatter() },
+    { name: "playPassWhiff", call: () => engine.playPassWhiff() },
+    { name: "playRevolutionBell", call: () => engine.playRevolutionBell() },
+  ];
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"] });
+    useAudioSettingsStore.getState().setMasterMuted(false);
+    useAudioSettingsStore.getState().setSfxMuted(false);
+    (engine as unknown as { lastPlayedAt: Map<string, number> }).lastPlayedAt = new Map();
+    (engine as unknown as { activeChannels: number }).activeChannels = 0;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it.each(NEW_SFX)("$name plays once when off cooldown and blocks an immediate repeat", ({ call }) => {
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    call(); // first call — off cooldown, should play
+    call(); // immediate repeat — same tick, must be blocked
+
+    expect(gateSpy.mock.results.map((r) => r.value)).toEqual([true, false]);
+  });
+
+  it("each new SFX gates on its own distinct key (no accidental cross-throttling)", () => {
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    // Spaced >SFX_CHANNEL_RELEASE_MS (450ms) apart so the *global* concurrent-
+    // channel cap (a separate, legitimate mechanism — see file header "Polyphony
+    // control") can't itself block a call and produce a false positive here;
+    // this test is only about per-SFX-type key collisions, not the channel cap.
+    for (const { call } of NEW_SFX) {
+      call();
+      vi.advanceTimersByTime(500);
+    }
+
+    // If any two shared a gate key, a later call would be blocked (return
+    // false) purely due to the earlier one's cooldown, despite the spacing above.
+    expect(gateSpy.mock.results.every((r) => r.value === true)).toBe(true);
+    const keysUsed = gateSpy.mock.calls.map(([key]) => key);
+    expect(new Set(keysUsed).size).toBe(keysUsed.length);
+  });
+
+  it("respects the shared master mute — no new SFX plays while muted", () => {
+    useAudioSettingsStore.getState().setMasterMuted(true);
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    for (const { call } of NEW_SFX) call();
+
+    expect(gateSpy.mock.results.every((r) => r.value === false)).toBe(true);
+  });
+});

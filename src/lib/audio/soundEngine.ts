@@ -945,6 +945,239 @@ class SoundEngine {
     src.start(now);
     src.stop(now + 0.14);
   }
+
+  // ---------------------------------------------------------------------
+  // 2026-08-27 세션(오후) — 6개 허브 게임의 남은 세부 액션 SFX 갭을 메우기
+  // 위해 추가된 신규 SFX. AskUserQuestion으로 확인된 대상 이벤트에만 연결
+  // (HANDOFF.md "게임별 세부 액션 SFX 완전 바인딩" 절 참고).
+  // ---------------------------------------------------------------------
+
+  /** 운명전쟁39 — "데스 카드 페널티음": a dark descending detuned buzz + a sharp glitchy noise stab, for a Death card landing (STATUS_EFFECT 매핑 대상, 화면 흔들림과 같은 타이밍). */
+  playDeathCardSting() {
+    if (!this.gate("deathCardSting", 200)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    [110, 116].forEach((freq) => {
+      const osc = ctx.createOscillator();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freq, now);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.4, now + 0.3);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(now);
+      osc.stop(now + 0.35);
+    });
+
+    const stab = ctx.createBufferSource();
+    stab.buffer = noiseBuffer(ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 1400;
+    filter.Q.value = 3;
+    const stabGain = ctx.createGain();
+    stabGain.gain.setValueAtTime(0.24, now);
+    stabGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    stab.connect(filter).connect(stabGain).connect(this.sfxGain);
+    stab.start(now);
+    stab.stop(now + 0.12);
+  }
+
+  /** 운명전쟁39 — "라운드 승리 챠임": a bright ascending three-note major chime, for `roundEnd`'s per-player score sign check. */
+  playPredictionWin() {
+    if (!this.gate("predictionWin", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [659.25, 830.61, 987.77].forEach((freq, i) => {
+      const at = now + i * 0.08;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.24, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.4);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.42);
+    });
+  }
+
+  /** 운명전쟁39 — "라운드 패배 톤": a short flat minor-second dip, muted counterpart to `playPredictionWin`. */
+  playPredictionLose() {
+    if (!this.gate("predictionLose", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(311.13, now);
+    osc.frequency.linearRampToValueAtTime(233.08, now + 0.3);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc.connect(gain).connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.35);
+  }
+
+  /** 라스베가스 — "지폐 세는 소리": several quick paper-flick noise bursts, for the game-over payout flight starting (MONEY_COLLECT). */
+  playBillCount() {
+    if (!this.gate("billCount", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [0, 0.07, 0.14, 0.21, 0.28].forEach((offset) => {
+      const at = now + offset;
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuffer(ctx);
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.value = 2600 + Math.random() * 900;
+      filter.Q.value = 5;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.16, at);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.05);
+      src.connect(filter).connect(gain).connect(this.sfxGain!);
+      src.start(at);
+      src.stop(at + 0.06);
+    });
+  }
+
+  /** 그리드포커 — "족보 완성 팡파르": a quick bright major-triad brass-like stab, for round-result entering (POKER_HAND_FANFARE). */
+  playHandFanfare() {
+    if (!this.gate("handFanfare", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [523.25, 659.25, 783.99].forEach((freq, i) => {
+      const at = now + i * 0.05;
+      const osc = ctx.createOscillator();
+      osc.type = "sawtooth";
+      osc.frequency.value = freq;
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 3000;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.2, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.35);
+      osc.connect(filter).connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.36);
+    });
+  }
+
+  /** 그리드포커 — "승리 스탬프 임팩트": a low thud + a bright noise crack, timed with `VictoryStamp`'s appearance (IMPACT_VICTORY). */
+  playVictoryStamp() {
+    if (!this.gate("victoryStamp", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const thud = ctx.createOscillator();
+    thud.type = "sine";
+    thud.frequency.setValueAtTime(180, now);
+    thud.frequency.exponentialRampToValueAtTime(50, now + 0.15);
+    const thudGain = ctx.createGain();
+    thudGain.gain.setValueAtTime(0.32, now);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    thud.connect(thudGain).connect(this.sfxGain);
+    thud.start(now);
+    thud.stop(now + 0.25);
+
+    const crack = ctx.createBufferSource();
+    crack.buffer = noiseBuffer(ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = 2500;
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.22, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+    crack.connect(filter).connect(crackGain).connect(this.sfxGain);
+    crack.start(now);
+    crack.stop(now + 0.08);
+  }
+
+  /** 말달리자 — "카드 사용 확정음": a quick woody double-tap + a light rising blip, distinct from 라스베가스의 playCasinoDiceRoll (RACE_DICE_ROLL — this game's "roll" is a movement card, not a physical die). */
+  playRaceDiceClatter() {
+    if (!this.gate("raceDiceClatter", 150)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [0, 0.06].forEach((offset) => {
+      const at = now + offset;
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuffer(ctx);
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.value = 1600;
+      filter.Q.value = 5;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.18, at);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.05);
+      src.connect(filter).connect(gain).connect(this.sfxGain!);
+      src.start(at);
+      src.stop(at + 0.06);
+    });
+    const blip = ctx.createOscillator();
+    blip.type = "square";
+    blip.frequency.setValueAtTime(900, now + 0.1);
+    blip.frequency.exponentialRampToValueAtTime(1400, now + 0.16);
+    const blipGain = ctx.createGain();
+    blipGain.gain.setValueAtTime(0.08, now + 0.1);
+    blipGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    blip.connect(blipGain).connect(this.sfxGain);
+    blip.start(now + 0.1);
+    blip.stop(now + 0.19);
+  }
+
+  /** 달무티 — "패스 선언 톤": a short low downward whiff, deliberately understated next to `playParchmentSubmit`/`playCoinTribute` (ACTION_PASS). */
+  playPassWhiff() {
+    if (!this.gate("passWhiff", 150)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(260, now);
+    osc.frequency.exponentialRampToValueAtTime(140, now + 0.14);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.14, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+    osc.connect(gain).connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.16);
+  }
+
+  /** 달무티 — "반란 종소리": a struck bell (fundamental + inharmonic partials, long decay) for `declareRevolution` (REVOLUTION_BELL) — distinct from the deal-time `playRankFanfare`. */
+  playRevolutionBell() {
+    if (!this.gate("revolutionBell", 500)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    // Inharmonic partials approximate a struck bell/gong better than a pure harmonic stack.
+    [
+      { freq: 220, gain: 0.28 },
+      { freq: 369, gain: 0.16 },
+      { freq: 587, gain: 0.1 },
+      { freq: 818, gain: 0.06 },
+    ].forEach(({ freq, gain: g }) => {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(g, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.6);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(now);
+      osc.stop(now + 1.6);
+    });
+  }
 }
 
 let instance: SoundEngine | null = null;

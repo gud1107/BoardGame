@@ -350,14 +350,21 @@ export default function GridPokerBoard({
     return () => engine.stopFuseCrackle();
   }, [isUrgent]);
 
-  // A short positive "ding" the instant the round-result overlay appears —
-  // there's no bespoke fanfare/victory jingle anywhere in this project's
-  // sound engine to draw from (checked: only playCorrectDing/playWrongBuzz/
-  // dice/BGM exist), so this reuses the same generic positive sound already
-  // used elsewhere rather than adding new audio synthesis for one flourish.
+  // 족보 완성 팡파르(POKER_HAND_FANFARE) — round-result 진입 즉시 1회. 이전엔
+  // 전용 SFX가 없어 playCorrectDing을 재사용했으나, 2026-08-27 세션 오후
+  // AskUserQuestion으로 전용 신규 합성 2종(팡파르+임팩트)을 확정해 교체.
   useEffect(() => {
-    if (state.phase === "round-result") getSoundEngine().playCorrectDing();
+    if (state.phase === "round-result") getSoundEngine().playHandFanfare();
   }, [state.phase, state.lastRoundResult?.roundNumber]);
+
+  // 라운드 결과 발표 임팩트(IMPACT_VICTORY) — 실제 승자가 있을 때만(무승부는
+  // `RoundResultOverlay`가 스탬프 자체를 렌더링하지 않음), `VictoryStamp`가
+  // 화면에 나타나는 타이밍(오버레이 자체의 셰이크 딜레이 0.15s)에 맞춰 재생.
+  useEffect(() => {
+    if (state.phase !== "round-result" || !state.lastRoundResult || state.lastRoundResult.winnerSeat === null) return;
+    const timer = setTimeout(() => getSoundEngine().playVictoryStamp(), 150);
+    return () => clearTimeout(timer);
+  }, [state.phase, state.lastRoundResult]);
 
   // Both toggles below read/write the site-wide `audioSettings` store, so
   // they always match the header's global sound widget and the settings

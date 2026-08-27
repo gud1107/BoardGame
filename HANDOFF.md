@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-27 (**무료 티어 하루 7회 캡 등 엔타이틀먼트 전체를 끄고 켤 수 있는 super-admin 전용 킬 스위치 추가(기본값 OFF=무제한) 세션** — 자세한 내용은 아래 `### 2026-08-27 — 엔타이틀먼트 킬 스위치(super-admin 전용) 추가` 절 참고.)_
+_최종 갱신: 2026-08-27 (**6개 보드게임 인게임 세부 액션 SFX 완전 바인딩(운명전쟁39/라스베가스/그리드포커/말달리자/달무티 갭 채우기) 세션** — 자세한 내용은 아래 `### 2026-08-27 — 게임별 세부 액션 SFX 완전 바인딩` 절 참고.)_
+
+_이전 갱신: 2026-08-27 (**무료 티어 하루 7회 캡 등 엔타이틀먼트 전체를 끄고 켤 수 있는 super-admin 전용 킬 스위치 추가(기본값 OFF=무제한) 세션** — 자세한 내용은 아래 `### 2026-08-27 — 엔타이틀먼트 킬 스위치(super-admin 전용) 추가` 절 참고.)_
 
 _이전 갱신: 2026-08-27 (**전 게임 통합 패치노트(Changelog) 모달 및 릴리즈 이력 시스템 구축 세션** — 자세한 내용은 아래 `### 2026-08-27 — 통합 패치노트 모달 및 릴리즈 이력 시스템 구축` 절 참고.)_
 
@@ -37,6 +39,40 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-27 — 게임별 세부 액션 SFX 완전 바인딩
+
+**요청**: 6종 보드게임 전체의 세부 인터랙션/상태 전이(카드 제출, 드로우, 주사위, 베팅, 이동, 특수 능력, 라운드 정산 등)마다 누락 없는 액션 SFX 완전 연동. 요청 문구는 `AudioManager.ts`/`useAudio.ts`/`soundMap.ts`, `src/games/{destinyWar,gridPoker,horseRacing}/` 등 이 저장소에 존재하지 않는 경로/모듈명을 전제로 했고, "Audio Pool"·"HTMLAudioElement 재사용" 문제 진단도 이 프로젝트 구조와 무관했음 — 모호점을 임의로 넘겨짚지 말고 먼저 질문하라는 명시적 지시가 있어 아래처럼 진행.
+
+**사전 조사에서 발견한 핵심 사실**: 요청이 나열한 액션 SFX 매핑표의 상당수는 **바로 전 두 세션(2026-08-26/27, `44f4a7b`/`0379cc8`)에서 이미 구현·배포되어 있었음** — 실제 구조는 `AudioManager.ts` 등이 아니라 `soundEngine.ts`(Web Audio API 완전 합성, 외부 오디오 파일 없음 — 저작권 정책)+`audioSettings.ts`+`bgmManager.ts`이고, 게임 폴더도 `destinyWar39`/`lasVegas`/`grid-poker`/`malDalliJa`/`dalmuti`. Throttle(SFX 타입별 30~90ms 쿨다운)와 폴리포니 상한(동시 8채널)도 이미 정확히 구현돼 있었고, 음소거 시 CPU/디코딩 스킵도 `gate()`가 가장 먼저 체크하므로 이미 충족돼 있었음. 실제로 남은 작업은 요청 매핑표 중 진짜 갭(엔진에 대응 이벤트 자체가 없거나, 아직 사운드가 안 걸린 항목)뿐이었음.
+
+**`AskUserQuestion`으로 확인한 모호점 (총 15문항, 4회에 걸쳐 진행 — 2번째 라운드에서 1번/4번 문항은 추가 확인 필요해 후속 질문)**:
+1. 운명전쟁39 STATUS_EFFECT("원숭이 상태이상") — 엔진엔 이런 메커니즘 자체가 없음(예측 점수제 구조) → 처음엔 "직접 이벤트 지정" 선택, 후속 질문에서 **"death 카드(CardKind: "death") 제출/발생 시점"**으로 확정(화면 흔들림 `screenShake`와 같은 트리거).
+2. 운명전쟁39 ROUND_WIN/ROUND_LOSE — 이분법 승패가 아니라 라운드별 예측 점수제 → **"roundEnd 진입 시 뷰어 본인 이번 라운드 점수 부호(+/-) 기준"** 선택(0점 이하는 LOSE로 처리).
+3. 라스베가스 MONEY_COLLECT — **"신규 합성 사운드 추가"** 선택 → 게임오버 정산 시 `PayoutMoneyFly`가 트로피에서 지폐를 날리기 시작하는 순간에 연결(기존 `playChipSettle`은 라운드 중 칩 배치용으로 유지).
+4. 그리드포커 CARD_HOVER_TICK — **"제외하고 선택/배치음만 유지"** 선택(호버마다 소리 내면 스팸처럼 들릴 위험).
+5. 그리드포커 POKER_HAND_FANFARE vs IMPACT_VICTORY — 처음엔 "신규 2종 합성" 선택, 후속 질문에서 **"기존 `playCorrectDing` 재사용을 이 게임에서 제거하고 완전히 새 2종으로 교체, POKER_HAND_FANFARE=round-result 진입 즉시 / IMPACT_VICTORY=그 후 스탬프 등장 시(0.15s 딜레이)"**로 확정.
+6. 말달리자 RACE_DICE_ROLL — **"말달리자 전용 신규 합성"** 선택(이 게임은 실제 주사위가 아니라 이동 카드를 쓰는 구조라, 셀 클릭으로 이동을 확정하는 시점에 연결).
+7. 달무티 ACTION_PASS — **"짧고 가벼운 스킵/거절 톤 신규 합성"** 선택.
+8. 달무티 REVOLUTION_BELL — **"신규 종소리 합성"** 선택(기존 `playRankFanfare`와 구분).
+9. 달무티 조공/교환 세분화(TAX_GIVE_GOLD/TAX_SUBMIT/COMMONER_EXCHANGE_SWIRL) — **"현재 매핑(playCards→playParchmentSubmit, returnTax→playCoinTribute, 전체 카드교환→playExchangeLaunch/Arrival) 그대로 유지"** 선택, 세분화 안 함.
+10. 공통 UI_CLICK 범위 — **"6개 게임 내부 액션 버튼까지만"** 선택(사이트 전역 버튼 확대는 범위 제외) — 실제로는 게임플레이 액션 각각이 이미 전용 SFX로 커버되므로 이번 세션에서 별도 `playWoodTap` 추가는 없었음.
+11. 공통 ROOM_JOIN/PLAYER_READY/MY_TURN_ALERT — 이 앱엔 명시적 "레디" 시스템이 없음(호스트가 바로 시작) → **"이번 작업에서 제외"** 선택.
+12. 단위 테스트 범위 — **"`soundEngine.ts` 신규 메서드 `gate()` 검증만"** 선택(`<Game>Board.tsx` 전용 테스트 인프라(jsdom) 부재는 HANDOFF §3-10에 기록된 기존 사각지대).
+13. 배포 범위 — 직전 두 오디오 세션은 프리뷰까지만 진행했으나, 이번엔 **"프로덕션까지 배포"** 선택.
+
+**구현**:
+- **`src/lib/audio/soundEngine.ts`**: 신규 SFX 9종 추가 — `playDeathCardSting`(운명전쟁39 데스카드 페널티), `playPredictionWin`/`playPredictionLose`(운명전쟁39 라운드 승패), `playBillCount`(라스베가스 지폐 획득), `playHandFanfare`/`playVictoryStamp`(그리드포커 족보 완성/결과 임팩트), `playRaceDiceClatter`(말달리자 카드 사용 확정), `playPassWhiff`(달무티 패스), `playRevolutionBell`(달무티 반란). 전부 기존 컨벤션대로 Web Audio API 완전 합성(오실레이터/필터드 노이즈), 각자 고유한 `gate()` 키로 폴리포니 제어에 자동 편입.
+- **`DestinyWar39Board.tsx`**: 기존 데스카드 화면 흔들림(`screenShake`) 이펙트에 `playDeathCardSting()` 병행 호출 추가. `state.phase`를 추적하는 신규 `useRef`+`useEffect`로 `roundEnd` 진입을 감지해 뷰어 본인 점수 부호에 따라 `playPredictionWin`/`playPredictionLose` 1회 재생.
+- **`LasVegasBoard.tsx`**: 게임오버 정산 시작(`payoutStartedRef` 최초 true 전환) 시점에 `playBillCount()` 추가.
+- **`GridPokerBoard.tsx`**: round-result 진입 시 기존 `playCorrectDing()` 호출을 `playHandFanfare()`로 교체. 승자가 있는 경우(무승부 제외)에 한해 150ms 뒤 `playVictoryStamp()`를 재생하는 신규 이펙트 추가(`RoundResultOverlay`의 `VictoryStamp` 등장 타이밍에 맞춤).
+- **`MalDalliJaBoard.tsx`**: `handleCellClick`의 이동 확정 분기(`onAction({ type: "move", ... })` 직전)에 `playRaceDiceClatter()` 추가.
+- **`DalmutiBoard.tsx`**: 로컬 액션 디스패치 래퍼(`dispatch()`)에 `pass` 액션 분기 추가(`playPassWhiff()`). 상태 diff 블록(모든 클라이언트가 원격 반란 선언도 감지하는 지점, 라스베가스 diff 블록과 동일 패턴)에서 `newRevolution` 감지 시 `playRevolutionBell()` 추가.
+- **`soundEngine.test.ts`**: 신규 SFX 9종 각각에 대해 "쿨다운 오프 상태에서 재생 + 즉시 재호출 시 차단" 파라미터화 테스트(`it.each`), "9종이 서로 다른 `gate()` 키를 쓰는지"(전역 8채널 상한과 겹치지 않도록 호출 간 500ms 시간 진행), "전역 음소거 시 9종 전부 무음" 테스트 3종 추가.
+
+**검증**: `npx tsc --noEmit`(에러 0), `npm run lint`(경고 0). 신규 테스트를 처음 작성했을 때 "서로 다른 키" 테스트가 동일 틱에서 9개 SFX를 연속 호출해 전역 동시 채널 상한(8개, `SFX_CHANNEL_RELEASE_MS`)에 걸려 1건 실패 — 키 충돌이 아니라 테스트 설계 문제였음을 확인하고 호출 간 500ms 시간 진행으로 수정. `npx vitest run`(전체, `aiBenchmark.test.ts` 미제외) 백그라운드 실행이 59분째 완주하지 못해 원인 조사 — `aiBenchmark.test.ts`가 `GAMES_PER_MATCHUP = 1000`(매치업당 AI 봇 자가대전 1000판, 알파베타/몬테카를로 실탐색)에 개별 타임아웃 120s/120s/450s를 선언해둔 게 원인(§0/§3-10에 과거 세션들도 "전체 vitest run 완주"를 반복적으로 미해결로 남긴 바로 그 이슈) — 이번 세션의 변경 범위와 무관해 그 실행은 중단하고, `npx vitest run --exclude "**/aiBenchmark.test.ts"`로 재실행해 **34개 파일·1224개 테스트 전원 통과**(32.19초) 확인. 실제 브라우저 육안/귀 재생 확인은 이 프로젝트의 기존 사각지대(`<Game>Board.tsx` 전용 jsdom 인프라 부재, HANDOFF §3-10)와 동일하게 이번에도 수행하지 못함.
+
+**커밋/배포**: `<커밋 해시 채우기>` → `git push origin main` 완료 예정. 이번 세션이 실제로 만든/건드린 파일만 스테이징(`soundEngine.ts`, `soundEngine.test.ts`, `DestinyWar39Board.tsx`, `LasVegasBoard.tsx`, `GridPokerBoard.tsx`, `MalDalliJaBoard.tsx`, `DalmutiBoard.tsx`, 이 HANDOFF 절, 총 8개) — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.gitignore`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠.
 
 ### 2026-08-27 — 엔타이틀먼트 킬 스위치(super-admin 전용) 추가
 

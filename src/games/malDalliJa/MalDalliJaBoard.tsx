@@ -276,7 +276,12 @@ export default function MalDalliJaBoard({
 
     const move = legalByCell.get(key);
     if (move) {
-      getSoundEngine().unlock();
+      const engine = getSoundEngine();
+      engine.unlock();
+      // 카드 사용 확정음(RACE_DICE_ROLL 매핑 — 이 게임은 실제 주사위가 아니라
+      // 이동 카드를 쓰는 구조라 카드 사용 확정 시점에 연결, AskUserQuestion으로
+      // 확정, 2026-08-27 세션 오후) — 이동 애니메이션의 홉/부스트 SFX보다 먼저.
+      engine.playRaceDiceClatter();
       onAction({ type: "move", horseIndex: move.horseIndex, moveKind: move.moveKind, dr: move.dr, dc: move.dc });
       setSelectedHorseIndex(null);
       return;
