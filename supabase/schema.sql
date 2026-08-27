@@ -100,7 +100,9 @@ create table if not exists app_settings (
   -- src/lib/entitlements/evaluate.ts). Restricted in the admin API to the
   -- super-admin account (src/lib/admin/superAdmin.ts) — other admins can
   -- still edit every other setting on this row, just not this one.
-  entitlements_enabled boolean not null default true,
+  -- Defaults to OFF (unlimited play, per explicit request) rather than the
+  -- pre-existing per-tier caps — flip to true from /admin to re-enable them.
+  entitlements_enabled boolean not null default false,
   metering_mode text not null default 'coin' check (metering_mode in ('coin', 'time')),
   tier_limits jsonb not null default '{
     "free": {"gamesPerDay": 7, "minutesPerDay": 60},
@@ -113,7 +115,9 @@ create table if not exists app_settings (
 );
 insert into app_settings (id) values (1) on conflict (id) do nothing;
 -- Safe to re-run even if app_settings was already created live before this column existed.
-alter table app_settings add column if not exists entitlements_enabled boolean not null default true;
+-- Also flips an existing row's caps off (matches the singleton's only real row, id=1).
+alter table app_settings add column if not exists entitlements_enabled boolean not null default false;
+update app_settings set entitlements_enabled = false where id = 1;
 
 alter table profiles enable row level security;
 alter table subscriptions enable row level security;

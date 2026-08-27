@@ -18,7 +18,7 @@ export interface TierLimits {
 /** The site-wide singleton the admin dashboard edits (`app_settings` table). */
 export interface AppSettings {
   guestModeEnabled: boolean;
-  /** Site-wide kill switch: when false, `evaluateEntitlement` always allows play regardless of usage/caps. Restricted to the super-admin account, see `src/lib/admin/superAdmin.ts`. */
+  /** Site-wide kill switch: when false (the default — caps are currently off), `evaluateEntitlement` always allows play regardless of usage/caps. Restricted to the super-admin account, see `src/lib/admin/superAdmin.ts`. */
   entitlementsEnabled: boolean;
   meteringMode: MeteringMode;
   tierLimits: Record<Tier, TierLimits>;

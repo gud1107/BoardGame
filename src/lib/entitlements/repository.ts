@@ -17,7 +17,7 @@ function todayKey(): string {
 export async function fetchAppSettings(): Promise<AppSettings> {
   const fallback: AppSettings = {
     guestModeEnabled: true,
-    entitlementsEnabled: true,
+    entitlementsEnabled: false,
     meteringMode: "coin",
     tierLimits: DEFAULT_TIER_LIMITS,
     guestLimits: DEFAULT_GUEST_LIMITS,
@@ -33,7 +33,7 @@ export async function fetchAppSettings(): Promise<AppSettings> {
     if (error || !data) return fallback;
     return {
       guestModeEnabled: data.guest_mode_enabled,
-      entitlementsEnabled: data.entitlements_enabled ?? true,
+      entitlementsEnabled: data.entitlements_enabled ?? false,
       meteringMode: data.metering_mode,
       tierLimits: data.tier_limits ?? DEFAULT_TIER_LIMITS,
       guestLimits: data.guest_limits ?? DEFAULT_GUEST_LIMITS,
