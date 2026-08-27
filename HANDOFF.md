@@ -59,6 +59,8 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **참고 — 미검증 항목**: 모달/버튼의 실제 브라우저 렌더링(모바일 바텀시트 스크롤 체감, 알림 도트 표시/해제, `Overlay`의 `wide` 폭이 타임라인 카드에 실제로 적절한지)은 위 테스트 사각지대와 동일한 이유로 육안 확인하지 못함.
 
+**커밋/배포**: `17f1e85 feat(hub): implement compact patch notes modal sorted by latest release date with new notification badge` → `git push origin main` 완료. 이번 세션이 실제로 만든/수정한 파일만 스테이징(`src/constants/patchNotes.ts`+`patchNotes.test.ts` 신규, `src/components/patchNotes/PatchNoteModal.tsx`+`PatchNoteButton.tsx` 신규, `src/components/SiteHeader.tsx` 수정, 이 HANDOFF 절, 총 6개) — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.gitignore`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 작업 트리에 남겨둠. `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주, READY — `https://board-game-cq8hyqkah-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod --scope me-3871`로 후속 승격 요청할 것. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨 — 이 세션이 그 변경들을 검증하거나 의도한 것은 아님.
+
 ### 2026-08-27 — 저작권 무료 테마 BGM 재확인 및 CREDITS.md 신설
 
 **요청**: 로비 + 6개 게임(운명전쟁39/라스베가스/그리드포커/말달리자/달무티) 테마에 맞는 저작권 무료(CC0/Royalty-Free) BGM을 수급해 `public/assets/audio/bgm/`에 배치하고, `AudioManager.ts`에 매끄러운 루프·크로스페이드(Web Audio `gainNode.gain.linearRampToValueAtTime`)를 연동하며, 기본 볼륨 밸런스(예: BGM 35%/SFX 100%) 등 확인이 필요한 사항은 임의로 넘겨짚지 말고 먼저 질문하라는 명시적 지시가 있었던 요청.
