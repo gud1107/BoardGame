@@ -6,6 +6,7 @@ import { useBettingStore } from "@/store/bettingStore";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
 import { TIER_LABELS } from "@/lib/entitlements/types";
 import SoundToggleButton from "@/components/audio/SoundToggleButton";
+import PatchNoteButton from "@/components/patchNotes/PatchNoteButton";
 
 export default function SiteHeader() {
   const session = useBettingStore((s) => s.session);
@@ -60,6 +61,7 @@ export default function SiteHeader() {
           <Link href="/bug-reports" className="text-xs text-white/50 hover:text-white/80 sm:text-sm">
             🐛 버그 리포트
           </Link>
+          <PatchNoteButton />
           <SoundToggleButton />
           <button
             onClick={() => setSidebarOpen(true)}

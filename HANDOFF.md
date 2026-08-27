@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-27 (**저작권 무료 테마 BGM 재확인 및 CREDITS.md 신설 세션** — 자세한 내용은 아래 `### 2026-08-27 — 저작권 무료 테마 BGM 재확인 및 CREDITS.md 신설` 절 참고.)_
+_최종 갱신: 2026-08-27 (**전 게임 통합 패치노트(Changelog) 모달 및 릴리즈 이력 시스템 구축 세션** — 자세한 내용은 아래 `### 2026-08-27 — 통합 패치노트 모달 및 릴리즈 이력 시스템 구축` 절 참고.)_
+
+_이전 갱신: 2026-08-27 (**저작권 무료 테마 BGM 재확인 및 CREDITS.md 신설 세션** — 자세한 내용은 아래 `### 2026-08-27 — 저작권 무료 테마 BGM 재확인 및 CREDITS.md 신설` 절 참고.)_
 
 _이전 갱신: 2026-08-27 (**그리드포커 카드 배치 SFX 쿨다운 튜닝(연속 배치 끊김/누락 대응) 세션** — 자세한 내용은 아래 `### 2026-08-27 — 그리드포커 카드 배치 SFX 쿨다운 튜닝` 절 참고.)_
 
@@ -33,6 +35,29 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-27 — 통합 패치노트 모달 및 릴리즈 이력 시스템 구축
+
+**요청**: 로비/전역 헤더에 전 게임 통합 패치노트(Changelog) 모달을 신설 — 최신 배포일자순 내림차순 정렬, [배포일자/버전/게임 태그/변경 항목] 형태의 컴팩트한 카드형 타임라인, 게임별 카테고리 뱃지, `localStorage`의 `last_seen_version` 키를 이용한 'New' 알림 뱃지(모달 오픈 시 해제) 구현 요청. 버전 네이밍, 모달 사이즈, 초기 데이터 구성 방식 등은 임의로 정하지 말고 먼저 질문 목록을 제시하라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사에서 발견한 핵심 불일치**: 요청 문구가 가정한 파일 구조가 이 저장소와 다름 — `src/pages/lobby/Lobby.tsx`/`src/components/layout/Header.tsx`는 존재하지 않음(Next.js App Router 구조이며 헤더는 `SiteHeader.tsx` 하나가 `layout.tsx`에 전역 마운트되어 로비뿐 아니라 모든 게임 화면에서도 항상 노출됨, 로비 페이지는 `src/app/lobby/page.tsx`). `src/constants/`·`src/data/` 폴더도 아직 없었음. 또한 이 프로젝트엔 지금까지 기능 버전 태깅 이력이 전혀 없었고(`package.json`의 `version`은 무관한 `0.1.0`), 실제 구현된 게임은 13개 이상(avalon/bang/century/coup/coyote/dalmuti/destinyWar39/five-cucumbers/forSale/grid-poker/hanamikoji/lasVegas/loveLetter/malDalliJa/no-thanks/perudo/piecesOfLanguage/spot-difference/summonersRift/worm)인데 요청 예시는 5개(운명전쟁39/라스베가스/그리드포커/말달리자/달무티)만 뱃지로 들었음.
+
+**`AskUserQuestion`으로 확인한 모호점 (4문항)**:
+1. 패치노트 버튼 위치 → **"전역 SiteHeader"** 선택(로비 전용이 아니라 모든 페이지에서 상시 노출, `SoundToggleButton` 옆에 배치).
+2. 게임 카테고리 뱃지 범위 → **"구현된 전체 게임(13개+)"** 선택 — 요청 예시 5개로 한정하지 않고 `GAME_REGISTRY`(playable 게임 전체)를 단일 소스로 삼아 확장.
+3. 시작 버전 번호 → **"v1.0.0부터 소급 기록"** 선택 — 최근 5개 업데이트를 실제 HANDOFF 세션 날짜/커밋 순서 그대로 v1.0.0~v1.4.0 개별 릴리즈로 소급 기록(최신 v1.4.0 = 2026-08-27).
+4. 향후 버전 부여 규칙 → **"SemVer 규칙 적용"** 선택 — FIX만 있으면 patch(+0.0.1), FEAT 포함 시 minor(+0.1.0), breaking 변경 시에만 major. 규칙을 `patchNotes.ts` 상단 주석에 명시해 이후 세션이 따르도록 함.
+
+**구현**:
+- **`src/constants/patchNotes.ts`(신규)**: `PatchNoteEntry`(`version`/`releaseDate`/`title`/`changes`)·`PatchNoteChange`(`{game: GameId | "common", type: "FEAT"|"FIX"|"IMPROVE", desc}`) 인터페이스 정의. `PATCH_NOTES` 배열은 최신순(v1.4.0→v1.0.0) 고정 순서로 5개 엔트리 소급 등록 — 각 항목은 실제 HANDOFF 세션 기록과 커밋 해시를 근거로 함(v1.0.0=라스베가스 지폐 정렬 `4a670be`/2026-08-24, v1.1.0=그리드포커 승리 연출 `41c87b5`/2026-08-24, v1.2.0=달무티 5대 신분·조공 `45fa950`/2026-08-25, v1.3.0=말달리자 슬라이드 가속+state-sync 고스트버그 수정 `9c3a5e4`+`760fcef`/2026-08-25, v1.4.0=전역 기본 음소거 `44f4a7b`+그리드포커 SFX 쿨다운 튜닝 `0379cc8`/2026-08-27). `getPatchNoteGameMeta(tag)`가 `"common"`은 고정 🎮 공통 뱃지, 그 외 태그는 `GAME_REGISTRY`에서 실시간 조회해 이모지/이름을 가져오므로 게임 카탈로그와 라벨이 어긋날 일이 없음. `LATEST_PATCH_VERSION` export.
+- **`src/components/patchNotes/PatchNoteModal.tsx`(신규)**: 기존 `Overlay` 공용 컴포넌트(다크 테마, 모바일 바텀시트/PC 중앙 다이얼로그, `max-h-85vh` 내부 스크롤)를 `wide` 옵션으로 재사용 — 새 모달 레이아웃을 처음부터 만들지 않고 `SoundSettingsModal.tsx`와 동일한 시각 언어를 유지. 카드형 타임라인: 버전 뱃지+배포일자+타이틀 헤더, 그 아래 변경 항목마다 [게임 이모지·이름 뱃지] [FEAT=NEW(초록)/IMPROVE(파랑)/FIX(빨강) 타입 뱃지] [설명] 한 줄 구성.
+- **`src/components/patchNotes/PatchNoteButton.tsx`(신규)**: `[ 📋 vX.X.X ]` 버튼 + 미확인 시 빨간 알림 도트. `localStorage.getItem("last_seen_version")`(요청 원문의 리터럴 키 그대로 사용 — 이 프로젝트의 관례적 네임스페이스 접두사 대신 명시적 지시를 그대로 따름)가 `LATEST_PATCH_VERSION`과 다르면 도트 표시, 모달을 열면 즉시 `last_seen_version`을 최신 버전으로 갱신해 해제. localStorage 읽기는 `useEffect`+`setState`가 아니라 지연 `useState(() => ...)` 초기화 함수로 구현 — `NoThanksBoard.tsx`의 `revealOpponentChips`와 동일한 패턴이며, effect 내부 동기 `setState`를 잡아내는 `react-hooks/set-state-in-effect` 린트 규칙을 피하기 위함.
+- **`src/components/SiteHeader.tsx`**: `PatchNoteButton`을 `SoundToggleButton` 앞에 배치 — 전역 헤더이므로 로비·모든 게임 화면에서 노출.
+- **`src/constants/patchNotes.test.ts`(신규)**: 이 프로젝트는 `<Game>Board.tsx`/헤더급 컴포넌트에 대한 유닛 테스트가 없음(jsdom 미설치, `vitest.config.mts`가 `node` 환경 전용 — 기존 HANDOFF에 반복 기록된 사각지대)이므로 모달/버튼 컴포넌트 자체는 테스트하지 않고, 순수 데이터/로직인 `patchNotes.ts`만 검증: 최신순 정렬 불변식, 버전/날짜 포맷 정규식, 모든 게임 태그가 `GAME_REGISTRY`에 실존하는지, `getPatchNoteGameMeta`의 조회/폴백 동작.
+
+**검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(초기 1건 — `PatchNoteButton.tsx`의 mount effect 내 동기 `setState`가 `react-hooks/set-state-in-effect`에 걸려 지연 `useState` 초기화 방식으로 수정 후 0 에러 0 경고) / `npx vitest run src/constants/patchNotes.test.ts src/games/registry.test.ts`(12/12 통과). 전체 `npx vitest run`은 시도하지 않음(§0 및 다수 직전 세션에 기록된 워커 크래시로 상시 멈추는 기존 이슈, 이번 변경 범위와 무관).
+
+**참고 — 미검증 항목**: 모달/버튼의 실제 브라우저 렌더링(모바일 바텀시트 스크롤 체감, 알림 도트 표시/해제, `Overlay`의 `wide` 폭이 타임라인 카드에 실제로 적절한지)은 위 테스트 사각지대와 동일한 이유로 육안 확인하지 못함.
 
 ### 2026-08-27 — 저작권 무료 테마 BGM 재확인 및 CREDITS.md 신설
 
