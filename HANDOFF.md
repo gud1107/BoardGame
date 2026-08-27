@@ -57,7 +57,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **미해결/후속 필요**: 실제 mp3 파일 6개는 여전히 저장소에 없음 — 사용자가 `CREDITS.md`/`public/assets/sounds/bgm/README.md`의 링크에서 직접 Download 버튼으로 받아 해당 경로에 넣어야 실제 재생이 시작됨(파일이 없는 동안은 무음 폴백이라 앱 동작 자체엔 지장 없음).
 
-**커밋/배포**: (아래에 실제 커밋 해시·배포 URL 기록 예정)
+**커밋/배포**: `8d525f9 docs(audio): confirm royalty-free BGM candidates and add CREDITS.md` → `git push origin main` 완료. 이번 세션이 실제로 만든/수정한 파일만 스테이징(`CREDITS.md` 신규, `public/assets/sounds/bgm/README.md`, `HANDOFF.md`, 총 3개) — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.gitignore`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 작업 트리에 남겨둠. `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주, READY — `https://board-game-6sprq7v0w-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod --scope me-3871`로 후속 승격 요청할 것. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨 — 이 세션이 그 변경들을 검증하거나 의도한 것은 아님. 이번 세션은 문서만 바꿨고 실제 mp3 파일이 여전히 없으므로, 이 배포에서도 6개 게임 BGM은 무음 폴백 상태 그대로임(기능적 변화 없음).
 
 ### 2026-08-27 — 그리드포커 카드 배치 SFX 쿨다운 튜닝
 
