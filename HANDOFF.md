@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-27 (**그리드포커 카드 배치 SFX 쿨다운 튜닝(연속 배치 끊김/누락 대응) 세션** — 자세한 내용은 아래 `### 2026-08-27 — 그리드포커 카드 배치 SFX 쿨다운 튜닝` 절 참고.)_
+_최종 갱신: 2026-08-27 (**저작권 무료 테마 BGM 재확인 및 CREDITS.md 신설 세션** — 자세한 내용은 아래 `### 2026-08-27 — 저작권 무료 테마 BGM 재확인 및 CREDITS.md 신설` 절 참고.)_
+
+_이전 갱신: 2026-08-27 (**그리드포커 카드 배치 SFX 쿨다운 튜닝(연속 배치 끊김/누락 대응) 세션** — 자세한 내용은 아래 `### 2026-08-27 — 그리드포커 카드 배치 SFX 쿨다운 튜닝` 절 참고.)_
 
 _이전 갱신: 2026-08-27 (**말달리자 말 이동 채팅 로그 제외 및 승리 시스템 로그 신규 추가 세션** — 자세한 내용은 아래 `### 2026-08-27 — 말달리자 말 이동 채팅 로그 제외 및 승리 시스템 로그 신규 추가` 절 참고.)_
 
@@ -31,6 +33,31 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-27 — 저작권 무료 테마 BGM 재확인 및 CREDITS.md 신설
+
+**요청**: 로비 + 6개 게임(운명전쟁39/라스베가스/그리드포커/말달리자/달무티) 테마에 맞는 저작권 무료(CC0/Royalty-Free) BGM을 수급해 `public/assets/audio/bgm/`에 배치하고, `AudioManager.ts`에 매끄러운 루프·크로스페이드(Web Audio `gainNode.gain.linearRampToValueAtTime`)를 연동하며, 기본 볼륨 밸런스(예: BGM 35%/SFX 100%) 등 확인이 필요한 사항은 임의로 넘겨짚지 말고 먼저 질문하라는 명시적 지시가 있었던 요청.
+
+**사전 조사에서 발견한 핵심 사실**: 요청과 사실상 동일한 기능이 **이미 2026-08-26 세션에서 구현 완료**돼 있었음(바로 아래 `### 2026-08-27 — 게임별 테마 BGM/SFX 연동 및 전역 기본 음소거` 절 참고) — `audioSettings.ts`(zustand, 기본 전체 음소거, 해제 시 BGM 40%/SFX 70%, localStorage `boardgame_audio_settings_v1`), `bgmManager.ts`(네이티브 `<audio>` + `setInterval` 기반 900ms 크로스페이드, `loop=true`, 파일 없으면 1회 경고 후 무음 폴백), `useGameBgm.ts`가 로비·6개 게임 전부에 이미 연결돼 있었음. 다만 요청이 가리키는 파일/경로(`AudioManager.ts`, `public/assets/audio/bgm/`, Web Audio GainNode)는 실제 구조(`bgmManager.ts`, `public/assets/sounds/bgm/`, 네이티브 `<audio>`.volume 보간)와 다름. `public/assets/sounds/bgm/README.md`에 6개 테마 후보(Pixabay Content License) 링크도 이미 조사돼 있었으나, mp3 바이너리 자체는 배치되어 있지 않았고 CREDITS.md 같은 라이선스 명시 문서도 아직 없었음.
+
+**핵심 제약(재확인)**: Claude는 Pixabay/OpenGameArt/Incompetech/Freesound 등에서 실제 재생 가능한 오디오 바이너리를 자동 다운로드할 수 없음 — Pixabay는 봇 요청을 403으로 차단하고 다운로드 버튼이 JS 인터랙션을 요구함(2026-08-26 세션에서 이미 확인됐던 제약을 이번 세션에서도 재확인).
+
+**`AskUserQuestion`으로 확인한 모호점 (3문항)**:
+1. 실제 오디오 파일 확보 방식 → **"기존 후보 링크 재확인 후 유지"** 선택(장르 재조사/재선정 대신).
+2. 기존 구현(경로 `public/assets/sounds/bgm/`, 기본 볼륨 BGM 40%/SFX 70%, 네이티브 `<audio>`+interval 크로스페이드) 재사용 vs 이번 요청 스펙(`public/assets/audio/bgm/`, BGM 35%/SFX 100%, Web Audio GainNode)으로 교체 → **"기존 구현 그대로 재사용"** 선택.
+3. SFX 처리 → **"기존 합성(Web Audio API) 방식 그대로 유지"** 선택(요청은 BGM만 다룸을 재확인).
+
+**구현**:
+- 코드 변경 없음(질문 2번 답변에 따라 기존 `audioSettings.ts`/`bgmManager.ts`/`useGameBgm.ts`/`soundEngine.ts` 그대로 유지).
+- `WebFetch`로 `public/assets/sounds/bgm/README.md`의 6개 Pixabay 링크를 전부 재확인 — 6개 페이지 모두 살아있고(404 아님) 트랙명·아티스트가 표와 일치함을 확인. 이 과정에서 `lobby.mp3`/`destiny-war-39.mp3` 두 트랙이 페이지에 "AI generated"로 표시돼 있다는 점과, `dalmuti.mp3`(Harpsichord Mania) 원본 길이가 46초로 6곡 중 가장 짧다는 점(루프 재생 자체엔 지장 없음)을 새로 확인해 문서에 기록.
+- **`CREDITS.md`(신규, 프로젝트 루트)**: 6개 BGM 후보 트랙별 파일명/게임/트랙명/아티스트/라이선스/링크 표, Pixabay Content License 조건 요약(재판매·NFT 금지, CC0 아님), 위 "AI generated"·"46초 최단 트랙" 특이사항, 트랙 교체 절차를 정리.
+- `public/assets/sounds/bgm/README.md`에 `CREDITS.md` 링크와 이번 세션의 재확인 결과(6개 링크 생존 확인, 재다운로드는 여전히 수동 필요) 문단 추가.
+
+**검증**: `npx tsc --noEmit`(에러 0, 코드 변경 없어 자명) / `npm run lint`(경고 0) / `npx vitest run src/lib/audio src/app`(3/3 통과) — 이번 세션은 문서 파일(`CREDITS.md` 신규, `README.md`/`HANDOFF.md` 수정)만 건드렸으므로 광범위한 회귀 테스트는 불필요 판단.
+
+**미해결/후속 필요**: 실제 mp3 파일 6개는 여전히 저장소에 없음 — 사용자가 `CREDITS.md`/`public/assets/sounds/bgm/README.md`의 링크에서 직접 Download 버튼으로 받아 해당 경로에 넣어야 실제 재생이 시작됨(파일이 없는 동안은 무음 폴백이라 앱 동작 자체엔 지장 없음).
+
+**커밋/배포**: (아래에 실제 커밋 해시·배포 URL 기록 예정)
 
 ### 2026-08-27 — 그리드포커 카드 배치 SFX 쿨다운 튜닝
 
