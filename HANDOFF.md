@@ -1,6 +1,6 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-27 (**무료 티어 하루 7회 캡 등 엔타이틀먼트 전체를 끄고 켤 수 있는 super-admin 전용 킬 스위치 추가 세션** — 자세한 내용은 아래 `### 2026-08-27 — 엔타이틀먼트 킬 스위치(super-admin 전용) 추가` 절 참고.)_
+_최종 갱신: 2026-08-27 (**무료 티어 하루 7회 캡 등 엔타이틀먼트 전체를 끄고 켤 수 있는 super-admin 전용 킬 스위치 추가(기본값 OFF=무제한) 세션** — 자세한 내용은 아래 `### 2026-08-27 — 엔타이틀먼트 킬 스위치(super-admin 전용) 추가` 절 참고.)_
 
 _이전 갱신: 2026-08-27 (**전 게임 통합 패치노트(Changelog) 모달 및 릴리즈 이력 시스템 구축 세션** — 자세한 내용은 아래 `### 2026-08-27 — 통합 패치노트 모달 및 릴리즈 이력 시스템 구축` 절 참고.)_
 
@@ -42,13 +42,15 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **요청**: 무료 티어 "하루 7회" 캡 진행 상황 질문에 이어, 이걸 ON/OFF 스위치로 끌 수 있게 해달라는 요청 + 그 스위치는 개발자 계정(`freedom_03@naver.com`) 로그인 시에만 활성화하라는 명시적 지시.
 
-**구현**: `AppSettings.entitlementsEnabled`(신규, 기본값 `true` — 기존 동작 무변화) 추가. `evaluateEntitlement`가 이 값이 `false`면 사용량/캡과 무관하게 항상 `allowed: true`를 반환(사용량 기록 자체는 그대로 유지, 판정만 무시). `/admin` 대시보드에 🔒 스위치 신설 — `src/lib/admin/superAdmin.ts`의 `SUPER_ADMIN_EMAIL` 상수와 로그인 이메일이 일치할 때만 체크박스가 활성화되고, 다른 admin 계정은 회색 비활성 상태로 보임(안내 문구 표시). **클라이언트 잠금은 UX일 뿐** — 실제 경계는 서버: `requireAdmin()`이 이제 호출자 이메일도 반환하고, `/api/admin/settings`가 `entitlementsEnabled` 필드는 `admin.email === SUPER_ADMIN_EMAIL`일 때만 반영하고 그 외엔 조용히 무시. `supabase/schema.sql`에 `app_settings.entitlements_enabled` 컬럼 추가(`alter table ... add column if not exists`로 이미 라이브 반영된 테이블에도 안전).
+**구현**: `AppSettings.entitlementsEnabled`(신규) 추가. `evaluateEntitlement`가 이 값이 `false`면 사용량/캡과 무관하게 항상 `allowed: true`를 반환(사용량 기록 자체는 그대로 유지, 판정만 무시). `/admin` 대시보드에 🔒 스위치 신설 — `src/lib/admin/superAdmin.ts`의 `SUPER_ADMIN_EMAIL` 상수와 로그인 이메일이 일치할 때만 체크박스가 활성화되고, 다른 admin 계정은 회색 비활성 상태로 보임(안내 문구 표시). **클라이언트 잠금은 UX일 뿐** — 실제 경계는 서버: `requireAdmin()`이 이제 호출자 이메일도 반환하고, `/api/admin/settings`가 `entitlementsEnabled` 필드는 `admin.email === SUPER_ADMIN_EMAIL`일 때만 반영하고 그 외엔 조용히 무시. `supabase/schema.sql`에 `app_settings.entitlements_enabled` 컬럼 추가(`alter table ... add column if not exists`로 이미 라이브 반영된 테이블에도 안전).
 
-**검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run src/lib/entitlements`(11/11 통과, 킬 스위치 OFF 시나리오 신규 테스트 포함) / `npm run build`(Turbopack, TypeScript 전체 재검사 포함 정상 완주, 23개 라우트). 전체 `npx vitest run`은 §0에 기록된 기존 이슈로 여전히 시도하지 않음(무관한 변경 범위).
+**같은 세션 내 후속 지시로 기본값 뒤집음**: 처음엔 기존 동작(캡 적용)을 그대로 유지하도록 기본값 `true`로 구현했으나, 곧바로 "대신 off모드로 해주세요"라는 후속 요청을 받아 기본값을 `false`(무제한, 캡 꺼짐)로 뒤집었다 — 스키마 컬럼 기본값, `alter table` 마이그레이션(기존에 이미 라이브 반영된 행이 있어도 `update ... set entitlements_enabled = false`로 함께 꺼지도록 보강), 앱 쪽 fallback(`repository.ts`) 세 곳 전부 일관되게 수정.
 
-**참고 — 라이브 반영 아직 안 됨**: 2026-08-13 세션 때와 마찬가지로 `supabase/schema.sql`은 파일로만 존재 — 실제 Supabase 프로젝트에 `alter table` 문을 수동 반영해야 이 컬럼이 생기고 스위치가 실제로 동작함. 그 전까지는 `app_settings.entitlements_enabled`를 못 찾아 기존 fallback(`entitlementsEnabled: true`, 즉 기존 캡 그대로 유지)으로 동작.
+**검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run src/lib/entitlements`(11/11 통과, 킬 스위치 OFF 시나리오 신규 테스트 포함) / `npm run build`(Turbopack, TypeScript 전체 재검사 포함 정상 완주, 23개 라우트) — 기본값 플립 후 전부 재확인. 전체 `npx vitest run`은 §0에 기록된 기존 이슈로 여전히 시도하지 않음(무관한 변경 범위).
 
-**커밋/배포**: `0acb64f feat(admin): add super-admin-only kill switch for entitlement caps` → `git push origin main` 완료. 이번 세션이 실제로 건드린 9개 파일만 스테이징(`src/lib/admin/superAdmin.ts` 신규 + `src/app/admin/page.tsx`/`src/app/api/admin/settings/route.ts`/`src/lib/entitlements/{types,evaluate,evaluate.test,repository}.ts`/`src/lib/supabase/adminGuard.ts`/`supabase/schema.sql` 수정) — 세션 시작 시점부터 작업 트리에 있던 다른 미커밋 변경(`.gitignore`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. `npx vercel deploy`(프리뷰) 정상 완주, READY — `https://board-game-9qh9ks4hk-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨.
+**참고 — 라이브 반영 아직 안 됨**: 2026-08-13 세션 때와 마찬가지로 `supabase/schema.sql`은 파일로만 존재 — 실제 Supabase 프로젝트에 `alter table`/`update` 문을 수동 반영해야 이 컬럼이 생기고 스위치가 실제로 꺼짐. 그 전까지도 앱 쪽 fallback이 `entitlementsEnabled: false`로 바뀌었으므로 **결과적으로 지금 이 순간부터 이미 캡 없이 무제한 플레이로 동작 중**(코드 레벨 fallback이 이미 off이기 때문 — DB 마이그레이션은 이 fallback을 "진짜 설정값"으로 승격시키는 것뿐, on/off 자체는 지금도 이미 off).
+
+**커밋/배포**: `0acb64f feat(admin): add super-admin-only kill switch for entitlement caps` → `6effc6b fix(admin): default the entitlements kill switch to OFF` → `git push origin main` 완료(둘 다 반영). 이번 세션이 실제로 건드린 파일만 스테이징 — 세션 시작 시점부터 작업 트리에 있던 다른 미커밋 변경(`.gitignore`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 최종 `npx vercel deploy`(프리뷰) 정상 완주, READY — `https://board-game-27m5auofg-me-3871.vercel.app`(기본값 `true`였던 중간 배포 `https://board-game-9qh9ks4hk-me-3871.vercel.app`는 이 최신 배포로 대체됨, 참고용으로만 남김). 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod`로 후속 승격 요청할 것. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨.
 
 ### 2026-08-27 — 통합 패치노트 모달 및 릴리즈 이력 시스템 구축
 
