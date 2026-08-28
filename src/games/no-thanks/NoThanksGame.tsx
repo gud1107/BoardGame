@@ -15,6 +15,7 @@ import {
   type ChipVisibility,
   type EngineAction,
   type NoThanksState,
+  type RankedScore,
   type SeatIndex,
 } from "./engine";
 import NoThanksBoard from "./NoThanksBoard";
@@ -31,17 +32,18 @@ import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/
 import ChatDrawer from "@/components/chat/ChatDrawer";
 
 /**
- * Pure system-log line formatter for the in-game chat system-log pilot (see
- * GameMeta.chatEnabled, PerudoGame.tsx/DalmutiGame.tsx) — takes
- * already-resolved plain values instead of importing engine.ts, so the pure
- * reducer stays untouched. e.g. "지수님이 24번 카드를 칩 3개와 함께 가져갔습니다"
- * for a `take` action — the single most game-defining decision in No Thanks!
- * (vs. the much less eventful `pass`).
+ * Pure system-log line formatter for the one system message No Thanks emits
+ * (see GameMeta.chatEnabled). Per-turn "OO님이 N번 카드를 칩 N개와 함께
+ * 가져갔습니다" logs for `take` actions were deliberately removed — explicit
+ * product decision (see HANDOFF.md) to keep the chat feed free of a system
+ * line on every single turn, since No Thanks is played almost entirely
+ * through repeated take/pass decisions. The only system log left is this
+ * one-time final-ranking announcement, e.g. "게임이 종료되었습니다 — 최종
+ * 순위: 1위 지수(3점), 2위 민준(12점)".
  */
-function formatNoThanksTakeLog(name: string, card: number, chips: number): string {
-  return chips > 0
-    ? `${name}님이 ${card}번 카드를 칩 ${chips}개와 함께 가져갔습니다`
-    : `${name}님이 ${card}번 카드를 가져갔습니다`;
+function formatNoThanksFinalRankingLog(rankings: RankedScore[], names: Record<SeatIndex, string>): string {
+  const parts = rankings.map((r) => `${r.rank}위 ${names[r.seat] ?? "상대"}(${r.score.total}점)`);
+  return `게임이 종료되었습니다 — 최종 순위: ${parts.join(", ")}`;
 }
 
 /** Whose decision is pending, for `useBotAutoplay` — No Thanks has no sub-phase like Hanamikoji's response offers, so this is just the active seat. */
@@ -244,29 +246,37 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
       const action = payload?.action as EngineAction;
       // System-log pilot (see GameMeta.chatEnabled): every connected client
-      // derives the same human-readable line independently from the
-      // *pre-action* state (`gameStateRef.current`, not yet updated by the
-      // `setGameState` call below) — no change to the pure reducer in
-      // engine.ts. Deliberately not persisted to `chat_messages` (unlike
-      // user messages), since every client would otherwise write a
-      // duplicate row, and it's trivially re-derivable from the replayed
-      // action log anyway.
-      if (action.type === "take") {
-        const prevState = gameStateRef.current;
-        if (prevState && prevState.currentCard !== null) {
-          setChatMessages((prev) => [
-            ...prev,
-            {
-              id: uuid(),
-              channel: chatChannel,
-              deviceId: "system",
-              senderName: "시스템",
-              body: formatNoThanksTakeLog(namesRef.current[action.seat] ?? "상대", prevState.currentCard!, prevState.chipsOnCard),
-              type: "SYSTEM",
-              createdAt: new Date().toISOString(),
-            },
-          ]);
-        }
+      // derives the same human-readable line independently by replaying this
+      // broadcast action against its own already-synchronized state — no
+      // change to the pure reducer in engine.ts. Deliberately not persisted
+      // to `chat_messages` (unlike user messages), since every client would
+      // otherwise write a duplicate row, and it's trivially re-derivable
+      // from the replayed action log anyway.
+      //
+      // Card/chip acquisition (`take`) is intentionally NOT logged here
+      // (explicit product decision, see HANDOFF.md) — the only system log
+      // this game emits is the final-ranking announcement below, fired the
+      // instant the *replayed* state transitions into `gameOver`. This is
+      // computed here rather than from the board's "확인" button click
+      // (`onGameEnd`/`handleGameEnd`) because that's a per-viewer UI click
+      // that wouldn't fire simultaneously (or at all, for an idle viewer)
+      // across clients — same reasoning as the malDalliJa win-log precedent
+      // in HANDOFF.md.
+      const prevState = gameStateRef.current;
+      const nextState = prevState ? applyAction(prevState, action) : null;
+      if (prevState && prevState.phase !== "gameOver" && nextState && nextState.phase === "gameOver") {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: uuid(),
+            channel: chatChannel,
+            deviceId: "system",
+            senderName: "시스템",
+            body: formatNoThanksFinalRankingLog(computeRankings(nextState), namesRef.current),
+            type: "SYSTEM",
+            createdAt: new Date().toISOString(),
+          },
+        ]);
       }
       setGameState((prev) => (prev ? applyAction(prev, action) : prev));
     });
