@@ -109,4 +109,8 @@ export interface BugReportRecord {
   attachment?: BugReportAttachment;
   status: BugReportStatus;
   createdAt: string;
+  /** Set only when an admin edits a legacy (account-less) local report's content — see `board.ts`'s "수정됨" badge logic. */
+  updatedAt?: string;
+  /** Soft-delete flag for admin-deleted legacy reports. `listBugReports()` filters these out; absent/false = not deleted. */
+  isDeleted?: boolean;
 }

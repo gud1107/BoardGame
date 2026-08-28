@@ -6,8 +6,16 @@ import {
   validateAttachmentMeta,
   validateBugReportInput,
 } from "./validate";
-import { filterReports, prependReport, updateReportStatusInList } from "./board";
+import {
+  filterReports,
+  mergeReportSources,
+  prependReport,
+  removeReportFromList,
+  updateReportInList,
+  updateReportStatusInList,
+} from "./board";
 import type { BugReportRecord } from "@/lib/db/types";
+import type { CloudBugReportRecord } from "./types";
 
 function report(overrides: Partial<BugReportRecord> = {}): BugReportRecord {
   return {
@@ -17,6 +25,20 @@ function report(overrides: Partial<BugReportRecord> = {}): BugReportRecord {
     author: "작성자",
     status: "접수됨",
     createdAt: "2026-08-11T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function cloudReport(overrides: Partial<CloudBugReportRecord> = {}): CloudBugReportRecord {
+  return {
+    id: "c1",
+    title: "클라우드 제목",
+    description: "설명",
+    authorId: "user-1",
+    author: "작성자",
+    status: "접수됨",
+    createdAt: "2026-08-11T00:00:00.000Z",
+    updatedAt: "2026-08-11T00:00:00.000Z",
     ...overrides,
   };
 }
@@ -175,5 +197,42 @@ describe("filterReports", () => {
 
   it("treats an empty-string gameId as 'hub-only', distinct from no filter", () => {
     expect(filterReports(list, { gameId: "" }).map((r) => r.id)).toEqual(["3"]);
+  });
+});
+
+describe("updateReportInList", () => {
+  it("merges a partial patch into only the targeted item", () => {
+    const list = [report({ id: "a", title: "원래 제목" }), report({ id: "b", title: "다른 글" })];
+    const result = updateReportInList(list, "a", { title: "수정된 제목", updatedAt: "2026-08-20T00:00:00.000Z" });
+    expect(result.find((r) => r.id === "a")).toMatchObject({ title: "수정된 제목", updatedAt: "2026-08-20T00:00:00.000Z" });
+    expect(result.find((r) => r.id === "b")?.title).toBe("다른 글");
+  });
+
+  it("is a no-op when the id isn't found", () => {
+    const list = [report({ id: "a" })];
+    expect(updateReportInList(list, "missing", { title: "x" })).toEqual(list);
+  });
+});
+
+describe("removeReportFromList", () => {
+  it("drops the targeted report and leaves the rest untouched", () => {
+    const list = [report({ id: "a" }), report({ id: "b" })];
+    expect(removeReportFromList(list, "a").map((r) => r.id)).toEqual(["b"]);
+  });
+});
+
+describe("mergeReportSources", () => {
+  it("tags each side with its source and sorts the combined feed newest-first", () => {
+    const local = [report({ id: "local-old", createdAt: "2026-08-01T00:00:00.000Z" })];
+    const cloud = [cloudReport({ id: "cloud-new", createdAt: "2026-08-20T00:00:00.000Z" })];
+    const result = mergeReportSources(local, cloud);
+    expect(result.map((r) => [r.id, r.source])).toEqual([
+      ["cloud-new", "cloud"],
+      ["local-old", "local"],
+    ]);
+  });
+
+  it("returns an empty feed for two empty lists", () => {
+    expect(mergeReportSources([], [])).toEqual([]);
   });
 });

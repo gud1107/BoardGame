@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-28 (**노땡스 카드/칩 획득 로그 채팅창 미노출 처리 + 최종 순위 로그 신규 추가 세션** — 자세한 내용은 아래 `### 2026-08-28 — 노땡스 카드/칩 획득 로그 채팅창 미노출 및 최종 순위 로그 신규 추가` 절 참고.)_
+_최종 갱신: 2026-08-28 (**버그리포트 게시판 작성자/관리자 수정·삭제 기능 + 계정 연동 세션** — 자세한 내용은 아래 `### 2026-08-28 — 버그리포트 게시판 작성자/관리자 수정·삭제 기능 및 계정 연동 전환` 절 참고.)_
+
+_이전 갱신: 2026-08-28 (**노땡스 카드/칩 획득 로그 채팅창 미노출 처리 + 최종 순위 로그 신규 추가 세션** — 자세한 내용은 아래 `### 2026-08-28 — 노땡스 카드/칩 획득 로그 채팅창 미노출 및 최종 순위 로그 신규 추가` 절 참고.)_
 
 _이전 갱신: 2026-08-27 (**저작권 무료 테마 BGM 재확인/CREDITS.md 세션 결과물 프로덕션 승격** — 자세한 내용은 아래 `### 2026-08-27 — 저작권 무료 BGM 문서화 작업 프로덕션 승격` 절 참고.)_
 
@@ -43,6 +45,44 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-28 — 버그리포트 게시판 작성자/관리자 수정·삭제 기능 및 계정 연동 전환
+
+**요청**: 버그리포트 게시판에 작성자 본인/관리자 권한 기반 수정(Edit)·삭제(Delete) 기능 구현. 요청 문구는 Prisma 스키마, `src/server/api/bugReport/` 또는 `src/app/api/bug-reports/`, `PATCH`/`DELETE /api/bug-reports/:id`, `session.userId`/`authorId` 서버 검증, `BugReportList.tsx`/`BugReportEditModal.tsx` 등을 전제했으나 이 저장소엔 전부 존재하지 않았음 — "모호한 세부사항은 절대 임의로 넘겨짚지 말고 번호를 매긴 질문 목록을 먼저 제시" 하라는 명시적 지시가 있어 조사 후 확인 절차를 거쳐 진행.
+
+**사전 조사에서 발견한 핵심 불일치**: 이 저장소엔 Prisma/DB 자체가 없다. 버그리포트의 주 저장소는 **브라우저별 IndexedDB**([src/lib/db/repository.ts](src/lib/db/repository.ts))였고, `/bug-reports` 페이지엔 "이 브라우저(기기)에 제출된 리포트만 표시됩니다"라고 명시돼 있었다(2026-08-11 최초 구현, HANDOFF 해당 절 참고). `BugReportRecord`엔 `authorId` 자체가 없었고 `author`는 로그인 없이 자유 입력하는 이름 텍스트일 뿐이었다. `/api/bug-reports` 라우트도 존재하지 않았고, 유일한 "수정" 기능이던 상태변경(`updateStatus`)조차 권한 검증이 전혀 없었다(그 브라우저에서 리포트가 보이는 사람 누구나 가능). Supabase `bug_reports`는 write-only 미러([src/lib/supabase/sync.ts](src/lib/supabase/sync.ts) `backupBugReport`)였고, 실제 `supabase/schema.sql`엔 이 테이블이 존재조차 하지 않았다(주석에만 "expected schema"로 언급 — 한 번도 실제로 만들어진 적 없는 테이블). 계정/세션(Supabase Auth + `profiles.role==='admin'`, [src/lib/supabase/adminGuard.ts](src/lib/supabase/adminGuard.ts))은 `/admin` 등 다른 기능에서 이미 쓰였지만 버그리포트와는 완전히 무관했다. 즉 "타인의 글 서버 변조 차단"이라는 요구는 계정 연동 자체가 없는 기존 구조로는 구조적으로 불가능했음.
+
+**`AskUserQuestion`으로 확인한 모호점 (4문항, 전부 권장안 선택)**:
+1. 아키텍처 방향 — **"Supabase 계정 연동으로 전환"** 선택: 작성을 로그인 필수로 바꾸고, `authorId=profiles.id`를 실제 저장, `bug_reports`를 (write-only 미러가 아니라) 실제 서버 저장소로 승격, API 라우트에서 진짜 세션 검증 수행.
+2. 관리자 판정 기준 — **기존 `profiles.role==='admin'`(`requireAdmin()`과 동일 기준) 재사용** 선택.
+3. 삭제 방식 — **소프트 삭제(`isDeleted`/`is_deleted` 플래그)** 선택.
+4. 기존 로컬(IndexedDB) 리포트 처리 — **"마이그레이션 대상에서 제외"** 선택: 계정과 연결된 `authorId`가 없는 기존 글은 그대로 열람용으로 남기되(브라우저 로컬), 작성자 식별이 불가능하므로 **관리자만** 수정/삭제 가능하게 처리. 이 로컬 데이터에 대한 관리자 검증은 서버에 그 데이터가 아예 없어 구조적으로 클라이언트 측(`currentUser.isAdmin`) 확인이 최선이라는 한계를 명시적으로 문서화하고 진행(아래 "알려진 한계" 참고).
+
+**규모가 큰 아키텍처 전환**(계정 필수화, 신규 Supabase 테이블, 서버 API 신설)이라 `EnterPlanMode`로 계획을 먼저 작성해 사용자 승인을 받은 후 구현 착수.
+
+**구현**:
+
+1. **`supabase/schema.sql`**: 실제 컬럼 기반 `bug_reports` 테이블 신설(`id`/`game_id`/`game_name`/`title`/`description`/`author_id`(→`profiles.id`, FK)/`author_name`(자유 텍스트 표시명, 인가 키 아님)/`phone`/`attachment`(jsonb)/`status`/`is_deleted`/`created_at`/`updated_at`). RLS는 활성화하되 **정책을 하나도 두지 않음**(`monthly_visit_stats`와 동일 패턴) — 모든 접근이 서버(service role)를 거치고, 라우트 핸들러의 명시적 author-or-admin 검증이 유일한 게이트. 기존 "write-only jsonb payload mirror" 주석은 실제로 한 번도 존재한 적 없었던 설계였음을 밝히고 대체.
+2. **`src/lib/bugReports/permissions.ts`(신규)** — 순수 함수 `canEditContent`/`canDelete`(작성자 or 관리자)/`canChangeStatus`(관리자 전용 — 기존엔 무제한이었던 걸 여기서 강화). 서버 라우트와 상세 모달(버튼 노출 여부)이 동일한 로직을 공유. `permissions.test.ts` 11개 케이스로 소유자/관리자/타인/비로그인 조합 전수 검증.
+3. **`src/lib/bugReports/serverRepository.ts`(신규, server-only)** — `getServiceSupabase()` 기반 CRUD(`getProfile`/`listCloudBugReports`/`getCloudBugReport`/`insertCloudBugReport`/`updateCloudBugReport`/`softDeleteCloudBugReport`). [src/app/api/subscription/toggle-cancel/route.ts](src/app/api/subscription/toggle-cancel/route.ts)와 동일하게 "먼저 세션으로 신원 확인 후 서비스 롤로 실제 쓰기" 패턴 재사용 — `/api/admin/*` 밖에서도 이미 이 저장소의 확립된 관행이었음을 확인 후 채택.
+4. **`src/app/api/bug-reports/route.ts`(신규)** — `GET`(공개, 로그인 불필요 — 기존처럼 누구나 열람), `POST`(로그인 필수, 비로그인 401, `validateBugReportInput` 재사용해 유효성 검사 후 `author_id=user.id`로 생성).
+5. **`src/app/api/bug-reports/[id]/route.ts`(신규, Next 16 컨벤션대로 `params: Promise<{id}>`)** — `PATCH`(내용 필드 변경은 본인-or-관리자 아니면 403, `status` 필드 변경은 관리자 아니면 403, 빈 제목 등은 400, 성공 시 `updated_at` 갱신 후 200), `DELETE`(본인-or-관리자 아니면 403, 아니면 `is_deleted=true` 후 200). 각 파일에 대응하는 `route.test.ts` 신규 — "타인 글 수정/삭제 → 403", "본인/관리자 → 200 + 반영", "비로그인 → 401", "없는 id → 404" 케이스를 `createServerSupabase`/`serverRepository` 모킹으로 검증(요청의 명시적 테스트 요구사항 직접 충족). route 테스트 2개 파일 합계 17개 케이스(목록/생성 4 + PATCH/DELETE 13).
+6. **`src/lib/bugReports/types.ts`(신규)** — `CloudBugReportRecord`(계정 연동, `authorId` 보유), `UnifiedBugReport`(로컬/클라우드 병합 뷰용 `source: "local"|"cloud"` 유니온).
+7. **`src/lib/db/types.ts`** — 레거시 `BugReportRecord`에 `isDeleted?`/`updatedAt?` 옵셔널 필드 추가(기존 레코드와 호환, `DB_VERSION` 안 올려도 됨).
+8. **`src/lib/db/repository.ts`** — `updateBugReportContent`/`softDeleteBugReport` 신규(레거시 로컬 리포트의 관리자 전용 수정/삭제용 — 호출자가 반드시 사전에 관리자 여부를 확인해야 한다고 주석에 명시, 이 계층 자체엔 신원 개념이 없음). `listBugReports()`는 `isDeleted` 필터링.
+9. **`src/lib/bugReports/board.ts`** — `prependReport`/`updateReportStatusInList`를 제네릭으로 일반화(로컬/클라우드 리스트 공용), `updateReportInList`/`removeReportFromList`(신규, 편집/삭제 후 로컬 상태 반영용), `mergeReportSources`(로컬+클라우드를 `source` 태그와 함께 생성일 역순 병합), `filterReports`도 제네릭화해 병합 뷰에 적용 가능하게 함. `BugReports.test.ts`에 신규 함수 케이스 추가(총 32개).
+10. **`src/store/bugReportStore.ts`(재작성)** — `currentUser`(로그인 시 `getAuthSupabase()`로 유저+`profiles.role` 조회 — "self read profile" RLS 정책 하에 본인 행만 읽음), `localReports`/`cloudReports` 분리 보유. `submitReport`→`POST`(비로그인 시 `reason:"login-required"` 반환), `updateReport`(본인/관리자 편집)·`updateStatus`(관리자)→같은 `PATCH` 엔드포인트를 감싼 내부 `patchCloud` 헬퍼로 통합, `deleteReport`(본인/관리자)→`DELETE`. 레거시 로컬 리포트용 `adminUpdateLocalReport`/`adminDeleteLocalReport`/`adminUpdateLocalStatus`(전부 `currentUser.isAdmin` 클라이언트 확인 후 IndexedDB 직접 수정 — 서버 검증이 구조적으로 불가능함을 주석에 명시).
+11. **`src/lib/supabase/sync.ts`** — `backupBugReport` 제거(신규 서버 저장소로 완전히 대체돼 무의미해짐) + 스키마 주석에서 실제로 존재한 적 없었던 `bug_reports(jsonb)` 언급 정리.
+12. **`src/components/bugReport/BugReportModal.tsx`** — `editing?: UnifiedBugReport` prop으로 생성/수정 모드 통합(로컬 레거시 편집은 `adminUpdateLocalReport`, 클라우드 편집은 `updateReport` 호출로 내부 분기). 비로그인이면 폼 대신 "로그인이 필요합니다" + `/login?next=...` 링크, Supabase 미설정이면 기존 `SupabaseRequiredNotice` 재사용.
+13. **`src/components/bugReport/BugReportDetailModal.tsx`** — `permissions.ts`로 [✏️ 수정]/[🗑️ 삭제] 버튼 노출 여부 결정(클라우드=본인 or 관리자, 로컬=관리자만 — 배지로 "🗂 로컬 기록" 표시), 상태변경 select는 관리자에게만 노출(기존엔 전원 노출 — 강화), "✏️ 수정됨 · <일시>" 배지(`updatedAt !== createdAt`일 때만). 삭제는 모달 내부 인라인 확인 상태("정말 이 버그리포트를 삭제하시겠습니까?" → 확정 시 삭제 요청 후 `onClose()`) — 이 앱엔 별도 상세 페이지/라우트가 없어 요청이 전제한 `router.push('/bug-reports')`는 모달 닫기로 대체(목록 페이지로의 "부드러운 복귀"라는 의도는 동일하게 충족).
+14. **`src/app/bug-reports/page.tsx`** — `init()`으로 로컬+클라우드+`currentUser` 모두 로드, `mergeReportSources`로 병합해 표시, 열려있는 상세 모달은 병합 리스트에서 fresh 데이터를 다시 찾아 동기화(삭제되면 자동으로 닫힘). 안내 문구를 "이 브라우저에 제출된 리포트만 표시" → "작성/수정/삭제는 로그인 필요, 본인 글은 직접 관리, 관리자는 전체 관리"로 갱신.
+
+**알려진 한계(의도적 문서화, 감춘 게 아님)**:
+- 레거시 로컬 리포트(계정 연동 이전 데이터)의 관리자 수정/삭제는 **서버 검증이 불가능**하다 — 그 데이터가 애초에 서버에 존재하지 않고 그 브라우저의 IndexedDB에만 있기 때문. 클라이언트에서 `currentUser.isAdmin`(실제로는 서버에서 조회한 사실이지만, 그 판단을 로컬 mutation 실행 여부에 반영하는 지점 자체는 클라이언트)을 확인하는 것이 이 데이터가 허용하는 최선이며, 이는 신규 클라우드 리포트의 진짜 서버 사이드 403 차단과는 보안 수준이 다르다.
+- 컴포넌트 렌더링 테스트(`BugReportModal.tsx`/`BugReportDetailModal.tsx`/`page.tsx`)는 이 저장소의 기존 사각지대(vitest `environment:"node"`, jsdom/`@testing-library/react` 부재 — HANDOFF §3-10, 여러 과거 세션에 반복 기록) 그대로 이번에도 수행 불가. 대신 권한 판정 로직(`permissions.ts`)과 API 라우트 핸들러(`route.test.ts`, Supabase 모킹) 레벨에서 요청이 명시한 403/200 시나리오를 직접 검증.
+- **신규 `bug_reports` 테이블 SQL은 이 세션이 직접 실행할 수 없다** — 이 저장소엔 Supabase CLI/마이그레이션/DB 연결 수단이 전혀 없고(`package.json` 확인됨), 지금까지 모든 스키마 변경은 사용자가 Supabase 대시보드 SQL 에디터에 `supabase/schema.sql`을 수동으로 붙여넣는 방식이었다(`.env.example`/`README.md`에도 명시된 기존 워크플로). **이 `CREATE TABLE bug_reports`를 사용자가 직접 실행하기 전까지는 신규 작성/수정/삭제 API가 프로덕션에서 동작하지 않는다** — 실행 전까지 `POST`/`PATCH`/`DELETE`는 테이블 부재로 오류를 반환하고, 게시판엔 레거시 로컬 리포트만 계속 보이게 된다.
+
+**검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run --exclude "**/aiBenchmark.test.ts"`(**37개 파일·1257개 테스트 전부 통과**, 이전 세션 대비 +33 — 신규 파일 3개: `permissions.test.ts` 11개, `src/app/api/bug-reports/route.test.ts` 4개, `src/app/api/bug-reports/[id]/route.test.ts` 13개 + `BugReports.test.ts`에 병합/편집 헬퍼용 신규 케이스 추가(32개로 확장) — 나머지는 기존 세션들의 회귀 없는 기존 테스트).
 
 ### 2026-08-28 — 노땡스 카드/칩 획득 로그 채팅창 미노출 및 최종 순위 로그 신규 추가
 

@@ -303,3 +303,45 @@ create policy "anon insert chat_messages" on chat_messages
 -- table size. If this table ever gets large, a manual
 -- `delete from chat_messages where created_at < now() - interval '30 days'`
 -- in the SQL editor is enough — no infrastructure needed for that today.
+
+-- ---------------------------------------------------------------------------
+-- Bug reports (2026-08-28 — account-linked edit/delete). Replaces an
+-- earlier write-only `bug_reports(id, payload jsonb, ...)` mirror that was
+-- never actually created in this schema file — IndexedDB was the sole
+-- store for reports submitted before this table existed, and those legacy
+-- local reports were deliberately NOT migrated here (see HANDOFF.md); they
+-- stay visible client-side as read-mostly history, editable/deletable by
+-- admins only since they have no `author_id` to check ownership against.
+--
+-- RLS is enabled with NO anon/authenticated policies at all (same posture
+-- as `monthly_visit_stats` above) — every read and write goes through
+-- `src/app/api/bug-reports/*` Route Handlers via the service role, after
+-- an explicit author-or-admin check (`src/lib/bugReports/permissions.ts`).
+-- There is deliberately no RLS backstop here; the route handler's check is
+-- the only gate, same trade-off `toggle-cancel/route.ts` already made for
+-- `subscriptions` writes.
+-- ---------------------------------------------------------------------------
+
+create table if not exists bug_reports (
+  id uuid primary key default gen_random_uuid(),
+  game_id text,
+  game_name text,
+  title text not null,
+  description text not null,
+  author_id uuid not null references profiles (id) on delete cascade,
+  -- Free-text display name shown in the UI — editable, NOT the
+  -- authorization key (author_id is). Same "cosmetic vs. real identity"
+  -- split as nickname vs. auth.uid() elsewhere in this schema.
+  author_name text not null,
+  phone text,
+  attachment jsonb,
+  status text not null default '접수됨' check (status in ('접수됨', '확인 중', '수정 완료')),
+  is_deleted boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists bug_reports_created_idx on bug_reports (created_at desc) where is_deleted = false;
+create index if not exists bug_reports_author_idx on bug_reports (author_id);
+
+alter table bug_reports enable row level security;
+-- No policies (intentional) — see comment block above.

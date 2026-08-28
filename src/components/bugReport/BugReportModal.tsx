@@ -1,13 +1,15 @@
 "use client";
 
-import { useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import Overlay from "@/components/Overlay";
+import SupabaseRequiredNotice from "@/components/SupabaseRequiredNotice";
 import { GAME_REGISTRY } from "@/games/registry";
 import { useBugReportStore } from "@/store/bugReportStore";
 import { compressImageDataUrl, readFileAsDataUrl } from "@/lib/bugReports/attachment";
 import { formatPhoneNumber, validateAttachmentMeta, validateBugReportInput } from "@/lib/bugReports/validate";
 import type { BugReportFieldErrors } from "@/lib/bugReports/validate";
-import type { BugReportAttachment, BugReportRecord } from "@/lib/db/types";
+import type { BugReportAttachment } from "@/lib/db/types";
+import type { CloudBugReportRecord, UnifiedBugReport } from "@/lib/bugReports/types";
 
 const PLAYABLE_GAMES = GAME_REGISTRY.filter((g) => g.playable);
 
@@ -18,32 +20,55 @@ interface BugReportModalProps {
    * replaced by a read-only badge — this is the "게임 내에서 접근 시 게임
    * 종류 정보가 자동으로 매핑" requirement. Omit for hub-level access
    * (header button, board page), where the user can pick a game or leave it
-   * unset ("허브 전체").
+   * unset ("허브 전체"). Ignored when `editing` is set (edit mode always
+   * shows the picker, even from the hub board).
    */
   gameId?: string;
   gameName?: string;
-  onSubmitted?: (report: BugReportRecord) => void;
+  onSubmitted?: (report: CloudBugReportRecord) => void;
+  /**
+   * Present ⇒ edit mode: prefills from this report. A `source: "cloud"`
+   * report PATCHes on save; a `source: "local"` (legacy, account-less)
+   * report is edited in place in this browser's IndexedDB instead — only
+   * ever reachable by an admin, see `BugReportDetailModal.tsx`.
+   */
+  editing?: UnifiedBugReport;
 }
 
-export default function BugReportModal({ gameId, gameName, onClose, onSubmitted }: BugReportModalProps) {
+export default function BugReportModal({ gameId, gameName, onClose, onSubmitted, editing }: BugReportModalProps) {
   const submitReport = useBugReportStore((s) => s.submitReport);
+  const updateReport = useBugReportStore((s) => s.updateReport);
+  const adminUpdateLocalReport = useBugReportStore((s) => s.adminUpdateLocalReport);
+  const currentUser = useBugReportStore((s) => s.currentUser);
+  const configured = useBugReportStore((s) => s.configured);
+  const refreshCurrentUser = useBugReportStore((s) => s.refreshCurrentUser);
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [author, setAuthor] = useState("");
-  const [phone, setPhone] = useState("");
-  const [selectedGameId, setSelectedGameId] = useState(gameId ?? "");
-  const [attachment, setAttachment] = useState<BugReportAttachment | null>(null);
+  const isEdit = Boolean(editing);
+  const isLocalEdit = editing?.source === "local";
+
+  const [title, setTitle] = useState(editing?.title ?? "");
+  const [description, setDescription] = useState(editing?.description ?? "");
+  const [author, setAuthor] = useState(editing?.author ?? "");
+  const [phone, setPhone] = useState(editing?.phone ?? "");
+  const [selectedGameId, setSelectedGameId] = useState(editing?.gameId ?? gameId ?? "");
+  const [attachment, setAttachment] = useState<BugReportAttachment | null>(editing?.attachment ?? null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [processingAttachment, setProcessingAttachment] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [errors, setErrors] = useState<BugReportFieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState<BugReportRecord | null>(null);
+  const [submitted, setSubmitted] = useState<CloudBugReportRecord | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const locked = Boolean(gameId);
+  // A stale `currentUser` (e.g. just returned from /login via client-side
+  // routing) would otherwise show "로그인이 필요합니다" over a form the
+  // user can already legitimately use.
+  useEffect(() => {
+    void refreshCurrentUser();
+  }, [refreshCurrentUser]);
+
+  const locked = !isEdit && Boolean(gameId);
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -84,6 +109,43 @@ export default function BugReportModal({ gameId, gameName, onClose, onSubmitted 
 
     const game = PLAYABLE_GAMES.find((g) => g.id === selectedGameId);
     try {
+      if (isLocalEdit && editing) {
+        const ok = await adminUpdateLocalReport(editing.id, {
+          title,
+          description,
+          gameId: selectedGameId || undefined,
+          gameName: game?.name,
+          phone: phone.trim() || undefined,
+          attachment: attachment ?? undefined,
+        });
+        if (!ok) {
+          setSubmitError("수정 권한이 없거나 오류가 발생했습니다.");
+          return;
+        }
+        onClose();
+        return;
+      }
+
+      if (isEdit && editing) {
+        const result = await updateReport(editing.id, {
+          title,
+          description,
+          author,
+          phone: phone.trim() || null,
+          gameId: selectedGameId || null,
+          gameName: game?.name ?? null,
+          attachment: attachment ?? null,
+        });
+        if (!result.ok) {
+          if (result.reason === "validation") setErrors(result.errors);
+          else setSubmitError(result.reason === "forbidden" ? "수정 권한이 없습니다." : "수정 중 오류가 발생했습니다.");
+          return;
+        }
+        onSubmitted?.(result.report);
+        onClose();
+        return;
+      }
+
       const result = await submitReport({
         ...input,
         gameId: gameId ?? (selectedGameId || undefined),
@@ -91,7 +153,9 @@ export default function BugReportModal({ gameId, gameName, onClose, onSubmitted 
         attachment: attachment ?? undefined,
       });
       if (!result.ok) {
-        setErrors(result.errors);
+        if (result.reason === "validation") setErrors(result.errors);
+        else if (result.reason === "login-required") setSubmitError("로그인이 필요합니다.");
+        else setSubmitError("제출 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
         return;
       }
       setSubmitted(result.report);
@@ -101,6 +165,41 @@ export default function BugReportModal({ gameId, gameName, onClose, onSubmitted 
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (!configured) {
+    return (
+      <Overlay title={isEdit ? "✏️ 버그 리포트 수정" : "🐛 버그 리포트 작성"} onClose={onClose}>
+        <SupabaseRequiredNotice feature="버그 리포트 작성/수정" />
+      </Overlay>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <Overlay title={isEdit ? "✏️ 버그 리포트 수정" : "🐛 버그 리포트 작성"} onClose={onClose}>
+        <div className="flex flex-col items-center gap-3 py-4 text-center">
+          <span className="text-3xl">🔒</span>
+          <p className="text-sm text-white/80">
+            버그 리포트 {isEdit ? "수정" : "작성"}은 로그인 후 이용할 수 있습니다.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <a
+              href={`/login?next=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname : "/bug-reports")}`}
+              className="rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-400"
+            >
+              로그인하러 가기
+            </a>
+            <button
+              onClick={onClose}
+              className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      </Overlay>
+    );
   }
 
   if (submitted) {
@@ -132,7 +231,7 @@ export default function BugReportModal({ gameId, gameName, onClose, onSubmitted 
   }
 
   return (
-    <Overlay title="🐛 버그 리포트 작성" onClose={onClose} wide>
+    <Overlay title={isEdit ? "✏️ 버그 리포트 수정" : "🐛 버그 리포트 작성"} onClose={onClose} wide>
       <div className="flex flex-col gap-4">
         {locked ? (
           <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60">
@@ -276,7 +375,7 @@ export default function BugReportModal({ gameId, gameName, onClose, onSubmitted 
           disabled={submitting || processingAttachment}
           className="mt-1 w-full rounded-xl bg-rose-500 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
         >
-          {submitting ? "제출 중..." : "제출하기"}
+          {submitting ? (isEdit ? "저장 중..." : "제출 중...") : isEdit ? "저장하기" : "제출하기"}
         </button>
       </div>
     </Overlay>

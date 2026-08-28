@@ -181,7 +181,9 @@ export async function createBugReport(
 export async function listBugReports(): Promise<BugReportRecord[]> {
   const db = await getDb();
   const all = await db.getAll("bugReports");
-  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return all
+    .filter((r) => !r.isDeleted)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function updateBugReportStatus(
@@ -194,4 +196,39 @@ export async function updateBugReportStatus(
   const updated: BugReportRecord = { ...record, status };
   await db.put("bugReports", updated);
   return updated;
+}
+
+/**
+ * Content edit for a legacy (account-less) local report. Callers must
+ * independently verify the current user is an admin first (see
+ * `bugReportStore.ts`'s `adminUpdateLocalReport`) — this repository layer
+ * has no concept of identity, IndexedDB is local to the browser, so there
+ * is no server to re-check against. Documented limitation, not an oversight.
+ */
+/**
+ * Unlike the cloud `PATCH` route (which accepts a sparse patch because it
+ * also has to serve status-only requests through the same endpoint), this
+ * is only ever called by the edit form with the complete set of editable
+ * fields — so a plain full-replacement merge is correct and simpler than
+ * trying to distinguish "field omitted" from "field explicitly cleared".
+ */
+export async function updateBugReportContent(
+  id: string,
+  patch: Pick<BugReportRecord, "title" | "description" | "gameId" | "gameName" | "phone" | "attachment">,
+): Promise<BugReportRecord | undefined> {
+  const db = await getDb();
+  const record = await db.get("bugReports", id);
+  if (!record) return undefined;
+  const updated: BugReportRecord = { ...record, ...patch, updatedAt: nowIso() };
+  await db.put("bugReports", updated);
+  return updated;
+}
+
+/** Soft-deletes a legacy local report — same admin-only caveat as `updateBugReportContent`. */
+export async function softDeleteBugReport(id: string): Promise<boolean> {
+  const db = await getDb();
+  const record = await db.get("bugReports", id);
+  if (!record) return false;
+  await db.put("bugReports", { ...record, isDeleted: true, updatedAt: nowIso() });
+  return true;
 }

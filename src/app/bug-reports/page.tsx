@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { GAME_REGISTRY } from "@/games/registry";
 import { useBugReportStore } from "@/store/bugReportStore";
-import { BUG_REPORT_STATUSES, filterReports } from "@/lib/bugReports/board";
+import { BUG_REPORT_STATUSES, filterReports, mergeReportSources } from "@/lib/bugReports/board";
 import BugReportModal from "@/components/bugReport/BugReportModal";
 import BugReportDetailModal from "@/components/bugReport/BugReportDetailModal";
-import type { BugReportRecord, BugReportStatus } from "@/lib/db/types";
+import type { BugReportStatus } from "@/lib/db/types";
+import type { UnifiedBugReport } from "@/lib/bugReports/types";
 
 const PLAYABLE_GAMES = GAME_REGISTRY.filter((g) => g.playable);
 
@@ -21,30 +22,34 @@ function formatDate(iso: string): string {
 }
 
 export default function BugReportsPage() {
-  const reports = useBugReportStore((s) => s.reports);
+  const localReports = useBugReportStore((s) => s.localReports);
+  const cloudReports = useBugReportStore((s) => s.cloudReports);
   const hydrated = useBugReportStore((s) => s.hydrated);
   const init = useBugReportStore((s) => s.init);
-  const updateStatus = useBugReportStore((s) => s.updateStatus);
+  const refreshCurrentUser = useBugReportStore((s) => s.refreshCurrentUser);
 
   useEffect(() => {
     void init();
-  }, [init]);
+    void refreshCurrentUser();
+  }, [init, refreshCurrentUser]);
 
   const [query, setQuery] = useState("");
   const [gameFilter, setGameFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<BugReportStatus | "all">("all");
   const [formOpen, setFormOpen] = useState(false);
-  const [selected, setSelected] = useState<BugReportRecord | null>(null);
+  const [selected, setSelected] = useState<UnifiedBugReport | null>(null);
 
+  const merged = useMemo(() => mergeReportSources(localReports, cloudReports), [localReports, cloudReports]);
   const filtered = useMemo(
-    () => filterReports(reports, { gameId: gameFilter, status: statusFilter, query }),
-    [reports, gameFilter, statusFilter, query],
+    () => filterReports(merged, { gameId: gameFilter, status: statusFilter, query }),
+    [merged, gameFilter, statusFilter, query],
   );
 
-  // Keep the open detail modal's contents in sync after a status update.
+  // Keep the open detail modal's contents in sync after an edit/status update elsewhere.
   if (selected) {
-    const fresh = reports.find((r) => r.id === selected.id);
+    const fresh = merged.find((r) => r.id === selected.id);
     if (fresh && fresh !== selected) setSelected(fresh);
+    else if (!fresh) setSelected(null); // deleted while open
   }
 
   return (
@@ -53,7 +58,8 @@ export default function BugReportsPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">🐛 버그 리포트 게시판</h1>
           <p className="mt-1 text-sm text-white/50">
-            이 브라우저(기기)에 제출된 리포트만 표시됩니다. 전화번호는 목록/상세 모두 마스킹되어 노출됩니다.
+            작성/수정/삭제는 로그인이 필요합니다. 본인이 작성한 리포트는 직접 수정·삭제할 수 있고, 관리자는 모든
+            리포트를 관리할 수 있습니다. 전화번호는 목록/상세 모두 마스킹되어 노출됩니다.
           </p>
         </div>
         <button
@@ -105,7 +111,7 @@ export default function BugReportsPage() {
         <p className="py-16 text-center text-sm text-white/40">불러오는 중...</p>
       ) : filtered.length === 0 ? (
         <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/40">
-          {reports.length === 0 ? "아직 제출된 버그 리포트가 없습니다." : "검색/필터 조건에 맞는 리포트가 없습니다."}
+          {merged.length === 0 ? "아직 제출된 버그 리포트가 없습니다." : "검색/필터 조건에 맞는 리포트가 없습니다."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-white/10">
@@ -132,6 +138,9 @@ export default function BugReportsPage() {
                   <td className="px-3 py-2.5">
                     <span className="line-clamp-1">{r.title}</span>
                     {r.attachment && <span className="ml-1 text-white/40">📎</span>}
+                    {r.updatedAt && r.updatedAt !== r.createdAt && (
+                      <span className="ml-1 text-xs text-white/30">(수정됨)</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 whitespace-nowrap">{r.author}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-white/50">{formatDate(r.createdAt)}</td>
@@ -148,13 +157,7 @@ export default function BugReportsPage() {
       )}
 
       {formOpen && <BugReportModal onClose={() => setFormOpen(false)} />}
-      {selected && (
-        <BugReportDetailModal
-          report={selected}
-          onClose={() => setSelected(null)}
-          onStatusChange={updateStatus}
-        />
-      )}
+      {selected && <BugReportDetailModal report={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }

@@ -6,27 +6,51 @@
  */
 
 import type { BugReportRecord, BugReportStatus } from "@/lib/db/types";
+import type { CloudBugReportRecord, UnifiedBugReport } from "./types";
 
 export const BUG_REPORT_STATUSES: BugReportStatus[] = ["접수됨", "확인 중", "수정 완료"];
 
 /**
  * Adds a freshly submitted report to the front of the list. `listBugReports`
- * (repository.ts) returns newest-first (sorted by `createdAt` desc); this
- * mirrors that order without a full re-fetch after every submission.
+ * (repository.ts) / the cloud `GET /api/bug-reports` both return newest-first
+ * (sorted by `createdAt` desc); this mirrors that order without a full
+ * re-fetch after every submission. Generic so it works for both the legacy
+ * `BugReportRecord[]` (local) and `CloudBugReportRecord[]` lists.
  */
-export function prependReport(
-  list: BugReportRecord[],
-  report: BugReportRecord,
-): BugReportRecord[] {
+export function prependReport<T extends { id: string }>(list: T[], report: T): T[] {
   return [report, ...list];
 }
 
-export function updateReportStatusInList(
-  list: BugReportRecord[],
+export function updateReportStatusInList<T extends { id: string; status: BugReportStatus }>(
+  list: T[],
   id: string,
   status: BugReportStatus,
-): BugReportRecord[] {
+): T[] {
   return list.map((r) => (r.id === id ? { ...r, status } : r));
+}
+
+/** Merges a content-edit patch into the targeted item; used after a successful `PATCH`/local content update. */
+export function updateReportInList<T extends { id: string }>(list: T[], id: string, patch: Partial<T>): T[] {
+  return list.map((r) => (r.id === id ? { ...r, ...patch } : r));
+}
+
+/** Drops a report after a successful delete (soft-delete responses don't return the row). */
+export function removeReportFromList<T extends { id: string }>(list: T[], id: string): T[] {
+  return list.filter((r) => r.id !== id);
+}
+
+/**
+ * Combines the legacy local (IndexedDB, no account link — see HANDOFF.md
+ * for why these weren't migrated) and the new cloud-backed lists into one
+ * chronological feed for the board. Tagging each item with `source` lets
+ * the detail modal decide whether edit/delete availability follows
+ * author-or-admin (cloud) or admin-only (local, since there's no authorId
+ * to check ownership against).
+ */
+export function mergeReportSources(local: BugReportRecord[], cloud: CloudBugReportRecord[]): UnifiedBugReport[] {
+  const localTagged: UnifiedBugReport[] = local.map((r) => ({ ...r, source: "local" as const }));
+  const cloudTagged: UnifiedBugReport[] = cloud.map((r) => ({ ...r, source: "cloud" as const }));
+  return [...localTagged, ...cloudTagged].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export interface BugReportFilter {
@@ -43,10 +67,11 @@ export interface BugReportFilter {
   query?: string;
 }
 
-export function filterReports(
-  list: BugReportRecord[],
+/** Generic over `T` so it works on both a plain local list and the merged `UnifiedBugReport[]` feed. */
+export function filterReports<T extends { gameId?: string; status: BugReportStatus; title: string }>(
+  list: T[],
   filter: BugReportFilter,
-): BugReportRecord[] {
+): T[] {
   const q = filter.query?.trim().toLowerCase();
   return list.filter((r) => {
     const gameOk =
