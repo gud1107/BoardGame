@@ -61,7 +61,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(에러 0, 경고 0) / `npx vitest run --exclude "**/aiBenchmark.test.ts"`(34개 파일·1224개 테스트 전부 통과, `NoThanks.test.ts` 포함 회귀 없음 — `engine.ts` 무변경이므로 예상대로).
 
-**커밋/배포**: `<커밋 예정>` → `git push origin main` 예정. 이번 세션이 실제로 만든 파일만 스테이징(`src/games/no-thanks/NoThanksGame.tsx` + 이 HANDOFF 절, 총 2개) — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.gitignore`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 요청 문구에 "production" 명시가 없어 과거 세션들과 동일한 판단 기준으로 프리뷰까지만 배포 진행 — 필요하면 `npx vercel deploy --prod --scope me-3871`로 후속 승격 요청할 것.
+**커밋/배포**: `fca4cba fix(no-thanks): hide card and chip acquisition logs from in-game chat` → `git push origin main` 완료. 이번 세션이 실제로 만든 파일만 스테이징(`src/games/no-thanks/NoThanksGame.tsx` + 이 HANDOFF 절, 총 2개) — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.gitignore`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 요청 문구에 "production" 명시가 없어 과거 세션들과 동일한 판단 기준으로 프리뷰까지만 배포 진행 — 필요하면 `npx vercel deploy --prod --scope me-3871`로 후속 승격 요청할 것.
 
 ### 2026-08-27 — 게임별 세부 액션 SFX 완전 바인딩
 
