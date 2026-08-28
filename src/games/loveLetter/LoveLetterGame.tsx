@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { RealtimeChannel, RealtimePresenceState } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
 import { getDeviceId } from "@/lib/identity/deviceId";
+import GameLeaveGuardModal from "@/components/GameLeaveGuardModal";
+import { useGameLeaveGuard } from "@/hooks/useGameLeaveGuard";
+import { useBackgroundResync } from "@/hooks/useBackgroundResync";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import {
@@ -143,6 +146,16 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
   const botSeatSet = useMemo(() => new Set(botSeats), [botSeats]);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
+  // Shared by the initial post-subscribe sync and `useBackgroundResync`
+  // (below) — see that hook's doc comment for why the `state !== "joined"`
+  // check is enough of a fallback even though realtime-js's own reconnect
+  // logic already covers the common case.
+  function requestStateSync() {
+    const channel = channelRef.current;
+    if (!channel) return;
+    if (channel.state !== "joined") channel.subscribe();
+    channel.send({ type: "broadcast", event: "state-request", payload: {} });
+  }
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
   const isHost = intent === "create";
@@ -326,7 +339,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
           playerId: myPlayerId,
           ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
         } satisfies Occupant);
-        channel.send({ type: "broadcast", event: "state-request", payload: {} });
+        requestStateSync();
         setPhase((p) => (p === "connecting" ? "waiting" : p));
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         setPhase("channel-error");
@@ -562,8 +575,23 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
 
   const shareUrl = typeof window !== "undefined" && roomCode ? `${window.location.origin}${window.location.pathname}?room=${roomCode}` : "";
 
-  if (phase === "supabase-missing") {
+  const { exitConfirmOpen, cancelExit, confirmExit } = useGameLeaveGuard(roomCode !== null, handleLeave);
+  useBackgroundResync(roomCode !== null, requestStateSync);
+
+  // Mobile back-gesture / browser back-button exit guard, and mobile
+  // background-tab resync — both shared across every online game; see
+  // `useGameLeaveGuard` / `useBackgroundResync` for the full explanation.
+  function withGuard(node: ReactNode) {
     return (
+      <>
+        {node}
+        <GameLeaveGuardModal open={exitConfirmOpen} onCancel={cancelExit} onConfirm={confirmExit} />
+      </>
+    );
+  }
+
+  if (phase === "supabase-missing") {
+    return withGuard(
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-8 text-center">
         <span className="text-3xl">⚠️</span>
         <h2 className="text-lg font-bold text-white">온라인 대전을 사용할 수 없어요</h2>
@@ -579,7 +607,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "room-full") {
-    return (
+    return withGuard(
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center">
         <span className="text-3xl">🚫</span>
         <h2 className="text-lg font-bold text-white">이미 다른 사람이 참여 중인 방이에요</h2>
@@ -592,7 +620,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "channel-error") {
-    return (
+    return withGuard(
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center">
         <span className="text-3xl">📡</span>
         <h2 className="text-lg font-bold text-white">연결에 실패했습니다</h2>
@@ -604,7 +632,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "choose") {
-    return (
+    return withGuard(
       <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">💌</span>
         <h2 className="text-lg font-bold text-white">러브레터 온라인 대전</h2>
@@ -636,7 +664,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "enter-name") {
-    return (
+    return withGuard(
       <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
         <h2 className="text-base font-bold text-white">{intent === "create" ? "방 만들기" : "초대 코드로 참여"}</h2>
         <div className="flex flex-col gap-1.5 text-sm text-white/70">
@@ -691,7 +719,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "connecting" || phase === "waiting") {
-    return (
+    return withGuard(
       <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         {phase === "connecting" ? (
@@ -745,7 +773,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "playing" && gameState && mySeat !== null) {
-    return (
+    return withGuard(
       <>
       <LoveLetterBoard state={gameState} viewerSeat={mySeat} names={names} connectedSeats={connectedSeats} onAction={handleAction} onGameEnd={handleGameEnd} />
       <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
@@ -754,7 +782,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "post-game" && finalResult) {
-    return (
+    return withGuard(
       <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">💌</span>
@@ -773,5 +801,5 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
     );
   }
 
-  return null;
+  return withGuard(null);
 }

@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-28 (**버그리포트 게시판 작성자/관리자 수정·삭제 기능 + 계정 연동 세션** — 자세한 내용은 아래 `### 2026-08-28 — 버그리포트 게시판 작성자/관리자 수정·삭제 기능 및 계정 연동 전환` 절 참고.)_
+_최종 갱신: 2026-08-28 (**전 게임 모바일 뒤로가기/제스처 나가기 확인 가드 표준화 + 백그라운드 탭 복귀 자동 재동기화 세션** — 자세한 내용은 아래 `### 2026-08-28 — 전 게임 모바일 나가기 가드 표준화 및 백그라운드 탭 재동기화` 절 참고.)_
+
+_이전 갱신: 2026-08-28 (**버그리포트 게시판 작성자/관리자 수정·삭제 기능 + 계정 연동 세션** — 자세한 내용은 아래 `### 2026-08-28 — 버그리포트 게시판 작성자/관리자 수정·삭제 기능 및 계정 연동 전환` 절 참고.)_
 
 _이전 갱신: 2026-08-28 (**노땡스 카드/칩 획득 로그 채팅창 미노출 처리 + 최종 순위 로그 신규 추가 세션** — 자세한 내용은 아래 `### 2026-08-28 — 노땡스 카드/칩 획득 로그 채팅창 미노출 및 최종 순위 로그 신규 추가` 절 참고.)_
 
@@ -45,6 +47,32 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-28 — 전 게임 모바일 나가기 가드 표준화 및 백그라운드 탭 재동기화
+
+**요청**: 두 가지 모바일 안정성 기능을 온라인 실시간 게임 21종 전체에 적용. (1) 모바일 뒤로가기 버튼/제스처 나가기 확인 가드 — 이미 `destinyWar39`에 인라인으로 구현돼 있던 것을 표준화해 전체 게임에 확산. (2) 모바일 백그라운드 탭(`visibilitychange`) 복원력 — 탭이 백그라운드로 가는 걸 이탈로 취급하지 않고, 탭이 복귀하면 게임 상태를 자동으로 재동기화.
+
+**이 세션 이전에 이미 확인된 사항(재조사 불필요, 오케스트레이팅 세션이 사전에 `AskUserQuestion`으로 확정)**:
+1. **범위** — 최초 요청은 "6개 게임"으로 시작했지만 최종 확정 범위는 **온라인 실시간 게임 21종 전체**(avalon/bang/century/coup/coyote/dalmuti/destinyWar39/five-cucumbers/forSale/grid-poker/hanamikoji/lasVegas/loveLetter/malDalliJa/no-thanks/perudo/piecesOfLanguage/splendor/spot-difference/summonersRift/worm). `destinyWar39`는 기존 인라인 구현을 **리팩터링**해 신규 공유 훅/컴포넌트를 사용하도록 전환(구현이 두 벌 존재하지 않도록).
+2. **전송 계층** — 이 저장소엔 Socket.io/커스텀 서버/`SocketContext` 같은 건 전혀 없음(사전 확인됨) — 실시간 동기화는 100% Supabase Realtime(`channel.broadcast` + `channel.presence`)이고, 게임마다 `<GameName>Game.tsx` 내부에 인라인으로 채널 하나씩 여는 구조. Vercel 서버리스 배포라 유예시간 로직을 얹을 "서버 사이드 방 관리자" 자체가 없음 — **이 구조를 그대로 유지**하고 클라이언트 사이드 로직만 기존 Supabase 채널 패턴 위에 얹는 것으로 확정.
+3. **유예 시간(grace period)** — 120,000ms(120초) 고정.
+4. **나가기 확인 모달** — `destinyWar39`의 기존 문구/디자인을 그대로("정말"로 바꾸지 않음) 그대로 공유 컴포넌트로 추출.
+
+**구현**:
+
+1. **`src/hooks/gameLeaveGuard.ts`(신규, 순수 함수)** — `reduceGameLeaveGuard(state, event)`: `closed`/`open` 2-상태 머신. `popstate`는 `open`으로, `cancel`/`confirm`은 `closed`로 전이. `gameLeaveGuard.test.ts` 5개 케이스로 검증(this vitest config는 `environment: "node"`라 jsdom/`@testing-library/react`가 없음 — 이 저장소 기존 컨벤션대로 `window.history`/`document` 실제 조작은 얇은 훅에만 남기고 전이 로직만 순수 함수로 분리해 테스트).
+2. **`src/hooks/useGameLeaveGuard.ts`(신규)** — `destinyWar39`의 "히스토리 트랩"(방 입장 시 동일 URL 히스토리 엔트리 1개 `pushState`, `popstate` 발생 시 즉시 재-`pushState`해 실제 네비게이션을 무효화하고 확인 모달을 띄움) 로직을 그대로 추출한 공유 훅. `useGameLeaveGuard(active, onLeave)` → `{ exitConfirmOpen, cancelExit, confirmExit }`. `destinyWar39`의 설명 주석(브라우저 히스토리 동작에 대한, 게임 종속적이지 않은 진짜 지식)도 훅 독스트링으로 보존.
+3. **`src/components/GameLeaveGuardModal.tsx`(신규)** — `destinyWar39`의 `Overlay` 기반 확인 모달 JSX를 문구/스타일 그대로("게임을 나가시겠습니까?" / "진행 중인 게임에서 나가면 다시 들어오기 전까지 참여할 수 없어요." / "계속하기" / `bg-rose-600` "나가기") `{ open, onCancel, onConfirm }` props로 추출.
+4. **`src/hooks/backgroundResync.ts`(신규, 순수 함수)** — `reduceBackgroundResync(state, event)`: `hidden`/`visible` 이벤트를 받아 `{ shouldResync, longAbsence }`를 계산하는 상태 머신. `visibilitychange`(탭 전환/최소화)와 `blur`/`focus`(브라우저 창은 그대로 보이는 OS 레벨 앱 전환)를 모두 `hidden`/`visible` 두 종류로 매핑해 넘기고, 중복 발화(둘 다 같은 실제 "백그라운드→복귀" 전환에 대해 발화하는 경우)는 상태 머신 자체에서 자연스럽게 걸러짐(`hiddenAt === null`이면 `visible`을 무시, 이미 `hiddenAt`이 있으면 `hidden`을 무시). `LONG_ABSENCE_MS = 120_000` 네임드 익스포트. `backgroundResync.test.ts` 7개 케이스(경계값 포함).
+5. **`src/hooks/useBackgroundResync.ts`(신규)** — `useBackgroundResync(active, resync)` → `{ reconnecting }`. `document.visibilitychange` + `window` `blur`/`focus` 전부 구독, 위 순수 함수로 판정. `longAbsence`일 때만 1.5초짜리 `reconnecting` 플래그를 세워 호출부가 선택적으로 "재접속 중..." 인디케이터를 보여줄 수 있게 함(짧은 5초 앱 전환에는 깜빡임 없음). **서버 사이드 유예시간 로직은 만들지 않음** — 오늘 코드가 이미 `hidden`에서 아무것도 정리(unsubscribe/untrack)하지 않으므로 "유예시간 내 자리 유지"는 이미 구조적으로 참이고, 이 훅이 실제로 하는 일은 복귀 시 caller가 넘긴 `resync()`(각 게임이 이미 갖고 있던 `state-request` 브로드캐스트 전송)를 호출하는 것뿐.
+6. **`@supabase/realtime-js`(v2.111) 재연결 동작 리서치** (`node_modules/@supabase/realtime-js/src/RealtimeClient.ts`/`RealtimeChannel.ts` 직접 확인) — Phoenix 기반 소켓이 이미 자체 백오프로 재연결하고(`reconnectAfterMs`/`reconnectTimer`), 채널도 소켓이 살아나면 자동으로 재-join한다(`rejoinTimer` — 표준 Phoenix 채널 동작, 이 저장소만의 특이사항이 아님). 게다가 `RealtimeChannel.send()`는 `broadcast` 타입 메시지를 채널이 아직 push 불가능한 상태(`canPush()` false)일 때 **자동으로 REST API 폴백**을 탄다(`send()` 내부 확인). 이 두 가지를 근거로: 탭 복귀 시 수동 `channel.subscribe()`/`track()` 재실행은 불필요하고, `state-request` 전송만으로 충분하다고 판단 — 이게 이번 구현의 최소 정답. 다만 각 게임의 `requestStateSync()`(신규 로컬 함수, 기존 인라인 post-subscribe `state-request` 전송을 이 함수로 리팩터링)에 `channel.state !== "joined"`일 때만 `channel.subscribe()`를 한 번 더 호출하는 방어적 nudge를 추가 — `subscribe()`는 이미 joined/joining이면 사실상 no-op이라 안전하고 비용도 거의 없음.
+7. **21개 게임 전체 배선** — 각 `<GameName>Game.tsx`에 `requestStateSync()`(기존 인라인 `channel.send({ type: "broadcast", event: "state-request", payload: {} })`을 함수로 추출, 최초 구독 직후 호출부도 이 함수 호출로 교체) + `useGameLeaveGuard(roomCode !== null, handleLeave)` + `useBackgroundResync(roomCode !== null, requestStateSync)` + `withGuard(node)` 헬퍼(모든 컴포넌트가 phase별로 여러 개의 조기 `return (...)`을 갖는 동일한 구조라, `destinyWar39`가 이미 풀어둔 것과 같은 방식 — `withGuard`로 감싸 `<GameLeaveGuardModal>`을 모든 return 지점에 형제로 렌더링)을 배선. `destinyWar39`는 기존 인라인 `exitConfirmOpen`/`useEffect`/`withGuard` 모달 JSX와 그 설명 주석을 전부 삭제하고 신규 공유 훅/컴포넌트 호출로 교체 — 동작은 이전과 동일, 구현만 공유화.
+8. **예외 처리 — `hanamikoji`** — 조사 결과 이 게임만 유일하게 `state-request`/`state-sync` 재동기화 프로토콜 자체가 없었음(2인 전용 구조라 처음부터 누락된 것으로 보임 — 새로고침 후 재입장 시 상태 복구가 원래도 불가능했던 기존 갭). "기존 이벤트명을 그대로 재사용, 새 이벤트명을 발명하지 말 것"이라는 지시에 따라 새 프로토콜을 만드는 대신 **다른 20개 게임이 이미 쓰는 동일한 `state-request`/`state-sync` 핸들러 쌍을 이 파일에도 동일한 형태로 추가**(신규 프로토콜이 아니라 이미 확립된 컨벤션을 누락된 한 파일에 채워 넣은 것) — 이걸로 `hanamikoji`도 나머지 20개와 동일하게 배선 가능해졌고, 부수적으로 기존에 없던 "새로고침 후 재입장 시 상태 복구" 갭도 함께 해소됨.
+9. **명시적 범위 제외 — AFK 배지**: 백그라운드로 나간 참가자에게 "자리비움" 배지를 좌석 목록 UI에 표시하는 기능은 이번 세션에서 **구현하지 않음** — 게임마다 보드 렌더링 컴포넌트를 각각 건드려야 하는 별도의 큰 작업 범위라 이번 요청(①이탈로 취급하지 않기 ②복귀 시 자동 재동기화)의 최소 충족 범위 밖으로 판단. 필요하면 후속 작업으로 권장.
+
+**검증**: `npx tsc --noEmit`(에러 0). `npm run lint` 최초 실행에서 2건 발견 후 수정 — (1) `useGameLeaveGuard.ts`가 `active`/`deactivated` 전이 시 effect 본문에서 동기적으로 `setState`를 호출해 `react-hooks/set-state-in-effect` 에러 발생 → `exitConfirmOpen`은 이미 `false`로 시작하고 `cancelExit`/`confirmExit`가 `active`가 꺼지기 전에 이미 모달을 닫으므로 effect 본문에서 재조정할 게 없음을 확인, 해당 `setState` 호출 자체를 제거(순수 함수 `reduceGameLeaveGuard`도 더 이상 쓰이지 않는 `activated`/`deactivated` 이벤트를 정리해 3-이벤트 머신으로 단순화). (2) `hanamikoji`에 새로 추가한 `state-request` 핸들러가 `isHost`를 참조하는데 그 핸들러가 속한 `useEffect`의 deps 배열에 `isHost`가 빠져 있어 `react-hooks/exhaustive-deps` 경고 → deps에 추가. 재실행 후 `npm run lint` 경고/에러 0. `npx vitest run`(전체, 백그라운드+타임아웃 150초로 실행) — 이 저장소에 기록된 기존 이슈(§0/여러 과거 세션)대로 완주에 145초가 걸렸고 워커 포크 1개가 크래시(`Worker exited unexpectedly`, 실제 테스트 실패 아님)해 39/40 파일·1270/1271 테스트 통과로 마감 — 이번 변경과 무관한 기존 인프라 flake로 판단. 신뢰성을 위해 이번 세션이 만들거나 건드린 테스트 파일만 별도로 직접 실행: `gameLeaveGuard.test.ts`/`backgroundResync.test.ts`(신규 2개) + 21개 게임 전부의 기존 `*.test.ts`(`Avalon.test.ts`~`Worm.test.ts`, `no-thanks`는 `NoThanks.test.ts`+`AuctionEffects.test.ts` 2개) — **24개 파일·1129개 테스트 전부 통과**, 회귀 없음.
+
+**커밋/배포**: 이번 세션이 새로 만들거나 수정한 파일만 스테이징 — 신규 `src/hooks/{gameLeaveGuard,gameLeaveGuard.test,useGameLeaveGuard,backgroundResync,backgroundResync.test,useBackgroundResync}.ts`, 신규 `src/components/GameLeaveGuardModal.tsx`, 21개 게임 파일(`src/games/*/*.tsx`) 전부, 이 HANDOFF.md 절. 세션 시작 시점부터 작업 트리에 이미 있던 다른 세션의 미커밋/미추적 변경(`.gitignore`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지 `feat(mobile): enforce leave guard across all games and enhance background socket reconnection` 단일 커밋 → `git push origin main`. 실제 커밋 해시와 프리뷰 배포 URL은 이 저장소의 기존 컨벤션(`13308fe`/`af6eb5c` 등 최근 `docs(handoff)` 커밋들과 동일 패턴)대로 이 절 바로 아래에 후속 `docs(handoff)` 커밋으로 기록. 프로덕션(`--prod`) 배포는 이번 요청에 명시되지 않아 **진행하지 않음** — 필요 시 요청 시 바로 승격 가능.
 
 ### 2026-08-28 — 버그리포트 게시판 작성자/관리자 수정·삭제 기능 및 계정 연동 전환
 

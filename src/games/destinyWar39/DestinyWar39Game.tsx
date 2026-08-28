@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { RealtimeChannel, RealtimePresenceState } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
 import { getDeviceId } from "@/lib/identity/deviceId";
-import Overlay from "@/components/Overlay";
+import GameLeaveGuardModal from "@/components/GameLeaveGuardModal";
+import { useGameLeaveGuard } from "@/hooks/useGameLeaveGuard";
+import { useBackgroundResync } from "@/hooks/useBackgroundResync";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import {
@@ -177,6 +179,16 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
   const botSeatSet = useMemo(() => new Set(botSeats), [botSeats]);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
+  // Shared by the initial post-subscribe sync and `useBackgroundResync`
+  // (below) — see that hook's doc comment for why the `state !== "joined"`
+  // check is enough of a fallback even though realtime-js's own reconnect
+  // logic already covers the common case.
+  function requestStateSync() {
+    const channel = channelRef.current;
+    if (!channel) return;
+    if (channel.state !== "joined") channel.subscribe();
+    channel.send({ type: "broadcast", event: "state-request", payload: {} });
+  }
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
   const isHost = intent === "create";
@@ -353,7 +365,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
           playerId: myPlayerId,
           ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
         } satisfies Occupant);
-        channel.send({ type: "broadcast", event: "state-request", payload: {} });
+        requestStateSync();
         setPhase((p) => (p === "connecting" ? "waiting" : p));
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         setPhase("channel-error");
@@ -546,6 +558,9 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
     sendGameStart();
   }
 
+  const { exitConfirmOpen, cancelExit, confirmExit } = useGameLeaveGuard(roomCode !== null, handleLeave);
+  useBackgroundResync(roomCode !== null, requestStateSync);
+
   function handleLeave() {
     if (channelRef.current) {
       const supabase = getSupabase();
@@ -571,69 +586,14 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
     setPhase("choose");
   }
 
-  // ---------------------------------------------------------------------
-  // Mobile back-gesture / browser back-button exit guard (2026-08-23 bug
-  // report: a back gesture instantly kicked the player out of the game with
-  // no confirmation). This game never does a real route change while inside
-  // a room (join/create/play/leave are all handled by internal `phase`
-  // state on this one mounted component — see module doc above), so the
-  // only way "back" can eject the player is the browser's own history
-  // stack: this component's page is still just one entry in it, and a
-  // back gesture pops straight past it.
-  //
-  // Standard "history trap": the moment a room is joined (`roomCode` set —
-  // covers connecting/waiting/playing/post-game, this session's confirmed
-  // answer: guard the entire in-room lifetime, not just the active
-  // "playing" phase), push one extra same-URL history entry. A back
-  // gesture then fires `popstate` here (instead of actually navigating)
-  // because the browser pops that extra entry first; the handler
-  // immediately pushes it right back (cancelling the effective navigation)
-  // and opens the confirm modal instead. [계속하기] just closes the modal
-  // (the re-armed entry is already back in place); [나가기] calls the
-  // existing `handleLeave()` to return to this game's own lobby screen
-  // in-place (this session's confirmed answer — no real cross-page
-  // navigation happens either way, matching how every other exit path in
-  // this component already works).
-  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
-  useEffect(() => {
-    if (!roomCode) return;
-    window.history.pushState({ destinyWar39ExitGuard: true }, "", window.location.href);
-    const onPopState = () => {
-      window.history.pushState({ destinyWar39ExitGuard: true }, "", window.location.href);
-      setExitConfirmOpen(true);
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, [roomCode]);
-
+  // Mobile back-gesture / browser back-button exit guard, and mobile
+  // background-tab resync — both shared across every online game; see
+  // `useGameLeaveGuard` / `useBackgroundResync` for the full explanation.
   function withGuard(node: ReactNode) {
     return (
       <>
         {node}
-        {exitConfirmOpen && (
-          <Overlay title="게임을 나가시겠습니까?" onClose={() => setExitConfirmOpen(false)}>
-            <div className="flex flex-col gap-4 text-sm text-white/80">
-              <p>진행 중인 게임에서 나가면 다시 들어오기 전까지 참여할 수 없어요.</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setExitConfirmOpen(false)}
-                  className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm font-semibold text-white/80 hover:border-white/30"
-                >
-                  계속하기
-                </button>
-                <button
-                  onClick={() => {
-                    setExitConfirmOpen(false);
-                    handleLeave();
-                  }}
-                  className="flex-1 rounded-xl bg-rose-600 py-2.5 text-sm font-semibold text-white hover:bg-rose-500"
-                >
-                  나가기
-                </button>
-              </div>
-            </div>
-          </Overlay>
-        )}
+        <GameLeaveGuardModal open={exitConfirmOpen} onCancel={cancelExit} onConfirm={confirmExit} />
       </>
     );
   }
