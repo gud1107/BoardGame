@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { ChatMessage, SendResult } from "@/lib/chat/types";
 import ChatPanel from "./ChatPanel";
+import DragHandle from "@/components/common/DragHandle";
+import { useSwipeToDismiss } from "@/hooks/useSwipeToDismiss";
 
 interface Props {
   messages: ChatMessage[];
@@ -23,9 +25,17 @@ interface Props {
  * Phase-independent by design: it doesn't matter whether the game underneath
  * is in its waiting room or mid-play, so it can be mounted once per phase
  * branch without any dependency on what's rendered alongside it.
+ *
+ * Below `sm` (640px) this switches from a full-height left side drawer into
+ * a bottom sheet (rounded top, drag handle, swipe down to close via
+ * `useSwipeToDismiss`) so it doesn't hide the whole board behind a
+ * full-screen panel while the keyboard is up. `sm:` and above keeps the
+ * original side-drawer shape untouched.
  */
 export default function ChatDrawer({ messages, onSend, myDeviceId, cooldownUntil, title = "채팅" }: Props) {
   const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
+  const { dragY, dragging, handlers } = useSwipeToDismiss(close);
   // How many messages had already been seen as of the last time the drawer
   // was open — `unread` is derived from it, not stored itself. Adjusted
   // during render (not in an effect) the moment the drawer is open and a new
@@ -52,22 +62,26 @@ export default function ChatDrawer({ messages, onSend, myDeviceId, cooldownUntil
         )}
       </button>
 
-      {open && <div onClick={() => setOpen(false)} className="fixed inset-0 z-30 bg-black/50" />}
+      {open && <div onClick={close} className="fixed inset-0 z-30 bg-black/50" />}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[92vw] max-w-sm flex-col border-r border-white/10 bg-[#12101c] shadow-2xl transition-transform duration-200 sm:w-96 ${
-          open ? "translate-x-0" : "-translate-x-full"
+        style={open ? { transform: `translateY(${dragY}px)`, transition: dragging ? "none" : "transform 200ms ease-out" } : undefined}
+        className={`fixed inset-x-0 bottom-0 z-40 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-white/10 bg-[#12101c] shadow-2xl transition-transform duration-200 sm:inset-x-auto sm:inset-y-0 sm:left-0 sm:max-h-none sm:w-96 sm:translate-y-0 sm:rounded-none sm:rounded-r-2xl sm:border-t-0 sm:border-r ${
+          open ? "translate-y-0 sm:translate-x-0" : "translate-y-full sm:-translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-          <h2 className="text-sm font-bold text-white">💬 {title}</h2>
-          <button
-            onClick={() => setOpen(false)}
-            aria-label="닫기"
-            className="grid h-8 w-8 place-items-center rounded-full text-white/50 hover:bg-white/10 hover:text-white"
-          >
-            ×
-          </button>
+        <div {...handlers} className="shrink-0 px-4 pt-3">
+          <DragHandle />
+          <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <h2 className="text-sm font-bold text-white">💬 {title}</h2>
+            <button
+              onClick={close}
+              aria-label="닫기"
+              className="-mr-2 grid h-12 w-12 place-items-center rounded-full text-xl text-white/50 transition hover:bg-white/10 hover:text-white active:bg-white/20"
+            >
+              ×
+            </button>
+          </div>
         </div>
         <div className="min-h-0 flex-1 px-3 py-3">
           <ChatPanel

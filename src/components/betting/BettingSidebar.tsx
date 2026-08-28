@@ -5,6 +5,8 @@ import { useBettingStore } from "@/store/bettingStore";
 import type { DailyRecord } from "@/lib/db/types";
 import RosterEditor, { type RosterParticipant } from "./RosterEditor";
 import PayoutTableEditor from "./PayoutTableEditor";
+import DragHandle from "@/components/common/DragHandle";
+import { useSwipeToDismiss } from "@/hooks/useSwipeToDismiss";
 
 function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -35,6 +37,8 @@ export default function BettingSidebar() {
   const endSession = useBettingStore((s) => s.endSession);
   const updateParticipantName = useBettingStore((s) => s.updateParticipantName);
   const updatePayoutTable = useBettingStore((s) => s.updatePayoutTable);
+  const closeSidebar = () => setSidebarOpen(false);
+  const { dragY, dragging, handlers } = useSwipeToDismiss(closeSidebar);
 
   useEffect(() => {
     void init();
@@ -109,30 +113,33 @@ export default function BettingSidebar() {
         )}
       </button>
 
-      {sidebarOpen && (
-        <div
-          onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 z-30 bg-black/50"
-        />
-      )}
+      {sidebarOpen && <div onClick={closeSidebar} className="fixed inset-0 z-30 bg-black/50" />}
 
       <aside
-        className={`fixed inset-y-0 right-0 z-40 flex w-[92vw] max-w-sm flex-col border-l border-white/10 bg-[#12101c] shadow-2xl transition-transform duration-200 sm:w-96 md:w-[26rem] lg:w-[30rem] ${
-          sidebarOpen ? "translate-x-0" : "translate-x-full"
+        style={
+          sidebarOpen
+            ? { transform: `translateY(${dragY}px)`, transition: dragging ? "none" : "transform 200ms ease-out" }
+            : undefined
+        }
+        className={`fixed inset-x-0 bottom-0 z-40 flex max-h-[85vh] w-full flex-col rounded-t-2xl border-t border-white/10 bg-[#12101c] shadow-2xl transition-transform duration-200 sm:inset-x-auto sm:inset-y-0 sm:right-0 sm:max-h-none sm:w-96 sm:max-w-sm sm:translate-y-0 sm:rounded-none sm:rounded-l-2xl sm:border-t-0 sm:border-l md:w-[26rem] lg:w-[30rem] ${
+          sidebarOpen ? "translate-y-0 sm:translate-x-0" : "translate-y-full sm:translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-          <h2 className="text-sm font-bold text-white">🎲 내기 관리</h2>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="grid h-8 w-8 place-items-center rounded-full text-white/50 hover:bg-white/10 hover:text-white"
-            aria-label="닫기"
-          >
-            ×
-          </button>
+        <div {...handlers} className="shrink-0 px-4 pt-3">
+          <DragHandle />
+          <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <h2 className="text-sm font-bold text-white">🎲 내기 관리</h2>
+            <button
+              onClick={closeSidebar}
+              className="-mr-2 grid h-12 w-12 place-items-center rounded-full text-xl text-white/50 transition hover:bg-white/10 hover:text-white active:bg-white/20"
+              aria-label="닫기"
+            >
+              ×
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           {!hydrated ? (
             <p className="text-sm text-white/40">불러오는 중...</p>
           ) : (
