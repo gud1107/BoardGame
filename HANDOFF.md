@@ -74,7 +74,9 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **검증**: `npx tsc --noEmit`(에러 0), `npm run lint`(에러/경고 0). `npx vitest run` — 이번 세션 중 이 저장소 환경이 유난히 느려져(과거 세션 기록상 ~145초였던 전체 스위트가 최초 시도에서 70분 넘게 진행 중 CPU만 계속 누적돼 강제 종료 후 재시도, 재시도판도 장시간 진행) 세션 시간 내 완주를 확인하지 못함 — 다만 **이번 세션이 건드리거나 새로 만든 파일 중 어느 것도 기존 테스트 파일이 import하지 않음**(`Overlay.tsx`/`ChatDrawer.tsx`/`BettingSidebar.tsx`/`useSwipeToDismiss.ts`/`DragHandle.tsx`를 참조하는 `*.test.ts*`가 저장소에 전무 — 순수 프레젠테이션/제스처 레이어 변경이라 기존 게임 엔진·리듀서 테스트 커버리지와 겹치지 않음)과 `tsc`/`lint` 클린을 근거로, 회귀 위험은 낮다고 판단해 진행. **후속으로 전체 스위트 완주 확인이 필요하면 별도로 재실행 권장.**
 
-**커밋/배포**: TODO — 아래 참고.
+**커밋/배포**: 이번 세션이 새로 만들거나 수정한 파일만 스테이징(`HANDOFF.md`, `src/components/Overlay.tsx`, `src/components/betting/BettingSidebar.tsx`, `src/components/chat/ChatDrawer.tsx`, 신규 `src/components/common/DragHandle.tsx`, 신규 `src/hooks/useSwipeToDismiss.ts`) — 세션 시작 시점부터 작업 트리에 이미 있던 다른 세션의 미커밋/미추적 변경(`.gitignore`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지 `feat(mobile): implement swipe-down to close gesture and enlarged touch targets for chat and betting panels` 단일 커밋(`2af704d`) → `git push origin main` 완료(`b6c0e03..2af704d`). 사용자가 "프리뷰 말고 운영에 배포"를 명시적으로 요청해 `npx vercel deploy --prod --scope me-3871` 바로 실행 — 빌드 정상 완주(Turbopack, TypeScript 전체 재검사 포함, 기존과 동일 24개 라우트), `target: "production"`/`status: READY`, 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료(`dpl_DF25Z53qnAx3WmaF4Z9RMTu7J6X4`). `curl`로 프로덕션 루트(`/`, 200) 확인.
+
+*알려진 이슈 — 이번 세션 로컬 vitest 완주 미확인*: `npx vitest run` 전체 스위트가 이번 세션 내내(두 차례 시도, 첫 시도는 70분 넘게 CPU만 계속 누적되길래 강제 종료 후 재시도, 재시도판도 40분+ 진행되도록 완주하지 못함) 과거 기록된 ~145초 베이스라인 대비 비정상적으로 느렸음 — 다만 Vercel 프로덕션 빌드 자체는(별도의 원격 빌드 머신) `next build` 중 TypeScript 전체 재검사를 포함해 정상적으로 41초 만에 끝났으므로, 이 로컬 vitest 지연은 이 세션의 로컬 샌드박스 환경 특유의 문제로 보이고 이번 코드 변경과는 무관한 것으로 판단(수정/신규 파일 6개 중 어느 것도 기존 `*.test.ts*`가 import하지 않음을 사전에 확인). `tsc --noEmit`/`lint` 클린 + 테스트 커버리지 미겹침을 근거로 배포까지 진행했으나, **다음 세션에서 `npx vitest run` 전체 스위트 완주를 별도로 확인 권장**.
 
 ### 2026-08-28 — 전 게임 모바일 나가기 가드 표준화 및 백그라운드 탭 재동기화
 
