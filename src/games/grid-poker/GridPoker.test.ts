@@ -20,6 +20,7 @@ import {
   type SeatIndex,
   type Suit,
 } from "./engine";
+import { DOUBLE_TAP_SKIP_MS, isDoubleTap } from "./skipGesture";
 
 function std(rank: number, suit: Suit, id = `${rank}${suit}`): Card {
   return { id, kind: "std", rank, suit };
@@ -585,6 +586,87 @@ describe("round-result phase (round-win celebration pause)", () => {
 
   it("ROUND_RESULT_SECONDS (the overlay/host-timer pacing constant) is 6", () => {
     expect(ROUND_RESULT_SECONDS).toBe(6);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round-result "skip" (fast-forward past the celebration wait —
+// RoundResultOverlay.tsx's [⏩ 연출 스킵] button / backdrop double-tap,
+// 2026-08-29 세션). The skip button dispatches nothing new: it's the exact
+// same `{ type: "advance-round-result" }` action the host's own
+// ROUND_RESULT_SECONDS timer fires, from any viewer, the instant they ask.
+// ---------------------------------------------------------------------------
+
+describe("round-result skip (any single viewer's skip ends the wait for everyone)", () => {
+  function fullBoardWith(overrides: Record<number, Card>): (Card | null)[] {
+    const board: (Card | null)[] = Array.from({ length: BOARD_SIZE }, (_, i) => std(2, "C", `filler${i}`));
+    for (const [cell, card] of Object.entries(overrides)) board[Number(cell)] = card;
+    return board;
+  }
+  function submittingState(): GridPokerState {
+    const board0 = fullBoardWith({ 0: std(9, "S"), 1: std(9, "D"), 2: std(9, "H"), 3: std(9, "C"), 4: std(3, "S") });
+    const board1 = fullBoardWith({ 0: std(2, "S"), 1: std(5, "D"), 2: std(7, "H"), 3: std(11, "C"), 4: std(14, "S") });
+    return {
+      playerCount: 2,
+      players: [
+        { seat: 0, board: board0, firstPlacedCell: 0, lastPlacedCell: null, usedLines: Array(LINES.length).fill(false), score: 0 },
+        { seat: 1, board: board1, firstPlacedCell: 0, lastPlacedCell: null, usedLines: Array(LINES.length).fill(false), score: 0 },
+      ],
+      phase: "submitting",
+      currentCard: null,
+      placedThisRound: [true, true],
+      drawCount: BOARD_SIZE,
+      submissions: [null, null],
+      roundNumber: 1,
+      totalScoringRounds: 10,
+      winThreshold: 6,
+      lastRoundResult: null,
+      winner: null,
+      timerSettings: DEFAULT_TIMER_SETTINGS,
+    };
+  }
+
+  it("skipping immediately (zero elapsed wait) still yields the round's fully-resolved final score/winner — resolveRound already computed them synchronously, there's nothing left to finish", () => {
+    let s = submittingState();
+    s = applyAction(s, { type: "submit-line", seat: 0, lineIndex: 0 });
+    s = applyAction(s, { type: "submit-line", seat: 1, lineIndex: 0 });
+    expect(s.phase).toBe("round-result");
+    const { winnerSeat } = s.lastRoundResult!;
+    const winnerScoreBeforeSkip = s.players[winnerSeat!].score;
+
+    s = applyAction(s, { type: "advance-round-result" }); // exactly what the skip button/double-tap dispatches
+    expect(s.phase).toBe("submitting");
+    expect(s.lastRoundResult!.winnerSeat).toBe(winnerSeat);
+    expect(s.players[winnerSeat!].score).toBe(winnerScoreBeforeSkip);
+  });
+
+  it("two viewers skipping at nearly the same instant is safe — the second dispatch is a pure no-op returning the identical state", () => {
+    let s = submittingState();
+    s = applyAction(s, { type: "submit-line", seat: 0, lineIndex: 0 });
+    s = applyAction(s, { type: "submit-line", seat: 1, lineIndex: 0 });
+    const afterFirstSkip = applyAction(s, { type: "advance-round-result" });
+    const afterSecondSkip = applyAction(afterFirstSkip, { type: "advance-round-result" });
+    expect(afterSecondSkip).toBe(afterFirstSkip);
+  });
+});
+
+describe("isDoubleTap (RoundResultOverlay.tsx's backdrop double-tap skip gesture)", () => {
+  it("is false for a first tap (sentinel lastTapAt = 0 means no prior tap recorded)", () => {
+    expect(isDoubleTap(0, Date.now())).toBe(false);
+  });
+
+  it("is true once a second tap lands strictly inside the double-tap window", () => {
+    expect(isDoubleTap(1_000, 1_000 + DOUBLE_TAP_SKIP_MS - 1)).toBe(true);
+  });
+
+  it("is false once the gap between taps reaches or exceeds the window (two unrelated taps, not a double-tap)", () => {
+    expect(isDoubleTap(1_000, 1_000 + DOUBLE_TAP_SKIP_MS)).toBe(false);
+    expect(isDoubleTap(1_000, 1_000 + DOUBLE_TAP_SKIP_MS + 500)).toBe(false);
+  });
+
+  it("honors a custom window when one is passed explicitly", () => {
+    expect(isDoubleTap(1_000, 1_100, 200)).toBe(true);
+    expect(isDoubleTap(1_000, 1_300, 200)).toBe(false);
   });
 });
 

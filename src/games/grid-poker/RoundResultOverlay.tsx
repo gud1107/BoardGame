@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useRef, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { CardChip, SUIT_SYMBOL } from "./cardDisplay";
 import {
@@ -12,15 +12,17 @@ import {
   type SeatIndex,
   type Suit,
 } from "./engine";
+import { isDoubleTap } from "./skipGesture";
 
 /**
  * The round-win celebration overlay — a full-screen portal shown while
  * `state.phase === "round-result"` (engine.ts's module doc "Flow" section
- * and `advanceRoundResult`). Purely a rendering layer: it never dispatches
- * anything itself. The host alone drives the actual phase transition on a
- * fixed timer (GridPokerGame.tsx); `timeLeft`/`secondsTotal` here only feed
- * the "다음 라운드 준비" countdown bar every client renders locally so it
- * finishes in step with that host timer.
+ * and `advanceRoundResult`). Otherwise a pure rendering layer — the host's
+ * own fixed timer (GridPokerGame.tsx) is what actually advances the phase
+ * once `ROUND_RESULT_SECONDS` elapses, and `timeLeft`/`secondsTotal` here
+ * only feed the "다음 라운드 준비" countdown bar every client renders
+ * locally so it finishes in step with that timer — except for `onSkip`
+ * (see the "Skip" section below), the one action this overlay does dispatch.
  *
  * Two branches, per the confirmed design (Strict-No-Assumption Q&A,
  * 2026-08-24 session): a genuine winner gets the full epic treatment (gold
@@ -31,6 +33,18 @@ import {
  * sees the exact same content — there is no separate "you lost" framing,
  * matching requirement 3's "losers should still get to watch the winner's
  * play, not a blank wait".
+ *
+ * Skip (Strict-No-Assumption Q&A, 2026-08-29 session): every field already
+ * renders the round's fully-resolved final state the instant this overlay
+ * mounts — there's no partial/in-progress reveal to fast-forward through,
+ * only the fixed `ROUND_RESULT_SECONDS` wait itself. `onSkip` (top-right
+ * button, or a double-tap anywhere on the backdrop) calls straight through
+ * to the same `{ type: "advance-round-result" }` engine action the host's
+ * own timer fires (see GridPokerGame.tsx) — any single viewer's skip ends
+ * the wait for *everyone* immediately, since that action is a plain
+ * broadcast Realtime action like any other (not host-gated) and a no-op
+ * once the phase has already moved on (engine.ts's `advanceRoundResult`),
+ * so a near-simultaneous skip from more than one viewer is always safe.
  */
 export interface RoundResultOverlayProps {
   result: RoundResult;
@@ -40,6 +54,8 @@ export interface RoundResultOverlayProps {
   viewerSeat: SeatIndex;
   timeLeft: number;
   secondsTotal: number;
+  /** Ends the round-result wait immediately for every connected viewer — see the module doc's "Skip" section. */
+  onSkip: () => void;
 }
 
 /** One badge look per seat (up to 8, this game's max player count) — deterministic by seat index, no naming/photo system exists elsewhere in this game to draw from. */
@@ -203,6 +219,28 @@ function NextRoundCountdown({ timeLeft, secondsTotal }: { timeLeft: number; seco
   );
 }
 
+/**
+ * Fixed top-right skip affordance (confirmed placement, 2026-08-29
+ * Strict-No-Assumption Q&A) — `stopPropagation` keeps a tap on the button
+ * itself from also bubbling up into the backdrop's double-tap counter
+ * below, so a single button press never risks being read as "tap 1 of 2".
+ */
+function SkipButton({ onSkip }: { onSkip: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onSkip();
+      }}
+      className="absolute top-3 right-3 z-20 flex items-center gap-1 rounded-full border border-white/25 bg-black/50 px-3 py-1.5 text-xs font-semibold text-white/85 backdrop-blur transition hover:border-white/50 hover:bg-black/70 hover:text-white active:scale-95"
+      aria-label="연출 스킵하고 다음 라운드로 바로 넘어가기"
+    >
+      ⏩ 연출 스킵
+    </button>
+  );
+}
+
 export default function RoundResultOverlay({
   result,
   players,
@@ -211,7 +249,35 @@ export default function RoundResultOverlay({
   viewerSeat,
   timeLeft,
   secondsTotal,
+  onSkip,
 }: RoundResultOverlayProps) {
+  // Guards against firing `onSkip` more than once per mount — a fast double
+  // press on the button, or a button press right after a backdrop
+  // double-tap, would otherwise re-broadcast `advance-round-result`
+  // needlessly (harmless — the action is idempotent — but wasteful). Reset
+  // is automatic: this overlay only ever mounts fresh per round (the parent
+  // renders it solely while `state.phase === "round-result"`), so a stale
+  // `true` from a previous round can never leak into the next one.
+  const hasSkippedRef = useRef(false);
+  const lastTapRef = useRef(0);
+
+  function triggerSkip() {
+    if (hasSkippedRef.current) return;
+    hasSkippedRef.current = true;
+    onSkip();
+  }
+
+  /** Backdrop double-tap (mobile "그냥 화면 아무 곳이나 두 번" fast-forward) — a plain onClick, not onDoubleClick: React normalizes a touch tap into a click event reliably across mobile browsers, while native `dblclick` synthesis from touch is inconsistent, so a manual timestamp comparison (see skipGesture.ts's `isDoubleTap`) is the more robust choice here. */
+  function handleBackdropTap() {
+    const now = Date.now();
+    if (isDoubleTap(lastTapRef.current, now)) {
+      lastTapRef.current = 0;
+      triggerSkip();
+    } else {
+      lastTapRef.current = now;
+    }
+  }
+
   if (typeof document === "undefined") return null;
 
   const winnerSeat = result.winnerSeat;
@@ -223,7 +289,9 @@ export default function RoundResultOverlay({
       <div
         className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto bg-black/80 p-4"
         style={{ animation: "gp-round-overlay-in 0.35s ease-out both, gp-round-overlay-shake 0.5s ease-out 0.15s both" }}
+        onClick={handleBackdropTap}
       >
+        <SkipButton onSkip={triggerSkip} />
         <GoldSunburst />
         <ConfettiBurst />
         <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-3 py-6 text-center">
@@ -264,7 +332,12 @@ export default function RoundResultOverlay({
       // Genuine tie — deliberately subdued: no sunburst/confetti/stamp/shake,
       // just a plain recap of everyone's hand this round (confirmed design,
       // Q3 of the Strict-No-Assumption pass).
-      <div className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4" style={{ animation: "gp-round-overlay-in 0.35s ease-out both" }}>
+      <div
+        className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
+        style={{ animation: "gp-round-overlay-in 0.35s ease-out both" }}
+        onClick={handleBackdropTap}
+      >
+        <SkipButton onSkip={triggerSkip} />
         <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.05] p-5 text-center">
           <span className="text-3xl">🤝</span>
           <h2 className="text-lg font-bold text-white/80">{result.roundNumber}라운드 · 무승부</h2>

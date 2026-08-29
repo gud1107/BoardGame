@@ -656,6 +656,13 @@ export default function GridPokerBoard({
           viewerSeat={viewerSeat}
           timeLeft={roundResultTimeLeft}
           secondsTotal={ROUND_RESULT_SECONDS}
+          // Any single viewer's skip (button or backdrop double-tap) ends the
+          // wait for everyone at once — `advance-round-result` isn't
+          // host-gated and is a safe no-op once another client's skip (or
+          // the host's own 6s timer) has already moved the phase past
+          // "round-result" (see RoundResultOverlay.tsx's module doc "Skip"
+          // section and engine.ts's `advanceRoundResult`).
+          onSkip={() => onAction({ type: "advance-round-result" })}
         />
       )}
     </div>
