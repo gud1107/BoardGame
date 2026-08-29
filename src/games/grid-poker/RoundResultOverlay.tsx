@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type CSSProperties } from "react";
+import { useRef } from "react";
 import { createPortal } from "react-dom";
 import { CardChip, SUIT_SYMBOL } from "./cardDisplay";
 import {
@@ -12,7 +12,11 @@ import {
   type SeatIndex,
   type Suit,
 } from "./engine";
+import ScoreEffectCanvas from "./ScoreEffectCanvas";
 import { isDoubleTap } from "./skipGesture";
+
+/** category >= 5 (플러시 and above — same threshold GridPokerEffects.tsx's `HandRankFloatingBadge` already uses for its own ✨ sparkle) gets the extra diamond-burst celebration on `ScoreEffectCanvas`. */
+const HIGH_TIER_CATEGORY = 5;
 
 /**
  * The round-win celebration overlay — a full-screen portal shown while
@@ -25,26 +29,37 @@ import { isDoubleTap } from "./skipGesture";
  * (see the "Skip" section below), the one action this overlay does dispatch.
  *
  * Two branches, per the confirmed design (Strict-No-Assumption Q&A,
- * 2026-08-24 session): a genuine winner gets the full epic treatment (gold
- * sunburst + confetti + a stamped "ROUND N WIN!" emblem with a brief screen
- * shake + the winning line's 5 cards pulsing gold on a mini board diagram);
- * a tie gets one deliberately subdued recap card and nothing else — no
+ * 2026-08-24 session, visuals renewed 2026-08-29): a genuine winner gets the
+ * full epic treatment — `ScoreEffectCanvas`'s gold laser beams + shimmer
+ * particles (plus a diamond-burst layer for category >= `HIGH_TIER_CATEGORY`
+ * hands), a rotating poker-chip/wax-seal `VictoryStamp` emblem, a brief
+ * screen shake, and the winning line's 5 cards pulsing gold on a mini board
+ * diagram with its own neon border + laser scan sweep (`WinningLineGrid`); a
+ * tie gets one deliberately subdued recap card and nothing else — no
  * particles, no shake, no stamp. Every viewer (winner and losers alike)
  * sees the exact same content — there is no separate "you lost" framing,
  * matching requirement 3's "losers should still get to watch the winner's
  * play, not a blank wait".
  *
- * Skip (Strict-No-Assumption Q&A, 2026-08-29 session): every field already
- * renders the round's fully-resolved final state the instant this overlay
- * mounts — there's no partial/in-progress reveal to fast-forward through,
- * only the fixed `ROUND_RESULT_SECONDS` wait itself. `onSkip` (top-right
- * button, or a double-tap anywhere on the backdrop) calls straight through
- * to the same `{ type: "advance-round-result" }` engine action the host's
- * own timer fires (see GridPokerGame.tsx) — any single viewer's skip ends
- * the wait for *everyone* immediately, since that action is a plain
- * broadcast Realtime action like any other (not host-gated) and a no-op
- * once the phase has already moved on (engine.ts's `advanceRoundResult`),
- * so a near-simultaneous skip from more than one viewer is always safe.
+ * Skip (Strict-No-Assumption Q&A, 2026-08-29 session; repositioned in the
+ * same-dated visual-renewal session): every field already renders the
+ * round's fully-resolved final state the instant this overlay mounts —
+ * there's no partial/in-progress reveal to fast-forward through, only the
+ * fixed `ROUND_RESULT_SECONDS` wait itself. `onSkip` (the button docked
+ * directly under the effect area, or a double-tap anywhere on the backdrop)
+ * calls straight through to the same `{ type: "advance-round-result" }`
+ * engine action the host's own timer fires (see GridPokerGame.tsx) — any
+ * single viewer's skip ends the wait for *everyone* immediately, since that
+ * action is a plain broadcast Realtime action like any other (not
+ * host-gated) and a no-op once the phase has already moved on (engine.ts's
+ * `advanceRoundResult`), so a near-simultaneous skip from more than one
+ * viewer is always safe. Because this overlay (and `ScoreEffectCanvas`
+ * inside it) only ever mounts while `phase === "round-result"`, dispatching
+ * that action unmounts everything — canvas rAF loop included — in the same
+ * render pass, which is also what cancels GridPokerBoard.tsx's pending
+ * 150ms `playVictoryStamp` timeout if skip fires before it elapses (that
+ * effect's own cleanup runs off the same `state.phase` dependency — no
+ * separate "cancel SFX" wiring needed here).
  */
 export interface RoundResultOverlayProps {
   result: RoundResult;
@@ -95,68 +110,44 @@ function dominantSuit(cards: { suit: Suit }[]): Suit {
   return best;
 }
 
-/** Fixed deterministic confetti scatter (24 pieces) — index-driven pseudo-variety via distinct small-prime multipliers, never `Math.random()`, so a server-rendered first paint can never mismatch a client hydration pass (same rationale as GridPokerEffects.tsx's SPARKLE_OFFSETS, scaled up for a screen-filling burst instead of a small badge). */
-const CONFETTI_COLORS = ["#fbbf24", "#f59e0b", "#fde68a", "#ffffff", "#fca5a5"];
-const CONFETTI_COUNT = 24;
-const CONFETTI_PIECES = Array.from({ length: CONFETTI_COUNT }, (_, i) => ({
-  leftPct: (i * 37) % 100,
-  driftStart: ((i * 53) % 60) - 30,
-  driftEnd: ((i * 71) % 160) - 80,
-  delayMs: (i * 83) % 700,
-  durationMs: 2200 + ((i * 47) % 900),
-  size: 6 + (i % 4) * 2,
-  color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-  rounded: i % 3 === 0,
-}));
-
-function ConfettiBurst() {
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-      {CONFETTI_PIECES.map((p, i) => (
-        <span
-          key={i}
-          className="absolute top-0"
-          style={
-            {
-              left: `${p.leftPct}%`,
-              width: p.size,
-              height: p.size,
-              backgroundColor: p.color,
-              borderRadius: p.rounded ? "9999px" : "2px",
-              "--confetti-drift-start": `${p.driftStart}px`,
-              "--confetti-drift-end": `${p.driftEnd}px`,
-              animation: `gp-confetti-fall ${p.durationMs}ms ${p.delayMs}ms ease-in forwards`,
-            } as CSSProperties
-          }
-        />
-      ))}
-    </div>
-  );
-}
-
-function GoldSunburst() {
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute top-1/2 left-1/2 h-[140vmax] w-[140vmax] -translate-x-1/2 -translate-y-1/2 opacity-70"
-      style={{
-        background: "repeating-conic-gradient(from 0deg, rgba(251,191,36,0.4) 0deg 5deg, transparent 5deg 22deg)",
-        maskImage: "radial-gradient(circle, black 0%, black 28%, transparent 66%)",
-        WebkitMaskImage: "radial-gradient(circle, black 0%, black 28%, transparent 66%)",
-        animation: "gp-sunburst-spin 16s linear infinite",
-      }}
-    />
-  );
-}
-
+/**
+ * Rotating poker-chip / metallic wax-seal emblem — replaces the old plain
+ * text "[ ROUND N WIN! ]" badge (Strict-No-Assumption Q&A, 2026-08-29 visual
+ * renewal session: user picked "완전 교체" over layering the new look on top
+ * of the old one). Pure CSS/HTML rather than `ScoreEffectCanvas` — canvas has
+ * no crisp, accessible way to bake in text, and nothing else in this project
+ * renders UI text onto a `<canvas>`. The ridge ring is a `repeating-conic-
+ * gradient` masked down to an annulus (a poker chip's edge notches); the
+ * center face is a radial metallic gradient. `gp-stamp-rotate-in` spins the
+ * whole thing in off-axis and lets it "thud" down to rest, timed to land
+ * alongside the overlay's own screen-shake and `playVictoryStamp` SFX (both
+ * fire at the same 0.15s mark — see GridPokerBoard.tsx).
+ */
 function VictoryStamp({ roundNumber }: { roundNumber: number }) {
   return (
-    <div
-      aria-hidden
-      className="relative z-10 rounded-2xl border-4 border-amber-300/90 bg-gradient-to-b from-rose-600/95 to-rose-800/95 px-5 py-1.5 text-center shadow-[0_10px_40px_-8px_rgba(0,0,0,0.85)]"
-      style={{ animation: "gp-victory-stamp-in 0.55s cubic-bezier(0.34,1.56,0.64,1) both" }}
-    >
-      <span className="block text-lg font-black tracking-wider text-amber-50 sm:text-xl">[ ROUND {roundNumber} WIN! ]</span>
+    <div aria-hidden className="relative z-10" style={{ animation: "gp-stamp-rotate-in 0.65s cubic-bezier(0.34,1.56,0.64,1) both" }}>
+      <div
+        className="relative flex h-28 w-28 items-center justify-center rounded-full sm:h-32 sm:w-32"
+        style={{
+          background: "radial-gradient(circle at 35% 30%, #fef3c7 0%, #f59e0b 32%, #92400e 78%, #451a03 100%)",
+          boxShadow:
+            "0 0 0 4px rgba(0,0,0,0.4), 0 0 0 7px rgba(251,191,36,0.55), 0 12px 30px -6px rgba(0,0,0,0.85), inset 0 2px 6px rgba(255,255,255,0.35), inset 0 -6px 10px rgba(0,0,0,0.45)",
+        }}
+      >
+        <div
+          className="absolute inset-1 rounded-full opacity-40"
+          style={{
+            background: "repeating-conic-gradient(#fff7ed 0deg 8deg, transparent 8deg 20deg)",
+            maskImage: "radial-gradient(circle, transparent 62%, black 64%, black 78%, transparent 80%)",
+            WebkitMaskImage: "radial-gradient(circle, transparent 62%, black 64%, black 78%, transparent 80%)",
+          }}
+        />
+        <div className="relative z-10 flex flex-col items-center leading-none text-amber-950">
+          <span className="text-[9px] font-bold tracking-widest sm:text-[10px]">ROUND</span>
+          <span className="text-2xl font-black sm:text-3xl">{roundNumber}</span>
+          <span className="text-[9px] font-bold tracking-widest sm:text-[10px]">WIN</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -174,7 +165,17 @@ function VictoryStamp({ roundNumber }: { roundNumber: number }) {
 function WinningLineGrid({ winner, lineIndex }: { winner: PlayerState; lineIndex: number }) {
   const cellSet = new Set(LINES[lineIndex]);
   return (
-    <div className="grid grid-cols-5 gap-1 rounded-xl border border-amber-400/20 bg-black/30 p-2">
+    <div className="relative overflow-hidden rounded-xl border border-amber-300/50 bg-black/30 p-2 drop-shadow-[0_0_15px_rgba(234,179,8,0.6)]">
+      {/* Laser scan pulse — a bright band sweeping once across the whole
+          scoring grid, so which board is currently being read as "the one
+          that just won" is unmistakable at a glance (Strict-No-Assumption
+          Q&A, 2026-08-29 visual renewal session, "라인 완성 하이라이트"). */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-[-40%] z-10 w-[40%] bg-gradient-to-r from-transparent via-amber-200/70 to-transparent"
+        style={{ animation: "gp-line-scan-sweep 1.4s ease-in-out 0.2s 2" }}
+      />
+      <div className="relative z-0 grid grid-cols-5 gap-1">
       {Array.from({ length: 25 }, (_, cell) => {
         if (!cellSet.has(cell)) {
           return <span key={cell} aria-hidden className="h-8 w-6 rounded-sm bg-white/[0.03] sm:h-9 sm:w-7" />;
@@ -192,6 +193,7 @@ function WinningLineGrid({ winner, lineIndex }: { winner: PlayerState; lineIndex
           </span>
         );
       })}
+      </div>
     </div>
   );
 }
@@ -220,10 +222,16 @@ function NextRoundCountdown({ timeLeft, secondsTotal }: { timeLeft: number; seco
 }
 
 /**
- * Fixed top-right skip affordance (confirmed placement, 2026-08-29
- * Strict-No-Assumption Q&A) — `stopPropagation` keeps a tap on the button
- * itself from also bubbling up into the backdrop's double-tap counter
- * below, so a single button press never risks being read as "tap 1 of 2".
+ * Skip affordance, now docked inline directly below the effect area (board
+ * diagram in the winner branch, hand recap in the tie branch) instead of the
+ * old fixed top-right corner (repositioned per Strict-No-Assumption Q&A,
+ * 2026-08-29 visual-renewal session — "이펙트 바로 아래 중앙, 대형 터치
+ * 타깃"). `stopPropagation` still keeps a tap on the button itself from also
+ * bubbling up into the backdrop's double-tap counter, so a single button
+ * press never risks being read as "tap 1 of 2". The pulsing neon border
+ * (`gp-skip-pulse-glow`, box-shadow only — never dims the label like Tailwind's
+ * stock `animate-pulse` would) runs the whole time the overlay is up, signaling
+ * "this is tappable" without requiring the player to notice a static corner icon.
  */
 function SkipButton({ onSkip }: { onSkip: () => void }) {
   return (
@@ -233,7 +241,8 @@ function SkipButton({ onSkip }: { onSkip: () => void }) {
         e.stopPropagation();
         onSkip();
       }}
-      className="absolute top-3 right-3 z-20 flex items-center gap-1 rounded-full border border-white/25 bg-black/50 px-3 py-1.5 text-xs font-semibold text-white/85 backdrop-blur transition hover:border-white/50 hover:bg-black/70 hover:text-white active:scale-95"
+      className="relative z-10 mt-3 flex items-center gap-1.5 rounded-full border border-yellow-500/50 bg-slate-900/80 px-6 py-2.5 text-sm font-semibold text-white/90 backdrop-blur-sm transition hover:border-yellow-400/70 hover:bg-slate-900 active:scale-95 sm:mt-4"
+      style={{ animation: "gp-skip-pulse-glow 1.8s ease-in-out infinite" }}
       aria-label="연출 스킵하고 다음 라운드로 바로 넘어가기"
     >
       ⏩ 연출 스킵
@@ -291,9 +300,7 @@ export default function RoundResultOverlay({
         style={{ animation: "gp-round-overlay-in 0.35s ease-out both, gp-round-overlay-shake 0.5s ease-out 0.15s both" }}
         onClick={handleBackdropTap}
       >
-        <SkipButton onSkip={triggerSkip} />
-        <GoldSunburst />
-        <ConfettiBurst />
+        <ScoreEffectCanvas highTier={winnerSubmission.hand.category >= HIGH_TIER_CATEGORY} />
         <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-3 py-6 text-center">
           <VictoryStamp roundNumber={result.roundNumber} />
 
@@ -320,6 +327,10 @@ export default function RoundResultOverlay({
 
           <WinningLineGrid winner={winner} lineIndex={winnerSubmission.lineIndex} />
 
+          {/* Skip button: bottom-center, directly under the effect area
+              (Strict-No-Assumption Q&A, 2026-08-29 visual-renewal session). */}
+          <SkipButton onSkip={triggerSkip} />
+
           <div className="flex items-center gap-2 text-sm text-amber-100">
             <span>🏆 {winner.score}승 달성 ({winner.score}/{winThreshold})</span>
             <ProgressDots wins={winner.score} threshold={winThreshold} />
@@ -329,15 +340,15 @@ export default function RoundResultOverlay({
         </div>
       </div>
     ) : (
-      // Genuine tie — deliberately subdued: no sunburst/confetti/stamp/shake,
+      // Genuine tie — deliberately subdued: no laser beams/particles/stamp/shake,
       // just a plain recap of everyone's hand this round (confirmed design,
-      // Q3 of the Strict-No-Assumption pass).
+      // Q3 of the original 2026-08-24 Strict-No-Assumption pass, unchanged by
+      // this session's visual renewal).
       <div
         className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
         style={{ animation: "gp-round-overlay-in 0.35s ease-out both" }}
         onClick={handleBackdropTap}
       >
-        <SkipButton onSkip={triggerSkip} />
         <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.05] p-5 text-center">
           <span className="text-3xl">🤝</span>
           <h2 className="text-lg font-bold text-white/80">{result.roundNumber}라운드 · 무승부</h2>
@@ -349,6 +360,7 @@ export default function RoundResultOverlay({
               </div>
             ))}
           </div>
+          <SkipButton onSkip={triggerSkip} />
           <NextRoundCountdown timeLeft={timeLeft} secondsTotal={secondsTotal} />
         </div>
       </div>

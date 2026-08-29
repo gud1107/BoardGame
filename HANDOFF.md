@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-29 (**모바일 전용 넷플릭스 스타일 카테고리 가로 스크롤 로비 개편 세션** — 자세한 내용은 아래 `### 2026-08-29 — 모바일 전용 넷플릭스 스타일 카테고리 가로 스크롤 로비 개편` 절 참고.)_
+_최종 갱신: 2026-08-29 (**그리드포커 라운드 결과 연출 비주얼 전면 개편(Canvas 레이저빔/골드·다이아몬드 파티클 + 회전 포커칩 스탬프) 및 스킵 버튼 이펙트 직하단 재배치 세션** — 자세한 내용은 아래 `### 2026-08-29 — 그리드포커 결과 연출 비주얼 리뉴얼 및 스킵 버튼 이펙트 직하단 재배치` 절 참고.)_
+
+_이전 갱신: 2026-08-29 (**모바일 전용 넷플릭스 스타일 카테고리 가로 스크롤 로비 개편 세션** — 자세한 내용은 아래 `### 2026-08-29 — 모바일 전용 넷플릭스 스타일 카테고리 가로 스크롤 로비 개편` 절 참고.)_
 
 _이전 갱신: 2026-08-29 (**언어의 조각 — 회전 다이얼 입력을 직접 타이핑 입력으로 전면 교체 + 실시간 자음/모음 조각 현황판(PieceTracker) 신설 세션** — 자세한 내용은 아래 `### 2026-08-29 — 언어의 조각 직접 타이핑 입력 및 실시간 자모 조각 현황판` 절 참고.)_
 
@@ -63,6 +65,33 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-29 — 그리드포커 결과 연출 비주얼 리뉴얼 및 스킵 버튼 이펙트 직하단 재배치
+
+**요청**: 그리드포커 라운드/게임 결과 정산 연출의 비주얼 스타일을 네온 족보 빔/스탬프/글로우 파티클로 개편하고, 기존에 화면 구석(우측 상단)에 있던 [⏩ 연출 스킵] 버튼을 이펙트 영역 바로 하단 중앙으로 재배치. 요청서는 `src/games/gridPoker/` 하위 `ResultModal.tsx`/`RoundSummary.tsx`/`ScoreBoard.tsx`/`ScoreEffect.tsx`/`GridCell.tsx`를 전제했고, 새 이펙트 구현 방식(CSS 키프레임/Canvas 파티클/Lottie/Framer Motion)과 모바일 여백 수치 등은 "절대 임의로 추정하지 말고 먼저 번호를 매긴 질문 목록을 제시"하라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사에서 발견한 핵심 불일치**: 요청 경로/파일명은 전부 존재하지 않음 — 실제 경로는 `src/games/grid-poker/`(하이픈)이고, 결과 연출은 [`RoundResultOverlay.tsx`](src/games/grid-poker/RoundResultOverlay.tsx) 하나(2026-08-24 신설, 2026-08-29 오전 스킵 버튼 추가 세션에서 이미 `⏩ 연출 스킵` 버튼과 백드롭 더블탭 제스처가 구현돼 있었음 — [skipGesture.ts](src/games/grid-poker/skipGesture.ts))에 집중돼 있었음. `GridPokerBoard.tsx`의 `Cell`(placing 단계 중 줄 완성 시 도는 `gp-line-glow` 골드 스윕)과 `GridPokerEffects.tsx`(`HandRankFloatingBadge`, "줄 완성!" 토스트)는 별개의 라운드 진행 중 연출이라 이번 리뉴얼 범위에서 제외(질문 1 답변). `game-end`(최종 게임 결과) 화면은 지연 없이 즉시 렌더링돼 스킵할 대상 자체가 없음(기존 확인 사항 재확인). SFX 확인: `playHandFanfare`/`playVictoryStamp`는 300ms 이하로 끝나는 순수 합성 원샷이라 "잔여 SFX 페이드아웃"이 실질적으로 손댈 대상이 없었고, 유일하게 유효한 항목이던 `playVictoryStamp`의 150ms 지연 `setTimeout`도 이미 `state.phase` 의존 `useEffect`의 클린업으로 스킵 시 자동 취소되고 있었음(GridPokerBoard.tsx, 별도 코드 추가 불필요).
+
+**`AskUserQuestion`으로 확인한 사항 (4문항)**:
+1. 리뉴얼 적용 범위 → **라운드 결과 오버레이만**(RoundResultOverlay.tsx). placing 단계의 줄 완성 골드 스윕/토스트는 그대로 둠.
+2. 새 비주얼(레이저 빔/스탬프/파티클) 구현 기술 → **Canvas 기반 파티클**(pure CSS 키프레임이나 신규 Framer Motion 의존성 대신, `requestAnimationFrame` 실시간 시뮬레이션).
+3. 다이아몬드 파티클 축하 연출 적용 족보 기준 → **플러시 이상**(category >= 5, GridPokerEffects.tsx의 `HandRankFloatingBadge` ✨ 스파클과 동일 임계값으로 통일).
+4. 기존 골드 썬버스트+컨페티+텍스트 스탬프 교체 여부 → **완전 교체**(레이어 추가 아님).
+
+**구현**:
+- **[`ScoreEffectCanvas.tsx`](src/games/grid-poker/ScoreEffectCanvas.tsx) 신규** — `<canvas>` 기반 파티클 엔진. 화면 중앙 상단부에서 회전하는 6개의 골드 네온 레이저 빔(`globalCompositeOperation="lighter"` 가산 합성으로 네온 발광 재현, 기존 정적 `repeating-conic-gradient` 회전 대신 실제로 "훑고 지나가는" 느낌 구현), 초기 골드 스파크 46개 폭죽식 방사 버스트 + 오버레이가 떠있는 내내 지속되는 앰비언트 쉬머 트리클(0.16초마다 신규 스폰), 고득점(플러시 이상)일 때만 추가되는 다이아몬드(회전 마름모, 화이트-시안 그라디언트+글로우) 34개 폭발 버스트. `RoundResultOverlay.tsx`가 이미 `typeof document === "undefined"`일 때 전체를 null 처리하므로 이 캔버스는 서버 렌더링 경로에 절대 포함되지 않아 `Math.random()` 자유 사용이 하이드레이션 불일치를 일으킬 수 없음(기존 `CONFETTI_PIECES`의 결정론적 배열 방식과 다른 근거— 주석에 명시). 언마운트 시 `cancelAnimationFrame` + resize 리스너 해제.
+- **[`RoundResultOverlay.tsx`](src/games/grid-poker/RoundResultOverlay.tsx)**:
+  - `GoldSunburst`/`ConfettiBurst`(구 텍스트 스탬프와 함께 완전 삭제) → `<ScoreEffectCanvas highTier={승자 hand.category >= 5} />`로 교체.
+  - `VictoryStamp` — 평평한 "[ ROUND N WIN! ]" 텍스트 배지를 **회전하는 포커 칩/메탈릭 실링 왁스 스탬프 형태**로 전면 교체. 원형 메탈 그라디언트 페이스 + `repeating-conic-gradient`를 환형으로 마스킹한 칩 테두리 노치 + 오프축 회전으로 날아들어와 "쿵" 정착하는 `gp-stamp-rotate-in` 키프레임(캔버스가 아닌 순수 CSS/HTML 유지 — 이 프로젝트 어디에도 `<canvas>`에 UI 텍스트를 굽는 패턴이 없고 접근성/선명도 문제가 있어 텍스트 포함 그래픽은 CSS로 유지, Canvas는 텍스트 없는 파티클/빔 전용으로 역할 분리).
+  - `WinningLineGrid` — 컨테이너에 `drop-shadow-[0_0_15px_rgba(234,179,8,0.6)]` 네온 글로우 테두리 추가 + 그 위를 한 번 훑고 지나가는 `gp-line-scan-sweep` 레이저 스캔 밴드 신규.
+  - `SkipButton` — 기존 `absolute top-3 right-3` 코너 고정을 제거하고, 승자/무승부 두 분기 모두 **효과 영역(WinningLineGrid / 무승부 recap 리스트) 바로 아래 인라인 배치**로 이동(`mt-3 sm:mt-4`, `flex flex-col items-center` 컬럼 안에서 자연스럽게 중앙 정렬). 스타일을 요청서가 제시한 정확한 값대로 `rounded-full`·`px-6 py-2.5`·`bg-slate-900/80 backdrop-blur-sm border border-yellow-500/50`·`active:scale-95`로 교체, 신규 `gp-skip-pulse-glow` 키프레임(box-shadow만 펄스 — 라벨 가독성을 해치는 Tailwind 기본 `animate-pulse`의 불투명도 깜빡임 대신)으로 상시 은은한 네온 글로우 부여. 백드롭 더블탭 스킵 제스처(`isDoubleTap`)는 그대로 유지(대형 버튼이 생겼다고 기존 모바일 제스처를 없앨 이유가 없어 하위 호환으로 존치).
+  - 모듈 최상단 doc 주석과 각 컴포넌트 doc 주석을 이번 세션 근거로 갱신(교체 이력 추적용).
+- **[`globals.css`](src/app/globals.css)** — 사용처가 없어진 `gp-sunburst-spin`/`gp-confetti-fall`/`gp-victory-stamp-in` 3종 삭제(사전에 저장소 전체 grep으로 다른 파일에서 참조 없음 확인), `gp-stamp-rotate-in`/`gp-line-scan-sweep`/`gp-skip-pulse-glow` 3종 신규 추가. `gp-round-overlay-in`/`gp-round-overlay-shake`/`gp-winline-pulse-in`/`gp-winline-float`(입장 페이드/화면 흔들림/카드 개별 펄스)는 이번 리뉴얼 대상(썬버스트/컨페티/스탬프)이 아니라 그대로 유지.
+- **엔진/테스트 변경 없음** — `engine.ts`와 `GridPoker.test.ts`는 이번 세션과 무관(순수 렌더링/비주얼 변경). `GridPoker.test.ts`가 실제로 exercise하는 건 엔진 레벨 `advance-round-result` 액션과 순수 `isDoubleTap` 헬퍼뿐이고, 이 저장소 vitest 환경은 컴포넌트 렌더링 테스트 설비가 없어(node 환경, DOM 없음) 텍스트/클래스 변경으로 깨질 테스트가 애초에 없었음.
+
+**검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(**44개 파일 · 1347개 테스트 전부 통과**, 46초, 기존 테스트 그대로 무변경). Chrome DevTools 모바일/데스크톱 실사용 스크린샷 점검은 **이번 세션에서 수행하지 못함** — 이 환경(Windows Git Bash)에 `chromium-cli`/Playwright/MCP 브라우저 도구가 설치돼 있지 않아 `run` 스킬의 브라우저 구동 경로를 탈 수 없었음(신규 npm 의존성 설치는 사용자 확인 없이 진행하지 않음). 사용자가 원하면 Playwright를 devDependency로 추가해 이후 세션에서 재사용 가능한 스크린샷 점검 스킬을 만들 수 있음.
+
+**다음 세션 인계 (미해결 항목)**: Chrome DevTools 모바일/데스크톱 실사용 스크린샷 점검 미완료(위 "검증" 항목 참고) — 브라우저 자동화 도구 설치 여부를 사용자에게 확인 후 진행 필요.
 
 ### 2026-08-29 — 언어의 조각 직접 타이핑 입력 및 실시간 자모 조각 현황판
 

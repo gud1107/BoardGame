@@ -1287,11 +1287,15 @@ body {
 }
 
 /* 그리드 포커's round-win celebration overlay (see RoundResultOverlay.tsx,
-   2026-08-24 라운드 승리 연출 강화 세션) — a full-screen portal shown while
-   `state.phase === "round-result"` (engine.ts's module doc "Flow" section).
-   The six keyframes below are this overlay's own effects; none are reused
-   from the per-cell flourishes above (gp-card-place etc.), which stay scoped
-   to the live board grid during placing/submitting. */
+   2026-08-24 라운드 승리 연출 강화 세션, 비주얼 전면 개편 2026-08-29 세션) —
+   a full-screen portal shown while `state.phase === "round-result"`
+   (engine.ts's module doc "Flow" section). The keyframes below are this
+   overlay's own effects; none are reused from the per-cell flourishes above
+   (gp-card-place etc.), which stay scoped to the live board grid during
+   placing/submitting. The free-floating particle/laser-beam layer itself
+   (old gp-sunburst-spin + gp-confetti-fall, replaced 2026-08-29) now lives in
+   ScoreEffectCanvas.tsx as a real per-frame `<canvas>` simulation instead of
+   fixed CSS keyframes — see that file's module doc for why. */
 
 /* Backdrop + content fade/scale-in on mount. */
 @keyframes gp-round-overlay-in {
@@ -1305,58 +1309,74 @@ body {
   }
 }
 
-/* The slow-rotating ray layer behind the winner headline — a
-   repeating-conic-gradient (see RoundResultOverlay.tsx) spun continuously
-   for as long as the overlay is mounted, giving the "황금빛 빛줄기" a sense of
-   radiating outward without ever needing per-frame JS. */
-@keyframes gp-sunburst-spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-/* One confetti piece's fall — start position/delay/color/size/drift are all
-   supplied per-particle via inline style (RoundResultOverlay.tsx's fixed
-   deterministic `CONFETTI_PIECES` list, same "fixed scatter reads just as
-   lively as randomizing, without size/position jitter between runs"
-   rationale as this file's own gp-sparkle-twinkle above). */
-@keyframes gp-confetti-fall {
-  0% {
-    transform: translate(var(--confetti-drift-start, 0px), -12vh) rotate(0deg);
-    opacity: 0;
-  }
-  12% {
-    opacity: 1;
-  }
-  100% {
-    transform: translate(var(--confetti-drift-end, 24px), 108vh) rotate(720deg);
-    opacity: 0;
-  }
-}
-
-/* "[ ROUND N WIN! ]" emblem slamming into place — starts oversized and
-   rotated, overshoots past its resting size/angle, settles with a slight
-   permanent tilt so it reads as physically stamped rather than just faded
+/* The rotating poker-chip / wax-seal `VictoryStamp` emblem slamming into
+   place (replaced the old flat "[ ROUND N WIN! ]" text badge's
+   gp-victory-stamp-in, 2026-08-29 visual-renewal session) — starts oversized
+   and rotated off-axis, overshoots past its resting size/angle, settles dead
+   level so it reads as a chip physically stamped down rather than just faded
    in. Paired with gp-round-overlay-shake below (both fire at mount, see
    RoundResultOverlay.tsx's `VictoryStamp`). */
-@keyframes gp-victory-stamp-in {
+@keyframes gp-stamp-rotate-in {
   0% {
-    transform: scale(2.4) rotate(-14deg);
+    transform: scale(2.4) rotate(-35deg);
     opacity: 0;
+    filter: blur(2px);
   }
   55% {
-    transform: scale(0.92) rotate(-2deg);
+    transform: scale(0.92) rotate(6deg);
     opacity: 1;
+    filter: blur(0);
   }
   75% {
-    transform: scale(1.06) rotate(-4deg);
+    transform: scale(1.06) rotate(-2deg);
   }
   100% {
-    transform: scale(1) rotate(-3deg);
+    transform: scale(1) rotate(0deg);
     opacity: 1;
+  }
+}
+
+/* Laser scan pulse across the winning-line mini board (RoundResultOverlay.tsx's
+   `WinningLineGrid`, 2026-08-29 visual-renewal session) — a bright band
+   sweeping once from just off its left edge to past its right edge, layered
+   on top of the grid's own neon `drop-shadow` border glow so it's obvious at
+   a glance which board just won. `translateX` is expressed in units of the
+   band's own width (40% of the container) — (100% container + 40% band) /
+   40% band = 350%, the exact distance needed to fully cross the container
+   regardless of its actual pixel size. */
+@keyframes gp-line-scan-sweep {
+  0% {
+    transform: translateX(0%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(350%);
+    opacity: 0;
+  }
+}
+
+/* Skip button's "you can tap this" neon glow (RoundResultOverlay.tsx's
+   `SkipButton`, 2026-08-29 visual-renewal session) — pulses only the
+   surrounding box-shadow ring, deliberately not the button's own opacity
+   (unlike Tailwind's stock `animate-pulse`), so the "⏩ 연출 스킵" label stays
+   fully legible the whole time. */
+@keyframes gp-skip-pulse-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(234, 179, 8, 0.45),
+      0 0 10px 1px rgba(234, 179, 8, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(234, 179, 8, 0),
+      0 0 22px 4px rgba(234, 179, 8, 0.65);
   }
 }
 
