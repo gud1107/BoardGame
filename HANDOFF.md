@@ -94,6 +94,8 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계 (미해결 항목)**: 사용자가 표준국어대사전 Open API 키를 발급받으면, `words.ts`의 262개 큐레이션 사전을 그 사전 기반 대용량 단어 목록(빌드타임 정적 번들링, `engine.ts`의 "pure, no I/O" 결정론 계약 유지)으로 교체하는 후속 작업이 남아있음 — 이번 세션은 그 전 단계(입력 UI/카운터)만 완료하고 사전 자체는 그대로 둠(사용자 확인 사항 4번).
 
+**커밋/배포**: 이번 세션이 만든/수정한 9개 파일만 스테이징(`HANDOFF.md`/`globals.css`/`PieceTracker.tsx`/`WordInput.tsx`/`useHangulAnalysis.ts`/`PiecesOfLanguage.test.ts`/`PiecesOfLanguageBoard.tsx`/`RulebookModal.tsx`/`hangul.ts`) — 작업 트리에 있던 다른 세션들의 미커밋 변경(`.claude/`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`, `GameCategoryRow.tsx`, `gameCategories.ts`)은 이번 작업과 무관하므로 건드리지 않음. 커밋 메시지 `feat(word-piece): add direct text input with real-time hangul consonant and vowel tracker`(`d48e8d8`) → `git push origin main` 완료(`5c6fc90..d48e8d8`). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(39초), `target: "production"`/`readyState: READY`(`dpl_3dNcfZqFUMznazd3Lnrp4XY4nkh9`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨. `curl`로 `/`·`/games/pieces-of-language` 둘 다 200 직접 확인함.
+
 ### 2026-08-29 — 모바일 SiteHeader 텍스트 세로 쪼개짐 수정 및 GameCard 제목 줄바꿈 정책
 
 **요청**: 모바일 뷰포트(좁은 너비) 접속 시 텍스트 세로 쪼개짐/줄바꿈 깨짐 및 레이아웃 붕괴 전면 해결. 요청서는 `src/pages/lobby/`, `src/components/layout/`(`Header.tsx`/`Navbar.tsx`), `src/styles/`, `tailwind.config.js`, `word-break: break-all` 기본 적용을 원인으로 전제했고, "모호한 점은 임의로 추정하지 말고 번호를 매긴 질문 목록을 먼저 제시"하라는 명시적 지시(Strict No-Assumption Rule).
