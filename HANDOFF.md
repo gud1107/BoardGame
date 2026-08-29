@@ -94,7 +94,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 - 레거시 로컬(IndexedDB, 계정 연동 이전) 리포트는 이번 게스트 기능과 무관 — 여전히 관리자만 수정/삭제 가능한 기존 동작 그대로.
 - 실제 Supabase 프로젝트에 대한 라이브 통합 테스트(진짜 bcrypt round-trip을 실제 DB 컬럼에 저장/조회)는 미실행 — `serverRepository.ts` 함수는 mock으로만 검증(이 저장소 기존 관례와 동일).
 
-**커밋/배포**: 아래 실행 예정.
+**커밋/배포**: 이번 세션이 만들거나 수정한 파일만 스테이징(신규 `guestAuth.ts`/`guestAuth.test.ts`/`GuestPasswordModal.tsx` + 버그리포트 관련 12개 파일 수정 + `package.json`/`package-lock.json`(bcryptjs 추가) + HANDOFF, 총 21개 파일) — 세션 시작 시점부터 작업 트리에 있던 다른 세션들의 미커밋 변경(`.claude/`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`, `src/components/lobby/GameCategoryRow.tsx`, `src/constants/gameCategories.ts`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지 `feat(bug-report): allow guest submissions with password and grant master delete permissions to freedom_03@naver.com`(`6651192`) → `git push origin main` 완료(`57de519..6651192`). 사용자가 "production"을 명시하지 않아 과거 세션들과 동일 기준으로 `npx vercel deploy --scope me-3871`(프리뷰)까지만 진행 — Turbopack 빌드 정상 완주(TypeScript 전체 재검사 포함), `readyState: READY` — `https://board-game-h0xipo4or-me-3871.vercel.app`. 이 미리보기 URL은 Vercel 팀 SSO 배포 보호가 걸려 있어 `curl`은 302(SSO 리다이렉트)만 확인됨 — 과거 세션들과 동일하게 `readyState: READY` + 빌드 로그의 TypeScript 재검사 통과를 성공 근거로 삼음(팀 로그인 없이는 직접 200 확인 불가). 필요하면 `npx vercel deploy --prod --scope me-3871`로 후속 프로덕션 승격 요청할 것 — **단, 프로덕션 승격 여부와 무관하게 `supabase/schema.sql`의 신규 `alter table bug_reports ...` 구문을 사용자가 Supabase SQL 에디터에서 직접 실행하기 전까지는 게스트 작성/게스트 대상 마스터 삭제가 실제로 동작하지 않음**(위 "알려진 한계" 참고). 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨.
 
 ### 2026-08-29 — 고유 식별자 기반 내기 정산 원장 및 엑셀형 사후 닉네임 병합 취합표
 
