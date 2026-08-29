@@ -134,8 +134,11 @@ export function ItemSlot({
           // `HpBanner`'s kill-flash plays (see globals.css), reused here so the
           // item that just neutralized a monster visibly flares in sync with it
           // rather than relying on a static ring alone against an
-          // already-gold equipped border.
-          animation: highlighted ? "rift-hp-kill-pulse 1700ms ease-out" : undefined,
+          // already-gold equipped border. 2026-08-30 세션: `HpBanner`의 펄스가
+          // `HIT_FLASH_MS`(400ms)로 짧아진 데 맞춰 이쪽도 동일 계열의 짧은
+          // 값(600ms)으로 조정 — 나머지 3.4~4.6초는 `ring-4 ring-amber-300`
+          // 정적 테두리 + "발동!" 배지만으로 5초 유지창 내내 표시된다.
+          animation: highlighted ? "rift-hp-kill-pulse 600ms ease-out" : undefined,
         }}
       >
         <Image src={ITEM_IMAGES[itemId]} alt={item.name} width={imgSize} height={imgSize} className="h-full w-full object-cover" />

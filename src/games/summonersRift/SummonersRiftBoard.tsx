@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
 import SummonersRiftLastRoundModal from "./SummonersRiftLastRoundModal";
 import SummonersRiftGuideSidebar from "./SummonersRiftGuideSidebar";
 import { CardPileStack, HeroCard, ItemSlot, MonsterFace, RemovedItemsRow } from "./CardArt";
-import { detectRiftPushEvent, FlyingRiftCard, type RiftPushEvent } from "./SummonersRiftEffects";
+import { detectRiftPushEvent, FlyingRiftCard, NamedMonsterDim, type RiftPushEvent } from "./SummonersRiftEffects";
 import {
   computeRankings,
   computeTotalHp,
+  getMonsterDef,
   ITEM_CATALOG,
   MONSTER_CATALOG,
   SUCCESS_TOKENS_TO_WIN,
@@ -60,34 +61,121 @@ interface CombatFlashState {
   hpBefore: number;
 }
 
-/** How long the flip+resolve choreography takes before the reveal slot's own `rift-monster-slay`/`rift-monster-strike` keyframes finish (see globals.css) — the HP banner's flash and the challenger's "다음 몬스터 공개" button lock are timed to match so every connected client (not just the challenger) finishes watching one monster resolve before the next can be revealed. */
-const COMBAT_FLASH_MS = 1700;
+/**
+ * 2026-08-30 던전 몬스터 등장 연출 세션 (AskUserQuestion "5초 타이머 구조" — 기존
+ * 사후 연출 잠금 확장안 채택) — `revealNextMonster`는 여전히 등장과 전투 판정이
+ * 한 액션에서 동시에 일어나는 순수 리듀서 그대로이고(엔진 미변경), 이 상수는
+ * 그 판정 *이후* 결과 화면(대형 HP바 + 등장 기록)을 화면에 붙잡아두는 시간이다.
+ * 예전엔 이 값 자체가 1700ms였고 그 시간이 지나면 곧장 "다음 몬스터 공개"가
+ * 풀렸는데, 그게 사용자가 말한 "너무 빨리 넘어가는" 원인이었다 — 이제 5000ms로
+ * 늘리고 [⏩ 스킵]으로 조기 종료할 수 있게 한다. 모든 클라이언트가 동일한
+ * `combatLog` 증가를 보고 동시에 이 타이머를 로컬에서 각자 시작하므로(락스텝
+ * state diff 기반, 서버 타임스탬프 없음) 여전히 같은 트리거 지점에서 함께
+ * 시작되지만, 스킵은 로컬(뷰어 개인)에만 적용된다 — 다른 클라이언트의 타이머는
+ * 그대로 흐른다(AskUserQuestion "스킵 범위" — 로컬 스킵안 채택, 엔진 액션 불필요).
+ */
+const ENCOUNTER_HOLD_MS = 5000;
+/** HP 배너의 피격 흔들림/플래시와 격투 게임 스타일 데미지 트레일 게이지가 따라잡는 데 걸리는 시간(AskUserQuestion "트레일 길이" — 요청 예시 범위 400ms 채택) — `ENCOUNTER_HOLD_MS`와 분리해 두어, 5초 동안 화면은 붙잡아두되 흔들림 자체는 느려지지 않고 처음 400ms에만 짧고 경쾌하게 재생된다. */
+const HIT_FLASH_MS = 400;
 
-/** Task brief §2 "용사의 현재 체력(HP)을 중앙에 크게" — a large, always-visible HP readout for the dungeon-combat phases, replacing the small header badge with an oversized number that also carries the per-monster resolution flash (kill effect / damage flash) while `flash` is set. Renders nothing outside `declaringSpatula`/`resolvingRift` (i.e. whenever `currentHp` isn't live). */
-function HpBanner({ state, flash }: { state: SummonersRiftState; flash: CombatFlashState | null }) {
+/**
+ * 5초 유지 창(`ENCOUNTER_HOLD_MS`) 동안 채워진 채로 시작해 선형으로 0%까지
+ * 줄어드는 얇은 진행 바 — "5초 후 시작 텍스트 안내 병행"(작업 지시 §1)을 위한
+ * 시각 보조. `key={durationMs}` 방식 대신 부모(`HpBanner`)가 `combatLog.length`로
+ * 매 조우마다 이 컴포넌트를 새로 마운트시키므로, 매번 100%에서 다시 시작한다 —
+ * FlyingRiftCard와 동일한 "즉시 전이 없음 상태로 시작값 고정 → reflow 강제 →
+ * transition 재활성화" 기법.
+ */
+function EncounterProgressBar({ durationMs }: { durationMs: number }) {
+  const barRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    el.style.transition = "none";
+    el.style.width = "100%";
+    void el.offsetHeight;
+    el.style.transition = `width ${durationMs}ms linear`;
+    const raf = requestAnimationFrame(() => {
+      const live = barRef.current;
+      if (live) live.style.width = "0%";
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [durationMs]);
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+      <div ref={barRef} className="h-full rounded-full" style={{ background: "linear-gradient(90deg,#f0d48a,#c8933e)" }} />
+    </div>
+  );
+}
+
+/** 위 진행 바와 짝을 이루는 "N초 후 자동으로..." 숫자 안내 — `setInterval`로 200ms마다 남은 초를 재계산한다(경과 시각은 마운트 시각 기준 `Date.now()` 차로 계산해 탭 비활성 등으로 인한 틱 밀림에도 어긋나지 않음). 부모가 매 조우마다 새로 마운트시키므로 항상 `durationMs`초에서 다시 시작한다. */
+function EncounterCountdown({ durationMs }: { durationMs: number }) {
+  const [remaining, setRemaining] = useState(Math.ceil(durationMs / 1000));
+  // `Date.now()` is an impure call, so it can't sit in the render body (or a
+  // bare `useRef(Date.now())` initializer, which runs during render too) —
+  // it's read for the first time inside the effect below instead, which only
+  // ever runs after render has committed.
+  const startRef = useRef<number | null>(null);
+  useEffect(() => {
+    startRef.current = Date.now();
+    const id = setInterval(() => {
+      const elapsed = Date.now() - (startRef.current ?? Date.now());
+      setRemaining(Math.max(0, Math.ceil((durationMs - elapsed) / 1000)));
+    }, 200);
+    return () => clearInterval(id);
+  }, [durationMs]);
+  return <>{remaining}</>;
+}
+
+/**
+ * Task brief §2 "용사의 현재 체력(HP)을 중앙에 크게" — a large, always-visible HP
+ * readout for the dungeon-combat phases. 2026-08-30 세션(AskUserQuestion "HP 바
+ * 대상" — 챔피언 공유 체력에만 적용 채택)에서 텍스트 전용 배너를 두껍고 큼직한
+ * 게이지 바(`h-6 sm:h-8, rounded-full`)로 확장하고, 격투 게임 스타일 데미지
+ * 트레일(즉시 반응하는 앞쪽 게이지 + `HIT_FLASH_MS` 동안 뒤늦게 따라 줄어드는
+ * 붉은/노란 잔상 게이지)과 5초 유지 카운트다운 + [⏩ 스킵] 버튼을 추가했다.
+ * `flash`가 살아있는 동안(=`ENCOUNTER_HOLD_MS` 전체) 계속 렌더링되지만, 흔들림/
+ * 플래시 애니메이션 자체는 `key={flashKey}` 리마운트 덕에 `HIT_FLASH_MS` 동안만
+ * 짧게 재생되고 그 뒤엔 정적인 결과 표시로 5초를 채운다. 몬스터 자체의 HP 풀은
+ * 규칙상 존재하지 않으므로(1회성 고정 데미지 판정) 몬스터용 게이지는 만들지
+ * 않는다 — `MonsterFace` 쪽은 기존 등장/처치 카드 연출만 그대로 유지.
+ */
+function HpBanner({
+  state,
+  flash,
+  flashKey,
+  onSkip,
+}: {
+  state: SummonersRiftState;
+  flash: CombatFlashState | null;
+  /** `flash`가 새로 생길 때마다 바뀌는 값(여기서는 `combatLog.length`) — 연속된 두 피격의 `animation` 인라인 스타일 문자열이 텍스트상 동일해도(둘 다 "데미지" 판정) 매번 리마운트시켜 흔들림/플래시가 매 타격마다 반드시 재생되도록 한다. */
+  flashKey: number;
+  onSkip: () => void;
+}) {
   if (state.currentHp === null || state.totalHp === null) return null;
+  const maxHp = state.totalHp;
+  const curHp = Math.max(0, state.currentHp);
+  const pct = maxHp > 0 ? Math.min(100, (curHp / maxHp) * 100) : 0;
+  const isDamageFlash = flash !== null && !flash.entry.killedBy;
+
   return (
     <section
-      className="flex flex-col items-center gap-1 rounded-2xl border p-3"
+      className="flex flex-col items-center gap-2 rounded-2xl border p-3"
       style={{ borderColor: "rgba(200,170,110,0.3)", background: "linear-gradient(160deg,#241418 0%,#160c0e 55%,#0a0506 100%)" }}
     >
       <span className="text-[10px] font-semibold tracking-wide uppercase" style={{ color: "#c8aa6e" }}>
         ❤️ 용사 체력
       </span>
+
+      {/* 결과 숫자 — 처치 시엔 "처치! HP 유지", 피격 시엔 "이전 ➔ 이후 (-데미지)"를 5초 내내 정적으로 표시. 흔들림/펄스 애니메이션만 key로 재마운트해 HIT_FLASH_MS 동안 재생. */}
       {flash ? (
         flash.entry.killedBy ? (
-          <div
-            className="flex items-center gap-2"
-            style={{ animation: `rift-hp-kill-pulse ${COMBAT_FLASH_MS}ms ease-out` }}
-          >
+          <div key={flashKey} className="flex items-center gap-2" style={{ animation: `rift-hp-kill-pulse ${HIT_FLASH_MS}ms ease-out` }}>
             <span className="text-2xl font-black text-emerald-300">⚔️ 처치!</span>
             <span className="text-lg font-bold text-white/70">HP {flash.hpBefore} 유지</span>
           </div>
         ) : (
-          <div
-            className="flex items-center gap-2 text-3xl font-black text-white"
-            style={{ animation: `rift-hp-damage-flash ${COMBAT_FLASH_MS}ms ease-out` }}
-          >
+          <div key={flashKey} className="flex items-center gap-2 text-3xl font-black text-white" style={{ animation: `rift-hp-damage-flash ${HIT_FLASH_MS}ms ease-out` }}>
             <span>{flash.hpBefore}</span>
             <span className="text-xl text-white/40">➔</span>
             <span className="text-rose-300">{flash.entry.hpAfter}</span>
@@ -98,6 +186,50 @@ function HpBanner({ state, flash }: { state: SummonersRiftState; flash: CombatFl
         <span className="text-3xl font-black text-white">
           {state.currentHp} <span className="text-lg font-semibold text-white/40">/ {state.totalHp}</span>
         </span>
+      )}
+
+      {/* 대형 게이지 바 — 작업 지시 §2 "h-6 sm:h-8, rounded-full" + 중앙 굵은 텍스트. 피격 시 좌우로 흔들리고(rift-hp-hit-shake) 붉게 번쩍인다(brightness/saturate). */}
+      <div
+        key={`bar-${flashKey}`}
+        className="relative h-6 w-full max-w-xs overflow-hidden rounded-full border sm:h-8"
+        style={{
+          borderColor: "rgba(220,60,60,0.4)",
+          background: "rgba(0,0,0,0.45)",
+          animation: isDamageFlash ? `rift-hp-hit-shake ${HIT_FLASH_MS}ms ease-out` : undefined,
+        }}
+      >
+        {/* 잔상(트레일) 게이지 — 앞쪽 게이지와 같은 최종 목표치(pct)로 향하지만 전이 시간이 훨씬 길어(HIT_FLASH_MS), 앞쪽이 먼저 줄어든 뒤 이 노란/붉은 잔상이 뒤늦게 따라 줄어드는 것처럼 보인다. */}
+        <div
+          className="absolute inset-y-0 left-0 rounded-full"
+          style={{ width: `${pct}%`, background: "linear-gradient(90deg,#f0b94a,#e0533f)", transition: `width ${HIT_FLASH_MS}ms ease-out` }}
+        />
+        {/* 앞쪽 게이지 — 즉시(빠르게) 반응해 현재 HP%로 스냅. */}
+        <div
+          className="absolute inset-y-0 left-0 rounded-full"
+          style={{ width: `${pct}%`, background: "linear-gradient(90deg,#8fe3c0,#2fae86)", transition: "width 120ms ease-out" }}
+        />
+        <div className="absolute inset-0 flex items-center justify-center text-xs font-black text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] sm:text-sm">
+          {curHp.toLocaleString()} / {maxHp.toLocaleString()} HP
+        </div>
+      </div>
+
+      {/* 5초 유지 카운트다운 + 스킵 — 작업 지시 §1. flash가 살아있는 동안(ENCOUNTER_HOLD_MS 전체)만 렌더링. */}
+      {flash && (
+        <div key={`skip-${flashKey}`} className="flex w-full max-w-xs flex-col items-center gap-1.5">
+          <EncounterProgressBar durationMs={ENCOUNTER_HOLD_MS} />
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-white/45">
+              <EncounterCountdown durationMs={ENCOUNTER_HOLD_MS} />초 후 자동으로 다음 몬스터 공개
+            </span>
+            <button
+              onClick={onSkip}
+              className="rounded-full px-4 py-1.5 text-[11px] font-black text-black shadow-[0_0_16px_rgba(90,240,200,0.55)] transition hover:brightness-110 active:scale-95"
+              style={{ background: "linear-gradient(135deg,#7dfcd0,#12b892)" }}
+            >
+              ⏩ 스킵
+            </button>
+          </div>
+        </div>
       )}
     </section>
   );
@@ -180,11 +312,24 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
     const t = setTimeout(() => setRoundFlash(null), 5200);
     return () => clearTimeout(t);
   }, [roundFlash]);
+  // 조우 유지 타이머 — combatFlash가 새로 생길 때마다 ENCOUNTER_HOLD_MS 뒤에
+  // 자동으로 잠금 해제한다. 타임아웃 id를 ref에 보관해두는 이유는 [⏩ 스킵]이
+  // 눌렸을 때 이 자동 타이머를 즉시 취소하고 바로 잠금을 풀기 위해서 — 스킵은
+  // 로컬(이 뷰어) 한정이라 다른 클라이언트의 동일 useEffect는 그대로 5초를 채운다.
+  const encounterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!combatFlash) return;
-    const t = setTimeout(() => setCombatFlash(null), COMBAT_FLASH_MS);
-    return () => clearTimeout(t);
+    const t = setTimeout(() => setCombatFlash(null), ENCOUNTER_HOLD_MS);
+    encounterTimeoutRef.current = t;
+    return () => {
+      clearTimeout(t);
+      encounterTimeoutRef.current = null;
+    };
   }, [combatFlash]);
+  const handleSkipEncounter = useCallback(() => {
+    if (encounterTimeoutRef.current) clearTimeout(encounterTimeoutRef.current);
+    setCombatFlash(null);
+  }, []);
   const handlePushDone = useCallback((id: number) => {
     setPushEvents((prev) => prev.filter((e) => e.id !== id));
   }, []);
@@ -295,6 +440,12 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
     combatFlash?.entry.killedBy && ("itemId" in combatFlash.entry.killedBy ? combatFlash.entry.killedBy.itemId : 5);
 
   const dungeonPhaseActive = state.phase === "declaringSpatula" || state.phase === "resolvingRift";
+  // 2026-08-30 세션(AskUserQuestion "보스 구분" — copies===1 몬스터를 '네임드'로
+  // 취급 채택): MONSTER_CATALOG에 별도 isBoss 필드가 없어, 13장 중 1장뿐인
+  // 희귀 몬스터(카서스/모데카이저/장로드래곤, 위협도 6/7/9)를 네임드 기준으로
+  // 삼는다. 방금 해결된 몬스터가 이 기준에 걸리면 조우 유지창(5초) 동안
+  // 백드롭 딤 + 살짝 확대(줌인) 포커싱을 얹는다.
+  const namedFlashActive = combatFlash !== null && getMonsterDef(combatFlash.entry.monster.threat).copies === 1;
 
   return (
     // Three columns wide, narrowing to a single stack: the monster history
@@ -374,42 +525,57 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
           </div>
         </section>
 
-        {/* Task brief §2: a large, central live HP readout for the dungeon-combat phases, with the per-monster kill/damage flash baked in. */}
-        <HpBanner state={state} flash={combatFlash} />
+        {/* 네임드 몬스터 조우 시 백드롭 딤(전체 화면 포털) — namedFlashActive일 때만 마운트. */}
+        {namedFlashActive && <NamedMonsterDim />}
 
-        {/* Card piles: the monster draw deck (task brief §1) beside the Rift accumulation pile — both face-down, remaining count badged on top. */}
-        <section className="flex flex-wrap items-start justify-center gap-4 rounded-2xl border border-white/10 bg-black/25 p-3">
-          <div className="flex flex-col items-center gap-2">
-            <h3 className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">🃏 던전 입장 카드더미</h3>
-            <CardPileStack count={state.deck.length} emptyHint="덱 소진" />
-          </div>
-          <div ref={riftStackRef} className="flex flex-col items-center gap-2">
-            <h3 className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">🗡️ 협곡 더미</h3>
-            {state.riftPile.length === 0 && state.phase === "bidding" ? (
-              <div className="flex h-16 w-12 items-center justify-center">
-                <p className="text-center text-[9px] leading-tight text-white/30">아직 없음</p>
-              </div>
-            ) : (
-              <CardPileStack count={state.riftPile.length} />
-            )}
+        {/* HP 배너 + 카드더미 묶음 — 네임드 조우 중엔 이 블록 전체를 딤 배경 위로 끌어올리고(z-index) 살짝 확대해 "카메라 줌인" 포커싱을 흉내낸다(작업 지시 §2 "카메라 줌인 또는 백드롭 딤"). */}
+        <div className={`relative flex flex-col gap-3 transition-transform duration-300 ${namedFlashActive ? "z-50 scale-[1.03] sm:scale-105" : ""}`}>
+          {namedFlashActive && (
+            <span
+              className="self-center rounded-full border px-3 py-1 text-[11px] font-black tracking-wide"
+              style={{ borderColor: "rgba(230,120,255,0.5)", background: "rgba(120,40,180,0.25)", color: "#e8b8ff", animation: "rift-named-dim-in 0.35s ease-out" }}
+            >
+              👑 네임드 몬스터 등장!
+            </span>
+          )}
 
-            {/* Dungeon phase: current reveal slot — keyed remount replays the flip/resolve animation each new combatLog entry (task brief §2 "카드 제거 애니메이션"). */}
-            {state.phase === "resolvingRift" && state.combatLog.length > 0 && (
-              <div
-                key={state.combatLog.length}
-                className="flex flex-col items-center gap-1"
-                style={{
-                  animation: state.combatLog.at(-1)!.killedBy
-                    ? "rift-monster-flip 0.4s ease-out, rift-monster-slay 0.5s ease-in 1.1s forwards"
-                    : "rift-monster-flip 0.4s ease-out, rift-monster-strike 0.6s ease-in 1.1s forwards",
-                }}
-              >
-                <MonsterFace threat={state.combatLog.at(-1)!.monster.threat} size="md" />
-                {combatBadge(state.combatLog.at(-1)!)}
-              </div>
-            )}
-          </div>
-        </section>
+          {/* Task brief §2: a large, central live HP readout for the dungeon-combat phases, with the per-monster kill/damage flash baked in. */}
+          <HpBanner state={state} flash={combatFlash} flashKey={state.combatLog.length} onSkip={handleSkipEncounter} />
+
+          {/* Card piles: the monster draw deck (task brief §1) beside the Rift accumulation pile — both face-down, remaining count badged on top. */}
+          <section className="flex flex-wrap items-start justify-center gap-4 rounded-2xl border border-white/10 bg-black/25 p-3">
+            <div className="flex flex-col items-center gap-2">
+              <h3 className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">🃏 던전 입장 카드더미</h3>
+              <CardPileStack count={state.deck.length} emptyHint="덱 소진" />
+            </div>
+            <div ref={riftStackRef} className="flex flex-col items-center gap-2">
+              <h3 className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">🗡️ 협곡 더미</h3>
+              {state.riftPile.length === 0 && state.phase === "bidding" ? (
+                <div className="flex h-16 w-12 items-center justify-center">
+                  <p className="text-center text-[9px] leading-tight text-white/30">아직 없음</p>
+                </div>
+              ) : (
+                <CardPileStack count={state.riftPile.length} />
+              )}
+
+              {/* Dungeon phase: current reveal slot — keyed remount replays the flip/resolve animation each new combatLog entry (task brief §2 "카드 제거 애니메이션"). combatBadge는 애니메이션 래퍼 *밖*에 렌더링한다 — rift-monster-slay/strike가 `forwards`로 몬스터 카드를 투명하게 마무리해도(2026-08-30 세션 전까지는 배지까지 같이 사라졌음) 처치/피격 결과 배지는 조우 유지 5초 내내 계속 보이도록. */}
+              {state.phase === "resolvingRift" && state.combatLog.length > 0 && (
+                <div key={state.combatLog.length} className="flex flex-col items-center gap-1">
+                  <div
+                    style={{
+                      animation: state.combatLog.at(-1)!.killedBy
+                        ? "rift-monster-flip 0.4s ease-out, rift-monster-slay 0.5s ease-in 1.1s forwards"
+                        : "rift-monster-flip 0.4s ease-out, rift-monster-strike 0.6s ease-in 1.1s forwards",
+                    }}
+                  >
+                    <MonsterFace threat={state.combatLog.at(-1)!.monster.threat} size="md" />
+                  </div>
+                  {combatBadge(state.combatLog.at(-1)!)}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
 
         <TurnPanel state={state} viewerSeat={viewerSeat} me={me} isChallenger={isChallenger} onAction={onAction} revealLocked={combatFlash !== null} />
 

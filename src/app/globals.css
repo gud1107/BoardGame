@@ -364,6 +364,53 @@ body {
   }
 }
 
+/* 2026-08-30 던전 몬스터 등장 연출 세션 — the large HP *gauge bar* itself
+   (see SummonersRiftBoard.tsx's `HpBanner`) shaking + flashing bright/
+   saturated red on a damage hit, distinct from rift-hp-damage-flash above
+   (which shakes the small numeric readout text). Runs once for HIT_FLASH_MS
+   (400ms) via a keyed remount so back-to-back hits always replay it, then
+   settles back to its normal look for the remainder of the 5s encounter
+   hold. */
+@keyframes rift-hp-hit-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+    filter: brightness(1) saturate(1);
+  }
+  15% {
+    transform: translateX(-4px);
+    filter: brightness(1.5) saturate(2);
+  }
+  30% {
+    transform: translateX(4px);
+  }
+  45% {
+    transform: translateX(-3px);
+    filter: brightness(1.5) saturate(2);
+  }
+  60% {
+    transform: translateX(3px);
+  }
+  80% {
+    transform: translateX(-1px);
+    filter: brightness(1.1) saturate(1.2);
+  }
+}
+
+/* Summoner's Rift — the fixed full-screen dim backdrop behind a named
+   (copies===1) monster's 5s encounter hold (see SummonersRiftEffects.tsx's
+   `NamedMonsterDim`), a soft fade-in so the dim doesn't snap in jarringly.
+   Reused (much faster, same easing) for the "👑 네임드 몬스터 등장!" badge in
+   SummonersRiftBoard.tsx. */
+@keyframes rift-named-dim-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
 /* 달무티's card-exchange flight (see DalmutiEffects.tsx / FlyingExchangeCard)
    — 2026-08-25 후속 세션(평민 자유 선택 교환 모달 + 비공개 마스킹 + 화려한 VFX)
    replaced the older straight-scale-in `dalmuti-tax-fly` with a richer arc.

@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-29 (**그리드포커 라운드 결과 연출 비주얼 전면 개편(Canvas 레이저빔/골드·다이아몬드 파티클 + 회전 포커칩 스탬프) 및 스킵 버튼 이펙트 직하단 재배치 세션** — 자세한 내용은 아래 `### 2026-08-29 — 그리드포커 결과 연출 비주얼 리뉴얼 및 스킵 버튼 이펙트 직하단 재배치` 절 참고.)_
+_최종 갱신: 2026-08-30 (**소환사의 협곡 던전 몬스터 등장 연출 5초 유지 + 스킵 버튼 + 대형 HP바 피격 트레일/흔들림 + 네임드 몬스터 백드롭 딤 세션** — 자세한 내용은 아래 `### 2026-08-30 — 소환사의 협곡 던전 몬스터 등장 5초 유지·스킵·대형 HP바 피격 연출` 절 참고.)_
+
+_이전 갱신: 2026-08-29 (**그리드포커 라운드 결과 연출 비주얼 전면 개편(Canvas 레이저빔/골드·다이아몬드 파티클 + 회전 포커칩 스탬프) 및 스킵 버튼 이펙트 직하단 재배치 세션** — 자세한 내용은 아래 `### 2026-08-29 — 그리드포커 결과 연출 비주얼 리뉴얼 및 스킵 버튼 이펙트 직하단 재배치` 절 참고.)_
 
 _이전 갱신: 2026-08-29 (**모바일 전용 넷플릭스 스타일 카테고리 가로 스크롤 로비 개편 세션** — 자세한 내용은 아래 `### 2026-08-29 — 모바일 전용 넷플릭스 스타일 카테고리 가로 스크롤 로비 개편` 절 참고.)_
 
@@ -94,6 +96,33 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 **다음 세션 인계 (미해결 항목)**: Chrome DevTools 모바일/데스크톱 실사용 스크린샷 점검 미완료(위 "검증" 항목 참고) — 브라우저 자동화 도구 설치 여부를 사용자에게 확인 후 진행 필요.
 
 **커밋/배포**: 이번 세션이 만들거나 수정한 파일만 스테이징(`ScoreEffectCanvas.tsx` 신규 + `RoundResultOverlay.tsx`/`globals.css`/HANDOFF, 총 4개 파일) — 작업 트리에 있던 다른 세션들의 미커밋 변경(`.claude/`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지 `feat(grid-poker): redesign scoring effect visuals and reposition skip button directly below effect area`(`afe09c8`) → `git push origin main` 완료(`247d8c4..afe09c8`). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(40초), `target: "production"`/`readyState: READY`(`dpl_6JjtGevRCT5JXDtExAiiAuWLXdRj`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨. `curl`로 `/`·`/games/grid-poker` 둘 다 200 직접 확인함.
+
+### 2026-08-30 — 소환사의 협곡 던전 몬스터 등장 5초 유지·스킵·대형 HP바 피격 연출
+
+**요청**: 소환사의 협곡 던전 몬스터 등장 시 연출이 너무 빨리 지나가는 문제 해결(기본 5초 유지 + [⏩ 스킵] 버튼), 대형 체력(HP) 게이지 중앙 포커싱, 피격 시 체력바 흔들림/데미지 트레일 애니메이션 개발. 요청서는 `src/games/summonersRift/` 또는 `src/games/rift/`, `src/games/dungeon/` 하위 `DungeonModal.tsx`/`MonsterEncounter.tsx`/`HpBar.tsx`/`Board.tsx`/`engine.ts` 경로를 전제했고, "몬스터 출현 타이머 정확한 동작 방식, 데미지 애니메이션 딜레이, 멀티플레이 타이머 동기화 방식 등은 절대 임의로 추정하지 말고 먼저 질문 목록을 제시"하라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사에서 발견한 핵심 불일치**: 요청 경로는 전부 존재하지 않음 — 실제 게임은 [`src/games/summonersRift/`](src/games/summonersRift/) 하나뿐이고, 던전 연출은 별도 모달이 아니라 [`SummonersRiftBoard.tsx`](src/games/summonersRift/SummonersRiftBoard.tsx)의 협곡 더미 리빌 슬롯 + `HpBanner`가 담당. 더 근본적으로, [`engine.ts`](src/games/summonersRift/engine.ts)의 `revealNextMonster`는 "등장"과 "전투 판정"이 한 액션에서 동시에 일어나는 순수 리듀서라 몬스터별 HP 풀 자체가 존재하지 않음(1회성 고정 데미지 판정 후 즉시 처치/피해, 여러 번 때려서 깎는 개념 없음) — 요청서가 전제한 "1,500/1,500 HP" 식 몬스터 체력바와 근본적으로 안 맞음. 기존에도 리빌 후 `COMBAT_FLASH_MS=1700ms` 동안 "다음 몬스터 공개" 버튼이 잠기는 연출 텀포가 이미 있었고, 이 타이머는 서버 타임스탬프가 아니라 모든 클라이언트가 동일한 락스텝 state diff를 보고 각자 로컬에서 유발하는 방식.
+
+**`AskUserQuestion`으로 확인한 사항 (2회, 총 6문항)**:
+1. **5초 타이머 구조** → **기존 사후 연출 잠금 확장(권장)**: 엔진은 미변경, `revealNextMonster`는 여전히 등장+판정 동시 처리. 판정 *이후* 결과 화면(대형 HP바 + 등장 기록)을 붙잡아두는 시간만 1700ms→5000ms로 확장. 신규 "몬스터 접근" 사전 단계는 도입하지 않음.
+2. **HP 바 대상** → **챔피언(용사) 공유 체력에만 적용(권장)**: 몬스터에 실제 HP 풀이 없으므로 가짜 게이지를 만들지 않고, 기존 텍스트 전용 `HpBanner`를 대형 바(h-6 sm:h-8, rounded-full)로 확장. 몬스터 쪽은 기존 등장/처치 카드 연출만 유지.
+3. **데미지 트레일/흔들림 길이** → **400ms**(요청 예시 범위 채택), `ENCOUNTER_HOLD_MS`(5000ms)와 분리된 별도 상수 `HIT_FLASH_MS`.
+4. **스킵 범위** → **로컬(뷰어 개인) 스킵(권장)**: 각 클라이언트가 로컬 타임아웃만 취소. 도전자가 아닌 다른 소환사가 스킵해도 자신의 화면만 넘어가고, 실제 게임 진행(도전자의 "다음 몬스터 공개" 가능 시점)에는 영향 없음 — 엔진/네트워크 변경 불필요.
+5. **보스/네임드 구분** → **copies===1 몬스터를 '네임드'로 취급(권장)**: `MONSTER_CATALOG`에 `isBoss` 필드가 없어, 13장 중 1장뿐인 희귀 몬스터(사신 카서스/모데카이저/장로드래곤, 위협도 6/7/9)만 백드롭 딤 + 확대(줌인) 포커싱 대상으로 삼음.
+6. **적용 범위** → **resolvingRift 전투 리빌만(권장)**: bidding 페이즈의 `pendingDraw`(본인만 보는 개인 카드 확인 프리뷰)는 제외 — 기존 `HpBanner`/`MonsterHistoryPanel`도 이미 이 두 페이즈에서만 렌더링되던 범위와 일치.
+
+**구현**:
+- **[`SummonersRiftBoard.tsx`](src/games/summonersRift/SummonersRiftBoard.tsx)** — `COMBAT_FLASH_MS`(1700ms, 단일 용도)를 `ENCOUNTER_HOLD_MS`(5000ms, 조우 유지 시간)와 `HIT_FLASH_MS`(400ms, 흔들림/트레일 애니메이션 길이)로 분리. `combatFlash` 타임아웃을 ref로 보관해 `handleSkipEncounter`가 즉시 취소하고 `setCombatFlash(null)`할 수 있게 함. `HpBanner`를 대형 게이지 바(잔상 트레일 레이어 — 앞쪽 게이지는 120ms 즉시 반응, 뒤쪽 노란/붉은 트레일 게이지는 같은 목표치로 400ms 걸려 뒤늦게 따라잡는 격투 게임 스타일)로 확장하고, 피격 시 `rift-hp-hit-shake` 애니메이션(흔들림+brightness/saturate 플래시)을 키 리마운트로 매 타격마다 재생. 5초 카운트다운(`EncounterCountdown`, `Date.now()` 기반 `setInterval`)과 진행 바(`EncounterProgressBar`, FlyingRiftCard와 동일한 "transition:none→reflow→transition 재활성화" 기법)를 신설하고 네온 민트색 [⏩ 스킵] 필 버튼 추가. 리빌 슬롯의 `combatBadge`(✅처치/🩸-N)를 기존 `rift-monster-slay`/`rift-monster-strike`의 `forwards` 페이드아웃 애니메이션 래퍼 *밖*으로 이동해, 몬스터 카드 아트가 사라진 뒤에도 판정 결과 배지는 5초 유지창 내내 보이도록 수정(이전엔 배지까지 같이 사라졌음 — 사용자가 말한 "너무 빨리 넘어감"의 또 다른 원인). `getMonsterDef(threat).copies === 1`로 네임드 여부를 판정해 해당 블록(HP 배너+카드더미)에 `scale-105`급 확대 + z-index 상승 + "👑 네임드 몬스터 등장!" 배지 추가.
+- **[`SummonersRiftEffects.tsx`](src/games/summonersRift/SummonersRiftEffects.tsx)** — `NamedMonsterDim` 신규: `FlyingRiftCard`와 동일하게 `document.body`에 포털링되는 `pointer-events-none fixed inset-0` 백드롭 딤(radial-gradient 어둡게), 네임드 조우 중에만 마운트.
+- **[`CardArt.tsx`](src/games/summonersRift/CardArt.tsx)** — `ItemSlot`의 처치 아이템 하이라이트 펄스 애니메이션 길이를 1700ms→600ms로 조정(새 `HIT_FLASH_MS` 계열과 정합), 정적 링 강조는 여전히 5초 유지창 내내 표시.
+- **[`globals.css`](src/app/globals.css)** — `rift-hp-hit-shake`(HP 바 흔들림+플래시), `rift-named-dim-in`(딤 배경 페이드인, 배지에도 재사용) 키프레임 2개 신규.
+- **engine.ts는 변경 없음** — 몬스터 판정 규칙/HP 계산은 그대로, 순수 프레젠테이션 레이어만 수정.
+
+**검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(에러 0, purity 규칙 위반 1건 발견 후 수정 — `EncounterCountdown`의 `useRef(Date.now())` 초기화가 렌더 중 impure 호출이라 지적되어, `Date.now()` 최초 호출을 `useEffect` 내부로 이동) / `npx vitest run`(**44개 파일 · 1347개 테스트 전부 통과**, 45초 — 엔진 미변경이라 회귀 없음 확인). 추가로 임시 dev-preview 라우트(`src/app/dev-preview/summoners-rift/page.tsx`, 실제 `applyAction` 리듀서로 `resolvingRift` 상태를 직접 구성해 두 탭 멀티플레이 로비를 거치지 않고 렌더링 검증용)와 `npm install --no-save playwright` + headless Chromium으로 실제 클릭 흐름을 검증: (1) 장로드래곤(위협도 9, 네임드) 리빌 직후 "👑 네임드 몬스터 등장!" 배지·백드롭 딤 렌더 확인, (2) ~1.3초 시점에 "다음 몬스터 공개" 버튼이 "⏳ 전투 연출 재생 중..."으로 잠겨있음(5초 유지 동작) 확인, 카운트다운 "5초 후..." → "4초 후..."로 정상 감소, (3) [⏩ 스킵] 클릭 즉시 버튼이 "⚔️ 다음 몬스터 공개"로 풀림 확인(스킵 동작), (4) HP 바가 "11 → 2 (-9)"로 갱신되고 대형 게이지("2 / 11 HP")에 노란/붉은 트레일 레이어가 앞쪽 초록 게이지보다 늦게 따라잡는 모습 스크린샷으로 확인, (5) 일반 몬스터(사이온, 위협도 3) 리빌 시엔 네임드 배지/딤이 뜨지 않음(false) 확인. 검증 후 dev-preview 라우트와 임시 설치한 playwright는 모두 삭제/제거해 저장소에 남기지 않음.
+
+**다음 세션 인계**: 없음 — 이번 세션 요청 3항목(5초 유지+스킵, 대형 HP바 포커싱, 피격 트레일/흔들림) 전부 구현·검증 완료.
+
+**커밋/배포**: (아래 커밋 시점에 추가 기재)
 
 ### 2026-08-29 — 언어의 조각 직접 타이핑 입력 및 실시간 자모 조각 현황판
 

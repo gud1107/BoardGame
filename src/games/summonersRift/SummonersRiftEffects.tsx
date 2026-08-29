@@ -107,3 +107,29 @@ export function FlyingRiftCard({
     document.body,
   );
 }
+
+/**
+ * 2026-08-30 던전 몬스터 등장 연출 세션 (작업 지시 §2 "보스/네임드 몬스터 등장
+ * 시 카메라 줌인 또는 은은한 백드롭 딤(Dim) 처리") — 조우 유지창(5초) 동안
+ * 전체 화면을 어둡게 깔아 시선을 중앙의 대형 HP 배너 쪽으로 모으는 순수 연출용
+ * 백드롭. `FlyingRiftCard`와 같은 이유로 `document.body`에 포털링한다: 이
+ * 컴포넌트가 보드 레이아웃 안쪽 어디에 마운트되든(좌측 몬스터 기록 패널이 있는
+ * 3열 레이아웃이든 1열로 좁아진 모바일이든) 항상 뷰포트 전체를 덮어야 하기
+ * 때문 — `position: fixed`만으로는 `SummonersRiftBoard`가 감싸고 있는 스크롤
+ * 컨테이너 기준으로 잘릴 수 있어 포털이 필요하다. 딤 배경 자체는 `pointer-events-none`이라
+ * 뒤쪽 보드 상호작용을 막지 않는다(스킵 버튼 등은 이 위에 z-index로 얹힌 실제
+ * 보드 콘텐츠 쪽에 있으므로 여전히 클릭 가능).
+ */
+export function NamedMonsterDim() {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="pointer-events-none fixed inset-0 z-40"
+      style={{
+        background: "radial-gradient(circle at 50% 38%, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.78) 100%)",
+        animation: "rift-named-dim-in 0.35s ease-out",
+      }}
+    />,
+    document.body,
+  );
+}
