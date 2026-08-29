@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, SendResult } from "@/lib/chat/types";
 import { QUICK_EMOJIS, QUICK_PHRASES } from "@/lib/chat/quickPhrases";
+import Avatar from "@/components/common/Avatar";
 
 interface Props {
   messages: ChatMessage[];
@@ -68,13 +69,27 @@ export default function ChatPanel({ messages, onSend, myDeviceId, cooldownUntil,
         )}
         {messages.map((m) => {
           const isMine = m.deviceId === myDeviceId;
+          if (m.type === "SYSTEM") {
+            return (
+              <div key={m.id} className="flex max-w-[85%] flex-col gap-0.5 self-center items-center">
+                <span className={bubbleClasses(m, isMine)}>{m.body}</span>
+              </div>
+            );
+          }
+          // No cross-device avatar sync exists (see ProfileModal's note) — every
+          // sender's chat avatar renders the same DEFAULT_AVATAR (Avatar's
+          // no-`src` fallback) rather than a per-player photo.
           return (
-            <div key={m.id} className={`flex max-w-[85%] flex-col gap-0.5 ${isMine ? "self-end items-end" : "self-start items-start"}`}>
-              {m.type !== "SYSTEM" && (
+            <div
+              key={m.id}
+              className={`flex max-w-[85%] items-end gap-1.5 ${isMine ? "self-end flex-row-reverse" : "self-start"}`}
+            >
+              <Avatar size={22} className="mb-0.5 shrink-0" />
+              <div className={`flex flex-col gap-0.5 ${isMine ? "items-end" : "items-start"}`}>
                 <span className="px-1 text-[10px] text-white/35">{isMine ? "나" : m.senderName}</span>
-              )}
-              <span className={bubbleClasses(m, isMine)}>{m.body}</span>
-              {m.type !== "SYSTEM" && <span className="px-1 text-[9px] text-white/25">{formatTime(m.createdAt)}</span>}
+                <span className={bubbleClasses(m, isMine)}>{m.body}</span>
+                <span className="px-1 text-[9px] text-white/25">{formatTime(m.createdAt)}</span>
+              </div>
             </div>
           );
         })}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import Avatar from "@/components/common/Avatar";
 import RulebookModal from "./RulebookModal";
 import { CucumberCluster, CucumberIcon } from "./CucumberIcon";
 import {
@@ -384,8 +385,11 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
                 <tr key={seat} className={rank === 1 ? "bg-emerald-400/10" : ""}>
                   <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-emerald-200">{rank === 1 ? "🏆 1" : rank}</td>
                   <td className="border-b border-white/5 px-2 py-2 text-left text-white">
-                    {names[seat]}
-                    {seat === viewerSeat && <span className="ml-1 text-emerald-200">(나)</span>}
+                    <span className="flex items-center gap-1.5">
+                      <Avatar size={20} />
+                      {names[seat]}
+                      {seat === viewerSeat && <span className="text-emerald-200">(나)</span>}
+                    </span>
                   </td>
                   <td className="border-b border-white/5 px-2 py-2 text-right">
                     <span className="inline-flex items-center gap-1 text-rose-200">
@@ -565,6 +569,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
               }`}
             >
               <span className="flex items-center gap-1.5 font-semibold text-white/90">
+                <Avatar size={20} />
                 <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
                 {isActive && <span title="차례">👉</span>}
                 {names[seat]}

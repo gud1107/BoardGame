@@ -1,6 +1,10 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-30 (**소환사의 협곡 패스 선언 강력 임팩트 이펙트(스탬프 슬램/쉐이크/글로우) + 라운드 내내 지속되는 [⛔ PASS] 배지 세션** — 자세한 내용은 아래 `### 2026-08-30 — 소환사의 협곡 패스 임팩트 연출 및 지속 배지` 절 참고.)_
+_최종 갱신: 2026-08-30 (**소환사의 협곡 카드 공개 방식 선택([🃏 1장씩 오픈]/[💥 전체 오픈]) 듀얼 인터랙션 + 생사(생존/사망) 판정 화면 전체 압도 이펙트 신설 세션** — 자세한 내용은 아래 `### 2026-08-30 — 소환사의 협곡 카드 공개 방식 선택 및 생사 판정 화면 전체 이펙트` 절 참고.)_
+
+_이전 갱신: 2026-08-30 (**전역 기본 프로필 아바타(user.png) 도입 + Supabase 계정 연동 업로드형 프로필 이미지 편집 기능 신설 세션** — 자세한 내용은 아래 `### 2026-08-30 — 전역 기본 아바타(user.png) 및 계정 연동 프로필 이미지 편집` 절 참고.)_
+
+_이전 갱신: 2026-08-30 (**소환사의 협곡 패스 선언 강력 임팩트 이펙트(스탬프 슬램/쉐이크/글로우) + 라운드 내내 지속되는 [⛔ PASS] 배지 세션** — 자세한 내용은 아래 `### 2026-08-30 — 소환사의 협곡 패스 임팩트 연출 및 지속 배지` 절 참고.)_
 
 _이전 갱신: 2026-08-30 (**온라인 멀티플레이 21개 게임 방 만들기/참여 화면 엔터(Enter) 키 즉시 제출 연동 세션** — 자세한 내용은 아래 `### 2026-08-30 — 온라인 멀티플레이 방 만들기/참여 화면 엔터 키 즉시 제출` 절 참고.)_
 
@@ -75,6 +79,31 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-30 — 전역 기본 아바타(user.png) 및 계정 연동 프로필 이미지 편집
+
+**요청 배경**: "전 게임 및 프로필 설정 기본 아바타를 user.png로 전면 교체"라는 요청이 들어왔으나, 조사 결과 이 프로젝트에는 애초에 아바타/프로필 이미지 시스템 자체가 존재하지 않았음(`ProfileModal.tsx`/`userStore.ts`/`PlayerSlot.tsx` 등 요청이 전제한 파일이 전부 없음 — 플레이어 식별은 [RoomNicknameField.tsx](../src/components/identity/RoomNicknameField.tsx)의 닉네임 문자열 하나뿐이었고, `avatarUrl`류 필드가 코드베이스 어디에도 없었음). Strict-No-Assumption 원칙에 따라 임의로 넘겨짚지 않고 AskUserQuestion으로 5라운드에 걸쳐 확인 후 진행.
+
+**확인된 결정 사항** (AskUserQuestion):
+1. 구현 범위: "정적 표시만"이 아니라 전체 편집 기능(업로드/초기화) 포함.
+2. `user.png` 위치: `public/games/user.png`(기존 위치, 게임 박스아트 폴더와 섞여 있던 미추적 신규 파일)를 `public/assets/images/user.png`로 이동, `DEFAULT_AVATAR = "/assets/images/user.png"`로 상수화.
+3. 저장 범위: **Supabase 로그인 계정에만 연결** — 게스트는 항상 기본 이미지만 표시, 별도 저장 없음.
+4. 변경 방식: **파일 업로드** — Supabase Storage 신규 버킷(`avatars`) 구축.
+5. 온라인 대전 중 다른 플레이어에게 내 커스텀 아바타를 동기화할지: **아니오, 로컬(본인 화면)에만 반영** — 이 앱의 온라인 방은 21개 게임 각각이 자체 realtime 채널로 닉네임 문자열만 브로드캐스트하는 구조([types.ts](../src/games/types.ts)의 `participants: {id, name}[]`)라, 아바타 실시간 동기화는 각 게임의 `state-sync` payload를 전부 건드려야 하는 훨씬 큰 별도 작업이라 확인 후 제외.
+6. 게임 보드(플레이어 슬롯/헤더/결과창) 내부 표시: **모든 자리를 기본 이미지로 통일**(사진 동기화가 없으므로 내 자리만 사진이고 나머지는 아이콘인 비일관 상태를 피함) — 즉 게임 보드 안의 아바타는 순수 장식용 `DEFAULT_AVATAR`이고, 실제 계정 커스텀 아바타는 `SiteHeader`/`/account`/`ProfileModal`에만 노출됨.
+
+**구현**:
+- `src/constants/avatar.ts` — `DEFAULT_AVATAR` 상수.
+- `src/components/common/Avatar.tsx` — 공통 아바타 컴포넌트. `src={src || DEFAULT_AVATAR}` + `onError`로 깨진 URL을 `DEFAULT_AVATAR`로 자동 치환(무한 루프 방지 가드 포함), `rounded-full object-cover border` 원형 프레임. 의도적으로 `next/image`가 아닌 순수 `<img>`(요청이 명시한 `e.currentTarget.src` 치환 방식이 필요해서 — `@next/next/no-img-element` 룰은 파일 내 주석과 함께 개별 disable).
+- `supabase/schema.sql` — `profiles.avatar_url` 컬럼 추가(`alter table ... add column if not exists`, 기존 라이브 테이블 패턴과 동일) + 공개 읽기·소유자 폴더 전용 쓰기 정책의 `avatars` Storage 버킷 신설. **알려진 한계**: 과거 `bug_reports` 게스트 컬럼 사례와 동일하게, 이 SQL은 사용자가 자신의 Supabase 프로젝트 SQL 에디터에서 직접 실행하기 전까지는 실제 DB에 반영되지 않음 — 그 전까지는 업로드/초기화가 실패함(코드 배포 자체는 정상).
+- `src/app/api/profile/avatar/route.ts` — `profiles.avatar_url` 갱신 전용 서버 라우트. `toggle-cancel/route.ts`와 동일한 이유(RLS는 컬럼 단위 제한이 불가능해 클라이언트 직접 UPDATE 정책을 열면 `role`/`email`도 덮어쓸 수 있음)로 서비스 롤을 통해 서버에서만 갱신, 호출자 소유 폴더 URL인지 검증, 교체 시 이전 Storage 파일 best-effort 정리.
+- `src/store/profileStore.ts` — 로그인 계정 전용 zustand 스토어(`avatarUrl`/`uploadAvatar`/`resetAvatar`), `subscriptionStore.ts`와 동일하게 자체적으로 `getAuthSupabase().auth.getUser()` 호출.
+- `src/components/profile/ProfileModal.tsx` — 업로드/초기화 UI, 공유 `Overlay` 재사용.
+- `SiteHeader.tsx`(계정 뱃지 옆 아바타 버튼) + `/account` 페이지(아바타 미리보기 + 변경 버튼) 두 곳에 진입점 배치.
+- `src/components/chat/ChatPanel.tsx`(로비 채팅 `LobbyChat.tsx` + 전 온라인 게임 인게임 채팅 `ChatDrawer.tsx`가 공유) — 메시지 발신자 아바타를 `DEFAULT_AVATAR`로 통일 추가.
+- 요청 본문이 명시적으로 나열한 9개 게임(운명전쟁39/destinyWar39, 라스베가스/lasVegas, 그리드포커/grid-poker, 말달리자/malDalliJa, 달무티/dalmuti, 노땡스/no-thanks, 소환사의 협곡/summonersRift, 언어의조각/piecesOfLanguage, 오이다섯개/five-cucumbers) 각각의 대기실 좌석 목록·인게임 상시 플레이어 HUD·최종 결과 스코어보드에 `Avatar` 추가(그리드포커 `RoundResultOverlay.tsx`의 기존 이니셜 원형 배지는 실제 `Avatar`로 교체).
+
+**검증**: `npx tsc --noEmit`(에러 0) / `npx vitest run`(44개 파일 · 1347개 테스트 전부 통과) / `npm run lint` — **이 아바타 작업이 만든/수정한 파일 자체는 0 에러**지만, 세션 도중 이 저장소에서 동시에 진행 중이던 무관한 다른 세션의 미커밋 작업(`SummonersRiftBoard.tsx`의 "💥 전체 오픈" 카드 공개 체인 기능, `SummonersRiftEffects.tsx`/`soundEngine.ts`/`globals.css`)에서 이 세션 시작 전에는 없던 `react-hooks/refs`(렌더 중 ref 접근) 에러 5건이 새로 발생해 있음 — `git stash`로 원본 커밋 상태에서 `npm run lint`를 재실행해 이 에러들이 이 아바타 세션의 변경과 무관함을 확인함. 그 세션의 진행 중인 코드라 손대지 않았고, 커밋 시에도 이 아바타 세션이 실제로 만들거나 수정한 파일만 스테이징함(아래 커밋/배포 항목 참고) — 저 5건은 그 세션이 스스로 정리해야 함.
 
 ### 2026-08-30 — 소환사의 협곡 패스 임팩트 연출 및 지속 배지
 

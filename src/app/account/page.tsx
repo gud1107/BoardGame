@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
+import { useProfileStore } from "@/store/profileStore";
 import { TIER_LABELS } from "@/lib/entitlements/types";
 import SupabaseRequiredNotice from "@/components/SupabaseRequiredNotice";
+import Avatar from "@/components/common/Avatar";
+import ProfileModal from "@/components/profile/ProfileModal";
 
 export default function AccountPage() {
   const router = useRouter();
@@ -21,9 +24,17 @@ export default function AccountPage() {
   const toggleCancelAtPeriodEnd = useSubscriptionStore((s) => s.toggleCancelAtPeriodEnd);
   const signOut = useSubscriptionStore((s) => s.signOut);
 
+  const profileAvatarUrl = useProfileStore((s) => s.avatarUrl);
+  const initProfile = useProfileStore((s) => s.init);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    void initProfile();
+  }, [initProfile]);
 
   useEffect(() => {
     if (hydrated && configured && !userId) {
@@ -47,9 +58,18 @@ export default function AccountPage() {
     <div className="mx-auto max-w-md px-4 py-16">
       <h1 className="mb-6 text-xl font-bold text-white">내 구독</h1>
       <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-        <div>
-          <p className="text-xs text-white/40">계정</p>
-          <p className="text-sm text-white">{email}</p>
+        <div className="flex items-center gap-3">
+          <Avatar src={profileAvatarUrl} size={56} />
+          <div>
+            <p className="text-xs text-white/40">계정</p>
+            <p className="text-sm text-white">{email}</p>
+            <button
+              onClick={() => setProfileModalOpen(true)}
+              className="mt-1 text-xs text-rose-300 hover:text-rose-200"
+            >
+              프로필 이미지 변경
+            </button>
+          </div>
         </div>
         <div>
           <p className="text-xs text-white/40">요금제</p>
@@ -94,6 +114,7 @@ export default function AccountPage() {
           </button>
         </div>
       </div>
+      {profileModalOpen && <ProfileModal onClose={() => setProfileModalOpen(false)} />}
     </div>
   );
 }

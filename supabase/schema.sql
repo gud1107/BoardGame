@@ -384,3 +384,46 @@ create index if not exists bug_reports_guest_device_idx on bug_reports (device_i
 
 alter table bug_reports enable row level security;
 -- No policies (intentional) — see comment block above.
+
+-- ---------------------------------------------------------------------------
+-- Profile avatar (see HANDOFF.md — user.png default-avatar rollout). Scoped
+-- to logged-in Supabase accounts only: guests always render
+-- `DEFAULT_AVATAR` (src/constants/avatar.ts) client-side and never write
+-- here. Null `avatar_url` means "using the default" — there is no separate
+-- boolean for it.
+-- ---------------------------------------------------------------------------
+
+-- Safe to re-run against a `profiles` table created before this column
+-- existed — same "alter existing live table" pattern used elsewhere in this
+-- file (e.g. `app_settings.entitlements_enabled`, `bug_reports.is_guest`).
+alter table profiles add column if not exists avatar_url text;
+
+-- Uploads go straight from the browser to Storage (not through a route
+-- handler) using the per-user-folder convention below, but persisting the
+-- resulting URL onto `profiles.avatar_url` still goes through
+-- `src/app/api/profile/avatar/route.ts` (service role), same reasoning as
+-- `toggle-cancel/route.ts`: a client-reachable UPDATE policy on `profiles`
+-- would let any authenticated user overwrite their own `role`/`email` too,
+-- since Postgres RLS can't restrict an UPDATE policy to a single column.
+
+-- Public bucket: avatars are meant to be viewable as plain <img src> without
+-- a signed URL. Writes are restricted below to each user's own folder
+-- (`{auth.uid()}/...`) so one account can never overwrite another's file.
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do nothing;
+
+create policy "public read avatars" on storage.objects
+  for select to public using (bucket_id = 'avatars');
+
+create policy "owner write own avatar folder" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "owner update own avatar folder" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "owner delete own avatar folder" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);

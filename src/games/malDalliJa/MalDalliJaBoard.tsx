@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import Avatar from "@/components/common/Avatar";
 import { AnimatedHorse, MoveParticleLayer, buildMoveAnim, type MoveAnim, type MoveEvent, type MoveParticle } from "./MoveEffects";
 import RulebookModal from "./RulebookModal";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
@@ -384,6 +385,7 @@ export default function MalDalliJaBoard({
                   : "border-white/10 text-white/40"
               }`}
             >
+              <Avatar size={18} />
               <span>{SEAT_THEME[seat].emoji}</span>
               <span>{names[seat]}</span>
               {seat === viewerSeat && <span className="text-white/30">(나)</span>}

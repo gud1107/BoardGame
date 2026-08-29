@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Avatar from "@/components/common/Avatar";
 import { HiddenActivationBadge } from "./DestinyWar39Effects";
 import { visibleCurrentPrediction, type DestinyWar39State, type EngineAction, type SeatIndex } from "./engine";
 
@@ -114,7 +115,8 @@ function PredictionContent({ state, viewerSeat, names, connectedSeats, onAction 
               } ${!connectedSeats.has(seat) ? "opacity-40" : ""}`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className={`truncate font-semibold ${isMe ? "text-fuchsia-200" : "text-white/85"}`}>
+                <span className={`flex min-w-0 items-center gap-1.5 truncate font-semibold ${isMe ? "text-fuchsia-200" : "text-white/85"}`}>
+                  <Avatar size={18} className="shrink-0" />
                   {names[seat]}
                   {isMe ? " (나)" : ""}
                 </span>

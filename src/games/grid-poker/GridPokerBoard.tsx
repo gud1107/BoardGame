@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Overlay from "@/components/Overlay";
+import Avatar from "@/components/common/Avatar";
 import RulebookModal from "./RulebookModal";
 import DealerReveal from "./DealerReveal";
 import { CardChip } from "./cardDisplay";
@@ -419,6 +420,7 @@ export default function GridPokerBoard({
                 state.winner?.includes(p.seat) ? "border-amber-400/50 bg-amber-400/10" : "border-white/10 bg-black/20"
               }`}
             >
+              <Avatar size={24} />
               <span className="text-white/80">{names[p.seat]}</span>
               <span className="text-lg font-bold text-white">{p.score}승</span>
             </div>
@@ -466,6 +468,7 @@ export default function GridPokerBoard({
               p.seat === viewerSeat ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-white/10 bg-white/5 text-white/60"
             }`}
           >
+            <Avatar size={18} />
             <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(p.seat) ? "bg-emerald-400" : "bg-white/20"}`} />
             <span className="font-semibold text-amber-300/90">{rank === 1 ? "🏆" : `${rank}위`}</span>
             {names[p.seat]} · {p.score}/{state.winThreshold}승
@@ -605,6 +608,7 @@ export default function GridPokerBoard({
                   className="flex shrink-0 flex-col items-start gap-0.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-left transition active:border-emerald-400/50 active:bg-emerald-400/10"
                 >
                   <span className="flex items-center gap-1 text-[11px] font-medium text-white/80">
+                    <Avatar size={16} />
                     {names[p.seat]}
                     {liveCell !== null && <span className="h-1.5 w-1.5 rounded-full bg-amber-400" title="배치 중" />}
                   </span>

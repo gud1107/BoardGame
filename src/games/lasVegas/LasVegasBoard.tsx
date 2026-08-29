@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Avatar from "@/components/common/Avatar";
 import RulebookModal from "./RulebookModal";
 import { CasinoMatArt } from "./CasinoPhotoArt";
 import { MoneyBillArt } from "./MoneyBillArt";
@@ -657,8 +658,11 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
                 <tr key={seat} className={rank === 1 ? "bg-amber-400/10" : ""}>
                   <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-amber-200">{rank === 1 ? "🏆 1" : rank}</td>
                   <td className="border-b border-white/5 px-2 py-2 text-left text-white">
-                    {names[seat]}
-                    {seat === viewerSeat && <span className="ml-1 text-amber-200">(나)</span>}
+                    <span className="flex items-center gap-1.5">
+                      <Avatar size={20} />
+                      {names[seat]}
+                      {seat === viewerSeat && <span className="text-amber-200">(나)</span>}
+                    </span>
                   </td>
                   <td className="border-b border-white/5 px-2 py-2 text-right">
                     <span
@@ -830,6 +834,7 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
               }}
             >
               <span className="flex items-center gap-2 font-semibold text-white/90">
+                <Avatar size={20} />
                 <span
                   className="grid h-5 w-5 place-items-center rounded-full text-[10px] font-black text-black shadow-[0_0_8px_2px_rgba(255,255,255,0.25)]"
                   style={{ background: seatColor }}

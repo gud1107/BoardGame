@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import Avatar from "@/components/common/Avatar";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
 import SummonersRiftLastRoundModal from "./SummonersRiftLastRoundModal";
@@ -493,9 +494,12 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
                     {rank === 1 ? "🏆 1" : rank}
                   </td>
                   <td className="border-b border-white/5 px-2 py-2 text-left text-white">
-                    {names[seat]}
-                    {seat === viewerSeat && <span className="ml-1" style={{ color: "#e8c77a" }}>(나)</span>}
-                    {eliminated && <span className="ml-1 text-rose-300">💀</span>}
+                    <span className="flex items-center gap-1.5">
+                      <Avatar size={20} />
+                      {names[seat]}
+                      {seat === viewerSeat && <span style={{ color: "#e8c77a" }}>(나)</span>}
+                      {eliminated && <span className="text-rose-300">💀</span>}
+                    </span>
                   </td>
                   <td className="border-b border-white/5 px-2 py-2 text-right text-emerald-200">
                     {"🏆".repeat(successTokens) || "—"}
@@ -741,6 +745,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
                   {/* 패스 딤 오버레이 — 텍스트/토큰은 아래에서 별도로 z-10을 줘 그 위에 계속 읽히게 남긴다. */}
                   {isPassed && <div className="pointer-events-none absolute inset-0 rounded-xl bg-black/50 backdrop-blur-[1px]" />}
                   <span className="relative z-10 flex items-center gap-1.5 font-semibold text-white/90">
+                    <Avatar size={20} />
                     <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
                     {isActive && <span title="차례">👉</span>}
                     {state.challengerSeat === seat && (state.phase === "declaringSpatula" || state.phase === "resolvingRift") && <span title="도전자">🛡️</span>}

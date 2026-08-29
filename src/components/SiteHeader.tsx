@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useBettingStore } from "@/store/bettingStore";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
+import { useProfileStore } from "@/store/profileStore";
 import { TIER_LABELS } from "@/lib/entitlements/types";
 import SoundToggleButton from "@/components/audio/SoundToggleButton";
 import PatchNoteButton from "@/components/patchNotes/PatchNoteButton";
+import Avatar from "@/components/common/Avatar";
+import ProfileModal from "@/components/profile/ProfileModal";
 
 export default function SiteHeader() {
   const session = useBettingStore((s) => s.session);
@@ -18,9 +21,17 @@ export default function SiteHeader() {
   const entitlement = useSubscriptionStore((s) => s.entitlement);
   const initSubscription = useSubscriptionStore((s) => s.init);
 
+  const profileAvatarUrl = useProfileStore((s) => s.avatarUrl);
+  const initProfile = useProfileStore((s) => s.init);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+
   useEffect(() => {
     void initSubscription();
   }, [initSubscription]);
+
+  useEffect(() => {
+    void initProfile();
+  }, [initProfile]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0b0b12]/80 backdrop-blur">
@@ -42,6 +53,16 @@ export default function SiteHeader() {
           <span className="text-sm font-bold sm:text-base">보드게임 허브</span>
         </Link>
         <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1.5 sm:gap-3">
+          {configured && userId && (
+            <button
+              onClick={() => setProfileModalOpen(true)}
+              className="shrink-0 rounded-full transition hover:opacity-80"
+              aria-label="프로필 이미지 변경"
+              title="프로필 이미지 변경"
+            >
+              <Avatar src={profileAvatarUrl} size={28} />
+            </button>
+          )}
           {configured && (
             <Link
               href={userId ? "/account" : "/login"}
@@ -92,6 +113,7 @@ export default function SiteHeader() {
           </button>
         </div>
       </div>
+      {profileModalOpen && <ProfileModal onClose={() => setProfileModalOpen(false)} />}
     </header>
   );
 }

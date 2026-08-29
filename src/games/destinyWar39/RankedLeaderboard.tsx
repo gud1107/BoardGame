@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
+import Avatar from "@/components/common/Avatar";
 import type { DestinyWar39State, SeatIndex } from "./engine";
 
 export interface RankedLeaderboardProps {
@@ -132,6 +133,7 @@ function LeaderboardList({ state, viewerSeat, names, connectedSeats }: RankedLea
             <span className="w-6 shrink-0 text-center text-sm" title={`${rank}위`}>
               {RANK_BADGE[rank] ?? <span className="text-[10px] text-white/40">{rank}위</span>}
             </span>
+            <Avatar size={20} className="shrink-0" />
             <span className={`min-w-0 flex-1 truncate font-semibold ${isMe ? "text-fuchsia-200" : "text-white/85"}`}>
               {names[seat]}
               {isMe ? " (나)" : ""}

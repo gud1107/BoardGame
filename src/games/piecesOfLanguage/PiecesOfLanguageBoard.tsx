@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Avatar from "@/components/common/Avatar";
 import RulebookModal from "./RulebookModal";
 import WordInput from "./WordInput";
 import { rotationPartner } from "./hangul";
@@ -145,6 +146,7 @@ function HistoryGrid({ history, names }: { history: GuessRecord[]; names: Record
     <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
       {(["p1", "p2"] as const).map((seat) => (
         <div key={seat} className={`flex items-center gap-1.5 text-xs font-semibold ${SEAT_THEME[seat].text}`}>
+          <Avatar size={16} />
           <span>{SEAT_THEME[seat].emoji}</span>
           <span className="truncate">{names[seat]}</span>
         </div>
@@ -323,6 +325,7 @@ function Hud({
                 : "border-white/10 text-white/40"
             }`}
           >
+            <Avatar size={18} />
             <span>{SEAT_THEME[seat].emoji}</span>
             <span>{names[seat]}</span>
             {seat === viewerSeat && <span className="text-white/30">(나)</span>}

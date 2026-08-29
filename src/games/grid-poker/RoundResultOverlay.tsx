@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { createPortal } from "react-dom";
+import Avatar from "@/components/common/Avatar";
 import { CardChip, SUIT_SYMBOL } from "./cardDisplay";
 import {
   LINE_LABELS,
@@ -308,9 +309,7 @@ export default function RoundResultOverlay({
             👑 ROUND WINNER
           </h2>
           <div className="flex items-center gap-2">
-            <span className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ring-2 ${seatPalette(winnerSeat).ring} ${seatPalette(winnerSeat).chip}`}>
-              {names[winnerSeat]?.slice(0, 1) ?? "?"}
-            </span>
+            <Avatar size={36} className={`ring-2 ${seatPalette(winnerSeat).ring}`} />
             <span className="text-xl font-bold text-white">
               {names[winnerSeat]}
               {winnerSeat === viewerSeat && <span className="ml-1 text-sm font-normal text-emerald-300">(나)</span>}
@@ -355,7 +354,10 @@ export default function RoundResultOverlay({
           <div className="flex w-full flex-col gap-1">
             {result.submissions.map((sub) => (
               <div key={sub.seat} className="flex items-center justify-between gap-2 text-xs text-white/60">
-                <span className="truncate">{names[sub.seat]}</span>
+                <span className="flex items-center gap-1.5 truncate">
+                  <Avatar size={16} />
+                  {names[sub.seat]}
+                </span>
                 <span>{formatHandLabel(sub.hand)}</span>
               </div>
             ))}

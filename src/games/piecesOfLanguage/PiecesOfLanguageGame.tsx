@@ -5,6 +5,7 @@ import type { RealtimeChannel, RealtimePresenceState } from "@supabase/supabase-
 import { getSupabase } from "@/lib/supabase/client";
 import { getDeviceId } from "@/lib/identity/deviceId";
 import GameLeaveGuardModal from "@/components/GameLeaveGuardModal";
+import Avatar from "@/components/common/Avatar";
 import { useGameLeaveGuard } from "@/hooks/useGameLeaveGuard";
 import { useBackgroundResync } from "@/hooks/useBackgroundResync";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
@@ -778,7 +779,8 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
                 const isBot = botIdx >= 0;
                 return (
                   <p key={role} className="flex items-center justify-between gap-2 text-sm text-white/70">
-                    <span>
+                    <span className="flex items-center gap-1.5">
+                      {occ && <Avatar size={20} />}
                       {role === myRole ? "나" : role === "p1" ? "1번" : "2번"}:{" "}
                       {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30">대기 중...</span>}
                     </span>

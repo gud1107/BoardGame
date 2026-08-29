@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Avatar from "@/components/common/Avatar";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import RulebookModal from "./RulebookModal";
@@ -218,8 +219,11 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
                   <tr key={seat} className={rank === 1 ? "bg-amber-400/10" : ""}>
                     <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-amber-200">{rank === 1 ? "👑 1" : rank}</td>
                     <td className="border-b border-white/5 px-2 py-2 text-left text-white">
-                      {names[seat]}
-                      {seat === viewerSeat && <span className="ml-1 text-amber-200">(나)</span>}
+                      <span className="flex items-center gap-1.5">
+                        <Avatar size={20} />
+                        {names[seat]}
+                        {seat === viewerSeat && <span className="text-amber-200">(나)</span>}
+                      </span>
                     </td>
                     <td className="border-b border-white/5 px-2 py-2 text-left">
                       <RoleBadge title={startTitle} />
@@ -501,6 +505,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
               }`}
             >
               <span className="flex items-center gap-1.5 font-semibold text-white/90">
+                <Avatar size={20} />
                 <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
                 {isActive && <span title="차례">👉</span>}
                 <RoleBadge title={title} />
