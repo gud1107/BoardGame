@@ -95,6 +95,10 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 - `DailyRecord`(내기 종료 시 아카이브되는 최종 기록)는 이번 세션에서 `mergedGroups`를 반영하지 않음 — 병합은 활성 세션 정산표를 보정하는 용도로만 동작, 종료 후 영구 기록에는 원시 `playerId` 기준 그대로 저장됨.
 - 6개 게임 각각의 실제 UI 렌더링(패널 위치 충돌 등)은 이 저장소에 반복 기록된 jsdom 미설치 한계와 동일하게 육안 확인 전.
 
+**커밋/푸시**: `fe322e2 feat(settlement): implement slot-based betting ledger with excel-style post-game alias merge UI` → `git push origin main` 완료. 이번 세션 변경분(신규 모듈 8개 + 수정 12개 파일 + HANDOFF)만 정확히 스테이징 — 세션 시작 시점부터 작업 트리에 있던 다른 미커밋 변경(`boardGameRule/` 신규 이미지, `저작권, 상표권.md`, `orca충돌및확인.md`, `src/components/lobby/GameCategoryRow.tsx`, `src/constants/gameCategories.ts`, `.claude/` 등)은 이번 작업과 무관하므로 건드리지 않고 작업 트리에 그대로 남겨둠.
+
+**배포**: `npx vercel deploy --scope me-3871`(프리뷰) 정상 완주, READY — `https://board-game-ebobbp36q-me-3871.vercel.app`. 요청 문구에 "production" 명시가 없어 프리뷰까지만 진행(과거 세션들과 동일 판단 기준) — 필요하면 `npx vercel deploy --prod --scope me-3871`로 후속 승격 요청할 것. 이 배포도 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경이 함께 반영된 상태로 배포됨.
+
 ### 2026-08-29 — 이탈 플레이어 투표 기반 AI 봇 대체 시스템 및 vitest 정지 이슈 수정
 
 **요청**: 다인 온라인 대전 중 플레이어가 연결을 끊거나 방을 나가면 방이 터지지 않도록, 해당 슬롯을 AI 봇으로 즉시 대체하는 시스템 구축(대상 6종: 운명전쟁39/라스베가스/그리드포커/말달리자/달무티/노땡스). 원 요청서는 `src/server/socket/roomManager.ts`/`socketHandler.ts`/게임별 `aiBot.ts` 같은 Socket.io 서버 구조를 전제했고, 호스트가 이탈을 감지해 자동으로 봇 전환을 결정하는 방식을 지시했음. "모호한 점은 임의로 추정하지 말고 번호를 매긴 질문 목록을 먼저 제시"하라는 명시적 지시가 있어 조사 후 확인 절차를 거쳐 진행.
