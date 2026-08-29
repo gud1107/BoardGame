@@ -93,7 +93,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계 (미해결 항목)**: Chrome DevTools 모바일/데스크톱 실사용 스크린샷 점검 미완료(위 "검증" 항목 참고) — 브라우저 자동화 도구 설치 여부를 사용자에게 확인 후 진행 필요.
 
-**커밋/배포**: 이번 세션이 만들거나 수정한 파일만 스테이징(`ScoreEffectCanvas.tsx` 신규 + `RoundResultOverlay.tsx`/`globals.css`/HANDOFF, 총 4개 파일) — 작업 트리에 있던 다른 세션들의 미커밋 변경(`.claude/`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지 `feat(grid-poker): redesign scoring effect visuals and reposition skip button directly below effect area`(`afe09c8`) → `git push origin main` 완료(`247d8c4..afe09c8`).
+**커밋/배포**: 이번 세션이 만들거나 수정한 파일만 스테이징(`ScoreEffectCanvas.tsx` 신규 + `RoundResultOverlay.tsx`/`globals.css`/HANDOFF, 총 4개 파일) — 작업 트리에 있던 다른 세션들의 미커밋 변경(`.claude/`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지 `feat(grid-poker): redesign scoring effect visuals and reposition skip button directly below effect area`(`afe09c8`) → `git push origin main` 완료(`247d8c4..afe09c8`). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(40초), `target: "production"`/`readyState: READY`(`dpl_6JjtGevRCT5JXDtExAiiAuWLXdRj`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨. `curl`로 `/`·`/games/grid-poker` 둘 다 200 직접 확인함.
 
 ### 2026-08-29 — 언어의 조각 직접 타이핑 입력 및 실시간 자모 조각 현황판
 
