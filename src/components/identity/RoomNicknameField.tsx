@@ -14,6 +14,16 @@ interface Props {
   onChange: (value: RoomIdentityValue) => void;
   placeholder?: string;
   accent?: "emerald" | "amber" | "rose" | "fuchsia";
+  /**
+   * Fired on a plain Enter keydown in the guest-mode text input (not the
+   * roster chip picker, which has no text field). IME composition is
+   * guarded here so committing a Korean syllable block doesn't fire this
+   * twice — see `e.nativeEvent.isComposing`. Callers pass their room
+   * create/join submit handler (e.g. `enterRoom`); that handler already
+   * owns its own empty/invalid-input validation and error display, so this
+   * is a plain "Enter = submit" wire-through, nothing more.
+   */
+  onEnter?: () => void;
 }
 
 // Tailwind's scanner needs literal class strings, not `border-${accent}-400`
@@ -43,7 +53,7 @@ const ACCENT_CLASSES: Record<NonNullable<Props["accent"]>, { input: string; chip
  * synced across every player's phone. When there's no active session this
  * renders identically to the old plain text input.
  */
-export default function RoomNicknameField({ value, onChange, placeholder = "닉네임을 입력하세요", accent = "emerald" }: Props) {
+export default function RoomNicknameField({ value, onChange, placeholder = "닉네임을 입력하세요", accent = "emerald", onEnter }: Props) {
   const session = useBettingStore((s) => s.session);
   const hasRoster = Boolean(session && session.participants.length > 0);
   const [guestMode, setGuestMode] = useState(!hasRoster);
@@ -85,6 +95,12 @@ export default function RoomNicknameField({ value, onChange, placeholder = "닉�
       <input
         value={value.name}
         onChange={(e) => onChange({ name: e.target.value, playerId: undefined })}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            onEnter?.();
+          }
+        }}
         placeholder={placeholder}
         className={`rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none ${classes.input}`}
       />

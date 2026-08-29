@@ -948,7 +948,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
         <h2 className="text-base font-bold text-white">{intent === "create" ? "방 만들기" : "초대 코드로 참여"}</h2>
         <div className="flex flex-col gap-1.5 text-sm text-white/70">
           내 닉네임
-          <RoomNicknameField value={identity} onChange={setIdentity} accent="fuchsia" />
+          <RoomNicknameField value={identity} onChange={setIdentity} onEnter={enterRoom} accent="fuchsia" />
         </div>
         {intent === "join" && (
           <label className="flex flex-col gap-1.5 text-sm text-white/70">
@@ -956,6 +956,12 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
             <input
               value={codeInput}
               onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  enterRoom();
+                }
+              }}
               placeholder="0000"
               inputMode="numeric"
               className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-center text-lg font-semibold tracking-[0.3em] text-white placeholder:text-white/20 focus:border-fuchsia-400 focus:outline-none"
