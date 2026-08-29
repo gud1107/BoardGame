@@ -101,7 +101,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 - 실제 2기기 연결 끊김/재접속 타이밍 레이스는 재현 테스트하지 않음(이 저장소 기존 관례).
 - `npm run test:bench`(신규 opt-in 벤치마크 스위트) 완주를 이번 세션에서 확인하지 못함 — 위 Part A 참고, 다음 세션에서 재확인 권장.
 
-**커밋/배포**: [여기에 채움]
+**커밋/배포**: 이번 세션이 실제로 만들거나 수정한 파일만 스테이징(`HANDOFF.md`, `package.json`, `src/components/lobby/{BotSeatControls,BotTakeoverVoteModal}.tsx`, 6개 게임 `*Game.tsx`, `src/games/shared/bot/{botTakeover,botTakeover.test}.ts` 신규 + `aiBenchmark.test.ts`→`aiBenchmark.bench.ts` 이름변경, `src/lib/chat/systemLog.ts`, `vitest.bench.config.mts` 신규 — 총 15개 파일) — 세션 시작 시점부터 작업 트리에 있던 다른 세션의 미커밋 변경(`.gitignore`, `src/app/globals.css`, `src/app/page.tsx`, `src/components/GameCard.tsx`, `src/components/lobby/GameCategoryRow.tsx`, `src/constants/gameCategories.ts`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)는 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지 `feat(game): implement vote-based bot takeover on player disconnect to prevent room collapse` 단일 커밋(`0817654`) → `git push origin main` 완료(`bb5a8fd..0817654`). 결정 10(검증되는 대로 즉시 프로덕션)에 따라 `npx vercel deploy --prod --scope me-3871` 바로 실행 — Turbopack 빌드 정상 완주(TypeScript 전체 재검사 포함, 24개 라우트), `target: "production"`/`status: READY`, 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료(`dpl_7jizUWPjYhDPEZnHepYQG3vunpAq`). `curl`로 프로덕션 루트(`/`, 200) 확인. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨 — 이 세션이 그 변경들을 검증하거나 의도한 것은 아님.
 
 ### 2026-08-29 — 모바일 전용 넷플릭스 스타일 카테고리 가로 스크롤 로비 개편
 
