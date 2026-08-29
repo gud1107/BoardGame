@@ -83,7 +83,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(44개 파일 · 1336개 테스트 전부 통과, 이번 변경은 CSS/마크업 전용이라 신규 테스트 없음) / `npx playwright screenshot`으로 실제 Chromium 헤드리스 브라우저에서 360px(Galaxy S20)·375px(iPhone SE) 뷰포트 렌더링을 수정 전/후 스크린샷으로 직접 대조 — 수정 전엔 "보드게임 허브"가 실제로 글자별 세로 줄바꿈되는 것을 재현 확인, 수정 후엔 헤더가 2줄로 깔끔히 줄바꿈되고 모든 텍스트가 가로 한 줄로 읽힘을 확인.
 
-**커밋/배포**: 커밋 메시지 `fix(ui): resolve vertical text wrapping and enhance mobile responsive typography in lobby` → 아래 "커밋 시점에 확인된 사실" 참고.
+**커밋/배포**: 이번 세션이 만든 3개 파일만 스테이징(`SiteHeader.tsx`/`GameCard.tsx`/`HANDOFF.md`) — 작업 트리에 있던 다른 세션들의 미커밋 변경(`.claude/`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`, `GameCategoryRow.tsx`, `gameCategories.ts`)은 이번 작업과 무관하므로 건드리지 않음. 커밋 메시지 `fix(ui): resolve vertical text wrapping and enhance mobile responsive typography in lobby`(`3db3c55`) → `git push origin main` 완료(`77fdde7..3db3c55`). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주, `target: "production"`/`readyState: READY`(`dpl_Aob1uqBvBoCFE2ZjEW1B8ChcLhA8`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨. `curl`로 `/`·`/lobby` 둘 다 200 직접 확인함.
 
 ### 2026-08-29 — 그리드포커 라운드 결과 연출 스킵(Fast-Forward) 버튼
 
