@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import RulebookModal from "./RulebookModal";
 import { CucumberCluster, CucumberIcon } from "./CucumberIcon";
 import {
@@ -51,6 +51,26 @@ export interface FiveCucumbersBoardProps {
  * card's ~5:7 index-card ratio (`오이카드구성.jpg`).
  */
 const CARD_SIZE_CLASSES = "h-28 w-20 sm:h-36 sm:w-24 lg:h-40 lg:w-28";
+
+/**
+ * Trick-result hold durations (2026-08-30 세션, task brief "결과가 너무 빠르게
+ * 넘어가는 문제" — `AskUserQuestion`으로 확정):
+ * - 스킵 동기화 범위: 로컬(개인) 스킵 — 각 클라이언트가 자기 화면의 타이머만
+ *   취소한다. 어차피 엔진은 `state.activeSeat`가 아닌 좌석의 `playCard`를
+ *   거부하므로(engine.ts), 이 홀드는 "다음 액티브 시트(=이번 트릭 승자)가 자기
+ *   클라이언트에서 얼마나 빨리 다음 카드를 낼 수 있는가"만 실질적으로 제어하면
+ *   전체 진행 속도가 자연히 맞춰진다 — 별도의 네트워크 동기화 액션이 필요 없다.
+ * - 홀드 중 카드 제출: 승자 본인도 잠금(아래 `isHoldActive`가 `isMyTurn`에
+ *   합류) — "결과를 최소 3초 인지시킨다"는 요청 취지상 스킵 버튼이 실질적 의미를
+ *   가지려면 자동으로 다음 카드를 낼 수 있으면 안 됨.
+ * - 7번째(마지막) 트릭: 오이 페널티 정산 + 신규 라운드 딜 정보까지 한 번에
+ *   보여줘야 해서 5초로 더 길게(`FINAL_TRICK_HOLD_MS`).
+ * - 홀드 중 갱신 범위: 트릭 카드 필드(승자 카드/뱃지)만 고정하고, 점수판(오이
+ *   개수)·내 손패는 실제 state를 그대로 즉시 반영 — 기존 trickFlash/roundFlash
+ *   배너와 동일한 컨벤션.
+ */
+const TRICK_HOLD_MS = 3000;
+const FINAL_TRICK_HOLD_MS = 5000;
 
 /**
  * Danger-tier accent (0-5 cucumbers) — the real card art doesn't color-code
@@ -112,25 +132,95 @@ function TrickSlot({
   label,
   isMe,
   slotRef,
+  isWinner = false,
+  isFinalTrick = false,
 }: {
   play?: PlayedCard;
   label: string;
   isMe: boolean;
   /** Landing spot for `FlyingPlayedCard` — see FiveCucumbersBoard's `trickSlotRefs`. */
   slotRef?: (el: HTMLDivElement | null) => void;
+  /** This seat took the trick — draws the "👑 트릭 승리" badge + gold glow (or, on the 7th/final trick, a "🥒 오이 획득" penalty badge in rose instead — winning the last trick is bad, so it shouldn't read as a celebratory crown). */
+  isWinner?: boolean;
+  isFinalTrick?: boolean;
 }) {
   return (
     <div className="flex flex-col items-center gap-1">
       <span className={`text-[10px] font-semibold ${isMe ? "text-amber-200" : "text-white/50"}`}>{label}</span>
       {play ? (
-        <div ref={slotRef}>
-          <CardFace card={play.card} />
+        <div ref={slotRef} className="relative">
+          {isWinner && (
+            <span
+              className={`absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border px-2 py-0.5 text-[9px] font-bold whitespace-nowrap shadow-lg ${
+                isFinalTrick ? "border-rose-300/70 bg-rose-950/90 text-rose-200" : "border-amber-300/70 bg-amber-950/90 text-amber-200"
+              }`}
+            >
+              {isFinalTrick ? "🥒 오이 획득" : "👑 트릭 승리"}
+            </span>
+          )}
+          <CardFace
+            card={play.card}
+            className={
+              isWinner
+                ? isFinalTrick
+                  ? "ring-4 ring-rose-400/80 shadow-[0_0_26px_-4px_rgba(244,63,94,0.9)]"
+                  : "ring-4 ring-amber-300/80 shadow-[0_0_26px_-4px_rgba(251,191,36,0.9)]"
+                : ""
+            }
+          />
         </div>
       ) : (
         <div className={`flex items-center justify-center rounded-xl border border-dashed border-white/10 ${CARD_SIZE_CLASSES}`} />
       )}
     </div>
   );
+}
+
+/**
+ * Linear progress bar counting down the hold window — visual companion to
+ * `TrickHoldCountdown`'s numeric readout (task brief "원형 타이머 또는
+ * 프로그레스 제공"). Same "fixed start value → forced reflow → re-enable
+ * transition" technique as this project's other hold timers (see
+ * summonersRift/SummonersRiftBoard.tsx's `EncounterProgressBar`) so the CSS
+ * transition actually animates instead of snapping straight to the end
+ * value. The parent remounts this via `key` every new trick, so it always
+ * restarts at 100%.
+ */
+function TrickHoldProgressBar({ durationMs }: { durationMs: number }) {
+  const barRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    el.style.transition = "none";
+    el.style.width = "100%";
+    void el.offsetHeight;
+    el.style.transition = `width ${durationMs}ms linear`;
+    const raf = requestAnimationFrame(() => {
+      const live = barRef.current;
+      if (live) live.style.width = "0%";
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [durationMs]);
+  return (
+    <div className="h-1 w-full max-w-[220px] overflow-hidden rounded-full bg-white/10">
+      <div ref={barRef} className="h-full rounded-full" style={{ background: "linear-gradient(90deg,#fde68a,#f59e0b)" }} />
+    </div>
+  );
+}
+
+/** "N초 후 다음 트릭..." 숫자 안내 — `Date.now()`는 순수하지 않은 호출이라 렌더 본문이 아닌 effect 안에서만 읽는다(마운트 시각 기준 경과 시간 계산이라 탭 비활성 등으로 인한 틱 밀림에도 어긋나지 않음). 부모가 매 트릭마다 `key`로 새로 마운트시키므로 항상 `durationMs`초에서 다시 시작한다. */
+function TrickHoldCountdown({ durationMs }: { durationMs: number }) {
+  const [remaining, setRemaining] = useState(Math.ceil(durationMs / 1000));
+  const startRef = useRef<number | null>(null);
+  useEffect(() => {
+    startRef.current = Date.now();
+    const id = setInterval(() => {
+      const elapsed = Date.now() - (startRef.current ?? Date.now());
+      setRemaining(Math.max(0, Math.ceil((durationMs - elapsed) / 1000)));
+    }, 200);
+    return () => clearInterval(id);
+  }, [durationMs]);
+  return <>{remaining}</>;
 }
 
 /** Slight arc + overlap so a hand of cards reads like it's fanned out by hand, not stacked in a grid — same technique as hanamikoji/HanamikojiBoard.tsx's `fanStyle`. */
@@ -180,14 +270,34 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
       setCardFlyEvents((prev) => [...prev, { ...cardPlay, id: (prev.at(-1)?.id ?? 0) + 1 }]);
     }
   }
+  // Hold timer — `trickFlash` is a fresh object every time a trick resolves
+  // (engine.ts always returns a new `TrickResult`), so this effect reliably
+  // re-fires per trick even when two consecutive tricks share the same
+  // duration. `holdTimeoutRef` lets `handleSkipTrickHold` cancel the pending
+  // timeout immediately instead of waiting it out.
+  const holdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!trickFlash && !roundFlash) return;
-    const t = setTimeout(() => {
+    if (!trickFlash) return;
+    const duration = trickFlash.trickNumber === FINAL_TRICK_NUMBER ? FINAL_TRICK_HOLD_MS : TRICK_HOLD_MS;
+    holdTimeoutRef.current = setTimeout(() => {
       setTrickFlash(null);
       setRoundFlash(null);
-    }, 3600);
-    return () => clearTimeout(t);
-  }, [trickFlash, roundFlash]);
+      holdTimeoutRef.current = null;
+    }, duration);
+    return () => {
+      if (holdTimeoutRef.current) clearTimeout(holdTimeoutRef.current);
+      holdTimeoutRef.current = null;
+    };
+  }, [trickFlash]);
+  /** [⏩ 스킵] — 로컬 클라이언트에서만 홀드를 즉시 해제한다(위 상수 주석 참고). */
+  const handleSkipTrickHold = useCallback(() => {
+    if (holdTimeoutRef.current) {
+      clearTimeout(holdTimeoutRef.current);
+      holdTimeoutRef.current = null;
+    }
+    setTrickFlash(null);
+    setRoundFlash(null);
+  }, []);
   const handleCardFlyDone = useCallback((id: number) => {
     setCardFlyEvents((prev) => prev.filter((e) => e.id !== id));
   }, []);
@@ -232,10 +342,20 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
     </button>
   );
 
+  // Trick-result hold (see TRICK_HOLD_MS's doc comment) — declared before the
+  // game-over branch below because the 7th/final trick can simultaneously
+  // resolve the trick AND end the game in the same engine action
+  // (engine.ts's `playCard`, the `remaining.length <= 1` case): without this
+  // check the game-over trophy screen would render immediately and the final
+  // trick's result/skip UI the player is meant to see for 5s would never
+  // appear at all. So the trophy screen only takes over once the hold has
+  // actually finished (naturally or via skip).
+  const isHoldActive = trickFlash !== null;
+
   // ---------------------------------------------------------------------
-  // Game over
+  // Game over — held back while `isHoldActive` (see above).
   // ---------------------------------------------------------------------
-  if (state.phase === "gameOver") {
+  if (state.phase === "gameOver" && !isHoldActive) {
     const rankings = computeRankings(state);
     const winner = rankings.find((r) => r.rank === 1)!;
     const tied = rankings.filter((r) => r.rank === 1).length > 1;
@@ -291,10 +411,26 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
   // Playing
   // ---------------------------------------------------------------------
   const me = state.players.find((p) => p.seat === viewerSeat)!;
-  const isMyTurn = state.activeSeat === viewerSeat && !me.eliminated;
+  // `state.phase` is already "gameOver" here whenever the just-resolved final
+  // trick both settled the round AND ended the game — this render is the
+  // held-back window (see `isHoldActive`'s doc comment above) still showing
+  // that trick's result before the trophy screen takes over.
+  const gameJustEnded = state.phase === "gameOver";
+  // While `trickFlash` is live, this client renders the just-resolved
+  // trick's cards instead of the (already-advanced) live `state.trickPlays`,
+  // and blocks even the winner's own card submission until the hold ends or
+  // they hit skip — matching AskUserQuestion answer 2 ("홀드 중 카드 제출 버튼도
+  // 비활성화").
+  const isMyTurn = state.activeSeat === viewerSeat && !me.eliminated && !isHoldActive && !gameJustEnded;
   const legal = legalCardIds(state, viewerSeat);
   const isFinalTrick = state.trickNumber === FINAL_TRICK_NUMBER;
   const seatOrder = Array.from({ length: state.playerCount }, (_, i) => i);
+  const displayedTrickPlays: PlayedCard[] = isHoldActive ? trickFlash!.plays : state.trickPlays;
+  const heldWinnerSeat: SeatIndex | null = isHoldActive ? trickFlash!.winnerSeats[0] : null;
+  const heldIsFinalTrick = isHoldActive && trickFlash!.trickNumber === FINAL_TRICK_NUMBER;
+  const holdDurationMs = heldIsFinalTrick ? FINAL_TRICK_HOLD_MS : TRICK_HOLD_MS;
+  /** Unique per resolved trick — used as a `key` to force `TrickHoldProgressBar`/`TrickHoldCountdown` to remount (and thus restart) every trick, even when two consecutive tricks share the same hold duration. */
+  const holdKey = trickFlash ? `${trickFlash.roundNumber}-${trickFlash.trickNumber}` : null;
 
   function playCard(cardId: string) {
     if (!isMyTurn || !legal.has(cardId)) return;
@@ -319,7 +455,12 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
         <div className="flex gap-1.5">{rulebookButton}</div>
       </div>
 
-      {isFinalTrick && (
+      {/* `!isHoldActive` guard: once trick 7 resolves, `state.trickNumber` only
+          resets once a *new* round is dealt — but a game-ending trick 7 stays
+          on the settled (never-redealt) state, so this "upcoming final trick"
+          warning would otherwise keep showing stale during that trick's own
+          result hold. */}
+      {isFinalTrick && !isHoldActive && (
         <p className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-2 py-1.5 text-center text-[11px] font-semibold text-rose-200">
           ⚠️ 마지막 7번째 트릭입니다 — 여기서 이기면 오이를 먹습니다!
         </p>
@@ -348,37 +489,68 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
       )}
 
       <p className={`text-center text-xs font-medium ${isMyTurn ? "text-amber-200" : "text-white/50"}`}>
-        {me.eliminated
-          ? "탈락했습니다 — 남은 라운드를 구경하는 중..."
-          : isMyTurn
-            ? state.trickPlays.length === 0
-              ? "🫵 당신 차례입니다! 트릭을 리드할 카드를 아무거나 내세요."
-              : "🫵 당신 차례입니다! 현재 최댓값 이상이거나, 손패 중 가장 낮은 카드만 낼 수 있어요."
-            : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
+        {gameJustEnded
+          ? "🏁 게임이 종료되었습니다 — 곧 최종 결과가 표시됩니다."
+          : me.eliminated
+            ? "탈락했습니다 — 남은 라운드를 구경하는 중..."
+            : isHoldActive
+              ? state.activeSeat === viewerSeat
+                ? "⏳ 트릭 결과를 확인하는 중 — 곧 당신 차례입니다. [⏩ 스킵]으로 바로 진행할 수 있어요."
+                : `⏳ 트릭 결과를 확인하는 중 — 곧 ${names[state.activeSeat]}님 차례입니다.`
+              : isMyTurn
+                ? state.trickPlays.length === 0
+                  ? "🫵 당신 차례입니다! 트릭을 리드할 카드를 아무거나 내세요."
+                  : "🫵 당신 차례입니다! 현재 최댓값 이상이거나, 손패 중 가장 낮은 카드만 낼 수 있어요."
+                : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
       </p>
 
-      {/* Current trick */}
+      {/* Current trick — during a hold this renders the just-resolved trick's
+          fixed snapshot (`trickFlash.plays`) instead of the live (already
+          advanced) `state.trickPlays`, so the result stays visible & legible
+          for the full hold window regardless of how fast the engine itself
+          moved on. */}
       <section ref={trickAreaRef} className="flex flex-wrap items-start justify-center gap-2.5 rounded-2xl border border-white/10 bg-black/25 p-3">
-        {state.trickPlays.length === 0 ? (
+        {displayedTrickPlays.length === 0 ? (
           <p className="py-6 text-xs text-white/30">아직 아무도 카드를 내지 않았어요.</p>
         ) : (
-          state.trickPlays.map((play, i) => (
+          displayedTrickPlays.map((play, i) => (
             <TrickSlot
               key={play.seat}
               play={play}
               label={`${i + 1}. ${names[play.seat]}`}
               isMe={play.seat === viewerSeat}
               slotRef={setTrickSlotRef(play.seat)}
+              isWinner={play.seat === heldWinnerSeat}
+              isFinalTrick={heldIsFinalTrick}
             />
           ))
         )}
       </section>
 
+      {/* Trick-result hold: progress bar + countdown + skip, directly below
+          the trick card area (task brief "트릭 카드 영역 바로 하단 중앙"). */}
+      {isHoldActive && holdKey && (
+        <div key={holdKey} className="-mt-1 flex flex-col items-center gap-1.5">
+          <TrickHoldProgressBar durationMs={holdDurationMs} />
+          <div className="flex items-center gap-2.5">
+            <span className="text-[11px] text-white/50">
+              <TrickHoldCountdown durationMs={holdDurationMs} />초 후 {gameJustEnded ? "최종 결과로 진행" : "다음 트릭으로 진행"}
+            </span>
+            <button
+              onClick={handleSkipTrickHold}
+              className="rounded-full border border-amber-300/60 bg-black/40 px-5 py-2 text-xs font-semibold text-amber-100 shadow-[0_0_14px_-2px_rgba(251,191,36,0.6)] transition hover:border-amber-200 hover:bg-black/55 hover:shadow-[0_0_18px_-2px_rgba(251,191,36,0.8)] active:scale-95"
+            >
+              ⏩ 스킵
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Scoreboard */}
       <section className="flex flex-col gap-1.5">
         {seatOrder.map((seat) => {
           const p = state.players.find((pl) => pl.seat === seat)!;
-          const isActive = state.activeSeat === seat && !p.eliminated;
+          const isActive = state.activeSeat === seat && !p.eliminated && !gameJustEnded;
           const isSelf = seat === viewerSeat;
           return (
             <div
