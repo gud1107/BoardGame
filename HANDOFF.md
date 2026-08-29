@@ -83,6 +83,8 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **알려진 한계(정직 공개)**: 컴포넌트 레벨(버튼 클릭/더블탭/언마운트 시 경고 없음)은 이 프로젝트에 렌더링 테스트 인프라가 없어 자동 테스트로 커버하지 않음 — 제스처 판정의 순수 로직(`isDoubleTap`)만 단위 테스트했고, 버튼 배치/실제 스킵 동작은 수동 확인 필요.
 
+**커밋/배포**: 이번 세션이 만들거나 수정한 파일만 스테이징(`skipGesture.ts` 신규 + `RoundResultOverlay.tsx`/`GridPokerBoard.tsx`/`GridPoker.test.ts`/HANDOFF, 총 5개 파일) — 작업 트리에 있던 다른 세션들의 미커밋 변경(`.claude/`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`, `src/components/lobby/GameCategoryRow.tsx`, `src/constants/gameCategories.ts`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지 `feat(grid-poker): add fast-forward skip button for round scoring and result animations`(`87d85c8`) → `git push origin main` 완료(`8f8d041..87d85c8`). 이어서 사용자가 "운영까지배포해줘"로 명시 요청 → `npx vercel deploy --prod --scope me-3871` 실행, Turbopack 빌드 정상 완주(TypeScript 전체 재검사 포함), `target: "production"`/`readyState: READY`(`dpl_E3Jibca7R7SJjZKduRefdKCKTSRG`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨. `curl`로 `/`·`/lobby` 둘 다 200 직접 확인함.
+
 ### 2026-08-29 — 버그리포트 게스트(비로그인) 작성 및 슈퍼 관리자 마스터 삭제
 
 **요청**: 버그리포트 게시판에 (1) 비로그인(게스트) 작성 지원(닉네임+4자리 이상 비밀번호로 본인 인증, 이후 수정/삭제 시 비밀번호 검증), (2) `freedom_03@naver.com` 계정 전용 "비밀번호/작성자 무관 즉시 삭제" 마스터 권한을 요청. 요청서는 Prisma(`prisma/schema.prisma`)와 `src/pages/bugReport/`·`src/server/api/bugReport/` 구조를 전제했음. "모호한 점은 임의로 추정하지 말고 번호를 매긴 질문 목록을 먼저 제시"하라는 명시적 지시(Strict No-Assumption Rule).
