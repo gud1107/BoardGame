@@ -24,16 +24,28 @@ export default function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0b0b12]/80 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <Link href="/" className="flex items-center gap-2 text-white">
+      {/* flex-wrap + shrink-0 on every child below is the actual fix for the
+          "보\n드\n게\n임" vertical-splitting bug reported on this bar: with no
+          flex-wrap, a too-narrow viewport made the flex row shrink every
+          child (default flex-shrink:1) down toward its min-content width —
+          and a CJK text node's min-content width is a single character
+          (default East Asian line-break allows a break between any two
+          characters), so squeezed labels collapsed into one-glyph-per-line
+          columns. shrink-0 stops labels from being squeezed below their
+          natural width at all; flex-wrap lets the row spill onto a second
+          line instead when things don't fit, so nothing ever gets that
+          squeeze. break-keep is extra insurance for the multi-word labels
+          (버그 리포트/내기 진행 중) so a wrap point can't land mid-word either. */}
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 py-2 sm:px-6 sm:py-3">
+        <Link href="/" className="flex shrink-0 items-center gap-2 whitespace-nowrap break-keep text-white">
           <span className="text-xl">🎲</span>
           <span className="text-sm font-bold sm:text-base">보드게임 허브</span>
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1.5 sm:gap-3">
           {configured && (
             <Link
               href={userId ? "/account" : "/login"}
-              className="flex items-center gap-1.5 rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/70 hover:border-white/30 sm:text-xs"
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/70 hover:border-white/30 sm:text-xs"
               title={
                 entitlement
                   ? `오늘 ${entitlement.unit === "games" ? "이용 횟수" : "이용 시간"}: ${entitlement.used}/${entitlement.cap}`
@@ -52,20 +64,29 @@ export default function SiteHeader() {
               )}
             </Link>
           )}
-          <Link href="/lobby" className="text-xs text-white/50 hover:text-white/80 sm:text-sm">
+          <Link
+            href="/lobby"
+            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-white/80 sm:text-sm"
+          >
             💬 로비
           </Link>
-          <Link href="/history" className="text-xs text-white/50 hover:text-white/80 sm:text-sm">
+          <Link
+            href="/history"
+            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-white/80 sm:text-sm"
+          >
             기록
           </Link>
-          <Link href="/bug-reports" className="text-xs text-white/50 hover:text-white/80 sm:text-sm">
+          <Link
+            href="/bug-reports"
+            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-white/80 sm:text-sm"
+          >
             🐛 버그 리포트
           </Link>
           <PatchNoteButton />
           <SoundToggleButton />
           <button
             onClick={() => setSidebarOpen(true)}
-            className="rounded-full border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-rose-400 hover:text-white"
+            className="shrink-0 whitespace-nowrap break-keep rounded-full border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-rose-400 hover:text-white"
           >
             {session ? "🎲 내기 진행 중" : "🎲 내기 관리"}
           </button>

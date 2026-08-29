@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-29 (**그리드포커 라운드 승리 연출(round-result) 스킵 버튼/백드롭 더블탭 + 관련 타이머·사운드 자동 정리 세션** — 자세한 내용은 아래 `### 2026-08-29 — 그리드포커 라운드 결과 연출 스킵(Fast-Forward) 버튼` 절 참고.)_
+_최종 갱신: 2026-08-29 (**모바일 뷰포트 SiteHeader 텍스트 세로 쪼개짐(글자별 줄바꿈) 수정 + GameCard 제목 줄바꿈 정책 적용 세션** — 자세한 내용은 아래 `### 2026-08-29 — 모바일 SiteHeader 텍스트 세로 쪼개짐 수정 및 GameCard 제목 줄바꿈 정책` 절 참고.)_
+
+_이전 갱신: 2026-08-29 (**그리드포커 라운드 승리 연출(round-result) 스킵 버튼/백드롭 더블탭 + 관련 타이머·사운드 자동 정리 세션** — 자세한 내용은 아래 `### 2026-08-29 — 그리드포커 라운드 결과 연출 스킵(Fast-Forward) 버튼` 절 참고.)_
 
 _이전 갱신: 2026-08-29 (**버그리포트 비로그인(게스트) 작성 재도입 + freedom_03@naver.com 슈퍼 관리자 마스터 삭제 권한 세션** — 자세한 내용은 아래 `### 2026-08-29 — 버그리포트 게스트(비로그인) 작성 및 슈퍼 관리자 마스터 삭제` 절 참고.)_
 
@@ -59,6 +61,29 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-29 — 모바일 SiteHeader 텍스트 세로 쪼개짐 수정 및 GameCard 제목 줄바꿈 정책
+
+**요청**: 모바일 뷰포트(좁은 너비) 접속 시 텍스트 세로 쪼개짐/줄바꿈 깨짐 및 레이아웃 붕괴 전면 해결. 요청서는 `src/pages/lobby/`, `src/components/layout/`(`Header.tsx`/`Navbar.tsx`), `src/styles/`, `tailwind.config.js`, `word-break: break-all` 기본 적용을 원인으로 전제했고, "모호한 점은 임의로 추정하지 말고 번호를 매긴 질문 목록을 먼저 제시"하라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사에서 발견한 핵심 불일치**: `src/pages/lobby/`는 존재하지 않음 — App Router 구조라 게임 카탈로그(카드 그리드)는 루트 `/`([page.tsx](src/app/page.tsx)), `/lobby`는 전체 채팅방뿐([lobby/page.tsx](src/app/lobby/page.tsx))이라 서로 다른 화면. `Header.tsx`/`Navbar.tsx`는 없고 [SiteHeader.tsx](src/components/SiteHeader.tsx) 하나뿐. Tailwind v4라 `tailwind.config.js` 자체가 없음(`postcss.config.mjs`만 존재), 전역 CSS는 `src/styles/`가 아니라 [globals.css](src/app/globals.css). 저장소 전체 grep 결과 `word-break: break-all`/`white-space` 규칙은 **어디에도 없음** — 즉 요청서가 지목한 "명시적 규칙"은 원인이 아니었음. 또한 미배선 상태인 [GameCategoryRow.tsx](src/components/lobby/GameCategoryRow.tsx)(넷플릭스 스타일 가로 스크롤, 어떤 페이지에도 import 안 됨)를 이번 범위에 포함할지도 확인 필요했음.
+
+**`AskUserQuestion`으로 확인한 사항 (1회, 4문항)**:
+1. 대상 페이지 → **메인 허브(`/`) 게임 카드 그리드**(채팅 전용 `/lobby`가 아님).
+2. 세로 쪼개짐 실제 목격 지점 → **SiteHeader 최상단 nav 바**(전체 예방적 수정이 아니라 이 지점이 확정 버그).
+3. 미배선 GameCategoryRow → **범위에서 제외, 손대지 않음**.
+4. 좁은 카드/버튼에서 제목 텍스트 오버플로우 정책 → **`break-keep` 단어 단위 줄바꿈, 2줄까지 허용, 그 이상은 말줄임**.
+
+**근본 원인(실제 확인)**: [SiteHeader.tsx](src/components/SiteHeader.tsx)의 우측 nav 컨테이너가 `flex items-center gap-3`로 `flex-wrap` 없이 여러 항목(등급 배지, 로비/기록/버그리포트 링크, 패치노트/사운드 버튼, 내기관리 버튼)을 한 줄에 강제로 욱여넣고 있었음. 컨테이너가 뷰포트보다 넓어지면 기본 `flex-shrink:1` 때문에 모든 자식이 자신의 min-content 너비까지 축소를 시도하는데, 한글 텍스트는 브라우저 기본 동아시아 줄바꿈 규칙상 어떤 두 글자 사이에서도 줄바꿈이 가능해 **min-content 너비가 글자 1개 폭**이 됨 — 그래서 "보드게임 허브" 같은 브랜드 텍스트가 눌리면서 글자당 한 줄씩 세로로 쌓이는 현상(`보/드/게/임/허/브`)이 발생. `word-break: break-all` 같은 명시적 규칙은 필요 없었고, 그냥 flex 기본 동작 + 한글 특성의 조합이 원인이었음. `npx playwright screenshot`으로 수정 전 360px 뷰포트를 재현해 실제로 이 증상을 스크린샷으로 확인함(스크린샷은 세션 로컬 스크래치패드에만 저장, 커밋 대상 아님).
+
+**구현**:
+- **[SiteHeader.tsx](src/components/SiteHeader.tsx)**: 바깥 컨테이너에 `flex-wrap` 추가(+ 모바일 패딩/간격 축소: `px-4 py-3` → `px-3 py-2 sm:px-6 sm:py-3`, `gap-3` → `gap-x-3 gap-y-1.5`). 브랜드 링크와 우측 nav의 모든 링크/버튼에 `shrink-0 whitespace-nowrap`을 부여해 애초에 min-content로 눌리지 않도록 방어(진짜 수정은 이것 — `flex-wrap`은 그래도 안 맞을 때의 안전판). 다중 단어 라벨("버그 리포트", "내기 진행 중")엔 `break-keep`도 추가해 이중 방어. 우측 nav 컨테이너 자체도 `flex-wrap justify-end`로 바꿔, 못 맞으면 항목 전체가 다음 줄로 넘어가지 글자가 눌리지 않게 함.
+- **[GameCard.tsx](src/components/GameCard.tsx)**: 제목 `<h3>`에 `line-clamp-2 break-keep` 추가(확인된 정책 4번 그대로) — 이미 카드 폭이 극단적으로 좁아지는 경우(모바일 `grid-cols-2`)를 대비한 예방적 조치.
+- **손대지 않은 것**: `GameCategoryRow.tsx`/`gameCategories.ts`(범위 제외 확정), 필터 pill(page.tsx)·채팅 메시지(ChatPanel/LobbyChat) 등 확정되지 않은 지점.
+
+**검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run`(44개 파일 · 1336개 테스트 전부 통과, 이번 변경은 CSS/마크업 전용이라 신규 테스트 없음) / `npx playwright screenshot`으로 실제 Chromium 헤드리스 브라우저에서 360px(Galaxy S20)·375px(iPhone SE) 뷰포트 렌더링을 수정 전/후 스크린샷으로 직접 대조 — 수정 전엔 "보드게임 허브"가 실제로 글자별 세로 줄바꿈되는 것을 재현 확인, 수정 후엔 헤더가 2줄로 깔끔히 줄바꿈되고 모든 텍스트가 가로 한 줄로 읽힘을 확인.
+
+**커밋/배포**: 커밋 메시지 `fix(ui): resolve vertical text wrapping and enhance mobile responsive typography in lobby` → 아래 "커밋 시점에 확인된 사실" 참고.
 
 ### 2026-08-29 — 그리드포커 라운드 결과 연출 스킵(Fast-Forward) 버튼
 

@@ -53,7 +53,9 @@ export default function GameCard({ game }: { game: GameMeta }) {
         )}
       </div>
       <div className="flex flex-1 flex-col gap-2.5 p-4 sm:p-5">
-        <h3 className="text-base font-semibold text-white sm:text-lg">{game.name}</h3>
+        <h3 className="line-clamp-2 break-keep text-base font-semibold text-white sm:text-lg">
+          {game.name}
+        </h3>
         <p className="line-clamp-2 flex-1 text-xs leading-relaxed text-white/55">{game.description}</p>
         <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-white/60">
           <span className="rounded-full bg-white/10 px-2.5 py-1">👥 {formatPlayers(game)}</span>
