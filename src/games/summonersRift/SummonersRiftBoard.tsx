@@ -55,10 +55,33 @@ export function combatBadge(entry: RoundResult["combatLog"][number]) {
   );
 }
 
-/** A single `combatLog` entry mid-animation, plus the HP it resolved *from* — `entry.hpAfter` alone can't reconstruct that once later entries have moved on. Drives both `HpBanner`'s transition text and which `ItemSlot`/turn-panel button locks for the duration (task brief §2/§4 "전투 연출 템포"). */
+/**
+ * A single `combatLog` entry mid-animation, plus the HP it resolved *from* —
+ * `entry.hpAfter` alone can't reconstruct that once later entries have moved
+ * on. Drives both `HpBanner`'s transition text and which `ItemSlot`/turn-panel
+ * button locks for the duration (task brief §2/§4 "전투 연출 템포").
+ *
+ * 2026-08-30 마지막 카드 홀드 세션: `totalHp` is snapshotted here (not read live
+ * off `state.totalHp`) because the *round- or game-ending* reveal is the one
+ * case where the engine resets/moves on `totalHp`/`combatLog` in the very
+ * same lockstep action that produced this flash (`dealRound` nulls `totalHp`
+ * for the next round's bidding phase; `finishRound`→`gameOver` just leaves it
+ * be, but by then the component can no longer trust "current phase" to tell
+ * it which fields are still live) — so every renderer of a flash reads
+ * entirely from this object instead of cross-referencing `state`. `key` is a
+ * monotonic counter (see `nextFlashKeyRef` in the board component) used to
+ * force-remount the flip/shake animations on every new flash — `state.combatLog.length`
+ * used to serve this purpose but collides with itself once `dealRound` resets
+ * that array back to 0 for the next round, so this pairs the round number
+ * (monotonic for the whole game) with the in-round entry index instead —
+ * globally unique with no ref/counter needed (a plain incrementing ref can't
+ * be touched during render, and this render-time diff block is exactly that).
+ */
 interface CombatFlashState {
   entry: CombatLogEntry;
   hpBefore: number;
+  totalHp: number;
+  key: string;
 }
 
 /**
@@ -143,20 +166,24 @@ function EncounterCountdown({ durationMs }: { durationMs: number }) {
 function HpBanner({
   state,
   flash,
-  flashKey,
   onSkip,
 }: {
   state: SummonersRiftState;
   flash: CombatFlashState | null;
-  /** `flash`가 새로 생길 때마다 바뀌는 값(여기서는 `combatLog.length`) — 연속된 두 피격의 `animation` 인라인 스타일 문자열이 텍스트상 동일해도(둘 다 "데미지" 판정) 매번 리마운트시켜 흔들림/플래시가 매 타격마다 반드시 재생되도록 한다. */
-  flashKey: number;
   onSkip: () => void;
 }) {
-  if (state.currentHp === null || state.totalHp === null) return null;
-  const maxHp = state.totalHp;
-  const curHp = Math.max(0, state.currentHp);
+  // 2026-08-30 마지막 카드 홀드 세션: `flash`가 살아있는 동안엔 그 자신의 스냅샷
+  // (`flash.totalHp`/`flash.entry.hpAfter`)을 우선한다 — 라운드/게임을 끝낸
+  // 마지막 조우일 경우 이 시점엔 이미 `state.totalHp`/`currentHp`가 `null`로
+  // 리셋돼 있을 수 있어(다음 라운드 `dealRound`가 같은 액션에서 동시에 실행됨),
+  // 예전처럼 `state`만 보고 얼리 리턴하면 정작 가장 붙잡아둬야 할 마지막 조우의
+  // 배너가 통째로 사라져버린다.
+  const maxHp = flash ? flash.totalHp : state.totalHp;
+  const curHp = flash ? Math.max(0, flash.entry.hpAfter) : state.currentHp !== null ? Math.max(0, state.currentHp) : null;
+  if (maxHp === null || curHp === null) return null;
   const pct = maxHp > 0 ? Math.min(100, (curHp / maxHp) * 100) : 0;
   const isDamageFlash = flash !== null && !flash.entry.killedBy;
+  const flashKey = flash?.key ?? "";
 
   return (
     <section
@@ -235,9 +262,23 @@ function HpBanner({
   );
 }
 
-/** Task brief §3 "좌측 던전 출현 몬스터 누적 나열 패널" — every monster revealed so far *this dungeon run*, oldest first, each badged with its outcome. Rendered as the leftmost of three columns on wide screens and the topmost block on narrow ones (see the root layout in `SummonersRiftBoard`'s default export) — only while there's an active challenge (`declaringSpatula`/`resolvingRift`), matching `HpBanner`'s same live-HP window. Auto-scrolls to the newest entry so a long dungeon run never needs a manual scroll to see what just happened. */
-function MonsterHistoryPanel({ state }: { state: SummonersRiftState }) {
-  const entries = state.phase === "resolvingRift" ? state.combatLog : [];
+/**
+ * Task brief §3 "좌측 던전 출현 몬스터 누적 나열 패널" — every monster revealed so far
+ * *this dungeon run*, oldest first, each badged with its outcome. Rendered as the
+ * leftmost of three columns on wide screens and the topmost block on narrow ones
+ * (see the root layout in `SummonersRiftBoard`'s default export) — only while
+ * there's an active challenge (`declaringSpatula`/`resolvingRift`), matching
+ * `HpBanner`'s same live-HP window. Auto-scrolls to the newest entry so a long
+ * dungeon run never needs a manual scroll to see what just happened.
+ *
+ * `entries` is passed in rather than derived from `state.combatLog` here
+ * (2026-08-30 마지막 카드 홀드 세션) because the round/game-ending reveal is held
+ * on screen *after* `state.phase` has already moved past `resolvingRift` and
+ * `state.combatLog` has already been reset by the same action — the caller
+ * resolves the correct source (`state.combatLog` live, or the just-finished
+ * `state.lastRoundResult.combatLog` during that terminal hold) once.
+ */
+function MonsterHistoryPanel({ state, entries }: { state: SummonersRiftState; entries: CombatLogEntry[] }) {
   const listRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const el = listRef.current;
@@ -302,9 +343,26 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
     if (push) setPushEvents((prev) => [...prev, { ...push, id: (prev.at(-1)?.id ?? 0) + 1 }]);
 
     if (state.phase === "resolvingRift" && state.combatLog.length > priorCombatLogLength) {
+      // Ordinary mid-run reveal — `phase` hasn't moved on, so the new entry
+      // is still live at `state.combatLog[index]`.
       const index = priorCombatLogLength;
       const hpBefore = index === 0 ? state.totalHp! : state.combatLog[index - 1].hpAfter;
-      setCombatFlash({ entry: state.combatLog[index], hpBefore });
+      setCombatFlash({ entry: state.combatLog[index], hpBefore, totalHp: state.totalHp!, key: `${trackedState.roundNumber}-${index}` });
+    } else if (newRound && newRound.combatLog.length > priorCombatLogLength) {
+      // 2026-08-30 마지막 카드 홀드 버그 수정 — 라운드(또는 게임)를 끝내는 "마지막"
+      // 몬스터 공개는 `revealNextMonster` 한 액션 안에서 `finishRound`(→ 다음
+      // 라운드로 넘어가면 `dealRound`가 `combatLog`/`totalHp`까지 동시에 리셋,
+      // 게임이 끝나면 `phase: "gameOver"`로 즉시 전환)까지 함께 실행된다. 그
+      // 결과 위 분기가 이 렌더를 볼 때는 이미 `state.phase !== "resolvingRift"`
+      // 이고 `state.combatLog`도 비워진 뒤라, 정작 가장 오래 붙잡아둬야 할
+      // "라운드/매치의 마지막 카드"만 조우 유지 플래시가 걸리지 않고 화면이
+      // 곧장 다음 라운드(bidding)나 트로피 화면(gameOver)으로 전환돼버렸다 —
+      // 이번 세션에서 신고된 버그의 근본 원인. `finishRound`는 리셋되기
+      // *이전*의 전체 `combatLog`를 `lastRoundResult.combatLog`에 그대로 복사해
+      // 두므로, 거기서 놓친 마지막 엔트리를 복구한다.
+      const index = priorCombatLogLength;
+      const hpBefore = index === 0 ? newRound.totalHp : newRound.combatLog[index - 1].hpAfter;
+      setCombatFlash({ entry: newRound.combatLog[index], hpBefore, totalHp: newRound.totalHp, key: `${newRound.roundNumber}-${index}` });
     }
   }
   useEffect(() => {
@@ -365,10 +423,19 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
   );
   const lastRoundModal = lastRoundOpen && <SummonersRiftLastRoundModal state={state} names={names} onClose={() => setLastRoundOpen(false)} />;
 
+  // 2026-08-30 마지막 카드 홀드 세션 — `combatFlash`가 살아있는데 `state.phase`가
+  // 이미 "resolvingRift"를 벗어나 있다면(= 위 diff 블록의 두 번째 분기가 방금
+  // 돌았다는 뜻), 이건 라운드나 게임을 끝낸 "마지막 카드"의 조우 유지 창이다.
+  // 이 플래그가 true인 동안은 아래 gameOver 얼리 리턴과 `TurnPanel`이 곧장
+  // 다음 화면(트로피/다음 라운드 입력)으로 넘어가지 않고 이 조우를 계속
+  // 붙잡아 보여준다 — 자동 5초 경과 또는 [⏩ 스킵]으로 `combatFlash`가 다시
+  // `null`이 되면 자연히 풀린다.
+  const isHoldingFinalReveal = combatFlash !== null && state.phase !== "resolvingRift";
+
   // ---------------------------------------------------------------------
   // Game over
   // ---------------------------------------------------------------------
-  if (state.phase === "gameOver") {
+  if (state.phase === "gameOver" && !isHoldingFinalReveal) {
     const rankings = computeRankings(state);
     const winner = rankings.find((r) => r.rank === 1)!;
     return (
@@ -439,7 +506,14 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
   const flashKillerItemId =
     combatFlash?.entry.killedBy && ("itemId" in combatFlash.entry.killedBy ? combatFlash.entry.killedBy.itemId : 5);
 
-  const dungeonPhaseActive = state.phase === "declaringSpatula" || state.phase === "resolvingRift";
+  // `isHoldingFinalReveal`을 포함시켜 라운드/게임을 끝낸 마지막 조우가 화면에
+  // 붙잡혀 있는 동안(=`state.phase`가 이미 "bidding"/"gameOver"로 넘어간 뒤에도)
+  // 몬스터 기록 패널이 사라지지 않고 그대로 남아있게 한다.
+  const dungeonPhaseActive = state.phase === "declaringSpatula" || state.phase === "resolvingRift" || isHoldingFinalReveal;
+  // 위와 같은 이유로, "이번 던전 런의 몬스터 기록" 소스도 살아있는 `state.combatLog`
+  // 대신 `lastRoundResult.combatLog`(리셋되기 전 전체 로그의 스냅샷)로 폴백한다.
+  const monsterHistoryEntries =
+    state.phase === "resolvingRift" ? state.combatLog : isHoldingFinalReveal ? (state.lastRoundResult?.combatLog ?? []) : [];
   // 2026-08-30 세션(AskUserQuestion "보스 구분" — copies===1 몬스터를 '네임드'로
   // 취급 채택): MONSTER_CATALOG에 별도 isBoss 필드가 없어, 13장 중 1장뿐인
   // 희귀 몬스터(카서스/모데카이저/장로드래곤, 위협도 6/7/9)를 네임드 기준으로
@@ -454,7 +528,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
     // §4) rightmost/bottom-most — the `[gameId]` page widens its container
     // specifically for this game id so all three have room on wide screens.
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
-      {dungeonPhaseActive && <MonsterHistoryPanel state={state} />}
+      {dungeonPhaseActive && <MonsterHistoryPanel state={state} entries={monsterHistoryEntries} />}
       <div
         className="flex min-w-0 flex-1 flex-col gap-3 rounded-[28px] border p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
         style={{ borderColor: "rgba(200,170,110,0.3)", background: "linear-gradient(160deg,#151b28 0%,#0d121c 45%,#06090f 100%)" }}
@@ -504,8 +578,8 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
             <h3 className="text-[11px] font-semibold tracking-wide uppercase" style={{ color: "#c8aa6e" }}>
               ⚔️ 공유 챔피언
             </h3>
-            {/* Combat phases now own the live HP readout via the large `HpBanner` below — this small badge is only the bidding-phase equip preview, so the two never show conflicting numbers side by side. */}
-            {state.phase === "bidding" && liveTotalHp !== null && (
+            {/* Combat phases now own the live HP readout via the large `HpBanner` below — this small badge is only the bidding-phase equip preview, so the two never show conflicting numbers side by side (also suppressed while a prior round's final reveal is still being held on screen). */}
+            {state.phase === "bidding" && !isHoldingFinalReveal && liveTotalHp !== null && (
               <span className="flex items-center gap-1 text-xs font-bold text-white">❤️ {liveTotalHp}</span>
             )}
           </div>
@@ -540,7 +614,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
           )}
 
           {/* Task brief §2: a large, central live HP readout for the dungeon-combat phases, with the per-monster kill/damage flash baked in. */}
-          <HpBanner state={state} flash={combatFlash} flashKey={state.combatLog.length} onSkip={handleSkipEncounter} />
+          <HpBanner state={state} flash={combatFlash} onSkip={handleSkipEncounter} />
 
           {/* Card piles: the monster draw deck (task brief §1) beside the Rift accumulation pile — both face-down, remaining count badged on top. */}
           <section className="flex flex-wrap items-start justify-center gap-4 rounded-2xl border border-white/10 bg-black/25 p-3">
@@ -558,26 +632,54 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
                 <CardPileStack count={state.riftPile.length} />
               )}
 
-              {/* Dungeon phase: current reveal slot — keyed remount replays the flip/resolve animation each new combatLog entry (task brief §2 "카드 제거 애니메이션"). combatBadge는 애니메이션 래퍼 *밖*에 렌더링한다 — rift-monster-slay/strike가 `forwards`로 몬스터 카드를 투명하게 마무리해도(2026-08-30 세션 전까지는 배지까지 같이 사라졌음) 처치/피격 결과 배지는 조우 유지 5초 내내 계속 보이도록. */}
-              {state.phase === "resolvingRift" && state.combatLog.length > 0 && (
-                <div key={state.combatLog.length} className="flex flex-col items-center gap-1">
+              {/*
+                Dungeon phase: current reveal slot — keyed remount replays the flip/resolve
+                animation each new flash (task brief §2 "카드 제거 애니메이션"). combatBadge는
+                애니메이션 래퍼 *밖*에 렌더링한다 — rift-monster-slay/strike가 `forwards`로
+                몬스터 카드를 투명하게 마무리해도(2026-08-30 세션 전까지는 배지까지 같이
+                사라졌음) 처치/피격 결과 배지는 조우 유지 5초 내내 계속 보이도록.
+
+                2026-08-30 마지막 카드 홀드 세션: 렌더 소스를 `state.combatLog.at(-1)`에서
+                `combatFlash.entry`로 바꿨다 — 라운드/게임을 끝낸 마지막 조우일 때는 이
+                렌더 시점에 `state.combatLog`가 이미 다음 라운드용으로 리셋돼 있을 수 있어
+                (`isHoldingFinalReveal`), `state`가 아니라 `combatFlash` 자신의 스냅샷만
+                신뢰할 수 있다. 그 마지막 카드에는 사라짐 애니메이션(slay/strike의
+                `forwards`)도 걸지 않고 뒤집기만 재생한 뒤 정지시켜 3초 이상 카드 자체가
+                안정적으로 화면에 남아있게 하고, 사용자가 요청한 골드 글로우 테두리를
+                덧붙인다 — 일반 조우는 다음 카드가 바로 이어지므로 기존처럼 살짝 페이드돼도
+                무방하지만, "마지막 카드"는 정확히 그 페이드 때문에 카드가 사라지는 것처럼
+                보인다는 게 이번 신고의 핵심이었다.
+              */}
+              {combatFlash && (
+                <div key={combatFlash.key} className="flex flex-col items-center gap-1">
                   <div
+                    className={isHoldingFinalReveal ? "rounded-xl drop-shadow-[0_0_16px_rgba(232,199,122,0.75)]" : undefined}
                     style={{
-                      animation: state.combatLog.at(-1)!.killedBy
-                        ? "rift-monster-flip 0.4s ease-out, rift-monster-slay 0.5s ease-in 1.1s forwards"
-                        : "rift-monster-flip 0.4s ease-out, rift-monster-strike 0.6s ease-in 1.1s forwards",
+                      animation: isHoldingFinalReveal
+                        ? "rift-monster-flip 0.4s ease-out forwards"
+                        : combatFlash.entry.killedBy
+                          ? "rift-monster-flip 0.4s ease-out, rift-monster-slay 0.5s ease-in 1.1s forwards"
+                          : "rift-monster-flip 0.4s ease-out, rift-monster-strike 0.6s ease-in 1.1s forwards",
                     }}
                   >
-                    <MonsterFace threat={state.combatLog.at(-1)!.monster.threat} size="md" />
+                    <MonsterFace threat={combatFlash.entry.monster.threat} size="md" />
                   </div>
-                  {combatBadge(state.combatLog.at(-1)!)}
+                  {combatBadge(combatFlash.entry)}
                 </div>
               )}
             </div>
           </section>
         </div>
 
-        <TurnPanel state={state} viewerSeat={viewerSeat} me={me} isChallenger={isChallenger} onAction={onAction} revealLocked={combatFlash !== null} />
+        <TurnPanel
+          state={state}
+          viewerSeat={viewerSeat}
+          me={me}
+          isChallenger={isChallenger}
+          onAction={onAction}
+          revealLocked={combatFlash !== null}
+          holdingFinalReveal={isHoldingFinalReveal}
+        />
 
         {/* Scoreboard */}
         <section className="flex flex-col gap-1.5">
@@ -643,6 +745,7 @@ function TurnPanel({
   isChallenger,
   onAction,
   revealLocked,
+  holdingFinalReveal,
 }: {
   state: SummonersRiftState;
   viewerSeat: SeatIndex;
@@ -651,8 +754,36 @@ function TurnPanel({
   onAction: (action: EngineAction) => void;
   /** Task brief §4 "전투 연출 템포" — true while the last-revealed monster's kill/damage flash is still playing (see `HpBanner`), so the challenger can't reveal the next one until every connected client has finished watching this one resolve. */
   revealLocked: boolean;
+  /**
+   * 2026-08-30 마지막 카드 홀드 세션 — true while the round- or game-ending
+   * reveal's hold window is still open (`isHoldingFinalReveal` in the parent).
+   * `state.phase` has already moved on to `"bidding"` (next round) or
+   * `"gameOver"` by this point, but the viewer is still looking at the
+   * *previous* round's frozen last card — so every turn action (draw/pass for
+   * whoever the next round's `activeSeat` happens to be, or acknowledging the
+   * game's end) stays locked out until this clears, same spirit as
+   * `revealLocked` for the challenger's own "다음 몬스터 공개" button.
+   */
+  holdingFinalReveal: boolean;
 }) {
   const panelStyle = { borderColor: "rgba(200,170,110,0.25)", background: "linear-gradient(160deg,#20180a 0%,#150f06 55%,#0a0603 100%)" };
+
+  if (state.phase === "gameOver") {
+    return (
+      <section className="rounded-2xl border p-3 text-center" style={panelStyle}>
+        <p className="text-xs font-medium" style={{ color: "#e8c77a" }}>
+          🏁 게임이 종료되었습니다 — 곧 최종 결과가 표시됩니다...
+        </p>
+      </section>
+    );
+  }
+  if (holdingFinalReveal) {
+    return (
+      <section className="rounded-2xl border p-3 text-center" style={panelStyle}>
+        <p className="text-xs text-white/60">⏳ 직전 라운드의 마지막 몬스터 결과를 확인하는 중입니다 — 잠시 후 다음 라운드가 시작됩니다.</p>
+      </section>
+    );
+  }
 
   if (state.phase === "bidding") {
     const isMyTurn = state.activeSeat === viewerSeat && !me.eliminated;
