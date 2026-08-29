@@ -122,7 +122,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: 없음 — 이번 세션 요청 3항목(5초 유지+스킵, 대형 HP바 포커싱, 피격 트레일/흔들림) 전부 구현·검증 완료.
 
-**커밋/배포**: (아래 커밋 시점에 추가 기재)
+**커밋/배포**: 이번 세션이 만들거나 수정한 5개 파일만 스테이징(`SummonersRiftBoard.tsx`/`SummonersRiftEffects.tsx`/`CardArt.tsx`/`globals.css`/`HANDOFF.md`) — 작업 트리에 있던 다른 세션들의 미커밋 변경(`.claude/`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지 `feat(summoners-rift): hold dungeon monster reveal 5s with skip, large HP bar hit trail/shake, named-monster dim`(`b7d59e9`) → `git push origin main` 완료(`6aceee3..b7d59e9`, 그 사이 다른 세션의 그리드포커 커밋이 먼저 반영돼 있었음). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(39초), `target: "production"`/`readyState: READY`(`dpl_4cYdCh9vZHh8pArXfRwzxapXN7KH`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/summoners-rift` 둘 다 200 직접 확인함.
 
 ### 2026-08-29 — 언어의 조각 직접 타이핑 입력 및 실시간 자모 조각 현황판
 
