@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-29 (**모바일 뷰포트 SiteHeader 텍스트 세로 쪼개짐(글자별 줄바꿈) 수정 + GameCard 제목 줄바꿈 정책 적용 세션** — 자세한 내용은 아래 `### 2026-08-29 — 모바일 SiteHeader 텍스트 세로 쪼개짐 수정 및 GameCard 제목 줄바꿈 정책` 절 참고.)_
+_최종 갱신: 2026-08-29 (**언어의 조각 — 회전 다이얼 입력을 직접 타이핑 입력으로 전면 교체 + 실시간 자음/모음 조각 현황판(PieceTracker) 신설 세션** — 자세한 내용은 아래 `### 2026-08-29 — 언어의 조각 직접 타이핑 입력 및 실시간 자모 조각 현황판` 절 참고.)_
+
+_이전 갱신: 2026-08-29 (**모바일 뷰포트 SiteHeader 텍스트 세로 쪼개짐(글자별 줄바꿈) 수정 + GameCard 제목 줄바꿈 정책 적용 세션** — 자세한 내용은 아래 `### 2026-08-29 — 모바일 SiteHeader 텍스트 세로 쪼개짐 수정 및 GameCard 제목 줄바꿈 정책` 절 참고.)_
 
 _이전 갱신: 2026-08-29 (**그리드포커 라운드 승리 연출(round-result) 스킵 버튼/백드롭 더블탭 + 관련 타이머·사운드 자동 정리 세션** — 자세한 내용은 아래 `### 2026-08-29 — 그리드포커 라운드 결과 연출 스킵(Fast-Forward) 버튼` 절 참고.)_
 
@@ -61,6 +63,36 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-29 — 언어의 조각 직접 타이핑 입력 및 실시간 자모 조각 현황판
+
+**요청**: "언어의조각" 보드게임의 복잡한 타일 드래그/클릭 방식 대신 유저가 키보드로 직접 단어를 타이핑 입력할 수 있는 인풋 필드 구축, 그리고 실시간 한글 자소 분해(초성/중성/종성) 기반 자음·모음 사용 현황 카운터 UI 개발. 요청서는 `src/games/wordPiece/` 또는 `src/games/hangul/`, `src/games/languagePiece/` 하위 `Board.tsx`/`WordInput.tsx`/`TileRack.tsx`/`engine.ts`/`types.ts` 경로를 전제했고, 이중자음/이중모음을 1개 조각으로 볼지 조합 분해로 볼지, 사전 검증 방식 등은 "절대 임의로 추정하지 말고 먼저 번호를 매긴 질문 목록을 제시"하라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사에서 발견한 핵심 불일치**: 요청 경로는 전부 존재하지 않음 — 실제 게임은 [`src/games/piecesOfLanguage/`](src/games/piecesOfLanguage/) 하나뿐이고, [`hangul.ts`](src/games/piecesOfLanguage/hangul.ts)(유니코드 기반 초/중/종성 분해·조합, 요청한 `disassemble.ts`와 동일 역할)와 262개 큐레이션 사전 [`words.ts`](src/games/piecesOfLanguage/words.ts)가 이미 존재했음. 더 근본적으로, 요청 문구("보유한 자음/모음 조각 수량과 비교해 초과 사용 경고")는 **개인별 자모 인벤토리를 소모해 단어를 스펠링하는 게임**을 전제했지만, 실제 `engine.ts`는 **두 플레이어가 시스템이 뽑은 공유 정답 단어 하나를 번갈아 추측하는 워들(Wordle)식 대결**이며 개인 hand가 아니라 정답 단어의 자모로 구성된 **공용 조각 풀(`tilePool`, 소모되지 않고 매 추측마다 재검증)**만 있음. 입력 방식도 클릭/드래그가 아니라 초성/중성/종성 **회전 다이얼(◀ ▶, `SyllableRotator`)**이었음.
+
+**`AskUserQuestion`으로 확인한 사항 (2회, 총 6문항)**:
+1. **게임 모델**(가장 중요한 결정) → **공용 풀 유지 + 입력만 로터→타이핑으로 교체**. 기존 워들 추리 게임의 규칙/승패 로직(engine.ts)은 전혀 건드리지 않고, 추측을 조합하던 로터 다이얼만 텍스트 타이핑으로 바꾼다. 상단 카운터는 "이 추측이 쓴 자모가 공용 `tilePool` 안에 있는지"를 실시간 비교해 초과분을 경고 표시.
+2. **이중자모 처리** → **유니코드 표준(기존 `hangul.ts` 그대로)**: ㄲ/ㅘ 등을 1개 원자 조각으로 카운트(`CHO_LIST`/`JUNG_LIST` 그대로 재사용, 낱자 분해 안 함).
+3. **기존 회전 다이얼 UI** → **완전 교체**(`SyllableRotator` 제거, 병행 제공 안 함).
+4. **사전 검증 기준** → 1차 답변은 "외부 사전 API/더 큰 단어 목록 신규 연동"이었으나, 이어서 이 프로젝트 `engine.ts`의 **"pure, no I/O" 결정론적 락스텝 계약**(`ARCHITECTURE.md §1`)과 실시간 API 호출이 충돌한다는 점을 알리고 재확인 → **빌드타임에 대용량 단어 목록을 정적 번들링**하는 방향(표준국어대사전 Open API, opendict.korean.go.kr)으로 좁혔으나, **API 키를 아직 발급받지 못한 상태**라 이번 세션은 **기존 `words.ts`(262개 큐레이션 사전) 그대로 사용**하는 것으로 진행 확정(사용자가 직접 발급받아 전달하면 후속 세션에서 사전만 교체 예정 — 아래 "다음 세션 인계" 참고).
+
+**구현**:
+- **[`hangul.ts`](src/games/piecesOfLanguage/hangul.ts)** — 순수 함수 2개 신규 추가:
+  - `analyzeJamoUsage(text)` — 완성된 음절은 `decomposeSyllable`로 초성/중성/종성 분해해 집계(초성+종성 → consonants, 중성 → vowels), 아직 조합 중인 낱자모(IME가 "ㅎ"만 커밋한 상태 등, `decomposeSyllable`이 던지는 비완성 입력)는 `CHO_LIST`/`JUNG_LIST` 직접 대조로 집계해 타이핑 도중에도 실시간으로 갱신됨. 한글이 아닌 문자(공백/기호/숫자/영문)는 조용히 무시.
+  - `jamoAvailableInPool(jamo, pool)` — 하나의 자모가 공용 풀에(리터럴 또는 회전형으로) 존재하는지 판정 — 기존 `wordBuildableFromPool`(단어 전체 판정)의 자모 단위 대응, 조각 현황판 칩의 빨간색 경고 근거.
+- **[`useHangulAnalysis.ts`](src/games/piecesOfLanguage/useHangulAnalysis.ts)** 신규 — `analyzeJamoUsage`를 감싼 `useMemo` 훅(요청한 `useHangulAnalysis(text)`).
+- **[`PieceTracker.tsx`](src/games/piecesOfLanguage/PieceTracker.tsx)** 신규 — `🟢 사용 중인 자음 N개 | 🔵 사용 중인 모음 M개` 요약 뱃지 + 자모별 칩(`ㄱ×2` 형태). `jamoAvailableInPool`이 false인 칩은 요청 스펙 그대로 `bg-red-500/20 text-red-400` 빨간 강조.
+- **[`WordInput.tsx`](src/games/piecesOfLanguage/WordInput.tsx)** 신규 — 단일 controlled `<input>`(모바일/PC 키보드 IME 그대로 수신, React `onChange`가 조합 중 글자도 매 키 입력마다 전달하므로 별도 `compositionstart/end` 배선 불필요). `wordLength` 음절수로 캡, Enter 키 → 유효성 통과 시 즉시 제출(`onSubmit` 후 입력창 비움), 유효하지 않으면 흔들림 애니메이션. 제출 버튼은 `isValidWord && wordBuildableFromPool`을 모두 만족해야 활성화(기존 로터와 동일한 검증, 입력 수단만 교체). 기존 로터의 "완성 힌트" 칩 제안 기능(`suggestCompletions`)도 그대로 이식(클릭 시 입력값을 그 단어로 채움). `sticky bottom-2`로 배치해 모바일 가상 키보드가 올라와도 현황판+입력창+제출 버튼이 함께 보이도록 함.
+- **[`PiecesOfLanguageBoard.tsx`](src/games/piecesOfLanguage/PiecesOfLanguageBoard.tsx)** — `SyllableRotator`/`SyllableDial`/`wordToDials`/`suggestCompletions`(로터 전용 사본) 전부 제거, 렌더 지점을 `<WordInput wordLength pool accent onSubmit />`으로 교체. 모듈 상단 주석의 "회전 다이얼" 설명을 "직접 타이핑" 설명으로 갱신. `TilePool`(공용 풀 패널)·`HintPanel`·`HistoryGrid`·게임오버 오버레이 등 나머지는 전혀 변경 없음.
+- **[`RulebookModal.tsx`](src/games/piecesOfLanguage/RulebookModal.tsx)** — "글자 조합" 절의 "타이핑이 아니라 회전으로 조합" 설명을 "키보드로 직접 타이핑, 조각 현황판이 실시간 집계, 풀 밖 자모는 칩이 빨간색으로 경고 + 제시하기 버튼 비활성화"로 갱신.
+- **[`globals.css`](src/app/globals.css)** — `pol-piece-shake` 키프레임 신규(기존 `pol-`류 애니메이션과 동일 네이밍 컨벤션), 제출 실패 시 조각 현황판이 좌우로 짧게 흔들리는 피드백.
+- **`PiecesOfLanguageGame.tsx`는 변경 없음** — `EngineAction`을 그대로 전달만 하는 얇은 온라인 동기화 레이어라 입력 수단 교체와 무관.
+
+**테스트**: `PiecesOfLanguage.test.ts`에 `analyzeJamoUsage`/`jamoAvailableInPool` 신규 `describe` 블록 2개, 11개 테스트 추가(이 저장소는 게임별 로직 테스트를 하나의 `*.test.ts` 파일에 통합하는 기존 컨벤션이라 요청하신 별도 `hangul.test.ts` 대신 여기 추가— `hangul.ts` 자체 함수를 이미 이 파일의 "hangul decomposition" 블록이 테스트하고 있었음): 겹받침 복합 종성(닭=ㄷ/ㅏ/ㄺ, 밟다) 1개 원자 조각 집계, 이중모음(과=ㅘ, 의=ㅢ) 1개 원자 조각 집계, 반복 자모 누적 집계, 조합 중 낱자모(ㅎ/ㅏ 단독) 예외 없이 집계, 비한글 문자 무시, 조각 풀 초과 사용 감지(리터럴/회전형 모두 커버 + `사과`를 `가을` 풀에 입력했을 때 ㅅ/ㅘ 둘 다 개별적으로 unavailable 판정). 풀 하드 레일 자체(`wordBuildableFromPool`)의 `isValid: false` 판정은 기존 "buildTilePool / wordBuildableFromPool" 블록이 이미 커버 중이라 중복 추가하지 않음.
+
+**검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0) / `npx vitest run src/games/piecesOfLanguage`(**65/65 통과** — 기존 54 + 신규 11) / 전체 `npx vitest run`(**44개 파일 · 1347개 테스트 전부 통과**, 46초, 타임아웃/행 없이 완주 — 과거 세션이 남긴 `aiBenchmark.test.ts` 관련 이슈는 이번 실행에서 재현 안 됨).
+
+**다음 세션 인계 (미해결 항목)**: 사용자가 표준국어대사전 Open API 키를 발급받으면, `words.ts`의 262개 큐레이션 사전을 그 사전 기반 대용량 단어 목록(빌드타임 정적 번들링, `engine.ts`의 "pure, no I/O" 결정론 계약 유지)으로 교체하는 후속 작업이 남아있음 — 이번 세션은 그 전 단계(입력 UI/카운터)만 완료하고 사전 자체는 그대로 둠(사용자 확인 사항 4번).
 
 ### 2026-08-29 — 모바일 SiteHeader 텍스트 세로 쪼개짐 수정 및 GameCard 제목 줄바꿈 정책
 

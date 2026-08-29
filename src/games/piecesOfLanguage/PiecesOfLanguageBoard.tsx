@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import RulebookModal from "./RulebookModal";
-import { isValidWord, wordsOfLength } from "./words";
-import { CHO_LIST, JONG_LIST, JUNG_LIST, composeSyllable, decomposeWord, rotationPartner } from "./hangul";
+import WordInput from "./WordInput";
+import { rotationPartner } from "./hangul";
 import {
   buildHint,
   isHintUnlocked,
   totalAttemptsRemaining,
   otherSeat,
-  wordBuildableFromPool,
   type EngineAction,
   type FeedbackColor,
   type GuessRecord,
@@ -25,26 +24,28 @@ import {
  *
  * Both seats race toward one system-generated shared target word
  * (`state.targetWord`), taking strict turns submitting a guess — this board
- * never reveals `targetWord` before `phase === "gameOver"`. Word entry is a
- * per-syllable "자음/모음 회전" dial picker (`SyllableRotator` below): each
- * syllable of the guess is built by rotating independent 초성/중성/종성
- * dials (`hangul.ts`'s `composeSyllable`) rather than typed or tapped whole
- * from a list, giving the "글자 조각을 조합한다" tactile feel literally. A
- * composed word only submits once it matches an entry in
- * `wordsOfLength(wordLength)` (`isValidWord`); until then the picker shows
- * closest-match word hints instead of silently accepting garbage.
+ * never reveals `targetWord` before `phase === "gameOver"`. Word entry is
+ * direct keyboard typing (`WordInput` below, replacing the earlier
+ * per-syllable 자음/모음 회전 dial picker — see git history for that
+ * version): a player types their whole guess into one text field with their
+ * own keyboard/IME, with a live consonant/vowel usage counter
+ * (`PieceTracker`) above it. A typed word only submits once it matches an
+ * entry in `wordsOfLength(wordLength)` (`isValidWord`); until then the input
+ * shows closest-match word hints instead of silently accepting garbage.
  *
  * Feedback is **one light per completed 글자** (syllable), not per jamo
  * slot: green (character + position both match the target), yellow
  * (character exists elsewhere in the target), red (character absent
  * entirely) — see `engine.ts`'s `compareWords` module doc.
  *
- * The rotator dials are further hard-railed by `state.tilePool` (`TilePool`
- * below renders it in the shared common area): a composed word only submits
+ * Typed guesses are further hard-railed by `state.tilePool` (`TilePool`
+ * below renders it in the shared common area): a typed word only submits
  * once it's *both* a real word-bank entry *and* buildable from the pool
  * (literally or via each tile's rotation partner) — see `engine.ts`'s
  * `buildTilePool`/`wordBuildableFromPool` module doc for why the pool is
  * deliberately minimal (exactly the target's own jamo, no random filler).
+ * `WordInput`'s `PieceTracker` panel previews this same pool rule live, per
+ * jamo, as the player types (`hangul.ts`'s `jamoAvailableInPool`).
  *
  * There is deliberately no wall-clock per-turn timer (confirmed via
  * `AskUserQuestion`): the "제한시간 내에 먼저 맞히면 승리" win condition is
@@ -75,7 +76,7 @@ const SEAT_THEME: Record<Seat, { emoji: string; ring: string; text: string; bg: 
 };
 
 // Static class strings (not built via string interpolation) so Tailwind's
-// JIT scanner can actually see and keep them — see SyllableRotator `accent` usage.
+// JIT scanner can actually see and keep them — see WordInput's `accent` usage.
 const SEAT_PICKER_ACCENT: Record<Seat, string> = {
   p1: "hover:border-violet-400 hover:bg-violet-500/10",
   p2: "hover:border-amber-400 hover:bg-amber-500/10",
@@ -164,38 +165,6 @@ function HistoryGrid({ history, names }: { history: GuessRecord[]; names: Record
   );
 }
 
-type SyllableDialState = { cho: number; jung: number; jong: number };
-
-/** Decomposes an existing bank word into rotator dial indices — used to jump the rotator straight to a clicked completion hint. */
-function wordToDials(word: string): SyllableDialState[] {
-  return decomposeWord(word).map((s) => ({
-    cho: CHO_LIST.indexOf(s.cho as (typeof CHO_LIST)[number]),
-    jung: JUNG_LIST.indexOf(s.jung as (typeof JUNG_LIST)[number]),
-    jong: JONG_LIST.indexOf(s.jong as (typeof JONG_LIST)[number]),
-  }));
-}
-
-/**
- * Closest-match valid words for the "완성 가능한 조합 힌트" — ranked by how
- * many syllables already match the current (invalid) composition, so the
- * hint gets more specific the closer the rotators get. Restricted to words
- * the shared tile pool can actually build (§2's hard rail), so a hint never
- * points at something the pool would reject on submit anyway.
- */
-function suggestCompletions(current: string, wordLength: number, pool: string[], limit = 6): string[] {
-  const currentChars = [...current];
-  const ranked = wordsOfLength(wordLength)
-    .filter((w) => wordBuildableFromPool(w, pool))
-    .map((w) => {
-      const chars = [...w];
-      let matches = 0;
-      for (let i = 0; i < wordLength; i++) if (chars[i] === currentChars[i]) matches++;
-      return { w, matches };
-    })
-    .sort((a, b) => b.matches - a.matches);
-  return ranked.slice(0, limit).map((r) => r.w);
-}
-
 /** The common consonant/vowel tile pool, rendered in the shared central area both seats build guesses from (`언어의조각.md` §1/§2). */
 function TilePool({ pool }: { pool: string[] }) {
   return (
@@ -258,159 +227,6 @@ function HintPanel({ state, seat }: { state: PiecesOfLanguageState; seat: Seat }
   );
 }
 
-function SyllableDial({
-  label,
-  value,
-  onPrev,
-  onNext,
-}: {
-  label: string;
-  value: string;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-1 rounded-md border border-white/10 bg-white/5 px-1.5 py-1">
-      <span className="w-7 shrink-0 text-[10px] text-white/40">{label}</span>
-      <button
-        type="button"
-        onClick={onPrev}
-        aria-label={`${label} 이전`}
-        className="grid h-5 w-5 shrink-0 place-items-center rounded text-white/50 hover:bg-white/10 hover:text-white"
-      >
-        ◀
-      </button>
-      <span className="min-w-[2.25rem] text-center text-xs font-semibold text-white">{value}</span>
-      <button
-        type="button"
-        onClick={onNext}
-        aria-label={`${label} 다음`}
-        className="grid h-5 w-5 shrink-0 place-items-center rounded text-white/50 hover:bg-white/10 hover:text-white"
-      >
-        ▶
-      </button>
-    </div>
-  );
-}
-
-/**
- * The guess-entry control: `wordLength` independent syllable rotators, each
- * spinning its own 초성/중성/종성 dial. Submission is only ever enabled once
- * the composed word matches the shared word bank (`isValidWord`); while it
- * doesn't, closest-match word hints are shown instead so a wrong rotation
- * never silently reaches the engine (which would just no-op it anyway — see
- * engine.ts's `applyGuess`).
- */
-function SyllableRotator({
-  wordLength,
-  pool,
-  onSubmit,
-  accent,
-}: {
-  wordLength: number;
-  pool: string[];
-  onSubmit: (word: string) => void;
-  accent: string;
-}) {
-  const [dials, setDials] = useState<SyllableDialState[]>(() =>
-    Array.from({ length: wordLength }, () => ({ cho: 0, jung: 0, jong: 0 })),
-  );
-
-  function rotate(index: number, slot: keyof SyllableDialState, delta: number) {
-    const count = slot === "cho" ? CHO_LIST.length : slot === "jung" ? JUNG_LIST.length : JONG_LIST.length;
-    setDials((prev) =>
-      prev.map((d, i) => (i === index ? { ...d, [slot]: ((d[slot] + delta) % count + count) % count } : d)),
-    );
-  }
-
-  const word = dials.map((d) => composeSyllable(d.cho, d.jung, d.jong)).join("");
-  const isWord = isValidWord(word, wordLength);
-  const poolOk = wordBuildableFromPool(word, pool);
-  const valid = isWord && poolOk;
-  const suggestions = valid ? [] : suggestCompletions(word, wordLength, pool);
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap justify-center gap-2.5">
-        {dials.map((d, i) => (
-          <div key={i} className="flex flex-col items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 p-2">
-            <div
-              className={`grid h-11 w-11 place-items-center rounded-lg border text-xl font-bold sm:h-12 sm:w-12 ${
-                valid ? "border-sky-300 bg-sky-500/20 text-white" : "border-white/15 bg-white/5 text-white"
-              }`}
-            >
-              {composeSyllable(d.cho, d.jung, d.jong)}
-            </div>
-            <SyllableDial label="초성" value={CHO_LIST[d.cho]} onPrev={() => rotate(i, "cho", -1)} onNext={() => rotate(i, "cho", 1)} />
-            <SyllableDial label="중성" value={JUNG_LIST[d.jung]} onPrev={() => rotate(i, "jung", -1)} onNext={() => rotate(i, "jung", 1)} />
-            <SyllableDial
-              label="종성"
-              value={JONG_LIST[d.jong] === "" ? "받침없음" : JONG_LIST[d.jong]}
-              onPrev={() => rotate(i, "jong", -1)}
-              onNext={() => rotate(i, "jong", 1)}
-            />
-          </div>
-        ))}
-      </div>
-
-      {valid ? (
-        <p className="text-center text-xs text-sky-300">✅ &ldquo;{word}&rdquo; — 제출 가능한 단어예요</p>
-      ) : !isWord ? (
-        <div className="flex flex-col items-center gap-1.5">
-          <p className="text-center text-xs text-amber-300">
-            ⚠️ &ldquo;{word}&rdquo;은(는) 올바른 한글 단어 조합이 아니에요
-          </p>
-          {suggestions.length > 0 && (
-            <div className="flex flex-wrap justify-center gap-1.5">
-              <span className="text-[11px] text-white/40">완성 힌트:</span>
-              {suggestions.map((w) => (
-                <button
-                  key={w}
-                  type="button"
-                  onClick={() => setDials(wordToDials(w))}
-                  className={`rounded-full border border-white/15 px-2.5 py-1 text-[11px] font-medium text-white/70 transition hover:text-white ${accent}`}
-                >
-                  {w}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center gap-1.5">
-          <p className="text-center text-xs text-rose-300">
-            🧩 &ldquo;{word}&rdquo;은(는) 단어이지만 지금 조각 풀로는 조합할 수 없어요
-          </p>
-          {suggestions.length > 0 && (
-            <div className="flex flex-wrap justify-center gap-1.5">
-              <span className="text-[11px] text-white/40">조각 풀로 조합 가능한 단어:</span>
-              {suggestions.map((w) => (
-                <button
-                  key={w}
-                  type="button"
-                  onClick={() => setDials(wordToDials(w))}
-                  className={`rounded-full border border-white/15 px-2.5 py-1 text-[11px] font-medium text-white/70 transition hover:text-white ${accent}`}
-                >
-                  {w}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      <button
-        type="button"
-        disabled={!valid}
-        onClick={() => onSubmit(word)}
-        className="rounded-xl bg-violet-500 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
-      >
-        제시하기
-      </button>
-    </div>
-  );
-}
-
 export default function PiecesOfLanguageBoard({
   state,
   viewerSeat,
@@ -447,7 +263,7 @@ export default function PiecesOfLanguageBoard({
         <h3 className="text-sm font-bold text-white">🎯 공통 정답 단어 추리 — 기록</h3>
         <HistoryGrid history={state.history} names={names} />
         {isMyTurn && attemptsLeft !== 0 && (
-          <SyllableRotator
+          <WordInput
             wordLength={state.wordLength}
             pool={state.tilePool}
             accent={SEAT_PICKER_ACCENT[viewerSeat]}

@@ -4,10 +4,12 @@ import {
   CHO_LIST,
   JONG_LIST,
   JUNG_LIST,
+  analyzeJamoUsage,
   composeSyllable,
   decomposeSyllable,
   decomposeWord,
   isPureHangulWord,
+  jamoAvailableInPool,
   jamoSatisfiedByTile,
   rotationPartner,
 } from "./hangul";
@@ -55,6 +57,72 @@ describe("hangul decomposition", () => {
     expect(isPureHangulWord("abc")).toBe(false);
     expect(isPureHangulWord("사과!")).toBe(false);
     expect(isPureHangulWord("ㅅㅏㄱㅘ")).toBe(false); // bare jamo, not composed syllables
+  });
+});
+
+describe("analyzeJamoUsage (WordInput/PieceTracker의 실시간 자모 사용량 집계)", () => {
+  it("counts a complex batchim (겹받침) as one atomic jamo, not split into its parts — '닭'", () => {
+    const usage = analyzeJamoUsage("닭");
+    expect(usage.consonants).toEqual({ ㄷ: 1, ㄺ: 1 });
+    expect(usage.vowels).toEqual({ ㅏ: 1 });
+  });
+
+  it("counts a complex batchim across a whole word — '밟다' (밟 = ㅂ/ㅏ/ㄼ, 다 = ㄷ/ㅏ)", () => {
+    const usage = analyzeJamoUsage("밟다");
+    expect(usage.consonants).toEqual({ ㅂ: 1, ㄼ: 1, ㄷ: 1 });
+    expect(usage.vowels).toEqual({ ㅏ: 2 });
+  });
+
+  it("counts a complex vowel (이중모음) as one atomic jamo — '과' and '의'", () => {
+    expect(analyzeJamoUsage("과")).toEqual({ consonants: { ㄱ: 1 }, vowels: { ㅘ: 1 } });
+    expect(analyzeJamoUsage("의")).toEqual({ consonants: { ㅇ: 1 }, vowels: { ㅢ: 1 } });
+  });
+
+  it("tallies repeated jamo across syllables instead of overwriting", () => {
+    // "가나": 초성 ㄱ/ㄴ (distinct), 중성 ㅏ twice.
+    const usage = analyzeJamoUsage("가나");
+    expect(usage.consonants).toEqual({ ㄱ: 1, ㄴ: 1 });
+    expect(usage.vowels).toEqual({ ㅏ: 2 });
+  });
+
+  it("counts a still-mid-composition lone jamo (IME hasn't produced a full syllable yet) instead of throwing", () => {
+    expect(analyzeJamoUsage("ㅎ")).toEqual({ consonants: { ㅎ: 1 }, vowels: {} });
+    expect(analyzeJamoUsage("ㅏ")).toEqual({ consonants: {}, vowels: { ㅏ: 1 } });
+  });
+
+  it("silently ignores non-Hangul characters (spaces, punctuation, digits, Latin) instead of throwing", () => {
+    const usage = analyzeJamoUsage("가나! a1 나");
+    expect(usage.consonants).toEqual({ ㄱ: 1, ㄴ: 2 });
+    expect(usage.vowels).toEqual({ ㅏ: 3 });
+  });
+
+  it("returns empty maps for an empty string", () => {
+    expect(analyzeJamoUsage("")).toEqual({ consonants: {}, vowels: {} });
+  });
+});
+
+describe("jamoAvailableInPool (조각 풀 초과 사용 감지 — PieceTracker의 붉은색 경고 칩 근거)", () => {
+  it("is available when the exact jamo is in the pool", () => {
+    expect(jamoAvailableInPool("ㄱ", ["ㄱ", "ㅏ"])).toBe(true);
+  });
+
+  it("is available via a rotation partner even if the literal jamo isn't in the pool", () => {
+    expect(jamoAvailableInPool("ㄱ", ["ㄴ"])).toBe(true); // ㄴ rotates to ㄱ
+  });
+
+  it("is unavailable when neither the jamo nor its rotation partner is in the pool — the over-usage case", () => {
+    expect(jamoAvailableInPool("ㅅ", ["ㄱ", "ㄴ", "ㅏ"])).toBe(false);
+  });
+
+  it("every jamo actually used to type a pool-incompatible guess is individually flagged unavailable", () => {
+    // Pool built for "가을" (ㄱ/ㅇ/ㅏ/ㅡ/ㄹ, ㄱ possibly shown rotated as ㄴ) — typing "사과"
+    // uses ㅅ and ㅘ, neither of which the pool (or its rotations) can cover.
+    const pool = ["ㄴ", "ㅇ", "ㅏ", "ㅡ", "ㄹ"]; // ㄱ rotated to ㄴ, per buildTilePool's own convention
+    const usage = analyzeJamoUsage("사과");
+    const unavailable = [...Object.keys(usage.consonants), ...Object.keys(usage.vowels)].filter(
+      (jamo) => !jamoAvailableInPool(jamo, pool),
+    );
+    expect(unavailable.sort()).toEqual(["ㅅ", "ㅘ"].sort());
   });
 });
 

@@ -121,3 +121,70 @@ export function jamoSatisfiedByTile(poolJamo: string, required: string): boolean
   if (required === "") return true;
   return poolJamo === required || rotationPartner(poolJamo) === required;
 }
+
+/**
+ * True iff some tile in `pool` can stand in for `jamo` (literally or via
+ * rotation) — `jamoSatisfiedByTile` asked per pool tile against one
+ * requirement; this is the same question asked the other way round, for one
+ * jamo against the whole pool. Used by the typing-input piece counter
+ * (`WordInput.tsx`/`PieceTracker.tsx`) to decide whether a single jamo chip
+ * should render as "available" or "overused" — `wordBuildableFromPool`
+ * (engine.ts) asks the equivalent whole-word question for gating submission,
+ * this is its per-jamo breakdown for the UI. Like the pool itself, this is
+ * never a *quantity* check — the pool holds at most one tile per unique
+ * jamo (see `engine.ts`'s `buildTilePool`) and is never consumed, so a jamo
+ * used twice in one guess is still "available" as long as one matching tile
+ * exists at all.
+ */
+export function jamoAvailableInPool(jamo: string, pool: string[]): boolean {
+  return pool.some((tile) => jamoSatisfiedByTile(tile, jamo));
+}
+
+/** Per-jamo usage counts for a (possibly still-being-typed) piece of text — see `analyzeJamoUsage`. */
+export interface JamoUsage {
+  /** 초성/종성 consonant jamo -> how many times each appears. */
+  consonants: Record<string, number>;
+  /** 중성 vowel jamo -> how many times each appears. */
+  vowels: Record<string, number>;
+}
+
+function bumpCount(map: Record<string, number>, key: string): void {
+  if (key === "") return; // JONG_LIST[0] = "no batchim" — nothing to count.
+  map[key] = (map[key] ?? 0) + 1;
+}
+
+/**
+ * Real-time jamo usage breakdown for `text` — powers `WordInput.tsx`'s
+ * per-jamo piece counter (`useHangulAnalysis`, its thin `useMemo` wrapper).
+ * Every complete precomposed syllable block is decomposed via
+ * `decomposeSyllable` (초성 and 종성 both count toward `consonants`, 중성
+ * counts toward `vowels`); a still-mid-composition lone jamo — the IME has
+ * only committed e.g. "ㅎ" so far, before its vowel arrives, which is *not*
+ * a precomposed syllable block and would make `decomposeSyllable` throw — is
+ * still counted by matching it directly against `CHO_LIST`/`JUNG_LIST`, so
+ * the counter updates live while typing rather than jumping only once each
+ * syllable completes. Compound/複合 자모 (ㄲ, ㅘ, …) are each counted as one
+ * atomic piece, matching this module's Unicode-standard jamo tables — never
+ * split into ㄱ+ㄱ or ㅗ+ㅏ (see module doc). Anything else (spaces,
+ * punctuation, non-Hangul characters) is silently skipped rather than
+ * thrown on, since a partial guess is expected to contain incomplete input
+ * while the player is still typing.
+ */
+export function analyzeJamoUsage(text: string): JamoUsage {
+  const consonants: Record<string, number> = {};
+  const vowels: Record<string, number> = {};
+  for (const char of text) {
+    if (isHangulSyllable(char)) {
+      const { cho, jung, jong } = decomposeSyllable(char);
+      bumpCount(consonants, cho);
+      bumpCount(vowels, jung);
+      bumpCount(consonants, jong);
+    } else if ((CHO_LIST as readonly string[]).includes(char)) {
+      bumpCount(consonants, char);
+    } else if ((JUNG_LIST as readonly string[]).includes(char)) {
+      bumpCount(vowels, char);
+    }
+    // else: not a Hangul jamo/syllable at all — ignored, not thrown on.
+  }
+  return { consonants, vowels };
+}

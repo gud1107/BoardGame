@@ -1050,6 +1050,31 @@ body {
   }
 }
 
+/* 언어의 조각's typing-input piece counter (see PieceTracker.tsx): a brief
+   horizontal shake feedback when the player hits Enter/제시하기 on a word
+   that isn't submittable yet (incomplete, not in the dictionary, or a jamo
+   the shared tile pool can't cover) — a lighter-weight sibling of
+   pol-attempts-warn's pulse, for a one-shot "that didn't work" nudge rather
+   than an ongoing countdown warning. */
+@keyframes pol-piece-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
 /* 레지스탕스 쿠's influence-card reveal (see CoupEffects.tsx / CardFlipWrapper)
    — identical technique to coyote-card-flip/loveletter-card-flip, reused here
    so a challenge resolution or a lost-influence reveal visibly turns the

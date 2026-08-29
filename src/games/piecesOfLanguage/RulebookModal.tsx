@@ -37,20 +37,22 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
 
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">
-            글자 조합 — 자음/모음 회전 &amp; 조합 제약
+            글자 조합 — 직접 타이핑 &amp; 조합 제약
           </h3>
           <p className="text-white/70">
-            추측 단어는 타이핑이 아니라 <b className="text-white">글자 조각 회전</b>으로
-            만듭니다. 글자마다 초성·중성·종성 다이얼을 각각 돌려(◀ ▶) 조합하세요. 풀의 일부
-            조각은 <b className="text-white">회전시키면 다른 자모로도 쓸 수 있어요</b>(예: ㄱ↔ㄴ,
+            추측 단어는 <b className="text-white">키보드로 직접 타이핑</b>해 입력합니다. 입력창
+            위 조각 현황판에 지금까지 입력한 <b className="text-white">자음/모음이 실시간으로
+            집계</b>되어 표시되며, 풀의 일부 조각은{" "}
+            <b className="text-white">회전시키면 다른 자모로도 쓸 수 있어요</b>(예: ㄱ↔ㄴ,
             ㅡ↔ㅣ — 풀 조각에 ↻ 표시로 안내됩니다).
           </p>
           <p className="mt-2 text-white/70">
             <b className="text-white">조합 제약(하드 레일)</b> — 초성·중성·종성 각각은 오직{" "}
             <b className="text-white">공통 조각 풀에 있는 자모(또는 그 회전형)</b>로만 채울 수
-            있습니다. 등록된 단어라도 풀로 조합할 수 없으면 제시할 수 없고, 조합이 불완전하거나
-            풀 밖의 단어면 대신 <b className="text-white">조각 풀로 조합 가능한 단어 힌트</b>를
-            보여줍니다.
+            있습니다. 등록된 단어라도 풀로 조합할 수 없으면 제시할 수 없고, 풀에 없는 자모를
+            입력하면 조각 현황판의 해당 칩이 <b className="text-white">붉은색으로 경고</b>되며
+            제시하기 버튼도 비활성화됩니다. 조합이 불완전하거나 풀 밖의 단어면 대신{" "}
+            <b className="text-white">조각 풀로 조합 가능한 단어 힌트</b>를 보여줍니다.
           </p>
         </section>
 
