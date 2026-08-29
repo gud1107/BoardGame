@@ -96,7 +96,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: 없음 — 슬램 이펙트(모든 접속 클라이언트 동기 재생)와 라운드 종료까지 유지되는 지속 배지 둘 다 구현·검증 완료.
 
-**커밋/배포**: TODO — 아래 절차 진행 중.
+**커밋/배포**: 변경 파일(`soundEngine.ts`/`globals.css`/`SummonersRiftBoard.tsx` + HANDOFF) 스테이징 — 작업 트리에 있던 다른 세션들의 미커밋 변경(`.claude/`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않음. 커밋 메시지 `feat(summoners-rift): add powerful pass slam effect and persistent pass status indicator`(`3f8d994`) → `git push origin main` 완료(`3c5c39d..3f8d994`). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(39초), `target: "production"`/`readyState: READY`(`dpl_DUnfJaekmftb6Z3riPBrE7myRUQa`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨. `curl`로 `/`·`/games/summoners-rift` 둘 다 200 직접 확인함.
 
 ### 2026-08-30 — 온라인 멀티플레이 방 만들기/참여 화면 엔터 키 즉시 제출
 
