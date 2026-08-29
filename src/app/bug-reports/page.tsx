@@ -58,8 +58,9 @@ export default function BugReportsPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">🐛 버그 리포트 게시판</h1>
           <p className="mt-1 text-sm text-white/50">
-            작성/수정/삭제는 로그인이 필요합니다. 본인이 작성한 리포트는 직접 수정·삭제할 수 있고, 관리자는 모든
-            리포트를 관리할 수 있습니다. 전화번호는 목록/상세 모두 마스킹되어 노출됩니다.
+            로그인 없이도 작성할 수 있어요 — 비로그인 작성 시 입력한 비밀번호로 나중에 직접 수정·삭제할 수
+            있습니다. 로그인 후 작성한 리포트는 본인 계정으로 바로 수정·삭제할 수 있고, 관리자는 모든 리포트를
+            관리할 수 있습니다. 전화번호는 목록/상세 모두 마스킹되어 노출됩니다.
           </p>
         </div>
         <button
@@ -142,7 +143,14 @@ export default function BugReportsPage() {
                       <span className="ml-1 text-xs text-white/30">(수정됨)</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 whitespace-nowrap">{r.author}</td>
+                  <td className="px-3 py-2.5 whitespace-nowrap">
+                    {r.author}
+                    {r.source === "cloud" && r.isGuest && (
+                      <span className="ml-1 text-white/30" title="비로그인(게스트) 작성">
+                        👤
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-white/50">{formatDate(r.createdAt)}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap">
                     <span className={`rounded-full border px-2 py-0.5 text-xs ${STATUS_STYLE[r.status]}`}>

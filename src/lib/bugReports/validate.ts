@@ -16,8 +16,25 @@ export interface BugReportFormInput {
   phone?: string;
 }
 
-export type BugReportField = "title" | "description" | "author" | "phone";
+export type BugReportField = "title" | "description" | "author" | "phone" | "password";
 export type BugReportFieldErrors = Partial<Record<BugReportField, string>>;
+
+/** Minimum length for a guest's 글 관리 비밀번호 (post management password) — request specified "4자리 이상". */
+export const MIN_GUEST_PASSWORD_LENGTH = 4;
+
+/**
+ * Only relevant for guest (non-logged-in) submissions/edits — logged-in
+ * users authenticate via their Supabase session, not a per-post password.
+ * Kept separate from `validateBugReportInput` (rather than an extra field
+ * on `BugReportFormInput`) because whether it applies at all depends on
+ * login state, which this dependency-free module has no way to know.
+ */
+export function validateGuestPassword(password: string | undefined): string | null {
+  if (!password || password.length < MIN_GUEST_PASSWORD_LENGTH) {
+    return `비밀번호는 ${MIN_GUEST_PASSWORD_LENGTH}자리 이상 입력해주세요.`;
+  }
+  return null;
+}
 
 /**
  * 제목/내용/글쓴이는 필수, 전화번호는 선택이지만 입력됐다면 형식을 검증한다

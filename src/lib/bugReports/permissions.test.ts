@@ -24,6 +24,14 @@ describe("canEditContent", () => {
   it("an admin editing their own report is still allowed", () => {
     expect(canEditContent(AUTHOR, AUTHOR, true)).toBe(true);
   });
+
+  it("blocks anyone (even signed in) from matching a guest report (authorId: null) by identity", () => {
+    expect(canEditContent(null, OTHER, false)).toBe(false);
+  });
+
+  it("still allows an admin to edit a guest report", () => {
+    expect(canEditContent(null, null, true)).toBe(true);
+  });
 });
 
 describe("canDelete", () => {
@@ -41,6 +49,14 @@ describe("canDelete", () => {
 
   it("mirrors canEditContent for a signed-out visitor", () => {
     expect(canDelete(AUTHOR, null, false)).toBe(false);
+  });
+
+  it("blocks a signed-in non-admin from deleting a guest report by identity alone", () => {
+    expect(canDelete(null, OTHER, false)).toBe(false);
+  });
+
+  it("still allows an admin (including the freedom_03@naver.com super admin, folded in by the caller) to delete a guest report", () => {
+    expect(canDelete(null, null, true)).toBe(true);
   });
 });
 

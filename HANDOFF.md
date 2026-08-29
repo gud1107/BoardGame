@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-29 (**고유 식별자(playerId/좌석) 기반 내기 정산 원장 사후 닉네임 병합(Alias Merge) 엑셀형 취합표 + 6개 온라인 게임 크로스디바이스 공유 원장 신설 세션** — 자세한 내용은 아래 `### 2026-08-29 — 고유 식별자 기반 내기 정산 원장 및 엑셀형 사후 닉네임 병합 취합표` 절 참고.)_
+_최종 갱신: 2026-08-29 (**버그리포트 비로그인(게스트) 작성 재도입 + freedom_03@naver.com 슈퍼 관리자 마스터 삭제 권한 세션** — 자세한 내용은 아래 `### 2026-08-29 — 버그리포트 게스트(비로그인) 작성 및 슈퍼 관리자 마스터 삭제` 절 참고.)_
+
+_이전 갱신: 2026-08-29 (**고유 식별자(playerId/좌석) 기반 내기 정산 원장 사후 닉네임 병합(Alias Merge) 엑셀형 취합표 + 6개 온라인 게임 크로스디바이스 공유 원장 신설 세션** — 자세한 내용은 아래 `### 2026-08-29 — 고유 식별자 기반 내기 정산 원장 및 엑셀형 사후 닉네임 병합 취합표` 절 참고.)_
 
 _이전 갱신: 2026-08-29 (**이탈 플레이어 투표 기반 AI 봇 대체(Bot Takeover) 시스템 구축 + 전체 `npx vitest run` 정지 이슈 근본 원인 수정 세션** — 자세한 내용은 아래 `### 2026-08-29 — 이탈 플레이어 투표 기반 AI 봇 대체 시스템 및 vitest 정지 이슈 수정` 절 참고.)_
 
@@ -55,6 +57,44 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-29 — 버그리포트 게스트(비로그인) 작성 및 슈퍼 관리자 마스터 삭제
+
+**요청**: 버그리포트 게시판에 (1) 비로그인(게스트) 작성 지원(닉네임+4자리 이상 비밀번호로 본인 인증, 이후 수정/삭제 시 비밀번호 검증), (2) `freedom_03@naver.com` 계정 전용 "비밀번호/작성자 무관 즉시 삭제" 마스터 권한을 요청. 요청서는 Prisma(`prisma/schema.prisma`)와 `src/pages/bugReport/`·`src/server/api/bugReport/` 구조를 전제했음. "모호한 점은 임의로 추정하지 말고 번호를 매긴 질문 목록을 먼저 제시"하라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사에서 발견한 핵심 불일치**: 이 저장소엔 Prisma가 전혀 없음 — DB는 Supabase Postgres이고 스키마는 `supabase/schema.sql`을 수동 편집 후 사용자가 Supabase 대시보드 SQL 에디터에 직접 반영하는 기존 워크플로(이번에도 동일하게 따름, 이 세션이 직접 실행하지 못함). 실제 컴포넌트 경로도 `src/components/bugReport/{BugReportModal,BugReportDetailModal,BugReportFloatingButton}.tsx` + `src/app/api/bug-reports/{route.ts,[id]/route.ts}`. **더 중요한 발견**: 바로 전날(2026-08-28) 세션이 "타인 글 서버 변조 차단"을 위해 원래 비로그인이던 버그리포트를 **의도적으로 로그인 필수로 전환**했었음(그 이전엔 상태변경(`updateStatus`)에 권한 검증 자체가 없던 취약점도 같이 막았던 결정) — 이번 요청은 그 결정을 부분적으로 되돌리는 작업이라는 점을 먼저 사용자에게 공유. 또한 `src/lib/admin/superAdmin.ts`에 `SUPER_ADMIN_EMAIL = "freedom_03@naver.com"`이 엔타이틀먼트 킬스위치용으로 이미 존재해 요청 이메일과 정확히 일치 — 그대로 재사용. `permissions.ts`의 `canDelete`/`canEditContent`는 이미 `profiles.role==='admin'`인 계정 전원에게 전체 삭제/수정 권한을 부여 중이었어서(freedom_03 한 명으로 좁혀져 있지 않음), 이 기존 동작과 신규 "마스터 삭제"를 어떻게 병행할지가 실제 결정 지점이었음.
+
+**`AskUserQuestion`으로 확인한 사항 (1회, 3문항)**:
+1. 마스터 삭제/수정 권한 범위 → **기존 admin 롤 유지 + freedom_03 보장**(freedom_03 전용으로 좁혀 다른 admin 계정의 기존 권한을 뺏는 대안은 채택 안 함) — `isAdmin`이 `profiles.role==='admin'` OR `SUPER_ADMIN_EMAIL` 이메일 일치로 폴드되고, `permissions.ts`의 기존 규칙(`isAdmin`이면 전부 허용)은 손대지 않음.
+2. 게스트 작성 스팸/도배 방지 → **기기 단위 쿨다운**(외부 캡차 서비스 없이, 기존 `getDeviceId()`(localStorage) 패턴 재사용) 선택 — 별도 서비스/키 발급 없이 구현 가능한 안.
+3. 게스트 첨부 이미지 용량 제한 → **로그인 사용자와 동일 5MB**(별도 축소 없음).
+
+**구현 — DB 스키마(`supabase/schema.sql`)**: `bug_reports.author_id`를 `not null`에서 nullable로 전환(게스트는 null), `password_hash text`(bcrypt 해시, 클라이언트로 절대 반환되지 않음)·`is_guest boolean`·`device_id text`(게스트 쿨다운 조회용) 컬럼 신설 + `(device_id, created_at desc) where is_guest` 인덱스. 신규 설치용 `create table` 정의와 기존 라이브 테이블용 `alter table ... add column if not exists`/`alter column ... drop not null`를 모두 작성(이 파일의 기존 관례) — **사용자가 Supabase SQL 에디터에 직접 실행하기 전까지는 게스트 작성/마스터 삭제가 프로덕션에서 동작하지 않음**(테이블 부재/컬럼 부재로 오류 반환, 로그인 작성 흐름은 기존 컬럼만 쓰므로 영향 없음).
+
+**구현 — 서버**:
+- **`src/lib/bugReports/guestAuth.ts`**(신규)+테스트 4케이스: `bcryptjs`(순수 JS, Vercel 서버리스에 네이티브 바인딩 이슈 없음 — 신규 의존성으로 추가) 기반 `hashGuestPassword`/`verifyGuestPassword`. `permissions.ts`(동기/의존성 없는 순수 함수 계약)와 분리된 별도 모듈로 두고, 그 파일 헤더 주석에 "게스트 비밀번호 경로는 여기 없음, guestAuth.ts 참고"로 상호 링크.
+- **`src/lib/bugReports/permissions.ts`**: `authorId: string | null`로 시그니처 변경(게스트 글은 `authorId: null`이라 아무도 신원 매칭 불가 → 항상 관리자 경로로만 통과), 헤더 주석에 `isAdmin`이 호출부에서 이미 `SUPER_ADMIN_EMAIL`을 폴드한 값이어야 함을 명시. 신규 null-authorId 테스트 2+2케이스.
+- **`src/lib/bugReports/serverRepository.ts`**: `password_hash`/`device_id`를 `CloudBugReportRecord`(클라이언트 반환 타입)에 매핑하지 않는 **allowlist 방식**의 `rowToRecord`로 유지(향후 `select("*")`가 바뀌어도 해시 유출 불가) + `getLastGuestSubmissionAt`(쿨다운 조회) · `verifyGuestReportPassword`(비밀번호 검증, DB 조회+bcrypt 비교를 한 함수로 캡슐화) 신규.
+- **`POST /api/bug-reports`**: 로그인 필수 401 게이트 제거 — 세션 없으면 `isGuest=true`로 분기해 `author`+`password`(4자리 이상, `validateGuestPassword`) 요구, 기기당 **60초 쿨다운**(`GUEST_SUBMIT_COOLDOWN_MS`, 요청서에 수치 없어 직접 정한 기본값 — `IDLE_VOTE_THRESHOLD_MS` 45초를 정했던 것과 동일한 방식) 위반 시 429.
+- **`PATCH`/`DELETE /api/bug-reports/[id]`**: `requireUser()`(무조건 401)를 `getAuthContext()`(비로그인도 통과시키고 `userId: null`로 흘려보냄)로 교체, `isAdmin`을 `profiles.role==='admin' OR user.email===SUPER_ADMIN_EMAIL`로 계산(결정 1). 콘텐츠 수정/삭제는 `canEditContent`/`canDelete`(신원 기반) 우선 시도 → 실패하고 대상이 게스트 글이면 바디의 `password`를 `verifyGuestReportPassword`로 검증하는 2단계 authorize 헬퍼(`authorizeContentChange`/`authorizeDelete`) 신규. 상태 변경(`접수됨→...`)은 게스트 비밀번호로도 우회 불가 — 여전히 admin 전용 그대로. **동작 변화**: 비로그인 요청이 이제 무조건 401이 아니라(신원 없음 자체는 오류가 아님), 신원도 비밀번호도 못 대면 403으로 응답 — 기존 "signed-out ⇒ 401" 테스트들을 이 의미로 재작성.
+
+**구현 — 클라이언트**:
+- **`src/store/bugReportStore.ts`**: `BugReportCurrentUser`에 `nickname`(닉네임 자동 바인딩용)·`isSuperAdmin`(크로운 버튼 표시용, 실제 권한은 서버가 이미 동일하게 처리하므로 순수 코스메틱) 추가. `submitReport`가 로그인 여부로 게스트 분기(비밀번호 검증 + `getDeviceId()` 자동 첨부), `deleteReport`가 `password?` 파라미터와 `reason: "forbidden"` 반환을 지원하도록 확장.
+- **`src/components/bugReport/GuestPasswordModal.tsx`**(신규): "수정/삭제 클릭 시 비밀번호 확인 모달" — 비밀번호를 수집만 하고(자체 검증 API 없음, 이 저장소가 이미 채택한 "클라이언트 체크는 UX일 뿐, 서버가 실제 경계" 원칙에 따라 뒤이어 호출되는 PATCH/DELETE가 실제 검증) 이어지는 동작에 그대로 실어보냄.
+- **`BugReportModal.tsx`**: "로그인 필요" 차단 화면 완전 제거 — 항상 폼을 렌더링하고, 비로그인 신규 작성일 때만 비밀번호 입력란 노출. 로그인 유저의 "닉네임 자동 바인딩"은 `useEffect`+`setState`가 아니라(이 저장소의 `react-hooks/set-state-in-effect` 린트 규칙 위반, botTakeover 세션과 동일 제약) 렌더 시점에 `displayAuthor = author || currentUser?.nickname` 파생값으로 구현 — `author` state 자체엔 쓰지 않고 여전히 자유 편집 가능(기존 "표시명, 인가 키 아님" 설계 유지). 게스트 글 수정 시엔 `BugReportDetailModal`이 미리 받아둔 비밀번호를 `guestPassword` prop으로 조용히 실어 PATCH에 포함.
+- **`BugReportDetailModal.tsx`**: 게스트 글(`isGuest`)은 신원 매칭이 원천적으로 불가하므로 수정/삭제 버튼을 **관리자가 아닌 모든 방문자에게 노출**하고(로그인 여부 무관), 클릭 시 `GuestPasswordModal`(수정) 또는 인라인 비밀번호 입력(삭제 확인창)으로 게이트. `currentUser.isSuperAdmin`이면 삭제 버튼이 빨간 "👑 관리자 삭제"로 바뀌고 확인 후 비밀번호 없이 즉시 삭제(서버가 `user.email===SUPER_ADMIN_EMAIL`로 이미 우회 허용).
+- **`/bug-reports` 페이지**: 안내 문구를 "로그인 필요" → "비로그인도 작성 가능, 비밀번호로 직접 관리" 로 수정. 목록 테이블 작성자 칸에 게스트 글 👤 표시 추가(요청서의 "목록에도 노출" 취지를 가볍게 반영 — 단, 목록 각 행에 크로운 삭제 버튼을 직접 심는 것까지는 범위를 좁힘: 상세 모달이 한 클릭 거리라 클릭당 비용 대비 이득이 낮다고 판단, 필요시 후속 세션에서 추가 가능).
+
+**검증**: `npx tsc --noEmit`(에러 0) / `npm run lint`(경고 0, `react-hooks/set-state-in-effect` 위반을 파생값 패턴으로 우회) / `npx vitest run`(**44개 파일 · 1330개 테스트 전부 통과**, 신규 `guestAuth.test.ts` 4케이스 + `[id]/route.test.ts`/`route.test.ts` 게스트·슈퍼관리자 시나리오 전면 재작성 포함 — 게스트 작성 후 올바른 비밀번호로 삭제 성공, `freedom_03@naver.com`이 타인/게스트 글을 비밀번호 없이 200 삭제, 일반 타 유저 계정의 무단 삭제 시도 403, 잘못된 비밀번호 403, 상태변경은 게스트 비밀번호로도 우회 불가 전부 단위 테스트로 검증 — 요청서 4번 항목의 3가지 테스트 케이스 모두 포함).
+
+**알려진 한계(정직 공개)**:
+- **DB 마이그레이션 미반영**: `supabase/schema.sql`은 파일로만 작성 — 사용자가 Supabase SQL 에디터에서 `alter table`을 직접 실행하기 전까지 게스트 작성(`password_hash`/`is_guest`/`device_id` 컬럼 부재)과 마스터 삭제(동작 자체는 이메일 비교뿐이라 컬럼과 무관하게 이미 동작하지만, 대상이 게스트 글인 시나리오는 컬럼이 있어야 실존)가 프로덕션에서 작동하지 않음. 로그인 작성/수정/삭제 흐름은 기존 컬럼만 사용하므로 이 세션의 변경과 무관하게 계속 정상 동작.
+- 스팸 방지는 기기 단위(로컬스토리지) 쿨다운뿐 — IP 기반이나 진짜 캡차는 미적용(결정 2에 따른 명시적 범위 제한, `guest_usage`와 동일한 "약한 신호, 넛지용" 수준).
+- 목록 테이블 각 행에 직접 삭제 버튼은 없음(상세 모달을 거쳐야 함) — 위 "구현 — 클라이언트" 항목의 범위 축소 참고.
+- 레거시 로컬(IndexedDB, 계정 연동 이전) 리포트는 이번 게스트 기능과 무관 — 여전히 관리자만 수정/삭제 가능한 기존 동작 그대로.
+- 실제 Supabase 프로젝트에 대한 라이브 통합 테스트(진짜 bcrypt round-trip을 실제 DB 컬럼에 저장/조회)는 미실행 — `serverRepository.ts` 함수는 mock으로만 검증(이 저장소 기존 관례와 동일).
+
+**커밋/배포**: 아래 실행 예정.
 
 ### 2026-08-29 — 고유 식별자 기반 내기 정산 원장 및 엑셀형 사후 닉네임 병합 취합표
 

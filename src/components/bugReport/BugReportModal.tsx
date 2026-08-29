@@ -6,7 +6,12 @@ import SupabaseRequiredNotice from "@/components/SupabaseRequiredNotice";
 import { GAME_REGISTRY } from "@/games/registry";
 import { useBugReportStore } from "@/store/bugReportStore";
 import { compressImageDataUrl, readFileAsDataUrl } from "@/lib/bugReports/attachment";
-import { formatPhoneNumber, validateAttachmentMeta, validateBugReportInput } from "@/lib/bugReports/validate";
+import {
+  formatPhoneNumber,
+  validateAttachmentMeta,
+  validateBugReportInput,
+  validateGuestPassword,
+} from "@/lib/bugReports/validate";
 import type { BugReportFieldErrors } from "@/lib/bugReports/validate";
 import type { BugReportAttachment } from "@/lib/db/types";
 import type { CloudBugReportRecord, UnifiedBugReport } from "@/lib/bugReports/types";
@@ -33,9 +38,25 @@ interface BugReportModalProps {
    * ever reachable by an admin, see `BugReportDetailModal.tsx`.
    */
   editing?: UnifiedBugReport;
+  /**
+   * Set only when editing a guest (`editing.isGuest`) report as that guest
+   * — the caller (`BugReportDetailModal`) has already collected this via
+   * `GuestPasswordModal` before opening this form. Threaded silently into
+   * the PATCH body; never rendered as a field here (the guest already
+   * "confirmed" it in that prior modal). Ignored for a create, or an edit
+   * by the report's own logged-in author or an admin.
+   */
+  guestPassword?: string;
 }
 
-export default function BugReportModal({ gameId, gameName, onClose, onSubmitted, editing }: BugReportModalProps) {
+export default function BugReportModal({
+  gameId,
+  gameName,
+  onClose,
+  onSubmitted,
+  editing,
+  guestPassword,
+}: BugReportModalProps) {
   const submitReport = useBugReportStore((s) => s.submitReport);
   const updateReport = useBugReportStore((s) => s.updateReport);
   const adminUpdateLocalReport = useBugReportStore((s) => s.adminUpdateLocalReport);
@@ -45,10 +66,13 @@ export default function BugReportModal({ gameId, gameName, onClose, onSubmitted,
 
   const isEdit = Boolean(editing);
   const isLocalEdit = editing?.source === "local";
+  /** Not logged in and creating a new report — the only case that needs the extra password field below. Editing an existing guest report reuses the password collected by `GuestPasswordModal` instead (see `guestPassword` prop). */
+  const isGuestCreate = !isEdit && !currentUser;
 
   const [title, setTitle] = useState(editing?.title ?? "");
   const [description, setDescription] = useState(editing?.description ?? "");
   const [author, setAuthor] = useState(editing?.author ?? "");
+  const [password, setPassword] = useState("");
   const [phone, setPhone] = useState(editing?.phone ?? "");
   const [selectedGameId, setSelectedGameId] = useState(editing?.gameId ?? gameId ?? "");
   const [attachment, setAttachment] = useState<BugReportAttachment | null>(editing?.attachment ?? null);
@@ -62,11 +86,23 @@ export default function BugReportModal({ gameId, gameName, onClose, onSubmitted,
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // A stale `currentUser` (e.g. just returned from /login via client-side
-  // routing) would otherwise show "로그인이 필요합니다" over a form the
-  // user can already legitimately use.
+  // routing) would otherwise miss the nickname prefill below.
   useEffect(() => {
     void refreshCurrentUser();
   }, [refreshCurrentUser]);
+
+  // "로그인 유저: 기존 닉네임 자동 바인딩" — for a fresh (not edit)
+  // submission, defaults the displayed/submitted author name to the
+  // logged-in nickname until the user actually types something of their
+  // own, without writing it into `author` state itself (this repo's
+  // `react-hooks/set-state-in-effect` lint rule disallows deriving state
+  // via a state-setting effect — see HANDOFF.md's botTakeover session for
+  // the same constraint). Deliberately still a plain editable value
+  // afterward, not locked — `author` has always been "display name, free
+  // text, NOT the authorization key" in this feature (see `types.ts`), and
+  // a real Supabase identity is available (session/`authorId`) regardless
+  // of what this field says.
+  const displayAuthor = !isEdit && !author ? (currentUser?.nickname ?? "") : author;
 
   const locked = !isEdit && Boolean(gameId);
 
@@ -97,8 +133,12 @@ export default function BugReportModal({ gameId, gameName, onClose, onSubmitted,
   }
 
   async function handleSubmit() {
-    const input = { title, description, author, phone };
+    const input = { title, description, author: displayAuthor, phone };
     const validation = validateBugReportInput(input);
+    if (isGuestCreate) {
+      const passwordError = validateGuestPassword(password);
+      if (passwordError) validation.password = passwordError;
+    }
     if (Object.keys(validation).length > 0) {
       setErrors(validation);
       return;
@@ -135,10 +175,20 @@ export default function BugReportModal({ gameId, gameName, onClose, onSubmitted,
           gameId: selectedGameId || null,
           gameName: game?.name ?? null,
           attachment: attachment ?? null,
+          password: guestPassword,
         });
         if (!result.ok) {
           if (result.reason === "validation") setErrors(result.errors);
-          else setSubmitError(result.reason === "forbidden" ? "수정 권한이 없습니다." : "수정 중 오류가 발생했습니다.");
+          else {
+            const isGuestReport = editing.source === "cloud" && editing.isGuest;
+            setSubmitError(
+              result.reason === "forbidden"
+                ? isGuestReport
+                  ? "비밀번호가 올바르지 않습니다."
+                  : "수정 권한이 없습니다."
+                : "수정 중 오류가 발생했습니다.",
+            );
+          }
           return;
         }
         onSubmitted?.(result.report);
@@ -148,14 +198,16 @@ export default function BugReportModal({ gameId, gameName, onClose, onSubmitted,
 
       const result = await submitReport({
         ...input,
+        password: isGuestCreate ? password : undefined,
         gameId: gameId ?? (selectedGameId || undefined),
         gameName: gameName ?? game?.name,
         attachment: attachment ?? undefined,
       });
       if (!result.ok) {
         if (result.reason === "validation") setErrors(result.errors);
-        else if (result.reason === "login-required") setSubmitError("로그인이 필요합니다.");
-        else setSubmitError("제출 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+        else if (result.reason === "cooldown") {
+          setSubmitError("너무 빠르게 연속으로 등록했어요. 잠시 후 다시 시도해주세요.");
+        } else setSubmitError("제출 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
         return;
       }
       setSubmitted(result.report);
@@ -171,33 +223,6 @@ export default function BugReportModal({ gameId, gameName, onClose, onSubmitted,
     return (
       <Overlay title={isEdit ? "✏️ 버그 리포트 수정" : "🐛 버그 리포트 작성"} onClose={onClose}>
         <SupabaseRequiredNotice feature="버그 리포트 작성/수정" />
-      </Overlay>
-    );
-  }
-
-  if (!currentUser) {
-    return (
-      <Overlay title={isEdit ? "✏️ 버그 리포트 수정" : "🐛 버그 리포트 작성"} onClose={onClose}>
-        <div className="flex flex-col items-center gap-3 py-4 text-center">
-          <span className="text-3xl">🔒</span>
-          <p className="text-sm text-white/80">
-            버그 리포트 {isEdit ? "수정" : "작성"}은 로그인 후 이용할 수 있습니다.
-          </p>
-          <div className="mt-2 flex gap-2">
-            <a
-              href={`/login?next=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname : "/bug-reports")}`}
-              className="rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-400"
-            >
-              로그인하러 가기
-            </a>
-            <button
-              onClick={onClose}
-              className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30"
-            >
-              닫기
-            </button>
-          </div>
-        </div>
       </Overlay>
     );
   }
@@ -292,7 +317,7 @@ export default function BugReportModal({ gameId, gameName, onClose, onSubmitted,
               글쓴이 <span className="text-rose-400">*</span>
             </span>
             <input
-              value={author}
+              value={displayAuthor}
               onChange={(e) => setAuthor(e.target.value)}
               placeholder="닉네임 또는 이름"
               className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
@@ -312,6 +337,22 @@ export default function BugReportModal({ gameId, gameName, onClose, onSubmitted,
             {errors.phone && <span className="text-xs text-rose-400">{errors.phone}</span>}
           </label>
         </div>
+
+        {isGuestCreate && (
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="text-white/70">
+              글 관리 비밀번호 <span className="text-rose-400">*</span>
+            </span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="4자리 이상 (나중에 수정/삭제할 때 필요해요)"
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
+            />
+            {errors.password && <span className="text-xs text-rose-400">{errors.password}</span>}
+          </label>
+        )}
 
         <div className="flex flex-col gap-1.5 text-sm">
           <span className="text-white/70">첨부파일 (선택)</span>

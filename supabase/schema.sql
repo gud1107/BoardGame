@@ -305,21 +305,32 @@ create policy "anon insert chat_messages" on chat_messages
 -- in the SQL editor is enough — no infrastructure needed for that today.
 
 -- ---------------------------------------------------------------------------
--- Bug reports (2026-08-28 — account-linked edit/delete). Replaces an
--- earlier write-only `bug_reports(id, payload jsonb, ...)` mirror that was
--- never actually created in this schema file — IndexedDB was the sole
--- store for reports submitted before this table existed, and those legacy
--- local reports were deliberately NOT migrated here (see HANDOFF.md); they
--- stay visible client-side as read-mostly history, editable/deletable by
--- admins only since they have no `author_id` to check ownership against.
+-- Bug reports (2026-08-28 — account-linked edit/delete; 2026-08-29 — guest
+-- (non-logged-in) submissions with a per-post password re-added on top).
+-- Replaces an earlier write-only `bug_reports(id, payload jsonb, ...)`
+-- mirror that was never actually created in this schema file — IndexedDB
+-- was the sole store for reports submitted before this table existed, and
+-- those legacy local reports were deliberately NOT migrated here (see
+-- HANDOFF.md); they stay visible client-side as read-mostly history,
+-- editable/deletable by admins only since they have no `author_id` to
+-- check ownership against.
+--
+-- A guest submission has `author_id null` / `is_guest true` and is instead
+-- authorized by `password_hash` (bcrypt, see `src/lib/bugReports/guestAuth.ts`)
+-- — nobody, including the plaintext password, is ever readable from this
+-- table by the client; the API route only ever compares a submitted
+-- password against the hash server-side and never echoes the hash back.
 --
 -- RLS is enabled with NO anon/authenticated policies at all (same posture
 -- as `monthly_visit_stats` above) — every read and write goes through
 -- `src/app/api/bug-reports/*` Route Handlers via the service role, after
--- an explicit author-or-admin check (`src/lib/bugReports/permissions.ts`).
--- There is deliberately no RLS backstop here; the route handler's check is
--- the only gate, same trade-off `toggle-cancel/route.ts` already made for
--- `subscriptions` writes.
+-- an explicit author-or-admin-or-guest-password check
+-- (`src/lib/bugReports/permissions.ts` + `guestAuth.ts`), plus an
+-- unconditional bypass for `SUPER_ADMIN_EMAIL`
+-- (`src/lib/admin/superAdmin.ts`) folded into "isAdmin" at the route
+-- handler. There is deliberately no RLS backstop here; the route
+-- handler's check is the only gate, same trade-off `toggle-cancel/route.ts`
+-- already made for `subscriptions` writes.
 -- ---------------------------------------------------------------------------
 
 create table if not exists bug_reports (
@@ -328,11 +339,26 @@ create table if not exists bug_reports (
   game_name text,
   title text not null,
   description text not null,
-  author_id uuid not null references profiles (id) on delete cascade,
+  -- Nullable: null for a guest (non-logged-in) submission, set for a
+  -- logged-in author. `on delete cascade` only ever fires for the
+  -- non-null case.
+  author_id uuid references profiles (id) on delete cascade,
   -- Free-text display name shown in the UI — editable, NOT the
-  -- authorization key (author_id is). Same "cosmetic vs. real identity"
-  -- split as nickname vs. auth.uid() elsewhere in this schema.
+  -- authorization key (author_id is, for a logged-in author). Same
+  -- "cosmetic vs. real identity" split as nickname vs. auth.uid()
+  -- elsewhere in this schema.
   author_name text not null,
+  -- bcrypt hash of the guest's post-management password. Null for a
+  -- logged-in author's report (they authorize via session, not a
+  -- password). Never selected into the API's client-facing response type
+  -- (`CloudBugReportRecord` — see `src/lib/bugReports/types.ts`).
+  password_hash text,
+  is_guest boolean not null default false,
+  -- Guest-submission device id (see `src/lib/identity/deviceId.ts`) used
+  -- solely for the per-device submission cooldown in the POST route — the
+  -- same "weak signal, not tamper-proof, good enough to nudge" posture as
+  -- `device_sightings`/`guest_usage` above. Null for a logged-in author.
+  device_id text,
   phone text,
   attachment jsonb,
   status text not null default '접수됨' check (status in ('접수됨', '확인 중', '수정 완료')),
@@ -342,6 +368,19 @@ create table if not exists bug_reports (
 );
 create index if not exists bug_reports_created_idx on bug_reports (created_at desc) where is_deleted = false;
 create index if not exists bug_reports_author_idx on bug_reports (author_id);
+-- Powers the guest per-device submission cooldown: "most recent guest
+-- report from this device_id" without scanning the whole table.
+create index if not exists bug_reports_guest_device_idx on bug_reports (device_id, created_at desc) where is_guest = true;
+
+-- Safe to re-run against a `bug_reports` table created by the pre-2026-08-29
+-- version of this file (author_id was `not null` and these columns didn't
+-- exist yet) — same "alter existing live table" pattern used for
+-- `app_settings.entitlements_enabled` above.
+alter table bug_reports alter column author_id drop not null;
+alter table bug_reports add column if not exists password_hash text;
+alter table bug_reports add column if not exists is_guest boolean not null default false;
+alter table bug_reports add column if not exists device_id text;
+create index if not exists bug_reports_guest_device_idx on bug_reports (device_id, created_at desc) where is_guest = true;
 
 alter table bug_reports enable row level security;
 -- No policies (intentional) — see comment block above.

@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Overlay from "@/components/Overlay";
 import BugReportModal from "./BugReportModal";
+import GuestPasswordModal from "./GuestPasswordModal";
 import { BUG_REPORT_STATUSES } from "@/lib/bugReports/board";
-import { maskPhoneNumber } from "@/lib/bugReports/validate";
+import { maskPhoneNumber, MIN_GUEST_PASSWORD_LENGTH } from "@/lib/bugReports/validate";
 import { canChangeStatus, canDelete, canEditContent } from "@/lib/bugReports/permissions";
 import { useBugReportStore } from "@/store/bugReportStore";
 import type { BugReportStatus } from "@/lib/db/types";
@@ -44,14 +45,27 @@ export default function BugReportDetailModal({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletePassword, setDeletePassword] = useState("");
+  /** `"edit"` while the pre-edit password gate is open — see `needsGuestPassword` below. */
+  const [passwordGateFor, setPasswordGateFor] = useState<"edit" | null>(null);
+  const [guestPassword, setGuestPassword] = useState("");
 
   const isAdmin = currentUser?.isAdmin ?? false;
   // Legacy local reports (`source: "local"`) have no `authorId` to check
   // ownership against — see permissions.ts / HANDOFF.md — so only the
   // admin-only branch of each rule applies to them, never the "own it" one.
-  const canEdit = report.source === "cloud" ? canEditContent(report.authorId, currentUser?.id ?? null, isAdmin) : isAdmin;
-  const canRemove = report.source === "cloud" ? canDelete(report.authorId, currentUser?.id ?? null, isAdmin) : isAdmin;
+  const isGuestReport = report.source === "cloud" && report.isGuest;
+  // A guest report can't be matched by identity (see permissions.ts) — for
+  // a non-admin viewer, editing/deleting it is instead gated on a password
+  // prompt (`needsGuestPassword`) rather than the button being hidden
+  // outright, since the viewer might in fact be the original guest author.
+  const canEdit =
+    report.source === "cloud" ? canEditContent(report.authorId, currentUser?.id ?? null, isAdmin) || isGuestReport : isAdmin;
+  const canRemove =
+    report.source === "cloud" ? canDelete(report.authorId, currentUser?.id ?? null, isAdmin) || isGuestReport : isAdmin;
   const canStatus = report.source === "cloud" ? canChangeStatus(isAdmin) : isAdmin;
+  const needsGuestPassword = isGuestReport && !isAdmin;
+  const isSuperAdminViewer = currentUser?.isSuperAdmin ?? false;
 
   async function handleStatusChange(status: BugReportStatus) {
     setStatusUpdating(true);
@@ -63,14 +77,49 @@ export default function BugReportDetailModal({
   async function handleDelete() {
     setDeleting(true);
     setDeleteError(null);
-    const ok = report.source === "cloud" ? (await deleteReport(report.id)).ok : await adminDeleteLocalReport(report.id);
+    if (report.source === "cloud") {
+      const result = await deleteReport(report.id, needsGuestPassword ? deletePassword : undefined);
+      setDeleting(false);
+      if (result.ok) onClose();
+      else setDeleteError(result.reason === "forbidden" ? "비밀번호가 올바르지 않습니다." : "삭제 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+      return;
+    }
+    const ok = await adminDeleteLocalReport(report.id);
     setDeleting(false);
     if (ok) onClose();
     else setDeleteError("삭제 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
   }
 
+  function handleEditClick() {
+    if (needsGuestPassword) setPasswordGateFor("edit");
+    else setEditing(true);
+  }
+
+  if (passwordGateFor === "edit") {
+    return (
+      <GuestPasswordModal
+        title="비밀번호 확인"
+        onCancel={() => setPasswordGateFor(null)}
+        onConfirm={(password) => {
+          setGuestPassword(password);
+          setPasswordGateFor(null);
+          setEditing(true);
+        }}
+      />
+    );
+  }
+
   if (editing) {
-    return <BugReportModal editing={report} onClose={() => setEditing(false)} />;
+    return (
+      <BugReportModal
+        editing={report}
+        guestPassword={needsGuestPassword ? guestPassword : undefined}
+        onClose={() => {
+          setEditing(false);
+          setGuestPassword("");
+        }}
+      />
+    );
   }
 
   return (
@@ -145,10 +194,24 @@ export default function BugReportDetailModal({
         {confirmingDelete ? (
           <div className="rounded-xl border border-rose-400/40 bg-rose-500/10 p-4 text-center">
             <p className="text-white/80">정말 이 버그리포트를 삭제하시겠습니까?</p>
+            {needsGuestPassword && (
+              <input
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                placeholder="작성 시 입력한 비밀번호"
+                autoFocus
+                className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
+              />
+            )}
             {deleteError && <p className="mt-1 text-xs text-rose-300">{deleteError}</p>}
             <div className="mt-3 flex justify-center gap-2">
               <button
-                onClick={() => setConfirmingDelete(false)}
+                onClick={() => {
+                  setConfirmingDelete(false);
+                  setDeletePassword("");
+                  setDeleteError(null);
+                }}
                 disabled={deleting}
                 className="rounded-xl border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-white/30 disabled:opacity-50"
               >
@@ -156,7 +219,7 @@ export default function BugReportDetailModal({
               </button>
               <button
                 onClick={() => void handleDelete()}
-                disabled={deleting}
+                disabled={deleting || (needsGuestPassword && deletePassword.trim().length < MIN_GUEST_PASSWORD_LENGTH)}
                 className="rounded-xl bg-rose-500 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-400 disabled:cursor-not-allowed disabled:bg-white/10"
               >
                 {deleting ? "삭제 중..." : "삭제"}
@@ -168,20 +231,28 @@ export default function BugReportDetailModal({
             <div className="flex gap-2">
               {canEdit && (
                 <button
-                  onClick={() => setEditing(true)}
+                  onClick={handleEditClick}
                   className="rounded-xl border border-white/15 px-4 py-2 text-xs text-white/80 hover:border-white/30"
                 >
                   ✏️ 수정
                 </button>
               )}
-              {canRemove && (
-                <button
-                  onClick={() => setConfirmingDelete(true)}
-                  className="rounded-xl border border-rose-400/40 px-4 py-2 text-xs text-rose-300 hover:bg-rose-500/10"
-                >
-                  🗑️ 삭제
-                </button>
-              )}
+              {canRemove &&
+                (isSuperAdminViewer ? (
+                  <button
+                    onClick={() => setConfirmingDelete(true)}
+                    className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-500"
+                  >
+                    👑 관리자 삭제
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setConfirmingDelete(true)}
+                    className="rounded-xl border border-rose-400/40 px-4 py-2 text-xs text-rose-300 hover:bg-rose-500/10"
+                  >
+                    🗑️ 삭제
+                  </button>
+                ))}
             </div>
           )
         )}

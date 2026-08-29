@@ -12,6 +12,7 @@
  */
 import { getServiceSupabase } from "@/lib/supabase/serviceClient";
 import type { BugReportAttachment } from "@/lib/db/types";
+import { verifyGuestPassword } from "./guestAuth";
 import type { CloudBugReportRecord } from "./types";
 
 interface BugReportRow {
@@ -20,8 +21,13 @@ interface BugReportRow {
   game_name: string | null;
   title: string;
   description: string;
-  author_id: string;
+  author_id: string | null;
   author_name: string;
+  /** Never mapped into `CloudBugReportRecord` — see `rowToRecord`'s allowlist. */
+  password_hash: string | null;
+  is_guest: boolean;
+  /** Never mapped into `CloudBugReportRecord` either — server-only, used for the guest submission cooldown. */
+  device_id: string | null;
   phone: string | null;
   attachment: BugReportAttachment | null;
   status: CloudBugReportRecord["status"];
@@ -29,6 +35,11 @@ interface BugReportRow {
   updated_at: string;
 }
 
+/**
+ * Allowlist mapping — `password_hash`/`device_id` are deliberately never
+ * read off `row` here, so a future `select("*")` can't accidentally leak
+ * the guest password hash to the client no matter what the row contains.
+ */
 function rowToRecord(row: BugReportRow): CloudBugReportRecord {
   return {
     id: row.id,
@@ -38,6 +49,7 @@ function rowToRecord(row: BugReportRow): CloudBugReportRecord {
     description: row.description,
     authorId: row.author_id,
     author: row.author_name,
+    isGuest: row.is_guest,
     phone: row.phone ?? undefined,
     attachment: row.attachment ?? undefined,
     status: row.status,
@@ -83,8 +95,14 @@ export interface InsertBugReportInput {
   gameName?: string;
   title: string;
   description: string;
-  authorId: string;
+  /** Set for a logged-in author, omitted for a guest submission (`isGuest: true`). */
+  authorId?: string;
   authorName: string;
+  isGuest: boolean;
+  /** bcrypt hash — required when `isGuest` is true, ignored otherwise. */
+  passwordHash?: string;
+  /** Guest submission's device id, for the cooldown lookup below — omitted for a logged-in author. */
+  deviceId?: string;
   phone?: string;
   attachment?: BugReportAttachment;
 }
@@ -99,14 +117,60 @@ export async function insertCloudBugReport(input: InsertBugReportInput): Promise
       game_name: input.gameName ?? null,
       title: input.title,
       description: input.description,
-      author_id: input.authorId,
+      author_id: input.authorId ?? null,
       author_name: input.authorName,
+      is_guest: input.isGuest,
+      password_hash: input.passwordHash ?? null,
+      device_id: input.deviceId ?? null,
       phone: input.phone ?? null,
       attachment: input.attachment ?? null,
     })
     .select("*")
     .single();
   return data ? rowToRecord(data) : null;
+}
+
+/**
+ * Most recent guest submission from this device, for the POST route's
+ * per-device cooldown — see `bug_reports_guest_device_idx` in
+ * `supabase/schema.sql`. Returns `null` if this device has never submitted
+ * a guest report (not rate-limited) or Supabase isn't configured (same
+ * fail-open posture as the rest of this module — an unconfigured backend
+ * already 503s the whole request before this would matter).
+ */
+export async function getLastGuestSubmissionAt(deviceId: string): Promise<string | null> {
+  const service = getServiceSupabase();
+  if (!service) return null;
+  const { data } = await service
+    .from("bug_reports")
+    .select("created_at")
+    .eq("device_id", deviceId)
+    .eq("is_guest", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.created_at ?? null;
+}
+
+/**
+ * Verifies a guest's submitted password against the stored hash for one
+ * report — the authorization path for a guest editing/deleting their own
+ * post (see `permissions.ts`'s header comment for why this is separate
+ * from the identity-based `canEditContent`/`canDelete`). Returns `false`
+ * (never throws) for a non-guest report, a deleted report, or a missing
+ * hash, so callers can treat it as a plain yes/no gate.
+ */
+export async function verifyGuestReportPassword(id: string, password: string): Promise<boolean> {
+  const service = getServiceSupabase();
+  if (!service) return false;
+  const { data } = await service
+    .from("bug_reports")
+    .select("password_hash")
+    .eq("id", id)
+    .eq("is_deleted", false)
+    .maybeSingle();
+  if (!data?.password_hash) return false;
+  return verifyGuestPassword(password, data.password_hash);
 }
 
 export interface UpdateBugReportInput {

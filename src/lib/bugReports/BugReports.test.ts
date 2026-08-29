@@ -5,6 +5,7 @@ import {
   maskPhoneNumber,
   validateAttachmentMeta,
   validateBugReportInput,
+  validateGuestPassword,
 } from "./validate";
 import {
   filterReports,
@@ -36,6 +37,7 @@ function cloudReport(overrides: Partial<CloudBugReportRecord> = {}): CloudBugRep
     description: "설명",
     authorId: "user-1",
     author: "작성자",
+    isGuest: false,
     status: "접수됨",
     createdAt: "2026-08-11T00:00:00.000Z",
     updatedAt: "2026-08-11T00:00:00.000Z",
@@ -83,6 +85,21 @@ describe("validateBugReportInput", () => {
       validateBugReportInput({ title: "제목", description: "내용", author: "홍길동", phone: "010-1234-5678" })
         .phone,
     ).toBeUndefined();
+  });
+});
+
+describe("validateGuestPassword", () => {
+  it("rejects an undefined password", () => {
+    expect(validateGuestPassword(undefined)).toMatch(/비밀번호/);
+  });
+
+  it("rejects a too-short password", () => {
+    expect(validateGuestPassword("123")).toMatch(/비밀번호/);
+  });
+
+  it("accepts a 4+ character password", () => {
+    expect(validateGuestPassword("1234")).toBeNull();
+    expect(validateGuestPassword("longer-password")).toBeNull();
   });
 });
 
