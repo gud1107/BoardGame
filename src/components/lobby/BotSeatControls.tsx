@@ -12,7 +12,22 @@ import { BOT_LEVELS, DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot
  * read as "a control", not compete with the game's palette.
  */
 
-export function BotSeatBadge({ label }: { label: string }) {
+/**
+ * `variant: "takeover"` renders the distinct look for a seat an originally-
+ * human player left mid-game (see `botTakeover.ts` / HANDOFF.md's bot
+ * takeover session) — semi-transparent to read as "temporarily standing in",
+ * as opposed to the solid sky badge a host deliberately added in the lobby.
+ * Existing call sites all omit this prop and keep the original look
+ * unchanged.
+ */
+export function BotSeatBadge({ label, variant = "lobby" }: { label: string; variant?: "lobby" | "takeover" }) {
+  if (variant === "takeover") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-white/60 opacity-70">
+        {BOT_BADGE} BOT · {label}
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-sky-400/15 px-2 py-0.5 text-[11px] font-semibold text-sky-200">
       {BOT_BADGE} {label}

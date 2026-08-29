@@ -25,14 +25,26 @@ import { useGameBgm } from "@/lib/audio/useGameBgm";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
+import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
 import { botTier, DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import { requestBotAction } from "@/games/shared/bot/botWorkerClient";
+import {
+  activeVoteFor,
+  INITIAL_BOT_TAKEOVER_STATE,
+  isSeatTakenOver,
+  reduceBotTakeover,
+  voteThresholdMet,
+  voteYesCount,
+  type BotTakeoverEvent,
+  type BotTakeoverState,
+} from "@/games/shared/bot/botTakeover";
 import { v4 as uuid } from "uuid";
 import type { ChatMessage, SendResult } from "@/lib/chat/types";
 import { checkThrottle, recordSend, INITIAL_THROTTLE_STATE, type ThrottleState } from "@/lib/chat/throttle";
 import { filterProfanity } from "@/lib/chat/profanity";
 import { stripControlChars } from "@/lib/chat/sanitize";
 import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
+import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 
 /** Whose decision `useBotAutoplay` should drive right now. */
@@ -152,6 +164,34 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
   }, [botLevels]);
   const botRoleSet = useMemo(() => new Set(botRoles), [botRoles]);
 
+  // Mid-game "seat disconnected/unresponsive → AI bot" — see botTakeover.ts
+  // for the vote/conversion state machine this mirrors (same lockstep
+  // philosophy as `gameState`/`applyAction` above, no host dependency). Only
+  // 1 other role can ever exist to vote in this 2-player game, so a vote
+  // "passes" the instant that one opponent votes yes — `voteThresholdMet(1, 1)`.
+  const [botTakeover, setBotTakeover] = useState<BotTakeoverState>(INITIAL_BOT_TAKEOVER_STATE);
+  const botTakeoverRef = useRef<BotTakeoverState>(INITIAL_BOT_TAKEOVER_STATE);
+  function applyBotTakeoverEvent(event: BotTakeoverEvent) {
+    const next = reduceBotTakeover(botTakeoverRef.current, event);
+    botTakeoverRef.current = next;
+    setBotTakeover(next);
+  }
+  const [dismissedVoteKey, setDismissedVoteKey] = useState<string | null>(null);
+  const phaseRef = useRef<Phase>(phase);
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+  // Tracks how long the current actor has been stuck, for the "idle/무응답"
+  // vote trigger — see the dedicated interval effect below. `since: 0` is a
+  // deliberately-stale placeholder (not `Date.now()`, an impure render-time
+  // call) — the first interval tick always rebases it to "now".
+  const lastActorRef = useRef<{ actor: Seat | null; since: number }>({ actor: null, since: 0 });
+  const IDLE_VOTE_THRESHOLD_MS = 45_000;
+  const occupantsRef = useRef<Occupant[]>([]);
+  useEffect(() => {
+    occupantsRef.current = occupants;
+  }, [occupants]);
+
   const channelRef = useRef<RealtimeChannel | null>(null);
   // Shared by the initial post-subscribe sync and `useBackgroundResync`
   // (below) — see that hook's doc comment for why the `state !== "joined"`
@@ -183,6 +223,12 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
   // name for the system log without closing over a stale value.
   const namesRef = useRef<Record<Seat, string>>({ p1: "상대", p2: "상대" });
 
+  // Roles a takeover vote has actually converted — unioned with the lobby
+  // `botRoles` roster wherever bot-role membership matters (autoplay,
+  // occupancy, display). See DalmutiGame.tsx for the fuller rationale.
+  const takeoverRoles = useMemo(() => Object.keys(botTakeover.takeovers) as Seat[], [botTakeover]);
+  const allBotRoleSet = useMemo(() => new Set([...botRoleSet, ...takeoverRoles]), [botRoleSet, takeoverRoles]);
+
   const opponentSeat = myRole ? otherSeat(myRole) : null;
   const names: Record<Seat, string> = useMemo(() => {
     const byRole = (r: Seat) => occupants.find((o) => o.role === r)?.name;
@@ -190,25 +236,29 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
       const idx = botRoles.indexOf(r);
       return idx >= 0 ? botDisplayName(idx, botLevels[idx]) : "상대";
     };
+    const takenOver = (r: Seat) => botTakeover.takeovers[r];
     return {
-      p1: (myRole === "p1" ? myName : byRole("p1")) ?? fallback("p1"),
-      p2: (myRole === "p2" ? myName : byRole("p2")) ?? fallback("p2"),
+      p1: takenOver("p1") ? `🤖 AI ${takenOver("p1")!.originalName}` : ((myRole === "p1" ? myName : byRole("p1")) ?? fallback("p1")),
+      p2: takenOver("p2") ? `🤖 AI ${takenOver("p2")!.originalName}` : ((myRole === "p2" ? myName : byRole("p2")) ?? fallback("p2")),
     };
-  }, [occupants, myRole, myName, botRoles, botLevels]);
+  }, [occupants, myRole, myName, botRoles, botLevels, botTakeover]);
   useEffect(() => {
     namesRef.current = names;
   }, [names]);
   // Prefer the real betting-system playerId (present when that seat's
   // occupant joined by picking themselves from an active session's roster —
-  // see RoomNicknameField) over the synthetic per-room id.
+  // see RoomNicknameField) over the synthetic per-room id. A taken-over
+  // role's `originalUserId` wins over both — see DalmutiGame.tsx's `ids` for
+  // why this matters for a real disconnect (the player is gone from
+  // presence entirely by then).
   const ids: Record<Seat, string> = useMemo(() => {
     const byRole = (r: Seat) => occupants.find((o) => o.role === r)?.playerId;
     return {
-      p1: byRole("p1") ?? `${roomCode}:p1`,
-      p2: byRole("p2") ?? `${roomCode}:p2`,
+      p1: botTakeover.takeovers.p1?.originalUserId ?? byRole("p1") ?? `${roomCode}:p1`,
+      p2: botTakeover.takeovers.p2?.originalUserId ?? byRole("p2") ?? `${roomCode}:p2`,
     };
-  }, [roomCode, occupants]);
-  const opponentIsBot = opponentSeat ? botRoles.includes(opponentSeat) : false;
+  }, [roomCode, occupants, botTakeover]);
+  const opponentIsBot = opponentSeat ? allBotRoleSet.has(opponentSeat) : false;
   const opponentConnected = (opponentSeat ? occupants.some((o) => o.role === opponentSeat) : false) || opponentIsBot;
 
   function enterRoom() {
@@ -268,6 +318,10 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
       setBotRoles(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
+      // A rematch is a fresh game — any takeover from the previous round
+      // shouldn't silently carry a role's control into this one.
+      botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
+      setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
       setGameState(startGame(seededRng(seed)));
       setTurnTimerSec(timerSec);
       setFinalResult(null);
@@ -326,6 +380,56 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
       setBotLevels(levels);
     });
 
+    // Bot-takeover vote/conversion — see botTakeover.ts. Every client
+    // replays the identical event stream through the same pure reducer; a
+    // client whose own `vote-cast` (including its own) just crossed the
+    // majority threshold is the one that fires `convert` — harmless if more
+    // than one client does this in the same instant, since `convert` on an
+    // already-converted role only happens once (the vote is gone by then on
+    // every client that already processed the first `convert`).
+    channel.on("broadcast", { event: "bot-takeover-event" }, ({ payload }) => {
+      const event = payload?.event as BotTakeoverEvent | undefined;
+      if (!event) return;
+      // System-log line the instant a conversion actually lands — read the
+      // about-to-be-consumed vote's `originalName` *before* applying the
+      // event. `broadcast: { self: true }` means the client that sent
+      // `convert` processes this same handler too, so this fires exactly
+      // once per client either way, never duplicated.
+      if (event.type === "convert") {
+        const vote = botTakeoverRef.current.votes[event.seatKey];
+        if (vote) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: uuid(),
+              channel: chatChannel,
+              deviceId: "system",
+              senderName: "시스템",
+              body: formatBotTakeoverLog(vote.originalName),
+              type: "SYSTEM",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+      }
+      applyBotTakeoverEvent(event);
+      if (event.type !== "vote-cast") return;
+      const vote = botTakeoverRef.current.votes[event.seatKey];
+      if (!vote) return; // already converted/cancelled by a faster broadcast
+      // Only ever 1 other role in this 2-player game — eligible = 1 if the
+      // opponent role is a connected real (non-bot, non-taken-over) player.
+      const otherRole = event.seatKey === "p1" ? "p2" : "p1";
+      const takenOverRoles = new Set(Object.keys(botTakeoverRef.current.takeovers));
+      const eligible = occupantsRef.current.some(
+        (o) => o.role === otherRole && !botRolesRef.current.includes(o.role) && !takenOverRoles.has(o.role),
+      )
+        ? 1
+        : 0;
+      if (voteThresholdMet(voteYesCount(botTakeoverRef.current, event.seatKey), eligible)) {
+        channel.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "convert", seatKey: event.seatKey, at: Date.now() } } });
+      }
+    });
+
     channel.on("broadcast", { event: "state-request" }, () => {
       if (!gameStateRef.current) {
         if (myRole === "p1") {
@@ -341,6 +445,7 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
           turnTimerSec: turnTimerRef.current,
           botRoles: botRolesRef.current,
           botLevels: botLevelsRef.current,
+          botTakeover: botTakeoverRef.current,
         },
       });
     });
@@ -356,10 +461,13 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
       if (isStateSyncStale(gameStateRef.current, syncedState)) return;
       const roster = (payload?.botRoles as Seat[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      const takeover = (payload?.botTakeover as BotTakeoverState | undefined) ?? INITIAL_BOT_TAKEOVER_STATE;
       botRolesRef.current = roster;
       setBotRoles(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
+      botTakeoverRef.current = takeover;
+      setBotTakeover(takeover);
       setGameState(syncedState);
       setTurnTimerSec((payload?.turnTimerSec as number | null | undefined) ?? null);
       setPhase((p) => (p === "connecting" || p === "waiting" ? "playing" : p));
@@ -368,6 +476,35 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
       setOccupants(Object.values(raw).flat());
+    });
+
+    // Real disconnect (tab closed, network dropped, or an explicit leave) —
+    // fires identically on every connected client (Supabase Presence is
+    // server-synced, not local-only). Only kicks off a takeover vote
+    // mid-game, for a role that isn't already a bot; `leftPresences` still
+    // carries the leaving occupant's `playerId`/`name` even though they're
+    // already gone from `presenceState()` by the time anyone could look
+    // them up again.
+    channel.on("presence", { event: "leave" }, ({ leftPresences }) => {
+      if (phaseRef.current !== "playing") return;
+      for (const p of leftPresences as unknown as Occupant[]) {
+        if (botRolesRef.current.includes(p.role)) continue;
+        if (activeVoteFor(botTakeoverRef.current, p.role) || isSeatTakenOver(botTakeoverRef.current, p.role)) continue;
+        channel.send({
+          type: "broadcast",
+          event: "bot-takeover-event",
+          payload: {
+            event: {
+              type: "vote-start",
+              seatKey: p.role,
+              reason: "disconnected",
+              startedAt: Date.now(),
+              originalUserId: p.playerId ?? `${roomCode}:${p.role}`,
+              originalName: p.name,
+            },
+          },
+        });
+      }
     });
 
     channel.subscribe(async (status) => {
@@ -514,6 +651,8 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
   // isn't available in this environment.
   const chooseAction = useCallback((state: MalDalliJaState, actor: Seat): EngineAction | null | Promise<EngineAction | null> => {
     const idx = botRolesRef.current.indexOf(actor);
+    // A takeover role has no per-seat lobby-chosen level (it was human-
+    // controlled until now) — fall back to the room's default level.
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
     if (botTier(level) === "expert") {
       return requestBotAction<EngineAction>("malDalliJa", state, actor, level, Math.floor(Math.random() * 1_000_000_000), () =>
@@ -527,10 +666,57 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
     active: isHost && phase === "playing",
     state: gameState,
     currentActor: mddjCurrentActor,
-    botSeats: botRoleSet,
+    botSeats: allBotRoleSet,
     chooseAction,
     dispatch: handleAction,
   });
+
+  // "무응답(idle)" takeover trigger — see DalmutiGame.tsx for the full
+  // rationale (runs off a plain interval since a *stuck* actor means
+  // `gameState` itself stops changing).
+  useEffect(() => {
+    if (phase !== "playing") return;
+    const interval = window.setInterval(() => {
+      const state = gameStateRef.current;
+      if (!state) return;
+      const actor = mddjCurrentActor(state);
+      if (actor !== lastActorRef.current.actor) {
+        lastActorRef.current = { actor, since: Date.now() };
+        return;
+      }
+      if (actor === null) return;
+      if (botRolesRef.current.includes(actor)) return;
+      if (activeVoteFor(botTakeoverRef.current, actor) || isSeatTakenOver(botTakeoverRef.current, actor)) return;
+      if (Date.now() - lastActorRef.current.since < IDLE_VOTE_THRESHOLD_MS) return;
+      const occ = occupantsRef.current.find((o) => o.role === actor);
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "bot-takeover-event",
+        payload: {
+          event: {
+            type: "vote-start",
+            seatKey: actor,
+            reason: "idle",
+            startedAt: Date.now(),
+            originalUserId: occ?.playerId ?? `${roomCode}:${actor}`,
+            originalName: occ?.name ?? namesRef.current[actor] ?? "상대",
+          },
+        },
+      });
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [phase, roomCode]);
+
+  function castTakeoverVote(seatKey: string) {
+    channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "vote-cast", seatKey, voterDeviceId: deviceId } } });
+  }
+  // Unified "yes" affordance — the vote target proving presence cancels the
+  // pending vote; the same button after the role has already converted
+  // instead reclaims control.
+  function proveStillHereOrReclaim(seatKey: string) {
+    const type = isSeatTakenOver(botTakeover, seatKey) ? "reclaim" : "vote-cancel";
+    channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type, seatKey } } });
+  }
 
   function handleGameEnd(winnerId: string) {
     if (!gameState || !myRole) return;
@@ -554,6 +740,9 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
       event: "game-start",
       payload: { seed: Math.floor(Math.random() * 1_000_000_000), turnTimerSec, botRoles: botRolesRef.current, botLevels: botLevelsRef.current },
     });
+    // Sender included — `broadcast: { self: true }` means this client also
+    // processes its own "game-start" above (which resets `botTakeover`), so
+    // any previous round's takeover doesn't silently carry into this one.
   }
 
   function handleLeave() {
@@ -576,6 +765,9 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
     setBotRoles([]);
     botLevelsRef.current = [];
     setBotLevels([]);
+    botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
+    setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
+    setDismissedVoteKey(null);
     setChatMessages([]);
     setChatCooldownUntil(null);
     chatThrottleRef.current = INITIAL_THROTTLE_STATE;
@@ -798,8 +990,37 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
 
   // ---- Playing. ----
   if (phase === "playing" && gameState && myRole) {
+    const myVoteAsTarget = activeVoteFor(botTakeover, myRole);
+    const iAmTakenOver = isSeatTakenOver(botTakeover, myRole);
+    const voteToShow = Object.values(botTakeover.votes).find(
+      (v) => v.seatKey !== myRole && `${v.seatKey}:${v.startedAt}` !== dismissedVoteKey,
+    );
     return withGuard(
       <>
+      {myVoteAsTarget && (
+        <BotTakeoverSelfBanner mode="prove-presence" onConfirm={() => proveStillHereOrReclaim(myRole)} />
+      )}
+      {!myVoteAsTarget && iAmTakenOver && (
+        <BotTakeoverSelfBanner mode="reclaim" onConfirm={() => proveStillHereOrReclaim(myRole)} />
+      )}
+      {voteToShow && (
+        <BotTakeoverVoteModal
+          targetName={names[voteToShow.seatKey as Seat] ?? voteToShow.originalName}
+          reason={voteToShow.reason}
+          yesCount={voteToShow.yesVoterDeviceIds.length}
+          eligibleVoterCount={1}
+          hasVoted={voteToShow.yesVoterDeviceIds.includes(deviceId)}
+          onVoteYes={() => castTakeoverVote(voteToShow.seatKey)}
+          onDismiss={() => setDismissedVoteKey(`${voteToShow.seatKey}:${voteToShow.startedAt}`)}
+        />
+      )}
+      {takeoverRoles.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {takeoverRoles.map((role) => (
+            <BotSeatBadge key={role} variant="takeover" label={botTakeover.takeovers[role]?.originalName ?? "이탈"} />
+          ))}
+        </div>
+      )}
       <MalDalliJaBoard
         state={gameState}
         viewerSeat={myRole}

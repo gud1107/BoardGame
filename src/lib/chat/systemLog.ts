@@ -22,3 +22,14 @@ export function formatDalmutiTributeLog(
 ): string {
   return `${fromTitle}(${fromName})와 ${toTitle}(${toName})가 카드를 교환했습니다`;
 }
+
+/**
+ * e.g. "지수 님이 퇴장하여 AI 봇이 대신 플레이합니다" — shown once when a bot
+ * takeover vote passes (see `botTakeover.ts`). Unlike the other formatters
+ * above, this one line is identical across all 6 games that support
+ * takeover, so it lives here in the shared file instead of being duplicated
+ * as a local per-game formatter like each game's own action-log lines are.
+ */
+export function formatBotTakeoverLog(name: string): string {
+  return `${name} 님이 퇴장하여 AI 봇이 대신 플레이합니다`;
+}

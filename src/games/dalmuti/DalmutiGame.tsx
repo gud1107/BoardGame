@@ -26,14 +26,25 @@ import { useGameBgm } from "@/lib/audio/useGameBgm";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
+import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import {
+  activeVoteFor,
+  INITIAL_BOT_TAKEOVER_STATE,
+  isSeatTakenOver,
+  reduceBotTakeover,
+  voteThresholdMet,
+  voteYesCount,
+  type BotTakeoverEvent,
+  type BotTakeoverState,
+} from "@/games/shared/bot/botTakeover";
 import { v4 as uuid } from "uuid";
 import type { ChatMessage, SendResult } from "@/lib/chat/types";
 import { checkThrottle, recordSend, INITIAL_THROTTLE_STATE, type ThrottleState } from "@/lib/chat/throttle";
 import { filterProfanity } from "@/lib/chat/profanity";
 import { stripControlChars } from "@/lib/chat/sanitize";
 import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
-import { formatDalmutiTributeLog } from "@/lib/chat/systemLog";
+import { formatBotTakeoverLog, formatDalmutiTributeLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 
 /**
@@ -164,6 +175,35 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
   }, [botLevels]);
   const botSeatSet = useMemo(() => new Set(botSeats), [botSeats]);
 
+  // Mid-game "seat disconnected/unresponsive → AI bot" — see botTakeover.ts
+  // for the vote/conversion state machine this mirrors. Every client
+  // independently replays the same broadcast `BotTakeoverEvent`s, same
+  // lockstep philosophy as `gameState`/`applyAction` above; no host
+  // dependency (a deliberate departure from host-authoritative decisions —
+  // see HANDOFF.md's bot takeover session).
+  const [botTakeover, setBotTakeover] = useState<BotTakeoverState>(INITIAL_BOT_TAKEOVER_STATE);
+  const botTakeoverRef = useRef<BotTakeoverState>(INITIAL_BOT_TAKEOVER_STATE);
+  function applyBotTakeoverEvent(event: BotTakeoverEvent) {
+    const next = reduceBotTakeover(botTakeoverRef.current, event);
+    botTakeoverRef.current = next;
+    setBotTakeover(next);
+  }
+  // A vote this client has already dismissed without voting — re-shown if a
+  // *different* vote (different seat or restarted timer) comes in, keyed by
+  // `${seatKey}:${startedAt}` so it's distinct per vote instance.
+  const [dismissedVoteKey, setDismissedVoteKey] = useState<string | null>(null);
+  const phaseRef = useRef<Phase>(phase);
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+  // Tracks how long the current actor has been stuck, for the "idle/무응답"
+  // vote trigger — see the dedicated interval effect below. `since: 0` is a
+  // deliberately-stale placeholder (not `Date.now()`, which would be an
+  // impure render-time call) — the first interval tick always sees `actor`
+  // differ from the initial `null` and immediately rebases it to "now".
+  const lastActorRef = useRef<{ actor: SeatIndex | null; since: number }>({ actor: null, since: 0 });
+  const IDLE_VOTE_THRESHOLD_MS = 45_000;
+
   const channelRef = useRef<RealtimeChannel | null>(null);
   // Shared by the initial post-subscribe sync and `useBackgroundResync`
   // (below) — see that hook's doc comment for why the `state !== "joined"`
@@ -183,6 +223,14 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  // Read inside the channel-setup effect's broadcast handlers (registered
+  // once, doesn't re-run on every `occupants` change) to avoid closing over
+  // a stale snapshot — same reasoning as `gameStateRef`/`botSeatsRef`.
+  const occupantsRef = useRef<Occupant[]>([]);
+  useEffect(() => {
+    occupantsRef.current = occupants;
+  }, [occupants]);
 
   // Kept in sync so the `game-action` broadcast handler (registered once,
   // inside the channel-setup effect below) can resolve a seat to its display
@@ -241,6 +289,10 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
       setBotSeats(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
+      // A rematch is a fresh game — any takeover from the previous round
+      // shouldn't silently carry a seat's control into this one.
+      botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
+      setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
       setGameState(startGame(playerCount, seed));
       setFinalResult(null);
       setPhase("playing");
@@ -296,6 +348,54 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
       setBotLevels(levels);
     });
 
+    // Bot-takeover vote/conversion — see botTakeover.ts. Every client
+    // replays the identical event stream through the same pure reducer; a
+    // client whose own `vote-cast` (including its own) just crossed the
+    // majority threshold is the one that fires `convert` — harmless if more
+    // than one client does this in the same instant, since `convert` on an
+    // already-converted seat only happens once (the vote is gone by then on
+    // every client that already processed the first `convert`).
+    channel.on("broadcast", { event: "bot-takeover-event" }, ({ payload }) => {
+      const event = payload?.event as BotTakeoverEvent | undefined;
+      if (!event) return;
+      // System-log line the instant a conversion actually lands — read the
+      // about-to-be-consumed vote's `originalName` *before* applying the
+      // event (same "resolve from pre-update state" pattern as the
+      // `returnTax` log above). `broadcast: { self: true }` means the client
+      // that sent `convert` processes this same handler too, so this fires
+      // exactly once per client either way, never duplicated.
+      if (event.type === "convert") {
+        const vote = botTakeoverRef.current.votes[event.seatKey];
+        if (vote) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: uuid(),
+              channel: chatChannel,
+              deviceId: "system",
+              senderName: "시스템",
+              body: formatBotTakeoverLog(vote.originalName),
+              type: "SYSTEM",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+      }
+      applyBotTakeoverEvent(event);
+      if (event.type !== "vote-cast") return;
+      const vote = botTakeoverRef.current.votes[event.seatKey];
+      if (!vote) return; // already converted/cancelled by a faster broadcast
+      // Eligible voters = other connected real players whose own seat isn't
+      // itself bot-controlled right now (lobby bot OR an earlier takeover).
+      const takenOverSeats = new Set(Object.keys(botTakeoverRef.current.takeovers).map(Number));
+      const eligible = occupantsRef.current.filter(
+        (o) => o.seat !== Number(event.seatKey) && !botSeatsRef.current.includes(o.seat) && !takenOverSeats.has(o.seat),
+      ).length;
+      if (voteThresholdMet(voteYesCount(botTakeoverRef.current, event.seatKey), eligible)) {
+        channel.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "convert", seatKey: event.seatKey, at: Date.now() } } });
+      }
+    });
+
     // A client that (re)joins after the game already started never saw the
     // one-time `game-start` broadcast — same reconnect flow as every other
     // online game here.
@@ -304,7 +404,12 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
         channel.send({
           type: "broadcast",
           event: "state-sync",
-          payload: { state: gameStateRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
+          payload: {
+            state: gameStateRef.current,
+            botSeats: botSeatsRef.current,
+            botLevels: botLevelsRef.current,
+            botTakeover: botTakeoverRef.current,
+          },
         });
       } else if (isHost) {
         channel.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: botSeatsRef.current, botLevels: botLevelsRef.current } });
@@ -316,10 +421,13 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
       if (!state) return;
       const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      const takeover = (payload?.botTakeover as BotTakeoverState | undefined) ?? INITIAL_BOT_TAKEOVER_STATE;
       botSeatsRef.current = roster;
       setBotSeats(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
+      botTakeoverRef.current = takeover;
+      setBotTakeover(takeover);
       setGameState(state);
       setFinalResult(null);
       setPhase("playing");
@@ -337,6 +445,35 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();
+      }
+    });
+
+    // Real disconnect (tab closed, network dropped, or an explicit leave) —
+    // fires identically on every connected client (Supabase Presence is
+    // server-synced, not local-only), so whichever seat(s) left are known to
+    // everyone at once. Only kicks off a takeover vote mid-game, for a seat
+    // that isn't already a bot; `leftPresences` still carries the leaving
+    // occupant's `playerId`/`name` even though they're already gone from
+    // `presenceState()` by the time anyone could look them up again.
+    channel.on("presence", { event: "leave" }, ({ leftPresences }) => {
+      if (phaseRef.current !== "playing") return;
+      for (const p of leftPresences as unknown as Occupant[]) {
+        if (botSeatsRef.current.includes(p.seat)) continue;
+        if (activeVoteFor(botTakeoverRef.current, String(p.seat)) || isSeatTakenOver(botTakeoverRef.current, String(p.seat))) continue;
+        channel.send({
+          type: "broadcast",
+          event: "bot-takeover-event",
+          payload: {
+            event: {
+              type: "vote-start",
+              seatKey: String(p.seat),
+              reason: "disconnected",
+              startedAt: Date.now(),
+              originalUserId: p.playerId ?? `${roomCode}:${p.seat}`,
+              originalName: p.name,
+            },
+          },
+        });
       }
     });
 
@@ -484,6 +621,17 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }, []);
 
+  function castTakeoverVote(seatKey: string) {
+    channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "vote-cast", seatKey, voterDeviceId: deviceId } } });
+  }
+  // Unified "yes" affordance (decision: one action for both) — the vote
+  // target proving presence cancels the pending vote; the same button after
+  // the seat has already converted instead reclaims control.
+  function proveStillHereOrReclaim(seatKey: string) {
+    const type = isSeatTakenOver(botTakeover, seatKey) ? "reclaim" : "vote-cancel";
+    channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type, seatKey } } });
+  }
+
   const sendChatMessage = useCallback(
     (rawBody: string): SendResult => {
       const now = Date.now();
@@ -515,8 +663,25 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
     [roomCode, myName, deviceId],
   );
 
+  // Seats a takeover vote has actually converted — unioned with the lobby
+  // `botSeats` roster below wherever bot-seat membership matters (autoplay,
+  // occupancy, display). Kept separate from `botSeats`/`botLevels` (which
+  // stay host-only lobby state) since takeover membership is derived
+  // identically by every client from the replayed vote/convert broadcasts.
+  const takeoverSeats = useMemo(
+    () => Object.keys(botTakeover.takeovers).map(Number) as SeatIndex[],
+    [botTakeover],
+  );
+  const allBotSeatSet = useMemo(
+    () => new Set([...botSeatSet, ...takeoverSeats]),
+    [botSeatSet, takeoverSeats],
+  );
+
   const chooseAction = useCallback((state: DalmutiState, actor: SeatIndex): EngineAction | null => {
     const idx = botSeatsRef.current.indexOf(actor);
+    // A takeover seat has no per-seat lobby-chosen level (it was human-
+    // controlled until now) — decision: fall back to the room's default
+    // level rather than inventing a per-room difficulty dial.
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
     return chooseBotAction(state, actor, level);
   }, []);
@@ -525,39 +690,98 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
     active: isHost && phase === "playing",
     state: gameState,
     currentActor: dalmutiCurrentActor,
-    botSeats: botSeatSet,
+    botSeats: allBotSeatSet,
     chooseAction,
     dispatch: handleAction,
   });
+
+  // "무응답(idle)" takeover trigger: if the current actor hasn't changed in
+  // IDLE_VOTE_THRESHOLD_MS while the game is playing, kick off a vote for
+  // that seat (unless it's already a bot or already mid-vote). Runs off a
+  // plain interval (not a `gameState`-keyed effect) because a *stuck* actor
+  // means `gameState` itself stops changing — an effect keyed on it would
+  // never re-fire to notice the elapsed time.
+  useEffect(() => {
+    if (phase !== "playing") return;
+    const interval = window.setInterval(() => {
+      const state = gameStateRef.current;
+      if (!state) return;
+      const actor = dalmutiCurrentActor(state);
+      if (actor !== lastActorRef.current.actor) {
+        lastActorRef.current = { actor, since: Date.now() };
+        return;
+      }
+      if (actor === null) return;
+      if (botSeatsRef.current.includes(actor)) return;
+      const seatKey = String(actor);
+      if (activeVoteFor(botTakeoverRef.current, seatKey) || isSeatTakenOver(botTakeoverRef.current, seatKey)) return;
+      if (Date.now() - lastActorRef.current.since < IDLE_VOTE_THRESHOLD_MS) return;
+      const occ = occupantsRef.current.find((o) => o.seat === actor);
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "bot-takeover-event",
+        payload: {
+          event: {
+            type: "vote-start",
+            seatKey,
+            reason: "idle",
+            startedAt: Date.now(),
+            originalUserId: occ?.playerId ?? `${roomCode}:${actor}`,
+            originalName: occ?.name ?? namesRef.current[actor] ?? "상대",
+          },
+        },
+      });
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [phase, roomCode]);
 
   const ids: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
     const count = gameState?.playerCount ?? knownTargetPlayerCount;
     for (let seat = 0; seat < count; seat++) {
       const occ = occupants.find((o) => o.seat === seat);
-      map[seat] = occ?.playerId ?? `${roomCode}:${seat}`;
+      // A takeover seat's `originalUserId` must win over the live occupant
+      // lookup — a real disconnect means `occ` is undefined here (the
+      // player is gone from presence entirely), and without this the
+      // reward/ranking map would silently fall back to a synthetic bot id,
+      // losing the original player's credit for what the bot goes on to do.
+      map[seat] = botTakeover.takeovers[seat]?.originalUserId ?? occ?.playerId ?? `${roomCode}:${seat}`;
     }
     return map;
-  }, [roomCode, gameState, knownTargetPlayerCount, occupants]);
+  }, [roomCode, gameState, knownTargetPlayerCount, occupants, botTakeover]);
 
   const names: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
     const count = gameState?.playerCount ?? knownTargetPlayerCount;
     for (let seat = 0; seat < count; seat++) {
+      const takeover = botTakeover.takeovers[seat];
+      if (takeover) {
+        map[seat] = `🤖 AI ${takeover.originalName}`;
+        continue;
+      }
       const occ = occupants.find((o) => o.seat === seat);
       const botIdx = botSeats.indexOf(seat);
       map[seat] = seat === mySeat ? myName : (occ?.name ?? (botIdx >= 0 ? botDisplayName(botIdx, botLevels[botIdx]) : "상대"));
     }
     return map;
-  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels]);
+  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels, botTakeover]);
   useEffect(() => {
     namesRef.current = names;
   }, [names]);
 
   const connectedSeats = useMemo(
-    () => new Set([...occupants.map((o) => o.seat), ...botSeats]),
-    [occupants, botSeats],
+    () => new Set([...occupants.map((o) => o.seat), ...botSeats, ...takeoverSeats]),
+    [occupants, botSeats, takeoverSeats],
   );
+
+  // Other real, non-bot occupants besides `seat` — the eligible-voter
+  // denominator for that seat's vote (mirrors the broadcast handler's own
+  // threshold check above, kept in sync by construction since both read the
+  // same `occupants`/`botSeats`/`botTakeover` inputs).
+  function eligibleVoterCountFor(seatKey: string): number {
+    const takenOverSeats = new Set(Object.keys(botTakeover.takeovers).map(Number));
+    return occupants.filter((o) => o.seat !== Number(seatKey) && !botSeats.includes(o.seat) && !takenOverSeats.has(o.seat)).length;
+  }
 
   function handleGameEnd() {
     if (!gameState || gameState.phase !== "gameOver") return;
@@ -594,6 +818,9 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
     setBotSeats([]);
     botLevelsRef.current = [];
     setBotLevels([]);
+    botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
+    setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
+    setDismissedVoteKey(null);
     setChatMessages([]);
     setChatCooldownUntil(null);
     chatThrottleRef.current = INITIAL_THROTTLE_STATE;
@@ -800,8 +1027,37 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "playing" && gameState && mySeat !== null) {
+    const myVoteAsTarget = activeVoteFor(botTakeover, String(mySeat));
+    const iAmTakenOver = isSeatTakenOver(botTakeover, String(mySeat));
+    const voteToShow = Object.values(botTakeover.votes).find(
+      (v) => v.seatKey !== String(mySeat) && `${v.seatKey}:${v.startedAt}` !== dismissedVoteKey,
+    );
     return withGuard(
       <>
+      {myVoteAsTarget && (
+        <BotTakeoverSelfBanner mode="prove-presence" onConfirm={() => proveStillHereOrReclaim(String(mySeat))} />
+      )}
+      {!myVoteAsTarget && iAmTakenOver && (
+        <BotTakeoverSelfBanner mode="reclaim" onConfirm={() => proveStillHereOrReclaim(String(mySeat))} />
+      )}
+      {voteToShow && (
+        <BotTakeoverVoteModal
+          targetName={names[Number(voteToShow.seatKey)] ?? voteToShow.originalName}
+          reason={voteToShow.reason}
+          yesCount={voteToShow.yesVoterDeviceIds.length}
+          eligibleVoterCount={eligibleVoterCountFor(voteToShow.seatKey)}
+          hasVoted={voteToShow.yesVoterDeviceIds.includes(deviceId)}
+          onVoteYes={() => castTakeoverVote(voteToShow.seatKey)}
+          onDismiss={() => setDismissedVoteKey(`${voteToShow.seatKey}:${voteToShow.startedAt}`)}
+        />
+      )}
+      {takeoverSeats.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {takeoverSeats.map((seat) => (
+            <BotSeatBadge key={seat} variant="takeover" label={botTakeover.takeovers[seat]?.originalName ?? "이탈"} />
+          ))}
+        </div>
+      )}
       <DalmutiBoard state={gameState} viewerSeat={mySeat} names={names} connectedSeats={connectedSeats} onAction={handleAction} onGameEnd={handleGameEnd} />
       <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
       </>

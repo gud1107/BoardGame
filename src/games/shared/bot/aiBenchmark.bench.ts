@@ -5,6 +5,22 @@
  * moves, see botDifficulty.ts), 1,000 headless 2-player games per game,
  * asserting Level 10 wins at least 85% of them.
  *
+ * `.bench.ts`, NOT `.test.ts` — deliberately outside `vitest.config.mts`'s
+ * `include: ["src/**\/*.test.ts"]`, so plain `npx vitest run` / `npm test`
+ * never touches this file. This is the actual, previously-unidentified root
+ * cause of the long-standing "full `vitest run` just hangs" issue reported
+ * across many past HANDOFF.md sessions: every `it()` below runs its 1,000-
+ * game loop fully synchronously (no `await` inside), so once it starts, it
+ * blocks Node's event loop for real minutes at a time — vitest's own 5s
+ * per-test timeout can't fire because firing it requires the event loop to
+ * turn, which the synchronous loop never yields. From the outside this is
+ * indistinguishable from a genuine hang; a background timed run of just this
+ * file measured 100% CPU for 5.7+ minutes to get through only 2 of 3
+ * matchups. It is not a bug in the benchmark's logic, just wrong placement —
+ * a 3,000-full-game statistical benchmark belongs opt-in, not in the default
+ * fast-feedback test run. Run it explicitly with `npm run test:bench`
+ * (see `vitest.bench.config.mts`) — expect 15+ minutes wall time.
+ *
  * Every game here runs 2-player specifically (rather than trying to define
  * "win rate" against a variable-size table for perudo/five-cucumbers, both
  * of which support more): a literal "Level 10 vs Level 1-3" 1v1 is the
