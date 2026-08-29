@@ -100,6 +100,8 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: PC 브라우저에서의 Enter 키 즉시 제출은 코드 레벨로 검증(모든 게임이 동일한 `enterRoom()` 재사용 패턴)했으나, 실제 모바일 기기(iOS/Android 가상 키보드의 완료/이동 키)에서의 수동 조작 테스트는 이번 세션에서 수행하지 않음 — 필요시 후속 세션에서 실기기 확인 권장. 로비 상단 룸 코드 검색창(`RoomSearchInput` 상당 기능)과 방 비밀번호 기능은 사용자 확인 하에 이번 범위에서 명시적으로 제외됨(향후 요청 시 신규 기능으로 별도 설계 필요).
 
+**커밋/배포**: 커밋 `e47fe55` (`feat(lobby): enable instant room creation and joining via enter key submission`), `main`에 푸시 완료. `npx vercel deploy --prod`로 프로덕션 배포 완료(https://board-game-tau-navy.vercel.app, `curl` 200 확인).
+
 ### 2026-08-30 — 소환사의 협곡 마지막 카드 홀드 버그 수정(라운드/게임 종료 조우 5초 유지)
 
 **요청**: "소환사의 협곡 라운드/매치 마지막 카드 공개(Reveal) 시 즉시 닫히며 화면이 전환되는 문제 해결 — 마지막 카드 상태 최소 3초 유지 및 [⏩ 스킵] 버튼 개발." 요청서는 `src/games/summonersRift/` 또는 `src/games/rift/` 하위 `CardArea.tsx`/`CardReveal.tsx`/`BattlePhase.tsx`/`useCardRevealTimer.ts` 경로를 전제했고, 멀티플레이 스킵 동기화 방식과 "마지막 카드"가 정확히 가리키는 화면을 임의로 추정하지 말고 먼저 질문하라는 명시적 지시(Strict No-Assumption Rule).
