@@ -1178,6 +1178,55 @@ class SoundEngine {
       osc.stop(now + 1.6);
     });
   }
+
+  /** 소환사의 협곡 — "패스 봉인 스탬프": a heavy dark-metal seal slamming down (deep sine thud sweep + a lowpass thump, like `playCupThud`/`playVictoryStamp` but deeper/louder) followed by a short metallic clang (inharmonic high partials, like a struck steel plate) — deliberately the loud/heavy opposite of Dalmuti's understated `playPassWhiff`, since this pass needs every other seat to notice it happened (PASS_HEAVY). */
+  playPassSeal() {
+    if (!this.gate("passSeal", 250)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const thud = ctx.createOscillator();
+    thud.type = "sine";
+    thud.frequency.setValueAtTime(110, now);
+    thud.frequency.exponentialRampToValueAtTime(32, now + 0.22);
+    const thudGain = ctx.createGain();
+    thudGain.gain.setValueAtTime(0.42, now);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+    thud.connect(thudGain).connect(this.sfxGain);
+    thud.start(now);
+    thud.stop(now + 0.32);
+
+    const thump = ctx.createBufferSource();
+    thump.buffer = noiseBuffer(ctx);
+    const thumpFilter = ctx.createBiquadFilter();
+    thumpFilter.type = "lowpass";
+    thumpFilter.frequency.value = 500;
+    const thumpGain = ctx.createGain();
+    thumpGain.gain.setValueAtTime(0.3, now);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    thump.connect(thumpFilter).connect(thumpGain).connect(this.sfxGain);
+    thump.start(now);
+    thump.stop(now + 0.12);
+
+    // Metallic clang — inharmonic partials struck a beat after the thud lands, like a steel seal ringing against the slot.
+    const clangAt = now + 0.03;
+    [
+      { freq: 1900, gain: 0.12 },
+      { freq: 2650, gain: 0.08 },
+      { freq: 3400, gain: 0.05 },
+    ].forEach(({ freq, gain: g }) => {
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(g, clangAt);
+      gain.gain.exponentialRampToValueAtTime(0.001, clangAt + 0.22);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(clangAt);
+      osc.stop(clangAt + 0.22);
+    });
+  }
 }
 
 let instance: SoundEngine | null = null;

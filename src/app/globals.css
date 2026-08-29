@@ -411,6 +411,69 @@ body {
   }
 }
 
+/* Summoner's Rift — a player declaring PASS: a heavy dark-metal seal
+   slamming down onto the [⛔ PASS] badge the instant `passed` flips true.
+   Overshoots big and snaps back with a slight rotation, like a stamp
+   punched down harder than needed (scale 1.6 -> 0.94 -> 1, see
+   SummonersRiftBoard.tsx's `passFlash`). Paired with `rift-pass-row-shake`
+   + `rift-pass-glow-flash` below, all three replayed once per pass via a
+   remount key — same one-shot-on-state-diff pattern as `rift-monster-flip`. */
+@keyframes rift-pass-badge-slam {
+  0% {
+    opacity: 0;
+    transform: scale(1.6) rotate(-8deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(0.94) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* The passing player's own scoreboard row juddering once under the stamp's
+   impact. Deliberately local to that one row, not a whole-page screen
+   shake — a pass can happen from any of up to 6 seats and more than once
+   a round, so a full-screen jolt every time would get old fast; the badge
+   slam + glow flash below already make it unmissable. */
+@keyframes rift-pass-row-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15% {
+    transform: translateX(-5px);
+  }
+  30% {
+    transform: translateX(4px);
+  }
+  45% {
+    transform: translateX(-3px);
+  }
+  60% {
+    transform: translateX(2px);
+  }
+  75% {
+    transform: translateX(-1px);
+  }
+}
+
+/* Momentary red shockwave around the passing player's row, synced with the
+   shake above. */
+@keyframes rift-pass-glow-flash {
+  0% {
+    box-shadow: 0 0 0 rgba(239, 68, 68, 0);
+  }
+  30% {
+    box-shadow: 0 0 25px rgba(239, 68, 68, 0.8);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
 /* 달무티's card-exchange flight (see DalmutiEffects.tsx / FlyingExchangeCard)
    — 2026-08-25 후속 세션(평민 자유 선택 교환 모달 + 비공개 마스킹 + 화려한 VFX)
    replaced the older straight-scale-in `dalmuti-tax-fly` with a richer arc.

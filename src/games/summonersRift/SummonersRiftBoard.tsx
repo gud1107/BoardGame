@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
 import SummonersRiftLastRoundModal from "./SummonersRiftLastRoundModal";
 import SummonersRiftGuideSidebar from "./SummonersRiftGuideSidebar";
@@ -100,6 +101,8 @@ interface CombatFlashState {
 const ENCOUNTER_HOLD_MS = 5000;
 /** HP 배너의 피격 흔들림/플래시와 격투 게임 스타일 데미지 트레일 게이지가 따라잡는 데 걸리는 시간(AskUserQuestion "트레일 길이" — 요청 예시 범위 400ms 채택) — `ENCOUNTER_HOLD_MS`와 분리해 두어, 5초 동안 화면은 붙잡아두되 흔들림 자체는 느려지지 않고 처음 400ms에만 짧고 경쾌하게 재생된다. */
 const HIT_FLASH_MS = 400;
+/** 패스 선언 시 스탬프 슬램/로우 쉐이크/글로우 플래시(`rift-pass-badge-slam`/`rift-pass-row-shake`/`rift-pass-glow-flash`, 전부 globals.css)가 재생되는 시간 — 이 시간이 지나면 `passFlash`를 지워 1회성 임팩트 연출을 종료한다. 패스 자체의 지속 배지/딤 처리는 `p.passed`가 살아있는 한(다음 라운드 `dealRound`가 리셋할 때까지) 별도로 계속 남는다. */
+const PASS_FLASH_MS = 650;
 
 /**
  * 5초 유지 창(`ENCOUNTER_HOLD_MS`) 동안 채워진 채로 시작해 선형으로 0%까지
@@ -328,9 +331,20 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
   const [roundFlash, setRoundFlash] = useState<RoundResult | null>(null);
   const [pushEvents, setPushEvents] = useState<RiftPushEvent[]>([]);
   const [combatFlash, setCombatFlash] = useState<CombatFlashState | null>(null);
+  /** 방금 패스를 선언한 좌석 — 스탬프 슬램/쉐이크/글로우 1회성 연출(`PASS_FLASH_MS` 뒤 자동 해제)만 담당한다. 지속 배지/딤 처리는 `state.players[seat].passed`를 직접 읽어 렌더하므로 이 값과 무관하게 라운드 끝까지 남는다. */
+  const [passFlash, setPassFlash] = useState<{ seat: SeatIndex } | null>(null);
   if (trackedState !== state) {
     const newRound = state.lastRoundResult !== trackedState.lastRoundResult ? state.lastRoundResult : null;
     const push = detectRiftPushEvent(trackedState, state);
+    // 방금 false -> true로 뒤집힌 좌석의 `passed` 찾기 — 락스텝 state가 모든
+    // 클라이언트에 동일하게 동기화되므로, 패스를 누른 당사자뿐 아니라 다른
+    // 모든 플레이어의 화면에서도 이 렌더에서 동시에 감지되어 요청서의 "다른
+    // 플레이어들이 명확히 인지" 요구를 만족한다(combatFlash/pushEvents와 같은
+    // state-diff 트리거 패턴).
+    const justPassed = state.players.find((p) => {
+      const prev = trackedState.players.find((pp) => pp.seat === p.seat);
+      return p.passed && prev && !prev.passed;
+    });
     // Captured before `trackedState` is replaced below, so it's "how many
     // entries this dungeon run had last render" — `combatLog` resets to `[]`
     // at both `enterDungeon` and the next `dealRound`, so comparing against
@@ -341,6 +355,10 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
     setTrackedState(state);
     if (newRound) setRoundFlash(newRound);
     if (push) setPushEvents((prev) => [...prev, { ...push, id: (prev.at(-1)?.id ?? 0) + 1 }]);
+    if (justPassed) {
+      setPassFlash({ seat: justPassed.seat });
+      getSoundEngine().playPassSeal();
+    }
 
     if (state.phase === "resolvingRift" && state.combatLog.length > priorCombatLogLength) {
       // Ordinary mid-run reveal — `phase` hasn't moved on, so the new entry
@@ -370,6 +388,11 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
     const t = setTimeout(() => setRoundFlash(null), 5200);
     return () => clearTimeout(t);
   }, [roundFlash]);
+  useEffect(() => {
+    if (!passFlash) return;
+    const t = setTimeout(() => setPassFlash(null), PASS_FLASH_MS);
+    return () => clearTimeout(t);
+  }, [passFlash]);
   // 조우 유지 타이머 — combatFlash가 새로 생길 때마다 ENCOUNTER_HOLD_MS 뒤에
   // 자동으로 잠금 해제한다. 타임아웃 id를 ref에 보관해두는 이유는 [⏩ 스킵]이
   // 눌렸을 때 이 자동 타이머를 즉시 취소하고 바로 잠금을 풀기 위해서 — 스킵은
@@ -687,28 +710,55 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
             const p = state.players.find((pl) => pl.seat === seat)!;
             const isActive = state.activeSeat === seat && !p.eliminated;
             const isSelf = seat === viewerSeat;
+            // 패스 지속 배지/딤 — `p.passed`가 소스: bidding에서 declaringSpatula/
+            // resolvingRift로 phase가 넘어가도 켜진 채 남고, 다음 라운드
+            // `dealRound`가 모든 좌석의 `passed`를 일괄 리셋할 때만 꺼진다(engine.ts
+            // "Deals a fresh round" 참고) — 즉 요청서의 "해당 라운드가 끝날 때까지
+            // 유지" 요구가 기존 엔진 상태만으로 이미 충족된다. 탈락한 좌석은 이미
+            // 자체 딤/배지(💀 탈락)가 있으므로 패스 배지는 그 위에 겹치지 않게 제외.
+            const isPassed = p.passed && !p.eliminated;
+            // 방금 패스를 누른 그 순간의 1회성 스탬프 슬램/쉐이크/글로우 — PASS_FLASH_MS 뒤 자동으로 꺼지고, 이후에도 `isPassed`가 살아있는 동안은 위 지속 배지가 그대로 남는다.
+            const isFlashing = passFlash !== null && passFlash.seat === seat;
             return (
               // Task brief §1: the row itself stays a single line (name/turn/tokens), with removed items relocated to their own dedicated strip right below it instead of stacked on top of a face-down card — see `RemovedItemsRow`.
               <div key={seat} className="flex flex-col gap-1">
                 <div
                   ref={setSeatRowRef(seat)}
-                  className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs transition ${
-                    p.eliminated ? "border-white/5 bg-black/10 opacity-50" : isActive ? "bg-amber-400/10" : "border-white/10 bg-black/20"
+                  className={`relative flex flex-wrap items-center justify-between gap-2 overflow-hidden rounded-xl border p-2 text-xs transition ${
+                    p.eliminated
+                      ? "border-white/5 bg-black/10 opacity-50"
+                      : isPassed
+                        ? "border-red-500/40 bg-black/20 opacity-75"
+                        : isActive
+                          ? "bg-amber-400/10"
+                          : "border-white/10 bg-black/20"
                   }`}
-                  style={isActive ? { borderColor: "rgba(200,170,110,0.6)" } : undefined}
+                  style={{
+                    ...(isActive && !isPassed ? { borderColor: "rgba(200,170,110,0.6)" } : {}),
+                    ...(isFlashing ? { animation: "rift-pass-row-shake 0.5s ease-in-out, rift-pass-glow-flash 0.6s ease-out" } : {}),
+                  }}
                 >
-                  <span className="flex items-center gap-1.5 font-semibold text-white/90">
+                  {/* 패스 딤 오버레이 — 텍스트/토큰은 아래에서 별도로 z-10을 줘 그 위에 계속 읽히게 남긴다. */}
+                  {isPassed && <div className="pointer-events-none absolute inset-0 rounded-xl bg-black/50 backdrop-blur-[1px]" />}
+                  <span className="relative z-10 flex items-center gap-1.5 font-semibold text-white/90">
                     <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
                     {isActive && <span title="차례">👉</span>}
                     {state.challengerSeat === seat && (state.phase === "declaringSpatula" || state.phase === "resolvingRift") && <span title="도전자">🛡️</span>}
                     {names[seat]}
                     {isSelf && <span style={{ color: "#e8c77a" }}>(나)</span>}
-                    {p.passed && state.phase === "bidding" && <span className="text-white/40">(패스)</span>}
                     {p.eliminated && <span className="text-rose-300">💀 탈락</span>}
                   </span>
-                  <div className="flex items-center gap-2 text-white/70">
+                  <div className="relative z-10 flex items-center gap-2 text-white/70">
                     <span title={`성공 ${p.successTokens}/${SUCCESS_TOKENS_TO_WIN}`}>{"🏆".repeat(p.successTokens)}{"·".repeat(Math.max(0, SUCCESS_TOKENS_TO_WIN - p.successTokens))}</span>
                     <span title={`실패 ${p.failureTokens}/${FAILURE_TOKENS_TO_ELIMINATE}`}>{"💀".repeat(p.failureTokens)}{"·".repeat(Math.max(0, FAILURE_TOKENS_TO_ELIMINATE - p.failureTokens))}</span>
+                    {isPassed && (
+                      <span
+                        className="animate-pulse rounded border border-red-500 bg-red-950/80 px-1.5 py-0.5 text-[10px] font-extrabold tracking-wider text-red-400"
+                        style={isFlashing ? { animation: "rift-pass-badge-slam 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards" } : undefined}
+                      >
+                        ⛔ PASS
+                      </span>
+                    )}
                   </div>
                 </div>
                 <RemovedItemsRow removedItemIds={p.removedItemIds} />
