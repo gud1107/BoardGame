@@ -6,6 +6,8 @@ import { GENRE_META, GENRE_ORDER } from "@/games/genres";
 import type { GameGenre } from "@/games/types";
 import GameGrid from "@/components/GameGrid";
 import CollectionShowcase from "@/components/CollectionShowcase";
+import GameCategoryRow from "@/components/lobby/GameCategoryRow";
+import { GAME_CATEGORIES } from "@/constants/gameCategories";
 import { useGameBgm } from "@/lib/audio/useGameBgm";
 
 const PLAYER_FILTERS = [
@@ -62,70 +64,86 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="게임 이름 검색..."
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none sm:max-w-xs"
-        />
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-          {PLAYER_FILTERS.map((f, idx) => (
-            <button
-              key={f.label}
-              onClick={() => setFilterIdx(idx)}
-              className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                filterIdx === idx
-                  ? "border-rose-400 bg-rose-500/20 text-white"
-                  : "border-white/10 text-white/60 hover:border-white/25"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+      {/* Mobile-only (< sm) Netflix-style category carousel — replaces the
+          search/filter/full-grid section below entirely on phones (decided
+          via AskUserQuestion: desktop keeps that section 100% unchanged and
+          gets no row variant of its own). `-mx-4` cancels the page
+          container's own `px-4` (its only horizontal padding below `sm`,
+          since `sm:px-6` doesn't apply here) so each row's cards can bleed
+          to the viewport edge — the "next card peeks in" swipe affordance
+          only works if the row isn't boxed in by the container's padding. */}
+      <div className="-mx-4 sm:hidden">
+        {GAME_CATEGORIES.map((category) => (
+          <GameCategoryRow key={category.id} category={category} />
+        ))}
+      </div>
+
+      <div className="hidden sm:block">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="게임 이름 검색..."
+            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none sm:max-w-xs"
+          />
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            {PLAYER_FILTERS.map((f, idx) => (
+              <button
+                key={f.label}
+                onClick={() => setFilterIdx(idx)}
+                className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                  filterIdx === idx
+                    ? "border-rose-400 bg-rose-500/20 text-white"
+                    : "border-white/10 text-white/60 hover:border-white/25"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
+
+        <div className="mb-8 flex flex-wrap gap-2">
+          <button
+            onClick={() => setGenreFilter("all")}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+              genreFilter === "all"
+                ? "border-white/40 bg-white/15 text-white"
+                : "border-white/10 text-white/60 hover:border-white/25"
+            }`}
+          >
+            전체 장르
+          </button>
+          {GENRE_ORDER.map((genre) => {
+            const meta = GENRE_META[genre];
+            const active = genreFilter === genre;
+            return (
+              <button
+                key={genre}
+                onClick={() => setGenreFilter(active ? "all" : genre)}
+                className="rounded-full border px-3 py-1.5 text-xs font-medium transition"
+                style={
+                  active
+                    ? { borderColor: meta.accent, backgroundColor: `${meta.accent}26`, color: "white" }
+                    : { borderColor: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)" }
+                }
+              >
+                {meta.emoji} {meta.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {genreFilter === "all" && (
+          <CollectionShowcase collectionId="netflix-death-game" games={baseFiltered} />
+        )}
+
+        {filtered.length > 0 ? (
+          <GameGrid games={filtered} />
+        ) : (
+          <p className="py-16 text-center text-sm text-white/40">검색 결과가 없습니다.</p>
+        )}
       </div>
-
-      <div className="mb-8 flex flex-wrap gap-2">
-        <button
-          onClick={() => setGenreFilter("all")}
-          className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-            genreFilter === "all"
-              ? "border-white/40 bg-white/15 text-white"
-              : "border-white/10 text-white/60 hover:border-white/25"
-          }`}
-        >
-          전체 장르
-        </button>
-        {GENRE_ORDER.map((genre) => {
-          const meta = GENRE_META[genre];
-          const active = genreFilter === genre;
-          return (
-            <button
-              key={genre}
-              onClick={() => setGenreFilter(active ? "all" : genre)}
-              className="rounded-full border px-3 py-1.5 text-xs font-medium transition"
-              style={
-                active
-                  ? { borderColor: meta.accent, backgroundColor: `${meta.accent}26`, color: "white" }
-                  : { borderColor: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)" }
-              }
-            >
-              {meta.emoji} {meta.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {genreFilter === "all" && (
-        <CollectionShowcase collectionId="netflix-death-game" games={baseFiltered} />
-      )}
-
-      {filtered.length > 0 ? (
-        <GameGrid games={filtered} />
-      ) : (
-        <p className="py-16 text-center text-sm text-white/40">검색 결과가 없습니다.</p>
-      )}
     </div>
   );
 }

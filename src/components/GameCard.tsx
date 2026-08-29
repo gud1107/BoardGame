@@ -22,7 +22,11 @@ export default function GameCard({ game }: { game: GameMeta }) {
     <div
       className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-white/[0.03] transition ${
         collection ? "border-red-500/25" : "border-white/10"
-      } ${game.playable ? "hover:-translate-y-1 hover:border-white/25 hover:bg-white/[0.06]" : "opacity-70"}`}
+      } ${
+        game.playable
+          ? "hover:-translate-y-1 hover:border-white/25 hover:bg-white/[0.06] active:scale-95"
+          : "opacity-70"
+      }`}
     >
       <div
         className="relative flex aspect-[4/5] items-center justify-center overflow-hidden text-6xl"
@@ -76,6 +80,11 @@ export default function GameCard({ game }: { game: GameMeta }) {
               );
             })}
           </div>
+        )}
+        {game.playable && (
+          <span className="mt-1 inline-flex items-center gap-1 self-start rounded-full bg-rose-500/15 px-3 py-1.5 text-xs font-semibold text-rose-300 transition group-hover:bg-rose-500/25">
+            입장하기 →
+          </span>
         )}
       </div>
     </div>

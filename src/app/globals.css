@@ -27,6 +27,18 @@ body {
   border-radius: 999px;
 }
 
+/* Hides the OS scrollbar on an `overflow-x-auto` row while keeping it
+   scrollable — used by the mobile lobby's Netflix-style category carousels
+   (see GameCategoryRow.tsx) so the horizontal scroll reads as a swipeable
+   card row instead of a scrollbar-tracked list. */
+.scrollbar-hide {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* old Edge/IE */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/new Edge */
+}
+
 /* Grid Poker's dealer-style common-card reveal (see DealerReveal.tsx) — a
    card sliding out of the deck and flipping face-up. Re-keyed per draw so
    this replays every round instead of only once on mount. */
