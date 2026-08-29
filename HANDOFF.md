@@ -97,6 +97,8 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: 없음 — 요청 3항목(3초 유지+시각 힌트, 스킵 버튼, 타이머 정리/레이스 방지) 및 사전 확인 질문 4개 전부 구현·검증 완료. 게임 종료 얼리 리턴 버그는 이번 세션 구현 과정에서 발견해 함께 수정함.
 
+**커밋/배포**: 이번 세션이 만든 2개 파일(`FiveCucumbersBoard.tsx` + HANDOFF)만 스테이징 — 작업 트리에 있던 다른 세션들의 미커밋 변경(`.claude/`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지 `feat(five-cucumbers): retain trick result for 3 seconds and provide skip button`(`ff0c6d5`) → `git push origin main` 완료(`2c61a33..ff0c6d5`). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(39초), `target: "production"`/`readyState: READY`(`dpl_7T82k3Qgk5eDBzWG5YhmRThzU8iM`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨. `curl`로 `/`·`/games/five-cucumbers` 둘 다 200 직접 확인함.
+
 ### 2026-08-29 — 그리드포커 결과 연출 비주얼 리뉴얼 및 스킵 버튼 이펙트 직하단 재배치
 
 **요청**: 그리드포커 라운드/게임 결과 정산 연출의 비주얼 스타일을 네온 족보 빔/스탬프/글로우 파티클로 개편하고, 기존에 화면 구석(우측 상단)에 있던 [⏩ 연출 스킵] 버튼을 이펙트 영역 바로 하단 중앙으로 재배치. 요청서는 `src/games/gridPoker/` 하위 `ResultModal.tsx`/`RoundSummary.tsx`/`ScoreBoard.tsx`/`ScoreEffect.tsx`/`GridCell.tsx`를 전제했고, 새 이펙트 구현 방식(CSS 키프레임/Canvas 파티클/Lottie/Framer Motion)과 모바일 여백 수치 등은 "절대 임의로 추정하지 말고 먼저 번호를 매긴 질문 목록을 제시"하라는 명시적 지시(Strict No-Assumption Rule).
