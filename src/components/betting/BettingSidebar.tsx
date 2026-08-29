@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useBettingStore } from "@/store/bettingStore";
-import type { DailyRecord } from "@/lib/db/types";
+import type { BettingSessionRecord, DailyRecord } from "@/lib/db/types";
 import RosterEditor, { type RosterParticipant } from "./RosterEditor";
 import PayoutTableEditor from "./PayoutTableEditor";
+import SettlementModal from "./SettlementModal";
 import DragHandle from "@/components/common/DragHandle";
 import { useSwipeToDismiss } from "@/hooks/useSwipeToDismiss";
+import type { SettlementRoundInput } from "@/lib/betting/settlementView";
 
 function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -37,7 +39,11 @@ export default function BettingSidebar() {
   const endSession = useBettingStore((s) => s.endSession);
   const updateParticipantName = useBettingStore((s) => s.updateParticipantName);
   const updatePayoutTable = useBettingStore((s) => s.updatePayoutTable);
+  const mergeParticipants = useBettingStore((s) => s.mergeParticipants);
+  const unmergeGroup = useBettingStore((s) => s.unmergeGroup);
+  const applyManualAdjustment = useBettingStore((s) => s.applyManualAdjustment);
   const closeSidebar = () => setSidebarOpen(false);
+  const [settlementOpen, setSettlementOpen] = useState(false);
   const { dragY, dragging, handlers } = useSwipeToDismiss(closeSidebar);
 
   useEffect(() => {
@@ -232,7 +238,15 @@ export default function BettingSidebar() {
                   </div>
 
                   <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                    <p className="mb-1 text-sm font-medium text-white/80">진행 상황</p>
+                    <div className="mb-1 flex items-center justify-between">
+                      <p className="text-sm font-medium text-white/80">진행 상황</p>
+                      <button
+                        onClick={() => setSettlementOpen(true)}
+                        className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/70 hover:border-white/30"
+                      >
+                        📊 정산표 보기
+                      </button>
+                    </div>
                     <p className="text-xs text-white/60">지금까지 {session.rounds.length}게임 진행됨</p>
                     {session.rounds.length > 0 && (
                       <ul className="mt-2 flex flex-col gap-1 text-[11px] text-white/45">
@@ -314,6 +328,43 @@ export default function BettingSidebar() {
           )}
         </div>
       </aside>
+
+      {session && (
+        <SettlementModal
+          title="내기"
+          open={settlementOpen}
+          onClose={() => setSettlementOpen(false)}
+          rounds={buildLocalSettlementRounds(session.rounds, session.manualAdjustments)}
+          names={Object.fromEntries(session.participants.map((p) => [p.playerId, p.name]))}
+          mergedGroups={session.mergedGroups ?? []}
+          onMerge={(canonicalId, memberIds) => void mergeParticipants(canonicalId, memberIds)}
+          onUnmerge={(canonicalId) => void unmergeGroup(canonicalId)}
+          onManualAdjust={(playerId, amount, note) => void applyManualAdjustment(playerId, amount, note)}
+        />
+      )}
     </>
   );
+}
+
+/**
+ * Folds `session.rounds` into the settlement grid's per-round columns, plus
+ * one trailing "수동 보정" column summing every manual adjustment per
+ * participant (so a correction shows up in the grid without being mistaken
+ * for a real played round).
+ */
+function buildLocalSettlementRounds(
+  rounds: BettingSessionRecord["rounds"],
+  manualAdjustments: BettingSessionRecord["manualAdjustments"],
+): SettlementRoundInput[] {
+  const cols: SettlementRoundInput[] = rounds.map((r, i) => ({
+    round: i + 1,
+    label: r.gameName,
+    deltas: r.deltas,
+  }));
+  if (manualAdjustments && manualAdjustments.length > 0) {
+    const deltas: Record<string, number> = {};
+    for (const adj of manualAdjustments) deltas[adj.playerId] = (deltas[adj.playerId] ?? 0) + adj.amount;
+    cols.push({ round: cols.length + 1, label: "수동 보정", deltas });
+  }
+  return cols;
 }

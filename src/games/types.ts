@@ -126,6 +126,16 @@ export interface GameMeta {
    * flag only makes sense alongside `onlineMultiplayer: true`.
    */
   chatEnabled?: boolean;
+  /**
+   * True for games that offer the cross-device room-linked betting ledger
+   * (see `src/games/shared/betting/roomBetting.ts`) — every seat in the room
+   * auto-participates, deltas settle over the room's existing Realtime
+   * channel on each game's end, and the host can merge/unmerge seats that
+   * reconnected under a different nickname. Piloted on the same six games as
+   * `botTakeover.ts` (dalmuti/lasVegas/grid-poker/malDalliJa/no-thanks/
+   * destinyWar39) — see HANDOFF.md for the session that added this.
+   */
+  bettingRoomLinked?: boolean;
 }
 
 /**

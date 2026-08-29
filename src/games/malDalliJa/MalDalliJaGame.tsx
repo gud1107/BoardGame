@@ -38,6 +38,14 @@ import {
   type BotTakeoverEvent,
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
+import {
+  computeRoundDeltas,
+  INITIAL_ROOM_BETTING_STATE,
+  reduceRoomBetting,
+  type RoomBettingEvent,
+  type RoomBettingState,
+} from "@/games/shared/betting/roomBetting";
+import RoomBettingPanel from "@/games/shared/betting/RoomBettingPanel";
 import { v4 as uuid } from "uuid";
 import type { ChatMessage, SendResult } from "@/lib/chat/types";
 import { checkThrottle, recordSend, INITIAL_THROTTLE_STATE, type ThrottleState } from "@/lib/chat/throttle";
@@ -177,6 +185,12 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
     setBotTakeover(next);
   }
   const [dismissedVoteKey, setDismissedVoteKey] = useState<string | null>(null);
+  // Cross-device room-linked betting ledger — see roomBetting.ts. Unlike
+  // `botTakeover` above, this accumulates ACROSS rematches within one room's
+  // lifetime, so it's only reset when leaving the room, never on
+  // `game-start`/rematch.
+  const [roomBetting, setRoomBetting] = useState<RoomBettingState>(INITIAL_ROOM_BETTING_STATE);
+  const roomBettingRef = useRef<RoomBettingState>(INITIAL_ROOM_BETTING_STATE);
   const phaseRef = useRef<Phase>(phase);
   useEffect(() => {
     phaseRef.current = phase;
@@ -430,6 +444,17 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
       }
     });
 
+    // Room-linked betting ledger — see roomBetting.ts. Same lockstep replay
+    // pattern as `bot-takeover-event` above: `broadcast: { self: true }`
+    // means the sender also receives its own event through this same
+    // handler, so this is the one-and-only place `reduceRoomBetting` runs.
+    channel.on("broadcast", { event: "room-betting-event" }, ({ payload }) => {
+      const event = payload?.event as RoomBettingEvent | undefined;
+      if (!event) return;
+      roomBettingRef.current = reduceRoomBetting(roomBettingRef.current, event);
+      setRoomBetting(roomBettingRef.current);
+    });
+
     channel.on("broadcast", { event: "state-request" }, () => {
       if (!gameStateRef.current) {
         if (myRole === "p1") {
@@ -446,6 +471,7 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
           botRoles: botRolesRef.current,
           botLevels: botLevelsRef.current,
           botTakeover: botTakeoverRef.current,
+          roomBetting: roomBettingRef.current,
         },
       });
     });
@@ -462,12 +488,15 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
       const roster = (payload?.botRoles as Seat[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
       const takeover = (payload?.botTakeover as BotTakeoverState | undefined) ?? INITIAL_BOT_TAKEOVER_STATE;
+      const betting = (payload?.roomBetting as RoomBettingState | undefined) ?? INITIAL_ROOM_BETTING_STATE;
       botRolesRef.current = roster;
       setBotRoles(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
       botTakeoverRef.current = takeover;
       setBotTakeover(takeover);
+      roomBettingRef.current = betting;
+      setRoomBetting(betting);
       setGameState(syncedState);
       setTurnTimerSec((payload?.turnTimerSec as number | null | undefined) ?? null);
       setPhase((p) => (p === "connecting" || p === "waiting" ? "playing" : p));
@@ -721,7 +750,27 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
   function handleGameEnd(winnerId: string) {
     if (!gameState || !myRole) return;
     const winnerSeat: Seat = winnerId === ids.p1 ? "p1" : "p2";
+    const loserSeat: Seat = winnerSeat === "p1" ? "p2" : "p1";
     const loserId = winnerId === ids.p1 ? ids.p2 : ids.p1;
+    if (roomBettingRef.current.active) {
+      const ranksBySeat: Record<string, number> = { [winnerSeat]: 1, [loserSeat]: 2 };
+      const deltas = computeRoundDeltas(ranksBySeat, [...roomBettingRef.current.payoutTable]);
+      const namesAtRound: Record<string, string> = { p1: names.p1, p2: names.p2 };
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "room-betting-event",
+        payload: {
+          event: {
+            type: "round-recorded",
+            round: roomBettingRef.current.rounds.length + 1,
+            deltas,
+            namesAtRound,
+            rankedSeats: Object.keys(ranksBySeat).sort((a, b) => ranksBySeat[a] - ranksBySeat[b]),
+            playedAt: new Date().toISOString(),
+          },
+        },
+      });
+    }
     onComplete({
       rankings: [
         { playerId: winnerId, rank: 1 },
@@ -768,6 +817,8 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
     botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
     setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
     setDismissedVoteKey(null);
+    roomBettingRef.current = INITIAL_ROOM_BETTING_STATE;
+    setRoomBetting(INITIAL_ROOM_BETTING_STATE);
     setChatMessages([]);
     setChatCooldownUntil(null);
     chatThrottleRef.current = INITIAL_THROTTLE_STATE;
@@ -1032,6 +1083,17 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
         onGameEnd={handleGameEnd}
       />
       <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      <RoomBettingPanel
+        state={roomBetting}
+        isHost={true}
+        namesBySeat={names}
+        participantCount={2}
+        onStart={(payoutTable) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "session-start", payoutTable } } })}
+        onPayoutChange={(payoutTable) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "payout-set", payoutTable } } })}
+        onEnd={() => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "session-end" } } })}
+        onMerge={(canonicalSeat, memberSeats) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "merge", canonicalSeat, memberSeats } } })}
+        onUnmerge={(canonicalSeat) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "unmerge", canonicalSeat } } })}
+      />
       </>
     );
   }
@@ -1059,6 +1121,17 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
         </div>
       </div>
       <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      <RoomBettingPanel
+        state={roomBetting}
+        isHost={true}
+        namesBySeat={names}
+        participantCount={2}
+        onStart={(payoutTable) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "session-start", payoutTable } } })}
+        onPayoutChange={(payoutTable) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "payout-set", payoutTable } } })}
+        onEnd={() => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "session-end" } } })}
+        onMerge={(canonicalSeat, memberSeats) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "merge", canonicalSeat, memberSeats } } })}
+        onUnmerge={(canonicalSeat) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "unmerge", canonicalSeat } } })}
+      />
       </>
     );
   }

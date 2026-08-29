@@ -152,6 +152,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
     chatEnabled: true,
+    bettingRoomLinked: true,
   },
   {
     id: "no-thanks",
@@ -169,6 +170,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
     chatEnabled: true,
+    bettingRoomLinked: true,
   },
   {
     id: "perudo",
@@ -389,6 +391,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
     chatEnabled: true,
+    bettingRoomLinked: true,
   },
   {
     id: "dalmuti",
@@ -406,6 +409,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
     chatEnabled: true,
+    bettingRoomLinked: true,
   },
   {
     id: "summoners-rift",
@@ -492,6 +496,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
     chatEnabled: true,
+    bettingRoomLinked: true,
   },
   {
     id: "pieces-of-language",
@@ -545,6 +550,7 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
     chatEnabled: true,
+    bettingRoomLinked: true,
   },
   {
     id: "worm",

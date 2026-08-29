@@ -38,6 +38,14 @@ import {
   type BotTakeoverEvent,
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
+import {
+  computeRoundDeltas,
+  INITIAL_ROOM_BETTING_STATE,
+  reduceRoomBetting,
+  type RoomBettingEvent,
+  type RoomBettingState,
+} from "@/games/shared/betting/roomBetting";
+import RoomBettingPanel from "@/games/shared/betting/RoomBettingPanel";
 import { v4 as uuid } from "uuid";
 import type { ChatMessage, SendResult } from "@/lib/chat/types";
 import { checkThrottle, recordSend, INITIAL_THROTTLE_STATE, type ThrottleState } from "@/lib/chat/throttle";
@@ -188,6 +196,12 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
     botTakeoverRef.current = next;
     setBotTakeover(next);
   }
+  // Cross-device room-linked betting ledger (see roomBetting.ts) — same
+  // lockstep replay pattern as `botTakeover` above, but deliberately NOT
+  // reset on rematch/`game-start`: betting accumulates across rematches for
+  // the room's whole lifetime, only cleared in `handleLeave`.
+  const [roomBetting, setRoomBetting] = useState<RoomBettingState>(INITIAL_ROOM_BETTING_STATE);
+  const roomBettingRef = useRef<RoomBettingState>(INITIAL_ROOM_BETTING_STATE);
   // A vote this client has already dismissed without voting — re-shown if a
   // *different* vote (different seat or restarted timer) comes in, keyed by
   // `${seatKey}:${startedAt}` so it's distinct per vote instance.
@@ -396,6 +410,17 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
       }
     });
 
+    // Room-linked betting ledger (see roomBetting.ts) — every client replays
+    // the identical event stream through the same pure reducer, same
+    // `broadcast: { self: true }` "receive handler does the one-and-only
+    // reduce+setState" pattern as the bot-takeover handler above.
+    channel.on("broadcast", { event: "room-betting-event" }, ({ payload }) => {
+      const event = payload?.event as RoomBettingEvent | undefined;
+      if (!event) return;
+      roomBettingRef.current = reduceRoomBetting(roomBettingRef.current, event);
+      setRoomBetting(roomBettingRef.current);
+    });
+
     // A client that (re)joins after the game already started never saw the
     // one-time `game-start` broadcast — same reconnect flow as every other
     // online game here.
@@ -409,6 +434,7 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
             botSeats: botSeatsRef.current,
             botLevels: botLevelsRef.current,
             botTakeover: botTakeoverRef.current,
+            roomBetting: roomBettingRef.current,
           },
         });
       } else if (isHost) {
@@ -422,12 +448,15 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
       const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
       const takeover = (payload?.botTakeover as BotTakeoverState | undefined) ?? INITIAL_BOT_TAKEOVER_STATE;
+      const betting = (payload?.roomBetting as RoomBettingState | undefined) ?? INITIAL_ROOM_BETTING_STATE;
       botSeatsRef.current = roster;
       setBotSeats(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
       botTakeoverRef.current = takeover;
       setBotTakeover(takeover);
+      roomBettingRef.current = betting;
+      setRoomBetting(betting);
       setGameState(state);
       setFinalResult(null);
       setPhase("playing");
@@ -769,6 +798,14 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
     namesRef.current = names;
   }, [names]);
 
+  // String-keyed view of `names` for RoomBettingPanel/room-betting-event
+  // (seat keys there are plain strings, same convention as botTakeover.ts).
+  const namesBySeat: Record<string, string> = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const [seat, name] of Object.entries(names)) map[String(seat)] = name;
+    return map;
+  }, [names]);
+
   const connectedSeats = useMemo(
     () => new Set([...occupants.map((o) => o.seat), ...botSeats, ...takeoverSeats]),
     [occupants, botSeats, takeoverSeats],
@@ -791,6 +828,27 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
       finishedAt: new Date().toISOString(),
     });
+    if (roomBettingRef.current.active) {
+      const ranksBySeat: Record<string, number> = {};
+      for (const r of rankings) ranksBySeat[String(r.seat)] = r.rank;
+      const deltas = computeRoundDeltas(ranksBySeat, [...roomBettingRef.current.payoutTable]);
+      const namesAtRound: Record<string, string> = {};
+      for (const [seat, name] of Object.entries(names)) namesAtRound[String(seat)] = name;
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "room-betting-event",
+        payload: {
+          event: {
+            type: "round-recorded",
+            round: roomBettingRef.current.rounds.length + 1,
+            deltas,
+            namesAtRound,
+            rankedSeats: Object.keys(ranksBySeat).sort((a, b) => ranksBySeat[a] - ranksBySeat[b]),
+            playedAt: new Date().toISOString(),
+          },
+        },
+      });
+    }
     setFinalResult({ winnerName: names[winner.seat] });
     setPhase("post-game");
   }
@@ -820,6 +878,8 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
     setBotLevels([]);
     botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
     setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
+    roomBettingRef.current = INITIAL_ROOM_BETTING_STATE;
+    setRoomBetting(INITIAL_ROOM_BETTING_STATE);
     setDismissedVoteKey(null);
     setChatMessages([]);
     setChatCooldownUntil(null);
@@ -1060,6 +1120,17 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
       )}
       <DalmutiBoard state={gameState} viewerSeat={mySeat} names={names} connectedSeats={connectedSeats} onAction={handleAction} onGameEnd={handleGameEnd} />
       <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      <RoomBettingPanel
+        state={roomBetting}
+        isHost={isHost}
+        namesBySeat={namesBySeat}
+        participantCount={knownTargetPlayerCount}
+        onStart={(payoutTable) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "session-start", payoutTable } } })}
+        onPayoutChange={(payoutTable) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "payout-set", payoutTable } } })}
+        onEnd={() => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "session-end" } } })}
+        onMerge={(canonicalSeat, memberSeats) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "merge", canonicalSeat, memberSeats } } })}
+        onUnmerge={(canonicalSeat) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "unmerge", canonicalSeat } } })}
+      />
       </>
     );
   }
@@ -1080,6 +1151,17 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
         </div>
       </div>
       <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      <RoomBettingPanel
+        state={roomBetting}
+        isHost={isHost}
+        namesBySeat={namesBySeat}
+        participantCount={knownTargetPlayerCount}
+        onStart={(payoutTable) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "session-start", payoutTable } } })}
+        onPayoutChange={(payoutTable) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "payout-set", payoutTable } } })}
+        onEnd={() => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "session-end" } } })}
+        onMerge={(canonicalSeat, memberSeats) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "merge", canonicalSeat, memberSeats } } })}
+        onUnmerge={(canonicalSeat) => channelRef.current?.send({ type: "broadcast", event: "room-betting-event", payload: { event: { type: "unmerge", canonicalSeat } } })}
+      />
       </>
     );
   }

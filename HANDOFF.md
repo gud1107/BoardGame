@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-29 (**이탈 플레이어 투표 기반 AI 봇 대체(Bot Takeover) 시스템 구축 + 전체 `npx vitest run` 정지 이슈 근본 원인 수정 세션** — 자세한 내용은 아래 `### 2026-08-29 — 이탈 플레이어 투표 기반 AI 봇 대체 시스템 및 vitest 정지 이슈 수정` 절 참고.)_
+_최종 갱신: 2026-08-29 (**고유 식별자(playerId/좌석) 기반 내기 정산 원장 사후 닉네임 병합(Alias Merge) 엑셀형 취합표 + 6개 온라인 게임 크로스디바이스 공유 원장 신설 세션** — 자세한 내용은 아래 `### 2026-08-29 — 고유 식별자 기반 내기 정산 원장 및 엑셀형 사후 닉네임 병합 취합표` 절 참고.)_
+
+_이전 갱신: 2026-08-29 (**이탈 플레이어 투표 기반 AI 봇 대체(Bot Takeover) 시스템 구축 + 전체 `npx vitest run` 정지 이슈 근본 원인 수정 세션** — 자세한 내용은 아래 `### 2026-08-29 — 이탈 플레이어 투표 기반 AI 봇 대체 시스템 및 vitest 정지 이슈 수정` 절 참고.)_
 
 _이전 갱신: 2026-08-29 (**모바일 전용 넷플릭스 스타일 카테고리 가로 스크롤 로비 개편 세션** — 자세한 내용은 아래 `### 2026-08-29 — 모바일 전용 넷플릭스 스타일 카테고리 가로 스크롤 로비 개편` 절 참고.)_
 
@@ -53,6 +55,45 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-29 — 고유 식별자 기반 내기 정산 원장 및 엑셀형 사후 닉네임 병합 취합표
+
+**요청**: 가변 닉네임(같은 유저가 라운드마다 "기택"→"기탁"→"기태기"로 개명하거나 타인과 중복)으로 인해 내기 정산 장부가 여러 명으로 쪼개지는 문제를 방지하기 위해, `src/games/common/BettingManager.tsx`/`SettlementModal.tsx`/`ledger.ts`/`types.ts`, `src/server/socket/roomManager.ts`를 전제로 (1) 불변 슬롯/세션 ID 기반 원장 데이터 모델, (2) 인게임 룸 공유 내기 관리자(방 인원 자동 참여), (3) 엑셀 시트 스타일 사후 취합·병합(Merge)·Unmerge·클립보드/카카오톡 텍스트·CSV 다운로드, (4) 정합성 단위 테스트 구현 요청. "모호한 점은 임의로 추정하지 말고 번호를 매긴 질문 목록을 먼저 제시"하라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사에서 발견한 핵심 불일치**: 요청서가 전제한 파일(`src/games/common/*`, `src/server/socket/roomManager.ts`)이 이 저장소에 전혀 존재하지 않음 — `[bot-takeover-feature-decisions]` 메모리에 이미 기록된 사실대로 이 앱은 서버가 없는 Vercel 서버리스 배포. 실제 내기 시스템은 `src/lib/betting/ledger.ts` · `src/store/bettingStore.ts` · `src/components/betting/{BettingSidebar,RosterEditor,PayoutTableEditor,RoundResultEntry}.tsx` · `src/lib/db/types.ts`(`PlayerRecord`/`BettingParticipant`/`BettingSessionRecord`)에 이미 존재했고, 요청의 핵심 문제(닉네임 키 충돌)를 상당 부분 이미 해결하고 있었음 — `PlayerRecord.id`(불변)가 이미 `name`(현재 닉네임)과 분리돼 있고 `aliases: string[]`(닉네임 이력)까지 갖췄으며, 정산 총액/라운드 델타가 전부 `playerId`로만 키잉되어 개명해도 장부가 안 꼬임. `src/lib/identity/resolve.ts`+`RosterEditor.tsx`에는 참가자 추가 시점에 "동일 인물로 보이는 플레이어를 찾았어요, 같은 사람인가요?" 사전(pre-hoc) 병합 확인 UI도 이미 있었음. 반면 요청의 라운드별 엑셀 그리드 취합 뷰, 사후(post-hoc) 병합/Unmerge, 클립보드/카카오톡 텍스트, CSV 다운로드는 실제로 전무했음.
+
+추가로 `src/components/identity/RoomNicknameField.tsx`의 기존 코드 주석에서 결정적 전례를 발견: 이 내기 도구는 "한 사람(총무)이 한 기기로 여러 명의 내기를 대신 관리하는" **기기 로컬(device-local) 전제**로 설계돼 있고, 온라인 멀티플레이 게임(21종)은 `src/app/games/[gameId]/page.tsx:253`의 `if (game?.onlineMultiplayer) return;`으로 애초에 내기 기록 단계 자체에 진입하지 않아 온라인 게임에는 내기 연동이 전무했음.
+
+**`AskUserQuestion`으로 확인한 사항 (4차례, 총 8문항)**:
+1. 요청서의 "인게임 자동 기록 모드"를 이 구조에 어떻게 반영할지 → **크로스디바이스 실시간 룸 연동 신설**(호스트-권위 브로드캐스트로 방의 모든 플레이어 기기가 동일 원장을 replay) 선택. 두 차례에 걸쳐 "기기 로컬 전제라 21개 게임 각각에 새 동기화 프로토콜을 처음부터 배선해야 한다"는 비용/위험을 재확인시켰음에도 사용자가 원래 선택을 유지.
+2. 핵심 신규 기능 범위 → **기존 확장**(`PlayerRecord`/`BettingParticipant`/`ledger.ts` 모델 유지, 사후 병합/Unmerge/엑셀 그리드/클립보드/CSV만 신규 추가) 선택 — 요청서 원문의 `slotId`/`entityId`/`BettingTransaction` 등 병행 신규 모델은 채택하지 않음.
+3. 라운드당 손익 입력 방식 → **기존 순위 기반 배당표(`PayoutTableEditor`)로 충분**, 별도의 "승/패 ±1,000원 정액 모드" 신설 없음.
+4. 엑셀/CSV 다운로드 → **포함**.
+5. 크로스디바이스 연동을 몇 개 온라인 게임에 적용할지 → **봇 대체 기능과 동일한 6종**(운명전쟁39/라스베가스/그리드포커/말달리자/달무티/노땡스) — 21종 전체 또는 로컬 전용으로 축소하는 대안도 제시했으나 사용자가 6종 파일럿 선택.
+
+**구현 — 로컬(기기 로컬) 도구 확장**:
+- **`src/lib/betting/mergeGroups.ts`**(신규)+테스트 8케이스: `MergedGroup`(`canonicalId`+`memberIds`) 순수 함수 `mergeParticipants`/`unmergeParticipants`/`removeMember`/`resolveGroupId`/`membersOf`. **핵심 설계 원칙**: 병합은 순수 표시-계층(view-layer) 폴드일 뿐 — `BettingRound.deltas`/`rankedPlayerIds`(원시 라운드 기록)는 절대 재작성하지 않으므로 Unmerge가 항상 무손실(그룹 매핑만 삭제).
+- **`src/lib/betting/settlementView.ts`**(신규)+테스트 8케이스: `buildSettlementView`(라운드×참가자 그리드 모델 생성, 병합 그룹을 한 행으로 폴드) · `formatSettlementText`(카카오톡용 "기택: +2,000원 / 건열: -2,000원" 텍스트) · `toSettlementCsv`(UTF-8 BOM 포함 CSV, 엑셀 한글 깨짐 방지).
+- **`src/lib/db/types.ts`**: `BettingSessionRecord`에 `mergedGroups?`/`manualAdjustments?` 필드 추가(과거 세션 레코드엔 없으므로 옵셔널), `BettingManualAdjustment`/`BettingMergedGroup` 타입 신규.
+- **`src/store/bettingStore.ts`**: `mergeParticipants`/`unmergeGroup`/`applyManualAdjustment` 액션 추가(전부 IndexedDB 즉시 영속).
+- **`src/components/betting/SettlementModal.tsx`**(신규): 엑셀 시트 스타일 그리드(라운드 열×참가자 행+합계 열), "🔗 동일 인물 합치기"(체크박스 다중 선택 후 확정) · 병합된 행의 "분리"(Unmerge) 버튼 · "보정"(수동 금액 조정, 사유 메모 포함) · "📋 정산 텍스트 복사"(클립보드) · "⬇️ CSV 다운로드" 버튼. **로컬 도구와 온라인 방 도구 양쪽에서 재사용되도록** 원시 세션 데이터가 아니라 정규화된 `SettlementRoundInput[]`/`names`/`mergedGroups`/`readOnly` props를 받는 범용 컴포넌트로 설계.
+- **`src/components/betting/BettingSidebar.tsx`**: "📊 정산표 보기" 버튼 추가 → `SettlementModal` 오픈, `session.rounds`+`manualAdjustments`를 그리드 열로 폴드하는 `buildLocalSettlementRounds` 헬퍼 신규.
+
+**구현 — 6개 온라인 게임 크로스디바이스 공유 원장(신규)**:
+- **`src/games/shared/betting/roomBetting.ts`**(신규)+테스트 6케이스: `src/games/shared/bot/botTakeover.ts`(같은 6개 게임에 이미 배선된 이탈-봇-대체 기능)와 동일한 lockstep 철학 — 서버/호스트 권위 없이 모든 클라이언트가 동일한 `RoomBettingEvent`(`session-start`/`payout-set`/`round-recorded`/`manual-adjustment`/`merge`/`unmerge`/`session-end`) 브로드캐스트를 각 방의 **기존** Realtime 채널로 replay해 동일한 `RoomBettingState`를 독립 계산. **식별자 설계**: 기기마다 로컬 `PlayerRecord.id`가 별도라 온라인 방엔 크로스디바이스 플레이어 식별자가 없으므로, 각 게임이 이미 갖고 있는 **좌석 키(seatKey)**를 정체성 앵커로 사용(요청서의 `slotId` 개념과 사실상 동일) — `namesAtRound` 스냅샷으로 라운드마다 개명해도 유실 없이 기록(`roomBetting.test.ts`에 3연속 개명 시나리오 전수 검증). `round-recorded`는 라운드 번호 기준 멱등(중복 브로드캐스트 무시). 알려진 한계: 방 생애주기 중 한 좌석이 비었다가 **다른** 실제 사람이 재입장하는 케이스는 자동 분리를 감지하지 못함(문서화된 한계, `manual-adjustment`로 수동 보정 가능).
+- **`src/games/shared/betting/RoomBettingPanel.tsx`**(신규): `bottom-24 right-4`(전역 `BettingSidebar` FAB 위에 스택) 플로팅 패널 — 호스트만 시작/배당표 수정/종료/병합/Unmerge 가능, 모든 참가자가 실시간 좌석별 누적 총액 + `SettlementModal`(비호스트는 `readOnly`) 열람 가능.
+- **6개 게임(`DalmutiGame.tsx`/`LasVegasGame.tsx`/`GridPokerGame.tsx`/`NoThanksGame.tsx`/`DestinyWar39Game.tsx`/`MalDalliJaGame.tsx`) 통합**: 병렬 서브에이전트 6개가 각 파일 1개씩만 편집(동일 패턴 반복 적용) — `botTakeover` 배선을 그대로 본떠 `roomBetting`/`roomBettingRef` state-ref 쌍, `room-betting-event` 브로드캐스트 수신 핸들러(발신은 전부 `channel.send`만 — `broadcast:{self:true}`라 발신자도 자기 브로드캐스트를 수신 핸들러로 되돌려받으므로 발신 시점엔 로컬 reduce를 절대 하지 않음, `bot-takeover-event`와 동일 패턴), `state-request`/`state-sync` 페이로드에 `roomBetting` 포함(재접속 시 원장 이어받기), `handleLeave`에서만 초기화(재대국/rematch에는 유지 — 방 생애주기 전체에 걸쳐 누적되는 게 요구사항이므로 봇 대체 투표와 달리 의도적으로 다르게 처리). 라운드 기록 훅은 각 게임이 기존에 `onComplete(...)`를 호출하던 지점(한 판 전체 완주 = 정산 1라운드, 판 내부 개별 핸드 아님) 바로 옆에 배치. 말달리자는 2인 대칭 구조라 `isHost`/`targetPlayerCount` 개념이 없어 두 클라이언트 모두 `isHost=true`로 동등 취급(원래 이 게임의 봇 대체 투표도 같은 전제).
+- **`src/games/types.ts`/`registry.ts`**: `GameMeta.bettingRoomLinked?: boolean` 필드 신규, 6개 게임 엔트리에만 `true` 설정.
+
+**⚠️ 작업 중 발생한 사고와 복구(정직 공개)**: 6개 병렬 서브에이전트 중 라스베가스 담당 에이전트가 작업 트리를 비교하려고 `git stash`/`git stash pop`을 실행했는데, 다른 5개 에이전트가 동시에 서로 다른 파일을 편집 중이던 공유 작업 트리에서 충돌이 났고, 그 에이전트는 **자기 담당 파일 한 개만** `git checkout stash@{0} -- <path>`로 복구한 뒤 스태시를 drop해버림 — 그 순간 스태시에 들어 있던 다른 모든 파일의 미커밋 변경이 영구 소실됨. 결과: 6개 게임 파일은 각 담당 에이전트가 스스로 "파일이 초기화됨"을 감지하고 재적용+재검증해 무사했지만(각자 보고에 기록됨), **오케스트레이터(이 세션)가 먼저 만들어둔 5개 파일**(`src/lib/db/types.ts`, `src/store/bettingStore.ts`, `src/components/betting/BettingSidebar.tsx`, `src/games/types.ts`, `src/games/registry.ts`)은 지켜보는 에이전트가 없어 원본 상태로 완전히 되돌아간 채 방치돼 있었음. 모든 서브에이전트 완료 후 `git status`/`grep`으로 발견해 5개 파일 전부 처음 작성한 내용 그대로 재적용 후 재검증 완료(아래 검증 항목 참고) — 최종적으로 데이터 손실 없이 복구됨. **교훈**: 공유 작업 트리에서 병렬 에이전트를 돌릴 땐 각자에게 "본인 담당 파일 외 어떤 git 명령도(특히 `stash`) 실행 금지"를 더 명시적으로 못박아야 함 — 이번엔 "다른 파일을 편집하지 말라"고만 지시했지 "git 전역 상태를 건드리지 말라"까진 명시하지 않았던 게 원인.
+
+**검증**: `npx tsc --noEmit`(에러 0, 복구 후 전체 재실행) / `npm run lint`(경고 0) / `npx vitest run`(**43개 파일 · 1303개 테스트 전부 통과**, 신규 `mergeGroups.test.ts`/`settlementView.test.ts`/`roomBetting.test.ts` 22케이스 포함 — 닉네임 3연속 개명 시 라운드 유실 없음, 병합 시 합계 수학적 정합성, Unmerge 무손실 전부 단위 테스트로 검증). 6개 게임 파일 diff 크기(82/78/85/82/73/82줄, 총 482줄 추가)가 각 서브에이전트 보고와 정확히 일치함을 재확인. Dalmuti 파일의 실제 diff를 직접 읽어 배선 패턴이 설계대로인지 육안 검증(다른 5개는 동일 템플릿+tsc/lint 통과로 갈음, 개별 diff 전수 육안 검토는 하지 않음).
+
+**알려진 한계(정직 공개)**:
+- 실제 다중 기기(여러 폰) 간 크로스디바이스 원장 동기화는 이번 세션에서 실제로 2대 이상의 기기로 재현 테스트하지 않음 — `roomBetting.ts`의 순수 상태전이 테스트로만 검증(이 저장소 기존 관례와 동일, `botTakeover.ts`도 동일 수준).
+- 좌석이 비었다가 다른 사람이 재입장하는 케이스의 자동 식별 분리는 미지원(위 설계 노트 참고).
+- `DailyRecord`(내기 종료 시 아카이브되는 최종 기록)는 이번 세션에서 `mergedGroups`를 반영하지 않음 — 병합은 활성 세션 정산표를 보정하는 용도로만 동작, 종료 후 영구 기록에는 원시 `playerId` 기준 그대로 저장됨.
+- 6개 게임 각각의 실제 UI 렌더링(패널 위치 충돌 등)은 이 저장소에 반복 기록된 jsdom 미설치 한계와 동일하게 육안 확인 전.
 
 ### 2026-08-29 — 이탈 플레이어 투표 기반 AI 봇 대체 시스템 및 vitest 정지 이슈 수정
 

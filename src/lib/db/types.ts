@@ -45,6 +45,27 @@ export interface BettingRound {
   playedAt: string;
 }
 
+/** A hand-entered correction outside the normal round flow (e.g. a cash-settlement rounding fix). */
+export interface BettingManualAdjustment {
+  id: string;
+  playerId: string;
+  amount: number;
+  note?: string;
+  createdAt: string;
+}
+
+/**
+ * Post-hoc "same person, different name" consolidation for the settlement
+ * view — see `src/lib/betting/mergeGroups.ts` for the full rationale. Purely
+ * a display-time fold: `rounds`/`totals` above always stay keyed by the raw
+ * `playerId` that was actually used at the time, so merging (and undoing a
+ * merge) never rewrites history.
+ */
+export interface BettingMergedGroup {
+  canonicalId: string;
+  memberIds: string[];
+}
+
 export interface BettingSessionRecord {
   id: string;
   status: BettingStatus;
@@ -56,6 +77,10 @@ export interface BettingSessionRecord {
   rounds: BettingRound[];
   /** Cumulative totals per playerId, derived from rounds but cached for fast reads. */
   totals: Record<string, number>;
+  /** Absent on sessions created before this field existed — treat as `[]`. */
+  manualAdjustments?: BettingManualAdjustment[];
+  /** Absent on sessions created before this field existed — treat as `[]`. */
+  mergedGroups?: BettingMergedGroup[];
 }
 
 export interface DailyRecordStanding {

@@ -9,6 +9,7 @@ import {
 } from "@/lib/db/repository";
 import { validatePayoutTable } from "@/lib/betting/zeroSum";
 import { computeFinalStandings, computeRoundDeltas, mergeDeltasIntoTotals } from "@/lib/betting/ledger";
+import { mergeParticipants as foldMergeGroups, unmergeParticipants as dissolveMergeGroup } from "@/lib/betting/mergeGroups";
 import { backupDailyRecord } from "@/lib/supabase/sync";
 import { renamePlayer } from "@/lib/db/repository";
 
@@ -32,6 +33,12 @@ interface BettingStore {
   updateParticipantName: (playerId: string, name: string) => Promise<void>;
   /** Replaces the active session's payout table. Rejects (no-op on storage) if it isn't zero-sum. */
   updatePayoutTable: (table: number[]) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Folds `memberIds` into one settlement row under `canonicalId` (see `mergeGroups.ts`) — never touches raw round history. */
+  mergeParticipants: (canonicalId: string, memberIds: string[]) => Promise<void>;
+  /** Undoes a merge — the group's rows split back apart, with their original round history untouched. */
+  unmergeGroup: (canonicalId: string) => Promise<void>;
+  /** Hand-entered correction outside the normal round flow (e.g. a cash rounding fix). */
+  applyManualAdjustment: (playerId: string, amount: number, note?: string) => Promise<void>;
   endSession: () => Promise<DailyRecord | null>;
 }
 
@@ -132,6 +139,41 @@ export const useBettingStore = create<BettingStore>((set, get) => ({
     await saveBettingSession(updated);
     set({ session: updated });
     return { ok: true };
+  },
+
+  mergeParticipants: async (canonicalId, memberIds) => {
+    const session = get().session;
+    if (!session) return;
+    const updated: BettingSessionRecord = {
+      ...session,
+      mergedGroups: foldMergeGroups(session.mergedGroups ?? [], canonicalId, memberIds),
+    };
+    await saveBettingSession(updated);
+    set({ session: updated });
+  },
+
+  unmergeGroup: async (canonicalId) => {
+    const session = get().session;
+    if (!session) return;
+    const updated: BettingSessionRecord = {
+      ...session,
+      mergedGroups: dissolveMergeGroup(session.mergedGroups ?? [], canonicalId),
+    };
+    await saveBettingSession(updated);
+    set({ session: updated });
+  },
+
+  applyManualAdjustment: async (playerId, amount, note) => {
+    const session = get().session;
+    if (!session || !Number.isFinite(amount) || amount === 0) return;
+    const adjustment = { id: uuid(), playerId, amount, note, createdAt: new Date().toISOString() };
+    const updated: BettingSessionRecord = {
+      ...session,
+      manualAdjustments: [...(session.manualAdjustments ?? []), adjustment],
+      totals: { ...session.totals, [playerId]: (session.totals[playerId] ?? 0) + amount },
+    };
+    await saveBettingSession(updated);
+    set({ session: updated });
   },
 
   endSession: async () => {
