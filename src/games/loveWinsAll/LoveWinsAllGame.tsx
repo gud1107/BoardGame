@@ -10,6 +10,7 @@ import { useGameLeaveGuard } from "@/hooks/useGameLeaveGuard";
 import { useBackgroundResync } from "@/hooks/useBackgroundResync";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
+import { seededRng } from "@/lib/rng";
 import {
   applyAction,
   chooseBotAction,
@@ -20,6 +21,7 @@ import {
   type EngineAction,
   type Seat,
   type LoveWinsAllState,
+  type Variant,
 } from "./engine";
 import LoveWinsAllBoard, { REVEAL_SECONDS } from "./LoveWinsAllBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
@@ -59,21 +61,22 @@ import ChatDrawer from "@/components/chat/ChatDrawer";
  * `MalDalliJaGame.tsx`'s precedent: a per-round chat-spam log was rejected in
  * past sessions — only the match's headline result is logged here).
  */
-function formatLoveWinsAllLog(winnerName: string | null, matchOutcome: LoveWinsAllState["matchOutcome"]): string {
-  if (matchOutcome === "mutualVictory") return "둘 다 끝까지 서로를 믿어 공동 승리로 게임이 끝났습니다";
-  if (matchOutcome === "mutualDefeat") return "둘 다 서로를 배신해 공동 파멸로 게임이 끝났습니다";
-  return winnerName ? `${winnerName}님이 배신에 성공해 단독 승리했습니다` : "게임이 끝났습니다";
+function formatLoveWinsAllLog(winnerName: string | null): string {
+  return winnerName ? `${winnerName}님이 상대의 칩을 모두 가져와 승리했습니다` : "둘 다 동시에 칩을 소진해 무승부로 게임이 끝났습니다";
 }
 
 /**
  * Online-room multiplayer entry point — same lockstep pattern as every other
  * 2-player game in this project (see docs/cloud-sync.md, and
- * `ShowMeTheCoinGame.tsx` which this was modeled on): every client
- * independently derives the identical initial state via `startGame()` (no
- * seed needed — this engine has no randomness at start), and every
- * subsequent move replays as an `EngineAction` broadcast through the same
- * pure reducer. Only the seat still pending a choice, or a shared "continue"
- * step, ever sends an action for itself (single-writer guarantee).
+ * `ShowMeTheCoinGame.tsx` which this was modeled on): the host generates a
+ * `seed` (deck shuffle) and picks the `variant` at room creation, both
+ * broadcast once in "game-start"; every client then derives the identical
+ * initial deal via `startGame(variant, seededRng(seed))`, and every
+ * subsequent move (including each round's `"continue"`, which carries its
+ * own fresh reshuffle seed — see engine.ts's module doc) replays as an
+ * `EngineAction` through the same pure reducer. Only the seat with a pending
+ * decision, or the shared "continue" step, ever sends an action for itself
+ * (single-writer guarantee).
  *
  * Also opts into the vote-based bot-takeover system (`botTakeover.ts`) and
  * the room-linked betting ledger (`roomBetting.ts`), same 2-player wiring as
@@ -123,6 +126,11 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
   const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [formError, setFormError] = useState<string | null>(null);
+  // Host-only ruleset choice at room creation (engine.ts module doc, decision
+  // 1) — a joiner never picks this themselves, they just inherit whatever the
+  // host broadcasts in "game-start"/"bot-roster"/"state-sync".
+  const [chosenVariant, setChosenVariant] = useState<Variant>("base");
+  const variantRef = useRef<Variant>("base");
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<Seat | null>(null);
@@ -130,7 +138,7 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
   const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<LoveWinsAllState | null>(null);
-  const [finalResult, setFinalResult] = useState<{ winnerId: string | null; winnerName: string | null; matchOutcome: LoveWinsAllState["matchOutcome"] } | null>(null);
+  const [finalResult, setFinalResult] = useState<{ winnerId: string | null; winnerName: string | null } | null>(null);
   // Room chat + in-game system log (see PerudoGame.tsx/DalmutiGame.tsx — GameMeta.chatEnabled).
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatCooldownUntil, setChatCooldownUntil] = useState<number | null>(null);
@@ -236,6 +244,7 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
     const role: Seat = getStoredRole(code) ?? (intent === "create" ? "p1" : "p2");
     storeRole(code, role);
     window.history.replaceState(null, "", `${window.location.pathname}?room=${code}`);
+    if (intent === "create") variantRef.current = chosenVariant; // joiner's variant is overwritten by the host's "game-start" broadcast regardless
     setMyName(name);
     setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
     setMyRole(role);
@@ -269,13 +278,17 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const roster = (payload?.botRoles as Seat[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      const variant = (payload?.variant as Variant | undefined) ?? "base";
+      const seed = (payload?.seed as number | undefined) ?? 0;
+      variantRef.current = variant;
+      setChosenVariant(variant);
       botRolesRef.current = roster;
       setBotRoles(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
       botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
-      setGameState(startGame());
+      setGameState(startGame(variant, seededRng(seed)));
       setFinalResult(null);
       setPhase("playing");
     });
@@ -294,7 +307,7 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
               channel: chatChannel,
               deviceId: "system",
               senderName: "시스템",
-              body: formatLoveWinsAllLog(winnerName, nextState.matchOutcome),
+              body: formatLoveWinsAllLog(winnerName),
               type: "SYSTEM",
               createdAt: new Date().toISOString(),
             },
@@ -458,7 +471,12 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
       channelRef.current?.send({
         type: "broadcast",
         event: "game-start",
-        payload: { botRoles: botRolesRef.current, botLevels: botLevelsRef.current },
+        payload: {
+          botRoles: botRolesRef.current,
+          botLevels: botLevelsRef.current,
+          variant: variantRef.current,
+          seed: Math.floor(Math.random() * 1_000_000_000),
+        },
       });
     }
   }, [occupants, botRoles, phase, isHost]);
@@ -594,16 +612,20 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
   }, [phase, roomCode]);
 
   // Request's "결과/연출 3초 유지" — the host alone broadcasts the advance
-  // once REVEAL_SECONDS has elapsed for a non-final tie (same "shared clock,
-  // no one seat's move" shape as GridPokerGame.tsx's own round-result timer);
-  // the overlay's skip button (LoveWinsAllEffects.tsx) lets any viewer end
-  // the wait sooner by dispatching the exact same no-op-safe action. Never
-  // fires once `phase === "gameOver"` — there is no next round to advance to.
+  // once REVEAL_SECONDS has elapsed for a non-final showdown/fold (same
+  // "shared clock, no one seat's move" shape as GridPokerGame.tsx's own
+  // round-result timer); the overlay's skip button (LoveWinsAllEffects.tsx)
+  // lets any viewer end the wait sooner by dispatching the exact same
+  // no-op-safe "continue". Never fires once `phase === "gameOver"` — there
+  // is no next round to deal (the "continue" seed is generated here, at
+  // dispatch time, keeping `applyAction`/`applyContinue` itself pure per
+  // ARCHITECTURE.md §1 — see `perudo`'s identical `{type:"continue",seed}`
+  // convention).
   useEffect(() => {
     if (!isHost || phase !== "playing" || !gameState) return;
-    if (gameState.phase !== "reveal") return;
+    if (gameState.phase !== "showdown") return;
     const id = setTimeout(() => {
-      handleAction({ type: "continue" });
+      handleAction({ type: "continue", seed: Math.floor(Math.random() * 1_000_000_000) });
     }, REVEAL_SECONDS * 1000);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed to this reveal episode itself, same pattern as GridPokerGame.tsx's round-result timer
@@ -622,8 +644,8 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
     const winnerId = winnerSeat ? ids[winnerSeat] : null;
     const winnerName = winnerSeat ? names[winnerSeat] : null;
     if (roomBettingRef.current.active) {
-      // Both mutual endings (mutualVictory/mutualDefeat) rank both seats 1st —
-      // there is no single winner to seat above the other either way.
+      // The rare simultaneous double-KO draw (engine.ts's `applyKoCheck`) has
+      // no single winner to seat above the other, so both rank 1st.
       const ranksBySeat: Record<string, number> = winnerSeat
         ? { [winnerSeat]: 1, [otherSeat(winnerSeat)]: 2 }
         : { p1: 1, p2: 1 };
@@ -656,7 +678,7 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
           ],
       finishedAt: new Date().toISOString(),
     });
-    setFinalResult({ winnerId, winnerName, matchOutcome: gameState.matchOutcome });
+    setFinalResult({ winnerId, winnerName });
     setPhase("post-game");
   }
 
@@ -665,7 +687,12 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({
       type: "broadcast",
       event: "game-start",
-      payload: { botRoles: botRolesRef.current, botLevels: botLevelsRef.current },
+      payload: {
+        botRoles: botRolesRef.current,
+        botLevels: botLevelsRef.current,
+        variant: variantRef.current, // keeps the same ruleset the match just finished with — not re-asked per rematch
+        seed: Math.floor(Math.random() * 1_000_000_000),
+      },
     });
   }
 
@@ -795,6 +822,33 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
           내 닉네임
           <RoomNicknameField value={identity} onChange={setIdentity} onEnter={enterRoom} accent="rose" />
         </div>
+        {intent === "create" && (
+          <div className="flex flex-col gap-1.5 text-sm text-white/70">
+            룰셋 선택 (방장만 선택 — 상대방은 자동으로 맞춰집니다)
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setChosenVariant("base")}
+                className={`flex-1 rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${
+                  chosenVariant === "base" ? "border-pink-400 bg-pink-500/15 text-pink-100" : "border-white/15 text-white/60 hover:border-white/30"
+                }`}
+              >
+                기본판
+                <span className="mt-0.5 block break-keep text-[10px] font-normal text-white/40">30장 · 3장 손패 · 칩 25개</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setChosenVariant("lwa2")}
+                className={`flex-1 rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${
+                  chosenVariant === "lwa2" ? "border-pink-400 bg-pink-500/15 text-pink-100" : "border-white/15 text-white/60 hover:border-white/30"
+                }`}
+              >
+                러브 윈즈 올 2
+                <span className="mt-0.5 block break-keep text-[10px] font-normal text-white/40">49장 · 커뮤니티+라이어 · 칩 35개</span>
+              </button>
+            </div>
+          </div>
+        )}
         {intent === "join" && (
           <label className="flex flex-col gap-1.5 text-sm text-white/70">
             초대 코드 (4자리)
@@ -839,6 +893,9 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
             <>
               <p className="text-sm text-white/50">초대 코드</p>
               <p className="text-4xl font-bold tracking-[0.3em] text-white">{roomCode}</p>
+              <span className="rounded-full border border-pink-400/30 px-2.5 py-0.5 text-[11px] text-pink-200">
+                룰셋: {chosenVariant === "base" ? "기본판" : "러브 윈즈 올 2"}
+              </span>
               <button
                 onClick={() => navigator.clipboard?.writeText(shareUrl)}
                 className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-white/30"
@@ -919,16 +976,13 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "post-game" && finalResult) {
-    const headline =
-      finalResult.matchOutcome === "mutualVictory"
-        ? "둘 다 끝까지 서로를 믿어 공동 승리로 끝났어요."
-        : finalResult.matchOutcome === "mutualDefeat"
-          ? "둘 다 서로를 배신해 공동 파멸로 끝났어요."
-          : `${finalResult.winnerName}님 승리로 게임이 끝났어요.`;
+    const headline = finalResult.winnerName
+      ? `${finalResult.winnerName}님이 상대의 칩을 모두 가져와 승리했어요.`
+      : "둘 다 동시에 칩을 소진해 무승부로 끝났어요.";
     return withGuard(
       <>
         <div className="flex flex-col items-center gap-5 rounded-2xl border border-pink-500/20 bg-gradient-to-b from-[#1a0510] via-[#0d0610] to-black p-8 text-center">
-          <span className="text-4xl">{finalResult.matchOutcome === "mutualVictory" ? "🤝" : finalResult.matchOutcome === "mutualDefeat" ? "💀" : "🏆"}</span>
+          <span className="text-4xl">{finalResult.winnerName ? "🏆" : "💀"}</span>
           <p className="text-white/80">{headline}</p>
           <div className="flex gap-2">
             <button onClick={handleLeave} className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30">
