@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-30 (**로스트 시티(Lost Cities) 2인 전용 탐험 카드 게임 신규 개발 세션 — 22번째 플레이 가능 게임** — 자세한 내용은 아래 `### 2026-08-30 — 로스트 시티(Lost Cities) 신규 게임 개발` 절 참고.)_
+_최종 갱신: 2026-08-30 (**쇼미더코인(Show Me The Coin) 2인 전용 코인 베팅 심리전 게임 신규 개발 세션 — 23번째 플레이 가능 게임, 봇 대체/베팅 연동 7번째 게임으로 확장** — 자세한 내용은 아래 `### 2026-08-30 — 쇼미더코인(Show Me The Coin) 신규 게임 개발` 절 참고.)_
+
+_이전 갱신: 2026-08-30 (**로스트 시티(Lost Cities) 2인 전용 탐험 카드 게임 신규 개발 세션 — 22번째 플레이 가능 게임** — 자세한 내용은 아래 `### 2026-08-30 — 로스트 시티(Lost Cities) 신규 게임 개발` 절 참고.)_
 
 _이전 갱신: 2026-08-30 (**소환사의 협곡 카드 공개 방식 선택([🃏 1장씩 오픈]/[💥 전체 오픈]) 듀얼 인터랙션 + 생사(생존/사망) 판정 화면 전체 압도 이펙트 신설 세션** — 자세한 내용은 아래 `### 2026-08-30 — 소환사의 협곡 카드 공개 방식 선택 및 생사 판정 화면 전체 이펙트` 절 참고.)_
 
@@ -81,6 +83,41 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-30 — 쇼미더코인(Show Me The Coin) 신규 게임 개발
+
+**요청**: 넷플릭스 <데스게임> 등장 심리 베팅 보드게임 "쇼미더코인"을 `boardGameRule/쇼미더코인/쇼미더코인.md` 룰북 기반으로 풀스택 신규 개발. 요청서는 `src/games/common/`, `src/server/socket/roomManager.ts`, `aiBot.ts` 소켓 서버 아키텍처와 2~8인 순차 탈락 서바이벌 모델을 전제했고, 라운드별 베팅 한도·인원수·탈락자 관전 모드 등을 임의로 추정하지 말고 먼저 질문하라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사에서 발견한 핵심 사실 (요청서 전제와 실제 구조/룰북의 괴리)**: 이번 세션도 바로 전 로스트 시티 세션과 동일한 패턴의 괴리였음.
+- `src/games/common/`, `src/server/socket/roomManager.ts`, `aiBot.ts`는 이 저장소에 전혀 존재하지 않음 — 서버 없는 Supabase Realtime 락스텝 구조([ARCHITECTURE.md](../ARCHITECTURE.md), [docs/cloud-sync.md](../docs/cloud-sync.md)).
+- **룰북 원문이 요청서의 "2~8인 순차 탈락 서바이벌" 전제와 정면으로 배치됨**: 룰북 1문단부터 "1:1 두뇌·베팅 심리전 게임"으로 명시, §1~§4 전부 선공/후공 단 2인 구조만 서술 — `netflix-death-game` 컬렉션의 기존 2인 전용작(`malDalliJa`/`piecesOfLanguage`, `players:{min:2,max:2}`) 전례와도 일치.
+- 이탈자 봇 대체는 즉시 자동 전환이 아니라 공용 모듈 `botTakeover.ts`(잔여 인원 과반수 투표 기반)이며, 아직 6개 게임(운명전쟁39/라스베가스/그리드포커/말달리자/달무티/노땡스)에만 적용된 상태.
+- 룰북 자체도 시작 코인 수·전체 라운드 상한·동률 시 이월/분할 중 무엇을 쓸지 등 숫자를 명시하지 않은 대목이 다수.
+
+**`AskUserQuestion`으로 확인한 사항 (2라운드, 8문항)**:
+1. **인원 구성** → **룰북 그대로 2인 전용(1:1)**(채택, 권장안): `players:{min:2,max:2}`.
+2. **네트워크/봇 아키텍처** → **기존 표준 재사용**(Supabase 락스텝 + `useBotAutoplay`)(채택, 권장안): 신규 소켓 서버 인프라 없음.
+3. **이탈 처리** → **기존 6종과 동일한 투표 기반 봇 전환을 7번째 게임으로 확장**(채택, 권장안).
+4. **배포 범위** → **바로 Production까지 배포**(사용자가 프리뷰 단계 생략을 명시적으로 선택).
+5. **초기 보유 코인** → **30개**(권장안 채택).
+6. **§1 비밀 배치(2~6개)와 판돈의 관계** → **비밀 배치 = 판돈에 그대로 투입(충돌형 베팅)**(채택): 히든 값으로만 쓰이고 별도 베팅 칩 풀이 있는 구조가 아니라, 낸 코인이 즉시 팟에 쌓임.
+7. **게임 종료 조건/라운드 상한** → **고정 라운드 없음, KO(상대 코인 0개)까지 무제한 진행**(채택).
+8. **동률 처리** → **판돈 이월(다음 라운드로 누적, 분할 아님)**(채택).
+
+**구현** (`src/games/showMeTheCoin/`, ARCHITECTURE.md §2 표준 레이아웃):
+- [`engine.ts`](src/games/showMeTheCoin/engine.ts): 순수 리듀서. §1 비공개 배치(`commit`, 2~6개 클램프 — 잔여 스택이 2 미만이면 `[stack,stack]`로 강제 올인 클램프)→§2 베팅(`raise`/`call`/`fold`, 콜에 필요한 만큼 없으면 "콜 for less" 허용, 인위적 상한 없이 잔여 스택만이 자연 올인 한도)→§3 쇼다운(`resolveShowdown`, 동률이면 팟을 리셋하지 않고 다음 라운드로 이월) 4단계 페이즈(`commit`/`betting`/`showdown`/`gameOver`). KO 판정(`applyKoCheck`)은 판돈이 실제로 정산된 시점에만 체크하고 베팅 도중(자기 코인이 팟에 걸려있을 뿐인 상태)에는 절대 게임을 끝내지 않음 — 동률 라운드에서 양쪽 다 0코인이 되는 룰북 미기술 엣지케이스는 무승부(`winner:null`, 양쪽 `alive:false`)로 처리. "체크" 개념(콜할 금액이 0일 때의 `call`)은 룰북엔 없지만 자기 스택 전부를 §1에 걸어 §2에 낼 게 없는 좌석도 합법적인 수를 갖도록 추가, 첫 체크는 턴만 넘기고 두 번째 체크(체크-체크)에서 쇼다운으로 종결(`checkedThisStreet` 플래그). `getValidMoves`/`chooseBotAction(state,seat,level,rng?)`(ARCHITECTURE.md §7.1) — 정보 공정성을 지키는 간단 휴리스틱(자신의 §1 비밀값만 읽어 콜/레이즈/폴드 성향 결정), 딥서치 불필요.
+- [`ShowMeTheCoin.test.ts`](src/games/showMeTheCoin/ShowMeTheCoin.test.ts): 22개 테스트 — 결정론적 `startGame`, 비밀 배치 범위/클램프, 체크-체크/콜/레이즈/폴드 각 흐름, 콜-포-레스, 쇼다운 승패/동률-이월, KO는 정산 시점에만 발생(베팅 도중엔 미발생) 검증, 동률+양쪽 0코인 무승부 케이스, `isStateSyncStale`, `chooseBotAction` 항상 합법수 반환, Lv.1/Lv.10 분기, 봇 vs 봇 완주(무한루프 없음).
+- [`ShowMeTheCoinBoard.tsx`](src/games/showMeTheCoin/ShowMeTheCoinBoard.tsx): 제어 컴포넌트. 비공개 배치 스텝퍼(2~6, 잔여 스택 클램프), 베팅 컨트롤(폴드/체크·콜/레이즈 슬라이더), 룰북 모달 진입점.
+- [`ShowMeTheCoinEffects.tsx`](src/games/showMeTheCoin/ShowMeTheCoinEffects.tsx): 요청서의 "CoinEffect.tsx"를 이 프로젝트의 `<Game>Effects.tsx` 명명 규칙에 맞춰 통합 — 쇼다운 결과 연출(`ShowdownOverlay`, 승리 시 황금 코인 파티클 버스트, 폴드는 양쪽 비밀값 모두 비공개 유지), KO 발생 시 붉은 비네트 암전 + 💀 데스 엠블럼 슬램 + 화면 흔들림, 중앙 황금 볼트/누적 팟 카운터(`VaultPot`), 결과 3초 유지 + `[⏩ 스킵]` 버튼(백드롭 더블탭도 지원). 관련 키프레임 8개를 [`globals.css`](src/app/globals.css)에 `smtc-` 접두사로 신설(기존 게임 간 코드 결합 0 원칙에 따라 `grid-poker/skipGesture.ts`류를 import하지 않고 동일 로직을 자체 복제).
+- [`ShowMeTheCoinGame.tsx`](src/games/showMeTheCoin/ShowMeTheCoinGame.tsx): `malDalliJa`/`destinyWar39` 패턴 그대로의 Supabase Realtime 락스텝 방 로비 + `botTakeover.ts` 투표 기반 봇 대체(**이번 세션에서 6→7개 게임으로 확장 적용**, 2인 게임이라 상대 1명의 찬성만으로 즉시 전환) + `useBotAutoplay` + `roomBetting.ts`/`bettingRoomLinked`(**동일하게 7번째 게임으로 확장**) + 인게임 채팅(`chatEnabled`) + `useGameLeaveGuard`/`useBackgroundResync` + `Avatar`(기본 아바타 자동 연동, 별도 구현 불필요) 전부 재사용. 호스트 클라이언트가 쇼다운 3초 후 `{type:"continue"}`를 자동 브로드캐스트(그리드포커의 `round-result` 타이머와 동일 패턴).
+- [`RulebookModal.tsx`](src/games/showMeTheCoin/RulebookModal.tsx): 룰 요약 + 위 8개 하우스 결정 사항 고지.
+- [`registry.ts`](src/games/registry.ts)에 `show-me-the-coin` 항목 추가(`players:2~2`, `category:"deduction"`, `genres:["bluffing","luck"]`, `collectionId:"netflix-death-game"`, `bettingRoomLinked:true`), [`playableGames.tsx`](src/games/playableGames.tsx)에 동적 import 등록.
+
+**실제 렌더링 확인 (ARCHITECTURE.md §2 "알려진 사각지대")**: 이 Windows 세션 환경엔 `chromium-cli`/Playwright 같은 헤드리스 브라우저 도구가 없어(리눅스 컨테이너 전제인 `run` 스킬의 기본 경로 사용 불가) 스크린샷 기반 육안 확인은 못함 — 대신 `npm run dev` 기동 후 `curl`로 대시보드(`/`)와 게임 페이지(`/games/show-me-the-coin`) 둘 다 200 확인, 대시보드 서버 렌더 HTML에 "쇼미더코인" 카드/설명·"넷플릭스 데스게임 시리즈" 컬렉션 행이 실제로 포함됨을 확인, 개발 서버 로그에 컴파일/런타임 에러 없음을 확인. 게임 로비 자체는 `dynamic(..., {ssr:false})`라 서버 렌더 HTML에는 내용이 비어있어(의도된 동작) curl로는 클라이언트 렌더 내용까지 확인 불가 — 실제 2인 대국 흐름(비공개 배치→베팅→쇼다운→KO)의 육안 검증은 다음 세션에서 브라우저 도구가 있는 환경이라면 권장.
+
+**검증**: `npx tsc --noEmit`(에러 0), `npm run lint`(경고/에러 0), `npx vitest run`(46개 파일·1399개 테스트 전부 통과 — 신규 22개 포함).
+
+**다음 세션 인계**: (1) 위 "실제 렌더링 확인" 항목대로 Board/Game 컴포넌트의 실제 브라우저 동작(특히 봇 vs 봇/사람 vs 봇 대국의 비공개 배치 순차 처리, 쇼다운 3초 타이머, 이탈 투표 UI)은 자동 테스트 밖이라 육안 확인이 아직 안 됨. (2) 레이즈/콜 폭이 넓을 때(`getValidMoves`가 정수 1개당 액션 1개씩 나열) UI 슬라이더는 문제없지만 `chooseBotAction`의 후보 배열이 스택 크기(최대 30)에 비례해 커짐 — 현재 규모에선 성능 문제 없음. (3) Level 1-10 난이도 곡선은 있으나 실제 사람 상대 체감 밸런스 테스트는 안 됨. (4) 이 게임은 턴 제한 시간(§5류 하우스 룰) 없음 — 필요시 후속 요청으로 `malDalliJa` 패턴 재사용 가능.
 
 ### 2026-08-30 — 로스트 시티(Lost Cities) 신규 게임 개발
 
