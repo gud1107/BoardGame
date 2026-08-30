@@ -1315,6 +1315,58 @@ class SoundEngine {
     shatter.start(now + 0.02);
     shatter.stop(now + 0.32);
   }
+
+  // ---------------------------------------------------------------------
+  // 2026-08-31 세션 — 랫어탯캣 "랫어탯캣(콜)" 초대형 연출용 SFX. 실제 사이렌
+  // 음원 파일이 아니라(파일 헤더 참고, 저작권 이슈로 이 프로젝트는 오디오
+  // 파일을 쓰지 않음) 이 파일의 다른 SFX와 동일하게 순수 합성.
+  // ---------------------------------------------------------------------
+
+  /** 랫어탯캣 — "콜 선언 사이렌+카운트다운": 두 음 사이를 오가는 사이렌형 스윕(경보 느낌) 위에, 마지막 1턴을 알리는 3연속 카운트다운 딩을 얹은 합성음. `RatATatCatCallModal.tsx` 등장과 동시 재생(다른 SFX보다 길고 무게감 있게, 게임당 한 번뿐인 이벤트라 쿨다운도 넉넉히). */
+  playRatCallSiren() {
+    if (!this.gate("ratCallSiren", 1500)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    // Alternating two-tone siren sweep — classic alarm cadence, ~4 back-and-forth sweeps.
+    const siren = ctx.createOscillator();
+    siren.type = "sawtooth";
+    const sirenFilter = ctx.createBiquadFilter();
+    sirenFilter.type = "lowpass";
+    sirenFilter.frequency.value = 2200;
+    const sirenGain = ctx.createGain();
+    sirenGain.gain.setValueAtTime(0, now);
+    sirenGain.gain.linearRampToValueAtTime(0.16, now + 0.05);
+    let t = now;
+    for (let i = 0; i < 4; i++) {
+      siren.frequency.setValueAtTime(520, t);
+      siren.frequency.linearRampToValueAtTime(880, t + 0.18);
+      siren.frequency.linearRampToValueAtTime(520, t + 0.36);
+      t += 0.36;
+    }
+    sirenGain.gain.setValueAtTime(0.16, t - 0.15);
+    sirenGain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    siren.connect(sirenFilter).connect(sirenGain).connect(this.sfxGain);
+    siren.start(now);
+    siren.stop(t + 0.12);
+
+    // Three bright ascending countdown dings, timed right after the siren fades — "마지막 1턴 시작" beat.
+    const dingStart = t;
+    [1046.5, 1046.5, 1567.98].forEach((freq, i) => {
+      const at = dingStart + i * 0.22;
+      const osc = ctx.createOscillator();
+      osc.type = "square";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.2, at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.18);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.2);
+    });
+  }
 }
 
 let instance: SoundEngine | null = null;

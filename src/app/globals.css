@@ -3095,3 +3095,171 @@ body {
     box-shadow: 0 0 0 8px rgba(251, 191, 36, 0);
   }
 }
+
+/* ---------------------------------------------------------------------
+   2026-08-31 세션 — Peek 임시 확인 타이머(engine.ts docstring point 8),
+   카드 획득 플라이트 이펙트, "랫어탯캣(콜)" 초대형 연출 추가.
+   --------------------------------------------------------------------- */
+
+/* Active peek glow ring — CardSlot.tsx's `peeking` prop (a setup peek or the
+   Peek power card actively showing its value for a few seconds). Gold and
+   brighter/faster than the dimmer `ratc-call-pulse-glow` so it reads as "an
+   active timed look", not a standing status. */
+@keyframes ratc-peek-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(252, 211, 77, 0.65);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(252, 211, 77, 0);
+  }
+}
+.ratc-peek-glow {
+  animation: ratc-peek-glow 0.9s ease-in-out infinite;
+}
+
+/* CardFlightEffect.tsx's traveling card — the outer wrapper is positioned
+   imperatively (start/end coordinates measured at trigger time) and
+   transitions its own `transform: translate()`; this keyframe layers a
+   parabolic "hop" (translateY hump) plus a fade/scale in-out on top so a
+   straight CSS transition reads as an arced flight without any per-frame
+   JS math. */
+@keyframes ratc-flight-arc {
+  0% {
+    transform: translateY(0) scale(0.5);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-46px) scale(1.15);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(0.7);
+    opacity: 0;
+  }
+}
+
+/* A trailing "ghost" copy of the flying card, staggered via animation-delay
+   in CardFlightEffect.tsx, for a comet-tail light-trail look. */
+@keyframes ratc-flight-trail-fade {
+  0% {
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+/* Floating "+" style badge popup on an opponent's seat panel when they draw
+   or finish their turn's card action (RatATatCatBoard.tsx's state-diff
+   effect). */
+@keyframes ratc-badge-pop {
+  0% {
+    transform: translateY(4px) scale(0.85);
+    opacity: 0;
+  }
+  20% {
+    transform: translateY(-2px) scale(1.05);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(-2px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-10px) scale(0.95);
+    opacity: 0;
+  }
+}
+.ratc-badge-pop {
+  animation: ratc-badge-pop 1.6s ease-out both;
+}
+
+/* Persistent gold neon border on the caller's own seat panel, for the rest
+   of the final round (RatATatCatCallModal.tsx / RatATatCatBoard.tsx). Slower
+   and steadier than the active `ratc-peek-glow`/`ratc-call-pulse-glow` —
+   this is an ongoing status, not something demanding attention right now. */
+@keyframes ratc-caller-border-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 14px 2px rgba(251, 191, 36, 0.55);
+  }
+}
+.ratc-caller-border-glow {
+  animation: ratc-caller-border-glow 2.2s ease-in-out infinite;
+}
+
+/* RatATatCatCallModal.tsx's backdrop dim fade-in — reuses ratc-overlay-in's
+   timing feel but named distinctly since it dims the whole game behind it,
+   not just fades in an overlay panel. */
+@keyframes ratc-call-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The epic emblem + caller avatar "slam zoom" — scale-150 → slight
+   undershoot → scale-100, per the work order's "거대하게 슬램 줌인" ask. */
+@keyframes ratc-call-slam {
+  0% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(0.94);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Source badge ("📦 덱 드로우" / "♻️ 버림 더미 픽업") riding along under
+   CardFlightEffect.tsx's traveling card. */
+@keyframes ratc-flight-badge-fade {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+  15%,
+  70% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -4px);
+  }
+}
+
+/* Gold neon emblem text pulse behind the "RAT-A-TAT CAT!" headline. */
+@keyframes ratc-call-emblem-glow {
+  0%,
+  100% {
+    text-shadow:
+      0 0 12px rgba(252, 211, 77, 0.9),
+      0 0 28px rgba(252, 211, 77, 0.5);
+  }
+  50% {
+    text-shadow:
+      0 0 20px rgba(252, 211, 77, 1),
+      0 0 42px rgba(252, 211, 77, 0.75);
+  }
+}

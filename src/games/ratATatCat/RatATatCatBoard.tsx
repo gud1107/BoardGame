@@ -1,15 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Avatar from "@/components/common/Avatar";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
+import CardFlightEffect, { type CardFlight } from "./CardFlightEffect";
 import CardSlot, { CardBack } from "./CardSlot";
 import GameOverReveal from "./RatATatCatEffects";
+import RatATatCatCallModal from "./RatATatCatCallModal";
 import { getValidMoves, SLOTS, type EngineAction, type RatATatCatState, type SeatIndex, type SlotIndex } from "./engine";
 
 /**
  * Controlled component — state comes in via props only, every user action
  * turns into an `EngineAction` handed to `onAction`. No network/betting
  * awareness (ARCHITECTURE.md §2).
+ *
+ * 2026-08-31 세션에서 추가된 순수 로컬(비-엔진) UI 상태:
+ *  - `peekingSlot`/setup 타이머: 엿보기(설정/Peek 특수카드)의 임시 확인 창
+ *    (engine.ts docstring point 8 — 더 이상 엔진이 영구 지식을 부여하지
+ *    않으므로, "몇 초간 보여주고 다시 숨기는" 연출은 여기서만 관리한다).
+ *  - `flights`/`opponentBadges`: 카드 획득/드로우 전역 궤적 이펙트 — 연속된
+ *    두 `state` 스냅샷을 비교해 "방금 드로우가 일어났다"/"이번 턴 카드
+ *    액션이 막 끝났다"를 감지하고, 덱·버림더미·손패 로우의 실측 좌표
+ *    (`getBoundingClientRect`) 사이로 카드 한 장을 날린다.
+ *  - `activeCallModal`: "랫어탯켓(콜)" 초대형 연출의 1회성 표시 게이트.
  */
 export interface RatATatCatBoardProps {
   state: RatATatCatState;
@@ -20,6 +33,11 @@ export interface RatATatCatBoardProps {
   /** Called once the viewer has acknowledged (or skipped) the game-over reveal. */
   onGameEnd: () => void;
 }
+
+/** How long the setup peek / Peek power's temporary reveal stays up before auto-hiding (AskUserQuestion 2026-08-31: "고정 3초 자동 + 화면 터치 시 즉시 해제"). */
+const PEEK_REVEAL_MS = 3000;
+/** How long an opponent's "드로우 완료"/"카드 정리 완료" badge popup stays visible. */
+const OPPONENT_BADGE_MS = 1600;
 
 function seatOrderFrom(viewerSeat: SeatIndex, playerCount: number): SeatIndex[] {
   const order: SeatIndex[] = [];
@@ -35,6 +53,138 @@ const SPECIAL_INSTRUCTIONS: Record<"peek" | "swap" | "drawTwo", string> = {
 
 export default function RatATatCatBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: RatATatCatBoardProps) {
   const [swapMySlot, setSwapMySlot] = useState<SlotIndex | null>(null);
+
+  // ---------------------------------------------------------------------
+  // Peek temporary-reveal timers (setup end-cards + the Peek power card) —
+  // see engine.ts docstring point 8. Every hook below runs unconditionally
+  // on every render (React rule) even though most of them only matter in
+  // one phase; each effect's own body guards on `state.phase`.
+  // ---------------------------------------------------------------------
+  const iAcked = state.setupAcks[viewerSeat];
+  const [setupPeekSecondsLeft, setSetupPeekSecondsLeft] = useState(Math.ceil(PEEK_REVEAL_MS / 1000));
+  const setupPeekFiredRef = useRef(false);
+  const setupPeekDismissRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    if (state.phase !== "setup" || iAcked) return;
+    setupPeekFiredRef.current = false;
+    const startedAt = Date.now();
+    const dismiss = () => {
+      if (setupPeekFiredRef.current) return;
+      setupPeekFiredRef.current = true;
+      onAction({ type: "INITIAL_PEEK_DONE", seat: viewerSeat });
+    };
+    setupPeekDismissRef.current = dismiss;
+    // Deferred (setInterval/setTimeout callbacks, never called synchronously
+    // during the effect itself) — the immediate 0ms timeout just corrects the
+    // displayed countdown right away for a repeat peek window (a rematch)
+    // without setState-in-effect's cascading-render footgun.
+    const tick = () => setSetupPeekSecondsLeft(Math.max(0, Math.ceil((PEEK_REVEAL_MS - (Date.now() - startedAt)) / 1000)));
+    const immediate = setTimeout(tick, 0);
+    const interval = setInterval(tick, 250);
+    const timeout = setTimeout(dismiss, PEEK_REVEAL_MS);
+    return () => {
+      clearTimeout(immediate);
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [state.phase, iAcked, viewerSeat, onAction]);
+
+  const [peekingSlot, setPeekingSlot] = useState<SlotIndex | null>(null);
+  const peekPowerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function startPeekReveal(slot: SlotIndex) {
+    if (peekPowerTimerRef.current) clearTimeout(peekPowerTimerRef.current);
+    setPeekingSlot(slot);
+    peekPowerTimerRef.current = setTimeout(() => setPeekingSlot(null), PEEK_REVEAL_MS);
+  }
+  function dismissPeekReveal() {
+    if (peekPowerTimerRef.current) {
+      clearTimeout(peekPowerTimerRef.current);
+      peekPowerTimerRef.current = null;
+    }
+    setPeekingSlot(null);
+  }
+  useEffect(
+    () => () => {
+      if (peekPowerTimerRef.current) clearTimeout(peekPowerTimerRef.current);
+    },
+    [],
+  );
+
+  // ---------------------------------------------------------------------
+  // Card acquisition flight effect + opponent draw/settle badges — driven
+  // by diffing consecutive `state` snapshots (this is a controlled
+  // component with no event stream of its own).
+  // ---------------------------------------------------------------------
+  const deckRef = useRef<HTMLButtonElement | null>(null);
+  const discardRef = useRef<HTMLButtonElement | null>(null);
+  const seatRefs = useRef<Map<SeatIndex, HTMLDivElement>>(new Map());
+  function setSeatRef(seat: SeatIndex, el: HTMLDivElement | null) {
+    if (el) seatRefs.current.set(seat, el);
+    else seatRefs.current.delete(seat);
+  }
+
+  const [flights, setFlights] = useState<CardFlight[]>([]);
+  function handleFlightDone(id: string) {
+    setFlights((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  const [opponentBadges, setOpponentBadges] = useState<Partial<Record<SeatIndex, { text: string; key: number }>>>({});
+  const badgeKeyRef = useRef(0);
+  function pushOpponentBadge(seat: SeatIndex, text: string) {
+    const key = ++badgeKeyRef.current;
+    setOpponentBadges((prev) => ({ ...prev, [seat]: { text, key } }));
+    setTimeout(() => {
+      setOpponentBadges((prev) => (prev[seat]?.key === key ? { ...prev, [seat]: undefined } : prev));
+    }, OPPONENT_BADGE_MS);
+  }
+
+  const [activeCallModal, setActiveCallModal] = useState<SeatIndex | null>(null);
+  const shownCallForRef = useRef<SeatIndex | null>(null);
+
+  const prevStateRef = useRef(state);
+  useEffect(() => {
+    const prev = prevStateRef.current;
+    prevStateRef.current = state;
+    if (prev === state) return;
+
+    // A call was just declared — show the epic modal exactly once per round.
+    if (prev.callerId === null && state.callerId !== null && shownCallForRef.current !== state.callerId) {
+      shownCallForRef.current = state.callerId;
+      setActiveCallModal(state.callerId);
+    }
+
+    // A draw just resolved (deck or discard) — fly a card icon from the
+    // source to the drawing seat's hand row, for every viewer.
+    const drawSource = state.drawSource;
+    if (prev.drawnCard === null && state.drawnCard !== null && drawSource) {
+      const drawer = state.currentTurn;
+      const fromEl = drawSource === "deck" ? deckRef.current : discardRef.current;
+      const toEl = seatRefs.current.get(drawer);
+      if (fromEl && toEl) {
+        const fromRect = fromEl.getBoundingClientRect();
+        const toRect = toEl.getBoundingClientRect();
+        setFlights((prevFlights) => [
+          ...prevFlights,
+          {
+            id: `flight-${state.seq}`,
+            from: { x: fromRect.left + fromRect.width / 2, y: fromRect.top + fromRect.height / 2 },
+            to: { x: toRect.left + toRect.width / 2, y: toRect.top + toRect.height / 2 },
+            source: drawSource,
+          },
+        ]);
+        getSoundEngine().playCardDrawWhoosh();
+      }
+      if (drawer !== viewerSeat) pushOpponentBadge(drawer, "📥 드로우 완료");
+    }
+
+    // This seat's card action (replace/discard/power) just fully resolved.
+    if (prev.turnPhase !== "TURN_DECISION" && state.turnPhase === "TURN_DECISION") {
+      const settler = state.currentTurn;
+      if (settler !== viewerSeat) pushOpponentBadge(settler, "🔄 카드 정리 완료");
+    }
+  }, [state, viewerSeat]);
 
   if (state.phase === "gameOver") {
     return <GameOverReveal state={state} names={names} viewerSeat={viewerSeat} onDone={onGameEnd} />;
@@ -54,40 +204,45 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
 
   // ---------------------------------------------------------------------
   // Setup phase — everyone privately peeks their own end cards (slots 0/3),
-  // acks independently (see engine.ts's currentActor doc for why this isn't
-  // turn-gated), then flips back down.
+  // now a TEMPORARY reveal (engine.ts docstring point 8): fixed 3s auto-hide,
+  // or an immediate tap-anywhere-on-screen / dedicated button to hide early.
   // ---------------------------------------------------------------------
   if (state.phase === "setup") {
-    const iAcked = state.setupAcks[viewerSeat];
     const ackedCount = state.setupAcks.filter(Boolean).length;
     return (
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center">
+      <div
+        className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center"
+        onClick={() => {
+          if (!iAcked) setupPeekDismissRef.current();
+        }}
+      >
         <span className="text-3xl">🐱🐭</span>
         <h2 className="text-base font-bold text-white">시작 전 카드 확인</h2>
         <p className="max-w-xs text-xs text-white/50">양 끝(1, 4번) 카드만 몰래 확인하세요. 가운데 2장은 능력을 쓰기 전까지 알 수 없어요.</p>
         <div className="flex gap-2">
           {SLOTS.map((slot) => {
             const revealNow = !iAcked && (slot === 0 || slot === 3);
-            return (
-              <CardSlot
-                key={slot}
-                handCard={myHand[slot]}
-                knownToViewer={revealNow || myHand[slot].isKnownToOwner}
-                label={`내 카드 ${slot + 1}번`}
-              />
-            );
+            return <CardSlot key={slot} handCard={myHand[slot]} peeking={revealNow} label={`내 카드 ${slot + 1}번`} />;
           })}
         </div>
         {iAcked ? (
-          <p className="text-xs text-white/40">{ackedCount}/{state.playerCount}명 확인 완료 — 상대를 기다리는 중...</p>
+          <p className="text-xs text-white/40">
+            {ackedCount}/{state.playerCount}명 확인 완료 — 상대를 기다리는 중...
+          </p>
         ) : (
-          <button
-            type="button"
-            onClick={() => onAction({ type: "INITIAL_PEEK_DONE", seat: viewerSeat })}
-            className="rounded-full bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500"
-          >
-            확인 완료 (다시 뒤집기)
-          </button>
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-xs text-amber-200/80">{setupPeekSecondsLeft}초 후 자동으로 뒷면으로 뒤집혀요 · 화면을 터치하면 바로 뒤집혀요</p>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setupPeekDismissRef.current();
+              }}
+              className="rounded-full bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500"
+            >
+              🔽 지금 뒤집기
+            </button>
+          </div>
         )}
       </div>
     );
@@ -106,6 +261,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
     }
     if (state.turnPhase === "EXECUTE_POWER" && state.drawnCard?.kind === "peek") {
       onAction({ type: "USE_SPECIAL_CARD", seat: viewerSeat, power: "peek", slot });
+      startPeekReveal(slot);
       return;
     }
     if (state.turnPhase === "EXECUTE_POWER" && state.drawnCard?.kind === "swap") {
@@ -126,7 +282,20 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
 
   return (
     <div className="flex flex-col gap-5">
-      {state.callerId !== null && (
+      <CardFlightEffect flights={flights} onFlightDone={handleFlightDone} />
+      {activeCallModal !== null && (
+        <RatATatCatCallModal
+          callerSeat={activeCallModal}
+          callerName={names[activeCallModal]}
+          viewerSeat={viewerSeat}
+          onDismiss={() => setActiveCallModal(null)}
+        />
+      )}
+
+      {/* Ongoing final-round status, shown once the epic call modal has been dismissed
+          (AskUserQuestion 2026-08-31: the modal replaces the old always-on banner as the
+          *announcement*; this slim strip keeps the "N턴 남음" status visible afterward). */}
+      {state.callerId !== null && activeCallModal === null && (
         <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-center text-xs font-semibold text-amber-200">
           🐱 {names[state.callerId]}님이 &ldquo;랫어탯캣!&rdquo;을 외쳤습니다 — 마지막 턴이 진행 중이에요 ({state.finalRoundTurnsLeft}턴 남음)
         </div>
@@ -137,18 +306,29 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
         {opponents.map((seat) => {
           const isTurn = state.phase === "playing" && state.currentTurn === seat;
           const isSwapTarget = inSwapPickTarget;
+          const isCaller = state.callerId === seat;
+          const badge = opponentBadges[seat];
           return (
             <div
               key={seat}
-              className={`flex flex-col items-center gap-1.5 rounded-xl border p-2.5 ${
+              ref={(el) => setSeatRef(seat, el)}
+              className={`relative flex flex-col items-center gap-1.5 rounded-xl border p-2.5 ${
                 isTurn ? "border-emerald-400/50 bg-emerald-400/5" : "border-white/10 bg-white/[0.02]"
-              }`}
+              } ${isCaller ? "ratc-caller-border-glow border-amber-300/70" : ""}`}
             >
+              {badge && (
+                <span
+                  key={badge.key}
+                  className="ratc-badge-pop pointer-events-none absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-sky-300/70 bg-black/80 px-2 py-0.5 text-[10px] font-bold text-sky-200 shadow"
+                >
+                  {badge.text}
+                </span>
+              )}
               <div className="flex items-center gap-1.5">
                 <Avatar size={22} />
                 <span className="max-w-[6rem] truncate text-xs font-semibold text-white/80">{names[seat]}</span>
                 {!connectedSeats.has(seat) && <span className="text-[10px] text-white/30">💤</span>}
-                {state.callerId === seat && <span className="text-[10px]">🐱</span>}
+                {isCaller && <span className="text-[10px]">🐱</span>}
               </div>
               <div className="flex gap-1">
                 {SLOTS.map((slot) => (
@@ -171,6 +351,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
         <div className="flex items-center gap-6">
           <button
+            ref={deckRef}
             type="button"
             disabled={!canDrawDeck}
             onClick={() => onAction({ type: "DRAW_CARD", seat: viewerSeat, source: "deck" })}
@@ -183,6 +364,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
           </button>
 
           <button
+            ref={discardRef}
             type="button"
             disabled={!canDrawDiscard}
             onClick={() => onAction({ type: "DRAW_CARD", seat: viewerSeat, source: "discard" })}
@@ -282,24 +464,34 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
       </div>
 
       {/* My hand */}
-      <div className="flex flex-col items-center gap-1.5">
+      <div
+        ref={(el) => setSeatRef(viewerSeat, el)}
+        className={`flex flex-col items-center gap-1.5 rounded-xl border p-2 ${
+          state.callerId === viewerSeat ? "ratc-caller-border-glow border-amber-300/70" : "border-transparent"
+        }`}
+      >
         <div className="flex items-center gap-1.5">
           <Avatar size={22} />
           <span className="text-xs font-semibold text-emerald-300">나 ({names[viewerSeat]})</span>
         </div>
         <div className="flex gap-2">
-          {SLOTS.map((slot) => (
-            <CardSlot
-              key={slot}
-              size="lg"
-              handCard={myHand[slot]}
-              knownToViewer={myHand[slot].isKnownToOwner}
-              selected={inSwapPickOwn === false && swapMySlot === slot}
-              highlighted={inReplacePick || inPeekPick || inSwapPickOwn}
-              label={`내 카드 ${slot + 1}번`}
-              onClick={inReplacePick || inPeekPick || inSwapPickOwn ? () => handleMySlotClick(slot) : undefined}
-            />
-          ))}
+          {SLOTS.map((slot) => {
+            const isPeeking = peekingSlot === slot;
+            const clickable = isPeeking || inReplacePick || inPeekPick || inSwapPickOwn;
+            return (
+              <CardSlot
+                key={slot}
+                size="lg"
+                handCard={myHand[slot]}
+                knownToViewer={myHand[slot].isKnownToOwner}
+                peeking={isPeeking}
+                selected={inSwapPickOwn === false && swapMySlot === slot}
+                highlighted={inReplacePick || inPeekPick || inSwapPickOwn}
+                label={`내 카드 ${slot + 1}번`}
+                onClick={clickable ? (isPeeking ? dismissPeekReveal : () => handleMySlotClick(slot)) : undefined}
+              />
+            );
+          })}
         </div>
       </div>
     </div>

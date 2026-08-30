@@ -41,6 +41,31 @@
  *    wanted for the new `TURN_DECISION` screen — this project has no
  *    turn-level timer anywhere, only the existing idle/disconnect-based
  *    `botTakeover.ts` vote flow, which is unaffected and untouched.
+ * 8. **Peek visibility is now TEMPORARY, not a permanent memory hint**
+ *    (confirmed via `AskUserQuestion`, 2026-08-31, "완전히 숨김(규칙 변경)"):
+ *    the original engine had both the setup's leftmost/rightmost peek and
+ *    the Peek special card set `isKnownToOwner = true` forever, which
+ *    `CardSlot.tsx` rendered as a permanent dim hint to the owner — a bug
+ *    report described this as "카드가 뒷면으로 자동 전환되지 않는" defect. It
+ *    was actually the original deliberate design (see git history), but the
+ *    user confirmed they want the real physical-game feel instead: peeking
+ *    only grants a few seconds of visibility, then the card goes fully back
+ *    to unknown — the player must actually remember it. `initialPeekDone`
+ *    and `resolvePeek` below therefore no longer set `isKnownToOwner` at
+ *    all; the few-seconds-then-hide behavior is implemented purely as local,
+ *    ephemeral UI state in `RatATatCatBoard.tsx` (every client already holds
+ *    the real `card` value for every slot regardless of this flag — see this
+ *    docstring's trust-model paragraph below — so no engine/network change
+ *    is needed to show a temporary reveal). `isKnownToOwner` now means
+ *    exactly one thing: "this slot's current card was actively placed here
+ *    by REPLACE_CARD this game" (confirmed to stay permanent — a replace
+ *    isn't a "peek", the owner just placed the card and reasonably still
+ *    remembers it, same as the physical game). One accepted side effect:
+ *    `assumedSlotValue`'s bot heuristic below now also "forgets" a
+ *    peeked-only slot instead of getting free permanent knowledge from it —
+ *    judged as an acceptable, thematically-consistent simplification rather
+ *    than worth a second confirmation round (bots become exactly as fallible
+ *    as a human who doesn't memorize their peek in time).
  *
  * **Engineering judgment calls (implementation detail, not a rules
  * ambiguity — documented per ARCHITECTURE.md §5 rather than re-asked)**:
@@ -134,7 +159,7 @@ export function buildDeck(): Card[] {
 
 export interface HandCard {
   card: Card;
-  /** True once the owning seat has actually seen this card's face (initial end-peek, a Peek power, or just having placed it via a replace). Drives the board's "살짝 투명한 힌트" vs "?" rendering — a purely per-viewer concern, never used to gate engine actions. */
+  /** True only once the owning seat has actively placed this exact card here via REPLACE_CARD this game — NOT set by the setup peek or the Peek power, which are temporary/UI-only (module docstring point 8). Drives the board's permanent "살짝 투명한 힌트" vs "?" rendering for a just-placed card — a purely per-viewer concern, never used to gate engine actions. */
   isKnownToOwner: boolean;
   /** True only once the round is over and every hand is revealed for scoring. */
   isRevealed: boolean;
@@ -307,20 +332,19 @@ function advanceTurn(state: RatATatCatState): RatATatCatState {
 // Actions
 // ---------------------------------------------------------------------------
 
+/**
+ * Acks that `seat` has finished its one-time setup peek at slots 0/3 (module
+ * docstring point 8: the peek itself is a temporary reveal handled entirely
+ * client-side by `RatATatCatBoard.tsx` — this action only advances the
+ * setup handshake and grants no lasting `isKnownToOwner` knowledge).
+ */
 function initialPeekDone(state: RatATatCatState, seat: SeatIndex): RatATatCatState {
   if (state.phase !== "setup") return state;
   if (seat < 0 || seat >= state.playerCount || state.setupAcks[seat]) return state;
 
-  const hands = state.hands.map((hand, s) => {
-    if (s !== seat) return hand;
-    const next = hand.map((hc) => ({ ...hc })) as Hand;
-    next[0] = { ...next[0], isKnownToOwner: true };
-    next[3] = { ...next[3], isKnownToOwner: true };
-    return next;
-  });
   const setupAcks = state.setupAcks.map((acked, s) => (s === seat ? true : acked));
   const allAcked = setupAcks.every(Boolean);
-  return { ...state, hands, setupAcks, phase: allAcked ? "playing" : "setup", seq: state.seq + 1 };
+  return { ...state, setupAcks, phase: allAcked ? "playing" : "setup", seq: state.seq + 1 };
 }
 
 function drawCard(state: RatATatCatState, seat: SeatIndex, source: "deck" | "discard"): RatATatCatState {
@@ -372,19 +396,21 @@ function discardCard(state: RatATatCatState, seat: SeatIndex): RatATatCatState {
   return awaitTurnDecision({ ...state, discardPile, seq: state.seq + 1 });
 }
 
+/**
+ * Resolves the Peek special card. Per module docstring point 8, this grants
+ * no lasting `isKnownToOwner` knowledge — the temporary reveal itself is
+ * handled purely client-side (`RatATatCatBoard.tsx`), which already has the
+ * real `card` value on hand regardless of this flag (see the trust-model
+ * paragraph above).
+ */
 function resolvePeek(state: RatATatCatState, seat: SeatIndex, slot: SlotIndex): RatATatCatState {
   if (state.phase !== "playing" || seat !== state.currentTurn || state.turnPhase !== "EXECUTE_POWER") return state;
   const drawn = state.drawnCard;
   if (!drawn || drawn.kind !== "peek") return state;
+  if (slot < 0 || slot > 3) return state;
 
-  const hands = state.hands.map((hand, s) => {
-    if (s !== seat) return hand;
-    const next = [...hand] as Hand;
-    next[slot] = { ...next[slot], isKnownToOwner: true };
-    return next;
-  });
   const discardPile = [...state.discardPile, drawn];
-  return awaitTurnDecision({ ...state, hands, discardPile, seq: state.seq + 1 });
+  return awaitTurnDecision({ ...state, discardPile, seq: state.seq + 1 });
 }
 
 function resolveSwap(state: RatATatCatState, seat: SeatIndex, mySlot: SlotIndex, targetSeat: SeatIndex, targetSlot: SlotIndex): RatATatCatState {

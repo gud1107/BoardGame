@@ -11,7 +11,15 @@ import type { Card, HandCard } from "./engine";
  *   true for another seat's hand): a dimmed "hint" face per the work order's
  *   "자신이 아는 카드는 살짝 투명한 힌트 표시" — still visibly a card-back
  *   silhouette so it reads as "still face-down on the table, I just happen
- *   to remember it" rather than an actual reveal.
+ *   to remember it" rather than an actual reveal. Only ever true for a card
+ *   the owner actively placed via REPLACE_CARD (engine.ts docstring point 8)
+ *   — permanent for the rest of the game.
+ * - `peeking` (own hand only, temporary): a full-brightness reveal with a
+ *   gold glow ring, for the few seconds a setup peek or the Peek power
+ *   card is actively showing its value — deliberately NOT the dimmed
+ *   "remembered hint" look, since this is an active, timed look rather than
+ *   a standing memory aid. `RatATatCatBoard.tsx` owns the timer entirely;
+ *   this component just renders whatever boolean it's handed.
  * - Otherwise: a plain face-down "?" back.
  */
 
@@ -59,6 +67,7 @@ export default function CardSlot({
   handCard,
   revealed = false,
   knownToViewer = false,
+  peeking = false,
   size = "md",
   selected = false,
   highlighted = false,
@@ -67,10 +76,12 @@ export default function CardSlot({
   onClick,
 }: {
   handCard: HandCard;
-  /** Game-over full reveal — shows the true face regardless of `knownToViewer`. */
+  /** Game-over full reveal — shows the true face regardless of `knownToViewer`/`peeking`. */
   revealed?: boolean;
-  /** Own-hand-only dimmed hint (see module doc). Ignored when `revealed`. */
+  /** Own-hand-only dimmed permanent hint (see module doc) — a card the owner actively placed via replace. Ignored when `revealed`. */
   knownToViewer?: boolean;
+  /** Own-hand-only temporary full-brightness reveal with a gold glow (see module doc) — a setup peek or the Peek power card, actively timed by the caller. Ignored when `revealed`. */
+  peeking?: boolean;
   size?: "sm" | "md" | "lg";
   selected?: boolean;
   /** A softly pulsing ring — used for "this slot is a legal target right now" affordances (replace target, peek/swap target). */
@@ -79,22 +90,23 @@ export default function CardSlot({
   label?: string;
   onClick?: () => void;
 }) {
-  const showFace = revealed || knownToViewer;
-  const isHint = showFace && knownToViewer && !revealed;
+  const showFace = revealed || knownToViewer || peeking;
+  const isHint = showFace && knownToViewer && !revealed && !peeking;
   const className = `relative flex ${SIZE_DIMS[size]} flex-col items-center justify-center gap-0.5 rounded-xl border-2 font-bold shadow-sm transition ${
     showFace
       ? "border-amber-300/60 bg-gradient-to-b from-amber-50 to-amber-100 text-amber-950"
       : "border-white/15 bg-gradient-to-br from-slate-700 to-slate-900 text-white/30"
   } ${isHint ? "opacity-60" : ""} ${selected ? "-translate-y-2 ring-4 ring-emerald-300/80" : ""} ${
     highlighted ? "ring-4 ring-sky-300/70 animate-pulse" : ""
-  } ${faded ? "opacity-30" : ""} ${onClick ? "cursor-pointer active:scale-95" : "cursor-default"}`;
+  } ${peeking ? "ratc-peek-glow" : ""} ${faded ? "opacity-30" : ""} ${onClick ? "cursor-pointer active:scale-95" : "cursor-default"}`;
 
   const content = showFace ? <CardContent card={handCard.card} small={size === "sm"} /> : <span className={SIZE_TEXT[size]}>❓</span>;
 
   // Remounting on this key (card identity changing via replace/swap, or
-  // `showFace` flipping true via a peek) restarts the `ratc-card-flip`
-  // keyframe defined in globals.css — the work order's "카드 엿보기/교환 시
-  // 부드러운 3D 플립" ask, with zero extra timer/ref bookkeeping.
+  // `showFace` flipping true/false via a peek starting or its timer/tap
+  // ending it) restarts the `ratc-card-flip` keyframe defined in
+  // globals.css — the work order's "카드 엿보기/교환 시 부드러운 3D 플립"
+  // ask, with zero extra timer/ref bookkeeping in this component itself.
   const body = (
     <div key={`${handCard.card.id}-${showFace}`} className={`${className} ratc-card-flip`} aria-label={label}>
       {content}

@@ -129,14 +129,11 @@ describe("startGame — setup", () => {
 });
 
 describe("setup peek", () => {
-  it("INITIAL_PEEK_DONE reveals only slots 0 and 3 to the owner, not 1/2", () => {
+  it("INITIAL_PEEK_DONE just acks the setup handshake — the peek itself is temporary/UI-only (engine.ts docstring point 8), so it grants no lasting isKnownToOwner", () => {
     const state = startGame(3, 5);
     const seat = state.currentTurn; // seat identity doesn't matter, use any valid one
     const next = applyAction(state, { type: "INITIAL_PEEK_DONE", seat });
-    expect(next.hands[seat][0].isKnownToOwner).toBe(true);
-    expect(next.hands[seat][3].isKnownToOwner).toBe(true);
-    expect(next.hands[seat][1].isKnownToOwner).toBe(false);
-    expect(next.hands[seat][2].isKnownToOwner).toBe(false);
+    for (const hc of next.hands[seat]) expect(hc.isKnownToOwner).toBe(false);
     expect(next.phase).toBe("setup"); // other seats haven't acked yet
   });
 
@@ -232,7 +229,7 @@ describe("draw / decide flow", () => {
 });
 
 describe("special cards", () => {
-  it("Peek reveals a chosen slot to the owner only, resting in TURN_DECISION; PASS_TURN then ends the turn", () => {
+  it("Peek discards itself and rests in TURN_DECISION without granting lasting knowledge (temporary/UI-only reveal); PASS_TURN then ends the turn", () => {
     let state = allAck(startGame(2, 1));
     // Rig a peek card to the top of the deck for a deterministic draw.
     const peekCard = state.deck.find((c) => c.kind === "peek")!;
@@ -241,7 +238,8 @@ describe("special cards", () => {
     state = applyAction(state, { type: "DRAW_CARD", seat, source: "deck" });
     expect(state.turnPhase).toBe("EXECUTE_POWER");
     state = applyAction(state, { type: "USE_SPECIAL_CARD", seat, power: "peek", slot: 2 });
-    expect(state.hands[seat][2].isKnownToOwner).toBe(true);
+    // Peek is temporary/UI-only (engine.ts docstring point 8) — it grants no lasting isKnownToOwner.
+    expect(state.hands[seat][2].isKnownToOwner).toBe(false);
     expect(state.turnPhase).toBe("TURN_DECISION");
     expect(state.currentTurn).toBe(seat);
     expect(state.discardPile[state.discardPile.length - 1]).toEqual(peekCard);
