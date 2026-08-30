@@ -136,7 +136,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: (1) 이번 세션이 즉석에서 사용한 Playwright 기반 브라우저 구동 절차(캐시된 `ms-playwright` Chromium 실행 파일 경로 + `playwright-core` 스크래치패드 설치 + 방 생성/봇 추가/시작 셀렉터)는 매번 재발견하기보다 `/run-skill-generator`로 프로젝트 스킬화해두면 다음 세션들의 반복 조사 비용을 줄일 수 있음 — 이번 세션에선 시간 관계상 스킬화까지는 진행하지 않음. (2) "지금 시작" 버튼으로 목표 인원(`targetPlayerCount`)보다 적은 인원으로 조기 시작하면 `sendGameStart`가 여전히 원래 목표 인원수 그대로 `startGame(playerCount)`를 호출해, 아무도 앉지 않은 좌석이 영원히 액션을 못 받아 설정 페이즈가 멈추는 것으로 보이는 기존 동작을 이번 조사 중 우연히 발견함(이번 세션 변경과 무관한 기존 로직 — 재현: 목표 4인 방에서 호스트+봇 1명만 채운 채 "지금 시작" 클릭) — 이번 요청 범위 밖이라 손대지 않았고, 필요하면 별도 버그로 다룰 것. (3) Peek 임시 확인 창(3초/터치) 동안 다른 좌석이 스왑/드로우 등으로 내 손패를 건드리는 극단적 동시성 케이스는 이 프로젝트의 턴제 구조상 애초에 발생하지 않지만, 명시적으로 테스트하지는 않음.
 
-**커밋/배포**: `git commit`(`<PENDING>`) → `git push origin main` 예정. 이어서 `npx vercel deploy --prod --scope me-3871` 진행 예정 — 아래 실제 실행 결과로 갱신.
+**커밋/배포**: `git commit`(`0c9b2bb`, `fix(rat-a-tat-cat): fix card flip bug and add acquisition effects with epic call announcement`) → `git push origin main`(`81193fa..0c9b2bb`) 완료. 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(41초), `target: "production"`/`readyState: READY`(`dpl_22aZcqunoXnyaq7Z1WWBX85ftGb9`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/rat-a-tat-cat` 둘 다 200과 페이지 HTML에 "랫어탯캣" 문자열 포함 직접 확인함.
 
 ### 2026-08-31 — 랫어탯캣 턴 종료/콜 선언 선택 페이즈(TURN_DECISION) 분리
 
