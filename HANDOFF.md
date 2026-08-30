@@ -119,6 +119,8 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: (1) 위 "실제 렌더링 확인" 항목대로 Board/Game 컴포넌트의 실제 브라우저 동작(특히 봇 vs 봇/사람 vs 봇 대국의 비공개 배치 순차 처리, 쇼다운 3초 타이머, 이탈 투표 UI)은 자동 테스트 밖이라 육안 확인이 아직 안 됨. (2) 레이즈/콜 폭이 넓을 때(`getValidMoves`가 정수 1개당 액션 1개씩 나열) UI 슬라이더는 문제없지만 `chooseBotAction`의 후보 배열이 스택 크기(최대 30)에 비례해 커짐 — 현재 규모에선 성능 문제 없음. (3) Level 1-10 난이도 곡선은 있으나 실제 사람 상대 체감 밸런스 테스트는 안 됨. (4) 이 게임은 턴 제한 시간(§5류 하우스 룰) 없음 — 필요시 후속 요청으로 `malDalliJa` 패턴 재사용 가능.
 
+**커밋/배포**: 커밋 메시지 `feat(show-me-the-coin): implement death-game themed show me the coin board game based on rulebook`(`6206207`) → `git push origin main` 완료(`d401f3a..6206207`). 이어서 사용자가 명시적으로 확인한 배포 범위(위 질문 4)대로 프리뷰 단계 없이 바로 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(40초), `target: "production"`/`readyState: READY`(`dpl_DBHcpuYLQJD2nq5qDyF2znjedT17`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/show-me-the-coin` 둘 다 200 직접 확인함.
+
 ### 2026-08-30 — 로스트 시티(Lost Cities) 신규 게임 개발
 
 **요청**: 라이너 크니치아의 2인 전용 탐험 카드 게임 "로스트 시티"를 `boardGameRule/로스트시티/로스트시티.md` 룰북 기반으로 풀스택 신규 개발. 요청서는 `src/games/common/`, `src/server/socket/roomManager.ts`, `aiBot.ts` 등 소켓 기반 아키텍처를 전제했고, 라운드 진행 방식(단판 vs 룰북 §7의 정식 3라운드 누적)과 베팅 연동 여부 등은 임의로 추정하지 말고 먼저 질문하라는 명시적 지시(Strict No-Assumption Rule).
