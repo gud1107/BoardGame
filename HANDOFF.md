@@ -111,7 +111,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: (1) 이 게임은 채팅(`chatEnabled`)/베팅(`bettingRoomLinked`) 미연동 상태 — 필요시 후속 요청으로 추가 가능(다른 6개 게임과 동일 패턴 재사용). (2) Level 1-10 봇 난이도 곡선은 있으나 아직 실제 사람 상대 난이도 체감 테스트는 안 됨. (3) `boardGameRule/로스트시티/로스트시티.md`의 3라운드 누적 정식 규칙은 이번 세션에서 명시적으로 채택하지 않은 하우스 룰 변형(단판)이므로, 나중에 "정식 룰대로 3라운드로 바꿔달라"는 요청이 오면 라운드 전환 UI/누적 스코어보드를 새로 설계해야 함(현재 엔진엔 라운드 개념 자체가 없음).
 
-**커밋/배포**: <!-- 다음 단계에서 채움 -->
+**커밋/배포**: 커밋 메시지 `feat(lost-cities): implement 2-player lost cities card game based on rulebook`(`6c31b38`) → `git push origin main` 완료(`5b9a8c0..6c31b38`). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(38초), `target: "production"`/`readyState: READY`(`dpl_5hY6JYBvFQXeJDqn7o73B5z3GXFc`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/lost-cities` 둘 다 200 직접 확인함.
 
 ### 2026-08-30 — 소환사의 협곡 카드 공개 방식 선택 및 생사 판정 화면 전체 이펙트
 
