@@ -19,6 +19,12 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             최저점이 아니어도 <span className="text-emerald-300">별도 페널티는 없습니다</span> —
             그냥 카드 합이 가장 낮은 사람이 승리합니다.
           </p>
+          <p className="mt-1.5 text-xs text-white/40">
+            [하우스 룰] 원래 룰북은 &ldquo;랫어탯캣!&rdquo;을 카드 뽑기 <span className="text-emerald-300">대신</span>{" "}
+            턴 시작 시에만 외칠 수 있게 하지만, 이 방에서는 매 턴 카드를 뽑고 처리(교체/버리기/능력
+            사용)까지 <span className="text-emerald-300">마친 뒤</span>에만 외칠 수 있습니다 — 아래
+            &ldquo;매 턴 진행&rdquo;의 3번째 단계 참고.
+          </p>
         </section>
 
         <section>
@@ -55,7 +61,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
 
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">매 턴 진행</h3>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-3">
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
               <p className="mb-1 font-medium text-white">1️⃣ 가져오기</p>
               <p className="text-xs text-white/60">
@@ -67,6 +73,14 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               <p className="text-xs text-white/60">
                 숫자 카드면 내 카드 1장과 교체하거나 그냥 버리고, 특수 카드면 능력을 즉시 쓰거나
                 그냥 버립니다. 버림 더미 카드는 반드시 교체해야 해요.
+              </p>
+            </div>
+            <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 p-3">
+              <p className="mb-1 font-medium text-white">3️⃣ 턴 마무리</p>
+              <p className="text-xs text-white/60">
+                <span className="text-emerald-300">턴 종료</span>로 다음 사람에게 넘기거나,{" "}
+                <span className="text-amber-300">🐱 랫어탯캣!</span>을 외쳐 라운드 종료를 선언하세요
+                (아직 아무도 외치지 않았을 때만 보여요).
               </p>
             </div>
           </div>
@@ -92,8 +106,8 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">게임 종료 &amp; 점수</h3>
           <p className="text-white/70">
-            자신의 턴에 카드를 뽑는 대신 <span className="text-rose-300">&ldquo;랫어탯캣!&rdquo;</span>을 외치면,
-            나머지 모두가 마지막 1턴씩 진행한 뒤 전원 카드를 공개합니다. 4장 합이{" "}
+            자신의 턴 행동(가져오기/처리하기)을 마친 뒤 <span className="text-rose-300">&ldquo;랫어탯캣!&rdquo;</span>을
+            외치면, 나머지 모두가 마지막 1턴씩 진행한 뒤 전원 카드를 공개합니다. 4장 합이{" "}
             <span className="text-emerald-300">가장 낮은</span> 사람이 승리! 덱이 바닥나면 그 즉시
             게임이 끝납니다.
           </p>

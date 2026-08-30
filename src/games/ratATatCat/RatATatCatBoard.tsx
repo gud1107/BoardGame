@@ -45,6 +45,9 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
   const myMoves = isMyTurn ? getValidMoves(state, viewerSeat) : [];
   const canDrawDeck = myMoves.some((m) => m.type === "DRAW_CARD" && m.source === "deck");
   const canDrawDiscard = myMoves.some((m) => m.type === "DRAW_CARD" && m.source === "discard");
+  // TURN_DECISION only — see engine.ts docstring point 5 (call timing moved
+  // from "instead of drawing" to "after this turn's card action resolves").
+  const canPassTurn = myMoves.some((m) => m.type === "PASS_TURN");
   const canCall = myMoves.some((m) => m.type === "CALL_RAT_A_TAT_CAT");
   const canDiscard = myMoves.some((m) => m.type === "DISCARD_CARD");
   const discardTop = state.discardPile[state.discardPile.length - 1] ?? null;
@@ -199,15 +202,38 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
             <p className="text-xs text-white/50">
               {state.drawTwoStage === 1 ? "덱에서 두 번째(마지막) 카드를 뽑으세요." : "덱 또는 버림 더미에서 카드를 가져오세요."}
             </p>
-            {canCall && (
-              <button
-                type="button"
-                onClick={() => onAction({ type: "CALL_RAT_A_TAT_CAT", seat: viewerSeat })}
-                className="rounded-full bg-rose-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-rose-900/40 hover:bg-rose-500"
-              >
-                🐱 랫어탯캣! (콜)
-              </button>
-            )}
+          </div>
+        )}
+
+        {/* Turn-end choice — reached once this turn's card action (교체/버리기/능력 사용) is
+            fully resolved. Split into two big, clearly separated touch targets (gap-3) so a
+            careless tap can't accidentally end the turn instead of calling, or vice versa —
+            see engine.ts docstring point 5 for why the call moved here instead of "드로우 대신". */}
+        {isMyTurn && state.turnPhase === "TURN_DECISION" && (
+          <div className="flex flex-col items-center gap-2.5">
+            <p className="text-xs text-white/50">이번 턴 행동을 마쳤어요. 턴을 마칠까요, 랫어탯캣을 외칠까요?</p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {canPassTurn && (
+                <button
+                  type="button"
+                  onClick={() => onAction({ type: "PASS_TURN", seat: viewerSeat })}
+                  className="min-w-[9.5rem] rounded-full bg-emerald-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-900/40 hover:bg-emerald-500 active:scale-95"
+                >
+                  ✅ 턴 종료
+                </button>
+              )}
+              {canCall && (
+                <button
+                  type="button"
+                  onClick={() => onAction({ type: "CALL_RAT_A_TAT_CAT", seat: viewerSeat })}
+                  style={{ animation: "ratc-call-pulse-glow 1.6s ease-in-out infinite" }}
+                  className="min-w-[9.5rem] rounded-full bg-gradient-to-b from-amber-400 to-amber-600 px-6 py-3 text-sm font-extrabold text-amber-950 hover:from-amber-300 hover:to-amber-500 active:scale-95"
+                >
+                  🐱 랫어탯캣! (콜)
+                </button>
+              )}
+            </div>
+            {!canCall && <p className="text-[11px] text-white/35">이미 다른 플레이어가 콜을 외쳤어요 — 턴 종료만 가능해요.</p>}
           </div>
         )}
 

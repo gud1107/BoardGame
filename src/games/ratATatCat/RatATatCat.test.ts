@@ -27,11 +27,13 @@ function allAck(state: RatATatCatState): RatATatCatState {
 /**
  * Plays turns forward (drawing from the deck, discarding anything that
  * isn't a number card — using a drawTwo's power instead so its chain keeps
- * going for the *same* seat) until whoever is currently up lands in
- * DECIDE_CARD holding a number card. Since a peek/swap draw always resolves
- * (and ends that seat's turn) in one action, the seat that ends up in
- * DECIDE_CARD isn't necessarily the one active when this was called —
- * callers should use the returned `seat`, not their own pre-call variable.
+ * going for the *same* seat, and passing the turn via PASS_TURN whenever a
+ * resolved action parks the seat in TURN_DECISION) until whoever is
+ * currently up lands in DECIDE_CARD holding a number card. Since a
+ * peek/swap draw always resolves (and ends that seat's turn once passed) in
+ * one action, the seat that ends up in DECIDE_CARD isn't necessarily the one
+ * active when this was called — callers should use the returned `seat`, not
+ * their own pre-call variable.
  */
 function drawUntilNumberCard(state: RatATatCatState): { state: RatATatCatState; seat: SeatIndex } {
   let s = state;
@@ -40,6 +42,10 @@ function drawUntilNumberCard(state: RatATatCatState): { state: RatATatCatState; 
     if (s.phase !== "playing") return { state: s, seat: s.currentTurn };
     const seat = s.currentTurn;
     if (s.turnPhase === "DECIDE_CARD") return { state: s, seat };
+    if (s.turnPhase === "TURN_DECISION") {
+      s = applyAction(s, { type: "PASS_TURN", seat });
+      continue;
+    }
     if (s.turnPhase === "EXECUTE_POWER") {
       s = s.drawnCard?.kind === "drawTwo"
         ? applyAction(s, { type: "USE_SPECIAL_CARD", seat, power: "drawTwo" })
@@ -53,6 +59,29 @@ function drawUntilNumberCard(state: RatATatCatState): { state: RatATatCatState; 
     return { state: s, seat };
   }
   return { state: s, seat: s.currentTurn };
+}
+
+/** Finishes out a seat's turn from TURN_DECISION by just passing (no call) — the common case in tests that only care about a plain turn-advance. */
+function passTurn(state: RatATatCatState, seat: SeatIndex): RatATatCatState {
+  return applyAction(state, { type: "PASS_TURN", seat });
+}
+
+/**
+ * Draws for the current seat until it holds a number card, then resolves
+ * that card (replace if forced, otherwise a plain discard) to land it in
+ * TURN_DECISION — the only phase `CALL_RAT_A_TAT_CAT` is legal from (engine.ts
+ * docstring point 5). Returns the seat now parked in TURN_DECISION.
+ */
+function reachTurnDecision(state: RatATatCatState): { state: RatATatCatState; seat: SeatIndex } {
+  const drawn = drawUntilNumberCard(state);
+  let s = drawn.state;
+  const seat = drawn.seat;
+  if (s.turnPhase === "DECIDE_CARD") {
+    s = s.mustReplace
+      ? applyAction(s, { type: "REPLACE_CARD", seat, slot: 0 })
+      : applyAction(s, { type: "DISCARD_CARD", seat });
+  }
+  return { state: s, seat };
 }
 
 describe("startGame — setup", () => {
@@ -147,10 +176,16 @@ describe("draw / decide flow", () => {
     expect(state.hands[seat][0].card).toEqual(drawnValue);
     expect(state.hands[seat][0].isKnownToOwner).toBe(true);
     expect(state.discardPile[state.discardPile.length - 1]).toEqual(oldCard);
-    expect(state.currentTurn).not.toBe(seat); // turn advanced
+    // The card action is done, but the turn doesn't advance yet — it rests
+    // in TURN_DECISION so this seat can choose PASS_TURN or the call
+    // (engine.ts docstring point 5) before the next seat is up.
+    expect(state.turnPhase).toBe("TURN_DECISION");
+    expect(state.currentTurn).toBe(seat);
+    state = passTurn(state, seat);
+    expect(state.currentTurn).not.toBe(seat); // turn advanced only after PASS_TURN
   });
 
-  it("DISCARD_CARD on a plain deck-drawn number card ends the turn without touching the hand", () => {
+  it("DISCARD_CARD on a plain deck-drawn number card rests in TURN_DECISION without touching the hand; PASS_TURN then advances", () => {
     let state = allAck(startGame(2, 9));
     const first = drawUntilNumberCard(state);
     state = first.state;
@@ -158,6 +193,9 @@ describe("draw / decide flow", () => {
     const handBefore = state.hands[seat];
     state = applyAction(state, { type: "DISCARD_CARD", seat });
     expect(state.hands[seat]).toEqual(handBefore);
+    expect(state.turnPhase).toBe("TURN_DECISION");
+    expect(state.currentTurn).toBe(seat);
+    state = passTurn(state, seat);
     expect(state.currentTurn).not.toBe(seat);
   });
 
@@ -167,7 +205,7 @@ describe("draw / decide flow", () => {
     const forced = drawUntilNumberCard(state);
     state = forced.state;
     const seat0 = forced.seat;
-    state = applyAction(state, { type: "REPLACE_CARD", seat: seat0, slot: 0 });
+    state = passTurn(applyAction(state, { type: "REPLACE_CARD", seat: seat0, slot: 0 }), seat0);
     expect(state.discardPile[state.discardPile.length - 1].kind).toBe("number");
 
     const seat = state.currentTurn;
@@ -179,6 +217,8 @@ describe("draw / decide flow", () => {
     state = applyAction(state, { type: "DISCARD_CARD", seat }); // rejected, no-op
     expect(state.turnPhase).toBe("DECIDE_CARD");
     state = applyAction(state, { type: "REPLACE_CARD", seat, slot: 1 });
+    expect(state.turnPhase).toBe("TURN_DECISION");
+    state = passTurn(state, seat);
     expect(state.currentTurn).not.toBe(seat);
   });
 
@@ -192,7 +232,7 @@ describe("draw / decide flow", () => {
 });
 
 describe("special cards", () => {
-  it("Peek reveals a chosen slot to the owner only and ends the turn", () => {
+  it("Peek reveals a chosen slot to the owner only, resting in TURN_DECISION; PASS_TURN then ends the turn", () => {
     let state = allAck(startGame(2, 1));
     // Rig a peek card to the top of the deck for a deterministic draw.
     const peekCard = state.deck.find((c) => c.kind === "peek")!;
@@ -202,8 +242,11 @@ describe("special cards", () => {
     expect(state.turnPhase).toBe("EXECUTE_POWER");
     state = applyAction(state, { type: "USE_SPECIAL_CARD", seat, power: "peek", slot: 2 });
     expect(state.hands[seat][2].isKnownToOwner).toBe(true);
-    expect(state.currentTurn).not.toBe(seat);
+    expect(state.turnPhase).toBe("TURN_DECISION");
+    expect(state.currentTurn).toBe(seat);
     expect(state.discardPile[state.discardPile.length - 1]).toEqual(peekCard);
+    state = passTurn(state, seat);
+    expect(state.currentTurn).not.toBe(seat);
   });
 
   it("Swap blindly exchanges one own slot with one opponent slot — neither side learns the new value", () => {
@@ -234,10 +277,13 @@ describe("special cards", () => {
     expect(getValidMoves(state, seat).some((m) => m.type === "CALL_RAT_A_TAT_CAT")).toBe(false);
     expect(getValidMoves(state, seat).some((m) => m.type === "DRAW_CARD" && m.source === "discard")).toBe(false);
     state = applyAction(state, { type: "DRAW_CARD", seat, source: "deck" });
-    // Whatever came up, just resolve it (replace or discard) — either way the turn should end without a forced 3rd draw.
+    // Whatever came up, just resolve it (replace or discard) — either way it rests in
+    // TURN_DECISION without a forced 3rd draw; PASS_TURN then ends the turn.
     state = state.turnPhase === "DECIDE_CARD"
       ? applyAction(state, { type: "REPLACE_CARD", seat, slot: 0 })
       : applyAction(state, { type: "DISCARD_CARD", seat });
+    expect(state.turnPhase).toBe("TURN_DECISION");
+    state = passTurn(state, seat);
     expect(state.currentTurn).not.toBe(seat);
   });
 
@@ -254,28 +300,42 @@ describe("special cards", () => {
     expect(state.turnPhase).toBe("DRAW");
     state = applyAction(state, { type: "DRAW_CARD", seat, source: "deck" }); // mandatory candidate #2
     expect(state.turnPhase === "DECIDE_CARD" || state.turnPhase === "EXECUTE_POWER").toBe(true);
-    // Discarding now must end the turn (no 3rd draw).
+    // Discarding now must rest in TURN_DECISION (no 3rd draw); PASS_TURN then ends the turn.
     state = applyAction(state, { type: "DISCARD_CARD", seat });
-    expect(state.currentTurn).not.toBe(seat);
+    expect(state.turnPhase).toBe("TURN_DECISION");
     expect(state.drawTwoStage).toBe(0);
+    state = passTurn(state, seat);
+    expect(state.currentTurn).not.toBe(seat);
   });
 });
 
 describe("call / final round / game end", () => {
-  it("CALL_RAT_A_TAT_CAT ends the caller's turn instantly and gives every other seat exactly one more turn", () => {
+  it("CALL_RAT_A_TAT_CAT is only legal from TURN_DECISION (house-rule call timing, engine.ts docstring point 5) — never from DRAW", () => {
+    const state = allAck(startGame(3, 22));
+    const seat = state.currentTurn;
+    expect(state.turnPhase).toBe("DRAW");
+    expect(getValidMoves(state, seat).some((m) => m.type === "CALL_RAT_A_TAT_CAT")).toBe(false);
+    const rejected = applyAction(state, { type: "CALL_RAT_A_TAT_CAT", seat });
+    expect(rejected).toEqual(state); // no-op — the pre-draw "call instead of drawing" option was removed entirely
+  });
+
+  it("CALL_RAT_A_TAT_CAT (from TURN_DECISION, after this turn's card action) ends the caller's turn instantly and gives every other seat exactly one more turn", () => {
     let state = allAck(startGame(3, 22));
-    const caller = state.currentTurn;
+    const reached = reachTurnDecision(state);
+    state = reached.state;
+    const caller = reached.seat;
+    expect(state.turnPhase).toBe("TURN_DECISION");
     state = applyAction(state, { type: "CALL_RAT_A_TAT_CAT", seat: caller });
     expect(state.callerId).toBe(caller);
     expect(state.finalRoundTurnsLeft).toBe(2);
     expect(state.currentTurn).not.toBe(caller);
     expect(state.phase).toBe("playing");
 
-    // Two remaining seats each take one full turn (draw+discard).
+    // Two remaining seats each take one full turn (draw+decide+pass).
     for (let i = 0; i < 2 && state.phase === "playing"; i++) {
-      const step = drawUntilNumberCard(state);
+      const step = reachTurnDecision(state);
       state = step.state;
-      if (state.turnPhase === "DECIDE_CARD") state = applyAction(state, { type: "DISCARD_CARD", seat: step.seat });
+      if (state.phase === "playing") state = passTurn(state, step.seat);
     }
     expect(state.phase).toBe("gameOver");
     // Every hand is revealed at game end.
@@ -284,22 +344,37 @@ describe("call / final round / game end", () => {
 
   it("a seat cannot call twice, and a non-caller can't call after someone already has", () => {
     let state = allAck(startGame(2, 22));
-    const caller = state.currentTurn;
+    const first = reachTurnDecision(state);
+    state = first.state;
+    const caller = first.seat;
     state = applyAction(state, { type: "CALL_RAT_A_TAT_CAT", seat: caller });
-    const other = state.currentTurn;
+    expect(state.currentTurn).not.toBe(caller);
+
+    // The now-current seat reaches its own TURN_DECISION — CALL_RAT_A_TAT_CAT
+    // must be rejected as a no-op purely because someone already called
+    // (getValidMoves agrees it isn't offered).
+    const second = reachTurnDecision(state);
+    state = second.state;
+    const other = second.seat;
+    expect(state.turnPhase).toBe("TURN_DECISION");
+    expect(getValidMoves(state, other).some((m) => m.type === "CALL_RAT_A_TAT_CAT")).toBe(false);
     const beforeCallAttempt = state;
     const afterBadCall = applyAction(state, { type: "CALL_RAT_A_TAT_CAT", seat: other });
     expect(afterBadCall).toEqual(beforeCallAttempt); // rejected no-op
+
+    // The original caller is no longer even the current seat, so a repeat call is rejected on that basis too.
+    const afterCallerRetry = applyAction(state, { type: "CALL_RAT_A_TAT_CAT", seat: caller });
+    expect(afterCallerRetry).toEqual(state);
   });
 
   it("deck exhaustion ends the round immediately, even mid final-round countdown", () => {
     let state = allAck(startGame(2, 3));
-    // Drain the deck down to 1 card via repeated forced draw/discard turns.
+    // Drain the deck down to 1 card via repeated forced draw/decide/pass turns.
     let guard = 0;
     while (state.deck.length > 1 && guard < 200) {
-      const step = drawUntilNumberCard(state);
+      const step = reachTurnDecision(state);
       state = step.state;
-      if (state.turnPhase === "DECIDE_CARD") state = applyAction(state, { type: "DISCARD_CARD", seat: step.seat });
+      if (state.phase === "playing") state = passTurn(state, step.seat);
       guard++;
     }
     expect(state.phase).toBe("playing");
@@ -307,9 +382,10 @@ describe("call / final round / game end", () => {
     const seat = state.currentTurn;
     state = applyAction(state, { type: "DRAW_CARD", seat, source: "deck" });
     expect(state.deck).toHaveLength(0);
-    state = state.turnPhase === "DECIDE_CARD"
-      ? applyAction(state, { type: "DISCARD_CARD", seat })
-      : applyAction(state, { type: "DISCARD_CARD", seat });
+    state = applyAction(state, { type: "DISCARD_CARD", seat });
+    expect(state.turnPhase).toBe("TURN_DECISION"); // the card action itself never ends the round early
+    expect(state.phase).toBe("playing");
+    state = passTurn(state, seat); // only PASS_TURN's advanceTurn actually checks deck exhaustion
     expect(state.phase).toBe("gameOver");
   });
 });
@@ -317,12 +393,13 @@ describe("call / final round / game end", () => {
 describe("scoring (§6.2 special-card substitution)", () => {
   it("a hand of all-number cards scores as the plain sum", () => {
     let state = allAck(startGame(2, 4));
-    // Force gameOver via two immediate calls-in-a-row equivalent: call then let the other seat play out.
-    const caller = state.currentTurn;
-    state = applyAction(state, { type: "CALL_RAT_A_TAT_CAT", seat: caller });
-    const step = drawUntilNumberCard(state);
+    // Force gameOver by calling as soon as possible, then letting the other seat play its one final turn out.
+    const reached = reachTurnDecision(state);
+    state = reached.state;
+    state = applyAction(state, { type: "CALL_RAT_A_TAT_CAT", seat: reached.seat });
+    const step = reachTurnDecision(state);
     state = step.state;
-    if (state.turnPhase === "DECIDE_CARD") state = applyAction(state, { type: "DISCARD_CARD", seat: step.seat });
+    if (state.phase === "playing") state = passTurn(state, step.seat);
     expect(state.phase).toBe("gameOver");
 
     const scores = computeGameOverScores(state);
@@ -365,8 +442,12 @@ describe("getValidMoves / chooseBotAction", () => {
     let state = startGame(4, 123);
     for (let i = 0; i < 4; i++) state = applyAction(state, { type: "INITIAL_PEEK_DONE", seat: i });
 
+    // Bumped from the pre-TURN_DECISION 500 — every turn now needs an extra
+    // PASS_TURN/CALL_RAT_A_TAT_CAT step after its card action resolves
+    // (engine.ts docstring point 5), so a full playthrough takes roughly 1.5x
+    // as many actions as before.
     let guard = 0;
-    while (state.phase !== "gameOver" && guard < 500) {
+    while (state.phase !== "gameOver" && guard < 800) {
       const actor = currentActor(state);
       expect(actor).not.toBeNull();
       const action = chooseBotAction(state, actor!, 5, () => 0.999);
@@ -400,8 +481,10 @@ describe("bot vs bot full games never hang or error", () => {
       it(`playerCount=${playerCount} seed=${seed} completes`, () => {
         let state = startGame(playerCount, seed);
         for (let seat = 0; seat < playerCount; seat++) state = applyAction(state, { type: "INITIAL_PEEK_DONE", seat });
+        // Bumped from 2000 — see the same-sized comment in the
+        // getValidMoves/chooseBotAction describe block above.
         let guard = 0;
-        while (state.phase !== "gameOver" && guard < 2000) {
+        while (state.phase !== "gameOver" && guard < 3000) {
           const actor = currentActor(state)!;
           const action = chooseBotAction(state, actor, 5);
           if (!action) break;
@@ -409,7 +492,7 @@ describe("bot vs bot full games never hang or error", () => {
           guard++;
         }
         expect(state.phase).toBe("gameOver");
-        expect(guard).toBeLessThan(2000);
+        expect(guard).toBeLessThan(3000);
         const rankings = computeRankings(state);
         expect(rankings).toHaveLength(playerCount);
         expect(rankings[0].rank).toBe(1);

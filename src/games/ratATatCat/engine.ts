@@ -22,19 +22,39 @@
  *    session — see HANDOFF.md).
  * 4. `bettingRoomLinked`: NOT applied (optional pilot feature, absent from
  *    the work order's "공통 규격" list — same call as Lost Cities).
+ * 5. **Call timing (deliberate house-rule deviation from rulebook §6)**: the
+ *    rulebook's own text has the call replace the draw ("턴을 시작할 때, 카드
+ *    뽑기 행동을 하는 **대신** 외칠 수 있다") — the original engine matched
+ *    that exactly. A later work order asked instead for the call to be
+ *    offered *after* that seat's draw/replace/discard/power action fully
+ *    resolves, so the player can improve their hand this turn AND still
+ *    call. Confirmed via `AskUserQuestion` (2026-08-31, "완전 대체"): the
+ *    pre-draw "call instead of drawing" option is REMOVED entirely, not
+ *    offered alongside the new one — `CALL_RAT_A_TAT_CAT` is only a legal
+ *    move from the new `TURN_DECISION` resting phase below.
+ * 6. Draw Two chain × the new `TURN_DECISION` phase: confirmed the decision
+ *    screen appears only once the chain is fully resolved (after the final
+ *    candidate is replaced/discarded), never at the mid-chain "reject the
+ *    first candidate" step — matches the existing "only resting phases get
+ *    their own phase value" design below.
+ * 7. No new turn timer: confirmed no chess-clock-style per-turn timeout was
+ *    wanted for the new `TURN_DECISION` screen — this project has no
+ *    turn-level timer anywhere, only the existing idle/disconnect-based
+ *    `botTakeover.ts` vote flow, which is unaffected and untouched.
  *
  * **Engineering judgment calls (implementation detail, not a rules
  * ambiguity — documented per ARCHITECTURE.md §5 rather than re-asked)**:
  * - The work order sketched `turnPhase: 'DRAW' | 'DECIDE_CARD' |
- *   'EXECUTE_POWER' | 'DISCARD'`. Implemented as only 3 *resting* phases —
- *   'DISCARD' turned out to have no reachable state of its own once modeled
- *   precisely: §4 방식 A/B's "그냥 버리기" always resolves atomically inside
- *   the `DECIDE_CARD`/`EXECUTE_POWER` action handler (never left parked in a
+ *   'EXECUTE_POWER' | 'DISCARD'`. Implemented as only 3 *resting* phases plus
+ *   the later-added `TURN_DECISION` (point 5 above) — 'DISCARD' turned out
+ *   to have no reachable state of its own once modeled precisely: §4 방식
+ *   A/B's "그냥 버리기" always resolves atomically inside the
+ *   `DECIDE_CARD`/`EXECUTE_POWER` action handler (never left parked in a
  *   phase of its own), and §5 Draw Two's mandatory second draw is just a
  *   restricted re-entry into `DRAW` (deck-only, no call, tracked by
- *   `drawTwoStage`) rather than a new named phase. `TurnPhase` keeps the
- *   4-value union in its JSDoc for traceability but only 3 values are ever
- *   actually assigned.
+ *   `drawTwoStage`) rather than a new named phase. `TurnPhase` keeps
+ *   'DISCARD' in its JSDoc union for traceability but it is never actually
+ *   assigned.
  * - §3.2's initial deal is unrestricted (any of the 54 cards, including
  *   specials, can land in a starting hand) and §3.4's peek only ever looks
  *   at 2 of the 4 slots — so a special card can sit in a hand all game and
@@ -125,20 +145,27 @@ export type Hand = [HandCard, HandCard, HandCard, HandCard];
 export type Phase = "setup" | "playing" | "gameOver";
 
 /**
- * See this module's docstring — only 3 values are ever assigned
- * (`DISCARD` kept in the union for traceability against the original work
- * order's sketch, but every "그냥 버리기" resolves atomically inside
+ * See this module's docstring — `DISCARD` is kept in the union for
+ * traceability against the original work order's sketch but never actually
+ * assigned (every "그냥 버리기" resolves atomically inside
  * `DECIDE_CARD`/`EXECUTE_POWER` instead of resting in a phase of its own).
+ * `TURN_DECISION` IS a real resting phase: entered once a turn's card action
+ * (replace / plain discard / power resolution) is fully done, offering the
+ * acting seat a choice between ending the turn normally and calling
+ * "Rat-a-Tat-Cat!" now that their hand reflects this turn's play (house-rule
+ * deviation from rulebook §6 — see module docstring point 5).
  */
-export type TurnPhase = "DRAW" | "DECIDE_CARD" | "EXECUTE_POWER" | "DISCARD";
+export type TurnPhase = "DRAW" | "DECIDE_CARD" | "EXECUTE_POWER" | "DISCARD" | "TURN_DECISION";
 
 /**
- * 0 = no active Draw Two chain (a plain discard ends the turn normally).
+ * 0 = no active Draw Two chain (a plain discard moves on to TURN_DECISION
+ *     normally, like any other resolved card action).
  * 1 = holding the chain's first candidate — discarding it (instead of
- *     using/replacing) forces the mandatory second draw rather than ending
- *     the turn.
+ *     using/replacing) forces the mandatory second draw rather than resting
+ *     in TURN_DECISION yet.
  * 2 = holding the chain's mandatory second (final) candidate — discarding
- *     it now behaves exactly like stage 0 (ends the turn, no further draw).
+ *     it now behaves exactly like stage 0 (moves on to TURN_DECISION, no
+ *     further draw).
  * Using ANY drawTwo special card's power (even mid-chain, if one happens to
  * be drawn as a candidate) always resets this to a fresh 1 — nesting is
  * bounded by the deck's finite 3 physical Draw Two cards, never infinite.
@@ -178,6 +205,9 @@ export type EngineAction =
   | { type: "USE_SPECIAL_CARD"; seat: SeatIndex; power: "peek"; slot: SlotIndex }
   | { type: "USE_SPECIAL_CARD"; seat: SeatIndex; power: "swap"; mySlot: SlotIndex; targetSeat: SeatIndex; targetSlot: SlotIndex }
   | { type: "USE_SPECIAL_CARD"; seat: SeatIndex; power: "drawTwo" }
+  /** Only legal from `TURN_DECISION` — ends the turn normally without calling. */
+  | { type: "PASS_TURN"; seat: SeatIndex }
+  /** Only legal from `TURN_DECISION` (see module docstring point 5) — declares "Rat-a-Tat-Cat!" now that this turn's card action is done, then ends the turn. */
   | { type: "CALL_RAT_A_TAT_CAT"; seat: SeatIndex };
 
 function nextSeat(seat: SeatIndex, playerCount: number): SeatIndex {
@@ -241,6 +271,18 @@ export function startGame(playerCount: number, seed: number): RatATatCatState {
 
 function clearedForNextDecision(state: RatATatCatState): RatATatCatState {
   return { ...state, drawnCard: null, drawSource: null, mustReplace: false, drawTwoStage: 0, turnPhase: "DRAW" };
+}
+
+/**
+ * A turn's card action (replace / plain discard / power resolution) just
+ * fully resolved — instead of immediately advancing to the next seat, parks
+ * the *same* seat in `TURN_DECISION` so it can choose `PASS_TURN` or
+ * `CALL_RAT_A_TAT_CAT` (module docstring point 5). `currentTurn`/`callerId`/
+ * `finalRoundTurnsLeft` are untouched; only the transient draw/decision
+ * fields are cleared, same as `clearedForNextDecision`.
+ */
+function awaitTurnDecision(state: RatATatCatState): RatATatCatState {
+  return { ...state, drawnCard: null, drawSource: null, mustReplace: false, drawTwoStage: 0, turnPhase: "TURN_DECISION" };
 }
 
 /** Reveals every hand for the game-over scoring animation. Score *values* are computed separately (see `computeGameOverScores`) — the special-card-substitution rule (§6.2) never mutates the actual hands, only the derived score. */
@@ -312,7 +354,7 @@ function replaceCard(state: RatATatCatState, seat: SeatIndex, slot: SlotIndex): 
     return next;
   });
   const discardPile = [...state.discardPile, oldCard];
-  return advanceTurn({ ...state, hands, discardPile, seq: state.seq + 1 });
+  return awaitTurnDecision({ ...state, hands, discardPile, seq: state.seq + 1 });
 }
 
 function discardCard(state: RatATatCatState, seat: SeatIndex): RatATatCatState {
@@ -327,7 +369,7 @@ function discardCard(state: RatATatCatState, seat: SeatIndex): RatATatCatState {
     // §5: didn't like the first candidate — forced into the mandatory second draw, deck-only, no call.
     return { ...state, discardPile, drawnCard: null, drawSource: null, mustReplace: false, drawTwoStage: 2, turnPhase: "DRAW", seq: state.seq + 1 };
   }
-  return advanceTurn({ ...state, discardPile, seq: state.seq + 1 });
+  return awaitTurnDecision({ ...state, discardPile, seq: state.seq + 1 });
 }
 
 function resolvePeek(state: RatATatCatState, seat: SeatIndex, slot: SlotIndex): RatATatCatState {
@@ -342,7 +384,7 @@ function resolvePeek(state: RatATatCatState, seat: SeatIndex, slot: SlotIndex): 
     return next;
   });
   const discardPile = [...state.discardPile, drawn];
-  return advanceTurn({ ...state, hands, discardPile, seq: state.seq + 1 });
+  return awaitTurnDecision({ ...state, hands, discardPile, seq: state.seq + 1 });
 }
 
 function resolveSwap(state: RatATatCatState, seat: SeatIndex, mySlot: SlotIndex, targetSeat: SeatIndex, targetSlot: SlotIndex): RatATatCatState {
@@ -367,7 +409,7 @@ function resolveSwap(state: RatATatCatState, seat: SeatIndex, mySlot: SlotIndex,
     return hand;
   });
   const discardPile = [...state.discardPile, drawn];
-  return advanceTurn({ ...state, hands, discardPile, seq: state.seq + 1 });
+  return awaitTurnDecision({ ...state, hands, discardPile, seq: state.seq + 1 });
 }
 
 function resolveDrawTwo(state: RatATatCatState, seat: SeatIndex): RatATatCatState {
@@ -380,16 +422,28 @@ function resolveDrawTwo(state: RatATatCatState, seat: SeatIndex): RatATatCatStat
   return { ...state, discardPile, drawnCard: null, drawSource: null, mustReplace: false, drawTwoStage: 1, turnPhase: "DRAW", seq: state.seq + 1 };
 }
 
-function callRatATatCat(state: RatATatCatState, seat: SeatIndex): RatATatCatState {
-  if (state.phase !== "playing" || seat !== state.currentTurn || state.turnPhase !== "DRAW") return state;
-  if (state.callerId !== null || state.drawTwoStage !== 0) return state;
+/** Only legal from `TURN_DECISION` (see module docstring point 5) — this seat's card action for the turn is already resolved, so ending the turn just needs the ordinary `advanceTurn`. */
+function passTurn(state: RatATatCatState, seat: SeatIndex): RatATatCatState {
+  if (state.phase !== "playing" || seat !== state.currentTurn || state.turnPhase !== "TURN_DECISION") return state;
+  return advanceTurn({ ...state, seq: state.seq + 1 });
+}
 
-  // §6: the caller's own turn ends instantly (no draw); every OTHER seat gets exactly one more turn.
+function callRatATatCat(state: RatATatCatState, seat: SeatIndex): RatATatCatState {
+  if (state.phase !== "playing" || seat !== state.currentTurn || state.turnPhase !== "TURN_DECISION") return state;
+  if (state.callerId !== null) return state;
+
+  // House-rule call timing (module docstring point 5): the caller's own turn
+  // ends instantly right after this turn's card action; every OTHER seat
+  // gets exactly one more turn. `finalRoundTurnsLeft` starts at the full
+  // `playerCount - 1` (the caller's own turn doesn't count against it) — the
+  // next seat's own `passTurn`/`CALL_RAT_A_TAT_CAT` will run through
+  // `advanceTurn` and decrement it normally from there, same as before.
   return {
     ...state,
     callerId: seat,
     finalRoundTurnsLeft: state.playerCount - 1,
     currentTurn: nextSeat(seat, state.playerCount),
+    turnPhase: "DRAW",
     seq: state.seq + 1,
   };
 }
@@ -405,6 +459,8 @@ export function applyAction(state: RatATatCatState, action: EngineAction): RatAT
       return replaceCard(state, action.seat, action.slot);
     case "DISCARD_CARD":
       return discardCard(state, action.seat);
+    case "PASS_TURN":
+      return passTurn(state, action.seat);
     case "CALL_RAT_A_TAT_CAT":
       return callRatATatCat(state, action.seat);
     case "USE_SPECIAL_CARD":
@@ -523,15 +579,22 @@ export function getValidMoves(state: RatATatCatState, seat: SeatIndex): EngineAc
 
   const moves: EngineAction[] = [];
   if (state.turnPhase === "DRAW") {
+    // No "call instead of drawing" — the call is only offered from
+    // TURN_DECISION, after this turn's card action resolves (module
+    // docstring point 5).
     if (state.drawTwoStage === 0) {
-      if (state.callerId === null) moves.push({ type: "CALL_RAT_A_TAT_CAT", seat });
       if (state.deck.length > 0) moves.push({ type: "DRAW_CARD", seat, source: "deck" });
       const top = state.discardPile[state.discardPile.length - 1];
       if (top && top.kind === "number") moves.push({ type: "DRAW_CARD", seat, source: "discard" });
     } else {
-      // Draw Two's mandatory redraw — deck-only, no call, no discard-pile take.
+      // Draw Two's mandatory redraw — deck-only, no discard-pile take.
       if (state.deck.length > 0) moves.push({ type: "DRAW_CARD", seat, source: "deck" });
     }
+    return moves;
+  }
+  if (state.turnPhase === "TURN_DECISION") {
+    moves.push({ type: "PASS_TURN", seat });
+    if (state.callerId === null) moves.push({ type: "CALL_RAT_A_TAT_CAT", seat });
     return moves;
   }
   if (state.turnPhase === "DECIDE_CARD") {
@@ -588,10 +651,13 @@ function scoreMove(state: RatATatCatState, seat: SeatIndex, move: EngineAction, 
   switch (move.type) {
     case "INITIAL_PEEK_DONE":
       return 0;
+    case "PASS_TURN":
+      return 0; // baseline "do nothing" — comparable to CALL_RAT_A_TAT_CAT's delta scale below
     case "CALL_RAT_A_TAT_CAT": {
       const estimate = estimateHandValue(hand);
-      // Flat bonus scaled so calling only outscores drawing once the hand is
-      // genuinely good (well under the ~20 average for 4 cards at mean 5).
+      // Flat bonus scaled so calling only outscores PASS_TURN's 0 baseline
+      // once the hand is genuinely good (well under the ~20 average for 4
+      // cards at mean 5).
       return (10 - estimate) * 1.5;
     }
     case "DRAW_CARD": {
