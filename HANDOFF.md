@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-30 (**러브 윈즈 올(Love Wins All) 구버전 전면 폐기(Purge) 및 신규 룰북 기반 완전 재구축 세션 — 룰북 파일 자체가 상위 세션에서 완전히 다른 게임(가위바위보+러브 카드 칩 베팅 포커)으로 교체되어 있어, 기존 LOVE/WAR 죄수의 딜레마 엔진/UI를 전부 비우고 제로베이스 재작성** — 자세한 내용은 아래 `### 2026-08-30 — 러브 윈즈 올(Love Wins All) 전면 폐기 및 신규 룰북 기반 재구축` 절 참고.)_
+_최종 갱신: 2026-08-31 (**랫어탯캣(Rat-a-Tat Cat) 턴 종료/"랫어탯캣!" 콜 선언 선택 페이즈(`TURN_DECISION`) 분리 세션 — 카드 액션(교체/버리기/능력 사용) 완료 후 곧바로 다음 플레이어에게 턴이 넘어가던 것을, [✅ 턴 종료]/[🐱 랫어탯캣! (콜)] 두 버튼 중 선택하는 새 페이즈로 분리. 콜 타이밍을 룰북 §6의 "드로우 대신"에서 "액션 완료 후"로 바꾸는 하우스룰 변경이라 `AskUserQuestion`으로 먼저 확인받고 진행** — 자세한 내용은 아래 `### 2026-08-31 — 랫어탯캣 턴 종료/콜 선언 선택 페이즈(TURN_DECISION) 분리` 절 참고.)_
+
+_이전 갱신: 2026-08-30 (**러브 윈즈 올(Love Wins All) 구버전 전면 폐기(Purge) 및 신규 룰북 기반 완전 재구축 세션 — 룰북 파일 자체가 상위 세션에서 완전히 다른 게임(가위바위보+러브 카드 칩 베팅 포커)으로 교체되어 있어, 기존 LOVE/WAR 죄수의 딜레마 엔진/UI를 전부 비우고 제로베이스 재작성** — 자세한 내용은 아래 `### 2026-08-30 — 러브 윈즈 올(Love Wins All) 전면 폐기 및 신규 룰북 기반 재구축` 절 참고.)_
 
 _이전 갱신: 2026-08-30 (**랫어탯캣(Rat-a-Tat Cat) 2~6인 기억력·블러핑 카드 게임 신규 개발 세션 — 25번째 플레이 가능 게임, 봇 대체 9번째 게임으로 확장(베팅 연동은 미적용). 이 세션에서 이전 세션의 보류 상태였던 러브 윈즈 올 커밋/푸시/배포도 함께 진행** — 자세한 내용은 아래 `### 2026-08-30 — 랫어탯캣(Rat-a-Tat Cat) 신규 게임 개발` 절 참고.)_
 
@@ -89,6 +91,30 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-31 — 랫어탯캣 턴 종료/콜 선언 선택 페이즈(TURN_DECISION) 분리
+
+**요청**: 랫어탯캣에서 카드 액션(드로우 후 교체/버리기/능력 사용)을 마치면 곧바로 다음 플레이어에게 턴이 넘어가, 유저가 자기 턴 액션을 끝낸 뒤 "랫어탯캣!"을 외칠 기회를 갖지 못하던 문제를 지적하며, 액션 완료 후 [턴 종료]/[🐱 랫어탯캣! (콜)] 두 버튼 중 하나를 고르는 새 페이즈(`ACTION_COMPLETE`/`TURN_END_CHOICE`) 분리를 요청. 요청서는 `types.ts`/`ActionPanel.tsx`/`useRatATatCat.ts`/소켓 핸들러 파일 구조를 전제했고, 턴 제한시간 초과 시 기본 동작 등 모호한 지점은 임의로 추정하지 말고 먼저 질문하라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사에서 발견한 핵심 사실**:
+- 요청서의 `types.ts`/`ActionPanel.tsx`/`useRatATatCat.ts`/소켓 핸들러는 이 저장소에 없음 — 실제로는 `engine.ts` 하나에 상태/액션 타입+리듀서가 다 있고, `RatATatCatBoard.tsx`가 UI를 전담하며, `RatATatCatGame.tsx`가 서버 권위 없는 Supabase Realtime 락스텝(모든 클라이언트가 `EngineAction`을 브로드캐스트/재생해 각자 전체 상태 계산)으로 동작 — 이 저장소 다른 게임들과 동일한 반복 패턴([HANDOFF.md](./HANDOFF.md) 여러 세션에서 이미 지적된 괴리).
+- **핵심 룰 충돌**: 원 룰북(`boardGameRule/렛어텟켓/렛어텟켓.md`) §6은 "자신의 턴을 **시작할 때**, 카드 뽑기 행동을 하는 **대신** '랫어탯캣!'을 외칠 수 있다"고 명시 — 기존 엔진(`callRatATatCat`)은 이를 그대로 구현해 `turnPhase === 'DRAW'`(드로우 전)에서만 콜을 허용하고 있었음. 요청서의 "액션 완료 후 콜" 구조는 이 공식 룰과 다른 하우스룰(패를 이미 개선한 뒤에도 콜 가능 — 유불리가 달라짐)이라 임의로 바꾸지 않고 `AskUserQuestion`으로 먼저 확인.
+
+**`AskUserQuestion`으로 확인한 사항 (1라운드, 3문항, 전부 권장안 채택)**:
+1. **콜 타이밍** → **완전 대체**(채택): 턴 시작 시 "드로우 대신 콜" 옵션은 제거하고, 매턴 반드시 드로우+액션(교체/버리기/능력)을 마친 뒤에만 [턴 종료]/[콜] 중 선택. 기존 "드로우 대신 콜"과 병행하는 안(콜 찬스가 매턴 2번으로 늘어 유불리가 더 크게 벌어지는 안)은 채택하지 않음.
+2. **Draw Two 체인 중 선택 화면 노출 시점** → **체인이 완전히 끝난 뒤에만**(채택): 1차 카드를 버려 2차 강제 드로우가 진행 중인 중간 단계에서는 [턴 종료]/[콜] 화면을 띄우지 않고, 최종 카드를 교체/버린 뒤에만 노출.
+3. **턴 제한시간(타이머) 신규 기능** → **만들지 않음**(채택): 이 프로젝트엔 애초에 턴 단위 타이머가 없고(무응답 감지 기반 `botTakeover.ts` 투표 대체만 존재), 이번 요청도 새 타이머 기능을 만들어달라는 게 아니라 모바일 오조작 방지용 "확실한 선택 UI"였으므로 큼직하고 간격(`gap-3`) 있는 버튼 두 개로 해결.
+
+**구현** (`src/games/ratATatCat/`):
+- [`engine.ts`](src/games/ratATatCat/engine.ts): `TurnPhase`에 `'TURN_DECISION'` 신규 추가(실제로 값이 대입되는 4번째 resting 페이즈). `replaceCard`/`discardCard`(그냥 버리기)/`resolvePeek`/`resolveSwap`이 액션 완료 후 곧장 `advanceTurn()`을 부르던 것을, 같은 좌석을 유지한 채 `turnPhase: 'TURN_DECISION'`으로 파킹하는 `awaitTurnDecision()`으로 교체(Draw Two 체인 중간의 "1차 카드 버리기→2차 강제 드로우" 분기와 `resolveDrawTwo`는 원래도 턴을 끝내지 않던 경로라 변경 없음 — 위 확인사항 2번과 자연히 일치). 신규 액션 `PASS_TURN`(TURN_DECISION 전용, 그냥 `advanceTurn()`) 추가. `callRatATatCat`을 `turnPhase === 'DRAW'` 대신 `turnPhase === 'TURN_DECISION'`에서만 합법이도록 재작성(하우스룰 확정사항을 모듈 docstring에 5~7번 항목으로 기록). `getValidMoves`에서 DRAW 페이즈의 `CALL_RAT_A_TAT_CAT` 제거, `TURN_DECISION` 분기(`PASS_TURN` 항상 + `callerId===null`일 때만 `CALL_RAT_A_TAT_CAT`) 신설. `chooseBotAction`/`scoreMove`에 `PASS_TURN`(중립 0점, 기존 `CALL_RAT_A_TAT_CAT` 공식과 비교 가능한 베이스라인) 케이스 추가 — 봇도 이 새 페이즈에서 자동으로 콜 여부를 결정.
+- [`RatATatCatBoard.tsx`](src/games/ratATatCat/RatATatCatBoard.tsx): DRAW 페이즈 블록에서 콜 버튼 제거, `TURN_DECISION` 전용 블록 신설 — [✅ 턴 종료](에메랄드) / [🐱 랫어탯캣! (콜)](골드 그라디언트 + 펄스 글로우) 두 버튼을 `gap-3`로 나란히 배치하고 각각 `min-w`/`py-3`로 큼직한 터치 영역 확보, `active:scale-95`로 탭 피드백. 이미 다른 좌석이 콜을 외친 상태(`callerId !== null`)면 콜 버튼 자체가 `getValidMoves` 기준으로 숨겨지고 안내 문구만 표시.
+- [`globals.css`](src/app/globals.css): 콜 버튼 전용 `ratc-call-pulse-glow` 키프레임 신설(기존 `ratc-skip-pulse-glow`와 동일 기법, 골드 톤 `rgba(251,191,36,...)`로 차별화) — 기존 `ratc-` 접두사 자체 복제 관행 유지.
+- [`RulebookModal.tsx`](src/games/ratATatCat/RulebookModal.tsx): "매 턴 진행"에 3번째 단계(턴 마무리: 턴 종료/콜)를 카드로 추가, "게임 종료 & 점수" 문구를 "카드를 뽑는 대신"→"턴 행동을 마친 뒤"로 수정, 콜 타이밍이 원 룰북과 다른 하우스룰임을 별도 고지 문단으로 명시.
+- [`RatATatCat.test.ts`](src/games/ratATatCat/RatATatCat.test.ts): 기존 42개 테스트 전부가 "액션 직후 턴이 곧장 넘어간다"는 옛 가정을 깔고 있어 전면 수정 — `drawUntilNumberCard`에 TURN_DECISION 자동 패스 처리 추가, 신규 헬퍼 `passTurn`/`reachTurnDecision` 도입, 모든 REPLACE_CARD/DISCARD_CARD/USE_SPECIAL_CARD 직후의 "턴이 넘어갔다" 단언을 "TURN_DECISION에서 대기 중 → PASS_TURN 후에야 턴이 넘어간다"로 교체. `CALL_RAT_A_TAT_CAT`이 DRAW 페이즈에서는 항상 거부됨을 확인하는 신규 테스트 1개 추가(총 43개). 봇 vs 봇 완주 테스트 2개는 매 턴 액션이 1스텝(PASS_TURN 또는 CALL) 늘어난 만큼 안전 가드(500→800, 2000→3000)를 상향.
+
+**검증**: `npx tsc --noEmit`(에러 0), `npm run lint`(경고/에러 0), `npx vitest run src/games/ratATatCat/RatATatCat.test.ts`(43/43 통과), `npx vitest run` 전체(48개 파일·1482개 테스트 전부 통과). 이 Windows 세션에도 헤드리스 브라우저 도구가 없어 이미 떠 있던 다른 세션의 `npm run dev`를 통해 `curl`로 `/`·`/games/rat-a-tat-cat` 둘 다 200, 페이지 HTML에 "랫어탯캣" 문자열 포함, 개발 서버 로그에 컴파일/런타임 에러 없음을 확인 — TURN_DECISION 버튼 자체의 실제 클릭 육안 확인은 미실시(다음 세션 실브라우저 확인 권장, §3 참고).
+
+**커밋/배포**: `git commit`(`044830f`, `fix(rat-a-tat-cat): allow calling rat-a-tat-cat after completing turn action before turn end`) → `git push origin main`(`7fd631b..044830f`) 완료. 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(42초), `target: "production"`/`readyState: READY`(`dpl_H3eCEKgmk4W4n8rfTwdsErditXHw`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/rat-a-tat-cat` 둘 다 200과 페이지 HTML에 "랫어탯캣" 문자열 포함 직접 확인함.
 
 ### 2026-08-30 — 러브 윈즈 올(Love Wins All) 전면 폐기 및 신규 룰북 기반 재구축
 
