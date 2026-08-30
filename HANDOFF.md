@@ -112,7 +112,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: 실제 도전자 시점 수동 브라우저 조작(전체 오픈 체인이 죽음/클리어까지 자동으로 이어지는지, 생사 이펙트와 사운드가 두 케이스 모두 정확히 동기화되는지)은 이번 세션에서 수동 QA로 확인하지 않음 — `tsc`/`lint`/`vitest`(엔진 동작 자체는 미변경) 기준으로만 검증됨. 필요시 후속 세션에서 실제 멀티플레이 방을 열어 두 오픈 모드와 두 생사 케이스(빈 협곡 즉시 클리어 포함)를 눈으로 확인 권장.
 
-**커밋/배포**: 사용자 요청에 따라 **보류** — 로컬 구현·검증까지만 진행하고 커밋/푸시/`vercel deploy`는 실행하지 않음.
+**커밋/배포**: 변경 파일(`SummonersRiftBoard.tsx`/`SummonersRiftEffects.tsx`/`soundEngine.ts`/`globals.css` + HANDOFF) 스테이징 — 작업 트리에 있던 다른 세션들의 미커밋 변경(`.claude/`, `boardGameRule/` 신규 이미지, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않음. 커밋 메시지 `feat(summoners-rift): add card reveal mode choice and epic survive/death effects`(`9cce079`) → `git push origin main` 완료(`0e827ab..9cce079`). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(34초), `target: "production"`/`readyState: READY`(`dpl_9oT5fKGsw6J5DgDHb9guG5DjF7Ls`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/summoners-rift` 둘 다 200 직접 확인함.
 
 ### 2026-08-30 — 전역 기본 아바타(user.png) 및 계정 연동 프로필 이미지 편집
 
