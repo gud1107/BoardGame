@@ -29,4 +29,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   coup: dynamic(() => import("./coup/CoupGame"), { ssr: false }),
   "destiny-war-39": dynamic(() => import("./destinyWar39/DestinyWar39Game"), { ssr: false }),
   worm: dynamic(() => import("./worm/WormGame"), { ssr: false }),
+  "lost-cities": dynamic(() => import("./lostCities/LostCitiesGame"), { ssr: false }),
 };

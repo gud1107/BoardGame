@@ -568,6 +568,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
   },
+  {
+    id: "lost-cities",
+    name: "로스트 시티",
+    nameEn: "Lost Cities",
+    description:
+      "라이너 크니치아의 2인 전용 탐험 카드 게임. 히말라야·열대우림·사막·화산·침몰 도시 5개 원정로에 카드를 오름차순으로 쌓아 올리되, 원정을 시작하는 순간 기본 -20점이 발생하니 확실한 수익이 날 색만 골라 투자해야 합니다. 덱의 마지막 카드가 뽑히는 순간 즉시 종료되는 단판 승부.",
+    players: { min: 2, max: 2 },
+    playTime: { minMinutes: 15, maxMinutes: 20 },
+    category: "card",
+    thumbnail: { emoji: "🗺️", gradient: ["#34d399", "#0f3d2e"] },
+    tags: ["카드", "2인전용", "단판승부"],
+    genres: ["strategy"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {

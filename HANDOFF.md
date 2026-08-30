@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-30 (**소환사의 협곡 카드 공개 방식 선택([🃏 1장씩 오픈]/[💥 전체 오픈]) 듀얼 인터랙션 + 생사(생존/사망) 판정 화면 전체 압도 이펙트 신설 세션** — 자세한 내용은 아래 `### 2026-08-30 — 소환사의 협곡 카드 공개 방식 선택 및 생사 판정 화면 전체 이펙트` 절 참고.)_
+_최종 갱신: 2026-08-30 (**로스트 시티(Lost Cities) 2인 전용 탐험 카드 게임 신규 개발 세션 — 22번째 플레이 가능 게임** — 자세한 내용은 아래 `### 2026-08-30 — 로스트 시티(Lost Cities) 신규 게임 개발` 절 참고.)_
+
+_이전 갱신: 2026-08-30 (**소환사의 협곡 카드 공개 방식 선택([🃏 1장씩 오픈]/[💥 전체 오픈]) 듀얼 인터랙션 + 생사(생존/사망) 판정 화면 전체 압도 이펙트 신설 세션** — 자세한 내용은 아래 `### 2026-08-30 — 소환사의 협곡 카드 공개 방식 선택 및 생사 판정 화면 전체 이펙트` 절 참고.)_
 
 _이전 갱신: 2026-08-30 (**전역 기본 프로필 아바타(user.png) 도입 + Supabase 계정 연동 업로드형 프로필 이미지 편집 기능 신설 세션** — 자세한 내용은 아래 `### 2026-08-30 — 전역 기본 아바타(user.png) 및 계정 연동 프로필 이미지 편집` 절 참고.)_
 
@@ -79,6 +81,37 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-30 — 로스트 시티(Lost Cities) 신규 게임 개발
+
+**요청**: 라이너 크니치아의 2인 전용 탐험 카드 게임 "로스트 시티"를 `boardGameRule/로스트시티/로스트시티.md` 룰북 기반으로 풀스택 신규 개발. 요청서는 `src/games/common/`, `src/server/socket/roomManager.ts`, `aiBot.ts` 등 소켓 기반 아키텍처를 전제했고, 라운드 진행 방식(단판 vs 룰북 §7의 정식 3라운드 누적)과 베팅 연동 여부 등은 임의로 추정하지 말고 먼저 질문하라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사에서 발견한 핵심 사실 (요청서 전제와 실제 구조의 괴리)**: `src/games/common/`, `src/server/socket/roomManager.ts`, `aiBot.ts`는 이 저장소에 전혀 존재하지 않음 — 실제로는 서버가 없는 Supabase Realtime Broadcast/Presence 락스텝 구조([ARCHITECTURE.md](../ARCHITECTURE.md), [docs/cloud-sync.md](../docs/cloud-sync.md))이며, 봇 대체는 공용 모듈 `src/games/shared/bot/botTakeover.ts`(투표 기반, 이미 grid-poker/no-thanks/las-vegas/dalmuti/malDalliJa/destiny-war-39 6종에 적용)로 처리된다. 가장 가까운 선례는 2인 전용 온라인 게임 `malDalliJa`/`piecesOfLanguage`. 이 사실을 사용자에게 정정 안내한 뒤 기존 패턴을 그대로 재사용하는 쪽으로 진행.
+
+**`AskUserQuestion`으로 확인한 사항 (3문항)**:
+1. **라운드 진행 방식** → **단판 승부**(채택, 권장안 아님 — 룰북 §7의 "정규 규칙은 3라운드 누적"이 권장안이었으나 사용자가 이 저장소의 다른 온라인 카드 게임들과 통일된 단판 방식을 선택): 라운드 전환/누적 스코어보드 UI 없이, 덱의 마지막 카드가 뽑히는 즉시 `phase: "gameOver"`로 확정.
+2. **베팅 연동(`bettingRoomLinked`)** → **적용 안 함**(권장안 채택): 6개 게임에만 파일럿 적용된 옵션 기능이며 요청서의 "보드게임허브 공통 규격" 목록에 없었으므로 제외.
+3. **5색 테마 명칭 매핑** → **제안 매핑 사용**(권장안 채택): 하양=히말라야, 초록=열대우림, 노랑=사막, 빨강=화산, 파랑=침몰 도시(바다).
+
+**구현** (`src/games/lostCities/`, ARCHITECTURE.md §2 표준 레이아웃 그대로):
+- [`engine.ts`](src/games/lostCities/engine.ts): 순수 리듀서. 60장 덱(5색×12장: 투자 3+숫자 2~10), 8장 시작 손패, 2단계 필수 턴(`PLAY_OR_DISCARD`→`DRAW`), 오름차순+투자선행 검증(`canPlayToExpedition`), "방금 버린 카드 즉시 재회수 금지"(`justDiscardedColor`, 같은 턴에만 유효), 덱 마지막 장 드로우 즉시 종료(`finishGame`). 점수 공식 `(숫자합-20)×(투자+1)+(8장 이상 +20)`을 `calculateExpeditionBreakdown`/`calculateExpeditionScore`로 구현 — 룰북 §6의 예시 3개(48점/-14점/50점) 전부 단위 테스트로 정확히 일치 확인. `getValidMoves`/`chooseBotAction(state,seat,level,rng?)`(ARCHITECTURE.md §7.1, Level 1-10 난이도 포함) — 정보 공정성을 지키는 간단 휴리스틱(`scoreMove`: 카드별 순증가치, 상대 원정로에 이득 안 주기, 8장 보너스 근접 가중 등), 딥서치/워커 오프로딩 불필요할 만큼 저렴해 동기 호출로 충분.
+- [`LostCities.test.ts`](src/games/lostCities/LostCities.test.ts): 30개 테스트 — 점수 공식 3예시, `startGame` 결정론/카드수 검증, 오름차순·투자선행 규칙, 버림 즉시 재회수 금지, 덱 소진 종료(+동점 무승부), `getValidMoves` 게이팅, `chooseBotAction`이 항상 합법수 반환, 5가지 시드×레벨 조합 봇 vs 봇 완주(무한루프/NaN/Infinity 없음).
+- [`LostCitiesBoard.tsx`](src/games/lostCities/LostCitiesBoard.tsx)/[`CardFace.tsx`](src/games/lostCities/CardFace.tsx): 모바일 우선 2탭 인터랙션(손패 카드 탭→선택, 그 색의 내 원정로/버림 더미가 하이라이트→탭 한 번으로 배치/버리기; DRAW 페이즈는 덱/버림더미가 바로 하이라이트). 상단 상대 원정로, 중앙 덱 카운터+5색 버림더미, 하단 내 원정로+손패.
+- [`ScoreBreakdownModal.tsx`](src/games/lostCities/ScoreBreakdownModal.tsx): 게임 종료 시 색상별 점수 상세 브레이크다운 테이블(카드/투자/숫자합/배수/보너스/소계) + `[⏩ 결과 스킵]` 버튼(로컬 리빌 애니메이션만 건너뜀, 실제 점수 데이터는 이미 모든 클라이언트에 동일하게 존재).
+- [`LostCitiesGame.tsx`](src/games/lostCities/LostCitiesGame.tsx): `malDalliJa`/`no-thanks` 패턴 그대로의 Supabase Realtime 락스텝 방 로비 + `botTakeover.ts` 투표 기반 봇 대체(2인 게임이라 상대 1명의 찬성만으로 즉시 전환) + `useBotAutoplay` + `useGameLeaveGuard`(모바일 뒤로가기 가드)/`useBackgroundResync` + `Avatar`(기본 아바타 user.png 자동 연동) 전부 재사용. 요청서의 "보드게임허브 공통 규격" 목록에 없던 채팅(`chatEnabled`)/베팅 연동은 의도적으로 제외.
+- [`RulebookModal.tsx`](src/games/lostCities/RulebookModal.tsx): 룰 요약 + 단판 승부 하우스 룰 고지.
+- [`registry.ts`](src/games/registry.ts)에 `lost-cities` 항목 추가(`players: 2~2`, `onlineMultiplayer: true`, `supportsAutoRanking: true`), [`playableGames.tsx`](src/games/playableGames.tsx)에 동적 import 등록.
+
+**실제 브라우저 렌더링 검증 (ARCHITECTURE.md §2 "알려진 사각지대" — Board/Game 컴포넌트는 자동 테스트 밖)**: `npm run dev` + Playwright로 실제 2인 온라인 방(호스트+AI 봇)을 열어 육안 확인하던 중 실제 버그 2건을 발견해 수정함:
+1. **중첩 `<button>` HTML 버그**: `CardFace`가 항상 `<button>`을 렌더링했는데, `LostCitiesBoard.tsx`의 원정로/버림더미 하이라이트 버튼 안에 다시 중첩되고 있었음(유효하지 않은 HTML — 브라우저가 파싱 시 바깥 버튼을 조기 종료시켜버림). `onClick`이 없을 때는 `<div>`로 렌더링하도록 수정.
+2. **덱이 아예 클릭 불가능했던 버그**: `CenterPiles`에서 5개 색상 버림더미에는 클릭 핸들러를 달았지만 정작 덱(뽑는 더미) 자체에는 핸들러를 빠뜨려, DRAW 페이즈에 덱에서 뽑는 액션을 UI로 실행할 방법이 전혀 없었음. 덱도 동일한 하이라이트+클릭 패턴으로 수정.
+두 수정 후 Playwright로 실제 대국을 174틱(약 22턴)까지 자동 진행시켜 덱 소진→게임 종료→점수 브레이크다운 모달(리빌 애니메이션+스킵 버튼+승자 크라운+나가기/다시하기)까지 전체 플로우를 스크린샷으로 육안 확인 완료. 남아있는 무관한 콘솔 에러(PatchNoteButton 하이드레이션 불일치, `/api/analytics/game-play` 500, BGM mp3 404)는 전부 이 세션 이전부터 있던 사이트 전역 문제로 이 게임 코드와 무관함(다른 게임 페이지에서도 동일하게 재현되는 것으로 확인).
+
+**검증**: `npx tsc --noEmit`(에러 0), `npm run lint`(경고/에러 0), `npx vitest run`(45개 파일·1377개 테스트 전부 통과 — 신규 30개 포함).
+
+**다음 세션 인계**: (1) 이 게임은 채팅(`chatEnabled`)/베팅(`bettingRoomLinked`) 미연동 상태 — 필요시 후속 요청으로 추가 가능(다른 6개 게임과 동일 패턴 재사용). (2) Level 1-10 봇 난이도 곡선은 있으나 아직 실제 사람 상대 난이도 체감 테스트는 안 됨. (3) `boardGameRule/로스트시티/로스트시티.md`의 3라운드 누적 정식 규칙은 이번 세션에서 명시적으로 채택하지 않은 하우스 룰 변형(단판)이므로, 나중에 "정식 룰대로 3라운드로 바꿔달라"는 요청이 오면 라운드 전환 UI/누적 스코어보드를 새로 설계해야 함(현재 엔진엔 라운드 개념 자체가 없음).
+
+**커밋/배포**: <!-- 다음 단계에서 채움 -->
 
 ### 2026-08-30 — 소환사의 협곡 카드 공개 방식 선택 및 생사 판정 화면 전체 이펙트
 
