@@ -124,6 +124,8 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: (1) 실제 브라우저에서의 육안 확인(베팅 슬라이더 조작감, 선언 UI, 시즌2 커뮤니티 카드 표시, 라이어 카드 연출)은 아직 안 됨 — 브라우저 도구가 있는 환경에서 우선 확인 권장. (2) 시즌2("러브 윈즈 올 2") 변형은 엔진/테스트 레벨에서는 기본판과 동등하게 탄탄히 구현했지만, 부록이 스스로 세부 비교 규칙을 재서술하지 않아 이번 세션이 도출한 동점 처리 로직 일부(예: 투러브끼리 완전 동점 처리)는 기본판 §D의 보수적 확장이며 공식 확정 규칙은 아님 — 사용자가 실제 플레이에서 다른 해석을 원하면 조정 필요.
 
+**커밋/배포**: `git commit`(`6482a6d`, `refactor(love-wins-all): purge legacy logic and rebuild from scratch based on updated rulebook`) → `git push origin main`(`95b3e2d..6482a6d`) 완료. 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(43초), `target: "production"`/`readyState: READY`(`dpl_H38UjZfauFrGrL9LX8o1agtETps7`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/love-wins-all` 둘 다 200과 페이지 HTML에 "러브 윈즈 올" 문자열 포함 직접 확인함.
+
 ### 2026-08-30 — 랫어탯캣(Rat-a-Tat Cat) 신규 게임 개발
 
 **요청**: Monty/Ann Stambler의 2~6인 기억력·블러핑 카드 게임 "랫어탯캣(Rat-a-Tat Cat)"을 `boardGameRule/렛어텟켓/렛어텟켓.md` 룰북 기반으로 풀스택 신규 개발. 요청서는 `src/games/common/`, `src/server/socket/roomManager.ts`, `aiBot.ts` 소켓 서버 아키텍처를 전제했고, 라운드 누적 점수제 vs 단판 승부, 콜 선언자의 패배 페널티 세부 룰 등은 임의로 추정하지 말고 먼저 질문하라는 명시적 지시(Strict No-Assumption Rule). 완료 후 "로컬에만 반영하고 커밋/푸시/배포는 대기"로 시작했으나, 세션 중간에 사용자가 "다 완료되면 로컬 반영분 커밋/푸시, 배포 안 된 것 전부 반영"으로 지시를 변경.
