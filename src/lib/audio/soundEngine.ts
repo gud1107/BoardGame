@@ -1227,6 +1227,94 @@ class SoundEngine {
       osc.stop(clangAt + 0.22);
     });
   }
+
+  // ---------------------------------------------------------------------
+  // 2026-08-30 세션 — 소환사의 협곡 "카드 공개 방식 선택 + 생사 이펙트": 라운드가
+  // 성공(생존)/실패(사망)으로 확정되는 순간의 화면 전체 이펙트용 SFX. 몬스터
+  // 개별 처치의 짧은 `playDeathCardSting`류와 달리, 이 둘은 라운드당 정확히
+  // 한 번만 울리는 더 크고 지속감 있는 사운드로 설계했다.
+  // ---------------------------------------------------------------------
+
+  /** 소환사의 협곡 — "생존 판정 웅장 팡파르": 밝은 4음 상승 아르페지오 위에 서서히 부풀어 오르는 쉬머 패드를 겹쳐, 몬스터 개별 처치의 짧은 스탬프음과 구분되는 하나의 웅장하고 지속적인 순간으로 들리게 한다(LIFE_DEATH_SURVIVE, `SurvivalEffect`의 "🛡️ SURVIVED" 등장과 동시 재생). */
+  playSurviveEpic() {
+    if (!this.gate("surviveEpic", 800)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+      const at = now + i * 0.09;
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.26, at + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.6);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.62);
+    });
+
+    const pad = ctx.createOscillator();
+    pad.type = "sawtooth";
+    pad.frequency.value = 392; // G4, under the arpeggio
+    const padFilter = ctx.createBiquadFilter();
+    padFilter.type = "lowpass";
+    padFilter.frequency.setValueAtTime(600, now);
+    padFilter.frequency.linearRampToValueAtTime(2200, now + 0.5);
+    const padGain = ctx.createGain();
+    padGain.gain.setValueAtTime(0, now);
+    padGain.gain.linearRampToValueAtTime(0.12, now + 0.35);
+    padGain.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+    pad.connect(padFilter).connect(padGain).connect(this.sfxGain);
+    pad.start(now);
+    pad.stop(now + 1.15);
+  }
+
+  /** 소환사의 협곡 — "사망 판정 강타 폭발음": 깊은 서브베이스 붐 + 하강하는 디튠 둠 드론 스탭 + 밝은 유리 파편 노이즈 버스트로, 라운드 전체가 실패로 끝난 무게감을 담는다 — 몬스터 한 마리의 데미지음(`playDeathCardSting`)보다 훨씬 무겁고 낮게(LIFE_DEATH_DEATH, `DeathEffect`의 "💀 YOU DIED" 등장과 동시 재생). */
+  playDeathExplode() {
+    if (!this.gate("deathExplode", 800)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const boom = ctx.createOscillator();
+    boom.type = "sine";
+    boom.frequency.setValueAtTime(150, now);
+    boom.frequency.exponentialRampToValueAtTime(28, now + 0.5);
+    const boomGain = ctx.createGain();
+    boomGain.gain.setValueAtTime(0.5, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+    boom.connect(boomGain).connect(this.sfxGain);
+    boom.start(now);
+    boom.stop(now + 0.75);
+
+    [98, 103].forEach((freq) => {
+      const osc = ctx.createOscillator();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freq, now);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.35, now + 0.6);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.22, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(now);
+      osc.stop(now + 0.65);
+    });
+
+    const shatter = ctx.createBufferSource();
+    shatter.buffer = noiseBuffer(ctx);
+    const shatterFilter = ctx.createBiquadFilter();
+    shatterFilter.type = "highpass";
+    shatterFilter.frequency.value = 3000;
+    const shatterGain = ctx.createGain();
+    shatterGain.gain.setValueAtTime(0.28, now + 0.02);
+    shatterGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    shatter.connect(shatterFilter).connect(shatterGain).connect(this.sfxGain);
+    shatter.start(now + 0.02);
+    shatter.stop(now + 0.32);
+  }
 }
 
 let instance: SoundEngine | null = null;

@@ -80,6 +80,40 @@ _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
 
+### 2026-08-30 — 소환사의 협곡 카드 공개 방식 선택 및 생사 판정 화면 전체 이펙트
+
+**요청**: "소환사의 협곡 카드 공개 방식 선택(1장씩 순차 오픈 vs 전체 카드 한 번에 공개[💥 전체 오픈]) 듀얼 인터랙션 구축 & 생사 판정(생존/처치) 시 화면 전체를 압도하는 화려한 시각/음향 이펙트 개발." 요청서는 `src/games/summonersRift/` 또는 `src/games/rift/` 하위 `Board.tsx`/`CardArea.tsx`/`CardReveal.tsx`/`BattlePhase.tsx`/`SurvivalEffect.tsx`/`DeathEffect.tsx` 경로를 전제했고, 전체 공개 시 멀티플레이 동기화 방식(방장만 vs 전원 동시)·생사 연출 지속 시간 등을 임의로 추정하지 말고 먼저 질문하라는 명시적 지시(Strict No-Assumption Rule). 로컬 구현까지만 진행하고 커밋/푸시/배포는 보류해달라는 조건도 함께 명시됨.
+
+**사전 조사에서 발견한 핵심 사실 (요청서 전제와 실제 구조의 괴리)**: 요청서가 전제한 파일 구조(`CardArea`/`CardReveal`/`BattlePhase`/`SurvivalEffect`/`DeathEffect` 분리)는 존재하지 않음 — 이 게임은 [`SummonersRiftBoard.tsx`](src/games/summonersRift/SummonersRiftBoard.tsx) 단일 컴포넌트 + [`SummonersRiftEffects.tsx`](src/games/summonersRift/SummonersRiftEffects.tsx) 순수 연출 헬퍼 + [`engine.ts`](src/games/summonersRift/engine.ts) 순수 리듀서 구조. 더 결정적으로, "카드 공개" 단계(`resolvingRift`)는 **도전자(challenger) 단 한 명**만 협곡 더미를 한 장씩 뒤집을 수 있고, 각 장은 **현재 체력에 순차적으로 데미지를 적용**하며 체력이 0 이하가 되는 즉시 라운드가 끝나 남은 카드는 공개되지 않는 구조라 — "전체 공개"도 판정 순서 자체는 반드시 순차적이어야 하고, 시각적으로만 빠르게 몰아볼 수 있음. 또한 이 프로젝트의 모든 게임 액션은 낙관적 로컬 적용 없이 Supabase Realtime 브로드캐스트 왕복 후에만 로컬 state에 반영되는 락스텝 구조([`SummonersRiftGame.tsx`](src/games/summonersRift/SummonersRiftGame.tsx)의 `broadcast:{self:true}` + 함수형 `setState`)임을 확인 — 즉 기존 `revealNextMonster` 액션을 연속 전송해도 함수형 업데이트 덕분에 도착 순서대로 안전하게 처리됨.
+
+**`AskUserQuestion`으로 확인한 사항 (4문항, 전부 권장안 채택)**:
+1. **"전체 오픈" 구현 방식** → **엔진 변경 없이 기존 `revealNextMonster` 액션을 도전자 클라이언트가 자동 연속 전송**(채택): `engine.ts`에 새 액션(예: `revealAllInRift`)을 추가하는 대신, 짧은 홀드가 끝날 때마다 다음 액션을 스스로 이어 쏘는 클라이언트 체인으로 구현 — 락스텝 안전성은 위에서 확인한 함수형 `setState` 재적용 구조로 이미 보장됨.
+2. **"전체 오픈" 버튼 클릭 권한** → **도전자만**(채택): `resolvingRift` 단계에서 카드를 공개할 수 있는 사람은 이미 도전자 1명뿐이므로(다른 플레이어는 항상 관전), 듀얼 버튼도 도전자 화면에만 노출.
+3. **전체 오픈 시 카드별 5초 홀드/스킵 처리** → **중간 카드는 짧게(0.8초), 마지막 카드만 기존 5초 홀드+스킵 유지**(채택).
+4. **생사(SURVIVED/YOU DIED) 이펙트 판정 대상·지속시간** → **라운드 단위, 2.5초+자체 스킵 버튼 가능**(채택): 몬스터 개별 처치가 아니라 `finishRound`가 라운드를 성공/실패로 확정하는 그 순간 정확히 1회 재생.
+
+**구현**:
+- [`engine.ts`](src/games/summonersRift/engine.ts): **미변경** — 위 AskUserQuestion 결과에 따라 순수 리듀서 파일은 전혀 손대지 않음.
+- [`SummonersRiftBoard.tsx`](src/games/summonersRift/SummonersRiftBoard.tsx):
+  - `CombatFlashState`에 `holdMs`/`autoAdvance` 필드 추가. 락스텝 state-diff 블록에서 "💥 전체 오픈" 체인이 켜져 있는지(`bulkActive` — 아래 참고)를 읽어, 라운드/게임을 끝내지 않는 중간 조우는 `MID_CARD_HOLD_MS`(800ms)+`autoAdvance:true`로, 마지막 조우는 기존 `ENCOUNTER_HOLD_MS`(5000ms)+`autoAdvance:false`로 세팅.
+  - `finishCombatFlash` 헬퍼 신설 — 자동 타임아웃과 `[⏩ 스킵]` 양쪽에서 공통으로 호출되며, `autoAdvance`가 걸린 플래시라면 그 자리에서 다음 `revealNextMonster`를 스스로 재전송해 체인을 이어감(엔진 액션은 여전히 하나뿐).
+  - `TurnPanel`의 기존 "⚔️ 다음 몬스터 공개" 단일 버튼을 듀얼 버튼(**🃏 1장씩 오픈** / **💥 전체 오픈**)으로 교체 — 전자는 기존과 동일하게 정확히 한 장만 요청, 후자는 체인 플래그를 켠 뒤 첫 장을 요청.
+  - `HpBanner`의 카운트다운/스킵 UI는 `flash.holdMs >= ENCOUNTER_HOLD_MS`일 때만 렌더링(짧은 중간 홀드에는 숨김), `flash.autoAdvance`면 "⚡ 전체 오픈 진행 중..." 펄스 배지를 대신 표시.
+  - 라운드가 성공/실패로 확정되는 순간(기존 `roundFlash`와 같은 트리거 지점, 빈 협곡 즉시 클리어 포함) `lifeDeathFlash` 상태를 세팅하고 `playSurviveEpic()`/`playDeathExplode()`를 재생 — `LIFE_DEATH_HOLD_MS`(2.5초) 뒤 자동 해제되거나 자체 스킵 버튼으로 즉시 해제. `gameOver` 얼리 리턴 가드와 `TurnPanel`의 `holdingFinalReveal`에도 이 플래그를 OR로 포함시켜, 이 2.5초 동안은 트로피 화면이나 다음 라운드 액션으로 넘어가지 않도록 함.
+  - 공유 챔피언 `HeroCard`에 `lifeDeathFlash` 연동 시각 처리 추가 — 생존이면 골드/에메랄드 `drop-shadow` 글로우 펄스(`rift-hero-glow-pulse`), 사망이면 `grayscale` 필터 + 손으로 그은 듯한 SVG 크랙 오버레이(`rift-hero-crack-in`).
+  - "💥 전체 오픈" 체인 플래그(`bulkActive`)는 처음 `useRef`로 구현했으나 렌더 중 이 값을 읽고 조건부로 갱신하는 구조가 `react-hooks/refs`(렌더 중 ref 접근 금지) 린트 규칙에 걸려, `roundFlash`/`passFlash`와 동일한 "렌더 중 diff → 조건부 setState" 패턴에 맞춰 일반 `useState`로 전환.
+- [`SummonersRiftEffects.tsx`](src/games/summonersRift/SummonersRiftEffects.tsx): `NamedMonsterDim`과 동일한 `document.body` 포털 기법으로 `SurvivalEffect`/`DeathEffect` 두 컴포넌트 신설 — 전자는 황금/에메랄드 방사형 배경 플래시 + 동심원 링 파티클(`rift-survive-ring-expand`) + "🛡️ SURVIVED / 생존 성공!" 3D 텍스트 슬램, 후자는 붉은 비네트 암전(Tailwind `animate-pulse`) + 8방향 유리 크랙 샤드(`rift-death-shard-fly`, `--dx`/`--dy`/`--rot` 커스텀 프로퍼티 기법은 `destinywar39-hidden-shatter-fragment`와 동일) + "💀 YOU DIED / 처치됨" 무겁게 내리찍히는 텍스트. 둘 다 각자 `[⏩ 스킵]` 버튼 보유.
+- [`soundEngine.ts`](src/lib/audio/soundEngine.ts): `playSurviveEpic()`(4음 상승 아르페지오 + 쉬머 패드) / `playDeathExplode()`(서브베이스 붐 + 디튠 둠 드론 + 유리 파편 노이즈) 신규 메서드 추가 — 이 게임에 이미 있던 몬스터 개별 처치음(`playDeathCardSting`류)보다 훨씬 크고 지속감 있게 설계, 라운드당 정확히 1회만 재생.
+- [`globals.css`](src/app/globals.css): `rift-survive-bg-flash`/`rift-survive-ring-expand`/`rift-survive-text-slam`/`rift-death-shard-fly`/`rift-death-text-slam`/`rift-hero-glow-pulse`/`rift-hero-crack-in` 7개 키프레임 신설 — 기존 `rift-*`/`destinywar39-*` 네이밍·구조 컨벤션 그대로.
+
+**동시 작업 세션 관련 메모**: 이 세션 도중 같은 저장소에서 별도 세션이 전역 아바타 기능을 동시에 작업 중이었음(`SummonersRiftBoard.tsx`/`SummonersRiftGame.tsx` 등 일부 파일 공유) — 파일이 예고 없이 바뀌는 레이스가 실제로 관측되어(Edit 도구의 "파일이 마지막 읽은 후 변경됨" 거부가 여러 번 발생), 매번 즉시 재-Read 후 최소 범위로만 재적용하는 방식으로 대응. 서로의 unrelated 변경 영역(예: `<Avatar>` 삽입 vs 이 세션의 리빌 로직)은 겹치지 않아 최종적으로는 양쪽 다 무사히 반영됨.
+
+**검증**: `npx tsc --noEmit`(에러 0 — 무관한 다른 세션이 남긴 `Avatar` 미해결 참조 에러도 저 세션이 이후 스스로 정리해 최종적으로는 0), `npm run lint`(처음엔 위 `bulkActive` ref 이슈로 `react-hooks/refs` 에러 5건 발생 → `useState` 전환 후 0건), `npx vitest run`(44개 파일·1347개 테스트 전부 통과 — `engine.ts` 미변경이라 회귀 없음, 세션 시작 시점과 동일한 개수).
+
+**다음 세션 인계**: 실제 도전자 시점 수동 브라우저 조작(전체 오픈 체인이 죽음/클리어까지 자동으로 이어지는지, 생사 이펙트와 사운드가 두 케이스 모두 정확히 동기화되는지)은 이번 세션에서 수동 QA로 확인하지 않음 — `tsc`/`lint`/`vitest`(엔진 동작 자체는 미변경) 기준으로만 검증됨. 필요시 후속 세션에서 실제 멀티플레이 방을 열어 두 오픈 모드와 두 생사 케이스(빈 협곡 즉시 클리어 포함)를 눈으로 확인 권장.
+
+**커밋/배포**: 사용자 요청에 따라 **보류** — 로컬 구현·검증까지만 진행하고 커밋/푸시/`vercel deploy`는 실행하지 않음.
+
 ### 2026-08-30 — 전역 기본 아바타(user.png) 및 계정 연동 프로필 이미지 편집
 
 **요청 배경**: "전 게임 및 프로필 설정 기본 아바타를 user.png로 전면 교체"라는 요청이 들어왔으나, 조사 결과 이 프로젝트에는 애초에 아바타/프로필 이미지 시스템 자체가 존재하지 않았음(`ProfileModal.tsx`/`userStore.ts`/`PlayerSlot.tsx` 등 요청이 전제한 파일이 전부 없음 — 플레이어 식별은 [RoomNicknameField.tsx](../src/components/identity/RoomNicknameField.tsx)의 닉네임 문자열 하나뿐이었고, `avatarUrl`류 필드가 코드베이스 어디에도 없었음). Strict-No-Assumption 원칙에 따라 임의로 넘겨짚지 않고 AskUserQuestion으로 5라운드에 걸쳐 확인 후 진행.

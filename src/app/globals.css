@@ -474,6 +474,112 @@ body {
   }
 }
 
+/* 2026-08-30 카드 공개 방식 선택 + 생사 이펙트 세션 — 라운드 성공(생존) 확정
+   순간의 전체 화면 연출(SummonersRiftEffects.tsx의 `SurvivalEffect`). 배경
+   방사형 플래시가 서서히 사그라든다. */
+@keyframes rift-survive-bg-flash {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* `SurvivalEffect`의 황금/에메랄드 링 파티클 하나 — 중앙에서 동심원으로
+   확장되며 사라진다. */
+@keyframes rift-survive-ring-expand {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(4.5);
+    opacity: 0;
+  }
+}
+
+/* `SurvivalEffect`의 "🛡️ SURVIVED" 3D 텍스트 슬램 — 작게 튀어나와 크게
+   부풀었다가 살짝 오버슈트 후 정착하는 영웅적인 등장. */
+@keyframes rift-survive-text-slam {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) rotate(-10deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.18) rotate(4deg);
+  }
+  80% {
+    transform: scale(0.95) rotate(-2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* `SurvivalEffect`와 짝을 이루는, 라운드 실패(사망/처치) 확정 순간의 전체
+   화면 연출(`DeathEffect`) — 중앙에서 8방향으로 튀어나가는 유리 크랙 샤드
+   하나. direction/거리는 `--dx`/`--dy`, 회전은 `--rot` 커스텀 프로퍼티로
+   조각마다 다르게 지정(destinywar39-hidden-shatter-fragment와 동일 기법). */
+@keyframes rift-death-shard-fly {
+  0% {
+    transform: translate(-50%, -50%) translate(0, 0) rotate(var(--rot, 0deg)) scale(1);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(var(--dx, 0px), var(--dy, 0px)) rotate(calc(var(--rot, 0deg) + 180deg)) scale(0.3);
+    opacity: 0;
+  }
+}
+
+/* `DeathEffect`의 "💀 YOU DIED" 텍스트 — 위에서 무겁게 떨어져 찍히는 묵직한
+   타격감(`rift-survive-text-slam`의 가볍고 튀어오르는 등장과 대비). */
+@keyframes rift-death-text-slam {
+  0% {
+    opacity: 0;
+    transform: translateY(-160px) scale(1.4) rotate(-6deg);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(10px) scale(0.95) rotate(2deg);
+  }
+  75% {
+    transform: translateY(-4px) scale(1.03) rotate(-1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+}
+
+/* SummonersRiftBoard.tsx의 공유 챔피언 카드(`HeroCard`) — 라운드 생존 확정
+   2.5초 동안 두르는 골드/에메랄드 글로우 펄스. */
+@keyframes rift-hero-glow-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 14px rgba(250, 204, 21, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 26px rgba(250, 204, 21, 0.95)) drop-shadow(0 0 10px rgba(52, 211, 153, 0.7));
+  }
+}
+
+/* 같은 챔피언 카드 위, 라운드 사망 확정 시 덧그려지는 크랙 오버레이(SVG)의
+   페이드인 — 카드 자체는 별도로 `grayscale` 클래스가 흑백화한다. */
+@keyframes rift-hero-crack-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0.85;
+  }
+}
+
 /* 달무티's card-exchange flight (see DalmutiEffects.tsx / FlyingExchangeCard)
    — 2026-08-25 후속 세션(평민 자유 선택 교환 모달 + 비공개 마스킹 + 화려한 VFX)
    replaced the older straight-scale-in `dalmuti-tax-fly` with a richer arc.

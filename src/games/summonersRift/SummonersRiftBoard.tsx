@@ -7,7 +7,7 @@ import RulebookModal from "./RulebookModal";
 import SummonersRiftLastRoundModal from "./SummonersRiftLastRoundModal";
 import SummonersRiftGuideSidebar from "./SummonersRiftGuideSidebar";
 import { CardPileStack, HeroCard, ItemSlot, MonsterFace, RemovedItemsRow } from "./CardArt";
-import { detectRiftPushEvent, FlyingRiftCard, NamedMonsterDim, type RiftPushEvent } from "./SummonersRiftEffects";
+import { DeathEffect, detectRiftPushEvent, FlyingRiftCard, NamedMonsterDim, SurvivalEffect, type RiftPushEvent } from "./SummonersRiftEffects";
 import {
   computeRankings,
   computeTotalHp,
@@ -84,6 +84,17 @@ interface CombatFlashState {
   hpBefore: number;
   totalHp: number;
   key: string;
+  /**
+   * How long this flash stays on screen before auto-clearing — normally
+   * `ENCOUNTER_HOLD_MS` (5s, with the countdown/skip UI), but a "💥 전체
+   * 오픈" chain's non-final reveals use the much shorter `MID_CARD_HOLD_MS`
+   * instead (see `bulkActive` in the board component) so the chain reads
+   * as one fast sequential sweep through the pile rather than N separate
+   * 5-second waits.
+   */
+  holdMs: number;
+  /** True only for a "💥 전체 오픈" chain's non-final reveal — once this flash's `holdMs` elapses (naturally or via skip), the board automatically fires the next `revealNextMonster` itself, continuing the chain with no further clicks. Always false for a manual "🃏 1장씩 오픈" reveal or the round/game-ending final reveal. */
+  autoAdvance: boolean;
 }
 
 /**
@@ -104,6 +115,23 @@ const ENCOUNTER_HOLD_MS = 5000;
 const HIT_FLASH_MS = 400;
 /** 패스 선언 시 스탬프 슬램/로우 쉐이크/글로우 플래시(`rift-pass-badge-slam`/`rift-pass-row-shake`/`rift-pass-glow-flash`, 전부 globals.css)가 재생되는 시간 — 이 시간이 지나면 `passFlash`를 지워 1회성 임팩트 연출을 종료한다. 패스 자체의 지속 배지/딤 처리는 `p.passed`가 살아있는 한(다음 라운드 `dealRound`가 리셋할 때까지) 별도로 계속 남는다. */
 const PASS_FLASH_MS = 650;
+/**
+ * 2026-08-30 카드 공개 방식 선택 + 생사 이펙트 세션(AskUserQuestion 확인 완료) —
+ * "💥 전체 오픈" 체인 중 라운드/게임을 끝내지 *않는* 중간 몬스터 조우 하나가
+ * 화면에 붙잡히는 시간. `ENCOUNTER_HOLD_MS`(5초, 수동 "1장씩 오픈"과 마지막
+ * 카드 전용)보다 훨씬 짧게 잡아, 전체 오픈이 "카드가 빠르게 연속으로 파바박
+ * 뒤집히는" 느낌이 나게 한다 — 이 홀드 동안엔 카운트다운/스킵 UI 자체를
+ * 렌더링하지 않는다(너무 짧아 불필요, `HpBanner` 참고).
+ */
+const MID_CARD_HOLD_MS = 800;
+/**
+ * 라운드가 성공(생존)/실패(사망)로 확정되는 순간 재생되는 화면 전체 생사
+ * 이펙트(`SurvivalEffect`/`DeathEffect`, SummonersRiftEffects.tsx)가 화면에
+ * 붙잡히는 시간 — AskUserQuestion "라운드 단위, 2.5초+스킵 가능" 채택. 몬스터
+ * 개별 처치가 아니라 `finishRound`가 라운드를 끝낸 그 순간(협곡 클리어 성공
+ * 또는 체력 0 실패, 빈 협곡 즉시 클리어 포함) 정확히 1회만 재생된다.
+ */
+const LIFE_DEATH_HOLD_MS = 2500;
 
 /**
  * 5초 유지 창(`ENCOUNTER_HOLD_MS`) 동안 채워진 채로 시작해 선형으로 0%까지
@@ -244,13 +272,17 @@ function HpBanner({
         </div>
       </div>
 
-      {/* 5초 유지 카운트다운 + 스킵 — 작업 지시 §1. flash가 살아있는 동안(ENCOUNTER_HOLD_MS 전체)만 렌더링. */}
-      {flash && (
+      {/* 5초 유지 카운트다운 + 스킵 — 작업 지시 §1. "💥 전체 오픈" 체인의 중간
+          조우(짧은 holdMs)에는 렌더링하지 않는다 — 그 잠깐 사이 카운트다운을
+          보여주는 게 오히려 더 정신없어서(AskUserQuestion "중간 카드는 짧게,
+          스킵 버튼 불필요" 채택), 마지막 카드/수동 모드처럼 holdMs가
+          ENCOUNTER_HOLD_MS 전체일 때만 보여준다. */}
+      {flash && flash.holdMs >= ENCOUNTER_HOLD_MS && (
         <div key={`skip-${flashKey}`} className="flex w-full max-w-xs flex-col items-center gap-1.5">
-          <EncounterProgressBar durationMs={ENCOUNTER_HOLD_MS} />
+          <EncounterProgressBar durationMs={flash.holdMs} />
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-white/45">
-              <EncounterCountdown durationMs={ENCOUNTER_HOLD_MS} />초 후 자동으로 다음 몬스터 공개
+              <EncounterCountdown durationMs={flash.holdMs} />초 후 자동으로 다음 몬스터 공개
             </span>
             <button
               onClick={onSkip}
@@ -261,6 +293,15 @@ function HpBanner({
             </button>
           </div>
         </div>
+      )}
+
+      {/* "💥 전체 오픈" 체인이 자동으로 다음 몬스터를 이어서 공개하는 중임을
+          알리는 작은 표시 — 위 스킵 UI 없이도 지금 자동 진행 중임을 알 수
+          있게 한다. */}
+      {flash?.autoAdvance && (
+        <span key={`bulk-${flashKey}`} className="animate-pulse text-[10px] font-semibold tracking-wide" style={{ color: "#7dfcd0" }}>
+          ⚡ 전체 오픈 진행 중...
+        </span>
       )}
     </section>
   );
@@ -332,8 +373,25 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
   const [roundFlash, setRoundFlash] = useState<RoundResult | null>(null);
   const [pushEvents, setPushEvents] = useState<RiftPushEvent[]>([]);
   const [combatFlash, setCombatFlash] = useState<CombatFlashState | null>(null);
+  /** 라운드가 성공/실패로 확정된 순간 화면 전체를 압도하는 생사 이펙트(`SurvivalEffect`/`DeathEffect`) — `LIFE_DEATH_HOLD_MS` 뒤 자동 해제되거나 자체 스킵 버튼으로 즉시 해제된다. */
+  const [lifeDeathFlash, setLifeDeathFlash] = useState<{ outcome: "success" | "failure"; key: string } | null>(null);
   /** 방금 패스를 선언한 좌석 — 스탬프 슬램/쉐이크/글로우 1회성 연출(`PASS_FLASH_MS` 뒤 자동 해제)만 담당한다. 지속 배지/딤 처리는 `state.players[seat].passed`를 직접 읽어 렌더하므로 이 값과 무관하게 라운드 끝까지 남는다. */
   const [passFlash, setPassFlash] = useState<{ seat: SeatIndex } | null>(null);
+  /**
+   * "💥 전체 오픈"이 눌리면 true — 도전자가 그 즉시 첫 `revealNextMonster`를
+   * 전송하고, 이후 매 중간 조우(라운드/게임을 끝내지 않는 조우)가 짧은
+   * `MID_CARD_HOLD_MS` 뒤 자동으로 다음 `revealNextMonster`를 스스로 전송해
+   * 체인을 이어가도록 만든다(아래 `finishCombatFlash` 참고). 라운드/게임을
+   * 끝내는 마지막 조우에 도달하거나 새 도전자가 정해지면 다시 false로
+   * 리셋되어, 다음 협곡 도전은 항상 [🃏 1장씩 오픈]/[💥 전체 오픈] 재선택부터
+   * 시작한다. 순수 로컬(이 뷰어) 연출 타이밍용 state일 뿐 — 실제 게임 액션은
+   * 여전히 기존 `revealNextMonster` 하나뿐이라 락스텝 동기화에 영향 없다.
+   * (ref가 아니라 state인 이유: 아래 diff 블록이 렌더 중에 이 값을 읽고 조건부로
+   * 갱신하는데, `react-hooks/refs` 린트 규칙이 렌더 중 ref 접근을 금지하므로
+   * 이 파일의 다른 모든 렌더-중-diff 값들(`roundFlash`/`passFlash` 등)과
+   * 동일하게 state로 둔다.)
+   */
+  const [bulkActive, setBulkActive] = useState(false);
   if (trackedState !== state) {
     const newRound = state.lastRoundResult !== trackedState.lastRoundResult ? state.lastRoundResult : null;
     const push = detectRiftPushEvent(trackedState, state);
@@ -353,8 +411,22 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
     // every fresh challenge with no separate reset step needed (task brief
     // §2/§4 "전투 연출 템포": flash exactly the newest live entry once).
     const priorCombatLogLength = trackedState.combatLog.length;
+    // 새 도전자가 정해지면(=새 협곡 도전 시작) 전체 오픈 체인 플래그를 방어적으로
+    // 리셋한다 — 매 협곡 도전은 항상 [🃏 1장씩 오픈]/[💥 전체 오픈] 재선택부터
+    // 시작해야 하고, 이전 도전의 체인 상태가 새 도전으로 새어 들어가면 안 된다.
+    if (state.challengerSeat !== trackedState.challengerSeat) setBulkActive(false);
     setTrackedState(state);
-    if (newRound) setRoundFlash(newRound);
+    if (newRound) {
+      setRoundFlash(newRound);
+      // 카드 공개 방식 선택 + 생사 이펙트 세션(AskUserQuestion "라운드 단위,
+      // 2.5초+스킵 가능" 채택) — 몬스터 개별 처치가 아니라 라운드 자체가
+      // 성공(생존)/실패(사망)로 확정된 이 순간에 화면 전체 이펙트를 정확히
+      // 1회 재생한다. 빈 협곡 즉시 클리어(combatLog 없이 finishRound가 바로
+      // 불림)도 `newRound`가 존재하므로 동일하게 트리거된다.
+      setLifeDeathFlash({ outcome: newRound.outcome, key: `${newRound.roundNumber}-${newRound.challengerSeat}` });
+      if (newRound.outcome === "success") getSoundEngine().playSurviveEpic();
+      else getSoundEngine().playDeathExplode();
+    }
     if (push) setPushEvents((prev) => [...prev, { ...push, id: (prev.at(-1)?.id ?? 0) + 1 }]);
     if (justPassed) {
       setPassFlash({ seat: justPassed.seat });
@@ -363,10 +435,23 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
 
     if (state.phase === "resolvingRift" && state.combatLog.length > priorCombatLogLength) {
       // Ordinary mid-run reveal — `phase` hasn't moved on, so the new entry
-      // is still live at `state.combatLog[index]`.
+      // is still live at `state.combatLog[index]`. If a "💥 전체 오픈" chain
+      // is active (`bulkActive`), this reveal gets the much shorter
+      // `MID_CARD_HOLD_MS` hold with `autoAdvance: true` so `finishCombatFlash`
+      // below fires the next `revealNextMonster` itself once it elapses — a
+      // manual "🃏 1장씩 오픈" reveal keeps the existing full
+      // `ENCOUNTER_HOLD_MS` hold and never auto-advances.
       const index = priorCombatLogLength;
       const hpBefore = index === 0 ? state.totalHp! : state.combatLog[index - 1].hpAfter;
-      setCombatFlash({ entry: state.combatLog[index], hpBefore, totalHp: state.totalHp!, key: `${trackedState.roundNumber}-${index}` });
+      const bulk = bulkActive;
+      setCombatFlash({
+        entry: state.combatLog[index],
+        hpBefore,
+        totalHp: state.totalHp!,
+        key: `${trackedState.roundNumber}-${index}`,
+        holdMs: bulk ? MID_CARD_HOLD_MS : ENCOUNTER_HOLD_MS,
+        autoAdvance: bulk,
+      });
     } else if (newRound && newRound.combatLog.length > priorCombatLogLength) {
       // 2026-08-30 마지막 카드 홀드 버그 수정 — 라운드(또는 게임)를 끝내는 "마지막"
       // 몬스터 공개는 `revealNextMonster` 한 액션 안에서 `finishRound`(→ 다음
@@ -378,10 +463,19 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
       // 곧장 다음 라운드(bidding)나 트로피 화면(gameOver)으로 전환돼버렸다 —
       // 이번 세션에서 신고된 버그의 근본 원인. `finishRound`는 리셋되기
       // *이전*의 전체 `combatLog`를 `lastRoundResult.combatLog`에 그대로 복사해
-      // 두므로, 거기서 놓친 마지막 엔트리를 복구한다.
+      // 두므로, 거기서 놓친 마지막 엔트리를 복구한다. 이 조우는 전체 오픈
+      // 체인 중이었더라도 항상 마지막이므로 체인을 여기서 끝낸다.
+      setBulkActive(false);
       const index = priorCombatLogLength;
       const hpBefore = index === 0 ? newRound.totalHp : newRound.combatLog[index - 1].hpAfter;
-      setCombatFlash({ entry: newRound.combatLog[index], hpBefore, totalHp: newRound.totalHp, key: `${newRound.roundNumber}-${index}` });
+      setCombatFlash({
+        entry: newRound.combatLog[index],
+        hpBefore,
+        totalHp: newRound.totalHp,
+        key: `${newRound.roundNumber}-${index}`,
+        holdMs: ENCOUNTER_HOLD_MS,
+        autoAdvance: false,
+      });
     }
   }
   useEffect(() => {
@@ -394,27 +488,59 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
     const t = setTimeout(() => setPassFlash(null), PASS_FLASH_MS);
     return () => clearTimeout(t);
   }, [passFlash]);
-  // 조우 유지 타이머 — combatFlash가 새로 생길 때마다 ENCOUNTER_HOLD_MS 뒤에
-  // 자동으로 잠금 해제한다. 타임아웃 id를 ref에 보관해두는 이유는 [⏩ 스킵]이
-  // 눌렸을 때 이 자동 타이머를 즉시 취소하고 바로 잠금을 풀기 위해서 — 스킵은
-  // 로컬(이 뷰어) 한정이라 다른 클라이언트의 동일 useEffect는 그대로 5초를 채운다.
+  useEffect(() => {
+    if (!lifeDeathFlash) return;
+    const t = setTimeout(() => setLifeDeathFlash(null), LIFE_DEATH_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [lifeDeathFlash]);
+  const handleSkipLifeDeath = useCallback(() => setLifeDeathFlash(null), []);
+  // 조우 유지 타이머 — combatFlash가 새로 생길 때마다 그 자신의 `holdMs`(수동
+  // 모드/마지막 카드는 ENCOUNTER_HOLD_MS, "💥 전체 오픈" 체인의 중간 조우는
+  // 훨씬 짧은 MID_CARD_HOLD_MS) 뒤에 자동으로 잠금 해제한다. 타임아웃 id를
+  // ref에 보관해두는 이유는 [⏩ 스킵]이 눌렸을 때 이 자동 타이머를 즉시
+  // 취소하고 바로 잠금을 풀기 위해서 — 스킵은 로컬(이 뷰어) 한정이라 다른
+  // 클라이언트의 동일 useEffect는 그대로 자기 홀드 시간을 채운다.
   const encounterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // combatFlash 하나의 홀드가 끝날 때(자동 타임아웃이든 스킵이든) 공통으로
+  // 거치는 정리 지점 — `autoAdvance`가 걸린 "💥 전체 오픈" 체인의 중간 조우라면
+  // 다음 `revealNextMonster`를 이 자리에서 자동으로 이어 전송해 체인을 계속
+  // 이어간다(엔진 액션은 그대로 하나뿐이라 락스텝 동기화에 영향 없음).
+  const finishCombatFlash = useCallback(
+    (flash: CombatFlashState) => {
+      setCombatFlash(null);
+      if (flash.autoAdvance) onAction({ type: "revealNextMonster", seat: viewerSeat });
+    },
+    [onAction, viewerSeat],
+  );
   useEffect(() => {
     if (!combatFlash) return;
-    const t = setTimeout(() => setCombatFlash(null), ENCOUNTER_HOLD_MS);
+    const flash = combatFlash;
+    const t = setTimeout(() => finishCombatFlash(flash), flash.holdMs);
     encounterTimeoutRef.current = t;
     return () => {
       clearTimeout(t);
       encounterTimeoutRef.current = null;
     };
-  }, [combatFlash]);
+  }, [combatFlash, finishCombatFlash]);
   const handleSkipEncounter = useCallback(() => {
+    if (!combatFlash) return;
     if (encounterTimeoutRef.current) clearTimeout(encounterTimeoutRef.current);
-    setCombatFlash(null);
-  }, []);
+    finishCombatFlash(combatFlash);
+  }, [combatFlash, finishCombatFlash]);
   const handlePushDone = useCallback((id: number) => {
     setPushEvents((prev) => prev.filter((e) => e.id !== id));
   }, []);
+  // Task brief "듀얼 오픈 컨트롤러 바" — 도전자가 협곡 조우를 시작/이어갈 때
+  // 선택하는 두 진입점. 수동 모드는 기존 "다음 몬스터 공개"와 동일하게 정확히
+  // 한 장만 요청하고, 전체 오픈은 `bulkActive`를 켠 뒤 첫 장을 요청해 체인을
+  // 시작시킨다(이후는 위 `finishCombatFlash`가 이어감).
+  const handleManualReveal = useCallback(() => {
+    onAction({ type: "revealNextMonster", seat: viewerSeat });
+  }, [onAction, viewerSeat]);
+  const handleBulkReveal = useCallback(() => {
+    setBulkActive(true);
+    onAction({ type: "revealNextMonster", seat: viewerSeat });
+  }, [onAction, viewerSeat]);
 
   const seatRowRefs = useRef(new Map<SeatIndex, HTMLElement>());
   const riftStackRef = useRef<HTMLDivElement | null>(null);
@@ -455,11 +581,23 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
   // 붙잡아 보여준다 — 자동 5초 경과 또는 [⏩ 스킵]으로 `combatFlash`가 다시
   // `null`이 되면 자연히 풀린다.
   const isHoldingFinalReveal = combatFlash !== null && state.phase !== "resolvingRift";
+  // 라운드가 막 확정된 순간의 생사 이펙트(`lifeDeathFlash`)가 재생 중이면,
+  // 게임을 끝낸 바로 그 라운드라도 그 이펙트가 끝나기 전에는 트로피 화면으로
+  // 바로 넘어가지 않는다 — 빈 협곡 즉시 클리어처럼 `combatFlash` 자체가 아예
+  // 생기지 않는 경우에도(=`isHoldingFinalReveal`가 false여도) 이 이펙트만은
+  // 항상 최소 `LIFE_DEATH_HOLD_MS` 동안 화면을 덮고 있어야 하기 때문.
+  const lifeDeathOverlay =
+    lifeDeathFlash &&
+    (lifeDeathFlash.outcome === "success" ? (
+      <SurvivalEffect key={lifeDeathFlash.key} onSkip={handleSkipLifeDeath} />
+    ) : (
+      <DeathEffect key={lifeDeathFlash.key} onSkip={handleSkipLifeDeath} />
+    ));
 
   // ---------------------------------------------------------------------
   // Game over
   // ---------------------------------------------------------------------
-  if (state.phase === "gameOver" && !isHoldingFinalReveal) {
+  if (state.phase === "gameOver" && !isHoldingFinalReveal && !lifeDeathFlash) {
     const rankings = computeRankings(state);
     const winner = rankings.find((r) => r.rank === 1)!;
     return (
@@ -518,6 +656,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
           결과 확정하고 계속하기
         </button>
         {lastRoundModal}
+        {lifeDeathOverlay}
       </div>
     );
   }
@@ -612,7 +751,34 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
           </div>
           {/* Task brief §3: the base HP-3 champion tile, physically-set-up-style — the hero card centered above the items equipped onto it. */}
           <div className="flex justify-center">
-            <HeroCard />
+            {/*
+              라운드가 막 확정된 2.5초 동안(`lifeDeathFlash`) 챔피언 카드 자체에
+              생사 판정을 덧입힌다 — 생존(성공)이면 골드/에메랄드 글로우 테두리로
+              "수호"를, 사망(실패)이면 흑백화 + 손으로 그은 듯한 크랙 오버레이로
+              "쓰러짐"을 표현한다. 다음 라운드의 `dealRound`가 이미
+              `equippedItemIds`를 리셋했을 수 있어도 이 카드 자체 연출은
+              `lifeDeathFlash`의 로컬 타이머로만 켜지고 꺼지므로 무관하다.
+            */}
+            <div
+              className={`relative ${lifeDeathFlash?.outcome === "failure" ? "grayscale" : ""}`}
+              style={lifeDeathFlash?.outcome === "success" ? { animation: `rift-hero-glow-pulse ${LIFE_DEATH_HOLD_MS}ms ease-in-out` } : undefined}
+            >
+              <HeroCard />
+              {lifeDeathFlash?.outcome === "failure" && (
+                <svg
+                  className="pointer-events-none absolute inset-0 h-full w-full"
+                  viewBox="0 0 100 160"
+                  preserveAspectRatio="none"
+                  style={{ animation: "rift-hero-crack-in 0.4s ease-out forwards" }}
+                >
+                  <path d="M50 0 L46 30 L58 55 L40 80 L52 105 L38 130 L50 160" stroke="rgba(0,0,0,0.75)" strokeWidth="2.4" fill="none" />
+                  <path d="M20 40 L46 30" stroke="rgba(0,0,0,0.6)" strokeWidth="1.6" fill="none" />
+                  <path d="M58 55 L85 62" stroke="rgba(0,0,0,0.6)" strokeWidth="1.6" fill="none" />
+                  <path d="M40 80 L15 92" stroke="rgba(0,0,0,0.6)" strokeWidth="1.6" fill="none" />
+                  <path d="M52 105 L80 118" stroke="rgba(0,0,0,0.6)" strokeWidth="1.6" fill="none" />
+                </svg>
+              )}
+            </div>
           </div>
           <div className="flex flex-wrap justify-center gap-2">
             {ITEM_CATALOG.map((item) => (
@@ -705,7 +871,9 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
           isChallenger={isChallenger}
           onAction={onAction}
           revealLocked={combatFlash !== null}
-          holdingFinalReveal={isHoldingFinalReveal}
+          holdingFinalReveal={isHoldingFinalReveal || lifeDeathFlash !== null}
+          onManualReveal={handleManualReveal}
+          onBulkReveal={handleBulkReveal}
         />
 
         {/* Scoreboard */}
@@ -774,6 +942,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
 
         {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
         {lastRoundModal}
+        {lifeDeathOverlay}
 
         {/* Rift-pile accumulation FX (task brief §2): pushing seat's row -> the pile stack. */}
         {pushEvents.map((event) => (
@@ -801,6 +970,8 @@ function TurnPanel({
   onAction,
   revealLocked,
   holdingFinalReveal,
+  onManualReveal,
+  onBulkReveal,
 }: {
   state: SummonersRiftState;
   viewerSeat: SeatIndex;
@@ -817,9 +988,16 @@ function TurnPanel({
    * *previous* round's frozen last card — so every turn action (draw/pass for
    * whoever the next round's `activeSeat` happens to be, or acknowledging the
    * game's end) stays locked out until this clears, same spirit as
-   * `revealLocked` for the challenger's own "다음 몬스터 공개" button.
+   * `revealLocked` for the challenger's own "다음 몬스터 공개" button. 카드
+   * 공개 방식 선택 세션부터는 부모가 여기에 `lifeDeathFlash !== null`도 함께
+   * OR해서 넘기므로, 라운드를 끝낸 화면 전체 생사 이펙트가 재생되는 동안도
+   * 동일하게 잠긴다.
    */
   holdingFinalReveal: boolean;
+  /** "🃏 1장씩 오픈" — 기존과 동일하게 정확히 몬스터 한 장만 공개 요청. */
+  onManualReveal: () => void;
+  /** "💥 전체 오픈" — 도전자 클라이언트가 죽거나 협곡 더미가 빌 때까지 `revealNextMonster`를 자동 연속 전송하는 체인을 시작시킨다(부모의 `bulkActive`/`finishCombatFlash` 참고). */
+  onBulkReveal: () => void;
 }) {
   const panelStyle = { borderColor: "rgba(200,170,110,0.25)", background: "linear-gradient(160deg,#20180a 0%,#150f06 55%,#0a0603 100%)" };
 
@@ -952,14 +1130,35 @@ function TurnPanel({
       {state.spatulaDeclaredThreat !== null && (
         <p className="text-[10px] text-white/40">🥄 지정한 몬스터: 위협도 {state.spatulaDeclaredThreat}</p>
       )}
-      <button
-        disabled={revealLocked}
-        onClick={() => onAction({ type: "revealNextMonster", seat: viewerSeat })}
-        className="rounded-full px-6 py-2.5 text-xs font-semibold text-black transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
-        style={{ background: "linear-gradient(135deg,#e05a5a,#a12f2f)" }}
-      >
-        {revealLocked ? "⏳ 전투 연출 재생 중..." : "⚔️ 다음 몬스터 공개"}
-      </button>
+      {/*
+        듀얼 오픈 컨트롤러 바 — "🃏 1장씩 오픈"은 기존 "다음 몬스터 공개"와
+        동일하게 정확히 한 장만 요청하고, "💥 전체 오픈"은 죽거나 협곡 더미가
+        빌 때까지 자동으로 이어서 공개하는 체인을 시작시킨다(AskUserQuestion
+        "기존 액션 연속 전송" 채택 — engine.ts 변경 없이 두 버튼 모두 결국
+        같은 `revealNextMonster` 액션만 반복 전송). 둘 다 도전자 화면에만
+        노출되며(AskUserQuestion "도전자만" 채택), 이전 조우의 결과가 아직
+        화면에 붙잡혀 있는 동안(`revealLocked`)은 둘 다 비활성화된다.
+      */}
+      {revealLocked ? (
+        <span className="rounded-full border border-white/15 px-6 py-2.5 text-xs font-semibold text-white/50">⏳ 전투 연출 재생 중...</span>
+      ) : (
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            onClick={onManualReveal}
+            className="rounded-full px-5 py-2.5 text-xs font-semibold text-black transition hover:brightness-110"
+            style={{ background: "linear-gradient(135deg,#e05a5a,#a12f2f)" }}
+          >
+            🃏 1장씩 오픈
+          </button>
+          <button
+            onClick={onBulkReveal}
+            className="rounded-full px-5 py-2.5 text-xs font-semibold text-black transition hover:brightness-110"
+            style={{ background: "linear-gradient(135deg,#ffcf6b,#d9425e)" }}
+          >
+            💥 전체 오픈
+          </button>
+        </div>
+      )}
     </section>
   );
 }

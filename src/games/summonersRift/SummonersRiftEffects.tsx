@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { DeckBack } from "./CardArt";
 import type { SeatIndex, SummonersRiftState } from "./engine";
@@ -130,6 +130,124 @@ export function NamedMonsterDim() {
         animation: "rift-named-dim-in 0.35s ease-out",
       }}
     />,
+    document.body,
+  );
+}
+
+/**
+ * 2026-08-30 카드 공개 방식 선택 + 생사 이펙트 세션 — 라운드가 성공(협곡을
+ * 끝까지 클리어해 생존)으로 확정되는 그 순간 화면 전체를 압도하는 축하 연출
+ * (작업 지시 §2 "생존(Survival) 판정 시"). `NamedMonsterDim`과 같은 이유로
+ * `document.body`에 포털링 — `SummonersRiftBoard`가 gameOver/playing 두
+ * 갈래로 분기돼도(부모의 `lifeDeathOverlay` 변수가 양쪽 모두에 렌더) 항상
+ * 뷰포트 전체를 덮어야 한다. 배경/링/텍스트는 모두 `pointer-events-none`이라
+ * 뒤쪽 보드 상호작용을 막지 않고, 스킵 버튼만 `pointer-events-auto`로 켠다.
+ */
+export function SurvivalEffect({ onSkip }: { onSkip: () => void }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center overflow-hidden">
+      <div
+        className="absolute inset-0"
+        style={{
+          background: "radial-gradient(circle at 50% 50%, rgba(250,204,21,0.32) 0%, rgba(16,185,129,0.2) 45%, rgba(0,0,0,0) 78%)",
+          animation: "rift-survive-bg-flash 2.5s ease-out forwards",
+        }}
+      />
+      {/* 황금빛/에메랄드빛 링 파티클 — 중앙에서 동심원으로 퍼져나가며 사라진다 (작업 지시 §2 "황금빛 링 파티클 방출"). */}
+      {[0, 1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className="absolute h-20 w-20 rounded-full border-4"
+          style={{
+            borderColor: i % 2 === 0 ? "rgba(250,204,21,0.85)" : "rgba(52,211,153,0.75)",
+            opacity: 0,
+            animation: `rift-survive-ring-expand 1.3s ease-out ${i * 0.18}s forwards`,
+          }}
+        />
+      ))}
+      <div className="flex flex-col items-center gap-2" style={{ animation: "rift-survive-text-slam 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards" }}>
+        <span
+          className="text-4xl font-black tracking-wider sm:text-6xl"
+          style={{ color: "#faf3c8", textShadow: "0 0 24px rgba(250,204,21,0.95), 0 0 60px rgba(16,185,129,0.6)" }}
+        >
+          🛡️ SURVIVED
+        </span>
+        <span className="text-base font-bold sm:text-xl" style={{ color: "#e8c77a" }}>
+          생존 성공!
+        </span>
+      </div>
+      <button
+        onClick={onSkip}
+        className="pointer-events-auto absolute bottom-10 rounded-full px-4 py-1.5 text-[11px] font-black text-black shadow-[0_0_16px_rgba(250,204,21,0.6)] transition hover:brightness-110 active:scale-95"
+        style={{ background: "linear-gradient(135deg,#fde68a,#c8933e)" }}
+      >
+        ⏩ 스킵
+      </button>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * `SurvivalEffect`의 반대 — 라운드가 실패(체력 0, 사망/처치)로 확정되는 순간의
+ * 전체 화면 연출(작업 지시 §2 "사망/처치(Defeated/Death) 판정 시"): 붉은
+ * 비네트 암전 펄스 + 유리 조각처럼 흩날리는 크랙 샤드 + 무겁게 내리찍히는
+ * 해골 엠블럼 텍스트.
+ */
+export function DeathEffect({ onSkip }: { onSkip: () => void }) {
+  if (typeof document === "undefined") return null;
+  const shardCount = 8;
+  return createPortal(
+    <div className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center overflow-hidden">
+      {/* 화면 모서리 붉은색 비네트 플래시 — 작업 지시 §2 "animate-pulse"를 그대로 사용. */}
+      <div
+        className="absolute inset-0 animate-pulse"
+        style={{ background: "radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 28%, rgba(140,10,10,0.55) 78%, rgba(50,0,0,0.85) 100%)" }}
+      />
+      {/* 유리가 산산조각 나는 듯한 크랙 샤드 — 중앙에서 8방향으로 튀어나가며 사라진다. */}
+      {Array.from({ length: shardCount }, (_, i) => {
+        const angle = (i / shardCount) * Math.PI * 2;
+        const dx = Math.round(Math.cos(angle) * 220);
+        const dy = Math.round(Math.sin(angle) * 220);
+        return (
+          <span
+            key={i}
+            className="absolute h-10 w-4 bg-white/70"
+            style={
+              {
+                left: "50%",
+                top: "50%",
+                clipPath: "polygon(50% 0%, 100% 100%, 0% 100%)",
+                opacity: 0,
+                "--dx": `${dx}px`,
+                "--dy": `${dy}px`,
+                "--rot": `${i * 47}deg`,
+                animation: `rift-death-shard-fly 0.7s ease-out ${i * 0.02}s forwards`,
+              } as CSSProperties
+            }
+          />
+        );
+      })}
+      <div className="flex flex-col items-center gap-2" style={{ animation: "rift-death-text-slam 0.55s ease-out forwards" }}>
+        <span
+          className="text-4xl font-black tracking-wider sm:text-6xl"
+          style={{ color: "#ff6b6b", textShadow: "0 0 20px rgba(220,20,20,0.9), 0 0 50px rgba(0,0,0,0.9)" }}
+        >
+          💀 YOU DIED
+        </span>
+        <span className="text-base font-bold sm:text-xl" style={{ color: "#f3a5a5" }}>
+          처치됨
+        </span>
+      </div>
+      <button
+        onClick={onSkip}
+        className="pointer-events-auto absolute bottom-10 rounded-full border border-white/30 px-4 py-1.5 text-[11px] font-black text-white/80 transition hover:border-white/50 active:scale-95"
+        style={{ background: "rgba(0,0,0,0.5)" }}
+      >
+        ⏩ 스킵
+      </button>
+    </div>,
     document.body,
   );
 }
