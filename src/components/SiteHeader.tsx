@@ -76,6 +76,7 @@ export default function SiteHeader() {
               <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 font-semibold text-rose-200">
                 {userId ? (tier ? TIER_LABELS[tier] : "…") : "게스트"}
               </span>
+              {/* TEMP: 무료 이용 횟수(N/N회) 배지 임시 숨김 — 요청에 따라 비활성화. 되돌리려면 이 블록 복원.
               {entitlement && (
                 <span className="text-white/50">
                   {entitlement.unit === "games"
@@ -83,6 +84,7 @@ export default function SiteHeader() {
                     : `${Math.max(0, entitlement.cap - entitlement.used)}/${entitlement.cap}분`}
                 </span>
               )}
+              */}
             </Link>
           )}
           <Link

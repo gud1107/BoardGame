@@ -1,6 +1,10 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-30 (**쇼미더코인(Show Me The Coin) 2인 전용 코인 베팅 심리전 게임 신규 개발 세션 — 23번째 플레이 가능 게임, 봇 대체/베팅 연동 7번째 게임으로 확장** — 자세한 내용은 아래 `### 2026-08-30 — 쇼미더코인(Show Me The Coin) 신규 게임 개발` 절 참고.)_
+_최종 갱신: 2026-08-30 (**랫어탯캣(Rat-a-Tat Cat) 2~6인 기억력·블러핑 카드 게임 신규 개발 세션 — 25번째 플레이 가능 게임, 봇 대체 9번째 게임으로 확장(베팅 연동은 미적용). 이 세션에서 이전 세션의 보류 상태였던 러브 윈즈 올 커밋/푸시/배포도 함께 진행** — 자세한 내용은 아래 `### 2026-08-30 — 랫어탯캣(Rat-a-Tat Cat) 신규 게임 개발` 절 참고.)_
+
+_이전 갱신: 2026-08-30 (**러브 윈즈 올(Love Wins All) 2인 전용 심리·배신 데스매치 게임 신규 개발 세션 — 24번째 플레이 가능 게임, 봇 대체/베팅 연동 8번째 게임으로 확장. 사용자 지시로 커밋/푸시/배포는 보류하고 로컬 반영까지만 완료(다음 세션에서 커밋/배포 완료 — 위 최신 절 참고)** — 자세한 내용은 아래 `### 2026-08-30 — 러브 윈즈 올(Love Wins All) 신규 게임 개발` 절 참고.)_
+
+_이전 갱신: 2026-08-30 (**쇼미더코인(Show Me The Coin) 2인 전용 코인 베팅 심리전 게임 신규 개발 세션 — 23번째 플레이 가능 게임, 봇 대체/베팅 연동 7번째 게임으로 확장** — 자세한 내용은 아래 `### 2026-08-30 — 쇼미더코인(Show Me The Coin) 신규 게임 개발` 절 참고.)_
 
 _이전 갱신: 2026-08-30 (**로스트 시티(Lost Cities) 2인 전용 탐험 카드 게임 신규 개발 세션 — 22번째 플레이 가능 게임** — 자세한 내용은 아래 `### 2026-08-30 — 로스트 시티(Lost Cities) 신규 게임 개발` 절 참고.)_
 
@@ -83,6 +87,80 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-30 — 랫어탯캣(Rat-a-Tat Cat) 신규 게임 개발
+
+**요청**: Monty/Ann Stambler의 2~6인 기억력·블러핑 카드 게임 "랫어탯캣(Rat-a-Tat Cat)"을 `boardGameRule/렛어텟켓/렛어텟켓.md` 룰북 기반으로 풀스택 신규 개발. 요청서는 `src/games/common/`, `src/server/socket/roomManager.ts`, `aiBot.ts` 소켓 서버 아키텍처를 전제했고, 라운드 누적 점수제 vs 단판 승부, 콜 선언자의 패배 페널티 세부 룰 등은 임의로 추정하지 말고 먼저 질문하라는 명시적 지시(Strict No-Assumption Rule). 완료 후 "로컬에만 반영하고 커밋/푸시/배포는 대기"로 시작했으나, 세션 중간에 사용자가 "다 완료되면 로컬 반영분 커밋/푸시, 배포 안 된 것 전부 반영"으로 지시를 변경.
+
+**사전 조사에서 발견한 핵심 사실 (요청서 전제와 실제 구조/룰북의 괴리)**: 이번 세션도 직전 여러 세션과 동일한 패턴의 괴리였음.
+- `src/games/common/`, `src/server/socket/roomManager.ts`, `aiBot.ts`는 이 저장소에 전혀 존재하지 않음 — 서버 없는 Supabase Realtime 락스텝 구조([ARCHITECTURE.md](../ARCHITECTURE.md), [docs/cloud-sync.md](../docs/cloud-sync.md)).
+- 이탈자 봇 대체는 즉시 자동 전환이 아니라 공용 모듈 `botTakeover.ts`(잔여 인원 과반수 투표 기반)이며, 이번 세션 시점 8개 게임(운명전쟁39/라스베가스/그리드포커/말달리자/달무티/노땡스/쇼미더코인/러브윈즈올)에 적용된 상태 — 랫어탯캣을 9번째로 확장.
+- 룰북 원문 §6은 단판 승부와 "다회 라운드 누적 승점제"(목표 점수 미명시) 둘 다 언급하고, 콜 선언자가 최저점이 아닐 때의 페널티는 룰북 어디에도 명시돼 있지 않음 — 요청서 본문에서도 직접 "확인 필요"로 짚었던 지점.
+
+**`AskUserQuestion`으로 확인한 사항 (1라운드, 4문항)**:
+1. **네트워크/봇 대체 아키텍처** → **기존 표준 재사용**(채택, 권장안): Supabase 락스텝 + `botTakeover.ts` 투표 기반 봇 전환(9번째 게임으로 확장) + `useBotAutoplay`.
+2. **라운드 진행 방식** → **단판 승부**(채택, 권장안): 룰북 §6의 "다회 라운드 누적 승점제"(목표 점수 미명시)는 채택하지 않고, 이 저장소의 다른 온라인 카드 게임들과 동일하게 1회 플레이 후 즉시 결과.
+3. **콜 선언자 패널티 룰** → **페널티 없음, 룰북 원문 그대로**(채택, 권장안): 선언 여부와 무관하게 카드 합이 가장 낮은 사람이 그냥 승리.
+4. **베팅 룸 연동(`bettingRoomLinked`)** → **적용 안 함**(채택, 권장안): 요청서의 "보드게임허브 공통 규격" 목록에 없는 선택 기능 — 로스트 시티와 동일한 판단.
+
+**구현** (`src/games/ratATatCat/`, ARCHITECTURE.md §2 표준 레이아웃):
+- [`engine.ts`](src/games/ratATatCat/engine.ts): 순수 리듀서. 54장 덱(숫자 0-8 각 4장+9는 9장=45장, 특수 카드 엿보기/바꾸기/두 번 뽑기 각 3장=9장), 4장 시작 손패 중 양 끝(0/3번) 슬롯만 `INITIAL_PEEK_DONE`으로 좌석별 비동기 확인(엔진엔 "동시" 개념이 없어도 좌석 간 상호작용이 없으므로 순서 무관 — `setupAcks` 전원 완료 시 `"playing"` 전환). `turnPhase: "DRAW"|"DECIDE_CARD"|"EXECUTE_POWER"|"DISCARD"`는 타입엔 요청서 스케치 그대로 4개 값을 유지했지만 실제로 정밀 모델링한 결과 `"DISCARD"`는 도달 불가능한 상태로 판명(§4의 "그냥 버리기"는 항상 `DECIDE_CARD`/`EXECUTE_POWER` 핸들러 안에서 원자적으로 끝나고, §5 두 번 뽑기의 강제 2차 드로우는 `drawTwoStage` 플래그로 제한된 `DRAW` 재진입일 뿐 — engine.ts 모듈 docstring에 근거 기록) — 3개 값만 실제로 대입됨. §6.2(손패에 특수 카드가 남아있으면 덱에서 숫자 카드가 나올 때까지 뽑아 대체해 채점)를 `computeGameOverScores`로 정확히 구현 — 실제 손패는 절대 변형하지 않고 순수 파생 계산만 수행. `getValidMoves`/`chooseBotAction(state,seat,level,rng?)`(ARCHITECTURE.md §7.1) — 요청서의 "메모리 기반 지능형 봇"을 정보 공정성 원칙 안에서 구현: 자신이 아는(또는 안다고 가정할 수 있는) 카드값만으로 손패 기댓값을 추정해 낮은 카드는 유지, 높은 카드는 교체.
+- [`RatATatCat.test.ts`](src/games/ratATatCat/RatATatCat.test.ts): 42개 테스트 — 덱 구성(45+9=54장), 결정론적 `startGame`, 초기 정찰(양 끝만 공개), 드로우/교체/버리기 각 흐름, 버림 더미 강제 교체(mustReplace), 엿보기/바꾸기/두 번 뽑기(1차 거부→강제 2차 드로우, 3차 드로우 없음) 각각, 콜 선언+마지막 1턴씩+게임 종료, 덱 소진 즉시 종료, §6.2 특수 카드 대체 채점, `getValidMoves` 게이팅, `chooseBotAction` 항상 합법수 반환, Lv.1/Lv.10 분기, 2~6인 각 5개 시드 봇 vs 봇 완주(무한루프 없음), `isStateSyncStale` 재접속 레이스 가드.
+- [`CardSlot.tsx`](src/games/ratATatCat/CardSlot.tsx): 카드 1장의 순수 표현 컴포넌트 — 게임 종료 전원 공개(`revealed`)와 본인만 아는 힌트(`knownToViewer`, 살짝 투명 처리) 두 가지를 구분. 카드 정체성/공개여부가 바뀔 때마다 리마운트되도록 `key`를 걸어 별도 타이머 없이 `globals.css`의 `ratc-card-flip` 3D 플립 애니메이션이 자연히 재생되게 함(엿보기/교환 연출 요구사항).
+- [`RatATatCatBoard.tsx`](src/games/ratATatCat/RatATatCatBoard.tsx): 제어 컴포넌트. 상단 상대 좌석들(4장 뒷면+기본 아바타), 중앙 덱/버림 더미/콜 버튼("🐱 랫어탯캣!")과 상황별(교체/버리기, 능력 사용/버리기, 바꾸기 2단계 선택) 액션 UI, 하단 내 손패(아는 카드 힌트 표시). `getValidMoves`를 그대로 읽어 버튼 활성/비활성을 결정(별도 검증 로직 중복 없음).
+- [`RatATatCatEffects.tsx`](src/games/ratATatCat/RatATatCatEffects.tsx): `GameOverReveal` — 전원 카드 동시 공개 + 좌석별 점수(대체값 표기 포함) + 승자 왕관 하이라이트, 결과 3초 유지 + `[⏩ 결과 스킵]` 버튼(백드롭 더블탭도 지원). 관련 키프레임을 `globals.css`에 `ratc-` 접두사로 신설(게임 간 코드 결합 0 원칙에 따라 자체 복제).
+- [`RulebookModal.tsx`](src/games/ratATatCat/RulebookModal.tsx): 룰 요약 + 위 4개 하우스 결정 사항 고지.
+- [`RatATatCatGame.tsx`](src/games/ratATatCat/RatATatCatGame.tsx): `no-thanks` 패턴 그대로의 Supabase Realtime 락스텝 방 로비(2~6인 가변) + `botTakeover.ts` 투표 기반 봇 대체(**9번째 게임으로 확장**) + `useBotAutoplay` + 무응답(idle) 자동 투표 트리거 + `useGameLeaveGuard`/`useBackgroundResync` + `Avatar`(기본 아바타 자동 연동) 재사용. 요청서의 "보드게임허브 공통 규격" 목록에 없던 채팅/베팅 연동은 로스트 시티와 동일하게 의도적으로 제외.
+- [`registry.ts`](src/games/registry.ts)에 `rat-a-tat-cat` 항목 추가(`players:2~6`, `category:"card"`, `genres:["strategy","family"]`), [`playableGames.tsx`](src/games/playableGames.tsx)에 동적 import 등록.
+
+**실제 렌더링 확인 (ARCHITECTURE.md §2 "알려진 사각지대")**: 이 Windows 세션 환경에도 헤드리스 브라우저 도구가 없어(`run` 스킬 시도 결과 동일하게 확인) 스크린샷 육안 확인은 못함 — `npm run dev` 기동 후 `curl`로 대시보드(`/`)와 게임 페이지(`/games/rat-a-tat-cat`) 둘 다 200, 양쪽 서버 렌더 HTML에 "랫어탯캣" 문자열 포함 확인, 개발 서버 로그에 컴파일/런타임 에러 없음을 확인. 실제 2인 이상 대국의 육안 검증(손패 힌트 표시, 카드 플립 애니메이션, 콜→마지막 라운드→전원 공개 흐름)은 다음 세션에서 브라우저 도구가 있는 환경이라면 권장.
+
+**검증**: `npx tsc --noEmit`(에러 0), `npm run lint`(경고/에러 0), `npx vitest run`(48개 파일·1458개 테스트 전부 통과 — 신규 42개 포함).
+
+**다음 세션 인계**: (1) 위 "실제 렌더링 확인" 항목대로 Board/Game 컴포넌트의 실제 브라우저 동작(특히 바꾸기 2단계 선택 UI, 두 번 뽑기 체인, 봇 vs 사람 혼합 대국)은 자동 테스트 밖이라 육안 확인이 아직 안 됨. (2) Level 1-10 난이도 곡선은 있으나 실제 사람 상대 체감 밸런스 테스트는 안 됨. (3) `turnPhase`의 `"DISCARD"` 값은 타입엔 남아있지만 실제로 절대 대입되지 않음(engine.ts 모듈 docstring에 근거 기록) — 향후 리팩터링 시 3-값 유니온으로 정리해도 무방.
+
+**커밋/배포**: 세션 도중 사용자가 지시를 "로컬만 반영, 대기" → "완료되면 로컬 반영분 전부 커밋/푸시, 배포 안 된 것 반영"으로 명시적으로 변경. 이에 따라 이 세션 시작 시점에 이미 워킹 트리에 있던 **이전(러브 윈즈 올) 세션의 보류 상태 변경분**(`src/games/loveWinsAll/` 전체, registry.ts/playableGames.tsx의 `love-wins-all` 항목, globals.css의 `lwa-` 키프레임)과, 그 세션과 무관하게 이미 스테이징되어 있던 `src/components/SiteHeader.tsx`의 무료 이용 횟수 배지 임시 숨김(코드 내 `TEMP:` 주석 확인, 이 세션이 만든 변경 아님)까지 포함해 **이 세션이 만들지 않은 변경분도 사용자의 명시적 "전부 반영" 지시에 따라 함께 커밋**했음 — 아래 커밋 해시와 실제 배포 결과는 이어지는 절 참고.
+
+### 2026-08-30 — 러브 윈즈 올(Love Wins All) 신규 게임 개발
+
+**요청**: 넷플릭스 <데스게임> 등장 심리·배신 데스매치 보드게임 "러브 윈즈 올"을 `boardGameRule/러브윈즈올/러브윈즈올.md` 룰북 기반으로 풀스택 신규 개발. 요청서는 `src/games/common/`, `src/server/socket/roomManager.ts`, `aiBot.ts` 소켓 서버 아키텍처와 "라운드별 파트너 매칭/타겟 지목" + "하트 0까지 여러 라운드 반복하는 서바이벌" 모델을 전제했고, 인원 구성·라운드 구조·동률 처리·봇 전략 등을 임의로 추정하지 말고 먼저 질문하라는 명시적 지시(Strict No-Assumption Rule). 진행 중 사용자가 "커밋, 푸쉬, 배포하지 말고 로컬만 반영하고 대기"하도록 명시적으로 지시.
+
+**사전 조사에서 발견한 핵심 사실 (요청서 전제와 실제 구조/룰북의 괴리)**: 이번 세션도 바로 전 쇼미더코인/로스트 시티 세션과 동일한 패턴의 괴리였음.
+- `src/games/common/`, `src/server/socket/roomManager.ts`, `aiBot.ts`는 이 저장소에 전혀 존재하지 않음 — 서버 없는 Supabase Realtime 락스텝 구조([ARCHITECTURE.md](../ARCHITECTURE.md), [docs/cloud-sync.md](../docs/cloud-sync.md)).
+- **룰북 원문이 요청서의 "라운드별 파트너 매칭 + 하트 0까지 다중 라운드 서바이벌" 전제와 정면으로 배치됨**: 룰북 제목부터 "(단판 승부 모드)"로 명시, §1~§4 전부 선/후공 구분 없는 단 2인이 LOVE/WAR를 각 1회 동시 공개해 그 자리에서 승부를 끝내는 구조 — 하트/생명력 게이지, 매 라운드 파트너 재매칭, 3인 이상 인원 구성 같은 개념은 룰북에 전혀 없음. `netflix-death-game` 컬렉션의 기존 2인 전용작(`showMeTheCoin`/`malDalliJa`/`piecesOfLanguage`) 전례와도 일치.
+- 이탈자 봇 대체는 즉시 자동 전환이 아니라 공용 모듈 `botTakeover.ts`(잔여 인원 과반수 투표 기반)이며, 이번 세션 시점 7개 게임(운명전쟁39/라스베가스/그리드포커/말달리자/달무티/노땡스/쇼미더코인)에 적용된 상태.
+- 룰북 자체도 LOVE+LOVE 무승부를 "공동 승리 (또는 공동 무승부 후 재경기)"로 두 가지 대안을 병기만 하고 확정하지 않음.
+
+**`AskUserQuestion`으로 확인한 사항 (1라운드, 4문항, 전부 권장안 채택)**:
+1. **인원 구성** → **2인 전용(룰북 그대로)**(채택, 권장안): `players:{min:2,max:2}`, 요청서의 다인원 매칭 전제 기각.
+2. **게임 구조** → **룰북 그대로 단판 승부**(채택, 권장안): 하트/생명력 게이지 없음. 요청서의 "하트 0까지 다중 라운드" 전제 기각.
+3. **LOVE+LOVE 무승부 처리** → **무승부 후 판돈 이월 재경기**(채택, 권장안): 즉시 공동 승리 처리가 아니라, 판돈을 이월한 채 같은 매치를 다시 진행.
+4. **이탈 플레이어 봇 전략** → **휴리스틱형(Tit-for-Tat 등, 요청서 원문 그대로)**(채택, 권장안).
+
+**엔진 설계상 추가로 확인이 필요했던 지점(사용자 답변을 구체 구현으로 옮기며 발견 — 재질문 없이 문서화된 엔지니어링 판단으로 처리, `engine.ts` 모듈 docstring 참고)**:
+- **판돈(pot) 자체의 숫자**: 룰북은 "공용 목표 자원(하트/승점 칩)"이라고만 하고 구체 수치가 없음 — 순수 연출용 긴장 지수로 모델링, 라운드 1 시작 시 `ANTE_PER_ROUND`(10)가 자동으로 쌓이고 재경기마다 다시 10씩 추가 적립. 승패 판정 자체엔 전혀 영향 없음.
+- **무한 재경기 안전장치**: 둘 다 계속 LOVE만 선택하면 이론상 영원히 재경기가 반복될 수 있어 매치가 끝나지 않는 문제 — 룰북이 병기한 "공동 승리" 대안을 백스톱으로 적용, `MAX_TIE_ROUNDS`(5)번째 연속 무승부에서 자동으로 공동 승리 확정. 사용자가 확정한 "재경기" 선택을 절대 덮어쓰지 않고, 5연속 무승부라는 사실상 도달하기 어려운 극단적 케이스에서만 발동.
+- **WAR+WAR(상호 배신)의 판돈**: 룰북은 "둘 다 최종 패배(탈락)"이라고만 하고 판돈 언급이 없음 — 몰수(0으로 리셋, 누구에게도 지급 안 함)로 처리.
+- **Tit-for-Tat의 실질 의미**: 이 엔진 구조상 라운드 2 이상은 오직 직전 라운드가 LOVE+LOVE 무승부였을 때만 도달 가능 — 즉 "상대의 직전 선택을 그대로 따라한다"는 순수 TFT는 항상 LOVE만 반복하는 것과 동치. 대신 룰북 §5의 "신뢰를 쌓은 뒤 배신 타이밍을 노린다" 팁을 그대로 반영해, 라운드 수와 봇 등급(novice/core/expert)에 비례해 커지는 배신 유혹 확률(`warTemptation`)로 구현 — 저난이도는 거의 안 커지고, 고난이도(expert)일수록 신뢰가 쌓일수록 빠르게 배신 타이밍을 노림.
+
+**구현** (`src/games/loveWinsAll/`, ARCHITECTURE.md §2 표준 레이아웃):
+- [`engine.ts`](src/games/loveWinsAll/engine.ts): 순수 리듀서. `choice`(비공개 LOVE/WAR 선택)→`reveal`(동시 공개, 결과 확정)→`gameOver` 3단계 페이즈. `resolveRound`가 LOVE+LOVE(무승부, 판돈 이월)/LOVE+WAR·WAR+LOVE(배신 성공, 단독 승리+판돈 독식)/WAR+WAR(상호 파멸, 판돈 몰수) 3가지 조합을 판정하고, `applyMatchEndCheck`가 결정적 결과는 즉시 `gameOver`로, 무승부는 `MAX_TIE_ROUNDS` 도달 여부에 따라 재경기 대기 또는 공동 승리 확정으로 분기. `getValidMoves`/`chooseBotAction(state,seat,level,rng?)`(ARCHITECTURE.md §7.1) — `warTemptation(round,tier)`가 라운드 수·봇 등급에 비례해 커지는 배신 유혹을 스코어로 반영하고, `pickByLevel`의 기존 실수율/타이마진 곡선이 novice~expert 난이도 차등을 자동으로 만들어줌(게임별 커스텀 티어 분기 불필요).
+- [`LoveWinsAll.test.ts`](src/games/loveWinsAll/LoveWinsAll.test.ts): 17개 테스트 — 결정론적 `startGame`, 비공개 선택 단계 게이팅/중복 선택 거부, 배신(양방향 대칭) 승리, 상호 배신 공동 패배+판돈 몰수, 무승부 판돈 이월+재경기(`continue`), `MAX_TIE_ROUNDS` 도달 시 자동 공동 승리, `gameOver` 이후 전 액션 no-op, `isStateSyncStale`, `chooseBotAction` 항상 합법수 반환, 라운드가 진행될수록 expert 봇의 배신 선택 확률이 실제로 역전됨(결정론적 argmax로 검증), 봇 vs 봇 완주(무한루프 없음).
+- [`LoveWinsAllBoard.tsx`](src/games/loveWinsAll/LoveWinsAllBoard.tsx): 제어 컴포넌트. 가림판 뒤 LOVE/WAR 2택 버튼, 중앙 긴장 지수(판돈) 표시, 룰북 모달 진입점.
+- [`LoveWinsAllEffects.tsx`](src/games/loveWinsAll/LoveWinsAllEffects.tsx): 요청서의 "DilemmaEffect.tsx"를 이 프로젝트의 `<Game>Effects.tsx` 명명 규칙에 맞춰 통합 — 상호 신뢰(LOVE+LOVE) 성공 시 네온 핑크 하트 폭발 파티클(`HeartBurst`) + 에메랄드 쉴드 링(`ShieldPulse`), 배신/상호 파멸 시 깨진 하트 크랙(`BrokenHeartCrack`) + 붉은 비네트 암전 + 💀 데스 엠블럼 슬램 + 화면 흔들림(`DeathVignette`), 결과 최소 3초 유지(`REVEAL_SECONDS`) + `[⏩ 스킵]` 버튼(백드롭 더블탭도 지원). 관련 키프레임 9개를 [`globals.css`](src/app/globals.css)에 `lwa-` 접두사로 신설(게임 간 코드 결합 0 원칙에 따라 `showMeTheCoin/ShowMeTheCoinEffects.tsx`류를 import하지 않고 동일 로직을 자체 복제).
+- [`LoveWinsAllGame.tsx`](src/games/loveWinsAll/LoveWinsAllGame.tsx): `showMeTheCoin`/`malDalliJa` 패턴 그대로의 Supabase Realtime 락스텝 방 로비 + `botTakeover.ts` 투표 기반 봇 대체(**이번 세션에서 7→8개 게임으로 확장 적용**, 2인 게임이라 상대 1명의 찬성만으로 즉시 전환) + `useBotAutoplay`(기본 500~1500ms 지연이 요청서의 "1.5초 내 자동 선택" 요구를 그대로 충족해 별도 커스텀 불필요) + `roomBetting.ts`/`bettingRoomLinked`(**동일하게 8번째 게임으로 확장**) + 인게임 채팅(`chatEnabled`) + `useGameLeaveGuard`/`useBackgroundResync` + `Avatar`(기본 아바타 자동 연동, 별도 구현 불필요) 전부 재사용. 호스트 클라이언트가 (무승부일 때만) 3초 후 `{type:"continue"}`를 자동 브로드캐스트.
+- [`RulebookModal.tsx`](src/games/loveWinsAll/RulebookModal.tsx): 룰 요약 + 위 4개 하우스 결정 사항 고지.
+- [`registry.ts`](src/games/registry.ts)에 `love-wins-all` 항목 추가(`players:2~2`, `category:"deduction"`, `genres:["bluffing","strategy"]`, `collectionId:"netflix-death-game"`, `bettingRoomLinked:true`), [`playableGames.tsx`](src/games/playableGames.tsx)에 동적 import 등록.
+
+**실제 브라우저 렌더링 확인은 이번 세션에서 미실시**: 사용자가 커밋/푸시/배포를 보류하도록 명시적으로 지시해 `npm run dev`/`vercel deploy` 등 배포 파이프라인을 아예 실행하지 않음 — Board/Game 컴포넌트의 실제 육안 동작(비공개 선택→동시 공개→재경기 루프, 하트 버스트/데스 비네트 이펙트, 봇 대체 투표 UI)은 자동 테스트 밖이라 다음 세션에서 커밋/배포 진행 시 반드시 육안 확인 필요.
+
+**검증**: `npx tsc --noEmit`(에러 0), `npm run lint`(경고/에러 0), `npx vitest run`(47개 파일·1416개 테스트 전부 통과 — 신규 17개 포함).
+
+**다음 세션 인계**: (1) 위 "실제 브라우저 렌더링 확인" 항목대로 이번 세션은 자동 테스트만 돌렸을 뿐 실제 2인 대국의 육안 확인이 안 됨 — 커밋/배포 재개 시 우선순위. (2) `MAX_TIE_ROUNDS`(5)/`ANTE_PER_ROUND`(10) 둘 다 룰북에 없는 수치라 사용자 재확인 없이 문서화된 엔지니어링 판단으로 정한 값 — 체감 밸런스가 별로면 조정 여지 있음. (3) Level 1-10 봇 난이도 곡선은 있으나 실제 사람 상대 체감 밸런스 테스트는 안 됨. (4) 요청서의 "협상 시간(3~5분)" 대화 페이즈는 채팅 드로어(`chatEnabled`)로 대체 — 별도의 엔진 페이즈나 타이머는 만들지 않음(대화 자체가 승패에 영향을 주는 메커니즘이 아니라 순수 플레이버라 자유 채팅으로 충분하다고 판단, 재확인 안 함).
+
+**커밋/배포**: 사용자 지시(`커밋, 푸쉬, 배포하지말고 로컬만 반영하고 대기해줘`)에 따라 **커밋/푸시/배포 전부 보류** — 워킹 트리에 로컬 변경 사항만 반영된 상태로 세션 종료. 다음 세션(또는 사용자 재지시) 시 커밋 메시지 `feat(love-wins-all): implement death-game themed dilemma board game based on rulebook`로 커밋 후 `git push origin main`, 이어서 `npx vercel deploy --prod --scope me-3871` 진행 필요.
+
+_→ 후속 갱신: 위 보류분은 바로 다음 랫어탯캣 세션에서 사용자의 "로컬 반영분 전부 커밋/푸시/배포" 재지시에 따라 커밋/푸시/배포 완료 — 위 최신 절(`### 2026-08-30 — 랫어탯캣(Rat-a-Tat Cat) 신규 게임 개발`) 참고._
 
 ### 2026-08-30 — 쇼미더코인(Show Me The Coin) 신규 게임 개발
 

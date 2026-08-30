@@ -2877,3 +2877,205 @@ body {
     transform: translate(3px, -2px);
   }
 }
+
+/* ---------------------------------------------------------------------
+   러브 윈즈 올 (Love Wins All) — see loveWinsAll/LoveWinsAllEffects.tsx for
+   what mounts each of these. Self-contained "lwa-" prefix, same
+   per-game-keyframes convention as every other title above.
+   --------------------------------------------------------------------- */
+
+/* Central pot breathing glow — always running while a match is in progress. */
+@keyframes lwa-pot-glow-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(236, 72, 153, 0.35),
+      0 0 24px 4px rgba(236, 72, 153, 0.25);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(236, 72, 153, 0.6),
+      0 0 44px 10px rgba(236, 72, 153, 0.5);
+  }
+}
+
+/* Reveal overlay entrance — same shape as every other game's own "-overlay-in" keyframe. */
+@keyframes lwa-overlay-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Skip-button pulsing border — same idea as every other game's own "-skip-pulse-glow". */
+@keyframes lwa-skip-pulse-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(236, 72, 153, 0.45),
+      0 0 10px 1px rgba(236, 72, 153, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(236, 72, 153, 0),
+      0 0 22px 4px rgba(236, 72, 153, 0.65);
+  }
+}
+
+/* One heart particle radiating outward on a mutual-LOVE reveal — driven per-particle via the --angle custom property, same technique as smtc-coin-burst-particle. */
+@keyframes lwa-heart-burst-particle {
+  0% {
+    transform: rotate(var(--angle)) translateY(0) scale(0.4);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--angle)) translateY(-90px) scale(1);
+    opacity: 0;
+  }
+}
+
+/* Emerald trust-shield ring expanding outward behind a mutual-LOVE reveal. */
+@keyframes lwa-shield-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+
+/* Broken-heart icon cracking into view on a betrayal/mutual-WAR reveal. */
+@keyframes lwa-crack-in {
+  0% {
+    transform: scale(1.6) rotate(-6deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.95) rotate(2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 0.9;
+  }
+}
+
+/* Full-screen red vignette darkening in on a betrayal/mutual-WAR elimination. */
+@keyframes lwa-death-vignette-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Death emblem slamming down off-axis to a hard stop, timed with the vignette. */
+@keyframes lwa-death-emblem-slam {
+  0% {
+    transform: scale(2.4) rotate(-10deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.92) rotate(3deg);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(1.04) rotate(-1deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* Screen shake accompanying the death emblem slam landing. */
+@keyframes lwa-death-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-6px, 3px);
+  }
+  40% {
+    transform: translate(5px, -4px);
+  }
+  60% {
+    transform: translate(-4px, 2px);
+  }
+  80% {
+    transform: translate(3px, -2px);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   랫어탯캣 (Rat-a-Tat Cat) — see ratATatCat/CardSlot.tsx and
+   ratATatCat/RatATatCatEffects.tsx for what mounts each of these.
+   Self-contained "ratc-" prefix, same per-game-keyframes convention as
+   every other title above.
+   --------------------------------------------------------------------- */
+
+/* Card flip — CardSlot.tsx remounts its face element (via a key on card
+   identity + known/revealed state) whenever a card is drawn, swapped, or
+   peeked, restarting this once-only animation with zero extra JS timers. */
+@keyframes ratc-card-flip {
+  0% {
+    transform: perspective(400px) rotateY(90deg) scale(0.92);
+    opacity: 0.4;
+  }
+  60% {
+    transform: perspective(400px) rotateY(-8deg) scale(1.03);
+    opacity: 1;
+  }
+  100% {
+    transform: perspective(400px) rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+}
+.ratc-card-flip {
+  animation: ratc-card-flip 0.45s ease-out both;
+}
+
+/* Overlay backdrop fade-in for the game-over reveal. */
+@keyframes ratc-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Winner crown pop on the score reveal. */
+@keyframes ratc-winner-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Pulsing glow on the skip button, matching the other <Game>Effects.tsx skip affordances. */
+@keyframes ratc-skip-pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(52, 211, 153, 0);
+  }
+}
