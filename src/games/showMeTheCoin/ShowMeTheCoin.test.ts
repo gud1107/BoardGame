@@ -7,11 +7,11 @@ import {
   CHIP_CONVERSION_DIVISOR,
   commitRange,
   convertedChipTotal,
-  getMaskedCoinCountRange,
   getValidMoves,
   isSeatAllIn,
   isStateSyncStale,
   MAX_COMMIT,
+  opponentCommitRange,
   otherSeat,
   startGame,
   STARTING_CHIPS,
@@ -30,11 +30,22 @@ function commitWith(state: ShowMeTheCoinState, seat: Seat, coinIds: string[]): S
   return applyAction(state, { type: "commit", seat, coinIds });
 }
 
-/** Both seats commit `count` of their own 10-value coins each (a plentiful, always-available denomination) — a quick way to reach "betting" deterministically without caring about exact sums. */
+/**
+ * Commits BOTH seats' own 10-value coins (a plentiful, always-available
+ * denomination) in the now-mandatory sequential dealer-first order, then
+ * advances the resulting "countReveal" focus beat straight into "betting"
+ * via `continue` — a quick way to reach "betting" deterministically without
+ * caring about exact sums. Assumes `dealerSeat === "p1"`, true for every
+ * `startGame(() => 0)` call in this file (`rng() < 0.5` picks p1). `p2Count`
+ * must satisfy the ±1 window relative to `p1Count` (`opponentCommitRange`) —
+ * callers pick counts that differ by at most 1, or the p2 commit is silently
+ * rejected by `applyCommit` and the helper would return a state stuck in
+ * "commit" (this is 2026-09-01's actual rule, not a test-only shortcut).
+ */
 function bothCommitTens(state: ShowMeTheCoinState, p1Count: number, p2Count: number): ShowMeTheCoinState {
   let s = commitWith(state, "p1", idsFor("p1", 10, p1Count));
   s = commitWith(s, "p2", idsFor("p2", 10, p2Count));
-  return s;
+  return applyAction(s, { type: "continue" }); // countReveal -> betting
 }
 
 describe("startGame", () => {
@@ -59,8 +70,8 @@ describe("startGame", () => {
 });
 
 describe("§1 commit phase", () => {
-  it("rejects a commit outside the 2~6 coin-count range and does not touch chips/coins", () => {
-    const s = startGame(() => 0);
+  it("rejects the dealer's own commit outside the 2~6 coin-count range and does not touch chips/coins", () => {
+    const s = startGame(() => 0); // dealer = p1
     const tooFew = commitWith(s, "p1", idsFor("p1", 10, 1));
     const tooMany = commitWith(s, "p1", idsFor("p1", 10, MAX_COMMIT + 1));
     expect(tooFew).toBe(s);
@@ -75,8 +86,26 @@ describe("§1 commit phase", () => {
     expect(notMine).toBe(s);
   });
 
-  it("a legal commit records the submission WITHOUT deducting chips or moving the pot (coins are not currency — see module doc)", () => {
-    const s = startGame(() => 0);
+  it("2026-09-01: rejects the non-dealer's commit before the dealer has submitted (sequential order enforced)", () => {
+    const s = startGame(() => 0); // dealer = p1
+    const tooEarly = commitWith(s, "p2", idsFor("p2", 10, 3));
+    expect(tooEarly).toBe(s);
+    expect(getValidMoves(s, "p2")).toEqual([]);
+  });
+
+  it("2026-09-01: rejects the non-dealer's commit outside the dealer's count ±1 window", () => {
+    let s = startGame(() => 0); // dealer = p1
+    s = commitWith(s, "p1", idsFor("p1", 10, 4)); // dealer submits 4 -> non-dealer window is [3,5]
+    const tooFew = commitWith(s, "p2", idsFor("p2", 10, 2));
+    const tooMany = commitWith(s, "p2", idsFor("p2", 10, 6));
+    expect(tooFew).toBe(s);
+    expect(tooMany).toBe(s);
+    const legal = commitWith(s, "p2", idsFor("p2", 10, 5));
+    expect(legal.committed.p2).toEqual(idsFor("p2", 10, 5));
+  });
+
+  it("a legal sequential commit records both submissions WITHOUT deducting chips or moving the pot (coins are not currency — see module doc), landing in countReveal, and 'continue' from there starts betting fresh", () => {
+    const s = startGame(() => 0); // dealer = p1
     const afterP1 = commitWith(s, "p1", idsFor("p1", 10, 4));
     expect(afterP1.chips.p1).toBe(s.chips.p1);
     expect(afterP1.pot).toBe(s.pot);
@@ -84,10 +113,14 @@ describe("§1 commit phase", () => {
     expect(afterP1.committed.p1).toEqual(idsFor("p1", 10, 4));
     expect(afterP1.phase).toBe("commit");
 
-    const afterP2 = commitWith(afterP1, "p2", idsFor("p2", 10, 3));
-    expect(afterP2.phase).toBe("betting");
-    expect(afterP2.actingSeat).toBe(afterP2.dealerSeat);
-    expect(afterP2.currentBet).toBe(0);
+    const afterP2 = commitWith(afterP1, "p2", idsFor("p2", 10, 3)); // within [3,5]
+    expect(afterP2.phase).toBe("countReveal"); // §1 done — Phase 2 focus beat, not straight into betting
+    expect(afterP2.committed.p2).toEqual(idsFor("p2", 10, 3));
+
+    const startedBetting = applyAction(afterP2, { type: "continue" });
+    expect(startedBetting.phase).toBe("betting");
+    expect(startedBetting.actingSeat).toBe(startedBetting.dealerSeat);
+    expect(startedBetting.currentBet).toBe(0);
   });
 
   it("ignores a second commit from the same seat", () => {
@@ -97,7 +130,7 @@ describe("§1 commit phase", () => {
     expect(twice).toBe(once);
   });
 
-  it("clamps the commit range down when a seat's remaining coins are below MIN_COMMIT (forced all-in commit)", () => {
+  it("clamps the dealer's own commit range down when its remaining coins are below MIN_COMMIT (forced all-in commit)", () => {
     let s = startGame(() => 0);
     const onlyOne: CoinToken[] = [{ id: "p1-10-0", value: 10 }];
     s = { ...s, coins: { ...s.coins, p1: onlyOne } };
@@ -111,15 +144,16 @@ describe("§1 commit phase", () => {
   });
 });
 
-describe("getMaskedCoinCountRange (opponent-facing ±1 coin-count hint)", () => {
-  it("widens a submitted count by exactly ±1, clamped to a 0 floor", () => {
-    expect(getMaskedCoinCountRange(2)).toBe("1 ~ 3개");
-    expect(getMaskedCoinCountRange(6)).toBe("5 ~ 7개");
+describe("opponentCommitRange (2026-09-01: second submitter's ±1 legal coin-count window)", () => {
+  it("widens the dealer's exact count by ±1, capped at MAX_COMMIT", () => {
+    expect(opponentCommitRange(2, 50)).toEqual({ min: 1, max: 3 });
+    expect(opponentCommitRange(1, 50)).toEqual({ min: 1, max: 2 }); // floors at 1, never 0 or negative
+    expect(opponentCommitRange(6, 50)).toEqual({ min: 5, max: 6 }); // +1 would be 7, clamped to MAX_COMMIT
   });
 
-  it("floors at 0 rather than going negative for a 1-coin or 0-coin submission", () => {
-    expect(getMaskedCoinCountRange(1)).toBe("0 ~ 2개");
-    expect(getMaskedCoinCountRange(0)).toBe("0 ~ 1개");
+  it("clamps further down to whatever's actually available when the non-dealer is short on coins", () => {
+    expect(opponentCommitRange(6, 3)).toEqual({ min: 3, max: 3 }); // window [5,6] both exceed the 3 available -> forced "everything left"
+    expect(opponentCommitRange(2, 0)).toEqual({ min: 0, max: 0 });
   });
 });
 
@@ -168,6 +202,7 @@ describe("§2 betting phase", () => {
     s = { ...s, chips: { p1: 10, p2: 10 } };
     s = commitWith(s, "p1", idsFor("p1", 50, 2)); // dealer's hand (sum 100) decisively beats p2's — not a tie, so the tie-split doesn't hand chips back to the loser
     s = commitWith(s, "p2", idsFor("p2", 10, 2)); // sum 20
+    s = applyAction(s, { type: "continue" }); // countReveal -> betting
     const dealer = s.dealerSeat;
     const other = otherSeat(dealer);
     s = applyAction(s, { type: "raise", amount: s.chips[dealer] }); // dealer shoves remaining chips
@@ -180,7 +215,7 @@ describe("§2 betting phase", () => {
   });
 
   it("folding awards the entire chip pot to the opponent, discards BOTH seats' coins, and never reveals either commit", () => {
-    const s = bothCommitTens(startGame(() => 0), 5, 2);
+    const s = bothCommitTens(startGame(() => 0), 5, 4);
     const dealer = s.dealerSeat;
     const other = otherSeat(dealer);
     const potBefore = s.pot;
@@ -196,13 +231,13 @@ describe("§2 betting phase", () => {
     expect(afterFold.lastRoundResult?.folderSeat).toBe(dealer);
     // §4 step 4: submitted coins are discarded win/tie/fold alike, including the fold-winner's own unrevealed hand.
     expect(afterFold.coins[dealer].length).toBe(dealerCoinsBefore - 5);
-    expect(afterFold.coins[other].length).toBe(otherCoinsBefore - 2);
+    expect(afterFold.coins[other].length).toBe(otherCoinsBefore - 4);
   });
 });
 
 describe("§3 showdown", () => {
   it("awards the pot to whoever submitted the higher coin sum, and discards both seats' submitted coins", () => {
-    const s = bothCommitTens(startGame(() => 0), 6, 2); // p1 submits 6×10=60, p2 submits 2×10=20 -> p1 wins
+    const s = bothCommitTens(startGame(() => 0), 6, 5); // p1 submits 6×10=60, p2 submits 5×10=50 -> p1 wins
     const afterCheck1 = applyAction(s, { type: "call" });
     const resolved = applyAction(afterCheck1, { type: "call" });
     expect(resolved.lastRoundResult?.outcome).toBe("win");
@@ -210,7 +245,7 @@ describe("§3 showdown", () => {
     expect(resolved.pot).toBe(0);
     expect(resolved.chips.p1).toBe(s.chips.p1 + s.pot); // winner gains the chip pot...
     expect(resolved.coins.p1).toHaveLength(s.coins.p1.length - 6); // ...but never gets its own submitted coins back
-    expect(resolved.coins.p2).toHaveLength(s.coins.p2.length - 2);
+    expect(resolved.coins.p2).toHaveLength(s.coins.p2.length - 5);
   });
 
   it("a tie splits the chip pot evenly and carries the odd remainder into the next round", () => {
@@ -234,9 +269,9 @@ describe("§3 showdown", () => {
     expect(nextRound.pot).toBe(resolved.pot + ANTE * 2); // carried remainder + this round's fresh ante
   });
 
-  it("'continue' is a no-op outside the showdown phase, and moves commit->betting seats + dealer alternate + fresh ante on success", () => {
+  it("'continue' is a no-op outside countReveal/showdown, and advances showdown->next round with dealer alternate + fresh ante on success", () => {
     const s = startGame(() => 0);
-    expect(applyAction(s, { type: "continue" })).toBe(s);
+    expect(applyAction(s, { type: "continue" })).toBe(s); // still "commit" — no-op
 
     const raised = applyAction(bothCommitTens(startGame(() => 0), 4, 3), { type: "raise", amount: 5 });
     const decisive = applyAction(raised, { type: "call" });
@@ -277,6 +312,7 @@ describe("KO / gameOver", () => {
     expect(s.chips.p1).toBeGreaterThan(0);
     s = commitWith(s, "p1", ["p1-10-0", "p1-10-1"]); // p1's only 2 remaining coins, sum 20
     s = commitWith(s, "p2", idsFor("p2", 100, 2)); // p2 submits sum 200, decisively higher
+    s = applyAction(s, { type: "continue" }); // countReveal -> betting
     const afterCheck1 = applyAction(s, { type: "call" });
     const resolved = applyAction(afterCheck1, { type: "call" });
     expect(resolved.coins.p1).toHaveLength(0);
@@ -299,6 +335,7 @@ describe("KO / gameOver", () => {
     s = { ...s, coins: { p1: p1Last, p2: p2Last } };
     s = commitWith(s, "p1", ["p1-10-0", "p1-10-1"]);
     s = commitWith(s, "p2", ["p2-10-0", "p2-10-1"]); // equal sums -> tie
+    s = applyAction(s, { type: "continue" }); // countReveal -> betting
     const afterCheck1 = applyAction(s, { type: "call" });
     const resolved = applyAction(afterCheck1, { type: "call" });
     expect(resolved.lastRoundResult?.outcome).toBe("tie");
@@ -313,6 +350,7 @@ describe("KO / gameOver", () => {
     s = { ...s, chips: { p1: 2, p2: 2 } };
     s = commitWith(s, "p1", idsFor("p1", 10, 2)); // sum 20 — will lose
     s = commitWith(s, "p2", idsFor("p2", 50, 2)); // sum 100 — will win
+    s = applyAction(s, { type: "continue" }); // countReveal -> betting
     s = applyAction(s, { type: "raise", amount: 2 }); // p1 (dealer) shoves both remaining chips
     const resolved = applyAction(s, { type: "call" }); // p2 calls -> showdown, p2 wins, p1 busts
     expect(resolved.phase).toBe("gameOver");
@@ -395,7 +433,7 @@ describe("AI bot support (ARCHITECTURE.md §7)", () => {
   });
 
   it("Lv.1 (forced-mistake rng) and Lv.10 (argmax rng) diverge on the same betting decision", () => {
-    const s = bothCommitTens(startGame(() => 0), 6, 2); // dealer's own hand (6x10=60) is strong -> raise should score best
+    const s = bothCommitTens(startGame(() => 0), 6, 5); // dealer's own hand (6x10=60) is strong -> raise should score best
     const dealer = s.dealerSeat;
     const alwaysZero = () => 0; // Lv.1: rng()=0 < mistake chance -> random pick (first candidate = "fold"); Lv.10: 0% mistake chance -> argmax
     const lv1 = chooseBotAction(s, dealer, 1, alwaysZero);

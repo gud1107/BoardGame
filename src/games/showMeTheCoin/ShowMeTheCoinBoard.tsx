@@ -7,6 +7,7 @@ import {
   commitRange,
   convertedChipTotal,
   isSeatAllIn,
+  opponentCommitRange,
   otherSeat,
   STARTING_CHIPS,
   type CoinToken,
@@ -15,12 +16,22 @@ import {
   type Seat,
   type ShowMeTheCoinState,
 } from "./engine";
-import ShowdownOverlay, { AllInEmblem, BetBadge, CoinBlastSlam, MaskedCoinBadge, OwnCoinBadge, VaultPot } from "./ShowMeTheCoinEffects";
+import ShowdownOverlay, {
+  AllInEmblem,
+  BetBadge,
+  CoinBlastSlam,
+  CoinCountRevealOverlay,
+  OpponentCoinCountBadge,
+  OwnCoinBadge,
+  VaultPot,
+} from "./ShowMeTheCoinEffects";
 import RulebookModal from "./RulebookModal";
 import { useCountdown } from "./useCountdown";
 
 /** Request's "결과/연출 3초 유지" — confirmed length of the showdown reveal before the host auto-advances (see `ShowMeTheCoinGame.tsx`'s matching `setTimeout`). */
 export const SHOWDOWN_SECONDS = 3;
+/** 2026-09-01 세션: Phase 2 "COIN_COUNT_REVEALED" focus beat — 동일한 "결과/연출 최소 3초 유지" 허브 표준(직하단 스킵 버튼 포함)을 그대로 적용. */
+export const COUNT_REVEAL_SECONDS = 3;
 
 const DENOM_ORDER: CoinValue[] = [500, 100, 50, 10];
 const DENOM_STYLE: Record<CoinValue, { ring: string; glow: string }> = {
@@ -151,8 +162,19 @@ function ChipStatsPanel({ coins }: { coins: CoinToken[] }) {
   );
 }
 
-function CommitControls({ coins, onCommit }: { coins: CoinToken[]; onCommit: (coinIds: string[]) => void }) {
-  const { min, max } = commitRange(coins.length);
+function CommitControls({
+  coins,
+  range,
+  description,
+  onCommit,
+}: {
+  coins: CoinToken[];
+  /** 2026-09-01 세션: 선공(dealer)은 `commitRange`, 후공(non-dealer)은 `opponentCommitRange` — 어느 쪽 범위인지는 호출부(`ShowMeTheCoinBoard`)가 결정해 넘긴다(단일 진실 소스는 engine.ts). */
+  range: { min: number; max: number };
+  description: string;
+  onCommit: (coinIds: string[]) => void;
+}) {
+  const { min, max } = range;
   const groups = useMemo(() => {
     const byValue = new Map<CoinValue, CoinToken[]>();
     for (const c of coins) byValue.set(c.value, [...(byValue.get(c.value) ?? []), c]);
@@ -183,7 +205,7 @@ function CommitControls({ coins, onCommit }: { coins: CoinToken[]; onCommit: (co
   return (
     <div className="flex flex-col items-center gap-3 rounded-2xl border border-pink-400/30 bg-black/40 p-4">
       <p className="text-center text-xs text-white/60" style={{ wordBreak: "keep-all" }}>
-        가림판 뒤에서 이번 라운드에 걸 코인을 {min}~{max}개 고르세요 (되찾을 수 없이 영구 소멸됩니다)
+        {description}
       </p>
       <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4">
         {groups.map((g) => {
@@ -353,6 +375,8 @@ export default function ShowMeTheCoinBoard({
 }: ShowMeTheCoinBoardProps) {
   const opponentSeat = otherSeat(viewerSeat);
   const { timeLeft } = useCountdown(SHOWDOWN_SECONDS, state.lastRoundResult?.roundNumber ?? 0, state.phase === "showdown");
+  // 2026-09-01 세션: Phase 2 "COIN_COUNT_REVEALED" 전용 별도 카운트다운 — 라운드당 한 번뿐이라 `state.round`를 resetKey로 사용.
+  const { timeLeft: countRevealTimeLeft } = useCountdown(COUNT_REVEAL_SECONDS, state.round, state.phase === "countReveal");
   const [rulebookOpen, setRulebookOpen] = useState(false);
 
   // Chip-clink spark on the vault every time the pot grows (ante/bet/raise/call) — see VaultPot's doc.
@@ -412,13 +436,30 @@ export default function ShowMeTheCoinBoard({
 
   const iHaveCommitted = state.committed[viewerSeat] !== undefined;
 
+  // 2026-09-01 세션: 순차 제출(선공 dealerSeat 먼저, 후공 나중) — 지금
+  // 화면 주인(viewerSeat)이 실제로 제출할 차례인지, 그리고 어떤 개수 범위가
+  // 적용되는지를 여기서 한 번에 계산해 CommitControls/대기 문구 양쪽에
+  // 넘긴다(engine.ts의 applyCommit/getValidMoves와 동일한 판정 — 단일
+  // 진실 소스는 항상 엔진, 여기선 그 규칙을 UI용으로 거울처럼 재현할 뿐).
+  const isViewerDealer = viewerSeat === state.dealerSeat;
+  const dealerCommittedIds = state.committed[state.dealerSeat];
+  const myTurnToCommit = state.phase === "commit" && !iHaveCommitted && (isViewerDealer || dealerCommittedIds !== undefined);
+  const myCommitRange = isViewerDealer
+    ? commitRange(state.coins[viewerSeat].length)
+    : dealerCommittedIds !== undefined
+      ? opponentCommitRange(dealerCommittedIds.length, state.coins[viewerSeat].length)
+      : { min: 0, max: 0 }; // 아직 선공이 제출 전이라 후공은 계산 불가 — myTurnToCommit이 false이므로 렌더링되지 않음
+  const myCommitDescription = isViewerDealer
+    ? `가림판 뒤에서 이번 라운드에 걸 코인을 ${myCommitRange.min}~${myCommitRange.max}개 고르세요 (되찾을 수 없이 영구 소멸됩니다)`
+    : `상대(선공)가 정확히 ${dealerCommittedIds?.length ?? 0}개를 제출했습니다 — ±1 범위인 ${myCommitRange.min}~${myCommitRange.max}개 중에서만 고를 수 있습니다 (되찾을 수 없이 영구 소멸됩니다)`;
+
   // §1 secret-commit badge pop — bumps once per seat the instant
   // `committed[seat]` flips from undefined to defined, so both sides see
   // "배치 대기" -> committed replay its pop-in the moment the OTHER side
-  // locks in. Feeds `OwnCoinBadge`/`MaskedCoinBadge` in each `PlayerPanel`
-  // (moved out of the central Vault area in the 2026-08-31 ±1-hint session —
-  // see those components' docs for the exact/masked split confirmed via
-  // `AskUserQuestion`).
+  // locks in. Feeds `OwnCoinBadge`/`OpponentCoinCountBadge` in each
+  // `PlayerPanel` — 2026-09-01 세션에서 두 뱃지 모두 이제 정확한 개수를
+  // 보여준다(금액 breakdown만 `OwnCoinBadge`가 추가로 노출 — engine.ts
+  // module doc 참고).
   const prevCommittedRef = useRef(state.committed);
   const [commitPulse, setCommitPulse] = useState<Record<Seat, number>>({ p1: 0, p2: 0 });
   useEffect(() => {
@@ -471,7 +512,7 @@ export default function ShowMeTheCoinBoard({
           betThisStreet={state.betsThisRound[viewerSeat]}
           betPulseKey={betPulse[viewerSeat]}
           commitBadge={
-            state.phase === "commit" ? (
+            state.phase === "commit" || state.phase === "countReveal" ? (
               <OwnCoinBadge coins={state.coins[viewerSeat]} committedIds={state.committed[viewerSeat]} pulseKey={commitPulse[viewerSeat]} />
             ) : null
           }
@@ -496,8 +537,8 @@ export default function ShowMeTheCoinBoard({
           betThisStreet={state.betsThisRound[opponentSeat]}
           betPulseKey={betPulse[opponentSeat]}
           commitBadge={
-            state.phase === "commit" ? (
-              <MaskedCoinBadge committedCount={state.committed[opponentSeat]?.length} pulseKey={commitPulse[opponentSeat]} />
+            state.phase === "commit" || state.phase === "countReveal" ? (
+              <OpponentCoinCountBadge committedCount={state.committed[opponentSeat]?.length} pulseKey={commitPulse[opponentSeat]} />
             ) : null
           }
         />
@@ -518,10 +559,29 @@ export default function ShowMeTheCoinBoard({
         <>
           {iHaveCommitted ? (
             <p className="text-center text-sm text-white/50">🔒 배치 완료 — 상대방을 기다리는 중...</p>
+          ) : myTurnToCommit ? (
+            <CommitControls
+              coins={state.coins[viewerSeat]}
+              range={myCommitRange}
+              description={myCommitDescription}
+              onCommit={(coinIds) => onAction({ type: "commit", seat: viewerSeat, coinIds })}
+            />
           ) : (
-            <CommitControls coins={state.coins[viewerSeat]} onCommit={(coinIds) => onAction({ type: "commit", seat: viewerSeat, coinIds })} />
+            <p className="text-center text-sm text-white/50">⏳ {names[state.dealerSeat]}님(선공)이 먼저 코인을 제출하는 중...</p>
           )}
         </>
+      )}
+
+      {state.phase === "countReveal" && (
+        <CoinCountRevealOverlay
+          countBySeat={{ p1: state.committed.p1?.length ?? 0, p2: state.committed.p2?.length ?? 0 }}
+          dealerSeat={state.dealerSeat}
+          names={names}
+          viewerSeat={viewerSeat}
+          timeLeft={countRevealTimeLeft}
+          secondsTotal={COUNT_REVEAL_SECONDS}
+          onSkip={() => onAction({ type: "continue" })}
+        />
       )}
 
       {state.phase === "betting" &&

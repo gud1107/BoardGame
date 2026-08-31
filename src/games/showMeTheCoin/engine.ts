@@ -117,6 +117,59 @@
  *    engine's existing minimal-state convention (`ShowMeTheCoinBoard.tsx`
  *    already derives its ALL-IN emblem trigger the same way, by watching
  *    `chips[seat]` drop to 0).
+ *
+ * **2026-09-01 session — exact coin-count reveal & sequential ±1 submission
+ * redesign.** A prior 2026-08-31 follow-up (see the now-removed
+ * `getMaskedCoinCountRange`'s own doc, replaced below) had opponents see only
+ * a `[N-1, N+1]` *estimate* of each other's §1 coin count, with both seats
+ * still committing simultaneously. This request reverses that premise
+ * entirely: the exact count is now shown to both sides, and — because a
+ * "submit within ±1 of what the other side submitted" rule is meaningless
+ * without knowing that count first — §1 commit necessarily becomes
+ * **sequential**, not simultaneous. Every ambiguity this raised was confirmed
+ * via `AskUserQuestion` (this request's own "Strict No-Assumption Rule")
+ * before writing a line of this section:
+ *  1. **Submission order**: sequential turn-based — `dealerSeat` (this
+ *      round's 선공, per the existing alternating-dealer convention) submits
+ *      first; its exact count is revealed the instant it locks in (needed for
+ *      the second seat's own range check, not withheld until some later
+ *      reveal moment); the non-dealer then submits within the ±1 window.
+ *      `applyCommit` now structurally rejects a commit from the "wrong" seat
+ *      for whichever slot is still open, so an invalid submission order can
+ *      never reach the range/ownership checks below it.
+ *  2. **First submitter's own floor**: stays the existing 2~6 (`MIN_COMMIT`/
+ *      `MAX_COMMIT`) hard range, confirmed NOT relaxed to the rulebook's
+ *      literal "1개 이상" — only the *second* submitter's window (via
+ *      `opponentCommitRange` below) can ever produce a legal 1-coin
+ *      submission, exactly per the request's own `max(1, N-1)` formula.
+ *  3. **Window clamping**: when `[max(1,N-1), N+1]` would exceed `MAX_COMMIT`
+ *      or the second seat's actual remaining coin count, `opponentCommitRange`
+ *      silently clamps down to whatever's actually legal/available — the same
+ *      "below-minimum clamp" judgment call `commitRange` already makes for a
+ *      low-on-coins forced commit, just intersected with the ±1 window too.
+ *      Confirmed over hard-rejecting an unsatisfiable range (e.g. dealer
+ *      submits 6 but the non-dealer only has 3 coins left: 5~6 clamps to a
+ *      forced 3, never a stuck/unplayable state).
+ *  4. **No-submission/disconnect handling**: reuses the existing project-wide
+ *      45s idle-vote → bot-takeover mechanism (`ShowMeTheCoinGame.tsx`'s
+ *      `smtcCurrentActor`, updated below to report the dealer-first ordering)
+ *      rather than adding a phase-specific timer — confirmed no new timeout
+ *      concept was needed.
+ *
+ * This also reshapes the round's phase sequence per the request's explicit
+ * 4-phase flow: a new `"countReveal"` phase (§`RoundPhase`) sits between
+ * `"commit"` and `"betting"` — once BOTH seats have sequentially committed,
+ * the round holds here (both exact counts already visible from step 1 above,
+ * now given a dedicated "focus" beat) for the same held-until-`"continue"`
+ * pattern `"showdown"` already uses (a host timer + the overlay's skip button
+ * both dispatch the identical no-op-safe `{type:"continue"}}`, per the
+ * project-wide "결과/연출 3초 유지 + 직하단 스킵 버튼" hub standard — see
+ * `ShowMeTheCoinBoard.tsx`'s `COUNT_REVEAL_SECONDS`). `applyContinue` now
+ * branches on which held phase it's advancing FROM: `"countReveal"` sets up
+ * the betting street (`actingSeat = dealerSeat`, fresh `currentBet`/
+ * `betsThisRound`/`checkedThisStreet`) that `applyCommit` used to set up
+ * directly the instant both seats had committed; `"showdown"` keeps its
+ * existing round-advance behavior unchanged.
  */
 
 import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
@@ -160,7 +213,8 @@ function makeStartingCoins(seat: Seat): CoinToken[] {
 }
 
 export type RoundPhase =
-  | "commit" // §4 step 1: both seats secretly submit 2~6 coins as this round's "hand" (no chips move here — see module doc)
+  | "commit" // §4 step 1: dealerSeat then the other seat SEQUENTIALLY submit 2~6 / ±1-windowed coins as this round's "hand" (no chips move here — see module doc's 2026-09-01 section)
+  | "countReveal" // both seats' exact §1 coin COUNTS (not values) held in focus once both have committed, until "continue" — see module doc's 2026-09-01 section
   | "betting" // §4 step 2: poker-style check/bet/raise/call/fold with chips
   | "showdown" // §4 step 3 reveal + step 4 discard, held for the UI's ~3s celebration/elimination beat until "continue"
   | "gameOver"; // §5 KO reached (bankrupt or coin-depleted)
@@ -279,19 +333,31 @@ export function commitRange(coinsRemaining: number): { min: number; max: number 
 }
 
 /**
- * §1 opponent-facing coin-count masking — 2026-08-31 후속 세션 ("실물 동전
- * ±1 힌트 시스템"). §1의 비공개 커밋은 *금액*뿐 아니라 이제 *개수*도 상대방
- * 화면에는 정확히 노출하지 않고 `[max(0, N-1), N+1]` 범위 힌트로만 보여준다
- * (본인 화면은 항상 정확한 개수/구성을 그대로 표시 — 정보 비대칭 없음).
- * `AskUserQuestion`으로 확인된 스펙 그대로: N<=0(이론상 코인 완전 고갈 케이스,
- * 실전에서는 `applyKoCheck`가 라운드 사이에 먼저 게임을 끝내므로 도달 불가)도
- * 별도 분기 없이 같은 공식으로 자연스럽게 "0 ~ 1개"가 나온다. 하한만 0으로
- * 클램프하고 상한은 클램프하지 않음(순수 힌트이므로 `MAX_COMMIT`을 넘어도 무방).
- * 순수 문자열 포맷터라 엔진에 두되(다른 UI 파생값과 동일한 위치), 렌더링은
- * 전적으로 `ShowMeTheCoinBoard.tsx`/`ShowMeTheCoinEffects.tsx` 쪽 책임.
+ * §1 second-submitter's legal coin-COUNT window — 2026-09-01 세션 ("정확한
+ * 개수 공개 + ±1 제출 제약"). 이전 `getMaskedCoinCountRange`(상대방 화면에만
+ * `[N-1,N+1]` 추정 힌트를 보여주던 함수, 이번 세션에서 완전히 대체·삭제)와
+ * 정반대로, 이제 개수는 양쪽 다 정확히 공개하고 대신 "제출 자체"를 그 범위
+ * 안으로 강제한다 — 힌트가 아니라 **유효성 검증 규칙**. `firstCount`는 이미
+ * 제출을 마친 선공(dealerSeat)의 정확한 §1 개수, `available`은 지금 제출하려는
+ * 후공 좌석의 실제 잔여 코인 수. `AskUserQuestion`으로 확인된 스펙(module doc
+ * 2026-09-01 섹션 항목 2·3):
+ *  - 하한은 `max(1, firstCount - 1)`, 상한은 `min(MAX_COMMIT, firstCount + 1)`
+ *    — 상한이 하우스룰 상한(6)을 넘지 않도록 클램프.
+ *  - 그 다음 두 값 모두 `available`을 넘지 않도록 다시 클램프(코인이 부족해
+ *    범위 자체가 불가능해지는 경우, `commitRange`의 "below-minimum clamp"와
+ *    동일한 원칙으로 "가능한 만큼 전부"로 강제 축소 — 절대 제출 불가 상태가
+ *    되지 않음).
+ * `applyCommit`의 실제 검증과 `getValidMoves`의 봇 열거 양쪽에서 공유하는
+ * 단일 소스 — UI(`ShowMeTheCoinBoard.tsx`의 `CommitControls`)도 동일 함수로
+ * 표시 범위를 계산해 항상 엔진의 실제 판정과 100% 일치한다.
  */
-export function getMaskedCoinCountRange(coinCount: number): string {
-  return `${Math.max(0, coinCount - 1)} ~ ${coinCount + 1}개`;
+export function opponentCommitRange(firstCount: number, available: number): { min: number; max: number } {
+  if (available <= 0) return { min: 0, max: 0 };
+  const rawMin = Math.max(1, firstCount - 1);
+  const rawMax = Math.min(MAX_COMMIT, firstCount + 1);
+  const max = Math.min(rawMax, available);
+  const min = Math.min(rawMin, max);
+  return { min, max };
 }
 
 function coinSum(coins: CoinToken[], ids: string[]): number {
@@ -302,8 +368,17 @@ function coinSum(coins: CoinToken[], ids: string[]): number {
 function applyCommit(state: ShowMeTheCoinState, action: Extract<EngineAction, { type: "commit" }>): ShowMeTheCoinState {
   if (state.phase !== "commit") return state;
   if (state.committed[action.seat] !== undefined) return state; // already committed this round
+
+  // 2026-09-01 세션: 순차 제출 순서 강제 — 선공(dealerSeat)이 먼저, 그 다음
+  // 후공. "아직 자기 차례가 아닌" 좌석의 커밋은 여기서 구조적으로 거부되어
+  // 아래 범위/소유권 검증까지 내려가지 않는다 (module doc 참고).
+  const dealer = state.dealerSeat;
+  const isFirstSubmitter = action.seat === dealer;
+  const dealerCommitted = state.committed[dealer];
+  if (!isFirstSubmitter && dealerCommitted === undefined) return state; // non-dealer must wait for the dealer to go first
+
   const available = state.coins[action.seat];
-  const { min, max } = commitRange(available.length);
+  const { min, max } = isFirstSubmitter ? commitRange(available.length) : opponentCommitRange(dealerCommitted!.length, available.length);
   const ids = action.coinIds;
   if (ids.length < min || ids.length > max) return state;
   if (new Set(ids).size !== ids.length) return state; // no duplicate coin ids
@@ -316,11 +391,12 @@ function applyCommit(state: ShowMeTheCoinState, action: Extract<EngineAction, { 
   return {
     ...state,
     committed: nextCommitted,
-    phase: bothCommitted ? "betting" : "commit",
-    actingSeat: bothCommitted ? state.dealerSeat : null,
-    currentBet: bothCommitted ? 0 : state.currentBet,
-    betsThisRound: bothCommitted ? { p1: 0, p2: 0 } : state.betsThisRound,
-    checkedThisStreet: bothCommitted ? false : state.checkedThisStreet,
+    // Both seats' exact counts are already visible the instant each locks in
+    // (the second seat needs the first's count to validate its own ±1 window
+    // — see module doc). "countReveal" is a dedicated focus beat, not the
+    // first moment either count becomes knowable; betting only starts once
+    // that beat's "continue" fires (see applyContinue).
+    phase: bothCommitted ? "countReveal" : "commit",
     seq: state.seq + 1,
   };
 }
@@ -521,7 +597,25 @@ function applyFold(state: ShowMeTheCoinState): ShowMeTheCoinState {
   return applyKoCheck(next);
 }
 
+/**
+ * `"continue"` advances whichever held/passive phase the round is currently
+ * paused in — 2026-09-01 세션에서 `"countReveal"`(§1 개수 공개 포커스 beat)
+ * 분기가 추가되었다: 베팅 스트리트를 여기서 새로 세팅한다(이전에는
+ * `applyCommit`이 양쪽 커밋이 완료되는 즉시 직접 세팅했음 — module doc 참고).
+ * `"showdown"`의 라운드 전환 로직은 그대로 유지.
+ */
 function applyContinue(state: ShowMeTheCoinState): ShowMeTheCoinState {
+  if (state.phase === "countReveal") {
+    return {
+      ...state,
+      phase: "betting",
+      actingSeat: state.dealerSeat,
+      currentBet: 0,
+      betsThisRound: { p1: 0, p2: 0 },
+      checkedThisStreet: false,
+      seq: state.seq + 1,
+    };
+  }
   if (state.phase !== "showdown") return state;
   const next: ShowMeTheCoinState = {
     ...state,
@@ -589,9 +683,17 @@ function coinsByStrategy(available: CoinToken[], count: number, strategy: "high"
 export function getValidMoves(state: ShowMeTheCoinState, seat: Seat): EngineAction[] {
   if (state.phase === "commit") {
     if (state.committed[seat] !== undefined) return [];
+    // 2026-09-01 세션: 순차 제출 — 아직 자기 차례가 아니면(선공이 먼저 내야
+    // 하는데 자신이 후공인 경우) 합법 수가 없다. applyCommit의 순서 강제와
+    // 동일한 판정을 여기서도 거울처럼 재현(봇 열거/UI 힌트 양쪽의 단일
+    // 진실 소스가 되도록).
+    const dealer = state.dealerSeat;
+    const isFirstSubmitter = seat === dealer;
+    const dealerCommitted = state.committed[dealer];
+    if (!isFirstSubmitter && dealerCommitted === undefined) return [];
     const available = state.coins[seat];
     if (available.length === 0) return [];
-    const { min, max } = commitRange(available.length);
+    const { min, max } = isFirstSubmitter ? commitRange(available.length) : opponentCommitRange(dealerCommitted!.length, available.length);
     const moves: EngineAction[] = [];
     const seen = new Set<string>();
     for (let count = min; count <= max; count++) {
@@ -605,6 +707,8 @@ export function getValidMoves(state: ShowMeTheCoinState, seat: Seat): EngineActi
     }
     return moves;
   }
+
+  if (state.phase === "countReveal") return [{ type: "continue" }]; // held focus beat — see module doc
 
   if (state.phase === "betting") {
     if (state.actingSeat !== seat) return [];
@@ -649,7 +753,12 @@ function scoreMove(state: ShowMeTheCoinState, seat: Seat, move: EngineAction, ti
       const sum = coinSum(state.coins[seat], move.coinIds);
       const { min: sumMin, max: sumMax } = theoreticalSumBounds(count);
       const normalized = sumMax > sumMin ? (sum - sumMin) / (sumMax - sumMin) : 0.5;
-      const { min: countMin, max: countMax } = commitRange(state.coins[seat].length);
+      // 2026-09-01 세션: 후공(non-dealer)이면 ±1 윈도우(opponentCommitRange)로
+      // "이상적인 개수"를 계산 — 선공(dealer)은 기존 commitRange 그대로.
+      const isFirstSubmitter = seat === state.dealerSeat;
+      const { min: countMin, max: countMax } = isFirstSubmitter
+        ? commitRange(state.coins[seat].length)
+        : opponentCommitRange(state.committed[state.dealerSeat]!.length, state.coins[seat].length);
       const idealFraction = tier === "expert" ? 0.65 : 0.5;
       const idealCount = countMin + idealFraction * (countMax - countMin);
       return -Math.abs(count - idealCount) * 3 - Math.abs(normalized - idealFraction) * 5;

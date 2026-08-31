@@ -1,7 +1,11 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { ANTE, MAX_COMMIT, MIN_COMMIT, STARTING_CHIPS } from "./engine";
+import { ANTE, MAX_COMMIT, MIN_COMMIT, opponentCommitRange, STARTING_CHIPS } from "./engine";
+
+/** Worked ±1 example for the 1단계 section below — a mid-range first-submitter count with plenty of coins on hand, so the window is never clamped by scarcity. */
+const EXAMPLE_FIRST_COUNT = 3;
+const exampleRange = opponentCommitRange(EXAMPLE_FIRST_COUNT, 99);
 
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
   return (
@@ -18,31 +22,47 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           </p>
           <p className="mt-2 text-xs text-white/40" style={{ wordBreak: "keep-all" }}>
             [확인된 하우스 결정] 룰북 원문은 인원수와 §1 코인 제출 개수 상한을 명시하지 않아 세션 시작 전 사용자와
-            직접 확인했습니다: 2인 전용(다른 데스게임 컬렉션 타이틀과 동일), 코인 제출 개수는{" "}
+            직접 확인했습니다: 2인 전용(다른 데스게임 컬렉션 타이틀과 동일), 선공의 코인 제출 개수는{" "}
             {MIN_COMMIT}~{MAX_COMMIT}개, 정해진 라운드 상한 없이 최후의 1인이 남을 때까지 진행, 레이즈 금액은
-            자유(직전 베팅보다 많고 남은 칩 이하면 얼마든지).
+            자유(직전 베팅보다 많고 남은 칩 이하면 얼마든지). 2026-09-01 세션에서{" "}
+            <span className="text-amber-300">선공→후공 순차 제출 + 후공의 ±1개 제출 제약 + 정확한 개수 공개</span>
+            로 §1이 개편됐습니다(아래 1·2단계 참고).
           </p>
         </section>
 
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">
-            1단계 · 앤티 &amp; 비공개 코인 제출
+            1단계 · 앤티 &amp; 순차 코인 제출 (±1 규칙)
           </h3>
           <p className="text-white/70" style={{ wordBreak: "keep-all" }}>
-            라운드가 시작되면 모두 팟에 기본 앤티로 베팅칩 {ANTE}개를 자동으로 지불합니다. 이어서 각자 가림판 뒤에서
-            이번 라운드 승부에 쓸 숫자 코인을{" "}
+            라운드가 시작되면 모두 팟에 기본 앤티로 베팅칩 {ANTE}개를 자동으로 지불합니다. 이어서{" "}
+            <span className="text-amber-300">선공이 먼저</span> 가림판 뒤에서 이번 라운드 승부에 쓸 숫자 코인을{" "}
             <span className="text-amber-300">
               {MIN_COMMIT}개~{MAX_COMMIT}개
             </span>{" "}
-            비공개로 고릅니다. 이 코인은 팟에 들어가지 않고, 오직 쇼다운에서 합산 금액을 비교하는 &ldquo;패&rdquo;
-            역할만 합니다 — 승패와 상관없이{" "}
+            비공개로 골라 제출합니다. 선공이 제출한 순간 그 <span className="text-amber-300">정확한 개수</span>가
+            양쪽 화면에 즉시 공개되고(권종·금액은 여전히 비공개), 후공은 그 개수를 보고{" "}
+            <span className="text-amber-300">±1개 범위</span> 안에서만 자신의 코인을 고를 수 있습니다 — 예를 들어
+            선공이 {EXAMPLE_FIRST_COUNT}개를 냈다면 후공은{" "}
+            {exampleRange.min}~{exampleRange.max}개 중에서만 고를 수 있습니다(가진
+            코인이 부족하면 가능한 만큼으로 자동 조정). 이 코인은 팟에 들어가지 않고, 오직 쇼다운에서 합산 금액을
+            비교하는 &ldquo;패&rdquo; 역할만 합니다 — 승패와 상관없이{" "}
             <span className="text-rose-300">이번 라운드가 끝나면 제출한 코인은 전량 영구 소멸</span>됩니다.
           </p>
         </section>
 
         <section>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">2단계 · 동전 개수 공개</h3>
+          <p className="text-white/70" style={{ wordBreak: "keep-all" }}>
+            양쪽 모두 제출을 마치면, 두 좌석이 낸 <span className="text-amber-300">정확한 동전 개수</span>가 화면
+            중앙과 각자 슬롯에 큼직하게 포커싱 표시됩니다(최소 3초 유지, 직하단 스킵 버튼으로 더 빨리 넘어갈 수
+            있음). 금액(권종)은 여기서도 계속 비공개이며, 이 단계가 끝나면 곧바로 칩 베팅으로 넘어갑니다.
+          </p>
+        </section>
+
+        <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">
-            2단계 · 베팅 (체크 · 콜 · 레이즈 · 폴드)
+            3단계 · 베팅 (체크 · 콜 · 레이즈 · 폴드)
           </h3>
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
@@ -66,14 +86,14 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
           <p className="mt-2 text-xs text-white/40" style={{ wordBreak: "keep-all" }}>
-            둘 다 체크(또는 콜)하면 베팅이 종료되고 3단계 공개로 넘어갑니다. 남은 칩보다 많이 걸 수는 없으며(자연스러운
+            둘 다 체크(또는 콜)하면 베팅이 종료되고 4단계 공개로 넘어갑니다. 남은 칩보다 많이 걸 수는 없으며(자연스러운
             올인 한도), 콜할 칩이 모자라면 가진 만큼만 내는 &ldquo;콜 for less&rdquo;가 허용됩니다.
           </p>
         </section>
 
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">
-            3단계 · 쇼다운 (공개 &amp; 승패)
+            4단계 · 쇼다운 (공개 &amp; 승패)
           </h3>
           <p className="text-white/70" style={{ wordBreak: "keep-all" }}>
             1단계에서 제출한 코인을 동시에 앞면으로 공개하고 합산 금액을 비교합니다. 더 높은 쪽이 팟의 베팅칩 전부를
@@ -85,7 +105,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
 
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">
-            4단계 · 사용 코인 폐기 (핵심 규칙)
+            5단계 · 사용 코인 폐기 (핵심 규칙)
           </h3>
           <p className="text-white/70" style={{ wordBreak: "keep-all" }}>
             이번 라운드에 제출됐던 모든 플레이어의 코인은 승패·폴드 여부와 상관없이 전량 회수되어 게임에서

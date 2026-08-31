@@ -21,7 +21,7 @@ import {
   type Seat,
   type ShowMeTheCoinState,
 } from "./engine";
-import ShowMeTheCoinBoard, { SHOWDOWN_SECONDS } from "./ShowMeTheCoinBoard";
+import ShowMeTheCoinBoard, { COUNT_REVEAL_SECONDS, SHOWDOWN_SECONDS } from "./ShowMeTheCoinBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
@@ -54,15 +54,24 @@ import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 
-/** Whose decision `useBotAutoplay` should drive right now. §1's simultaneous commit is handled by returning whichever seat hasn't committed yet — see the module doc on `ShowMeTheCoinState.committed` for why sequencing it this way never leaks either seat's hidden value. */
+/**
+ * Whose decision `useBotAutoplay` should drive right now. 2026-09-01 세션:
+ * §1 커밋이 동시 제출에서 **순차 제출**(선공 dealerSeat 먼저, 후공 나중)로
+ * 바뀌면서 이 함수도 p1/p2 고정 순서가 아니라 `dealerSeat` 기준으로 다음
+ * 차례를 판정하도록 갱신 — engine.ts의 `applyCommit`/`getValidMoves`가 이미
+ * 강제하는 순서와 정확히 동일한 판정이어야 봇이 "자기 차례가 아닌데" 액션을
+ * 시도해 매번 no-op으로 씹히는 낭비가 없다.
+ */
 function smtcCurrentActor(state: ShowMeTheCoinState): Seat | null {
   if (state.phase === "commit") {
-    if (state.committed.p1 === undefined) return "p1";
-    if (state.committed.p2 === undefined) return "p2";
+    const dealer = state.dealerSeat;
+    const nonDealer = otherSeat(dealer);
+    if (state.committed[dealer] === undefined) return dealer;
+    if (state.committed[nonDealer] === undefined) return nonDealer;
     return null;
   }
   if (state.phase === "betting") return state.actingSeat;
-  return null; // "showdown"/"gameOver" — driven by the host's own timer / the overlay's skip button, not a seat decision
+  return null; // "countReveal"/"showdown"/"gameOver" — driven by the host's own timer / the overlay's skip button, not a seat decision
 }
 
 /**
@@ -616,6 +625,20 @@ export default function ShowMeTheCoinGame({ onComplete }: PlayableGameProps) {
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed to this showdown episode itself, same pattern as GridPokerGame.tsx's round-result timer
   }, [isHost, phase, gameState?.phase, gameState?.lastRoundResult?.roundNumber]);
+
+  // 2026-09-01 세션: Phase 2 "COIN_COUNT_REVEALED" — 위 쇼다운 타이머와
+  // 동일한 패턴(호스트만 타이머로 continue 브로드캐스트, 스킵 버튼은 각자
+  // 로컬에서 동일 액션을 더 일찍 디스패치). resetKey는 `state.round`(라운드당
+  // 한 번뿐인 beat라 `lastRoundResult`가 아직 없음).
+  useEffect(() => {
+    if (!isHost || phase !== "playing" || !gameState) return;
+    if (gameState.phase !== "countReveal") return;
+    const id = setTimeout(() => {
+      handleAction({ type: "continue" });
+    }, COUNT_REVEAL_SECONDS * 1000);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed to this countReveal episode itself, same pattern as the showdown timer above
+  }, [isHost, phase, gameState?.phase, gameState?.round]);
 
   function castTakeoverVote(seatKey: string) {
     channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "vote-cast", seatKey, voterDeviceId: deviceId } } });

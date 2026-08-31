@@ -3,7 +3,7 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import Avatar from "@/components/common/Avatar";
-import { COIN_COMPOSITION, getMaskedCoinCountRange, type CoinToken, type RoundResultSnapshot, type Seat } from "./engine";
+import { COIN_COMPOSITION, otherSeat, type CoinToken, type RoundResultSnapshot, type Seat } from "./engine";
 
 /** How close together two backdrop taps must land to count as a double-tap skip gesture — same small pure helper `grid-poker/skipGesture.ts` defines, kept as its own copy here per ARCHITECTURE.md §2's "zero cross-game code coupling" rule rather than importing across game folders. */
 const DOUBLE_TAP_SKIP_MS = 350;
@@ -225,16 +225,18 @@ export function OwnCoinBadge({ coins, committedIds, pulseKey }: { coins: CoinTok
 }
 
 /**
- * §1 secret-commit badge — "상대방" 화면 전용. 정확한 개수 대신
- * `getMaskedCoinCountRange`의 `[max(0,N-1), N+1]` 힌트 범위만 노출하고, 금액
- * 구성은 (기존과 동일하게) 쇼다운까지 완전히 비공개. `committedCount`는 오직
- * `state.committed[opponentSeat]?.length` 여야 한다 — 절대 상대의 실제
- * `CoinToken[]`을 이 컴포넌트에 넘기지 말 것(넘길 이유도 없음: 개수 하나면
- * 충분). 점선 테두리 + 🔮로 "확정된 사실이 아닌 추정치"임을 시각적으로
- * `OwnCoinBadge`와 구분한다(둘 다 금(gold) 계열 네온이라 "코인" 패밀리로는
- * 즉시 식별되면서도, 확정/추정 여부는 아이콘·테두리 스타일로 구분).
+ * §1 secret-commit badge — "상대방" 화면 전용. 2026-09-01 세션에서 이전
+ * `MaskedCoinBadge`(`[N-1,N+1]` 추정 힌트만 노출)를 완전히 대체 — 이제
+ * 개수는 상대에게도 **정확히** 공개한다(양측 다 ±1 범위 제출 검증을 위해
+ * 실시간으로 알아야 하는 정보이기도 함 — engine.ts의 2026-09-01 module doc
+ * 참고). 다만 금액 구성(500/100/50/10원 breakdown)은 (기존과 동일하게)
+ * 쇼다운까지 완전히 비공개 — `committedCount`는 오직
+ * `state.committed[opponentSeat]?.length`여야 한다(절대 상대의 실제
+ * `CoinToken[]`을 이 컴포넌트에 넘기지 말 것 — breakdown을 보여줄 이유가
+ * 없으므로 애초에 필요하지도 않음). 점선 테두리로 "개수는 정확하지만 금액은
+ * 비공개"임을 `OwnCoinBadge`(실선 테두리 + breakdown)와 시각적으로 구분한다.
  */
-export function MaskedCoinBadge({ committedCount, pulseKey }: { committedCount: number | undefined; pulseKey: number }) {
+export function OpponentCoinCountBadge({ committedCount, pulseKey }: { committedCount: number | undefined; pulseKey: number }) {
   if (committedCount === undefined) return <CoinWaitingBadge />;
   return (
     <span
@@ -242,7 +244,7 @@ export function MaskedCoinBadge({ committedCount, pulseKey }: { committedCount: 
       className="inline-flex items-center gap-1 rounded-full border border-dashed border-amber-400/60 bg-neutral-900/90 px-2.5 py-1 text-xs font-black text-amber-200/90 tabular-nums shadow-[0_0_10px_-2px_rgba(217,119,6,0.5)]"
       style={{ animation: "smtc-bet-badge-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) both" }}
     >
-      🔮 낸 동전 추정: {getMaskedCoinCountRange(committedCount)}
+      🪙 낸 동전: {committedCount}개
     </span>
   );
 }
@@ -389,11 +391,12 @@ function DeathVignette({ isDraw, loserName }: { isDraw: boolean; loserName: stri
   );
 }
 
-function NextRoundCountdown({ timeLeft, secondsTotal }: { timeLeft: number; secondsTotal: number }) {
+/** `label` generalized in the 2026-09-01 session so `CoinCountRevealOverlay` below can reuse this same progress bar with its own copy ("칩 베팅 준비") instead of the showdown-only "다음 라운드 준비". */
+function NextRoundCountdown({ timeLeft, secondsTotal, label = "다음 라운드 준비" }: { timeLeft: number; secondsTotal: number; label?: string }) {
   const pct = Math.max(0, Math.min(100, (timeLeft / secondsTotal) * 100));
   return (
     <div className="relative z-10 flex w-full max-w-xs flex-col items-center gap-1.5">
-      <span className="text-[11px] font-medium tracking-wide text-white/50 uppercase">다음 라운드 준비</span>
+      <span className="text-[11px] font-medium tracking-wide text-white/50 uppercase">{label}</span>
       <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
         <div
           className="h-full rounded-full bg-gradient-to-r from-amber-400 to-rose-500 transition-[width] duration-1000 ease-linear"
@@ -419,6 +422,100 @@ function SkipButton({ onSkip }: { onSkip: () => void }) {
       ⏩ 스킵
     </button>
   );
+}
+
+/**
+ * Phase 2 "COIN_COUNT_REVEALED" — 2026-09-01 세션의 신규 focus beat. 두 좌석
+ * 모두 §1 순차 제출을 마친 직후(`state.phase === "countReveal"`) 정확한
+ * 개수를 "테이블 중앙에 큼직하게 포커싱 표시"하라는 요청을 그대로 구현 —
+ * 이미 슬롯(`PlayerPanel`)에도 `OpponentCoinCountBadge`/`OwnCoinBadge`로
+ * 같은 정보가 떠 있지만(정보가 이 시점엔 이미 양쪽 다 알고 있음 — engine.ts
+ * module doc 참고), 여기서는 그걸 화면 전체를 덮는 강조 연출로 한 번 더
+ * 못박는다. `ShowdownOverlay`와 동일한 "호스트 타이머 + 스킵 버튼 둘 다
+ * 동일한 no-op-safe `continue` 디스패치" 패턴(`hasSkippedRef`/더블탭 백드롭)을
+ * 그대로 재사용 — 금액(권종)은 여기서도 전혀 노출하지 않는다(쇼다운까지
+ * 계속 비공개).
+ */
+export interface CoinCountRevealOverlayProps {
+  countBySeat: Record<Seat, number>;
+  dealerSeat: Seat;
+  names: Record<Seat, string>;
+  viewerSeat: Seat;
+  timeLeft: number;
+  secondsTotal: number;
+  onSkip: () => void;
+}
+
+export function CoinCountRevealOverlay({
+  countBySeat,
+  dealerSeat,
+  names,
+  viewerSeat,
+  timeLeft,
+  secondsTotal,
+  onSkip,
+}: CoinCountRevealOverlayProps) {
+  const hasSkippedRef = useRef(false);
+  const lastTapRef = useRef(0);
+
+  function triggerSkip() {
+    if (hasSkippedRef.current) return;
+    hasSkippedRef.current = true;
+    onSkip();
+  }
+
+  function handleBackdropTap() {
+    const now = Date.now();
+    if (isDoubleTap(lastTapRef.current, now)) {
+      lastTapRef.current = 0;
+      triggerSkip();
+    } else {
+      lastTapRef.current = now;
+    }
+  }
+
+  if (typeof document === "undefined") return null;
+
+  const body = (
+    <div
+      className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto bg-black/85 p-4"
+      style={{ animation: "smtc-overlay-in 0.35s ease-out both" }}
+      onClick={handleBackdropTap}
+    >
+      <LightPillars />
+      <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-4 py-6 text-center">
+        <h2 className="text-lg font-extrabold text-amber-200 drop-shadow-[0_0_16px_rgba(251,191,36,0.8)] sm:text-xl" style={{ wordBreak: "keep-all" }}>
+          🪙 동전 제출 개수 공개
+        </h2>
+        <div className="flex items-center gap-5 sm:gap-8">
+          {[dealerSeat, otherSeat(dealerSeat)].map((seat) => (
+            <div key={seat} className="flex flex-col items-center gap-1.5">
+              <Avatar size={40} className={seat === viewerSeat ? "ring-2 ring-emerald-400/70" : "ring-2 ring-white/10"} />
+              <span className="text-xs text-white/70">
+                {names[seat]}
+                {seat === viewerSeat && <span className="text-emerald-300"> (나)</span>}
+                {seat === dealerSeat && <span className="ml-1 text-amber-300/70">선공</span>}
+              </span>
+              <span
+                className="text-4xl font-black text-amber-200 tabular-nums drop-shadow-[0_0_18px_rgba(251,191,36,0.85)] sm:text-5xl"
+                style={{ animation: "smtc-death-emblem-slam 0.55s cubic-bezier(0.34,1.56,0.64,1) both" }}
+              >
+                {countBySeat[seat]}개
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-white/40" style={{ wordBreak: "keep-all" }}>
+          권종(금액)은 쇼다운까지 비공개 — 개수만 확정 공개됩니다.
+        </p>
+
+        <SkipButton onSkip={triggerSkip} />
+        <NextRoundCountdown timeLeft={timeLeft} secondsTotal={secondsTotal} label="칩 베팅 준비" />
+      </div>
+    </div>
+  );
+
+  return createPortal(body, document.body);
 }
 
 function coinSumOf(coins: CoinToken[]): number {
