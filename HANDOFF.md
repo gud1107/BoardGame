@@ -134,6 +134,8 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: (1) 위 "실제 브라우저 렌더링 확인" 항목대로 온라인 2대 이상 기기 동기화(매설 비공개성이 실제로 새어나가지 않는지 포함)는 미검증. (2) `TURN_CAP`(40)·보물/시작 칸 좌표·정찰 아이템 사양은 전부 룰북에 없는 하우스 확장이라 사용자 확인은 받았으나 실제 플레이 체감 밸런스는 미검증 — 특히 정찰 1회 제한이 너무 약한지/강한지 후속 피드백 필요. (3) 봇의 매설 위치 선정(`chooseBotMinePlacement`, 보물 근접 가중치)과 이동 휴리스틱(`scoreMove`)은 정보 공정성 원칙(상대 미폭발 지뢰 절대 안 읽음)을 지키게 설계했지만 실제 사람 상대 체감 난이도는 미검증.
 
+**커밋/배포**: 사용자가 요청서 자체에 "배포 명령을 실행하고 가능한 단계까지 완료"를 명시적으로 포함해 커밋/푸시/배포까지 이번 세션에서 바로 진행. 이번 세션이 만든 변경분(`src/games/mineOfOblivion/` 전체, `registry.ts`/`playableGames.tsx`/`globals.css`/`soundEngine.ts`/`HANDOFF.md`)만 정확히 스테이징 — 작업 시작 시점에 이미 워킹 트리에 있던 이 세션과 무관한 사전 변경분(`boardGameRule/쇼미더코인/쇼미더코인.md` 수정, `.claude/`, 여러 미구현 게임용 참고 이미지, 저장소 최상위 `orca충돌및확인.md`/`저작권, 상표권.md`)은 의도·용도를 확인할 수 없어 이번에도 커밋 대상에서 제외(랫어탯캣 세션과 동일 판단). 커밋 메시지 `feat(mine-of-oblivion): implement death-game themed memory mine board game based on rulebook`(`5b57d6d`) → `git push origin main` 완료(`0cc9155..5b57d6d`). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(39초), `target: "production"`/`readyState: READY`(`dpl_Czaeu3TUkvFFB6XsZj4S5hfRppJQ`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/mine-of-oblivion` 둘 다 200과 대시보드/게임 페이지 HTML에 "망각의 지뢰" 문자열 포함 직접 확인함.
+
 ### 2026-08-31 — 쇼미더코인 구버전 전면 폐기 및 신규 룰북 기반 재구축
 
 **요청**: 갱신된 `boardGameRule/쇼미더코인/쇼미더코인.md` 룰북(숫자 코인/베팅칩을 분리한 신규 경제 모델)을 기준으로 구버전 `engine.ts`/`Board.tsx`/`Effects.tsx`를 전면 폐기하고 제로베이스 재구축, 코인 베팅·올인·쇼다운·코인 획득·탈락 등 인게임 전 액션에 화려한 비주얼/사운드 풀 이펙트 추가. 요청서는 이번에도 `src/server/socket/roomManager.ts`/`src/games/common/`/`aiBot.ts` 소켓 서버 아키텍처를 전제했고, 모호한 규칙은 임의로 추정하지 말고 먼저 질문하라는 명시적 지시(Strict No-Assumption Rule).
