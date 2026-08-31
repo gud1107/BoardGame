@@ -1,57 +1,69 @@
 /**
  * Pure "망각의 지뢰 (Mine of Oblivion)" rules engine — no React, no I/O.
  *
- * Source of truth: `boardGameRule/망각의 지뢰/망각의 지뢰.md` (넷플릭스 데스게임 테마,
- * 단판 승부 하우스 룰). Several design points were confirmed via
- * `AskUserQuestion` (Strict No-Assumption Rule in the task brief) before
- * implementation, since they weren't derivable from the rulebook alone:
+ * Source of truth: `boardGameRule/망각의 지뢰/망각의 지뢰.md`, rewritten wholesale for
+ * this session's brief — an **11×11 minesweeper-style exploration race**,
+ * replacing the previous 5×5 "forced-retreat forfeit" house rule entirely.
+ * Several design points weren't derivable from the brief alone and were
+ * confirmed via `AskUserQuestion` (Strict No-Assumption Rule) before writing
+ * a line of engine code:
  *
- *  - **Board coordinates**: start tiles = corner "A1"(p1) / "E5"(p2); the 3
- *    treasure tiles = center "C3" + the two other corners "A5"/"E1".
- *  - **정찰(radar) 아이템**: NOT in the original rulebook (which has zero item
- *    system — pure memory/bluffing). Added as a platform extension per the
- *    confirmed answer: once per game, instead of moving, a seat may reveal
- *    whether one tile orthogonally adjacent to their pawn currently holds an
- *    *armed* mine (from either seat) — costs the turn, same as a move.
- *  - **턴 제한시간**: none — untimed, matching the rulebook's turn-based flow.
- *    Disconnect/idle→bot takeover is handled entirely by the shared
- *    `botTakeover.ts` module in `<Game>.tsx`, independent of this engine.
- *  - **승리조건 B 종료 시점**: the rulebook's "보드판 변수 소진" is undefined for
- *    an open grid with no movement-blocking (a player can always step
- *    somewhere), so the confirmed house rule caps the match at 20 turns per
- *    seat (40 total actions). If nobody has reached 2 treasures by then: more
- *    treasures wins; tied treasures → fewer mine hits taken wins; still tied
- *    → draw. (A "board fully exhausted without anyone reaching 2" via the
- *    rulebook's *other* clause — "보물이 모두 획득되었을 때" — is mathematically
- *    unreachable with 2 seats and 3 treasures: splitting 3 without anyone
- *    reaching 2 is impossible.)
+ *  - **지뢰 배치 방식**: kept as each seat's own *secret* mine burial (not a
+ *    system-random minefield) — the bluffing/memory element from the
+ *    original game survives, it's just that the adjacent-8-tile mine count
+ *    is now a *scoring* mechanic (and a public deduction clue once a tile is
+ *    first visited) instead of a pure hazard-avoidance one.
+ *  - **보물 배치**: fixed coordinates, scaled up from the old 5×5 layout's
+ *    "두 대각선 코너가 시작칸, 남은 두 코너 + 정중앙이 보물" pattern — start
+ *    tiles are the two ends of one diagonal (`A1`/`K11`), treasures are the
+ *    other diagonal's two corners (`A11`/`K1`) plus dead center (`F6`).
+ *  - **리스폰 우선순위**: nearest-first — search Chebyshev-distance rings
+ *    outward from the seat's own start tile (0, 1, 2, 3, then keep
+ *    expanding only if truly necessary), collect every tile in the nearest
+ *    non-empty ring that is both mine-free and unoccupied, and pick among
+ *    those uniformly. Because `applyAction` must stay a pure, no-I/O
+ *    function of `(state, action)` for this project's lockstep online-sync
+ *    architecture (every peer replays the exact same broadcast actions and
+ *    must land on bit-identical state — see `<Game>.tsx`'s module doc), the
+ *    "random" pick can't call `Math.random()` inside the reducer. It's a
+ *    deterministic FNV-1a hash of the mine-hit tile + seat + the match's
+ *    running `actionsPlayed` counter instead (`deterministicPick`) — looks
+ *    and feels random across a match/replay, reproduces identically on
+ *    every peer.
+ *  - **참여 인원**: kept 2-player-exclusive, same `"p1" | "p2"` seat
+ *    convention as every other 2-player-only online game here (lostCities,
+ *    malDalliJa, the pre-rewrite version of this game).
  *
- * Everything else follows the rulebook verbatim: 5×5 grid, 4 secret mines per
- * seat (never on a treasure tile or the seat's *own* start tile — the
- * opponent's start tile is a legal mine spot, since the rulebook only
- * restricts "본인의 시작 칸"), orthogonal 1-tile moves only, a mine hit forces
- * the mover back to their own start tile + forfeits one held treasure (if
- * any) back onto its home tile, and the triggered mine itself detonates and
- * is permanently removed (that tile is safe forever after, for both seats).
- * "망각(forgetting)" is deliberately NOT an engine mechanic — the rulebook's
- * whole point is that a *human* player might forget where they buried their
- * own mines. There is no timer that blinds/resets tile info; a seat's own
- * mine layout is simply present in `mines[seat]` for the rest of the match,
- * exactly like an opponent's is in `mines[otherSeat]` — the "게임 정보 은닉" the
- * task brief asked for is enforced at the UI layer only (Board.tsx never
- * renders the opponent's un-triggered mine tiles), same convention as every
- * other hidden-hand game in this catalog (Lost Cities' hands, Dalmuti's
- * hands, …) — see `getValidMoves`'s / `scoreMove`'s doc for the matching
- * "bot only reads what a fair human opponent could know" discipline.
+ * One more call made without a fresh confirmation round, flagged here
+ * explicitly rather than silently: the previous build's "🔭 정찰(radar)"
+ * item was itself never part of any rulebook — it was a platform extension
+ * added on top of the old 5×5 house rule specifically because that rule had
+ * zero built-in deduction mechanism. The new adjacent-8-tile mine-count
+ * score *is* that deduction mechanism (numbers become public the instant a
+ * tile is first visited by either seat), and the new brief's turn model
+ * describes exactly one action per turn ("이동하기") with no second item
+ * action — so radar is dropped rather than carried forward. Likewise, no
+ * turn cap: the old 5×5 build's `TURN_CAP` was itself a confirmed house
+ * rule bolted on for a win condition ("보드판 변수 소진") that no longer
+ * exists — the new sole end condition (3rd treasure claimed) is reachable
+ * in finite time on a fixed 121-tile board with two seats, so nothing here
+ * reintroduces an unrequested cap.
  *
- * A mine hit is a *forced retreat*, never a permanent elimination — the
- * rulebook has no "탈락" concept at all (only Win Condition A/B, §4). Forced
- * retreat is a penalty side-effect, not a move action, so it does not itself
- * re-trigger a mine check at the seat's start tile even if the opponent
- * happened to plant a mine there.
+ * Mine count per seat: not specified in the brief, chosen as a tuned
+ * parameter rather than a house-rule ambiguity worth a question round — see
+ * `MINES_PER_PLAYER`'s own doc for the reasoning.
  *
- * Seat model follows the same `"p1" | "p2"` convention as every other
- * 2-player-exclusive online game here (lostCities, malDalliJa).
+ * Everything else follows the new brief verbatim: 11×11 grid (`A1`..`K11`),
+ * 8-directional single-tile moves, no two seats ever standing on the same
+ * tile, first arrival at an unvisited non-mined tile scores the count of
+ * still-armed mines among its 8 neighbors (0 for a tile either seat has
+ * already visited), a mine hit is a flat **−5** regardless of how many
+ * mines were stacked on that tile (both/all of that tile's mines detonate
+ * and are permanently removed together), and the three treasures pay out
+ * 10 / 15 / 20 in claim order with the match ending the instant the 3rd is
+ * claimed — highest total score wins (there is no forfeiting a claimed
+ * treasure back; once scored, a seat keeps those points for the rest of
+ * the match, unlike the old build's "hand it back on your next mine hit").
  */
 
 import { seededRng } from "@/lib/rng";
@@ -66,26 +78,40 @@ export function otherSeat(seat: Seat): Seat {
 }
 
 // ---------------------------------------------------------------------------
-// Board geometry (5×5, "A1".."E5" — same notation the rulebook itself uses)
+// Board geometry (11×11, "A1".."K11")
 // ---------------------------------------------------------------------------
 
 export type TileId = string;
 
-const COLS = ["A", "B", "C", "D", "E"] as const;
-const ROWS = [1, 2, 3, 4, 5] as const;
-/** Exported purely for UI grid layout (`MineOfOblivionBoard.tsx` iterates these to build the 5×5 CSS grid in reading order) — not used by any rule logic below, which only ever deals in `TileId` strings. */
+const COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"] as const;
+const ROWS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
+/** Exported purely for UI grid layout — not used by any rule logic below, which only ever deals in `TileId` strings. */
 export const BOARD_COLS: readonly string[] = COLS;
 export const BOARD_ROWS: readonly number[] = ROWS;
+export const GRID_SIZE = 11;
 
 export const ALL_TILES: readonly TileId[] = COLS.flatMap((c) => ROWS.map((r) => `${c}${r}`));
 
-export const START_TILE: Record<Seat, TileId> = { p1: "A1", p2: "E5" };
-/** Center + the two non-start corners — confirmed board layout. */
-export const TREASURE_TILES: readonly TileId[] = ["C3", "A5", "E1"];
+/** Two ends of one board diagonal — confirmed layout (see module doc). */
+export const START_TILE: Record<Seat, TileId> = { p1: "A1", p2: "K11" };
+/** The other diagonal's two corners + dead center — confirmed layout. */
+export const TREASURE_TILES: readonly TileId[] = ["A11", "K1", "F6"];
 
-export const MINES_PER_PLAYER = 4;
-/** Confirmed house rule: 20 turns/seat = 40 total actions before Win Condition B's tiebreak kicks in. */
-export const TURN_CAP = 40;
+/**
+ * Mines each seat secretly buries. Not specified by the brief, so tuned
+ * rather than assumed-and-shipped silently: the old 5×5 build used 4 mines
+ * per seat on 25 tiles (~16% of the board, per seat, ignoring overlap).
+ * Carrying that same *absolute* count forward unchanged (8 = 2×4, doubled
+ * because the new board has 2 legal 11-tile edges instead of 1 and a much
+ * larger safe-exploration middle) would still only cover ~7% of 121 tiles
+ * per seat — deliberately less dense than the old game, because unlike the
+ * old build (where a hit was a full turn write-off but no lasting harm),
+ * every tile here is worth real points, and a board so dense that safe
+ * exploration became rare would gut the scoring layer this whole rewrite
+ * adds. 8/seat keeps genuine memory/bluffing tension without turning most
+ * of the map into a minefield.
+ */
+export const MINES_PER_PLAYER = 8;
 
 function colIndex(tile: TileId): number {
   return COLS.indexOf(tile[0] as (typeof COLS)[number]);
@@ -94,32 +120,58 @@ function rowIndex(tile: TileId): number {
   return ROWS.indexOf(Number(tile.slice(1)) as (typeof ROWS)[number]);
 }
 
-export function isOrthogonallyAdjacent(a: TileId, b: TileId): boolean {
-  const dc = Math.abs(colIndex(a) - colIndex(b));
-  const dr = Math.abs(rowIndex(a) - rowIndex(b));
-  return dc + dr === 1;
+/** Chebyshev (king-move) distance — the natural metric once movement is 8-directional. */
+export function chebyshevDistance(a: TileId, b: TileId): number {
+  return Math.max(Math.abs(colIndex(a) - colIndex(b)), Math.abs(rowIndex(a) - rowIndex(b)));
 }
 
-export function orthogonalNeighbors(tile: TileId): TileId[] {
+/** True iff `b` is one of `a`'s 8 surrounding tiles (orthogonal or diagonal), never `a` itself. */
+export function isEightDirectionAdjacent(a: TileId, b: TileId): boolean {
+  if (a === b) return false;
+  return chebyshevDistance(a, b) === 1;
+}
+
+/** Up to 8 surrounding tiles, clipped at the board edge (corner = 3, edge = 5, interior = 8). */
+export function eightDirectionNeighbors(tile: TileId): TileId[] {
   const c = colIndex(tile);
   const r = rowIndex(tile);
-  const deltas = [
-    [0, -1],
-    [0, 1],
-    [-1, 0],
-    [1, 0],
-  ];
   const out: TileId[] = [];
-  for (const [dc, dr] of deltas) {
-    const nc = c + dc;
-    const nr = r + dr;
-    if (nc >= 0 && nc < COLS.length && nr >= 0 && nr < ROWS.length) out.push(`${COLS[nc]}${ROWS[nr]}`);
+  for (let dc = -1; dc <= 1; dc++) {
+    for (let dr = -1; dr <= 1; dr++) {
+      if (dc === 0 && dr === 0) continue;
+      const nc = c + dc;
+      const nr = r + dr;
+      if (nc >= 0 && nc < COLS.length && nr >= 0 && nr < ROWS.length) out.push(`${COLS[nc]}${ROWS[nr]}`);
+    }
   }
   return out;
 }
 
-function manhattanDistance(a: TileId, b: TileId): number {
-  return Math.abs(colIndex(a) - colIndex(b)) + Math.abs(rowIndex(a) - rowIndex(b));
+/** Every tile at exactly Chebyshev distance `radius` from `center` (a hollow square ring; `radius` 0 is just `center` itself), sorted for deterministic iteration. */
+function chebyshevRing(center: TileId, radius: number): TileId[] {
+  const c = colIndex(center);
+  const r = rowIndex(center);
+  const out: TileId[] = [];
+  for (let dc = -radius; dc <= radius; dc++) {
+    for (let dr = -radius; dr <= radius; dr++) {
+      if (Math.max(Math.abs(dc), Math.abs(dr)) !== radius) continue;
+      const nc = c + dc;
+      const nr = r + dr;
+      if (nc >= 0 && nc < COLS.length && nr >= 0 && nr < ROWS.length) out.push(`${COLS[nc]}${ROWS[nr]}`);
+    }
+  }
+  return out.sort();
+}
+
+/** Deterministic FNV-1a-hash pick — see module doc's "리스폰 우선순위" note on why this can't be `Math.random()`. */
+function deterministicPick<T extends string>(items: readonly T[], seed: string): T {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  const idx = Math.abs(h) % items.length;
+  return items[idx];
 }
 
 // ---------------------------------------------------------------------------
@@ -128,43 +180,60 @@ function manhattanDistance(a: TileId, b: TileId): number {
 
 export interface Treasure {
   tileId: TileId;
-  /** null while still sitting on the board. */
   holder: Seat | null;
+  /** Claim order (1st/2nd/3rd) — determines the payout below. `null` while unclaimed. */
+  order: 1 | 2 | 3 | null;
+  /** 10 / 15 / 20 respectively — frozen at claim time. `null` while unclaimed. */
+  points: number | null;
 }
 
 export interface PlayerState {
   position: TileId;
-  treasureCount: number;
+  /** Total score — can go negative (repeated mine hits with little exploration). */
+  score: number;
+  /** How many of the 3 treasures this seat personally claimed (0..3) — a stat, not itself the win condition (total score is). */
+  treasuresClaimed: number;
   mineHitsTaken: number;
-  radarUsed: boolean;
-  /** Tiles this seat has used its one radar charge on — UI-only bookkeeping (own-eyes-only, per the info-fairness note above). */
-  radarRevealed: TileId[];
 }
 
-export type EventKind = "safe" | "treasure" | "mine" | "radar-safe" | "radar-mine";
+export type EventKind = "reveal" | "treasure" | "mine";
 
 export interface LastEvent {
   kind: EventKind;
   actor: Seat;
   tile: TileId;
-  /** Only for `"mine"` — whose mine(s) detonated (usually one seat; both if the two seats happened to mine the same tile). */
+  /** `"reveal"` only — the adjacent-mine-count score just awarded (0 if `alreadyVisited`). */
+  scoreGained?: number;
+  /** `"reveal"` only — true if this tile had already been visited by either seat before (score is always 0 in that case). */
+  alreadyVisited?: boolean;
+  /** `"mine"` only — whose mine(s) detonated (usually one seat; both if the two seats happened to mine the same tile). */
   mineOwners?: Seat[];
-  treasureForfeited?: boolean;
+  /** `"mine"` only — where the mover was forced to respawn. */
+  respawnTile?: TileId;
+  /** `"treasure"` only. */
+  treasureOrder?: 1 | 2 | 3;
+  treasurePoints?: number;
 }
 
 export type Phase = "SETUP_MINE" | "PLAYER_MOVE" | "REVEAL_STEP" | "GAME_OVER";
 
 export interface MineOfOblivionState {
   phase: Phase;
-  /** Secret mine layouts — full state carries both seats' (see file header re: UI-level-only secrecy). */
+  /** Secret mine layouts — full state carries both seats' (UI-level-only secrecy, same convention as every hidden-hand game in this catalog: `MineOfOblivionBoard.tsx` never renders the opponent's un-triggered mines). */
   mines: Record<Seat, TileId[]>;
   /** Per-seat tiles whose mine has already detonated and is gone — checked against `mines[seat]` to know which are still armed. */
   disarmed: Record<Seat, TileId[]>;
   mineReady: Record<Seat, boolean>;
+  /** Every tile either seat has ever landed on (as a real move, not a forced mine respawn) — global, first-come-first-served for the reveal score. */
+  visitedTiles: TileId[];
+  /** Adjacent-mine-count score frozen at the moment each tile in `visitedTiles` was *first* visited — the public deduction clue every subsequent viewer (both seats) can see, keyed by tile. Treasure tiles are tracked in `visitedTiles` but never get an entry here (claiming pays the sequential treasure bonus instead, not a mine-count score). */
+  revealedCounts: Partial<Record<TileId, number>>;
   treasures: Treasure[];
+  /** 0 → 3; the moment this hits 3 the match is over. */
+  treasureClaimCount: number;
   players: Record<Seat, PlayerState>;
   activeSeat: Seat;
-  /** Total actions taken across both seats since PLAYER_MOVE started (move or radar alike) — drives the `TURN_CAP` house rule. */
+  /** Total moves taken across both seats since PLAYER_MOVE started. */
   actionsPlayed: number;
   lastEvent: LastEvent | null;
   /** Computed the instant the deciding event happens, but not "official" until the REVEAL_STEP's `READY_NEXT_ROUND` acknowledgement flips `phase` to `GAME_OVER` — same "reveal, then confirm" two-step every other dramatic-reveal game in this catalog uses. */
@@ -177,16 +246,21 @@ export interface MineOfOblivionState {
  * Which seat(s) currently have an armed (not-yet-triggered) mine at `tile`.
  * Exported for UI use, but ONLY safe to call for a tile the viewer is
  * actually entitled to know about right now (their own mines via
- * `ownArmedMines`, or a tile they've already spent their own radar charge
- * on) — calling it for an arbitrary tile and rendering the result would leak
- * the opponent's hidden mine layout, the same trust boundary every other
- * hidden-hand game in this catalog relies on the UI layer to respect.
+ * `ownArmedMines`, or any tile in `revealedCounts`/`publiclyDisarmedTiles`,
+ * which are public once revealed) — calling it for an arbitrary
+ * still-secret tile and rendering the result would leak the opponent's
+ * hidden mine layout.
  */
 export function armedMineOwnersAt(state: Pick<MineOfOblivionState, "mines" | "disarmed">, tile: TileId): Seat[] {
   return (["p1", "p2"] as const).filter((seat) => state.mines[seat].includes(tile) && !state.disarmed[seat].includes(tile));
 }
 
-/** True iff `tile` is a legal spot for `seat` to bury a mine — not a treasure tile, not `seat`'s own start tile (rulebook §1's two constraints; the opponent's start tile is deliberately allowed). */
+/** Sum of still-armed mines (either seat, counted individually) across `tile`'s up-to-8 neighbors — the score a first visit to `tile` awards. */
+function computeAdjacentMineScore(state: Pick<MineOfOblivionState, "mines" | "disarmed">, tile: TileId): number {
+  return eightDirectionNeighbors(tile).reduce((sum, n) => sum + armedMineOwnersAt(state, n).length, 0);
+}
+
+/** True iff `tile` is a legal spot for `seat` to bury a mine — not a treasure tile, not `seat`'s own start tile (the opponent's start tile is deliberately allowed, same as the pre-rewrite rulebook). */
 export function canPlaceMine(seat: Seat, tile: TileId): boolean {
   if (!ALL_TILES.includes(tile)) return false;
   if (TREASURE_TILES.includes(tile)) return false;
@@ -201,10 +275,13 @@ export function startGame(rng: () => number = Math.random): MineOfOblivionState 
     mines: { p1: [], p2: [] },
     disarmed: { p1: [], p2: [] },
     mineReady: { p1: false, p2: false },
-    treasures: TREASURE_TILES.map((tileId) => ({ tileId, holder: null })),
+    visitedTiles: [],
+    revealedCounts: {},
+    treasures: TREASURE_TILES.map((tileId) => ({ tileId, holder: null, order: null, points: null })),
+    treasureClaimCount: 0,
     players: {
-      p1: { position: START_TILE.p1, treasureCount: 0, mineHitsTaken: 0, radarUsed: false, radarRevealed: [] },
-      p2: { position: START_TILE.p2, treasureCount: 0, mineHitsTaken: 0, radarUsed: false, radarRevealed: [] },
+      p1: { position: START_TILE.p1, score: 0, treasuresClaimed: 0, mineHitsTaken: 0 },
+      p2: { position: START_TILE.p2, score: 0, treasuresClaimed: 0, mineHitsTaken: 0 },
     },
     activeSeat: firstSeat,
     actionsPlayed: 0,
@@ -222,20 +299,34 @@ export function startGame(rng: () => number = Math.random): MineOfOblivionState 
 export type EngineAction =
   | { type: "SET_MINE_POSITION"; seat: Seat; tiles: TileId[] }
   | { type: "SELECT_TILE_STEP"; seat: Seat; tile: TileId }
-  | { type: "USE_RADAR_ITEM"; seat: Seat; tile: TileId }
-  /** Acknowledges the current REVEAL_STEP overlay and advances the game — named to match the task brief's event vocabulary, repurposed here as "ready to continue past this reveal" since this house rule is single-round (no next round to ready up for). Carries no seat: any client may fire it (mirrors grid-poker/showMeTheCoin's shared skip button), and it's a no-op once `phase` has already moved past REVEAL_STEP, so a near-simultaneous double-press from both viewers is harmless. */
+  /** Acknowledges the current REVEAL_STEP overlay and advances the game. Carries no seat: any client may fire it (shared skip button), and it's a no-op once `phase` has already moved past REVEAL_STEP. */
   | { type: "READY_NEXT_ROUND" };
 
-function resolveWinConditionB(state: MineOfOblivionState): { winner: Seat | null; isDraw: boolean } {
-  const p1 = state.players.p1;
-  const p2 = state.players.p2;
-  if (p1.treasureCount !== p2.treasureCount) {
-    return { winner: p1.treasureCount > p2.treasureCount ? "p1" : "p2", isDraw: false };
+/** True iff `tile` is safe to force-respawn a mover onto right now: no armed mine (either seat) and not the other seat's current position. */
+function tileSafeForRespawn(state: MineOfOblivionState, tile: TileId, mover: Seat): boolean {
+  if (armedMineOwnersAt(state, tile).length > 0) return false;
+  const other = otherSeat(mover);
+  return state.players[other].position !== tile;
+}
+
+/** Nearest-first (Chebyshev rings expanding from `mover`'s own start tile), random-among-ties respawn pick — see module doc. `seedTile`/`state.actionsPlayed` make the "random" pick deterministic and reproducible for lockstep replay. */
+function chooseRespawnTile(state: MineOfOblivionState, mover: Seat, seedTile: TileId): TileId {
+  const start = START_TILE[mover];
+  const maxRadius = COLS.length + ROWS.length; // generous upper bound, never actually reached in practice
+  for (let radius = 0; radius <= maxRadius; radius++) {
+    const ring = chebyshevRing(start, radius).filter((t) => tileSafeForRespawn(state, t, mover));
+    if (ring.length > 0) {
+      return deterministicPick(ring, `${mover}:${seedTile}:${state.actionsPlayed}:${radius}`);
+    }
   }
-  if (p1.mineHitsTaken !== p2.mineHitsTaken) {
-    return { winner: p1.mineHitsTaken < p2.mineHitsTaken ? "p1" : "p2", isDraw: false };
-  }
-  return { winner: null, isDraw: true };
+  return start; // unreachable in practice (board has 121 tiles, at most 16 mines total)
+}
+
+function resolveWinner(state: MineOfOblivionState): { winner: Seat | null; isDraw: boolean } {
+  const p1 = state.players.p1.score;
+  const p2 = state.players.p2.score;
+  if (p1 === p2) return { winner: null, isDraw: true };
+  return { winner: p1 > p2 ? "p1" : "p2", isDraw: false };
 }
 
 function applySetMines(state: MineOfOblivionState, seat: Seat, tiles: TileId[]): MineOfOblivionState {
@@ -250,7 +341,17 @@ function applySetMines(state: MineOfOblivionState, seat: Seat, tiles: TileId[]):
   return { ...state, mines, mineReady, phase: bothReady ? "PLAYER_MOVE" : "SETUP_MINE" };
 }
 
-/** Shared arrival resolution for a legal step onto `tile` — mine/treasure/safe judgment, retreat/forfeit penalty, and the `REVEAL_STEP` + turn-cap bookkeeping every move-consuming action goes through. */
+/** Win condition (3rd treasure claimed) + the shared REVEAL_STEP gate — the sole entry/exit point every move funnels through. */
+function finalizeAction(state: MineOfOblivionState, mover: Seat): MineOfOblivionState {
+  void mover;
+  if (state.treasureClaimCount >= 3) {
+    const { winner, isDraw } = resolveWinner(state);
+    return { ...state, phase: "REVEAL_STEP", pendingGameOver: true, winner, isDraw };
+  }
+  return { ...state, phase: "REVEAL_STEP", pendingGameOver: false };
+}
+
+/** Shared arrival resolution for a legal step onto `tile` — mine/treasure/reveal judgment and the REVEAL_STEP gate every move goes through. */
 function resolveArrival(state: MineOfOblivionState, mover: Seat, tile: TileId): MineOfOblivionState {
   const triggeredOwners = armedMineOwnersAt(state, tile);
   let next: MineOfOblivionState = {
@@ -262,81 +363,55 @@ function resolveArrival(state: MineOfOblivionState, mover: Seat, tile: TileId): 
   if (triggeredOwners.length > 0) {
     const disarmed = { ...next.disarmed };
     for (const owner of triggeredOwners) disarmed[owner] = [...disarmed[owner], tile];
+    next = { ...next, disarmed };
+
+    const respawnTile = chooseRespawnTile(next, mover, tile);
     const mover_ = next.players[mover];
-    const hadTreasure = mover_.treasureCount > 0;
-    let treasures = next.treasures;
-    if (hadTreasure) {
-      const idx = treasures.findIndex((t) => t.holder === mover);
-      if (idx !== -1) treasures = treasures.map((t, i) => (i === idx ? { ...t, holder: null } : t));
-    }
     next = {
       ...next,
-      disarmed,
-      treasures,
       players: {
         ...next.players,
-        [mover]: {
-          ...mover_,
-          position: START_TILE[mover],
-          treasureCount: hadTreasure ? mover_.treasureCount - 1 : mover_.treasureCount,
-          mineHitsTaken: mover_.mineHitsTaken + 1,
-        },
+        [mover]: { ...mover_, position: respawnTile, score: mover_.score - 5, mineHitsTaken: mover_.mineHitsTaken + 1 },
       },
-      lastEvent: { kind: "mine", actor: mover, tile, mineOwners: triggeredOwners, treasureForfeited: hadTreasure },
+      lastEvent: { kind: "mine", actor: mover, tile, mineOwners: triggeredOwners, respawnTile },
     };
   } else {
     const treasureIdx = next.treasures.findIndex((t) => t.tileId === tile && t.holder === null);
     if (treasureIdx !== -1) {
-      const treasures = next.treasures.map((t, i) => (i === treasureIdx ? { ...t, holder: mover } : t));
-      const treasureCount = next.players[mover].treasureCount + 1;
+      const order = (next.treasureClaimCount + 1) as 1 | 2 | 3;
+      const points = order === 1 ? 10 : order === 2 ? 15 : 20;
+      const treasures = next.treasures.map((t, i) => (i === treasureIdx ? { ...t, holder: mover, order, points } : t));
+      const mover_ = next.players[mover];
       next = {
         ...next,
         treasures,
-        players: { ...next.players, [mover]: { ...next.players[mover], treasureCount } },
-        lastEvent: { kind: "treasure", actor: mover, tile },
+        treasureClaimCount: next.treasureClaimCount + 1,
+        visitedTiles: next.visitedTiles.includes(tile) ? next.visitedTiles : [...next.visitedTiles, tile],
+        players: { ...next.players, [mover]: { ...mover_, score: mover_.score + points, treasuresClaimed: mover_.treasuresClaimed + 1 } },
+        lastEvent: { kind: "treasure", actor: mover, tile, treasureOrder: order, treasurePoints: points },
       };
     } else {
-      next = { ...next, lastEvent: { kind: "safe", actor: mover, tile } };
+      const alreadyVisited = next.visitedTiles.includes(tile);
+      const scoreGained = alreadyVisited ? 0 : computeAdjacentMineScore(next, tile);
+      const mover_ = next.players[mover];
+      next = {
+        ...next,
+        visitedTiles: alreadyVisited ? next.visitedTiles : [...next.visitedTiles, tile],
+        revealedCounts: alreadyVisited ? next.revealedCounts : { ...next.revealedCounts, [tile]: scoreGained },
+        players: { ...next.players, [mover]: { ...mover_, score: mover_.score + scoreGained } },
+        lastEvent: { kind: "reveal", actor: mover, tile, scoreGained, alreadyVisited },
+      };
     }
   }
 
   return finalizeAction(next, mover);
 }
 
-/** Win Condition A (2 treasures) and the `TURN_CAP` tiebreak (Win Condition B), then the shared REVEAL_STEP gate. */
-function finalizeAction(state: MineOfOblivionState, mover: Seat): MineOfOblivionState {
-  if (state.players[mover].treasureCount >= 2) {
-    return { ...state, phase: "REVEAL_STEP", pendingGameOver: true, winner: mover, isDraw: false };
-  }
-  if (state.actionsPlayed >= TURN_CAP) {
-    const { winner, isDraw } = resolveWinConditionB(state);
-    return { ...state, phase: "REVEAL_STEP", pendingGameOver: true, winner, isDraw };
-  }
-  return { ...state, phase: "REVEAL_STEP", pendingGameOver: false };
-}
-
 function applyStep(state: MineOfOblivionState, seat: Seat, tile: TileId): MineOfOblivionState {
   if (state.phase !== "PLAYER_MOVE" || state.activeSeat !== seat) return state;
-  if (!isOrthogonallyAdjacent(state.players[seat].position, tile)) return state;
+  if (!isEightDirectionAdjacent(state.players[seat].position, tile)) return state;
+  if (state.players[otherSeat(seat)].position === tile) return state; // 동일 칸 진입 금지
   return resolveArrival(state, seat, tile);
-}
-
-function applyRadar(state: MineOfOblivionState, seat: Seat, tile: TileId): MineOfOblivionState {
-  if (state.phase !== "PLAYER_MOVE" || state.activeSeat !== seat) return state;
-  if (state.players[seat].radarUsed) return state;
-  if (!isOrthogonallyAdjacent(state.players[seat].position, tile)) return state;
-
-  const hasMine = armedMineOwnersAt(state, tile).length > 0;
-  const next: MineOfOblivionState = {
-    ...state,
-    actionsPlayed: state.actionsPlayed + 1,
-    players: {
-      ...state.players,
-      [seat]: { ...state.players[seat], radarUsed: true, radarRevealed: [...state.players[seat].radarRevealed, tile] },
-    },
-    lastEvent: { kind: hasMine ? "radar-mine" : "radar-safe", actor: seat, tile },
-  };
-  return finalizeAction(next, seat);
 }
 
 function applyReadyNextRound(state: MineOfOblivionState): MineOfOblivionState {
@@ -354,8 +429,6 @@ export function applyAction(state: MineOfOblivionState, action: EngineAction): M
       return applySetMines(state, action.seat, action.tiles);
     case "SELECT_TILE_STEP":
       return applyStep(state, action.seat, action.tile);
-    case "USE_RADAR_ITEM":
-      return applyRadar(state, action.seat, action.tile);
     case "READY_NEXT_ROUND":
       return applyReadyNextRound(state);
     default:
@@ -382,82 +455,62 @@ export function publiclyDisarmedTiles(state: MineOfOblivionState): TileId[] {
 // AI bot support (ARCHITECTURE.md §7) — getValidMoves / scoreMove /
 // chooseBotAction(state, seat, level, rng?). Information fairness: the bot
 // never reads the opponent's un-triggered mine tiles — only its own mines
-// (`ownArmedMines`), tiles it has spent its own radar charge on
-// (`players[seat].radarRevealed`), and tiles publicly known safe because a
-// mine already detonated there (`publiclyDisarmedTiles`) — exactly what a
-// human in that seat could legitimately know.
+// (`ownArmedMines`), tiles publicly known safe because a mine already
+// detonated there (`publiclyDisarmedTiles`), and the public adjacent-count
+// numbers on every already-visited tile (`state.revealedCounts` / `state.
+// visitedTiles`, both public by construction the instant either seat
+// reveals them) — exactly what a human in that seat could legitimately know.
 // ---------------------------------------------------------------------------
 
-/** `scoreMove` only ever receives what `getValidMoves` produces during `PLAYER_MOVE` — the other two `EngineAction` variants (`SET_MINE_POSITION`, `READY_NEXT_ROUND`) go through different dedicated paths (`chooseBotMinePlacement`, the host's shared reveal timer) and are never scored here. */
-type ScorableMove = Extract<EngineAction, { type: "SELECT_TILE_STEP" | "USE_RADAR_ITEM" }>;
+type ScorableMove = Extract<EngineAction, { type: "SELECT_TILE_STEP" }>;
 
 export function getValidMoves(state: MineOfOblivionState, seat: Seat): ScorableMove[] {
   if (state.phase !== "PLAYER_MOVE" || state.activeSeat !== seat) return [];
-  const moves: ScorableMove[] = orthogonalNeighbors(state.players[seat].position).map((tile) => ({ type: "SELECT_TILE_STEP", seat, tile }));
-  if (!state.players[seat].radarUsed) {
-    for (const tile of orthogonalNeighbors(state.players[seat].position)) {
-      moves.push({ type: "USE_RADAR_ITEM", seat, tile });
-    }
-  }
-  return moves;
-}
-
-function tileKnownSafe(state: MineOfOblivionState, seat: Seat, tile: TileId): boolean {
-  return publiclyDisarmedTiles(state).includes(tile) || state.players[seat].radarRevealed.includes(tile);
-}
-
-function tileKnownDangerForSeat(state: MineOfOblivionState, seat: Seat, tile: TileId): boolean {
-  if (ownArmedMines(state, seat).includes(tile)) return true;
-  if (state.players[seat].radarRevealed.includes(tile)) {
-    // Only known-dangerous if this seat's own radar charge (the one charge it
-    // ever gets) was spent right here and came back positive.
-    return armedMineOwnersAt(state, tile).length > 0;
-  }
-  return false;
+  return eightDirectionNeighbors(state.players[seat].position)
+    .filter((tile) => state.players[otherSeat(seat)].position !== tile)
+    .map((tile) => ({ type: "SELECT_TILE_STEP", seat, tile }));
 }
 
 export function scoreMove(state: MineOfOblivionState, seat: Seat, move: ScorableMove, tier: BotTier): number {
   if (tier === "novice") return 0; // uniform over every legal move, per the shared novice-tier convention
 
-  const remainingTreasures = state.treasures.filter((t) => t.holder === null).map((t) => t.tileId);
-  const nearestTreasureDist = (tile: TileId) => (remainingTreasures.length === 0 ? 0 : Math.min(...remainingTreasures.map((t) => manhattanDistance(tile, t))));
-
-  if (move.type === "SELECT_TILE_STEP") {
-    const { tile } = move;
-    if (tileKnownDangerForSeat(state, seat, tile)) return -1000; // never knowingly step on a known mine
-
-    let score = 0;
-    if (remainingTreasures.includes(tile)) score += 60; // grabbing a treasure outright
-    score += (5 - nearestTreasureDist(tile)) * 4; // pull toward the nearest unclaimed treasure
-    if (tileKnownSafe(state, seat, tile)) score += 3; // mild preference for confirmed-safe ground
-
-    if (tier === "expert") {
-      // Rulebook strategy tip §5.2: a suspiciously roundabout path away from
-      // the direct line to a treasure often means the opponent mined that
-      // line — nudge the expert bot to occasionally favor a side approach
-      // over an untested straight shot once treasures start thinning out.
-      if (remainingTreasures.length <= 1 && !tileKnownSafe(state, seat, tile) && !remainingTreasures.includes(tile)) score -= 2;
-    }
-    return score;
-  }
-
-  // USE_RADAR_ITEM
   const { tile } = move;
-  if (tileKnownSafe(state, seat, tile) || ownArmedMines(state, seat).includes(tile)) return 1; // nothing new to learn here
-  const valueOfKnowing = (5 - nearestTreasureDist(tile)) * 2;
-  return tier === "expert" ? valueOfKnowing + 6 : valueOfKnowing;
+  if (ownArmedMines(state, seat).includes(tile)) return -1000; // never knowingly step on a known mine
+
+  const remainingTreasures = state.treasures.filter((t) => t.holder === null).map((t) => t.tileId);
+  const nearestTreasureDist = remainingTreasures.length === 0 ? 0 : Math.min(...remainingTreasures.map((t) => chebyshevDistance(tile, t)));
+
+  let score = 0;
+  if (remainingTreasures.includes(tile)) {
+    const prospectiveOrder = state.treasureClaimCount + 1;
+    const prospectivePoints = prospectiveOrder === 1 ? 10 : prospectiveOrder === 2 ? 15 : 20;
+    score += 80 + prospectivePoints; // grabbing a treasure outright, weighted by its payout
+  }
+  score += (GRID_SIZE - nearestTreasureDist) * 3; // pull toward the nearest unclaimed treasure
+  if (!state.visitedTiles.includes(tile)) score += 4; // unvisited ground still has a score to offer
+  else score -= 2; // a revisited tile is worth nothing — mildly avoid unless it's the only useful step
+
+  if (tier === "expert") {
+    // A tile whose already-public adjacent count came back high hints at
+    // more armed mines still hiding one ring further out — nudge the
+    // expert bot to lean away from that neighborhood once it has other
+    // options, same "read the public numbers" deduction a sharp human
+    // opponent would do.
+    const hotNeighbors = eightDirectionNeighbors(tile).filter((n) => (state.revealedCounts[n] ?? 0) >= 3);
+    if (hotNeighbors.length > 0 && !remainingTreasures.includes(tile)) score -= hotNeighbors.length * 2;
+  }
+  return score;
 }
 
-/** Heuristic mine placement for the bot's `SETUP_MINE` submission — this doesn't go through `getValidMoves`/`scoreMove`/`pickByLevel` since a "move" here is a whole 4-tile combination, not one atomic choice among a short list. Biases lightly toward guarding tiles near the treasures (where an opponent is likely to path through) while never fully surrounding a treasure (leaves the bot itself a way to reach it later), and keeps some randomness so mine layouts don't become a predictable rote pattern across bot levels. */
+/** Heuristic mine placement for the bot's `SETUP_MINE` submission — a whole `MINES_PER_PLAYER`-tile combination, not one atomic choice among a short list, so it doesn't go through `getValidMoves`/`scoreMove`/`pickByLevel`. Biases lightly toward guarding tiles a couple of steps out from the treasures (where an opponent is likely to path through) while keeping some randomness so mine layouts don't become a predictable rote pattern across bot levels. */
 export function chooseBotMinePlacement(seat: Seat, level: BotLevel, rng: () => number = Math.random): TileId[] {
   const candidates = ALL_TILES.filter((t) => canPlaceMine(seat, t));
   const tier = botTier(level);
   const weight = (tile: TileId): number => {
     if (tier === "novice") return 1;
-    const distToTreasure = Math.min(...TREASURE_TILES.map((t) => manhattanDistance(tile, t)));
-    const distToOwnStart = manhattanDistance(tile, START_TILE[seat]);
-    // Favor tiles a couple steps out from a treasure (guarding the approach) over either the treasure's own doorstep or the far edges of the board.
-    return 1 + Math.max(0, 3 - Math.abs(distToTreasure - 2)) + (tier === "expert" ? Math.max(0, distToOwnStart - 1) * 0.3 : 0);
+    const distToTreasure = Math.min(...TREASURE_TILES.map((t) => chebyshevDistance(tile, t)));
+    const distToOwnStart = chebyshevDistance(tile, START_TILE[seat]);
+    return 1 + Math.max(0, 3 - Math.abs(distToTreasure - 2)) + (tier === "expert" ? Math.max(0, distToOwnStart - 1) * 0.2 : 0);
   };
   const pool = candidates.map((tile) => ({ tile, weight: weight(tile) }));
   const chosen: TileId[] = [];
@@ -481,9 +534,8 @@ export function chooseBotMinePlacement(seat: Seat, level: BotLevel, rng: () => n
 /**
  * `REVEAL_STEP` is deliberately NOT handled here — advancing past it is a
  * shared-clock, no-one-seat's-decision action (`READY_NEXT_ROUND` carries no
- * seat), driven by the room host's own timer exactly like grid-poker's
- * `round-result`→`advance-round-result` and showMeTheCoin's showdown, not by
- * any bot seat's turn. See `<Game>.tsx`'s host-only reveal-timer effect.
+ * seat), driven by the room host's own timer, not by any bot seat's turn.
+ * See `<Game>.tsx`'s host-only reveal-timer effect.
  */
 export function chooseBotAction(state: MineOfOblivionState, seat: Seat, level: BotLevel, rng: () => number = Math.random): EngineAction | null {
   if (state.phase === "SETUP_MINE") {

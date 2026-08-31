@@ -3761,10 +3761,12 @@ body {
 }
 
 /* ===========================================================================
-   망각의 지뢰 (Mine of Oblivion) — 넷플릭스 데스게임 테마 신규 게임 (룰북 기반
-   구현 세션). See mineOfOblivion/MineOfOblivionEffects.tsx (지뢰 폭발/안전
-   통과/보물 획득/정찰 스캔 REVEAL_STEP 연출). Self-contained "moo-" prefix,
-   same per-game-keyframes convention as every other title above.
+   망각의 지뢰 (Mine of Oblivion) — 11×11 지뢰찾기식 탐험 레이스로 전면 개편
+   (구버전: 5×5 넷플릭스 데스게임 테마). See mineOfOblivion/MineOfOblivionEffects.tsx
+   (지뢰 폭발 -5점/보물 순차 획득/안전 칸 최초 공개 REVEAL_STEP 연출).
+   Self-contained "moo-" prefix, same per-game-keyframes convention as every
+   other title above. (구버전의 🔭 정찰 스캔 링 keyframe은 이번 개편에서 그 기능과
+   함께 제거됨.)
    --------------------------------------------------------------------- */
 
 @keyframes moo-overlay-in {
@@ -3878,28 +3880,66 @@ body {
   }
 }
 
-/* Radar scan ring sweeping outward once on a 정찰 reveal. */
-@keyframes moo-radar-sweep-ring {
-  0% {
-    transform: scale(0.2);
-    opacity: 0.9;
-  }
-  100% {
-    transform: scale(2);
-    opacity: 0;
-  }
-}
-
-/* Neon tile-highlight breathing pulse for the currently-reachable tiles on the grid (MineOfOblivionBoard.tsx). */
+/* Neon tile-highlight breathing pulse for the currently-reachable (8-direction) tiles on the grid (MineOfOblivionBoard.tsx) — emerald per the task brief's "이동 가능한 8방향 인접 타일 에메랄드 하이라이트". */
 @keyframes moo-tile-highlight-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.35);
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.35);
   }
   50% {
-    box-shadow: 0 0 14px 2px rgba(34, 211, 238, 0.6);
+    box-shadow: 0 0 14px 2px rgba(52, 211, 153, 0.65);
   }
 }
 .moo-tile-highlight-pulse {
   animation: moo-tile-highlight-pulse 1.8s ease-in-out infinite;
+}
+
+/* Score delta ("+N" gold / "-5" red) floating upward and fading — shared by the mine-blast penalty, the reveal score, and the treasure payout. */
+@keyframes moo-score-float-up {
+  0% {
+    transform: translateY(0) scale(0.7);
+    opacity: 0;
+  }
+  20% {
+    transform: translateY(-6px) scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-46px) scale(1);
+    opacity: 0;
+  }
+}
+
+/* Treasure chest emblem slamming open with a bouncy overshoot on claim. */
+@keyframes moo-chest-open-slam {
+  0% {
+    transform: scale(0.4) rotate(-14deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.18) rotate(6deg);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(0.94) rotate(-2deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* Spiral warp cue accompanying a mine-hit's forced respawn near the mover's start tile. */
+@keyframes moo-respawn-warp {
+  0% {
+    transform: scale(0.3) rotate(0deg);
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.2) rotate(220deg);
+    opacity: 0;
+  }
 }

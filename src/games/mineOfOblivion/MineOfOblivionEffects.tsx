@@ -12,16 +12,16 @@ function isDoubleTap(lastTapAt: number, now: number): boolean {
 }
 
 /**
- * 넷플릭스 데스게임 테마의 도착-판정 연출 — 지뢰 폭발(강제 후퇴, 영구 탈락이
- * 아님 — engine.ts 모듈 헤더 참고) / 보물 획득 / 안전 통과 / 정찰 스캔 4종.
- * 매 턴 정확히 한 번, `REVEAL_STEP`에 진입할 때마다 뜬다. Keyframes live in
+ * 11×11 지뢰찾기식 도착-판정 연출 — 지뢰 폭발(-5점 + 강제 리스폰, 영구 탈락이
+ * 아님) / 보물 순차 획득(+10/+15/+20) / 안전 칸 최초 공개(+N점) 3종. 매 턴
+ * 정확히 한 번, `REVEAL_STEP`에 진입할 때마다 뜬다. Keyframes live in
  * `globals.css` under the `moo-` prefix (same per-game-keyframes convention
  * as every other `<Game>Effects.tsx`).
  */
 
 const FIRE_PARTICLE_COUNT = 16;
 const FIRE_PARTICLES = Array.from({ length: FIRE_PARTICLE_COUNT });
-const SPARKLE_PARTICLE_COUNT = 12;
+const SPARKLE_PARTICLE_COUNT = 14;
 const SPARKLE_PARTICLES = Array.from({ length: SPARKLE_PARTICLE_COUNT });
 
 function FireBurst() {
@@ -55,19 +55,19 @@ function TreasureSparkle() {
           style={
             {
               "--angle": `${(360 / SPARKLE_PARTICLE_COUNT) * i}deg`,
-              animation: `moo-treasure-sparkle-particle 0.9s ease-out ${(i * 0.025).toFixed(2)}s both`,
+              animation: `moo-treasure-sparkle-particle 1s ease-out ${(i * 0.025).toFixed(2)}s both`,
             } as CSSProperties
           }
         >
-          {i % 2 === 0 ? "✨" : "💎"}
+          {i % 2 === 0 ? "✨" : "💰"}
         </span>
       ))}
     </div>
   );
 }
 
-/** 지뢰 폭발: 붉은 비네트 암전 + 화면 흔들림 + 화염 파티클 + 슬램 엠블럼. 영구 탈락이 아니라 "시작 칸으로 강제 후퇴"라는 걸 문구로 분명히 한다. */
-function MineBlastVignette({ mover, tile, treasureForfeited, names }: { mover: Seat; tile: string; treasureForfeited: boolean; names: Record<Seat, string> }) {
+/** 지뢰 폭발: 붉은 비네트 암전 + 화면 흔들림 + 화염 파티클 + 슬램 엠블럼 + 붉은 "-5" 플로팅 텍스트. 영구 탈락이 아니라 "출발지 인근으로 강제 리스폰"이라는 걸 문구로 분명히 한다. */
+function MineBlastVignette({ mover, tile, respawnTile, names }: { mover: Seat; tile: string; respawnTile?: string; names: Record<Seat, string> }) {
   return (
     <>
       <div
@@ -78,34 +78,67 @@ function MineBlastVignette({ mover, tile, treasureForfeited, names }: { mover: S
           animation: "moo-red-flash-in 0.5s ease-out both, moo-screen-shake 0.5s ease-out both",
         }}
       />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-1/3 z-20 -translate-x-1/2 text-5xl font-black text-rose-400 drop-shadow-[0_0_18px_rgba(244,63,94,0.9)] sm:text-6xl"
+        style={{ animation: "moo-score-float-up 1.1s ease-out 0.15s both" }}
+      >
+        −5
+      </span>
       <div className="relative z-10 flex flex-col items-center gap-2" style={{ animation: "moo-mine-emblem-slam 0.65s cubic-bezier(0.34,1.56,0.64,1) 0.1s both" }}>
         <span className="text-6xl drop-shadow-[0_0_25px_rgba(244,63,94,0.9)] sm:text-7xl">💀</span>
-        <p className="text-lg font-black tracking-wide text-rose-200 sm:text-xl">폭사! {names[mover]}님 {tile} 지뢰 명중</p>
-        <p className="text-xs text-rose-100/70">시작 칸으로 강제 후퇴{treasureForfeited ? " · 보물 1개 반납" : ""}</p>
+        <p className="text-lg font-black tracking-wide text-rose-200 sm:text-xl">
+          폭사! {names[mover]}님 {tile} 지뢰 명중
+        </p>
+        <p className="text-xs text-rose-100/70">해당 칸 지뢰 전원 제거 · {respawnTile ?? "출발지 인근"}(으)로 강제 리스폰</p>
+      </div>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 flex items-center justify-center"
+        style={{ animation: "moo-respawn-warp 0.9s ease-in 0.35s both" }}
+      >
+        <span className="text-4xl">🌀</span>
       </div>
     </>
   );
 }
 
-function SafePulse({ tile }: { tile: string }) {
+/** 안전 칸 최초 공개: 에메랄드 펄스 링 + 골드 "+N" 플로팅 스코어. */
+function RevealPulse({ scoreGained }: { scoreGained: number }) {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
       <span className="absolute h-24 w-24 rounded-full border-4 border-emerald-400/70" style={{ animation: "moo-safe-pulse-ring 0.9s ease-out both" }} />
       <span className="absolute h-24 w-24 rounded-full border-4 border-emerald-400/50" style={{ animation: "moo-safe-pulse-ring 0.9s ease-out 0.15s both" }} />
       <span className="relative text-4xl">🟢</span>
-      <span className="sr-only">{tile}</span>
+      {scoreGained > 0 && (
+        <span
+          className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 text-3xl font-black text-amber-300 drop-shadow-[0_0_14px_rgba(251,191,36,0.8)] sm:text-4xl"
+          style={{ animation: "moo-score-float-up 1s ease-out 0.1s both" }}
+        >
+          +{scoreGained}
+        </span>
+      )}
     </div>
   );
 }
 
-function RadarSweep({ hasMine }: { hasMine: boolean }) {
+/** 보물 획득: 거대한 황금 궤짝 오픈 연출 + 순차 점수(+10/+15/+20) 골드 파티클. */
+function TreasureChestBurst({ points }: { points: number }) {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <TreasureSparkle />
       <span
-        className={`absolute h-28 w-28 rounded-full border-2 ${hasMine ? "border-rose-400/70" : "border-cyan-400/70"}`}
-        style={{ animation: "moo-radar-sweep-ring 1s ease-out both" }}
-      />
-      <span className="relative text-4xl">📡</span>
+        className="relative text-7xl drop-shadow-[0_0_30px_rgba(251,191,36,0.9)] sm:text-8xl"
+        style={{ animation: "moo-chest-open-slam 0.7s cubic-bezier(0.34,1.56,0.64,1) both" }}
+      >
+        📦
+      </span>
+      <span
+        className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 text-4xl font-black text-amber-300 drop-shadow-[0_0_18px_rgba(251,191,36,0.9)] sm:text-5xl"
+        style={{ animation: "moo-score-float-up 1.1s ease-out 0.2s both" }}
+      >
+        +{points}
+      </span>
     </div>
   );
 }
@@ -141,11 +174,9 @@ export interface RevealOverlayProps {
 }
 
 const EVENT_HEADLINE: Record<EventKind, (names: Record<Seat, string>, ev: LastEvent) => string> = {
-  safe: (names, ev) => `${names[ev.actor]}님 · ${ev.tile} 안전 통과`,
-  treasure: (names, ev) => `💎 ${names[ev.actor]}님 보물 획득!`,
+  reveal: (names, ev) => (ev.alreadyVisited ? `${names[ev.actor]}님 · ${ev.tile} 이미 탐사된 칸 · 0점` : `${names[ev.actor]}님 · ${ev.tile} 최초 공개`),
+  treasure: (names, ev) => `💎 ${names[ev.actor]}님 ${ev.treasureOrder}번째 보물 획득!`,
   mine: () => "", // rendered entirely by MineBlastVignette instead
-  "radar-safe": (names, ev) => `📡 ${names[ev.actor]}님 정찰 · ${ev.tile} 안전`,
-  "radar-mine": (names, ev) => `📡 ${names[ev.actor]}님 정찰 · ${ev.tile} 지뢰 감지!`,
 };
 
 export default function RevealOverlay({ event, names, viewerSeat, isGameOver, winner, isDraw, timeLeft, secondsTotal, onSkip }: RevealOverlayProps) {
@@ -180,30 +211,28 @@ export default function RevealOverlay({ event, names, viewerSeat, isGameOver, wi
       style={{ animation: "moo-overlay-in 0.3s ease-out both" }}
       onClick={handleBackdropTap}
     >
-      {isTreasure && <TreasureSparkle />}
       {isMine && <FireBurst />}
-      {!isMine && event.kind !== "treasure" && <span className="pointer-events-none absolute inset-0" />}
 
       <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-3 py-6 text-center">
         {isMine ? (
-          <MineBlastVignette mover={event.actor} tile={event.tile} treasureForfeited={!!event.treasureForfeited} names={names} />
-        ) : event.kind === "safe" ? (
+          <MineBlastVignette mover={event.actor} tile={event.tile} respawnTile={event.respawnTile} names={names} />
+        ) : isTreasure ? (
           <>
-            <SafePulse tile={event.tile} />
-            <h2 className="text-xl font-extrabold text-emerald-200 drop-shadow-[0_0_16px_rgba(52,211,153,0.7)] sm:text-2xl">{EVENT_HEADLINE.safe(names, event)}</h2>
+            <TreasureChestBurst points={event.treasurePoints ?? 0} />
+            <h2 className="text-xl font-extrabold text-amber-200 drop-shadow-[0_0_16px_rgba(251,191,36,0.8)] sm:text-2xl">{EVENT_HEADLINE.treasure(names, event)}</h2>
           </>
-        ) : event.kind === "treasure" ? (
-          <h2 className="text-xl font-extrabold text-amber-200 drop-shadow-[0_0_16px_rgba(251,191,36,0.8)] sm:text-2xl">{EVENT_HEADLINE.treasure(names, event)}</h2>
         ) : (
           <>
-            <RadarSweep hasMine={event.kind === "radar-mine"} />
-            <h2 className={`text-xl font-extrabold sm:text-2xl ${event.kind === "radar-mine" ? "text-rose-200" : "text-cyan-200"}`}>{EVENT_HEADLINE[event.kind](names, event)}</h2>
+            <RevealPulse scoreGained={event.scoreGained ?? 0} />
+            <h2
+              className={`text-xl font-extrabold sm:text-2xl ${event.alreadyVisited ? "text-white/50" : "text-emerald-200 drop-shadow-[0_0_16px_rgba(52,211,153,0.7)]"}`}
+            >
+              {EVENT_HEADLINE.reveal(names, event)}
+            </h2>
           </>
         )}
 
-        {isGameOver && (
-          <p className="text-sm font-semibold text-white/80">{isDraw ? "🤝 무승부" : `🏆 ${names[winner as Seat]}님 최종 승리`}</p>
-        )}
+        {isGameOver && <p className="text-sm font-semibold text-white/80">{isDraw ? "🤝 무승부" : `🏆 ${names[winner as Seat]}님 최종 승리`}</p>}
 
         <SkipButton onSkip={triggerSkip} />
 
@@ -224,8 +253,24 @@ export default function RevealOverlay({ event, names, viewerSeat, isGameOver, wi
   return createPortal(body, document.body);
 }
 
-/** Small always-visible avatar+HUD strip for one seat — treasure/mine-hit counters, used by the Board's top/bottom bars. */
-export function SeatHud({ seat, name, treasureCount, mineHitsTaken, isActive, connected }: { seat: Seat; name: string; treasureCount: number; mineHitsTaken: number; isActive: boolean; connected: boolean }) {
+/** Small always-visible avatar+HUD strip for one seat — score/treasure/mine-hit stats, used by the Board's top/bottom bars. */
+export function SeatHud({
+  seat,
+  name,
+  score,
+  treasuresClaimed,
+  mineHitsTaken,
+  isActive,
+  connected,
+}: {
+  seat: Seat;
+  name: string;
+  score: number;
+  treasuresClaimed: number;
+  mineHitsTaken: number;
+  isActive: boolean;
+  connected: boolean;
+}) {
   return (
     <div className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition ${isActive ? "border-rose-400/50 bg-rose-500/10" : "border-white/10 bg-white/[0.03]"}`}>
       <span className="flex items-center gap-1.5 text-sm font-semibold text-white">
@@ -234,7 +279,10 @@ export function SeatHud({ seat, name, treasureCount, mineHitsTaken, isActive, co
         {!connected && <span className="text-[10px] font-normal text-rose-300">(연결 끊김)</span>}
       </span>
       <span className="flex items-center gap-2 text-xs text-white/60">
-        <span title="보유 보물">💎 {treasureCount}</span>
+        <span title="총점" className={`font-bold ${score < 0 ? "text-rose-300" : "text-amber-200"}`}>
+          🏅 {score}
+        </span>
+        <span title="획득 보물">💎 {treasuresClaimed}</span>
         <span title="지뢰 피격 횟수">💥 {mineHitsTaken}</span>
       </span>
       <span className="sr-only">{seat}</span>
