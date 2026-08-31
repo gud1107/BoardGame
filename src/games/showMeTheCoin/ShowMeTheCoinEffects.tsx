@@ -25,13 +25,20 @@ function isDoubleTap(lastTapAt: number, now: number): boolean {
  * a dependency-free pure helper, not a cross-game *state* coupling, so it
  * doesn't violate ARCHITECTURE.md §2's "게임 간 코드 결합 0" rule).
  *
- * This project has no audio pipeline (no `<audio>`/Web Audio usage anywhere
- * in any existing `<Game>Effects.tsx` — confirmed by grep before writing this
- * file) — every other title's "풀 이펙트" requests have shipped as visual +
- * haptic-feeling CSS choreography only, so the "칩 충돌음" etc. the request
- * asks for is delivered as a heavier, more percussive *visual* accent (a
- * sharp scale-snap on the chip/coin stack, a "thud" screen micro-shake on
- * ALL-IN) rather than actual sound, matching this project's own precedent.
+ * This project had no audio pipeline when this file was first written (no
+ * `<audio>`/Web Audio usage anywhere in any existing `<Game>Effects.tsx` —
+ * confirmed by grep before writing this file) — every other title's "풀
+ * 이펙트" requests had shipped as visual + haptic-feeling CSS choreography
+ * only, so the "칩 충돌음" etc. the original request asked for was delivered
+ * as a heavier, more percussive *visual* accent (a sharp scale-snap on the
+ * chip/coin stack, a "thud" screen micro-shake on ALL-IN) rather than actual
+ * sound. **That has since changed project-wide** (Grid Poker, Dalmuti, Las
+ * Vegas, Love Wins All, Mine of Oblivion, etc. all now call
+ * `@/lib/audio/soundEngine`'s `getSoundEngine()`), so the 2026-08-31
+ * betting-UI/FX follow-up request's `BetBadge`/`CoinBlastSlam` below are the
+ * first real SFX in this file (`playSmtcCoinBlastSlam`), triggered from
+ * `ShowMeTheCoinBoard.tsx` alongside them — every FX added before that
+ * follow-up remains visual-only, as documented above.
  *
  * Keyframes live in `globals.css` under the `smtc-` prefix (see that file's
  * "쇼미더코인" section) — same per-game-keyframes convention as every other
@@ -143,6 +150,91 @@ export function VaultPot({ pot, clinkPulse }: { pot: number; clinkPulse: number 
       <span className="text-[11px] font-medium tracking-wide text-amber-200/70 uppercase">누적 팟</span>
       <span className="text-2xl font-black text-amber-200 drop-shadow-[0_0_12px_rgba(251,191,36,0.7)] tabular-nums sm:text-3xl">
         🎰 {pot}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Bold neon "🎰 {amount}" badge — the betting-UI/FX rebuild request's live
+ * opponent-bet-amount display ("굵은 네온 뱃지와 애니메이션으로 즉시 표시"),
+ * mounted both on a seat's slot (`ShowMeTheCoinBoard.tsx`'s `PlayerPanel`)
+ * and again in the table's center betting zone. `pulseKey` (bumped by the
+ * caller every time the amount grows this street) is used as the React
+ * `key` so the pop-in animation replays on every increase, not just mount —
+ * same technique as `VaultPot`'s `clinkPulse`. Renders nothing at 0 (nothing
+ * bet yet this street).
+ */
+export function BetBadge({ amount, pulseKey, size = "md" }: { amount: number; pulseKey: number; size?: "sm" | "md" }) {
+  if (amount <= 0) return null;
+  const sizeCls = size === "sm" ? "gap-0.5 px-2 py-0.5 text-xs" : "gap-1 px-2.5 py-1 text-sm";
+  return (
+    <span
+      key={pulseKey}
+      className={`inline-flex items-center rounded-full border border-amber-300/80 bg-gradient-to-r from-pink-500 to-amber-400 font-black text-black shadow-[0_0_16px_-2px_rgba(251,191,36,0.9)] tabular-nums ${sizeCls}`}
+      style={{ animation: "smtc-bet-badge-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) both" }}
+    >
+      🎰 {amount}
+    </span>
+  );
+}
+
+const BLAST_MAX_COINS = 9;
+
+/**
+ * Huge coin-bundle trajectory slamming from a seat's slot into the central
+ * pot — the request's "Coin Blast Slam". `fromSide` picks the flight
+ * direction (`"left"` = the seat rendered on the board's left flying
+ * rightward to the vault, `"right"` = the reverse). `intensity` (0~1, this
+ * bet's size relative to the bettor's own remaining stack going in) scales
+ * the coin count and glow — an all-in reads as the biggest possible slam.
+ * Absolutely positioned within the board's own (already `relative`)
+ * container, not a portal — stays inside the board card, so it can never
+ * visually collide with unrelated fixed UI (e.g. the room-betting FAB).
+ * Self-hides via `onDone`, same self-timing pattern as `AllInEmblem`.
+ */
+export function CoinBlastSlam({
+  fromSide,
+  amount,
+  intensity,
+  onDone,
+}: {
+  fromSide: "left" | "right";
+  amount: number;
+  intensity: number;
+  onDone: () => void;
+}) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 750);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only per this instance, same pattern as every other self-timing effect in this file
+  }, []);
+
+  const amt = Math.max(0, Math.min(1, intensity));
+  const coinCount = 4 + Math.round(amt * (BLAST_MAX_COINS - 4));
+  const flyKeyframe = fromSide === "left" ? "smtc-coin-blast-fly-from-left" : "smtc-coin-blast-fly-from-right";
+
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 z-30 overflow-visible">
+      {Array.from({ length: coinCount }).map((_, i) => (
+        <span
+          key={i}
+          className="absolute text-2xl sm:text-3xl"
+          style={
+            {
+              "--jitter": `${(i - coinCount / 2) * 5}px`,
+              animation: `${flyKeyframe} ${(0.42 + amt * 0.1).toFixed(2)}s cubic-bezier(0.2,0.85,0.3,1) ${(i * 0.02).toFixed(2)}s both`,
+            } as CSSProperties
+          }
+        >
+          🪙
+        </span>
+      ))}
+      <span
+        className="absolute top-1/2 left-1/2 whitespace-nowrap text-xl font-black text-amber-200 drop-shadow-[0_0_16px_rgba(251,191,36,0.9)] sm:text-2xl"
+        style={{ animation: "smtc-bet-amount-popup 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.15s both" }}
+      >
+        🎰 +{amount}
       </span>
     </div>
   );

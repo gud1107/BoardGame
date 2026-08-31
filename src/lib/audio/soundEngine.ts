@@ -1717,6 +1717,70 @@ class SoundEngine {
     thump.start(now);
     thump.stop(now + 0.2);
   }
+
+  // ---------------------------------------------------------------------
+  // 쇼미더코인 — 베팅/레이즈 대형 임팩트 SFX. 베팅 UI/FX 리빌드 세션에서 추가
+  // (그 전까지는 이 게임의 이펙트가 전부 시각 전용이었음 — `ShowMeTheCoinEffects.tsx`
+  // 모듈 주석의 애덤덤 참고). `playChipSettle`(라스베가스, 잔잔한 안착음)보다
+  // 훨씬 묵직하게 설계해 "거대한 코인 다발이 팟에 꽂히는" 임팩트로 차별화했다.
+  // ---------------------------------------------------------------------
+
+  /**
+   * 베팅/레이즈 대형 슬램: 저역 붐(임팩트) + 여러 코인이 한꺼번에 쏟아지는
+   * 금속성 클링크 클러스터 + 짧은 크랙 노이즈. `intensity`(0~1, 베팅액이
+   * 자기 남은 칩에서 차지하는 비중)가 클수록 붐이 더 깊고 크게, 클링크
+   * 알갱이 수도 더 많아진다 — 올인일수록 가장 크고 묵직하게 들리도록.
+   */
+  playSmtcCoinBlastSlam(intensity = 1) {
+    if (!this.gate("smtcCoinBlastSlam", 140)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    const amt = Math.max(0, Math.min(1, intensity));
+
+    // Deep impact boom — scales from a light thud to a heavy slam.
+    const boom = ctx.createOscillator();
+    boom.type = "sine";
+    boom.frequency.setValueAtTime(150 - amt * 40, now);
+    boom.frequency.exponentialRampToValueAtTime(30, now + 0.32);
+    const boomGain = ctx.createGain();
+    boomGain.gain.setValueAtTime(0.22 + amt * 0.3, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4 + amt * 0.15);
+    boom.connect(boomGain).connect(this.sfxGain);
+    boom.start(now);
+    boom.stop(now + 0.6);
+
+    // Impact crack — a short broadband snap at the moment of landing.
+    const crack = ctx.createBufferSource();
+    crack.buffer = noiseBuffer(ctx);
+    const crackFilter = ctx.createBiquadFilter();
+    crackFilter.type = "bandpass";
+    crackFilter.frequency.value = 1800;
+    crackFilter.Q.value = 3;
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.18 + amt * 0.22, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    crack.connect(crackFilter).connect(crackGain).connect(this.sfxGain);
+    crack.start(now);
+    crack.stop(now + 0.16);
+
+    // A cluster of metallic coin clinks trailing the impact — more coins (higher intensity) means more grains.
+    const clinkCount = 3 + Math.round(amt * 6);
+    for (let i = 0; i < clinkCount; i++) {
+      const at = now + 0.03 + i * (0.02 + Math.random() * 0.02);
+      const freq = 1600 + Math.random() * 1400;
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, at);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.6, at + 0.05);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.1 + amt * 0.08, at);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.09);
+      osc.connect(gain).connect(this.sfxGain);
+      osc.start(at);
+      osc.stop(at + 0.1);
+    }
+  }
 }
 
 let instance: SoundEngine | null = null;

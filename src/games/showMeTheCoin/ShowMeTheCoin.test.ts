@@ -4,8 +4,11 @@ import {
   ANTE,
   applyAction,
   chooseBotAction,
+  CHIP_CONVERSION_DIVISOR,
   commitRange,
+  convertedChipTotal,
   getValidMoves,
+  isSeatAllIn,
   isStateSyncStale,
   MAX_COMMIT,
   otherSeat,
@@ -304,6 +307,48 @@ describe("KO / gameOver", () => {
     expect(getValidMoves(resolved, "p1")).toEqual([]);
     expect(getValidMoves(resolved, "p2")).toEqual([]);
     expect(applyAction(resolved, { type: "continue" })).toBe(resolved);
+  });
+});
+
+describe("베팅 UI/FX rebuild (2026-08-31 follow-up) — totalBet / isSeatAllIn / chip-conversion HUD formula", () => {
+  it("totalBet starts at the mandatory ante and keeps accumulating every bet/raise/call, never resetting across rounds", () => {
+    let s = startGame(() => 0); // dealer = p1
+    expect(s.totalBet).toEqual({ p1: ANTE, p2: ANTE });
+
+    s = bothCommitTens(s, 4, 3);
+    const dealer = s.dealerSeat;
+    const other = otherSeat(dealer);
+    s = applyAction(s, { type: "raise", amount: 5 });
+    expect(s.totalBet[dealer]).toBe(ANTE + 5);
+    s = applyAction(s, { type: "call" }); // other calls to 5, resolves showdown
+    expect(s.totalBet[other]).toBe(ANTE + 5);
+    expect(s.phase === "showdown" || s.phase === "gameOver").toBe(true);
+
+    if (s.phase === "showdown") {
+      const dealerTotalBeforeContinue = s.totalBet[dealer];
+      const otherTotalBeforeContinue = s.totalBet[other];
+      const next = applyAction(s, { type: "continue" }); // fresh ante for round 2
+      expect(next.totalBet[dealer]).toBe(dealerTotalBeforeContinue + ANTE);
+      expect(next.totalBet[other]).toBe(otherTotalBeforeContinue + ANTE);
+    }
+  });
+
+  it("isSeatAllIn is true only once a seat's chip stack is actually at 0", () => {
+    let s = startGame(() => 0);
+    s = bothCommitTens(s, 3, 3);
+    const seat = s.dealerSeat;
+    expect(isSeatAllIn(s, seat)).toBe(false);
+    s = applyAction(s, { type: "raise", amount: s.chips[seat] }); // shove the whole stack
+    expect(s.chips[seat]).toBe(0);
+    expect(isSeatAllIn(s, seat)).toBe(true);
+    expect(isSeatAllIn(s, otherSeat(seat))).toBe(false);
+  });
+
+  it("convertedChipTotal divides the 500-excluded remaining coin count by 20 (confirmed formula — see ShowMeTheCoinBoard.tsx's doc)", () => {
+    expect(CHIP_CONVERSION_DIVISOR).toBe(20);
+    expect(convertedChipTotal(47)).toBeCloseTo(2.35);
+    expect(convertedChipTotal(0)).toBe(0);
+    expect(convertedChipTotal(20)).toBe(1);
   });
 });
 

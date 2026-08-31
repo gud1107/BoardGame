@@ -80,6 +80,43 @@
  *    (`RoundResultSnapshot.committed` is `null` for a `"fold"` outcome) —
  *    standard poker convention, keeps a successful bluff-fold from leaking
  *    the bluffer's real coins for free.
+ *
+ * **2026-08-31 follow-up session — betting-UI/FX rebuild request.** The
+ * request asked for (a) a live opponent-bet-amount display, (b) a private
+ * per-seat chip-conversion stats HUD, (c) "no-limit raise," and (d) heavy
+ * bet/raise FX. Before writing any of it, every ambiguous point was
+ * confirmed via `AskUserQuestion` (the request's own "Strict No-Assumption
+ * Rule") rather than guessed, because the request's wording conflicts with
+ * this file's own two-resource split documented above:
+ *  - The request's "베팅 코인"/"코인 베팅/레이즈" — confirmed to mean 베팅칩
+ *    (`chips`/`betsThisRound`/`currentBet`), NOT `coins`. `coins` is never
+ *    bet or raised; only its *count* feeds the stats HUD below.
+ *  - "1개 고정 레이즈 제한" — turned out to already be unlimited: `applyRaise`
+ *    (below) already accepted any `minLevel..maxLevel` amount before this
+ *    session touched it. Confirmed no engine change was needed here — only
+ *    the raise UI (`ShowMeTheCoinBoard.tsx`'s `BettingControls`) gained
+ *    quick-amount buttons (+1/+5/+10/MAX) alongside its existing slider.
+ *  - The private HUD's "코인 {n}개 / 남은코인 500제외 {n}개 / 환산후총칩 {n}개"
+ *    reads a seat's OWN remaining `coins` (never the opponent's — info
+ *    fairness, same principle as `scoreMove`'s doc above), and was confirmed
+ *    to mean: `coins개` = `coins[seat].length`; `남은코인 500제외` = that count
+ *    minus how many of those remaining coins are 500-value; `환산후총칩` =
+ *    `남은코인 500제외 ÷ 20`, displayed to 1 decimal place. This is a pure
+ *    UI-side computation (`ShowMeTheCoinBoard.tsx`'s `ChipStatsPanel`) — the
+ *    engine doesn't need to store it since it's fully derivable from
+ *    `coins[seat]`.
+ *  - **`totalBet` added below**: the request explicitly asked for both a
+ *    per-street figure (already `betsThisRound`) and a running match-lifetime
+ *    total — confirmed as "every 베팅칩 a seat has ever paid into any pot this
+ *    match" (ante included, since an ante is still a mandatory chip payment
+ *    into the pot), accumulated forever and never reset by `applyContinue`.
+ *  - **`isSeatAllIn` added below**: a *derived* (not stored) helper — a seat
+ *    is all-in whenever its `chips` hit exactly 0, which (per `applyAnte`'s
+ *    own comment) can only happen via an all-in call/raise, never an ante.
+ *    Kept as a pure derivation rather than a stored flag to match this
+ *    engine's existing minimal-state convention (`ShowMeTheCoinBoard.tsx`
+ *    already derives its ALL-IN emblem trigger the same way, by watching
+ *    `chips[seat]` drop to 0).
  */
 
 import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
@@ -168,6 +205,8 @@ export interface ShowMeTheCoinState {
   currentBet: number;
   /** Each seat's cumulative §2 chip contribution this betting street (for call/raise sizing). */
   betsThisRound: Record<Seat, number>;
+  /** Each seat's cumulative §2 chip contribution across the WHOLE match (ante + every bet/raise/call ever paid) — persists across rounds, never reset by `applyContinue`. Added for the betting-UI rebuild's live-bet-display/stats request (see module doc addendum); purely informational, no rule reads it. */
+  totalBet: Record<Seat, number>;
   /** Whose §2 decision is pending, or `null` outside the betting phase. */
   actingSeat: Seat | null;
   /**
@@ -194,6 +233,7 @@ function applyAnte(state: ShowMeTheCoinState): ShowMeTheCoinState {
     ...state,
     chips: { p1: state.chips.p1 - anteP1, p2: state.chips.p2 - anteP2 },
     pot: state.pot + anteP1 + anteP2,
+    totalBet: { p1: state.totalBet.p1 + anteP1, p2: state.totalBet.p2 + anteP2 },
   };
 }
 
@@ -210,6 +250,7 @@ export function startGame(rng: () => number = Math.random): ShowMeTheCoinState {
     pot: 0,
     currentBet: 0,
     betsThisRound: { p1: 0, p2: 0 },
+    totalBet: { p1: 0, p2: 0 },
     actingSeat: null,
     checkedThisStreet: false,
     lastRoundResult: null,
@@ -284,11 +325,31 @@ function applyRaise(state: ShowMeTheCoinState, action: Extract<EngineAction, { t
     ...state,
     chips: { ...state.chips, [seat]: stack - delta },
     betsThisRound: { ...state.betsThisRound, [seat]: action.amount },
+    totalBet: { ...state.totalBet, [seat]: state.totalBet[seat] + delta },
     currentBet: action.amount,
     pot: state.pot + delta,
     actingSeat: otherSeat(seat),
     seq: state.seq + 1,
   };
+}
+
+/** Whether `seat` is currently all-in (zero chips left) — see module doc addendum. Purely derived, not stored. */
+export function isSeatAllIn(state: ShowMeTheCoinState, seat: Seat): boolean {
+  return state.chips[seat] === 0;
+}
+
+/**
+ * §500-exclusion coin→chip conversion for the private `ChipStatsPanel` HUD
+ * (`ShowMeTheCoinBoard.tsx`) — confirmed via `AskUserQuestion` (see module
+ * doc addendum): remaining-coin COUNT (not value) with every 500-value coin
+ * excluded, then 1 converted chip per 20 remaining coins (displayed to 1
+ * decimal place by the caller). A pure formula, so it lives here rather than
+ * in the UI layer — same "derivable from `coins[seat]`, no extra state"
+ * principle as `commitRange`.
+ */
+export const CHIP_CONVERSION_DIVISOR = 20;
+export function convertedChipTotal(remainingAfter500: number): number {
+  return remainingAfter500 / CHIP_CONVERSION_DIVISOR;
 }
 
 /**
@@ -396,6 +457,7 @@ function applyCall(state: ShowMeTheCoinState): ShowMeTheCoinState {
     ...state,
     chips: { ...state.chips, [seat]: stack - pay },
     betsThisRound: { ...state.betsThisRound, [seat]: already + pay },
+    totalBet: { ...state.totalBet, [seat]: state.totalBet[seat] + pay },
     pot: state.pot + pay,
   };
 

@@ -1,17 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Avatar from "@/components/common/Avatar";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
 import {
   commitRange,
+  convertedChipTotal,
+  isSeatAllIn,
   otherSeat,
+  STARTING_CHIPS,
   type CoinToken,
   type CoinValue,
   type EngineAction,
   type Seat,
   type ShowMeTheCoinState,
 } from "./engine";
-import ShowdownOverlay, { AllInEmblem, VaultPot } from "./ShowMeTheCoinEffects";
+import ShowdownOverlay, { AllInEmblem, BetBadge, CoinBlastSlam, VaultPot } from "./ShowMeTheCoinEffects";
 import RulebookModal from "./RulebookModal";
 import { useCountdown } from "./useCountdown";
 
@@ -50,6 +54,8 @@ function PlayerPanel({
   isViewer,
   isActing,
   connected,
+  betThisStreet,
+  betPulseKey,
 }: {
   name: string;
   chips: number;
@@ -58,13 +64,22 @@ function PlayerPanel({
   isViewer: boolean;
   isActing: boolean;
   connected: boolean;
+  /** This betting street's live commitment (§2 `betsThisRound[seat]`) — the rebuild request's "상대방 베팅 코인[칩] 수량 실시간 표시". 0 renders no badge. */
+  betThisStreet: number;
+  /** Bumped by the caller every time `betThisStreet` grows, so `BetBadge`'s pop animation replays on each raise/call, not just once. */
+  betPulseKey: number;
 }) {
   return (
     <div
-      className={`flex flex-1 flex-col items-center gap-1.5 rounded-2xl border p-3 transition ${
+      className={`relative flex flex-1 flex-col items-center gap-1.5 rounded-2xl border p-3 transition ${
         isActing ? "border-pink-400/70 bg-pink-500/10 shadow-[0_0_20px_-4px_rgba(244,114,182,0.6)]" : "border-white/10 bg-white/[0.03]"
       }`}
     >
+      {betThisStreet > 0 && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+          <BetBadge amount={betThisStreet} pulseKey={betPulseKey} />
+        </div>
+      )}
       <div className="relative">
         <Avatar size={40} className={isViewer ? "ring-2 ring-emerald-400/70" : "ring-2 ring-white/10"} />
         {!connected && <span className="absolute -right-1 -bottom-1 text-xs" title="연결 끊김">📡</span>}
@@ -83,6 +98,38 @@ function PlayerPanel({
         </span>
       </div>
       {isActing && <span className="text-[10px] font-medium text-pink-200">고민 중...</span>}
+    </div>
+  );
+}
+
+/**
+ * Private per-viewer stats HUD — the rebuild request's "본인 전용 실시간 칩
+ * 환산 통계 자료 HUD". Only ever reads `viewerState`'s OWN remaining coins
+ * (never the opponent's — info fairness, same principle as engine.ts's
+ * `scoreMove`), and is only ever mounted for the viewer's own seat by the
+ * caller — never rendered for the opponent. Formula confirmed via
+ * `AskUserQuestion` (see engine.ts's `convertedChipTotal` doc): 코인 = all
+ * remaining coins; 남은코인 500제외 = that count minus how many are
+ * 500-value; 환산후총칩 = 남은코인 500제외 ÷ 20, to 1 decimal place.
+ */
+function ChipStatsPanel({ coins }: { coins: CoinToken[] }) {
+  const totalCoins = coins.length;
+  const count500 = coins.filter((c) => c.value === 500).length;
+  const remainingAfter500 = totalCoins - count500;
+  const converted = convertedChipTotal(remainingAfter500);
+
+  return (
+    <div className="flex flex-col gap-1 self-end rounded-xl border border-white/10 bg-black/50 px-3 py-2 text-right text-[11px] backdrop-blur-md sm:text-xs" style={{ wordBreak: "keep-all" }}>
+      <span className="mb-0.5 text-[9px] font-medium tracking-wide text-white/40 uppercase sm:text-[10px]">나만 보는 칩 환산 통계</span>
+      <span className="text-white/70">
+        코인 : <span className="font-bold text-yellow-200 tabular-nums">{totalCoins}</span>개
+      </span>
+      <span className="text-white/70">
+        남은코인 500제외 <span className="font-bold text-yellow-200 tabular-nums">{remainingAfter500}</span>개
+      </span>
+      <span className="text-white/70">
+        환산후총칩 : <span className="font-bold text-amber-200 tabular-nums">{converted.toFixed(1)}</span>개
+      </span>
     </div>
   );
 }
@@ -185,10 +232,17 @@ function BettingControls({
   const toCall = state.currentBet - already;
   const canRaise = stack > toCall;
   const minRaise = Math.max(state.currentBet + 1, already + 1);
-  const maxRaise = already + stack;
+  const maxRaise = already + stack; // no-limit — full remaining stack (all-in), no artificial cap (see engine.ts's module doc addendum)
   const [raiseAmount, setRaiseAmount] = useState(minRaise);
   const raiseClamped = Math.min(Math.max(raiseAmount, minRaise), Math.max(minRaise, maxRaise));
   const isAllInRaise = raiseClamped === maxRaise;
+
+  // No-limit rebuild request's "+1/+5/+10/MAX 퀵버튼" — each nudges from the
+  // CURRENT clamped value (not from minRaise) so repeated taps stack, same
+  // convention as every quantity stepper elsewhere in this project.
+  function bump(delta: number) {
+    setRaiseAmount((prev) => Math.min(Math.max(prev, minRaise) + delta, maxRaise));
+  }
 
   return (
     <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-black/40 p-4">
@@ -205,26 +259,62 @@ function BettingControls({
         </button>
         <button
           type="button"
-          onClick={() => onAction({ type: "call" })}
+          onClick={() => {
+            getSoundEngine().unlock(); // best-effort — same "unlock from inside the actual gesture that needs sound" convention as Dalmuti/Perudo's own action buttons
+            onAction({ type: "call" });
+          }}
           className="flex-1 rounded-xl border border-emerald-400/40 bg-emerald-500/10 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20"
         >
           {toCall > 0 ? `✅ 콜 (${toCall})` : "✅ 체크"}
         </button>
       </div>
       {canRaise && (
-        <div className="flex w-full items-center gap-2">
-          <input
-            type="range"
-            min={minRaise}
-            max={maxRaise}
-            value={raiseClamped}
-            onChange={(e) => setRaiseAmount(Number(e.target.value))}
-            className="flex-1 accent-pink-500"
-          />
+        <div className="flex w-full flex-col items-center gap-2">
+          <div className="flex w-full items-center gap-2">
+            <input
+              type="range"
+              min={minRaise}
+              max={maxRaise}
+              value={raiseClamped}
+              onChange={(e) => setRaiseAmount(Number(e.target.value))}
+              className="flex-1 accent-pink-500"
+            />
+            <input
+              type="number"
+              min={minRaise}
+              max={maxRaise}
+              value={raiseClamped}
+              onChange={(e) => setRaiseAmount(Number(e.target.value) || minRaise)}
+              className="w-16 shrink-0 rounded-lg border border-white/15 bg-white/5 px-1.5 py-1 text-center text-sm font-bold text-white tabular-nums focus:border-pink-400 focus:outline-none"
+            />
+          </div>
+          <div className="flex w-full gap-1.5">
+            {[1, 5, 10].map((step) => (
+              <button
+                key={step}
+                type="button"
+                onClick={() => bump(step)}
+                disabled={raiseClamped >= maxRaise}
+                className="flex-1 rounded-lg border border-white/15 py-1.5 text-xs font-semibold text-white/70 transition hover:border-amber-400/50 hover:text-amber-200 disabled:opacity-30"
+              >
+                +{step}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setRaiseAmount(maxRaise)}
+              className="flex-1 rounded-lg border border-rose-400/40 bg-rose-500/10 py-1.5 text-xs font-bold text-rose-200 transition hover:bg-rose-500/20"
+            >
+              MAX
+            </button>
+          </div>
           <button
             type="button"
-            onClick={() => onAction({ type: "raise", amount: raiseClamped })}
-            className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold text-black transition hover:brightness-110 ${
+            onClick={() => {
+              getSoundEngine().unlock(); // best-effort — see the call button's matching comment above
+              onAction({ type: "raise", amount: raiseClamped });
+            }}
+            className={`w-full rounded-xl py-2.5 text-sm font-bold text-black transition hover:brightness-110 ${
               isAllInRaise ? "bg-gradient-to-r from-rose-500 to-amber-400" : "bg-gradient-to-r from-pink-500 to-amber-500"
             }`}
           >
@@ -269,12 +359,52 @@ export default function ShowMeTheCoinBoard({
     prevChipsRef.current = state.chips;
   }, [state.chips, state.phase]);
 
+  // Heavy bet/raise FX (§4.2/§4.4 rebuild request's "Coin Blast Slam") + each
+  // seat's live bet-badge pop, both driven off the SAME `betsThisRound`
+  // growth so a bet/raise/call always triggers exactly one blast+badge pair.
+  // `betsThisRound` (unlike `pot`) never moves for an ante (see engine.ts's
+  // `applyAnte` — it only touches `chips`/`pot`/`totalBet`), so this can
+  // never mis-fire the heavy FX on a mere round-start ante.
+  const prevBetsRef = useRef(state.betsThisRound);
+  const blastKeyRef = useRef(0);
+  const [betPulse, setBetPulse] = useState<Record<Seat, number>>({ p1: 0, p2: 0 });
+  const [blastFx, setBlastFx] = useState<{ seat: Seat; amount: number; intensity: number; key: number } | null>(null);
+  const [shakeMag, setShakeMag] = useState(0);
+  useEffect(() => {
+    const prev = prevBetsRef.current;
+    if (state.phase === "betting") {
+      (["p1", "p2"] as const).forEach((seat) => {
+        const delta = state.betsThisRound[seat] - prev[seat];
+        if (delta > 0) {
+          setBetPulse((p) => ({ ...p, [seat]: p[seat] + 1 }));
+          const intensity = isSeatAllIn(state, seat) ? 1 : Math.max(0.15, Math.min(1, delta / STARTING_CHIPS));
+          blastKeyRef.current += 1;
+          setBlastFx({ seat, amount: delta, intensity, key: blastKeyRef.current });
+          setShakeMag(3 + intensity * 11);
+          getSoundEngine().playSmtcCoinBlastSlam(intensity);
+        }
+      });
+    }
+    prevBetsRef.current = state.betsThisRound;
+  }, [state]);
+  useEffect(() => {
+    if (shakeMag <= 0) return;
+    const t = setTimeout(() => setShakeMag(0), 400);
+    return () => clearTimeout(t);
+  }, [shakeMag]);
+
   const iHaveCommitted = state.committed[viewerSeat] !== undefined;
 
   return (
     <div
-      className="flex flex-col gap-4 rounded-2xl border border-pink-500/20 p-4 sm:p-6"
-      style={{ background: "radial-gradient(ellipse at top, #1a0b12 0%, #05030a 60%, #000 100%)" }}
+      className="relative flex flex-col gap-4 rounded-2xl border border-pink-500/20 p-4 sm:p-6"
+      style={
+        {
+          background: "radial-gradient(ellipse at top, #1a0b12 0%, #05030a 60%, #000 100%)",
+          animation: shakeMag > 0 ? "smtc-board-shake 0.4s ease-out both" : undefined,
+          "--shake-mag": `${shakeMag}px`,
+        } as CSSProperties
+      }
     >
       <div className="flex items-center justify-between text-xs text-white/40">
         <span>ROUND {state.round}</span>
@@ -290,6 +420,9 @@ export default function ShowMeTheCoinBoard({
         </div>
       </div>
 
+      {/* Private per-viewer HUD — never rendered for the opponent (see `ChipStatsPanel`'s doc). */}
+      <ChipStatsPanel coins={state.coins[viewerSeat]} />
+
       <div className="flex items-stretch gap-3">
         <PlayerPanel
           name={names[viewerSeat]}
@@ -299,9 +432,17 @@ export default function ShowMeTheCoinBoard({
           isViewer
           isActing={state.phase === "betting" && state.actingSeat === viewerSeat}
           connected
+          betThisStreet={state.betsThisRound[viewerSeat]}
+          betPulseKey={betPulse[viewerSeat]}
         />
-        <div className="flex flex-col items-center justify-center px-1">
+        <div className="flex flex-col items-center justify-center gap-1.5 px-1">
           <VaultPot pot={state.pot} clinkPulse={clinkPulse} />
+          {state.phase === "betting" && (state.betsThisRound.p1 > 0 || state.betsThisRound.p2 > 0) && (
+            <div className="flex items-center gap-1.5">
+              <BetBadge amount={state.betsThisRound[viewerSeat]} pulseKey={betPulse[viewerSeat]} size="sm" />
+              <BetBadge amount={state.betsThisRound[opponentSeat]} pulseKey={betPulse[opponentSeat]} size="sm" />
+            </div>
+          )}
         </div>
         <PlayerPanel
           name={names[opponentSeat]}
@@ -311,8 +452,21 @@ export default function ShowMeTheCoinBoard({
           isViewer={false}
           isActing={state.phase === "betting" && state.actingSeat === opponentSeat}
           connected={opponentConnected}
+          betThisStreet={state.betsThisRound[opponentSeat]}
+          betPulseKey={betPulse[opponentSeat]}
         />
       </div>
+
+      {blastFx && (
+        <CoinBlastSlam
+          key={blastFx.key}
+          fromSide={blastFx.seat === viewerSeat ? "left" : "right"}
+          amount={blastFx.amount}
+          intensity={blastFx.intensity}
+          // Guard against a stale timer clearing a NEWER blast that replaced this one before this instance's own onDone fired (e.g. two bets landing within 750ms of each other).
+          onDone={() => setBlastFx((cur) => (cur?.key === blastFx.key ? null : cur))}
+        />
+      )}
 
       {state.phase === "commit" && (
         <>
