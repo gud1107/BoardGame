@@ -29,9 +29,10 @@ export default function MineOfOblivionRulebookModal({ onClose }: { onClose: () =
             <span className="font-mono text-amber-300">{TREASURE_TILES.join(", ")}</span> 칸에 고정 배치됩니다.
           </p>
           <p className="mt-1.5 text-xs text-white/40">
-            각자 가림판 뒤에서 지뢰 {MINES_PER_PLAYER}개를 비밀리에 매설합니다. 보물 칸과{" "}
-            <span className="text-white/60">본인의</span> 시작 칸에는 매설할 수 없습니다(상대 시작 칸은 매설
-            가능). 내가 어디에 묻었는지 스스로 기억하지 못하면, 내 지뢰를 내가 밟고 폭사할 수도 있습니다.
+            각자 가림판 뒤에서 지뢰 {MINES_PER_PLAYER}개를 비밀리에 매설합니다. 보물 칸과 두 플레이어의{" "}
+            <span className="text-white/60">시작 칸(본인·상대 모두)</span>에는 매설할 수 없습니다 — 설치
+            시점에 상대가 서 있는 칸에는 지뢰를 심을 수 없습니다. 내가 어디에 묻었는지 스스로 기억하지
+            못하면, 내 지뢰를 내가 밟고 폭사할 수도 있습니다.
           </p>
         </section>
 

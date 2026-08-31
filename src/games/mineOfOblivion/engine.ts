@@ -260,11 +260,27 @@ function computeAdjacentMineScore(state: Pick<MineOfOblivionState, "mines" | "di
   return eightDirectionNeighbors(tile).reduce((sum, n) => sum + armedMineOwnersAt(state, n).length, 0);
 }
 
-/** True iff `tile` is a legal spot for `seat` to bury a mine — not a treasure tile, not `seat`'s own start tile (the opponent's start tile is deliberately allowed, same as the pre-rewrite rulebook). */
+/**
+ * True iff `tile` is a legal spot for `seat` to bury a mine — not a treasure
+ * tile, and not a tile either seat currently occupies.
+ *
+ * **2026-09-01 reversal, confirmed via `AskUserQuestion`**: the original
+ * 2026-08-31 rewrite deliberately *allowed* mining the opponent's start tile
+ * (only `seat`'s own start tile was forbidden). A follow-up request asked to
+ * block mining any tile "the opponent is currently standing on," which the
+ * user confirmed should flip that decision — mining the opponent's start
+ * tile is now forbidden too. `SETUP_MINE` is the one phase where mines are
+ * ever placed, and it always runs before any `SELECT_TILE_STEP` has moved
+ * either seat off `START_TILE` — so "every tile a seat currently occupies"
+ * is exactly `{START_TILE.p1, START_TILE.p2}` for the entire lifetime of
+ * this check, with no need to thread live `players[seat].position` state
+ * through a currently-pure `(seat, tile) -> boolean` signature.
+ */
 export function canPlaceMine(seat: Seat, tile: TileId): boolean {
   if (!ALL_TILES.includes(tile)) return false;
   if (TREASURE_TILES.includes(tile)) return false;
-  if (tile === START_TILE[seat]) return false;
+  if (tile === START_TILE.p1 || tile === START_TILE.p2) return false;
+  void seat; // kept in the signature: every call site passes it, and a future per-seat exception (were one ever confirmed) would need it again.
   return true;
 }
 

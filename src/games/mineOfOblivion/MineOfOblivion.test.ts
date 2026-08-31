@@ -82,11 +82,11 @@ describe("canPlaceMine", () => {
     }
   });
 
-  it("forbids only the seat's OWN start tile — the opponent's start tile is legal", () => {
+  it("forbids BOTH start tiles for either seat (2026-09-01 reversal: mining an occupied tile, including the opponent's, is no longer allowed)", () => {
     expect(canPlaceMine("p1", START_TILE.p1)).toBe(false);
-    expect(canPlaceMine("p1", START_TILE.p2)).toBe(true);
+    expect(canPlaceMine("p1", START_TILE.p2)).toBe(false);
     expect(canPlaceMine("p2", START_TILE.p2)).toBe(false);
-    expect(canPlaceMine("p2", START_TILE.p1)).toBe(true);
+    expect(canPlaceMine("p2", START_TILE.p1)).toBe(false);
   });
 
   it("allows an ordinary empty tile", () => {
@@ -111,13 +111,16 @@ describe("SETUP_MINE → PLAYER_MOVE transition", () => {
     expect(s2.phase).toBe("PLAYER_MOVE");
   });
 
-  it("rejects a submission touching a treasure tile or the seat's own start", () => {
+  it("rejects a submission touching a treasure tile, the seat's own start, or the opponent's start", () => {
     const s0 = startGame(() => 0);
     const withTreasure = applyAction(s0, { type: "SET_MINE_POSITION", seat: "p1", tiles: ["F6", ...eight.slice(1)] });
     expect(withTreasure.mineReady.p1).toBe(false);
 
     const withOwnStart = applyAction(s0, { type: "SET_MINE_POSITION", seat: "p1", tiles: [START_TILE.p1, ...eight.slice(1)] });
     expect(withOwnStart.mineReady.p1).toBe(false);
+
+    const withOpponentStart = applyAction(s0, { type: "SET_MINE_POSITION", seat: "p1", tiles: [START_TILE.p2, ...eight.slice(1)] });
+    expect(withOpponentStart.mineReady.p1).toBe(false);
   });
 
   it("rejects a wrong-count or duplicate-tile submission", () => {

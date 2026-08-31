@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Avatar from "@/components/common/Avatar";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import ChessPawn from "./ChessPawn";
 import RevealOverlay, { SeatHud } from "./MineOfOblivionEffects";
 import { useCountdown } from "./useCountdown";
 import {
@@ -357,6 +358,8 @@ function RowCells({
           >
             {isStart && <span className="absolute left-0.5 top-0.5 text-[8px] text-white/25">🚩</span>}
 
+            {isMineForbidden && <span className="absolute right-0.5 top-0.5 text-[9px] text-rose-400" title="상대/본인이 점유한 칸 · 지뢰 설치 불가">🚫</span>}
+
             {isTreasureTile && treasure?.holder === null && <span className="text-base sm:text-lg">💎</span>}
             {isTreasureTile && treasure?.holder !== null && (
               <span className="flex flex-col items-center leading-none">
@@ -374,20 +377,8 @@ function RowCells({
               </span>
             )}
 
-            {(isP1Here || isP2Here) && (
-              <div className="absolute -bottom-1 flex gap-0.5">
-                {isP1Here && (
-                  <div className={`rounded-full ${viewerSeat === "p1" ? "ring-2 ring-rose-400" : "ring-1 ring-rose-400/50"}`}>
-                    <Avatar size={14} />
-                  </div>
-                )}
-                {isP2Here && (
-                  <div className={`rounded-full ${viewerSeat === "p2" ? "ring-2 ring-fuchsia-400" : "ring-1 ring-fuchsia-400/50"}`}>
-                    <Avatar size={14} />
-                  </div>
-                )}
-              </div>
-            )}
+            {isP1Here && <ChessPawn seat="p1" isViewer={viewerSeat === "p1"} isActive={state.phase === "PLAYER_MOVE" && state.activeSeat === "p1"} size={Math.max(14, gridColPx * 0.62)} className="absolute bottom-0 left-1/2 -translate-x-1/2" />}
+            {isP2Here && <ChessPawn seat="p2" isViewer={viewerSeat === "p2"} isActive={state.phase === "PLAYER_MOVE" && state.activeSeat === "p2"} size={Math.max(14, gridColPx * 0.62)} className="absolute bottom-0 left-1/2 -translate-x-1/2" />}
           </button>
         );
       })}

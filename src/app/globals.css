@@ -3943,3 +3943,17 @@ body {
     opacity: 0;
   }
 }
+
+/* Gentle hovering/bounce cue on the chess-pawn piece belonging to whichever seat's turn it currently is ("이동 턴 시" per the 2026-09-01 pawn renewal request). */
+@keyframes moo-pawn-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.06);
+  }
+}
+.moo-pawn-bounce {
+  animation: moo-pawn-bounce 1s ease-in-out infinite;
+}
