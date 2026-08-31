@@ -3650,3 +3650,147 @@ body {
 .lc-discard-zone-pulse {
   animation: lc-discard-zone-pulse 2.6s ease-in-out infinite;
 }
+
+/* ===========================================================================
+   망각의 지뢰 (Mine of Oblivion) — 넷플릭스 데스게임 테마 신규 게임 (룰북 기반
+   구현 세션). See mineOfOblivion/MineOfOblivionEffects.tsx (지뢰 폭발/안전
+   통과/보물 획득/정찰 스캔 REVEAL_STEP 연출). Self-contained "moo-" prefix,
+   same per-game-keyframes convention as every other title above.
+   --------------------------------------------------------------------- */
+
+@keyframes moo-overlay-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Skip-button pulsing border. */
+@keyframes moo-skip-pulse-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(244, 63, 94, 0.45),
+      0 0 10px 1px rgba(244, 63, 94, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(244, 63, 94, 0),
+      0 0 22px 4px rgba(244, 63, 94, 0.65);
+  }
+}
+
+/* Full-screen red vignette darkening in on a mine hit. */
+@keyframes moo-red-flash-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Screen shake accompanying the mine blast. */
+@keyframes moo-screen-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-7px, 4px);
+  }
+  40% {
+    transform: translate(6px, -5px);
+  }
+  60% {
+    transform: translate(-5px, 3px);
+  }
+  80% {
+    transform: translate(4px, -2px);
+  }
+}
+
+/* 💀 emblem slamming down off-axis to a hard stop on a mine hit reveal. */
+@keyframes moo-mine-emblem-slam {
+  0% {
+    transform: scale(2.4) rotate(-10deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.92) rotate(3deg);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(1.04) rotate(-1deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* One ember/fire-chunk particle radiating outward from a mine blast — driven per-particle via the --angle custom property, same technique as smtc-coin-burst-particle. */
+@keyframes moo-fire-particle {
+  0% {
+    transform: rotate(var(--angle)) translateY(0) scale(0.4);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--angle)) translateY(-95px) scale(1.05);
+    opacity: 0;
+  }
+}
+
+/* One sparkle particle radiating outward from a treasure grab. */
+@keyframes moo-treasure-sparkle-particle {
+  0% {
+    transform: rotate(var(--angle)) translateY(0) scale(0.4);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--angle)) translateY(-85px) scale(1);
+    opacity: 0;
+  }
+}
+
+/* Emerald neon ring expanding outward and fading — a safe-tile pass-through. */
+@keyframes moo-safe-pulse-ring {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* Radar scan ring sweeping outward once on a 정찰 reveal. */
+@keyframes moo-radar-sweep-ring {
+  0% {
+    transform: scale(0.2);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* Neon tile-highlight breathing pulse for the currently-reachable tiles on the grid (MineOfOblivionBoard.tsx). */
+@keyframes moo-tile-highlight-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 14px 2px rgba(34, 211, 238, 0.6);
+  }
+}
+.moo-tile-highlight-pulse {
+  animation: moo-tile-highlight-pulse 1.8s ease-in-out infinite;
+}

@@ -33,4 +33,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "show-me-the-coin": dynamic(() => import("./showMeTheCoin/ShowMeTheCoinGame"), { ssr: false }),
   "love-wins-all": dynamic(() => import("./loveWinsAll/LoveWinsAllGame"), { ssr: false }),
   "rat-a-tat-cat": dynamic(() => import("./ratATatCat/RatATatCatGame"), { ssr: false }),
+  "mine-of-oblivion": dynamic(() => import("./mineOfOblivion/MineOfOblivionGame"), { ssr: false }),
 };

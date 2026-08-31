@@ -1560,6 +1560,163 @@ class SoundEngine {
     shatter.start(now + 0.02);
     shatter.stop(now + 0.3);
   }
+
+  // ---------------------------------------------------------------------
+  // 망각의 지뢰 — 격자 위 지뢰 폭발/안전 통과/보물 획득/정찰 SFX. 룰북 기반 신규
+  // 게임 개발 세션에서 추가. `playDeathExplode`(소환사의 협곡, 라운드 전체 패배)
+  // 보다 더 국소적이고 즉각적인 "발밑 폭발" 임팩트로 설계해 서로 다른 게임의
+  // 사운드 정체성이 겹치지 않게 했다.
+  // ---------------------------------------------------------------------
+
+  /** 지뢰 폭발: 날카로운 저음 붐 + 잔파편 노이즈 크랙 + 강제 후퇴를 암시하는 하강 글리산도. `playDeathExplode`보다 짧고 더 "발밑에서 터지는" 임팩트감. */
+  playMineBlast() {
+    if (!this.gate("mineBlast", 250)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const boom = ctx.createOscillator();
+    boom.type = "sine";
+    boom.frequency.setValueAtTime(180, now);
+    boom.frequency.exponentialRampToValueAtTime(35, now + 0.3);
+    const boomGain = ctx.createGain();
+    boomGain.gain.setValueAtTime(0.45, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    boom.connect(boomGain).connect(this.sfxGain);
+    boom.start(now);
+    boom.stop(now + 0.45);
+
+    const crack = ctx.createBufferSource();
+    crack.buffer = noiseBuffer(ctx);
+    const crackFilter = ctx.createBiquadFilter();
+    crackFilter.type = "bandpass";
+    crackFilter.frequency.value = 2200;
+    crackFilter.Q.value = 4;
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.32, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    crack.connect(crackFilter).connect(crackGain).connect(this.sfxGain);
+    crack.start(now);
+    crack.stop(now + 0.2);
+
+    // Retreat glissando — a falling pitch right after the blast, cueing the forced walk back to the start tile.
+    const retreat = ctx.createOscillator();
+    retreat.type = "triangle";
+    retreat.frequency.setValueAtTime(500, now + 0.15);
+    retreat.frequency.exponentialRampToValueAtTime(140, now + 0.5);
+    const retreatGain = ctx.createGain();
+    retreatGain.gain.setValueAtTime(0.001, now + 0.15);
+    retreatGain.gain.linearRampToValueAtTime(0.14, now + 0.2);
+    retreatGain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    retreat.connect(retreatGain).connect(this.sfxGain);
+    retreat.start(now + 0.15);
+    retreat.stop(now + 0.56);
+  }
+
+  /** 안전한 칸 통과: 에메랄드 네온 펄스와 짝을 이루는 부드러운 상승 두 음 + 옅은 안도의 숨결(필터 노이즈). */
+  playSafeStepChime() {
+    if (!this.gate("safeStepChime", 120)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [660, 880].forEach((freq, i) => {
+      const at = now + i * 0.07;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.2, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.3);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.32);
+    });
+    const breath = ctx.createBufferSource();
+    breath.buffer = noiseBuffer(ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 1200;
+    const breathGain = ctx.createGain();
+    breathGain.gain.setValueAtTime(0.05, now);
+    breathGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    breath.connect(filter).connect(breathGain).connect(this.sfxGain);
+    breath.start(now);
+    breath.stop(now + 0.26);
+  }
+
+  /** 보물 획득: 밝은 3음 상승 아르페지오 + 반짝이는 하이햇풍 노이즈 스파클. */
+  playTreasureGrab() {
+    if (!this.gate("treasureGrab", 200)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [523.25, 659.25, 987.77].forEach((freq, i) => {
+      const at = now + i * 0.06;
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.26, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.4);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.42);
+    });
+    const sparkle = ctx.createBufferSource();
+    sparkle.buffer = noiseBuffer(ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = 5000;
+    const sparkleGain = ctx.createGain();
+    sparkleGain.gain.setValueAtTime(0.12, now + 0.12);
+    sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    sparkle.connect(filter).connect(sparkleGain).connect(this.sfxGain);
+    sparkle.start(now + 0.12);
+    sparkle.stop(now + 0.36);
+  }
+
+  /** 정찰 아이템 사용: 레이더 핑 — 상승 사인 스윕 + 짧은 딜레이 후 되돌아오는 메아리풍 두 번째 핑. */
+  playRadarPing() {
+    if (!this.gate("radarPing", 200)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [0, 0.18].forEach((offset, i) => {
+      const at = now + offset;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(900, at);
+      osc.frequency.exponentialRampToValueAtTime(1500, at + 0.12);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(i === 0 ? 0.22 : 0.12, at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.2);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.22);
+    });
+  }
+
+  /** 비밀 지뢰 매설 확정: 둔탁한 흙 파는 듯한 저역 노이즈 thump — 매설판에서 4개를 다 배치했을 때 1회. */
+  playMineBury() {
+    if (!this.gate("mineBury", 150)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    const thump = ctx.createBufferSource();
+    thump.buffer = noiseBuffer(ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 400;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.26, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    thump.connect(filter).connect(gain).connect(this.sfxGain);
+    thump.start(now);
+    thump.stop(now + 0.2);
+  }
 }
 
 let instance: SoundEngine | null = null;

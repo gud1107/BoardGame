@@ -638,6 +638,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
   },
+  {
+    id: "mine-of-oblivion",
+    name: "망각의 지뢰",
+    nameEn: "Mine of Oblivion",
+    description:
+      "넷플릭스 예능 <데스게임> 등장 2인 전용 기억력·블러핑 데스매치. 5×5 격자판에 각자 지뢰 4개를 비밀리에 매설한 뒤, 상·하·좌·우로 한 칸씩 이동하며 보물 2개를 먼저 모으면 승리합니다. 지뢰를 밟으면(내가 묻고 잊어버린 지뢰도 포함) 시작 칸으로 강제 후퇴하고 보물 1개를 반납하지만, 그 지뢰는 영구 소멸해 이후 모두에게 안전한 칸이 됩니다.",
+    players: { min: 2, max: 2 },
+    playTime: { minMinutes: 10, maxMinutes: 20 },
+    category: "deduction",
+    thumbnail: { emoji: "💣", gradient: ["#f43f5e", "#1a0509"] },
+    tags: ["2인전용", "기억력", "블러핑", "단판승부", "데스게임"],
+    genres: ["strategy", "bluffing"],
+    collectionId: "netflix-death-game",
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {
