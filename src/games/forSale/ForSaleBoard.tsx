@@ -183,17 +183,19 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
     >
       <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-sky-100/70">
         <span className="flex flex-wrap items-center gap-x-1.5">
-          {state.playerCount}인 · {state.phase === "buying" ? "1단계: 부동산 경매" : "2단계: 수표 판매"} · 남은 현금{" "}
-          <span className="inline-flex items-center gap-1 font-semibold text-amber-200">
+          <span className="whitespace-nowrap">
+            {state.playerCount}인 · {state.phase === "buying" ? "1단계: 부동산 경매" : "2단계: 수표 판매"} · 남은 현금
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-1 font-semibold whitespace-nowrap text-amber-200">
             {coinBreakdown(me.cash).map(({ value, count }) => (
-              <span key={value} className="inline-flex items-center gap-0.5">
+              <span key={value} className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap">
                 <CoinChip value={value} size="sm" />×{count}
               </span>
             ))}
             {formatDollars(me.cash)}
           </span>
-          · 수표 누적{" "}
-          <span className="font-semibold text-emerald-300">{formatDollars(me.checks.reduce((s, c) => s + c, 0))}</span>
+          <span className="whitespace-nowrap">· 수표 누적</span>
+          <span className="shrink-0 font-semibold whitespace-nowrap text-emerald-300">{formatDollars(me.checks.reduce((s, c) => s + c, 0))}</span>
         </span>
         <div className="flex gap-1.5">{rulebookButton}</div>
       </div>
@@ -237,7 +239,7 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
                   >
                     −
                   </button>
-                  <span className="w-24 text-center text-lg font-bold text-white">{formatDollars(bidAmount)}</span>
+                  <span className="w-24 shrink-0 text-center text-lg font-bold whitespace-nowrap text-white">{formatDollars(bidAmount)}</span>
                   <button
                     onClick={() => setBidAmount((n) => Math.min(maxBid, n + BID_INCREMENT))}
                     className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
@@ -287,18 +289,22 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
                     {names[seat]}
                     {isSelf && <span className="text-sky-200">(나)</span>}
                   </span>
-                  <span className="flex items-center gap-2 text-white/70">
+                  <span className="flex flex-wrap items-center gap-2 text-white/70">
                     {seatBid > 0 && (
                       <span
-                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                        className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${
                           isHighBidder ? "border-amber-300/70 bg-amber-400/20 text-amber-200" : "border-white/15 bg-white/5 text-white/50"
                         }`}
                       >
                         {isHighBidder ? "👑" : "🎫"} {formatDollars(seatBid)}
                       </span>
                     )}
-                    <span title="현금">{isSelf ? formatDollars(p.cash) : "🔒 비공개"}</span>
-                    <span title="보유 부동산 카드">🏠 {p.properties.length}장</span>
+                    <span title="현금" className="shrink-0 whitespace-nowrap">
+                      {isSelf ? formatDollars(p.cash) : "🔒 비공개"}
+                    </span>
+                    <span title="보유 부동산 카드" className="shrink-0 whitespace-nowrap">
+                      🏠 {p.properties.length}장
+                    </span>
                   </span>
                 </div>
               );
@@ -383,8 +389,8 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
 
           <section className="rounded-2xl border border-emerald-300/20 p-2.5 sm:p-3" style={{ background: "linear-gradient(160deg,#0c2b3a 0%,#081c26 55%,#040d12 100%)" }}>
             <h3 className="mb-2 flex flex-wrap items-center justify-between gap-1 text-[11px] font-semibold tracking-wide text-emerald-200/90 uppercase">
-              <span>🧾 내 수표 ({me.checks.length}장)</span>
-              <span className="text-emerald-300">누적 합계 {formatDollars(me.checks.reduce((s, c) => s + c, 0))}</span>
+              <span className="whitespace-nowrap">🧾 내 수표 ({me.checks.length}장)</span>
+              <span className="shrink-0 whitespace-nowrap text-emerald-300">누적 합계 {formatDollars(me.checks.reduce((s, c) => s + c, 0))}</span>
             </h3>
             {me.checks.length === 0 ? (
               <p className="text-xs text-white/30">아직 판매한 수표가 없습니다.</p>
