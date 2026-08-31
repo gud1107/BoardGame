@@ -202,13 +202,13 @@ function DeclareControls({
             className={`relative rounded-lg transition ${i === cardIndex ? "ring-2 ring-pink-400" : "opacity-70"}`}
           >
             <span
-              key={i === cardIndex ? selectNonce : "idle"}
+              key={`card-${i === cardIndex ? selectNonce : "idle"}`}
               className="block"
               style={i === cardIndex ? { animation: "lwa-card-snap 0.35s cubic-bezier(0.34,1.56,0.64,1) both" } : undefined}
             >
               <Card suit={suit} size="lg" />
             </span>
-            {i === cardIndex && <CardSelectParticles key={selectNonce} />}
+            {i === cardIndex && <CardSelectParticles key={`particles-${selectNonce}`} />}
           </button>
         ))}
       </div>
