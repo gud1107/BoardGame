@@ -355,6 +355,156 @@ function otherHandCardsOfColor(hand: readonly Card[], color: Color, excludeId: s
   return hand.filter((c) => c.color === color && c.id !== excludeId);
 }
 
+/**
+ * The color's whole-hand potential: what that lane would score if every
+ * same-color card currently in hand got played (ignoring ordering and future
+ * draws — a cheap EV floor). This is the fix for the "−20 fear" bug: judging
+ * a brand-new expedition by this single card in isolation always looks
+ * catastrophic (a lone number card scores `(value-20)`, a lone investment
+ * card scores `-40`), even when the hand actually holds enough of that color
+ * to profit overall. Weighing the *whole hand's* same-color cards instead
+ * lets a good color commitment register as good.
+ */
+function estimateOpeningPotential(hand: readonly Card[], color: Color): number {
+  const colorCards = hand.filter((c) => c.color === color);
+  const investCount = colorCards.filter((c) => c.kind === "investment").length;
+  const numberSum = colorCards.filter((c) => c.kind === "number").reduce((sum, c) => sum + c.value!, 0);
+  return (numberSum - 20) * (investCount + 1);
+}
+
+/** How many of `color`'s 12 total cards are already public knowledge to `seat` (own hand + both played expeditions + discard pile) — never the opponent's hand, preserving information fairness. */
+function countVisibleOfColor(state: LostCitiesState, seat: Seat, color: Color): number {
+  let count = state.hands[seat].filter((c) => c.color === color).length;
+  count += state.expeditions.p1[color].length + state.expeditions.p2[color].length;
+  count += state.discardPiles[color].length;
+  return count;
+}
+
+const CARDS_PER_COLOR = 12; // 3 investment + 9 number (2..10)
+
+/**
+ * `play-expedition` evaluation (core+expert tiers). Two very different
+ * decisions live under one action type:
+ *  - Adding to a lane already open: judged by the card's real point swing,
+ *    with a strong preference for playing the *smallest* legal number now so
+ *    bigger numbers of the same color still in hand stay legal to play later
+ *    (playing them out of order would strand the smaller ones as
+ *    forced-discards).
+ *  - Opening a brand-new lane: judged by the color's whole-hand potential
+ *    (`estimateOpeningPotential`) rather than this one card's own
+ *    isolated, always-negative marginal value — this is the actual bug fix.
+ */
+function evaluateExpeditionPlay(state: LostCitiesState, seat: Seat, card: Card, tier: BotTier): number {
+  const hand = state.hands[seat];
+  const lane = state.expeditions[seat][card.color];
+
+  if (lane.length > 0) {
+    const before = projectedLaneValue(lane);
+    const after = projectedLaneValue(lane, card);
+    let score = after - before; // real point contribution of this card to an already-committed lane
+    if (card.kind === "number") {
+      score += (11 - card.value!) * 1.5; // smaller number now → preserves bigger same-color numbers in hand for later turns
+    } else {
+      score += 8; // stack another investment multiplier while numbers aren't down yet
+    }
+    if (lane.length + 1 >= 8) score += 25; // this move itself clinches the 8-card bonus
+    else if (lane.length + 1 >= 6) score += 6; // getting close to it
+    if (tier === "expert") {
+      const reinforcements = otherHandCardsOfColor(hand, card.color, card.id).length;
+      score += reinforcements * 2; // more of this color still in hand to keep building the lane with
+    }
+    return score;
+  }
+
+  // Opening a brand-new lane — the -20 up-front cost has to be judged
+  // against the color's prospects, not this one card alone.
+  const potential = estimateOpeningPotential(hand, card.color);
+  const colorHandCount = hand.filter((c) => c.color === card.color).length;
+  let score = potential;
+  if (card.kind === "investment") score += 10; // lay the multiplier down first, while it's still legal to
+  if (colorHandCount >= 3) score += 8; // enough same-color cards in hand to plausibly recoup the opening cost
+  if (tier === "expert" && colorHandCount >= 2) {
+    // More of this color still unseen in the deck (public: total minus what
+    // hand/expeditions/discards already show) means better odds of drawing
+    // into the numbers needed to turn this lane profitable over the rest of
+    // the game. Gated on already holding at least 2 of this color — this is
+    // a reinforcement estimate for a hand that's already showing some
+    // commitment, not a reason on its own to chase a color the hand barely
+    // touches (that was the over-opening failure mode: a single random card
+    // in an entirely fresh color looked attractive purely because ~11 of its
+    // 12 cards were still unseen).
+    const remainingUnseen = Math.max(0, CARDS_PER_COLOR - countVisibleOfColor(state, seat, card.color));
+    score += remainingUnseen * 0.5;
+  }
+  return score;
+}
+
+/**
+ * `discard` evaluation (core+expert tiers). Prefers letting go of colors
+ * this seat isn't committed to (and doesn't hold enough of to plausibly
+ * profit from), prefers low numbers over high ones (individually worth less,
+ * and safer to put within the opponent's reach), holds onto investment
+ * cards and anything still playable to this seat's own open lane, and —
+ * tier-gated — avoids handing the opponent's already-open lane a card it
+ * could use immediately (weighted penalty, not an absolute rule, so the bot
+ * isn't forced into a worse alternative when genuinely cornered).
+ */
+function evaluateDiscard(state: LostCitiesState, seat: Seat, card: Card, tier: BotTier): number {
+  const hand = state.hands[seat];
+  const myLane = state.expeditions[seat][card.color];
+  const colorHandCount = hand.filter((c) => c.color === card.color).length;
+
+  let score = 0;
+  if (myLane.length > 0 && canPlayToExpedition(state, seat, card)) {
+    score -= 10; // still usable in my own open lane — don't throw it away
+  } else if (myLane.length === 0 && colorHandCount <= 1) {
+    score += 10; // a lone, uncommitted-color card — safest thing to discard
+  } else if (myLane.length === 0 && estimateOpeningPotential(hand, card.color) < 0) {
+    score += 4; // several cards of this color, but the hand-only math still doesn't justify opening it yet
+  }
+
+  if (card.kind === "number") {
+    score += (10 - card.value!) * 0.6; // low numbers are worth less to hold and safer to expose
+  } else {
+    score -= 5; // investment cards are precious multipliers — don't casually discard them
+  }
+
+  if (tier !== "novice") {
+    const opponent = otherSeat(seat);
+    const opponentLane = state.expeditions[opponent][card.color];
+    if (canPlayToExpedition(state, opponent, card)) {
+      const helpsOpponent = projectedLaneValue(opponentLane, card) - projectedLaneValue(opponentLane);
+      if (helpsOpponent > 0) score -= helpsOpponent * (tier === "expert" ? 1 : 0.5);
+    }
+  }
+
+  return score;
+}
+
+/**
+ * `draw-discard` evaluation (core+expert tiers). A discard-pile top card is
+ * worth picking up over a blind deck draw when it connects to one of this
+ * seat's own open lanes — and among connecting options, the smallest step up
+ * over the lane's current max is preferred (a big jump scores the same
+ * points immediately but strands any smaller in-hand numbers of that color
+ * as future forced-discards).
+ */
+function evaluateDrawChoice(state: LostCitiesState, seat: Seat, color: Color): number {
+  const pile = state.discardPiles[color];
+  const top = pile[pile.length - 1];
+  const lane = state.expeditions[seat][color];
+  if (!canPlayToExpedition(state, seat, top)) return -8; // dead card for now — known and unusable, worse than an unknown deck draw
+  const before = projectedLaneValue(lane);
+  const after = projectedLaneValue(lane, top);
+  let score = 5 + (after - before); // baseline against blind deck draw, plus its real point value
+  if (top.kind === "number") {
+    const currentMax = [...lane].reverse().find((c) => c.kind === "number")?.value ?? 0;
+    const gap = top.value! - currentMax; // >= 1, since it just passed canPlayToExpedition
+    score += Math.max(0, 8 - gap); // smaller gap → bigger bonus, independent of hand follow-up
+  }
+  return score;
+}
+
 export function scoreMove(state: LostCitiesState, seat: Seat, move: EngineAction, tier: BotTier): number {
   if (tier === "novice") return 0; // uniform over every legal move, per the shared novice-tier convention (pieces-of-language, etc.)
 
@@ -362,43 +512,12 @@ export function scoreMove(state: LostCitiesState, seat: Seat, move: EngineAction
 
   if (move.type === "play-expedition") {
     const card = hand.find((c) => c.id === move.cardId)!;
-    const lane = state.expeditions[seat][card.color];
-    const before = projectedLaneValue(lane);
-    const after = projectedLaneValue(lane, card);
-    let score = after - before; // marginal swing this single card causes if the lane stopped right here
-    if (tier === "expert") {
-      // Reward committing when the hand still holds more of the same color
-      // to build on (public info: the bot's own hand), and reward closing in
-      // on the 8-card bonus threshold.
-      const reinforcements = otherHandCardsOfColor(hand, card.color, card.id).length;
-      score += reinforcements * 2;
-      if (lane.length + 1 >= 6) score += 5; // getting close to the 8-card bonus
-    }
-    return score;
+    return evaluateExpeditionPlay(state, seat, card, tier);
   }
 
   if (move.type === "discard") {
     const card = hand.find((c) => c.id === move.cardId)!;
-    // Prefer discarding cards least useful to *this* seat: low-value number
-    // cards for a lane not worth starting, or investment cards for a color
-    // whose hand doesn't otherwise support it. Negated so "least useful"
-    // sorts highest.
-    const lane = state.expeditions[seat][card.color];
-    // If this card isn't even legal to play right now, discarding it costs
-    // nothing (0), rather than being scored as either great or terrible.
-    const wouldHelp = canPlayToExpedition(state, seat, card) ? projectedLaneValue(lane, card) - projectedLaneValue(lane) : 0;
-    let score = -wouldHelp;
-    if (tier === "expert") {
-      // Slightly avoid feeding the opponent's own expedition — a top-of-pile
-      // card the opponent could immediately use is public info (their
-      // played lanes are visible), even though their hand isn't.
-      const opponent = otherSeat(seat);
-      const opponentLane = state.expeditions[opponent][card.color];
-      if (canPlayToExpedition(state, opponent, card)) {
-        score -= projectedLaneValue(opponentLane, card) - projectedLaneValue(opponentLane);
-      }
-    }
-    return score;
+    return evaluateDiscard(state, seat, card, tier);
   }
 
   if (move.type === "draw-deck") {
@@ -406,11 +525,7 @@ export function scoreMove(state: LostCitiesState, seat: Seat, move: EngineAction
   }
 
   // draw-discard
-  const pile = state.discardPiles[move.color];
-  const top = pile[pile.length - 1];
-  const lane = state.expeditions[seat][move.color];
-  if (!canPlayToExpedition(state, seat, top)) return -5; // dead card for now — worse than an unknown deck draw
-  return 5 + (projectedLaneValue(lane, top) - projectedLaneValue(lane));
+  return evaluateDrawChoice(state, seat, move.color);
 }
 
 export function chooseBotAction(
