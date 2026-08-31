@@ -135,7 +135,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: (1) 이번 세션에서 시도한 완전 올인(레이즈 슬라이더를 프로그래매틱으로 최댓값까지 끌어 `AllInEmblem`을 직접 트리거)은 React 컨트롤드 `<input type=range>`의 네이티브 값 설정 이슈로 실제로는 최소 레이즈(+1)만 반영돼, `AllInEmblem`/완전 all-in 경로 자체의 육안 확인은 못 함 — 코드 경로는 `ShowMeTheCoinBoard.tsx`의 `prevChipsRef` 비교로 구현했고 타입체크/로직상 문제는 없으나, 다음 세션에서 실제 올인까지 밀어붙인 픽셀 확인을 권장. (2) 룰북 §4의 "폴드 승자도 코인 소멸" 해석은 문자 그대로 읽은 문서화된 판단이며 공식 확정 규칙은 아님 — 사용자가 실제 플레이 후 다른 해석(폴드 승자는 코인 보존)을 원하면 조정 필요.
 
-**커밋/배포**: (이 절 작성 시점 기준 — 실행 직후 아래 문단에서 커밋 해시/배포 정보로 갱신 예정)
+**커밋/배포**: 커밋 메시지 `refactor(show-me-the-coin): rebuild engine based on updated rulebook and add full action visual effects`(`a416914`) → `git push origin main` 완료(`d7b8147..a416914`). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(42초), `target: "production"`/`readyState: READY`(`dpl_B93YsF4HzTyAfqsBULmA6DhNEkK9`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/show-me-the-coin` 둘 다 200, 대시보드 HTML에 "쇼미더코인" 문자열 포함 직접 확인함.
 
 ### 2026-08-31 — 러브 윈즈 올 실시간 족보 뱃지 및 액션 이펙트 강화
 
