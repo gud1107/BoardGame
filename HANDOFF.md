@@ -314,7 +314,12 @@ SVG는 줌 최소치(0.55배, 실측 타일 한 변 약 19px)에서도 형태가
 그보다 더 작은 기기 화면에서의 가독성은 별도 확인이 필요할 수 있음.
 
 **커밋/배포**: 사용자가 요청서 자체에 "배포 명령을 실행하고 가능한 단계까지 완료"를 명시적으로 포함해
-커밋/푸시/배포까지 이번 세션에서 바로 진행.
+커밋/푸시/배포까지 이번 세션에서 바로 진행. 커밋 메시지 `feat(mine-of-oblivion): block mine placement on
+occupied tiles and update player pieces to color-coded chess pawns`(`f8a2bb4`) → `git push origin main`
+완료(`bf081da..f8a2bb4`). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(42초),
+`target: "production"`/`readyState: READY`(`dpl_Crnh9EAKSjwQBkxdRi19xoX7VzWp`), 프로덕션 도메인
+`board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/mine-of-oblivion` 둘 다 200과 게임
+페이지 HTML에 "망각의 지뢰" 문자열 포함 직접 확인함.
 
 ### 2026-09-01 — 러브 윈즈 올 §4 카드 선언 선택 영역 클릭 시 카드 무한 증식(key 충돌) 버그 픽스
 
