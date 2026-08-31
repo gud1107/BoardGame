@@ -25,8 +25,9 @@ p1/p2 고정 순서에서 `dealerSeat` 기준 순서로 갱신하고 `countRevea
 run`(49개 파일·1526개 테스트) 전부 통과 확인. Playwright 헤드리스 브라우저(호스트+봇 1탭)로 실제 대국을
 직접 재현해 커밋(선공 2개 제출)→봇(후공, ±1 윈도우 [1,3] 내에서 2개로 자동 준수)→Phase 2 "🪙 동전 제출
 개수 공개" 오버레이(양쪽 "2개" 큼직하게 표시, "추정" 문구 완전히 사라짐 확인)→3초 후 자동으로 칩 베팅
-페이즈 전환까지 스크린샷으로 육안 확인 완료. 아직 커밋/배포는 진행하지 않음(다음 단계에서 진행 예정)** —
-자세한 내용은 아래 `### 2026-09-01 — 쇼미더코인 §1 정확한 동전 개수 공개 및 순차 ±1 제출 제약` 절 참고.)_
+페이즈 전환까지 스크린샷으로 육안 확인 완료. `git commit`(`815b300`) → `push` → `vercel deploy --prod`까지
+완료, 프로덕션 `board-game-tau-navy.vercel.app`에서 정상 서빙 직접 확인** — 자세한 내용은 아래
+`### 2026-09-01 — 쇼미더코인 §1 정확한 동전 개수 공개 및 순차 ±1 제출 제약` 절 참고.)_
 
 _이전 갱신: 2026-08-31 (**포세일(For Sale) 수표/코인 이미지 깨짐 버그 픽스 및 CSS/SVG 벡터 화폐 렌더링 개편
 세션 — 사용자가 첨부한 `boardGameRule/포세일/돈이깨져서나오는현상.png`를 근거로 실제 원인을 재진단한 결과,
@@ -275,8 +276,15 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
   무작위로 재현하지 못했으나, 관련 엔진 함수(`applyCommit`/`getValidMoves`)와 보드 컴포넌트 로직 모두
   `state.dealerSeat`을 기준으로 한 좌석 무관 대칭 구조라 유닛 테스트(순차 순서 강제 테스트 2개)로 대신 검증.
 
-**커밋/배포**: 아직 진행하지 않음 — 다음 단계에서 `git commit`/`git push`/`npx vercel deploy --prod` 진행
-예정.
+**커밋/배포**: `git commit`(`815b300`, `feat(show-me-the-coin): reveal exact submitted coin count and enforce
++/-1 coin selection rule before chip betting`) → `git push origin main`(`d11f737..815b300`) 완료. 이어서
+`npx vercel deploy --prod --scope me-3871` 실행, Turbopack 빌드 정상 완주(44초), `target: "production"`/
+`readyState: READY`(`dpl_47D6GzsoujQAqDJYmgCNbYvKLTKf`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에
+별칭 완료. `curl`로 `/`·`/games/show-me-the-coin` 둘 다 200, 응답 HTML에 "쇼미더코인" 문자열 포함 직접
+확인함. 이번 세션에서 손대지 않은 `boardGameRule/쇼미더코인/쇼미더코인.md`의 사전 존재 미커밋 변경분(더
+이전 세션이 구버전→신규 룰북으로 재작성했으나 커밋이 누락됐던 것으로 추정 — `engine.ts`의
+`a416914`/`01fdf6e` 커밋들은 이미 새 룰북 내용을 전제로 작성돼 있어 내용 자체는 최신 상태와 일치)은 이번
+커밋 범위 밖으로 의도적으로 제외 — 다음 세션에서 별도로 커밋할지 사용자 확인 필요.
 
 ### 2026-08-31 — 포세일 수표/코인 이미지 깨짐 버그 픽스 및 CSS/SVG 벡터 화폐 렌더링 개편
 
