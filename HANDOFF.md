@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-31 (**랫어탯캣(Rat-a-Tat Cat) 카드 엿보기(Peek) 자동 뒷면 뒤집기 버그 픽스 + 카드 획득/드로우 전역 궤적 이펙트 + "랫어탯캣(콜)" 초대형 중앙 포커싱 연출 세션 — 설정 페이즈/Peek 특수카드의 확인이 영구 힌트로 계속 노출되던 것을 진짜 물리 게임처럼 "몇 초간만 보이고 완전히 숨김"으로 바꾸는 하우스룰 변경, 덱/버림더미→손패로 날아가는 플라이트 이펙트, 화면 전체를 덮는 골드 네온 콜 모달 3가지를 `AskUserQuestion` 2라운드로 세부사항 전부 확인 후 구현** — 자세한 내용은 아래 `### 2026-08-31 — 랫어탯캣 Peek 임시 확인 타이머 + 카드 획득 플라이트 이펙트 + 콜 초대형 연출` 절 참고.)_
+_최종 갱신: 2026-08-31 (**로스트 시티(Lost Cities) 버림 칸 시인성 강화 + 5색 솔리드 컬러/엠블럼 전면 리뉴얼 + 액션 풀 이펙트 + 실시간 탐험로 점수 HUD 구현 세션 — 버림 더미를 "🗑️ 버림 칸 · DISCARD" 네온 점선 프레임으로 탐험로와 명확히 분리하고, 5개 색상을 물 빠진 반투명 톤에서 꽉 찬 원색+고유 SVG 벡터 엠블럼(피라미드/파도/설산/덩굴잎/화산)으로 전면 교체, 배치/버리기/드로우 3종 액션에 각각 다른 궤적·랜딩 이펙트와 합성 사운드를 연동하고, 투자 카드 ×N 골드 뱃지와 -20 시작비용부터 실시간으로 갱신되는 탐험로별 점수 HUD(8장 보너스 즉시 반영 포함)를 신설. 8장 보너스 반영 시점/모바일 레이아웃/결과 모달 스킵 관계/작업 범위 4가지를 `AskUserQuestion`으로 먼저 확인 후 구현** — 자세한 내용은 아래 `### 2026-08-31 — 로스트 시티 버림 칸 시인성·5색 솔리드 리뉴얼·액션 이펙트·실시간 점수 HUD` 절 참고.)_
+
+_이전 갱신: 2026-08-31 (**랫어탯캣(Rat-a-Tat Cat) 카드 엿보기(Peek) 자동 뒷면 뒤집기 버그 픽스 + 카드 획득/드로우 전역 궤적 이펙트 + "랫어탯캣(콜)" 초대형 중앙 포커싱 연출 세션 — 설정 페이즈/Peek 특수카드의 확인이 영구 힌트로 계속 노출되던 것을 진짜 물리 게임처럼 "몇 초간만 보이고 완전히 숨김"으로 바꾸는 하우스룰 변경, 덱/버림더미→손패로 날아가는 플라이트 이펙트, 화면 전체를 덮는 골드 네온 콜 모달 3가지를 `AskUserQuestion` 2라운드로 세부사항 전부 확인 후 구현** — 자세한 내용은 아래 `### 2026-08-31 — 랫어탯캣 Peek 임시 확인 타이머 + 카드 획득 플라이트 이펙트 + 콜 초대형 연출` 절 참고.)_
 
 _이전 갱신: 2026-08-31 (**랫어탯캣(Rat-a-Tat Cat) 턴 종료/"랫어탯캣!" 콜 선언 선택 페이즈(`TURN_DECISION`) 분리 세션 — 카드 액션(교체/버리기/능력 사용) 완료 후 곧바로 다음 플레이어에게 턴이 넘어가던 것을, [✅ 턴 종료]/[🐱 랫어탯캣! (콜)] 두 버튼 중 선택하는 새 페이즈로 분리. 콜 타이밍을 룰북 §6의 "드로우 대신"에서 "액션 완료 후"로 바꾸는 하우스룰 변경이라 `AskUserQuestion`으로 먼저 확인받고 진행** — 자세한 내용은 아래 `### 2026-08-31 — 랫어탯캣 턴 종료/콜 선언 선택 페이즈(TURN_DECISION) 분리` 절 참고.)_
 
@@ -93,6 +95,46 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-31 — 로스트 시티 버림 칸 시인성·5색 솔리드 리뉴얼·액션 이펙트·실시간 점수 HUD
+
+**요청**: (1) 중앙 버림 더미 5칸을 "🗑️ 버림 칸 / DISCARD" 라벨 + 점선/네온 테두리로 탐험로와 명확히 구분하고 버려진 장수 카운터 노출. (2) 5색 탐험로/카드 배경을 반투명 톤에서 꽉 찬 원색(#EAB308/#2563EB/#F1F5F9+#CBD5E1/#16A34A/#DC2626)으로 바꾸고 색상별 고유 벡터 엠블럼(사막·해양·설산·정글·화산) 각인. (3) 배치/버리기/드로우 3종 액션에 각각 다른 파티클/사운드 이펙트, 게임 종료 모달 3초 유지+스킵 버튼. (4) 투자(악수) 카드 ×2/×3/×4 골드 뱃지 + 탐험로 첫 카드 배치 즉시 -20 시작비용 세팅 + 숫자 카드 추가마다 실시간 갱신되는 점수 HUD(8장 보너스 포함). 요청서는 `src/games/lostCities/` 하위 `Board.tsx`/`ExpeditionLane.tsx`/`DiscardPile.tsx`/`Card.tsx`/`ScoreBoard.tsx`/`LostCitiesEffects.tsx`/`engine.ts`/`useExpeditionScore.ts` 경로를 전제했고, 8장 보너스 HUD 반영 시점·모바일 레이아웃·결과 모달 스킵 방식·작업 범위 등은 임의로 추정하지 말고 번호 매긴 질문으로 먼저 확인하라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사에서 발견한 핵심 사실 (요청서 전제와 실제 구조의 괴리)**:
+- 요청서의 `Board.tsx`/`ExpeditionLane.tsx`/`DiscardPile.tsx`/`Card.tsx`/`ScoreBoard.tsx`/`LostCitiesEffects.tsx`는 이번 세션 시작 시점엔 `ExpeditionLane.tsx`/`DiscardPile.tsx`/`LostCitiesEffects.tsx` 3개가 전혀 존재하지 않았고, 나머지는 `LostCitiesBoard.tsx`(보드+레인+버림더미 렌더링 겸용)/`CardFace.tsx`(카드 비주얼, `Card.tsx` 아님)/`ScoreBreakdownModal.tsx`(결과 화면, `ScoreBoard.tsx` 아님)로 이름이 다름 — 다른 신규/개편 세션들과 동일한 반복 괴리(HANDOFF.md 여러 세션에서 이미 지적). 실제 존재하지 않던 3개 파일은 이번 세션에서 요청서 이름 그대로 신설했고, 나머지는 실제 파일명에 맞춰 작업.
+- 점수 계산 공식(`(numberSum − 20) × (investCount + 1) + (cardCount ≥ 8 ? 20 : 0)`)은 `engine.ts`의 `calculateExpeditionBreakdown`에 룰북과 정확히 일치하게 이미 구현되어 있었음 — 새로 만들 필요 없이 `useExpeditionScore.ts`가 그 순수 함수를 그대로 감싸는 얇은 메모이즈 훅으로 충분했음.
+- 사운드는 파일 없이 전부 Web Audio 합성(`soundEngine.ts`)이며, 카드 배치/버리기/드로우에 그대로 재사용 가능한 범용 합성음(`playGridSnap`/`playCardFlick`/`playCardDrawWhoosh`)이 이미 있어 로스트 시티 전용 신규 합성음을 추가하지 않고 재사용함.
+- 이 게임은 이미 단판(1라운드) 버전으로 구현되어 있음(3라운드 누적 아님 — 이전 세션에서 확정된 하우스룰, 이번 세션과 무관하게 유지).
+
+**`AskUserQuestion`으로 확인한 사항 (1라운드, 4문항, 전부 권장안 채택)**:
+1. **8장 보너스 HUD 반영 시점** → **8번째 카드 놓이는 즉시 실시간 반영**(채택): 라운드 종료 전에도 +20이 바로 더해져 골드 뱃지가 팝업. "최종 정산에서만 반영" 대안은 채택하지 않음.
+2. **모바일 5개 레인 레이아웃** → **현재처럼 한 화면에 압축(flex-wrap/축소) 유지**(채택): 가로 스크롤 전환 대안은 채택하지 않음 — 기존 `LostCitiesBoard.tsx` 구조를 그대로 유지하고 HUD/색상만 얹음.
+3. **결과 모달 3초 유지 vs 스킵 버튼** → **스킵 버튼은 처음부터 즉시 활성(기존 `ScoreBreakdownModal.tsx` 동작 유지)**(채택): "3초간 스킵 비활성화" 강제 홀드 대안은 채택하지 않음 — 해당 모달은 이번 세션에서 손대지 않음.
+4. **작업 범위** → **네 가지(HUD/비주얼 리뉴얼/이펙트/버림칸) 전부 한 세션에 진행**(채택): 범위를 나눠 다음 세션으로 미루는 대안은 채택하지 않음.
+
+**구현** (`src/games/lostCities/`):
+- [`CardFace.tsx`](src/games/lostCities/CardFace.tsx): 전면 리뉴얼. 신규 `LANE_THEME`(색상별 `solidBg`/`text`/`ring`/`backdropFrom`~`backdropTo`/`laneBorder`/`discardBorder`/`label`) export — 요청된 5개 hex(#EAB308/#2563EB/#F1F5F9+#CBD5E1/#16A34A/#DC2626)가 이 프로젝트의 기존 Tailwind 팔레트(`yellow-500`/`blue-600`/`slate-100`+`slate-300`/`green-600`/`red-600`)와 정확히 일치해 임의 hex 대신 표준 유틸리티 클래스 사용. 색상별 인라인 SVG `ColorEmblem`(피라미드+태양/파도 3겹/설산 봉우리/덩굴잎/화산+용암) 신설 — 카드 번호 뒤에 낮은 불투명도로 워터마크, 채도만이 아니라 모양 자체가 달라 색약자도 식별 가능. `multiplierBadge` prop 신설 — 투자 카드에 `×N` 골드 네온 뱃지(`lc-mult-badge-glow`) 표시, `ExpeditionLane.tsx`가 레인의 현재 배율을 전달.
+- [`useExpeditionScore.ts`](src/games/lostCities/useExpeditionScore.ts) (신규): `calculateExpeditionBreakdown`을 감싸는 얇은 `useMemo` 훅.
+- [`ExpeditionLane.tsx`](src/games/lostCities/ExpeditionLane.tsx) (신규): `LostCitiesBoard.tsx`의 옛 인라인 `LaneStack`/`ExpeditionRow` 한 칸을 분리. 색상 테마 배경(솔리드 카드가 돋보이도록 같은 색조의 어두운 그라디언트 백드롭) + 실시간 HUD(0장="미시작", 1장 이상부터 "-20 시작비용" 즉시 노출 + `(numberSum-20)×배율` 실시간 합계 + 8장 이상 도달 시 "+20 BONUS" 골드 뱃지 팝업(`lc-bonus-pop`, 조건부 마운트 자체가 "막 8장 도달" 시점이라 별도 diff 불필요) + 투자 카드 수 있으면 `×N` 뱃지(`lc-mult-badge-glow`)) + 점수 숫자가 바뀔 때마다 `key={breakdown.total}` 리마운트로 한 번 재생되는 `lc-score-pulse`.
+- [`DiscardPile.tsx`](src/games/lostCities/DiscardPile.tsx) (신규): `CenterPiles`의 옛 인라인 색상별 버튼을 분리. 최상단 카드 앞면 + 버려진 장수 카운터 뱃지(`N장`) 노출.
+- [`LostCitiesBoard.tsx`](src/games/lostCities/LostCitiesBoard.tsx): `ExpeditionRow`/`CenterPiles`가 새 `ExpeditionLane`/`DiscardPile`을 사용하도록 재배선. `CenterPiles`에 "🗑️ 버림 칸 · DISCARD" 라벨 + 점선 네온 프레임(`lc-discard-zone-pulse`, 로즈 톤으로 탐험로의 솔리드 컬러들과 확실히 대비)을 신설해 5개 버림 셀 전체를 감쌈. 액션 이펙트 트리거: `handRowRef`/`opponentHeaderRef`/`deckRef`/레인별·색상별 discard `ref` 콜백을 신설하고, 연속된 두 `state` 스냅샷을 비교하는 단일 `useEffect`(ratATatCat의 기존 확립된 diff 패턴과 동일)로 배치(레인 길이 +1)/버리기(버림더미 +1)/드로우(덱 −1 또는 버림더미 −1)를 구분해 각각 `LostCitiesEffects`에 이펙트를 추가하고 대응 사운드(`playGridSnap`/`playCardFlick`/`playCardDrawWhoosh`)를 재생 — 내 액션이든 상대/봇 액션이든 모든 뷰어가 자신이 받은 state로 동일하게 로컬 렌더링.
+- [`LostCitiesEffects.tsx`](src/games/lostCities/LostCitiesEffects.tsx) (신규): `ratATatCat/CardFlightEffect.tsx`와 동일한 순수 표현 오버레이 패턴(좌표 측정은 호출자, 렌더링만 여기). 3가지 `kind`: `place`(골드 아치 궤적 + 도착 시 `lc-place-slam` 스파크 버스트), `discard`(회전+페이드 `lc-discard-flutter` 궤적 + 도착 시 `lc-discard-smoke` 연기 퍼프), `draw`(시안/화이트 라이트 트레일 아치 + 출처 뱃지 "📦 덱 드로우"/"♻️ 버림더미 픽업").
+- [`globals.css`](src/app/globals.css): `lc-` 접두사 신규 키프레임 9종(`lc-flight-arc`/`lc-discard-flutter`/`lc-flight-trail-fade`/`lc-place-slam`/`lc-discard-smoke`/`lc-mult-badge-glow`/`lc-bonus-pop`/`lc-score-pulse`/`lc-discard-zone-pulse`) — 기존 게임별 자체 접두사 키프레임 관행 그대로 유지.
+
+**실제 브라우저 육안 확인**: 캐시된 Playwright Chromium(`ms-playwright/chromium-1234`) + 스크래치패드 임시 설치 `playwright-core`로 `npm run dev` 기동 후 방 생성(2인) → 봇 추가 → 실제 플레이까지 진행해 스크린샷으로 직접 확인:
+1. 손패 카드: 5색 솔리드 배경 + 색상별 벡터 엠블럼(사막 피라미드/설산 봉우리/화산 등) 워터마크가 실제로 렌더링됨, 투자 카드(🤝)도 동일 테마로 확인.
+2. 버림 칸 영역: "🗑️ 버림 칸 · DISCARD" 라벨 + 로즈 점선 네온 테두리가 5개 탐험로 솔리드 컬러 블록과 뚜렷이 구분되어 렌더링, 버려진 카드마다 최상단 앞면 + "1장" 카운터 뱃지 노출 확인.
+3. 실시간 점수 HUD: 투자 카드 1장을 배치한 내 노랑 레인에 `×2` 골드 뱃지 + `-40`(= (0−20)×2, 시작비용 -20부터 실시간 반영) 정확히 렌더링, 숫자 카드 10을 배치한 초록 레인에 `-10`(= (10−20)×1) 정확히 렌더링 — 엔진의 `calculateExpeditionBreakdown` 산출값과 화면 표시가 일치함을 직접 확인.
+4. 배치/버리기/드로우 액션 중 콘솔에 이번 세션 변경과 관련된 에러 없음(기존에도 있던, 무관한 `PatchNoteButton` 하이드레이션 미스매치 1건만 관찰 — 이번 세션 변경 파일과 무관, 손대지 않음).
+5. 모바일 폭(480px 뷰포트)에서 5개 레인이 가로 스크롤 없이 한 화면에 압축 렌더링되는 것 확인(확인사항 2번대로 기존 레이아웃 그대로 유지).
+
+브라우저/서버는 확인 직후 정리(Chromium 프로세스 확인 결과 잔존 없음, 3000번 포트 리스너도 확인 결과 없음).
+
+**검증**: `npx tsc --noEmit`(에러 0), `npm run lint`(에러 0), `npx vitest run`(48개 파일·1482개 테스트 중 1481개 통과 — 유일한 실패 `RatATatCat.test.ts`의 "playerCount=6 seed=12345 completes"는 이번 세션이 건드리지 않은 `ratATatCat/` 파일의 기존 테스트이고 단독 재실행 시 통과하는 플레이키/기존 이슈로 확인됨, 이번 변경과 무관 — 손대지 않음). 로스트 시티 관련 `LostCities.test.ts`는 무변경으로 전부 통과.
+
+**다음 세션 인계**: (1) `ratATatCat/RatATatCat.test.ts`의 "playerCount=6 seed=12345 completes" 플레이키 실패(전체 스위트 동시 실행 시에만 재현, 단독 실행 시 통과)는 이번 세션 범위 밖이라 조사만 하고 손대지 않음 — 필요하면 별도로 원인 규명. (2) 요청서가 전제한 `Board.tsx`/`Card.tsx`/`ScoreBoard.tsx` 파일명은 이번에도 실제 파일명(`LostCitiesBoard.tsx`/`CardFace.tsx`/`ScoreBreakdownModal.tsx`)과 계속 다름 — 다음 세션도 유의. (3) 투자 카드 ×3/×4(2장/3장 배치) 및 8장 보너스 팝업은 코드 경로상 ×2와 동일 렌더링 로직을 타고 산식은 기존 단위테스트(`LostCities.test.ts`)로 이미 검증되어 있어 실제 x3/x4/8장 시나리오까지 브라우저로 직접 재현하지는 않음(랜덤 셔플로 짧은 세션 안에 재현하기 어려움) — 필요시 후속 세션에서 확인.
+
+**커밋/배포**: 이 세션 마지막 커밋 직후 별도의 `docs(handoff)` 커밋으로 실제 커밋 해시와 배포 결과를 기록할 예정(이 저장소의 기존 관행) — 진행 중이면 이 줄이 아직 갱신 전이라는 뜻.
 
 ### 2026-08-31 — 랫어탯캣 Peek 임시 확인 타이머 + 카드 획득 플라이트 이펙트 + 콜 초대형 연출
 
