@@ -140,7 +140,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: 쇼다운 단계의 "전체 공개 + 파티클" 연출은 이미 이전 세션(`ShowdownOverlay`)에서 구현되어 있으며 이번 세션에서 변경하지 않음(요청서의 "쇼다운 진입 시 마스킹 해제"는 애초에 커밋 뱃지 자체가 `commit` 단계에서만 렌더링되므로 별도 처리 불필요 — betting/showdown 단계로 넘어가는 순간 이미 마스킹 뱃지가 사라짐).
 
-**커밋/배포**: 아래 참고.
+**커밋/배포**: `git commit`(`01fdf6e`, `feat(show-me-the-coin): separate coins from chips and show +/- 1 range hint for submitted coins`) → `git push origin main`(`926f42f..01fdf6e`) 완료. 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(42초), `target: "production"`/`readyState: READY`(`dpl_BEK8yDSkZCVh7LDFqenFFbf1LCCS`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/show-me-the-coin` 둘 다 200 직접 확인함.
 
 ### 2026-08-31 — 로스트 시티 AI 봇 "−20점 공포증" 결함 픽스 및 지능 알고리즘 개편
 
