@@ -179,6 +179,33 @@ export function BetBadge({ amount, pulseKey, size = "md" }: { amount: number; pu
   );
 }
 
+/**
+ * §1 secret-commit status badge — the "상대 베팅 코인 수량이 노출되지 않는다"
+ * bug report turned out (after `AskUserQuestion` confirmation) to point at
+ * this phase, not the betting street: the player wants the *count* of coins
+ * each side placed behind the screen to be visible in real time, while the
+ * denominations/value stay secret until showdown ("금액만 비밀이고 개수는
+ * 공개"). `count` must therefore only ever be `committed[seat]?.length` —
+ * NEVER the coin values themselves — see `ShowMeTheCoinBoard.tsx`'s call
+ * site. `pulseKey` bumps once when a seat's status flips from "대기" to
+ * "배치완료" (same replay-on-`key` technique as `BetBadge`).
+ */
+export function CommitStatusBadge({ committed, count, pulseKey }: { committed: boolean; count: number; pulseKey: number }) {
+  return (
+    <span
+      key={pulseKey}
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-black tabular-nums shadow-[0_0_10px_-2px_rgba(234,179,8,0.6)] ${
+        committed
+          ? "border-yellow-500/80 bg-neutral-900/90 text-yellow-300"
+          : "border-white/15 bg-neutral-900/70 text-white/50"
+      }`}
+      style={committed ? { animation: "smtc-bet-badge-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) both" } : undefined}
+    >
+      🪙 {committed ? `${count}개 배치완료` : "배치 대기"}
+    </span>
+  );
+}
+
 const BLAST_MAX_COINS = 9;
 
 /**

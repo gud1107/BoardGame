@@ -15,7 +15,7 @@ import {
   type Seat,
   type ShowMeTheCoinState,
 } from "./engine";
-import ShowdownOverlay, { AllInEmblem, BetBadge, CoinBlastSlam, VaultPot } from "./ShowMeTheCoinEffects";
+import ShowdownOverlay, { AllInEmblem, BetBadge, CoinBlastSlam, CommitStatusBadge, VaultPot } from "./ShowMeTheCoinEffects";
 import RulebookModal from "./RulebookModal";
 import { useCountdown } from "./useCountdown";
 
@@ -395,6 +395,24 @@ export default function ShowMeTheCoinBoard({
 
   const iHaveCommitted = state.committed[viewerSeat] !== undefined;
 
+  // §1 secret-commit status badge pop — bumps once per seat the instant
+  // `committed[seat]` flips from undefined to defined, so both sides see
+  // "배치 대기" -> "N개 배치완료" replay its pop-in the moment the OTHER
+  // side locks in (this is the "코인 수량이 화면상에 노출되지 않는다" bug
+  // report's actual target — see `CommitStatusBadge`'s doc for the count/
+  // value split confirmed via `AskUserQuestion`).
+  const prevCommittedRef = useRef(state.committed);
+  const [commitPulse, setCommitPulse] = useState<Record<Seat, number>>({ p1: 0, p2: 0 });
+  useEffect(() => {
+    const prev = prevCommittedRef.current;
+    (["p1", "p2"] as const).forEach((seat) => {
+      if (prev[seat] === undefined && state.committed[seat] !== undefined) {
+        setCommitPulse((p) => ({ ...p, [seat]: p[seat] + 1 }));
+      }
+    });
+    prevCommittedRef.current = state.committed;
+  }, [state.committed]);
+
   return (
     <div
       className="relative flex flex-col gap-4 rounded-2xl border border-pink-500/20 p-4 sm:p-6"
@@ -441,6 +459,21 @@ export default function ShowMeTheCoinBoard({
             <div className="flex items-center gap-1.5">
               <BetBadge amount={state.betsThisRound[viewerSeat]} pulseKey={betPulse[viewerSeat]} size="sm" />
               <BetBadge amount={state.betsThisRound[opponentSeat]} pulseKey={betPulse[opponentSeat]} size="sm" />
+            </div>
+          )}
+          {/* §1 secret commit — count-only reveal (value stays hidden until showdown), see `CommitStatusBadge`'s doc. */}
+          {state.phase === "commit" && (
+            <div className="flex items-center gap-1.5">
+              <CommitStatusBadge
+                committed={iHaveCommitted}
+                count={state.committed[viewerSeat]?.length ?? 0}
+                pulseKey={commitPulse[viewerSeat]}
+              />
+              <CommitStatusBadge
+                committed={state.committed[opponentSeat] !== undefined}
+                count={state.committed[opponentSeat]?.length ?? 0}
+                pulseKey={commitPulse[opponentSeat]}
+              />
             </div>
           )}
         </div>
