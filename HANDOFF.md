@@ -313,7 +313,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 순차 획득→지뢰 명중 리스폰→3번째 보물로 종료까지)은 이번 세션에서 수행하지 않음 — 엔진 단위 테스트와
 정적 검사만으로 커밋했으므로, 다음 세션에서 실제 브라우저 육안 검증을 권장.
 
-**커밋/배포**: `git commit`(`4aa9a5d`, `feat(mine-of-oblivion): overhaul to 11x11 minesweeper-style treasure race`) → `git push origin main` 완료. 사용자 지시(`"배포대기"`)에 따라 프로덕션 배포는 이번 세션에서 실행하지 않고 보류 — 다음 세션(또는 사용자 확인 후) 진행.
+**커밋/배포**: `git commit`(`4aa9a5d` 본 작업 + `4981695` HANDOFF 해시 기록) → `git push origin main` 완료. 다음 요청으로 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(38초), `target: "production"`/`readyState: READY`(`dpl_4MNwe3WKXjixeVznAmUySHzKQEpo`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/mine-of-oblivion` 둘 다 200 직접 확인함. (참고: 이 배포에는 같은 시점 병렬 세션이 커밋한 `bf0a53a`/`3fd69f7` For Sale 이미지 수정도 함께 포함됨 — main 브랜치 전체를 배포하는 구조상 정상.)
 
 ### 2026-08-31 — 쇼미더코인 §1 실물 동전 제출 개수 ±1 범위 마스킹 힌트
 
