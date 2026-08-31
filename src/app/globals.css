@@ -2878,6 +2878,103 @@ body {
   }
 }
 
+/* One spark radiating outward from the vault on any chip landing in the pot (ante/bet/raise/call) — driven per-particle via the --angle custom property, same technique as smtc-coin-burst-particle. */
+@keyframes smtc-chip-clink-spark {
+  0% {
+    transform: rotate(var(--angle)) translateY(-4px) scale(0.3);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--angle)) translateY(-38px) scale(1);
+    opacity: 0;
+  }
+}
+
+/* A quick "thud" scale-snap on the vault itself, timed with the clink spark — this project has no audio pipeline, so the "칩 충돌음" request is delivered as a percussive visual snap instead (see ShowMeTheCoinEffects.tsx's module doc). */
+@keyframes smtc-chip-clink-thud {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Expanding neon/fire pulse ring behind the ALL-IN emblem. */
+@keyframes smtc-allin-pulse-ring {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* Scoreboard-style flicker on the ALL-IN emblem text, settling to fully lit. */
+@keyframes smtc-allin-flicker {
+  0% {
+    opacity: 0.3;
+  }
+  15% {
+    opacity: 1;
+  }
+  25% {
+    opacity: 0.4;
+  }
+  35%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Vertical light-pillar fading in behind a revealed hand, then settling to a soft glow. */
+@keyframes smtc-light-pillar {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.3);
+  }
+  40% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  100% {
+    opacity: 0.35;
+    transform: scaleY(1);
+  }
+}
+
+/* One coin falling from the pot into the winner's side during the pot-recovery "coin shower" motion. */
+@keyframes smtc-coin-shower-fall {
+  0% {
+    transform: translateY(-10%) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(340%) rotate(300deg);
+    opacity: 0;
+  }
+}
+
+/* One shattering coin fragment flying outward and down on an elimination. */
+@keyframes smtc-coin-shard-shatter {
+  0% {
+    transform: rotate(var(--angle)) translateY(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--angle)) translateY(120px) rotate(220deg) scale(0.4);
+    opacity: 0;
+  }
+}
+
 /* ---------------------------------------------------------------------
    러브 윈즈 올 (Love Wins All) — see loveWinsAll/LoveWinsAllEffects.tsx for
    what mounts each of these. Self-contained "lwa-" prefix, same
