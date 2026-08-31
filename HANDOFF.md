@@ -202,7 +202,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **검증**: `npx tsc --noEmit`(에러 0), `npm run lint`(경고/에러 0), `npx vitest run`(49개 파일·1520개 테스트 전부 통과 — 쇼미더코인 28개 중 신규 3개 포함).
 
-**커밋/배포**: 사용자 지시("로컬에만 반영하고 커밋,푸쉬, 배포대기")에 따라 **로컬 작업 트리에만 반영 — 커밋/푸시/배포 전부 보류**. 다음 세션(또는 사용자 확인 후)에 `engine.ts`/`ShowMeTheCoinBoard.tsx`/`ShowMeTheCoinEffects.tsx`/`soundEngine.ts`/`globals.css`/`ShowMeTheCoin.test.ts`/`HANDOFF.md` 7개 파일을 스테이징해 커밋할 것 — 세션 시작 시점부터 작업 트리에 있던 다른 미커밋 변경(`.claude/`, `boardGameRule/` 신규 이미지·폴더, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 함께 커밋하지 말 것.
+**커밋/배포**: 이번 세션이 만들거나 수정한 7개 파일만 스테이징(`engine.ts`/`ShowMeTheCoinBoard.tsx`/`ShowMeTheCoinEffects.tsx`/`soundEngine.ts`/`globals.css`/`ShowMeTheCoin.test.ts`/`HANDOFF.md`) — 세션 시작 시점부터 작업 트리에 있던 다른 세션의 미커밋 변경(`boardGameRule/쇼미더코인/쇼미더코인.md`, `.claude/`, `boardGameRule/` 신규 이미지·폴더, `orca충돌및확인.md`, `저작권, 상표권.md`)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지 `feat(show-me-the-coin): live bet badges, private chip-conversion HUD, no-limit raise quick buttons, coin blast slam FX`(`56c2e53`) → `git push origin main` 완료(`4b10764..56c2e53`). 사용자가 "배포진행해줘"로 명시 요청 → `npx vercel deploy --prod --scope me-3871` 실행, Turbopack 빌드 정상 완주(42초), `target: "production"`/`readyState: READY`(`dpl_EBqUfXF5DRVpFZ9N3dnZag26acuW`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/show-me-the-coin` 둘 다 200, 응답 HTML에 "쇼미더코인" 문자열 포함 직접 확인함.
 
 ### 2026-08-31 — 쇼미더코인 구버전 전면 폐기 및 신규 룰북 기반 재구축
 
