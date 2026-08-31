@@ -134,7 +134,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: (1) `ratATatCat/RatATatCat.test.ts`의 "playerCount=6 seed=12345 completes" 플레이키 실패(전체 스위트 동시 실행 시에만 재현, 단독 실행 시 통과)는 이번 세션 범위 밖이라 조사만 하고 손대지 않음 — 필요하면 별도로 원인 규명. (2) 요청서가 전제한 `Board.tsx`/`Card.tsx`/`ScoreBoard.tsx` 파일명은 이번에도 실제 파일명(`LostCitiesBoard.tsx`/`CardFace.tsx`/`ScoreBreakdownModal.tsx`)과 계속 다름 — 다음 세션도 유의. (3) 투자 카드 ×3/×4(2장/3장 배치) 및 8장 보너스 팝업은 코드 경로상 ×2와 동일 렌더링 로직을 타고 산식은 기존 단위테스트(`LostCities.test.ts`)로 이미 검증되어 있어 실제 x3/x4/8장 시나리오까지 브라우저로 직접 재현하지는 않음(랜덤 셔플로 짧은 세션 안에 재현하기 어려움) — 필요시 후속 세션에서 확인.
 
-**커밋/배포**: 이 세션 마지막 커밋 직후 별도의 `docs(handoff)` 커밋으로 실제 커밋 해시와 배포 결과를 기록할 예정(이 저장소의 기존 관행) — 진행 중이면 이 줄이 아직 갱신 전이라는 뜻.
+**커밋/배포**: `git commit`(`8435c52`, `feat(lost-cities): redesign visual theme, add action effects, and implement real-time expedition scoring HUD`) → `git push origin main`(`438c5ec..8435c52`) 완료. 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(36초), `target: "production"`/`readyState: READY`(`dpl_4EYBNsKAf1N6FjEi1CMic81UfBaC`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/lost-cities` 둘 다 200과 페이지 HTML에 "로스트 시티" 문자열 포함 직접 확인함.
 
 ### 2026-08-31 — 랫어탯캣 Peek 임시 확인 타이머 + 카드 획득 플라이트 이펙트 + 콜 초대형 연출
 
