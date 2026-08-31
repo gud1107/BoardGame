@@ -1,6 +1,8 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-08-31 (**로스트 시티(Lost Cities) 버림 칸 시인성 강화 + 5색 솔리드 컬러/엠블럼 전면 리뉴얼 + 액션 풀 이펙트 + 실시간 탐험로 점수 HUD 구현 세션 — 버림 더미를 "🗑️ 버림 칸 · DISCARD" 네온 점선 프레임으로 탐험로와 명확히 분리하고, 5개 색상을 물 빠진 반투명 톤에서 꽉 찬 원색+고유 SVG 벡터 엠블럼(피라미드/파도/설산/덩굴잎/화산)으로 전면 교체, 배치/버리기/드로우 3종 액션에 각각 다른 궤적·랜딩 이펙트와 합성 사운드를 연동하고, 투자 카드 ×N 골드 뱃지와 -20 시작비용부터 실시간으로 갱신되는 탐험로별 점수 HUD(8장 보너스 즉시 반영 포함)를 신설. 8장 보너스 반영 시점/모바일 레이아웃/결과 모달 스킵 관계/작업 범위 4가지를 `AskUserQuestion`으로 먼저 확인 후 구현** — 자세한 내용은 아래 `### 2026-08-31 — 로스트 시티 버림 칸 시인성·5색 솔리드 리뉴얼·액션 이펙트·실시간 점수 HUD` 절 참고.)_
+_최종 갱신: 2026-08-31 (**러브 윈즈 올(Love Wins All) 실시간 족보 뱃지 + 게임 전반 액션 비주얼/사운드 이펙트 강화 세션 — 손패 상단에 현재 완성 족보(일반/레어/전설 3단계 테두리 발광 + 등급-업 시 스케일 팝업)를 실시간으로 표시하는 `useCombinationEvaluator`/`CombinationBadge`를 신설하고, 카드 선택(네온 파티클+스냅), 쇼다운 카드 공개(Clash Pulse 스파크), 승리(하트버스트+쉴드오라, 잭팟은 더 화려하게), 라운드 패배(패자 클라이언트에서만 크랙+화면 흔들림+붉은 플래시)에 각각 신규 합성 SFX 6종을 연동 — 이 게임엔 이전까지 사운드가 전혀 없었음. 점수/배율 표시 방식, 등급 3단계 매핑 기준, "배신/처치" 이펙트가 실제로 어느 이벤트에 대응하는지, 적용 범위(변형) 4가지를 `AskUserQuestion`으로 먼저 확인 후 구현** — 자세한 내용은 아래 `### 2026-08-31 — 러브 윈즈 올 실시간 족보 뱃지 및 액션 이펙트 강화` 절 참고.)_
+
+_이전 갱신: 2026-08-31 (**로스트 시티(Lost Cities) 버림 칸 시인성 강화 + 5색 솔리드 컬러/엠블럼 전면 리뉴얼 + 액션 풀 이펙트 + 실시간 탐험로 점수 HUD 구현 세션 — 버림 더미를 "🗑️ 버림 칸 · DISCARD" 네온 점선 프레임으로 탐험로와 명확히 분리하고, 5개 색상을 물 빠진 반투명 톤에서 꽉 찬 원색+고유 SVG 벡터 엠블럼(피라미드/파도/설산/덩굴잎/화산)으로 전면 교체, 배치/버리기/드로우 3종 액션에 각각 다른 궤적·랜딩 이펙트와 합성 사운드를 연동하고, 투자 카드 ×N 골드 뱃지와 -20 시작비용부터 실시간으로 갱신되는 탐험로별 점수 HUD(8장 보너스 즉시 반영 포함)를 신설. 8장 보너스 반영 시점/모바일 레이아웃/결과 모달 스킵 관계/작업 범위 4가지를 `AskUserQuestion`으로 먼저 확인 후 구현** — 자세한 내용은 아래 `### 2026-08-31 — 로스트 시티 버림 칸 시인성·5색 솔리드 리뉴얼·액션 이펙트·실시간 점수 HUD` 절 참고.)_
 
 _이전 갱신: 2026-08-31 (**랫어탯캣(Rat-a-Tat Cat) 카드 엿보기(Peek) 자동 뒷면 뒤집기 버그 픽스 + 카드 획득/드로우 전역 궤적 이펙트 + "랫어탯캣(콜)" 초대형 중앙 포커싱 연출 세션 — 설정 페이즈/Peek 특수카드의 확인이 영구 힌트로 계속 노출되던 것을 진짜 물리 게임처럼 "몇 초간만 보이고 완전히 숨김"으로 바꾸는 하우스룰 변경, 덱/버림더미→손패로 날아가는 플라이트 이펙트, 화면 전체를 덮는 골드 네온 콜 모달 3가지를 `AskUserQuestion` 2라운드로 세부사항 전부 확인 후 구현** — 자세한 내용은 아래 `### 2026-08-31 — 랫어탯캣 Peek 임시 확인 타이머 + 카드 획득 플라이트 이펙트 + 콜 초대형 연출` 절 참고.)_
 
@@ -95,6 +97,38 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-08-31 — 러브 윈즈 올 실시간 족보 뱃지 및 액션 이펙트 강화
+
+**요청**: 러브 윈즈 올 손패 영역 상단에 현재 완성된 족보(등급명)와 점수 기대치를 실시간 뱃지로 표시하고, 카드 선택·페어링 대결·결과 판정 등 게임 전반 액션에 화려한 시각/사운드 이펙트를 적용. 요청서는 `HANDOFF.md`/신규 `러브윈즈올.md` 룰북/`src/games/loveWinsAll/` 하위 `Board.tsx`/`HandArea.tsx`/`CombinationBadge.tsx`/`LoveWinsEffects.tsx`/`engine.ts`/`types.ts`와 사운드 매니저를 먼저 확인하라고 전제했고, 족보 명칭·우선순위 계산식·이펙트 재생 시간 등은 임의로 추정하지 말고 번호 매긴 질문으로 먼저 확인하라는 명시적 지시(Strict No-Assumption Rule).
+
+**사전 조사에서 발견한 핵심 사실 (요청서 전제와 실제 구조/게임의 괴리)**:
+- 요청서가 전제한 `HandArea.tsx`/`CombinationBadge.tsx`(이번 세션 이전)/`LoveWinsEffects.tsx`/`types.ts`는 존재하지 않음 — 실제 파일은 `LoveWinsAllBoard.tsx`/`LoveWinsAllEffects.tsx`/`LoveWinsAllGame.tsx`/`engine.ts`/`cards.ts`(타입은 이 저장소 관례대로 `engine.ts` 안에 위치, 룰북 파일 경로도 "러브윈즈올.md"가 아니라 `boardGameRule/러브윈즈올/러브윈즈올.md`).
+- **결정적으로**, 2026-08-30 세션에서 이 게임은 완전히 재구축되어 지금은 가위바위보+러브 카드 기반 **칩 베팅 포커**(bet1→declare→bet2→showdown, 폴드/콜/레이즈/무승부/KO)이며, 요청서가 언급한 "배신/처치/실패(Betray/Death)"는 그 이전에 폐기된 옛 LOVE/WAR 죄수의 딜레마 버전의 개념 — 현재 게임엔 배신 메커니즘 자체가 없음.
+- 족보 판정(`evaluateHand`/`compareEvaluated`/`HAND_CATEGORY_LABEL`)은 이미 `cards.ts`에 순수함수로 구현되어 있어 새로 만들 필요 없이 재사용만 하면 됐음. 단 **룰북엔 "점수/배율" 개념이 전혀 없음**(순위 1~6/1~9와 §E 등장 확률(%)만 존재) — 엔진 전체를 뒤져도 점수·배율 필드는 없음.
+- 사운드는 파일 없이 전부 `soundEngine.ts`의 Web Audio 합성(저작권 이슈로 이 프로젝트는 오디오 파일을 쓰지 않음, 파일 헤더 참고) — 이 게임엔 착수 전 시점까지 **연결된 SFX가 하나도 없었음**(카드 선택/쇼다운/승패 전부 무음).
+
+**`AskUserQuestion`으로 확인한 사항 (1라운드, 4문항)**:
+1. **뱃지의 "점수/배율" 표시 방식** → **족보명만 표시, 수치 없음**(채택): 룰북에 없는 수치를 새로 만들지 않고 `💖 현재 족보: {족보명}`만 노출, 등급은 테두리 색으로만 구분. §E 확률(%) 노출·자체 배율표 신설 대안은 채택하지 않음.
+2. **일반/레어/전설 3단계 매핑 기준** → **전설=러브 윈즈 올만, 레어=나머지 중 상위 절반, 일반=나머지**(권장안 채택): 기본판은 레어=트리플·투러브, 일반=믹스·더블·원러브; 시즌2는 레어=쓰리러브·포카드·믹스·투러브, 일반=투페어·트리플·원페어·원러브.
+3. **"배신/처치" 이펙트가 대응할 실제 이벤트** → **매 라운드 패배(쇼다운에서 짐)마다, 패자 클라이언트에서만**(채택): 최종 KO는 기존 `DeathVignette`를 그대로 유지하고 건드리지 않음.
+4. **적용 범위** → **기본판 + 시즌2(lwa2) 두 변형 모두 한 번에**(권장안 채택): `cards.ts`의 `evaluateHand`/`HAND_CATEGORY_LABEL`이 이미 두 변형을 통일 처리하므로 뱃지/등급색/이펙트도 variant 분기 없이 그대로 동작.
+
+**구현** (`src/games/loveWinsAll/`):
+- [`cards.ts`](src/games/loveWinsAll/cards.ts): `HandTier`("common"/"rare"/"legendary") + `BASE_HAND_TIER`/`LWA2_HAND_TIER` 표(위 확인사항 2 그대로) + `handTier()`/`handTierRank()`(등급-업 감지용, legendary=0 < rare=1 < common=2) 신설 — 승패/베팅 로직과는 완전히 분리된 순수 표시용 분류. `engine.ts`가 그대로 재수출.
+- [`useCombinationEvaluator.ts`](src/games/loveWinsAll/useCombinationEvaluator.ts) (신규): `evaluateHand`/`handTier`를 감싸는 얇은 `useMemo` 훅 — 새 평가 로직은 전혀 추가하지 않음. lwa2는 `[...hand, community]` 병합(엔진의 `resolveShowdown`/`ownHandStrength`와 동일한 병합 방식) 후 평가.
+- [`CombinationBadge.tsx`](src/games/loveWinsAll/CombinationBadge.tsx) (신규): 손패 영역 상단 중앙에 `💖/🌟/💎 현재 족보: {족보명}` 고정 렌더링(수치 없음, break-keep 적용). 등급별 테두리 발광(일반=골드/레어=마젠타/전설=다이아몬드 순환 펄스), 이전 렌더의 등급 랭크와 비교해 실제로 더 좋아졌을 때만 `lwa-badge-tier-pop` 스케일 팝업 + `playLwaBadgeUpgrade` 챠임 재생.
+- [`LoveWinsAllBoard.tsx`](src/games/loveWinsAll/LoveWinsAllBoard.tsx): `내 카드` 영역 위에 `CombinationBadge` 마운트. `DeclareControls`의 족보 선언용 카드 탭에 바운스+회전 스냅 애니메이션(`lwa-card-snap`) + 네온 핑크/바이올렛 궤적 파티클(`CardSelectParticles`, 매 탭마다 nonce로 리마운트해 재생) + `playLwaCardSnap` 사운드를 연동.
+- [`LoveWinsAllEffects.tsx`](src/games/loveWinsAll/LoveWinsAllEffects.tsx): 신규 `ClashPulse`(폴드가 아닌 모든 쇼다운 공개 순간 중앙 스파크 충돌) / `RoundLossImpact`(매 라운드 패배마다 **패자 클라이언트에서만** 크랙+화면 흔들림(`lwa-death-shake` 재사용)+붉은 비네트 플래시, 확인사항 3). 기존 `HeartBurst`/`ShieldPulse`는 잭팟(러브 윈즈 올)에서 모든 결정적 승리(`isWin`)로 게이팅 확대 — 잭팟은 헤드라인 문구와 팡파르 화음이 더 화려하게 남음. 마운트 시 1회(리마운트마다 재생) 재생되는 사운드 훅: 비폴드 시 즉시 `playLwaClashSpark`, 350ms 뒤 승자/패자 관점에 따라 `playLwaVictoryFanfare(jackpot)` 또는 `playLwaRoundLossImpact`, `isGameOver`면 550ms 뒤 `playLwaFinalKoImpact` 추가.
+- [`soundEngine.ts`](src/lib/audio/soundEngine.ts): 러브 윈즈 올 전용 신규 합성 SFX 6종(`playLwaCardSnap`/`playLwaBadgeUpgrade`/`playLwaClashSpark`/`playLwaVictoryFanfare`/`playLwaRoundLossImpact`/`playLwaFinalKoImpact`) — 이 게임의 첫 SFX 연동.
+- [`globals.css`](src/app/globals.css): `lwa-` 접두사 신규 키프레임 9종(뱃지 등급별 발광 3종 + 등급-업 팝 + 카드 선택 파티클/스냅 + 클래시 플래시/스파크 파티클 + 라운드 패배 비네트 플래시).
+- [`LoveWinsAll.test.ts`](src/games/loveWinsAll/LoveWinsAll.test.ts): `handTier`/`handTierRank` 단위 테스트 3개 추가(기본판 6단계 전수, 시즌2 9단계 전수, 랭크 순서).
+
+**검증**: `npx tsc --noEmit`(에러 0), `npm run lint`(에러 0), `npx vitest run`(48개 파일·1485개 테스트 전부 통과 — 러브 윈즈 올 43개(기존 40+신규 3) 포함), `npm run build`(프로덕션 빌드 정상 완주). 이 세션엔 헤드리스 브라우저를 새로 띄우지 않고, `npm run dev` 기동 후 `curl`로 `/games/love-wins-all` 200과 페이지 HTML에 "러브 윈즈 올" 문자열 포함 확인, 개발 서버 로그에 컴파일/런타임 에러 없음을 확인.
+
+**다음 세션 인계**: (1) 육안 브라우저 확인(뱃지 등급-업 팝업 타이밍, 카드 선택 파티클, Clash Pulse/RoundLossImpact 실제 연출감, 6종 신규 SFX 음색)은 아직 안 됨 — 헤드리스 브라우저 도구가 있는 환경에서 우선 확인 권장. (2) 뱃지는 `isBetting`/`declare`/`showdown` 등 모든 페이즈에서 항상 렌더링(별도 페이즈 게이팅 없음) — 쇼다운 오버레이가 화면을 덮으므로 실질적으로는 베팅/선언 단계에서만 보이지만, 요청하면 페이즈 게이팅을 추가할 수 있음. (3) 요청서가 전제한 "점수 기대치" 수치 표시는 이번 확인사항 1에 따라 의도적으로 넣지 않았음 — 사용자가 실제 플레이 후 역시 숫자가 필요하다고 판단하면 §E 확률(%) 노출 쪽으로 후속 조정 가능.
+
+**커밋/배포**: `git commit`(`cb8194c`, `feat(love-wins-all): add real-time hand combination display and comprehensive action visual effects`) → `git push origin main`(`a960fe2..cb8194c`) 완료. 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(41초), `target: "production"`/`readyState: READY`(`dpl_5UgTMBAweyZ5CSLg3NdxFMhbYqHx`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/love-wins-all` 둘 다 200과 페이지 HTML에 "러브 윈즈 올" 문자열 포함 직접 확인함.
 
 ### 2026-08-31 — 로스트 시티 버림 칸 시인성·5색 솔리드 리뉴얼·액션 이펙트·실시간 점수 HUD
 
