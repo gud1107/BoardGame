@@ -4,9 +4,12 @@ import {
   compareEvaluated,
   evaluateHand,
   buildDeck,
+  handTier,
+  handTierRank,
   STARTING_CHIPS,
   ANTE,
   LIAR_PENALTY,
+  type HandCategory,
   type Suit,
 } from "./cards";
 import {
@@ -141,6 +144,44 @@ describe("evaluateHand — lwa2 (4-card hands incl. shared community)", () => {
     const same = evaluateHand(["scissors", "scissors", "scissors", "rock"], "lwa2");
     expect(compareEvaluated(withoutLiar, same)).toBe(0);
     expect(withLiar.hasLiar).toBe(true);
+  });
+});
+
+describe("handTier — real-time badge's 일반/레어/전설 classification", () => {
+  it("base: legendary=loveWinsAll only, rare=triple/twoLove, common=the rest", () => {
+    const expected: Record<string, "common" | "rare" | "legendary"> = {
+      loveWinsAll: "legendary",
+      triple: "rare",
+      twoLove: "rare",
+      mix: "common",
+      double: "common",
+      oneLove: "common",
+    };
+    for (const [category, tier] of Object.entries(expected)) {
+      expect(handTier(category as HandCategory, "base")).toBe(tier);
+    }
+  });
+
+  it("lwa2: legendary=loveWinsAll only, rare=threeLove/fourCard/mix/twoLove, common=the rest", () => {
+    const expected: Record<string, "common" | "rare" | "legendary"> = {
+      loveWinsAll: "legendary",
+      threeLove: "rare",
+      fourCard: "rare",
+      mix: "rare",
+      twoLove: "rare",
+      twoPair: "common",
+      triple: "common",
+      onePair: "common",
+      oneLove: "common",
+    };
+    for (const [category, tier] of Object.entries(expected)) {
+      expect(handTier(category as HandCategory, "lwa2")).toBe(tier);
+    }
+  });
+
+  it("handTierRank orders legendary < rare < common, so a rank comparison detects an upgrade", () => {
+    expect(handTierRank("legendary")).toBeLessThan(handTierRank("rare"));
+    expect(handTierRank("rare")).toBeLessThan(handTierRank("common"));
   });
 });
 

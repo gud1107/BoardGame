@@ -99,7 +99,7 @@ import {
   type Variant,
 } from "./cards";
 
-export type { Variant, Suit, HandCategory } from "./cards";
+export type { Variant, Suit, HandCategory, HandTier } from "./cards";
 export {
   ANTE,
   LIAR_PENALTY,
@@ -108,6 +108,8 @@ export {
   declarableHands,
   evaluateHand,
   handRankNumber,
+  handTier,
+  handTierRank,
   HAND_CATEGORY_LABEL,
   SUIT_EMOJI,
   SUIT_LABEL,

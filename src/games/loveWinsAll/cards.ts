@@ -257,3 +257,46 @@ export const HAND_CATEGORY_LABEL: Record<HandCategory, string> = {
   onePair: "원페어",
   oneLove: "원 러브",
 };
+
+// ---------------------------------------------------------------------------
+// Hand tier (실시간 족보 뱃지 강조 등급) — 일반/레어/전설 3단계로 압축한 시각적
+// 분류. 룰북엔 "등급"이라는 개념 자체가 없어(§C/부록은 순위 1~n만 규정) 이 세
+// 구간 경계는 이번 세션에서 AskUserQuestion으로 확정한 하우스 프리젠테이션
+// 규칙: 전설=러브 윈즈 올(각 변형의 1위)만, 레어=나머지 중 순위 상위 절반,
+// 일반=그 아래 절반. 게임 판정(승패/베팅)에는 전혀 관여하지 않는 순수 표시용
+// 분류라 `compareEvaluated`/엔진 로직과 완전히 분리되어 있다.
+// ---------------------------------------------------------------------------
+
+export type HandTier = "common" | "rare" | "legendary";
+
+export const BASE_HAND_TIER: Record<BaseHandCategory, HandTier> = {
+  loveWinsAll: "legendary",
+  triple: "rare",
+  twoLove: "rare",
+  mix: "common",
+  double: "common",
+  oneLove: "common",
+};
+
+export const LWA2_HAND_TIER: Record<Lwa2HandCategory, HandTier> = {
+  loveWinsAll: "legendary",
+  threeLove: "rare",
+  fourCard: "rare",
+  mix: "rare",
+  twoLove: "rare",
+  twoPair: "common",
+  triple: "common",
+  onePair: "common",
+  oneLove: "common",
+};
+
+const HAND_TIER_RANK: Record<HandTier, number> = { legendary: 0, rare: 1, common: 2 };
+
+/** Lower is "better" (legendary < rare < common) — lets a caller detect a tier *upgrade* via a plain `<` comparison. */
+export function handTierRank(tier: HandTier): number {
+  return HAND_TIER_RANK[tier];
+}
+
+export function handTier(category: HandCategory, variant: Variant): HandTier {
+  return variant === "base" ? BASE_HAND_TIER[category as BaseHandCategory] : LWA2_HAND_TIER[category as Lwa2HandCategory];
+}

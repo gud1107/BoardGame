@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import Avatar from "@/components/common/Avatar";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
+import CombinationBadge from "./CombinationBadge";
 import {
   declarableHands,
   HAND_CATEGORY_LABEL,
@@ -46,6 +48,30 @@ function Card({ suit, size = "md", dim }: { suit: Suit; size?: "sm" | "md" | "lg
     >
       {SUIT_EMOJI[suit]}
     </span>
+  );
+}
+
+/** Request's "카드 탭 시 네온 핑크/바이올렛 궤적 파티클" — a small ring of dots radiating from a just-selected declare card. Keyed by a per-tap nonce (see `DeclareControls`) so it replays on every tap, even re-tapping the already-selected card. */
+const CARD_SELECT_PARTICLE_COUNT = 6;
+const CARD_SELECT_PARTICLES = Array.from({ length: CARD_SELECT_PARTICLE_COUNT });
+
+function CardSelectParticles() {
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      {CARD_SELECT_PARTICLES.map((_, i) => (
+        <span
+          key={i}
+          className="absolute h-1.5 w-1.5 rounded-full"
+          style={
+            {
+              background: i % 2 === 0 ? "#f472b6" : "#a78bfa",
+              "--angle": `${(360 / CARD_SELECT_PARTICLE_COUNT) * i}deg`,
+              animation: "lwa-card-select-particle 0.5s ease-out both",
+            } as CSSProperties
+          }
+        />
+      ))}
+    </div>
   );
 }
 
@@ -153,7 +179,16 @@ function DeclareControls({
   const hand = state.hands[viewerSeat];
   const [cardIndex, setCardIndex] = useState(0);
   const [declaredHand, setDeclaredHand] = useState<HandCategory | null>(null);
+  const [selectNonce, setSelectNonce] = useState(0);
   const labels = useMemo(() => declarableHands(state.variant), [state.variant]);
+
+  function selectCard(i: number) {
+    const engine = getSoundEngine();
+    engine.unlock();
+    engine.playLwaCardSnap();
+    setSelectNonce((n) => n + 1); // forces the snap/particle animations below to replay even on a re-tap of the already-selected card
+    setCardIndex(i);
+  }
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-pink-400/30 bg-black/40 p-4">
@@ -163,10 +198,17 @@ function DeclareControls({
           <button
             key={i}
             type="button"
-            onClick={() => setCardIndex(i)}
-            className={`rounded-lg transition ${i === cardIndex ? "scale-110 ring-2 ring-pink-400" : "opacity-70"}`}
+            onClick={() => selectCard(i)}
+            className={`relative rounded-lg transition ${i === cardIndex ? "ring-2 ring-pink-400" : "opacity-70"}`}
           >
-            <Card suit={suit} size="lg" />
+            <span
+              key={i === cardIndex ? selectNonce : "idle"}
+              className="block"
+              style={i === cardIndex ? { animation: "lwa-card-snap 0.35s cubic-bezier(0.34,1.56,0.64,1) both" } : undefined}
+            >
+              <Card suit={suit} size="lg" />
+            </span>
+            {i === cardIndex && <CardSelectParticles key={selectNonce} />}
           </button>
         ))}
       </div>
@@ -262,6 +304,7 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
       ) : null}
 
       <div className="flex flex-col items-center gap-1.5">
+        <CombinationBadge hand={state.hands[viewerSeat]} community={state.community} variant={state.variant} />
         <span className="text-[10px] tracking-wide text-white/40 uppercase">내 카드</span>
         <div className="flex gap-2">
           {state.hands[viewerSeat].map((suit, i) => (

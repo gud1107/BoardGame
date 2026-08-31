@@ -3,6 +3,7 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import Avatar from "@/components/common/Avatar";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { HAND_CATEGORY_LABEL, SUIT_EMOJI, type RoundResultSnapshot, type Seat, type Suit } from "./engine";
 
 /**
@@ -18,10 +19,20 @@ import { HAND_CATEGORY_LABEL, SUIT_EMOJI, type RoundResultSnapshot, type Seat, t
  * Keyframes live in `globals.css` under the pre-existing `lwa-` prefix (see
  * that file's "러브 윈즈 올" section) — the old LOVE/WAR-themed ones
  * (heart-burst/shield-pulse, broken-heart-crack/death-vignette/emblem-slam)
- * are repurposed here rather than deleted: a heart burst now celebrates the
- * rare "러브 윈즈 올" hand (any variant's rank-1 category) landing at
- * showdown, and the death vignette now marks the match's final KO reveal —
- * both are still thematically apt for this rebuild, just retargeted.
+ * are repurposed here rather than deleted: a heart burst + shield now
+ * celebrates every decisive round win (`isWin`), and the death vignette
+ * still marks the match's final KO reveal — both are still thematically apt
+ * for this rebuild, just retargeted.
+ *
+ * 2026-08-31 세션 — 실시간 족보 표시 + 액션 이펙트 강화 (요청의 "게임 전반
+ * 액션 비주얼/사운드 이펙트" 항목, 이 게임엔 이전까지 SFX가 전혀 없었다):
+ * added `ClashPulse` (쇼다운 카드 공개 순간의 스파크 충돌, 폴드가 아니면
+ * 항상) and `RoundLossImpact` (매 라운드 패배마다 패자 클라이언트에서만
+ * 재생되는 가벼운 크랙+화면 흔들림+붉은 플래시 — 최종 KO의 무거운
+ * `DeathVignette`와는 별개), plus a mount-only SFX effect wiring both to
+ * `soundEngine.ts`'s new `playLwa*` methods. See `CombinationBadge.tsx` for
+ * the companion "실시간 족보 뱃지" (family lives in this same folder but
+ * renders inline on the board, not inside this reveal overlay).
  */
 
 const DOUBLE_TAP_SKIP_MS = 350;
@@ -69,6 +80,59 @@ function BrokenHeartCrack() {
         💔
       </span>
     </div>
+  );
+}
+
+const CLASH_SPARK_COUNT = 10;
+const CLASH_SPARKS = Array.from({ length: CLASH_SPARK_COUNT });
+
+/** Request's "페어링/쇼다운 대결 스파크 충돌(Clash Pulse)" — a bright center flash plus radiating spark glyphs, mounted the instant both hands are revealed (any non-fold outcome, win or tie alike — a fold never reveals cards, so there's nothing to "clash"). */
+function ClashPulse() {
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <span
+        className="absolute h-24 w-24 rounded-full sm:h-32 sm:w-32"
+        style={{
+          background: "radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(236,72,153,0.55) 45%, transparent 72%)",
+          animation: "lwa-clash-flash 0.4s ease-out both",
+        }}
+      />
+      {CLASH_SPARKS.map((_, i) => (
+        <span
+          key={i}
+          className="absolute text-base sm:text-lg"
+          style={
+            {
+              "--angle": `${(360 / CLASH_SPARK_COUNT) * i}deg`,
+              animation: `lwa-clash-spark-particle 0.5s ease-out ${(i * 0.01).toFixed(2)}s both`,
+            } as CSSProperties
+          }
+        >
+          ⚡
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Request's "배신/처치/실패(Betray/Death)" reaction — but repurposed for this rebuild's actual mechanic (see module doc): a lighter, per-round-loss flash+shake+crack for whichever client just lost *this round's* showdown, distinct from `DeathVignette`'s heavier one-time final-KO treatment below. Only ever mounted on the losing viewer's own client (see `RevealOverlay`'s `iLostThisRound`), never the winner's. */
+function RoundLossImpact() {
+  return (
+    <>
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 z-[92]"
+        style={{
+          background: "radial-gradient(ellipse at center, transparent 35%, rgba(190,18,60,0.4) 100%)",
+          animation: "lwa-round-loss-vignette-flash 0.6s ease-out both",
+        }}
+      />
+      <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <span className="text-6xl sm:text-7xl" style={{ animation: "lwa-crack-in 0.5s ease-out both" }}>
+          💔
+        </span>
+      </div>
+    </>
   );
 }
 
@@ -168,6 +232,20 @@ export interface RevealOverlayProps {
 
 /** The §6 full-reveal showdown (or a §G fold's no-reveal variant) — request's "선택 공개 및 생사 판정 연출 최소 3초 유지 + 직하단 [⏩ 스킵] 버튼". Every viewer sees identical content. */
 export default function RevealOverlay({ result, isGameOver, names, viewerSeat, timeLeft, secondsTotal, onSkip }: RevealOverlayProps) {
+  const isFold = result.outcome === "fold";
+  const isTie = result.outcome === "tie";
+  const isWin = result.outcome === "win";
+  const jackpot = isWin && result.handRanks && Object.values(result.handRanks).some((c) => c === "loveWinsAll");
+  // The only way `isGameOver` can coincide with a null `winnerSeat` is the
+  // rare simultaneous double-KO (both chip stacks hit 0 at once) — see
+  // engine.ts's `applyKoCheck`. Checked first so it never gets mislabeled as
+  // an ordinary mid-match tie (which always has a next round to carry into).
+  const isDoubleKoDraw = isGameOver && result.winnerSeat === null;
+  /** This *specific* viewer's round-loss reaction (see `RoundLossImpact`'s doc) — only true on the losing client, never the winner's or a tie/fold. */
+  const iLostThisRound = isWin && !isDoubleKoDraw && result.winnerSeat !== viewerSeat;
+
+  const loserName = isWin && result.winnerSeat ? names[result.winnerSeat === "p1" ? "p2" : "p1"] : null;
+
   const hasSkippedRef = useRef(false);
   const lastTapRef = useRef(0);
 
@@ -184,6 +262,33 @@ export default function RevealOverlay({ result, isGameOver, names, viewerSeat, t
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only per this reveal instance, same pattern as every other self-timing effect in this project's <Game>Effects.tsx files
   }, []);
 
+  // Request's "카드 제출 및 충돌 연출" SFX — a `ClashPulse` spark the instant
+  // both hands are shown (any non-fold outcome), then ~350ms later (letting
+  // the clash read first) an outcome-specific stinger: this viewer's own
+  // win fanfare, this viewer's own round-loss impact, or — once — the
+  // heavier final-KO boom. Every branch reads props already fixed for this
+  // reveal instance, so mount-only (`[]`) is correct: this component only
+  // ever (re)mounts when `LoveWinsAllBoard.tsx` starts a *new* reveal (its
+  // phase-gated conditional render), never mid-reveal for the same result.
+  useEffect(() => {
+    const engine = getSoundEngine();
+    engine.unlock();
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    if (!isFold) {
+      engine.playLwaClashSpark();
+      timers.push(
+        setTimeout(() => {
+          if (isTie || isDoubleKoDraw) return;
+          if (result.winnerSeat === viewerSeat) engine.playLwaVictoryFanfare(Boolean(jackpot));
+          else engine.playLwaRoundLossImpact();
+        }, 350),
+      );
+    }
+    if (isGameOver) timers.push(setTimeout(() => engine.playLwaFinalKoImpact(), 550));
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only per this reveal instance, same rationale as the skip-timer effect above
+  }, []);
+
   function handleBackdropTap() {
     const now = Date.now();
     if (isDoubleTap(lastTapRef.current, now)) {
@@ -195,18 +300,6 @@ export default function RevealOverlay({ result, isGameOver, names, viewerSeat, t
   }
 
   if (typeof document === "undefined") return null;
-
-  const isFold = result.outcome === "fold";
-  const isTie = result.outcome === "tie";
-  const isWin = result.outcome === "win";
-  const jackpot = isWin && result.handRanks && Object.values(result.handRanks).some((c) => c === "loveWinsAll");
-  // The only way `isGameOver` can coincide with a null `winnerSeat` is the
-  // rare simultaneous double-KO (both chip stacks hit 0 at once) — see
-  // engine.ts's `applyKoCheck`. Checked first so it never gets mislabeled as
-  // an ordinary mid-match tie (which always has a next round to carry into).
-  const isDoubleKoDraw = isGameOver && result.winnerSeat === null;
-
-  const loserName = isWin && result.winnerSeat ? names[result.winnerSeat === "p1" ? "p2" : "p1"] : null;
 
   const headline = isDoubleKoDraw
     ? "💀 둘 다 동시에 칩 소진 — 무승부로 게임 종료"
@@ -224,15 +317,21 @@ export default function RevealOverlay({ result, isGameOver, names, viewerSeat, t
       style={{ animation: "lwa-overlay-in 0.35s ease-out both" }}
       onClick={handleBackdropTap}
     >
-      {jackpot && (
+      {!isFold && <ClashPulse />}
+      {/* Request's "상호 성공(Love/Win)" flourish — every decisive round win, not just the rare loveWinsAll jackpot (which additionally gets the bigger fanfare chord above and its own headline). */}
+      {isWin && (
         <>
           <HeartBurst />
           <ShieldPulse />
         </>
       )}
+      {iLostThisRound && <RoundLossImpact />}
       {isGameOver && <BrokenHeartCrack />}
 
-      <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-3 py-6 text-center">
+      <div
+        className="relative z-10 flex w-full max-w-sm flex-col items-center gap-3 py-6 text-center"
+        style={iLostThisRound ? { animation: "lwa-death-shake 0.5s ease-out both" } : undefined}
+      >
         {isGameOver && loserName && <DeathVignette loserName={loserName} />}
 
         <h2

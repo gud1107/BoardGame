@@ -1367,6 +1367,199 @@ class SoundEngine {
       osc.stop(at + 0.2);
     });
   }
+
+  // ---------------------------------------------------------------------
+  // 2026-08-31 세션 — 러브 윈즈 올 "실시간 족보 표시 + 액션 이펙트 강화": 이
+  // 게임엔 이전까지 SFX가 하나도 연결돼 있지 않았다(카드 선택/쇼다운 대결/
+  // 승패 판정 전부 무음). 요청의 4개 항목(카드 선택·페어링 대결·상호 성공·
+  // 배신 실패)에 뱃지 등급-업 챠임까지 더해 6종 신규 합성.
+  // ---------------------------------------------------------------------
+
+  /** 러브 윈즈 올 — "카드 선택 스냅음": 밝은 하이패스 스파클 + 짧은 스냅 클릭. `playGridSnap`보다 가볍고 반짝이는 톤으로, 족보 선언용 카드를 탭할 때마다 울린다(CARD_SELECT_SNAP). */
+  playLwaCardSnap() {
+    if (!this.gate("lwaCardSnap", 60)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const sparkle = ctx.createOscillator();
+    sparkle.type = "sine";
+    sparkle.frequency.setValueAtTime(2200, now);
+    sparkle.frequency.exponentialRampToValueAtTime(3400, now + 0.05);
+    const sparkleGain = ctx.createGain();
+    sparkleGain.gain.setValueAtTime(0.14, now);
+    sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+    sparkle.connect(sparkleGain).connect(this.sfxGain);
+    sparkle.start(now);
+    sparkle.stop(now + 0.1);
+
+    const click = ctx.createBufferSource();
+    click.buffer = noiseBuffer(ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = 3500;
+    const clickGain = ctx.createGain();
+    clickGain.gain.setValueAtTime(0.16, now);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+    click.connect(filter).connect(clickGain).connect(this.sfxGain);
+    click.start(now);
+    click.stop(now + 0.05);
+  }
+
+  /** 러브 윈즈 올 — "족보 등급-업 챠임": 실시간 족보 뱃지가 더 높은 등급으로 바뀌는 순간(CombinationBadge.tsx). `tier === "legendary"`(러브 윈즈 올)일수록 더 길고 반짝이는 상승 아르페지오. */
+  playLwaBadgeUpgrade(tier: "rare" | "legendary") {
+    if (!this.gate("lwaBadgeUpgrade", 250)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    const notes = tier === "legendary" ? [987.77, 1318.51, 1567.98, 2093.0] : [880, 1174.66];
+    notes.forEach((freq, i) => {
+      const at = now + i * 0.06;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(tier === "legendary" ? 0.24 : 0.18, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.32);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.34);
+    });
+  }
+
+  /** 러브 윈즈 올 — "페어링/쇼다운 대결 스파크 충돌(Clash Pulse)": 서로 다른 방향에서 부딪히듯 수렴하는 디튠 소투스 두 음 + 고주파 노이즈 크랙. 폴드가 아닌 모든 쇼다운 공개 순간 재생(CLASH_PULSE). */
+  playLwaClashSpark() {
+    if (!this.gate("lwaClashSpark", 250)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    const duration = 0.3;
+
+    [[520, 180], [560, 180]].forEach(([startFreq, endFreq]) => {
+      const osc = ctx.createOscillator();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(startFreq, now);
+      osc.frequency.exponentialRampToValueAtTime(endFreq, now + duration);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(now);
+      osc.stop(now + duration);
+    });
+
+    const crack = ctx.createBufferSource();
+    crack.buffer = noiseBuffer(ctx);
+    const crackFilter = ctx.createBiquadFilter();
+    crackFilter.type = "bandpass";
+    crackFilter.frequency.value = 3200;
+    crackFilter.Q.value = 6;
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.26, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+    crack.connect(crackFilter).connect(crackGain).connect(this.sfxGain);
+    crack.start(now);
+    crack.stop(now + 0.1);
+  }
+
+  /** 러브 윈즈 올 — "상호 성공(Love/Win) 승리 팡파르": 밝은 3음 상승 화음. `jackpot`(러브 윈즈 올 족보로 승리)이면 한 옥타브 위 반짝이는 4음을 덧붙여 더 화려하게(VICTORY_FANFARE). */
+  playLwaVictoryFanfare(jackpot: boolean) {
+    if (!this.gate("lwaVictoryFanfare", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [659.25, 830.61, 987.77].forEach((freq, i) => {
+      const at = now + i * 0.08;
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.26, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.45);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.46);
+    });
+    if (!jackpot) return;
+    [1318.51, 1567.98, 2093.0, 2637.02].forEach((freq, i) => {
+      const at = now + 0.26 + i * 0.05;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.2, at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.35);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.36);
+    });
+  }
+
+  /** 러브 윈즈 올 — "라운드 패배 타격 폭발음": 둔탁한 저음 임팩트 + 하강하는 디튠 버즈. 매 라운드 패배(쇼다운에서 짐)마다 패자 클라이언트에서만 재생 — 최종 KO는 별도의 `playLwaFinalKoImpact`가 맡는다(ROUND_LOSS_IMPACT). */
+  playLwaRoundLossImpact() {
+    if (!this.gate("lwaRoundLossImpact", 250)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const thud = ctx.createOscillator();
+    thud.type = "sine";
+    thud.frequency.setValueAtTime(160, now);
+    thud.frequency.exponentialRampToValueAtTime(45, now + 0.2);
+    const thudGain = ctx.createGain();
+    thudGain.gain.setValueAtTime(0.34, now);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    thud.connect(thudGain).connect(this.sfxGain);
+    thud.start(now);
+    thud.stop(now + 0.28);
+
+    [140, 148].forEach((freq) => {
+      const osc = ctx.createOscillator();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freq, now);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.5, now + 0.35);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.16, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(now);
+      osc.stop(now + 0.4);
+    });
+  }
+
+  /** 러브 윈즈 올 — "최종 KO 처치 폭발음": `playLwaRoundLossImpact`보다 훨씬 무겁고 낮은 서브베이스 붐 + 유리 파편 노이즈. 상대 칩을 전부 잃어 탈락이 확정되는 순간(§I) 단 한 번 재생(FINAL_KO_IMPACT). */
+  playLwaFinalKoImpact() {
+    if (!this.gate("lwaFinalKoImpact", 800)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const boom = ctx.createOscillator();
+    boom.type = "sine";
+    boom.frequency.setValueAtTime(140, now);
+    boom.frequency.exponentialRampToValueAtTime(30, now + 0.45);
+    const boomGain = ctx.createGain();
+    boomGain.gain.setValueAtTime(0.46, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+    boom.connect(boomGain).connect(this.sfxGain);
+    boom.start(now);
+    boom.stop(now + 0.7);
+
+    const shatter = ctx.createBufferSource();
+    shatter.buffer = noiseBuffer(ctx);
+    const shatterFilter = ctx.createBiquadFilter();
+    shatterFilter.type = "highpass";
+    shatterFilter.frequency.value = 2800;
+    const shatterGain = ctx.createGain();
+    shatterGain.gain.setValueAtTime(0.26, now + 0.02);
+    shatterGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    shatter.connect(shatterFilter).connect(shatterGain).connect(this.sfxGain);
+    shatter.start(now + 0.02);
+    shatter.stop(now + 0.3);
+  }
 }
 
 let instance: SoundEngine | null = null;
