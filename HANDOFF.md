@@ -135,7 +135,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 
 **다음 세션 인계**: (1) 이번 수정은 `engine.ts` 내부 휴리스틱 튜닝만 다뤘고 실제 사람 상대 난이도 체감 테스트는 미실시(2026-08-30 최초 개발 세션부터 이어지는 인계 사항). (2) 딥서치/워커 오프로딩 없이 여전히 동기 호출로 충분할 만큼 저렴한 휴리스틱 — 필요시 향후 몇 수 앞 내다보는 lookahead로 확장 가능하나 이번 요청 범위 밖.
 
-**커밋/배포**: 진행 예정 — 아래 참고.
+**커밋/배포**: `git commit`(`70ea97e`, `fix(lost-cities): overhaul AI bot decision engine to aggressively play expeditions and optimize card placements`) → `git push origin main`(`f7f7493..70ea97e`) 완료. 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(41초), `target: "production"`/`readyState: READY`(`dpl_HVBy7NETSnwNhd9FuHyWP5jZeUge`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/lost-cities` 둘 다 200 직접 확인함.
 
 ### 2026-08-31 — 망각의 지뢰(Mine of Oblivion) 신규 게임 개발
 
