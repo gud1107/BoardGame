@@ -7,6 +7,7 @@ import {
   CHIP_CONVERSION_DIVISOR,
   commitRange,
   convertedChipTotal,
+  getMaskedCoinCountRange,
   getValidMoves,
   isSeatAllIn,
   isStateSyncStale,
@@ -107,6 +108,18 @@ describe("§1 commit phase", () => {
 
   it("commitRange returns {0,0} once a seat's coins are fully depleted", () => {
     expect(commitRange(0)).toEqual({ min: 0, max: 0 });
+  });
+});
+
+describe("getMaskedCoinCountRange (opponent-facing ±1 coin-count hint)", () => {
+  it("widens a submitted count by exactly ±1, clamped to a 0 floor", () => {
+    expect(getMaskedCoinCountRange(2)).toBe("1 ~ 3개");
+    expect(getMaskedCoinCountRange(6)).toBe("5 ~ 7개");
+  });
+
+  it("floors at 0 rather than going negative for a 1-coin or 0-coin submission", () => {
+    expect(getMaskedCoinCountRange(1)).toBe("0 ~ 2개");
+    expect(getMaskedCoinCountRange(0)).toBe("0 ~ 1개");
   });
 });
 

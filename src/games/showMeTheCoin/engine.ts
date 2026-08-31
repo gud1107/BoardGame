@@ -278,6 +278,22 @@ export function commitRange(coinsRemaining: number): { min: number; max: number 
   return { min: Math.min(MIN_COMMIT, coinsRemaining), max: Math.min(MAX_COMMIT, coinsRemaining) };
 }
 
+/**
+ * §1 opponent-facing coin-count masking — 2026-08-31 후속 세션 ("실물 동전
+ * ±1 힌트 시스템"). §1의 비공개 커밋은 *금액*뿐 아니라 이제 *개수*도 상대방
+ * 화면에는 정확히 노출하지 않고 `[max(0, N-1), N+1]` 범위 힌트로만 보여준다
+ * (본인 화면은 항상 정확한 개수/구성을 그대로 표시 — 정보 비대칭 없음).
+ * `AskUserQuestion`으로 확인된 스펙 그대로: N<=0(이론상 코인 완전 고갈 케이스,
+ * 실전에서는 `applyKoCheck`가 라운드 사이에 먼저 게임을 끝내므로 도달 불가)도
+ * 별도 분기 없이 같은 공식으로 자연스럽게 "0 ~ 1개"가 나온다. 하한만 0으로
+ * 클램프하고 상한은 클램프하지 않음(순수 힌트이므로 `MAX_COMMIT`을 넘어도 무방).
+ * 순수 문자열 포맷터라 엔진에 두되(다른 UI 파생값과 동일한 위치), 렌더링은
+ * 전적으로 `ShowMeTheCoinBoard.tsx`/`ShowMeTheCoinEffects.tsx` 쪽 책임.
+ */
+export function getMaskedCoinCountRange(coinCount: number): string {
+  return `${Math.max(0, coinCount - 1)} ~ ${coinCount + 1}개`;
+}
+
 function coinSum(coins: CoinToken[], ids: string[]): number {
   const byId = new Map(coins.map((c) => [c.id, c.value] as const));
   return ids.reduce((sum, id) => sum + (byId.get(id) ?? 0), 0);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Avatar from "@/components/common/Avatar";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import {
@@ -15,7 +15,7 @@ import {
   type Seat,
   type ShowMeTheCoinState,
 } from "./engine";
-import ShowdownOverlay, { AllInEmblem, BetBadge, CoinBlastSlam, CommitStatusBadge, VaultPot } from "./ShowMeTheCoinEffects";
+import ShowdownOverlay, { AllInEmblem, BetBadge, CoinBlastSlam, MaskedCoinBadge, OwnCoinBadge, VaultPot } from "./ShowMeTheCoinEffects";
 import RulebookModal from "./RulebookModal";
 import { useCountdown } from "./useCountdown";
 
@@ -56,6 +56,7 @@ function PlayerPanel({
   connected,
   betThisStreet,
   betPulseKey,
+  commitBadge,
 }: {
   name: string;
   chips: number;
@@ -68,6 +69,14 @@ function PlayerPanel({
   betThisStreet: number;
   /** Bumped by the caller every time `betThisStreet` grows, so `BetBadge`'s pop animation replays on each raise/call, not just once. */
   betPulseKey: number;
+  /**
+   * §1 실물 동전 제출 뱃지(본인: `OwnCoinBadge`/상대: `MaskedCoinBadge`) —
+   * 2026-08-31 ±1 힌트 세션에서 중앙 Vault 영역의 뱃지 쌍을 각 플레이어 슬롯
+   * 안으로 이동(`AskUserQuestion`으로 확인). `commit` 단계에서만(기존 범위
+   * 유지, 같은 세션에서 재확인) caller가 렌더링해 넘겨준다 — `null`이면 자리
+   * 자체를 차지하지 않음(betting/showdown 단계 등).
+   */
+  commitBadge: ReactNode | null;
 }) {
   return (
     <div
@@ -89,14 +98,22 @@ function PlayerPanel({
         {isViewer && <span className="text-emerald-300"> (나)</span>}
       </span>
       {isDealer && <span className="rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-200">선공</span>}
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-black text-amber-100 tabular-nums" title="베팅칩">
-          🎰 {chips}
+      {/* 다크 퍼플(베팅 칩) vs 골드(실물 코인) 듀얼 네온 — 두 자원이 한눈에 구분되도록(요청 §2 스타일링). */}
+      <div className="flex items-center gap-1.5">
+        <span
+          className="inline-flex items-center gap-1 rounded-full border border-purple-400/60 bg-purple-950/40 px-2 py-0.5 text-xs font-black text-purple-200 tabular-nums shadow-[0_0_10px_-2px_rgba(168,85,247,0.6)]"
+          title="베팅 칩"
+        >
+          💰 {chips}
         </span>
-        <span className="text-sm font-black text-yellow-200/90 tabular-nums" title="남은 코인">
-          🪙 {coinsRemaining}
+        <span
+          className="inline-flex items-center gap-1 rounded-full border border-yellow-600/40 bg-neutral-900/60 px-2 py-0.5 text-xs font-black text-yellow-200/80 tabular-nums"
+          title="잔여 실물 코인 (이번 라운드 제출량과 다름)"
+        >
+          🪙 잔여 {coinsRemaining}
         </span>
       </div>
+      {commitBadge}
       {isActing && <span className="text-[10px] font-medium text-pink-200">고민 중...</span>}
     </div>
   );
@@ -395,12 +412,13 @@ export default function ShowMeTheCoinBoard({
 
   const iHaveCommitted = state.committed[viewerSeat] !== undefined;
 
-  // §1 secret-commit status badge pop — bumps once per seat the instant
+  // §1 secret-commit badge pop — bumps once per seat the instant
   // `committed[seat]` flips from undefined to defined, so both sides see
-  // "배치 대기" -> "N개 배치완료" replay its pop-in the moment the OTHER
-  // side locks in (this is the "코인 수량이 화면상에 노출되지 않는다" bug
-  // report's actual target — see `CommitStatusBadge`'s doc for the count/
-  // value split confirmed via `AskUserQuestion`).
+  // "배치 대기" -> committed replay its pop-in the moment the OTHER side
+  // locks in. Feeds `OwnCoinBadge`/`MaskedCoinBadge` in each `PlayerPanel`
+  // (moved out of the central Vault area in the 2026-08-31 ±1-hint session —
+  // see those components' docs for the exact/masked split confirmed via
+  // `AskUserQuestion`).
   const prevCommittedRef = useRef(state.committed);
   const [commitPulse, setCommitPulse] = useState<Record<Seat, number>>({ p1: 0, p2: 0 });
   useEffect(() => {
@@ -452,6 +470,11 @@ export default function ShowMeTheCoinBoard({
           connected
           betThisStreet={state.betsThisRound[viewerSeat]}
           betPulseKey={betPulse[viewerSeat]}
+          commitBadge={
+            state.phase === "commit" ? (
+              <OwnCoinBadge coins={state.coins[viewerSeat]} committedIds={state.committed[viewerSeat]} pulseKey={commitPulse[viewerSeat]} />
+            ) : null
+          }
         />
         <div className="flex flex-col items-center justify-center gap-1.5 px-1">
           <VaultPot pot={state.pot} clinkPulse={clinkPulse} />
@@ -459,21 +482,6 @@ export default function ShowMeTheCoinBoard({
             <div className="flex items-center gap-1.5">
               <BetBadge amount={state.betsThisRound[viewerSeat]} pulseKey={betPulse[viewerSeat]} size="sm" />
               <BetBadge amount={state.betsThisRound[opponentSeat]} pulseKey={betPulse[opponentSeat]} size="sm" />
-            </div>
-          )}
-          {/* §1 secret commit — count-only reveal (value stays hidden until showdown), see `CommitStatusBadge`'s doc. */}
-          {state.phase === "commit" && (
-            <div className="flex items-center gap-1.5">
-              <CommitStatusBadge
-                committed={iHaveCommitted}
-                count={state.committed[viewerSeat]?.length ?? 0}
-                pulseKey={commitPulse[viewerSeat]}
-              />
-              <CommitStatusBadge
-                committed={state.committed[opponentSeat] !== undefined}
-                count={state.committed[opponentSeat]?.length ?? 0}
-                pulseKey={commitPulse[opponentSeat]}
-              />
             </div>
           )}
         </div>
@@ -487,6 +495,11 @@ export default function ShowMeTheCoinBoard({
           connected={opponentConnected}
           betThisStreet={state.betsThisRound[opponentSeat]}
           betPulseKey={betPulse[opponentSeat]}
+          commitBadge={
+            state.phase === "commit" ? (
+              <MaskedCoinBadge committedCount={state.committed[opponentSeat]?.length} pulseKey={commitPulse[opponentSeat]} />
+            ) : null
+          }
         />
       </div>
 

@@ -3,7 +3,7 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import Avatar from "@/components/common/Avatar";
-import type { CoinToken, RoundResultSnapshot, Seat } from "./engine";
+import { COIN_COMPOSITION, getMaskedCoinCountRange, type CoinToken, type RoundResultSnapshot, type Seat } from "./engine";
 
 /** How close together two backdrop taps must land to count as a double-tap skip gesture — same small pure helper `grid-poker/skipGesture.ts` defines, kept as its own copy here per ARCHITECTURE.md §2's "zero cross-game code coupling" rule rather than importing across game folders. */
 const DOUBLE_TAP_SKIP_MS = 350;
@@ -179,29 +179,70 @@ export function BetBadge({ amount, pulseKey, size = "md" }: { amount: number; pu
   );
 }
 
+/** Shared "배치 대기" (not yet committed this round) grey pill — both `OwnCoinBadge` and `MaskedCoinBadge` render exactly this before `committedIds`/`committedCount` is defined, so the two badges only ever visibly diverge once there's something to actually mask. */
+function CoinWaitingBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-neutral-900/70 px-2.5 py-1 text-xs font-black text-white/50">
+      🪙 배치 대기
+    </span>
+  );
+}
+
 /**
- * §1 secret-commit status badge — the "상대 베팅 코인 수량이 노출되지 않는다"
- * bug report turned out (after `AskUserQuestion` confirmation) to point at
- * this phase, not the betting street: the player wants the *count* of coins
- * each side placed behind the screen to be visible in real time, while the
- * denominations/value stay secret until showdown ("금액만 비밀이고 개수는
- * 공개"). `count` must therefore only ever be `committed[seat]?.length` —
- * NEVER the coin values themselves — see `ShowMeTheCoinBoard.tsx`'s call
- * site. `pulseKey` bumps once when a seat's status flips from "대기" to
- * "배치완료" (same replay-on-`key` technique as `BetBadge`).
+ * §1 secret-commit badge — "본인" 화면 전용. 2026-08-31 세션 이전엔 이 자리의
+ * `CommitStatusBadge`가 개수만 공개하고(`committed[seat]?.length`) 금액은
+ * 숨겼는데, 이번 ±1 힌트 시스템 요청은 그 "개수 공개"조차 **상대방에게는**
+ * 감추라는 것 — 본인 화면은 원래부터 정보 비대칭 문제가 없으므로 여기서는
+ * 그대로 정확한 개수 + 금액 구성(호버 시 전체 내역)까지 노출한다. `coins`는
+ * 반드시 뷰어 자신의 전체 코인 인벤토리(`state.coins[viewerSeat]`)여야 하며
+ * (상대 좌석의 실제 코인 배열을 여기 넘기지 말 것 — 정보 공정성 계약은
+ * `engine.ts`의 `scoreMove` 문서와 동일), `committedIds`는 그 좌석 자신의
+ * `state.committed[seat]`. `pulseKey`는 `undefined`→정의로 바뀐 순간 한 번
+ * bump되어 배지가 "배치 대기"에서 팝인하는 것을 트리거(`BetBadge`와 동일 기법).
  */
-export function CommitStatusBadge({ committed, count, pulseKey }: { committed: boolean; count: number; pulseKey: number }) {
+export function OwnCoinBadge({ coins, committedIds, pulseKey }: { coins: CoinToken[]; committedIds: string[] | undefined; pulseKey: number }) {
+  if (committedIds === undefined) return <CoinWaitingBadge />;
+  const idSet = new Set(committedIds);
+  const submitted = coins.filter((c) => idSet.has(c.id));
+  const breakdown = COIN_COMPOSITION.map((d) => d.value)
+    .map((value) => ({ value, n: submitted.filter((c) => c.value === value).length }))
+    .filter((d) => d.n > 0);
   return (
     <span
       key={pulseKey}
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-black tabular-nums shadow-[0_0_10px_-2px_rgba(234,179,8,0.6)] ${
-        committed
-          ? "border-yellow-500/80 bg-neutral-900/90 text-yellow-300"
-          : "border-white/15 bg-neutral-900/70 text-white/50"
-      }`}
-      style={committed ? { animation: "smtc-bet-badge-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) both" } : undefined}
+      title={breakdown.map((d) => `${d.value}원 ${d.n}개`).join(", ")}
+      className="inline-flex flex-col items-center gap-0.5 rounded-full border border-yellow-500/80 bg-neutral-900/90 px-2.5 py-1 text-xs font-black text-yellow-300 shadow-[0_0_10px_-2px_rgba(234,179,8,0.6)]"
+      style={{ animation: "smtc-bet-badge-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) both" }}
     >
-      🪙 {committed ? `${count}개 배치완료` : "배치 대기"}
+      <span className="tabular-nums">🪙 낸 동전: {submitted.length}개</span>
+      {breakdown.length > 0 && (
+        <span className="text-[9px] font-medium tracking-wide text-yellow-300/60 tabular-nums">
+          ({breakdown.map((d) => `${d.value}×${d.n}`).join(", ")})
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * §1 secret-commit badge — "상대방" 화면 전용. 정확한 개수 대신
+ * `getMaskedCoinCountRange`의 `[max(0,N-1), N+1]` 힌트 범위만 노출하고, 금액
+ * 구성은 (기존과 동일하게) 쇼다운까지 완전히 비공개. `committedCount`는 오직
+ * `state.committed[opponentSeat]?.length` 여야 한다 — 절대 상대의 실제
+ * `CoinToken[]`을 이 컴포넌트에 넘기지 말 것(넘길 이유도 없음: 개수 하나면
+ * 충분). 점선 테두리 + 🔮로 "확정된 사실이 아닌 추정치"임을 시각적으로
+ * `OwnCoinBadge`와 구분한다(둘 다 금(gold) 계열 네온이라 "코인" 패밀리로는
+ * 즉시 식별되면서도, 확정/추정 여부는 아이콘·테두리 스타일로 구분).
+ */
+export function MaskedCoinBadge({ committedCount, pulseKey }: { committedCount: number | undefined; pulseKey: number }) {
+  if (committedCount === undefined) return <CoinWaitingBadge />;
+  return (
+    <span
+      key={pulseKey}
+      className="inline-flex items-center gap-1 rounded-full border border-dashed border-amber-400/60 bg-neutral-900/90 px-2.5 py-1 text-xs font-black text-amber-200/90 tabular-nums shadow-[0_0_10px_-2px_rgba(217,119,6,0.5)]"
+      style={{ animation: "smtc-bet-badge-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) both" }}
+    >
+      🔮 낸 동전 추정: {getMaskedCoinCountRange(committedCount)}
     </span>
   );
 }
