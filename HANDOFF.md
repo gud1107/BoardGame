@@ -220,7 +220,7 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
   세로줄무늬 없이 선명) — 요청서가 첨부한 원본 버그 스크린샷과 달리 깨짐/찌그러짐 없음을 직접 확인.
   스크린샷은 스크래치패드에서 확인 후 커밋 대상에서 제외.
 
-**커밋/배포**: (다음 커밋에서 해시 기록 예정)
+**커밋/배포**: `git commit`(`bf0a53a`, `fix(for-sale): fix broken money image rendering with crisp vector coin and currency components`) → `git push origin main`(`4981695..bf0a53a`) 완료. 이어서 `npx vercel deploy --prod --scope me-3871` 실행, Turbopack 빌드 정상 완주(42초), `target: "production"`/`readyState: READY`(`dpl_EyZbSQwE8YA2UkytCqS7XXjzmPk2`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/for-sale` 둘 다 200, 응답 HTML에 "포세일" 문자열 포함 직접 확인함.
 
 ### 2026-08-31 — 망각의 지뢰 11×11 대형판 전면 개편
 
