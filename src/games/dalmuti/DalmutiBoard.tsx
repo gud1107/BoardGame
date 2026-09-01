@@ -8,16 +8,19 @@ import RulebookModal from "./RulebookModal";
 import CardExchangeModal from "./CardExchangeModal";
 import { CardFace, RoleBadge, type AuraTier } from "./CardArt";
 import {
+  detectCommonerExchangeHistoryEvents,
   detectCommonerSwapEvents,
   detectTaxEvents,
   detectTaxHighlightEvents,
   FlyingExchangeCard,
   ReceivedCardGlow,
   RevolutionBanner,
+  type ExchangeHistoryEntry,
   type TaxFlyEvent,
   type TaxHighlightEvent,
 } from "./DalmutiEffects";
 import TaxHighlightModal from "./TaxHighlightModal";
+import ExchangeHistoryPanel from "./ExchangeHistoryPanel";
 import {
   computeRankings,
   isLegalPlay,
@@ -104,6 +107,15 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   // overlay, this is the actual card sitting in the hand staying lit once it
   // lands, even after the flight overlay is long gone.
   const [receivedCards, setReceivedCards] = useState<Map<string, AuraTier>>(new Map());
+  // Permanent "📜 세금 교환 기록" log (task brief, 2026-09-02 세션) — unlike
+  // every queue above (each self-clears once its transient animation
+  // finishes), this one only ever grows for the rest of the game. Holds
+  // *every* exchange (own and others'), not just this viewer's own —
+  // `ExchangeHistoryPanel.tsx` decides per row how much detail to reveal
+  // (AskUserQuestion: full card detail for a party, masked count-only
+  // summary for everyone else), same "log everything, mask at render time"
+  // split `FlyingExchangeCard`'s `isExchangeParticipant` already uses.
+  const [exchangeHistory, setExchangeHistory] = useState<ExchangeHistoryEntry[]>([]);
   if (trackedState !== state) {
     const newTax = detectTaxEvents(trackedState, state);
     const newCommonerSwaps = detectCommonerSwapEvents(trackedState, state);
@@ -116,15 +128,40 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
         return [...prev, ...[...newTax, ...newCommonerSwaps].map((e) => ({ ...e, id: nextId++ }))];
       });
     }
+    const newTributeHighlights = detectTaxHighlightEvents(trackedState, state);
     // Only queued for the two actual parties (AskUserQuestion, 2026-09-01) —
     // never for a third-party viewer, same masking scope as `taxEvents` above.
-    const newHighlights = detectTaxHighlightEvents(trackedState, state).filter(
-      (e) => e.recipientSeat === viewerSeat || e.giverSeat === viewerSeat,
-    );
+    const newHighlights = newTributeHighlights.filter((e) => e.recipientSeat === viewerSeat || e.giverSeat === viewerSeat);
     if (newHighlights.length > 0) {
       setTaxHighlights((prev) => {
         let nextId = (prev.at(-1)?.id ?? 0) + 1;
         return [...prev, ...newHighlights.map((e) => ({ ...e, id: nextId++ }))];
+      });
+    }
+    // History log: every resolved tribute + every resolved commoner swap,
+    // for every viewer (AskUserQuestion, 2026-09-02) — detail level is
+    // decided per-row by ExchangeHistoryPanel.tsx, not filtered here.
+    const newCommonerHistory = detectCommonerExchangeHistoryEvents(trackedState, state);
+    if (newTributeHighlights.length > 0 || newCommonerHistory.length > 0) {
+      setExchangeHistory((prev) => {
+        let nextId = (prev.at(-1)?.id ?? 0) + 1;
+        const tributeEntries: ExchangeHistoryEntry[] = newTributeHighlights.map((e) => ({
+          id: nextId++,
+          kind: e.auraTier as "king" | "noble", // detectTaxHighlightEvents only ever tags "king"/"noble" (see its doc) — auraTier's 3rd value ("commoner") belongs solely to the unrelated FlyingExchangeCard flight tier
+          recipientSeat: e.recipientSeat,
+          giverSeat: e.giverSeat,
+          givenCards: e.givenCards,
+          returnedCards: e.returnedCards,
+        }));
+        const commonerEntries: ExchangeHistoryEntry[] = newCommonerHistory.map((e) => ({
+          id: nextId++,
+          kind: "commoner",
+          seatA: e.seatA,
+          seatB: e.seatB,
+          cardFromA: e.cardFromA,
+          cardFromB: e.cardFromB,
+        }));
+        return [...prev, ...tributeEntries, ...commonerEntries];
       });
     }
     const newlyReceivedByMe = [...newTax, ...newCommonerSwaps].filter((e) => e.targetSeat === viewerSeat);
@@ -228,8 +265,9 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     const rankings = computeRankings(state);
     const winner = rankings.find((r) => r.rank === 1)!;
     return (
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
       <div
-        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        className="relative flex min-w-0 flex-1 flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
         style={{ background: "linear-gradient(160deg,#241a3a 0%,#160f26 55%,#0a0714 100%)" }}
       >
         <span className="text-5xl">👑</span>
@@ -269,6 +307,8 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
         <button onClick={onGameEnd} className="rounded-full bg-amber-500 px-8 py-3 font-medium text-black transition hover:bg-amber-400">
           결과 확정하고 계속하기
         </button>
+      </div>
+      <ExchangeHistoryPanel entries={exchangeHistory} viewerSeat={viewerSeat} names={names} titleFor={titleFor} />
       </div>
     );
   }
@@ -367,8 +407,9 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   };
 
   return (
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
     <div
-      className="flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
+      className="flex min-w-0 flex-1 flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
       style={{ background: "linear-gradient(160deg,#1c1430 0%,#120c20 45%,#080510 100%)" }}
     >
       <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-purple-100/70">
@@ -664,6 +705,8 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
           onDone={() => setRevolutionBanner(null)}
         />
       )}
+    </div>
+    <ExchangeHistoryPanel entries={exchangeHistory} viewerSeat={viewerSeat} names={names} titleFor={titleFor} />
     </div>
   );
 }

@@ -238,6 +238,76 @@ export function detectCommonerSwapEvents(prev: DalmutiState, next: DalmutiState)
   return events;
 }
 
+// ---------------------------------------------------------------------------
+// Permanent per-viewer exchange history (2026-09-02 세션, task brief "우측
+// 히스토리 패널") — unlike `taxEvents`/`ReceivedCardGlow`'s tracking maps
+// above (both self-clean once their transient animation finishes),
+// `ExchangeHistoryPanel.tsx`'s log is meant to persist for the rest of the
+// game. `DalmutiBoard.tsx` accumulates it into its own never-cleared array
+// by calling these detectors on every diffed transition, same lockstep-diff
+// trust model as everything else in this file: every connected client
+// replays the same state transitions in the same order, so every client's
+// accumulated log ends up identical without any dedicated engine field or
+// broadcast of its own.
+// ---------------------------------------------------------------------------
+
+/** One resolved 평민(Commoner) mutual-swap pair, packaged for the permanent history log — unlike `detectCommonerSwapEvents` above (which emits two direction-specific `TaxFlyEvent`s per pair for the flight animation), this emits exactly one symmetric record per pair, keyed to the pair's fixed `seatA`/`seatB` identity rather than "who picked first". */
+export interface CommonerHistoryEvent {
+  id: number;
+  seatA: SeatIndex;
+  seatB: SeatIndex;
+  /** Card `seatA` gave up — now in `seatB`'s hand. */
+  cardFromA: Card;
+  /** Card `seatB` gave up — now in `seatA`'s hand. */
+  cardFromB: Card;
+}
+
+/** Same "diff `prev.commonerExchange.pairs` against the transition" technique as `detectCommonerSwapEvents`, packaged as one entry per completed pair instead of two. */
+export function detectCommonerExchangeHistoryEvents(prev: DalmutiState, next: DalmutiState): Omit<CommonerHistoryEvent, "id">[] {
+  if (prev === next) return [];
+  const prevPairs = prev.commonerExchange?.pairs ?? [];
+  const events: Omit<CommonerHistoryEvent, "id">[] = [];
+
+  for (const pair of prevPairs) {
+    if (pair.resolved) continue;
+    const aPicked = pair.cardIdA !== null;
+    const bPicked = pair.cardIdB !== null;
+    if (aPicked === bPicked) continue;
+
+    const giverSeat = aPicked ? pair.seatA : pair.seatB;
+    const otherSeat = aPicked ? pair.seatB : pair.seatA;
+    const givenCardId = (aPicked ? pair.cardIdA : pair.cardIdB)!;
+
+    const giverHandBeforeIds = new Set((prev.players.find((p) => p.seat === giverSeat)?.hand ?? []).map((c) => c.id));
+    const giverHandAfter = next.players.find((p) => p.seat === giverSeat)?.hand ?? [];
+    const receivedCard = giverHandAfter.find((c) => !giverHandBeforeIds.has(c.id));
+    if (!receivedCard) continue;
+
+    const givenCard = (next.players.find((p) => p.seat === otherSeat)?.hand ?? []).find((c) => c.id === givenCardId);
+    if (!givenCard) continue;
+
+    const cardFromA = pair.seatA === giverSeat ? givenCard : receivedCard;
+    const cardFromB = pair.seatA === giverSeat ? receivedCard : givenCard;
+    events.push({ seatA: pair.seatA, seatB: pair.seatB, cardFromA, cardFromB });
+  }
+
+  return events;
+}
+
+/**
+ * One row of `ExchangeHistoryPanel.tsx`'s permanent log — a discriminated
+ * union so a `"king"`/`"noble"` tribute (asymmetric: forced give + chosen
+ * return, two different card sets) and a `"commoner"` swap (symmetric: one
+ * card each way) each carry exactly the fields they need, no shared-but-
+ * sometimes-empty fields. `"king"`/`"noble"` entries reuse `TaxHighlightEvent`'s
+ * exact shape (recipient/giver + given/returned cards) — same data, just
+ * additionally tagged with a permanent `kind` and queued forever instead of
+ * shown once and discarded.
+ */
+export type ExchangeHistoryEntry =
+  | ({ id: number; kind: "king" | "noble" } & Omit<TaxHighlightEvent, "id" | "auraTier">)
+  | ({ id: number; kind: "commoner" } & Omit<CommonerHistoryEvent, "id">);
+
 function rectCenter(rect: DOMRect) {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { detectCommonerSwapEvents, detectTaxEvents, detectTaxHighlightEvents, isExchangeParticipant } from "./DalmutiEffects";
+import {
+  detectCommonerExchangeHistoryEvents,
+  detectCommonerSwapEvents,
+  detectTaxEvents,
+  detectTaxHighlightEvents,
+  isExchangeParticipant,
+} from "./DalmutiEffects";
 import {
   applyAction,
   buildDeck,
@@ -862,6 +868,63 @@ describe("detectTaxEvents / detectCommonerSwapEvents auraTier tagging (drives bo
     const events = detectCommonerSwapEvents(prev, next);
     expect(events).toHaveLength(2);
     expect(events.every((e) => e.auraTier === "commoner")).toBe(true);
+  });
+});
+
+describe("detectCommonerExchangeHistoryEvents (permanent history log, 2026-09-02 세션)", () => {
+  it("packages a completed pair into one symmetric record keyed to the pair's fixed seatA/seatB, regardless of who picked first", () => {
+    const base = makeState({
+      playerCount: 6,
+      rankOrder: [0, 1, 2, 3, 4, 5],
+      phase: "commonerExchange",
+      players: [makePlayer(0), makePlayer(1), makePlayer(2, { hand: [card(3)] }), makePlayer(3, { hand: [card(9)] }), makePlayer(4), makePlayer(5)],
+      commonerExchange: {
+        participants: [
+          { seat: 2, participate: true },
+          { seat: 3, participate: true },
+        ],
+        pairs: [{ seatA: 2, seatB: 3, cardIdA: "3-0", cardIdB: null, resolved: false }],
+      },
+    });
+    // seatA (2) picked first here — seatB (3) completes it.
+    const next = applyAction(base, { type: "commonerOfferCard", seat: 3, cardId: "9-0" });
+    const events = detectCommonerExchangeHistoryEvents(base, next);
+    expect(events).toHaveLength(1);
+    expect(events[0].seatA).toBe(2);
+    expect(events[0].seatB).toBe(3);
+    expect(events[0].cardFromA.id).toBe("3-0"); // seatA gave up 3-0, now in seatB's hand
+    expect(events[0].cardFromB.id).toBe("9-0"); // seatB gave up 9-0, now in seatA's hand
+
+    // Same pair, but seatB (3) picks first instead — seatA/seatB identity in the record must stay fixed either way.
+    const baseFlipped = {
+      ...base,
+      commonerExchange: { ...base.commonerExchange!, pairs: [{ seatA: 2, seatB: 3, cardIdA: null, cardIdB: "9-0", resolved: false }] },
+    };
+    const nextFlipped = applyAction(baseFlipped, { type: "commonerOfferCard", seat: 2, cardId: "3-0" });
+    const eventsFlipped = detectCommonerExchangeHistoryEvents(baseFlipped, nextFlipped);
+    expect(eventsFlipped).toHaveLength(1);
+    expect(eventsFlipped[0].seatA).toBe(2);
+    expect(eventsFlipped[0].seatB).toBe(3);
+    expect(eventsFlipped[0].cardFromA.id).toBe("3-0");
+    expect(eventsFlipped[0].cardFromB.id).toBe("9-0");
+  });
+
+  it("emits nothing while a pair is still only half-picked", () => {
+    const state = makeState({
+      playerCount: 6,
+      rankOrder: [0, 1, 2, 3, 4, 5],
+      phase: "commonerExchange",
+      players: [makePlayer(0), makePlayer(1), makePlayer(2, { hand: [card(3)] }), makePlayer(3, { hand: [card(9)] }), makePlayer(4), makePlayer(5)],
+      commonerExchange: {
+        participants: [
+          { seat: 2, participate: true },
+          { seat: 3, participate: true },
+        ],
+        pairs: [{ seatA: 2, seatB: 3, cardIdA: null, cardIdB: null, resolved: false }],
+      },
+    });
+    const next = applyAction(state, { type: "commonerOfferCard", seat: 2, cardId: "3-0" });
+    expect(detectCommonerExchangeHistoryEvents(state, next)).toHaveLength(0);
   });
 });
 

@@ -282,9 +282,13 @@ export default function GamePlayPage() {
   // 2026-08-22 운명전쟁39 좌우 패널 분리 세션: 운명전쟁39는 좌측 `RankedLeaderboard`
   // + 우측 `PredictionStatusBoard` 두 개의 고정폭 사이드 패널을 동시에 메인
   // 보드 옆에 두므로(3열 레이아웃), 사이드바가 하나뿐인 위 게임들보다 폭이 더
-  // 필요해 6xl을 씀.
+  // 필요해 6xl을 씀. 2026-09-02 달무티 세금 교환 기록 패널 세션: 달무티도 같은
+  // 이유로 5xl — 새 `ExchangeHistoryPanel`(DalmutiBoard.tsx)이 아발론/소환사의
+  // 협곡과 동일하게 데스크톱에서 보드 옆에 항상 표시되는 고정폭 사이드바로 붙음
+  // (AskUserQuestion으로 이 프로젝트의 유일한 상시 표시 사이드바 전례를 확인 후
+  // 그대로 재사용).
   const pageMaxWidth =
-    game.id === "summoners-rift" || game.id === "avalon"
+    game.id === "summoners-rift" || game.id === "avalon" || game.id === "dalmuti"
       ? "max-w-5xl"
       : game.id === "destiny-war-39"
         ? "max-w-6xl"

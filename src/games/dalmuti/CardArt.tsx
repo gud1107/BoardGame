@@ -68,6 +68,26 @@ export function CardFace({
 }
 
 /**
+ * Compact pill chip for a card — one line, tier-colored, used anywhere a
+ * full-size `CardFace` would be too large (2026-09-02 세션,
+ * `ExchangeHistoryPanel.tsx`'s "컴팩트 칩 뷰" requirement). Deliberately its
+ * own component rather than a `CardFace` variant — the two have unrelated
+ * layouts (vertical card vs inline pill), not just a size difference.
+ */
+export function CardChip({ card, className = "" }: { card: Card; className?: string }) {
+  const info = CARD_RANK_INFO[card.rank];
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold text-white ${cardTierBorder(card.rank)} ${className}`}
+      style={{ background: cardTierBg(card.rank) }}
+    >
+      <span className="text-xs leading-none">{info.emoji}</span>
+      {card.isJoker ? "조커" : `${card.rank}번`}
+    </span>
+  );
+}
+
+/**
  * Small role badge next to a seat's name — task brief §2 "계급별 좌석
  * 시각화". 5-tier rename (2026-08-25, §5 of engine.ts): 달무티→왕(King)
  * 👑, 총리→귀족(Noble) 🎩, 중농→평민(Commoner) 🌾, 소농노→거지(Beggar) 🪵,
