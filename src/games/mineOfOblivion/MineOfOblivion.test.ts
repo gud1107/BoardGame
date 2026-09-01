@@ -9,6 +9,7 @@ import {
   eightDirectionNeighbors,
   getValidMoves,
   isEightDirectionAdjacent,
+  isSafeZoneTile,
   MINES_PER_PLAYER,
   otherSeat,
   publiclyDisarmedTiles,
@@ -259,9 +260,9 @@ describe("arrival judgment", () => {
 });
 
 describe("REVEAL_STEP → next turn / game over gate", () => {
-  it("READY_NEXT_ROUND passes the turn when no game-over is pending", () => {
-    const s = baseState();
-    const moved = applyAction(s, { type: "SELECT_TILE_STEP", seat: "p1", tile: "A2" });
+  it("a mine hit or treasure claim enters REVEAL_STEP, and READY_NEXT_ROUND passes the turn when no game-over is pending", () => {
+    const s = baseState({ mines: { p1: [], p2: ["A2"] } });
+    const moved = applyAction(s, { type: "SELECT_TILE_STEP", seat: "p1", tile: "A2" }); // mine hit
     expect(moved.phase).toBe("REVEAL_STEP");
     const advanced = applyAction(moved, { type: "READY_NEXT_ROUND" });
     expect(advanced.phase).toBe("PLAYER_MOVE");
@@ -269,11 +270,38 @@ describe("REVEAL_STEP → next turn / game over gate", () => {
   });
 
   it("is idempotent once already advanced (double-press safety)", () => {
-    const s = baseState();
+    const s = baseState({ mines: { p1: [], p2: ["A2"] } });
     const moved = applyAction(s, { type: "SELECT_TILE_STEP", seat: "p1", tile: "A2" });
     const once = applyAction(moved, { type: "READY_NEXT_ROUND" });
     const twice = applyAction(once, { type: "READY_NEXT_ROUND" });
     expect(twice).toEqual(once);
+  });
+
+  it("2026-09-01: a plain reveal move (ordinary land, no mine/treasure) skips REVEAL_STEP entirely and passes the turn immediately — no popup, no READY_NEXT_ROUND needed", () => {
+    const s = baseState();
+    const moved = applyAction(s, { type: "SELECT_TILE_STEP", seat: "p1", tile: "A2" });
+    expect(moved.phase).toBe("PLAYER_MOVE");
+    expect(moved.activeSeat).toBe("p2");
+    expect(moved.lastEvent).toMatchObject({ kind: "reveal", tile: "A2" });
+    // A stray READY_NEXT_ROUND after an already-instant reveal move is a harmless no-op.
+    expect(applyAction(moved, { type: "READY_NEXT_ROUND" })).toEqual(moved);
+  });
+
+  it("2026-09-01: an already-visited reveal move also passes the turn instantly", () => {
+    const s = baseState({ visitedTiles: ["A2"], revealedCounts: { A2: 3 } });
+    const moved = applyAction(s, { type: "SELECT_TILE_STEP", seat: "p1", tile: "A2" });
+    expect(moved.phase).toBe("PLAYER_MOVE");
+    expect(moved.activeSeat).toBe("p2");
+  });
+});
+
+describe("isSafeZoneTile (2026-09-01 corner-safe-zone follow-up)", () => {
+  it("is true for exactly the two start tiles, and false for the corner treasure tiles", () => {
+    expect(isSafeZoneTile(START_TILE.p1)).toBe(true);
+    expect(isSafeZoneTile(START_TILE.p2)).toBe(true);
+    expect(isSafeZoneTile("A11")).toBe(false); // corner treasure tile — deliberately NOT a safe zone (see engine.ts doc)
+    expect(isSafeZoneTile("K1")).toBe(false);
+    expect(isSafeZoneTile("E5")).toBe(false);
   });
 });
 

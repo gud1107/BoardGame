@@ -16,22 +16,24 @@ export default function MineOfOblivionRulebookModal({ onClose }: { onClose: () =
             [개편 안내] 5×5 판 · 지뢰 밟으면 시작 칸으로 후퇴하며 보물을 반납하던 구버전 규칙을 완전히
             폐기하고, 11×11 판 · 8방향 이동 · 인접 지뢰 수 점수제 · 보물 순차 점수제로 전면 개편했습니다.
             원 룰북에 없던 🔭 정찰 아이템은 이번 개편에서 삭제되었습니다(인접 지뢰 수 공개가 그 역할을
-            대신합니다).
+            대신합니다). 2026-09-01 후속 개편으로 일반 지반 이동 시 뜨던 전체화면 팝업이 사라지고 점수만
+            즉시 화면에 떠오르도록 바뀌었습니다(지뢰/보물 연출은 그대로 유지).
           </p>
         </section>
 
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">세팅</h3>
           <p className="text-white/70">
-            시작 칸: <span className="font-mono text-rose-300">{START_TILE.p1}</span>(선공) /{" "}
+            🛡️ 안전구역(시작 칸): <span className="font-mono text-rose-300">{START_TILE.p1}</span>(선공) /{" "}
             <span className="font-mono text-fuchsia-300">{START_TILE.p2}</span>(후공) — 보드 대각선의 양 끝
-            코너입니다. 보물 토큰 3개는 다른 쪽 대각선 코너 2곳 + 정중앙{" "}
-            <span className="font-mono text-amber-300">{TREASURE_TILES.join(", ")}</span> 칸에 고정 배치됩니다.
+            코너이며, 이 두 칸에만 지뢰를 설치할 수 없는 고유 색상의 영구 안전구역입니다. 보물 토큰 3개는
+            다른 쪽 대각선 코너 2곳 + 정중앙 <span className="font-mono text-amber-300">{TREASURE_TILES.join(", ")}</span>{" "}
+            칸에 고정 배치되며, 안전구역과 달리 밟으면 즉시 획득되는 일반 칸입니다.
           </p>
           <p className="mt-1.5 text-xs text-white/40">
             각자 가림판 뒤에서 지뢰 {MINES_PER_PLAYER}개를 비밀리에 매설합니다. 보물 칸과 두 플레이어의{" "}
-            <span className="text-white/60">시작 칸(본인·상대 모두)</span>에는 매설할 수 없습니다 — 설치
-            시점에 상대가 서 있는 칸에는 지뢰를 심을 수 없습니다. 내가 어디에 묻었는지 스스로 기억하지
+            <span className="text-white/60">안전구역(본인·상대 시작 칸 모두)</span>에는 매설할 수 없습니다 —
+            설치 시점에 상대가 서 있는 칸에는 지뢰를 심을 수 없습니다. 내가 어디에 묻었는지 스스로 기억하지
             못하면, 내 지뢰를 내가 밟고 폭사할 수도 있습니다.
           </p>
         </section>
@@ -52,17 +54,21 @@ export default function MineOfOblivionRulebookModal({ onClose }: { onClose: () =
           <div className="grid gap-2 sm:grid-cols-3">
             <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-3">
               <p className="mb-1 font-medium text-emerald-300">🟢 미답사 칸 (최초 진입)</p>
-              <p className="text-xs text-white/60">인접 8칸에 있는 총 지뢰 수만큼 즉시 점수를 획득합니다(지뢰 1개당 1점).</p>
+              <p className="text-xs text-white/60">
+                인접 8칸에 있는 총 지뢰 수만큼 즉시 점수를 획득합니다(지뢰 1개당 1점). 전체화면 팝업 없이 획득
+                점수가 칸 위에 짧게 떠오르고, 곧바로 다음 사람 차례로 넘어갑니다.
+              </p>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
               <p className="mb-1 font-medium text-white/70">⬜ 기답사 칸</p>
-              <p className="text-xs text-white/60">본인 또는 상대가 이미 한 번이라도 밟은 칸이면 0점입니다.</p>
+              <p className="text-xs text-white/60">본인 또는 상대가 이미 한 번이라도 밟은 칸이면 0점이며, 마찬가지로 즉시 다음 차례로 넘어갑니다.</p>
             </div>
             <div className="rounded-xl border border-rose-400/20 bg-rose-400/5 p-3">
               <p className="mb-1 font-medium text-rose-300">💥 지뢰 명중</p>
               <p className="text-xs text-white/60">
                 -5점 페널티. 해당 칸의 지뢰는 (여러 개라도) 전부 즉시 제거되어 영구히 안전해집니다. 자신의
-                출발지 인근에서 가장 가까운 빈 안전 칸으로 강제 리스폰됩니다.
+                출발지(🛡️ 안전구역) 인근에서 가장 가까운 빈 안전 칸으로 강제 리스폰됩니다 — 이 연출은 기존과
+                동일하게 전체화면으로 유지됩니다.
               </p>
             </div>
           </div>

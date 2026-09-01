@@ -53,6 +53,13 @@
  * parameter rather than a house-rule ambiguity worth a question round — see
  * `MINES_PER_PLAYER`'s own doc for the reasoning.
  *
+ * **2026-09-01 corner-safe-zone + popup-removal follow-up** (both confirmed
+ * via `AskUserQuestion`, see `isSafeZoneTile`'s and `finalizeAction`'s own
+ * docs for the full reasoning): the board's only safe zones are the two real
+ * start tiles (not all 4 corners — the user explicitly declined that
+ * expansion), and a plain-land "reveal" move now skips the shared
+ * `REVEAL_STEP` popup entirely, passing the turn the instant it resolves.
+ *
  * Everything else follows the new brief verbatim: 11×11 grid (`A1`..`K11`),
  * 8-directional single-tile moves, no two seats ever standing on the same
  * tile, first arrival at an unvisited non-mined tile scores the count of
@@ -284,6 +291,27 @@ export function canPlaceMine(seat: Seat, tile: TileId): boolean {
   return true;
 }
 
+/**
+ * True iff `tile` is one of the two seats' own start tiles — the board's
+ * only permanent "안전구역" (safe zone). **2026-09-01 corner-safe-zone
+ * follow-up, confirmed via `AskUserQuestion`**: the request that prompted
+ * this helper originally assumed *4* corner safe tiles (both start tiles
+ * plus both corner treasure tiles), with mine-hit respawn warping among the
+ * other 3. The user explicitly rejected that premise ("4개코너가 아닌
+ * 2개코너이며 플레이어가 밟고있는부분만 안전구역으로해주세요") — only these
+ * two real start tiles count as safe zones, the corner treasure tiles
+ * (`A11`/`K1`) keep functioning as ordinary claimable treasures, and
+ * `chooseRespawnTile`'s existing nearest-Chebyshev-ring respawn (confirmed
+ * 2026-08-31) was deliberately left unchanged rather than rewritten into a
+ * "warp to one of 3 other corners" scheme. This helper exists purely so the
+ * UI can theme these two tiles distinctly without duplicating the
+ * `START_TILE.p1 || START_TILE.p2` check — `canPlaceMine` above already
+ * forbids mining either one.
+ */
+export function isSafeZoneTile(tile: TileId): boolean {
+  return tile === START_TILE.p1 || tile === START_TILE.p2;
+}
+
 export function startGame(rng: () => number = Math.random): MineOfOblivionState {
   const firstSeat: Seat = rng() < 0.5 ? "p1" : "p2";
   return {
@@ -357,12 +385,30 @@ function applySetMines(state: MineOfOblivionState, seat: Seat, tiles: TileId[]):
   return { ...state, mines, mineReady, phase: bothReady ? "PLAYER_MOVE" : "SETUP_MINE" };
 }
 
-/** Win condition (3rd treasure claimed) + the shared REVEAL_STEP gate — the sole entry/exit point every move funnels through. */
+/**
+ * Win condition (3rd treasure claimed) + the shared REVEAL_STEP gate — the
+ * sole entry/exit point every move funnels through.
+ *
+ * **2026-09-01 popup-removal follow-up, confirmed via `AskUserQuestion`**: a
+ * plain "reveal" event (ordinary land, whether freshly revealed or already
+ * visited — i.e. neither a mine hit nor a treasure claim) no longer routes
+ * through `REVEAL_STEP` at all. It passes the turn immediately and
+ * deterministically, right here in the reducer, instead of waiting on the
+ * room host's `REVEAL_SECONDS` timer + a blocking full-screen overlay. Mine
+ * hits and treasure claims are unaffected — the user confirmed only the
+ * plain-land popup should go ("일반 이동만 제거"), and that the turn should
+ * pass instantly rather than keep a shorter non-blocking delay ("즉시
+ * 전환"). `state.lastEvent` still carries the `reveal` details either way,
+ * so the UI can drive its own short, non-blocking "+N" floating-score cue
+ * off it without needing a dedicated phase.
+ */
 function finalizeAction(state: MineOfOblivionState, mover: Seat): MineOfOblivionState {
-  void mover;
   if (state.treasureClaimCount >= 3) {
     const { winner, isDraw } = resolveWinner(state);
     return { ...state, phase: "REVEAL_STEP", pendingGameOver: true, winner, isDraw };
+  }
+  if (state.lastEvent?.kind === "reveal") {
+    return { ...state, phase: "PLAYER_MOVE", activeSeat: otherSeat(mover) };
   }
   return { ...state, phase: "REVEAL_STEP", pendingGameOver: false };
 }

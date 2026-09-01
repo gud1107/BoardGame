@@ -1,6 +1,29 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-01 (**러브 윈즈 올(Love Wins All) 게임 종료 결과창 미표출 버그 픽스 + 베팅 UI 퀵버튼/팟
+_최종 갱신: 2026-09-01 (**망각의 지뢰(Mine of Oblivion) 안전구역 색상 분리 + 일반 이동 팝업 제거 세션 —
+요청서는 "4개 코너 시작 칸 전부를 안전구역으로, 지뢰 폭발 시 다른 코너 3곳 중 하나로 리스폰"을 전제했으나,
+실제 엔진은 시작 칸이 2개(`A1`/`K11`)뿐이고 나머지 두 코너(`A11`/`K1`)는 보물 칸이라 그 전제가 코드와
+어긋남을 확인 — `AskUserQuestion` 4문항으로 먼저 확인했고, 사용자가 "4개코너가 아닌 2개코너이며
+플레이어가 밟고있는부분만 안전구역으로" 답변하며 4코너/3곳 워프 리스폰 구상을 명시적으로 반려, 기존
+2026-08-31에 확정된 "출발지 인근 가장 가까운 안전 칸으로 리스폰" 로직은 그대로 유지하기로 확정. ①
+`engine.ts`에 `isSafeZoneTile(tile)` 헬퍼 신규 추가(두 시작 칸만 true — `canPlaceMine`은 이미 이 두 칸을
+막고 있어 엔진 차단 로직 자체는 변경 없음), `MineOfOblivionBoard.tsx`에서 이 두 칸에 에메랄드/골드
+그라디언트 + 펄스 오라(`moo-safezone-aura` 신규 키프레임) + 🛡️ 아이콘을 렌더링해 다른 칸과 명확히 구분. ②
+일반 지반(미답사/기답사) 이동 시 뜨던 전체화면 `RevealOverlay` 팝업을 제거 — `finalizeAction`이 `lastEvent.
+kind === "reveal"`이면 `REVEAL_STEP`을 아예 거치지 않고 곧바로 `PLAYER_MOVE`+상대 턴으로 전환하도록 엔진
+레벨에서 즉시 전환을 구현(호스트 타이머/스킵 버튼에 의존하지 않아 네트워크 경합 여지가 없음). 지뢰
+명중·보물 획득은 기존 `REVEAL_STEP` 전체화면 연출을 그대로 유지(요청서의 "일반 이동만 제거" 답변대로).
+점수 텍스트는 사라지지 않도록 보드 타일 위에 인라인 `+N` 플로팅(기존 `moo-score-float-up` 키프레임 재사용,
+`RowCells`에 `floatingReveal` prop으로 전달, 1.1초 후 자동 정리)으로 이전해 유지. SFX 재생 이펙트를
+`REVEAL_STEP` 게이팅에서 분리해 `actionsPlayed` 변경만으로 매 이동마다 정확히 한 번 재생되도록 재구성.
+`MineOfOblivion.test.ts`에 REVEAL_STEP 게이트 테스트를 지뢰 명중 기반으로 교체하고, 일반 이동이 팝업 없이
+즉시 턴을 넘기는 회귀 테스트 2개 + `isSafeZoneTile` 테스트 3개 신규 추가(34개 테스트 전부 통과).
+`RulebookModal.tsx`·`boardGameRule/망각의 지뢰/망각의 지뢰.md` 양쪽에 안전구역 재정의(2개 코너 한정)와
+팝업 제거 내역을 반영. `npx tsc --noEmit`/`npm run lint`/`npx vitest run`(49개 파일·1532개 테스트) 전부
+통과** — 자세한 내용은 아래 `### 2026-09-01 — 망각의 지뢰 안전구역 색상 분리 및 일반 이동 팝업 제거` 절
+참고.)_
+
+_이전 갱신: 2026-09-01 (**러브 윈즈 올(Love Wins All) 게임 종료 결과창 미표출 버그 픽스 + 베팅 UI 퀵버튼/팟
 증감 표기 개편 + 체크·레이즈·선언 액션 콜아웃 연출 + 매칭 팟(사이드 팟) 정산 룰 구현 세션 — 요청서는
 "러브 윈즈 올 2"를 별도 게임/파일 구조(`loveWinsAll2/`, `BettingPanel.tsx`/`ResultModal.tsx`/
 `LoveWins2Effects.tsx`/`PlayerSlot.tsx` 등)로 전제했으나, 실제로는 방 만들기 시 호스트가 고르는 룰셋
@@ -357,6 +380,65 @@ origin main` 완료(`2a47bcc..627a136`). 이어서 `npx vercel deploy --prod --s
 완주(41초), `target: "production"`/`readyState: READY`(`dpl_H4P9aqfjn56RzTgMGDaZwBbEH38D`), 프로덕션
 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/love-wins-all` 둘 다 200과 게임
 페이지 HTML에 "러브 윈즈 올" 문자열 포함 직접 확인함.
+
+### 2026-09-01 — 망각의 지뢰 안전구역 색상 분리 및 일반 이동 팝업 제거
+
+**요청**: ① 보드 4개 모서리 시작 칸(요청서 표현: `A1`/`K1`/`A11`/`K11`)을 영구 안전구역으로 지정해 지뢰
+설치를 차단(`canPlaceMineAtTile` 검증 + AI 봇 알고리즘 모두)하고, 에메랄드/세이프 골드 계열 고유 색상 +
+보호 오라 테두리로 일반 칸과 구분. ② 지뢰 폭발 시 −5점 차감 후 자신의 시작 대각선 모서리를 제외한 나머지
+3개 안전 칸 중 하나로 즉시 리스폰. ③ 일반 타일(빈 땅/기답사 땅) 이동 시마다 뜨던 확인/스킵 모달 팝업을
+완전히 제거하되, 점수 획득 플로팅 애니메이션(+N)은 그대로 유지.
+
+**전제 충돌 확인**: 요청서 착수 전 `engine.ts`/`MineOfOblivionBoard.tsx`/`HANDOFF.md`를 먼저 확인한 결과,
+실제 보드는 시작 칸이 대각선 2개(`A1`=P1, `K11`=P2)뿐이고 나머지 두 코너(`A11`/`K1`)는 보물 칸(+ 중앙
+`F6`)으로 이미 2026-08-31에 `AskUserQuestion`으로 확정돼 있어, 요청서의 "4개 코너 시작 칸" 전제와
+정면으로 어긋남을 발견. 또한 `canPlaceMine`은 이미 보물 칸 3곳 + 양쪽 시작 칸 2곳(=사실상 4개 코너 +
+중앙 전부)에 지뢰 설치를 막고 있어 "①의 지뢰 설치 차단" 자체는 사실상 기존에 이미 구현돼 있었던 상태.
+이 차이를 임의로 메꾸지 않고 `AskUserQuestion` 4문항(코너 레이아웃을 어떻게 통일할지 / 리스폰이 보물
+칸에 떨어지면 자동 획득할지 / 모달 제거 범위가 지뢰·보물까지인지 / 팝업 제거 후 턴 전환 타이밍)으로
+확인받은 뒤 구현 착수. 사용자는 "4개코너가 아닌 2개코너이며 플레이어가 밟고있는부분만 안전구역으로"라고
+답변해 4코너/3곳 워프 리스폰 구상을 명시적으로 반려했고, 모달 제거는 일반 이동에만 한정(지뢰/보물 연출
+유지), 턴 전환은 즉시(지연 없음)로 확정.
+
+**구현**:
+
+- [`engine.ts`](src/games/mineOfOblivion/engine.ts): 신규 `isSafeZoneTile(tile)` export — 두 시작 칸만
+  `true`. `canPlaceMine`은 이미 이 두 칸을 막고 있어 지뢰 차단 로직 자체는 변경하지 않았고, 이 헬퍼는
+  UI 테마용으로만 신설. `chooseRespawnTile`(가장 가까운 안전 칸 링 확장 탐색, 2026-08-31 확정)은
+  요청서의 "3개 코너 중 워프" 구상이 사용자 확인 결과 반려되었으므로 **변경 없음**. `finalizeAction`에
+  분기 추가: `lastEvent.kind === "reveal"`(일반 지반, 미답사/기답사 모두)이면 `REVEAL_STEP`을 거치지 않고
+  그 자리에서 곧바로 `phase: "PLAYER_MOVE"` + 상대 턴으로 전환 — 호스트의 `REVEAL_SECONDS` 타이머나 스킵
+  버튼 클릭에 의존하지 않는 완전히 결정적인 즉시 전환(lockstep 동기화 안전). 지뢰 명중·보물 획득은 이
+  분기를 타지 않아 기존과 동일하게 `REVEAL_STEP`을 거친다.
+- [`MineOfOblivionBoard.tsx`](src/games/mineOfOblivion/MineOfOblivionBoard.tsx): 두 시작 칸에
+  `isSafeZoneTile` 기반 에메랄드/골드 그라디언트 배경 + `moo-safezone-aura` 펄스 오라 + 🛡️ 아이콘(기존
+  🚩 대체) 렌더링, 매설 단계의 🚫 금지 배지는 안전구역에서는 숨김(아이콘 중복 방지). 일반 이동 점수는
+  더 이상 전체화면 `RevealOverlay`에 의존하지 않고, 도착한 타일 버튼 위에 인라인 `+N`(기존
+  `moo-score-float-up` 키프레임 재사용, `key`를 `tile-actionsPlayed` 조합으로 고유화 — 형제 요소 `key`
+  충돌로 카드가 무한 증식했던 러브 윈즈 올 버그와 동일한 함정을 피하기 위함)을 1.1초간 표시 후 자동
+  정리. SFX 재생 이펙트를 `phase === "REVEAL_STEP"` 게이팅에서 분리해 `actionsPlayed`/`lastEvent` 변경만
+  으로 매 이동마다 정확히 한 번 재생되도록 재구성(그렇지 않으면 이제 `REVEAL_STEP`을 거치지 않는 일반
+  이동의 효과음이 아예 재생되지 않게 됨). `setFloatingReveal` 호출은 `useEffect` 안에서 하면
+  `react-hooks/set-state-in-effect` 린트 에러가 나서, 이 파일이 `prevPhase`에 이미 쓰던 "렌더 중 상태
+  조정" 패턴으로 옮겨 해결.
+- `globals.css`: 신규 `moo-safezone-aura` 키프레임(에메랄드/골드 이중 박스섀도 펄스) 추가. 플로팅 텍스트는
+  기존 `moo-score-float-up`을 그대로 재사용해 신규 키프레임 최소화.
+- [`RulebookModal.tsx`](src/games/mineOfOblivion/RulebookModal.tsx) · `boardGameRule/망각의 지뢰/망각의
+  지뢰.md`: "시작 칸"을 "🛡️ 안전구역(2개 코너 한정, 4개 전체 아님)"으로 재정의하고 일반 이동 팝업 제거
+  내역을 양쪽 문서에 반영, 리스폰 규칙은 변경되지 않았음을 명시.
+- [`MineOfOblivion.test.ts`](src/games/mineOfOblivion/MineOfOblivion.test.ts): 기존 "REVEAL_STEP → next
+  turn" 테스트 2개를 지뢰 명중 기반 시나리오로 교체(일반 이동은 더 이상 REVEAL_STEP에 들어가지 않으므로),
+  일반 이동이 팝업 없이 즉시 턴을 넘기는 회귀 테스트 2개(미답사/기답사 각각) + `isSafeZoneTile` 테스트
+  3개 신규 추가 — 34개 테스트 전부 통과.
+
+**검증**: `npx tsc --noEmit -p .` 전체 에러 0, `npm run lint` 경고/에러 0, `npx vitest run`
+(49개 파일·1532개 테스트, mineOfOblivion 34개 포함) 전부 통과. 이번 세션은 헤드리스 브라우저로의 육안
+재현은 진행하지 않음(엔진 단위 테스트 + 정적 분석만) — 다음 세션에서 실제 2탭 대국으로 안전구역 색상
+렌더링과 일반 이동 시 팝업 미표출/즉시 턴 전환을 육안으로 한 번 더 확인하면 좋음.
+
+**다음 세션 인계**: 리스폰 로직("3개 코너 중 워프")과 보드 4코너 안전구역 확장은 이번 세션에서 사용자가
+명시적으로 반려한 사항 — 향후 세션이 요청서 원문만 보고 이를 "누락"으로 오인해 재구현하지 않도록 주의
+(engine.ts의 `isSafeZoneTile` 독스트링에 반려 경위 기록해 둠).
 
 ### 2026-09-01 — 망각의 지뢰 지뢰 설치 상대 점유 칸 금지 룰 반전 및 체스 폰 리뉴얼
 

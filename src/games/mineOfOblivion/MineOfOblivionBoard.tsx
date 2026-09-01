@@ -12,11 +12,11 @@ import {
   BOARD_ROWS,
   canPlaceMine,
   eightDirectionNeighbors,
+  isSafeZoneTile,
   MINES_PER_PLAYER,
   otherSeat,
   ownArmedMines,
   publiclyDisarmedTiles,
-  START_TILE,
   TREASURE_TILES,
   type EngineAction,
   type MineOfOblivionState,
@@ -97,11 +97,42 @@ export default function MineOfOblivionBoard({ state, viewerSeat, names, opponent
 
   const { timeLeft } = useCountdown(REVEAL_SECONDS, state.actionsPlayed, state.phase === "REVEAL_STEP");
 
-  // Fire the matching SFX exactly once per REVEAL_STEP episode (keyed to
-  // actionsPlayed, which only changes when a fresh reveal starts).
+  // Non-blocking "+N" score cue for a plain land reveal — 2026-09-01 popup-
+  // removal follow-up. A mine hit or treasure claim still goes through the
+  // full-screen RevealOverlay below (gated on phase === REVEAL_STEP, which
+  // engine.ts's finalizeAction no longer enters for a plain reveal), so this
+  // is the *only* place that event's score ever gets shown. Derived directly
+  // during render (React's documented "adjusting state when a prop changes"
+  // pattern — same convention this file already uses below for prevPhase)
+  // rather than inside an effect, since it's a pure state derivation off
+  // `state.actionsPlayed`, not a call into an external system.
+  const [floatingReveal, setFloatingReveal] = useState<{ tile: TileId; scoreGained: number; nonce: number } | null>(null);
+  const [lastFloatFor, setLastFloatFor] = useState(-1);
+  if (
+    state.lastEvent?.kind === "reveal" &&
+    !state.lastEvent.alreadyVisited &&
+    (state.lastEvent.scoreGained ?? 0) > 0 &&
+    lastFloatFor !== state.actionsPlayed
+  ) {
+    setLastFloatFor(state.actionsPlayed);
+    setFloatingReveal({ tile: state.lastEvent.tile, scoreGained: state.lastEvent.scoreGained ?? 0, nonce: state.actionsPlayed });
+  }
+
+  // Auto-clear the floating cue once its float-up-and-fade animation (moo-score-float-up, ~1.1s) has finished.
+  useEffect(() => {
+    if (!floatingReveal) return;
+    const id = setTimeout(() => setFloatingReveal(null), 1100);
+    return () => clearTimeout(id);
+  }, [floatingReveal]);
+
+  // Fire the matching SFX exactly once per resolved move (keyed to
+  // actionsPlayed, which only changes when a fresh event lands) — no longer
+  // gated on REVEAL_STEP so a plain reveal's chime still plays even though
+  // it now skips that phase entirely. Playing audio is a genuine external-
+  // system call, so this one stays in an effect (no setState inside it).
   const lastPlayedForRef = useRef<number>(-1);
   useEffect(() => {
-    if (state.phase !== "REVEAL_STEP" || !state.lastEvent) return;
+    if (!state.lastEvent) return;
     if (lastPlayedForRef.current === state.actionsPlayed) return;
     lastPlayedForRef.current = state.actionsPlayed;
     const engine = getSoundEngine();
@@ -116,7 +147,7 @@ export default function MineOfOblivionBoard({ state, viewerSeat, names, opponent
         if (!state.lastEvent.alreadyVisited) engine.playSafeStepChime();
         break;
     }
-  }, [state.phase, state.actionsPlayed, state.lastEvent]);
+  }, [state.actionsPlayed, state.lastEvent]);
 
   // Reset local mine-selection UI state the instant the engine phase moves
   // past where it's meaningful — React's documented "adjusting state when a
@@ -236,6 +267,7 @@ export default function MineOfOblivionBoard({ state, viewerSeat, names, opponent
                 myArmedMines={myArmedMines}
                 iAmReady={iAmReady}
                 onTap={handleTileTap}
+                floatingReveal={floatingReveal}
               />
             ))}
           </div>
@@ -303,6 +335,7 @@ function RowCells({
   myArmedMines,
   iAmReady,
   onTap,
+  floatingReveal,
 }: {
   row: number;
   gridColPx: number;
@@ -314,6 +347,7 @@ function RowCells({
   myArmedMines: Set<TileId>;
   iAmReady: boolean;
   onTap: (tile: TileId) => void;
+  floatingReveal: { tile: TileId; scoreGained: number; nonce: number } | null;
 }) {
   return (
     <>
@@ -334,8 +368,9 @@ function RowCells({
         const revealedCount = state.revealedCounts[tile];
         const isDisarmed = disarmedTiles.has(tile);
         const isMyMine = myArmedMines.has(tile);
-        const isStart = tile === START_TILE.p1 || tile === START_TILE.p2;
+        const isSafeZone = isSafeZoneTile(tile);
         const clickable = state.phase === "SETUP_MINE" ? isMineSelectable : isReachable;
+        const isFloatingHere = floatingReveal?.tile === tile;
 
         return (
           <button
@@ -348,17 +383,20 @@ function RowCells({
                 ? "border-rose-400 bg-rose-500/25 ring-2 ring-rose-400/70"
                 : isReachable
                   ? "moo-tile-highlight-pulse border-emerald-300/70 bg-emerald-400/10"
-                  : isMineForbidden
-                    ? "border-white/5 bg-white/[0.01] opacity-40"
-                    : isVisited
-                      ? "border-white/10 bg-white/[0.06]"
-                      : "border-white/10 bg-white/[0.03]"
+                  : isSafeZone
+                    ? "moo-safezone-aura border-amber-300/60 bg-gradient-to-br from-emerald-400/15 via-amber-300/10 to-emerald-400/15"
+                    : isMineForbidden
+                      ? "border-white/5 bg-white/[0.01] opacity-40"
+                      : isVisited
+                        ? "border-white/10 bg-white/[0.06]"
+                        : "border-white/10 bg-white/[0.03]"
             } ${clickable ? "cursor-pointer active:scale-95" : "cursor-default"}`}
             style={{ width: gridColPx, height: gridColPx }}
           >
-            {isStart && <span className="absolute left-0.5 top-0.5 text-[8px] text-white/25">🚩</span>}
+            {/* 안전구역(각자 시작 칸) 전용 방패 아이콘 — 2026-09-01: 4개 코너가 아닌 이 2개 칸만 안전구역으로 확정. */}
+            {isSafeZone && <span className="absolute left-0.5 top-0.5 text-[9px] drop-shadow-[0_0_3px_rgba(52,211,153,0.8)]" title="안전구역 · 지뢰 설치 불가">🛡️</span>}
 
-            {isMineForbidden && <span className="absolute right-0.5 top-0.5 text-[9px] text-rose-400" title="상대/본인이 점유한 칸 · 지뢰 설치 불가">🚫</span>}
+            {isMineForbidden && !isSafeZone && <span className="absolute right-0.5 top-0.5 text-[9px] text-rose-400" title="상대/본인이 점유한 칸 · 지뢰 설치 불가">🚫</span>}
 
             {isTreasureTile && treasure?.holder === null && <span className="text-base sm:text-lg">💎</span>}
             {isTreasureTile && treasure?.holder !== null && (
@@ -379,6 +417,18 @@ function RowCells({
 
             {isP1Here && <ChessPawn seat="p1" isViewer={viewerSeat === "p1"} isActive={state.phase === "PLAYER_MOVE" && state.activeSeat === "p1"} size={Math.max(14, gridColPx * 0.62)} className="absolute bottom-0 left-1/2 -translate-x-1/2" />}
             {isP2Here && <ChessPawn seat="p2" isViewer={viewerSeat === "p2"} isActive={state.phase === "PLAYER_MOVE" && state.activeSeat === "p2"} size={Math.max(14, gridColPx * 0.62)} className="absolute bottom-0 left-1/2 -translate-x-1/2" />}
+
+            {/* 2026-09-01: 일반 지반 이동은 더 이상 전체화면 팝업을 띄우지 않고, 이 인라인 +N 텍스트만 짧게 표시된다. */}
+            {isFloatingHere && (
+              <span
+                key={`float-${tile}-${floatingReveal!.nonce}`}
+                aria-hidden
+                className="pointer-events-none absolute -top-1 left-1/2 z-20 -translate-x-1/2 text-sm font-black text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.9)] sm:text-base"
+                style={{ animation: "moo-score-float-up 1.1s ease-out both" }}
+              >
+                +{floatingReveal!.scoreGained}
+              </span>
+            )}
           </button>
         );
       })}
