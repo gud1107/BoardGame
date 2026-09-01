@@ -100,6 +100,63 @@ export function isExchangeParticipant(event: Pick<TaxFlyEvent, "seat" | "targetS
 }
 
 /**
+ * One fully-resolved tribute exchange (2026-09-01 세션, task brief "대형
+ * 하이라이트 팝업") — both legs (`givenCards`: the forced tribute the giver
+ * had to hand over; `returnedCards`: whatever the recipient chose to give
+ * back) are already known once the record flips `resolved`, so this pairs
+ * them into a single event for `TaxHighlightModal.tsx` instead of the two
+ * separate `TaxFlyEvent`s the flight animation above uses. Deliberately not
+ * masked (unlike `TaxFlyEvent`) — the caller only ever constructs this
+ * popup for `viewerSeat === recipientSeat || viewerSeat === giverSeat`
+ * (AskUserQuestion, 2026-09-01: only the two actual parties see it), so
+ * every field is always safe to render as a real `CardFace`.
+ */
+export interface TaxHighlightEvent {
+  id: number;
+  /** The tribute's `toSeat` — 왕(King) or 귀족(Noble). */
+  recipientSeat: SeatIndex;
+  /** The tribute's `fromSeat` — 노예(Slave) or 거지(Beggar). */
+  giverSeat: SeatIndex;
+  /** Forced tribute cards `giverSeat` had to hand to `recipientSeat` at tax-phase start. */
+  givenCards: Card[];
+  /** Cards `recipientSeat` chose to hand back to `giverSeat` via `returnTax`. */
+  returnedCards: Card[];
+  auraTier: AuraTier;
+}
+
+/** Finds a card by id anywhere across every seat's current hand — safe because card ids are unique across the 80-card deck and a card is always in exactly one hand. */
+function findCardAnywhere(state: DalmutiState, cardId: string): Card | undefined {
+  for (const p of state.players) {
+    const c = p.hand.find((card) => card.id === cardId);
+    if (c) return c;
+  }
+  return undefined;
+}
+
+/**
+ * Same "diff two consecutive lockstep snapshots" technique as
+ * `detectTaxEvents` below, watching for the same resolved-flip transition —
+ * but pairs the forced-tribute leg with the return leg into one event
+ * instead of two, for the big "내가 준 카드 / 받은 카드" popup. `auraTier`
+ * relies on the same fixed push order in engine.ts's `computeTributes` that
+ * `detectTaxEvents` documents.
+ */
+export function detectTaxHighlightEvents(prev: DalmutiState, next: DalmutiState): Omit<TaxHighlightEvent, "id">[] {
+  if (prev === next) return [];
+  const events: Omit<TaxHighlightEvent, "id">[] = [];
+  for (let i = 0; i < next.tributes.length; i++) {
+    const nt = next.tributes[i];
+    const pt = prev.tributes[i];
+    if (pt && !pt.resolved && nt.resolved) {
+      const givenCards = nt.givenCardIds.map((id) => findCardAnywhere(next, id)).filter((c): c is Card => !!c);
+      const returnedCards = nt.returnedCardIds.map((id) => findCardAnywhere(next, id)).filter((c): c is Card => !!c);
+      events.push({ recipientSeat: nt.toSeat, giverSeat: nt.fromSeat, givenCards, returnedCards, auraTier: i === 0 ? "king" : "noble" });
+    }
+  }
+  return events;
+}
+
+/**
  * Compares two consecutive `DalmutiState` snapshots and infers which tax
  * cards just moved, purely from the data (the reducer always returns the
  * same object reference for a rejected/no-op action, so a genuine reference

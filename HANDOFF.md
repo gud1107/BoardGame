@@ -1,6 +1,41 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-01 (**말달리자(Run Horse) 3대 버그 신고 조사 세션 — 요청서는 "말 1개/플레이어 +
+_최종 갱신: 2026-09-02 (**달무티(The Great Dalmuti) 5인 귀족↔거지 세금 교환 "불일치" 버그 신고 조사 +
+세금 교환 대형 하이라이트 팝업 신규 구현 세션 — 요청서는 "5인 세팅 17장 시작 후 귀족(2등)이 거지(4등)에게
+1장을 주기만 하고 되돌려 받지 못한다"는 버그를 전제했으나, `AskUserQuestion` 전 실제 엔진(`engine.ts`의
+`computeTributes`/`applyForcedTribute`/`returnTax`)을 시드 1~200까지 200회(회귀 테스트로는 50회 편입)
+직접 시뮬레이션한 결과 한 번도 재현되지 않음을 먼저 확인 — 80장÷5인분배는 나머지 없이 정확히 16장씩이라
+"17장" 전제부터 실제와 다르고, 왕↔노예(2장)/귀족↔거지(1장) 두 트랜잭션 모두 매번 정상적으로 왕복 완료돼
+전원 손패가 16장으로 복원됨(말달리자 세션과 같은 "전제-코드 불일치" 패턴). 요청서가 언급한
+`TaxExchangeModal.tsx`/`Card.tsx`/`aiBot.ts`도 실재하지 않음(실제로는 `CardExchangeModal.tsx`는 평민 교환
+전용 모달이고 봇 로직은 `engine.ts`의 `chooseBotAction`에 내장). `AskUserQuestion` 4문항으로 ① 버그 픽스
+생략하고 하이라이트 UI만 구현(권장, 채택) ② "이탈 시 봇 즉시 대체"는 2026-08-29에 이미 전 게임 공통으로
+확정된 투표 기반 정책과 다르므로 기존 정책 유지(채택, 변경 없음) ③ 5인전의 왕↔노예/귀족↔거지 두 교환은
+각각 완료되는 시점마다 그 두 당사자에게만 개별 표출(채택) ④ 기존 카드 비행 애니메이션(`FlyingExchangeCard`,
+~1.4초)·손패 3.5초 골드 오라(`ReceivedCardGlow`) 위에 추가로 표출, 대체하지 않음(채택)을 확인 후 구현.
+`DalmutiEffects.tsx`에 `detectTaxHighlightEvents`(같은 "연속 lockstep 스냅샷 diff" 기법으로 `tribute.
+resolved`가 false→true로 뒤집히는 순간을 감지, 카드 id가 결과적으로 어느 좌석 손패에 있든 `findCardAnywhere`로
+찾아 forced-tribute 카드와 return 카드를 한 이벤트로 페어링) 신규 추가. `TaxHighlightModal.tsx` 신규
+컴포넌트 — 전용 오버레이 모달에 `[ 📤 내가 준 카드 ]`(반투명 딤 + `dalmuti-highlight-given-sink` 하강 궤적 +
+`💨 전달 완료` 뱃지)와 `[ 📥 상납/하사받은 카드 ]`(`dalmuti-highlight-card-flip` 3D 플립 + 기존
+`dalmuti-received-aura-pulse`/`-shimmer-sweep`/`-spark` 골드 오라·스파크 재사용 + `✨ 획득!` 뱃지)를 나란히
+표시, 3초 유지 후 자동 닫힘(`HOLD_MS`) + 직하단 중앙 `⏩ 스킵` 버튼(언제든 즉시 닫힘, 그리드포커
+`RoundResultOverlay`와 동일한 "스킵은 항상 즉시 동작" 컨벤션), `break-keep` 전면 적용, `Avatar` 컴포넌트가
+이미 `/user.png`를 기본값으로 연동(작업 불필요). 오직 그 교환의 두 당사자(`recipientSeat`/`giverSeat`)에게만
+큐잉되고 제3자에게는 전혀 표출되지 않음(`FlyingExchangeCard`의 `isExchangeParticipant` 마스킹 범위 결정과
+동일 원칙 재적용) — `DalmutiBoard.tsx`에 `taxHighlights` 큐 상태로 연결. `globals.css`에
+`dalmuti-highlight-overlay-in`/`-card-flip`/`-given-sink`/`dalmuti-skip-pulse-glow` 4개 신규 키프레임 추가.
+`Dalmuti.test.ts`에 `detectTaxHighlightEvents` 단위 테스트 3개(단일 tribute 페어링, no-op 무이벤트, 5인
+왕↔노예/귀족↔거지 동시 해소 시 카드 위치 무관 탐지) + 5인 세금 교환 왕복 회귀 테스트(시드 1~50, 매번 두
+트랜잭션 모두 해소·전원 16장 복원 확인) 신규 추가. 캐시된 Playwright Chromium(scratchpad 전용 설치, 호스트
++ 봇 4개 5인방)으로 실제 5인 대국을 라이브 재현 — 노예 좌석(양쪽 조커 보유, 대혁명 선포하지 않기 선택)이
+왕에게 강제 상납한 뒤 봇이 자동으로 돌려주자 하이라이트 팝업이 정확한 "내가 준 카드"/"상납받은 카드"
+카드 face로 뜨는 것을 스크린샷으로 확인, 스킵 버튼 클릭 시 즉시 닫힘(2/3회, 나머지 1회는 세금 교환 비당사자인
+평민 좌석이라 팝업 자체가 뜨지 않는 것도 설계대로 정상 확인)도 검증. `npx tsc --noEmit`/`npm run lint`/
+`npx vitest run`(49개 파일·1536개 테스트, 신규 4개 회귀 테스트 포함) 전부 통과** — 자세한 내용은 아래
+`### 2026-09-02 — 달무티 5인 세금 교환 버그 조사 및 대형 하이라이트 팝업 구현` 절 참고.)_
+
+_이전 갱신: 2026-09-01 (**말달리자(Run Horse) 3대 버그 신고 조사 세션 — 요청서는 "말 1개/플레이어 +
 `piece.ownerId`/`board[from]=null` 단일 배열" 구조를 전제했으나, 실제 엔진(`positions: Record<Seat,
 Position[]>`, 2026-08-14 이미지 기반 재설계로 이미 여러 세션에서 확정된 "플레이어당 10개 말, 대각선 코너
 2곳" 하우스 룰)에는 그런 구조 자체가 없어 애초에 "소유권/색상이 덮어써질 대상"이 존재하지 않음을
@@ -328,6 +363,61 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-09-02 — 달무티 5인 세금 교환 버그 조사 및 대형 하이라이트 팝업 구현
+
+**요청**: 5인 달무티에서 귀족(2등)이 거지(4등)에게 세금 1장을 주고도 되돌려 받지 못하는 트랜잭션 버그
+긴급 픽스, + 세금 교환 완료 시 "내가 준 카드"/"상납·하사받은 카드"를 화면 중앙에 대형 하이라이트 팝업(3D
+카드 플립, 골드 오라, 3초 유지 + 스킵 버튼)으로 표출하는 신규 연출. 배포까지 포함된 명시적 지시.
+
+**전제 불일치 확인 (`AskUserQuestion`)**: `engine.ts`의 `computeTributes`/`applyForcedTribute`/`returnTax`를
+시드 1~200까지 순수 엔진 레벨로 직접 시뮬레이션(5인 세팅, `declineRevolution` → 두 tribute record 모두
+`getValidMoves`의 `returnTax` 후보로 즉시 해소)한 결과 단 한 번도 재현되지 않음 — 왕↔노예(2장)/귀족↔거지
+(1장) 두 트랜잭션 모두 매번 정상 왕복 완료되고 전원 손패가 정확히 16장(80÷5, 나머지 없음)으로 복원됨.
+요청서의 "17장 시작" 전제 자체가 실제(16장 균등 분배)와 다르고, 언급된 `TaxExchangeModal.tsx`/`Card.tsx`/
+`aiBot.ts`도 실재하지 않음(실제로는 `CardExchangeModal.tsx`는 평민 교환 전용 모달, 봇 로직은 `engine.ts`의
+`chooseBotAction`에 내장) — 말달리자 세션(`### 2026-09-01 — 말달리자...`)과 같은 "요청서 전제가 실제
+코드와 어긋남" 패턴. `AskUserQuestion` 4문항으로 확인: ① 버그 재현 안 됨 → 픽스 생략하고 하이라이트 UI만
+구현(권장안 채택) ② "이탈 시 봇 즉시 대체"는 2026-08-29에 이미 전 게임(달무티 포함) 공통으로 확정된
+투표 기반 봇 대체 정책과 다름 → 기존 정책 유지, 변경 없음(권장안 채택) ③ 5인전은 왕↔노예/귀족↔거지 두
+교환이 서로 독립적으로 동시 진행 → 각 교환이 완료되는 시점마다 그 두 당사자에게만 개별 표출(권장안 채택)
+④ 새 대형 팝업은 기존 카드 비행 애니메이션(`FlyingExchangeCard`, ~1.4초)·손패 3.5초 골드 오라
+(`ReceivedCardGlow`)을 대체하지 않고 그 직후 추가로 표출(권장안 채택).
+
+**구현**: `DalmutiEffects.tsx`에 `TaxHighlightEvent`/`detectTaxHighlightEvents` 신규 추가 — 기존
+`detectTaxEvents`와 같은 "연속 lockstep 스냅샷 diff" 기법으로 `tribute.resolved`가 false→true로 뒤집히는
+순간을 감지하되, forced-tribute 카드(`givenCardIds`)와 return 카드(`returnedCardIds`)를 한 이벤트로
+페어링한다는 점이 다름. 카드가 결과적으로 어느 좌석 손패에 있든(수령인이 방금 받은 카드를 그대로 되돌려주는
+경우도 카드 id는 유일하므로 안전) `findCardAnywhere`로 전 좌석을 훑어 찾는다. `TaxHighlightModal.tsx` 신규
+컴포넌트 — 오직 그 tribute의 두 당사자(`recipientSeat`/`giverSeat`)에게만 렌더링(제3자에게는 전혀
+표출되지 않음, `FlyingExchangeCard`의 `isExchangeParticipant` 마스킹 범위 결정과 동일 원칙), 뷰어가
+recipient인지 giver인지에 따라 "내가 준 카드"/"받은 카드"를 자동으로 뒤바꿔 보여준다. `[ 📤 내가 준
+카드 ]`는 반투명 딤(`grayscale`) + `dalmuti-highlight-given-sink` 하강 궤적 + `💨 전달 완료` 뱃지,
+`[ 📥 상납/하사받은 카드 ]`는 `dalmuti-highlight-card-flip` 3D 플립 + 기존 `dalmuti-received-aura-pulse`/
+`-shimmer-sweep`/`-spark` 골드 오라·스파크(재사용, `ReceivedCardGlow`와 같은 시각 언어) + `✨ 획득!` 뱃지.
+`HOLD_MS`(3000ms) 후 자동 닫힘 + 직하단 중앙 `⏩ 스킵` 버튼(언제든 즉시 닫힘 — 그리드포커
+`RoundResultOverlay`의 "스킵은 항상 즉시 동작" 컨벤션과 동일, 별도의 "3초 전에는 스킵 불가" 잠금 없음).
+`break-keep` 전면 적용. `Avatar` 컴포넌트가 이미 `/user.png`를 기본 프로필로 연동하고 있어(`DEFAULT_AVATAR`)
+별도 작업 불필요. 순수 로컬 연출이라 별도 브로드캐스트 액션 없이 각 클라이언트가 독립적으로 같은
+lockstep state를 diff해 표시(스킵도 그 클라이언트에게만 적용, 다른 뷰어/엔진 진행에 영향 없음). `globals.css`에
+`dalmuti-highlight-overlay-in`/`-card-flip`/`-given-sink`/`dalmuti-skip-pulse-glow` 4개 신규 키프레임 추가.
+`DalmutiBoard.tsx`에 `taxHighlights` 큐 상태(`TaxHighlightEvent[]`)로 연결 — 한 번에 하나씩 표시, 기존
+`taxEvents`(비행 애니메이션) diff 블록과 나란히 배치.
+
+**테스트**: `Dalmuti.test.ts`에 `detectTaxHighlightEvents` 단위 테스트 3개(단일 tribute 해소 시 give/return
+페어링 확인, 미해소·no-op 액션 시 무이벤트 확인, 5인 왕↔노예·귀족↔거지 동시 해소 시 카드가 어느 손패에
+있든 정확히 탐지) + "5인 세금 교환 왕복 회귀" describe 블록(시드 1~50 반복, 매번 두 tribute record 모두
+`resolved: true`, 전원 정확히 16장 복원 확인 — 재발 방지용 영구 회귀 테스트) 신규 추가.
+
+**라이브 검증**: 캐시된 Playwright Chromium(scratchpad 전용 설치, 호스트 1탭 + 봇 4개로 5인방 구성)으로
+실제 대국을 여러 차례 재현. 노예 좌석(양쪽 조커 보유 → 대혁명 선포 UI 등장, "선포하지 않기" 선택)이 왕에게
+2장을 강제 상납한 뒤 봇이 자동으로 카드를 골라 돌려주자 하이라이트 팝업이 정확한 "내가 준 카드"(딤 처리된
+카드 2장 + 전달 완료 뱃지)/"상납받은 카드"(골드 오라 카드 2장 + 획득 뱃지)로 뜨는 것을 스크린샷으로 직접
+확인, `⏩ 스킵` 클릭 시 즉시 닫힘(3회 중 2회 확인 — 나머지 1회는 세금 교환 비당사자인 평민 좌석이 배정돼
+설계대로 팝업 자체가 뜨지 않은 것도 함께 확인, 마스킹 범위 결정이 실제로 동작함을 입증).
+
+**커밋/배포**: `npx tsc --noEmit`/`npm run lint`/`npx vitest run`(49개 파일·1536개 테스트, 신규 4개 회귀
+테스트 포함, 회귀 없음) 전부 통과.
 
 ### 2026-09-01 — 말달리자 3대 버그 신고 조사 및 봇 자동진행/승리 오버레이 방어 보강
 

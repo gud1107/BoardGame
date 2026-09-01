@@ -797,6 +797,77 @@ body {
   }
 }
 
+/* 달무티's tax-exchange result highlight popup (see DalmutiEffects.tsx's
+   `detectTaxHighlightEvents` and TaxHighlightModal.tsx, 2026-09-01 세션) — a
+   large centered "내가 준 카드 / 상납·하사받은 카드" recap shown only to the
+   two seats actually party to a just-resolved 왕↔노예 or 귀족↔거지 tribute,
+   right after the existing ~1.4s `dalmuti-exchange-arc` flight lands. The
+   gold aura/shimmer/sparkle/badge-pop on the "받은 카드" side deliberately
+   reuse `dalmuti-received-aura-pulse` / `-shimmer-sweep` / `-spark` /
+   `-badge-pop` above (same visual language as a card's own in-hand glow) —
+   only the entrance/flip/sink/skip-glow below are new to this popup. */
+@keyframes dalmuti-highlight-overlay-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 3D flip reveal for each card in the popup — parent needs `perspective` set
+   inline (card size/count varies) for the rotateY to read as a real flip
+   rather than a flat squash. Staggered per-card via the caller's `animation-
+   delay`. */
+@keyframes dalmuti-highlight-card-flip {
+  0% {
+    transform: rotateY(180deg) scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
+/* "내가 준 카드" side — settles into a dimmed, slightly sunken resting state
+   (task brief "반투명 딤 처리 + 아래로 내려가는 궤적") instead of the "받은
+   카드" side's full-brightness gold treatment. */
+@keyframes dalmuti-highlight-given-sink {
+  0% {
+    transform: translateY(-16px) scale(1.04);
+    opacity: 0;
+  }
+  60% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.5;
+  }
+}
+
+/* Skip button's neon pulse — same shape as every other game's own
+   `-skip-pulse-glow`, gold to match this popup's "받은 카드" tier color. */
+@keyframes dalmuti-skip-pulse-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(251, 191, 36, 0.45),
+      0 0 10px 1px rgba(251, 191, 36, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(251, 191, 36, 0),
+      0 0 22px 4px rgba(251, 191, 36, 0.65);
+  }
+}
+
 /* 코요테's showdown backdrop (see CoyoteEffects.tsx / CoyoteHowlBanner) — a
    desert-toned wash that fades in behind the "코요테!" banner the instant the
    round leaves "playing" for "reveal"/"gameOver". */

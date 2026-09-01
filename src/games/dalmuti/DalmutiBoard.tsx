@@ -7,7 +7,17 @@ import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import RulebookModal from "./RulebookModal";
 import CardExchangeModal from "./CardExchangeModal";
 import { CardFace, RoleBadge, type AuraTier } from "./CardArt";
-import { detectCommonerSwapEvents, detectTaxEvents, FlyingExchangeCard, ReceivedCardGlow, RevolutionBanner, type TaxFlyEvent } from "./DalmutiEffects";
+import {
+  detectCommonerSwapEvents,
+  detectTaxEvents,
+  detectTaxHighlightEvents,
+  FlyingExchangeCard,
+  ReceivedCardGlow,
+  RevolutionBanner,
+  type TaxFlyEvent,
+  type TaxHighlightEvent,
+} from "./DalmutiEffects";
+import TaxHighlightModal from "./TaxHighlightModal";
 import {
   computeRankings,
   isLegalPlay,
@@ -76,6 +86,14 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   // DalmutiEffects.tsx's module doc.
   const [trackedState, setTrackedState] = useState(state);
   const [taxEvents, setTaxEvents] = useState<TaxFlyEvent[]>([]);
+  // Large "내가 준 카드 / 받은 카드" recap popup (task brief, 2026-09-01 세션) —
+  // a separate queue from `taxEvents` above: that's the ~1.4s flight overlay
+  // every viewer sees (masked for non-parties); this is the additive, unmasked
+  // big popup shown only to the exchange's two actual parties, once per
+  // resolved tribute (see TaxHighlightModal.tsx's module doc). Queued (not a
+  // single nullable field) in case this viewer is ever a party to two
+  // tributes resolving in quick succession — shown one at a time.
+  const [taxHighlights, setTaxHighlights] = useState<TaxHighlightEvent[]>([]);
   const [trickFlash, setTrickFlash] = useState<TrickResult | null>(null);
   const [revolutionBanner, setRevolutionBanner] = useState<{ seat: SeatIndex; isGrand: boolean } | null>(null);
   const [commonerSwapFlash, setCommonerSwapFlash] = useState<{ seatA: SeatIndex; seatB: SeatIndex } | null>(null);
@@ -96,6 +114,17 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
       setTaxEvents((prev) => {
         let nextId = (prev.at(-1)?.id ?? 0) + 1;
         return [...prev, ...[...newTax, ...newCommonerSwaps].map((e) => ({ ...e, id: nextId++ }))];
+      });
+    }
+    // Only queued for the two actual parties (AskUserQuestion, 2026-09-01) —
+    // never for a third-party viewer, same masking scope as `taxEvents` above.
+    const newHighlights = detectTaxHighlightEvents(trackedState, state).filter(
+      (e) => e.recipientSeat === viewerSeat || e.giverSeat === viewerSeat,
+    );
+    if (newHighlights.length > 0) {
+      setTaxHighlights((prev) => {
+        let nextId = (prev.at(-1)?.id ?? 0) + 1;
+        return [...prev, ...newHighlights.map((e) => ({ ...e, id: nextId++ }))];
       });
     }
     const newlyReceivedByMe = [...newTax, ...newCommonerSwaps].filter((e) => e.targetSeat === viewerSeat);
@@ -148,6 +177,9 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   }, []);
   const handleTaxDone = useCallback((id: number) => {
     setTaxEvents((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+  const handleTaxHighlightDone = useCallback((id: number) => {
+    setTaxHighlights((prev) => prev.filter((e) => e.id !== id));
   }, []);
 
   // Card-selection resets whenever the turn/trick shape moves on, so a stale
@@ -610,6 +642,19 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
           onDone={handleTaxDone}
         />
       ))}
+
+      {/* Large tax-exchange recap popup — one at a time, additive on top of
+          the flight FX above (AskUserQuestion, 2026-09-01). */}
+      {taxHighlights.length > 0 && (
+        <TaxHighlightModal
+          key={taxHighlights[0].id}
+          event={taxHighlights[0]}
+          viewerSeat={viewerSeat}
+          names={names}
+          titleFor={titleFor}
+          onDone={() => handleTaxHighlightDone(taxHighlights[0].id)}
+        />
+      )}
 
       {/* Revolution banner */}
       {revolutionBanner && (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectCommonerSwapEvents, detectTaxEvents, isExchangeParticipant } from "./DalmutiEffects";
+import { detectCommonerSwapEvents, detectTaxEvents, detectTaxHighlightEvents, isExchangeParticipant } from "./DalmutiEffects";
 import {
   applyAction,
   buildDeck,
@@ -862,6 +862,116 @@ describe("detectTaxEvents / detectCommonerSwapEvents auraTier tagging (drives bo
     const events = detectCommonerSwapEvents(prev, next);
     expect(events).toHaveLength(2);
     expect(events.every((e) => e.auraTier === "commoner")).toBe(true);
+  });
+});
+
+describe("detectTaxHighlightEvents (large 세금 교환 완료 팝업, 2026-09-01 세션)", () => {
+  it("pairs the forced-tribute leg with the return leg the instant a tribute record resolves, tagged by tier", () => {
+    const prev = makeState({
+      playerCount: 4,
+      rankOrder: [0, 1, 2, 3],
+      phase: "taxReturn",
+      tributes: [{ fromSeat: 3, toSeat: 0, givenCardIds: ["1-0", "2-0"], returnedCardIds: [], resolved: false }],
+      players: [makePlayer(0, { hand: [card(6), card(7), card(1), card(2)] }), makePlayer(1), makePlayer(2), makePlayer(3, { hand: [] })],
+    });
+    const next = applyAction(prev, { type: "returnTax", seat: 0, cardIds: ["6-0", "7-0"] });
+    const events = detectTaxHighlightEvents(prev, next);
+    expect(events).toHaveLength(1);
+    const e = events[0];
+    expect(e.recipientSeat).toBe(0);
+    expect(e.giverSeat).toBe(3);
+    expect(e.auraTier).toBe("king");
+    expect(e.givenCards.map((c) => c.id).sort()).toEqual(["1-0", "2-0"]);
+    expect(e.returnedCards.map((c) => c.id).sort()).toEqual(["6-0", "7-0"]);
+  });
+
+  it("emits nothing while a tribute is still unresolved, or for an unrelated no-op action", () => {
+    const prev = makeState({
+      playerCount: 4,
+      rankOrder: [0, 1, 2, 3],
+      phase: "taxReturn",
+      tributes: [{ fromSeat: 3, toSeat: 0, givenCardIds: ["1-0"], returnedCardIds: [], resolved: false }],
+      players: [makePlayer(0, { hand: [card(6), card(1)] }), makePlayer(1), makePlayer(2), makePlayer(3, { hand: [] })],
+    });
+    // Wrong card count — rejected by the engine, same state reference back.
+    const rejected = applyAction(prev, { type: "returnTax", seat: 0, cardIds: [] });
+    expect(detectTaxHighlightEvents(prev, rejected)).toHaveLength(0);
+  });
+
+  it("resolves both the 왕↔노예 and 귀족↔거지 tributes into two independent events at n=5, each finds the real cards wherever they currently sit", () => {
+    let state = makeState({
+      playerCount: 5,
+      rankOrder: [0, 1, 2, 3, 4],
+      phase: "taxReturn",
+      tributes: [
+        { fromSeat: 4, toSeat: 0, givenCardIds: ["1-0", "2-0"], returnedCardIds: [], resolved: false },
+        { fromSeat: 3, toSeat: 1, givenCardIds: ["4-0"], returnedCardIds: [], resolved: false },
+      ],
+      players: [
+        makePlayer(0, { hand: [card(8), card(9), card(1), card(2)] }),
+        makePlayer(1, { hand: [card(6), card(4)] }),
+        makePlayer(2),
+        makePlayer(3, { hand: [] }),
+        makePlayer(4, { hand: [] }),
+      ],
+    });
+    let allEvents: ReturnType<typeof detectTaxHighlightEvents> = [];
+    for (const [seat, cardIds] of [
+      [0, ["8-0", "9-0"]],
+      [1, ["6-0"]],
+    ] as const) {
+      const next = applyAction(state, { type: "returnTax", seat, cardIds: [...cardIds] });
+      allEvents = [...allEvents, ...detectTaxHighlightEvents(state, next)];
+      state = next;
+    }
+    expect(allEvents).toHaveLength(2);
+    const kingEvent = allEvents.find((e) => e.auraTier === "king")!;
+    expect(kingEvent.recipientSeat).toBe(0);
+    expect(kingEvent.giverSeat).toBe(4);
+    expect(kingEvent.givenCards.map((c) => c.id).sort()).toEqual(["1-0", "2-0"]);
+    expect(kingEvent.returnedCards.map((c) => c.id).sort()).toEqual(["8-0", "9-0"]);
+    const nobleEvent = allEvents.find((e) => e.auraTier === "noble")!;
+    expect(nobleEvent.recipientSeat).toBe(1);
+    expect(nobleEvent.giverSeat).toBe(3);
+    expect(nobleEvent.givenCards.map((c) => c.id)).toEqual(["4-0"]);
+    expect(nobleEvent.returnedCards.map((c) => c.id)).toEqual(["6-0"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. 5인 귀족↔거지 세금 교환 왕복 회귀 테스트 (2026-09-01 세션) — task brief는
+//    "17장 시작 후 되돌려받지 못함"이라는 버그를 전제했으나, 실제로는 80장÷5=
+//    16장 균등 분배(나머지 없음)이며 아래 시뮬레이션에서 200개 시드 전부 두
+//    트랜잭션(왕↔노예 2장, 귀족↔거지 1장) 모두 정상 왕복해 전원 16장으로
+//    복원됨을 확인(AskUserQuestion으로 사용자에게 보고 후 확정) — 재발 방지용
+//    영구 회귀 테스트로 편입.
+// ---------------------------------------------------------------------------
+describe("5인 세금 교환 왕복 (귀족↔거지 포함) 회귀", () => {
+  it("both king and noble tributes resolve and every hand returns to exactly 16 cards, across many seeds", () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      let state = startGame(5, seed);
+      expect(
+        state.players.reduce((sum, p) => sum + p.hand.length, 0),
+      ).toBe(80); // 80 / 5 divides evenly — no leftover cards set aside
+
+      if (state.phase === "revolutionOption") {
+        state = applyAction(state, { type: "declineRevolution", seat: state.pendingRevolution!.seat });
+      }
+      expect(state.phase).toBe("taxReturn");
+      expect(state.tributes).toHaveLength(2);
+
+      let guard = 0;
+      while (state.phase === "taxReturn" && guard < 10) {
+        for (const t of state.tributes.filter((t) => !t.resolved)) {
+          const moves = getValidMoves(state, t.toSeat).filter((m) => m.type === "returnTax");
+          expect(moves.length).toBeGreaterThan(0);
+          state = applyAction(state, moves[0]);
+        }
+        guard++;
+      }
+      expect(state.tributes.every((t) => t.resolved)).toBe(true);
+      for (const p of state.players) expect(p.hand.length).toBe(16);
+    }
   });
 });
 
