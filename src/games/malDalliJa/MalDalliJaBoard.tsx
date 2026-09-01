@@ -201,6 +201,22 @@ export default function MalDalliJaBoard({
     getSoundEngine().playFinishFanfare();
   }, [state.phase, animations.length]);
 
+  // 2026-09-01 fix (말달리자 "오아시스에 도착했지만 끝나지 않음" 버그 조사 —
+  // 엔진 자체의 승리 판정은 단위 테스트로 정상 확인됐고, 화면이 "멈춘 것처럼"
+  // 보이는 원인은 이 승리 오버레이의 `animations.length === 0` 게이트일
+  // 가능성이 유력해 방어적으로 보강) — `AnimatedHorse`의 rAF 루프가 매 프레임
+  // 정상 진행되면 `onDone`이 항상 불려 `animations`가 자연스럽게 비므로, 이
+  // 타이머는 평소엔 절대 발동하지 않는다(가장 긴 이동인 10칸 슬라이드도
+  // 1,300ms 안에 끝남). 브라우저 탭 백그라운드 전환으로 인한 rAF 스로틀링,
+  // 네트워크 재동기화가 애니메이션 도중 컴포넌트 상태를 예상 못한 방식으로
+  // 건드리는 경우 등, `onDone`이 끝내 불리지 않는 예외적 상황에서도 승리
+  // 오버레이가 영구히 가려지지 않도록 하는 최후의 안전장치일 뿐이다.
+  useEffect(() => {
+    if (state.phase !== "gameOver" || animations.length === 0) return;
+    const timer = window.setTimeout(() => setAnimations([]), 2500);
+    return () => window.clearTimeout(timer);
+  }, [state.phase, animations.length]);
+
   const animatingKeys = new Set(animations.map((a) => `${a.seat}-${a.horseIndex}`));
 
   function handleAnimEvent(anim: MoveAnim, evt: MoveEvent) {

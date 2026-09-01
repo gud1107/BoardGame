@@ -184,10 +184,22 @@ function cornerZone(cornerRow: number, cornerCol: number, rowDir: 1 | -1, colDir
 
 /**
  * §1 세팅 (2026-08-14 image-based redesign): each seat's home zones are both
- * ends of one board diagonal — p1 (white) = main diagonal (0,0)+(10,10), p2
- * (black) = anti-diagonal (0,10)+(10,0), pixel-verified against
- * `말달리자판.png`. `HOME_ZONES[seat][0]`/`[1]` are the two 5-cell corner
- * camps; the flattened 10-cell array is also each seat's starting layout.
+ * ends of one board diagonal — p1 = main diagonal (0,0)+(10,10), p2 =
+ * anti-diagonal (0,10)+(10,0), pixel-verified against `말달리자판.png`.
+ * `HOME_ZONES[seat][0]`/`[1]` are the two 5-cell corner camps; the flattened
+ * 10-cell array is also each seat's starting layout.
+ *
+ * **2026-09-01 correction**: this comment previously glossed p1 as "white"
+ * and p2 as "black" — backwards from `MalDalliJaBoard.tsx`'s `SEAT_THEME`
+ * (p1 = 흑마/black-horse.jpg/rose ring, p2 = 백마/white-horse.jpg/cyan ring),
+ * which has been the actual displayed pairing since this game's very first
+ * commit (predates this 2026-08-14 redesign). Investigated as a possible
+ * cause of a "말 색상이 뒤바뀌었다" bug report — confirmed via `git log -p`
+ * that `SEAT_THEME` never changed this assignment, so it was only ever this
+ * comment (and a matching descriptive comment in `MalDalliJa.test.ts`) that
+ * was wrong, not any rendered behavior — removed the incorrect gloss rather
+ * than "fixing" `SEAT_THEME` to match it, which would have flipped every
+ * returning player's actual seat color for no functional reason.
  */
 export const HOME_ZONES: Record<Seat, [Position[], Position[]]> = {
   p1: [cornerZone(0, 0, 1, 1), cornerZone(LAST, LAST, -1, -1)],

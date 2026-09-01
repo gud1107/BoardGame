@@ -80,6 +80,22 @@ export function useBotAutoplay<State, Action, Actor>({
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      // 2026-09-01 fix (말달리자 "오아시스 도착 후 멈춤" 버그 조사 중 발견): if
+      // this cleanup runs *before* the scheduled dispatch above ever fired,
+      // undo the "claimed" mark for `state` too — otherwise React's dev-mode
+      // Strict Mode double-invoke (mount → cleanup → mount, same `state`
+      // reference both times) permanently skips this bot turn: the phantom
+      // first mount claims `state` via `actedForRef.current = state` above,
+      // this cleanup cancels its *own* pending dispatch (correct), but the
+      // *second*, real mount then sees `actedForRef.current === state`
+      // already true and bails out without ever scheduling a replacement —
+      // the bot silently never moves again for the rest of that turn. Any
+      // *other* legitimate remount mid-game (e.g. an error-boundary reset)
+      // would hit the identical trap. Only resets when we're actually
+      // cancelling our own not-yet-fired dispatch, not after a successful
+      // one (a fired dispatch's timer has already elapsed, so this branch is
+      // a no-op then — see the module doc's reasoning).
+      if (actedForRef.current === state) actedForRef.current = null;
     };
   }, [active, state, currentActor, botSeats, chooseAction, dispatch, minDelayMs, maxDelayMs]);
 }

@@ -38,7 +38,7 @@ describe("home zones (§1 세팅, 2026-08-14 image-based redesign — 4 corners,
     }
   });
 
-  it("p1 (백마) owns both ends of the main diagonal, p2 (흑마) both ends of the anti-diagonal (pixel-verified against 말달리자판.png)", () => {
+  it("p1 owns both ends of the main diagonal, p2 both ends of the anti-diagonal (pixel-verified against 말달리자판.png; see engine.ts's 2026-09-01 comment correction for why this doesn't say which color is which)", () => {
     expect(HOME_ZONES.p1[0]).toContainEqual({ row: 0, col: 0 });
     expect(HOME_ZONES.p1[1]).toContainEqual({ row: BOARD_SIZE - 1, col: BOARD_SIZE - 1 });
     expect(HOME_ZONES.p2[0]).toContainEqual({ row: 0, col: BOARD_SIZE - 1 });
