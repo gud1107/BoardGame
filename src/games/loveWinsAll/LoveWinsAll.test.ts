@@ -367,6 +367,68 @@ describe("lwa2 Liar penalty", () => {
   });
 });
 
+describe("matched pot / uncalled-bet refund (요청: 올인해도 상대가 실제로 베팅한 금액까지만 획득)", () => {
+  it("refunds a raiser's uncalled excess when the caller is short-stacked, so only the matched amount is ever contested", () => {
+    let s = startGame("base", seededRng(50));
+    s = { ...s, firstActorSeat: "p1", actingSeat: "p1", chips: { ...s.chips, p2: 6 } };
+    const totalChips = s.chips.p1 + s.chips.p2 + s.pot;
+    const raiserStack = s.chips.p1;
+
+    s = applyAction(s, { type: "raise", amount: raiserStack }); // p1 shoves their entire stack
+    expect(s.chips.p1).toBe(0);
+    expect(s.actingSeat).toBe("p2");
+
+    s = applyAction(s, { type: "call" }); // p2 can only call all-in for 6
+    expect(s.chips.p2).toBe(0);
+    // p1's uncalled excess (everything above the 6 that was actually matched) comes straight back.
+    expect(s.chips.p1).toBe(raiserStack - 6);
+    expect(s.roundRefund).toEqual({ seat: "p1", amount: raiserStack - 6 });
+    expect(s.pot).toBe(ANTE * 2 + 12); // only the matched 6+6, never the raiser's excess
+    expect(s.chips.p1 + s.chips.p2 + s.pot).toBe(totalChips); // conservation holds through the refund
+
+    // Even if the short-stacked p2 goes on to win the hand, they can never claim more than what they matched.
+    s = withHands(s, ["scissors", "rock", "paper"], ["love", "love", "love"]);
+    s = applyAction(s, { type: "declare", seat: "p1", cardIndex: 0, declaredHand: "mix" });
+    s = applyAction(s, { type: "declare", seat: "p2", cardIndex: 0, declaredHand: "loveWinsAll" });
+    expect(s.phase).toBe("bet2");
+    s = applyAction(s, { type: "call" });
+    s = applyAction(s, { type: "call" });
+    expect(s.lastRoundResult?.winnerSeat).toBe("p2");
+    expect(s.lastRoundResult?.potWon).toBe(ANTE * 2 + 12);
+    expect(s.lastRoundResult?.refund).toEqual({ seat: "p1", amount: raiserStack - 6 });
+  });
+
+  it("no refund happens on an ordinary full call (both sides matched exactly)", () => {
+    let s = startGame("base", seededRng(51));
+    s = applyAction(s, { type: "raise", amount: (raiseRange(s, s.firstActorSeat) as { min: number })!.min });
+    s = applyAction(s, { type: "call" });
+    expect(s.roundRefund).toBeNull();
+  });
+});
+
+describe("ante-induced KO still produces a non-null lastRoundResult (2026-09-01 버그 픽스: 결과창이 안 뜨는 버그)", () => {
+  it("synthesizes a result snapshot when the match ends purely from the next round's mandatory ante, not a showdown/fold", () => {
+    let s = startGame("base", seededRng(60));
+    // A genuine tie carries the pot forward and leaves both seats' stacks untouched by any bet this round.
+    s = withHands(s, ["scissors", "rock", "paper"], ["rock", "paper", "scissors"]);
+    s = { ...s, chips: { p1: s.chips.p1, p2: ANTE } }; // p2 has just enough for exactly one more ante, nothing more
+    s = runToShowdown(s);
+    expect(s.lastRoundResult?.outcome).toBe("tie");
+    expect(s.phase).toBe("showdown"); // not yet gameOver -- the KO-inducing ante hasn't posted yet
+
+    const next = applyAction(s, { type: "continue", seed: 999 });
+    expect(next.phase).toBe("gameOver"); // p2's next-round ante clamps them to exactly 0
+    expect(next.chips.p2).toBe(0);
+    expect(next.winner).toBe("p1");
+    // The actual bug: this used to be wiped to `null` by `applyContinue`'s new-round reset,
+    // which left `LoveWinsAllBoard.tsx`'s `state.lastRoundResult &&`-gated reveal overlay
+    // (and everything downstream of it, including `onGameEnd`) never rendering at all.
+    expect(next.lastRoundResult).not.toBeNull();
+    expect(next.lastRoundResult?.outcome).toBe("win");
+    expect(next.lastRoundResult?.winnerSeat).toBe("p1");
+  });
+});
+
 describe("isStateSyncStale", () => {
   it("accepts the first sync and rejects one strictly behind the current seq", () => {
     const s = applyAction(startGame("base", seededRng(12)), { type: "call" });

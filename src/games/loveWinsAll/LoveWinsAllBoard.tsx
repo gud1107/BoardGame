@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Avatar from "@/components/common/Avatar";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import CombinationBadge from "./CombinationBadge";
@@ -16,7 +16,7 @@ import {
   type Seat,
   type Suit,
 } from "./engine";
-import RevealOverlay, { ChipPot } from "./LoveWinsAllEffects";
+import RevealOverlay, { ChipPot, CheckBadge, DeclareBubble, RaiseBanner, type ActionCalloutEvent } from "./LoveWinsAllEffects";
 import RulebookModal from "./RulebookModal";
 import { useCountdown } from "./useCountdown";
 
@@ -80,13 +80,29 @@ function HiddenCard({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   return <span className={`flex flex-col items-center justify-center rounded-lg border border-white/10 bg-gradient-to-br from-pink-950 to-black ${dims}`}>🂠</span>;
 }
 
-function PlayerHeader({ name, isViewer, chips, connected, pending }: { name: string; isViewer: boolean; chips: number; connected: boolean; pending: boolean }) {
+function PlayerHeader({
+  name,
+  isViewer,
+  chips,
+  connected,
+  pending,
+  badge,
+}: {
+  name: string;
+  isViewer: boolean;
+  chips: number;
+  connected: boolean;
+  pending: boolean;
+  /** Request's "상대 선언/체크... 슬롯에 대형 포커싱 연출" — a transient `CheckBadge`/`DeclareBubble` overlaid on this seat's own slot, decided by `useActionCallout` below. */
+  badge?: ReactNode;
+}) {
   return (
     <div
-      className={`flex flex-1 flex-col items-center gap-1 rounded-2xl border p-2.5 transition ${
+      className={`relative flex flex-1 flex-col items-center gap-1 rounded-2xl border p-2.5 transition ${
         pending ? "border-pink-400/70 bg-pink-500/10 shadow-[0_0_20px_-4px_rgba(244,114,182,0.6)]" : "border-white/10 bg-white/[0.03]"
       }`}
     >
+      {badge}
       <div className="relative">
         <Avatar size={36} className={isViewer ? "ring-2 ring-emerald-400/70" : "ring-2 ring-white/10"} />
         {!connected && (
@@ -104,11 +120,18 @@ function PlayerHeader({ name, isViewer, chips, connected, pending }: { name: str
   );
 }
 
+/** Request's "베팅 컨트롤러 퀵 증액 버튼 (+3, +5, +10)" — nudges the raise slider, clamped to the legal range; the existing 올인 button already covers the requested MAX/ALL-IN slot. */
+const QUICK_RAISE_INCREMENTS = [3, 5, 10];
+
 function BettingControls({ state, viewerSeat, onAction }: { state: LoveWinsAllState; viewerSeat: Seat; onAction: (a: EngineAction) => void }) {
   const toCall = state.currentBet - state.betsThisStreet[viewerSeat];
   const range = raiseRange(state, viewerSeat);
   const [raiseAmount, setRaiseAmount] = useState<number>(range?.min ?? 0);
   const clampedRaise = range ? Math.min(Math.max(raiseAmount, range.min), range.max) : 0;
+  function bumpRaise(delta: number) {
+    if (!range) return;
+    setRaiseAmount((prev) => Math.min(range.max, Math.max(range.min, prev + delta)));
+  }
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-pink-400/30 bg-black/40 p-4">
@@ -145,6 +168,18 @@ function BettingControls({ state, viewerSeat, onAction }: { state: LoveWinsAllSt
             onChange={(e) => setRaiseAmount(Number(e.target.value))}
             className="w-full accent-pink-500"
           />
+          <div className="flex flex-wrap gap-1.5">
+            {QUICK_RAISE_INCREMENTS.map((inc) => (
+              <button
+                key={inc}
+                type="button"
+                onClick={() => bumpRaise(inc)}
+                className="rounded-lg border border-pink-400/30 bg-pink-500/10 px-2.5 py-1 text-[11px] font-semibold text-pink-100 transition hover:bg-pink-500/20 active:scale-95"
+              >
+                +{inc}
+              </button>
+            ))}
+          </div>
           <div className="flex gap-2">
             <button
               type="button"
@@ -238,10 +273,69 @@ function DeclareControls({
   );
 }
 
+/**
+ * Request's "상대 선언/체크/레이즈 대형 포커싱 연출" — diffs consecutive
+ * `state` snapshots to figure out *which* action just landed and who took
+ * it, since a networked opponent's move only ever reaches this component as
+ * a new replicated `state` (never as the raw `EngineAction` itself — see
+ * `LoveWinsAllGame.tsx`'s module doc on the lockstep broadcast model).
+ * `LoveWinsAllEffects.tsx`'s callout components own the actual visuals/SFX;
+ * this hook only ever decides *when* to mount one of them.
+ */
+function useActionCallout(state: LoveWinsAllState): ActionCalloutEvent | null {
+  const prevRef = useRef(state);
+  const nonceRef = useRef(0);
+  const [callout, setCallout] = useState<ActionCalloutEvent | null>(null);
+
+  useEffect(() => {
+    const prev = prevRef.current;
+    prevRef.current = state;
+    if (prev === state || prev.round !== state.round) return;
+
+    // §4 declare — whichever seat's `declaredHand` just went from unset to set.
+    for (const seat of ["p1", "p2"] as const) {
+      if (prev.declaredHand[seat] === undefined && state.declaredHand[seat] !== undefined) {
+        nonceRef.current += 1;
+        setCallout({ type: "declare", seat, nonce: nonceRef.current });
+        return;
+      }
+    }
+
+    // Betting-street actions — only meaningful transitioning out of an actual betting phase.
+    if (prev.phase !== "bet1" && prev.phase !== "bet2") return;
+    const actor = prev.actingSeat;
+    if (!actor) return;
+    const actorBetDelta = state.betsThisStreet[actor] - prev.betsThisStreet[actor];
+
+    if (state.currentBet > prev.currentBet && actorBetDelta > 0) {
+      nonceRef.current += 1;
+      setCallout({ type: "raise", seat: actor, nonce: nonceRef.current });
+      return;
+    }
+    if (actorBetDelta === 0 && state.currentBet === prev.currentBet) {
+      // A check leaves both fields untouched — but so does a fold, so exclude that landing explicitly.
+      const isFold = state.phase === "showdown" && state.lastRoundResult?.roundNumber === state.round && state.lastRoundResult?.outcome === "fold";
+      if (!isFold) {
+        nonceRef.current += 1;
+        setCallout({ type: "check", seat: actor, nonce: nonceRef.current });
+      }
+    }
+  }, [state]);
+
+  useEffect(() => {
+    if (!callout) return;
+    const t = setTimeout(() => setCallout(null), 1300);
+    return () => clearTimeout(t);
+  }, [callout]);
+
+  return callout;
+}
+
 export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentConnected, onAction, onGameEnd }: LoveWinsAllBoardProps) {
   const opponentSeat = otherSeat(viewerSeat);
   const { timeLeft } = useCountdown(REVEAL_SECONDS, `${state.round}:${state.lastRoundResult?.roundNumber ?? 0}`, state.phase === "showdown" || state.phase === "gameOver");
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const callout = useActionCallout(state);
 
   const isBetting = state.phase === "bet1" || state.phase === "bet2";
   const myTurn = isBetting && state.actingSeat === viewerSeat;
@@ -270,8 +364,23 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
         </div>
       </div>
 
+      {callout?.type === "raise" && <RaiseBanner key={callout.nonce} name={names[callout.seat]} />}
+
       <div className="flex items-stretch gap-3">
-        <PlayerHeader name={names[viewerSeat]} isViewer chips={state.chips[viewerSeat]} connected pending={myTurn} />
+        <PlayerHeader
+          name={names[viewerSeat]}
+          isViewer
+          chips={state.chips[viewerSeat]}
+          connected
+          pending={myTurn}
+          badge={
+            callout?.seat === viewerSeat && callout.type !== "raise"
+              ? callout.type === "check"
+                ? <CheckBadge key={callout.nonce} />
+                : <DeclareBubble key={callout.nonce} />
+              : undefined
+          }
+        />
         <div className="flex flex-col items-center justify-center gap-2 px-1">
           <ChipPot pot={state.pot} />
           {state.community && (
@@ -287,6 +396,13 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
           chips={state.chips[opponentSeat]}
           connected={opponentConnected}
           pending={isBetting && state.actingSeat === opponentSeat}
+          badge={
+            callout?.seat === opponentSeat && callout.type !== "raise"
+              ? callout.type === "check"
+                ? <CheckBadge key={callout.nonce} />
+                : <DeclareBubble key={callout.nonce} />
+              : undefined
+          }
         />
       </div>
 

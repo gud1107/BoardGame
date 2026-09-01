@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import Avatar from "@/components/common/Avatar";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
@@ -136,10 +136,51 @@ function RoundLossImpact() {
   );
 }
 
+/**
+ * Request's "중앙 팟 누적 증감량 직관적 표기": a bold neon badge that floats up
+ * and fades out the instant `pot` *increases*, showing exactly how much this
+ * one action just added — separate from (and layered on top of) the always-
+ * visible cumulative total below it. Self-contained (diffs its own `pot`
+ * prop across renders via a ref, same idiom as every other mount-driven FX
+ * in this file) so no caller has to compute or pass the delta itself.
+ */
+function PotDeltaBadge({ pot }: { pot: number }) {
+  const prevPotRef = useRef(pot);
+  const [delta, setDelta] = useState<{ amount: number; nonce: number } | null>(null);
+  const nonceRef = useRef(0);
+
+  useEffect(() => {
+    const prev = prevPotRef.current;
+    prevPotRef.current = pot;
+    if (pot <= prev) return; // only a genuine increase counts as "추가 투입" — a showdown payout resets pot to 0, not an add
+    nonceRef.current += 1;
+    setDelta({ amount: pot - prev, nonce: nonceRef.current });
+  }, [pot]);
+
+  useEffect(() => {
+    if (!delta) return;
+    const t = setTimeout(() => setDelta(null), 1600);
+    return () => clearTimeout(t);
+  }, [delta]);
+
+  if (!delta) return null;
+  return (
+    <span
+      key={delta.nonce}
+      aria-hidden
+      className="pointer-events-none absolute -top-1 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-emerald-300/70 bg-emerald-500/20 px-2.5 py-1 text-[11px] font-black text-emerald-100 shadow-[0_0_14px_2px_rgba(52,211,153,0.6)]"
+      style={{ animation: "lwa-pot-delta-float 1.6s ease-out both" }}
+    >
+      +{delta.amount} 코인 추가!
+    </span>
+  );
+}
+
 /** Central pot display — always visible on the live table, not just during a reveal. */
 export function ChipPot({ pot }: { pot: number }) {
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className="relative flex flex-col items-center gap-1">
+      <PotDeltaBadge pot={pot} />
       <div
         className="flex h-20 w-20 items-center justify-center rounded-full text-3xl sm:h-24 sm:w-24 sm:text-4xl"
         style={{
@@ -152,6 +193,82 @@ export function ChipPot({ pot }: { pot: number }) {
       </div>
       <span className="text-[11px] font-medium tracking-wide text-amber-200/70 uppercase">POT</span>
       <span className="text-2xl font-black text-amber-200 drop-shadow-[0_0_12px_rgba(245,158,11,0.7)] tabular-nums sm:text-3xl">🪙 {pot}</span>
+    </div>
+  );
+}
+
+/**
+ * Request's "상대 선언/체크/레이즈 대형 포커싱 연출" — three transient action
+ * callouts, whichever of them mounts is decided by `LoveWinsAllBoard.tsx`'s
+ * `useActionCallout` diff hook (this file only renders + plays sound for
+ * whatever event that hook hands it, same split as `RevealOverlay` above).
+ */
+export type ActionCalloutEvent = { type: "check" | "raise" | "declare"; seat: Seat; nonce: number };
+
+const RAISE_SPARK_COUNT = 8;
+const RAISE_SPARKS = Array.from({ length: RAISE_SPARK_COUNT });
+
+/** "체크(Check): 테이블을 가볍게 두드리는 타격음과 함께 [🛡️ CHECK] 블루 펄스 뱃지" — mounted over the acting seat's own `PlayerHeader` slot. */
+export function CheckBadge() {
+  useEffect(() => {
+    const engine = getSoundEngine();
+    engine.unlock();
+    engine.playLwaCheckKnock();
+  }, []);
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute -top-2 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-full border border-sky-300/70 bg-sky-500/20 px-3 py-1 text-[11px] font-bold text-sky-100 shadow-[0_0_16px_2px_rgba(56,189,248,0.6)] backdrop-blur-sm"
+      style={{ animation: "lwa-check-badge-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) both" }}
+    >
+      🛡️ CHECK
+    </div>
+  );
+}
+
+/** "레이즈(Raise): 화염/스파크 충격파와 함께 화면 상단에 [🔥 RAISE!] 배너 + 묵직한 칩 슬램" — screen-top, not seat-anchored (every viewer sees the same banner regardless of who raised). */
+export function RaiseBanner({ name }: { name: string }) {
+  useEffect(() => {
+    const engine = getSoundEngine();
+    engine.unlock();
+    engine.playLwaRaiseSlam();
+  }, []);
+  return (
+    <div aria-hidden className="pointer-events-none fixed inset-x-0 top-4 z-[80] flex justify-center px-4">
+      <div
+        className="relative flex items-center gap-2 rounded-2xl border border-orange-400/60 bg-gradient-to-r from-rose-600/90 via-orange-500/90 to-amber-500/90 px-5 py-2.5 shadow-[0_0_30px_6px_rgba(249,115,22,0.55)]"
+        style={{ animation: "lwa-raise-banner-slam 0.45s cubic-bezier(0.34,1.56,0.64,1) both" }}
+      >
+        {RAISE_SPARKS.map((_, i) => (
+          <span
+            key={i}
+            className="absolute text-sm"
+            style={{ "--angle": `${(360 / RAISE_SPARK_COUNT) * i}deg`, animation: `lwa-raise-spark-particle 0.55s ease-out ${(i * 0.02).toFixed(2)}s both` } as CSSProperties}
+          >
+            🔥
+          </span>
+        ))}
+        <span className="text-lg">🔥</span>
+        <span className="break-keep text-sm font-black tracking-wide text-white drop-shadow sm:text-base">RAISE! {name}님 베팅 증액</span>
+      </div>
+    </div>
+  );
+}
+
+/** "상대 선언 액션: 상대방이... 선언 시 상대 슬롯 전면에 거대한 네온 말풍선 엠블럼" — mounted over the declaring seat's own `PlayerHeader` slot. */
+export function DeclareBubble() {
+  useEffect(() => {
+    const engine = getSoundEngine();
+    engine.unlock();
+    engine.playLwaCardSnap(); // §4's declare confirm reuses the existing card-select snap tone (same action family, no new SFX needed)
+  }, []);
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute -top-3 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-2xl border border-pink-300/70 bg-black/80 px-3 py-1.5 text-[11px] font-bold text-pink-100 shadow-[0_0_20px_4px_rgba(244,114,182,0.65)] backdrop-blur-sm"
+      style={{ animation: "lwa-declare-bubble-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) both" }}
+    >
+      💬 족보 선언!
     </div>
   );
 }
@@ -368,6 +485,11 @@ export default function RevealOverlay({ result, isGameOver, names, viewerSeat, t
 
         {result.potWon > 0 && <p className="text-sm text-amber-100">🪙 팟 {result.potWon} 획득</p>}
         {result.liarPenaltyPaid > 0 && <p className="text-xs text-rose-300">🃏 라이어 카드 패배 페널티 {result.liarPenaltyPaid} 추가 지불</p>}
+        {result.refund && result.refund.amount > 0 && (
+          <p className="text-xs text-emerald-300">
+            🔄 {names[result.refund.seat]}님의 초과 베팅 {result.refund.amount}칩 환급 (매칭 팟 — 상대가 실제로 베팅한 만큼만 승부에 걸립니다)
+          </p>
+        )}
         {isTie && <p className="text-xs text-white/50">팟이 아무에게도 분배되지 않고 다음 라운드로 넘어갑니다</p>}
 
         <SkipButton onSkip={triggerSkip} />

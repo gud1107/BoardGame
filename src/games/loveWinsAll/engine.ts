@@ -148,6 +148,8 @@ export interface RoundResultSnapshot {
   handRanks: Record<Seat, HandCategory> | null;
   /** Each seat's §4 bluffable claim (may not match `handRanks`) — kept even after a fold if declaring had already happened before the fold (bet2). */
   declaredHand: Partial<Record<Seat, HandCategory>>;
+  /** This round's "매칭 팟" uncalled-bet refund (2026-09-01 session), if any — see `applyCall`'s doc. `null` when no street this round closed on a short all-in call. */
+  refund: { seat: Seat; amount: number } | null;
 }
 
 export interface LoveWinsAllState {
@@ -174,6 +176,8 @@ export interface LoveWinsAllState {
   /** Distinguishes "opening check, passes to the other seat" from "check-check, street closes" — reset every time a betting street starts. */
   checkedThisStreet: boolean;
   lastRoundResult: RoundResultSnapshot | null;
+  /** This round's "매칭 팟" uncalled-bet refund so far (2026-09-01 session), carried from whichever street last closed on a short all-in call into this round's eventual `RoundResultSnapshot.refund` — `null` most rounds. Reset to `null` at the start of every new round (`applyContinue`/`startGame`), independent of `lastRoundResult`. */
+  roundRefund: { seat: Seat; amount: number } | null;
   /** Final match winner once `phase === "gameOver"`; `null` for the (rare) simultaneous double-KO. */
   winner: Seat | null;
   /** Monotonic counter, incremented on every state-changing action — used by `isStateSyncStale` to reject a stale reconnect `state-sync` race. */
@@ -229,6 +233,7 @@ export function startGame(variant: Variant = "base", rng: () => number = Math.ra
     betsThisStreet: { p1: 0, p2: 0 },
     checkedThisStreet: false,
     lastRoundResult: null,
+    roundRefund: null,
     winner: null,
     seq: 0,
   };
@@ -323,6 +328,7 @@ function resolveShowdown(state: LoveWinsAllState): LoveWinsAllState {
     folderSeat: null,
     potWon,
     liarPenaltyPaid,
+    refund: state.roundRefund,
     hands: { p1: state.hands.p1, p2: state.hands.p2 },
     community: state.community,
     handRanks: { p1: e1.category, p2: e2.category },
@@ -348,12 +354,26 @@ function applyCall(state: LoveWinsAllState): LoveWinsAllState {
   const already = state.betsThisStreet[seat];
   const toCall = state.currentBet - already;
   const pay = Math.max(0, Math.min(toCall, stack)); // call-for-less if short (standard heads-up poker convention)
+  const newTotal = already + pay;
+
+  // Matched-pot / uncalled-bet rule (request's "베팅 상한 매칭 팟"): if this call
+  // is short — an all-in for less than `currentBet` — the raiser's excess
+  // above what actually got matched was never contested and is refunded
+  // straight back to their stack right now, rather than sitting in a pot the
+  // short-stacked opponent could never have covered. `currentBet` always
+  // equals the raiser's own `betsThisStreet` total (`applyRaise` sets both
+  // together), so `currentBet - newTotal` is exactly that uncalled excess.
+  const raiser = otherSeat(seat);
+  const refund = toCall > 0 && newTotal < state.currentBet ? state.currentBet - newTotal : 0;
+  let nextChips = { ...state.chips, [seat]: stack - pay };
+  if (refund > 0) nextChips = { ...nextChips, [raiser]: nextChips[raiser] + refund };
 
   const afterPay: LoveWinsAllState = {
     ...state,
-    chips: { ...state.chips, [seat]: stack - pay },
-    betsThisStreet: { ...state.betsThisStreet, [seat]: already + pay },
-    pot: state.pot + pay,
+    chips: nextChips,
+    betsThisStreet: { ...state.betsThisStreet, [seat]: newTotal },
+    pot: state.pot + pay - refund,
+    roundRefund: refund > 0 ? { seat: raiser, amount: refund } : state.roundRefund,
   };
 
   // A genuine call (toCall > 0) always closes the street. A check (toCall
@@ -382,6 +402,7 @@ function applyFold(state: LoveWinsAllState): LoveWinsAllState {
     folderSeat: folder,
     potWon,
     liarPenaltyPaid: 0,
+    refund: state.roundRefund,
     hands: null, // §G — a fold never reveals either hand
     community: null,
     handRanks: null,
@@ -444,15 +465,57 @@ function applyDeclare(state: LoveWinsAllState, action: Extract<EngineAction, { t
  * (The one case with no seat left to award it to — both hitting 0
  * simultaneously — matches `showMeTheCoin`'s identical draw convention;
  * that pot has nowhere to go and is discarded.)
+ *
+ * **2026-09-01 bug fix — synthesized `lastRoundResult`.** The showdown/fold
+ * call sites always populate `state.lastRoundResult` themselves before
+ * reaching this function, so this used to just leave it alone. But
+ * `applyContinue`'s ante-induced-KO path (module doc above) calls this
+ * *after* already resetting `lastRoundResult` to `null` for the new round it
+ * just dealt — so a match that ends purely from a short-stacked ante (never
+ * from a showdown/fold) used to reach `phase: "gameOver"` with a `null`
+ * `lastRoundResult`. `LoveWinsAllBoard.tsx`'s reveal overlay (and everything
+ * downstream of it: the skip button, `onGameEnd`, the post-game result
+ * screen) is gated on `state.lastRoundResult` being non-null — so that combo
+ * silently froze the UI on the live table with no result screen ever
+ * appearing, which is the "게임 종료 후 결과창이 안 뜬다" bug this session was
+ * asked to fix. Synthesizing a minimal snapshot here (only when one isn't
+ * already present) closes that gap without touching the showdown/fold paths
+ * at all — `?? synthesized` is a no-op for those.
  */
 function applyKoCheck(state: LoveWinsAllState): LoveWinsAllState {
   const p1Out = state.chips.p1 <= 0;
   const p2Out = state.chips.p2 <= 0;
   if (!p1Out && !p2Out) return state;
-  if (p1Out && p2Out) return { ...state, pot: 0, phase: "gameOver", winner: null };
+
+  function synthesizedResult(winnerSeat: Seat | null, potWon: number): RoundResultSnapshot {
+    return {
+      roundNumber: state.round,
+      outcome: winnerSeat ? "win" : "tie",
+      winnerSeat,
+      folderSeat: null,
+      potWon,
+      liarPenaltyPaid: 0,
+      refund: state.roundRefund,
+      hands: null,
+      community: null,
+      handRanks: null,
+      declaredHand: state.declaredHand,
+    };
+  }
+
+  if (p1Out && p2Out) {
+    return { ...state, pot: 0, phase: "gameOver", winner: null, lastRoundResult: state.lastRoundResult ?? synthesizedResult(null, 0) };
+  }
   const loserSeat: Seat = p1Out ? "p1" : "p2";
   const winnerSeat = otherSeat(loserSeat);
-  return { ...state, chips: { ...state.chips, [winnerSeat]: state.chips[winnerSeat] + state.pot }, pot: 0, phase: "gameOver", winner: winnerSeat };
+  return {
+    ...state,
+    chips: { ...state.chips, [winnerSeat]: state.chips[winnerSeat] + state.pot },
+    pot: 0,
+    phase: "gameOver",
+    winner: winnerSeat,
+    lastRoundResult: state.lastRoundResult ?? synthesizedResult(winnerSeat, state.pot),
+  };
 }
 
 function applyContinue(state: LoveWinsAllState, action: Extract<EngineAction, { type: "continue" }>): LoveWinsAllState {
@@ -479,6 +542,7 @@ function applyContinue(state: LoveWinsAllState, action: Extract<EngineAction, { 
     betsThisStreet: { p1: 0, p2: 0 },
     checkedThisStreet: false,
     lastRoundResult: null,
+    roundRefund: null,
     seq: state.seq + 1,
   };
   return applyKoCheck(withDeal); // ante-induced KO edge case (module doc)

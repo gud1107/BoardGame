@@ -1561,6 +1561,89 @@ class SoundEngine {
     shatter.stop(now + 0.3);
   }
 
+  // 2026-09-01 세션 — 베팅 액션 대형 연출(체크/레이즈) 강화: 이 둘은 이전까지
+  // 버튼 클릭 자체에 아무 SFX도 없었다(레이즈/올인은 `playChipBet` 같은 공용
+  // 사운드조차 연결돼 있지 않았음).
+
+  /** 러브 윈즈 올 — "체크(패스) 타격음": 테이블을 가볍게 두 번 두드리는 둔탁한 노크음. 상대의 체크가 화면에 뜰 때마다(자신의 체크 포함) 재생(CHECK_KNOCK). */
+  playLwaCheckKnock() {
+    if (!this.gate("lwaCheckKnock", 200)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    [0, 0.09].forEach((delay) => {
+      const at = now + delay;
+      const knock = ctx.createOscillator();
+      knock.type = "triangle";
+      knock.frequency.setValueAtTime(220, at);
+      knock.frequency.exponentialRampToValueAtTime(90, at + 0.09);
+      const knockGain = ctx.createGain();
+      knockGain.gain.setValueAtTime(0.22, at);
+      knockGain.gain.exponentialRampToValueAtTime(0.001, at + 0.12);
+      knock.connect(knockGain).connect(this.sfxGain!);
+      knock.start(at);
+      knock.stop(at + 0.12);
+
+      const tap = ctx.createBufferSource();
+      tap.buffer = noiseBuffer(ctx);
+      const tapFilter = ctx.createBiquadFilter();
+      tapFilter.type = "bandpass";
+      tapFilter.frequency.value = 600;
+      tapFilter.Q.value = 4;
+      const tapGain = ctx.createGain();
+      tapGain.gain.setValueAtTime(0.12, at);
+      tapGain.gain.exponentialRampToValueAtTime(0.001, at + 0.05);
+      tap.connect(tapFilter).connect(tapGain).connect(this.sfxGain!);
+      tap.start(at);
+      tap.stop(at + 0.05);
+    });
+  }
+
+  /** 러브 윈즈 올 — "레이즈 칩 슬램음": 낮게 깔리는 화염 스웰(라이징 사각파) + 묵직한 칩 더미가 테이블에 내려찍히는 임팩트. 레이즈(올인 포함) 배너가 뜰 때마다 재생(RAISE_SLAM). */
+  playLwaRaiseSlam() {
+    if (!this.gate("lwaRaiseSlam", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const whoosh = ctx.createOscillator();
+    whoosh.type = "sawtooth";
+    whoosh.frequency.setValueAtTime(90, now);
+    whoosh.frequency.exponentialRampToValueAtTime(340, now + 0.18);
+    const whooshGain = ctx.createGain();
+    whooshGain.gain.setValueAtTime(0.001, now);
+    whooshGain.gain.linearRampToValueAtTime(0.2, now + 0.15);
+    whooshGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    whoosh.connect(whooshGain).connect(this.sfxGain);
+    whoosh.start(now);
+    whoosh.stop(now + 0.22);
+
+    const slamAt = now + 0.16;
+    const slam = ctx.createOscillator();
+    slam.type = "sine";
+    slam.frequency.setValueAtTime(180, slamAt);
+    slam.frequency.exponentialRampToValueAtTime(55, slamAt + 0.22);
+    const slamGain = ctx.createGain();
+    slamGain.gain.setValueAtTime(0.4, slamAt);
+    slamGain.gain.exponentialRampToValueAtTime(0.001, slamAt + 0.26);
+    slam.connect(slamGain).connect(this.sfxGain);
+    slam.start(slamAt);
+    slam.stop(slamAt + 0.26);
+
+    const clatter = ctx.createBufferSource();
+    clatter.buffer = noiseBuffer(ctx);
+    const clatterFilter = ctx.createBiquadFilter();
+    clatterFilter.type = "highpass";
+    clatterFilter.frequency.value = 2200;
+    const clatterGain = ctx.createGain();
+    clatterGain.gain.setValueAtTime(0.2, slamAt);
+    clatterGain.gain.exponentialRampToValueAtTime(0.001, slamAt + 0.15);
+    clatter.connect(clatterFilter).connect(clatterGain).connect(this.sfxGain);
+    clatter.start(slamAt);
+    clatter.stop(slamAt + 0.15);
+  }
+
   // ---------------------------------------------------------------------
   // 망각의 지뢰 — 격자 위 지뢰 폭발/안전 통과/보물 획득/정찰 SFX. 룰북 기반 신규
   // 게임 개발 세션에서 추가. `playDeathExplode`(소환사의 협곡, 라운드 전체 패배)

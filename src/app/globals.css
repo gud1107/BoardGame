@@ -3339,6 +3339,92 @@ body {
   }
 }
 
+/* 2026-09-01 세션 — 체크/레이즈/선언 액션 콜아웃 + 팟 증가분 플로팅 배지. See
+   LoveWinsAllEffects.tsx's CheckBadge/RaiseBanner/DeclareBubble/PotDeltaBadge. */
+
+/* Check badge popping onto the acting seat's slot. */
+@keyframes lwa-check-badge-pop {
+  0% {
+    transform: scale(0.5) translateY(6px);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.15) translateY(-2px);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Screen-top RAISE! banner slamming into place. */
+@keyframes lwa-raise-banner-slam {
+  0% {
+    transform: scale(1.6) translateY(-14px);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(0.96) translateY(2px);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(1.05) translateY(-1px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* One flame glyph radiating outward from the RAISE! banner — driven per-particle via --angle, same technique as lwa-heart-burst-particle. */
+@keyframes lwa-raise-spark-particle {
+  0% {
+    transform: rotate(var(--angle)) translateY(0) scale(0.4);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--angle)) translateY(-60px) scale(1.1);
+    opacity: 0;
+  }
+}
+
+/* Declare speech-bubble popping onto the declaring seat's slot. */
+@keyframes lwa-declare-bubble-pop {
+  0% {
+    transform: scale(0.4) translateY(10px);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.12) translateY(-4px);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Pot-delta badge floating up and away over the central pot display. */
+@keyframes lwa-pot-delta-float {
+  0% {
+    transform: translateY(4px) scale(0.7);
+    opacity: 0;
+  }
+  25% {
+    transform: translateY(-4px) scale(1.08);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(-14px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-22px) scale(0.92);
+    opacity: 0;
+  }
+}
+
 /* ---------------------------------------------------------------------
    랫어탯캣 (Rat-a-Tat Cat) — see ratATatCat/CardSlot.tsx and
    ratATatCat/RatATatCatEffects.tsx for what mounts each of these.
