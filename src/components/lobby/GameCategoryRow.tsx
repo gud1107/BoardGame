@@ -5,8 +5,8 @@ import GameCard from "@/components/GameCard";
 /**
  * One Netflix-style horizontal-scroll "row" for the mobile lobby (see
  * `src/app/page.tsx` — rendered only in the `sm:hidden` mobile-only section,
- * confirmed via AskUserQuestion: desktop keeps its existing search/filter/
- * grid layout unchanged and gets no row/no hover-arrow variant of this).
+ * as a curated preview stacked above the full searchable catalog, which as
+ * of 2026-09-02 renders on mobile too instead of being desktop-only).
  * Each card gets a fixed peek width (not the grid's implicit column width)
  * so the next card's edge is visibly cut off at the viewport edge — the
  * "you can swipe" affordance — and snaps flush via `snap-x`/`snap-start`

@@ -31,12 +31,20 @@ export default function DashboardPage() {
   // the collection showcase (always shown at the "전체" genre view) and the
   // main grid (narrowed to one genre when picked) can both read off the same
   // base list without double-filtering.
+  //
+  // Query matches title (kr/en), theme tags, and description keywords —
+  // shared identically between the desktop-visible-always section and the
+  // mobile copy of it below the curated carousel (2026-09-02, AskUserQuestion).
   const baseFiltered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filter = PLAYER_FILTERS[filterIdx];
     return GAME_REGISTRY.filter((g) => {
       const matchesQuery =
-        !q || g.name.toLowerCase().includes(q) || g.nameEn?.toLowerCase().includes(q);
+        !q ||
+        g.name.toLowerCase().includes(q) ||
+        g.nameEn?.toLowerCase().includes(q) ||
+        g.description.toLowerCase().includes(q) ||
+        g.tags?.some((tag) => tag.toLowerCase().includes(q));
       const matchesPlayers = filter.test(g.players.min, g.players.max);
       return matchesQuery && matchesPlayers;
     });
@@ -64,28 +72,46 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Mobile-only (< sm) Netflix-style category carousel — replaces the
-          search/filter/full-grid section below entirely on phones (decided
-          via AskUserQuestion: desktop keeps that section 100% unchanged and
-          gets no row variant of its own). `-mx-4` cancels the page
-          container's own `px-4` (its only horizontal padding below `sm`,
-          since `sm:px-6` doesn't apply here) so each row's cards can bleed
-          to the viewport edge — the "next card peeks in" swipe affordance
-          only works if the row isn't boxed in by the container's padding. */}
+      {/* Mobile-only (< sm) Netflix-style category carousel — a curated
+          preview shown ABOVE the full searchable catalog below (as of
+          2026-09-02 that section is no longer desktop-only; see its own
+          comment). `-mx-4` cancels the page container's own `px-4` (its only
+          horizontal padding below `sm`, since `sm:px-6` doesn't apply here)
+          so each row's cards can bleed to the viewport edge — the "next card
+          peeks in" swipe affordance only works if the row isn't boxed in by
+          the container's padding. */}
       <div className="-mx-4 sm:hidden">
         {GAME_CATEGORIES.map((category) => (
           <GameCategoryRow key={category.id} category={category} />
         ))}
       </div>
 
-      <div className="hidden sm:block">
+      {/* Full searchable catalog. On mobile this now renders below the
+          curated carousel above (rather than being hidden entirely) so every
+          registered game — not just the 6 curated ones — stays reachable via
+          search or scroll (2026-09-02, AskUserQuestion: keep the carousel,
+          add this section underneath on mobile too). */}
+      <div className="mt-8 sm:mt-0">
+        <h2 className="mb-3 text-base font-bold text-white sm:hidden">🔍 전체 게임 검색</h2>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="게임 이름 검색..."
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none sm:max-w-xs"
-          />
+          <div className="relative w-full sm:max-w-xs">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="게임 이름, 태그로 검색..."
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 pr-9 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="검색어 지우기"
+                className="absolute top-1/2 right-2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white"
+              >
+                ✕
+              </button>
+            )}
+          </div>
           <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
             {PLAYER_FILTERS.map((f, idx) => (
               <button
