@@ -527,8 +527,14 @@ input을 `relative` 래퍼로 감싸고, `query`가 비어있지 않을 때만 �
 `✕` 버튼 클릭 시 `input.value`가 `""`로 정상 초기화됨을 `inputValue()`로 직접 확인, 존재하지 않는 검색어
 입력 시 "검색 결과가 없습니다." 안내 문구가 정확히 1건 렌더링됨을 확인.
 
-**커밋/배포**: 이 세션에서 커밋 `feat(lobby): ensure all games visible on mobile and implement real-time
-search filter`로 반영, 배포는 아래 "커밋/배포" 결과 참고.
+**커밋/배포**: `git commit`(`7774817`, `feat(lobby): ensure all games visible on mobile and implement
+real-time search filter`) → `git push origin main`(`3b5bf9a..7774817`) 완료. 세션 시작 시점부터 이미
+워킹 트리에 있던 이번 세션과 무관한 변경분(`boardGameRule/` 여러 파일, `.claude/`, `src/components/patchNotes/`
+개편분, `src/constants/patchNotes.ts` 등 — 다른 세션의 진행 중 작업으로 추정)은 의도·용도를 확인할 수 없어
+커밋 대상에서 제외(이전 세션들과 동일 판단). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드
+정상 완주(42초), `target: "production"`/`readyState: READY`(`dpl_CDwBkKULgPwM6mVDasf7jBABSxmr`), 프로덕션
+도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/` 200 확인, 응답 HTML에 신규 "전체 게임 검색"
+소제목과 "지렁이"(캐러셀 미포함 게임) 문자열이 포함돼 SSR 단계부터 전체 목록이 내려오는 것을 직접 확인함.
 
 ### 2026-09-02 — 지렁이 맵 확장/모바일 최적화/성장 진화/1등 왕관/봇 대체 구현
 
