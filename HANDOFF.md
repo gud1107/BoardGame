@@ -32,7 +32,9 @@ resolved`가 false→true로 뒤집히는 순간을 감지, 카드 id가 결과�
 왕에게 강제 상납한 뒤 봇이 자동으로 돌려주자 하이라이트 팝업이 정확한 "내가 준 카드"/"상납받은 카드"
 카드 face로 뜨는 것을 스크린샷으로 확인, 스킵 버튼 클릭 시 즉시 닫힘(2/3회, 나머지 1회는 세금 교환 비당사자인
 평민 좌석이라 팝업 자체가 뜨지 않는 것도 설계대로 정상 확인)도 검증. `npx tsc --noEmit`/`npm run lint`/
-`npx vitest run`(49개 파일·1536개 테스트, 신규 4개 회귀 테스트 포함) 전부 통과** — 자세한 내용은 아래
+`npx vitest run`(49개 파일·1536개 테스트, 신규 4개 회귀 테스트 포함) 전부 통과. 커밋 `6456c01` →
+`git push origin main` → `npx vercel deploy --prod --scope me-3871`(`dpl_H69Z2ri39HgLEStdUoDs9RmcCeBf`,
+READY) 완료, `curl`로 프로덕션 `/`·`/games/dalmuti` 200 확인** — 자세한 내용은 아래
 `### 2026-09-02 — 달무티 5인 세금 교환 버그 조사 및 대형 하이라이트 팝업 구현` 절 참고.)_
 
 _이전 갱신: 2026-09-01 (**말달리자(Run Horse) 3대 버그 신고 조사 세션 — 요청서는 "말 1개/플레이어 +
@@ -417,7 +419,14 @@ lockstep state를 diff해 표시(스킵도 그 클라이언트에게만 적용, 
 설계대로 팝업 자체가 뜨지 않은 것도 함께 확인, 마스킹 범위 결정이 실제로 동작함을 입증).
 
 **커밋/배포**: `npx tsc --noEmit`/`npm run lint`/`npx vitest run`(49개 파일·1536개 테스트, 신규 4개 회귀
-테스트 포함, 회귀 없음) 전부 통과.
+테스트 포함, 회귀 없음) 전부 통과. 이번 세션 변경분만 정확히 스테이징(`HANDOFF.md`, `globals.css`,
+`src/games/dalmuti/Dalmuti.test.ts`/`DalmutiBoard.tsx`/`DalmutiEffects.tsx`/`TaxHighlightModal.tsx` 신규 —
+작업 시작 시점에 이미 워킹 트리에 있던 이 세션과 무관한 사전 변경분은 이전 세션들과 동일하게 커밋 대상에서
+제외). 커밋 메시지 `fix(dalmuti): fix 5-player merchant tax exchange transaction and add large card exchange
+highlight UI`(`6456c01`) → `git push origin main` 완료(`43024d8..6456c01`). 이어서
+`npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(56초), `target: "production"`/
+`readyState: READY`(`dpl_H69Z2ri39HgLEStdUoDs9RmcCeBf`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에
+별칭 완료. `curl`로 `/`·`/games/dalmuti` 둘 다 200 직접 확인함.
 
 ### 2026-09-01 — 말달리자 3대 버그 신고 조사 및 봇 자동진행/승리 오버레이 방어 보강
 
