@@ -407,7 +407,7 @@ StrictMode 이중 mount는 "게임 시작 직후 봇이 선공일 때"만 재현
 로컬 개발 서버인지 프로덕션인지, (b) 문제가 발생한 시점의 대략적인 이동 횟수, (c) 새로고침/재접속으로
 복구됐는지를 함께 확인해 재현 단서로 삼을 것.
 
-**커밋/배포**: 아래 참고(이 문단은 실제 커밋 직후 갱신).
+**커밋/배포**: 커밋 메시지 `fix(mal-dalli-ja): investigate 3 reported piece/oasis bugs, correct stale seat-color comment, and harden bot-autoplay against remount-induced freeze`(`31b6cc0`) → `git push origin main` 완료(`4e983a2..31b6cc0`). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(42초), `target: "production"`/`readyState: READY`(`dpl_2VWeKM4xu9vakutxY6c3N6vA9Vfw`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/mal-dalli-ja` 둘 다 200, 응답 HTML에 "말달리자" 문자열 포함 직접 확인함.
 
 ### 2026-09-01 — 러브 윈즈 올 결과창 버그 픽스, 베팅 UI 개편, 액션 콜아웃 연출 및 매칭 팟 정산 룰
 
