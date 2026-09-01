@@ -1,6 +1,42 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-01 (**망각의 지뢰(Mine of Oblivion) 지뢰 설치 상대 점유 칸 금지 룰 반전 + 체스 폰
+_최종 갱신: 2026-09-01 (**러브 윈즈 올(Love Wins All) 게임 종료 결과창 미표출 버그 픽스 + 베팅 UI 퀵버튼/팟
+증감 표기 개편 + 체크·레이즈·선언 액션 콜아웃 연출 + 매칭 팟(사이드 팟) 정산 룰 구현 세션 — 요청서는
+"러브 윈즈 올 2"를 별도 게임/파일 구조(`loveWinsAll2/`, `BettingPanel.tsx`/`ResultModal.tsx`/
+`LoveWins2Effects.tsx`/`PlayerSlot.tsx` 등)로 전제했으나, 실제로는 방 만들기 시 호스트가 고르는 룰셋
+변형(`variant: "base" | "lwa2"`, 같은 `engine.ts`/`LoveWinsAllBoard.tsx`/`LoveWinsAllEffects.tsx` 안에서
+분기)일 뿐 별도 게임이 아님을 `AskUserQuestion`으로 먼저 확인. "결과창이 안 뜬다"는 신고도 재현 여부를
+같이 확인한 결과, 코드 추적으로 실제 근본 원인을 발견: `applyContinue`가 다음 라운드를 딜하며
+`lastRoundResult`를 `null`로 리셋한 *직후* 그 라운드의 앤티(ante) 자체가 이미 칩 0인 좌석을 완전히
+소진시켜(숏스택 앤티 클램프) `applyKoCheck`가 `phase: "gameOver"`로 전이시키는 극히 드문 경로(쇼다운/폴드를
+거치지 않고 순수히 다음 라운드 앤티만으로 매치가 끝나는 경우)에서만 `lastRoundResult`가 계속 `null`로
+남아있었고, `LoveWinsAllBoard.tsx`의 리빌 오버레이(및 그 안의 스킵 버튼·`onGameEnd`·사후 결과 화면 전부)가
+`state.lastRoundResult &&` 조건에 게이팅돼 있어 이 경로에서만 결과 화면이 영원히 뜨지 않고 화면이 멈추는
+버그였음(오늘 이전에 픽스한 §4 카드 무한 증식 버그와는 무관한 별개의 버그). `engine.ts`의 `applyKoCheck`에
+`lastRoundResult`가 이미 있으면 그대로 두고(쇼다운/폴드 경로는 무변경) 없을 때만 최소 스냅샷을 합성하는
+`?? synthesizedResult(...)` 한 줄로 픽스 — 이 정확한 경로를 재현하는 회귀 테스트도 신규 추가. 베팅
+컨트롤러에 `[+3]`/`[+5]`/`[+10]` 퀵 증액 버튼(레이즈 슬라이더 값을 범위 안에서 즉시 가감, 기존 `올인` 버튼이
+요청의 MAX/ALL-IN 역할을 이미 겸함) 신규 배치, 중앙 팟(`ChipPot`)에 팟이 증가할 때마다 `+N 코인 추가!`
+네온 배지가 뜨고 1.6초 후 페이드아웃하는 `PotDeltaBadge` 신규 추가. 상대 체크/레이즈/선언 액션을 대형
+연출로 알리는 `useActionCallout` 훅(연속된 두 `state` 스냅샷을 diff해 "누가 무엇을 했는지" 판별 — 네트워크로
+도착하는 상대의 액션은 raw `EngineAction`이 아니라 결과 `state`로만 전달되므로 diff가 유일한 방법) +
+`CheckBadge`(🛡️ CHECK 블루 펄스, 행동한 좌석의 `PlayerHeader` 슬롯 위에 오버레이)/`RaiseBanner`(🔥 RAISE!
+화면 상단 배너 + 화염 파티클, 좌석 무관 전체 화면 고정)/`DeclareBubble`(💬 족보 선언! 네온 말풍선, 선언한
+좌석 슬롯 위) 신규 컴포넌트. 신규 SFX 2종(`playLwaCheckKnock` 목재 노크음 2연타, `playLwaRaiseSlam` 화염
+스웰+칩 슬램 임팩트) `soundEngine.ts`에 추가, 선언 콜아웃은 기존 카드 스냅음 재사용. 베팅 상한 매칭
+팟(사이드 팟) 정산 룰은 `engine.ts`의 `applyCall`에 신규 구현 — 숏스택 올인 콜(`toCall > newTotal`이 되는
+경우)이 발생하면 레이저가 이미 팟에 넣은 초과분(`currentBet - newTotal`)을 그 즉시 팟에서 빼서 레이저
+본인 칩으로 즉시 환급(승패와 무관하게 항상 환급 — "안전하게 환급"이라는 요청 문구와 일치), 팟에는 실제로
+매칭된 금액만 남아 쇼다운 승자도 그만큼만 획득 가능. 이 라운드의 환급 내역은 신규 `state.roundRefund` →
+`RoundResultSnapshot.refund`로 이어져 리빌 오버레이에 "🔄 OO님의 초과 베팅 N칩 환급" 문구로도 표시. 캐시된
+Playwright Chromium(scratchpad 전용 설치, 호스트+봇 1탭)으로 실제 대국을 라이브 재현해 퀵 `+5` 버튼 클릭
+→ 레이즈 제출 → `RAISE! OO님 베팅 증액` 배너와 `+6 코인 추가!` 팟 배지가 동시에 뜨는 것, 상대(봇)의 체크
+시 `🛡️ CHECK` 배지가 상대 슬롯 위에, 본인 선언 확정 시 `💬 족보 선언!` 버블이 본인 슬롯 위에 각각 정확히
+뜨는 것을 스크린샷 4장으로 직접 확인. `npx tsc --noEmit`/`npm run lint`/`npx vitest run`(49개 파일·1529개
+테스트, 신규 2개 회귀 테스트 포함) 전부 통과** — 자세한 내용은 아래 `### 2026-09-01 — 러브 윈즈 올 결과창
+버그 픽스, 베팅 UI 개편, 액션 콜아웃 연출 및 매칭 팟 정산 룰` 절 참고.)_
+
+_이전 갱신: 2026-09-01 (**망각의 지뢰(Mine of Oblivion) 지뢰 설치 상대 점유 칸 금지 룰 반전 + 체스 폰
 플레이어 말 리뉴얼 세션 — 요청서는 "상대방이 점유한 칸에는 지뢰 설치 불가"를 요구했으나, 실제로는 지뢰
 매설(`SETUP_MINE`)이 이동이 시작되기 전 단 한 번만 일어나는 페이즈라 그 시점의 "점유 칸"은 곧 양측 시작
 칸(A1/K11)뿐임을 확인 — 이는 바로 전날(2026-08-31) `AskUserQuestion`으로 명시적으로 확정한 "상대 시작
@@ -239,6 +275,88 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-09-01 — 러브 윈즈 올 결과창 버그 픽스, 베팅 UI 개편, 액션 콜아웃 연출 및 매칭 팟 정산 룰
+
+**요청**: ① 게임 종료 후 결과창(Result Modal) 미출력 버그 픽스, ② 베팅 컨트롤러 퀵 증액 버튼(+3/+5/+10)
++ MAX/ALL-IN 버튼, ③ 중앙 팟 누적 표기 옆에 이번 액션의 증가분을 분리 표기, ④ 상대 선언/체크/레이즈
+대형 포커싱 연출(네온 말풍선, 블루 실드 펄스+노크음, 화염 충격파+RAISE! 배너), ⑤ 올인해도 상대가 실제로
+베팅한 금액까지만 획득 가능한 매칭 팟/사이드 팟 정산 엔진. 요청서는 이 전부를 "러브 윈즈 올 **2**"라는
+별도 게임(`src/games/loveWinsAll2/` 또는 `loveWins2/`, `engine.ts`/`types.ts`/`Board.tsx`/
+`BettingPanel.tsx`/`ResultModal.tsx`/`LoveWins2Effects.tsx`/`PlayerSlot.tsx` 파일 구조)로 전제.
+
+**사전 조사에서 발견한 사실 (`AskUserQuestion`으로 확인)**:
+- "러브 윈즈 올 2"는 별도 게임이 아니라 방 만들기 화면에서 호스트가 고르는 룰셋 변형
+  (`variant: "base" | "lwa2"`) — 카드 3장 족보인 기본판과, 공용 카드 1장이 열리는 홀덤식 + 라이어(조커)
+  카드가 추가된 `lwa2`가 **같은** `engine.ts`/`cards.ts`/`LoveWinsAllBoard.tsx`/`LoveWinsAllEffects.tsx`
+  안에서 분기한다. 요청서가 전제한 파일 구조·경로는 실재하지 않음.
+- "결과창이 안 뜬다"는 신고를 코드 추적으로 검증 — 실제로 재현 가능한 버그였음(상세는 아래 구현 항목 ①).
+  같은 날 이미 픽스·배포된 §4 카드 무한 증식(key 충돌) 버그(`bf081da`)와는 무관한 별개 경로.
+- 매칭 팟/사이드 팟 룰은 기존 엔진에 전혀 없었음(`sidePot`/`allIn` 관련 로직 0건) — `applyRaise`가 레이즈
+  전액을 즉시 팟에 넣고, 상대가 숏스택으로 콜-포-레스해도 초과분을 돌려주는 로직이 없어 승자가 상대의
+  실제 베팅액을 넘는 금액까지 그대로 가져가는 구조였음.
+
+**구현**:
+1. **① 결과창 버그 픽스 (`engine.ts`)** — 근본 원인: 쇼다운/폴드로 인한 게임오버는 그 전에 이미
+   `lastRoundResult` 스냅샷이 채워져 있어 문제없지만, `applyContinue`가 다음 라운드를 딜하며
+   `lastRoundResult: null`로 리셋한 *직후* 그 라운드의 앤티(ante)가 이미 칩이 간당간당한 좌석을 완전히
+   0으로 소진시키는 숏스택 앤티 클램프 경로(쇼다운/폴드를 거치지 않고 순수히 다음 라운드 앤티만으로
+   매치가 끝나는, 드물지만 실재하는 경로)에서만 `lastRoundResult`가 계속 `null`로 남았다.
+   `LoveWinsAllBoard.tsx`의 리빌 오버레이(`state.lastRoundResult && <RevealOverlay .../>`)가 그 값에
+   게이팅돼 있어, 이 경로에서는 리빌 오버레이 자체가 마운트되지 않고 → 그 안의 3초 자동 스킵/스킵
+   버튼/`onGameEnd`가 전부 실행되지 않으며 → 사후 결과 화면(post-game phase)에도 영원히 도달하지 못하고
+   보드가 그대로 멈추는 것이 "결과창이 안 뜬다"는 신고의 실체였다. `applyKoCheck`에
+   `lastRoundResult: state.lastRoundResult ?? synthesizedResult(...)`로 최소 스냅샷 합성 로직을 추가 —
+   기존 쇼다운/폴드 경로는 이미 값이 있어 무변경, 이 경로에서만 새로 채워짐.
+2. **② 퀵 베팅 버튼 (`LoveWinsAllBoard.tsx`의 `BettingControls`)** — 레이즈 슬라이더 아래 `[+3]`/`[+5]`/
+   `[+10]` 버튼 신규 추가(클릭 시 현재 슬라이더 값에 가산, 범위(`raiseRange`) 안으로 클램프, 즉시 제출은
+   하지 않고 슬라이더만 조정). 기존 `올인` 버튼이 요청의 MAX/ALL-IN 버튼 역할을 이미 정확히 수행하고
+   있어 중복 버튼은 추가하지 않음.
+3. **③ 팟 증감 표기 (`LoveWinsAllEffects.tsx`의 `ChipPot`/신규 `PotDeltaBadge`)** — `pot` prop을 이전
+   렌더값과 자체 diff해서(호출자 배선 불필요) 증가할 때마다 `+N 코인 추가!` 네온 배지를 팟 위에 1.6초간
+   플로팅-페이드 표시. 누적 총합(`🪙 {pot}`)은 그대로 유지, 배지는 "이번 액션분"만 별도 강조.
+4. **④ 액션 콜아웃 연출** — 신규 `useActionCallout` 훅(`LoveWinsAllBoard.tsx`): 연속된 두 `state`
+   스냅샷을 diff해 방금 어떤 액션이 있었는지 판별한다(네트워크로 도착하는 상대의 액션은 raw
+   `EngineAction`이 아니라 결과 `state`로만 이 컴포넌트에 전달되므로, diff가 유일하게 신뢰 가능한 방법 —
+   `declaredHand[seat]`가 `undefined→값`이면 선언, 베팅 페이즈에서 행동한 좌석의 `betsThisStreet`가
+   늘고 `currentBet`도 늘면 레이즈, 둘 다 그대로면 체크(폴드로 인한 쇼다운 전이는 `lastRoundResult.outcome`
+   으로 구분해 제외)). 신규 `CheckBadge`(🛡️ CHECK, 행동한 좌석의 `PlayerHeader` 슬롯 위 오버레이 + 신규
+   `playLwaCheckKnock` 목재 노크 2연타 SFX)/`RaiseBanner`(🔥 RAISE! OO님 베팅 증액, 좌석 무관 화면 상단
+   고정 배너 + 화염 파티클 + 신규 `playLwaRaiseSlam` 화염 스웰+칩 슬램 SFX)/`DeclareBubble`(💬 족보 선언!,
+   선언한 좌석 슬롯 위 + 기존 카드 스냅음 재사용) 컴포넌트, `globals.css`에 `lwa-check-badge-pop`/
+   `lwa-raise-banner-slam`/`lwa-raise-spark-particle`/`lwa-declare-bubble-pop`/`lwa-pot-delta-float`
+   키프레임 5종 신규 추가.
+5. **⑤ 매칭 팟(사이드 팟) 정산 (`engine.ts`의 `applyCall`)** — 숏스택 올인 콜(`toCall > 0`이고 콜 후
+   총액이 `currentBet`에 못 미치는 경우)이 발생하면, 레이저가 이미 팟에 넣어둔 초과분
+   (`currentBet - newTotal`)을 그 즉시 팟에서 빼서 레이저 본인 칩으로 환급 — 승패와 무관하게 항상, 콜이
+   일어나는 그 순간에 즉시 실행("초과 베팅은 본인에게 안전하게 환급"이라는 요청 문구와 일치). 팟에는
+   실제로 매칭된 금액만 남으므로 쇼다운 승자도 그만큼만 획득 가능. 이 라운드의 환급 내역은 신규
+   `state.roundRefund`(다음 라운드 딜 시 `null`로 리셋)에 보관됐다가 `RoundResultSnapshot.refund`로
+   쇼다운/폴드/게임오버 스냅샷에 실려, 리빌 오버레이에 "🔄 OO님의 초과 베팅 N칩 환급" 문구로 표시.
+
+**검증**: `npx tsc --noEmit`(에러 0), `npm run lint`(경고/에러 0), `npx vitest run`(49개 파일·**1529개**
+테스트 전부 통과 — 매칭 팟 환급 회귀 테스트 2개 + 앤티-KO 결과창 합성 회귀 테스트 1개 신규 포함). 캐시된
+Playwright Chromium(`playwright-core`, scratchpad 전용 설치, 호스트+봇 1탭으로 단독 재현)으로 라이브
+재현: (1) 퀵 `+5` 버튼 클릭 → 슬라이더 값이 정확히 가산되는 것을 스크린샷으로 확인, (2) 그 값으로 레이즈
+제출 직후 `RAISE! 테스터님 베팅 증액` 배너와 `+6 코인 추가!` 팟 배지가 동시에 뜨는 것을 스크린샷으로 확인,
+(3) 상대(봇)가 체크할 때 `🛡️ CHECK` 배지가 정확히 상대 슬롯 위에 뜨는 것을 스크린샷으로 확인, (4) 본인이
+선언을 확정할 때 `💬 족보 선언!` 버블이 정확히 본인 슬롯 위에 뜨는 것을 스크린샷으로 확인. 네 시나리오
+모두 요청서의 연출 스펙과 일치.
+
+**다음 세션 인계**: 앤티-KO 결과창 버그는 숏스택 앤티 클램프라는 드문 경로에서만 발생해 이번 세션의
+Playwright 재현으로는 직접 유도하지 못했고(봇 대전으로 그 상황을 몰아가려면 수십 라운드가 필요), 대신
+정확히 그 경로를 격리한 엔진 단 회귀 테스트로 검증을 갈음했다 — 실제 온라인 2인 대국에서 매치 막판까지
+플레이해 육안으로도 한 번 재확인하면 더 좋음. 매칭 팟 정산은 2인 전용 엔진이라 진짜 "사이드 팟"(3인 이상
+멀티웨이)은 아니고 "레이저의 초과 올인분 환급"만 구현한 것 — 이 게임이 향후 3인 이상으로 확장될 계획은
+없음.
+
+**커밋/배포**: 사용자가 요청서 자체에 "배포 명령을 실행하고 가능한 단계까지 완료"를 명시적으로 포함해
+커밋/푸시/배포까지 이번 세션에서 바로 진행. 커밋 메시지 `feat(love-wins-all): fix result modal, add quick
+bet buttons, enhance action effects, and implement matched pot settlement rule`(`627a136`) → `git push
+origin main` 완료(`2a47bcc..627a136`). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상
+완주(41초), `target: "production"`/`readyState: READY`(`dpl_H4P9aqfjn56RzTgMGDaZwBbEH38D`), 프로덕션
+도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/love-wins-all` 둘 다 200과 게임
+페이지 HTML에 "러브 윈즈 올" 문자열 포함 직접 확인함.
 
 ### 2026-09-01 — 망각의 지뢰 지뢰 설치 상대 점유 칸 금지 룰 반전 및 체스 폰 리뉴얼
 
