@@ -9,7 +9,19 @@ import { useGameLeaveGuard } from "@/hooks/useGameLeaveGuard";
 import { useBackgroundResync } from "@/hooks/useBackgroundResync";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
+import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
 import {
+  activeVoteFor,
+  INITIAL_BOT_TAKEOVER_STATE,
+  isSeatTakenOver,
+  reduceBotTakeover,
+  voteThresholdMet,
+  voteYesCount,
+  type BotTakeoverEvent,
+  type BotTakeoverState,
+} from "@/games/shared/bot/botTakeover";
+import {
+  chooseWormBotInput,
   computeRankings,
   MAX_PLAYERS,
   MIN_PLAYERS,
@@ -141,6 +153,45 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
     gameStateRef.current = gameState;
   }, [gameState]);
 
+  const phaseRef = useRef<Phase>(phase);
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
+  const occupantsRef = useRef<Occupant[]>([]);
+  useEffect(() => {
+    occupantsRef.current = occupants;
+  }, [occupants]);
+
+  // Mid-game "seat disconnected/unresponsive → AI bot" — see botTakeover.ts
+  // for the vote/conversion state machine this mirrors. 2026-09-02 맵
+  // 확장 세션: 지렁이는 그 기능의 원래 대상 6개 게임에 없었고(HANDOFF.md
+  // 2026-08-29절) 사전 로비 봇 좌석 인프라(`botSeats`/`useBotAutoplay`)도
+  // 애초에 없었으므로, 여기서는 오직 이 vote/takeover 상태 머신 + 호스트 tick
+  // 루프에서 taken-over 좌석에 `chooseWormBotInput`(engine.ts)을 매 틱 대신
+  // 계산해 넣어주는 것만 신규로 붙인다 — 난이도 티어는 재사용할 기존 설정이
+  // 없어 단일 고정 휴리스틱.
+  const [botTakeover, setBotTakeover] = useState<BotTakeoverState>(INITIAL_BOT_TAKEOVER_STATE);
+  const botTakeoverRef = useRef<BotTakeoverState>(INITIAL_BOT_TAKEOVER_STATE);
+  function applyBotTakeoverEvent(event: BotTakeoverEvent) {
+    const next = reduceBotTakeover(botTakeoverRef.current, event);
+    botTakeoverRef.current = next;
+    setBotTakeover(next);
+  }
+  // Per-seat "last time we saw a `player-input` broadcast from them" — the
+  // "무응답(idle)" takeover trigger's input, since worm has no discrete
+  // `currentActor` (every seat acts every tick) to watch for stalling the
+  // way the turn-based games do. A backgrounded/frozen tab's RAF loop stops
+  // firing entirely, which stops its ~14/sec input broadcasts too — so a
+  // stale timestamp here is a reasonable proxy for "not actually here"
+  // without needing literal AFK/intent detection.
+  const lastInputAtRef = useRef<Record<SeatIndex, number>>({});
+  const matchStartedAtRef = useRef(0);
+  const IDLE_VOTE_THRESHOLD_MS = 45_000;
+  // A vote this client has already dismissed without voting — re-shown if a
+  // *different* vote (different seat or restarted timer) comes in.
+  const [dismissedVoteKey, setDismissedVoteKey] = useState<string | null>(null);
+
   // Latest input every seat is known to want — updated by `player-input`
   // broadcasts (host reads this every tick; non-host clients keep it around
   // harmlessly but never consume it).
@@ -193,6 +244,12 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
       playerCountRef.current = playerCount;
       simSeedRef.current = seed + 1;
       inputsRef.current = {};
+      lastInputAtRef.current = {};
+      matchStartedAtRef.current = Date.now();
+      // A rematch is a fresh match — any takeover from the previous round
+      // shouldn't silently carry a seat's control into this one.
+      botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
+      setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
       setGameState(startGame(playerCount, seed));
       setFinalRankings(null);
       setPhase("playing");
@@ -209,20 +266,77 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
       const input = sanitizeInput(payload?.input);
       if (seat === undefined || !input) return;
       inputsRef.current = { ...inputsRef.current, [seat]: input };
+      lastInputAtRef.current = { ...lastInputAtRef.current, [seat]: Date.now() };
+    });
+
+    // Bot-takeover vote/conversion — see botTakeover.ts. Every client replays
+    // the identical event stream through the same pure reducer; a client
+    // whose own `vote-cast` (including its own) just crossed the majority
+    // threshold is the one that fires `convert` — harmless if more than one
+    // client does this in the same instant, since `convert` on an
+    // already-converted seat only happens once.
+    channel.on("broadcast", { event: "bot-takeover-event" }, ({ payload }) => {
+      const event = payload?.event as BotTakeoverEvent | undefined;
+      if (!event) return;
+      applyBotTakeoverEvent(event);
+      if (event.type !== "vote-cast") return;
+      const vote = botTakeoverRef.current.votes[event.seatKey];
+      if (!vote) return; // already converted/cancelled by a faster broadcast
+      const takenOverSeats = new Set(Object.keys(botTakeoverRef.current.takeovers).map(Number));
+      const eligible = occupantsRef.current.filter(
+        (o) => o.seat !== Number(event.seatKey) && !takenOverSeats.has(o.seat),
+      ).length;
+      if (voteThresholdMet(voteYesCount(botTakeoverRef.current, event.seatKey), eligible)) {
+        channel.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "convert", seatKey: event.seatKey, at: Date.now() } } });
+      }
     });
 
     channel.on("broadcast", { event: "state-request" }, () => {
       if (gameStateRef.current) {
-        channel.send({ type: "broadcast", event: "state-sync", payload: { state: gameStateRef.current } });
+        channel.send({
+          type: "broadcast",
+          event: "state-sync",
+          payload: { state: gameStateRef.current, botTakeover: botTakeoverRef.current },
+        });
       }
     });
 
     channel.on("broadcast", { event: "state-sync" }, ({ payload }) => {
       const state = payload?.state as WormState | undefined;
       if (!state) return;
+      const takeover = (payload?.botTakeover as BotTakeoverState | undefined) ?? INITIAL_BOT_TAKEOVER_STATE;
+      botTakeoverRef.current = takeover;
+      setBotTakeover(takeover);
       setGameState(state);
       setFinalRankings(null);
       setPhase("playing");
+    });
+
+    // Real disconnect (tab closed, network dropped, or an explicit leave) —
+    // fires identically on every connected client (Supabase Presence is
+    // server-synced, not local-only). Only kicks off a takeover vote
+    // mid-game. `leftPresences` still carries the leaving occupant's
+    // `playerId`/`name` even though they're already gone from
+    // `presenceState()` by the time anyone could look them up again.
+    channel.on("presence", { event: "leave" }, ({ leftPresences }) => {
+      if (phaseRef.current !== "playing") return;
+      for (const p of leftPresences as unknown as Occupant[]) {
+        if (activeVoteFor(botTakeoverRef.current, String(p.seat)) || isSeatTakenOver(botTakeoverRef.current, String(p.seat))) continue;
+        channel.send({
+          type: "broadcast",
+          event: "bot-takeover-event",
+          payload: {
+            event: {
+              type: "vote-start",
+              seatKey: String(p.seat),
+              reason: "disconnected",
+              startedAt: Date.now(),
+              originalUserId: p.playerId ?? `${roomCode}:${p.seat}`,
+              originalName: p.name,
+            },
+          },
+        });
+      }
     });
 
     let resolveFirstSync = () => {};
@@ -277,6 +391,41 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
       if (channelRef.current === channel) channelRef.current = null;
     };
   }, [roomCode, myName, myPlayerId, isHost]);
+
+  // "무응답(idle)" takeover trigger — runs off a plain interval (every
+  // client independently, same "no host dependency" philosophy as the vote
+  // machine itself) since worm has no discrete `currentActor` to watch for
+  // stalling; see `lastInputAtRef`'s doc comment above for what "idle" means
+  // here.
+  useEffect(() => {
+    if (phase !== "playing" || !roomCode) return;
+    const interval = window.setInterval(() => {
+      if (phaseRef.current !== "playing") return;
+      const playerCount = gameStateRef.current?.playerCount ?? 0;
+      for (const occ of occupantsRef.current) {
+        if (occ.seat >= playerCount) continue;
+        const seatKey = String(occ.seat);
+        if (activeVoteFor(botTakeoverRef.current, seatKey) || isSeatTakenOver(botTakeoverRef.current, seatKey)) continue;
+        const lastAt = lastInputAtRef.current[occ.seat] ?? matchStartedAtRef.current;
+        if (Date.now() - lastAt < IDLE_VOTE_THRESHOLD_MS) continue;
+        channelRef.current?.send({
+          type: "broadcast",
+          event: "bot-takeover-event",
+          payload: {
+            event: {
+              type: "vote-start",
+              seatKey,
+              reason: "idle",
+              startedAt: Date.now(),
+              originalUserId: occ.playerId ?? `${roomCode}:${occ.seat}`,
+              originalName: occ.name,
+            },
+          },
+        });
+      }
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [phase, roomCode]);
 
   const deviceId = typeof window !== "undefined" ? getDeviceId() : "";
   const host = occupants.find((o) => o.isHost);
@@ -348,7 +497,20 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
       last = now;
       acc += dt;
       const seat = mySeatRef.current;
-      const inputs = seat === null ? inputsRef.current : { ...inputsRef.current, [seat]: localInputRef.current };
+      // Always a fresh shallow copy (never `inputsRef.current` itself) — the
+      // bot-takeover overrides below mutate this local object, and it must
+      // never alias the ref that `player-input`'s handler owns.
+      const inputs: Partial<Record<SeatIndex, SnakeInput>> = seat === null ? { ...inputsRef.current } : { ...inputsRef.current, [seat]: localInputRef.current };
+      // Taken-over seats get a freshly computed steering input every tick
+      // instead of whatever (now-stale) input they last broadcast — same
+      // "recompute from the live state" spirit as a real player's mouse/
+      // joystick angle, just synthesized instead of read from the network.
+      // Computed from `sim` (this tick's about-to-advance state), not the
+      // React `gameState` prop, so it's never a step behind.
+      for (const seatKey of Object.keys(botTakeoverRef.current.takeovers)) {
+        const botSeat = Number(seatKey);
+        inputs[botSeat] = chooseWormBotInput(sim, botSeat);
+      }
       while (acc >= TICK_MS && sim.phase !== "gameOver") {
         sim = stepWorm(sim, TICK_MS, inputs, rng);
         acc -= TICK_MS;
@@ -373,27 +535,60 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "player-input", payload: { seat: mySeat, input } });
   }
 
+  function castTakeoverVote(seatKey: string) {
+    channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "vote-cast", seatKey, voterDeviceId: deviceId } } });
+  }
+  // Unified "yes" affordance — the vote target proving presence cancels the
+  // pending vote; the same button after the seat has already converted
+  // instead reclaims control.
+  function proveStillHereOrReclaim(seatKey: string) {
+    const type = isSeatTakenOver(botTakeover, seatKey) ? "reclaim" : "vote-cancel";
+    channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type, seatKey } } });
+  }
+
+  const takeoverSeats = useMemo(() => Object.keys(botTakeover.takeovers).map(Number) as SeatIndex[], [botTakeover]);
+
+  // Other real, non-bot occupants besides `seat` — the eligible-voter
+  // denominator for that seat's vote.
+  function eligibleVoterCountFor(seatKey: string): number {
+    const takenOverSeats = new Set(Object.keys(botTakeover.takeovers).map(Number));
+    return occupants.filter((o) => o.seat !== Number(seatKey) && !takenOverSeats.has(o.seat)).length;
+  }
+
+  // A takeover seat's `originalUserId`/name wins over the live occupant
+  // lookup — a genuinely disconnected player has already dropped out of
+  // `occupants` entirely, but should still be credited for what the bot does
+  // in their seat (reward/ranking) and still show as "themselves, now a bot"
+  // rather than the generic "상대" fallback.
   const ids: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
     const count = gameState?.playerCount ?? knownTargetPlayerCount;
     for (let seat = 0; seat < count; seat++) {
       const occ = occupants.find((o) => o.seat === seat);
-      map[seat] = occ?.playerId ?? `${roomCode}:${seat}`;
+      map[seat] = botTakeover.takeovers[seat]?.originalUserId ?? occ?.playerId ?? `${roomCode}:${seat}`;
     }
     return map;
-  }, [roomCode, gameState, knownTargetPlayerCount, occupants]);
+  }, [roomCode, gameState, knownTargetPlayerCount, occupants, botTakeover]);
 
   const names: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
     const count = gameState?.playerCount ?? knownTargetPlayerCount;
     for (let seat = 0; seat < count; seat++) {
+      const takeover = botTakeover.takeovers[seat];
+      if (takeover) {
+        map[seat] = `🤖 AI ${takeover.originalName}`;
+        continue;
+      }
       const occ = occupants.find((o) => o.seat === seat);
       map[seat] = seat === mySeat ? myName : (occ?.name ?? "상대");
     }
     return map;
-  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount]);
+  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botTakeover]);
 
-  const connectedSeats = useMemo(() => new Set(occupants.map((o) => o.seat)), [occupants]);
+  const connectedSeats = useMemo(
+    () => new Set([...occupants.map((o) => o.seat), ...takeoverSeats]),
+    [occupants, takeoverSeats],
+  );
 
   function handleGameEnd() {
     const sim = gameStateRef.current;
@@ -423,6 +618,8 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
     setOccupants([]);
     setGameState(null);
     setFinalRankings(null);
+    botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
+    setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
     setIdentity({ name: "" });
     setMyPlayerId(undefined);
     setCodeInput("");
@@ -624,15 +821,35 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "playing" && gameState && mySeat !== null) {
+    const myVoteAsTarget = activeVoteFor(botTakeover, String(mySeat));
+    const iAmTakenOver = isSeatTakenOver(botTakeover, String(mySeat));
+    const voteToShow = Object.values(botTakeover.votes).find(
+      (v) => v.seatKey !== String(mySeat) && `${v.seatKey}:${v.startedAt}` !== dismissedVoteKey,
+    );
     return withGuard(
-      <WormCanvas
-        state={gameState}
-        viewerSeat={mySeat}
-        names={names}
-        connectedSeats={connectedSeats}
-        onInput={handleInput}
-        onGameEnd={handleGameEnd}
-      />
+      <div className="flex flex-col gap-2">
+        {myVoteAsTarget && <BotTakeoverSelfBanner mode="prove-presence" onConfirm={() => proveStillHereOrReclaim(String(mySeat))} />}
+        {!myVoteAsTarget && iAmTakenOver && <BotTakeoverSelfBanner mode="reclaim" onConfirm={() => proveStillHereOrReclaim(String(mySeat))} />}
+        {voteToShow && (
+          <BotTakeoverVoteModal
+            targetName={names[Number(voteToShow.seatKey)] ?? voteToShow.originalName}
+            reason={voteToShow.reason}
+            yesCount={voteToShow.yesVoterDeviceIds.length}
+            eligibleVoterCount={eligibleVoterCountFor(voteToShow.seatKey)}
+            hasVoted={voteToShow.yesVoterDeviceIds.includes(deviceId)}
+            onVoteYes={() => castTakeoverVote(voteToShow.seatKey)}
+            onDismiss={() => setDismissedVoteKey(`${voteToShow.seatKey}:${voteToShow.startedAt}`)}
+          />
+        )}
+        <WormCanvas
+          state={gameState}
+          viewerSeat={mySeat}
+          names={names}
+          connectedSeats={connectedSeats}
+          onInput={handleInput}
+          onGameEnd={handleGameEnd}
+        />
+      </div>
     );
   }
 

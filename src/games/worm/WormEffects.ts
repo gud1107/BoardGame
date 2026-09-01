@@ -31,7 +31,7 @@
  * (<1s) and these capacities (never all in-flight at once in practice).
  */
 
-import { BODY_RADIUS, HEAD_RADIUS, type ArenaSize, type SeatIndex, type Vec2, type WormState } from "./engine";
+import { BODY_RADIUS, GROWTH_STAGE_LARGE_LENGTH, HEAD_RADIUS, type ArenaSize, type SeatIndex, type Vec2, type WormState } from "./engine";
 
 // ---------------------------------------------------------------------------
 // Event detection (pure, unit-testable — see Worm.test.ts)
@@ -220,6 +220,14 @@ const FLOAT_TEXT_MS = 800;
 const FLOAT_TEXT_RISE = 60; // world units
 const BOOST_TRAIL_INTERVAL_MS = 45;
 
+// 2026-09-02 맵 확장 세션: "대형" 성장 단계(길이 >= GROWTH_STAGE_LARGE_LENGTH)의
+// 잔상(afterimage) 이펙트용 머리 궤적 샘플. 몸통 마디는 이미 `segments`로 정확히
+// 그려지므로, 잔상은 그와 별개로 머리가 지나온 최근 화면 위치를 옅게 겹쳐 그리는
+// 순수 시각 효과 — 네트워크 스냅샷이 아니라 렌더 프레임마다(`updateHeadTrail`)
+// 샘플링하므로 스냅샷 사이 보간 없이도 부드럽게 이어진다.
+const HEAD_TRAIL_CAPACITY = 7;
+const HEAD_TRAIL_INTERVAL_MS = 55;
+
 // ---------------------------------------------------------------------------
 // Kill FX (opponent eliminated via a head-to-head collision — the only death
 // cause another player can be credited with, see `detectWormEvents` above).
@@ -268,6 +276,9 @@ export class WormEffectsManager {
   private lastBoostSpawn = new Map<SeatIndex, number>();
   /** Gold aura pulse expiry per seat — set on whoever just landed a kill (`onDeath`'s "head" cause), read by `killerAuraAlpha`. */
   private killerAuraExpiry = new Map<SeatIndex, number>();
+  /** Most-recent-first ring buffer of a "large" stage snake's recent head positions, for the afterimage trail — see `updateHeadTrail`/`headTrail`. */
+  private headTrailPoints = new Map<SeatIndex, Vec2[]>();
+  private lastHeadTrailSpawn = new Map<SeatIndex, number>();
 
   /** Internal clock, advanced by `update`; every expiry above is stored as an absolute time on this clock. */
   private clock = 0;
@@ -414,6 +425,29 @@ export class WormEffectsManager {
       const angle = Math.random() * Math.PI * 2;
       this.spawnParticle({ x: tail.x + Math.cos(angle) * 4, y: tail.y + Math.sin(angle) * 4, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, life: 260 + Math.random() * 140, size: 2.5 + Math.random() * 2, hue: snake.hue, sat: 40, light: 60, baseAlpha: 0.45, drag: 1 });
     }
+  }
+
+  /** Per-frame head-trajectory sampling for the "large" growth stage's afterimage — a seat drops out of the trail (and its buffer resets) the moment it's no longer alive-and-large, so shrinking back down or dying clears the ghost instantly instead of leaving a stale trail. */
+  updateHeadTrail(state: WormState) {
+    for (let seat = 0; seat < state.playerCount; seat++) {
+      const snake = state.snakes[seat];
+      if (!snake?.alive || snake.length < GROWTH_STAGE_LARGE_LENGTH) {
+        this.headTrailPoints.delete(seat);
+        continue;
+      }
+      const last = this.lastHeadTrailSpawn.get(seat) ?? -Infinity;
+      if (this.clock - last < HEAD_TRAIL_INTERVAL_MS) continue;
+      this.lastHeadTrailSpawn.set(seat, this.clock);
+      const points = this.headTrailPoints.get(seat) ?? [];
+      points.unshift({ x: snake.path[0].x, y: snake.path[0].y });
+      if (points.length > HEAD_TRAIL_CAPACITY) points.length = HEAD_TRAIL_CAPACITY;
+      this.headTrailPoints.set(seat, points);
+    }
+  }
+
+  /** Most-recent-first head positions for the afterimage trail — empty for anything not currently alive-and-large. */
+  headTrail(seat: SeatIndex): Vec2[] {
+    return this.headTrailPoints.get(seat) ?? [];
   }
 
   // -------------------------------------------------------------------

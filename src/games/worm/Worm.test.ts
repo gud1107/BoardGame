@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  ARENA_SIZE,
+  chooseWormBotInput,
   computeLeaderboard,
   computeRankings,
   computeSegments,
   DEFAULT_ARENA,
   FOOD_COUNT_TARGET,
   BOOST_DRAIN_MS,
+  getGrowthStage,
+  GROWTH_STAGE_LARGE_LENGTH,
+  GROWTH_STAGE_MID_LENGTH,
   MATCH_DURATION_MS,
   MAX_PLAYERS,
   MIN_LENGTH_TO_BOOST,
@@ -412,5 +417,98 @@ describe("detectWormEvents", () => {
     const after = buildState([makeSnake(0, { alive: false, deadAtMs: 0, path: [], segments: [] })]);
     const events = detectWormEvents(before, after);
     expect(events[0]).toMatchObject({ type: "death", segments: snake.segments });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2026-09-02 맵 확장/모바일 최적화/성장 진화/왕관/봇 대체 세션
+// ---------------------------------------------------------------------------
+
+describe("ARENA_SIZE — 2026-09-02 맵 확장", () => {
+  it("is 1.75x the pre-expansion 3000 (AskUserQuestion-confirmed multiplier)", () => {
+    expect(ARENA_SIZE).toBe(3000 * 1.75);
+  });
+});
+
+describe("getGrowthStage — 외형 진화 단계", () => {
+  it("classifies below GROWTH_STAGE_MID_LENGTH as small", () => {
+    expect(getGrowthStage(0)).toBe("small");
+    expect(getGrowthStage(GROWTH_STAGE_MID_LENGTH - 1)).toBe("small");
+  });
+
+  it("classifies [GROWTH_STAGE_MID_LENGTH, GROWTH_STAGE_LARGE_LENGTH) as mid", () => {
+    expect(getGrowthStage(GROWTH_STAGE_MID_LENGTH)).toBe("mid");
+    expect(getGrowthStage(GROWTH_STAGE_LARGE_LENGTH - 1)).toBe("mid");
+  });
+
+  it("classifies GROWTH_STAGE_LARGE_LENGTH and above as large", () => {
+    expect(getGrowthStage(GROWTH_STAGE_LARGE_LENGTH)).toBe("large");
+    expect(getGrowthStage(GROWTH_STAGE_LARGE_LENGTH + 50)).toBe("large");
+  });
+});
+
+describe("stepWorm — food/collision optimization regressions (spatial-hash broad-phase must match naive full-scan behavior)", () => {
+  it("still eats a pellet well within a single grid cell of the head", () => {
+    const snake = makeSnake(0, { path: [{ x: 500, y: 500 }, { x: 480, y: 500 }] });
+    const food: FoodItem[] = [{ id: 0, x: 505, y: 500, value: 2, hue: 0 }];
+    const state = buildState([snake], { food, nextFoodId: 1 });
+    const result = stepWorm(state, 16, {});
+    expect(result.snakes[0].length).toBe(START_LENGTH + 2);
+  });
+
+  it("still eats a pellet lying just across a grid-cell boundary from the head", () => {
+    // FOOD_GRID_CELL is 160 (internal) — place the head exactly on a cell
+    // boundary and the food a few units into the *previous* cell, so a
+    // buggy "only check the head's own cell" implementation would miss it.
+    const cellBoundary = 160 * 5; // 800
+    const snake = makeSnake(0, { path: [{ x: cellBoundary, y: 500 }, { x: cellBoundary - 20, y: 500 }] });
+    const food: FoodItem[] = [{ id: 0, x: cellBoundary - 4, y: 500, value: 1, hue: 0 }];
+    const state = buildState([snake], { food, nextFoodId: 1 });
+    const result = stepWorm(state, 16, {});
+    expect(result.snakes[0].length).toBe(START_LENGTH + 1);
+  });
+
+  it("still cuts a target's tail mid-body (not just near its head) — the bounding-circle broad-phase must not accidentally exclude segments still within the target's own reach", () => {
+    const target = makeSnake(1, { length: 20 }); // straight body from (500, 100) trailing toward -x
+    const midSegment = target.segments[9]; // well past the near-head skip zone, still comfortably within reach
+    const attacker = makeSnake(0, { length: 6, path: [{ x: midSegment.x + 3, y: midSegment.y }, { x: midSegment.x + 30, y: midSegment.y }] });
+    const state = buildState([attacker, target]);
+    const result = stepWorm(state, 16, {});
+    expect(result.snakes[1].length).toBeLessThan(target.length);
+    expect(result.snakes[0].length).toBe(attacker.length); // attacker itself is untouched
+  });
+});
+
+describe("chooseWormBotInput — 봇 대체 조종 휴리스틱", () => {
+  it("returns a neutral, non-boosting input for a dead or missing seat", () => {
+    const state = buildState([makeSnake(0, { alive: false, path: [], segments: [] })]);
+    expect(chooseWormBotInput(state, 0)).toEqual({ angle: 0, boosting: false });
+    expect(chooseWormBotInput(state, 5)).toEqual({ angle: 0, boosting: false });
+  });
+
+  it("steers toward the nearest food when one is in range", () => {
+    const snake = makeSnake(0, { path: [{ x: 500, y: 500 }, { x: 480, y: 500 }] });
+    const food: FoodItem[] = [{ id: 0, x: 500, y: 300, value: 1, hue: 0 }]; // due north of the head
+    const state = buildState([snake], { food, nextFoodId: 1 });
+    const input = chooseWormBotInput(state, 0);
+    expect(input.angle).toBeCloseTo(-Math.PI / 2, 1); // atan2 of "up" in screen coords
+  });
+
+  it("steers back toward the arena center once within the wall margin, overriding food-seeking", () => {
+    const snake = makeSnake(0, { path: [{ x: 5, y: 5 }, { x: 25, y: 5 }] });
+    // Food placed further into the corner than the wall — without the wall
+    // override the bot would drive itself straight into the boundary.
+    const food: FoodItem[] = [{ id: 0, x: 1, y: 1, value: 1, hue: 0 }];
+    const state = buildState([snake], { food, nextFoodId: 1 });
+    const input = chooseWormBotInput(state, 0);
+    const towardCenter = Math.atan2(DEFAULT_ARENA.height / 2 - 5, DEFAULT_ARENA.width / 2 - 5);
+    expect(input.angle).toBeCloseTo(towardCenter, 3);
+    expect(input.boosting).toBe(false);
+  });
+
+  it("never boosts a snake at or below MIN_LENGTH_TO_BOOST", () => {
+    const snake = makeSnake(0, { length: MIN_LENGTH_TO_BOOST, path: [{ x: 2000, y: 2000 }, { x: 1980, y: 2000 }] });
+    const state = buildState([snake]);
+    expect(chooseWormBotInput(state, 0).boosting).toBe(false);
   });
 });

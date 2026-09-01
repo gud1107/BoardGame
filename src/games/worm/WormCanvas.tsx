@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import RulebookModal from "./RulebookModal";
 import {
   computeLeaderboard,
+  getGrowthStage,
   MATCH_DURATION_MS,
   RESPAWN_DELAY_MS,
+  SEGMENT_SPACING,
   type SeatIndex,
   type SnakeInput,
   type WormState,
@@ -33,6 +35,7 @@ const BASE_VIEW_HEIGHT = 820; // world units visible vertically at zoom = 1
 const EMIT_INTERVAL_MS = 70;
 const JOYSTICK_RADIUS = 46;
 const JOYSTICK_DEADZONE = 8;
+const MINIMAP_CSS_SIZE = 96; // matches the `h-24 w-24` Tailwind box below
 
 // Kill announcement banner (see the kill-FX session's confirmed answers):
 // center screen, 1.8s total (worm-kill-banner keyframe in globals.css owns
@@ -70,6 +73,7 @@ function formatClock(ms: number): string {
 export default function WormCanvas({ state, viewerSeat, names, connectedSeats, onInput, onGameEnd }: WormCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const minimapRef = useRef<HTMLCanvasElement | null>(null);
   const [rulebookOpen, setRulebookOpen] = useState(false);
   // Lazy initializer (runs once on first render, not "in an effect") — this
   // component only ever mounts client-side (dynamic import, `ssr: false`),
@@ -229,6 +233,59 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
   }, []);
 
   // ---------------------------------------------------------------------
+  // Minimap backing canvas — fixed CSS size (`MINIMAP_CSS_SIZE`, the `h-24
+  // w-24` box below), so unlike the main canvas this only needs a one-shot
+  // dpr-aware sizing, not a `ResizeObserver`.
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    const canvas = minimapRef.current;
+    if (!canvas) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(MINIMAP_CSS_SIZE * dpr);
+    canvas.height = Math.round(MINIMAP_CSS_SIZE * dpr);
+    canvas.style.width = `${MINIMAP_CSS_SIZE}px`;
+    canvas.style.height = `${MINIMAP_CSS_SIZE}px`;
+  }, []);
+
+  // ---------------------------------------------------------------------
+  // Mobile gesture/overscroll lock — scoped to this component's mount (only
+  // rendered while `phase === "playing"`, see `WormGame.tsx`), restored on
+  // unmount so leaving the game never leaves the rest of the site
+  // non-scrollable. The canvas game area itself already blocks touch
+  // gestures via `touchAction: "none"` on its container below; this covers
+  // the surrounding page chrome (stat/leaderboard overlays, the footer
+  // caption) so a stray touch there can't trigger the browser's pull-to-
+  // refresh or rubber-band bounce while dragging the virtual joystick near
+  // the game's edges. `touch-action: pan-y` keeps ordinary vertical page
+  // scroll working while dropping pinch-zoom and double-tap-zoom (neither is
+  // in the "pan-y" allowed-gesture list), and `overscroll-behavior: none`
+  // stops the pull-to-refresh/rubber-band bounce and (on Chromium) most of
+  // the swipe-back/forward navigation gesture. A genuine OS-level Safari
+  // edge-swipe-back gesture is outside what any web-page CSS/JS can block —
+  // documented as a known limitation rather than claimed as "완전 차단".
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverscroll = html.style.overscrollBehavior;
+    const prevBodyOverscroll = body.style.overscrollBehavior;
+    const prevBodyTouchAction = body.style.touchAction;
+    html.style.overscrollBehavior = "none";
+    body.style.overscrollBehavior = "none";
+    body.style.touchAction = "pan-y";
+    function blockMultiTouch(e: TouchEvent) {
+      if (e.touches.length > 1) e.preventDefault(); // pinch-zoom guard beyond what touch-action already drops
+    }
+    document.addEventListener("touchmove", blockMultiTouch, { passive: false });
+    return () => {
+      html.style.overscrollBehavior = prevHtmlOverscroll;
+      body.style.overscrollBehavior = prevBodyOverscroll;
+      body.style.touchAction = prevBodyTouchAction;
+      document.removeEventListener("touchmove", blockMultiTouch);
+    };
+  }, []);
+
+  // ---------------------------------------------------------------------
   // Main render + input-emit loop.
   // ---------------------------------------------------------------------
   useEffect(() => {
@@ -259,6 +316,7 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
       const dt = Math.min(now - lastFrameTime, 100);
       lastFrameTime = now;
       effects.updateLiveBoost(stateRef.current);
+      effects.updateHeadTrail(stateRef.current);
       effects.update(dt);
 
       const canvas = canvasRef.current;
@@ -267,6 +325,7 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
         const cssW = canvas.width / dpr;
         const cssH = canvas.height / dpr;
         draw(canvas, dpr, cssW, cssH, stateRef.current, viewerSeat, namesRef.current, effects);
+        drawMinimap(minimapRef.current, dpr, stateRef.current, viewerSeat);
 
         const angle = computeAngle(cssW, cssH);
         lastAngleRef.current = angle;
@@ -344,18 +403,24 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
           <span className="text-white/60">⏱ 남은 시간 {formatClock(timeLeft)}</span>
         </div>
 
-        {/* Top-right: leaderboard */}
-        <div className="pointer-events-none absolute top-2 right-2 flex w-36 flex-col gap-1 rounded-xl border border-white/10 bg-black/40 px-2.5 py-2 text-[11px] text-white/80 backdrop-blur-sm">
-          <span className="mb-0.5 font-semibold tracking-wide text-white/50 uppercase">🏆 리더보드</span>
-          {leaderboard.map((entry, i) => (
-            <span key={entry.seat} className={`flex items-center justify-between gap-1 ${entry.seat === viewerSeat ? "text-lime-300" : entry.alive ? "text-white/80" : "text-white/30"}`}>
-              <span className="truncate">
-                {i + 1}. {names[entry.seat] ?? `#${entry.seat}`}
-                {!entry.alive && " 💀"}
+        {/* Top-right: leaderboard + minimap radar, stacked */}
+        <div className="pointer-events-none absolute top-2 right-2 flex flex-col items-end gap-1.5">
+          <div className="flex w-36 flex-col gap-1 rounded-xl border border-white/10 bg-black/40 px-2.5 py-2 text-[11px] text-white/80 backdrop-blur-sm">
+            <span className="mb-0.5 font-semibold tracking-wide text-white/50 uppercase">🏆 리더보드</span>
+            {leaderboard.map((entry, i) => (
+              <span key={entry.seat} className={`flex items-center justify-between gap-1 ${entry.seat === viewerSeat ? "text-lime-300" : entry.alive ? "text-white/80" : "text-white/30"}`}>
+                <span className="truncate">
+                  {i + 1}. {names[entry.seat] ?? `#${entry.seat}`}
+                  {!entry.alive && " 💀"}
+                </span>
+                <span className="font-bold">{entry.length}</span>
               </span>
-              <span className="font-bold">{entry.length}</span>
-            </span>
-          ))}
+            ))}
+          </div>
+          {/* Minimap radar — dots scaled to the full arena, viewer in lime, current #1 ringed gold. See `drawMinimap` below. */}
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40 backdrop-blur-sm">
+            <canvas ref={minimapRef} className="block h-24 w-24" />
+          </div>
         </div>
 
         {/* Rulebook button */}
@@ -503,10 +568,23 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
   const [bx2, by2] = toScreen(state.arena.width, state.arena.height);
   ctx.strokeRect(bx1, by1, bx2 - bx1, by2 - by1);
 
+  // World-space view rect (with a small margin) — used below to skip both
+  // food and whole off-screen snakes' rendering work *before* transforming
+  // to screen space, cheaper than a per-item toScreen-then-check and, for
+  // snakes, avoids the eyes/glow/aura/label work a per-segment-only check
+  // wouldn't have skipped. 모바일 렉 최적화 세션 (2026-09-02): 맵이 커지고
+  // (`ARENA_SIZE`) 먹이 개수가 늘면서(`FOOD_COUNT_TARGET`) 이 컬링이 실제로
+  // 아끼는 작업량도 함께 커졌다.
+  const cullMarginWorld = 60 / scale;
+  const viewMinX = camera.x - cssW / scale / 2 - cullMarginWorld;
+  const viewMaxX = camera.x + cssW / scale / 2 + cullMarginWorld;
+  const viewMinY = camera.y - cssH / scale / 2 - cullMarginWorld;
+  const viewMaxY = camera.y + cssH / scale / 2 + cullMarginWorld;
+
   // Food.
   for (const food of state.food) {
+    if (food.x < viewMinX || food.x > viewMaxX || food.y < viewMinY || food.y > viewMaxY) continue;
     const [sx, sy] = toScreen(food.x, food.y);
-    if (sx < -20 || sx > cssW + 20 || sy < -20 || sy > cssH + 20) continue;
     const r = (3 + food.value * 1.6) * scale;
     ctx.beginPath();
     ctx.fillStyle = hsl(food.hue, 85, 62);
@@ -514,12 +592,48 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
     ctx.fill();
   }
 
+  // Current #1 by length (crown target below) — only an alive snake can
+  // wear it, since the crown renders on its actual head position.
+  const leaderSeat = computeLeaderboard(state, 1).find((entry) => entry.alive)?.seat ?? null;
+
   // Snakes (others first, viewer last so it renders on top).
   const seats = Array.from({ length: state.playerCount }, (_, i) => i).sort((a, b) => (a === viewerSeat ? 1 : b === viewerSeat ? -1 : 0));
   for (const seat of seats) {
     const snake = state.snakes[seat];
     if (!snake || !snake.alive || snake.segments.length === 0) continue;
+
+    // Whole-snake broad-phase cull: every segment lies within
+    // `snake.length * SEGMENT_SPACING` of the head by construction
+    // (`computeSegments`), so a head whose full reach can't touch the view
+    // rect means none of its segments/eyes/glow/aura/label can either —
+    // skip the entire snake's per-frame draw work, not just individual
+    // off-screen segments.
+    const head0 = snake.path[0];
+    const reach = snake.length * SEGMENT_SPACING + 40;
+    if (head0.x + reach < viewMinX || head0.x - reach > viewMaxX || head0.y + reach < viewMinY || head0.y - reach > viewMaxY) continue;
+
+    const stage = getGrowthStage(snake.length);
+    // 성장 단계별 외형: 중형/대형은 더 두껍고(반경 배율), 대형은 여기에 더해
+    // 아래에서 잔상(afterimage)까지 겹쳐 그린다 — `AskUserQuestion`으로 확정된
+    // length 20/40 기준(`GROWTH_STAGE_MID_LENGTH`/`GROWTH_STAGE_LARGE_LENGTH`).
+    const stageRadiusMul = stage === "large" ? 1.28 : stage === "mid" ? 1.14 : 1;
     const color = hsl(snake.hue, 75, seat === viewerSeat ? 60 : 52);
+
+    // Afterimage trail (대형 전용) — drawn *before* the body so the solid
+    // segments render on top of the fading ghosts, not the other way round.
+    if (stage === "large") {
+      const trail = effects.headTrail(seat);
+      for (let ti = 0; ti < trail.length; ti++) {
+        const [tx, ty] = toScreen(trail[ti].x, trail[ti].y);
+        if (tx < -30 || tx > cssW + 30 || ty < -30 || ty > cssH + 30) continue;
+        ctx.beginPath();
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.2 * (1 - ti / trail.length);
+        ctx.arc(tx, ty, Math.max(2, 8 * scale), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
 
     for (let i = snake.segments.length - 1; i >= 0; i--) {
       const seg = snake.segments[i];
@@ -529,12 +643,21 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
       // Head gets a brief scale-pulse on eating a pellet (WormEffects.ts's
       // headScale, eases back to 1 once the pulse expires).
       const headPulse = i === 0 ? effects.headScale(seat) : 1;
-      const r = (6 + t * 6) * scale * headPulse;
+      const r = (6 + t * 6) * scale * headPulse * stageRadiusMul;
       ctx.beginPath();
       ctx.fillStyle = color;
       ctx.globalAlpha = i === 0 ? 1 : 0.92;
       ctx.arc(sx, sy, Math.max(1.5, r), 0, Math.PI * 2);
       ctx.fill();
+      // 중형/대형 테두리 패턴 — 비늘처럼 보이도록 몸통 마디마다는 아니고
+      // 몇 마디 간격으로만 어두운 테두리 링을 겹쳐 그린다(머리 제외).
+      if (stage !== "small" && i !== 0 && i % 4 === 0) {
+        ctx.beginPath();
+        ctx.strokeStyle = hsl(snake.hue, 70, seat === viewerSeat ? 32 : 26);
+        ctx.lineWidth = Math.max(0.6, 1.1 * scale);
+        ctx.arc(sx, sy, Math.max(1.5, r * 0.7), 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
     ctx.globalAlpha = 1;
 
@@ -583,6 +706,24 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
     ctx.textAlign = "center";
     ctx.fillStyle = seat === viewerSeat ? "#d9f99d" : "rgba(255,255,255,0.7)";
     ctx.fillText(label, hx, hy - 18 * scale - 4);
+
+    // Realtime #1 crown + gold aura — persistent (not fading, unlike the
+    // kill-triggered `killerAuraAlpha` ring above), visible to every viewer,
+    // re-evaluated every frame from `computeLeaderboard` so it instantly
+    // hops to whoever is actually longest right now.
+    if (seat === leaderSeat) {
+      const pulse = 0.85 + 0.15 * Math.sin(Date.now() / 260);
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(255, 213, 92, 0.6)";
+      ctx.lineWidth = Math.max(1.5, 3 * scale);
+      ctx.shadowColor = "rgba(255, 196, 60, 0.85)";
+      ctx.shadowBlur = 10 * scale;
+      ctx.arc(hx, hy, Math.max(3, 17 * scale) * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.font = `${Math.max(13, 17 * scale)}px sans-serif`;
+      ctx.fillText("👑", hx, hy - 32 * scale - 8);
+    }
   }
 
   // Particles/floating text/shockwaves/flashes/slash trails — always drawn
@@ -599,4 +740,47 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
     ctx.fillStyle = `rgba(255, 250, 235, ${flashAlpha * 0.55})`;
     ctx.fillRect(-20, -20, cssW + 40, cssH + 40);
   }
+}
+
+// ---------------------------------------------------------------------
+// Minimap radar — the whole arena scaled down into a fixed `MINIMAP_CSS_SIZE`
+// square (independent of the main view's camera/zoom), every alive seat as a
+// dot, the viewer in lime, the current #1 by length ringed gold. New in the
+// 2026-09-02 맵 확장 세션 (there was no minimap before this — see HANDOFF.md).
+// ---------------------------------------------------------------------
+function drawMinimap(canvas: HTMLCanvasElement | null, dpr: number, state: WormState, viewerSeat: SeatIndex) {
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, MINIMAP_CSS_SIZE, MINIMAP_CSS_SIZE);
+  ctx.fillStyle = "rgba(5, 10, 5, 0.55)";
+  ctx.fillRect(0, 0, MINIMAP_CSS_SIZE, MINIMAP_CSS_SIZE);
+
+  const sx = MINIMAP_CSS_SIZE / state.arena.width;
+  const sy = MINIMAP_CSS_SIZE / state.arena.height;
+  const leaderSeat = computeLeaderboard(state, 1).find((entry) => entry.alive)?.seat ?? null;
+
+  for (let seat = 0; seat < state.playerCount; seat++) {
+    const snake = state.snakes[seat];
+    if (!snake?.alive || snake.path.length === 0) continue;
+    const px = snake.path[0].x * sx;
+    const py = snake.path[0].y * sy;
+    const isViewer = seat === viewerSeat;
+    ctx.beginPath();
+    ctx.fillStyle = isViewer ? "#d9f99d" : hsl(snake.hue, 80, 60);
+    ctx.arc(px, py, isViewer ? 3 : 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    if (seat === leaderSeat) {
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(255, 213, 92, 0.9)";
+      ctx.lineWidth = 1.2;
+      ctx.arc(px, py, 5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  ctx.strokeStyle = "rgba(255,255,255,0.25)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, MINIMAP_CSS_SIZE - 1, MINIMAP_CSS_SIZE - 1);
 }

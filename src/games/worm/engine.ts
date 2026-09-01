@@ -78,7 +78,10 @@ export interface ArenaSize {
   height: number;
 }
 
-export const ARENA_SIZE = 3000;
+// 2026-09-02 맵 확장 세션: 3000 → 5250 (1.75배 선형 확장, `AskUserQuestion`으로
+// 1.5/1.75/2배 중 확정 — 면적 기준으로는 약 3.06배). 아래 `FOOD_COUNT_TARGET`도
+// 같은 면적 배율로 함께 올려 먹이 밀도(단위 면적당 개수)를 이전과 동일하게 유지.
+export const ARENA_SIZE = 5250;
 export const DEFAULT_ARENA: ArenaSize = { width: ARENA_SIZE, height: ARENA_SIZE };
 
 export const SEGMENT_SPACING = 16;
@@ -95,9 +98,24 @@ export const MIN_LENGTH_TO_BOOST = 6;
 export const BOOST_DRAIN_MS = 350; // lose 1 segment every this many ms of boosting
 export const TURN_RATE = Math.PI * 2.6; // max radians/sec the head can turn
 
-export const FOOD_COUNT_TARGET = 160;
+// 160 * (5250/3000)^2 ≈ 490 — same food density per world-area as before the
+// map expansion above, not just the same raw count on a now-3x-larger field.
+export const FOOD_COUNT_TARGET = 490;
 export const FOOD_VALUE_MIN = 1;
 export const FOOD_VALUE_MAX = 3;
+
+// 2026-09-02 맵 확장 세션: 성장 단계별 외형 진화 길이 기준(`AskUserQuestion`으로
+// 20/40 확정) — `length < MID`는 기본형, `[MID, LARGE)`는 중형(두꺼워짐 + 테두리
+// 패턴), `>= LARGE`는 대형(중형 외형 + 잔상 이펙트). `WormCanvas.tsx`의 렌더링과
+// `getGrowthStage`가 이 두 상수만 참조하므로 튜닝은 여기 한 곳만 고치면 된다.
+export const GROWTH_STAGE_MID_LENGTH = 20;
+export const GROWTH_STAGE_LARGE_LENGTH = 40;
+export type GrowthStage = "small" | "mid" | "large";
+export function getGrowthStage(length: number): GrowthStage {
+  if (length >= GROWTH_STAGE_LARGE_LENGTH) return "large";
+  if (length >= GROWTH_STAGE_MID_LENGTH) return "mid";
+  return "small";
+}
 
 export const RESPAWN_DELAY_MS = 1800;
 export const MATCH_DURATION_MS = 3 * 60 * 1000;
@@ -199,6 +217,45 @@ function scatter(pos: Vec2, arena: ArenaSize, rng: () => number): Vec2 {
 
 function makeFood(id: number, pos: Vec2, value: number, rng: () => number): FoodItem {
   return { id, x: pos.x, y: pos.y, value, hue: Math.floor(rng() * 360) };
+}
+
+// ---------------------------------------------------------------------------
+// Food spatial hash — 2026-09-02 맵 확장 세션: `FOOD_COUNT_TARGET`이 3배 가까이
+//늘면서 매 틱 "모든 뱀 머리 x 모든 먹이"로 도는 원래 이중 루프의 비용도 같이 3배가
+// 됐으므로, 먹이를 격자 버킷에 미리 넣어두고 머리 주변 3x3 셀만 훑도록 바꿔 최악의
+// 경우(전체 스캔) 대신 평균적으로 근처 소수 후보만 검사하게 한다. 순수 broad-phase
+// 최적화라 최종적으로 "어느 먹이가 이번 틱에 먹혔는가" 판정 결과는 원래 전수 스캔과
+// 완전히 동일 — 셀 크기(160)가 판정 반경(HEAD_RADIUS+FOOD_RADIUS=18)보다 훨씬 커서
+// 3x3 이웃 셀이 판정 원을 항상 포함한다.
+const FOOD_GRID_CELL = 160;
+
+function foodCellKey(cx: number, cy: number): string {
+  return `${cx},${cy}`;
+}
+
+function buildFoodGrid(food: FoodItem[]): Map<string, FoodItem[]> {
+  const grid = new Map<string, FoodItem[]>();
+  for (const f of food) {
+    const key = foodCellKey(Math.floor(f.x / FOOD_GRID_CELL), Math.floor(f.y / FOOD_GRID_CELL));
+    const bucket = grid.get(key);
+    if (bucket) bucket.push(f);
+    else grid.set(key, [f]);
+  }
+  return grid;
+}
+
+/** Every food item within one grid cell of `(x, y)` (a 3x3 neighborhood) — a superset of anything actually eatable from here, cheap to over-include. */
+function nearbyFood(grid: Map<string, FoodItem[]>, x: number, y: number): FoodItem[] {
+  const cx = Math.floor(x / FOOD_GRID_CELL);
+  const cy = Math.floor(y / FOOD_GRID_CELL);
+  const out: FoodItem[] = [];
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      const bucket = grid.get(foodCellKey(cx + dx, cy + dy));
+      if (bucket) out.push(...bucket);
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -378,15 +435,18 @@ export function stepWorm(
     };
   }
 
-  // 2. Food consumption — head vs. every uneaten pellet, first seat (in seat
+  // 2. Food consumption — head vs. every uneaten pellet *near it* (spatial
+  //    hash broad-phase, see `buildFoodGrid` above), first seat (in seat
   //    order) to reach it this tick wins a simultaneous-arrival tie.
   const eaten = new Set<number>();
+  const foodGrid = buildFoodGrid(prev.food);
   for (let seat = 0; seat < prev.playerCount; seat++) {
     const snake = moved[seat];
     if (!snake.alive) continue;
-    for (const food of prev.food) {
+    const head = snake.path[0];
+    for (const food of nearbyFood(foodGrid, head.x, head.y)) {
       if (eaten.has(food.id)) continue;
-      if (dist(snake.path[0], food) < HEAD_RADIUS + FOOD_RADIUS) {
+      if (dist(head, food) < HEAD_RADIUS + FOOD_RADIUS) {
         eaten.add(food.id);
         moved[seat] = { ...moved[seat], length: moved[seat].length + food.value, score: moved[seat].score + food.value * 10 };
       }
@@ -438,11 +498,23 @@ export function stepWorm(
   for (let a = 0; a < prev.playerCount; a++) {
     const attacker = moved[a];
     if (!attacker.alive || deaths.has(a)) continue;
+    const attackerHead = attacker.path[0];
     for (let b = 0; b < prev.playerCount; b++) {
       const target = moved[b];
       if (!target.alive || deaths.has(b)) continue;
       const isSelf = a === b;
       if (!isSelf && resolvedPairs.has(a < b ? `${a}-${b}` : `${b}-${a}`)) continue;
+      // Bounding-circle broad-phase: every one of `target`'s segments lies
+      // within `target.length * SEGMENT_SPACING` of its own head, so if the
+      // attacker's head is already farther than that (plus the collision
+      // radius) from the target's head, none of its segments can possibly be
+      // in range — skip the whole per-segment scan below. Bigger snakes on a
+      // bigger map (see this session's arena expansion) is exactly the case
+      // this saves the most on.
+      if (!isSelf) {
+        const maxReach = target.length * SEGMENT_SPACING + HEAD_RADIUS + BODY_RADIUS;
+        if (dist(attackerHead, target.segments[0]) > maxReach) continue;
+      }
       const startIdx = isSelf ? SELF_COLLISION_SKIP : 1; // idx 0 is the head, already resolved above
       for (let k = startIdx; k < target.segments.length; k++) {
         if (dist(attacker.path[0], target.segments[k]) < HEAD_RADIUS + BODY_RADIUS) {
@@ -495,6 +567,87 @@ export function stepWorm(
   const phase = elapsedMs >= MATCH_DURATION_MS ? "gameOver" : "playing";
 
   return { ...prev, snakes: finalSnakes, food, nextFoodId: foodIdCounter, elapsedMs, phase };
+}
+
+// ---------------------------------------------------------------------------
+// Bot-takeover steering AI
+// ---------------------------------------------------------------------------
+// 2026-09-02 맵 확장/봇 대체 세션: 지렁이는 원래 이 프로젝트의 투표 기반
+// "이탈 시 봇 대체" 기능(HANDOFF.md 2026-08-29절, `src/games/shared/bot/
+// botTakeover.ts`) 대상 6개 게임에 포함돼 있지 않았고, 그 게임들처럼 미리
+// 로비에서 채워두는 난이도별(`botLevels`) 봇 좌석 인프라도 지렁이에는 아예
+// 없었다(`WormGame.tsx`에 `useBotAutoplay`/`AddBotButton` 자체가 없음). 이번
+// 세션에 사용자가 명시적으로 "지렁이도 봇 대체 신규 구현"을 선택해 새로 추가하되,
+// 재사용할 기존 난이도 설정이 없으므로 단일 고정 난이도 휴리스틱 하나만 제공—
+// 다른 게임들의 티어형 알파베타/몬테카를로 AI와 달리 "매 틱 입력값(각도/부스트)을
+// 계산해서 낸다"는 게 이 게임 특유의 연속 조작 모델과 맞는 유일한 형태이기도 하다.
+// `stepWorm`처럼 replay 결정성이 필요한 함수가 아니라 — 실제 플레이어의 마우스/
+// 조이스틱 입력과 동급의 "매 틱 새로 계산되는 입력값"일 뿐이므로 호스트 클라이언트
+// 에서만, 매 틱 최신 상태로 다시 계산해 호출한다(`WormGame.tsx`의 host tick loop).
+const BOT_WALL_MARGIN = 260;
+const BOT_THREAT_LOOKAHEAD = 140;
+const BOT_FOOD_SEARCH_RADIUS = 900;
+
+/**
+ * Picks a steering input for a bot-controlled seat: seek the nearest food in
+ * range, override toward safety when another snake's body is close ahead,
+ * override again (highest priority) to turn back toward the center once near
+ * the arena wall, and boost opportunistically when nothing dangerous is
+ * nearby. Deliberately simple — this exists to keep a room alive after a
+ * disconnect, not to be a competitive opponent.
+ */
+export function chooseWormBotInput(state: WormState, seat: SeatIndex): SnakeInput {
+  const snake = state.snakes[seat];
+  if (!snake || !snake.alive) return { angle: 0, boosting: false };
+  const head = snake.path[0];
+  const arena = state.arena;
+
+  // 1. Seek the nearest food within range; otherwise just hold heading.
+  let targetAngle = snake.angle;
+  let bestFoodDist = BOT_FOOD_SEARCH_RADIUS;
+  for (const food of state.food) {
+    const d = dist(head, food);
+    if (d < bestFoodDist) {
+      bestFoodDist = d;
+      targetAngle = Math.atan2(food.y - head.y, food.x - head.x);
+    }
+  }
+
+  // 2. Steer away from the nearest opposing body segment within a short
+  //    lookahead, overriding the food-seeking heading above.
+  let nearestThreat: Vec2 | null = null;
+  let threatDist = BOT_THREAT_LOOKAHEAD;
+  for (let other = 0; other < state.playerCount; other++) {
+    if (other === seat) continue;
+    const s = state.snakes[other];
+    if (!s.alive) continue;
+    for (const seg of s.segments) {
+      const d = dist(head, seg);
+      if (d < threatDist) {
+        threatDist = d;
+        nearestThreat = seg;
+      }
+    }
+  }
+  if (nearestThreat) {
+    targetAngle = Math.atan2(head.y - nearestThreat.y, head.x - nearestThreat.x);
+  }
+
+  // 3. Wall proximity overrides everything — turn back toward the center.
+  const nearLeft = head.x < BOT_WALL_MARGIN;
+  const nearRight = head.x > arena.width - BOT_WALL_MARGIN;
+  const nearTop = head.y < BOT_WALL_MARGIN;
+  const nearBottom = head.y > arena.height - BOT_WALL_MARGIN;
+  if (nearLeft || nearRight || nearTop || nearBottom) {
+    targetAngle = Math.atan2(arena.height / 2 - head.y, arena.width / 2 - head.x);
+  }
+
+  // 4. Boost only when it's safe to (nothing dangerous nearby, not hugging
+  //    the wall, long enough to afford the drain, food still a bit away).
+  const boosting =
+    !nearestThreat && !nearLeft && !nearRight && !nearTop && !nearBottom && snake.length > MIN_LENGTH_TO_BOOST + 4 && bestFoodDist > 200;
+
+  return { angle: normalizeAngle(targetAngle), boosting };
 }
 
 // ---------------------------------------------------------------------------
