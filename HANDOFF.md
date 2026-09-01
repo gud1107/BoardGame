@@ -32,7 +32,9 @@ diff로 별도 영구 로그를 새로 축적) ② 패널에는 이번 판의 �
 때 두 강제 세금 건 모두 "건수만" 마스킹되는 것, 거지 좌석(당사자)일 때 본인 건은 "📤 상납한 카드: 1번"/
 "📥 하사받은 카드: 9번"으로 정확한 카드 칩이, 나머지 두 건(평민↔평민 자유 교환·노예↔왕 세금 교환)은 여전히
 마스킹되는 것을 스크린샷으로 직접 확인. `npx tsc --noEmit`/`npm run lint`/`npx vitest run`(49개 파일·1538개
-테스트, 신규 2개 회귀 테스트 포함) 전부 통과** — 자세한 내용은 아래
+테스트, 신규 2개 회귀 테스트 포함) 전부 통과. 커밋 `37d42e5` → `git push origin main` →
+`npx vercel deploy --prod --scope me-3871`(`dpl_2qbbXPnHR44CYRxzWjG8nZ12QvcF`, READY) 완료, `curl`로
+프로덕션 `/`·`/games/dalmuti` 200 확인** — 자세한 내용은 아래
 `### 2026-09-02 — 달무티 프라이빗 세금 교환 히스토리 패널 구현` 절 참고.)_
 
 _이전 갱신: 2026-09-02 (**달무티(The Great Dalmuti) 5인 귀족↔거지 세금 교환 "불일치" 버그 신고 조사 +
@@ -468,7 +470,14 @@ commonerExchange/trick) 화면과 "gameOver" 결과 화면 둘 다 동일하게 
 않는 것도 확인.
 
 **커밋/배포**: `npx tsc --noEmit`/`npm run lint`/`npx vitest run`(49개 파일·1538개 테스트, 신규 2개 회귀
-테스트 포함, 회귀 없음) 전부 통과.
+테스트 포함, 회귀 없음) 전부 통과. 이번 세션 변경분만 정확히 스테이징(`HANDOFF.md`,
+`src/app/games/[gameId]/page.tsx`, `src/games/dalmuti/CardArt.tsx`/`Dalmuti.test.ts`/`DalmutiBoard.tsx`/
+`DalmutiEffects.tsx`/`ExchangeHistoryPanel.tsx` 신규 — 이 세션과 무관한 사전 변경분은 이전 세션들과 동일하게
+커밋 대상에서 제외). 커밋 메시지 `feat(dalmuti): add private right-side tax exchange history panel for
+individual players`(`37d42e5`) → `git push origin main` 완료(`a599c7c..37d42e5`). 이어서
+`npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(39초), `target: "production"`/
+`readyState: READY`(`dpl_2qbbXPnHR44CYRxzWjG8nZ12QvcF`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에
+별칭 완료. `curl`로 `/`·`/games/dalmuti` 둘 다 200 직접 확인함.
 
 ### 2026-09-02 — 달무티 5인 세금 교환 버그 조사 및 대형 하이라이트 팝업 구현
 
