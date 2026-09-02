@@ -50,7 +50,9 @@ b-06-esports 시나리오 truth 텍스트에 잘못 섞여 있던 것)를 실제
 미커밋 변경/로컬 env 이슈로 확인(과거 세션들과 동일 패턴), 이번 세션 신규 파일과 무관. `npx tsc --noEmit`/
 `npm run lint`/`npx vitest run`(50개 파일·1591개 테스트)/`npm run build` 전부 통과. 커밋
 `d4c4199`(`feat(hill-of-truth): implement multiplayer engine, fixed scenario db, investigation tools, and
-yellow light review`) → `git push origin main`** — 자세한 내용은 아래
+yellow light review`) → `git push origin main` → `docs(handoff)` 커밋(`352db8c`) →
+`npx vercel deploy --prod --scope me-3871`(`dpl_GRRCe74H35gjZ5bQfFrM7LQANLhU`, READY) 완료, `curl`로 프로덕션
+`/`·`/games/hill-of-truth` 200 확인** — 자세한 내용은 아래
 `### 2026-09-02 — 진실의 고개 신규 다인 추리 엔진 구축` 절 참고.)_
 
 _이전 갱신: 2026-09-02 (**로비(메인 `/`) 모바일 전체 게임 목록 100% 노출 + 실시간 검색 필터 구현 세션 —
@@ -625,10 +627,12 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 과거 여러 세션에서 반복 확인된 것과 동일한 패턴으로, 이번 세션 신규 파일과 무관함을 확인.
 
 **커밋/배포**: `git commit`(`d4c4199`, `feat(hill-of-truth): implement multiplayer engine, fixed scenario
-db, investigation tools, and yellow light review`) → `git push origin main`(`f2c00bd..d4c4199`) 완료. 이
-세션 시작 시점부터 이미 워킹 트리에 있던 무관한 변경분(`boardGameRule/`의 다른 게임 이미지들, `.claude/`,
-`src/components/patchNotes/` 개편분, `src/constants/patchNotes.ts`, `orca충돌및확인.md`, `저작권, 상표권.md`
-등 — 다른 세션의 진행 중 작업으로 추정)은 이전 세션들과 동일한 판단으로 커밋 대상에서 제외.
+db, investigation tools, and yellow light review`) → `git push origin main`(`f2c00bd..d4c4199`) →
+`docs(handoff)` 커밋(`352db8c`) → `npx vercel deploy --prod --scope me-3871`(`dpl_GRRCe74H35gjZ5bQfFrM7LQANLhU`,
+READY) 완료, `curl`로 프로덕션 `/`·`/games/hill-of-truth` 200 확인. 이 세션 시작 시점부터 이미 워킹 트리에
+있던 무관한 변경분(`boardGameRule/`의 다른 게임 이미지들, `.claude/`, `src/components/patchNotes/` 개편분,
+`src/constants/patchNotes.ts`, `orca충돌및확인.md`, `저작권, 상표권.md` 등 — 다른 세션의 진행 중 작업으로
+추정)은 이전 세션들과 동일한 판단으로 커밋 대상에서 제외.
 
 ### 2026-09-02 — 로비 모바일 전체 게임 노출 및 실시간 검색 구현
 
