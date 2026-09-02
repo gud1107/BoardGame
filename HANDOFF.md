@@ -15,7 +15,7 @@ Peek은 룰북상 항상 자기 카드만 봄(상대 카드 훔쳐보기 기능 
 검증 — 정찰 화면에서 카드가 뜨자마자 0.9초간 6회 연타(탭 스팸)해도 카드가 전혀 조기 복귀하지 않고, 약 3초
 경과 후에만 자동으로 뒷면 전환+확인 완료로 넘어가는 것을 스크린샷 4장으로 직접 확인. `npx tsc --noEmit`/
 `npm run lint`/`npx vitest run`(50개 파일·1591개 테스트) 전부 통과. 커밋
-`TBD`(`fix(rat-a-tat-cat): guarantee 3-second self card reveal even when skip is triggered`) →
+`f9ae955`(`fix(rat-a-tat-cat): guarantee 3-second self card reveal even when skip is triggered`) →
 `git push origin main` 완료, 배포는 아래 절 "커밋/배포" 참고** — 자세한 내용은 아래
 `### 2026-09-02 — 랫어탯캣 시작 전 카드 확인 3초 보장` 절 참고.)_
 
@@ -601,8 +601,8 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 이 세션 시작 전부터 있던 별도 미커밋 변경/로컬 env 이슈로, 과거 여러 세션에서 반복 확인된 것과 동일한
 패턴이며 이번 변경과 무관.
 
-**커밋/배포**: `git commit`(`0378f2e`, `fix(rat-a-tat-cat): guarantee 3-second self card reveal even when
-skip is triggered`) → `git push origin main`(`d4c4199..0378f2e`) 완료. 이 세션 시작 시점부터 이미 워킹
+**커밋/배포**: `git commit`(`f9ae955`, `fix(rat-a-tat-cat): guarantee 3-second self card reveal even when
+skip is triggered`) → `git push origin main`(`d4c4199..f9ae955`) 완료. 이 세션 시작 시점부터 이미 워킹
 트리에 있던 무관한 변경분(`boardGameRule/`의 다른 게임 이미지·룰북, `.claude/`,
 `src/components/patchNotes/`/`src/constants/patchNotes.ts` 개편분 등 — 다른 세션의 진행 중 작업으로 추정)은
 이전 세션들과 동일한 판단으로 커밋 대상에서 제외.
