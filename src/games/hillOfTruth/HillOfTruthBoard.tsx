@@ -144,9 +144,22 @@ export default function HillOfTruthBoard({
   return (
     <div className="flex flex-col gap-4 pb-28">
       <div className="flex items-center justify-between gap-2">
-        <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/60">
-          {scenario.type === "A" ? "🎬 유형 A · 원작 헌정" : "📚 유형 B · 검증 시나리오"}
-        </span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/60">
+            {scenario.type === "A" ? "🎬 유형 A · 원작 헌정" : "📚 유형 B · 검증 시나리오"}
+          </span>
+          <span
+            className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+              state.difficulty === "LV3"
+                ? "bg-fuchsia-500/15 text-fuchsia-200"
+                : state.difficulty === "LV2"
+                  ? "bg-cyan-500/15 text-cyan-200"
+                  : "bg-white/10 text-white/60"
+            }`}
+          >
+            {state.difficulty === "LV3" ? "🔴 Lv.3 하드코어" : state.difficulty === "LV2" ? "🟡 Lv.2 심화" : "🟢 Lv.1 기본"}
+          </span>
+        </div>
         <button
           onClick={() => setRulebookOpen(true)}
           className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30"
@@ -321,7 +334,7 @@ export default function HillOfTruthBoard({
         </div>
       )}
 
-      <InvestigationPanel scenario={scenario} />
+      <InvestigationPanel scenario={scenario} difficulty={state.difficulty} questionLog={state.questionLog} />
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
       {reviewOpen && (
         <GameReviewModal

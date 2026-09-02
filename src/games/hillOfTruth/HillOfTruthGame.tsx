@@ -14,6 +14,7 @@ import {
   chooseBotAction,
   computeRankings,
   startGame,
+  type Difficulty,
   type EngineAction,
   type GameState,
   type Seat,
@@ -50,6 +51,14 @@ import {
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 8;
 const IDLE_VOTE_THRESHOLD_MS = 45_000;
+
+/** 방 생성 시 호스트가 고르는 난이도 3단계(2026-09-03 세션) — scenarios.ts §
+ * Difficulty 계약과 동일한 값을 쓴다. */
+const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; emoji: string; desc: string }[] = [
+  { value: "LV1", label: "Lv.1", emoji: "🟢", desc: "기본 · 텍스트 추리" },
+  { value: "LV2", label: "Lv.2", emoji: "🟡", desc: "심화 · 사진 증거" },
+  { value: "LV3", label: "Lv.3", emoji: "🔴", desc: "하드코어 · 위증 검증" },
+];
 
 function hillOfTruthCurrentActor(state: GameState): Seat | null {
   return state.phase === "playing" ? state.turnOrder[state.turnIndex] : null;
@@ -105,6 +114,9 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
   const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [targetPlayerCount, setTargetPlayerCount] = useState(4);
+  // 방 난이도(2026-09-03 세션 신규) — 호스트만 고를 수 있고, game-start 브로드캐스트에
+  // 실려 전원에게 전파된다. 기본값 LV1은 구버전 룸 생성 흐름과 동일한 체감을 보장한다.
+  const [difficulty, setDifficulty] = useState<Difficulty>("LV1");
   const [formError, setFormError] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -152,6 +164,7 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
   }
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
+  const difficultyRef = useRef<Difficulty>(difficulty);
   const isHost = intent === "create";
 
   const gameStateRef = useRef<GameState | null>(null);
@@ -187,6 +200,7 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
       return;
     }
     playerCountRef.current = targetPlayerCount;
+    difficultyRef.current = difficulty;
     setMyName(name);
     setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
     setRoomCode(code);
@@ -207,16 +221,19 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
       const seed = payload?.seed as number;
       const playerCount = payload?.playerCount as number;
+      const roomDifficulty = (payload?.difficulty as Difficulty | undefined) ?? "LV1";
       const roster = (payload?.botSeats as Seat[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
       playerCountRef.current = playerCount;
+      difficultyRef.current = roomDifficulty;
+      setDifficulty(roomDifficulty);
       botSeatsRef.current = roster;
       setBotSeats(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
       botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
-      setGameState(startGame(playerCount, seed));
+      setGameState(startGame(playerCount, seed, roomDifficulty));
       setFinalResult(null);
       setPhase("playing");
     });
@@ -406,7 +423,13 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({
       type: "broadcast",
       event: "game-start",
-      payload: { seed: randomSeed(), playerCount: playerCountRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
+      payload: {
+        seed: randomSeed(),
+        playerCount: playerCountRef.current,
+        difficulty: difficultyRef.current,
+        botSeats: botSeatsRef.current,
+        botLevels: botLevelsRef.current,
+      },
     });
   }, []);
 
@@ -475,7 +498,12 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
     return occupants.filter((o) => o.seat !== Number(seatKey) && !botSeats.includes(o.seat) && !takenOverSeats.has(o.seat)).length;
   }
 
-  const takeoverSeats = useMemo(() => Object.keys(botTakeover.takeovers).map(Number) as Seat[], [botTakeover]);
+  // See DalmutiGame.tsx's 2026-09-03 freeze-fix comment: depends on a
+  // stable string key (not the whole `botTakeover` object) so an unrelated
+  // seat's vote/convert broadcast can't reset a bot's in-flight action
+  // timer via `useBotAutoplay`.
+  const takeoverSeatKey = Object.keys(botTakeover.takeovers).sort().join(",");
+  const takeoverSeats = useMemo(() => (takeoverSeatKey ? (takeoverSeatKey.split(",").map(Number) as Seat[]) : []), [takeoverSeatKey]);
   const allBotSeatSet = useMemo(() => new Set([...botSeatSet, ...takeoverSeats]), [botSeatSet, takeoverSeats]);
 
   const chooseAction = useCallback((state: GameState, actor: Seat): EngineAction | null => {
@@ -727,6 +755,28 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
               </button>
             </div>
           </label>
+        )}
+        {intent === "create" && (
+          <div className="flex flex-col gap-1.5 text-sm text-white/70">
+            난이도
+            <div className="grid grid-cols-3 gap-1.5">
+              {DIFFICULTY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setDifficulty(opt.value)}
+                  className={`flex flex-col items-center gap-0.5 rounded-xl border px-2 py-2 text-center transition ${
+                    difficulty === opt.value
+                      ? "border-cyan-400/60 bg-cyan-400/10 text-cyan-100"
+                      : "border-white/15 text-white/60 hover:border-white/30"
+                  }`}
+                >
+                  <span className="text-sm font-bold">{opt.emoji} {opt.label}</span>
+                  <span className="break-keep text-[10px] leading-snug text-white/50">{opt.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">{formError}</p>}
         <div className="flex gap-2">

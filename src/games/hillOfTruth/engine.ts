@@ -19,7 +19,9 @@
 
 import { seededRng } from "@/lib/rng";
 import { clampBotLevel, pickByLevel, type BotLevel, type ScoredCandidate } from "../shared/bot/botDifficulty";
-import { SCENARIOS, getScenario, correctAnswerTextFor, type Scenario, type SemaphoreColor } from "./scenarios";
+import { SCENARIOS, getScenario, correctAnswerTextFor, type Difficulty, type Scenario, type SemaphoreColor } from "./scenarios";
+
+export type { Difficulty } from "./scenarios";
 
 export const MAX_HIDDEN_QUESTIONS = 7;
 export const ANSWER_COOLDOWN_MS = 20_000;
@@ -63,6 +65,10 @@ export type Phase = "playing" | "ended";
 export interface GameState {
   readonly phase: Phase;
   readonly scenarioId: string;
+  /** 방 생성 시 선택된 난이도(2026-09-03 세션). 판정 로직(matchTrigger/isCorrectAnswer)은
+   * 이 값과 무관하게 항상 동일하게 동작한다 — UI가 사진/잠금 단서/위증 증언을 보여줄지만
+   * 결정한다. 히든 질문 횟수·오답 쿨타임도 이번 패치에서는 난이도별로 차등화하지 않는다. */
+  readonly difficulty: Difficulty;
   readonly seatCount: number;
   readonly players: readonly PlayerState[];
   readonly turnOrder: readonly Seat[];
@@ -79,20 +85,30 @@ export type EngineAction =
   | { type: "SUBMIT_ANSWER"; seat: Seat; text: string; atMs: number }
   | { type: "PASS_TURN"; seat: Seat; atMs: number };
 
-function pickScenario(rng: () => number): Scenario {
-  const idx = Math.min(Math.floor(rng() * SCENARIOS.length), SCENARIOS.length - 1);
-  return SCENARIOS[idx];
+/** 난이도가 지원하는 시나리오만 후보로 남긴다 — LV2/LV3 방은 사진·잠금 단서·위증 증언을
+ * 갖춘 2026-09-03 신규 32편 중에서만 뽑히고, LV1 방은 구버전 10편도 포함해 전부 뽑힐 수
+ * 있다(§2 difficultySupport 계약). 후보가 비는 경우는 있을 수 없다 — LV1은 전체
+ * SCENARIOS, LV2/LV3는 신규 32편이 항상 존재(HillOfTruth.test.ts에서 검증). */
+function scenarioPoolFor(difficulty: Difficulty): readonly Scenario[] {
+  return SCENARIOS.filter((s) => s.difficultySupport.includes(difficulty));
 }
 
-export function startGame(seatCount: number, seed: number): GameState {
+function pickScenario(rng: () => number, difficulty: Difficulty): Scenario {
+  const pool = scenarioPoolFor(difficulty);
+  const idx = Math.min(Math.floor(rng() * pool.length), pool.length - 1);
+  return pool[idx];
+}
+
+export function startGame(seatCount: number, seed: number, difficulty: Difficulty = "LV1"): GameState {
   // seed로 시나리오를 결정론적으로 롤링(락스텝 계약 — 모든 클라이언트가 같은 시드로
   // 같은 시나리오를 뽑는다). 시드는 여기서만 소비한다.
   const rng = seededRng(seed);
-  const scenario = pickScenario(rng);
+  const scenario = pickScenario(rng, difficulty);
   const turnOrder = Array.from({ length: seatCount }, (_, i) => i);
   return {
     phase: "playing",
     scenarioId: scenario.id,
+    difficulty,
     seatCount,
     players: turnOrder.map((seat) => ({ seat, hiddenQuestionsUsed: 0, cooldownUntilMs: null })),
     turnOrder,

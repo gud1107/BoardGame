@@ -29,6 +29,28 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           </ul>
         </section>
 
+        <section className="rounded-xl border border-cyan-300/20 bg-cyan-400/5 p-3">
+          <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-cyan-200/90 uppercase">🎚️ 난이도 3단계 (방 생성 시 선택)</h3>
+          <ul className="list-disc space-y-1.5 pl-4 text-xs text-white/70">
+            <li>
+              <b>🟢 Lv.1 기본</b> — 텍스트 단서(타임테이블/증거/메시지/증언록)만으로 추리합니다.
+            </li>
+            <li>
+              <b>🟡 Lv.2 심화</b> — Lv.1 전부 + 증거단서함의 일부 항목에 실제 사진이 붙습니다. 증거 카드의
+              📷 썸네일을 누르면 화면 중앙에 고해상도로 확대돼 열립니다.
+            </li>
+            <li>
+              <b>🔴 Lv.3 하드코어</b> — Lv.2 전부 + 증언록 중 일부가 사건의 진실과 어긋나는 <b>위증</b>을
+              포함합니다(딜러는 여전히 진실 기준으로만 판정하므로, 증언과 판정이 어긋나면 그 자체가 단서입니다).
+              또한 특정 핵심 질문에서 초록불을 받아야만 해금되는 🔐 <b>잠금 단서</b>가 증거단서함에 추가됩니다.
+            </li>
+          </ul>
+          <p className="mt-2 break-keep text-[11px] text-white/50">
+            히든 질문 횟수(최대 {MAX_HIDDEN_QUESTIONS}회)와 오답 쿨타임({ANSWER_COOLDOWN_MS / 1000}초)은 난이도와
+            무관하게 동일합니다.
+          </p>
+        </section>
+
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">내 턴에 하는 행동</h3>
           <ol className="list-decimal space-y-1.5 pl-4 text-white/70">

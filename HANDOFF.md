@@ -1,6 +1,58 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-03 (**달무티(The Great Dalmuti) 플레이어 퇴장/재접속 시 AI 봇 턴 정지(freeze) 버그
+_최종 갱신: 2026-09-03 (**진실의 고개(Hill of Truth) 난이도 3단계(Lv.1~Lv.3) 시스템 + 사진 증거
+뷰어 + 위증 교차검증 + 잠금 단서 구현 세션 — 요청서는 `src/games/hillOfTruth/` 하위에
+`types.ts`/`Board.tsx`/`EvidencePanel.tsx`/`PhotoModal.tsx`/`RoomSettings.tsx`와 방 생성을 관리하는
+`roomManager.ts`가 있다고 가정했으나 조사 결과 그런 파일명은 하나도 없었음(다른 여러 세션에서 반복된
+"요청 전제-실제 코드 불일치" 패턴과 동일) — 이 프로젝트엔 애초에 `roomManager.ts` 자체가 없고(다른
+게임들과 동일하게 Supabase Realtime 브로드캐스트로 각 `<Game>.tsx`가 직접 방을 관리, `docs/cloud-sync.md`
+표준), 타입은 `engine.ts`/`scenarios.ts`에 있으며 실제 보드/증거 패널 컴포넌트명은
+`HillOfTruthBoard.tsx`/`InvestigationPanel.tsx`였음. 시나리오 데이터 모델도 완전히 텍스트 전용이라
+사진 필드·난이도 필드·위증/잠금 단서 개념 자체가 전무했고, 실제 사진 에셋도 이 게임엔 하나도 없었음.
+`AskUserQuestion` 다회 왕복으로 확인 후 진행: ①사진은 직접 생성하지 않고 무료 라이선스(CC0/CC-BY/
+CC-BY-SA/Public domain) 실사진을 인터넷에서 검색해 다운로드(Wikimedia Commons API) ②기존 10개
+시나리오는 그대로 두고, 사진·위증·잠금 단서를 전부 갖춘 신규 시나리오를 추가 저작(처음엔 파일럿 2편
+합의, 이후 사용자가 "다른 구조의 사례도 30편 이상"으로 확장 요청 → 최종 30편+ 전부 Lv.1~Lv.3 완전
+저작으로 재확인, 총 신규 32편) ③위증 판정은 새 로직 없이 기존 `questionBank` 트리거 매칭(항상 진실
+기준)을 그대로 재사용 — 증언록 텍스트에 거짓 내용을 심어두되, 그 내용을 질문하면 여전히 진실 기준으로
+신호등이 뜨게만 하면 되므로 엔진 변경이 전혀 불필요했음(사용자가 직접 이 설계를 정확히 지시함) ④히든
+질문 횟수(7회)·오답 쿨타임(20초)은 요청서 초안엔 난이도별 차등안이 있었으나 "이번 패치에서는 제한하지
+말아달라"는 답변으로 전 난이도 동일 유지 확정. **구현**: `scenarios.ts`에 `Difficulty`("LV1"|"LV2"|"LV3")
+타입, `Scenario.difficultySupport`(기존 10편은 `["LV1"]`만, 신규 32편은 3단계 전부), `EvidenceItem.photo`
+(선택 필드, `{url, alt, credit}`), `LockedEvidenceItem`(`unlockTriggerId`로 questionBank 트리거 참조),
+`Scenario.testimoniesLv3`(LV3에서만 `testimonies` 대신 노출되는 위증 포함 버전) 추가. 사진은 카테고리별
+공용 라이브러리(`PHOTO_CREDITS`, 21장을 Wikimedia Commons에서 다운로드해 `public/images/hillOfTruth/
+evidence/`에 저장 — CCTV/복도/영수증/필적/열쇠/폴리스라인/서류/키패드/발자국/야간주차장/컴퓨터화면/
+손전등/편지봉투/지문/장부/손목시계/여행가방/깨진유리/관람차/방탈출퍼즐박스/회전목마)로 32개 신규
+시나리오가 항목별로 재사용, 시나리오 고유 `name`/`description`만 매번 새로 저작. 이미지 검증 중 두
+건의 부적절한 후보를 걸러냄 — ①실제 FBI 사건 증거 압수품으로 추정되는 사진(제목에 "EFTA00001941"
+등 실제 증거번호 포함)을 필적 샘플로 잘못 골라뒀다가 1746년 여행일지 스캔본(안전한 역사 자료)으로
+교체 ②"Key to the World"라는 이름의 어학원 간판 사진을 실제 열쇠 사진으로 착각해 골랐다가(제목만
+보고 판단한 실수) 직접 이미지를 열어 확인 후 진짜 열쇠 클로즈업 사진으로 교체 — 제목만 보고 채택하지
+않고 최종적으로 시각 확인한 것이 중요했음. `engine.ts`: `startGame(seatCount, seed, difficulty = "LV1")`
+로 시그니처 확장(하위 호환 기본값), `GameState.difficulty` 필드 추가, `scenarioPoolFor(difficulty)`로
+시나리오 풀을 `difficultySupport` 기준 필터링 후 롤링 — 판정 로직(`matchTrigger`/`isCorrectAnswer`)은
+단 한 줄도 변경하지 않음(사용자 설계 의도 그대로). 신규 컴포넌트 `PhotoModal.tsx`(라이트박스, 로드
+실패 시 텍스트 폴백 카드로 자동 대체, `next/image` 사용 — `forSale/CardArt.tsx` 등과 동일한 로컬
+이미지 컨벤션), `LockedEvidenceSlot.tsx`(자물쇠 아이콘 → 네온 해금 연출, 해금 판정은 새 상태 없이
+`questionLog`의 `triggerId`+`verdict:"green"`만으로 순수 계산). `InvestigationPanel.tsx`에
+`difficulty`/`questionLog` prop 추가 — LV1에선 사진 완전히 숨김, LV2+에서 증거 카드에 📷 썸네일,
+LV3에서 `testimoniesLv3`로 증언록 교체 + 잠금 단서 섹션. `HillOfTruthBoard.tsx`에 난이도 배지 추가.
+`HillOfTruthGame.tsx`: 방 생성 폼(호스트 전용)에 Lv.1~Lv.3 선택 UI 신설, `game-start` 브로드캐스트
+페이로드에 `difficulty` 실어 전파. `RulebookModal.tsx`·`진실의 고개.md` 룰북 전면 개정(§2-1 신설).
+`HillOfTruth.test.ts`: 시나리오 수 검증을 42개(구버전 10 + 신규 32)로 갱신, 난이도별
+`difficultySupport`/사진 보유/잠금 단서 `unlockTriggerId` 유효성/`testimoniesLv3` 실제 교체 여부/
+`startGame`의 난이도별 시나리오 풀 필터링(LV2·LV3 각 100시드 전수 검증)을 검증하는 신규 테스트 다수
+추가. **검증**: `npx tsc --noEmit`(에러 0) / `npx eslint src/games/hillOfTruth/`(경고 0) /
+`npx vitest run`(50개 파일·1605개 테스트 전부 통과, hillOfTruth 자체는 54개) / `npm run build`(26개
+라우트 전부 정상 생성) 전부 통과. 작업 중 이 저장소를 동시에 건드리던 다른 세션(달무티 프리즈 픽스
+세션)이 이 파일(`HillOfTruthGame.tsx`)에서 진행 중이던 이 작업을 발견하고 자기 커밋 범위에서 의도적으로
+제외했음을 그 세션의 HANDOFF 기록(바로 아래 항목)에서 확인 — 커밋 시 다른 세션이 건드린 무관한 파일
+(coyote/patch-notes/globals.css 등 워킹 트리에 섞여 있던 다른 미완성 변경)은 전부 제외하고 이 세션이
+실제로 만든 `src/games/hillOfTruth/**`·`public/images/hillOfTruth/**`·룰북·이 문서만 범위를 좁혀 커밋함.
+자세한 내용은 아래 `### 2026-09-03 — 진실의 고개 난이도 3단계 시스템 구현` 절 참고.)_
+
+_이전 갱신: 2026-09-03 (**달무티(The Great Dalmuti) 플레이어 퇴장/재접속 시 AI 봇 턴 정지(freeze) 버그
 픽스 세션 — 요청서는 "플레이어2가 방을 나가면 다음 차례인 AI 봇이 카드를 내지 않고 턴이 무한 정지된다"며
 `server/roomManager.ts`/`aiManager.ts`/`src/games/dalmuti/useDalmuti.ts`/`aiBot.ts`를 확인해 달라 요청했으나
 조사 결과 이 프로젝트엔 그런 서버/파일이 아예 존재하지 않았음(socket.io도 없음) — 실제 구조는 서버리스
@@ -699,6 +751,127 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-09-03 — 진실의 고개 난이도 3단계 시스템 구현
+
+**요청**: 진실의 고개(Hill of Truth) 방 생성 시 난이도(Lv.1 기본/Lv.2 심화/Lv.3 하드코어) 선택 옵션
+신설. Lv.1은 기존과 동일한 텍스트 단서, Lv.2는 여기에 시각 증거 사진(CCTV 스틸컷/현장 사진/영수증/
+필적/소지품 등)이 추가되고 증거단서함 카드 클릭 시 고해상도 라이트박스 팝업으로 확대, Lv.3는 증언록에
+위증·알리바이 조작이 섞여 있어 신호등 교차 검증으로 스스로 간파해야 하고, 특정 핵심 질문에서 초록불을
+받아야 2차 심층 단서(디지털 포렌식/부검 감정서 등)가 자물쇠 해금 연출과 함께 열림. 요청서 초안은
+히든 질문 횟수(Lv.1~2: 7회 / Lv.3: 4회)와 오답 페널티(Lv.1~2: 20초 쿨타임 / Lv.3: 30초 쿨타임)를
+난이도별로 차등화할 것도 제안했음. 룰북(`진실의 고개.md`) 전면 개정과 HANDOFF 동기화, 확인이 필요한
+세부사항은 임의로 추정하지 말고 번호를 매긴 질문 목록으로 먼저 확인받으라는 명시적 지시.
+
+**조사 결과**: 요청서가 가정한 파일 구조(`roomManager.ts`, `src/games/hillOfTruth/types.ts`/`Board.tsx`/
+`EvidencePanel.tsx`/`PhotoModal.tsx`/`RoomSettings.tsx`)는 이 코드베이스에 하나도 존재하지 않았다 —
+다른 여러 세션에서 반복돼온 "요청 전제-실제 코드 불일치" 패턴과 동일. 실제로는:
+- `roomManager.ts` 자체가 프로젝트 전체에 없다. 방 생성/진행은 게임마다 자체 `<Game>.tsx` 컴포넌트가
+  Supabase Realtime 채널의 `game-start` 브로드캐스트 페이로드로 처리한다(`docs/cloud-sync.md` 표준
+  락스텝 패턴 — 예: `spot-difference`의 대기실이 `stageCount`/`diffCount`/`timerSeconds`를 골라
+  `startGame()`에 넘기는 것과 동일 구조).
+- 타입은 별도 `types.ts`가 아니라 `engine.ts`/`scenarios.ts`에 있고, 실제 보드/증거 패널 컴포넌트명은
+  `HillOfTruthBoard.tsx`/`InvestigationPanel.tsx`(2026-09-02 신규 구축 세션에서 지은 이름 그대로).
+- `Scenario`/`EvidenceItem` 데이터 모델이 완전히 텍스트 전용이었다 — 이미지 경로 필드, 난이도 필드,
+  위증/모순 플래그, 잠금 단서 개념이 전무했고, 이 게임용 실제 사진 에셋도 리포에 하나도 없었다(기존
+  10개 시나리오는 전부 유형 B 텍스트 전용).
+
+**확인(`AskUserQuestion` 다회 왕복)**:
+1. **사진 소스**: 직접 생성하지 않고, 인터넷에서 찾아 파일을 다운로드해달라는 명시적 요청 — 무료
+   라이선스(CC0/CC-BY/CC-BY-SA/Public domain) 실사진을 Wikimedia Commons API로 검색·다운로드하는
+   방식 채택.
+2. **적용 범위**: 처음엔 신규 시나리오 2편(파일럿 — 관람차/방탈출카페) 저작에 합의했으나, 승인 직후
+   "다른 구조의 사례도 30편 이상 만들어달라"는 추가 요청이 들어와 규모가 크게 확장됨 — 이 30편+도
+   파일럿 2편과 똑같이 Lv.1~Lv.3 완전 저작(사진 증거 + 위증 + 잠금 단서 전부 포함)할지, 아니면 기존
+   9편처럼 텍스트 전용(Lv.1)으로만 만들어 재플레이 다양성만 늘릴지 재확인 → **30편+ 전부 Lv.1~Lv.3
+   완전 저작**으로 확정(사용자 선택) — 최종 신규 시나리오 총 32편(파일럿 2 + 신규 30).
+3. **위증 메커니즘의 성격**: 새 판정/이의제기 로직을 만드는 게 아니라, 증언록 텍스트에 진실과 어긋나는
+   내용을 심어두고 — 그 내용을 그대로 질문하면 딜러는 여전히 진실 기준으로만 신호등을 켠다는 점
+   자체가 단서가 되도록 하는 설계를 사용자가 직접 정확히 지시함("딜러 판정 엔진: 별도의 판사/반박
+   로직을 새로 짜는 것이 아니라, 기존의 참/부분참/거짓 트리거 매칭 로직 그대로"). 결과적으로 엔진
+   판정 로직(`matchTrigger`/`isCorrectAnswer`)은 이 세션에서 단 한 줄도 바뀌지 않음 — 순수 콘텐츠
+   저작 문제로 축소됨.
+4. **히든 질문 횟수·오답 쿨타임**: "오답쿨타임 20초 유지, 쿨타임은 일단 이번 패치에선 제한하지
+   말아주세요"라는 답변으로 요청서 초안의 난이도별 차등안(Lv.3만 4회/30초)을 명시적으로 폐기 —
+   **전 난이도 히든 질문 7회, 오답 쿨타임 20초로 통일**. 향후 별도 요청이 있으면 재검토 대상.
+
+**설계**: 위 확인 사항 덕분에 엔진 판정 로직은 그대로 두고, 난이도가 바꾸는 건 딱 두 가지로 좁혀짐 —
+①시나리오 풀 필터링(신규 32편만 `difficultySupport`에 LV2/LV3 포함), ②UI가 보여주는 정보량(사진
+노출 여부, 어느 증언록 세트를 보여줄지, 잠금 단서 섹션 노출 여부). 이 덕분에 히든 질문 카운트·쿨타임
+분기, 새로운 신호등 색상, 새로운 딜러 판정 API 등 원 요청서가 암시했던 무거운 엔진 리팩터링이 전부
+불필요해짐.
+
+**이미지 소싱**: Wikimedia Commons API(`action=query&generator=search&prop=imageinfo`)로 카테고리별
+(보안카메라/복도/영수증/필적/열쇠/폴리스라인/서류/키패드/발자국/야간주차장/컴퓨터화면/손전등/
+편지봉투/지문/장부/손목시계/여행가방/깨진유리/관람차/방탈출퍼즐박스/회전목마) 검색 → 라이선스
+(`LicenseShortName`) 확인 → 다운로드, 총 21장을 `public/images/hillOfTruth/evidence/`에 저장하고
+출처를 `CREDITS.json`에 기록. 실제 인물 얼굴이 나오는 사진은 전부 배제(초상권/오해 방지). 검증 과정에서
+부적절한 후보 2건을 직접 걸러냄 — 자동화된 제목 매칭만으로는 놓칠 뻔한 문제들:
+1. "handwriting" 카테고리 검색 결과 1순위가 제목에 "EFTA00001941" 같은 실제 증거번호를 포함한, FBI가
+   업로더로 표기된 사진이었다 — 실제 형사사건의 압수 증거물일 가능성이 높아 즉시 배제하고, 1746년
+   여행일지 스캔본(공개된 지 280년 지난 역사 자료, 안전)으로 교체.
+2. "keys" 카테고리에서 제목만 보고 고른 "Key to the World 20231112.jpg"를 실제로 열어보니 동명의
+   어학원 간판 사진이었다(은유적 이름에 낚임) — 실제 사진을 하나씩 열어 확인하는 과정에서 발견,
+   진짜 열쇠 클로즈업 사진으로 교체. 이 두 건 덕분에 이후 전체 이미지도 검색 스니펫이 아니라 최종
+   파일명/맥락을 재확인하는 절차를 거침(다른 게임의 라스베가스 실사진 저작권 이슈처럼 이 프로젝트에서
+   이미지 관련 리스크가 특히 조심스러운 영역이라는 선례와 일치).
+
+**구현 — 데이터 모델(`scenarios.ts`)**: `Difficulty = "LV1"|"LV2"|"LV3"` 타입, `Scenario.difficultySupport`
+(기존 10편은 `["LV1"]`만, 신규 32편은 3단계 전부 — `b()` 헬퍼로 감싸는 기존 관례 그대로 유지),
+`EvidencePhoto{url,alt,credit}`, `EvidenceItem.photo?`(선택 필드, 없으면 텍스트 카드), `LockedEvidenceItem`
+(`unlockTriggerId`로 `questionBank` 트리거 id를 참조 — 새 상태 없이 `questionLog`만으로 해금 판정 가능한
+설계), `Scenario.testimoniesLv3?`(LV3에서만 `testimonies` 대신 노출되는 위증 포함 버전, 없으면 그대로
+`testimonies` 사용). 사진은 카테고리별 공용 라이브러리(`PHOTO_CREDITS` 21종 + `photo()` 헬퍼)로 32개
+신규 시나리오가 재사용하고, 시나리오 고유 `name`/`description`만 매번 새로 저작 — 실제 존재하지 않는
+가상 사건에 사진마다 유일한 실사진을 구하는 건 불가능하므로 채택한 절충(사용자에게 미리 고지하고 진행).
+신규 32편은 데스게임 장르 톤을 유지하되 트릭 메커니즘을 최대한 다양화(정비 로그 조작·마스터키 재입장·
+변장 착각·매점 대신결제 알리바이·가짜 화재경보·이어폰 부정행위·장비 사보타주·스마트락 원격조작·카드
+복제·도핑·서명 위조·블랙박스 반복재생·빙판 흠집·세이브파일 타임스탬프 조작·사진 합성·원격 차단기·
+녹음기 설치·독성 스프레이 화장 트릭·감정서 위조·산책 중 분실 은폐·약통 바꿔치기·비상제동 조작·카라비너
+바꿔치기·시음잔 오염·외장하드 바꿔치기·미술품 감정서 위조·악성코드 삽입·GPS 항법 조작·유리파손 위장·
+대기표 부정발급·후원봇 조작·GPS 트래커 중계기 조작 등 32가지 서로 다른 구조).
+
+**구현 — 엔진(`engine.ts`)**: `startGame(seatCount, seed, difficulty: Difficulty = "LV1")`로 시그니처
+확장(기본값으로 기존 호출부 전부 하위 호환), `GameState.difficulty` 필드 추가, 신규
+`scenarioPoolFor(difficulty)`가 `SCENARIOS`를 `difficultySupport.includes(difficulty)`로 필터링한 뒤
+그 풀에서 결정론적으로 롤링. 판정 로직(`matchTrigger`/`isCorrectAnswer`/`computeFailureReason`)은
+위 §확인-3 덕분에 정말로 한 줄도 안 바뀜.
+
+**구현 — UI**: 신규 `PhotoModal.tsx`(증거 사진 라이트박스 — `next/image` 사용, `forSale/CardArt.tsx`·
+`lasVegas/CasinoPhotoArt.tsx`와 동일한 로컬 이미지 컨벤션, 로드 실패 시 React state로 텍스트 폴백 카드
+자동 대체 — "이미지 깨짐 방지" 요구사항), 신규 `LockedEvidenceSlot.tsx`(잠금 시 자물쇠 아이콘+힌트 문구,
+해금 시 네온 글로우 카드로 전환 — 해금 판정은 상위 컴포넌트가 `questionLog`의 `triggerId`+
+`verdict:"green"` 매칭만으로 순수 계산해 prop으로 내려줌, 새 상태 불필요). `InvestigationPanel.tsx`에
+`difficulty`/`questionLog` prop 추가 — LV1이면 사진 필드가 있어도 완전히 숨김(순수 텍스트만), LV2+면
+증거 카드에 📷 CSS 배경 썸네일(목록에 다수의 `next/image` 인스턴스를 띄우지 않으려는 선택 — 확대
+모달에서만 `next/image` 사용) + 클릭 시 `PhotoModal`, LV3면 `testimoniesLv3`로 증언록 자동 교체 +
+경고 안내 문구 + 잠금 단서 섹션. `HillOfTruthBoard.tsx`에 난이도 배지(🟢/🟡/🔴) 추가,
+`InvestigationPanel`에 `difficulty`/`questionLog` 전달. `HillOfTruthGame.tsx`: 방 생성 폼(호스트 전용,
+"인원 수" 선택 바로 아래)에 Lv.1~Lv.3 3버튼 선택 UI 신설, `sendGameStart`의 `game-start` 브로드캐스트
+페이로드에 `difficulty` 추가, 수신 측에서 `startGame(playerCount, seed, difficulty)`로 반영.
+
+**구현 — 문서**: `RulebookModal.tsx`(인게임 룰북)에 난이도 3단계 섹션 신설. `진실의 고개.md` 전면
+개정 — §2-1(난이도 3단계) 신설, §1 세팅에 호스트의 난이도 선택 절차 추가, §6 수사 노트 가이드에
+사진/잠금 단서 설명 추가, §8에 이미지 출처 고지(무료 라이선스, 실존 인물 배제, `CREDITS.json` 위치)
+추가. 문서 상단 changelog에 "히든 질문 횟수·쿨타임은 난이도 무관 동일" 사실을 명시적으로 기록해 향후
+세션이 요청서 초안의 차등안과 혼동하지 않도록 함.
+
+**검증**: `HillOfTruth.test.ts`에 시나리오 수(42개 = 구버전 10 + 신규 32) 검증, 시나리오 id 고유성,
+`difficultySupport` 값이 구버전/신규 각각 기대대로인지, LV2+ 시나리오는 사진 붙은 증거를 최소 1개
+갖는지, LV3 시나리오는 `lockedEvidence`를 최소 1개 갖고 `unlockTriggerId`가 실제 `questionBank`
+트리거를 가리키는지, `testimoniesLv3`가 실제로 `testimonies`와 다른 내용을 담고 있는지, `startGame`이
+difficulty 생략 시 LV1로 기본 처리되는지, LV2/LV3 방이 100개 시드를 굴려도 항상 그 난이도를 지원하는
+시나리오만 뽑는지를 검증하는 신규 테스트를 대거 추가(총 54개, 기존 46개에서 증가). `npx tsc --noEmit`
+(에러 0) / `npx eslint src/games/hillOfTruth/`(경고 0) / `npx vitest run`(50개 파일·1605개 테스트 전부
+통과, 프로젝트 전체) / `npm run build`(Next.js 16.2.12, 26개 라우트 전부 정상 생성) 전부 통과.
+
+**커밋 범위에 대한 참고**: 이 세션 도중 같은 저장소를 동시에 건드리던 다른 세션(달무티 AI 봇 프리즈
+픽스 세션, 위 최상단 "이전 갱신" 항목)이 `HillOfTruthGame.tsx`에서 이 작업이 진행 중임을 발견하고
+자기 커밋 범위에서 그 파일을 의도적으로 제외했다고 자신의 HANDOFF 기록에 남겼음 — 반대로 이 세션도
+커밋 시 워킹 트리에 섞여 있던 무관한 다른 세션들의 미완성 변경(coyote 게임, patch-notes 기능,
+`globals.css`, 여러 `boardGameRule/` 이미지 등)은 전부 제외하고 `src/games/hillOfTruth/**`·
+`public/images/hillOfTruth/**`·`진실의 고개.md`·이 문서만 범위를 좁혀 커밋함(여러 세션 동시 작업 시
+`git add -A` 대신 파일을 명시적으로 골라 add하는 게 안전하다는 선례 — §2 작업 규칙 참고).
 
 ### 2026-09-03 — 운명전쟁39 라운드 결과 점수판 히든 마스킹 해제
 

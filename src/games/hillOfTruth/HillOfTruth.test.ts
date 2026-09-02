@@ -19,9 +19,66 @@ import { seededRng } from "@/lib/rng";
 import type { BotLevel } from "../shared/bot/botDifficulty";
 
 describe("scenarios DB", () => {
-  it("유형 A 1개 + 유형 B 9개, 총 10개가 등록돼 있다", () => {
+  it("유형 A 1개 + 유형 B 41개(구버전 9개 + 2026-09-03 신규 32개), 총 42개가 등록돼 있다", () => {
     expect(SCENARIOS.filter((s) => s.type === "A")).toHaveLength(1);
-    expect(SCENARIOS.filter((s) => s.type === "B")).toHaveLength(9);
+    expect(SCENARIOS.filter((s) => s.type === "B")).toHaveLength(41);
+  });
+
+  it("모든 시나리오 id는 중복 없이 고유하다", () => {
+    const ids = SCENARIOS.map((s) => s.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("구버전 10개 시나리오는 LV1만 지원하고, 2026-09-03 신규 32개는 LV1~LV3를 전부 지원한다", () => {
+    const legacyIds = new Set([
+      "a-01-midnight-broadcast",
+      "b-01-greenhouse",
+      "b-02-gallery",
+      "b-03-ski-resort",
+      "b-04-bakery",
+      "b-05-orchestra",
+      "b-06-esports",
+      "b-07-camping",
+      "b-08-webnovel",
+      "b-09-marathon",
+    ]);
+    for (const scenario of SCENARIOS) {
+      if (legacyIds.has(scenario.id)) {
+        expect(scenario.difficultySupport).toEqual(["LV1"]);
+      } else {
+        expect(scenario.difficultySupport).toEqual(["LV1", "LV2", "LV3"]);
+      }
+    }
+    expect(SCENARIOS.filter((s) => s.difficultySupport.includes("LV2"))).toHaveLength(32);
+    expect(SCENARIOS.filter((s) => s.difficultySupport.includes("LV3"))).toHaveLength(32);
+  });
+
+  it("LV2/LV3를 지원하는 시나리오는 사진이 붙은 증거를 최소 1개 이상 갖는다", () => {
+    for (const scenario of SCENARIOS) {
+      if (!scenario.difficultySupport.includes("LV2")) continue;
+      expect(scenario.evidence.some((e) => e.photo)).toBe(true);
+    }
+  });
+
+  it("LV3를 지원하는 시나리오는 잠금 단서를 최소 1개 이상 갖고, unlockTriggerId가 실제 questionBank 트리거를 가리킨다", () => {
+    for (const scenario of SCENARIOS) {
+      if (!scenario.difficultySupport.includes("LV3")) continue;
+      expect(scenario.lockedEvidence && scenario.lockedEvidence.length).toBeGreaterThan(0);
+      const triggerIds = new Set(scenario.questionBank.map((t) => t.id));
+      for (const locked of scenario.lockedEvidence ?? []) {
+        expect(triggerIds.has(locked.unlockTriggerId)).toBe(true);
+      }
+    }
+  });
+
+  it("testimoniesLv3가 있는 시나리오는 testimonies와 다른 내용을 담고 있다(위증 교체가 실제로 일어남)", () => {
+    for (const scenario of SCENARIOS) {
+      if (!scenario.testimoniesLv3) continue;
+      expect(scenario.testimoniesLv3.length).toBeGreaterThanOrEqual(scenario.testimonies.length);
+      // 최소 하나의 증언 id는 LV1/LV2 세트에 없는 새 증언이어야 위증 교체가 의미를 가진다.
+      const baseIds = new Set(scenario.testimonies.map((t) => t.id));
+      expect(scenario.testimoniesLv3.some((t) => !baseIds.has(t.id))).toBe(true);
+    }
   });
 
   it("모든 시나리오는 answerRequiredKeywordGroups를 합친 정답 텍스트가 isCorrectAnswer를 통과한다", () => {
@@ -59,6 +116,26 @@ describe("startGame", () => {
   it("다른 시드는 대체로 다른 시나리오를 뽑을 수 있다", () => {
     const scenarioIds = new Set(Array.from({ length: 20 }, (_, i) => startGame(3, i).scenarioId));
     expect(scenarioIds.size).toBeGreaterThan(1);
+  });
+
+  it("difficulty를 생략하면 LV1로 기본값 처리된다(기존 호출부와의 하위 호환)", () => {
+    const state = startGame(4, 999);
+    expect(state.difficulty).toBe("LV1");
+  });
+
+  it("LV2/LV3 방은 100개 시드를 굴려도 항상 그 난이도를 지원하는 시나리오만 뽑는다", () => {
+    for (const difficulty of ["LV2", "LV3"] as const) {
+      for (let seed = 0; seed < 100; seed++) {
+        const state = startGame(4, seed, difficulty);
+        const scenario = getScenario(state.scenarioId);
+        expect(scenario.difficultySupport.includes(difficulty)).toBe(true);
+      }
+    }
+  });
+
+  it("LV1 방은 구버전 시나리오도 뽑을 수 있다(전체 42편이 후보)", () => {
+    const scenarioIds = new Set(Array.from({ length: 60 }, (_, i) => startGame(3, i, "LV1").scenarioId));
+    expect(scenarioIds.has("a-01-midnight-broadcast") || scenarioIds.has("b-01-greenhouse")).toBe(true);
   });
 });
 

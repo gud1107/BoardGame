@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import type { Scenario } from "./scenarios";
+import type { QuestionLogEntry } from "./engine";
+import PhotoModal from "./PhotoModal";
+import LockedEvidenceSlot from "./LockedEvidenceSlot";
 
 /**
  * 체계적 수사 분석 대시보드 — 타임테이블/증거단서함/문자메시지/증언록 4개 탭을 오가는
@@ -9,6 +12,11 @@ import type { Scenario } from "./scenarios";
  * 토글 버튼 하나로 열고 닫음 — 달무티 `ExchangeHistoryPanel.tsx`의 "상시 표시 사이드바"
  * 대신, 이 게임은 콘텐츠가 4탭×여러 항목으로 훨씬 커서 필요할 때만 펼치는 드로어 형태를
  * 택했다). 전원 공개 정보이므로 좌석/뷰어 구분 없이 시나리오 데이터를 그대로 보여준다.
+ *
+ * 2026-09-03 세션 — 난이도 3단계 확장: `difficulty`가 LV2 이상이면 증거 카드에 카메라
+ * 아이콘/썸네일이 붙어 `PhotoModal` 라이트박스로 확대할 수 있고, LV3면 증언록이
+ * `testimoniesLv3`(위증 포함 버전)로 바뀌고 잠금 단서 섹션이 추가된다. 잠금 해금 판정은
+ * 새 상태 없이 `questionLog`(triggerId+verdict)만으로 순수 계산한다 — 엔진 변경 없음.
  */
 
 type TabId = "timeline" | "evidence" | "messages" | "testimonies";
@@ -20,9 +28,23 @@ const TABS: { id: TabId; label: string; emoji: string }[] = [
   { id: "testimonies", label: "인물 증언록", emoji: "🗣️" },
 ];
 
-export default function InvestigationPanel({ scenario }: { scenario: Scenario }) {
+export default function InvestigationPanel({
+  scenario,
+  difficulty,
+  questionLog,
+}: {
+  scenario: Scenario;
+  difficulty: Scenario["difficultySupport"][number];
+  questionLog: readonly QuestionLogEntry[];
+}) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("timeline");
+  const [openPhoto, setOpenPhoto] = useState<{ title: string; photo: NonNullable<Scenario["evidence"][number]["photo"]> } | null>(null);
+
+  const showPhotos = difficulty !== "LV1";
+  const isLv3 = difficulty === "LV3";
+  const testimonies = isLv3 && scenario.testimoniesLv3 ? scenario.testimoniesLv3 : scenario.testimonies;
+  const greenTriggerIds = new Set(questionLog.filter((e) => e.verdict === "green" && e.triggerId).map((e) => e.triggerId as string));
 
   return (
     <>
@@ -75,12 +97,43 @@ export default function InvestigationPanel({ scenario }: { scenario: Scenario })
               )}
               {tab === "evidence" && (
                 <ul className="flex flex-col gap-3">
-                  {scenario.evidence.map((e) => (
-                    <li key={e.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                      <p className="break-keep text-sm font-bold text-white">🧩 {e.name}</p>
-                      <p className="mt-1 break-keep text-xs leading-relaxed text-white/60">{e.description}</p>
-                    </li>
-                  ))}
+                  {scenario.evidence.map((e) => {
+                    const photo = showPhotos ? e.photo : undefined;
+                    return (
+                      <li key={e.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                        <div className="flex items-start gap-3">
+                          {photo && (
+                            <button
+                              onClick={() => setOpenPhoto({ title: e.name, photo })}
+                              className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/30"
+                            >
+                              {/* 썸네일은 순수 CSS 배경으로 — 목록 스크롤 중 다수의 next/image
+                                  인스턴스를 띄우지 않으려는 선택(라이트박스에서만 next/image 사용). */}
+                              <span
+                                className="absolute inset-0 bg-cover bg-center"
+                                style={{ backgroundImage: `url(${photo.url})` }}
+                              />
+                              <span className="absolute bottom-0.5 right-0.5 rounded bg-black/60 px-1 text-[9px]">📷</span>
+                            </button>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="break-keep text-sm font-bold text-white">🧩 {e.name}</p>
+                            <p className="mt-1 break-keep text-xs leading-relaxed text-white/60">{e.description}</p>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                  {isLv3 && scenario.lockedEvidence && scenario.lockedEvidence.length > 0 && (
+                    <>
+                      <p className="mt-1 break-keep text-[11px] font-semibold tracking-wide text-fuchsia-300/70 uppercase">
+                        🔐 잠금 단서
+                      </p>
+                      {scenario.lockedEvidence.map((locked) => (
+                        <LockedEvidenceSlot key={locked.id} item={locked} unlocked={greenTriggerIds.has(locked.unlockTriggerId)} />
+                      ))}
+                    </>
+                  )}
                 </ul>
               )}
               {tab === "messages" && (
@@ -100,7 +153,13 @@ export default function InvestigationPanel({ scenario }: { scenario: Scenario })
               )}
               {tab === "testimonies" && (
                 <ul className="flex flex-col gap-3">
-                  {scenario.testimonies.map((t) => (
+                  {isLv3 && (
+                    <p className="break-keep rounded-md bg-fuchsia-500/10 px-2.5 py-1.5 text-[11px] text-fuchsia-200/80">
+                      ⚠️ 이 난이도에서는 증언 중 일부가 사건의 진실과 어긋날 수 있습니다 — 신호등 판정, 타임테이블,
+                      증거와 교차 대조해서 위증을 스스로 간파해 보세요.
+                    </p>
+                  )}
+                  {testimonies.map((t) => (
                     <li key={t.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                       <p className="break-keep text-sm font-bold text-white">🗣️ {t.witness}</p>
                       <p className="mt-1 break-keep text-sm leading-relaxed text-white/80">&ldquo;{t.statement}&rdquo;</p>
@@ -108,7 +167,7 @@ export default function InvestigationPanel({ scenario }: { scenario: Scenario })
                         <p className="mt-2 break-keep rounded-md bg-rose-500/10 px-2 py-1 text-xs text-rose-300">
                           ⚠️ 다른 증언과 모순됨 —{" "}
                           {t.contradictsWith
-                            .map((id) => scenario.testimonies.find((o) => o.id === id)?.witness)
+                            .map((id) => testimonies.find((o) => o.id === id)?.witness)
                             .filter(Boolean)
                             .join(", ")}
                           의 증언과 대조해 보세요.
@@ -122,6 +181,7 @@ export default function InvestigationPanel({ scenario }: { scenario: Scenario })
           </div>
         </div>
       )}
+      {openPhoto && <PhotoModal title={openPhoto.title} photo={openPhoto.photo} onClose={() => setOpenPhoto(null)} />}
     </>
   );
 }
