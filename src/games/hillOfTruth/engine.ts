@@ -47,6 +47,8 @@ export interface AnswerAttemptEntry {
   readonly text: string;
   readonly correct: boolean;
   readonly turnNumber: number;
+  /** 오답일 때만 채워짐(정답이면 null) — §7 복기 리포트의 "오답 사유 분석" 문구. */
+  readonly failureReason: string | null;
 }
 
 export interface PlayerState {
@@ -141,6 +143,29 @@ export function isCorrectAnswer(scenario: Scenario, text: string): boolean {
   );
 }
 
+/**
+ * 오답 사유 자동 생성 — 정답 선언 히스토리 복기 리포트용(2026-09-03 세션,
+ * AskUserQuestion으로 "키워드 그룹 결여 비교" 방식 확정, 시나리오별 오답 유형 DB는
+ * 채택하지 않음). `isCorrectAnswer`와 동일한 `answerRequiredKeywordGroups` 판정
+ * 기준을 그대로 재사용해, 어느 라벨(범인/트릭/동기 등)이 통과했고 어느 라벨이
+ * 결여됐는지를 순수 함수로 비교한다 — 외부 LLM 호출도, 시나리오별 신규 저작도
+ * 필요 없다. 정답인 경우(모든 그룹 통과) null을 반환한다.
+ */
+export function computeFailureReason(scenario: Scenario, text: string): string | null {
+  const normalized = text.trim();
+  const matchedLabels: string[] = [];
+  const missingLabels: string[] = [];
+  for (const group of scenario.answerRequiredKeywordGroups) {
+    const hit = normalized.length > 0 && group.keywords.some((k) => normalized.includes(k));
+    (hit ? matchedLabels : missingLabels).push(group.label);
+  }
+  if (missingLabels.length === 0) return null;
+  if (matchedLabels.length === 0) {
+    return `제출하신 내용은 사건의 핵심 요소(${scenario.answerRequiredKeywordGroups.map((g) => g.label).join("·")}) 중 어느 것과도 일치하지 않았습니다.`;
+  }
+  return `${matchedLabels.join("·")} 항목은 맞았으나, ${missingLabels.join("·")} 항목이 결여되었거나 일치하지 않았습니다.`;
+}
+
 /** seat가 지금 볼 수 있는 질문 텍스트. 판정 색상(verdict)은 히든이라도 항상 전원에게
  * 공개되므로 항상 그대로 두되(로그 자체는 렌더링 여부와 무관하게 모든 클라이언트가
  * 동일하게 계산), `text`만 비참여자에게 마스킹한다 — 아발론 역할 공개와 동일한 "state엔
@@ -206,6 +231,7 @@ export function applyAction(state: GameState, action: EngineAction): GameState {
         text,
         correct,
         turnNumber: state.turnNumber,
+        failureReason: correct ? null : computeFailureReason(scenario, text),
       };
 
       if (correct) {

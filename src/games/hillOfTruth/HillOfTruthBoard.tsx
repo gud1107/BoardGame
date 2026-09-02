@@ -17,7 +17,7 @@ import {
 } from "./engine";
 import { getScenario } from "./scenarios";
 import InvestigationPanel from "./InvestigationPanel";
-import YellowLightReviewModal, { type YellowReviewItem } from "./YellowLightReviewModal";
+import GameReviewModal, { type AnswerReviewItem, type YellowReviewItem } from "./GameReviewModal";
 import RulebookModal from "./RulebookModal";
 
 const VERDICT_META = {
@@ -133,6 +133,13 @@ export default function HillOfTruthBoard({
   const reviewItems: YellowReviewItem[] = state.questionLog
     .filter((e) => e.verdict === "yellow")
     .map((entry) => ({ entry, askerName: names[entry.seat] ?? `${entry.seat + 1}번` }));
+
+  // 🎯 정답 선언 히스토리 — 종합 복기 모달의 두 번째 탭(GameReviewModal.tsx)에 그대로 전달.
+  const answerReviewItems: AnswerReviewItem[] = state.answerLog.map((entry) => ({
+    entry,
+    name: names[entry.seat] ?? `${entry.seat + 1}번`,
+    avatar: avatars?.[entry.seat],
+  }));
 
   return (
     <div className="flex flex-col gap-4 pb-28">
@@ -305,7 +312,7 @@ export default function HillOfTruthBoard({
               onClick={() => setReviewOpen(true)}
               className="rounded-xl border border-amber-400/40 px-4 py-2 text-sm text-amber-200 hover:border-amber-300/60"
             >
-              🟡 복기 리포트 다시보기
+              🔍 복기 리포트 다시보기
             </button>
             <button onClick={onGameEnd} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400">
               결과 확정하고 계속하기
@@ -316,7 +323,14 @@ export default function HillOfTruthBoard({
 
       <InvestigationPanel scenario={scenario} />
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
-      {reviewOpen && <YellowLightReviewModal items={reviewItems} onDone={() => setReviewOpen(false)} />}
+      {reviewOpen && (
+        <GameReviewModal
+          yellowItems={reviewItems}
+          answerItems={answerReviewItems}
+          scenarioTruth={scenario.truth}
+          onDone={() => setReviewOpen(false)}
+        />
+      )}
     </div>
   );
 }

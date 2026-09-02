@@ -5,6 +5,7 @@ import {
   applyAction,
   canSubmitAnswer,
   chooseBotAction,
+  computeFailureReason,
   computeRankings,
   cooldownRemainingMs,
   getValidMoves,
@@ -167,6 +168,54 @@ describe("SUBMIT_ANSWER", () => {
     state = applyAction(state, { type: "PASS_TURN", seat: 1, atMs: 0 });
     const asked = applyAction(state, { type: "ASK_QUESTION", seat: 0, mode: "public", text: "질문", atMs: 100 });
     expect(asked.questionLog).toHaveLength(1);
+  });
+
+  it("오답 시 answerLog에 failureReason이 채워지고, 정답 시엔 null이다(정답 선언 히스토리 복기 리포트)", () => {
+    const state = startGame(2, 1);
+    const scenario = getScenario(state.scenarioId);
+    const wrong = applyAction(state, { type: "SUBMIT_ANSWER", seat: 0, text: "완전히 틀린 답", atMs: 0 });
+    expect(wrong.answerLog).toHaveLength(1);
+    expect(wrong.answerLog[0].correct).toBe(false);
+    expect(wrong.answerLog[0].failureReason).not.toBeNull();
+    expect(wrong.answerLog[0].failureReason).toBe(computeFailureReason(scenario, "완전히 틀린 답"));
+
+    const right = applyAction(wrong, {
+      type: "SUBMIT_ANSWER",
+      seat: 1,
+      text: correctAnswerTextFor(scenario),
+      atMs: 0,
+    });
+    const winningAttempt = right.answerLog[right.answerLog.length - 1];
+    expect(winningAttempt.correct).toBe(true);
+    expect(winningAttempt.failureReason).toBeNull();
+  });
+});
+
+describe("computeFailureReason", () => {
+  it("모든 그룹이 결여되면 '어느 것도 일치하지 않았다'는 사유를 반환한다", () => {
+    for (const scenario of SCENARIOS) {
+      const reason = computeFailureReason(scenario, "전혀 관련 없는 아무 문장");
+      expect(reason).not.toBeNull();
+      for (const group of scenario.answerRequiredKeywordGroups) {
+        expect(reason).toContain(group.label);
+      }
+    }
+  });
+
+  it("첫 번째 그룹(주로 '범인')만 맞혔을 때, 맞은 라벨과 결여된 라벨을 정확히 나눠 보여준다", () => {
+    for (const scenario of SCENARIOS) {
+      const [firstGroup, ...restGroups] = scenario.answerRequiredKeywordGroups;
+      const reason = computeFailureReason(scenario, firstGroup.keywords[0]);
+      expect(reason).not.toBeNull();
+      expect(reason).toContain(firstGroup.label);
+      for (const group of restGroups) expect(reason).toContain(group.label);
+    }
+  });
+
+  it("모든 그룹의 키워드를 포함한 완전한 정답 텍스트는 null(정답)을 반환한다", () => {
+    for (const scenario of SCENARIOS) {
+      expect(computeFailureReason(scenario, correctAnswerTextFor(scenario))).toBeNull();
+    }
   });
 });
 
