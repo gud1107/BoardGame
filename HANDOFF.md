@@ -27,7 +27,13 @@ UI 개편 세션 — 요청서는 `src/pages/Lobby.tsx`/`src/components/lobby/{S
 `window.scrollTo(0, 2000)`로 카드 목록 깊숙이 스크롤해도 검색 바가 그대로 최상단에 고정되어 뒤 카드 위에
 또렷하게 겹쳐 보임, 스크롤된 상태에서 ✕ 클리어 버튼 클릭 시 `inputValue()`가 빈 문자열로 정상 초기화되는
 것까지 스크린샷+DOM 값으로 확인. 데스크톱(1280×800)은 스크린샷으로 레이아웃 무변경(검색창+필터 칩이
-여전히 한 줄, sticky 바/캐러셀 없음) 확인.)_
+여전히 한 줄, sticky 바/캐러셀 없음) 확인. **커밋(`46a3cc9`)/푸시/Vercel 프로덕션 배포까지 완료**
+(`https://board-game-tau-navy.vercel.app`, `vercel --prod`, deployment `dpl_7c9whXc1zk5JL1kZnXHJkgbTbpnL`
+— 배포 후 `curl`로 200 응답 및 응답 HTML에 `--site-header-h` 포함 여부로 신 코드 서빙 확인). 이 커밋은
+동시에 작업 중이던 다른 무관한 세션들(코요테/운명전쟁39 등)의 `HANDOFF.md`/`globals.css` 미커밋 변경분과
+겹치지 않도록, `git hash-object`+`update-index`로 이 세션이 실제로 작성한 훅(hunk)만 골라 스테이징해
+커밋 — 다른 세션들의 변경은 여전히 작업 트리에 미커밋 상태로 그대로 남아 있음(각 세션이 스스로 커밋할
+차례).)_
 
 _이전 갱신: 2026-09-03 (**진실의 고개(Hill of Truth) 정답 선언 히스토리 & 오답 분석 복기 리포트 구현
 세션 — 요청서는 게임 종료 시 그동안의 모든 "정답 선언(정답 도전)" 내역과 각 선언이 왜 틀렸는지(오답 분석
