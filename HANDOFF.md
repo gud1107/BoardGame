@@ -663,11 +663,13 @@ _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로�
 500도 과거 세션들과 동일한 로컬 개발 환경 Supabase 설정 이슈로 확인, 이번 세션 신규 파일과 무관.
 
 **커밋/배포**: `git commit`(`d204e02`, `feat(hill-of-truth): implement answer declaration history and
-detailed failure reason review in game over modal`) → `git push origin main` → `docs(handoff)` 커밋 →
-배포는 아래 "커밋/배포 결과" 참고. 이 세션 시작 시점부터 이미 워킹 트리에 있던 무관한 변경분
-(`src/components/patchNotes/` 개편분, `src/constants/patchNotes.ts`, `.claude/`,
-`boardGameRule/`의 다른 게임 이미지들, `orca충돌및확인.md`, `저작권, 상표권.md` 등 — 다른 세션의 진행
-중 작업으로 추정)은 이전 세션들과 동일한 판단으로 커밋 대상에서 제외.
+detailed failure reason review in game over modal`) → `git push origin main`(`0292831..1bf9815`) →
+`docs(handoff)` 커밋(`1bf9815`) → `npx vercel deploy --prod --scope me-3871`
+(`dpl_2PsdB1s1qco4Hr5HVopnTQWLisaW`, READY) 완료, `curl`로 프로덕션 `/`·`/games/hill-of-truth` 200 확인.
+이 세션 시작 시점부터 이미 워킹 트리에 있던 무관한 변경분(`src/components/patchNotes/` 개편분,
+`src/constants/patchNotes.ts`, `.claude/`, `boardGameRule/`의 다른 게임 이미지들, `orca충돌및확인.md`,
+`저작권, 상표권.md` 등 — 다른 세션의 진행 중 작업으로 추정)은 이전 세션들과 동일한 판단으로 커밋
+대상에서 제외.
 
 ### 2026-09-02 — 랫어탯캣 시작 전 카드 확인 3초 보장
 
