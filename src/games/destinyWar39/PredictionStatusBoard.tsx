@@ -63,7 +63,7 @@ function PredictionContent({ state, viewerSeat, names, connectedSeats, onAction 
                   onChange={(e) => setUseHidden(e.target.checked)}
                   className="h-3.5 w-3.5 accent-fuchsia-500"
                 />
-                🙈 히든으로 제출 (게임당 1회, 9라운드 종료까지 비공개)
+                🙈 히든으로 제출 (게임당 1회, 이번 라운드 종료 전까지만 비공개)
               </label>
             )}
             <button

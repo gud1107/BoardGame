@@ -2,7 +2,8 @@
 
 import Overlay from "@/components/Overlay";
 import { CardFace } from "./CardFace";
-import { visiblePastPrediction, type DestinyWar39State, type SeatIndex } from "./engine";
+import { HiddenRevealCell } from "./DestinyWar39Effects";
+import type { DestinyWar39State, SeatIndex } from "./engine";
 
 export interface LastRoundHistoryModalProps {
   state: DestinyWar39State;
@@ -16,9 +17,11 @@ export interface LastRoundHistoryModalProps {
  * recently *completed* round, sourced from `state.lastCompletedRound` (see
  * engine.ts). Available from the moment round 1 finishes through the rest
  * of the game, independent of the current phase, so a player can revisit
- * what was played even after the round has moved on. Predictions still
- * respect the same hidden-token redaction as everywhere else in the UI —
- * card plays themselves are never secret (they were revealed live).
+ * what was played even after the round has moved on. This modal only ever
+ * shows an already-completed round, so — like the roundEnd summary table —
+ * every prediction (hidden or not) shows its real value (rulebook §8,
+ * updated 2026-09-03); card plays themselves were never secret either way
+ * (they were revealed live).
  */
 export default function LastRoundHistoryModal({ state, viewerSeat, names, onClose }: LastRoundHistoryModalProps) {
   const round = state.lastCompletedRound;
@@ -75,15 +78,17 @@ export default function LastRoundHistoryModal({ state, viewerSeat, names, onClos
                 {Array.from({ length: state.playerCount }, (_, seat) => {
                   const idx = round.roundNumber - 1;
                   const player = state.players.find((p) => p.seat === seat)!;
-                  const visible = visiblePastPrediction(state, viewerSeat, seat, round.roundNumber);
-                  const isHiddenFromMe = visible === "hidden";
+                  const wasHidden = player.hidden[idx];
                   return (
                     <tr key={seat} className="border-t border-white/10">
                       <td className="px-2 py-1.5 font-medium text-white/90">{seatLabel(seat)}</td>
-                      <td className="px-2 py-1.5 text-center text-white/70">{isHiddenFromMe ? "🙈" : player.predictions[idx]}</td>
+                      <td className="px-2 py-1.5 text-center text-white/70">
+                        {wasHidden ? <HiddenRevealCell>{player.predictions[idx]}</HiddenRevealCell> : player.predictions[idx]}
+                      </td>
                       <td className="px-2 py-1.5 text-center text-white/70">{player.actualWins[idx]}</td>
                       <td className="px-2 py-1.5 text-right text-white/80">
-                        {isHiddenFromMe ? "?" : `${(player.scores[idx] ?? 0) >= 0 ? "+" : ""}${player.scores[idx]}`}
+                        {(player.scores[idx] ?? 0) >= 0 ? "+" : ""}
+                        {player.scores[idx]}
                       </td>
                     </tr>
                   );

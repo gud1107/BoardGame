@@ -8,14 +8,7 @@ import LastRoundHistoryModal from "./LastRoundHistoryModal";
 import { CardFace } from "./CardFace";
 import { HiddenRevealCell, PlayedCardSlot, ReverseSwishOverlay, RoundResultBadge, TurnOrderBadge, type RoundOutcome } from "./DestinyWar39Effects";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
-import {
-  TOTAL_ROUNDS,
-  visiblePastPrediction,
-  type DestinyWar39State,
-  type EngineAction,
-  type SeatIndex,
-  type TurnRecord,
-} from "./engine";
+import { TOTAL_ROUNDS, type DestinyWar39State, type EngineAction, type SeatIndex, type TurnRecord } from "./engine";
 
 /**
  * Minimum time a just-finished trick stays on screen (winner glowing) before
@@ -36,8 +29,12 @@ const DEATH_SHAKE_MS = 200;
  * Pure game UI + rules driver — same controlled-component contract as every
  * other `<Game>Board.tsx` in this project (state via props only, intent out
  * via `onAction`). Every client holds the FULL state per this project's
- * lockstep trust model; hidden-prediction secrecy is enforced only here, at
- * render time, via `visibleCurrentPrediction`/`visiblePastPrediction`.
+ * lockstep trust model; hidden-prediction secrecy for the round STILL in
+ * progress is enforced only here, at render time, via
+ * `visibleCurrentPrediction` (PredictionStatusBoard.tsx). Once a round ends
+ * its hidden predictions are public (rulebook §8, updated 2026-09-03) — the
+ * roundEnd table below shows every seat's real prediction unmasked, wrapped
+ * in `HiddenRevealCell` purely for the unveil flourish, not for redaction.
  *
  * Layout is a persistent 3-column shell: `RankedLeaderboard` (left) is
  * mounted across every phase — it owns cumulative score exclusively, with
@@ -310,34 +307,29 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
             <tbody>
               {state.players.map((p) => {
                 const idx = round.roundNumber - 1;
-                const visible = visiblePastPrediction(state, viewerSeat, p.seat, round.roundNumber);
-                const isHiddenFromMe = visible === "hidden";
+                const wasHidden = p.hidden[idx];
                 const predicted = p.predictions[idx]!;
                 const actual = p.actualWins[idx]!;
                 const success = predicted === actual;
-                // Never computed/shown for a row hidden from the viewer — a
-                // distinct outcome badge would leak exactly what that
-                // redaction is meant to hide (see RoundResultBadge's doc).
                 const outcome: RoundOutcome = success ? "success" : actual > predicted ? "over" : "under";
                 const outcomeLabel = success ? "성공" : outcome === "over" ? "초과" : "미달";
                 const outcomeClass = success ? "text-emerald-400" : outcome === "over" ? "text-orange-300" : "text-sky-300";
                 return (
                   <tr key={p.seat} className="border-t border-white/10">
                     <td className="px-2 py-1.5 font-medium text-white/90">{seatLabel(p.seat)}</td>
-                    <td className="px-2 py-1.5 text-center text-white/70">{isHiddenFromMe ? "🙈" : predicted}</td>
+                    <td className="px-2 py-1.5 text-center text-white/70">
+                      {wasHidden ? <HiddenRevealCell>{predicted}</HiddenRevealCell> : predicted}
+                    </td>
                     <td className="px-2 py-1.5 text-center text-white/70">{actual}</td>
-                    <td className={`px-2 py-1.5 text-center font-semibold ${isHiddenFromMe ? "text-white/40" : outcomeClass}`}>
-                      {isHiddenFromMe ? (
-                        "비공개"
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5">
-                          {outcomeLabel}
-                          <RoundResultBadge outcome={outcome} />
-                        </span>
-                      )}
+                    <td className={`px-2 py-1.5 text-center font-semibold ${outcomeClass}`}>
+                      <span className="inline-flex items-center gap-1.5">
+                        {outcomeLabel}
+                        <RoundResultBadge outcome={outcome} />
+                      </span>
                     </td>
                     <td className="px-2 py-1.5 text-right text-white/80">
-                      {isHiddenFromMe ? "?" : `${(p.scores[idx] ?? 0) >= 0 ? "+" : ""}${p.scores[idx]}`}
+                      {(p.scores[idx] ?? 0) >= 0 ? "+" : ""}
+                      {p.scores[idx]}
                     </td>
                   </tr>
                 );

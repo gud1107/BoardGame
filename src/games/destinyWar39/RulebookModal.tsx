@@ -98,7 +98,7 @@ export default function RulebookModal({ onClose, playerCount }: { onClose: () =>
           <ul className="list-disc space-y-1 pl-4 text-xs text-white/70">
             <li>매 라운드 시작 시(손패 확인 후) 그 라운드의 예측 승수(0~R)를 새로 선언합니다. 이전 라운드 예측과는 무관합니다</li>
             <li>히든은 게임 전체에서 <b>딱 1회</b>, 원하는 라운드에 사용할 수 있습니다 — 예측은 정상적으로 확정하되 다른 플레이어에게만 숨깁니다</li>
-            <li>히든으로 숨긴 예측값은 9라운드가 모두 끝난 뒤에 공개됩니다</li>
+            <li>히든으로 숨긴 예측값은 그 라운드가 진행되는 동안만 비공개이며, 라운드 결과가 확정되는 즉시 실제 승수·점수로 공개됩니다</li>
           </ul>
         </section>
 

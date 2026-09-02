@@ -32,8 +32,9 @@ import { deckModeConfig, isReverseCard, type Card, type PlayerCount } from "./en
  *    exactly which card(s) caused it.
  *  - `HiddenActivationBadge` — the 🙈 badge's flip-in glow+sparkle the
  *    instant a seat spends their lifetime hidden token.
- *  - `HiddenRevealCell` — the game-over flip+shatter reveal of a previously
- *    hidden prediction, once all 9 rounds are done (rulebook §8).
+ *  - `HiddenRevealCell` — the flip+shatter reveal of a previously hidden
+ *    prediction, the instant the round it was spent on ends (rulebook §8,
+ *    updated 2026-09-03 — previously waited until all 9 rounds were done).
  *  - `RoundResultBadge` — the round-end summary table's per-row Exact
  *    Hit/Over/Under flourish.
  *
@@ -286,13 +287,19 @@ const SHATTER_FRAGMENTS: { dx: number; dy: number; rot: number; delayMs: number 
 ];
 
 /**
- * Wraps a previously-hidden prediction's value in the game-over final
- * results table — flips into view with a bright flash + "?" fragment shards
- * flying outward, the moment all 9 rounds' hidden predictions are revealed
- * at once (rulebook §8, §12). Relies on the game-over table only ever
- * mounting fresh on the `roundEnd` -> `gameOver` phase transition (a
- * different JSX branch entirely — see DestinyWar39Board.tsx) for the "plays
- * once" read.
+ * Wraps a hidden prediction's value the moment it's revealed — flips into
+ * view with a bright flash + "?" fragment shards flying outward. Since the
+ * 2026-09-03 rulebook §8 update, that's the instant the round it was spent
+ * on ends (not the old "wait for all 9 rounds" gate), so this mounts in
+ * three places now: DestinyWar39Board.tsx's roundEnd summary table (for the
+ * round that just finished), LastRoundHistoryModal.tsx (for whichever round
+ * is the "직전 라운드" at open time), and the game-over final results table
+ * (a no-op re-reveal for rounds already shown earlier, kept for visual
+ * consistency with cells that happen to be seeing it for the first time,
+ * e.g. a game reloaded straight into `gameOver`). Relies on each of those
+ * blocks only ever mounting fresh once per round it's shown for (roundEnd's
+ * `key={round.roundNumber}`, the history modal's remount-on-open, game-over
+ * being a one-time phase transition) for the "plays once" read.
  */
 export function HiddenRevealCell({ children }: { children: ReactNode }) {
   return (
@@ -369,10 +376,12 @@ const RESULT_META: Record<
  * "OVER" badge on an over-prediction, blue frost flecks + a drooping "MISS"
  * badge on an under-prediction.
  *
- * Never render this for a row whose prediction is hidden from the viewer
- * (see engine.ts's `visiblePastPrediction`) — a distinct outcome badge would
- * leak exactly what that redaction is meant to hide, the same reason that
- * row's score cell is already masked to "?".
+ * Rendered for every row now, hidden predictions included — a round's real
+ * prediction/outcome/score are all public the instant that round ends
+ * (rulebook §8, updated 2026-09-03; see engine.ts's `visiblePastPrediction`).
+ * A hidden row's prediction cell is wrapped in `HiddenRevealCell` alongside
+ * this badge purely for the unveil flourish, not to gate whether the badge
+ * itself shows.
  *
  * Relies on the round-end block remounting fresh each round
  * (`key={round.roundNumber}` on the containing element in

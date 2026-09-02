@@ -46,8 +46,11 @@
  *    -|P-A|*2 (R irrelevant). P==0 → success +R / fail -R.
  *  - Hidden: each player may use it at most once across the whole game, on
  *    any round of their choosing; the prediction is still locked in before
- *    that round's turns start, just not shown to opponents until the game
- *    ends (all 9 rounds resolved).
+ *    that round's turns start, just not shown to opponents while that round
+ *    is still being played — it reveals to everyone the instant that round
+ *    itself ends (2026-09-03 rulebook §8 update; previously stayed hidden
+ *    until all 9 rounds were done), and stays revealed for the rest of the
+ *    game.
  *  - Final ranking: sum of the 9 per-round scores, highest wins; ties share
  *    the same rank (standard "competition ranking" — no tiebreaker).
  */
@@ -552,19 +555,24 @@ export function visibleCurrentPrediction(state: DestinyWar39State, viewerSeat: S
   return value;
 }
 
-/** A already-finished round's prediction for `targetSeat` (1-indexed `roundNumber`), as `viewerSeat` is allowed to see it. Hidden predictions stay redacted until `state.phase === "gameOver"` (rulebook §8: "게임의 모든 결과가 전부 공개된 시점"). */
-export function visiblePastPrediction(
-  state: DestinyWar39State,
-  viewerSeat: SeatIndex,
-  targetSeat: SeatIndex,
-  roundNumber: number,
-): VisiblePrediction {
+/**
+ * A already-finished round's prediction for `targetSeat` (1-indexed
+ * `roundNumber`). Until 2026-09-03, hidden predictions stayed redacted
+ * from other seats until `state.phase === "gameOver"`; per the rulebook §8
+ * update ("라운드 결과 점수판 히든 마스킹 해제"), a round's own
+ * roundEnd/history/game-over summaries now show every seat's real prediction
+ * the instant that round itself concludes (its `PlayerRecord.predictions`
+ * entry is only ever populated once `resolveTurnAndAdvance` folds the round
+ * in — see engine.ts's `resolveTurnAndAdvance`), and it stays revealed for
+ * the rest of the game. No viewer-dependent redaction remains here; the live
+ * secrecy during an ongoing round is still enforced separately by
+ * `visibleCurrentPrediction` above.
+ */
+export function visiblePastPrediction(state: DestinyWar39State, targetSeat: SeatIndex, roundNumber: number): VisiblePrediction {
   const player = state.players.find((p) => p.seat === targetSeat)!;
   const idx = roundNumber - 1;
   const value = player.predictions[idx];
-  if (value === null) return "pending";
-  if (!player.hidden[idx] || targetSeat === viewerSeat || state.phase === "gameOver") return value;
-  return "hidden";
+  return value === null ? "pending" : value;
 }
 
 // ---------------------------------------------------------------------------

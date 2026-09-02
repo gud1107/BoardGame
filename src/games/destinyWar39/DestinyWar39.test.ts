@@ -605,7 +605,7 @@ describe("hidden (rulebook §8, §12)", () => {
     expect(visibleCurrentPrediction(state, 0, 0)).toBe(1); // owner still sees their own
   });
 
-  it("reveals every hidden past prediction once the game reaches gameOver", () => {
+  it("reveals a hidden past prediction the instant its own round ends, not waiting for game over (2026-09-03 rulebook §8 update)", () => {
     let state = startGame(5, 123);
     state = applyAction(state, { type: "predict", seat: 0, value: 1, hidden: true });
     for (let seat = 1; seat < 5; seat++) state = applyAction(state, { type: "predict", seat, value: 0, hidden: false });
@@ -615,10 +615,15 @@ describe("hidden (rulebook §8, §12)", () => {
       state = applyAction(state, { type: "play", seat: seatToAct, cardId: card.id });
       seatToAct++;
     }
-    // Round 1 done. visiblePastPrediction should still redact seat 0's hidden round-1 prediction
-    // from seat 1's view while the game isn't over yet.
-    expect(visiblePastPrediction(state, 1, 0, 1)).toBe("hidden");
-    expect(visiblePastPrediction(state, 0, 0, 1)).toBe(1);
+    // Round 1 just ended (game continues — 9 rounds total). Seat 0's hidden
+    // round-1 prediction is now visible to everyone, not just its owner.
+    expect(state.phase).toBe("roundEnd");
+    expect(visiblePastPrediction(state, 0, 1)).toBe(1);
+
+    // And it stays revealed permanently — still visible once round 2 starts.
+    state = applyAction(state, { type: "nextRound", seed: 456 });
+    expect(state.round.roundNumber).toBe(2);
+    expect(visiblePastPrediction(state, 0, 1)).toBe(1);
   });
 });
 
