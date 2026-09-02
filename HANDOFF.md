@@ -49,8 +49,17 @@ Chromium으로 로컬 서버(3인 방, 호스트+봇2)에서 직접 재현 시�
 재확인 시 이미 해소돼 있었음, 이 세션과 무관)/`npx vitest run`(50개 파일·1597개 테스트, 기존 1595+신규 2
 전부 통과) 통과. `npm run build`는 세션 도중 이미 다른 세션이 `next build`를 실행 중이라("Another next
 build process is already running") 이번 세션에서 직접 실행하지 못함 — tsc+lint+vitest 전부 통과로 검증을
-갈음. `코요테.md`/`HANDOFF.md` 갱신. **커밋/푸시/배포는 사용자 지시대로 진행 — 상세 결과는 아래 후속
-`docs(handoff)` 갱신 참고.**)_
+갈음. `코요테.md`/`HANDOFF.md` 갱신. **커밋/푸시/배포**: 이번 세션이 만들거나 수정한 6개 파일만
+스테이징(`CoyoteBoard.tsx`/`CoyoteEffects.tsx`/`Coyote.test.ts`/`globals.css`/`코요테.md`/`HANDOFF.md`) —
+작업 트리에 있던 다른 세션들의 미커밋 변경(`PatchNoteButton.tsx`/`PatchNoteModal.tsx`/`patchNotes.ts` 등,
+`.claude/`, `boardGameRule/` 신규 이미지·폴더, `쇼미더코인.md`, `orca충돌및확인.md`, `저작권, 상표권.md`)은
+이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지 `feat(coyote): add "?" card deck-draw
+replacement animation with unified 3s reveal hold + skip`(`02e6daf`) → `git push origin main` 완료
+(`9b2d0e2..02e6daf`, fast-forward). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상
+완주(Turbopack, 43초), `target: "production"`/`readyState: READY`(`dpl_67Wd27KAw3CTA6sv2Lmt8LWv5dHr`),
+프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료. 이 배포는 Git 커밋이 아니라 작업 트리 전체를
+빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨. `curl`로 `/`·`/games/coyote`
+둘 다 200 직접 확인함.)_
 
 _이전 갱신: 2026-09-03 (**진실의 고개(Hill of Truth) 난이도 3단계(Lv.1~Lv.3) 시스템 + 사진 증거
 뷰어 + 위증 교차검증 + 잠금 단서 구현 세션 — 요청서는 `src/games/hillOfTruth/` 하위에
