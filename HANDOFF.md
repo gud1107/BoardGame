@@ -1,6 +1,40 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-03 (**로비(메인 대시보드, `src/app/page.tsx`) 모바일 검색창 상단 고정(Sticky Header)
+_최종 갱신: 2026-09-03 (**운명전쟁39(destinyWar39) 라운드 결과 점수판 히든 마스킹 해제 세션 — 요청서는
+"운명전쟁(War of Fate)"이 `src/games/warOfFate/`나 `fateWar/`(`RoundSummary.tsx`/`ScoreBoard.tsx`/
+`types.ts`/`useWarOfFate.ts`/소켓 룸 매니저)로 구성돼 있다고 가정하고, 히든(Hidden) 선언 라운드가 끝나
+라운드 결과 점수판이 뜨는 시점엔 물음표(`?`) 대신 실제 예측 승수·획득 점수를 공개하라고 요청 — 조사
+결과 그런 경로/파일은 전혀 존재하지 않았고(다른 여러 세션에서 반복된 "요청 전제-실제 코드 불일치"
+패턴과 동일), 실제 게임은 `src/games/destinyWar39/`(운명전쟁39, 룰북은
+`boardGameRule/운명전쟁39/운명전쟁39.md`)이며 소켓 룸 매니저 자체가 없는 완전 클라이언트 락스텝 구조
+(Supabase Realtime 브로드캐스트로 모든 클라이언트가 이미 전체 state를 로컬에 보유, 마스킹은
+`engine.ts`의 `visiblePastPrediction`/`visibleCurrentPrediction` 렌더 레이어에서만 수행)임을 확인.
+라운드 종료(`roundEnd`) 결과 화면도 별도 컴포넌트가 아니라 `DestinyWar39Board.tsx` 인라인 테이블로 이미
+존재했지만, 히든 참가자는 예측 🙈/결과 "비공개"/점수 `?`로 계속 마스킹되고 있었음(요청이 고치고자 한
+바로 그 동작). `AskUserQuestion` 2라운드로 확인: ①실제 파일 기준(destinyWar39) 진행 확정 ②라운드
+종료 시 공개된 히든 정보는 게임이 끝날 때까지 영구 공개로 유지(과거로 되돌아가 다시 가리지 않음)
+③라운드 결과 UI는 기존 인라인 테이블 레이아웃 그대로 유지하고 원 요청의 "3초 유지+스킵 버튼"은
+추가하지 않음(사용자 확정 답변) ④이번 변경은 단순 UI 표기가 아니라 히든 블러핑 지속시간을 줄이는
+**룰 변경**으로 간주해 룰북(§8/§12/§13)도 함께 갱신, 언베일 연출은 게임오버 최종표에서 이미 쓰던
+`HiddenRevealCell`(플립+파편 애니메이션)을 재사용. **구현**: `engine.ts`의 `visiblePastPrediction`을
+`state.phase === "gameOver"` 게이트 없이 항상 실제값을 반환하도록 단순화(더는 쓰이지 않는 `viewerSeat`
+매개변수도 제거) — 이미 완료된 라운드만 조회하는 함수라 "라운드 종료 시 공개"가 곧 함수 전체 동작이
+됨, 진행 중인 라운드의 실시간 마스킹(`visibleCurrentPrediction`)은 변경 없음. `DestinyWar39Board.tsx`의
+`roundEnd` 테이블과 `LastRoundHistoryModal.tsx`(항상 "이미 끝난 라운드"만 보여주는 모달)에서 🙈/비공개/
+`?` 마스킹 분기를 전부 제거하고 실제 예측·결과 뱃지(`RoundResultBadge`)·점수를 그대로 렌더, 히든이었던
+셀만 `HiddenRevealCell`로 감싸 언베일 연출 적용. `RankedLeaderboard.tsx`의 누적 점수 총합은 애초에
+마스킹 여부와 무관하게 항상 실제 `scores` 배열을 합산해왔음을 코드로 확인 — 변경 불필요(사용자가
+"영구 공개" 확인 질문에서 우려했던 "누적 종합 점수판 반영 시점" 문제 자체가 존재하지 않았음).
+`PredictionStatusBoard.tsx`의 히든 체크박스 라벨과 `RulebookModal.tsx`의 인게임 룰 설명 텍스트도
+"게임 종료까지 비공개"에서 "그 라운드 종료 전까지만 비공개"로 갱신. `DestinyWar39.test.ts`: 기존
+"reveals every hidden past prediction once the game reaches gameOver" 테스트를 새 동작에 맞게
+재작성(라운드 1 종료 직후 `visiblePastPrediction`이 즉시 실제값을 반환하는지, 라운드 2 시작 후에도
+영구히 공개 상태가 유지되는지 검증). `npx tsc --noEmit`/타깃 파일 `eslint`/`npx vitest run`(50개 파일·
+1597개 테스트) 전부 통과. 운명전쟁39.md §0에 Version 2.3 변경사항 추가, §8·§12·§13 문구를 "게임 종료
+후 공개"→"그 라운드 결과 확정 시 공개"로 갱신. 자세한 내용은 아래
+`### 2026-09-03 — 운명전쟁39 라운드 결과 점수판 히든 마스킹 해제` 절 참고.)_
+
+_이전 갱신: 2026-09-03 (**로비(메인 대시보드, `src/app/page.tsx`) 모바일 검색창 상단 고정(Sticky Header)
 UI 개편 세션 — 요청서는 `src/pages/Lobby.tsx`/`src/components/lobby/{SearchBar,GameGrid,Header}.tsx`
 경로를 가정했으나 실제로는 그런 파일들이 존재하지 않음(App Router 구조, `src/app/lobby/`는 채팅 전용
 페이지) — 실제 게임 검색+캐러셀 UI는 `src/app/page.tsx`(메인 대시보드)에 있음을 먼저 확인. `AskUserQuestion`
@@ -621,6 +655,94 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-09-03 — 운명전쟁39 라운드 결과 점수판 히든 마스킹 해제
+
+**요청**: 운명전쟁(War of Fate)에서 특정 라운드에 히든(Hidden)을 선언했더라도, 그 라운드의 모든 트릭이
+끝나 나타나는 라운드 결과 점수판(Round Summary) 단계에서는 물음표(`?`) 대신 실제 예측 승수와 획득
+점수를 실제 숫자로 공개하라는 요청. `HANDOFF.md`, `운명전쟁.md` 룰북, `src/games/warOfFate/` 또는
+`fateWar/` 하위 `RoundSummary.tsx`/`ScoreBoard.tsx`/`engine.ts`/`types.ts`/`useWarOfFate.ts`, 소켓 룸
+매니저를 확인해 달라고 명시. 라운드 진행 중(PLAYING)과 라운드 종료 정산(ROUND_SUMMARY)을 분리해
+후자만 마스킹 해제, 언베일 연출, 3초 유지+스킵 버튼, `/user.png` 기본 프로필, 모바일 반응형·
+`break-keep` 등 보드게임허브 공통 규격 준수, 누적 종합 점수판 반영 시점 등 확인이 필요한 사항은
+임의로 추정하지 말고 먼저 질문 목록을 제시해 확인받으라는 명시적 지시.
+
+**조사 결과**: 요청서가 가정한 경로/파일(`warOfFate`, `fateWar`, `RoundSummary.tsx`, `ScoreBoard.tsx`,
+`types.ts`, `useWarOfFate.ts`, `운명전쟁.md`, 소켓 룸 매니저)은 프로젝트 어디에도 존재하지 않음 — 다른
+여러 세션에서 반복된 "요청 전제-실제 코드 불일치" 패턴(말달리자/달마티/지렁이/진실의 고개 세션 등)과
+동일. 실제 "운명전쟁"은 `src/games/destinyWar39/`(운명전쟁39, 룰북 `boardGameRule/운명전쟁39/
+운명전쟁39.md`)이며, 이 프로젝트엔 socket.io/`roomManager.ts` 자체가 존재하지 않고 모든 온라인 게임이
+서버리스 Supabase Realtime 락스텝 구조(`docs/cloud-sync.md`)로 동작 — 모든 클라이언트가 히든 예측값을
+포함한 전체 state를 이미 로컬에 갖고 있고, 마스킹은 순전히 `engine.ts`의
+`visiblePastPrediction`(완료된 라운드)/`visibleCurrentPrediction`(진행 중인 라운드) 두 렌더-레이어
+프로젝션 함수에서만 이뤄짐(서버가 원본을 "전달"할 필요 자체가 없음). 라운드 종료 결과 화면도 별도
+`RoundSummary`/`ScoreBoard` 컴포넌트가 아니라 `DestinyWar39Board.tsx`의 `roundEnd` 페이즈 분기에 인라인
+테이블로 이미 구현돼 있었으나, 히든 참가자는 예측 🙈 / 결과 "비공개" / 점수 `?`로 계속 마스킹되는
+중이었음(요청이 고치고자 한 바로 그 동작) — 자동 타이머·최소 3초 유지·스킵 버튼 없이 "다음 라운드"
+버튼을 아무 클라이언트나 누르면 즉시 다음 라운드로 넘어가는 구조.
+
+**확인**: `AskUserQuestion` 2라운드(첫 라운드 4문항 + 응답 모호성 재확인 2문항)로 진행 전 확인.
+①대상 범위 — **실제 파일 기준(destinyWar39) 진행**(추천안 채택): `engine.ts`/`DestinyWar39Board.tsx`
+인라인 `roundEnd` 테이블/`LastRoundHistoryModal.tsx`를 수정 대상으로 확정. ②공개 지속성 — **영구
+공개**(추천안 채택): 라운드 종료 시 공개된 히든 정보는 이후 라운드에서도, 게임 종료 최종표에서도 계속
+공개 상태로 유지(다시 가려지지 않음) — 최종 정산과 동일하게 "이미 일어난 사실"로 취급. ③UI 구현
+방식 — 처음엔 "grid-poker RoundResultOverlay 패턴(모달 전환 + 3초 타이머 + 스킵 버튼)" vs "기존 인라인
+테이블 유지 + 타이머만 추가" 두 선택지를 제시했으나 사용자가 자유 응답으로 "라운드결과는 지금 UI가
+좋습니다"라고 답해 의미가 모호(레이아웃만 유지하되 타이머/스킵은 추가하라는 뜻인지, 마스킹 로직만
+고치고 타이머/스킵 자체를 추가하지 말라는 뜻인지) — 추가 질문으로 명확화한 결과 **"타이머/스킵
+버튼은 추가하지 않음"**(기존 인라인 테이블 레이아웃과 "다음 라운드" 버튼 즉시-전환 동작을 그대로
+유지하고 마스킹 로직만 수정) 확정. ④룰 변경 여부 — **룰 변경으로 보고 룰북(§8/§12/§13)도 함께
+수정**(추천안 채택): 히든이 "게임 종료까지 비공개"에서 "그 라운드 종료 시 공개"로 바뀌는 것은 단순
+표기가 아니라 블러핑 지속시간을 줄이는 실질적 룰 변경이라는 판단에 사용자도 동의. 언베일 연출은
+별도 질문으로 **기존 `HiddenRevealCell`(게임오버 최종표에서 이미 쓰던 플립+파편 애니메이션) 재사용**
+확정.
+
+**구현 — 엔진(`engine.ts`)**: `visiblePastPrediction(state, viewerSeat, targetSeat, roundNumber)`을
+`visiblePastPrediction(state, targetSeat, roundNumber)`로 단순화 — `state.phase === "gameOver"` 게이트와
+`viewerSeat === targetSeat` 예외를 전부 제거하고, 이제 완료된 라운드(`player.predictions[idx] !== null`)
+값이면 항상 그 실제값을 그대로 반환. 이 함수는 애초에 "이미 완료된 라운드"만 조회하는 용도이므로
+"라운드 종료 시 공개"가 곧 함수의 전체 동작이 됨 — 아직 진행 중인 라운드의 실시간 마스킹은 별도 함수인
+`visibleCurrentPrediction`(현재 라운드 전용, `PredictionStatusBoard.tsx`가 사용)이 그대로 담당하며
+전혀 변경하지 않음(라운드 진행 중엔 여전히 물음표로 블러핑 유지). 모듈 상단 doc과 함수 doc, §8/§9
+관련 주석을 새 타이밍에 맞게 갱신.
+
+**구현 — UI**: `DestinyWar39Board.tsx`의 `roundEnd` 인라인 테이블에서 `visiblePastPrediction` 기반
+`isHiddenFromMe` 마스킹 분기(🙈/"비공개"/`?`)를 전부 제거하고 실제 예측값·결과 뱃지
+(`RoundResultBadge`)·부호 붙은 점수를 그대로 렌더, 히든이었던 예측 셀만(`p.hidden[idx]`) 기존
+`HiddenRevealCell`로 감싸 플립+파편 언베일 애니메이션 적용(게임오버 최종표와 동일한 컴포넌트 재사용).
+`LastRoundHistoryModal.tsx`(항상 "가장 최근에 끝난 라운드"만 보여주는 모달이라 같은 조건에 해당)도
+동일하게 마스킹 제거 + `HiddenRevealCell` 적용. `DestinyWar39Effects.tsx`의 `HiddenRevealCell`/
+`RoundResultBadge` doc 주석을 "게임오버 시점에만 마운트"에서 "라운드 종료 즉시 마운트, 이후 게임
+종료까지 계속 공개 상태"로 갱신. `RankedLeaderboard.tsx`는 코드 확인 결과 애초에 마스킹 여부와
+무관하게 `player.scores` 배열을 항상 그대로 합산해 누적 총점을 계산하고 있었음(개별 라운드 표기만
+마스킹됐을 뿐, 누적 총점 자체는 처음부터 실시간으로 정확했음) — 사용자가 확인 질문에서 우려했던
+"누적 종합 점수판 반영 시점" 문제 자체가 존재하지 않아 변경 불필요. `PredictionStatusBoard.tsx`의
+히든 체크박스 라벨("게임당 1회, 9라운드 종료까지 비공개" → "게임당 1회, 이번 라운드 종료 전까지만
+비공개")과 `RulebookModal.tsx`의 인게임 룰 설명("히든으로 숨긴 예측값은 9라운드가 모두 끝난 뒤에
+공개됩니다" → "그 라운드가 진행되는 동안만 비공개이며, 라운드 결과가 확정되는 즉시 실제 승수·점수로
+공개됩니다") 텍스트도 새 타이밍에 맞게 갱신.
+
+**검증**: `DestinyWar39.test.ts`의 "reveals every hidden past prediction once the game reaches
+gameOver" 테스트를 "reveals a hidden past prediction the instant its own round ends, not waiting for
+game over"로 재작성 — 라운드 1이 끝나 `roundEnd` 페이즈에 진입한 직후 `visiblePastPrediction`이 이미
+실제 예측값을 반환하는지, `nextRound`로 라운드 2에 진입한 뒤에도 그 값이 계속 공개 상태로 유지되는지
+(영구 공개) 검증하도록 어서션을 교체. `npx tsc --noEmit`(0 에러) / 변경 파일 대상 `eslint`(0 경고) /
+`npx vitest run`(50개 파일·1597개 테스트, 전체 스위트) 전부 통과.
+
+**룰북 갱신(`운명전쟁39.md`)**: §0에 Version 2.3 변경사항 항목 추가(히든 공개 시점을 "9라운드 종료
+후"에서 "그 라운드 결과 확정 시점"으로 앞당김, 점수 산식·최종 순위·누적 집계 시점은 불변임을 명시).
+§8 히든 규칙 문구를 "게임의 모든 라운드 결과가 전부 공개된 시점(9라운드 종료 후)"에서 "그 라운드의
+모든 턴이 끝나 라운드 결과가 확정되는 시점"으로 교체. §12 공개/비공개 정보 표를 "히든으로 숨겨진
+예측값(게임 종료까지 비공개)"에서 "그 라운드가 진행 중인 동안만 비공개, 라운드 결과 확정 후 공개
+정보로 전환"으로 갱신. §13 핵심 규칙 요약 5번 문구도 동일하게 갱신.
+
+**커밋/배포**: `git commit`(`8a40036`, `feat(destiny-war-39): reveal hidden round prediction at
+round-end summary instead of game-over`) → `git push origin main` → `docs(handoff)` 커밋 → 배포는 아래
+"커밋/배포 결과" 참고. 이 세션 시작 시점부터 이미 워킹 트리에 있던 다른 세션들의 무관한 진행 중
+변경분(달무티 AI 봇 턴 정지 픽스의 `useBotAutoplay.ts`/8개 `<Game>Game.tsx`, 코요테 "?" 카드 치환
+애니메이션, `HillOfTruthGame.tsx`/`scenarios.ts`, `globals.css`, `src/components/patchNotes/` 개편분,
+`boardGameRule/`의 다른 게임 이미지들, `.claude/` 등)은 이전 세션들과 동일한 판단으로 커밋 대상에서
+제외.
 
 ### 2026-09-03 — 진실의 고개 정답 선언 히스토리 & 오답 분석 복기 리포트 구현
 
