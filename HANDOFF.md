@@ -892,7 +892,11 @@ difficulty 생략 시 LV1로 기본 처리되는지, LV2/LV3 방이 100개 시�
 evidence viewer, contradiction deduction, and rulebook update`) → `git push origin main`(`6780c19..cd17aff`)
 완료. 이 세션 시작 시점부터 이미 워킹 트리에 있던 무관한 변경분(coyote 게임, patch-notes 기능,
 `globals.css`, 다른 게임들의 `boardGameRule/` 이미지, `.claude/`, `저작권, 상표권.md` 등 — 다른 세션의
-진행 중 작업으로 추정)은 이전 세션들과 동일한 판단으로 커밋 대상에서 제외.
+진행 중 작업으로 추정)은 이전 세션들과 동일한 판단으로 커밋 대상에서 제외. 이어서 `docs(handoff)`
+커밋(`d134e16`) → `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(45초),
+`target: "production"`/`readyState: READY`(`dpl_Eo6KRij4r3zyHHVRFC5yq6SisGYp`), 프로덕션 도메인
+`board-game-tau-navy.vercel.app`에 별칭 완료. `curl`로 `/`·`/games/hill-of-truth` 둘 다 200, 응답 HTML에
+"진실의 고개" 문자열 포함 직접 확인함.
 
 ### 2026-09-03 — 운명전쟁39 라운드 결과 점수판 히든 마스킹 해제
 
