@@ -24,7 +24,7 @@ _최종 갱신: 2026-09-03 (**달무티(The Great Dalmuti) 플레이어 퇴장/�
 독립적인 별도 `setInterval` 기반 감시 로직 추가 — `state`/`botSeats` 객체 참조가 아니라 액터 **값**을 ref로
 추적해(참조 불안정에 영향받지 않음) 같은 봇 좌석이 5초 이상 그대로면 `chooseAction`/`dispatch`를 강제
 호출, 단 기존 효과가 이미 그 정확한 상태 스냅샷을 처리 중이면(`actedForRef` 확인) 건너뛰어 중복 디스패치를
-방지. 작업 중 제 작업과 무관한 uncommitted 미얼롯(`CoyoteBoard.tsx`)의 `const res` 중복 선언으로 로컬 dev
+방지. 작업 중 제 작업과 무관한 uncommitted 미커밋(`CoyoteBoard.tsx`)의 `const res` 중복 선언으로 로컬 dev
 서버가 500 에러였는데, 라이브 검증 착수 시점엔 이미 (다른 세션/사용자에 의해) 해소되어 있어 손대지 않음.
 `npx tsc --noEmit`/`npm run lint`/`npx vitest run`(50개 파일·1595개 테스트)/`npm run build`(26개 라우트)
 전부 통과. 캐시된 Playwright Chromium + 별도 브라우저 컨텍스트 2개(P1 호스트, P2)로 요청서가 명시한 최종
@@ -38,7 +38,11 @@ _최종 갱신: 2026-09-03 (**달무티(The Great Dalmuti) 플레이어 퇴장/�
 수정 한 줄이 다른 세션이 그 파일에서 진행 중이던 별개의 난이도 선택 기능과 같은 파일에 섞여 있어, 그
 세션의 미완성 작업까지 함께 커밋하지 않도록 이번 커밋 범위에서 **의도적으로 제외**함(수정 자체는 로컬
 파일에 그대로 남아있어 다음에 그 파일이 커밋될 때 함께 들어감). 그 외 8개 게임 + `useBotAutoplay.ts` +
-이 문서만 범위를 좁혀 커밋.)_
+이 문서만 범위를 좁혀 커밋. 커밋 `d05db83`(`fix(bot-takeover): stop bot-timer resets from unrelated
+takeover events + add watchdog`) → `git push origin main` 완료 → `npx vercel deploy --prod --scope
+me-3871` 배포 완료(`dpl_BfHbt5YA9zELD2okyf8ozqqjkp5E`), `https://board-game-tau-navy.vercel.app` 200
+확인. `hillOfTruth/HillOfTruthGame.tsx`의 동일 수정은 로컬 파일엔 남아있지만 이번 커밋엔 포함되지 않았음 —
+그 파일을 동시에 편집 중이던 다른 세션이 커밋할 때 함께 들어갈 예정.)_
 
 _이전 갱신: 2026-09-03 (**운명전쟁39(destinyWar39) 라운드 결과 점수판 히든 마스킹 해제 세션 — 요청서는
 "운명전쟁(War of Fate)"이 `src/games/warOfFate/`나 `fateWar/`(`RoundSummary.tsx`/`ScoreBoard.tsx`/
