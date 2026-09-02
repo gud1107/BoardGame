@@ -50,7 +50,9 @@ LV3에서 `testimoniesLv3`로 증언록 교체 + 잠금 단서 섹션. `HillOfTr
 제외했음을 그 세션의 HANDOFF 기록(바로 아래 항목)에서 확인 — 커밋 시 다른 세션이 건드린 무관한 파일
 (coyote/patch-notes/globals.css 등 워킹 트리에 섞여 있던 다른 미완성 변경)은 전부 제외하고 이 세션이
 실제로 만든 `src/games/hillOfTruth/**`·`public/images/hillOfTruth/**`·룰북·이 문서만 범위를 좁혀 커밋함.
-자세한 내용은 아래 `### 2026-09-03 — 진실의 고개 난이도 3단계 시스템 구현` 절 참고.)_
+커밋(`cd17aff`, `feat(hill-of-truth): implement 3-tier difficulty system, photo evidence viewer,
+contradiction deduction, and rulebook update`) 후 `git push origin main` 완료. 자세한 내용은 아래
+`### 2026-09-03 — 진실의 고개 난이도 3단계 시스템 구현` 절 참고.)_
 
 _이전 갱신: 2026-09-03 (**달무티(The Great Dalmuti) 플레이어 퇴장/재접속 시 AI 봇 턴 정지(freeze) 버그
 픽스 세션 — 요청서는 "플레이어2가 방을 나가면 다음 차례인 AI 봇이 카드를 내지 않고 턴이 무한 정지된다"며
@@ -872,6 +874,25 @@ difficulty 생략 시 LV1로 기본 처리되는지, LV2/LV3 방이 100개 시�
 `globals.css`, 여러 `boardGameRule/` 이미지 등)은 전부 제외하고 `src/games/hillOfTruth/**`·
 `public/images/hillOfTruth/**`·`진실의 고개.md`·이 문서만 범위를 좁혀 커밋함(여러 세션 동시 작업 시
 `git add -A` 대신 파일을 명시적으로 골라 add하는 게 안전하다는 선례 — §2 작업 규칙 참고).
+
+**라이브 검증(Playwright)**: 캐시된 Playwright Chromium(`chromium-1234`)으로 실제 dev 서버 대상 검증 —
+①방 생성 폼에서 인원 2명으로 축소 후 Lv.3 선택 → 방 만들기 → 봇 추가로 게임 자동 시작 → 상단에
+"🔴 Lv.3 하드코어" 배지 정상 렌더링 확인. ②수사 노트 → 증거단서함 탭에서 신규 시나리오("요트클럽
+심야 항해")의 증거 5종에 📷 사진 썸네일이 전부 붙어 있고 🔐 잠금 단서 섹션(🔒 아이콘 + 해금 힌트 문구)도
+정상 노출됨을 스크린샷으로 확인. ③사진 썸네일 클릭 → `PhotoModal` 라이트박스가 실제 이미지(예: 자동항법
+로그 항목엔 코드 화면 사진)와 "출처: Slashme · CC0 (Wikimedia Commons)" 크레딧 라인을 정확히 표시하며
+열리는 것을 확인. ④다른 시나리오("브루어리 신메뉴 시음회")에서 증언록 탭에 LV3 위증 경고 배너와 3인
+증언(그중 LV3 전용 3번째 증언 포함) + 모순 대조 안내가 전부 정상 렌더링됨을 확인. 콘솔에 뜬 하이드레이션
+미스매치(`PatchNoteButton`)와 `/api/analytics/game-play` 500은 과거 여러 세션에서 반복 확인된 것과 동일한
+패턴(이 세션 이전부터 있던 별도 미커밋 변경/로컬 dev 환경 Supabase 설정 이슈)으로, 이번 세션 신규 코드와
+무관함을 확인. 검증 중 실제 새 이슈는 발견되지 않음(§확인 단계에서 이미지 후보 2건을 직접 걸러낸 것이
+이번 세션의 유일한 실측 교정).
+
+**커밋/배포**: `git commit`(`cd17aff`, `feat(hill-of-truth): implement 3-tier difficulty system, photo
+evidence viewer, contradiction deduction, and rulebook update`) → `git push origin main`(`6780c19..cd17aff`)
+완료. 이 세션 시작 시점부터 이미 워킹 트리에 있던 무관한 변경분(coyote 게임, patch-notes 기능,
+`globals.css`, 다른 게임들의 `boardGameRule/` 이미지, `.claude/`, `저작권, 상표권.md` 등 — 다른 세션의
+진행 중 작업으로 추정)은 이전 세션들과 동일한 판단으로 커밋 대상에서 제외.
 
 ### 2026-09-03 — 운명전쟁39 라운드 결과 점수판 히든 마스킹 해제
 
