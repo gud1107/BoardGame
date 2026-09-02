@@ -34,7 +34,17 @@ export interface RatATatCatBoardProps {
   onGameEnd: () => void;
 }
 
-/** How long the setup peek / Peek power's temporary reveal stays up before auto-hiding (AskUserQuestion 2026-08-31: "고정 3초 자동 + 화면 터치 시 즉시 해제"). */
+/**
+ * How long the setup peek / Peek power's temporary reveal stays up before
+ * auto-hiding. Originally both were "고정 3초 자동 + 화면 터치 시 즉시 해제"
+ * (AskUserQuestion 2026-08-31). AskUserQuestion 2026-09-02 changed the SETUP
+ * peek only (slots 0/3 at game start) into a hard guaranteed minimum with no
+ * early-dismiss path at all, so a stray tap/skip can never cut a player's
+ * look at their own cards short — see the `state.phase === "setup"` block
+ * below and its `PeekCountdownRing`. The Peek power card mid-game
+ * (`peekingSlot`/`dismissPeekReveal`) intentionally keeps the original
+ * tap-to-dismiss-early behavior; it was explicitly excluded from this change.
+ */
 const PEEK_REVEAL_MS = 3000;
 /** How long an opponent's "드로우 완료"/"카드 정리 완료" badge popup stays visible. */
 const OPPONENT_BADGE_MS = 1600;
@@ -43,6 +53,38 @@ function seatOrderFrom(viewerSeat: SeatIndex, playerCount: number): SeatIndex[] 
   const order: SeatIndex[] = [];
   for (let i = 1; i < playerCount; i++) order.push((viewerSeat + i) % playerCount);
   return order;
+}
+
+/**
+ * Small circular progress badge overlaid on a setup-peek card, draining once
+ * over the guaranteed `PEEK_REVEAL_MS` hold so the player can gauge how much
+ * longer their card stays visible. Pure CSS (`ratc-peek-ring-drain` in
+ * globals.css) — no per-tick JS re-render. `r=8`/circumference ≈50.27 is
+ * hardcoded on both ends; keep them in sync if this radius ever changes.
+ */
+function PeekCountdownRing() {
+  const r = 8;
+  const circumference = 2 * Math.PI * r;
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" className="pointer-events-none absolute -right-1.5 -top-1.5 drop-shadow" aria-hidden>
+      <circle cx="10" cy="10" r={r} fill="rgba(0,0,0,0.55)" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
+      <circle
+        cx="10"
+        cy="10"
+        r={r}
+        fill="none"
+        stroke="#fbbf24"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        style={{
+          transform: "rotate(-90deg)",
+          transformOrigin: "50% 50%",
+          animation: `ratc-peek-ring-drain ${PEEK_REVEAL_MS}ms linear forwards`,
+        }}
+      />
+    </svg>
+  );
 }
 
 const SPECIAL_INSTRUCTIONS: Record<"peek" | "swap" | "drawTwo", string> = {
@@ -63,8 +105,14 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
   const iAcked = state.setupAcks[viewerSeat];
   const [setupPeekSecondsLeft, setSetupPeekSecondsLeft] = useState(Math.ceil(PEEK_REVEAL_MS / 1000));
   const setupPeekFiredRef = useRef(false);
-  const setupPeekDismissRef = useRef<() => void>(() => {});
 
+  // 2026-09-02 (AskUserQuestion): the setup peek's reveal window is now a
+  // guaranteed minimum — there is no longer any manual "dismiss early" path
+  // (no tap-anywhere, no button) for the two end cards. This effect owns the
+  // *only* trigger that ends the reveal: the fixed timeout below. Peek power
+  // card mid-game (`peekingSlot`/`dismissPeekReveal` further down) is
+  // intentionally unchanged — it keeps its existing tap-to-dismiss-early
+  // behavior; only this setup window got the hard 3s floor.
   useEffect(() => {
     if (state.phase !== "setup" || iAcked) return;
     setupPeekFiredRef.current = false;
@@ -74,7 +122,6 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
       setupPeekFiredRef.current = true;
       onAction({ type: "INITIAL_PEEK_DONE", seat: viewerSeat });
     };
-    setupPeekDismissRef.current = dismiss;
     // Deferred (setInterval/setTimeout callbacks, never called synchronously
     // during the effect itself) — the immediate 0ms timeout just corrects the
     // displayed countdown right away for a repeat peek window (a rematch)
@@ -204,25 +251,29 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
 
   // ---------------------------------------------------------------------
   // Setup phase — everyone privately peeks their own end cards (slots 0/3),
-  // now a TEMPORARY reveal (engine.ts docstring point 8): fixed 3s auto-hide,
-  // or an immediate tap-anywhere-on-screen / dedicated button to hide early.
+  // a TEMPORARY reveal (engine.ts docstring point 8) with a fixed 3s
+  // *guaranteed minimum* hold (AskUserQuestion 2026-09-02): unlike the Peek
+  // power card further down, this window has no early-dismiss path at all —
+  // no tap-anywhere, no button — precisely so a mistimed tap can never cut a
+  // player's own look at their cards short. It only ever ends via the
+  // `dismiss()` timeout in the effect above.
   // ---------------------------------------------------------------------
   if (state.phase === "setup") {
     const ackedCount = state.setupAcks.filter(Boolean).length;
     return (
-      <div
-        className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center"
-        onClick={() => {
-          if (!iAcked) setupPeekDismissRef.current();
-        }}
-      >
+      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center">
         <span className="text-3xl">🐱🐭</span>
         <h2 className="text-base font-bold text-white">시작 전 카드 확인</h2>
         <p className="max-w-xs text-xs text-white/50">양 끝(1, 4번) 카드만 몰래 확인하세요. 가운데 2장은 능력을 쓰기 전까지 알 수 없어요.</p>
         <div className="flex gap-2">
           {SLOTS.map((slot) => {
             const revealNow = !iAcked && (slot === 0 || slot === 3);
-            return <CardSlot key={slot} handCard={myHand[slot]} peeking={revealNow} label={`내 카드 ${slot + 1}번`} />;
+            return (
+              <div key={slot} className="relative">
+                <CardSlot handCard={myHand[slot]} peeking={revealNow} label={`내 카드 ${slot + 1}번`} />
+                {revealNow && <PeekCountdownRing />}
+              </div>
+            );
           })}
         </div>
         {iAcked ? (
@@ -230,19 +281,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
             {ackedCount}/{state.playerCount}명 확인 완료 — 상대를 기다리는 중...
           </p>
         ) : (
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-xs text-amber-200/80">{setupPeekSecondsLeft}초 후 자동으로 뒷면으로 뒤집혀요 · 화면을 터치하면 바로 뒤집혀요</p>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setupPeekDismissRef.current();
-              }}
-              className="rounded-full bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500"
-            >
-              🔽 지금 뒤집기
-            </button>
-          </div>
+          <p className="text-xs text-amber-200/80">{setupPeekSecondsLeft}초 후 자동으로 뒷면으로 뒤집혀요 — 최소 3초간은 그대로 보여요</p>
         )}
       </div>
     );

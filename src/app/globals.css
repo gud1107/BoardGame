@@ -3599,6 +3599,23 @@ body {
   animation: ratc-peek-glow 0.9s ease-in-out infinite;
 }
 
+/* Setup-peek countdown ring — RatATatCatBoard.tsx's small circular progress
+   badge over each of the two end cards during the guaranteed 3s reveal
+   (2026-09-02: this window can no longer be dismissed early, so the ring
+   just drains once, linearly, over the fixed hold — no restart/skip path).
+   `stroke-dashoffset` animates from 0 (full gold ring, just revealed) to the
+   circle's own circumference (empty, about to auto-flip) — the target value
+   is hardcoded for the r=8 circle drawn in RatATatCatBoard.tsx's
+   `PeekCountdownRing`; keep both in sync if that radius ever changes. */
+@keyframes ratc-peek-ring-drain {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 50.27;
+  }
+}
+
 /* CardFlightEffect.tsx's traveling card — the outer wrapper is positioned
    imperatively (start/end coordinates measured at trigger time) and
    transitions its own `transform: translate()`; this keyframe layers a
