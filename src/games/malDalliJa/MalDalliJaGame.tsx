@@ -241,7 +241,12 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
   // Roles a takeover vote has actually converted — unioned with the lobby
   // `botRoles` roster wherever bot-role membership matters (autoplay,
   // occupancy, display). See DalmutiGame.tsx for the fuller rationale.
-  const takeoverRoles = useMemo(() => Object.keys(botTakeover.takeovers) as Seat[], [botTakeover]);
+  // See DalmutiGame.tsx's 2026-09-03 freeze-fix comment: depends on a
+  // stable string key (not the whole `botTakeover` object) so an unrelated
+  // seat's vote/convert broadcast can't reset a bot's in-flight action
+  // timer via `useBotAutoplay`.
+  const takeoverRoleKey = Object.keys(botTakeover.takeovers).sort().join(",");
+  const takeoverRoles = useMemo(() => (takeoverRoleKey ? (takeoverRoleKey.split(",") as Seat[]) : []), [takeoverRoleKey]);
   const allBotRoleSet = useMemo(() => new Set([...botRoleSet, ...takeoverRoles]), [botRoleSet, takeoverRoles]);
 
   const opponentSeat = myRole ? otherSeat(myRole) : null;

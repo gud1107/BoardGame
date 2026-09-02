@@ -446,7 +446,12 @@ export default function RatATatCatGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type, seatKey } } });
   }
 
-  const takeoverSeats = useMemo(() => Object.keys(botTakeover.takeovers).map(Number) as SeatIndex[], [botTakeover]);
+  // See DalmutiGame.tsx's 2026-09-03 freeze-fix comment: depends on a
+  // stable string key (not the whole `botTakeover` object) so an unrelated
+  // seat's vote/convert broadcast can't reset a bot's in-flight action
+  // timer via `useBotAutoplay`.
+  const takeoverSeatKey = Object.keys(botTakeover.takeovers).sort().join(",");
+  const takeoverSeats = useMemo(() => (takeoverSeatKey ? (takeoverSeatKey.split(",").map(Number) as SeatIndex[]) : []), [takeoverSeatKey]);
   const allBotSeatSet = useMemo(() => new Set([...botSeatSet, ...takeoverSeats]), [botSeatSet, takeoverSeats]);
 
   const chooseAction = useCallback((state: RatATatCatState, actor: SeatIndex): EngineAction | null => {

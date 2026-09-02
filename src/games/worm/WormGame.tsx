@@ -546,7 +546,13 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type, seatKey } } });
   }
 
-  const takeoverSeats = useMemo(() => Object.keys(botTakeover.takeovers).map(Number) as SeatIndex[], [botTakeover]);
+  // See DalmutiGame.tsx's 2026-09-03 freeze-fix comment: depends on a
+  // stable string key (not the whole `botTakeover` object) so an unrelated
+  // seat's vote/convert broadcast can't produce a needless new reference
+  // here (worm has no `useBotAutoplay` call to break, but this feeds
+  // `connectedSeats` below, so the same stability fix still applies).
+  const takeoverSeatKey = Object.keys(botTakeover.takeovers).sort().join(",");
+  const takeoverSeats = useMemo(() => (takeoverSeatKey ? (takeoverSeatKey.split(",").map(Number) as SeatIndex[]) : []), [takeoverSeatKey]);
 
   // Other real, non-bot occupants besides `seat` — the eligible-voter
   // denominator for that seat's vote.

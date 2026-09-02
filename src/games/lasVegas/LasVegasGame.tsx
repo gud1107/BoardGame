@@ -662,10 +662,13 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
 
   // Seats a takeover vote has actually converted — unioned with the lobby
   // `botSeats` roster wherever bot-seat membership matters (autoplay,
-  // occupancy, display). See DalmutiGame.tsx for the fuller rationale.
+  // occupancy, display). See DalmutiGame.tsx for the fuller rationale, and
+  // its 2026-09-03 freeze-fix comment for why this depends on a stable
+  // string key instead of the whole `botTakeover` object.
+  const takeoverSeatKey = Object.keys(botTakeover.takeovers).sort().join(",");
   const takeoverSeats = useMemo(
-    () => Object.keys(botTakeover.takeovers).map(Number) as SeatIndex[],
-    [botTakeover],
+    () => (takeoverSeatKey ? (takeoverSeatKey.split(",").map(Number) as SeatIndex[]) : []),
+    [takeoverSeatKey],
   );
   const allBotSeatSet = useMemo(
     () => new Set([...botSeatSet, ...takeoverSeats]),

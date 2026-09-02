@@ -42,6 +42,21 @@ export interface UseBotAutoplayOptions<State, Action, Actor> {
   /** Natural-feeling "thinking" delay before the bot acts. Defaults to 500–1500ms per the project's bot UX standard. */
   minDelayMs?: number;
   maxDelayMs?: number;
+  /**
+   * Fail-safe watchdog (added 2026-09-03, 달무티 "AI 턴 정지" 리포트): if the
+   * same bot-seat `Actor` is still `currentActor` after this many ms, force
+   * a decision through the exact same `chooseAction`/`dispatch` path,
+   * independent of the effect below. It polls `currentActor`/`botSeats` by
+   * VALUE off refs on a plain interval — deliberately NOT wired through the
+   * effect's own dependency array — so it stays correct even if some other
+   * unrelated broadcast (a takeover vote for a different seat, a
+   * `state-sync` reconnect reply) keeps handing this hook a fresh `state`/
+   * `botSeats` object identity and resetting the normal timer below (see
+   * each `<Game>Game.tsx`'s 2026-09-03 fix for the main source of that).
+   * Defaults to 5000ms, comfortably above the normal 500–1500ms thinking
+   * window so it only ever fires as a last resort.
+   */
+  watchdogMs?: number;
 }
 
 export function useBotAutoplay<State, Action, Actor>({
@@ -53,6 +68,7 @@ export function useBotAutoplay<State, Action, Actor>({
   dispatch,
   minDelayMs = 500,
   maxDelayMs = 1500,
+  watchdogMs = 5000,
 }: UseBotAutoplayOptions<State, Action, Actor>): void {
   // A given state object is only ever acted on once, even though this effect
   // re-runs whenever any dependency changes identity (e.g. a fresh
@@ -98,4 +114,63 @@ export function useBotAutoplay<State, Action, Actor>({
       if (actedForRef.current === state) actedForRef.current = null;
     };
   }, [active, state, currentActor, botSeats, chooseAction, dispatch, minDelayMs, maxDelayMs]);
+
+  // --- Fail-safe watchdog (2026-09-03, 달무티 "AI 턴 정지" 리포트) ---------
+  // Deliberately independent of the effect above: it reads everything off
+  // refs updated by their own tiny effects and polls on a plain interval,
+  // so — unlike the effect above — it can never itself be torn down and
+  // rescheduled by an incidental `state`/`botSeats` identity change. It
+  // tracks the current actor by VALUE (`watchdogRef`), not by `state`
+  // object identity, so a caller handing this hook a fresh-but-equivalent
+  // `state` (e.g. from a `state-sync` reconnect reply) doesn't reset its
+  // clock either — only an actual change of *actor* does.
+  const stateRef = useRef(state);
+  const botSeatsRef = useRef(botSeats);
+  const currentActorRef = useRef(currentActor);
+  const chooseActionRef = useRef(chooseAction);
+  const dispatchRef = useRef(dispatch);
+  useEffect(() => {
+    stateRef.current = state;
+    botSeatsRef.current = botSeats;
+    currentActorRef.current = currentActor;
+    chooseActionRef.current = chooseAction;
+    dispatchRef.current = dispatch;
+  });
+  const watchdogRef = useRef<{ actor: Actor | null; since: number; firedFor: State | null }>({
+    actor: null,
+    since: 0,
+    firedFor: null,
+  });
+
+  useEffect(() => {
+    if (!active) return;
+    const interval = window.setInterval(() => {
+      const s = stateRef.current;
+      if (!s) return;
+      const actor = currentActorRef.current(s);
+      const tracker = watchdogRef.current;
+      if (actor === null || !botSeatsRef.current.has(actor)) {
+        watchdogRef.current = { actor: null, since: 0, firedFor: null };
+        return;
+      }
+      if (actor !== tracker.actor) {
+        // A new bot turn — let the normal thinking-delay effect above
+        // handle it; just start this actor's clock.
+        watchdogRef.current = { actor, since: Date.now(), firedFor: null };
+        return;
+      }
+      if (Date.now() - tracker.since < watchdogMs) return;
+      if (tracker.firedFor === s) return; // already forced once for this exact snapshot
+      // If the normal effect has already claimed this exact snapshot, trust
+      // it — it fires within maxDelayMs (far under watchdogMs) once
+      // scheduled, so there's nothing to force.
+      if (actedForRef.current === s) return;
+      watchdogRef.current = { ...tracker, firedFor: s };
+      void Promise.resolve(chooseActionRef.current(s, actor)).then((action) => {
+        if (!action) return;
+        dispatchRef.current(action);
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [active, watchdogMs]);
 }

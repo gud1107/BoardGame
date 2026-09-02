@@ -698,9 +698,28 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
   // occupancy, display). Kept separate from `botSeats`/`botLevels` (which
   // stay host-only lobby state) since takeover membership is derived
   // identically by every client from the replayed vote/convert broadcasts.
+  //
+  // 2026-09-03 freeze-fix (플레이어 퇴장/재접속 시 AI 봇 턴 정지 리포트):
+  // this used to depend on the *whole* `botTakeover` object, so ANY
+  // vote-start/vote-cast/vote-cancel/convert broadcast — even one for a
+  // completely different seat — produced a brand-new array reference here,
+  // which cascaded into `allBotSeatSet` getting a new `Set` identity too.
+  // `useBotAutoplay`'s effect depends on that `Set`'s identity, so it kept
+  // tearing down and re-scheduling an already-in-flight bot's pending
+  // action timer every time an unrelated seat's takeover vote fired (e.g.
+  // player2 leaving while an unrelated bot1 was mid-turn) — this, not a
+  // lost server-side timer (there is no server — see docs/cloud-sync.md),
+  // was the actual mechanism behind bots appearing to "freeze" around
+  // disconnects/reconnects. Depending on a stable, content-derived string
+  // key instead means this only produces a new reference when the *set of
+  // taken-over seats* itself actually changes. Same fix applied to every
+  // other game with bot takeover (lasVegas/grid-poker/no-thanks/
+  // destinyWar39/hillOfTruth/ratATatCat/malDalliJa/worm) since they all
+  // copy this exact pattern.
+  const takeoverSeatKey = Object.keys(botTakeover.takeovers).sort().join(",");
   const takeoverSeats = useMemo(
-    () => Object.keys(botTakeover.takeovers).map(Number) as SeatIndex[],
-    [botTakeover],
+    () => (takeoverSeatKey ? (takeoverSeatKey.split(",").map(Number) as SeatIndex[]) : []),
+    [takeoverSeatKey],
   );
   const allBotSeatSet = useMemo(
     () => new Set([...botSeatSet, ...takeoverSeats]),
