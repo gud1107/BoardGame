@@ -1,6 +1,58 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-03 (**진실의 고개(Hill of Truth) 난이도 3단계(Lv.1~Lv.3) 시스템 + 사진 증거
+_최종 갱신: 2026-09-03 (**코요테(Coyote) "?" 카드 치환 애니메이션 구현 세션 — 요청서는 ①"코요테!" 외침 시
+이펙트만 재생되고 라운드 종료(공개/판정)로 이어지지 않은 채 다음 턴으로 넘어가는 "턴 스킵 버그" 긴급
+픽스와 ②"?" 카드 오픈 시 덱에서 실제 카드가 날아와 3D로 치환되는 연출 신규 구현 둘 다 요청. `engine.ts`
+조사 결과 `callCoyote`→`resolveCoyoteCall`은 애초부터 턴 순환을 거치지 않고 phase를 즉시
+`"reveal"`/`"gameOver"`로 원자적 전환하며(`Coyote.test.ts`의 "moves the game to the reveal phase" 등
+기존 테스트로도 이미 커버), git log상 이 로직을 건드린 회귀 커밋도 없었음 — 다른 세션들에서 반복된
+"요청 전제-실제 코드 불일치" 패턴(말달리자/달무티 세금 버그 사례와 동일 유형)으로 판단. 캐시된 Playwright
+Chromium으로 로컬 서버(3인 방, 호스트+봇2)에서 직접 재현 시도 — "🐺 코요테!" 클릭 150ms 후 스크린샷에서
+이미 하울 배너와 함께 "…님이 '코요테!'를 외쳤습니다 / 직전 선언 / 실제 총합 / 하트 손실 / ▶️ 다음 라운드"
+판정 패널까지 전부 동시에 렌더링되어 있음을 확인 — 다음 턴으로 잘못 넘어가는 현상 재현 안 됨(엔진 변경
+없음). `AskUserQuestion` 4문항으로 ②의 구현 방향 확인: 애니메이션 기능만 진행(①은 버그 아님) / 치환된
+카드가 또 다른 특수카드(0·×2·MAX→0·밤)여도 동일하게 뒤집기만 하고 별도 배지 없음(엔진의 최종 합산은
+이미 원자적으로 계산되어 있어 순수 연출 문제) / 치환은 해당 좌석 자리에서 제자리로 발생 / 기존 2초
+하울 배너(스킵 불가)와 새 "3초 유지+스킵" 규격을 하나로 통합. 구현: `CoyoteEffects.tsx`에
+`questionCardSeat`(물리 덱엔 "?"가 1장뿐이라 항상 0~1개 좌석만 해당, engine.ts 모듈 doc 가정 #1)와
+`REVEAL_HOLD_MS`(3000)/`QUESTION_PULSE_MS`(500)/`QUESTION_FLY_MS`(650) 상수, Dalmuti의
+`FlyingExchangeCard`와 동일한 `getBoundingClientRect` 기반 fixed-portal 기법을 재사용한
+`QuestionCardFlyGhost`(중앙 테이블→좌석 비행), 기존 `CoyoteHowlBanner`에 `durationMs` prop을 추가해 기존
+2초 배너를 통합 시퀀스 맨 앞의 1.3초 짧은 플래시로 축소. `CoyoteBoard.tsx`: `state.lastResolution` identity가
+바뀔 때마다(=새 "코요테!" 호출마다) pulse→flying→flipped 스테이지 타이머 + 3초 최소유지 타이머를 재시작,
+"실제 총합" 숫자를 0에서 `finalTotal`까지 카운트업(치환 완료 시점에 동기화, ~550ms), "⏩ 스킵" 버튼(클릭 시
+모든 타이머를 취소하고 즉시 최종 치환/합산 완료 화면으로 스냅 — rAF 루프도 매 프레임 스킵 플래그를
+확인해 중간에 끊김), 좌석 이름 옆에 `Avatar`/`DEFAULT_AVATAR`(Hill of Truth와 동일 패턴, 커스텀 아바타
+저장 없이 항상 사이트 공용 기본 이미지로 연동) 삽입, 텍스트 `break-keep` + 스킵 버튼
+`touch-manipulation`/`select-none` 적용. React Compiler의 `react-hooks/refs` 린트 규칙 때문에 렌더
+바디에서 직접 ref를 읽거나(포탈 좌표 전달) 쓰는(스킵 플래그 리셋) 최초 구현이 걸려서, Dalmuti의
+`getSeatEl` 콜백 패턴(엘리먼트를 직접 넘기지 않고 `() => ref.current`를 넘겨 자식의 effect 안에서
+읽게 함)과 ref 리셋을 렌더 바디 대신 effect로 옮기는 수정으로 해결. `globals.css`에
+`coyote-question-pulse`(보라색 미스터리 펄스)/`coyote-question-fly`(비행 카드 회전·스케일) 키프레임 추가.
+`engine.ts`/`types.ts`는 무변경(애초에 버그가 없었으므로). `Coyote.test.ts`에 `questionCardSeat` 신규
+테스트 2개 추가(56개 전체 통과). 물리 덱엔 "?"가 1장뿐이라 실제 플레이에서 어느 라운드에 뽑히는지 예측
+불가능했으므로, `startGame`을 로컬 vitest 스크래치 테스트(작업 종료 후 삭제)로 브루트포스해 "3인 seed=2 →
+라운드1에 seat2가 '?' 카드"임을 먼저 확인한 뒤, 브라우저의 `Math.random`을 대기실 진입 후 마지막 봇
+추가 직전 시점에만 그 값으로 고정(페이지 로드 시점에 오버라이드하면 이 프로젝트의 기존 PatchNoteButton
+하이드레이션 미스매치와 상호작용해 트리 전체가 클라이언트에서 리마운트되며 진행 중이던 방 생성 상태가
+통째로 날아가는 부작용을 발견 — 하이드레이션이 이미 끝난 뒤로 오버라이드 시점을 옮겨 회피)해 정확히 그
+딜을 재현. 자연 진행 시나리오에서 "코요테!" 외침 직후 "?" 카드가 실제로 뽑힌 MAX→0 카드로 3D
+치환되는 것, "실제 총합"이 0으로 정확히 카운트업되는 것, 스킵 버튼이 0~2.2초 구간엔 노출되다 3.1초
+시점에 "▶️ 다음 라운드" 버튼으로 자동 전환되는 것을 스크린샷/DOM 텍스트로 확인. 별도 실행(스킵 모드)에서
+스킵 버튼 클릭 150ms 후 이미 "다음 라운드" 버튼으로 즉시 전환돼 있고 스킵 버튼은 사라짐을 확인. 범위
+결정: 마지막 라운드로 게임이 끝나는 `"gameOver"` phase는 원래부터 reveal 판정 패널 자체를 보여주지 않고
+곧장 순위표로 넘어가는 기존 동작이라(요청 범위 밖) 손대지 않음 — 그 경로에서는 "?" 치환 애니메이션이
+노출되지 않는 기존 한계가 그대로 남아 있음(후속 세션에서 필요 시 확장 가능). 조사 중 다른 게임들엔 있는
+"이탈 시 투표 기반 봇 대체" 정책이 코요테엔 아직 없다는 것도 확인했으나, 이번 요청 범위 밖으로 판단해
+미구현. `npx tsc --noEmit`/`npm run lint`(둘 다 이 세션의 변경 파일 기준 0 에러 — 세션 도중 이 저장소에서
+동시에 진행 중이던 무관한 다른 세션들의 destinyWar39 미커밋 변경에서 일시적으로 tsc 에러가 목격됐으나
+재확인 시 이미 해소돼 있었음, 이 세션과 무관)/`npx vitest run`(50개 파일·1597개 테스트, 기존 1595+신규 2
+전부 통과) 통과. `npm run build`는 세션 도중 이미 다른 세션이 `next build`를 실행 중이라("Another next
+build process is already running") 이번 세션에서 직접 실행하지 못함 — tsc+lint+vitest 전부 통과로 검증을
+갈음. `코요테.md`/`HANDOFF.md` 갱신. **커밋/푸시/배포는 사용자 지시대로 진행 — 상세 결과는 아래 후속
+`docs(handoff)` 갱신 참고.**)_
+
+_이전 갱신: 2026-09-03 (**진실의 고개(Hill of Truth) 난이도 3단계(Lv.1~Lv.3) 시스템 + 사진 증거
 뷰어 + 위증 교차검증 + 잠금 단서 구현 세션 — 요청서는 `src/games/hillOfTruth/` 하위에
 `types.ts`/`Board.tsx`/`EvidencePanel.tsx`/`PhotoModal.tsx`/`RoomSettings.tsx`와 방 생성을 관리하는
 `roomManager.ts`가 있다고 가정했으나 조사 결과 그런 파일명은 하나도 없었음(다른 여러 세션에서 반복된

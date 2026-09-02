@@ -17,6 +17,7 @@ import {
   type PlayerState,
   type SeatIndex,
 } from "./engine";
+import { questionCardSeat } from "./CoyoteEffects";
 
 function card(id: number, kind: Card["kind"], value = 0): Card {
   return { id, kind, value };
@@ -266,6 +267,25 @@ describe("coyote — 외침 유효성", () => {
     const next = applyAction(state, { type: "coyote", seat: 1 });
     expect(next.phase).toBe("reveal");
     expect(next.lastResolution).not.toBeNull();
+  });
+});
+
+describe("questionCardSeat — '?' 치환 애니메이션(CoyoteEffects.tsx)의 대상 좌석 탐지", () => {
+  it("returns the seat holding the '?' card", () => {
+    const state = makeState({
+      tableCards: { 0: card(0, "question"), 1: card(1, "number", 10), 2: card(2, "number", 3) },
+      roundDeck: [card(90, "number", 7)],
+      currentBid: { seat: 0, number: 5 },
+      activeSeat: 1,
+    });
+    const next = applyAction(state, { type: "coyote", seat: 1 });
+    expect(questionCardSeat(next.lastResolution!)).toBe(0);
+  });
+
+  it("returns null when no '?' card was in play this round", () => {
+    const state = makeState({ currentBid: { seat: 0, number: 18 }, activeSeat: 1 });
+    const next = applyAction(state, { type: "coyote", seat: 1 });
+    expect(questionCardSeat(next.lastResolution!)).toBeNull();
   });
 });
 

@@ -932,6 +932,53 @@ body {
   }
 }
 
+/* 코요테's "?" 카드 치환 연출 (2026-09-03, CoyoteEffects.tsx / CoyoteBoard.tsx)
+   — 1단계 "시선 집중" 펄스(이 카드가 곧 치환된다는 신호), 2단계 "덱 드로우"
+   비행 궤적(QuestionCardFlyGhost). 3단계 3D 치환 플립은 새 키프레임 없이
+   위 coyote-card-flip을 그대로 재사용한다(치환된 카드도 결국 "카드 한 장이
+   뒤집히는 것"일 뿐이므로). */
+@keyframes coyote-question-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 0 0 rgba(192, 132, 252, 0.55),
+      0 0 10px 1px rgba(192, 132, 252, 0.35);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow:
+      0 0 0 6px rgba(192, 132, 252, 0),
+      0 0 26px 6px rgba(192, 132, 252, 0.8);
+  }
+}
+.coyote-question-pulse {
+  animation: coyote-question-pulse 0.6s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+/* 비행 중인 "?" 유령 카드 자체의 회전/스케일 플라이트 — 위치(left/top)는
+   QuestionCardFlyGhost가 JS로 트랜지션시키고, 이 키프레임은 그 위에 얹히는
+   회전/스케일 플레어만 담당한다(dalmuti-exchange-arc와 동일 기법, 색상 없는
+   순수 지오메트리라 값만 코요테 톤으로 살짝 다르게). */
+@keyframes coyote-question-fly {
+  0% {
+    transform: translate(-50%, -50%) scale(0.55) rotate(-14deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  60% {
+    transform: translate(-50%, -50%) scale(1.12) rotate(10deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
 /* 포세일's Phase-1 pass-refund flight (see ForSaleEffects.tsx /
    FlyingPassCard) — the passed property card arcs from the open-card row to
    the passer's seat while fading in/out, mirroring dalmuti-tax-fly's arc. */

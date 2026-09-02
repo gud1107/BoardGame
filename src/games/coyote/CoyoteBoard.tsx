@@ -1,10 +1,21 @@
 "use client";
 
-import { type CSSProperties, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
+import Avatar from "@/components/common/Avatar";
 import RulebookModal from "./RulebookModal";
 import { CardFace, HeartPips } from "./CardArt";
-import { CardFlipWrapper, CoyoteHowlBanner, detectCoyoteCallEvent } from "./CoyoteEffects";
-import { computeRankings, getPlayerView, STARTING_HEARTS, type CoyoteState, type EngineAction, type SeatIndex } from "./engine";
+import {
+  CardFlipWrapper,
+  CoyoteHowlBanner,
+  detectCoyoteCallEvent,
+  QuestionCardFlyGhost,
+  questionCardSeat,
+  QUESTION_FLY_MS,
+  QUESTION_PULSE_CLASS,
+  QUESTION_PULSE_MS,
+  REVEAL_HOLD_MS,
+} from "./CoyoteEffects";
+import { computeRankings, getPlayerView, STARTING_HEARTS, type Card, type CoyoteState, type EngineAction, type SeatIndex } from "./engine";
 
 /**
  * Pure game UI + rules driver — same controlled-component contract as every
@@ -74,6 +85,95 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     setTrackedTurnKey(turnKey);
     setDeclareValue((state.currentBid?.number ?? 0) + 1);
   }
+
+  // -------------------------------------------------------------------
+  // Reveal/showdown sequencing (2026-09-03) — "?" 카드 치환(펄스→비행→
+  // 3D플립) + 판정 패널 전체의 3초 최소 유지/스킵. `res` (state.lastResolution)
+  // identity가 바뀔 때만(=새 "코요테!" 호출마다) 재시작된다 — `howl` 위에서
+  // 쓰는 것과 동일한 "연속 스냅샷 diff" 기법.
+  // -------------------------------------------------------------------
+  const res = state.lastResolution;
+  const qSeat = res ? questionCardSeat(res) : null;
+
+  const [trackedRes, setTrackedRes] = useState(res);
+  const [questionStage, setQuestionStage] = useState<"pulse" | "flying" | "flipped">("pulse");
+  const [revealSettled, setRevealSettled] = useState(false);
+  const [countingActive, setCountingActive] = useState(false);
+  const [displayedTotal, setDisplayedTotal] = useState(0);
+  const skippedRef = useRef(false);
+  if (trackedRes !== res) {
+    setTrackedRes(res);
+    setQuestionStage("pulse");
+    setRevealSettled(false);
+    setDisplayedTotal(0);
+    setCountingActive(!res || questionCardSeat(res) === null); // no "?" card in this round -> count up right away
+  }
+
+  // Stage timers: pulse -> fly -> flipped (only when a "?" card is in play),
+  // plus the unified REVEAL_HOLD_MS minimum before "다음 라운드" unlocks.
+  // Also owns resetting `skippedRef` for the new resolution (a ref write
+  // belongs in an effect/handler, never directly in the render body).
+  useEffect(() => {
+    skippedRef.current = false;
+    if (!res || state.phase === "playing") return;
+    const timers: number[] = [];
+    if (questionCardSeat(res) !== null) {
+      timers.push(window.setTimeout(() => setQuestionStage("flying"), QUESTION_PULSE_MS));
+      timers.push(
+        window.setTimeout(() => {
+          setQuestionStage("flipped");
+          setCountingActive(true);
+        }, QUESTION_PULSE_MS + QUESTION_FLY_MS),
+      );
+    }
+    timers.push(window.setTimeout(() => setRevealSettled(true), REVEAL_HOLD_MS));
+    return () => timers.forEach((t) => window.clearTimeout(t));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on `res` identity only, restarts exactly once per new "코요테!" call
+  }, [res]);
+
+  // "실제 총합" count-up, 0 -> res.finalTotal over ~550ms once `countingActive`
+  // flips true (either immediately, or synced to the "?" card's flip settling).
+  useEffect(() => {
+    if (!countingActive || !res) return;
+    if (skippedRef.current) {
+      setDisplayedTotal(res.finalTotal);
+      return;
+    }
+    const target = res.finalTotal;
+    const durationMs = 550;
+    const start = performance.now();
+    let raf = 0;
+    function tick(now: number) {
+      if (skippedRef.current) {
+        setDisplayedTotal(target);
+        return;
+      }
+      const t = Math.min(1, (now - start) / durationMs);
+      setDisplayedTotal(Math.round(target * t));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [countingActive, res]);
+
+  /** "⏩ 스킵" — 애니메이션을 기다리지 않고 즉시 "?" 치환/합산 완료 화면으로 전환. */
+  function handleSkipReveal() {
+    if (revealSettled) return;
+    skippedRef.current = true;
+    setQuestionStage("flipped");
+    setCountingActive(true);
+    if (res) setDisplayedTotal(res.finalTotal);
+    setRevealSettled(true);
+  }
+
+  const seatRefs = useRef(new Map<SeatIndex, HTMLElement>());
+  function setSeatRef(seat: SeatIndex) {
+    return (el: HTMLElement | null) => {
+      if (el) seatRefs.current.set(seat, el);
+      else seatRefs.current.delete(seat);
+    };
+  }
+  const tableCenterRef = useRef<HTMLDivElement | null>(null);
 
   const rulebookButton = (
     <button
@@ -146,7 +246,6 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   const minDeclare = (state.currentBid?.number ?? -Infinity) + 1;
   const canDeclare = isMyTurn && Number.isInteger(declareValue) && declareValue > (state.currentBid?.number ?? -Infinity);
   const canCoyote = isMyTurn && state.currentBid !== null;
-  const res = state.lastResolution;
   // 7-8인일 때만 카드/이름표를 한 단계 줄여 타원 위 겹침을 방지 — 레이아웃 방식(단일 타원 유지)은
   // 그대로 두고 크기/간격만 반응형으로 축소하는 쪽으로 제품 확정.
   const compact = state.playerCount > 6;
@@ -154,11 +253,23 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   function renderSeat(seat: SeatIndex, style: CSSProperties, isSelf: boolean) {
     const player = state.players.find((p) => p.seat === seat)!;
     const isActive = state.phase === "playing" && state.activeSeat === seat;
-    const card = cardBySeat.get(seat) ?? null;
+
+    // "?" 치환 연출 대상 좌석이면 스테이지에 따라 표시 카드를 바꿔치기한다
+    // (엔진 state는 그대로 — 순수 표시 레이어 오버라이드). pulse/flying 단계는
+    // 원래 "?" 카드를 그대로 보여주고(스테이지 1 펄스 글로우만 덧씌움),
+    // flipped 단계부터 실제로 뽑힌 카드(res.extraDrawnCards[0])로 바뀐다.
+    const isQuestionSeat = revealed && res && seat === qSeat;
+    const showReplacedCard = isQuestionSeat && questionStage === "flipped";
+    const card: Card | null = showReplacedCard ? (res!.extraDrawnCards[0] ?? cardBySeat.get(seat) ?? null) : (cardBySeat.get(seat) ?? null);
+    const pulseActive = isQuestionSeat && questionStage !== "flipped";
+    const flipKey = showReplacedCard ? `${seat}-${state.roundNumber}-replaced` : `${seat}-${state.roundNumber}-${revealed}`;
+
     return (
-      <div key={seat} className="absolute flex flex-col items-center gap-1" style={style}>
-        <CardFlipWrapper flipKey={`${seat}-${state.roundNumber}-${revealed}`} revealed={revealed}>
-          <CardFace card={card} highlight={isActive} size={compact ? "xs" : "sm"} />
+      <div key={seat} ref={setSeatRef(seat)} className="absolute flex flex-col items-center gap-1" style={style}>
+        <CardFlipWrapper flipKey={flipKey} revealed={revealed}>
+          <div className={pulseActive ? QUESTION_PULSE_CLASS : undefined}>
+            <CardFace card={card} highlight={isActive} size={compact ? "xs" : "sm"} />
+          </div>
         </CardFlipWrapper>
         <div
           className={`flex flex-col items-center gap-0.5 rounded-xl border text-center ${compact ? "max-w-[70px] px-1.5 py-0.5 text-[9px]" : "px-2 py-1 text-[10px]"} ${
@@ -166,9 +277,10 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
           }`}
         >
           <span className="flex max-w-full items-center gap-1 truncate font-semibold text-white/90">
+            <Avatar size={compact ? 14 : 16} className="shrink-0" />
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
             {isActive && <span title="차례">👉</span>}
-            <span className="truncate">{names[seat]}</span>
+            <span className="break-keep truncate">{names[seat]}</span>
             {isSelf && <span className="shrink-0 text-amber-200">(나)</span>}
           </span>
           <HeartPips hearts={player.hearts} max={STARTING_HEARTS} />
@@ -191,9 +303,12 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
 
       {/* Round table: every seat's forehead card placed around an ellipse, viewer at the bottom. Widens for 7-8 players (see `compact`) so seatPosition's slightly larger radius has more physical room to spread cards apart. */}
       <div className={`relative z-10 mx-auto w-full ${compact ? "h-[320px] max-w-lg sm:h-[380px]" : "h-[280px] max-w-md sm:h-[320px]"}`}>
-        <div className="absolute inset-[10%] rounded-[50%] border-4 border-orange-900/50 bg-gradient-to-b from-orange-950/50 to-black/70 shadow-inner" />
+        <div ref={tableCenterRef} className="absolute inset-[10%] rounded-[50%] border-4 border-orange-900/50 bg-gradient-to-b from-orange-950/50 to-black/70 shadow-inner" />
         {renderSeat(viewerSeat, seatPosition(0, state.playerCount), true)}
         {otherSeats.map((seat, i) => renderSeat(seat, seatPosition(i + 1, state.playerCount), false))}
+        {questionStage === "flying" && qSeat !== null && (
+          <QuestionCardFlyGhost getFromEl={() => tableCenterRef.current} getToEl={() => seatRefs.current.get(qSeat) ?? null} />
+        )}
       </div>
 
       {/* Bidding phase */}
@@ -252,36 +367,47 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
         </div>
       )}
 
-      {/* Reveal / showdown */}
+      {/* Reveal / showdown — 보드게임허브 공통 규격: 카드 공개("?" 치환 포함)는
+          최소 REVEAL_HOLD_MS(3초)간 유지되며, 그동안 "다음 라운드" 대신
+          "⏩ 스킵" 버튼만 노출된다(클릭 시 handleSkipReveal이 즉시 최종
+          치환/합산 완료 화면으로 전환). */}
       {state.phase === "reveal" && res && (
         <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-center text-xs">
-          <p className="font-semibold text-rose-200">🐺 {names[res.callerSeat]}님이 &quot;코요테!&quot;를 외쳤습니다</p>
-          <p className="text-white/70">
-            직전 선언: <b className="text-amber-300">{res.bid.number}</b> ({names[res.bid.seat]}) · 실제 총합:{" "}
-            <b className="text-emerald-300">{res.finalTotal}</b>
+          <p className="break-keep font-semibold text-rose-200">🐺 {names[res.callerSeat]}님이 &quot;코요테!&quot;를 외쳤습니다</p>
+          <p className="break-keep text-white/70">
+            직전 선언: <b className="text-amber-300">{res.bid.number}</b> ({names[res.bid.seat]}) · 실제 총합: <b className="text-emerald-300">{displayedTotal}</b>
           </p>
           {res.extraDrawnCards.length > 0 && (
-            <p className="text-white/60">🎁 ? 카드로 {res.extraDrawnCards.length}장 추가 공개됨</p>
+            <p className="break-keep text-white/60">🎁 ? 카드로 {res.extraDrawnCards.length}장 추가 공개됨</p>
           )}
-          {res.maxZeroTarget.card && <p className="text-white/60">👧 최고값 카드({res.maxZeroTarget.card.value})가 0으로 무효화됨</p>}
-          {res.doubled && <p className="text-white/60">🪶 최종 합산이 2배 적용됨</p>}
-          {res.nightCardHolderSeat !== null && <p className="text-white/60">🌙 {names[res.nightCardHolderSeat]}님이 다음 라운드의 선이 됩니다</p>}
-          <p className="font-semibold text-white">
+          {res.maxZeroTarget.card && <p className="break-keep text-white/60">👧 최고값 카드({res.maxZeroTarget.card.value})가 0으로 무효화됨</p>}
+          {res.doubled && <p className="break-keep text-white/60">🪶 최종 합산이 2배 적용됨</p>}
+          {res.nightCardHolderSeat !== null && <p className="break-keep text-white/60">🌙 {names[res.nightCardHolderSeat]}님이 다음 라운드의 선이 됩니다</p>}
+          <p className="break-keep font-semibold text-white">
             {res.loserWasBidder
               ? `${names[res.bid.seat]}님이 오버 배팅으로 하트 1개를 잃었습니다.`
               : `${names[res.callerSeat]}님이 잘못된 코요테 외침으로 하트 1개를 잃었습니다.`}
           </p>
-          <button
-            onClick={() => onAction({ type: "continue", seed: randomSeed() })}
-            className="mx-auto mt-1 rounded-full bg-amber-500 px-6 py-2 text-xs font-bold text-black transition hover:bg-amber-400"
-          >
-            ▶️ 다음 라운드
-          </button>
+          {revealSettled ? (
+            <button
+              onClick={() => onAction({ type: "continue", seed: randomSeed() })}
+              className="mx-auto mt-1 rounded-full bg-amber-500 px-6 py-2 text-xs font-bold text-black transition hover:bg-amber-400"
+            >
+              ▶️ 다음 라운드
+            </button>
+          ) : (
+            <button
+              onClick={handleSkipReveal}
+              className="mx-auto mt-1 touch-manipulation rounded-full border border-white/20 bg-black/30 px-6 py-2 text-xs font-bold text-white/80 transition select-none hover:border-white/40 hover:text-white"
+            >
+              ⏩ 스킵
+            </button>
+          )}
         </div>
       )}
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
-      {howl && <CoyoteHowlBanner callerName={howl.callerName} onDone={() => setHowl(null)} />}
+      {howl && <CoyoteHowlBanner callerName={howl.callerName} onDone={() => setHowl(null)} durationMs={1300} />}
     </div>
   );
 }
