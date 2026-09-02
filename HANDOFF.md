@@ -737,8 +737,10 @@ game over"로 재작성 — 라운드 1이 끝나 `roundEnd` 페이즈에 진입
 정보로 전환"으로 갱신. §13 핵심 규칙 요약 5번 문구도 동일하게 갱신.
 
 **커밋/배포**: `git commit`(`8a40036`, `feat(destiny-war-39): reveal hidden round prediction at
-round-end summary instead of game-over`) → `git push origin main` → `docs(handoff)` 커밋 → 배포는 아래
-"커밋/배포 결과" 참고. 이 세션 시작 시점부터 이미 워킹 트리에 있던 다른 세션들의 무관한 진행 중
+round-end summary instead of game-over`) → `git push origin main`(`055eee5..2f08fff`) →
+`docs(handoff)` 커밋(`2f08fff`) → `npx vercel deploy --prod --scope me-3871`
+(`dpl_Cy5iDXpjtAQCNwCGrvv6Xn8gxVrz`, READY, `board-game-tau-navy.vercel.app`에 별칭) 완료, `curl`로
+프로덕션 `/`·`/games/destiny-war-39` 200 확인. 이 세션 시작 시점부터 이미 워킹 트리에 있던 다른 세션들의 무관한 진행 중
 변경분(달무티 AI 봇 턴 정지 픽스의 `useBotAutoplay.ts`/8개 `<Game>Game.tsx`, 코요테 "?" 카드 치환
 애니메이션, `HillOfTruthGame.tsx`/`scenarios.ts`, `globals.css`, `src/components/patchNotes/` 개편분,
 `boardGameRule/`의 다른 게임 이미지들, `.claude/` 등)은 이전 세션들과 동일한 판단으로 커밋 대상에서
