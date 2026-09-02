@@ -33,8 +33,11 @@ export default function DashboardPage() {
   // base list without double-filtering.
   //
   // Query matches title (kr/en), theme tags, and description keywords —
-  // shared identically between the desktop-visible-always section and the
-  // mobile copy of it below the curated carousel (2026-09-02, AskUserQuestion).
+  // this single `query` state is shared by two inputs that are never both
+  // visible at once: the sticky mobile search bar pinned above the page
+  // title, and the desktop-only (`hidden sm:block`) input further down
+  // (2026-09-02 AskUserQuestion added the section below the carousel;
+  // 2026-09-03 AskUserQuestion moved its input to the sticky bar on mobile).
   const baseFiltered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filter = PLAYER_FILTERS[filterIdx];
@@ -65,7 +68,49 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <div className="mb-8">
+      {/* Mobile-only (< sm) sticky search bar (2026-09-03, AskUserQuestion).
+          Pinned to the very top of the viewport, directly beneath the
+          global SiteHeader's own sticky bar — `top` reads that header's
+          real measured height off `--site-header-h` (set in
+          SiteHeader.tsx) rather than a hardcoded px offset, since that
+          header's height changes when it wraps to a second line or its
+          async badge content resolves. `-mx-4 -mt-8` cancels this
+          container's own edge padding (`px-4 py-8`) so the bar's background
+          spans full-bleed edge-to-edge and sits flush against the header
+          with no gap on first paint — it reads as pinned to the top even
+          before any scroll happens, not just once scrolled past. Kept to
+          the search input only (no player-count/genre filter chips) per
+          confirmed scope — those stay in their normal in-flow spot below,
+          so the fixed strip stays short and doesn't eat too much card
+          real estate. The full desktop-style search input further below
+          is hidden on mobile (`hidden sm:block`) so there's only one
+          active input, not a confusing duplicate. */}
+      <div
+        className="sticky z-30 -mx-4 -mt-8 border-b border-white/10 bg-[#0b0b12]/80 px-4 py-3 backdrop-blur sm:hidden"
+        style={{ top: "var(--site-header-h, 96px)" }}
+      >
+        <div className="relative w-full">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="게임 이름, 태그로 검색..."
+            aria-label="게임 검색"
+            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 pr-9 text-sm text-white break-keep placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="검색어 지우기"
+              className="absolute top-1/2 right-2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-6 mb-8 sm:mt-0">
         <h1 className="text-2xl font-bold text-white sm:text-3xl">함께할 보드게임을 골라보세요</h1>
         <p className="mt-1 text-sm text-white/50">
           총 {GAME_REGISTRY.length}종 · 플레이 가능 {playableCount}종 · 1~10명, 폰이나 데스크톱으로 즐기세요
@@ -94,7 +139,10 @@ export default function DashboardPage() {
       <div className="mt-8 sm:mt-0">
         <h2 className="mb-3 text-base font-bold text-white sm:hidden">🔍 전체 게임 검색</h2>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full sm:max-w-xs">
+          {/* Hidden on mobile — replaced by the sticky search bar pinned
+              above the page title (2026-09-03). Kept as-is for sm+, where
+              there's no sticky bar and this is still the only search input. */}
+          <div className="relative hidden w-full sm:block sm:max-w-xs">
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}

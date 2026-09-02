@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useBettingStore } from "@/store/bettingStore";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
@@ -25,6 +25,8 @@ export default function SiteHeader() {
   const initProfile = useProfileStore((s) => s.init);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
 
+  const headerRef = useRef<HTMLElement>(null);
+
   useEffect(() => {
     void initSubscription();
   }, [initSubscription]);
@@ -33,8 +35,29 @@ export default function SiteHeader() {
     void initProfile();
   }, [initProfile]);
 
+  // Publishes this header's real rendered height as a CSS var so other
+  // sticky layers (e.g. the mobile lobby's sticky search bar, page.tsx) can
+  // stack directly beneath it without guessing a fixed px offset — this bar
+  // wraps to a second line on narrow viewports (see the flex-wrap comment
+  // below) and grows/shrinks as async content (tier badge, avatar) resolves,
+  // so a hardcoded top offset would either leave a gap or clip under it.
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const setVar = () => {
+      document.documentElement.style.setProperty("--site-header-h", `${el.offsetHeight}px`);
+    };
+    setVar();
+    const observer = new ResizeObserver(setVar);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0b0b12]/80 backdrop-blur">
+    <header
+      ref={headerRef}
+      className="sticky top-0 z-40 border-b border-white/10 bg-[#0b0b12]/80 backdrop-blur"
+    >
       {/* flex-wrap + shrink-0 on every child below is the actual fix for the
           "보\n드\n게\n임" vertical-splitting bug reported on this bar: with no
           flex-wrap, a too-narrow viewport made the flex row shrink every

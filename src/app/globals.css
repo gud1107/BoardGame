@@ -3,6 +3,13 @@
 :root {
   --background: #0b0b12;
   --foreground: #f4f4f5;
+  /* Fallback for SiteHeader's real measured height (set via ResizeObserver
+     in SiteHeader.tsx) — used as the `top` offset for layers that stack
+     sticky directly beneath it (e.g. the mobile lobby search bar in
+     page.tsx) before JS has run a first measurement. Close to the header's
+     typical two-line mobile height so there's no visible jump once the real
+     value lands. */
+  --site-header-h: 96px;
 }
 
 @theme inline {

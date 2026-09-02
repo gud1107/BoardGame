@@ -1,6 +1,35 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-03 (**진실의 고개(Hill of Truth) 정답 선언 히스토리 & 오답 분석 복기 리포트 구현
+_최종 갱신: 2026-09-03 (**로비(메인 대시보드, `src/app/page.tsx`) 모바일 검색창 상단 고정(Sticky Header)
+UI 개편 세션 — 요청서는 `src/pages/Lobby.tsx`/`src/components/lobby/{SearchBar,GameGrid,Header}.tsx`
+경로를 가정했으나 실제로는 그런 파일들이 존재하지 않음(App Router 구조, `src/app/lobby/`는 채팅 전용
+페이지) — 실제 게임 검색+캐러셀 UI는 `src/app/page.tsx`(메인 대시보드)에 있음을 먼저 확인. `AskUserQuestion`
+3문항으로 확인 후 진행: ①이미 전역 `sticky top-0 z-40`인 `SiteHeader`(로고/프로필 바) 바로 아래에 검색창을
+2단으로 고정(대안이었던 "검색창이 로고 헤더보다 위" 안은 채택 안 함) ②검색창을 모바일 전용 Netflix식
+캐러셀보다 위로 순서 이동(로고 헤더 → 검색창 → 페이지 타이틀 → 캐러셀 → 나머지, 검색창이 로드 즉시부터
+항상 화면 최상단에 보이도록) ③고정 영역엔 검색 입력창만 포함, 인원수/장르 필터 칩은 원래 위치에서
+그대로 스크롤. **구현**: `SiteHeader.tsx`에 `useLayoutEffect`+`ResizeObserver`로 헤더 자신의 실측
+높이를 `document.documentElement`의 CSS 변수 `--site-header-h`로 발행(이 바는 좁은 화면에서 2줄로
+줄바꿈되고 비동기 등급 배지 로드로 높이가 변하므로, 고정 px 오프셋 대신 실측값을 읽어야 함) —
+`globals.css`엔 JS 측정 전 잠깐 쓰일 96px 폴백 값만 `:root`에 추가. `page.tsx`에 모바일 전용
+(`sm:hidden`) sticky 검색 바 신규 추가(`top: var(--site-header-h, 96px)`, `-mx-4 -mt-8`로 컨테이너
+자체 패딩을 상쇄해 헤더에 여백 없이 완전히 붙임, 다크 반투명 블러 배경 + 하단 경계선), 페이지 타이틀보다
+앞으로 배치. 콘텐츠는 `position: sticky`(fixed 아님)라 자기 자리를 문서 흐름에서 그대로 차지하므로 첫
+게임 카드가 가려지는 문제 자체가 발생하지 않음(별도 상단 패딩 보정 불필요, sticky의 기본 성질로 자동
+해결) — `-mx-4 -mt-8`로 컨테이너 padding만 상쇄했을 뿐 이후 형제 요소들의 흐름은 그대로. 기존 캐러셀
+아래쪽의 데스크톱용 검색 입력창(+클리어 버튼)은 `hidden sm:block`으로 모바일에서만 숨겨 중복 입력창을
+제거(인원수 필터 칩은 그대로 노출 유지); `query` 상태 하나를 두 입력창이 공유하되 동시에 보이는 일은
+없음. `100vh` 계열 레이아웃을 이 페이지가 애초에 쓰지 않아 모바일 가상 키보드로 인한 뷰포트 붕괴 이슈
+자체가 없음(별도 대응 불필요, sticky 방식이라 키보드가 레이아웃을 밀어내지도 않음). `npx tsc --noEmit`
+0에러/`npx eslint`(변경 파일 기준) 0에러/`npm run build` 성공/`npx vitest run`(50개 파일·1597개 테스트
+전부 통과) 확인. 캐시된 Playwright Chromium으로 모바일 뷰포트(390×780) 실측 검증: 로드 직후 스크린샷에서
+헤더(2줄, 119px)와 검색 바 사이 간격 0(`headerBox.height`=`searchBarBox.y`-`py-3`), 검색어 입력 후
+`window.scrollTo(0, 2000)`로 카드 목록 깊숙이 스크롤해도 검색 바가 그대로 최상단에 고정되어 뒤 카드 위에
+또렷하게 겹쳐 보임, 스크롤된 상태에서 ✕ 클리어 버튼 클릭 시 `inputValue()`가 빈 문자열로 정상 초기화되는
+것까지 스크린샷+DOM 값으로 확인. 데스크톱(1280×800)은 스크린샷으로 레이아웃 무변경(검색창+필터 칩이
+여전히 한 줄, sticky 바/캐러셀 없음) 확인.)_
+
+_이전 갱신: 2026-09-03 (**진실의 고개(Hill of Truth) 정답 선언 히스토리 & 오답 분석 복기 리포트 구현
 세션 — 요청서는 게임 종료 시 그동안의 모든 "정답 선언(정답 도전)" 내역과 각 선언이 왜 틀렸는지(오답 분석
 사유)를 투명하게 공개하는 복기 모달을 요청. 조사 결과 요청서가 언급한 파일명(`types.ts`, `Board.tsx`,
 `ResultModal.tsx`, `ReviewReportModal.tsx`, `AnswerHistoryPanel.tsx`)은 실제로는 존재하지 않았고(타입은
