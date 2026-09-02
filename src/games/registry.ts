@@ -655,6 +655,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
   },
+  {
+    id: "hill-of-truth",
+    name: "진실의 고개",
+    nameEn: "Hill of Truth",
+    description:
+      "넷플릭스 예능 <데스게임> 장르에서 영감을 받은 2~8인 단서 추리 게임. 딜러(게임 시스템)에게 공개·히든 질문을 던져 초록/노랑/빨강 신호등 판정을 모으고, 사건의 진상을 가장 먼저 맞힌 사람이 즉시 승리합니다. 오답을 내도 탈락하지 않고 짧은 쿨타임만 부여되며, 타임테이블·증거·메시지·증언을 살펴보는 수사 노트와 게임 종료 후 노란불 복기 리포트를 제공합니다.",
+    players: { min: 2, max: 8 },
+    playTime: { minMinutes: 15, maxMinutes: 30 },
+    category: "deduction",
+    thumbnail: { emoji: "🚦", gradient: ["#22d3ee", "#0f172a"] },
+    tags: ["추리", "다인플레이", "데스게임", "수사"],
+    genres: ["strategy", "party"],
+    collectionId: "netflix-death-game",
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {

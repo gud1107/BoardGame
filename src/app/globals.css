@@ -4132,3 +4132,49 @@ body {
 .moo-safezone-aura {
   animation: moo-safezone-aura 2.6s ease-in-out infinite;
 }
+
+/* 진실의 고개(Hill of Truth) — 딜러 신호등 판정 연출 + 노란불 복기 리포트 모달 진입
+   애니메이션. 모달 진입은 dalmuti-highlight-overlay-in과 동일한 fade+scale이라 새로
+   정의하되(게임 폴더 간 CSS 결합 금지 원칙상 클래스명은 이 게임 전용으로 분리), 신호등
+   점등은 색상별로 글로우가 번쩍였다가 은은하게 유지되는 2단 연출이다. */
+@keyframes hill-of-truth-modal-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes hill-of-truth-light-flash {
+  0% {
+    transform: scale(0.85);
+    filter: brightness(2.2);
+  }
+  60% {
+    transform: scale(1.08);
+    filter: brightness(1.4);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+.hill-of-truth-light-flash {
+  animation: hill-of-truth-light-flash 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes hill-of-truth-cooldown-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.hill-of-truth-cooldown-pulse {
+  animation: hill-of-truth-cooldown-pulse 1.4s ease-in-out infinite;
+}
