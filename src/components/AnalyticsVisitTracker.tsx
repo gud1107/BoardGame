@@ -9,8 +9,8 @@ const SESSION_FLAG = "bg_visit_logged_session";
 /**
  * Mounted once in the root layout. Fires exactly one `recordVisit` per
  * browser tab session (gated by `sessionStorage`, not per page navigation)
- * — this is a *visit* counter ("site_visit_log"/"monthly_visit_stats"), not
- * a page-view counter, per the confirmed analytics design. `path` captures
+ * — this is a *visit* counter, not a page-view counter, per the confirmed
+ * analytics design (see `src/lib/analytics/localStore.ts`). `path` captures
  * whichever page the session actually landed on.
  */
 export default function AnalyticsVisitTracker() {

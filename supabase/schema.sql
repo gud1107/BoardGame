@@ -164,12 +164,14 @@ create policy "anyone read app_settings" on app_settings
   for select to anon, authenticated using (true);
 
 -- ---------------------------------------------------------------------------
--- Analytics: site visit tracking + game play tracking (admin stats
--- dashboard, see HANDOFF.md). Written by `src/app/api/analytics/*` route
--- handlers using the anon client (never the service role — see
--- `src/lib/supabase/serviceClient.ts`'s "admin routes only" rule) and read
--- exclusively by `src/app/api/admin/analytics/*` via `requireAdmin()` +
--- the service role.
+-- Analytics (DEPRECATED as of 2026-09-03): site visit tracking + game play
+-- tracking used to live here. `src/app/api/analytics/*` and
+-- `src/app/api/admin/analytics/*` no longer read or write these three
+-- tables at all — the whole feature moved to a local JSON file
+-- (`src/lib/analytics/localStore.ts`), per the requirement to drop external
+-- services for this specific feature. Left in place (not dropped) only so
+-- the historical rows collected before the migration aren't destroyed;
+-- nothing in the app queries them anymore.
 -- ---------------------------------------------------------------------------
 
 create extension if not exists pgcrypto;

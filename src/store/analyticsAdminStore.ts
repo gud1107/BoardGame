@@ -1,11 +1,12 @@
 import { create } from "zustand";
-import type { AnalyticsSummary, GameRankingRow, MonthlyTrendPoint } from "@/lib/analytics/types";
+import type { AnalyticsSummary, DailyTrendPoint, GameRankingRow, MonthlyTrendPoint } from "@/lib/analytics/types";
 
 interface AnalyticsAdminState {
   loading: boolean;
   error: string | null;
   summary: AnalyticsSummary | null;
   trend: MonthlyTrendPoint[];
+  daily: DailyTrendPoint[];
   games: GameRankingRow[];
   trendMonths: 6 | 12;
 
@@ -28,21 +29,23 @@ export const useAnalyticsAdminStore = create<AnalyticsAdminState>((set, get) => 
   error: null,
   summary: null,
   trend: [],
+  daily: [],
   games: [],
   trendMonths: 6,
 
   init: async () => {
     set({ loading: true, error: null });
-    const [summary, trendRes, gamesRes] = await Promise.all([
+    const [summary, trendRes, dailyRes, gamesRes] = await Promise.all([
       fetchJson<AnalyticsSummary>("/api/admin/analytics/summary"),
       fetchJson<{ trend: MonthlyTrendPoint[] }>(`/api/admin/analytics/visits?months=${get().trendMonths}`),
+      fetchJson<{ trend: DailyTrendPoint[] }>("/api/admin/analytics/daily?days=14"),
       fetchJson<{ games: GameRankingRow[] }>("/api/admin/analytics/games"),
     ]);
-    if (!summary || !trendRes || !gamesRes) {
+    if (!summary || !trendRes || !dailyRes || !gamesRes) {
       set({ loading: false, error: "통계를 불러오지 못했습니다." });
       return;
     }
-    set({ loading: false, error: null, summary, trend: trendRes.trend, games: gamesRes.games });
+    set({ loading: false, error: null, summary, trend: trendRes.trend, daily: dailyRes.trend, games: gamesRes.games });
   },
 
   setTrendMonths: async (months) => {

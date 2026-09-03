@@ -61,9 +61,13 @@ export default function GamePlayPage() {
   }
 
   const playStartedAtRef = useRef<number | null>(null);
-  // Analytics `game_play_log` row id for the in-progress session, if the
-  // start call succeeded — see the two effects below and `handleGameComplete`.
+  // Analytics play id for the in-progress session, if the start call
+  // succeeded — see the two effects below and `handleGameComplete`.
   const gamePlayIdRef = useRef<string | null>(null);
+  // gameId captured alongside it, since `endGamePlay` needs it directly (the
+  // local file store has no per-session row to look it up from) and a ref
+  // avoids relying on the outer `game` closure staying fresh across renders.
+  const gamePlayGameIdRef = useRef<string | null>(null);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   // Online-multiplayer games run their own room lobby (create/join/waiting)
@@ -78,6 +82,7 @@ export default function GamePlayPage() {
     if (stage === "select") {
       playStartedAtRef.current = null; // "이 게임 다시하기" restarts the elapsed-time clock too.
       gamePlayIdRef.current = null; // ...and starts a fresh analytics play record too.
+      gamePlayGameIdRef.current = null;
     }
   }, [stage]);
 
@@ -117,8 +122,8 @@ export default function GamePlayPage() {
     return adHocNames.map((name, i) => ({ id: `adhoc-${i}`, name: name.trim() || `플레이어${i + 1}` }));
   }, [session, selectedIds, adHocNames]);
 
-  // Analytics: log a `game_play_log` row the moment a session actually
-  // starts (stage -> "playing"), covering every game through this one
+  // Analytics: record a game-start the moment a session actually starts
+  // (stage -> "playing"), covering every game through this one
   // shared page rather than per-engine instrumentation. Guarded by the ref
   // (not just `stage` in the deps) so re-renders while still "playing"
   // (e.g. `activeParticipants` changing reference) never fire a second
@@ -126,7 +131,8 @@ export default function GamePlayPage() {
   useEffect(() => {
     if (stage !== "playing" || !game || gamePlayIdRef.current !== null) return;
     let cancelled = false;
-    void startGamePlay(game.id, activeParticipants.length || min).then((playId) => {
+    gamePlayGameIdRef.current = game.id;
+    void startGamePlay(game.id).then((playId) => {
       if (!cancelled) gamePlayIdRef.current = playId;
     });
     return () => {
@@ -140,7 +146,7 @@ export default function GamePlayPage() {
   // this only ever fires for genuinely abandoned sessions.
   useEffect(() => {
     return () => {
-      if (gamePlayIdRef.current) endGamePlay(gamePlayIdRef.current, false);
+      if (gamePlayIdRef.current) endGamePlay(gamePlayIdRef.current, false, gamePlayGameIdRef.current);
     };
   }, []);
 
@@ -229,8 +235,9 @@ export default function GamePlayPage() {
 
   async function handleGameComplete(res: GameCompletionResult) {
     setResult(res);
-    endGamePlay(gamePlayIdRef.current, true);
+    endGamePlay(gamePlayIdRef.current, true, gamePlayGameIdRef.current);
     gamePlayIdRef.current = null;
+    gamePlayGameIdRef.current = null;
     if (subConfigured) {
       const startedAt = playStartedAtRef.current ?? Date.now();
       const minutes = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
