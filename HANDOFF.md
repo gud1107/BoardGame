@@ -1,6 +1,65 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-03 (**코요테(Coyote) "?" 카드 치환 애니메이션 구현 세션 — 요청서는 ①"코요테!" 외침 시
+_최종 갱신: 2026-09-03 (**외부 서비스 없는 로컬 파일 기반 방문/게임 통계 집계 시스템 구축 세션 — 요청서는
+`server/index.ts`/`src/server/server.ts`/`roomManager.ts`가 있다고 가정했으나 조사 결과 이 저장소엔
+커스텀 Node 서버도 룸 매니저도 없음(순수 `next dev`/`next start` + Next.js Route Handler, 각 게임은
+Supabase Realtime으로 직접 방을 관리) — 다른 여러 세션에서 반복된 "요청 전제-실제 코드 불일치" 패턴과
+동일. 더 결정적으로, **방문 통계 집계 자체는 이미 2026-08-26에 구현·배포돼 있었음**(커밋 `123e054`,
+`site_visit_log`/`monthly_visit_stats`/`game_play_log` Supabase 테이블 + `/admin/stats` 대시보드) —
+다만 요청이 명시한 "외부 매체 없는 로컬 파일 기반"과 반대로 Supabase 기반이었다는 차이. 그리고 이 앱은
+`npx vercel deploy --prod`로 서버리스 배포되므로, "서버 로컬 디스크에 영구 저장"이라는 요구 자체가 배포
+환경과 근본적으로 상충함(Vercel 배포 코드 경로는 읽기 전용, 쓰기 가능한 `/tmp`조차 콜드스타트마다
+초기화되고 인스턴스 간 공유되지 않음) — 이 세 가지를 먼저 사용자에게 명시적으로 알린 뒤 `AskUserQuestion`
+5문항(배포 환경 대응/기존 Supabase 시스템과의 관계/관리자 인증 방식/데이터 보존 정책 + Vercel 영속성 충돌
+확인 후속 1문항)으로 방향을 확인: (1) Vercel 프로덕션에서는 콜드스타트/재배포 시 카운트가 리셋될 수 있는
+한계를 **감수하고 best-effort로 진행**(로컬/자체호스팅 시엔 실제로 영구 저장됨), (2) 기존 Supabase 분석
+시스템은 **완전 대체**(단, 프로덕션에 이미 쌓인 과거 방문/플레이 원본 데이터를 지우는 건 별개의 파괴적
+작업이라 임의로 진행하지 않고 `supabase/schema.sql`의 세 테이블은 그대로 남겨둠 — deprecated 주석만
+추가, 앱은 더 이상 읽지도 쓰지도 않음), (3) 관리자 통계 조회 인증은 **나중에 연계 시 재확인**(그때까지는
+기존 `requireAdmin()`/Supabase 로그인+`profiles.role='admin'` 게이트를 그대로 재사용, 별도 비밀번호
+모달은 미구현), (4) 보존 정책은 **무기한 누적, 초기화 없음**. **구현**: `src/lib/analytics/localStore.ts`
+신설(서버 전용, Route Handler에서만 import) — 메모리 버퍼(`recordVisit`/`recordGameStart`/
+`recordGameComplete`가 동기적으로 즉시 반영)+2분 주기 `setInterval` 플러시(`FLUSH_INTERVAL_MS`, "1~5분"
+요구의 중간값)+매 쓰기마다 "마지막 플러시 후 2분 이상 지났으면 즉시 플러시"하는 안전망(서버리스 인스턴스
+사이에서 `setInterval`이 실제로 발화한다는 보장이 없어서 추가) 조합, 플러시 시 디스크에 이미 있는 내용을
+읽어 병합(read-modify-write, 다른 인스턴스의 카운트를 덮어쓰지 않음)한 뒤 임시파일→rename으로 원자적
+치환. 저장 경로는 `process.env.VERCEL` 유무로 분기 — 로컬/자체호스팅(`next dev`/`next start`)은
+`<repo>/data/analytics.json`(진짜 영구 저장, `.gitignore`에 `/data` 추가), Vercel 배포에서는
+`os.tmpdir()/boardgame-analytics/analytics.json`(위에서 확인받은 best-effort 한계 적용). 저장 스키마는
+`{ visits: { 'YYYY-MM-DD': { pv, uv: string[] } }, games: { 'YYYY-MM-DD': { [gameId]: { starts,
+completes } } } }` — `uv`는 카운트가 아니라 SHA-256 해시(앞 16자)된 익명 방문자 id **배열** 자체를
+저장해서, 서로 다른 인스턴스의 플러시 배치를 합칠 때도 재방문자를 중복 집계하지 않도록 함(요청의 "익명
+세션/해시 기반" 그대로 구현). **API**: `POST /api/analytics/visit`·`POST /api/analytics/game-play`(공개,
+`recordVisit`/`recordGameStart`/`recordGameComplete` 호출 — 기존 클라이언트 훅
+`src/lib/analytics/track.ts`/`AnalyticsVisitTracker.tsx`/`src/app/games/[gameId]/page.tsx`는 엔드포인트
+계약이 거의 그대로라 무변경에 가까움; 다만 `endGamePlay`가 이제 `gameId`를 직접 받도록 시그니처 변경 —
+로컬 스토어는 세션별 행이 없어 `playId`로 되짚어 게임을 알아낼 방법이 없어졌기 때문, 페이지 쪽에
+`gamePlayGameIdRef`를 추가해 대응), `GET /api/admin/analytics/{summary,visits,games}`(모두 `requireAdmin()`
+그대로, 응답 스키마 무변경이라 `analyticsAdminStore.ts`/`admin/stats/page.tsx`의 KPI 카드·월별 추이
+차트·게임 랭킹 테이블은 무변경으로 그대로 작동), 그리고 요청의 "일별" 요구를 위해 **신규**
+`GET /api/admin/analytics/daily?days=7..30`(`buildDailyTrend` 순수 함수 신규, 단위테스트 포함) + `/admin/stats`에
+"일별 추이(최근 14일)" 테이블 섹션 신규 추가. 미사용으로 확인된 `device_type`/`playerCount` 필드와
+`src/lib/analytics/deviceType.ts`(+ 테스트)는 삭제(어느 read 경로도 소비하지 않던 죽은 코드). **검증**:
+`npx tsc --noEmit`(0 에러) / `npx eslint`(변경 파일 전체, 0 경고) / `npx vitest run src/lib/analytics`
+(18/18, dayKey·recentDayKeys·buildDailyTrend 신규 6개 포함) / `npx next build`(Turbopack, 정상 완주,
+`/api/admin/analytics/daily` 등 21개 라우트 전부 정상 등록) 전부 통과. `localStore.ts`는 유닛테스트로
+커버되지 않는 실제 파일 I/O 경로라 임시 스크립트(`tsx`, 검증 후 삭제)로 별도 스모크 테스트 2회 수행—
+①방문 2회(동일 기기)+게임 시작 3회+완료 1회 기록 후 `readSnapshot()`으로 PV/UV/시작/완료 집계가 기대값과
+정확히 일치함을 확인, ②`data/analytics.json`에 임의 과거 데이터를 미리 심어둔 뒤 새 프로세스에서
+`readSnapshot()`을 호출해 디스크 데이터(과거)와 메모리 버퍼(신규, 아직 미플러시)가 정확히 병합되어
+반환됨을 확인(서로 다른 인스턴스/재시작 시나리오 재현). **알아둘 것**: 기존 Supabase 대시보드가 보여주던
+8/26~9/3 사이 누적 방문/플레이 수치는 이번 전환으로 화면에서 사라짐(과거 데이터를 새 로컬 파일로
+마이그레이션하는 작업은 요청되지 않아 진행하지 않음 — DB의 원본 행 자체는 삭제하지 않았으니 필요하면
+후속 세션에서 백필 가능). **커밋/푸시**: 이 세션이 만들거나 수정한 파일만 스테이징 — 작업 트리에 이미
+있던 다른 세션들의 무관한 미완성 변경(`PatchNoteButton.tsx`/`PatchNoteModal.tsx`/`patchNotes.ts` 등,
+`.claude/`, `boardGameRule/` 신규 이미지·폴더)은 건드리지 않고 그대로 남겨둠. 이 세션 시작 시점에 `main`
+브랜치였으므로(harness 정책상 default 브랜치엔 직접 커밋하지 않고 먼저 브랜치 분기) `feat/local-analytics`
+브랜치를 새로 만들어 그 위에서 커밋(`feat(analytics): implement file-based daily/monthly site visits and
+game play statistics without external services`) → 해당 브랜치를 `origin`에 푸시. **`main`으로 병합하거나
+Vercel 배포하는 것은 이번 요청(커밋&푸시)의 범위 밖이라 진행하지 않음** — 병합/배포는 사용자 확인 후 후속
+조치.)_
+
+_이전 갱신: 2026-09-03 (**코요테(Coyote) "?" 카드 치환 애니메이션 구현 세션 — 요청서는 ①"코요테!" 외침 시
 이펙트만 재생되고 라운드 종료(공개/판정)로 이어지지 않은 채 다음 턴으로 넘어가는 "턴 스킵 버그" 긴급
 픽스와 ②"?" 카드 오픈 시 덱에서 실제 카드가 날아와 3D로 치환되는 연출 신규 구현 둘 다 요청. `engine.ts`
 조사 결과 `callCoyote`→`resolveCoyoteCall`은 애초부터 턴 순환을 거치지 않고 phase를 즉시

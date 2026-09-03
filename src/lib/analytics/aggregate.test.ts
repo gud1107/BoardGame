@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { buildGameRanking, buildMonthlyTrend, momChangePct, monthKey, recentMonthKeys } from "./aggregate";
+import {
+  buildDailyTrend,
+  buildGameRanking,
+  buildMonthlyTrend,
+  dayKey,
+  momChangePct,
+  monthKey,
+  recentDayKeys,
+  recentMonthKeys,
+} from "./aggregate";
 
 describe("monthKey", () => {
   it("formats as YYYY-MM using UTC", () => {
@@ -17,6 +26,24 @@ describe("recentMonthKeys", () => {
   it("crosses a year boundary correctly", () => {
     const from = new Date(Date.UTC(2026, 1, 1)); // 2026-02
     expect(recentMonthKeys(4, from)).toEqual(["2025-11", "2025-12", "2026-01", "2026-02"]);
+  });
+});
+
+describe("dayKey", () => {
+  it("formats as YYYY-MM-DD using UTC", () => {
+    expect(dayKey(new Date(Date.UTC(2026, 8, 3)))).toBe("2026-09-03");
+  });
+});
+
+describe("recentDayKeys", () => {
+  it("returns the last N days ascending, ending at `from`'s day", () => {
+    const from = new Date(Date.UTC(2026, 8, 3)); // 2026-09-03
+    expect(recentDayKeys(3, from)).toEqual(["2026-09-01", "2026-09-02", "2026-09-03"]);
+  });
+
+  it("crosses a month boundary correctly", () => {
+    const from = new Date(Date.UTC(2026, 8, 1)); // 2026-09-01
+    expect(recentDayKeys(3, from)).toEqual(["2026-08-30", "2026-08-31", "2026-09-01"]);
   });
 });
 
@@ -58,6 +85,27 @@ describe("buildMonthlyTrend", () => {
 
   it("returns an empty array for an empty month list", () => {
     expect(buildMonthlyTrend([], [], [])).toEqual([]);
+  });
+});
+
+describe("buildDailyTrend", () => {
+  it("merges visit + play rows per day and fills gaps with zeros", () => {
+    const days = ["2026-09-01", "2026-09-02", "2026-09-03"];
+    const visits = [
+      { date: "2026-09-01", totalVisits: 10, uniqueVisitors: 4 },
+      { date: "2026-09-03", totalVisits: 15, uniqueVisitors: 6 },
+    ];
+    const plays = [{ date: "2026-09-02", totalPlays: 2 }];
+
+    expect(buildDailyTrend(visits, plays, days)).toEqual([
+      { date: "2026-09-01", totalVisits: 10, uniqueVisitors: 4, totalPlays: 0 },
+      { date: "2026-09-02", totalVisits: 0, uniqueVisitors: 0, totalPlays: 2 },
+      { date: "2026-09-03", totalVisits: 15, uniqueVisitors: 6, totalPlays: 0 },
+    ]);
+  });
+
+  it("returns an empty array for an empty day list", () => {
+    expect(buildDailyTrend([], [], [])).toEqual([]);
   });
 });
 

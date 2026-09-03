@@ -1,42 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/supabase/adminGuard";
-import { getServiceSupabase } from "@/lib/supabase/serviceClient";
-import { buildMonthlyTrend, monthKey, recentMonthKeys } from "@/lib/analytics/aggregate";
+import { buildMonthlyTrend, recentMonthKeys } from "@/lib/analytics/aggregate";
+import { readSnapshot } from "@/lib/analytics/localStore";
 import type { MonthlyPlayRow, MonthlyVisitRow } from "@/lib/analytics/types";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /** Monthly visit + play trend for the dashboard's chart. `?months=6..12` (default 6). */
 export async function GET(request: NextRequest) {
   const admin = await requireAdmin();
   if (!admin.ok) return NextResponse.json({ error: "forbidden" }, { status: admin.status });
 
-  const service = getServiceSupabase();
-  if (!service) return NextResponse.json({ error: "not configured" }, { status: 503 });
-
   const requested = Number(request.nextUrl.searchParams.get("months") ?? 6);
   const months = Math.min(12, Math.max(6, Number.isFinite(requested) ? Math.trunc(requested) : 6));
   const monthKeys = recentMonthKeys(months);
-  const earliestMonthStart = new Date(`${monthKeys[0]}-01T00:00:00.000Z`);
+  const monthSet = new Set(monthKeys);
 
-  const [{ data: visitData }, { data: playData }] = await Promise.all([
-    service.from("monthly_visit_stats").select("month, total_visits, unique_visitors").in("month", monthKeys),
-    service.from("game_play_log").select("started_at").gte("started_at", earliestMonthStart.toISOString()),
-  ]);
+  const snapshot = await readSnapshot();
 
-  const visits: MonthlyVisitRow[] = (visitData ?? []).map((r) => ({
-    month: r.month as string,
-    totalVisits: r.total_visits as number,
-    uniqueVisitors: r.unique_visitors as number,
+  const visitByMonth = new Map<string, { pv: number; uv: Set<string> }>();
+  for (const [day, v] of Object.entries(snapshot.visits)) {
+    const month = day.slice(0, 7);
+    if (!monthSet.has(month)) continue;
+    const cur = visitByMonth.get(month) ?? { pv: 0, uv: new Set<string>() };
+    cur.pv += v.pv;
+    for (const id of v.uv) cur.uv.add(id);
+    visitByMonth.set(month, cur);
+  }
+  const visits: MonthlyVisitRow[] = [...visitByMonth.entries()].map(([month, v]) => ({
+    month,
+    totalVisits: v.pv,
+    uniqueVisitors: v.uv.size,
   }));
 
-  // game_play_log has no monthly rollup table (unlike visits) — the
-  // expected row count at this project's scale makes grouping client-side
-  // simpler than a dedicated Postgres aggregate function.
-  const playCountByMonth = new Map<string, number>();
-  for (const row of playData ?? []) {
-    const month = monthKey(new Date(row.started_at as string));
-    playCountByMonth.set(month, (playCountByMonth.get(month) ?? 0) + 1);
+  const playByMonth = new Map<string, number>();
+  for (const [day, byGame] of Object.entries(snapshot.games)) {
+    const month = day.slice(0, 7);
+    if (!monthSet.has(month)) continue;
+    const dayTotal = Object.values(byGame).reduce((sum, s) => sum + s.starts, 0);
+    playByMonth.set(month, (playByMonth.get(month) ?? 0) + dayTotal);
   }
-  const plays: MonthlyPlayRow[] = [...playCountByMonth.entries()].map(([month, totalPlays]) => ({ month, totalPlays }));
+  const plays: MonthlyPlayRow[] = [...playByMonth.entries()].map(([month, totalPlays]) => ({ month, totalPlays }));
 
   return NextResponse.json({ trend: buildMonthlyTrend(visits, plays, monthKeys) });
 }

@@ -5,16 +5,35 @@
  * in aggregation logic.
  */
 
-export type DeviceType = "desktop" | "mobile" | "tablet" | "unknown";
+/** One day's aggregated visit counts. */
+export interface DailyVisitRow {
+  date: string; // 'YYYY-MM-DD'
+  totalVisits: number;
+  uniqueVisitors: number;
+}
 
-/** One row from `monthly_visit_stats`. */
+/** One day's aggregated game-start count (across all games). */
+export interface DailyPlayRow {
+  date: string;
+  totalPlays: number;
+}
+
+/** One point on the admin dashboard's daily trend table. */
+export interface DailyTrendPoint {
+  date: string;
+  totalVisits: number;
+  uniqueVisitors: number;
+  totalPlays: number;
+}
+
+/** One month's aggregated visit counts. */
 export interface MonthlyVisitRow {
   month: string; // 'YYYY-MM'
   totalVisits: number;
   uniqueVisitors: number;
 }
 
-/** One `game_play_log` row grouped by month (`to_char(started_at, 'YYYY-MM')`). */
+/** One month's aggregated game-start count (across all games). */
 export interface MonthlyPlayRow {
   month: string;
   totalPlays: number;

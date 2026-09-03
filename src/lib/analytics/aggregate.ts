@@ -1,4 +1,13 @@
-import type { GamePlayCountRow, GameRankingRow, MonthlyPlayRow, MonthlyTrendPoint, MonthlyVisitRow } from "./types";
+import type {
+  DailyPlayRow,
+  DailyTrendPoint,
+  DailyVisitRow,
+  GamePlayCountRow,
+  GameRankingRow,
+  MonthlyPlayRow,
+  MonthlyTrendPoint,
+  MonthlyVisitRow,
+} from "./types";
 
 /** `'YYYY-MM'` for the given date (UTC — matches Postgres `to_char(..., 'YYYY-MM')` on Supabase's UTC-clock server). */
 export function monthKey(date: Date): string {
@@ -12,6 +21,20 @@ export function recentMonthKeys(count: number, from: Date = new Date()): string[
     out.push(monthKey(new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() - i, 1))));
   }
   return out;
+}
+
+/** Ascending list of the `count` most recent day keys ('YYYY-MM-DD', UTC), ending at `from`'s day. */
+export function recentDayKeys(count: number, from: Date = new Date()): string[] {
+  const out: string[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    out.push(dayKey(new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate() - i))));
+  }
+  return out;
+}
+
+/** 'YYYY-MM-DD' for the given date (UTC). */
+export function dayKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
 /** Month-over-month % change. `null` when there's nothing meaningful to compare against (previous was 0 but current isn't). */
@@ -39,6 +62,19 @@ export function buildMonthlyTrend(visits: MonthlyVisitRow[], plays: MonthlyPlayR
     previousVisits = totalVisits;
     return { month, totalVisits, uniqueVisitors, totalPlays, visitMomChangePct };
   });
+}
+
+/** Merges daily visit + play rows into one ordered series, filling in zero-rows for any day in `days` that has no data yet (e.g. today, still in progress). */
+export function buildDailyTrend(visits: DailyVisitRow[], plays: DailyPlayRow[], days: string[]): DailyTrendPoint[] {
+  const visitByDay = new Map(visits.map((v) => [v.date, v]));
+  const playsByDay = new Map(plays.map((p) => [p.date, p.totalPlays]));
+
+  return days.map((date) => ({
+    date,
+    totalVisits: visitByDay.get(date)?.totalVisits ?? 0,
+    uniqueVisitors: visitByDay.get(date)?.uniqueVisitors ?? 0,
+    totalPlays: playsByDay.get(date) ?? 0,
+  }));
 }
 
 /** Sorts by total plays descending, annotates rank + share%, and resolves each game's display name. */

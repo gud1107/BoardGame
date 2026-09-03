@@ -20,6 +20,9 @@
 # production
 /build
 
+# local analytics store (src/lib/analytics/localStore.ts) — runtime data, not source
+/data
+
 # misc
 .DS_Store
 *.pem
