@@ -58,7 +58,12 @@ _최종 갱신: 2026-09-03 (**코요테(Coyote) 탈락자 해골(💀) 아이콘
 컴포넌트, 룰북 이미지·폴더 다수, `.claude/`, `저작권, 상표권.md`, `docs/visual-verification.md`,
 `orca충돌및확인.md` 등)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지
 `feat(coyote): replace eliminated player icon with skull and add dramatic death animation`
-(`__COMMIT_HASH__`) → `git push origin main` 완료 예정.)_
+(`0d9ba3a`) → `git push origin main` 완료(`6d9f1e9..0d9ba3a`, fast-forward). 이어서
+`npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(Turbopack, 56초),
+`target: "production"`/`readyState: READY`(`dpl_CBepbJ1sewVv3buioTuBa2KiH58h`), 프로덕션 도메인
+`board-game-tau-navy.vercel.app`에 별칭 완료. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로
+당시 작업 트리에 남아 있던 다른 세션들의 미커밋 변경도 함께 반영된 상태로 배포됨. `curl`로 `/`·
+`/games/coyote` 둘 다 200 직접 확인함.)_
 
 _이전 갱신: 2026-09-03 (**대기실 AI 봇 "일괄 채우기"(레벨 선택 후 원클릭으로 빈 슬롯 전부 채우기) 구현
 세션 — 요청서는 `server/roomManager.ts`/`src/server/socket/`(전통적 소켓 룸 매니저), 공통
