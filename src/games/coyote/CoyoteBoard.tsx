@@ -5,12 +5,16 @@ import Avatar from "@/components/common/Avatar";
 import RulebookModal from "./RulebookModal";
 import { CardFace, HeartPips } from "./CardArt";
 import {
+  buildFormulaTerms,
   CardFlipWrapper,
   CoyoteHowlBanner,
   detectCoyoteCallEvent,
-  QuestionCardFlyGhost,
+  FormulaBar,
+  MaxZeroSlashOverlay,
+  MAXZERO_SLASH_MS,
+  QuestionRevealPopup,
   questionCardSeat,
-  QUESTION_FLY_MS,
+  QUESTION_POPUP_MS,
   QUESTION_PULSE_CLASS,
   QUESTION_PULSE_MS,
   REVEAL_HOLD_MS,
@@ -87,47 +91,68 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   }
 
   // -------------------------------------------------------------------
-  // Reveal/showdown sequencing (2026-09-03) — "?" 카드 치환(펄스→비행→
-  // 3D플립) + 판정 패널 전체의 3초 최소 유지/스킵. `res` (state.lastResolution)
-  // identity가 바뀔 때만(=새 "코요테!" 호출마다) 재시작된다 — `howl` 위에서
-  // 쓰는 것과 동일한 "연속 스냅샷 diff" 기법.
+  // Reveal/showdown sequencing — 카드 공개 → "?" 카드 중앙 대형 팝업 →
+  // MAX→0 최대값 슬래시 제거 → 하단 계산식 바 등장, 판정 패널 전체의 3초
+  // 최소 유지/스킵. `res` (state.lastResolution) identity가 바뀔 때만(=새
+  // "코요테!" 호출마다) 재시작된다 — `howl` 위에서 쓰는 것과 동일한 "연속
+  // 스냅샷 diff" 기법.
   // -------------------------------------------------------------------
   const res = state.lastResolution;
   const qSeat = res ? questionCardSeat(res) : null;
+  const hasQuestionStage = res !== null && qSeat !== null;
+  const hasMaxZeroStage = res !== null && res.maxZeroTarget.card !== null;
 
   const [trackedRes, setTrackedRes] = useState(res);
-  const [questionStage, setQuestionStage] = useState<"pulse" | "flying" | "flipped">("pulse");
+  const [questionStage, setQuestionStage] = useState<"pulse" | "popup" | "done">("pulse");
+  const [maxZeroStage, setMaxZeroStage] = useState<"pending" | "slashing" | "done">("pending");
   const [revealSettled, setRevealSettled] = useState(false);
   const [countingActive, setCountingActive] = useState(false);
+  const [showFormula, setShowFormula] = useState(false);
   const [displayedTotal, setDisplayedTotal] = useState(0);
   const skippedRef = useRef(false);
   if (trackedRes !== res) {
     setTrackedRes(res);
-    setQuestionStage("pulse");
+    const noSpecialStages = !res || (!hasQuestionStage && !hasMaxZeroStage);
+    setQuestionStage(hasQuestionStage ? "pulse" : "done");
+    setMaxZeroStage(hasMaxZeroStage ? "pending" : "done");
     setRevealSettled(false);
     setDisplayedTotal(0);
-    setCountingActive(!res || questionCardSeat(res) === null); // no "?" card in this round -> count up right away
+    setCountingActive(noSpecialStages); // no special-card stage to play -> count up right away
+    setShowFormula(noSpecialStages);
   }
 
-  // Stage timers: pulse -> fly -> flipped (only when a "?" card is in play),
-  // plus the unified REVEAL_HOLD_MS minimum before "다음 라운드" unlocks.
-  // Also owns resetting `skippedRef` for the new resolution (a ref write
-  // belongs in an effect/handler, never directly in the render body).
+  // Stage timers: "?" pulse -> popup (only if a "?" card is in play), then
+  // MAX→0 slash (only if that special is in play), then the count-up +
+  // formula bar reveal — plus the unified REVEAL_HOLD_MS minimum before
+  // "다음 라운드" unlocks. Also owns resetting `skippedRef` for the new
+  // resolution (a ref write belongs in an effect/handler, never directly in
+  // the render body).
   useEffect(() => {
     skippedRef.current = false;
     if (!res || state.phase === "playing") return;
     const timers: number[] = [];
-    if (questionCardSeat(res) !== null) {
-      timers.push(window.setTimeout(() => setQuestionStage("flying"), QUESTION_PULSE_MS));
+    let t = 0;
+    if (hasQuestionStage) {
+      timers.push(window.setTimeout(() => setQuestionStage("popup"), QUESTION_PULSE_MS));
+      t = QUESTION_PULSE_MS + QUESTION_POPUP_MS;
+      timers.push(window.setTimeout(() => setQuestionStage("done"), t));
+    }
+    if (hasMaxZeroStage) {
+      const slashAt = t;
+      timers.push(window.setTimeout(() => setMaxZeroStage("slashing"), slashAt));
+      t = slashAt + MAXZERO_SLASH_MS;
+      timers.push(window.setTimeout(() => setMaxZeroStage("done"), t));
+    }
+    if (hasQuestionStage || hasMaxZeroStage) {
       timers.push(
         window.setTimeout(() => {
-          setQuestionStage("flipped");
           setCountingActive(true);
-        }, QUESTION_PULSE_MS + QUESTION_FLY_MS),
+          setShowFormula(true);
+        }, t),
       );
     }
     timers.push(window.setTimeout(() => setRevealSettled(true), REVEAL_HOLD_MS));
-    return () => timers.forEach((t) => window.clearTimeout(t));
+    return () => timers.forEach((id) => window.clearTimeout(id));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on `res` identity only, restarts exactly once per new "코요테!" call
   }, [res]);
 
@@ -156,24 +181,17 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     return () => cancelAnimationFrame(raf);
   }, [countingActive, res]);
 
-  /** "⏩ 스킵" — 애니메이션을 기다리지 않고 즉시 "?" 치환/합산 완료 화면으로 전환. */
+  /** "⏩ 스킵" — 애니메이션을 기다리지 않고 즉시 "?"/MAX 연출을 건너뛴 계산식+하이라이트 완료 화면으로 전환. */
   function handleSkipReveal() {
     if (revealSettled) return;
     skippedRef.current = true;
-    setQuestionStage("flipped");
+    setQuestionStage("done");
+    setMaxZeroStage("done");
     setCountingActive(true);
+    setShowFormula(true);
     if (res) setDisplayedTotal(res.finalTotal);
     setRevealSettled(true);
   }
-
-  const seatRefs = useRef(new Map<SeatIndex, HTMLElement>());
-  function setSeatRef(seat: SeatIndex) {
-    return (el: HTMLElement | null) => {
-      if (el) seatRefs.current.set(seat, el);
-      else seatRefs.current.delete(seat);
-    };
-  }
-  const tableCenterRef = useRef<HTMLDivElement | null>(null);
 
   const rulebookButton = (
     <button
@@ -249,26 +267,51 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   // 7-8인일 때만 카드/이름표를 한 단계 줄여 타원 위 겹침을 방지 — 레이아웃 방식(단일 타원 유지)은
   // 그대로 두고 크기/간격만 반응형으로 축소하는 쪽으로 제품 확정.
   const compact = state.playerCount > 6;
+  // The "?" seat's post-resolution card — needed so a MAX→0 target that the
+  // engine attributes to "no seat" (module doc assumption #4: the max only
+  // existed among "?"-drawn cards, never assigned to a seat in the original
+  // deal) still visually strikes the seat now displaying that same card.
+  const questionResolvedCard: Card | null = res && qSeat !== null ? (res.extraDrawnCards[res.extraDrawnCards.length - 1] ?? null) : null;
 
   function renderSeat(seat: SeatIndex, style: CSSProperties, isSelf: boolean) {
     const player = state.players.find((p) => p.seat === seat)!;
     const isActive = state.phase === "playing" && state.activeSeat === seat;
 
-    // "?" 치환 연출 대상 좌석이면 스테이지에 따라 표시 카드를 바꿔치기한다
-    // (엔진 state는 그대로 — 순수 표시 레이어 오버라이드). pulse/flying 단계는
-    // 원래 "?" 카드를 그대로 보여주고(스테이지 1 펄스 글로우만 덧씌움),
-    // flipped 단계부터 실제로 뽑힌 카드(res.extraDrawnCards[0])로 바뀐다.
+    // "?" 연출 대상 좌석이면 스테이지에 따라 표시 카드를 바꿔치기한다
+    // (엔진 state는 그대로 — 순수 표시 레이어 오버라이드). pulse/popup
+    // 단계는 원래 "?" 카드를 그대로 보여주고(popup 단계는 중앙 대형
+    // 팝업(QuestionRevealPopup)에 시선이 쏠리도록 옅게 dim), done 단계부터
+    // 좌석 카드 자체가 실제로 뽑힌 카드(res.extraDrawnCards의 마지막 카드)로
+    // 바뀐다.
     const isQuestionSeat = revealed && res && seat === qSeat;
-    const showReplacedCard = isQuestionSeat && questionStage === "flipped";
-    const card: Card | null = showReplacedCard ? (res!.extraDrawnCards[0] ?? cardBySeat.get(seat) ?? null) : (cardBySeat.get(seat) ?? null);
-    const pulseActive = isQuestionSeat && questionStage !== "flipped";
+    const showReplacedCard = isQuestionSeat && questionStage === "done";
+    const card: Card | null = showReplacedCard
+      ? (res!.extraDrawnCards[res!.extraDrawnCards.length - 1] ?? cardBySeat.get(seat) ?? null)
+      : (cardBySeat.get(seat) ?? null);
+    const pulseActive = isQuestionSeat && questionStage === "pulse";
+    const dimmedForPopup = isQuestionSeat && questionStage === "popup";
     const flipKey = showReplacedCard ? `${seat}-${state.roundNumber}-replaced` : `${seat}-${state.roundNumber}-${revealed}`;
 
+    // MAX→0 연출 대상 좌석이면 슬래시 오버레이 + 카드 자체를 저채도 처리.
+    // 대상 좌석이 없는 채로("?" 체인에서만 존재하던 카드) 무효화된 경우에도,
+    // 그 카드가 지금 "?" 좌석에 치환되어 놓여 있다면 그 좌석에 슬래시를 그린다.
+    const isMaxZeroSeat =
+      revealed &&
+      res &&
+      res.maxZeroTarget.card !== null &&
+      (res.maxZeroTarget.seat === seat || (seat === qSeat && res.maxZeroTarget.card === questionResolvedCard));
+    const maxZeroStruck = isMaxZeroSeat && maxZeroStage !== "pending";
+
     return (
-      <div key={seat} ref={setSeatRef(seat)} className="absolute flex flex-col items-center gap-1" style={style}>
+      <div key={seat} className="absolute flex flex-col items-center gap-1" style={style}>
         <CardFlipWrapper flipKey={flipKey} revealed={revealed}>
-          <div className={pulseActive ? QUESTION_PULSE_CLASS : undefined}>
+          <div
+            className={`relative transition-opacity duration-300 ${pulseActive ? QUESTION_PULSE_CLASS : ""} ${dimmedForPopup ? "opacity-20" : ""} ${
+              maxZeroStruck ? "opacity-60 grayscale transition-all duration-500" : ""
+            }`}
+          >
             <CardFace card={card} highlight={isActive} size={compact ? "xs" : "sm"} />
+            {maxZeroStruck && <MaxZeroSlashOverlay stage={maxZeroStage === "slashing" ? "slashing" : "done"} />}
           </div>
         </CardFlipWrapper>
         <div
@@ -303,12 +346,9 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
 
       {/* Round table: every seat's forehead card placed around an ellipse, viewer at the bottom. Widens for 7-8 players (see `compact`) so seatPosition's slightly larger radius has more physical room to spread cards apart. */}
       <div className={`relative z-10 mx-auto w-full ${compact ? "h-[320px] max-w-lg sm:h-[380px]" : "h-[280px] max-w-md sm:h-[320px]"}`}>
-        <div ref={tableCenterRef} className="absolute inset-[10%] rounded-[50%] border-4 border-orange-900/50 bg-gradient-to-b from-orange-950/50 to-black/70 shadow-inner" />
+        <div className="absolute inset-[10%] rounded-[50%] border-4 border-orange-900/50 bg-gradient-to-b from-orange-950/50 to-black/70 shadow-inner" />
         {renderSeat(viewerSeat, seatPosition(0, state.playerCount), true)}
         {otherSeats.map((seat, i) => renderSeat(seat, seatPosition(i + 1, state.playerCount), false))}
-        {questionStage === "flying" && qSeat !== null && (
-          <QuestionCardFlyGhost getFromEl={() => tableCenterRef.current} getToEl={() => seatRefs.current.get(qSeat) ?? null} />
-        )}
       </div>
 
       {/* Bidding phase */}
@@ -367,27 +407,32 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
         </div>
       )}
 
-      {/* Reveal / showdown — 보드게임허브 공통 규격: 카드 공개("?" 치환 포함)는
-          최소 REVEAL_HOLD_MS(3초)간 유지되며, 그동안 "다음 라운드" 대신
-          "⏩ 스킵" 버튼만 노출된다(클릭 시 handleSkipReveal이 즉시 최종
-          치환/합산 완료 화면으로 전환). */}
+      {/* Reveal / showdown — 보드게임허브 공통 규격: 카드 공개(→"?" 팝업 →MAX
+          슬래시→계산식 순서로 이어지는 연출 포함)는 최소 REVEAL_HOLD_MS(3초)간
+          유지되며, 그동안 "다음 라운드" 대신 "⏩ 스킵" 버튼만 노출된다(클릭 시
+          handleSkipReveal이 즉시 최종 계산식+하이라이트 완료 화면으로 전환). */}
       {state.phase === "reveal" && res && (
         <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-center text-xs">
           <p className="break-keep font-semibold text-rose-200">🐺 {names[res.callerSeat]}님이 &quot;코요테!&quot;를 외쳤습니다</p>
           <p className="break-keep text-white/70">
-            직전 선언: <b className="text-amber-300">{res.bid.number}</b> ({names[res.bid.seat]}) · 실제 총합: <b className="text-emerald-300">{displayedTotal}</b>
+            직전 선언: <b className="text-amber-300">{res.bid.number}</b> ({names[res.bid.seat]})
           </p>
-          {res.extraDrawnCards.length > 0 && (
-            <p className="break-keep text-white/60">🎁 ? 카드로 {res.extraDrawnCards.length}장 추가 공개됨</p>
-          )}
-          {res.maxZeroTarget.card && <p className="break-keep text-white/60">👧 최고값 카드({res.maxZeroTarget.card.value})가 0으로 무효화됨</p>}
-          {res.doubled && <p className="break-keep text-white/60">🪶 최종 합산이 2배 적용됨</p>}
           {res.nightCardHolderSeat !== null && <p className="break-keep text-white/60">🌙 {names[res.nightCardHolderSeat]}님이 다음 라운드의 선이 됩니다</p>}
           <p className="break-keep font-semibold text-white">
             {res.loserWasBidder
               ? `${names[res.bid.seat]}님이 오버 배팅으로 하트 1개를 잃었습니다.`
               : `${names[res.callerSeat]}님이 잘못된 코요테 외침으로 하트 1개를 잃었습니다.`}
           </p>
+          {showFormula && (
+            <FormulaBar
+              terms={buildFormulaTerms(res)}
+              doubled={res.doubled}
+              finalTotal={res.finalTotal}
+              revealedTotal={displayedTotal}
+              bidNumber={res.bid.number}
+              callerWon={res.loserWasBidder}
+            />
+          )}
           {revealSettled ? (
             <button
               onClick={() => onAction({ type: "continue", seed: randomSeed() })}
@@ -408,6 +453,9 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
       {howl && <CoyoteHowlBanner callerName={howl.callerName} onDone={() => setHowl(null)} durationMs={1300} />}
+      {questionStage === "popup" && res && qSeat !== null && (
+        <QuestionRevealPopup card={res.extraDrawnCards[res.extraDrawnCards.length - 1] ?? res.tableCards[qSeat]} />
+      )}
     </div>
   );
 }

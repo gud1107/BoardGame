@@ -932,11 +932,8 @@ body {
   }
 }
 
-/* 코요테's "?" 카드 치환 연출 (2026-09-03, CoyoteEffects.tsx / CoyoteBoard.tsx)
-   — 1단계 "시선 집중" 펄스(이 카드가 곧 치환된다는 신호), 2단계 "덱 드로우"
-   비행 궤적(QuestionCardFlyGhost). 3단계 3D 치환 플립은 새 키프레임 없이
-   위 coyote-card-flip을 그대로 재사용한다(치환된 카드도 결국 "카드 한 장이
-   뒤집히는 것"일 뿐이므로). */
+/* 코요테's "?" 카드 치환 연출 1단계 "시선 집중" 펄스(2026-09-03, CoyoteEffects.tsx
+   / CoyoteBoard.tsx) — 이 카드가 곧 중앙 팝업으로 치환된다는 신호. */
 @keyframes coyote-question-pulse {
   0%,
   100% {
@@ -957,24 +954,59 @@ body {
   border-radius: 0.5rem;
 }
 
-/* 비행 중인 "?" 유령 카드 자체의 회전/스케일 플라이트 — 위치(left/top)는
-   QuestionCardFlyGhost가 JS로 트랜지션시키고, 이 키프레임은 그 위에 얹히는
-   회전/스케일 플레어만 담당한다(dalmuti-exchange-arc와 동일 기법, 색상 없는
-   순수 지오메트리라 값만 코요테 톤으로 살짝 다르게). */
-@keyframes coyote-question-fly {
-  0% {
-    transform: translate(-50%, -50%) scale(0.55) rotate(-14deg);
-    opacity: 0;
+/* 코요테's "?" 카드 중앙 대형 임팩트 팝업 (같은 날 후속 세션,
+   CoyoteEffects.tsx / QuestionRevealPopup) — 보라색 미스터리 아우라와 함께
+   흔들리는 stage(shake), 이어서 3D로 뒤집히며 확대/플래시되는 stage(reveal). */
+@keyframes coyote-mystery-shake {
+  0%,
+  100% {
+    transform: rotate(0deg);
   }
   20% {
-    opacity: 1;
+    transform: rotate(-6deg);
+  }
+  40% {
+    transform: rotate(5deg);
   }
   60% {
-    transform: translate(-50%, -50%) scale(1.12) rotate(10deg);
+    transform: rotate(-4deg);
+  }
+  80% {
+    transform: rotate(2deg);
+  }
+}
+@keyframes coyote-mystery-reveal {
+  0% {
+    transform: scale(0.4) rotateY(180deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.15) rotateY(0deg);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1.22) rotateY(0deg);
+  }
+  100% {
+    transform: scale(1) rotateY(0deg);
+    opacity: 1;
+  }
+}
+
+/* 코요테's MAX→0 최대값 슬래시 제거 연출 (같은 날 후속 세션, CoyoteEffects.tsx
+   / MaxZeroSlashOverlay) — 필드에서 가장 높았던 숫자 카드 위로 붉은 사선이
+   그어지며 무력화됨을 보여준다. */
+@keyframes coyote-maxzero-slash {
+  0% {
+    transform: rotate(-40deg) scaleX(0);
+    opacity: 0;
+  }
+  40% {
+    transform: rotate(-40deg) scaleX(1.15);
     opacity: 1;
   }
   100% {
-    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    transform: rotate(-40deg) scaleX(1);
     opacity: 1;
   }
 }

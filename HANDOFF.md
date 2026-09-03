@@ -1,6 +1,48 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-03 (**코요테(Coyote) "?" 카드 치환 애니메이션 구현 세션 — 요청서는 ①"코요테!" 외침 시
+_최종 갱신: 2026-09-03 (**코요테(Coyote) "?" 카드 대형 임팩트 팝업 + MAX→0 슬래시 제거 + 하단 계산식 바
+구현 세션(직전 세션의 후속) — 요청서는 ①"?" 카드가 화면 중앙으로 팝업되며 흔들림 후 대형으로 확대/플래시
+공개되는 연출, ②MAX→0 카드가 필드 최고값 카드를 붉은 사선으로 타격/디졸브하는 연출, ③하단에 모든 카드의
+연산 과정을 수식으로 나열하고 "실제 총합 vs 외친 숫자"를 네온 하이라이트+승패 뱃지로 대조하는 계산식 바를
+요청. 요청서는 `RoundSummary.tsx`가 존재한다고 가정했으나 조사 결과 그런 파일은 없음(다른 여러 세션에서
+반복된 "요청 전제-실제 코드 불일치" 패턴과 동일) — 판정 화면 UI는 `CoyoteBoard.tsx`의
+`phase === "reveal"` 블록에 인라인으로, 연출 로직은 `CoyoteEffects.tsx`에 있어 그대로 확장. 요청서가 직접
+지목한 "MAX→0 카드가 여러 장이거나 동률일 때" 항목은 조사로 선제 해소: 36장 덱에 `MAX→0`은 정확히 1장뿐이라
+"여러 장" 케이스는 존재 불가능하고, 동률 처리는 이미 `resolveCoyoteCall`(engine.ts 모듈 doc 가정 #4)이
+좌석 인덱스가 낮은 쪽으로 확정해 `resolution.maxZeroTarget`에 담아주고 있어 새 연출은 그 결과만 그리면 됨
+(엔진 무변경). `AskUserQuestion` 3문항으로 확인: ①"?" 연출은 직전 세션에서 확정했던 "좌석 제자리
+플립(중앙 전용 영역 없음)"을 이번 요청의 중앙 대형 팝업으로 **완전히 대체**(구 `QuestionCardFlyGhost`
+제거) ②전체 시퀀스가 카드공개→"?"팝업→MAX슬래시→계산식 4단계로 늘어나도 `REVEAL_HOLD_MS`(3초) 값은
+그대로 두고 각 단계 길이만 압축 ③계산식 바의 특수카드 항은 "원래값 취소선+라벨" 표기(`20→0(MAX제거)`,
+`20(?)`, `0(밤)` 등). 구현: `CoyoteEffects.tsx`에 `QuestionRevealPopup`(중앙 고정 포탈, 보라 아우라
+shake→3D reveal→확대/플래시, `QUESTION_PULSE_MS`=400/`QUESTION_POPUP_MS`=900), `MaxZeroSlashOverlay`(좌석
+카드 위 인라인 오버레이 — 포탈 아님, 붉은 사선 `coyote-maxzero-slash` 0.45s, `MAXZERO_SLASH_MS`=650),
+`buildFormulaTerms`/`FormulaTermChip`/`FormulaBar`("?" 좌석은 원래의 0짜리 "?" 카드 대신 치환된 실제
+카드로 한 항 표시 — 물리 덱에 "?"가 1장뿐이라 체인이 안 생기므로 이 치환만으로 §3 계산 순서와 값이 정확히
+일치, `revealedTotal` prop은 카운트업 중인 표시값을 받아 큰 네온 숫자가 여전히 0→최종값으로 올라가는
+흐름을 유지하고 판정 뱃지는 항상 확정된 `res.loserWasBidder` 기준이라 무관하게 정확). 구 `QuestionCardFlyGhost`
++ `coyote-question-fly` 키프레임 삭제(더 이상 쓰이지 않음). `CoyoteBoard.tsx`: `questionStage`를
+`"pulse"|"flying"|"flipped"`에서 `"pulse"|"popup"|"done"`으로, 신규 `maxZeroStage`
+(`"pending"|"slashing"|"done"`)를 추가해 `res` identity가 바뀔 때마다 두 스테이지를 순차 타이머로
+오케스트레이션(hasQuestionStage/hasMaxZeroStage 각각 없으면 그 단계 자체를 건너뜀), 스킵 버튼은 두 스테이지
+모두 즉시 "done"으로 스냅. MAX→0 대상이 좌석에 안 붙어있고("?" 체인에서만 존재하던 카드) 그 카드가 지금
+"?" 좌석에 치환되어 있는 edge case까지 커버(`questionResolvedCard` 참조 비교로 그 좌석에도 슬래시를 그림).
+더 이상 안 쓰는 `seatRefs`/`tableCenterRef`(구 비행 궤적용 DOM 좌표 계산)도 함께 제거. `globals.css`에
+`coyote-mystery-shake`/`coyote-mystery-reveal`(팝업용)/`coyote-maxzero-slash`(슬래시용) 키프레임 추가.
+`engine.ts`/`Coyote.test.ts`는 무변경(계산 로직은 이미 정확했고 UI 연출만 확장). `npx tsc --noEmit`
+(0 에러)/`npx eslint`(변경 파일 0 에러)/`npx vitest run src/games/coyote`(56개 전체 통과) 검증. 캐시된
+Playwright Chromium으로 로컬 서버(4인 방, 호스트+봇3)에서 여러 라운드를 직접 플레이해 시각 확인: MAX→0
+카드가 있던 라운드에서 계산식 바(`+2 + MAX→0(MAX카드) + +15→0(MAX제거) = 2`)와 "실제 총합 vs 외친 숫자"
+네온 하이라이트, "🐺 코요테 성공!" 뱃지, 하울 배너가 420px 모바일 뷰포트에서 겹침/줄바꿈 깨짐 없이 정상
+렌더링됨을 스크린샷으로 확인. "?" 카드가 없었던 라운드의 계산식 바(`+5 + +3 + -5 + +10 = 13`, "🙅 코요테
+실패!")도 확인. "?" 카드는 물리 덱에 1장뿐이라(라운드마다 뽑힐 확률 인원수/36) 이번 세션의 랜덤 플레이
+12라운드 동안 자연히 뽑히지 않아 `QuestionRevealPopup` 자체의 실제 프레임은 못 잡았음 — 다만 이미 검증된
+`CoyoteHowlBanner`와 동일한 `createPortal`+fixed-inset 기법을 그대로 재사용하고 `cardLabel`/`cardEmoji`
+등도 이미 검증된 `CardArt.tsx` 헬퍼를 그대로 쓰므로 코드 검토 수준의 확신은 있음(후속 세션에서 실제로
+마주치면 재확인 권장). `코요테.md` §7을 7-1(팝업)/7-2(슬래시)/7-3(계산식바)로 재구성해 갱신, 공통 규격
+문단에 계산식 바의 가로 스크롤 컨테이너 처리 명시.)_
+
+_이전 갱신: 2026-09-03 (**코요테(Coyote) "?" 카드 치환 애니메이션 구현 세션 — 요청서는 ①"코요테!" 외침 시
 이펙트만 재생되고 라운드 종료(공개/판정)로 이어지지 않은 채 다음 턴으로 넘어가는 "턴 스킵 버그" 긴급
 픽스와 ②"?" 카드 오픈 시 덱에서 실제 카드가 날아와 3D로 치환되는 연출 신규 구현 둘 다 요청. `engine.ts`
 조사 결과 `callCoyote`→`resolveCoyoteCall`은 애초부터 턴 순환을 거치지 않고 phase를 즉시
