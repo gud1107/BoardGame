@@ -31,13 +31,16 @@ export function recordVisit(path: string): void {
  * `endGamePlay` later — this is the one analytics call that isn't fully
  * fire-and-forget. Returns `null` on any failure; callers must treat a null
  * playId as "this session won't be tracked" and carry on regardless.
+ * No longer takes a `playerCount` — the local file store only keeps
+ * per-game/per-day counters (see `src/lib/analytics/localStore.ts`), and
+ * the admin dashboard has never surfaced a player-count breakdown.
  */
-export async function startGamePlay(gameId: string, playerCount: number): Promise<string | null> {
+export async function startGamePlay(gameId: string): Promise<string | null> {
   try {
     const res = await fetch("/api/analytics/game-play", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "start", gameId, playerCount, deviceId: getDeviceId() }),
+      body: JSON.stringify({ action: "start", gameId }),
     });
     if (!res.ok) return null;
     const data = (await res.json().catch(() => null)) as { playId?: string } | null;
@@ -47,8 +50,13 @@ export async function startGamePlay(gameId: string, playerCount: number): Promis
   }
 }
 
-/** Records a game session end (completed or abandoned). No-op when `playId` is null (start was never tracked). */
-export function endGamePlay(playId: string | null, isCompleted: boolean): void {
+/**
+ * Records a game session end (completed or abandoned). No-op when `playId`
+ * is null (start was never tracked). `gameId` is required here (unlike the
+ * old Supabase version) because the local store has no per-session row to
+ * look it up from — see the comment in `api/analytics/game-play/route.ts`.
+ */
+export function endGamePlay(playId: string | null, isCompleted: boolean, gameId: string | null): void {
   if (typeof window === "undefined" || !playId) return;
-  beacon("/api/analytics/game-play", { action: "end", playId, isCompleted });
+  beacon("/api/analytics/game-play", { action: "end", playId, isCompleted, gameId: gameId ?? undefined });
 }

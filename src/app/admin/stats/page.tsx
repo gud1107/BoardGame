@@ -63,6 +63,7 @@ export default function AdminStatsPage() {
   const error = useAnalyticsAdminStore((s) => s.error);
   const summary = useAnalyticsAdminStore((s) => s.summary);
   const trend = useAnalyticsAdminStore((s) => s.trend);
+  const daily = useAnalyticsAdminStore((s) => s.daily);
   const games = useAnalyticsAdminStore((s) => s.games);
   const trendMonths = useAnalyticsAdminStore((s) => s.trendMonths);
   const init = useAnalyticsAdminStore((s) => s.init);
@@ -155,6 +156,36 @@ export default function AdminStatsPage() {
                 </ComposedChart>
               </ResponsiveContainer>
             </ChartCard>
+          </div>
+
+          <div className="mb-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+            <h2 className="mb-4 text-sm font-semibold text-white/80">일별 추이 (최근 14일)</h2>
+            {daily.length === 0 ? (
+              <p className="text-xs text-white/40">아직 기록된 방문/플레이가 없습니다.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[420px] text-left text-xs">
+                  <thead className="text-white/40">
+                    <tr>
+                      <th className="pb-2 pr-3">날짜</th>
+                      <th className="pb-2 pr-3">방문수</th>
+                      <th className="pb-2 pr-3">고유 방문자</th>
+                      <th className="pb-2 pr-3">플레이 수</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...daily].reverse().map((d) => (
+                      <tr key={d.date} className="border-t border-white/5 text-white/70">
+                        <td className="py-2 pr-3">{d.date}</td>
+                        <td className="py-2 pr-3">{formatNumber(d.totalVisits)}</td>
+                        <td className="py-2 pr-3">{formatNumber(d.uniqueVisitors)}</td>
+                        <td className="py-2 pr-3">{formatNumber(d.totalPlays)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
