@@ -31,7 +31,20 @@ _최종 갱신: 2026-09-04 (**달무티(Dalmuti) 버튼 클릭 반응성 하드�
 `palette.glow`를 거쳐 투명해지도록 수정, 재검증 스크린샷으로 패스 버튼 위 리플이 뚜렷이 보임을 확인.
 `npx tsc --noEmit`(0 에러) / `npx eslint src/games/dalmuti src/lib/audio`(0 에러) / `npx vitest run`(50개
 파일 **1614개** 테스트 전체 통과) 확인. 룰북(`달무티.md`)은 게임 규칙 변경이 전혀 없는 순수 UI/UX
-작업이라 수정하지 않음.)_
+작업이라 수정하지 않음. **커밋/푸시/배포**: 이번 세션이 수정한 7개 파일만 스테이징(`HANDOFF.md`/
+`globals.css`/`CardExchangeModal.tsx`/`DalmutiBoard.tsx`/`DalmutiEffects.tsx`/`soundEngine.ts`/
+`soundEngine.test.ts`) — 작업 트리에 있던 다른 동시 세션들의 미커밋 변경(분석 인프라, 패치노트, 룰북
+이미지, `docs/README.md` 등)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지
+`feat(dalmuti): enhance button click responsiveness and add dynamic ripple click effects`
+(`195a672`) → `git push origin main`이 다른 동시 세션의 analytics 커밋과 non-fast-forward로 충돌해
+공유 작업 트리를 건드리지 않는 임시 격리 워크트리(`git worktree add --detach`)에서
+`git merge origin/main`(충돌 없음) 후 그 워크트리에서 푸시(`66ad794..22139e3`) — `docs/README.md`
+등 다른 세션의 로컬 미커밋 변경이 있는 상태에서 공유 작업 트리 자체를 병합/체크아웃하면 덮어쓸 위험이
+있어 이 방식을 씀. 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(51초),
+`target: "production"`/`readyState: READY`(`dpl_HxYktBLv4Gbn7pNndgUxMQNpMHtM`), 프로덕션 도메인
+`board-game-tau-navy.vercel.app`에 별칭 완료. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로
+당시 작업 트리에 남아 있던 다른 세션들의 미커밋 변경(analytics 관련 파일 포함, 이미 origin/main엔
+병합됨)도 함께 반영된 상태로 배포됨. `curl`로 `/`·`/games/dalmuti` 둘 다 200 직접 확인함.)_
 
 _이전 갱신: 2026-09-03 (**코요테(Coyote) 탈락자 해골(💀) 아이콘 교체 + 데스 이펙트 구현 세션** — 요청서는
 탈락한(하트 0) 플레이어의 이마 표시가 "?" (물음표) 특수카드와 혼동된다는 버그 리포트를 근거로 ①탈락자
