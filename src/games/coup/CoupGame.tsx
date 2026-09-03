@@ -24,7 +24,7 @@ import {
 import CoupBoard from "./CoupBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
-import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
+import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import { v4 as uuid } from "uuid";
 import type { ChatMessage, SendResult } from "@/lib/chat/types";
@@ -441,6 +441,32 @@ export default function CoupGame({ onComplete }: PlayableGameProps) {
     [isHost, occupants],
   );
 
+  // Host-only: fill every currently-empty seat with a bot of one chosen
+  // level in a single click (same "bot-roster" broadcast as `addBotAtSeat`,
+  // just with every empty seat appended at once instead of one).
+  const fillEmptySeatsWithBots = useCallback(
+    (level: BotLevel) => {
+      if (!isHost) return;
+      const taken = new Set<SeatIndex>([...occupants.map((o) => o.seat), ...botSeatsRef.current]);
+      const emptySeats = Array.from({ length: knownTargetPlayerCount }, (_, seat) => seat as SeatIndex).filter(
+        (seat) => !taken.has(seat),
+      );
+      if (emptySeats.length === 0) return;
+      const nextSeats = [...botSeatsRef.current, ...emptySeats];
+      const nextLevels = [...botLevelsRef.current, ...emptySeats.map(() => level)];
+      botSeatsRef.current = nextSeats;
+      setBotSeats(nextSeats);
+      botLevelsRef.current = nextLevels;
+      setBotLevels(nextLevels);
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "bot-roster",
+        payload: { botSeats: nextSeats, botLevels: nextLevels },
+      });
+    },
+    [isHost, occupants, knownTargetPlayerCount],
+  );
+
   const removeBotAtSeat = useCallback(
     (seat: SeatIndex) => {
       if (!isHost) return;
@@ -756,6 +782,12 @@ export default function CoupGame({ onComplete }: PlayableGameProps) {
             <p className="text-xs text-white/50">
               {occupants.length + botSeats.length} / {knownTargetPlayerCount}명 참여 중
             </p>
+            {isHost && occupants.length + botSeats.length < knownTargetPlayerCount && (
+              <FillEmptySeatsButton
+                emptyCount={knownTargetPlayerCount - occupants.length - botSeats.length}
+                onFill={fillEmptySeatsWithBots}
+              />
+            )}
             <div className="mt-2 flex flex-col gap-1.5">
               {Array.from({ length: knownTargetPlayerCount }, (_, seat) => {
                 const occ = occupants.find((o) => o.seat === seat);

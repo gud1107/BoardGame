@@ -25,7 +25,7 @@ import {
 import NoThanksBoard from "./NoThanksBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
-import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
+import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import {
@@ -652,6 +652,32 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
     [isHost, occupants],
   );
 
+  // Host-only: fill every currently-empty seat with a bot of one chosen
+  // level in a single click (same "bot-roster" broadcast as `addBotAtSeat`,
+  // just with every empty seat appended at once instead of one).
+  const fillEmptySeatsWithBots = useCallback(
+    (level: BotLevel) => {
+      if (!isHost) return;
+      const taken = new Set<SeatIndex>([...occupants.map((o) => o.seat), ...botSeatsRef.current]);
+      const emptySeats = Array.from({ length: knownTargetPlayerCount }, (_, seat) => seat as SeatIndex).filter(
+        (seat) => !taken.has(seat),
+      );
+      if (emptySeats.length === 0) return;
+      const nextSeats = [...botSeatsRef.current, ...emptySeats];
+      const nextLevels = [...botLevelsRef.current, ...emptySeats.map(() => level)];
+      botSeatsRef.current = nextSeats;
+      setBotSeats(nextSeats);
+      botLevelsRef.current = nextLevels;
+      setBotLevels(nextLevels);
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "bot-roster",
+        payload: { botSeats: nextSeats, botLevels: nextLevels },
+      });
+    },
+    [isHost, occupants, knownTargetPlayerCount],
+  );
+
   const removeBotAtSeat = useCallback(
     (seat: SeatIndex) => {
       if (!isHost) return;
@@ -1145,6 +1171,12 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
             <p className="text-xs text-white/50">
               {occupants.length + botSeats.length} / {knownTargetPlayerCount}명 참여 중
             </p>
+            {isHost && occupants.length + botSeats.length < knownTargetPlayerCount && (
+              <FillEmptySeatsButton
+                emptyCount={knownTargetPlayerCount - occupants.length - botSeats.length}
+                onFill={fillEmptySeatsWithBots}
+              />
+            )}
             <p className="text-xs text-white/40">
               {knownChipVisibility === "public" ? "👁️ 공개 모드 (모두의 칩이 보임)" : "🔒 비밀 모드 (내 칩만 나에게 보임)"}
             </p>

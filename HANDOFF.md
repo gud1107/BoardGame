@@ -1,6 +1,44 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-03 (**코요테(Coyote) "?" 카드 대형 임팩트 팝업 + MAX→0 슬래시 제거 + 하단 계산식 바
+_최종 갱신: 2026-09-03 (**대기실 AI 봇 "일괄 채우기"(레벨 선택 후 원클릭으로 빈 슬롯 전부 채우기) 구현
+세션 — 요청서는 `server/roomManager.ts`/`src/server/socket/`(전통적 소켓 룸 매니저), 공통
+`CreateRoomModal.tsx`/`WaitingRoom.tsx`/`PlayerSlot.tsx`, `RoomState`+`FILL_BOTS_BATCH` 소켓 액션을
+전제로 요청했으나 조사 결과 이 프로젝트엔 그런 서버/공통 컴포넌트가 전혀 없음(다른 여러 세션에서
+반복된 "요청 전제-실제 코드 불일치" 패턴과 동일 유형) — 전통적 소켓 서버 자체가 없고, 27개 온라인
+대전 게임이 각자 `<Game>Game.tsx` 안에 호스트-로컬 상태 + Supabase Realtime broadcast(락스텝)로
+대기실을 구현하며, 이미 `src/games/shared/bot/botDifficulty.ts`(Lv.1~10 커브)와
+`src/components/lobby/BotSeatControls.tsx`(`AddBotButton`의 `onAddWithLevel`로 레벨 드롭박스 포함
+1명씩 추가)로 개별 슬롯 봇 추가가 구현되어 있었음(ARCHITECTURE.md §7/§7.5). `AskUserQuestion` 4문항으로
+확인: ①레벨 시스템 있는 26개 게임(지렁이 제외) 전체에 적용 ②새 서버 인프라를 만들지 않고 기존
+BotSeatControls.tsx+botDifficulty.ts 패턴을 그대로 확장 ③일괄 채우기는 빈 슬롯만 채우고 이미 배치된
+봇의 레벨은 건드리지 않음 ④봇 뱃지 표기는 기존 `[Lv.N] AI 봇 N` 형식 유지(요청서의 괄호 형식으로
+바꾸지 않음). 구현 중 추가로 발견: 26개 중 7개(로스트 시티/러브 윈즈 올/말달리자/오블리비언의 광산/
+언어의 조각/쇼미더코인/하나미코지)는 전부 고정 2인 대전이라 "role"이 `p1`/`p2` 단 둘뿐이라 애초에
+빈 슬롯이 동시에 2개 이상 될 수 없음 — 이런 게임에 "일괄 채우기"를 추가하면 기존 단일 `AddBotButton`과
+기능이 완전히 동일한 중복 버튼일 뿐이라 **의도적으로 제외**(재질문 없이 판단, 이 문서에 근거 기록).
+따라서 실제 대상은 좌석 수가 가변인 19개 게임: 아발론/뱅/센추리/쿠/코요테/달무티/운명전쟁39/오이
+다섯개/포세일/그리드포커/진실의 고개/라스베가스/러브레터/노땡스/페루도/랫어탯캣/스플렌더/소환사의
+협곡/틀린그림찾기. 구현: `BotSeatControls.tsx`에 `FillEmptySeatsButton`(레벨 Lv.1~10 select + "🤖 일괄
+채우기 (N명)" 버튼, `emptyCount<=0`이면 렌더 안 함) 신규 export. 19개 게임 각각에 `fillEmptySeatsWithBots
+(level)` 콜백을 기존 `addBotAtSeat` 바로 뒤에 추가(같은 `botSeatsRef`/`botLevelsRef` 갱신 + 같은
+`"bot-roster"` 브로드캐스트 이벤트 재사용 — 수신측은 이미 배열 전체를 그대로 받아 세팅하므로 프로토콜
+변경 없음) — `knownTargetPlayerCount`만큼의 좌석 중 사람도 봇도 아닌 좌석을 모두 계산해 선택한 레벨로
+한 번에 추가. 대기실 참가자 수(`N/M명 참여 중`) 바로 아래에 호스트 전용으로 버튼을 배치. 진실의 고개는
+이 프로젝트에서 유일하게 좌석 타입 이름이 `SeatIndex`가 아니라 `Seat`라서(engine.ts export 이름 차이)
+최초 삽입 시 `tsc` 에러로 걸러졌고 바로 수정. 검증: `npx tsc --noEmit`(0 에러) / `npx eslint .`(0 에러) /
+`npx vitest run`(50개 파일 1605개 테스트 전체 통과, 새 테스트는 추가하지 않음 — ARCHITECTURE.md §7.4가
+로비 버튼 UI를 원래도 "자동 테스트 밖" 사각지대로 명시) / `npm run build`(Turbopack 프로덕션 빌드 성공,
+26페이지 정상 생성). 캐시된 Playwright Chromium(scratchpad에 `playwright-core`만 설치, 브라우저 바이너리는
+`C:\Users\choi\AppData\Local\ms-playwright\chromium-1234\chrome-win64\chrome.exe` 재사용 — 이번 세션
+확인 결과 하위 폴더명이 `chrome-win`이 아니라 `chrome-win64`)로 코요테 4인 방 실제 육안 확인: ①대기실에
+"1/4명 참여 중" 아래 "Lv.5 ▾ 🤖 일괄 채우기 (3명)" 버튼이 겹침/깨짐 없이 렌더링 ②클릭 시 실제로 3개
+빈 좌석이 전부 "[Lv.5] AI 봇 1/2/3"로 채워지고 4/4 도달로 게임이 자동 시작되어 봇들이 실제로 턴을 진행함
+(스크린샷 2장, 클릭 전/후). **커밋/푸시**: 이번 세션이 수정한 파일만 스테이징(`BotSeatControls.tsx` +
+19개 `<Game>Game.tsx` + `HANDOFF.md`) — 작업 트리에 있던 다른 세션들의 미커밋 변경(패치노트 컴포넌트,
+룰북 이미지 등)은 이번 작업과 무관하므로 건드리지 않음. 커밋 메시지 `feat(room): add batch ai bot
+generation with selectable level in create room and waiting room`.)_
+
+_이전 갱신: 2026-09-03 (**코요테(Coyote) "?" 카드 대형 임팩트 팝업 + MAX→0 슬래시 제거 + 하단 계산식 바
 구현 세션(직전 세션의 후속) — 요청서는 ①"?" 카드가 화면 중앙으로 팝업되며 흔들림 후 대형으로 확대/플래시
 공개되는 연출, ②MAX→0 카드가 필드 최고값 카드를 붉은 사선으로 타격/디졸브하는 연출, ③하단에 모든 카드의
 연산 과정을 수식으로 나열하고 "실제 총합 vs 외친 숫자"를 네온 하이라이트+승패 뱃지로 대조하는 계산식 바를

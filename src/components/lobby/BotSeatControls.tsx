@@ -103,3 +103,53 @@ export function RemoveBotButton({ onClick }: { onClick: () => void }) {
     </button>
   );
 }
+
+/**
+ * Host-only "일괄 채우기" (batch fill) control: picks a Level 1–10 and, on
+ * click, fills every currently-empty seat at once via `onFill(level)`. Sits
+ * next to the per-seat `AddBotButton`s (§7.3) rather than replacing them —
+ * it's a shortcut for "fill the rest of the room", not a new roster model.
+ * Only ever offered when at least one seat is empty (`emptyCount > 0`);
+ * callers gate this by `isHost` themselves, same as `AddBotButton`. Existing
+ * bot seats and their levels are left untouched — this only ever claims
+ * seats that are neither a connected human nor an already-placed bot.
+ */
+export function FillEmptySeatsButton({
+  onFill,
+  emptyCount,
+  label = "일괄 채우기",
+  defaultLevel = DEFAULT_BOT_LEVEL,
+}: {
+  onFill: (level: BotLevel) => void;
+  emptyCount: number;
+  label?: string;
+  defaultLevel?: BotLevel;
+}) {
+  const [level, setLevel] = useState<BotLevel>(defaultLevel);
+
+  if (emptyCount <= 0) return null;
+
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-sky-400/30 bg-sky-400/5 px-2 py-1">
+      <select
+        value={level}
+        onChange={(e) => setLevel(Number(e.target.value) as BotLevel)}
+        aria-label="일괄 채우기 난이도"
+        className="rounded-full border border-white/15 bg-black/30 px-1.5 py-1 text-[11px] text-white/70"
+      >
+        {BOT_LEVELS.map((lv) => (
+          <option key={lv} value={lv}>
+            Lv.{lv}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={() => onFill(level)}
+        className="rounded-full border border-dashed border-sky-400/40 px-2.5 py-1 text-[11px] font-semibold text-sky-200 transition hover:border-sky-400/70 hover:bg-sky-400/10"
+      >
+        {BOT_BADGE} {label} ({emptyCount}명)
+      </button>
+    </span>
+  );
+}
