@@ -35,6 +35,7 @@
 | [ai.md](./ai.md) | AI/LLM 연동 현황(없음, 확인 완료) + 오인하기 쉬운 로직 경계 정리 |
 | [deployment.md](./deployment.md) | Vercel 배포 절차, 환경변수, 빌드/검증 파이프라인, Supabase 스키마 배포, PWA 해당 없음 확인 |
 | [features.md](./features.md) | 대시보드/카탈로그, 내기 정산 시스템, 플레이어 식별, 게임별 룰 해석 판단 기록 |
+| [analytics-local-store-limitations.md](./analytics-local-store-limitations.md) | 방문/게임 통계를 로컬 파일(`localStore.ts`)로 저장하기로 한 결정이 Vercel 프로덕션에서 구체적으로 어떤 충돌 시나리오·불편함을 낳는지 정리 |
 
 루트 문서(이 폴더 밖):
 
