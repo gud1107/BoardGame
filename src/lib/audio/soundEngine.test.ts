@@ -219,3 +219,54 @@ describe("soundEngine SFX gate — 코요테 탈락 데스 이펙트 SFX", () =>
     expect(gateSpy.mock.results.every((r) => r.value === false)).toBe(true);
   });
 });
+
+/**
+ * 2026-09-04 세션 — 달무티 게임 액션 버튼(카드 제출/패스/세금 반환/혁명/평민 교환 등)
+ * 클릭 즉시 재생되는 신규 `playUiClickTick`. 위 블록들과 동일한 "게이트 통과/즉시
+ * 반복 차단/뮤트 시 무음" 커버리지 — 이 SFX는 1개뿐이라 "서로 다른 gate 키" 테스트는
+ * 해당 없음.
+ */
+describe("soundEngine SFX gate — 달무티 버튼 클릭 틱", () => {
+  const engine = getSoundEngine();
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"] });
+    useAudioSettingsStore.getState().setMasterMuted(false);
+    useAudioSettingsStore.getState().setSfxMuted(false);
+    (engine as unknown as { lastPlayedAt: Map<string, number> }).lastPlayedAt = new Map();
+    (engine as unknown as { activeChannels: number }).activeChannels = 0;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("plays once when off cooldown and blocks an immediate repeat", () => {
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    engine.playUiClickTick();
+    engine.playUiClickTick();
+
+    expect(gateSpy.mock.results.map((r) => r.value)).toEqual([true, false]);
+  });
+
+  it("allows a fresh tick once its 60ms cooldown has elapsed", () => {
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    engine.playUiClickTick();
+    vi.advanceTimersByTime(65);
+    engine.playUiClickTick();
+
+    expect(gateSpy.mock.results.map((r) => r.value)).toEqual([true, true]);
+  });
+
+  it("respects the shared master mute — no tick plays while muted", () => {
+    useAudioSettingsStore.getState().setMasterMuted(true);
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    engine.playUiClickTick();
+
+    expect(gateSpy.mock.results.every((r) => r.value === false)).toBe(true);
+  });
+});

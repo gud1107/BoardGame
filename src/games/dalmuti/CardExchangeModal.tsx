@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { CardFace } from "./CardArt";
+import { FxButton } from "./DalmutiEffects";
 import type { Card } from "./engine";
 
 /**
@@ -44,23 +45,25 @@ export default function CardExchangeModal({
           {[...hand]
             .sort((a, b) => a.rank - b.rank)
             .map((c) => (
-              <button
+              <FxButton
                 key={c.id}
+                variant="card"
                 onClick={() => setSelected(c.id)}
                 className={`transition ${selected === c.id ? "-translate-y-2" : "hover:-translate-y-1"}`}
               >
                 <CardFace card={c} highlight={selected === c.id} />
-              </button>
+              </FxButton>
             ))}
         </div>
         <div className="mt-5 flex justify-center">
-          <button
+          <FxButton
+            variant="emerald"
             onClick={() => selected && onSubmit(selected)}
             disabled={!selected}
             className="rounded-full bg-emerald-500 px-8 py-3 text-sm font-bold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-30"
           >
             🤝 {selected ? "이 카드 보내기" : "카드를 선택하세요"}
-          </button>
+          </FxButton>
         </div>
       </div>
     </div>,
