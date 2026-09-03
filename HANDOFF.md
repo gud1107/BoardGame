@@ -40,7 +40,16 @@ Playwright Chromium으로 로컬 서버(4인 방, 호스트+봇3)에서 여러 �
 `CoyoteHowlBanner`와 동일한 `createPortal`+fixed-inset 기법을 그대로 재사용하고 `cardLabel`/`cardEmoji`
 등도 이미 검증된 `CardArt.tsx` 헬퍼를 그대로 쓰므로 코드 검토 수준의 확신은 있음(후속 세션에서 실제로
 마주치면 재확인 권장). `코요테.md` §7을 7-1(팝업)/7-2(슬래시)/7-3(계산식바)로 재구성해 갱신, 공통 규격
-문단에 계산식 바의 가로 스크롤 컨테이너 처리 명시.)_
+문단에 계산식 바의 가로 스크롤 컨테이너 처리 명시. **커밋/푸시/배포**: 이번 세션이 수정한 5개 파일만
+스테이징(`CoyoteBoard.tsx`/`CoyoteEffects.tsx`/`globals.css`/`코요테.md`/`HANDOFF.md`) — 작업 트리에
+있던 다른 세션들의 미커밋 변경(패치노트/라스베가스·페루도·소환사의협곡 룰북 이미지/`.claude/`/저작권
+문서 등)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지 `feat(coyote): add "?" card
+reveal popup, MAX->0 slash effect, and calculation formula bar`(`077c570`) → `git push origin main`
+완료(`718031b..077c570`, fast-forward). 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드
+정상 완주(Turbopack, 44초), `target: "production"`/`readyState: READY`
+(`dpl_5qfWVWx6iYPLsA4VQPXBSn1b9cWP`), 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 별칭 완료.
+이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로, 위에 적은 다른 세션들의 미커밋 변경도 함께
+반영된 상태로 배포됨. `curl`로 `/`·`/games/coyote` 둘 다 200 직접 확인함.)_
 
 _이전 갱신: 2026-09-03 (**코요테(Coyote) "?" 카드 치환 애니메이션 구현 세션 — 요청서는 ①"코요테!" 외침 시
 이펙트만 재생되고 라운드 종료(공개/판정)로 이어지지 않은 채 다음 턴으로 넘어가는 "턴 스킵 버그" 긴급
