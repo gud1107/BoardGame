@@ -2,14 +2,22 @@
 
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import Avatar from "@/components/common/Avatar";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
-import { CardFace, HeartPips } from "./CardArt";
+import { CardFace, EliminatedFace, HeartPips } from "./CardArt";
 import {
   buildFormulaTerms,
   CardFlipWrapper,
+  CardShatterOverlay,
   CoyoteHowlBanner,
+  DeathStampOverlay,
   detectCoyoteCallEvent,
+  DEATH_SHAKE_CLASS,
+  DEATH_SHAKE_MS,
+  DEATH_SHATTER_MS,
+  DEATH_SKULL_MS,
   FormulaBar,
+  justEliminatedSeat,
   MaxZeroSlashOverlay,
   MAXZERO_SLASH_MS,
   QuestionRevealPopup,
@@ -101,10 +109,18 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   const qSeat = res ? questionCardSeat(res) : null;
   const hasQuestionStage = res !== null && qSeat !== null;
   const hasMaxZeroStage = res !== null && res.maxZeroTarget.card !== null;
+  // 탈락(하트 0) 데스 이펙트 — 정확히 한 좌석(있다면)의 하트가 이번 정산으로
+  // 0이 됐는지. `state.players`는 하트 차감이 이미 반영된 정산 이후 상태라
+  // `justEliminatedSeat`가 매 렌더 순수하게 재계산해도 안전(위 `qSeat`과 같은
+  // 패턴) — 게임을 끝내는 마지막 탈락(phase가 곧장 "gameOver"로 전환되는
+  // 경우)도 여기서 똑같이 잡힌다.
+  const justEliminatedSeatValue = res ? justEliminatedSeat(res, state.players) : null;
+  const hasDeathStage = justEliminatedSeatValue !== null;
 
   const [trackedRes, setTrackedRes] = useState(res);
   const [questionStage, setQuestionStage] = useState<"pulse" | "popup" | "done">("pulse");
   const [maxZeroStage, setMaxZeroStage] = useState<"pending" | "slashing" | "done">("pending");
+  const [deathStage, setDeathStage] = useState<"pending" | "shake" | "shatter" | "skull" | "done">("pending");
   const [revealSettled, setRevealSettled] = useState(false);
   const [countingActive, setCountingActive] = useState(false);
   const [showFormula, setShowFormula] = useState(false);
@@ -115,11 +131,13 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     const noSpecialStages = !res || (!hasQuestionStage && !hasMaxZeroStage);
     setQuestionStage(hasQuestionStage ? "pulse" : "done");
     setMaxZeroStage(hasMaxZeroStage ? "pending" : "done");
+    setDeathStage(hasDeathStage ? "pending" : "done");
     setRevealSettled(false);
     setDisplayedTotal(0);
     setCountingActive(noSpecialStages); // no special-card stage to play -> count up right away
     setShowFormula(noSpecialStages);
   }
+  const boardShaking = deathStage === "shake";
 
   // Stage timers: "?" pulse -> popup (only if a "?" card is in play), then
   // MAX→0 slash (only if that special is in play), then the count-up +
@@ -127,6 +145,12 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   // "다음 라운드" unlocks. Also owns resetting `skippedRef` for the new
   // resolution (a ref write belongs in an effect/handler, never directly in
   // the render body).
+  //
+  // 데스 이펙트(타격→파괴→해골)는 이 타임라인과 별도로 시작한다 — "?" 팝업이
+  // 있다면(화면 중앙을 이미 차지하고 있으므로) 그게 끝난 직후(1.4초 지점)에,
+  // 없다면 곧바로(0.15초) 시작해서 1.5초 안에 끝나므로 최악의 경우도 2.9초로
+  // REVEAL_HOLD_MS(3초) 예산 안에 들어간다(MAX→0 슬래시는 카드 위 인라인
+  // 오버레이라 전체화면 데스 스탬프와 겹쳐도 무관, 대기시킬 필요 없음).
   useEffect(() => {
     skippedRef.current = false;
     if (!res || state.phase === "playing") return;
@@ -150,6 +174,18 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
           setShowFormula(true);
         }, t),
       );
+    }
+    if (hasDeathStage) {
+      const deathStartAt = hasQuestionStage ? QUESTION_PULSE_MS + QUESTION_POPUP_MS + 100 : 150;
+      timers.push(
+        window.setTimeout(() => {
+          setDeathStage("shake");
+          getSoundEngine().playDeathCardSting();
+        }, deathStartAt),
+      );
+      timers.push(window.setTimeout(() => setDeathStage("shatter"), deathStartAt + DEATH_SHAKE_MS));
+      timers.push(window.setTimeout(() => setDeathStage("skull"), deathStartAt + DEATH_SHAKE_MS + DEATH_SHATTER_MS));
+      timers.push(window.setTimeout(() => setDeathStage("done"), deathStartAt + DEATH_SHAKE_MS + DEATH_SHATTER_MS + DEATH_SKULL_MS));
     }
     timers.push(window.setTimeout(() => setRevealSettled(true), REVEAL_HOLD_MS));
     return () => timers.forEach((id) => window.clearTimeout(id));
@@ -187,6 +223,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     skippedRef.current = true;
     setQuestionStage("done");
     setMaxZeroStage("done");
+    setDeathStage("done");
     setCountingActive(true);
     setShowFormula(true);
     if (res) setDisplayedTotal(res.finalTotal);
@@ -210,7 +247,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     const winner = rankings.find((r) => r.rank === 1)!;
     return (
       <div
-        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        className={`relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8 ${boardShaking ? DEATH_SHAKE_CLASS : ""}`}
         style={{ background: "linear-gradient(160deg,#2e1a0d 0%,#1a0f08 55%,#0a0704 100%)" }}
       >
         <span className="text-5xl">🐺</span>
@@ -232,6 +269,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
                   <tr key={seat} className={rank === 1 ? "bg-amber-400/10" : ""}>
                     <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-amber-200">{rank === 1 ? "🐺 1" : rank}</td>
                     <td className="border-b border-white/5 px-2 py-2 text-left text-white">
+                      {rank !== 1 && <span className="mr-1 text-rose-400">💀</span>}
                       {names[seat]}
                       {seat === viewerSeat && <span className="ml-1 text-amber-200">(나)</span>}
                     </td>
@@ -248,6 +286,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
           결과 확정하고 계속하기
         </button>
         {howl && <CoyoteHowlBanner callerName={howl.callerName} onDone={() => setHowl(null)} />}
+        {deathStage === "skull" && justEliminatedSeatValue !== null && <DeathStampOverlay name={names[justEliminatedSeatValue]} />}
       </div>
     );
   }
@@ -277,6 +316,20 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     const player = state.players.find((p) => p.seat === seat)!;
     const isActive = state.phase === "playing" && state.activeSeat === seat;
 
+    // 탈락(하트 0) 좌석 — "❓"(자기 자신의 숨겨진 카드용 mystery-back, CardArt.tsx
+    // `CardFace`)와 절대 겹치지 않는 고정 해골 표시(`EliminatedFace`)로 렌더링.
+    // 이번 정산으로 막 탈락한 좌석(`isDyingSeat`)이면 deathStage가
+    // "skull"/"done"에 이르기 전까지는 아래 일반 카드 분기를 그대로 타서(1단계
+    // 타격 red-flash, 2단계 파편 파쇄) 이번 라운드의 실제 카드가 잠깐
+    // 보였다가 부서지는 연출을 먼저 보여주고, 그 이후(또는 이전 라운드에 이미
+    // 탈락한 좌석은 항상)부터 고정 해골로 전환된다.
+    const isEliminated = player.hearts <= 0;
+    const isDyingSeat = isEliminated && seat === justEliminatedSeatValue;
+    const deathTransitionSettled = isDyingSeat && (deathStage === "skull" || deathStage === "done");
+    const showPermanentSkull = isEliminated && (!isDyingSeat || deathTransitionSettled);
+    const cardFlashingRed = isDyingSeat && deathStage === "shake";
+    const cardShattering = isDyingSeat && deathStage === "shatter";
+
     // "?" 연출 대상 좌석이면 스테이지에 따라 표시 카드를 바꿔치기한다
     // (엔진 state는 그대로 — 순수 표시 레이어 오버라이드). pulse/popup
     // 단계는 원래 "?" 카드를 그대로 보여주고(popup 단계는 중앙 대형
@@ -304,27 +357,39 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
 
     return (
       <div key={seat} className="absolute flex flex-col items-center gap-1" style={style}>
-        <CardFlipWrapper flipKey={flipKey} revealed={revealed}>
-          <div
-            className={`relative transition-opacity duration-300 ${pulseActive ? QUESTION_PULSE_CLASS : ""} ${dimmedForPopup ? "opacity-20" : ""} ${
-              maxZeroStruck ? "opacity-60 grayscale transition-all duration-500" : ""
-            }`}
-          >
-            <CardFace card={card} highlight={isActive} size={compact ? "xs" : "sm"} />
-            {maxZeroStruck && <MaxZeroSlashOverlay stage={maxZeroStage === "slashing" ? "slashing" : "done"} />}
-          </div>
-        </CardFlipWrapper>
+        {showPermanentSkull ? (
+          <EliminatedFace size={compact ? "xs" : "sm"} />
+        ) : (
+          <CardFlipWrapper flipKey={flipKey} revealed={revealed}>
+            <div
+              className={`relative transition-opacity duration-300 ${pulseActive ? QUESTION_PULSE_CLASS : ""} ${dimmedForPopup ? "opacity-20" : ""} ${
+                maxZeroStruck ? "opacity-60 grayscale transition-all duration-500" : ""
+              }`}
+              style={cardFlashingRed ? { animation: "coyote-death-flash 0.35s ease-in-out" } : undefined}
+            >
+              <CardFace card={card} highlight={isActive} size={compact ? "xs" : "sm"} />
+              {maxZeroStruck && <MaxZeroSlashOverlay stage={maxZeroStage === "slashing" ? "slashing" : "done"} />}
+              {cardShattering && <CardShatterOverlay />}
+            </div>
+          </CardFlipWrapper>
+        )}
         <div
           className={`flex flex-col items-center gap-0.5 rounded-xl border text-center ${compact ? "max-w-[70px] px-1.5 py-0.5 text-[9px]" : "px-2 py-1 text-[10px]"} ${
             isActive ? "border-amber-300/60 bg-amber-400/10" : "border-white/10 bg-black/30"
-          }`}
+          } ${showPermanentSkull ? "opacity-70" : ""}`}
+          style={cardFlashingRed ? { animation: "coyote-death-flash 0.35s ease-in-out" } : undefined}
         >
           <span className="flex max-w-full items-center gap-1 truncate font-semibold text-white/90">
-            <Avatar size={compact ? 14 : 16} className="shrink-0" />
+            <Avatar size={compact ? 14 : 16} className={`shrink-0 ${showPermanentSkull ? "opacity-50 grayscale" : ""}`} />
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
             {isActive && <span title="차례">👉</span>}
             <span className="break-keep truncate">{names[seat]}</span>
             {isSelf && <span className="shrink-0 text-amber-200">(나)</span>}
+            {showPermanentSkull && (
+              <span className="shrink-0 text-rose-400" title="탈락">
+                💀
+              </span>
+            )}
           </span>
           <HeartPips hearts={player.hearts} max={STARTING_HEARTS} />
         </div>
@@ -334,7 +399,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
 
   return (
     <div
-      className="relative flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
+      className={`relative flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4 ${boardShaking ? DEATH_SHAKE_CLASS : ""}`}
       style={{ background: "linear-gradient(160deg,#3a2410 0%,#20140a 45%,#0d0805 100%)" }}
     >
       <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-orange-100/70">
@@ -423,6 +488,11 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
               ? `${names[res.bid.seat]}님이 오버 배팅으로 하트 1개를 잃었습니다.`
               : `${names[res.callerSeat]}님이 잘못된 코요테 외침으로 하트 1개를 잃었습니다.`}
           </p>
+          {justEliminatedSeatValue !== null && (deathStage === "skull" || deathStage === "done") && (
+            <p className="break-keep font-black tracking-wide text-rose-300 [text-shadow:0_0_10px_rgba(244,63,94,0.75)]">
+              💀 {names[justEliminatedSeatValue]}님이 마지막 하트를 잃고 탈락했습니다!
+            </p>
+          )}
           {showFormula && (
             <FormulaBar
               terms={buildFormulaTerms(res)}
@@ -456,6 +526,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
       {questionStage === "popup" && res && qSeat !== null && (
         <QuestionRevealPopup card={res.extraDrawnCards[res.extraDrawnCards.length - 1] ?? res.tableCards[qSeat]} />
       )}
+      {deathStage === "skull" && justEliminatedSeatValue !== null && <DeathStampOverlay name={names[justEliminatedSeatValue]} />}
     </div>
   );
 }

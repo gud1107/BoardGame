@@ -1864,6 +1864,86 @@ class SoundEngine {
       osc.stop(at + 0.1);
     }
   }
+
+  // ---------------------------------------------------------------------
+  // 코요테 — 탈락(하트 0) 데스 이펙트 SFX. 1단계(타격/화면 흔들림)는 이미 있는
+  // `playDeathCardSting()`(운명전쟁39 데스 카드 페널티음 — "화면 흔들림과 같은
+  // 타이밍"이라는 원래 문구가 이 순간과 그대로 들어맞아 재사용)이 맡고, 3단계
+  // (해골 각인 스탬프)는 `playVictoryStamp`보다 더 어둡고 무겁게 새로 설계했다
+  // — "승리"와 "탈락"은 대조적인 순간이라 밝은 임팩트음을 그대로 쓰면 어색함.
+  // 2단계(카드 파쇄)에 대응하는 유리 깨짐류 SFX는 기존에 없어 신규 추가.
+  // ---------------------------------------------------------------------
+
+  /** 코요테 — "카드 파쇄음": 4개의 짧고 밝은 유리 균열 노이즈가 하강 피치로 연달아 터진다, 이마 카드가 산산조각 나는 순간(DEATH_CARD_SHATTER). */
+  playCardShatter() {
+    if (!this.gate("cardShatter", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [0, 0.05, 0.11, 0.19].forEach((offset, i) => {
+      const at = now + offset;
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuffer(ctx);
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(3800 - i * 500 + Math.random() * 400, at);
+      filter.frequency.exponentialRampToValueAtTime(1200, at + 0.1);
+      filter.Q.value = 7;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.2, at);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.13);
+      src.connect(filter).connect(gain).connect(this.sfxGain!);
+      src.start(at);
+      src.stop(at + 0.14);
+    });
+  }
+
+  /** 코요테 — "탈락 해골 각인 스탬프음": 아주 낮은 붐(임팩트) + 어둡게 하강하는 디튠 드론 + 저역 크랙, 거대한 해골 엠블럼이 쿵 내려앉는 순간(DEATH_SKULL_STAMP) — `playVictoryStamp`보다 훨씬 어둡고 무겁게 설계. */
+  playEliminationSlam() {
+    if (!this.gate("eliminationSlam", 400)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const boom = ctx.createOscillator();
+    boom.type = "sine";
+    boom.frequency.setValueAtTime(90, now);
+    boom.frequency.exponentialRampToValueAtTime(28, now + 0.4);
+    const boomGain = ctx.createGain();
+    boomGain.gain.setValueAtTime(0.4, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    boom.connect(boomGain).connect(this.sfxGain);
+    boom.start(now);
+    boom.stop(now + 0.55);
+
+    [130, 138].forEach((freq) => {
+      const osc = ctx.createOscillator();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freq, now + 0.05);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.5, now + 0.5);
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 500;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.16, now + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      osc.connect(filter).connect(gain).connect(this.sfxGain!);
+      osc.start(now + 0.05);
+      osc.stop(now + 0.5);
+    });
+
+    const crack = ctx.createBufferSource();
+    crack.buffer = noiseBuffer(ctx);
+    const crackFilter = ctx.createBiquadFilter();
+    crackFilter.type = "lowpass";
+    crackFilter.frequency.value = 700;
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.28, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    crack.connect(crackFilter).connect(crackGain).connect(this.sfxGain);
+    crack.start(now);
+    crack.stop(now + 0.12);
+  }
 }
 
 let instance: SoundEngine | null = null;

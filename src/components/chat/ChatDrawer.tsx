@@ -12,6 +12,8 @@ interface Props {
   myDeviceId: string;
   cooldownUntil?: number | null;
   title?: string;
+  /** 2026-09-03 세션 — `ChatPanel.tsx`로 그대로 전달. 코요테의 탈락 좌석 관전-전용 채팅 게이팅에 쓰인다(다른 게임은 항상 기본값 `false`). */
+  readOnly?: boolean;
 }
 
 /**
@@ -32,7 +34,7 @@ interface Props {
  * full-screen panel while the keyboard is up. `sm:` and above keeps the
  * original side-drawer shape untouched.
  */
-export default function ChatDrawer({ messages, onSend, myDeviceId, cooldownUntil, title = "채팅" }: Props) {
+export default function ChatDrawer({ messages, onSend, myDeviceId, cooldownUntil, title = "채팅", readOnly = false }: Props) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
   const { dragY, dragging, handlers } = useSwipeToDismiss(close);
@@ -73,7 +75,10 @@ export default function ChatDrawer({ messages, onSend, myDeviceId, cooldownUntil
         <div {...handlers} className="shrink-0 px-4 pt-3">
           <DragHandle />
           <div className="flex items-center justify-between border-b border-white/10 pb-3">
-            <h2 className="text-sm font-bold text-white">💬 {title}</h2>
+            <h2 className="text-sm font-bold text-white">
+              💬 {title}
+              {readOnly && <span className="ml-1 text-white/40">(관전 중)</span>}
+            </h2>
             <button
               onClick={close}
               aria-label="닫기"
@@ -90,6 +95,7 @@ export default function ChatDrawer({ messages, onSend, myDeviceId, cooldownUntil
             myDeviceId={myDeviceId}
             cooldownUntil={cooldownUntil}
             placeholder="같은 방 사람들에게 메시지 보내기"
+            readOnly={readOnly}
           />
         </div>
       </aside>

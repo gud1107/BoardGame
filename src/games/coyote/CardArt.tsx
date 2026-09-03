@@ -120,6 +120,29 @@ export function CardFace({
   );
 }
 
+/**
+ * 탈락(하트 0) 좌석의 이마 카드 자리 — `CardFace`의 `card === null` 분기
+ * ("❓" 미스터리 백, 자기 자신의 숨겨진 카드용)와는 완전히 다른 표시로 구분해서
+ * "생존자가 물음표 카드를 들고 있다"는 오해를 없앤다(2026-09-03 세션, HANDOFF.md
+ * 참고). 붉은 톤 해골(💀) + "탈락" 라벨만 있고, 애초에 이 라운드부터 이 좌석엔
+ * 카드가 배분되지 않으므로(engine.ts `dealRound`가 alive 좌석에만 딜) 값 있는
+ * `card`를 받지 않는다 — 매 라운드/매 렌더 항상 같은 고정 표시.
+ */
+export function EliminatedFace({ className = "", size = "md" }: { className?: string; size?: "xs" | "sm" | "md" }) {
+  const dims = size === "xs" ? "h-12 w-9" : size === "sm" ? "h-14 w-10" : "h-20 w-14";
+  return (
+    <div
+      className={`relative flex ${dims} shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-rose-900/60 bg-black/70 ${className}`}
+      title="탈락한 플레이어입니다"
+    >
+      <span className={size === "xs" ? "text-lg" : "text-xl"} style={{ filter: "drop-shadow(0 0 4px rgba(244,63,94,0.6))" }}>
+        💀
+      </span>
+      <span className={`font-black tracking-wide text-rose-400/90 ${size === "xs" ? "text-[6px]" : "text-[7px]"}`}>탈락</span>
+    </div>
+  );
+}
+
 /** Heart (life) pips — "하트(목숨)" framing, backed by the rulebook's "벌점 토큰 = 탈락" (see engine.ts module doc #5 for the 3→2 house-rule count). */
 export function HeartPips({ hearts, max }: { hearts: number; max: number }) {
   return (

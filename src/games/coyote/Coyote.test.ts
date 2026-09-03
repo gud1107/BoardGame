@@ -17,7 +17,7 @@ import {
   type PlayerState,
   type SeatIndex,
 } from "./engine";
-import { questionCardSeat } from "./CoyoteEffects";
+import { justEliminatedSeat, questionCardSeat } from "./CoyoteEffects";
 
 function card(id: number, kind: Card["kind"], value = 0): Card {
   return { id, kind, value };
@@ -286,6 +286,32 @@ describe("questionCardSeat — '?' 치환 애니메이션(CoyoteEffects.tsx)의 
     const state = makeState({ currentBid: { seat: 0, number: 18 }, activeSeat: 1 });
     const next = applyAction(state, { type: "coyote", seat: 1 });
     expect(questionCardSeat(next.lastResolution!)).toBeNull();
+  });
+});
+
+describe("justEliminatedSeat — 탈락(하트 0) 데스 이펙트(CoyoteEffects.tsx)의 대상 좌석 탐지", () => {
+  it("returns null for an ordinary (non-lethal) heart loss", () => {
+    const state = makeState({ currentBid: { seat: 0, number: 18 }, activeSeat: 1 });
+    const next = applyAction(state, { type: "coyote", seat: 1 });
+    expect(next.lastResolution!.loserSeat).toBe(1);
+    expect(next.players.find((p) => p.seat === 1)!.hearts).toBe(STARTING_HEARTS - 1);
+    expect(justEliminatedSeat(next.lastResolution!, next.players)).toBeNull();
+  });
+
+  it("returns the loser's seat when the loss is their last heart (e.g. the game-ending elimination)", () => {
+    const state = makeState({
+      players: [
+        { seat: 0, hearts: STARTING_HEARTS },
+        { seat: 1, hearts: 1 },
+        { seat: 2, hearts: STARTING_HEARTS },
+      ],
+      currentBid: { seat: 0, number: 18 },
+      activeSeat: 1,
+    });
+    const next = applyAction(state, { type: "coyote", seat: 1 }); // seat 1's safe-bid misjudgment -> seat 1 loses a heart
+    expect(next.lastResolution!.loserSeat).toBe(1);
+    expect(next.players.find((p) => p.seat === 1)!.hearts).toBe(0);
+    expect(justEliminatedSeat(next.lastResolution!, next.players)).toBe(1);
   });
 });
 

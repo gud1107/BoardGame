@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { cardCaption, cardEmoji, cardLabel, cardTierBg } from "./CardArt";
-import type { Card, Resolution, SeatIndex, CoyoteState } from "./engine";
+import type { Card, PlayerState, Resolution, SeatIndex, CoyoteState } from "./engine";
 
 /**
  * Purely cosmetic flourishes — no game logic lives here. Task brief §2
@@ -180,6 +180,126 @@ export function MaxZeroSlashOverlay({ stage }: { stage: "slashing" | "done" }) {
         <span className="absolute rounded-full border border-rose-300/70 bg-black/60 px-1 text-[9px] font-black text-rose-200">0</span>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 2026-09-03 세션(후속) — 탈락(하트 0) 데스 이펙트: 타격(화면 흔들림) → 카드
+// 파괴(파편 산산조각) → 해골 각인(거대 스탬프) 3단계. `AskUserQuestion`으로
+// 확인된 결정: ①대상 좌석은 관전 전용(채팅 읽기만) — 이건 채팅 컴포넌트 쪽
+// 변경이라 이 파일과 무관, CoyoteGame.tsx/ChatPanel.tsx 참고. ②전체 재생
+// 시간은 기존 REVEAL_HOLD_MS(3초) 판정 패널 틀 안에 압축 — "?" 팝업이 있다면
+// 그게 끝나는 시점(QUESTION_PULSE_MS+QUESTION_POPUP_MS 이후)에 시작해서
+// DEATH_SHAKE_MS+DEATH_SHATTER_MS+DEATH_SKULL_MS(총 1.5초) 안에 끝나므로
+// 최악의 경우(1.4초 시작+1.5초)도 2.9초로 3초 예산을 넘지 않는다
+// (CoyoteBoard.tsx의 스테이지 타이머가 실제 시작 시점을 계산한다). 한 라운드에
+// 하트가 0이 되는 좌석은 항상 정확히 1명뿐(`resolveCoyoteCall`의 `loserSeat`
+// 하나) — 동시 탈락 케이스는 이 엔진에 존재하지 않는다.
+// ---------------------------------------------------------------------------
+
+/** 1단계(타격/화면 흔들림) 길이. */
+export const DEATH_SHAKE_MS = 350;
+/** 2단계(카드 파괴/파편) 길이. */
+export const DEATH_SHATTER_MS = 450;
+/** 3단계(해골 각인 스탬프) 길이 — `DeathStampOverlay`가 떠 있는 시간과 동일해야 한다. */
+export const DEATH_SKULL_MS = 700;
+
+/** 보드 루트 컨테이너에 얹는 전체 화면 흔들림 클래스 — CoyoteBoard.tsx가 `deathStage === "shake"`일 때만 조건부로 붙인다. */
+export const DEATH_SHAKE_CLASS = "coyote-death-shake";
+
+/**
+ * 이번 정산(`res`)으로 하트가 정확히 0이 된 좌석(있다면) — 평범한(치명적이지
+ * 않은) 하트 손실이면 `null`. `players`는 반드시 `resolveCoyoteCall`의 하트
+ * 차감이 이미 반영된 **정산 이후** 상태(`state.players`)여야 한다 — `Resolution`
+ * 자체엔 `loserSeat`만 기록돼 있고 그 결과 하트가 몇이 됐는지는 없기 때문.
+ */
+export function justEliminatedSeat(res: Resolution, players: PlayerState[]): SeatIndex | null {
+  const loser = players.find((p) => p.seat === res.loserSeat);
+  return loser && loser.hearts <= 0 ? res.loserSeat : null;
+}
+
+/** 2단계 파편 6조각의 방향(`--dx`/`--dy`/`--rot`) + 순차 지연 — destinyWar39 `HiddenRevealCell`의 동일 기법을 코요테 전용 색상으로 재사용. */
+const CARD_SHATTER_FRAGMENTS: { dx: number; dy: number; rot: number; delayMs: number }[] = [
+  { dx: 0, dy: -26, rot: 45, delayMs: 0 },
+  { dx: 22, dy: -14, rot: -55, delayMs: 20 },
+  { dx: 23, dy: 12, rot: 75, delayMs: 40 },
+  { dx: 0, dy: 26, rot: -35, delayMs: 10 },
+  { dx: -23, dy: 12, rot: 65, delayMs: 30 },
+  { dx: -22, dy: -14, rot: -75, delayMs: 50 },
+];
+
+/**
+ * 2단계 — 탈락 대상 좌석의 `CardFace` 위에 겹쳐 그리는 인라인 파쇄 오버레이
+ * (포탈 아님, `MaxZeroSlashOverlay`와 같은 배치). 카드가 유리처럼 산산조각
+ * 나는 느낌을 붉은 플래시 글로우 + 6조각 파편 비산으로 표현한다.
+ */
+export function CardShatterOverlay() {
+  useEffect(() => {
+    getSoundEngine().playCardShatter();
+  }, []);
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 overflow-visible">
+      <span
+        aria-hidden
+        className="absolute inset-0 rounded-lg bg-rose-500/60 blur-sm"
+        style={{ animation: "coyote-death-shatter-flash 0.4s ease-out" }}
+      />
+      {CARD_SHATTER_FRAGMENTS.map((f, i) => (
+        <span
+          key={i}
+          aria-hidden
+          className="absolute top-1/2 left-1/2 text-[10px] text-rose-200"
+          style={
+            {
+              "--dx": `${f.dx}px`,
+              "--dy": `${f.dy}px`,
+              "--rot": `${f.rot}deg`,
+              animation: `coyote-death-shatter-fragment 0.5s ease-out ${f.delayMs}ms both`,
+            } as CSSProperties
+          }
+        >
+          ▪
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 3단계 — 화면 전체를 덮는 거대 해골(💀) 각인 스탬프. `QuestionRevealPopup`과
+ * 같은 `createPortal` + fixed-inset 기법. 어두운 붉은 안개가 짙어지며 거대한
+ * 해골 엠블럼이 오버슈트-바운스로 쿵 내려앉는다 — SMTC `DeathVignette`와 같은
+ * "탈락 = 붉은 안개 + 거대 해골" 비주얼 언어를 코요테 전용 키프레임으로 재구성
+ * (SMTC는 매치 종료용, 이건 라운드 중간에도 반복 재생되므로 별도 네임스페이스).
+ */
+export function DeathStampOverlay({ name, durationMs = DEATH_SKULL_MS }: { name: string; durationMs?: number }) {
+  useEffect(() => {
+    getSoundEngine().playEliminationSlam();
+  }, []);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="pointer-events-none fixed inset-0 z-[95] flex items-center justify-center overflow-hidden">
+      <div
+        className="absolute inset-0"
+        style={{
+          background: "radial-gradient(ellipse at center, transparent 25%, rgba(120,0,20,0.55) 72%, rgba(0,0,0,0.88) 100%)",
+          animation: `coyote-death-fog-in ${durationMs}ms ease-out forwards`,
+        }}
+      />
+      <div
+        className="relative flex flex-col items-center gap-2"
+        style={{ animation: `coyote-skull-slam ${Math.round(durationMs * 0.75)}ms cubic-bezier(0.34,1.56,0.64,1) both` }}
+      >
+        <span className="text-7xl drop-shadow-[0_0_28px_rgba(244,63,94,0.9)] sm:text-8xl">💀</span>
+        <p className="break-keep text-center text-base font-black tracking-wide text-rose-200 sm:text-lg">
+          [ 💀 탈락 ] {name}님이 마지막 하트를 잃었습니다
+        </p>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

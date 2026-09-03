@@ -810,10 +810,23 @@ export default function CoyoteGame({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "playing" && gameState && mySeat !== null) {
+    // 2026-09-03 세션(탈락 데스 이펙트 요청, `AskUserQuestion`으로 확인) —
+    // 하트가 0이 된 좌석은 관전 전용: 채팅 메시지는 계속 읽을 수 있지만
+    // 전송은 막는다(ChatDrawer/ChatPanel의 `readOnly`). 게임이 완전히
+    // 끝난 뒤(`post-game`)의 채팅은 모두가 함께 결과를 보는 자리라 그대로
+    // 전체 허용 — 아래에서 게이팅하지 않는다.
+    const myEliminated = (gameState.players.find((p) => p.seat === mySeat)?.hearts ?? 1) <= 0;
     return withGuard(
       <>
       <CoyoteBoard state={gameState} viewerSeat={mySeat} names={names} connectedSeats={connectedSeats} onAction={handleAction} onGameEnd={handleGameEnd} />
-      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      <ChatDrawer
+        messages={chatMessages}
+        onSend={sendChatMessage}
+        myDeviceId={deviceId}
+        cooldownUntil={chatCooldownUntil}
+        title="게임 채팅"
+        readOnly={myEliminated}
+      />
       </>
     );
   }

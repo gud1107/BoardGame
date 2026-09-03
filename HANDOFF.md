@@ -1,6 +1,66 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-03 (**대기실 AI 봇 "일괄 채우기"(레벨 선택 후 원클릭으로 빈 슬롯 전부 채우기) 구현
+_최종 갱신: 2026-09-03 (**코요테(Coyote) 탈락자 해골(💀) 아이콘 교체 + 데스 이펙트 구현 세션** — 요청서는
+탈락한(하트 0) 플레이어의 이마 표시가 "?" (물음표) 특수카드와 혼동된다는 버그 리포트를 근거로 ①탈락자
+표시를 물음표에서 해골로 전면 교체 ②탈락 순간의 3단계(타격→카드 파괴→해골 각인) 데스 이펙트 추가를
+요청. 조사 결과 혼동의 실체를 확인: `CardArt.tsx`의 `CardFace`는 `card === null`일 때(자기 자신의 숨겨진
+카드 *또는* 탈락자의 미배분 카드 — `engine.ts`의 `dealRound`는 alive 좌석에만 카드를 배분해 탈락자는
+이후 라운드부터 `tableCards`에 아예 없음) 항상 같은 "❓" 미스터리 백 placeholder를 렌더링하고 있었음 —
+탈락자 전용 표시가 원래 없었던 것. `AskUserQuestion` 2문항으로 확인: ①탈락자 채팅 권한 — 이 게임엔 이미
+`ChatDrawer`/`ChatPanel` 게임 채팅이 있어 **관전 전용(읽기만)으로 제한** 선택(전송 UI 전부 비활성화,
+메시지 열람은 유지) ②데스 이펙트 재생 시간 — "?"/MAX→0 연출과 동일하게 **기존 REVEAL_HOLD_MS(3초) 판정
+패널 틀 안에 압축**(유지시간 연장 아님) 선택. 구현: `CardArt.tsx`에 `EliminatedFace`(붉은 톤 해골+"탈락"
+라벨 고정 박스, `CardFace`의 null-카드 placeholder와 시각적으로 완전히 분리) 신규 export.
+`CoyoteEffects.tsx`에 `justEliminatedSeat(res, players)`(이번 정산으로 하트가 정확히 0이 된 좌석 탐지 —
+`questionCardSeat`와 동일한 순수 함수 패턴, `Coyote.test.ts`에 단위 테스트 추가), `DEATH_SHAKE_MS`(350)/
+`DEATH_SHATTER_MS`(450)/`DEATH_SKULL_MS`(700) 스테이지 상수, `CardShatterOverlay`(좌석 카드 위 인라인
+파편 파쇄 — destinyWar39 `HiddenRevealCell`과 동일한 `--dx/--dy/--rot`-per-shard 기법 재사용),
+`DeathStampOverlay`(화면 전체 포탈, 거대 해골 엠블럼 슬램 — SMTC `DeathVignette`와 같은 "붉은 안개+거대
+해골" 비주얼 언어를 코요테 전용 키프레임으로 재구성) 추가. `CoyoteBoard.tsx`: `deathStage`
+(`"pending"|"shake"|"shatter"|"skull"|"done"`) 스테이트를 `res` identity 변경마다 리셋하고, "?" 팝업이
+있다면 그게 끝나는 시점(1.4초)에, 없다면 곧바로(0.15초) 시작해 1.5초 안에 끝나는 별도 타이머로
+오케스트레이션(최악의 경우도 2.9초로 3초 예산 안에 들어감 — MAX→0 슬래시는 카드 위 인라인이라 전체화면
+데스 스탬프와 겹쳐도 무관). `renderSeat`가 하트 0인 좌석은 항상 `EliminatedFace`로 렌더링하되, 이번
+라운드에 막 탈락한 좌석(`isDyingSeat`)만 deathStage가 "skull"/"done"에 이르기 전까지는 기존 카드 표시
+분기를 그대로 타서(1단계 red-flash, 2단계 파편) 이번 라운드의 실제 카드가 잠깐 보였다가 부서지는 걸
+먼저 보여줌. 게임을 끝내는 마지막 탈락(2인 이하로 줄어 곧바로 `phase: "gameOver"`로 전환되는 경우,
+`lastResolution`은 그대로 유지되므로)도 gameOver 화면에 동일한 보드 흔들림+`DeathStampOverlay`를 추가해
+커버, 순위표에도 탈락자 💀 표식 추가. 판정 패널 텍스트에 "💀 OO님이 마지막 하트를 잃고 탈락했습니다!"
+줄 추가. `soundEngine.ts`에 신규 SFX 2개(`playCardShatter` — 유리 균열 노이즈 4연타, `playEliminationSlam`
+— 저역 붐+디튠 드론+크랙, `playVictoryStamp`보다 훨씬 어둡게 설계) 추가 + `soundEngine.test.ts`에 게이트
+커버리지 테스트 추가; 1단계 타격음은 이미 있던 `playDeathCardSting`(운명전쟁39용으로 만들어졌지만 원래
+문구 자체가 "화면 흔들림과 같은 타이밍"이라 이 순간과 정확히 들어맞아 재사용)을 그대로 씀. 채팅
+관전-전용 게이팅은 `ChatPanel.tsx`/`ChatDrawer.tsx`에 `readOnly` prop 추가(기본값 `false`라 다른 게임의
+기존 채팅엔 영향 없음 — 전송 UI 전체를 "💀 탈락 후에는 관전 전용입니다" 안내문으로 대체)로 구현하고
+`CoyoteGame.tsx`가 `phase === "playing"`일 때 `mySeat`의 하트가 0이면 켬(게임이 끝난 뒤의 `post-game`
+채팅은 게이팅하지 않음 — 모두 함께 결과를 보는 자리). `globals.css`에 `coyote-death-shake`(보드 흔들림
+클래스)/`coyote-death-flash`(좌석 점멸)/`coyote-death-shatter-flash`+`coyote-death-shatter-fragment`
+(파편)/`coyote-death-fog-in`+`coyote-skull-slam`(전체화면 각인) 키프레임 6개 추가 — 이 CSS 주석을 작성하며
+`smtc-death-*`처럼 별표(`*`)로 시작하는 단어 뒤에 슬래시(`/`)를 이어 쓰면 CSS 블록 코멘트(`/* ... */`)가
+그 지점에서 조기 종료돼 뒤따르는 텍스트가 전부 깨진 CSS로 파싱되는 걸 로컬 dev 서버(포트 3000, 다른
+세션이 이미 띄워둔 걸 그대로 사용 — 같은 프로젝트 디렉터리라 `next dev`가 포트를 달리해도 두 번째
+인스턴스 실행 자체를 거부함을 확인)에서 500 에러로 실제로 잡아 수정(`vitest`/`tsc`/`eslint`는 CSS 파싱
+오류를 못 잡으므로 이번 세션에서만 걸린 실물 검증 가치). 검증: `npx tsc --noEmit`(0 에러) /
+`npx eslint .`(0 에러, 불필요한 `eslint-disable` 경고 2건도 제거) / `npx vitest run`(50개 파일 **1611개**
+테스트 전체 통과, 이번 세션 신규 테스트 다수 포함) 전부 통과. 캐시된 Playwright Chromium으로 로컬
+서버(3인 방, 호스트+봇2, 420px 모바일 뷰포트)에서 호스트가 매 턴 가능하면 "코요테!"를 즉시 외치도록
+스크립트로 반복 진행시켜 실제 탈락을 유발 — ①탈락 순간의 전체화면 `DeathStampOverlay`(거대 💀 + "[ 💀
+탈락 ] 검증호스트님이 마지막 하트를 잃었습니다" + 계산식 바 "실제 총합 vs 외친 숫자" 대조)가 겹침/줄바꿈
+깨짐 없이 정상 표시됨을 스크린샷으로 확인, ②연출이 끝난 뒤(2.5초 대기) 탈락 좌석이 `EliminatedFace`(붉은
+💀+"탈락" 고정 박스) + 흑백 아바타 + 이름 옆 💀 표식 + 빈 하트(🤍🤍)로 영구 전환된 걸 스크린샷으로
+재확인 — 두 스크린샷 모두 "?" 카드와 전혀 겹치지 않는 명확히 구분되는 표시임을 육안으로 확인함. 채팅
+관전-전용 게이팅/gameOver 화면 데스 이펙트는 코드 검토 수준(로직이 단순하고 기존에 검증된
+`DeathVignette`/`ChatPanel` 패턴을 그대로 따름)에서 확신, 실제 화면 스크린샷은 찍지 않음(scope-discipline
+— 하나의 질문에 답하는 최소 스크린샷만). `코요테.md`에 §8(탈락 표시+데스 이펙트) 신규 추가.
+**커밋/푸시/배포**: 이번 세션이 만들거나 수정한 11개 파일만 스테이징(`CardArt.tsx`/`CoyoteBoard.tsx`/
+`CoyoteEffects.tsx`/`CoyoteGame.tsx`/`Coyote.test.ts`/`ChatDrawer.tsx`/`ChatPanel.tsx`/`soundEngine.ts`/
+`soundEngine.test.ts`/`globals.css`/`코요테.md`) — 작업 트리에 있던 다른 세션들의 미커밋 변경(패치노트
+컴포넌트, 룰북 이미지·폴더 다수, `.claude/`, `저작권, 상표권.md`, `docs/visual-verification.md`,
+`orca충돌및확인.md` 등)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지
+`feat(coyote): replace eliminated player icon with skull and add dramatic death animation`
+(`__COMMIT_HASH__`) → `git push origin main` 완료 예정.)_
+
+_이전 갱신: 2026-09-03 (**대기실 AI 봇 "일괄 채우기"(레벨 선택 후 원클릭으로 빈 슬롯 전부 채우기) 구현
 세션 — 요청서는 `server/roomManager.ts`/`src/server/socket/`(전통적 소켓 룸 매니저), 공통
 `CreateRoomModal.tsx`/`WaitingRoom.tsx`/`PlayerSlot.tsx`, `RoomState`+`FILL_BOTS_BATCH` 소켓 액션을
 전제로 요청했으나 조사 결과 이 프로젝트엔 그런 서버/공통 컴포넌트가 전혀 없음(다른 여러 세션에서

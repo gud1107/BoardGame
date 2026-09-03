@@ -1011,6 +1011,107 @@ body {
   }
 }
 
+/* 2026-09-03 세션(후속) — 코요테 탈락(하트 0) 데스 이펙트 3단계(타격→카드
+   파괴→해골 각인, CoyoteEffects.tsx). smtc-death-계열/destinywar39-hidden-
+   shatter-계열 패턴을 코요테 전용 네임스페이스로 재구성. */
+
+/* 1단계: 판정 패널 루트 컨테이너 전체가 짧게 진동 — `deathStage === "shake"`일 때만 얹는 클래스. */
+@keyframes coyote-death-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-5px, 3px);
+  }
+  40% {
+    transform: translate(4px, -3px);
+  }
+  60% {
+    transform: translate(-3px, 2px);
+  }
+  80% {
+    transform: translate(3px, -2px);
+  }
+}
+
+/* CoyoteBoard.tsx가 판정 패널 루트 컨테이너에 조건부로 얹는 클래스 — `CoyoteEffects.tsx`의 `DEATH_SHAKE_CLASS`. */
+.coyote-death-shake {
+  animation: coyote-death-shake 0.35s ease-in-out;
+}
+
+/* 1단계: 탈락 대상 좌석의 카드+이름표 박스가 붉게 점멸 — coyote-death-shake와 동시 재생. */
+@keyframes coyote-death-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0);
+  }
+  25%,
+  75% {
+    box-shadow: 0 0 16px 3px rgba(244, 63, 94, 0.85);
+  }
+  50% {
+    box-shadow: 0 0 22px 5px rgba(244, 63, 94, 1);
+  }
+}
+
+/* 2단계: 카드 위로 붉은 플래시 글로우가 확 번졌다 사라짐 — 파편과 동시 재생. */
+@keyframes coyote-death-shatter-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  35% {
+    opacity: 0.9;
+    transform: scale(1.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+/* 2단계: 카드가 유리처럼 산산조각 — 파편이 각자의 --dx/--dy/--rot 방향으로 날아가며 소멸. */
+@keyframes coyote-death-shatter-fragment {
+  0% {
+    transform: translate(-50%, -50%) translate(0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(var(--dx, 0px), var(--dy, 0px)) scale(0.2) rotate(var(--rot, 90deg));
+    opacity: 0;
+  }
+}
+
+/* 3단계: 화면 전체 어두운 붉은 안개가 서서히 짙어짐 — DeathStampOverlay의 배경. */
+@keyframes coyote-death-fog-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* 3단계: 거대한 해골(💀) 엠블럼이 쿵 내려앉아 각인됨 — 오버슈트 바운스. */
+@keyframes coyote-skull-slam {
+  0% {
+    transform: scale(2.6) rotate(-12deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(0.9) rotate(4deg);
+    opacity: 1;
+  }
+  78% {
+    transform: scale(1.05) rotate(-2deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
 /* 포세일's Phase-1 pass-refund flight (see ForSaleEffects.tsx /
    FlyingPassCard) — the passed property card arcs from the open-card row to
    the passer's seat while fading in/out, mirroring dalmuti-tax-fly's arc. */

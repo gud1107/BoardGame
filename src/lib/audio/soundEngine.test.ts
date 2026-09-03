@@ -161,3 +161,61 @@ describe("soundEngine SFX gate — 2026-08-27 신규 세부 액션 SFX", () => {
     expect(gateSpy.mock.results.every((r) => r.value === false)).toBe(true);
   });
 });
+
+/**
+ * 2026-09-03 세션(후속) — 코요테 탈락(하트 0) 데스 이펙트용 신규 SFX 2개
+ * (`playCardShatter`/`playEliminationSlam`, HANDOFF.md 참고). 위 블록과 동일한
+ * "게이트 통과/즉시 반복 차단/서로 다른 gate 키/뮤트 시 무음" 커버리지.
+ */
+describe("soundEngine SFX gate — 코요테 탈락 데스 이펙트 SFX", () => {
+  const engine = getSoundEngine();
+
+  const DEATH_SFX: { name: string; call: () => void }[] = [
+    { name: "playCardShatter", call: () => engine.playCardShatter() },
+    { name: "playEliminationSlam", call: () => engine.playEliminationSlam() },
+  ];
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"] });
+    useAudioSettingsStore.getState().setMasterMuted(false);
+    useAudioSettingsStore.getState().setSfxMuted(false);
+    (engine as unknown as { lastPlayedAt: Map<string, number> }).lastPlayedAt = new Map();
+    (engine as unknown as { activeChannels: number }).activeChannels = 0;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it.each(DEATH_SFX)("$name plays once when off cooldown and blocks an immediate repeat", ({ call }) => {
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    call();
+    call();
+
+    expect(gateSpy.mock.results.map((r) => r.value)).toEqual([true, false]);
+  });
+
+  it("each death SFX gates on its own distinct key (no accidental cross-throttling)", () => {
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    for (const { call } of DEATH_SFX) {
+      call();
+      vi.advanceTimersByTime(500);
+    }
+
+    expect(gateSpy.mock.results.every((r) => r.value === true)).toBe(true);
+    const keysUsed = gateSpy.mock.calls.map(([key]) => key);
+    expect(new Set(keysUsed).size).toBe(keysUsed.length);
+  });
+
+  it("respects the shared master mute — no death SFX plays while muted", () => {
+    useAudioSettingsStore.getState().setMasterMuted(true);
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    for (const { call } of DEATH_SFX) call();
+
+    expect(gateSpy.mock.results.every((r) => r.value === false)).toBe(true);
+  });
+});
