@@ -42,7 +42,23 @@ Windows 정션을 실제 디렉터리처럼 따라 들어가 공유 작업 트�
 워크트리에서 배포/검증할 때 `node_modules`/`.vercel`을 정션으로 연결하지 말 것** — 대신 `npm install`을
 그 워크트리 안에서 별도로 실행하거나(패키지 재설치 비용 감수), 애초에 배포는 공유 작업 트리에서(빌드는
 git 커밋 상태와 무관하게 워킹 디렉터리 파일을 그대로 사용하므로) 직접 실행하는 편이 더 안전함 — 이번
-세션은 이후 단계를 공유 작업 트리에서 직접 진행함.)_
+세션은 이후 단계를 공유 작업 트리에서 직접 진행함.
+
+**커밋/푸시/배포**: 커밋 시점엔 공유 작업 트리에 다른 세션의 미해결 `docs/README.md` 병합 충돌이 남아
+있어 `git commit` 자체가 막혀 있었으므로, `node_modules`/`.vercel` 정션 없이 순수하게 git 메타데이터만
+필요한 임시 워크트리(`git worktree add --detach origin/main`)를 새로 만들어 이번 세션이 수정한 6개
+파일만 복사해 넣고 그 안에서 커밋 — `feat(perudo): expand dice color palette, disable purple, and
+prevent duplicate color selection`(`f3cfa9a`) → `git push origin HEAD:main` 완료(`26dc76b..f3cfa9a`,
+정션 없는 워크트리라 `git worktree remove` 후 공유 작업 트리의 `node_modules`도 무사함을 재확인). 배포는
+이번엔 워크트리를 따로 만들지 않고 **공유 작업 트리에서 직접**(위 교훈 그대로 적용) — 먼저 `npx vercel
+link --yes --project board-game --scope me-3871`로 삭제됐던 `.vercel/project.json` 재연결, 이어서
+`npx tsc --noEmit` 재확인(0 에러) 후 `npx vercel deploy --prod --scope me-3871` 실행 — 이번엔 직전
+배포 실패 세션들과 달리 빌드 로그가 정상적으로 스트리밍되며(업로드 → "Building…" → 실제 Turbopack
+빌드 로그 → "Compiled successfully in 16.5s" → TypeScript 22.3s → 21개 페이지 정적 생성 → "Build
+Completed in /vercel/output [43s]") `readyState: READY`(`dpl_4HLxY9XUHFQb6gNB9ppAESTtxYx1`)로 완주 —
+같은 날 앞서 겪은 "UNKNOWN에서 멈춤" 증상이 이번엔 재현되지 않아 일시적 제약이었다는 앞선 세션들의 추정과
+일치. 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 자동 별칭 완료, `curl`로 `/`·`/games/perudo`
+둘 다 200 직접 확인함.)_
 
 _이전 갱신: 2026-09-04 (**페루도(Perudo) 배팅 마커 상시 노출 버그 픽스 세션** — 요청서는 "다른
 플레이어 턴일 때 내 주사위 컵 자체가 사라진다"는 버그 리포트를 근거로 `Board.tsx`/`DiceCup.tsx`/
