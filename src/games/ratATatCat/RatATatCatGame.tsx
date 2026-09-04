@@ -487,12 +487,32 @@ export default function RatATatCatGame({ onComplete }: PlayableGameProps) {
   }, []);
 
   useBotAutoplay<RatATatCatState, EngineAction, SeatIndex>({
-    active: isHost && phase === "playing",
+    active: isHost && phase === "playing" && gameState?.phase === "playing",
     state: gameState,
     currentActor,
     botSeats: allBotSeatSet,
     chooseAction,
     dispatch: handleAction,
+  });
+
+  // 2026-09-04: the new player-confirm gate in front of the setup peek
+  // (RatATatCatBoard.tsx) only ever applies to human viewers — a bot seat
+  // has no button to tap, so it needs its own auto-ack here instead. Split
+  // out from the hook above (rather than just widening its `active` to
+  // include `gameState?.phase === "setup"`) so this can use the work
+  // order's own "자연스러운 반응 딜레이(약 1~1.5초)" timing instead of the
+  // faster default 500-1500ms in-turn thinking delay — both `currentActor`
+  // and `chooseAction` already handle the setup phase correctly (setup's
+  // only legal move per seat is INITIAL_PEEK_DONE, see engine.ts).
+  useBotAutoplay<RatATatCatState, EngineAction, SeatIndex>({
+    active: isHost && phase === "playing" && gameState?.phase === "setup",
+    state: gameState,
+    currentActor,
+    botSeats: allBotSeatSet,
+    chooseAction,
+    dispatch: handleAction,
+    minDelayMs: 1000,
+    maxDelayMs: 1500,
   });
 
   // "무응답(idle)" takeover trigger — see DalmutiGame.tsx/NoThanksGame.tsx for the full rationale.

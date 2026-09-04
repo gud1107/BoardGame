@@ -40,12 +40,21 @@ export interface RatATatCatBoardProps {
  * (AskUserQuestion 2026-08-31). AskUserQuestion 2026-09-02 changed the SETUP
  * peek only (slots 0/3 at game start) into a hard guaranteed minimum with no
  * early-dismiss path at all, so a stray tap/skip can never cut a player's
- * look at their own cards short — see the `state.phase === "setup"` block
- * below and its `PeekCountdownRing`. The Peek power card mid-game
- * (`peekingSlot`/`dismissPeekReveal`) intentionally keeps the original
- * tap-to-dismiss-early behavior; it was explicitly excluded from this change.
+ * look at their own cards short. **2026-09-04 (AskUserQuestion) partially
+ * reversed this for setup only**: a player-driven "👁️ 카드 확인하기" button now
+ * gates the reveal itself (see `confirmClicked` below — cards no longer
+ * flip on their own the instant setup begins), and once the player opts in,
+ * an early-dismiss "⏩ 바로 시작 (스킵)" button is offered again, but only
+ * after `SKIP_ENABLE_MS` has passed — a compromise between the two prior
+ * decisions rather than a full revert (see `skipAvailable` below). The Peek
+ * power card mid-game (`peekingSlot`/`dismissPeekReveal`) is untouched — it
+ * kept its own original tap-to-dismiss-early behavior throughout.
  */
 const PEEK_REVEAL_MS = 3000;
+/** AskUserQuestion 2026-09-04: minimum forced-visibility before the setup peek's skip button appears — see `PEEK_REVEAL_MS`'s docstring. */
+const SKIP_ENABLE_MS = 1000;
+/** AskUserQuestion 2026-09-04: a player who never taps "카드 확인하기" is auto-confirmed after this long, so an AFK/disconnected human can't stall the whole room at the pre-setup gate forever (bots have their own separate ~1-1.5s auto-ack in RatATatCatGame.tsx and never hit this). */
+const SETUP_CONFIRM_TIMEOUT_MS = 15000;
 /** How long an opponent's "드로우 완료"/"카드 정리 완료" badge popup stays visible. */
 const OPPONENT_BADGE_MS = 1600;
 
@@ -103,25 +112,43 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
   // one phase; each effect's own body guards on `state.phase`.
   // ---------------------------------------------------------------------
   const iAcked = state.setupAcks[viewerSeat];
-  const [setupPeekSecondsLeft, setSetupPeekSecondsLeft] = useState(Math.ceil(PEEK_REVEAL_MS / 1000));
-  const setupPeekFiredRef = useRef(false);
 
-  // 2026-09-02 (AskUserQuestion): the setup peek's reveal window is now a
-  // guaranteed minimum — there is no longer any manual "dismiss early" path
-  // (no tap-anywhere, no button) for the two end cards. This effect owns the
-  // *only* trigger that ends the reveal: the fixed timeout below. Peek power
-  // card mid-game (`peekingSlot`/`dismissPeekReveal` further down) is
-  // intentionally unchanged — it keeps its existing tap-to-dismiss-early
-  // behavior; only this setup window got the hard 3s floor.
+  // 2026-09-04 (AskUserQuestion): the setup peek no longer starts on its
+  // own — it now waits for this viewer to actively tap "👁️ 카드 확인하기"
+  // (`confirmClicked`) before any card flips. A player who never taps it is
+  // auto-confirmed after `SETUP_CONFIRM_TIMEOUT_MS` so an AFK/disconnected
+  // human can't stall the room at this pre-reveal gate forever (bots skip
+  // this gate entirely — see their own ~1-1.5s auto-ack in
+  // RatATatCatGame.tsx, which dispatches INITIAL_PEEK_DONE directly).
+  const [confirmClicked, setConfirmClicked] = useState(false);
   useEffect(() => {
-    if (state.phase !== "setup" || iAcked) return;
-    setupPeekFiredRef.current = false;
+    if (state.phase !== "setup" || iAcked || confirmClicked) return;
+    const timeout = setTimeout(() => setConfirmClicked(true), SETUP_CONFIRM_TIMEOUT_MS);
+    return () => clearTimeout(timeout);
+  }, [state.phase, iAcked, confirmClicked]);
+
+  const [setupPeekSecondsLeft, setSetupPeekSecondsLeft] = useState(Math.ceil(PEEK_REVEAL_MS / 1000));
+  const [setupSkipAvailable, setSetupSkipAvailable] = useState(false);
+  const setupPeekFiredRef = useRef(false);
+  /** Ends the setup peek reveal right now — called by the fixed `PEEK_REVEAL_MS` timeout below, or by the player tapping the skip button once `setupSkipAvailable`. Idempotent (guards on the fired ref) since both paths can otherwise race. */
+  function dismissSetupPeek() {
+    if (setupPeekFiredRef.current) return;
+    setupPeekFiredRef.current = true;
+    onAction({ type: "INITIAL_PEEK_DONE", seat: viewerSeat });
+  }
+
+  // Reveal + timers only start once `confirmClicked` — see docstring above.
+  // AskUserQuestion 2026-09-04 (compromise between the 2026-08-31 tap-to-
+  // dismiss and 2026-09-02 no-early-dismiss decisions): the reveal still
+  // guarantees `PEEK_REVEAL_MS` by default, but a skip button reappears
+  // after a shorter forced-visibility floor (`SKIP_ENABLE_MS`).
+  useEffect(() => {
+    if (state.phase !== "setup" || iAcked || !confirmClicked) return;
+    // No explicit reset of setupPeekFiredRef/setupSkipAvailable here: both
+    // `confirmClicked` and `iAcked` are one-way flips for a given viewer in
+    // a single-round game (module docstring), so this effect body only ever
+    // runs once per mount — their initial values already start correct.
     const startedAt = Date.now();
-    const dismiss = () => {
-      if (setupPeekFiredRef.current) return;
-      setupPeekFiredRef.current = true;
-      onAction({ type: "INITIAL_PEEK_DONE", seat: viewerSeat });
-    };
     // Deferred (setInterval/setTimeout callbacks, never called synchronously
     // during the effect itself) — the immediate 0ms timeout just corrects the
     // displayed countdown right away for a repeat peek window (a rematch)
@@ -129,13 +156,16 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
     const tick = () => setSetupPeekSecondsLeft(Math.max(0, Math.ceil((PEEK_REVEAL_MS - (Date.now() - startedAt)) / 1000)));
     const immediate = setTimeout(tick, 0);
     const interval = setInterval(tick, 250);
-    const timeout = setTimeout(dismiss, PEEK_REVEAL_MS);
+    const skipTimer = setTimeout(() => setSetupSkipAvailable(true), SKIP_ENABLE_MS);
+    const timeout = setTimeout(dismissSetupPeek, PEEK_REVEAL_MS);
     return () => {
       clearTimeout(immediate);
       clearInterval(interval);
+      clearTimeout(skipTimer);
       clearTimeout(timeout);
     };
-  }, [state.phase, iAcked, viewerSeat, onAction]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dismissSetupPeek closes over viewerSeat/onAction, both stable per mount; re-declaring it in deps would re-fire this effect every render.
+  }, [state.phase, iAcked, confirmClicked, viewerSeat, onAction]);
 
   const [peekingSlot, setPeekingSlot] = useState<SlotIndex | null>(null);
   const peekPowerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -251,20 +281,52 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
 
   // ---------------------------------------------------------------------
   // Setup phase — everyone privately peeks their own end cards (slots 0/3),
-  // a TEMPORARY reveal (engine.ts docstring point 8) with a fixed 3s
-  // *guaranteed minimum* hold (AskUserQuestion 2026-09-02): unlike the Peek
-  // power card further down, this window has no early-dismiss path at all —
-  // no tap-anywhere, no button — precisely so a mistimed tap can never cut a
-  // player's own look at their cards short. It only ever ends via the
-  // `dismiss()` timeout in the effect above.
+  // a TEMPORARY reveal (engine.ts docstring point 8). 2026-09-04
+  // (AskUserQuestion) added a player-driven gate in front of it: cards no
+  // longer flip the instant setup begins — this viewer must first tap
+  // "👁️ 카드 확인하기" (`confirmClicked`, or the `SETUP_CONFIRM_TIMEOUT_MS`
+  // safety timeout fires on their behalf). Once revealed, the window still
+  // guarantees `PEEK_REVEAL_MS` by default but now offers a "⏩ 바로 시작"
+  // skip button again after `SKIP_ENABLE_MS` — a deliberate compromise
+  // between the 2026-08-31 tap-to-dismiss and 2026-09-02 no-early-dismiss
+  // decisions (see `PEEK_REVEAL_MS`'s docstring above).
   // ---------------------------------------------------------------------
   if (state.phase === "setup") {
     const ackedCount = state.setupAcks.filter(Boolean).length;
+
+    if (!iAcked && !confirmClicked) {
+      return (
+        <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center">
+          <span className="text-3xl">🐱🐭</span>
+          <h2 className="break-keep text-base font-bold text-white">시작 전 카드 확인</h2>
+          <p className="max-w-xs break-keep text-xs text-white/50">
+            준비가 되면 아래 버튼을 눌러 내 카드 양 끝(1, 4번)을 확인하세요. 가운데 2장은 능력을 쓰기 전까지 알 수 없어요.
+          </p>
+          <div className="flex gap-2">
+            {SLOTS.map((slot) => (
+              <CardSlot key={slot} handCard={myHand[slot]} label={`내 카드 ${slot + 1}번`} />
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setConfirmClicked(true)}
+            style={{ animation: "ratc-call-pulse-glow 1.6s ease-in-out infinite" }}
+            className="min-w-[14rem] break-keep rounded-full bg-gradient-to-b from-amber-400 to-amber-600 px-6 py-3 text-sm font-extrabold text-amber-950 hover:from-amber-300 hover:to-amber-500 active:scale-95"
+          >
+            👁️ 카드 확인하기 (준비 완료)
+          </button>
+          <p className="break-keep text-[11px] text-white/35">
+            {ackedCount}/{state.playerCount}명 확인 완료
+          </p>
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center">
         <span className="text-3xl">🐱🐭</span>
-        <h2 className="text-base font-bold text-white">시작 전 카드 확인</h2>
-        <p className="max-w-xs text-xs text-white/50">양 끝(1, 4번) 카드만 몰래 확인하세요. 가운데 2장은 능력을 쓰기 전까지 알 수 없어요.</p>
+        <h2 className="break-keep text-base font-bold text-white">시작 전 카드 확인</h2>
+        <p className="max-w-xs break-keep text-xs text-white/50">양 끝(1, 4번) 카드만 몰래 확인하세요. 가운데 2장은 능력을 쓰기 전까지 알 수 없어요.</p>
         <div className="flex gap-2">
           {SLOTS.map((slot) => {
             const revealNow = !iAcked && (slot === 0 || slot === 3);
@@ -277,11 +339,22 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
           })}
         </div>
         {iAcked ? (
-          <p className="text-xs text-white/40">
+          <p className="break-keep text-xs text-white/40">
             {ackedCount}/{state.playerCount}명 확인 완료 — 상대를 기다리는 중...
           </p>
         ) : (
-          <p className="text-xs text-amber-200/80">{setupPeekSecondsLeft}초 후 자동으로 뒷면으로 뒤집혀요 — 최소 3초간은 그대로 보여요</p>
+          <div className="flex flex-col items-center gap-2">
+            <p className="break-keep text-xs text-amber-200/80">{setupPeekSecondsLeft}초 후 자동으로 뒷면으로 뒤집혀요</p>
+            {setupSkipAvailable && (
+              <button
+                type="button"
+                onClick={dismissSetupPeek}
+                className="break-keep rounded-full border border-white/20 px-4 py-1.5 text-[11px] text-white/60 hover:border-white/40 active:scale-95"
+              >
+                ⏩ 바로 시작 (스킵)
+              </button>
+            )}
+          </div>
         )}
       </div>
     );
