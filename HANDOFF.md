@@ -1,6 +1,163 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-04 (**페루도(Perudo) 배팅 마커 상시 노출 버그 픽스 세션** — 요청서는 "다른
+_최종 갱신: 2026-09-04 (**랫어탯캣(Rat-a-Tat Cat) 시작 전 카드 확인 — 플레이어 주도 확인 버튼 도입
+세션** — "게임 시작 시 자동으로 카드가 오픈되어 지나가지 않고, 플레이어 각자가 화면 중앙의 '확인(준비
+완료)' 버튼을 직접 눌러야만 본인 카드가 공개되며 게임 루프가 시작되도록" 요청. 조사 결과 기존 엔진은
+이미 `phase:"setup"` + 좌석별 `setupAcks: boolean[]` + `INITIAL_PEEK_DONE` 액션으로 "누가 아직 확인
+안 했는지"를 정확히 추적 중이었고, 카드 공개 타이밍 자체도 애초부터 순수 로컬 UI 상태
+(`RatATatCatBoard.tsx`)로만 처리되는 이 게임의 기존 설계 원칙(`engine.ts` 문서 point 8)이었음 —
+`AskUserQuestion`으로 "엔진에 `INITIAL_WAITING_CONFIRM`/`INITIAL_PEEKING` 신규 상태를 요청서대로
+추가할지"를 확인해 **"기존 구조 재사용" 확정**(engine.ts 완전 무변경, RatATatCatBoard.tsx 로컬 상태만
+추가) — 프로젝트의 기존 설계 원칙과 일치하고 변경 범위도 최소화됨. 나머지 두 세부사항도
+`AskUserQuestion`으로 확인: ①스킵 버튼 재도입 여부 — 요청서의 "최소 3초 보장 + 스킵 버튼"은
+2026-09-02 세션에서 사용자가 명시적으로 확정한 "조기 해제 경로 완전 제거" 결정과 정반대였음, **"최소
+1초 강제 노출 후 스킵 버튼 활성화" 절충안으로 확정**(완전 즉시 스킵도, 기존 3초 고정 유지도 아님).
+②미확인 플레이어 안전 타임아웃 — **15초로 확정**(그 안에 확인 버튼을 누르지 않으면 자동으로 확인
+완료 처리). 구현: `RatATatCatBoard.tsx`에 `confirmClicked`(버튼 눌림 여부) 로컬 상태 신규 추가 — 이
+값이 true가 되기 전(수동 클릭 또는 15초 타임아웃)에는 카드가 전혀 뒤집히지 않는 "👁️ 카드
+확인하기(준비 완료)" 전용 화면을 렌더링, true가 된 후에야 기존 3초 엿보기 타이머(`PEEK_REVEAL_MS`)가
+시작되며 그 타이머에 신규 `setupSkipAvailable`(1초 후 true) 게이트로 "⏩ 바로 시작(스킵)" 버튼을
+추가 — 두 번째 effect의 `dismiss()`를 컴포넌트 스코프 `dismissSetupPeek()` 함수로 승격해 자동
+타임아웃/스킵 클릭 양쪽에서 재사용. `RatATatCatGame.tsx`의 `useBotAutoplay` 훅을 인스턴스 2개로 분리
+— 기존 것은 `gameState.phase==="playing"`(실제 턴)에만 활성화되도록 조건 추가, 신규 인스턴스는
+`gameState.phase==="setup"`에만 활성화되어 요청서가 명시한 "약 1~1.5초" 지연(`minDelayMs:1000,
+maxDelayMs:1500`)으로 봇이 스스로 `INITIAL_PEEK_DONE`을 확인 완료 처리(사람과 달리 확인 버튼/3초
+엿보기 화면 자체를 거치지 않고 바로 액션 디스패치) — `currentActor`/`chooseBotAction` 둘 다 이미
+setup 페이즈를 정확히 지원하고 있어 엔진 쪽 추가 변경 없이 그대로 재사용됨. 검증: `npx tsc
+--noEmit`(0 에러) / `npx eslint src/games/ratATatCat`(0 에러, 최초 1회 `react-hooks/set-state-in-effect`
+위반 발견 후 effect 내 동기 `setState` 호출 제거로 수정) / `npx vitest run
+src/games/ratATatCat/RatATatCat.test.ts`(43/43, engine.ts 무변경이라 기존 테스트 그대로 통과) /
+`npx vitest run --exclude "**/aiBenchmark.test.ts"`(49개 파일 **1625개** 전체 통과). 캐시된 Playwright
+Chromium으로 실제 2인 방(호스트+봇1) 풀 플레이스루 5단계 라이브 검증 — ①입장 직후 카드 4장 전부
+"❓" 상태(자동 오픈 없음), "0/2명 확인 완료" ②확인 버튼 클릭 직후(~0.2초) 양 끝 카드만 즉시 앞면
+전환("5"/"바꾸기" 확인), 스킵 버튼 아직 미노출 ③~1.1초 시점에 스킵 버튼 노출 ④스킵 클릭 시 즉시
+확인 완료 처리되어 "상대를 기다리는 중..." 표시 ⑤봇이 자체 1~1.5초 지연 후 자동 확인을 마쳐 실제
+덱/버림더미가 있는 진짜 첫 턴 화면까지 정상 도달 — 스크린샷 5장으로 전부 확인, 게임이 봇 존재 시에도
+setup 단계에서 멈추지 않고 정상적으로 playing 단계로 넘어감을 직접 확인. **작업 중 발견한 무관한
+사고**: 검증 도중 `npm run dev`가 루트("/")를 포함해 모든 경로에서 404를 반환하는 증상을 만났으나,
+공유 작업 트리에 남아있던 다른 세션들의 stale `.next` 빌드 캐시가 원인이었음(`rm -rf .next` 후
+재시작으로 즉시 해결, 이번 세션의 코드 변경과는 무관 — 다음에 같은 증상을 만나면 우선
+`.next` 캐시부터 지우고 재시도할 것). 룰북(`렛어텟켓.md`) §3에 디지털 확장 안내 콜아웃 신규
+추가(확인 버튼/1초 스킵 게이트/15초 안전 타임아웃/봇 1~1.5초 지연, 판정 규칙 변화 없음을 명시).)_
+
+_이전 갱신: 2026-09-04 (**페루도 배팅 트랙 20 초과 시 같은 30칸 재사용 이어붙이기 세션** — "20보다
+더 커지는 경우에 1대신 21, 페루도1 대신 11(=페루도11 오타로 판단), 2대신 22, 3대신 23, 페루도2대신
+페루도12 이런식으로 이어주세요 / 사용자가 더 많이 배팅한경우만 해당합니다" 요청. 조사 결과
+`engine.ts`의 `trackCellAt`/`trackCellForBid`는 애초부터 무제한(수량 20 초과·페루도 10 초과도 같은
+닫힌 형태 공식으로 정확한 진짜 수량을 그대로 반환 — `Perudo.test.ts`에 이미 quantity 21/500까지의
+케이스가 검증돼 있었음)이었고, 실물 트랙판(`PerudoBoard.tsx`)만 30칸(index 0-29)으로 하드코딩돼 그
+너머는 `OverflowBadge`(트랙 밖 별도 배지)로 밀려나 있던 것이 요청의 진짜 원인이었음 — 즉 라벨 계산
+로직은 이미 정확했고, "화면에 보여주는 30칸짜리 창을 어디에 고정할지"만 문제였음. 구현:
+`buildRectFrame(laneOffset)`이 `trackCellAt(i)` 대신 `trackCellAt(laneOffset + i)`를 그려 물리적으로
+같은 30개 버튼 위치를 재사용하되, 각 칸의 `quantity`(이미 무제한으로 정확한 값)가 자동으로 21/
+페루도12 같은 큰 수로 찍히도록 함(추가 "+20/+10" 계산 불필요 — `trackCellAt`의 기존 닫힌 형태 공식이
+이미 정답을 주고 있었음). `laneOffset`은 **확정된 현재 선언**의 lap(`Math.floor(index/30)*30`)만
+따라감(사용자가 명시한 "더 많이 배팅한 경우만 해당" — 배팅은 항상 증가만 하므로 확정 선언은 항상
+정확히 그 30칸 창 안에 들어옴이 보장됨), 아직 확정 안 된 내 드래프트가 그 창의 위쪽 경계를 넘어서는
+드문 경우만 기존 `OverflowBadge`로 폴백(변경 없음). 좌상단 💀 "시작 칸" 배지는 `laneOffset===0`일
+때만(진짜 게임 시작 수량 1일 때만) 표시하도록 조건 추가. 검증: `npx tsc --noEmit`(0 에러)/
+`npx eslint src/games/perudo`(0 에러)/`npx vitest run`(49개 파일 **1625개** 테스트 전체 통과, 트랙
+로직 자체는 이미 완비된 기존 테스트로 커버돼 신규 테스트 불필요 — 새로 필요했던 건
+`PerudoBoard.tsx` 내부의 lap 선택 렌더링뿐이라 캐시된 Playwright로 실측 검증) — 2인 방(호스트+봇1)에서
+"+" 스테퍼로 수량을 31까지 올려 확정 선언(`2×31개↑`) 후 스크린샷/DOM 텍스트 덤프로 트랙 30칸 전부가
+21~40/페루도11~20 범위로 정확히 이어짐과 💀 배지가 사라짐을 직접 확인. 룰북(`페루도.md`) 디지털
+확장 안내에 한 줄 추가(판정 규칙 변화 없는 순수 화면 표시 개선임을 명시).)_
+
+_이전 갱신: 2026-09-04 (**페루도 "내 턴" 알림(배너 이펙트+효과음) 신규 구현 세션** — "내차례가
+되었을때 '나의 턴' 표시와 소리와 이팩트추가해주세요" 요청. 조사 결과 정적 "🫵 당신 차례입니다!"
+텍스트 배너는 이미 이 프로젝트 거의 모든 게임에 공통으로 있었지만(요구사항 중 "표시" 자체는 기존 존재),
+턴이 "시작되는 순간"에만 반응하는 소리/이펙트는 페루도는 물론 프로젝트 어디에도 없던 신규 패턴이라 페루도
+전용으로 구현. `PerudoBoard.tsx`: `isMyTurn`(및 `iAmAlive`)의 false→true 전환 엣지만 감지하는
+`useEffect`(이전 값은 ref로 보관 — 매 리렌더가 아니라 "턴이 막 넘어온 순간"에만 1회 발화, 라운드 중
+턴이 나→남→나로 여러 번 돌아와도 매번 정확히 반응) 추가 — 감지되면 `turnFxToken`을 증가시켜 배너
+`<p>`의 `key`로 꽂아 강제 리마운트(CSS 애니메이션 재생, 다른 파일들의 `key={rollToken}` 리플레이
+관례 재사용)시키고 동시에 신규 `playMyTurnChime()` 사운드를 재생. `globals.css`에 `perudo-turn-pulse`
+키프레임(확대 오버슈트 + 앰버 글로우 펄스, 650ms) 신규 추가, 배너를 기존보다 큼직하고 굵은 글씨로
+개편(`text-sm font-bold` + 정적 글로우 text-shadow, 평소엔 애니메이션 없이 그 마지막 프레임 상태로
+고정). `soundEngine.ts`에 신규 `playMyTurnChime()`(완전5도 상승 2음 벨 딩동, 600ms 게이트) 추가 +
+`soundEngine.test.ts`에 기존 `playUiClickTick` 커버리지와 동일 패턴의 게이트 테스트 3종. 검증:
+`npx tsc --noEmit`(0 에러)/`npx eslint src/games/perudo src/lib/audio`(0 에러)/`npx vitest run`(49개
+파일 **1625개** 테스트 전체 통과, 신규 3개 포함)/캐시된 Playwright로 2인 방(호스트+봇1) 실제 재현 —
+프로젝트 기본 음소거 설정(`masterMuted`/`sfxMuted` 둘 다 기본 true) 때문에 처음엔 오실레이터 호출이
+전혀 안 잡혀서, `localStorage`의 `boardgame_audio_settings_v1`를 사전에 언뮤트로 시딩해야 사운드
+경로까지 실제로 검증할 수 있었음(발견: 인게임 음소거 버튼은 `masterMuted`만 토글하고 `sfxMuted`는
+별도 — 이 세션에서 처음 확인) — 그렇게 재검증하니 내 턴이 시작되는 순간
+`AudioContext.createOscillator`가 정확히 587.33Hz/880Hz(코드에 넣은 두 음)로 두 번 호출됨을 직접
+확인, 배너 DOM의 `className`에도 `perudo-turn-pulse`가 실제로 붙는 것을 확인. 순수 UX 추가라 룰북
+무변경.)_
+
+_이전 갱신: 2026-09-04 (**페루도 색상 피커 자물쇠(🔒) 아이콘 제거 세션** — 직전 색상 팔레트 세션에서
+타인이 쓰는 색 스와치에 붙인 🔒 오버레이가 과하다는 사용자 피드백("색 자물쇠로 잠금은 안보여주는게
+좋을꺼같아요")을 받아 `PerudoBoard.tsx`(인게임 피커)·`PerudoGame.tsx`(대기실 피커) 양쪽에서 🔒
+`<span>` 오버레이만 제거 — 비활성화 상태(`disabled`, `opacity-35`, `cursor-not-allowed`, "OO님이
+사용 중" 툴팁)는 그대로 유지해 "선택 불가"라는 정보 자체는 잃지 않음. 오버레이 제거로 더 이상 쓸모없어진
+`relative`/absolute-positioning wrapper도 함께 정리. `npx tsc --noEmit`(0 에러)/
+`npx eslint src/games/perudo`(0 에러)/`npx vitest run src/games/perudo/Perudo.test.ts`(80/80) 확인,
+캐시된 Playwright로 동일한 2인 방(호스트+봇1) 재검증 — 봇이 가져간 파랑 스와치가 `disabled:true`,
+`hasLock:false`로 잠금 아이콘 없이 비활성화만 유지됨을 DOM 속성 + 스크린샷으로 확인. 순수 UI 미세조정이라
+룰북은 무변경.)_
+
+_이전 갱신: 2026-09-04 (**페루도(Perudo) 주사위 색상 팔레트 확장 + 보라색 제외 + 실시간 중복 방지
+세션** — 요청서는 `ColorPicker.tsx`/`DiceCup.tsx`/`Board.tsx`/`types.ts`/룸 매니저를 전제로 요청했으나
+이 프로젝트엔 존재하지 않고(실제: `PerudoBoard.tsx` 내장 스와치 피커 + `dice/colorways.ts` +
+`PerudoGame.tsx`의 Supabase Realtime presence — 페루도에서만 이번이 두 번째 요청 전제-실제 코드 불일치
+사례), 조사 결과 대기실엔 색상 선택 UI 자체가 아예 없었고 인게임 스와치 피커도 **완전히 로컬 전용**(다른
+클라이언트엔 전혀 반영 안 됨, 기존 `muted`와 같은 신뢰 등급)이었음을 먼저 확인. `AskUserQuestion` 3문항으로
+확인: ①보라색은 **목록에서 완전히 제거**(비활성화 아님) — 방금 전 세션에서 상시 노출로 고친 트랙의 보라색
+베팅 마커(`BETTING_COLORWAY`)와 혼동되는 게 근본 이유 ②색상 선택 UI를 **대기실+인게임 둘 다** 신규
+구축(요청서 원문 근거) ③재접속 시 내 색은 **localStorage**에 기억(기존 `perudo-seat-${code}` 저장과 동일
+패턴). 구현: `dice/colorways.ts` — `PLAYER_COLORWAYS`에서 `player-purple` 제거, 5색 신규 추가(민트
+`#06b6d4`/핫핑크`#ec4899`/라임`#84cc16`/차콜`#1e293b`/화이트`#f8fafc`, 각각 Tailwind 900/950 스케일로
+`shadow`/`ink` 튜닝, 총 10색 — `MAX_PLAYERS=8`보다 넉넉해 인원 초과로 색이 바닥나는 경우 자체가 없음),
+`nextAvailableColorwayId(taken, fallbackSeat)`(팔레트 순서상 첫 미사용 색, 전부 소진 시에만
+`playerColorwayForSeat` 폴백) + `colorwayById` 신규 export. `PerudoGame.tsx` — `Occupant`에
+`colorwayId` 필드 추가해 기존 이름/좌석과 같은 Presence `channel.track()`으로 방 전체에 실시간 동기화(색을
+바꾸면 재-track이 곧 동기화 메커니즘, 별도 브로드캐스트 이벤트 불필요), 봇은 `botLevels`와 동일한
+병렬배열 `botColorwayIds`를 `bot-roster`/`game-start`/`state-sync`/`state-request` 페이로드 전부에 실어
+전파(호스트가 봇 추가 시 그 시점 사람+봇 전체의 사용 중인 색을 모아 `nextAvailableColorwayId`로 자동
+배정 — 요청서가 명시한 "자동 순차 배정" 그대로, 봇별 수동 색상 선택 UI 없음), 첫 입장 시
+`getStoredColorway`(로컬스토리지)가 아직 안 겹치면 그대로, 겹치면 자동 배정 — 재검증 후 채택. 대기실에
+좌석별 색상 점(🎨) + "내 주사위 색상" 스와치 피커(다른 사람/봇이 쓰는 색은 회색조+🔒+"OO님이 사용 중"
+툴팁으로 비활성화) 신규 추가, 인게임 스와치 피커도 동일한 잠금 UX로 교체(로컬 `colorwayOverride`
+state 완전 삭제 → `colorways`/`onColorwayChange` prop으로 승격). `PerudoBoard.tsx`의 `LostDiceTray`/
+`RevealPanel`/스코어보드가 전부 `playerColorwayForSeat(seat)` 직접 호출 대신 새 `colorways` prop을
+단일 진실 공급원으로 사용하도록 리팩터. 신규 단위테스트 7개(`Perudo.test.ts`) — 보라 제외, 10색 이상·중복
+없음, 신규 5색 포함, 순차 배정, 전부 소진 시 폴백, `colorwayById` null/undefined 안전성, 좌석 순환.
+`npx tsc --noEmit`(0 에러)/`npx eslint src/games/perudo`(0 에러)/`npx vitest run
+src/games/perudo/Perudo.test.ts`(80/80)/`npx vitest run --exclude "**/aiBenchmark.test.ts"`(49개 파일
+1622개 전체 통과) 확인. 캐시된 Playwright로 2인 방(호스트+봇1) 실제 재현 — 스와치 DOM 속성 덤프 +
+스크린샷으로 보라색 부재, 10색 정확히 렌더링, 내 색(빨강)은 활성화, 봇이 먼저 가져간 색(파랑)은
+`disabled`+🔒+"[Lv.5] AI 봇 1님이 사용 중" 툴팁으로 잠긴 것까지 전부 확인. 룰북(`페루도.md`)의 "디지털
+확장 안내" 콜아웃에 10색 팔레트/보라 제외/실시간 중복 방지/봇 자동 배정 한 문장 추가(그 외 게임 규칙
+변경 없음).
+**⚠️ 이번 세션 중 발생한 사고와 복구**: 직전 배포 세션이 남긴 격리 워크트리(`node_modules`/`.vercel`을
+`mklink /J`로 공유 작업 트리에 연결해 둔 것)를 정리하려고 `git worktree remove --force`를 실행했는데,
+Windows 정션을 실제 디렉터리처럼 따라 들어가 공유 작업 트리의 진짜 `node_modules`/`.vercel` 내용물을
+통째로 삭제해버림(`git worktree remove`가 정션을 reparse point로 인식하지 않고 재귀 삭제한 것으로 추정)
+— 이번 세션이 직접 `npm install`(450개 패키지 복구)로 `node_modules`를 되살렸고, `.vercel`은 gitignore
+대상이라 커밋 이력에 없어 재배포 시 `vercel link`로 재연결이 필요함(§3에 기록). **다음에 격리
+워크트리에서 배포/검증할 때 `node_modules`/`.vercel`을 정션으로 연결하지 말 것** — 대신 `npm install`을
+그 워크트리 안에서 별도로 실행하거나(패키지 재설치 비용 감수), 애초에 배포는 공유 작업 트리에서(빌드는
+git 커밋 상태와 무관하게 워킹 디렉터리 파일을 그대로 사용하므로) 직접 실행하는 편이 더 안전함 — 이번
+세션은 이후 단계를 공유 작업 트리에서 직접 진행함.
+
+**커밋/푸시/배포**: 커밋 시점엔 공유 작업 트리에 다른 세션의 미해결 `docs/README.md` 병합 충돌이 남아
+있어 `git commit` 자체가 막혀 있었으므로, `node_modules`/`.vercel` 정션 없이 순수하게 git 메타데이터만
+필요한 임시 워크트리(`git worktree add --detach origin/main`)를 새로 만들어 이번 세션이 수정한 6개
+파일만 복사해 넣고 그 안에서 커밋 — `feat(perudo): expand dice color palette, disable purple, and
+prevent duplicate color selection`(`f3cfa9a`) → `git push origin HEAD:main` 완료(`26dc76b..f3cfa9a`,
+정션 없는 워크트리라 `git worktree remove` 후 공유 작업 트리의 `node_modules`도 무사함을 재확인). 배포는
+이번엔 워크트리를 따로 만들지 않고 **공유 작업 트리에서 직접**(위 교훈 그대로 적용) — 먼저 `npx vercel
+link --yes --project board-game --scope me-3871`로 삭제됐던 `.vercel/project.json` 재연결, 이어서
+`npx tsc --noEmit` 재확인(0 에러) 후 `npx vercel deploy --prod --scope me-3871` 실행 — 이번엔 직전
+배포 실패 세션들과 달리 빌드 로그가 정상적으로 스트리밍되며(업로드 → "Building…" → 실제 Turbopack
+빌드 로그 → "Compiled successfully in 16.5s" → TypeScript 22.3s → 21개 페이지 정적 생성 → "Build
+Completed in /vercel/output [43s]") `readyState: READY`(`dpl_4HLxY9XUHFQb6gNB9ppAESTtxYx1`)로 완주 —
+같은 날 앞서 겪은 "UNKNOWN에서 멈춤" 증상이 이번엔 재현되지 않아 일시적 제약이었다는 앞선 세션들의 추정과
+일치. 프로덕션 도메인 `board-game-tau-navy.vercel.app`에 자동 별칭 완료, `curl`로 `/`·`/games/perudo`
+둘 다 200 직접 확인함.)_
+
+_이전 갱신: 2026-09-04 (**페루도(Perudo) 배팅 마커 상시 노출 버그 픽스 세션** — 요청서는 "다른
 플레이어 턴일 때 내 주사위 컵 자체가 사라진다"는 버그 리포트를 근거로 `Board.tsx`/`DiceCup.tsx`/
 `PlayerHand.tsx`/`usePerudo.ts`/`roundPhase`/`currentTurnPlayerId` 같은 전제를 들며 `isMyTurn ?
 <DiceCup/> : null` 패턴 제거를 요청했으나, 조사 결과 그런 파일/필드는 이 프로젝트에 없고([[dalmuti-5p-tax-bug-premise-mismatch]] 등과 같은 유형의 요청 전제-실제 코드 불일치 사례) 본인
@@ -21,7 +178,27 @@ null`로 변경 — 내 턴이 아닐 땐 어차피 베팅 컴포저 컨트롤�
 `playwright-core`만 설치)으로 2인 방(호스트+봇1) 실제 재현: 내 턴에 첫 선언(2×1개↑)을 확정한 뒤 턴이
 봇에게 넘어간 상태에서 스크린샷 촬영 — 보라색 페루도(★) 다이 마커가 확정 선언 칸(금색 하이라이트) 위에
 그대로 떠 있음을 육안 확인(수정 전이었다면 사라졌을 지점). 룰북(`페루도.md`)은 규칙 변경이 전혀 없는
-순수 UI 버그 픽스라 수정하지 않음(달무티 버튼 반응성 세션과 동일 판단).)_
+순수 UI 버그 픽스라 수정하지 않음(달무티 버튼 반응성 세션과 동일 판단). **커밋/푸시**: 이번 세션이 수정한
+3개 파일만 스테이징(`PerudoBoard.tsx`/`HANDOFF.md`/사용자가 제공한 재현 스크린샷
+`boardGameRule/페루도/다른플레이어턴일때 주사위가안보임.png`) — 공유 작업 트리에 남아 있던 다른 세션들의
+미커밋 변경(`docs/README.md`는 이 세션 시작 전부터 이미 병합 충돌 상태였음, 패치노트 컴포넌트, 다수
+룰북 이미지 등)은 전혀 건드리지 않음. 커밋 `fix(perudo): keep current-bid marker visible on the track
+during other players' turns` → `git push origin main`이 그사이 다른 동시 세션(analytics/코요테 관련
+머지 커밋들)과 non-fast-forward로 충돌해, 공유 작업 트리의 미커밋 변경(`docs/README.md` 충돌 포함)을
+건드리지 않기 위해 그 변경들만 `git stash`로 잠시 격리한 뒤 `git pull --rebase`(충돌 없음)로 재정렬해
+푸시 완료(`bfed9c8..c847d4e`) — 이어서 `git stash pop`을 시도하니 `docs/README.md`에서 병합 충돌이
+발생(다른 세션의 기존 미해결 변경과 origin에 이미 반영된 버전 간 충돌로 추정, 이 세션의 변경과는 무관)해
+`git reset --hard`로 강제 정리하려던 시도는 세이프가드에 의해 차단됨 — stash 자체는 유실 없이
+`stash@{0}`으로 보존된 상태이니 원 작업자가 직접 `git stash pop`/`git stash drop`으로 해소해야 함(§3에
+기록). **배포 — 미완료**: 공유 워킹 트리의 미해결 충돌을 피하기 위해 `git worktree add`로 격리 워크트리를
+새로 만들고 `node_modules`/`.vercel`을 `mklink /J`로 연결한 뒤 그 안에서 `npx vercel deploy --prod
+--scope me-3871`을 2회 시도했으나 둘 다 업로드 후 `status: UNKNOWN`(빌드 로그 자체가 생성되지 않음)에서
+10분 이상 진행이 없어 강제 종료 — 같은 날 이른 시간에 다른 세션이 독립적으로 겪고 문서화해 둔 것과 동일한
+증상(§3 "2026-09-04 — analytics 머지 배포 시도" 참고, Vercel 계정/프로젝트 레벨의 일시적 제약으로 추정,
+이 세션의 코드 문제 아님 — `tsc`/`eslint`/`vitest`/로컬 Playwright 검증 전부 클린). 프로덕션 도메인
+(`board-game-tau-navy.vercel.app`)은 이 배포 시도들과 무관하게 계속 200으로 정상 서빙 중(이번 커밋이
+빠진 이전 버전) — 다음 세션에서 같은 격리 워크트리 또는 `origin/main`의 새 클론에서 `npx vercel deploy
+--prod --scope me-3871` 재시도만 하면 됨.)_
 
 _이전 갱신: 2026-09-04 (**달무티(Dalmuti) 버튼 클릭 반응성 하드닝 + 네온 리플/펄스 클릭 이펙트 구현
 세션** — 요청서는 "PC 마우스 클릭이 가끔 1번에 안 먹는다"는 버그를 ①터치/마우스 이벤트 혼용
