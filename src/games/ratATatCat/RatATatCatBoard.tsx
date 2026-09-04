@@ -78,6 +78,14 @@ const SETUP_CONFIRM_TIMEOUT_MS = 15000;
  * caught up. See `gameStartPeekActive` below.
  */
 const GAME_START_PEEK_MS = 3000;
+/**
+ * 2026-09-05 (user request): how long a just-REPLACE_CARD'd slot stays
+ * visible (with a shimmer, see `sparkle` on CardSlot) to its own owner
+ * before hiding again — see `replaceShimmerSlots` below for why this
+ * replaces the previous "stays visible forever" behavior on the VIEW side
+ * only (engine.ts's underlying `isKnownToOwner` flag is untouched).
+ */
+const REPLACE_REVEAL_MS = 5000;
 /** How long an opponent's "드로우 완료"/"카드 정리 완료" badge popup stays visible. */
 const OPPONENT_BADGE_MS = 1600;
 
@@ -234,6 +242,45 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
     [],
   );
 
+  // 2026-09-05 (user request, "카드를 교환하고 카드가 계속 오픈되어있는데 최대
+  // 5초까지만 오픈되며 조금씩 반짝이는 이팩트를 추가해주세요"): a REPLACE_CARD
+  // reveal (the ordinary "drew a card, put it in slot N" turn action) used to
+  // stay visible to its owner FOREVER via engine.ts's permanent
+  // `isKnownToOwner` flag (module docstring point 8, "confirmed to stay
+  // permanent" — a 2026-08-31 decision). Per this new request that permanent
+  // reveal is now capped to `REPLACE_REVEAL_MS` on the VIEWER SIDE ONLY: the
+  // engine's `isKnownToOwner` itself is untouched (bots' own
+  // `assumedSlotValue` heuristic still treats a replaced slot as reliably
+  // known forever, unaffected — that's an internal AI concern, not a human
+  // display one), but this board no longer wires `knownToViewer` straight
+  // from that permanent flag. Instead `replaceShimmerSlots` tracks, purely
+  // locally, which of MY OWN slots are still within their post-replace
+  // window (detected by the `prevStateRef` diff effect below) — after it
+  // expires the slot renders as a genuinely hidden "?" like every other
+  // never-looked-at slot, not a dimmed permanent hint anymore.
+  const [replaceShimmerSlots, setReplaceShimmerSlots] = useState<ReadonlySet<SlotIndex>>(new Set());
+  const replaceShimmerTimersRef = useRef<Partial<Record<SlotIndex, ReturnType<typeof setTimeout>>>>({});
+  function triggerReplaceShimmer(slot: SlotIndex) {
+    const existing = replaceShimmerTimersRef.current[slot];
+    if (existing) clearTimeout(existing);
+    setReplaceShimmerSlots((prev) => new Set(prev).add(slot));
+    replaceShimmerTimersRef.current[slot] = setTimeout(() => {
+      setReplaceShimmerSlots((prev) => {
+        if (!prev.has(slot)) return prev;
+        const next = new Set(prev);
+        next.delete(slot);
+        return next;
+      });
+      delete replaceShimmerTimersRef.current[slot];
+    }, REPLACE_REVEAL_MS);
+  }
+  useEffect(
+    () => () => {
+      for (const timer of Object.values(replaceShimmerTimersRef.current)) clearTimeout(timer);
+    },
+    [],
+  );
+
   // ---------------------------------------------------------------------
   // Card acquisition flight effect + opponent draw/settle badges — driven
   // by diffing consecutive `state` snapshots (this is a controlled
@@ -305,6 +352,18 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
     if (prev.turnPhase !== "TURN_DECISION" && state.turnPhase === "TURN_DECISION") {
       const settler = state.currentTurn;
       if (settler !== viewerSeat) pushOpponentBadge(settler, "🔄 카드 정리 완료");
+    }
+
+    // REPLACE_CARD just placed a fresh card in one of MY OWN slots
+    // (`isKnownToOwner` flips false -> true only via that action, never any
+    // other way — see engine.ts) — start this slot's `REPLACE_REVEAL_MS`
+    // shimmer window (see `replaceShimmerSlots` docstring above).
+    const prevMyHand = prev.hands[viewerSeat];
+    const myHand = state.hands[viewerSeat];
+    if (prevMyHand && myHand) {
+      for (const slot of SLOTS) {
+        if (!prevMyHand[slot].isKnownToOwner && myHand[slot].isKnownToOwner) triggerReplaceShimmer(slot);
+      }
     }
   }, [state, viewerSeat]);
 
@@ -657,14 +716,20 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
             // automatic reveal (not the click-driven `isPeeking` above), so it's
             // additive to `peeking` only, never to `clickable`.
             const isGameStartPeek = gameStartPeekActive && (slot === 0 || slot === 3);
+            // 2026-09-05 (user request) — replaces the old permanent
+            // `knownToViewer` hint: a just-REPLACE_CARD'd slot now reveals
+            // the same way every other temporary peek does (full brightness,
+            // capped at `REPLACE_REVEAL_MS`), plus the `sparkle` shimmer
+            // marking it as "freshly placed" rather than a look-only peek.
+            const isReplaceShimmer = replaceShimmerSlots.has(slot);
             const clickable = isPeeking || inReplacePick || inPeekPick || inSwapPickOwn;
             return (
               <CardSlot
                 key={slot}
                 size="lg"
                 handCard={myHand[slot]}
-                knownToViewer={myHand[slot].isKnownToOwner}
-                peeking={isPeeking || isGameStartPeek}
+                peeking={isPeeking || isGameStartPeek || isReplaceShimmer}
+                sparkle={isReplaceShimmer}
                 selected={inSwapPickOwn === false && swapMySlot === slot}
                 highlighted={inReplacePick || inPeekPick || inSwapPickOwn}
                 label={`내 카드 ${slot + 1}번`}

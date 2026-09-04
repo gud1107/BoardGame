@@ -7,19 +7,20 @@ import type { Card, HandCard } from "./engine";
  * under it:
  *
  * - `revealed` (game-over reveal): shows the real face to everyone.
- * - `knownToViewer` (own hand only — `RatATatCatBoard.tsx` never passes this
- *   true for another seat's hand): a dimmed "hint" face per the work order's
- *   "자신이 아는 카드는 살짝 투명한 힌트 표시" — still visibly a card-back
- *   silhouette so it reads as "still face-down on the table, I just happen
- *   to remember it" rather than an actual reveal. Only ever true for a card
- *   the owner actively placed via REPLACE_CARD (engine.ts docstring point 8)
- *   — permanent for the rest of the game.
  * - `peeking` (own hand only, temporary): a full-brightness reveal with a
- *   gold glow ring, for the few seconds a setup peek or the Peek power
- *   card is actively showing its value — deliberately NOT the dimmed
- *   "remembered hint" look, since this is an active, timed look rather than
- *   a standing memory aid. `RatATatCatBoard.tsx` owns the timer entirely;
- *   this component just renders whatever boolean it's handed.
+ *   gold glow ring, for the few seconds a setup peek, the Peek power card,
+ *   or a just-REPLACE_CARD'd slot is actively showing its value —
+ *   `RatATatCatBoard.tsx` owns every one of those timers entirely; this
+ *   component just renders whatever boolean it's handed and never keeps a
+ *   card visible on its own past that window (2026-09-05: this used to also
+ *   have a separate `knownToViewer` permanent-dim-hint mode for a replaced
+ *   card that stayed forever — removed per user request in favor of the
+ *   same timed-then-fully-hidden treatment every other reveal already
+ *   uses; see RatATatCatBoard.tsx's `replaceShimmerSlots` docstring).
+ * - `sparkle` (own hand only, temporary, always paired with `peeking`): an
+ *   extra diagonal light-sweep overlay distinguishing "I just placed this
+ *   card here" from a plain look-only peek — purely decorative, no new
+ *   state of its own.
  * - Otherwise: a plain face-down "?" back.
  */
 
@@ -66,8 +67,8 @@ function CardContent({ card, small }: { card: Card; small: boolean }) {
 export default function CardSlot({
   handCard,
   revealed = false,
-  knownToViewer = false,
   peeking = false,
+  sparkle = false,
   size = "md",
   selected = false,
   highlighted = false,
@@ -76,12 +77,12 @@ export default function CardSlot({
   onClick,
 }: {
   handCard: HandCard;
-  /** Game-over full reveal — shows the true face regardless of `knownToViewer`/`peeking`. */
+  /** Game-over full reveal — shows the true face regardless of `peeking`. */
   revealed?: boolean;
-  /** Own-hand-only dimmed permanent hint (see module doc) — a card the owner actively placed via replace. Ignored when `revealed`. */
-  knownToViewer?: boolean;
-  /** Own-hand-only temporary full-brightness reveal with a gold glow (see module doc) — a setup peek or the Peek power card, actively timed by the caller. Ignored when `revealed`. */
+  /** Own-hand-only temporary full-brightness reveal with a gold glow (see module doc) — a setup peek, the Peek power card, or a just-replaced slot, actively timed by the caller. Ignored when `revealed`. */
   peeking?: boolean;
+  /** Own-hand-only decorative light-sweep, meant to accompany `peeking` for a just-REPLACE_CARD'd slot (see module doc) — has no effect on its own without `peeking`/`revealed` also showing the face. */
+  sparkle?: boolean;
   size?: "sm" | "md" | "lg";
   selected?: boolean;
   /** A softly pulsing ring — used for "this slot is a legal target right now" affordances (replace target, peek/swap target). */
@@ -90,13 +91,12 @@ export default function CardSlot({
   label?: string;
   onClick?: () => void;
 }) {
-  const showFace = revealed || knownToViewer || peeking;
-  const isHint = showFace && knownToViewer && !revealed && !peeking;
-  const className = `relative flex ${SIZE_DIMS[size]} flex-col items-center justify-center gap-0.5 rounded-xl border-2 font-bold shadow-sm transition ${
+  const showFace = revealed || peeking;
+  const className = `relative flex ${SIZE_DIMS[size]} flex-col items-center justify-center gap-0.5 overflow-hidden rounded-xl border-2 font-bold shadow-sm transition ${
     showFace
       ? "border-amber-300/60 bg-gradient-to-b from-amber-50 to-amber-100 text-amber-950"
       : "border-white/15 bg-gradient-to-br from-slate-700 to-slate-900 text-white/30"
-  } ${isHint ? "opacity-60" : ""} ${selected ? "-translate-y-2 ring-4 ring-emerald-300/80" : ""} ${
+  } ${selected ? "-translate-y-2 ring-4 ring-emerald-300/80" : ""} ${
     highlighted ? "ring-4 ring-sky-300/70 animate-pulse" : ""
   } ${peeking ? "ratc-peek-glow" : ""} ${faded ? "opacity-30" : ""} ${onClick ? "cursor-pointer active:scale-95" : "cursor-default"}`;
 
@@ -110,6 +110,12 @@ export default function CardSlot({
   const body = (
     <div key={`${handCard.card.id}-${showFace}`} className={`${className} ratc-card-flip`} aria-label={label}>
       {content}
+      {/* "조금씩 반짝이는 이팩트" (2026-09-05) — a diagonal light bar sweeping
+          across the card, repeating for as long as the caller keeps
+          `sparkle` true. Clipped by the card's own `overflow-hidden` above. */}
+      {showFace && sparkle && (
+        <span aria-hidden className="ratc-replace-shimmer pointer-events-none absolute inset-y-0 left-0" />
+      )}
     </div>
   );
 

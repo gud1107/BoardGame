@@ -1,6 +1,35 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-04 (**랫어탯캣 — 결과판 순위 1등 오름차순 정렬 후속 세션** — 직전 세션(등수
+_최종 갱신: 2026-09-05 (**랫어탯캣 — 카드 교체 힌트를 영구 노출에서 최대 5초 반짝임으로 전환하는
+후속 세션** — "카드를 교환하고 카드가 계속 오픈되어있는데 최대 5초까지만 오픈되며 조금씩 반짝이는
+이팩트를 추가해주세요" 요청. 조사 결과 REPLACE_CARD(턴 중 카드 교체)로 놓은 카드는 2026-08-31
+세션에서 "확인된(confirmed) 영구 동작"으로 결정됐던 대로 게임이 끝날 때까지 계속 살짝 투명한 힌트로
+남아 있었음(engine.ts docstring point 8) — 이번 요청은 그 결정을 정면으로 뒤집는 요청이었지만, 이
+세션 전체가 "5초 확정 노출/게임시작 3초 재노출/대기 중 계속 노출" 등 동일 계열의 반복 조정을
+사용자가 직접 명확한 문장으로 지시해온 흐름이었으므로 재질문 없이 진행(같은 세션 내 이미 확립된
+패턴). **핵심 설계 결정: 엔진의 `isKnownToOwner` 플래그 자체와 그것에 의존하는 봇
+`assumedSlotValue` 휴리스틱은 전혀 건드리지 않고, 오직 사람 뷰어 쪽 렌더링만 분리**(엔진/봇은 여전히
+"교체한 카드는 영구히 안다"로 동작 — AI 내부 판단 로직까지 바꿀 필요는 없다고 판단). 구현:
+`RatATatCatBoard.tsx`에 신규 `replaceShimmerSlots`(Set<SlotIndex>) 로컬 상태 + 슬롯별 개별 타이머
+추가, 기존 `prevStateRef` 상태 diff 이펙트에서 "내 손패의 `isKnownToOwner`가 false→true로 막
+바뀐" 엣지(=REPLACE_CARD가 방금 일어남)를 감지해 `REPLACE_REVEAL_MS`(5000ms) 동안만 활성화. My
+hand 렌더에서 기존 영구 `knownToViewer` prop 전달을 완전히 제거하고 `peeking`에 이 새 상태를
+합류시킴(다른 임시 노출들과 동일한 "5초 후 완전히 뒷면" 취급으로 통합) + 신규 `sparkle` prop 추가.
+`CardSlot.tsx`: 이제 아무도 안 쓰는 `knownToViewer`/`isHint`(살짝 투명한 영구 힌트) 개념 자체를
+완전히 제거, 신규 `sparkle` prop(항상 `peeking`과 함께 사용)이 카드 위에 대각선 빛줄기가 반복
+스쳐지나가는 오버레이(`ratc-replace-shimmer`, globals.css 신규 키프레임)를 그려 "방금 놓은 카드"임을
+구분. engine.ts docstring point 8과 `HandCard.isKnownToOwner` 필드 주석도 "더 이상 영구 힌트를
+렌더링하지 않음, 플래그/봇 로직 자체는 무변경"으로 갱신. 검증: `npx tsc --noEmit`(0 에러) / `npx
+eslint src/games/ratATatCat`(0 에러) / `npx vitest run src/games/ratATatCat/RatATatCat.test.ts`
+(43/43, engine 실질 로직 무변경 — 주석만 수정). 캐시된 Playwright로 실제 2인 방(호스트+봇1) 재현 —
+내 턴에 덱에서 숫자 카드를 뽑아 1번 슬롯에 교체한 직후 DOM에서 `ratc-replace-shimmer` 스팬 존재 +
+실제 카드 값("8") 노출을 확인, ~3초 시점에도 동일하게 유지됨을 확인, ~5.6초 시점엔 스팬이 사라지고
+슬롯이 "❓"로 완전히 되돌아감을 확인(스크린샷 3장 첨부) — 요청한 "최대 5초" 상한이 정확히 지켜짐.
+룰북(`렛어텟켓.md`) §4에 디지털 확장 안내 콜아웃 신규 추가(교체 카드가 이제 최대 5초만 반짝이다
+사라진다는 변경 내역과, 판정 규칙 자체는 무변경임을 명시 — 오히려 실물 게임의 "놓자마자 다시 기억에
+의존" 느낌에 더 가까워졌다는 점도 기록).)_
+
+_이전 갱신: 2026-09-04 (**랫어탯캣 — 결과판 순위 1등 오름차순 정렬 후속 세션** — 직전 세션(등수
 배지/축하·우울 이펙트)에 곧바로 이어 "점수결과를 1등 오름차순으로 표시해주세요" 요청.
 `RatATatCatEffects.tsx`의 `GameOverReveal`이 지금까지 결과 그리드를 `seatOrderFrom(viewerSeat, ...)`
 (내 좌석 기준 시계방향, 즉 항상 "나"가 맨 위)로 그렸는데, 이를 `rankings.map(r => r.seat)`로 교체 —
