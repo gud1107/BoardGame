@@ -419,7 +419,7 @@ function RectBidTrack({
   currentCell,
   pendingCell,
   pendingFace,
-  showPending,
+  showMarker,
   cellEnabled,
   onCellClick,
   children,
@@ -427,7 +427,8 @@ function RectBidTrack({
   currentCell: TrackCell | null;
   pendingCell: TrackCell | null;
   pendingFace: Face;
-  showPending: boolean;
+  /** Whether to render the purple betting-die overlay at all (see `PerudoBoard`'s call site — true both while the viewer is actively drafting a raise AND, 2026-09-04 픽스, whenever there's already a confirmed bid to keep visually reinforced during any other seat's turn). Distinct from `cellEnabled`, which independently gates click-ability per cell. */
+  showMarker: boolean;
   cellEnabled: (cell: TrackCell) => boolean;
   onCellClick: (cell: TrackCell) => void;
   children: React.ReactNode;
@@ -440,7 +441,7 @@ function RectBidTrack({
         key={cell.index}
         cell={cell}
         isCurrent={currentCell?.index === cell.index}
-        isPending={showPending && pendingCell?.index === cell.index}
+        isPending={showMarker && pendingCell?.index === cell.index}
         pendingFace={pendingFace}
         enabled={cellEnabled(cell)}
         onClick={() => onCellClick(cell)}
@@ -661,6 +662,20 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
   const pendingCell = trackCellForBid({ quantity: pendingQuantity, face: pendingFace });
   const currentOverflows = currentCell !== null && currentCell.index > BOARD_LAST_INDEX;
   const pendingOverflows = pendingCell.index > BOARD_LAST_INDEX;
+  /**
+   * Whether the purple betting-die marker should render at all (2026-09-04
+   * 픽스 — 버그 리포트: "상대 턴일 때 보라색 배팅 주사위가 안 보임"). Previously this
+   * was just `isMyTurn && iAmAlive`, so the marker vanished the instant the
+   * turn passed to anyone else — leaving only the plain amber "현재 확정된
+   * 베팅 칸" highlight with no die/pip icon. `pendingCell`/`pendingFace` stay
+   * exactly in sync with `state.currentBid` whenever it isn't the viewer's
+   * turn (see the bid-composer sync block above — the composer controls
+   * that could otherwise diverge the draft are only rendered on my own
+   * turn), so showing the marker there too is always accurate: it now stays
+   * lit on whichever cell the CURRENT confirmed bid sits on for as long as
+   * one exists, not just while the viewer is actively drafting a raise.
+   */
+  const showBettingMarker = (isMyTurn && iAmAlive) || state.currentBid !== null;
 
   // Roll sound cue: `DiceRollTray`'s `onRollStart`/`onSettled` callbacks
   // (wired up below, "My dice" section) fire the rattle/thud SFX beat timed
@@ -865,7 +880,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
           currentCell={currentCell}
           pendingCell={pendingCell}
           pendingFace={pendingFace}
-          showPending={isMyTurn && iAmAlive}
+          showMarker={showBettingMarker}
           cellEnabled={cellEnabled}
           onCellClick={selectCell}
         >

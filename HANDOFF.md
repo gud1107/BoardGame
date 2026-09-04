@@ -1,6 +1,29 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-04 (**달무티(Dalmuti) 버튼 클릭 반응성 하드닝 + 네온 리플/펄스 클릭 이펙트 구현
+_최종 갱신: 2026-09-04 (**페루도(Perudo) 배팅 마커 상시 노출 버그 픽스 세션** — 요청서는 "다른
+플레이어 턴일 때 내 주사위 컵 자체가 사라진다"는 버그 리포트를 근거로 `Board.tsx`/`DiceCup.tsx`/
+`PlayerHand.tsx`/`usePerudo.ts`/`roundPhase`/`currentTurnPlayerId` 같은 전제를 들며 `isMyTurn ?
+<DiceCup/> : null` 패턴 제거를 요청했으나, 조사 결과 그런 파일/필드는 이 프로젝트에 없고([[dalmuti-5p-tax-bug-premise-mismatch]] 등과 같은 유형의 요청 전제-실제 코드 불일치 사례) 본인
+주사위 트레이는 2026-08-15 UI 개편 이후 줄곧 `iAmAlive`(생존 여부)로만 게이팅돼 턴과 무관하게 항상
+렌더링 중이었음을 코드로 먼저 확인. `AskUserQuestion`으로 재현 경로를 확인하니 사용자가 첨부한 실제
+스크린샷도 본인 주사위 5개가 전부 정상 노출된 상태였음(이 캡처만으로는 재현 안 됨) — 재질문 끝에 진짜
+버그가 드러남: **본인 주사위가 아니라, 비딩 트랙 위 보라색 "베팅 주사위" 마커**가 문제였음.
+`PerudoBoard.tsx`의 `RectBidTrack`이 이 마커를 `showPending={isMyTurn && iAmAlive}`로만 게이팅하고
+있어, 확정된 현재 선언이 있어도 턴이 다른 좌석(특히 봇)에게 넘어가는 순간 트랙 칸의 금색 "현재 확정"
+하이라이트만 남고 실제 눈금 pip이 보이는 보라색 다이 아이콘 자체는 완전히 사라졌음. 수정:
+`showPending` prop을 `showMarker`로 개명하고 조건을 `(isMyTurn && iAmAlive) || state.currentBid !==
+null`로 변경 — 내 턴이 아닐 땐 어차피 베팅 컴포저 컨트롤이 렌더링되지 않아 `pendingCell`/`pendingFace`
+드래프트가 `state.currentBid`와 항상 동기화된 상태로 남아 있으므로(기존 bid-composer 동기화 블록), 그
+값을 그대로 재사용해 확정된 현재 선언의 칸에 마커가 계속 떠 있도록 함(1개 지점, `PerudoBoard.tsx` 약
+20줄 변경). 검증: `npx tsc --noEmit`(0 에러) / `npx eslint src/games/perudo`(0 에러) /
+`npx vitest run src/games/perudo/Perudo.test.ts`(73/73 통과) / `npx vitest run --exclude
+"**/aiBenchmark.test.ts"`(50개 파일 **1614개** 테스트 전체 통과). 캐시된 Playwright Chromium(scratchpad에
+`playwright-core`만 설치)으로 2인 방(호스트+봇1) 실제 재현: 내 턴에 첫 선언(2×1개↑)을 확정한 뒤 턴이
+봇에게 넘어간 상태에서 스크린샷 촬영 — 보라색 페루도(★) 다이 마커가 확정 선언 칸(금색 하이라이트) 위에
+그대로 떠 있음을 육안 확인(수정 전이었다면 사라졌을 지점). 룰북(`페루도.md`)은 규칙 변경이 전혀 없는
+순수 UI 버그 픽스라 수정하지 않음(달무티 버튼 반응성 세션과 동일 판단).)_
+
+_이전 갱신: 2026-09-04 (**달무티(Dalmuti) 버튼 클릭 반응성 하드닝 + 네온 리플/펄스 클릭 이펙트 구현
 세션** — 요청서는 "PC 마우스 클릭이 가끔 1번에 안 먹는다"는 버그를 ①터치/마우스 이벤트 혼용
 ②과도한 디바운스/쓰로틀 ③`pointer-events` 잔류 플래그를 근본 원인으로 지목하며 `ActionButtonArea.tsx`/
 `Board.tsx`/`CardHand.tsx`/`useDalmuti.ts`/`DalmutiButton.tsx` 등을 전제로 요청 — 조사 결과 이런 파일은
