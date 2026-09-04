@@ -21,7 +21,27 @@ null`로 변경 — 내 턴이 아닐 땐 어차피 베팅 컴포저 컨트롤�
 `playwright-core`만 설치)으로 2인 방(호스트+봇1) 실제 재현: 내 턴에 첫 선언(2×1개↑)을 확정한 뒤 턴이
 봇에게 넘어간 상태에서 스크린샷 촬영 — 보라색 페루도(★) 다이 마커가 확정 선언 칸(금색 하이라이트) 위에
 그대로 떠 있음을 육안 확인(수정 전이었다면 사라졌을 지점). 룰북(`페루도.md`)은 규칙 변경이 전혀 없는
-순수 UI 버그 픽스라 수정하지 않음(달무티 버튼 반응성 세션과 동일 판단).)_
+순수 UI 버그 픽스라 수정하지 않음(달무티 버튼 반응성 세션과 동일 판단). **커밋/푸시**: 이번 세션이 수정한
+3개 파일만 스테이징(`PerudoBoard.tsx`/`HANDOFF.md`/사용자가 제공한 재현 스크린샷
+`boardGameRule/페루도/다른플레이어턴일때 주사위가안보임.png`) — 공유 작업 트리에 남아 있던 다른 세션들의
+미커밋 변경(`docs/README.md`는 이 세션 시작 전부터 이미 병합 충돌 상태였음, 패치노트 컴포넌트, 다수
+룰북 이미지 등)은 전혀 건드리지 않음. 커밋 `fix(perudo): keep current-bid marker visible on the track
+during other players' turns` → `git push origin main`이 그사이 다른 동시 세션(analytics/코요테 관련
+머지 커밋들)과 non-fast-forward로 충돌해, 공유 작업 트리의 미커밋 변경(`docs/README.md` 충돌 포함)을
+건드리지 않기 위해 그 변경들만 `git stash`로 잠시 격리한 뒤 `git pull --rebase`(충돌 없음)로 재정렬해
+푸시 완료(`bfed9c8..c847d4e`) — 이어서 `git stash pop`을 시도하니 `docs/README.md`에서 병합 충돌이
+발생(다른 세션의 기존 미해결 변경과 origin에 이미 반영된 버전 간 충돌로 추정, 이 세션의 변경과는 무관)해
+`git reset --hard`로 강제 정리하려던 시도는 세이프가드에 의해 차단됨 — stash 자체는 유실 없이
+`stash@{0}`으로 보존된 상태이니 원 작업자가 직접 `git stash pop`/`git stash drop`으로 해소해야 함(§3에
+기록). **배포 — 미완료**: 공유 워킹 트리의 미해결 충돌을 피하기 위해 `git worktree add`로 격리 워크트리를
+새로 만들고 `node_modules`/`.vercel`을 `mklink /J`로 연결한 뒤 그 안에서 `npx vercel deploy --prod
+--scope me-3871`을 2회 시도했으나 둘 다 업로드 후 `status: UNKNOWN`(빌드 로그 자체가 생성되지 않음)에서
+10분 이상 진행이 없어 강제 종료 — 같은 날 이른 시간에 다른 세션이 독립적으로 겪고 문서화해 둔 것과 동일한
+증상(§3 "2026-09-04 — analytics 머지 배포 시도" 참고, Vercel 계정/프로젝트 레벨의 일시적 제약으로 추정,
+이 세션의 코드 문제 아님 — `tsc`/`eslint`/`vitest`/로컬 Playwright 검증 전부 클린). 프로덕션 도메인
+(`board-game-tau-navy.vercel.app`)은 이 배포 시도들과 무관하게 계속 200으로 정상 서빙 중(이번 커밋이
+빠진 이전 버전) — 다음 세션에서 같은 격리 워크트리 또는 `origin/main`의 새 클론에서 `npx vercel deploy
+--prod --scope me-3871` 재시도만 하면 됨.)_
 
 _이전 갱신: 2026-09-04 (**달무티(Dalmuti) 버튼 클릭 반응성 하드닝 + 네온 리플/펄스 클릭 이펙트 구현
 세션** — 요청서는 "PC 마우스 클릭이 가끔 1번에 안 먹는다"는 버그를 ①터치/마우스 이벤트 혼용
