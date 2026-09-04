@@ -366,11 +366,38 @@ function TrackCellButton({
  * 함수는 여전히 순수 렌더링 배치일 뿐이다.
  */
 const BOARD_LAST_INDEX = 29;
+/** How many track slots one "lap" of the physical board covers — see `buildRectFrame`'s `laneOffset` doc. */
+const LAP_SIZE = BOARD_LAST_INDEX + 1;
 
-function buildRectFrame() {
-  const at = trackCellAt;
+/**
+ * `laneOffset` (2026-09-04 "20 초과 시 트랙 이어붙이기" 세션, 사용자 요청 —
+ * "20보다 더 커지는 경우에 1 대신 21, 페루도1 대신 페루도11... 이런식으로
+ * 이어주세요") — the physical board only has 30 painted slots, but
+ * `trackCellAt`/`trackCellForBid` (engine.ts) were always unbounded (dice
+ * counts have no cap, see that file's module doc). Previously this component
+ * only ever rendered `trackCellAt(0..29)` and punted anything past index 29
+ * to `OverflowBadge`, off the board entirely. Now the same 30 physical
+ * button POSITIONS are reused for however many "laps" a round needs — the
+ * board renders `trackCellAt(laneOffset + i)` instead of `trackCellAt(i)`,
+ * so a bid at index 30 (quantity 21) lands on the exact same physical slot
+ * quantity 1 sits on in lap 0, but the cell's own `quantity` field (already
+ * unbounded/correct from `trackCellAt`'s closed form — see engine.ts) prints
+ * "21" instead of "1", "페루도12" instead of "페루도2", etc. — no extra
+ * relabeling math needed here, just shifting which slice of the infinite
+ * sequence is on screen. `PerudoBoard` derives `laneOffset` from the
+ * CONFIRMED bid's own lap (`Math.floor(currentCell.index / 30) * 30`, 0 if
+ * no bid yet) — never the viewer's still-editable draft — because bids only
+ * ever increase, so every legal raise from here is guaranteed to be in that
+ * same lap or later; the confirmed bid itself is therefore always exactly
+ * on-board. The one remaining edge case — a viewer drafting a raise that
+ * pushes past the TOP of the currently-displayed lap (i.e. into a lap that
+ * won't become "current" until they actually confirm it) — still falls back
+ * to `OverflowBadge`, unchanged from before this session.
+ */
+function buildRectFrame(laneOffset: number) {
+  const at = (i: number) => trackCellAt(laneOffset + i);
   return {
-    cornerTL: at(0), // 숫자 1
+    cornerTL: at(0), // 숫자 1 (이 lap의 시작 칸)
     north: Array.from({ length: 7 }, (_, i) => at(1 + i)), // 1..7: 페루도1, 숫자2~3, 페루도2, 숫자4~5, 페루도3
     cornerTR: at(8), // 숫자 6
     east: Array.from({ length: 6 }, (_, i) => at(9 + i)), // 9..14: 숫자7, 페루도4, 숫자8~9, 페루도5, 숫자10
@@ -429,6 +456,7 @@ function RectBidTrack({
   pendingCell,
   pendingFace,
   showMarker,
+  laneOffset,
   cellEnabled,
   onCellClick,
   children,
@@ -438,11 +466,13 @@ function RectBidTrack({
   pendingFace: Face;
   /** Whether to render the purple betting-die overlay at all (see `PerudoBoard`'s call site — true both while the viewer is actively drafting a raise AND, 2026-09-04 픽스, whenever there's already a confirmed bid to keep visually reinforced during any other seat's turn). Distinct from `cellEnabled`, which independently gates click-ability per cell. */
   showMarker: boolean;
+  /** Which 30-slot "lap" of the (conceptually unbounded) track to render — see `buildRectFrame`'s doc comment. */
+  laneOffset: number;
   cellEnabled: (cell: TrackCell) => boolean;
   onCellClick: (cell: TrackCell) => void;
   children: React.ReactNode;
 }) {
-  const frame = buildRectFrame();
+  const frame = buildRectFrame(laneOffset);
 
   function renderCell(cell: TrackCell) {
     return (
@@ -465,12 +495,17 @@ function RectBidTrack({
     >
       <div className="relative col-start-1 row-start-1">
         {renderCell(frame.cornerTL)}
-        <span
-          className="pointer-events-none absolute -top-1.5 -left-1.5 z-20 text-[10px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]"
-          title="시작 칸"
-        >
-          💀
-        </span>
+        {/* "시작 칸" 표식은 lap 0(수량 1~20/페루도1~10)일 때만 의미가 있다 —
+            lap>0에서는 같은 물리 칸이 21/41/... 같은 훨씬 큰 수량을 나타내므로
+            "시작"이 아니다(2026-09-04 트랙 이어붙이기 세션). */}
+        {laneOffset === 0 && (
+          <span
+            className="pointer-events-none absolute -top-1.5 -left-1.5 z-20 text-[10px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]"
+            title="시작 칸"
+          >
+            💀
+          </span>
+        )}
       </div>
       <div className="col-start-2 row-start-1 flex shrink-0" style={{ width: stripLength(7) }}>
         {frame.north.map(renderCell)}
@@ -689,15 +724,23 @@ export default function PerudoBoard({
   const isIdenticalToCurrentBid =
     state.currentBid !== null && pendingQuantity === state.currentBid.quantity && pendingFace === state.currentBid.face;
 
-  // The fixed rectangular board (`RectBidTrack`) only has cells for
-  // quantities 1-20 — a bid past that (legal; dice counts are uncapped, see
-  // engine.ts module doc) has no cell to land on, so it's flagged here and
-  // surfaced as an `OverflowBadge` inside the board's center instead of
-  // being forced onto a cell that doesn't exist.
+  // The fixed rectangular board (`RectBidTrack`) only has 30 physical slots
+  // per lap — a bid whose index falls outside the currently-displayed lap
+  // has no on-board cell to land on, so it's flagged here and surfaced as an
+  // `OverflowBadge` inside the board's center instead of being forced onto a
+  // cell that doesn't exist. Since `laneOffset` (2026-09-04 트랙 이어붙이기
+  // 세션) always follows the CONFIRMED bid's own lap, `currentOverflows`
+  // below is provably always false in practice — the confirmed bid is always
+  // on-board now — but it's kept as a real (not hardcoded-false) check for
+  // robustness. Only the viewer's own still-editable draft can still
+  // overflow (pushing past the top of the currently-displayed lap before
+  // that raise is confirmed) — see `buildRectFrame`'s doc comment.
   const currentCell = state.currentBid ? trackCellForBid(state.currentBid) : null;
   const pendingCell = trackCellForBid({ quantity: pendingQuantity, face: pendingFace });
-  const currentOverflows = currentCell !== null && currentCell.index > BOARD_LAST_INDEX;
-  const pendingOverflows = pendingCell.index > BOARD_LAST_INDEX;
+  const laneOffset = currentCell !== null ? Math.floor(currentCell.index / LAP_SIZE) * LAP_SIZE : 0;
+  const currentOverflows =
+    currentCell !== null && (currentCell.index < laneOffset || currentCell.index > laneOffset + BOARD_LAST_INDEX);
+  const pendingOverflows = pendingCell.index < laneOffset || pendingCell.index > laneOffset + BOARD_LAST_INDEX;
   /**
    * Whether the purple betting-die marker should render at all (2026-09-04
    * 픽스 — 버그 리포트: "상대 턴일 때 보라색 배팅 주사위가 안 보임"). Previously this
@@ -947,6 +990,7 @@ export default function PerudoBoard({
           pendingCell={pendingCell}
           pendingFace={pendingFace}
           showMarker={showBettingMarker}
+          laneOffset={laneOffset}
           cellEnabled={cellEnabled}
           onCellClick={selectCell}
         >
