@@ -58,9 +58,17 @@
  *    docstring's trust-model paragraph below — so no engine/network change
  *    is needed to show a temporary reveal). `isKnownToOwner` now means
  *    exactly one thing: "this slot's current card was actively placed here
- *    by REPLACE_CARD this game" (confirmed to stay permanent — a replace
- *    isn't a "peek", the owner just placed the card and reasonably still
- *    remembers it, same as the physical game). One accepted side effect:
+ *    by REPLACE_CARD this game" and stays true for the rest of the game —
+ *    unchanged, still driving `assumedSlotValue`'s bot heuristic below
+ *    exactly as before. **2026-09-05 (user request) changed only the HUMAN
+ *    display side of this**: `RatATatCatBoard.tsx` no longer renders this
+ *    flag as a permanent dim hint — instead it starts a purely local,
+ *    ephemeral `REPLACE_REVEAL_MS` shimmer window (same technique as this
+ *    point's own setup/Peek-power reveals) the moment the flag flips false→
+ *    true, after which the slot goes back to genuinely hidden to its
+ *    viewer, same as an unlooked-at slot. The engine/bot side of
+ *    `isKnownToOwner` was deliberately left untouched — only the rendering
+ *    convention changed, not what a replace "means". One accepted side effect:
  *    `assumedSlotValue`'s bot heuristic below now also "forgets" a
  *    peeked-only slot instead of getting free permanent knowledge from it —
  *    judged as an acceptable, thematically-consistent simplification rather
@@ -159,7 +167,7 @@ export function buildDeck(): Card[] {
 
 export interface HandCard {
   card: Card;
-  /** True only once the owning seat has actively placed this exact card here via REPLACE_CARD this game — NOT set by the setup peek or the Peek power, which are temporary/UI-only (module docstring point 8). Drives the board's permanent "살짝 투명한 힌트" vs "?" rendering for a just-placed card — a purely per-viewer concern, never used to gate engine actions. */
+  /** True only once the owning seat has actively placed this exact card here via REPLACE_CARD this game — NOT set by the setup peek or the Peek power, which are temporary/UI-only (module docstring point 8). Drives `assumedSlotValue`'s bot heuristic below; on the human side, `RatATatCatBoard.tsx` only reads this flag's false→true edge to start a capped-length shimmer reveal (2026-09-05), it does not render this flag as an ongoing hint. Never used to gate engine actions either way. */
   isKnownToOwner: boolean;
   /** True only once the round is over and every hand is revealed for scoring. */
   isRevealed: boolean;
