@@ -4030,6 +4030,78 @@ body {
   }
 }
 
+/* ---------------------------------------------------------------------
+   2026-09-04 — 결과판 등수 배지 + 1등 축하/꼴등 우울 이펙트
+   (RatATatCatEffects.tsx's GameOverReveal). Each per-card spark/drip span
+   uses a fixed deterministic offset list in the component itself (same
+   "hardcoded offsets, no Math.random" convention as AvalonEffects.tsx's
+   CONFETTI_OFFSETS) rather than a shared full-screen burst, since the
+   reveal grid can hold up to 6 seats and the celebration/gloom should read
+   as belonging to that specific seat's card, not the whole screen.
+   --------------------------------------------------------------------- */
+
+/* 1등 카드 주변에서 튀어오르는 축하 스파클(🎉/✨/⭐) — 살짝 위로 튀었다가
+   옆으로 흩어지며 사라짐. */
+@keyframes ratc-rank-celebrate-spark {
+  0% {
+    transform: translate(0, 0) scale(0.4) rotate(0deg);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--ratc-spark-x, 0px), var(--ratc-spark-y, -28px)) scale(1) rotate(var(--ratc-spark-rot, 25deg));
+    opacity: 0;
+  }
+}
+
+/* 1등 카드 자체의 은은한 금빛 후광 펄스 — ratc-peek-glow보다 느리고
+   부드러워 "능동적 확인창"이 아니라 "축하받는 상태"로 읽히게 함. */
+@keyframes ratc-rank-celebrate-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(252, 211, 77, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 18px 4px rgba(252, 211, 77, 0.5);
+  }
+}
+.ratc-rank-celebrate-glow {
+  animation: ratc-rank-celebrate-glow 2.4s ease-in-out infinite;
+}
+
+/* 꼴등 카드에서 아래로 떨어지는 우울한 빗방울/눈물(💧/☔) — 위 스파클과
+   반대로 아래로 가라앉으며 사라짐. */
+@keyframes ratc-rank-gloom-drip {
+  0% {
+    transform: translate(0, -4px) scale(0.7);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(var(--ratc-drip-x, 0px), 26px) scale(1);
+    opacity: 0;
+  }
+}
+
+/* 꼴등 카드 전체가 살짝 고개를 숙이듯 늘어지는 무한 반복 모션 — 과하지
+   않게 아주 미세한 각도/이동만 사용. */
+@keyframes ratc-rank-gloom-slump {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  50% {
+    transform: rotate(-1.5deg) translateY(2px);
+  }
+}
+.ratc-rank-gloom-slump {
+  animation: ratc-rank-gloom-slump 2.8s ease-in-out infinite;
+}
+
 /* ===========================================================================
    로스트 시티 (Lost Cities) — visual renewal + action effects + real-time
    expedition scoring HUD (2026-08-31 session). See
