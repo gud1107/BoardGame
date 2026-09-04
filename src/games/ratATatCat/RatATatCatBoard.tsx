@@ -35,23 +35,34 @@ export interface RatATatCatBoardProps {
 }
 
 /**
- * How long the setup peek / Peek power's temporary reveal stays up before
- * auto-hiding. Originally both were "고정 3초 자동 + 화면 터치 시 즉시 해제"
- * (AskUserQuestion 2026-08-31). AskUserQuestion 2026-09-02 changed the SETUP
- * peek only (slots 0/3 at game start) into a hard guaranteed minimum with no
- * early-dismiss path at all, so a stray tap/skip can never cut a player's
- * look at their own cards short. **2026-09-04 (AskUserQuestion) partially
- * reversed this for setup only**: a player-driven "👁️ 카드 확인하기" button now
- * gates the reveal itself (see `confirmClicked` below — cards no longer
- * flip on their own the instant setup begins), and once the player opts in,
- * an early-dismiss "⏩ 바로 시작 (스킵)" button is offered again, but only
- * after `SKIP_ENABLE_MS` has passed — a compromise between the two prior
- * decisions rather than a full revert (see `skipAvailable` below). The Peek
- * power card mid-game (`peekingSlot`/`dismissPeekReveal`) is untouched — it
- * kept its own original tap-to-dismiss-early behavior throughout.
+ * How long the Peek power card's mid-game temporary reveal stays up before
+ * auto-hiding. Originally shared with the setup peek too — both were "고정
+ * 3초 자동 + 화면 터치 시 즉시 해제" (AskUserQuestion 2026-08-31). The setup
+ * peek has since diverged onto its own `SETUP_PEEK_REVEAL_MS` (see below);
+ * this constant now governs the Peek power card only
+ * (`peekingSlot`/`dismissPeekReveal`), which keeps its original
+ * tap-to-dismiss-early behavior throughout and was never part of any of the
+ * setup-peek-specific changes below.
  */
 const PEEK_REVEAL_MS = 3000;
-/** AskUserQuestion 2026-09-04: minimum forced-visibility before the setup peek's skip button appears — see `PEEK_REVEAL_MS`'s docstring. */
+/**
+ * How long the SETUP peek (slots 0/3 at game start) stays up before
+ * auto-hiding — separate from `PEEK_REVEAL_MS` above since AskUserQuestion
+ * 2026-09-02 changed setup only into a hard guaranteed minimum with no
+ * early-dismiss path at all, so a stray tap/skip could never cut a player's
+ * look at their own cards short. **2026-09-04 (AskUserQuestion) partially
+ * reversed this**: a player-driven "👁️ 카드 확인하기" button now gates the
+ * reveal itself (see `confirmClicked` below — cards no longer flip on their
+ * own the instant setup begins), and once the player opts in, an
+ * early-dismiss "⏩ 바로 시작 (스킵)" button is offered again, but only after
+ * `SKIP_ENABLE_MS` has passed — a compromise between the two prior decisions
+ * rather than a full revert (see `setupSkipAvailable` below). **2026-09-04
+ * follow-up (user request)** bumped the guaranteed hold itself from 3s to
+ * 5s, independent of `SKIP_ENABLE_MS` (still 1s) — a player can still skip
+ * from 1s onward, but the un-skipped default wait is now longer.
+ */
+const SETUP_PEEK_REVEAL_MS = 5000;
+/** AskUserQuestion 2026-09-04: minimum forced-visibility before the setup peek's skip button appears — see `SETUP_PEEK_REVEAL_MS`'s docstring. */
 const SKIP_ENABLE_MS = 1000;
 /** AskUserQuestion 2026-09-04: a player who never taps "카드 확인하기" is auto-confirmed after this long, so an AFK/disconnected human can't stall the whole room at the pre-setup gate forever (bots have their own separate ~1-1.5s auto-ack in RatATatCatGame.tsx and never hit this). */
 const SETUP_CONFIRM_TIMEOUT_MS = 15000;
@@ -66,9 +77,9 @@ function seatOrderFrom(viewerSeat: SeatIndex, playerCount: number): SeatIndex[] 
 
 /**
  * Small circular progress badge overlaid on a setup-peek card, draining once
- * over the guaranteed `PEEK_REVEAL_MS` hold so the player can gauge how much
- * longer their card stays visible. Pure CSS (`ratc-peek-ring-drain` in
- * globals.css) — no per-tick JS re-render. `r=8`/circumference ≈50.27 is
+ * over the guaranteed `SETUP_PEEK_REVEAL_MS` hold so the player can gauge
+ * how much longer their card stays visible. Pure CSS (`ratc-peek-ring-drain`
+ * in globals.css) — no per-tick JS re-render. `r=8`/circumference ≈50.27 is
  * hardcoded on both ends; keep them in sync if this radius ever changes.
  */
 function PeekCountdownRing() {
@@ -89,7 +100,7 @@ function PeekCountdownRing() {
         style={{
           transform: "rotate(-90deg)",
           transformOrigin: "50% 50%",
-          animation: `ratc-peek-ring-drain ${PEEK_REVEAL_MS}ms linear forwards`,
+          animation: `ratc-peek-ring-drain ${SETUP_PEEK_REVEAL_MS}ms linear forwards`,
         }}
       />
     </svg>
@@ -127,10 +138,10 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
     return () => clearTimeout(timeout);
   }, [state.phase, iAcked, confirmClicked]);
 
-  const [setupPeekSecondsLeft, setSetupPeekSecondsLeft] = useState(Math.ceil(PEEK_REVEAL_MS / 1000));
+  const [setupPeekSecondsLeft, setSetupPeekSecondsLeft] = useState(Math.ceil(SETUP_PEEK_REVEAL_MS / 1000));
   const [setupSkipAvailable, setSetupSkipAvailable] = useState(false);
   const setupPeekFiredRef = useRef(false);
-  /** Ends the setup peek reveal right now — called by the fixed `PEEK_REVEAL_MS` timeout below, or by the player tapping the skip button once `setupSkipAvailable`. Idempotent (guards on the fired ref) since both paths can otherwise race. */
+  /** Ends the setup peek reveal right now — called by the fixed `SETUP_PEEK_REVEAL_MS` timeout below, or by the player tapping the skip button once `setupSkipAvailable`. Idempotent (guards on the fired ref) since both paths can otherwise race. */
   function dismissSetupPeek() {
     if (setupPeekFiredRef.current) return;
     setupPeekFiredRef.current = true;
@@ -140,8 +151,8 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
   // Reveal + timers only start once `confirmClicked` — see docstring above.
   // AskUserQuestion 2026-09-04 (compromise between the 2026-08-31 tap-to-
   // dismiss and 2026-09-02 no-early-dismiss decisions): the reveal still
-  // guarantees `PEEK_REVEAL_MS` by default, but a skip button reappears
-  // after a shorter forced-visibility floor (`SKIP_ENABLE_MS`).
+  // guarantees `SETUP_PEEK_REVEAL_MS` by default, but a skip button
+  // reappears after a shorter forced-visibility floor (`SKIP_ENABLE_MS`).
   useEffect(() => {
     if (state.phase !== "setup" || iAcked || !confirmClicked) return;
     // No explicit reset of setupPeekFiredRef/setupSkipAvailable here: both
@@ -153,11 +164,11 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
     // during the effect itself) — the immediate 0ms timeout just corrects the
     // displayed countdown right away for a repeat peek window (a rematch)
     // without setState-in-effect's cascading-render footgun.
-    const tick = () => setSetupPeekSecondsLeft(Math.max(0, Math.ceil((PEEK_REVEAL_MS - (Date.now() - startedAt)) / 1000)));
+    const tick = () => setSetupPeekSecondsLeft(Math.max(0, Math.ceil((SETUP_PEEK_REVEAL_MS - (Date.now() - startedAt)) / 1000)));
     const immediate = setTimeout(tick, 0);
     const interval = setInterval(tick, 250);
     const skipTimer = setTimeout(() => setSetupSkipAvailable(true), SKIP_ENABLE_MS);
-    const timeout = setTimeout(dismissSetupPeek, PEEK_REVEAL_MS);
+    const timeout = setTimeout(dismissSetupPeek, SETUP_PEEK_REVEAL_MS);
     return () => {
       clearTimeout(immediate);
       clearInterval(interval);
@@ -286,10 +297,10 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
   // longer flip the instant setup begins — this viewer must first tap
   // "👁️ 카드 확인하기" (`confirmClicked`, or the `SETUP_CONFIRM_TIMEOUT_MS`
   // safety timeout fires on their behalf). Once revealed, the window still
-  // guarantees `PEEK_REVEAL_MS` by default but now offers a "⏩ 바로 시작"
-  // skip button again after `SKIP_ENABLE_MS` — a deliberate compromise
+  // guarantees `SETUP_PEEK_REVEAL_MS` by default but now offers a "⏩ 바로
+  // 시작" skip button again after `SKIP_ENABLE_MS` — a deliberate compromise
   // between the 2026-08-31 tap-to-dismiss and 2026-09-02 no-early-dismiss
-  // decisions (see `PEEK_REVEAL_MS`'s docstring above).
+  // decisions (see `SETUP_PEEK_REVEAL_MS`'s docstring above).
   // ---------------------------------------------------------------------
   if (state.phase === "setup") {
     const ackedCount = state.setupAcks.filter(Boolean).length;
