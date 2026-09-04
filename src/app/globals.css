@@ -4102,6 +4102,36 @@ body {
   animation: ratc-rank-gloom-slump 2.8s ease-in-out infinite;
 }
 
+/* ---------------------------------------------------------------------
+   2026-09-05 — CardSlot.tsx's `sparkle` prop: a diagonal light-sweep bar
+   repeating across a just-REPLACE_CARD'd own-hand slot for the duration of
+   its capped `REPLACE_REVEAL_MS` window (RatATatCatBoard.tsx). Replaces the
+   old permanent dimmed "known" hint per user request — now every own-hand
+   reveal in this game (setup peek / Peek power / this) is timed the same
+   way, just this one gets an extra flourish marking "freshly placed".
+   --------------------------------------------------------------------- */
+@keyframes ratc-replace-shimmer-sweep {
+  0% {
+    transform: translateX(-40%) skewX(-12deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.85;
+  }
+  55% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateX(340%) skewX(-12deg);
+    opacity: 0;
+  }
+}
+.ratc-replace-shimmer {
+  background: linear-gradient(100deg, transparent 42%, rgba(255, 255, 255, 0.85) 50%, transparent 58%);
+  width: 45%;
+  animation: ratc-replace-shimmer-sweep 1.7s ease-in-out infinite;
+}
+
 /* ===========================================================================
    로스트 시티 (Lost Cities) — visual renewal + action effects + real-time
    expedition scoring HUD (2026-08-31 session). See
