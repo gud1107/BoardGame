@@ -33,12 +33,6 @@ function isDoubleTap(lastTapAt: number, now: number): boolean {
   return lastTapAt !== 0 && now - lastTapAt < DOUBLE_TAP_SKIP_MS;
 }
 
-function seatOrderFrom(viewerSeat: SeatIndex, playerCount: number): SeatIndex[] {
-  const order = [viewerSeat];
-  for (let i = 1; i < playerCount; i++) order.push((viewerSeat + i) % playerCount);
-  return order;
-}
-
 /** 🥇/🥈/🥉 for the podium, plain "N등" beyond that (up to `MAX_PLAYERS`=6). */
 function rankLabel(rank: number): string {
   if (rank === 1) return "🥇 1등";
@@ -162,7 +156,13 @@ export default function GameOverReveal({ state, names, viewerSeat, onDone }: Gam
 
   const rankings = computeRankings(state);
   const rankBySeat = new Map(rankings.map((r) => [r.seat, r]));
-  const order = seatOrderFrom(viewerSeat, state.playerCount);
+  // 2026-09-04 (user request, "점수결과를 1등 오름차순으로 표시해주세요"): the
+  // reveal grid now orders by standing (1st → last) instead of seat position
+  // relative to the viewer. `computeRankings` already returns its entries
+  // sorted ascending by `rank` (engine.ts), so this is just reading that
+  // order directly — ties keep computeRankings' own stable seat-ascending
+  // order, same as every client computes independently.
+  const order = rankings.map((r) => r.seat);
   const winnerSeats = rankings.filter((r) => r.rank === 1).map((r) => r.seat);
   // "꼴등" = whoever holds the highest rank number. Only meaningful when it's
   // actually distinct from 1st (a full N-way tie for the win has nobody to
