@@ -330,11 +330,17 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
   // (AskUserQuestion) added a player-driven gate in front of it: cards no
   // longer flip the instant setup begins — this viewer must first tap
   // "👁️ 카드 확인하기" (`confirmClicked`, or the `SETUP_CONFIRM_TIMEOUT_MS`
-  // safety timeout fires on their behalf). Once revealed, the window still
-  // guarantees `SETUP_PEEK_REVEAL_MS` by default but now offers a "⏩ 바로
-  // 시작" skip button again after `SKIP_ENABLE_MS` — a deliberate compromise
-  // between the 2026-08-31 tap-to-dismiss and 2026-09-02 no-early-dismiss
-  // decisions (see `SETUP_PEEK_REVEAL_MS`'s docstring above).
+  // safety timeout fires on their behalf). The engine-level ack still fires
+  // on its own schedule (`SETUP_PEEK_REVEAL_MS` guaranteed hold, an earlier
+  // "⏩ 바로 시작" skip after `SKIP_ENABLE_MS`, or that safety timeout) so the
+  // room can't stall on one slow seat — but per a further 2026-09-04 request
+  // ("카드확인하기 단계에 상대를 기다릴때까지는 카드가 보이게해주세요") the
+  // VISUAL card reveal no longer hides the moment that ack fires: it now
+  // stays up through the whole rest of this setup screen, including the
+  // post-ack "waiting for others" view, only truly hiding once
+  // `state.phase` leaves "setup" (where `gameStartPeekActive` below picks up
+  // for one more 3s glance, so the whole thing reads as one continuous
+  // reveal across the phase boundary).
   // ---------------------------------------------------------------------
   if (state.phase === "setup") {
     const ackedCount = state.setupAcks.filter(Boolean).length;
@@ -374,11 +380,24 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
         <p className="max-w-xs break-keep text-xs text-white/50">양 끝(1, 4번) 카드만 몰래 확인하세요. 가운데 2장은 능력을 쓰기 전까지 알 수 없어요.</p>
         <div className="flex gap-2">
           {SLOTS.map((slot) => {
-            const revealNow = !iAcked && (slot === 0 || slot === 3);
+            // 2026-09-04 (user request, "카드확인하기 단계에 상대를 기다릴때까지는
+            // 카드가 보이게해주세요"): stays revealed for the WHOLE rest of the
+            // setup screen once confirmed — including the post-ack "waiting for
+            // others" view below — not just until this viewer's own ack fires.
+            // The engine-level ack timing itself is unchanged (still fires at
+            // `SETUP_PEEK_REVEAL_MS`/skip/`SETUP_CONFIRM_TIMEOUT_MS`, see the
+            // effects above); only the VISUAL reveal is now decoupled from
+            // `iAcked`. It only actually hides once `state.phase` leaves
+            // "setup" — at which point the separate `gameStartPeekActive`
+            // 3s reveal picks up seamlessly, so there's no visible gap.
+            const revealNow = confirmClicked && (slot === 0 || slot === 3);
             return (
               <div key={slot} className="relative">
                 <CardSlot handCard={myHand[slot]} peeking={revealNow} label={`내 카드 ${slot + 1}번`} />
-                {revealNow && <PeekCountdownRing />}
+                {/* Countdown ring only makes sense before my own ack — once
+                    iAcked, the count is over (that's what triggered it), the
+                    card just keeps showing without a running timer next to it. */}
+                {revealNow && !iAcked && <PeekCountdownRing />}
               </div>
             );
           })}
