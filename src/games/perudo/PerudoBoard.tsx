@@ -753,7 +753,7 @@ export default function PerudoBoard({
             onClick={() => onColorwayChange(c.id)}
             title={isTaken ? `${names[heldBySeat]}님이 사용 중` : `내 주사위 색상: ${c.label}`}
             aria-label={`주사위 색상: ${c.label}`}
-            className={`relative flex h-4 w-4 items-center justify-center rounded-full border-2 transition ${
+            className={`h-4 w-4 rounded-full border-2 transition ${
               isMine
                 ? "scale-110 border-white"
                 : isTaken
@@ -761,9 +761,7 @@ export default function PerudoBoard({
                   : "border-white/25 hover:border-white/60"
             }`}
             style={{ backgroundColor: c.body }}
-          >
-            {isTaken && <span className="pointer-events-none absolute -top-1 -right-1 text-[8px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">🔒</span>}
-          </button>
+          />
         );
       })}
     </div>

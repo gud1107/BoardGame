@@ -1089,7 +1089,7 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
                         onClick={() => handleColorwayChange(c.id)}
                         title={isTaken ? `${holder!.label}님이 사용 중` : c.label}
                         aria-label={`주사위 색상: ${c.label}`}
-                        className={`relative flex h-7 w-7 items-center justify-center rounded-full border-2 transition ${
+                        className={`h-7 w-7 rounded-full border-2 transition ${
                           isMine
                             ? "scale-110 border-white"
                             : isTaken
@@ -1097,9 +1097,7 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
                               : "border-white/25 hover:border-white/60"
                         }`}
                         style={{ backgroundColor: c.body }}
-                      >
-                        {isTaken && <span className="pointer-events-none text-[10px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">🔒</span>}
-                      </button>
+                      />
                     );
                   })}
                 </div>

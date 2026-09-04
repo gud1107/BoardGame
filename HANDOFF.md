@@ -1,6 +1,17 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-04 (**페루도(Perudo) 주사위 색상 팔레트 확장 + 보라색 제외 + 실시간 중복 방지
+_최종 갱신: 2026-09-04 (**페루도 색상 피커 자물쇠(🔒) 아이콘 제거 세션** — 직전 색상 팔레트 세션에서
+타인이 쓰는 색 스와치에 붙인 🔒 오버레이가 과하다는 사용자 피드백("색 자물쇠로 잠금은 안보여주는게
+좋을꺼같아요")을 받아 `PerudoBoard.tsx`(인게임 피커)·`PerudoGame.tsx`(대기실 피커) 양쪽에서 🔒
+`<span>` 오버레이만 제거 — 비활성화 상태(`disabled`, `opacity-35`, `cursor-not-allowed`, "OO님이
+사용 중" 툴팁)는 그대로 유지해 "선택 불가"라는 정보 자체는 잃지 않음. 오버레이 제거로 더 이상 쓸모없어진
+`relative`/absolute-positioning wrapper도 함께 정리. `npx tsc --noEmit`(0 에러)/
+`npx eslint src/games/perudo`(0 에러)/`npx vitest run src/games/perudo/Perudo.test.ts`(80/80) 확인,
+캐시된 Playwright로 동일한 2인 방(호스트+봇1) 재검증 — 봇이 가져간 파랑 스와치가 `disabled:true`,
+`hasLock:false`로 잠금 아이콘 없이 비활성화만 유지됨을 DOM 속성 + 스크린샷으로 확인. 순수 UI 미세조정이라
+룰북은 무변경.)_
+
+_이전 갱신: 2026-09-04 (**페루도(Perudo) 주사위 색상 팔레트 확장 + 보라색 제외 + 실시간 중복 방지
 세션** — 요청서는 `ColorPicker.tsx`/`DiceCup.tsx`/`Board.tsx`/`types.ts`/룸 매니저를 전제로 요청했으나
 이 프로젝트엔 존재하지 않고(실제: `PerudoBoard.tsx` 내장 스와치 피커 + `dice/colorways.ts` +
 `PerudoGame.tsx`의 Supabase Realtime presence — 페루도에서만 이번이 두 번째 요청 전제-실제 코드 불일치
