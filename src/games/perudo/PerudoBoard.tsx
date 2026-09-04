@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import RulebookModal from "./RulebookModal";
@@ -549,6 +549,25 @@ export default function PerudoBoard({
   const isMyTurn = state.activeSeat === viewerSeat && state.phase === "playing";
   const iAmAlive = me.diceCount > 0;
 
+  // "내 턴이 되었을 때" 알림 (2026-09-04, 사용자 요청) — 소리+이펙트는 턴이
+  // *시작되는 순간*(false→true 전환)에만 한 번 울려야 하므로, 매 렌더 그냥
+  // `isMyTurn`을 보는 게 아니라 이전 값을 ref로 들고 있다가 전환 엣지만 감지.
+  // `turnFxToken`을 증가시켜 아래 배너의 `key`로 꽂으면 같은 라운드 안에서
+  // 턴이 나→남→나로 여러 번 돌아와도 매번 CSS 애니메이션이 새로 재생된다
+  // (다른 파일들의 `key={rollToken}` 리플레이 관례와 동일 기법).
+  const [turnFxToken, setTurnFxToken] = useState(0);
+  const wasMyTurnRef = useRef(false);
+  useEffect(() => {
+    const nowMyTurn = isMyTurn && iAmAlive;
+    const justBecameMyTurn = nowMyTurn && !wasMyTurnRef.current;
+    wasMyTurnRef.current = nowMyTurn;
+    if (!justBecameMyTurn) return;
+    setTurnFxToken((t) => t + 1);
+    const engine = getSoundEngine();
+    engine.unlock(); // best-effort — a user gesture already happened earlier in the room lobby
+    engine.playMyTurnChime();
+  }, [isMyTurn, iAmAlive]);
+
   // My own dice's colorway — room-synced (2026-09-04 색상 확장/중복 방지 세션,
   // see `PerudoBoardProps.colorways`'s doc comment). Falls back to the
   // deterministic seat default only for the brief window before the caller's
@@ -888,7 +907,17 @@ export default function PerudoBoard({
         </div>
       </div>
 
-      <p className={`relative z-10 text-center text-xs font-medium ${isMyTurn ? "text-amber-200" : "text-white/50"}`}>
+      {/* 턴 배너 — 평소엔 조용한 텍스트 안내지만, 내 턴이 "막" 시작된 순간에는
+          `key`를 바꿔 강제로 리마운트시켜 `perudo-turn-pulse` 확대/글로우
+          애니메이션을 재생한다(위 `turnFxToken` 이펙트가 같은 순간 소리도
+          울림). 이미 내 턴인 상태로 계속 렌더링될 땐(예: 트랙 클릭 등 무관한
+          리렌더) key가 그대로라 애니메이션이 다시 재생되지 않는다. */}
+      <p
+        key={isMyTurn ? `mine-${turnFxToken}` : "waiting"}
+        className={`relative z-10 text-center text-sm font-bold break-keep ${
+          isMyTurn ? "perudo-turn-pulse text-amber-200 [text-shadow:0_0_12px_rgba(251,191,36,0.55)]" : "text-xs font-medium text-white/50"
+        }`}
+      >
         {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
       </p>
 

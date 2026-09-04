@@ -1,6 +1,29 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-04 (**페루도 색상 피커 자물쇠(🔒) 아이콘 제거 세션** — 직전 색상 팔레트 세션에서
+_최종 갱신: 2026-09-04 (**페루도 "내 턴" 알림(배너 이펙트+효과음) 신규 구현 세션** — "내차례가
+되었을때 '나의 턴' 표시와 소리와 이팩트추가해주세요" 요청. 조사 결과 정적 "🫵 당신 차례입니다!"
+텍스트 배너는 이미 이 프로젝트 거의 모든 게임에 공통으로 있었지만(요구사항 중 "표시" 자체는 기존 존재),
+턴이 "시작되는 순간"에만 반응하는 소리/이펙트는 페루도는 물론 프로젝트 어디에도 없던 신규 패턴이라 페루도
+전용으로 구현. `PerudoBoard.tsx`: `isMyTurn`(및 `iAmAlive`)의 false→true 전환 엣지만 감지하는
+`useEffect`(이전 값은 ref로 보관 — 매 리렌더가 아니라 "턴이 막 넘어온 순간"에만 1회 발화, 라운드 중
+턴이 나→남→나로 여러 번 돌아와도 매번 정확히 반응) 추가 — 감지되면 `turnFxToken`을 증가시켜 배너
+`<p>`의 `key`로 꽂아 강제 리마운트(CSS 애니메이션 재생, 다른 파일들의 `key={rollToken}` 리플레이
+관례 재사용)시키고 동시에 신규 `playMyTurnChime()` 사운드를 재생. `globals.css`에 `perudo-turn-pulse`
+키프레임(확대 오버슈트 + 앰버 글로우 펄스, 650ms) 신규 추가, 배너를 기존보다 큼직하고 굵은 글씨로
+개편(`text-sm font-bold` + 정적 글로우 text-shadow, 평소엔 애니메이션 없이 그 마지막 프레임 상태로
+고정). `soundEngine.ts`에 신규 `playMyTurnChime()`(완전5도 상승 2음 벨 딩동, 600ms 게이트) 추가 +
+`soundEngine.test.ts`에 기존 `playUiClickTick` 커버리지와 동일 패턴의 게이트 테스트 3종. 검증:
+`npx tsc --noEmit`(0 에러)/`npx eslint src/games/perudo src/lib/audio`(0 에러)/`npx vitest run`(49개
+파일 **1625개** 테스트 전체 통과, 신규 3개 포함)/캐시된 Playwright로 2인 방(호스트+봇1) 실제 재현 —
+프로젝트 기본 음소거 설정(`masterMuted`/`sfxMuted` 둘 다 기본 true) 때문에 처음엔 오실레이터 호출이
+전혀 안 잡혀서, `localStorage`의 `boardgame_audio_settings_v1`를 사전에 언뮤트로 시딩해야 사운드
+경로까지 실제로 검증할 수 있었음(발견: 인게임 음소거 버튼은 `masterMuted`만 토글하고 `sfxMuted`는
+별도 — 이 세션에서 처음 확인) — 그렇게 재검증하니 내 턴이 시작되는 순간
+`AudioContext.createOscillator`가 정확히 587.33Hz/880Hz(코드에 넣은 두 음)로 두 번 호출됨을 직접
+확인, 배너 DOM의 `className`에도 `perudo-turn-pulse`가 실제로 붙는 것을 확인. 순수 UX 추가라 룰북
+무변경.)_
+
+_이전 갱신: 2026-09-04 (**페루도 색상 피커 자물쇠(🔒) 아이콘 제거 세션** — 직전 색상 팔레트 세션에서
 타인이 쓰는 색 스와치에 붙인 🔒 오버레이가 과하다는 사용자 피드백("색 자물쇠로 잠금은 안보여주는게
 좋을꺼같아요")을 받아 `PerudoBoard.tsx`(인게임 피커)·`PerudoGame.tsx`(대기실 피커) 양쪽에서 🔒
 `<span>` 오버레이만 제거 — 비활성화 상태(`disabled`, `opacity-35`, `cursor-not-allowed`, "OO님이

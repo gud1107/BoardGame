@@ -1973,6 +1973,34 @@ class SoundEngine {
     crack.start(now);
     crack.stop(now + 0.12);
   }
+
+  /**
+   * "내 턴이 되었습니다" 알림음 (2026-09-04, 페루도 최초 도입 — 요청 시 다른
+   * 게임에도 재사용 가능). 밝은 2음 벨 딩동(완전5도 상승, `playSafeStepChime`과
+   * 같은 sine+엔벨로프 기법이지만 더 여유 있는 벨 톤 서스테인) — 경고음이
+   * 아니라 "당신 차례입니다"라는 긍정적 알림으로 읽히도록 짧고 산뜻하게 설계.
+   * 게이트를 넉넉히 잡아(600ms) 턴 전환 감지 로직이 같은 틱에 중복 호출해도
+   * 한 번만 울림.
+   */
+  playMyTurnChime() {
+    if (!this.gate("myTurnChime", 600)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [587.33, 880].forEach((freq, i) => {
+      const at = now + i * 0.1;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.22, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.45);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.47);
+    });
+  }
 }
 
 let instance: SoundEngine | null = null;

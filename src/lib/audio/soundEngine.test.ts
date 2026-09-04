@@ -270,3 +270,52 @@ describe("soundEngine SFX gate — 달무티 버튼 클릭 틱", () => {
     expect(gateSpy.mock.results.every((r) => r.value === false)).toBe(true);
   });
 });
+
+/**
+ * 2026-09-04 세션 — 페루도 "내 턴이 되었습니다" 알림음 `playMyTurnChime`.
+ * 위 `playUiClickTick` 블록과 동일한 게이트 커버리지 패턴, 쿨다운만 600ms.
+ */
+describe("soundEngine SFX gate — 페루도 내 턴 알림음", () => {
+  const engine = getSoundEngine();
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"] });
+    useAudioSettingsStore.getState().setMasterMuted(false);
+    useAudioSettingsStore.getState().setSfxMuted(false);
+    (engine as unknown as { lastPlayedAt: Map<string, number> }).lastPlayedAt = new Map();
+    (engine as unknown as { activeChannels: number }).activeChannels = 0;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("plays once when off cooldown and blocks an immediate repeat", () => {
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    engine.playMyTurnChime();
+    engine.playMyTurnChime();
+
+    expect(gateSpy.mock.results.map((r) => r.value)).toEqual([true, false]);
+  });
+
+  it("allows a fresh chime once its 600ms cooldown has elapsed", () => {
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    engine.playMyTurnChime();
+    vi.advanceTimersByTime(650);
+    engine.playMyTurnChime();
+
+    expect(gateSpy.mock.results.map((r) => r.value)).toEqual([true, true]);
+  });
+
+  it("respects the shared master mute — no chime plays while muted", () => {
+    useAudioSettingsStore.getState().setMasterMuted(true);
+    const gateSpy = vi.spyOn(engine as unknown as { gate: (key: string, cooldownMs: number) => boolean }, "gate");
+
+    engine.playMyTurnChime();
+
+    expect(gateSpy.mock.results.every((r) => r.value === false)).toBe(true);
+  });
+});
