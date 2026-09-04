@@ -46,6 +46,17 @@ export interface PerudoBoardProps {
   viewerSeat: SeatIndex;
   names: Record<SeatIndex, string>;
   connectedSeats: Set<SeatIndex>;
+  /**
+   * Room-synced dice colorway per seat (2026-09-04 색상 확장/중복 방지 세션) —
+   * computed by `PerudoGame.tsx`, covers every seat including the viewer's
+   * own (`colorways[viewerSeat]`). Replaces the old purely-local
+   * `colorwayOverride` state this component used to keep — every seat's
+   * color is now something every OTHER client renders identically too, so
+   * it has to come from the caller like `names`/`connectedSeats` already do.
+   */
+  colorways: Record<SeatIndex, DiceColorway>;
+  /** Request a change to the viewer's own colorway (swatch picker click) — the caller re-broadcasts it room-wide. */
+  onColorwayChange: (colorwayId: string) => void;
   onAction: (action: EngineAction) => void;
   onGameEnd: () => void;
 }
@@ -136,12 +147,10 @@ function TotalDiceBanner({ state }: { state: PerudoState }) {
  */
 function LostDiceTray({
   state,
-  viewerSeat,
-  myColorway,
+  colorways,
 }: {
   state: PerudoState;
-  viewerSeat: SeatIndex;
-  myColorway: DiceColorway;
+  colorways: Record<SeatIndex, DiceColorway>;
 }) {
   const bySeat = state.players.map((p) => ({ seat: p.seat, lost: STARTING_DICE - p.diceCount })).filter((x) => x.lost > 0);
   const totalLost = bySeat.reduce((sum, x) => sum + x.lost, 0);
@@ -158,7 +167,7 @@ function LostDiceTray({
             <div key={seat} className="flex items-center opacity-60 grayscale-[0.4]" title={`${lost}개 상실`}>
               {Array.from({ length: lost }, (_, i) => (
                 <div key={i} style={i === 0 ? undefined : { marginLeft: -10 }}>
-                  <DieBack size="sm" colorway={seat === viewerSeat ? myColorway : playerColorwayForSeat(seat)} />
+                  <DieBack size="sm" colorway={colorways[seat]} />
                 </div>
               ))}
             </div>
@@ -525,18 +534,26 @@ function MyDiceStatsPanel({ state, myDice }: { state: PerudoState; myDice: numbe
   );
 }
 
-export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: PerudoBoardProps) {
+export default function PerudoBoard({
+  state,
+  viewerSeat,
+  names,
+  connectedSeats,
+  colorways,
+  onColorwayChange,
+  onAction,
+  onGameEnd,
+}: PerudoBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const me = state.players.find((p) => p.seat === viewerSeat)!;
   const isMyTurn = state.activeSeat === viewerSeat && state.phase === "playing";
   const iAmAlive = me.diceCount > 0;
 
-  // My own dice's colorway: defaults to a seat-derived pick (see
-  // `playerColorwareForSeat`) so every player looks different out of the
-  // box, but is purely a local cosmetic preference the viewer can override
-  // via the swatch picker — never synced, same trust tier as `muted` below.
-  const [colorwayOverride, setColorwayOverride] = useState<DiceColorway | null>(null);
-  const myColorway = colorwayOverride ?? playerColorwayForSeat(viewerSeat);
+  // My own dice's colorway — room-synced (2026-09-04 색상 확장/중복 방지 세션,
+  // see `PerudoBoardProps.colorways`'s doc comment). Falls back to the
+  // deterministic seat default only for the brief window before the caller's
+  // own presence-track resolves a real pick.
+  const myColorway = colorways[viewerSeat] ?? playerColorwayForSeat(viewerSeat);
 
   // -------------------------------------------------------------------------
   // Bid composer draft — local to this client, re-synced from
@@ -712,21 +729,43 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
     </button>
   );
 
+  // In-game color swatch picker (2026-09-04 색상 확장/중복 방지 세션) — "taken" is
+  // derived straight from `colorways` (every seat is guaranteed filled once
+  // the game has started, unlike the waiting room's own picker in
+  // `PerudoGame.tsx`, which can't assume that). Picking a swatch calls
+  // `onColorwayChange`, which re-broadcasts to the whole room — this is no
+  // longer a purely-local preference.
+  const takenColorwaySeat = (colorwayId: string): SeatIndex | undefined => {
+    const entry = Object.entries(colorways).find(([seat, cw]) => Number(seat) !== viewerSeat && cw.id === colorwayId);
+    return entry ? (Number(entry[0]) as SeatIndex) : undefined;
+  };
   const colorwayPicker = (
-    <div className="flex items-center gap-1" title="내 주사위 색상 선택">
-      {PLAYER_COLORWAYS.map((c) => (
-        <button
-          key={c.id}
-          type="button"
-          onClick={() => setColorwayOverride(c)}
-          title={c.label}
-          aria-label={`주사위 색상: ${c.label}`}
-          className={`h-4 w-4 rounded-full border-2 transition ${
-            myColorway.id === c.id ? "scale-110 border-white" : "border-white/25 hover:border-white/60"
-          }`}
-          style={{ backgroundColor: c.body }}
-        />
-      ))}
+    <div className="flex items-center gap-1">
+      {PLAYER_COLORWAYS.map((c) => {
+        const heldBySeat = takenColorwaySeat(c.id);
+        const isMine = myColorway.id === c.id;
+        const isTaken = heldBySeat !== undefined && !isMine;
+        return (
+          <button
+            key={c.id}
+            type="button"
+            disabled={isTaken}
+            onClick={() => onColorwayChange(c.id)}
+            title={isTaken ? `${names[heldBySeat]}님이 사용 중` : `내 주사위 색상: ${c.label}`}
+            aria-label={`주사위 색상: ${c.label}`}
+            className={`relative flex h-4 w-4 items-center justify-center rounded-full border-2 transition ${
+              isMine
+                ? "scale-110 border-white"
+                : isTaken
+                  ? "cursor-not-allowed border-white/10 opacity-35"
+                  : "border-white/25 hover:border-white/60"
+            }`}
+            style={{ backgroundColor: c.body }}
+          >
+            {isTaken && <span className="pointer-events-none absolute -top-1 -right-1 text-[8px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">🔒</span>}
+          </button>
+        );
+      })}
     </div>
   );
 
@@ -739,7 +778,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
       <div className={`${TABLE_PANEL} flex flex-col items-center gap-4 p-4 text-center sm:p-8`}>
         <TableTexture />
         <TotalDiceBanner state={state} />
-        <LostDiceTray state={state} viewerSeat={viewerSeat} myColorway={myColorway} />
+        <LostDiceTray state={state} colorways={colorways} />
         <span className="relative z-10 text-5xl">🏆</span>
         <h2 className="relative z-10 text-2xl font-bold text-amber-100">{names[rankings[0]?.seat]}님 승리!</h2>
         <p className="relative z-10 text-xs text-white/50">마지막까지 주사위를 지킨 사람이 이기는 게임입니다.</p>
@@ -768,7 +807,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
           </table>
         </div>
 
-        {state.lastResolution && <RevealPanel state={state} names={names} viewerSeat={viewerSeat} myColorway={myColorway} />}
+        {state.lastResolution && <RevealPanel state={state} names={names} viewerSeat={viewerSeat} colorways={colorways} />}
 
         <button
           onClick={onGameEnd}
@@ -791,7 +830,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
       <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
         <TableTexture />
         <TotalDiceBanner state={state} />
-        <LostDiceTray state={state} viewerSeat={viewerSeat} myColorway={myColorway} />
+        <LostDiceTray state={state} colorways={colorways} />
         <div className="relative z-10 flex items-center justify-between text-xs text-rose-100/60">
           <span>
             {state.playerCount}인 · {state.roundNumber}라운드 결과
@@ -819,7 +858,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
           </p>
         </div>
 
-        <RevealPanel state={state} names={names} viewerSeat={viewerSeat} myColorway={myColorway} />
+        <RevealPanel state={state} names={names} viewerSeat={viewerSeat} colorways={colorways} />
 
         <button
           onClick={() => onAction({ type: "continue", seed: randomSeed() })}
@@ -906,7 +945,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
             </div>
           )}
 
-          <LostDiceTray state={state} viewerSeat={viewerSeat} myColorway={myColorway} />
+          <LostDiceTray state={state} colorways={colorways} />
 
           {/* Bid-declaration controls — the confirmed bid, plus (on my turn) the
               FacePicker + quantity stepper composer. Both the composer's
@@ -1054,7 +1093,7 @@ export default function PerudoBoard({ state, viewerSeat, names, connectedSeats, 
             const isSelf = seat === viewerSeat;
             const isActive = state.activeSeat === seat && state.phase === "playing";
             const eliminated = player.diceCount <= 0;
-            const seatColorway = seat === viewerSeat ? myColorway : playerColorwayForSeat(seat);
+            const seatColorway = colorways[seat] ?? playerColorwayForSeat(seat);
             return (
               <div
                 key={seat}
@@ -1101,12 +1140,12 @@ function RevealPanel({
   state,
   names,
   viewerSeat,
-  myColorway,
+  colorways,
 }: {
   state: PerudoState;
   names: Record<SeatIndex, string>;
   viewerSeat: SeatIndex;
-  myColorway: DiceColorway;
+  colorways: Record<SeatIndex, DiceColorway>;
 }) {
   const res = state.lastResolution;
   if (!res) return null;
@@ -1133,7 +1172,7 @@ function RevealPanel({
                       value={d}
                       size="sm"
                       ring={matches ? "match" : isWild ? "wild" : undefined}
-                      colorway={seat === viewerSeat ? myColorway : playerColorwayForSeat(seat)}
+                      colorway={colorways[seat] ?? playerColorwayForSeat(seat)}
                       tilt={tiltFor(seat * 31 + i * 7)}
                     />
                   );

@@ -21,6 +21,7 @@ import {
   type SeatIndex,
 } from "./engine";
 import PerudoBoard from "./PerudoBoard";
+import { colorwayById, nextAvailableColorwayId, playerColorwayForSeat, PLAYER_COLORWAYS, type DiceColorway } from "./dice/colorways";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
@@ -74,6 +75,17 @@ type Occupant = {
   playerId?: string;
   isHost?: boolean;
   targetPlayerCount?: number;
+  /**
+   * This occupant's chosen dice colorway id (`dice/colorways.ts`'s
+   * `PLAYER_COLORWAYS`), 2026-09-04 색상 팔레트 확장/중복 방지 세션. Room-wide
+   * synced via the same Presence `channel.track()` every other `Occupant`
+   * field already uses — re-tracking with a new `colorwayId` (see
+   * `handleColorwayChange` below) is how a color change propagates to every
+   * other client, same mechanism, no new broadcast event needed. Optional
+   * only for the brief window before the initial `track()` call resolves a
+   * starting color (see the presence-subscribe block).
+   */
+  colorwayId?: string;
 };
 type Phase =
   | "choose"
@@ -101,6 +113,15 @@ function storeSeat(code: string, seat: number) {
   window.localStorage.setItem(`perudo-seat-${code}`, String(seat));
 }
 
+/** 2026-09-04 색상 확장 세션: same persistence pattern as `getStoredSeat`/`storeSeat` above — remembers the player's own last chosen colorway across reconnects/refreshes for this room code. The restored id is still re-validated against whoever else currently holds it before being trusted (see the presence-subscribe block) — someone else may have claimed it while this player was away. */
+function getStoredColorway(code: string): string | null {
+  return window.localStorage.getItem(`perudo-color-${code}`);
+}
+
+function storeColorway(code: string, colorwayId: string) {
+  window.localStorage.setItem(`perudo-color-${code}`, colorwayId);
+}
+
 function randomSeed(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
@@ -120,6 +141,16 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [mySeat, setMySeat] = useState<SeatIndex | null>(null);
+  // My own chosen dice colorway id, room-synced via Presence (2026-09-04 색상
+  // 확장/중복 방지 세션— see `Occupant.colorwayId`'s doc comment). Decided once
+  // in the presence-subscribe block below (stored preference if still free,
+  // else the next available color) and changed thereafter only via
+  // `handleColorwayChange`.
+  const [myColorwayId, setMyColorwayId] = useState<string | null>(null);
+  const myColorwayIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    myColorwayIdRef.current = myColorwayId;
+  }, [myColorwayId]);
   const [myName, setMyName] = useState("");
   const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
@@ -146,6 +177,17 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
     botLevelsRef.current = botLevels;
   }, [botLevels]);
   const botSeatSet = useMemo(() => new Set(botSeats), [botSeats]);
+  // `botColorwayIds[i]` is the dice colorway id for `botSeats[i]` — same
+  // parallel-array shape/broadcast piggyback as `botLevels` (2026-09-04 색상
+  // 확장 세션). Assigned once, automatically, whenever a bot seat is added
+  // (see `addBotAtSeat`/`fillEmptySeatsWithBots`) via `nextAvailableColorwayId`
+  // against every currently-taken color (human + bot) — no manual per-bot
+  // color picker UI.
+  const [botColorwayIds, setBotColorwayIds] = useState<string[]>([]);
+  const botColorwayIdsRef = useRef<string[]>([]);
+  useEffect(() => {
+    botColorwayIdsRef.current = botColorwayIds;
+  }, [botColorwayIds]);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   // Shared by the initial post-subscribe sync and `useBackgroundResync`
@@ -222,11 +264,14 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
       const playerCount = payload?.playerCount as number;
       const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      const colorwayIds = (payload?.botColorwayIds as string[] | undefined) ?? [];
       playerCountRef.current = playerCount;
       botSeatsRef.current = roster;
       setBotSeats(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
+      botColorwayIdsRef.current = colorwayIds;
+      setBotColorwayIds(colorwayIds);
       setGameState(startGame(playerCount, seed));
       setFinalResult(null);
       setPhase("playing");
@@ -239,10 +284,13 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
     channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => {
       const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      const colorwayIds = (payload?.botColorwayIds as string[] | undefined) ?? [];
       botSeatsRef.current = roster;
       setBotSeats(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
+      botColorwayIdsRef.current = colorwayIds;
+      setBotColorwayIds(colorwayIds);
     });
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
@@ -282,7 +330,12 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
         channel.send({
           type: "broadcast",
           event: "state-sync",
-          payload: { state: gameStateRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
+          payload: {
+            state: gameStateRef.current,
+            botSeats: botSeatsRef.current,
+            botLevels: botLevelsRef.current,
+            botColorwayIds: botColorwayIdsRef.current,
+          },
         });
       } else if (isHost) {
         // Pre-game reconnect: no match state to hand over yet, but the host
@@ -291,7 +344,7 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
         channel.send({
           type: "broadcast",
           event: "bot-roster",
-          payload: { botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
+          payload: { botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, botColorwayIds: botColorwayIdsRef.current },
         });
       }
     });
@@ -301,10 +354,13 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
       if (!state) return;
       const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      const colorwayIds = (payload?.botColorwayIds as string[] | undefined) ?? [];
       botSeatsRef.current = roster;
       setBotSeats(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
+      botColorwayIdsRef.current = colorwayIds;
+      setBotColorwayIds(colorwayIds);
       setGameState(state);
       setFinalResult(null);
       setPhase("playing");
@@ -352,11 +408,35 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
           storeSeat(roomCode, seat);
         }
         setMySeat(seat);
+
+        // Decide a starting colorway: the stored preference for this room
+        // (see `getStoredColorway`), but only if nobody else already holds
+        // it (someone may have claimed it while this player was away) —
+        // otherwise the next free color in palette order. Computed fresh
+        // here (not reused from the `seat === null` branch above, which
+        // only runs for a brand-new seat claim) so a *reconnecting* player
+        // with an already-stored seat still gets a validated color.
+        const rawForColor = channel.presenceState() as RealtimePresenceState<Occupant>;
+        const othersForColor = Object.values(rawForColor)
+          .flat()
+          .filter((o) => o.deviceId !== deviceId);
+        const takenColors = new Set<string>([
+          ...othersForColor.map((o) => o.colorwayId).filter((id): id is string => !!id),
+          ...botColorwayIdsRef.current,
+        ]);
+        const storedColorway = getStoredColorway(roomCode);
+        const colorwayId =
+          storedColorway && !takenColors.has(storedColorway) ? storedColorway : nextAvailableColorwayId(takenColors, seat);
+        storeColorway(roomCode, colorwayId);
+        setMyColorwayId(colorwayId);
+        myColorwayIdRef.current = colorwayId;
+
         await channel.track({
           deviceId,
           seat,
           name: myName,
           playerId: myPlayerId,
+          colorwayId,
           ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
         } satisfies Occupant);
         // Ask any already-in-game peer for a state snapshot in case this is
@@ -412,6 +492,7 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
       seat: next,
       name: myName,
       playerId: myPlayerId,
+      colorwayId: myColorwayIdRef.current ?? undefined,
       ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
@@ -426,6 +507,7 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
         playerCount: playerCountRef.current,
         botSeats: botSeatsRef.current,
         botLevels: botLevelsRef.current,
+        botColorwayIds: botColorwayIdsRef.current,
       },
     });
   }, []);
@@ -450,14 +532,24 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
       if (botSeatsRef.current.includes(seat) || occupants.some((o) => o.seat === seat)) return;
       const nextSeats = [...botSeatsRef.current, seat];
       const nextLevels = [...botLevelsRef.current, level];
+      // Auto-assign the next free colorway (2026-09-04 색상 확장 세션) — taken
+      // = every human's current pick + every already-placed bot's pick. No
+      // manual per-bot color picker UI, per user request.
+      const taken = new Set<string>([
+        ...occupants.map((o) => o.colorwayId).filter((id): id is string => !!id),
+        ...botColorwayIdsRef.current,
+      ]);
+      const nextColorwayIds = [...botColorwayIdsRef.current, nextAvailableColorwayId(taken, seat)];
       botSeatsRef.current = nextSeats;
       setBotSeats(nextSeats);
       botLevelsRef.current = nextLevels;
       setBotLevels(nextLevels);
+      botColorwayIdsRef.current = nextColorwayIds;
+      setBotColorwayIds(nextColorwayIds);
       channelRef.current?.send({
         type: "broadcast",
         event: "bot-roster",
-        payload: { botSeats: nextSeats, botLevels: nextLevels },
+        payload: { botSeats: nextSeats, botLevels: nextLevels, botColorwayIds: nextColorwayIds },
       });
     },
     [isHost, occupants],
@@ -476,14 +568,29 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
       if (emptySeats.length === 0) return;
       const nextSeats = [...botSeatsRef.current, ...emptySeats];
       const nextLevels = [...botLevelsRef.current, ...emptySeats.map(() => level)];
+      // Assign each new bot the next free color IN SEQUENCE, growing the
+      // taken-set as we go so multiple bots added in this same batch never
+      // collide with each other (2026-09-04 색상 확장 세션).
+      const takenColors = new Set<string>([
+        ...occupants.map((o) => o.colorwayId).filter((id): id is string => !!id),
+        ...botColorwayIdsRef.current,
+      ]);
+      const newColorwayIds = emptySeats.map((seat) => {
+        const id = nextAvailableColorwayId(takenColors, seat);
+        takenColors.add(id);
+        return id;
+      });
+      const nextColorwayIds = [...botColorwayIdsRef.current, ...newColorwayIds];
       botSeatsRef.current = nextSeats;
       setBotSeats(nextSeats);
       botLevelsRef.current = nextLevels;
       setBotLevels(nextLevels);
+      botColorwayIdsRef.current = nextColorwayIds;
+      setBotColorwayIds(nextColorwayIds);
       channelRef.current?.send({
         type: "broadcast",
         event: "bot-roster",
-        payload: { botSeats: nextSeats, botLevels: nextLevels },
+        payload: { botSeats: nextSeats, botLevels: nextLevels, botColorwayIds: nextColorwayIds },
       });
     },
     [isHost, occupants, knownTargetPlayerCount],
@@ -496,14 +603,17 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
       if (idx < 0) return;
       const nextSeats = botSeatsRef.current.filter((_, i) => i !== idx);
       const nextLevels = botLevelsRef.current.filter((_, i) => i !== idx);
+      const nextColorwayIds = botColorwayIdsRef.current.filter((_, i) => i !== idx);
       botSeatsRef.current = nextSeats;
       setBotSeats(nextSeats);
       botLevelsRef.current = nextLevels;
       setBotLevels(nextLevels);
+      botColorwayIdsRef.current = nextColorwayIds;
+      setBotColorwayIds(nextColorwayIds);
       channelRef.current?.send({
         type: "broadcast",
         event: "bot-roster",
-        payload: { botSeats: nextSeats, botLevels: nextLevels },
+        payload: { botSeats: nextSeats, botLevels: nextLevels, botColorwayIds: nextColorwayIds },
       });
     },
     [isHost],
@@ -522,18 +632,50 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
   if (isHost && botSeats.length > 0) {
     const humanSeats = new Set(occupants.map((o) => o.seat));
     const keepIdx = botSeats.map((s, i) => (humanSeats.has(s) ? -1 : i)).filter((i) => i !== -1);
-    // botSeatsRef/botLevelsRef are re-synced by the effects above once this
-    // commits — not updated here too, since refs (like state) must not be
-    // written during render.
+    // botSeatsRef/botLevelsRef/botColorwayIdsRef are re-synced by the effects
+    // above once this commits — not updated here too, since refs (like
+    // state) must not be written during render.
     if (keepIdx.length !== botSeats.length) {
       setBotSeats(keepIdx.map((i) => botSeats[i]));
       setBotLevels(keepIdx.map((i) => botLevels[i]));
+      setBotColorwayIds(keepIdx.map((i) => botColorwayIds[i]));
     }
   }
 
   const handleAction = useCallback((action: EngineAction) => {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }, []);
+
+  // Change my own dice colorway — usable from the waiting-room swatch picker
+  // AND from the in-game one (`PerudoBoard`'s `onColorwayChange` prop), same
+  // callback either way (2026-09-04 색상 확장/중복 방지 세션). Re-tracking
+  // Presence with the new `colorwayId` is the entire sync mechanism — every
+  // other client's `occupants` state updates on the next "sync" event, no
+  // separate broadcast event needed. Defensively re-checks the color isn't
+  // already taken (the picker UI already disables taken swatches, but a
+  // race — someone else grabs it a moment earlier — is still possible).
+  const handleColorwayChange = useCallback(
+    (colorwayId: string) => {
+      if (!roomCode || mySeat === null) return;
+      const takenByOthers = new Set<string>([
+        ...occupants.filter((o) => o.deviceId !== deviceId).map((o) => o.colorwayId).filter((id): id is string => !!id),
+        ...botColorwayIdsRef.current,
+      ]);
+      if (takenByOthers.has(colorwayId)) return;
+      storeColorway(roomCode, colorwayId);
+      setMyColorwayId(colorwayId);
+      myColorwayIdRef.current = colorwayId;
+      channelRef.current?.track({
+        deviceId,
+        seat: mySeat,
+        name: myName,
+        playerId: myPlayerId,
+        colorwayId,
+        ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
+      } satisfies Occupant);
+    },
+    [roomCode, mySeat, myName, myPlayerId, isHost, occupants, deviceId],
+  );
 
   const sendChatMessage = useCallback(
     (rawBody: string): SendResult => {
@@ -608,6 +750,50 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
     namesRef.current = names;
   }, [names]);
 
+  // Room-synced dice colorway per seat (2026-09-04 색상 확장/중복 방지 세션) —
+  // same "seat → value" shape as `names`, feeding both the waiting-room
+  // swatch picker/roster dots and `PerudoBoard`'s in-game rendering. My own
+  // seat prefers the locally-tracked `myColorwayId` (updates instantly on my
+  // own pick, no round-trip through `occupants` needed); every other seat
+  // reads the synced `Occupant.colorwayId`/`botColorwayIds` and falls back to
+  // the deterministic `playerColorwayForSeat` default only for a seat that
+  // hasn't announced a color yet (e.g. the brief window before its first
+  // `track()` resolves).
+  const colorways: Record<SeatIndex, DiceColorway> = useMemo(() => {
+    const map: Record<SeatIndex, DiceColorway> = {};
+    const count = gameState?.playerCount ?? knownTargetPlayerCount;
+    for (let seat = 0; seat < count; seat++) {
+      const botIdx = botSeats.indexOf(seat);
+      const id =
+        seat === mySeat
+          ? myColorwayId
+          : botIdx >= 0
+            ? botColorwayIds[botIdx]
+            : occupants.find((o) => o.seat === seat)?.colorwayId;
+      map[seat] = colorwayById(id) ?? playerColorwayForSeat(seat);
+    }
+    return map;
+  }, [occupants, mySeat, myColorwayId, gameState, knownTargetPlayerCount, botSeats, botColorwayIds]);
+
+  // Waiting-room-only variant: WHO (seat + display label) currently holds
+  // each taken color, built strictly from real occupants/bots — unlike
+  // `colorways` above, this must NOT fall back to a deterministic default
+  // for an empty seat (an unfilled lobby seat holds no color at all, so its
+  // swatch must never read as "taken"). Only meaningful before the game
+  // starts; `PerudoBoard`'s in-game picker instead derives "taken" straight
+  // from the `colorways` prop, since every seat is guaranteed filled by then.
+  const lobbyTakenColorways = useMemo(() => {
+    const map = new Map<string, { seat: SeatIndex; label: string }>();
+    occupants.forEach((o) => {
+      if (o.colorwayId && o.seat !== mySeat) map.set(o.colorwayId, { seat: o.seat, label: o.name });
+    });
+    botSeats.forEach((seat, i) => {
+      const id = botColorwayIds[i];
+      if (id) map.set(id, { seat, label: botLabel(i, botLevels[i]) });
+    });
+    return map;
+  }, [occupants, mySeat, botSeats, botColorwayIds, botLevels]);
+
   const connectedSeats = useMemo(
     () => new Set([...occupants.map((o) => o.seat), ...botSeats]),
     [occupants, botSeats],
@@ -637,6 +823,8 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
     window.history.replaceState(null, "", window.location.pathname);
     setRoomCode(null);
     setMySeat(null);
+    setMyColorwayId(null);
+    myColorwayIdRef.current = null;
     setOccupants([]);
     setGameState(null);
     setFinalResult(null);
@@ -647,6 +835,8 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
     setBotSeats([]);
     botLevelsRef.current = [];
     setBotLevels([]);
+    botColorwayIdsRef.current = [];
+    setBotColorwayIds([]);
     setChatMessages([]);
     setChatCooldownUntil(null);
     chatThrottleRef.current = INITIAL_THROTTLE_STATE;
@@ -849,11 +1039,23 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
                 const occ = occupants.find((o) => o.seat === seat);
                 const botIdx = botSeats.indexOf(seat);
                 const isBot = botIdx >= 0;
+                // Only render a color dot once the seat actually holds
+                // someone — an empty seat has no colorway at all yet.
+                const seatColorway = occ || isBot ? colorways[seat] : undefined;
                 return (
                   <div key={seat} className="flex items-center justify-between gap-3 text-sm text-white/70">
-                    <span>
-                      {seat === mySeat ? "나" : `${seat + 1}번`}:{" "}
-                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30">대기 중...</span>}
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      {seatColorway && (
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-full border border-white/30"
+                          style={{ backgroundColor: seatColorway.body }}
+                          title={`${seatColorway.label} 주사위`}
+                        />
+                      )}
+                      <span className="[overflow-wrap:normal] break-keep">
+                        {seat === mySeat ? "나" : `${seat + 1}번`}:{" "}
+                        {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30">대기 중...</span>}
+                      </span>
                     </span>
                     {isHost && seat !== mySeat && !occ && (
                       isBot ? (
@@ -866,7 +1068,44 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
                 );
               })}
             </div>
-            <p className="text-xs text-white/40">
+            {/* 대기실 주사위 색상 피커 (2026-09-04 색상 확장/중복 방지 세션) —
+                `mySeat`가 확정된 뒤(=presence track 완료 후)에만 렌더링. 다른
+                사람/봇이 이미 쓰는 색은 잠금 오버레이+배지로 비활성화하고,
+                실시간으로 색을 바꾸면 `handleColorwayChange`가 Presence
+                재-track으로 즉시 방 전체에 동기화한다. */}
+            {mySeat !== null && myColorwayId && (
+              <div className="mt-1 flex flex-col items-center gap-2">
+                <p className="text-xs font-semibold text-white/50 break-keep">🎨 내 주사위 색상</p>
+                <div className="flex flex-wrap items-center justify-center gap-1.5 px-2">
+                  {PLAYER_COLORWAYS.map((c) => {
+                    const holder = lobbyTakenColorways.get(c.id);
+                    const isMine = c.id === myColorwayId;
+                    const isTaken = !!holder && !isMine;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        disabled={isTaken}
+                        onClick={() => handleColorwayChange(c.id)}
+                        title={isTaken ? `${holder!.label}님이 사용 중` : c.label}
+                        aria-label={`주사위 색상: ${c.label}`}
+                        className={`relative flex h-7 w-7 items-center justify-center rounded-full border-2 transition ${
+                          isMine
+                            ? "scale-110 border-white"
+                            : isTaken
+                              ? "cursor-not-allowed border-white/10 opacity-35"
+                              : "border-white/25 hover:border-white/60"
+                        }`}
+                        style={{ backgroundColor: c.body }}
+                      >
+                        {isTaken && <span className="pointer-events-none text-[10px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">🔒</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-white/40 break-keep">
               {knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다. AI 봇으로도 채울 수 있어요.
             </p>
             {isHost && occupants.length + botSeats.length >= MIN_PLAYERS && occupants.length + botSeats.length < knownTargetPlayerCount && (
@@ -893,6 +1132,8 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
         viewerSeat={mySeat}
         names={names}
         connectedSeats={connectedSeats}
+        colorways={colorways}
+        onColorwayChange={handleColorwayChange}
         onAction={handleAction}
         onGameEnd={handleGameEnd}
       />

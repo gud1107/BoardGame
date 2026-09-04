@@ -1,6 +1,50 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-04 (**페루도(Perudo) 배팅 마커 상시 노출 버그 픽스 세션** — 요청서는 "다른
+_최종 갱신: 2026-09-04 (**페루도(Perudo) 주사위 색상 팔레트 확장 + 보라색 제외 + 실시간 중복 방지
+세션** — 요청서는 `ColorPicker.tsx`/`DiceCup.tsx`/`Board.tsx`/`types.ts`/룸 매니저를 전제로 요청했으나
+이 프로젝트엔 존재하지 않고(실제: `PerudoBoard.tsx` 내장 스와치 피커 + `dice/colorways.ts` +
+`PerudoGame.tsx`의 Supabase Realtime presence — 페루도에서만 이번이 두 번째 요청 전제-실제 코드 불일치
+사례), 조사 결과 대기실엔 색상 선택 UI 자체가 아예 없었고 인게임 스와치 피커도 **완전히 로컬 전용**(다른
+클라이언트엔 전혀 반영 안 됨, 기존 `muted`와 같은 신뢰 등급)이었음을 먼저 확인. `AskUserQuestion` 3문항으로
+확인: ①보라색은 **목록에서 완전히 제거**(비활성화 아님) — 방금 전 세션에서 상시 노출로 고친 트랙의 보라색
+베팅 마커(`BETTING_COLORWAY`)와 혼동되는 게 근본 이유 ②색상 선택 UI를 **대기실+인게임 둘 다** 신규
+구축(요청서 원문 근거) ③재접속 시 내 색은 **localStorage**에 기억(기존 `perudo-seat-${code}` 저장과 동일
+패턴). 구현: `dice/colorways.ts` — `PLAYER_COLORWAYS`에서 `player-purple` 제거, 5색 신규 추가(민트
+`#06b6d4`/핫핑크`#ec4899`/라임`#84cc16`/차콜`#1e293b`/화이트`#f8fafc`, 각각 Tailwind 900/950 스케일로
+`shadow`/`ink` 튜닝, 총 10색 — `MAX_PLAYERS=8`보다 넉넉해 인원 초과로 색이 바닥나는 경우 자체가 없음),
+`nextAvailableColorwayId(taken, fallbackSeat)`(팔레트 순서상 첫 미사용 색, 전부 소진 시에만
+`playerColorwayForSeat` 폴백) + `colorwayById` 신규 export. `PerudoGame.tsx` — `Occupant`에
+`colorwayId` 필드 추가해 기존 이름/좌석과 같은 Presence `channel.track()`으로 방 전체에 실시간 동기화(색을
+바꾸면 재-track이 곧 동기화 메커니즘, 별도 브로드캐스트 이벤트 불필요), 봇은 `botLevels`와 동일한
+병렬배열 `botColorwayIds`를 `bot-roster`/`game-start`/`state-sync`/`state-request` 페이로드 전부에 실어
+전파(호스트가 봇 추가 시 그 시점 사람+봇 전체의 사용 중인 색을 모아 `nextAvailableColorwayId`로 자동
+배정 — 요청서가 명시한 "자동 순차 배정" 그대로, 봇별 수동 색상 선택 UI 없음), 첫 입장 시
+`getStoredColorway`(로컬스토리지)가 아직 안 겹치면 그대로, 겹치면 자동 배정 — 재검증 후 채택. 대기실에
+좌석별 색상 점(🎨) + "내 주사위 색상" 스와치 피커(다른 사람/봇이 쓰는 색은 회색조+🔒+"OO님이 사용 중"
+툴팁으로 비활성화) 신규 추가, 인게임 스와치 피커도 동일한 잠금 UX로 교체(로컬 `colorwayOverride`
+state 완전 삭제 → `colorways`/`onColorwayChange` prop으로 승격). `PerudoBoard.tsx`의 `LostDiceTray`/
+`RevealPanel`/스코어보드가 전부 `playerColorwayForSeat(seat)` 직접 호출 대신 새 `colorways` prop을
+단일 진실 공급원으로 사용하도록 리팩터. 신규 단위테스트 7개(`Perudo.test.ts`) — 보라 제외, 10색 이상·중복
+없음, 신규 5색 포함, 순차 배정, 전부 소진 시 폴백, `colorwayById` null/undefined 안전성, 좌석 순환.
+`npx tsc --noEmit`(0 에러)/`npx eslint src/games/perudo`(0 에러)/`npx vitest run
+src/games/perudo/Perudo.test.ts`(80/80)/`npx vitest run --exclude "**/aiBenchmark.test.ts"`(49개 파일
+1622개 전체 통과) 확인. 캐시된 Playwright로 2인 방(호스트+봇1) 실제 재현 — 스와치 DOM 속성 덤프 +
+스크린샷으로 보라색 부재, 10색 정확히 렌더링, 내 색(빨강)은 활성화, 봇이 먼저 가져간 색(파랑)은
+`disabled`+🔒+"[Lv.5] AI 봇 1님이 사용 중" 툴팁으로 잠긴 것까지 전부 확인. 룰북(`페루도.md`)의 "디지털
+확장 안내" 콜아웃에 10색 팔레트/보라 제외/실시간 중복 방지/봇 자동 배정 한 문장 추가(그 외 게임 규칙
+변경 없음).
+**⚠️ 이번 세션 중 발생한 사고와 복구**: 직전 배포 세션이 남긴 격리 워크트리(`node_modules`/`.vercel`을
+`mklink /J`로 공유 작업 트리에 연결해 둔 것)를 정리하려고 `git worktree remove --force`를 실행했는데,
+Windows 정션을 실제 디렉터리처럼 따라 들어가 공유 작업 트리의 진짜 `node_modules`/`.vercel` 내용물을
+통째로 삭제해버림(`git worktree remove`가 정션을 reparse point로 인식하지 않고 재귀 삭제한 것으로 추정)
+— 이번 세션이 직접 `npm install`(450개 패키지 복구)로 `node_modules`를 되살렸고, `.vercel`은 gitignore
+대상이라 커밋 이력에 없어 재배포 시 `vercel link`로 재연결이 필요함(§3에 기록). **다음에 격리
+워크트리에서 배포/검증할 때 `node_modules`/`.vercel`을 정션으로 연결하지 말 것** — 대신 `npm install`을
+그 워크트리 안에서 별도로 실행하거나(패키지 재설치 비용 감수), 애초에 배포는 공유 작업 트리에서(빌드는
+git 커밋 상태와 무관하게 워킹 디렉터리 파일을 그대로 사용하므로) 직접 실행하는 편이 더 안전함 — 이번
+세션은 이후 단계를 공유 작업 트리에서 직접 진행함.)_
+
+_이전 갱신: 2026-09-04 (**페루도(Perudo) 배팅 마커 상시 노출 버그 픽스 세션** — 요청서는 "다른
 플레이어 턴일 때 내 주사위 컵 자체가 사라진다"는 버그 리포트를 근거로 `Board.tsx`/`DiceCup.tsx`/
 `PlayerHand.tsx`/`usePerudo.ts`/`roundPhase`/`currentTurnPlayerId` 같은 전제를 들며 `isMyTurn ?
 <DiceCup/> : null` 패턴 제거를 요청했으나, 조사 결과 그런 파일/필드는 이 프로젝트에 없고([[dalmuti-5p-tax-bug-premise-mismatch]] 등과 같은 유형의 요청 전제-실제 코드 불일치 사례) 본인

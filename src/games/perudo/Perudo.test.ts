@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededRng } from "@/lib/rng";
+import { colorwayById, nextAvailableColorwayId, playerColorwayForSeat, PLAYER_COLORWAYS } from "./dice/colorways";
 import {
   applyAction,
   chooseBotAction,
@@ -879,5 +880,46 @@ describe("Level 1–10 풀 시뮬레이션 (버그 없이 gameOver까지 완주)
     const state = playFullBotGame(5, 4242, (seat) => (seat % 2 === 0 ? 1 : 10));
     expect(state.phase).toBe("gameOver");
     expect(computeRankings(state)).toHaveLength(5);
+  });
+});
+
+// 2026-09-04 색상 팔레트 확장/중복 방지 세션.
+describe("dice/colorways.ts — 색상 팔레트 확장 및 중복 방지", () => {
+  it("no longer offers purple as a selectable player color", () => {
+    expect(PLAYER_COLORWAYS.some((c) => c.id.includes("purple") || c.label === "보라")).toBe(false);
+  });
+
+  it("has at least MAX_PLAYERS (8) distinct colors so every seat can get a unique one", () => {
+    expect(PLAYER_COLORWAYS.length).toBeGreaterThanOrEqual(8);
+    expect(new Set(PLAYER_COLORWAYS.map((c) => c.id)).size).toBe(PLAYER_COLORWAYS.length);
+  });
+
+  it("includes the 5 newly requested colors (mint/pink/lime/charcoal/white)", () => {
+    const ids = PLAYER_COLORWAYS.map((c) => c.id);
+    expect(ids).toEqual(
+      expect.arrayContaining(["player-mint", "player-pink", "player-lime", "player-charcoal", "player-white"]),
+    );
+  });
+
+  it("nextAvailableColorwayId picks the first free color in palette order", () => {
+    const taken = new Set([PLAYER_COLORWAYS[0].id, PLAYER_COLORWAYS[1].id]);
+    expect(nextAvailableColorwayId(taken)).toBe(PLAYER_COLORWAYS[2].id);
+  });
+
+  it("nextAvailableColorwayId falls back to a seat-cycled color once every color is taken", () => {
+    const taken = new Set(PLAYER_COLORWAYS.map((c) => c.id));
+    expect(nextAvailableColorwayId(taken, 3)).toBe(playerColorwayForSeat(3).id);
+  });
+
+  it("colorwayById resolves a known id and tolerates null/undefined", () => {
+    expect(colorwayById(PLAYER_COLORWAYS[0].id)?.id).toBe(PLAYER_COLORWAYS[0].id);
+    expect(colorwayById(undefined)).toBeUndefined();
+    expect(colorwayById(null)).toBeUndefined();
+    expect(colorwayById("not-a-real-color")).toBeUndefined();
+  });
+
+  it("playerColorwayForSeat still cycles safely across the new, larger palette", () => {
+    expect(playerColorwayForSeat(0).id).toBe(PLAYER_COLORWAYS[0].id);
+    expect(playerColorwayForSeat(PLAYER_COLORWAYS.length).id).toBe(PLAYER_COLORWAYS[0].id);
   });
 });

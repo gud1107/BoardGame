@@ -51,26 +51,65 @@ export const BETTING_COLORWAY: DiceColorway = {
 };
 
 /**
- * Six selectable player identities — echoes real Cacho/Perudo boxed sets,
- * which ship as full-color dice+cup pairs per player, and pins the exact
- * seat→color mapping requested for this UI overhaul (2026-08 페루도 UI 전면
- * 개편): seat 1 red, seat 2 blue, seat 3 yellow, seat 4 green, seat 5
- * purple, seat 6 orange. `playerColorwayForSeat` gives every seat a sensible
- * default (cycling mod 6 past 6 players, since this game allows up to
- * `MAX_PLAYERS = 8`); each viewer can additionally override their OWN
- * colorway locally (see `PerudoBoard.tsx`'s swatch picker) — purely a
- * client-local cosmetic preference, never synced, the same trust tier as the
- * existing `muted` toggle.
+ * Ten selectable player identities — echoes real Cacho/Perudo boxed sets,
+ * which ship as full-color dice+cup pairs per player, extended for this
+ * digital version (2026-08 페루도 UI 전면 개편 원본 6색 + 2026-09-04 색상 팔레트
+ * 확장/중복 방지 세션에서 5색 추가). Original 6: red/blue/yellow/green/
+ * **purple** /orange. **Purple was removed 2026-09-04** — it's too close to
+ * `BETTING_COLORWAY` (the always-on-track purple bid marker, see this
+ * session's earlier fix keeping that marker visible on every turn), so a
+ * player using purple dice would read as "is that my die or the bid
+ * marker?" — dropped from the selectable pool entirely rather than merely
+ * disabled, per user request. 5 new additions (mint/pink/lime/charcoal/
+ * white) keep every player visually distinct up to `MAX_PLAYERS = 8` with
+ * headroom to spare (10 colors ≥ 8 seats). `playerColorwayForSeat` remains
+ * the fallback/default-order lookup (cycling mod 10 past 10 players) for
+ * anywhere a seat has no explicit chosen colorway yet.
+ *
+ * Colorway CHOICE itself is no longer purely local — as of the same
+ * session, each human's pick is broadcast via Supabase Realtime presence
+ * (`Occupant.colorwayId` in `PerudoGame.tsx`) and each bot's pick via the
+ * existing `bot-roster` broadcast (`botColorwayIds`, parallel to
+ * `botLevels`), so every client renders the SAME color for a given seat —
+ * unlike the pre-2026-09-04 "local override, never synced" design this
+ * module's own older comments used to describe. `nextAvailableColorwayId`
+ * below is the shared picker for "assign me/this new bot whichever color
+ * nobody else in the room has yet".
  */
 export const PLAYER_COLORWAYS: DiceColorway[] = [
   { id: "player-red", label: "빨강", body: "#c1272d", shadow: "#5e0f12", ink: "#fdf1f0" },
   { id: "player-blue", label: "파랑", body: "#1d4fbf", shadow: "#0c2660", ink: "#eef3ff" },
   { id: "player-yellow", label: "노랑", body: "#eab308", shadow: "#7a5c05", ink: "#1c1400" },
   { id: "player-green", label: "초록", body: "#1f8a4c", shadow: "#0d4020", ink: "#eafff0" },
-  { id: "player-purple", label: "보라", body: "#7e22ce", shadow: "#3b0764", ink: "#f5ecff" },
   { id: "player-orange", label: "주황", body: "#e2711d", shadow: "#7a3805", ink: "#2a1200" },
+  { id: "player-mint", label: "민트", body: "#06b6d4", shadow: "#164e63", ink: "#083344" },
+  { id: "player-pink", label: "핫핑크", body: "#ec4899", shadow: "#831843", ink: "#500724" },
+  { id: "player-lime", label: "라임", body: "#84cc16", shadow: "#365314", ink: "#1a2e05" },
+  { id: "player-charcoal", label: "차콜", body: "#1e293b", shadow: "#020617", ink: "#f1f5f9" },
+  { id: "player-white", label: "화이트", body: "#f8fafc", shadow: "#94a3b8", ink: "#0f172a" },
 ];
 
 export function playerColorwayForSeat(seat: number): DiceColorway {
   return PLAYER_COLORWAYS[((seat % PLAYER_COLORWAYS.length) + PLAYER_COLORWAYS.length) % PLAYER_COLORWAYS.length];
+}
+
+export function colorwayById(id: string | null | undefined): DiceColorway | undefined {
+  return PLAYER_COLORWAYS.find((c) => c.id === id);
+}
+
+/**
+ * Picks the first colorway (in `PLAYER_COLORWAYS` order) not present in
+ * `takenIds` — the shared "assign the next free color" rule used both when
+ * a human first joins a room (no stored preference, or their stored one got
+ * taken while they were away) and when the host adds a bot
+ * (`PerudoGame.tsx`'s `addBotAtSeat`/`fillEmptySeatsWithBots`). Falls back
+ * to cycling by `fallbackSeat` (same rule as `playerColorwayForSeat`) if
+ * every color is somehow already taken — never actually reachable within
+ * `MAX_PLAYERS = 8` against 10 colors, but keeps the function total instead
+ * of possibly returning `undefined` for an 8-player room with a weird
+ * duplicate-tracking edge case.
+ */
+export function nextAvailableColorwayId(takenIds: ReadonlySet<string>, fallbackSeat = 0): string {
+  const free = PLAYER_COLORWAYS.find((c) => !takenIds.has(c.id));
+  return free ? free.id : playerColorwayForSeat(fallbackSeat).id;
 }
