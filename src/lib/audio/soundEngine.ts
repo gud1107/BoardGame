@@ -1136,6 +1136,35 @@ class SoundEngine {
     blip.stop(now + 0.19);
   }
 
+  /**
+   * 달무티 — "버튼 클릭 틱": a very short, neutral high-pitched tick that fires
+   * the instant *any* interactive game-action button is pressed (BTN_CLICK_TICK,
+   * 2026-09-04 세션 "버튼 클릭 반응성/이펙트" 브리프 — AskUserQuestion으로 확정:
+   * 기존 결과음과 별도로 클릭 즉시 재생). Deliberately tiny/neutral so it never
+   * competes with the *result* SFX that already fire once the dispatched action
+   * actually resolves (`playParchmentSubmit`/`playPassWhiff`/`playCoinTribute`/
+   * `playRevolutionBell`) — those are unchanged; this one layers underneath them
+   * as the immediate "input registered" tactile cue. `DalmutiEffects.tsx`'s
+   * `FxButton` is the only caller (fires from `onPointerDown`, gated at 60ms so a
+   * synthetic pointer/mouse double-fire on the same press can't double-tick).
+   */
+  playUiClickTick() {
+    if (!this.gate("uiClickTick", 60)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(1100, now);
+    osc.frequency.exponentialRampToValueAtTime(700, now + 0.045);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    osc.connect(gain).connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.05);
+  }
+
   /** 달무티 — "패스 선언 톤": a short low downward whiff, deliberately understated next to `playParchmentSubmit`/`playCoinTribute` (ACTION_PASS). */
   playPassWhiff() {
     if (!this.gate("passWhiff", 150)) return;

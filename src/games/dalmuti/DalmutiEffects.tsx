@@ -1,6 +1,16 @@
 "use client";
 
-import { useLayoutEffect, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useCallback,
+  useLayoutEffect,
+  useEffect,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { CardBack, CardFace, EXCHANGE_TIER_STYLE, type AuraTier } from "./CardArt";
@@ -589,5 +599,158 @@ export function RevolutionBanner({
       </div>
     </div>,
     document.body,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Button click feedback — neon ripple + particle burst (task brief 2026-09-04
+// "PC 마우스 클릭 씹힘 방지 + 버튼 클릭 이펙트")
+// ---------------------------------------------------------------------------
+
+/**
+ * Investigation for the 2026-09-04 브리프 found no touch/mouse dual-handler,
+ * debounce/throttle, or stale `pointer-events` flag anywhere on
+ * `DalmutiBoard.tsx`'s action buttons — every one is a plain `onClick` +
+ * `disabled` pair, so the specific "root causes" the brief named don't exist
+ * in this codebase (confirmed via AskUserQuestion, which also confirmed the
+ * defensive/cosmetic scope below rather than chasing an unreproduced bug).
+ * `FxButton` still does two real things beyond decoration:
+ *  - Fires its ripple/particle/tick feedback from `onPointerDown` rather than
+ *    `onClick` (which only resolves on mouseup/touchend), so the very first
+ *    press of a mouse click reads as instantly acknowledged instead of
+ *    waiting for release — the concrete, testable version of "즉각적인 100%
+ *    입력 응답성" the brief asked for. The actual game-action dispatch stays
+ *    on the wrapped `onClick` unchanged (safe/standard, lets a drag-off
+ *    cancel the click as normal).
+ *  - Every caller in `DalmutiBoard.tsx`/`CardExchangeModal.tsx` now passes
+ *    its dispatch function through as a `useCallback` (see those files) so a
+ *    render mid-click can't hand the button pipeline a stale closure.
+ *
+ * `variant` picks the ripple/particle/hover-glow tint, echoing each button's
+ * own accent color so this reads as "your button lighting up," not a generic
+ * overlay: `gold` for submit/confirm actions (카드 내기/세금 반환 확정),
+ * `slate` for pass/decline actions (패스/혁명 선포 안 함/평민 교환 거절— task
+ * brief's own "차분하고 묵직한 슬레이트 블루" language for 패스, reused for
+ * every other decline so they read as one family), `rose` for the 혁명 선포
+ * button (matches its existing bg-rose-500), `emerald` for the 평민 교환
+ * accept + `CardExchangeModal`'s submit (matches `EXCHANGE_TIER_STYLE.commoner`
+ * — same palette this game already uses for commoner-tier VFX elsewhere), and
+ * `card` for individual hand-card buttons — ripple only, no particle burst,
+ * no press-scale (AskUserQuestion: "가벼운 리플"), and no `overflow-hidden`
+ * clip (a hand card's own `CardFace` "legal to play" gold ring already
+ * glows *outside* its own box via `shadow-[0_0_14px...]`, so clipping the
+ * button would cut that existing ring off).
+ */
+export type FxVariant = "gold" | "slate" | "rose" | "emerald" | "card";
+
+const FX_VARIANT_STYLE: Record<FxVariant, { spark: string; glow: string }> = {
+  gold: { spark: "#fde047", glow: "rgba(245,158,11,0.65)" },
+  slate: { spark: "#cbd5e1", glow: "rgba(100,116,139,0.55)" },
+  rose: { spark: "#fda4af", glow: "rgba(244,63,94,0.6)" },
+  emerald: { spark: "#6ee7b7", glow: "rgba(52,211,153,0.6)" },
+  card: { spark: "#ffffff", glow: "rgba(255,255,255,0.35)" },
+};
+
+const FX_PARTICLE_COUNT = 5;
+const FX_PARTICLES = Array.from({ length: FX_PARTICLE_COUNT });
+
+interface FxRipple {
+  id: number;
+  x: number;
+  y: number;
+  size: number;
+}
+
+/**
+ * Drop-in `<button>` replacement — forwards every prop straight through, so
+ * existing `disabled`/`onClick`/layout `className` at each call site needed
+ * no changes beyond adding `variant`. See the module doc above for what it
+ * adds and why.
+ */
+export function FxButton({
+  variant,
+  className = "",
+  onClick,
+  disabled,
+  children,
+  type = "button",
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant: FxVariant }) {
+  const [ripples, setRipples] = useState<FxRipple[]>([]);
+  const [pressed, setPressed] = useState(false);
+  const nextRippleId = useRef(0);
+  const palette = FX_VARIANT_STYLE[variant];
+  const isCard = variant === "card";
+
+  const firePress = useCallback(
+    (e: ReactPointerEvent<HTMLButtonElement>) => {
+      if (disabled || e.button !== 0) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const id = ++nextRippleId.current;
+      const size = Math.max(rect.width, rect.height) * 1.6;
+      setRipples((prev) => [...prev, { id, x: e.clientX - rect.left, y: e.clientY - rect.top, size }]);
+      if (!isCard) setPressed(true);
+      getSoundEngine().playUiClickTick();
+    },
+    [disabled, isCard],
+  );
+  const releasePress = useCallback(() => setPressed(false), []);
+  const removeRipple = useCallback((id: number) => setRipples((prev) => prev.filter((r) => r.id !== id)), []);
+
+  return (
+    <button
+      {...rest}
+      type={type}
+      disabled={disabled}
+      onClick={onClick}
+      onPointerDown={firePress}
+      onPointerUp={releasePress}
+      onPointerLeave={releasePress}
+      onPointerCancel={releasePress}
+      data-fx-variant={variant}
+      className={`dalmuti-fx-btn relative transition ${isCard ? "" : "overflow-hidden"} ${!isCard && pressed ? "scale-95" : ""} ${className}`}
+    >
+      <span className={`pointer-events-none absolute inset-0 ${isCard ? "" : "overflow-hidden rounded-[inherit]"}`} aria-hidden>
+        {ripples.map((r) => (
+          <span key={r.id}>
+            <span
+              className="absolute rounded-full"
+              style={{
+                left: r.x,
+                top: r.y,
+                width: r.size,
+                height: r.size,
+                // A same-hue radial (just `palette.glow` fading out) reads as
+                // invisible on gold/rose/emerald buttons whose own background
+                // is that same hue (caught by an actual Playwright click, not
+                // code review) — a bright white core fading into the accent
+                // color first is visible against any button background.
+                background: `radial-gradient(circle, rgba(255,255,255,0.55) 0%, ${palette.glow} 42%, transparent 72%)`,
+                animation: "dalmuti-fx-ripple 550ms ease-out forwards",
+              }}
+              onAnimationEnd={() => removeRipple(r.id)}
+            />
+            {!isCard &&
+              FX_PARTICLES.map((_, i) => (
+                <span
+                  key={i}
+                  className="absolute h-1 w-1 rounded-full"
+                  style={
+                    {
+                      left: r.x,
+                      top: r.y,
+                      background: palette.spark,
+                      boxShadow: `0 0 5px 1px ${palette.spark}`,
+                      "--angle": `${(360 / FX_PARTICLE_COUNT) * i}deg`,
+                      animation: "dalmuti-fx-particle 480ms ease-out forwards",
+                    } as CSSProperties
+                  }
+                />
+              ))}
+          </span>
+        ))}
+      </span>
+      {children}
+    </button>
   );
 }

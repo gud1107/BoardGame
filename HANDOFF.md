@@ -1,6 +1,52 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-03 (**코요테(Coyote) 탈락자 해골(💀) 아이콘 교체 + 데스 이펙트 구현 세션** — 요청서는
+_최종 갱신: 2026-09-04 (**달무티(Dalmuti) 버튼 클릭 반응성 하드닝 + 네온 리플/펄스 클릭 이펙트 구현
+세션** — 요청서는 "PC 마우스 클릭이 가끔 1번에 안 먹는다"는 버그를 ①터치/마우스 이벤트 혼용
+②과도한 디바운스/쓰로틀 ③`pointer-events` 잔류 플래그를 근본 원인으로 지목하며 `ActionButtonArea.tsx`/
+`Board.tsx`/`CardHand.tsx`/`useDalmuti.ts`/`DalmutiButton.tsx` 등을 전제로 요청 — 조사 결과 이런 파일은
+이 프로젝트에 없고(달무티에서만 2026-09-02 세금 버그 리포트에 이은 두 번째 요청 전제-실제 코드 불일치
+사례), 실제 버튼(`DalmutiBoard.tsx`/`CardExchangeModal.tsx`)은 전부 순수 `onClick`+
+`disabled`만 쓰며 지목된 근본 원인 셋 다 코드에 없음을 확인. `AskUserQuestion` 4문항으로 확인: ①재현되지
+않은 버그를 쫓기보다 **방어적 하드닝 + 이펙트만 진행** ②클릭 사운드는 기존 결과음(`playParchmentSubmit`/
+`playPassWhiff`)과 별도로 **클릭 즉시 틱 사운드 신규 추가** ③리플/네온 펄스는 **게임 액션 버튼 전체**(카드
+내기/패스/세금 반환/혁명 선포·거부/평민 교환 수락·거부/평민 교환 모달 제출)에 적용, 룰북/음소거 등 UI
+크롬 버튼은 제외 ④손패 개별 카드 선택 버튼에도 가벼운 리플 적용. 구현: `DalmutiEffects.tsx`에 신규
+`FxButton`(`<button>` 완전 대체 컴포넌트, `variant: "gold"|"slate"|"rose"|"emerald"|"card"`) 추가 —
+클릭 좌표 기준 확장 리플(`dalmuti-fx-ripple`)+5개 파티클 버스트(`dalmuti-fx-particle`, `card` variant는
+파티클 없이 가벼운 리플만) 전부 `onPointerDown`에서 즉시 발화(마우스업까지 기다리는 `onClick`보다 먼저
+반응해 "즉각적인 100% 입력 응답성" 체감 확보 — 실제 게임 액션 디스패치는 안전하게 기존 `onClick`에 그대로
+둠), 호버 시 `data-fx-variant`별 테두리 글로우(`globals.css`), variant별 색상은 각 버튼 자신의 기존
+배경색을 그대로 반영(gold=카드내기/세금반환, slate=패스+모든 거부/거절류, rose=혁명 선포, emerald=평민 교환 수락+
+`CardExchangeModal` 제출 — `EXCHANGE_TIER_STYLE.commoner`와 동일 팔레트 재사용). `soundEngine.ts`에
+신규 `playUiClickTick()`(60ms 게이트, 매우 짧고 중립적인 틱, 기존 결과음과 레이어링) + 게이트 커버리지
+테스트 3종 추가. `DalmutiBoard.tsx`의 `toggleCard`/`submitPlay`/`passTurn`/`submitReturnTax`/
+`submitCommonerOffer`는 `useCallback`으로 메모이제이션을 시도했으나, 이 컴포넌트가 `state.phase ===
+"gameOver"`에서 조건부 `return`을 먼저 하는 구조라 그 뒤에 훅을 놓으면 실제 Rules-of-Hooks 위반(게임오버
+전환 시 렌더 크래시 위험)이 되는 걸 `eslint(react-hooks/rules-of-hooks)`가 실제로 잡아내 — 어차피
+`dispatch` 자체가 매 렌더 재생성되는 일반 함수라 메모이제이션 실익도 없었으므로 원래의 일반 함수 선언으로
+되돌림(합리적 판단에 따른 되돌림이지 재현 안 된 시도가 아님). 실물 Playwright 검증(캐시된 Chromium,
+4인방 호스트+봇3, 로컬 개발 서버) 중 리플 색상이 버튼 자신의 배경색과 같은 색상 계열이라 gold/rose/emerald
+등 단색 배경 버튼 위에서 리플이 거의 안 보이는 실제 시각 버그를 코드 리뷰가 아닌 스크린샷에서 직접 발견 —
+리플 그라데이션을 `palette.glow`로만 시작하던 것에서 흰색 코어(`rgba(255,255,255,0.55)`)로 시작해
+`palette.glow`를 거쳐 투명해지도록 수정, 재검증 스크린샷으로 패스 버튼 위 리플이 뚜렷이 보임을 확인.
+`npx tsc --noEmit`(0 에러) / `npx eslint src/games/dalmuti src/lib/audio`(0 에러) / `npx vitest run`(50개
+파일 **1614개** 테스트 전체 통과) 확인. 룰북(`달무티.md`)은 게임 규칙 변경이 전혀 없는 순수 UI/UX
+작업이라 수정하지 않음. **커밋/푸시/배포**: 이번 세션이 수정한 7개 파일만 스테이징(`HANDOFF.md`/
+`globals.css`/`CardExchangeModal.tsx`/`DalmutiBoard.tsx`/`DalmutiEffects.tsx`/`soundEngine.ts`/
+`soundEngine.test.ts`) — 작업 트리에 있던 다른 동시 세션들의 미커밋 변경(분석 인프라, 패치노트, 룰북
+이미지, `docs/README.md` 등)은 이번 작업과 무관하므로 건드리지 않고 그대로 남겨둠. 커밋 메시지
+`feat(dalmuti): enhance button click responsiveness and add dynamic ripple click effects`
+(`195a672`) → `git push origin main`이 다른 동시 세션의 analytics 커밋과 non-fast-forward로 충돌해
+공유 작업 트리를 건드리지 않는 임시 격리 워크트리(`git worktree add --detach`)에서
+`git merge origin/main`(충돌 없음) 후 그 워크트리에서 푸시(`66ad794..22139e3`) — `docs/README.md`
+등 다른 세션의 로컬 미커밋 변경이 있는 상태에서 공유 작업 트리 자체를 병합/체크아웃하면 덮어쓸 위험이
+있어 이 방식을 씀. 이어서 `npx vercel deploy --prod --scope me-3871` 실행, 빌드 정상 완주(51초),
+`target: "production"`/`readyState: READY`(`dpl_HxYktBLv4Gbn7pNndgUxMQNpMHtM`), 프로덕션 도메인
+`board-game-tau-navy.vercel.app`에 별칭 완료. 이 배포는 Git 커밋이 아니라 작업 트리 전체를 빌드하므로
+당시 작업 트리에 남아 있던 다른 세션들의 미커밋 변경(analytics 관련 파일 포함, 이미 origin/main엔
+병합됨)도 함께 반영된 상태로 배포됨. `curl`로 `/`·`/games/dalmuti` 둘 다 200 직접 확인함.)_
+
+_이전 갱신: 2026-09-03 (**코요테(Coyote) 탈락자 해골(💀) 아이콘 교체 + 데스 이펙트 구현 세션** — 요청서는
 탈락한(하트 0) 플레이어의 이마 표시가 "?" (물음표) 특수카드와 혼동된다는 버그 리포트를 근거로 ①탈락자
 표시를 물음표에서 해골로 전면 교체 ②탈락 순간의 3단계(타격→카드 파괴→해골 각인) 데스 이펙트 추가를
 요청. 조사 결과 혼동의 실체를 확인: `CardArt.tsx`의 `CardFace`는 `card === null`일 때(자기 자신의 숨겨진

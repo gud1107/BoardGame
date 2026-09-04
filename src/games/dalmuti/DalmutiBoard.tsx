@@ -13,6 +13,7 @@ import {
   detectTaxEvents,
   detectTaxHighlightEvents,
   FlyingExchangeCard,
+  FxButton,
   ReceivedCardGlow,
   RevolutionBanner,
   type ExchangeHistoryEntry,
@@ -355,6 +356,15 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   // commonerExchange's card pick no longer shares this inline hand-click
   // flow — it gets its own dedicated `CardExchangeModal` (task brief §1,
   // 2026-08-25 후속 세션), rendered further down.
+  //
+  // 2026-09-04 세션: kept as plain functions, *not* `useCallback` — this
+  // component has an earlier conditional `return` for `state.phase ===
+  // "gameOver"` (above), so hooks placed here would only run some renders
+  // (a real Rules-of-Hooks violation, caught by `react-hooks/rules-of-hooks`
+  // while wiring up `FxButton` below). Memoizing them would also buy nothing
+  // real anyway: `dispatch` itself (just above) is a fresh closure every
+  // render, so any `useCallback` wrapping one of these would still change
+  // identity every render regardless.
   function toggleCard(card: Card) {
     if (state.phase === "trick") {
       if (!isMyTrickTurn) return;
@@ -432,18 +442,20 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
                 🃏 조커 2장을 모두 갖고 있습니다! {state.pendingRevolution.isGrand ? "대혁명(모든 신분 역전)" : "혁명(세금 취소)"}을 선포하시겠습니까?
               </p>
               <div className="flex gap-2">
-                <button
+                <FxButton
+                  variant="rose"
                   onClick={() => dispatch({ type: "declareRevolution", seat: viewerSeat })}
                   className="rounded-full bg-rose-500 px-4 py-2 text-xs font-bold text-white hover:bg-rose-400"
                 >
                   {state.pendingRevolution.isGrand ? "🔥 대혁명 선포" : "⚡ 혁명 선포"}
-                </button>
-                <button
+                </FxButton>
+                <FxButton
+                  variant="slate"
                   onClick={() => dispatch({ type: "declineRevolution", seat: viewerSeat })}
                   className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 hover:border-white/40"
                 >
                   선포하지 않기
-                </button>
+                </FxButton>
               </div>
             </div>
           ) : (
@@ -501,18 +513,20 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
             <div className="mt-1 flex flex-col items-center gap-2">
               <p className="font-medium text-emerald-100">🫵 다른 평민과 카드 1장을 맞교환하시겠습니까?</p>
               <div className="flex gap-2">
-                <button
+                <FxButton
+                  variant="emerald"
                   onClick={() => dispatch({ type: "commonerOptIn", seat: viewerSeat, participate: true })}
                   className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-bold text-black hover:bg-emerald-400"
                 >
                   🤝 교환 요청
-                </button>
-                <button
+                </FxButton>
+                <FxButton
+                  variant="slate"
                   onClick={() => dispatch({ type: "commonerOptIn", seat: viewerSeat, participate: false })}
                   className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 hover:border-white/40"
                 >
                   ❌ 거절
-                </button>
+                </FxButton>
               </div>
             </div>
           )}
@@ -611,8 +625,9 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
                 const highlighted = cardIsHighlighted(c);
                 const receivedTier = receivedCards.get(c.id);
                 const button = (
-                  <button
+                  <FxButton
                     key={c.id}
+                    variant="card"
                     disabled={!clickable || (!highlighted && !selected.has(c.id))}
                     onClick={() => toggleCard(c)}
                     className={`transition ${clickable && (highlighted || selected.has(c.id)) ? "cursor-pointer hover:-translate-y-1" : "cursor-not-allowed opacity-40"} ${
@@ -620,7 +635,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
                     }`}
                   >
                     <CardFace card={c} highlight={highlighted} />
-                  </button>
+                  </FxButton>
                 );
                 // Stacks with (doesn't replace) the "legal to play" gold ring
                 // above — task brief follow-up confirmed via AskUserQuestion.
@@ -635,31 +650,34 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
         )}
         {state.phase === "trick" && isMyTrickTurn && (
           <div className="mt-3 flex justify-center gap-2">
-            <button
+            <FxButton
+              variant="slate"
               onClick={passTurn}
               disabled={state.trick.count === 0}
               className="rounded-full border border-white/20 px-5 py-2 text-xs font-semibold text-white/80 transition hover:border-white/40 disabled:cursor-not-allowed disabled:opacity-30"
             >
               🙅 패스
-            </button>
-            <button
+            </FxButton>
+            <FxButton
+              variant="gold"
               onClick={submitPlay}
               disabled={!canSubmitPlay}
               className="rounded-full bg-amber-500 px-5 py-2 text-xs font-bold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-30"
             >
               🃏 카드 내기 ({selected.size}장)
-            </button>
+            </FxButton>
           </div>
         )}
         {state.phase === "taxReturn" && isMyTaxTurn && (
           <div className="mt-3 flex justify-center">
-            <button
+            <FxButton
+              variant="gold"
               onClick={submitReturnTax}
               disabled={!canReturnTax}
               className="rounded-full bg-amber-500 px-5 py-2 text-xs font-bold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-30"
             >
               💰 {selected.size}/{myTribute?.givenCardIds.length ?? 0}장 돌려주기
-            </button>
+            </FxButton>
           </div>
         )}
       </section>

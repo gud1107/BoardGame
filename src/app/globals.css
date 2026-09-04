@@ -804,6 +804,58 @@ body {
   }
 }
 
+/* 달무티 게임 액션 버튼(카드 제출/패스/세금 반환/혁명/평민 교환 등) 클릭 피드백
+   (2026-09-04 세션, DalmutiEffects.tsx's `FxButton`) — a neon ripple wave
+   expanding from the exact click point, plus (for every variant except the
+   lightweight `card` one) a handful of particles flung outward along the
+   button's own accent color, same `--angle`-per-span technique as
+   `dalmuti-exchange-spark`/`dalmuti-received-spark` above but a short
+   one-shot burst instead of a looping hold. Colors are injected inline per
+   click by `FxButton` (same convention as `EXCHANGE_TIER_STYLE` above), so
+   these two keyframes are shape-only and shared across every variant. */
+@keyframes dalmuti-fx-ripple {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0;
+  }
+}
+@keyframes dalmuti-fx-particle {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(0) scale(1);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(24px) scale(0.3);
+  }
+}
+
+/* Hover border-glow, one rule per `FxButton` variant (task brief "마우스
+   호버 시 경계선 글로우") — `:not(:disabled)` so a disabled action button
+   (e.g. no cards selected yet) never invites a click it can't accept. */
+.dalmuti-fx-btn[data-fx-variant="gold"]:hover:not(:disabled) {
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.5), 0 0 16px 2px rgba(245, 158, 11, 0.45);
+}
+.dalmuti-fx-btn[data-fx-variant="slate"]:hover:not(:disabled) {
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.5), 0 0 14px 2px rgba(148, 163, 184, 0.4);
+}
+.dalmuti-fx-btn[data-fx-variant="rose"]:hover:not(:disabled) {
+  box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.5), 0 0 16px 2px rgba(244, 63, 94, 0.45);
+}
+.dalmuti-fx-btn[data-fx-variant="emerald"]:hover:not(:disabled) {
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.5), 0 0 16px 2px rgba(52, 211, 153, 0.45);
+}
+.dalmuti-fx-btn[data-fx-variant="card"]:hover:not(:disabled) {
+  box-shadow: 0 0 10px 1px rgba(255, 255, 255, 0.35);
+}
+
 /* 달무티's tax-exchange result highlight popup (see DalmutiEffects.tsx's
    `detectTaxHighlightEvents` and TaxHighlightModal.tsx, 2026-09-01 세션) — a
    large centered "내가 준 카드 / 상납·하사받은 카드" recap shown only to the
