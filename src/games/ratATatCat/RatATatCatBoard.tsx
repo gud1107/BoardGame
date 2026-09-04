@@ -66,6 +66,18 @@ const SETUP_PEEK_REVEAL_MS = 5000;
 const SKIP_ENABLE_MS = 1000;
 /** AskUserQuestion 2026-09-04: a player who never taps "카드 확인하기" is auto-confirmed after this long, so an AFK/disconnected human can't stall the whole room at the pre-setup gate forever (bots have their own separate ~1-1.5s auto-ack in RatATatCatGame.tsx and never hit this). */
 const SETUP_CONFIRM_TIMEOUT_MS = 15000;
+/**
+ * 2026-09-04 (user request, "게임시작하고도 3초간 보이게해주세요"): once every
+ * seat has confirmed and `state.phase` actually flips from "setup" to
+ * "playing", this viewer's own end cards (slots 0/3) get one more automatic
+ * — no button, no skip — reveal on the real game board, for this long. Its
+ * own fresh timer, independent of how the setup peek itself went for this
+ * player (full `SETUP_PEEK_REVEAL_MS` hold, an early skip, or the
+ * `SETUP_CONFIRM_TIMEOUT_MS` safety net) — a refresher glance right as real
+ * play begins, in case setup finished a while before the slowest seat
+ * caught up. See `gameStartPeekActive` below.
+ */
+const GAME_START_PEEK_MS = 3000;
 /** How long an opponent's "드로우 완료"/"카드 정리 완료" badge popup stays visible. */
 const OPPONENT_BADGE_MS = 1600;
 
@@ -177,6 +189,28 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- dismissSetupPeek closes over viewerSeat/onAction, both stable per mount; re-declaring it in deps would re-fire this effect every render.
   }, [state.phase, iAcked, confirmClicked, viewerSeat, onAction]);
+
+  // "게임시작하고도 3초간 보이게해주세요" (2026-09-04) — edge-detects the
+  // one-time "setup" → "playing" transition (same ref-diff technique as
+  // `prevStateRef` further below) and reveals slots 0/3 again for
+  // `GAME_START_PEEK_MS` on the real board, regardless of how this viewer's
+  // own setup peek went. Both `setGameStartPeekActive` calls are deferred via
+  // `setTimeout(..., 0)` (never called synchronously in the effect body
+  // itself) for the same cascading-render reason as the setup peek's `tick`
+  // above.
+  const [gameStartPeekActive, setGameStartPeekActive] = useState(false);
+  const prevPhaseRef = useRef(state.phase);
+  useEffect(() => {
+    const prevPhase = prevPhaseRef.current;
+    prevPhaseRef.current = state.phase;
+    if (prevPhase !== "setup" || state.phase !== "playing") return;
+    const start = setTimeout(() => setGameStartPeekActive(true), 0);
+    const end = setTimeout(() => setGameStartPeekActive(false), GAME_START_PEEK_MS);
+    return () => {
+      clearTimeout(start);
+      clearTimeout(end);
+    };
+  }, [state.phase]);
 
   const [peekingSlot, setPeekingSlot] = useState<SlotIndex | null>(null);
   const peekPowerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -600,6 +634,10 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
         <div className="flex gap-2">
           {SLOTS.map((slot) => {
             const isPeeking = peekingSlot === slot;
+            // "게임시작하고도 3초간 보이게해주세요" (2026-09-04) — a non-interactive,
+            // automatic reveal (not the click-driven `isPeeking` above), so it's
+            // additive to `peeking` only, never to `clickable`.
+            const isGameStartPeek = gameStartPeekActive && (slot === 0 || slot === 3);
             const clickable = isPeeking || inReplacePick || inPeekPick || inSwapPickOwn;
             return (
               <CardSlot
@@ -607,7 +645,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
                 size="lg"
                 handCard={myHand[slot]}
                 knownToViewer={myHand[slot].isKnownToOwner}
-                peeking={isPeeking}
+                peeking={isPeeking || isGameStartPeek}
                 selected={inSwapPickOwn === false && swapMySlot === slot}
                 highlighted={inReplacePick || inPeekPick || inSwapPickOwn}
                 label={`내 카드 ${slot + 1}번`}
