@@ -133,17 +133,50 @@
     "source": "https://commons.wikimedia.org/wiki/File:Illuminated_Ferris_wheel,_bouncing_castle_and_carousel_at_night_in_a_funfair_in_Vientiane,_Laos.jpg"
   },
   {
-    "file": "escape-room.jpg",
-    "title": "File:01 Puzzle Box Boxology 5766.jpg",
-    "license": "CC BY-SA 4.0",
-    "artist": "CulmSee-Axel-acad.2161",
-    "source": "https://commons.wikimedia.org/wiki/File:01_Puzzle_Box_Boxology_5766.jpg"
-  },
-  {
     "file": "carousel.jpg",
     "title": "File:Top of Carousel at Winter Wonderland, Hyde Park, London - geograph.org.uk - 5229905.jpg",
     "license": "CC BY-SA 2.0",
     "artist": "Christine Matthews",
     "source": "https://commons.wikimedia.org/wiki/File:Top_of_Carousel_at_Winter_Wonderland,_Hyde_Park,_London_-_geograph.org.uk_-_5229905.jpg"
+  },
+  {
+    "file": "broken-crate.jpg",
+    "title": "File:BrokenPallet.jpeg",
+    "license": "CC BY-SA 4.0",
+    "artist": "Mdornseif",
+    "source": "https://commons.wikimedia.org/wiki/File:BrokenPallet.jpeg",
+    "note": "2026-09-05 세션 추가 — c-02(방탈출카페) 부서진 소품 상자 정밀 매칭용. 기존 escape-room.jpg(멀쩡한 퍼즐 상자 사진, 사건 설명과 불일치)를 교체."
+  },
+  {
+    "file": "broken-laptop.jpg",
+    "title": "File:Samsung Galaxy S2 shattered screen.jpg",
+    "license": "CC BY-SA 2.0",
+    "artist": "Ashwin Kumar from Bangalore, India",
+    "source": "https://commons.wikimedia.org/wiki/File:Samsung_Galaxy_S2_shattered_screen.jpg",
+    "note": "2026-09-05 세션 추가 — c-05(로봇공학랩) 몸싸움 중 파손된 노트북 액정 정밀 매칭용. 노트북이 아닌 스마트폰 사진이지만 '충격으로 거미줄처럼 금 간 화면'이라는 시각적 사실은 동일하다."
+  },
+  {
+    "file": "bruise-arm.jpg",
+    "title": "File:Large hematoma on an arm.jpg",
+    "license": "CC BY-SA 4.0",
+    "artist": "Jean van Kasteel",
+    "source": "https://commons.wikimedia.org/wiki/File:Large_hematoma_on_an_arm.jpg",
+    "note": "2026-09-05 세션 추가 — c-06(퀴즈쇼) 몸싸움 중 생긴 팔 타박상 정밀 매칭용."
+  },
+  {
+    "file": "broken-pot.jpg",
+    "title": "Colorful Broken Ceramic Pot in Outdoor Setting",
+    "license": "Pexels License",
+    "artist": "KAMTBIC",
+    "source": "https://www.pexels.com/photo/colorful-broken-ceramic-pot-in-outdoor-setting-32481791/",
+    "note": "2026-09-05 세션 추가 — c-18(플라워샵) 몸싸움 중 깨진 화분 정밀 매칭용. Wikimedia Commons에 맞는 사진이 없어 Pexels로 소스 확대(요청자 승인)."
+  },
+  {
+    "file": "ransacked-office.jpg",
+    "title": "Devastated House Interior",
+    "license": "Pexels License",
+    "artist": "Martin Dalsgaard",
+    "source": "https://www.pexels.com/photo/devastated-house-interior-7996333/",
+    "note": "2026-09-05 세션 추가 — c-26(미술품 감정) 몸싸움으로 어질러진 사무실 바닥 정밀 매칭용. Wikimedia Commons에 맞는 사진이 없어 Pexels로 소스 확대(요청자 승인)."
   }
 ]

@@ -1,6 +1,47 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-05 (**로스트 시티(Lost Cities) — 활성 턴 플레이어 프로필 하이라이트 + 턴 단계별
+_최종 갱신: 2026-09-05 (**진실의 고개(Hill of Truth) — 증거 사진 정밀 매칭 세션** — "포토 모드
+사진들이 사건 추리와 전혀 연관이 없다, 바닥의 핏자국·흉기·몸싸움 흔적 등 실제 수사 단서로
+전면 교체해달라"는 요청. `AskUserQuestion` 전 코드 조사로 두 가지 전제 불일치를 먼저 확인: **①**
+요청서가 언급한 `EvidenceViewer.tsx`/`PhotoTab.tsx`는 존재하지 않음(실제는 `PhotoModal.tsx` 라이트박스 +
+`InvestigationPanel.tsx`의 "🔍 증거단서함" 탭). **②** "사진이 사건과 전혀 무관하다"도 절반만 사실 —
+사진 지원 32편(신규 시나리오, 구버전 10편은 LV1 텍스트 전용)은 이미 증거 항목별 카테고리 사진이
+매칭돼 있었고(2026-09-03 세션 설계, §8 "분위기 담당" 원칙), 실존 인물 얼굴도 이미 전부 배제돼 있었음.
+**핵심 발견**: 42편 시나리오 제목을 전수 확인한 결과 압도적 다수가 레시피 도난·그림 위조·서명
+위조·반지 실종 등 **비폭력** 사건이었고, **42편 전체에 흉기·혈흔이 등장하는 시나리오가 단 하나도
+없음**(전부 "밀치기→물건에 부딪힘" 수준) — 요청서의 "핏자국·흉기 마커"를 그대로 적용하면 사실에 없는
+단서를 만들어내는 자기모순이 됨. `AskUserQuestion`으로 4라운드에 걸쳐 확정: **①** 혈흔·흉기는 실제
+몸싸움이 있는 시나리오에만 적용 검토(15편: c02/c04/c05/c06/c11/c14/c15/c17/c18/c19/c25/c26/c28/
+c29/c30) **②** 사진 정확도를 위해 기존 "분위기 담당" 설계를 이 15편에 한해 뒤집고 시나리오 truth와
+1:1 정밀 매칭 **③** 혈흔은 사실에 없으므로 미적용, 대신 실제로 존재하는 물증(부서진 소품 상자·파손된
+기기 화면·타박상·깨진 화분·어질러진 사무실·깨진 전시실 유리)만 사진으로 보강 **④** 소스는 원칙적으로
+Wikimedia Commons 유지, 단 Commons에 맞는 사진이 없는 경우에 한해 Pexels로 보조 확대(사용자 승인).
+구현: Wikimedia Commons API(`commons.wikimedia.org/w/api.php`)로 검색해 후보를 다운로드받아 매번
+Read로 실제 이미지를 육안 확인한 뒤 채택 — `broken-crate.jpg`(BrokenPallet, Mdornseif, CC BY-SA
+4.0, c-02 "부서진 소품 상자"의 기존 오배치 사진(멀쩡한 퍼즐 상자)을 교체), `broken-laptop.jpg`
+(Samsung Galaxy S2 shattered screen, Ashwin Kumar, CC BY-SA 2.0, c-05 파손된 노트북), `bruise-
+arm.jpg`(Large hematoma on an arm, Jean van Kasteel, CC BY-SA 4.0, c-06 몸싸움 타박상 — 기존
+"손목"이던 증거명을 실제 사진에 맞춰 "팔"로 수정), `broken-pot.jpg`(Pexels, KAMTBIC, c-18 깨진
+화분), `ransacked-office.jpg`(Pexels, Martin Dalsgaard, c-26 몸싸움으로 어질러진 사무실 — 신규
+증거 항목 c26-e6 추가)까지 5개 신규 다운로드 + `PHOTO_CREDITS`에 `source` 필드 신설(Pexels 출처
+표기 지원). c-29(왁스뮤지엄)는 조사 중 기존 `broken-glass.png`가 "전시실 유리를 일부러 깨고"라는
+truth와 이미 정확히 일치함을 확인해 그대로 유지(사진 재사용, 신규 다운로드 없음). 나머지 9편은
+Wikimedia Commons·Pexels·Pixabay를 각각 5~10개 검색어로 시도했지만(엎어진 소파·깨진 화분과 유사한
+서가/선반/대기 스탠드 등) 정확히 맞는 무료 실사진을 찾지 못해 억지로 끼워 넣지 않고 기존 분위기용
+사진을 그대로 유지 — Wikimedia Commons는 백과사전형 아카이브라 "연출된 몸싸움 흔적" 스톡사진
+자체가 희소함을 확인. **참고로 발견했으나 이번 범위 밖이라 손대지 않은 것**: `broken-glass`
+카테고리가 c-05(화재감지기)·c-12(도로 표지판)·c-13(빙판 흠집)에도 재사용되고 있는데, 이 3곳은
+전부 비폭력 시나리오라 이번에 승인된 범위(15개 몸싸움 시나리오) 밖이었고 사진 자체도 각 증거
+설명과 무관해(깨진 유리 사진이 화재감지기/도로 표지판/빙판과 안 맞음) 다음 세션에서 별도로
+검토가 필요함. 룰북(`진실의 고개.md`) 헤더 개정 이력 및 §8에 이번 세션 내역 추가. 검증: `npx tsc
+--noEmit`(0 에러) / `npx eslint src/games/hillOfTruth`(0 에러) / `npx vitest run`(49개 파일·1625개
+테스트 전부 통과, hillOfTruth 자체는 54개 무변경 — 텍스트/사진 데이터만 수정, 판정 로직 무변경) /
+`npm run build`(정상 완료). 새 정적 이미지 5장이 dev 서버에서 실제로 200/image-jpeg로 서빙되는지
+curl로 직접 확인(전부 통과). 이 세션은 별도 워크트리(`../boardGame-hot-photos`,
+`feat/hill-of-truth-evidence-photos` 브랜치, origin/main 기준)에서 진행 — 현재 로컬 작업 브랜치
+(`fix/mal-dalli-ja-horse-vanish-and-seat-tags`)에 쌓여 있던 무관한 미커밋 변경들과 완전히 분리됨.)_
+
+_이전 갱신: 2026-09-05 (**로스트 시티(Lost Cities) — 활성 턴 플레이어 프로필 하이라이트 + 턴 단계별
 가이드 연출 세션** — "1:1 탐험 대결 중 현재 누구의 차례인지 한눈에 인지할 수 있도록 활성 플레이어
 영역에 네온 글로우 펄스와 턴 인디케이터 뱃지를 넣어달라"는 요청. 요청서에 담긴 두 가지 전제를
 `AskUserQuestion` 전 코드 조사로 먼저 확인: **①** `PlayerArea.tsx`/`ExpeditionBoard.tsx`/

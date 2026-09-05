@@ -590,18 +590,34 @@ const SCENARIO_B_LIST: Scenario[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// LV2/LV3 사진 증거 공용 라이브러리 (2026-09-03 세션)
+// LV2/LV3 사진 증거 공용 라이브러리 (2026-09-03 세션 신설, 2026-09-05 세션 정밀화)
 //
 // 시나리오마다 새 사진을 일일이 촬영/생성할 수 없으므로(원작이 없는 가상의
-// 사건), 무료 라이선스(CC0/CC-BY/CC-BY-SA/Public domain) 실사진을 Wikimedia
-// Commons에서 카테고리별로 검색·다운로드해 `public/images/hillOfTruth/evidence/`에
-// 저장하고, 여러 시나리오가 같은 "증거 유형" 사진을 공유해서 쓴다(출처는
-// 그 폴더의 CREDITS.json 그대로). 각 증거 항목의 `name`/`description`은 전부
-// 시나리오별로 새로 쓴 고유 텍스트이고, 사진은 "이런 느낌의 증거"라는 분위기만
-// 담당한다 — 실존 인물 얼굴이 나오는 사진은 전부 제외했다(초상권/오해 방지).
+// 사건), 무료 라이선스(CC0/CC-BY/CC-BY-SA/Public domain/Pexels License) 실사진을
+// Wikimedia Commons·Pexels에서 카테고리별로 검색·다운로드해
+// `public/images/hillOfTruth/evidence/`에 저장하고, 여러 시나리오가 같은
+// "증거 유형" 사진을 공유해서 쓴다(출처는 그 폴더의 CREDITS.json 그대로). 각
+// 증거 항목의 `name`/`description`은 전부 시나리오별로 새로 쓴 고유 텍스트다.
+//
+// ⚠️ 2026-09-05 세션 정밀화(요청서 "진실의 고개 사진 단서 전면 교체" 처리 세션,
+// AskUserQuestion으로 전부 확정): 대다수 카테고리는 여전히 "이런 느낌의 증거"라는
+// 분위기 담당이지만, 42편 중 실제 몸싸움·폭행이 있는 15편(c02/c04/c05/c06/c11/
+// c14/c15/c17/c18/c19/c25/c26/c28/c29/c30)에 한해서는 방침을 뒤집어 시나리오
+// truth에 실제로 등장하는 물증(부서진 소품 상자·파손된 기기 화면·타박상·깨진
+// 화분·어질러진 사무실·깨진 전시실 유리)과 1:1로 정밀 매칭했다. 이 게임은
+// 흉기·혈흔이 42편 전체에 단 한 건도 등장하지 않는 저작물이라(전부 "밀치기→
+// 물건에 부딪힘" 수준), 요청서의 "핏자국/흉기 마커"는 사실에 없는 내용이라
+// 적용하지 않기로 확정했다 — 대신 실제로 존재하는 몸싸움 흔적만 사진으로 보강.
+// 15편 중 broken-crate(c02)/broken-laptop(c05)/bruise-arm(c06)/broken-pot(c18)/
+// ransacked-office(c26)/broken-glass 재확인(c29) 6편만 실제로 딱 맞는 무료
+// 사진을 찾았고, 나머지(화분 없는 소파·서가·선반·대기 스탠드 등)는 Wikimedia+
+// Pexels+Pixabay를 모두 검색했지만 맞는 실사진이 없어 기존 분위기용 사진을
+// 그대로 유지했다(HANDOFF.md 2026-09-05 항목 참고 — 억지로 안 맞는 사진을
+// 끼워 넣지 않기로 함). 실존 인물 얼굴이 나오는 사진은 전부 제외했다(초상권/
+// 오해 방지 — 이 원칙은 신규 사진에도 동일 적용).
 // ---------------------------------------------------------------------------
 
-const PHOTO_CREDITS: Record<string, { file: string; artist: string; license: string }> = {
+const PHOTO_CREDITS: Record<string, { file: string; artist: string; license: string; source?: string }> = {
   "security-camera": { file: "security-camera.jpg", artist: "Tdorante10", license: "CC BY-SA 4.0" },
   corridor: { file: "corridor.jpg", artist: "JIP", license: "CC BY-SA 4.0" },
   receipt: { file: "receipt.jpg", artist: "Peter Merholz", license: "CC BY-SA 2.0" },
@@ -621,14 +637,19 @@ const PHOTO_CREDITS: Record<string, { file: string; artist: string; license: str
   suitcase: { file: "suitcase.jpg", artist: "Sandrine Z", license: "CC BY-SA 4.0" },
   "broken-glass": { file: "broken-glass.png", artist: "OathOn", license: "CC BY-SA 4.0" },
   "ferris-wheel": { file: "ferris-wheel.jpg", artist: "Basile Morin", license: "CC BY-SA 4.0" },
-  "escape-room": { file: "escape-room.jpg", artist: "CulmSee-Axel-acad.2161", license: "CC BY-SA 4.0" },
   carousel: { file: "carousel.jpg", artist: "Christine Matthews", license: "CC BY-SA 2.0" },
+  // 2026-09-05 세션 신규 — 몸싸움 시나리오 정밀 매칭용(위 주석 참고).
+  "broken-crate": { file: "broken-crate.jpg", artist: "Mdornseif", license: "CC BY-SA 4.0" },
+  "broken-laptop": { file: "broken-laptop.jpg", artist: "Ashwin Kumar", license: "CC BY-SA 2.0" },
+  "bruise-arm": { file: "bruise-arm.jpg", artist: "Jean van Kasteel", license: "CC BY-SA 4.0" },
+  "broken-pot": { file: "broken-pot.jpg", artist: "KAMTBIC", license: "Pexels License", source: "Pexels" },
+  "ransacked-office": { file: "ransacked-office.jpg", artist: "Martin Dalsgaard", license: "Pexels License", source: "Pexels" },
 };
 
 /** 증거 항목에 LV2+ 사진을 붙이는 헬퍼 — `category`는 위 `PHOTO_CREDITS` 키. */
 function photo(category: keyof typeof PHOTO_CREDITS, alt: string): EvidencePhoto {
   const c = PHOTO_CREDITS[category];
-  return { url: `/images/hillOfTruth/evidence/${c.file}`, alt, credit: `${c.artist} · ${c.license} (Wikimedia Commons)` };
+  return { url: `/images/hillOfTruth/evidence/${c.file}`, alt, credit: `${c.artist} · ${c.license} (${c.source ?? "Wikimedia Commons"})` };
 }
 
 // ---------------------------------------------------------------------------
@@ -739,7 +760,7 @@ const SCENARIO_C_LIST: Scenario[] = [
     ],
     evidence: [
       { id: "c02-e1", name: "직원 전용 통로 키패드", description: "마스터 비밀번호로 열린 기록이 남은 전자 키패드.", photo: photo("keypad", "직원 전용 통로 전자 키패드") },
-      { id: "c02-e2", name: "부서진 소품 상자", description: "테마룸 뒤편에서 발견된 파손된 나무 소품 상자.", photo: photo("escape-room", "부서진 테마룸 소품 상자") },
+      { id: "c02-e2", name: "부서진 소품 상자", description: "테마룸 뒤편에서 발견된 파손된 나무 소품 상자.", photo: photo("broken-crate", "쪼개진 나무 소품 상자 클로즈업") },
       { id: "c02-e3", name: "근무표 원본", description: "재윤의 퇴근 시각이 실제보다 30분 앞당겨 기재된 근무표." },
       { id: "c02-e4", name: "복도 CCTV 스틸컷", description: "22:15경 직원 통로 쪽에서 포착된 흐릿한 인영.", photo: photo("corridor", "직원 전용 통로 CCTV 스틸컷") },
       { id: "c02-e5", name: "경쟁 프랜차이즈 제안 메일 출력본", description: "재윤이 테마 아이디어를 판매하겠다고 제안한 메일." },
@@ -931,7 +952,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { id: "c05-e2", name: "지완의 라이터", description: "실험실 서랍에서 발견된 라이터, 지완의 지문 검출." },
       { id: "c05-e3", name: "출입 카드 재입장 기록", description: "대피 직후 지완의 카드로 랩에 재입장한 기록.", photo: photo("keypad", "실험실 출입 카드 리더기") },
       { id: "c05-e4", name: "논문 초안 이메일", description: "지완이 단독 저자로 표기해 미리 투고 준비한 논문 초안." },
-      { id: "c05-e5", name: "피해자의 연구 노트북", description: "몸싸움 중 바닥에 떨어져 액정이 파손된 노트북." },
+      { id: "c05-e5", name: "피해자의 연구 노트북", description: "몸싸움 중 바닥에 떨어져 액정이 파손된 노트북.", photo: photo("broken-laptop", "충격으로 거미줄처럼 금이 간 기기 화면") },
     ],
     messages: [
       { id: "c05-m1", from: "지완", to: "학회 담당자", time: "사건 D-2", content: "제 단독 저자로 먼저 투고하고 싶은데 가능할까요?" },
@@ -994,7 +1015,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { id: "c06-e2", name: "대기실 CCTV 스틸컷", description: "몸싸움 직전 두 사람이 대기실에 함께 있는 장면.", photo: photo("corridor", "대기실 앞 CCTV 스틸컷") },
       { id: "c06-e3", name: "외부 조력자와의 문자 내역", description: "결승 문제 힌트를 주고받은 것으로 보이는 문자 기록." },
       { id: "c06-e4", name: "출연 계약서 초안", description: "우승 시 은호에게 유리한 방송 출연 계약 조건이 담긴 문서.", photo: photo("documents", "방송 출연 계약서 초안") },
-      { id: "c06-e5", name: "피해자의 멍든 손목 사진", description: "몸싸움 중 생긴 것으로 보이는 손목 멍 자국." },
+      { id: "c06-e5", name: "피해자의 멍든 팔 사진", description: "몸싸움 중 생긴 것으로 보이는 팔의 타박상 자국.", photo: photo("bruise-arm", "몸싸움 중 생긴 팔의 타박상") },
     ],
     messages: [
       { id: "c06-m1", from: "은호", to: "외부 조력자", time: "결승 D-1", content: "결승 문제 힌트, 시간 맞춰서 꼭 보내주세요." },
@@ -1742,7 +1763,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { time: "20분 후", description: "다른 직원이 작업실에서 사장을 발견." },
     ],
     evidence: [
-      { id: "c18-e1", name: "쓰러진 관엽식물 화분", description: "작업실 바닥에 쓰러진 채 발견된 큰 화분." },
+      { id: "c18-e1", name: "쓰러진 관엽식물 화분", description: "작업실 바닥에 쓰러진 채 발견된 큰 화분 — 몸싸움 중 부딪혀 한쪽이 깨졌다.", photo: photo("broken-pot", "몸싸움 중 깨진 화분") },
       { id: "c18-e2", name: "특제 보존액 배합 노트", description: "사장이 직접 개발한 보존액 배합 비율이 적힌 노트.", photo: photo("handwriting", "특제 보존액 배합 노트") },
       { id: "c18-e3", name: "경쟁 업체 이직 제안서", description: "라은에게 전달된 거액의 이직 조건 제안서.", photo: photo("documents", "이직 조건 제안서") },
       { id: "c18-e4", name: "작업실 CCTV 스틸컷", description: "사건 시각 작업실 입구를 드나드는 인영.", photo: photo("corridor", "플라워샵 작업실 CCTV 스틸컷") },
@@ -2244,6 +2265,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { id: "c26-e3", name: "화랑 사무실 CCTV 스틸컷", description: "몸싸움 직전 사무실 안 두 사람의 실루엣.", photo: photo("corridor", "화랑 사무실 CCTV 스틸컷") },
       { id: "c26-e4", name: "경매 출품 신청서", description: "태희가 미공개작으로 등록해 제출한 경매 출품 신청서." },
       { id: "c26-e5", name: "물감 성분 분석 자료", description: "그림에 사용된 물감이 최근 제작된 것임을 보여주는 분석 자료." },
+      { id: "c26-e6", name: "몸싸움 흔적이 남은 사무실 바닥", description: "태희와 감정 전문가의 몸싸움 중 서랍장이 넘어지고 서류가 사무실 바닥에 흩어졌다.", photo: photo("ransacked-office", "몸싸움으로 어질러진 화랑 사무실 바닥") },
     ],
     messages: [
       { id: "c26-m1", from: "태희", to: "위조 제작업자", time: "경매 D-10", content: "감정서 양식 최대한 진짜처럼 부탁드려요." },
