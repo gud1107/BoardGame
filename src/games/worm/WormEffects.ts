@@ -31,7 +31,10 @@
  * (<1s) and these capacities (never all in-flight at once in practice).
  */
 
-import { BODY_RADIUS, GROWTH_STAGE_LARGE_LENGTH, HEAD_RADIUS, type ArenaSize, type SeatIndex, type Vec2, type WormState } from "./engine";
+import { BODY_RADIUS, getGrowthStage, GROWTH_STAGE_CRYSTAL_LENGTH, HEAD_RADIUS, type ArenaSize, type GrowthStage, type SeatIndex, type Vec2, type WormState } from "./engine";
+
+/** Rank order for `GrowthStage`, so `detectWormEvents` can tell a stage *increase* (fires the growth-pulse FX) from a decrease (a cut/death shrinking a snake back down — no pulse). */
+const STAGE_RANK: Record<GrowthStage, number> = { base: 0, spiky: 1, scale: 2, crystal: 3, aurora: 4 };
 
 // ---------------------------------------------------------------------------
 // Event detection (pure, unit-testable — see Worm.test.ts)
@@ -40,7 +43,8 @@ import { BODY_RADIUS, GROWTH_STAGE_LARGE_LENGTH, HEAD_RADIUS, type ArenaSize, ty
 export type WormEvent =
   | { type: "eat"; seat: SeatIndex; pos: Vec2; value: number; hue: number }
   | { type: "cut"; targetSeat: SeatIndex; attackerSeat: SeatIndex | null; pos: Vec2; hue: number }
-  | { type: "death"; seat: SeatIndex; cause: "self" | "wall" | "head"; attackerSeat: SeatIndex | null; pos: Vec2; segments: Vec2[]; hue: number };
+  | { type: "death"; seat: SeatIndex; cause: "self" | "wall" | "head"; attackerSeat: SeatIndex | null; pos: Vec2; segments: Vec2[]; hue: number }
+  | { type: "stageUp"; seat: SeatIndex; hue: number };
 
 const HEAD_TO_HEAD_DIST = HEAD_RADIUS * 2 + 6;
 const WALL_MARGIN = HEAD_RADIUS + 6;
@@ -98,6 +102,13 @@ export function detectWormEvents(prev: WormState, next: WormState): WormEvent[] 
           }
         }
         events.push({ type: "cut", targetSeat: seat, attackerSeat, pos, hue: after.hue });
+      }
+      // Growth-stage-up (10/25/50/100 length breakpoints, `engine.ts`'s
+      // `getGrowthStage`): only fires on an actual *increase* — a cut/boost
+      // drain shrinking a snake back below its current stage's threshold
+      // must not replay the pulse wave in reverse.
+      if (STAGE_RANK[getGrowthStage(after.length)] > STAGE_RANK[getGrowthStage(before.length)]) {
+        events.push({ type: "stageUp", seat, hue: after.hue });
       }
     } else if (before.alive && !after.alive) {
       const pos = before.path[0] ?? { x: 0, y: 0 };
@@ -220,13 +231,32 @@ const FLOAT_TEXT_MS = 800;
 const FLOAT_TEXT_RISE = 60; // world units
 const BOOST_TRAIL_INTERVAL_MS = 45;
 
-// 2026-09-02 맵 확장 세션: "대형" 성장 단계(길이 >= GROWTH_STAGE_LARGE_LENGTH)의
-// 잔상(afterimage) 이펙트용 머리 궤적 샘플. 몸통 마디는 이미 `segments`로 정확히
-// 그려지므로, 잔상은 그와 별개로 머리가 지나온 최근 화면 위치를 옅게 겹쳐 그리는
-// 순수 시각 효과 — 네트워크 스냅샷이 아니라 렌더 프레임마다(`updateHeadTrail`)
-// 샘플링하므로 스냅샷 사이 보간 없이도 부드럽게 이어진다.
+// 2026-09-02 맵 확장 세션에서 도입, 2026-09-05 성장 진화 세션에서 "large"(구
+// 3단계 체계) → "crystal"/"aurora"(신 5단계 체계의 상위 두 단계)로 갱신: 길이
+// >= GROWTH_STAGE_CRYSTAL_LENGTH인 동안의 잔상(afterimage) 이펙트용 머리 궤적
+// 샘플. 몸통 마디는 이미 `segments`로 정확히 그려지므로, 잔상은 그와 별개로
+// 머리가 지나온 최근 화면 위치를 옅게 겹쳐 그리는 순수 시각 효과 — 네트워크
+// 스냅샷이 아니라 렌더 프레임마다(`updateHeadTrail`) 샘플링하므로 스냅샷 사이
+// 보간 없이도 부드럽게 이어진다.
 const HEAD_TRAIL_CAPACITY = 7;
 const HEAD_TRAIL_INTERVAL_MS = 55;
+
+// 2026-09-05 성장 진화 세션: 10/25/50/100 길이 임계값을 넘어설 때마다 머리→꼬리로
+// 훑고 지나가는 빛의 파동(Glow Pulse Wave). `growthPulseAlpha`가 몸통 순회
+// 위치(0=머리..1=꼬리)를 파동의 현재 진행 위치와 비교해 밝기를 반환하므로,
+// 실제로 파동을 그리는 코드는 `WormCanvas.tsx`의 기존 마디 순회 루프에 얹혀
+// 있다(새 순회 패스를 따로 만들지 않음).
+const GROWTH_PULSE_MS = 650;
+const GROWTH_PULSE_BAND = 0.16; // 파동의 "두께" — 몸통 전체 길이 대비 비율
+
+// 2026-09-05 킬 표정 세션: 상대를 처치했을 때(`onDeath`의 "head" 원인) 킬러의
+// 머리 표정을 2.5초간 승리 표정으로 바꾼다. 3가지 중 무작위 하나
+// (`AskUserQuestion`으로 "미소/윙크/선글라스 랜덤" 확정) — 클라이언트 로컬
+// 코스메틱이라 이 파일의 다른 파티클 스폰과 동일하게 `Math.random()`을 그대로
+// 쓴다(엔진 리듀서가 아니므로 락스텝 결정론 제약 대상이 아님).
+export type KillExpression = "smile" | "wink" | "sunglasses";
+const KILL_EXPRESSIONS: KillExpression[] = ["smile", "wink", "sunglasses"];
+const KILL_EXPRESSION_MS = 2500;
 
 // ---------------------------------------------------------------------------
 // Kill FX (opponent eliminated via a head-to-head collision — the only death
@@ -276,9 +306,14 @@ export class WormEffectsManager {
   private lastBoostSpawn = new Map<SeatIndex, number>();
   /** Gold aura pulse expiry per seat — set on whoever just landed a kill (`onDeath`'s "head" cause), read by `killerAuraAlpha`. */
   private killerAuraExpiry = new Map<SeatIndex, number>();
-  /** Most-recent-first ring buffer of a "large" stage snake's recent head positions, for the afterimage trail — see `updateHeadTrail`/`headTrail`. */
+  /** Most-recent-first ring buffer of a "crystal"/"aurora" stage snake's recent head positions, for the afterimage trail — see `updateHeadTrail`/`headTrail`. */
   private headTrailPoints = new Map<SeatIndex, Vec2[]>();
   private lastHeadTrailSpawn = new Map<SeatIndex, number>();
+  /** Absolute clock time a growth-stage-up pulse wave started for this seat — read by `growthPulseAlpha`. */
+  private growthPulseStart = new Map<SeatIndex, number>();
+  /** Victory expression + its expiry for whoever most recently landed a kill — read by `killExpression`. */
+  private killExpressionKind = new Map<SeatIndex, KillExpression>();
+  private killExpressionExpiry = new Map<SeatIndex, number>();
 
   /** Internal clock, advanced by `update`; every expiry above is stored as an absolute time on this clock. */
   private clock = 0;
@@ -319,8 +354,13 @@ export class WormEffectsManager {
     for (const ev of events) {
       if (ev.type === "eat") this.onEat(ev);
       else if (ev.type === "cut") this.onCut(ev);
+      else if (ev.type === "stageUp") this.onStageUp(ev);
       else this.onDeath(ev, viewerSeat);
     }
+  }
+
+  private onStageUp(ev: Extract<WormEvent, { type: "stageUp" }>) {
+    this.growthPulseStart.set(ev.seat, this.clock);
   }
 
   private onEat(ev: Extract<WormEvent, { type: "eat" }>) {
@@ -409,6 +449,12 @@ export class WormEffectsManager {
     // ---- Killer gold aura pulse (point 2) — world-space, so visible to
     // everyone watching the killer's head, not just the killer. ----
     this.killerAuraExpiry.set(attackerSeat, this.clock + GOLD_AURA_MS);
+
+    // ---- Killer victory expression (2026-09-05 킬 표정 세션) — a fresh kill
+    // always re-rolls and restarts the window, so a rapid double/triple kill
+    // keeps the face fresh instead of letting an earlier one expire mid-streak.
+    this.killExpressionKind.set(attackerSeat, KILL_EXPRESSIONS[Math.floor(Math.random() * KILL_EXPRESSIONS.length)]);
+    this.killExpressionExpiry.set(attackerSeat, this.clock + KILL_EXPRESSION_MS);
   }
 
   // -------------------------------------------------------------------
@@ -427,11 +473,11 @@ export class WormEffectsManager {
     }
   }
 
-  /** Per-frame head-trajectory sampling for the "large" growth stage's afterimage — a seat drops out of the trail (and its buffer resets) the moment it's no longer alive-and-large, so shrinking back down or dying clears the ghost instantly instead of leaving a stale trail. */
+  /** Per-frame head-trajectory sampling for the "crystal"/"aurora" growth stages' afterimage — a seat drops out of the trail (and its buffer resets) the moment it's no longer alive-and-crystal-or-above, so shrinking back down or dying clears the ghost instantly instead of leaving a stale trail. */
   updateHeadTrail(state: WormState) {
     for (let seat = 0; seat < state.playerCount; seat++) {
       const snake = state.snakes[seat];
-      if (!snake?.alive || snake.length < GROWTH_STAGE_LARGE_LENGTH) {
+      if (!snake?.alive || snake.length < GROWTH_STAGE_CRYSTAL_LENGTH) {
         this.headTrailPoints.delete(seat);
         continue;
       }
@@ -534,6 +580,31 @@ export class WormEffectsManager {
   screenFlashAlpha(): number {
     if (this.screenFlashTimeLeft <= 0) return 0;
     return this.screenFlashTimeLeft / KILL_SCREEN_FLASH_MS;
+  }
+
+  /**
+   * 0..1 extra brightness for a body point at fractional head→tail position
+   * `segT` (0 = head, 1 = tail) while a growth-stage pulse wave (see
+   * `onStageUp`) is travelling down this seat's body. The wave's own
+   * head→tail position at elapsed time `e` is `e / GROWTH_PULSE_MS`; a point
+   * lights up as the wave passes over it and fades once it's moved on.
+   */
+  growthPulseAlpha(seat: SeatIndex, segT: number): number {
+    const start = this.growthPulseStart.get(seat);
+    if (start === undefined) return 0;
+    const elapsed = this.clock - start;
+    if (elapsed < 0 || elapsed > GROWTH_PULSE_MS) return 0;
+    const waveT = elapsed / GROWTH_PULSE_MS;
+    const dist = Math.abs(segT - waveT);
+    if (dist > GROWTH_PULSE_BAND) return 0;
+    return (1 - dist / GROWTH_PULSE_BAND) * (1 - waveT * 0.3);
+  }
+
+  /** Current victory facial expression for a seat's head, or `null` for the plain default eyes — set by `onDeath` whenever this seat just landed a kill, expires after `KILL_EXPRESSION_MS`. */
+  killExpression(seat: SeatIndex): KillExpression | null {
+    const expiry = this.killExpressionExpiry.get(seat);
+    if (expiry === undefined || this.clock >= expiry) return null;
+    return this.killExpressionKind.get(seat) ?? null;
   }
 
   /** 0..1 alpha for the gold aura pulse drawn around a recent kill's attacker head (point 2), visible to every viewer. */
