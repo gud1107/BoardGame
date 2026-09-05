@@ -104,17 +104,24 @@ export const FOOD_COUNT_TARGET = 490;
 export const FOOD_VALUE_MIN = 1;
 export const FOOD_VALUE_MAX = 3;
 
-// 2026-09-02 맵 확장 세션: 성장 단계별 외형 진화 길이 기준(`AskUserQuestion`으로
-// 20/40 확정) — `length < MID`는 기본형, `[MID, LARGE)`는 중형(두꺼워짐 + 테두리
-// 패턴), `>= LARGE`는 대형(중형 외형 + 잔상 이펙트). `WormCanvas.tsx`의 렌더링과
-// `getGrowthStage`가 이 두 상수만 참조하므로 튜닝은 여기 한 곳만 고치면 된다.
-export const GROWTH_STAGE_MID_LENGTH = 20;
-export const GROWTH_STAGE_LARGE_LENGTH = 40;
-export type GrowthStage = "small" | "mid" | "large";
+// 2026-09-05 조이스틱 우측 재배치/성장 진화/킬 표정 세션: `AskUserQuestion`으로
+// 2026-09-02에 확정했던 20/40(3단계) 체계를 전면 폐기하고 10/25/50/100 길이
+// 기준 5단계로 교체 확정 — `base`(기본형) → `spiky`(가시/돌기형 + 몸통 그라데이션)
+// → `scale`(용린 패턴 + 네온 글로우) → `crystal`(크리스탈 마디 형태 + 잔상) →
+// `aurora`(크리스탈 + 시간에 따라 색조가 흐르는 오로라 펄스). `WormCanvas.tsx`의
+// 렌더링과 `WormEffects.ts`의 잔상 트레일이 이 상수/타입만 참조하므로 튜닝은
+// 여기 한 곳만 고치면 된다.
+export const GROWTH_STAGE_SPIKY_LENGTH = 10;
+export const GROWTH_STAGE_SCALE_LENGTH = 25;
+export const GROWTH_STAGE_CRYSTAL_LENGTH = 50;
+export const GROWTH_STAGE_AURORA_LENGTH = 100;
+export type GrowthStage = "base" | "spiky" | "scale" | "crystal" | "aurora";
 export function getGrowthStage(length: number): GrowthStage {
-  if (length >= GROWTH_STAGE_LARGE_LENGTH) return "large";
-  if (length >= GROWTH_STAGE_MID_LENGTH) return "mid";
-  return "small";
+  if (length >= GROWTH_STAGE_AURORA_LENGTH) return "aurora";
+  if (length >= GROWTH_STAGE_CRYSTAL_LENGTH) return "crystal";
+  if (length >= GROWTH_STAGE_SCALE_LENGTH) return "scale";
+  if (length >= GROWTH_STAGE_SPIKY_LENGTH) return "spiky";
+  return "base";
 }
 
 export const RESPAWN_DELAY_MS = 1800;

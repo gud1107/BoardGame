@@ -8,8 +8,10 @@ import {
   MATCH_DURATION_MS,
   RESPAWN_DELAY_MS,
   SEGMENT_SPACING,
+  type GrowthStage,
   type SeatIndex,
   type SnakeInput,
+  type Vec2,
   type WormState,
 } from "./engine";
 import { detectWormEvents, WormEffectsManager } from "./WormEffects";
@@ -137,6 +139,15 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
       effects.handleEvents(events, viewerSeat);
       for (const ev of events) {
         if (ev.type !== "death" || ev.cause !== "head" || ev.attackerSeat === null) continue;
+        // 짧은 쾌감 진동 — 내가 킬러일 때만, Vibration API 미지원 브라우저(iOS
+        // Safari 등)에서는 조용히 무시.
+        if (ev.attackerSeat === viewerSeat && typeof navigator !== "undefined" && "vibrate" in navigator) {
+          try {
+            navigator.vibrate(60);
+          } catch {
+            // 일부 브라우저는 지원 플래그가 있어도 호출 시점에 던질 수 있음 — 코스메틱이므로 무시.
+          }
+        }
         const now = performance.now();
         const prevCombo = killComboRef.current.get(ev.attackerSeat);
         const comboCount = prevCombo && now - prevCombo.lastAt <= KILL_COMBO_WINDOW_MS ? prevCombo.count + 1 : 1;
@@ -466,7 +477,15 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
           </div>
         )}
 
-        {/* Touch controls */}
+        {/* Touch controls — 2026-09-05 세션: 오른손 엄지 조작성을 위해 조이스틱을
+            화면 하단 모서리에서 우측 세로 중앙(top: 50%, right, translateY(-50%))
+            으로 재배치(`AskUserQuestion` 확정). 부스트 버튼은 조이스틱과 같은
+            우측 축에서 그 바로 아래로 붙여 세로로 스택(역시 확정 답변) — 가로
+            폭이 더 큰 조이스틱(h-24=96px) 중심에 맞춰 우측 오프셋을 계산해
+            두 컨트롤의 좌우 중심이 정확히 일치하도록 뺐다. 바깥 컨테이너에
+            이미 `touchAction: "none"`이 걸려 있지만(위 컨테이너 style 참고),
+            각 컨트롤에도 명시적으로 중복 지정해 터치 오작동(스크롤/줌)을 이중
+            차단한다. */}
         {touchCapable && (
           <>
             <div
@@ -475,7 +494,8 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
               onPointerMove={handleJoystickPointerMove}
               onPointerUp={handleJoystickPointerUp}
               onPointerCancel={handleJoystickPointerUp}
-              className="absolute bottom-4 left-4 h-24 w-24 rounded-full border border-white/20 bg-white/5"
+              className="absolute h-24 w-24 rounded-full border border-white/20 bg-white/5"
+              style={{ top: "50%", right: 24, transform: "translateY(-50%)", touchAction: "none" }}
             >
               <div
                 className="pointer-events-none absolute top-1/2 left-1/2 h-9 w-9 rounded-full bg-lime-300/70"
@@ -494,7 +514,8 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
               onPointerCancel={() => {
                 joystickBoostRef.current = false;
               }}
-              className="absolute right-4 bottom-4 h-16 w-16 rounded-full border border-amber-300/40 bg-amber-500/20 text-xs font-bold text-amber-100 active:bg-amber-400/40"
+              className="absolute h-16 w-16 rounded-full border border-amber-300/40 bg-amber-500/20 text-xs font-bold text-amber-100 active:bg-amber-400/40"
+              style={{ top: "calc(50% + 64px)", right: 40, touchAction: "none" }}
             >
               🚀 부스트
             </button>
@@ -509,6 +530,62 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------
+// 2026-09-05 성장 진화 세션: 10/25/50/100 길이 단계(`engine.ts`의
+// `GrowthStage`)별 마디 반경 배율/네온 글로우 여부/크리스탈 폴리곤 전환 여부.
+// 단계가 오를수록 누적(spiky의 그라데이션·돌기는 그 위 단계에서도 계속 유지).
+// ---------------------------------------------------------------------
+function stageRadiusMul(stage: GrowthStage): number {
+  switch (stage) {
+    case "aurora":
+      return 1.34;
+    case "crystal":
+      return 1.26;
+    case "scale":
+      return 1.16;
+    case "spiky":
+      return 1.06;
+    default:
+      return 1;
+  }
+}
+
+/** 마디 폴리곤(육각 "크리스탈") — crystal/aurora 단계 전용, 머리(i===0)는 항상 원형 유지(눈/표정 배치 단순화). */
+function drawCrystalSegment(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, rotation: number) {
+  const sides = 6;
+  ctx.beginPath();
+  for (let k = 0; k < sides; k++) {
+    const a = rotation + (k / sides) * Math.PI * 2;
+    const px = cx + Math.cos(a) * r;
+    const py = cy + Math.sin(a) * r;
+    if (k === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+/** 가시/돌기형 세그먼트 — spiky 단계 이상에서 몇 마디 간격으로 몸통 바깥쪽을 향해 작은 삼각 돌기를 덧그린다. 방향은 이웃 마디(world-space) 접선의 수직 벡터로 계산 — 정규화된 방향 비율은 world/screen 균등 스케일에서 그대로 쓸 수 있다. */
+function drawSpike(ctx: CanvasRenderingContext2D, sx: number, sy: number, prevSeg: Vec2, nextSeg: Vec2, side: number, r: number, hue: number, light: number) {
+  const dx = prevSeg.x - nextSeg.x;
+  const dy = prevSeg.y - nextSeg.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const perpX = -dy / len;
+  const perpY = dx / len;
+  const baseX = sx + perpX * side * r * 0.6;
+  const baseY = sy + perpY * side * r * 0.6;
+  const spikeLen = r * 0.9;
+  const tipX = baseX + perpX * side * spikeLen;
+  const tipY = baseY + perpY * side * spikeLen;
+  ctx.beginPath();
+  ctx.fillStyle = hsl(hue, 82, Math.min(88, light + 16));
+  ctx.moveTo(baseX - perpY * side * r * 0.28, baseY + perpX * side * r * 0.28);
+  ctx.lineTo(tipX, tipY);
+  ctx.lineTo(baseX + perpY * side * r * 0.28, baseY - perpX * side * r * 0.28);
+  ctx.closePath();
+  ctx.fill();
 }
 
 // ---------------------------------------------------------------------
@@ -613,21 +690,31 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
     if (head0.x + reach < viewMinX || head0.x - reach > viewMaxX || head0.y + reach < viewMinY || head0.y - reach > viewMaxY) continue;
 
     const stage = getGrowthStage(snake.length);
-    // 성장 단계별 외형: 중형/대형은 더 두껍고(반경 배율), 대형은 여기에 더해
-    // 아래에서 잔상(afterimage)까지 겹쳐 그린다 — `AskUserQuestion`으로 확정된
-    // length 20/40 기준(`GROWTH_STAGE_MID_LENGTH`/`GROWTH_STAGE_LARGE_LENGTH`).
-    const stageRadiusMul = stage === "large" ? 1.28 : stage === "mid" ? 1.14 : 1;
-    const color = hsl(snake.hue, 75, seat === viewerSeat ? 60 : 52);
+    // 성장 단계별 외형(10/25/50/100 길이 기준, `AskUserQuestion`으로 2026-09-02의
+    // 20/40·3단계 체계를 전면 교체 확정 — engine.ts의 `getGrowthStage` 참고):
+    // spiky부터 몸통에 그라데이션(머리→꼬리 밝기 차)과 돌기가 붙고, scale부터
+    // 네온 글로우가, crystal부터 마디 자체가 육각 폴리곤("크리스탈")으로 바뀌고
+    // 잔상까지 겹쳐 그리며, aurora는 여기에 시간에 따라 색조가 흐르는 오로라
+    // 펄스가 더해진다. 머리(i===0)는 항상 원형으로 유지해 눈/표정 배치는 단계와
+    // 무관하게 단순하게 둔다.
+    const radiusMul = stageRadiusMul(stage);
+    const glow = stage === "scale" || stage === "crystal" || stage === "aurora";
+    const crystalShape = stage === "crystal" || stage === "aurora";
+    const spikes = stage !== "base";
+    const baseLight = seat === viewerSeat ? 60 : 52;
+    const auroraShift = stage === "aurora" ? (performance.now() / 16) % 360 : 0;
 
-    // Afterimage trail (대형 전용) — drawn *before* the body so the solid
-    // segments render on top of the fading ghosts, not the other way round.
-    if (stage === "large") {
+    // Afterimage trail (crystal/aurora 전용) — drawn *before* the body so the
+    // solid segments render on top of the fading ghosts, not the other way
+    // round.
+    if (crystalShape) {
+      const trailColor = hsl(snake.hue, 75, baseLight);
       const trail = effects.headTrail(seat);
       for (let ti = 0; ti < trail.length; ti++) {
         const [tx, ty] = toScreen(trail[ti].x, trail[ti].y);
         if (tx < -30 || tx > cssW + 30 || ty < -30 || ty > cssH + 30) continue;
         ctx.beginPath();
-        ctx.fillStyle = color;
+        ctx.fillStyle = trailColor;
         ctx.globalAlpha = 0.2 * (1 - ti / trail.length);
         ctx.arc(tx, ty, Math.max(2, 8 * scale), 0, Math.PI * 2);
         ctx.fill();
@@ -639,39 +726,123 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
       const seg = snake.segments[i];
       const [sx, sy] = toScreen(seg.x, seg.y);
       if (sx < -30 || sx > cssW + 30 || sy < -30 || sy > cssH + 30) continue;
-      const t = 1 - i / snake.segments.length;
+      const segT = i / snake.segments.length; // 0(머리) .. ~1(꼬리) — growthPulseAlpha와 짝
+      const t = 1 - segT; // 1(머리) .. 0(꼬리) — 기존 반경 테이퍼링용
       // Head gets a brief scale-pulse on eating a pellet (WormEffects.ts's
       // headScale, eases back to 1 once the pulse expires).
       const headPulse = i === 0 ? effects.headScale(seat) : 1;
-      const r = (6 + t * 6) * scale * headPulse * stageRadiusMul;
+      const r = (6 + t * 6) * scale * headPulse * radiusMul;
+
+      // 단계별 색상 진행 — spiky부터 그라데이션, crystal부터 마디 색조 이동,
+      // aurora는 시간에 따라 흐르는 색조를 더해 오로라 펄스처럼 보이게 한다.
+      let hue = snake.hue;
+      let light = baseLight;
+      if (stage !== "base") light = Math.min(88, light + t * 10);
+      if (crystalShape) hue = (hue + t * 12) % 360;
+      if (stage === "aurora") hue = (hue + auroraShift) % 360;
+      const color = hsl(hue, 75, light);
+
+      if (glow) {
+        ctx.shadowColor = hsl(hue, 92, 72);
+        ctx.shadowBlur = (stage === "aurora" ? 10 : stage === "crystal" ? 7 : 4) * scale;
+      }
       ctx.beginPath();
       ctx.fillStyle = color;
       ctx.globalAlpha = i === 0 ? 1 : 0.92;
-      ctx.arc(sx, sy, Math.max(1.5, r), 0, Math.PI * 2);
-      ctx.fill();
-      // 중형/대형 테두리 패턴 — 비늘처럼 보이도록 몸통 마디마다는 아니고
-      // 몇 마디 간격으로만 어두운 테두리 링을 겹쳐 그린다(머리 제외).
-      if (stage !== "small" && i !== 0 && i % 4 === 0) {
+      if (crystalShape && i !== 0) {
+        drawCrystalSegment(ctx, sx, sy, Math.max(1.5, r), snake.angle);
+      } else {
+        ctx.arc(sx, sy, Math.max(1.5, r), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (glow) ctx.shadowBlur = 0;
+
+      // 가시/돌기형 세그먼트 — spiky 단계 이상, 몇 마디 간격으로 좌우 번갈아
+      // 몸통 바깥쪽에 작은 삼각 돌기를 덧그린다(머리 제외).
+      if (spikes && i !== 0 && i % 3 === 0) {
+        const prevSeg = snake.segments[Math.max(i - 1, 0)];
+        const nextSeg = snake.segments[Math.min(i + 1, snake.segments.length - 1)];
+        drawSpike(ctx, sx, sy, prevSeg, nextSeg, i % 6 === 0 ? 1 : -1, r, hue, light);
+      }
+      // 비늘 테두리 패턴 — scale 단계 이상에서 몇 마디 간격으로만 어두운
+      // 테두리 링을 겹쳐 그린다(머리 제외). 구 3단계 체계의 "mid/large 테두리"를
+      // 이어받되 임계값만 scale(길이 25) 이상으로 갱신.
+      if ((stage === "scale" || crystalShape) && i !== 0 && i % 4 === 0) {
         ctx.beginPath();
-        ctx.strokeStyle = hsl(snake.hue, 70, seat === viewerSeat ? 32 : 26);
+        ctx.strokeStyle = hsl(hue, 70, seat === viewerSeat ? 32 : 26);
         ctx.lineWidth = Math.max(0.6, 1.1 * scale);
         ctx.arc(sx, sy, Math.max(1.5, r * 0.7), 0, Math.PI * 2);
         ctx.stroke();
       }
+
+      // 성장 순간 파동(Glow Pulse Wave) — 10/25/50/100 임계값을 막 넘었을 때
+      // 머리→꼬리로 훑고 지나가는 밝은 오버레이 (WormEffects.ts의
+      // growthPulseAlpha, 새 순회 패스 없이 이 루프에 얹는다).
+      const pulse = effects.growthPulseAlpha(seat, segT);
+      if (pulse > 0) {
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(255,255,255,${pulse * 0.85})`;
+        ctx.arc(sx, sy, Math.max(1.5, r * 1.08), 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.globalAlpha = 1;
 
-    // Eyes on the head, facing travel direction.
+    // Eyes on the head, facing travel direction — unless a recent kill (see
+    // WormEffects.ts's killExpression) has this seat wearing a 2.5s victory
+    // expression instead (2026-09-05 킬 표정 세션, `AskUserQuestion`으로
+    // "미소/윙크/선글라스 중 랜덤" 확정).
     const [hx, hy] = toScreen(snake.path[0].x, snake.path[0].y);
     const eyeOffset = 6 * scale;
     const perp = snake.angle + Math.PI / 2;
-    for (const sign of [-1, 1]) {
-      const ex = hx + Math.cos(snake.angle) * eyeOffset + Math.cos(perp) * eyeOffset * 0.6 * sign;
-      const ey = hy + Math.sin(snake.angle) * eyeOffset + Math.sin(perp) * eyeOffset * 0.6 * sign;
+    const expression = effects.killExpression(seat);
+    if (expression === "sunglasses") {
+      const lx = hx + Math.cos(snake.angle) * eyeOffset + Math.cos(perp) * eyeOffset * 0.6 * -1;
+      const ly = hy + Math.sin(snake.angle) * eyeOffset + Math.sin(perp) * eyeOffset * 0.6 * -1;
+      const rx = hx + Math.cos(snake.angle) * eyeOffset + Math.cos(perp) * eyeOffset * 0.6 * 1;
+      const ry = hy + Math.sin(snake.angle) * eyeOffset + Math.sin(perp) * eyeOffset * 0.6 * 1;
+      ctx.strokeStyle = "#0b1a0b";
+      ctx.lineWidth = Math.max(2, 4 * scale);
+      ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.fillStyle = "#0b1a0b";
-      ctx.arc(ex, ey, Math.max(1, 2.4 * scale), 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(lx, ly);
+      ctx.lineTo(rx, ry);
+      ctx.stroke();
+      for (const [ex, ey] of [[lx, ly], [rx, ry]] as const) {
+        ctx.beginPath();
+        ctx.fillStyle = "#0b1a0b";
+        ctx.arc(ex, ey, Math.max(1.5, 3 * scale), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      for (const sign of [-1, 1]) {
+        const ex = hx + Math.cos(snake.angle) * eyeOffset + Math.cos(perp) * eyeOffset * 0.6 * sign;
+        const ey = hy + Math.sin(snake.angle) * eyeOffset + Math.sin(perp) * eyeOffset * 0.6 * sign;
+        // 윙크 — 진행 방향 기준 오른쪽 눈(sign===1)만 감은 아치형 선으로,
+        // 반대쪽은 평소처럼 원으로 유지.
+        if (expression === "wink" && sign === 1) {
+          ctx.strokeStyle = "#0b1a0b";
+          ctx.lineWidth = Math.max(1, 2 * scale);
+          ctx.beginPath();
+          ctx.arc(ex, ey, Math.max(1, 2.4 * scale), 0.15 * Math.PI, 0.85 * Math.PI);
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.fillStyle = "#0b1a0b";
+          ctx.arc(ex, ey, Math.max(1, 2.4 * scale), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      // 사악한 미소 — 머리 앞쪽(진행 방향)에 입 모양 호를 추가.
+      if (expression === "smile") {
+        const mx = hx + Math.cos(snake.angle) * eyeOffset * 1.7;
+        const my = hy + Math.sin(snake.angle) * eyeOffset * 1.7;
+        ctx.strokeStyle = "#0b1a0b";
+        ctx.lineWidth = Math.max(1, 2 * scale);
+        ctx.beginPath();
+        ctx.arc(mx, my, Math.max(1.5, 3.2 * scale), snake.angle - 0.9, snake.angle + 0.9);
+        ctx.stroke();
+      }
     }
 
     // Hit-impact glow: a brief bright ring around an attacker's head right

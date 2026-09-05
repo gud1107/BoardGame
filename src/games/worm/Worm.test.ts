@@ -9,8 +9,10 @@ import {
   FOOD_COUNT_TARGET,
   BOOST_DRAIN_MS,
   getGrowthStage,
-  GROWTH_STAGE_LARGE_LENGTH,
-  GROWTH_STAGE_MID_LENGTH,
+  GROWTH_STAGE_AURORA_LENGTH,
+  GROWTH_STAGE_CRYSTAL_LENGTH,
+  GROWTH_STAGE_SCALE_LENGTH,
+  GROWTH_STAGE_SPIKY_LENGTH,
   MATCH_DURATION_MS,
   MAX_PLAYERS,
   MIN_LENGTH_TO_BOOST,
@@ -430,20 +432,51 @@ describe("ARENA_SIZE — 2026-09-02 맵 확장", () => {
   });
 });
 
-describe("getGrowthStage — 외형 진화 단계", () => {
-  it("classifies below GROWTH_STAGE_MID_LENGTH as small", () => {
-    expect(getGrowthStage(0)).toBe("small");
-    expect(getGrowthStage(GROWTH_STAGE_MID_LENGTH - 1)).toBe("small");
+describe("getGrowthStage — 외형 진화 단계 (2026-09-05: 10/25/50/100 5단계 체계로 전면 교체)", () => {
+  it("classifies below GROWTH_STAGE_SPIKY_LENGTH as base", () => {
+    expect(getGrowthStage(0)).toBe("base");
+    expect(getGrowthStage(GROWTH_STAGE_SPIKY_LENGTH - 1)).toBe("base");
   });
 
-  it("classifies [GROWTH_STAGE_MID_LENGTH, GROWTH_STAGE_LARGE_LENGTH) as mid", () => {
-    expect(getGrowthStage(GROWTH_STAGE_MID_LENGTH)).toBe("mid");
-    expect(getGrowthStage(GROWTH_STAGE_LARGE_LENGTH - 1)).toBe("mid");
+  it("classifies [GROWTH_STAGE_SPIKY_LENGTH, GROWTH_STAGE_SCALE_LENGTH) as spiky", () => {
+    expect(getGrowthStage(GROWTH_STAGE_SPIKY_LENGTH)).toBe("spiky");
+    expect(getGrowthStage(GROWTH_STAGE_SCALE_LENGTH - 1)).toBe("spiky");
   });
 
-  it("classifies GROWTH_STAGE_LARGE_LENGTH and above as large", () => {
-    expect(getGrowthStage(GROWTH_STAGE_LARGE_LENGTH)).toBe("large");
-    expect(getGrowthStage(GROWTH_STAGE_LARGE_LENGTH + 50)).toBe("large");
+  it("classifies [GROWTH_STAGE_SCALE_LENGTH, GROWTH_STAGE_CRYSTAL_LENGTH) as scale", () => {
+    expect(getGrowthStage(GROWTH_STAGE_SCALE_LENGTH)).toBe("scale");
+    expect(getGrowthStage(GROWTH_STAGE_CRYSTAL_LENGTH - 1)).toBe("scale");
+  });
+
+  it("classifies [GROWTH_STAGE_CRYSTAL_LENGTH, GROWTH_STAGE_AURORA_LENGTH) as crystal", () => {
+    expect(getGrowthStage(GROWTH_STAGE_CRYSTAL_LENGTH)).toBe("crystal");
+    expect(getGrowthStage(GROWTH_STAGE_AURORA_LENGTH - 1)).toBe("crystal");
+  });
+
+  it("classifies GROWTH_STAGE_AURORA_LENGTH and above as aurora", () => {
+    expect(getGrowthStage(GROWTH_STAGE_AURORA_LENGTH)).toBe("aurora");
+    expect(getGrowthStage(GROWTH_STAGE_AURORA_LENGTH + 50)).toBe("aurora");
+  });
+});
+
+describe("detectWormEvents — stageUp (2026-09-05 성장 진화 세션)", () => {
+  it("emits a stageUp event when a still-alive snake's length crosses a growth-stage breakpoint upward", () => {
+    const before = buildState([makeSnake(0, { length: GROWTH_STAGE_SPIKY_LENGTH - 1 })]);
+    const after = buildState([makeSnake(0, { length: GROWTH_STAGE_SPIKY_LENGTH })]);
+    const events = detectWormEvents(before, after);
+    expect(events).toContainEqual({ type: "stageUp", seat: 0, hue: after.snakes[0].hue });
+  });
+
+  it("does not emit stageUp when length changes within the same stage", () => {
+    const before = buildState([makeSnake(0, { length: GROWTH_STAGE_SPIKY_LENGTH })]);
+    const after = buildState([makeSnake(0, { length: GROWTH_STAGE_SPIKY_LENGTH + 3 })]);
+    expect(detectWormEvents(before, after)).toEqual([]);
+  });
+
+  it("does not emit stageUp when length drops back below a threshold (e.g. a boost drain), only cut/no-op", () => {
+    const before = buildState([makeSnake(0, { length: GROWTH_STAGE_SPIKY_LENGTH })]);
+    const after = buildState([makeSnake(0, { length: GROWTH_STAGE_SPIKY_LENGTH - 1 })]);
+    expect(detectWormEvents(before, after)).toEqual([]);
   });
 });
 
