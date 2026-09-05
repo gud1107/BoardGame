@@ -37,7 +37,7 @@ export default function ExpeditionLane({ color, cards, highlight, dim, onClick, 
     <div
       ref={laneRef}
       className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg border bg-gradient-to-b p-0.5 transition ${theme.backdropFrom} ${theme.backdropTo} ${
-        highlight ? "border-emerald-300 ring-2 ring-emerald-300/70" : theme.laneBorder
+        highlight ? "lc-target-beam-pulse border-emerald-300 ring-2 ring-emerald-300/70" : theme.laneBorder
       } ${dim ? "opacity-60" : ""}`}
     >
       <div className="flex w-full items-center justify-between px-0.5">

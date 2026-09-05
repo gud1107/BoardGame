@@ -4304,6 +4304,92 @@ body {
   animation: lc-discard-zone-pulse 2.6s ease-in-out infinite;
 }
 
+/* 2026-09-05 턴 인디케이터 세션 — 현재 차례인 플레이어의 프로필 슬롯에 거는
+   입체적 골드/에메랄드 네온 글로우 파동. 대기 중인 상대 슬롯은 이 클래스
+   없이 그냥 opacity로만 죽인다(LostCitiesBoard.tsx). */
+@keyframes lc-active-turn-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.25), 0 0 10px 1px rgba(52, 211, 153, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 18px 3px rgba(251, 191, 36, 0.55), 0 0 26px 4px rgba(52, 211, 153, 0.35);
+  }
+}
+.lc-active-turn-glow {
+  animation: lc-active-turn-glow 1.8s ease-in-out infinite;
+}
+
+/* "🎯 현재 턴" 뱃지 — 은은하게 반짝이는 앰버 배지, 위 글로우와 같은 리듬. */
+@keyframes lc-turn-badge-shimmer {
+  0%,
+  100% {
+    box-shadow: 0 0 3px 0 rgba(252, 211, 77, 0.6);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 9px 1px rgba(252, 211, 77, 0.9);
+    transform: scale(1.05);
+  }
+}
+.lc-turn-badge-shimmer {
+  animation: lc-turn-badge-shimmer 1.8s ease-in-out infinite;
+}
+
+/* 내 턴이 "막" 시작된 순간 상태 텍스트에 한 번 재생되는 확대+글로우 버스트 —
+   perudo-turn-pulse와 같은 기법(키를 바꿔 강제 리마운트), 로스트시티 전용
+   사운드 없이 공용 playMyTurnChime()만 재사용(LostCitiesBoard.tsx). */
+@keyframes lc-turn-status-burst {
+  0% {
+    transform: scale(1);
+    text-shadow: none;
+  }
+  35% {
+    transform: scale(1.18);
+    text-shadow: 0 0 12px rgba(251, 191, 36, 0.7);
+  }
+  100% {
+    transform: scale(1);
+    text-shadow: 0 0 8px rgba(251, 191, 36, 0.45);
+  }
+}
+.lc-turn-status-pulse {
+  display: inline-block;
+  animation: lc-turn-status-burst 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 1단계(카드 내려놓기/버리기) 가이드 — 선택한 카드가 놓일 수 있는 탐험로/버림
+   칸에 도는 에메랄드 "빔" 펄스. 정적 ring보다 눈에 띄게 살아있는 느낌을 주기
+   위한 box-shadow 확장 애니메이션(ExpeditionLane.tsx, DiscardPile.tsx). */
+@keyframes lc-target-beam-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(110, 231, 183, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 14px 3px rgba(110, 231, 183, 0.75);
+  }
+}
+.lc-target-beam-pulse {
+  animation: lc-target-beam-pulse 1.1s ease-in-out infinite;
+}
+
+/* 2단계(카드 보충하기) 가이드 — 덱/버림 칸 중 지금 가져올 수 있는 곳에 도는
+   은은한 하늘색 "픽업" 펄스. 1단계의 에메랄드 빔과 색을 달리해 지금이 놓는
+   단계인지 가져오는 단계인지 한눈에 구분되게 한다. */
+@keyframes lc-pickup-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(125, 211, 252, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 14px 3px rgba(125, 211, 252, 0.7);
+  }
+}
+.lc-pickup-pulse {
+  animation: lc-pickup-pulse 1.3s ease-in-out infinite;
+}
+
 /* ===========================================================================
    망각의 지뢰 (Mine of Oblivion) — 11×11 지뢰찾기식 탐험 레이스로 전면 개편
    (구버전: 5×5 넷플릭스 데스게임 테마). See mineOfOblivion/MineOfOblivionEffects.tsx

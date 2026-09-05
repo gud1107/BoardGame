@@ -48,6 +48,19 @@ import {
  * `ratATatCat/RatATatCatBoard.tsx`'s acquisition-flight effect — every
  * viewer (including the non-acting seat, and both seats watching a bot's
  * move) derives the same effects locally from state they already received.
+ *
+ * 2026-09-05 턴 인디케이터 세션: 활성 턴 플레이어의 프로필 헤더에 골드/에메랄드
+ * 네온 글로우 파동(`lc-active-turn-glow`) + "🎯 현재 턴" 배지, 대기 중인 쪽은
+ * opacity로 딤 처리(딤은 프로필 헤더 바에만 한정 — 상대 탐험로는 항상 선명하게
+ * 유지, 점수 확인이 계속 필요하므로). 1단계(내려놓기/버리기) 대상은 에메랄드
+ * "빔" 펄스(`lc-target-beam-pulse`, ExpeditionLane/DiscardPile), 2단계(보충)
+ * 대상은 하늘색 "픽업" 펄스(`lc-pickup-pulse`, 덱 버튼/DiscardPile)로 색을
+ * 구분. "MY TURN" 알림은 별도 전체화면 팝업을 새로 만들지 않고, 페루도
+ * (PerudoBoard.tsx)가 먼저 도입한 "턴이 막 넘어온 순간 상태 텍스트에 pulse
+ * 재생 + 공용 playMyTurnChime() 사운드" 패턴을 그대로 재사용(AskUserQuestion
+ * 으로 확정 — 실제로는 크로스게임 공통 팝업 컴포넌트가 존재하지 않았음).
+ * 턴 제한 시간 타이머는 이 세션에서 의도적으로 추가하지 않음(engine.ts에
+ * 시간제한 개념 자체가 없고, AskUserQuestion으로 범위 밖 확정).
  */
 export interface LostCitiesBoardProps {
   state: LostCitiesState;
@@ -123,7 +136,7 @@ function CenterPiles({
           type="button"
           disabled={!deckClickable}
           onClick={deckClickable ? onDrawDeck : undefined}
-          className={`flex flex-col items-center gap-0.5 rounded-lg p-0.5 transition ${deckClickable ? "ring-2 ring-emerald-400/70" : ""}`}
+          className={`flex flex-col items-center gap-0.5 rounded-lg p-0.5 transition ${deckClickable ? "lc-pickup-pulse ring-2 ring-sky-400/70" : ""}`}
         >
           <CardBack size="sm" />
           <span className="text-[10px] font-semibold text-white/50">덱 {state.deck.length}</span>
@@ -146,6 +159,7 @@ function CenterPiles({
                   color={color}
                   pile={pile}
                   clickable={clickable}
+                  highlightKind={drawTarget ? "pickup" : discardTarget ? "target" : undefined}
                   faded={canDraw && color === state.justDiscardedColor}
                   onClick={clickable ? () => onDiscardPileClick(color) : undefined}
                   pileRef={(el) => registerDiscardRef(color, el)}
@@ -159,6 +173,15 @@ function CenterPiles({
   );
 }
 
+/** "🎯 현재 턴" badge — shown next to whichever seat's profile is currently active (2026-09-05 턴 인디케이터 세션). */
+function TurnBadge() {
+  return (
+    <span className="lc-turn-badge-shimmer shrink-0 whitespace-nowrap break-keep rounded-full border border-amber-300/70 bg-amber-400/20 px-1.5 py-0.5 text-[8px] font-extrabold tracking-wide text-amber-200 sm:text-[9px]">
+      🎯 현재 턴
+    </span>
+  );
+}
+
 function centerOf(rect: DOMRect): { x: number; y: number } {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
@@ -166,12 +189,31 @@ function centerOf(rect: DOMRect): { x: number; y: number } {
 export default function LostCitiesBoard({ state, viewerSeat, names, opponentConnected, onAction, onLeave, onRematch }: LostCitiesBoardProps) {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const opponentSeat = otherSeat(viewerSeat);
-  const isMyTurn = state.phase === "playing" && state.activeSeat === viewerSeat;
+  const isGamePlaying = state.phase === "playing";
+  const isMyTurn = isGamePlaying && state.activeSeat === viewerSeat;
+  const isOpponentTurn = isGamePlaying && state.activeSeat === opponentSeat;
   const myPhaseIsPlay = isMyTurn && state.turnPhase === "PLAY_OR_DISCARD";
   const myPhaseIsDraw = isMyTurn && state.turnPhase === "DRAW";
 
   const hand = state.hands[viewerSeat];
   const selectedCard = myPhaseIsPlay ? hand.find((c) => c.id === selectedCardId) ?? null : null;
+
+  // "MY TURN" 알림 — 턴이 *막* 나에게 넘어온 순간(false→true 전환)에만 한 번
+  // 상태 텍스트 pulse 애니메이션을 재생하고 공용 사운드를 울린다. 로스트시티
+  // 전용 배너/사운드를 새로 만들지 않고 페루도(PerudoBoard.tsx)가 2026-09-04에
+  // 도입한 것과 동일한 "인라인 상태 텍스트 + 공용 playMyTurnChime()" 패턴을
+  // 그대로 재사용(2026-09-05 턴 인디케이터 세션에서 AskUserQuestion으로 확정).
+  const [turnFxToken, setTurnFxToken] = useState(0);
+  const wasMyTurnRef = useRef(false);
+  useEffect(() => {
+    const justBecameMyTurn = isMyTurn && !wasMyTurnRef.current;
+    wasMyTurnRef.current = isMyTurn;
+    if (!justBecameMyTurn) return;
+    setTurnFxToken((t) => t + 1);
+    const engine = getSoundEngine();
+    engine.unlock(); // best-effort — a user gesture already happened earlier in the room lobby
+    engine.playMyTurnChime();
+  }, [isMyTurn]);
 
   // --- Action-effect anchors (LostCitiesEffects.tsx) --------------------
   const handRowRef = useRef<HTMLDivElement | null>(null);
@@ -304,14 +346,20 @@ export default function LostCitiesBoard({ state, viewerSeat, names, opponentConn
     <div className="flex w-full flex-col gap-2 sm:gap-3">
       <LostCitiesEffects effects={effects} onEffectDone={removeEffect} />
 
-      {/* Opponent header + expeditions */}
-      <div ref={opponentHeaderRef} className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+      {/* Opponent header + expeditions — active-turn glow + badge, or dimmed while waiting (2026-09-05 턴 인디케이터). */}
+      <div
+        ref={opponentHeaderRef}
+        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition ${
+          isOpponentTurn ? "lc-active-turn-glow border-amber-300/60 bg-amber-400/[0.06]" : `border-white/10 bg-white/[0.03] ${isGamePlaying ? "opacity-70" : ""}`
+        }`}
+      >
         <span className="flex items-center gap-1.5 text-sm font-semibold text-white">
           <Avatar size={24} />
-          {names[opponentSeat]}
-          {!opponentConnected && <span className="text-[10px] font-normal text-rose-300">(연결 끊김)</span>}
+          <span className="break-keep">{names[opponentSeat]}</span>
+          {!opponentConnected && <span className="whitespace-nowrap break-keep text-[10px] font-normal text-rose-300">(연결 끊김)</span>}
+          {isOpponentTurn && <TurnBadge />}
         </span>
-        <span className="text-xs text-white/40">손패 {state.hands[opponentSeat].length}장</span>
+        <span className="whitespace-nowrap break-keep text-xs text-white/40">손패 {state.hands[opponentSeat].length}장</span>
       </div>
       <ExpeditionRow
         seat={opponentSeat}
@@ -348,13 +396,25 @@ export default function LostCitiesBoard({ state, viewerSeat, names, opponentConn
         }}
       />
 
-      {/* Status + my hand */}
-      <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+      {/* Status + my hand — same active-turn glow + badge treatment as the opponent header, mirrored (2026-09-05 턴 인디케이터). */}
+      <div
+        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition ${
+          isMyTurn ? "lc-active-turn-glow border-amber-300/60 bg-amber-400/[0.06]" : `border-white/10 bg-white/[0.03] ${isGamePlaying ? "opacity-70" : ""}`
+        }`}
+      >
         <span className="flex items-center gap-1.5 text-sm font-semibold text-white">
           <Avatar size={24} />
-          {names[viewerSeat]} <span className="text-xs font-normal text-emerald-300">(나)</span>
+          <span className="break-keep">
+            {names[viewerSeat]} <span className="text-xs font-normal text-emerald-300">(나)</span>
+          </span>
+          {isMyTurn && <TurnBadge />}
         </span>
-        <span className={`text-xs ${isMyTurn ? "text-emerald-300" : "text-white/40"}`}>{statusText}</span>
+        <span
+          key={isMyTurn ? `mine-${turnFxToken}` : "waiting"}
+          className={`whitespace-nowrap break-keep text-xs ${isMyTurn ? "lc-turn-status-pulse text-amber-200" : "text-white/40"}`}
+        >
+          {statusText}
+        </span>
       </div>
       <div ref={handRowRef} className="flex flex-wrap justify-center gap-1.5 rounded-xl border border-white/10 bg-black/20 p-2 sm:gap-2 sm:p-3">
         {hand.map((card) => (

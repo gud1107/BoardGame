@@ -16,12 +16,19 @@ export interface DiscardPileProps {
   color: Color;
   pile: Card[];
   clickable: boolean;
+  /**
+   * Which step this cell is a valid action target for, when `clickable` —
+   * purely a visual distinction (2026-09-05 턴 인디케이터 세션) so the 1단계
+   * (내려놓기/버리기) 에메랄드 "빔" and 2단계(보충하기) 하늘색 "픽업" pulses
+   * never look the same, even though both render on this same button.
+   */
+  highlightKind?: "target" | "pickup";
   faded?: boolean;
   onClick?: () => void;
   pileRef?: (el: HTMLDivElement | null) => void;
 }
 
-export default function DiscardPile({ color, pile, clickable, faded, onClick, pileRef }: DiscardPileProps) {
+export default function DiscardPile({ color, pile, clickable, highlightKind, faded, onClick, pileRef }: DiscardPileProps) {
   const theme = LANE_THEME[color];
   const top = pile[pile.length - 1];
   return (
@@ -31,7 +38,11 @@ export default function DiscardPile({ color, pile, clickable, faded, onClick, pi
         disabled={!clickable}
         onClick={clickable ? onClick : undefined}
         className={`relative flex h-12 w-9 items-center justify-center rounded-lg border-2 border-dashed bg-black/30 transition sm:h-14 sm:w-10 ${
-          clickable ? "border-emerald-300 ring-2 ring-emerald-300/70" : theme.discardBorder
+          clickable
+            ? highlightKind === "pickup"
+              ? "lc-pickup-pulse border-sky-300 ring-2 ring-sky-300/70"
+              : "lc-target-beam-pulse border-emerald-300 ring-2 ring-emerald-300/70"
+            : theme.discardBorder
         }`}
       >
         {top ? (
