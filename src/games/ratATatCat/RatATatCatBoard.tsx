@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Avatar from "@/components/common/Avatar";
+import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import CardFlightEffect, { type CardFlight } from "./CardFlightEffect";
 import CardSlot, { CardBack } from "./CardSlot";
@@ -517,6 +518,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
 
   return (
     <div className="flex flex-col gap-5">
+      <MyTurnOverlay isMyTurn={isMyTurn} />
       <CardFlightEffect flights={flights} onFlightDone={handleFlightDone} />
       {activeCallModal !== null && (
         <RatATatCatCallModal

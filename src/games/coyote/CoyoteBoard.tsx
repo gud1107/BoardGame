@@ -2,6 +2,7 @@
 
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import Avatar from "@/components/common/Avatar";
+import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
 import { CardFace, EliminatedFace, HeartPips } from "./CardArt";
@@ -402,6 +403,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
       className={`relative flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4 ${boardShaking ? DEATH_SHAKE_CLASS : ""}`}
       style={{ background: "linear-gradient(160deg,#3a2410 0%,#20140a 45%,#0d0805 100%)" }}
     >
+      <MyTurnOverlay isMyTurn={isMyTurn} />
       <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-orange-100/70">
         <span>
           {state.playerCount}인 · {state.roundNumber}라운드 · 하트 {STARTING_HEARTS}개 모두 잃으면 탈락

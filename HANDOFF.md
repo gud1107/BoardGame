@@ -1,6 +1,54 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-05 (**달무티(The Great Dalmuti) — 카드 출도 타격 이펙트 강화, 패스 음성,
+_최종 갱신: 2026-09-05 (**보드게임허브 전 게임 공통 — 턴제 게임 전수 'MY TURN' 중앙 배너 + 차임
+사운드 일괄 탑재 세션** — "턴 개념이 있는 모든 보드게임(달무티/페루도/코요테/운명전쟁/랫어탯캣/
+로스트시티)에 본인 차례 도래 시 화면 중앙 'MY TURN' 배너와 Web Audio 차임을, 게임별 재구현 없는
+공용 훅/컴포넌트로 일괄 탑재해달라"는 요청. 진행 전 조사에서 요청 전제와 정면 충돌하는 지점을
+발견: `playMyTurnChime()`(완전5도 상승 2음 벨 딩동, 요청 스펙과 사실상 동일)은 이미 2026-09-04
+페루도에 도입돼 있었고, 같은 날 앞선 세션에서 로스트시티에 턴 인디케이터를 추가할 때 "전용
+전체화면 팝업 신설 안 함, 페루도의 인라인 pulse 그대로 재사용"으로 `AskUserQuestion` 확정까지
+마친 상태였음 — 이번 요청은 정확히 그 "전용 팝업"을 다시 요구하는 것이었음. 이 충돌과 함께
+'운명전쟁(War of Fate)'의 실제 경로가 `warOfFate`가 아니라 `src/games/destinyWar39/`라는 점(반복되는
+파일구조 전제 불일치 패턴), `/user.png`가 실제로는 존재하지 않고 `DEFAULT_AVATAR`
+상수(`/assets/images/user.png`) + 공용 `Avatar.tsx`로 구현돼 있다는 점을 `AskUserQuestion`으로 확인 후
+진행: **기존 페루도/로스트시티의 인라인 연출을 신규 팝업으로 전체 통일(교체)** / **destinyWar39
+경로 확정** / **아바타 이미지 없이 텍스트+충격파만** / **기존 `playMyTurnChime()` 그대로 재사용**
+(모두 권장 옵션으로 확정 채택).
+
+**구현**: 공용 `<MyTurnOverlay isMyTurn={boolean} />`(`src/components/common/MyTurnOverlay.tsx`, 내부
+`useMyTurnAlert` 훅도 함께 export) 신설 — 턴이 *막* 나에게 넘어온 순간(false→true 엣지, 이전 값은
+`wasMyTurnRef`로 추적)에만 1.2초짜리 중앙 팝업(탄성 스케일 0.5→1.05→1, 골드/네온 "MY TURN!" 텍스트 +
+0.8초 원형 충격파, `pointer-events-none` + `z-[97]`로 조작 간섭 원천 차단)을 띄우고 공용
+`playMyTurnChime()`을 1회 재생(엔진 자체 게이트로 중복 방지). 6개 보드 각각의 기존 turn 판정을 그대로
+넘겨 연동: 페루도(`isMyTurn && iAmAlive`, 기존 `turnFxToken`/`wasMyTurnRef`/`perudo-turn-pulse` 제거),
+로스트시티(`isMyTurn`, 기존 `turnFxToken`/`lc-turn-status-pulse` 제거 — 지속형
+`lc-active-turn-glow`/`TurnBadge`는 그대로 유지), 달무티(`isMyTrickTurn` — 요청 범위대로 트릭 제출
+턴만, 세금 반환/혁명 선언 턴은 제외), 코요테(`isMyTurn`), 운명전쟁39(신규 `isMyBattleTurn` — 카드
+배틀 단계 진행 중 턴 순서가 있는 라운드에서만, 턴 순서가 없는 1라운드 동시제출/예측 단계는 제외),
+랫어탯캣(`isMyTurn`, 완전 신규 연동 — DRAW/DECIDE_CARD/EXECUTE_POWER 등 턴 내 하위 단계 전환에는
+재발동하지 않고 턴 자체가 바뀔 때만 1회). `globals.css`에 `my-turn-pop-fade`/`my-turn-shockwave`
+키프레임을 새 공용 섹션으로 추가하고, 대체된 `perudo-turn-pulse`/`lc-turn-status-burst` 키프레임은
+제거.
+
+**검증**: `npx tsc --noEmit`(0 에러) / 터치한 파일 전부 `npx eslint`(0 에러, 0 경고) / `npx vitest
+run`(49개 파일 전체 통과, 회귀 없음). 캐시된 Playwright로 실제 봇 대전 확인: **페루도**(기존 로직
+리팩터 대상)와 **랫어탯캣**(완전 신규 연동, 봇의 턴이 끝나고 내 턴으로 넘어오는 실제 순간)
+두 게임에서 배너+충격파가 정확한 타이밍에 뜨고 상대(봇) 턴에는 뜨지 않는 것을 스크린샷으로 확인.
+나머지 4종(달무티/코요테/운명전쟁39/로스트시티)은 동일한 `isMyTurn` boolean 기반 패턴 재사용 + 코드
+리뷰 + 기존 단위테스트로만 확인했고 실브라우저 검증은 하지 않음 — 다음 세션에서 육안 확인이
+필요하면 참고.
+
+**대기 중**: 사용자 요청대로 로컬 반영까지만 — 커밋/푸시/운영배포는 보류.
+
+**다음 세션 참고**: 이번 세션 도중 `src/games/dalmuti/DalmutiBoard.tsx`/`DalmutiEffects.tsx`가 세션
+외부에서 동시에 수정되고 미추적 신규 파일 `AutoPass.tsx`가 생성되는 것을 발견함 — 바로 아래 적힌
+"카드 출도 타격 이펙트/패스 보이스/스마트 자동 패스" 관련 별도 진행 중이던 작업으로 보이며, 이번
+MY TURN 세션에서는 그 코드 자체를 건드리지 않음. 단 `npx eslint .`(레포 전체) 기준 그 작업에
+`AutoPass.tsx:100`(`react-hooks/set-state-in-effect`) + `DalmutiBoard.tsx:163`(`react-hooks/refs` ×2)
+에러 3건이 이미 존재 — 다음 세션에서 그 기능을 이어서 진행한다면 먼저 고쳐야 `eslint .` 전체가
+0 에러로 통과함._
+
+_이전 갱신: 2026-09-05 (**달무티(The Great Dalmuti) — 카드 출도 타격 이펙트 강화, 패스 음성,
 스마트 자동 패스 세션** — "① 카드 제출 시 필드 안착 타격감·네온 화염 파티클 등 시각 이펙트 대폭
 강화, ② 패스 시 또렷한 한국어 '패스!' 보이스 출력, ③ 전략적 조건을 걸어두는 스마트 자동 패스
 시스템" 요청. 진행 전 실제 파일 구조부터 조사 — 요청서가 전제한 `Board.tsx`/`CardHand.tsx`/

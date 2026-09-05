@@ -7,6 +7,7 @@ import RankedLeaderboard from "./RankedLeaderboard";
 import LastRoundHistoryModal from "./LastRoundHistoryModal";
 import { CardFace } from "./CardFace";
 import { HiddenRevealCell, PlayedCardSlot, ReverseSwishOverlay, RoundResultBadge, TurnOrderBadge, type RoundOutcome } from "./DestinyWar39Effects";
+import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { TOTAL_ROUNDS, type DestinyWar39State, type EngineAction, type SeatIndex, type TurnRecord } from "./engine";
 
@@ -175,6 +176,10 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
 
   let centerContent: ReactNode;
   let showPredictionPanel = false;
+  // "카드 배틀/트릭 제출" 턴 전환 시에만 <MyTurnOverlay>를 띄운다(예측 단계는
+  // 턴 순서 없이 각자 알아서 예측하므로 대상 아님, 요청 범위 그대로). 아래
+  // "playing phase" 분기에서만 실제 값으로 갱신.
+  let isMyBattleTurn = false;
 
   // ---------------------------------------------------------------------
   // Trick just resolved — freeze-frame it (winner glowing) before showing
@@ -401,6 +406,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
       }
     }
     const myTurnToAct = isSimultaneous ? !myPlayed : actingSeat === viewerSeat;
+    isMyBattleTurn = myTurnToAct;
 
     centerContent = (
       <div className="flex flex-1 flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
@@ -503,6 +509,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
       className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4"
       style={screenShake ? { animation: "destinywar39-death-impact-shake 200ms ease-in-out" } : undefined}
     >
+      <MyTurnOverlay isMyTurn={isMyBattleTurn} />
       <RankedLeaderboard state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} />
       <div className="flex min-w-0 flex-1 flex-col gap-5">{centerContent}</div>
       {showPredictionPanel && (

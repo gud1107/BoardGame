@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Avatar from "@/components/common/Avatar";
+import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import RulebookModal from "./RulebookModal";
@@ -527,6 +528,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
 
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
+    <MyTurnOverlay isMyTurn={isMyTrickTurn} />
     <div
       className="flex min-w-0 flex-1 flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
       style={{

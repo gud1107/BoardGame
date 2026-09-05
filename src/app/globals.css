@@ -46,6 +46,55 @@ body {
   display: none; /* Chrome/Safari/new Edge */
 }
 
+/* 허브 공통 "MY TURN" 배너 (src/components/common/MyTurnOverlay.tsx,
+   2026-09-05 세션) — 턴제 게임 전수 연동. 화면 중앙에서 탄성 있게 튀어나와
+   1.2초 뒤 위로 페이드아웃되는 텍스트 + 별도로 한 번만 방출되는 원형
+   충격파. 이전에 페루도 전용이던 `perudo-turn-pulse`와 로스트시티 전용이던
+   `lc-turn-status-pulse`(둘 다 인라인 상태 텍스트에 붙는 작은 확대 버스트)를
+   이 공용 중앙 팝업으로 승격/통일하며 제거했다 — 게임별 재구현 없이 이
+   컴포넌트 하나로 6종 모두 처리. */
+@keyframes my-turn-pop-fade {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  25% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  75% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-36px) scale(1);
+    opacity: 0;
+  }
+}
+.my-turn-pop-fade {
+  animation: my-turn-pop-fade 1.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes my-turn-shockwave {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.8;
+    border-width: 4px;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+    border-width: 1px;
+  }
+}
+.my-turn-shockwave {
+  animation: my-turn-shockwave 0.8s ease-out both;
+}
+
 /* Grid Poker's dealer-style common-card reveal (see DealerReveal.tsx) — a
    card sliding out of the deck and flipping face-up. Re-keyed per draw so
    this replays every round instead of only once on mount. */
@@ -125,35 +174,6 @@ body {
     transform: scale(1) rotate(var(--tilt, 0deg));
     opacity: 1;
   }
-}
-
-/* "내 턴이 되었습니다" 배너 이펙트 (2026-09-04, PerudoBoard.tsx) — 턴이
-   나에게 넘어온 순간에만(위 `turnFxToken`으로 key를 바꿔 리마운트) 한 번
-   재생되는 확대 오버슈트 + 글로우 펄스. 이후엔 정적인 상태(마지막 프레임)로
-   가만히 유지된다. */
-@keyframes perudo-turn-pulse {
-  0% {
-    transform: scale(0.8);
-    opacity: 0;
-    text-shadow: 0 0 0 rgba(251, 191, 36, 0);
-  }
-  45% {
-    transform: scale(1.16);
-    opacity: 1;
-    text-shadow: 0 0 20px rgba(251, 191, 36, 0.9);
-  }
-  75% {
-    transform: scale(0.98);
-    text-shadow: 0 0 10px rgba(251, 191, 36, 0.6);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-    text-shadow: 0 0 12px rgba(251, 191, 36, 0.55);
-  }
-}
-.perudo-turn-pulse {
-  animation: perudo-turn-pulse 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Spot the Difference's found-spot marker (see SpotDifferenceBoard.tsx) —
@@ -4481,28 +4501,6 @@ body {
 }
 .lc-turn-badge-shimmer {
   animation: lc-turn-badge-shimmer 1.8s ease-in-out infinite;
-}
-
-/* 내 턴이 "막" 시작된 순간 상태 텍스트에 한 번 재생되는 확대+글로우 버스트 —
-   perudo-turn-pulse와 같은 기법(키를 바꿔 강제 리마운트), 로스트시티 전용
-   사운드 없이 공용 playMyTurnChime()만 재사용(LostCitiesBoard.tsx). */
-@keyframes lc-turn-status-burst {
-  0% {
-    transform: scale(1);
-    text-shadow: none;
-  }
-  35% {
-    transform: scale(1.18);
-    text-shadow: 0 0 12px rgba(251, 191, 36, 0.7);
-  }
-  100% {
-    transform: scale(1);
-    text-shadow: 0 0 8px rgba(251, 191, 36, 0.45);
-  }
-}
-.lc-turn-status-pulse {
-  display: inline-block;
-  animation: lc-turn-status-burst 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* 1단계(카드 내려놓기/버리기) 가이드 — 선택한 카드가 놓일 수 있는 탐험로/버림

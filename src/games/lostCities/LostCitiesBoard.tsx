@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Avatar from "@/components/common/Avatar";
+import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import CardFace, { CardBack } from "./CardFace";
 import DiscardPile from "./DiscardPile";
@@ -198,22 +199,11 @@ export default function LostCitiesBoard({ state, viewerSeat, names, opponentConn
   const hand = state.hands[viewerSeat];
   const selectedCard = myPhaseIsPlay ? hand.find((c) => c.id === selectedCardId) ?? null : null;
 
-  // "MY TURN" 알림 — 턴이 *막* 나에게 넘어온 순간(false→true 전환)에만 한 번
-  // 상태 텍스트 pulse 애니메이션을 재생하고 공용 사운드를 울린다. 로스트시티
-  // 전용 배너/사운드를 새로 만들지 않고 페루도(PerudoBoard.tsx)가 2026-09-04에
-  // 도입한 것과 동일한 "인라인 상태 텍스트 + 공용 playMyTurnChime()" 패턴을
-  // 그대로 재사용(2026-09-05 턴 인디케이터 세션에서 AskUserQuestion으로 확정).
-  const [turnFxToken, setTurnFxToken] = useState(0);
-  const wasMyTurnRef = useRef(false);
-  useEffect(() => {
-    const justBecameMyTurn = isMyTurn && !wasMyTurnRef.current;
-    wasMyTurnRef.current = isMyTurn;
-    if (!justBecameMyTurn) return;
-    setTurnFxToken((t) => t + 1);
-    const engine = getSoundEngine();
-    engine.unlock(); // best-effort — a user gesture already happened earlier in the room lobby
-    engine.playMyTurnChime();
-  }, [isMyTurn]);
+  // "MY TURN" 알림 — 2026-09-05 턴 인디케이터 세션에서는 페루도의 인라인
+  // pulse 패턴을 그대로 재사용했지만, 같은 날 이어진 허브 공용 배너 세션에서
+  // 그 결정을 전체 통일로 뒤집고 <MyTurnOverlay>(중앙 팝업 + 공용
+  // playMyTurnChime()) 하나로 승격했다 — 엣지 감지/사운드/배너 전부 그
+  // 컴포넌트가 내부에서 처리하므로 이 파일엔 별도 상태가 필요 없다.
 
   // --- Action-effect anchors (LostCitiesEffects.tsx) --------------------
   const handRowRef = useRef<HTMLDivElement | null>(null);
@@ -344,6 +334,7 @@ export default function LostCitiesBoard({ state, viewerSeat, names, opponentConn
 
   return (
     <div className="flex w-full flex-col gap-2 sm:gap-3">
+      <MyTurnOverlay isMyTurn={isMyTurn} />
       <LostCitiesEffects effects={effects} onEffectDone={removeEffect} />
 
       {/* Opponent header + expeditions — active-turn glow + badge, or dimmed while waiting (2026-09-05 턴 인디케이터). */}
@@ -410,8 +401,7 @@ export default function LostCitiesBoard({ state, viewerSeat, names, opponentConn
           {isMyTurn && <TurnBadge />}
         </span>
         <span
-          key={isMyTurn ? `mine-${turnFxToken}` : "waiting"}
-          className={`whitespace-nowrap break-keep text-xs ${isMyTurn ? "lc-turn-status-pulse text-amber-200" : "text-white/40"}`}
+          className={`whitespace-nowrap break-keep text-xs ${isMyTurn ? "text-amber-200" : "text-white/40"}`}
         >
           {statusText}
         </span>
