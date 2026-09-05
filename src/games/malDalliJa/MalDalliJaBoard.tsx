@@ -201,21 +201,31 @@ export default function MalDalliJaBoard({
     getSoundEngine().playFinishFanfare();
   }, [state.phase, animations.length]);
 
-  // 2026-09-01 fix (말달리자 "오아시스에 도착했지만 끝나지 않음" 버그 조사 —
-  // 엔진 자체의 승리 판정은 단위 테스트로 정상 확인됐고, 화면이 "멈춘 것처럼"
-  // 보이는 원인은 이 승리 오버레이의 `animations.length === 0` 게이트일
-  // 가능성이 유력해 방어적으로 보강) — `AnimatedHorse`의 rAF 루프가 매 프레임
-  // 정상 진행되면 `onDone`이 항상 불려 `animations`가 자연스럽게 비므로, 이
-  // 타이머는 평소엔 절대 발동하지 않는다(가장 긴 이동인 10칸 슬라이드도
-  // 1,300ms 안에 끝남). 브라우저 탭 백그라운드 전환으로 인한 rAF 스로틀링,
-  // 네트워크 재동기화가 애니메이션 도중 컴포넌트 상태를 예상 못한 방식으로
-  // 건드리는 경우 등, `onDone`이 끝내 불리지 않는 예외적 상황에서도 승리
-  // 오버레이가 영구히 가려지지 않도록 하는 최후의 안전장치일 뿐이다.
+  // 2026-09-01 fix (말달리자 "오아시스에 도착했지만 끝나지 않음" 버그 조사)에서
+  // 도입했던 안전장치를 2026-09-05 세션에서 게임오버 국면 한정 → 모든 이동으로
+  // 확장. `AnimatedHorse`의 rAF 루프가 매 프레임 정상 진행되면 `onDone`이 항상
+  // 불려 `handleAnimDone`이 그 애니메이션을 `animations`에서 곧바로 제거하므로,
+  // 아래 타이머는 평소엔 절대 발동하지 않는다(가장 긴 이동인 10칸 슬라이드도
+  // 1,300ms 안에 끝남). 하지만 게임오버 국면이 아닌 **평범한 이동 도중에도**
+  // 브라우저 탭 백그라운드 전환으로 인한 rAF 스로틀링, 네트워크 재동기화 등으로
+  // `onDone`이 끝내 안 불리는 예외적 상황이 있을 수 있다 — 그러면 `state.positions`는
+  // 이미 새 칸을 가리키는데도 그 말이 `animatingKeys`에 영구히 남아 정적 그리드
+  // 레이어(위 렌더 루프의 `occupant && !animatingKeys.has(...)`)에서 계속 숨김
+  // 처리돼, 클릭/이동은 정상인데 화면에서만 사라진 것처럼 보이는 상태가 게임이
+  // 끝날 때까지 영구 고착된다("말이 사라짐" 신고와 정확히 일치). 그래서 이제는
+  // 게임 국면과 무관하게, 애니메이션 하나하나마다 독립적으로 안전장치를 건다.
+  const animationIds = animations.map((a) => a.id).join(",");
   useEffect(() => {
-    if (state.phase !== "gameOver" || animations.length === 0) return;
-    const timer = window.setTimeout(() => setAnimations([]), 2500);
-    return () => window.clearTimeout(timer);
-  }, [state.phase, animations.length]);
+    if (animations.length === 0) return;
+    // `animations` 배열이 바뀔 때마다(새 이동 추가/기존 이동 정상 종료 등)
+    // 이 effect가 다시 돌면서 그 시점에 남아있는 모든 애니메이션에 새
+    // 타이머를 건다 — 이미 정상 종료된 항목은 `handleAnimDone`이 먼저 배열에서
+    // 제거해버리므로 이 타이머가 나중에 발동해도 filter가 아무 일도 하지 않는
+    // no-op이라 안전하다.
+    const timers = animations.map((anim) => window.setTimeout(() => handleAnimDone(anim.id), 2500));
+    return () => timers.forEach((t) => window.clearTimeout(t));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animationIds]);
 
   const animatingKeys = new Set(animations.map((a) => `${a.seat}-${a.horseIndex}`));
 
@@ -373,6 +383,18 @@ export default function MalDalliJaBoard({
                 height={64}
                 className="h-full w-full object-contain p-[8%]"
               />
+              {/* 2026-09-05: 링 색상(rose/cyan)만으로는 순간적인 하이라이트
+                  전환(예: 상단 HUD의 "누구 차례" 강조 스타일 토글)이 마치 말
+                  주인이 바뀐 것처럼 오인될 수 있다는 사용자 피드백(신고
+                  스크린샷은 실제로는 HUD 하이라이트 토글이었고 말 자체는
+                  정상)에 따라, 색상과 무관하게 고정 텍스트로 읽을 수 있는
+                  식별 태그를 말 이미지 위에 항상 표시 — `occupant.seat`에서만
+                  파생되므로 턴/애니메이션 상태와 무관하게 절대 흔들리지 않는다. */}
+              <span
+                className={`absolute bottom-[2%] right-[4%] rounded bg-black/70 px-[3px] text-[9px] font-bold leading-tight ${SEAT_THEME[occupant.seat].text}`}
+              >
+                {SEAT_THEME[occupant.seat].name[0]}
+              </span>
             </span>
           )}
         </button>,
@@ -387,8 +409,8 @@ export default function MalDalliJaBoard({
         <div className="flex items-center gap-3">
           <span className="text-2xl">🐎</span>
           <div>
-            <p className="text-sm font-bold text-white">말달리자</p>
-            <p className="text-[11px] text-white/40">단판 승부 · 데스게임 하우스 룰</p>
+            <p className="break-keep text-sm font-bold text-white">말달리자</p>
+            <p className="break-keep text-[11px] text-white/40">단판 승부 · 데스게임 하우스 룰</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -403,21 +425,28 @@ export default function MalDalliJaBoard({
             >
               <Avatar size={18} />
               <span>{SEAT_THEME[seat].emoji}</span>
-              <span>{names[seat]}</span>
-              {seat === viewerSeat && <span className="text-white/30">(나)</span>}
+              {/* 2026-09-05: 턴 강조 스타일(위 삼항연산자)이 켜졌다 꺼졌다 하는
+                  것을 "이 배지가 상대방으로 바뀌었다"고 오인하지 않도록,
+                  `seat`에서만 고정 파생되는 흑마/백마 텍스트 태그를 이름 옆에
+                  항상 나란히 표시 — 하이라이트 on/off와 무관하게 절대 안 바뀜. */}
+              <span className="break-keep rounded-full border border-white/10 px-1.5 py-0.5 text-[10px] font-normal text-white/60">
+                {SEAT_THEME[seat].name}
+              </span>
+              <span className="break-keep">{names[seat]}</span>
+              {seat === viewerSeat && <span className="break-keep text-white/30">(나)</span>}
               {state.phase === "playing" && state.activeSeat === seat && (
                 <span className="ml-1 h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
               )}
             </div>
           ))}
           {!opponentConnected && (
-            <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-300">
+            <span className="break-keep rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-300">
               상대 연결 대기중…
             </span>
           )}
           <button
             onClick={() => setRulebookOpen(true)}
-            className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30"
+            className="break-keep rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30"
           >
             📖 룰북
           </button>
@@ -464,7 +493,7 @@ export default function MalDalliJaBoard({
         </div>
       </div>
 
-      <p className="text-center text-xs text-white/40">
+      <p className="break-keep text-center text-xs text-white/40">
         {isMyTurn
           ? selectedHorseIndex === null
             ? "내 차례입니다 — 이동 가능한 말을 선택하세요 (🔵 = 오아시스, 도착하면 즉시 승리 · 🟢 오아시스 구역으로는 나이트 이동 착지 불가)"
@@ -509,19 +538,19 @@ function GameOverOverlay({
           <>
             <p className="text-5xl">🏆</p>
             <h2 className="mt-3 text-3xl font-black tracking-wider text-amber-300 sm:text-5xl">WINNER</h2>
-            <p className="mt-2 text-sm text-amber-100/80">오아시스에 먼저 입성해 생존했습니다.</p>
+            <p className="mt-2 break-keep text-sm text-amber-100/80">오아시스에 먼저 입성해 생존했습니다.</p>
           </>
         ) : (
           <>
             <p className="text-5xl">💀</p>
             <h2 className="mt-3 text-3xl font-black tracking-wider text-rose-400 sm:text-5xl">ELIMINATED</h2>
-            <p className="mt-2 text-sm text-rose-100/70">{winnerName}님이 먼저 오아시스에 입성했습니다.</p>
+            <p className="mt-2 break-keep text-sm text-rose-100/70">{winnerName}님이 먼저 오아시스에 입성했습니다.</p>
           </>
         )}
       </div>
       <button
         onClick={onConfirm}
-        className="rounded-full bg-white px-8 py-3 text-sm font-semibold text-black transition hover:bg-white/85"
+        className="break-keep rounded-full bg-white px-8 py-3 text-sm font-semibold text-black transition hover:bg-white/85"
       >
         결과 확정하고 계속하기
       </button>
