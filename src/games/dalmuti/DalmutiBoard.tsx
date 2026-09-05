@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Avatar from "@/components/common/Avatar";
+import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import RulebookModal from "./RulebookModal";
@@ -10,16 +11,27 @@ import { CardFace, RoleBadge, type AuraTier } from "./CardArt";
 import {
   detectCommonerExchangeHistoryEvents,
   detectCommonerSwapEvents,
+  detectPlayImpactEvents,
   detectTaxEvents,
   detectTaxHighlightEvents,
   FlyingExchangeCard,
   FxButton,
+  PlayImpactBurst,
   ReceivedCardGlow,
   RevolutionBanner,
   type ExchangeHistoryEntry,
+  type PlayImpactEvent,
   type TaxFlyEvent,
   type TaxHighlightEvent,
 } from "./DalmutiEffects";
+import {
+  AUTO_PASS_TOAST_MS,
+  AutoPassBadge,
+  AutoPassSettingsPanel,
+  AutoPassToast,
+  evaluateAutoPass,
+  useAutoPassSettings,
+} from "./AutoPass";
 import TaxHighlightModal from "./TaxHighlightModal";
 import ExchangeHistoryPanel from "./ExchangeHistoryPanel";
 import {
@@ -78,8 +90,14 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     // 별개로, 매 트릭 제출·세금 반환 시점의 SFX (2026-08-26 세션).
     if (action.type === "playCards") engine.playParchmentSubmit();
     else if (action.type === "returnTax") engine.playCoinTribute();
-    // 패스 선언 톤(ACTION_PASS 매핑 — AskUserQuestion으로 확정, 2026-08-27 세션 오후).
-    else if (action.type === "pass") engine.playPassWhiff();
+    // 패스 선언 톤(ACTION_PASS 매핑 — AskUserQuestion으로 확정, 2026-08-27 세션 오후) +
+    // "패스!" 음성(task brief §2, 2026-09-05 세션 — AskUserQuestion: 브라우저 내장
+    // TTS). 자동 패스(§3, AutoPass.tsx)도 이 동일한 `dispatch`를 통해 pass를
+    // 보내므로, 수동 클릭이든 자동 패스든 항상 같은 SFX+음성을 듣는다.
+    else if (action.type === "pass") {
+      engine.playPassWhiff();
+      engine.speakPass();
+    }
     onAction(action);
   }
   /** Role title for a seat, independent of the viewer — used by the exchange FX's third-party message. */
@@ -117,12 +135,35 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   // summary for everyone else), same "log everything, mask at render time"
   // split `FlyingExchangeCard`'s `isExchangeParticipant` already uses.
   const [exchangeHistory, setExchangeHistory] = useState<ExchangeHistoryEntry[]>([]);
+  // 카드 출도 타격 이펙트 큐 (task brief §1, 2026-09-05 세션) — 트릭에 새로
+  // 추가된 플레이마다 하나씩, `PlayImpactBurst`가 스스로 정리(self-clean)한다.
+  // 같은 트리거로 화면 미세 진동(`shake`)도 함께 건다 — 두 개의 동일한 모양
+  // 키프레임(`dalmuti-screen-shake-1`/`-2`)을 번갈아 사용해, 연달아 카드가
+  // 나올 때도 애니메이션이 매번 처음부터 다시 재생되도록 한다(globals.css 참고).
+  const [playImpacts, setPlayImpacts] = useState<PlayImpactEvent[]>([]);
+  const [shake, setShake] = useState<{ token: number; grand: boolean } | null>(null);
   if (trackedState !== state) {
     const newTax = detectTaxEvents(trackedState, state);
     const newCommonerSwaps = detectCommonerSwapEvents(trackedState, state);
+    const newPlayImpacts = detectPlayImpactEvents(trackedState, state);
     const newTrick = state.lastTrickResult !== trackedState.lastTrickResult ? state.lastTrickResult : null;
     const newRevolution = state.revolutionDeclared !== trackedState.revolutionDeclared ? state.revolutionDeclared : null;
     setTrackedState(state);
+    if (newPlayImpacts.length > 0) {
+      setPlayImpacts((prev) => {
+        let nextId = (prev.at(-1)?.id ?? 0) + 1;
+        return [...prev, ...newPlayImpacts.map((e) => ({ ...e, id: nextId++ }))];
+      });
+      // 묵직한 타격 SFX(+대량 출도/조커 시 골드 스파클) — 제출한 본인뿐 아니라
+      // 트릭을 보고 있는 모든 접속자에게 동일하게 재생(`playRevolutionBell`과
+      // 같은 diff-트리거 위치, dispatch()의 actor-only 사운드들과는 다름).
+      const grand = newPlayImpacts.some((e) => e.isGrand);
+      getSoundEngine().playCardSlam(grand);
+      // `playIndex`(트릭 내에서 항상 증가, 새 트릭마다 0부터 재시작)를 그대로
+      // 토큰으로 재사용 — 렌더 중에는 ref를 건드릴 수 없으므로(react-hooks/refs)
+      // 별도 카운터 ref 없이 이미 갖고 있는 값으로 짝/홀만 구분하면 충분하다.
+      setShake({ token: newPlayImpacts[newPlayImpacts.length - 1].playIndex, grand });
+    }
     if (newTax.length > 0 || newCommonerSwaps.length > 0) {
       setTaxEvents((prev) => {
         let nextId = (prev.at(-1)?.id ?? 0) + 1;
@@ -194,6 +235,9 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
       return next;
     });
   }, []);
+  const clearPlayImpact = useCallback((id: number) => {
+    setPlayImpacts((prev) => prev.filter((e) => e.id !== id));
+  }, []);
   useEffect(() => {
     if (!trickFlash) return;
     const t = setTimeout(() => setTrickFlash(null), 3200);
@@ -204,6 +248,43 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     const t = setTimeout(() => setCommonerSwapFlash(null), 3200);
     return () => clearTimeout(t);
   }, [commonerSwapFlash]);
+  useEffect(() => {
+    if (!shake) return;
+    const t = setTimeout(() => setShake(null), shake.grand ? 450 : 300);
+    return () => clearTimeout(t);
+  }, [shake]);
+
+  // ---------------------------------------------------------------------
+  // 스마트 자동 패스 (task brief §3, 2026-09-05 세션) — see AutoPass.tsx's
+  // module doc for the condition semantics. Placed here, above the
+  // `gameOver` early return below, per this file's own Rules-of-Hooks note
+  // further down (every hook must run on every render).
+  // ---------------------------------------------------------------------
+  const autoPass = useAutoPassSettings();
+  const [autoPassPanelOpen, setAutoPassPanelOpen] = useState(false);
+  const [autoPassToast, setAutoPassToast] = useState<{ id: number; reason: string } | null>(null);
+  const autoPassToastIdRef = useRef(0);
+  useEffect(() => {
+    // 수동으로 카드를 고르기 시작하면 자동 패스 의도를 취소한 것으로 간주
+    // (AskUserQuestion, 2026-09-05: "수동 개입 시 자동 취소").
+    if (selected.size > 0) return;
+    const decision = evaluateAutoPass(state, viewerSeat, autoPass.settings);
+    if (!decision.shouldPass) return;
+    const id = ++autoPassToastIdRef.current;
+    setAutoPassToast({ id, reason: decision.reason });
+    const t = setTimeout(() => {
+      setAutoPassToast((prev) => (prev?.id === id ? null : prev));
+      dispatch({ type: "pass", seat: viewerSeat });
+    }, AUTO_PASS_TOAST_MS);
+    // 정리 시점에 토스트/타이머를 함께 걷어낸다 — `state`/`selected`/설정이
+    // 바뀌어 이 effect가 다시 실행될 때(예: 수동 선택으로 취소, 다음 턴으로
+    // 진행 등) 낡은 토스트가 남아있지 않도록 한다.
+    return () => {
+      clearTimeout(t);
+      setAutoPassToast((prev) => (prev?.id === id ? null : prev));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `dispatch`/`autoPass.settings` intentionally re-read fresh each run, same as every other closure in this component
+  }, [state, viewerSeat, selected, autoPass.settings]);
   // 게임 시작 시 신분 배정 SFX — 왕/귀족 등 상위 신분은 팡파르, 최하위(노예)는
   // 쇠사슬음. 이 보드가 마운트되는 시점(대국 시작)에 1회만 재생 (2026-08-26 세션).
   useEffect(() => {
@@ -257,6 +338,35 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     >
       {muted ? "🔇" : "🔊"}
     </button>
+  );
+
+  // ⚙️ 자동 패스 설정 드롭다운 토글 — task brief §3. 열고 닫는 상태(`autoPassPanelOpen`)만
+  // 로컬 UI 상태이고, 실제 조건 값은 위에서 이미 초기화한 `autoPass`가 들고 있다.
+  const autoPassButton = (
+    <div className="relative">
+      <FxButton
+        variant="slate"
+        onClick={() => {
+          getSoundEngine().unlock();
+          setAutoPassPanelOpen((v) => !v);
+        }}
+        className={`rounded-full border px-2.5 py-1 text-[11px] break-keep transition ${
+          autoPass.anyEnabled ? "border-sky-300/60 bg-sky-400/10 text-sky-100" : "border-white/15 text-white/60 hover:border-white/30 hover:text-white"
+        }`}
+      >
+        ⚙️ 자동 패스{autoPass.anyEnabled ? " · ON" : ""}
+      </FxButton>
+      {autoPassPanelOpen && (
+        <AutoPassSettingsPanel
+          settings={autoPass.settings}
+          onChange={(patch) => {
+            getSoundEngine().unlock();
+            autoPass.update(patch);
+          }}
+          onClose={() => setAutoPassPanelOpen(false)}
+        />
+      )}
+    </div>
   );
 
   // ---------------------------------------------------------------------
@@ -418,16 +528,24 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
 
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
+    <MyTurnOverlay isMyTurn={isMyTrickTurn} />
     <div
       className="flex min-w-0 flex-1 flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
-      style={{ background: "linear-gradient(160deg,#1c1430 0%,#120c20 45%,#080510 100%)" }}
+      style={{
+        background: "linear-gradient(160deg,#1c1430 0%,#120c20 45%,#080510 100%)",
+        // 카드 출도 타격 시 화면 미세 진동(task brief §1) — 두 개의 동일한
+        // 모양 키프레임을 번갈아 사용해 연달아 카드가 나올 때도 매번 처음부터
+        // 다시 재생되도록 한다 (globals.css의 `dalmuti-screen-shake-1/-2` 참고).
+        animation: shake ? `dalmuti-screen-shake-${shake.token % 2 === 0 ? 1 : 2} ${shake.grand ? 450 : 300}ms ease-in-out` : undefined,
+      }}
     >
       <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-purple-100/70">
         <span className="flex items-center gap-1.5">
           {state.playerCount}인 · 단판 승부 ·{" "}
           <RoleBadge title={myTitle} />
         </span>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
+          {autoPassButton}
           {muteButton}
           {rulebookButton}
         </div>
@@ -555,18 +673,32 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
             {state.trick.plays.length === 0 ? (
               <p className="py-6 text-xs text-white/30">아직 아무도 카드를 내지 않았어요. 이 트릭의 선입니다.</p>
             ) : (
-              state.trick.plays.map((play, i) => (
-                <div key={`${play.seat}-${i}`} className="flex flex-col items-center gap-1">
-                  <span className={`text-[10px] font-semibold ${play.seat === viewerSeat ? "text-amber-200" : "text-white/50"}`}>
-                    {i + 1}. {names[play.seat]}
-                  </span>
+              state.trick.plays.map((play, i) => {
+                const cardsEl = (
                   <div className="flex -space-x-8">
                     {play.cards.map((c) => (
                       <CardFace key={c.id} card={c} />
                     ))}
                   </div>
-                </div>
-              ))
+                );
+                // 이 play에 해당하는 카드 출도 타격 이펙트가 아직 재생 중이면
+                // 감싸서 보여준다 — playIndex로 정확히 매칭(task brief §1).
+                const impact = playImpacts.find((e) => e.playIndex === i);
+                return (
+                  <div key={`${play.seat}-${i}`} className="flex flex-col items-center gap-1">
+                    <span className={`text-[10px] font-semibold ${play.seat === viewerSeat ? "text-amber-200" : "text-white/50"}`}>
+                      {i + 1}. {names[play.seat]}
+                    </span>
+                    {impact ? (
+                      <PlayImpactBurst isGrand={impact.isGrand} onDone={() => clearPlayImpact(impact.id)}>
+                        {cardsEl}
+                      </PlayImpactBurst>
+                    ) : (
+                      cardsEl
+                    )}
+                  </div>
+                );
+              })
             )}
           </section>
         </>
@@ -649,7 +781,9 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
           </div>
         )}
         {state.phase === "trick" && isMyTrickTurn && (
-          <div className="mt-3 flex justify-center gap-2">
+          <div className="mt-3 flex flex-col items-center">
+            {autoPass.anyEnabled && <AutoPassBadge onDisable={autoPass.disableAll} />}
+            <div className="flex justify-center gap-2">
             <FxButton
               variant="slate"
               onClick={passTurn}
@@ -666,6 +800,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
             >
               🃏 카드 내기 ({selected.size}장)
             </FxButton>
+            </div>
           </div>
         )}
         {state.phase === "taxReturn" && isMyTaxTurn && (
@@ -723,6 +858,9 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
           onDone={() => setRevolutionBanner(null)}
         />
       )}
+
+      {/* 🤖 자동 패스 조건 충족 토스트 (task brief §3) */}
+      {autoPassToast && <AutoPassToast reason={autoPassToast.reason} />}
     </div>
     <ExchangeHistoryPanel entries={exchangeHistory} viewerSeat={viewerSeat} names={names} titleFor={titleFor} />
     </div>

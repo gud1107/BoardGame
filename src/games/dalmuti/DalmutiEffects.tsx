@@ -754,3 +754,119 @@ export function FxButton({
     </button>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Card-play impact burst (2026-09-05 세션, task brief "카드 출도 화려한 시각
+// 이펙트 강화") — a bounce + shockwave ring + gold/blue neon flame glow +
+// radial spark burst wrapped around the exact trick-play card group that was
+// just added, with a bigger/longer "grand" variant for a 조커-포함 또는 3장
+// 이상 대량 출도. Matched by `playIndex` (that play's position in
+// `state.trick.plays`), not "the last play", so this can never misfire onto
+// the wrong seat's cards if two diffed transitions land close together.
+// ---------------------------------------------------------------------------
+
+export interface PlayImpactEvent {
+  id: number;
+  /** This play's index into `state.trick.plays` — how `DalmutiBoard.tsx` matches an event to the exact card group to wrap, rather than assuming "the most recent one". */
+  playIndex: number;
+  seat: SeatIndex;
+  cards: Card[];
+  /** 조커 포함 또는 3장 이상 — 더 크고 오래가는 버스트 + "✨👑✨" 팝업을 트리거한다. */
+  isGrand: boolean;
+}
+
+/**
+ * `state.trick.plays` only ever grows by exactly one entry per `playCards`
+ * action (engine.ts never batches multiple plays into a single transition,
+ * see its `playCards`) and is only ever reset to empty by `pass()`'s
+ * `emptyTrick()` once a trick resolves — so a strict length increase always
+ * means "exactly these new entries just got played", safe to trust without
+ * inspecting card identity the way the tax/commoner detectors above have to.
+ */
+export function detectPlayImpactEvents(prev: DalmutiState, next: DalmutiState): Omit<PlayImpactEvent, "id">[] {
+  if (prev === next) return [];
+  if (next.trick.plays.length <= prev.trick.plays.length) return [];
+  return next.trick.plays.slice(prev.trick.plays.length).map((p, offset) => ({
+    playIndex: prev.trick.plays.length + offset,
+    seat: p.seat,
+    cards: p.cards,
+    isGrand: p.cards.length >= 3 || p.cards.some((c) => c.isJoker),
+  }));
+}
+
+const PLAY_IMPACT_PARTICLE_COUNT = 8;
+const PLAY_IMPACT_GRAND_PARTICLE_COUNT = 16;
+
+/**
+ * Wraps a trick-play's rendered card group (`children`) with a one-shot
+ * bounce-in + shockwave ring + gold/blue neon flame glow + radial sparks.
+ * Self-timing exactly like `ReceivedCardGlow`/`FlyingExchangeCard` above
+ * (mount-only effect, calls `onDone` on both natural completion and early
+ * unmount) — never touches `children`'s own layout, only an absolutely
+ * positioned overlay sibling, so the card(s) underneath stay fully legible.
+ */
+export function PlayImpactBurst({
+  isGrand,
+  onDone,
+  children,
+}: {
+  isGrand: boolean;
+  onDone: () => void;
+  children: ReactNode;
+}) {
+  const particleCount = isGrand ? PLAY_IMPACT_GRAND_PARTICLE_COUNT : PLAY_IMPACT_PARTICLE_COUNT;
+  const particles = Array.from({ length: particleCount });
+  const bounceMs = isGrand ? 520 : 380;
+  const totalMs = isGrand ? 950 : 620;
+
+  useEffect(() => {
+    const t = setTimeout(onDone, totalMs);
+    return () => {
+      clearTimeout(t);
+      onDone();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-only, see FlyingExchangeCard above for the same pattern
+  }, []);
+
+  return (
+    <span className="relative inline-flex" style={{ animation: `dalmuti-play-bounce ${bounceMs}ms cubic-bezier(0.34,1.56,0.64,1)` }}>
+      {children}
+      <span className="pointer-events-none absolute -inset-2" aria-hidden>
+        {/* Shockwave ring on impact */}
+        <span
+          className="absolute inset-0 rounded-xl"
+          style={{ boxShadow: "0 0 0 2px rgba(253,224,71,0.85)", animation: `dalmuti-play-shockwave ${isGrand ? 700 : 480}ms ease-out forwards` }}
+        />
+        {/* Gold/blue neon flame glow hugging the card border */}
+        <span
+          className="absolute inset-0 rounded-xl"
+          style={{
+            boxShadow: "0 0 26px 6px rgba(251,191,36,0.55), 0 0 14px 3px rgba(56,189,248,0.5)",
+            animation: `dalmuti-play-flame ${isGrand ? 900 : 600}ms ease-out forwards`,
+          }}
+        />
+        {/* Radial gold/sky spark particles */}
+        {particles.map((_, i) => (
+          <span
+            key={i}
+            className="absolute top-1/2 left-1/2 h-1.5 w-1.5 rounded-full"
+            style={
+              {
+                background: i % 2 === 0 ? "#fde047" : "#7dd3fc",
+                boxShadow: `0 0 6px 1px ${i % 2 === 0 ? "#fde047" : "#7dd3fc"}`,
+                "--angle": `${(360 / particleCount) * i}deg`,
+                animation: `dalmuti-play-spark ${isGrand ? "750ms" : "550ms"} ease-out ${(i * 0.02).toFixed(2)}s forwards`,
+              } as CSSProperties
+            }
+          />
+        ))}
+        {/* Extra flourish for a grand (조커 포함/3장+) play */}
+        {isGrand && (
+          <span className="absolute -top-3 left-1/2 text-lg" style={{ animation: "dalmuti-play-grand-pop 0.55s ease-out forwards" }}>
+            ✨👑✨
+          </span>
+        )}
+      </span>
+    </span>
+  );
+}

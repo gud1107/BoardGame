@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   detectCommonerExchangeHistoryEvents,
   detectCommonerSwapEvents,
+  detectPlayImpactEvents,
   detectTaxEvents,
   detectTaxHighlightEvents,
   isExchangeParticipant,
 } from "./DalmutiEffects";
+import { DEFAULT_AUTO_PASS_SETTINGS, evaluateAutoPass } from "./AutoPass";
 import {
   applyAction,
   buildDeck,
@@ -1053,5 +1055,171 @@ describe("Level 10 고수 AI끼리 풀 시뮬레이션 (버그 없이 gameOver�
     const state = playFullBotGame(5, 888, (seat) => (seat % 2 === 0 ? 1 : 10));
     expect(state.phase).toBe("gameOver");
     expect(computeRankings(state)).toHaveLength(5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectPlayImpactEvents (카드 출도 타격 이펙트, 2026-09-05 세션)
+// ---------------------------------------------------------------------------
+
+describe("detectPlayImpactEvents (PlayImpactBurst trigger, 2026-09-05 세션)", () => {
+  it("returns nothing when the state reference is unchanged", () => {
+    const state = makeState();
+    expect(detectPlayImpactEvents(state, state)).toEqual([]);
+  });
+
+  it("emits one non-grand event for a fresh single-card lead play", () => {
+    const prev = makeState();
+    const next = makeState({ trick: { rankValue: 4, count: 1, plays: [{ seat: 0, cards: [card(4)] }], leaderSeat: 0, consecutivePasses: 0 } });
+    const events = detectPlayImpactEvents(prev, next);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ playIndex: 0, seat: 0, isGrand: false });
+  });
+
+  it("flags a 3+ card play as grand", () => {
+    const prev = makeState({ trick: { rankValue: 4, count: 1, plays: [{ seat: 0, cards: [card(4)] }], leaderSeat: 0, consecutivePasses: 0 } });
+    const next = makeState({
+      trick: {
+        rankValue: 2,
+        count: 3,
+        plays: [
+          { seat: 0, cards: [card(4)] },
+          { seat: 1, cards: [card(2), card(2, 1), card(2, 2)] },
+        ],
+        leaderSeat: 0,
+        consecutivePasses: 0,
+      },
+    });
+    const events = detectPlayImpactEvents(prev, next);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ playIndex: 1, seat: 1, isGrand: true });
+  });
+
+  it("flags a play containing a joker as grand even at count 1", () => {
+    const prev = makeState();
+    const next = makeState({ trick: { rankValue: JOKER_RANK, count: 1, plays: [{ seat: 0, cards: [joker(0)] }], leaderSeat: 0, consecutivePasses: 0 } });
+    const events = detectPlayImpactEvents(prev, next);
+    expect(events[0].isGrand).toBe(true);
+  });
+
+  it("emits nothing when a trick resolves and resets (plays length decreases)", () => {
+    const prev = makeState({
+      trick: {
+        rankValue: 4,
+        count: 1,
+        plays: [
+          { seat: 0, cards: [card(4)] },
+          { seat: 1, cards: [card(3)] },
+        ],
+        leaderSeat: 1,
+        consecutivePasses: 0,
+      },
+    });
+    const next = makeState({ trick: { rankValue: null, count: 0, plays: [], leaderSeat: 1, consecutivePasses: 0 } });
+    expect(detectPlayImpactEvents(prev, next)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// evaluateAutoPass (스마트 자동 패스, 2026-09-05 세션)
+// ---------------------------------------------------------------------------
+
+describe("evaluateAutoPass (AutoPass.tsx, 2026-09-05 세션)", () => {
+  const allOn = { ...DEFAULT_AUTO_PASS_SETTINGS, freeFollow: true, lowRankSingle: true, roleDefense: true, waitForFirstFinisher: true };
+
+  it("never auto-passes while leading (trick.count === 0), even with every condition on", () => {
+    const state = makeState({ trick: { rankValue: null, count: 0, plays: [], leaderSeat: 0, consecutivePasses: 0 }, activeSeat: 0 });
+    expect(evaluateAutoPass(state, 0, allOn).shouldPass).toBe(false);
+  });
+
+  it("never auto-passes for a seat that isn't the active seat", () => {
+    const state = makeState({ trick: { rankValue: 5, count: 1, plays: [{ seat: 0, cards: [card(5)] }], leaderSeat: 0, consecutivePasses: 0 }, activeSeat: 0 });
+    expect(evaluateAutoPass(state, 1, allOn).shouldPass).toBe(false);
+  });
+
+  it("does nothing when every condition is off", () => {
+    const state = makeState({
+      trick: { rankValue: 5, count: 1, plays: [{ seat: 0, cards: [card(5)] }], leaderSeat: 0, consecutivePasses: 0 },
+      activeSeat: 1,
+      players: [makePlayer(0, { hand: [] }), makePlayer(1, { hand: [card(9)] })],
+    });
+    expect(evaluateAutoPass(state, 1, DEFAULT_AUTO_PASS_SETTINGS).shouldPass).toBe(false);
+  });
+
+  describe("freeFollow", () => {
+    const base = makeState({
+      trick: { rankValue: 5, count: 1, plays: [{ seat: 0, cards: [card(5)] }], leaderSeat: 0, consecutivePasses: 0 },
+      activeSeat: 1,
+    });
+    it("passes when the follower has no legal card at all", () => {
+      const state = { ...base, players: [makePlayer(0), makePlayer(1, { hand: [card(9)] })] };
+      expect(evaluateAutoPass(state, 1, { ...DEFAULT_AUTO_PASS_SETTINGS, freeFollow: true }).shouldPass).toBe(true);
+    });
+    it("does not pass when a legal follow exists", () => {
+      const state = { ...base, players: [makePlayer(0), makePlayer(1, { hand: [card(2)] })] };
+      expect(evaluateAutoPass(state, 1, { ...DEFAULT_AUTO_PASS_SETTINGS, freeFollow: true }).shouldPass).toBe(false);
+    });
+  });
+
+  describe("lowRankSingle", () => {
+    const settings = { ...DEFAULT_AUTO_PASS_SETTINGS, lowRankSingle: true, lowRankThreshold: 5 };
+    it("passes on a single card at/under the threshold", () => {
+      const state = makeState({ trick: { rankValue: 3, count: 1, plays: [{ seat: 0, cards: [card(3)] }], leaderSeat: 0, consecutivePasses: 0 }, activeSeat: 1 });
+      expect(evaluateAutoPass(state, 1, settings).shouldPass).toBe(true);
+    });
+    it("does not pass on a single card above the threshold", () => {
+      const state = makeState({ trick: { rankValue: 8, count: 1, plays: [{ seat: 0, cards: [card(8)] }], leaderSeat: 0, consecutivePasses: 0 }, activeSeat: 1 });
+      expect(evaluateAutoPass(state, 1, settings).shouldPass).toBe(false);
+    });
+    it("does not trigger on a multi-card play even below the threshold", () => {
+      const state = makeState({
+        trick: { rankValue: 3, count: 2, plays: [{ seat: 0, cards: [card(3), card(3, 1)] }], leaderSeat: 0, consecutivePasses: 0 },
+        activeSeat: 1,
+      });
+      expect(evaluateAutoPass(state, 1, settings).shouldPass).toBe(false);
+    });
+  });
+
+  describe("roleDefense (왕+귀족 모두 탈출할 때까지, AskUserQuestion 확정)", () => {
+    const settings = { ...DEFAULT_AUTO_PASS_SETTINGS, roleDefense: true };
+    // rankOrder[0]=seat0(왕), rankOrder[1]=seat1(귀족)
+    it("passes while the king hasn't finished", () => {
+      const state = makeState({
+        trick: { rankValue: 5, count: 1, plays: [{ seat: 2, cards: [card(5)] }], leaderSeat: 2, consecutivePasses: 0 },
+        activeSeat: 3,
+        players: [makePlayer(0), makePlayer(1), makePlayer(2), makePlayer(3)],
+      });
+      expect(evaluateAutoPass(state, 3, settings).shouldPass).toBe(true);
+    });
+    it("stops forcing a pass once both the king and noble have finished", () => {
+      const state = makeState({
+        trick: { rankValue: 5, count: 1, plays: [{ seat: 2, cards: [card(5)] }], leaderSeat: 2, consecutivePasses: 0 },
+        activeSeat: 3,
+        players: [
+          makePlayer(0, { hand: [], finishedAtOrder: 1 }),
+          makePlayer(1, { hand: [], finishedAtOrder: 2 }),
+          makePlayer(2),
+          makePlayer(3, { hand: [card(2)] }),
+        ],
+        finishOrder: [0, 1],
+      });
+      expect(evaluateAutoPass(state, 3, settings).shouldPass).toBe(false);
+    });
+  });
+
+  describe("waitForFirstFinisher", () => {
+    const settings = { ...DEFAULT_AUTO_PASS_SETTINGS, waitForFirstFinisher: true };
+    it("passes before anyone has finished", () => {
+      const state = makeState({ trick: { rankValue: 5, count: 1, plays: [{ seat: 0, cards: [card(5)] }], leaderSeat: 0, consecutivePasses: 0 }, activeSeat: 1 });
+      expect(evaluateAutoPass(state, 1, settings).shouldPass).toBe(true);
+    });
+    it("stops once someone has finished", () => {
+      const state = makeState({
+        trick: { rankValue: 5, count: 1, plays: [{ seat: 0, cards: [card(5)] }], leaderSeat: 0, consecutivePasses: 0 },
+        activeSeat: 1,
+        finishOrder: [2],
+      });
+      expect(evaluateAutoPass(state, 1, settings).shouldPass).toBe(false);
+    });
   });
 });

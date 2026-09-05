@@ -946,6 +946,64 @@ class SoundEngine {
     src.stop(now + 0.14);
   }
 
+  /**
+   * 달무티 — "카드 제출 타격감": `playParchmentSubmit`이 이미 담당하던 조용한
+   * 종이음과는 별개로, 카드가 필드에 실제로 "꽂히는" 순간의 묵직한 충격을 담당
+   * (task brief "카드가 필드 중앙으로 날아와 꽂힐 때 묵직한 타격... 강화",
+   * 2026-09-05 세션). 낮은 서브베이스 쿵 소리 + 짧은 슬랩 트랜지언트는 매번,
+   * `isGrand`(조커 포함 또는 3장 이상 대량 출도)일 때만 추가로 상승하는 골드
+   * 스파클 3화음이 겹쳐 울려 "거대한 폭죽" 느낌을 더한다. `DalmutiBoard.tsx`의
+   * lockstep diff 블록에서 호출되어 모든 접속자에게 동일하게 재생된다(제출한
+   * 본인의 로컬 클릭에만 의존하는 기존 `playParchmentSubmit`과 달리, 트릭
+   * 리더보드를 보는 모든 좌석이 같은 타격음을 듣도록 함 — `playRevolutionBell`과
+   * 같은 트리거 위치).
+   */
+  playCardSlam(isGrand: boolean) {
+    if (!this.gate("cardSlam", 90)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const thud = ctx.createOscillator();
+    thud.type = "sine";
+    thud.frequency.setValueAtTime(160, now);
+    thud.frequency.exponentialRampToValueAtTime(50, now + 0.14);
+    const thudGain = ctx.createGain();
+    thudGain.gain.setValueAtTime(0.3, now);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    thud.connect(thudGain).connect(this.sfxGain);
+    thud.start(now);
+    thud.stop(now + 0.2);
+
+    const slap = ctx.createBufferSource();
+    slap.buffer = noiseBuffer(ctx);
+    const slapFilter = ctx.createBiquadFilter();
+    slapFilter.type = "bandpass";
+    slapFilter.frequency.value = 1800;
+    slapFilter.Q.value = 4;
+    const slapGain = ctx.createGain();
+    slapGain.gain.setValueAtTime(0.22, now);
+    slapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    slap.connect(slapFilter).connect(slapGain).connect(this.sfxGain);
+    slap.start(now);
+    slap.stop(now + 0.08);
+
+    if (!isGrand) return;
+    [1046.5, 1318.5, 1568].forEach((freq, i) => {
+      const at = now + 0.05 + i * 0.04;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.22, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.4);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.42);
+    });
+  }
+
   // ---------------------------------------------------------------------
   // 2026-08-27 세션(오후) — 6개 허브 게임의 남은 세부 액션 SFX 갭을 메우기
   // 위해 추가된 신규 SFX. AskUserQuestion으로 확인된 대상 이벤트에만 연결
@@ -1181,6 +1239,35 @@ class SoundEngine {
     osc.connect(gain).connect(this.sfxGain);
     osc.start(now);
     osc.stop(now + 0.16);
+  }
+
+  /**
+   * 달무티 — "패스!" 음성 (task brief §2, 2026-09-05 세션): 이 프로젝트는
+   * 저작권 문제로 실제 성우 mp3를 넣지 않고 모든 SFX를 코드로 합성하는 정책이라
+   * (파일 헤더 참고), 실제 사람 목소리가 필요한 이 기능은 그 정책과 동일한
+   * 정신으로 mp3 에셋 없이 브라우저 내장 Web Speech API
+   * (`SpeechSynthesisUtterance`)를 사용한다(AskUserQuestion으로 확정) — 에셋
+   * 용량 0, 지연 없음. `gate()`를 그대로 재사용해 SFX 뮤트/볼륨 설정을 따르고,
+   * 짧은 쿨다운으로 연속 패스 시 발화가 겹치지 않게 한다. 매 호출마다
+   * `speechSynthesis.cancel()`로 직전 발화를 끊고 새로 즉시 발음하므로, 연속
+   * 자동 패스가 이어져도 "패스! 패스! 패스!"가 밀리지 않고 항상 최신 패스만
+   * 또렷하게 들린다. 한국어 음성이 설치되어 있으면 그 음성을, 없으면
+   * `lang="ko-KR"` 지정만으로 브라우저 기본 처리에 맡긴다(음성 목록은 비동기
+   * 로드되므로 없을 수 있음 — 기능 저하일 뿐 에러는 아님).
+   */
+  speakPass() {
+    if (!this.gate("passVoice", 200)) return;
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const settings = useAudioSettingsStore.getState();
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance("패스!");
+    utterance.lang = "ko-KR";
+    utterance.rate = 1.05;
+    utterance.pitch = 1.0;
+    utterance.volume = settings.sfxVolume;
+    const koVoice = window.speechSynthesis.getVoices().find((v) => v.lang?.toLowerCase().startsWith("ko"));
+    if (koVoice) utterance.voice = koVoice;
+    window.speechSynthesis.speak(utterance);
   }
 
   /** 달무티 — "반란 종소리": a struck bell (fundamental + inharmonic partials, long decay) for `declareRevolution` (REVOLUTION_BELL) — distinct from the deal-time `playRankFanfare`. */

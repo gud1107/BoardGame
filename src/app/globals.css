@@ -956,6 +956,153 @@ body {
   }
 }
 
+/* 달무티's 카드 출도(Play) 타격 이펙트 (see DalmutiEffects.tsx / PlayImpactBurst,
+   2026-09-05 세션 task brief "카드 제출 시 필드 안착 타격감 강화"). Wraps the exact
+   trick-play card group that was just added (matched by array index, not
+   "the last play", so this never misfires onto an older play if state
+   updates land in an unusual order) with a bounce-in + shockwave ring + gold/
+   블루 네온 화염 글로우 + radial spark burst — the "grand" variant (조커 포함
+   또는 3장 이상, `PlayImpactEvent.isGrand`) plays a longer/bigger version of
+   every piece below plus an extra "✨👑✨" pop, for "대량 출도" 임팩트. */
+@keyframes dalmuti-play-bounce {
+  0% {
+    transform: scale(0.55) translateY(-22px);
+    opacity: 0.4;
+  }
+  55% {
+    transform: scale(1.18) translateY(2px);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(0.94) translateY(0);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Expanding ring shockwave the instant the card(s) land — color set inline
+   per caller (always the shared gold/blue neon pair, see PlayImpactBurst). */
+@keyframes dalmuti-play-shockwave {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+/* Neon flame glow hugging the card group's border, pulsing once before
+   fading — the "골드/블루 네온 화염" the task brief asked for. */
+@keyframes dalmuti-play-flame {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Radial spark particle flung outward — same `--angle`-per-span technique as
+   `dalmuti-exchange-spark`, tuned shorter/snappier for a card-slam impact
+   rather than a multi-second flight. */
+@keyframes dalmuti-play-spark {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(0) scale(1);
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(34px) scale(0.25);
+  }
+}
+
+/* "✨👑✨" pop for a grand play (조커 포함 또는 3장 이상) — a bigger flourish
+   layered on top of the shared bounce/shockwave/flame/spark above. */
+@keyframes dalmuti-play-grand-pop {
+  0% {
+    transform: translate(-50%, 4px) scale(0.4);
+    opacity: 0;
+  }
+  55% {
+    transform: translate(-50%, -6px) scale(1.25);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -2px) scale(1);
+    opacity: 0;
+  }
+}
+
+/* Board-wide micro screen shake on every card play (task brief "화면 미세
+   진동") — scoped to the game panel itself, not the whole page, so it reads
+   as "the table jolted" rather than jarring the surrounding site chrome.
+   Defined as two pixel-identical keyframes so `DalmutiBoard.tsx` can
+   alternate between them on repeated triggers — swapping `animation-name`
+   forces the browser to restart the animation even if a second shake fires
+   before the first one's timeout clears (plain re-assignment of the same
+   name wouldn't restart it). */
+@keyframes dalmuti-screen-shake-1 {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-3px, 2px);
+  }
+  40% {
+    transform: translate(3px, -2px);
+  }
+  60% {
+    transform: translate(-2px, -2px);
+  }
+  80% {
+    transform: translate(2px, 2px);
+  }
+}
+@keyframes dalmuti-screen-shake-2 {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-3px, 2px);
+  }
+  40% {
+    transform: translate(3px, -2px);
+  }
+  60% {
+    transform: translate(-2px, -2px);
+  }
+  80% {
+    transform: translate(2px, 2px);
+  }
+}
+
+/* 달무티's 스마트 자동 패스 (2026-09-05 세션) — the "🤖 자동 패스 조건 충족"
+   toast slides up from the hand-action button row and holds for its full 1s
+   lifetime (`AUTO_PASS_TOAST_MS` in DalmutiBoard.tsx) before the pass actually
+   dispatches, then fades with the toast unmounting. */
+@keyframes dalmuti-autopass-toast-in {
+  0% {
+    transform: translateY(8px) scale(0.96);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
 /* 코요테's showdown backdrop (see CoyoteEffects.tsx / CoyoteHowlBanner) — a
    desert-toned wash that fades in behind the "코요테!" banner the instant the
    round leaves "playing" for "reveal"/"gameOver". */

@@ -1,6 +1,59 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-05 (**지렁이(Worm) — 조이스틱 우측 재배치, 성장 진화 이펙트, 킬 승리 표정 세션**
+_최종 갱신: 2026-09-05 (**달무티(The Great Dalmuti) — 카드 출도 타격 이펙트 강화, 패스 음성,
+스마트 자동 패스 세션** — "① 카드 제출 시 필드 안착 타격감·네온 화염 파티클 등 시각 이펙트 대폭
+강화, ② 패스 시 또렷한 한국어 '패스!' 보이스 출력, ③ 전략적 조건을 걸어두는 스마트 자동 패스
+시스템" 요청. 진행 전 실제 파일 구조부터 조사 — 요청서가 전제한 `Board.tsx`/`CardHand.tsx`/
+`ActionButtonArea.tsx`/`useDalmuti.ts`/`sound.ts`는 이 코드베이스에 없음(말달리자·달무티 세금 버그·
+달무티 버튼 반응성 등과 같은 반복되는 요청 전제-실제 코드 불일치 패턴) — 실제는
+`DalmutiBoard.tsx`/`DalmutiEffects.tsx`/`engine.ts` + 공용 `lib/audio/soundEngine.ts`. 또한 이
+프로젝트는 저작권 문제로 모든 SFX를 Web Audio로 직접 합성하는 정책(실제 mp3 에셋 없음)이라 "패스!"
+mp3 파일을 코드로 만들어 넣는 것 자체가 불가능함을 확인. 이 두 가지와 4종 자동 패스 모드의 결합
+방식·중단 UI·"대주교"(이 게임의 실제 직위명이 아님) 등 확인이 필요한 세부사항을 `AskUserQuestion`
+4문항으로 먼저 확인 후 진행(전부 권장 옵션 채택): **패스 음성은 브라우저 내장 Web Speech API
+(`SpeechSynthesisUtterance`, ko-KR)** / **자동 패스 4개 모드는 체크박스로 동시에 여러 개 ON 가능
+(OR 조건)** / **자동 패스 중단은 패스·카드내기 버튼 위 상시 배지 원터치** / **"계급별 방어 모드"는
+왕+귀족(1·2위)이 모두 탈출할 때까지로 매핑**.
+
+**① 카드 출도 타격 이펙트**: `soundEngine.ts`에 `playCardSlam(isGrand)` 신설(서브베이스 쿵+슬랩
+트랜지언트, 조커 포함/3장 이상 대량 출도 시 상승 골드 스파클 3화음 추가) — 제출한 본인만 듣던 기존
+`playParchmentSubmit`(actor-only)과 달리 `playRevolutionBell`과 같은 lockstep diff 트리거 위치에서
+호출해 트릭을 보는 모든 접속자에게 동일하게 재생. `DalmutiEffects.tsx`에 `detectPlayImpactEvents`
+(트릭에 새로 추가된 play를 `playIndex`로 정확히 매칭, 트릭 리셋은 무시)와 `PlayImpactBurst`(바운스
++ 골드/블루 네온 화염 글로우 + 방사형 충격파 + 스파크 파티클, 대량 출도 시 "✨👑✨" 팝업까지 추가된
+더 크고 긴 버전) 신설. `globals.css`에 `dalmuti-play-bounce`/`-shockwave`/`-flame`/`-spark`/
+`-grand-pop` + 카드 출도 때마다 게임 패널 전체에 미세 진동을 주는 `dalmuti-screen-shake-1`/`-2`(연달아
+출도돼도 매번 처음부터 재생되도록 두 개의 동일 키프레임을 번갈아 사용, `playIndex` 짝/홀로 선택) 추가.
+
+**② 패스 음성**: `soundEngine.ts`에 `speakPass()` 신설 — `SpeechSynthesisUtterance("패스!",
+lang="ko-KR")`을 기존 `gate()`(SFX 뮤트/볼륨 설정 그대로 적용 + 200ms 쿨다운)로 감싸고, 호출마다
+`speechSynthesis.cancel()`로 직전 발화를 끊어 연속 패스 시 밀리지 않게 함. `DalmutiBoard.tsx`의
+`dispatch()`에서 기존 `playPassWhiff()`와 나란히 호출 — 수동 클릭이든 자동 패스든 이 동일한
+`dispatch`를 거치므로 항상 같은 SFX+음성을 듣는다.
+
+**③ 스마트 자동 패스**: 신규 `src/games/dalmuti/AutoPass.tsx` — `useAutoPassSettings()`(localStorage
+`dalmuti_auto_pass_settings_v1` 영속, `PatchNoteButton.tsx`와 동일하게 lazy `useState` 초기화로
+`react-hooks/set-state-in-effect` 린트 회피) + 순수 함수 `evaluateAutoPass(state, seat, settings)`
+(4개 조건을 OR로 평가: 프리패스=`legalPlayOptions` 빈 배열, 저계급 단일패스=필드가 1장짜리이고
+`lowRankThreshold`(기본 5, 1~12 조절 가능) 이하, 계급별 방어=왕·귀족이 둘 다 `finishedAtOrder`가
+아닐 때, 1명탈출대기=`finishOrder`가 비어있을 때) + UI(`AutoPassSettingsPanel`/`AutoPassBadge`/
+`AutoPassToast`). `DalmutiBoard.tsx`에 헤더 `⚙️ 자동 패스` 드롭다운 버튼, 조건 충족 시 1초짜리
+"🤖 자동 패스 조건 충족" 토스트(`AUTO_PASS_TOAST_MS`) 후 실제 `pass` 액션을 디스패치하는 `useEffect`
+(수동으로 카드를 고르기 시작하면 즉시 취소), 패스/카드내기 버튼 위 `anyEnabled` 상시 배지를 추가.
+엔진(`engine.ts`)은 전혀 건드리지 않음 — 자동 패스는 항상 기존 `pass` 액션을 그대로 보내는 순수
+클라이언트 UI 편의 기능이며, 봇 AI(`chooseBotAction`)와도 무관.
+
+**룰북 미변경**: `달무티.md`/`RulebookModal.tsx`는 게임 규칙이 전혀 바뀌지 않은 순수 이펙트/음성/UI
+편의 기능이라 갱신하지 않음(2026-09-04 버튼 반응성 세션과 동일 판단).
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint .`(저장소 전체 0 에러) / `npx vitest run
+src/games/dalmuti`(70/70, `evaluateAutoPass`/`detectPlayImpactEvents` 신규 테스트 포함) / `npx vitest
+run`(전체 49개 파일·1647개 테스트, 회귀 없음) / `npm run build` 정상 완료. **다음 세션 참고**: 이번
+세션은 이 환경에 캐시된 Playwright/브라우저 자동화 도구가 준비돼 있지 않아 실제 화면에서 이펙트가
+터지는 모습·"패스!" 음성 출력·자동 패스 토스트를 육안으로는 확인하지 못함(타입체크/린트/테스트/빌드로만
+검증) — §3에 미검증 항목으로 남겨둘 것.)_
+
+_이전 갱신: 2026-09-05 (**지렁이(Worm) — 조이스틱 우측 재배치, 성장 진화 이펙트, 킬 승리 표정 세션**
 — "① 모바일 가상 조이스틱을 우측 가운데로 재배치, ② 길어질 때마다 마디 패턴·색상이 단계적으로
 진화하는 이펙트 추가, ③ 상대를 처치했을 때 머리에 통쾌한 승리 표정 애니메이션 적용" 요청. 진행 전
 `src/games/worm/` 실제 구조부터 조사 — 요청서가 전제한 `Board.tsx`/`Joystick.tsx`/
