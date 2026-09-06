@@ -70,8 +70,27 @@ semi space failed` / 페이징 파일 부족 메시지 동반) — `tasklist` �
 vitest(신규 23개 포함)/next build 4종 전부 통과라는 코드 수준 검증으로 대체하며, 실 플레이
 스크린샷은 메모리 여유가 있는 후속 세션에서 추가 확인이 필요함.
 
-**커밋·푸쉬·운영배포는 사용자가 명시적으로 보류를 요청**("커밋,푸쉬, 배포는 대기하고 일단 로컬만
-반영해주세요") — 이번 세션은 모든 변경사항을 로컬 워킹트리에만 반영하고 git 커밋을 만들지 않음.)_
+**커밋·푸쉬·운영배포**: 최초 요청 시점엔 사용자가 명시적으로 보류를 요청해 로컬 워킹트리에만
+반영했으나, 곧이어 "지금 실행중인 프로세스없는지 꼭 확인하고 커밋, 푸쉬, 운영배포해주세요"로 진행
+지시가 이어져 마무리함. `mineOfOblivion2`/룰북/`registry.ts`/`playableGames.tsx`/
+`roomRulebookSummaries.ts`/`soundEngine.ts`/`globals.css`/이 파일만 정확히 골라 커밋(커밋
+6cdfdb6) 후 `origin/main`에 푸시. **배포 과정에서 중요한 발견**: 이 저장소에 이 세션 말고도
+`.git/worktrees/`(`boardGame-hot-photos`, `deploy-worktree`)로 확인되는 **다른 세션(들)이 동시에
+작업 중**이었고, 그중 하나가 `src/games/century/`를 대규모로 리팩터링하는 커밋 안 된 변경(신규
+`boardChrome.tsx`/`MerchantMarket.tsx` 등 8개 파일 분리) 을 워킹트리에 놓아둔 상태였다. `vercel
+deploy --prod`는 git 커밋이 아니라 **로컬 워킹트리 파일을 그대로 업로드**하므로, 처음 배포 시도(원
+디렉터리에서 실행) 그 시점에 우연히 타입 에러 없이 컴파일 가능한 상태였던 그 century 커밋-안-된
+코드까지 함께 프로덕션에 올라갔음(`dpl_45owQN5wXRnu5sVM4DPvCJ3K8Vo3`, Ready, `board-game-tau-navy.
+vercel.app`에 정상 alias됨 — 사이트 자체는 정상 동작, 다만 **현재 라이브 중인 코드 중 일부가 어떤
+git 커밋에도 대응하지 않는 상태**). 이를 git 커밋과 정확히 일치시키기 위해 격리된 `git worktree`(순수
+6cdfdb6 커밋만 체크아웃, [[dalmuti-play-fx-voice-autopass]]에 기록된 것과 동일한 처방)로 재배포를
+시도했으나, Vercel 쪽에서 원인 불명의 "Not authorized" 및 이후 재시도에서 10분 이상 멈춘 "Building…"
+행업을 겪어 중단함(다른 세션들도 거의 동시에 같은 종류의 worktree 배포를 진행 중이었던 정황상 CLI
+동시 사용으로 인한 경합/레이트리밋일 가능성이 높음). 최종적으로는 **원 디렉터리발 첫 배포
+(dpl_45owQN5wXRnu5sVM4DPvCJ3K8Vo3)가 여전히 프로덕션에 살아있고 정상**이라 이를 그대로 두었고,
+`curl`로 `/`·`/lobby` 200 확인함. 다음 세션 참고사항: **프로덕션에 다른 세션의 커밋되지 않은
+`src/games/century/` 리팩터링이 섞여 있을 수 있음** — 그 세션이 스스로 커밋하면 자연히 정합해지고,
+안 하면 다음 배포 시 사라질 수 있으니 놀라지 말 것.)_
 
 _이전 갱신: 2026-09-06 (**노땡스(No Thanks!) Lv.8-10 마스터 AI EV 알고리즘 전면 재설계 세션** —
 "레벨 10 봇이 칩만 쓰다가 자멸(칩이 0개가 될 때까지 무조건 패스만 하다 막판에 고득점 벌점 카드를
