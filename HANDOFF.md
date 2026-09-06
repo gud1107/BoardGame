@@ -1,6 +1,46 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-06 (**방 만들기(Create Room) 단계 — 게임별 룰북/핵심 가이드 뷰어 통합 세션**
+_최종 갱신: 2026-09-06 (**패치노트 시스템 09-02~09-06 백필 세션** — "로비에 [📢 패치노트]
+버튼/모달을 구축하고 최근 진행된 개선 사항을 일자별로 정리해 최신화해달라"는 요청. 요청서는
+`src/data/patchNotes.ts` + `PatchNoteModal.tsx`를 새로 만드는 것을 전제했으나, 실제로는 이미
+[src/constants/patchNotes.ts](src/constants/patchNotes.ts) + `PatchNoteButton.tsx`/
+`PatchNoteList.tsx` + 전용 페이지 [src/app/patch-notes/page.tsx](src/app/patch-notes/page.tsx)로
+된 시스템이 **워킹트리에 미커밋 상태로 이미 완성**돼 있었음(2026-09-01 세션에서 `PatchNoteModal`을
+폐기하고 30개 항목엔 팝업보다 전용 페이지가 낫다는 판단으로 페이지 전환, `last_seen_version`
+localStorage 기반 New 뱃지까지 이미 구현). 다만 데이터가 v1.25.0(2026-09-01)에서 멈춰 있어
+09-02~09-06 사이 커밋(`docs(handoff)` 내부 문서 커밋 제외 실사용자 체감 변경 약 40여 건)이 반영
+안 된 상태였음 — 반복되는 요청 전제-실제 코드 불일치 패턴의 또 다른 사례.
+
+`AskUserQuestion`으로 3가지 확인 후 진행: **기존 시스템 그대로 확장**(요청서의 별도
+`PatchNoteModal.tsx` 신규 생성 대신) / **09-02~09-06 전체를 git log 기준으로 백필**(당일만 반영
+아님) / 요청서에 있던 "8인 방이라도 최소 인원만 모이면 시작" 기능은 git 이력상 구현된 적이 없어
+**이번 범위에서 제외**(모두 권장 옵션 채택).
+
+**구현**: `src/constants/patchNotes.ts`에 v1.26.0(09-02, 진실의 고개 신규 추가·지렁이 맵 확장·로비
+모바일 검색 개편) ~ v1.30.0(09-06, 전 게임 MY TURN 배너·방 만들기 룰북 열람·달무티 보이스
+브로드캐스트) 5개 릴리즈 엔트리를 기존 컨벤션(게임 태그+`FEAT`/`FIX`/`IMPROVE`, FEAT 포함 시
+minor 범프) 그대로 unshift. 요청서가 이미 배포된 것으로 착각하지 않도록 확인한 항목들
+(MY TURN 배너 `0bd1d16`, 모바일 검색 개편 `62469a4`, 룰북 뷰어 `c5f14ba`, 대기실 AI 봇 레벨 일괄
+생성 `6d9f1e9`)도 정확한 커밋 기준으로 날짜별 항목에 반영. 이 세션과 무관하게 워킹트리에 떠 있던
+`DestinyWar39Game.tsx`의 미완성 AI 좌석 승계 기능(별도 세션 산출물로 추정)은 건드리지 않음.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npm run lint`(0 에러/경고) / `npx vitest run`(저장소 전체
+49개 파일·1652개 테스트 통과, `patchNotes.test.ts`의 날짜순 정렬·버전 포맷·게임 태그 유효성
+검증 포함).
+
+**커밋/배포**: 최초 세션에서는 사용자가 로컬 반영까지만 요청, 커밋·푸시·운영배포는 대기.
+이후 후속 요청으로 커밋·푸시·운영배포 진행 — 이 작업과 무관한 기존 미커밋 변경
+(`DestinyWar39Game.tsx`의 AI 좌석 승계 WIP, `boardGameRule/*` 자산 등)이 함께 워킹트리에 있어
+`git stash push --keep-index`로 격리한 뒤 패치노트 관련 6개 파일만 스테이징 → 그 상태 그대로
+`tsc`/`lint`/`vitest`/`next build` 재검증(모두 통과, `/patch-notes` 라우트 생성 확인) → 커밋
+(`833fbfb`, `feat(patch-notes): replace header modal with dedicated page, backfill through
+2026-09-06`) → stash pop으로 무관한 변경 복원 → `git fetch`로 원격 미변경 확인 후 `git push
+origin main` → Vercel 자동 배포(`board-game-j43571ozn`, Production, 52초) 완료 확인 →
+`https://board-game-tau-navy.vercel.app/patch-notes`에서 `v1.30.0` 응답 확인(HTTP 200)으로 실
+운영 반영 검증 완료. HANDOFF.md 자체는 이 저장소 컨벤션대로 별도 `docs(handoff)` 커밋으로
+기록.)_
+
+_이전 갱신: 2026-09-06 (**방 만들기(Create Room) 단계 — 게임별 룰북/핵심 가이드 뷰어 통합 세션**
 — "로비에서 게임을 선택해 방을 만드는 단계에서, 방을 생성하기 전에 해당 게임의 핵심 규칙과 승리
 조건을 바로 열람할 수 있도록 [📖 룰북 / 게임 규칙] 탭과 요약 가이드를 추가해달라"는 요청.
 
