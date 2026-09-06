@@ -870,3 +870,86 @@ export function PlayImpactBurst({
     </span>
   );
 }
+
+// ---------------------------------------------------------------------------
+// 패스 말풍선 + 룸 전체 음성 브로드캐스트 (2026-09-06 세션) — "본인이 패스
+// 버튼을 눌렀을 때만 로컬에서 재생되고, 다른 사람/AI 봇이 패스하면 정적만
+// 흐르는" 문제 픽스. `detectPlayImpactEvents`와 같은 "연속 락스텝 스냅샷 diff"
+// 기법을 패스에도 적용해, 인간·봇 구분 없이 누가 패스하든 모든 접속자 화면에
+// 동일하게 반영되도록 한다. `DalmutiBoard.tsx`가 이 이벤트를 받아 (a) 시야에
+// 있는 모두에게 말풍선(`PassBubble`)을 띄우고 (b) 본인 좌석이 아닌 패스에
+// 한해 `playPassWhiff`+`speakPass`를 재생한다 — 본인 좌석의 패스는 버튼 클릭
+// 즉시 `DalmutiBoard.tsx`의 `dispatch()`에서 이미 로컬로 재생했으므로(그래야
+// Realtime 왕복 지연 없이 즉각 반응), 여기서 다시 재생하면 브로드캐스트가
+// 되돌아올 때 소리가 겹쳐 끊기므로 좌석을 비교해 제외한다.
+// ---------------------------------------------------------------------------
+
+export interface PassEvent {
+  seat: SeatIndex;
+}
+
+/**
+ * engine.ts의 `pass()`는 트릭 플레이(`trick.plays`)와 달리 "누가 패스했는지"
+ * 별도 로그를 남기지 않으므로, 상태 전이 자체로부터 추론한다: `pass` 액션은
+ * `phase === "trick"`일 때만 유효하고, 그 phase 동안 유효한 액션은
+ * `playCards`/`pass` 단 둘뿐이다(engine.ts의 `applyAction` 참고) — 따라서 트릭
+ * 페이즈 중 실제 상태 변화(`prev !== next`)가 있었는데 `trick.plays`가 늘지
+ * 않았다면 그 변화는 pass 말고는 있을 수 없다. 패스 직전까지 활성이었던 좌석
+ * (`prev.activeSeat`)이 곧 패스한 사람.
+ */
+export function detectPassEvents(prev: DalmutiState, next: DalmutiState): PassEvent[] {
+  if (prev === next) return [];
+  if (prev.phase !== "trick") return [];
+  if (next.trick.plays.length > prev.trick.plays.length) return []; // 새 카드 출도 — 패스 아님
+  return [{ seat: prev.activeSeat }];
+}
+
+const PASS_BUBBLE_MS = 1000;
+
+/**
+ * 패스한 좌석의 스코어보드 행(`getSeatEl`로 찾은 `<Board>Board.tsx`의
+ * `seatRowRefs` 앵커) 바로 위에 "💬 패스!" 말풍선을 1초간 띄운다.
+ * `FlyingExchangeCard`처럼 앵커에 좌표를 맞춰 `fixed`로 포탈하지만, 두 좌석
+ * 사이를 날아가는 게 아니라 한 자리에서 튀어오르며 나타났다 사라지는 단순
+ * 버전 — 마운트 시 위치를 한 번 계산해 고정하고, `onDone`으로 self-clean.
+ */
+export function PassBubble({ event, getSeatEl, onDone }: { event: PassEvent; getSeatEl: (seat: SeatIndex) => HTMLElement | null; onDone: () => void }) {
+  // `FlyingExchangeCard`와 동일하게 좌표를 리액트 state가 아니라 ref를 통해
+  // DOM에 직접 써넣는다 — useState로 관리하면 이 useLayoutEffect 본문에서
+  // 동기 setState를 호출하게 되어 `react-hooks/set-state-in-effect`에 걸린다.
+  const elRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = elRef.current;
+    const seatEl = getSeatEl(event.seat);
+    if (!el || !seatEl) {
+      onDone();
+      return;
+    }
+    const rect = seatEl.getBoundingClientRect();
+    el.style.left = `${rect.left + rect.width / 2}px`;
+    el.style.top = `${rect.top - 6}px`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 시 한 번만 좌표를 잡는다(FlyingExchangeCard와 동일 패턴)
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(onDone, PASS_BUBBLE_MS);
+    return () => {
+      clearTimeout(t);
+      onDone();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 시 한 번만 타이머를 건다(PlayImpactBurst와 동일 패턴)
+  }, []);
+
+  return createPortal(
+    <div ref={elRef} className="pointer-events-none fixed z-[75] -translate-x-1/2 -translate-y-full" style={{ left: 0, top: 0 }}>
+      <span
+        className="block rounded-2xl border border-white/20 bg-black/80 px-3 py-1.5 text-xs font-bold break-keep text-amber-100 shadow-[0_8px_20px_-6px_rgba(0,0,0,0.8)]"
+        style={{ animation: `dalmuti-pass-bubble ${PASS_BUBBLE_MS}ms ease-out forwards` }}
+      >
+        💬 패스!
+      </span>
+    </div>,
+    document.body,
+  );
+}

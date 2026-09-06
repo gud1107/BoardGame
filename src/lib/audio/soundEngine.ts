@@ -1242,28 +1242,44 @@ class SoundEngine {
   }
 
   /**
-   * 달무티 — "패스!" 음성 (task brief §2, 2026-09-05 세션): 이 프로젝트는
-   * 저작권 문제로 실제 성우 mp3를 넣지 않고 모든 SFX를 코드로 합성하는 정책이라
-   * (파일 헤더 참고), 실제 사람 목소리가 필요한 이 기능은 그 정책과 동일한
-   * 정신으로 mp3 에셋 없이 브라우저 내장 Web Speech API
-   * (`SpeechSynthesisUtterance`)를 사용한다(AskUserQuestion으로 확정) — 에셋
-   * 용량 0, 지연 없음. `gate()`를 그대로 재사용해 SFX 뮤트/볼륨 설정을 따르고,
-   * 짧은 쿨다운으로 연속 패스 시 발화가 겹치지 않게 한다. 매 호출마다
-   * `speechSynthesis.cancel()`로 직전 발화를 끊고 새로 즉시 발음하므로, 연속
-   * 자동 패스가 이어져도 "패스! 패스! 패스!"가 밀리지 않고 항상 최신 패스만
-   * 또렷하게 들린다. 한국어 음성이 설치되어 있으면 그 음성을, 없으면
-   * `lang="ko-KR"` 지정만으로 브라우저 기본 처리에 맡긴다(음성 목록은 비동기
-   * 로드되므로 없을 수 있음 — 기능 저하일 뿐 에러는 아님).
+   * 달무티 — "패스!" 음성 (task brief §2, 2026-09-05 세션 신설 / 2026-09-06 세션
+   * 룸 전체 브로드캐스트 확장): 이 프로젝트는 저작권 문제로 실제 성우 mp3를 넣지
+   * 않고 모든 SFX를 코드로 합성하는 정책이라(파일 헤더 참고), 실제 사람 목소리가
+   * 필요한 이 기능은 그 정책과 동일한 정신으로 mp3 에셋 없이 브라우저 내장 Web
+   * Speech API(`SpeechSynthesisUtterance`)를 사용한다(AskUserQuestion으로 확정) —
+   * 에셋 용량 0, 지연 없음. `gate()`를 그대로 재사용해 짧은 쿨다운(0.2초, task
+   * brief의 "0.2~0.3초 큐 딜레이" 요구사항 충족)으로 연속 패스 시 발화가 겹치지
+   * 않게 한다. 매 호출마다 `speechSynthesis.cancel()`로 직전 발화를 끊고 새로
+   * 즉시 발음하므로, 여러 명(또는 봇)이 연달아 패스해도 "패스! 패스! 패스!"가
+   * 지저분하게 겹치지 않고 항상 최신 패스만 또렷하게 들린다(자연스러운 컷-후-재생
+   * 방식 — task brief의 큐/컷 두 옵션 중 컷 방식 채택, 기존 구현 그대로 재사용).
+   *
+   * `isSfxEffectivelyMuted` 체크 추가(2026-09-06 세션) — 기존 구현은 `sfxVolume`만
+   * `utterance.volume`에 반영하고 `masterMuted`/`sfxMuted` 자체는 전혀 확인하지
+   * 않아, 음소거 상태에서도 TTS가 그대로 들리는 실제 버그였음(Web Audio
+   * `sfxGain` 그래프를 타는 다른 SFX와 달리 `speechSynthesis`는 별도 파이프라인이라
+   * 게인 노드 뮤트가 적용되지 않았다). "음소거 상태는 엄격히 반영"이라는 이번
+   * 요청에 맞춰 여기서 직접 게이트한다.
+   *
+   * `seat` 파라미터(2026-09-06 세션, 방 전체 브로드캐스트 확장에 맞춰 추가) —
+   * 실제 성별 데이터가 이 프로젝트에 전혀 없어(AskUserQuestion으로 확인 후 "성별
+   * 차등 없음, 좌석 번호 기반 의사-차등"으로 확정) 진짜 성별 구분이 아니라 좌석
+   * 홀/짝에 따라 피치를 살짝 다르게 주는 순전히 장식용 변형이다 — "다른 사람이
+   * 패스했다"는 청각적 구분감을 주는 목적일 뿐, 특정 좌석이 항상 같은 캐릭터
+   * 음색이라는 의미 이상은 없다.
    */
-  speakPass() {
+  speakPass(seat?: number) {
     if (!this.gate("passVoice", 200)) return;
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     const settings = useAudioSettingsStore.getState();
+    if (isSfxEffectivelyMuted(settings)) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance("패스!");
     utterance.lang = "ko-KR";
     utterance.rate = 1.05;
-    utterance.pitch = 1.0;
+    // 좌석 번호 기반 의사-차등(실제 성별 데이터 없음, 순수 장식용) — 짝수/홀수
+    // 좌석을 살짝 다른 피치로 번갈아 재생해 "누가 말했는지"의 청각적 구분을 준다.
+    utterance.pitch = seat !== undefined && seat % 2 === 1 ? 1.22 : 0.9;
     utterance.volume = settings.sfxVolume;
     const koVoice = window.speechSynthesis.getVoices().find((v) => v.lang?.toLowerCase().startsWith("ko"));
     if (koVoice) utterance.voice = koVoice;

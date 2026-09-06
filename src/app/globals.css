@@ -1123,6 +1123,32 @@ body {
   }
 }
 
+/* 달무티's 패스 말풍선 (2026-09-06 세션, PassBubble in DalmutiEffects.tsx) —
+   다른 플레이어/AI 봇이 패스할 때 그 좌석 위에 1초간 튀어오르며 나타났다
+   끝에서 페이드아웃하는 "💬 패스!" 말풍선. */
+@keyframes dalmuti-pass-bubble {
+  0% {
+    transform: translateY(6px) scale(0.85);
+    opacity: 0;
+  }
+  15% {
+    transform: translateY(-4px) scale(1.05);
+    opacity: 1;
+  }
+  25% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-6px) scale(0.95);
+    opacity: 0;
+  }
+}
+
 /* 코요테's showdown backdrop (see CoyoteEffects.tsx / CoyoteHowlBanner) — a
    desert-toned wash that fades in behind the "코요테!" banner the instant the
    round leaves "playing" for "reveal"/"gameOver". */

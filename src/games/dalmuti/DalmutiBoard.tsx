@@ -11,15 +11,18 @@ import { CardFace, RoleBadge, type AuraTier } from "./CardArt";
 import {
   detectCommonerExchangeHistoryEvents,
   detectCommonerSwapEvents,
+  detectPassEvents,
   detectPlayImpactEvents,
   detectTaxEvents,
   detectTaxHighlightEvents,
   FlyingExchangeCard,
   FxButton,
+  PassBubble,
   PlayImpactBurst,
   ReceivedCardGlow,
   RevolutionBanner,
   type ExchangeHistoryEntry,
+  type PassEvent,
   type PlayImpactEvent,
   type TaxFlyEvent,
   type TaxHighlightEvent,
@@ -96,7 +99,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     // 보내므로, 수동 클릭이든 자동 패스든 항상 같은 SFX+음성을 듣는다.
     else if (action.type === "pass") {
       engine.playPassWhiff();
-      engine.speakPass();
+      engine.speakPass(viewerSeat);
     }
     onAction(action);
   }
@@ -142,10 +145,18 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   // 나올 때도 애니메이션이 매번 처음부터 다시 재생되도록 한다(globals.css 참고).
   const [playImpacts, setPlayImpacts] = useState<PlayImpactEvent[]>([]);
   const [shake, setShake] = useState<{ token: number; grand: boolean } | null>(null);
+  // 패스 말풍선 큐 (2026-09-06 세션) — 다른 트랜지언트 오버레이 큐(taxEvents 등)와
+  // 같은 "고유 id로 push, self-clean으로 pop" 패턴. seat만으로 key를 잡으면 같은
+  // 좌석이 두 트릭 연속으로 패스할 때 두 번째 말풍선이 첫 번째와 같은 key를 갖게
+  // 되어 리액트가 재마운트하지 않고 재사용해버리는 문제(react-forced-remount
+  // sibling-key 계열 버그, 과거 러브 윈즈 올 §4에서 실제로 겪음)가 생길 수 있어
+  // 매번 증가하는 id를 key로 쓴다.
+  const [passBubbles, setPassBubbles] = useState<(PassEvent & { id: number })[]>([]);
   if (trackedState !== state) {
     const newTax = detectTaxEvents(trackedState, state);
     const newCommonerSwaps = detectCommonerSwapEvents(trackedState, state);
     const newPlayImpacts = detectPlayImpactEvents(trackedState, state);
+    const newPasses = detectPassEvents(trackedState, state);
     const newTrick = state.lastTrickResult !== trackedState.lastTrickResult ? state.lastTrickResult : null;
     const newRevolution = state.revolutionDeclared !== trackedState.revolutionDeclared ? state.revolutionDeclared : null;
     setTrackedState(state);
@@ -163,6 +174,24 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
       // 토큰으로 재사용 — 렌더 중에는 ref를 건드릴 수 없으므로(react-hooks/refs)
       // 별도 카운터 ref 없이 이미 갖고 있는 값으로 짝/홀만 구분하면 충분하다.
       setShake({ token: newPlayImpacts[newPlayImpacts.length - 1].playIndex, grand });
+    }
+    if (newPasses.length > 0) {
+      setPassBubbles((prev) => {
+        let nextId = (prev.at(-1)?.id ?? 0) + 1;
+        return [...prev, ...newPasses.map((e) => ({ ...e, id: nextId++ }))];
+      });
+      // 룸 전체 "패스!" 음성 브로드캐스트(task brief, 2026-09-06 세션) — 본인
+      // 좌석은 버튼 클릭 즉시 `dispatch()`에서 이미 로컬로 재생했으므로(왕복
+      // 지연 없는 즉각 반응 유지 목적) 여기서는 제외하고, 다른 사람/AI 봇의
+      // 패스에 한해 이 diff-트리거 지점에서 재생 — `playCardSlam`이 카드
+      // 출도에 대해 하는 것과 동일한 "actor 전용 즉시 재생 + 전원 대상
+      // diff-트리거 재생" 분리 구조.
+      const engine = getSoundEngine();
+      for (const e of newPasses) {
+        if (e.seat === viewerSeat) continue;
+        engine.playPassWhiff();
+        engine.speakPass(e.seat);
+      }
     }
     if (newTax.length > 0 || newCommonerSwaps.length > 0) {
       setTaxEvents((prev) => {
@@ -237,6 +266,9 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   }, []);
   const clearPlayImpact = useCallback((id: number) => {
     setPlayImpacts((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+  const clearPassBubble = useCallback((id: number) => {
+    setPassBubbles((prev) => prev.filter((e) => e.id !== id));
   }, []);
   useEffect(() => {
     if (!trickFlash) return;
@@ -835,6 +867,12 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
           getSeatEl={(seat) => seatRowRefs.current.get(seat) ?? null}
           onDone={handleTaxDone}
         />
+      ))}
+
+      {/* 패스 말풍선 — 본인 포함 모든 좌석의 패스에 표시(음성 재생 여부와는
+          별개 조건, task brief "누가 패스했는지 시각·청각적으로 동시 인지"). */}
+      {passBubbles.map((event) => (
+        <PassBubble key={event.id} event={event} getSeatEl={(seat) => seatRowRefs.current.get(seat) ?? null} onDone={() => clearPassBubble(event.id)} />
       ))}
 
       {/* Large tax-exchange recap popup — one at a time, additive on top of

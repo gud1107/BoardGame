@@ -1,6 +1,53 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-05 (**보드게임허브 전 게임 공통 — 턴제 게임 전수 'MY TURN' 중앙 배너 + 차임
+_최종 갱신: 2026-09-06 (**달무티(The Great Dalmuti) — 패스 음성/말풍선 룸 전체 브로드캐스트 세션**
+— "본인뿐만 아니라 다른 플레이어/AI 봇이 패스를 선언했을 때도 룸 안의 모든 참가자 화면에서
+'패스!' 음성이 실시간으로 들리도록 확장, 패스한 좌석에 말풍선 표시, 연속 패스 시 음성 겹침
+방지" 요청. 진행 전 조사에서 요청서가 전제한 `useDalmuti.ts`/`server/games/dalmuti.ts`/
+`src/utils/sound.ts`는 이 코드베이스에 없음을 확인(반복되는 요청 전제-실제 코드 불일치 패턴) —
+실제는 서버 소켓이 아니라 Supabase Realtime 브로드캐스트 락스텝 구조(`DalmutiGame.tsx`)이고
+오디오는 공용 `src/lib/audio/soundEngine.ts`. 원인 파악: 기존 `speakPass()`("패스!" TTS,
+2026-09-05 세션 신설)는 `DalmutiBoard.tsx`의 로컬 `dispatch()`에서만 호출돼 본인이 직접 패스
+버튼을 눌렀을 때만 재생됐고, AI 봇의 패스는 `useBotAutoplay`가 이 `dispatch()`를 거치지 않고
+`handleAction`으로 곧장 브로드캐스트하므로 호스트를 포함해 아무도 소리를 듣지 못하는 상태였음
+— 신고 증상과 정확히 일치. 남/여 음성 피치 차등 여부(실제 성별 데이터 없음)와 기존 "패스
+톤"(playPassWhiff)도 함께 전원에게 재생할지를 `AskUserQuestion`으로 확인 후 진행: **좌석 번호
+기반 의사-차등(진짜 성별 아님)** / **톤+음성 함께 전원 재생**(둘 다 권장 옵션 채택).
+
+**구현**: `DalmutiEffects.tsx`에 `detectPassEvents`(카드 출도 이펙트의 `detectPlayImpactEvents`와
+동일한 "연속 락스텝 스냅샷 diff" 기법 — engine.ts가 트릭 페이즈 중 새 play 없는 변화는 pass밖에
+없다는 사실을 이용해 순수 상태 비교만으로 패스 좌석을 추론, 트릭이 그 패스로 종료되는 경우도
+포함)와 `PassBubble`(패스한 좌석의 스코어보드 행 바로 위에 "💬 패스!" 1초 팝업, `FlyingExchangeCard`와
+동일한 seat-anchor 포탈 기법이나 좌표를 ref로 직접 DOM에 써서 `react-hooks/set-state-in-effect`
+회피) 신설. `DalmutiBoard.tsx`의 락스텝 diff 블록(카드 출도 타격 이펙트와 같은 위치)에서 이
+이벤트를 받아 (a) 시야의 모든 좌석에 말풍선 표시 (b) 본인 좌석이 아닌 패스에 한해
+`playPassWhiff`+`speakPass`를 재생 — 본인 좌석은 버튼 클릭 즉시 `dispatch()`에서 이미 재생 중이라
+왕복 지연 없는 즉각 반응을 유지하기 위해 diff 트리거에서는 제외(안 그러면 브로드캐스트가 되돌아올
+때 소리가 겹쳐 끊김). `soundEngine.ts`의 `speakPass(seat?)`에 좌석 홀/짝 기반 피치 차등(0.9/1.22,
+순수 장식용) 추가 + **`isSfxEffectivelyMuted` 체크 신규 추가**(기존 구현은 `sfxVolume`만 반영하고
+`masterMuted`/`sfxMuted` 자체는 전혀 확인하지 않아 음소거 상태에서도 TTS가 들리는 실제 버그였음 —
+Web Audio `sfxGain` 그래프를 타는 다른 SFX와 달리 `speechSynthesis`는 별도 파이프라인이라 게인
+뮤트가 적용되지 않았음). 200ms `gate()` 쿨다운 + 매 호출 `speechSynthesis.cancel()`은 기존 구현
+그대로 재사용(연속 패스 시 자연스러운 컷-후-재생, task brief의 0.2~0.3초 큐 요구사항 충족).
+`globals.css`에 `dalmuti-pass-bubble` 키프레임 추가. 룰 변경이 없어 `달무티.md` 룰북은 갱신하지
+않음(2026-09-04/05 세션과 동일 판단).
+
+**검증**: `npx tsc --noEmit`(0 에러) / 터치한 파일 전부 `npx eslint`(0 에러, 0 경고 — `PassBubble`
+초기 구현이 `useState`로 좌표를 관리해 `react-hooks/set-state-in-effect`에 걸렸던 것을 위
+DOM-ref 직접 조작 방식으로 수정) / `npx vitest run`(저장소 전체 49개 파일·1652개 테스트 통과,
+`detectPassEvents` 신규 단위 테스트 5개 포함) / `npm run build` 정상 완료. **실브라우저 검증**:
+캐시된 Playwright로 3인 방(나+봇 2명)을 만들어 실제로 진행 — 사이트 기본값(전부 음소거) 때문에
+헤더의 🔇/🔊 토글은 `masterMuted`만 뒤집고 `sfxMuted`는 별도(⚙ 설정 모달)라 처음엔 TTS가 계속
+막혀 있었음을 로그로 확인 후 두 값을 함께 풀어 재검증 — 다른 좌석(봇)의 패스로 스코어보드 행 위에
+"💬 패스!" 말풍선이 정확한 위치에 뜨는 스크린샷 확보, 동시에 `speechSynthesis.speak()` 호출 로그에서
+`{text:"패스!", pitch:0.9}`(짝수 좌석 피치)가 실제로 잡힘 — 말풍선/음성 양쪽 모두 다른 좌석의 패스에
+대해 정상 트리거됨을 확인. 개발 서버(`next dev`)에는 이 세션과 무관한 기존 미해결
+`PatchNoteButton` 하이드레이션 불일치(우발적 dev-overlay 간섭)가 있어 프로덕션 빌드(`next
+start`)로 우회해 검증.
+
+**커밋/배포**: 사용자가 이번엔 명시적으로 커밋·푸시·운영배포까지 요청 — 이 세션에서 그대로 진행.)_
+
+_이전 갱신: 2026-09-05 (**보드게임허브 전 게임 공통 — 턴제 게임 전수 'MY TURN' 중앙 배너 + 차임
 사운드 일괄 탑재 세션** — "턴 개념이 있는 모든 보드게임(달무티/페루도/코요테/운명전쟁/랫어탯캣/
 로스트시티)에 본인 차례 도래 시 화면 중앙 'MY TURN' 배너와 Web Audio 차임을, 게임별 재구현 없는
 공용 훅/컴포넌트로 일괄 탑재해달라"는 요청. 진행 전 조사에서 요청 전제와 정면 충돌하는 지점을

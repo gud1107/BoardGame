@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   detectCommonerExchangeHistoryEvents,
   detectCommonerSwapEvents,
+  detectPassEvents,
   detectPlayImpactEvents,
   detectTaxEvents,
   detectTaxHighlightEvents,
@@ -1117,6 +1118,61 @@ describe("detectPlayImpactEvents (PlayImpactBurst trigger, 2026-09-05 세션)", 
     });
     const next = makeState({ trick: { rankValue: null, count: 0, plays: [], leaderSeat: 1, consecutivePasses: 0 } });
     expect(detectPlayImpactEvents(prev, next)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectPassEvents (룸 전체 패스 말풍선/음성 브로드캐스트, 2026-09-06 세션) —
+// engine.ts는 트릭 플레이와 달리 "누가 패스했는지" 별도 로그를 남기지 않으므로,
+// 이 detector는 순수하게 상태 전이만 보고 추론한다: 트릭 페이즈 중 새 play가
+// 추가되지 않은 변화는 pass 말고는 있을 수 없다는 전제(engine.ts의
+// `applyAction`이 트릭 페이즈에서 playCards/pass만 통과시킴).
+// ---------------------------------------------------------------------------
+
+describe("detectPassEvents (PassBubble + 룸 전체 음성 트리거, 2026-09-06 세션)", () => {
+  it("returns nothing when the state reference is unchanged", () => {
+    const state = makeState();
+    expect(detectPassEvents(state, state)).toEqual([]);
+  });
+
+  it("emits the pre-pass active seat when the trick simply continues", () => {
+    const prev = makeState({
+      activeSeat: 1,
+      trick: { rankValue: 4, count: 1, plays: [{ seat: 0, cards: [card(4)] }], leaderSeat: 0, consecutivePasses: 0 },
+    });
+    const next = makeState({
+      activeSeat: 2,
+      trick: { rankValue: 4, count: 1, plays: [{ seat: 0, cards: [card(4)] }], leaderSeat: 0, consecutivePasses: 1 },
+    });
+    expect(detectPassEvents(prev, next)).toEqual([{ seat: 1 }]);
+  });
+
+  it("still attributes the pass to the pre-pass active seat even when the last pass resolves the trick (reset)", () => {
+    const prev = makeState({
+      activeSeat: 1,
+      trick: { rankValue: 4, count: 1, plays: [{ seat: 0, cards: [card(4)] }], leaderSeat: 0, consecutivePasses: 0 },
+    });
+    const next = makeState({
+      activeSeat: 0,
+      lastTrickResult: { winnerSeat: 0, rankValue: 4, count: 1, plays: [{ seat: 0, cards: [card(4)] }] },
+      trick: { rankValue: null, count: 0, plays: [], leaderSeat: 0, consecutivePasses: 0 },
+    });
+    expect(detectPassEvents(prev, next)).toEqual([{ seat: 1 }]);
+  });
+
+  it("emits nothing when the change was a new card play, not a pass", () => {
+    const prev = makeState({ activeSeat: 0 });
+    const next = makeState({
+      activeSeat: 1,
+      trick: { rankValue: 4, count: 1, plays: [{ seat: 0, cards: [card(4)] }], leaderSeat: 0, consecutivePasses: 0 },
+    });
+    expect(detectPassEvents(prev, next)).toEqual([]);
+  });
+
+  it("emits nothing outside the trick phase (e.g. tax return turns)", () => {
+    const prev = makeState({ phase: "taxReturn", activeSeat: 0 });
+    const next = makeState({ phase: "taxReturn", activeSeat: 1 });
+    expect(detectPassEvents(prev, next)).toEqual([]);
   });
 });
 
