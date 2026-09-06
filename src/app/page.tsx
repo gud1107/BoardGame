@@ -26,6 +26,9 @@ export default function DashboardPage() {
   const [query, setQuery] = useState("");
   const [filterIdx, setFilterIdx] = useState(0);
   const [genreFilter, setGenreFilter] = useState<GenreFilter>("all");
+  // 2026-09-06 AskUserQuestion: 모바일 검색어 입력 중엔 캐러셀/쇼케이스를
+  // 숨기고 결과 그리드를 최상단으로 끌어올린다 (인원수/장르 필터 칩은 유지).
+  const isSearching = query.trim().length > 0;
 
   // Search + player-count filter only — genre is applied separately below so
   // the collection showcase (always shown at the "전체" genre view) and the
@@ -124,11 +127,23 @@ export default function DashboardPage() {
           horizontal padding below `sm`, since `sm:px-6` doesn't apply here)
           so each row's cards can bleed to the viewport edge — the "next card
           peeks in" swipe affordance only works if the row isn't boxed in by
-          the container's padding. */}
-      <div className="-mx-4 sm:hidden">
-        {GAME_CATEGORIES.map((category) => (
-          <GameCategoryRow key={category.id} category={category} />
-        ))}
+          the container's padding.
+
+          2026-09-06 AskUserQuestion: while a mobile search query is active,
+          this collapses out (grid-rows 1fr→0fr + opacity, not unmounted) so
+          the search results grid below reads as promoted to the top of the
+          viewport instead of pushed down by the carousel. Reappears with the
+          same transition when the query is cleared. */}
+      <div
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out sm:hidden ${
+          isSearching ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+        }`}
+      >
+        <div className="-mx-4 overflow-hidden">
+          {GAME_CATEGORIES.map((category) => (
+            <GameCategoryRow key={category.id} category={category} />
+          ))}
+        </div>
       </div>
 
       {/* Full searchable catalog. On mobile this now renders below the
@@ -136,8 +151,14 @@ export default function DashboardPage() {
           registered game — not just the 6 curated ones — stays reachable via
           search or scroll (2026-09-02, AskUserQuestion: keep the carousel,
           add this section underneath on mobile too). */}
-      <div className="mt-8 sm:mt-0">
-        <h2 className="mb-3 text-base font-bold text-white sm:hidden">🔍 전체 게임 검색</h2>
+      <div className={`sm:mt-0 ${isSearching ? "mt-4" : "mt-8"}`}>
+        {/* 2026-09-06: swaps to a live match-count header while a mobile
+            search query is active (kept in-flow, not collapsed, since this
+            IS the replacement content for that moment — no animation needed
+            for a text swap). Reverts to the static heading once cleared. */}
+        <h2 className="mb-3 text-base font-bold text-white sm:hidden">
+          {isSearching ? `검색 결과 (${filtered.length}개)` : "🔍 전체 게임 검색"}
+        </h2>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {/* Hidden on mobile — replaced by the sticky search bar pinned
               above the page title (2026-09-03). Kept as-is for sm+, where
@@ -209,7 +230,20 @@ export default function DashboardPage() {
         </div>
 
         {genreFilter === "all" && (
-          <CollectionShowcase collectionId="netflix-death-game" games={baseFiltered} />
+          // 2026-09-06 AskUserQuestion: same mobile-search collapse as the
+          // carousel above, but this section stays visible on sm+ regardless
+          // of search state (`sm:grid-rows-[1fr] sm:opacity-100` overrides
+          // the collapsed classes at that breakpoint) since desktop's layout
+          // isn't in scope for this change.
+          <div
+            className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out sm:grid-rows-[1fr] sm:opacity-100 ${
+              isSearching ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+            }`}
+          >
+            <div className="overflow-hidden">
+              <CollectionShowcase collectionId="netflix-death-game" games={baseFiltered} />
+            </div>
+          </div>
         )}
 
         {filtered.length > 0 ? (
