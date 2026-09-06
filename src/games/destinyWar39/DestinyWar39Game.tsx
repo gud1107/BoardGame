@@ -137,6 +137,7 @@ type Phase =
   | "waiting"
   | "playing"
   | "post-game"
+  | "claim-seat"
   | "room-full"
   | "supabase-missing"
   | "channel-error";
@@ -321,7 +322,10 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
       setGameState(startGame(playerCount, seed));
       setFinalResult(null);
-      setPhase("playing");
+      // A "claim-seat" spectator hasn't picked their seat yet — let the state
+      // stay current for them without yanking them into a `mySeat === null`
+      // playing screen (see `claimSeat`).
+      setPhase((p) => (p === "claim-seat" ? p : "playing"));
     });
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
@@ -455,7 +459,8 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
       setRoomBetting(betting);
       setGameState(state);
       setFinalResult(null);
-      setPhase("playing");
+      // Same "claim-seat" guard as the game-start handler above.
+      setPhase((p) => (p === "claim-seat" ? p : "playing"));
     });
 
     let resolveFirstSync = () => {};
@@ -513,7 +518,27 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
           seat = 0;
           while (taken.has(seat)) seat++;
           const hostRecord = existing.find((o) => o.isHost);
-          if (hostRecord && seat >= hostRecord.targetPlayerCount!) {
+          // The room's *live* seat count is the running game's actual
+          // `playerCount` once it exists — which can be smaller than the
+          // lobby's original `targetPlayerCount` after an early "지금 시작"
+          // (see `sendGameStart` below) — and falls back to the lobby target
+          // pre-game.
+          const liveSeatCount = gameStateRef.current?.playerCount ?? hostRecord?.targetPlayerCount;
+          if (liveSeatCount !== undefined && seat >= liveSeatCount) {
+            // Every seat in the live game is already a real occupant or an
+            // AI-controlled one. Rather than flatly refusing entry, offer to
+            // take over an AI seat — either one nobody ever filled
+            // (`botSeatsRef`) or one whose original occupant disconnected and
+            // got voted into a bot (`isSeatTakenOver`); see the "claim-seat"
+            // phase below (2026-09-06 session).
+            const claimable = Array.from({ length: liveSeatCount }, (_, s) => s as SeatIndex).filter(
+              (s) => !existing.some((o) => o.seat === s) && (botSeatsRef.current.includes(s) || isSeatTakenOver(botTakeoverRef.current, String(s))),
+            );
+            if (claimable.length > 0) {
+              requestStateSync();
+              setPhase("claim-seat");
+              return;
+            }
             setPhase("room-full");
             return;
           }
@@ -573,12 +598,59 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
+  // Mid-game "spectator claims an AI-controlled seat" (2026-09-06 session).
+  // The subscribe callback above already decided this device landed on
+  // "claim-seat"; this recomputes the same list live so the choice stays in
+  // sync if someone else claims a seat, or a takeover reverts, while this
+  // client is still deciding.
+  const liveSeatCount = gameState?.playerCount ?? knownTargetPlayerCount;
+  const claimableSeats = useMemo(() => {
+    if (phase !== "claim-seat") return [];
+    const humanSeats = new Set(occupants.map((o) => o.seat));
+    return Array.from({ length: liveSeatCount }, (_, s) => s as SeatIndex).filter(
+      (s) => !humanSeats.has(s) && (botSeatSet.has(s) || isSeatTakenOver(botTakeover, String(s))),
+    );
+  }, [phase, occupants, liveSeatCount, botSeatSet, botTakeover]);
+
+  function claimSeat(seat: SeatIndex) {
+    if (!roomCode || occupants.some((o) => o.seat === seat)) return;
+    storeSeat(roomCode, seat);
+    setMySeat(seat);
+    const idx = botSeatsRef.current.indexOf(seat);
+    if (idx !== -1) {
+      const nextBotSeats = botSeatsRef.current.filter((_, i) => i !== idx);
+      const nextBotLevels = botLevelsRef.current.filter((_, i) => i !== idx);
+      botSeatsRef.current = nextBotSeats;
+      setBotSeats(nextBotSeats);
+      botLevelsRef.current = nextBotLevels;
+      setBotLevels(nextBotLevels);
+      channelRef.current?.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: nextBotSeats, botLevels: nextBotLevels } });
+    }
+    // A seat that converted via a disconnect vote also needs its takeover
+    // record cleared — same unified "someone real is back in control" event
+    // the original occupant's own reclaim button sends (see
+    // `proveStillHereOrReclaim`); crediting a brand-new player for what
+    // happens next is exactly what should happen once they've taken the seat.
+    if (isSeatTakenOver(botTakeoverRef.current, String(seat))) {
+      channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "reclaim", seatKey: String(seat) } } });
+    }
+    channelRef.current?.track({ deviceId, seat, name: myName, playerId: myPlayerId } satisfies Occupant);
+    requestStateSync();
+    setPhase(gameStateRef.current ? "playing" : "waiting");
+  }
+
   const sendGameStart = useCallback(() => {
     startSentRef.current = true;
+    // Actual filled seats at the moment of firing — not the lobby's original
+    // `targetPlayerCount` — so an early "지금 시작" with fewer than the full
+    // target starts a *smaller* game instead of leaving seats nobody (human
+    // or bot) will ever act for (flexible-start feature, 2026-09-06 session).
+    const activePlayerCount = (occupantsRef.current.length + botSeatsRef.current.length) as PlayerCount;
+    playerCountRef.current = activePlayerCount;
     channelRef.current?.send({
       type: "broadcast",
       event: "game-start",
-      payload: { seed: randomSeed(), playerCount: playerCountRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
+      payload: { seed: randomSeed(), playerCount: activePlayerCount, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
     });
   }, []);
 
@@ -588,6 +660,14 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
       sendGameStart();
     }
   }, [occupants, botSeats, phase, knownTargetPlayerCount, isHost, sendGameStart]);
+
+  // Host-only: start immediately once the game's real minimum is met,
+  // without waiting for the lobby's full `targetPlayerCount` — the auto-start
+  // effect above still covers "the room happens to fill all the way up",
+  // same "지금 시작" pattern as dalmuti/coyote/perudo's waiting rooms.
+  const canStartNow = isHost && phase === "waiting"
+    && occupants.length + botSeats.length >= MIN_PLAYERS
+    && occupants.length + botSeats.length < knownTargetPlayerCount;
 
   const addBotAtSeat = useCallback(
     (seat: SeatIndex, level: BotLevel) => {
@@ -916,6 +996,42 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
     );
   }
 
+  if (phase === "claim-seat") {
+    return withGuard(
+      <div className="flex flex-col items-center gap-4 rounded-2xl border border-fuchsia-400/30 bg-fuchsia-400/10 p-8 text-center">
+        <span className="text-3xl">👀</span>
+        <h2 className="break-keep text-lg font-bold text-white">이미 진행 중인 방이에요</h2>
+        <p className="max-w-sm break-keep text-sm text-fuchsia-100/80">
+          모든 자리가 찼지만, 아직 AI가 대신 플레이 중인 자리가 있어요. 원하는 자리를 골라 지금 바로 참여해보세요.
+        </p>
+        {claimableSeats.length > 0 ? (
+          <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
+            {claimableSeats.map((seat) => {
+              const botIdx = botSeats.indexOf(seat);
+              const takeover = botTakeover.takeovers[String(seat)];
+              const label = takeover ? `${takeover.originalName}님의 자리 (현재 AI)` : botLabel(botIdx, botLevels[botIdx]);
+              return (
+                <button
+                  key={seat}
+                  onClick={() => claimSeat(seat)}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/80 transition hover:border-fuchsia-400 hover:text-white"
+                >
+                  <span className="break-keep">{seat + 1}번: {label}</span>
+                  <span className="font-semibold text-fuchsia-300">참여하기 →</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="break-keep text-sm text-rose-200/80">방금 다른 사람이 마지막 자리를 가져갔어요.</p>
+        )}
+        <button onClick={handleLeave} className="mt-2 rounded-full border border-white/15 px-5 py-2 text-sm text-white/70 hover:border-white/30">
+          처음으로
+        </button>
+      </div>
+    );
+  }
+
   if (phase === "room-full") {
     return withGuard(
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center">
@@ -1085,7 +1201,19 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
                 );
               })}
             </div>
-            <p className="text-xs text-white/40">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다.</p>
+            <p className="text-xs text-white/40">
+              {occupants.length + botSeats.length >= knownTargetPlayerCount
+                ? `${knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다.`
+                : `최소 ${MIN_PLAYERS}명이 모이면 방장이 바로 시작할 수 있어요.`}
+            </p>
+            {canStartNow && (
+              <button
+                onClick={sendGameStart}
+                className="rounded-full bg-fuchsia-600 px-4 py-2 text-xs font-semibold text-white hover:bg-fuchsia-500"
+              >
+                🚀 지금 시작 ({occupants.length + botSeats.length}명)
+              </button>
+            )}
           </>
         )}
       </div>

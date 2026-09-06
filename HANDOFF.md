@@ -1,6 +1,55 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-06 (**패치노트 시스템 09-02~09-06 백필 세션** — "로비에 [📢 패치노트]
+_최종 갱신: 2026-09-06 (**운명전쟁39 — 유연한 게임 시작(Flexible Start) + 중도 참여 세션** —
+"공용 로비/대기실에 최대 인원이 안 차도 게임별 최소 인원만 모이면 방장이 바로 시작할 수 있는
+기능을 구현해달라"는 요청. 요청서는 `server/roomManager.ts`, `src/server/socket/`,
+`WaitingRoom.tsx`, `RoomControlBar.tsx`의 존재를 전제했으나 이 저장소엔 서버 자체가 없고
+(Supabase Realtime 락스텝, 27개 게임이 각자 `<Game>Game.tsx`에 대기실 로직을 개별 구현) —
+반복되는 요청 전제-실제 코드 불일치 패턴의 또 다른 사례. 더 나아가 **조사 결과 요청 기능 자체가
+인원 가변 게임 20개 중 19개(달무티/코요테/페루도/아발론/방/센추리/쿠/파이브큐컴버스/포세일/
+그리드포커/언덕의진실/라스베가스/러브레터/노생큐/랫어탯캣/스플렌더/스팟더디퍼런스/소환사의협곡/
+웜)에 이미 구현돼 있었음**(게임별 `MIN_PLAYERS`~`MAX_PLAYERS` 범위에서 방장이 `targetPlayerCount`를
+정하고, 실제 인원이 `MIN_PLAYERS` 이상이면 "🚀 지금 시작" 버튼 노출). 나머지 7개(하나미코지/
+로스트시티/러브윈즈올/말달리자/망각의지뢰/언어의조각/쇼미더코인)는 애초에 고정 2인(p1/p2)
+설계라 최소/최대 개념이 없음. **실제 갭은 `destinyWar39`(운명전쟁39) 하나뿐** — 같은
+`MIN_PLAYERS`/`MAX_PLAYERS`/`targetPlayerCount` 인프라는 있었지만 "지금 시작" 버튼만 빠져 있었음.
+
+`AskUserQuestion`으로 2가지 확인 후 진행: **작업 범위는 destinyWar39만**(나머지 19개는 이미
+정상 동작하므로 재검증 없이 손대지 않음) / 요청서의 "게임 도중 빈 슬롯에 관전자 난입" 기능도
+**이번에 함께 구현**(모두 명시적 선택, 권장 여부와 무관하게 사용자가 직접 지정).
+
+**구현** (`src/games/destinyWar39/DestinyWar39Game.tsx`만 수정, engine.ts 미변경): (1) 대기실에
+`MIN_PLAYERS` 이상만 모이면 "🚀 지금 시작 (N명)" 버튼 추가 — 클릭 시 `sendGameStart`가 로비의
+원래 `targetPlayerCount`(예: 8) 대신 **그 순간의 실제 인원**(`occupants+botSeats`, 예: 5)을
+`startGame`에 전달하도록 수정, 아무도 제어하지 않는 고아 좌석이 남지 않게 함(다른 19개 게임의
+기존 "지금 시작" 버튼은 여전히 예전 target을 그대로 보내는 동일한 잠재 문제가 있음 — 이번 확정
+범위 밖이라 손대지 않았으나 후속 점검 가치 있음). (2) 신규 `"claim-seat"` 페이즈 — 모든 좌석이
+찼지만 그중 일부가 AI 제어 중(로비에서 방장이 채운 봇이거나, 접속 끊김 투표로 전환된 좌석 모두
+포함)일 때, 새로 접속한 관전자에게 "room-full" 대신 좌석 목록을 보여주고 원하는 자리를 골라
+참여하게 함 — `bot-roster` 브로드캐스트로 봇 명단에서 제거하고, 투표 전환 좌석이면 원래 있던
+`reclaim` 이벤트(기존 "원래 유저 복귀" 용도)를 재사용해 `botTakeover` 상태도 정리(새 참여자가
+이후 진행을 온전히 이어받는 것이 맞다고 판단, `botTakeover.ts` 자체는 미변경이라 이 모듈을 쓰는
+나머지 5개 게임에 영향 없음). `game-start`/`state-sync` 핸들러의 무조건적 `setPhase("playing")`은
+`claim-seat` 단계에서 아직 좌석을 못 고른 관전자를 밀어내지 않도록 조건부로 수정.
+
+부수적으로, 이번 세션 도중 **`destinyWar39Game.tsx` 실제 파일명이 대소문자만 다르게
+(`destinyWar39Game.tsx`) 저장돼 있어 `next build`(Turbopack)가 `playableGames.tsx`의
+`import("./destinyWar39/DestinyWar39Game")`를 못 찾고 빌드 실패하는 것을 발견** — git 추적
+경로(`DestinyWar39Game.tsx`)와 일치하도록 파일명을 바로잡아 해결(내용 변경 없음, 이 세션의
+코드 수정과 무관한 기존 환경 문제).
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint .`(0 에러/경고) / `npx vitest run`(49개 파일·
+1652개 테스트 통과, engine.ts 미변경이라 전부 그대로 통과) / `npm run build`(next build, Turbopack
+컴파일·정적 페이지 생성 전부 성공). 실브라우저 스크린샷 검증은 이번 세션에서 dev 서버가 샌드박스
+메모리 부족으로 한 차례 죽어 재기동까지만 확인했고, 빌드/린트/테스트 전부 통과 + 이미 19개
+게임에서 검증된 동일 패턴을 그대로 재사용한 코드 수준 확신으로 대체(필요 시 후속 세션에서 실
+플레이 스크린샷 추가 가능).
+
+**커밋/배포**: 이 세션과 무관한 기존 워킹트리 변경(쇼미더코인 룰북 md, 말달리자 이미지 자산
+등)은 건드리지 않고 `DestinyWar39Game.tsx`/`HANDOFF.md` 두 파일만 스테이징해 커밋 → `git push
+origin main` → Vercel 자동 배포 확인.)_
+
+_이전 갱신: 2026-09-06 (**패치노트 시스템 09-02~09-06 백필 세션** — "로비에 [📢 패치노트]
 버튼/모달을 구축하고 최근 진행된 개선 사항을 일자별로 정리해 최신화해달라"는 요청. 요청서는
 `src/data/patchNotes.ts` + `PatchNoteModal.tsx`를 새로 만드는 것을 전제했으나, 실제로는 이미
 [src/constants/patchNotes.ts](src/constants/patchNotes.ts) + `PatchNoteButton.tsx`/
