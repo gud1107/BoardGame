@@ -14,6 +14,7 @@ import AvalonBoard from "./AvalonBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
+import RulebookGate from "@/components/lobby/RulebookGate";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import { v4 as uuid } from "uuid";
 import type { ChatMessage, SendResult } from "@/lib/chat/types";
@@ -694,31 +695,34 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "choose") {
     return withGuard(
-      <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
-        <span className="text-4xl">🗡️</span>
-        <h2 className="text-lg font-bold text-white">아발론 온라인 대전</h2>
-        <p className="text-sm text-white/50">5~10명이 각자 기기로 접속해서 실시간으로 플레이해요.</p>
-        <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
-          <button
-            onClick={() => {
-              setIntent("create");
-              setPhase("enter-name");
-            }}
-            className="w-full rounded-xl bg-amber-600 py-3 text-sm font-semibold text-white transition hover:bg-amber-500"
-          >
-            🎲 방 만들기
-          </button>
-          <button
-            onClick={() => {
-              setIntent("join");
-              setPhase("enter-name");
-            }}
-            className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30"
-          >
-            🔑 초대 코드로 참여
-          </button>
-        </div>
-      </div>
+      <RulebookGate
+        gameId="avalon"
+        icon="🗡️"
+        title="아발론 온라인 대전"
+        description={<p className="text-sm text-white/50">5~10명이 각자 기기로 접속해서 실시간으로 플레이해요.</p>}
+        actions={
+          <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
+            <button
+              onClick={() => {
+                setIntent("create");
+                setPhase("enter-name");
+              }}
+              className="w-full rounded-xl bg-amber-600 py-3 text-sm font-semibold text-white transition hover:bg-amber-500"
+            >
+              🎲 방 만들기
+            </button>
+            <button
+              onClick={() => {
+                setIntent("join");
+                setPhase("enter-name");
+              }}
+              className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30"
+            >
+              🔑 초대 코드로 참여
+            </button>
+          </div>
+        }
+      />
     );
   }
 

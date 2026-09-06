@@ -25,6 +25,7 @@ import ShowMeTheCoinBoard, { COUNT_REVEAL_SECONDS, SHOWDOWN_SECONDS } from "./Sh
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
+import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import {
@@ -790,31 +791,35 @@ export default function ShowMeTheCoinGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "choose") {
     return withGuard(
-      <div className="flex flex-col items-center gap-4 rounded-2xl border border-pink-500/20 bg-gradient-to-b from-[#1a0b12] via-[#0d0610] to-black p-8 text-center">
-        <span className="text-4xl">🪙</span>
-        <h2 className="text-lg font-bold text-white">쇼미더코인 온라인 대전</h2>
-        <p className="text-sm text-white/50">두 사람이 각자 기기로 접속해서 실시간으로 플레이해요.</p>
-        <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
-          <button
-            onClick={() => {
-              setIntent("create");
-              setPhase("enter-name");
-            }}
-            className="w-full rounded-xl bg-gradient-to-r from-pink-500 to-amber-500 py-3 text-sm font-semibold text-black transition hover:brightness-110"
-          >
-            🎲 방 만들기
-          </button>
-          <button
-            onClick={() => {
-              setIntent("join");
-              setPhase("enter-name");
-            }}
-            className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30"
-          >
-            🔑 초대 코드로 참여
-          </button>
-        </div>
-      </div>,
+      <RulebookGate
+        gameId="show-me-the-coin"
+        containerClassName="border-pink-500/20 bg-gradient-to-b from-[#1a0b12] via-[#0d0610] to-black"
+        icon="🪙"
+        title="쇼미더코인 온라인 대전"
+        description={<p className="text-sm text-white/50">두 사람이 각자 기기로 접속해서 실시간으로 플레이해요.</p>}
+        actions={
+          <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
+            <button
+              onClick={() => {
+                setIntent("create");
+                setPhase("enter-name");
+              }}
+              className="w-full rounded-xl bg-gradient-to-r from-pink-500 to-amber-500 py-3 text-sm font-semibold text-black transition hover:brightness-110"
+            >
+              🎲 방 만들기
+            </button>
+            <button
+              onClick={() => {
+                setIntent("join");
+                setPhase("enter-name");
+              }}
+              className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30"
+            >
+              🔑 초대 코드로 참여
+            </button>
+          </div>
+        }
+      />,
     );
   }
 

@@ -10,6 +10,7 @@ import { useBackgroundResync } from "@/hooks/useBackgroundResync";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
+import RulebookGate from "@/components/lobby/RulebookGate";
 import {
   activeVoteFor,
   INITIAL_BOT_TAKEOVER_STATE,
@@ -695,33 +696,38 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "choose") {
     return withGuard(
-      <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
-        <span className="text-4xl">🪱</span>
-        <h2 className="text-lg font-bold text-white">지렁이 실시간 대전</h2>
-        <p className="text-sm text-white/50">
-          {MIN_PLAYERS}~{MAX_PLAYERS}명이 각자 기기로 접속해서 Slither.io 스타일로 실시간 대전해요.
-        </p>
-        <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
-          <button
-            onClick={() => {
-              setIntent("create");
-              setPhase("enter-name");
-            }}
-            className="w-full rounded-xl bg-lime-600 py-3 text-sm font-semibold text-white transition hover:bg-lime-500"
-          >
-            🪱 방 만들기
-          </button>
-          <button
-            onClick={() => {
-              setIntent("join");
-              setPhase("enter-name");
-            }}
-            className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30"
-          >
-            🔑 초대 코드로 참여
-          </button>
-        </div>
-      </div>
+      <RulebookGate
+        gameId="worm"
+        icon="🪱"
+        title="지렁이 실시간 대전"
+        description={
+          <p className="text-sm text-white/50">
+            {MIN_PLAYERS}~{MAX_PLAYERS}명이 각자 기기로 접속해서 Slither.io 스타일로 실시간 대전해요.
+          </p>
+        }
+        actions={
+          <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
+            <button
+              onClick={() => {
+                setIntent("create");
+                setPhase("enter-name");
+              }}
+              className="w-full rounded-xl bg-lime-600 py-3 text-sm font-semibold text-white transition hover:bg-lime-500"
+            >
+              🪱 방 만들기
+            </button>
+            <button
+              onClick={() => {
+                setIntent("join");
+                setPhase("enter-name");
+              }}
+              className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30"
+            >
+              🔑 초대 코드로 참여
+            </button>
+          </div>
+        }
+      />
     );
   }
 

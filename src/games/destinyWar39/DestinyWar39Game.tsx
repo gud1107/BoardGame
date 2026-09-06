@@ -30,6 +30,7 @@ import { useGameBgm } from "@/lib/audio/useGameBgm";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
+import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import {
@@ -942,33 +943,38 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
 
   if (phase === "choose") {
     return withGuard(
-      <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
-        <span className="text-4xl">🔮</span>
-        <h2 className="text-lg font-bold text-white">운명전쟁39 온라인 대전</h2>
-        <p className="text-sm text-white/50">
-          {MIN_PLAYERS}~{MAX_PLAYERS}인 모드로 각자 기기에서 접속해 9라운드 예측 승부를 겨뤄요.
-        </p>
-        <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
-          <button
-            onClick={() => {
-              setIntent("create");
-              setPhase("enter-name");
-            }}
-            className="w-full rounded-xl bg-fuchsia-600 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-500"
-          >
-            🔮 방 만들기
-          </button>
-          <button
-            onClick={() => {
-              setIntent("join");
-              setPhase("enter-name");
-            }}
-            className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30"
-          >
-            🔑 초대 코드로 참여
-          </button>
-        </div>
-      </div>
+      <RulebookGate
+        gameId="destiny-war-39"
+        icon="🔮"
+        title="운명전쟁39 온라인 대전"
+        description={
+          <p className="text-sm text-white/50">
+            {MIN_PLAYERS}~{MAX_PLAYERS}인 모드로 각자 기기에서 접속해 9라운드 예측 승부를 겨뤄요.
+          </p>
+        }
+        actions={
+          <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
+            <button
+              onClick={() => {
+                setIntent("create");
+                setPhase("enter-name");
+              }}
+              className="w-full rounded-xl bg-fuchsia-600 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-500"
+            >
+              🔮 방 만들기
+            </button>
+            <button
+              onClick={() => {
+                setIntent("join");
+                setPhase("enter-name");
+              }}
+              className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30"
+            >
+              🔑 초대 코드로 참여
+            </button>
+          </div>
+        }
+      />
     );
   }
 
