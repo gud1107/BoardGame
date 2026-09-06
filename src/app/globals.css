@@ -4777,6 +4777,305 @@ body {
   animation: moo-safezone-aura 2.6s ease-in-out infinite;
 }
 
+/* ===========================================================================
+   망각의 지뢰 2 (Mine of Oblivion 2) — 1편의 11×11 탐험 레이스에 시한폭탄(Time
+   Bomb) 3×3 대폭발 레이어를 추가한 신규 게임. See
+   mineOfOblivion2/MineOfOblivion2Effects.tsx. Self-contained "moo2-" prefix
+   (zero cross-game CSS coupling, same convention as every block above) —
+   대부분 1편의 "moo-" keyframe을 그대로 복제했고, 시한폭탄 전용 연출
+   (moo2-mega-*, moo2-orange-flash-in, moo2-bomb-emblem-slam, moo2-bomb-tick,
+   moo2-danger-zone-pulse)만 신규.
+   --------------------------------------------------------------------- */
+
+@keyframes moo2-overlay-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes moo2-skip-pulse-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(251, 146, 60, 0.45),
+      0 0 10px 1px rgba(251, 146, 60, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(251, 146, 60, 0),
+      0 0 22px 4px rgba(251, 146, 60, 0.65);
+  }
+}
+
+@keyframes moo2-red-flash-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Full-screen orange/amber vignette darkening in on a time-bomb 3×3 detonation — distinct from the mine hit's red, reads as "bigger/hotter". */
+@keyframes moo2-orange-flash-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes moo2-screen-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-7px, 4px);
+  }
+  40% {
+    transform: translate(6px, -5px);
+  }
+  60% {
+    transform: translate(-5px, 3px);
+  }
+  80% {
+    transform: translate(4px, -2px);
+  }
+}
+
+/* Stronger/longer screen shake reserved for the 3×3 time-bomb blast — a wider, more violent shake than a single-tile mine hit. */
+@keyframes moo2-mega-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  10% {
+    transform: translate(-11px, 7px) rotate(-0.4deg);
+  }
+  25% {
+    transform: translate(10px, -8px) rotate(0.5deg);
+  }
+  40% {
+    transform: translate(-9px, 6px) rotate(-0.3deg);
+  }
+  55% {
+    transform: translate(8px, -5px) rotate(0.3deg);
+  }
+  70% {
+    transform: translate(-6px, 4px);
+  }
+  85% {
+    transform: translate(4px, -2px);
+  }
+}
+
+@keyframes moo2-mine-emblem-slam {
+  0% {
+    transform: scale(2.4) rotate(-10deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.92) rotate(3deg);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(1.04) rotate(-1deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* 🧨 emblem slamming down for a time-bomb detonation — bigger overshoot than the mine emblem to read as the more severe event. */
+@keyframes moo2-bomb-emblem-slam {
+  0% {
+    transform: scale(3) rotate(14deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(0.88) rotate(-4deg);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1.08) rotate(2deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes moo2-fire-particle {
+  0% {
+    transform: rotate(var(--angle)) translateY(0) scale(0.4);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--angle)) translateY(-95px) scale(1.05);
+    opacity: 0;
+  }
+}
+
+/* Wider/longer-traveling fire particle for the 3×3 time-bomb blast. */
+@keyframes moo2-mega-fire-particle {
+  0% {
+    transform: rotate(var(--angle)) translateY(0) scale(0.45);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--angle)) translateY(-140px) scale(1.15);
+    opacity: 0;
+  }
+}
+
+@keyframes moo2-treasure-sparkle-particle {
+  0% {
+    transform: rotate(var(--angle)) translateY(0) scale(0.4);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--angle)) translateY(-85px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes moo2-safe-pulse-ring {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@keyframes moo2-tile-highlight-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 14px 2px rgba(52, 211, 153, 0.65);
+  }
+}
+.moo2-tile-highlight-pulse {
+  animation: moo2-tile-highlight-pulse 1.8s ease-in-out infinite;
+}
+
+/* Pulsing amber outline marking every tile inside a live time bomb's 3×3 blast radius — "위험 반경(Danger Zone) 가이드라인" requirement, shown only for the viewer's own armed bombs. */
+@keyframes moo2-danger-zone-pulse {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 0 rgba(251, 146, 60, 0.3);
+  }
+  50% {
+    box-shadow: inset 0 0 0 3px rgba(251, 146, 60, 0.55);
+  }
+}
+.moo2-danger-zone-pulse {
+  animation: moo2-danger-zone-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes moo2-score-float-up {
+  0% {
+    transform: translateY(0) scale(0.7);
+    opacity: 0;
+  }
+  20% {
+    transform: translateY(-6px) scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-46px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes moo2-chest-open-slam {
+  0% {
+    transform: scale(0.4) rotate(-14deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.18) rotate(6deg);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(0.94) rotate(-2deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes moo2-respawn-warp {
+  0% {
+    transform: scale(0.3) rotate(0deg);
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.2) rotate(220deg);
+    opacity: 0;
+  }
+}
+
+@keyframes moo2-pawn-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.06);
+  }
+}
+.moo2-pawn-bounce {
+  animation: moo2-pawn-bounce 1s ease-in-out infinite;
+}
+
+@keyframes moo2-safezone-aura {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(251, 191, 36, 0.25),
+      inset 0 0 6px 0 rgba(52, 211, 153, 0.25);
+  }
+  50% {
+    box-shadow:
+      0 0 10px 2px rgba(251, 191, 36, 0.45),
+      inset 0 0 10px 1px rgba(52, 211, 153, 0.4);
+  }
+}
+.moo2-safezone-aura {
+  animation: moo2-safezone-aura 2.6s ease-in-out infinite;
+}
+
+/* 본인 시한폭탄 칸에 표시되는 째깍이는 카운트다운 배지 — 매 초 살짝 확대/축소되며 "틱톡" 감을 준다. */
+@keyframes moo2-bomb-tick {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+.moo2-bomb-tick {
+  animation: moo2-bomb-tick 1s ease-in-out infinite;
+}
+
 /* 진실의 고개(Hill of Truth) — 딜러 신호등 판정 연출 + 노란불 복기 리포트 모달 진입
    애니메이션. 모달 진입은 dalmuti-highlight-overlay-in과 동일한 fade+scale이라 새로
    정의하되(게임 폴더 간 CSS 결합 금지 원칙상 클래스명은 이 게임 전용으로 분리), 신호등

@@ -2104,6 +2104,93 @@ class SoundEngine {
       osc.stop(at + 0.47);
     });
   }
+
+  // ---------------------------------------------------------------------
+  // 망각의 지뢰 2 — 시한폭탄(Time Bomb) 3×3 대폭발 SFX. `playMineBlast`보다
+  // 한 단계 더 묵직하게 설계(더 낮은 저역, 더 긴 서스테인, 2겹 붐 레이어) —
+  // "9칸을 뒤덮는 대폭발"이 1칸짜리 지뢰 폭발보다 확실히 크게 들려야 한다는
+  // 요청을 반영.
+  // ---------------------------------------------------------------------
+
+  /** 시한폭탄 대폭발: 2겹의 깊은 저역 붐(임팩트 + 롱테일 서브베이스) + 넓은 크랙 노이즈 + 낙하 글리산도. */
+  playTimeBombBlast() {
+    if (!this.gate("timeBombBlast", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    // Primary impact boom — lower floor and longer decay than playMineBlast.
+    const boom = ctx.createOscillator();
+    boom.type = "sine";
+    boom.frequency.setValueAtTime(140, now);
+    boom.frequency.exponentialRampToValueAtTime(28, now + 0.5);
+    const boomGain = ctx.createGain();
+    boomGain.gain.setValueAtTime(0.55, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+    boom.connect(boomGain).connect(this.sfxGain);
+    boom.start(now);
+    boom.stop(now + 0.75);
+
+    // Sub-bass tail layered underneath for extra weight ("묵직한 폭발음").
+    const sub = ctx.createOscillator();
+    sub.type = "sine";
+    sub.frequency.setValueAtTime(60, now + 0.02);
+    sub.frequency.exponentialRampToValueAtTime(18, now + 0.65);
+    const subGain = ctx.createGain();
+    subGain.gain.setValueAtTime(0.4, now + 0.02);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+    sub.connect(subGain).connect(this.sfxGain);
+    sub.start(now + 0.02);
+    sub.stop(now + 0.9);
+
+    // Wide crack noise — broader bandpass than the mine's crack, for a bigger blast's initial snap.
+    const crack = ctx.createBufferSource();
+    crack.buffer = noiseBuffer(ctx);
+    const crackFilter = ctx.createBiquadFilter();
+    crackFilter.type = "bandpass";
+    crackFilter.frequency.value = 1600;
+    crackFilter.Q.value = 2.2;
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.42, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    crack.connect(crackFilter).connect(crackGain).connect(this.sfxGain);
+    crack.start(now);
+    crack.stop(now + 0.3);
+
+    // Falling debris glissando trailing the blast.
+    const debris = ctx.createOscillator();
+    debris.type = "triangle";
+    debris.frequency.setValueAtTime(420, now + 0.2);
+    debris.frequency.exponentialRampToValueAtTime(90, now + 0.7);
+    const debrisGain = ctx.createGain();
+    debrisGain.gain.setValueAtTime(0.001, now + 0.2);
+    debrisGain.gain.linearRampToValueAtTime(0.16, now + 0.26);
+    debrisGain.gain.exponentialRampToValueAtTime(0.001, now + 0.78);
+    debris.connect(debrisGain).connect(this.sfxGain);
+    debris.start(now + 0.2);
+    debris.stop(now + 0.8);
+  }
+
+  /** 시한폭탄 째깍임(남은 카운트다운이 낮을 때, 본인에게만): 짧고 건조한 클릭 두 번. */
+  playBombTick() {
+    if (!this.gate("bombTick", 400)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [0, 0.09].forEach((offset) => {
+      const at = now + offset;
+      const click = ctx.createOscillator();
+      click.type = "square";
+      click.frequency.value = 1400;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.001, at);
+      gain.gain.linearRampToValueAtTime(0.09, at + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.05);
+      click.connect(gain).connect(this.sfxGain!);
+      click.start(at);
+      click.stop(at + 0.06);
+    });
+  }
 }
 
 let instance: SoundEngine | null = null;

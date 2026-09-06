@@ -656,6 +656,23 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "mine-of-oblivion-2",
+    name: "망각의 지뢰 2",
+    nameEn: "Mine of Oblivion 2",
+    description:
+      "1편의 11×11 탐험 레이스에 신규 시한폭탄(Time Bomb) 레이어를 더한 2인 전용 후속작. 지뢰 8개에 더해 시한폭탄 3개를 추가로 비밀 매설하고, 카운트다운(3~5턴)이 0이 되는 순간 설치 칸 중심 3×3(9칸)이 대폭발합니다. 반경 안에 있으면(설치자 포함) −5점, 아무도 없이 안전하게 지나갔다면 설치자가 +2점을 받습니다.",
+    players: { min: 2, max: 2 },
+    playTime: { minMinutes: 10, maxMinutes: 20 },
+    category: "deduction",
+    thumbnail: { emoji: "🧨", gradient: ["#fb923c", "#1a0e05"] },
+    tags: ["2인전용", "기억력", "블러핑", "단판승부", "데스게임", "시한폭탄"],
+    genres: ["strategy", "bluffing"],
+    collectionId: "netflix-death-game",
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "hill-of-truth",
     name: "진실의 고개",
     nameEn: "Hill of Truth",
