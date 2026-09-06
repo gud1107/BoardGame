@@ -10,14 +10,14 @@ import {
  * This project's `<Game>Board.tsx`/header-level components have no
  * unit-test coverage (jsdom isn't installed; `vitest.config.mts` runs the
  * `node` environment — see HANDOFF.md's recurring note on this), so
- * `PatchNoteModal.tsx`/`PatchNoteButton.tsx` aren't exercised here. This
+ * `PatchNoteList.tsx`/`PatchNoteButton.tsx` aren't exercised here. This
  * file instead locks down the one thing that's actually pure data/logic:
  * `patchNotes.ts` itself — the newest-first ordering the modal relies on
  * (no re-sort happens at render time) and the game-tag → label/emoji
  * lookup that reads from the single source of truth (`GAME_REGISTRY`).
  */
 describe("PATCH_NOTES", () => {
-  it("is non-empty and starts at the retroactive v1.0.0 baseline", () => {
+  it("is non-empty and starts at the v1.0.0 baseline (the project's first shipped commit)", () => {
     expect(PATCH_NOTES.length).toBeGreaterThan(0);
     expect(PATCH_NOTES[PATCH_NOTES.length - 1].version).toBe("v1.0.0");
   });
