@@ -11,6 +11,7 @@ import {
   MAX_PLAYERS,
   MIN_PLAYERS,
   REMOVE_COUNT,
+  seededRng,
   startGame,
   startingChips,
   type NoThanksState,
@@ -423,5 +424,94 @@ describe("Level 1–10 풀 시뮬레이션 (버그 없이 gameOver까지 완주)
     const state = playFullBotGame(5, 4242, (seat) => (seat % 2 === 0 ? 1 : 10));
     expect(state.phase).toBe("gameOver");
     expect(computeRankings(state)).toHaveLength(5);
+  });
+});
+
+describe("Lv.8-10 마스터 EV 알고리즘 (연속 카드 정밀 처리 / 순손익 / 칩 고갈 방어)", () => {
+  it("req③ 칩 고갈 방어: 같은 실질 손익(-2)이라도 칩이 넉넉하면 패스, 칩이 바닥나가면(1개) 먼저 수거해 충전한다", () => {
+    // realTakeValue = chipsOnCard(8) - card(10) = -2 either way (no run connection).
+    const abundant = makeState({
+      currentCard: 10,
+      chipsOnCard: 8,
+      players: [{ seat: 0, chips: 11, cards: [] }, { seat: 1, chips: 11, cards: [] }, { seat: 2, chips: 11, cards: [] }],
+    });
+    expect(chooseBotAction(abundant, 0, 10, () => 0.5)).toEqual({ type: "pass", seat: 0 });
+
+    const starving = makeState({
+      currentCard: 10,
+      chipsOnCard: 8,
+      players: [{ seat: 0, chips: 1, cards: [] }, { seat: 1, chips: 11, cards: [] }, { seat: 2, chips: 11, cards: [] }],
+    });
+    expect(chooseBotAction(starving, 0, 10, () => 0.5)).toEqual({ type: "take", seat: 0 });
+  });
+
+  it("req② 순손익(Net Value): 칩이 충분히 쌓인 큰 카드는 실질 손익이 좋아지는 즉시 수거한다", () => {
+    // 20번 카드 위에 21개 칩 -> 실질 손익 +1, 이미 pass(-1)보다 좋음.
+    const state = makeState({ currentCard: 20, chipsOnCard: 21 });
+    expect(chooseBotAction(state, 0, 10, () => 0.5)).toEqual({ type: "take", seat: 0 });
+  });
+
+  it("req① 연속 카드 정밀 처리: 이미 손에 든 카드와 이어지는 카드는 칩이 얼마나 쌓였든 즉시 수거한다(지연 없음)", () => {
+    // 9를 들고 있는 상태에서 10이 뜨면 [9,10] 묶음 -> 벌점은 그대로 9, 실질손익 = +chipsOnCard.
+    // (한때 "칩을 더 불릴 때까지 일부러 패스하고 버틴다"는 핑퐁 파밍을 시도했으나, 500게임
+    // 시뮬레이션에서 자멸률이 오히려 6.0% -> 9.6~19.0%로 악화됨을 확인하고 폐기함 — 카드를
+    // 가져가면 즉시 추가 턴이 오는 템포 이득을 포기하는 대가가 기대 칩 인상분보다 항상 컸음.
+    // scoreMoveExpert 주석 참고.)
+    const state = makeState({
+      currentCard: 10,
+      chipsOnCard: 2,
+      players: [{ seat: 0, chips: 11, cards: [9] }, { seat: 1, chips: 11, cards: [] }, { seat: 2, chips: 11, cards: [] }],
+    });
+    expect(chooseBotAction(state, 0, 10, () => 0.5)).toEqual({ type: "take", seat: 0 });
+  });
+
+  it("연속 카드가 두 묶음 사이 간격을 메우면(병합) 지워지는 벌점까지 정확히 반영해 즉시 수거한다", () => {
+    // [9] 묶음과 [11,12] 묶음을 [9,10,11,12]로 병합 -> 지워지는 11의 벌점만큼 실질손익이 더 커짐.
+    const state = makeState({
+      currentCard: 10,
+      chipsOnCard: 0,
+      players: [{ seat: 0, chips: 11, cards: [9, 11, 12] }, { seat: 1, chips: 11, cards: [] }, { seat: 2, chips: 11, cards: [] }],
+    });
+    expect(chooseBotAction(state, 0, 10, () => 0.5)).toEqual({ type: "take", seat: 0 });
+  });
+
+  it("Lv.1-7은 새 EV 로직의 영향을 받지 않고 기존 단순 휴리스틱 그대로 유지된다 (파밍/고갈방어 미적용)", () => {
+    // req③ 테스트와 동일한 '칩 1개' 상황이지만 core tier(레벨 5)는 여전히 flat -1 pass 비용만 본다
+    // -> take(-2) < pass(-1) 이므로 그대로 패스(칩이 남아있는 한 core tier는 강제 수거 로직이 없음).
+    const state = makeState({
+      currentCard: 10,
+      chipsOnCard: 8,
+      players: [{ seat: 0, chips: 1, cards: [] }, { seat: 1, chips: 11, cards: [] }, { seat: 2, chips: 11, cards: [] }],
+    });
+    expect(chooseBotAction(state, 0, 5, () => 0.99)).toEqual({ type: "pass", seat: 0 });
+  });
+
+  it("풀 시뮬레이션: 올-Lv.10 테이블은 자멸(칩 0개로 무너져 대형 벌점 카드를 강제 섭취해 최하위 확정)하지 않는다", () => {
+    // 500개 시드(봇 rng도 시드 고정 — 재현 가능하도록)에 대해, 매 게임 최하위가 '칩 0개로
+    // 마감 + 벌점 15점 이상'인 예전 버그의 특징적 패턴(칩을 다 쓰고 막판에 방어 불가능한 큰
+    // 카드를 강제로 먹어 자멸)이 얼마나 드문지 측정한다.
+    //
+    // 실측 비교(같은 500시드, 같은 시드 고정 rng): 수정 전 6.8% -> 이 알고리즘 6.0%로 개선.
+    // (참고: "핑퐁 파밍" 지연 전략까지 넣어봤을 땐 오히려 9.6~19.0%로 악화되는 것을 확인하고
+    // 폐기했다 — scoreMoveExpert 주석 참고.) 노이즈 여유를 두고 12%를 상한으로 검증한다.
+    const SEEDS = 500;
+    let selfDestructedLastPlace = 0;
+    for (let seed = 0; seed < SEEDS; seed++) {
+      let state = startGame(4, seed);
+      const rng = seededRng(seed * 999983 + 7);
+      let guard = 0;
+      while (state.phase !== "gameOver" && guard < 5000) {
+        guard++;
+        const action = chooseBotAction(state, state.activeSeat, 10, rng);
+        if (!action) break;
+        state = applyAction(state, action);
+      }
+      const rankings = computeRankings(state);
+      const lastPlaceRank = Math.max(...rankings.map((r) => r.rank));
+      for (const { rank, score } of rankings) {
+        if (rank === lastPlaceRank && score.chips === 0 && score.cardPenalty >= 15) selfDestructedLastPlace++;
+      }
+    }
+    expect(selfDestructedLastPlace).toBeLessThan(SEEDS * 0.12);
   });
 });

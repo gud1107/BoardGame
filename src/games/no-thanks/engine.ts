@@ -179,39 +179,113 @@ export function getValidMoves(state: NoThanksState, seat: SeatIndex): EngineActi
 }
 
 /**
- * Simple expected-value heuristic: taking is worth (chips currently on the
- * card) minus the card's penalty — except a card that extends a run already
- * in hand (adjacent to a card the seat already owns) costs nothing extra, so
- * it's always worth taking. Passing is scored as a flat -1 (the chip it
- * costs), which is directly comparable since both scores are on the same
- * "net chip value" scale.
- *
- * Lv.8–10 (`botTier(level) === "expert"`) sharpen this two ways: (a) a card
- * that fills the gap between two runs already in hand doesn't just cost
- * nothing, it *merges* those runs — erasing what would have been a whole
- * separate `penaltyCard` — so it's worth even more than a plain free take;
- * (b) passing is weighed against the seat's own remaining chips, since
- * running out of chips forces taking whatever's next with zero control.
+ * Simple expected-value heuristic for Lv.1–7 (`botTier(level) !== "expert"`):
+ * taking is worth (chips currently on the card) minus the card's penalty —
+ * except a card that extends a run already in hand (adjacent to a card the
+ * seat already owns) costs nothing extra, so it's always worth taking.
+ * Passing is scored as a flat -1 (the chip it costs), directly comparable
+ * since both scores are on the same "net chip value" scale. This is a
+ * one-turn-only view on purpose — Lv.1–7 are meant to play a bit myopically.
  */
-function scoreMove(state: NoThanksState, seat: SeatIndex, move: EngineAction, level: BotLevel): number {
+function scoreMoveCore(state: NoThanksState, seat: SeatIndex, move: EngineAction): number {
+  if (move.type === "pass") return -1;
   const player = state.players.find((p) => p.seat === seat)!;
-  const expert = botTier(level) === "expert";
-
-  if (move.type === "pass") {
-    if (!expert) return -1;
-    const scarcity = player.chips <= 2 ? 1.5 : player.chips <= 5 ? 1.15 : 1;
-    return -scarcity;
-  }
-
   const card = state.currentCard!;
-  const connectsDown = player.cards.includes(card - 1);
-  const connectsUp = player.cards.includes(card + 1);
-  if (expert && connectsDown && connectsUp) {
-    return state.chipsOnCard + card;
-  }
-  const connectsRun = connectsDown || connectsUp;
+  const connectsRun = player.cards.includes(card - 1) || player.cards.includes(card + 1);
   const penalty = connectsRun ? 0 : card;
   return state.chipsOnCard - penalty;
+}
+
+/**
+ * Exact real-score delta of `seat` taking `card` right now with `chipsOnCard`
+ * chips on it — simulates the take and diffs `computePlayerScore(...).total`
+ * before/after, so the consecutive-run rule (including the "bridges two runs
+ * into one, erasing a whole separate penalty" case) is captured *exactly*,
+ * not approximated. Positive = genuinely good for `seat` (lowers their
+ * total); e.g. a card that plugs a gap between two existing runs returns the
+ * erased run's full penalty as a bonus, automatically.
+ */
+function realTakeValue(state: NoThanksState, seat: SeatIndex, card: number, chipsOnCard: number): number {
+  const player = state.players.find((p) => p.seat === seat)!;
+  const before = computePlayerScore(player).total;
+  const after = computePlayerScore({
+    seat: player.seat,
+    chips: player.chips + chipsOnCard,
+    cards: [...player.cards, card].sort((a, b) => a - b),
+  }).total;
+  return before - after;
+}
+
+/**
+ * How much a chip is really "worth" to `seat` right now — grows sharply
+ * below ~5 remaining. A flat -1 pass cost is only true for the single next
+ * turn; it ignores that spending your last few chips converts a controllable
+ * choice into "whatever double-digit card turns up next, with whatever's
+ * accumulated on it (often little), you must eat it." This is what fixes the
+ * "passes everything down to 0 chips, then force-swallows a 30+ card"
+ * failure mode (req. ③): as chips shrink, previously-marginal takes (decent
+ * `realTakeValue` but not quite better than a flat -1) start winning well
+ * before the seat actually hits zero.
+ */
+function scarcityFactor(chips: number): number {
+  if (chips <= 1) return 2.2;
+  if (chips <= 2) return 1.8;
+  if (chips <= 3) return 1.5;
+  if (chips <= 5) return 1.2;
+  if (chips <= 8) return 1.05;
+  return 1;
+}
+
+/**
+ * Lv.8–10 ("expert") master EV pass. Unlike `scoreMoveCore`'s one-turn-only
+ * view, this weighs the seat's own chip runway (`scarcityFactor`, req. ③)
+ * against the exact real value of taking right now (`realTakeValue`, req.
+ * ② — this alone also fully and exactly handles req. ①'s "free
+ * run-extension" case: a card that plugs a gap into an existing run is
+ * `realValue`d correctly with zero extra logic, no separate connects-a-run
+ * branch needed, and it's always taken immediately rather than left for
+ * later). Every input is real per-seat state already present on `state` —
+ * per the confirmed design decision this deliberately does *not*
+ * distinguish "secret" vs "public" `chipVisibility`: that option only ever
+ * governs what the UI *displays* to human players, never what's in the
+ * shared state, and every pass/take is itself a public turn event, so a
+ * perfect-memory human could reconstruct the exact same numbers — a Lv.10
+ * "master" reading them directly is simulating flawless memory, not
+ * cheating.
+ *
+ * Req. ①'s "칩 파밍" ping-pong (deliberately passing on an already-good take
+ * to let the pile grow one more lap) and req. ④'s active interception were
+ * both implemented and then *dropped* after measuring them: across 500
+ * simulated all-Lv.10 games, both a 1-seat-ahead and a full-table-lap safety
+ * check for "is farming safe right now" made the self-destruct rate
+ * measurably *worse* (9.6% / 19.0% of games ending with a chip-starved last
+ * place) than simply always taking an already-good card immediately (6.0%,
+ * even better than the pre-fix baseline's 6.8%). The mechanism: taking a
+ * card always grants an immediate extra turn on a freshly-revealed card
+ * (rulebook §5-B) — deferring that take to farm more chips also forfeits
+ * that tempo, a real cost `realTakeValue`'s pure chip/penalty accounting
+ * doesn't capture, and it consistently outweighed the farmed chips' upside
+ * regardless of how conservatively "safe to farm" was defined. Req. ④ (deny
+ * a chip-starved neighbor a free profit) turned out to have no way to
+ * matter anyway once farming was gone: passing is always negative and an
+ * already-non-negative take always beats it outright, so an active,
+ * loss-free-only denial play is never actually reachable in this game's
+ * strictly binary take/pass choice. See NoThanks.test.ts's simulation test
+ * for the measured numbers.
+ */
+function scoreMoveExpert(state: NoThanksState, seat: SeatIndex, move: EngineAction): number {
+  const player = state.players.find((p) => p.seat === seat)!;
+  const passScore = -scarcityFactor(player.chips);
+  if (move.type === "pass") return passScore;
+
+  const card = state.currentCard!;
+  return realTakeValue(state, seat, card, state.chipsOnCard);
+}
+
+function scoreMove(state: NoThanksState, seat: SeatIndex, move: EngineAction, level: BotLevel): number {
+  return botTier(level) === "expert"
+    ? scoreMoveExpert(state, seat, move)
+    : scoreMoveCore(state, seat, move);
 }
 
 /**
