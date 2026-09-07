@@ -47,6 +47,38 @@
  *     same precedent 1편's mine layer already established for its own
  *     mine-vs-mine overlaps).
  *
+ * **2026-09-07 확장 — 원격 수동 격발("즉시 격발") + N턴 예약 안내 UI.** The
+ * setup-time fuse *picker* the brief re-requested already existed unchanged
+ * (3/4/5턴, confirmed kept as-is rather than narrowed to 1/2/3 per a fresh
+ * `AskUserQuestion` round — the brief's "1턴/2턴/3턴" phrasing was a
+ * documentation example, not an intended balance change). What's genuinely
+ * new is a manual trigger a seat can press on their own turn, confirmed via
+ * two `AskUserQuestion` rounds (the brief's "즉시 격발" wording undersold how
+ * non-instant the requested behavior actually is):
+ *  5. **격발 조건**: available any time on your own turn (`activeSeat`), on
+ *     any of your own still-`armed` bombs — NOT gated on the opponent
+ *     currently standing in the 3×3 zone, and NOT gated on any minimum time
+ *     having elapsed since placement.
+ *  6. **턴 소모**: a free action, independent of movement — does not end the
+ *     turn, does not bump `actionsPlayed`. A seat may press it on any number
+ *     of their own bombs before submitting their `SELECT_TILE_STEP` for the
+ *     turn.
+ *  7. **격발은 즉시가 아니라 "2턴 후"**: pressing it does not detonate the
+ *     bomb on the spot. It only clamps `remaining` down to
+ *     `TIME_BOMB_MANUAL_TRIGGER_DELAY` (2) — never up — so the explosion
+ *     still fires through the ordinary `tickTimeBombs` path exactly 2 more
+ *     global ticks later, identical in every way to a naturally-expired
+ *     fuse (same 3×3 blast, same −5/+2 scoring). A bomb already at or below
+ *     that delay has nothing left to shorten, so the action is a no-op
+ *     (`canManuallyDetonate` — the UI disables the button instead of firing
+ *     a silent no-op).
+ * The setup fuse range (3/4/5) staying unchanged means point #2 above is
+ * unaffected; this only adds a second, player-triggered path onto the same
+ * `remaining` countdown. Deliberately NOT extended to the bot AI
+ * (`chooseBotAction`) — the brief never asked for bot behavior here, and the
+ * bot's existing self-preservation heuristic in `scoreMove` already treats a
+ * soon-to-detonate own bomb as a tile to avoid.
+ *
  * Two more calls made without a fresh confirmation round, flagged here
  * explicitly:
  *
@@ -117,6 +149,8 @@ export type TimeBombFuse = (typeof TIME_BOMB_FUSE_OPTIONS)[number];
 export const TIME_BOMB_BLAST_PENALTY = 5;
 /** Bonus the owner banks when their bomb detonates with the blast zone empty ("안전하게 피했을 때"). */
 export const TIME_BOMB_SAFE_BONUS = 2;
+/** How many global ticks a manual "즉시 격발" press leaves on the fuse — see module doc #7. Pressing the button clamps `remaining` down to this value (never up), so the bomb still detonates through the normal `tickTimeBombs` path. */
+export const TIME_BOMB_MANUAL_TRIGGER_DELAY = 2;
 
 function colIndex(tile: TileId): number {
   return COLS.indexOf(tile[0] as (typeof COLS)[number]);
@@ -218,6 +252,8 @@ export interface TimeBomb {
   /** Counts down from `fuseTurns` to 0 — see `tickTimeBombs`. */
   remaining: number;
   status: "armed" | "exploded";
+  /** True once the owner has pressed "즉시 격발" on this bomb (module doc #5-7) — a UI cue only ("🔥 격발됨" badge); detonation mechanics are otherwise identical to a naturally-expired fuse. */
+  manuallyTriggered: boolean;
 }
 
 export type EventKind = "reveal" | "treasure" | "mine";
@@ -332,7 +368,13 @@ export interface BombPlacement {
 export type EngineAction =
   | { type: "SET_SETUP"; seat: Seat; mines: TileId[]; bombs: BombPlacement[] }
   | { type: "SELECT_TILE_STEP"; seat: Seat; tile: TileId }
+  | { type: "DETONATE_BOMB"; seat: Seat; bombId: string }
   | { type: "READY_NEXT_ROUND" };
+
+/** True iff `seat` may currently press "즉시 격발" on `bomb` (module doc #5-7) — only reduces the fuse, so a bomb already at or below `TIME_BOMB_MANUAL_TRIGGER_DELAY` has nothing left to shorten. */
+export function canManuallyDetonate(bomb: TimeBomb): boolean {
+  return bomb.status === "armed" && bomb.remaining > TIME_BOMB_MANUAL_TRIGGER_DELAY;
+}
 
 function tileSafeForRespawn(state: MineOfOblivion2State, tile: TileId, victim: Seat): boolean {
   if (armedMineOwnersAt(state, tile).length > 0) return false;
@@ -377,6 +419,7 @@ function applySetSetup(state: MineOfOblivion2State, seat: Seat, mines: TileId[],
     fuseTurns: b.fuseTurns,
     remaining: b.fuseTurns,
     status: "armed",
+    manuallyTriggered: false,
   }));
 
   const nextMines = { ...state.mines, [seat]: mines };
@@ -527,6 +570,25 @@ function applyStep(state: MineOfOblivion2State, seat: Seat, tile: TileId): MineO
   return finalizeAction(withEvents, seat, events);
 }
 
+/**
+ * 원격 수동 격발("즉시 격발", module doc #5-7) — `seat`'s own turn only, on
+ * one of their own still-armed bombs. A FREE action: no phase change, no
+ * `activeSeat` change, no `actionsPlayed` bump — it only clamps that bomb's
+ * `remaining` down to `TIME_BOMB_MANUAL_TRIGGER_DELAY`, so it goes on to
+ * detonate through the ordinary `tickTimeBombs` path on a later move exactly
+ * like a naturally-expired fuse. No-op if the bomb isn't `seat`'s own, isn't
+ * still armed, or `canManuallyDetonate` is already false.
+ */
+function applyDetonateBomb(state: MineOfOblivion2State, seat: Seat, bombId: string): MineOfOblivion2State {
+  if (state.phase !== "PLAYER_MOVE" || state.activeSeat !== seat) return state;
+  const bomb = state.timeBombs.find((b) => b.id === bombId);
+  if (!bomb || bomb.seat !== seat || !canManuallyDetonate(bomb)) return state;
+  return {
+    ...state,
+    timeBombs: state.timeBombs.map((b) => (b.id === bombId ? { ...b, remaining: TIME_BOMB_MANUAL_TRIGGER_DELAY, manuallyTriggered: true } : b)),
+  };
+}
+
 function applyReadyNextRound(state: MineOfOblivion2State): MineOfOblivion2State {
   if (state.phase !== "REVEAL_STEP") return state;
   if (state.pendingGameOver) {
@@ -542,6 +604,8 @@ export function applyAction(state: MineOfOblivion2State, action: EngineAction): 
       return applySetSetup(state, action.seat, action.mines, action.bombs);
     case "SELECT_TILE_STEP":
       return applyStep(state, action.seat, action.tile);
+    case "DETONATE_BOMB":
+      return applyDetonateBomb(state, action.seat, action.bombId);
     case "READY_NEXT_ROUND":
       return applyReadyNextRound(state);
     default:

@@ -2171,6 +2171,27 @@ class SoundEngine {
     debris.stop(now + 0.8);
   }
 
+  /** 시한폭탄 원격 즉시 격발("즉시 격발" 버튼 확정) 전용 — 상승하는 2음 아밍(arming) 삐- 소리로, 곧바로 터지는 `playTimeBombBlast`(2턴 뒤 실제 폭발 시 재생됨)와는 확실히 다른, "기폭 장치를 걸었다"는 확인음. */
+  playBombManualArm() {
+    if (!this.gate("bombManualArm", 250)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [520, 780].forEach((freq, i) => {
+      const at = now + i * 0.09;
+      const beep = ctx.createOscillator();
+      beep.type = "square";
+      beep.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.001, at);
+      gain.gain.linearRampToValueAtTime(0.16, at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.13);
+      beep.connect(gain).connect(this.sfxGain!);
+      beep.start(at);
+      beep.stop(at + 0.14);
+    });
+  }
+
   /** 시한폭탄 째깍임(남은 카운트다운이 낮을 때, 본인에게만): 짧고 건조한 클릭 두 번. */
   playBombTick() {
     if (!this.gate("bombTick", 400)) return;

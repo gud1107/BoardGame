@@ -3,6 +3,7 @@ import {
   ALL_TILES,
   applyAction,
   blastZone,
+  canManuallyDetonate,
   canPlaceHazard,
   chooseBotAction,
   chooseBotSetup,
@@ -18,6 +19,7 @@ import {
   TIME_BOMBS_PER_PLAYER,
   TIME_BOMB_BLAST_PENALTY,
   TIME_BOMB_FUSE_OPTIONS,
+  TIME_BOMB_MANUAL_TRIGGER_DELAY,
   TIME_BOMB_SAFE_BONUS,
   TREASURE_TILES,
   type MineOfOblivion2State,
@@ -52,7 +54,7 @@ function baseState(overrides: Partial<MineOfOblivion2State> = {}): MineOfOblivio
 }
 
 function bomb(overrides: Partial<TimeBomb>): TimeBomb {
-  return { id: "p1-tb-0", seat: "p1", tile: "F5", fuseTurns: 3, remaining: 3, status: "armed", ...overrides };
+  return { id: "p1-tb-0", seat: "p1", tile: "F5", fuseTurns: 3, remaining: 3, status: "armed", manuallyTriggered: false, ...overrides };
 }
 
 describe("board geometry (11×11, identical to 1편)", () => {
@@ -266,6 +268,93 @@ describe("time-bomb detonation — 3×3 blast", () => {
     expect(publiclyExplodedBombTiles(state)).toEqual([]);
     const detonated = applyAction(state, { type: "SELECT_TILE_STEP", seat: "p2", tile: "K10" });
     expect(publiclyExplodedBombTiles(detonated)).toEqual(["F5"]);
+  });
+});
+
+describe("DETONATE_BOMB — 원격 즉시 격발 (2026-09-07)", () => {
+  it("canManuallyDetonate is true only while armed and above the manual-trigger delay", () => {
+    expect(canManuallyDetonate(bomb({ remaining: 5 }))).toBe(true);
+    expect(canManuallyDetonate(bomb({ remaining: TIME_BOMB_MANUAL_TRIGGER_DELAY }))).toBe(false);
+    expect(canManuallyDetonate(bomb({ remaining: 1 }))).toBe(false);
+    expect(canManuallyDetonate(bomb({ remaining: 5, status: "exploded" }))).toBe(false);
+  });
+
+  it("clamps remaining down to TIME_BOMB_MANUAL_TRIGGER_DELAY and flags manuallyTriggered, as a free action (no phase/turn/actionsPlayed change)", () => {
+    const state = baseState({
+      activeSeat: "p1",
+      timeBombs: [bomb({ id: "p1-tb-0", seat: "p1", tile: "F5", fuseTurns: 5, remaining: 5 })],
+    });
+    const next = applyAction(state, { type: "DETONATE_BOMB", seat: "p1", bombId: "p1-tb-0" });
+    expect(next.timeBombs[0].remaining).toBe(TIME_BOMB_MANUAL_TRIGGER_DELAY);
+    expect(next.timeBombs[0].manuallyTriggered).toBe(true);
+    expect(next.phase).toBe("PLAYER_MOVE");
+    expect(next.activeSeat).toBe("p1");
+    expect(next.actionsPlayed).toBe(0);
+  });
+
+  it("rejects detonating on the opponent's turn", () => {
+    const state = baseState({
+      activeSeat: "p2",
+      timeBombs: [bomb({ id: "p1-tb-0", seat: "p1", tile: "F5", fuseTurns: 5, remaining: 5 })],
+    });
+    const next = applyAction(state, { type: "DETONATE_BOMB", seat: "p1", bombId: "p1-tb-0" });
+    expect(next.timeBombs[0].remaining).toBe(5); // unchanged, no-op
+  });
+
+  it("rejects detonating a bomb owned by the other seat", () => {
+    const state = baseState({
+      activeSeat: "p1",
+      timeBombs: [bomb({ id: "p2-tb-0", seat: "p2", tile: "F5", fuseTurns: 5, remaining: 5 })],
+    });
+    const next = applyAction(state, { type: "DETONATE_BOMB", seat: "p1", bombId: "p2-tb-0" });
+    expect(next.timeBombs[0].remaining).toBe(5);
+  });
+
+  it("is a no-op once the bomb is already at or below the manual-trigger delay (nothing left to shorten)", () => {
+    const state = baseState({
+      activeSeat: "p1",
+      timeBombs: [bomb({ id: "p1-tb-0", seat: "p1", tile: "F5", fuseTurns: 5, remaining: TIME_BOMB_MANUAL_TRIGGER_DELAY })],
+    });
+    const next = applyAction(state, { type: "DETONATE_BOMB", seat: "p1", bombId: "p1-tb-0" });
+    expect(next.timeBombs[0].remaining).toBe(TIME_BOMB_MANUAL_TRIGGER_DELAY);
+    expect(next.timeBombs[0].manuallyTriggered).toBe(false);
+  });
+
+  it("is a no-op on an already-exploded bomb", () => {
+    const state = baseState({
+      activeSeat: "p1",
+      timeBombs: [bomb({ id: "p1-tb-0", seat: "p1", tile: "F5", status: "exploded", remaining: 0 })],
+    });
+    const next = applyAction(state, { type: "DETONATE_BOMB", seat: "p1", bombId: "p1-tb-0" });
+    expect(next.timeBombs[0].manuallyTriggered).toBe(false);
+  });
+
+  it("end-to-end: a manual trigger still detonates exactly TIME_BOMB_MANUAL_TRIGGER_DELAY moves later through the normal tickTimeBombs path", () => {
+    let state = baseState({
+      activeSeat: "p1",
+      players: {
+        p1: { position: "A1", score: 0, treasuresClaimed: 0, mineHitsTaken: 0, bombHitsTaken: 0, bombsSafelyDetonated: 0 },
+        p2: { position: "G6", score: 0, treasuresClaimed: 0, mineHitsTaken: 0, bombHitsTaken: 0, bombsSafelyDetonated: 0 },
+      },
+      timeBombs: [bomb({ id: "p1-tb-0", seat: "p1", tile: "F5", fuseTurns: 5, remaining: 5 })],
+    });
+    // p1 presses "즉시 격발" on their own turn instead of a fuse naturally reaching 0.
+    state = applyAction(state, { type: "DETONATE_BOMB", seat: "p1", bombId: "p1-tb-0" });
+    expect(state.timeBombs[0].remaining).toBe(2);
+
+    // It's still a free action — p1 still has to move to end the turn. A1->A2 is a
+    // plain, never-visited, zero-adjacent-mine reveal, so the turn auto-passes to p2
+    // immediately (no REVEAL_STEP gate — see `finalizeAction`).
+    state = applyAction(state, { type: "SELECT_TILE_STEP", seat: "p1", tile: "A2" });
+    expect(state.timeBombs[0].remaining).toBe(1);
+    expect(state.lastBombEvents.length).toBe(0);
+    expect(state.phase).toBe("PLAYER_MOVE");
+    expect(state.activeSeat).toBe("p2");
+
+    const detonated = applyAction(state, { type: "SELECT_TILE_STEP", seat: "p2", tile: "G5" });
+    expect(detonated.timeBombs[0].status).toBe("exploded");
+    expect(detonated.lastBombEvents.length).toBe(1);
+    expect(detonated.lastBombEvents[0].hitSeats).toEqual(["p2"]); // p2 walked into F5's blast zone
   });
 });
 

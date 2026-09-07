@@ -1,6 +1,50 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-07 (**망각의 지뢰 2(Mine of Oblivion 2) — 모바일 Zero-Scroll 3단 대시보드
+_최종 갱신: 2026-09-07 (**망각의 지뢰 2(Mine of Oblivion 2) — 원격 즉시 격발(수동 기폭) + 규칙
+안내 UI 세션** — "시한폭탄이 기계적으로만 터지지 않고, 유저가 전략적 타이밍에 직접 터뜨릴 수 있는
+'원격 격발' 기능과 'N턴 후 폭파' 예약 버튼을 추가해달라"는 요청. 요청서는 `Board.tsx`/`Grid.tsx`/
+`BombControlModal.tsx`/`types.ts` 파일 구조를 전제했으나, 실제로는 `MineOfOblivion2Board.tsx`/
+`MineOfOblivion2Grid.tsx`/`engine.ts`(타입도 여기 포함, 별도 `types.ts` 없음)였고
+`BombControlModal.tsx`는 애초에 존재하지 않았음 — 이 프로젝트에서 반복되는 요청 전제-실제 코드
+불일치 패턴의 또 다른 사례. 또한 "설치 시 N턴(1/2/3턴) 선택 버튼"은 이미 2026-09-06 신규 게임
+세션에서 3/4/5턴 퓨즈 선택 UI로 구현되어 있었다 — 브리핑의 예시 숫자였을 뿐 실제 요구사항은 아직
+없던 "원격 즉시 격발" 쪽이었음.
+
+요청서 자체가 "격발 시 턴 소모 여부 등은 임의로 추정하지 말고 확인 후 진행"을 명시해
+`AskUserQuestion` 두 라운드(총 4+2문항)로 확인: ① **격발 조건 = 상대 위치·경과 턴수 무관, 본인
+차례면 언제든 가능**(브리핑의 "상대가 3×3 범위에 들어왔을 때"라는 조건부 표현은 채택하지 않음).
+② **턴 소모 = 무료 액션**(이동과 별개, 턴을 끝내지 않음). ③ **퓨즈 범위 = 기존 3/4/5턴 유지**(1/2/3턴
+으로 좁히지 않음). ④ **격발은 "즉시"가 아니라 "2턴 후"** — 사용자가 직접 지정: 격발 버튼을 누르면
+그 자리에서 터지는 게 아니라 해당 폭탄의 남은 카운트다운이 **2턴**으로 강제 단축될 뿐이고, 이후
+평소와 동일한 전역 턴 카운트다운 경로를 타고 정확히 2턴 뒤 실제 3×3 폭발이 일어남(이미 2턴 이하로
+남은 폭탄은 격발 버튼이 비활성화됨). ⑤ 룰북 문서 경로 = 기존 관행대로
+`boardGameRule/망각의 지뢰 2/망각의 지뢰 2.md` 유지(프로젝트 루트 `망각의지뢰2.md` 아님).
+
+**구현**: `engine.ts`에 `DETONATE_BOMB` 액션 + `applyDetonateBomb`(본인 턴·본인 소유·armed 상태만
+허용, `remaining`을 `TIME_BOMB_MANUAL_TRIGGER_DELAY`(2)로 클램프하고 `manuallyTriggered` 플래그만
+세팅 — phase/activeSeat/actionsPlayed 불변) + `canManuallyDetonate` 헬퍼 추가. `TimeBomb`에
+`manuallyTriggered: boolean` 필드 신규. 폭발 자체는 기존 `tickTimeBombs` 경로를 100% 재사용(신규
+분기 없음). UI: 신규 `MineOfOblivion2BombControlModal.tsx`(격발 팝업 — 남은 턴 배지, [즉시 격발]
+버튼, 격발 가능 시에만 활성화, "이 칸으로 이동" 보조 버튼)를 `MineOfOblivion2Board.tsx`에서
+`bombControlId` 로컬 상태로 관리. `handleTileTap`을 확장해 **본인 소유의 아직 안 터진 폭탄 칸은
+인접 여부와 무관하게(원격이므로) 탭 가능**하도록 `MineOfOblivion2Grid.tsx`에 `isMyTurn` prop과
+`data-tile` 속성(자동화 테스트/향후 검증용으로도 재사용 가능)을 추가하고 `clickable` 판정에 반영.
+보드/모바일 대시보드 모두에 상시 규칙 안내 배지("💡 시한폭탄은 지정한 턴 뒤 자동 폭발하거나...")를
+본인 폭탄이 하나라도 있을 때만 노출. `soundEngine.ts`에 격발 확정 전용 2음 아밍 SFX
+`playBombManualArm()` 신규(기존 대폭발음 `playTimeBombBlast`와 구분).
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint`(대상 파일 0 에러/경고) / `npx vitest run`(저장소
+전체 50개 파일·**1688개** 테스트 통과 — 기존 1681개 + `DETONATE_BOMB` 신규 7개, 합법성 4종 + 클램프
+동작 + 자연 만료 경로로 이어지는 end-to-end 케이스) / `npx next build`(정적 21페이지 생성 성공) 모두
+통과. 추가로 캐시된 Playwright Chromium(430×900 모바일 뷰포트)으로 실제 방 생성→봇 추가→설치(지뢰
+8+폭탄 3매설, 폭탄 하나는 시작 칸에서 8방향 인접하지 않은 C1에 배치)→내 차례 진입→**인접하지 않은
+내 폭탄 칸(C1) 탭 → 격발 팝업 정상 렌더 확인 → [즉시 격발] 클릭 → 남은 턴 4→2 갱신 및 버튼
+비활성화 실측 확인**까지 스크린샷 3장으로 검증(`[[visual-check-token-cost-gate]]` 범위 규율에 따라
+이 한 가지 질문에만 한정). 스크린샷에 찍힌 "1 Issue" 배지는 이 세션과 무관한 기존
+`PatchNoteButton.tsx` 하이드레이션 미스매치 경고(2026-09-07 이전 세션에서도 동일하게 관찰·문서화됨)
+— 재확인만 하고 손대지 않음.
+
+_이전 갱신: 2026-09-07 (**망각의 지뢰 2(Mine of Oblivion 2) — 모바일 Zero-Scroll 3단 대시보드
 세션** — "모바일 뷰포트에서 11×11 지뢰/시한폭탄 보드가 화면을 벗어나 상하 스크롤을 내려야 하니,
 [상단: 상대 상태]-[중앙: 정사각형 반응형 보드]-[하단: 내 상태·컨트롤]이 100dvh 안에 스크롤 없이
 들어오게 해달라"는 요청. 요청서는 `Board.tsx`/`Grid.tsx`/`Controls.tsx` 3분할 파일 구조를 전제했으나,

@@ -44,6 +44,8 @@ export interface MineOfOblivion2GridProps {
   myBombByTile: Map<TileId, { remaining: number }>;
   myDangerZone: Set<TileId>;
   iAmReady: boolean;
+  /** Whether it's the viewer's own PLAYER_MOVE turn — lets a tile holding one of the viewer's own still-armed bombs stay tappable (for remote detonation) even when it isn't currently adjacent/reachable. Defaults to false so existing callers that don't yet pass it keep today's reachable-only behavior. */
+  isMyTurn?: boolean;
   onTap: (tile: TileId) => void;
   floatingReveal: { tile: TileId; scoreGained: number; nonce: number } | null;
   /** "desktop" = current wide scroll box (unchanged). "mobile" = fixed aspect-square clipped frame. */
@@ -65,6 +67,7 @@ export default function MineOfOblivion2Grid({
   myBombByTile,
   myDangerZone,
   iAmReady,
+  isMyTurn = false,
   onTap,
   floatingReveal,
   variant,
@@ -131,6 +134,7 @@ export default function MineOfOblivion2Grid({
               myBombByTile={myBombByTile}
               myDangerZone={myDangerZone}
               iAmReady={iAmReady}
+              isMyTurn={isMyTurn}
               onTap={onTap}
               floatingReveal={floatingReveal}
             />
@@ -155,6 +159,7 @@ function RowCells({
   myBombByTile,
   myDangerZone,
   iAmReady,
+  isMyTurn,
   onTap,
   floatingReveal,
 }: {
@@ -171,6 +176,7 @@ function RowCells({
   myBombByTile: Map<TileId, { remaining: number }>;
   myDangerZone: Set<TileId>;
   iAmReady: boolean;
+  isMyTurn: boolean;
   onTap: (tile: TileId) => void;
   floatingReveal: { tile: TileId; scoreGained: number; nonce: number } | null;
 }) {
@@ -198,13 +204,18 @@ function RowCells({
         const myBomb = myBombByTile.get(tile);
         const isInMyDangerZone = myDangerZone.has(tile) && !myBomb;
         const isSafeZone = isSafeZoneTile(tile);
-        const clickable = state.phase === "SETUP_MINE" ? isHazardSelectable : isReachable;
+        // A tile holding one of the viewer's OWN still-armed bombs stays tappable on
+        // their own turn regardless of adjacency — remote detonation works anywhere
+        // on the board (engine.ts module doc #5).
+        const isMyBombTappable = !!myBomb && isMyTurn;
+        const clickable = state.phase === "SETUP_MINE" ? isHazardSelectable : isReachable || isMyBombTappable;
         const isFloatingHere = floatingReveal?.tile === tile;
 
         return (
           <button
             key={tile}
             type="button"
+            data-tile={tile}
             disabled={!clickable}
             onClick={() => onTap(tile)}
             className={`relative flex flex-col items-center justify-center border text-[9px] font-medium transition ${
@@ -214,7 +225,9 @@ function RowCells({
                   ? "border-amber-400 bg-amber-500/25 ring-2 ring-amber-400/70"
                   : isReachable
                     ? "moo2-tile-highlight-pulse border-emerald-300/70 bg-emerald-400/10"
-                    : isSafeZone
+                    : isMyBombTappable
+                      ? "border-amber-400/70 bg-amber-500/10 ring-1 ring-amber-400/50"
+                      : isSafeZone
                       ? "moo2-safezone-aura border-amber-300/60 bg-gradient-to-br from-emerald-400/15 via-amber-300/10 to-emerald-400/15"
                       : isInMyDangerZone
                         ? "moo2-danger-zone-pulse border-orange-400/50 bg-orange-500/5"

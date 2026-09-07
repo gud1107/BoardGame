@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { MINES_PER_PLAYER, START_TILE, TIME_BOMBS_PER_PLAYER, TIME_BOMB_FUSE_OPTIONS, TREASURE_TILES } from "./engine";
+import { MINES_PER_PLAYER, START_TILE, TIME_BOMBS_PER_PLAYER, TIME_BOMB_FUSE_OPTIONS, TIME_BOMB_MANUAL_TRIGGER_DELAY, TREASURE_TILES } from "./engine";
 
 export default function MineOfOblivion2RulebookModal({ onClose }: { onClose: () => void }) {
   return (
@@ -62,6 +62,18 @@ export default function MineOfOblivion2RulebookModal({ onClose }: { onClose: () 
                 지나갔다면, 설치자가 <b>+2점</b> 보너스를 받습니다.
               </p>
             </div>
+            <div className="rounded-xl border border-orange-400/20 bg-orange-400/5 p-3 sm:col-span-2">
+              <p className="mb-1 font-medium text-orange-300">🕹️ 원격 즉시 격발 (수동 기폭)</p>
+              <p className="text-xs text-white/60">
+                본인 차례라면, 상대의 위치나 남은 턴 수와 무관하게 언제든 자신이 설치한 시한폭탄 칸을 탭해
+                <b> [즉시 격발]</b>을 누를 수 있습니다. 다만 그 자리에서 바로 터지는 것은 아니고, 남은 턴이{" "}
+                <b>{TIME_BOMB_MANUAL_TRIGGER_DELAY}턴</b>으로 강제 단축될 뿐입니다 — 이후로는 평소와 똑같이
+                {TIME_BOMB_MANUAL_TRIGGER_DELAY}번의 이동(전역 턴)이 더 지나야 실제로 3×3 폭발이 일어납니다.
+                이미 남은 턴이 {TIME_BOMB_MANUAL_TRIGGER_DELAY}턴 이하라면 더 단축할 게 없어 격발 버튼이
+                비활성화됩니다. 이 격발은 이동과 별개의 <b>무료 액션</b>이라 턴을 소모하지 않으므로, 격발
+                후에도 그대로 이동해 턴을 마칠 수 있습니다.
+              </p>
+            </div>
           </div>
         </section>
 
@@ -99,6 +111,11 @@ export default function MineOfOblivion2RulebookModal({ onClose }: { onClose: () 
             <li>긴 퓨즈(5턴)는 상대가 그 구역을 지나갈 때까지 기다릴 시간을 벌지만, 그만큼 상대도 대비할 시간이 늘어납니다.</li>
             <li>내 시한폭탄의 3×3 반경에 스스로 들어가면 자폭 −5를 당하니, 카운트다운이 얼마 안 남은 내 폭탄 근처는 직접 피하세요.</li>
             <li>일반 지뢰와 달리 시한폭탄은 밟아도 안전하다는 점을 역이용해, 상대를 방심시키는 블러핑 동선도 가능합니다.</li>
+            <li>
+              상대가 내 시한폭탄 반경 안에 막 들어온 순간을 놓쳤다면, 자동 카운트다운을 기다리지 말고
+              [즉시 격발]로 {TIME_BOMB_MANUAL_TRIGGER_DELAY}턴짜리 강제 카운트다운을 새로 걸어 추격전을 걸 수도
+              있습니다.
+            </li>
           </ul>
         </section>
       </div>

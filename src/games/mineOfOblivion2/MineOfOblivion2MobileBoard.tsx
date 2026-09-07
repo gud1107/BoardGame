@@ -51,6 +51,8 @@ export interface MineOfOblivion2MobileBoardProps {
   myDangerZone: Set<TileId>;
   onTap: (tile: TileId) => void;
   floatingReveal: { tile: TileId; scoreGained: number; nonce: number } | null;
+  /** One-line "즉시 격발" rule reminder — null when the viewer has no live bomb to act on. */
+  bombGuideText: string | null;
 }
 
 export default function MineOfOblivion2MobileBoard({
@@ -78,6 +80,7 @@ export default function MineOfOblivion2MobileBoard({
   myDangerZone,
   onTap,
   floatingReveal,
+  bombGuideText,
 }: MineOfOblivion2MobileBoardProps) {
   const showSetupControls = state.phase === "SETUP_MINE" && !iAmReady;
 
@@ -148,12 +151,15 @@ export default function MineOfOblivion2MobileBoard({
         myBombByTile={myBombByTile}
         myDangerZone={myDangerZone}
         iAmReady={iAmReady}
+        isMyTurn={isMyTurn}
         onTap={onTap}
         floatingReveal={floatingReveal}
         variant="mobile"
         cellPx={30}
         defaultZoom={0.75}
       />
+
+      {bombGuideText && <p className="rounded-lg border border-amber-400/15 bg-amber-400/5 px-2 py-1 text-center text-[10px] text-amber-200/80 break-keep">{bombGuideText}</p>}
 
       {/* 하단: 내 상태 */}
       <SeatHud

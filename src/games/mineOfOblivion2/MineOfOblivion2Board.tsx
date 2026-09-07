@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Avatar from "@/components/common/Avatar";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import MineOfOblivion2BombControlModal from "./MineOfOblivion2BombControlModal";
 import RevealOverlay, { SeatHud } from "./MineOfOblivion2Effects";
 import MineOfOblivion2Grid from "./MineOfOblivion2Grid";
 import MineOfOblivion2MobileBoard from "./MineOfOblivion2MobileBoard";
@@ -27,6 +28,7 @@ import {
   type MineOfOblivion2State,
   type Seat,
   type TileId,
+  type TimeBomb,
   type TimeBombFuse,
 } from "./engine";
 
@@ -85,6 +87,7 @@ export default function MineOfOblivion2Board({ state, viewerSeat, names, opponen
   const [selectedBombs, setSelectedBombs] = useState<BombPlacement[]>([]);
   const [placeMode, setPlaceMode] = useState<"mine" | "bomb">("mine");
   const [pendingFuse, setPendingFuse] = useState<TimeBombFuse>(4);
+  const [bombControlId, setBombControlId] = useState<string | null>(null);
   const isMobile = useIsMobile();
 
   const iAmReady = state.mineReady[viewerSeat];
@@ -157,6 +160,16 @@ export default function MineOfOblivion2Board({ state, viewerSeat, names, opponen
       if (selectedMines.length > 0) setSelectedMines([]);
       if (selectedBombs.length > 0) setSelectedBombs([]);
     }
+    if (bombControlId !== null) setBombControlId(null);
+  }
+
+  // Close the bomb-control popup the instant it's no longer this viewer's turn
+  // (e.g. they detonated/moved and the turn passed) — it only ever makes sense
+  // to act on it while `isMyTurn` is true.
+  const [prevIsMyTurn, setPrevIsMyTurn] = useState(isMyTurn);
+  if (isMyTurn !== prevIsMyTurn) {
+    setPrevIsMyTurn(isMyTurn);
+    if (!isMyTurn && bombControlId !== null) setBombControlId(null);
   }
 
   const myPos = state.players[viewerSeat].position;
@@ -196,7 +209,31 @@ export default function MineOfOblivion2Board({ state, viewerSeat, names, opponen
       else toggleBombTile(tile);
       return;
     }
+    // Tapping a tile holding one of MY OWN still-armed bombs opens the remote
+    // detonation popup instead of attempting a move — even when that tile
+    // isn't currently adjacent/reachable, since remote detonation is anywhere
+    // on the board. Only available on my own turn (module doc #5 in engine.ts).
+    if (isMyTurn) {
+      const myBomb = ownArmedTimeBombs(state, viewerSeat).find((b) => b.tile === tile);
+      if (myBomb) {
+        setBombControlId(myBomb.id);
+        return;
+      }
+    }
     if (!isMyTurn || !reachable.has(tile)) return;
+    onAction({ type: "SELECT_TILE_STEP", seat: viewerSeat, tile });
+  }
+
+  function closeBombControl() {
+    setBombControlId(null);
+  }
+
+  function handleDetonateBomb(bombId: string) {
+    onAction({ type: "DETONATE_BOMB", seat: viewerSeat, bombId });
+  }
+
+  function handleMoveHereFromBombControl(tile: TileId) {
+    setBombControlId(null);
     onAction({ type: "SELECT_TILE_STEP", seat: viewerSeat, tile });
   }
 
@@ -224,6 +261,10 @@ export default function MineOfOblivion2Board({ state, viewerSeat, names, opponen
           : `${names[opponentSeat]}님의 차례`;
 
   const selectedBombTiles = new Set(selectedBombs.map((b) => b.tile));
+  const bombControlBomb: TimeBomb | undefined = bombControlId ? state.timeBombs.find((b) => b.id === bombControlId && b.status === "armed") : undefined;
+  // Persistent one-line rule reminder (§요청 항목 2) — only worth showing once the viewer actually has a live bomb to act on.
+  const bombGuideText = "💡 시한폭탄은 지정한 턴 뒤 자동 폭발하거나, 언제든 내 폭탄을 탭해 [즉시 격발]로 2턴 후 강제 폭발시킬 수 있어요! (폭발 범위 내 −5점, 비어있으면 +2점)";
+  const showBombGuide = state.phase !== "SETUP_MINE" && state.phase !== "GAME_OVER" && myArmedBombs.length > 0;
 
   return (
     <div className="flex w-full flex-col gap-2 sm:gap-3">
@@ -255,6 +296,7 @@ export default function MineOfOblivion2Board({ state, viewerSeat, names, opponen
           myDangerZone={myDangerZone}
           onTap={handleTileTap}
           floatingReveal={floatingReveal}
+          bombGuideText={showBombGuide ? bombGuideText : null}
         />
       ) : (
         <>
@@ -318,6 +360,7 @@ export default function MineOfOblivion2Board({ state, viewerSeat, names, opponen
             myBombByTile={myBombByTile}
             myDangerZone={myDangerZone}
             iAmReady={iAmReady}
+            isMyTurn={isMyTurn}
             onTap={handleTileTap}
             floatingReveal={floatingReveal}
             variant="desktop"
@@ -340,6 +383,8 @@ export default function MineOfOblivion2Board({ state, viewerSeat, names, opponen
             {state.phase !== "SETUP_MINE" && <span className="text-[10px] text-white/30">보물 {state.treasureClaimCount}/3 획득됨</span>}
           </div>
 
+          {showBombGuide && <p className="rounded-xl border border-amber-400/15 bg-amber-400/5 px-3 py-1.5 text-[11px] text-amber-200/80 break-keep">{bombGuideText}</p>}
+
           {state.phase === "SETUP_MINE" && !iAmReady && (
             <button
               type="button"
@@ -351,6 +396,16 @@ export default function MineOfOblivion2Board({ state, viewerSeat, names, opponen
             </button>
           )}
         </>
+      )}
+
+      {bombControlBomb && (
+        <MineOfOblivion2BombControlModal
+          bomb={bombControlBomb}
+          canMoveHere={reachable.has(bombControlBomb.tile)}
+          onClose={closeBombControl}
+          onDetonate={() => handleDetonateBomb(bombControlBomb.id)}
+          onMoveHere={() => handleMoveHereFromBombControl(bombControlBomb.tile)}
+        />
       )}
 
       {state.phase === "REVEAL_STEP" &&
