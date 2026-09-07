@@ -1,6 +1,70 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-07 (**라스베가스(Las Vegas) — 모바일 Zero-Scroll 컴팩트 대시보드 전면 개편
+_최종 갱신: 2026-09-07 (**페루도(Perudo) — 모바일 가로 스크롤(가로 넘침) 제거 세션** — "모바일
+뷰포트에서 보드가 화면 가로 폭을 초과해 옆으로 살짝 스와이프해야만 주사위 판·베팅 현황이 보인다"는
+요청. 요청서는 `src/games/perudo/` 하위에 `Board.tsx`/`BettingBoard.tsx`/`DiceCup.tsx`/
+`PlayerCircle.tsx`/`ActionPanel.tsx` 5분할 파일 구조와 "둥근 원형 원탁 배치"를 전제했으나, 실제로는
+전부 `PerudoBoard.tsx` 1241줄 단일 파일(+`PerudoGame.tsx`/`engine.ts`/`dice/PerudoDie.tsx`)에
+통합돼 있었고, 상대 배치도 원탁이 아니라 스코어보드 리스트, 중앙 보드는 실제 페루도 물리 보드판을
+그대로 재현한 **사각형 30칸 트랙**(`RectBidTrack` — 2026-08-20~09-04 세션들에 걸쳐 만든, 클릭으로
+직접 베팅 칸을 선택하는 판정 트랙)이었음 — 이 프로젝트에서 반복되는 요청 전제-실제 코드 불일치
+패턴의 또 다른 사례.
+
+진행 전 `AskUserQuestion`으로 2가지 확인: ① **보드 방식 = 기존 사각형 트랙 유지 + 축소**(요청서
+목업의 "중앙 대형 배지로 전면 교체" 안은 기각 — 물리보드 재현·칸 클릭 판정·lap 이어붙이기 등 여러
+세션에 걸쳐 만든 기능을 보존) / ② **범위 = 가로만 해결**(세로는 그대로 — 통계 패널/스코어보드는
+계속 아래로 스크롤).
+
+**원인**: `--perudo-cell`(타일 크기)이 2026-08-21 세션에서 `clamp(50px, calc(33px + 4.5vw), 78px)`로
+확대된 뒤로, 9칸(모서리 2 + 7칸 스트립)의 최소 폭이 실제 모바일 페이지 여백
+(`GamePlayPage`의 `px-4` + `TABLE_PANEL`의 `p-3` + 트랙 자체 `border-4`+`p-1`, 합 72px)을 뚫고
+360~390px 폰 화면을 초과 — 기존 `overflow-x-auto`가 이를 가로 스와이프로만 가려주고 있었음.
+
+**구현**: `--perudo-cell`을 단일 vw `clamp()` 대신 `sm`(640px) 경계로 나뉜 두 개의 실제 `@media`
+규칙(`BOARD_CELL_SIZE_CSS`, `.perudo-rect-track`에 인라인 `<style>`로 주입)으로 교체 — 각 구간의
+실제 여백(모바일 72px / `sm+` 100px)을 반영해 9로 나눈 값, 최저 30px(실사용 최소 폰인 360px대에서는
+여유 있게 안 걸림)~최고 78px(기존 데스크톱 크기 그대로 유지)로 클램프. 타일이 작아지며 컴포저의
+고정폭 `FacePicker`(6버튼, 기존 `h-9 w-9`/`gap-1.5` ≈ 246px)가 새 최소 폭(7×30=210px)에 더 이상 안
+맞아 보드 자체의 스크롤 래퍼 안에서 다시 넘칠 뻔한 걸 `h-6 w-6`/`gap-1`(≈164px)로 축소, 수량
+스테퍼도 `h-8 w-8`→`h-7 w-7`로 함께 축소해 여유를 더함.
+
+**실제로 찾은 2차 버그(정직 공개)**: 위 축소만으로 캐시된 Playwright Chromium(360×740) 실측 결과
+문서 레벨 스크롤은 0이었지만 보드 자체 스크롤 래퍼엔 여전히 14px 넘침이 남아있었음 — 원인은
+`RectBidTrack`의 중앙 그리드 셀(`col-start-2 row-start-2`)에 걸려 있던 `p-1.5 sm:p-2.5` 패딩이 그
+안의 `children`(컴포저, `maxWidth: stripLength(7)`로 캡됨) **바깥**에서 그리드 열 폭에 그대로
+더해져, 열2의 `auto` 트랙 폭이 남북 스트립(패딩 없음, 224px)보다 12px 더 넓어지며 보드 전체가 그만큼
+넓어지고 모서리-스트립 사이에 미세한 정렬 틈까지 생기던, 이번 세션 이전부터 있던 잠재 버그(기존
+50px 플로어에서는 여유가 커서 안 드러났음). 패딩을 그리드 셀에서 떼어 `children` 자신의 `maxWidth`
+캡 **안쪽**으로 옮겨 해결 — 남은 실측 오차는 2px(서브픽셀/스크롤바 거터 수준, 무해).
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint src/games/perudo/PerudoBoard.tsx`(0 에러/경고) /
+`npx vitest run Perudo.test.ts`(기존 80개 테스트 그대로 통과, 엔진 로직 무변경) / `npm run
+build`(next build 전체 성공, 로컬 + 격리 worktree 양쪽). 캐시된 Playwright Chromium(스크래치패드에
+`playwright-core`만 설치, 캐시된 `chromium-1234` 실행 파일 직접 지정)으로 360×740 뷰포트에서 방
+생성→봇 채우기→내 턴(컴포저 노출, 가장 넓은 케이스) 도달 후 실측: `document.documentElement`/보드
+스크롤 래퍼 모두 가로 스크롤 0(잔여 2px 무해), 스크린샷으로 보드·FacePicker·스테퍼·확정/페루도!/맞아!
+버튼까지 잘림 없이 모두 노출 확인.
+
+**커밋/푸시**: `git add`는 이번 세션이 실제로 만진 `src/games/perudo/PerudoBoard.tsx`만 명시적으로
+골라 스테이징 — `git status`에 이미 다른(동시 실행 중인) 세션들의 미커밋 산출물이 대량으로 떠
+있었음(센추리 세션이 보류한 신규 파일들, 여러 게임 룰북 이미지, `.claude/`, 루트 메모 파일 등 —
+요청서가 지시한 `git add .`를 그대로 따르면 전부 함께 커밋될 뻔함). 커밋 `abd36be` → `git push origin
+main` 완료.
+
+**배포 — 미완료(정직 공개)**: `vercel-deploy-uploads-working-tree-not-git-head` 메모리의 권고대로
+오염된 메인 워킹트리 대신 `abd36be` 커밋만 담은 격리 `git worktree`(스크래치패드 하위, `node_modules`
+robocopy 실복사 + `.env.local`/`.vercel` 복사)를 새로 만들어 그 안에서 `npm run build`는 성공시켰으나,
+`vercel deploy --prod --yes`는 두 차례 모두 로컬 CLI 프로세스가 "시스템 메모리 부족"으로 강제
+종료됨(`dev-server-oom-environment-limit` 메모리에 이미 기록된 이 환경의 고질적 호스트 메모리 부족이
+빌드/개발 서버뿐 아니라 배포 CLI에도 그대로 적용된 새로운 사례). 두 시도 모두 Vercel 쪽에 배포
+레코드(`dpl_4x1ezos8pLxccVmM2cAyE8EQxMnv` 등)는 생겼지만 상태가 `UNKNOWN`에 멈추고 빌드 로그도 전혀
+없음(업로드 도중 죽어 서버 쪽 빌드 트리거 자체가 안 걸린 것으로 추정) — 프로덕션 alias
+(`board-game-tau-navy.vercel.app`/`board-game-me-3871.vercel.app`)는 여전히 2시간 전 배포
+(`dpl_6GcJsHiS4pwVgqPYDySvo1j2JFSZ`)를 가리키고 있어 **이 세션의 수정은 아직 프로덕션에 반영되지
+않음**. 메모리의 "반복 재시도 금지" 권고에 따라 세 번째 시도는 하지 않음 — 다음 세션(또는 호스트
+메모리 여유가 있을 때)이 같은 격리 worktree에서 `vercel deploy --prod`만 이어서 실행하면 됨.)_
+
+_이전 갱신: 2026-09-07 (**라스베가스(Las Vegas) — 모바일 Zero-Scroll 컴팩트 대시보드 전면 개편
 세션** — "1줄에 2개씩 3행으로 배치된 6개 카지노 필드 때문에 모바일에서 계속 스크롤을 오르내려야
 하는 문제를 해결해달라"는 요청. 요청서는 `src/games/lasVegas/` 하위에 `Board.tsx`/`CasinoCard.tsx`/
 `DiceTray.tsx`/`PlayerSlots.tsx`가 있다고 전제했으나, 실제로는 전부 `LasVegasBoard.tsx` 902줄
