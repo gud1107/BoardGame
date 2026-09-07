@@ -57,8 +57,21 @@ start`로 프로덕션 빌드 서빙)으로 코요테 3인 방(호스트+봇2) �
 `코요테.md` §2-1(하우스룰 명세)과 §9(연출 명세, 9-1 입력 제약/9-2 집중 경고 배너/9-3 고정 뱃지)
 신규 추가.
 
-**Git/배포**: 커밋 & `origin/main` 푸시 완료(아래 참고). 배포는 [이 세션에서 진행 중 — 아래
-결과 반영].
+**Git/배포**: 커밋(`3b68fcf`) & `origin/main` 푸시 완료 — 이번 세션이 실제로 건드린 7개 파일만
+명시적으로 스테이징(`git status`에 잡힌 다른 동시 세션들의 미커밋 변경 — 삭제된 말달리자 PNG,
+쇼미더코인.md 수정, `.claude/`, 여러 미추적 이미지/문서 등 — 은 손대지 않음).
+
+**배포는 완료하지 못함**: `git worktree`로 정확히 `3b68fcf` 커밋만 격리하고 `node_modules`를 실제
+복사(심볼릭 링크 아님)한 뒤 `vercel deploy --prod`를 시도 — 업로드까지는 정상 진행(1.8MB, Inspect/
+Production URL 발급)됐으나 이후 "Building…"에서 16분 이상 멈춰 `vercel inspect`로 확인한 결과
+`status: UNKNOWN`, `Builds: . [0ms]` — 지난 두 세션(망각의 지뢰 2)이 겪은 것과 동일한 동시 워크트리
+배포 경합 실패 시그니처. 시작 시점에 이미 다른 두 세션의 `deploy-worktree`가 `git worktree list`에
+떠 있었음(`5ac642e`/`f1826c6` detached HEAD) — [[vercel-deploy-uploads-working-tree-not-git-head]]가
+문서화한 "오래 재시도하지 말 것" 지침에 따라 장시간 재시도하지 않고 태스크를 중단, 워크트리를
+정리(`git worktree remove --force`, 파일 삭제는 권한 오류로 실패했으나 git 메타데이터는 정상
+디레지스터됨 → `git worktree prune`으로 확인)하고 종료. 기존 프로덕션(`board-game-tau-navy.vercel.app`)
+은 `/`, `/lobby` 모두 200으로 정상 서빙 중 확인 — 다운타임 없음, 이번 세션 변경분(코요테 하우스룰)만
+아직 미반영. 다음 세션에서 동시 배포 경합이 없는 시점에 동일한 격리 워크트리 방식으로 재시도 필요.
 
 _이전 갱신: 2026-09-07 (**망각의 지뢰 2(Mine of Oblivion 2) — 원격 즉시 격발(수동 기폭) + 규칙
 안내 UI 세션** — "시한폭탄이 기계적으로만 터지지 않고, 유저가 전략적 타이밍에 직접 터뜨릴 수 있는
