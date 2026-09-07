@@ -1,6 +1,106 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-06 (**망각의 지뢰 2(Mine of Oblivion 2) 신규 게임 추가 세션 — 시한폭탄(Time
+_최종 갱신: 2026-09-07 (**라스베가스(Las Vegas) — 모바일 Zero-Scroll 컴팩트 대시보드 전면 개편
+세션** — "1줄에 2개씩 3행으로 배치된 6개 카지노 필드 때문에 모바일에서 계속 스크롤을 오르내려야
+하는 문제를 해결해달라"는 요청. 요청서는 `src/games/lasVegas/` 하위에 `Board.tsx`/`CasinoCard.tsx`/
+`DiceTray.tsx`/`PlayerSlots.tsx`가 있다고 전제했으나, 실제로는 전부 `LasVegasBoard.tsx` 902줄
+단일 파일(+`CasinoEmblem.tsx`/`CasinoPhotoArt.tsx`/`DiceIcon.tsx`/`DiceEffects.tsx`/
+`MoneyBillArt.tsx`/`engine.ts`)에 통합돼 있었음 — 이 프로젝트에서 반복되는 요청 전제-실제 코드
+불일치 패턴의 또 다른 사례.
+
+진행 전 `AskUserQuestion`으로 3가지 확인(요청서가 명시적으로 확인을 요구): ① **6개 카지노 그리드
+형태 = 3열×2행**(가로형 카드 — 요청서가 2×3/3×2 두 안을 함께 제시했던 지점) / ② **컴팩트 카지노
+타일 탭 동작 = 팝업/바텀시트로 전체 상세 표시**(요청서가 명시적으로 확인을 요구한 항목 — 총액
+뱃지 요약만 보이는 미니 타일과 별개로, 탭하면 데스크톱과 동일한 전체 지폐 스택+주사위 상세를
+바텀시트로 띄움) / ③ **적용 범위 = 모바일 전용 분기**(데스크톱/태블릿은 기존 스크롤 레이아웃
+그대로 유지, 센추리 세션의 `useIsMobile` 컨벤션을 그대로 계승).
+
+**구현**: 공유 렌더링 로직(`money`/`hexToRgba`/`CASINO_ACCENTS`/`DiceGroupRow`/`MoneyStack`/
+`CasinoTile`)을 `LasVegasBoard.tsx`에서 신규 `CasinoTile.tsx`로 분리 — 데스크톱 6열 그리드와
+모바일 컴팩트 탭 상세 바텀시트가 순환 참조 없이 완전히 동일한 데스크톱급 렌더링을 공유하게 함.
+신규 `useIsMobile.ts`(센추리와 동일 `max-width:767px` 훅, 두 트리 동시 마운트 시
+`FlyingDicePlacement`/`PayoutMoneyFly`가 읽는 `casinoTileRefs`/`rollPanelRef` ref-콜백이 서로
+덮어쓰는 문제 방지 — 센추리 세션이 이미 겪은 교훈 재적용)와 신규 `CompactCasinoBoard.tsx`(턴 상태
+1줄 + `CompactPlayersSummary`(좌석별 아바타/연결점/잔여 주사위/총상금 압축 배지) + 3×2 컴팩트
+카지노 그리드(`CompactCasinoTile` — 번호/총액 뱃지 + 색상별 미니 주사위 카운터 칩, 동률 시
+취소선+반투명 처리, 탭하면 `CasinoTile` 재사용 바텀시트 오픈) + `CompactDiceTray`(굴린 주사위를
+눈금별로 자동 그룹화한 칩을 원터치로 배치 — 룰북 §3상 한 눈금 선택 시 그 눈금 전량을 무조건
+배치해야 하므로 한 번의 탭이 곧 완전한 배치 액션)로 구성. 모든 게임 공통 `<MyTurnOverlay>`(중앙
+골드 팝업+차임)도 이번 세션에 처음 연동(라스베가스에는 그동안 빠져 있었음 — 요청서의 "정상 출력"
+요청이 실제로 유효한 갭이었음).
+
+브리핑 예시가 `h-[100dvh] overflow-hidden` 풀블리드를 제시했지만, 센추리 세션이 이미 겪은
+"공용 `/games/[gameId]` 페이지 템플릿(SiteHeader+타이틀+`py-8` 패딩) 위에 얹히는 구조라 100dvh가
+진짜 뷰포트를 넘쳐 하단이 잘리는" 버그(`century-art-overhaul-mobile-dashboard` 메모리 참고)를
+그대로 적용해 처음부터 회피 — 대신 각 섹션(헤더/플레이어 요약/6타일 그리드/주사위 트레이)을
+컴팩트 고정 크기로 실측 튜닝하는 콘텐츠 사이즈 방식 채택.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint src/games/lasVegas`(0 에러/경고) /
+`npx vitest run LasVegas.test.ts`(기존 43개 테스트 그대로 통과, 엔진 로직 무변경) / `npm run
+build`(next build 전체 성공). 캐시된 Playwright Chromium으로 390×844 모바일 뷰포트 실측: (1) 방
+생성→봇 추가→게임 시작 직후 스크린샷에서 헤더+플레이어 요약+3×2 카지노 6타일+주사위 굴리기
+버튼까지 스크롤 없이 한 화면에 모두 들어오고 `<MyTurnOverlay>` "MY TURN!" 골드 배너도 정상 노출됨을
+확인, (2) 1번 카지노 타일 탭 → 데스크톱과 동일한 실사 카지노 아트+지폐 스택 바텀시트가 정상
+오픈됨을 확인.
+
+**세션 중 발생한 사고(정직 공개)**: 검증에 쓴 로컬 `next start` 서버를 정리하며
+`taskkill //F //IM node.exe //T`를 실행 — 이 저장소는 여러 세션이 동시에 실행되는 것으로 이미
+알려져 있는데(`vercel-deploy-uploads-working-tree-not-git-head` 메모리 참고), 이 명령은 이
+세션이 띄운 프로세스만이 아니라 **시스템의 모든 node.exe를 무차별 종료**함 — 만약 이 시점에 다른
+세션이 자신의 dev 서버/빌드를 돌리고 있었다면 그것까지 강제 종료됐을 수 있음. 실제 피해 여부는
+확인하지 못함(다른 세션의 상태를 알 방법이 없음). **교훈**: 다음부터는 시작할 때 받아둔 PID만
+`taskkill //F //PID <pid>`로 정밀 종료할 것 — 이번처럼 프로세스명 전체 매칭은 금지.
+
+_이전 갱신: 2026-09-06 (**센추리: 향신료의 길(Century: Spice Road) — 인라인 SVG 일러스트 강화 +
+모바일 컴팩트 대시보드 + 카드 탭 미리보기 세션** — "일러스트/아이콘 에셋 추가 및 모바일 세로
+뷰포트 무스크롤 컴팩트 뷰로 전면 개편해달라"는 요청. 요청서는 `src/games/century/`의 `Board.tsx`/
+`MerchantCards.tsx`/`PointCards.tsx`/`Caravan.tsx`/`PlayerHand.tsx` 분리 파일 구조와 "질감·광택이
+살아있는 SVG/WebP 에셋"을 전제했으나, 실제로는 전부 `CenturyBoard.tsx` 1268줄 단일 파일이었고
+기존 스파이스 아이콘도 이미 이 프로젝트 전역 관례(외부 이미지 자산 없이 순수 인라인 SVG/CSS만
+사용, `ResourceIcon.tsx`/`perudo/PerudoFaceIcon.tsx` 등)를 따르고 있었음 — 반복되는 요청 전제-실제
+코드 불일치 패턴의 또 다른 사례. 이 세션에는 이미지 생성 도구가 없어 실사진급 WebP를 새로 만들 수
+없다는 진짜 제약도 있어, 진행 전 `AskUserQuestion`으로 4가지 확인: ① **에셋 방식 = 정교한 인라인
+SVG/CSS 강화**(기존 무외부자산 관례 유지, 사용자 이미지 업로드 방식 대신 채택) / ② **카드 탭 시
+세부 미리보기 팝업 = 추가**(기존엔 구매 불가능한 카드는 `disabled` 버튼이라 탭 자체가 막혀
+있었음) / ③ **모바일 컴팩트 대시보드 = 모바일 전용 분기**(데스크톱 매트 레이아웃은 그대로 유지) /
+④ **코드 구조 = 분리**(요청서 예시가 전제한 여러 파일 분리를 실제로 수행).
+
+**구현**: `CenturyBoard.tsx`를 얇은 오케스트레이터로 남기고 `boardChrome.tsx`(MAT/FELT/CARAVAN
+매트 스타일, 카트/코인/덱/보울 등 공유 프리미티브)·`CardArt.tsx`(카드 워터마크 + 시장 패널 헤더의
+오아시스 바자르/카라반 실루엣 배너 SVG)·`PointCardsMarket.tsx`·`MerchantMarket.tsx`·
+`MyCaravan.tsx`·`MyHandCards.tsx`·`OpponentsSummary.tsx`·`CardPreviewModal.tsx`(신규)·
+`CenturyModals.tsx`·`useIsMobile.ts`(신규) 9개 파일로 분리. `ResourceIcon.tsx`에는 기존
+gem/cube 글리프를 건드리지 않고 4대 향신료(강황 그릇·사프란 실 다발+루비·카다멈 꼬투리·시나몬
+롤)를 각각 다른 모양으로 그리는 `SpiceHeroIcon`을 신규 추가. 시장 카드는 구매 가능 여부와 무관하게
+전부 탭 가능해져(기존 `disabled` 데드엔드 제거) `CardPreviewModal`로 확대 미리보기 + 확인 후 실제
+액션(점수 카드는 즉시 획득, 상인 카드 0번 슬롯은 즉시 획득, 1번 이상은 기존 자원 배치 모달로
+이어짐)을 띄운다. 모바일 컴팩트 대시보드는 `useIsMobile`(matchMedia 훅)로 데스크톱/모바일 트리를
+**하나만** 마운트하는 방식을 채택했는데, 이는 순전히 버그 회피용 결정임 — 두 트리를 동시에 마운트해
+CSS로만 숨기면 `MerchantEffects.tsx`의 날아가는 자원 애니메이션이 참조하는 슬롯 DOM ref가 두 트리
+간에 서로 덮어써(마지막 마운트된 쪽이 이김) 좌표가 어긋나는 문제를 실제로 확인함. 첫 구현은
+브리핑 예시 그대로 `h-[100dvh]` 풀블리드를 시도했으나, 이 게임은 `/games/[gameId]` 공용 페이지
+템플릿(SiteHeader + 게임 타이틀 블록 + `py-8` 패딩) 내부에 얹히는 구조라 100dvh가 그 위 여백까지
+포함해 뷰포트를 넘쳐버려 캐러밴/손패/상대방 섹션이 화면 밖으로 잘리는 실제 버그를 라이브
+스크린샷으로 발견 — `100dvh` 강제 대신 각 섹션(카드 폰트·아이콘·패딩까지)을 컴팩트 크기로 실측
+튜닝하는 방식으로 교체해 재해결.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint src/games/century`(0 에러/경고) /
+`npx vitest run Century.test.ts`(기존 58개 테스트 그대로 통과, 엔진 로직은 무변경) 외에, 캐시된
+Playwright Chromium으로 실제 방 생성→봇 추가→플레이 화면까지 진행해 두 차례 라이브 스크린샷 검증
+(390×844 모바일 뷰포트 기준 `document.scrollingElement.scrollHeight === window.innerHeight`,
+즉 **스크롤 없이 점수 카드·상인 카드·향신료 보울·캐러밴·상대방 배지·손패가 한 화면에 모두 들어옴을
+실측 확인**; 1400×900 데스크톱 뷰포트에서 기존 매트 레이아웃이 그대로 정상 렌더링됨도 확인).
+더 작은 기기(iPhone SE급 667px)까지는 별도로 실측하지 않음 — 알려진 한계로 남김.
+
+**커밋·푸쉬·배포는 이번 세션에서 보류**: 사용자가 명시적으로 "로컬에만 반영하고 커밋, 푸쉬,
+배포는 대기"를 요청해 워킹트리에만 반영된 상태. **다음 세션/사용자 참고사항**: 바로 아래
+2026-09-06 망각의 지뢰 2 항목이 스스로 기록했듯, 그 세션이 `vercel deploy --prod`(git 커밋이 아닌
+워킹트리 그대로 업로드)를 실행한 시점에 이 세션의 그때까지의 **커밋되지 않은 센추리 작업 일부가
+의도치 않게 함께 프로덕션에 올라갔을 가능성이 있음**(`dpl_45owQN5wXRnu5sVM4DPvCJ3K8Vo3`,
+`board-game-tau-navy.vercel.app`). 이 세션이 사용자 지시대로 정식 커밋을 하면 그 라이브 상태가
+git 이력과 자연히 정합되지만, 하지 않으면 다음 누군가의 배포에서 사라질 수 있음.)_
+
+_이전 갱신: 2026-09-06 (**망각의 지뢰 2(Mine of Oblivion 2) 신규 게임 추가 세션 — 시한폭탄(Time
 Bomb) 3×3 대폭발 레이어** — "넷플릭스 <데스게임> 콘셉트의 1편(망각의 지뢰) 위에, 반경 3×3 폭발과
 턴 기반 카운트다운을 가진 '시한폭탄' 메커니즘을 얹은 신규 후속 게임을 만들어달라"는 요청. 요청서는
 `src/games/mineOfOblivion/` 또는 `mineOfOblivion2/` 경로와 `boardGameRule/망각의지뢰2.md`(프로젝트
