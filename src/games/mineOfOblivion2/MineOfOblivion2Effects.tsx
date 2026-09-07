@@ -302,7 +302,12 @@ export default function RevealOverlay({ event, bombEvents, names, viewerSeat, is
   return createPortal(body, document.body);
 }
 
-/** Small always-visible avatar+HUD strip for one seat — score/treasure/mine-hit/bomb stats. */
+/**
+ * Small always-visible avatar+HUD strip for one seat — score/treasure/mine-hit/bomb stats.
+ * `compact` (2026-09-07 모바일 제로 스크롤 레이아웃 요청) trims padding/avatar/font size for the
+ * mobile 3-tier dashboard's top/bottom bars — same fields, just smaller, so nothing about the
+ * information shown differs between desktop and mobile.
+ */
 export function SeatHud({
   seat,
   name,
@@ -313,6 +318,7 @@ export function SeatHud({
   bombsSafelyDetonated,
   isActive,
   connected,
+  compact = false,
 }: {
   seat: Seat;
   name: string;
@@ -323,22 +329,27 @@ export function SeatHud({
   bombsSafelyDetonated: number;
   isActive: boolean;
   connected: boolean;
+  compact?: boolean;
 }) {
   return (
-    <div className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition ${isActive ? "border-orange-400/50 bg-orange-500/10" : "border-white/10 bg-white/[0.03]"}`}>
-      <span className="flex items-center gap-1.5 text-sm font-semibold text-white break-keep">
-        <Avatar size={24} />
+    <div
+      className={`flex items-center justify-between gap-1.5 rounded-xl border transition ${compact ? "px-2 py-1.5" : "px-3 py-2"} ${
+        isActive ? "border-orange-400/50 bg-orange-500/10" : "border-white/10 bg-white/[0.03]"
+      }`}
+    >
+      <span className={`flex items-center gap-1.5 font-semibold text-white break-keep ${compact ? "text-xs" : "text-sm"}`}>
+        <Avatar size={compact ? 18 : 24} />
         {name}
-        {!connected && <span className="text-[10px] font-normal text-rose-300">(연결 끊김)</span>}
+        {!connected && <span className="text-[9px] font-normal text-rose-300">(끊김)</span>}
       </span>
-      <span className="flex items-center gap-2 text-xs text-white/60">
+      <span className={`flex items-center gap-1.5 text-white/60 ${compact ? "text-[10px]" : "text-xs"}`}>
         <span title="총점" className={`font-bold ${score < 0 ? "text-rose-300" : "text-amber-200"}`}>
           🏅 {score}
         </span>
         <span title="획득 보물">💎 {treasuresClaimed}</span>
         <span title="지뢰 피격 횟수">💥 {mineHitsTaken}</span>
         <span title="시한폭탄 피격 횟수">🧨 {bombHitsTaken}</span>
-        <span title="안전하게 터진 내 시한폭탄">🛡️ {bombsSafelyDetonated}</span>
+        {!compact && <span title="안전하게 터진 내 시한폭탄">🛡️ {bombsSafelyDetonated}</span>}
       </span>
       <span className="sr-only">{seat}</span>
     </div>

@@ -1,6 +1,52 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-07 (**페루도(Perudo) — 모바일 가로 스크롤(가로 넘침) 제거 세션** — "모바일
+_최종 갱신: 2026-09-07 (**망각의 지뢰 2(Mine of Oblivion 2) — 모바일 Zero-Scroll 3단 대시보드
+세션** — "모바일 뷰포트에서 11×11 지뢰/시한폭탄 보드가 화면을 벗어나 상하 스크롤을 내려야 하니,
+[상단: 상대 상태]-[중앙: 정사각형 반응형 보드]-[하단: 내 상태·컨트롤]이 100dvh 안에 스크롤 없이
+들어오게 해달라"는 요청. 요청서는 `Board.tsx`/`Grid.tsx`/`Controls.tsx` 3분할 파일 구조를 전제했으나,
+실제로는 전부 `MineOfOblivion2Board.tsx` 1개 파일(그리드 셀 렌더링까지 인라인 `RowCells`로 포함)에
+통합돼 있었고, "말 이동"도 요청서가 상정한 십자 D-Pad가 아니라 **인접 8방향(대각선 포함) 칸을
+그리드에서 직접 탭하는 방식**이었음 — 이 프로젝트에서 반복되는 요청 전제-실제 코드 불일치 패턴의
+또 다른 사례.
+
+요청서 자체가 "이동 방식은 임의로 추정하지 말고 확인 후 진행"을 명시해 `AskUserQuestion`으로 2가지
+확인: ① **이동 = 기존 그리드 직접 탭 유지(D-Pad 미추가, 권장)** — 대각선 이동을 지원하는 8방향
+엔진 규칙과 100% 일치하고 입력 경로가 하나뿐이라는 이유로 채택. ② **줌/팬 = 고정 뷰포트 안에서 유지
+(제거하지 않음)** — 121칸을 모바일 화면에 다 욱여넣으면 셀이 25~30px까지 작아지므로, 기존 ±버튼
+확대/축소·pinch/팬 기능을 없애는 대신 새 정사각형 프레임 안에 `overflow-hidden`으로 가둬 페이지
+스크롤은 0을 보장하면서 가독성 옵션은 보존.
+
+**구현**: `MineOfOblivion2Board.tsx`의 줌 컨트롤+스크롤 그리드+`RowCells` 셀 렌더링을
+`MineOfOblivion2Grid.tsx`(신규)로 통째로 추출해 데스크톱/모바일 두 트리가 탭-이동 로직과 셀 아트를
+완전히 동일하게 공유하도록 하고(`variant: "desktop" | "mobile"` prop으로 프레임 크기만 다르게),
+`lasVegas/useIsMobile.ts`/`century/useIsMobile.ts`와 동일한 `(max-width: 767px)` 매치미디어 훅을
+`mineOfOblivion2/useIsMobile.ts`로 복제(ARCHITECTURE.md §2 게임 간 제로 커플링 원칙에 따라 매
+게임마다 자체 사본 유지)해 모바일 전용 트리 `MineOfOblivion2MobileBoard.tsx`(신규)를 하나만
+마운트한다. 모바일 그리드 프레임은 `w-[min(88vw,42dvh)] h-[min(88vw,42dvh)] aspect-square
+overflow-hidden`로 고정해 좌우(vw 상한)·상하(dvh 상한) 양쪽 모두 페이지를 넘칠 수 없게 하고, 초기
+줌을 0.75로 낮춰 프레임 폭에 가깝게 맞춘 뒤 ±버튼으로 그 안에서만 확대/축소하도록 했다. 상단/하단
+`SeatHud`(`MineOfOblivion2Effects.tsx`)에는 `compact` prop을 추가해 아바타·패딩·폰트를
+줄이고(안전 감지 방패 🛡️ 통계 1개만 모바일에서 생략, 나머지 점수/보물/피격 수치는 데스크톱과 동일),
+설치 단계 지뢰/폭탄 배치 토글·퓨즈 선택·매설 확정 버튼도 같은 비율로 축소한 컴팩트 버전을
+`MineOfOblivion2MobileBoard.tsx`에 새로 배치했다. **`h-[100dvh]` 강제는 쓰지 않음** — 이 게임도
+`/games/[gameId]` 공용 페이지 템플릿(SiteHeader + 게임 타이틀 블록 + `py-8` 패딩) 안에 얹히는
+구조라 하드 100dvh를 게임 자신의 루트에 걸면 그 위 여백까지 포함해 뷰포트를 넘쳐버리는, 같은 날
+`century/useIsMobile.ts`·`lasVegas/CompactCasinoBoard.tsx` 세션들이 이미 발견해 문서화한 정확히 같은
+버그이므로, 각 섹션을 컴팩트 크기로 실측 튜닝하는 동일한 방식으로 처음부터 우회.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint src/games/mineOfOblivion2`(0 에러/경고) /
+`npx vitest run`(저장소 전체 50개 파일·1681개 테스트 통과 — 엔진은 전혀 건드리지 않아
+`mineOfOblivion2` 기존 23개 테스트 그대로 통과) 외에, 캐시된 Playwright Chromium(390×844 모바일
+뷰포트)으로 실제 방 생성→봇 추가→설치 단계(그리드+배치 토글+매설 확정 버튼이 한 화면에 동시에 뜨는,
+가장 UI가 빽빽한 상태) 진입까지 진행해 `document.scrollingElement.scrollHeight === window.innerHeight`
+및 `scrollWidth === innerWidth`(390=390, 844=844)로 **가로·세로 스크롤 모두 0임을 실측 확인** —
+스크린샷상 상단 상대 상태바-중앙 정사각형 보드-하단 내 상태/확정 버튼 3단이 여유 있게 한 화면에
+들어옴. 데스크톱 경로는 로직 변경 없이 코드만 옮겼을 뿐이라 별도 스크린샷은 찍지 않음
+([[visual-check-token-cost-gate]] 범위 규율에 따름). 스크린샷에 찍힌 "1 Issue" 배지는 이 세션의
+변경과 무관한 기존 `PatchNoteButton.tsx`(전역 `SiteHeader`)의 하이드레이션 미스매치 경고로, 조사
+후 무관함을 확인만 하고 손대지 않음.
+
+_이전 갱신: 2026-09-07 (**페루도(Perudo) — 모바일 가로 스크롤(가로 넘침) 제거 세션** — "모바일
 뷰포트에서 보드가 화면 가로 폭을 초과해 옆으로 살짝 스와이프해야만 주사위 판·베팅 현황이 보인다"는
 요청. 요청서는 `src/games/perudo/` 하위에 `Board.tsx`/`BettingBoard.tsx`/`DiceCup.tsx`/
 `PlayerCircle.tsx`/`ActionPanel.tsx` 5분할 파일 구조와 "둥근 원형 원탁 배치"를 전제했으나, 실제로는
