@@ -1191,6 +1191,32 @@ body {
   }
 }
 
+/* 코요테's "+1 인상 1회 제한" house rule (2026-09-08, see CoyoteEffects.tsx /
+   PlusOneUsedBanner) — 라운드의 유일한 "+1" 찬스가 소진되는 순간의 집중 경고
+   배너. 줌인 펄스로 화면 중앙에 번쩍이다 잦아든다. */
+@keyframes coyote-plusone-burst {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.04);
+    opacity: 0;
+  }
+}
+
 /* 코요테's per-seat forehead-card reveal (see CoyoteEffects.tsx /
    CardFlipWrapper) — a single 3D turn so every hidden card visibly flips
    face-up the moment the showdown reveals it. */

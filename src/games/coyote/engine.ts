@@ -64,6 +64,19 @@
  *    only 8 of the 36 cards are dealt (28 remain in the round deck for "?"
  *    draws), the same "no shortage" margin every smaller table already has,
  *    so no deck rebalancing was needed for the larger cap.
+ * 7. **Opening-declare floor + once-per-round "+1" limit** (2026-09-08 house
+ *    rules, neither is in the physical rulebook — both were product
+ *    requests, confirmed via `AskUserQuestion` rather than assumed):
+ *    - A round's opening declaration (`currentBid === null`) must be a
+ *      strictly positive integer (`>= MIN_OPENING_DECLARE`, i.e. 0 itself is
+ *      also barred, not just negatives).
+ *    - Across an entire round, at most one declaration may raise the
+ *      previous bid by exactly 1 (`CoyoteState.plusOneUsedBySeat` records
+ *      which seat spent it, `null` until then). Once spent, every later
+ *      declaration in that round must raise the bid by >= 2. The round's
+ *      opening declaration itself never counts as a "+1 step" — there is no
+ *      prior bid to raise. The flag resets to `null` every new round
+ *      (`continueRound`).
  */
 
 export type SeatIndex = number;
@@ -72,6 +85,13 @@ export const MIN_PLAYERS = 3;
 export const MAX_PLAYERS = 8;
 /** House-rule value (rulebook's literal reading is 3 벌점 토큰) — see module doc assumption #5. */
 export const STARTING_HEARTS = 2;
+/**
+ * House-rule floor (2026-09-08 추가) — the round's opening declaration can no
+ * longer be 0 or negative. Confirmed via `AskUserQuestion`: 0 itself is also
+ * barred, the opener must declare a strictly positive integer (>= 1). See
+ * module doc assumption #7.
+ */
+export const MIN_OPENING_DECLARE = 1;
 
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
@@ -167,6 +187,13 @@ export interface CoyoteState {
   roundDeck: Card[];
   /** Null until the round starter makes their opening declaration. */
   currentBid: Bid | null;
+  /**
+   * Which seat (if any) has already spent this round's single allowed "raise
+   * the bid by exactly +1" step — see module doc assumption #7. `null` means
+   * the +1 step is still available; once set, every later `declare` this
+   * round must raise the bid by >= 2.
+   */
+  plusOneUsedBySeat: SeatIndex | null;
   activeSeat: SeatIndex;
   /** Who opens each round's bidding — the seat forced to declare first (no prior bid to challenge). */
   roundStarter: SeatIndex;
@@ -214,6 +241,7 @@ export function startGame(playerCount: number, seed: number): CoyoteState {
     tableCards,
     roundDeck,
     currentBid: null,
+    plusOneUsedBySeat: null,
     activeSeat: starter,
     roundStarter: starter,
     roundNumber: 1,
@@ -272,8 +300,12 @@ export function getPlayerView(state: CoyoteState, viewerSeat: SeatIndex): Visibl
 
 /**
  * "숫자 선언하기" — must strictly exceed the current bid (rulebook §2 행동
- * A). The round's opening declaration (`currentBid === null`) has no floor
- * to beat, same minimal-constraint convention as Perudo's opening bid.
+ * A). The round's opening declaration (`currentBid === null`) has no prior
+ * bid to beat, but per house rule (module doc assumption #7) it must still
+ * be `>= MIN_OPENING_DECLARE` (a strictly positive integer — no negative or
+ * zero opening). Once there's a bid to raise, the raise must be either
+ * exactly +1 (only once per round — `plusOneUsedBySeat`) or >= +2 (always
+ * allowed, and the only option once the +1 step is spent).
  */
 function declare(state: CoyoteState, seat: SeatIndex, number: number): CoyoteState {
   if (state.phase !== "playing") return state;
@@ -281,11 +313,19 @@ function declare(state: CoyoteState, seat: SeatIndex, number: number): CoyoteSta
   const player = state.players.find((p) => p.seat === seat);
   if (!player || player.hearts <= 0) return state;
   if (!Number.isInteger(number)) return state;
-  if (state.currentBid !== null && number <= state.currentBid.number) return state;
+
+  const isPlusOneStep = state.currentBid !== null && number === state.currentBid.number + 1;
+  if (state.currentBid === null) {
+    if (number < MIN_OPENING_DECLARE) return state;
+  } else {
+    if (number <= state.currentBid.number) return state;
+    if (isPlusOneStep && state.plusOneUsedBySeat !== null) return state; // this round's +1 step is already spent — must raise by >= 2
+  }
 
   return {
     ...state,
     currentBid: { seat, number },
+    plusOneUsedBySeat: isPlusOneStep ? seat : state.plusOneUsedBySeat,
     activeSeat: nextAliveSeat(seat, state.players, state.playerCount),
   };
 }
@@ -419,6 +459,7 @@ function continueRound(state: CoyoteState, seed: number): CoyoteState {
     tableCards,
     roundDeck,
     currentBid: null,
+    plusOneUsedBySeat: null,
     activeSeat: nextStarter,
     roundStarter: nextStarter,
     roundNumber: state.roundNumber + 1,
@@ -451,18 +492,27 @@ import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDiffi
 
 /**
  * "숫자 선언하기" has no rule-mandated ceiling (any integer strictly greater
- * than the current bid is legal), so a truly exhaustive `getValidMoves` is
- * impossible to enumerate. This returns a representative finite sample —
- * small conservative raises (+1..+6) through larger bluffing jumps
- * (+10/+20/+30/+50) above the current bid — which is what every level's
+ * than the current bid is legal, subject to the house rules in module doc
+ * assumption #7), so a truly exhaustive `getValidMoves` is impossible to
+ * enumerate. This returns a representative finite sample — small
+ * conservative raises (+1..+6) through larger bluffing jumps (+10/+20/+30/
+ * +50) above the current bid — which is what every level's
  * `chooseBotAction` actually picks from. Documented simplification, same
  * spirit as Perudo's dice-bounded bid enumeration but Coyote's declare has
  * no natural cap to enumerate exhaustively.
+ *
+ * Both house-rule constraints are folded in here (confirmed via
+ * `AskUserQuestion`, 2026-09-08) so bots never even attempt an invalid move:
+ * the opening declare's floor is `MIN_OPENING_DECLARE` (offsets are already
+ * all `>= 1`, so `floor = 0` on an opening turn just reuses them as-is), and
+ * the `+1` offset is dropped once this round's single "+1 step" is already
+ * spent (`plusOneUsedBySeat`).
  */
 function declareCandidates(state: CoyoteState): number[] {
-  const floor = state.currentBid?.number ?? -20; // opening declare has no floor at all; -20 covers the worst-case all-negative-specials table
+  const floor = state.currentBid?.number ?? 0; // opening declare's floor is 0 — offsets below are already >= MIN_OPENING_DECLARE(1)
+  const plusOneSpent = state.currentBid !== null && state.plusOneUsedBySeat !== null;
   const offsets = [1, 2, 3, 4, 5, 6, 10, 20, 30, 50];
-  return offsets.map((o) => floor + o);
+  return (plusOneSpent ? offsets.filter((o) => o >= 2) : offsets).map((o) => floor + o);
 }
 
 /** seat가 지금 제출할 수 있는 모든 합법 EngineAction(대표 표본) — declare/coyote의 가드를 그대로 반영. */

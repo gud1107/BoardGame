@@ -39,6 +39,7 @@ function makeState(overrides: Partial<CoyoteState> = {}): CoyoteState {
     },
     roundDeck: [],
     currentBid: null,
+    plusOneUsedBySeat: null,
     activeSeat: 0,
     roundStarter: 0,
     roundNumber: 1,
@@ -210,10 +211,22 @@ describe("getPlayerView — 이마 카드 정보 격리", () => {
 });
 
 describe("declare — 숫자 선언 오름차순 유효성", () => {
-  it("accepts any integer as the round's opening declaration", () => {
+  it("accepts any integer >= MIN_OPENING_DECLARE(1) as the round's opening declaration", () => {
+    const state = makeState({ currentBid: null, activeSeat: 0 });
+    const next = applyAction(state, { type: "declare", seat: 0, number: 3 });
+    expect(next.currentBid).toEqual({ seat: 0, number: 3 });
+  });
+
+  it("rejects a negative opening declaration (house rule, 2026-09-08)", () => {
     const state = makeState({ currentBid: null, activeSeat: 0 });
     const next = applyAction(state, { type: "declare", seat: 0, number: -3 });
-    expect(next.currentBid).toEqual({ seat: 0, number: -3 });
+    expect(next).toBe(state); // no-op
+  });
+
+  it("rejects a zero opening declaration — MIN_OPENING_DECLARE is 1, not 0", () => {
+    const state = makeState({ currentBid: null, activeSeat: 0 });
+    const next = applyAction(state, { type: "declare", seat: 0, number: 0 });
+    expect(next).toBe(state); // no-op
   });
 
   it("rejects a declaration that doesn't strictly exceed the previous one", () => {
@@ -231,6 +244,18 @@ describe("declare — 숫자 선언 오름차순 유효성", () => {
     expect(next.activeSeat).toBe(2);
   });
 
+  it("a +1 raise spends this round's once-per-round +1 step", () => {
+    const state = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedBySeat: null });
+    const next = applyAction(state, { type: "declare", seat: 1, number: 16 });
+    expect(next.plusOneUsedBySeat).toBe(1);
+  });
+
+  it("a raise of >= 2 leaves the +1 step untouched", () => {
+    const state = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedBySeat: null });
+    const next = applyAction(state, { type: "declare", seat: 1, number: 18 });
+    expect(next.plusOneUsedBySeat).toBeNull();
+  });
+
   it("rejects a declaration from someone other than the active seat", () => {
     const state = makeState({ activeSeat: 0 });
     const next = applyAction(state, { type: "declare", seat: 1, number: 5 });
@@ -246,6 +271,57 @@ describe("declare — 숫자 선언 오름차순 유효성", () => {
     const state = makeState({ players, activeSeat: 0 });
     const next = applyAction(state, { type: "declare", seat: 0, number: 5 });
     expect(next.activeSeat).toBe(2);
+  });
+});
+
+describe("declare — 라운드당 '+1 인상' 1회 제한 (house rule, 2026-09-08)", () => {
+  it("once the +1 step is spent, a further +1 raise is rejected", () => {
+    const state = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedBySeat: 2 });
+    const next = applyAction(state, { type: "declare", seat: 1, number: 16 }); // 15 -> 16 is +1
+    expect(next).toBe(state); // no-op
+  });
+
+  it("once the +1 step is spent, a raise of exactly +2 is still accepted", () => {
+    const state = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedBySeat: 2 });
+    const next = applyAction(state, { type: "declare", seat: 1, number: 17 }); // 15 -> 17 is +2
+    expect(next.currentBid).toEqual({ seat: 1, number: 17 });
+    expect(next.plusOneUsedBySeat).toBe(2); // stays with whoever originally spent it
+  });
+
+  it("the opening declaration never counts as a +1 step even if it happens to equal 1", () => {
+    const state = makeState({ currentBid: null, activeSeat: 0, plusOneUsedBySeat: null });
+    const next = applyAction(state, { type: "declare", seat: 0, number: 1 });
+    expect(next.currentBid).toEqual({ seat: 0, number: 1 });
+    expect(next.plusOneUsedBySeat).toBeNull();
+  });
+});
+
+describe("continueRound — 라운드 전환 시 '+1 인상' 플래그 초기화", () => {
+  it("resets plusOneUsedBySeat to null for the new round", () => {
+    const players: PlayerState[] = [
+      { seat: 0, hearts: STARTING_HEARTS },
+      { seat: 1, hearts: STARTING_HEARTS },
+      { seat: 2, hearts: STARTING_HEARTS },
+    ];
+    const state = makeState({
+      players,
+      phase: "reveal",
+      plusOneUsedBySeat: 1,
+      lastResolution: {
+        bid: { seat: 0, number: 8 },
+        callerSeat: 1,
+        tableCards: { 0: card(0, "number", 5), 1: card(1, "number", 10), 2: card(2, "number", 3) },
+        extraDrawnCards: [],
+        maxZeroTarget: { seat: null, card: null },
+        doubled: false,
+        finalTotal: 18,
+        loserSeat: 1,
+        loserWasBidder: false,
+        nightCardHolderSeat: null,
+      },
+    });
+    const next = applyAction(state, { type: "continue", seed: 42 });
+    expect(next.plusOneUsedBySeat).toBeNull();
   });
 });
 

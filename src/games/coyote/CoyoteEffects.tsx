@@ -36,11 +36,33 @@ import type { Card, PlayerState, Resolution, SeatIndex, CoyoteState } from "./en
  * 특수카드 4종) "여러 장" 케이스는 존재하지 않고, 동률 처리는 이미
  * `resolveCoyoteCall`(module doc assumption #4)이 좌석 인덱스 기준으로
  * 확정해 `resolution.maxZeroTarget`에 담아준다 — 연출은 그 결과만 그린다.
+ *
+ * 2026-09-08 추가 — 라운드당 1회 제한 "+1 인상" house rule(engine.ts 모듈
+ * doc 가정 #7)이 소진되는 순간의 `PlusOneUsedBanner`(중앙 집중 경고 팝업)와
+ * 좌석 슬롯에 고정 점등되는 `PlusOneUsedBadge`를 추가. 판정 패널
+ * (REVEAL_HOLD_MS) 시퀀스와 무관하게 "playing" 단계 중 선언 직후 독립적으로
+ * 트리거된다는 점이 이 파일의 다른 연출들과 다르다.
  */
 
 /** True exactly the render where the showdown just fired (phase left "playing" for "reveal"/"gameOver"). */
 export function detectCoyoteCallEvent(prev: CoyoteState, next: CoyoteState): boolean {
   return prev !== next && prev.phase === "playing" && next.phase !== "playing";
+}
+
+/**
+ * True exactly the render where this round's single "+1 인상" step was just
+ * spent (house rule, 2026-09-08 — see engine.ts module doc assumption #7):
+ * `plusOneUsedBySeat` went from `null` to some seat. A round transition that
+ * resets it back to `null` (`continueRound`) does NOT count — `next` being
+ * non-null is the whole signal, so that direction never matches. Returns the
+ * seat that spent it, or `null` if nothing changed. Same "diff two
+ * consecutive lockstep snapshots" technique as `detectCoyoteCallEvent` above.
+ */
+export function detectPlusOneUsedEvent(prev: CoyoteState, next: CoyoteState): SeatIndex | null {
+  if (prev === next) return null;
+  if (next.plusOneUsedBySeat === null) return null;
+  if (prev.plusOneUsedBySeat === next.plusOneUsedBySeat) return null;
+  return next.plusOneUsedBySeat;
 }
 
 /**
@@ -102,6 +124,63 @@ export function CoyoteHowlBanner({
       </div>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * 라운드당 단 1회뿐인 "+1 인상" house rule(2026-09-08, engine.ts 모듈 doc
+ * 가정 #7) 소진 순간 전원 화면에 뜨는 집중 경고 배너. `CoyoteHowlBanner`와
+ * 동일한 "포탈 오버레이 + 고정 시간 뒤 onDone" 패턴이지만, 판정 패널
+ * (REVEAL_HOLD_MS) 시퀀스와는 무관하게 "playing" 단계 중 선언 직후 독립적으로
+ * 뜬다 — `CoyoteBoard.tsx`가 `detectPlusOneUsedEvent`로 트리거한다.
+ */
+export function PlusOneUsedBanner({
+  seatName,
+  onDone,
+  durationMs = 1500,
+}: {
+  seatName: string;
+  onDone: () => void;
+  durationMs?: number;
+}) {
+  useEffect(() => {
+    const t = setTimeout(onDone, durationMs);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-only, see CoyoteHowlBanner above
+  }, []);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center overflow-hidden px-4">
+      <div
+        className="relative flex flex-col items-center gap-1.5 rounded-3xl border-4 border-amber-300 bg-gradient-to-b from-amber-950/95 to-black/95 px-8 py-6 text-center shadow-[0_0_90px_-10px_rgba(251,191,36,0.85)]"
+        style={{ animation: `coyote-plusone-burst ${durationMs}ms ease-out forwards` }}
+      >
+        <span className="text-4xl">⚠️</span>
+        <h2 className="break-keep text-xl font-black tracking-wide text-amber-200">&quot;+1 인상&quot; 찬스 소진!</h2>
+        <p className="break-keep text-xs text-white/70">
+          {seatName}님이 사용 — 이후 이 라운드는 반드시 <span className="font-bold text-amber-300">+2 이상</span> 올려야 합니다.
+        </p>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * 좌석 슬롯 이름표 옆/선언 컨트롤 옆에 라운드 종료(다음 라운드 시작)까지
+ * 고정 점등되는 "1 사용 완료" 뱃지 — `state.plusOneUsedBySeat`가 세팅돼
+ * 있는 동안 `CoyoteBoard.tsx`가 조건부로 렌더링한다.
+ */
+export function PlusOneUsedBadge({ compact = false }: { compact?: boolean }) {
+  return (
+    <span
+      className={`shrink-0 rounded-full border border-amber-300/70 bg-amber-500/20 font-bold text-amber-200 ${compact ? "px-1 py-px text-[8px]" : "px-1.5 py-0.5 text-[9px]"}`}
+      title="이번 라운드 &quot;+1 인상&quot;을 이미 사용했습니다 — 이후 +2 이상만 가능"
+    >
+      🔥 1 사용
+    </span>
   );
 }
 

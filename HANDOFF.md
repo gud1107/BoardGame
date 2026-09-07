@@ -1,6 +1,66 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-07 (**망각의 지뢰 2(Mine of Oblivion 2) — 원격 즉시 격발(수동 기폭) + 규칙
+_최종 갱신: 2026-09-08 (**코요테(Coyote) — 선 마이너스 시작 차단 + "+1 인상" 라운드당 1회 제한
+하우스룰 + 집중 경고 FX 세션** — "① 라운드 첫 숫자 선언은 음수로 시작 불가(0 또는 1 이상 강제,
+정확한 최솟값은 확인 후 진행), ② 이전 사람보다 정확히 +1만 올려 부르는 액션은 라운드당 단 1회만
+허용하고 이후엔 반드시 +2 이상, ③ '+1 인상' 발동 시 전원에게 보이는 집중 경고 이펙트 + '1 사용' 뱃지"
+요청. 요청서는 `Board.tsx`/`NumberPad.tsx`/`BiddingControls.tsx`/`types.ts` 파일 구조를 전제했으나
+실제로는 `CoyoteBoard.tsx`(선언 UI는 키패드가 아니라 −/입력창/+ 스테퍼)/`CoyoteEffects.tsx`/
+`engine.ts`(타입도 여기 포함, 별도 `types.ts` 없음)였음 — 이 프로젝트에서 반복되는 요청 전제-실제
+코드 불일치 패턴의 또 다른 사례. 다만 이번엔 두 하우스룰 자체는 premise mismatch가 아니라 실제
+엔진 갭이었음 — 기존 `declare()`는 라운드 오프닝(`currentBid === null`)에 아무 하한도 없어 실제로
+음수 선언(`-3`)이 통과됐고(`Coyote.test.ts`의 구 테스트 "accepts any integer as the round's opening
+declaration"이 이를 그대로 확인해 줌), "+1 인상" 제한은 애초에 존재하지 않았던 완전 신규 규칙.
+
+요청서 본문이 "최초 시작 숫자의 최솟값(0부터 vs 1부터)은 임의로 추정하지 말고 질문 목록으로 확인
+후 진행"을 명시해 `AskUserQuestion`으로 확인: ① **오프닝 최솟값 = 1**(0도 금지, 음수만이 아니라
+반드시 양의 정수). ② **봇(AI) 선언 후보 생성도 이 제약을 반영**(무효한 +1 후보를 봇이 아예 시도하지
+않도록 `declareCandidates` 자체에서 필터링).
+
+**구현**: `engine.ts` — `MIN_OPENING_DECLARE = 1` 신규 상수, `CoyoteState`에
+`plusOneUsedBySeat: SeatIndex | null` 필드 추가(라운드당 1회 소진 여부/누가 썼는지 추적,
+`continueRound`가 매 라운드 `null`로 리셋). `declare()`를 확장: 오프닝 선언은
+`number < MIN_OPENING_DECLARE`면 거부, 이후 선언은 기존 "직전 값보다 커야 함" 검사에 더해
+"`+1` 스텝인데 이미 `plusOneUsedBySeat`가 세팅돼 있으면 거부" 검사 추가, 처음으로 `+1` 스텝을
+쓴 선언에서만 `plusOneUsedBySeat`를 그 좌석으로 세팅(오프닝 선언 자체는 비교 대상 `prevNum`이
+없으므로 절대 "+1 스텝"으로 카운트되지 않음). 봇 후보 생성 `declareCandidates`도 동일 로직 반영
+(오프닝은 `floor=0`이라 기존 오프셋 배열 `[1,2,3,4,5,6,10,20,30,50]`이 그대로 `MIN_OPENING_DECLARE`
+이상이 되고, `+1` 스텝 소진 시엔 오프셋 `1`을 필터링). 기존 `getValidMoves`/`chooseBotAction`은
+무변경(둘 다 `declareCandidates` 위에 얹혀 있어 자동으로 새 제약을 물려받음).
+
+`CoyoteEffects.tsx` — `detectPlusOneUsedEvent(prev,next)`(스냅샷 diff로 `plusOneUsedBySeat`가
+`null`→좌석으로 막 바뀐 순간만 감지, 라운드 전환으로 좌석→`null`이 되는 방향은 감지하지 않음),
+`PlusOneUsedBanner`(`CoyoteHowlBanner`와 동일한 `createPortal`+고정시간 패턴의 중앙 집중 경고
+배너, 1.5초 줌인 펄스, 스킵 불가), `PlusOneUsedBadge`(좌석 슬롯/현재 선언 표시 옆에 라운드 종료까지
+고정 점등되는 "🔥 1 사용" 뱃지) 신규. `globals.css`에 `coyote-plusone-burst` 줌인 펄스 키프레임
+추가. `CoyoteBoard.tsx` — 선언 스테퍼의 최솟값을 `computeMinDeclare(state)`(오프닝
+`MIN_OPENING_DECLARE`, 그 외 `currentBid+1` 또는 잠긴 경우 `currentBid+2`)로 교체하고 턴 리셋 시
+이 값으로 초기화, `canDeclare`를 `declareValue >= minDeclare`로 단순화, 유효하지 않은 값 입력 시
+입력창 테두리가 붉게 바뀌고 상황별 안내 문구(오프닝 최솟값 안내 / "+1 인상 이미 사용" 안내 / 일반
+"현재 선언보다 커야 함" 안내)가 뜸, +/− 스테퍼 버튼과 입력창에 `title` 툴팁 추가, `renderSeat`에
+`PlusOneUsedBadge` 조건부 렌더, `plusOneFx` 상태 + `detectPlusOneUsedEvent`로 `PlusOneUsedBanner`
+트리거(플레이/게임오버 두 렌더 분기 모두에 배치, 판정 패널 시퀀스와 독립적으로 동작).
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint src/games/coyote`(0 에러/경고) /
+`npx vitest run src/games/coyote/Coyote.test.ts`(66/66 통과 — 오프닝 음수/0 거부 2건, "+1 인상"
+소진/미소진 분기 4건, 라운드 전환 리셋 1건 등 신규 테스트 포함) / `npx vitest run
+--exclude '**/aiBenchmark.test.ts'`(저장소 전체 50개 파일·1696개 통과) / `npx next build`(정적
+21페이지 생성 성공) 전부 통과. 추가로 캐시된 Playwright Chromium(430×900 모바일 뷰포트, `npx next
+start`로 프로덕션 빌드 서빙)으로 코요테 3인 방(호스트+봇2) 실제 진입 후 봇이 먼저 "1"을 선언한
+상태에서 내 턴에 스테퍼 입력창에 "0"을 입력 → 테두리가 빨갛게 바뀌고 "현재 선언(1)보다 커야
+합니다." 안내 문구가 뜨며 "선언하기" 버튼이 비활성화됨을 스크린샷 2장으로 확인
+(`[[visual-check-token-cost-gate]]` 범위 규율에 따라 "새 배지/경고 UI가 화면에서 정상 렌더링되는가"
+한 가지 질문에만 한정 — 오프닝 정확히 그 턴을 잡는 시나리오는 랜덤 시드라 따로 몰지 않았고, 해당
+경로는 이미 단위 테스트로 확정 검증됨). 브라우저는 `try/finally`로 정상 종료, 잔존 `chrome.exe`
+프로세스 없음 확인.
+
+`코요테.md` §2-1(하우스룰 명세)과 §9(연출 명세, 9-1 입력 제약/9-2 집중 경고 배너/9-3 고정 뱃지)
+신규 추가.
+
+**Git/배포**: 커밋 & `origin/main` 푸시 완료(아래 참고). 배포는 [이 세션에서 진행 중 — 아래
+결과 반영].
+
+_이전 갱신: 2026-09-07 (**망각의 지뢰 2(Mine of Oblivion 2) — 원격 즉시 격발(수동 기폭) + 규칙
 안내 UI 세션** — "시한폭탄이 기계적으로만 터지지 않고, 유저가 전략적 타이밍에 직접 터뜨릴 수 있는
 '원격 격발' 기능과 'N턴 후 폭파' 예약 버튼을 추가해달라"는 요청. 요청서는 `Board.tsx`/`Grid.tsx`/
 `BombControlModal.tsx`/`types.ts` 파일 구조를 전제했으나, 실제로는 `MineOfOblivion2Board.tsx`/
