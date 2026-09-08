@@ -5,11 +5,13 @@ import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import RulebookModal from "./RulebookModal";
+import PerudoMobileBoard from "./PerudoMobileBoard";
+import { useIsMobile } from "./useIsMobile";
 import PerudoFaceIcon from "./PerudoFaceIcon";
+import { DieBack, DieFace, faceLabel, FacePicker, LostDiceTray } from "./PerudoSharedUI";
 import {
   computeRankings,
   minValidQuantityForFace,
-  STARTING_DICE,
   totalDiceInPlay,
   trackCellAt,
   trackCellForBid,
@@ -20,7 +22,7 @@ import {
   type SeatIndex,
   type TrackCell,
 } from "./engine";
-import { DiceRollTray, PerudoDie, tiltFor, type DieSize } from "./dice/PerudoDie";
+import { DiceRollTray, PerudoDie, tiltFor } from "./dice/PerudoDie";
 import {
   BETTING_COLORWAY,
   PLAYER_COLORWAYS,
@@ -109,10 +111,6 @@ function TableTexture() {
   );
 }
 
-function faceLabel(face: Face): string {
-  return face === 1 ? "페루도" : `${face}`;
-}
-
 /** Always-visible stat bar (rulebook UX request #4, top area) — the one number every player needs at a glance regardless of phase. */
 function TotalDiceBanner({ state }: { state: PerudoState }) {
   return (
@@ -121,106 +119,6 @@ function TotalDiceBanner({ state }: { state: PerudoState }) {
       <span className="text-sm font-bold text-amber-100">
         현재 전체 주사위: {totalDiceInPlay(state)}개
       </span>
-    </div>
-  );
-}
-
-/**
- * The center "잃은 주사위 무덤" tray (requirement #3): every die any player
- * has ever lost this game collects here instead of just vanishing from the
- * roster count, so the whole table can see at a glance how depleted the
- * overall dice pool is. Purely derived from `state.players`
- * (`STARTING_DICE - diceCount` per seat) — nothing new is tracked, consistent
- * with this project's "파생 상태 금지" principle. Since a successful "맞아!"
- * no longer caps a seat's `diceCount` at `STARTING_DICE` (2026-08-17 룰북
- * 정리 — 상한 제거), that subtraction can go negative for a seat sitting on
- * more dice than it started with; the `.filter((x) => x.lost > 0)` below
- * simply excludes such seats from the tray rather than showing a negative
- * loss (see docs/architecture.md §1.4). Grouped per seat so the pile also reads as
- * "who's been bleeding dice": each seat's losses render as an overlapping
- * stack of THAT seat's own dice colorway (reinforcing requirement #2's
- * color-matching), dimmed/desaturated so a graveyard die reads as spent and
- * out of play rather than just another concealed hand die (see `DieBack`'s
- * own doc comment for why the shape/colorway underneath is otherwise
- * identical). Rendered right under `TotalDiceBanner` in every phase (not
- * just "playing") so it's a permanent, always-visible fixture of the board
- * rather than something that only shows up mid-round.
- */
-function LostDiceTray({
-  state,
-  colorways,
-}: {
-  state: PerudoState;
-  colorways: Record<SeatIndex, DiceColorway>;
-}) {
-  const bySeat = state.players.map((p) => ({ seat: p.seat, lost: STARTING_DICE - p.diceCount })).filter((x) => x.lost > 0);
-  const totalLost = bySeat.reduce((sum, x) => sum + x.lost, 0);
-  return (
-    <div className="relative z-10 flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-amber-800/40 bg-black/15 px-3 py-2">
-      <p className="text-[10px] font-semibold tracking-wide text-amber-200/60">
-        💀 잃은 주사위 무덤{totalLost > 0 ? ` · 총 ${totalLost}개` : ""}
-      </p>
-      {totalLost === 0 ? (
-        <p className="text-[10px] text-amber-100/30">아직 잃은 주사위가 없습니다</p>
-      ) : (
-        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
-          {bySeat.map(({ seat, lost }) => (
-            <div key={seat} className="flex items-center opacity-60 grayscale-[0.4]" title={`${lost}개 상실`}>
-              {Array.from({ length: lost }, (_, i) => (
-                <div key={i} style={i === 0 ? undefined : { marginLeft: -10 }}>
-                  <DieBack size="sm" colorway={colorways[seat]} />
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** One face-up die — thin wrapper over the shared `PerudoDie` primitive (see `dice/PerudoDie.tsx`) with this file's own title tooltip convention. Always renders in the passed-in `colorway` — including the face-1 페루도 mark, which is engraved in that same die's own ink color rather than a fixed universal red (see `dice/colorways.ts`'s file header). */
-function DieFace({ value, size = "md", ring, colorway, tilt }: { value: number; size?: DieSize; ring?: "match" | "wild"; colorway: DiceColorway; tilt?: number }) {
-  return (
-    <PerudoDie value={value} size={size} ring={ring} colorway={colorway} tilt={tilt} title={value === 1 ? "페루도 (조커)" : `${value}`} />
-  );
-}
-
-/** A hidden die — a blank, pip-free die in its owner's own colorway (no icon at all, so it reads as a true silhouette rather than a generic dice emoji). Tinted with the owning seat's own player colorway (see `PerudoBoard`'s roster strip and `LostDiceTray`) so whose stash is whose reads at a glance even before anyone's dice count is checked. */
-function DieBack({ size = "sm", colorway }: { size?: DieSize; colorway: DiceColorway }) {
-  return <PerudoDie size={size} colorway={colorway} blank glossy={false} title="비공개 주사위" />;
-}
-
-/**
- * 2026-09-07 모바일 가로 스크롤 제거 세션: shrunk from fixed `h-9 w-9`/`gap-1.5`
- * (6×36px + 5×6px gap ≈ 246px) to `h-6 w-6`/`gap-1` (6×24px + 5×4px gap =
- * 164px) — this row's 6 buttons don't scale with `--perudo-cell` at all, so
- * at the board's new, smaller floor (see that constant's doc comment) the
- * old fixed size no longer fit inside the composer panel nested in the
- * board's center column (capped to 7×`--perudo-cell`), which would have
- * reopened the very horizontal-overflow bug this session fixes — just one
- * level deeper (the board's own `overflow-x-auto` scroll wrapper, instead
- * of the page).
- */
-function FacePicker({ selected, onSelect }: { selected: Face; onSelect: (face: Face) => void }) {
-  const faces: Face[] = [1, 2, 3, 4, 5, 6];
-  return (
-    <div className="flex gap-1">
-      {faces.map((face) => (
-        <button
-          key={face}
-          type="button"
-          onClick={() => onSelect(face)}
-          className={`flex h-6 w-6 items-center justify-center rounded-lg border-2 text-xs font-bold transition ${
-            selected === face
-              ? "border-amber-200 bg-gradient-to-b from-amber-300 to-amber-500 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.35)]"
-              : "border-white/15 bg-black/20 text-white/60 hover:border-white/30"
-          }`}
-          title={face === 1 ? "페루도 (조커)" : `숫자 ${face}`}
-        >
-          {face === 1 ? <PerudoFaceIcon className="mx-auto h-3.5 w-3.5" /> : face}
-        </button>
-      ))}
     </div>
   );
 }
@@ -722,6 +620,35 @@ export default function PerudoBoard({
   // own presence-track resolves a real pick.
   const myColorway = colorways[viewerSeat] ?? playerColorwayForSeat(viewerSeat);
 
+  // 2026-09-08 모바일 화이트 오버스크롤 차단 세션: which of the two layout
+  // trees below actually mounts (`PerudoMobileBoard`'s right-sidebar/
+  // zero-scroll redesign vs. this file's own existing rect-track layout,
+  // AskUserQuestion-confirmed: 모바일 전용, 데스크톱은 기존 유지).
+  const isMobile = useIsMobile();
+
+  // White-overscroll-bounce lockdown (요구사항 1) — scoped to this
+  // component's mount, restored on unmount, same pattern as
+  // `WormCanvas.tsx`'s own gesture lock (see that file's doc comment).
+  // Applied regardless of phase/layout branch below (game-over and reveal
+  // screens can bounce just as easily as the playing screen can), not
+  // gated on `isMobile` either — harmless on desktop, and `matchMedia`
+  // already only ever fires the *visual* mobile layout switch above.
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverscroll = html.style.overscrollBehavior;
+    const prevBodyOverscroll = body.style.overscrollBehavior;
+    const prevBodyBackground = body.style.backgroundColor;
+    html.style.overscrollBehavior = "none";
+    body.style.overscrollBehavior = "none";
+    body.style.backgroundColor = "#020617"; // slate-950 — matches TABLE_PANEL's own darkest stop, so a rubber-band bounce reveals this instead of the page's default white
+    return () => {
+      html.style.overscrollBehavior = prevHtmlOverscroll;
+      body.style.overscrollBehavior = prevBodyOverscroll;
+      body.style.backgroundColor = prevBodyBackground;
+    };
+  }, []);
+
   // 2026-09-08 4변 밀착 세션: `RectBidTrack`'s hollow center is now
   // height-locked to `stripLength(6)` (see that component's own doc
   // comment) so the physical border stays a seamless rectangle on mobile —
@@ -1067,6 +994,41 @@ export default function PerudoBoard({
   // Playing
   // -------------------------------------------------------------------------
   const seatOrder = Array.from({ length: state.playerCount }, (_, i) => i);
+
+  // Mobile: entirely different layout tree (100dvh zero-scroll main board +
+  // narrow right utility rail for my dice/color picker — see
+  // `PerudoMobileBoard.tsx`'s own file header for the full rationale).
+  // Desktop/tablet keeps the existing rect-track board below, unchanged
+  // (AskUserQuestion-confirmed scope). All state/handlers stay owned by
+  // THIS component either way — `PerudoMobileBoard` is presentation-only.
+  if (isMobile) {
+    return (
+      <PerudoMobileBoard
+        state={state}
+        viewerSeat={viewerSeat}
+        names={names}
+        connectedSeats={connectedSeats}
+        colorways={colorways}
+        myColorway={myColorway}
+        onColorwayChange={onColorwayChange}
+        onAction={onAction}
+        isMyTurn={isMyTurn}
+        iAmAlive={iAmAlive}
+        me={me}
+        pendingFace={pendingFace}
+        pendingQuantity={pendingQuantity}
+        pendingFloor={pendingFloor}
+        canConfirmBet={canConfirmBet}
+        isIdenticalToCurrentBid={isIdenticalToCurrentBid}
+        pickFace={pickFace}
+        stepQuantity={stepQuantity}
+        muteButton={muteButton}
+        rulebookButton={rulebookButton}
+        rulebookOpen={rulebookOpen}
+        onCloseRulebook={() => setRulebookOpen(false)}
+      />
+    );
+  }
 
   return (
     <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>

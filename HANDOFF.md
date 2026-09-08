@@ -31,7 +31,61 @@
 `vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
 길게 재시도하지 마세요.
 
-_최종 갱신: 2026-09-08 (**코요테(Coyote) — "+1 인상" 찬스 스코프를 방 전체 1회 락 → 개인별 라운드당 1회로
+_최종 갱신: 2026-09-08 (**페루도(Perudo) — 모바일 화이트 오버스크롤 차단 + 우측 사이드 패널(내 주사위·색상변경)
+전면 개편 세션** — "① 모바일 하얀색 오버스크롤 바운스 차단, ② 턴 배너 직하단에 무덤/기대값 바 재배치, ③
+스크롤 없이 항상 보이는 우측 사이드 패널로 내 주사위·색상 변경 이전, ④ 메인 보드 100dvh 스크롤 제로 개편"을
+요청. 요청서는 `src/games/perudo/` 하위에 `Board.tsx`/`BettingBoard.tsx`/`DiceCup.tsx`/`Graveyard.tsx`/
+`DiceColorPicker.tsx`/`ExpectationBar.tsx`/`ActionPanel.tsx`를 전제했으나 실제로는 `PerudoBoard.tsx` 한
+파일(+`PerudoGame.tsx`/`engine.ts`/`dice/PerudoDie.tsx`)에 전부 있었음(반복되는
+request-premise-mismatch 패턴, [[mal-dalli-ja-bug-report-premise-mismatch]] 계열 — 페루도에서만
+이번이 세 번째).
+
+**AskUserQuestion 3문항으로 확인**: 1) 좁은 폰에서 사각형 물리 보드(30칸 트랙)와 우측 사이드바가 폭을 다툴 때
+→ 사이드바를 아주 좁게(~76px, 아이콘/미니그리드만)로 확정. 2) 2026-08-20/08-21 세션이 확정했던 "내
+주사위·색상 변경은 보드 중앙(hollow center) 안에 유지" 결정 → 이번 요청으로 뒤집어 우측 사이드바로 완전
+이전 확정. 3) 적용 범위 → 모바일 전용, 데스크톱/태블릿은 기존 `RectBidTrack` 레이아웃 그대로 유지 확정.
+
+**구현**: 신규 `useIsMobile.ts`(다른 게임들과 동일한 767px 브레이크포인트 훅, `PerudoGame.tsx`가
+`dynamic(..., {ssr:false})`라 lazy-initializer의 `window` 접근 안전), 신규 `PerudoMobileBoard.tsx`
+("playing" 단계 전용 대체 레이아웃, 상태/핸들러는 전부 `PerudoBoard.tsx`가 소유하고 이 컴포넌트는 순수
+프레젠테이션), 신규 `PerudoSharedUI.tsx`(`faceLabel`/`DieFace`/`DieBack`/`FacePicker`/`LostDiceTray`/
+`ExpectationBar` — 데스크톱·모바일 두 보드가 동일 마크업을 공유하도록 `PerudoBoard.tsx`에서 분리, 두 보드
+파일 간 순환 import 방지 목적). `PerudoBoard.tsx`에 mount-scoped 오버스크롤 락다운 `useEffect`(요구사항
+① — `WormCanvas.tsx`의 기존 제스처 락 패턴 재사용: `html`/`body`의 `overscrollBehavior:"none"` +
+`body.backgroundColor:"#020617"`를 마운트 시 적용, 언마운트 시 원복, 페이즈와 무관하게 항상 적용) 추가.
+
+**모바일 레이아웃의 핵심 단순화**: 사각형 30칸 물리 트랙(`RectBidTrack`)을 모바일에서 아예 렌더링하지 않음 —
+트랙 셀 클릭은 항상 `pickFace`/`stepQuantity`의 대체 경로였을 뿐이고, 트랙 자체의 폭 하한(9칸×30px)이 우측
+사이드바와 정면으로 폭을 다퉜을 것(질문 1의 실제 해소책) — 요청서 자체의 `PerudoCenterBoard` 예시 코드와도
+일치. 대신 "현재 베팅" 히어로 카드 + 눈금 키패드/수량 스테퍼/베팅확정/페루도!/맞아! 액션독으로 대체. 상단은
+턴 배너 → `LostDiceTray`(무덤, 안전용 `max-h-16 overflow-y-auto`) → 신규 `ExpectationBar`(전체 주사위
+N개 · 일반 기대값 N/3개 · 1눈금 기대값 N/6개) 순 수직 정렬. 우측 76px 사이드바: 내 주사위 미니 그리드
+(`DiceRollTray` size="sm" 재사용, 굴림 사운드 큐 그대로) → 색상 점+접속 점+잔여 주사위 숫자만 표시하는
+압축 플레이어 로스터(이름은 title 툴팁, `max-h-[180px] overflow-y-auto` 안전망) → 색상 팔레트 2열 칩
+그리드.
+
+**한 번 잘못 짰다가 실측으로 잡은 버그**: 최초 구현은 모바일 프레임을 `h-[100dvh]`로 고정했으나, 이
+컴포넌트는 `/games/[gameId]` 공용 페이지 템플릿(사이트 헤더+게임 타이틀 카드+페이지 패딩)이 이미 그 위에
+얹혀 있는 상태로 렌더링돼 실제로는 뷰포트 하단 ~150-200px가 넘쳐 액션독(페루도!/맞아! 버튼)과 사이드바
+하단(로스터/색상칩)이 완전히 화면 밖으로 잘려 보이지 않는 버그였음(390×844 Playwright 스크린샷으로 실측
+확인). `century/useIsMobile.ts`·`lasVegas/CompactCasinoBoard.tsx`·
+`mineOfOblivion2/MineOfOblivion2MobileBoard.tsx`가 이미 문서화해 둔 동일한 함정 — 컨텐츠 사이즈 기반(고정
+`100dvh` 대신 각 섹션을 컴팩트한 고정/자연 크기로 튜닝)으로 재작성해 해결, 재스크린샷으로 액션독·사이드바
+전체가 화면 안에 들어옴을 확인.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint src/games/perudo`(0 에러/경고) / `npx vitest run
+src/games/perudo/Perudo.test.ts`(80/80 통과, 엔진 로직 무변경) / `npm run build`(정상 완료) / 캐시된
+Playwright(390×844, `next start` 격리 포트)로 봇 채운 방 진입 → "playing" 단계까지 실제 스크린샷 2장
+(최초 버그 발견 1장 + 수정 후 재확인 1장) — 상단 정보 계층/베팅 히어로카드/액션독/우측 사이드바(내
+주사위·로스터·색상칩) 전부 스크롤 없이 한 화면에 노출됨을 확인.
+
+**커밋/푸시/배포**: 이번 세션이 실제로 만진 파일만 스테이징(`PerudoBoard.tsx`/`PerudoMobileBoard.tsx`/
+`PerudoSharedUI.tsx`/`useIsMobile.ts`/`HANDOFF.md`) — 작업 트리에 있던 다른 동시 세션들의 미커밋 변경
+(말달리자 이미지 삭제, 쇼미더코인 룰북 수정, `.claude/`, 신규 boardGameRule 이미지들,
+`docs/visual-verification.md`, 저작권 문서 등)은 전부 제외. `git push origin main`까지 완료 — GitHub
+웹훅 자동배포(파일 맨 위 배포 프로토콜 박스 참고), 배포 상태는 푸시 후 `npx vercel inspect`/API로 확인.)_
+
+_이전 갱신: 2026-09-08 (**코요테(Coyote) — "+1 인상" 찬스 스코프를 방 전체 1회 락 → 개인별 라운드당 1회로
 수정하는 세션** — "플레이어 1이 +1을 쓰면 플레이어 2는 자기 차례에도 +1을 못 쓴다"는 결함 신고.
 [[coyote-plus-one-limit-and-opening-floor]](같은 날 앞선 세션이 이 하우스룰 자체를 처음 구현)에서
 `CoyoteState.plusOneUsedBySeat: SeatIndex | null` 단일 전역 플래그로 설계했던 게 진짜 원인 — 신고
