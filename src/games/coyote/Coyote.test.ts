@@ -39,7 +39,7 @@ function makeState(overrides: Partial<CoyoteState> = {}): CoyoteState {
     },
     roundDeck: [],
     currentBid: null,
-    plusOneUsedBySeat: null,
+    plusOneUsedSeats: [],
     activeSeat: 0,
     roundStarter: 0,
     roundNumber: 1,
@@ -244,16 +244,16 @@ describe("declare — 숫자 선언 오름차순 유효성", () => {
     expect(next.activeSeat).toBe(2);
   });
 
-  it("a +1 raise spends this round's once-per-round +1 step", () => {
-    const state = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedBySeat: null });
+  it("a +1 raise spends that seat's own once-per-round +1 step", () => {
+    const state = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedSeats: [] });
     const next = applyAction(state, { type: "declare", seat: 1, number: 16 });
-    expect(next.plusOneUsedBySeat).toBe(1);
+    expect(next.plusOneUsedSeats).toEqual([1]);
   });
 
   it("a raise of >= 2 leaves the +1 step untouched", () => {
-    const state = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedBySeat: null });
+    const state = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedSeats: [] });
     const next = applyAction(state, { type: "declare", seat: 1, number: 18 });
-    expect(next.plusOneUsedBySeat).toBeNull();
+    expect(next.plusOneUsedSeats).toEqual([]);
   });
 
   it("rejects a declaration from someone other than the active seat", () => {
@@ -274,30 +274,37 @@ describe("declare — 숫자 선언 오름차순 유효성", () => {
   });
 });
 
-describe("declare — 라운드당 '+1 인상' 1회 제한 (house rule, 2026-09-08)", () => {
-  it("once the +1 step is spent, a further +1 raise is rejected", () => {
-    const state = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedBySeat: 2 });
+describe("declare — 개인별 라운드당 '+1 인상' 1회 제한 (house rule, 2026-09-08; 2026-09-08 후속 세션에서 전역 락 → 좌석별 스코프로 수정)", () => {
+  it("once a seat's own +1 step is spent, a further +1 raise from that same seat is rejected", () => {
+    const state = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedSeats: [1] });
     const next = applyAction(state, { type: "declare", seat: 1, number: 16 }); // 15 -> 16 is +1
     expect(next).toBe(state); // no-op
   });
 
-  it("once the +1 step is spent, a raise of exactly +2 is still accepted", () => {
-    const state = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedBySeat: 2 });
+  it("another seat having spent its own +1 step never blocks this seat's own +1 raise", () => {
+    const state = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedSeats: [2] });
+    const next = applyAction(state, { type: "declare", seat: 1, number: 16 }); // 15 -> 16 is +1, seat 1's own chance is untouched
+    expect(next.currentBid).toEqual({ seat: 1, number: 16 });
+    expect(next.plusOneUsedSeats).toEqual([2, 1]); // seat 2's earlier spend stays recorded alongside seat 1's new one
+  });
+
+  it("once a seat's own +1 step is spent, a raise of exactly +2 from that seat is still accepted", () => {
+    const state = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedSeats: [1] });
     const next = applyAction(state, { type: "declare", seat: 1, number: 17 }); // 15 -> 17 is +2
     expect(next.currentBid).toEqual({ seat: 1, number: 17 });
-    expect(next.plusOneUsedBySeat).toBe(2); // stays with whoever originally spent it
+    expect(next.plusOneUsedSeats).toEqual([1]); // unchanged — a >= +2 raise never spends the +1 step
   });
 
   it("the opening declaration never counts as a +1 step even if it happens to equal 1", () => {
-    const state = makeState({ currentBid: null, activeSeat: 0, plusOneUsedBySeat: null });
+    const state = makeState({ currentBid: null, activeSeat: 0, plusOneUsedSeats: [] });
     const next = applyAction(state, { type: "declare", seat: 0, number: 1 });
     expect(next.currentBid).toEqual({ seat: 0, number: 1 });
-    expect(next.plusOneUsedBySeat).toBeNull();
+    expect(next.plusOneUsedSeats).toEqual([]);
   });
 });
 
-describe("continueRound — 라운드 전환 시 '+1 인상' 플래그 초기화", () => {
-  it("resets plusOneUsedBySeat to null for the new round", () => {
+describe("continueRound — 라운드 전환 시 '+1 인상' 사용 목록 초기화", () => {
+  it("resets plusOneUsedSeats to [] for the new round, restoring every seat's own chance", () => {
     const players: PlayerState[] = [
       { seat: 0, hearts: STARTING_HEARTS },
       { seat: 1, hearts: STARTING_HEARTS },
@@ -306,7 +313,7 @@ describe("continueRound — 라운드 전환 시 '+1 인상' 플래그 초기화
     const state = makeState({
       players,
       phase: "reveal",
-      plusOneUsedBySeat: 1,
+      plusOneUsedSeats: [1, 2],
       lastResolution: {
         bid: { seat: 0, number: 8 },
         callerSeat: 1,
@@ -321,7 +328,7 @@ describe("continueRound — 라운드 전환 시 '+1 인상' 플래그 초기화
       },
     });
     const next = applyAction(state, { type: "continue", seed: 42 });
-    expect(next.plusOneUsedBySeat).toBeNull();
+    expect(next.plusOneUsedSeats).toEqual([]);
   });
 });
 
@@ -664,6 +671,16 @@ describe("getValidMoves (AI bot support, ARCHITECTURE.md §7)", () => {
   it("returns [] outside the 'playing' phase", () => {
     const state = makeState({ phase: "reveal" });
     expect(getValidMoves(state, state.activeSeat)).toEqual([]);
+  });
+
+  it("drops the +1 offset only for the seat that already spent its own +1 step this round — another seat's own +1 stays offered (2026-09-08 후속: per-seat scope)", () => {
+    const spentByOtherSeat = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 1, plusOneUsedSeats: [1] });
+    const otherMoves = getValidMoves(spentByOtherSeat, 1);
+    expect(otherMoves.filter((m) => m.type === "declare").every((m) => m.type === "declare" && m.number >= 17)).toBe(true); // seat 1 spent its own +1 -> floor is +2
+
+    const untouchedSeat = makeState({ currentBid: { seat: 0, number: 15 }, activeSeat: 2, plusOneUsedSeats: [1] });
+    const untouchedMoves = getValidMoves(untouchedSeat, 2);
+    expect(untouchedMoves).toContainEqual({ type: "declare", seat: 2, number: 16 }); // seat 2's own +1 is unaffected by seat 1's spend
   });
 });
 

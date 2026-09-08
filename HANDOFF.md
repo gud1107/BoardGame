@@ -31,7 +31,48 @@
 `vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
 길게 재시도하지 마세요.
 
-_최종 갱신: 2026-09-08 (**지렁이(Worm) — 모바일 렌더 스무딩(스냅샷 보간) + Canvas 픽셀 렌더링 경량화
+_최종 갱신: 2026-09-08 (**코요테(Coyote) — "+1 인상" 찬스 스코프를 방 전체 1회 락 → 개인별 라운드당 1회로
+수정하는 세션** — "플레이어 1이 +1을 쓰면 플레이어 2는 자기 차례에도 +1을 못 쓴다"는 결함 신고.
+[[coyote-plus-one-limit-and-opening-floor]](같은 날 앞선 세션이 이 하우스룰 자체를 처음 구현)에서
+`CoyoteState.plusOneUsedBySeat: SeatIndex | null` 단일 전역 플래그로 설계했던 게 진짜 원인 — 신고
+내용은 정확했음(요청서의 파일 구조 전제만 여전히 틀림: `Board.tsx`/`NumberPad.tsx`/
+`BiddingControls.tsx`/`types.ts`는 존재하지 않고, 실제로는 `CoyoteBoard.tsx`/`CoyoteEffects.tsx`/
+`engine.ts`, 선언 UI는 키패드가 아니라 −/입력창/+ 스테퍼).
+
+**수정**: `engine.ts` — `plusOneUsedBySeat: SeatIndex | null`를 `plusOneUsedSeats: SeatIndex[]`로
+전환(`startGame`/`continueRound` 모두 `[]`로 초기화). `declare()`의 +1 스텝 가드를
+`state.plusOneUsedSeats.includes(seat)`로 바꿔 "이 좌석 자신"의 소진 여부만 검사하도록 수정 —
+다른 좌석의 소진 여부는 전혀 영향을 주지 않음. 봇 지원 함수 `declareCandidates`도 시그니처에
+`seat` 파라미터를 추가해 좌석별로 +1 오프셋을 필터링하도록 수정(`getValidMoves`가 호출부에서 넘김).
+`AskUserQuestion`으로 확인: 봇의 +1 사용에 별도 우선순위 가중치는 추가하지 않음(기존
+`scoreMove`의 "가장 작은 인상 선호" 효율 페널티가 이미 자연스럽게 +1을 우선 선택하도록 만들어 줌 —
+가용성만 좌석별로 바로잡으면 충분하다고 확인).
+
+**UI/연출**: `CoyoteEffects.tsx` — `detectPlusOneUsedEvent`를 배열 diff(새로 추가된 좌석 탐지)로
+재작성. `PlusOneUsedBanner` 문구를 "방 전체 소진"에서 "🐺 OOO님이 개인 '+1 찬스'를 사용했습니다! —
+다른 분들의 개인 +1 찬스는 그대로 남아있습니다"로 교체. 기존엔 "사용 완료" 상태만 표시하던
+`PlusOneUsedBadge`를 제거하고, 보유/사용완료 두 상태를 항상 표시하는 `PlusOneChanceBadge({used})`로
+교체 — 초록/골드("🟢 +1 찬스") vs 그레이("⚪ +1 사용완료"). `CoyoteBoard.tsx` — 탈락하지 않은 모든
+좌석 이름표에 이 뱃지를 항상 렌더링(기존엔 소진된 좌석에만 조건부 표시), `currentBid` 옆의 전역
+뱃지와 "OOO님이 이미 사용했습니다" 전역 경고 문단은 스코프 자체가 틀려졌으므로 제거.
+`computeMinDeclare(state, seat)`에 seat 파라미터를 추가해 뷰어 자신의 소진 여부만으로 스테퍼
+최솟값/툴팁/힌트 문구("회원님은 이번 라운드 '+1 찬스'를 이미 사용하셨습니다. +2 이상 올려야
+합니다!")를 계산하도록 수정.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint`(대상 4개 파일 0 에러·경고) /
+`npx vitest run src/games/coyote/Coyote.test.ts`(68/68 통과 — 기존 66개 중 `plusOneUsedBySeat`
+참조 테스트 전부를 배열 스코프로 재작성, "다른 좌석의 소진이 이 좌석을 막지 않는다" 신규 엔진
+테스트 1건 + `getValidMoves`의 좌석별 +1 필터링 신규 테스트 1건 추가). `코요테.md` §2-1(2번 항목을
+개인별 스코프로 재작성)·§9(9-1/9-2/9-3을 개인별 문구·뱃지로 재작성) 갱신.
+
+**커밋/푸시/배포**: 이번 세션이 수정한 파일만 스테이징(`engine.ts`/`CoyoteBoard.tsx`/
+`CoyoteEffects.tsx`/`Coyote.test.ts`/`코요테.md`/`HANDOFF.md`) — 작업 트리에 있던 다른 동시 세션들의
+미커밋/미추적 변경(쇼미더코인 룰북, 말달리자 이미지 삭제, 라스베가스/페루도/소환사의 협곡/저작권 문서
+등)은 전부 제외. `git push origin main`까지 완료 — 이 저장소는 GitHub 웹훅 자동배포이므로(파일 맨 위
+배포 프로토콜 박스 참고) 별도 `vercel deploy` 실행 없이 푸시 직후 자동 반영됨, 배포 상태는 푸시 후
+`npx vercel inspect`/API로 확인.**)
+
+_이전 갱신: 2026-09-08 (**지렁이(Worm) — 모바일 렌더 스무딩(스냅샷 보간) + Canvas 픽셀 렌더링 경량화
 세션** — "① 조이스틱 회전 LERP, ② 델타타임 기반 클라이언트 예측 렌더 루프, ③ Canvas 2D 서브픽셀
 렌더링 방지 + GPU 가속 레이어 + 배경/먹이 오프스크린 캔버스 분리"를 요청. 요청서는 `Board.tsx`/
 `WormRenderer.tsx`/`types.ts` 별도 파일 구조를 전제했으나 실제로는 `WormCanvas.tsx` 한 파일에 캔버스

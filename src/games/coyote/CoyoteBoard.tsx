@@ -21,7 +21,7 @@ import {
   justEliminatedSeat,
   MaxZeroSlashOverlay,
   MAXZERO_SLASH_MS,
-  PlusOneUsedBadge,
+  PlusOneChanceBadge,
   PlusOneUsedBanner,
   QuestionRevealPopup,
   questionCardSeat,
@@ -104,13 +104,16 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     setTrackedState(state);
   }
 
-  // 이번 라운드 '+1 인상' 찬스가 이미 소진됐다면(house rule, engine.ts 모듈 doc
-  // 가정 #7) 다음 선언의 최솟값은 currentBid+2, 아니라면 currentBid+1 —
-  // 라운드 오프닝(currentBid===null)이라면 MIN_OPENING_DECLARE(1)가 바닥.
-  const plusOneLocked = state.currentBid !== null && state.plusOneUsedBySeat !== null;
-  function computeMinDeclare(s: CoyoteState): number {
+  // 뷰어 본인의 '+1 인상' 찬스가 이번 라운드에 이미 소진됐다면(house rule,
+  // engine.ts 모듈 doc 가정 #7 — 2026-09-08 후속 세션에서 방 전체 1회 제한이
+  // 아니라 "좌석별 라운드당 1회"로 스코프가 수정됨) 본인의 다음 선언 최솟값은
+  // currentBid+2, 아니라면 currentBid+1 — 라운드 오프닝(currentBid===null)
+  // 이라면 MIN_OPENING_DECLARE(1)가 바닥. 다른 좌석이 자기 +1을 썼는지는 이
+  // 계산과 전혀 무관하다.
+  const viewerPlusOneUsed = state.plusOneUsedSeats.includes(viewerSeat);
+  function computeMinDeclare(s: CoyoteState, seat: SeatIndex): number {
     if (s.currentBid === null) return MIN_OPENING_DECLARE;
-    return s.currentBid.number + (s.plusOneUsedBySeat !== null ? 2 : 1);
+    return s.currentBid.number + (s.plusOneUsedSeats.includes(seat) ? 2 : 1);
   }
 
   // The declare-number stepper resets to "the smallest legal declaration"
@@ -119,10 +122,10 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   // "state adjustment" pattern), same as dalmuti's selection-reset.
   const turnKey = `${state.activeSeat}-${state.currentBid?.number ?? "none"}-${state.roundNumber}-${state.phase}`;
   const [trackedTurnKey, setTrackedTurnKey] = useState(turnKey);
-  const [declareValue, setDeclareValue] = useState(computeMinDeclare(state));
+  const [declareValue, setDeclareValue] = useState(computeMinDeclare(state, viewerSeat));
   if (trackedTurnKey !== turnKey) {
     setTrackedTurnKey(turnKey);
-    setDeclareValue(computeMinDeclare(state));
+    setDeclareValue(computeMinDeclare(state, viewerSeat));
   }
 
   // -------------------------------------------------------------------
@@ -328,7 +331,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   const cardBySeat = new Map(view.map((v) => [v.seat, v.card]));
   const revealed = state.phase !== "playing";
   const isMyTurn = state.phase === "playing" && state.activeSeat === viewerSeat;
-  const minDeclare = computeMinDeclare(state);
+  const minDeclare = computeMinDeclare(state, viewerSeat);
   const canDeclare = isMyTurn && Number.isInteger(declareValue) && declareValue >= minDeclare;
   const canCoyote = isMyTurn && state.currentBid !== null;
   // 7-8인일 때만 카드/이름표를 한 단계 줄여 타원 위 겹침을 방지 — 레이아웃 방식(단일 타원 유지)은
@@ -419,7 +422,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
               </span>
             )}
           </span>
-          {seat === state.plusOneUsedBySeat && <PlusOneUsedBadge compact={compact} />}
+          {!isEliminated && <PlusOneChanceBadge used={state.plusOneUsedSeats.includes(seat)} compact={compact} />}
           <HeartPips hearts={player.hearts} max={STARTING_HEARTS} />
         </div>
       </div>
@@ -451,24 +454,16 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
         <div className="relative z-10 flex flex-col items-center gap-2 rounded-xl border border-white/10 bg-black/30 p-3 text-center">
           <div className="flex flex-wrap items-center justify-center gap-1.5 text-xs text-orange-100/80">
             {state.currentBid ? (
-              <>
-                <span className="break-keep">
-                  현재 선언: <span className="text-lg font-bold text-amber-300">{state.currentBid.number}</span> ({names[state.currentBid.seat]}
-                  님)
-                </span>
-                {plusOneLocked && <PlusOneUsedBadge />}
-              </>
+              <span className="break-keep">
+                현재 선언: <span className="text-lg font-bold text-amber-300">{state.currentBid.number}</span> ({names[state.currentBid.seat]}
+                님)
+              </span>
             ) : (
               <span className="break-keep">
                 아직 선언이 없습니다 — {names[state.activeSeat]}님이 {MIN_OPENING_DECLARE} 이상의 숫자로 첫 선언을 합니다.
               </span>
             )}
           </div>
-          {plusOneLocked && state.plusOneUsedBySeat !== null && (
-            <p className="break-keep text-[11px] text-amber-300/90">
-              ⚠️ 이번 라운드 &quot;+1 인상&quot;은 {names[state.plusOneUsedBySeat]}님이 이미 사용했습니다 — 이후 반드시 2 이상 올려야 합니다.
-            </p>
-          )}
           {isMyTurn ? (
             <div className="flex flex-col items-center gap-2">
               <p className="text-xs font-medium text-amber-200">🫵 당신 차례입니다!</p>
@@ -483,14 +478,14 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
                   type="number"
                   value={declareValue}
                   onChange={(e) => setDeclareValue(Number(e.target.value))}
-                  title={plusOneLocked ? "이번 라운드 '+1 인상'은 이미 사용되었습니다. 2 이상 올려야 합니다!" : undefined}
+                  title={viewerPlusOneUsed ? "회원님은 이번 라운드 '+1 찬스'를 이미 사용하셨습니다. +2 이상 올려야 합니다!" : undefined}
                   className={`w-20 rounded-lg border bg-white/5 px-2 py-1 text-center text-lg font-bold text-white focus:outline-none ${
                     declareValue < minDeclare ? "border-rose-400/70 focus:border-rose-400" : "border-white/15 focus:border-amber-400"
                   }`}
                 />
                 <button
                   onClick={() => setDeclareValue((n) => n + 1)}
-                  title={plusOneLocked ? "이번 라운드 '+1 인상'은 이미 사용되었습니다. 2 이상 올려야 합니다!" : undefined}
+                  title={viewerPlusOneUsed ? "회원님은 이번 라운드 '+1 찬스'를 이미 사용하셨습니다. +2 이상 올려야 합니다!" : undefined}
                   className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
                 >
                   +
@@ -500,8 +495,8 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
                 <p className="break-keep text-[11px] text-rose-300">
                   {state.currentBid === null
                     ? `최초 선언은 ${MIN_OPENING_DECLARE} 이상만 가능합니다 (음수/0 불가).`
-                    : plusOneLocked && declareValue === state.currentBid.number + 1
-                      ? `이번 라운드 "+1 인상"은 이미 사용되었습니다. 2 이상 올려야 합니다!`
+                    : viewerPlusOneUsed && declareValue === state.currentBid.number + 1
+                      ? `회원님은 이번 라운드 "+1 찬스"를 이미 사용하셨습니다. +2 이상 올려야 합니다!`
                       : `현재 선언(${state.currentBid.number})보다 커야 합니다.`}
                 </p>
               )}
