@@ -51,9 +51,23 @@ src/games/worm/Worm.test.ts`(50/50 통과 — 조작 위치 변경은 엔진 로
 **Git/배포**: 이번 세션이 실제로 건드린 4개 파일만 명시적으로 스테이징(`WormCanvas.tsx`/
 `RulebookModal.tsx`/`지렁이.md`/`HANDOFF.md`) — `git status`에 잡힌 다른 동시 세션들의 미커밋 변경
 (말달리자판 이미지 삭제, 쇼미더코인.md 수정, 각종 룰북 이미지, `.claude/`, `docs/visual-verification.md`
-등)은 손대지 않음. 커밋 후 `origin/main` 푸시. `git worktree list`에 잡혀 있던 이전 두 세션의 격리
-배포 워크트리(`5ac642e`/`f1826c6`)는 실행 중인 `node`/`vercel` 프로세스가 전혀 없는 상태(단순
-정리되지 않은 잔여물)임을 확인 후 정리(`git worktree prune`)하고 신규 격리 워크트리로 배포 진행.)_
+등)은 손대지 않음. 커밋(`ba2ebf6`) 후 `origin/main` 푸시 완료. `git worktree list`에 잡혀 있던 이전 두
+세션의 격리 배포 워크트리(`5ac642e`/`f1826c6`)는 실행 중인 `node`/`vercel` 프로세스가 전혀 없는
+상태(단순 정리되지 않은 잔여물)임을 확인 후 `git worktree remove --force`로 정리하고 신규 격리
+워크트리(`node_modules`는 robocopy로 실제 복사, `.vercel`/`.env.local`도 복사)로 빌드(`next
+build` 성공) 후 배포를 시도.
+
+**배포는 결국 실패 — 이번엔 워크트리 경합이 아니라 새로운 실패 유형**: 1차 시도는 업로드까지는
+성공했으나 빌드 단계에서 Vercel 서버가 `{"status":"error","reason":"deploy_failed","message":"Not
+authorized"}`를 반환(`vercel whoami`는 `gud1107`로 정상 인증 확인됨 — CLI 로그인 문제는 아니었음).
+Vercel 자체가 "retry deploy" 안내를 줘서 재시도했으나, 2차·3차 시도 모두 명령이 시작되기도 전에
+"시스템 메모리 부족"으로 강제 종료됨(당시 가용 메모리 1.3GB/7.3GB 총량 — 확인 결과 다른 세션의
+node 프로세스는 아니고 이 호스트 자체의 만성적 메모리 부족,
+[[dev-server-oom-environment-limit]]가 지금까지 `next dev`에서만 관찰됐던 것과 동일한 근본 원인이
+`vercel deploy` CLI에도 처음으로 나타난 사례). [[vercel-deploy-uploads-working-tree-not-git-head]]가
+기록해 온 지난 3세션의 "워크트리 동시 경합" 실패와는 다른 새로운 실패 시그니처 — 다음 세션 참고용으로
+구분해 기록. 코드는 `origin/main`에 정상 푸시돼 있고 로컬 빌드는 성공했으므로, 다음 세션에서 호스트
+메모리 여유가 있는 시점에 격리 워크트리 배포만 재시도하면 됨.)_
 
 _이전 갱신: 2026-09-08 (**전 게임 공통 — "소켓 재접속 후 턴 정지/AI 봇 멈춤" 결함 픽스 요청 조사
 및 코요테·페루도 등 14종 투표식 봇 전환(bot takeover) 신규 적용 세션** — "코요테·달무티·페루도 등
