@@ -6,11 +6,13 @@ import {
   computeLeaderboard,
   getGrowthStage,
   MATCH_DURATION_MS,
+  normalizeAngle,
   RESPAWN_DELAY_MS,
   SEGMENT_SPACING,
   type GrowthStage,
   type SeatIndex,
   type SnakeInput,
+  type SnakeState,
   type Vec2,
   type WormState,
 } from "./engine";
@@ -65,6 +67,56 @@ function hsl(hue: number, s = 78, l = 56) {
   return `hsl(${hue} ${s}% ${l}%)`;
 }
 
+/** Rounds a canvas coordinate to the nearest device pixel — cuts the subpixel-AA cost on the two hottest per-frame draw loops (food: up to `FOOD_COUNT_TARGET`≈490 arcs, snake segments: up to a few hundred more). Screen coordinates can be negative (off-screen-left/-top), so plain `Math.round` — a bitwise `|0` truncate-toward-zero trick would round the wrong way there. Left off the few-per-frame overlays (eyes/labels/crown/auras) below, where the AA cost is negligible and float precision reads slightly cleaner. */
+function ri(v: number): number {
+  return Math.round(v);
+}
+
+// ---------------------------------------------------------------------
+// Snapshot-to-snapshot render interpolation (see the ref doc comment above
+// for why this exists). Pure, no React/canvas dependency — only ever called
+// from the RAF loop below, once per frame.
+// ---------------------------------------------------------------------
+
+function lerpNum(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/** Shortest-arc angle interpolation, reusing the engine's own wrap convention. */
+function lerpAngle(a: number, b: number, t: number): number {
+  return normalizeAngle(a + normalizeAngle(b - a) * t);
+}
+
+/** Elementwise blend when shapes line up; otherwise `b` wins outright (a length/cut/death/respawn event this tick — snapping is correct there, not a bug). */
+function lerpVecArray(a: Vec2[], b: Vec2[], t: number): Vec2[] {
+  if (a.length !== b.length || b.length === 0) return b;
+  const out: Vec2[] = new Array(b.length);
+  for (let i = 0; i < b.length; i++) out[i] = { x: lerpNum(a[i].x, b[i].x, t), y: lerpNum(a[i].y, b[i].y, t) };
+  return out;
+}
+
+function lerpSnake(a: SnakeState, b: SnakeState, t: number): SnakeState {
+  if (!a.alive || !b.alive || a.path.length === 0 || b.path.length === 0 || a.segments.length !== b.segments.length) return b;
+  return {
+    ...b,
+    angle: lerpAngle(a.angle, b.angle, t),
+    path: [{ x: lerpNum(a.path[0].x, b.path[0].x, t), y: lerpNum(a.path[0].y, b.path[0].y, t) }, ...b.path.slice(1)],
+    segments: lerpVecArray(a.segments, b.segments, t),
+  };
+}
+
+/** Only positions/headings are blended — food, scores, phase, etc. always come from `b` (the latest confirmed snapshot) since those change in discrete pops that shouldn't be smoothed. */
+function buildInterpolatedState(a: WormState, b: WormState, t: number): WormState {
+  if (t >= 1) return b;
+  const snakes: Record<SeatIndex, SnakeState> = {};
+  for (const key of Object.keys(b.snakes)) {
+    const seat = Number(key);
+    const from = a.snakes[seat];
+    snakes[seat] = from ? lerpSnake(from, b.snakes[seat], t) : b.snakes[seat];
+  }
+  return { ...b, snakes };
+}
+
 function formatClock(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1000));
   const m = Math.floor(total / 60);
@@ -88,7 +140,28 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
   const stateRef = useRef(state);
   const namesRef = useRef(names);
   const onInputRef = useRef(onInput);
+  // 2026-09-08 모바일 렌더 스무딩 세션: `state`는 네트워크 스냅샷(비호스트 ~11Hz)
+  // 또는 호스트 자신의 고정 스텝 시뮬레이션 틱(20Hz)이 실제로 진행됐을 때만
+  // 갱신되고, 그 사이의 RAF 프레임들(60~120Hz 화면)은 지금까지 같은 위치를
+  // 반복해서 그려 "뚝뚝 끊기는" 체감을 만들었다. 아래 두 ref는 "가장 최근에
+  // 받은 두 스냅샷"과 각각의 도착 시각을 들고 있다가, `frame()`에서 그 사이를
+  // 실시간으로 보간해 그린다 — 미래를 추정하는 외삽(dead-reckoning)이 아니라
+  // 항상 확정된 두 지점 사이만 보간하므로(요청서 문서화 회신에서 "보간" 선택,
+  // "외삽" 기각) 위치가 항상 정확하고, 대신 한 스냅샷 간격만큼(호스트 ~50ms,
+  // 비호스트 ~90ms) 살짝 늦게 보인다 — 통상적인 멀티플레이어 엔티티 보간 기법.
+  const prevSnapshotRef = useRef<WormState | null>(null);
+  const prevSnapshotAtRef = useRef(0);
+  // Starts at 0 rather than `performance.now()` (calling that during render
+  // is an impure-render lint error) — harmless, since `prevSnapshotRef` is
+  // still `null` until the first real snapshot swap, which forces `t = 1`
+  // (no blending) in `frame()` regardless of what this ref holds until then.
+  const latestSnapshotAtRef = useRef(0);
   useEffect(() => {
+    if (stateRef.current !== state) {
+      prevSnapshotRef.current = stateRef.current;
+      prevSnapshotAtRef.current = latestSnapshotAtRef.current;
+      latestSnapshotAtRef.current = performance.now();
+    }
     stateRef.current = state;
   }, [state]);
   useEffect(() => {
@@ -335,8 +408,20 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const cssW = canvas.width / dpr;
         const cssH = canvas.height / dpr;
-        draw(canvas, dpr, cssW, cssH, stateRef.current, viewerSeat, namesRef.current, effects, touchCapable);
-        drawMinimap(minimapRef.current, dpr, stateRef.current, viewerSeat);
+
+        // Blend toward the latest confirmed snapshot over the *measured*
+        // gap between the last two arrivals (clamped to a sane range so a
+        // dropped/delayed packet can't stretch the blend absurdly long or
+        // divide-by-near-zero on a freak back-to-back pair) — see the ref
+        // doc comment above `prevSnapshotRef`.
+        const prevSnap = prevSnapshotRef.current;
+        const latestSnap = stateRef.current;
+        const gapMs = Math.min(Math.max(latestSnapshotAtRef.current - prevSnapshotAtRef.current, 16), 300);
+        const t = prevSnap ? Math.max(0, Math.min(1, (now - latestSnapshotAtRef.current) / gapMs)) : 1;
+        const renderState = prevSnap ? buildInterpolatedState(prevSnap, latestSnap, t) : latestSnap;
+
+        draw(canvas, dpr, cssW, cssH, renderState, viewerSeat, namesRef.current, effects, touchCapable);
+        drawMinimap(minimapRef.current, dpr, renderState, viewerSeat);
 
         const angle = computeAngle(cssW, cssH);
         lastAngleRef.current = angle;
@@ -403,7 +488,14 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
         className="relative w-full overflow-hidden rounded-[28px] border border-black/60 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)]"
         style={{ height: "min(78vh, 640px)", background: "#050a05", touchAction: "none" }}
       >
-        <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
+        {/* `willChange`/`translateZ(0)` — forces this canvas onto its own GPU
+            compositing layer instead of sharing one with the DOM overlays
+            drawn on top of it (HUD/leaderboard/minimap/kill banners), same
+            hardware-acceleration hint requested this session. `translateZ(0)`
+            is a no-op transform (doesn't affect the `absolute inset-0`
+            layout) purely to trigger layer promotion on browsers that don't
+            honor `will-change` alone. */}
+        <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" style={{ willChange: "transform", transform: "translateZ(0)" }} />
 
         {/* Top-left: my stats + timer */}
         <div className="pointer-events-none absolute top-2 left-2 flex flex-col gap-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-[11px] text-white/80 backdrop-blur-sm">
@@ -682,7 +774,7 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
     const r = (3 + food.value * 1.6) * scale;
     ctx.beginPath();
     ctx.fillStyle = hsl(food.hue, 85, 62);
-    ctx.arc(sx, sy, Math.max(2, r), 0, Math.PI * 2);
+    ctx.arc(ri(sx), ri(sy), Math.max(2, r), 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -763,13 +855,15 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
         ctx.shadowColor = hsl(hue, 92, 72);
         ctx.shadowBlur = (stage === "aurora" ? 10 : stage === "crystal" ? 7 : 4) * scale * blurMult;
       }
+      const rsx = ri(sx);
+      const rsy = ri(sy);
       ctx.beginPath();
       ctx.fillStyle = color;
       ctx.globalAlpha = i === 0 ? 1 : 0.92;
       if (crystalShape && i !== 0) {
-        drawCrystalSegment(ctx, sx, sy, Math.max(1.5, r), snake.angle);
+        drawCrystalSegment(ctx, rsx, rsy, Math.max(1.5, r), snake.angle);
       } else {
-        ctx.arc(sx, sy, Math.max(1.5, r), 0, Math.PI * 2);
+        ctx.arc(rsx, rsy, Math.max(1.5, r), 0, Math.PI * 2);
         ctx.fill();
       }
       if (glow) ctx.shadowBlur = 0;
@@ -779,7 +873,7 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
       if (spikes && i !== 0 && i % 3 === 0) {
         const prevSeg = snake.segments[Math.max(i - 1, 0)];
         const nextSeg = snake.segments[Math.min(i + 1, snake.segments.length - 1)];
-        drawSpike(ctx, sx, sy, prevSeg, nextSeg, i % 6 === 0 ? 1 : -1, r, hue, light);
+        drawSpike(ctx, rsx, rsy, prevSeg, nextSeg, i % 6 === 0 ? 1 : -1, r, hue, light);
       }
       // 비늘 테두리 패턴 — scale 단계 이상에서 몇 마디 간격으로만 어두운
       // 테두리 링을 겹쳐 그린다(머리 제외). 구 3단계 체계의 "mid/large 테두리"를
@@ -788,7 +882,7 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
         ctx.beginPath();
         ctx.strokeStyle = hsl(hue, 70, seat === viewerSeat ? 32 : 26);
         ctx.lineWidth = Math.max(0.6, 1.1 * scale);
-        ctx.arc(sx, sy, Math.max(1.5, r * 0.7), 0, Math.PI * 2);
+        ctx.arc(rsx, rsy, Math.max(1.5, r * 0.7), 0, Math.PI * 2);
         ctx.stroke();
       }
 
@@ -799,7 +893,7 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
       if (pulse > 0) {
         ctx.beginPath();
         ctx.fillStyle = `rgba(255,255,255,${pulse * 0.85})`;
-        ctx.arc(sx, sy, Math.max(1.5, r * 1.08), 0, Math.PI * 2);
+        ctx.arc(rsx, rsy, Math.max(1.5, r * 1.08), 0, Math.PI * 2);
         ctx.fill();
       }
     }
