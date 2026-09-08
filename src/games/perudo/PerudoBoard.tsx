@@ -519,9 +519,10 @@ export default function PerudoBoard({
   // -------------------------------------------------------------------------
   const seatOrder = Array.from({ length: state.playerCount }, (_, i) => i);
 
-  // Mobile: entirely different layout tree (100dvh zero-scroll main board +
-  // narrow right utility rail for my dice/color picker — see
-  // `PerudoMobileBoard.tsx`'s own file header for the full rationale).
+  // Mobile: entirely different layout tree — 2026-09-09 세션: Section 1
+  // (measured-height zero-scroll betting arena) + Section 2 (scroll-down
+  // player roster/color picker, replacing the prior toggle drawer) — see
+  // `PerudoMobileBoard.tsx`'s own file header for the full rationale.
   // Desktop/tablet keeps the existing rect-track board below, unchanged
   // (AskUserQuestion-confirmed scope). All state/handlers stay owned by
   // THIS component either way — `PerudoMobileBoard` is presentation-only.
