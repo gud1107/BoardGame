@@ -3,12 +3,17 @@
 /**
  * Small presentational pieces shared between `PerudoBoard.tsx` (desktop/
  * tablet layout) and `PerudoMobileBoard.tsx` (2026-09-08 모바일 화이트
- * 오버스크롤 차단 + 우측 사이드 패널 개편 세션) — pulled out of `PerudoBoard.tsx`,
- * where they used to live as unexported local functions, specifically so
- * both board variants can render the exact same graveyard/face-picker
- * markup instead of drifting into two slightly different copies. Living in
- * their own file (rather than just exporting them from `PerudoBoard.tsx`)
- * also avoids a circular import between the two board components.
+ * 오버스크롤 차단 세션, extended the same day by a 물리 보드 복원 세션 once the
+ * mobile board's first draft dropped the physical `RectBidTrack` and the
+ * user reported the board itself as "missing") — pulled out of
+ * `PerudoBoard.tsx`, where they used to live as unexported local functions,
+ * specifically so both board variants can render the exact same
+ * graveyard/face-picker/table-chrome markup instead of drifting into two
+ * slightly different copies. Living in their own file (rather than just
+ * exporting them from `PerudoBoard.tsx`) also avoids a circular import
+ * between the two board components. See also `PerudoBidTrack.tsx`, which
+ * holds the (larger) physical rectangular bid-track component both boards
+ * render identically.
  */
 
 import PerudoFaceIcon from "./PerudoFaceIcon";
@@ -18,6 +23,44 @@ import { STARTING_DICE, type Face, type PerudoState, type SeatIndex } from "./en
 
 export function faceLabel(face: Face): string {
   return face === 1 ? "페루도" : `${face}`;
+}
+
+// A warm, woven fabric mat — a deep terracotta/umber gradient (cloth, not
+// cold grey stone like an earlier version) and `TableTexture` below layers a
+// woven crosshatch + Andean-stripe trim bands on top of it, standing in for
+// the textile mat the real board sits on. Shared by both `PerudoBoard.tsx`
+// (desktop) and `PerudoMobileBoard.tsx` (2026-09-08 물리 보드 복원 세션) so the
+// mobile board's chrome padding — and therefore `PerudoBidTrack.tsx`'s own
+// `BOARD_CELL_SIZE_CSS` width formula, which is baked in assuming this exact
+// panel padding — stays identical between the two layouts.
+export const TABLE_PANEL =
+  "relative overflow-hidden rounded-3xl border border-black/60 bg-gradient-to-b from-[#2a1c14] via-[#1d130d] to-[#0d0805] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
+
+/** Andean-textile stripe band (terracotta/mustard/teal/cream/maroon) — used as the mat's top/bottom trim in `TableTexture`. */
+const FABRIC_TRIM_GRADIENT =
+  "repeating-linear-gradient(90deg, #b5482f 0 14px, #d9a441 14px 28px, #1f6f6f 28px 42px, #e8d9b5 42px 56px, #7a1f2b 56px 70px)";
+
+/** The fabric mat's texture layer: a woven crosshatch across the whole panel plus a colorful trim band along the top/bottom edges, standing in for a real South American textile mat under the board. The real board itself renders as `RectBidTrack` (`PerudoBidTrack.tsx`) rather than here — this layer is just the mat *under* the board. */
+export function TableTexture() {
+  return (
+    <>
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 h-2 opacity-90 sm:h-2.5"
+        style={{ backgroundImage: FABRIC_TRIM_GRADIENT }}
+      />
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-2 opacity-90 sm:h-2.5"
+        style={{ backgroundImage: FABRIC_TRIM_GRADIENT }}
+      />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.06]"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(45deg, rgba(255,255,255,0.15) 0px, rgba(255,255,255,0.15) 1px, transparent 1px, transparent 10px), repeating-linear-gradient(-45deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 1px, transparent 1px, transparent 10px)",
+        }}
+      />
+    </>
+  );
 }
 
 /** One face-up die — thin wrapper over the shared `PerudoDie` primitive with this game's own title tooltip convention. Always renders in the passed-in `colorway` — including the face-1 페루도 mark, which is engraved in that same die's own ink color rather than a fixed universal red (see `dice/colorways.ts`'s file header). */
