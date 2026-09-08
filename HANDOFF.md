@@ -1,6 +1,55 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-08 (**지렁이(Worm) — 조이스틱 좌측 재배치 + 모바일 제스처 락다운 재확인 + 렌더링
+## ⚠️ 배포 프로토콜 변경 (2026-09-08) — 반드시 읽을 것
+
+**`vercel deploy --prod`를 수동으로 실행하지 마세요.** 이 프로젝트의 Vercel 프로젝트(`board-game`,
+`me-3871` 팀)는 **GitHub 저장소(`gud1107/BoardGame`)와 이미 연결되어 있고**, `git push origin main`이
+성공하는 순간 Vercel이 웹훅으로 자동 프로덕션 배포를 트리거합니다(보통 1분 이내 완료, alias
+`board-game-git-main-me-3871.vercel.app` + `board-game-tau-navy.vercel.app`에 자동 반영).
+
+**그동안 여러 세션이 반복해서 겪은 "격리 워크트리로 `vercel deploy --prod` 시도 → `status: UNKNOWN`,
+`Builds: . [0ms]`로 몇 시간이고 멈춤" 현상의 진짜 원인**: 이 저장소는 동시에 여러 Claude Code 세션이
+같은 계정/프로젝트에 각자 수동 CLI 배포(`vercel deploy --prod`)를 반복 시도해왔고, 그 수동 CLI 배포
+요청들이 서로 빌드 큐에서 경합하며 대부분 죽어버리는 것으로 보임(2026-09-08 세션에서 실측: 동시에
+7개의 `vc.js deploy` 프로세스가 떠 있었고, 그중 다수가 `UNKNOWN` 상태로 17시간 넘게 멈춰 있었음 —
+`npx vercel ls`로 확인 가능, `npx vercel rm <url> --yes`로 정리 가능하나 이 자체는 근본 해결책이
+아님). **반면 GitHub 웹훅으로 트리거된 자동 배포는 이 경합의 영향을 받지 않고 안정적으로 ~1분 내
+성공**했음 — 실측: 커밋 `106096f`가 17:58:59에 푸시되자 5초 뒤(17:59:04) 자동 배포가 시작돼 정상
+`READY` 상태로 완료, `curl`/Vercel API(`githubCommitSha`)로 프로덕션이 정확히 그 커밋을 서빙 중임을
+확인함.
+
+**결론 및 향후 프로토콜**: 코드 변경 후 `git push origin main`까지만 하면 배포는 자동으로 처리됩니다.
+배포 결과를 확인하려면 수동으로 `vercel deploy`를 또 실행하지 말고, 아래로 확인하세요:
+1. `npx vercel inspect <production-url>`의 `status`가 `● Ready`인지, 또는
+2. Vercel API로 `meta.githubCommitSha`가 방금 푸시한 커밋 해시와 일치하는지
+   (`curl https://api.vercel.com/v13/deployments/<dpl_id>?teamId=<teamId> -H "Authorization: Bearer <token>"`,
+   토큰은 `~/AppData/Roaming/xdg.data/com.vercel.cli/auth.json`), 또는
+3. 간단히 `curl -s -o /dev/null -w "%{http_code}" https://board-game-tau-navy.vercel.app/`로 200 확인 +
+   몇 분 기다렸다가(웹훅 배포 완료 시간) 실제 화면 변경사항 확인.
+
+푸시 후 자동 배포가 몇 분이 지나도 시작되지 않는 것으로 의심되면(웹훅 실패 등 드문 경우), 그때만
+`vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
+길게 재시도하지 마세요.
+
+_최종 갱신: 2026-09-08 (**코요테(Coyote) 배포 재시도 세션 — 진짜 원인 진단: 수동 CLI 배포 경합 vs
+GitHub 웹훅 자동배포** — 위 프로토콜 박스 참고. 사용자가 "운영배포해주고 문제진단해서 해결해주세요"
+요청. 격리 워크트리로 `vercel deploy --prod` 2회 더 시도했으나 둘 다 이전 세션들과 동일하게
+`status: UNKNOWN`/`Builds: . [0ms]`로 멈춤(각각 프로세스 목록에서 동시에 5~7개의 다른 `vc.js deploy`
+프로세스 확인 — 그중 일부는 20분 넘게 카운트가 전혀 줄지 않아 "바쁜 것"이 아니라 "다른 세션들도 같이
+멈춰있는 것"으로 재해석). `npx vercel ls`로 지난 17시간+ 누적된 `UNKNOWN` 죽은 배포 10+개를 발견,
+사용자 승인(`AskUserQuestion`) 받아 `vercel rm`으로 정리. 그래도 새 수동 배포는 계속 멈춰서, 대신
+"이 프로젝트가 GitHub와 연결돼 있는지" 확인(`vercel git connect` → 이미 연결 확인) → `vercel ls`에서
+현재 프로덕션 alias가 이미 50분 전 `● Ready`로 성공한 배포를 가리키고 있음을 발견 → Vercel REST API로
+그 배포의 `meta.githubCommitSha`를 직접 조회해 **`106096f`(이번 세션 이전에 다른 세션이 푸시한, 코요테
+커밋 `3b68fcf`/`18191bd`를 포함한 최신 main)와 정확히 일치, `readyState: READY`**임을 확인 — 즉 **수동
+CLI 배포는 애초에 전혀 필요 없었고, `git push` 시점에 이미 자동으로 배포되어 있었음**. 코요테 하우스룰
+기능(선 마이너스/0 차단, "+1 인상" 1회 제한, FX)은 이미 프로덕션에 라이브 상태. curl로 `/`, `/lobby`,
+`/games/coyote` 모두 200 재확인. 정리: 중복 시도로 쌓인 죽은 배포 레코드 삭제, 격리 워크트리 제거(git
+메타데이터는 정상 디레지스터, 파일 삭제는 권한 오류로 실패 — 임시 스크래치 경로라 무해). 이번 세션의
+가장 중요한 산출물은 코드 변경이 아니라 위 배포 프로토콜 진단/문서화 자체 — 다음 세션부터는 배포
+문제로 헤매지 않도록.
+
+_이전 갱신: 2026-09-08 (**지렁이(Worm) — 조이스틱 좌측 재배치 + 모바일 제스처 락다운 재확인 + 렌더링
 GPU 경량화 세션** — "① 가상 조이스틱을 좌측으로 재배치, ② 하단 방향 조작 시 브라우저 스크롤/뒤로가기
 제스처/풀투리프레시 발동 원천 차단, ③ 모바일 프레임 드랍·입력 렉 완화를 위한 렌더링 파이프라인
 최적화"라는 요청. 요청서는 `src/games/worm/` 하위에 `Board.tsx`/`Joystick.tsx`/`WormRenderer.tsx` 등
