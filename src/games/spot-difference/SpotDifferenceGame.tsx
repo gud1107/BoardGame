@@ -31,13 +31,25 @@ import SpotDifferenceBoard from "./SpotDifferenceBoard";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
+import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import {
+  activeVoteFor,
+  INITIAL_BOT_TAKEOVER_STATE,
+  isSeatTakenOver,
+  reduceBotTakeover,
+  voteThresholdMet,
+  voteYesCount,
+  type BotTakeoverEvent,
+  type BotTakeoverState,
+} from "@/games/shared/bot/botTakeover";
 import { v4 as uuid } from "uuid";
 import type { ChatMessage, SendResult } from "@/lib/chat/types";
 import { checkThrottle, recordSend, INITIAL_THROTTLE_STATE, type ThrottleState } from "@/lib/chat/throttle";
 import { filterProfanity } from "@/lib/chat/profanity";
 import { stripControlChars } from "@/lib/chat/sanitize";
 import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
+import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 
 /**
@@ -202,6 +214,28 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
     botLevelsRef.current = botLevels;
   }, [botLevels]);
 
+  // Mid-game "seat disconnected → AI bot" — see botTakeover.ts for the
+  // vote/conversion state machine this mirrors (same wiring as
+  // DalmutiGame.tsx/CoyoteGame.tsx). Unlike every turn-based game here, this
+  // one has no single "current actor" to time out (every seat can click at
+  // any moment — see the per-bot-seat timer effect below), so only the
+  // "disconnected" trigger applies; there's no well-defined "idle" decision
+  // to watch for a stuck seat.
+  const [botTakeover, setBotTakeover] = useState<BotTakeoverState>(INITIAL_BOT_TAKEOVER_STATE);
+  const botTakeoverRef = useRef<BotTakeoverState>(INITIAL_BOT_TAKEOVER_STATE);
+  function applyBotTakeoverEvent(event: BotTakeoverEvent) {
+    const next = reduceBotTakeover(botTakeoverRef.current, event);
+    botTakeoverRef.current = next;
+    setBotTakeover(next);
+  }
+  // A vote this client has already dismissed without voting — re-shown if a
+  // *different* vote (different seat or restarted timer) comes in.
+  const [dismissedVoteKey, setDismissedVoteKey] = useState<string | null>(null);
+  const phaseRef = useRef<Phase>(phase);
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
   const channelRef = useRef<RealtimeChannel | null>(null);
   // Shared by the initial post-subscribe sync and `useBackgroundResync`
   // (below) — see that hook's doc comment for why the `state !== "joined"`
@@ -230,6 +264,14 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
   // inside the channel-setup effect below) can resolve a seat to its display
   // name for the system log without closing over a stale value.
   const namesRef = useRef<Record<SeatIndex, string>>({});
+
+  // Read inside the channel-setup effect's broadcast handlers (registered
+  // once, doesn't re-run on every `occupants` change) to avoid closing over
+  // a stale snapshot — same reasoning as `gameStateRef`/`botSeatsRef`.
+  const occupantsRef = useRef<Occupant[]>([]);
+  useEffect(() => {
+    occupantsRef.current = occupants;
+  }, [occupants]);
 
   useEffect(() => {
     if (phase !== "playing") return;
@@ -319,6 +361,10 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       setBotSeats(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
+      // A rematch is a fresh game — any takeover from the previous round
+      // shouldn't silently carry a seat's control into this one.
+      botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
+      setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
       setGameState(
         startGame(playerCount, seed, {
           source,
@@ -381,12 +427,54 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       setBotLevels(levels);
     });
 
+    // Bot-takeover vote/conversion — see botTakeover.ts. Every client
+    // replays the identical event stream through the same pure reducer; a
+    // client whose own `vote-cast` (including its own) just crossed the
+    // majority threshold is the one that fires `convert`.
+    channel.on("broadcast", { event: "bot-takeover-event" }, ({ payload }) => {
+      const event = payload?.event as BotTakeoverEvent | undefined;
+      if (!event) return;
+      if (event.type === "convert") {
+        const vote = botTakeoverRef.current.votes[event.seatKey];
+        if (vote) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: uuid(),
+              channel: chatChannel,
+              deviceId: "system",
+              senderName: "시스템",
+              body: formatBotTakeoverLog(vote.originalName),
+              type: "SYSTEM",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+      }
+      applyBotTakeoverEvent(event);
+      if (event.type !== "vote-cast") return;
+      const vote = botTakeoverRef.current.votes[event.seatKey];
+      if (!vote) return; // already converted/cancelled by a faster broadcast
+      const takenOverSeats = new Set(Object.keys(botTakeoverRef.current.takeovers).map(Number));
+      const eligible = occupantsRef.current.filter(
+        (o) => o.seat !== Number(event.seatKey) && !botSeatsRef.current.includes(o.seat) && !takenOverSeats.has(o.seat),
+      ).length;
+      if (voteThresholdMet(voteYesCount(botTakeoverRef.current, event.seatKey), eligible)) {
+        channel.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "convert", seatKey: event.seatKey, at: Date.now() } } });
+      }
+    });
+
     channel.on("broadcast", { event: "state-request" }, () => {
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",
           event: "state-sync",
-          payload: { state: gameStateRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
+          payload: {
+            state: gameStateRef.current,
+            botSeats: botSeatsRef.current,
+            botLevels: botLevelsRef.current,
+            botTakeover: botTakeoverRef.current,
+          },
         });
       } else if (isHost) {
         channel.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: botSeatsRef.current, botLevels: botLevelsRef.current } });
@@ -398,10 +486,13 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       if (!state) return;
       const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      const takeover = (payload?.botTakeover as BotTakeoverState | undefined) ?? INITIAL_BOT_TAKEOVER_STATE;
       botSeatsRef.current = roster;
       setBotSeats(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
+      botTakeoverRef.current = takeover;
+      setBotTakeover(takeover);
       setGameState(state);
       setFinalResult(null);
       setPhase("playing");
@@ -419,6 +510,35 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       if (!sawFirstSync) {
         sawFirstSync = true;
         resolveFirstSync();
+      }
+    });
+
+    // Real disconnect (tab closed, network dropped, or an explicit leave) —
+    // fires identically on every connected client (Supabase Presence is
+    // server-synced, not local-only), so whichever seat(s) left are known to
+    // everyone at once. Only kicks off a takeover vote mid-game, for a seat
+    // that isn't already a bot; `leftPresences` still carries the leaving
+    // occupant's `playerId`/`name` even though they're already gone from
+    // `presenceState()` by the time anyone could look them up again.
+    channel.on("presence", { event: "leave" }, ({ leftPresences }) => {
+      if (phaseRef.current !== "playing") return;
+      for (const p of leftPresences as unknown as Occupant[]) {
+        if (botSeatsRef.current.includes(p.seat)) continue;
+        if (activeVoteFor(botTakeoverRef.current, String(p.seat)) || isSeatTakenOver(botTakeoverRef.current, String(p.seat))) continue;
+        channel.send({
+          type: "broadcast",
+          event: "bot-takeover-event",
+          payload: {
+            event: {
+              type: "vote-start",
+              seatKey: String(p.seat),
+              reason: "disconnected",
+              startedAt: Date.now(),
+              originalUserId: p.playerId ?? `${roomCode}:${p.seat}`,
+              originalName: p.name,
+            },
+          },
+        });
       }
     });
 
@@ -618,19 +738,38 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
     return { ok: true };
   }
 
+  // Seats a takeover vote has actually converted — unioned with the lobby
+  // `botSeats` roster below wherever bot-seat membership matters (the
+  // per-seat timer effect, occupancy, display). Depending on a stable,
+  // content-derived string key (rather than the whole `botTakeover` object)
+  // means this only produces a new reference when the *set of taken-over
+  // seats* itself actually changes — see DalmutiGame.tsx's 2026-09-03
+  // freeze-fix comment for why that matters elsewhere; here it just avoids
+  // needlessly re-running the timer effect below on an unrelated seat's vote.
+  const takeoverSeatKey = Object.keys(botTakeover.takeovers).sort().join(",");
+  const takeoverSeats = useMemo(
+    () => (takeoverSeatKey ? (takeoverSeatKey.split(",").map(Number) as SeatIndex[]) : []),
+    [takeoverSeatKey],
+  );
+  const allBotSeats = useMemo(() => [...botSeats, ...takeoverSeats], [botSeats, takeoverSeats]);
+
   // Real-time free-for-all: there's no single "active seat", so the shared
   // `useBotAutoplay` hook (built around one pending decision at a time)
   // doesn't fit — see engine.ts's bot-support module doc. Instead, every bot
-  // seat gets its own independent repeating timer (host-only) that tries a
-  // click roughly every 0.7-1.8s, same human-like "thinking" cadence as
-  // every other game's single-decision bot delay.
+  // seat (lobby-added or takeover-converted) gets its own independent
+  // repeating timer (host-only) that tries a click roughly every 0.7-1.8s,
+  // same human-like "thinking" cadence as every other game's single-decision
+  // bot delay.
   useEffect(() => {
-    if (!isHost || phase !== "playing" || botSeats.length === 0) return;
+    if (!isHost || phase !== "playing" || allBotSeats.length === 0) return;
     const timers: number[] = [];
     let cancelled = false;
 
-    botSeats.forEach((seat, idx) => {
-      const level = botLevels[idx] ?? DEFAULT_BOT_LEVEL;
+    allBotSeats.forEach((seat) => {
+      // A takeover seat has no per-seat lobby-chosen level (it was human-
+      // controlled until now) — fall back to the room's default level.
+      const idx = botSeats.indexOf(seat);
+      const level = idx >= 0 ? (botLevels[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
       const tick = () => {
         if (cancelled) return;
         const state = gameStateRef.current;
@@ -649,35 +788,60 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       cancelled = true;
       timers.forEach((id) => window.clearTimeout(id));
     };
-  }, [isHost, phase, botSeats, botLevels]);
+  }, [isHost, phase, allBotSeats, botSeats, botLevels]);
+
+  function castTakeoverVote(seatKey: string) {
+    channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "vote-cast", seatKey, voterDeviceId: deviceId } } });
+  }
+  // Unified "yes" affordance — the vote target proving presence cancels the
+  // pending vote; the same button after the seat has already converted
+  // instead reclaims control.
+  function proveStillHereOrReclaim(seatKey: string) {
+    const type = isSeatTakenOver(botTakeover, seatKey) ? "reclaim" : "vote-cancel";
+    channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type, seatKey } } });
+  }
+
+  // Other real, non-bot occupants besides `seat` — the eligible-voter
+  // denominator for that seat's vote.
+  function eligibleVoterCountFor(seatKey: string): number {
+    const takenOverSeats = new Set(Object.keys(botTakeover.takeovers).map(Number));
+    return occupants.filter((o) => o.seat !== Number(seatKey) && !botSeats.includes(o.seat) && !takenOverSeats.has(o.seat)).length;
+  }
 
   const ids: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
     const count = gameState?.playerCount ?? knownTargetPlayerCount;
     for (let seat = 0; seat < count; seat++) {
       const occ = occupants.find((o) => o.seat === seat);
-      map[seat] = occ?.playerId ?? `${roomCode}:${seat}`;
+      // A takeover seat's `originalUserId` must win over the live occupant
+      // lookup — a real disconnect means `occ` is undefined here.
+      map[seat] = botTakeover.takeovers[seat]?.originalUserId ?? occ?.playerId ?? `${roomCode}:${seat}`;
     }
     return map;
-  }, [roomCode, gameState, knownTargetPlayerCount, occupants]);
+  }, [roomCode, gameState, knownTargetPlayerCount, occupants, botTakeover]);
 
   const names: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
     const count = gameState?.playerCount ?? knownTargetPlayerCount;
     for (let seat = 0; seat < count; seat++) {
+      const takeover = botTakeover.takeovers[seat];
+      if (takeover) {
+        map[seat] = `🤖 AI ${takeover.originalName}`;
+        continue;
+      }
       const occ = occupants.find((o) => o.seat === seat);
       const botIdx = botSeats.indexOf(seat);
       map[seat] = seat === mySeat ? myName : (occ?.name ?? (botIdx >= 0 ? botDisplayName(botIdx, botLevels[botIdx]) : "상대"));
     }
     return map;
-  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels]);
+  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels, botTakeover]);
   useEffect(() => {
     namesRef.current = names;
   }, [names]);
 
   const connectedSeats = useMemo(
-    () => new Set([...occupants.map((o) => o.seat), ...botSeats]),
-    [occupants, botSeats],
+    () => new Set([...occupants.map((o) => o.seat), ...botSeats, ...takeoverSeats]),
+    [occupants, botSeats, takeoverSeats],
   );
   const previewTeamOf = useMemo(() => defaultTeamAssignment(knownTargetPlayerCount), [knownTargetPlayerCount]);
 
@@ -720,6 +884,9 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
     setBotSeats([]);
     botLevelsRef.current = [];
     setBotLevels([]);
+    botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
+    setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
+    setDismissedVoteKey(null);
     setChatMessages([]);
     setChatCooldownUntil(null);
     chatThrottleRef.current = INITIAL_THROTTLE_STATE;
@@ -1074,8 +1241,37 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "playing" && gameState && mySeat !== null) {
+    const myVoteAsTarget = activeVoteFor(botTakeover, String(mySeat));
+    const iAmTakenOver = isSeatTakenOver(botTakeover, String(mySeat));
+    const voteToShow = Object.values(botTakeover.votes).find(
+      (v) => v.seatKey !== String(mySeat) && `${v.seatKey}:${v.startedAt}` !== dismissedVoteKey,
+    );
     return withGuard(
       <>
+      {myVoteAsTarget && (
+        <BotTakeoverSelfBanner mode="prove-presence" onConfirm={() => proveStillHereOrReclaim(String(mySeat))} />
+      )}
+      {!myVoteAsTarget && iAmTakenOver && (
+        <BotTakeoverSelfBanner mode="reclaim" onConfirm={() => proveStillHereOrReclaim(String(mySeat))} />
+      )}
+      {voteToShow && (
+        <BotTakeoverVoteModal
+          targetName={names[Number(voteToShow.seatKey)] ?? voteToShow.originalName}
+          reason={voteToShow.reason}
+          yesCount={voteToShow.yesVoterDeviceIds.length}
+          eligibleVoterCount={eligibleVoterCountFor(voteToShow.seatKey)}
+          hasVoted={voteToShow.yesVoterDeviceIds.includes(deviceId)}
+          onVoteYes={() => castTakeoverVote(voteToShow.seatKey)}
+          onDismiss={() => setDismissedVoteKey(`${voteToShow.seatKey}:${voteToShow.startedAt}`)}
+        />
+      )}
+      {takeoverSeats.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {takeoverSeats.map((seat) => (
+            <BotSeatBadge key={seat} variant="takeover" label={botTakeover.takeovers[seat]?.originalName ?? "이탈"} />
+          ))}
+        </div>
+      )}
       <SpotDifferenceBoard
         state={gameState}
         viewerSeat={mySeat}

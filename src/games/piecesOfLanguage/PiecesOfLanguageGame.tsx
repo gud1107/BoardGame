@@ -26,13 +26,25 @@ import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
+import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import {
+  activeVoteFor,
+  INITIAL_BOT_TAKEOVER_STATE,
+  isSeatTakenOver,
+  reduceBotTakeover,
+  voteThresholdMet,
+  voteYesCount,
+  type BotTakeoverEvent,
+  type BotTakeoverState,
+} from "@/games/shared/bot/botTakeover";
 import { v4 as uuid } from "uuid";
 import type { ChatMessage, SendResult } from "@/lib/chat/types";
 import { checkThrottle, recordSend, INITIAL_THROTTLE_STATE, type ThrottleState } from "@/lib/chat/throttle";
 import { filterProfanity } from "@/lib/chat/profanity";
 import { stripControlChars } from "@/lib/chat/sanitize";
 import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
+import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 
 /** Whose decision `useBotAutoplay` should drive right now. */
@@ -155,6 +167,30 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
   }, [botLevels]);
   const botRoleSet = useMemo(() => new Set(botRoles), [botRoles]);
 
+  // Mid-game "seat disconnected/unresponsive → AI bot" — see botTakeover.ts
+  // for the vote/conversion state machine this mirrors (same wiring as
+  // DalmutiGame.tsx/HanamikojiGame.tsx). `Seat` ("p1"/"p2") is already a
+  // plain string, so it doubles directly as botTakeover's `seatKey` — no
+  // Number()/String() conversion needed here unlike the numeric-seat games.
+  const [botTakeover, setBotTakeover] = useState<BotTakeoverState>(INITIAL_BOT_TAKEOVER_STATE);
+  const botTakeoverRef = useRef<BotTakeoverState>(INITIAL_BOT_TAKEOVER_STATE);
+  function applyBotTakeoverEvent(event: BotTakeoverEvent) {
+    const next = reduceBotTakeover(botTakeoverRef.current, event);
+    botTakeoverRef.current = next;
+    setBotTakeover(next);
+  }
+  // A vote this client has already dismissed without voting — re-shown if a
+  // *different* vote (different role or restarted timer) comes in.
+  const [dismissedVoteKey, setDismissedVoteKey] = useState<string | null>(null);
+  const phaseRef = useRef<Phase>(phase);
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+  // Tracks how long the current actor has been stuck, for the "idle/무응답"
+  // vote trigger — see the dedicated interval effect below.
+  const lastActorRef = useRef<{ actor: Seat | null; since: number }>({ actor: null, since: 0 });
+  const IDLE_VOTE_THRESHOLD_MS = 45_000;
+
   const channelRef = useRef<RealtimeChannel | null>(null);
   // Shared by the initial post-subscribe sync and `useBackgroundResync`
   // (below) — see that hook's doc comment for why the `state !== "joined"`
@@ -181,6 +217,14 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
   // name for the system log without closing over a stale value.
   const namesRef = useRef<Record<Seat, string>>({ p1: "상대", p2: "상대" });
 
+  // Read inside the channel-setup effect's broadcast handlers (registered
+  // once, doesn't re-run on every `occupants` change) to avoid closing over
+  // a stale snapshot — same reasoning as `gameStateRef`/`botRolesRef`.
+  const occupantsRef = useRef<Occupant[]>([]);
+  useEffect(() => {
+    occupantsRef.current = occupants;
+  }, [occupants]);
+
   const opponentSeat = myRole ? otherSeat(myRole) : null;
   const names: Record<Seat, string> = useMemo(() => {
     const byRole = (r: Seat) => occupants.find((o) => o.role === r)?.name;
@@ -189,26 +233,33 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
       const idx = botIdx(r);
       return idx >= 0 ? botDisplayName(idx, botLevels[idx]) : "상대";
     };
-    return {
-      p1: (myRole === "p1" ? myName : byRole("p1")) ?? fallback("p1"),
-      p2: (myRole === "p2" ? myName : byRole("p2")) ?? fallback("p2"),
+    const forRole = (r: Seat) => {
+      const takeover = botTakeover.takeovers[r];
+      if (takeover) return `🤖 AI ${takeover.originalName}`;
+      return (r === myRole ? myName : byRole(r)) ?? fallback(r);
     };
-  }, [occupants, myRole, myName, botRoles, botLevels]);
+    return { p1: forRole("p1"), p2: forRole("p2") };
+  }, [occupants, myRole, myName, botRoles, botLevels, botTakeover]);
   useEffect(() => {
     namesRef.current = names;
   }, [names]);
   // Prefer the real betting-system playerId (present when that seat's
   // occupant joined by picking themselves from an active session's roster —
-  // see RoomNicknameField) over the synthetic per-room id.
+  // see RoomNicknameField) over the synthetic per-room id. A takeover role's
+  // `originalUserId` must win over the live occupant lookup — a real
+  // disconnect means that role has no occupant record left at all.
   const ids: Record<Seat, string> = useMemo(() => {
-    const byRole = (r: Seat) => occupants.find((o) => o.role === r)?.playerId;
+    const byRole = (r: Seat) => botTakeover.takeovers[r]?.originalUserId ?? occupants.find((o) => o.role === r)?.playerId;
     return {
       p1: byRole("p1") ?? `${roomCode}:p1`,
       p2: byRole("p2") ?? `${roomCode}:p2`,
     };
-  }, [roomCode, occupants]);
+  }, [roomCode, occupants, botTakeover]);
   const opponentIsBot = opponentSeat ? botRoles.includes(opponentSeat) : false;
-  const opponentConnected = (opponentSeat ? occupants.some((o) => o.role === opponentSeat) : false) || opponentIsBot;
+  const opponentConnected =
+    (opponentSeat ? occupants.some((o) => o.role === opponentSeat) : false) ||
+    opponentIsBot ||
+    (opponentSeat ? isSeatTakenOver(botTakeover, opponentSeat) : false);
 
   function enterRoom() {
     setFormError(null);
@@ -268,6 +319,10 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
       setBotRoles(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
+      // A rematch is a fresh game — any takeover from the previous round
+      // shouldn't silently carry a role's control into this one.
+      botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
+      setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
       setGameState(startGame(wordLength, maxAttempts, seededRng(seed)));
       setFinalResult(null);
       setPhase("playing");
@@ -315,6 +370,43 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
       setBotLevels(levels);
     });
 
+    // Bot-takeover vote/conversion — see botTakeover.ts. Every client
+    // replays the identical event stream through the same pure reducer; a
+    // client whose own `vote-cast` (including its own) just crossed the
+    // majority threshold is the one that fires `convert`.
+    channel.on("broadcast", { event: "bot-takeover-event" }, ({ payload }) => {
+      const event = payload?.event as BotTakeoverEvent | undefined;
+      if (!event) return;
+      if (event.type === "convert") {
+        const vote = botTakeoverRef.current.votes[event.seatKey];
+        if (vote) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: uuid(),
+              channel: chatChannel,
+              deviceId: "system",
+              senderName: "시스템",
+              body: formatBotTakeoverLog(vote.originalName),
+              type: "SYSTEM",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+      }
+      applyBotTakeoverEvent(event);
+      if (event.type !== "vote-cast") return;
+      const vote = botTakeoverRef.current.votes[event.seatKey];
+      if (!vote) return; // already converted/cancelled by a faster broadcast
+      const takenOverRoles = new Set(Object.keys(botTakeoverRef.current.takeovers));
+      const eligible = occupantsRef.current.filter(
+        (o) => o.role !== event.seatKey && !botRolesRef.current.includes(o.role) && !takenOverRoles.has(o.role),
+      ).length;
+      if (voteThresholdMet(voteYesCount(botTakeoverRef.current, event.seatKey), eligible)) {
+        channel.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "convert", seatKey: event.seatKey, at: Date.now() } } });
+      }
+    });
+
     channel.on("broadcast", { event: "state-request" }, () => {
       if (!gameStateRef.current) {
         if (myRole === "p1") {
@@ -325,7 +417,12 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
       channel.send({
         type: "broadcast",
         event: "state-sync",
-        payload: { state: gameStateRef.current, botRoles: botRolesRef.current, botLevels: botLevelsRef.current },
+        payload: {
+          state: gameStateRef.current,
+          botRoles: botRolesRef.current,
+          botLevels: botLevelsRef.current,
+          botTakeover: botTakeoverRef.current,
+        },
       });
     });
 
@@ -334,10 +431,13 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
       if (!syncedState) return;
       const roster = (payload?.botRoles as Seat[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
+      const takeover = (payload?.botTakeover as BotTakeoverState | undefined) ?? INITIAL_BOT_TAKEOVER_STATE;
       botRolesRef.current = roster;
       setBotRoles(roster);
       botLevelsRef.current = levels;
       setBotLevels(levels);
+      botTakeoverRef.current = takeover;
+      setBotTakeover(takeover);
       setGameState(syncedState);
       setPhase((p) => (p === "connecting" || p === "waiting" ? "playing" : p));
     });
@@ -345,6 +445,35 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
     channel.on("presence", { event: "sync" }, () => {
       const raw = channel.presenceState() as RealtimePresenceState<Occupant>;
       setOccupants(Object.values(raw).flat());
+    });
+
+    // Real disconnect (tab closed, network dropped, or an explicit leave) —
+    // fires identically on every connected client (Supabase Presence is
+    // server-synced, not local-only). Only kicks off a takeover vote
+    // mid-game, for a role that isn't already a bot; `leftPresences` still
+    // carries the leaving occupant's `playerId`/`name` even though they're
+    // already gone from `presenceState()` by the time anyone could look them
+    // up again.
+    channel.on("presence", { event: "leave" }, ({ leftPresences }) => {
+      if (phaseRef.current !== "playing") return;
+      for (const p of leftPresences as unknown as Occupant[]) {
+        if (botRolesRef.current.includes(p.role)) continue;
+        if (activeVoteFor(botTakeoverRef.current, p.role) || isSeatTakenOver(botTakeoverRef.current, p.role)) continue;
+        channel.send({
+          type: "broadcast",
+          event: "bot-takeover-event",
+          payload: {
+            event: {
+              type: "vote-start",
+              seatKey: p.role,
+              reason: "disconnected",
+              startedAt: Date.now(),
+              originalUserId: p.playerId ?? `${roomCode}:${p.role}`,
+              originalName: p.name,
+            },
+          },
+        });
+      }
     });
 
     channel.subscribe(async (status) => {
@@ -484,8 +613,27 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
     [roomCode, myName, deviceId],
   );
 
+  // Roles a takeover vote has actually converted — unioned with the lobby
+  // `botRoles` roster wherever bot membership matters. Depending on a
+  // stable, content-derived string key (rather than the whole `botTakeover`
+  // object) means this only produces a new reference when the *set of
+  // taken-over roles* itself actually changes — see DalmutiGame.tsx's
+  // 2026-09-03 freeze-fix comment for why that matters for
+  // `useBotAutoplay`'s watchdog.
+  const takeoverRoleKey = Object.keys(botTakeover.takeovers).sort().join(",");
+  const takeoverRoles = useMemo(
+    () => (takeoverRoleKey ? (takeoverRoleKey.split(",") as Seat[]) : []),
+    [takeoverRoleKey],
+  );
+  const allBotRoleSet = useMemo(
+    () => new Set([...botRoleSet, ...takeoverRoles]),
+    [botRoleSet, takeoverRoles],
+  );
+
   const chooseAction = useCallback((state: PiecesOfLanguageState, actor: Seat): EngineAction | null => {
     const idx = botRolesRef.current.indexOf(actor);
+    // A takeover role has no per-role lobby-chosen level (it was human-
+    // controlled until now) — fall back to the room's default level.
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
     return chooseBotAction(state, actor, level);
   }, []);
@@ -494,10 +642,64 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
     active: isHost && phase === "playing",
     state: gameState,
     currentActor: polCurrentActor,
-    botSeats: botRoleSet,
+    botSeats: allBotRoleSet,
     chooseAction,
     dispatch: handleAction,
   });
+
+  // "무응답(idle)" takeover trigger: if the current actor hasn't changed in
+  // IDLE_VOTE_THRESHOLD_MS while the game is playing, kick off a vote for
+  // that role (unless it's already a bot or already mid-vote).
+  useEffect(() => {
+    if (phase !== "playing") return;
+    const interval = window.setInterval(() => {
+      const state = gameStateRef.current;
+      if (!state) return;
+      const actor = polCurrentActor(state);
+      if (actor !== lastActorRef.current.actor) {
+        lastActorRef.current = { actor, since: Date.now() };
+        return;
+      }
+      if (actor === null) return;
+      if (botRolesRef.current.includes(actor)) return;
+      if (activeVoteFor(botTakeoverRef.current, actor) || isSeatTakenOver(botTakeoverRef.current, actor)) return;
+      if (Date.now() - lastActorRef.current.since < IDLE_VOTE_THRESHOLD_MS) return;
+      const occ = occupantsRef.current.find((o) => o.role === actor);
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "bot-takeover-event",
+        payload: {
+          event: {
+            type: "vote-start",
+            seatKey: actor,
+            reason: "idle",
+            startedAt: Date.now(),
+            originalUserId: occ?.playerId ?? `${roomCode}:${actor}`,
+            originalName: occ?.name ?? namesRef.current[actor] ?? "상대",
+          },
+        },
+      });
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [phase, roomCode]);
+
+  function castTakeoverVote(seatKey: string) {
+    channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "vote-cast", seatKey, voterDeviceId: deviceId } } });
+  }
+  // Unified "yes" affordance — the vote target proving presence cancels the
+  // pending vote; the same button after the role has already converted
+  // instead reclaims control.
+  function proveStillHereOrReclaim(seatKey: string) {
+    const type = isSeatTakenOver(botTakeover, seatKey) ? "reclaim" : "vote-cancel";
+    channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type, seatKey } } });
+  }
+
+  // Other real, non-bot occupants besides `role` — the eligible-voter
+  // denominator for that role's vote (a 2-player game, so this is 0 or 1).
+  function eligibleVoterCountFor(role: string): number {
+    const takenOverRoles = new Set(Object.keys(botTakeover.takeovers));
+    return occupants.filter((o) => o.role !== role && !botRoles.includes(o.role as Seat) && !takenOverRoles.has(o.role)).length;
+  }
 
   function handleGameEnd(result: { winnerId: string | null; isDraw: boolean }) {
     if (!gameState) return;
@@ -559,6 +761,9 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
     setBotRoles([]);
     botLevelsRef.current = [];
     setBotLevels([]);
+    botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
+    setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
+    setDismissedVoteKey(null);
     setChatMessages([]);
     setChatCooldownUntil(null);
     chatThrottleRef.current = INITIAL_THROTTLE_STATE;
@@ -813,8 +1018,37 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
 
   // ---- Playing. ----
   if (phase === "playing" && gameState && myRole) {
+    const myVoteAsTarget = activeVoteFor(botTakeover, myRole);
+    const iAmTakenOver = isSeatTakenOver(botTakeover, myRole);
+    const voteToShow = Object.values(botTakeover.votes).find(
+      (v) => v.seatKey !== myRole && `${v.seatKey}:${v.startedAt}` !== dismissedVoteKey,
+    );
     return withGuard(
       <>
+      {myVoteAsTarget && (
+        <BotTakeoverSelfBanner mode="prove-presence" onConfirm={() => proveStillHereOrReclaim(myRole)} />
+      )}
+      {!myVoteAsTarget && iAmTakenOver && (
+        <BotTakeoverSelfBanner mode="reclaim" onConfirm={() => proveStillHereOrReclaim(myRole)} />
+      )}
+      {voteToShow && (
+        <BotTakeoverVoteModal
+          targetName={names[voteToShow.seatKey as Seat] ?? voteToShow.originalName}
+          reason={voteToShow.reason}
+          yesCount={voteToShow.yesVoterDeviceIds.length}
+          eligibleVoterCount={eligibleVoterCountFor(voteToShow.seatKey)}
+          hasVoted={voteToShow.yesVoterDeviceIds.includes(deviceId)}
+          onVoteYes={() => castTakeoverVote(voteToShow.seatKey)}
+          onDismiss={() => setDismissedVoteKey(`${voteToShow.seatKey}:${voteToShow.startedAt}`)}
+        />
+      )}
+      {takeoverRoles.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {takeoverRoles.map((role) => (
+            <BotSeatBadge key={role} variant="takeover" label={botTakeover.takeovers[role]?.originalName ?? "이탈"} />
+          ))}
+        </div>
+      )}
       <PiecesOfLanguageBoard
         state={gameState}
         viewerSeat={myRole}
