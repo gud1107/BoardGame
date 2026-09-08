@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
@@ -320,6 +320,31 @@ const BOARD_CELL_SIZE_CSS = `
     --perudo-cell: clamp(30px, calc((100vw - 100px) / 9), 78px);
   }
 }
+
+/* 2026-09-08 4변 밀착 세션: the hollow center's height is now locked to
+   the west/east strip's own height (see \`RectBidTrack\`'s grid-root
+   comment), so overflowing content (routine on mobile) scrolls inside
+   this one cell instead of stretching the board and detaching the
+   corners. A default browser scrollbar is easy to miss here, so give it
+   real presence — a slim amber thumb matching the board's own palette —
+   instead of leaving it invisible-by-default the way \`overflow-x-auto\`
+   elsewhere on this page already isn't (that one has room to just look
+   like a horizontal swipe; this cell doesn't). */
+.perudo-center-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(217, 119, 6, 0.85) rgba(0, 0, 0, 0.25);
+}
+.perudo-center-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.perudo-center-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 999px;
+}
+.perudo-center-scroll::-webkit-scrollbar-thumb {
+  background: rgba(217, 119, 6, 0.85);
+  border-radius: 999px;
+}
 `;
 
 /** A strip's exact content length — `cellCount * var(--perudo-cell)`, zero gap between cells (north/south hold 7 cells, west/east hold 6 — see `buildRectFrame`). */
@@ -549,7 +574,19 @@ function RectBidTrack({
   return (
     <div
       className="perudo-rect-track grid w-fit mx-auto gap-0 rounded-2xl border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-1.5"
-      style={{ gridTemplateColumns: "auto auto auto", gridTemplateRows: "auto auto auto" }}
+      // 2026-09-08 4변 밀착 세션: the middle row (west strip / children / east
+      // strip) used to be `auto`-sized, which let `children`'s real content
+      // height (the whole bid composer + dice tray on mobile, easily taller
+      // than 6 cells) inflate the row past `stripLength(6)`. West/east are
+      // `self-center`, so they'd get centered inside that taller row —
+      // visually detaching them from the TL/BL and TR/BR corners sitting in
+      // the fixed-height rows above/below (사용자 확인: "각 변의 4개가
+      // 떨어져있다"). Pinning the middle row to the strip's own exact
+      // height (same fix pattern already used for the middle COLUMN via
+      // `children`'s `maxWidth: stripLength(7)` below) keeps the border a
+      // seamless rectangle regardless of how tall the center content gets;
+      // the center cell scrolls internally instead (see its own comment).
+      style={{ gridTemplateColumns: "auto auto auto", gridTemplateRows: `auto ${stripLength(6)} auto` }}
     >
       {/* `display:none` by default (the UA stylesheet), so this never becomes a grid item itself — see `BOARD_CELL_SIZE_CSS`'s doc comment. */}
       <style>{BOARD_CELL_SIZE_CSS}</style>
@@ -588,7 +625,25 @@ function RectBidTrack({
           the whole board — past the strips' own width. Moved onto
           `children`'s own box instead, where `maxWidth` (a real cap on
           ITS OWN border-box) already accounts for it. */}
-      <div className="col-start-2 row-start-2 flex items-center justify-center">{children}</div>
+      {/* `overflow-y-auto` + `items-start` (2026-09-08 4변 밀착 세션): now that
+          the middle row is height-locked to `stripLength(6)` (see the grid
+          root's own comment above), this cell no longer grows to fit
+          `children` — content taller than 6 cells (routine on small phones)
+          scrolls inside this box instead of re-inflating the row and
+          re-detaching the west/east strips from the corners. The
+          `sticky top-0`/`bottom-0` gradient slivers below are a
+          scroll-more hint (AskUserQuestion-confirmed: keep the internal
+          scroll, just make it visibly discoverable, alongside
+          `.perudo-center-scroll`'s colored scrollbar above) — `sticky`
+          keeps each pinned to its edge of the scrollport as the content
+          scrolls past, without needing a separate non-scrolling wrapper or
+          JS scroll-position tracking. Harmless no-op when content doesn't
+          actually overflow (desktop/tablet, bigger `--perudo-cell`). */}
+      <div className="perudo-center-scroll col-start-2 row-start-2 flex flex-col items-center overflow-y-auto">
+        <div className="pointer-events-none sticky top-0 z-10 -mb-2 h-2 w-full shrink-0 bg-gradient-to-b from-black/45 to-transparent" />
+        {children}
+        <div className="pointer-events-none sticky bottom-0 z-10 -mt-3 h-3 w-full shrink-0 bg-gradient-to-t from-black/60 to-transparent" />
+      </div>
       <div className="col-start-3 row-start-2 flex shrink-0 flex-col self-center" style={{ height: stripLength(6) }}>
         {frame.east.map(renderCell)}
       </div>
@@ -666,6 +721,26 @@ export default function PerudoBoard({
   // deterministic seat default only for the brief window before the caller's
   // own presence-track resolves a real pick.
   const myColorway = colorways[viewerSeat] ?? playerColorwayForSeat(viewerSeat);
+
+  // 2026-09-08 4변 밀착 세션: `RectBidTrack`'s hollow center is now
+  // height-locked to `stripLength(6)` (see that component's own doc
+  // comment) so the physical border stays a seamless rectangle on mobile —
+  // but that means the bid-declare box (선언/확정 버튼, 🚨페루도!/🎯맞아!)
+  // routinely sits below the fold of that small internally-scrolling cell.
+  // Rather than leave the player to discover the nested scroll on their
+  // own, jump it into view the moment it's actually their turn (or the
+  // moment they gain the ability to act at all) — `scrollIntoView` walks up
+  // to the nearest scrollable ancestor regardless of which component
+  // rendered it, so this ref doesn't need to be threaded through
+  // `RectBidTrack` at all. AskUserQuestion-confirmed: keep the internal
+  // scroll (not a bigger layout redesign), just make it more discoverable —
+  // see this ref's call site for the matching scrollbar/fade styling.
+  const bidActionZoneRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (isMyTurn && iAmAlive) {
+      bidActionZoneRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [isMyTurn, iAmAlive]);
 
   // -------------------------------------------------------------------------
   // Bid composer draft — local to this client, re-synced from
@@ -1082,7 +1157,10 @@ export default function PerudoBoard({
               gate on the same `validateRaise` call, so a same-quantity face
               raise (예: "2가 1개" → "3이 1개") is never blocked by one path
               while allowed by the other. */}
-          <div className="relative z-10 flex w-full flex-col items-center justify-center gap-2 rounded-[1.25rem] border-4 border-amber-800 bg-amber-100/90 p-2 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)]">
+          <div
+            ref={bidActionZoneRef}
+            className="relative z-10 flex w-full flex-col items-center justify-center gap-2 rounded-[1.25rem] border-4 border-amber-800 bg-amber-100/90 p-2 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)]"
+          >
             {state.currentBid ? (
               <div className="flex flex-col items-center gap-0.5 text-center">
                 <span className="text-[10px] text-amber-900/70">{names[state.currentBid.seat]}님의 선언</span>

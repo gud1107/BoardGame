@@ -31,7 +31,43 @@
 `vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
 길게 재시도하지 마세요.
 
-_최종 갱신: 2026-09-08 (**코요테(Coyote) 배포 재시도 세션 — 진짜 원인 진단: 수동 CLI 배포 경합 vs
+_최종 갱신: 2026-09-08 (**페루도(Perudo) — 모바일 사각형 트랙 4변 밀착(이음매 제거) 세션** — "상단
+상대 현황/중앙 베팅판/하단 주사위 컵·액션 패널 사이가 붕 뜨거나 분리돼 보인다"는 요청. 요청서는
+[[perudo-mobile-overflow-and-grid-padding-gotcha]]와 동일하게 `Board.tsx`/`BettingBoard.tsx`/
+`DiceCup.tsx`/`ActionPanel.tsx` 분리 파일 구조, `justify-between` 과다 사용을 전제했으나 실제 코드엔
+그런 파일도, `justify-between`도 없었음(또 다른 요청 전제-실제 코드 불일치 사례). `AskUserQuestion`으로
+실제 증상을 재확인한 결과, 진짜 신고 내용은 다른 문제였음: **사각형 30칸 트랙(`RectBidTrack`)의 4변
+(1~6/7~10/11~16/17~20)이 서로 떨어져 보인다**는 것.
+
+**원인**: `RectBidTrack`의 3×3 그리드에서 서/동쪽 스트립(6칸)이 들어있는 가운데 행(row2)이 `auto`
+높이였는데, 같은 행에 걸린 가운데 셀(`children` — 베팅 확정 패널+주사위 트레이 전체)의 실제 콘텐츠
+높이가 모바일에서 `stripLength(6)`(≈180~300px)보다 훨씬 커서(≈580px+) 행 자체가 그 콘텐츠 높이만큼
+늘어남 → `self-center`로 배치된 서/동쪽 스트립이 늘어난 행 한가운데로 밀리면서 위/아래 코너와
+눈에 띄게 떨어져 보였음. 가로 폭은 2026-09-07 세션에서 이미 `children`의 `maxWidth: stripLength(7)`
+캡으로 해결돼 있었지만, 세로 높이엔 대응하는 캡이 없었던 게 원인.
+
+**수정**: 그리드 루트의 `gridTemplateRows`를 `auto ${stripLength(6)} auto`로 명시해 가운데 행을 서/동쪽
+스트립의 실제 높이에 고정(가로쪽 `maxWidth` 캡과 대칭되는 세로쪽 캡). 가운데 셀엔 `overflow-y-auto`를
+추가해 넘치는 콘텐츠가 행을 다시 부풀리는 대신 그 안에서 스크롤되도록 함 — 이걸로 4변이 콘텐츠
+높이와 무관하게 항상 이음매 없는 사각형으로 유지됨(Playwright 실측: 390×844에서 1~20 전체가 완전히
+밀착됨을 확인).
+
+**부작용 발견 및 후속 조치(정직 공개)**: 위 수정만으로는 베팅 확정 버튼/🚨페루도!·🎯맞아! 액션
+버튼/내 주사위 트레이가 새로 생긴 내부 스크롤 아래 가려져, 실제 플레이 시 액션 버튼을 못 찾을 위험이
+있음을 스크린샷으로 직접 확인. `AskUserQuestion`으로 처리 방식 확인: **내부 스크롤은 유지하되 발견성만
+높임**(패널을 보드 밖으로 빼는 안, 컴포저 자체를 재설계해 6칸 안에 욱여넣는 안은 기각) — ①
+`.perudo-center-scroll`에 앰버색 커스텀 스크롤바(`scrollbar-color`/`::-webkit-scrollbar-thumb`) 적용,
+② 스크롤 컨테이너 상/하단에 `sticky` 그라디언트 페이드 힌트 추가, ③ `isMyTurn && iAmAlive`가 될 때
+베팅 확정 패널(`bidActionZoneRef`)로 자동 `scrollIntoView` — 내 차례가 되면 스크롤 없이 바로 확정
+버튼이 보이도록. Playwright로 재확인: 내 차례 시작 시 눈금 선택/스텝퍼/"확정" 버튼이 스크롤 없이 즉시
+보임(오프너 상태 기준 — 페루도!/맞아! 버튼은 이 상태에서 어차피 비활성화라 영향 없음).
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint src/games/perudo/PerudoBoard.tsx`(0 에러/경고) /
+`npx vitest run src/games/perudo`(기존 80개 엔진 테스트 그대로 통과, 엔진 로직 무변경) — 순수 CSS
+그리드+스크롤 UX 변경. 캐시된 Playwright Chromium(390×844, 이번 세션에서 직접 실행한 `next dev`
++`scrollIntoViewIfNeeded`+클로즈업 스크린샷)로 라이브 확인, 매 실행 후 `browser.close()` 처리.
+
+_이전 갱신: 2026-09-08 (**코요테(Coyote) 배포 재시도 세션 — 진짜 원인 진단: 수동 CLI 배포 경합 vs
 GitHub 웹훅 자동배포** — 위 프로토콜 박스 참고. 사용자가 "운영배포해주고 문제진단해서 해결해주세요"
 요청. 격리 워크트리로 `vercel deploy --prod` 2회 더 시도했으나 둘 다 이전 세션들과 동일하게
 `status: UNKNOWN`/`Builds: . [0ms]`로 멈춤(각각 프로세스 목록에서 동시에 5~7개의 다른 `vc.js deploy`
