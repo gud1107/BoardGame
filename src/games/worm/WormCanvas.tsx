@@ -335,7 +335,7 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const cssW = canvas.width / dpr;
         const cssH = canvas.height / dpr;
-        draw(canvas, dpr, cssW, cssH, stateRef.current, viewerSeat, namesRef.current, effects);
+        draw(canvas, dpr, cssW, cssH, stateRef.current, viewerSeat, namesRef.current, effects, touchCapable);
         drawMinimap(minimapRef.current, dpr, stateRef.current, viewerSeat);
 
         const angle = computeAngle(cssW, cssH);
@@ -350,7 +350,7 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
     }
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [viewerSeat, effects]);
+  }, [viewerSeat, effects, touchCapable]);
 
   // ---------------------------------------------------------------------
   // Game end detection (match timer elapsed).
@@ -477,15 +477,24 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
           </div>
         )}
 
-        {/* Touch controls — 2026-09-05 세션: 오른손 엄지 조작성을 위해 조이스틱을
-            화면 하단 모서리에서 우측 세로 중앙(top: 50%, right, translateY(-50%))
-            으로 재배치(`AskUserQuestion` 확정). 부스트 버튼은 조이스틱과 같은
-            우측 축에서 그 바로 아래로 붙여 세로로 스택(역시 확정 답변) — 가로
-            폭이 더 큰 조이스틱(h-24=96px) 중심에 맞춰 우측 오프셋을 계산해
-            두 컨트롤의 좌우 중심이 정확히 일치하도록 뺐다. 바깥 컨테이너에
-            이미 `touchAction: "none"`이 걸려 있지만(위 컨테이너 style 참고),
-            각 컨트롤에도 명시적으로 중복 지정해 터치 오작동(스크롤/줌)을 이중
-            차단한다. */}
+        {/* Touch controls — 2026-09-08 세션: 2026-09-05에 확정했던 "조이스틱
+            우측" 배치를 다시 좌측(양손 조작 표준 — 왼손 이동/오른손 액션)으로
+            되돌리는 명시적 요청(`AskUserQuestion` 재확인). 조이스틱을
+            좌측 세로 중앙(top: 50%, left, translateY(-50%))으로, 부스트
+            버튼은 이제 비어진 우측에서 정확히 조이스틱이 있던 자리를
+            그대로 미러링(top: 50%, right, translateY(-50%) — 역시
+            `AskUserQuestion` 확정 답변)한다. 바깥 컨테이너에 이미
+            `touchAction: "none"`이 걸려 있지만(위 컨테이너 style 참고), 각
+            컨트롤에도 명시적으로 중복 지정해 터치 오작동(스크롤/줌)을 이중
+            차단한다.
+
+            ⚠️ 알려진 한계: 조이스틱을 화면 좌측 가장자리 가까이(left: 24px)에
+            두면 iOS Safari/일부 Android 브라우저의 "왼쪽 엣지 스와이프 = 뒤로
+            가기" OS 제스처 인식 구간과 겹칠 수 있다. `touch-action: none` +
+            `overscrollBehavior: none`(아래 useEffect, 컨테이너 style)이 대부분의
+            브라우저에서 이를 막아 주지만, 진짜 OS 레벨 엣지 스와이프는 웹페이지
+            CSS/JS로 100% 차단이 불가능한 영역 — 위 useEffect의 기존 주석과
+            동일한 성격의 문서화된 한계다. */}
         {touchCapable && (
           <>
             <div
@@ -495,7 +504,7 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
               onPointerUp={handleJoystickPointerUp}
               onPointerCancel={handleJoystickPointerUp}
               className="absolute h-24 w-24 rounded-full border border-white/20 bg-white/5"
-              style={{ top: "50%", right: 24, transform: "translateY(-50%)", touchAction: "none" }}
+              style={{ top: "50%", left: 24, transform: "translateY(-50%)", touchAction: "none" }}
             >
               <div
                 className="pointer-events-none absolute top-1/2 left-1/2 h-9 w-9 rounded-full bg-lime-300/70"
@@ -515,7 +524,7 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
                 joystickBoostRef.current = false;
               }}
               className="absolute h-16 w-16 rounded-full border border-amber-300/40 bg-amber-500/20 text-xs font-bold text-amber-100 active:bg-amber-400/40"
-              style={{ top: "calc(50% + 64px)", right: 40, touchAction: "none" }}
+              style={{ top: "50%", right: 24, transform: "translateY(-50%)", touchAction: "none" }}
             >
               🚀 부스트
             </button>
@@ -588,10 +597,18 @@ function drawSpike(ctx: CanvasRenderingContext2D, sx: number, sy: number, prevSe
   ctx.fill();
 }
 
+// 2026-09-08 모바일 렉 완화 세션: 터치 기기(대개 데스크톱보다 GPU가 약함)에서
+// `shadowBlur` 반경을 절반으로 줄여 네온 글로우 연산의 GPU 병목을 낮춘다.
+// 컬링(아래 `viewMinX` 등)이나 캔버스-직접-드로잉 분리(이 함수 자체가 React
+// 리렌더와 무관하게 RAF 루프에서만 호출됨)는 2026-09-02 맵 확장 세션에서 이미
+// 구현되어 있었음 — 그 위에 얹는 추가 절감분.
+const MOBILE_BLUR_MULT = 0.5;
+
 // ---------------------------------------------------------------------
 // Pure canvas drawing — no React, no state mutation, just paints the frame.
 // ---------------------------------------------------------------------
-function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number, state: WormState, viewerSeat: SeatIndex, names: Record<SeatIndex, string>, effects: WormEffectsManager) {
+function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number, state: WormState, viewerSeat: SeatIndex, names: Record<SeatIndex, string>, effects: WormEffectsManager, lowFx: boolean) {
+  const blurMult = lowFx ? MOBILE_BLUR_MULT : 1;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -744,7 +761,7 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
 
       if (glow) {
         ctx.shadowColor = hsl(hue, 92, 72);
-        ctx.shadowBlur = (stage === "aurora" ? 10 : stage === "crystal" ? 7 : 4) * scale;
+        ctx.shadowBlur = (stage === "aurora" ? 10 : stage === "crystal" ? 7 : 4) * scale * blurMult;
       }
       ctx.beginPath();
       ctx.fillStyle = color;
@@ -865,7 +882,7 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
       ctx.strokeStyle = `rgba(255, 213, 92, ${Math.min(1, auraAlpha)})`;
       ctx.lineWidth = Math.max(1.5, 4 * scale);
       ctx.shadowColor = "rgba(255, 196, 60, 0.9)";
-      ctx.shadowBlur = 14 * scale;
+      ctx.shadowBlur = 14 * scale * blurMult;
       ctx.arc(hx, hy, Math.max(3, 19 * scale), 0, Math.PI * 2);
       ctx.stroke();
       ctx.shadowBlur = 0;
@@ -888,7 +905,7 @@ function draw(canvas: HTMLCanvasElement, dpr: number, cssW: number, cssH: number
       ctx.strokeStyle = "rgba(255, 213, 92, 0.6)";
       ctx.lineWidth = Math.max(1.5, 3 * scale);
       ctx.shadowColor = "rgba(255, 196, 60, 0.85)";
-      ctx.shadowBlur = 10 * scale;
+      ctx.shadowBlur = 10 * scale * blurMult;
       ctx.arc(hx, hy, Math.max(3, 17 * scale) * pulse, 0, Math.PI * 2);
       ctx.stroke();
       ctx.shadowBlur = 0;
