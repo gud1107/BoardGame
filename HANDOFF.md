@@ -1,6 +1,81 @@
 # HANDOFF — 현재 스냅샷
 
-_최종 갱신: 2026-09-08 (**코요테(Coyote) — 선 마이너스 시작 차단 + "+1 인상" 라운드당 1회 제한
+_최종 갱신: 2026-09-08 (**전 게임 공통 — "소켓 재접속 후 턴 정지/AI 봇 멈춤" 결함 픽스 요청 조사
+및 코요테·페루도 등 14종 투표식 봇 전환(bot takeover) 신규 적용 세션** — "코요테·달무티·페루도 등
+모든 보드게임에서 네트워크 끊김/새로고침 후 초대 코드로 재접속 시 ① 내 턴인데도 입력이 안 먹거나
+② AI 봇 차례인데 자동 타이머가 안 돌아 게임이 완전히 멈춘다"는 긴급 버그 리포트. 리포트는
+`server/socket.ts`/`server/roomManager.ts`/게임별 `server/games/*.ts`/`socket.id`→`userId`
+재바인딩/`aiTurnTimeout` 등 Node.js socket.io 서버 아키텍처를 전제로 원인·해결 코드(예시 함수
+`handlePlayerReconnected`)까지 제시했으나, 이 프로젝트엔 그런 백엔드 서버 자체가 없음 — Vercel
+서버리스 배포 + Supabase Realtime Broadcast/Presence 락스텝(lockstep) 구조뿐(`docs/cloud-sync.md`).
+이번 세션에서 가장 규모가 큰 request-premise-mismatch 사례([[mal-dalli-ja-bug-report-premise-mismatch]]
+계열의 8번째 인스턴스) — 다만 이번엔 "전제가 틀렸으니 끝"이 아니라, 실제 아키텍처 기준으로 진짜
+갭을 찾아 채웠다.
+
+**리포트가 이미 존재한다고 착각한 것 vs 실제 구현(다른 메커니즘으로 이미 존재)**: ① "재접속 시
+FULL_SYNC" → `state-request`/`state-sync` 브로드캐스트 재접속 프로토콜(모든 게임 공통,
+`docs/cloud-sync.md §2.3`). ② "모바일 백그라운드 복귀 1초 내 싱크" → `useBackgroundResync` 훅
+(`src/hooks/useBackgroundResync.ts`, 이미 전 게임 적용). ③ "AI 봇 턴 타이머 유실 복구" →
+`useBotAutoplay`의 5초 워치독(`src/games/shared/bot/useBotAutoplay.ts`, 2026-09-03 달무티 "AI 턴
+정지" 리포트 때 이미 추가됨) — 같은 봇 액터가 5초 넘게 안 움직이면 강제로 액션 발동.
+
+**실제로 존재했던 진짜 갭**: "사람이 접속을 끊고 영영 안 돌아오는 경우"의 방어(`botTakeover.ts`의
+투표식 봇 전환 — disconnected/idle 사유, 과반 찬성 시 전환)가 온라인 대전 28종 중 14종에만
+적용돼 있었고, 리포트에 명시된 코요테·페루도를 포함한 나머지 14종(아발론·뱅!·센추리·레지스탕스
+쿠·오이 다섯 개·포세일·하나미코지·러브레터·페루도·언어의 조각·스플렌더·틀린 그림 찾기·소환사의
+협곡·코요테)에는 빠져 있었음 — 이 경우 그 사람 턴에서 게임이 정말로 영구 정지한다(리포트의 증상과
+실제로 일치하는 유일한 지점).
+
+`AskUserQuestion`으로 확인: ① **범위 = 빠진 14개 게임 전체**(코요테·페루도만이 아니라). ②
+**투표 타이밍 = 기존 14개 게임과 동일한 기본값 재사용**(idle 45초 무응답, disconnected는 presence
+leave 즉시, 과반 찬성 전환 — 새 파라미터 발명 안 함). ③ **HANDOFF 기술 방식 = 리포트 원문
+(`socket.id`/`aiTurnTimeout` 등 실존하지 않는 용어)이 아니라 실제 구현 기준으로 정확히 기술**.
+
+**구현**(14개 게임 전부 동일 패턴, `dalmuti/DalmutiGame.tsx`의 기존 wiring을 그대로 복제):
+`botTakeover`/`botTakeoverRef` 상태 + `applyBotTakeoverEvent`, presence `leave` 핸들러(퇴장 좌석에
+`vote-start` 방송, reason `disconnected`), 45초 무응답 인터벌 이펙트(현재 액터가 안 바뀌면
+`vote-start` 방송, reason `idle`), `bot-takeover-event` 브로드캐스트 핸들러(모든 클라이언트가 동일
+리듀서로 재생 + 과반 도달 시 `convert` 자동 발신), `state-request`/`state-sync` 페이로드에
+`botTakeover` 추가, 전환된 좌석을 `useBotAutoplay`의 봇 집합에 합집합(`allBotSeatSet`, 내용 기반
+문자열 키로 메모이즈 — 2026-09-03 프리즈픽스 코멘트가 설명하는 불필요한 워치독 재구동 방지 패턴
+재사용), `BotTakeoverSelfBanner`/`BotTakeoverVoteModal` UI를 playing 단계 렌더에 삽입, `ids`/`names`
+가 전환된 좌석의 `originalUserId`/`originalName`을 우선하도록 확장. 대상: 아발론·뱅!·센추리·레지스탕스
+쿠·코요테·오이 다섯 개·포세일·하나미코지·러브레터·페루도·언어의 조각·스플렌더·틀린 그림 찾기·소환사의
+협곡.
+
+**2인 고정 역할 게임(하나미코지, 언어의 조각) 변형**: `Owner`/`Seat`("p1"/"p2")가 이미 순수 문자열
+이라 `botTakeover`의 `seatKey`로 그대로 씀(숫자 좌석 게임들의 `Number()`/`String()` 변환 불필요).
+
+**틀린 그림 찾기(spot-difference) 변형**: 이 게임만 유일하게 "현재 액터" 개념 자체가 없는 실시간
+프리포올(모든 좌석이 동시에 아무 때나 클릭 가능, `useBotAutoplay` 대신 좌석별 독립 타이머 사용 —
+engine.ts의 봇 지원 모듈 독). 따라서 "무응답(idle)" 트리거는 적용하지 않음(타임아웃시킬 단일 결정이
+애초에 없음) — `disconnected` 트리거만 적용하고, 전환된 좌석은 기존 좌석별 봇 타이머 이펙트에
+합류시킴.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint`(터치한 14개 게임 디렉터리 전부 0 에러/경고) /
+`npx vitest run`(저장소 전체 50개 파일·1696개 테스트 전부 통과 — 게임 엔진/기존 UI 경로 무변경 확인)
+/ `npx next build`(정적 21페이지 생성 성공) 전부 통과. **실 브라우저로 재접속/투표 UI를 라이브
+검증하지는 못함** — 14개 게임 각각에서 실제 멀티탭 접속 해제를 재현하려면 세션 규모가 지나치게
+커짐; `dalmuti` 등 이미 프로덕션에 있는 동일 패턴이 검증된 상태이므로 코드 수준 확신으로 커버(과거
+`[[coyote-reveal-fx-popup-slash-formula]]` 세션의 "?" 카드 리빌처럼 실제로 트리거하기 어려운 상태를
+코드 리뷰만으로 확정한 전례와 동일한 판단).
+
+**Git/배포**: 커밋(`28a6ef6`) & `origin/main` 푸시 완료 — 이번 세션이 실제로 건드린 14개 게임
+파일만 명시적으로 스테이징(`git status`에 잡힌 다른 동시 세션들의 미커밋 변경 — 말달리자/코요테/
+페루도/소환사의 협곡 룰북 이미지, 쇼미더코인.md 수정, `.claude/`, `docs/visual-verification.md`,
+`orca충돌및확인.md`, `저작권, 상표권.md` 등 — 은 손대지 않음).
+
+**배포는 이번 세션에서 시도하지 않음**: `git worktree list` 확인 결과 이미 다른 두 동시 세션의
+격리 워크트리(`5ac642e`/`f1826c6` detached HEAD)가 떠 있는 상태 — 지난 세 세션(망각의 지뢰 2 ×2,
+코요테)이 정확히 이 동시 워크트리 경합 상황에서 `vercel deploy --prod`가 15분 이상 멈추거나
+`Builds: . [0ms]`로 실패한 전례가 이미 [[vercel-deploy-uploads-working-tree-not-git-head]]에 반복
+기록돼 있어, 같은 경합 상황에서 또 재시도해 봤자 성공 가능성이 낮다고 판단해 시도 자체를 건너뜀.
+main 워킹트리도 다른 세션들의 미커밋 변경으로 지저분한 상태라 그대로 배포하면
+[[vercel-deploy-uploads-working-tree-not-git-head]]가 경고하는 "엉뚱한 파일이 같이 배포되는" 위험도
+있음. 코드는 `origin/main`에 정상 푸시됨 — 다음 세션에서 동시 배포 경합이 없는 시점에 격리
+워크트리 방식으로 배포 필요.
+
+_이전 갱신: 2026-09-08 (**코요테(Coyote) — 선 마이너스 시작 차단 + "+1 인상" 라운드당 1회 제한
 하우스룰 + 집중 경고 FX 세션** — "① 라운드 첫 숫자 선언은 음수로 시작 불가(0 또는 1 이상 강제,
 정확한 최솟값은 확인 후 진행), ② 이전 사람보다 정확히 +1만 올려 부르는 액션은 라운드당 단 1회만
 허용하고 이후엔 반드시 +2 이상, ③ '+1 인상' 발동 시 전원에게 보이는 집중 경고 이펙트 + '1 사용' 뱃지"
