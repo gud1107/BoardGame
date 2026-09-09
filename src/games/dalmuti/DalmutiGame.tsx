@@ -235,6 +235,28 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
   const playerCountRef = useRef(targetPlayerCount);
   const isHost = intent === "create";
 
+  // Bot-turn execution authority — deliberately separate from `isHost`
+  // above. `isHost` is frozen at room-entry time ("did I create vs join the
+  // room") and never changes again, so an original host who leaves mid-game
+  // (tab closed/backgrounded, e.g. navigating to /patch-notes) and rejoins
+  // via the invite-code "join" flow becomes `isHost = false` forever — and
+  // since nobody else is ever promoted, `useBotAutoplay` below stops
+  // running on every client permanently, freezing any bot's turn for the
+  // rest of that game (2026-09-09 리포트: 달무티 재접속 후 봇 턴 영구 정지).
+  // `canDriveBots` instead recomputes live off presence (`occupants`,
+  // already synced in real time — see the "presence"/"sync" handler) on
+  // every change: whichever *currently connected* seat has the lowest seat
+  // index drives bots. No server needed — every client derives the same
+  // value independently. This means the original host reclaims driving
+  // duty the instant they reconnect (same seat, same lowest index), and if
+  // they never come back, the next-lowest connected seat picks it up
+  // automatically instead of the game staying stuck forever.
+  const canDriveBots = useMemo(() => {
+    if (mySeat === null || occupants.length === 0) return false;
+    const lowestPresentSeat = Math.min(...occupants.map((o) => o.seat));
+    return mySeat === lowestPresentSeat;
+  }, [mySeat, occupants]);
+
   const gameStateRef = useRef<DalmutiState | null>(null);
   useEffect(() => {
     gameStateRef.current = gameState;
@@ -763,7 +785,7 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
   }, []);
 
   useBotAutoplay<DalmutiState, EngineAction, SeatIndex>({
-    active: isHost && phase === "playing",
+    active: canDriveBots && phase === "playing",
     state: gameState,
     currentActor: dalmutiCurrentActor,
     botSeats: allBotSeatSet,

@@ -200,6 +200,25 @@ export default function CoyoteGame({ onComplete }: PlayableGameProps) {
   const playerCountRef = useRef(targetPlayerCount);
   const isHost = intent === "create";
 
+  // Bot-turn execution authority — deliberately separate from `isHost`
+  // above. `isHost` is frozen at room-entry time ("did I create vs join the
+  // room") and never changes again, so an original host who leaves mid-game
+  // (tab closed/backgrounded) and rejoins via the invite-code "join" flow
+  // becomes `isHost = false` forever — and since nobody else is ever
+  // promoted, `useBotAutoplay` stops running on every client permanently,
+  // freezing any bot's turn for the rest of that game (2026-09-09 리포트:
+  // 달무티에서 발견, 동일 패턴을 쓰는 코요테/페루도도 동일하게 적용— see
+  // DalmutiGame.tsx's identical comment). `canDriveBots` instead recomputes
+  // live off presence (`occupants`) on every change: whichever *currently
+  // connected* seat has the lowest seat index drives bots — no server
+  // needed, every client derives the same value independently, and the
+  // original host reclaims driving duty the instant they reconnect.
+  const canDriveBots = useMemo(() => {
+    if (mySeat === null || occupants.length === 0) return false;
+    const lowestPresentSeat = Math.min(...occupants.map((o) => o.seat));
+    return mySeat === lowestPresentSeat;
+  }, [mySeat, occupants]);
+
   const gameStateRef = useRef<CoyoteState | null>(null);
   useEffect(() => {
     gameStateRef.current = gameState;
@@ -663,7 +682,7 @@ export default function CoyoteGame({ onComplete }: PlayableGameProps) {
   }, []);
 
   useBotAutoplay<CoyoteState, EngineAction, SeatIndex>({
-    active: isHost && phase === "playing",
+    active: canDriveBots && phase === "playing",
     state: gameState,
     currentActor: coyoteCurrentActor,
     botSeats: allBotSeatSet,
