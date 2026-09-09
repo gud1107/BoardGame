@@ -415,29 +415,48 @@ export default function PerudoMobileBoard({
                   </div>
                 )}
 
-                {iAmAlive && (
-                  <div className="flex gap-2">
-                    <button
-                      disabled={!isMyTurn || !state.currentBid}
-                      onClick={() => onAction({ type: "dudo", seat: viewerSeat })}
-                      className="rounded-lg bg-rose-700 px-4 py-2 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30"
-                    >
-                      🚨 페루도!
-                    </button>
-                    <button
-                      disabled={!state.currentBid}
-                      onClick={() => onAction({ type: "calza", seat: viewerSeat })}
-                      title="차례와 상관없이 외칠 수 있어요"
-                      className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30"
-                    >
-                      🎯 맞아!
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           </RectBidTrack>
         </main>
+
+        {/*
+         * 🚨페루도!/🎯맞아! 액션 바 — 물리 보드(RectBidTrack) 내부의 고정-높이
+         * 스크롤 칸(`perudo-center-scroll`, PerudoBidTrack.tsx) 밖으로 완전히
+         * 빼낸 위치 (2026-09-09 후속 세션, "맞아 버튼을 보려면 스크롤을 내려야
+         * 한다"는 실사용 리포트 — AskUserQuestion 확인: 버튼을 보드 밖으로 이동,
+         * 보드 내부 콘텐츠 압축이나 잠긴 높이 해제 대신). 그 칸은 서/동쪽 변을
+         * 코너에 붙이기 위해 stripLength(6)로 높이가 잠겨 있어 늘릴 수 없는데,
+         * 선언 텍스트+베팅 조작(눈금/수량/확정)까지 채운 상태에서 이 버튼들까지
+         * 같이 들어있으면 잠긴 높이를 넘겨 내부 스크롤을 유발했음 — 그 칸에서
+         * 이 버튼들만 빼내는 것만으로 남은 콘텐츠(선언+조작부)가 잠긴 높이
+         * 안에 들어와 내부 스크롤 자체가 없어짐. 이 바는 `shrink-0`이라 화면이
+         * 좁아져도 압축 대상에서 제외되고(필요하면 물리 보드 쪽이 대신
+         * 줄어듦), footer보다 먼저 배치해 "내 주사위" 바로 위, 물리 보드 바로
+         * 아래에 항상 고정 노출된다 — 페루도는 내 턴에만, 맞아는 "차례와
+         * 상관없이" 언제든 눌러야 하므로 턴 전환 시에만 도와주는 자동
+         * 스크롤(예전 desktop의 bidActionZoneRef 방식)로는 불충분해 애초에
+         * 스크롤할 필요 자체를 없앴다.
+         */}
+        {iAmAlive && (
+          <div className="relative z-10 flex shrink-0 gap-2">
+            <button
+              disabled={!isMyTurn || !state.currentBid}
+              onClick={() => onAction({ type: "dudo", seat: viewerSeat })}
+              className="flex h-9 items-center justify-center rounded-lg bg-rose-700 px-4 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30"
+            >
+              🚨 페루도!
+            </button>
+            <button
+              disabled={!state.currentBid}
+              onClick={() => onAction({ type: "calza", seat: viewerSeat })}
+              title="차례와 상관없이 외칠 수 있어요"
+              className="flex h-9 items-center justify-center rounded-lg bg-emerald-700 px-4 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30"
+            >
+              🎯 맞아!
+            </button>
+          </div>
+        )}
 
         {/* 최하단: 내 주사위 상시 표시 바 + 색상 변경 팔레트. */}
         <footer className="relative z-10 flex shrink-0 flex-col items-center gap-1.5">
