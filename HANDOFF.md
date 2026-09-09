@@ -31,7 +31,45 @@
 `vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
 길게 재시도하지 마세요.
 
-_최종 갱신: 2026-09-09 (**페루도(Perudo) — 배팅판↔내 주사위 간격 밀착 세션** — "배팅판 하단과 내
+_최종 갱신: 2026-09-09 (**말달리자(Mal Dalli Ja) — 모바일 하얀 말(백마) 이동 중 사라짐 버그 픽스
+세션** — "모바일 기기에서 하얀색 말 플레이어가 이동할 때 화면에서 완전히 사라져 보이지 않는다(데스크톱
+검은색 말은 정상)"는 신고. 요청서 자체는 `src/games/horseRace/` 또는 `src/games/horse/`
+하위 `Board.tsx`/`Track.tsx`/`HorsePawn.tsx`/`engine.ts`, CSS `translate3d`/`z-index`/GPU 가속
+누락/좌표 NaN 증발을 전제했으나, 이 게임의 실제 경로는 `src/games/malDalliJa/`
+(`MalDalliJaBoard.tsx`/`MalDalliJaGame.tsx`/`MoveEffects.tsx`/`engine.ts`, 11×11 그리드 위 슬라이드
++ 나이트 이동 방식이며, 트랙형 레인 UI 자체가 없음)이고, 렌더링도 이미 `translate3d`/`will-change:
+transform` 기반 rAF GPU 합성으로 구현돼 있어 요청이 짚은 원인들은 실체가 없었음(반복되는
+[[mal-dalli-ja-bug-report-premise-mismatch]] 패턴의 3번째 사례).
+
+**진짜 원인**: `MalDalliJaBoard.tsx`의 이동 애니메이션은 `AnimatedHorse`(`MoveEffects.tsx`)가
+`requestAnimationFrame`으로 매 프레임 진행하다 완료 시 `onDone`을 정확히 1회 호출해야 그 말이
+`animatingKeys`에서 빠지며 정적 그리드 타일로 복귀하는 구조. 2026-09-01 세션이 "오아시스 도착 후
+멈춤" 버그를 조사하며 이 `onDone` 미호출에 대비한 안전장치(2.5초 타임아웃 후 강제 정리)를 추가했지만
+**`state.phase === "gameOver"`일 때만 발동**하도록 좁게 짜여 있었음 — 게임 중반의 평범한 이동 도중
+모바일 탭 백그라운드 전환/화면 잠금 등으로 그 프레임 하나가 rAF 스로틀링에 걸려 `onDone`이 끝내 안
+불리면, 그 말은 위치 데이터는 정상인데도 게임이 끝날 때까지 영구히 숨겨진 채로 남음(정확히 신고된
+증상). 이 일반화 자체는 2026-09-05 세션이 이미 진단해 `fix/mal-dalli-ja-horse-vanish-and-seat-tags`
+브랜치에 커밋(`1fd5ef5`)까지 마쳤으나 **main에 병합되지 않은 채 방치**돼 있었음 — 그 브랜치는 이후
+main에 들어온 다른 다수 세션의 작업(예: `c5f14ba`의 룰북 뷰어 `RulebookGate` 도입)보다 오래된 지점에서
+갈라져 나가 있어 그대로 병합하면 그 후속 작업들을 되돌리게 되므로, 이번 세션은 브랜치 전체를 머지하는
+대신 `MalDalliJaBoard.tsx`에서 실제 버그 수정과 무관한 부분(연결 로직 `MalDalliJaGame.tsx`의
+`RulebookGate` 제거)은 제외하고 안전장치 일반화 + 흑마/백마 고정 식별 태그(말 위 태그·HUD 배지 —
+링 강조색 토글을 말 주인이 바뀐 것으로 오인하지 않도록, 색과 무관하게 seat에서만 파생) +
+전 텍스트 `break-keep`만 이 세션에서 다시 반영.
+
+**적용하지 않은 항목**: 좌표 NaN 폴백 가드는 추가하지 않음 — 이 게임은 락스텝 순수 리듀서(`engine.ts`,
+`Math.random` 없음)로 좌표가 항상 타입이 보장된 정수이며, 재현 가능한 NaN 발생 경로를 찾지 못해 실체
+없는 방어 코드를 넣지 않음.
+
+**검증**: `npx tsc --noEmit`(0 에러), `npx eslint src/games/malDalliJa`(0 에러/경고),
+`npx vitest run src/games/malDalliJa`(71/71 통과), `npx vitest run`(전체 50개 파일 / 1698개 테스트
+통과, 회귀 없음). 라이브 브라우저 검증은 이번 세션에서 수행하지 않음(요청이 커밋/푸시/배포를 명시적으로
+보류했고, 로직 자체는 2026-09-05 세션이 동일한 안전장치를 캐시된 Playwright로 이미 실측 확인한 바
+있음).
+
+**커밋/푸시/배포**: 요청대로 로컬 반영까지만 하고 커밋·푸시·배포는 보류.)_
+
+_이전 갱신: 2026-09-09 (**페루도(Perudo) — 배팅판↔내 주사위 간격 밀착 세션** — "배팅판 하단과 내
 주사위/조작 컨트롤러 사이 휑한 공백을 밀착시키고, 모바일 스크롤 시 화면이 덜컹거리는 것도 완전히
 잠가달라"는 요청. 요청서 자체는 `src/games/perudo/`에 `Board.tsx`/`BettingBoard.tsx`/`DiceCup.tsx`/
 `ActionPanel.tsx`/`PlayerStatus.tsx`를 전제했으나 실제로는 `PerudoGame.tsx`(로비/소켓)/
