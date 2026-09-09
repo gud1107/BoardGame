@@ -31,7 +31,50 @@
 `vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
 길게 재시도하지 마세요.
 
-_최종 갱신: 2026-09-09 (**페루도(Perudo) — 모바일 색상 다이스 카운터 + 색상 피커 재배치 세션** —
+_최종 갱신: 2026-09-09 (**페루도(Perudo) — 배팅판↔내 주사위 간격 밀착 세션** — "배팅판 하단과 내
+주사위/조작 컨트롤러 사이 휑한 공백을 밀착시키고, 모바일 스크롤 시 화면이 덜컹거리는 것도 완전히
+잠가달라"는 요청. 요청서 자체는 `src/games/perudo/`에 `Board.tsx`/`BettingBoard.tsx`/`DiceCup.tsx`/
+`ActionPanel.tsx`/`PlayerStatus.tsx`를 전제했으나 실제로는 `PerudoGame.tsx`(로비/소켓)/
+`PerudoBoard.tsx`(데스크톱)/`PerudoMobileBoard.tsx`(모바일)/`PerudoBidTrack.tsx`/`PerudoSharedUI.tsx`로
+구성돼 있었음(반복되는 요청 전제-실제 파일구조 불일치 패턴).
+
+**질문 없이 진행한 이유**: 요청서가 사전에 확인을 요구한 "하단 스크롤 영역 진입 방식(네이티브 스크롤 vs
+탭 토글)"은 바로 위 두 개의 2026-09-09 세션에서 이미 AskUserQuestion으로 확정·구현까지 끝난 사안(섹션1
+No-Scroll 아레나 + 섹션2 네이티브 페이지 스크롤, 토글 드로어는 폐기)이라 재질문하지 않고 그대로
+재사용. 요청서가 진단한 두 원인(`100vh` 사용, `overscroll-behavior` 미적용)도 실제 코드를 먼저 확인한
+결과 이미 선행 세션에서 해소돼 있었음: `PerudoMobileBoard.tsx`의 섹션1 높이는 애초부터 리터럴
+`100vh`가 아니라 `arenaRef` 측정 기반 `calc(100dvh - offsetTop)`(perudo 파일 전체 grep으로 `100vh`
+0건 확인), `PerudoBoard.tsx`의 마운트 이펙트가 `html`/`body`에 `overscroll-behavior: none`을 이미
+전역 적용 중(모바일/데스크톱 분기와 무관하게 항상 실행). 이 두 항목은 코드 변경 없이 "이미 되어있음"으로
+확인만 하고 종료.
+
+**실제로 남아있던 진짜 원인 1건**: 섹션1의 `<main>`(물리 배팅판)이 `flex-1` + `justify-center`였던 탓에,
+뷰포트가 콘텐츠보다 넉넉한 기기에서 남는 세로 여백이 보드 위/아래에 절반씩 깔리며 보드 하단과 바로
+아래 `<footer>`(내 주사위 트레이) 사이에도 공백이 생기고 있었음 — 요청의 진단과 실제 원인이 정확히
+일치.
+
+**구현**: `PerudoMobileBoard.tsx` — 아레나 최상위 컨테이너의 `justify-between`을 제거하고, 기존
+`<main>`(보드)과 `<footer>`(내 주사위)를 새 래퍼 `<div className="flex-1 min-h-0 flex-col
+items-center justify-end gap-1.5">`로 묶음. `<main>` 자신은 `flex-1`/`justify-center`를 버리고 내용
+크기만큼만 차지(`min-h-0` + `overflow-y-auto`는 극단적으로 좁은 기기를 위한 안전장치로 유지). 결과:
+남는 여백은 전부 래퍼 위쪽(헤더/턴배너와 보드 사이)으로만 가고, 보드와 내 주사위는 `gap-1.5`(6px)
+간격의 한 덩어리로 밀착.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint src/games/perudo`(0 에러/경고) / `npx vitest run
+src/games/perudo/Perudo.test.ts`(80/80 통과, 엔진 로직 무변경) / `npm run build`(정상 완료) / 캐시된
+Playwright(390×844, `next start` 격리 포트, 방 만들기→2인으로 축소→봇 일괄 채우기 흐름)로 코드
+리뷰만으로 "고쳤다"고 단정하지 않고 실측 — `getBoundingClientRect()`로 보드(`<main>`) 하단
+`721.8px` vs 내 주사위(`<footer>`) 상단 `727.8px` = 간격 `6px`(설정한 `gap-1.5`와 정확히 일치, 이전엔
+`justify-center` 탓에 이보다 훨씬 컸을 여백), `<footer>` 하단 `832.3px`가 뷰포트 `844px` 안에 들어와
+오버플로 재발도 없음을 확인. 스크린샷으로도 보드-내 주사위가 한 세트처럼 밀착돼 보임을 확인
+(visual-check-gate 범위 규율: 이 질문 하나만 확인 후 다른 화면 추가 탐색 없이 종료).
+
+**커밋/푸시/배포**: 이번 세션이 실제로 만진 파일만 스테이징(`PerudoMobileBoard.tsx`/`HANDOFF.md`) —
+작업 트리에 떠 있는 다른 동시 세션의 미커밋 변경(`.claude/`, 말달리자 룰북 이미지, 라스베가스 룰북
+이미지, 쇼미더코인 문서, 루트 메모 파일 등)은 전부 제외. `git push origin main`까지 완료 — 수동
+`vercel deploy --prod` 없이 GitHub 웹훅 자동배포(파일 맨 위 배포 프로토콜 박스 참고).)_
+
+_이전 갱신: 2026-09-09 (**페루도(Perudo) — 모바일 색상 다이스 카운터 + 색상 피커 재배치 세션** —
 바로 앞 2026-09-09 세션이 만든 "배팅 아레나 No-Scroll + 스크롤-다운 플레이어 현황" 2단 구조 위에,
 ① 각 플레이어(상단 요약 바 + 하단 스크롤 로스터)의 잔여 주사위를 숫자 텍스트 대신 그 플레이어 고유
 색상의 미니 주사위 칩으로(잃은 자리는 회색 점선 슬롯), ② 섹션1 첫 화면의 No-Scroll 핏을 그대로

@@ -247,7 +247,7 @@ export default function PerudoMobileBoard({
       <div
         ref={arenaRef}
         style={{ minHeight: arenaMinHeight }}
-        className={`${TABLE_PANEL} flex flex-col justify-between gap-2 p-3 sm:p-4`}
+        className={`${TABLE_PANEL} flex flex-col gap-2 p-3 sm:p-4`}
       >
         <MyTurnOverlay isMyTurn={isMyTurn && iAmAlive} />
         <TableTexture />
@@ -276,10 +276,17 @@ export default function PerudoMobileBoard({
           <ExpectationBar totalActiveDice={totalDiceInPlay(state)} />
         </header>
 
-        {/* 중앙 보드: 물리 사각형 트랙 — hollow center엔 배팅 선언/조작 패널이
-            들어간다. `flex-1 min-h-0`로 위/아래 고정 영역을 뺀 나머지를 전부
-            차지하고, 아주 좁은 기기에서만 안전장치로 내부 스크롤을 허용한다. */}
-        <main className="relative z-10 flex min-h-0 w-full flex-1 flex-col items-center justify-center overflow-auto">
+        {/* 보드+내 주사위를 한 블록으로 묶어 하단에 밀착 — 2026-09-09 간격 밀착
+            세션(사용자 진단: "배팅판과 내 주사위 사이 과도한 여백"). 이전엔
+            <main>이 flex-1 + justify-center라 남는 세로 여백이 보드 위/아래에
+            절반씩 깔려 보드 하단~내 주사위 사이에도 공백이 생겼다(라이브
+            Playwright 실측으로 재현·확인 — 아래 검증 기록 참고). 이 wrapper가
+            flex-1 min-h-0 + justify-end를 지고, 남는 여백은 전부 헤더 바로
+            아래(이 블록 위쪽)로만 가도록 바꿨다. `<main>` 자신은 이제 내용
+            크기만큼만 차지하고, 아주 좁은 기기에서만 `min-h-0` +
+            `overflow-y-auto`로 내부 스크롤 안전장치를 유지한다. */}
+        <div className="relative flex min-h-0 flex-1 flex-col items-center justify-end gap-1.5">
+        <main className="relative z-10 flex min-h-0 w-full flex-col items-center overflow-y-auto">
           <RectBidTrack
             currentCell={currentCell}
             pendingCell={pendingCell}
@@ -443,6 +450,7 @@ export default function PerudoMobileBoard({
             </div>
           </div>
         </footer>
+        </div>
       </div>
 
       {/* [섹션 2] 하단 스크롤 영역: 플레이어별 주사위 잔여량, 턴. 색상 변경 팔레트는
