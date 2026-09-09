@@ -31,7 +31,56 @@
 `vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
 길게 재시도하지 마세요.
 
-_최종 갱신: 2026-09-09 (**페루도(Perudo) — 데스크톱 동등 단일 뷰포트(Zero-Scroll) 전면 재구축 세션** —
+_최종 갱신: 2026-09-09 (**패치노트 시스템 — 인게임 열람을 비침습적 오버레이로 전환 + v1.31.0~v1.33.0
+백필 세션** — "게임 중 패치노트를 열면 튕기거나 방에서 나가진다"는 요청을 받고 조사. 요청서 자체는
+이번에도 실체 없는 구조를 전제(`PatchNotesModal.tsx`, `src/data/patchNotes.ts`, `useSocket.ts`,
+`server/socket.ts` 전부 이 저장소에 존재하지 않음 — 실제로는 `src/constants/patchNotes.ts` +
+`src/components/patchNotes/PatchNoteButton.tsx`/`PatchNoteList.tsx`이고, 서버 소켓 자체가 없는
+Supabase Realtime 구조. 반복된 request-premise-mismatch 패턴), 하지만 **바탕이 된 버그 자체는
+실재**했다 — 바로 앞 세션([[universal-reconnect-bot-takeover-14-games]] 근처, §2 "달무티/코요테/
+페루도 — 방장 이탈·재접속 시 AI 봇 턴 영구 정지" 참고)에서 다룬 실사용 리포트가 정확히 "패치노트
+페이지를 보다가 팅겨서 재접속했다"는 경위였다.
+
+**진짜 원인**: `PatchNoteButton.tsx`(전역 `SiteHeader`에 상시 렌더링, 게임 룸 페이지
+`/games/[gameId]`를 포함한 모든 페이지에 떠 있음)가 `next/link`의 `<Link href="/patch-notes">`로
+구현돼 있었음 — 클릭 시 클라이언트 라우팅으로 `/games/[gameId]` 페이지(`GamePlayPage`) 자체가
+언마운트되고, 그 안에서 마운트 중이던 `GameComponent`(게임 보드 + Supabase Realtime 채널 구독)도
+함께 뜯겨나감. `GamePlayPage`에 이미 있던 "페이지 언마운트 시 진행 중이던 플레이를 이탈로 기록"하는
+분석 훅(줄 143-151)이 이 경로에서 실제로 발동하고 있었다는 것 자체가 방증.
+
+**조치**: 라우팅을 완전히 제거 — `PatchNoteButton`을 `Link`가 아닌 로컬 `open` 상태를 가진 버튼으로
+바꾸고, 클릭 시 이 프로젝트에 이미 있던 공용 모달 셸 `Overlay.tsx`(`createPortal` 기반, 데스크톱은
+중앙 모달·모바일은 바텀시트, 배경 클릭/×로 닫힘 — `SoundSettingsModal` 등 기존에도 쓰던 컴포넌트를
+그대로 재사용, 새로 만들지 않음)로 기존 `PatchNoteList`를 띄우도록 변경. 페이지 자체(`/patch-notes`)는
+직접 링크 공유용으로 그대로 남겨둠 — 이 버튼의 클릭 동작만 바꿈. `Overlay.tsx`의 스크롤 본문에
+`overscroll-contain`도 추가(요청서의 "모달 스크롤 시 배경 보드가 함께 안 움직이게" 항목 — 이 모달
+하나만이 아니라 `Overlay`를 쓰는 프로젝트 전역 모달에 공통 적용됨, 부작용 없는 안전한 변경으로 판단).
+포커스 트랩/전역 상태 변경은 애초에 하지 않으므로(순수 UI 오버레이) 백그라운드 소켓 구독·턴 타이머는
+건드릴 필요 자체가 없었음.
+
+**패치노트 데이터 백필**: `git log`(2026-09-07~09-09, `docs(handoff)` 제외) 기준 v1.31.0(2026-09-07,
+라스베가스 모바일 대시보드/망각의 지뢰2 즉시 격발 등), v1.32.0(2026-09-08, 코요테 인상 룰 개정/봇 대타
+14게임 확장/페루도 모바일 재정비 등), v1.33.0(2026-09-09, 페루도 모바일 재구축/말달리자 애니메이션
+복구/방장 이탈 봇 정지 수정 + 이번 세션의 패치노트 오버레이 전환 자체)를 각각 기존 버전 범핑 규칙(FEAT
+포함 날짜는 minor, FIX/IMPROVE만 있는 날짜는 patch)대로 추가.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint`(대상 파일 0 에러) / `npx vitest run
+src/constants/patchNotes.test.ts`(8/8 통과) / `npm run build`(정상 완료) / 캐시된 Playwright(390×844,
+`next start` 격리 포트 4321)로 `/games/dalmuti` 페이지에서 헤더 패치노트 버튼 클릭 → URL이
+`/games/dalmuti`에서 전혀 안 바뀜(모달 열기 전/후/닫기 후 3번 확인) + 오버레이가 새 v1.33.0/v1.32.0
+항목까지 정확히 렌더링됨을 스크린샷 1장으로 확인(visual-check-gate: 질문 하나만 확인 후 종료, 다른
+화면 추가 탐색 없음).
+
+**작업 트리 위생**: 이 세션이 시작할 때 워킹 트리에 이 작업과 무관한 다른 세션의 미커밋 변경(`boardGameRule/`
+이미지 추가/삭제/수정 다수, `.claude/`, 루트 마크다운 파일 2개, `docs/visual-verification.md`)이 남아
+있었음 — [[vercel-deploy-uploads-working-tree-not-git-head]] 패턴 그대로. `git add -A`를 쓰지 않고
+이 세션이 실제로 만든 파일만 개별 지정해 커밋해 그 변경들을 건드리지 않음.
+
+**커밋/푸시/배포**: 사용자가 이번 요청에 커밋·푸시·배포를 명시적으로 포함 — 커밋 후 `git push
+origin main`까지 진행(위 배포 프로토콜에 따라 수동 `vercel deploy --prod`는 실행하지 않음, 웹훅
+자동 배포 확인).)_
+
+_이전 갱신: 2026-09-09 (**페루도(Perudo) — 데스크톱 동등 단일 뷰포트(Zero-Scroll) 전면 재구축 세션** —
 바로 앞 세션들이 만든 "섹션1 No-Scroll 아레나 + 섹션2 스크롤-다운 플레이어 로스터" 2단 구조를 사용자가
 "화면을 위아래로 내릴 때마다 판이 출렁거린다"며 전면 폐기 요청. 데스크톱의 안정적인 레이아웃 구조를
 그대로 가져와 모바일 100dvh 안에 스크롤 전혀 없이 압축하는 재구축을 요청했고, 무추정 원칙에 따라

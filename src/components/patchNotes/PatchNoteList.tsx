@@ -14,8 +14,10 @@ const TYPE_META: Record<PatchNoteChangeType, { label: string; className: string 
  * Full release timeline — one card per `PatchNoteEntry`, newest on top
  * (array order, see `patchNotes.ts`), each change rendered as a single
  * scannable line ([게임 뱃지] [타입 뱃지] 설명) rather than prose. Shared by
- * `/patch-notes` (the full page) — previously also backed a header modal,
- * but a 30-entry timeline reads better as a page than a popup.
+ * both `/patch-notes` (the full page, for direct links) and the header
+ * `PatchNoteButton`'s `Overlay` popup (2026-09-09 — reverted back to also
+ * backing a modal so opening it in-game doesn't navigate away and unmount
+ * the current game room; see `PatchNoteButton.tsx`'s doc comment).
  */
 export default function PatchNoteList() {
   return (

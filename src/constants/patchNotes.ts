@@ -48,6 +48,122 @@ export interface PatchNoteEntry {
  */
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.33.0",
+    releaseDate: "2026-09-09",
+    title: "페루도 모바일 보드 재구축, 인게임 패치노트 열람 시 접속 끊김 방지",
+    changes: [
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "게임 진행 중 패치노트를 열어도 페이지 이동 없이 오버레이 창으로만 표시해 소켓 접속 끊김·강제 퇴장 없이 확인 가능",
+      },
+      {
+        game: "perudo",
+        type: "FEAT",
+        desc: "모바일 보드를 데스크톱과 동등한 단일 무스크롤 화면으로 전면 재구축",
+      },
+      {
+        game: "perudo",
+        type: "FEAT",
+        desc: "좌석별 색상 코드 주사위 카운터 추가, 색상 변경 팔레트를 주사위 트레이 바로 아래로 재배치",
+      },
+      {
+        game: "perudo",
+        type: "FIX",
+        desc: "보드와 주사위 트레이 사이 여백을 압축해 모바일 화면 밀도 개선",
+      },
+      {
+        game: "mal-dalli-ja",
+        type: "FIX",
+        desc: "애니메이션 멈춤 복구 로직을 모든 이동 동작에 일반화 적용, 고정 좌석 태그 복원",
+      },
+      {
+        game: "common",
+        type: "FIX",
+        desc: "방장이 이탈 후 재접속해도 AI 봇 턴이 영구 정지되지 않도록 봇 진행 권한을 접속 좌석 기준으로 자동 이양",
+      },
+    ],
+  },
+  {
+    version: "v1.32.0",
+    releaseDate: "2026-09-08",
+    title: "코요테 인상 룰 개정, 봇 대타 전 게임 확장, 페루도 모바일 레이아웃 재정비",
+    changes: [
+      {
+        game: "coyote",
+        type: "FEAT",
+        desc: "첫 선언 음수/0 금지, 라운드당 1인 1회 '+1 인상' 찬스 룰 개정 및 집중 연출 FX 추가",
+      },
+      {
+        game: "coyote",
+        type: "FIX",
+        desc: "'+1 인상' 찬스가 방 전체가 아닌 좌석별로 개별 적용되도록 수정",
+      },
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "투표 기반 봇 대타 시스템을 남은 14개 온라인 게임에 확장해 전 28개 게임에 적용",
+      },
+      {
+        game: "worm",
+        type: "FEAT",
+        desc: "조이스틱을 좌측으로 복귀시키고 부스트 버튼을 우측에 미러 배치, 모바일 GPU 블러 효과 제거",
+      },
+      {
+        game: "worm",
+        type: "IMPROVE",
+        desc: "스냅샷 간 렌더 보간과 핫루프 좌표 반올림으로 이동 애니메이션 성능 개선",
+      },
+      {
+        game: "perudo",
+        type: "FEAT",
+        desc: "우측 주사위/색상 레일 배치의 무스크롤 모바일 레이아웃 적용",
+      },
+      {
+        game: "perudo",
+        type: "FIX",
+        desc: "모바일 물리 배팅 트랙을 복원하고 사이드바를 토글형 드로어로 교체",
+      },
+      {
+        game: "perudo",
+        type: "FIX",
+        desc: "사각 트랙 중앙 행 높이를 고정해 4면 정렬이 흐트러지지 않도록 수정",
+      },
+    ],
+  },
+  {
+    version: "v1.31.0",
+    releaseDate: "2026-09-07",
+    title: "라스베가스 모바일 대시보드 개편, 망각의 지뢰2 즉시 격발 추가",
+    changes: [
+      {
+        game: "las-vegas",
+        type: "FEAT",
+        desc: "모바일에서 6개 카지노를 한 화면에 담는 무스크롤 컴팩트 대시보드와 원터치 주사위 배정 트레이 도입",
+      },
+      {
+        game: "mine-of-oblivion-2",
+        type: "FEAT",
+        desc: "시한폭탄을 예약 대기 없이 즉시 터뜨리는 원격 격발 기능과 규칙 안내 UI 추가",
+      },
+      {
+        game: "mine-of-oblivion-2",
+        type: "FEAT",
+        desc: "모바일 화면을 3단 구성의 무스크롤 레이아웃으로 재구성",
+      },
+      {
+        game: "century",
+        type: "IMPROVE",
+        desc: "카드/향신료 아트를 인라인 SVG로 전면 개편하고 모바일 전용 컴팩트 대시보드, 카드 탭 미리보기 추가",
+      },
+      {
+        game: "perudo",
+        type: "FIX",
+        desc: "모바일 사각 배팅 트랙에서 발생하던 가로 스크롤 밀림 현상 제거",
+      },
+    ],
+  },
+  {
     version: "v1.30.0",
     releaseDate: "2026-09-06",
     title: "전 게임 MY TURN 알림 배너 및 방 만들기 룰북 열람 연동",
