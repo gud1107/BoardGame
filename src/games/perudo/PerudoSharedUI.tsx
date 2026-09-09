@@ -17,7 +17,7 @@
  */
 
 import PerudoFaceIcon from "./PerudoFaceIcon";
-import { PerudoDie, type DieSize } from "./dice/PerudoDie";
+import { DIE_SIZE_PX, PerudoDie, type DieSize } from "./dice/PerudoDie";
 import type { DiceColorway } from "./dice/colorways";
 import { STARTING_DICE, type Face, type PerudoState, type SeatIndex } from "./engine";
 
@@ -73,6 +73,56 @@ export function DieFace({ value, size = "md", ring, colorway, tilt }: { value: n
 /** A hidden die — a blank, pip-free die in its owner's own colorway (no icon at all, so it reads as a true silhouette rather than a generic dice emoji). Tinted with the owning seat's own player colorway so whose stash is whose reads at a glance even before anyone's dice count is checked. */
 export function DieBack({ size = "sm", colorway }: { size?: DieSize; colorway: DiceColorway }) {
   return <PerudoDie size={size} colorway={colorway} blank glossy={false} title="비공개 주사위" />;
+}
+
+/**
+ * A fixed `maxSlots`-wide row of `DieBack`s in a seat's own colorway — `diceCount`
+ * of them filled, the rest rendered as empty dashed placeholders — so a
+ * seat's current dice count reads as "how full is this seat's dice rack"
+ * rather than a bare number, and every other seat's rack is visually
+ * comparable at a glance regardless of how many each has actually lost
+ * (2026-09-09 모바일 색상 다이스 카운터 세션, AskUserQuestion-confirmed: fixed
+ * `STARTING_DICE`-slot bar with dashed empty slots for lost dice, rather than
+ * the desktop scoreboard's older "just render however many are left, no
+ * empty slots" pattern — the two are allowed to diverge since this session's
+ * request scoped the change to mobile only).
+ *
+ * `maxSlots` only sets the FLOOR on how many slots render — a successful
+ * "맞아!(calza)" grants a bonus die with no upper cap (see `engine.ts`'s
+ * `calza`), so `diceCount` can exceed `STARTING_DICE`. Widening the slot
+ * count to fit `diceCount` in that case (rather than clamping the array to
+ * `maxSlots`) keeps every die actually owned visible instead of silently
+ * under-representing a seat that grew past the starting count.
+ */
+export function DiceCountStrip({
+  colorway,
+  diceCount,
+  maxSlots = STARTING_DICE,
+  size = "sm",
+}: {
+  colorway: DiceColorway;
+  diceCount: number;
+  maxSlots?: number;
+  size?: DieSize;
+}) {
+  const w = DIE_SIZE_PX[size];
+  const slots = Math.max(maxSlots, diceCount);
+  return (
+    <div className="flex shrink-0 items-center gap-0.5">
+      {Array.from({ length: slots }, (_, i) =>
+        i < diceCount ? (
+          <DieBack key={i} size={size} colorway={colorway} />
+        ) : (
+          <div
+            key={i}
+            className="shrink-0 rounded-[24%] border border-dashed border-white/15 bg-white/[0.03]"
+            style={{ width: w, height: w }}
+            title="잃은 주사위"
+          />
+        ),
+      )}
+    </div>
+  );
 }
 
 /**

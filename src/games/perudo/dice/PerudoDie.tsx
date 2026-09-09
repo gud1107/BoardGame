@@ -22,7 +22,7 @@ import type { DiceColorway } from "./colorways";
  * see its own doc comment.
  */
 
-export const DIE_SIZE_PX = { sm: 24, md: 36, lg: 48 } as const;
+export const DIE_SIZE_PX = { xs: 14, sm: 24, md: 36, lg: 48 } as const;
 export type DieSize = keyof typeof DIE_SIZE_PX;
 
 const PIP_LAYOUT: Record<number, number[]> = {

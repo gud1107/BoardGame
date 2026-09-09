@@ -7,7 +7,7 @@ import RulebookModal from "./RulebookModal";
 import RectBidTrack, { OverflowBadge, stripLength } from "./PerudoBidTrack";
 import { DiceRollTray } from "./dice/PerudoDie";
 import { PLAYER_COLORWAYS, playerColorwayForSeat, type DiceColorway } from "./dice/colorways";
-import { ExpectationBar, faceLabel, FacePicker, LostDiceTray, TABLE_PANEL, TableTexture } from "./PerudoSharedUI";
+import { DiceCountStrip, ExpectationBar, faceLabel, FacePicker, LostDiceTray, TABLE_PANEL, TableTexture } from "./PerudoSharedUI";
 import {
   totalDiceInPlay,
   type EngineAction,
@@ -67,6 +67,20 @@ import {
  * `px-4 sm:px-6` — a different wrapper here would silently throw that
  * formula off and reopen the horizontal-fit bug the 2026-09-07 session
  * fixed.
+ *
+ * **2026-09-09 색상 다이스 카운터 + 색상 피커 재배치 세션** (AskUserQuestion
+ * 3문항 확인 후 진행): the request's mockup assumed a "상단 요약 바" already
+ * existed — it didn't (this file's header was still just 인원/라운드 → 턴
+ * 배너 → 무덤 → 기대값 바, another instance of the request-premise-mismatch
+ * pattern) — so `PlayerDiceSummaryBar` below is a genuinely new addition, a
+ * horizontal-scrolling one-line strip (not a new fixed-height block) so it
+ * costs Section 1's zero-scroll budget as little vertical space as possible.
+ * Both it and the roster list in Section 2 now render each seat's dice count
+ * as `DiceCountStrip` (`PerudoSharedUI.tsx`) — a fixed `STARTING_DICE`-slot
+ * row of that seat's own colorway `DieBack`s with dashed empty slots for lost
+ * dice — replacing the roster's old plain `🎲 N개` text. The dice-colorway
+ * picker itself moved from Section 2 to directly under Section 1's own "내
+ * 주사위" tray (confirmed: moved outright, not duplicated in both places).
  */
 export interface PerudoMobileBoardProps {
   state: PerudoState;
@@ -100,6 +114,62 @@ export interface PerudoMobileBoardProps {
   rulebookButton: ReactNode;
   rulebookOpen: boolean;
   onCloseRulebook: () => void;
+}
+
+/**
+ * Section 1's new top-of-header "at a glance" strip — every seat's own
+ * colorway `DiceCountStrip` in turn order, horizontally scrollable so it
+ * never grows the (zero-scroll) header's height regardless of player count
+ * (up to `MAX_PLAYERS = 8`). Deliberately compact (`xs`-size dice, truncated
+ * 4-glyph name) since the full-detail version — untruncated name, connection
+ * dot, "탈락" text — already lives in Section 2's roster just a scroll away;
+ * this bar only needs to answer "who's on what color and roughly how loaded".
+ */
+function PlayerDiceSummaryBar({
+  state,
+  names,
+  colorways,
+  viewerSeat,
+}: {
+  state: PerudoState;
+  names: Record<SeatIndex, string>;
+  colorways: Record<SeatIndex, DiceColorway>;
+  viewerSeat: SeatIndex;
+}) {
+  const seatOrder = Array.from({ length: state.playerCount }, (_, i) => i);
+  return (
+    <div className="perudo-summary-hscroll relative z-10 flex w-full items-center gap-1.5 overflow-x-auto pb-0.5">
+      <style>{`
+        .perudo-summary-hscroll { scrollbar-width: thin; scrollbar-color: rgba(217,119,6,0.85) rgba(0,0,0,0.25); }
+        .perudo-summary-hscroll::-webkit-scrollbar { height: 4px; }
+        .perudo-summary-hscroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.25); border-radius: 999px; }
+        .perudo-summary-hscroll::-webkit-scrollbar-thumb { background: rgba(217,119,6,0.85); border-radius: 999px; }
+      `}</style>
+      {seatOrder.map((seat) => {
+        const player = state.players.find((p) => p.seat === seat)!;
+        const isActive = state.activeSeat === seat && state.phase === "playing";
+        const eliminated = player.diceCount <= 0;
+        const seatColorway = colorways[seat] ?? playerColorwayForSeat(seat);
+        return (
+          <div
+            key={seat}
+            className={`flex shrink-0 items-center gap-1 rounded-lg border px-1.5 py-0.5 ${
+              isActive ? "border-amber-300/50 bg-amber-400/10" : "border-white/10 bg-black/20"
+            } ${eliminated ? "opacity-40" : ""}`}
+            title={`${names[seat]}${seat === viewerSeat ? " (나)" : ""} · ${eliminated ? "탈락" : `${player.diceCount}개`}`}
+          >
+            {isActive && <span className="text-[9px]">👉</span>}
+            <span className="max-w-[36px] truncate break-keep text-[9px] font-semibold text-white/70">{names[seat]}</span>
+            {eliminated ? (
+              <span className="text-[9px]">💀</span>
+            ) : (
+              <DiceCountStrip colorway={seatColorway} diceCount={player.diceCount} size="xs" />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function PerudoMobileBoard({
@@ -193,6 +263,7 @@ export default function PerudoMobileBoard({
               {rulebookButton}
             </div>
           </div>
+          <PlayerDiceSummaryBar state={state} names={names} colorways={colorways} viewerSeat={viewerSeat} />
           <p className={`text-center text-sm font-bold break-keep ${isMyTurn ? "text-amber-200" : "text-xs font-medium text-white/50"}`}>
             {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
           </p>
@@ -337,14 +408,46 @@ export default function PerudoMobileBoard({
                 onSettled={() => getSoundEngine().playCupThud()}
               />
             )}
-          </div>
-          <div className="flex animate-bounce items-center justify-center gap-1 text-[10px] text-amber-200/50">
-            <span>↓ 아래로 스크롤하여 플레이어 현황 보기</span>
+            {/* ★ 2026-09-09 세션: 색상 변경 팔레트를 내 주사위 트레이 바로 아래에
+                밀착 배치(요청 원문 그대로) — 이전엔 섹션2(스크롤 영역)에만
+                있었으나, 여기 하나로 완전히 이동시키고 섹션2 쪽은 제거했다
+                (중복 없음, AskUserQuestion 확인). 한 줄(라벨+원형 칩)로 압축하고
+                구분선 없이 부모의 기존 `gap-1`에만 의존 — 새로 늘어난 만큼을
+                아래 스크롤 안내 문구 제거분으로 상쇄해 섹션1 "스크롤 없음" 예산을
+                다시 맞췄다(라이브 Playwright 실측으로 오버플로 확인 후 조정). */}
+            <div className="flex w-full flex-wrap items-center justify-center gap-1.5">
+              <span className="text-[10px] text-slate-400">🎨 색상:</span>
+              {PLAYER_COLORWAYS.map((c) => {
+                const heldBySeat = takenColorwaySeat(c.id);
+                const isMine = myColorway.id === c.id;
+                const isTaken = heldBySeat !== undefined && !isMine;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    disabled={isTaken}
+                    onClick={() => onColorwayChange(c.id)}
+                    title={isTaken ? `${names[heldBySeat]}님이 사용 중` : `내 주사위 색상: ${c.label}`}
+                    aria-label={`주사위 색상: ${c.label}`}
+                    className={`h-5 w-5 rounded-full border-2 transition ${
+                      isMine
+                        ? "scale-110 border-white"
+                        : isTaken
+                          ? "cursor-not-allowed border-white/10 opacity-35"
+                          : "border-white/25 hover:border-white/60"
+                    }`}
+                    style={{ backgroundColor: c.body }}
+                  />
+                );
+              })}
+            </div>
           </div>
         </footer>
       </div>
 
-      {/* [섹션 2] 하단 스크롤 영역: 플레이어별 주사위 잔여량, 턴, 색상 변경. */}
+      {/* [섹션 2] 하단 스크롤 영역: 플레이어별 주사위 잔여량, 턴. 색상 변경 팔레트는
+          2026-09-09 세션에서 섹션1 풋터(내 주사위 트레이 바로 아래)로 완전히
+          이동했다 — 여기 중복 없음. */}
       <div className="mt-3 flex w-full flex-col gap-3 rounded-3xl border border-amber-500/15 bg-gradient-to-b from-[#1d130d] to-[#0d0805] p-3">
         <h3 className="flex items-center gap-1.5 text-xs font-bold text-amber-400">👥 플레이어 주사위 현황 & 턴 순서</h3>
 
@@ -376,41 +479,16 @@ export default function PerudoMobileBoard({
                   <span className="truncate break-keep">{names[seat]}</span>
                   {isSelf && <span className="shrink-0 text-amber-200">(나)</span>}
                 </span>
-                <span className="shrink-0 text-[11px] text-white/70">
-                  {eliminated ? "탈락" : `🎲 ${player.diceCount}개`}
+                <span className="shrink-0">
+                  {eliminated ? (
+                    <span className="text-[11px] text-white/30">탈락</span>
+                  ) : (
+                    <DiceCountStrip colorway={seatColorway} diceCount={player.diceCount} size="sm" />
+                  )}
                 </span>
               </div>
             );
           })}
-        </div>
-
-        <div className="flex flex-col gap-1.5 border-t border-white/10 pt-3">
-          <span className="text-[11px] font-semibold text-amber-300/80">🎨 내 주사위 색상 변경</span>
-          <div className="grid grid-cols-5 gap-2">
-            {PLAYER_COLORWAYS.map((c) => {
-              const heldBySeat = takenColorwaySeat(c.id);
-              const isMine = myColorway.id === c.id;
-              const isTaken = heldBySeat !== undefined && !isMine;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  disabled={isTaken}
-                  onClick={() => onColorwayChange(c.id)}
-                  title={isTaken ? `${names[heldBySeat]}님이 사용 중` : `내 주사위 색상: ${c.label}`}
-                  aria-label={`주사위 색상: ${c.label}`}
-                  className={`mx-auto h-7 w-7 rounded-full border-2 transition ${
-                    isMine
-                      ? "scale-110 border-white"
-                      : isTaken
-                        ? "cursor-not-allowed border-white/10 opacity-35"
-                        : "border-white/25 hover:border-white/60"
-                  }`}
-                  style={{ backgroundColor: c.body }}
-                />
-              );
-            })}
-          </div>
         </div>
       </div>
 
