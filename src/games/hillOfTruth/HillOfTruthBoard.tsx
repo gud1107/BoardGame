@@ -76,6 +76,23 @@ export default function HillOfTruthBoard({
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const reviewAutoShownRef = useRef(false);
+  // 2026-09-10 세션 신설 — 오답 정답 선언 연출(§3): 화면 전체 흔들림 + 2단계 배너.
+  // `declarationAlert`는 전원의 화면에서 answerLog 성장을 감지해 동일하게 뜬다(질문
+  // 판정 사운드와 동일한 "상태 변화 자체를 감지" 컨벤션 — 선언한 본인의 dispatch에만
+  // 의존하지 않아, 다른 참가자 화면에도 그대로 공개 동기화된다).
+  const [isWrongAnswerShaking, setIsWrongAnswerShaking] = useState(false);
+  const [declarationAlert, setDeclarationAlert] = useState<{ playerName: string; stage: 1 | 2 } | null>(null);
+
+  // `names`는 부모(HillOfTruthGame)의 `gameState` 의존 useMemo라 매 액션마다 새
+  // 레퍼런스로 바뀐다 — 아래 오답 선언 이펙트의 의존성 배열에 그대로 넣으면, 무관한
+  // 다음 액션(예: 봇의 질문 하나)이 들어올 때마다 이펙트가 재실행→클린업되어 이미
+  // 예약해둔 흔들림/2단계 배너 타이머가 도중에 취소돼버린다(라이브 브라우저 검증에서
+  // 실제로 재현: 오답 직후 2번째 단계 "틀렸습니다!"가 끝내 안 뜸). ref로 최신값만
+  // 들고 있고, 이펙트 자체는 `names`를 구독하지 않는다.
+  const namesRef = useRef(names);
+  useEffect(() => {
+    namesRef.current = names;
+  }, [names]);
 
   const isMyTurn = state.phase === "playing" && state.turnOrder[state.turnIndex] === viewerSeat;
   const myPlayer = state.players.find((p) => p.seat === viewerSeat)!;
@@ -112,6 +129,40 @@ export default function HillOfTruthBoard({
     }
   }, [state.phase]);
 
+  // 오답 정답 선언 연출(§3, 2026-09-10 세션) — answerLog 성장을 감지해, 방금
+  // 추가된 시도가 오답이면 화면 흔들림 + 둔탁한 경고음 + 2단계 배너("정답 선언을
+  // 했습니다" → 1초 뒤 "틀렸습니다!")를 전원의 화면에서 동일하게 재생한다. 정답
+  // 시도(게임 종료)는 이미 별도의 승리 연출이 있으므로 여기서는 건드리지 않는다.
+  const lastAnswerLenRef = useRef(state.answerLog.length);
+  useEffect(() => {
+    if (state.answerLog.length <= lastAnswerLenRef.current) {
+      lastAnswerLenRef.current = state.answerLog.length;
+      return;
+    }
+    lastAnswerLenRef.current = state.answerLog.length;
+    const latestAttempt = state.answerLog[state.answerLog.length - 1];
+    if (!latestAttempt || latestAttempt.correct) return;
+
+    const playerName = namesRef.current[latestAttempt.seat] ?? `${latestAttempt.seat + 1}번`;
+    // setState를 이펙트 본문에서 동기 호출하지 않고 타이머 콜백 안으로 미룬다 —
+    // `react-hooks/set-state-in-effect`(cascading-render) 관례, ResponseModal.tsx의
+    // `ResponseGauge`와 동일한 해법(0ms 타이머도 "다음 틱" 콜백이라 문제 없음).
+    const startTimer = setTimeout(() => {
+      getSoundEngine().playDeclarationFailBuzzer();
+      setIsWrongAnswerShaking(true);
+      setDeclarationAlert({ playerName, stage: 1 });
+    }, 0);
+    const shakeTimer = setTimeout(() => setIsWrongAnswerShaking(false), 500);
+    const stage2Timer = setTimeout(() => setDeclarationAlert({ playerName, stage: 2 }), 1000);
+    const clearTimer = setTimeout(() => setDeclarationAlert(null), 3200);
+    return () => {
+      clearTimeout(startTimer);
+      clearTimeout(shakeTimer);
+      clearTimeout(stage2Timer);
+      clearTimeout(clearTimer);
+    };
+  }, [state.answerLog]);
+
   function submitAsk() {
     const text = askText.trim();
     if (!text) return;
@@ -142,7 +193,22 @@ export default function HillOfTruthBoard({
   }));
 
   return (
-    <div className="flex flex-col gap-4 pb-28">
+    <div className={`flex flex-col gap-4 pb-28 ${isWrongAnswerShaking ? "hill-of-truth-screen-shake" : ""}`}>
+      {declarationAlert && (
+        <div className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4">
+          <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-rose-500/80 bg-slate-900 px-6 py-5 text-center shadow-2xl">
+            <p className="break-keep text-sm font-bold text-amber-400">
+              ⚠️ {declarationAlert.playerName}님이 정답 선언을 했습니다.
+            </p>
+            {declarationAlert.stage === 2 && (
+              <p className="hill-of-truth-fail-glow break-keep text-2xl font-black tracking-wider text-rose-500">
+                ❌ 틀렸습니다! (오답 페널티 적용)
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/60">
@@ -342,6 +408,10 @@ export default function HillOfTruthBoard({
           answerItems={answerReviewItems}
           scenarioTruth={scenario.truth}
           onDone={() => setReviewOpen(false)}
+          onExitToLobby={() => {
+            setReviewOpen(false);
+            onGameEnd();
+          }}
         />
       )}
     </div>

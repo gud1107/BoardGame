@@ -46,6 +46,14 @@ export interface QuestionTrigger {
   sampleQuestion: string;
   /** 플레이어의 자유 텍스트 질문에 이 키워드 중 하나라도 포함되면 이 트리거가 발동. */
   keywords: string[];
+  /** 2026-09-10 세션 신설(초록불 오작동 버그 수정) — 지정돼 있으면 `keywords` 매칭과
+   * AND 조건으로 추가 검증한다: 이 배열 중 하나라도 포함돼야만 트리거가 발동한다.
+   * `keywords`가 짧은 고유명사(용의자 이름 등)만으로 이뤄진 경우, 그 이름이 들어간
+   * 아무 문장에나 매칭돼버리는 문제(예: "은호는 남자다"/"은호는 죽었다" 같은 무관하거나
+   * 틀린 주장도 초록불 판정)를 막기 위한 공존 필수 키워드다 — 각 트리거 자신의
+   * `sampleQuestion`에 실제로 등장하는 단어에서 골랐다(자기 자신의 정답 질문은 항상
+   * 통과하도록 보장, `HillOfTruth.test.ts`의 전수 자기 일치 테스트로 검증). */
+  anchorKeywords?: string[];
   verdict: SemaphoreColor;
   /** verdict가 yellow일 때 필수 — 노란불 복기 리포트에 그대로 노출되는 사유. */
   yellowDetail?: string;
@@ -162,9 +170,9 @@ const SCENARIO_A_HAJUN_SORA: Scenario = {
     { label: "동기", keywords: ["표절", "폭로"] },
   ],
   questionBank: [
-    { id: "a01-q1", sampleQuestion: "범인은 소라입니까?", keywords: ["범인", "소라"], verdict: "green", importance: 3 },
-    { id: "a01-q2", sampleQuestion: "하준은 독극물 때문에 쓰러졌습니까?", keywords: ["독극물", "독"], verdict: "yellow", yellowDetail: "완전한 독극물은 아니지만 '수면 성분이 든 음료'라는 점에서는 방향이 맞습니다.", importance: 3 },
-    { id: "a01-q3", sampleQuestion: "부스 문은 물리적으로 잠긴 것입니까?", keywords: ["문", "잠금", "잠겼"], verdict: "yellow", yellowDetail: "문이 잠긴 건 맞지만 '물리적 자물쇠'가 아니라 원격 조작된 '방음 모드'입니다.", importance: 2 },
+    { id: "a01-q1", sampleQuestion: "범인은 소라입니까?", keywords: ["범인", "소라"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
+    { id: "a01-q2", sampleQuestion: "하준은 독극물 때문에 쓰러졌습니까?", keywords: ["독극물"], verdict: "yellow", yellowDetail: "완전한 독극물은 아니지만 '수면 성분이 든 음료'라는 점에서는 방향이 맞습니다.", importance: 3 },
+    { id: "a01-q3", sampleQuestion: "부스 문은 물리적으로 잠긴 것입니까?", keywords: ["잠금", "잠겼", "잠긴"], verdict: "yellow", yellowDetail: "문이 잠긴 건 맞지만 '물리적 자물쇠'가 아니라 원격 조작된 '방음 모드'입니다.", importance: 2 },
     { id: "a01-q4", sampleQuestion: "방송이 계속 나온 건 사전 녹음 반복 재생 때문입니까?", keywords: ["녹음", "반복", "루프"], verdict: "green", importance: 3 },
     { id: "a01-q5", sampleQuestion: "범행 동기는 표절 폭로를 막기 위해서입니까?", keywords: ["표절", "폭로", "동기"], verdict: "green", importance: 3 },
     { id: "a01-q6", sampleQuestion: "제3의 인물이 부스에 몰래 들어왔습니까?", keywords: ["제3", "다른 사람", "공범"], verdict: "red", importance: 2 },
@@ -172,8 +180,8 @@ const SCENARIO_A_HAJUN_SORA: Scenario = {
     { id: "a01-q8", sampleQuestion: "하준이 스스로 쓰러진 건 지병 때문입니까?", keywords: ["지병", "지병때문", "자연"], verdict: "red", importance: 1 },
     { id: "a01-q9", sampleQuestion: "루프 장비는 사전에 설정된 것입니까?", keywords: ["사전", "미리 설정", "예약"], verdict: "green", importance: 2 },
     { id: "a01-q10", sampleQuestion: "소라는 하준과 방송 파트너 관계였습니까?", keywords: ["파트너", "관계", "동료"], verdict: "yellow", yellowDetail: "표면적으로는 방송 파트너지만, 실제로는 표절 의혹을 두고 대립하던 관계였습니다.", importance: 1 },
-    { id: "a01-q11", sampleQuestion: "부스 안에 흉기가 있었습니까?", keywords: ["흉기", "칼", "무기"], verdict: "red", importance: 1 },
-    { id: "a01-q12", sampleQuestion: "음료에 무언가를 탄 사람이 범인입니까?", keywords: ["음료", "탄", "성분"], verdict: "green", importance: 3 },
+    { id: "a01-q11", sampleQuestion: "부스 안에 흉기가 있었습니까?", keywords: ["흉기", "무기"], verdict: "red", importance: 1 },
+    { id: "a01-q12", sampleQuestion: "음료에 무언가를 탄 사람이 범인입니까?", keywords: ["음료", "성분"], verdict: "green", importance: 3 },
   ],
   timeline: [
     { time: "23:00", description: "생방송 시작. 하준과 소라 둘만 부스에 입장." },
@@ -224,13 +232,13 @@ const SCENARIO_B_LIST: Scenario[] = [
       { label: "동기", keywords: ["유언장", "상속"] },
     ],
     questionBank: [
-      { id: "b01-q1", sampleQuestion: "범인은 태오입니까?", keywords: ["태오"], verdict: "green", importance: 3 },
+      { id: "b01-q1", sampleQuestion: "범인은 태오입니까?", keywords: ["태오"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "b01-q2", sampleQuestion: "독은 음식에 직접 넣은 것입니까?", keywords: ["음식", "직접"], verdict: "yellow", yellowDetail: "독이 들어간 경로는 맞지만 '음식에 직접'이 아니라 '관수 시스템 → 허브차 재료'를 거친 간접 경로입니다.", importance: 2 },
       { id: "b01-q3", sampleQuestion: "관수 시스템에 화학비료를 섞었습니까?", keywords: ["관수", "비료"], verdict: "green", importance: 3 },
       { id: "b01-q4", sampleQuestion: "동기는 유언장 상속 문제입니까?", keywords: ["유언장", "상속"], verdict: "green", importance: 3 },
-      { id: "b01-q5", sampleQuestion: "첫째 딸 유리가 범인입니까?", keywords: ["유리"], verdict: "red", importance: 2 },
+      { id: "b01-q5", sampleQuestion: "첫째 딸 유리가 범인입니까?", keywords: ["유리"], anchorKeywords: ["범인"], verdict: "red", importance: 2 },
       { id: "b01-q6", sampleQuestion: "피해자는 심장 지병으로 자연사했습니까?", keywords: ["지병", "자연사"], verdict: "red", importance: 1 },
-      { id: "b01-q7", sampleQuestion: "허브차가 매개체입니까?", keywords: ["허브차"], verdict: "green", importance: 2 },
+      { id: "b01-q7", sampleQuestion: "허브차가 매개체입니까?", keywords: ["허브차"], anchorKeywords: ["매개체"], verdict: "green", importance: 2 },
       { id: "b01-q8", sampleQuestion: "유언장은 사망 당일 새로 작성됐습니까?", keywords: ["당일", "새로 작성"], verdict: "yellow", yellowDetail: "유언장이 바뀐 건 맞지만 '당일'이 아니라 사망 며칠 전에 이미 다시 작성됐습니다.", importance: 1 },
     ],
     timeline: [
@@ -266,7 +274,7 @@ const SCENARIO_B_LIST: Scenario[] = [
       { label: "동기", keywords: ["컬렉터", "거래", "판매"] },
     ],
     questionBank: [
-      { id: "b02-q1", sampleQuestion: "범인은 큐레이터 은채입니까?", keywords: ["은채", "큐레이터"], verdict: "green", importance: 3 },
+      { id: "b02-q1", sampleQuestion: "범인은 큐레이터 은채입니까?", keywords: ["은채", "큐레이터"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "b02-q2", sampleQuestion: "그림은 폐관 후 몰래 반출됐습니까?", keywords: ["반출", "폐관 후"], verdict: "yellow", yellowDetail: "진품이 창고로 옮겨진 시점은 맞지만, 핵심 트릭은 '반출'이 아니라 그 이전의 '복제품 바꿔치기'입니다.", importance: 2 },
       { id: "b02-q3", sampleQuestion: "행사 전에 이미 복제품으로 바뀌어 있었습니까?", keywords: ["복제품", "바꿔치기", "행사 전"], verdict: "green", importance: 3 },
       { id: "b02-q4", sampleQuestion: "경비원이 공범입니까?", keywords: ["경비원", "공범"], verdict: "red", importance: 2 },
@@ -307,7 +315,7 @@ const SCENARIO_B_LIST: Scenario[] = [
       { label: "동기", keywords: ["횡령", "동업", "은폐"] },
     ],
     questionBank: [
-      { id: "b03-q1", sampleQuestion: "범인은 재민입니까?", keywords: ["재민"], verdict: "green", importance: 3 },
+      { id: "b03-q1", sampleQuestion: "범인은 재민입니까?", keywords: ["재민"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "b03-q2", sampleQuestion: "곤돌라가 실제로는 정차한 적이 있습니까?", keywords: ["정차", "멈춘"], verdict: "green", importance: 3 },
       { id: "b03-q3", sampleQuestion: "정비 로그가 조작됐습니까?", keywords: ["로그", "조작", "정비"], verdict: "green", importance: 2 },
       { id: "b03-q4", sampleQuestion: "피해자가 스스로 뛰어내린 것입니까?", keywords: ["뛰어내", "자진"], verdict: "red", importance: 1 },
@@ -350,7 +358,7 @@ const SCENARIO_B_LIST: Scenario[] = [
       { label: "동기", keywords: ["프랜차이즈", "매도", "판매"] },
     ],
     questionBank: [
-      { id: "b04-q1", sampleQuestion: "범인은 막내 직원 하나입니까?", keywords: ["하나"], verdict: "green", importance: 3 },
+      { id: "b04-q1", sampleQuestion: "범인은 막내 직원 하나입니까?", keywords: ["하나"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "b04-q2", sampleQuestion: "노트는 실제로 가게 밖으로 나간 적이 없습니까?", keywords: ["가게 밖", "나간 적 없"], verdict: "green", importance: 3 },
       { id: "b04-q3", sampleQuestion: "알람 시스템에 예외 시간이 설정돼 있었습니까?", keywords: ["알람", "예외"], verdict: "green", importance: 2 },
       { id: "b04-q4", sampleQuestion: "노트를 사진으로 찍어 유출했습니까?", keywords: ["사진", "촬영"], verdict: "green", importance: 2 },
@@ -392,12 +400,12 @@ const SCENARIO_B_LIST: Scenario[] = [
       { label: "동기", keywords: ["수석", "오디션", "자리"] },
     ],
     questionBank: [
-      { id: "b05-q1", sampleQuestion: "범인은 동료 단원 세영입니까?", keywords: ["세영"], verdict: "green", importance: 3 },
-      { id: "b05-q2", sampleQuestion: "독은 치명적인 것이었습니까?", keywords: ["치명적", "죽", "사망"], verdict: "yellow", yellowDetail: "성분을 탄 건 맞지만 치명적인 독이 아니라 '일시적 어지럼증'만 유발하는 것이었습니다.", importance: 2 },
-      { id: "b05-q3", sampleQuestion: "공용 텀블러에 무언가를 탔습니까?", keywords: ["텀블러"], verdict: "green", importance: 3 },
+      { id: "b05-q1", sampleQuestion: "범인은 동료 단원 세영입니까?", keywords: ["세영"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
+      { id: "b05-q2", sampleQuestion: "독은 치명적인 것이었습니까?", keywords: ["치명적", "사망"], verdict: "yellow", yellowDetail: "성분을 탄 건 맞지만 치명적인 독이 아니라 '일시적 어지럼증'만 유발하는 것이었습니다.", importance: 2 },
+      { id: "b05-q3", sampleQuestion: "공용 텀블러에 무언가를 탔습니까?", keywords: ["텀블러"], anchorKeywords: ["탔"], verdict: "green", importance: 3 },
       { id: "b05-q4", sampleQuestion: "목적은 살해였습니까?", keywords: ["살해", "죽이려"], verdict: "red", importance: 2 },
       { id: "b05-q5", sampleQuestion: "동기는 수석 자리(오디션)를 차지하기 위해서입니까?", keywords: ["수석", "오디션", "자리"], verdict: "green", importance: 3 },
-      { id: "b05-q6", sampleQuestion: "지휘자가 관련이 있습니까?", keywords: ["지휘자"], verdict: "red", importance: 1 },
+      { id: "b05-q6", sampleQuestion: "지휘자가 관련이 있습니까?", keywords: ["지휘자"], anchorKeywords: ["관련"], verdict: "red", importance: 1 },
       { id: "b05-q7", sampleQuestion: "매니저가 실수로 잘못된 약을 줬습니까?", keywords: ["매니저", "실수"], verdict: "red", importance: 1 },
     ],
     timeline: [
@@ -434,11 +442,11 @@ const SCENARIO_B_LIST: Scenario[] = [
       { label: "동기", keywords: ["승부조작", "대가", "돈"] },
     ],
     questionBank: [
-      { id: "b06-q1", sampleQuestion: "범인은 팀 코치 두현입니까?", keywords: ["두현", "코치"], verdict: "green", importance: 3 },
+      { id: "b06-q1", sampleQuestion: "범인은 팀 코치 두현입니까?", keywords: ["두현", "코치"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "b06-q2", sampleQuestion: "정말 해킹이 있긴 있었습니까?", keywords: ["해킹", "있었"], verdict: "yellow", yellowDetail: "네트워크 공격이 있었다는 사실 자체는 맞지만, 외부 해커가 아니라 내부자(코치) 소행이라는 점이 다릅니다.", importance: 2 },
       { id: "b06-q3", sampleQuestion: "외부 해커의 소행입니까?", keywords: ["외부 해커", "외부인"], verdict: "red", importance: 2 },
       { id: "b06-q4", sampleQuestion: "네트워크 트래픽을 인위적으로 폭주시켰습니까?", keywords: ["트래픽", "폭주", "네트워크"], verdict: "green", importance: 3 },
-      { id: "b06-q5", sampleQuestion: "동기는 상대팀에게 돈을 받은 승부조작입니까?", keywords: ["승부조작", "대가", "돈"], verdict: "green", importance: 3 },
+      { id: "b06-q5", sampleQuestion: "동기는 상대팀에게 돈을 받은 승부조작입니까?", keywords: ["승부조작", "대가"], verdict: "green", importance: 3 },
       { id: "b06-q6", sampleQuestion: "선수 본인이 일부러 접속을 끊었습니까?", keywords: ["선수 본인", "일부러"], verdict: "red", importance: 1 },
       { id: "b06-q7", sampleQuestion: "원격 접속 프로그램이 사용됐습니까?", keywords: ["원격 접속", "원격"], verdict: "green", importance: 2 },
     ],
@@ -475,12 +483,12 @@ const SCENARIO_B_LIST: Scenario[] = [
       { label: "동기", keywords: ["투자", "손실", "문서"] },
     ],
     questionBank: [
-      { id: "b07-q1", sampleQuestion: "범인은 지훈입니까?", keywords: ["지훈"], verdict: "green", importance: 3 },
-      { id: "b07-q2", sampleQuestion: "정전은 낙뢰 때문입니까?", keywords: ["낙뢰"], verdict: "yellow", yellowDetail: "낙뢰가 그날 실제로 있었던 건 맞지만, 정전의 직접 원인은 아니고 지훈이 조작한 발전기 연료 밸브 때문이었습니다.", importance: 2 },
+      { id: "b07-q1", sampleQuestion: "범인은 지훈입니까?", keywords: ["지훈"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
+      { id: "b07-q2", sampleQuestion: "정전은 낙뢰 때문입니까?", keywords: ["낙뢰"], anchorKeywords: ["정전"], verdict: "yellow", yellowDetail: "낙뢰가 그날 실제로 있었던 건 맞지만, 정전의 직접 원인은 아니고 지훈이 조작한 발전기 연료 밸브 때문이었습니다.", importance: 2 },
       { id: "b07-q3", sampleQuestion: "발전기 연료 밸브를 미리 조작했습니까?", keywords: ["발전기", "연료", "밸브"], verdict: "green", importance: 3 },
       { id: "b07-q4", sampleQuestion: "귀중품을 훔치려던 것입니까?", keywords: ["귀중품", "훔치"], verdict: "yellow", yellowDetail: "보관함을 연 건 맞지만 목적은 금품 절도가 아니라 자신에게 불리한 '문서'를 빼돌리는 것이었습니다.", importance: 2 },
       { id: "b07-q5", sampleQuestion: "동기는 투자 손실 증거 문서를 없애기 위해서입니까?", keywords: ["투자", "손실", "문서"], verdict: "green", importance: 3 },
-      { id: "b07-q6", sampleQuestion: "캠핑장 관리인이 범인입니까?", keywords: ["관리인"], verdict: "red", importance: 1 },
+      { id: "b07-q6", sampleQuestion: "캠핑장 관리인이 범인입니까?", keywords: ["관리인"], anchorKeywords: ["범인"], verdict: "red", importance: 1 },
       { id: "b07-q7", sampleQuestion: "정전은 완전한 우연입니까?", keywords: ["우연", "그냥 사고"], verdict: "red", importance: 1 },
     ],
     timeline: [
@@ -517,10 +525,10 @@ const SCENARIO_B_LIST: Scenario[] = [
       { label: "동기", keywords: ["재계약", "여론", "조건"] },
     ],
     questionBank: [
-      { id: "b08-q1", sampleQuestion: "범인은 매니저 유진입니까?", keywords: ["유진"], verdict: "green", importance: 3 },
+      { id: "b08-q1", sampleQuestion: "범인은 매니저 유진입니까?", keywords: ["유진"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "b08-q2", sampleQuestion: "정말 외부 해킹이 있었습니까?", keywords: ["외부 해킹", "진짜 해킹"], verdict: "red", importance: 2 },
       { id: "b08-q3", sampleQuestion: "원고는 실제로 삭제됐습니까?", keywords: ["삭제됐", "완전히 사라"], verdict: "yellow", yellowDetail: "독자들 눈에는 사라진 것처럼 보였지만 실제로는 삭제가 아니라 '비공개 전환'이었고, 원본은 그대로 백업돼 있었습니다.", importance: 2 },
-      { id: "b08-q4", sampleQuestion: "원고가 다른 곳에 백업돼 있었습니까?", keywords: ["백업"], verdict: "green", importance: 3 },
+      { id: "b08-q4", sampleQuestion: "원고가 다른 곳에 백업돼 있었습니까?", keywords: ["백업"], anchorKeywords: ["원고"], verdict: "green", importance: 3 },
       { id: "b08-q5", sampleQuestion: "동기는 재계약 협상에서 유리한 여론을 만들기 위해서입니까?", keywords: ["재계약", "여론"], verdict: "green", importance: 3 },
       { id: "b08-q6", sampleQuestion: "작가 본인이 스스로 벌인 일입니까?", keywords: ["작가 본인", "작가가 스스로"], verdict: "red", importance: 1 },
       { id: "b08-q7", sampleQuestion: "플랫폼 직원이 관련돼 있습니까?", keywords: ["플랫폼 직원"], verdict: "red", importance: 1 },
@@ -558,10 +566,10 @@ const SCENARIO_B_LIST: Scenario[] = [
       { label: "동기", keywords: ["상금", "스폰서"] },
     ],
     questionBank: [
-      { id: "b09-q1", sampleQuestion: "우승자 도경이 부정을 저질렀습니까?", keywords: ["도경"], verdict: "green", importance: 3 },
+      { id: "b09-q1", sampleQuestion: "우승자 도경이 부정을 저질렀습니까?", keywords: ["도경"], anchorKeywords: ["부정"], verdict: "green", importance: 3 },
       { id: "b09-q2", sampleQuestion: "약물을 사용했습니까?", keywords: ["약물", "도핑"], verdict: "red", importance: 2 },
-      { id: "b09-q3", sampleQuestion: "쌍둥이 형이 중간 구간을 대신 뛰었습니까?", keywords: ["쌍둥이", "형"], verdict: "green", importance: 3 },
-      { id: "b09-q4", sampleQuestion: "지름길로 이동했습니까?", keywords: ["지름길"], verdict: "yellow", yellowDetail: "지름길 자체가 핵심은 아니고, 그 구간에서 '형과 교대'했다는 사실이 핵심 트릭입니다.", importance: 2 },
+      { id: "b09-q3", sampleQuestion: "쌍둥이 형이 중간 구간을 대신 뛰었습니까?", keywords: ["쌍둥이"], verdict: "green", importance: 3 },
+      { id: "b09-q4", sampleQuestion: "지름길로 이동했습니까?", keywords: ["지름길"], anchorKeywords: ["이동"], verdict: "yellow", yellowDetail: "지름길 자체가 핵심은 아니고, 그 구간에서 '형과 교대'했다는 사실이 핵심 트릭입니다.", importance: 2 },
       { id: "b09-q5", sampleQuestion: "동기는 우승 상금과 스폰서 계약입니까?", keywords: ["상금", "스폰서"], verdict: "green", importance: 3 },
       { id: "b09-q6", sampleQuestion: "체크포인트 기기가 단순 고장난 것입니까?", keywords: ["기기 고장", "단순 고장"], verdict: "yellow", yellowDetail: "그 순간 태그가 인식되지 않은 건 맞지만, 원인은 '기기 고장'이 아니라 '선수 교대'가 일어난 순간이었기 때문입니다.", importance: 2 },
       { id: "b09-q7", sampleQuestion: "대회 관계자가 공모했습니까?", keywords: ["대회 관계자", "공모"], verdict: "red", importance: 1 },
@@ -657,7 +665,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["감사", "폭로", "안전점검"] },
     ],
     questionBank: [
-      { id: "c01-q1", sampleQuestion: "범인은 정비팀장 도현입니까?", keywords: ["도현"], verdict: "green", importance: 3 },
+      { id: "c01-q1", sampleQuestion: "범인은 정비팀장 도현입니까?", keywords: ["도현"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c01-q2", sampleQuestion: "관람차가 실제로 멈춘 적이 있습니까?", keywords: ["멈춘", "정차", "정지"], verdict: "green", importance: 3 },
       { id: "c01-q3", sampleQuestion: "정비 로그가 삭제됐습니까?", keywords: ["로그", "삭제", "조작"], verdict: "green", importance: 2 },
       { id: "c01-q4", sampleQuestion: "피해자가 스스로 뛰어내렸습니까?", keywords: ["뛰어내", "자진"], verdict: "red", importance: 1 },
@@ -720,7 +728,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["아이디어", "프랜차이즈", "매도"] },
     ],
     questionBank: [
-      { id: "c02-q1", sampleQuestion: "범인은 동료 스태프 재윤입니까?", keywords: ["재윤"], verdict: "green", importance: 3 },
+      { id: "c02-q1", sampleQuestion: "범인은 동료 스태프 재윤입니까?", keywords: ["재윤"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c02-q2", sampleQuestion: "재윤은 그 시각 이미 퇴근한 상태였습니까?", keywords: ["퇴근", "이미"], verdict: "yellow", yellowDetail: "근무 기록상으로는 퇴근한 걸로 보이지만, 실제로는 마스터 키패드로 몰래 재입장했습니다.", importance: 2 },
       { id: "c02-q3", sampleQuestion: "마스터 키패드 비밀번호로 재입장한 사람이 있습니까?", keywords: ["마스터키", "재입장"], verdict: "green", importance: 3 },
       { id: "c02-q4", sampleQuestion: "출입 로그가 조작됐습니까?", keywords: ["로그", "삭제", "조작"], verdict: "green", importance: 2 },
@@ -783,7 +791,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["심사", "수상", "앙심"] },
     ],
     questionBank: [
-      { id: "c03-q1", sampleQuestion: "범인은 라이벌 코스어 다인입니까?", keywords: ["다인"], verdict: "green", importance: 3 },
+      { id: "c03-q1", sampleQuestion: "범인은 라이벌 코스어 다인입니까?", keywords: ["다인"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c03-q2", sampleQuestion: "목격자들이 본 사람은 정말 피해자 본인이었습니까?", keywords: ["본인", "피해자 본인"], verdict: "yellow", yellowDetail: "목격자들이 본 실루엣과 의상은 진짜지만, 그 사람은 피해자가 아니라 같은 의상을 입은 다인이었습니다.", importance: 2 },
       { id: "c03-q3", sampleQuestion: "동일한 의상으로 변장해 피해자로 착각하게 만들었습니까?", keywords: ["같은 의상", "변장", "가발"], verdict: "green", importance: 3 },
       { id: "c03-q4", sampleQuestion: "스프레이에 자극성 물질이 섞여 있었습니까?", keywords: ["스프레이", "자극성"], verdict: "green", importance: 2 },
@@ -846,9 +854,9 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["카운팅", "협박"] },
     ],
     questionBank: [
-      { id: "c04-q1", sampleQuestion: "범인은 카지노 딜러 세훈입니까?", keywords: ["세훈"], verdict: "green", importance: 3 },
+      { id: "c04-q1", sampleQuestion: "범인은 카지노 딜러 세훈입니까?", keywords: ["세훈"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c04-q2", sampleQuestion: "매점 결제 기록은 진짜 알리바이입니까?", keywords: ["매점", "결제", "알리바이"], verdict: "yellow", yellowDetail: "결제 자체는 실제로 일어났지만, 세훈 본인이 아니라 공범이 대신 결제한 것입니다.", importance: 2 },
-      { id: "c04-q3", sampleQuestion: "카드를 다른 사람에게 맡겨 대신 결제하게 했습니까?", keywords: ["대신결제", "카드"], verdict: "green", importance: 3 },
+      { id: "c04-q3", sampleQuestion: "카드를 다른 사람에게 맡겨 대신 결제하게 했습니까?", keywords: ["대신결제", "대신 결제", "카드"], verdict: "green", importance: 3 },
       { id: "c04-q4", sampleQuestion: "동기는 카드 카운팅을 들켜서입니까?", keywords: ["카운팅", "협박"], verdict: "green", importance: 3 },
       { id: "c04-q5", sampleQuestion: "다른 손님이 범인입니까?", keywords: ["다른 손님"], verdict: "red", importance: 1 },
       { id: "c04-q6", sampleQuestion: "선상에서 몸싸움이 있었습니까?", keywords: ["몸싸움", "밀쳤"], verdict: "green", importance: 2 },
@@ -909,8 +917,8 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["논문", "저자순위", "단독발표"] },
     ],
     questionBank: [
-      { id: "c05-q1", sampleQuestion: "범인은 대학원생 지완입니까?", keywords: ["지완"], verdict: "green", importance: 3 },
-      { id: "c05-q2", sampleQuestion: "실제로 화재가 있었습니까?", keywords: ["실제 화재", "불이 났"], verdict: "red", importance: 2 },
+      { id: "c05-q1", sampleQuestion: "범인은 대학원생 지완입니까?", keywords: ["지완"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
+      { id: "c05-q2", sampleQuestion: "실제로 화재가 있었습니까?", keywords: ["실제 화재", "불이 났", "실제로 화재"], verdict: "red", importance: 2 },
       { id: "c05-q3", sampleQuestion: "화재경보는 감지기를 조작해 울린 가짜였습니까?", keywords: ["감지기", "가짜경보", "조작"], verdict: "green", importance: 3 },
       { id: "c05-q4", sampleQuestion: "대피 후 실험실에 몰래 남은 사람이 있었습니까?", keywords: ["몰래 남", "대피 후"], verdict: "green", importance: 2 },
       { id: "c05-q5", sampleQuestion: "동기는 논문 저자 순위 문제입니까?", keywords: ["논문", "저자순위", "단독발표"], verdict: "green", importance: 3 },
@@ -972,7 +980,18 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["상금", "출연계약"] },
     ],
     questionBank: [
-      { id: "c06-q1", sampleQuestion: "범인은 상대 참가자 은호입니까?", keywords: ["은호"], verdict: "green", importance: 3 },
+      { id: "c06-q1", sampleQuestion: "범인은 상대 참가자 은호입니까?", keywords: ["은호"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
+      // 2026-09-10 세션 추가 — 실사용자 스크린샷 재현: "이어폰이 작동되지않았다"(부정문)처럼
+      // 진실과 반대로 부정된 주장도 아래 c06-q3의 "이어폰" 키워드 하나로 초록불이 켜지던
+      // 문제. c06-q3보다 먼저 검사되도록 앞에 배치해, 부정형 어미가 붙은 이어폰 질문을
+      // 빨간불로 먼저 가로챈다(정상적인 긍정형 질문은 그대로 c06-q3에서 계속 초록불).
+      {
+        id: "c06-q1b-earphone-negated",
+        sampleQuestion: "이어폰이 작동되지 않았습니까?",
+        keywords: ["작동되지 않", "작동하지 않", "작동 안", "작동되지않"],
+        verdict: "red",
+        importance: 1,
+      },
       { id: "c06-q2", sampleQuestion: "부정행위를 한 사람은 피해자입니까?", keywords: ["피해자", "부정행위"], verdict: "red", importance: 2 },
       { id: "c06-q3", sampleQuestion: "은호가 초소형 이어폰으로 힌트를 받았습니까?", keywords: ["이어폰", "힌트"], verdict: "green", importance: 3 },
       { id: "c06-q4", sampleQuestion: "대기실에서 몸싸움이 있었습니까?", keywords: ["대기실", "몸싸움"], verdict: "green", importance: 3 },
@@ -1035,7 +1054,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["선거", "회장", "경쟁자"] },
     ],
     questionBank: [
-      { id: "c07-q1", sampleQuestion: "범인은 부회장 인석입니까?", keywords: ["인석"], verdict: "green", importance: 3 },
+      { id: "c07-q1", sampleQuestion: "범인은 부회장 인석입니까?", keywords: ["인석"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c07-q2", sampleQuestion: "등산화 스파이크가 미리 풀려 있었습니까?", keywords: ["스파이크", "풀려"], verdict: "green", importance: 3 },
       { id: "c07-q3", sampleQuestion: "단순히 젖은 바위에서 실족한 사고입니까?", keywords: ["단순 사고", "실족"], verdict: "yellow", yellowDetail: "미끄러진 지점 자체는 맞지만, 원인은 '단순 실족'이 아니라 미리 풀려 있던 스파이크입니다.", importance: 2 },
       { id: "c07-q4", sampleQuestion: "동기는 동호회장 선거 경쟁 때문입니까?", keywords: ["선거", "회장", "경쟁자"], verdict: "green", importance: 3 },
@@ -1098,9 +1117,9 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["리베이트", "발주비리", "보고"] },
     ],
     questionBank: [
-      { id: "c08-q1", sampleQuestion: "범인은 동료 사육사 하윤입니까?", keywords: ["하윤"], verdict: "green", importance: 3 },
+      { id: "c08-q1", sampleQuestion: "범인은 동료 사육사 하윤입니까?", keywords: ["하윤"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c08-q2", sampleQuestion: "그 시각 통로 문이 정말 열리지 않았습니까?", keywords: ["문이 안 열", "열리지 않"], verdict: "yellow", yellowDetail: "서버 로그상으로는 안 열린 것처럼 보이지만, 실제로는 하윤이 원격으로 열고 로그만 조작해 지운 것입니다.", importance: 2 },
-      { id: "c08-q3", sampleQuestion: "스마트폰 앱으로 원격으로 문을 열었습니까?", keywords: ["원격제어", "스마트폰", "앱"], verdict: "green", importance: 3 },
+      { id: "c08-q3", sampleQuestion: "스마트폰 앱으로 원격으로 문을 열었습니까?", keywords: ["원격제어", "스마트폰"], verdict: "green", importance: 3 },
       { id: "c08-q4", sampleQuestion: "도어락 로그가 조작됐습니까?", keywords: ["로그", "조작"], verdict: "green", importance: 2 },
       { id: "c08-q5", sampleQuestion: "동기는 사료 발주 리베이트 문제입니까?", keywords: ["리베이트", "발주비리"], verdict: "green", importance: 3 },
       { id: "c08-q6", sampleQuestion: "관람객이 통로에 몰래 들어갔습니까?", keywords: ["관람객", "몰래"], verdict: "red", importance: 1 },
@@ -1161,12 +1180,12 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["사채", "빚", "급전"] },
     ],
     questionBank: [
-      { id: "c09-q1", sampleQuestion: "범인은 웨딩플래너 보조 다연입니까?", keywords: ["다연"], verdict: "green", importance: 3 },
-      { id: "c09-q2", sampleQuestion: "출입 기록에 남지 않은 카드키가 사용됐습니까?", keywords: ["복제카드", "복제"], verdict: "green", importance: 3 },
+      { id: "c09-q1", sampleQuestion: "범인은 웨딩플래너 보조 다연입니까?", keywords: ["다연"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
+      { id: "c09-q2", sampleQuestion: "출입 기록에 남지 않은 카드키가 사용됐습니까?", keywords: ["복제카드", "복제", "카드키"], anchorKeywords: ["남지 않은", "복제"], verdict: "green", importance: 3 },
       { id: "c09-q3", sampleQuestion: "반지는 꽃다발 속에 숨겨져 반출됐습니까?", keywords: ["꽃다발", "반출"], verdict: "green", importance: 3 },
-      { id: "c09-q4", sampleQuestion: "동기는 사채 빚 때문입니까?", keywords: ["사채", "빚", "급전"], verdict: "green", importance: 3 },
+      { id: "c09-q4", sampleQuestion: "동기는 사채 빚 때문입니까?", keywords: ["사채", "급전"], verdict: "green", importance: 3 },
       { id: "c09-q5", sampleQuestion: "신랑 측 하객이 범인입니까?", keywords: ["하객", "신랑측"], verdict: "red", importance: 1 },
-      { id: "c09-q6", sampleQuestion: "정식 카드키 출입 기록이 있습니까?", keywords: ["정식 출입", "출입기록"], verdict: "red", importance: 2 },
+      { id: "c09-q6", sampleQuestion: "정식 카드키 출입 기록이 있습니까?", keywords: ["정식 출입", "출입기록", "정식 카드키"], verdict: "red", importance: 2 },
       { id: "c09-q7", sampleQuestion: "경비 업체 직원이 공범입니까?", keywords: ["경비", "공범"], verdict: "red", importance: 1 },
       { id: "c09-q8", sampleQuestion: "다연이 사건 전날 카드키 복제 장비를 준비했습니까?", keywords: ["복제 장비", "전날"], verdict: "green", importance: 2 },
     ],
@@ -1223,9 +1242,9 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["출전권", "대회", "탈락"] },
     ],
     questionBank: [
-      { id: "c10-q1", sampleQuestion: "범인은 경쟁자 태민입니까?", keywords: ["태민"], verdict: "green", importance: 3 },
+      { id: "c10-q1", sampleQuestion: "범인은 경쟁자 태민입니까?", keywords: ["태민"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c10-q2", sampleQuestion: "피해자가 약물로 컨디션이 나빠졌습니까?", keywords: ["약물", "이뇨제"], verdict: "green", importance: 3 },
-      { id: "c10-q3", sampleQuestion: "물통에 무언가를 탔습니까?", keywords: ["물통", "탔"], verdict: "green", importance: 3 },
+      { id: "c10-q3", sampleQuestion: "물통에 무언가를 탔습니까?", keywords: ["물통"], verdict: "green", importance: 3 },
       { id: "c10-q4", sampleQuestion: "단순 컨디션 난조입니까?", keywords: ["컨디션 난조", "단순"], verdict: "red", importance: 2 },
       { id: "c10-q5", sampleQuestion: "동기는 대회 출전권 경쟁 때문입니까?", keywords: ["출전권", "대회", "탈락"], verdict: "green", importance: 3 },
       { id: "c10-q6", sampleQuestion: "코치가 훈련을 과하게 시킨 게 원인입니까?", keywords: ["코치", "과한 훈련"], verdict: "red", importance: 1 },
@@ -1285,7 +1304,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["경매", "판매", "고가"] },
     ],
     questionBank: [
-      { id: "c11-q1", sampleQuestion: "범인은 단골손님 명우입니까?", keywords: ["명우"], verdict: "green", importance: 3 },
+      { id: "c11-q1", sampleQuestion: "범인은 단골손님 명우입니까?", keywords: ["명우"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c11-q2", sampleQuestion: "초판본이 정말 사라졌습니까?", keywords: ["사라졌", "없어졌"], verdict: "yellow", yellowDetail: "책장에 책이 꽂혀 있긴 하지만 그건 진품이 아니라 정교한 복제본입니다.", importance: 2 },
       { id: "c11-q3", sampleQuestion: "진품을 복제본으로 바꿔치기했습니까?", keywords: ["복제본", "바꿔치기"], verdict: "green", importance: 3 },
       { id: "c11-q4", sampleQuestion: "동기는 해외 경매에 팔기 위해서입니까?", keywords: ["경매", "판매", "고가"], verdict: "green", importance: 3 },
@@ -1348,11 +1367,11 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["요금", "착복", "횡령"] },
     ],
     questionBank: [
-      { id: "c12-q1", sampleQuestion: "범인은 버스 기사 광수입니까?", keywords: ["광수"], verdict: "green", importance: 3 },
+      { id: "c12-q1", sampleQuestion: "범인은 버스 기사 광수입니까?", keywords: ["광수"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c12-q2", sampleQuestion: "버스가 실제로 중간에 정차한 적이 있습니까?", keywords: ["정차", "멈춘"], verdict: "green", importance: 3 },
       { id: "c12-q3", sampleQuestion: "블랙박스 영상이 조작됐습니까?", keywords: ["블랙박스", "조작", "반복재생"], verdict: "green", importance: 3 },
       { id: "c12-q4", sampleQuestion: "동기는 요금 착복 사실을 들켜서입니까?", keywords: ["요금", "착복", "횡령"], verdict: "green", importance: 3 },
-      { id: "c12-q5", sampleQuestion: "승객이 스스로 중간에 내렸습니까?", keywords: ["스스로 내렸", "자진 하차"], verdict: "red", importance: 1 },
+      { id: "c12-q5", sampleQuestion: "승객이 스스로 중간에 내렸습니까?", keywords: ["스스로 내렸", "자진 하차", "스스로 중간에"], verdict: "red", importance: 1 },
       { id: "c12-q6", sampleQuestion: "다른 승객이 목격자입니까?", keywords: ["다른 승객", "목격"], verdict: "red", importance: 1 },
       { id: "c12-q7", sampleQuestion: "정차 구간에서 다툼이 있었습니까?", keywords: ["정차 구간", "다툼"], verdict: "green", importance: 2 },
       { id: "c12-q8", sampleQuestion: "회사 차원의 조직적 은폐입니까?", keywords: ["회사", "조직적 은폐"], verdict: "red", importance: 1 },
@@ -1411,13 +1430,13 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["보험금", "자금난"] },
     ],
     questionBank: [
-      { id: "c13-q1", sampleQuestion: "범인은 기획사 대표 규현입니까?", keywords: ["규현"], verdict: "green", importance: 3 },
+      { id: "c13-q1", sampleQuestion: "범인은 기획사 대표 규현입니까?", keywords: ["규현"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c13-q2", sampleQuestion: "빙판에 미리 흠집이 나 있었습니까?", keywords: ["흠집", "빙판"], verdict: "green", importance: 3 },
-      { id: "c13-q3", sampleQuestion: "단순히 선수 본인의 실수였습니까?", keywords: ["본인 실수", "단순 실수"], verdict: "red", importance: 2 },
-      { id: "c13-q4", sampleQuestion: "동기는 보험금을 노린 것입니까?", keywords: ["보험금"], verdict: "green", importance: 3 },
+      { id: "c13-q3", sampleQuestion: "단순히 선수 본인의 실수였습니까?", keywords: ["본인 실수", "단순 실수", "본인의 실수"], verdict: "red", importance: 2 },
+      { id: "c13-q4", sampleQuestion: "동기는 보험금을 노린 것입니까?", keywords: ["보험금"], anchorKeywords: ["노린"], verdict: "green", importance: 3 },
       { id: "c13-q5", sampleQuestion: "다른 선수가 질투로 저지른 일입니까?", keywords: ["다른 선수", "질투"], verdict: "red", importance: 1 },
       { id: "c13-q6", sampleQuestion: "제빙기 오작동이 원인입니까?", keywords: ["제빙기", "오작동"], verdict: "yellow", yellowDetail: "얼음 상태가 이상했던 건 맞지만 제빙기 오작동이 아니라 사람이 의도적으로 낸 흠집입니다.", importance: 2 },
-      { id: "c13-q7", sampleQuestion: "규현이 회사 자금난을 겪고 있었습니까?", keywords: ["자금난"], verdict: "green", importance: 2 },
+      { id: "c13-q7", sampleQuestion: "규현이 회사 자금난을 겪고 있었습니까?", keywords: ["자금난"], anchorKeywords: ["회사"], verdict: "green", importance: 2 },
       { id: "c13-q8", sampleQuestion: "규현이 피해자의 동선을 미리 파악했습니까?", keywords: ["동선", "미리 파악"], verdict: "green", importance: 2 },
     ],
     timeline: [
@@ -1473,12 +1492,12 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["상금", "스카우트"] },
     ],
     questionBank: [
-      { id: "c14-q1", sampleQuestion: "범인은 라이벌 참가자 유빈입니까?", keywords: ["유빈"], verdict: "green", importance: 3 },
+      { id: "c14-q1", sampleQuestion: "범인은 라이벌 참가자 유빈입니까?", keywords: ["유빈"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c14-q2", sampleQuestion: "세이브 파일을 조작한 사람은 피해자 본인입니까?", keywords: ["본인", "피해자 본인"], verdict: "red", importance: 2 },
-      { id: "c14-q3", sampleQuestion: "USB로 세이브 파일 타임스탬프를 조작했습니까?", keywords: ["usb", "타임스탬프", "조작"], verdict: "green", importance: 3 },
+      { id: "c14-q3", sampleQuestion: "USB로 세이브 파일 타임스탬프를 조작했습니까?", keywords: ["usb", "타임스탬프", "조작"], anchorKeywords: ["usb", "타임스탬프"], verdict: "green", importance: 3 },
       { id: "c14-q4", sampleQuestion: "동기는 우승 상금과 프로팀 스카우트 때문입니까?", keywords: ["상금", "스카우트"], verdict: "green", importance: 3 },
       { id: "c14-q5", sampleQuestion: "대회 운영진이 조작에 가담했습니까?", keywords: ["운영진", "가담"], verdict: "red", importance: 1 },
-      { id: "c14-q6", sampleQuestion: "몸싸움이 있었습니까?", keywords: ["몸싸움"], verdict: "green", importance: 2 },
+      { id: "c14-q6", sampleQuestion: "몸싸움이 있었습니까?", keywords: ["몸싸움"], anchorKeywords: ["있었"], verdict: "green", importance: 2 },
       { id: "c14-q7", sampleQuestion: "유빈이 대회 전날 대회용 PC에 접근했습니까?", keywords: ["전날", "pc", "접근"], verdict: "green", importance: 2 },
       { id: "c14-q8", sampleQuestion: "조작 흔적 신고 자체가 거짓 신고입니까?", keywords: ["거짓 신고"], verdict: "red", importance: 1 },
     ],
@@ -1535,8 +1554,8 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["후계자", "자리"] },
     ],
     questionBank: [
-      { id: "c15-q1", sampleQuestion: "범인은 후배 작가 도윤입니까?", keywords: ["도윤"], verdict: "green", importance: 3 },
-      { id: "c15-q2", sampleQuestion: "실장이 정말 사진을 조작해왔습니까?", keywords: ["실장이 조작", "실장 조작"], verdict: "red", importance: 2 },
+      { id: "c15-q1", sampleQuestion: "범인은 후배 작가 도윤입니까?", keywords: ["도윤"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
+      { id: "c15-q2", sampleQuestion: "실장이 정말 사진을 조작해왔습니까?", keywords: ["실장이 조작", "실장 조작", "사진을 조작"], verdict: "red", importance: 2 },
       { id: "c15-q3", sampleQuestion: "소문의 근거가 된 사진 자체가 합성된 것입니까?", keywords: ["합성", "가짜사진"], verdict: "green", importance: 3 },
       { id: "c15-q4", sampleQuestion: "동기는 사진관 후계자 자리를 노려서입니까?", keywords: ["후계자", "자리"], verdict: "green", importance: 3 },
       { id: "c15-q5", sampleQuestion: "고객이 항의하러 왔다가 벌어진 일입니까?", keywords: ["고객", "항의"], verdict: "red", importance: 1 },
@@ -1598,14 +1617,14 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["지분", "동업", "독차지"] },
     ],
     questionBank: [
-      { id: "c16-q1", sampleQuestion: "범인은 동행자 세진입니까?", keywords: ["세진"], verdict: "green", importance: 3 },
-      { id: "c16-q2", sampleQuestion: "정전은 낙뢰 때문입니까?", keywords: ["낙뢰"], verdict: "red", importance: 2 },
+      { id: "c16-q1", sampleQuestion: "범인은 동행자 세진입니까?", keywords: ["세진"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
+      { id: "c16-q2", sampleQuestion: "정전은 낙뢰 때문입니까?", keywords: ["낙뢰"], anchorKeywords: ["정전"], verdict: "red", importance: 2 },
       { id: "c16-q3", sampleQuestion: "정전은 스마트 차단기 앱으로 원격 조작된 것입니까?", keywords: ["스마트차단기", "원격"], verdict: "green", importance: 3 },
       { id: "c16-q4", sampleQuestion: "동기는 동업 지분을 독차지하기 위해서입니까?", keywords: ["지분", "동업", "독차지"], verdict: "green", importance: 3 },
       { id: "c16-q5", sampleQuestion: "여관 직원이 실수로 차단기를 내렸습니까?", keywords: ["직원 실수", "여관 직원"], verdict: "red", importance: 1 },
       { id: "c16-q6", sampleQuestion: "피해자가 어둠 속에서 스스로 헛디뎠습니까?", keywords: ["헛디뎠", "스스로"], verdict: "yellow", yellowDetail: "계단에서 발을 헛디딘 건 맞지만 '스스로'가 아니라 어둠 속에서 세진에게 떠밀린 것입니다.", importance: 2 },
       { id: "c16-q7", sampleQuestion: "세진이 사건 전날 차단기 앱 접근 권한을 확보했습니까?", keywords: ["앱 접근", "권한", "전날"], verdict: "green", importance: 2 },
-      { id: "c16-q8", sampleQuestion: "낙뢰가 실제로 그날 있었습니까?", keywords: ["낙뢰 실제", "그날 낙뢰"], verdict: "red", importance: 1 },
+      { id: "c16-q8", sampleQuestion: "낙뢰가 실제로 그날 있었습니까?", keywords: ["낙뢰 실제", "그날 낙뢰", "낙뢰가 실제로"], verdict: "red", importance: 1 },
     ],
     timeline: [
       { time: "D-1", description: "세진이 여관 스마트 차단기 앱 관리자 권한을 몰래 확보." },
@@ -1661,7 +1680,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["인사고과", "압박", "협박"] },
     ],
     questionBank: [
-      { id: "c17-q1", sampleQuestion: "범인은 동료 대리 채원입니까?", keywords: ["채원"], verdict: "green", importance: 3 },
+      { id: "c17-q1", sampleQuestion: "범인은 동료 대리 채원입니까?", keywords: ["채원"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c17-q2", sampleQuestion: "신입사원이 졸다가 실수로 부딪힌 것입니까?", keywords: ["신입사원", "졸다가"], verdict: "red", importance: 2 },
       { id: "c17-q3", sampleQuestion: "방 안에 몰래 숨겨둔 녹음기가 있었습니까?", keywords: ["녹음기", "숨겨"], verdict: "green", importance: 3 },
       { id: "c17-q4", sampleQuestion: "동기는 녹음 파일로 인사고과를 압박하려던 것입니까?", keywords: ["인사고과", "압박", "협박"], verdict: "green", importance: 3 },
@@ -1724,14 +1743,14 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["이직", "경쟁업체", "제안"] },
     ],
     questionBank: [
-      { id: "c18-q1", sampleQuestion: "범인은 직원 라은입니까?", keywords: ["라은"], verdict: "green", importance: 3 },
+      { id: "c18-q1", sampleQuestion: "범인은 직원 라은입니까?", keywords: ["라은"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c18-q2", sampleQuestion: "사라진 꽃다발 자체가 목적이었습니까?", keywords: ["꽃다발이 목적", "꽃다발 자체"], verdict: "yellow", yellowDetail: "꽃다발을 노린 건 맞지만 꽃 자체가 아니라 그 안에 담긴 특제 보존액 레시피가 진짜 목적이었습니다.", importance: 2 },
       { id: "c18-q3", sampleQuestion: "특제 보존액 레시피를 훔치려 한 것입니까?", keywords: ["보존액", "레시피"], verdict: "green", importance: 3 },
       { id: "c18-q4", sampleQuestion: "동기는 경쟁 업체로 이직하기 위해서입니까?", keywords: ["이직", "경쟁업체", "제안"], verdict: "green", importance: 3 },
       { id: "c18-q5", sampleQuestion: "손님이 실수로 화분을 넘어뜨린 것입니까?", keywords: ["손님", "화분 넘어"], verdict: "red", importance: 1 },
       { id: "c18-q6", sampleQuestion: "사장이 라은을 목격하고 밀쳐졌습니까?", keywords: ["목격", "밀쳐"], verdict: "green", importance: 2 },
       { id: "c18-q7", sampleQuestion: "라은이 경쟁 업체와 사전에 접촉했습니까?", keywords: ["사전 접촉", "경쟁 업체"], verdict: "green", importance: 2 },
-      { id: "c18-q8", sampleQuestion: "사장이 지병으로 쓰러졌습니까?", keywords: ["지병"], verdict: "red", importance: 1 },
+      { id: "c18-q8", sampleQuestion: "사장이 지병으로 쓰러졌습니까?", keywords: ["지병"], anchorKeywords: ["쓰러"], verdict: "red", importance: 1 },
     ],
     timeline: [
       { time: "대목 D-5", description: "라은이 경쟁 플라워샵으로부터 이직 제안을 받음." },
@@ -1787,10 +1806,10 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["컬렉터", "밀매", "판매"] },
     ],
     questionBank: [
-      { id: "c19-q1", sampleQuestion: "범인은 큐레이터 지호입니까?", keywords: ["지호"], verdict: "green", importance: 3 },
-      { id: "c19-q2", sampleQuestion: "감정 목록의 서명본이 진품입니까?", keywords: ["진품", "감정목록"], verdict: "red", importance: 2 },
-      { id: "c19-q3", sampleQuestion: "위조 서명본을 진품 자리에 끼워 넣었습니까?", keywords: ["위조서명", "바꿔치기"], verdict: "green", importance: 3 },
-      { id: "c19-q4", sampleQuestion: "동기는 진품을 해외 컬렉터에게 팔기 위해서입니까?", keywords: ["컬렉터", "밀매", "판매"], verdict: "green", importance: 3 },
+      { id: "c19-q1", sampleQuestion: "범인은 큐레이터 지호입니까?", keywords: ["지호"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
+      { id: "c19-q2", sampleQuestion: "감정 목록의 서명본이 진품입니까?", keywords: ["진품", "감정목록", "감정 목록"], verdict: "red", importance: 2 },
+      { id: "c19-q3", sampleQuestion: "위조 서명본을 진품 자리에 끼워 넣었습니까?", keywords: ["위조서명", "바꿔치기", "위조 서명본", "끼워 넣"], verdict: "green", importance: 3 },
+      { id: "c19-q4", sampleQuestion: "동기는 진품을 해외 컬렉터에게 팔기 위해서입니까?", keywords: ["컬렉터", "밀매", "판매", "팔기"], verdict: "green", importance: 3 },
       { id: "c19-q5", sampleQuestion: "감정 직원이 실수로 서명본을 훼손했습니까?", keywords: ["직원 실수", "훼손"], verdict: "red", importance: 1 },
       { id: "c19-q6", sampleQuestion: "감정 직원이 필적 차이를 발견했습니까?", keywords: ["필적 차이", "발견"], verdict: "green", importance: 2 },
       { id: "c19-q7", sampleQuestion: "경매 대행사가 조직적으로 가담했습니까?", keywords: ["대행사", "조직적"], verdict: "red", importance: 1 },
@@ -1850,14 +1869,14 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["해고", "책임회피"] },
     ],
     questionBank: [
-      { id: "c20-q1", sampleQuestion: "이 상황을 만든 사람은 야간 관리 직원 우진입니까?", keywords: ["우진"], verdict: "green", importance: 3 },
+      { id: "c20-q1", sampleQuestion: "이 상황을 만든 사람은 야간 관리 직원 우진입니까?", keywords: ["우진"], anchorKeywords: ["만든"], verdict: "green", importance: 3 },
       { id: "c20-q2", sampleQuestion: "강아지가 우리 안에서 사라진 것입니까?", keywords: ["우리 안에서", "우리 안 사라"], verdict: "red", importance: 2 },
       { id: "c20-q3", sampleQuestion: "낮 산책 중에 목줄을 놓쳐 잃어버린 것입니까?", keywords: ["목줄", "산책중"], verdict: "green", importance: 3 },
       { id: "c20-q4", sampleQuestion: "CCTV 영상이 삭제됐습니까?", keywords: ["cctv", "삭제"], verdict: "green", importance: 2 },
       { id: "c20-q5", sampleQuestion: "동기는 해고를 피하려는 책임 회피입니까?", keywords: ["해고", "책임회피"], verdict: "green", importance: 3 },
       { id: "c20-q6", sampleQuestion: "다른 손님이 실수로 우리를 열었습니까?", keywords: ["다른 손님", "실수로 열"], verdict: "red", importance: 1 },
-      { id: "c20-q7", sampleQuestion: "우리 문 자체는 계속 잠겨 있었습니까?", keywords: ["문 잠겨", "계속 잠김"], verdict: "green", importance: 2 },
-      { id: "c20-q8", sampleQuestion: "강아지를 훔쳐서 판 것입니까?", keywords: ["훔쳐서", "판"], verdict: "red", importance: 1 },
+      { id: "c20-q7", sampleQuestion: "우리 문 자체는 계속 잠겨 있었습니까?", keywords: ["문 잠겨", "계속 잠김", "계속 잠겨"], verdict: "green", importance: 2 },
+      { id: "c20-q8", sampleQuestion: "강아지를 훔쳐서 판 것입니까?", keywords: ["훔쳐서"], verdict: "red", importance: 1 },
     ],
     timeline: [
       { time: "낮 15:00", description: "우진이 반려견을 산책시키던 중 목줄을 놓쳐 강아지를 잃어버림." },
@@ -1912,7 +1931,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["레지던트", "평가", "경쟁"] },
     ],
     questionBank: [
-      { id: "c21-q1", sampleQuestion: "범인은 동료 인턴 서준입니까?", keywords: ["서준"], verdict: "green", importance: 3 },
+      { id: "c21-q1", sampleQuestion: "범인은 동료 인턴 서준입니까?", keywords: ["서준"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c21-q2", sampleQuestion: "피해자가 원래 처방받은 약을 그대로 먹었습니까?", keywords: ["원래 처방", "그대로 먹"], verdict: "red", importance: 2 },
       { id: "c21-q3", sampleQuestion: "약통에 다른 약이 섞여 있었습니까?", keywords: ["약통", "바꿔치기"], verdict: "green", importance: 3 },
       { id: "c21-q4", sampleQuestion: "동기는 레지던트 선발 평가에서 유리해지기 위해서입니까?", keywords: ["레지던트", "평가", "경쟁"], verdict: "green", importance: 3 },
@@ -1974,7 +1993,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["임용심사", "경쟁", "정식기관사"] },
     ],
     questionBank: [
-      { id: "c22-q1", sampleQuestion: "범인은 기관사 훈련생 도영입니까?", keywords: ["도영"], verdict: "green", importance: 3 },
+      { id: "c22-q1", sampleQuestion: "범인은 기관사 훈련생 도영입니까?", keywords: ["도영"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c22-q2", sampleQuestion: "정말 신호 이상 때문에 급정지했습니까?", keywords: ["신호 이상"], verdict: "yellow", yellowDetail: "관제 기록상 '신호 이상'으로 남았지만, 실제로는 도영이 제어 시스템에 접근해 인위적으로 건 비상 제동입니다.", importance: 2 },
       { id: "c22-q3", sampleQuestion: "비상 제동을 인위적으로 걸었습니까?", keywords: ["비상제동", "인위적"], verdict: "green", importance: 3 },
       { id: "c22-q4", sampleQuestion: "동기는 정식 임용 심사 경쟁 때문입니까?", keywords: ["임용심사", "경쟁", "정식기관사"], verdict: "green", importance: 3 },
@@ -2036,7 +2055,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["스폰서", "계약", "라이벌"] },
     ],
     questionBank: [
-      { id: "c23-q1", sampleQuestion: "범인은 후배 선수 하진입니까?", keywords: ["하진"], verdict: "green", importance: 3 },
+      { id: "c23-q1", sampleQuestion: "범인은 후배 선수 하진입니까?", keywords: ["하진"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c23-q2", sampleQuestion: "카라비너 자체는 원래 불량품이었습니까?", keywords: ["원래 불량", "제조 불량"], verdict: "red", importance: 2 },
       { id: "c23-q3", sampleQuestion: "정상 장비를 불량품으로 바꿔치기했습니까?", keywords: ["바꿔치기", "불량품"], verdict: "green", importance: 3 },
       { id: "c23-q4", sampleQuestion: "동기는 스폰서 계약 경쟁 때문입니까?", keywords: ["스폰서", "계약", "라이벌"], verdict: "green", importance: 3 },
@@ -2098,14 +2117,14 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["레시피", "경쟁브루어리", "거액"] },
     ],
     questionBank: [
-      { id: "c24-q1", sampleQuestion: "범인은 위장 참가자 정민입니까?", keywords: ["정민"], verdict: "green", importance: 3 },
+      { id: "c24-q1", sampleQuestion: "범인은 위장 참가자 정민입니까?", keywords: ["정민"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c24-q2", sampleQuestion: "시음잔에 독한 향신료 추출액이 섞여 있었습니까?", keywords: ["향신료", "추출액"], verdict: "green", importance: 3 },
       { id: "c24-q3", sampleQuestion: "단순히 신메뉴 자체가 문제였습니까?", keywords: ["신메뉴 자체", "레시피 문제"], verdict: "red", importance: 2 },
       { id: "c24-q4", sampleQuestion: "동기는 신메뉴 레시피를 훔치기 위해서입니까?", keywords: ["레시피", "경쟁브루어리", "거액"], verdict: "green", importance: 3 },
       { id: "c24-q5", sampleQuestion: "정민이 경쟁 브루어리에서 파견됐습니까?", keywords: ["경쟁 브루어리", "파견"], verdict: "green", importance: 2 },
       { id: "c24-q6", sampleQuestion: "다른 참가자가 실수로 재료를 잘못 넣었습니까?", keywords: ["다른 참가자", "실수"], verdict: "red", importance: 1 },
       { id: "c24-q7", sampleQuestion: "정민이 레시피 노트를 노렸습니까?", keywords: ["레시피 노트", "노렸"], verdict: "green", importance: 2 },
-      { id: "c24-q8", sampleQuestion: "헤드 브루어가 알레르기 반응을 일으킨 것뿐입니까?", keywords: ["알레르기"], verdict: "red", importance: 1 },
+      { id: "c24-q8", sampleQuestion: "헤드 브루어가 알레르기 반응을 일으킨 것뿐입니까?", keywords: ["알레르기"], anchorKeywords: ["반응"], verdict: "red", importance: 1 },
     ],
     timeline: [
       { time: "시음회 D-3", description: "정민이 경쟁 브루어리로부터 레시피 탈취 제안을 받음." },
@@ -2160,12 +2179,12 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["독립연재", "데뷔", "참고"] },
     ],
     questionBank: [
-      { id: "c25-q1", sampleQuestion: "범인은 동료 어시스턴트 은결입니까?", keywords: ["은결"], verdict: "green", importance: 3 },
+      { id: "c25-q1", sampleQuestion: "범인은 동료 어시스턴트 은결입니까?", keywords: ["은결"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c25-q2", sampleQuestion: "원고 파일이 완전히 삭제됐습니까?", keywords: ["완전히 삭제", "영구 삭제"], verdict: "yellow", yellowDetail: "원고가 사라진 것처럼 보이지만 삭제된 게 아니라 은결이 외장하드째로 바꿔치기해 가져간 것입니다.", importance: 2 },
       { id: "c25-q3", sampleQuestion: "외장하드가 바꿔치기됐습니까?", keywords: ["외장하드", "바꿔치기"], verdict: "green", importance: 3 },
       { id: "c25-q4", sampleQuestion: "동기는 독립 연재를 위해 화풍을 참고하려던 것입니까?", keywords: ["독립연재", "데뷔", "참고"], verdict: "green", importance: 3 },
       { id: "c25-q5", sampleQuestion: "편집자가 원고를 회수해간 것입니까?", keywords: ["편집자", "회수"], verdict: "red", importance: 1 },
-      { id: "c25-q6", sampleQuestion: "몸싸움이 있었습니까?", keywords: ["몸싸움"], verdict: "green", importance: 2 },
+      { id: "c25-q6", sampleQuestion: "몸싸움이 있었습니까?", keywords: ["몸싸움"], anchorKeywords: ["있었"], verdict: "green", importance: 2 },
       { id: "c25-q7", sampleQuestion: "은결이 사건 며칠 전부터 비슷한 외장하드를 준비했습니까?", keywords: ["비슷한 외장하드", "준비"], verdict: "green", importance: 2 },
       { id: "c25-q8", sampleQuestion: "정전으로 파일이 손상된 것입니까?", keywords: ["정전", "손상"], verdict: "red", importance: 1 },
     ],
@@ -2218,18 +2237,18 @@ const SCENARIO_C_LIST: Scenario[] = [
       "화랑 실장 태희가 무명 화가의 그림을 유명 화가의 미공개작으로 둔갑시키기 위해 가짜 감정서를 만들어 감정 전문가에게 검토를 요청했다. 전문가가 위조를 알아채고 신고하려 하자 태희가 사무실에서 몸싸움을 벌였다. 동기는 위조 미공개작을 경매에 출품해 거액을 챙기려던 것이었다.",
     answerRequiredKeywordGroups: [
       { label: "범인", keywords: ["태희"] },
-      { label: "트릭", keywords: ["위조감정서", "무명화가"] },
+      { label: "트릭", keywords: ["위조감정서", "무명화가", "무명 화가"] },
       { label: "동기", keywords: ["경매", "거액", "출품"] },
     ],
     questionBank: [
-      { id: "c26-q1", sampleQuestion: "범인은 화랑 실장 태희입니까?", keywords: ["태희"], verdict: "green", importance: 3 },
+      { id: "c26-q1", sampleQuestion: "범인은 화랑 실장 태희입니까?", keywords: ["태희"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c26-q2", sampleQuestion: "그림 자체가 진짜 미공개작입니까?", keywords: ["진짜 미공개작", "진품"], verdict: "red", importance: 2 },
-      { id: "c26-q3", sampleQuestion: "감정서가 위조됐습니까?", keywords: ["위조감정서", "감정서 위조"], verdict: "green", importance: 3 },
-      { id: "c26-q4", sampleQuestion: "실제로는 무명 화가의 그림입니까?", keywords: ["무명화가"], verdict: "green", importance: 2 },
+      { id: "c26-q3", sampleQuestion: "감정서가 위조됐습니까?", keywords: ["위조감정서", "감정서 위조", "위조됐"], verdict: "green", importance: 3 },
+      { id: "c26-q4", sampleQuestion: "실제로는 무명 화가의 그림입니까?", keywords: ["무명화가", "무명 화가"], anchorKeywords: ["그림"], verdict: "green", importance: 2 },
       { id: "c26-q5", sampleQuestion: "동기는 경매에서 거액을 챙기려던 것입니까?", keywords: ["경매", "거액", "출품"], verdict: "green", importance: 3 },
-      { id: "c26-q6", sampleQuestion: "감정 전문가 본인이 위조에 가담했습니까?", keywords: ["전문가 가담", "공모"], verdict: "red", importance: 2 },
+      { id: "c26-q6", sampleQuestion: "감정 전문가 본인이 위조에 가담했습니까?", keywords: ["전문가 가담", "공모", "위조에 가담"], verdict: "red", importance: 2 },
       { id: "c26-q7", sampleQuestion: "전문가가 위조를 알아채고 신고하려 했습니까?", keywords: ["신고", "알아채"], verdict: "green", importance: 2 },
-      { id: "c26-q8", sampleQuestion: "무명 화가 본인이 위조에 가담했습니까?", keywords: ["무명 화가가", "화가 본인 가담"], verdict: "red", importance: 1 },
+      { id: "c26-q8", sampleQuestion: "무명 화가 본인이 위조에 가담했습니까?", keywords: ["무명 화가가", "화가 본인 가담", "본인이 위조에 가담"], verdict: "red", importance: 1 },
     ],
     timeline: [
       { time: "경매 D-14", description: "태희가 무명 화가의 그림을 저렴하게 사들임." },
@@ -2284,11 +2303,11 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["지분분쟁", "헐값인수", "투자무산"] },
     ],
     questionBank: [
-      { id: "c27-q1", sampleQuestion: "범인은 전 공동창업자 재하입니까?", keywords: ["재하"], verdict: "green", importance: 3 },
-      { id: "c27-q2", sampleQuestion: "프로토타입 자체의 결함입니까?", keywords: ["프로토타입 결함", "제품 결함"], verdict: "red", importance: 2 },
-      { id: "c27-q3", sampleQuestion: "시연용 기기에 악성 코드가 심어졌습니까?", keywords: ["악성코드", "usb"], verdict: "green", importance: 3 },
+      { id: "c27-q1", sampleQuestion: "범인은 전 공동창업자 재하입니까?", keywords: ["재하"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
+      { id: "c27-q2", sampleQuestion: "프로토타입 자체의 결함입니까?", keywords: ["프로토타입 결함", "제품 결함", "자체의 결함"], verdict: "red", importance: 2 },
+      { id: "c27-q3", sampleQuestion: "시연용 기기에 악성 코드가 심어졌습니까?", keywords: ["악성코드", "악성 코드", "usb"], verdict: "green", importance: 3 },
       { id: "c27-q4", sampleQuestion: "재하가 사무실에 몰래 침입했습니까?", keywords: ["침입", "몰래"], verdict: "green", importance: 2 },
-      { id: "c27-q5", sampleQuestion: "동기는 지분 분쟁 끝에 회사를 헐값에 인수하려던 것입니까?", keywords: ["지분분쟁", "헐값인수", "투자무산"], verdict: "green", importance: 3 },
+      { id: "c27-q5", sampleQuestion: "동기는 지분 분쟁 끝에 회사를 헐값에 인수하려던 것입니까?", keywords: ["지분분쟁", "지분 분쟁", "헐값인수", "헐값에 인수", "투자무산"], verdict: "green", importance: 3 },
       { id: "c27-q6", sampleQuestion: "투자자 측에서 조작에 가담했습니까?", keywords: ["투자자", "가담"], verdict: "red", importance: 1 },
       { id: "c27-q7", sampleQuestion: "대표가 단순 과로로 쓰러졌습니까?", keywords: ["과로", "단순"], verdict: "yellow", yellowDetail: "체력이 떨어진 상태이긴 했지만, 결정적 계기는 '과로'가 아니라 악성 코드로 인한 오작동을 발견한 충격이었습니다.", importance: 2 },
       { id: "c27-q8", sampleQuestion: "재하가 예전 사무실 출입 카드를 여전히 갖고 있었습니까?", keywords: ["출입 카드", "여전히"], verdict: "green", importance: 2 },
@@ -2346,14 +2365,14 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["단독소유", "보험금", "공동소유"] },
     ],
     questionBank: [
-      { id: "c28-q1", sampleQuestion: "범인은 동승자 은표입니까?", keywords: ["은표"], verdict: "green", importance: 3 },
+      { id: "c28-q1", sampleQuestion: "범인은 동승자 은표입니까?", keywords: ["은표"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c28-q2", sampleQuestion: "자동항법장치가 단순 결함으로 오작동했습니까?", keywords: ["단순 결함", "기기 결함"], verdict: "red", importance: 2 },
-      { id: "c28-q3", sampleQuestion: "항로 설정이 앱으로 원격 변경됐습니까?", keywords: ["자동항법", "항로변경", "앱"], verdict: "green", importance: 3 },
+      { id: "c28-q3", sampleQuestion: "항로 설정이 앱으로 원격 변경됐습니까?", keywords: ["자동항법", "항로변경", "원격 변경"], verdict: "green", importance: 3 },
       { id: "c28-q4", sampleQuestion: "동기는 요트 단독 소유권과 보험금 때문입니까?", keywords: ["단독소유", "보험금", "공동소유"], verdict: "green", importance: 3 },
       { id: "c28-q5", sampleQuestion: "선장이 스스로 실수한 것입니까?", keywords: ["선장 실수", "스스로"], verdict: "red", importance: 1 },
       { id: "c28-q6", sampleQuestion: "다른 동승자가 목격했습니까?", keywords: ["다른 동승자", "목격"], verdict: "yellow", yellowDetail: "다른 동승자가 뭔가를 보긴 했지만, 그 순간엔 무슨 일이 벌어지는지 정확히 알아채지 못했습니다.", importance: 1 },
       { id: "c28-q7", sampleQuestion: "은표가 사건 전날 항법 앱 접근 권한을 확보했습니까?", keywords: ["앱 접근", "전날"], verdict: "green", importance: 2 },
-      { id: "c28-q8", sampleQuestion: "배가 실제로 암초 근처로 향했습니까?", keywords: ["암초"], verdict: "green", importance: 2 },
+      { id: "c28-q8", sampleQuestion: "배가 실제로 암초 근처로 향했습니까?", keywords: ["암초"], anchorKeywords: ["향했"], verdict: "green", importance: 2 },
     ],
     timeline: [
       { time: "항해 D-1", description: "은표가 자동항법 앱의 원격 접근 권한을 몰래 확보." },
@@ -2409,12 +2428,12 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["배상책임", "해고회피"] },
     ],
     questionBank: [
-      { id: "c29-q1", sampleQuestion: "범인은 동료 경비원 진혁입니까?", keywords: ["진혁"], verdict: "green", importance: 3 },
+      { id: "c29-q1", sampleQuestion: "범인은 동료 경비원 진혁입니까?", keywords: ["진혁"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c29-q2", sampleQuestion: "실제로 외부 침입자가 있었습니까?", keywords: ["외부 침입자", "침입자"], verdict: "red", importance: 2 },
-      { id: "c29-q3", sampleQuestion: "침입 흔적은 진혁이 위장한 것입니까?", keywords: ["침입자위장", "유리파손"], verdict: "green", importance: 3 },
-      { id: "c29-q4", sampleQuestion: "동기는 파손 배상 책임과 해고를 피하려던 것입니까?", keywords: ["배상책임", "해고회피"], verdict: "green", importance: 3 },
+      { id: "c29-q3", sampleQuestion: "침입 흔적은 진혁이 위장한 것입니까?", keywords: ["침입자위장", "유리파손", "위장한"], verdict: "green", importance: 3 },
+      { id: "c29-q4", sampleQuestion: "동기는 파손 배상 책임과 해고를 피하려던 것입니까?", keywords: ["배상책임", "배상 책임", "해고회피", "해고를 피"], verdict: "green", importance: 3 },
       { id: "c29-q5", sampleQuestion: "피규어는 순찰 중 실수로 파손됐습니까?", keywords: ["순찰 중", "실수로 파손"], verdict: "green", importance: 2 },
-      { id: "c29-q6", sampleQuestion: "경보 시스템 자체의 오작동입니까?", keywords: ["경보 오작동"], verdict: "red", importance: 1 },
+      { id: "c29-q6", sampleQuestion: "경보 시스템 자체의 오작동입니까?", keywords: ["오작동"], anchorKeywords: ["경보"], verdict: "red", importance: 1 },
       { id: "c29-q7", sampleQuestion: "진혁이 경보를 일부러 늦게 울렸습니까?", keywords: ["경보 지연", "늦게 울"], verdict: "green", importance: 2 },
       { id: "c29-q8", sampleQuestion: "피해자가 순찰 기록의 모순을 발견했습니까?", keywords: ["모순", "순찰 기록"], verdict: "green", importance: 2 },
     ],
@@ -2472,7 +2491,7 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["리셀", "되팔이", "차익"] },
     ],
     questionBank: [
-      { id: "c30-q1", sampleQuestion: "범인은 행사 스태프 유찬입니까?", keywords: ["유찬"], verdict: "green", importance: 3 },
+      { id: "c30-q1", sampleQuestion: "범인은 행사 스태프 유찬입니까?", keywords: ["유찬"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c30-q2", sampleQuestion: "사인본이 정식 절차로 판매된 것입니까?", keywords: ["정식 절차", "정상 판매"], verdict: "red", importance: 2 },
       { id: "c30-q3", sampleQuestion: "대기표가 부정 발급됐습니까?", keywords: ["대기표", "부정발급"], verdict: "green", importance: 3 },
       { id: "c30-q4", sampleQuestion: "동기는 사인본을 리셀해 차익을 남기려던 것입니까?", keywords: ["리셀", "되팔이", "차익"], verdict: "green", importance: 3 },
@@ -2534,9 +2553,9 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["구독자", "화제몰이", "악의적"] },
     ],
     questionBank: [
-      { id: "c31-q1", sampleQuestion: "범인은 합방 상대 스트리머 예준입니까?", keywords: ["예준"], verdict: "green", importance: 3 },
+      { id: "c31-q1", sampleQuestion: "범인은 합방 상대 스트리머 예준입니까?", keywords: ["예준"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
       { id: "c31-q2", sampleQuestion: "정말 시청자가 보낸 정상적인 도네이션이었습니까?", keywords: ["정상 도네이션", "시청자가 보낸"], verdict: "red", importance: 2 },
-      { id: "c31-q3", sampleQuestion: "후원 알림 봇을 조작해 음성을 강제로 재생시켰습니까?", keywords: ["후원봇", "강제재생"], verdict: "green", importance: 3 },
+      { id: "c31-q3", sampleQuestion: "후원 알림 봇을 조작해 음성을 강제로 재생시켰습니까?", keywords: ["후원봇", "알림 봇", "강제재생", "강제로 재생"], verdict: "green", importance: 3 },
       { id: "c31-q4", sampleQuestion: "재생된 건 피해자의 과거 비공개 발언 음성이었습니까?", keywords: ["비공개 발언", "음성파일"], verdict: "green", importance: 2 },
       { id: "c31-q5", sampleQuestion: "동기는 구독자를 빼앗기 위한 화제몰이였습니까?", keywords: ["구독자", "화제몰이", "악의적"], verdict: "green", importance: 3 },
       { id: "c31-q6", sampleQuestion: "방송 플랫폼 시스템 오류입니까?", keywords: ["플랫폼 오류", "시스템 오류"], verdict: "red", importance: 1 },
@@ -2596,8 +2615,8 @@ const SCENARIO_C_LIST: Scenario[] = [
       { label: "동기", keywords: ["횡령", "정산", "동업자금"] },
     ],
     questionBank: [
-      { id: "c32-q1", sampleQuestion: "범인은 사업 파트너 승우입니까?", keywords: ["승우"], verdict: "green", importance: 3 },
-      { id: "c32-q2", sampleQuestion: "GPS 기록이 실제 이동 경로와 일치합니까?", keywords: ["gps 일치", "실제 경로"], verdict: "red", importance: 2 },
+      { id: "c32-q1", sampleQuestion: "범인은 사업 파트너 승우입니까?", keywords: ["승우"], anchorKeywords: ["범인"], verdict: "green", importance: 3 },
+      { id: "c32-q2", sampleQuestion: "GPS 기록이 실제 이동 경로와 일치합니까?", keywords: ["gps 일치", "실제 경로", "실제 이동 경로"], verdict: "red", importance: 2 },
       { id: "c32-q3", sampleQuestion: "GPS 신호가 중계기로 조작됐습니까?", keywords: ["gps", "신호조작", "중계기"], verdict: "green", importance: 3 },
       { id: "c32-q4", sampleQuestion: "동기는 동업 자금 횡령 문제입니까?", keywords: ["횡령", "정산", "동업자금"], verdict: "green", importance: 3 },
       { id: "c32-q5", sampleQuestion: "캐디가 관련돼 있습니까?", keywords: ["캐디", "관련"], verdict: "red", importance: 1 },

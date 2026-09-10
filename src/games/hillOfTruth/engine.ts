@@ -140,14 +140,38 @@ function advanceTurn(state: GameState): { turnIndex: number; turnNumber: number 
   return { turnIndex, turnNumber: state.turnNumber + 1 };
 }
 
+/**
+ * 2026-09-10 세션 수정(초록불 오작동 버그) — 두 가지를 함께 고쳤다.
+ *
+ * ① `anchorKeywords`(AND 조건): 지정돼 있으면 그 배열 중 하나도 포함돼야만 트리거가
+ * 발동한다. 42개 시나리오 전수 스캔 결과, 거의 모든 시나리오의 "범인 확인" 트리거
+ * (`*-q1`)가 용의자 이름 한 단어만 `keywords`에 등록돼 있어 — 그 이름이 들어간
+ * 문장이면 내용과 무관하게(심지어 반대 주장이어도) 즉시 그 트리거의 판정색이
+ * 나가버렸다("은호는 남자다"/"은호는 여자다"가 둘 다 초록불로 뜨는 등, 실사용자
+ * 스크린샷으로 재현·확인됨). `anchorKeywords`는 그 위험군 트리거에만 추가된, 이
+ * 트리거 자신의 `sampleQuestion`에서 실제로 뽑은 공존 필수 단어다.
+ *
+ * ② "첫 매치"가 아니라 "가장 구체적인 매치"를 고른다: 매칭된 `keywords` 개수가 더
+ * 많은(=더 구체적인) 트리거를 우선한다. 배열에 먼저 등록됐을 뿐인 더 포괄적인
+ * 트리거(예: 키워드 1개 "유언장")가, 뒤에 등록된 더 구체적인 트리거(예: 키워드 2개
+ * "당일"+"새로 작성")의 자리를 가로채는 경우가 자기 일치성 테스트로 다수 발견됐다 —
+ * 이 우선순위 규칙으로 해결한다(동점이면 배열 순서 그대로 먼저 오는 쪽).
+ */
 function matchTrigger(scenario: Scenario, text: string): Scenario["questionBank"][number] | null {
   const normalized = text.trim();
   if (!normalized) return null;
-  // 저장 순서를 우선순위로 취급 — 더 구체적인 트리거를 앞에 배치해 데이터를 작성한다.
+  let best: Scenario["questionBank"][number] | null = null;
+  let bestScore = 0;
   for (const trigger of scenario.questionBank) {
-    if (trigger.keywords.some((k) => normalized.includes(k))) return trigger;
+    const score = trigger.keywords.filter((k) => normalized.includes(k)).length;
+    if (score === 0) continue;
+    if (trigger.anchorKeywords && !trigger.anchorKeywords.some((k) => normalized.includes(k))) continue;
+    if (score > bestScore) {
+      best = trigger;
+      bestScore = score;
+    }
   }
-  return null;
+  return best;
 }
 
 /** 정답 판정: 모든 그룹에서 최소 1개 키워드가 텍스트에 포함돼야 한다. */

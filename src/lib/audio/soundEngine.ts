@@ -405,6 +405,46 @@ class SoundEngine {
     osc.stop(now + 0.25);
   }
 
+  /**
+   * 진실의 고개 — "정답 선언"이 오답으로 판정되는 순간 전용 둔탁한 경고음
+   * (2026-09-10 세션 신설). 매 질문(§3 행동 A/B)의 가벼운 `playWrongBuzz`와
+   * 구별되도록, 저음 사인파 붐(`playEliminationSlam`과 유사한 기법) + 거친
+   * 사각파 2연타로 훨씬 무겁고 충격적인 톤을 낸다 — 화면 흔들림 연출과 동기화.
+   */
+  playDeclarationFailBuzzer() {
+    if (!this.gate("declarationFailBuzzer", 400)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const boom = ctx.createOscillator();
+    boom.type = "sine";
+    boom.frequency.setValueAtTime(85, now);
+    boom.frequency.exponentialRampToValueAtTime(32, now + 0.35);
+    const boomGain = ctx.createGain();
+    boomGain.gain.setValueAtTime(0.38, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    boom.connect(boomGain).connect(this.sfxGain);
+    boom.start(now);
+    boom.stop(now + 0.45);
+
+    [0, 0.16].forEach((delay) => {
+      const osc = ctx.createOscillator();
+      osc.type = "square";
+      osc.frequency.setValueAtTime(140, now + delay);
+      osc.frequency.linearRampToValueAtTime(90, now + delay + 0.14);
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 900;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.24, now + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.16);
+      osc.connect(filter).connect(gain).connect(this.sfxGain!);
+      osc.start(now + delay);
+      osc.stop(now + delay + 0.16);
+    });
+  }
+
   /** Tier-tinted whoosh (filtered noise sweep) + a short ascending chord — a card-exchange flight taking off. */
   playExchangeLaunch(tier: "king" | "noble" | "commoner") {
     if (!this.gate("exchangeLaunch", 100)) return;

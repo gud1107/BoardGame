@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Avatar from "@/components/common/Avatar";
 import type { AnswerAttemptEntry, QuestionLogEntry } from "./engine";
@@ -18,18 +18,20 @@ import type { AnswerAttemptEntry, QuestionLogEntry } from "./engine";
  *    사건의 진실 전문(`scenario.truth`)을 보여준다.
  *
  * 두 탭을 별도 모달로 쪼개지 않고 하나로 묶은 것도 AskUserQuestion으로 확정한
- * 결정이다 — 요청서 문구("기존 노란불 복기와 함께 탭/섹션 노출")와 일치하고, 3초
- * 유지+스킵 타이머를 하나만 공유해 팝업이 두 번 중첩되지 않는다. 정답 시도가
- * 있으면(항상 최소 1건 — 승리 시도 — 존재) 그 탭을 기본으로 연다.
+ * 결정이다 — 요청서 문구("기존 노란불 복기와 함께 탭/섹션 노출")와 일치하고, 정답
+ * 시도가 있으면(항상 최소 1건 — 승리 시도 — 존재) 그 탭을 기본으로 연다.
  *
- * `TaxHighlightModal.tsx`(2026-09-01 세션에서 확립된 이 프로젝트의 표준 하이라이트
- * 팝업 패턴)와 동일하게 `HOLD_MS` 후 자동 닫힘, 스킵 버튼은 언제든 즉시 닫힘.
+ * 2026-09-10 세션 수정 — 종료 후 분석이 안 된다는 실사용자 피드백으로, 예전의
+ * `TaxHighlightModal.tsx` 스타일 "HOLD_MS 후 자동 닫힘"을 이 모달에서는 완전히
+ * 제거했다(자동 닫힘 타이머, 배경 클릭 닫힘 전부 삭제). 오직 사용자가 우측 상단
+ * `✕` 또는 하단 "복기 종료 및 로비로 이동" 버튼을 직접 눌러야만 닫힌다 — `✕`는
+ * 모달만 닫고(종료 화면에 남아 "결과 확정하고 계속하기"를 따로 누를 수 있음),
+ * 하단 버튼은 모달을 닫으면서 곧장 로비 이동(`onExitToLobby`)까지 이어준다.
  *
  * 히든 질문 내용은 게임이 끝난 뒤엔 전면 공개한다(`engine.ts`의
  * `visibleQuestionText` — phase가 "ended"면 항상 원문 반환). 정답 시도(`answerLog`)
  * 텍스트는 애초에 히든 마스킹 대상이 아니었으므로 그대로 노출한다.
  */
-const HOLD_MS = 3000;
 
 export interface YellowReviewItem {
   entry: QuestionLogEntry;
@@ -49,15 +51,18 @@ export default function GameReviewModal({
   answerItems,
   scenarioTruth,
   onDone,
+  onExitToLobby,
 }: {
   yellowItems: YellowReviewItem[];
   answerItems: AnswerReviewItem[];
   /** 최종 정답 카드에 노출할 사건의 진실 전문(scenario.truth). */
   scenarioTruth: string;
+  /** 모달만 닫는다(종료 화면에는 그대로 남는다) — 우측 상단 ✕ 전용. */
   onDone: () => void;
+  /** 하단 "복기 종료 및 로비로 이동" 전용 — 모달을 닫으면서 곧장 로비로 나간다. */
+  onExitToLobby: () => void;
 }) {
   const hasClosedRef = useRef(false);
-  const [holdElapsed, setHoldElapsed] = useState(false);
   const [tab, setTab] = useState<Tab>(answerItems.length > 0 ? "answers" : "yellow");
 
   function close() {
@@ -66,28 +71,34 @@ export default function GameReviewModal({
     onDone();
   }
 
-  useEffect(() => {
-    const holdTimer = setTimeout(() => setHoldElapsed(true), HOLD_MS);
-    const closeTimer = setTimeout(close, HOLD_MS);
-    return () => {
-      clearTimeout(holdTimer);
-      clearTimeout(closeTimer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 시 1회만(TaxHighlightModal.tsx와 동일한 패턴)
-  }, []);
+  function exitToLobby() {
+    if (hasClosedRef.current) return;
+    hasClosedRef.current = true;
+    onExitToLobby();
+  }
 
   if (typeof document === "undefined") return null;
 
   return createPortal(
+    // 2026-09-10 세션: 자동 닫힘 타이머·배경 클릭 닫힘 전부 제거 — 아래 두 버튼을
+    // 직접 눌러야만 닫힌다(실사용자 피드백: 복기 분석이 끝나기 전에 저절로 닫혔음).
     <div
       className="fixed inset-0 z-[95] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
       style={{ animation: "hill-of-truth-modal-in 0.3s ease-out both" }}
-      onClick={holdElapsed ? close : undefined}
     >
       <div
         className="relative flex max-h-[85vh] w-full max-w-lg flex-col gap-4 overflow-hidden rounded-3xl border-2 border-amber-400/60 bg-slate-950 px-5 py-6 shadow-[0_0_80px_-10px_rgba(0,0,0,0.9)] sm:px-8"
         onClick={(e) => e.stopPropagation()}
       >
+        <button
+          type="button"
+          onClick={close}
+          aria-label="복기 리포트 닫기"
+          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/[0.04] text-sm text-white/60 transition hover:border-white/30 hover:text-white"
+        >
+          ✕
+        </button>
+
         <div className="flex flex-col items-center gap-1 text-center">
           <span className="text-3xl">🔍📋👑</span>
           <h2 className="break-keep text-lg font-black text-amber-100 sm:text-xl">종합 복기 리포트</h2>
@@ -195,12 +206,11 @@ export default function GameReviewModal({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            close();
+            exitToLobby();
           }}
           className="relative z-10 mx-auto flex items-center gap-1.5 rounded-full border border-amber-400/50 bg-slate-900/85 px-6 py-2.5 text-sm font-semibold text-white/90 backdrop-blur-sm transition hover:border-amber-300/70 hover:bg-slate-900 active:scale-95"
-          aria-label="복기 리포트 스킵"
         >
-          ⏩ 스킵
+          🏠 복기 종료 및 로비로 이동
         </button>
       </div>
     </div>,

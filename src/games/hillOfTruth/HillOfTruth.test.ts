@@ -169,6 +169,62 @@ describe("ASK_QUESTION 판정", () => {
     expect(next.questionLog[0].triggerId).toBeNull();
   });
 
+  it("모든 시나리오 × 모든 트리거: 자기 자신의 sampleQuestion을 그대로 물으면 자기 자신의 verdict가 그대로 나온다(anchorKeywords 회귀 방지)", () => {
+    for (const scenario of SCENARIOS) {
+      for (const trigger of scenario.questionBank) {
+        const state = { ...startGame(2, 1), scenarioId: scenario.id } as GameState;
+        const next = applyAction(state, {
+          type: "ASK_QUESTION",
+          seat: 0,
+          mode: "public",
+          text: trigger.sampleQuestion,
+          atMs: 0,
+        });
+        expect(
+          next.questionLog[0].verdict,
+          `${scenario.id}/${trigger.id} ("${trigger.sampleQuestion}")`,
+        ).toBe(trigger.verdict);
+      }
+    }
+  });
+
+  it("2026-09-10 실사용자 버그 리포트 재현: 용의자 이름만 들어간 무관한/반대 주장은 더 이상 초록불이 아니다", () => {
+    // 스크린샷으로 제보된 c-06-quiz-show(용의자 "은호") 실제 사례.
+    const state = { ...startGame(2, 1), scenarioId: "c-06-quiz-show" } as GameState;
+    const bogus = [
+      "은호",
+      "은호는 남자다",
+      "은호는 여자다",
+      "은호는 죽었다",
+      "은호가 약을 먹였나요?",
+      "은호가 관계자인가요?",
+      "최형우가 은호다",
+    ];
+    for (const text of bogus) {
+      const next = applyAction(state, { type: "ASK_QUESTION", seat: 0, mode: "public", text, atMs: 0 });
+      expect(next.questionLog[0].verdict, text).toBe("red");
+    }
+    // 부정(negation)이 붙으면 더 이상 green으로 오판하지 않는다("이어폰" 단독 키워드였던
+    // c06-q3가 anchorKeywords: ["힌트"]로 힌트 언급까지 요구하게 됐는지 확인).
+    const negated = applyAction(state, {
+      type: "ASK_QUESTION",
+      seat: 0,
+      mode: "public",
+      text: "결정적인 문제에서 이어폰이 작동되지않았다",
+      atMs: 0,
+    });
+    expect(negated.questionLog[0].verdict).toBe("red");
+    // 반대로 정상적인 질문은 여전히 정확히 매칭된다(회귀 없음).
+    const legit = applyAction(state, {
+      type: "ASK_QUESTION",
+      seat: 0,
+      mode: "public",
+      text: "범인은 상대 참가자 은호입니까?",
+      atMs: 0,
+    });
+    expect(legit.questionLog[0].verdict).toBe("green");
+  });
+
   it("내 턴이 아니면 질문해도 상태가 바뀌지 않는다(no-op)", () => {
     const state = startGame(2, 1);
     const next = applyAction(state, { type: "ASK_QUESTION", seat: 1, mode: "public", text: "아무 질문", atMs: 0 });
