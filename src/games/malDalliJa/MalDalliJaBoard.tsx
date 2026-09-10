@@ -236,14 +236,22 @@ export default function MalDalliJaBoard({
   // 그동안 멈춰있던 rAF를 그냥 이어서 재개하므로 `AnimatedHorse`가 알아서
   // `onDone`을 부르며 정상 복구되지만, 일부 브라우저는 rAF를 계속 스로틀링해 위
   // 2.5초 타이머가 뒷수습할 때까지 화면이 그대로 멎어있다 — 탭이 다시 보이는 그
-  // 순간 즉시 걸려있는 애니메이션을 전부 정리해 그 대기 시간을 사실상 0으로
-  // 줄인다. `state.positions`는 애니메이션 시작 시점부터 이미 최종 칸이므로,
-  // 정상 진행 중이던 애니메이션을 여기서 조기 종료해도(드물게 화면이 잠깐이라도
-  // 꺼졌다 켜진 경우에만 발동) 말의 최종 위치가 틀어지는 일은 없다 — 비행
-  // 연출만 한 프레임 일찍 끝난다.
+  // 순간 "이미 끝났어야 할" 애니메이션만 즉시 정리해 그 대기 시간을 사실상
+  // 0으로 줄인다.
+  //
+  // 2026-09-10 후속 수정(같은 날 재신고 — "애니메이션이 끊기거나 순간이동"):
+  // 처음엔 이 핸들러가 `setAnimations([])`로 걸려있는 애니메이션을 전부
+  // 무조건 지웠는데, 데스크톱/모바일 모두 알트탭·알림 확인처럼 아주 잠깐
+  // 포커스만 바뀌어도 `visibilitychange`가 발화한다 — 그 순간 마침 정상적으로
+  // 날아가던(스로틀링되지 않은) 애니메이션까지 조기 종료돼 도착 칸으로 순간
+  // 이동하는 것처럼 보였다. `anim.createdAt`(생성 시각) 기준으로 이미
+  // `totalMs`를 넘겨 끝났어야 할 것만 골라 지우도록 좁혀, 진짜 스로틀링으로
+  // 멎어버린 것만 구제하고 정상 진행 중인 비행은 그대로 둔다.
   useEffect(() => {
     function handleVisibility() {
-      if (document.visibilityState === "visible") setAnimations([]);
+      if (document.visibilityState !== "visible") return;
+      const now = performance.now();
+      setAnimations((prev) => prev.filter((a) => now - a.createdAt < a.totalMs));
     }
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);

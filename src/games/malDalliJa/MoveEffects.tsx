@@ -111,6 +111,11 @@ export interface MoveAnim {
   /** Includes the starting cell at index 0 — `path.length - 1` is the hop count. */
   path: Position[];
   totalMs: number;
+  /** `performance.now()` at the moment this anim was queued — lets a
+   * consumer (see MalDalliJaBoard.tsx's visibilitychange recovery) tell a
+   * genuinely-still-flying animation apart from one that's already overdue,
+   * instead of guessing from wall-clock heuristics. */
+  createdAt: number;
   /** Slide of 2+ cells only (user's confirmed "다중 칸 슬라이드만" answer). */
   showSpeedTrail: boolean;
   /** Landed cell newly entered the oasis diamond zone from outside it, and
@@ -151,6 +156,7 @@ export function buildMoveAnim(record: MoveRecord, gameEndedByThisMove: boolean):
     moveKind: record.moveKind,
     path,
     totalMs: record.moveKind === "knight" ? KNIGHT_JUMP_MS : steps * HOP_MS,
+    createdAt: performance.now(),
     showSpeedTrail: record.moveKind === "slide" && steps >= 2,
     showLeadBadge: record.moveKind === "slide" && enteredZone && !gameEndedByThisMove,
   };
