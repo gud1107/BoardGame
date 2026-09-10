@@ -230,6 +230,25 @@ export default function MalDalliJaBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [animationIds]);
 
+  // 2026-09-10 fix (위 2.5초 안전장치의 후속 — 모바일 "이동 후 몇 초간 안 보이는
+  // 현상" 재신고 조사): 탭이 백그라운드로 갔다 돌아오는 순간(`visibilitychange`,
+  // 스크린샷을 찍으려 다른 앱으로 전환하는 것도 포함) 대부분의 모바일 브라우저는
+  // 그동안 멈춰있던 rAF를 그냥 이어서 재개하므로 `AnimatedHorse`가 알아서
+  // `onDone`을 부르며 정상 복구되지만, 일부 브라우저는 rAF를 계속 스로틀링해 위
+  // 2.5초 타이머가 뒷수습할 때까지 화면이 그대로 멎어있다 — 탭이 다시 보이는 그
+  // 순간 즉시 걸려있는 애니메이션을 전부 정리해 그 대기 시간을 사실상 0으로
+  // 줄인다. `state.positions`는 애니메이션 시작 시점부터 이미 최종 칸이므로,
+  // 정상 진행 중이던 애니메이션을 여기서 조기 종료해도(드물게 화면이 잠깐이라도
+  // 꺼졌다 켜진 경우에만 발동) 말의 최종 위치가 틀어지는 일은 없다 — 비행
+  // 연출만 한 프레임 일찍 끝난다.
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.visibilityState === "visible") setAnimations([]);
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
   const animatingKeys = new Set(animations.map((a) => `${a.seat}-${a.horseIndex}`));
 
   function handleAnimEvent(anim: MoveAnim, evt: MoveEvent) {

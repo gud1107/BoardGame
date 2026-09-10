@@ -307,11 +307,26 @@ export function AnimatedHorse({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 2026-09-10 fix (모바일 "이동 후 몇 초간 안 보이는 현상" 신고 조사): 마운트된
+  // 첫 프레임이 그려지기 전엔 위 rAF 루프가 아직 한 번도 `moverRef.style.transform`을
+  // 쓰지 않은 상태라, 브라우저 기본값인 `translate3d(0,0,0)`(보드 좌측 상단 원점)에
+  // 이 말이 그대로 걸려 있는다 — 모바일에서 스크린샷을 찍으려 화면을 전환하는 등
+  // 탭이 잠깐 백그라운드로 가 rAF가 멎으면(아래 visibilitychange 안전장치가 따로
+  // 있는 MalDalliJaBoard.tsx 참고) 원점 근처에 있던 다른 말과 겹쳐 마치 이동한
+  // 말이 사라진 것처럼 보였다. 출발 칸(`anim.path[0]`) 좌표를 인라인 스타일
+  // 초기값으로 즉시 세팅해두면 rAF가 늦게 시작하거나 잠깐 멎어도 최소한 "출발 칸에
+  // 멈춰 서 있는 말"로는 항상 보인다.
+  const startCell = anim.path[0];
   return (
     <div
       ref={moverRef}
       className="pointer-events-none absolute left-0 top-0 z-20"
-      style={{ width: `${CELL_PCT}%`, height: `${CELL_PCT}%`, willChange: "transform" }}
+      style={{
+        width: `${CELL_PCT}%`,
+        height: `${CELL_PCT}%`,
+        willChange: "transform",
+        transform: `translate3d(${startCell.col * 100}%, ${startCell.row * 100}%, 0)`,
+      }}
     >
       <div ref={bounceRef} className="h-full w-full" style={{ willChange: "transform" }}>
         <HorseTokenVisual pieceImage={pieceImage} altName={altName} ringClass={ringClass} />
