@@ -31,7 +31,74 @@
 `vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
 길게 재시도하지 마세요.
 
-_최종 갱신: 2026-09-10 (**페루도(Perudo) 모바일 — "맞아!" 버튼 내부 스크롤 후속 픽스** —
+_최종 갱신: 2026-09-10 (**페루도(Perudo) 모바일 — 헤더 높이-크리프(Height Creep) 제거 + 하단
+컨트롤 독 재구성 세션** — "인원이 4~6인 이상 늘어나면 상단 영역이 줄바꿈되며 중앙 배팅판을
+아래로 밀어내 배팅/주사위 조작부가 화면 바깥으로 짤려 나간다"는 리포트.
+
+**전제는 이번에도 요청서가 언급한 `Board.tsx`/`BettingBoard.tsx`/`PlayerStatus.tsx`/
+`ActionPanel.tsx` 등 실체 없는 파일 구조였고, 예시 코드의 `PerudoDesktopArena`/
+`BottomPlayerStatusStrip`/`MyDiceHorizontalTray`/`CompactColorPicker`/`CompactTurnBadge`/
+`PerudoCompactActionDock`도 이 프로젝트에 존재하지 않음(반복된 request-premise-mismatch
+패턴, 실체는 `PerudoMobileBoard.tsx`/`PerudoBidTrack.tsx`/`PerudoSharedUI.tsx`) — 하지만
+리포트된 증상 자체는 실재 결함이었음**: 바로 전날(2026-09-09) 세션이 헤더의 플레이어
+스트립(`PlayerDiceSummaryBar`)을 `flex-wrap`으로 바꿔놨는데, 이게 인원이 많아지면 2~3줄로
+넘칠 수 있고, 헤더가 `shrink-0`라 그만큼 커지면서 `flex-1 min-h-0`인 보드+컨트롤 영역을
+그대로 밀어 압축시키는 구조였음(루트가 JS 실측 `calc(100dvh - offset)` 고정 높이라 스크롤로
+도망갈 데도 없음).
+
+**AskUserQuestion 확인 (3라운드)**: ① 하단으로 옮길 플레이어 스트립의 스크롤 방식 —
+바로 전날 세션이 "이 화면은 어떤 제스처로도 스크롤되면 안 된다"며 명시적으로 가로 스크롤을
+flex-wrap으로 교체했던 이력이 있어 재확인 → **"overflow-x-auto 가로 스크롤 재도입"** 선택
+(그 전날 결정의 무스크롤 근거는 헤더처럼 다른 영역과 공간을 나눠 쓸 때만 유효하고, 스트립을
+전용 `shrink-0` 행으로 격리하면 스크롤해도 다른 요소를 밀어낼 수 없어 무관하다고 설명).
+② 중앙 배팅판을 요청서 문구대로 `min(80vw, 34dvh)` 정사각형으로 강제 고정할지 — 실물 보드
+(`RectBidTrack`)는 2026-09-07 세션에 뷰포트 폭 기준 breakpoint별 `clamp()` 공식으로 가로
+잘림 없이 정밀 튜닝된 직사각형 트랙이라 강제 정사각형화 시 충돌(셀이 찌그러지거나 30px 탭
+타겟 하한보다 작아질 위험) → **"기존 크기 공식 유지 + 중앙 정렬 컨테이너로만 감싸기"** 선택.
+③ 하단 스트립 세부 사양(아이콘 크기/닉네임 길이) — 요청서의 "프로필" 이미지는 이 게임에
+존재한 적이 없음(컬러웨이 점만 사용, 기정 확인 사항) → **기존 헤더 스트립 컨벤션과 동일**
+(14px xs 주사위 + 4글자 말줄임) 선택.
+
+**구현 (`PerudoMobileBoard.tsx`)**:
+1. **헤더를 `h-8` 고정 단일 행으로 전면 축소** — 🎲 로고 + `{인원}인·{라운드}R·잔여 N개(기대값
+   X.X)` 한 줄 요약(넘치면 `truncate`) + 뮤트/룰북 버튼 + `내 차례`/`{이름} 차례` 컴팩트 배지만
+   남기고, 기존에 헤더에 있던 플레이어 스트립·큰 턴 배너 문단·무덤(`LostDiceTray`)·박스형
+   `ExpectationBar`를 전부 밖으로 뺐음 — 인원수와 무관하게 절대 줄바꿈되지 않는 게 핵심(부분
+   압축이 아니라 구조적 제거).
+2. **`PlayerDiceSummaryBar`를 하단 컨트롤 독으로 이전** — `h-9` 전용 가로 스크롤 행(스크롤바는
+   인라인 Tailwind 임의값 `[scrollbar-width:none] [&::-webkit-scrollbar]:hidden`으로 숨김;
+   `RectBidTrack`의 `.perudo-center-scroll`과 달리 이쪽은 상태 표시용이라 스크롤바를 굳이
+   보여줄 필요 없다고 판단), 기존 내 주사위 트레이/색상 팔레트 박스 바로 위에 배치.
+3. **`LostDiceTray`(무덤)를 조건부 마운트로 전환** — 실제로 주사위 손실이 발생했을 때만
+   렌더링(`totalLost > 0`), 흔한 초반/중반 무손실 구간에서 세로 공간을 전혀 쓰지 않게 함
+   (이전엔 "아직 없음" 빈 상태로도 항상 렌더됐음).
+4. **`<main>`이 직접 `flex-1 min-h-0`로 남는 세로 여백을 흡수**하고 `items-center
+   justify-center`로 보드를 그 안에서 수직 중앙 정렬(이전엔 바깥 wrapper의 `justify-end`가
+   보드+컨트롤 그룹 전체를 하단에 붙이기만 했음) — 인원수가 적어 헤더/무덤이 작을 때 보드가
+   화면 정중앙에 안정적으로 위치.
+5. 루트의 `calc(100dvh - offset)` JS 실측 높이 기법과 보드 자체의 `--perudo-cell` 자동 공식은
+   의도적으로 무변경 — 요청서의 `h-[100dvh]`/`min(80vw,34dvh)` 리터럴 고정은 각각 페이지
+   크롬 이중 계산 회귀, 가로 잘림 재발 위험이 있어 AskUserQuestion으로 반려됨(위 참고).
+6. Safe-area 하단 패딩을 `pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]`
+   (`sm:` 1rem)로 명시 추가.
+
+요청서가 언급한 HANDOFF.md의 "[Game Systems & Features - Perudo]" 섹션은 이 파일에 실제로
+존재하지 않음(파일 구조는 최상단 연대기 체인 + §1 Executive Summary~§4 Resume Prompt뿐,
+게임별 고정 섹션 없음 — 2026-08 세션이 노땡스 요청에서 이미 같은 결론을 남긴 바 있음) —
+관례대로 이 연대기 체인에 항목을 추가하는 것으로 대체.
+
+**검증**: `npx tsc --noEmit`(전체, 0 에러) / `npx eslint src/games/perudo`(0 에러/경고) /
+`npx vitest run src/games/perudo/Perudo.test.ts`(80/80 통과, `engine.ts` 무변경) — 캐시된
+Playwright Chromium(390×844)으로 실측: 8인(MAX_PLAYERS) 방을 "일괄 채우기"로 채운 뒤
+스크린샷 확인 — 헤더 한 줄 유지, 보드 정상 렌더, 하단 플레이어 스트립/내 주사위(5개 전부
+표시)/🎯맞아! 버튼 전부 화면 안에 들어옴(🚨페루도! 버튼은 화면 좌하단의 무관한 개발용
+플로팅 위젯("1 Issue" 뱃지)에 시각적으로 가려 보였으나, `boundingBox` 실측으로
+`y:642.5~678.5`(뷰포트 844 안에 완전 포함) 확인해 실제 클리핑이 아님을 별도 확인). 4인
+케이스도 동일 스크린샷 1장으로 회귀 없음 확인(visual-check-gate 스코프 규율: "인원수와
+무관하게 헤더/하단 컨트롤이 화면 안에 들어오는가" 한 질문만 확인 후 종료). 사용한 Chromium
+프로세스는 매 스크립트 `finally`에서 종료.)_
+
+_이전 갱신: 2026-09-10 (**페루도(Perudo) 모바일 — "맞아!" 버튼 내부 스크롤 후속 픽스** —
 바로 앞 세션(2026-09-09, 아래 항목)이 "완전 고정 스크린, 스크롤 없음"을 표방하며
 `PerudoMobileBoard.tsx`를 전면 재구축했지만, 실사용 리포트로 "맞아버튼이 스크롤을 내려야
 보인다"가 접수됨.

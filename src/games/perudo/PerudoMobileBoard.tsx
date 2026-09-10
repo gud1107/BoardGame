@@ -7,8 +7,9 @@ import RulebookModal from "./RulebookModal";
 import RectBidTrack, { OverflowBadge, stripLength } from "./PerudoBidTrack";
 import { DiceRollTray } from "./dice/PerudoDie";
 import { PLAYER_COLORWAYS, playerColorwayForSeat, type DiceColorway } from "./dice/colorways";
-import { DiceCountStrip, ExpectationBar, faceLabel, FacePicker, LostDiceTray, TABLE_PANEL, TableTexture } from "./PerudoSharedUI";
+import { DiceCountStrip, faceLabel, FacePicker, LostDiceTray, TABLE_PANEL, TableTexture } from "./PerudoSharedUI";
 import {
+  STARTING_DICE,
   totalDiceInPlay,
   type EngineAction,
   type Face,
@@ -90,6 +91,45 @@ import {
  * keeps running into — this decision itself isn't new this session, just
  * reconfirmed by staying consistent with every prior Perudo mobile session).
  *
+ * **2026-09-10 헤더 높이-크리프(Height Creep) 제거 세션** — real bug report:
+ * with 4~6+ players the header's `PlayerDiceSummaryBar` (`flex-wrap`, see
+ * that function's own doc history) could spill onto a 2nd/3rd row, growing
+ * the `shrink-0` header and eating into the `flex-1 min-h-0` space the board
+ * + action dock + footer share, clipping the bottom controls on small
+ * phones. Fix (3 `AskUserQuestion` rounds this session):
+ * 1) **Header hard-capped to one `h-8` row, unconditionally** — every
+ *    per-seat detail (player strip, round/player-count text, table-wide
+ *    expectation figure) is OUT of the header now; it holds only the 🎲
+ *    logo, a truncating one-line summary string, mute/rulebook buttons, and
+ *    a compact turn-state pill. Nothing left in it can wrap, so this is a
+ *    structural fix, not a size tweak.
+ * 2) **`PlayerDiceSummaryBar` moved into the bottom control dock** as its
+ *    own dedicated horizontal-scroll row (`overflow-x-auto`) — reintroducing
+ *    a scroll gesture the previous day's session had explicitly removed
+ *    project-wide on this screen (AskUserQuestion-confirmed this session:
+ *    that removal's rationale — "scrolling could resize the rest of the
+ *    arena" — doesn't apply once the strip is its own shrink-0 row rather
+ *    than a header that shares space with everything else).
+ * 3) **`LostDiceTray` (graveyard) demoted to conditional** — only mounts
+ *    when a die has actually been lost (`totalLost > 0`), so the common
+ *    early/mid-round case costs zero vertical budget; previously it
+ *    always rendered (with an explicit "no losses yet" empty state).
+ * 4) **`<main>` now owns the flexible space directly** (`flex-1 min-h-0
+ *    items-center justify-center`, was the outer wrapper doing this via
+ *    `justify-end`) so the board visually centers in whatever room is left
+ *    once the (now-fixed) header/graveyard/action-dock/footer take their
+ *    share, instead of just hugging the bottom controls.
+ * The board's own `--perudo-cell` sizing formula (`PerudoBidTrack.tsx`,
+ * tuned per-breakpoint against real viewport width) and the root's
+ * `calc(100dvh - offset)` measurement technique below are both
+ * INTENTIONALLY left untouched — an earlier request draft this session
+ * asked for a literal `min(80vw, 34dvh)` fixed-square board and a literal
+ * `h-[100dvh]` root; both would silently reopen bugs those two techniques
+ * were specifically built to avoid (cell-size/no-overflow tuning and
+ * page-chrome double-counting respectively — see each technique's own doc
+ * comment), so per this session's own `AskUserQuestion` this file only wraps
+ * the existing board in a centering container instead of forcing its size.
+ *
  * Reuses the exact same `TABLE_PANEL`/`TableTexture` chrome as the desktop
  * board (`PerudoSharedUI.tsx`) — this matters beyond visual consistency:
  * `RectBidTrack`'s own `--perudo-cell` width formula (`PerudoBidTrack.tsx`'s
@@ -132,23 +172,27 @@ export interface PerudoMobileBoardProps {
 }
 
 /**
- * The header's "at a glance" player strip — every seat's own colorway
- * `DiceCountStrip` in turn order. Now the ONLY player-status surface in this
- * file (the old scroll-down Section 2 roster is gone this session — see the
- * file header) and, per this session's zero-scroll lock, no longer an
- * `overflow-x-auto` horizontal-scroll strip either (a previous 2026-09-09
- * session added the scroll specifically so this bar's height never grew past
- * one row for up to `MAX_PLAYERS = 8` seats — but "no gesture scrolls
- * anything, sideways included" is this session's own explicit, first-listed
- * requirement, so that specific tradeoff is reversed: `flex-wrap` now lets it
- * spill onto a second row instead of scrolling, and the rest of the arena
- * below sizes itself around however many rows that turns out to be via the
- * shared `calc(100dvh - offset)` measurement, same as any other header
- * content). Deliberately compact (`xs`-size dice, truncated 4-glyph name)
- * since the full-detail version — untruncated name, connection dot, "탈락"
- * text — no longer exists anywhere on mobile at all (AskUserQuestion-
- * confirmed: dropped, not relocated); this bar only needs to answer "who's on
- * what color and roughly how loaded".
+ * The player-status strip — every seat's own colorway `DiceCountStrip` in
+ * turn order. Relocated from the header into the bottom control dock
+ * (2026-09-10 헤더 높이-크리프 제거 세션 — see file header) specifically to fix
+ * a real bug: with `flex-wrap` in the header, 4~6+ players could push it onto
+ * a 2nd/3rd row, growing the header's `shrink-0` height and squeezing the
+ * board/controls below it off-screen. Now a dedicated `overflow-x-auto`
+ * horizontal-scroll row of its own — a previous 2026-09-09 session had
+ * explicitly swapped an earlier version of this same scroll for `flex-wrap`
+ * project-wide on this screen ("no gesture scrolls anything, sideways
+ * included"), but this session's `AskUserQuestion` explicitly reintroduced it
+ * here: that removal's rationale doesn't hold once this strip is its own
+ * shrink-0 row rather than sharing space with (and resizing) the rest of the
+ * arena — scrolling this row can never itself push the board or action
+ * buttons around. Scrollbar hidden via inline arbitrary Tailwind variants (no
+ * project-wide `.no-scrollbar` utility exists yet, unlike `PerudoBidTrack.tsx`'s
+ * `.perudo-center-scroll`, which deliberately keeps a VISIBLE thin scrollbar
+ * since that one scrolls actual bid controls, not just a status readout).
+ * Deliberately compact (`xs`-size dice = 14px, truncated 4-glyph name,
+ * AskUserQuestion-confirmed: same as the header strip's own prior
+ * convention) — no avatar/profile imagery (AskUserQuestion-reconfirmed: this
+ * game has never rendered player avatars anywhere, colorway dot only).
  */
 function PlayerDiceSummaryBar({
   state,
@@ -163,7 +207,7 @@ function PlayerDiceSummaryBar({
 }) {
   const seatOrder = Array.from({ length: state.playerCount }, (_, i) => i);
   return (
-    <div className="relative z-10 flex w-full flex-wrap items-center justify-center gap-1.5">
+    <div className="relative z-10 flex w-full items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {seatOrder.map((seat) => {
         const player = state.players.find((p) => p.seat === seat)!;
         const isActive = state.activeSeat === seat && state.phase === "playing";
@@ -298,46 +342,61 @@ export default function PerudoMobileBoard({
 
   if (isLandscape) return <LandscapeNotice />;
 
+  const totalActiveDice = totalDiceInPlay(state);
+  const totalLost = state.players.reduce((sum, p) => sum + Math.max(0, STARTING_DICE - p.diceCount), 0);
+  const activeName = names[state.activeSeat] ?? "";
+
   return (
     <div
       ref={arenaRef}
       style={{ height: arenaHeight }}
-      className={`${TABLE_PANEL} flex w-full max-w-[100vw] touch-none flex-col gap-2 overscroll-none p-3 select-none sm:p-4`}
+      className={`${TABLE_PANEL} flex w-full max-w-[100vw] touch-none flex-col gap-1.5 overscroll-none p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] select-none sm:p-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom,0px))]`}
     >
       <MyTurnOverlay isMyTurn={isMyTurn && iAmAlive} />
       <TableTexture />
 
-      {/* 상단 정보 계층: 인원/라운드 정보 → 플레이어 요약바 → 턴 배너 → 무덤 → 기대값 바. */}
-      <header className="relative z-10 flex shrink-0 flex-col gap-1.5">
-        <div className="flex items-center justify-between gap-1.5 text-xs text-rose-100/60">
-          <span>
-            {state.playerCount}인 · {state.roundNumber}라운드
+      {/* 초슬림 고정 헤더 (h-8, shrink-0) — 인원수와 무관하게 절대 줄바꿈되지
+          않는 단일 행. 플레이어별 상세(스트립/무덤/기대값)는 전부 이 밖으로
+          이전됨 — 2026-09-10 헤더 높이-크리프 제거 세션 (파일 상단 doc 참고). */}
+      <header className="relative z-10 flex h-8 shrink-0 items-center justify-between gap-1.5 rounded-lg border border-amber-500/15 bg-black/25 px-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-[11px] font-bold text-amber-300">
+          <span className="shrink-0">🎲 페루도</span>
+          <span className="shrink-0 text-white/20">|</span>
+          <span className="min-w-0 truncate font-normal text-white/55">
+            {state.playerCount}인 · {state.roundNumber}R · 잔여 {totalActiveDice}개 (기대값 {(totalActiveDice / 3).toFixed(1)})
           </span>
-          <div className="flex gap-1.5">
-            {muteButton}
-            {rulebookButton}
-          </div>
         </div>
-        <PlayerDiceSummaryBar state={state} names={names} colorways={colorways} viewerSeat={viewerSeat} />
-        <p className={`text-center text-sm font-bold break-keep ${isMyTurn ? "text-amber-200" : "text-xs font-medium text-white/50"}`}>
-          {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
-        </p>
-        {/* 완전 고정 스크린이라 넘치는 만큼은 스크롤이 아니라 클립됨 (요구사항 ①) —
-            섹션2 제거로 확보된 여유 예산 안에서 실측으로 확인됨(HANDOFF 참고). */}
-        <div className="max-h-16 overflow-hidden">
+        <div className="flex shrink-0 items-center gap-1">
+          {muteButton}
+          {rulebookButton}
+          <span
+            className={`flex h-5 shrink-0 items-center rounded-full px-2 text-[10px] font-bold break-keep ${
+              isMyTurn ? "bg-amber-400/20 text-amber-200" : "bg-white/5 text-white/40"
+            }`}
+          >
+            {isMyTurn ? "🫵 내 차례" : `${activeName.slice(0, 4)} 차례`}
+          </span>
+        </div>
+      </header>
+
+      {/* 무덤(잃은 주사위) — 실제로 손실이 발생했을 때만 마운트, 그 전까지는
+          세로 공간을 전혀 차지하지 않는다(이전엔 "아직 없음" 빈 상태로도
+          항상 렌더됐음). */}
+      {totalLost > 0 && (
+        <div className="relative z-10 shrink-0">
           <LostDiceTray state={state} colorways={colorways} />
         </div>
-        <ExpectationBar totalActiveDice={totalDiceInPlay(state)} />
-        </header>
+      )}
 
-        {/* 보드+내 주사위를 한 블록으로 묶어 하단에 밀착 — 남는 세로 여백은
-            전부 헤더 바로 아래(이 블록 위쪽)로만 가도록 flex-1 min-h-0 +
-            justify-end를 사용. `<main>` 자신은 내용 크기만큼만 차지하고,
-            혹시라도 넘치는 만큼은(이 세션부터는) 스크롤이 아니라 클립된다
-            — `overflow-y-auto` 안전장치가 이번 세션의 "완전 고정" 요구사항과
-            상충해 제거됨. */}
-        <div className="relative flex min-h-0 flex-1 flex-col items-center justify-end gap-1.5">
-        <main className="relative z-10 flex min-h-0 w-full flex-col items-center overflow-hidden">
+        {/* 보드+내 주사위를 한 블록으로 묶어 하단에 밀착. `<main>` 자신이
+            flex-1 min-h-0로 남는 세로 여백을 전부 흡수해 물리 보드를 그
+            안에서 수직 중앙 정렬하고(items-center justify-center), 액션
+            독/풋터는 shrink-0라 항상 바로 아래 밀착된 채로 남는다. 혹시라도
+            넘치는 만큼은(이 세션부터는) 스크롤이 아니라 클립된다 —
+            `overflow-y-auto` 안전장치가 "완전 고정" 요구사항과 상충해
+            제거됨. */}
+        <div className="relative flex min-h-0 flex-1 flex-col items-center gap-1.5">
+        <main className="relative z-10 flex min-h-0 w-full flex-1 flex-col items-center justify-center overflow-hidden">
           <RectBidTrack
             currentCell={currentCell}
             pendingCell={pendingCell}
@@ -458,8 +517,14 @@ export default function PerudoMobileBoard({
           </div>
         )}
 
-        {/* 최하단: 내 주사위 상시 표시 바 + 색상 변경 팔레트. */}
+        {/* 최하단 컨트롤 독: [플레이어 현황 가로 스크롤 스트립] → [내 주사위
+            상시 표시 바 + 색상 변경 팔레트]. */}
         <footer className="relative z-10 flex shrink-0 flex-col items-center gap-1.5">
+          <div className="flex h-9 w-full items-center gap-2 rounded-xl border border-amber-900/30 bg-black/20 px-2">
+            <span className="shrink-0 text-[10px] font-semibold text-amber-200/50">인원</span>
+            <PlayerDiceSummaryBar state={state} names={names} colorways={colorways} viewerSeat={viewerSeat} />
+          </div>
+
           <div className="flex w-full flex-col items-center gap-1 rounded-2xl border-2 border-amber-900/40 bg-gradient-to-b from-black/25 to-black/35 p-2.5 shadow-[inset_0_2px_10px_rgba(0,0,0,0.35)]">
             <span className="text-[11px] font-semibold text-amber-100/70">🎲 내 주사위 ({me.diceCount}개)</span>
             {!iAmAlive ? (
