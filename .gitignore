@@ -46,3 +46,13 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# Claude Code — this PC/session's own local state (PID lock, activity log,
+# per-machine notification/hook settings); shared skills under .claude/skills/
+# stay tracked. See orca충돌및확인.md for why these three are machine-local.
+.claude/settings.local.json
+.claude/.session-lock.json
+.claude/session-activity.log
+
+# internal IP-risk analysis — kept local only, not for a public repo (see 2026-09-12 decision)
+/저작권, 상표권.md
