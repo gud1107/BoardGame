@@ -8,6 +8,7 @@ import GameLeaveGuardModal from "@/components/GameLeaveGuardModal";
 import Avatar from "@/components/common/Avatar";
 import { useGameLeaveGuard } from "@/hooks/useGameLeaveGuard";
 import { useBackgroundResync } from "@/hooks/useBackgroundResync";
+import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import { seededRng } from "@/lib/rng";
@@ -534,6 +535,18 @@ export default function LostCitiesGame({ onComplete }: PlayableGameProps) {
 
   const { exitConfirmOpen, cancelExit, confirmExit } = useGameLeaveGuard(roomCode !== null, handleLeave);
   useBackgroundResync(roomCode !== null, requestStateSync);
+  // Desktop lobby dashboard "실시간 활성 대기실" panel (src/app/page.tsx) —
+  // best-effort, see useActiveRoomListing.ts. Lost Cities is a fixed 2-seat
+  // (p1/p2) game, so maxPlayers is always 2.
+  useActiveRoomListing({
+    gameId: "lost-cities",
+    roomCode,
+    isHost,
+    isWaiting: phase === "waiting",
+    hostName: myName,
+    playerCount: occupants.length,
+    maxPlayers: 2,
+  });
 
   function withGuard(node: ReactNode) {
     return (

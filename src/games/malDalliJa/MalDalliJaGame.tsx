@@ -8,6 +8,7 @@ import GameLeaveGuardModal from "@/components/GameLeaveGuardModal";
 import Avatar from "@/components/common/Avatar";
 import { useGameLeaveGuard } from "@/hooks/useGameLeaveGuard";
 import { useBackgroundResync } from "@/hooks/useBackgroundResync";
+import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import { seededRng } from "@/lib/rng";
@@ -840,6 +841,18 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
   // ---- Supabase not configured: online play literally cannot work. ----
   const { exitConfirmOpen, cancelExit, confirmExit } = useGameLeaveGuard(roomCode !== null, handleLeave);
   useBackgroundResync(roomCode !== null, requestStateSync);
+  // Desktop lobby dashboard "실시간 활성 대기실" panel (src/app/page.tsx) —
+  // best-effort, see useActiveRoomListing.ts. Fixed 2-player game (p1/p2
+  // roles), so `maxPlayers` is a literal 2 — no numeric target-count variable.
+  useActiveRoomListing({
+    gameId: "mal-dalli-ja",
+    roomCode,
+    isHost,
+    isWaiting: phase === "waiting",
+    hostName: myName,
+    playerCount: occupants.length,
+    maxPlayers: 2,
+  });
 
   // Mobile back-gesture / browser back-button exit guard, and mobile
   // background-tab resync — both shared across every online game; see

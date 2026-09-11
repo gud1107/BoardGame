@@ -7,6 +7,7 @@ import { getDeviceId } from "@/lib/identity/deviceId";
 import GameLeaveGuardModal from "@/components/GameLeaveGuardModal";
 import { useGameLeaveGuard } from "@/hooks/useGameLeaveGuard";
 import { useBackgroundResync } from "@/hooks/useBackgroundResync";
+import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import { applyAction, chooseBotAction, startGame, type AvalonState, type EngineAction, type SeatIndex, type Team } from "./engine";
@@ -838,6 +839,17 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
 
   const { exitConfirmOpen, cancelExit, confirmExit } = useGameLeaveGuard(roomCode !== null, handleLeave);
   useBackgroundResync(roomCode !== null, requestStateSync);
+  // Desktop lobby dashboard "실시간 활성 대기실" panel (src/app/page.tsx) —
+  // best-effort, see useActiveRoomListing.ts.
+  useActiveRoomListing({
+    gameId: "avalon",
+    roomCode,
+    isHost,
+    isWaiting: phase === "waiting",
+    hostName: myName,
+    playerCount: occupants.length,
+    maxPlayers: knownTargetPlayerCount,
+  });
 
   // Mobile back-gesture / browser back-button exit guard, and mobile
   // background-tab resync — both shared across every online game; see

@@ -31,7 +31,48 @@
 `vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
 길게 재시도하지 마세요.
 
-_최종 갱신: 2026-09-11 (**진실의 고개(Hill of Truth) — 질문 판정 초록불 오작동 수정 + 복기
+_최종 갱신: 2026-09-12 (**로비 데스크톱 3-컬럼 무스크롤 대시보드 + 실시간 활성 대기실 인프라
+신설 세션** — 1920×1080/1440×900 데스크톱에서 스크롤 없이 전체 게임 라인업·실시간 대기실·
+패치노트·프로필을 한 화면에 담는 좌/중앙/우 3-컬럼 개편 요청 (`HANDOFF.md`의 "[Lobby & UI/UX
+Standards]" 섹션 갱신 명시, 커밋·푸시·운영배포까지 요청).
+
+요청서가 언급한 `src/pages/Lobby.tsx`/`GameCardGrid.tsx`/`RoomList.tsx`/`UserProfile.tsx`,
+"[Lobby & UI/UX Standards]" 섹션 모두 실체 없는 구조였다(반복된 request-premise-mismatch
+패턴 — 실체는 App Router의 `src/app/page.tsx`). **다만 이번엔 두 가지 진짜 인프라 공백도
+함께 확인됨**: ①28개 게임을 가로지르는 "실시간 활성 대기실" 조회 인프라가 전혀 없었음(각
+게임이 `supabase.channel`로 자기 방만 독자 동기화, 공용 테이블 없음), ②전역 닉네임/전적·
+레이팅 데이터도 없음(아바타 URL만 `profileStore`에 존재).
+
+**AskUserQuestion 확인 3건**: ①우측 대기실 패널 데이터 소스 — "가벼운 대체 콘텐츠" vs
+**"최소 실 데이터 인프라를 지금 새로 구축"(채택)**. ②좌측 프로필 표시 — **"있는 데이터만
+표시"(채택, 전적/닉네임 필드 없음)** vs 준비중 플레이스홀더. ③적용 범위 — **"데스크톱 전용
+(xl+, ≥1280px), 기존 모바일/태블릿 레이아웃은 완전 그대로 유지"(채택)** vs 전체 교체.
+
+신규 `active_rooms` Supabase 테이블(`supabase/schema.sql` — 기존 `chat_messages`/
+`game_play_log`와 동일한 anon 허용 RLS posture) + `src/lib/activeRooms/`(best-effort
+read/write, 실패해도 절대 throw 안 함) + `useActiveRoomListing` 쓰기 훅을 **28개 온라인
+멀티플레이어 게임 전부**에 순수 추가(additive-only, 파일당 1 import + 1 훅 호출, 삭제
+라인 0)로 배선(`CoyoteGame.tsx` 기준 구현 직접 작성 후 나머지 27개는 4개 배치로 나눠
+백그라운드 서브에이전트 병렬 위임) + `useActiveRooms` 읽기 훅(Realtime 구독 + 90초
+신선도 필터) + 신규 `src/components/lobby/{LobbyProfileCard,ActiveRoomsPanel,
+PatchNotesSummaryPanel,CompactGameCard,DesktopDashboard}.tsx` + `src/app/page.tsx`는
+기존 레이아웃을 한 줄도 안 건드리고(`xl:hidden` 클래스 1건 추가) 같은 `query`/`filtered`
+state를 공유하는 새 데스크톱 대시보드를 나란히 추가.
+
+**알려진 한계 — 기존 컨벤션과 동일**: `active_rooms` 테이블 SQL은 파일로만 존재 —
+사용자가 Supabase SQL 에디터에서 직접 실행하기 전까지 실시간 대기실/방 개수 뱃지는
+항상 정직한 빈 상태로만 보인다(에러 없음, 코드 배포 자체는 정상 동작).
+
+검증: `tsc`(0 에러)/`eslint`(0 에러·경고)/`vitest`(50개 파일 1700개 전부 통과)/`next build`
+성공. 캐시된 Playwright Chromium으로 프로덕션 빌드를 별도 포트(3101, 3000번은 동시 세션
+점유 중이라 충돌 회피)에서 직접 띄워 1920×1080·1440×900 양쪽
+`scrollHeight === clientHeight` 실측(브라우저 스크롤 0 확정), 3-컬럼 배치·빈 대기실 정직
+상태 스크린샷 확인.
+
+`### 2026-09-12 — 로비 데스크톱 3-컬럼 무스크롤 대시보드 + 실시간 활성 대기실 인프라 신설`
+절 참고.)_
+
+_이전 갱신: 2026-09-11 (**진실의 고개(Hill of Truth) — 질문 판정 초록불 오작동 수정 + 복기
 리포트 영구 유지 + 오답 선언 화면 흔들림/공지 연출 세션** — "정답 추론 단계에서 엉뚱한 답변을
 입력해도 무조건 초록불이 뜬다"는 버그 리포트(`boardGameRule/진실의 고개/1~6.jpg` 실사용자
 스크린샷 첨부) + "복기 리포트가 저절로 빨리 닫힌다" + "오답 선언 시 화면 흔들림·공지 연출을
@@ -3260,6 +3301,92 @@ _그 이전 갱신: 2026-08-24 (**그리드 포커 라운드 승수 표기(M/N�
 _그 이전 갱신: 2026-08-24 (**라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 세션** — 자세한 내용은 아래 `### 2026-08-24 — 라스베가스 배팅존 지폐 카드 비겹침 나란히 정렬 및 개별 금액 가독성 확보` 절 참고. 커밋은 해당 절의 "커밋/배포" 항목 참고.)_
 
 _그 이전 갱신: 2026-08-24 (**저작권/상표권 360도 분석 + 카탈로그 썸네일·라스베가스 카지노 실사진 정리 세션** — 자세한 내용은 아래 `### 2026-08-24 — 저작권/상표권 분석 문서 작성 및 실물 박스아트·라스베가스 카지노 실사진 정리` 절 참고. 이 항목은 이 세션 시작 시점까지도 아직 커밋되지 않은 상태였음 — 아래 새 세션 절의 "커밋 시점에 확인된 사실" 참고.)_
+
+### 2026-09-12 — 로비 데스크톱 3-컬럼 무스크롤 대시보드 + 실시간 활성 대기실 인프라 신설
+
+**요청**: 1920×1080/1440×900 등 고해상도 데스크톱에서 불필요한 스크롤 없이 전체 게임
+라인업·실시간 대기실·패치노트·유저 프로필을 한 화면(100vh Single Dashboard)에 담는
+좌(프로필·퀵액션)/중앙(게임 그리드)/우(실시간 대기실·패치노트) 3-컬럼 레이아웃 개편.
+`HANDOFF.md`의 "[Lobby & UI/UX Standards]" 섹션 갱신, 완료 후 커밋·푸시·운영배포까지 요청.
+
+**조사 결과 — 이번에도 request-premise-mismatch 패턴, 다만 두 가지가 실제로 없는 채로
+확인됨**: 요청서가 언급한 `src/pages/Lobby.tsx`/`GameCardGrid.tsx`/`RoomList.tsx`/
+`UserProfile.tsx`는 존재하지 않는다(이 프로젝트는 App Router이고 `src/pages`는 아예 없음).
+실제 메인 허브는 `src/app/page.tsx`이고, `/lobby`는 별개로 전체 채팅 전용 페이지
+(`LobbyChat.tsx`)다. `HANDOFF.md`에도 "[Lobby & UI/UX Standards]" 같은 게임/기능별 고정
+섹션은 없다(파일 구조는 최상단 연대기 체인뿐 — 여러 세션이 이미 같은 결론을 남김) → 관례대로
+이 연대기 체인 + 이 절 추가로 대체.
+
+**진짜 결함/공백 2건도 함께 확인됨(전제 불일치가 아니라 실재하는 인프라 공백)**: ①우측
+패널이 요구하는 "28개 게임을 가로지르는 실시간 활성 대기실 목록"은 애초에 조회할 인프라가
+전혀 없었다 — 각 온라인 게임은 `supabase.channel("{game}-room-{roomCode}")`로 자기 방
+상태만 독자적으로 동기화할 뿐, 방 존재 자체를 기록하는 공용 테이블/소켓 서버가 없다(공용
+`RoomList` 없음, `docs/architecture.md` §2와 일치). ②좌측 프로필 패널이 요구하는
+"닉네임/전적·레이팅"도 전역 데이터가 없다 — `profileStore`엔 로그인 유저의 아바타 URL만
+있고 닉네임은 방 입장마다 개별 입력(`RoomNicknameField`), `/history`의 "내기 기록"은
+전적·레이팅이 아니라 특정 정산 기능의 로컬 기록이다.
+
+**AskUserQuestion 확인 (3라운드)**: ① 우측 "실시간 활성 대기실" 데이터 소스 — "가벼운
+대체 콘텐츠(최근 플레이/초대코드 입장만)" vs **"최소 실 데이터 인프라를 지금 새로
+구축"(채택)**. ② 좌측 프로필 표시 데이터 — "있는 데이터만 표시(아바타+로그인 이메일,
+전적/레이팅 자리 없음)"(채택) vs "준비중 플레이스홀더로 자리 확보". ③ 적용 범위 — 기존에
+세밀하게 튜닝된 모바일/태블릿(캐러셀·스티키 검색바 등)을 그대로 두고 **"데스크톱 전용
+(xl+, ≥1280px)"으로만 3-컬럼 개편**(채택) vs 모든 뷰포트 교체.
+
+**신규 실시간 대기실 인프라 (`supabase/schema.sql`/`src/lib/activeRooms/`)**: `active_rooms`
+테이블(`id = "{gameId}:{roomCode}"`, `game_id`/`room_code`/`host_name`/`player_count`/
+`max_players`/`updated_at`) + `chat_messages`/`game_play_log`와 동일한 anon 허용 RLS
+posture(민감 데이터 없음, 이 앱의 모든 Realtime 채널과 동일한 신뢰 한계) 신설. 서버 측
+TTL/크론은 두지 않고 클라이언트가 `updated_at` 신선도(90초)로 죽은 방을 걸러낸다
+(호스트 탭이 죽어 delete가 못 갈 때를 대비). **알려진 한계 — 기존 컨벤션과 동일**: 이 SQL은
+파일로만 존재 — 사용자가 Supabase SQL 에디터에서 직접 실행하기 전까지는 우측 패널/게임
+카드의 실시간 방 뱃지가 항상 "지금 열려있는 방이 없어요"로만 보인다(에러 없이 조용히
+빈 배열 반환 — `src/lib/activeRooms/repository.ts`가 `chat_messages`의 `loadRecentMessages`와
+동일한 best-effort try/catch 패턴).
+
+**쓰기 측 — `useActiveRoomListing.ts` 훅을 28개 온라인 멀티플레이어 게임 전부에 순수
+추가(additive-only)로 배선**: 방장(host)만 대기 로비 단계에서 25초마다 하트비트로
+upsert, 로비를 벗어나거나 언마운트되면 delete. `CoyoteGame.tsx`에 먼저 직접 기준
+구현을 만든 뒤, 나머지 27개 게임은 4개 배치로 나눠 백그라운드 서브에이전트에 병렬
+위임 — 각 파일 1 import + 1 훅 호출만 추가(전 파일 `git diff` 삭제 라인 0줄 확인). 좌석
+기반(occupants.length/knownTargetPlayerCount) 22개 게임은 코요테와 동일 패턴, p1/p2
+고정 2인 게임(하나미코지/말달리자/피스오브랭귀지/쇼미더코인/러브윈즈올/로스트시티즈/
+망각의지뢰/망각의지뢰2)은 `maxPlayers: 2` 리터럴 + `isHost: myRole === "p1"`로 대체
+매핑 — 건너뛴 게임 없음. 읽기 측 `useActiveRooms.ts`는 Realtime `postgres_changes` 구독
++ 15초 주기 재신선도-필터링(하트비트 없이도 죽은 방이 결국 사라지도록).
+
+**신규 UI (`src/components/lobby/`)**: `LobbyProfileCard`(아바타+로그인 이메일/게스트+티어
+뱃지+게임 그리드로 스크롤 이동 버튼+코드 즉시입장+`SoundToggleButton` 재사용, 전적/닉네임
+필드 없음), `ActiveRoomsPanel`(실시간 목록, 빈 상태 정직 표시, 가득 찬 방은 비활성화),
+`PatchNotesSummaryPanel`(`PATCH_NOTES` 최신 3건 헤드라인 + 기존 `Overlay`+`PatchNoteList`
+그대로 재사용하는 팝업 — `/games/[gameId]` 중에도 안전하다는 기존 `PatchNoteButton`의
+설계를 그대로 승계), `CompactGameCard`(작은 카드 + 게임별 실시간 방 개수 뱃지), 이를 묶는
+`DesktopDashboard`. `findActiveRoomsByCode`로 방 코드만으로 게임을 특정해 입장하는 퀵조인도
+추가(같은 코드가 게임 간 충돌 시 가장 최근 갱신된 방으로 이동).
+
+**`src/app/page.tsx` 배선**: 기존 컴포넌트를 고치는 대신 같은 `query`/`filtered` state를
+공유하는 `<DesktopDashboard>`를 최상단에 추가하고, 기존 반응형 레이아웃 전체를
+`xl:hidden`으로 감쌌다 — 두 레이아웃이 동일 상태를 공유해 검색 결과가 어긋나지 않고,
+기존 모바일/태블릿 코드는 한 줄도 바뀌지 않았다(`className`에 `xl:hidden` 추가 1건뿐).
+카드 클릭은 기존과 동일하게 `/games/[gameId]`로 `Link` 이동 — 요청 예시의 "카드 클릭 시
+모달"은 도입하지 않음(이 앱 28개 게임 전부가 각자 자체 방 생성/입장 플로우를 갖고 있고
+공용 `CreateRoomModal`이 존재한 적이 없다는 기존 룰북 뷰어 세션의 확인 사항과 같은 이유 —
+새 전역 모달 아키텍처를 발명하는 대신 기존 패턴 유지).
+
+**검증**: `npx tsc --noEmit`(전체 0 에러) / `npx eslint`(전체 0 에러·경고 — 훅의 렌더 중
+ref 접근 위반 1건을 `useEffect`로 옮겨 수정) / `npx vitest run`(50개 파일 1700개 테스트
+전부 통과) / `next build` 프로덕션 빌드 성공. 캐시된 Playwright Chromium으로 프로덕션
+빌드를 별도 포트(3101 — 3000번은 동시 세션이 점유 중이라 충돌 회피)에서 직접 띄워
+1920×1080·1440×900 양쪽 스크린샷 실측 — `document.documentElement.scrollHeight ===
+clientHeight`로 두 해상도 모두 브라우저 스크롤 0 확정, 3-컬럼 배치·빈 대기실 정직 상태·
+게임 그리드 내부 스크롤 정상 렌더링 확인(`visual-check-gate` 범위 규율에 따라 요청서가
+명시한 두 해상도 각 1장, 총 2장만 촬영 후 정지).
+
+**미검증/후속 필요**: `active_rooms` 테이블 SQL을 사용자가 Supabase SQL 에디터에서
+실행하기 전까지 실시간 대기실/방 개수 뱃지는 항상 빈 상태로만 보인다(기능 자체는 SQL
+실행 즉시 별도 배포 없이 살아남 — 클라이언트는 이미 배포돼 있으므로). 로그인 후 실제
+아바타/이메일이 뜨는 화면, 코드 즉시입장의 실제 방 매칭은 게스트 세션 + 빈 테이블
+상태에서는 실측하지 못함(로직상 확인, 라이브 방 실측은 후속 세션 권장).
 
 ### 2026-09-11 — 진실의 고개 초록불 오작동 + 복기 리포트 + 오답 연출
 

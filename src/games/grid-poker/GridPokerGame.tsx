@@ -8,6 +8,7 @@ import GameLeaveGuardModal from "@/components/GameLeaveGuardModal";
 import Avatar from "@/components/common/Avatar";
 import { useGameLeaveGuard } from "@/hooks/useGameLeaveGuard";
 import { useBackgroundResync } from "@/hooks/useBackgroundResync";
+import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { useGameBgm } from "@/lib/audio/useGameBgm";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
@@ -1058,6 +1059,17 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
 
   const { exitConfirmOpen, cancelExit, confirmExit } = useGameLeaveGuard(roomCode !== null, handleLeave);
   useBackgroundResync(roomCode !== null, requestStateSync);
+  // Desktop lobby dashboard "실시간 활성 대기실" panel (src/app/page.tsx) —
+  // best-effort, see useActiveRoomListing.ts.
+  useActiveRoomListing({
+    gameId: "grid-poker",
+    roomCode,
+    isHost,
+    isWaiting: phase === "waiting",
+    hostName: myName,
+    playerCount: occupants.length,
+    maxPlayers: knownTargetPlayerCount,
+  });
 
   // Mobile back-gesture / browser back-button exit guard, and mobile
   // background-tab resync — both shared across every online game; see

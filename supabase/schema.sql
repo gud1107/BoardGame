@@ -429,3 +429,50 @@ create policy "owner update own avatar folder" on storage.objects
 create policy "owner delete own avatar folder" on storage.objects
   for delete to authenticated
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- ---------------------------------------------------------------------------
+-- Active rooms (2026-09-12 — desktop lobby dashboard's "실시간 활성 대기실"
+-- panel). One row per game room while it's in its pre-start waiting-for-
+-- players lobby (not yet playing) — the row is upserted on a heartbeat by
+-- whichever client is hosting/updating it and deleted once the room starts,
+-- closes, or goes stale. There is deliberately no server-side cron/TTL job
+-- (same posture as chat_messages' missing retention job above); staleness is
+-- handled client-side by the reader filtering out rows whose `updated_at` is
+-- older than a short window, since a tab can close without ever sending the
+-- delete (crash, network loss, etc.).
+--
+-- Same "anon-permissive, not a security boundary" posture as
+-- chat_messages/game_play_log above — anyone holding the anon key could in
+-- principle delete or overwrite another room's row, but nothing sensitive
+-- depends on this table (it's a public "here's a joinable room" listing) and
+-- every one of this app's online games already has this same trust ceiling
+-- for its own Realtime channel.
+-- ---------------------------------------------------------------------------
+
+create table if not exists active_rooms (
+  -- `<gameId>:<roomCode>`, e.g. `coyote:4821` — matches the channel naming
+  -- convention each game already uses (`{game}-room-{roomCode}`), so this
+  -- table never has to invent its own id scheme.
+  id text primary key,
+  game_id text not null,
+  room_code text not null,
+  -- Free-text label shown in the room-list row, e.g. the host's nickname —
+  -- purely cosmetic, never used for authorization.
+  host_name text,
+  player_count int not null default 1,
+  max_players int not null default 1,
+  updated_at timestamptz not null default now()
+);
+create index if not exists active_rooms_updated_idx on active_rooms (updated_at desc);
+create index if not exists active_rooms_game_idx on active_rooms (game_id);
+
+alter table active_rooms enable row level security;
+
+create policy "anon read active_rooms" on active_rooms
+  for select to anon, authenticated using (true);
+create policy "anon write active_rooms" on active_rooms
+  for insert to anon, authenticated with check (true);
+create policy "anon update active_rooms" on active_rooms
+  for update to anon, authenticated using (true);
+create policy "anon delete active_rooms" on active_rooms
+  for delete to anon, authenticated using (true);

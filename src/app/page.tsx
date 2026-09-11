@@ -7,6 +7,7 @@ import type { GameGenre } from "@/games/types";
 import GameGrid from "@/components/GameGrid";
 import CollectionShowcase from "@/components/CollectionShowcase";
 import GameCategoryRow from "@/components/lobby/GameCategoryRow";
+import DesktopDashboard from "@/components/lobby/DesktopDashboard";
 import { GAME_CATEGORIES } from "@/constants/gameCategories";
 import { useGameBgm } from "@/lib/audio/useGameBgm";
 
@@ -70,7 +71,23 @@ export default function DashboardPage() {
   const playableCount = GAME_REGISTRY.filter((g) => g.playable).length;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+    <>
+      {/* Desktop-only (xl+, ≥1280px) zero-scroll 3-column dashboard —
+          confirmed via AskUserQuestion (2026-09-12) to sit alongside the
+          existing responsive layout below rather than replace it, so every
+          hand-tuned mobile/tablet behavior in that layout (carousel,
+          sticky search, collapse animations) stays completely untouched.
+          Shares this page's own `query`/`filtered` state so search results
+          never drift out of sync between the two layouts. */}
+      <DesktopDashboard
+        games={filtered}
+        totalCount={GAME_REGISTRY.length}
+        playableCount={playableCount}
+        query={query}
+        onQueryChange={setQuery}
+      />
+
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 xl:hidden">
       {/* Mobile-only (< sm) sticky search bar (2026-09-03, AskUserQuestion).
           Pinned to the very top of the viewport, directly beneath the
           global SiteHeader's own sticky bar — `top` reads that header's
@@ -252,6 +269,7 @@ export default function DashboardPage() {
           <p className="py-16 text-center text-sm text-white/40">검색 결과가 없습니다.</p>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
