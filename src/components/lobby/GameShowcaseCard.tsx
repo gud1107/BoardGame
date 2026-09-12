@@ -41,12 +41,14 @@ export default function GameShowcaseCard({
 
   const content = (
     <div
-      className={`group flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] transition-all duration-300 ${
+      className={`group relative flex h-full flex-col overflow-hidden rounded-2xl border border-amber-500/15 bg-gradient-to-b from-neutral-900/80 to-neutral-950/90 transition-all duration-300 ${
         game.playable
-          ? "hover:scale-[1.05] hover:border-rose-400/50 hover:shadow-[0_0_24px_rgba(244,63,94,0.25)] active:scale-100"
+          ? "hover:scale-[1.05] hover:border-amber-400/60 hover:shadow-[0_0_24px_rgba(245,158,11,0.25)] active:scale-100"
           : "opacity-60"
       }`}
     >
+      {/* 카드 상단 골드 림라이트 — 다크 럭셔리 리뉴얼(2026-09-12) */}
+      <div className="absolute top-0 right-0 left-0 z-10 h-px bg-gradient-to-r from-transparent via-amber-400/0 to-transparent transition-all duration-500 group-hover:via-amber-300/70" />
       <div
         className="relative flex aspect-[4/3] items-center justify-center overflow-hidden text-4xl"
         style={{

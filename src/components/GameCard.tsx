@@ -20,14 +20,16 @@ export default function GameCard({ game }: { game: GameMeta }) {
 
   const content = (
     <div
-      className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-white/[0.03] transition ${
-        collection ? "border-red-500/25" : "border-white/10"
+      className={`group relative flex h-full flex-col overflow-hidden rounded-2xl border bg-gradient-to-b from-neutral-900/80 to-neutral-950/90 transition ${
+        collection ? "border-red-500/25" : "border-amber-500/15"
       } ${
         game.playable
-          ? "hover:-translate-y-1 hover:border-white/25 hover:bg-white/[0.06] active:scale-95"
+          ? "hover:-translate-y-1 hover:border-amber-400/50 hover:shadow-[0_8px_28px_rgba(245,158,11,0.15)] active:scale-95"
           : "opacity-70"
       }`}
     >
+      {/* 카드 상단 골드 림라이트 — 다크 럭셔리 리뉴얼(2026-09-12) */}
+      <div className="absolute top-0 right-0 left-0 h-px bg-gradient-to-r from-transparent via-amber-400/0 to-transparent transition-all duration-500 group-hover:via-amber-300/60" />
       <div
         className="relative flex aspect-[4/5] items-center justify-center overflow-hidden text-6xl"
         style={{
@@ -62,8 +64,8 @@ export default function GameCard({ game }: { game: GameMeta }) {
         </h3>
         <p className="line-clamp-2 flex-1 text-xs leading-relaxed text-white/55">{game.description}</p>
         <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-white/60">
-          <span className="rounded-full bg-white/10 px-2.5 py-1">👥 {formatPlayers(game)}</span>
-          <span className="rounded-full bg-white/10 px-2.5 py-1">⏱ {formatTime(game)}</span>
+          <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-100/80">👥 {formatPlayers(game)}</span>
+          <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-100/80">⏱ {formatTime(game)}</span>
         </div>
         {game.genres && game.genres.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
@@ -82,7 +84,7 @@ export default function GameCard({ game }: { game: GameMeta }) {
           </div>
         )}
         {game.playable && (
-          <span className="mt-1 inline-flex items-center gap-1 self-start rounded-full bg-rose-500/15 px-3 py-1.5 text-xs font-semibold text-rose-300 transition group-hover:bg-rose-500/25">
+          <span className="mt-1 inline-flex items-center gap-1 self-start rounded-full bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-300 transition group-hover:bg-amber-500/25">
             입장하기 →
           </span>
         )}

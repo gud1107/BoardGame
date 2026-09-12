@@ -10,7 +10,6 @@ import SoundToggleButton from "@/components/audio/SoundToggleButton";
 import PatchNoteButton from "@/components/patchNotes/PatchNoteButton";
 import Avatar from "@/components/common/Avatar";
 import ProfileModal from "@/components/profile/ProfileModal";
-import InviteCodeJoin from "@/components/lobby/InviteCodeJoin";
 
 export default function SiteHeader() {
   const session = useBettingStore((s) => s.session);
@@ -57,7 +56,7 @@ export default function SiteHeader() {
   return (
     <header
       ref={headerRef}
-      className="sticky top-0 z-40 border-b border-white/10 bg-[#0b0b12]/80 backdrop-blur"
+      className="sticky top-0 z-40 border-b border-amber-500/20 bg-neutral-950/70 backdrop-blur-xl"
     >
       {/* flex-wrap + shrink-0 on every child below is the actual fix for the
           "보\n드\n게\n임" vertical-splitting bug reported on this bar: with no
@@ -72,21 +71,29 @@ export default function SiteHeader() {
           squeeze. break-keep is extra insurance for the multi-word labels
           (버그 리포트/내기 진행 중) so a wrap point can't land mid-word either. */}
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 py-2 sm:px-6 sm:py-3">
-        <Link href="/" className="flex shrink-0 items-center gap-2 whitespace-nowrap break-keep text-white">
-          <span className="text-xl">🎲</span>
-          <span className="text-sm font-bold sm:text-base">보드게임 허브</span>
+        {/* 다크 럭셔리 리뉴얼(2026-09-12): 시그니처 엠블럼 + 골드 그라데이션
+            워드마크. 이전엔 이 자리 옆(`hidden xl:flex`)에 데스크톱 전용 초대
+            코드 입력창(`InviteCodeJoin`)이 있었으나, 대체 없이 완전히
+            제거하기로 확정(모달/공유링크 자동입장 파이프라인 모두 이 코드베이스에
+            존재하지 않음) — 헤더를 미니멀하게 비웠다. */}
+        <Link href="/" className="flex shrink-0 items-center gap-2.5 whitespace-nowrap break-keep">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-300 to-amber-600 text-sm font-black text-neutral-950 shadow-[0_0_14px_rgba(245,158,11,0.35)]">
+            ✦
+          </span>
+          <span className="flex flex-col leading-none">
+            <span className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 bg-clip-text font-serif text-sm font-bold tracking-wide text-transparent sm:text-base">
+              보드게임 허브
+            </span>
+            <span className="hidden text-[9px] font-medium tracking-[0.2em] text-amber-500/50 uppercase sm:block">
+              Private Lounge
+            </span>
+          </span>
         </Link>
-        {/* 데스크톱 그리드 대시보드 전용(xl+) 초대 코드 입장 — 2026-09-12 그리드
-            개편으로 제거된 좌측 LobbyProfileCard의 빠른입장을 헤더로 승계.
-            `hidden xl:flex`라서 모바일/태블릿 헤더는 기존과 픽셀 단위로 동일. */}
-        <div className="hidden xl:flex">
-          <InviteCodeJoin />
-        </div>
         <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1.5 sm:gap-3">
           {configured && userId && (
             <button
               onClick={() => setProfileModalOpen(true)}
-              className="shrink-0 rounded-full transition hover:opacity-80"
+              className="shrink-0 rounded-full ring-1 ring-amber-400/40 transition hover:opacity-80 hover:ring-amber-300/70"
               aria-label="프로필 이미지 변경"
               title="프로필 이미지 변경"
             >
@@ -96,7 +103,7 @@ export default function SiteHeader() {
           {configured && (
             <Link
               href={userId ? "/account" : "/login"}
-              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/70 hover:border-white/30 sm:text-xs"
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-500/20 px-2.5 py-1 text-[11px] text-white/70 hover:border-amber-400/60 sm:text-xs"
               title={
                 entitlement
                   ? `오늘 ${entitlement.unit === "games" ? "이용 횟수" : "이용 시간"}: ${entitlement.used}/${entitlement.cap}`
@@ -119,19 +126,19 @@ export default function SiteHeader() {
           )}
           <Link
             href="/lobby"
-            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-white/80 sm:text-sm"
+            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm"
           >
             💬 로비
           </Link>
           <Link
             href="/history"
-            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-white/80 sm:text-sm"
+            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm"
           >
             기록
           </Link>
           <Link
             href="/bug-reports"
-            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-white/80 sm:text-sm"
+            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm"
           >
             🐛 버그 리포트
           </Link>
@@ -139,7 +146,7 @@ export default function SiteHeader() {
           <SoundToggleButton />
           <button
             onClick={() => setSidebarOpen(true)}
-            className="shrink-0 whitespace-nowrap break-keep rounded-full border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-rose-400 hover:text-white"
+            className="shrink-0 whitespace-nowrap break-keep rounded-full border border-amber-500/30 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-amber-400/70 hover:text-white hover:shadow-[0_0_16px_rgba(245,158,11,0.25)]"
           >
             {session ? "🎲 내기 진행 중" : "🎲 내기 관리"}
           </button>

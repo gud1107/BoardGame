@@ -106,7 +106,7 @@ export default function DashboardPage() {
           is hidden on mobile (`hidden sm:block`) so there's only one
           active input, not a confusing duplicate. */}
       <div
-        className="sticky z-30 -mx-4 -mt-8 border-b border-white/10 bg-[#0b0b12]/80 px-4 py-3 backdrop-blur sm:hidden"
+        className="sticky z-30 -mx-4 -mt-8 border-b border-amber-500/15 bg-neutral-950/80 px-4 py-3 backdrop-blur sm:hidden"
         style={{ top: "var(--site-header-h, 96px)" }}
       >
         <div className="relative w-full">
@@ -115,7 +115,7 @@ export default function DashboardPage() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="게임 이름, 태그로 검색..."
             aria-label="게임 검색"
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 pr-9 text-sm text-white break-keep placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
+            className="w-full rounded-xl border border-amber-500/15 bg-white/5 px-4 py-2.5 pr-9 text-sm text-white break-keep placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none"
           />
           {query && (
             <button
@@ -131,7 +131,9 @@ export default function DashboardPage() {
       </div>
 
       <div className="mt-6 mb-8 sm:mt-0">
-        <h1 className="text-2xl font-bold text-white sm:text-3xl">함께할 보드게임을 골라보세요</h1>
+        <h1 className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 bg-clip-text font-serif text-2xl font-bold text-transparent sm:text-3xl">
+          함께할 보드게임을 골라보세요
+        </h1>
         <p className="mt-1 text-sm text-white/50">
           총 {GAME_REGISTRY.length}종 · 플레이 가능 {playableCount}종 · 1~10명, 폰이나 데스크톱으로 즐기세요
         </p>
@@ -185,7 +187,7 @@ export default function DashboardPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="게임 이름, 태그로 검색..."
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 pr-9 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
+              className="w-full rounded-xl border border-amber-500/15 bg-white/5 px-4 py-2.5 pr-9 text-sm text-white placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none"
             />
             {query && (
               <button
@@ -205,8 +207,8 @@ export default function DashboardPage() {
                 onClick={() => setFilterIdx(idx)}
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                   filterIdx === idx
-                    ? "border-rose-400 bg-rose-500/20 text-white"
-                    : "border-white/10 text-white/60 hover:border-white/25"
+                    ? "border-amber-400/70 bg-amber-500/20 text-white"
+                    : "border-white/10 text-white/60 hover:border-amber-400/40"
                 }`}
               >
                 {f.label}
@@ -220,8 +222,8 @@ export default function DashboardPage() {
             onClick={() => setGenreFilter("all")}
             className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
               genreFilter === "all"
-                ? "border-white/40 bg-white/15 text-white"
-                : "border-white/10 text-white/60 hover:border-white/25"
+                ? "border-amber-400/60 bg-amber-500/15 text-white"
+                : "border-white/10 text-white/60 hover:border-amber-400/40"
             }`}
           >
             전체 장르

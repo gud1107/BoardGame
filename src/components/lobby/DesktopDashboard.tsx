@@ -47,19 +47,23 @@ export default function DesktopDashboard({
 
   return (
     <div
-      className="hidden min-h-0 w-full flex-col overflow-hidden px-4 pt-3 pb-4 xl:flex"
+      className="relative hidden min-h-0 w-full flex-col overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-900 via-neutral-950 to-black px-4 pt-3 pb-4 xl:flex"
       style={{ height: "calc(100dvh - var(--site-header-h, 96px))" }}
     >
-      <main className="flex min-h-0 flex-1 flex-col rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 pb-3">
+      {/* 은은한 배경 앰비언트 골드 오라 — 다크 럭셔리 리뉴얼(2026-09-12) */}
+      <div className="pointer-events-none absolute top-0 left-1/2 h-32 w-3/4 -translate-x-1/2 bg-amber-500/5 blur-[120px]" />
+      <main className="relative flex min-h-0 flex-1 flex-col rounded-2xl border border-amber-500/20 bg-neutral-900/60 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.5)] backdrop-blur-md">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-amber-500/15 pb-3">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-rose-400">🎮 게임 선택</span>
+            <span className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 bg-clip-text font-serif text-sm font-bold tracking-wide text-transparent">
+              🎮 게임 선택
+            </span>
             <span className="text-xs font-normal text-white/40">
               플레이할 보드게임을 선택하여 방을 개설하세요
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="shrink-0 text-xs font-medium text-white/40">
+            <span className="shrink-0 text-xs font-medium text-amber-500/60">
               총 {totalCount}개 게임 · 플레이 가능 {playableCount}개
             </span>
             <div className="relative w-full max-w-[240px]">
@@ -68,7 +72,7 @@ export default function DesktopDashboard({
                 onChange={(e) => onQueryChange(e.target.value)}
                 placeholder="게임 이름, 태그로 검색..."
                 aria-label="게임 검색"
-                className="w-full rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
+                className="w-full rounded-full border border-amber-500/20 bg-neutral-950/40 px-3 py-1.5 text-xs text-white placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none"
               />
             </div>
           </div>
