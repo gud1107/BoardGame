@@ -10,6 +10,7 @@ import SoundToggleButton from "@/components/audio/SoundToggleButton";
 import PatchNoteButton from "@/components/patchNotes/PatchNoteButton";
 import Avatar from "@/components/common/Avatar";
 import ProfileModal from "@/components/profile/ProfileModal";
+import InviteCodeJoin from "@/components/lobby/InviteCodeJoin";
 
 export default function SiteHeader() {
   const session = useBettingStore((s) => s.session);
@@ -75,6 +76,12 @@ export default function SiteHeader() {
           <span className="text-xl">🎲</span>
           <span className="text-sm font-bold sm:text-base">보드게임 허브</span>
         </Link>
+        {/* 데스크톱 그리드 대시보드 전용(xl+) 초대 코드 입장 — 2026-09-12 그리드
+            개편으로 제거된 좌측 LobbyProfileCard의 빠른입장을 헤더로 승계.
+            `hidden xl:flex`라서 모바일/태블릿 헤더는 기존과 픽셀 단위로 동일. */}
+        <div className="hidden xl:flex">
+          <InviteCodeJoin />
+        </div>
         <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1.5 sm:gap-3">
           {configured && userId && (
             <button
