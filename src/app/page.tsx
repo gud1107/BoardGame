@@ -9,15 +9,8 @@ import CollectionShowcase from "@/components/CollectionShowcase";
 import GameCategoryRow from "@/components/lobby/GameCategoryRow";
 import DesktopDashboard from "@/components/lobby/DesktopDashboard";
 import { GAME_CATEGORIES } from "@/constants/gameCategories";
+import { PLAYER_FILTERS } from "@/constants/playerFilters";
 import { useGameBgm } from "@/lib/audio/useGameBgm";
-
-const PLAYER_FILTERS = [
-  { label: "전체", test: () => true },
-  { label: "2인", test: (min: number, max: number) => min <= 2 && max >= 2 },
-  { label: "3~4인", test: (min: number, max: number) => min <= 4 && max >= 3 },
-  { label: "5~7인", test: (min: number, max: number) => min <= 7 && max >= 5 },
-  { label: "8인", test: (min: number, max: number) => min <= 8 && max >= 8 },
-];
 
 type GenreFilter = GameGenre | "all";
 
@@ -85,6 +78,8 @@ export default function DashboardPage() {
         playableCount={playableCount}
         query={query}
         onQueryChange={setQuery}
+        filterIdx={filterIdx}
+        onFilterChange={setFilterIdx}
       />
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 xl:hidden">

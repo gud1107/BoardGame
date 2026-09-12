@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import type { GameMeta } from "@/games/types";
 import { useActiveRooms } from "@/games/shared/room/useActiveRooms";
+import { PLAYER_FILTERS } from "@/constants/playerFilters";
 import GameShowcaseCard from "./GameShowcaseCard";
 
 /**
@@ -16,13 +17,19 @@ import GameShowcaseCard from "./GameShowcaseCard";
  * 2026-09-12 grid-overhaul revision: this replaced a same-day 3-column
  * version (profile/quick-start rail + this grid + a live-room-list/patch-
  * notes rail) within hours of shipping, per an explicit follow-up request
- * to devote ~85%+ of the screen to the game grid instead. What moved
- * rather than disappeared: the invite-code quick-join now lives in
- * `SiteHeader` (`InviteCodeJoin`, xl+ only) since the global header already
- * carries the profile summary/patch-notes button/sound toggle this
- * dashboard needed; the `active_rooms` live-room infra built that same day
- * is NOT reverted — `useActiveRooms` still feeds a live room-count badge on
- * each card, only the dedicated right-rail panel UI was removed.
+ * to devote ~85%+ of the screen to the game grid instead. The `active_rooms`
+ * live-room infra built that same day is NOT reverted — `useActiveRooms`
+ * still feeds a live room-count badge on each card, only the dedicated
+ * right-rail panel UI was removed. (The invite-code quick-join that
+ * briefly lived in `SiteHeader` after this revision was later removed
+ * outright, with no replacement — see HANDOFF.md's "다크 럭셔리" entry.)
+ *
+ * 2026-09-12 follow-up: this rewrite's header only kept a text search
+ * input, silently dropping the player-count filter chips
+ * (전체/2인/3~4인/5~7인/8인) that `src/app/page.tsx`'s mobile/tablet layout
+ * still has — restored here as `filterIdx`/`onFilterChange`, sharing the
+ * same `PLAYER_FILTERS` list (and the same lifted state in `page.tsx`) so
+ * results never drift between the two layouts.
  */
 export default function DesktopDashboard({
   games,
@@ -30,12 +37,16 @@ export default function DesktopDashboard({
   playableCount,
   query,
   onQueryChange,
+  filterIdx,
+  onFilterChange,
 }: {
   games: GameMeta[];
   totalCount: number;
   playableCount: number;
   query: string;
   onQueryChange: (q: string) => void;
+  filterIdx: number;
+  onFilterChange: (idx: number) => void;
 }) {
   const rooms = useActiveRooms();
 
@@ -53,7 +64,7 @@ export default function DesktopDashboard({
       {/* 은은한 배경 앰비언트 골드 오라 — 다크 럭셔리 리뉴얼(2026-09-12) */}
       <div className="pointer-events-none absolute top-0 left-1/2 h-32 w-3/4 -translate-x-1/2 bg-amber-500/5 blur-[120px]" />
       <main className="relative flex min-h-0 flex-1 flex-col rounded-2xl border border-amber-500/20 bg-neutral-900/60 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.5)] backdrop-blur-md">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-amber-500/15 pb-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-amber-500/15 pb-3">
           <div className="flex items-center gap-2">
             <span className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 bg-clip-text font-serif text-sm font-bold tracking-wide text-transparent">
               🎮 게임 선택
@@ -63,6 +74,25 @@ export default function DesktopDashboard({
             </span>
           </div>
           <div className="flex items-center gap-3">
+            {/* 인원수 필터 — 이 대시보드가 검색 인풋만 남기고 조용히 빠뜨렸던 걸
+                복원 (2026-09-12 후속). `PLAYER_FILTERS`/`filterIdx` 상태는
+                `page.tsx`에서 그대로 내려받아 모바일 레이아웃과 결과가 어긋나지
+                않는다. */}
+            <div className="flex shrink-0 gap-1.5">
+              {PLAYER_FILTERS.map((f, idx) => (
+                <button
+                  key={f.label}
+                  onClick={() => onFilterChange(idx)}
+                  className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+                    filterIdx === idx
+                      ? "border-amber-400/70 bg-amber-500/20 text-white"
+                      : "border-white/10 text-white/60 hover:border-amber-400/40"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
             <span className="shrink-0 text-xs font-medium text-amber-500/60">
               총 {totalCount}개 게임 · 플레이 가능 {playableCount}개
             </span>
