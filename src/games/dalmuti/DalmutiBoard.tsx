@@ -403,10 +403,12 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     </button>
   );
 
-  // ⚙️ 자동 패스 설정 드롭다운 토글 — task brief §3. 열고 닫는 상태(`autoPassPanelOpen`)만
-  // 로컬 UI 상태이고, 실제 조건 값은 위에서 이미 초기화한 `autoPass`가 들고 있다.
+  // ⚙️ 자동 패스 설정 모달 토글 — task brief §3, 2026-09-14 세션에 화면 중앙
+  // 포탈 모달로 재배치(AutoPass.tsx 참고, 모바일 화면 밖 잘림 버그 수정).
+  // 열고 닫는 상태(`autoPassPanelOpen`)만 로컬 UI 상태이고, 실제 조건 값은
+  // 위에서 이미 초기화한 `autoPass`가 들고 있다.
   const autoPassButton = (
-    <div className="relative">
+    <div>
       <FxButton
         variant="slate"
         onClick={() => {

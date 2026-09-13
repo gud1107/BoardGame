@@ -169,7 +169,16 @@ export function evaluateAutoPass(state: DalmutiState, seat: SeatIndex, settings:
 // UI: settings dropdown, persistent "켜짐" badge, and the 1s toast
 // ---------------------------------------------------------------------------
 
-/** ⚙️ 드롭다운 안의 체크박스+숫자입력 패널. 위치는 호출부(`DalmutiBoard.tsx`)가 `relative` 컨테이너로 앵커링한다. */
+/**
+ * ⚙️ 체크박스+숫자입력 패널. 원래 호출부(`DalmutiBoard.tsx`) 버튼에
+ * `absolute top-full right-0`로 앵커링된 드롭다운이었으나, 상단 바 내용
+ * 길이에 따라 버튼이 화면 우측 끝에서 먼 위치에 놓이는 좁은 모바일 폭에서는
+ * 패널 너비(288px)가 왼쪽으로 화면 밖까지 삐져나가 체크박스 텍스트가 잘려
+ * 보이는 실제 레이아웃 버그가 있었다(`boardGameRule/달무티/모바일짤림현상.jpg`
+ * 로 재현 확인, 2026-09-14 세션). 앵커 위치에 의존하지 않도록 `createPortal`로
+ * 화면 정중앙에 뜨는 고정 모달로 전환 — 버튼이 어디 있든 항상 체크박스
+ * 전체가 보인다. 배경을 탭해도 닫힌다(`AutoPassToast`처럼 `document.body`에 포탈).
+ */
 export function AutoPassSettingsPanel({
   settings,
   onChange,
@@ -179,63 +188,76 @@ export function AutoPassSettingsPanel({
   onChange: (patch: Partial<AutoPassSettings>) => void;
   onClose: () => void;
 }) {
-  return (
-    <div className="absolute top-full right-0 z-30 mt-2 w-72 max-w-[85vw] rounded-2xl border border-white/15 bg-[#160f26] p-3 text-[11px] text-white/80 shadow-2xl">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-semibold break-keep text-amber-200">⚙️ 자동 패스 설정</span>
-        <button onClick={onClose} className="px-1 text-white/50 hover:text-white" aria-label="닫기">
-          ✕
-        </button>
-      </div>
-      <p className="mb-2 break-keep text-white/40">체크한 조건 중 하나라도 맞으면 자동으로 패스해요. 여러 개를 동시에 켤 수 있어요.</p>
-      <label className="mb-1.5 flex items-start gap-2">
-        <input
-          type="checkbox"
-          className="mt-0.5 shrink-0"
-          checked={settings.freeFollow}
-          onChange={(e) => onChange({ freeFollow: e.target.checked })}
-        />
-        <span className="break-keep">기본 프리패스 — 낼 수 있는 카드가 아예 없을 때 즉시 패스</span>
-      </label>
-      <label className="mb-1.5 flex items-start gap-2">
-        <input
-          type="checkbox"
-          className="mt-0.5 shrink-0"
-          checked={settings.lowRankSingle}
-          onChange={(e) => onChange({ lowRankSingle: e.target.checked })}
-        />
-        <span className="flex flex-wrap items-center gap-1 break-keep">
-          단일 카드로
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-label="자동 패스 설정"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl border border-white/15 bg-[#160f26] p-4 text-[11px] text-white/80 shadow-2xl"
+        style={{ animation: "dalmuti-autopass-panel-in 150ms ease-out" }}
+      >
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-xs font-semibold break-keep text-amber-200">⚙️ 자동 패스 설정</span>
+          <button onClick={onClose} className="px-1 text-white/50 hover:text-white" aria-label="닫기">
+            ✕
+          </button>
+        </div>
+        <p className="mb-2 break-keep text-white/40">체크한 조건 중 하나라도 맞으면 자동으로 패스해요. 여러 개를 동시에 켤 수 있어요.</p>
+        <label className="mb-1.5 flex items-start gap-2">
           <input
-            type="number"
-            min={1}
-            max={12}
-            value={settings.lowRankThreshold}
-            onChange={(e) => onChange({ lowRankThreshold: Number(e.target.value) })}
-            className="w-11 shrink-0 rounded border border-white/20 bg-black/30 px-1 py-0.5 text-center text-white"
+            type="checkbox"
+            className="mt-0.5 shrink-0"
+            checked={settings.freeFollow}
+            onChange={(e) => onChange({ freeFollow: e.target.checked })}
           />
-          번 이하 강한 계급이 나오면 패 아끼며 패스
-        </span>
-      </label>
-      <label className="mb-1.5 flex items-start gap-2">
-        <input
-          type="checkbox"
-          className="mt-0.5 shrink-0"
-          checked={settings.roleDefense}
-          onChange={(e) => onChange({ roleDefense: e.target.checked })}
-        />
-        <span className="break-keep">계급별 방어 — 왕·귀족이 모두 탈출할 때까지 계속 패스</span>
-      </label>
-      <label className="flex items-start gap-2">
-        <input
-          type="checkbox"
-          className="mt-0.5 shrink-0"
-          checked={settings.waitForFirstFinisher}
-          onChange={(e) => onChange({ waitForFirstFinisher: e.target.checked })}
-        />
-        <span className="break-keep">1명 탈출 시까지 무조건 패스 — 아직 아무도 손패를 다 못 털었으면 무조건 패스</span>
-      </label>
-    </div>
+          <span className="break-keep">기본 프리패스 — 낼 수 있는 카드가 아예 없을 때 즉시 패스</span>
+        </label>
+        <label className="mb-1.5 flex items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-0.5 shrink-0"
+            checked={settings.lowRankSingle}
+            onChange={(e) => onChange({ lowRankSingle: e.target.checked })}
+          />
+          <span className="flex flex-wrap items-center gap-1 break-keep">
+            단일 카드로
+            <input
+              type="number"
+              min={1}
+              max={12}
+              value={settings.lowRankThreshold}
+              onChange={(e) => onChange({ lowRankThreshold: Number(e.target.value) })}
+              className="w-11 shrink-0 rounded border border-white/20 bg-black/30 px-1 py-0.5 text-center text-white"
+            />
+            번 이하 강한 계급이 나오면 패 아끼며 패스
+          </span>
+        </label>
+        <label className="mb-1.5 flex items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-0.5 shrink-0"
+            checked={settings.roleDefense}
+            onChange={(e) => onChange({ roleDefense: e.target.checked })}
+          />
+          <span className="break-keep">계급별 방어 — 왕·귀족이 모두 탈출할 때까지 계속 패스</span>
+        </label>
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-0.5 shrink-0"
+            checked={settings.waitForFirstFinisher}
+            onChange={(e) => onChange({ waitForFirstFinisher: e.target.checked })}
+          />
+          <span className="break-keep">1명 탈출 시까지 무조건 패스 — 아직 아무도 손패를 다 못 털었으면 무조건 패스</span>
+        </label>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

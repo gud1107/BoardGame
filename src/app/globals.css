@@ -1123,6 +1123,22 @@ body {
   }
 }
 
+/* 달무티's 자동 패스 설정 패널 (2026-09-14 세션) — 원래 ⚙️ 버튼에 `absolute
+   top-full right-0`로 앵커링된 드롭다운이었으나, 버튼이 화면 우측 끝에서 먼
+   좁은 모바일 폭에서 패널(288px)이 왼쪽으로 화면 밖까지 삐져나가 체크박스
+   텍스트가 잘려 보이는 실제 버그가 있었다(boardGameRule/달무티/모바일짤림현상.jpg
+   로 확인). 화면 정중앙에 뜨는 고정 모달로 전환하면서 쓰는 등장 애니메이션. */
+@keyframes dalmuti-autopass-panel-in {
+  0% {
+    transform: scale(0.94);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 /* 달무티's 패스 말풍선 (2026-09-06 세션, PassBubble in DalmutiEffects.tsx) —
    다른 플레이어/AI 봇이 패스할 때 그 좌석 위에 1초간 튀어오르며 나타났다
    끝에서 페이드아웃하는 "💬 패스!" 말풍선. */
