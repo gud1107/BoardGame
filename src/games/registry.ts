@@ -705,6 +705,24 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
   },
+  {
+    id: "memory-feast",
+    name: "기억의 만찬",
+    nameEn: "Memory's Feast",
+    description:
+      "넷플릭스 예능 <데스게임> 등장 2인 전용 기억력 데스매치. 접시 여러 개를 공유하며 라운드마다 토큰을 한 접시에 몰아 쌓되, 내가 넣은 개수만 항상 보이고 상대가 넣는 순간은 잠깐만 보여진 뒤 가려집니다. 배치가 끝나면 접시 2개를 지정해 총합이 같은지 맞히는 오픈 단계로 전환되며, 맞히면 내 저장고가 줄어들고(먼저 0을 만들면 승리), 틀리면 벌점이 쌓입니다(임계치 도달 시 패배). 쉬움/보통/어려움 난이도로 접시 수·라운드·제한시간을 조절할 수 있습니다.",
+    players: { min: 2, max: 2 },
+    playTime: { minMinutes: 10, maxMinutes: 20 },
+    category: "deduction",
+    thumbnail: { emoji: "🍽️", gradient: ["#f59e0b", "#1a0e05"] },
+    tags: ["2인전용", "기억력", "단판승부", "데스게임", "난이도선택"],
+    genres: ["strategy"],
+    collectionId: "netflix-death-game",
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+    chatEnabled: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {
