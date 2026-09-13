@@ -689,6 +689,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
     onlineMultiplayer: true,
   },
+  {
+    id: "great-legacy",
+    name: "위대한 유산",
+    nameEn: "The Great Legacy",
+    description:
+      "전 세계 유물을 놓고 벌이는 심리 경매 게임. 코인을 입찰해 유물 카드를 낙찰받고 컬렉션을 완성해 점수를 쌓되, 평가절하·가품 판정 카드는 거꾸로 '먼저 포기한 사람'이 떠안는 역경매입니다. 4인은 원작 그대로, 8인은 완전 리밸런싱된 단일 테이블 변형입니다.",
+    players: { min: 4, max: 8 },
+    playTime: { minMinutes: 30, maxMinutes: 50 },
+    category: "card",
+    thumbnail: { emoji: "🏛️", gradient: ["#f59e0b", "#7c2d12"] },
+    tags: ["경매", "심리전", "컬렉션"],
+    genres: ["strategy", "bluffing"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
 ];
 
 export function getGameMeta(id: string): GameMeta | undefined {
