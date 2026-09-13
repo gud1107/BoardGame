@@ -21,6 +21,8 @@ import {
   PlayImpactBurst,
   ReceivedCardGlow,
   RevolutionBanner,
+  ShowdownReveal,
+  SHOWDOWN_REVEAL_MS,
   type ExchangeHistoryEntry,
   type PassEvent,
   type PlayImpactEvent,
@@ -103,6 +105,19 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     }
     onAction(action);
   }
+  // 모바일 오디오 자동재생 정책 방어(task brief §2, 2026-09-13 세션) — 지금까지는
+  // 오직 이 뷰어가 직접 액션을 보낼 때(`dispatch()` 안)만 `unlock()`이 호출됐다.
+  // 문제는 다른 좌석/봇의 "패스"는 `dispatch()`가 아니라 아래 락스텝 diff
+  // 지점에서 감지·재생되는데, 만약 이 뷰어가 자기 턴이 오기 전에 남의 패스를
+  // 먼저 듣게 되면(선 좌석이 아니거나, 첫 액션이 패스가 아닌 경우) 그 시점에
+  // `AudioContext`/`speechSynthesis`가 단 한 번도 실제 사용자 제스처로 언락된
+  // 적 없어 브라우저(특히 iOS Safari/일부 Android WebView)가 조용히 무음
+  // 처리한다 — "패스 소리와 음성이 유독 안 들린다"는 신고의 실제 원인. 보드에
+  // 진입해 화면 아무 곳이나 처음 터치하는 순간 최대한 빨리 언락되도록 루트
+  // 래퍼의 `onPointerDownCapture`에 건다(멱등 — 이후 호출은 전부 그냥 no-op).
+  function unlockAudio() {
+    getSoundEngine().unlock();
+  }
   /** Role title for a seat, independent of the viewer — used by the exchange FX's third-party message. */
   const titleFor = useCallback((seat: SeatIndex) => rankTitle(state.rankOrder.indexOf(seat), state.playerCount), [state.rankOrder, state.playerCount]);
 
@@ -152,6 +167,12 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   // sibling-key 계열 버그, 과거 러브 윈즈 올 §4에서 실제로 겪음)가 생길 수 있어
   // 매번 증가하는 id를 key로 쓴다.
   const [passBubbles, setPassBubbles] = useState<(PassEvent & { id: number })[]>([]);
+  // 게임 종료 쇼다운 공개(task brief §1, 2026-09-13 세션) — `gameOver` 진입을
+  // 다른 모든 코스메틱 이벤트와 같은 "연속 락스텝 스냅샷 diff" 지점에서
+  // 감지해, 결과 순위표 대신 `ShowdownReveal`을 먼저 `SHOWDOWN_REVEAL_MS`만큼
+  // 보여준다. 순수 로컬 타이머로만 제어(락스텝 상태는 손대지 않음)이므로
+  // 각 클라이언트가 독립적으로 재생해도 안전 — `ShowdownReveal`의 모듈 doc 참고.
+  const [showdownActive, setShowdownActive] = useState(false);
   if (trackedState !== state) {
     const newTax = detectTaxEvents(trackedState, state);
     const newCommonerSwaps = detectCommonerSwapEvents(trackedState, state);
@@ -159,7 +180,12 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     const newPasses = detectPassEvents(trackedState, state);
     const newTrick = state.lastTrickResult !== trackedState.lastTrickResult ? state.lastTrickResult : null;
     const newRevolution = state.revolutionDeclared !== trackedState.revolutionDeclared ? state.revolutionDeclared : null;
+    const enteredGameOver = trackedState.phase !== "gameOver" && state.phase === "gameOver";
     setTrackedState(state);
+    if (enteredGameOver) {
+      setShowdownActive(true);
+      getSoundEngine().playShowdownReveal();
+    }
     if (newPlayImpacts.length > 0) {
       setPlayImpacts((prev) => {
         let nextId = (prev.at(-1)?.id ?? 0) + 1;
@@ -285,6 +311,11 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     const t = setTimeout(() => setShake(null), shake.grand ? 450 : 300);
     return () => clearTimeout(t);
   }, [shake]);
+  useEffect(() => {
+    if (!showdownActive) return;
+    const t = setTimeout(() => setShowdownActive(false), SHOWDOWN_REVEAL_MS);
+    return () => clearTimeout(t);
+  }, [showdownActive]);
 
   // ---------------------------------------------------------------------
   // 스마트 자동 패스 (task brief §3, 2026-09-05 세션) — see AutoPass.tsx's
@@ -405,6 +436,14 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   // Game over
   // ---------------------------------------------------------------------
   if (state.phase === "gameOver") {
+    if (showdownActive) {
+      return (
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
+          <ShowdownReveal state={state} names={names} titleFor={titleFor} />
+          <ExchangeHistoryPanel entries={exchangeHistory} viewerSeat={viewerSeat} names={names} titleFor={titleFor} />
+        </div>
+      );
+    }
     const rankings = computeRankings(state);
     const winner = rankings.find((r) => r.rank === 1)!;
     return (
@@ -559,7 +598,10 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   };
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
+    <div
+      className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4"
+      onPointerDownCapture={unlockAudio}
+    >
     <MyTurnOverlay isMyTurn={isMyTrickTurn} />
     <div
       className="flex min-w-0 flex-1 flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"

@@ -31,7 +31,51 @@
 `vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
 길게 재시도하지 마세요.
 
-_최종 갱신: 2026-09-12 (**로비 데스크톱 — 인원수 필터 칩 복원(같은 날 네 번째 세션)** —
+_최종 갱신: 2026-09-13 (**달무티(The Great Dalmuti) — 게임 종료 쇼다운(Showdown) 공개 연출 +
+모바일 패스 음성/효과음 묵음 결함 픽스** — 요청서가 든 `GameResultModal.tsx`/`CardHand.tsx`/
+`Board.tsx`/`SoundManager.ts`/`src/utils/audio.ts`는 이 코드베이스에 없음(이 게임에서 매번
+반복되는 premise-mismatch 패턴 — 실체는 `DalmutiBoard.tsx`/`DalmutiEffects.tsx`/`engine.ts` +
+`lib/audio/soundEngine.ts`). 오디오 원인 진단도 요청서와 실제가 달랐음: 이 프로젝트는
+`new Audio('/*.mp3')`를 어디서도 쓰지 않고(저작권 정책상 모든 SFX를 코드로 합성 — 파일
+헤더 참고) 패스 효과음(`playPassWhiff`)도 이미 Web Audio 오실레이터 기반이라 요청서가 짚은
+"HTML5 Audio 재사용/포맷 문제"는 실체가 없었음. 다만 진짜 결함은 있었음: 상대/봇의 패스는
+`dispatch()`(내 클릭)가 아니라 락스텝 diff 지점에서 감지·재생되는데, 이 뷰어가 **자기
+차례가 오기 전에 남의 패스를 먼저 듣는 경우**(선 좌석이 아니거나 첫 액션이 패스가 아닌 경우)
+그 시점까지 `AudioContext`도 `speechSynthesis`도 실제 사용자 제스처로 언락된 적이 없어
+iOS Safari/일부 Android WebView가 조용히 무음 처리함 — 이것이 "패스 소리·음성이 유독 안
+들린다" 신고의 실제 원인.
+
+**① 쇼다운 공개 연출**: `engine.ts`의 `playCards`는 손패가 남은 좌석이 정확히 1명이 되는
+순간 그 좌석을 곧장 `finishOrder` 꼴찌로 편입시키며 `phase`를 바로 `gameOver`로 전환하는
+구조(라운드제가 아닌 단판 승부라 `ROUND_OVER`라는 별도 phase 자체가 없음) — 신규
+`DalmutiEffects.tsx`의 `ShowdownReveal`이 `gameOver` 진입을 기존과 동일한 "연속 락스텝
+스냅샷 diff" 지점에서 감지해, 한 번도 앞면 공개된 적 없는 그 꼴찌 좌석의 손패를
+`dalmuti-highlight-card-flip`(기존 키프레임 재사용) 플립으로 3.5초(`SHOWDOWN_REVEAL_MS`)간
+공개하는 골드/벨벳 톤 화면을 기존 순위표 모달 **앞에** 끼워 넣음(`DalmutiBoard.tsx`의
+`showdownActive` 로컬 상태 + 타이머, 락스텝 상태 자체는 건드리지 않는 순수 연출이라 클라
+이언트마다 독립 재생해도 안전). `[ 남은 패: 12, 12, 어릿광대 ]` 형식 요약 배지 포함, 순위표
+자체(레이아웃/판정)는 무변경. 신규 SFX `playShowdownReveal()`(커튼 스윕 화이트노이즈 +
+`playRevolutionBell`보다 한 옥타브 낮은 공 울림, 반란 종소리와 구분).
+
+**② 모바일 패스 음성/효과음 묵음 결함**: `soundEngine.ts`의 `unlock()`을 확장해 `speechSynthesis`
+워밍업(거의 무음 더미 발화 1회)을 `ensureContext()`와 같은 타이밍에 함께 처리 — WebKit은
+세션 중 실제 제스처 안에서 최소 1회 `speak()`가 성공해야 이후 제스처 밖 호출도 계속
+동작하므로, 이 언락을 AudioContext 언락과 동일한 "첫 실제 클릭/탭"에 편승시킴. `DalmutiBoard.tsx`
+루트 래퍼에 `onPointerDownCapture`로 화면 아무 곳이나 처음 터치하는 즉시(기존처럼 액션을
+직접 보낼 때까지 기다리지 않고) `unlock()`이 걸리도록 확장. 부수적으로 `ensureContext()`의
+`ctx.resume()` 미처리 프라미스에도 `.catch(() => {})` 방어 추가. **실제 iOS Safari/안드로이드
+실기기 검증은 이 환경에서 불가능** — 코드 수준 확신(WebKit의 "첫 제스처 필요" 정책에 대한
+표준 대응 패턴 적용)으로만 커버, 실기기 확인은 다음 세션 과제로 남음.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint src/games/dalmuti src/lib/audio`(0 에러) /
+`npx vitest run src/games/dalmuti src/lib/audio`(75+24=99개 전부 통과) / `npx next build`
+성공. `달무티.md` §4에 쇼다운 공개가 판정에 영향 없는 연출 단계임을 명시하는 한 줄 추가.
+헤드리스 브라우저로 실제 게임을 끝까지 진행해 쇼다운 화면을 스크린샷으로 확인하지는
+못함(단판 끝까지 플레이하는 자동화 비용 대비 실익 낮다고 판단, 이 게임 과거 세션들의
+"코드 수준 확신" 관례를 따름) — 다음 세션에서 실제 라이브 확인 권장. 커밋 후 `git push`로
+자동 배포.)_
+
+_이전 갱신: 2026-09-12 (**로비 데스크톱 — 인원수 필터 칩 복원(같은 날 네 번째 세션)** —
 바로 위 절의 그리드 중심 재개편이 `DesktopDashboard.tsx` 헤더를 텍스트 검색 인풋 하나만
 남기고 새로 쓰면서, `src/app/page.tsx`의 모바일/태블릿 레이아웃엔 계속 남아 있던 인원수
 필터 칩(전체/2인/3~4인/5~7인/8인)을 xl+ 데스크톱에서 조용히 빠뜨렸던 실제 회귀 버그 —

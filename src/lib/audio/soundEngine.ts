@@ -171,6 +171,7 @@ class SoundEngine {
   private storeSubscribed = false;
   private lastPlayedAt = new Map<string, number>();
   private activeChannels = 0;
+  private speechUnlocked = false;
 
   isMuted(): boolean {
     return useAudioSettingsStore.getState().masterMuted;
@@ -195,7 +196,7 @@ class SoundEngine {
       this.sfxGain.connect(this.ctx.destination);
       this.subscribeToSettings();
     }
-    if (this.ctx.state === "suspended") void this.ctx.resume();
+    if (this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
     return this.ctx;
   }
 
@@ -212,6 +213,34 @@ class SoundEngine {
   /** Call from any click/tap handler to unlock audio ahead of time. */
   unlock() {
     this.ensureContext();
+    this.unlockSpeech();
+  }
+
+  /**
+   * WebKit(iOS Safari, 일부 Android WebView 포함)은 세션 중 `speechSynthesis.
+   * speak()`가 실제 사용자 제스처 콜스택 안에서 최소 한 번 성공적으로
+   * 호출되기 전까지는 이후의 모든 speak() 호출(제스처 밖에서 호출되는 것
+   * 포함)을 조용히 무시한다 — Web Audio `AudioContext`의 "첫 제스처가
+   * 필요하다"는 제약과는 별개의 파이프라인이라 `ensureContext()`만으로는
+   * 해결되지 않는다. `unlock()`은 이미 이 프로젝트의 모든 게임에서 클릭/탭
+   * 핸들러마다 최소 1회 호출되므로(파일 헤더 참고) 그 첫 실제 제스처에
+   * 편승해 거의 무음(볼륨 0) 더미 발화 1회로 speechSynthesis 자체도 같은
+   * 타이밍에 영구 언락해 둔다 — 이렇게 해두면 실제 발화(`speakPass` 등)는
+   * 이후 사용자 제스처 밖(소켓/락스텝 상태 동기화로 다른 좌석의 패스를
+   * 감지하는 diff 지점 등)에서 호출돼도 계속 정상 작동한다. (task brief,
+   * 2026-09-13 세션 — "일부 모바일 기기 패스 음성 묵음" 결함 조치)
+   */
+  private unlockSpeech() {
+    if (this.speechUnlocked) return;
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    this.speechUnlocked = true;
+    try {
+      const warmUp = new SpeechSynthesisUtterance(" ");
+      warmUp.volume = 0;
+      window.speechSynthesis.speak(warmUp);
+    } catch {
+      // 일부 구형 WebView는 SpeechSynthesisUtterance 생성 자체를 던질 수 있음 — 무음 실패, 다음 세션에서 재시도되지 않아도 실사용 영향 없음(치명적이지 않은 장식용 워밍업)
+    }
   }
 
   /**
@@ -1348,6 +1377,54 @@ class SoundEngine {
       osc.connect(gain).connect(this.sfxGain!);
       osc.start(now);
       osc.stop(now + 1.6);
+    });
+  }
+
+  /**
+   * 달무티 — "쇼다운 공개": 최후까지 손패를 털지 못한 좌석의 카드가 뒤집혀
+   * 공개되는 순간 재생되는 사운드(task brief, 2026-09-13 세션 §1
+   * SHOWDOWN_REVEAL) — 짧은 커튼-스윕 화이트노이즈(공개의 "휙" 소리)에 이어
+   * `playRevolutionBell`보다 한 옥타브 이상 낮고 어두운 공(gong) 울림으로,
+   * 반란 종소리와 청각적으로 헷갈리지 않게 구분했다. `DalmutiBoard.tsx`가
+   * `gameOver` 진입을 감지하는 diff 지점에서 모든 접속자에게 동일하게
+   * 재생한다.
+   */
+  playShowdownReveal() {
+    if (!this.gate("showdownReveal", 800)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const sweep = ctx.createBufferSource();
+    sweep.buffer = noiseBuffer(ctx);
+    const sweepFilter = ctx.createBiquadFilter();
+    sweepFilter.type = "bandpass";
+    sweepFilter.Q.value = 1.2;
+    sweepFilter.frequency.setValueAtTime(2200, now);
+    sweepFilter.frequency.exponentialRampToValueAtTime(300, now + 0.5);
+    const sweepGain = ctx.createGain();
+    sweepGain.gain.setValueAtTime(0, now);
+    sweepGain.gain.linearRampToValueAtTime(0.18, now + 0.05);
+    sweepGain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    sweep.connect(sweepFilter).connect(sweepGain).connect(this.sfxGain);
+    sweep.start(now);
+    sweep.stop(now + 0.55);
+
+    const gongAt = now + 0.08;
+    [
+      { freq: 98, gain: 0.32 },
+      { freq: 164, gain: 0.14 },
+      { freq: 233, gain: 0.08 },
+    ].forEach(({ freq, gain: g }) => {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(g, gongAt);
+      gain.gain.exponentialRampToValueAtTime(0.001, gongAt + 2.2);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(gongAt);
+      osc.stop(gongAt + 2.2);
     });
   }
 

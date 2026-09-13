@@ -12,8 +12,9 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import Avatar from "@/components/common/Avatar";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
-import { CardBack, CardFace, EXCHANGE_TIER_STYLE, type AuraTier } from "./CardArt";
+import { CardBack, CardFace, RoleBadge, EXCHANGE_TIER_STYLE, type AuraTier } from "./CardArt";
 import type { Card, DalmutiState, SeatIndex } from "./engine";
 
 /**
@@ -951,5 +952,71 @@ export function PassBubble({ event, getSeatEl, onDone }: { event: PassEvent; get
       </span>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * 게임 종료 쇼다운 공개 유지 시간(ms) — task brief(2026-09-13 세션) "3~4초간의
+ * SHOWDOWN 상태" 요구를 그 구간 중앙값으로 확정.
+ */
+export const SHOWDOWN_REVEAL_MS = 3500;
+
+/**
+ * 최종 쇼다운 공개(task brief, 2026-09-13 세션 §1) — `engine.ts`의
+ * `playCards`는 손패가 남은 좌석이 정확히 1명이 되는 순간 그 좌석을 곧장
+ * `finishOrder` 꼴찌로 편입시키며 `phase`를 `gameOver`로 전환한다(engine.ts
+ * "remaining.length === 1" 분기 참고) — 즉 이 순간까지 한 번도 앞면으로
+ * 공개된 적 없는 손패를 쥔 좌석은 항상 정확히 1명이다. 결과 순위표가 뜨기
+ * 전 `SHOWDOWN_REVEAL_MS` 동안 그 손패를 뒤집어 보여준다.
+ *
+ * `.find` 대신 `.filter`로 대상을 고르는 이유: 엔진이 훗날 바뀌어 동시에
+ * 여러 좌석이 손패를 남긴 채 게임이 끝나는 경우가 생기더라도(현재는 발생하지
+ * 않음) 이 컴포넌트가 별도 수정 없이 전원을 그대로 나열해 보여준다.
+ *
+ * 순수 연출 목적의 로컬 타이머로만 제어된다(`DalmutiBoard.tsx`) — 락스텝
+ * 상태 자체는 건드리지 않으므로 각 클라이언트가 독립적으로 재생해도
+ * 결과 화면 전환 타이밍만 살짝 어긋날 뿐 게임 판정에는 전혀 영향이 없다.
+ */
+export function ShowdownReveal({
+  state,
+  names,
+  titleFor,
+}: {
+  state: DalmutiState;
+  names: Record<SeatIndex, string>;
+  titleFor: (seat: SeatIndex) => string;
+}) {
+  const stragglers = state.players.filter((p) => p.hand.length > 0);
+  return (
+    <div
+      className="relative flex min-w-0 flex-1 flex-col items-center gap-5 rounded-[28px] border border-amber-500/20 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+      style={{ background: "linear-gradient(160deg,#241a3a 0%,#160f26 55%,#0a0714 100%)" }}
+    >
+      <span className="text-4xl">🕯️</span>
+      <h2 className="text-xl font-bold break-keep text-amber-100">최후의 손패, 공개합니다...</h2>
+      <p className="text-xs break-keep text-white/50">끝까지 카드를 털어내지 못한 자의 패가 드러납니다.</p>
+      <div className="flex w-full flex-col items-center gap-5">
+        {stragglers.map((p) => (
+          <div key={p.seat} className="flex w-full flex-col items-center gap-2.5">
+            <span className="flex items-center gap-1.5 text-sm text-white">
+              <Avatar size={20} />
+              {names[p.seat]}
+              <RoleBadge title={titleFor(p.seat)} />
+            </span>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {p.hand.map((c, i) => (
+                <div key={c.id} style={{ perspective: "600px", animation: `dalmuti-highlight-card-flip 0.6s cubic-bezier(0.34,1.56,0.64,1) ${(i * 0.12).toFixed(2)}s both` }}>
+                  <CardFace card={c} />
+                </div>
+              ))}
+            </div>
+            <span className="rounded-full border border-amber-300/30 bg-black/30 px-3 py-1 text-[11px] font-semibold tracking-wide break-keep text-amber-200/90">
+              [ 남은 패: {p.hand.map((c) => (c.isJoker ? "어릿광대" : `${c.rank}`)).join(", ")} ]
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="animate-pulse text-[11px] break-keep text-amber-200/70">곧 최종 결과가 공개됩니다...</p>
+    </div>
   );
 }
