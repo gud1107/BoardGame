@@ -20,14 +20,14 @@ export default function DealerReveal({ card, drawCount, caption }: { card: Card 
           {[0, 1, 2].map((i) => (
             <span
               key={i}
-              className="absolute inset-0 rounded-md border border-white/15 bg-gradient-to-br from-indigo-950 via-slate-900 to-black shadow-md"
+              className="absolute inset-0 rounded-md border border-white/15 bg-gradient-to-br from-indigo-950 via-slate-900 to-black shadow-md light:border-slate-300 light:shadow-sm"
               style={{ transform: `rotate(${(i - 1) * 5}deg) translate(${(i - 1) * 2}px, ${-i}px)` }}
             />
           ))}
-          <span className="absolute inset-0 flex items-center justify-center text-sm text-white/25">🂠</span>
+          <span className="absolute inset-0 flex items-center justify-center text-sm text-white/25 light:text-slate-400">🂠</span>
         </div>
 
-        <span className="text-lg text-white/20">→</span>
+        <span className="text-lg text-white/20 light:text-slate-400">→</span>
 
         <div className="[perspective:700px]">
           {card ? (
@@ -35,13 +35,13 @@ export default function DealerReveal({ card, drawCount, caption }: { card: Card 
               <CardChip card={card} size="lg" />
             </div>
           ) : (
-            <div className="flex h-16 w-12 items-center justify-center rounded-md border border-dashed border-white/15 text-white/20 sm:h-20 sm:w-14">
+            <div className="flex h-16 w-12 items-center justify-center rounded-md border border-dashed border-white/15 text-white/20 sm:h-20 sm:w-14 light:border-slate-300 light:text-slate-400">
               ⋯
             </div>
           )}
         </div>
       </div>
-      <p className="text-xs text-white/50">{caption}</p>
+      <p className="text-xs text-white/50 light:text-slate-500">{caption}</p>
     </div>
   );
 }

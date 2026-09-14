@@ -49,7 +49,7 @@ function ThirdPartyRow({ entry, titleFor }: { entry: ExchangeHistoryEntry; title
   const titleB = titleFor(seatB);
   const kindLabel = entry.kind === "commoner" ? "자유 교환" : "세금 교환";
   return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-2 text-[11px] break-keep text-white/50">
+    <div className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-2 text-[11px] break-keep text-white/50 light:border-slate-200 light:bg-slate-50 light:text-slate-500">
       [ {titleEmoji(titleA)} {titleA} ↔ {titleEmoji(titleB)} {titleB} {kindLabel} 완료 ({entryCardCount(entry)}장) ]
     </div>
   );
@@ -86,12 +86,12 @@ function PartyRow({
   const { otherSeat, givenLabel, receivedLabel, givenByMe, receivedByMe } = partyDirections(entry, viewerSeat);
   const otherTitle = titleFor(otherSeat);
   return (
-    <div className="flex flex-col gap-1.5 rounded-lg border border-amber-300/20 bg-amber-400/[0.05] p-2.5 text-[11px]">
-      <p className="break-keep font-semibold text-amber-100/90">
+    <div className="flex flex-col gap-1.5 rounded-lg border border-amber-300/20 bg-amber-400/[0.05] p-2.5 text-[11px] light:border-amber-300 light:bg-amber-50">
+      <p className="break-keep font-semibold text-amber-100/90 light:text-amber-700">
         {titleEmoji(otherTitle)} {otherTitle}({names[otherSeat]})와(과) {entry.kind === "commoner" ? "자유 교환" : "세금 교환"}
       </p>
       <div className="flex flex-col gap-1">
-        <span className="text-[10px] break-keep text-white/50">{givenLabel}</span>
+        <span className="text-[10px] break-keep text-white/50 light:text-slate-500">{givenLabel}</span>
         <div className="flex flex-wrap gap-1">
           {givenByMe.map((c) => (
             <CardChip key={c.id} card={c} className="opacity-70 grayscale" />
@@ -99,7 +99,7 @@ function PartyRow({
         </div>
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-[10px] break-keep text-emerald-200/70">{receivedLabel}</span>
+        <span className="text-[10px] break-keep text-emerald-200/70 light:text-emerald-700">{receivedLabel}</span>
         <div className="flex flex-wrap gap-1">
           {receivedByMe.map((c) => (
             <CardChip key={c.id} card={c} />
@@ -142,7 +142,7 @@ function PanelContent(props: ExchangeHistoryPanelProps) {
   return (
     <div className="flex flex-col gap-2">
       {ordered.length === 0 ? (
-        <p className="rounded-lg border border-white/10 bg-black/20 p-3 text-center text-[11px] break-keep text-white/40">
+        <p className="rounded-lg border border-white/10 bg-black/20 p-3 text-center text-[11px] break-keep text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
           아직 세금 교환 기록이 없습니다.
         </p>
       ) : (
@@ -159,10 +159,9 @@ export default function ExchangeHistoryPanel(props: ExchangeHistoryPanelProps) {
     <>
       {/* Desktop: always-visible fixed column beside the board (AskUserQuestion). */}
       <aside
-        className="hidden max-h-[80vh] w-72 shrink-0 flex-col gap-3 overflow-y-auto rounded-[24px] border border-white/10 p-3 text-xs backdrop-blur-md lg:flex"
-        style={{ background: "rgba(20,16,32,0.55)" }}
+        className="hidden max-h-[80vh] w-72 shrink-0 flex-col gap-3 overflow-y-auto rounded-[24px] border border-white/10 bg-[rgba(20,16,32,0.55)] p-3 text-xs backdrop-blur-md lg:flex light:border-slate-200 light:bg-white/90 light:shadow-md"
       >
-        <h3 className="text-[11px] font-semibold tracking-wide break-keep text-amber-200/90 uppercase">📜 세금 교환 기록</h3>
+        <h3 className="text-[11px] font-semibold tracking-wide break-keep text-amber-200/90 uppercase light:text-amber-700">📜 세금 교환 기록</h3>
         <PanelContent {...props} />
       </aside>
 
@@ -170,7 +169,7 @@ export default function ExchangeHistoryPanel(props: ExchangeHistoryPanelProps) {
       <button
         onClick={() => setDrawerOpen(true)}
         aria-label="세금 교환 기록 패널 열기"
-        className="fixed top-1/2 right-0 z-40 flex -translate-y-1/2 flex-col items-center gap-1 rounded-l-xl border border-r-0 border-amber-300/30 bg-[#180f26] px-1.5 py-3 text-[10px] font-semibold text-amber-200 shadow-lg lg:hidden"
+        className="fixed top-1/2 right-0 z-40 flex -translate-y-1/2 flex-col items-center gap-1 rounded-l-xl border border-r-0 border-amber-300/30 bg-[#180f26] px-1.5 py-3 text-[10px] font-semibold text-amber-200 shadow-lg lg:hidden light:border-amber-300 light:bg-white light:text-amber-700"
       >
         <span className="text-base">📜</span>
         <span className="[writing-mode:vertical-rl]">교환 기록</span>
@@ -185,15 +184,14 @@ export default function ExchangeHistoryPanel(props: ExchangeHistoryPanelProps) {
         <div className="fixed inset-0 z-50 flex justify-end lg:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={() => setDrawerOpen(false)} />
           <div
-            className="relative flex h-full w-[85vw] max-w-sm flex-col gap-3 overflow-y-auto border-l border-amber-300/20 p-4 text-xs shadow-2xl backdrop-blur-md"
-            style={{ background: "rgba(20,16,32,0.92)" }}
+            className="relative flex h-full w-[85vw] max-w-sm flex-col gap-3 overflow-y-auto border-l border-amber-300/20 bg-[rgba(20,16,32,0.92)] p-4 text-xs shadow-2xl backdrop-blur-md light:border-amber-200 light:bg-white/95"
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-[11px] font-semibold tracking-wide break-keep text-amber-200/90 uppercase">📜 세금 교환 기록</h3>
+              <h3 className="text-[11px] font-semibold tracking-wide break-keep text-amber-200/90 uppercase light:text-amber-700">📜 세금 교환 기록</h3>
               <button
                 onClick={() => setDrawerOpen(false)}
                 aria-label="닫기"
-                className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/60 hover:border-white/30 hover:text-white"
+                className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/60 hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
               >
                 ✕
               </button>

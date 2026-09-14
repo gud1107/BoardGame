@@ -28,8 +28,18 @@ export interface SpotDifferenceBoardProps {
 }
 
 const TEAM_STYLE: Record<TeamId, { label: string; accent: string; bg: string; ring: string }> = {
-  A: { label: "팀 A", accent: "text-sky-300", bg: "bg-sky-500/15 border-sky-400/40", ring: "ring-sky-400" },
-  B: { label: "팀 B", accent: "text-rose-300", bg: "bg-rose-500/15 border-rose-400/40", ring: "ring-rose-400" },
+  A: {
+    label: "팀 A",
+    accent: "text-sky-300 light:text-sky-600",
+    bg: "bg-sky-500/15 border-sky-400/40 light:bg-sky-50 light:border-sky-300",
+    ring: "ring-sky-400",
+  },
+  B: {
+    label: "팀 B",
+    accent: "text-rose-300 light:text-rose-600",
+    bg: "bg-rose-500/15 border-rose-400/40 light:bg-rose-50 light:border-rose-300",
+    ring: "ring-rose-400",
+  },
 };
 
 /**
@@ -141,12 +151,12 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
     const winners = ranked.filter((r) => r.rank === 1);
     const tied = winners.length > 1;
     return (
-      <div className="flex flex-col items-center gap-6 rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-center">
+      <div className="flex flex-col items-center gap-6 rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-center light:border-slate-200 light:bg-white light:shadow-sm">
         <span className="text-4xl">{tied ? "🤝" : "🏆"}</span>
-        <h2 className="text-lg font-bold text-white">
+        <h2 className="text-lg font-bold text-white light:text-slate-900">
           {tied ? "무승부! 두 팀 모두 잘 찾았어요" : `${TEAM_STYLE[winners[0].team].label} 승리!`}
         </h2>
-        <p className="text-sm text-white/50">
+        <p className="text-sm text-white/50 light:text-slate-500">
           {state.timeUp ? "제한 시간 종료" : "모든 틀린 곳을 다 찾았어요"} · 총 {totalSpotCount(state)}개 중{" "}
           {foundSpotCount(state)}개 발견
         </p>
@@ -157,8 +167,8 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
               className={`rounded-2xl border p-4 ${TEAM_STYLE[team].bg} ${winners.some((w) => w.team === team) ? "ring-2 " + TEAM_STYLE[team].ring : ""}`}
             >
               <p className={`text-xs font-semibold ${TEAM_STYLE[team].accent}`}>{TEAM_STYLE[team].label}</p>
-              <p className="mt-1 text-3xl font-bold text-white">{scores[team]}</p>
-              <p className="mt-1 text-[11px] text-white/40">
+              <p className="mt-1 text-3xl font-bold text-white light:text-slate-900">{scores[team]}</p>
+              <p className="mt-1 text-[11px] text-white/40 light:text-slate-500">
                 {Object.entries(state.teamOf)
                   .filter(([, t]) => t === team)
                   .map(([seat]) => names[Number(seat)] ?? `${Number(seat) + 1}번`)
@@ -182,7 +192,7 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
   // -------------------------------------------------------------------------
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+      <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] p-3 light:border-slate-200 light:bg-white light:shadow-sm">
         <div className="flex gap-2">
           {(["A", "B"] as TeamId[]).map((team) => (
             <div
@@ -193,38 +203,38 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
                 {TEAM_STYLE[team].label}
                 {team === myTeam && " (나)"}
               </p>
-              <p className="text-lg font-bold text-white leading-tight">{scores[team]}</p>
+              <p className="text-lg font-bold text-white leading-tight light:text-slate-900">{scores[team]}</p>
             </div>
           ))}
         </div>
         <div className="text-center">
-          <p className="text-[10px] text-white/40">남은 차이</p>
-          <p className="text-lg font-bold text-white">{remaining}</p>
+          <p className="text-[10px] text-white/40 light:text-slate-500">남은 차이</p>
+          <p className="text-lg font-bold text-white light:text-slate-900">{remaining}</p>
         </div>
         <div className="text-center">
-          <p className="text-[10px] text-white/40">남은 시간</p>
-          <p className={`text-lg font-bold tabular-nums ${timeLeft <= 10 ? "text-rose-400" : "text-white"}`}>
+          <p className="text-[10px] text-white/40 light:text-slate-500">남은 시간</p>
+          <p className={`text-lg font-bold tabular-nums ${timeLeft <= 10 ? "text-rose-400" : "text-white light:text-slate-900"}`}>
             {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
           </p>
         </div>
         <button
           onClick={() => setRulebookOpen(true)}
-          className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:border-white/30"
+          className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
         >
           📖 룰북
         </button>
       </div>
 
       {state.stages.length > 1 && (
-        <p className="text-center text-xs text-white/40">
+        <p className="text-center text-xs text-white/40 light:text-slate-500">
           스테이지 {state.currentStageIndex + 1} / {state.stages.length}
         </p>
       )}
 
       <div className="flex items-center justify-between">
-        <p className="text-xs text-white/50">
+        <p className="text-xs text-white/50 light:text-slate-500">
           {isLocked ? (
-            <span className="text-rose-300">🔒 오답! {lockSecondsLeft}초 후 다시 클릭할 수 있어요</span>
+            <span className="text-rose-300 light:text-rose-600">🔒 오답! {lockSecondsLeft}초 후 다시 클릭할 수 있어요</span>
           ) : (
             "양쪽 그림에서 다른 부분을 찾아 클릭하세요"
           )}
@@ -232,7 +242,7 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
         <button
           onClick={handleUseHint}
           disabled={state.hints[myTeam] <= 0}
-          className="rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition hover:border-amber-400/70 disabled:cursor-not-allowed disabled:opacity-30"
+          className="rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition hover:border-amber-400/70 disabled:cursor-not-allowed disabled:opacity-30 light:border-amber-400/60 light:bg-amber-50 light:text-amber-700"
         >
           💡 힌트 ({state.hints[myTeam]}남음)
         </button>
@@ -261,7 +271,7 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
         />
       </div>
 
-      <p className="text-center text-[11px] text-white/30">
+      <p className="text-center text-[11px] text-white/30 light:text-slate-400">
         {Array.from({ length: state.playerCount }, (_, seat) => seat)
           .map((seat) => `${names[seat] ?? `${seat + 1}번`}${connectedSeats.has(seat) ? "" : "(연결끊김)"}`)
           .join(" · ")}
@@ -290,7 +300,7 @@ function StagePanel({
   return (
     <div
       onClick={onClick}
-      className={`relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 ${
+      className={`relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 light:border-slate-300 light:shadow-sm ${
         isLocked ? "cursor-not-allowed" : "cursor-crosshair"
       }`}
     >

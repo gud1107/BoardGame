@@ -113,7 +113,7 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 light:border-slate-200 px-2.5 py-1 text-[11px] text-white/60 light:text-slate-600 transition hover:border-white/30 hover:text-white"
     >
       📖 러브레터 룰북
     </button>
@@ -126,14 +126,14 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
     const rankings = computeRankings(state);
     return (
       <div
-        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 light:border-slate-200 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
         style={{ background: "linear-gradient(160deg,#3a1024 0%,#1e0a15 55%,#0a0308 100%)" }}
       >
         <span className="text-5xl">💌</span>
         <h2 className="text-2xl font-bold text-rose-100">
           {state.winnerSeats.map((s) => names[s] ?? "상대").join(", ")}님이 공주의 마음을 얻었습니다!
         </h2>
-        <p className="text-xs text-white/50">
+        <p className="text-xs text-white/50 light:text-slate-500">
           {state.endReason === "elimination" ? "최후까지 살아남아 승리했습니다." : "덱이 소진되어 손패를 공개해 승자를 가렸습니다."}
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
@@ -150,11 +150,11 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
                   // wrongly imply hidden info still exists, so show a plain
                   // "탈락" marker instead (their held card, if any, already
                   // surfaced in their discard pile per engine.ts module doc #1).
-                  <div className="flex h-20 w-14 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-lg opacity-50">
+                  <div className="flex h-20 w-14 items-center justify-center rounded-lg border border-white/10 light:border-slate-200 bg-black/30 light:bg-white/80 light:shadow-sm text-lg opacity-50">
                     💔
                   </div>
                 )}
-                <span className="text-[10px] text-white/60">{names[p.seat] ?? "상대"}</span>
+                <span className="text-[10px] text-white/60 light:text-slate-600">{names[p.seat] ?? "상대"}</span>
               </div>
             );
           })}
@@ -162,10 +162,10 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[380px] border-collapse text-xs">
             <thead>
-              <tr className="text-white/50">
-                <th className="border-b border-white/10 px-2 py-2 text-left">순위</th>
-                <th className="border-b border-white/10 px-2 py-2 text-left">플레이어</th>
-                <th className="border-b border-white/10 px-2 py-2 text-left">버린 카드</th>
+              <tr className="text-white/50 light:text-slate-500">
+                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">순위</th>
+                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">플레이어</th>
+                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">버린 카드</th>
               </tr>
             </thead>
             <tbody>
@@ -173,12 +173,12 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
                 const p = state.players.find((pl) => pl.seat === seat)!;
                 return (
                   <tr key={seat} className={rank === 1 ? "bg-rose-400/10" : ""}>
-                    <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-rose-200">{rank === 1 ? "💌 1" : rank}</td>
-                    <td className="border-b border-white/5 px-2 py-2 text-left text-white">
+                    <td className="border-b border-white/5 light:border-slate-200 px-2 py-2 text-left font-bold text-rose-200">{rank === 1 ? "💌 1" : rank}</td>
+                    <td className="border-b border-white/5 light:border-slate-200 px-2 py-2 text-left text-white light:text-slate-900">
                       {names[seat] ?? "상대"}
                       {seat === viewerSeat && <span className="ml-1 text-rose-200">(나)</span>}
                     </td>
-                    <td className="border-b border-white/5 px-2 py-2 text-left text-white/60">
+                    <td className="border-b border-white/5 light:border-slate-200 px-2 py-2 text-left text-white/60 light:text-slate-600">
                       {p.discardPile.length === 0 ? "—" : p.discardPile.map((c) => c.number).join(", ")}
                     </td>
                   </tr>
@@ -227,7 +227,7 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
+      className="flex flex-col gap-3 rounded-[28px] border border-black/60 light:border-slate-200 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
       style={{ background: "linear-gradient(160deg,#2a1020 0%,#180a14 45%,#0a0308 100%)" }}
     >
       <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-rose-100/70">
@@ -238,7 +238,7 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
       </div>
 
       {narration && (
-        <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-center text-xs text-white/70">💬 {narration}</div>
+        <div className="rounded-xl border border-white/10 light:border-slate-200 bg-black/30 light:bg-white/80 light:shadow-sm px-3 py-2 text-center text-xs text-white/70 light:text-slate-700">💬 {narration}</div>
       )}
 
       {state.visibleRemovedCards.length > 0 && (
@@ -262,15 +262,15 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
             <div
               key={p.seat}
               className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs transition ${
-                !p.alive ? "border-white/5 bg-black/10 opacity-60" : isActive ? "border-rose-300/60 bg-rose-400/10" : "border-white/10 bg-black/20"
+                !p.alive ? "border-white/5 light:border-slate-200 bg-black/10 light:bg-slate-100 opacity-60" : isActive ? "border-rose-300/60 bg-rose-400/10" : "border-white/10 light:border-slate-200 bg-black/20 light:bg-slate-100"
               }`}
             >
-              <span className="flex items-center gap-1.5 font-semibold text-white/90">
-                <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(p.seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+              <span className="flex items-center gap-1.5 font-semibold text-white/90 light:text-slate-800">
+                <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(p.seat) ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`} />
                 {isActive && <span title="차례">👉</span>}
                 {names[p.seat] ?? "상대"}
                 {isSelf && <span className="text-rose-200">(나)</span>}
-                {!p.alive && <span className="text-white/40">💔 탈락</span>}
+                {!p.alive && <span className="text-white/40 light:text-slate-500">💔 탈락</span>}
                 {p.protectedUntilNextTurn && <span title="하녀 보호 중">🛡️</span>}
               </span>
               <span className="flex items-center gap-1.5">
@@ -299,9 +299,9 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
       >
         <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-rose-200/90 uppercase">💌 내 손패 ({me.hand.length}장)</h3>
         {!me.alive ? (
-          <p className="text-xs text-white/30">탈락하여 더 이상 카드를 낼 수 없습니다.</p>
+          <p className="text-xs text-white/30 light:text-slate-400">탈락하여 더 이상 카드를 낼 수 없습니다.</p>
         ) : me.hand.length === 0 ? (
-          <p className="text-xs text-white/30">{names[state.activeSeat] ?? "상대"}님의 차례를 기다리는 중...</p>
+          <p className="text-xs text-white/30 light:text-slate-400">{names[state.activeSeat] ?? "상대"}님의 차례를 기다리는 중...</p>
         ) : (
           <div className="flex flex-wrap items-end gap-2">
             {me.hand.map((c) => {
@@ -326,7 +326,7 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
           </p>
         )}
         {!isMyTurn && me.alive && state.phase === "playing" && (
-          <p className="mt-2 text-center text-[11px] text-white/40">{names[state.activeSeat] ?? "상대"}님의 차례를 기다리는 중...</p>
+          <p className="mt-2 text-center text-[11px] text-white/40 light:text-slate-500">{names[state.activeSeat] ?? "상대"}님의 차례를 기다리는 중...</p>
         )}
       </section>
 
@@ -347,15 +347,15 @@ export default function LoveLetterBoard({ state, viewerSeat, names, connectedSea
       )}
 
       {confirmPrincess && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 light:bg-white/90 light:shadow-md p-4 backdrop-blur-sm">
           <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-2xl border border-rose-300/40 bg-[#1e0a15] p-5 text-center shadow-2xl">
             <CardSlot card={confirmPrincess} size="md" />
             <p className="text-sm font-semibold text-rose-100">정말 공주를 버리시겠습니까?</p>
-            <p className="text-xs text-white/50">이 카드를 내면 이유를 불문하고 즉시 탈락합니다.</p>
+            <p className="text-xs text-white/50 light:text-slate-500">이 카드를 내면 이유를 불문하고 즉시 탈락합니다.</p>
             <div className="flex w-full gap-2">
               <button
                 onClick={() => setConfirmPrincess(null)}
-                className="flex-1 rounded-xl border border-white/15 py-2 text-xs text-white/70 hover:border-white/30"
+                className="flex-1 rounded-xl border border-white/15 light:border-slate-200 py-2 text-xs text-white/70 light:text-slate-700 hover:border-white/30"
               >
                 취소
               </button>

@@ -43,7 +43,7 @@ export default function Overlay({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{ transform: `translateY(${dragY}px)`, transition: dragging ? "none" : "transform 200ms ease-out" }}
-        className={`flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-[#151022] shadow-2xl sm:rounded-2xl ${
+        className={`flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-[#151022] shadow-2xl sm:rounded-2xl light:border-slate-200 light:bg-white ${
           wide ? "sm:max-w-2xl" : "sm:max-w-md"
         }`}
       >
@@ -52,10 +52,10 @@ export default function Overlay({
         <div {...handlers} className="shrink-0 px-5 pt-5 sm:px-6 sm:pt-6">
           <DragHandle />
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white">{title}</h2>
+            <h2 className="text-lg font-bold text-white light:text-slate-900">{title}</h2>
             <button
               onClick={onClose}
-              className="-mr-2 grid h-12 w-12 place-items-center rounded-full text-xl text-white/50 transition hover:bg-white/10 hover:text-white active:bg-white/20"
+              className="-mr-2 grid h-12 w-12 place-items-center rounded-full text-xl text-white/50 transition hover:bg-white/10 hover:text-white active:bg-white/20 light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700 light:active:bg-slate-200"
               aria-label="닫기"
             >
               ×

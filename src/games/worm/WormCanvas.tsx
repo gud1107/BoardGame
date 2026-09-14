@@ -18,6 +18,14 @@ import {
 } from "./engine";
 import { detectWormEvents, WormEffectsManager } from "./WormEffects";
 
+// TODO(theme): the `draw`/`drawMinimap` functions below paint directly onto
+// the <canvas> 2D context with hardcoded dark-palette colors (background,
+// grid, snake hues, glow, etc.) and are NOT theme-aware — they render the
+// same dark look regardless of light/dark mode. Only the surrounding React/
+// DOM chrome (HUD overlays, buttons, minimap frame, container backgrounds)
+// got light: overrides in this pass; branching the canvas draw calls at
+// runtime is out of scope here.
+
 /**
  * Canvas 2D real-time renderer + input capture, the "board" layer for this
  * game (see ARCHITECTURE.md §2's `<Game>Board.tsx` slot) — state comes in as
@@ -485,7 +493,7 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
     <div className="flex flex-col gap-2">
       <div
         ref={containerRef}
-        className="relative w-full overflow-hidden rounded-[28px] border border-black/60 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)]"
+        className="relative w-full overflow-hidden rounded-[28px] border border-black/60 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] light:border-slate-300"
         style={{ height: "min(78vh, 640px)", background: "#050a05", touchAction: "none" }}
       >
         {/* `willChange`/`translateZ(0)` — forces this canvas onto its own GPU
@@ -498,20 +506,23 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" style={{ willChange: "transform", transform: "translateZ(0)" }} />
 
         {/* Top-left: my stats + timer */}
-        <div className="pointer-events-none absolute top-2 left-2 flex flex-col gap-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-[11px] text-white/80 backdrop-blur-sm">
-          <span className="font-bold text-lime-200">
+        <div className="pointer-events-none absolute top-2 left-2 flex flex-col gap-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-[11px] text-white/80 backdrop-blur-sm light:border-slate-200 light:bg-white/90 light:text-slate-900 light:shadow-sm">
+          <span className="font-bold text-lime-200 light:text-lime-700">
             🪱 {names[viewerSeat] ?? "나"} · 길이 {viewerSnake?.length ?? 0}
           </span>
-          <span className="text-white/60">점수 {viewerSnake?.score ?? 0}</span>
-          <span className="text-white/60">⏱ 남은 시간 {formatClock(timeLeft)}</span>
+          <span className="text-white/60 light:text-slate-600">점수 {viewerSnake?.score ?? 0}</span>
+          <span className="text-white/60 light:text-slate-600">⏱ 남은 시간 {formatClock(timeLeft)}</span>
         </div>
 
         {/* Top-right: leaderboard + minimap radar, stacked */}
         <div className="pointer-events-none absolute top-2 right-2 flex flex-col items-end gap-1.5">
-          <div className="flex w-36 flex-col gap-1 rounded-xl border border-white/10 bg-black/40 px-2.5 py-2 text-[11px] text-white/80 backdrop-blur-sm">
-            <span className="mb-0.5 font-semibold tracking-wide text-white/50 uppercase">🏆 리더보드</span>
+          <div className="flex w-36 flex-col gap-1 rounded-xl border border-white/10 bg-black/40 px-2.5 py-2 text-[11px] text-white/80 backdrop-blur-sm light:border-slate-200 light:bg-white/90 light:text-slate-900 light:shadow-sm">
+            <span className="mb-0.5 font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">🏆 리더보드</span>
             {leaderboard.map((entry, i) => (
-              <span key={entry.seat} className={`flex items-center justify-between gap-1 ${entry.seat === viewerSeat ? "text-lime-300" : entry.alive ? "text-white/80" : "text-white/30"}`}>
+              <span
+                key={entry.seat}
+                className={`flex items-center justify-between gap-1 ${entry.seat === viewerSeat ? "text-lime-300 light:text-lime-700" : entry.alive ? "text-white/80 light:text-slate-700" : "text-white/30 light:text-slate-400"}`}
+              >
                 <span className="truncate">
                   {i + 1}. {names[entry.seat] ?? `#${entry.seat}`}
                   {!entry.alive && " 💀"}
@@ -521,7 +532,7 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
             ))}
           </div>
           {/* Minimap radar — dots scaled to the full arena, viewer in lime, current #1 ringed gold. See `drawMinimap` below. */}
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40 backdrop-blur-sm">
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40 backdrop-blur-sm light:border-slate-200 light:bg-white/90 light:shadow-sm">
             <canvas ref={minimapRef} className="block h-24 w-24" />
           </div>
         </div>
@@ -529,7 +540,7 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
         {/* Rulebook button */}
         <button
           onClick={() => setRulebookOpen(true)}
-          className="absolute bottom-2 left-2 rounded-full border border-white/15 bg-black/40 px-2.5 py-1 text-[11px] text-white/70 backdrop-blur-sm transition hover:border-white/30 hover:text-white"
+          className="absolute bottom-2 left-2 rounded-full border border-white/15 bg-black/40 px-2.5 py-1 text-[11px] text-white/70 backdrop-blur-sm transition hover:border-white/30 hover:text-white light:border-slate-300 light:bg-white/90 light:text-slate-700 light:shadow-sm light:hover:border-slate-400 light:hover:text-slate-900"
         >
           📖 룰북
         </button>
@@ -624,7 +635,7 @@ export default function WormCanvas({ state, viewerSeat, names, connectedSeats, o
         )}
       </div>
 
-      <p className="text-center text-[11px] text-white/40">
+      <p className="text-center text-[11px] text-white/40 light:text-slate-500">
         {connectedSeats.size}/{state.playerCount}명 접속 중 · 마우스/드래그로 방향, 스페이스바·클릭·부스트 버튼으로 대시
       </p>
 

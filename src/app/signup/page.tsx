@@ -56,8 +56,8 @@ export default function SignupPage() {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
         <span className="text-4xl">📬</span>
-        <h1 className="mt-4 text-xl font-bold text-white">이메일을 확인해주세요</h1>
-        <p className="mt-2 text-sm text-white/60">{email}로 보낸 확인 메일의 링크를 클릭하면 가입이 완료됩니다.</p>
+        <h1 className="mt-4 text-xl font-bold text-white light:text-slate-900">이메일을 확인해주세요</h1>
+        <p className="mt-2 text-sm text-white/60 light:text-slate-600">{email}로 보낸 확인 메일의 링크를 클릭하면 가입이 완료됩니다.</p>
         <Link href="/login" className="mt-6 inline-block text-rose-300 underline">
           로그인으로
         </Link>
@@ -67,16 +67,16 @@ export default function SignupPage() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-16">
-      <h1 className="mb-2 text-xl font-bold text-white">회원가입</h1>
-      <p className="mb-6 text-sm text-white/50">가입하면 {TRIAL_DAYS}일 무료 Lite 체험이 자동으로 시작돼요.</p>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <h1 className="mb-2 text-xl font-bold text-white light:text-slate-900">회원가입</h1>
+      <p className="mb-6 text-sm text-white/50 light:text-slate-500">가입하면 {TRIAL_DAYS}일 무료 Lite 체험이 자동으로 시작돼요.</p>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5 light:border-slate-200 light:bg-white light:shadow-sm">
         <input
           type="email"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="이메일"
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
         />
         <input
           type="password"
@@ -84,18 +84,18 @@ export default function SignupPage() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="비밀번호 (8자 이상)"
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
         />
         {error && <p className="text-xs text-rose-300">{error}</p>}
         <button
           type="submit"
           disabled={loading}
-          className="mt-2 w-full rounded-xl bg-rose-500 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+          className="mt-2 w-full rounded-xl bg-rose-500 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-100 light:disabled:text-slate-400"
         >
           {loading ? "가입 중…" : "회원가입"}
         </button>
       </form>
-      <p className="mt-4 text-center text-sm text-white/50">
+      <p className="mt-4 text-center text-sm text-white/50 light:text-slate-500">
         이미 계정이 있으신가요?{" "}
         <Link href="/login" className="text-rose-300 underline">
           로그인

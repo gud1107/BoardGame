@@ -34,8 +34,8 @@ export default function CollectionShowcase({
       <div className="mb-4 flex items-start gap-2">
         <span className="text-xl leading-none">{meta.emoji}</span>
         <div>
-          <h2 className="text-base font-bold text-white sm:text-lg">{meta.label}</h2>
-          <p className="mt-0.5 text-xs text-white/50 sm:text-sm">{meta.description}</p>
+          <h2 className="text-base font-bold text-white sm:text-lg light:text-slate-900">{meta.label}</h2>
+          <p className="mt-0.5 text-xs text-white/50 sm:text-sm light:text-slate-500">{meta.description}</p>
         </div>
       </div>
       <GameGrid games={matches} />

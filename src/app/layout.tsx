@@ -4,6 +4,7 @@ import "./globals.css";
 import SiteHeader from "@/components/SiteHeader";
 import BettingSidebar from "@/components/betting/BettingSidebar";
 import AnalyticsVisitTracker from "@/components/AnalyticsVisitTracker";
+import { ThemeProvider, THEME_INIT_SCRIPT } from "@/contexts/ThemeContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,11 +31,19 @@ export default function RootLayout({
       lang="ko"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col text-zinc-100">
-        <AnalyticsVisitTracker />
-        <SiteHeader />
-        <main className="flex-1">{children}</main>
-        <BettingSidebar />
+      <head>
+        {/* Sets data-theme="light" (if that's what's saved) before hydration
+            so a light-mode revisit never flashes the dark default first —
+            see ThemeContext.tsx's THEME_INIT_SCRIPT doc comment. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body className="flex min-h-full flex-col text-zinc-100 light:text-slate-900">
+        <ThemeProvider>
+          <AnalyticsVisitTracker />
+          <SiteHeader />
+          <main className="flex-1">{children}</main>
+          <BettingSidebar />
+        </ThemeProvider>
       </body>
     </html>
   );

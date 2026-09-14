@@ -89,7 +89,7 @@ export interface GridPokerBoardProps {
 }
 
 const TABLE_PANEL =
-  "relative overflow-hidden rounded-3xl border border-black/50 bg-gradient-to-b from-[#151a2e] via-[#0f1322] to-[#0a0d17] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
+  "relative overflow-hidden rounded-3xl border border-black/50 bg-gradient-to-b from-[#151a2e] via-[#0f1322] to-[#0a0d17] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)] light:border-slate-200 light:from-white light:via-slate-50 light:to-white light:shadow-md";
 
 const CELL_DIMS = {
   main: "h-14 w-10 sm:h-16 sm:w-12",
@@ -127,7 +127,7 @@ function Cell({
     return (
       <span
         title="상대가 이미 카드를 놓은 칸 (공개 전)"
-        className={`inline-flex ${dims} items-center justify-center rounded-md border border-white/5 bg-black/75 text-white/15 shadow-[inset_0_0_8px_rgba(0,0,0,0.8)] ${
+        className={`inline-flex ${dims} items-center justify-center rounded-md border border-white/5 bg-black/75 text-white/15 shadow-[inset_0_0_8px_rgba(0,0,0,0.8)] light:border-slate-300 light:bg-slate-300/70 light:text-slate-500 light:shadow-none ${
           highlight ? "ring-2 ring-amber-400/80" : ""
         }`}
       >
@@ -141,7 +141,9 @@ function Cell({
         onClick={onClick}
         disabled={!onClick}
         className={`${dims} rounded-md border border-dashed transition ${
-          onClick ? "border-white/25 bg-white/[0.03] hover:border-emerald-400/60 hover:bg-emerald-400/10" : "border-white/10 bg-white/[0.02]"
+          onClick
+            ? "border-white/25 bg-white/[0.03] hover:border-emerald-400/60 hover:bg-emerald-400/10 light:border-slate-300 light:bg-white light:hover:border-emerald-500/60 light:hover:bg-emerald-50"
+            : "border-white/10 bg-white/[0.02] light:border-slate-200 light:bg-slate-50"
         } ${highlight ? "ring-2 ring-amber-400/70" : ""}`}
       />
     );
@@ -203,7 +205,7 @@ function CountdownBar({ timeLeft, total }: { timeLeft: number; total: number }) 
   const pct = Math.max(0, Math.min(100, (timeLeft / total) * 100));
   return (
     <div className="flex w-full max-w-[220px] items-center gap-2">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
         <div
           className={`h-full rounded-full transition-[width] duration-1000 ease-linear ${
             urgent ? "bg-rose-500" : "bg-emerald-400"
@@ -211,7 +213,7 @@ function CountdownBar({ timeLeft, total }: { timeLeft: number; total: number }) 
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className={`w-6 text-right text-xs font-bold tabular-nums ${urgent ? "animate-pulse text-rose-300" : "text-white/60"}`}>
+      <span className={`w-6 text-right text-xs font-bold tabular-nums ${urgent ? "animate-pulse text-rose-300" : "text-white/60 light:text-slate-500"}`}>
         {timeLeft}
       </span>
     </div>
@@ -237,7 +239,7 @@ export default function GridPokerBoard({
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 족보 · 룰북
     </button>
@@ -378,7 +380,7 @@ export default function GridPokerBoard({
         toggleMasterMuted();
         getSoundEngine().unlock();
       }}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
       aria-label={masterMuted ? "소리 켜기" : "소리 끄기"}
     >
       {masterMuted ? "🔇" : "🔊"}
@@ -394,7 +396,7 @@ export default function GridPokerBoard({
   const bgmToggle = (
     <button
       onClick={toggleBgmMuted}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
       aria-label={bgmMuted ? "배경음악 켜기" : "배경음악 끄기"}
       title="배경음악"
     >
@@ -407,7 +409,7 @@ export default function GridPokerBoard({
     return (
       <div className={`${TABLE_PANEL} flex flex-col items-center gap-5 p-8 text-center`}>
         <span className="relative z-10 text-5xl">🏆</span>
-        <h2 className="relative z-10 text-2xl font-bold text-amber-100">
+        <h2 className="relative z-10 text-2xl font-bold text-amber-100 light:text-amber-700">
           {state.winner && state.winner.length === 1
             ? `${names[state.winner[0]]}님 승리!`
             : "동점으로 무승부"}
@@ -417,12 +419,14 @@ export default function GridPokerBoard({
             <div
               key={p.seat}
               className={`flex flex-col items-center gap-1 rounded-xl border p-3 text-xs ${
-                state.winner?.includes(p.seat) ? "border-amber-400/50 bg-amber-400/10" : "border-white/10 bg-black/20"
+                state.winner?.includes(p.seat)
+                  ? "border-amber-400/50 bg-amber-400/10 light:border-amber-500/40 light:bg-amber-50"
+                  : "border-white/10 bg-black/20 light:border-slate-200 light:bg-slate-50"
               }`}
             >
               <Avatar size={24} />
-              <span className="text-white/80">{names[p.seat]}</span>
-              <span className="text-lg font-bold text-white">{p.score}승</span>
+              <span className="text-white/80 light:text-slate-700">{names[p.seat]}</span>
+              <span className="text-lg font-bold text-white light:text-slate-900">{p.score}승</span>
             </div>
           ))}
         </div>
@@ -439,7 +443,7 @@ export default function GridPokerBoard({
 
   return (
     <div className={`${TABLE_PANEL} flex flex-col gap-4 p-3 sm:p-4`}>
-      <div className="relative z-10 flex items-center justify-between text-xs text-white/60">
+      <div className="relative z-10 flex items-center justify-between text-xs text-white/60 light:text-slate-500">
         <span>
           {state.phase === "placing"
             ? `배치 중 · ${filledCells}/${BOARD_SIZE}칸`
@@ -465,12 +469,14 @@ export default function GridPokerBoard({
             key={p.seat}
             title={`목표 ${state.winThreshold}승 중 ${p.score}승 · ${Math.max(state.winThreshold - p.score, 0)}승 남음`}
             className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ${
-              p.seat === viewerSeat ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-white/10 bg-white/5 text-white/60"
+              p.seat === viewerSeat
+                ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200 light:border-emerald-500/40 light:bg-emerald-50 light:text-emerald-700"
+                : "border-white/10 bg-white/5 text-white/60 light:border-slate-200 light:bg-slate-50 light:text-slate-600"
             }`}
           >
             <Avatar size={18} />
-            <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(p.seat) ? "bg-emerald-400" : "bg-white/20"}`} />
-            <span className="font-semibold text-amber-300/90">{rank === 1 ? "🏆" : `${rank}위`}</span>
+            <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(p.seat) ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`} />
+            <span className="font-semibold text-amber-300/90 light:text-amber-600">{rank === 1 ? "🏆" : `${rank}위`}</span>
             {names[p.seat]} · {p.score}/{state.winThreshold}승
             <WinDots wins={p.score} threshold={state.winThreshold} />
           </div>
@@ -495,8 +501,8 @@ export default function GridPokerBoard({
       )}
 
       <div className="relative z-10 flex flex-col items-center gap-1.5">
-        <p className="text-xs text-white/50">내 보드판</p>
-        <div className="grid grid-cols-5 gap-1.5 rounded-2xl border border-white/10 bg-black/20 p-2.5 sm:gap-2 sm:p-3">
+        <p className="text-xs text-white/50 light:text-slate-500">내 보드판</p>
+        <div className="grid grid-cols-5 gap-1.5 rounded-2xl border border-white/10 bg-black/20 p-2.5 sm:gap-2 sm:p-3 light:border-slate-200 light:bg-slate-50">
           {viewer.board.map((card, i) => (
             <Cell key={i} card={card} glow={glowByCell.get(i) ?? null} onClick={myTurnToPlace && card === null ? () => placeAt(i) : undefined} />
           ))}
@@ -514,7 +520,7 @@ export default function GridPokerBoard({
 
       {state.phase === "submitting" && (
         <div className="relative z-10 flex flex-col items-center gap-2">
-          <p className="text-center text-xs text-white/50">
+          <p className="text-center text-xs text-white/50 light:text-slate-500">
             {mySubmission !== null ? "제출 완료 · 다른 플레이어를 기다리는 중..." : "제출할 라인을 하나 고르세요"}
           </p>
           {submittingActive && <CountdownBar timeLeft={submittingTimeLeft} total={submittingSeconds} />}
@@ -533,21 +539,21 @@ export default function GridPokerBoard({
                   disabled={used || mySubmission !== null}
                   className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition ${
                     used
-                      ? "border-white/5 bg-white/[0.02] opacity-40"
+                      ? "border-white/5 bg-white/[0.02] opacity-40 light:border-slate-200 light:bg-slate-50"
                       : mySubmission === lineIndex
-                        ? "border-amber-400/60 bg-amber-400/10"
-                        : "border-white/10 bg-white/5 hover:border-emerald-400/50 hover:bg-emerald-400/10"
+                        ? "border-amber-400/60 bg-amber-400/10 light:border-amber-500/50 light:bg-amber-50"
+                        : "border-white/10 bg-white/5 hover:border-emerald-400/50 hover:bg-emerald-400/10 light:border-slate-200 light:bg-white light:hover:border-emerald-500/50 light:hover:bg-emerald-50"
                   }`}
                 >
-                  <span className="text-[10px] text-white/50">{LINE_LABELS[lineIndex]}</span>
+                  <span className="text-[10px] text-white/50 light:text-slate-500">{LINE_LABELS[lineIndex]}</span>
                   <div className="flex gap-0.5">
                     {cards.map((c) => (
                       <CardChip key={c.id} card={c} size="sm" />
                     ))}
                   </div>
-                  <span className="text-[10px] font-semibold text-emerald-300">
+                  <span className="text-[10px] font-semibold text-emerald-300 light:text-emerald-600">
                     {formatHandLabel(hand)}
-                    <span className="ml-1 font-normal text-white/40">({hand.category + 1}/9)</span>
+                    <span className="ml-1 font-normal text-white/40 light:text-slate-400">({hand.category + 1}/9)</span>
                   </span>
                 </button>
               );
@@ -557,8 +563,8 @@ export default function GridPokerBoard({
       )}
 
       {state.lastRoundResult && (
-        <div className="relative z-10 rounded-xl border border-white/10 bg-white/5 p-3">
-          <p className="mb-2 text-xs text-white/50">
+        <div className="relative z-10 rounded-xl border border-white/10 bg-white/5 p-3 light:border-slate-200 light:bg-slate-50">
+          <p className="mb-2 text-xs text-white/50 light:text-slate-500">
             {state.lastRoundResult.roundNumber}라운드 결과
             {state.lastRoundResult.winnerSeat !== null
               ? ` · ${names[state.lastRoundResult.winnerSeat]} 승!`
@@ -568,7 +574,7 @@ export default function GridPokerBoard({
             {state.lastRoundResult.submissions.map((sub) => (
               <div key={sub.seat} className="flex items-center gap-2 text-xs">
                 <span
-                  className={`w-16 shrink-0 truncate ${sub.seat === state.lastRoundResult!.winnerSeat ? "font-semibold text-amber-300" : "text-white/60"}`}
+                  className={`w-16 shrink-0 truncate ${sub.seat === state.lastRoundResult!.winnerSeat ? "font-semibold text-amber-300 light:text-amber-600" : "text-white/60 light:text-slate-600"}`}
                 >
                   {names[sub.seat]}
                 </span>
@@ -584,7 +590,7 @@ export default function GridPokerBoard({
                     </span>
                   ))}
                 </div>
-                <span className="text-white/50">{formatHandLabel(sub.hand)}</span>
+                <span className="text-white/50 light:text-slate-500">{formatHandLabel(sub.hand)}</span>
               </div>
             ))}
           </div>
@@ -593,7 +599,7 @@ export default function GridPokerBoard({
 
       {opponents.length > 0 && (
         <div className="relative z-10 flex flex-col gap-1.5">
-          <p className="text-xs text-white/50">상대 보드판 (처음 배치한 칸 + 공개된 라인 + 이번 카드 배치 위치만 보임)</p>
+          <p className="text-xs text-white/50 light:text-slate-500">상대 보드판 (처음 배치한 칸 + 공개된 라인 + 이번 카드 배치 위치만 보임)</p>
 
           {/* Mobile (< sm): a scrollable strip of summary chips — tap one to
               pop the board open in `viewedSeat`'s popup below, instead of
@@ -605,14 +611,14 @@ export default function GridPokerBoard({
                 <button
                   key={p.seat}
                   onClick={() => setViewedSeat(p.seat)}
-                  className="flex shrink-0 flex-col items-start gap-0.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-left transition active:border-emerald-400/50 active:bg-emerald-400/10"
+                  className="flex shrink-0 flex-col items-start gap-0.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-left transition active:border-emerald-400/50 active:bg-emerald-400/10 light:border-slate-200 light:bg-slate-50 light:active:border-emerald-500/50 light:active:bg-emerald-50"
                 >
-                  <span className="flex items-center gap-1 text-[11px] font-medium text-white/80">
+                  <span className="flex items-center gap-1 text-[11px] font-medium text-white/80 light:text-slate-700">
                     <Avatar size={16} />
                     {names[p.seat]}
                     {liveCell !== null && <span className="h-1.5 w-1.5 rounded-full bg-amber-400" title="배치 중" />}
                   </span>
-                  <span className="text-[10px] text-white/50">
+                  <span className="text-[10px] text-white/50 light:text-slate-500">
                     {p.score}승 · 라인 {completedLineCount(p)}개
                   </span>
                 </button>
@@ -625,10 +631,10 @@ export default function GridPokerBoard({
             {opponents.map((p) => {
               const liveCell = opponentLiveCell(state, p);
               return (
-                <div key={p.seat} className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-2">
-                  <span className="flex items-center gap-1 text-[11px] text-white/60">
+                <div key={p.seat} className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-2 light:border-slate-200 light:bg-slate-50">
+                  <span className="flex items-center gap-1 text-[11px] text-white/60 light:text-slate-600">
                     {names[p.seat]} · {p.score}승 · 라인 {completedLineCount(p)}개
-                    {liveCell !== null && <span className="text-[10px] text-amber-300">· 배치 중</span>}
+                    {liveCell !== null && <span className="text-[10px] text-amber-300 light:text-amber-600">· 배치 중</span>}
                   </span>
                   <OpponentBoardGrid state={state} player={p} size="mini" />
                 </div>

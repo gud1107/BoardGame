@@ -94,7 +94,7 @@ export default function MineOfOblivion2Grid({
         <button
           type="button"
           onClick={() => setZoom((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)))}
-          className={`flex items-center justify-center rounded-md border border-white/15 bg-black/70 text-white/80 backdrop-blur active:scale-90 ${zoomBtnSizeClassName}`}
+          className={`flex items-center justify-center rounded-md border border-white/15 light:border-slate-200 bg-black/70 light:bg-white/95 light:shadow-md text-white/80 light:text-slate-700 backdrop-blur active:scale-90 ${zoomBtnSizeClassName}`}
           aria-label="확대"
         >
           ＋
@@ -102,7 +102,7 @@ export default function MineOfOblivion2Grid({
         <button
           type="button"
           onClick={() => setZoom((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2)))}
-          className={`flex items-center justify-center rounded-md border border-white/15 bg-black/70 text-white/80 backdrop-blur active:scale-90 ${zoomBtnSizeClassName}`}
+          className={`flex items-center justify-center rounded-md border border-white/15 light:border-slate-200 bg-black/70 light:bg-white/95 light:shadow-md text-white/80 light:text-slate-700 backdrop-blur active:scale-90 ${zoomBtnSizeClassName}`}
           aria-label="축소"
         >
           −
@@ -111,9 +111,9 @@ export default function MineOfOblivion2Grid({
 
       <div className={scrollBoxClassName} style={{ touchAction: "pan-x pan-y" }}>
         <div className="grid" style={{ gridTemplateColumns: `${gutterPx}px repeat(${BOARD_COLS.length}, ${gridColPx}px)`, width: "max-content" }}>
-          <div className="sticky left-0 top-0 z-[2] bg-black/40" />
+          <div className="sticky left-0 top-0 z-[2] bg-black/40 light:bg-white/85 light:shadow-sm" />
           {BOARD_COLS.map((col) => (
-            <div key={`h-${col}`} className="sticky top-0 z-[1] flex items-center justify-center bg-black/60 text-[10px] font-semibold text-white/40" style={{ height: gutterPx }}>
+            <div key={`h-${col}`} className="sticky top-0 z-[1] flex items-center justify-center bg-black/60 light:bg-white/90 light:shadow-md text-[10px] font-semibold text-white/40 light:text-slate-500" style={{ height: gutterPx }}>
               {col}
             </div>
           ))}
@@ -182,7 +182,7 @@ function RowCells({
 }) {
   return (
     <>
-      <div className="sticky left-0 z-[1] flex items-center justify-center bg-black/60 text-[10px] font-semibold text-white/40" style={{ height: gridColPx }}>
+      <div className="sticky left-0 z-[1] flex items-center justify-center bg-black/60 light:bg-white/90 light:shadow-md text-[10px] font-semibold text-white/40 light:text-slate-500" style={{ height: gridColPx }}>
         {row}
       </div>
       {BOARD_COLS.map((col) => {
@@ -232,10 +232,10 @@ function RowCells({
                       : isInMyDangerZone
                         ? "moo2-danger-zone-pulse border-orange-400/50 bg-orange-500/5"
                         : isHazardForbidden
-                          ? "border-white/5 bg-white/[0.01] opacity-40"
+                          ? "border-white/5 light:border-slate-200 bg-white/[0.01] opacity-40"
                           : isVisited
-                            ? "border-white/10 bg-white/[0.06]"
-                            : "border-white/10 bg-white/[0.03]"
+                            ? "border-white/10 light:border-slate-200 bg-white/[0.06]"
+                            : "border-white/10 light:border-slate-200 bg-white/[0.03]"
             } ${clickable ? "cursor-pointer active:scale-95" : "cursor-default"}`}
             style={{ width: gridColPx, height: gridColPx }}
           >
@@ -245,7 +245,7 @@ function RowCells({
             {isTreasureTile && treasure?.holder === null && <span className="text-base sm:text-lg">💎</span>}
             {isTreasureTile && treasure?.holder !== null && (
               <span className="flex flex-col items-center leading-none">
-                <span className="text-xs text-white/15 sm:text-sm">◌</span>
+                <span className="text-xs text-white/15 light:text-slate-400 sm:text-sm">◌</span>
                 <span className="text-[7px] text-amber-300/70">+{treasure?.points}</span>
               </span>
             )}

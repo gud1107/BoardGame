@@ -14,6 +14,7 @@ import { maxTradeRepeats, simulateUpgrade, type PlayerState } from "./engine";
 export function ModalShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      {/* TODO(theme): background/borderColor is a hardcoded dark parchment-box gradient via inline style; left as-is in light mode (physical game-mat art, not a plain UI panel) — descendant text/borders below are intentionally left unprefixed since they still sit on this unchanged dark surface. */}
       <div
         className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl border p-5 shadow-2xl sm:rounded-2xl"
         style={{

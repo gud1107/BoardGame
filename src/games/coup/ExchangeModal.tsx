@@ -32,10 +32,10 @@ export default function ExchangeModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-      <div className="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl border border-purple-300/30 bg-[#160c28] p-5 text-center shadow-2xl">
+      <div className="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl border border-purple-300/30 bg-[#160c28] p-5 text-center shadow-2xl light:bg-white light:border-purple-300 light:shadow-md">
         <span className="text-3xl">🕊️</span>
-        <h2 className="text-base font-bold text-purple-100">교환할 카드를 고르세요</h2>
-        <p className="text-xs text-white/50">
+        <h2 className="text-base font-bold text-purple-100 light:text-purple-900">교환할 카드를 고르세요</h2>
+        <p className="text-xs text-white/50 light:text-slate-500">
           아래 {options.length}장 중 남길 {keepCount}장을 선택하세요. 나머지는 덱으로 돌아갑니다.
         </p>
         <div className="flex flex-wrap justify-center gap-3">

@@ -55,7 +55,7 @@ export function CardFace({
   const info = CARD_RANK_INFO[card.rank];
   return (
     <div
-      className={`relative flex h-24 w-16 shrink-0 flex-col items-center justify-between rounded-lg border p-1 transition ${cardTierBorder(card.rank)} ${
+      className={`relative flex h-24 w-16 shrink-0 flex-col items-center justify-between rounded-lg border p-1 transition light:shadow-sm ${cardTierBorder(card.rank)} ${
         highlight ? "shadow-[0_0_14px_-2px_rgba(251,191,36,0.85)] ring-2 ring-amber-300/70" : ""
       } ${className}`}
       style={{ background: cardTierBg(card.rank) }}
@@ -78,7 +78,7 @@ export function CardChip({ card, className = "" }: { card: Card; className?: str
   const info = CARD_RANK_INFO[card.rank];
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold text-white ${cardTierBorder(card.rank)} ${className}`}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold text-white light:shadow-sm ${cardTierBorder(card.rank)} ${className}`}
       style={{ background: cardTierBg(card.rank) }}
     >
       <span className="text-xs leading-none">{info.emoji}</span>
@@ -94,11 +94,11 @@ export function CardChip({ card, className = "" }: { card: Card; className?: str
  * 대농노→노예(Slave) ⛓️, per the task brief's requested emblems.
  */
 export const ROLE_BADGE: Record<string, { emoji: string; color: string }> = {
-  왕: { emoji: "👑", color: "text-amber-200" },
-  귀족: { emoji: "🎩", color: "text-sky-200" },
-  평민: { emoji: "🌾", color: "text-emerald-200" },
-  거지: { emoji: "🪵", color: "text-lime-200" },
-  노예: { emoji: "⛓️", color: "text-white/60" },
+  왕: { emoji: "👑", color: "text-amber-200 light:text-amber-700" },
+  귀족: { emoji: "🎩", color: "text-sky-200 light:text-sky-700" },
+  평민: { emoji: "🌾", color: "text-emerald-200 light:text-emerald-700" },
+  거지: { emoji: "🪵", color: "text-lime-200 light:text-lime-700" },
+  노예: { emoji: "⛓️", color: "text-white/60 light:text-slate-500" },
 };
 
 export function RoleBadge({ title, className = "" }: { title: string; className?: string }) {
@@ -106,7 +106,7 @@ export function RoleBadge({ title, className = "" }: { title: string; className?
   return (
     <span
       title={title}
-      className={`inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/30 px-1.5 py-0.5 text-[10px] font-semibold ${info.color} ${className}`}
+      className={`inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/30 px-1.5 py-0.5 text-[10px] font-semibold light:border-slate-300 light:bg-white/85 light:shadow-sm ${info.color} ${className}`}
     >
       <span>{info.emoji}</span>
       {title}
@@ -143,7 +143,8 @@ export function CardBack({ tier, className = "" }: { tier: AuraTier; className?:
   const style = EXCHANGE_TIER_STYLE[tier];
   return (
     <div
-      className={`relative flex h-24 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border ${style.ring} ${className}`}
+      className={`relative flex h-24 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border light:shadow-sm ${style.ring} ${className}`}
+      // TODO(theme): hardcoded dark gradient background — not trivial to branch via a CSS class variant, left dark in light mode for now.
       style={{ background: "linear-gradient(160deg,#241a3a 0%,#160f26 55%,#0a0714 100%)", boxShadow: `0 0 14px -2px ${style.glow}` }}
     >
       <span className="text-lg leading-none">{style.icon}</span>

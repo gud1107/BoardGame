@@ -103,6 +103,7 @@ function RollViewerPanel({
 }) {
   const rollerColor = diceColorForSeat(activeSeat);
   return (
+    // TODO(theme): hardcoded dark gradient background, not yet branched for light mode.
     <section
       ref={panelRef}
       className="relative flex min-h-[64px] flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl border border-amber-300/20 p-2.5 sm:p-3"
@@ -119,9 +120,12 @@ function RollViewerPanel({
           {isMyTurn && (
             <div className="flex flex-wrap items-center justify-center gap-1.5">
               {rollGroups.map((g) => (
-                <span key={g.face} className="flex items-center gap-1 rounded-full border border-amber-300/25 bg-black/25 px-1.5 py-0.5">
+                <span
+                  key={g.face}
+                  className="flex items-center gap-1 rounded-full border border-amber-300/25 bg-black/25 px-1.5 py-0.5 light:border-amber-400/40 light:bg-white/70 light:shadow-sm"
+                >
                   <DiceFace face={g.face} color={rollerColor} size="h-4 w-4" />
-                  <span className="text-[10px] font-bold text-amber-100">×{g.ownCount + g.neutralCount}개</span>
+                  <span className="text-[10px] font-bold text-amber-100 light:text-amber-700">×{g.ownCount + g.neutralCount}개</span>
                 </span>
               ))}
             </div>
@@ -142,12 +146,12 @@ function RollViewerPanel({
                   <button
                     key={g.face}
                     onClick={() => onPlace(g.face)}
-                    className="flex items-center gap-1.5 rounded-xl border border-amber-300/50 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-400/20"
+                    className="flex items-center gap-1.5 rounded-xl border border-amber-300/50 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-400/20 light:border-amber-400/60 light:bg-amber-100 light:text-amber-800 light:hover:bg-amber-200"
                   >
                     <DiceFace face={g.face} color="#f4f4f5" size="h-5 w-5" />
                     <span className="flex flex-col items-start leading-tight">
                       <span>눈금 {g.face} 전체 배치</span>
-                      <span className="text-[10px] font-normal text-amber-200/70">
+                      <span className="text-[10px] font-normal text-amber-200/70 light:text-amber-700">
                         {existing > 0 ? `기존 ${existing}개 + 신규 ${incoming}개 → 총 ${existing + incoming}개` : `${incoming}개`}
                       </span>
                     </span>
@@ -277,6 +281,7 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
     const winners = rankings.filter((r) => r.rank === 1);
     const tied = winners.length > 1;
     return (
+      // TODO(theme): hardcoded dark gradient background, not yet branched for light mode.
       <div
         className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
         style={{ background: "linear-gradient(160deg,#241405 0%,#170d02 55%,#0a0601 100%)" }}
@@ -339,23 +344,23 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
           />
         ))}
 
-        <details className="w-full rounded-xl border border-white/10 bg-white/[0.03] p-3 text-left text-[11px] text-white/60">
-          <summary className="cursor-pointer text-white/80">카지노별 정산 내역 보기</summary>
+        <details className="w-full rounded-xl border border-white/10 bg-white/[0.03] p-3 text-left text-[11px] text-white/60 light:border-slate-200 light:bg-white/85 light:text-slate-600 light:shadow-sm">
+          <summary className="cursor-pointer text-white/80 light:text-slate-800">카지노별 정산 내역 보기</summary>
           <div className="mt-2 flex flex-col gap-2">
             {state.settlement.map((s) => (
-              <div key={s.casino} className="rounded-lg border border-white/10 p-2">
-                <p className="font-semibold text-white/80">카지노 {s.casino}</p>
+              <div key={s.casino} className="rounded-lg border border-white/10 p-2 light:border-slate-200">
+                <p className="font-semibold text-white/80 light:text-slate-800">카지노 {s.casino}</p>
                 {s.cancelledOwners.length > 0 && (
-                  <p className="text-rose-300">
+                  <p className="text-rose-300 light:text-rose-600">
                     ⚔️ 동률 상쇄:{" "}
                     {s.cancelledOwners.map((o) => (o === NEUTRAL_OWNER ? "중립" : names[o as SeatIndex])).join(", ")}
                   </p>
                 )}
                 {s.awards.length === 0 ? (
-                  <p className="text-white/40">획득자 없음</p>
+                  <p className="text-white/40 light:text-slate-400">획득자 없음</p>
                 ) : (
                   s.awards.map((a, i) => (
-                    <p key={i} className="text-white/70">
+                    <p key={i} className="text-white/70 light:text-slate-600">
                       {a.owner === NEUTRAL_OWNER ? "중립" : names[a.owner as SeatIndex]} (주사위 {a.diceCount}개) →{" "}
                       {a.bill === null ? "지폐 없음" : a.owner === NEUTRAL_OWNER ? `${money(a.bill)} (버려짐)` : money(a.bill)}
                     </p>
@@ -459,6 +464,7 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
   }
 
   return (
+    // TODO(theme): hardcoded dark gradient background, not yet branched for light mode.
     <div
       className="flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
       style={{ background: "linear-gradient(160deg,#1b1004 0%,#120b03 45%,#080502 100%)" }}
@@ -517,6 +523,7 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
           const total = p.money.reduce((s, v) => s + v, 0);
           const seatColor = diceColorForSeat(seat);
           return (
+            // TODO(theme): inline seat-color/black gradient background, not yet branched for light mode.
             <div
               key={seat}
               className="flex flex-wrap items-center justify-between gap-2 rounded-xl border-2 bg-black/20 p-2 text-xs transition"
@@ -554,6 +561,7 @@ export default function LasVegasBoard({ state, viewerSeat, names, connectedSeats
       </section>
 
       {/* My dice tray — personal hand reserve + roll trigger only now; the actual rolled dice and placement choice moved into the shared RollViewerPanel above (2026-08-23 요청). */}
+      {/* TODO(theme): hardcoded dark gradient background, not yet branched for light mode. */}
       <section
         className="relative overflow-hidden rounded-2xl border border-amber-300/20 p-2.5 sm:p-3"
         style={{ background: "linear-gradient(160deg,#332008 0%,#1c1204 55%,#0a0601 100%)" }}

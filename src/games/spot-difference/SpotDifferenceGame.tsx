@@ -927,14 +927,14 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "supabase-missing") {
     return withGuard(
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-8 text-center light:border-amber-400/40 light:bg-amber-50 light:shadow-sm">
         <span className="text-3xl">⚠️</span>
-        <h2 className="text-lg font-bold text-white">온라인 대전을 사용할 수 없어요</h2>
-        <p className="max-w-sm text-sm text-amber-100/80">
+        <h2 className="text-lg font-bold text-white light:text-slate-900">온라인 대전을 사용할 수 없어요</h2>
+        <p className="max-w-sm text-sm text-amber-100/80 light:text-amber-700">
           틀린 그림 찾기는 실시간 온라인 대전 전용이라 Supabase 설정이 필요합니다.
-          <code className="mx-1 rounded bg-black/30 px-1.5 py-0.5 text-xs">.env.local</code>
-          에 <code className="rounded bg-black/30 px-1.5 py-0.5 text-xs">NEXT_PUBLIC_SUPABASE_URL</code> /
-          <code className="mx-1 rounded bg-black/30 px-1.5 py-0.5 text-xs">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
+          <code className="mx-1 rounded bg-black/30 px-1.5 py-0.5 text-xs light:bg-slate-200 light:text-slate-700">.env.local</code>
+          에 <code className="rounded bg-black/30 px-1.5 py-0.5 text-xs light:bg-slate-200 light:text-slate-700">NEXT_PUBLIC_SUPABASE_URL</code> /
+          <code className="mx-1 rounded bg-black/30 px-1.5 py-0.5 text-xs light:bg-slate-200 light:text-slate-700">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
           를 채워주세요 (README 참고).
         </p>
       </div>
@@ -943,10 +943,10 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "room-full") {
     return withGuard(
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center light:border-rose-300 light:bg-rose-50 light:shadow-sm">
         <span className="text-3xl">🚫</span>
-        <h2 className="text-lg font-bold text-white">이미 다른 사람이 참여 중인 방이에요</h2>
-        <p className="text-sm text-rose-100/80">코드를 다시 확인하거나 새로운 방을 만들어보세요.</p>
+        <h2 className="text-lg font-bold text-white light:text-slate-900">이미 다른 사람이 참여 중인 방이에요</h2>
+        <p className="text-sm text-rose-100/80 light:text-rose-700">코드를 다시 확인하거나 새로운 방을 만들어보세요.</p>
         <button
           onClick={handleLeave}
           className="mt-2 rounded-full bg-fuchsia-600 px-5 py-2 text-sm font-semibold text-white hover:bg-fuchsia-500"
@@ -959,9 +959,9 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "channel-error") {
     return withGuard(
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center light:border-rose-300 light:bg-rose-50 light:shadow-sm">
         <span className="text-3xl">📡</span>
-        <h2 className="text-lg font-bold text-white">연결에 실패했습니다</h2>
+        <h2 className="text-lg font-bold text-white light:text-slate-900">연결에 실패했습니다</h2>
         <button
           onClick={handleLeave}
           className="mt-2 rounded-full bg-fuchsia-600 px-5 py-2 text-sm font-semibold text-white hover:bg-fuchsia-500"
@@ -978,7 +978,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
         gameId="spot-difference"
         icon="🔍"
         title="틀린 그림 찾기 온라인 대전"
-        description={<p className="text-sm text-white/50">2~{MAX_PLAYERS}명이 두 팀으로 나뉘어 실시간으로 함께 찾아요.</p>}
+        description={<p className="text-sm text-white/50 light:text-slate-500">2~{MAX_PLAYERS}명이 두 팀으로 나뉘어 실시간으로 함께 찾아요.</p>}
         actions={
           <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
             <button
@@ -995,7 +995,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
                 setIntent("join");
                 setPhase("enter-name");
               }}
-              className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30"
+              className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
             >
               🔑 초대 코드로 참여
             </button>
@@ -1007,14 +1007,14 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "enter-name") {
     return withGuard(
-      <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-        <h2 className="text-base font-bold text-white">{intent === "create" ? "방 만들기" : "초대 코드로 참여"}</h2>
-        <div className="flex flex-col gap-1.5 text-sm text-white/70">
+      <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6 light:border-slate-200 light:bg-white light:shadow-sm">
+        <h2 className="text-base font-bold text-white light:text-slate-900">{intent === "create" ? "방 만들기" : "초대 코드로 참여"}</h2>
+        <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
           내 닉네임
           <RoomNicknameField value={identity} onChange={setIdentity} onEnter={enterRoom} accent="fuchsia" />
         </div>
         {intent === "join" && (
-          <label className="flex flex-col gap-1.5 text-sm text-white/70">
+          <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
             초대 코드 (4자리)
             <input
               value={codeInput}
@@ -1027,34 +1027,34 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
               }}
               placeholder="0000"
               inputMode="numeric"
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-center text-lg font-semibold tracking-[0.3em] text-white placeholder:text-white/20 focus:border-fuchsia-400 focus:outline-none"
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-center text-lg font-semibold tracking-[0.3em] text-white placeholder:text-white/20 focus:border-fuchsia-400 focus:outline-none light:border-slate-300 light:bg-slate-100 light:text-slate-900 light:placeholder:text-slate-400"
             />
           </label>
         )}
         {intent === "create" && (
           <>
-            <label className="flex flex-col gap-1.5 text-sm text-white/70">
+            <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
               인원 수 (2~{MAX_PLAYERS}명, 팀은 자동으로 절반씩 나뉩니다)
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setTargetPlayerCount((n) => Math.max(MIN_PLAYERS, n - 1))}
-                  className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
+                  className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
                 >
                   −
                 </button>
-                <span className="w-8 text-center text-lg font-semibold text-white">{targetPlayerCount}</span>
+                <span className="w-8 text-center text-lg font-semibold text-white light:text-slate-900">{targetPlayerCount}</span>
                 <button
                   type="button"
                   onClick={() => setTargetPlayerCount((n) => Math.min(MAX_PLAYERS, n + 1))}
-                  className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
+                  className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
                 >
                   +
                 </button>
               </div>
             </label>
 
-            <div className="flex flex-col gap-1.5 text-sm text-white/70">
+            <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
               게임 모드
               <div className="flex gap-2">
                 <button
@@ -1062,30 +1062,30 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
                   onClick={() => setMode("builtin")}
                   className={`flex-1 rounded-xl border px-3 py-2 text-left text-xs transition ${
                     mode === "builtin"
-                      ? "border-fuchsia-400/60 bg-fuchsia-400/10 text-fuchsia-100"
-                      : "border-white/15 text-white/60 hover:border-white/30"
+                      ? "border-fuchsia-400/60 bg-fuchsia-400/10 text-fuchsia-100 light:border-fuchsia-500 light:bg-fuchsia-50 light:text-fuchsia-700"
+                      : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
                   }`}
                 >
                   <p className="font-semibold">🖼️ 기본 스테이지</p>
-                  <p className="text-white/50">준비된 그림 세트로 바로 시작</p>
+                  <p className="text-white/50 light:text-slate-500">준비된 그림 세트로 바로 시작</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => setMode("photo")}
                   className={`flex-1 rounded-xl border px-3 py-2 text-left text-xs transition ${
                     mode === "photo"
-                      ? "border-fuchsia-400/60 bg-fuchsia-400/10 text-fuchsia-100"
-                      : "border-white/15 text-white/60 hover:border-white/30"
+                      ? "border-fuchsia-400/60 bg-fuchsia-400/10 text-fuchsia-100 light:border-fuchsia-500 light:bg-fuchsia-50 light:text-fuchsia-700"
+                      : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
                   }`}
                 >
                   <p className="font-semibold">📸 내 사진으로 게임하기</p>
-                  <p className="text-white/50">직접 업로드한 사진을 자동 변형</p>
+                  <p className="text-white/50 light:text-slate-500">직접 업로드한 사진을 자동 변형</p>
                 </button>
               </div>
             </div>
 
             {mode === "builtin" && (
-              <label className="flex flex-col gap-1.5 text-sm text-white/70">
+              <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
                 스테이지 수 (스테이지당 차이 5개)
                 <div className="flex gap-1.5">
                   {STAGE_COUNT_PRESETS.map((n) => (
@@ -1095,8 +1095,8 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
                       onClick={() => setStageCount(n)}
                       className={`rounded-full border px-3 py-1 text-xs transition ${
                         stageCount === n
-                          ? "border-fuchsia-400/60 bg-fuchsia-400/15 text-fuchsia-200"
-                          : "border-white/15 text-white/60 hover:border-white/30"
+                          ? "border-fuchsia-400/60 bg-fuchsia-400/15 text-fuchsia-200 light:border-fuchsia-500 light:bg-fuchsia-50 light:text-fuchsia-700"
+                          : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
                       }`}
                     >
                       {n}스테이지
@@ -1107,19 +1107,19 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
             )}
 
             {mode === "photo" && (
-              <div className="flex flex-col gap-1.5 text-sm text-white/70">
+              <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
                 사진 업로드
                 <input
                   type="file"
                   accept="image/*"
                   onChange={(e) => handlePhotoSelected(e.target.files?.[0])}
-                  className="text-xs text-white/60 file:mr-3 file:rounded-full file:border-0 file:bg-fuchsia-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-fuchsia-500"
+                  className="text-xs text-white/60 file:mr-3 file:rounded-full file:border-0 file:bg-fuchsia-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-fuchsia-500 light:text-slate-500"
                 />
-                {photoBusy && <p className="text-xs text-white/40">사진 처리 중...</p>}
-                {photoError && <p className="text-xs text-rose-300">{photoError}</p>}
+                {photoBusy && <p className="text-xs text-white/40 light:text-slate-500">사진 처리 중...</p>}
+                {photoError && <p className="text-xs text-rose-300 light:text-rose-600">{photoError}</p>}
                 {photoDataUrl && (
                   // eslint-disable-next-line @next/next/no-img-element -- client-only object/data URL preview, next/image would gain nothing here
-                  <img src={photoDataUrl} alt="업로드한 사진 미리보기" className="mt-1 h-24 w-full rounded-lg object-cover" />
+                  <img src={photoDataUrl} alt="업로드한 사진 미리보기" className="mt-1 h-24 w-full rounded-lg object-cover light:border light:border-slate-300 light:shadow-sm" />
                 )}
                 <label className="mt-1 flex flex-col gap-1.5">
                   차이 개수
@@ -1131,8 +1131,8 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
                         onClick={() => setDiffCount(n)}
                         className={`rounded-full border px-3 py-1 text-xs transition ${
                           diffCount === n
-                            ? "border-fuchsia-400/60 bg-fuchsia-400/15 text-fuchsia-200"
-                            : "border-white/15 text-white/60 hover:border-white/30"
+                            ? "border-fuchsia-400/60 bg-fuchsia-400/15 text-fuchsia-200 light:border-fuchsia-500 light:bg-fuchsia-50 light:text-fuchsia-700"
+                            : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
                         }`}
                       >
                         {n}곳
@@ -1143,7 +1143,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
               </div>
             )}
 
-            <label className="flex flex-col gap-1.5 text-sm text-white/70">
+            <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
               제한 시간
               <div className="flex flex-wrap gap-1.5">
                 {TIMER_PRESETS.map((s) => (
@@ -1153,8 +1153,8 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
                     onClick={() => setTimerSeconds(s)}
                     className={`rounded-full border px-3 py-1 text-xs transition ${
                       timerSeconds === s
-                        ? "border-fuchsia-400/60 bg-fuchsia-400/15 text-fuchsia-200"
-                        : "border-white/15 text-white/60 hover:border-white/30"
+                        ? "border-fuchsia-400/60 bg-fuchsia-400/15 text-fuchsia-200 light:border-fuchsia-500 light:bg-fuchsia-50 light:text-fuchsia-700"
+                        : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
                     }`}
                   >
                     {s}초
@@ -1164,11 +1164,11 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
             </label>
           </>
         )}
-        {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">{formError}</p>}
+        {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300 light:bg-rose-50 light:text-rose-700">{formError}</p>}
         <div className="flex gap-2">
           <button
             onClick={() => setPhase("choose")}
-            className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30"
+            className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
           >
             뒤로
           </button>
@@ -1187,20 +1187,20 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
   if (phase === "connecting" || phase === "waiting") {
     return withGuard(
       <>
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center light:border-slate-200 light:bg-white light:shadow-sm">
         {phase === "connecting" ? (
-          <p className="text-sm text-white/50">연결하는 중...</p>
+          <p className="text-sm text-white/50 light:text-slate-500">연결하는 중...</p>
         ) : (
           <>
-            <p className="text-sm text-white/50">초대 코드</p>
-            <p className="text-4xl font-bold tracking-[0.3em] text-white">{roomCode}</p>
+            <p className="text-sm text-white/50 light:text-slate-500">초대 코드</p>
+            <p className="text-4xl font-bold tracking-[0.3em] text-white light:text-slate-900">{roomCode}</p>
             <button
               onClick={() => navigator.clipboard?.writeText(shareUrl)}
-              className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-white/30"
+              className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
             >
               🔗 초대 링크 복사
             </button>
-            <p className="text-xs text-white/50">
+            <p className="text-xs text-white/50 light:text-slate-500">
               {occupants.length + botSeats.length} / {knownTargetPlayerCount}명 참여 중
             </p>
             {isHost && occupants.length + botSeats.length < knownTargetPlayerCount && (
@@ -1216,11 +1216,11 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
                 const botIdx = botSeats.indexOf(seat);
                 const isBot = botIdx >= 0;
                 return (
-                  <p key={seat} className="flex items-center justify-between gap-2 text-sm text-white/70">
+                  <p key={seat} className="flex items-center justify-between gap-2 text-sm text-white/70 light:text-slate-600">
                     <span>
-                      <span className={team === "A" ? "text-sky-300" : "text-rose-300"}>[{team}팀]</span>{" "}
+                      <span className={team === "A" ? "text-sky-300 light:text-sky-600" : "text-rose-300 light:text-rose-600"}>[{team}팀]</span>{" "}
                       {seat === mySeat ? "나" : `${seat + 1}번`}:{" "}
-                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30">대기 중...</span>}
+                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30 light:text-slate-400">대기 중...</span>}
                     </span>
                     {isHost && !occ && (
                       <span>
@@ -1235,7 +1235,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
                 );
               })}
             </div>
-            <p className="text-xs text-white/40">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다.</p>
+            <p className="text-xs text-white/40 light:text-slate-500">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다.</p>
             {isHost && occupants.length + botSeats.length >= MIN_PLAYERS && occupants.length + botSeats.length < knownTargetPlayerCount && (
               <button
                 onClick={sendGameStart}
@@ -1300,15 +1300,15 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
   if (phase === "post-game" && finalResult) {
     return withGuard(
       <>
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center light:border-slate-200 light:bg-white light:shadow-sm">
         <span className="text-4xl">{finalResult.tied ? "🤝" : "🏆"}</span>
-        <p className="text-white/80">
+        <p className="text-white/80 light:text-slate-700">
           {finalResult.tied ? "두 팀이 비겼어요!" : `${finalResult.winningTeam === "A" ? "팀 A" : "팀 B"} 승리로 게임이 끝났어요.`}
         </p>
         <div className="flex gap-2">
           <button
             onClick={handleLeave}
-            className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30"
+            className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
           >
             나가기
           </button>

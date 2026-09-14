@@ -118,6 +118,7 @@ export function CoyoteHowlBanner({
 
   return createPortal(
     <div className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center overflow-hidden">
+      {/* One-shot theatrical FX overlay (desert flash) — intentionally left dark/dramatic regardless of site theme, not persistent UI chrome. */}
       <div
         className="absolute inset-0 bg-gradient-to-b from-orange-950/70 via-black/60 to-black/90"
         style={{ animation: `coyote-desert-flash ${durationMs}ms ease-out forwards` }}
@@ -163,6 +164,7 @@ export function PlusOneUsedBanner({
   if (typeof document === "undefined") return null;
 
   return createPortal(
+    // One-shot theatrical FX overlay — intentionally left dark/dramatic regardless of site theme.
     <div className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center overflow-hidden px-4">
       <div
         className="relative flex flex-col items-center gap-1.5 rounded-3xl border-4 border-amber-300 bg-gradient-to-b from-amber-950/95 to-black/95 px-8 py-6 text-center shadow-[0_0_90px_-10px_rgba(251,191,36,0.85)]"
@@ -192,7 +194,7 @@ export function PlusOneChanceBadge({ used, compact = false }: { used: boolean; c
   if (used) {
     return (
       <span
-        className={`shrink-0 rounded-full border border-white/15 bg-white/5 font-bold text-white/40 ${sizeCls}`}
+        className={`shrink-0 rounded-full border border-white/15 bg-white/5 font-bold text-white/40 light:border-slate-300 light:bg-slate-100 light:text-slate-500 ${sizeCls}`}
         title="이번 라운드 개인 &quot;+1 찬스&quot;를 이미 사용했습니다 — 다음 선언은 +2 이상만 가능"
       >
         ⚪ +1 사용완료
@@ -201,7 +203,7 @@ export function PlusOneChanceBadge({ used, compact = false }: { used: boolean; c
   }
   return (
     <span
-      className={`shrink-0 rounded-full border border-emerald-300/60 bg-emerald-500/15 font-bold text-emerald-200 ${sizeCls}`}
+      className={`shrink-0 rounded-full border border-emerald-300/60 bg-emerald-500/15 font-bold text-emerald-200 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700 ${sizeCls}`}
       title="이번 라운드 개인 &quot;+1 찬스&quot;를 아직 보유하고 있습니다"
     >
       🟢 +1 찬스
@@ -231,6 +233,7 @@ export function QuestionRevealPopup({ card, durationMs = QUESTION_POPUP_MS }: { 
   if (typeof document === "undefined") return null;
 
   return createPortal(
+    // One-shot theatrical mystery-reveal FX overlay (purple aura) — intentionally left dark regardless of site theme; text-white inside is on a hardcoded dark/purple card gradient, never a solid-fill button, so it stays untouched too.
     <div className="pointer-events-none fixed inset-0 z-[90] flex items-center justify-center overflow-hidden">
       <div
         className="absolute inset-0 bg-gradient-to-b from-violet-950/75 via-black/55 to-black/85"
@@ -270,6 +273,7 @@ export function QuestionRevealPopup({ card, durationMs = QUESTION_POPUP_MS }: { 
  */
 export function MaxZeroSlashOverlay({ stage }: { stage: "slashing" | "done" }) {
   return (
+    // Inline overlay drawn directly on top of CardFace's own hardcoded-gradient card art (CardArt.tsx) — left as-is regardless of site theme, same as that card art.
     <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden rounded-lg">
       <span
         key={stage}
@@ -343,6 +347,7 @@ export function CardShatterOverlay() {
   }, []);
 
   return (
+    // Part of the theatrical death-FX chain (shake -> shatter -> skull stamp) — intentionally left dark/dramatic regardless of site theme.
     <div className="pointer-events-none absolute inset-0 z-20 overflow-visible">
       <span
         aria-hidden
@@ -385,6 +390,7 @@ export function DeathStampOverlay({ name, durationMs = DEATH_SKULL_MS }: { name:
   if (typeof document === "undefined") return null;
 
   return createPortal(
+    // One-shot theatrical death-fog FX overlay — intentionally left dark/dramatic regardless of site theme.
     <div className="pointer-events-none fixed inset-0 z-[95] flex items-center justify-center overflow-hidden">
       <div
         className="absolute inset-0"
@@ -464,12 +470,12 @@ export function buildFormulaTerms(res: Resolution): FormulaTerm[] {
 
 /** Text color for a term's numeric value, by kind/sign — mirrors CardArt.tsx's per-kind palette. */
 function termValueClass(card: Card): string {
-  if (card.kind === "night") return "text-indigo-300";
-  if (card.kind === "double") return "text-emerald-300";
-  if (card.kind === "maxZero") return "text-rose-300";
-  if (card.value < 0) return "text-red-300";
-  if (card.value === 0) return "text-white/50";
-  return "text-amber-200";
+  if (card.kind === "night") return "text-indigo-300 light:text-indigo-700";
+  if (card.kind === "double") return "text-emerald-300 light:text-emerald-700";
+  if (card.kind === "maxZero") return "text-rose-300 light:text-rose-700";
+  if (card.value < 0) return "text-red-300 light:text-red-700";
+  if (card.value === 0) return "text-white/50 light:text-slate-500";
+  return "text-amber-200 light:text-amber-700";
 }
 
 function FormulaTermChip({ term }: { term: FormulaTerm }) {
@@ -477,19 +483,19 @@ function FormulaTermChip({ term }: { term: FormulaTerm }) {
   if (zeroed) {
     return (
       <span className="whitespace-nowrap">
-        <s className="text-white/35">{cardLabel(card)}</s>
-        <span className="text-rose-300">→0</span>
-        <span className="ml-0.5 text-[9px] text-rose-300/80">(MAX제거)</span>
+        <s className="text-white/35 light:text-slate-400">{cardLabel(card)}</s>
+        <span className="text-rose-300 light:text-rose-700">→0</span>
+        <span className="ml-0.5 text-[9px] text-rose-300/80 light:text-rose-600">(MAX제거)</span>
       </span>
     );
   }
   return (
     <span className="whitespace-nowrap">
       <span className={`font-bold ${termValueClass(card)}`}>{cardLabel(card)}</span>
-      {wasQuestion && <span className="ml-0.5 text-[9px] text-violet-300/80">(?)</span>}
-      {!wasQuestion && card.kind === "night" && <span className="ml-0.5 text-[9px] text-indigo-300/80">(밤)</span>}
-      {!wasQuestion && card.kind === "maxZero" && <span className="ml-0.5 text-[9px] text-rose-300/80">(MAX카드)</span>}
-      {!wasQuestion && card.kind === "double" && <span className="ml-0.5 text-[9px] text-emerald-300/80">(2배카드)</span>}
+      {wasQuestion && <span className="ml-0.5 text-[9px] text-violet-300/80 light:text-violet-700">(?)</span>}
+      {!wasQuestion && card.kind === "night" && <span className="ml-0.5 text-[9px] text-indigo-300/80 light:text-indigo-700">(밤)</span>}
+      {!wasQuestion && card.kind === "maxZero" && <span className="ml-0.5 text-[9px] text-rose-300/80 light:text-rose-700">(MAX카드)</span>}
+      {!wasQuestion && card.kind === "double" && <span className="ml-0.5 text-[9px] text-emerald-300/80 light:text-emerald-700">(2배카드)</span>}
     </span>
   );
 }
@@ -519,33 +525,35 @@ export function FormulaBar({
 }) {
   const preDoubleSum = doubled ? finalTotal / 2 : finalTotal;
   return (
-    <div className="animate-[coyote-desert-flash_0.4s_ease-out] rounded-xl border border-white/10 bg-black/40 p-3">
+    <div className="animate-[coyote-desert-flash_0.4s_ease-out] rounded-xl border border-white/10 bg-black/40 p-3 light:border-slate-200 light:bg-white/90 light:shadow-sm">
       <div className="flex flex-wrap items-center justify-center gap-x-1 gap-y-1 overflow-x-auto text-[11px] break-keep">
         {terms.map((term, i) => (
           <span key={term.key} className="flex items-center gap-1">
-            {i > 0 && <span className="text-white/30">+</span>}
+            {i > 0 && <span className="text-white/30 light:text-slate-400">+</span>}
             <FormulaTermChip term={term} />
           </span>
         ))}
-        <span className="text-white/30">=</span>
-        <span className="font-bold text-white">{preDoubleSum}</span>
+        <span className="text-white/30 light:text-slate-400">=</span>
+        <span className="font-bold text-white light:text-slate-900">{preDoubleSum}</span>
         {doubled && (
           <>
-            <span className="text-emerald-300">× 2</span>
-            <span className="text-white/30">=</span>
-            <span className="font-black text-emerald-300">{finalTotal}</span>
+            <span className="text-emerald-300 light:text-emerald-700">× 2</span>
+            <span className="text-white/30 light:text-slate-400">=</span>
+            <span className="font-black text-emerald-300 light:text-emerald-700">{finalTotal}</span>
           </>
         )}
       </div>
       <div className="mt-2.5 flex flex-col items-center gap-1.5">
         <p className="break-keep text-center text-sm font-black tracking-wide sm:text-base">
-          <span className="text-emerald-300 [text-shadow:0_0_14px_rgba(52,211,153,0.85)]">실제 총합 [ {revealedTotal} ]</span>
-          <span className="mx-1.5 text-white/40">vs</span>
-          <span className="text-amber-300 [text-shadow:0_0_14px_rgba(251,191,36,0.85)]">외친 숫자 [ {bidNumber} ]</span>
+          <span className="text-emerald-300 [text-shadow:0_0_14px_rgba(52,211,153,0.85)] light:text-emerald-700">실제 총합 [ {revealedTotal} ]</span>
+          <span className="mx-1.5 text-white/40 light:text-slate-400">vs</span>
+          <span className="text-amber-300 [text-shadow:0_0_14px_rgba(251,191,36,0.85)] light:text-amber-700">외친 숫자 [ {bidNumber} ]</span>
         </p>
         <span
           className={`break-keep rounded-full border px-3 py-1 text-xs font-black tracking-wide ${
-            callerWon ? "border-emerald-300/60 bg-emerald-400/15 text-emerald-200" : "border-rose-300/60 bg-rose-500/15 text-rose-200"
+            callerWon
+              ? "border-emerald-300/60 bg-emerald-400/15 text-emerald-200 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700"
+              : "border-rose-300/60 bg-rose-500/15 text-rose-200 light:border-rose-400 light:bg-rose-50 light:text-rose-700"
           }`}
         >
           {callerWon ? "🐺 코요테 성공!" : "🙅 코요테 실패!"}

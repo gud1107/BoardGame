@@ -8,6 +8,7 @@ import { useProfileStore } from "@/store/profileStore";
 import { TIER_LABELS } from "@/lib/entitlements/types";
 import SoundToggleButton from "@/components/audio/SoundToggleButton";
 import PatchNoteButton from "@/components/patchNotes/PatchNoteButton";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 import Avatar from "@/components/common/Avatar";
 import ProfileModal from "@/components/profile/ProfileModal";
 
@@ -56,7 +57,7 @@ export default function SiteHeader() {
   return (
     <header
       ref={headerRef}
-      className="sticky top-0 z-40 border-b border-amber-500/20 bg-neutral-950/70 backdrop-blur-xl"
+      className="sticky top-0 z-40 border-b border-amber-500/20 bg-neutral-950/70 backdrop-blur-xl light:border-slate-200 light:bg-white/90 light:shadow-sm"
     >
       {/* flex-wrap + shrink-0 on every child below is the actual fix for the
           "보\n드\n게\n임" vertical-splitting bug reported on this bar: with no
@@ -103,7 +104,7 @@ export default function SiteHeader() {
           {configured && (
             <Link
               href={userId ? "/account" : "/login"}
-              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-500/20 px-2.5 py-1 text-[11px] text-white/70 hover:border-amber-400/60 sm:text-xs"
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-500/20 px-2.5 py-1 text-[11px] text-white/70 hover:border-amber-400/60 sm:text-xs light:border-slate-300 light:text-slate-700 light:hover:border-amber-500"
               title={
                 entitlement
                   ? `오늘 ${entitlement.unit === "games" ? "이용 횟수" : "이용 시간"}: ${entitlement.used}/${entitlement.cap}`
@@ -126,27 +127,28 @@ export default function SiteHeader() {
           )}
           <Link
             href="/lobby"
-            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm"
+            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm light:text-slate-500 light:hover:text-amber-600"
           >
             💬 로비
           </Link>
           <Link
             href="/history"
-            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm"
+            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm light:text-slate-500 light:hover:text-amber-600"
           >
             기록
           </Link>
           <Link
             href="/bug-reports"
-            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm"
+            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm light:text-slate-500 light:hover:text-amber-600"
           >
             🐛 버그 리포트
           </Link>
           <PatchNoteButton />
+          <ThemeToggle />
           <SoundToggleButton />
           <button
             onClick={() => setSidebarOpen(true)}
-            className="shrink-0 whitespace-nowrap break-keep rounded-full border border-amber-500/30 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-amber-400/70 hover:text-white hover:shadow-[0_0_16px_rgba(245,158,11,0.25)]"
+            className="shrink-0 whitespace-nowrap break-keep rounded-full border border-amber-500/30 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-amber-400/70 hover:text-white hover:shadow-[0_0_16px_rgba(245,158,11,0.25)] light:border-amber-500/40 light:text-slate-800 light:hover:border-amber-500 light:hover:text-slate-900"
           >
             {session ? "🎲 내기 진행 중" : "🎲 내기 관리"}
           </button>

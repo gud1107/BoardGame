@@ -16,9 +16,9 @@ export default function SoundSettingsModal({ onClose }: { onClose: () => void })
 
   return (
     <Overlay title="🔊 사운드 설정" onClose={onClose}>
-      <div className="flex flex-col gap-5 text-sm text-white/80">
+      <div className="flex flex-col gap-5 text-sm text-white/80 light:text-slate-700">
         <label className="flex items-center justify-between gap-3">
-          <span className="font-semibold text-white">전체 음소거</span>
+          <span className="font-semibold text-white light:text-slate-900">전체 음소거</span>
           <input
             type="checkbox"
             className="h-5 w-5 accent-rose-500"
@@ -30,7 +30,7 @@ export default function SoundSettingsModal({ onClose }: { onClose: () => void })
           />
         </label>
 
-        <section className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/5 p-3">
+        <section className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/5 p-3 light:border-slate-200 light:bg-slate-50">
           <label className="flex items-center justify-between gap-3">
             <span>배경음악 (BGM)</span>
             <input
@@ -53,7 +53,7 @@ export default function SoundSettingsModal({ onClose }: { onClose: () => void })
           />
         </section>
 
-        <section className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/5 p-3">
+        <section className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/5 p-3 light:border-slate-200 light:bg-slate-50">
           <label className="flex items-center justify-between gap-3">
             <span>효과음 (SFX)</span>
             <input
@@ -80,7 +80,7 @@ export default function SoundSettingsModal({ onClose }: { onClose: () => void })
           />
         </section>
 
-        <p className="text-xs text-white/40">
+        <p className="text-xs text-white/40 light:text-slate-400">
           체크박스가 켜져 있으면(✓) 음소거 상태입니다. 설정은 이 브라우저에 저장되어 다음 방문에도 유지됩니다.
         </p>
       </div>

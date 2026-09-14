@@ -151,7 +151,7 @@ function SkipButton({ onSkip }: { onSkip: () => void }) {
         e.stopPropagation();
         onSkip();
       }}
-      className="relative z-10 mt-3 flex items-center gap-1.5 rounded-full border border-rose-500/50 bg-black/80 px-6 py-2.5 text-sm font-semibold text-white/90 backdrop-blur-sm transition hover:border-rose-400/70 hover:bg-black active:scale-95"
+      className="relative z-10 mt-3 flex items-center gap-1.5 rounded-full border border-rose-500/50 bg-black/80 light:bg-white/95 light:shadow-md px-6 py-2.5 text-sm font-semibold text-white/90 light:text-slate-800 backdrop-blur-sm transition hover:border-rose-400/70 hover:bg-black active:scale-95"
       style={{ animation: "moo-skip-pulse-glow 1.8s ease-in-out infinite" }}
       aria-label="연출 스킵하고 바로 진행하기"
     >
@@ -207,7 +207,7 @@ export default function RevealOverlay({ event, names, viewerSeat, isGameOver, wi
 
   const body = (
     <div
-      className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto bg-black/85 p-4"
+      className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto bg-black/85 light:bg-white light:shadow-md p-4"
       style={{ animation: "moo-overlay-in 0.3s ease-out both" }}
       onClick={handleBackdropTap}
     >
@@ -225,23 +225,23 @@ export default function RevealOverlay({ event, names, viewerSeat, isGameOver, wi
           <>
             <RevealPulse scoreGained={event.scoreGained ?? 0} />
             <h2
-              className={`text-xl font-extrabold sm:text-2xl ${event.alreadyVisited ? "text-white/50" : "text-emerald-200 drop-shadow-[0_0_16px_rgba(52,211,153,0.7)]"}`}
+              className={`text-xl font-extrabold sm:text-2xl ${event.alreadyVisited ? "text-white/50 light:text-slate-500" : "text-emerald-200 drop-shadow-[0_0_16px_rgba(52,211,153,0.7)]"}`}
             >
               {EVENT_HEADLINE.reveal(names, event)}
             </h2>
           </>
         )}
 
-        {isGameOver && <p className="text-sm font-semibold text-white/80">{isDraw ? "🤝 무승부" : `🏆 ${names[winner as Seat]}님 최종 승리`}</p>}
+        {isGameOver && <p className="text-sm font-semibold text-white/80 light:text-slate-700">{isDraw ? "🤝 무승부" : `🏆 ${names[winner as Seat]}님 최종 승리`}</p>}
 
         <SkipButton onSkip={triggerSkip} />
 
         {isGameOver ? (
-          <p className="mt-1 text-xs text-white/40">화면을 눌러 결과를 확인하세요{viewerSeat ? "" : ""}</p>
+          <p className="mt-1 text-xs text-white/40 light:text-slate-500">화면을 눌러 결과를 확인하세요{viewerSeat ? "" : ""}</p>
         ) : (
           <div className="relative z-10 flex w-full max-w-xs flex-col items-center gap-1.5">
-            <span className="text-[11px] font-medium tracking-wide text-white/50 uppercase">다음 턴 준비</span>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+            <span className="text-[11px] font-medium tracking-wide text-white/50 light:text-slate-500 uppercase">다음 턴 준비</span>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-white/10 light:bg-slate-900/5">
               <div className="h-full rounded-full bg-gradient-to-r from-rose-500 to-fuchsia-500 transition-[width] duration-1000 ease-linear" style={{ width: `${pct}%` }} />
             </div>
           </div>
@@ -272,13 +272,13 @@ export function SeatHud({
   connected: boolean;
 }) {
   return (
-    <div className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition ${isActive ? "border-rose-400/50 bg-rose-500/10" : "border-white/10 bg-white/[0.03]"}`}>
-      <span className="flex items-center gap-1.5 text-sm font-semibold text-white">
+    <div className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition ${isActive ? "border-rose-400/50 bg-rose-500/10" : "border-white/10 light:border-slate-200 bg-white/[0.03]"}`}>
+      <span className="flex items-center gap-1.5 text-sm font-semibold text-white light:text-slate-900">
         <Avatar size={24} />
         {name}
         {!connected && <span className="text-[10px] font-normal text-rose-300">(연결 끊김)</span>}
       </span>
-      <span className="flex items-center gap-2 text-xs text-white/60">
+      <span className="flex items-center gap-2 text-xs text-white/60 light:text-slate-600">
         <span title="총점" className={`font-bold ${score < 0 ? "text-rose-300" : "text-amber-200"}`}>
           🏅 {score}
         </span>

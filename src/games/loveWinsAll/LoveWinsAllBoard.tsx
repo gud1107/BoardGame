@@ -43,7 +43,7 @@ function Card({ suit, size = "md", dim }: { suit: Suit; size?: "sm" | "md" | "lg
   return (
     <span
       className={`flex flex-col items-center justify-center rounded-lg border ${dims} ${
-        dim ? "border-white/10 bg-white/5 opacity-40" : "border-pink-300/30 bg-black/50"
+        dim ? "border-white/10 light:border-slate-200 bg-white/5 light:bg-slate-900/5 opacity-40" : "border-pink-300/30 bg-black/50 light:bg-white/90 light:shadow-sm"
       }`}
     >
       {SUIT_EMOJI[suit]}
@@ -77,7 +77,7 @@ function CardSelectParticles() {
 
 function HiddenCard({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   const dims = size === "lg" ? "h-14 w-11 text-xl" : size === "sm" ? "h-8 w-6 text-xs" : "h-11 w-9 text-base";
-  return <span className={`flex flex-col items-center justify-center rounded-lg border border-white/10 bg-gradient-to-br from-pink-950 to-black ${dims}`}>🂠</span>;
+  return <span className={`flex flex-col items-center justify-center rounded-lg border border-white/10 light:border-slate-200 bg-gradient-to-br from-pink-950 to-black ${dims}`}>🂠</span>;
 }
 
 function PlayerHeader({
@@ -99,7 +99,7 @@ function PlayerHeader({
   return (
     <div
       className={`relative flex flex-1 flex-col items-center gap-1 rounded-2xl border p-2.5 transition ${
-        pending ? "border-pink-400/70 bg-pink-500/10 shadow-[0_0_20px_-4px_rgba(244,114,182,0.6)]" : "border-white/10 bg-white/[0.03]"
+        pending ? "border-pink-400/70 bg-pink-500/10 shadow-[0_0_20px_-4px_rgba(244,114,182,0.6)]" : "border-white/10 light:border-slate-200 bg-white/[0.03]"
       }`}
     >
       {badge}
@@ -111,7 +111,7 @@ function PlayerHeader({
           </span>
         )}
       </div>
-      <span className="max-w-[96px] truncate text-xs font-semibold text-white/90">
+      <span className="max-w-[96px] truncate text-xs font-semibold text-white/90 light:text-slate-800">
         {name}
         {isViewer && <span className="text-emerald-300"> (나)</span>}
       </span>
@@ -134,8 +134,8 @@ function BettingControls({ state, viewerSeat, onAction }: { state: LoveWinsAllSt
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-pink-400/30 bg-black/40 p-4">
-      <p className="text-center text-xs text-white/60">
+    <div className="flex flex-col gap-3 rounded-2xl border border-pink-400/30 bg-black/40 light:bg-white/85 light:shadow-sm p-4">
+      <p className="text-center text-xs text-white/60 light:text-slate-600">
         {toCall > 0 ? `상대 베팅 ${state.currentBet} — 콜하려면 ${toCall}칩 필요` : "베팅할 차례입니다 (체크 가능)"}
       </p>
       <div className="flex gap-2">
@@ -155,10 +155,10 @@ function BettingControls({ state, viewerSeat, onAction }: { state: LoveWinsAllSt
         </button>
       </div>
       {range && (
-        <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-          <div className="flex items-center justify-between text-xs text-white/60">
+        <div className="flex flex-col gap-2 rounded-xl border border-white/10 light:border-slate-200 bg-white/[0.03] p-3">
+          <div className="flex items-center justify-between text-xs text-white/60 light:text-slate-600">
             <span>레이즈 (노리밋)</span>
-            <span className="font-bold text-white/90">{clampedRaise}</span>
+            <span className="font-bold text-white/90 light:text-slate-800">{clampedRaise}</span>
           </div>
           <input
             type="range"
@@ -226,8 +226,8 @@ function DeclareControls({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-pink-400/30 bg-black/40 p-4">
-      <p className="text-center text-xs text-white/60">공개할 카드 1장을 고르고, 자신의 족보를 선언하세요 (거짓 선언 가능)</p>
+    <div className="flex flex-col gap-3 rounded-2xl border border-pink-400/30 bg-black/40 light:bg-white/85 light:shadow-sm p-4">
+      <p className="text-center text-xs text-white/60 light:text-slate-600">공개할 카드 1장을 고르고, 자신의 족보를 선언하세요 (거짓 선언 가능)</p>
       <div className="flex justify-center gap-2">
         {hand.map((suit, i) => (
           <button
@@ -254,7 +254,7 @@ function DeclareControls({
             type="button"
             onClick={() => setDeclaredHand(h)}
             className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
-              declaredHand === h ? "border-pink-400 bg-pink-500/20 text-pink-100" : "border-white/15 text-white/60 hover:border-white/30"
+              declaredHand === h ? "border-pink-400 bg-pink-500/20 text-pink-100" : "border-white/15 light:border-slate-200 text-white/60 light:text-slate-600 hover:border-white/30"
             }`}
           >
             {HAND_CATEGORY_LABEL[h]}
@@ -348,7 +348,7 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
       className="flex flex-col gap-4 rounded-2xl border border-pink-500/20 p-4 sm:p-6"
       style={{ background: "radial-gradient(ellipse at top, #1a0510 0%, #05030a 60%, #000 100%)" }}
     >
-      <div className="flex items-center justify-between text-xs text-white/40">
+      <div className="flex items-center justify-between text-xs text-white/40 light:text-slate-500">
         <span>ROUND {state.round}</span>
         <div className="flex items-center gap-2">
           <span className="rounded-full border border-pink-400/30 px-2 py-0.5 text-pink-200">
@@ -357,7 +357,7 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
           <button
             type="button"
             onClick={() => setRulebookOpen(true)}
-            className="rounded-full border border-white/15 px-2 py-0.5 text-white/60 transition hover:border-white/30 hover:text-white"
+            className="rounded-full border border-white/15 light:border-slate-200 px-2 py-0.5 text-white/60 light:text-slate-600 transition hover:border-white/30 hover:text-white"
           >
             📖 룰북
           </button>
@@ -385,7 +385,7 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
           <ChipPot pot={state.pot} />
           {state.community && (
             <div className="flex flex-col items-center gap-0.5">
-              <span className="text-[10px] text-white/40">공용 카드</span>
+              <span className="text-[10px] text-white/40 light:text-slate-500">공용 카드</span>
               <Card suit={state.community} size="sm" />
             </div>
           )}
@@ -409,19 +409,19 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
       {/* Opponent's hand — face-down until their §4 reveal, then that one slot flips to its true suit. Never shows the other two slots' true suits before showdown, matching the online trust model's UI-side info hiding. */}
       {isBetting || state.phase === "declare" ? (
         <div className="flex flex-col items-center gap-1.5">
-          <span className="text-[10px] tracking-wide text-white/40 uppercase">{names[opponentSeat]}의 카드</span>
+          <span className="text-[10px] tracking-wide text-white/40 light:text-slate-500 uppercase">{names[opponentSeat]}의 카드</span>
           <div className="flex items-center gap-2">
             {state.hands[opponentSeat].map((suit, i) =>
               opponentRevealedIdx === i ? <Card key={i} suit={suit} size="sm" /> : <HiddenCard key={i} size="sm" />,
             )}
           </div>
-          {opponentDeclared && <span className="text-xs text-white/60">“{HAND_CATEGORY_LABEL[opponentDeclared]}” 라고 선언했습니다</span>}
+          {opponentDeclared && <span className="text-xs text-white/60 light:text-slate-600">“{HAND_CATEGORY_LABEL[opponentDeclared]}” 라고 선언했습니다</span>}
         </div>
       ) : null}
 
       <div className="flex flex-col items-center gap-1.5">
         <CombinationBadge hand={state.hands[viewerSeat]} community={state.community} variant={state.variant} />
-        <span className="text-[10px] tracking-wide text-white/40 uppercase">내 카드</span>
+        <span className="text-[10px] tracking-wide text-white/40 light:text-slate-500 uppercase">내 카드</span>
         <div className="flex gap-2">
           {state.hands[viewerSeat].map((suit, i) => (
             <Card key={i} suit={suit} size="lg" dim={state.revealedIndex[viewerSeat] !== undefined && state.revealedIndex[viewerSeat] !== i} />
@@ -433,12 +433,12 @@ export default function LoveWinsAllBoard({ state, viewerSeat, names, opponentCon
         (myTurn ? (
           <BettingControls state={state} viewerSeat={viewerSeat} onAction={onAction} />
         ) : (
-          <p className="text-center text-sm text-white/50">⏳ {names[opponentSeat]}님의 베팅을 기다리는 중...</p>
+          <p className="text-center text-sm text-white/50 light:text-slate-500">⏳ {names[opponentSeat]}님의 베팅을 기다리는 중...</p>
         ))}
 
       {state.phase === "declare" &&
         (iHaveDeclared ? (
-          <p className="text-center text-sm text-white/50">🔒 선언 완료 — 상대방을 기다리는 중...</p>
+          <p className="text-center text-sm text-white/50 light:text-slate-500">🔒 선언 완료 — 상대방을 기다리는 중...</p>
         ) : (
           <DeclareControls state={state} viewerSeat={viewerSeat} onAction={onAction} />
         ))}

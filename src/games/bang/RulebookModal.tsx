@@ -49,28 +49,28 @@ const CARDS = [
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
   return (
     <Overlay title="📖 뱅! 룰북" onClose={onClose} wide>
-      <div className="flex flex-col gap-5 text-sm text-white/80">
+      <div className="flex flex-col gap-5 text-sm text-white/80 light:text-slate-700">
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">역할과 승리 조건</h3>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">역할과 승리 조건</h3>
           <div className="grid gap-2 sm:grid-cols-2">
             {ROLES.map((r) => (
-              <div key={r.name} className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <p className="mb-1 font-medium text-white">
+              <div key={r.name} className="rounded-xl border border-white/10 bg-white/5 p-3 light:border-slate-200 light:bg-white/80">
+                <p className="mb-1 font-medium text-white light:text-slate-900">
                   {r.emoji} {r.name}
                 </p>
-                <p className="text-xs text-white/60">{r.desc}</p>
+                <p className="text-xs text-white/60 light:text-slate-600">{r.desc}</p>
               </div>
             ))}
           </div>
-          <p className="mt-2 text-xs text-white/50">
+          <p className="mt-2 text-xs text-white/50 light:text-slate-500">
             역할이 제거되면 즉시 정체가 공개됩니다. 배신자가 마지막 생존자라면 다른 조건보다{" "}
-            <span className="text-amber-300">우선</span>해서 배신자 단독 승리로 처리됩니다.
+            <span className="text-amber-300 light:text-amber-700">우선</span>해서 배신자 단독 승리로 처리됩니다.
           </p>
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">거리(Range)</h3>
-          <p className="text-white/70">
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">거리(Range)</h3>
+          <p className="text-white/70 light:text-slate-600">
             자리는 원탁으로 고정되며, 죽은 자리는 계산에서 제외되어 원이 좁혀집니다. 무기가 정하는
             사거리 이내의 상대만 뱅!으로 조준할 수 있습니다. 쌍안경은 내가 보는 거리를 1 줄이고,
             무스탕은 상대가 나를 보는 거리를 1 늘립니다.
@@ -78,30 +78,30 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">턴 순서</h3>
-          <p className="text-white/70">
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">턴 순서</h3>
+          <p className="text-white/70 light:text-slate-600">
             ① 다이너마이트 확인 → ② 감옥 확인(당첨 시 턴 종료) → ③ 카드 2장 뽑기 → ④ 원하는 만큼
             카드 사용 → ⑤ 체력보다 카드가 많으면 초과분 버리기 → ⑥ 다음 생존자에게 턴이 넘어갑니다.
           </p>
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">카드 목록</h3>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">카드 목록</h3>
           <div className="grid gap-2 sm:grid-cols-2">
             {CARDS.map((c) => (
-              <div key={c.name} className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <p className="mb-1 font-medium text-white">
+              <div key={c.name} className="rounded-xl border border-white/10 bg-white/5 p-3 light:border-slate-200 light:bg-white/80">
+                <p className="mb-1 font-medium text-white light:text-slate-900">
                   {c.emoji} {c.name}
                 </p>
-                <p className="text-xs text-white/60">{c.desc}</p>
+                <p className="text-xs text-white/60 light:text-slate-600">{c.desc}</p>
               </div>
             ))}
           </div>
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">이 버전의 생략 사항</h3>
-          <p className="text-white/70">
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">이 버전의 생략 사항</h3>
+          <p className="text-white/70 light:text-slate-600">
             정식 룰의 개별 캐릭터 고유 능력(윌리 더 키드, 바트 카시디 등 16종)은 이번 버전에
             포함되지 않았습니다. 모든 플레이어는 역할(보안관/부보안관/무법자/배신자)만 가진 채로
             플레이합니다.

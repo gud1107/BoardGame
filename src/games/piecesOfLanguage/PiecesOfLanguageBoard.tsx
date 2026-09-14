@@ -72,8 +72,8 @@ export interface PiecesOfLanguageBoardProps {
 }
 
 const SEAT_THEME: Record<Seat, { emoji: string; ring: string; text: string; bg: string }> = {
-  p1: { emoji: "🟣", ring: "border-violet-400", text: "text-violet-300", bg: "bg-violet-500/20" },
-  p2: { emoji: "🟠", ring: "border-amber-400", text: "text-amber-300", bg: "bg-amber-500/20" },
+  p1: { emoji: "🟣", ring: "border-violet-400", text: "text-violet-300 light:text-violet-700", bg: "bg-violet-500/20" },
+  p2: { emoji: "🟠", ring: "border-amber-400", text: "text-amber-300 light:text-amber-700", bg: "bg-amber-500/20" },
 };
 
 // Static class strings (not built via string interpolation) so Tailwind's
@@ -87,7 +87,7 @@ const SEAT_PICKER_ACCENT: Record<Seat, string> = {
 const TILE_COLOR: Record<FeedbackColor, string> = {
   green: "border-emerald-300 bg-emerald-500 text-white shadow-[0_0_14px_2px_rgba(16,185,129,0.5)]",
   yellow: "border-amber-200 bg-amber-400/80 text-black",
-  red: "border-rose-400/40 bg-rose-500/10 text-rose-100/70",
+  red: "border-rose-400/40 bg-rose-500/10 text-rose-100/70 light:border-rose-300 light:bg-rose-50 light:text-rose-600",
 };
 
 function SyllableTile({ char, feedback, index }: { char: string; feedback: FeedbackColor; index: number }) {
@@ -105,8 +105,8 @@ function SyllableTile({ char, feedback, index }: { char: string; feedback: Feedb
 /** One seat's guess, rendered as a cell inside the 2×N history grid — the seat is implied by which column it's in, so no seat badge here (unlike the old single-timeline row). */
 function GuessCell({ guess, turn }: { guess: GuessRecord; turn: number }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.03] px-2 py-1.5">
-      <span className="w-5 shrink-0 text-right text-[11px] text-white/30">{turn}</span>
+    <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.03] px-2 py-1.5 light:border-slate-200 light:bg-slate-50">
+      <span className="w-5 shrink-0 text-right text-[11px] text-white/30 light:text-slate-400">{turn}</span>
       <div className="flex gap-1.5">
         {[...guess.word].map((char, i) => (
           <SyllableTile key={i} char={char} feedback={guess.feedback[i]} index={i} />
@@ -120,9 +120,9 @@ function GuessCell({ guess, turn }: { guess: GuessRecord; turn: number }) {
 /** Empty placeholder cell for a turn this seat hasn't reached yet — keeps the two columns row-aligned. */
 function EmptyGuessCell({ turn }: { turn: number }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-dashed border-white/5 px-2 py-1.5">
-      <span className="w-5 shrink-0 text-right text-[11px] text-white/20">{turn}</span>
-      <span className="text-xs text-white/20">대기 중…</span>
+    <div className="flex items-center gap-2 rounded-lg border border-dashed border-white/5 px-2 py-1.5 light:border-slate-300">
+      <span className="w-5 shrink-0 text-right text-[11px] text-white/20 light:text-slate-400">{turn}</span>
+      <span className="text-xs text-white/20 light:text-slate-400">대기 중…</span>
     </div>
   );
 }
@@ -139,7 +139,7 @@ function HistoryGrid({ history, names }: { history: GuessRecord[]; names: Record
   const rows = Math.max(bySeat.p1.length, bySeat.p2.length);
 
   if (rows === 0) {
-    return <p className="text-xs text-white/30">아직 아무도 시도하지 않았어요.</p>;
+    return <p className="text-xs text-white/30 light:text-slate-500">아직 아무도 시도하지 않았어요.</p>;
   }
 
   return (
@@ -170,8 +170,8 @@ function HistoryGrid({ history, names }: { history: GuessRecord[]; names: Record
 /** The common consonant/vowel tile pool, rendered in the shared central area both seats build guesses from (`언어의조각.md` §1/§2). */
 function TilePool({ pool }: { pool: string[] }) {
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-sky-400/20 bg-gradient-to-b from-sky-950/40 to-black/20 p-3">
-      <p className="text-center text-xs font-semibold tracking-wide text-sky-200/70">
+    <div className="flex flex-col gap-2 rounded-2xl border border-sky-400/20 bg-gradient-to-b from-sky-950/40 to-black/20 p-3 light:border-sky-300 light:from-sky-50 light:to-white light:shadow-sm">
+      <p className="text-center text-xs font-semibold tracking-wide text-sky-200/70 light:text-sky-700">
         🧵 공통 자모음 조각 풀 — 이 조각(과 회전 변환)으로만 조합 가능
       </p>
       <div className="flex flex-wrap justify-center gap-2">
@@ -180,11 +180,11 @@ function TilePool({ pool }: { pool: string[] }) {
           return (
             <div
               key={i}
-              className="flex flex-col items-center gap-0.5 rounded-lg border border-sky-400/30 bg-sky-500/10 px-2.5 py-1.5"
+              className="flex flex-col items-center gap-0.5 rounded-lg border border-sky-400/30 bg-sky-500/10 px-2.5 py-1.5 light:border-sky-300 light:bg-sky-50"
               title={partner ? `회전하면 ${partner}(으)로도 사용할 수 있어요` : undefined}
             >
-              <span className="text-lg font-bold text-white">{jamo}</span>
-              {partner && <span className="text-[10px] leading-none text-sky-300">↻{partner}</span>}
+              <span className="text-lg font-bold text-white light:text-slate-900">{jamo}</span>
+              {partner && <span className="text-[10px] leading-none text-sky-300 light:text-sky-700">↻{partner}</span>}
             </div>
           );
         })}
@@ -203,7 +203,7 @@ function TilePool({ pool }: { pool: string[] }) {
 function HintPanel({ state, seat }: { state: PiecesOfLanguageState; seat: Seat }) {
   if (!isHintUnlocked(state, seat)) {
     return (
-      <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 bg-black/20 px-3 py-2.5 text-xs text-white/30">
+      <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 bg-black/20 px-3 py-2.5 text-xs text-white/30 light:border-slate-300 light:bg-slate-50 light:text-slate-500">
         <span>🔒</span>
         <span>힌트는 내가 오답을 1회 이상 제출해야 해금돼요</span>
       </div>
@@ -211,14 +211,16 @@ function HintPanel({ state, seat }: { state: PiecesOfLanguageState; seat: Seat }
   }
   const revealed = buildHint(state.targetWord, seat);
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-sky-400/20 bg-sky-500/5 px-3 py-2.5">
-      <span className="text-xs font-semibold text-sky-200/70">💡 힌트</span>
+    <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-sky-400/20 bg-sky-500/5 px-3 py-2.5 light:border-sky-300 light:bg-sky-50">
+      <span className="text-xs font-semibold text-sky-200/70 light:text-sky-700">💡 힌트</span>
       <div className="flex gap-1.5">
         {revealed.map((ch, i) => (
           <span
             key={i}
             className={`grid h-8 w-8 place-items-center rounded-md border text-sm font-bold ${
-              ch === "_" ? "border-white/10 bg-white/5 text-white/25" : "border-sky-300/40 bg-sky-500/15 text-white"
+              ch === "_"
+                ? "border-white/10 bg-white/5 text-white/25 light:border-slate-200 light:bg-slate-50 light:text-slate-400"
+                : "border-sky-300/40 bg-sky-500/15 text-white light:text-slate-900"
             }`}
           >
             {ch}
@@ -257,12 +259,12 @@ export default function PiecesOfLanguageBoard({
 
       <HintPanel state={state} seat={viewerSeat} />
 
-      <p className="text-center text-xs text-white/40">
+      <p className="text-center text-xs text-white/40 light:text-slate-500">
         {isMyTurn ? "내 차례입니다 — 공통 정답 단어를 추리해 제시하세요" : `${names[opponentSeat]}의 차례를 기다리는 중…`}
       </p>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-gradient-to-b from-[#140a1c] via-[#0c0715] to-black p-4">
-        <h3 className="text-sm font-bold text-white">🎯 공통 정답 단어 추리 — 기록</h3>
+      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-gradient-to-b from-[#140a1c] via-[#0c0715] to-black p-4 light:border-slate-200 light:from-white light:via-white light:to-white light:shadow-sm">
+        <h3 className="text-sm font-bold text-white light:text-slate-900">🎯 공통 정답 단어 추리 — 기록</h3>
         <HistoryGrid history={state.history} names={names} />
         {isMyTurn && attemptsLeft !== 0 && (
           <WordInput
@@ -305,12 +307,12 @@ function Hud({
   onOpenRulebook: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-gradient-to-b from-[#140a1c] via-[#0c0715] to-[#050203] p-4">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-gradient-to-b from-[#140a1c] via-[#0c0715] to-[#050203] p-4 light:border-slate-200 light:from-white light:via-white light:to-white light:shadow-sm">
       <div className="flex items-center gap-3">
         <span className="text-2xl">🧩</span>
         <div>
-          <p className="text-sm font-bold text-white">언어의 조각</p>
-          <p className="text-[11px] text-white/40">
+          <p className="text-sm font-bold text-white light:text-slate-900">언어의 조각</p>
+          <p className="text-[11px] text-white/40 light:text-slate-500">
             공통 정답 단어 · {state.wordLength}글자 · 2인 턴제 맞추기
           </p>
         </div>
@@ -321,25 +323,25 @@ function Hud({
             key={seat}
             className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
               state.phase === "playing" && state.activeSeat === seat
-                ? `${SEAT_THEME[seat].ring} bg-white/10 ${SEAT_THEME[seat].text}`
-                : "border-white/10 text-white/40"
+                ? `${SEAT_THEME[seat].ring} bg-white/10 ${SEAT_THEME[seat].text} light:bg-slate-900/5`
+                : "border-white/10 text-white/40 light:border-slate-200 light:text-slate-400"
             }`}
           >
             <Avatar size={18} />
             <span>{SEAT_THEME[seat].emoji}</span>
             <span>{names[seat]}</span>
-            {seat === viewerSeat && <span className="text-white/30">(나)</span>}
+            {seat === viewerSeat && <span className="text-white/30 light:text-slate-400">(나)</span>}
             {state.phase === "playing" && state.activeSeat === seat && (
               <span className="ml-1 h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
             )}
           </div>
         ))}
         {!opponentConnected && (
-          <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-300">상대 연결 대기중…</span>
+          <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-300 light:text-amber-700">상대 연결 대기중…</span>
         )}
         <button
           onClick={onOpenRulebook}
-          className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30"
+          className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
         >
           📖 룰북
         </button>
@@ -353,15 +355,15 @@ function AttemptsBar({ left, max }: { left: number | null; max: number }) {
   const low = remaining <= Math.ceil(max / 3);
   const barColor = low ? "bg-rose-500" : "bg-sky-400";
   return (
-    <div className="rounded-xl border border-white/10 bg-black/30 p-2.5">
-      <div className="mb-1 flex items-center justify-between text-[11px] text-white/50">
+    <div className="rounded-xl border border-white/10 bg-black/30 p-2.5 light:border-slate-200 light:bg-white light:shadow-sm">
+      <div className="mb-1 flex items-center justify-between text-[11px] text-white/50 light:text-slate-500">
         <span>남은 총 시도 횟수 (양쪽 합산)</span>
-        <span className={low ? "font-bold text-rose-300" : "text-white/60"}>
+        <span className={low ? "font-bold text-rose-300 light:text-rose-600" : "text-white/60 light:text-slate-600"}>
           {remaining}/{max}
         </span>
       </div>
       <div
-        className="h-1.5 w-full overflow-hidden rounded-full bg-white/5"
+        className="h-1.5 w-full overflow-hidden rounded-full bg-white/5 light:bg-slate-200"
         style={low ? { animation: "pol-attempts-warn 0.7s ease-in-out infinite" } : undefined}
       >
         <div
@@ -387,10 +389,10 @@ function GameOverOverlay({
   onConfirm: () => void;
 }) {
   const bgClass = isDraw
-    ? "bg-gradient-to-b from-slate-800/95 via-black/95 to-black/95"
+    ? "bg-gradient-to-b from-slate-800/95 via-black/95 to-black/95 light:from-slate-100 light:via-white light:to-white"
     : amIWinner
-      ? "bg-gradient-to-b from-amber-950/95 via-black/95 to-black/95"
-      : "bg-gradient-to-b from-rose-950/95 via-black/95 to-black/95";
+      ? "bg-gradient-to-b from-amber-950/95 via-black/95 to-black/95 light:from-amber-100 light:via-amber-50 light:to-white"
+      : "bg-gradient-to-b from-rose-950/95 via-black/95 to-black/95 light:from-rose-100 light:via-rose-50 light:to-white";
 
   return (
     <div
@@ -401,31 +403,31 @@ function GameOverOverlay({
         {isDraw ? (
           <>
             <p className="text-5xl">🤝</p>
-            <h2 className="mt-3 text-3xl font-black tracking-wider text-slate-200 sm:text-5xl">DRAW</h2>
-            <p className="mt-2 text-sm text-slate-300/80">
+            <h2 className="mt-3 text-3xl font-black tracking-wider text-slate-200 sm:text-5xl light:text-slate-800">DRAW</h2>
+            <p className="mt-2 text-sm text-slate-300/80 light:text-slate-600">
               양쪽 모두 총 시도 횟수를 다 썼고, 얻어낸 힌트 수도 같습니다.
             </p>
           </>
         ) : amIWinner ? (
           <>
             <p className="text-5xl">🏆</p>
-            <h2 className="mt-3 text-3xl font-black tracking-wider text-amber-300 sm:text-5xl">WINNER</h2>
-            <p className="mt-2 text-sm text-amber-100/80">공통 정답 단어를 먼저 완성했습니다.</p>
+            <h2 className="mt-3 text-3xl font-black tracking-wider text-amber-300 sm:text-5xl light:text-amber-700">WINNER</h2>
+            <p className="mt-2 text-sm text-amber-100/80 light:text-amber-800">공통 정답 단어를 먼저 완성했습니다.</p>
           </>
         ) : (
           <>
             <p className="text-5xl">💀</p>
-            <h2 className="mt-3 text-3xl font-black tracking-wider text-rose-400 sm:text-5xl">ELIMINATED</h2>
-            <p className="mt-2 text-sm text-rose-100/70">{winnerName}님이 먼저 정답을 맞혔습니다.</p>
+            <h2 className="mt-3 text-3xl font-black tracking-wider text-rose-400 sm:text-5xl light:text-rose-700">ELIMINATED</h2>
+            <p className="mt-2 text-sm text-rose-100/70 light:text-rose-700">{winnerName}님이 먼저 정답을 맞혔습니다.</p>
           </>
         )}
       </div>
-      <p className="text-xs text-white/50">
-        정답 단어: <span className="font-semibold text-white/80">{targetWord}</span>
+      <p className="text-xs text-white/50 light:text-slate-500">
+        정답 단어: <span className="font-semibold text-white/80 light:text-slate-800">{targetWord}</span>
       </p>
       <button
         onClick={onConfirm}
-        className="rounded-full bg-white px-8 py-3 text-sm font-semibold text-black transition hover:bg-white/85"
+        className="rounded-full bg-white px-8 py-3 text-sm font-semibold text-black transition hover:bg-white/85 light:border light:border-slate-300 light:shadow-sm"
       >
         결과 확정하고 계속하기
       </button>

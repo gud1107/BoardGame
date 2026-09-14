@@ -48,7 +48,7 @@ const HAND_FAN_OVERLAP_PX = 40;
 // A wooden saloon-table panel — warm, dark wood tones instead of Hanamikoji's
 // lacquerware palette, so the two games read as visually distinct rooms.
 const TABLE_PANEL =
-  "relative overflow-hidden rounded-3xl border border-black/50 bg-gradient-to-b from-[#3b2a1a] via-[#2a1d12] to-[#170f09] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
+  "relative overflow-hidden rounded-3xl border border-black/50 bg-gradient-to-b from-[#3b2a1a] via-[#2a1d12] to-[#170f09] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)] light:border-amber-900/20 light:from-amber-50 light:via-white light:to-amber-100/50 light:shadow-md";
 
 function TableTexture() {
   return (
@@ -150,7 +150,7 @@ function HeartPips({ life, maxLife }: { life: number; maxLife: number }) {
   return (
     <span className="flex gap-0.5 text-[10px] leading-none">
       {Array.from({ length: maxLife }).map((_, i) => (
-        <span key={i} className={i < life ? "text-rose-400" : "text-white/15"}>
+        <span key={i} className={i < life ? "text-rose-400" : "text-white/15 light:text-slate-300"}>
           ❤
         </span>
       ))}
@@ -173,26 +173,26 @@ function MyLifeAndRoleBadge({ viewer, viewerName }: { viewer: PlayerState; viewe
     <div className="relative z-10 flex flex-wrap items-center justify-center gap-2 sm:gap-3">
       <div
         className={`flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 transition ${
-          flash === "hit" ? "border-rose-400 bg-rose-500/20" : flash === "heal" ? "border-emerald-400 bg-emerald-500/20" : "border-white/15 bg-black/40"
+          flash === "hit" ? "border-rose-400 bg-rose-500/20" : flash === "heal" ? "border-emerald-400 bg-emerald-500/20" : "border-white/15 bg-black/40 light:border-slate-300 light:bg-white/80"
         }`}
         style={flash ? { animation: `bang-hp-${flash} 0.7s ease-out` } : undefined}
       >
         <span className="flex gap-0.5 text-lg leading-none" aria-hidden>
           {Array.from({ length: viewer.maxLife }).map((_, i) => (
-            <span key={i} className={i < viewer.life ? "text-rose-400" : "text-white/15"}>
+            <span key={i} className={i < viewer.life ? "text-rose-400" : "text-white/15 light:text-slate-300"}>
               ❤
             </span>
           ))}
         </span>
-        <span className="text-sm font-bold text-white">
+        <span className="text-sm font-bold text-white light:text-slate-900">
           {viewer.life} / {viewer.maxLife}
         </span>
       </div>
-      <div className="flex items-center gap-1.5 rounded-full border-2 border-amber-400/60 bg-amber-500/15 px-3 py-1.5">
+      <div className="flex items-center gap-1.5 rounded-full border-2 border-amber-400/60 bg-amber-500/15 px-3 py-1.5 light:bg-amber-50 light:border-amber-400">
         <span className="text-lg leading-none">{role.icon}</span>
-        <span className="text-sm font-bold text-amber-100">{role.label}</span>
+        <span className="text-sm font-bold text-amber-100 light:text-amber-800">{role.label}</span>
       </div>
-      <span className="text-xs text-amber-100/50">{viewerName} (나)</span>
+      <span className="text-xs text-amber-100/50 light:text-slate-500">{viewerName} (나)</span>
     </div>
   );
 }
@@ -211,7 +211,7 @@ function EquipRow({ player }: { player: PlayerState }) {
       {items.map((c) => (
         <span
           key={c.id}
-          className="flex h-5 min-w-5 items-center justify-center gap-0.5 rounded border border-white/20 bg-black/40 px-0.5 text-[10px]"
+          className="flex h-5 min-w-5 items-center justify-center gap-0.5 rounded border border-white/20 bg-black/40 px-0.5 text-[10px] light:border-slate-300 light:bg-white/80 light:text-slate-700"
         >
           {CARD_META[c.type].icon}
           {c.type === "volcanic" || c.type === "schofield" || c.type === "remington" || c.type === "rev-carbine" || c.type === "winchester"
@@ -348,7 +348,7 @@ export default function BangBoard({
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-500 light:hover:border-slate-400 light:hover:text-slate-800"
     >
       📖 뱅! 룰북
     </button>
@@ -359,7 +359,7 @@ export default function BangBoard({
       <div className={`${TABLE_PANEL} flex flex-col items-center gap-5 p-8 text-center`}>
         <TableTexture />
         <span className="relative z-10 text-5xl">🏆</span>
-        <h2 className="relative z-10 text-2xl font-bold text-amber-100">{TEAM_LABEL[state.winner]}</h2>
+        <h2 className="relative z-10 text-2xl font-bold text-amber-100 light:text-amber-800">{TEAM_LABEL[state.winner]}</h2>
         <div className="relative z-10 flex flex-wrap justify-center gap-2">
           {state.turnOrder.map((seat) => {
             const p = state.players[seat];
@@ -368,10 +368,10 @@ export default function BangBoard({
               <div
                 key={seat}
                 className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-xs ${
-                  p.alive ? "border-emerald-400/40 bg-emerald-400/10" : "border-white/10 bg-black/20 opacity-70"
+                  p.alive ? "border-emerald-400/40 bg-emerald-400/10" : "border-white/10 bg-black/20 opacity-70 light:border-slate-200 light:bg-white/60"
                 }`}
               >
-                <span className="text-white/80">{names[seat]}</span>
+                <span className="text-white/80 light:text-slate-700">{names[seat]}</span>
                 <span>
                   {role.icon} {role.label}
                 </span>
@@ -400,7 +400,7 @@ export default function BangBoard({
       {centerEvents[0] && (
         <CenterPlayBanner key={centerEvents[0].id} event={centerEvents[0]} names={names} onDone={() => onCenterEventDone(centerEvents[0].id)} />
       )}
-      <div className="relative z-10 flex items-center justify-between text-xs text-amber-100/60">
+      <div className="relative z-10 flex items-center justify-between text-xs text-amber-100/60 light:text-slate-500">
         <span>
           {state.playerCount}인 · 턴 {state.turnNumber} · 남은 카드 {state.deck.length}장
         </span>
@@ -434,18 +434,18 @@ export default function BangBoard({
               <div
                 className={`flex flex-col items-center ${scale.gap} rounded-xl border-2 ${scale.pad} text-center shadow-md transition ${
                   !player.alive
-                    ? "border-white/10 bg-black/40 opacity-50"
+                    ? "border-white/10 bg-black/40 opacity-50 light:border-slate-200 light:bg-white/60"
                     : state.turnSeat === seat
-                      ? "border-amber-300 bg-amber-950/60"
-                      : "border-white/15 bg-black/40"
+                      ? "border-amber-300 bg-amber-950/60 light:bg-amber-100"
+                      : "border-white/15 bg-black/40 light:border-slate-300 light:bg-white/80"
                 } ${isLegalTarget ? "cursor-pointer ring-4 ring-amber-300" : isTargeting ? "opacity-40" : ""}`}
                 onClick={() => isLegalTarget && pickTarget(seat)}
               >
-                <span className={`flex items-center gap-1 font-semibold text-white/90 ${scale.name}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+                <span className={`flex items-center gap-1 font-semibold text-white/90 light:text-slate-800 ${scale.name}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`} />
                   {names[seat]}
                 </span>
-                <span className={`text-amber-200 ${scale.role}`}>
+                <span className={`text-amber-200 light:text-amber-700 ${scale.role}`}>
                   {roleMeta ? `${roleMeta.icon} ${roleMeta.label}` : "❔ 비공개"}
                 </span>
                 <HeartPips life={player.life} maxLife={player.maxLife} />
@@ -462,7 +462,7 @@ export default function BangBoard({
                             e.stopPropagation();
                             pickTarget(seat, { from: "equip", equipCardId: c.id });
                           }}
-                          className="rounded border border-amber-300 bg-amber-400/30 px-1 text-[9px] text-amber-100"
+                          className="rounded border border-amber-300 bg-amber-400/30 px-1 text-[9px] text-amber-100 light:text-amber-800"
                         >
                           {CARD_META[c.type].icon} 뺏기
                         </button>
@@ -473,7 +473,7 @@ export default function BangBoard({
                         e.stopPropagation();
                         pickTarget(seat, { from: "hand" });
                       }}
-                      className="rounded border border-amber-300 bg-amber-400/30 px-1 text-[9px] text-amber-100"
+                      className="rounded border border-amber-300 bg-amber-400/30 px-1 text-[9px] text-amber-100 light:text-amber-800"
                     >
                       🃏 패에서
                     </button>
@@ -486,7 +486,7 @@ export default function BangBoard({
         {/* deck/discard pile in the center */}
         <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2">
           <CardBack size="sm" />
-          <span className="text-[10px] text-amber-100/70">{state.deck.length}장</span>
+          <span className="text-[10px] text-amber-100/70 light:text-slate-500">{state.deck.length}장</span>
         </div>
       </div>
 
@@ -501,7 +501,7 @@ export default function BangBoard({
         <GeneralStoreModal pending={pending} onAction={onAction} viewerSeat={viewerSeat} />
       )}
       {pending && !iOweGroupResponse && !iOweDuelResponse && !iOweStorePick && (
-        <div className="relative z-10 rounded-xl border border-white/10 bg-black/30 p-2 text-center text-xs text-amber-100/60">
+        <div className="relative z-10 rounded-xl border border-white/10 bg-black/30 p-2 text-center text-xs text-amber-100/60 light:border-slate-200 light:bg-white/70 light:text-slate-500">
           {pending.kind === "duel"
             ? `${names[pending.turnToRespond]}님이 응답 중...`
             : pending.kind === "general-store"
@@ -512,9 +512,9 @@ export default function BangBoard({
 
       {/* Turn flow: begin-turn / action guidance / end-turn */}
       {!pending && (
-        <div className="relative z-10 rounded-xl border border-white/10 bg-black/30 p-3 text-center">
+        <div className="relative z-10 rounded-xl border border-white/10 bg-black/30 p-3 text-center light:border-slate-200 light:bg-white/70">
           {!myTurn ? (
-            <p className="text-xs text-amber-100/50">{names[state.turnSeat]}님의 차례입니다...</p>
+            <p className="text-xs text-amber-100/50 light:text-slate-500">{names[state.turnSeat]}님의 차례입니다...</p>
           ) : state.turnPhase === "begin-turn" ? (
             <button
               onClick={() => onAction({ type: "begin-turn", seed: randomSeed() })}
@@ -524,27 +524,27 @@ export default function BangBoard({
             </button>
           ) : discarding && overHandLimit ? (
             <div className="flex flex-col gap-2">
-              <p className="text-xs text-amber-100/70">
+              <p className="text-xs text-amber-100/70 light:text-slate-600">
                 체력({viewer.life})보다 카드가 많아요. {excessCount}장을 버리세요. ({discardSelection.length}/{excessCount} 선택됨)
               </p>
               <div className="flex gap-2">
                 <button
                   disabled={discardSelection.length !== excessCount}
                   onClick={confirmDiscardAndEndTurn}
-                  className="flex-1 rounded-xl bg-rose-600 py-2 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+                  className="flex-1 rounded-xl bg-rose-600 py-2 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-200 light:disabled:text-slate-400"
                 >
                   선택한 카드 버리고 턴 종료
                 </button>
                 <button
                   onClick={cancelDiscard}
-                  className="rounded-xl border border-white/15 px-3 py-2 text-sm text-white/70 transition hover:border-white/30"
+                  className="rounded-xl border border-white/15 px-3 py-2 text-sm text-white/70 transition hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
                 >
                   취소
                 </button>
               </div>
             </div>
           ) : (
-            <p className="text-xs text-amber-100/60">
+            <p className="text-xs text-amber-100/60 light:text-slate-500">
               {overHandLimit
                 ? `카드를 내거나, 턴을 종료하세요. (턴 종료 시 ${excessCount}장을 버려야 해요)`
                 : "카드를 내거나, 턴을 종료하세요."}
@@ -554,7 +554,7 @@ export default function BangBoard({
       )}
 
       {isTargeting && (
-        <p className="relative z-10 text-center text-xs text-amber-200">
+        <p className="relative z-10 text-center text-xs text-amber-200 light:text-amber-700">
           대상을 고르세요 ({targets.length}명 가능) ·{" "}
           <button onClick={resetSelection} className="underline">
             취소
@@ -566,7 +566,7 @@ export default function BangBoard({
           <button onClick={playSelected} className="rounded-full bg-amber-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-amber-500">
             {CARD_META[selectedCard.type].label} 사용하기
           </button>
-          <button onClick={resetSelection} className="rounded-full border border-white/15 px-4 py-1.5 text-xs text-white/70 hover:border-white/30">
+          <button onClick={resetSelection} className="rounded-full border border-white/15 px-4 py-1.5 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400">
             취소
           </button>
         </div>
@@ -581,7 +581,7 @@ export default function BangBoard({
 
       {/* My hand: fanned, face up, always visible. */}
       <div className="relative z-10">
-        <p className="mb-1 text-center text-xs text-amber-100/50">내 카드</p>
+        <p className="mb-1 text-center text-xs text-amber-100/50 light:text-slate-500">내 카드</p>
         <div className="flex justify-center pt-2 pb-2">
           {hand.map((c, i) => {
             const interactive = myTurn && state.turnPhase === "action" && !pending;
@@ -629,7 +629,7 @@ export default function BangBoard({
         {!(discarding && overHandLimit) && myTurn && state.turnPhase === "action" && !pending && (
           <button
             onClick={requestEndTurn}
-            className="mt-3 w-full rounded-xl border border-white/15 py-2 text-sm text-white/70 transition hover:border-white/30"
+            className="mt-3 w-full rounded-xl border border-white/15 py-2 text-sm text-white/70 transition hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
           >
             턴 종료{overHandLimit ? ` (버릴 카드 선택 필요: ${excessCount}장)` : ""}
           </button>
@@ -655,8 +655,8 @@ function GroupResponseModal({
   const matchingCards = viewer.hand.filter((c) => c.type === pending.requiredCard);
   const causeLabel = pending.cause === "bang" ? "뱅!" : pending.cause === "gatling" ? "개틀링" : "인디언!";
   return (
-    <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-amber-400/40 bg-black/50 p-3">
-      <p className="text-center text-xs text-amber-100">
+    <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-amber-400/40 bg-black/50 p-3 light:border-amber-400/60 light:bg-amber-50">
+      <p className="text-center text-xs text-amber-100 light:text-amber-800">
         {causeLabel}에 응답하세요! {pending.requiredCard === "missed" ? "빗나감!" : "뱅!"} 카드를 내거나 맞으세요.
       </p>
       <div className="flex flex-wrap justify-center gap-2">
@@ -679,7 +679,7 @@ function GroupResponseModal({
         )}
         <button
           onClick={() => onAction({ type: "group-respond", seat: viewerSeat, mode: "take-hit" })}
-          className="rounded-full border border-white/20 px-3 py-1.5 text-xs text-white/80 hover:border-white/40"
+          className="rounded-full border border-white/20 px-3 py-1.5 text-xs text-white/80 hover:border-white/40 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
         >
           맞기 (체력 1 손실)
         </button>
@@ -699,8 +699,8 @@ function DuelResponseModal({
 }) {
   const bangCards = viewer.hand.filter((c) => c.type === "bang");
   return (
-    <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-amber-400/40 bg-black/50 p-3">
-      <p className="text-center text-xs text-amber-100">듀얼! 뱅!을 내거나 포기하세요.</p>
+    <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-amber-400/40 bg-black/50 p-3 light:border-amber-400/60 light:bg-amber-50">
+      <p className="text-center text-xs text-amber-100 light:text-amber-800">듀얼! 뱅!을 내거나 포기하세요.</p>
       <div className="flex flex-wrap justify-center gap-2">
         {bangCards.map((c) => (
           <button
@@ -713,7 +713,7 @@ function DuelResponseModal({
         ))}
         <button
           onClick={() => onAction({ type: "duel-respond", seat: viewerSeat, cardId: null })}
-          className="rounded-full border border-white/20 px-3 py-1.5 text-xs text-white/80 hover:border-white/40"
+          className="rounded-full border border-white/20 px-3 py-1.5 text-xs text-white/80 hover:border-white/40 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
         >
           포기 (체력 1 손실)
         </button>
@@ -732,8 +732,8 @@ function GeneralStoreModal({
   onAction: (a: EngineAction) => void;
 }) {
   return (
-    <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-amber-400/40 bg-black/50 p-3">
-      <p className="text-center text-xs text-amber-100">종합 상점 — 카드 1장을 고르세요.</p>
+    <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-amber-400/40 bg-black/50 p-3 light:border-amber-400/60 light:bg-amber-50">
+      <p className="text-center text-xs text-amber-100 light:text-amber-800">종합 상점 — 카드 1장을 고르세요.</p>
       <div className="flex flex-wrap justify-center gap-2">
         {pending.revealed.map((c) => (
           <button key={c.id} onClick={() => onAction({ type: "general-store-pick", seat: viewerSeat, cardId: c.id })}>

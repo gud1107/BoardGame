@@ -243,18 +243,18 @@ export function VoteRevealOverlay({
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
       <div
-        className="relative flex w-full max-w-md flex-col items-center gap-4 rounded-2xl border border-amber-400/30 bg-[#1a1128] p-6 text-center shadow-2xl"
+        className="relative flex w-full max-w-md flex-col items-center gap-4 rounded-2xl border border-amber-400/30 bg-[#1a1128] p-6 text-center shadow-2xl light:bg-white light:border-amber-300"
         style={step === "outcome" && !event.approved ? { animation: "avalon-reject-shake 0.4s ease-in-out" } : undefined}
       >
         {step === "seal" && (
-          <div className="flex h-28 w-28 items-center justify-center rounded-full border-4 border-amber-300/70 bg-amber-950/40 text-4xl" style={{ animation: "avalon-seal-lock 0.6s ease-out both" }}>
+          <div className="flex h-28 w-28 items-center justify-center rounded-full border-4 border-amber-300/70 bg-amber-950/40 text-4xl light:bg-amber-50" style={{ animation: "avalon-seal-lock 0.6s ease-out both" }}>
             🔒
           </div>
         )}
 
         {step !== "seal" && (
           <>
-            <p className="text-xs text-white/50">원정대 투표 결과</p>
+            <p className="text-xs text-white/50 light:text-slate-500">원정대 투표 결과</p>
             <div className="flex flex-wrap justify-center gap-2">
               {seats.map((seat, i) => {
                 const vote = event.votes[seat];
@@ -273,7 +273,7 @@ export function VoteRevealOverlay({
                     >
                       {vote === "approve" ? "👍" : "👎"}
                     </div>
-                    <span className={`text-[10px] ${onTeam ? "text-sky-300" : "text-white/40"}`}>{names[seat]}</span>
+                    <span className={`text-[10px] ${onTeam ? "text-sky-300 light:text-sky-600" : "text-white/40 light:text-slate-400"}`}>{names[seat]}</span>
                   </div>
                 );
               })}
@@ -290,7 +290,7 @@ export function VoteRevealOverlay({
                 )}
                 <div
                   className={`relative rounded-xl border px-4 py-3 text-sm font-bold ${
-                    event.approved ? "border-amber-300/60 bg-amber-400/10 text-amber-100" : "border-rose-400/60 bg-rose-500/10 text-rose-100"
+                    event.approved ? "border-amber-300/60 bg-amber-400/10 text-amber-100 light:text-amber-700" : "border-rose-400/60 bg-rose-500/10 text-rose-100 light:text-rose-700"
                   }`}
                   style={{ animation: "avalon-banner-pop 0.5s ease-out both" }}
                 >
@@ -381,7 +381,7 @@ export function QuestRevealOverlay({
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
-      <div className="relative flex w-full max-w-md flex-col items-center gap-4 overflow-hidden rounded-2xl border border-amber-400/30 bg-[#1a1128] p-6 text-center shadow-2xl">
+      <div className="relative flex w-full max-w-md flex-col items-center gap-4 overflow-hidden rounded-2xl border border-amber-400/30 bg-[#1a1128] p-6 text-center shadow-2xl light:bg-white light:border-amber-300">
         {step === "outcome" && !result.success && (
           <div aria-hidden className="pointer-events-none absolute inset-0" style={{ animation: "avalon-mist-drift 1.2s ease-out both", background: "radial-gradient(circle at 50% 40%, rgba(120,10,20,0.55), transparent 70%)" }} />
         )}
@@ -400,12 +400,12 @@ export function QuestRevealOverlay({
           </div>
         )}
 
-        <p className="relative z-10 text-xs text-white/50">
+        <p className="relative z-10 text-xs text-white/50 light:text-slate-500">
           {result.round}라운드 원정 결과 · 실패 카드 {result.failCount}장
         </p>
 
         {step === "shuffle" && (
-          <div className="relative z-10 flex h-16 w-12 items-center justify-center rounded-md border border-white/20 bg-black/40 text-2xl" style={{ animation: "avalon-quest-shuffle 0.5s ease-in-out both" }}>
+          <div className="relative z-10 flex h-16 w-12 items-center justify-center rounded-md border border-white/20 bg-black/40 text-2xl light:border-slate-300 light:bg-slate-100" style={{ animation: "avalon-quest-shuffle 0.5s ease-in-out both" }}>
             🂠
           </div>
         )}
@@ -416,7 +416,7 @@ export function QuestRevealOverlay({
               <div
                 key={i}
                 className={`flex h-16 w-12 items-center justify-center rounded-md border text-xl font-bold ${
-                  card === "success" ? "border-sky-300/60 bg-sky-400/10 text-sky-200" : "border-rose-400/60 bg-rose-500/10 text-rose-200"
+                  card === "success" ? "border-sky-300/60 bg-sky-400/10 text-sky-200 light:text-sky-700" : "border-rose-400/60 bg-rose-500/10 text-rose-200 light:text-rose-700"
                 }`}
                 style={{ animation: `avalon-quest-card-flip 0.7s ease-out ${i * CARD_FLIP_STAGGER_MS}ms both` }}
               >
@@ -437,7 +437,7 @@ export function QuestRevealOverlay({
                 ⚡🩸
               </span>
             )}
-            <p className={`text-sm font-bold ${result.success ? "text-sky-200" : "text-rose-200"}`}>
+            <p className={`text-sm font-bold ${result.success ? "text-sky-200 light:text-sky-700" : "text-rose-200 light:text-rose-700"}`}>
               {result.success ? "원정 성공!" : "원정 실패!"}
             </p>
           </div>

@@ -22,8 +22,8 @@ export default function LobbyChat() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-        <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-white/60">
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 light:border-slate-200 light:bg-slate-50">
+        <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-white/60 light:text-slate-600">
           닉네임
           <input
             value={nickname}
@@ -33,16 +33,16 @@ export default function LobbyChat() {
               setChatNickname(v);
             }}
             placeholder="닉네임"
-            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none"
+            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
           />
         </label>
-        <span className="flex shrink-0 items-center gap-1.5 text-xs text-white/50">
+        <span className="flex shrink-0 items-center gap-1.5 text-xs text-white/50 light:text-slate-500">
           <span className="h-2 w-2 rounded-full bg-emerald-400" />
           {connectedCount}명 접속 중
         </span>
       </div>
 
-      <div className="h-[60vh] max-h-[520px] rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+      <div className="h-[60vh] max-h-[520px] rounded-2xl border border-white/10 bg-white/[0.03] p-3 light:border-slate-200 light:bg-white">
         <ChatPanel
           messages={messages}
           onSend={(body) => sendMessage(body)}

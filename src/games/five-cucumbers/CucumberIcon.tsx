@@ -43,7 +43,7 @@ export function CucumberIcon({
 /** "🥒 x N" badge, matching splendor's `GemCountBadge` shape/spacing convention. */
 export function CucumberCountBadge({ count, size = "h-4 w-4" }: { count: number; size?: string }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/30 px-1.5 py-0.5 text-[11px] font-semibold text-white/90">
+    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 light:border-slate-300 bg-black/30 light:bg-white/90 px-1.5 py-0.5 text-[11px] font-semibold text-white/90 light:text-slate-900">
       <CucumberIcon className={size} />
       {count}
     </span>
@@ -52,7 +52,7 @@ export function CucumberCountBadge({ count, size = "h-4 w-4" }: { count: number;
 
 /** A row of N cucumber icons — used on card faces where the count itself IS the visual (task brief §2), not a "icon + number" badge. */
 export function CucumberRow({ count, size = "h-3 w-3" }: { count: number; size?: string }) {
-  if (count === 0) return <span className="text-[9px] text-white/25">오이 없음</span>;
+  if (count === 0) return <span className="text-[9px] text-white/25 light:text-slate-400">오이 없음</span>;
   return (
     <span className="flex flex-wrap items-center gap-0.5" title={`오이 ${count}개`}>
       {Array.from({ length: count }, (_, i) => (

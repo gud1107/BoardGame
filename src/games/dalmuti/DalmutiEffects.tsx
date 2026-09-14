@@ -452,7 +452,7 @@ export function FlyingExchangeCard({
           ),
         )}
       </div>
-      <p className={`mt-1 max-w-[220px] text-center text-[10px] font-bold ${participant ? "text-amber-200" : "text-white/60"}`}>{label}</p>
+      <p className={`mt-1 max-w-[220px] text-center text-[10px] font-bold ${participant ? "text-amber-200 light:text-amber-700" : "text-white/60 light:text-slate-600"}`}>{label}</p>
     </div>,
     document.body,
   );
@@ -585,16 +585,18 @@ export function RevolutionBanner({
   return createPortal(
     <div className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center">
       <div
-        className={`flex flex-col items-center gap-2 rounded-3xl border-4 px-10 py-8 text-center shadow-[0_0_80px_-10px_rgba(0,0,0,0.9)] ${
-          isGrand ? "border-rose-400 bg-gradient-to-b from-rose-950/95 to-black/95" : "border-amber-300 bg-gradient-to-b from-purple-950/95 to-black/95"
+        className={`flex flex-col items-center gap-2 rounded-3xl border-4 px-10 py-8 text-center shadow-[0_0_80px_-10px_rgba(0,0,0,0.9)] light:shadow-2xl ${
+          isGrand
+            ? "border-rose-400 bg-gradient-to-b from-rose-950/95 to-black/95 light:from-rose-100 light:to-white"
+            : "border-amber-300 bg-gradient-to-b from-purple-950/95 to-black/95 light:from-amber-100 light:to-white"
         }`}
         style={{ animation: "dalmuti-revolution-burst 2.2s ease-out forwards" }}
       >
         <span className="text-6xl">{isGrand ? "🔥👑🔥" : "⚡🃏⚡"}</span>
-        <h2 className={`text-3xl font-black tracking-wide ${isGrand ? "text-rose-200" : "text-amber-200"}`}>
+        <h2 className={`text-3xl font-black tracking-wide ${isGrand ? "text-rose-200 light:text-rose-700" : "text-amber-200 light:text-amber-700"}`}>
           {isGrand ? "대혁명!" : "혁명!"}
         </h2>
-        <p className="text-sm text-white/70">
+        <p className="text-sm text-white/70 light:text-slate-600">
           {seatLabel}님이 조커 2장으로 {isGrand ? "모든 신분을 뒤집었습니다" : "세금 바치기를 취소시켰습니다"}!
         </p>
       </div>
@@ -945,7 +947,7 @@ export function PassBubble({ event, getSeatEl, onDone }: { event: PassEvent; get
   return createPortal(
     <div ref={elRef} className="pointer-events-none fixed z-[75] -translate-x-1/2 -translate-y-full" style={{ left: 0, top: 0 }}>
       <span
-        className="block rounded-2xl border border-white/20 bg-black/80 px-3 py-1.5 text-xs font-bold break-keep text-amber-100 shadow-[0_8px_20px_-6px_rgba(0,0,0,0.8)]"
+        className="block rounded-2xl border border-white/20 bg-black/80 px-3 py-1.5 text-xs font-bold break-keep text-amber-100 shadow-[0_8px_20px_-6px_rgba(0,0,0,0.8)] light:border-amber-300 light:bg-white light:text-amber-700 light:shadow-lg"
         style={{ animation: `dalmuti-pass-bubble ${PASS_BUBBLE_MS}ms ease-out forwards` }}
       >
         💬 패스!
@@ -989,7 +991,8 @@ export function ShowdownReveal({
   const stragglers = state.players.filter((p) => p.hand.length > 0);
   return (
     <div
-      className="relative flex min-w-0 flex-1 flex-col items-center gap-5 rounded-[28px] border border-amber-500/20 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+      className="relative flex min-w-0 flex-1 flex-col items-center gap-5 rounded-[28px] border border-amber-500/20 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8 light:border-amber-300 light:shadow-md"
+      // TODO(theme): hardcoded dark gradient background — not trivial to branch via a CSS class variant, left dark in light mode for now.
       style={{ background: "linear-gradient(160deg,#241a3a 0%,#160f26 55%,#0a0714 100%)" }}
     >
       <span className="text-4xl">🕯️</span>
@@ -1010,7 +1013,7 @@ export function ShowdownReveal({
                 </div>
               ))}
             </div>
-            <span className="rounded-full border border-amber-300/30 bg-black/30 px-3 py-1 text-[11px] font-semibold tracking-wide break-keep text-amber-200/90">
+            <span className="rounded-full border border-amber-300/30 bg-black/30 px-3 py-1 text-[11px] font-semibold tracking-wide break-keep text-amber-200/90 light:border-amber-300 light:bg-amber-50 light:text-amber-700">
               [ 남은 패: {p.hand.map((c) => (c.isJoker ? "어릿광대" : `${c.rank}`)).join(", ")} ]
             </span>
           </div>

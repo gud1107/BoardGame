@@ -23,12 +23,12 @@ interface Props {
 
 function bubbleClasses(message: ChatMessage, isMine: boolean): string {
   if (message.type === "SYSTEM") {
-    return "self-center rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-center text-[11px] text-sky-200";
+    return "self-center rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-center text-[11px] text-sky-200 light:bg-sky-100 light:text-sky-800";
   }
   if (isMine) {
     return "self-end rounded-2xl rounded-br-sm bg-amber-600 px-3 py-1.5 text-sm text-white";
   }
-  return "self-start rounded-2xl rounded-bl-sm border border-white/10 bg-white/[0.06] px-3 py-1.5 text-sm text-white/90";
+  return "self-start rounded-2xl rounded-bl-sm border border-white/10 bg-white/[0.06] px-3 py-1.5 text-sm text-white/90 light:border-slate-200 light:bg-slate-100 light:text-slate-800";
 }
 
 function formatTime(iso: string): string {
@@ -73,7 +73,7 @@ export default function ChatPanel({ messages, onSend, myDeviceId, cooldownUntil,
     <div className="flex h-full flex-col gap-2">
       <div ref={listRef} className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-1 py-1">
         {messages.length === 0 && (
-          <p className="mt-4 text-center text-xs text-white/30">아직 메시지가 없어요. 먼저 인사해보세요!</p>
+          <p className="mt-4 text-center text-xs text-white/30 light:text-slate-400">아직 메시지가 없어요. 먼저 인사해보세요!</p>
         )}
         {messages.map((m) => {
           const isMine = m.deviceId === myDeviceId;
@@ -94,18 +94,18 @@ export default function ChatPanel({ messages, onSend, myDeviceId, cooldownUntil,
             >
               <Avatar size={22} className="mb-0.5 shrink-0" />
               <div className={`flex flex-col gap-0.5 ${isMine ? "items-end" : "items-start"}`}>
-                <span className="px-1 text-[10px] text-white/35">{isMine ? "나" : m.senderName}</span>
+                <span className="px-1 text-[10px] text-white/35 light:text-slate-400">{isMine ? "나" : m.senderName}</span>
                 <span className={bubbleClasses(m, isMine)}>{m.body}</span>
-                <span className="px-1 text-[9px] text-white/25">{formatTime(m.createdAt)}</span>
+                <span className="px-1 text-[9px] text-white/25 light:text-slate-400">{formatTime(m.createdAt)}</span>
               </div>
             </div>
           );
         })}
       </div>
 
-      <div className="flex flex-col gap-1.5 border-t border-white/10 pt-2">
+      <div className="flex flex-col gap-1.5 border-t border-white/10 pt-2 light:border-slate-200">
         {readOnly ? (
-          <p className="break-keep rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[11px] text-white/40">
+          <p className="break-keep rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[11px] text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
             💀 탈락 후에는 관전 전용입니다 — 채팅을 보낼 수 없어요
           </p>
         ) : (
@@ -116,7 +116,7 @@ export default function ChatPanel({ messages, onSend, myDeviceId, cooldownUntil,
                   key={phrase}
                   type="button"
                   onClick={() => send(phrase)}
-                  className="shrink-0 rounded-full border border-white/15 px-2.5 py-1 text-[11px] whitespace-nowrap text-white/70 hover:border-amber-400 hover:text-white"
+                  className="shrink-0 rounded-full border border-white/15 px-2.5 py-1 text-[11px] whitespace-nowrap text-white/70 hover:border-amber-400 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:text-slate-900"
                 >
                   {phrase}
                 </button>
@@ -124,13 +124,13 @@ export default function ChatPanel({ messages, onSend, myDeviceId, cooldownUntil,
             </div>
 
             {showEmoji && (
-              <div className="flex flex-wrap gap-1.5 rounded-xl border border-white/10 bg-white/5 p-2">
+              <div className="flex flex-wrap gap-1.5 rounded-xl border border-white/10 bg-white/5 p-2 light:border-slate-200 light:bg-slate-50">
                 {QUICK_EMOJIS.map((emoji) => (
                   <button
                     key={emoji}
                     type="button"
                     onClick={() => send(emoji)}
-                    className="rounded-lg px-1.5 py-1 text-lg hover:bg-white/10"
+                    className="rounded-lg px-1.5 py-1 text-lg hover:bg-white/10 light:hover:bg-slate-200"
                   >
                     {emoji}
                   </button>
@@ -149,7 +149,7 @@ export default function ChatPanel({ messages, onSend, myDeviceId, cooldownUntil,
                 type="button"
                 onClick={() => setShowEmoji((v) => !v)}
                 aria-label="이모지"
-                className="shrink-0 rounded-full border border-white/15 px-2 py-1.5 text-sm text-white/70 hover:border-white/30"
+                className="shrink-0 rounded-full border border-white/15 px-2 py-1.5 text-sm text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
               >
                 😊
               </button>
@@ -159,7 +159,7 @@ export default function ChatPanel({ messages, onSend, myDeviceId, cooldownUntil,
                 placeholder={remainingLock > 0 ? `잠시 후 다시 시도 (${remainingLock}초)` : placeholder}
                 disabled={remainingLock > 0}
                 maxLength={300}
-                className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none"
+                className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
               />
               <button
                 type="submit"

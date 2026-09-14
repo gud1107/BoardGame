@@ -16,30 +16,30 @@ export default function LockedEvidenceSlot({ item, unlocked }: { item: LockedEvi
 
   if (!unlocked) {
     return (
-      <li className="rounded-xl border border-dashed border-fuchsia-400/25 bg-fuchsia-500/[0.03] p-3">
-        <p className="flex items-center gap-1.5 break-keep text-sm font-bold text-white/40">
+      <li className="rounded-xl border border-dashed border-fuchsia-400/25 bg-fuchsia-500/[0.03] p-3 light:border-fuchsia-300 light:bg-fuchsia-50">
+        <p className="flex items-center gap-1.5 break-keep text-sm font-bold text-white/40 light:text-slate-400">
           🔒 {item.name}
         </p>
-        <p className="mt-1 break-keep text-xs leading-relaxed text-white/35">{item.unlockHint}</p>
+        <p className="mt-1 break-keep text-xs leading-relaxed text-white/35 light:text-slate-400">{item.unlockHint}</p>
       </li>
     );
   }
 
   return (
     <li
-      className={`rounded-xl border p-3 transition ${
+      className={`rounded-xl border p-3 transition light:bg-fuchsia-50 ${
         justUnlocked
-          ? "border-fuchsia-400/60 bg-fuchsia-500/10 shadow-[0_0_20px_2px_rgba(232,121,249,0.35)]"
-          : "border-fuchsia-400/30 bg-fuchsia-500/[0.05]"
+          ? "border-fuchsia-400/60 bg-fuchsia-500/10 shadow-[0_0_20px_2px_rgba(232,121,249,0.35)] light:border-fuchsia-400"
+          : "border-fuchsia-400/30 bg-fuchsia-500/[0.05] light:border-fuchsia-300"
       }`}
       onAnimationEnd={() => setJustUnlocked(false)}
     >
-      <p className="break-keep text-sm font-bold text-fuchsia-200">🔓 {item.name}</p>
-      <p className="mt-1 break-keep text-xs leading-relaxed text-white/70">{item.description}</p>
+      <p className="break-keep text-sm font-bold text-fuchsia-200 light:text-fuchsia-800">🔓 {item.name}</p>
+      <p className="mt-1 break-keep text-xs leading-relaxed text-white/70 light:text-slate-600">{item.description}</p>
       {item.photo && (
         <button
           onClick={() => setPhotoOpen(true)}
-          className="mt-2 flex items-center gap-1.5 rounded-lg border border-fuchsia-400/30 px-2.5 py-1.5 text-[11px] text-fuchsia-200 hover:border-fuchsia-300/50"
+          className="mt-2 flex items-center gap-1.5 rounded-lg border border-fuchsia-400/30 px-2.5 py-1.5 text-[11px] text-fuchsia-200 hover:border-fuchsia-300/50 light:border-fuchsia-300 light:text-fuchsia-800 light:hover:border-fuchsia-400"
         >
           📷 사진 증거 보기
         </button>

@@ -34,7 +34,7 @@ export function faceLabel(face: Face): string {
 // `BOARD_CELL_SIZE_CSS` width formula, which is baked in assuming this exact
 // panel padding — stays identical between the two layouts.
 export const TABLE_PANEL =
-  "relative overflow-hidden rounded-3xl border border-black/60 bg-gradient-to-b from-[#2a1c14] via-[#1d130d] to-[#0d0805] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
+  "relative overflow-hidden rounded-3xl border border-black/60 bg-gradient-to-b from-[#2a1c14] via-[#1d130d] to-[#0d0805] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)] light:border-slate-200 light:from-white light:via-amber-50/50 light:to-white light:shadow-md";
 
 /** Andean-textile stripe band (terracotta/mustard/teal/cream/maroon) — used as the mat's top/bottom trim in `TableTexture`. */
 const FABRIC_TRIM_GRADIENT =
@@ -115,7 +115,7 @@ export function DiceCountStrip({
         ) : (
           <div
             key={i}
-            className="shrink-0 rounded-[24%] border border-dashed border-white/15 bg-white/[0.03]"
+            className="shrink-0 rounded-[24%] border border-dashed border-white/15 bg-white/[0.03] light:border-slate-300 light:bg-slate-100"
             style={{ width: w, height: w }}
             title="잃은 주사위"
           />
@@ -146,7 +146,7 @@ export function FacePicker({ selected, onSelect }: { selected: Face; onSelect: (
           className={`flex h-6 w-6 items-center justify-center rounded-lg border-2 text-xs font-bold transition ${
             selected === face
               ? "border-amber-200 bg-gradient-to-b from-amber-300 to-amber-500 text-neutral-900 shadow-[0_0_0_2px_rgba(251,191,36,0.35)]"
-              : "border-white/15 bg-black/20 text-white/60 hover:border-white/30"
+              : "border-white/15 bg-black/20 text-white/60 hover:border-white/30 light:border-slate-300 light:bg-white light:text-slate-600 light:hover:border-slate-400"
           }`}
           title={face === 1 ? "페루도 (조커)" : `숫자 ${face}`}
         >
@@ -183,12 +183,12 @@ export function LostDiceTray({
   const bySeat = state.players.map((p) => ({ seat: p.seat, lost: STARTING_DICE - p.diceCount })).filter((x) => x.lost > 0);
   const totalLost = bySeat.reduce((sum, x) => sum + x.lost, 0);
   return (
-    <div className="relative z-10 flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-amber-800/40 bg-black/15 px-3 py-2">
-      <p className="text-[10px] font-semibold tracking-wide text-amber-200/60">
+    <div className="relative z-10 flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-amber-800/40 bg-black/15 px-3 py-2 light:border-amber-400 light:bg-amber-50/60">
+      <p className="text-[10px] font-semibold tracking-wide text-amber-200/60 light:text-amber-700">
         💀 잃은 주사위 무덤{totalLost > 0 ? ` · 총 ${totalLost}개` : ""}
       </p>
       {totalLost === 0 ? (
-        <p className="text-[10px] text-amber-100/30">아직 잃은 주사위가 없습니다</p>
+        <p className="text-[10px] text-amber-100/30 light:text-amber-500">아직 잃은 주사위가 없습니다</p>
       ) : (
         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
           {bySeat.map(({ seat, lost }) => (
@@ -221,7 +221,7 @@ export function ExpectationBar({ totalActiveDice }: { totalActiveDice: number })
   const general = totalActiveDice / 3;
   const jokerOnly = totalActiveDice / 6;
   return (
-    <div className="relative z-10 flex items-center justify-center gap-1.5 rounded-xl border border-amber-300/25 bg-amber-400/10 px-2.5 py-1 text-center text-[11px] font-semibold text-amber-100">
+    <div className="relative z-10 flex items-center justify-center gap-1.5 rounded-xl border border-amber-300/25 bg-amber-400/10 px-2.5 py-1 text-center text-[11px] font-semibold text-amber-100 light:border-amber-400 light:bg-amber-50 light:text-amber-700">
       <span>📊</span>
       <span className="break-keep">
         전체 {totalActiveDice}개 · 일반 기대값 {general.toFixed(1)}개 (1 눈금은 {jokerOnly.toFixed(1)}개)

@@ -119,7 +119,7 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:bg-white/80 light:text-slate-600 light:shadow-sm light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 쿠 룰북
     </button>
@@ -132,7 +132,8 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
     const rankings = computeRankings(state);
     return (
       <div
-        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8 light:border-slate-200 light:shadow-md"
+        // TODO(theme): hardcoded dark gradient background — not trivial to branch via a CSS class variant, left dark in light mode for now.
         style={{ background: "linear-gradient(160deg,#2a1a08 0%,#180f04 55%,#0a0602 100%)" }}
       >
         <span className="text-5xl">👑</span>
@@ -151,7 +152,7 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
                       </CardFlipWrapper>
                     ))
                   ) : (
-                    <div className="flex h-16 w-12 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-lg opacity-50">💀</div>
+                    <div className="flex h-16 w-12 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-lg opacity-50 light:border-slate-300 light:bg-slate-100">💀</div>
                   )}
                 </div>
                 <span className="text-[10px] text-white/60">{names[p.seat] ?? "상대"}</span>
@@ -223,7 +224,8 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
+      className="flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4 light:border-slate-200 light:shadow-md"
+      // TODO(theme): hardcoded dark gradient background — not trivial to branch via a CSS class variant, left dark in light mode for now.
       style={{ background: "linear-gradient(160deg,#201408 0%,#140c04 45%,#0a0602 100%)" }}
     >
       <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-amber-100/70">
@@ -233,7 +235,11 @@ export default function CoupBoard({ state, viewerSeat, names, connectedSeats, on
         <div className="flex gap-1.5">{rulebookButton}</div>
       </div>
 
-      {narration && <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-center text-xs text-white/70">💬 {narration}</div>}
+      {narration && (
+        <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-center text-xs text-white/70 light:border-slate-200 light:bg-white/70 light:text-slate-600">
+          💬 {narration}
+        </div>
+      )}
 
       {/* Seats */}
       <section className="flex flex-col gap-1.5">

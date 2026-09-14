@@ -188,7 +188,7 @@ export default function CardFace({
 export function CardBack({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   return (
     <div
-      className={`flex ${SIZE_DIMS[size]} items-center justify-center rounded-lg border-2 border-white/20 bg-gradient-to-br from-slate-700 to-slate-900 text-white/30`}
+      className={`flex ${SIZE_DIMS[size]} items-center justify-center rounded-lg border-2 border-white/20 bg-gradient-to-br from-slate-700 to-slate-900 text-white/30 light:border-slate-300 light:from-slate-200 light:to-slate-400 light:text-slate-600 light:shadow-sm`}
       aria-hidden
     >
       🗺️

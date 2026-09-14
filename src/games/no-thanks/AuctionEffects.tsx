@@ -134,7 +134,7 @@ export function FlyingToken({
         <span className="text-2xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">🪙</span>
       ) : (
         <div className="flex flex-col items-center gap-0.5">
-          <div className="flex h-9 w-7 items-center justify-center rounded-md border border-white/40 bg-gradient-to-b from-white to-neutral-200 text-xs font-black text-neutral-900 shadow">
+          <div className="flex h-9 w-7 items-center justify-center rounded-md border border-white/40 bg-gradient-to-b from-white to-neutral-200 text-xs font-black text-neutral-900 shadow light:border-slate-300">
             {event.cardValue}
           </div>
           {event.coinCount > 0 && (

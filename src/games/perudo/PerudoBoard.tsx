@@ -70,9 +70,9 @@ function randomSeed(): number {
 /** Always-visible stat bar (rulebook UX request #4, top area) — the one number every player needs at a glance regardless of phase. */
 function TotalDiceBanner({ state }: { state: PerudoState }) {
   return (
-    <div className="relative z-10 flex items-center justify-center gap-2 rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-1.5 text-center">
+    <div className="relative z-10 flex items-center justify-center gap-2 rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-1.5 text-center light:border-amber-400 light:bg-amber-50">
       <span className="text-base">🎲</span>
-      <span className="text-sm font-bold text-amber-100">
+      <span className="text-sm font-bold text-amber-100 light:text-amber-700">
         현재 전체 주사위: {totalDiceInPlay(state)}개
       </span>
     </div>
@@ -93,14 +93,16 @@ function MyDiceStatsPanel({ state, myDice }: { state: PerudoState; myDice: numbe
   const expected = total / 3;
 
   return (
-    <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-white/10 bg-black/25 p-2.5">
-      <p className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">📊 통계 현황판</p>
+    <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-white/10 bg-black/25 p-2.5 light:border-slate-200 light:bg-white/70">
+      <p className="text-[11px] font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">📊 통계 현황판</p>
       <div className="flex flex-wrap gap-1.5">
         {counts.map(({ face, count }) => (
           <span
             key={face}
             className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
-              count > 0 ? "border-amber-300/40 bg-amber-400/10 text-amber-100" : "border-white/10 text-white/30"
+              count > 0
+                ? "border-amber-300/40 bg-amber-400/10 text-amber-100 light:border-amber-400 light:bg-amber-50 light:text-amber-700"
+                : "border-white/10 text-white/30 light:border-slate-200 light:text-slate-400"
             }`}
           >
             {face === 1 ? <PerudoFaceIcon className="h-3 w-3" /> : <span className="font-bold">{face}</span>}
@@ -108,9 +110,9 @@ function MyDiceStatsPanel({ state, myDice }: { state: PerudoState; myDice: numbe
           </span>
         ))}
       </div>
-      <p className="text-[11px] text-white/50">
-        전체 주사위: <span className="text-white/80">{total}개</span> · 1/3 기대값:{" "}
-        <span className="text-amber-200">{expected.toFixed(1)}개</span>
+      <p className="text-[11px] text-white/50 light:text-slate-500">
+        전체 주사위: <span className="text-white/80 light:text-slate-700">{total}개</span> · 1/3 기대값:{" "}
+        <span className="text-amber-200 light:text-amber-700">{expected.toFixed(1)}개</span>
       </p>
     </div>
   );
@@ -356,7 +358,7 @@ export default function PerudoBoard({
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 페루도 룰북
     </button>
@@ -369,7 +371,7 @@ export default function PerudoBoard({
         getSoundEngine().unlock();
       }}
       title={muted ? "효과음 켜기" : "효과음 끄기"}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
     >
       {muted ? "🔇" : "🔊"}
     </button>
@@ -401,10 +403,10 @@ export default function PerudoBoard({
             aria-label={`주사위 색상: ${c.label}`}
             className={`h-4 w-4 rounded-full border-2 transition ${
               isMine
-                ? "scale-110 border-white"
+                ? "scale-110 border-white light:border-slate-900"
                 : isTaken
-                  ? "cursor-not-allowed border-white/10 opacity-35"
-                  : "border-white/25 hover:border-white/60"
+                  ? "cursor-not-allowed border-white/10 opacity-35 light:border-slate-300"
+                  : "border-white/25 hover:border-white/60 light:border-slate-300 light:hover:border-slate-500"
             }`}
             style={{ backgroundColor: c.body }}
           />
@@ -424,26 +426,26 @@ export default function PerudoBoard({
         <TotalDiceBanner state={state} />
         <LostDiceTray state={state} colorways={colorways} />
         <span className="relative z-10 text-5xl">🏆</span>
-        <h2 className="relative z-10 text-2xl font-bold text-amber-100">{names[rankings[0]?.seat]}님 승리!</h2>
-        <p className="relative z-10 text-xs text-white/50">마지막까지 주사위를 지킨 사람이 이기는 게임입니다.</p>
+        <h2 className="relative z-10 text-2xl font-bold text-amber-100 light:text-amber-700">{names[rankings[0]?.seat]}님 승리!</h2>
+        <p className="relative z-10 text-xs text-white/50 light:text-slate-500">마지막까지 주사위를 지킨 사람이 이기는 게임입니다.</p>
 
         <div className="relative z-10 w-full overflow-x-auto">
           <table className="w-full min-w-[320px] border-collapse text-xs">
             <thead>
-              <tr className="text-white/50">
-                <th className="border-b border-white/10 px-2 py-2 text-left">순위</th>
-                <th className="border-b border-white/10 px-2 py-2 text-left">플레이어</th>
+              <tr className="text-white/50 light:text-slate-500">
+                <th className="border-b border-white/10 px-2 py-2 text-left light:border-slate-200">순위</th>
+                <th className="border-b border-white/10 px-2 py-2 text-left light:border-slate-200">플레이어</th>
               </tr>
             </thead>
             <tbody>
               {rankings.map(({ seat, rank }) => (
-                <tr key={seat} className={rank === 1 ? "bg-amber-400/10" : ""}>
-                  <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-amber-200">
+                <tr key={seat} className={rank === 1 ? "bg-amber-400/10 light:bg-amber-50" : ""}>
+                  <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-amber-200 light:border-slate-100 light:text-amber-700">
                     {rank === 1 ? "🏆 1" : rank}
                   </td>
-                  <td className="border-b border-white/5 px-2 py-2 text-left text-white">
+                  <td className="border-b border-white/5 px-2 py-2 text-left text-white light:border-slate-100 light:text-slate-900">
                     {names[seat]}
-                    {seat === viewerSeat && <span className="ml-1 text-amber-200">(나)</span>}
+                    {seat === viewerSeat && <span className="ml-1 text-amber-200 light:text-amber-700">(나)</span>}
                   </td>
                 </tr>
               ))}
@@ -475,7 +477,7 @@ export default function PerudoBoard({
         <TableTexture />
         <TotalDiceBanner state={state} />
         <LostDiceTray state={state} colorways={colorways} />
-        <div className="relative z-10 flex items-center justify-between text-xs text-rose-100/60">
+        <div className="relative z-10 flex items-center justify-between text-xs text-rose-100/60 light:text-slate-500">
           <span>
             {state.playerCount}인 · {state.roundNumber}라운드 결과
           </span>
@@ -484,14 +486,14 @@ export default function PerudoBoard({
             {rulebookButton}
           </div>
         </div>
-        <div className="relative z-10 rounded-2xl border border-white/10 bg-black/30 p-4 text-center">
-          <p className="text-sm font-semibold text-amber-100">
+        <div className="relative z-10 rounded-2xl border border-white/10 bg-black/30 p-4 text-center light:border-slate-200 light:bg-white/70">
+          <p className="text-sm font-semibold text-amber-100 light:text-amber-700">
             {names[res.actorSeat]}님이 {res.kind === "dudo" ? "🚨 페루도!" : "🎯 맞아!"}를 외쳤습니다
           </p>
-          <p className="mt-1 text-xs text-white/60">
+          <p className="mt-1 text-xs text-white/60 light:text-slate-500">
             선언: {faceLabel(res.bid.face)} {res.bid.quantity}개 이상 · 실제: {res.actualCount}개
           </p>
-          <p className={`mt-2 text-sm font-bold ${success ? "text-emerald-300" : "text-rose-300"}`}>
+          <p className={`mt-2 text-sm font-bold ${success ? "text-emerald-300 light:text-emerald-600" : "text-rose-300 light:text-rose-600"}`}>
             {res.kind === "dudo"
               ? res.affectedSeat === res.bid.seat
                 ? `📉 선언이 틀렸습니다 — ${names[res.bid.seat]}님이 주사위 ${lossAmount}개를 잃었습니다.`
@@ -568,7 +570,7 @@ export default function PerudoBoard({
       <TableTexture />
       <TotalDiceBanner state={state} />
 
-      <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-rose-100/60">
+      <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-rose-100/60 light:text-slate-500">
         <span className="flex items-center gap-1.5">
           {state.playerCount}인 · {state.roundNumber}라운드
         </span>
@@ -581,7 +583,7 @@ export default function PerudoBoard({
       {/* 턴 배너 — 하단 상태 텍스트는 이제 조용한 안내문 고정(한 번 튀는
           애니메이션은 위 <MyTurnOverlay>의 중앙 팝업이 전담, 2026-09-05
           세션). */}
-      <p className={`relative z-10 text-center text-sm font-bold break-keep ${isMyTurn ? "text-amber-200" : "text-xs font-medium text-white/50"}`}>
+      <p className={`relative z-10 text-center text-sm font-bold break-keep ${isMyTurn ? "text-amber-200 light:text-amber-700" : "text-xs font-medium text-white/50 light:text-slate-500"}`}>
         {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
       </p>
 
@@ -748,13 +750,13 @@ export default function PerudoBoard({
               interaction. Moved inside the board's center (2026-08-20 사각형
               트랙 세션, 사용자 요청: "보드판 사이즈를 좀 더 키워서 내 주사위까지
               보이게 해주세요"). */}
-          <div className="relative z-10 flex w-full flex-col items-center gap-1.5 rounded-2xl border-2 border-amber-900/40 bg-gradient-to-b from-black/25 to-black/35 p-3 shadow-[inset_0_2px_10px_rgba(0,0,0,0.35),0_4px_14px_-6px_rgba(0,0,0,0.6)]">
+          <div className="relative z-10 flex w-full flex-col items-center gap-1.5 rounded-2xl border-2 border-amber-900/40 bg-gradient-to-b from-black/25 to-black/35 p-3 shadow-[inset_0_2px_10px_rgba(0,0,0,0.35),0_4px_14px_-6px_rgba(0,0,0,0.6)] light:border-amber-300 light:from-amber-50 light:to-white">
             <div className="flex w-full items-center justify-between px-1">
-              <p className="text-[11px] font-semibold text-amber-100/70">🎲 내 주사위 ({me.diceCount}개)</p>
+              <p className="text-[11px] font-semibold text-amber-100/70 light:text-amber-700">🎲 내 주사위 ({me.diceCount}개)</p>
               {colorwayPicker}
             </div>
             {!iAmAlive ? (
-              <p className="text-xs text-rose-300/70">탈락했습니다 — 관전 중</p>
+              <p className="text-xs text-rose-300/70 light:text-rose-600">탈락했습니다 — 관전 중</p>
             ) : (
               <DiceRollTray
                 dice={me.dice}
@@ -791,7 +793,7 @@ export default function PerudoBoard({
           colorway (requirement #2: name <-> dice color at a glance) before
           the name itself. */}
       <div className="relative z-10 flex flex-col gap-1.5">
-        <p className="px-1 text-[10px] font-semibold tracking-[0.15em] text-amber-200/50 uppercase">🏆 스코어보드</p>
+        <p className="px-1 text-[10px] font-semibold tracking-[0.15em] text-amber-200/50 uppercase light:text-amber-600">🏆 스코어보드</p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {seatOrder.map((seat) => {
             const player = state.players.find((p) => p.seat === seat)!;
@@ -803,26 +805,28 @@ export default function PerudoBoard({
               <div
                 key={seat}
                 className={`flex items-center justify-between gap-2 rounded-xl border p-2.5 transition ${
-                  isActive ? "border-amber-300/60 bg-amber-400/10" : "border-white/10 bg-black/20"
+                  isActive
+                    ? "border-amber-300/60 bg-amber-400/10 light:border-amber-400 light:bg-amber-50"
+                    : "border-white/10 bg-black/20 light:border-slate-200 light:bg-white/60"
                 } ${eliminated ? "opacity-40" : ""}`}
               >
-                <span className="flex min-w-0 items-center gap-1.5 truncate text-xs font-semibold text-white/90">
+                <span className="flex min-w-0 items-center gap-1.5 truncate text-xs font-semibold text-white/90 light:text-slate-800">
                   <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full border border-white/30"
+                    className="h-2.5 w-2.5 shrink-0 rounded-full border border-white/30 light:border-slate-300"
                     style={{ backgroundColor: seatColorway.body }}
                     title={`${seatColorway.label} 주사위`}
                   />
                   <span
-                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`}
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`}
                   />
                   {isActive && <span title="차례">👉</span>}
                   {eliminated && <span title="탈락">💀</span>}
                   <span className="truncate">{names[seat]}</span>
-                  {isSelf && <span className="shrink-0 text-amber-200">(나)</span>}
+                  {isSelf && <span className="shrink-0 text-amber-200 light:text-amber-700">(나)</span>}
                 </span>
                 <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-1">
                   {eliminated ? (
-                    <span className="text-[11px] text-white/30">탈락</span>
+                    <span className="text-[11px] text-white/30 light:text-slate-400">탈락</span>
                   ) : (
                     Array.from({ length: player.diceCount }, (_, i) => (
                       <DieBack key={i} colorway={seatColorway} />
@@ -859,14 +863,14 @@ function RevealPanel({
       {Object.entries(res.revealedDice).map(([seatStr, dice]) => {
         const seat = Number(seatStr);
         return (
-          <div key={seat} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-2">
-            <span className="w-20 shrink-0 truncate text-[11px] text-white/60">
+          <div key={seat} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-2 light:border-slate-200 light:bg-white/70">
+            <span className="w-20 shrink-0 truncate text-[11px] text-white/60 light:text-slate-500">
               {names[seat]}
               {seat === viewerSeat && " (나)"}
             </span>
             <div className="flex flex-wrap gap-1">
               {dice.length === 0 ? (
-                <span className="text-[11px] text-white/25">주사위 없음</span>
+                <span className="text-[11px] text-white/25 light:text-slate-400">주사위 없음</span>
               ) : (
                 dice.map((d, i) => {
                   const matches = d === res.bid.face;

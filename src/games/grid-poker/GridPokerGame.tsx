@@ -179,7 +179,7 @@ function TimerSecondsField({
   onCustomChange: (v: number) => void;
 }) {
   return (
-    <label className="flex flex-col gap-1.5 text-sm text-white/70">
+    <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
       {label}
       <div className="flex flex-wrap items-center gap-1.5">
         {options.map((opt) => (
@@ -189,8 +189,8 @@ function TimerSecondsField({
             onClick={() => onChoiceChange(opt)}
             className={`rounded-full border px-3 py-1 text-xs transition ${
               choice === opt
-                ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200"
-                : "border-white/15 text-white/60 hover:border-white/30"
+                ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200 light:border-emerald-500/50 light:bg-emerald-50 light:text-emerald-700"
+                : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
             }`}
           >
             {opt}초
@@ -201,8 +201,8 @@ function TimerSecondsField({
           onClick={() => onChoiceChange("custom")}
           className={`rounded-full border px-3 py-1 text-xs transition ${
             choice === "custom"
-              ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200"
-              : "border-white/15 text-white/60 hover:border-white/30"
+              ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200 light:border-emerald-500/50 light:bg-emerald-50 light:text-emerald-700"
+              : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
           }`}
         >
           직접 입력
@@ -214,7 +214,7 @@ function TimerSecondsField({
             max={MAX_TIMER_SECONDS}
             value={customValue}
             onChange={(e) => onCustomChange(Number(e.target.value))}
-            className="w-16 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-center text-xs text-white focus:border-emerald-400 focus:outline-none"
+            className="w-16 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-center text-xs text-white focus:border-emerald-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900"
           />
         )}
       </div>

@@ -58,13 +58,13 @@ function AnimatedScore({ total }: { total: number }) {
 
   return (
     <span className="relative inline-flex items-center">
-      <b className="tabular-nums text-white">{display}</b>
+      <b className="tabular-nums text-white light:text-slate-900">{display}</b>
       {delta && (
         <span
           key={delta.key}
           onAnimationEnd={() => setDelta(null)}
           className={`pointer-events-none absolute left-1/2 -top-1 -translate-x-1/2 text-[11px] font-bold whitespace-nowrap ${
-            delta.value >= 0 ? "text-emerald-300" : "text-rose-300"
+            delta.value >= 0 ? "text-emerald-300 light:text-emerald-600" : "text-rose-300 light:text-rose-600"
           }`}
           style={{ animation: `destinywar39-score-delta-float ${DELTA_FLOAT_MS}ms ease-out forwards` }}
         >
@@ -127,14 +127,14 @@ function LeaderboardList({ state, viewerSeat, names, connectedSeats }: RankedLea
               else rowRefs.current.delete(seat);
             }}
             className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 text-xs transition-colors ${
-              isMe ? "border-fuchsia-400/40 bg-fuchsia-500/10" : "border-white/10 bg-white/[0.02]"
+              isMe ? "border-fuchsia-400/40 bg-fuchsia-500/10 light:border-fuchsia-300 light:bg-fuchsia-50" : "border-white/10 bg-white/[0.02] light:border-slate-200 light:bg-slate-50"
             } ${!connectedSeats.has(seat) ? "opacity-40" : ""}`}
           >
             <span className="w-6 shrink-0 text-center text-sm" title={`${rank}위`}>
-              {RANK_BADGE[rank] ?? <span className="text-[10px] text-white/40">{rank}위</span>}
+              {RANK_BADGE[rank] ?? <span className="text-[10px] text-white/40 light:text-slate-400">{rank}위</span>}
             </span>
             <Avatar size={20} className="shrink-0" />
-            <span className={`min-w-0 flex-1 truncate font-semibold ${isMe ? "text-fuchsia-200" : "text-white/85"}`}>
+            <span className={`min-w-0 flex-1 truncate font-semibold ${isMe ? "text-fuchsia-200 light:text-fuchsia-700" : "text-white/85 light:text-slate-800"}`}>
               {names[seat]}
               {isMe ? " (나)" : ""}
             </span>
@@ -161,8 +161,8 @@ export default function RankedLeaderboard(props: RankedLeaderboardProps) {
   return (
     <>
       {/* Desktop: always-visible fixed column beside the board. */}
-      <aside className="hidden max-h-[70vh] w-60 shrink-0 flex-col gap-2 overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.03] p-3 lg:flex">
-        <h3 className="px-1 text-xs font-semibold tracking-wide text-white/50 uppercase">🏆 누적 순위</h3>
+      <aside className="hidden max-h-[70vh] w-60 shrink-0 flex-col gap-2 overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.03] p-3 lg:flex light:border-slate-200 light:bg-white/90 light:shadow-md">
+        <h3 className="px-1 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">🏆 누적 순위</h3>
         <LeaderboardList {...props} />
       </aside>
 
@@ -170,7 +170,7 @@ export default function RankedLeaderboard(props: RankedLeaderboardProps) {
       <button
         onClick={() => setDrawerOpen(true)}
         aria-label="누적 순위 패널 열기"
-        className="fixed top-1/2 left-0 z-40 flex -translate-y-1/2 flex-col items-center gap-1 rounded-r-xl border border-l-0 border-white/15 bg-[#150c22] px-1.5 py-3 text-[10px] font-semibold text-white/70 shadow-lg lg:hidden"
+        className="fixed top-1/2 left-0 z-40 flex -translate-y-1/2 flex-col items-center gap-1 rounded-r-xl border border-l-0 border-white/15 bg-[#150c22] px-1.5 py-3 text-[10px] font-semibold text-white/70 shadow-lg lg:hidden light:border-slate-300 light:bg-white light:text-slate-600 light:shadow-md"
       >
         <span className="text-base">🏆</span>
         <span className="[writing-mode:vertical-rl]">순위</span>
@@ -179,13 +179,13 @@ export default function RankedLeaderboard(props: RankedLeaderboardProps) {
       {drawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-start lg:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={() => setDrawerOpen(false)} />
-          <div className="relative flex h-full w-[85vw] max-w-sm flex-col gap-2 overflow-y-auto border-r border-white/10 bg-[#150c22] p-4 text-xs shadow-2xl">
+          <div className="relative flex h-full w-[85vw] max-w-sm flex-col gap-2 overflow-y-auto border-r border-white/10 bg-[#150c22] p-4 text-xs shadow-2xl light:border-slate-200 light:bg-white light:shadow-lg">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold tracking-wide text-white/50 uppercase">🏆 누적 순위</h3>
+              <h3 className="text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">🏆 누적 순위</h3>
               <button
                 onClick={() => setDrawerOpen(false)}
                 aria-label="닫기"
-                className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/60 hover:border-white/30 hover:text-white"
+                className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/60 hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
               >
                 ✕
               </button>

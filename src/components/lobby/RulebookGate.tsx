@@ -27,7 +27,7 @@ export default function RulebookGate({
   title,
   description,
   actions,
-  containerClassName = "border-white/10 bg-white/[0.03]",
+  containerClassName = "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white",
 }: {
   gameId: string;
   icon: string;
@@ -49,17 +49,17 @@ export default function RulebookGate({
   return (
     <div className={`flex w-full flex-col items-center gap-4 rounded-2xl border p-6 text-center md:p-8 ${containerClassName}`}>
       <span className="text-4xl">{icon}</span>
-      <h2 className="text-lg font-bold break-keep text-white">{title}</h2>
+      <h2 className="text-lg font-bold break-keep text-white light:text-slate-900">{title}</h2>
 
       {/* Desktop / tablet: persistent tab switcher */}
       <div className="hidden w-full max-w-sm flex-col items-center gap-3 md:flex">
-        <div className="flex w-full gap-1 rounded-full border border-white/10 bg-white/5 p-1">
+        <div className="flex w-full gap-1 rounded-full border border-white/10 bg-white/5 p-1 light:border-slate-200 light:bg-slate-100">
           <button
             type="button"
             onClick={() => setTab("settings")}
             aria-pressed={tab === "settings"}
             className={`flex-1 rounded-full px-3 py-1.5 text-xs font-semibold break-keep transition ${
-              tab === "settings" ? "bg-sky-500 text-white" : "text-white/50 hover:text-white/80"
+              tab === "settings" ? "bg-sky-500 text-white" : "text-white/50 hover:text-white/80 light:text-slate-500 light:hover:text-slate-800"
             }`}
           >
             ⚙️ 방 설정
@@ -69,7 +69,7 @@ export default function RulebookGate({
             onClick={() => setTab("rulebook")}
             aria-pressed={tab === "rulebook"}
             className={`flex-1 rounded-full px-3 py-1.5 text-xs font-semibold break-keep transition ${
-              tab === "rulebook" ? "bg-sky-500 text-white" : "text-white/50 hover:text-white/80"
+              tab === "rulebook" ? "bg-sky-500 text-white" : "text-white/50 hover:text-white/80 light:text-slate-500 light:hover:text-slate-800"
             }`}
           >
             📖 룰북 / 게임 규칙
@@ -84,7 +84,7 @@ export default function RulebookGate({
           type="button"
           onClick={() => setMobileRulebookOpen((o) => !o)}
           aria-expanded={mobileRulebookOpen}
-          className="flex w-full items-center justify-center gap-1.5 rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-xs font-semibold break-keep text-sky-200"
+          className="flex w-full items-center justify-center gap-1.5 rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-xs font-semibold break-keep text-sky-200 light:bg-sky-100 light:text-sky-800"
         >
           📖 30초 핵심 룰 보기 {mobileRulebookOpen ? "▲" : "▼"}
         </button>

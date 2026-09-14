@@ -46,6 +46,10 @@ export interface SplendorBoardProps {
   onGameEnd: () => void;
 }
 
+// TODO(theme): these per-tier `bg` values are hardcoded dark inline-style gradients
+// (used by DevelopmentCardFace/ReservedCardBack/DeckBack below) — not yet theme-aware,
+// deliberately left dark in light mode (a real per-tier light gradient wasn't trivial
+// to derive safely here without risking the tier color-coding reading wrong).
 const TIER_STYLE: Record<Tier, { border: string; bg: string; label: string }> = {
   1: { border: "border-emerald-400/50", bg: "linear-gradient(160deg,#0d3324 0%,#0a2018 60%,#061309 100%)", label: "1단계" },
   2: { border: "border-amber-400/50", bg: "linear-gradient(160deg,#3a2c0a 0%,#241b06 60%,#140f03 100%)", label: "2단계" },
@@ -57,7 +61,7 @@ function DevelopmentCardFace({ card, affordable = false }: { card: DevelopmentCa
   const costEntries = GEM_ORDER.filter((c) => (card.cost[c] ?? 0) > 0);
   return (
     <div
-      className={`relative flex w-full flex-col gap-1.5 rounded-lg border p-1.5 transition ${style.border} ${
+      className={`relative flex w-full flex-col gap-1.5 rounded-lg border p-1.5 transition light:shadow-sm ${style.border} ${
         affordable ? "shadow-[0_0_14px_-2px_rgba(196,181,253,0.8)]" : ""
       }`}
       style={{ background: style.bg }}
@@ -80,7 +84,7 @@ function DevelopmentCardFace({ card, affordable = false }: { card: DevelopmentCa
 function ReservedCardBack({ tier }: { tier: Tier }) {
   const style = TIER_STYLE[tier];
   return (
-    <div className={`flex h-[52px] w-9 items-center justify-center rounded-md border text-[9px] text-white/40 ${style.border}`} style={{ background: style.bg }}>
+    <div className={`flex h-[52px] w-9 items-center justify-center rounded-md border text-[9px] text-white/40 light:shadow-sm ${style.border}`} style={{ background: style.bg }}>
       🂠
     </div>
   );
@@ -90,9 +94,10 @@ function NobleTile({ noble, qualifies }: { noble: Noble; qualifies: boolean }) {
   const entries = GEM_ORDER.filter((c) => (noble.cost[c] ?? 0) > 0);
   return (
     <div
-      className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition ${
-        qualifies ? "border-amber-300 shadow-[0_0_16px_-2px_rgba(251,191,36,0.85)]" : "border-white/15"
+      className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition light:shadow-sm ${
+        qualifies ? "border-amber-300 shadow-[0_0_16px_-2px_rgba(251,191,36,0.85)]" : "border-white/15 light:border-slate-200"
       }`}
+      // TODO(theme): hardcoded dark purple gradient — not yet theme-aware, kept dark in light mode.
       style={{ background: "linear-gradient(160deg,#3b2d55 0%,#241a38 60%,#160f22 100%)" }}
     >
       <span className="text-lg font-black text-amber-200">{noble.points}</span>
@@ -113,7 +118,7 @@ function DeckBack({ tier, count, disabled, onReserve }: { tier: Tier; count: num
       disabled={inactive}
       onClick={onReserve}
       title="맨 위 카드를 비공개로 예약"
-      className={`flex min-h-[74px] w-12 flex-col items-center justify-center gap-0.5 rounded-lg border text-[9px] transition ${style.border} ${
+      className={`flex min-h-[74px] w-12 flex-col items-center justify-center gap-0.5 rounded-lg border text-[9px] transition light:shadow-sm ${style.border} ${
         inactive ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:scale-105"
       }`}
       style={{ background: style.bg }}
@@ -150,7 +155,7 @@ function TierMarketRow({
       <div className="grid flex-1 grid-cols-4 gap-1.5">
         {Array.from({ length: MARKET_SIZE }, (_, i) => {
           const card = market[i];
-          if (!card) return <div key={i} className="rounded-lg border border-dashed border-white/10" />;
+          if (!card) return <div key={i} className="rounded-lg border border-dashed border-white/10 light:border-slate-200" />;
           return (
             <button key={card.id} disabled={!isMyTurn} onClick={() => onCardClick(card)} className="text-left transition disabled:cursor-not-allowed disabled:opacity-90">
               <DevelopmentCardFace card={card} affordable={isMyTurn && affordableIds.has(card.id)} />
@@ -179,7 +184,7 @@ function TokenBank({
 }) {
   const canConfirm = (pick.length === 3 && new Set(pick).size === 3) || (pick.length === 2 && pick[0] === pick[1]);
   return (
-    <div className="rounded-xl border border-white/10 bg-black/25 p-2.5">
+    <div className="rounded-xl border border-white/10 bg-black/25 p-2.5 light:border-slate-200 light:bg-white light:shadow-sm">
       <div className="mb-2 flex flex-wrap items-center justify-center gap-2.5">
         {GEM_ORDER.map((c) => {
           const doubled = pick.filter((p) => p === c).length === 2;
@@ -190,7 +195,7 @@ function TokenBank({
               onClick={() => onClickToken(c)}
               className="flex flex-col items-center gap-1 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <span className={`relative inline-flex rounded-full ${pick.includes(c) ? "ring-2 ring-violet-300 ring-offset-2 ring-offset-[#160f22]" : ""}`}>
+              <span className={`relative inline-flex rounded-full ${pick.includes(c) ? "ring-2 ring-violet-300 ring-offset-2 ring-offset-[#160f22] light:ring-violet-500 light:ring-offset-white" : ""}`}>
                 <GemChip color={c} className="h-9 w-9" />
                 {doubled && (
                   <span className="absolute -right-1 -bottom-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500 text-[9px] font-bold text-white">
@@ -198,23 +203,23 @@ function TokenBank({
                   </span>
                 )}
               </span>
-              <span className="text-[11px] font-semibold text-white/70">{state.tokenSupply[c] ?? 0}</span>
+              <span className="text-[11px] font-semibold text-white/70 light:text-slate-600">{state.tokenSupply[c] ?? 0}</span>
             </button>
           );
         })}
-        <div className="mx-1 h-8 w-px bg-white/10" />
+        <div className="mx-1 h-8 w-px bg-white/10 light:bg-slate-200" />
         <div className="flex flex-col items-center gap-1">
           <GemChip color="gold" className="h-9 w-9" />
-          <span className="text-[11px] font-semibold text-white/70">{state.tokenSupply.gold ?? 0}</span>
+          <span className="text-[11px] font-semibold text-white/70 light:text-slate-600">{state.tokenSupply.gold ?? 0}</span>
         </div>
       </div>
       {isMyTurn && (
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <span className="text-[11px] text-white/50">
+          <span className="text-[11px] text-white/50 light:text-slate-500">
             {pick.length === 0 ? "다른 보석 3개 또는 같은 보석 2개(4개 이상 남은 경우)를 고르세요" : `${pick.length}개 선택됨`}
           </span>
           {pick.length > 0 && (
-            <button onClick={onClear} className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/70 hover:border-white/30">
+            <button onClick={onClear} className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/70 hover:border-white/30 light:border-slate-200 light:text-slate-600 light:hover:border-slate-300">
               다시 선택
             </button>
           )}
@@ -234,7 +239,7 @@ function TokenBank({
 function BonusShelf({ purchasedCards, compact = false }: { purchasedCards: DevelopmentCard[]; compact?: boolean }) {
   const bonus = computeBonusCounts(purchasedCards);
   const entries = GEM_ORDER.filter((c) => (bonus[c] ?? 0) > 0);
-  if (entries.length === 0) return <span className="text-[11px] text-white/30">보너스 없음</span>;
+  if (entries.length === 0) return <span className="text-[11px] text-white/30 light:text-slate-400">보너스 없음</span>;
   return (
     <div className="flex flex-wrap items-center gap-1">
       {entries.map((c) => (
@@ -246,7 +251,7 @@ function BonusShelf({ purchasedCards, compact = false }: { purchasedCards: Devel
 
 function TokenRow({ tokens, compact = false }: { tokens: TokenBundle; compact?: boolean }) {
   const entries = TOKEN_COLORS.filter((c) => (tokens[c] ?? 0) > 0);
-  if (entries.length === 0) return <span className="text-[11px] text-white/30">없음</span>;
+  if (entries.length === 0) return <span className="text-[11px] text-white/30 light:text-slate-400">없음</span>;
   return (
     <div className="flex flex-wrap items-center gap-1">
       {entries.map((c) => (
@@ -307,7 +312,8 @@ export default function SplendorBoard({ state, viewerSeat, names, connectedSeats
     const rankings = computeRankings(state);
     const winnerSeat = rankings.find((r) => r.rank === 1)!.seat;
     return (
-      <div className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8" style={{ background: "linear-gradient(160deg,#241a38 0%,#160f22 55%,#0a0712 100%)" }}>
+      <div className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8 light:border-slate-200 light:shadow-lg" style={{ background: "linear-gradient(160deg,#241a38 0%,#160f22 55%,#0a0712 100%)" }}>
+        {/* TODO(theme): hardcoded dark violet gradient panel background — not yet theme-aware, kept dark in light mode. */}
         <span className="text-5xl">🏆</span>
         <h2 className="text-2xl font-bold text-violet-100">
           {rankings.filter((r) => r.rank === 1).length > 1 ? "공동 승리!" : `${names[winnerSeat]}님 승리!`}
@@ -402,7 +408,8 @@ export default function SplendorBoard({ state, viewerSeat, names, connectedSeats
   // ---------------------------------------------------------------------
   return (
     <div
-      className="flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
+      className="flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4 light:border-slate-200 light:shadow-lg"
+      // TODO(theme): hardcoded dark violet gradient board background — not yet theme-aware, kept dark in light mode.
       style={{ background: "linear-gradient(160deg,#1c1230 0%,#120b1c 45%,#08050d 100%)" }}
     >
       <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-violet-100/70">

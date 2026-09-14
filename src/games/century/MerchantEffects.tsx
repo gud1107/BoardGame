@@ -116,11 +116,11 @@ export function FlyingResourceBurst({
       className="pointer-events-none fixed z-[70] -translate-x-1/2 -translate-y-1/2"
       style={{ left: 0, top: 0, animation: "card-collect-fade 0.6s ease-in forwards" }}
     >
-      <div className="flex items-center gap-1 rounded-full border border-white/30 bg-black/60 px-1.5 py-1 shadow-lg backdrop-blur-sm">
+      <div className="flex items-center gap-1 rounded-full border border-white/30 bg-black/60 px-1.5 py-1 shadow-lg backdrop-blur-sm light:border-slate-300 light:bg-white/90">
         {entries.map((r) => (
           <span key={r} className="flex items-center gap-0.5">
             <ResourceIcon resource={r} className="h-4 w-4" />
-            <span className="text-[10px] font-bold text-white">×{event.resources[r]}</span>
+            <span className="text-[10px] font-bold text-white light:text-slate-900">×{event.resources[r]}</span>
           </span>
         ))}
       </div>

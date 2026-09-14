@@ -35,10 +35,10 @@ export default function CardExchangeModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center">
-      <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl border border-emerald-300/30 bg-[#12241c] p-5 shadow-[0_0_60px_-15px_rgba(52,211,153,0.55)] sm:max-w-lg sm:rounded-2xl sm:p-6">
+      <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl border border-emerald-300/30 bg-[#12241c] p-5 shadow-[0_0_60px_-15px_rgba(52,211,153,0.55)] sm:max-w-lg sm:rounded-2xl sm:p-6 light:border-emerald-300 light:bg-white light:shadow-xl">
         <div className="mb-1 text-center text-2xl">🌾🤝🌾</div>
-        <h2 className="mb-1 text-center text-lg font-bold text-emerald-100">평민 카드 교환</h2>
-        <p className="mb-4 text-center text-xs text-emerald-200/70">
+        <h2 className="mb-1 text-center text-lg font-bold text-emerald-100 light:text-emerald-700">평민 카드 교환</h2>
+        <p className="mb-4 text-center text-xs text-emerald-200/70 light:text-emerald-700/70">
           <b>{partnerName}</b>님에게 건네줄 카드를 손패에서 <b>1장</b> 골라주세요. 서로 확정 전까지 상대의 선택은 보이지 않습니다.
         </p>
         <div className="flex flex-wrap justify-center gap-2">

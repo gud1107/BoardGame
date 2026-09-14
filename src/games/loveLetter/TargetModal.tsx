@@ -37,16 +37,16 @@ export default function TargetModal({ cardNumber, targets, names, viewerSeat, on
 
   return (
     <Overlay title={`${cardNumber}. ${CARD_NAMES[cardNumber]} — 대상 지정`} onClose={onCancel} wide={needsGuess}>
-      <div className="flex flex-col gap-4 text-sm text-white/80">
+      <div className="flex flex-col gap-4 text-sm text-white/80 light:text-slate-700">
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">누구를 지목할까요?</h3>
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 light:text-slate-500 uppercase">누구를 지목할까요?</h3>
           <div className="flex flex-wrap gap-2">
             {targets.map((seat) => (
               <button
                 key={seat}
                 onClick={() => setTargetSeat(seat)}
                 className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                  targetSeat === seat ? "border-rose-300 bg-rose-500/20 text-rose-100" : "border-white/15 text-white/70 hover:border-white/30"
+                  targetSeat === seat ? "border-rose-300 bg-rose-500/20 text-rose-100" : "border-white/15 light:border-slate-200 text-white/70 light:text-slate-700 hover:border-white/30"
                 }`}
               >
                 {seat === viewerSeat ? "나 자신" : names[seat]}
@@ -57,7 +57,7 @@ export default function TargetModal({ cardNumber, targets, names, viewerSeat, on
 
         {needsGuess && (
           <section>
-            <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">어떤 카드일지 추리하세요 (1번 제외)</h3>
+            <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 light:text-slate-500 uppercase">어떤 카드일지 추리하세요 (1번 제외)</h3>
             <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
               {GUESSABLE_NUMBERS.map((n) => (
                 <button
@@ -65,14 +65,14 @@ export default function TargetModal({ cardNumber, targets, names, viewerSeat, on
                   onClick={() => setGuessNumber(n)}
                   title={`${n}. ${CARD_NAMES[n]}`}
                   className={`flex flex-col items-center gap-1 rounded-xl border p-1.5 transition ${
-                    guessNumber === n ? "border-amber-300 bg-amber-400/15" : "border-white/10 hover:border-white/25"
+                    guessNumber === n ? "border-amber-300 bg-amber-400/15" : "border-white/10 light:border-slate-200 hover:border-white/25"
                   }`}
                 >
-                  <span className="relative h-14 w-10 shrink-0 overflow-hidden rounded-md border border-white/15">
+                  <span className="relative h-14 w-10 shrink-0 overflow-hidden rounded-md border border-white/15 light:border-slate-200">
                     {/* eslint-disable-next-line @next/next/no-img-element -- tiny fixed thumbnail inside a modal grid, next/image's layout overhead isn't worth it here */}
                     <img src={CARD_IMAGES[n]} alt="" className="h-full w-full object-cover" />
                   </span>
-                  <span className="text-[10px] leading-none font-semibold text-white/80">{n}</span>
+                  <span className="text-[10px] leading-none font-semibold text-white/80 light:text-slate-700">{n}</span>
                 </button>
               ))}
             </div>
@@ -80,7 +80,7 @@ export default function TargetModal({ cardNumber, targets, names, viewerSeat, on
         )}
 
         <div className="flex gap-2 pt-1">
-          <button onClick={onCancel} className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30">
+          <button onClick={onCancel} className="flex-1 rounded-xl border border-white/15 light:border-slate-200 py-2.5 text-sm text-white/70 light:text-slate-700 hover:border-white/30">
             취소
           </button>
           <button

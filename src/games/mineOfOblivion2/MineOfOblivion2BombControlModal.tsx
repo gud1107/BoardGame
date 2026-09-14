@@ -30,7 +30,7 @@ export default function MineOfOblivion2BombControlModal({ bomb, canMoveHere, onC
   const buttonLabel = canDetonate ? "💥 지금 즉시 격발! (2턴 후 폭발)" : bomb.manuallyTriggered ? "🔥 이미 격발됨 · 자동 폭발 대기 중" : "⏳ 곧 자동 폭발 (격발 불필요)";
 
   return createPortal(
-    <div className="pointer-events-auto fixed inset-0 z-[92] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="pointer-events-auto fixed inset-0 z-[92] flex items-center justify-center bg-black/70 light:bg-white/95 light:shadow-md p-4" onClick={onClose}>
       <div
         className="flex w-full max-w-xs flex-col gap-3 rounded-2xl border border-amber-400/30 bg-gradient-to-b from-[#1a1206] via-[#120c04] to-black p-4 text-center"
         onClick={(e) => e.stopPropagation()}
@@ -39,12 +39,12 @@ export default function MineOfOblivion2BombControlModal({ bomb, canMoveHere, onC
           <span className="text-3xl">🧨</span>
           <div className="flex flex-col items-start">
             <span className="text-sm font-bold text-amber-200 break-keep">내 시한폭탄 · {bomb.tile}</span>
-            <span className="text-[11px] text-white/50 break-keep">{bomb.manuallyTriggered ? "🔥 격발됨 · 자동 폭발 대기 중" : "⏳ 카운트다운 진행 중"}</span>
+            <span className="text-[11px] text-white/50 light:text-slate-500 break-keep">{bomb.manuallyTriggered ? "🔥 격발됨 · 자동 폭발 대기 중" : "⏳ 카운트다운 진행 중"}</span>
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] py-2">
-          <span className="text-xs text-white/50 break-keep">남은 턴</span>
+        <div className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 light:border-slate-200 bg-white/[0.03] py-2">
+          <span className="text-xs text-white/50 light:text-slate-500 break-keep">남은 턴</span>
           <span className={`text-lg font-black ${bomb.remaining <= 1 ? "text-rose-300" : "text-amber-200"}`}>{bomb.remaining}</span>
         </div>
 
@@ -66,11 +66,11 @@ export default function MineOfOblivion2BombControlModal({ bomb, canMoveHere, onC
           </button>
         )}
 
-        <button type="button" onClick={onClose} className="rounded-xl border border-white/10 py-2 text-xs text-white/50 transition hover:border-white/25">
+        <button type="button" onClick={onClose} className="rounded-xl border border-white/10 light:border-slate-200 py-2 text-xs text-white/50 light:text-slate-500 transition hover:border-white/25">
           닫기
         </button>
 
-        <p className="text-[10px] text-white/35 break-keep">
+        <p className="text-[10px] text-white/35 light:text-slate-400 break-keep">
           💡 시한폭탄은 설치 시 고른 퓨즈가 다 되면 자동 폭발하거나, 언제든 [즉시 격발]을 눌러 {TIME_BOMB_MANUAL_TRIGGER_DELAY}턴 후 강제 폭발시킬 수 있어요. 3×3 범위 내 −5점
           (비어있으면 설치자 +2점).
         </p>

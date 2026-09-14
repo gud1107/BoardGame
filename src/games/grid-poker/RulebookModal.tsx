@@ -24,75 +24,75 @@ const HAND_EXAMPLES: { name: string; cards: Card[]; note?: string }[] = [
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
   return (
     <Overlay title="📖 그리드 포커 룰북" onClose={onClose} wide>
-      <div className="flex flex-col gap-5 text-sm text-white/80">
+      <div className="flex flex-col gap-5 text-sm text-white/80 light:text-slate-700">
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">카드 구성</h3>
-          <p className="text-white/70">
-            2~10, J, Q, K, A (13종 × 4문양 = 52장) + 조커 2장, 총 <span className="text-white">54장</span>.
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">카드 구성</h3>
+          <p className="text-white/70 light:text-slate-600">
+            2~10, J, Q, K, A (13종 × 4문양 = 52장) + 조커 2장, 총 <span className="text-white light:text-slate-900">54장</span>.
             공통 카드는 뽑을 때마다 즉시 덱에 되돌아가므로 매 순간 어떤 카드가 나올 확률은 항상{" "}
-            <span className="text-white">1/54</span>로 동일합니다 — 같은 카드가 한 판에 여러 번 나올 수 있어요.
-            조커는 <span className="text-amber-300">어떤 숫자·문양으로도</span> 대체할 수 있는 완전 와일드 카드입니다.
+            <span className="text-white light:text-slate-900">1/54</span>로 동일합니다 — 같은 카드가 한 판에 여러 번 나올 수 있어요.
+            조커는 <span className="text-amber-300 light:text-amber-600">어떤 숫자·문양으로도</span> 대체할 수 있는 완전 와일드 카드입니다.
           </p>
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">보드판 & 배치</h3>
-          <p className="text-white/70">
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">보드판 & 배치</h3>
+          <p className="text-white/70 light:text-slate-600">
             각자 5×5(25칸) 보드판을 갖습니다. 공통 카드가 한 장씩 공개될 때마다 모든 플레이어가{" "}
-            <span className="text-white">동시에</span> 자신의 빈 칸 중 원하는 곳에 배치하며, 25칸이 다 찰
-            때까지(25번) 반복합니다. 내가 <span className="text-white">가장 처음 놓은 칸</span>만 상대에게
+            <span className="text-white light:text-slate-900">동시에</span> 자신의 빈 칸 중 원하는 곳에 배치하며, 25칸이 다 찰
+            때까지(25번) 반복합니다. 내가 <span className="text-white light:text-slate-900">가장 처음 놓은 칸</span>만 상대에게
             공개되고, 그 외의 내 보드판 전체는 나만 볼 수 있습니다 (상대도 마찬가지).
           </p>
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">족보 제출 & 승부</h3>
-          <p className="mb-2 text-white/70">
-            보드판이 다 차면, 가로 5줄 + 세로 5줄 + 대각선 2줄, 총 <span className="text-white">12개 라인</span>이
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">족보 제출 & 승부</h3>
+          <p className="mb-2 text-white/70 light:text-slate-600">
+            보드판이 다 차면, 가로 5줄 + 세로 5줄 + 대각선 2줄, 총 <span className="text-white light:text-slate-900">12개 라인</span>이
             생깁니다. 매 라운드마다 모두가 자신의 라인 중 아직 제출하지 않은 라인을 하나 골라{" "}
-            <span className="text-white">동시에</span> 제출하고, 공개해서 가장 높은 포커 족보를 완성한 사람이
+            <span className="text-white light:text-slate-900">동시에</span> 제출하고, 공개해서 가장 높은 포커 족보를 완성한 사람이
             그 라운드를 가져갑니다. 한 번 제출한 라인은 다시 제출할 수 없습니다.
           </p>
-          <p className="text-white/70">
-            <span className="text-white">2인전</span>: 12개 중 10개 라인만 사용하며 (나머지 2개는 전략적으로
-            포기), 10라운드 중 <span className="text-amber-300">6승을 먼저</span> 달성하면 즉시 승리합니다.
+          <p className="text-white/70 light:text-slate-600">
+            <span className="text-white light:text-slate-900">2인전</span>: 12개 중 10개 라인만 사용하며 (나머지 2개는 전략적으로
+            포기), 10라운드 중 <span className="text-amber-300 light:text-amber-600">6승을 먼저</span> 달성하면 즉시 승리합니다.
             <br />
-            <span className="text-white">3인 이상</span>: 12개 라인을 모두 제출하며, 12라운드 종료 후 승점이
-            가장 높은 사람이 승리합니다 (도중에 <span className="text-amber-300">7승</span>을 채우면 즉시
+            <span className="text-white light:text-slate-900">3인 이상</span>: 12개 라인을 모두 제출하며, 12라운드 종료 후 승점이
+            가장 높은 사람이 승리합니다 (도중에 <span className="text-amber-300 light:text-amber-600">7승</span>을 채우면 즉시
             승리 확정).
           </p>
         </section>
 
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase">동점 판정</h3>
-          <p className="text-white/70">
+          <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">동점 판정</h3>
+          <p className="text-white/70 light:text-slate-600">
             ① 족보 자체가 높은 쪽이 승리 → ② 같은 족보면 주 카드 숫자(A가 가장 높음)가 높은 쪽 → ③ 그래도
             같으면 나머지 카드(키커)를 순서대로 비교 → ④{" "}
-            <span className="text-white">5장 구성이 완전히 동일</span>할 때만 가장 높은 카드의 문양(
-            <span className="text-white">{SUIT_SYMBOL.S} &gt; {SUIT_SYMBOL.D} &gt; {SUIT_SYMBOL.H} &gt; {SUIT_SYMBOL.C}</span>
+            <span className="text-white light:text-slate-900">5장 구성이 완전히 동일</span>할 때만 가장 높은 카드의 문양(
+            <span className="text-white light:text-slate-900">{SUIT_SYMBOL.S} &gt; {SUIT_SYMBOL.D} &gt; {SUIT_SYMBOL.H} &gt; {SUIT_SYMBOL.C}</span>
             )으로 승부를 가립니다. 그래도 완전히 같다면 그 라운드는 무승부(승점 없음)입니다.
           </p>
         </section>
 
         <section>
-          <h3 className="mb-3 text-xs font-semibold tracking-wide text-white/50 uppercase">
+          <h3 className="mb-3 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">
             포커 족보 (높은 순)
           </h3>
           <div className="flex flex-col gap-1.5">
             {HAND_EXAMPLES.map((h, i) => (
               <div
                 key={h.name}
-                className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-2.5"
+                className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-2.5 light:border-slate-200 light:bg-slate-50"
               >
-                <span className="w-5 shrink-0 text-center text-xs text-white/40">{i + 1}</span>
+                <span className="w-5 shrink-0 text-center text-xs text-white/40 light:text-slate-400">{i + 1}</span>
                 <div className="flex shrink-0 gap-1">
                   {h.cards.map((c) => (
                     <CardChip key={c.id} card={c} size="sm" />
                   ))}
                 </div>
                 <div className="min-w-0">
-                  <p className="font-medium text-white">{h.name}</p>
-                  {h.note && <p className="text-xs text-white/50">{h.note}</p>}
+                  <p className="font-medium text-white light:text-slate-900">{h.name}</p>
+                  {h.note && <p className="text-xs text-white/50 light:text-slate-500">{h.note}</p>}
                 </div>
               </div>
             ))}

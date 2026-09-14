@@ -19,7 +19,7 @@ export default function Tooltip({ text, children }: { text: string; children: Re
     <span className="group relative inline-flex" onClick={() => setTapOpen((o) => !o)}>
       {children}
       <span
-        className={`pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[190px] -translate-x-1/2 rounded-lg bg-black/90 px-2.5 py-1.5 text-center text-[11px] leading-snug text-white shadow-lg transition-opacity duration-150 group-hover:opacity-100 ${
+        className={`pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[190px] -translate-x-1/2 rounded-lg bg-black/90 px-2.5 py-1.5 text-center text-[11px] leading-snug text-white shadow-lg transition-opacity duration-150 group-hover:opacity-100 light:bg-slate-800 ${
           tapOpen ? "opacity-100" : "opacity-0"
         }`}
       >

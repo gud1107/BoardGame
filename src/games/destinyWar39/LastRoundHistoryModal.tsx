@@ -30,18 +30,18 @@ export default function LastRoundHistoryModal({ state, viewerSeat, names, onClos
   return (
     <Overlay title="🕓 직전 라운드 카드 조합" onClose={onClose} wide>
       {!round ? (
-        <p className="text-sm text-white/50">아직 완료된 라운드가 없습니다.</p>
+        <p className="text-sm text-white/50 light:text-slate-500">아직 완료된 라운드가 없습니다.</p>
       ) : (
-        <div className="flex flex-col gap-5 text-sm text-white/80">
-          <p className="text-xs text-white/50">ROUND {round.roundNumber} — 턴별 공개 카드와 승자</p>
+        <div className="flex flex-col gap-5 text-sm text-white/80 light:text-slate-700">
+          <p className="text-xs text-white/50 light:text-slate-500">ROUND {round.roundNumber} — 턴별 공개 카드와 승자</p>
 
           <div className="flex flex-col gap-3">
             {round.turnRecords.map((t) => (
-              <div key={t.turnNumber} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-                <div className="mb-2 flex items-center justify-between text-xs text-white/50">
+              <div key={t.turnNumber} className="rounded-xl border border-white/10 bg-white/[0.02] p-3 light:border-slate-200 light:bg-slate-50">
+                <div className="mb-2 flex items-center justify-between text-xs text-white/50 light:text-slate-500">
                   <span>턴 {t.turnNumber}</span>
                   {t.reverseActive && (
-                    <span className="rounded-full border border-fuchsia-400/40 bg-fuchsia-500/10 px-2 py-0.5 text-fuchsia-200">🔄 리버스 발동</span>
+                    <span className="rounded-full border border-fuchsia-400/40 bg-fuchsia-500/10 px-2 py-0.5 text-fuchsia-200 light:text-fuchsia-700">🔄 리버스 발동</span>
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2.5">
@@ -51,7 +51,7 @@ export default function LastRoundHistoryModal({ state, viewerSeat, names, onClos
                     const isWinner = seat === t.winnerSeat;
                     return (
                       <div key={seat} className="flex flex-col items-center gap-1">
-                        <span className={`text-[10px] ${isWinner ? "font-bold text-amber-200" : "text-white/50"}`}>
+                        <span className={`text-[10px] ${isWinner ? "font-bold text-amber-200 light:text-amber-700" : "text-white/50 light:text-slate-500"}`}>
                           {seatLabel(seat)}
                           {isWinner ? " 🏆" : ""}
                         </span>
@@ -64,10 +64,10 @@ export default function LastRoundHistoryModal({ state, viewerSeat, names, onClos
             ))}
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-white/10">
+          <div className="overflow-x-auto rounded-xl border border-white/10 light:border-slate-200">
             <table className="w-full min-w-[380px] border-collapse text-xs">
               <thead>
-                <tr className="bg-white/5 text-white/50">
+                <tr className="bg-white/5 text-white/50 light:bg-slate-50 light:text-slate-500">
                   <th className="px-2 py-1.5 text-left">플레이어</th>
                   <th className="px-2 py-1.5 text-center">예측</th>
                   <th className="px-2 py-1.5 text-center">실제</th>
@@ -80,13 +80,13 @@ export default function LastRoundHistoryModal({ state, viewerSeat, names, onClos
                   const player = state.players.find((p) => p.seat === seat)!;
                   const wasHidden = player.hidden[idx];
                   return (
-                    <tr key={seat} className="border-t border-white/10">
-                      <td className="px-2 py-1.5 font-medium text-white/90">{seatLabel(seat)}</td>
-                      <td className="px-2 py-1.5 text-center text-white/70">
+                    <tr key={seat} className="border-t border-white/10 light:border-slate-200">
+                      <td className="px-2 py-1.5 font-medium text-white/90 light:text-slate-900">{seatLabel(seat)}</td>
+                      <td className="px-2 py-1.5 text-center text-white/70 light:text-slate-600">
                         {wasHidden ? <HiddenRevealCell>{player.predictions[idx]}</HiddenRevealCell> : player.predictions[idx]}
                       </td>
-                      <td className="px-2 py-1.5 text-center text-white/70">{player.actualWins[idx]}</td>
-                      <td className="px-2 py-1.5 text-right text-white/80">
+                      <td className="px-2 py-1.5 text-center text-white/70 light:text-slate-600">{player.actualWins[idx]}</td>
+                      <td className="px-2 py-1.5 text-right text-white/80 light:text-slate-700">
                         {(player.scores[idx] ?? 0) >= 0 ? "+" : ""}
                         {player.scores[idx]}
                       </td>

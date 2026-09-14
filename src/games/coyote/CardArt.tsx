@@ -97,7 +97,7 @@ export function CardFace({
   if (!card) {
     return (
       <div
-        className={`relative flex ${dims} shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-white/25 bg-black/50 ${className}`}
+        className={`relative flex ${dims} shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-white/25 bg-black/50 light:border-slate-300 light:bg-white/90 light:shadow-sm ${className}`}
         title="내 이마 위 카드 (나에게는 숨겨져 있어요)"
       >
         <span className={size === "xs" ? "text-lg" : "text-xl"}>❓</span>
@@ -109,6 +109,7 @@ export function CardFace({
       className={`relative flex ${dims} shrink-0 flex-col items-center justify-between rounded-lg border p-1 transition ${cardTierBorder(card)} ${
         highlight ? "shadow-[0_0_14px_-2px_rgba(251,191,36,0.85)] ring-2 ring-amber-300/70" : ""
       } ${className}`}
+      // Hardcoded dark gradient card art (cardTierBg) — intentionally left as-is regardless of site theme.
       style={{ background: cardTierBg(card) }}
     >
       <span className={`leading-none ${size === "xs" ? "text-xs" : "text-sm"}`}>{cardEmoji(card)}</span>
@@ -132,13 +133,13 @@ export function EliminatedFace({ className = "", size = "md" }: { className?: st
   const dims = size === "xs" ? "h-12 w-9" : size === "sm" ? "h-14 w-10" : "h-20 w-14";
   return (
     <div
-      className={`relative flex ${dims} shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-rose-900/60 bg-black/70 ${className}`}
+      className={`relative flex ${dims} shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-rose-900/60 bg-black/70 light:border-rose-300 light:bg-white/90 light:shadow-sm ${className}`}
       title="탈락한 플레이어입니다"
     >
       <span className={size === "xs" ? "text-lg" : "text-xl"} style={{ filter: "drop-shadow(0 0 4px rgba(244,63,94,0.6))" }}>
         💀
       </span>
-      <span className={`font-black tracking-wide text-rose-400/90 ${size === "xs" ? "text-[6px]" : "text-[7px]"}`}>탈락</span>
+      <span className={`font-black tracking-wide text-rose-400/90 light:text-rose-600 ${size === "xs" ? "text-[6px]" : "text-[7px]"}`}>탈락</span>
     </div>
   );
 }
@@ -148,7 +149,7 @@ export function HeartPips({ hearts, max }: { hearts: number; max: number }) {
   return (
     <span className="inline-flex items-center gap-0.5">
       {Array.from({ length: max }, (_, i) => (
-        <span key={i} className={i < hearts ? "text-rose-400" : "text-white/15"}>
+        <span key={i} className={i < hearts ? "text-rose-400" : "text-white/15 light:text-slate-300"}>
           {i < hearts ? "❤️" : "🤍"}
         </span>
       ))}

@@ -105,7 +105,7 @@ function CompactCasinoTile({
       }}
       className={`relative flex cursor-pointer flex-col justify-between gap-1 rounded-xl border-2 ${
         leaderColor ? "" : accent.border
-      } bg-black/30 p-1.5 text-left transition active:scale-[0.96]`}
+      } bg-black/30 p-1.5 text-left transition active:scale-[0.96] light:bg-white/90 light:shadow-sm`}
       style={{
         ...(isRollDestination ? { animation: "lasvegas-mat-glow-pulse 1.6s ease-in-out infinite" } : {}),
         ...(leaderColor
@@ -135,16 +135,16 @@ function CompactCasinoTile({
       <div className="flex items-center justify-between gap-1">
         <span className="flex items-center gap-1">
           <DiceFace face={casino.number} color="#f4f4f5" size="h-4 w-4" />
-          <span className="text-[11px] font-black text-white">{casino.number}번</span>
+          <span className="text-[11px] font-black text-white light:text-slate-900">{casino.number}번</span>
         </span>
         {iHaveDiceHere && <span className="text-[9px]" title="내 주사위 있음">🎯</span>}
       </div>
 
-      <span className="truncate text-[11px] font-bold text-emerald-200">💰 {money(total)}</span>
+      <span className="truncate text-[11px] font-bold text-emerald-200 light:text-emerald-700">💰 {money(total)}</span>
 
       <div className="flex min-h-[18px] flex-wrap items-center gap-1">
         {groups.length === 0 ? (
-          <span className="text-[9px] text-white/30">주사위 없음</span>
+          <span className="text-[9px] text-white/30 light:text-slate-500">주사위 없음</span>
         ) : (
           groups.map((g) => (
             <span
@@ -187,6 +187,7 @@ function CompactPlayersSummary({
         const total = p.money.reduce((s, v) => s + v, 0);
         const seatColor = diceColorForSeat(seat);
         return (
+          // TODO(theme): inline background mixes a dark tint (inactive) with a seat-color tint (active), not yet branched for light mode.
           <div
             key={seat}
             className="flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px]"
@@ -244,6 +245,7 @@ function CompactDiceTray({
 }) {
   const rollerColor = diceColorForSeat(activeSeat);
   return (
+    // TODO(theme): hardcoded dark gradient background, not yet branched for light mode.
     <section
       ref={panelRef}
       className="flex min-h-[76px] flex-col items-center justify-center gap-1.5 rounded-2xl border border-amber-300/20 p-2"
@@ -316,6 +318,7 @@ export function CompactCasinoBoard({
   const detail = detailCasino !== null ? (state.casinos.find((c) => c.number === detailCasino) ?? null) : null;
 
   return (
+    // TODO(theme): hardcoded dark gradient background, not yet branched for light mode.
     <div
       className="flex w-full flex-col gap-1.5 rounded-2xl border border-black/60 p-2 select-none"
       style={{ background: "linear-gradient(160deg,#1b1004 0%,#120b03 45%,#080502 100%)" }}

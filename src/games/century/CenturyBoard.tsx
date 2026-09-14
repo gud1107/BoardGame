@@ -305,6 +305,7 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
     // screen. Every section below is tuned to a small fixed/compact size so
     // the whole stack comfortably fits the space left under that chrome on
     // a typical phone viewport.
+    // TODO(theme): mirrors MAT/CARAVAN_STYLE's intentional dark physical-mat surface (boardChrome.tsx) — its `statusBar()` text below is shared verbatim with the desktop MAT branch (which stays permanently dark), so this wrapper is deliberately left unprefixed rather than lightened, to avoid making that shared text invisible on the still-dark desktop mat.
     <div className="flex w-full flex-col gap-1.5 rounded-2xl border border-amber-900/30 bg-slate-950 p-2 select-none">
       <div className="space-y-1">{statusBar(true)}</div>
 

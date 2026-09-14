@@ -147,8 +147,8 @@ export function VaultPot({ pot, clinkPulse }: { pot: number; clinkPulse: number 
       >
         🏆
       </div>
-      <span className="text-[11px] font-medium tracking-wide text-amber-200/70 uppercase">누적 팟</span>
-      <span className="text-2xl font-black text-amber-200 drop-shadow-[0_0_12px_rgba(251,191,36,0.7)] tabular-nums sm:text-3xl">
+      <span className="text-[11px] font-medium tracking-wide text-amber-200/70 light:text-amber-700 uppercase">누적 팟</span>
+      <span className="text-2xl font-black text-amber-200 light:text-amber-700 drop-shadow-[0_0_12px_rgba(251,191,36,0.7)] tabular-nums sm:text-3xl">
         🎰 {pot}
       </span>
     </div>
@@ -182,7 +182,7 @@ export function BetBadge({ amount, pulseKey, size = "md" }: { amount: number; pu
 /** Shared "배치 대기" (not yet committed this round) grey pill — both `OwnCoinBadge` and `MaskedCoinBadge` render exactly this before `committedIds`/`committedCount` is defined, so the two badges only ever visibly diverge once there's something to actually mask. */
 function CoinWaitingBadge() {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-neutral-900/70 px-2.5 py-1 text-xs font-black text-white/50">
+    <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-neutral-900/70 light:border-slate-300 light:bg-slate-100 px-2.5 py-1 text-xs font-black text-white/50 light:text-slate-500">
       🪙 배치 대기
     </span>
   );
@@ -211,12 +211,12 @@ export function OwnCoinBadge({ coins, committedIds, pulseKey }: { coins: CoinTok
     <span
       key={pulseKey}
       title={breakdown.map((d) => `${d.value}원 ${d.n}개`).join(", ")}
-      className="inline-flex flex-col items-center gap-0.5 rounded-full border border-yellow-500/80 bg-neutral-900/90 px-2.5 py-1 text-xs font-black text-yellow-300 shadow-[0_0_10px_-2px_rgba(234,179,8,0.6)]"
+      className="inline-flex flex-col items-center gap-0.5 rounded-full border border-yellow-500/80 bg-neutral-900/90 light:border-yellow-500 light:bg-yellow-50 px-2.5 py-1 text-xs font-black text-yellow-300 light:text-yellow-700 shadow-[0_0_10px_-2px_rgba(234,179,8,0.6)]"
       style={{ animation: "smtc-bet-badge-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) both" }}
     >
       <span className="tabular-nums">🪙 낸 동전: {submitted.length}개</span>
       {breakdown.length > 0 && (
-        <span className="text-[9px] font-medium tracking-wide text-yellow-300/60 tabular-nums">
+        <span className="text-[9px] font-medium tracking-wide text-yellow-300/60 light:text-yellow-700 tabular-nums">
           ({breakdown.map((d) => `${d.value}×${d.n}`).join(", ")})
         </span>
       )}
@@ -241,7 +241,7 @@ export function OpponentCoinCountBadge({ committedCount, pulseKey }: { committed
   return (
     <span
       key={pulseKey}
-      className="inline-flex items-center gap-1 rounded-full border border-dashed border-amber-400/60 bg-neutral-900/90 px-2.5 py-1 text-xs font-black text-amber-200/90 tabular-nums shadow-[0_0_10px_-2px_rgba(217,119,6,0.5)]"
+      className="inline-flex items-center gap-1 rounded-full border border-dashed border-amber-400/60 bg-neutral-900/90 light:border-amber-400 light:bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-200/90 light:text-amber-700 tabular-nums shadow-[0_0_10px_-2px_rgba(217,119,6,0.5)]"
       style={{ animation: "smtc-bet-badge-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) both" }}
     >
       🪙 낸 동전: {committedCount}개
@@ -339,7 +339,7 @@ export function AllInEmblem({ name, onDone }: { name: string; onDone: () => void
         >
           🔥 ALL-IN
         </span>
-        <span className="text-sm font-bold text-white/80 sm:text-base">{name}님의 올인 선언!</span>
+        <span className="text-sm font-bold text-white/80 light:text-slate-800 sm:text-base">{name}님의 올인 선언!</span>
       </div>
     </div>
   );

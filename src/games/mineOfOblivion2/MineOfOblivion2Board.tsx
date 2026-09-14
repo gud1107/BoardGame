@@ -48,15 +48,15 @@ export interface MineOfOblivion2BoardProps {
 function ResultModal({ state, names, viewerSeat, onLeave, onRematch }: { state: MineOfOblivion2State; names: Record<Seat, string>; viewerSeat: Seat; onLeave: () => void; onRematch: () => void }) {
   const iWon = state.winner === viewerSeat;
   return (
-    <div className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/85 p-4">
-      <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-white/10 bg-gradient-to-b from-[#1a0e05] via-[#120a04] to-black p-6 text-center">
+    <div className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/85 light:bg-white light:shadow-md p-4">
+      <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-white/10 light:border-slate-200 bg-gradient-to-b from-[#1a0e05] via-[#120a04] to-black p-6 text-center">
         <span className="text-5xl">{state.isDraw ? "🤝" : iWon ? "🏆" : "💀"}</span>
-        <h2 className="text-xl font-black text-white break-keep">{state.isDraw ? "무승부" : `${names[state.winner as Seat]}님 최종 승리`}</h2>
+        <h2 className="text-xl font-black text-white light:text-slate-900 break-keep">{state.isDraw ? "무승부" : `${names[state.winner as Seat]}님 최종 승리`}</h2>
         <div className="flex w-full items-center justify-center gap-6">
           {(["p1", "p2"] as const).map((seat) => (
             <div key={seat} className="flex flex-col items-center gap-1">
               <Avatar size={36} className={seat === state.winner ? "ring-2 ring-amber-300/80" : undefined} />
-              <span className="text-xs text-white/70 break-keep">
+              <span className="text-xs text-white/70 light:text-slate-700 break-keep">
                 {names[seat]}
                 {seat === viewerSeat && <span className="text-emerald-300"> (나)</span>}
               </span>
@@ -69,7 +69,7 @@ function ResultModal({ state, names, viewerSeat, onLeave, onRematch }: { state: 
           ))}
         </div>
         <div className="mt-2 flex w-full gap-2">
-          <button onClick={onLeave} className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30">
+          <button onClick={onLeave} className="flex-1 rounded-xl border border-white/15 light:border-slate-200 py-2.5 text-sm text-white/70 light:text-slate-700 hover:border-white/30">
             나가기
           </button>
           <button onClick={onRematch} className="flex-1 rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white hover:bg-orange-400">
@@ -313,32 +313,32 @@ export default function MineOfOblivion2Board({ state, viewerSeat, names, opponen
           />
 
           {state.phase === "SETUP_MINE" && !iAmReady && (
-            <div className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-2">
+            <div className="flex flex-col gap-1.5 rounded-xl border border-white/10 light:border-slate-200 bg-white/[0.03] p-2">
               <div className="flex gap-1.5">
                 <button
                   type="button"
                   onClick={() => setPlaceMode("mine")}
-                  className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition ${placeMode === "mine" ? "bg-rose-500 text-white" : "border border-white/10 text-white/60"}`}
+                  className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition ${placeMode === "mine" ? "bg-rose-500 text-white" : "border border-white/10 light:border-slate-200 text-white/60 light:text-slate-600"}`}
                 >
                   💣 일반 지뢰 ({selectedMines.length}/{MINES_PER_PLAYER})
                 </button>
                 <button
                   type="button"
                   onClick={() => setPlaceMode("bomb")}
-                  className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition ${placeMode === "bomb" ? "bg-orange-500 text-white" : "border border-white/10 text-white/60"}`}
+                  className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition ${placeMode === "bomb" ? "bg-orange-500 text-white" : "border border-white/10 light:border-slate-200 text-white/60 light:text-slate-600"}`}
                 >
                   🧨 시한폭탄 ({selectedBombs.length}/{TIME_BOMBS_PER_PLAYER})
                 </button>
               </div>
               {placeMode === "bomb" && (
-                <div className="flex items-center gap-1.5 text-xs text-white/60">
+                <div className="flex items-center gap-1.5 text-xs text-white/60 light:text-slate-600">
                   <span className="break-keep">다음 폭탄 퓨즈:</span>
                   {TIME_BOMB_FUSE_OPTIONS.map((f) => (
                     <button
                       key={f}
                       type="button"
                       onClick={() => setPendingFuse(f)}
-                      className={`rounded-full px-2.5 py-1 font-bold transition ${pendingFuse === f ? "bg-amber-400 text-black" : "border border-white/15 text-white/60"}`}
+                      className={`rounded-full px-2.5 py-1 font-bold transition ${pendingFuse === f ? "bg-amber-400 text-black" : "border border-white/15 light:border-slate-200 text-white/60 light:text-slate-600"}`}
                     >
                       {f}턴
                     </button>
@@ -378,9 +378,9 @@ export default function MineOfOblivion2Board({ state, viewerSeat, names, opponen
             connected
           />
 
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-            <span className={`text-xs break-keep ${isMyTurn ? "text-orange-300" : "text-white/50"}`}>{statusText}</span>
-            {state.phase !== "SETUP_MINE" && <span className="text-[10px] text-white/30">보물 {state.treasureClaimCount}/3 획득됨</span>}
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 light:border-slate-200 bg-white/[0.03] px-3 py-2">
+            <span className={`text-xs break-keep ${isMyTurn ? "text-orange-300" : "text-white/50 light:text-slate-500"}`}>{statusText}</span>
+            {state.phase !== "SETUP_MINE" && <span className="text-[10px] text-white/30 light:text-slate-400">보물 {state.treasureClaimCount}/3 획득됨</span>}
           </div>
 
           {showBombGuide && <p className="rounded-xl border border-amber-400/15 bg-amber-400/5 px-3 py-1.5 text-[11px] text-amber-200/80 break-keep">{bombGuideText}</p>}

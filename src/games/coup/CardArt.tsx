@@ -35,7 +35,7 @@ const TEXT_EMOJI = { xs: "text-base", sm: "text-lg", md: "text-2xl", lg: "text-3
 export function CardBack({ size = "md", className = "" }: { size?: keyof typeof DIMS; className?: string }) {
   return (
     <div
-      className={`flex ${DIMS[size]} shrink-0 items-center justify-center rounded-lg border border-white/15 bg-[repeating-linear-gradient(135deg,#1a0d2e_0px,#1a0d2e_6px,#120822_6px,#120822_12px)] ${className}`}
+      className={`flex ${DIMS[size]} shrink-0 items-center justify-center rounded-lg border border-white/15 bg-[repeating-linear-gradient(135deg,#1a0d2e_0px,#1a0d2e_6px,#120822_6px,#120822_12px)] light:border-slate-300 light:shadow-sm ${className}`}
     >
       <span className="text-white/30">🂠</span>
     </div>
@@ -58,7 +58,7 @@ export function CharacterCardFace({
 }) {
   return (
     <div
-      className={`relative flex ${DIMS[size]} shrink-0 flex-col items-center justify-between rounded-lg border p-1 transition ${CHARACTER_BORDER[card.character]} ${
+      className={`relative flex ${DIMS[size]} shrink-0 flex-col items-center justify-between rounded-lg border p-1 transition light:shadow-sm ${CHARACTER_BORDER[card.character]} ${
         dead ? "opacity-45 grayscale" : ""
       } ${highlight ? "shadow-[0_0_16px_-2px_rgba(251,191,36,0.85)] ring-2 ring-amber-300/70" : ""} ${className}`}
       style={{ background: CHARACTER_BG[card.character] }}
@@ -72,7 +72,7 @@ export function CharacterCardFace({
 
 export function CoinStack({ coins }: { coins: number }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-xs font-bold text-amber-200">
+    <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-xs font-bold text-amber-200 light:border-amber-400 light:bg-amber-50 light:text-amber-700 light:shadow-sm">
       🪙 {coins}
     </span>
   );

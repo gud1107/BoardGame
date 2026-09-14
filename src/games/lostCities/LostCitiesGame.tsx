@@ -603,7 +603,7 @@ export default function LostCitiesGame({ onComplete }: PlayableGameProps) {
     return withGuard(
       <RulebookGate
         gameId="lost-cities"
-        containerClassName="border-white/10 bg-gradient-to-b from-[#0c1b1a] via-[#0a1513] to-black"
+        containerClassName="border-white/10 bg-gradient-to-b from-[#0c1b1a] via-[#0a1513] to-black light:border-slate-200 light:bg-none light:bg-white"
         icon="🗺️"
         title="로스트 시티 온라인 대전"
         description={<p className="text-sm text-white/50">두 사람이 각자 기기로 접속해서 실시간으로 플레이해요.</p>}

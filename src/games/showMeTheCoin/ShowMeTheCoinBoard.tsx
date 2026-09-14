@@ -92,7 +92,9 @@ function PlayerPanel({
   return (
     <div
       className={`relative flex flex-1 flex-col items-center gap-1.5 rounded-2xl border p-3 transition ${
-        isActing ? "border-pink-400/70 bg-pink-500/10 shadow-[0_0_20px_-4px_rgba(244,114,182,0.6)]" : "border-white/10 bg-white/[0.03]"
+        isActing
+          ? "border-pink-400/70 bg-pink-500/10 shadow-[0_0_20px_-4px_rgba(244,114,182,0.6)] light:border-pink-400 light:bg-pink-50"
+          : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/80"
       }`}
     >
       {betThisStreet > 0 && (
@@ -104,28 +106,28 @@ function PlayerPanel({
         <Avatar size={40} className={isViewer ? "ring-2 ring-emerald-400/70" : "ring-2 ring-white/10"} />
         {!connected && <span className="absolute -right-1 -bottom-1 text-xs" title="연결 끊김">📡</span>}
       </div>
-      <span className="max-w-[100px] truncate text-xs font-semibold text-white/90" style={{ wordBreak: "keep-all" }}>
+      <span className="max-w-[100px] truncate text-xs font-semibold text-white/90 light:text-slate-900" style={{ wordBreak: "keep-all" }}>
         {name}
-        {isViewer && <span className="text-emerald-300"> (나)</span>}
+        {isViewer && <span className="text-emerald-300 light:text-emerald-700"> (나)</span>}
       </span>
-      {isDealer && <span className="rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-200">선공</span>}
+      {isDealer && <span className="rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-200 light:bg-amber-100 light:text-amber-700">선공</span>}
       {/* 다크 퍼플(베팅 칩) vs 골드(실물 코인) 듀얼 네온 — 두 자원이 한눈에 구분되도록(요청 §2 스타일링). */}
       <div className="flex items-center gap-1.5">
         <span
-          className="inline-flex items-center gap-1 rounded-full border border-purple-400/60 bg-purple-950/40 px-2 py-0.5 text-xs font-black text-purple-200 tabular-nums shadow-[0_0_10px_-2px_rgba(168,85,247,0.6)]"
+          className="inline-flex items-center gap-1 rounded-full border border-purple-400/60 bg-purple-950/40 px-2 py-0.5 text-xs font-black text-purple-200 tabular-nums shadow-[0_0_10px_-2px_rgba(168,85,247,0.6)] light:border-purple-400 light:bg-purple-50 light:text-purple-700"
           title="베팅 칩"
         >
           💰 {chips}
         </span>
         <span
-          className="inline-flex items-center gap-1 rounded-full border border-yellow-600/40 bg-neutral-900/60 px-2 py-0.5 text-xs font-black text-yellow-200/80 tabular-nums"
+          className="inline-flex items-center gap-1 rounded-full border border-yellow-600/40 bg-neutral-900/60 px-2 py-0.5 text-xs font-black text-yellow-200/80 tabular-nums light:border-yellow-600 light:bg-yellow-50 light:text-yellow-800"
           title="잔여 실물 코인 (이번 라운드 제출량과 다름)"
         >
           🪙 잔여 {coinsRemaining}
         </span>
       </div>
       {commitBadge}
-      {isActing && <span className="text-[10px] font-medium text-pink-200">고민 중...</span>}
+      {isActing && <span className="text-[10px] font-medium text-pink-200 light:text-pink-700">고민 중...</span>}
     </div>
   );
 }
@@ -147,16 +149,16 @@ function ChipStatsPanel({ coins }: { coins: CoinToken[] }) {
   const converted = convertedChipTotal(remainingAfter500);
 
   return (
-    <div className="flex flex-col gap-1 self-end rounded-xl border border-white/10 bg-black/50 px-3 py-2 text-right text-[11px] backdrop-blur-md sm:text-xs" style={{ wordBreak: "keep-all" }}>
-      <span className="mb-0.5 text-[9px] font-medium tracking-wide text-white/40 uppercase sm:text-[10px]">나만 보는 칩 환산 통계</span>
-      <span className="text-white/70">
-        코인 : <span className="font-bold text-yellow-200 tabular-nums">{totalCoins}</span>개
+    <div className="flex flex-col gap-1 self-end rounded-xl border border-white/10 bg-black/50 light:border-slate-200 light:bg-white/90 light:shadow-sm px-3 py-2 text-right text-[11px] backdrop-blur-md sm:text-xs" style={{ wordBreak: "keep-all" }}>
+      <span className="mb-0.5 text-[9px] font-medium tracking-wide text-white/40 light:text-slate-400 uppercase sm:text-[10px]">나만 보는 칩 환산 통계</span>
+      <span className="text-white/70 light:text-slate-600">
+        코인 : <span className="font-bold text-yellow-200 tabular-nums light:text-yellow-700">{totalCoins}</span>개
       </span>
-      <span className="text-white/70">
-        남은코인 500제외 <span className="font-bold text-yellow-200 tabular-nums">{remainingAfter500}</span>개
+      <span className="text-white/70 light:text-slate-600">
+        남은코인 500제외 <span className="font-bold text-yellow-200 tabular-nums light:text-yellow-700">{remainingAfter500}</span>개
       </span>
-      <span className="text-white/70">
-        환산후총칩 : <span className="font-bold text-amber-200 tabular-nums">{converted.toFixed(1)}</span>개
+      <span className="text-white/70 light:text-slate-600">
+        환산후총칩 : <span className="font-bold text-amber-200 tabular-nums light:text-amber-700">{converted.toFixed(1)}</span>개
       </span>
     </div>
   );
@@ -203,8 +205,8 @@ function CommitControls({
   const valid = total >= min && total <= max;
 
   return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl border border-pink-400/30 bg-black/40 p-4">
-      <p className="text-center text-xs text-white/60" style={{ wordBreak: "keep-all" }}>
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-pink-400/30 bg-black/40 light:border-pink-300 light:bg-white/90 light:shadow-sm p-4">
+      <p className="text-center text-xs text-white/60 light:text-slate-600" style={{ wordBreak: "keep-all" }}>
         {description}
       </p>
       <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4">
@@ -212,24 +214,24 @@ function CommitControls({
           const picked = picks[g.value] ?? 0;
           const style = DENOM_STYLE[g.value];
           return (
-            <div key={g.value} className={`flex flex-col items-center gap-1.5 rounded-xl border ${style.ring} bg-white/5 p-2 ${style.glow}`}>
-              <span className="text-base font-black text-amber-100 tabular-nums">{g.value}</span>
-              <span className="text-[10px] text-white/40">보유 {g.tokens.length}개</span>
+            <div key={g.value} className={`flex flex-col items-center gap-1.5 rounded-xl border ${style.ring} bg-white/5 light:bg-slate-50 p-2 ${style.glow}`}>
+              <span className="text-base font-black text-amber-100 tabular-nums light:text-amber-700">{g.value}</span>
+              <span className="text-[10px] text-white/40 light:text-slate-400">보유 {g.tokens.length}개</span>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => adjust(g.value, -1)}
                   disabled={picked <= 0}
-                  className="h-7 w-7 rounded-full border border-white/15 text-sm text-white/80 disabled:opacity-30"
+                  className="h-7 w-7 rounded-full border border-white/15 text-sm text-white/80 disabled:opacity-30 light:border-slate-300 light:text-slate-700"
                 >
                   −
                 </button>
-                <span className="w-5 text-center text-sm font-bold text-white">{picked}</span>
+                <span className="w-5 text-center text-sm font-bold text-white light:text-slate-900">{picked}</span>
                 <button
                   type="button"
                   onClick={() => adjust(g.value, 1)}
                   disabled={picked >= g.tokens.length || total >= max}
-                  className="h-7 w-7 rounded-full border border-white/15 text-sm text-white/80 disabled:opacity-30"
+                  className="h-7 w-7 rounded-full border border-white/15 text-sm text-white/80 disabled:opacity-30 light:border-slate-300 light:text-slate-700"
                 >
                   +
                 </button>
@@ -239,11 +241,11 @@ function CommitControls({
         })}
       </div>
       <div className="flex items-center gap-3 text-sm">
-        <span className={`font-bold tabular-nums ${valid ? "text-emerald-300" : "text-white/50"}`}>
+        <span className={`font-bold tabular-nums ${valid ? "text-emerald-300 light:text-emerald-700" : "text-white/50 light:text-slate-500"}`}>
           {total}/{max}개 선택
         </span>
-        <span className="text-white/40">·</span>
-        <span className="font-bold text-amber-200 tabular-nums">합계 {sum}</span>
+        <span className="text-white/40 light:text-slate-400">·</span>
+        <span className="font-bold text-amber-200 tabular-nums light:text-amber-700">합계 {sum}</span>
       </div>
       <button
         type="button"
@@ -284,15 +286,15 @@ function BettingControls({
   }
 
   return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-black/40 p-4">
-      <p className="text-center text-xs text-white/60" style={{ wordBreak: "keep-all" }}>
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-black/40 light:border-amber-300 light:bg-white/90 light:shadow-sm p-4">
+      <p className="text-center text-xs text-white/60 light:text-slate-600" style={{ wordBreak: "keep-all" }}>
         {toCall > 0 ? `상대 베팅 ${state.currentBet}칩 — 콜하려면 ${toCall}칩 필요` : "베팅 없음 — 체크하거나 베팅을 거세요"}
       </p>
       <div className="flex w-full gap-2">
         <button
           type="button"
           onClick={() => onAction({ type: "fold" })}
-          className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm font-semibold text-white/70 transition hover:border-rose-400/50 hover:text-rose-300"
+          className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm font-semibold text-white/70 transition hover:border-rose-400/50 hover:text-rose-300 light:border-slate-300 light:text-slate-600 light:hover:border-rose-400 light:hover:text-rose-600"
         >
           🏳️ 폴드
         </button>
@@ -302,7 +304,7 @@ function BettingControls({
             getSoundEngine().unlock(); // best-effort — same "unlock from inside the actual gesture that needs sound" convention as Dalmuti/Perudo's own action buttons
             onAction({ type: "call" });
           }}
-          className="flex-1 rounded-xl border border-emerald-400/40 bg-emerald-500/10 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20"
+          className="flex-1 rounded-xl border border-emerald-400/40 bg-emerald-500/10 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700 light:hover:bg-emerald-100"
         >
           {toCall > 0 ? `✅ 콜 (${toCall})` : "✅ 체크"}
         </button>
@@ -324,7 +326,7 @@ function BettingControls({
               max={maxRaise}
               value={raiseClamped}
               onChange={(e) => setRaiseAmount(Number(e.target.value) || minRaise)}
-              className="w-16 shrink-0 rounded-lg border border-white/15 bg-white/5 px-1.5 py-1 text-center text-sm font-bold text-white tabular-nums focus:border-pink-400 focus:outline-none"
+              className="w-16 shrink-0 rounded-lg border border-white/15 bg-white/5 px-1.5 py-1 text-center text-sm font-bold text-white tabular-nums focus:border-pink-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900"
             />
           </div>
           <div className="flex w-full gap-1.5">
@@ -334,7 +336,7 @@ function BettingControls({
                 type="button"
                 onClick={() => bump(step)}
                 disabled={raiseClamped >= maxRaise}
-                className="flex-1 rounded-lg border border-white/15 py-1.5 text-xs font-semibold text-white/70 transition hover:border-amber-400/50 hover:text-amber-200 disabled:opacity-30"
+                className="flex-1 rounded-lg border border-white/15 py-1.5 text-xs font-semibold text-white/70 transition hover:border-amber-400/50 hover:text-amber-200 disabled:opacity-30 light:border-slate-300 light:text-slate-600 light:hover:border-amber-400 light:hover:text-amber-700"
               >
                 +{step}
               </button>
@@ -342,7 +344,7 @@ function BettingControls({
             <button
               type="button"
               onClick={() => setRaiseAmount(maxRaise)}
-              className="flex-1 rounded-lg border border-rose-400/40 bg-rose-500/10 py-1.5 text-xs font-bold text-rose-200 transition hover:bg-rose-500/20"
+              className="flex-1 rounded-lg border border-rose-400/40 bg-rose-500/10 py-1.5 text-xs font-bold text-rose-200 transition hover:bg-rose-500/20 light:border-rose-400 light:bg-rose-50 light:text-rose-700 light:hover:bg-rose-100"
             >
               MAX
             </button>
@@ -474,23 +476,24 @@ export default function ShowMeTheCoinBoard({
 
   return (
     <div
-      className="relative flex flex-col gap-4 rounded-2xl border border-pink-500/20 p-4 sm:p-6"
+      className="relative flex flex-col gap-4 rounded-2xl border border-pink-500/20 light:border-pink-300 light:shadow-md p-4 sm:p-6"
       style={
         {
+          // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
           background: "radial-gradient(ellipse at top, #1a0b12 0%, #05030a 60%, #000 100%)",
           animation: shakeMag > 0 ? "smtc-board-shake 0.4s ease-out both" : undefined,
           "--shake-mag": `${shakeMag}px`,
         } as CSSProperties
       }
     >
-      <div className="flex items-center justify-between text-xs text-white/40">
+      <div className="flex items-center justify-between text-xs text-white/40 light:text-slate-400">
         <span>ROUND {state.round}</span>
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-pink-400/30 px-2 py-0.5 text-pink-200">쇼 미 더 코인</span>
+          <span className="rounded-full border border-pink-400/30 px-2 py-0.5 text-pink-200 light:border-pink-300 light:text-pink-700">쇼 미 더 코인</span>
           <button
             type="button"
             onClick={() => setRulebookOpen(true)}
-            className="rounded-full border border-white/15 px-2 py-0.5 text-white/60 transition hover:border-white/30 hover:text-white"
+            className="rounded-full border border-white/15 px-2 py-0.5 text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
           >
             📖 룰북
           </button>
@@ -558,7 +561,7 @@ export default function ShowMeTheCoinBoard({
       {state.phase === "commit" && (
         <>
           {iHaveCommitted ? (
-            <p className="text-center text-sm text-white/50">🔒 배치 완료 — 상대방을 기다리는 중...</p>
+            <p className="text-center text-sm text-white/50 light:text-slate-500">🔒 배치 완료 — 상대방을 기다리는 중...</p>
           ) : myTurnToCommit ? (
             <CommitControls
               coins={state.coins[viewerSeat]}
@@ -567,7 +570,7 @@ export default function ShowMeTheCoinBoard({
               onCommit={(coinIds) => onAction({ type: "commit", seat: viewerSeat, coinIds })}
             />
           ) : (
-            <p className="text-center text-sm text-white/50">⏳ {names[state.dealerSeat]}님(선공)이 먼저 코인을 제출하는 중...</p>
+            <p className="text-center text-sm text-white/50 light:text-slate-500">⏳ {names[state.dealerSeat]}님(선공)이 먼저 코인을 제출하는 중...</p>
           )}
         </>
       )}
@@ -588,7 +591,7 @@ export default function ShowMeTheCoinBoard({
         (state.actingSeat === viewerSeat ? (
           <BettingControls state={state} seat={viewerSeat} onAction={onAction} />
         ) : (
-          <p className="text-center text-sm text-white/50">⏳ 상대방이 베팅을 고민하는 중...</p>
+          <p className="text-center text-sm text-white/50 light:text-slate-500">⏳ 상대방이 베팅을 고민하는 중...</p>
         ))}
 
       {(state.phase === "showdown" || state.phase === "gameOver") && state.lastRoundResult && (

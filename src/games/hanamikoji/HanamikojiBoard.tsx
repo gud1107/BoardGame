@@ -75,8 +75,12 @@ const ACTION_ICON: Record<ActionType, string> = {
 // A dark charcoal table panel, reused across every screen of the board so
 // the "playing" and end-of-round states feel like one table.
 const TABLE_PANEL =
-  "relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-[#1c1c1e] via-[#121214] to-[#050506] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
+  "relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-[#1c1c1e] via-[#121214] to-[#050506] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)] light:border-slate-200 light:from-white light:via-white light:to-white light:shadow-md";
 
+// TODO(theme): this radial-dot texture is a hardcoded white-on-transparent
+// inline gradient meant for the dark table felt; in light mode the panel
+// background flips to white so the dots become invisible (harmless, just
+// not theme-aware) — leaving as CSS/class-only pass, no JS color branching.
 function TableTexture() {
   return (
     <div
@@ -128,8 +132,12 @@ function CardBack({ size = "md" }: { size?: "sm" | "md" }) {
   const dims = size === "sm" ? "h-16 w-11" : "h-24 w-16";
   return (
     <Tooltip text="상대방의 카드입니다 (비공개).">
+      {/* TODO(theme): the card-back art itself is a hardcoded dark-purple
+          inline gradient — left as-is (CSS/class-only pass, no JS color
+          branching); only the surrounding border gets a light override so
+          the card doesn't wash out against a white table panel. */}
       <div
-        className={`flex ${dims} items-center justify-center rounded-xl border-2 border-white/15 shadow-[0_4px_10px_rgba(0,0,0,0.5)]`}
+        className={`flex ${dims} items-center justify-center rounded-xl border-2 border-white/15 shadow-[0_4px_10px_rgba(0,0,0,0.5)] light:border-slate-300 light:shadow-sm`}
         style={{
           backgroundImage:
             "repeating-linear-gradient(135deg, rgba(255,255,255,0.07) 0px, rgba(255,255,255,0.07) 2px, transparent 2px, transparent 8px), linear-gradient(160deg, #2c1032, #130715)",
@@ -160,10 +168,10 @@ function GeishaMarker({ p1Count, p2Count, owner }: { p1Count: number; p2Count: n
     <div
       className={`flex h-5 min-w-[38px] items-center justify-center gap-1 rounded-md border px-1 text-[9px] font-bold sm:h-6 sm:min-w-[42px] sm:text-[10px] ${
         leader === "p1"
-          ? "border-rose-400/70 bg-rose-500/20 text-rose-200"
+          ? "border-rose-400/70 bg-rose-500/20 text-rose-200 light:text-rose-700"
           : leader === "p2"
-            ? "border-sky-400/70 bg-sky-500/20 text-sky-200"
-            : "border-white/10 bg-white/5 text-white/30"
+            ? "border-sky-400/70 bg-sky-500/20 text-sky-200 light:text-sky-700"
+            : "border-white/10 bg-white/5 text-white/30 light:border-slate-300 light:bg-slate-100 light:text-slate-400"
       }`}
     >
       {owner ? "👑" : leader ? `${leader === "p1" ? "P1" : "P2"} ${leader === "p1" ? p1Count : p2Count}` : "–"}
@@ -192,7 +200,7 @@ function GeishaBoard({ state, names }: { state: HanamikojiState; names: Record<O
                     ? "border-rose-300 ring-2 ring-rose-400/70"
                     : owner === "p2"
                       ? "border-sky-300 ring-2 ring-sky-400/70"
-                      : "border-white/40"
+                      : "border-white/40 light:border-slate-300"
                 }`}
               >
                 <span className={`absolute left-1 top-1 text-[8px] font-bold sm:text-[9px] ${style.text}`}>
@@ -235,10 +243,10 @@ function ActionTile({
         disabled={disabled}
         className={`flex h-14 w-14 flex-col items-center justify-center gap-0.5 rounded-xl border-2 text-[10px] font-semibold transition sm:h-16 sm:w-16 ${
           disabled
-            ? "cursor-not-allowed border-white/5 bg-white/[0.03] text-white/20"
+            ? "cursor-not-allowed border-white/5 bg-white/[0.03] text-white/20 light:border-slate-200 light:bg-slate-100 light:text-slate-400"
             : selected
-              ? "scale-105 border-amber-300 bg-amber-400/20 text-amber-100 shadow-[0_0_0_3px_rgba(251,191,36,0.35)]"
-              : "border-white/15 bg-white/5 text-white/70 hover:border-white/30 hover:bg-white/10"
+              ? "scale-105 border-amber-300 bg-amber-400/20 text-amber-100 shadow-[0_0_0_3px_rgba(251,191,36,0.35)] light:text-amber-800"
+              : "border-white/15 bg-white/5 text-white/70 hover:border-white/30 hover:bg-white/10 light:border-slate-300 light:bg-slate-50 light:text-slate-600 light:hover:border-slate-400 light:hover:bg-slate-100"
         }`}
       >
         <span className="text-lg sm:text-xl">{ACTION_ICON[type]}</span>
@@ -346,14 +354,14 @@ export default function HanamikojiBoard({
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 룰북
     </button>
   );
 
   const connectionBanner = !opponentConnected && (
-    <div className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+    <div className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-200 light:text-amber-700">
       ⚠️ {names[opponentRole]}님의 연결이 끊겼습니다. 창을 닫지 말고 잠시 기다려주세요.
     </div>
   );
@@ -364,8 +372,8 @@ export default function HanamikojiBoard({
       <div className={`${TABLE_PANEL} flex flex-col items-center gap-6 p-10 text-center`}>
         <TableTexture />
         <span className="relative z-10 text-5xl">🏆</span>
-        <h2 className="relative z-10 text-2xl font-bold text-white">{winnerName}님 승리!</h2>
-        <p className="relative z-10 text-sm text-white/60">
+        <h2 className="relative z-10 text-2xl font-bold text-white light:text-slate-900">{winnerName}님 승리!</h2>
+        <p className="relative z-10 text-sm text-white/60 light:text-slate-600">
           게이샤 {t[state.matchWinner === "p1" ? "p1GeishaCount" : "p2GeishaCount"]}명 · 호감도{" "}
           {t[state.matchWinner === "p1" ? "p1Points" : "p2Points"]}점
         </p>
@@ -386,11 +394,11 @@ export default function HanamikojiBoard({
     return (
       <div className={`${TABLE_PANEL} flex flex-col items-center gap-6 p-8 text-center`}>
         <TableTexture />
-        <h2 className="relative z-10 text-xl font-bold text-white">{state.roundNumber}라운드 결과</h2>
+        <h2 className="relative z-10 text-xl font-bold text-white light:text-slate-900">{state.roundNumber}라운드 결과</h2>
         <div className="relative z-10">
           <GeishaBoard state={state} names={names} />
         </div>
-        <p className="relative z-10 text-sm text-white/60">
+        <p className="relative z-10 text-sm text-white/60 light:text-slate-600">
           {names.p1}: 게이샤 {t.p1GeishaCount}명 / 호감도 {t.p1Points}점 · {names.p2}: 게이샤{" "}
           {t.p2GeishaCount}명 / 호감도 {t.p2Points}점
         </p>
@@ -411,7 +419,7 @@ export default function HanamikojiBoard({
     <div className={`${TABLE_PANEL} flex flex-col gap-4 p-3 sm:p-4`}>
       <TableTexture />
       <div className="relative z-10 flex flex-col gap-4">
-        <div className="flex items-center justify-between text-xs text-white/50">
+        <div className="flex items-center justify-between text-xs text-white/50 light:text-slate-500">
           <span>
             {state.roundNumber}라운드 · 남은 카드 {state.deck.length}장
           </span>
@@ -424,7 +432,7 @@ export default function HanamikojiBoard({
             actions they've already spent this round, both up top since
             that's "across the table" from the viewer. */}
         <div>
-          <p className="mb-1 text-center text-xs text-white/50">
+          <p className="mb-1 text-center text-xs text-white/50 light:text-slate-500">
             {names[opponentRole]} (상대) · {opponentHandCount}장
           </p>
           <div className="flex justify-center pt-2">
@@ -441,7 +449,9 @@ export default function HanamikojiBoard({
                 <span
                   key={a}
                   className={`flex h-5 w-5 items-center justify-center rounded-md border text-[10px] ${
-                    used ? "border-white/5 bg-white/[0.03] text-white/15" : "border-white/15 bg-white/5 text-white/50"
+                    used
+                      ? "border-white/5 bg-white/[0.03] text-white/15 light:border-slate-200 light:bg-slate-100 light:text-slate-300"
+                      : "border-white/15 bg-white/5 text-white/50 light:border-slate-300 light:bg-slate-50 light:text-slate-500"
                   }`}
                 >
                   {ACTION_ICON[a]}
@@ -472,8 +482,8 @@ export default function HanamikojiBoard({
 
         {state.phase === "awaiting-response" && state.pendingOffer && responder ? (
           iAmResponder ? (
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-              <p className="mb-3 text-sm text-white/70">
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4 light:border-slate-200 light:bg-slate-50">
+              <p className="mb-3 text-sm text-white/70 light:text-slate-600">
                 {names[state.pendingOffer.offeredBy]}님이 제시한{" "}
                 {state.pendingOffer.kind === "gift" ? "카드 중 1장" : "세트 중 1개"}를 선택하세요.
               </p>
@@ -491,7 +501,7 @@ export default function HanamikojiBoard({
                     <button
                       key={idx}
                       onClick={() => onAction({ type: "compete-response", index: idx as 0 | 1 })}
-                      className="flex gap-2 rounded-xl border border-white/10 p-2 transition hover:border-rose-400 hover:bg-white/5"
+                      className="flex gap-2 rounded-xl border border-white/10 p-2 transition hover:border-rose-400 hover:bg-white/5 light:border-slate-200 light:hover:bg-slate-100"
                     >
                       {set.map((card) => (
                         <CardChip key={card.id} card={card} />
@@ -502,8 +512,8 @@ export default function HanamikojiBoard({
               )}
             </div>
           ) : (
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-              <p className="mb-3 text-sm text-white/70">
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4 light:border-slate-200 light:bg-slate-50">
+              <p className="mb-3 text-sm text-white/70 light:text-slate-600">
                 {names[responder]}님이 선택 중입니다... 내가 제시한{" "}
                 {state.pendingOffer.kind === "gift" ? "카드" : "묶음"}이에요.
               </p>
@@ -516,7 +526,7 @@ export default function HanamikojiBoard({
               ) : (
                 <div className="flex justify-center gap-6">
                   {state.pendingOffer.sets.map((set, idx) => (
-                    <div key={idx} className="flex gap-2 rounded-xl border border-white/10 p-2">
+                    <div key={idx} className="flex gap-2 rounded-xl border border-white/10 p-2 light:border-slate-200">
                       {set.map((card) => (
                         <CardChip key={card.id} card={card} />
                       ))}
@@ -527,11 +537,11 @@ export default function HanamikojiBoard({
             </div>
           )
         ) : (
-          <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-            <p className="mb-2 text-sm text-white/70">{myTurn ? "내 차례예요" : `${names[state.activePlayer]}님의 차례입니다...`}</p>
+          <div className="rounded-2xl border border-white/10 bg-black/30 p-4 light:border-slate-200 light:bg-slate-50">
+            <p className="mb-2 text-sm text-white/70 light:text-slate-600">{myTurn ? "내 차례예요" : `${names[state.activePlayer]}님의 차례입니다...`}</p>
 
             {!myTurn ? (
-              <p className="text-xs text-white/40">상대방이 카드를 뽑고 행동을 고르는 중이에요.</p>
+              <p className="text-xs text-white/40 light:text-slate-400">상대방이 카드를 뽑고 행동을 고르는 중이에요.</p>
             ) : state.phase === "awaiting-draw" ? (
               <button
                 onClick={() => onAction({ type: "draw" })}
@@ -540,16 +550,16 @@ export default function HanamikojiBoard({
                 카드 뽑기
               </button>
             ) : selectedAction ? (
-              <p className="text-xs text-white/50">
+              <p className="text-xs text-white/50 light:text-slate-500">
                 {ACTION_LABEL[selectedAction].desc}
                 {selectedAction === "compete" ? (
                   <>
                     {" · "}
-                    <span className={competeGroupA.length === 2 ? "text-rose-300" : "text-white/50"}>
+                    <span className={competeGroupA.length === 2 ? "text-rose-300 light:text-rose-600" : "text-white/50 light:text-slate-500"}>
                       묶음 A {competeGroupA.length}/2
                     </span>
                     {" · "}
-                    <span className={competeGroupB.length === 2 ? "text-sky-300" : "text-white/50"}>
+                    <span className={competeGroupB.length === 2 ? "text-sky-300 light:text-sky-600" : "text-white/50 light:text-slate-500"}>
                       묶음 B {competeGroupB.length}/2
                     </span>
                   </>
@@ -561,14 +571,14 @@ export default function HanamikojiBoard({
                 )}
               </p>
             ) : (
-              <p className="text-xs text-white/40">위에서 행동을 선택하세요.</p>
+              <p className="text-xs text-white/40 light:text-slate-400">위에서 행동을 선택하세요.</p>
             )}
           </div>
         )}
 
         {/* My hand: always visible, face-up, fanned, selectable during my action phase. */}
         <div>
-          <p className="mb-1 text-center text-xs text-white/50">내 카드</p>
+          <p className="mb-1 text-center text-xs text-white/50 light:text-slate-500">내 카드</p>
           <div className="flex justify-center pt-2">
             {myHand.map((card, i) => {
               const interactive = myTurn && state.phase === "awaiting-action" && Boolean(selectedAction);
@@ -602,12 +612,12 @@ export default function HanamikojiBoard({
               <button
                 disabled={confirmDisabled}
                 onClick={confirmAction}
-                className="mt-3 w-full rounded-xl bg-emerald-500 py-3 font-medium text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+                className="mt-3 w-full rounded-xl bg-emerald-500 py-3 font-medium text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-200 light:disabled:text-slate-400"
               >
                 {selectedAction === "compete" ? "2장씩 나눠 제시하기" : "확정"}
               </button>
               {confirmDisabled && (
-                <p className="mt-1.5 text-center text-[11px] text-white/40">
+                <p className="mt-1.5 text-center text-[11px] text-white/40 light:text-slate-400">
                   {selectedAction === "compete"
                     ? "카드 4장을 눌러 2장씩 A·B 묶음을 채우면 제출할 수 있어요."
                     : `카드를 ${ACTION_LABEL[selectedAction].count}장 선택하면 제출할 수 있어요.`}

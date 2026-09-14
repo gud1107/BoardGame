@@ -96,7 +96,7 @@ function SkipButton({ onSkip }: { onSkip: () => void }) {
         e.stopPropagation();
         onSkip();
       }}
-      className="relative z-10 mt-2 flex items-center gap-1.5 rounded-full border border-amber-400/50 bg-slate-900/85 px-6 py-2.5 text-sm font-semibold text-white/90 backdrop-blur-sm transition hover:border-amber-300/70 hover:bg-slate-900 active:scale-95"
+      className="relative z-10 mt-2 flex items-center gap-1.5 rounded-full border border-amber-400/50 bg-slate-900/85 px-6 py-2.5 text-sm font-semibold text-white/90 backdrop-blur-sm transition hover:border-amber-300/70 hover:bg-slate-900 active:scale-95 light:bg-white/90 light:text-slate-800 light:hover:bg-white"
       style={{ animation: "dalmuti-skip-pulse-glow 1.8s ease-in-out infinite" }}
       aria-label="세금 교환 연출 스킵"
     >
@@ -152,6 +152,9 @@ export default function TaxHighlightModal({ event, viewerSeat, names, titleFor, 
     >
       <div
         className="relative flex w-full max-w-lg flex-col items-center gap-4 rounded-3xl border-2 px-5 py-6 text-center shadow-[0_0_80px_-10px_rgba(0,0,0,0.9)] sm:px-8"
+        // TODO(theme): hardcoded dark inline gradient panel background — not yet
+        // theme-aware, stays dark in light mode (this popup's own text/badges
+        // below are tuned for that dark panel regardless of the site theme).
         style={{ borderColor: palette.spark, background: "linear-gradient(180deg, rgba(24,20,10,0.97) 0%, rgba(10,8,5,0.98) 100%)" }}
         onClick={(e) => e.stopPropagation()}
       >

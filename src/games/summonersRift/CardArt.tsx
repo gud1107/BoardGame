@@ -17,7 +17,8 @@ const RUNE_GOLD = "#c8aa6e";
 export function DeckBack({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`relative flex items-center justify-center overflow-hidden rounded-lg border ${className}`}
+      // TODO(theme): card-back gradient is a fixed inline `style`, not theme-branched — deliberate, this is the card's own dark face art.
+      className={`relative flex items-center justify-center overflow-hidden rounded-lg border light:shadow-md ${className}`}
       style={{
         borderColor: "rgba(200,170,110,0.45)",
         background: "linear-gradient(155deg,#1a2332 0%,#0c1119 55%,#050709 100%)",
@@ -60,8 +61,8 @@ export function CardPileStack({
 
   if (count === 0) {
     return (
-      <div className={`flex items-center justify-center ${dims} rounded-lg border border-dashed border-white/15`}>
-        {emptyHint && <span className="px-1 text-center text-[9px] leading-tight text-white/30">{emptyHint}</span>}
+      <div className={`flex items-center justify-center ${dims} rounded-lg border border-dashed border-white/15 light:border-slate-300`}>
+        {emptyHint && <span className="px-1 text-center text-[9px] leading-tight text-white/30 light:text-slate-400">{emptyHint}</span>}
       </div>
     );
   }
@@ -95,7 +96,8 @@ export function HeroCard({ size = "lg" }: { size?: "md" | "lg" }) {
   const imgSize = size === "lg" ? 96 : 72;
   return (
     <div
-      className={`relative shrink-0 overflow-hidden rounded-lg border-2 ${dims}`}
+      // `!` needed on the shadow util since `boxShadow` below is inline (always wins over a plain class).
+      className={`relative shrink-0 overflow-hidden rounded-lg border-2 light:shadow-md! ${dims}`}
       style={{ borderColor: "rgba(200,170,110,0.7)", boxShadow: "0 0 16px -3px rgba(200,170,110,0.6)" }}
     >
       <Image src={HERO_IMAGE} alt="용사 (기본 체력 3)" width={imgSize} height={imgSize * 1.8} className="h-full w-full object-cover" />
@@ -123,7 +125,8 @@ export function ItemSlot({
       className={`flex flex-col items-center gap-1 ${equipped ? "" : "opacity-35 grayscale"}`}
     >
       <div
-        className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg border-2 ${dims} ${
+        // `!` needed on the shadow util since `boxShadow` below is inline (always wins over a plain class).
+        className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg border-2 light:shadow-md! ${dims} ${
           highlighted ? "ring-4 ring-amber-300" : ""
         }`}
         style={{
@@ -154,7 +157,7 @@ export function ItemSlot({
         )}
       </div>
       {/* Name label only — the card art itself already carries the effect text (see assets.ts's doc), so no redundant caption here. */}
-      <span className={`text-center text-[10px] leading-tight font-semibold ${equipped ? "text-amber-100/90" : "text-white/40"}`}>{item.name}</span>
+      <span className={`text-center text-[10px] leading-tight font-semibold ${equipped ? "text-amber-100/90 light:text-amber-700" : "text-white/40 light:text-slate-500"}`}>{item.name}</span>
     </div>
   );
 }
@@ -174,7 +177,8 @@ export function MonsterFace({
   return (
     <div className={`flex flex-col items-center gap-1 ${faded ? "opacity-40" : ""}`}>
       <div
-        className={`relative shrink-0 overflow-hidden rounded-lg border-2 ${dims}`}
+        // `!` needed on the shadow util since `boxShadow` below is inline (always wins over a plain class).
+        className={`relative shrink-0 overflow-hidden rounded-lg border-2 light:shadow-md! ${dims}`}
         style={{ borderColor: "rgba(220,60,60,0.55)", boxShadow: "0 0 14px -4px rgba(220,60,60,0.5)" }}
       >
         <Image src={MONSTER_IMAGES[threat]} alt={def.name} width={imgSize} height={imgSize} className="h-full w-full object-cover" />
@@ -185,7 +189,7 @@ export function MonsterFace({
           {threat}
         </span>
       </div>
-      {size !== "sm" && <span className="text-center text-[10px] leading-tight font-semibold text-rose-100/90">{def.name}</span>}
+      {size !== "sm" && <span className="text-center text-[10px] leading-tight font-semibold text-rose-100/90 light:text-rose-700">{def.name}</span>}
     </div>
   );
 }
@@ -206,7 +210,7 @@ export function RemovedItemsRow({ removedItemIds }: { removedItemIds: ItemId[] }
       className="flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed p-1.5"
       style={{ borderColor: "rgba(200,170,110,0.2)" }}
     >
-      <span className="shrink-0 text-[9px] font-semibold tracking-wide text-white/35 uppercase">해제한 장비</span>
+      <span className="shrink-0 text-[9px] font-semibold tracking-wide text-white/35 uppercase light:text-slate-500">해제한 장비</span>
       {removedItemIds.map((id, i) => {
         const item = getItemDef(id);
         return (
@@ -215,15 +219,15 @@ export function RemovedItemsRow({ removedItemIds }: { removedItemIds: ItemId[] }
             className="flex shrink-0 items-center gap-1.5 rounded-lg border px-1.5 py-1"
             style={{ borderColor: "rgba(200,170,110,0.35)", background: "rgba(0,0,0,0.25)" }}
           >
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-black/40 text-[9px] font-bold text-white/40">
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-black/40 text-[9px] font-bold text-white/40 light:text-slate-300">
               {i + 1}
             </span>
             <div className="relative h-8 w-6 shrink-0 overflow-hidden rounded border" style={{ borderColor: "rgba(200,170,110,0.5)" }}>
               <Image src={ITEM_IMAGES[id]} alt={item.name} width={24} height={32} className="h-full w-full object-cover" />
             </div>
             <div className="flex flex-col leading-tight">
-              <span className="text-[10px] font-semibold text-amber-100/90">{item.name}</span>
-              <span className="max-w-[150px] text-[9px] text-white/45">{item.effect}</span>
+              <span className="text-[10px] font-semibold text-amber-100/90 light:text-amber-700">{item.name}</span>
+              <span className="max-w-[150px] text-[9px] text-white/45 light:text-slate-500">{item.effect}</span>
             </div>
           </div>
         );

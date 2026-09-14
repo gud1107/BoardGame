@@ -87,7 +87,7 @@ function FlightItem({ flight, onDone }: { flight: CardFlight; onDone: (id: strin
           🃏
         </span>
         <span
-          className="absolute left-1/2 top-full whitespace-nowrap rounded-full border border-amber-300/70 bg-black/80 px-2 py-0.5 text-[10px] font-bold text-amber-200 shadow"
+          className="absolute left-1/2 top-full whitespace-nowrap rounded-full border border-amber-300/70 bg-black/80 light:border-amber-400 light:bg-white/90 px-2 py-0.5 text-[10px] font-bold text-amber-200 light:text-amber-700 shadow light:shadow-md"
           style={{ animation: "ratc-flight-badge-fade 0.65s ease-out both" }}
         >
           {SOURCE_BADGE[flight.source]}

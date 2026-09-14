@@ -55,15 +55,15 @@ function countColor(n: number): string {
 function ResultModal({ state, names, viewerSeat, onLeave, onRematch }: { state: MineOfOblivionState; names: Record<Seat, string>; viewerSeat: Seat; onLeave: () => void; onRematch: () => void }) {
   const iWon = state.winner === viewerSeat;
   return (
-    <div className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/85 p-4">
-      <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-white/10 bg-gradient-to-b from-[#1a0a0e] via-[#12070a] to-black p-6 text-center">
+    <div className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/85 light:bg-white light:shadow-md p-4">
+      <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-white/10 light:border-slate-200 bg-gradient-to-b from-[#1a0a0e] via-[#12070a] to-black p-6 text-center">
         <span className="text-5xl">{state.isDraw ? "🤝" : iWon ? "🏆" : "💀"}</span>
-        <h2 className="text-xl font-black text-white">{state.isDraw ? "무승부" : `${names[state.winner as Seat]}님 최종 승리`}</h2>
+        <h2 className="text-xl font-black text-white light:text-slate-900">{state.isDraw ? "무승부" : `${names[state.winner as Seat]}님 최종 승리`}</h2>
         <div className="flex w-full items-center justify-center gap-6">
           {(["p1", "p2"] as const).map((seat) => (
             <div key={seat} className="flex flex-col items-center gap-1">
               <Avatar size={36} className={seat === state.winner ? "ring-2 ring-amber-300/80" : undefined} />
-              <span className="text-xs text-white/70">
+              <span className="text-xs text-white/70 light:text-slate-700">
                 {names[seat]}
                 {seat === viewerSeat && <span className="text-emerald-300"> (나)</span>}
               </span>
@@ -74,7 +74,7 @@ function ResultModal({ state, names, viewerSeat, onLeave, onRematch }: { state: 
           ))}
         </div>
         <div className="mt-2 flex w-full gap-2">
-          <button onClick={onLeave} className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30">
+          <button onClick={onLeave} className="flex-1 rounded-xl border border-white/15 light:border-slate-200 py-2.5 text-sm text-white/70 light:text-slate-700 hover:border-white/30">
             나가기
           </button>
           <button onClick={onRematch} className="flex-1 rounded-xl bg-rose-500 py-2.5 text-sm font-semibold text-white hover:bg-rose-400">
@@ -223,7 +223,7 @@ export default function MineOfOblivionBoard({ state, viewerSeat, names, opponent
           <button
             type="button"
             onClick={() => setZoom((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)))}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/70 text-sm text-white/80 backdrop-blur active:scale-90"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-white/15 light:border-slate-200 bg-black/70 light:bg-white/95 light:shadow-md text-sm text-white/80 light:text-slate-700 backdrop-blur active:scale-90"
             aria-label="확대"
           >
             ＋
@@ -231,14 +231,14 @@ export default function MineOfOblivionBoard({ state, viewerSeat, names, opponent
           <button
             type="button"
             onClick={() => setZoom((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2)))}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/70 text-sm text-white/80 backdrop-blur active:scale-90"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-white/15 light:border-slate-200 bg-black/70 light:bg-white/95 light:shadow-md text-sm text-white/80 light:text-slate-700 backdrop-blur active:scale-90"
             aria-label="축소"
           >
             −
           </button>
         </div>
 
-        <div className="max-h-[62vh] w-full overflow-auto rounded-xl border border-white/10 bg-black/40 p-1.5" style={{ touchAction: "pan-x pan-y" }}>
+        <div className="max-h-[62vh] w-full overflow-auto rounded-xl border border-white/10 light:border-slate-200 bg-black/40 light:bg-white/85 light:shadow-sm p-1.5" style={{ touchAction: "pan-x pan-y" }}>
           <div
             className="grid"
             style={{
@@ -247,9 +247,9 @@ export default function MineOfOblivionBoard({ state, viewerSeat, names, opponent
             }}
           >
             {/* Column header row (A..K) — sticky so it stays visible while panning vertically. */}
-            <div className="sticky left-0 top-0 z-[2] bg-black/40" />
+            <div className="sticky left-0 top-0 z-[2] bg-black/40 light:bg-white/85 light:shadow-sm" />
             {BOARD_COLS.map((col) => (
-              <div key={`h-${col}`} className="sticky top-0 z-[1] flex items-center justify-center bg-black/60 text-[10px] font-semibold text-white/40" style={{ height: gutterPx }}>
+              <div key={`h-${col}`} className="sticky top-0 z-[1] flex items-center justify-center bg-black/60 light:bg-white/90 light:shadow-md text-[10px] font-semibold text-white/40 light:text-slate-500" style={{ height: gutterPx }}>
                 {col}
               </div>
             ))}
@@ -284,9 +284,9 @@ export default function MineOfOblivionBoard({ state, viewerSeat, names, opponent
         connected
       />
 
-      <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-        <span className={`text-xs ${isMyTurn ? "text-rose-300" : "text-white/50"}`}>{statusText}</span>
-        {state.phase !== "SETUP_MINE" && <span className="text-[10px] text-white/30">보물 {state.treasureClaimCount}/3 획득됨</span>}
+      <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 light:border-slate-200 bg-white/[0.03] px-3 py-2">
+        <span className={`text-xs ${isMyTurn ? "text-rose-300" : "text-white/50 light:text-slate-500"}`}>{statusText}</span>
+        {state.phase !== "SETUP_MINE" && <span className="text-[10px] text-white/30 light:text-slate-400">보물 {state.treasureClaimCount}/3 획득됨</span>}
       </div>
 
       {state.phase === "SETUP_MINE" && !iAmReady && (
@@ -351,7 +351,7 @@ function RowCells({
 }) {
   return (
     <>
-      <div className="sticky left-0 z-[1] flex items-center justify-center bg-black/60 text-[10px] font-semibold text-white/40" style={{ height: gridColPx }}>
+      <div className="sticky left-0 z-[1] flex items-center justify-center bg-black/60 light:bg-white/90 light:shadow-md text-[10px] font-semibold text-white/40 light:text-slate-500" style={{ height: gridColPx }}>
         {row}
       </div>
       {BOARD_COLS.map((col) => {
@@ -386,10 +386,10 @@ function RowCells({
                   : isSafeZone
                     ? "moo-safezone-aura border-amber-300/60 bg-gradient-to-br from-emerald-400/15 via-amber-300/10 to-emerald-400/15"
                     : isMineForbidden
-                      ? "border-white/5 bg-white/[0.01] opacity-40"
+                      ? "border-white/5 light:border-slate-200 bg-white/[0.01] opacity-40"
                       : isVisited
-                        ? "border-white/10 bg-white/[0.06]"
-                        : "border-white/10 bg-white/[0.03]"
+                        ? "border-white/10 light:border-slate-200 bg-white/[0.06]"
+                        : "border-white/10 light:border-slate-200 bg-white/[0.03]"
             } ${clickable ? "cursor-pointer active:scale-95" : "cursor-default"}`}
             style={{ width: gridColPx, height: gridColPx }}
           >
@@ -401,7 +401,7 @@ function RowCells({
             {isTreasureTile && treasure?.holder === null && <span className="text-base sm:text-lg">💎</span>}
             {isTreasureTile && treasure?.holder !== null && (
               <span className="flex flex-col items-center leading-none">
-                <span className="text-xs text-white/15 sm:text-sm">◌</span>
+                <span className="text-xs text-white/15 light:text-slate-400 sm:text-sm">◌</span>
                 <span className="text-[7px] text-amber-300/70">+{treasure?.points}</span>
               </span>
             )}

@@ -35,7 +35,7 @@ export default function Avatar({
       width={size}
       height={size}
       style={{ width: size, height: size }}
-      className={`rounded-full border border-white/20 object-cover ${className}`}
+      className={`rounded-full border border-white/20 object-cover light:border-slate-300 ${className}`}
       onError={(e) => {
         if (e.currentTarget.src.endsWith(DEFAULT_AVATAR)) return; // already showing the fallback — avoid an error loop
         e.currentTarget.src = DEFAULT_AVATAR;

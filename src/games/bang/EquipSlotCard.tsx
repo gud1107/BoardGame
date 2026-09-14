@@ -24,13 +24,13 @@ export function EquipSlotCard({ player, slot }: { player: PlayerState; slot: Equ
         ? "상대 사거리 +1 (조준당할 때)"
         : null;
   return (
-    <div className="flex w-36 flex-col gap-0.5 rounded-lg border border-amber-500/40 bg-black/40 px-2 py-1.5 text-left">
-      <span className="flex items-center gap-1.5 text-xs font-bold text-amber-100">
+    <div className="flex w-36 flex-col gap-0.5 rounded-lg border border-amber-500/40 bg-black/40 px-2 py-1.5 text-left light:border-amber-400/50 light:bg-white/80 light:shadow-sm">
+      <span className="flex items-center gap-1.5 text-xs font-bold text-amber-100 light:text-amber-800">
         <span className="text-base leading-none">{meta.icon}</span>
         {meta.label}
       </span>
-      {rangeNote && <span className="text-[10px] font-semibold text-amber-300">{rangeNote}</span>}
-      <span className="text-[10px] leading-snug text-amber-100/60">{meta.desc}</span>
+      {rangeNote && <span className="text-[10px] font-semibold text-amber-300 light:text-amber-700">{rangeNote}</span>}
+      <span className="text-[10px] leading-snug text-amber-100/60 light:text-slate-600">{meta.desc}</span>
     </div>
   );
 }
@@ -38,7 +38,7 @@ export function EquipSlotCard({ player, slot }: { player: PlayerState; slot: Equ
 export function MyEquipmentRow({ player }: { player: PlayerState }) {
   const slots = EQUIP_ORDER.filter((slot) => player.equipment[slot] !== null);
   if (slots.length === 0) {
-    return <p className="text-center text-[11px] text-amber-100/30">장착한 아이템 없음</p>;
+    return <p className="text-center text-[11px] text-amber-100/30 light:text-slate-400">장착한 아이템 없음</p>;
   }
   return (
     <div className="flex flex-wrap justify-center gap-1.5">

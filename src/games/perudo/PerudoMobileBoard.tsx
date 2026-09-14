@@ -217,12 +217,12 @@ function PlayerDiceSummaryBar({
           <div
             key={seat}
             className={`flex shrink-0 items-center gap-1 rounded-lg border px-1.5 py-0.5 ${
-              isActive ? "border-amber-300/50 bg-amber-400/10" : "border-white/10 bg-black/20"
+              isActive ? "border-amber-300/50 bg-amber-400/10 light:border-amber-400 light:bg-amber-50" : "border-white/10 bg-black/20 light:border-slate-200 light:bg-white/60"
             } ${eliminated ? "opacity-40" : ""}`}
             title={`${names[seat]}${seat === viewerSeat ? " (나)" : ""} · ${eliminated ? "탈락" : `${player.diceCount}개`}`}
           >
             {isActive && <span className="text-[9px]">👉</span>}
-            <span className="max-w-[36px] truncate break-keep text-[9px] font-semibold text-white/70">{names[seat]}</span>
+            <span className="max-w-[36px] truncate break-keep text-[9px] font-semibold text-white/70 light:text-slate-600">{names[seat]}</span>
             {eliminated ? (
               <span className="text-[9px]">💀</span>
             ) : (
@@ -257,10 +257,10 @@ function useIsLandscape(): boolean {
 /** Full-viewport notice swapped in for the entire arena while the device is in landscape (AskUserQuestion-confirmed scope: portrait-only, this notice instead of a second bespoke layout). `fixed inset-0` so it always covers the real viewport regardless of page chrome above this component — unlike the arena itself, it doesn't need the `calc(100dvh - offset)` measurement below. */
 function LandscapeNotice() {
   return (
-    <div className="fixed inset-0 z-50 flex h-[100dvh] w-full flex-col items-center justify-center gap-3 bg-slate-950 p-6 text-center select-none">
+    <div className="fixed inset-0 z-50 flex h-[100dvh] w-full flex-col items-center justify-center gap-3 bg-slate-950 p-6 text-center select-none light:bg-white">
       <span className="text-4xl">📱↕️</span>
-      <p className="text-sm font-bold break-keep text-amber-100">세로 모드로 이용해주세요</p>
-      <p className="max-w-[240px] text-xs break-keep text-white/50">페루도는 휴대폰을 세로로 들었을 때 최적화된 화면으로 표시됩니다.</p>
+      <p className="text-sm font-bold break-keep text-amber-100 light:text-amber-700">세로 모드로 이용해주세요</p>
+      <p className="max-w-[240px] text-xs break-keep text-white/50 light:text-slate-500">페루도는 휴대폰을 세로로 들었을 때 최적화된 화면으로 표시됩니다.</p>
     </div>
   );
 }
@@ -358,11 +358,11 @@ export default function PerudoMobileBoard({
       {/* 초슬림 고정 헤더 (h-8, shrink-0) — 인원수와 무관하게 절대 줄바꿈되지
           않는 단일 행. 플레이어별 상세(스트립/무덤/기대값)는 전부 이 밖으로
           이전됨 — 2026-09-10 헤더 높이-크리프 제거 세션 (파일 상단 doc 참고). */}
-      <header className="relative z-10 flex h-8 shrink-0 items-center justify-between gap-1.5 rounded-lg border border-amber-500/15 bg-black/25 px-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-[11px] font-bold text-amber-300">
+      <header className="relative z-10 flex h-8 shrink-0 items-center justify-between gap-1.5 rounded-lg border border-amber-500/15 bg-black/25 px-2 light:border-amber-300/50 light:bg-white/70">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-[11px] font-bold text-amber-300 light:text-amber-700">
           <span className="shrink-0">🎲 페루도</span>
-          <span className="shrink-0 text-white/20">|</span>
-          <span className="min-w-0 truncate font-normal text-white/55">
+          <span className="shrink-0 text-white/20 light:text-slate-300">|</span>
+          <span className="min-w-0 truncate font-normal text-white/55 light:text-slate-500">
             {state.playerCount}인 · {state.roundNumber}R · 잔여 {totalActiveDice}개 (기대값 {(totalActiveDice / 3).toFixed(1)})
           </span>
         </div>
@@ -371,7 +371,7 @@ export default function PerudoMobileBoard({
           {rulebookButton}
           <span
             className={`flex h-5 shrink-0 items-center rounded-full px-2 text-[10px] font-bold break-keep ${
-              isMyTurn ? "bg-amber-400/20 text-amber-200" : "bg-white/5 text-white/40"
+              isMyTurn ? "bg-amber-400/20 text-amber-200 light:bg-amber-100 light:text-amber-700" : "bg-white/5 text-white/40 light:bg-slate-100 light:text-slate-400"
             }`}
           >
             {isMyTurn ? "🫵 내 차례" : `${activeName.slice(0, 4)} 차례`}
@@ -520,15 +520,15 @@ export default function PerudoMobileBoard({
         {/* 최하단 컨트롤 독: [플레이어 현황 가로 스크롤 스트립] → [내 주사위
             상시 표시 바 + 색상 변경 팔레트]. */}
         <footer className="relative z-10 flex shrink-0 flex-col items-center gap-1.5">
-          <div className="flex h-9 w-full items-center gap-2 rounded-xl border border-amber-900/30 bg-black/20 px-2">
-            <span className="shrink-0 text-[10px] font-semibold text-amber-200/50">인원</span>
+          <div className="flex h-9 w-full items-center gap-2 rounded-xl border border-amber-900/30 bg-black/20 px-2 light:border-amber-200 light:bg-white/70">
+            <span className="shrink-0 text-[10px] font-semibold text-amber-200/50 light:text-amber-700">인원</span>
             <PlayerDiceSummaryBar state={state} names={names} colorways={colorways} viewerSeat={viewerSeat} />
           </div>
 
-          <div className="flex w-full flex-col items-center gap-1 rounded-2xl border-2 border-amber-900/40 bg-gradient-to-b from-black/25 to-black/35 p-2.5 shadow-[inset_0_2px_10px_rgba(0,0,0,0.35)]">
-            <span className="text-[11px] font-semibold text-amber-100/70">🎲 내 주사위 ({me.diceCount}개)</span>
+          <div className="flex w-full flex-col items-center gap-1 rounded-2xl border-2 border-amber-900/40 bg-gradient-to-b from-black/25 to-black/35 p-2.5 shadow-[inset_0_2px_10px_rgba(0,0,0,0.35)] light:border-amber-300 light:from-amber-50 light:to-white">
+            <span className="text-[11px] font-semibold text-amber-100/70 light:text-amber-700">🎲 내 주사위 ({me.diceCount}개)</span>
             {!iAmAlive ? (
-              <p className="text-xs text-rose-300/70">탈락했습니다 — 관전 중</p>
+              <p className="text-xs text-rose-300/70 light:text-rose-600">탈락했습니다 — 관전 중</p>
             ) : (
               <DiceRollTray
                 dice={me.dice}

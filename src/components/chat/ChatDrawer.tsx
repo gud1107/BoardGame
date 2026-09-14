@@ -58,7 +58,7 @@ export default function ChatDrawer({ messages, onSend, myDeviceId, cooldownUntil
       >
         💬
         {unread > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-bold text-white ring-2 ring-[#0b0b12]">
+          <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-bold text-white ring-2 ring-[#0b0b12] light:ring-[#f8fafc]">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
@@ -68,21 +68,21 @@ export default function ChatDrawer({ messages, onSend, myDeviceId, cooldownUntil
 
       <aside
         style={open ? { transform: `translateY(${dragY}px)`, transition: dragging ? "none" : "transform 200ms ease-out" } : undefined}
-        className={`fixed inset-x-0 bottom-0 z-40 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-white/10 bg-[#12101c] shadow-2xl transition-transform duration-200 sm:inset-x-auto sm:inset-y-0 sm:left-0 sm:max-h-none sm:w-96 sm:translate-y-0 sm:rounded-none sm:rounded-r-2xl sm:border-t-0 sm:border-r ${
+        className={`fixed inset-x-0 bottom-0 z-40 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-white/10 bg-[#12101c] shadow-2xl transition-transform duration-200 sm:inset-x-auto sm:inset-y-0 sm:left-0 sm:max-h-none sm:w-96 sm:translate-y-0 sm:rounded-none sm:rounded-r-2xl sm:border-t-0 sm:border-r light:border-slate-200 light:bg-white ${
           open ? "translate-y-0 sm:translate-x-0" : "translate-y-full sm:-translate-x-full"
         }`}
       >
         <div {...handlers} className="shrink-0 px-4 pt-3">
           <DragHandle />
-          <div className="flex items-center justify-between border-b border-white/10 pb-3">
-            <h2 className="text-sm font-bold text-white">
+          <div className="flex items-center justify-between border-b border-white/10 pb-3 light:border-slate-200">
+            <h2 className="text-sm font-bold text-white light:text-slate-900">
               💬 {title}
-              {readOnly && <span className="ml-1 text-white/40">(관전 중)</span>}
+              {readOnly && <span className="ml-1 text-white/40 light:text-slate-400">(관전 중)</span>}
             </h2>
             <button
               onClick={close}
               aria-label="닫기"
-              className="-mr-2 grid h-12 w-12 place-items-center rounded-full text-xl text-white/50 transition hover:bg-white/10 hover:text-white active:bg-white/20"
+              className="-mr-2 grid h-12 w-12 place-items-center rounded-full text-xl text-white/50 transition hover:bg-white/10 hover:text-white active:bg-white/20 light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700 light:active:bg-slate-200"
             >
               ×
             </button>

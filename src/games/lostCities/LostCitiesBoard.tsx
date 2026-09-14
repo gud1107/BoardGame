@@ -130,7 +130,7 @@ function CenterPiles({
 }) {
   const deckClickable = canDraw && state.deck.length > 0;
   return (
-    <div className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-black/20 p-2 sm:p-3">
+    <div className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-black/20 p-2 light:border-slate-200 light:bg-white/80 light:shadow-sm sm:p-3">
       <div className="flex items-center gap-1 sm:gap-2">
         <button
           ref={deckRef}
@@ -140,14 +140,14 @@ function CenterPiles({
           className={`flex flex-col items-center gap-0.5 rounded-lg p-0.5 transition ${deckClickable ? "lc-pickup-pulse ring-2 ring-sky-400/70" : ""}`}
         >
           <CardBack size="sm" />
-          <span className="text-[10px] font-semibold text-white/50">덱 {state.deck.length}</span>
+          <span className="text-[10px] font-semibold text-white/50 light:text-slate-500">덱 {state.deck.length}</span>
         </button>
 
         {/* 🗑️ 버림 칸 (Discard Pile) zone — dashed neon frame + label, deliberately
             distinct from the solid-color expedition lanes so it can never be
             mistaken for one (task brief's "High Visibility Discard Area"). */}
-        <div className="lc-discard-zone-pulse flex flex-col items-center gap-1 rounded-lg border-2 border-dashed border-rose-400/50 bg-rose-500/5 px-1.5 py-1.5 sm:px-2">
-          <span className="whitespace-nowrap text-[8px] font-bold tracking-wide text-rose-300 sm:text-[9px]">🗑️ 버림 칸 · DISCARD</span>
+        <div className="lc-discard-zone-pulse flex flex-col items-center gap-1 rounded-lg border-2 border-dashed border-rose-400/50 bg-rose-500/5 px-1.5 py-1.5 light:border-rose-400/60 light:bg-rose-50 sm:px-2">
+          <span className="whitespace-nowrap text-[8px] font-bold tracking-wide text-rose-300 light:text-rose-600 sm:text-[9px]">🗑️ 버림 칸 · DISCARD</span>
           <div className="flex items-center gap-1 sm:gap-1.5">
             {COLORS.map((color) => {
               const pile = state.discardPiles[color];
@@ -177,7 +177,7 @@ function CenterPiles({
 /** "🎯 현재 턴" badge — shown next to whichever seat's profile is currently active (2026-09-05 턴 인디케이터 세션). */
 function TurnBadge() {
   return (
-    <span className="lc-turn-badge-shimmer shrink-0 whitespace-nowrap break-keep rounded-full border border-amber-300/70 bg-amber-400/20 px-1.5 py-0.5 text-[8px] font-extrabold tracking-wide text-amber-200 sm:text-[9px]">
+    <span className="lc-turn-badge-shimmer shrink-0 whitespace-nowrap break-keep rounded-full border border-amber-300/70 bg-amber-400/20 px-1.5 py-0.5 text-[8px] font-extrabold tracking-wide text-amber-200 light:bg-amber-100 light:text-amber-700 sm:text-[9px]">
       🎯 현재 턴
     </span>
   );
@@ -341,16 +341,18 @@ export default function LostCitiesBoard({ state, viewerSeat, names, opponentConn
       <div
         ref={opponentHeaderRef}
         className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition ${
-          isOpponentTurn ? "lc-active-turn-glow border-amber-300/60 bg-amber-400/[0.06]" : `border-white/10 bg-white/[0.03] ${isGamePlaying ? "opacity-70" : ""}`
+          isOpponentTurn
+            ? "lc-active-turn-glow border-amber-300/60 bg-amber-400/[0.06] light:bg-amber-100/60"
+            : `border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/70 ${isGamePlaying ? "opacity-70" : ""}`
         }`}
       >
-        <span className="flex items-center gap-1.5 text-sm font-semibold text-white">
+        <span className="flex items-center gap-1.5 text-sm font-semibold text-white light:text-slate-900">
           <Avatar size={24} />
           <span className="break-keep">{names[opponentSeat]}</span>
-          {!opponentConnected && <span className="whitespace-nowrap break-keep text-[10px] font-normal text-rose-300">(연결 끊김)</span>}
+          {!opponentConnected && <span className="whitespace-nowrap break-keep text-[10px] font-normal text-rose-300 light:text-rose-600">(연결 끊김)</span>}
           {isOpponentTurn && <TurnBadge />}
         </span>
-        <span className="whitespace-nowrap break-keep text-xs text-white/40">손패 {state.hands[opponentSeat].length}장</span>
+        <span className="whitespace-nowrap break-keep text-xs text-white/40 light:text-slate-500">손패 {state.hands[opponentSeat].length}장</span>
       </div>
       <ExpeditionRow
         seat={opponentSeat}
@@ -390,23 +392,25 @@ export default function LostCitiesBoard({ state, viewerSeat, names, opponentConn
       {/* Status + my hand — same active-turn glow + badge treatment as the opponent header, mirrored (2026-09-05 턴 인디케이터). */}
       <div
         className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition ${
-          isMyTurn ? "lc-active-turn-glow border-amber-300/60 bg-amber-400/[0.06]" : `border-white/10 bg-white/[0.03] ${isGamePlaying ? "opacity-70" : ""}`
+          isMyTurn
+            ? "lc-active-turn-glow border-amber-300/60 bg-amber-400/[0.06] light:bg-amber-100/60"
+            : `border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/70 ${isGamePlaying ? "opacity-70" : ""}`
         }`}
       >
-        <span className="flex items-center gap-1.5 text-sm font-semibold text-white">
+        <span className="flex items-center gap-1.5 text-sm font-semibold text-white light:text-slate-900">
           <Avatar size={24} />
           <span className="break-keep">
-            {names[viewerSeat]} <span className="text-xs font-normal text-emerald-300">(나)</span>
+            {names[viewerSeat]} <span className="text-xs font-normal text-emerald-300 light:text-emerald-600">(나)</span>
           </span>
           {isMyTurn && <TurnBadge />}
         </span>
         <span
-          className={`whitespace-nowrap break-keep text-xs ${isMyTurn ? "text-amber-200" : "text-white/40"}`}
+          className={`whitespace-nowrap break-keep text-xs ${isMyTurn ? "text-amber-200 light:text-amber-700" : "text-white/40 light:text-slate-500"}`}
         >
           {statusText}
         </span>
       </div>
-      <div ref={handRowRef} className="flex flex-wrap justify-center gap-1.5 rounded-xl border border-white/10 bg-black/20 p-2 sm:gap-2 sm:p-3">
+      <div ref={handRowRef} className="flex flex-wrap justify-center gap-1.5 rounded-xl border border-white/10 bg-black/20 p-2 light:border-slate-200 light:bg-white/80 light:shadow-sm sm:gap-2 sm:p-3">
         {hand.map((card) => (
           <CardFace key={card.id} card={card} onClick={myPhaseIsPlay ? () => handleHandCardClick(card) : undefined} selected={selectedCardId === card.id} />
         ))}

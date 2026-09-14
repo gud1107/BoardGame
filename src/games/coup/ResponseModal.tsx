@@ -53,7 +53,7 @@ function ResponseGauge({ onTimeout }: { onTimeout: () => void }) {
 
   const pct = (secondsLeft / RESPONSE_SECONDS) * 100;
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
       <div
         className="h-full rounded-full bg-amber-400 transition-[width] duration-1000 ease-linear"
         style={{ width: `${pct}%`, animation: pct <= 30 ? "coup-response-warn 0.6s ease-in-out infinite" : undefined }}
@@ -91,15 +91,15 @@ export default function ResponseModal({
     const pending = state.pendingAction;
     return (
       <Overlay title="🕵️ 의심(Challenge)" onClose={sendPass}>
-        <div className="flex flex-col gap-4 text-sm text-white/80">
+        <div className="flex flex-col gap-4 text-sm text-white/80 light:text-slate-700">
           {gauge}
           <p>
             <b>{names[pending.actorSeat] ?? "상대"}</b>님이 <b>{CHARACTER_NAMES[pending.claimedCharacter!]}</b>({ACTION_NAMES[pending.action]}) 능력을
             선언했습니다.
           </p>
-          <p className="text-xs text-white/50">거짓말이라고 생각되면 의심을 외치세요. 의심이 틀리면 내 카드 1장을 잃습니다.</p>
+          <p className="text-xs text-white/50 light:text-slate-500">거짓말이라고 생각되면 의심을 외치세요. 의심이 틀리면 내 카드 1장을 잃습니다.</p>
           <div className="flex gap-2">
-            <button onClick={sendPass} className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30">
+            <button onClick={sendPass} className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30 light:border-slate-200 light:text-slate-600">
               패스
             </button>
             <button
@@ -119,24 +119,24 @@ export default function ResponseModal({
     const options = blockCharactersFor(pending.action);
     return (
       <Overlay title="🛡️ 방어(Counter)" onClose={sendPass}>
-        <div className="flex flex-col gap-4 text-sm text-white/80">
+        <div className="flex flex-col gap-4 text-sm text-white/80 light:text-slate-700">
           {gauge}
           <p>
             <b>{names[pending.actorSeat] ?? "상대"}</b>님이 <b>{ACTION_NAMES[pending.action]}</b>을 시도했습니다.
           </p>
-          <p className="text-xs text-white/50">막을 캐릭터를 주장하거나, 그냥 넘기세요.</p>
+          <p className="text-xs text-white/50 light:text-slate-500">막을 캐릭터를 주장하거나, 그냥 넘기세요.</p>
           <div className="flex flex-wrap gap-2">
             {options.map((character) => (
               <button
                 key={character}
                 onClick={() => onAction({ type: "declareBlock", seat: viewerSeat, character })}
-                className="rounded-xl border border-emerald-300/40 px-3 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-400/10"
+                className="rounded-xl border border-emerald-300/40 px-3 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-400/10 light:text-emerald-700 light:bg-emerald-50"
               >
                 🛡️ {CHARACTER_NAMES[character]}로 방어
               </button>
             ))}
           </div>
-          <button onClick={sendPass} className="rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30">
+          <button onClick={sendPass} className="rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30 light:border-slate-200 light:text-slate-600">
             막지 않기
           </button>
         </div>
@@ -148,14 +148,14 @@ export default function ResponseModal({
     const block = state.pendingBlock;
     return (
       <Overlay title="🕵️ 방어 의심" onClose={sendPass}>
-        <div className="flex flex-col gap-4 text-sm text-white/80">
+        <div className="flex flex-col gap-4 text-sm text-white/80 light:text-slate-700">
           {gauge}
           <p>
             <b>{names[block.blockerSeat] ?? "상대"}</b>님이 <b>{CHARACTER_NAMES[block.claimedCharacter]}</b>(으)로 방어를 선언했습니다.
           </p>
-          <p className="text-xs text-white/50">거짓말이라고 생각되면 의심을 외치세요. 의심이 틀리면 내 카드 1장을 잃습니다.</p>
+          <p className="text-xs text-white/50 light:text-slate-500">거짓말이라고 생각되면 의심을 외치세요. 의심이 틀리면 내 카드 1장을 잃습니다.</p>
           <div className="flex gap-2">
-            <button onClick={sendPass} className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30">
+            <button onClick={sendPass} className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30 light:border-slate-200 light:text-slate-600">
               패스
             </button>
             <button

@@ -20,11 +20,11 @@ export default function GameCard({ game }: { game: GameMeta }) {
 
   const content = (
     <div
-      className={`group relative flex h-full flex-col overflow-hidden rounded-2xl border bg-gradient-to-b from-neutral-900/80 to-neutral-950/90 transition ${
-        collection ? "border-red-500/25" : "border-amber-500/15"
+      className={`group relative flex h-full flex-col overflow-hidden rounded-2xl border bg-gradient-to-b from-neutral-900/80 to-neutral-950/90 transition light:border-slate-200 light:from-white light:to-slate-50 light:shadow-sm ${
+        collection ? "border-red-500/25 light:border-red-300" : "border-amber-500/15"
       } ${
         game.playable
-          ? "hover:-translate-y-1 hover:border-amber-400/50 hover:shadow-[0_8px_28px_rgba(245,158,11,0.15)] active:scale-95"
+          ? "hover:-translate-y-1 hover:border-amber-400/50 hover:shadow-[0_8px_28px_rgba(245,158,11,0.15)] active:scale-95 light:hover:border-amber-500/60 light:hover:shadow-md"
           : "opacity-70"
       }`}
     >
@@ -59,13 +59,13 @@ export default function GameCard({ game }: { game: GameMeta }) {
         )}
       </div>
       <div className="flex flex-1 flex-col gap-2.5 p-4 sm:p-5">
-        <h3 className="line-clamp-2 break-keep text-base font-semibold text-white sm:text-lg">
+        <h3 className="line-clamp-2 break-keep text-base font-semibold text-white sm:text-lg light:text-slate-900">
           {game.name}
         </h3>
-        <p className="line-clamp-2 flex-1 text-xs leading-relaxed text-white/55">{game.description}</p>
-        <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-white/60">
-          <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-100/80">👥 {formatPlayers(game)}</span>
-          <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-100/80">⏱ {formatTime(game)}</span>
+        <p className="line-clamp-2 flex-1 text-xs leading-relaxed text-white/55 light:text-slate-500">{game.description}</p>
+        <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-white/60 light:text-slate-600">
+          <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-100/80 light:bg-amber-100 light:text-amber-800">👥 {formatPlayers(game)}</span>
+          <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-100/80 light:bg-amber-100 light:text-amber-800">⏱ {formatTime(game)}</span>
         </div>
         {game.genres && game.genres.length > 0 && (
           <div className="flex flex-wrap gap-1.5">

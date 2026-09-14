@@ -147,13 +147,15 @@ function TrickSlot({
 }) {
   return (
     <div className="flex flex-col items-center gap-1">
-      <span className={`text-[10px] font-semibold ${isMe ? "text-amber-200" : "text-white/50"}`}>{label}</span>
+      <span className={`text-[10px] font-semibold ${isMe ? "text-amber-200 light:text-amber-700" : "text-white/50 light:text-slate-500"}`}>{label}</span>
       {play ? (
         <div ref={slotRef} className="relative">
           {isWinner && (
             <span
               className={`absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border px-2 py-0.5 text-[9px] font-bold whitespace-nowrap shadow-lg ${
-                isFinalTrick ? "border-rose-300/70 bg-rose-950/90 text-rose-200" : "border-amber-300/70 bg-amber-950/90 text-amber-200"
+                isFinalTrick
+                  ? "border-rose-300/70 bg-rose-950/90 text-rose-200 light:border-rose-300 light:bg-rose-50 light:text-rose-700"
+                  : "border-amber-300/70 bg-amber-950/90 text-amber-200 light:border-amber-300 light:bg-amber-50 light:text-amber-700"
               }`}
             >
               {isFinalTrick ? "🥒 오이 획득" : "👑 트릭 승리"}
@@ -171,7 +173,7 @@ function TrickSlot({
           />
         </div>
       ) : (
-        <div className={`flex items-center justify-center rounded-xl border border-dashed border-white/10 ${CARD_SIZE_CLASSES}`} />
+        <div className={`flex items-center justify-center rounded-xl border border-dashed border-white/10 light:border-slate-300 ${CARD_SIZE_CLASSES}`} />
       )}
     </div>
   );
@@ -203,7 +205,7 @@ function TrickHoldProgressBar({ durationMs }: { durationMs: number }) {
     return () => cancelAnimationFrame(raf);
   }, [durationMs]);
   return (
-    <div className="h-1 w-full max-w-[220px] overflow-hidden rounded-full bg-white/10">
+    <div className="h-1 w-full max-w-[220px] overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
       <div ref={barRef} className="h-full rounded-full" style={{ background: "linear-gradient(90deg,#fde68a,#f59e0b)" }} />
     </div>
   );
@@ -337,7 +339,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 light:border-slate-300 px-2.5 py-1 text-[11px] text-white/60 light:text-slate-600 transition hover:border-white/30 hover:text-white light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 오이 다섯 개 룰북
     </button>
@@ -362,41 +364,42 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
     const tied = rankings.filter((r) => r.rank === 1).length > 1;
     return (
       <div
-        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 light:border-slate-200 light:shadow-md p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
         style={{ background: "linear-gradient(160deg,#132a1c 0%,#0d1e14 55%,#070f0a 100%)" }}
       >
         <span className="text-5xl">{tied ? "🥒" : "🏆"}</span>
-        <h2 className="text-2xl font-bold text-emerald-100">
+        <h2 className="text-2xl font-bold text-emerald-100 light:text-emerald-700">
           {tied ? "공동 최후 생존!" : `${names[winner.seat]}님 최후 생존 승리!`}
         </h2>
-        <p className="text-xs text-white/50">오이를 가장 적게 먹고 가장 오래 살아남은 사람이 이기는 게임입니다.</p>
+        <p className="text-xs text-white/50 light:text-slate-500">오이를 가장 적게 먹고 가장 오래 살아남은 사람이 이기는 게임입니다.</p>
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[480px] border-collapse text-xs">
             <thead>
-              <tr className="text-white/50">
-                <th className="border-b border-white/10 px-2 py-2 text-left">순위</th>
-                <th className="border-b border-white/10 px-2 py-2 text-left">플레이어</th>
-                <th className="border-b border-white/10 px-2 py-2 text-right">최종 오이</th>
-                <th className="border-b border-white/10 px-2 py-2 text-right">생존</th>
+              <tr className="text-white/50 light:text-slate-500">
+                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">순위</th>
+                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">플레이어</th>
+                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-right">최종 오이</th>
+                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-right">생존</th>
               </tr>
             </thead>
             <tbody>
               {rankings.map(({ seat, rank, cucumbers, eliminatedAtRound }) => (
-                <tr key={seat} className={rank === 1 ? "bg-emerald-400/10" : ""}>
-                  <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-emerald-200">{rank === 1 ? "🏆 1" : rank}</td>
-                  <td className="border-b border-white/5 px-2 py-2 text-left text-white">
+                <tr key={seat} className={rank === 1 ? "bg-emerald-400/10 light:bg-emerald-50" : ""}>
+                  <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-left font-bold text-emerald-200 light:text-emerald-700">{rank === 1 ? "🏆 1" : rank}</td>
+                  <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-left text-white light:text-slate-900">
                     <span className="flex items-center gap-1.5">
                       <Avatar size={20} />
                       {names[seat]}
-                      {seat === viewerSeat && <span className="text-emerald-200">(나)</span>}
+                      {seat === viewerSeat && <span className="text-emerald-200 light:text-emerald-700">(나)</span>}
                     </span>
                   </td>
-                  <td className="border-b border-white/5 px-2 py-2 text-right">
-                    <span className="inline-flex items-center gap-1 text-rose-200">
+                  <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-right">
+                    <span className="inline-flex items-center gap-1 text-rose-200 light:text-rose-600">
                       <CucumberIcon className="h-3.5 w-3.5" /> {cucumbers}
                     </span>
                   </td>
-                  <td className="border-b border-white/5 px-2 py-2 text-right text-white/60">
+                  <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-right text-white/60 light:text-slate-500">
                     {eliminatedAtRound === null ? "끝까지 생존" : `${eliminatedAtRound}라운드까지`}
                   </td>
                 </tr>
@@ -443,15 +446,16 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
+      className="flex flex-col gap-3 rounded-[28px] border border-black/60 light:border-slate-200 light:shadow-md p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
+      // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
       style={{ background: "linear-gradient(160deg,#0f2418 0%,#0a1710 45%,#050b07 100%)" }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-emerald-100/70">
+      <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-emerald-100/70 light:text-emerald-700">
         <span className="flex items-center gap-1.5">
           {state.playerCount}인 · 라운드 {state.roundNumber} · 트릭 {state.trickNumber}/{TRICKS_PER_ROUND}
           <span
             title="이 개수 이상 오이를 먹으면 탈락합니다"
-            className="rounded-full border border-white/15 px-1.5 py-0.5 text-[10px] text-white/50"
+            className="rounded-full border border-white/15 light:border-slate-300 px-1.5 py-0.5 text-[10px] text-white/50 light:text-slate-500"
           >
             탈락 기준 🥒{state.eliminationThreshold}개
           </span>
@@ -465,26 +469,26 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
           warning would otherwise keep showing stale during that trick's own
           result hold. */}
       {isFinalTrick && !isHoldActive && (
-        <p className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-2 py-1.5 text-center text-[11px] font-semibold text-rose-200">
+        <p className="rounded-lg border border-rose-400/40 bg-rose-500/10 light:border-rose-300 light:bg-rose-50 px-2 py-1.5 text-center text-[11px] font-semibold text-rose-200 light:text-rose-700">
           ⚠️ 마지막 7번째 트릭입니다 — 여기서 이기면 오이를 먹습니다!
         </p>
       )}
 
       {(trickFlash || roundFlash) && (
-        <div className="rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-center text-xs">
+        <div className="rounded-xl border border-amber-300/30 bg-amber-400/10 light:border-amber-300 light:bg-amber-50 px-3 py-2 text-center text-xs">
           {roundFlash ? (
             <>
-              <p className="font-semibold text-rose-200">
+              <p className="font-semibold text-rose-200 light:text-rose-700">
                 🥒 {roundFlash.winnerSeats.map((s) => names[s]).join(", ")}님이 마지막 트릭에서 오이 {roundFlash.cucumberPenaltyEach}개 획득
                 {roundFlash.onesCount > 0 && ` (1번 카드 ${roundFlash.onesCount}장 → ×${2 ** roundFlash.onesCount} 배수)`}
               </p>
               {roundFlash.newlyEliminatedSeats.length > 0 && (
-                <p className="mt-0.5 text-rose-300">💀 {roundFlash.newlyEliminatedSeats.map((s) => names[s]).join(", ")}님 탈락!</p>
+                <p className="mt-0.5 text-rose-300 light:text-rose-600">💀 {roundFlash.newlyEliminatedSeats.map((s) => names[s]).join(", ")}님 탈락!</p>
               )}
             </>
           ) : (
             trickFlash && (
-              <p className="text-white/70">
+              <p className="text-white/70 light:text-slate-600">
                 {names[trickFlash.winnerSeats[0]]}님이 트릭 {trickFlash.trickNumber}을 가져가 다음 리드가 됩니다.
               </p>
             )
@@ -492,7 +496,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
         </div>
       )}
 
-      <p className={`text-center text-xs font-medium ${isMyTurn ? "text-amber-200" : "text-white/50"}`}>
+      <p className={`text-center text-xs font-medium ${isMyTurn ? "text-amber-200 light:text-amber-700" : "text-white/50 light:text-slate-500"}`}>
         {gameJustEnded
           ? "🏁 게임이 종료되었습니다 — 곧 최종 결과가 표시됩니다."
           : me.eliminated
@@ -513,9 +517,9 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
           advanced) `state.trickPlays`, so the result stays visible & legible
           for the full hold window regardless of how fast the engine itself
           moved on. */}
-      <section ref={trickAreaRef} className="flex flex-wrap items-start justify-center gap-2.5 rounded-2xl border border-white/10 bg-black/25 p-3">
+      <section ref={trickAreaRef} className="flex flex-wrap items-start justify-center gap-2.5 rounded-2xl border border-white/10 light:border-slate-200 bg-black/25 light:bg-white/80 p-3">
         {displayedTrickPlays.length === 0 ? (
-          <p className="py-6 text-xs text-white/30">아직 아무도 카드를 내지 않았어요.</p>
+          <p className="py-6 text-xs text-white/30 light:text-slate-400">아직 아무도 카드를 내지 않았어요.</p>
         ) : (
           displayedTrickPlays.map((play, i) => (
             <TrickSlot
@@ -537,12 +541,12 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
         <div key={holdKey} className="-mt-1 flex flex-col items-center gap-1.5">
           <TrickHoldProgressBar durationMs={holdDurationMs} />
           <div className="flex items-center gap-2.5">
-            <span className="text-[11px] text-white/50">
+            <span className="text-[11px] text-white/50 light:text-slate-500">
               <TrickHoldCountdown durationMs={holdDurationMs} />초 후 {gameJustEnded ? "최종 결과로 진행" : "다음 트릭으로 진행"}
             </span>
             <button
               onClick={handleSkipTrickHold}
-              className="rounded-full border border-amber-300/60 bg-black/40 px-5 py-2 text-xs font-semibold text-amber-100 shadow-[0_0_14px_-2px_rgba(251,191,36,0.6)] transition hover:border-amber-200 hover:bg-black/55 hover:shadow-[0_0_18px_-2px_rgba(251,191,36,0.8)] active:scale-95"
+              className="rounded-full border border-amber-300/60 bg-black/40 light:border-amber-400 light:bg-amber-50 px-5 py-2 text-xs font-semibold text-amber-100 light:text-amber-700 shadow-[0_0_14px_-2px_rgba(251,191,36,0.6)] transition hover:border-amber-200 hover:bg-black/55 hover:shadow-[0_0_18px_-2px_rgba(251,191,36,0.8)] light:hover:border-amber-500 light:hover:bg-amber-100 active:scale-95"
             >
               ⏩ 스킵
             </button>
@@ -562,31 +566,31 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
               ref={setSeatRowRef(seat)}
               className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs transition ${
                 p.eliminated
-                  ? "border-white/5 bg-black/10 opacity-50"
+                  ? "border-white/5 bg-black/10 opacity-50 light:border-slate-200 light:bg-slate-100"
                   : isActive
-                    ? "border-amber-300/60 bg-amber-400/10"
-                    : "border-white/10 bg-black/20"
+                    ? "border-amber-300/60 bg-amber-400/10 light:border-amber-400 light:bg-amber-50"
+                    : "border-white/10 bg-black/20 light:border-slate-200 light:bg-white/70"
               }`}
             >
-              <span className="flex items-center gap-1.5 font-semibold text-white/90">
+              <span className="flex items-center gap-1.5 font-semibold text-white/90 light:text-slate-900">
                 <Avatar size={20} />
-                <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+                <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`} />
                 {isActive && <span title="차례">👉</span>}
                 {names[seat]}
-                {isSelf && <span className="text-amber-200">(나)</span>}
-                {p.eliminated && <span className="text-rose-300">💀 탈락</span>}
+                {isSelf && <span className="text-amber-200 light:text-amber-700">(나)</span>}
+                {p.eliminated && <span className="text-rose-300 light:text-rose-600">💀 탈락</span>}
               </span>
-              <div className="flex items-center gap-3 text-white/70">
+              <div className="flex items-center gap-3 text-white/70 light:text-slate-600">
                 <span title="남은 손패 수">🂠 {p.hand.length}장</span>
                 <span
                   ref={setCucumberBadgeRef(seat)}
                   title={`오이 ${p.cucumbers} / ${state.eliminationThreshold}개`}
                   className={`flex items-center gap-1 rounded-full border px-2 py-0.5 font-bold ${
                     p.cucumbers >= state.eliminationThreshold
-                      ? "border-rose-400/60 text-rose-300"
+                      ? "border-rose-400/60 text-rose-300 light:border-rose-400 light:text-rose-600"
                       : p.cucumbers > 0
-                        ? "border-amber-300/40 text-amber-200"
-                        : "border-white/15 text-white/50"
+                        ? "border-amber-300/40 text-amber-200 light:border-amber-400 light:text-amber-700"
+                        : "border-white/15 text-white/50 light:border-slate-300 light:text-slate-500"
                   }`}
                 >
                   <CucumberIcon className="h-3.5 w-3.5" /> {p.cucumbers} / {state.eliminationThreshold}
@@ -600,12 +604,13 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
       {/* My hand */}
       <section
         ref={handSectionRef}
-        className="rounded-2xl border border-emerald-300/20 p-2.5 sm:p-3"
+        className="rounded-2xl border border-emerald-300/20 light:border-emerald-300 light:shadow-sm p-2.5 sm:p-3"
+        // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
         style={{ background: "linear-gradient(160deg,#173322 0%,#0f2116 55%,#081108 100%)" }}
       >
-        <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-emerald-200/90 uppercase">🃏 내 손패 ({me.hand.length}장)</h3>
+        <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-emerald-200/90 light:text-emerald-700 uppercase">🃏 내 손패 ({me.hand.length}장)</h3>
         {me.hand.length === 0 ? (
-          <p className="text-xs text-white/30">손패가 없습니다.</p>
+          <p className="text-xs text-white/30 light:text-slate-400">손패가 없습니다.</p>
         ) : (
           // Fanned overlap (task brief §2) instead of a wrapping grid — up to
           // 7 cards at round start still fit a phone-width hand at the

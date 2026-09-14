@@ -11,7 +11,8 @@ import { RESOURCE_ORDER, type Resource, type ResourceBundle } from "./cards";
  * / CoinStack below). Extracted out of CenturyBoard.tsx so both the desktop
  * mat layout and the mobile compact dashboard can share one visual language.
  */
-export const MAT = "relative overflow-hidden rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4";
+export const MAT = "relative overflow-hidden rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4 light:border-amber-900/20 light:shadow-lg";
+// TODO(theme): MAT_STYLE's background is a hardcoded dark wood gradient via inline style; left as-is in light mode (physical game-mat art, not a plain UI panel).
 export const MAT_STYLE: React.CSSProperties = {
   background:
     "radial-gradient(ellipse 140% 60% at 50% -10%, rgba(255,205,130,0.10), transparent 55%)," +
@@ -21,6 +22,7 @@ export const MAT_STYLE: React.CSSProperties = {
 };
 
 export const FELT = "relative overflow-hidden rounded-2xl border p-2 sm:p-3";
+// TODO(theme): FELT_STYLE's background/borderColor is a hardcoded dark felt gradient via inline style; left as-is in light mode (physical game-mat art, not a plain UI panel).
 export const FELT_STYLE: React.CSSProperties = {
   background:
     "radial-gradient(circle at 50% 0%, rgba(160,40,40,0.16), transparent 60%)," +
@@ -30,6 +32,7 @@ export const FELT_STYLE: React.CSSProperties = {
   boxShadow: "inset 0 0 0 1px rgba(198,160,90,0.2), inset 0 0 30px rgba(0,0,0,0.6)",
 };
 
+// TODO(theme): CARAVAN_STYLE's background is a hardcoded dark wood gradient via inline style; left as-is in light mode (physical game-mat art, not a plain UI panel).
 export const CARAVAN_STYLE: React.CSSProperties = {
   background: "linear-gradient(160deg, #5a3b1c 0%, #3c260f 55%, #2a1a0a 100%)",
   borderColor: "rgba(198,160,90,0.4)",
@@ -51,7 +54,7 @@ export const CARD_FRAME_STYLE: React.CSSProperties = {
 
 export function ResourceChip({ resource, count, size = "h-4 w-4" }: { resource: Resource; count: number; size?: string }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/30 px-1.5 py-0.5 text-[11px] font-semibold text-white/90">
+    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/30 px-1.5 py-0.5 text-[11px] font-semibold text-white/90 light:border-slate-300 light:bg-white/80 light:text-slate-800 light:shadow-sm">
       <ResourceCube resource={resource} className={size} />
       {count}
     </span>
@@ -60,7 +63,7 @@ export function ResourceChip({ resource, count, size = "h-4 w-4" }: { resource: 
 
 export function BundleRow({ bundle, size = "h-4 w-4" }: { bundle: ResourceBundle; size?: string }) {
   const entries = RESOURCE_ORDER.filter((r) => (bundle[r] ?? 0) > 0);
-  if (entries.length === 0) return <span className="text-[11px] text-white/30">없음</span>;
+  if (entries.length === 0) return <span className="text-[11px] text-white/30 light:text-slate-400">없음</span>;
   return (
     <div className="flex flex-wrap items-center gap-1">
       {entries.map((r) => (
@@ -109,6 +112,7 @@ export function CartInventory({
   }
   const slots = Array.from({ length: limit }, (_, i) => cubes[i] ?? null);
   const overflowCubes = cubes.slice(limit);
+  // TODO(theme): well background is a hardcoded dark carved-hollow radial gradient via inline style; left as-is in light mode (physical caravan-board art, not a plain UI panel).
   const wellStyle = (filled: boolean): React.CSSProperties => ({
     background: "radial-gradient(circle at 50% 38%, #241708 0%, #100b04 72%)",
     boxShadow: filled
@@ -120,13 +124,13 @@ export function CartInventory({
     <div className={compact ? "flex flex-wrap gap-1" : "grid grid-cols-5 gap-1.5 sm:gap-2"}>
       {slots.map((r, i) => (
         <div key={i} className={`flex items-center justify-center rounded-full ${resolvedSlot}`} style={wellStyle(!!r)}>
-          {r ? <ResourceCube resource={r} className={resolvedCube} /> : <span className="h-1 w-1 rounded-full bg-white/10" />}
+          {r ? <ResourceCube resource={r} className={resolvedCube} /> : <span className="h-1 w-1 rounded-full bg-white/10 light:bg-black/10" />}
         </div>
       ))}
       {overflowCubes.map((r, i) => (
         <div
           key={`overflow-${i}`}
-          className={`flex items-center justify-center rounded-full border-2 border-rose-400/70 bg-rose-500/10 shadow-[0_0_10px_-1px_rgba(244,63,94,0.7)] ${resolvedSlot}`}
+          className={`flex items-center justify-center rounded-full border-2 border-rose-400/70 bg-rose-500/10 shadow-[0_0_10px_-1px_rgba(244,63,94,0.7)] light:bg-rose-100 ${resolvedSlot}`}
           title="10개 한도 초과 — 버려야 합니다"
         >
           <ResourceCube resource={r} className={resolvedCube} />
@@ -233,7 +237,7 @@ export function CoinStack({ kind, count, capacity }: { kind: "gold" | "silver"; 
           );
         })}
       </div>
-      <span className="mt-0.5 text-[9px] font-bold text-white/70">{count}개</span>
+      <span className="mt-0.5 text-[9px] font-bold text-white/70 light:text-slate-500">{count}개</span>
     </div>
   );
 }
@@ -251,10 +255,10 @@ export function DeckStack({ label, count, accent }: { label: string; count: numb
   if (count === 0) {
     return (
       <div className="flex flex-col items-center gap-1">
-        <div className="flex h-[58px] w-11 items-center justify-center rounded-md border border-dashed border-white/15 text-[8px] text-white/30 sm:h-[64px] sm:w-12">
+        <div className="flex h-[58px] w-11 items-center justify-center rounded-md border border-dashed border-white/15 text-[8px] text-white/30 sm:h-[64px] sm:w-12 light:border-slate-300 light:text-slate-400">
           소진
         </div>
-        <span className="text-[9px] font-semibold text-white/40">{label}</span>
+        <span className="text-[9px] font-semibold text-white/40 light:text-slate-500">{label}</span>
       </div>
     );
   }
@@ -317,7 +321,7 @@ export function SpiceBowl({ resource, compact = false }: { resource: Resource; c
           ))}
         </div>
       </div>
-      {!compact && <span className="text-[8px] font-semibold tracking-wide text-white/50 sm:text-[9px]">{meta.label.split(" ")[0]}</span>}
+      {!compact && <span className="text-[8px] font-semibold tracking-wide text-white/50 sm:text-[9px] light:text-slate-500">{meta.label.split(" ")[0]}</span>}
     </div>
   );
 }

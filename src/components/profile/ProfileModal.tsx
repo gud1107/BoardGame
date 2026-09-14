@@ -49,13 +49,13 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
           <button
             onClick={() => void resetAvatar()}
             disabled={uploading || !avatarUrl}
-            className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 transition hover:border-white/30 disabled:opacity-40"
+            className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 transition hover:border-white/30 disabled:opacity-40 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
           >
             기본 이미지로 초기화
           </button>
         </div>
 
-        <p className="text-center text-[11px] leading-relaxed text-white/40">
+        <p className="text-center text-[11px] leading-relaxed text-white/40 light:text-slate-400">
           PNG · JPG · WEBP · GIF, 최대 2MB. 기본 이미지는 `{DEFAULT_AVATAR}`이며, 다른 방 참가자에게는 동기화되지 않고 내
           화면에만 적용돼요.
         </p>

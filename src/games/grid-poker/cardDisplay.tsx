@@ -47,7 +47,7 @@ export function CardChip({
   if (card.kind === "joker") {
     return (
       <span
-        className={`inline-flex ${dims} flex-col items-center justify-center rounded-md border border-amber-400/40 bg-amber-400/10 font-bold text-amber-300 ${SIZE_SUIT_TEXT[size]} ${dim ? "opacity-40" : ""}`}
+        className={`inline-flex ${dims} flex-col items-center justify-center rounded-md border border-amber-400/40 bg-amber-400/10 font-bold text-amber-300 light:border-amber-500/50 light:bg-amber-100 light:text-amber-700 ${SIZE_SUIT_TEXT[size]} ${dim ? "opacity-40" : ""}`}
       >
         🃏
       </span>
@@ -55,7 +55,7 @@ export function CardChip({
   }
   return (
     <span
-      className={`inline-flex ${dims} flex-col items-center justify-center gap-0.5 rounded-md border border-white/15 bg-white/95 font-bold leading-none ${SUIT_TEXT_CLASS[card.suit]} ${dim ? "opacity-40" : ""}`}
+      className={`inline-flex ${dims} flex-col items-center justify-center gap-0.5 rounded-md border border-white/15 bg-white/95 font-bold leading-none light:border-slate-300 light:shadow-sm ${SUIT_TEXT_CLASS[card.suit]} ${dim ? "opacity-40" : ""}`}
     >
       <span className={SIZE_RANK_TEXT[size]}>{rankLabel(card.rank)}</span>
       <span className={SIZE_SUIT_TEXT[size]}>{SUIT_SYMBOL[card.suit]}</span>

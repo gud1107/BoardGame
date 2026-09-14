@@ -38,8 +38,8 @@ function PredictionContent({ state, viewerSeat, names, connectedSeats, onAction 
     <div className="flex flex-col gap-3">
       {state.phase === "predicting" &&
         (!alreadySubmitted ? (
-          <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-            <p className="text-[11px] text-white/50">이번 라운드 몇 승을 예측하시나요? (0~{R})</p>
+          <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-3 light:border-slate-200 light:bg-slate-50">
+            <p className="text-[11px] text-white/50 light:text-slate-500">이번 라운드 몇 승을 예측하시나요? (0~{R})</p>
             <div className="flex flex-wrap gap-1.5">
               {Array.from({ length: R + 1 }, (_, v) => v).map((v) => (
                 <button
@@ -47,8 +47,8 @@ function PredictionContent({ state, viewerSeat, names, connectedSeats, onAction 
                   onClick={() => setPredictionChoice(v)}
                   className={`h-9 min-w-9 rounded-lg border px-2.5 text-xs font-semibold transition ${
                     predictionChoice === v
-                      ? "border-fuchsia-400 bg-fuchsia-500/20 text-fuchsia-200"
-                      : "border-white/15 text-white/70 hover:border-white/30"
+                      ? "border-fuchsia-400 bg-fuchsia-500/20 text-fuchsia-200 light:border-fuchsia-500 light:bg-fuchsia-50 light:text-fuchsia-700"
+                      : "border-white/15 text-white/70 hover:border-white/30 light:border-slate-200 light:text-slate-600 light:hover:border-slate-400"
                   }`}
                 >
                   {v}승
@@ -56,7 +56,7 @@ function PredictionContent({ state, viewerSeat, names, connectedSeats, onAction 
               ))}
             </div>
             {hiddenAvailable && (
-              <label className="flex items-center gap-2 text-[11px] text-white/60">
+              <label className="flex items-center gap-2 text-[11px] text-white/60 light:text-slate-600">
                 <input
                   type="checkbox"
                   checked={useHidden}
@@ -80,7 +80,7 @@ function PredictionContent({ state, viewerSeat, names, connectedSeats, onAction 
             </button>
           </div>
         ) : (
-          <p className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[11px] text-emerald-200">
+          <p className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[11px] text-emerald-200 light:bg-emerald-50 light:text-emerald-700">
             예측을 확정했습니다. 다른 플레이어들을 기다리는 중… ({submittedCount}/{state.playerCount})
           </p>
         ))}
@@ -111,11 +111,11 @@ function PredictionContent({ state, viewerSeat, names, connectedSeats, onAction 
             <div
               key={seat}
               className={`flex flex-col gap-1 rounded-xl border px-2.5 py-2 text-xs transition ${
-                isMe ? "border-fuchsia-400/40 bg-fuchsia-500/10" : "border-white/10 bg-white/[0.02]"
+                isMe ? "border-fuchsia-400/40 bg-fuchsia-500/10 light:border-fuchsia-300 light:bg-fuchsia-50" : "border-white/10 bg-white/[0.02] light:border-slate-200 light:bg-slate-50"
               } ${!connectedSeats.has(seat) ? "opacity-40" : ""}`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className={`flex min-w-0 items-center gap-1.5 truncate font-semibold ${isMe ? "text-fuchsia-200" : "text-white/85"}`}>
+                <span className={`flex min-w-0 items-center gap-1.5 truncate font-semibold ${isMe ? "text-fuchsia-200 light:text-fuchsia-700" : "text-white/85 light:text-slate-800"}`}>
                   <Avatar size={18} className="shrink-0" />
                   {names[seat]}
                   {isMe ? " (나)" : ""}
@@ -127,15 +127,15 @@ function PredictionContent({ state, viewerSeat, names, connectedSeats, onAction 
                     moment `nextRound` advances past it, never to reappear this game. */}
                 {player.hiddenRound === round.roundNumber && <HiddenActivationBadge title="이번 라운드 히든 사용 중" />}
               </div>
-              <div className="flex items-center justify-between text-white/60">
+              <div className="flex items-center justify-between text-white/60 light:text-slate-600">
                 <span>
                   예측 {visible === "pending" ? "?" : visible === "submitted" ? "완료" : visible === "hidden" ? "🙈" : `${visible}승`} / 현재{" "}
-                  <b className={onTarget ? "text-emerald-300" : exceeded ? "text-rose-300" : "text-white/80"}>{current}승</b>
+                  <b className={onTarget ? "text-emerald-300 light:text-emerald-600" : exceeded ? "text-rose-300 light:text-rose-600" : "text-white/80 light:text-slate-700"}>{current}승</b>
                 </span>
                 {state.phase === "playing" && submitted && (
                   <span
                     className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                      onTarget ? "bg-emerald-400/20 text-emerald-200" : exceeded ? "bg-rose-400/20 text-rose-200" : "bg-white/10 text-white/50"
+                      onTarget ? "bg-emerald-400/20 text-emerald-200 light:bg-emerald-50 light:text-emerald-700" : exceeded ? "bg-rose-400/20 text-rose-200 light:bg-rose-50 light:text-rose-700" : "bg-white/10 text-white/50 light:bg-slate-100 light:text-slate-500"
                     }`}
                   >
                     {onTarget ? "적중 중" : exceeded ? "초과" : "진행 중"}
@@ -156,8 +156,8 @@ export default function PredictionStatusBoard(props: PredictionStatusBoardProps)
   return (
     <>
       {/* Desktop: always-visible fixed column beside the board. */}
-      <aside className="hidden max-h-[70vh] w-64 shrink-0 flex-col gap-2 overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.03] p-3 lg:flex">
-        <h3 className="px-1 text-xs font-semibold tracking-wide text-white/50 uppercase">🎯 승수 예측</h3>
+      <aside className="hidden max-h-[70vh] w-64 shrink-0 flex-col gap-2 overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.03] p-3 lg:flex light:border-slate-200 light:bg-white/90 light:shadow-md">
+        <h3 className="px-1 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">🎯 승수 예측</h3>
         <PredictionContent {...props} />
       </aside>
 
@@ -165,7 +165,7 @@ export default function PredictionStatusBoard(props: PredictionStatusBoardProps)
       <button
         onClick={() => setDrawerOpen(true)}
         aria-label="승수 예측 패널 열기"
-        className="fixed top-1/2 right-0 z-40 flex -translate-y-1/2 flex-col items-center gap-1 rounded-l-xl border border-r-0 border-fuchsia-400/30 bg-[#1c0f28] px-1.5 py-3 text-[10px] font-semibold text-fuchsia-200 shadow-lg lg:hidden"
+        className="fixed top-1/2 right-0 z-40 flex -translate-y-1/2 flex-col items-center gap-1 rounded-l-xl border border-r-0 border-fuchsia-400/30 bg-[#1c0f28] px-1.5 py-3 text-[10px] font-semibold text-fuchsia-200 shadow-lg lg:hidden light:border-fuchsia-300 light:bg-white light:text-fuchsia-700 light:shadow-md"
       >
         <span className="text-base">🎯</span>
         <span className="[writing-mode:vertical-rl]">예측</span>
@@ -174,13 +174,13 @@ export default function PredictionStatusBoard(props: PredictionStatusBoardProps)
       {drawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-end lg:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={() => setDrawerOpen(false)} />
-          <div className="relative flex h-full w-[85vw] max-w-sm flex-col gap-2 overflow-y-auto border-l border-white/10 bg-[#1c0f28] p-4 text-xs shadow-2xl">
+          <div className="relative flex h-full w-[85vw] max-w-sm flex-col gap-2 overflow-y-auto border-l border-white/10 bg-[#1c0f28] p-4 text-xs shadow-2xl light:border-slate-200 light:bg-white light:shadow-lg">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold tracking-wide text-white/50 uppercase">🎯 승수 예측</h3>
+              <h3 className="text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">🎯 승수 예측</h3>
               <button
                 onClick={() => setDrawerOpen(false)}
                 aria-label="닫기"
-                className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/60 hover:border-white/30 hover:text-white"
+                className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/60 hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
               >
                 ✕
               </button>

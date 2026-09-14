@@ -39,10 +39,10 @@ export default function LoginForm() {
 
   return (
     <>
-      <h1 className="mb-6 text-xl font-bold text-white">로그인</h1>
+      <h1 className="mb-6 text-xl font-bold text-white light:text-slate-900">로그인</h1>
       <form
         onSubmit={handleSubmit}
-        className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5"
+        className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5 light:border-slate-200 light:bg-white light:shadow-sm"
       >
         <input
           type="email"
@@ -50,7 +50,7 @@ export default function LoginForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="이메일"
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
         />
         <input
           type="password"
@@ -58,18 +58,18 @@ export default function LoginForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="비밀번호"
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
         />
         {error && <p className="text-xs text-rose-300">{error}</p>}
         <button
           type="submit"
           disabled={loading}
-          className="mt-2 w-full rounded-xl bg-rose-500 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+          className="mt-2 w-full rounded-xl bg-rose-500 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-100 light:disabled:text-slate-400"
         >
           {loading ? "로그인 중…" : "로그인"}
         </button>
       </form>
-      <p className="mt-4 text-center text-sm text-white/50">
+      <p className="mt-4 text-center text-sm text-white/50 light:text-slate-500">
         계정이 없으신가요?{" "}
         <Link href="/signup" className="text-rose-300 underline">
           회원가입

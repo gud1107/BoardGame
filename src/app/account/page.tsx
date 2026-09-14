@@ -51,18 +51,18 @@ export default function AccountPage() {
   }
 
   if (!hydrated || !userId || !tier) {
-    return <div className="mx-auto max-w-md px-4 py-16 text-center text-sm text-white/40">불러오는 중…</div>;
+    return <div className="mx-auto max-w-md px-4 py-16 text-center text-sm text-white/40 light:text-slate-400">불러오는 중…</div>;
   }
 
   return (
     <div className="mx-auto max-w-md px-4 py-16">
-      <h1 className="mb-6 text-xl font-bold text-white">내 구독</h1>
-      <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <h1 className="mb-6 text-xl font-bold text-white light:text-slate-900">내 구독</h1>
+      <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 light:border-slate-200 light:bg-white light:shadow-sm">
         <div className="flex items-center gap-3">
           <Avatar src={profileAvatarUrl} size={56} />
           <div>
-            <p className="text-xs text-white/40">계정</p>
-            <p className="text-sm text-white">{email}</p>
+            <p className="text-xs text-white/40 light:text-slate-400">계정</p>
+            <p className="text-sm text-white light:text-slate-900">{email}</p>
             <button
               onClick={() => setProfileModalOpen(true)}
               className="mt-1 text-xs text-rose-300 hover:text-rose-200"
@@ -72,10 +72,10 @@ export default function AccountPage() {
           </div>
         </div>
         <div>
-          <p className="text-xs text-white/40">요금제</p>
-          <p className="text-sm font-semibold text-rose-200">{TIER_LABELS[tier]}</p>
+          <p className="text-xs text-white/40 light:text-slate-400">요금제</p>
+          <p className="text-sm font-semibold text-rose-200 light:text-rose-700">{TIER_LABELS[tier]}</p>
           {subscription?.periodEnd && (
-            <p className="mt-0.5 text-xs text-white/40">
+            <p className="mt-0.5 text-xs text-white/40 light:text-slate-400">
               {new Date(subscription.periodEnd).toLocaleDateString("ko-KR")}까지
               {subscription.cancelAtPeriodEnd && " (해지 예약됨 — 이후 무료로 전환)"}
             </p>
@@ -83,8 +83,8 @@ export default function AccountPage() {
         </div>
         {entitlement && (
           <div>
-            <p className="text-xs text-white/40">오늘 이용 현황</p>
-            <p className="text-sm text-white">
+            <p className="text-xs text-white/40 light:text-slate-400">오늘 이용 현황</p>
+            <p className="text-sm text-white light:text-slate-900">
               {entitlement.used} / {entitlement.cap}
               {entitlement.unit === "games" ? "회" : "분"}
             </p>
@@ -93,14 +93,14 @@ export default function AccountPage() {
         {subscription && subscription.tier !== "free" && (
           <button
             onClick={() => void toggleCancelAtPeriodEnd()}
-            className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30"
+            className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
           >
             {subscription.cancelAtPeriodEnd ? "해지 예약 취소" : "해지 예약하기"}
           </button>
         )}
-        <p className="text-xs text-white/40">요금제 업그레이드/충전은 아직 준비 중이에요 — 문의는 관리자에게 해주세요.</p>
-        <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-4">
-          <Link href="/" className="text-xs text-white/50 hover:text-white/80">
+        <p className="text-xs text-white/40 light:text-slate-400">요금제 업그레이드/충전은 아직 준비 중이에요 — 문의는 관리자에게 해주세요.</p>
+        <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-4 light:border-slate-200">
+          <Link href="/" className="text-xs text-white/50 hover:text-white/80 light:text-slate-500 light:hover:text-slate-800">
             대시보드로
           </Link>
           <button

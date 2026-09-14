@@ -407,10 +407,10 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
 
     if (!iAcked && !confirmClicked) {
       return (
-        <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center">
+        <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/90 light:shadow-sm p-6 text-center">
           <span className="text-3xl">🐱🐭</span>
-          <h2 className="break-keep text-base font-bold text-white">시작 전 카드 확인</h2>
-          <p className="max-w-xs break-keep text-xs text-white/50">
+          <h2 className="break-keep text-base font-bold text-white light:text-slate-900">시작 전 카드 확인</h2>
+          <p className="max-w-xs break-keep text-xs text-white/50 light:text-slate-500">
             준비가 되면 아래 버튼을 눌러 내 카드 양 끝(1, 4번)을 확인하세요. 가운데 2장은 능력을 쓰기 전까지 알 수 없어요.
           </p>
           <div className="flex gap-2">
@@ -426,7 +426,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
           >
             👁️ 카드 확인하기 (준비 완료)
           </button>
-          <p className="break-keep text-[11px] text-white/35">
+          <p className="break-keep text-[11px] text-white/35 light:text-slate-400">
             {ackedCount}/{state.playerCount}명 확인 완료
           </p>
         </div>
@@ -434,10 +434,10 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
     }
 
     return (
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center">
+      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/90 light:shadow-sm p-6 text-center">
         <span className="text-3xl">🐱🐭</span>
-        <h2 className="break-keep text-base font-bold text-white">시작 전 카드 확인</h2>
-        <p className="max-w-xs break-keep text-xs text-white/50">양 끝(1, 4번) 카드만 몰래 확인하세요. 가운데 2장은 능력을 쓰기 전까지 알 수 없어요.</p>
+        <h2 className="break-keep text-base font-bold text-white light:text-slate-900">시작 전 카드 확인</h2>
+        <p className="max-w-xs break-keep text-xs text-white/50 light:text-slate-500">양 끝(1, 4번) 카드만 몰래 확인하세요. 가운데 2장은 능력을 쓰기 전까지 알 수 없어요.</p>
         <div className="flex gap-2">
           {SLOTS.map((slot) => {
             // 2026-09-04 (user request, "카드확인하기 단계에 상대를 기다릴때까지는
@@ -463,17 +463,17 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
           })}
         </div>
         {iAcked ? (
-          <p className="break-keep text-xs text-white/40">
+          <p className="break-keep text-xs text-white/40 light:text-slate-400">
             {ackedCount}/{state.playerCount}명 확인 완료 — 상대를 기다리는 중...
           </p>
         ) : (
           <div className="flex flex-col items-center gap-2">
-            <p className="break-keep text-xs text-amber-200/80">{setupPeekSecondsLeft}초 후 자동으로 뒷면으로 뒤집혀요</p>
+            <p className="break-keep text-xs text-amber-200/80 light:text-amber-700">{setupPeekSecondsLeft}초 후 자동으로 뒷면으로 뒤집혀요</p>
             {setupSkipAvailable && (
               <button
                 type="button"
                 onClick={dismissSetupPeek}
-                className="break-keep rounded-full border border-white/20 px-4 py-1.5 text-[11px] text-white/60 hover:border-white/40 active:scale-95"
+                className="break-keep rounded-full border border-white/20 px-4 py-1.5 text-[11px] text-white/60 hover:border-white/40 active:scale-95 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
               >
                 ⏩ 바로 시작 (스킵)
               </button>
@@ -533,7 +533,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
           (AskUserQuestion 2026-08-31: the modal replaces the old always-on banner as the
           *announcement*; this slim strip keeps the "N턴 남음" status visible afterward). */}
       {state.callerId !== null && activeCallModal === null && (
-        <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-center text-xs font-semibold text-amber-200">
+        <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 light:border-amber-300 light:bg-amber-50 px-3 py-2 text-center text-xs font-semibold text-amber-200 light:text-amber-700">
           🐱 {names[state.callerId]}님이 &ldquo;랫어탯캣!&rdquo;을 외쳤습니다 — 마지막 턴이 진행 중이에요 ({state.finalRoundTurnsLeft}턴 남음)
         </div>
       )}
@@ -550,21 +550,23 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
               key={seat}
               ref={(el) => setSeatRef(seat, el)}
               className={`relative flex flex-col items-center gap-1.5 rounded-xl border p-2.5 ${
-                isTurn ? "border-emerald-400/50 bg-emerald-400/5" : "border-white/10 bg-white/[0.02]"
+                isTurn
+                  ? "border-emerald-400/50 bg-emerald-400/5 light:border-emerald-400 light:bg-emerald-50"
+                  : "border-white/10 bg-white/[0.02] light:border-slate-200 light:bg-slate-50"
               } ${isCaller ? "ratc-caller-border-glow border-amber-300/70" : ""}`}
             >
               {badge && (
                 <span
                   key={badge.key}
-                  className="ratc-badge-pop pointer-events-none absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-sky-300/70 bg-black/80 px-2 py-0.5 text-[10px] font-bold text-sky-200 shadow"
+                  className="ratc-badge-pop pointer-events-none absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-sky-300/70 bg-black/80 light:border-sky-400 light:bg-white/90 px-2 py-0.5 text-[10px] font-bold text-sky-200 light:text-sky-700 shadow light:shadow-md"
                 >
                   {badge.text}
                 </span>
               )}
               <div className="flex items-center gap-1.5">
                 <Avatar size={22} />
-                <span className="max-w-[6rem] truncate text-xs font-semibold text-white/80">{names[seat]}</span>
-                {!connectedSeats.has(seat) && <span className="text-[10px] text-white/30">💤</span>}
+                <span className="max-w-[6rem] truncate text-xs font-semibold text-white/80 light:text-slate-700">{names[seat]}</span>
+                {!connectedSeats.has(seat) && <span className="text-[10px] text-white/30 light:text-slate-400">💤</span>}
                 {isCaller && <span className="text-[10px]">🐱</span>}
               </div>
               <div className="flex gap-1">
@@ -585,7 +587,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
       </div>
 
       {/* Center: deck / discard / drawn-card decision zone */}
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/90 light:shadow-sm p-4">
         <div className="flex items-center gap-6">
           <button
             ref={deckRef}
@@ -597,7 +599,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
             <div className={canDrawDeck ? "animate-pulse" : ""}>
               <CardBack size="lg" />
             </div>
-            <span className="text-[11px] text-white/50">덱 ({state.deck.length}장)</span>
+            <span className="text-[11px] text-white/50 light:text-slate-500">덱 ({state.deck.length}장)</span>
           </button>
 
           <button
@@ -610,15 +612,15 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
             {discardTop ? (
               <CardSlot size="lg" handCard={{ card: discardTop, isKnownToOwner: true, isRevealed: true }} revealed highlighted={canDrawDiscard} />
             ) : (
-              <div className="flex h-24 w-16 items-center justify-center rounded-xl border-2 border-dashed border-white/15 text-white/20 sm:h-28 sm:w-20">-</div>
+              <div className="flex h-24 w-16 items-center justify-center rounded-xl border-2 border-dashed border-white/15 light:border-slate-300 text-white/20 light:text-slate-400 sm:h-28 sm:w-20">-</div>
             )}
-            <span className="text-[11px] text-white/50">버림 더미</span>
+            <span className="text-[11px] text-white/50 light:text-slate-500">버림 더미</span>
           </button>
         </div>
 
         {isMyTurn && state.turnPhase === "DRAW" && (
           <div className="flex flex-col items-center gap-2">
-            <p className="text-xs text-white/50">
+            <p className="text-xs text-white/50 light:text-slate-500">
               {state.drawTwoStage === 1 ? "덱에서 두 번째(마지막) 카드를 뽑으세요." : "덱 또는 버림 더미에서 카드를 가져오세요."}
             </p>
           </div>
@@ -630,7 +632,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
             see engine.ts docstring point 5 for why the call moved here instead of "드로우 대신". */}
         {isMyTurn && state.turnPhase === "TURN_DECISION" && (
           <div className="flex flex-col items-center gap-2.5">
-            <p className="text-xs text-white/50">이번 턴 행동을 마쳤어요. 턴을 마칠까요, 랫어탯캣을 외칠까요?</p>
+            <p className="text-xs text-white/50 light:text-slate-500">이번 턴 행동을 마쳤어요. 턴을 마칠까요, 랫어탯캣을 외칠까요?</p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               {canPassTurn && (
                 <button
@@ -652,17 +654,17 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
                 </button>
               )}
             </div>
-            {!canCall && <p className="text-[11px] text-white/35">이미 다른 플레이어가 콜을 외쳤어요 — 턴 종료만 가능해요.</p>}
+            {!canCall && <p className="text-[11px] text-white/35 light:text-slate-400">이미 다른 플레이어가 콜을 외쳤어요 — 턴 종료만 가능해요.</p>}
           </div>
         )}
 
         {isMyTurn && state.turnPhase === "DECIDE_CARD" && state.drawnCard && (
           <div className="flex flex-col items-center gap-2">
-            <p className="text-xs text-white/60">뽑은 카드:</p>
+            <p className="text-xs text-white/60 light:text-slate-600">뽑은 카드:</p>
             <CardSlot size="lg" handCard={{ card: state.drawnCard, isKnownToOwner: true, isRevealed: true }} revealed />
-            <p className="text-xs text-white/50">{state.mustReplace ? "버림 더미에서 가져온 카드는 반드시 교체해야 해요." : "아래 내 카드 중 하나와 교체하거나 그냥 버리세요."}</p>
+            <p className="text-xs text-white/50 light:text-slate-500">{state.mustReplace ? "버림 더미에서 가져온 카드는 반드시 교체해야 해요." : "아래 내 카드 중 하나와 교체하거나 그냥 버리세요."}</p>
             {canDiscard && (
-              <button type="button" onClick={() => onAction({ type: "DISCARD_CARD", seat: viewerSeat })} className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 hover:border-white/40">
+              <button type="button" onClick={() => onAction({ type: "DISCARD_CARD", seat: viewerSeat })} className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 hover:border-white/40 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400">
                 그냥 버리기
               </button>
             )}
@@ -672,7 +674,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
         {isMyTurn && state.turnPhase === "EXECUTE_POWER" && state.drawnCard && state.drawnCard.kind !== "number" && (
           <div className="flex flex-col items-center gap-2">
             <CardSlot size="lg" handCard={{ card: state.drawnCard, isKnownToOwner: true, isRevealed: true }} revealed />
-            <p className="max-w-xs text-xs text-white/60">{SPECIAL_INSTRUCTIONS[state.drawnCard.kind]}</p>
+            <p className="max-w-xs text-xs text-white/60 light:text-slate-600">{SPECIAL_INSTRUCTIONS[state.drawnCard.kind]}</p>
             {state.drawnCard.kind === "drawTwo" && (
               <button
                 type="button"
@@ -683,12 +685,12 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
               </button>
             )}
             {inSwapPickTarget && (
-              <button type="button" onClick={() => setSwapMySlot(null)} className="rounded-full border border-white/20 px-4 py-1.5 text-[11px] text-white/60 hover:border-white/40">
+              <button type="button" onClick={() => setSwapMySlot(null)} className="rounded-full border border-white/20 px-4 py-1.5 text-[11px] text-white/60 hover:border-white/40 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400">
                 다시 선택
               </button>
             )}
             {canDiscard && (
-              <button type="button" onClick={() => onAction({ type: "DISCARD_CARD", seat: viewerSeat })} className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 hover:border-white/40">
+              <button type="button" onClick={() => onAction({ type: "DISCARD_CARD", seat: viewerSeat })} className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 hover:border-white/40 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400">
                 그냥 버리기
               </button>
             )}
@@ -696,7 +698,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
         )}
 
         {!isMyTurn && state.phase === "playing" && (
-          <p className="text-xs text-white/40">{names[state.currentTurn]}님의 차례입니다...</p>
+          <p className="text-xs text-white/40 light:text-slate-400">{names[state.currentTurn]}님의 차례입니다...</p>
         )}
       </div>
 
@@ -709,7 +711,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
       >
         <div className="flex items-center gap-1.5">
           <Avatar size={22} />
-          <span className="text-xs font-semibold text-emerald-300">나 ({names[viewerSeat]})</span>
+          <span className="text-xs font-semibold text-emerald-300 light:text-emerald-700">나 ({names[viewerSeat]})</span>
         </div>
         <div className="flex gap-2">
           {SLOTS.map((slot) => {

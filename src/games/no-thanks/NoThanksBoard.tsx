@@ -41,7 +41,7 @@ export interface NoThanksBoardProps {
 // A felt-green "auction table" panel — distinct from the other games' navy /
 // wood / purple boards, fitting No Thanks's casino-chip theme.
 const TABLE_PANEL =
-  "relative overflow-hidden rounded-3xl border border-black/50 bg-gradient-to-b from-[#123326] via-[#0d251c] to-[#071310] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
+  "relative overflow-hidden rounded-3xl border border-black/50 bg-gradient-to-b from-[#123326] via-[#0d251c] to-[#071310] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)] light:border-slate-200 light:from-white light:via-emerald-50/40 light:to-white light:shadow-md";
 
 function TableTexture() {
   return (
@@ -59,13 +59,15 @@ function TableTexture() {
 function CardGroupBadge({ group, size = "sm" }: { group: ScoreGroup; size?: "sm" | "lg" }) {
   const cell = size === "lg" ? "h-11 w-11 text-sm" : "h-8 w-8 text-xs";
   return (
-    <div className="flex overflow-hidden rounded-lg border border-emerald-400/40 bg-black/30 shadow-sm">
+    <div className="flex overflow-hidden rounded-lg border border-emerald-400/40 bg-black/30 shadow-sm light:bg-white light:shadow-sm">
       {group.cards.map((card, i) => (
         <div
           key={card}
           className={`flex items-center justify-center font-bold ${cell} ${
-            i === 0 ? "bg-emerald-500/30 text-emerald-100" : "bg-white/5 text-white/30 line-through decoration-white/25"
-          } ${i > 0 ? "border-l border-dashed border-white/10" : ""}`}
+            i === 0
+              ? "bg-emerald-500/30 text-emerald-100 light:text-emerald-800"
+              : "bg-white/5 text-white/30 line-through decoration-white/25 light:bg-slate-100 light:text-slate-400 light:decoration-slate-300"
+          } ${i > 0 ? "border-l border-dashed border-white/10 light:border-slate-200" : ""}`}
           title={i === 0 ? `${card}점 벌점` : `${card} — 연속이라 상쇄됨`}
         >
           {card}
@@ -91,7 +93,7 @@ const MAX_CARDS_IN_PLAY = CARD_MAX - CARD_MIN + 1 - REMOVE_COUNT;
 function DeckStack({ count }: { count: number }) {
   if (count <= 0) {
     return (
-      <div className="flex h-28 w-16 items-center justify-center rounded-2xl border-2 border-dashed border-white/15 text-[10px] text-white/25 sm:h-36 sm:w-20">
+      <div className="flex h-28 w-16 items-center justify-center rounded-2xl border-2 border-dashed border-white/15 text-[10px] text-white/25 sm:h-36 sm:w-20 light:border-slate-300 light:text-slate-400">
         빈 덱
       </div>
     );
@@ -108,7 +110,7 @@ function DeckStack({ count }: { count: number }) {
           <div
             key={i}
             aria-hidden
-            className="absolute inset-0 rounded-2xl border-2 border-white/20 bg-gradient-to-br from-slate-600 to-slate-800"
+            className="absolute inset-0 rounded-2xl border-2 border-white/20 bg-gradient-to-br from-slate-600 to-slate-800 light:border-slate-300"
             style={{
               transform: `translate(${-depth * 2.5}px, ${-depth * 2.5}px)`,
               zIndex: i,
@@ -229,7 +231,7 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 노땡스 룰북
     </button>
@@ -241,8 +243,8 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
       title="연습/디버그용: 상대방의 칩 개수를 나에게만 숫자로 보여줍니다 (원작 규칙은 비공개, 다른 사람 화면엔 영향 없음)"
       className={`rounded-full border px-2.5 py-1 text-[11px] transition ${
         revealOpponentChips
-          ? "border-amber-300/60 bg-amber-400/10 text-amber-200"
-          : "border-white/15 text-white/60 hover:border-white/30 hover:text-white"
+          ? "border-amber-300/60 bg-amber-400/10 text-amber-200 light:border-amber-400 light:bg-amber-100 light:text-amber-700"
+          : "border-white/15 text-white/60 hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
       }`}
     >
       {revealOpponentChips ? "👁️ 상대 칩 공개 중" : "🙈 상대 칩 비공개"}
@@ -258,40 +260,40 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
       <div className={`${TABLE_PANEL} flex flex-col items-center gap-5 p-4 text-center sm:p-8`}>
         <TableTexture />
         <span className="relative z-10 text-5xl">🏆</span>
-        <h2 className="relative z-10 text-2xl font-bold text-amber-100">
+        <h2 className="relative z-10 text-2xl font-bold text-amber-100 light:text-amber-700">
           {names[rankings[0].seat]}
           {rankings.filter((r) => r.rank === 1).length > 1 ? " 외 공동 1위!" : "님 승리!"}
         </h2>
-        <p className="relative z-10 text-xs text-white/50">벌점이 가장 낮은 사람이 이기는 게임입니다.</p>
+        <p className="relative z-10 text-xs text-white/50 light:text-slate-500">벌점이 가장 낮은 사람이 이기는 게임입니다.</p>
 
         <div className="relative z-10 w-full overflow-x-auto">
           <table className="w-full min-w-[560px] border-collapse text-xs">
             <thead>
-              <tr className="text-white/50">
-                <th className="border-b border-white/10 px-2 py-2 text-left">순위</th>
-                <th className="border-b border-white/10 px-2 py-2 text-left">플레이어</th>
-                <th className="border-b border-white/10 px-2 py-2 text-left">보유 카드 (그룹화)</th>
-                <th className="border-b border-white/10 px-2 py-2 text-right">카드 벌점</th>
-                <th className="border-b border-white/10 px-2 py-2 text-right">칩</th>
-                <th className="border-b border-white/10 px-2 py-2 text-right">최종 점수</th>
+              <tr className="text-white/50 light:text-slate-500">
+                <th className="border-b border-white/10 px-2 py-2 text-left light:border-slate-200">순위</th>
+                <th className="border-b border-white/10 px-2 py-2 text-left light:border-slate-200">플레이어</th>
+                <th className="border-b border-white/10 px-2 py-2 text-left light:border-slate-200">보유 카드 (그룹화)</th>
+                <th className="border-b border-white/10 px-2 py-2 text-right light:border-slate-200">카드 벌점</th>
+                <th className="border-b border-white/10 px-2 py-2 text-right light:border-slate-200">칩</th>
+                <th className="border-b border-white/10 px-2 py-2 text-right light:border-slate-200">최종 점수</th>
               </tr>
             </thead>
             <tbody>
               {rankings.map(({ seat, rank, score }) => (
-                <tr key={seat} className={rank === 1 ? "bg-amber-400/10" : ""}>
-                  <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-amber-200">
+                <tr key={seat} className={rank === 1 ? "bg-amber-400/10 light:bg-amber-50" : ""}>
+                  <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-amber-200 light:border-slate-100 light:text-amber-700">
                     {rank === 1 ? "🏆 1" : rank}
                   </td>
-                  <td className="border-b border-white/5 px-2 py-2 text-left text-white">
+                  <td className="border-b border-white/5 px-2 py-2 text-left text-white light:border-slate-100 light:text-slate-900">
                     <span className="flex items-center gap-1.5">
                       <Avatar size={20} />
                       {names[seat]}
-                      {seat === viewerSeat && <span className="text-amber-200">(나)</span>}
+                      {seat === viewerSeat && <span className="text-amber-200 light:text-amber-700">(나)</span>}
                     </span>
                   </td>
-                  <td className="border-b border-white/5 px-2 py-2 text-left">
+                  <td className="border-b border-white/5 px-2 py-2 text-left light:border-slate-100">
                     {score.groups.length === 0 ? (
-                      <span className="text-white/30">없음</span>
+                      <span className="text-white/30 light:text-slate-400">없음</span>
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {score.groups.map((g) => (
@@ -300,9 +302,9 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
                       </div>
                     )}
                   </td>
-                  <td className="border-b border-white/5 px-2 py-2 text-right text-rose-300">−{score.cardPenalty}</td>
-                  <td className="border-b border-white/5 px-2 py-2 text-right text-emerald-300">+{score.chips}</td>
-                  <td className="border-b border-white/5 px-2 py-2 text-right font-bold text-white">{score.total}</td>
+                  <td className="border-b border-white/5 px-2 py-2 text-right text-rose-300 light:border-slate-100 light:text-rose-600">−{score.cardPenalty}</td>
+                  <td className="border-b border-white/5 px-2 py-2 text-right text-emerald-300 light:border-slate-100 light:text-emerald-600">+{score.chips}</td>
+                  <td className="border-b border-white/5 px-2 py-2 text-right font-bold text-white light:border-slate-100 light:text-slate-900">{score.total}</td>
                 </tr>
               ))}
             </tbody>
@@ -332,13 +334,15 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
   return (
     <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
       <TableTexture />
-      <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-emerald-100/60">
+      <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-emerald-100/60 light:text-slate-500">
         <span className="flex items-center gap-1.5">
           {state.playerCount}인 · 남은 카드 {cardsRemaining}장
           <span
             title={publicMode ? "공개 모드: 모두의 칩이 항상 공개됩니다" : "비밀 모드: 각자 자기 칩만 볼 수 있습니다"}
             className={`rounded-full border px-1.5 py-0.5 text-[10px] ${
-              publicMode ? "border-amber-300/40 text-amber-200" : "border-white/15 text-white/40"
+              publicMode
+                ? "border-amber-300/40 text-amber-200 light:border-amber-400 light:text-amber-700"
+                : "border-white/15 text-white/40 light:border-slate-300 light:text-slate-400"
             }`}
           >
             {publicMode ? "👁️ 공개 모드" : "🔒 비밀 모드"}
@@ -351,8 +355,8 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
       </div>
 
       {/* Central auction area */}
-      <div className="relative z-10 flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-6">
-        <p className={`text-xs font-medium ${isMyTurn ? "text-amber-200" : "text-white/50"}`}>
+      <div className="relative z-10 flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-6 light:border-slate-200 light:bg-white/70">
+        <p className={`text-xs font-medium ${isMyTurn ? "text-amber-200 light:text-amber-700" : "text-white/50 light:text-slate-500"}`}>
           {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
         </p>
 
@@ -370,7 +374,7 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
           <div className="flex flex-col items-center gap-1.5">
             <div
               ref={centerCardRef}
-              className="flex h-28 w-20 items-center justify-center rounded-2xl border-2 border-white/20 bg-gradient-to-b from-white to-neutral-200 text-4xl font-black text-neutral-900 shadow-lg sm:h-36 sm:w-24 sm:text-5xl"
+              className="flex h-28 w-20 items-center justify-center rounded-2xl border-2 border-white/20 bg-gradient-to-b from-white to-neutral-200 text-4xl font-black text-neutral-900 shadow-lg sm:h-36 sm:w-24 sm:text-5xl light:border-slate-300"
             >
               {state.currentCard}
             </div>
@@ -388,20 +392,20 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
           <button
             disabled={!canPass}
             onClick={() => onAction({ type: "pass", seat: viewerSeat })}
-            className="flex-1 rounded-xl bg-amber-600 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+            className="flex-1 rounded-xl bg-amber-600 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-200 light:disabled:text-slate-400"
           >
             🙅 노 땡스! (칩 1개)
           </button>
           <button
             disabled={!isMyTurn}
             onClick={() => onAction({ type: "take", seat: viewerSeat })}
-            className="flex-1 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+            className="flex-1 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-200 light:disabled:text-slate-400"
           >
             ✅ 가져오기
           </button>
         </div>
         {isMyTurn && me.chips === 0 && (
-          <p className="text-[11px] text-amber-300/80">칩이 없어서 무조건 가져와야 해요!</p>
+          <p className="text-[11px] text-amber-300/80 light:text-amber-700">칩이 없어서 무조건 가져와야 해요!</p>
         )}
       </div>
 
@@ -418,24 +422,26 @@ export default function NoThanksBoard({ state, viewerSeat, names, connectedSeats
               key={seat}
               ref={setSeatRef(seat)}
               className={`flex flex-col gap-1.5 rounded-xl border p-2.5 transition ${
-                isActive ? "border-amber-300/60 bg-amber-400/10" : "border-white/10 bg-black/20"
+                isActive
+                  ? "border-amber-300/60 bg-amber-400/10 light:border-amber-400 light:bg-amber-50"
+                  : "border-white/10 bg-black/20 light:border-slate-200 light:bg-white/60"
               }`}
             >
               <div className="flex items-center justify-between text-xs">
-                <span className="flex items-center gap-1.5 font-semibold text-white/90">
+                <span className="flex items-center gap-1.5 font-semibold text-white/90 light:text-slate-800">
                   <Avatar size={20} />
-                  <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`} />
                   {isActive && <span title="차례">👉</span>}
                   {names[seat]}
-                  {isSelf && <span className="text-amber-200">(나)</span>}
+                  {isSelf && <span className="text-amber-200 light:text-amber-700">(나)</span>}
                 </span>
-                <span className={`flex items-center gap-1 font-bold ${chipsVisible ? "text-amber-200" : "text-white/30"}`}>
+                <span className={`flex items-center gap-1 font-bold ${chipsVisible ? "text-amber-200 light:text-amber-700" : "text-white/30 light:text-slate-400"}`}>
                   🪙 {chipsVisible ? player.chips : "?"}
                 </span>
               </div>
               <div className="flex flex-wrap gap-1">
                 {groups.length === 0 ? (
-                  <span className="text-[11px] text-white/25">아직 가져온 카드 없음</span>
+                  <span className="text-[11px] text-white/25 light:text-slate-400">아직 가져온 카드 없음</span>
                 ) : (
                   groups.map((g) => <CardGroupBadge key={g.cards[0]} group={g} />)
                 )}

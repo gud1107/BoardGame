@@ -43,10 +43,10 @@ function rankLabel(rank: number): string {
 
 /** Card border/background accent per rank tier — independent of (and layered under) the winner/last-place effects below. */
 function rankAccentClass(rank: number): string {
-  if (rank === 1) return "border-amber-400/60 bg-amber-400/10";
-  if (rank === 2) return "border-slate-300/50 bg-slate-300/10";
-  if (rank === 3) return "border-orange-400/45 bg-orange-700/10";
-  return "border-white/10 bg-white/[0.04]";
+  if (rank === 1) return "border-amber-400/60 bg-amber-400/10 light:border-amber-400 light:bg-amber-50";
+  if (rank === 2) return "border-slate-300/50 bg-slate-300/10 light:border-slate-300 light:bg-slate-100";
+  if (rank === 3) return "border-orange-400/45 bg-orange-700/10 light:border-orange-400 light:bg-orange-50";
+  return "border-white/10 bg-white/[0.04] light:border-slate-200 light:bg-slate-50";
 }
 
 /** Fixed deterministic offsets (no Math.random, same convention as
@@ -172,17 +172,17 @@ export default function GameOverReveal({ state, names, viewerSeat, onDone }: Gam
 
   return (
     <div
-      className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141018] via-[#0f0c14] to-black p-5 text-center sm:p-8"
+      className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141018] via-[#0f0c14] to-black p-5 text-center sm:p-8 light:border-slate-200 light:from-white light:via-slate-50 light:to-slate-100 light:shadow-md"
       style={{ animation: "ratc-overlay-in 0.35s ease-out both" }}
       onClick={handleBackdropTap}
     >
       <span className="text-4xl" style={{ animation: winnerSeats.length ? "ratc-winner-pop 0.5s ease-out both" : undefined }}>
         🏆
       </span>
-      <h2 className="text-lg font-bold text-white">
+      <h2 className="text-lg font-bold text-white light:text-slate-900">
         {winnerSeats.length > 1 ? `${winnerSeats.map((s) => names[s]).join(", ")}님 공동 우승!` : `${names[winnerSeats[0]]}님 승리!`}
       </h2>
-      <p className="text-xs text-white/40">카드 합이 가장 낮은 플레이어가 승리 (점수는 낮을수록 좋아요)</p>
+      <p className="text-xs text-white/40 light:text-slate-400">카드 합이 가장 낮은 플레이어가 승리 (점수는 낮을수록 좋아요)</p>
 
       <div className="flex w-full flex-wrap justify-center gap-3">
         {order.map((seat) => {
@@ -203,17 +203,17 @@ export default function GameOverReveal({ state, names, viewerSeat, onDone }: Gam
                   isWinner
                     ? "border-amber-300/70 bg-amber-500/90 text-amber-950"
                     : isLastPlace
-                      ? "border-slate-500/50 bg-slate-800/90 text-slate-300"
-                      : "border-white/15 bg-black/70 text-white/70"
+                      ? "border-slate-500/50 bg-slate-800/90 text-slate-300 light:border-slate-400 light:bg-slate-100 light:text-slate-600"
+                      : "border-white/15 bg-black/70 text-white/70 light:border-slate-300 light:bg-white light:text-slate-600"
                 }`}
               >
                 {rankLabel(ranked.rank)}
               </span>
               <div className="mt-1.5 flex items-center gap-1.5">
                 <Avatar size={22} />
-                <span className="max-w-[7rem] truncate text-xs font-semibold text-white">
+                <span className="max-w-[7rem] truncate text-xs font-semibold text-white light:text-slate-900">
                   {names[seat]}
-                  {seat === viewerSeat && <span className="ml-1 text-emerald-300">(나)</span>}
+                  {seat === viewerSeat && <span className="ml-1 text-emerald-300 light:text-emerald-700">(나)</span>}
                 </span>
                 {isWinner && <span aria-hidden>👑</span>}
                 {isLastPlace && <span aria-hidden>☔</span>}
@@ -224,13 +224,13 @@ export default function GameOverReveal({ state, names, viewerSeat, onDone }: Gam
                   return (
                     <div key={slot} className="flex flex-col items-center gap-0.5">
                       <CardSlot size="sm" handCard={state.hands[seat][slot]} revealed label={`${names[seat]}의 카드 ${slot + 1}번`} />
-                      {slotScore.substituted && <span className="text-[9px] text-sky-300">대체값 {slotScore.value}</span>}
+                      {slotScore.substituted && <span className="text-[9px] text-sky-300 light:text-sky-700">대체값 {slotScore.value}</span>}
                     </div>
                   );
                 })}
               </div>
               <span
-                className={`text-lg font-extrabold ${isWinner ? "text-amber-300" : isLastPlace ? "text-slate-400" : "text-white/70"}`}
+                className={`text-lg font-extrabold ${isWinner ? "text-amber-300 light:text-amber-700" : isLastPlace ? "text-slate-400 light:text-slate-500" : "text-white/70 light:text-slate-600"}`}
               >
                 {ranked.score.total}점
               </span>
@@ -246,7 +246,7 @@ export default function GameOverReveal({ state, names, viewerSeat, onDone }: Gam
             e.stopPropagation();
             skip();
           }}
-          className="mt-1 flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-black/30 px-6 py-2.5 text-sm font-semibold text-white/90 transition hover:border-emerald-300 active:scale-95"
+          className="mt-1 flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-black/30 px-6 py-2.5 text-sm font-semibold text-white/90 transition hover:border-emerald-300 active:scale-95 light:border-emerald-400 light:bg-white/70 light:text-slate-700 light:hover:border-emerald-500"
           style={{ animation: "ratc-skip-pulse-glow 1.8s ease-in-out infinite" }}
         >
           ⏩ 결과 스킵

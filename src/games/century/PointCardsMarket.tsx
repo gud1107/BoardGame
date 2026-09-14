@@ -95,14 +95,14 @@ export function PointCardsMarket({
 }) {
   return (
     <div className="flex items-start gap-1.5 sm:gap-2.5">
-      <div className="relative min-w-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-black/25 p-2 sm:p-2.5">
+      <div className="relative min-w-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-black/25 p-2 sm:p-2.5 light:border-slate-200 light:bg-white/90 light:shadow-sm">
         <MarketBanner variant="bazaar" />
-        <h3 className={`relative z-10 text-[11px] font-semibold tracking-wide text-orange-200/70 uppercase ${compact ? "mb-0.5" : "mb-2"}`}>점수 카드</h3>
+        <h3 className={`relative z-10 text-[11px] font-semibold tracking-wide text-orange-200/70 uppercase light:text-orange-700 ${compact ? "mb-0.5" : "mb-2"}`}>점수 카드</h3>
         <div className={`relative z-10 grid grid-cols-5 gap-1 ${compact ? "pt-0.5" : "gap-1.5 pt-9"}`}>
           {Array.from({ length: POINT_MARKET_SIZE }, (_, i) => {
             const card = state.pointMarket[i];
             const bonus: "gold" | "silver" | null = i === 0 ? "gold" : i === 1 ? "silver" : null;
-            if (!card) return <div key={i} className="rounded-xl border border-dashed border-white/10" />;
+            if (!card) return <div key={i} className="rounded-xl border border-dashed border-white/10 light:border-slate-300" />;
             const affordable = isMyTurn && canClaimPoint(me, card);
             return (
               // Always clickable — even a card the viewer can't currently

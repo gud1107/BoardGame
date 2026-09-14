@@ -54,7 +54,7 @@ export default function InvestigationPanel({
         // 채팅/버그 리포트 `left-4 bottom-4`)과의 충돌을 피하려고 두 버튼 위쪽
         // 자리에 고정 — sm 이상에서도 내리지 않는다(desktop에서 bottom-6까지
         // 내리면 내기 사이드바 토글과 다시 겹치는 실측 버그를 봐서 고정값 유지).
-        className="fixed bottom-24 right-3 z-30 flex items-center gap-1.5 rounded-full border border-cyan-400/30 bg-slate-900/90 px-4 py-2.5 text-xs font-semibold text-cyan-200 shadow-lg backdrop-blur-md transition hover:border-cyan-300/50"
+        className="fixed bottom-24 right-3 z-30 flex items-center gap-1.5 rounded-full border border-cyan-400/30 bg-slate-900/90 px-4 py-2.5 text-xs font-semibold text-cyan-200 shadow-lg backdrop-blur-md transition hover:border-cyan-300/50 light:bg-white/90 light:text-cyan-700 light:shadow-md"
       >
         🗂️ 수사 노트
       </button>
@@ -62,21 +62,21 @@ export default function InvestigationPanel({
       {open && (
         <div className="fixed inset-0 z-40 flex items-end justify-end sm:items-stretch">
           <div className="absolute inset-0 bg-black/50" onClick={() => setOpen(false)} />
-          <div className="relative flex max-h-[85vh] w-full flex-col rounded-t-2xl border border-white/10 bg-slate-900 shadow-2xl sm:h-full sm:max-h-none sm:w-[420px] sm:rounded-none sm:rounded-l-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-              <h3 className="break-keep text-sm font-bold text-white">🗂️ 수사 노트</h3>
-              <button onClick={() => setOpen(false)} className="rounded-full p-1.5 text-white/50 hover:bg-white/10 hover:text-white">
+          <div className="relative flex max-h-[85vh] w-full flex-col rounded-t-2xl border border-white/10 bg-slate-900 shadow-2xl sm:h-full sm:max-h-none sm:w-[420px] sm:rounded-none sm:rounded-l-2xl light:border-slate-200 light:bg-white light:shadow-[-8px_0_30px_-8px_rgba(0,0,0,0.15)]">
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 light:border-slate-200">
+              <h3 className="break-keep text-sm font-bold text-white light:text-slate-900">🗂️ 수사 노트</h3>
+              <button onClick={() => setOpen(false)} className="rounded-full p-1.5 text-white/50 hover:bg-white/10 hover:text-white light:text-slate-500 light:hover:bg-slate-100 light:hover:text-slate-900">
                 ✕
               </button>
             </div>
 
-            <div className="flex gap-1 overflow-x-auto border-b border-white/10 px-2 py-2">
+            <div className="flex gap-1 overflow-x-auto border-b border-white/10 px-2 py-2 light:border-slate-200">
               {TABS.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setTab(t.id)}
                   className={`shrink-0 whitespace-nowrap break-keep rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                    tab === t.id ? "bg-cyan-500 text-slate-950" : "text-white/60 hover:bg-white/10"
+                    tab === t.id ? "bg-cyan-500 text-slate-950" : "text-white/60 hover:bg-white/10 light:text-slate-500 light:hover:bg-slate-100"
                   }`}
                 >
                   {t.emoji} {t.label}
@@ -89,8 +89,8 @@ export default function InvestigationPanel({
                 <ol className="flex flex-col gap-3">
                   {scenario.timeline.map((e, i) => (
                     <li key={i} className="flex gap-3 text-sm">
-                      <span className="shrink-0 rounded-md bg-cyan-500/10 px-2 py-0.5 text-xs font-mono font-semibold text-cyan-300">{e.time}</span>
-                      <span className="break-keep text-white/80">{e.description}</span>
+                      <span className="shrink-0 rounded-md bg-cyan-500/10 px-2 py-0.5 text-xs font-mono font-semibold text-cyan-300 light:bg-cyan-50 light:text-cyan-700">{e.time}</span>
+                      <span className="break-keep text-white/80 light:text-slate-700">{e.description}</span>
                     </li>
                   ))}
                 </ol>
@@ -100,12 +100,12 @@ export default function InvestigationPanel({
                   {scenario.evidence.map((e) => {
                     const photo = showPhotos ? e.photo : undefined;
                     return (
-                      <li key={e.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                      <li key={e.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 light:border-slate-200 light:bg-white light:shadow-sm">
                         <div className="flex items-start gap-3">
                           {photo && (
                             <button
                               onClick={() => setOpenPhoto({ title: e.name, photo })}
-                              className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/30"
+                              className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/30 light:border-slate-300 light:bg-slate-100"
                             >
                               {/* 썸네일은 순수 CSS 배경으로 — 목록 스크롤 중 다수의 next/image
                                   인스턴스를 띄우지 않으려는 선택(라이트박스에서만 next/image 사용). */}
@@ -117,8 +117,8 @@ export default function InvestigationPanel({
                             </button>
                           )}
                           <div className="min-w-0 flex-1">
-                            <p className="break-keep text-sm font-bold text-white">🧩 {e.name}</p>
-                            <p className="mt-1 break-keep text-xs leading-relaxed text-white/60">{e.description}</p>
+                            <p className="break-keep text-sm font-bold text-white light:text-slate-900">🧩 {e.name}</p>
+                            <p className="mt-1 break-keep text-xs leading-relaxed text-white/60 light:text-slate-600">{e.description}</p>
                           </div>
                         </div>
                       </li>
@@ -126,7 +126,7 @@ export default function InvestigationPanel({
                   })}
                   {isLv3 && scenario.lockedEvidence && scenario.lockedEvidence.length > 0 && (
                     <>
-                      <p className="mt-1 break-keep text-[11px] font-semibold tracking-wide text-fuchsia-300/70 uppercase">
+                      <p className="mt-1 break-keep text-[11px] font-semibold tracking-wide text-fuchsia-300/70 uppercase light:text-fuchsia-700">
                         🔐 잠금 단서
                       </p>
                       {scenario.lockedEvidence.map((locked) => (
@@ -139,14 +139,14 @@ export default function InvestigationPanel({
               {tab === "messages" && (
                 <ul className="flex flex-col gap-2.5">
                   {scenario.messages.map((m) => (
-                    <li key={m.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                      <p className="flex items-center justify-between text-xs text-white/40">
-                        <span className="break-keep font-semibold text-cyan-300">
+                    <li key={m.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 light:border-slate-200 light:bg-white light:shadow-sm">
+                      <p className="flex items-center justify-between text-xs text-white/40 light:text-slate-400">
+                        <span className="break-keep font-semibold text-cyan-300 light:text-cyan-700">
                           {m.from} → {m.to}
                         </span>
                         <span className="font-mono">{m.time}</span>
                       </p>
-                      <p className="mt-1 break-keep text-sm text-white/80">&ldquo;{m.content}&rdquo;</p>
+                      <p className="mt-1 break-keep text-sm text-white/80 light:text-slate-700">&ldquo;{m.content}&rdquo;</p>
                     </li>
                   ))}
                 </ul>
@@ -154,17 +154,17 @@ export default function InvestigationPanel({
               {tab === "testimonies" && (
                 <ul className="flex flex-col gap-3">
                   {isLv3 && (
-                    <p className="break-keep rounded-md bg-fuchsia-500/10 px-2.5 py-1.5 text-[11px] text-fuchsia-200/80">
+                    <p className="break-keep rounded-md bg-fuchsia-500/10 px-2.5 py-1.5 text-[11px] text-fuchsia-200/80 light:bg-fuchsia-50 light:text-fuchsia-800">
                       ⚠️ 이 난이도에서는 증언 중 일부가 사건의 진실과 어긋날 수 있습니다 — 신호등 판정, 타임테이블,
                       증거와 교차 대조해서 위증을 스스로 간파해 보세요.
                     </p>
                   )}
                   {testimonies.map((t) => (
-                    <li key={t.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                      <p className="break-keep text-sm font-bold text-white">🗣️ {t.witness}</p>
-                      <p className="mt-1 break-keep text-sm leading-relaxed text-white/80">&ldquo;{t.statement}&rdquo;</p>
+                    <li key={t.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 light:border-slate-200 light:bg-white light:shadow-sm">
+                      <p className="break-keep text-sm font-bold text-white light:text-slate-900">🗣️ {t.witness}</p>
+                      <p className="mt-1 break-keep text-sm leading-relaxed text-white/80 light:text-slate-700">&ldquo;{t.statement}&rdquo;</p>
                       {t.contradictsWith && t.contradictsWith.length > 0 && (
-                        <p className="mt-2 break-keep rounded-md bg-rose-500/10 px-2 py-1 text-xs text-rose-300">
+                        <p className="mt-2 break-keep rounded-md bg-rose-500/10 px-2 py-1 text-xs text-rose-300 light:bg-rose-50 light:text-rose-700">
                           ⚠️ 다른 증언과 모순됨 —{" "}
                           {t.contradictsWith
                             .map((id) => testimonies.find((o) => o.id === id)?.witness)

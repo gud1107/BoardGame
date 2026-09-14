@@ -340,7 +340,7 @@ export default function RectBidTrack({
 
   return (
     <div
-      className="perudo-rect-track grid w-fit mx-auto gap-0 rounded-2xl border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-1.5"
+      className="perudo-rect-track grid w-fit mx-auto gap-0 rounded-2xl border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-1.5 light:border-slate-400 light:shadow-md"
       // 2026-09-08 4변 밀착 세션: the middle row (west strip / children / east
       // strip) used to be `auto`-sized, which let `children`'s real content
       // height inflate the row past `stripLength(6)`. West/east are

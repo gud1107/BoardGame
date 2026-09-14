@@ -57,8 +57,9 @@ export function CardFace({ card, size = "md" }: { card: Card; size?: "sm" | "md"
 export function CardBack({ size = "sm" }: { size?: "sm" | "md" }) {
   const dims = size === "sm" ? "h-16 w-11" : "h-24 w-16";
   return (
+    // TODO(theme): card-back background is a hardcoded dark leather gradient via inline style; left as-is in light mode (physical card back art, not a UI panel).
     <div
-      className={`flex ${dims} items-center justify-center rounded-xl border-2 border-white/15 shadow-[0_4px_10px_rgba(0,0,0,0.5)]`}
+      className={`flex ${dims} items-center justify-center rounded-xl border-2 border-white/15 shadow-[0_4px_10px_rgba(0,0,0,0.5)] light:border-slate-300`}
       style={{
         backgroundImage:
           "repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 2px, transparent 2px, transparent 8px), linear-gradient(160deg, #4a2f14, #1c1108)",

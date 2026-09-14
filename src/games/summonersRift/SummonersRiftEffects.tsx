@@ -21,6 +21,13 @@ import type { SeatIndex, SummonersRiftState } from "./engine";
  * single reveal slot — no source/target flight is needed there since there's
  * only ever one "current" monster card, unlike the many-seats-pushing-at-once
  * case this file exists for.
+ *
+ * Global dark/light theme note: every effect in this file is a one-shot
+ * theatrical overlay (card-toss flourish, boss-reveal dim, full-screen
+ * survive/death celebration) layered over its own dark dim backdrop or portal
+ * — none of it is persistent UI chrome, so none of it gets `light:` classes;
+ * left dark-only in both site themes by design (same treatment as coyote's
+ * death/howl overlays).
  */
 
 export interface RiftPushEvent {
@@ -47,6 +54,7 @@ function rectCenter(rect: DOMRect) {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
+// One-shot card-toss flourish portaled over the whole viewport — intentionally left dark/theatrical regardless of site theme (see file header note).
 export function FlyingRiftCard({
   event,
   getSourceEl,
@@ -120,6 +128,7 @@ export function FlyingRiftCard({
  * 뒤쪽 보드 상호작용을 막지 않는다(스킵 버튼 등은 이 위에 z-index로 얹힌 실제
  * 보드 콘텐츠 쪽에 있으므로 여전히 클릭 가능).
  */
+// One-shot full-screen backdrop dim for a named-monster reveal — intentionally left dark/theatrical regardless of site theme (see file header note).
 export function NamedMonsterDim() {
   if (typeof document === "undefined") return null;
   return createPortal(
@@ -143,6 +152,7 @@ export function NamedMonsterDim() {
  * 뷰포트 전체를 덮어야 한다. 배경/링/텍스트는 모두 `pointer-events-none`이라
  * 뒤쪽 보드 상호작용을 막지 않고, 스킵 버튼만 `pointer-events-auto`로 켠다.
  */
+// One-shot full-screen survive celebration — intentionally left dark/theatrical regardless of site theme (see file header note).
 export function SurvivalEffect({ onSkip }: { onSkip: () => void }) {
   if (typeof document === "undefined") return null;
   return createPortal(
@@ -195,6 +205,7 @@ export function SurvivalEffect({ onSkip }: { onSkip: () => void }) {
  * 비네트 암전 펄스 + 유리 조각처럼 흩날리는 크랙 샤드 + 무겁게 내리찍히는
  * 해골 엠블럼 텍스트.
  */
+// One-shot full-screen death effect — intentionally left dark/theatrical regardless of site theme (see file header note).
 export function DeathEffect({ onSkip }: { onSkip: () => void }) {
   if (typeof document === "undefined") return null;
   const shardCount = 8;

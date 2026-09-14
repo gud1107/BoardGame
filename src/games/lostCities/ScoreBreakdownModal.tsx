@@ -31,22 +31,22 @@ const REVEAL_STEP_MS = 350;
 
 function ScoreTable({ name, isViewer, breakdown, total, isWinner }: { name: string; isViewer: boolean; breakdown: ExpeditionScoreBreakdown[]; total: number; isWinner: boolean }) {
   return (
-    <div className={`flex flex-1 flex-col gap-2 rounded-xl border p-3 ${isWinner ? "border-amber-400/60 bg-amber-400/10" : "border-white/10 bg-white/[0.04]"}`}>
+    <div className={`flex flex-1 flex-col gap-2 rounded-xl border p-3 ${isWinner ? "border-amber-400/60 bg-amber-400/10 light:bg-amber-100/60" : "border-white/10 bg-white/[0.04] light:border-slate-200 light:bg-white"}`}>
       <div className="flex items-center justify-between gap-2">
-        <span className="flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold text-white">
+        <span className="flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold text-white light:text-slate-900">
           <Avatar size={22} />
           <span className="truncate">
             {name}
-            {isViewer && <span className="ml-1 text-xs font-normal text-emerald-300">(나)</span>}
+            {isViewer && <span className="ml-1 text-xs font-normal text-emerald-300 light:text-emerald-600">(나)</span>}
           </span>
           {isWinner && <span aria-hidden>👑</span>}
         </span>
-        <span className={`shrink-0 text-lg font-extrabold ${total >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{total >= 0 ? `+${total}` : total}</span>
+        <span className={`shrink-0 text-lg font-extrabold ${total >= 0 ? "text-emerald-300 light:text-emerald-600" : "text-rose-300 light:text-rose-600"}`}>{total >= 0 ? `+${total}` : total}</span>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[280px] text-xs text-white/70">
+        <table className="w-full min-w-[280px] text-xs text-white/70 light:text-slate-600">
           <thead>
-            <tr className="text-white/40">
+            <tr className="text-white/40 light:text-slate-500">
               <th className="py-1 text-left font-medium">원정로</th>
               <th className="text-right font-medium">카드</th>
               <th className="text-right font-medium">투자</th>
@@ -60,7 +60,7 @@ function ScoreTable({ name, isViewer, breakdown, total, isWinner }: { name: stri
             {breakdown.map((b) => {
               const theme = EXPEDITION_THEME[b.color];
               return (
-                <tr key={b.color} className="border-t border-white/5">
+                <tr key={b.color} className="border-t border-white/5 light:border-slate-200">
                   <td className="py-1 text-left">
                     {theme.emoji} {theme.name}
                   </td>
@@ -69,7 +69,7 @@ function ScoreTable({ name, isViewer, breakdown, total, isWinner }: { name: stri
                   <td className="text-right">{b.numberSum}</td>
                   <td className="text-right">×{b.multiplier}</td>
                   <td className="text-right">{b.bonus > 0 ? `+${b.bonus}` : "-"}</td>
-                  <td className={`text-right font-semibold ${b.total >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{b.cardCount === 0 ? "0" : b.total >= 0 ? `+${b.total}` : b.total}</td>
+                  <td className={`text-right font-semibold ${b.total >= 0 ? "text-emerald-300 light:text-emerald-600" : "text-rose-300 light:text-rose-600"}`}>{b.cardCount === 0 ? "0" : b.total >= 0 ? `+${b.total}` : b.total}</td>
                 </tr>
               );
             })}

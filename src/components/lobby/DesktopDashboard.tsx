@@ -58,18 +58,18 @@ export default function DesktopDashboard({
 
   return (
     <div
-      className="relative hidden min-h-0 w-full flex-col overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-900 via-neutral-950 to-black px-4 pt-3 pb-4 xl:flex"
+      className="relative hidden min-h-0 w-full flex-col overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-900 via-neutral-950 to-black px-4 pt-3 pb-4 xl:flex light:from-slate-100 light:via-slate-50 light:to-white"
       style={{ height: "calc(100dvh - var(--site-header-h, 96px))" }}
     >
       {/* 은은한 배경 앰비언트 골드 오라 — 다크 럭셔리 리뉴얼(2026-09-12) */}
       <div className="pointer-events-none absolute top-0 left-1/2 h-32 w-3/4 -translate-x-1/2 bg-amber-500/5 blur-[120px]" />
-      <main className="relative flex min-h-0 flex-1 flex-col rounded-2xl border border-amber-500/20 bg-neutral-900/60 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.5)] backdrop-blur-md">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-amber-500/15 pb-3">
+      <main className="relative flex min-h-0 flex-1 flex-col rounded-2xl border border-amber-500/20 bg-neutral-900/60 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.5)] backdrop-blur-md light:border-slate-200 light:bg-white/90 light:shadow-md">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-amber-500/15 pb-3 light:border-slate-200">
           <div className="flex items-center gap-2">
             <span className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 bg-clip-text font-serif text-sm font-bold tracking-wide text-transparent">
               🎮 게임 선택
             </span>
-            <span className="text-xs font-normal text-white/40">
+            <span className="text-xs font-normal text-white/40 light:text-slate-500">
               플레이할 보드게임을 선택하여 방을 개설하세요
             </span>
           </div>
@@ -85,15 +85,15 @@ export default function DesktopDashboard({
                   onClick={() => onFilterChange(idx)}
                   className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
                     filterIdx === idx
-                      ? "border-amber-400/70 bg-amber-500/20 text-white"
-                      : "border-white/10 text-white/60 hover:border-amber-400/40"
+                      ? "border-amber-400/70 bg-amber-500/20 text-white light:text-slate-900"
+                      : "border-white/10 text-white/60 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
                   }`}
                 >
                   {f.label}
                 </button>
               ))}
             </div>
-            <span className="shrink-0 text-xs font-medium text-amber-500/60">
+            <span className="shrink-0 text-xs font-medium text-amber-500/60 light:text-amber-700">
               총 {totalCount}개 게임 · 플레이 가능 {playableCount}개
             </span>
             <div className="relative w-full max-w-[240px]">
@@ -102,7 +102,7 @@ export default function DesktopDashboard({
                 onChange={(e) => onQueryChange(e.target.value)}
                 placeholder="게임 이름, 태그로 검색..."
                 aria-label="게임 검색"
-                className="w-full rounded-full border border-amber-500/20 bg-neutral-950/40 px-3 py-1.5 text-xs text-white placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none"
+                className="w-full rounded-full border border-amber-500/20 bg-neutral-950/40 px-3 py-1.5 text-xs text-white placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 light:shadow-sm"
               />
             </div>
           </div>
@@ -120,7 +120,7 @@ export default function DesktopDashboard({
               ))}
             </div>
           ) : (
-            <p className="py-16 text-center text-xs text-white/40">검색 결과가 없습니다.</p>
+            <p className="py-16 text-center text-xs text-white/40 light:text-slate-400">검색 결과가 없습니다.</p>
           )}
         </div>
       </main>

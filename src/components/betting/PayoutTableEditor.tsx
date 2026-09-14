@@ -62,9 +62,9 @@ export default function PayoutTableEditor({ participantCount, payoutTable, onCha
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium text-white/80">순위별 상금 / 벌금 (원)</p>
+        <p className="text-sm font-medium text-white/80 light:text-slate-700">순위별 상금 / 벌금 (원)</p>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] text-white/40">단위</span>
+          <span className="text-[11px] text-white/40 light:text-slate-400">단위</span>
           {UNITS.map((u) => (
             <button
               key={u}
@@ -72,8 +72,8 @@ export default function PayoutTableEditor({ participantCount, payoutTable, onCha
               onClick={() => setUnit(u)}
               className={`min-h-[2rem] rounded-full border px-2.5 py-1 text-[11px] font-medium whitespace-nowrap transition ${
                 unit === u
-                  ? "border-rose-400/60 bg-rose-500/20 text-white"
-                  : "border-white/15 text-white/50 hover:border-white/30"
+                  ? "border-rose-400/60 bg-rose-500/20 text-white light:text-rose-900"
+                  : "border-white/15 text-white/50 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
               }`}
             >
               +{u.toLocaleString()}
@@ -85,7 +85,7 @@ export default function PayoutTableEditor({ participantCount, payoutTable, onCha
       <button
         type="button"
         onClick={() => onChange(generateDefaultPayoutTable(participantCount, unit))}
-        className="mb-2 min-h-11 w-full rounded-lg border border-white/15 px-2 py-2 text-xs text-white/70 transition hover:border-rose-400/40 hover:text-white"
+        className="mb-2 min-h-11 w-full rounded-lg border border-white/15 px-2 py-2 text-xs text-white/70 transition hover:border-rose-400/40 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:text-slate-900"
       >
         ⚡ 빠른 정산 적용 (1등 +{(unit * Math.floor(participantCount / 2)).toLocaleString()}원 ~ {participantCount}등 −
         {(unit * Math.floor(participantCount / 2)).toLocaleString()}원)
@@ -95,9 +95,9 @@ export default function PayoutTableEditor({ participantCount, payoutTable, onCha
         {payoutTable.map((value, idx) => (
           <div
             key={idx}
-            className="flex flex-col gap-1.5 rounded-lg border border-white/10 bg-white/5 p-2.5"
+            className="flex flex-col gap-1.5 rounded-lg border border-white/10 bg-white/5 p-2.5 light:border-slate-200 light:bg-slate-50"
           >
-            <span className="text-xs whitespace-nowrap text-white/50">
+            <span className="text-xs whitespace-nowrap text-white/50 light:text-slate-500">
               {rankLabel(idx)} ({idx + 1}등)
             </span>
             <div className="flex items-center gap-1.5">
@@ -105,7 +105,7 @@ export default function PayoutTableEditor({ participantCount, payoutTable, onCha
                 type="button"
                 onClick={() => step(idx, -1)}
                 aria-label={`${idx + 1}등 금액 ${unit.toLocaleString()}원 감소`}
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-white/15 text-base text-white/60 hover:border-white/30 hover:text-white active:bg-white/10"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-white/15 text-base text-white/60 hover:border-white/30 hover:text-white active:bg-white/10 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400 light:hover:text-slate-800 light:active:bg-slate-100"
               >
                 −
               </button>
@@ -123,15 +123,15 @@ export default function PayoutTableEditor({ participantCount, payoutTable, onCha
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
                 }}
-                className={`min-h-11 min-w-[4.5rem] flex-1 rounded-md border border-white/10 bg-black/20 px-2 py-2 text-center text-base font-bold whitespace-nowrap tabular-nums outline-none focus:border-rose-400 ${
-                  value > 0 ? "text-emerald-300" : value < 0 ? "text-rose-300" : "text-white/60"
+                className={`min-h-11 min-w-[4.5rem] flex-1 rounded-md border border-white/10 bg-black/20 px-2 py-2 text-center text-base font-bold whitespace-nowrap tabular-nums outline-none focus:border-rose-400 light:border-slate-300 light:bg-white ${
+                  value > 0 ? "text-emerald-300" : value < 0 ? "text-rose-300" : "text-white/60 light:text-slate-500"
                 }`}
               />
               <button
                 type="button"
                 onClick={() => step(idx, 1)}
                 aria-label={`${idx + 1}등 금액 ${unit.toLocaleString()}원 증가`}
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-white/15 text-base text-white/60 hover:border-white/30 hover:text-white active:bg-white/10"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-white/15 text-base text-white/60 hover:border-white/30 hover:text-white active:bg-white/10 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400 light:hover:text-slate-800 light:active:bg-slate-100"
               >
                 +
               </button>
@@ -143,8 +143,8 @@ export default function PayoutTableEditor({ participantCount, payoutTable, onCha
       <p
         className={`mt-3 rounded-lg px-3 py-2 text-xs font-medium ${
           check.valid
-            ? "bg-emerald-500/10 text-emerald-300"
-            : "bg-rose-500/10 text-rose-300"
+            ? "bg-emerald-500/10 text-emerald-300 light:bg-emerald-50 light:text-emerald-700"
+            : "bg-rose-500/10 text-rose-300 light:bg-rose-50 light:text-rose-700"
         }`}
       >
         {check.valid

@@ -69,7 +69,7 @@ export function PropertyCard({
   if (value === null) {
     return (
       <div
-        className={`relative flex ${dims} shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-white/25 bg-gradient-to-br from-sky-950 to-black ${className}`}
+        className={`relative flex ${dims} shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-white/25 light:border-slate-300 bg-gradient-to-br from-sky-950 to-black ${className}`}
       >
         <span className="text-lg opacity-60">🏠</span>
       </div>
@@ -125,7 +125,7 @@ export function CheckCard({
   const dollarSize = size === "lg" ? "text-4xl" : size === "sm" ? "text-2xl" : "text-3xl";
   if (value === null) {
     return (
-      <div className={`relative flex ${dims} shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-white/25 bg-gradient-to-br from-emerald-950 to-black ${className}`}>
+      <div className={`relative flex ${dims} shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-white/25 light:border-slate-300 bg-gradient-to-br from-emerald-950 to-black ${className}`}>
         <span className="text-lg opacity-60">🧾</span>
       </div>
     );

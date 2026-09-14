@@ -69,7 +69,9 @@ export default function RoomNicknameField({ value, onChange, placeholder = "닉�
               type="button"
               onClick={() => onChange({ name: p.name, playerId: p.playerId })}
               className={`rounded-full border px-3 py-1.5 text-sm transition ${
-                value.playerId === p.playerId ? classes.chipSelected : "border-white/15 text-white/70 hover:border-white/30"
+                value.playerId === p.playerId
+                  ? classes.chipSelected + " light:text-slate-900"
+                  : "border-white/15 text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
               }`}
             >
               {p.name}
@@ -82,7 +84,7 @@ export default function RoomNicknameField({ value, onChange, placeholder = "닉�
             setGuestMode(true);
             onChange({ name: "", playerId: undefined });
           }}
-          className="self-start text-xs text-white/40 underline hover:text-white/70"
+          className="self-start text-xs text-white/40 underline hover:text-white/70 light:text-slate-400 light:hover:text-slate-600"
         >
           다른 이름으로 입장 (내기 참가자 아님)
         </button>
@@ -102,13 +104,13 @@ export default function RoomNicknameField({ value, onChange, placeholder = "닉�
           }
         }}
         placeholder={placeholder}
-        className={`rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none ${classes.input}`}
+        className={`rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 ${classes.input}`}
       />
       {hasRoster && (
         <button
           type="button"
           onClick={() => setGuestMode(false)}
-          className="self-start text-xs text-white/40 underline hover:text-white/70"
+          className="self-start text-xs text-white/40 underline hover:text-white/70 light:text-slate-400 light:hover:text-slate-600"
         >
           내기 참가자 목록에서 선택
         </button>

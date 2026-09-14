@@ -10,7 +10,7 @@
 export default function DragHandle() {
   return (
     <div className="mb-2 flex justify-center sm:hidden">
-      <div className="h-1 w-9 shrink-0 rounded-full bg-white/25" />
+      <div className="h-1 w-9 shrink-0 rounded-full bg-white/25 light:bg-slate-300" />
     </div>
   );
 }

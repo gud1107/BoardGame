@@ -70,7 +70,7 @@ export function GameOverBanner({ winnerNames, onDone }: { winnerNames: string[];
       >
         <span className="text-6xl">💌</span>
         <h2 className="text-3xl font-black tracking-wide text-rose-100">공주의 마음을 얻었습니다!</h2>
-        <p className="text-sm text-white/70">{winnerNames.join(", ")}님, 축하합니다!</p>
+        <p className="text-sm text-white/70 light:text-slate-700">{winnerNames.join(", ")}님, 축하합니다!</p>
       </div>
     </div>,
     document.body,

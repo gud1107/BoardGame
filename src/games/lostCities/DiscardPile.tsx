@@ -37,7 +37,7 @@ export default function DiscardPile({ color, pile, clickable, highlightKind, fad
         type="button"
         disabled={!clickable}
         onClick={clickable ? onClick : undefined}
-        className={`relative flex h-12 w-9 items-center justify-center rounded-lg border-2 border-dashed bg-black/30 transition sm:h-14 sm:w-10 ${
+        className={`relative flex h-12 w-9 items-center justify-center rounded-lg border-2 border-dashed bg-black/30 transition sm:h-14 sm:w-10 light:bg-white/70 light:shadow-sm ${
           clickable
             ? highlightKind === "pickup"
               ? "lc-pickup-pulse border-sky-300 ring-2 ring-sky-300/70"
@@ -48,10 +48,10 @@ export default function DiscardPile({ color, pile, clickable, highlightKind, fad
         {top ? (
           <CardFace card={top} size="sm" faded={faded} />
         ) : (
-          <span className="text-[9px] text-white/20">{EXPEDITION_THEME[color].emoji}</span>
+          <span className="text-[9px] text-white/20 light:text-slate-400">{EXPEDITION_THEME[color].emoji}</span>
         )}
         {pile.length > 0 && (
-          <span className="absolute -bottom-1.5 -right-1.5 rounded-full border border-white/30 bg-black/85 px-1 text-[8px] font-bold text-white/80">
+          <span className="absolute -bottom-1.5 -right-1.5 rounded-full border border-white/30 bg-black/85 px-1 text-[8px] font-bold text-white/80 light:border-slate-300 light:bg-white/90 light:text-slate-700 light:shadow-sm">
             {pile.length}장
           </span>
         )}

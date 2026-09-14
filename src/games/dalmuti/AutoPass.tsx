@@ -198,16 +198,16 @@ export function AutoPassSettingsPanel({
         role="dialog"
         aria-label="자동 패스 설정"
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl border border-white/15 bg-[#160f26] p-4 text-[11px] text-white/80 shadow-2xl"
+        className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl border border-white/15 bg-[#160f26] p-4 text-[11px] text-white/80 shadow-2xl light:border-slate-200 light:bg-white light:text-slate-700 light:shadow-lg"
         style={{ animation: "dalmuti-autopass-panel-in 150ms ease-out" }}
       >
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-semibold break-keep text-amber-200">⚙️ 자동 패스 설정</span>
-          <button onClick={onClose} className="px-1 text-white/50 hover:text-white" aria-label="닫기">
+          <span className="text-xs font-semibold break-keep text-amber-200 light:text-amber-700">⚙️ 자동 패스 설정</span>
+          <button onClick={onClose} className="px-1 text-white/50 hover:text-white light:text-slate-400 light:hover:text-slate-900" aria-label="닫기">
             ✕
           </button>
         </div>
-        <p className="mb-2 break-keep text-white/40">체크한 조건 중 하나라도 맞으면 자동으로 패스해요. 여러 개를 동시에 켤 수 있어요.</p>
+        <p className="mb-2 break-keep text-white/40 light:text-slate-500">체크한 조건 중 하나라도 맞으면 자동으로 패스해요. 여러 개를 동시에 켤 수 있어요.</p>
         <label className="mb-1.5 flex items-start gap-2">
           <input
             type="checkbox"
@@ -232,7 +232,7 @@ export function AutoPassSettingsPanel({
               max={12}
               value={settings.lowRankThreshold}
               onChange={(e) => onChange({ lowRankThreshold: Number(e.target.value) })}
-              className="w-11 shrink-0 rounded border border-white/20 bg-black/30 px-1 py-0.5 text-center text-white"
+              className="w-11 shrink-0 rounded border border-white/20 bg-black/30 px-1 py-0.5 text-center text-white light:border-slate-300 light:bg-white light:text-slate-900"
             />
             번 이하 강한 계급이 나오면 패 아끼며 패스
           </span>
@@ -267,7 +267,7 @@ export function AutoPassBadge({ onDisable }: { onDisable: () => void }) {
     <button
       onClick={onDisable}
       title="탭하면 모든 자동 패스 조건이 즉시 꺼집니다"
-      className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-sky-300/40 bg-sky-400/10 px-3 py-1.5 text-[11px] font-semibold break-keep text-sky-100 transition hover:border-sky-300/70 hover:bg-sky-400/20"
+      className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-sky-300/40 bg-sky-400/10 px-3 py-1.5 text-[11px] font-semibold break-keep text-sky-100 transition hover:border-sky-300/70 hover:bg-sky-400/20 light:border-sky-400 light:bg-sky-100 light:text-sky-700 light:hover:bg-sky-200"
     >
       🤖 자동 패스 켜짐 · 끄기
     </button>
@@ -280,7 +280,7 @@ export function AutoPassToast({ reason }: { reason: string }) {
   return createPortal(
     <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[75] flex justify-center px-4">
       <div
-        className="max-w-[90vw] rounded-full border border-sky-300/50 bg-[#0d1a2b]/95 px-4 py-2 text-center text-xs font-semibold break-keep text-sky-100 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8)]"
+        className="max-w-[90vw] rounded-full border border-sky-300/50 bg-[#0d1a2b]/95 px-4 py-2 text-center text-xs font-semibold break-keep text-sky-100 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8)] light:border-sky-400 light:bg-white light:text-sky-700 light:shadow-lg"
         style={{ animation: "dalmuti-autopass-toast-in 200ms ease-out" }}
       >
         🤖 자동 패스 조건 충족: 패스 진행 — {reason}

@@ -156,12 +156,25 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 운명전쟁39 룰북
     </button>
   );
   const historyButton = (
+    <button
+      onClick={() => setHistoryOpen(true)}
+      disabled={!state.lastCompletedRound}
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
+    >
+      🕓 직전 라운드 보기
+    </button>
+  );
+  // Game-over panel keeps a permanently dark gradient background (see the
+  // hardcoded `style` below) regardless of theme, so its own history button
+  // intentionally does NOT get `light:` overrides — those would turn its
+  // text/border light and make it unreadable against that still-dark panel.
+  const historyButtonOnDarkPanel = (
     <button
       onClick={() => setHistoryOpen(true)}
       disabled={!state.lastCompletedRound}
@@ -189,13 +202,13 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
   if (resolvingTurn) {
     const t = resolvingTurn;
     centerContent = (
-      <div className="flex flex-col gap-5 rounded-2xl border border-amber-400/25 bg-white/[0.03] p-5 sm:p-6">
+      <div className="flex flex-col gap-5 rounded-2xl border border-amber-400/25 bg-white/[0.03] p-5 sm:p-6 light:border-amber-400/40 light:bg-white/90 light:shadow-md">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-white">
+          <h2 className="text-base font-bold text-white light:text-slate-900">
             ROUND {round.roundNumber} — 턴 {t.turnNumber} 결과
           </h2>
           {t.reverseActive && (
-            <span className="rounded-full border border-fuchsia-400/40 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] text-fuchsia-200">🔄 리버스 발동</span>
+            <span className="rounded-full border border-fuchsia-400/40 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] text-fuchsia-200 light:text-fuchsia-700">🔄 리버스 발동</span>
           )}
         </div>
         <div className="flex flex-wrap justify-center gap-4 py-2">
@@ -205,7 +218,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
             const isWinner = seat === t.winnerSeat;
             return (
               <div key={seat} className="flex flex-col items-center gap-1.5">
-                <span className={`text-xs ${isWinner ? "font-bold text-amber-200" : "text-white/50"}`}>
+                <span className={`text-xs ${isWinner ? "font-bold text-amber-200 light:text-amber-700" : "text-white/50 light:text-slate-500"}`}>
                   {seatLabel(seat)}
                   {isWinner ? " 🏆" : ""}
                 </span>
@@ -221,7 +234,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
             );
           })}
         </div>
-        <p className="text-center text-sm font-semibold text-amber-200">{seatLabel(t.winnerSeat)}님이 이 턴을 가져갔습니다!</p>
+        <p className="text-center text-sm font-semibold text-amber-200 light:text-amber-700">{seatLabel(t.winnerSeat)}님이 이 턴을 가져갔습니다!</p>
       </div>
     );
   } else if (state.phase === "gameOver") {
@@ -232,13 +245,16 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
     centerContent = (
       <div
         className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        // Hardcoded dark gradient — not yet theme-aware. Kept permanently dark
+        // on purpose in both themes, so nothing inside this panel gets `light:`
+        // text/border overrides (they'd become unreadable against this bg).
         style={{ background: "linear-gradient(160deg,#241033 0%,#160a20 55%,#0a0510 100%)" }}
       >
         <span className="text-5xl">🔮</span>
         <h2 className="text-2xl font-bold text-fuchsia-100">
           {winners.length > 1 ? `${winners.join(", ")}님 공동 우승!` : `${winners[0]}님이 운명전쟁39에서 승리했습니다!`}
         </h2>
-        <div className="flex justify-center">{historyButton}</div>
+        <div className="flex justify-center">{historyButtonOnDarkPanel}</div>
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[560px] border-collapse text-xs">
             <thead>
@@ -290,18 +306,18 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
       // Keyed by round number so every round-end visit remounts fresh —
       // required for RoundResultBadge's mount-only confetti/stamp to replay
       // each round instead of only ever firing once for round 1's table.
-      <div key={`round-end-${round.roundNumber}`} className="flex flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+      <div key={`round-end-${round.roundNumber}`} className="flex flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6 light:border-slate-200 light:bg-white/90 light:shadow-md">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-white">ROUND {round.roundNumber} 결과</h2>
+          <h2 className="text-base font-bold text-white light:text-slate-900">ROUND {round.roundNumber} 결과</h2>
           <div className="flex gap-2">
             {historyButton}
             {rulebookButton}
           </div>
         </div>
-        <div className="overflow-x-auto rounded-xl border border-white/10">
+        <div className="overflow-x-auto rounded-xl border border-white/10 light:border-slate-200">
           <table className="w-full min-w-[420px] border-collapse text-xs">
             <thead>
-              <tr className="bg-white/5 text-white/50">
+              <tr className="bg-white/5 text-white/50 light:bg-slate-50 light:text-slate-500">
                 <th className="px-2 py-1.5 text-left">플레이어</th>
                 <th className="px-2 py-1.5 text-center">예측</th>
                 <th className="px-2 py-1.5 text-center">실제</th>
@@ -318,21 +334,21 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
                 const success = predicted === actual;
                 const outcome: RoundOutcome = success ? "success" : actual > predicted ? "over" : "under";
                 const outcomeLabel = success ? "성공" : outcome === "over" ? "초과" : "미달";
-                const outcomeClass = success ? "text-emerald-400" : outcome === "over" ? "text-orange-300" : "text-sky-300";
+                const outcomeClass = success ? "text-emerald-400 light:text-emerald-600" : outcome === "over" ? "text-orange-300 light:text-orange-600" : "text-sky-300 light:text-sky-600";
                 return (
-                  <tr key={p.seat} className="border-t border-white/10">
-                    <td className="px-2 py-1.5 font-medium text-white/90">{seatLabel(p.seat)}</td>
-                    <td className="px-2 py-1.5 text-center text-white/70">
+                  <tr key={p.seat} className="border-t border-white/10 light:border-slate-200">
+                    <td className="px-2 py-1.5 font-medium text-white/90 light:text-slate-900">{seatLabel(p.seat)}</td>
+                    <td className="px-2 py-1.5 text-center text-white/70 light:text-slate-600">
                       {wasHidden ? <HiddenRevealCell>{predicted}</HiddenRevealCell> : predicted}
                     </td>
-                    <td className="px-2 py-1.5 text-center text-white/70">{actual}</td>
+                    <td className="px-2 py-1.5 text-center text-white/70 light:text-slate-600">{actual}</td>
                     <td className={`px-2 py-1.5 text-center font-semibold ${outcomeClass}`}>
                       <span className="inline-flex items-center gap-1.5">
                         {outcomeLabel}
                         <RoundResultBadge outcome={outcome} />
                       </span>
                     </td>
-                    <td className="px-2 py-1.5 text-right text-white/80">
+                    <td className="px-2 py-1.5 text-right text-white/80 light:text-slate-700">
                       {(p.scores[idx] ?? 0) >= 0 ? "+" : ""}
                       {p.scores[idx]}
                     </td>
@@ -342,7 +358,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
             </tbody>
           </table>
         </div>
-        <p className="text-center text-[11px] text-white/40">누적 순위는 좌측 랭킹판에서 실시간으로 확인할 수 있어요.</p>
+        <p className="text-center text-[11px] text-white/40 light:text-slate-500">누적 순위는 좌측 랭킹판에서 실시간으로 확인할 수 있어요.</p>
         <button
           onClick={() => onAction({ type: "nextRound", seed: randomSeed() })}
           className="w-full rounded-xl bg-fuchsia-600 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-500"
@@ -360,15 +376,15 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
     // ---------------------------------------------------------------------
     showPredictionPanel = true;
     centerContent = (
-      <div className="flex flex-1 flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+      <div className="flex flex-1 flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6 light:border-slate-200 light:bg-white/90 light:shadow-md">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-white">ROUND {R} — 예측</h2>
+          <h2 className="text-base font-bold text-white light:text-slate-900">ROUND {R} — 예측</h2>
           <div className="flex gap-2">
             {historyButton}
             {rulebookButton}
           </div>
         </div>
-        <p className="text-xs text-white/50">
+        <p className="text-xs text-white/50 light:text-slate-500">
           이번 라운드는 {R}턴 진행됩니다. 손패 {R}장을 확인하고, 우측 예측 패널에서 이번 라운드에 몇 번 이길지 예측하세요 (0~{R}).
         </p>
         <div className="flex flex-wrap gap-2.5">
@@ -409,9 +425,9 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
     isMyBattleTurn = myTurnToAct;
 
     centerContent = (
-      <div className="flex flex-1 flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+      <div className="flex flex-1 flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6 light:border-slate-200 light:bg-white/90 light:shadow-md">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-white">
+          <h2 className="text-base font-bold text-white light:text-slate-900">
             ROUND {R} — 턴 {round.turnNumber} / {R}
           </h2>
           <div className="flex gap-2">
@@ -420,11 +436,11 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/50">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/50 light:text-slate-500">
           <span>{isSimultaneous ? "전원 동시 공개" : `선공: ${seatLabel(round.turnLeader)}`}</span>
           <span className="flex flex-wrap gap-3">
             {Array.from({ length: playerCount }, (_, seat) => (
-              <span key={seat} className="text-white/70">
+              <span key={seat} className="text-white/70 light:text-slate-600">
                 {seatLabel(seat)}: {round.winsThisRound[seat] ?? 0}승
               </span>
             ))}
@@ -439,12 +455,12 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
             return (
               <div key={seat} className="flex flex-col items-center gap-1">
                 {order !== null && <TurnOrderBadge order={order} isActive={isActingSeat} isDone={!!p} />}
-                <span className="text-[11px] text-white/50">{seatLabel(seat)}</span>
+                <span className="text-[11px] text-white/50 light:text-slate-500">{seatLabel(seat)}</span>
                 {p ? (
                   <PlayedCardSlot key={p.card.id} card={p.card} playerCount={playerCount} size="sm" />
                 ) : (
                   <span
-                    className={`grid h-[84px] w-[60px] place-items-center rounded-lg border border-dashed text-2xl text-white/20 ${isActingSeat ? "border-amber-300/70" : "border-white/15"}`}
+                    className={`grid h-[84px] w-[60px] place-items-center rounded-lg border border-dashed text-2xl text-white/20 light:text-slate-300 ${isActingSeat ? "border-amber-300/70 light:border-amber-500/70" : "border-white/15 light:border-slate-300"}`}
                     style={isActingSeat ? { animation: "destinywar39-turn-badge-pulse 1.1s ease-in-out infinite" } : undefined}
                   >
                     ?
@@ -457,7 +473,7 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
 
         {myTurnToAct ? (
           <div className="flex flex-col gap-2">
-            <p className="text-xs text-white/50">낼 카드를 선택하세요 (남은 손패 {myHand.length}장)</p>
+            <p className="text-xs text-white/50 light:text-slate-500">낼 카드를 선택하세요 (남은 손패 {myHand.length}장)</p>
             <div className="flex flex-wrap gap-2.5">
               {myHand.map((c) => (
                 <CardFace
@@ -483,12 +499,12 @@ export default function DestinyWar39Board({ state, viewerSeat, names, connectedS
             </div>
           </div>
         ) : (
-          <p className="text-xs text-white/40">{myPlayed ? "카드를 공개했습니다. 다른 플레이어를 기다리는 중…" : `${seatLabel(actingSeat!)}님의 차례를 기다리는 중…`}</p>
+          <p className="text-xs text-white/40 light:text-slate-400">{myPlayed ? "카드를 공개했습니다. 다른 플레이어를 기다리는 중…" : `${seatLabel(actingSeat!)}님의 차례를 기다리는 중…`}</p>
         )}
 
         {round.turnRecords.length > 0 && (
-          <details className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs text-white/60">
-            <summary className="cursor-pointer select-none text-white/70">이전 턴 기록 ({round.turnRecords.length}턴)</summary>
+          <details className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs text-white/60 light:border-slate-200 light:bg-slate-50 light:text-slate-600">
+            <summary className="cursor-pointer select-none text-white/70 light:text-slate-700">이전 턴 기록 ({round.turnRecords.length}턴)</summary>
             <ul className="mt-2 flex flex-col gap-1">
               {round.turnRecords.map((t) => (
                 <li key={t.turnNumber}>

@@ -249,7 +249,7 @@ export function RaiseBanner({ name }: { name: string }) {
           </span>
         ))}
         <span className="text-lg">🔥</span>
-        <span className="break-keep text-sm font-black tracking-wide text-white drop-shadow sm:text-base">RAISE! {name}님 베팅 증액</span>
+        <span className="break-keep text-sm font-black tracking-wide text-white light:text-slate-900 drop-shadow sm:text-base">RAISE! {name}님 베팅 증액</span>
       </div>
     </div>
   );
@@ -265,7 +265,7 @@ export function DeclareBubble() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute -top-3 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-2xl border border-pink-300/70 bg-black/80 px-3 py-1.5 text-[11px] font-bold text-pink-100 shadow-[0_0_20px_4px_rgba(244,114,182,0.65)] backdrop-blur-sm"
+      className="pointer-events-none absolute -top-3 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-2xl border border-pink-300/70 bg-black/80 light:bg-white/95 light:shadow-md px-3 py-1.5 text-[11px] font-bold text-pink-100 shadow-[0_0_20px_4px_rgba(244,114,182,0.65)] backdrop-blur-sm"
       style={{ animation: "lwa-declare-bubble-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) both" }}
     >
       💬 족보 선언!
@@ -299,8 +299,8 @@ function NextRoundCountdown({ timeLeft, secondsTotal }: { timeLeft: number; seco
   const pct = Math.max(0, Math.min(100, (timeLeft / secondsTotal) * 100));
   return (
     <div className="relative z-10 flex w-full max-w-xs flex-col items-center gap-1.5">
-      <span className="text-[11px] font-medium tracking-wide text-white/50 uppercase">다음 라운드 준비</span>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+      <span className="text-[11px] font-medium tracking-wide text-white/50 light:text-slate-500 uppercase">다음 라운드 준비</span>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-white/10 light:bg-slate-900/5">
         <div className="h-full rounded-full bg-gradient-to-r from-pink-400 to-rose-500 transition-[width] duration-1000 ease-linear" style={{ width: `${pct}%` }} />
       </div>
     </div>
@@ -315,7 +315,7 @@ function SkipButton({ onSkip }: { onSkip: () => void }) {
         e.stopPropagation();
         onSkip();
       }}
-      className="relative z-10 mt-3 flex items-center gap-1.5 rounded-full border border-pink-500/50 bg-black/80 px-6 py-2.5 text-sm font-semibold text-white/90 backdrop-blur-sm transition hover:border-pink-400/70 hover:bg-black active:scale-95"
+      className="relative z-10 mt-3 flex items-center gap-1.5 rounded-full border border-pink-500/50 bg-black/80 light:bg-white/95 light:shadow-md px-6 py-2.5 text-sm font-semibold text-white/90 light:text-slate-800 backdrop-blur-sm transition hover:border-pink-400/70 hover:bg-black active:scale-95"
       style={{ animation: "lwa-skip-pulse-glow 1.8s ease-in-out infinite" }}
       aria-label="연출 스킵하고 바로 진행하기"
     >
@@ -328,7 +328,7 @@ function CardChip({ suit, dim }: { suit: Suit; dim?: boolean }) {
   return (
     <span
       className={`flex h-10 w-8 flex-col items-center justify-center rounded-lg border text-lg sm:h-12 sm:w-10 sm:text-xl ${
-        dim ? "border-white/10 bg-white/5 opacity-50" : "border-white/20 bg-black/40"
+        dim ? "border-white/10 light:border-slate-200 bg-white/5 light:bg-slate-900/5 opacity-50" : "border-white/20 light:border-slate-200 bg-black/40 light:bg-white/85 light:shadow-sm"
       }`}
     >
       {SUIT_EMOJI[suit]}
@@ -430,7 +430,7 @@ export default function RevealOverlay({ result, isGameOver, names, viewerSeat, t
 
   const body = (
     <div
-      className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto bg-black/85 p-4"
+      className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto bg-black/85 light:bg-white light:shadow-md p-4"
       style={{ animation: "lwa-overlay-in 0.35s ease-out both" }}
       onClick={handleBackdropTap}
     >
@@ -453,7 +453,7 @@ export default function RevealOverlay({ result, isGameOver, names, viewerSeat, t
 
         <h2
           className={`break-keep text-lg font-extrabold sm:text-xl ${
-            isWin ? "text-amber-200 drop-shadow-[0_0_16px_rgba(245,158,11,0.7)]" : "text-white/90"
+            isWin ? "text-amber-200 drop-shadow-[0_0_16px_rgba(245,158,11,0.7)]" : "text-white/90 light:text-slate-800"
           }`}
         >
           {headline}
@@ -464,7 +464,7 @@ export default function RevealOverlay({ result, isGameOver, names, viewerSeat, t
             {(["p1", "p2"] as const).map((seat) => (
               <div key={seat} className="flex flex-col items-center gap-1.5">
                 <Avatar size={28} className={seat === result.winnerSeat ? "ring-2 ring-amber-300/80" : undefined} />
-                <span className="max-w-[84px] truncate text-xs text-white/70">
+                <span className="max-w-[84px] truncate text-xs text-white/70 light:text-slate-700">
                   {names[seat]}
                   {seat === viewerSeat && <span className="text-emerald-300"> (나)</span>}
                 </span>
@@ -474,9 +474,9 @@ export default function RevealOverlay({ result, isGameOver, names, viewerSeat, t
                   ))}
                   {result.community && <CardChip suit={result.community} />}
                 </div>
-                <span className="text-xs font-bold text-white/80">{result.handRanks ? HAND_CATEGORY_LABEL[result.handRanks[seat]] : ""}</span>
+                <span className="text-xs font-bold text-white/80 light:text-slate-700">{result.handRanks ? HAND_CATEGORY_LABEL[result.handRanks[seat]] : ""}</span>
                 {result.declaredHand[seat] && (
-                  <span className="text-[10px] text-white/40">선언: {HAND_CATEGORY_LABEL[result.declaredHand[seat]!]}</span>
+                  <span className="text-[10px] text-white/40 light:text-slate-500">선언: {HAND_CATEGORY_LABEL[result.declaredHand[seat]!]}</span>
                 )}
               </div>
             ))}
@@ -490,12 +490,12 @@ export default function RevealOverlay({ result, isGameOver, names, viewerSeat, t
             🔄 {names[result.refund.seat]}님의 초과 베팅 {result.refund.amount}칩 환급 (매칭 팟 — 상대가 실제로 베팅한 만큼만 승부에 걸립니다)
           </p>
         )}
-        {isTie && <p className="text-xs text-white/50">팟이 아무에게도 분배되지 않고 다음 라운드로 넘어갑니다</p>}
+        {isTie && <p className="text-xs text-white/50 light:text-slate-500">팟이 아무에게도 분배되지 않고 다음 라운드로 넘어갑니다</p>}
 
         <SkipButton onSkip={triggerSkip} />
 
         {isGameOver ? (
-          <p className="mt-1 text-xs text-white/40">화면을 눌러 결과를 확인하세요</p>
+          <p className="mt-1 text-xs text-white/40 light:text-slate-500">화면을 눌러 결과를 확인하세요</p>
         ) : (
           <NextRoundCountdown timeLeft={timeLeft} secondsTotal={secondsTotal} />
         )}

@@ -683,10 +683,10 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "supabase-missing") {
     return withGuard(
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-8 text-center light:shadow-sm">
         <span className="text-3xl">⚠️</span>
-        <h2 className="break-keep text-lg font-bold text-white">온라인 대전을 사용할 수 없어요</h2>
-        <p className="max-w-sm break-keep text-sm text-amber-100/80">
+        <h2 className="break-keep text-lg font-bold text-white light:text-slate-900">온라인 대전을 사용할 수 없어요</h2>
+        <p className="max-w-sm break-keep text-sm text-amber-100/80 light:text-amber-800">
           진실의 고개는 실시간 온라인 대전 전용이라 Supabase 설정이 필요합니다.
         </p>
       </div>,
@@ -695,9 +695,9 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "room-full") {
     return withGuard(
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center light:shadow-sm">
         <span className="text-3xl">🚫</span>
-        <h2 className="break-keep text-lg font-bold text-white">이미 다른 사람이 참여 중인 방이에요</h2>
+        <h2 className="break-keep text-lg font-bold text-white light:text-slate-900">이미 다른 사람이 참여 중인 방이에요</h2>
         <button onClick={handleLeave} className="mt-2 rounded-full bg-cyan-600 px-5 py-2 text-sm font-semibold text-white hover:bg-cyan-500">
           처음으로
         </button>
@@ -707,9 +707,9 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "channel-error") {
     return withGuard(
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center light:shadow-sm">
         <span className="text-3xl">📡</span>
-        <h2 className="break-keep text-lg font-bold text-white">연결에 실패했습니다</h2>
+        <h2 className="break-keep text-lg font-bold text-white light:text-slate-900">연결에 실패했습니다</h2>
         <button onClick={handleLeave} className="mt-2 rounded-full bg-cyan-600 px-5 py-2 text-sm font-semibold text-white hover:bg-cyan-500">
           다시 시도
         </button>
@@ -723,7 +723,7 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
         gameId="hill-of-truth"
         icon="🚦"
         title="진실의 고개 온라인 대전"
-        description={<p className="break-keep text-sm text-white/50">2~8명이 각자 기기로 접속해서 실시간으로 추리를 겨뤄요.</p>}
+        description={<p className="break-keep text-sm text-white/50 light:text-slate-500">2~8명이 각자 기기로 접속해서 실시간으로 추리를 겨뤄요.</p>}
         actions={
           <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
             <button
@@ -752,14 +752,14 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "enter-name") {
     return withGuard(
-      <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-        <h2 className="break-keep text-base font-bold text-white">{intent === "create" ? "방 만들기" : "초대 코드로 참여"}</h2>
-        <div className="flex flex-col gap-1.5 text-sm text-white/70">
+      <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6 light:border-slate-200 light:bg-white light:shadow-sm">
+        <h2 className="break-keep text-base font-bold text-white light:text-slate-900">{intent === "create" ? "방 만들기" : "초대 코드로 참여"}</h2>
+        <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
           내 닉네임
           <RoomNicknameField value={identity} onChange={setIdentity} onEnter={enterRoom} accent="emerald" />
         </div>
         {intent === "join" && (
-          <label className="flex flex-col gap-1.5 text-sm text-white/70">
+          <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
             초대 코드 (4자리)
             <input
               value={codeInput}
@@ -772,26 +772,26 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
               }}
               placeholder="0000"
               inputMode="numeric"
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-center text-lg font-semibold tracking-[0.3em] text-white placeholder:text-white/20 focus:border-cyan-400 focus:outline-none"
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-center text-lg font-semibold tracking-[0.3em] text-white placeholder:text-white/20 focus:border-cyan-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
             />
           </label>
         )}
         {intent === "create" && (
-          <label className="flex flex-col gap-1.5 text-sm text-white/70">
+          <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
             인원 수 ({MIN_PLAYERS}~{MAX_PLAYERS}명)
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setTargetPlayerCount((n) => Math.max(MIN_PLAYERS, n - 1))}
-                className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
+                className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
               >
                 −
               </button>
-              <span className="w-8 text-center text-lg font-semibold text-white">{targetPlayerCount}</span>
+              <span className="w-8 text-center text-lg font-semibold text-white light:text-slate-900">{targetPlayerCount}</span>
               <button
                 type="button"
                 onClick={() => setTargetPlayerCount((n) => Math.min(MAX_PLAYERS, n + 1))}
-                className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
+                className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
               >
                 +
               </button>
@@ -799,7 +799,7 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
           </label>
         )}
         {intent === "create" && (
-          <div className="flex flex-col gap-1.5 text-sm text-white/70">
+          <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
             난이도
             <div className="grid grid-cols-3 gap-1.5">
               {DIFFICULTY_OPTIONS.map((opt) => (
@@ -809,20 +809,20 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
                   onClick={() => setDifficulty(opt.value)}
                   className={`flex flex-col items-center gap-0.5 rounded-xl border px-2 py-2 text-center transition ${
                     difficulty === opt.value
-                      ? "border-cyan-400/60 bg-cyan-400/10 text-cyan-100"
-                      : "border-white/15 text-white/60 hover:border-white/30"
+                      ? "border-cyan-400/60 bg-cyan-400/10 text-cyan-100 light:text-cyan-700"
+                      : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
                   }`}
                 >
                   <span className="text-sm font-bold">{opt.emoji} {opt.label}</span>
-                  <span className="break-keep text-[10px] leading-snug text-white/50">{opt.desc}</span>
+                  <span className="break-keep text-[10px] leading-snug text-white/50 light:text-slate-500">{opt.desc}</span>
                 </button>
               ))}
             </div>
           </div>
         )}
-        {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">{formError}</p>}
+        {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300 light:bg-rose-50 light:text-rose-700">{formError}</p>}
         <div className="flex gap-2">
-          <button onClick={() => setPhase("choose")} className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30">
+          <button onClick={() => setPhase("choose")} className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400">
             뒤로
           </button>
           <button onClick={enterRoom} className="flex-1 rounded-xl bg-cyan-600 py-2.5 text-sm font-semibold text-white hover:bg-cyan-500">
@@ -835,17 +835,17 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "connecting" || phase === "waiting") {
     return withGuard(
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center light:border-slate-200 light:bg-white light:shadow-sm">
         {phase === "connecting" ? (
-          <p className="text-sm text-white/50">연결하는 중...</p>
+          <p className="text-sm text-white/50 light:text-slate-500">연결하는 중...</p>
         ) : (
           <>
-            <p className="text-sm text-white/50">초대 코드</p>
-            <p className="text-4xl font-bold tracking-[0.3em] text-white">{roomCode}</p>
-            <button onClick={() => navigator.clipboard?.writeText(shareUrl)} className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-white/30">
+            <p className="text-sm text-white/50 light:text-slate-500">초대 코드</p>
+            <p className="text-4xl font-bold tracking-[0.3em] text-white light:text-slate-900">{roomCode}</p>
+            <button onClick={() => navigator.clipboard?.writeText(shareUrl)} className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400">
               🔗 초대 링크 복사
             </button>
-            <p className="text-xs text-white/50">
+            <p className="text-xs text-white/50 light:text-slate-500">
               {occupants.length + botSeats.length} / {knownTargetPlayerCount}명 참여 중
             </p>
             {isHost && occupants.length + botSeats.length < knownTargetPlayerCount && (
@@ -860,10 +860,10 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
                 const botIdx = botSeats.indexOf(seat);
                 const isBot = botIdx >= 0;
                 return (
-                  <p key={seat} className="flex items-center justify-between gap-2 text-sm text-white/70">
+                  <p key={seat} className="flex items-center justify-between gap-2 text-sm text-white/70 light:text-slate-600">
                     <span className="break-keep">
                       {seat === mySeat ? "나" : `${seat + 1}번`}:{" "}
-                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30">대기 중...</span>}
+                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30 light:text-slate-400">대기 중...</span>}
                     </span>
                     {isHost && !occ && (
                       <span>
@@ -874,7 +874,7 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
                 );
               })}
             </div>
-            <p className="break-keep text-xs text-white/40">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다.</p>
+            <p className="break-keep text-xs text-white/40 light:text-slate-400">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다.</p>
             {isHost && occupants.length + botSeats.length >= MIN_PLAYERS && occupants.length + botSeats.length < knownTargetPlayerCount && (
               <button onClick={sendGameStart} className="rounded-full bg-cyan-600 px-4 py-2 text-xs font-semibold text-white hover:bg-cyan-500">
                 지금 시작 ({occupants.length + botSeats.length}명)
@@ -929,13 +929,13 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "post-game" && finalResult) {
     return withGuard(
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center light:border-slate-200 light:bg-white light:shadow-sm">
         <span className="text-4xl">🏆</span>
-        <p className="break-keep text-white/80">
+        <p className="break-keep text-white/80 light:text-slate-700">
           {finalResult.winnerSeat !== null ? `${names[finalResult.winnerSeat] ?? "누군가"}님의 승리로 게임이 끝났어요.` : "게임이 끝났어요."}
         </p>
         <div className="flex gap-2">
-          <button onClick={handleLeave} className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30">
+          <button onClick={handleLeave} className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400">
             나가기
           </button>
           <button onClick={handleRematch} className="rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-500">

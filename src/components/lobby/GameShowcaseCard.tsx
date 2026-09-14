@@ -41,9 +41,9 @@ export default function GameShowcaseCard({
 
   const content = (
     <div
-      className={`group relative flex h-full flex-col overflow-hidden rounded-2xl border border-amber-500/15 bg-gradient-to-b from-neutral-900/80 to-neutral-950/90 transition-all duration-300 ${
+      className={`group relative flex h-full flex-col overflow-hidden rounded-2xl border border-amber-500/15 bg-gradient-to-b from-neutral-900/80 to-neutral-950/90 transition-all duration-300 light:border-slate-200 light:from-white light:to-slate-50 light:shadow-sm ${
         game.playable
-          ? "hover:scale-[1.05] hover:border-amber-400/60 hover:shadow-[0_0_24px_rgba(245,158,11,0.25)] active:scale-100"
+          ? "hover:scale-[1.05] hover:border-amber-400/60 hover:shadow-[0_0_24px_rgba(245,158,11,0.25)] active:scale-100 light:hover:shadow-md"
           : "opacity-60"
       }`}
     >
@@ -69,13 +69,13 @@ export default function GameShowcaseCard({
         )}
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-3">
-        <p className="line-clamp-1 break-keep text-sm font-bold text-white">{game.name}</p>
-        <div className="flex flex-wrap items-center gap-1 text-[10px] text-white/50">
+        <p className="line-clamp-1 break-keep text-sm font-bold text-white light:text-slate-900">{game.name}</p>
+        <div className="flex flex-wrap items-center gap-1 text-[10px] text-white/50 light:text-slate-500">
           <span>👥 {formatPlayers(game)}</span>
           {difficulty && (
-            <span className="text-amber-300/90" title={`체감 난이도 ${difficulty}/5`}>
+            <span className="text-amber-300/90 light:text-amber-600" title={`체감 난이도 ${difficulty}/5`}>
               {"★".repeat(difficulty)}
-              <span className="text-white/20">{"★".repeat(5 - difficulty)}</span>
+              <span className="text-white/20 light:text-slate-300">{"★".repeat(5 - difficulty)}</span>
             </span>
           )}
         </div>

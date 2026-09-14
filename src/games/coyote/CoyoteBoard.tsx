@@ -278,6 +278,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     return (
       <div
         className={`relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8 ${boardShaking ? DEATH_SHAKE_CLASS : ""}`}
+        // Hardcoded dark wood-table gradient — deliberately left as-is in light mode (thematic board felt, not UI chrome); direct-child text below is left unstyled too since this backdrop never lightens.
         style={{ background: "linear-gradient(160deg,#2e1a0d 0%,#1a0f08 55%,#0a0704 100%)" }}
       >
         <span className="text-5xl">🐺</span>
@@ -406,18 +407,18 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
         )}
         <div
           className={`flex flex-col items-center gap-0.5 rounded-xl border text-center ${compact ? "max-w-[70px] px-1.5 py-0.5 text-[9px]" : "px-2 py-1 text-[10px]"} ${
-            isActive ? "border-amber-300/60 bg-amber-400/10" : "border-white/10 bg-black/30"
+            isActive ? "border-amber-300/60 bg-amber-400/10 light:border-amber-400 light:bg-amber-50" : "border-white/10 bg-black/30 light:border-slate-200 light:bg-white/90 light:shadow-sm"
           } ${showPermanentSkull ? "opacity-70" : ""}`}
           style={cardFlashingRed ? { animation: "coyote-death-flash 0.35s ease-in-out" } : undefined}
         >
-          <span className="flex max-w-full items-center gap-1 truncate font-semibold text-white/90">
+          <span className="flex max-w-full items-center gap-1 truncate font-semibold text-white/90 light:text-slate-900">
             <Avatar size={compact ? 14 : 16} className={`shrink-0 ${showPermanentSkull ? "opacity-50 grayscale" : ""}`} />
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`} />
             {isActive && <span title="차례">👉</span>}
             <span className="break-keep truncate">{names[seat]}</span>
-            {isSelf && <span className="shrink-0 text-amber-200">(나)</span>}
+            {isSelf && <span className="shrink-0 text-amber-200 light:text-amber-700">(나)</span>}
             {showPermanentSkull && (
-              <span className="shrink-0 text-rose-400" title="탈락">
+              <span className="shrink-0 text-rose-400 light:text-rose-600" title="탈락">
                 💀
               </span>
             )}
@@ -432,6 +433,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   return (
     <div
       className={`relative flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4 ${boardShaking ? DEATH_SHAKE_CLASS : ""}`}
+      // Hardcoded dark wood-table gradient — deliberately left as-is in light mode (thematic board felt, not UI chrome); direct-child text/header below is left unstyled too since this backdrop never lightens.
       style={{ background: "linear-gradient(160deg,#3a2410 0%,#20140a 45%,#0d0805 100%)" }}
     >
       <MyTurnOverlay isMyTurn={isMyTurn} />
@@ -451,11 +453,11 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
 
       {/* Bidding phase */}
       {state.phase === "playing" && (
-        <div className="relative z-10 flex flex-col items-center gap-2 rounded-xl border border-white/10 bg-black/30 p-3 text-center">
-          <div className="flex flex-wrap items-center justify-center gap-1.5 text-xs text-orange-100/80">
+        <div className="relative z-10 flex flex-col items-center gap-2 rounded-xl border border-white/10 bg-black/30 p-3 text-center light:border-slate-200 light:bg-white/90 light:shadow-sm">
+          <div className="flex flex-wrap items-center justify-center gap-1.5 text-xs text-orange-100/80 light:text-slate-600">
             {state.currentBid ? (
               <span className="break-keep">
-                현재 선언: <span className="text-lg font-bold text-amber-300">{state.currentBid.number}</span> ({names[state.currentBid.seat]}
+                현재 선언: <span className="text-lg font-bold text-amber-300 light:text-amber-700">{state.currentBid.number}</span> ({names[state.currentBid.seat]}
                 님)
               </span>
             ) : (
@@ -466,11 +468,11 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
           </div>
           {isMyTurn ? (
             <div className="flex flex-col items-center gap-2">
-              <p className="text-xs font-medium text-amber-200">🫵 당신 차례입니다!</p>
+              <p className="text-xs font-medium text-amber-200 light:text-amber-700">🫵 당신 차례입니다!</p>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setDeclareValue((n) => Math.max(minDeclare, n - 1))}
-                  className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
+                  className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
                 >
                   −
                 </button>
@@ -479,20 +481,22 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
                   value={declareValue}
                   onChange={(e) => setDeclareValue(Number(e.target.value))}
                   title={viewerPlusOneUsed ? "회원님은 이번 라운드 '+1 찬스'를 이미 사용하셨습니다. +2 이상 올려야 합니다!" : undefined}
-                  className={`w-20 rounded-lg border bg-white/5 px-2 py-1 text-center text-lg font-bold text-white focus:outline-none ${
-                    declareValue < minDeclare ? "border-rose-400/70 focus:border-rose-400" : "border-white/15 focus:border-amber-400"
+                  className={`w-20 rounded-lg border bg-white/5 px-2 py-1 text-center text-lg font-bold text-white focus:outline-none light:bg-white light:text-slate-900 ${
+                    declareValue < minDeclare
+                      ? "border-rose-400/70 focus:border-rose-400 light:border-rose-500 light:focus:border-rose-500"
+                      : "border-white/15 focus:border-amber-400 light:border-slate-300 light:focus:border-amber-500"
                   }`}
                 />
                 <button
                   onClick={() => setDeclareValue((n) => n + 1)}
                   title={viewerPlusOneUsed ? "회원님은 이번 라운드 '+1 찬스'를 이미 사용하셨습니다. +2 이상 올려야 합니다!" : undefined}
-                  className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
+                  className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
                 >
                   +
                 </button>
               </div>
               {declareValue < minDeclare && (
-                <p className="break-keep text-[11px] text-rose-300">
+                <p className="break-keep text-[11px] text-rose-300 light:text-rose-600">
                   {state.currentBid === null
                     ? `최초 선언은 ${MIN_OPENING_DECLARE} 이상만 가능합니다 (음수/0 불가).`
                     : viewerPlusOneUsed && declareValue === state.currentBid.number + 1
@@ -518,7 +522,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
               </div>
             </div>
           ) : (
-            <p className="text-xs text-white/50">{names[state.activeSeat]}님의 차례를 기다리는 중...</p>
+            <p className="text-xs text-white/50 light:text-slate-500">{names[state.activeSeat]}님의 차례를 기다리는 중...</p>
           )}
         </div>
       )}
@@ -528,19 +532,19 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
           유지되며, 그동안 "다음 라운드" 대신 "⏩ 스킵" 버튼만 노출된다(클릭 시
           handleSkipReveal이 즉시 최종 계산식+하이라이트 완료 화면으로 전환). */}
       {state.phase === "reveal" && res && (
-        <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-center text-xs">
-          <p className="break-keep font-semibold text-rose-200">🐺 {names[res.callerSeat]}님이 &quot;코요테!&quot;를 외쳤습니다</p>
-          <p className="break-keep text-white/70">
-            직전 선언: <b className="text-amber-300">{res.bid.number}</b> ({names[res.bid.seat]})
+        <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-center text-xs light:border-rose-300 light:bg-rose-50">
+          <p className="break-keep font-semibold text-rose-200 light:text-rose-700">🐺 {names[res.callerSeat]}님이 &quot;코요테!&quot;를 외쳤습니다</p>
+          <p className="break-keep text-white/70 light:text-slate-600">
+            직전 선언: <b className="text-amber-300 light:text-amber-700">{res.bid.number}</b> ({names[res.bid.seat]})
           </p>
-          {res.nightCardHolderSeat !== null && <p className="break-keep text-white/60">🌙 {names[res.nightCardHolderSeat]}님이 다음 라운드의 선이 됩니다</p>}
-          <p className="break-keep font-semibold text-white">
+          {res.nightCardHolderSeat !== null && <p className="break-keep text-white/60 light:text-slate-500">🌙 {names[res.nightCardHolderSeat]}님이 다음 라운드의 선이 됩니다</p>}
+          <p className="break-keep font-semibold text-white light:text-slate-900">
             {res.loserWasBidder
               ? `${names[res.bid.seat]}님이 오버 배팅으로 하트 1개를 잃었습니다.`
               : `${names[res.callerSeat]}님이 잘못된 코요테 외침으로 하트 1개를 잃었습니다.`}
           </p>
           {justEliminatedSeatValue !== null && (deathStage === "skull" || deathStage === "done") && (
-            <p className="break-keep font-black tracking-wide text-rose-300 [text-shadow:0_0_10px_rgba(244,63,94,0.75)]">
+            <p className="break-keep font-black tracking-wide text-rose-300 [text-shadow:0_0_10px_rgba(244,63,94,0.75)] light:text-rose-600">
               💀 {names[justEliminatedSeatValue]}님이 마지막 하트를 잃고 탈락했습니다!
             </p>
           )}
@@ -564,7 +568,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
           ) : (
             <button
               onClick={handleSkipReveal}
-              className="mx-auto mt-1 touch-manipulation rounded-full border border-white/20 bg-black/30 px-6 py-2 text-xs font-bold text-white/80 transition select-none hover:border-white/40 hover:text-white"
+              className="mx-auto mt-1 touch-manipulation rounded-full border border-white/20 bg-black/30 px-6 py-2 text-xs font-bold text-white/80 transition select-none hover:border-white/40 hover:text-white light:border-slate-300 light:bg-white light:text-slate-700 light:hover:border-slate-400 light:hover:text-slate-900"
             >
               ⏩ 스킵
             </button>

@@ -17,19 +17,21 @@ import { ITEM_CATALOG, MONSTER_CATALOG } from "./engine";
 export default function SummonersRiftGuideSidebar() {
   return (
     <aside
-      className="flex w-full shrink-0 flex-col gap-3 rounded-[24px] border p-3 text-xs sm:p-4 lg:w-72"
+      // The `!` important modifiers below are needed to win over this element's
+      // inline `background`/`borderColor` (dark obsidian gradient) in light mode.
+      className="flex w-full shrink-0 flex-col gap-3 rounded-[24px] border p-3 text-xs sm:p-4 lg:w-72 light:bg-white/95! light:border-slate-200! light:shadow-md"
       style={{ borderColor: "rgba(200,170,110,0.25)", background: "linear-gradient(160deg,#151b28 0%,#0d121c 45%,#06090f 100%)" }}
     >
-      <h3 className="text-[11px] font-semibold tracking-wide uppercase" style={{ color: "#c8aa6e" }}>
+      <h3 className="text-[11px] font-semibold tracking-wide uppercase light:text-amber-700!" style={{ color: "#c8aa6e" }}>
         📖 인게임 요약 가이드
       </h3>
 
       <section className="flex flex-col gap-1.5">
-        <p className="text-[10px] font-semibold tracking-wide text-white/50 uppercase">진행 흐름</p>
-        <ol className="list-decimal space-y-1 pl-4 text-white/70">
+        <p className="text-[10px] font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">진행 흐름</p>
+        <ol className="list-decimal space-y-1 pl-4 text-white/70 light:text-slate-700">
           <li>
-            내 차례: 카드를 뽑아 혼자 확인한 뒤 <b className="text-rose-200">협곡에 넣기</b> 또는{" "}
-            <b className="text-amber-200">아이템 1개 해제해 숨기기</b> 중 하나. 아니면 <b className="text-white">패스</b>.
+            내 차례: 카드를 뽑아 혼자 확인한 뒤 <b className="text-rose-200 light:text-rose-600">협곡에 넣기</b> 또는{" "}
+            <b className="text-amber-200 light:text-amber-700">아이템 1개 해제해 숨기기</b> 중 하나. 아니면 <b className="text-white light:text-slate-900">패스</b>.
           </li>
           <li>단 1명만 남으면 그 소환사가 최종 도전자가 되어, 남은 아이템으로 총 HP를 계산합니다.</li>
           <li>협곡 더미를 한 장씩 공개 — 처치 아이템이 있으면 무피해, 없으면 위협도만큼 HP가 감소합니다.</li>

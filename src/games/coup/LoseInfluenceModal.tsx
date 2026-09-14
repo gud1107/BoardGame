@@ -24,10 +24,10 @@ export default function LoseInfluenceModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-      <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-rose-400/40 bg-[#240808] p-5 text-center shadow-2xl">
+      <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-rose-400/40 bg-[#240808] p-5 text-center shadow-2xl light:bg-white light:border-rose-300 light:shadow-md">
         <span className="text-3xl">💀</span>
-        <h2 className="text-base font-bold text-rose-100">영향력 카드를 공개하세요</h2>
-        <p className="text-xs text-white/60">{REASON_LABEL[reason]}</p>
+        <h2 className="text-base font-bold text-rose-100 light:text-rose-900">영향력 카드를 공개하세요</h2>
+        <p className="text-xs text-white/60 light:text-slate-600">{REASON_LABEL[reason]}</p>
         <div className="flex justify-center gap-3">
           {options.map((c) => (
             <button key={c.id} onClick={() => onReveal(c.id)} className="rounded-xl p-1 opacity-90 transition hover:scale-105 hover:opacity-100">
@@ -35,7 +35,7 @@ export default function LoseInfluenceModal({
             </button>
           ))}
         </div>
-        {options.length === 1 && <p className="text-[11px] text-white/40">공개할 카드가 1장뿐입니다.</p>}
+        {options.length === 1 && <p className="text-[11px] text-white/40 light:text-slate-400">공개할 카드가 1장뿐입니다.</p>}
       </div>
     </div>
   );

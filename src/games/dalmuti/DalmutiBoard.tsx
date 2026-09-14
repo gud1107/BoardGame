@@ -387,7 +387,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:bg-white/80 light:text-slate-600 light:shadow-sm light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 달무티 룰북
     </button>
@@ -397,7 +397,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     <button
       onClick={toggleMuted}
       title={muted ? "효과음 켜기" : "효과음 끄기"}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:bg-white/80 light:text-slate-600 light:shadow-sm light:hover:border-slate-400 light:hover:text-slate-900"
     >
       {muted ? "🔇" : "🔊"}
     </button>
@@ -416,7 +416,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
           setAutoPassPanelOpen((v) => !v);
         }}
         className={`rounded-full border px-2.5 py-1 text-[11px] break-keep transition ${
-          autoPass.anyEnabled ? "border-sky-300/60 bg-sky-400/10 text-sky-100" : "border-white/15 text-white/60 hover:border-white/30 hover:text-white"
+          autoPass.anyEnabled ? "border-sky-300/60 bg-sky-400/10 text-sky-100 light:border-sky-400 light:bg-sky-100 light:text-sky-700 light:shadow-sm" : "border-white/15 text-white/60 hover:border-white/30 hover:text-white light:border-slate-300 light:bg-white/80 light:text-slate-600 light:shadow-sm light:hover:border-slate-400 light:hover:text-slate-900"
         }`}
       >
         ⚙️ 자동 패스{autoPass.anyEnabled ? " · ON" : ""}
@@ -451,7 +451,8 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     return (
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
       <div
-        className="relative flex min-w-0 flex-1 flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        className="relative flex min-w-0 flex-1 flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8 light:border-slate-200 light:shadow-md"
+        // TODO(theme): hardcoded dark gradient background — not trivial to branch via a CSS class variant, left dark in light mode for now.
         style={{ background: "linear-gradient(160deg,#241a3a 0%,#160f26 55%,#0a0714 100%)" }}
       >
         <span className="text-5xl">👑</span>
@@ -606,7 +607,8 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     >
     <MyTurnOverlay isMyTurn={isMyTrickTurn} />
     <div
-      className="flex min-w-0 flex-1 flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
+      className="flex min-w-0 flex-1 flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4 light:border-slate-200 light:shadow-md"
+      // TODO(theme): hardcoded dark gradient background (plus the screen-shake animation branch below) — not trivial to branch via a CSS class variant, left dark in light mode for now.
       style={{
         background: "linear-gradient(160deg,#1c1430 0%,#120c20 45%,#080510 100%)",
         // 카드 출도 타격 시 화면 미세 진동(task brief §1) — 두 개의 동일한
@@ -629,10 +631,10 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
 
       {/* Revolution option */}
       {state.phase === "revolutionOption" && state.pendingRevolution && (
-        <div className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-3 text-center text-xs">
+        <div className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-3 text-center text-xs light:border-rose-300 light:bg-rose-50">
           {isMyRevolutionTurn ? (
             <div className="flex flex-col items-center gap-2">
-              <p className="font-semibold text-rose-200">
+              <p className="font-semibold text-rose-200 light:text-rose-700">
                 🃏 조커 2장을 모두 갖고 있습니다! {state.pendingRevolution.isGrand ? "대혁명(모든 신분 역전)" : "혁명(세금 취소)"}을 선포하시겠습니까?
               </p>
               <div className="flex gap-2">
@@ -646,14 +648,14 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
                 <FxButton
                   variant="slate"
                   onClick={() => dispatch({ type: "declineRevolution", seat: viewerSeat })}
-                  className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 hover:border-white/40"
+                  className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 hover:border-white/40 light:border-slate-300 light:bg-white/80 light:text-slate-600 light:hover:border-slate-400"
                 >
                   선포하지 않기
                 </FxButton>
               </div>
             </div>
           ) : (
-            <p className="text-white/70">
+            <p className="text-white/70 light:text-slate-600">
               {names[state.pendingRevolution.seat]}님이 조커 2장을 모두 갖고 있어 혁명 선포 여부를 고민 중입니다...
             </p>
           )}
@@ -662,16 +664,16 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
 
       {/* Tax phase */}
       {state.phase === "taxReturn" && (
-        <div className="flex flex-col gap-1.5 rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-2.5 text-xs">
-          <p className="text-center font-semibold text-amber-200">💰 세금 바치기</p>
+        <div className="flex flex-col gap-1.5 rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-2.5 text-xs light:border-amber-300 light:bg-amber-50">
+          <p className="text-center font-semibold text-amber-200 light:text-amber-700">💰 세금 바치기</p>
           {state.tributes.map((t, i) => (
-            <p key={i} className="text-center text-white/70">
+            <p key={i} className="text-center text-white/70 light:text-slate-600">
               {names[t.fromSeat]} → {names[t.toSeat]}: {t.givenCardIds.length}장 진상{" "}
               {t.resolved ? "✅ 하사 완료" : t.toSeat === viewerSeat ? "⏳ 내가 돌려줄 카드 선택 중" : "⏳ 대기 중"}
             </p>
           ))}
           {isMyTaxTurn && myTribute && (
-            <p className="mt-1 text-center font-medium text-amber-100">
+            <p className="mt-1 text-center font-medium text-amber-100 light:text-amber-700">
               🫵 아래 손패에서 돌려줄 카드 {myTribute.givenCardIds.length}장을 고른 뒤 확정하세요.
             </p>
           )}
@@ -680,10 +682,10 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
 
       {/* Commoner (평민) mutual exchange phase */}
       {state.phase === "commonerExchange" && state.commonerExchange && (
-        <div className="flex flex-col gap-1.5 rounded-xl border border-emerald-300/30 bg-emerald-400/10 px-3 py-2.5 text-xs">
-          <p className="text-center font-semibold text-emerald-200">🌾 평민 카드 교환</p>
+        <div className="flex flex-col gap-1.5 rounded-xl border border-emerald-300/30 bg-emerald-400/10 px-3 py-2.5 text-xs light:border-emerald-300 light:bg-emerald-50">
+          <p className="text-center font-semibold text-emerald-200 light:text-emerald-700">🌾 평민 카드 교환</p>
           {commonerSwapFlash && (
-            <p className="text-center text-emerald-100">
+            <p className="text-center text-emerald-100 light:text-emerald-700">
               ✅ {names[commonerSwapFlash.seatA]}님과 {names[commonerSwapFlash.seatB]}님이 카드를 교환했습니다!
             </p>
           )}
@@ -697,7 +699,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
               else if (pair.resolved) status = "✅ 교환 완료";
               else status = "⏳ 카드 선택 중";
               return (
-                <p key={p.seat} className="text-center text-white/70">
+                <p key={p.seat} className="text-center text-white/70 light:text-slate-600">
                   {names[p.seat]}: {status}
                 </p>
               );
@@ -705,7 +707,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
           </div>
           {isMyCommonerOptInTurn && (
             <div className="mt-1 flex flex-col items-center gap-2">
-              <p className="font-medium text-emerald-100">🫵 다른 평민과 카드 1장을 맞교환하시겠습니까?</p>
+              <p className="font-medium text-emerald-100 light:text-emerald-700">🫵 다른 평민과 카드 1장을 맞교환하시겠습니까?</p>
               <div className="flex gap-2">
                 <FxButton
                   variant="emerald"
@@ -717,7 +719,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
                 <FxButton
                   variant="slate"
                   onClick={() => dispatch({ type: "commonerOptIn", seat: viewerSeat, participate: false })}
-                  className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 hover:border-white/40"
+                  className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 hover:border-white/40 light:border-slate-300 light:bg-white/80 light:text-slate-600 light:hover:border-slate-400"
                 >
                   ❌ 거절
                 </FxButton>
@@ -725,7 +727,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
             </div>
           )}
           {isMyCommonerOfferTurn && (
-            <p className="mt-1 text-center font-medium text-emerald-100">🫵 팝업 창에서 상대에게 건넬 카드를 골라주세요.</p>
+            <p className="mt-1 text-center font-medium text-emerald-100 light:text-emerald-700">🫵 팝업 창에서 상대에게 건넬 카드를 골라주세요.</p>
           )}
         </div>
       )}
@@ -734,7 +736,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
       {state.phase === "trick" && (
         <>
           {trickFlash && (
-            <div className="rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-center text-xs text-white/70">
+            <div className="rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-center text-xs text-white/70 light:border-amber-300 light:bg-amber-50 light:text-slate-600">
               {names[trickFlash.winnerSeat]}님이 {trickFlash.rankValue === 13 ? "조커" : `${trickFlash.rankValue}번`} {trickFlash.count}장으로 트릭을 가져가 다음 리드가 됩니다.
             </div>
           )}
@@ -745,9 +747,9 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
                 : `🫵 당신 차례입니다! 같은 장수(${state.trick.count}장)이면서 더 높은 계급(숫자 < ${state.trick.rankValue})만 낼 수 있어요.`
               : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
           </p>
-          <section className="flex flex-wrap items-start justify-center gap-2.5 rounded-2xl border border-white/10 bg-black/25 p-3">
+          <section className="flex flex-wrap items-start justify-center gap-2.5 rounded-2xl border border-white/10 bg-black/25 p-3 light:border-slate-200 light:bg-slate-50">
             {state.trick.plays.length === 0 ? (
-              <p className="py-6 text-xs text-white/30">아직 아무도 카드를 내지 않았어요. 이 트릭의 선입니다.</p>
+              <p className="py-6 text-xs text-white/30 light:text-slate-400">아직 아무도 카드를 내지 않았어요. 이 트릭의 선입니다.</p>
             ) : (
               state.trick.plays.map((play, i) => {
                 const cardsEl = (
@@ -762,7 +764,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
                 const impact = playImpacts.find((e) => e.playIndex === i);
                 return (
                   <div key={`${play.seat}-${i}`} className="flex flex-col items-center gap-1">
-                    <span className={`text-[10px] font-semibold ${play.seat === viewerSeat ? "text-amber-200" : "text-white/50"}`}>
+                    <span className={`text-[10px] font-semibold ${play.seat === viewerSeat ? "text-amber-200 light:text-amber-700" : "text-white/50 light:text-slate-500"}`}>
                       {i + 1}. {names[play.seat]}
                     </span>
                     {impact ? (
@@ -793,22 +795,22 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
               ref={setSeatRowRef(seat)}
               className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs transition ${
                 p.finishedAtOrder !== null
-                  ? "border-white/5 bg-black/10 opacity-60"
+                  ? "border-white/5 bg-black/10 opacity-60 light:border-slate-200 light:bg-slate-100"
                   : isActive
-                    ? "border-amber-300/60 bg-amber-400/10"
-                    : "border-white/10 bg-black/20"
+                    ? "border-amber-300/60 bg-amber-400/10 light:border-amber-400 light:bg-amber-50"
+                    : "border-white/10 bg-black/20 light:border-slate-200 light:bg-slate-50"
               }`}
             >
-              <span className="flex items-center gap-1.5 font-semibold text-white/90">
+              <span className="flex items-center gap-1.5 font-semibold text-white/90 light:text-slate-800">
                 <Avatar size={20} />
-                <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+                <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`} />
                 {isActive && <span title="차례">👉</span>}
                 <RoleBadge title={title} />
                 {names[seat]}
-                {isSelf && <span className="text-amber-200">(나)</span>}
-                {p.finishedAtOrder !== null && <span className="text-amber-300">🏁 {p.finishedAtOrder}등</span>}
+                {isSelf && <span className="text-amber-200 light:text-amber-700">(나)</span>}
+                {p.finishedAtOrder !== null && <span className="text-amber-300 light:text-amber-700">🏁 {p.finishedAtOrder}등</span>}
               </span>
-              <span className="text-white/70" title="남은 손패 수">
+              <span className="text-white/70 light:text-slate-600" title="남은 손패 수">
                 🂠 {p.hand.length}장
               </span>
             </div>
@@ -818,7 +820,8 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
 
       {/* My hand */}
       <section
-        className="rounded-2xl border border-purple-300/20 p-2.5 sm:p-3"
+        className="rounded-2xl border border-purple-300/20 p-2.5 sm:p-3 light:border-slate-200 light:shadow-sm"
+        // TODO(theme): hardcoded dark gradient background — not trivial to branch via a CSS class variant, left dark in light mode for now.
         style={{ background: "linear-gradient(160deg,#241a3a 0%,#160f26 55%,#0a0714 100%)" }}
       >
         <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-purple-200/90 uppercase">🃏 내 손패 ({me.hand.length}장)</h3>
@@ -864,7 +867,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
               variant="slate"
               onClick={passTurn}
               disabled={state.trick.count === 0}
-              className="rounded-full border border-white/20 px-5 py-2 text-xs font-semibold text-white/80 transition hover:border-white/40 disabled:cursor-not-allowed disabled:opacity-30"
+              className="rounded-full border border-white/20 px-5 py-2 text-xs font-semibold text-white/80 transition hover:border-white/40 disabled:cursor-not-allowed disabled:opacity-30 light:border-slate-300 light:bg-white/80 light:text-slate-700 light:shadow-sm light:hover:border-slate-400"
             >
               🙅 패스
             </FxButton>

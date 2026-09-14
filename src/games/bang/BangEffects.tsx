@@ -194,17 +194,17 @@ export function CenterPlayBanner({
               {icon}
             </span>
           )}
-          <div className={`rounded-xl border-4 bg-black/20 p-1 ${EFFECT_RING[event.effect]}`}>
+          <div className={`rounded-xl border-4 bg-black/20 p-1 light:bg-white/40 ${EFFECT_RING[event.effect]}`}>
             <CardFace card={event.card ?? { id: "center-preview", type: event.cardType, suit: "S", rank: 2 }} size="md" />
           </div>
         </div>
         <div
-          className="max-w-[min(90vw,26rem)] rounded-2xl border border-amber-300/60 bg-gradient-to-r from-amber-950/95 via-black/90 to-amber-950/95 px-5 py-2.5 text-center shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)]"
+          className="max-w-[min(90vw,26rem)] rounded-2xl border border-amber-300/60 bg-gradient-to-r from-amber-950/95 via-black/90 to-amber-950/95 px-5 py-2.5 text-center shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)] light:border-amber-400/60 light:from-amber-50 light:via-white light:to-amber-50 light:shadow-md"
           style={{ animation: "bang-banner-slide 0.3s ease-out 0.1s both" }}
         >
-          <p className="text-sm font-bold whitespace-nowrap text-amber-100">{bannerText}</p>
-          {event.note && <p className="mt-0.5 text-xs font-semibold text-amber-300">{event.note}</p>}
-          <p className="mt-0.5 text-[11px] text-amber-100/60">{meta.desc}</p>
+          <p className="text-sm font-bold whitespace-nowrap text-amber-100 light:text-amber-900">{bannerText}</p>
+          {event.note && <p className="mt-0.5 text-xs font-semibold text-amber-300 light:text-amber-700">{event.note}</p>}
+          <p className="mt-0.5 text-[11px] text-amber-100/60 light:text-slate-500">{meta.desc}</p>
         </div>
       </div>
     </div>,

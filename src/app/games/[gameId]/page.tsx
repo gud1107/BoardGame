@@ -13,6 +13,7 @@ import { endGamePlay, startGamePlay } from "@/lib/analytics/track";
 import RoundResultEntry from "@/components/betting/RoundResultEntry";
 import GameThumbnail from "@/components/GameThumbnail";
 import BugReportFloatingButton from "@/components/bugReport/BugReportFloatingButton";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 
 type Stage = "select" | "playing" | "record" | "done";
 /** Frozen once per page load right after the subscription store hydrates — see the entitlement gate below. */
@@ -153,7 +154,7 @@ export default function GamePlayPage() {
   if (!game) {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
-        <p className="text-white/60">존재하지 않는 게임입니다.</p>
+        <p className="text-white/60 light:text-slate-500">존재하지 않는 게임입니다.</p>
         <Link href="/" className="mt-4 inline-block text-rose-300 underline">
           대시보드로 돌아가기
         </Link>
@@ -164,7 +165,7 @@ export default function GamePlayPage() {
   if (!game.playable) {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
-        <div className="relative mx-auto flex h-28 w-24 items-center justify-center overflow-hidden rounded-lg bg-white/5">
+        <div className="relative mx-auto flex h-28 w-24 items-center justify-center overflow-hidden rounded-lg bg-white/5 light:bg-slate-100">
           {/* imageClassName padding (not container padding) actually insets
               the art — next/image's `fill` positions absolutely against the
               container's padding box, so container padding alone wouldn't
@@ -176,8 +177,8 @@ export default function GamePlayPage() {
             imageSizes="96px"
           />
         </div>
-        <h1 className="mt-4 text-xl font-bold text-white">{game.name}</h1>
-        <p className="mt-2 text-sm text-white/50">아직 준비 중인 게임입니다. 곧 만나보실 수 있어요!</p>
+        <h1 className="mt-4 text-xl font-bold text-white light:text-slate-900">{game.name}</h1>
+        <p className="mt-2 text-sm text-white/50 light:text-slate-500">아직 준비 중인 게임입니다. 곧 만나보실 수 있어요!</p>
         <Link href="/" className="mt-6 inline-block text-rose-300 underline">
           대시보드로 돌아가기
         </Link>
@@ -189,8 +190,8 @@ export default function GamePlayPage() {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
         <span className="text-4xl">🔒</span>
-        <h1 className="mt-4 text-xl font-bold text-white">로그인이 필요합니다</h1>
-        <p className="mt-2 text-sm text-white/50">지금은 게스트 모드가 꺼져 있어 로그인한 회원만 플레이할 수 있어요.</p>
+        <h1 className="mt-4 text-xl font-bold text-white light:text-slate-900">로그인이 필요합니다</h1>
+        <p className="mt-2 text-sm text-white/50 light:text-slate-500">지금은 게스트 모드가 꺼져 있어 로그인한 회원만 플레이할 수 있어요.</p>
         <Link
           href={`/login?next=${encodeURIComponent(`/games/${game.id}`)}`}
           className="mt-6 inline-block rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-400"
@@ -205,8 +206,8 @@ export default function GamePlayPage() {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
         <span className="text-4xl">⏳</span>
-        <h1 className="mt-4 text-xl font-bold text-white">오늘의 이용 한도를 모두 사용했어요</h1>
-        <p className="mt-2 text-sm text-white/50">
+        <h1 className="mt-4 text-xl font-bold text-white light:text-slate-900">오늘의 이용 한도를 모두 사용했어요</h1>
+        <p className="mt-2 text-sm text-white/50 light:text-slate-500">
           {entitlement?.unit === "minutes"
             ? `오늘 이용 시간(${entitlement.cap}분)을 모두 사용했습니다.`
             : `오늘 게임 횟수(${entitlement?.cap}회)를 모두 사용했습니다.`}{" "}
@@ -222,7 +223,7 @@ export default function GamePlayPage() {
           <button
             disabled
             title="준비 중인 기능입니다"
-            className="cursor-not-allowed rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/40"
+            className="cursor-not-allowed rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/40 light:border-slate-200 light:text-slate-400"
           >
             코인 충전 (준비중)
           </button>
@@ -305,31 +306,38 @@ export default function GamePlayPage() {
 
   return (
     <div className={`mx-auto ${pageMaxWidth} px-4 py-8 sm:px-6`}>
-      <div className="mb-6 flex items-center gap-3">
-        <div className="relative flex h-14 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/5">
-          <GameThumbnail
-            game={game}
-            className="text-3xl"
-            imageClassName="object-contain p-1"
-            imageSizes="44px"
-          />
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="relative flex h-14 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/5 light:bg-slate-100">
+            <GameThumbnail
+              game={game}
+              className="text-3xl"
+              imageClassName="object-contain p-1"
+              imageSizes="44px"
+            />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-white light:text-slate-900">{game.name}</h1>
+            <p className="text-xs text-white/45 light:text-slate-500">
+              {game.players.min === game.players.max
+                ? `${game.players.min}인 전용`
+                : `${game.players.min}~${game.players.max}인`}{" "}
+              · {game.playTime.minMinutes}~{game.playTime.maxMinutes}분
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-white">{game.name}</h1>
-          <p className="text-xs text-white/45">
-            {game.players.min === game.players.max
-              ? `${game.players.min}인 전용`
-              : `${game.players.min}~${game.players.max}인`}{" "}
-            · {game.playTime.minMinutes}~{game.playTime.maxMinutes}분
-          </p>
-        </div>
+        {/* 인게임 유틸리티 영역의 원터치 테마 토글 — 모든 게임이 이 한 곳(공용
+            GamePlayPage 셸)을 거치므로 게임별로 따로 배치할 필요 없음. 이미
+            SiteHeader에도 있지만(로비/모든 페이지 공통), 턴 진행 중 손이 가는
+            위치인 게임 제목 바로 옆에도 하나 더 노출해 달라는 요청 사항. */}
+        <ThemeToggle />
       </div>
 
       {stage === "select" && (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 light:border-slate-200 light:bg-white light:shadow-sm">
           {canSelectFromRoster ? (
             <>
-              <p className="mb-3 text-sm text-white/70">
+              <p className="mb-3 text-sm text-white/70 light:text-slate-600">
                 이번 판을 플레이할 참가자를 {min === max ? `${min}명` : `${min}~${max}명`} 선택하세요.
                 (내기 참가자 목록에서)
               </p>
@@ -350,8 +358,8 @@ export default function GamePlayPage() {
                       }
                       className={`rounded-full border px-3 py-1.5 text-sm transition ${
                         selected
-                          ? "border-rose-400 bg-rose-500/20 text-white"
-                          : "border-white/15 text-white/60 hover:border-white/30"
+                          ? "border-rose-400 bg-rose-500/20 text-white light:text-rose-900"
+                          : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
                       }`}
                     >
                       {p.name}
@@ -359,29 +367,29 @@ export default function GamePlayPage() {
                   );
                 })}
               </div>
-              <p className="mt-2 text-xs text-white/40">
+              <p className="mt-2 text-xs text-white/40 light:text-slate-400">
                 {selectedIds.length}/{max} 선택됨 · 선택되지 않은 참가자는 이번 판 상금/벌금에 영향을
                 주지 않도록 다음 화면에서 조정할 수 있어요.
               </p>
             </>
           ) : (
             <>
-              <p className="mb-3 text-sm text-white/70">
+              <p className="mb-3 text-sm text-white/70 light:text-slate-600">
                 내기 없이 자유롭게 플레이합니다. 참가자 이름을 입력하세요.
               </p>
               {min !== max && (
-                <div className="mb-3 flex items-center gap-2 text-sm text-white/70">
+                <div className="mb-3 flex items-center gap-2 text-sm text-white/70 light:text-slate-600">
                   <span>인원 수</span>
                   <button
                     onClick={() => setAdHocCount((c) => Math.max(min, c - 1))}
-                    className="h-7 w-7 rounded-full border border-white/15 hover:border-white/40"
+                    className="h-7 w-7 rounded-full border border-white/15 hover:border-white/40 light:border-slate-300 light:hover:border-slate-400"
                   >
                     −
                   </button>
                   <span className="w-6 text-center">{adHocCount}</span>
                   <button
                     onClick={() => setAdHocCount((c) => Math.min(max, c + 1))}
-                    className="h-7 w-7 rounded-full border border-white/15 hover:border-white/40"
+                    className="h-7 w-7 rounded-full border border-white/15 hover:border-white/40 light:border-slate-300 light:hover:border-slate-400"
                   >
                     +
                   </button>
@@ -396,7 +404,7 @@ export default function GamePlayPage() {
                       setAdHocNames((prev) => prev.map((n, idx) => (idx === i ? e.target.value : n)))
                     }
                     placeholder={`플레이어${i + 1}`}
-                    className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none"
+                    className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-rose-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
                   />
                 ))}
               </div>
@@ -406,7 +414,7 @@ export default function GamePlayPage() {
           <button
             disabled={!selectionValid}
             onClick={() => setStage("playing")}
-            className="mt-5 w-full rounded-xl bg-rose-500 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+            className="mt-5 w-full rounded-xl bg-rose-500 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-100 light:disabled:text-slate-400"
           >
             게임 시작
           </button>
@@ -418,7 +426,7 @@ export default function GamePlayPage() {
       )}
 
       {stage === "record" && session && result && (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 light:border-slate-200 light:bg-white light:shadow-sm">
           <RoundResultEntry
             participants={session.participants}
             autoRanking={result.rankings}
@@ -428,9 +436,9 @@ export default function GamePlayPage() {
       )}
 
       {stage === "done" && result && (
-        <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center light:border-slate-200 light:bg-white light:shadow-sm">
           <span className="text-4xl">✅</span>
-          <p className="text-white/80">
+          <p className="text-white/80 light:text-slate-700">
             {session ? "결과가 내기에 반영되었습니다." : "게임이 종료되었습니다."}
           </p>
           <div className="flex gap-2">
@@ -440,7 +448,7 @@ export default function GamePlayPage() {
                 setSelectedIds([]);
                 setResult(null);
               }}
-              className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30"
+              className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
             >
               이 게임 다시하기
             </button>

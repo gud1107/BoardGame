@@ -95,7 +95,7 @@ function EffectItem({ effect, onDone }: { effect: LostCitiesEffect; onDone: (id:
 
         {effect.kind === "draw" && effect.drawSource && (
           <span
-            className="absolute left-1/2 top-full whitespace-nowrap rounded-full border border-cyan-200/70 bg-black/80 px-2 py-0.5 text-[10px] font-bold text-cyan-200 shadow"
+            className="absolute left-1/2 top-full whitespace-nowrap rounded-full border border-cyan-200/70 bg-black/80 px-2 py-0.5 text-[10px] font-bold text-cyan-200 shadow light:border-cyan-400/70 light:bg-white/95 light:text-cyan-700"
             style={{ animation: "lc-flight-trail-fade 0.6s ease-out both" }}
           >
             {DRAW_BADGE[effect.drawSource]}

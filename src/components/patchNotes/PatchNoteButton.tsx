@@ -58,7 +58,7 @@ export default function PatchNoteButton() {
       <button
         type="button"
         onClick={handleOpen}
-        className="relative flex items-center gap-1 rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/70 transition hover:border-white/30 hover:text-white sm:text-xs"
+        className="relative flex items-center gap-1 rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/70 transition hover:border-white/30 hover:text-white sm:text-xs light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
         aria-label={`패치노트 ${LATEST_PATCH_VERSION}`}
         title="패치노트"
       >
@@ -66,7 +66,7 @@ export default function PatchNoteButton() {
         <span className="hidden sm:inline">{LATEST_PATCH_VERSION}</span>
         {hasUnseen && (
           <span
-            className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-[#0b0b12]"
+            className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-[#0b0b12] light:ring-[#f8fafc]"
             aria-label="새 패치노트 있음"
           />
         )}

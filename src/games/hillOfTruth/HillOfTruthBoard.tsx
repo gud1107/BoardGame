@@ -30,20 +30,20 @@ function SignalLight({ verdict, flashKey }: { verdict: "green" | "yellow" | "red
   const lights: ("red" | "yellow" | "green")[] = ["red", "yellow", "green"];
   return (
     <div className="flex flex-col items-center gap-2">
-      <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-slate-900/80 px-5 py-4">
+      <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-slate-900/80 px-5 py-4 light:border-slate-200 light:bg-white/90 light:shadow-sm">
         {lights.map((color) => {
           const isLit = verdict === color;
           return (
             <span
               key={`${color}-${flashKey}`}
-              className={`h-9 w-9 rounded-full border-2 border-white/10 transition-all ${
-                isLit ? `${VERDICT_META[color].dot} ${VERDICT_META[color].ring} hill-of-truth-light-flash` : "bg-white/5"
+              className={`h-9 w-9 rounded-full border-2 border-white/10 transition-all light:border-slate-200 ${
+                isLit ? `${VERDICT_META[color].dot} ${VERDICT_META[color].ring} hill-of-truth-light-flash` : "bg-white/5 light:bg-slate-100"
               }`}
             />
           );
         })}
       </div>
-      <p className="break-keep text-xs font-semibold text-white/50">{verdict ? `딜러 판정: ${VERDICT_META[verdict].label}` : "딜러 대기 중"}</p>
+      <p className="break-keep text-xs font-semibold text-white/50 light:text-slate-500">{verdict ? `딜러 판정: ${VERDICT_META[verdict].label}` : "딜러 대기 중"}</p>
     </div>
   );
 }
@@ -196,8 +196,8 @@ export default function HillOfTruthBoard({
     <div className={`flex flex-col gap-4 pb-28 ${isWrongAnswerShaking ? "hill-of-truth-screen-shake" : ""}`}>
       {declarationAlert && (
         <div className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4">
-          <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-rose-500/80 bg-slate-900 px-6 py-5 text-center shadow-2xl">
-            <p className="break-keep text-sm font-bold text-amber-400">
+          <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-rose-500/80 bg-slate-900 px-6 py-5 text-center shadow-2xl light:bg-white light:shadow-lg">
+            <p className="break-keep text-sm font-bold text-amber-400 light:text-amber-700">
               ⚠️ {declarationAlert.playerName}님이 정답 선언을 했습니다.
             </p>
             {declarationAlert.stage === 2 && (
@@ -211,16 +211,16 @@ export default function HillOfTruthBoard({
 
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/60">
+          <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/60 light:bg-slate-200 light:text-slate-600">
             {scenario.type === "A" ? "🎬 유형 A · 원작 헌정" : "📚 유형 B · 검증 시나리오"}
           </span>
           <span
             className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
               state.difficulty === "LV3"
-                ? "bg-fuchsia-500/15 text-fuchsia-200"
+                ? "bg-fuchsia-500/15 text-fuchsia-200 light:bg-fuchsia-100 light:text-fuchsia-700"
                 : state.difficulty === "LV2"
-                  ? "bg-cyan-500/15 text-cyan-200"
-                  : "bg-white/10 text-white/60"
+                  ? "bg-cyan-500/15 text-cyan-200 light:bg-cyan-100 light:text-cyan-700"
+                  : "bg-white/10 text-white/60 light:bg-slate-200 light:text-slate-600"
             }`}
           >
             {state.difficulty === "LV3" ? "🔴 Lv.3 하드코어" : state.difficulty === "LV2" ? "🟡 Lv.2 심화" : "🟢 Lv.1 기본"}
@@ -228,15 +228,15 @@ export default function HillOfTruthBoard({
         </div>
         <button
           onClick={() => setRulebookOpen(true)}
-          className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30"
+          className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
         >
           📖 룰북
         </button>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-        <h2 className="break-keep text-lg font-black text-white">{scenario.title}</h2>
-        <p className="mt-1.5 break-keep text-sm leading-relaxed text-white/60">{scenario.synopsis}</p>
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 light:border-slate-200 light:bg-white light:shadow-sm">
+        <h2 className="break-keep text-lg font-black text-white light:text-slate-900">{scenario.title}</h2>
+        <p className="mt-1.5 break-keep text-sm leading-relaxed text-white/60 light:text-slate-600">{scenario.synopsis}</p>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -248,20 +248,20 @@ export default function HillOfTruthBoard({
             <div
               key={seat}
               className={`flex items-center gap-2 rounded-full border px-2.5 py-1.5 text-xs ${
-                active ? "border-cyan-400/60 bg-cyan-400/10" : "border-white/10 bg-white/[0.02]"
+                active ? "border-cyan-400/60 bg-cyan-400/10" : "border-white/10 bg-white/[0.02] light:border-slate-200 light:bg-white"
               }`}
             >
               <div className="relative">
                 <Avatar src={avatars?.[seat]} size={26} />
                 <span
-                  className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-slate-950 ${connected ? "bg-emerald-400" : "bg-white/20"}`}
+                  className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-slate-950 light:border-white ${connected ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`}
                 />
               </div>
-              <span className={`break-keep font-semibold ${active ? "text-cyan-200" : "text-white/70"}`}>
+              <span className={`break-keep font-semibold ${active ? "text-cyan-200 light:text-cyan-700" : "text-white/70 light:text-slate-600"}`}>
                 {seat === viewerSeat ? `나 (${names[seat]})` : names[seat]}
               </span>
               {seat === viewerSeat && (
-                <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/50">🔒{player.hiddenQuestionsUsed}/{MAX_HIDDEN_QUESTIONS}</span>
+                <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/50 light:bg-slate-200 light:text-slate-500">🔒{player.hiddenQuestionsUsed}/{MAX_HIDDEN_QUESTIONS}</span>
               )}
             </div>
           );
@@ -270,24 +270,24 @@ export default function HillOfTruthBoard({
 
       <SignalLight verdict={latestEntry?.verdict ?? null} flashKey={state.questionLog.length} />
 
-      <div className="flex max-h-64 flex-col-reverse gap-2 overflow-y-auto rounded-2xl border border-white/10 bg-black/20 p-3">
-        {state.questionLog.length === 0 && <p className="break-keep text-center text-xs text-white/30">아직 나온 질문이 없습니다.</p>}
+      <div className="flex max-h-64 flex-col-reverse gap-2 overflow-y-auto rounded-2xl border border-white/10 bg-black/20 p-3 light:border-slate-200 light:bg-slate-50">
+        {state.questionLog.length === 0 && <p className="break-keep text-center text-xs text-white/30 light:text-slate-400">아직 나온 질문이 없습니다.</p>}
         {[...state.questionLog].reverse().map((entry) => {
           const text = visibleQuestionText(entry, viewerSeat, state.phase);
           const masked = entry.mode === "hidden" && !text;
           const meta = VERDICT_META[entry.verdict];
           return (
-            <div key={entry.id} className="flex items-start gap-2 rounded-xl bg-white/[0.02] px-3 py-2">
+            <div key={entry.id} className="flex items-start gap-2 rounded-xl bg-white/[0.02] px-3 py-2 light:border light:border-slate-200 light:bg-white light:shadow-sm">
               <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} />
               <div className="min-w-0 flex-1">
-                <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-white/40">
-                  <span className="break-keep font-semibold text-white/60">{names[entry.seat] ?? `${entry.seat + 1}번`}</span>
-                  {entry.mode === "hidden" && <span className="rounded bg-white/10 px-1.5 py-0.5">🔒 히든</span>}
+                <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-white/40 light:text-slate-400">
+                  <span className="break-keep font-semibold text-white/60 light:text-slate-600">{names[entry.seat] ?? `${entry.seat + 1}번`}</span>
+                  {entry.mode === "hidden" && <span className="rounded bg-white/10 px-1.5 py-0.5 light:bg-slate-200 light:text-slate-700">🔒 히든</span>}
                   <span>{meta.label}</span>
                 </p>
-                <p className="break-keep text-sm text-white/85">{masked ? "🔒 비공개 질문입니다 (판정 색상만 공개)" : text}</p>
+                <p className="break-keep text-sm text-white/85 light:text-slate-800">{masked ? "🔒 비공개 질문입니다 (판정 색상만 공개)" : text}</p>
                 {state.phase === "ended" && entry.verdict === "yellow" && entry.yellowDetail && (
-                  <p className="mt-1 break-keep rounded bg-amber-400/10 px-2 py-1 text-[11px] text-amber-200/80">🟡 {entry.yellowDetail}</p>
+                  <p className="mt-1 break-keep rounded bg-amber-400/10 px-2 py-1 text-[11px] text-amber-200/80 light:bg-amber-50 light:text-amber-800">🟡 {entry.yellowDetail}</p>
                 )}
               </div>
             </div>
@@ -296,8 +296,8 @@ export default function HillOfTruthBoard({
       </div>
 
       {state.phase === "playing" && (
-        <div className={`flex flex-col gap-3 rounded-2xl border p-4 ${isMyTurn ? "border-cyan-400/40 bg-cyan-400/[0.04]" : "border-white/10 bg-white/[0.02]"}`}>
-          <p className="break-keep text-sm font-bold text-white">
+        <div className={`flex flex-col gap-3 rounded-2xl border p-4 ${isMyTurn ? "border-cyan-400/40 bg-cyan-400/[0.04]" : "border-white/10 bg-white/[0.02] light:border-slate-200 light:bg-white"}`}>
+          <p className="break-keep text-sm font-bold text-white light:text-slate-900">
             {isMyTurn ? "🎯 당신의 차례입니다" : `⏳ ${names[state.turnOrder[state.turnIndex]] ?? "상대"}님의 차례를 기다리는 중...`}
           </p>
 
@@ -305,22 +305,22 @@ export default function HillOfTruthBoard({
             <>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
-                  <div className="flex overflow-hidden rounded-full border border-white/15 text-xs">
+                  <div className="flex overflow-hidden rounded-full border border-white/15 text-xs light:border-slate-300">
                     <button
                       onClick={() => setAskMode("public")}
-                      className={`px-3 py-1.5 font-semibold ${askMode === "public" ? "bg-cyan-500 text-slate-950" : "text-white/60"}`}
+                      className={`px-3 py-1.5 font-semibold ${askMode === "public" ? "bg-cyan-500 text-slate-950" : "text-white/60 light:text-slate-500"}`}
                     >
                       🌐 공개
                     </button>
                     <button
                       onClick={() => setAskMode("hidden")}
                       disabled={!canAskHidden}
-                      className={`px-3 py-1.5 font-semibold disabled:opacity-30 ${askMode === "hidden" ? "bg-fuchsia-500 text-slate-950" : "text-white/60"}`}
+                      className={`px-3 py-1.5 font-semibold disabled:opacity-30 ${askMode === "hidden" ? "bg-fuchsia-500 text-slate-950" : "text-white/60 light:text-slate-500"}`}
                     >
                       🔒 히든
                     </button>
                   </div>
-                  <span className="break-keep text-[11px] text-white/50">히든 질문 {hiddenRemaining}/{MAX_HIDDEN_QUESTIONS}회 남음</span>
+                  <span className="break-keep text-[11px] text-white/50 light:text-slate-500">히든 질문 {hiddenRemaining}/{MAX_HIDDEN_QUESTIONS}회 남음</span>
                 </div>
                 <div className="flex gap-2">
                   <input
@@ -330,7 +330,7 @@ export default function HillOfTruthBoard({
                       if (e.key === "Enter" && !e.nativeEvent.isComposing) submitAsk();
                     }}
                     placeholder="예: 범인은 OO입니까?"
-                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/25 focus:border-cyan-400 focus:outline-none"
+                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/25 focus:border-cyan-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
                   />
                   <button
                     onClick={submitAsk}
@@ -350,7 +350,7 @@ export default function HillOfTruthBoard({
                     if (e.key === "Enter" && !e.nativeEvent.isComposing) submitAnswer();
                   }}
                   placeholder="사건의 진상을 문장으로 제출하세요"
-                  className="min-w-0 flex-1 rounded-lg border border-amber-400/20 bg-amber-400/[0.04] px-3 py-2 text-sm text-white placeholder:text-white/25 focus:border-amber-400 focus:outline-none"
+                  className="min-w-0 flex-1 rounded-lg border border-amber-400/20 bg-amber-400/[0.04] px-3 py-2 text-sm text-white placeholder:text-white/25 focus:border-amber-400 focus:outline-none light:border-amber-400/40 light:bg-amber-50 light:text-slate-900 light:placeholder:text-slate-400"
                 />
                 <button
                   onClick={submitAnswer}
@@ -363,12 +363,12 @@ export default function HillOfTruthBoard({
                 </button>
               </div>
               {!canSubmit && cooldownSeconds > 0 && (
-                <p className="break-keep text-[11px] text-amber-300/70">
+                <p className="break-keep text-[11px] text-amber-300/70 light:text-amber-700">
                   직전 오답으로 {ANSWER_COOLDOWN_MS / 1000}초 쿨타임이 적용 중입니다 — 질문은 계속 할 수 있어요.
                 </p>
               )}
 
-              <button onClick={pass} className="self-start rounded-full border border-white/15 px-4 py-1.5 text-xs text-white/60 hover:border-white/30">
+              <button onClick={pass} className="self-start rounded-full border border-white/15 px-4 py-1.5 text-xs text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400">
                 ⏭️ 이번 턴 패스
               </button>
             </>
@@ -377,19 +377,19 @@ export default function HillOfTruthBoard({
       )}
 
       {state.phase === "ended" && (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-400/[0.06] p-5 text-center">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-400/[0.06] p-5 text-center light:shadow-sm">
           <span className="text-3xl">🏆</span>
-          <p className="break-keep text-base font-bold text-white">
+          <p className="break-keep text-base font-bold text-white light:text-slate-900">
             {state.winnerSeat !== null ? `${names[state.winnerSeat]}님이 진실을 밝혀냈습니다!` : "게임 종료"}
           </p>
-          <div className="w-full rounded-xl bg-black/20 p-3 text-left">
-            <p className="mb-1 text-[11px] font-semibold tracking-wide text-white/40 uppercase">사건의 진실</p>
-            <p className="break-keep text-sm leading-relaxed text-white/80">{scenario.truth}</p>
+          <div className="w-full rounded-xl bg-black/20 p-3 text-left light:bg-slate-100">
+            <p className="mb-1 text-[11px] font-semibold tracking-wide text-white/40 uppercase light:text-slate-500">사건의 진실</p>
+            <p className="break-keep text-sm leading-relaxed text-white/80 light:text-slate-700">{scenario.truth}</p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setReviewOpen(true)}
-              className="rounded-xl border border-amber-400/40 px-4 py-2 text-sm text-amber-200 hover:border-amber-300/60"
+              className="rounded-xl border border-amber-400/40 px-4 py-2 text-sm text-amber-200 hover:border-amber-300/60 light:text-amber-700"
             >
               🔍 복기 리포트 다시보기
             </button>

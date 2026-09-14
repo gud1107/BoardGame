@@ -838,12 +838,12 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
     return withGuard(
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-8 text-center">
         <span className="text-3xl">⚠️</span>
-        <h2 className="text-lg font-bold text-white">온라인 대전을 사용할 수 없어요</h2>
+        <h2 className="text-lg font-bold text-white light:text-slate-900">온라인 대전을 사용할 수 없어요</h2>
         <p className="max-w-sm text-sm text-amber-100/80">
           러브레터는 실시간 온라인 대전 전용이라 Supabase 설정이 필요합니다.
-          <code className="mx-1 rounded bg-black/30 px-1.5 py-0.5 text-xs">.env.local</code>
-          에 <code className="rounded bg-black/30 px-1.5 py-0.5 text-xs">NEXT_PUBLIC_SUPABASE_URL</code> /
-          <code className="mx-1 rounded bg-black/30 px-1.5 py-0.5 text-xs">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
+          <code className="mx-1 rounded bg-black/30 light:bg-white/80 light:shadow-sm px-1.5 py-0.5 text-xs">.env.local</code>
+          에 <code className="rounded bg-black/30 light:bg-white/80 light:shadow-sm px-1.5 py-0.5 text-xs">NEXT_PUBLIC_SUPABASE_URL</code> /
+          <code className="mx-1 rounded bg-black/30 light:bg-white/80 light:shadow-sm px-1.5 py-0.5 text-xs">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
           를 채워주세요 (README 참고).
         </p>
       </div>
@@ -854,7 +854,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
     return withGuard(
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center">
         <span className="text-3xl">🚫</span>
-        <h2 className="text-lg font-bold text-white">이미 다른 사람이 참여 중인 방이에요</h2>
+        <h2 className="text-lg font-bold text-white light:text-slate-900">이미 다른 사람이 참여 중인 방이에요</h2>
         <p className="text-sm text-rose-100/80">코드를 다시 확인하거나 새로운 방을 만들어보세요.</p>
         <button onClick={handleLeave} className="mt-2 rounded-full bg-rose-600 px-5 py-2 text-sm font-semibold text-white hover:bg-rose-500">
           처음으로
@@ -867,7 +867,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
     return withGuard(
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center">
         <span className="text-3xl">📡</span>
-        <h2 className="text-lg font-bold text-white">연결에 실패했습니다</h2>
+        <h2 className="text-lg font-bold text-white light:text-slate-900">연결에 실패했습니다</h2>
         <button onClick={handleLeave} className="mt-2 rounded-full bg-rose-600 px-5 py-2 text-sm font-semibold text-white hover:bg-rose-500">
           다시 시도
         </button>
@@ -882,7 +882,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
         icon="💌"
         title="러브레터 온라인 대전"
         description={
-          <p className="text-sm text-white/50">
+          <p className="text-sm text-white/50 light:text-slate-500">
             {MIN_PLAYERS}~{MAX_PLAYERS}명이 각자 기기로 접속해서 실시간으로 플레이해요. 단판 승부로 공주의 마음을 얻어보세요!
           </p>
         }
@@ -902,7 +902,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
                 setIntent("join");
                 setPhase("enter-name");
               }}
-              className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30"
+              className="w-full rounded-xl border border-white/15 light:border-slate-200 py-3 text-sm font-semibold text-white/80 light:text-slate-700 transition hover:border-white/30"
             >
               🔑 초대 코드로 참여
             </button>
@@ -914,14 +914,14 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "enter-name") {
     return withGuard(
-      <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-        <h2 className="text-base font-bold text-white">{intent === "create" ? "방 만들기" : "초대 코드로 참여"}</h2>
-        <div className="flex flex-col gap-1.5 text-sm text-white/70">
+      <div className="flex flex-col gap-4 rounded-2xl border border-white/10 light:border-slate-200 bg-white/[0.03] p-6">
+        <h2 className="text-base font-bold text-white light:text-slate-900">{intent === "create" ? "방 만들기" : "초대 코드로 참여"}</h2>
+        <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-700">
           내 닉네임
           <RoomNicknameField value={identity} onChange={setIdentity} onEnter={enterRoom} accent="rose" />
         </div>
         {intent === "join" && (
-          <label className="flex flex-col gap-1.5 text-sm text-white/70">
+          <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-700">
             초대 코드 (4자리)
             <input
               value={codeInput}
@@ -934,26 +934,26 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
               }}
               placeholder="0000"
               inputMode="numeric"
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-center text-lg font-semibold tracking-[0.3em] text-white placeholder:text-white/20 focus:border-rose-400 focus:outline-none"
+              className="rounded-lg border border-white/10 light:border-slate-200 bg-white/5 light:bg-slate-900/5 px-3 py-2 text-center text-lg font-semibold tracking-[0.3em] text-white light:text-slate-900 placeholder:text-white/20 focus:border-rose-400 focus:outline-none"
             />
           </label>
         )}
         {intent === "create" && (
-          <label className="flex flex-col gap-1.5 text-sm text-white/70">
+          <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-700">
             인원 수 ({MIN_PLAYERS}~{MAX_PLAYERS}명)
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setTargetPlayerCount((n) => Math.max(MIN_PLAYERS, n - 1))}
-                className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
+                className="h-8 w-8 rounded-full border border-white/15 light:border-slate-200 text-white/80 light:text-slate-700 hover:border-white/30"
               >
                 −
               </button>
-              <span className="w-8 text-center text-lg font-semibold text-white">{targetPlayerCount}</span>
+              <span className="w-8 text-center text-lg font-semibold text-white light:text-slate-900">{targetPlayerCount}</span>
               <button
                 type="button"
                 onClick={() => setTargetPlayerCount((n) => Math.min(MAX_PLAYERS, n + 1))}
-                className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
+                className="h-8 w-8 rounded-full border border-white/15 light:border-slate-200 text-white/80 light:text-slate-700 hover:border-white/30"
               >
                 +
               </button>
@@ -962,7 +962,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
         )}
         {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">{formError}</p>}
         <div className="flex gap-2">
-          <button onClick={() => setPhase("choose")} className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30">
+          <button onClick={() => setPhase("choose")} className="flex-1 rounded-xl border border-white/15 light:border-slate-200 py-2.5 text-sm text-white/70 light:text-slate-700 hover:border-white/30">
             뒤로
           </button>
           <button onClick={enterRoom} className="flex-1 rounded-xl bg-rose-600 py-2.5 text-sm font-semibold text-white hover:bg-rose-500">
@@ -976,17 +976,17 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
   if (phase === "connecting" || phase === "waiting") {
     return withGuard(
       <>
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 light:border-slate-200 bg-white/[0.03] p-8 text-center">
         {phase === "connecting" ? (
-          <p className="text-sm text-white/50">연결하는 중...</p>
+          <p className="text-sm text-white/50 light:text-slate-500">연결하는 중...</p>
         ) : (
           <>
-            <p className="text-sm text-white/50">초대 코드</p>
-            <p className="text-4xl font-bold tracking-[0.3em] text-white">{roomCode}</p>
-            <button onClick={() => navigator.clipboard?.writeText(shareUrl)} className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-white/30">
+            <p className="text-sm text-white/50 light:text-slate-500">초대 코드</p>
+            <p className="text-4xl font-bold tracking-[0.3em] text-white light:text-slate-900">{roomCode}</p>
+            <button onClick={() => navigator.clipboard?.writeText(shareUrl)} className="rounded-full border border-white/15 light:border-slate-200 px-4 py-2 text-xs text-white/70 light:text-slate-700 hover:border-white/30">
               🔗 초대 링크 복사
             </button>
-            <p className="text-xs text-white/50">
+            <p className="text-xs text-white/50 light:text-slate-500">
               {occupants.length + botSeats.length} / {knownTargetPlayerCount}명 참여 중
             </p>
             {isHost && occupants.length + botSeats.length < knownTargetPlayerCount && (
@@ -1001,10 +1001,10 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
                 const botIdx = botSeats.indexOf(seat);
                 const isBot = botIdx >= 0;
                 return (
-                  <p key={seat} className="flex items-center justify-between gap-2 text-sm text-white/70">
+                  <p key={seat} className="flex items-center justify-between gap-2 text-sm text-white/70 light:text-slate-700">
                     <span>
                       {seat === mySeat ? "나" : `${seat + 1}번`}:{" "}
-                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30">대기 중...</span>}
+                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30 light:text-slate-400">대기 중...</span>}
                     </span>
                     {isHost && !occ && (
                       <span>
@@ -1019,7 +1019,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
                 );
               })}
             </div>
-            <p className="text-xs text-white/40">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다.</p>
+            <p className="text-xs text-white/40 light:text-slate-500">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다.</p>
             {isHost && occupants.length + botSeats.length >= MIN_PLAYERS && occupants.length + botSeats.length < knownTargetPlayerCount && (
               <button onClick={sendGameStart} className="rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-500">
                 지금 시작 ({occupants.length + botSeats.length}명)
@@ -1074,11 +1074,11 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
   if (phase === "post-game" && finalResult) {
     return withGuard(
       <>
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 light:border-slate-200 bg-white/[0.03] p-8 text-center">
         <span className="text-4xl">💌</span>
-        <p className="text-white/80">{finalResult.winnerNames} 님이 공주의 마음을 얻어 게임이 끝났어요.</p>
+        <p className="text-white/80 light:text-slate-700">{finalResult.winnerNames} 님이 공주의 마음을 얻어 게임이 끝났어요.</p>
         <div className="flex gap-2">
-          <button onClick={handleLeave} className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30">
+          <button onClick={handleLeave} className="rounded-xl border border-white/15 light:border-slate-200 px-4 py-2.5 text-sm text-white/70 light:text-slate-700 hover:border-white/30">
             나가기
           </button>
           <button onClick={handleRematch} className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-500">

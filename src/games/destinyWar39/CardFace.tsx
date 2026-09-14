@@ -54,10 +54,10 @@ export function cardLabel(card: Card): string {
 
 /** Border/background/text classes for a card badge. Reverse cards intentionally do NOT reuse this alone — see `CardFace` for the full banner+watermark+contrast-chip treatment. */
 export function cardBadgeClasses(card: Card, playerCount: PlayerCount): string {
-  if (card.kind === "death") return "border-rose-400/60 bg-rose-950/60 text-rose-200";
-  if (card.value === 0) return "border-amber-400/60 bg-amber-950/50 text-amber-200";
-  if (isReverseCard(card, playerCount)) return "border-fuchsia-400 bg-fuchsia-950/70 text-fuchsia-100";
-  return "border-white/20 bg-white/5 text-white/90";
+  if (card.kind === "death") return "border-rose-400/60 bg-rose-950/60 text-rose-200 light:border-rose-300 light:bg-rose-100 light:text-rose-700 light:shadow-sm";
+  if (card.value === 0) return "border-amber-400/60 bg-amber-950/50 text-amber-200 light:border-amber-300 light:bg-amber-100 light:text-amber-700 light:shadow-sm";
+  if (isReverseCard(card, playerCount)) return "border-fuchsia-400 bg-fuchsia-950/70 text-fuchsia-100 light:border-fuchsia-300 light:bg-fuchsia-100 light:text-fuchsia-700 light:shadow-sm";
+  return "border-white/20 bg-white/5 text-white/90 light:border-slate-300 light:bg-slate-100 light:text-slate-800 light:shadow-sm";
 }
 
 export interface CardFaceProps {
@@ -115,10 +115,10 @@ export function CardFace({ card, playerCount, size = "md", interactive = false, 
         )}
         {reverse && (
           <>
-            <span aria-hidden className={`pointer-events-none absolute top-1 left-1 leading-none font-extrabold text-white ${cornerIndex} ${numberOutline}`}>
+            <span aria-hidden className={`pointer-events-none absolute top-1 left-1 leading-none font-extrabold text-white light:text-slate-900 ${cornerIndex} ${numberOutline}`}>
               {label}
             </span>
-            <span aria-hidden className={`pointer-events-none absolute right-1 bottom-1 leading-none font-extrabold text-white ${cornerIndex} ${numberOutline}`}>
+            <span aria-hidden className={`pointer-events-none absolute right-1 bottom-1 leading-none font-extrabold text-white light:text-slate-900 ${cornerIndex} ${numberOutline}`}>
               {label}
             </span>
           </>

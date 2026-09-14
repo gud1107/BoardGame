@@ -21,7 +21,7 @@ export default function BugReportFloatingButton({ gameId, gameName }: { gameId: 
       <button
         onClick={() => setOpen(true)}
         aria-label="버그 리포트 작성"
-        className="fixed bottom-5 left-4 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-[#151022] text-xl shadow-lg transition hover:border-rose-400 sm:bottom-6 sm:left-6"
+        className="fixed bottom-5 left-4 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-[#151022] text-xl shadow-lg transition hover:border-rose-400 sm:bottom-6 sm:left-6 light:border-slate-200 light:bg-white light:shadow-md"
       >
         🐛
       </button>

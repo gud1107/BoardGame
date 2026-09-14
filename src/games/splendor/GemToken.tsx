@@ -60,7 +60,7 @@ export function GemChip({
 /** Small "chip + count" badge for compact cost/bonus listings. */
 export function GemCountBadge({ color, count, size = "h-4 w-4" }: { color: TokenColor; count: number; size?: string }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/30 px-1.5 py-0.5 text-[11px] font-semibold text-white/90">
+    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/30 px-1.5 py-0.5 text-[11px] font-semibold text-white/90 light:border-slate-200 light:bg-white/90 light:text-slate-900 light:shadow-sm">
       <GemChip color={color} className={size} />
       {count}
     </span>

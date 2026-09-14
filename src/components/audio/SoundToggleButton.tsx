@@ -28,7 +28,7 @@ export default function SoundToggleButton() {
     <div className="flex items-center gap-1">
       <button
         onClick={handleToggle}
-        className="grid h-8 w-8 place-items-center rounded-full border border-white/15 text-sm text-white/70 transition hover:border-white/30 hover:text-white"
+        className="grid h-8 w-8 place-items-center rounded-full border border-white/15 text-sm text-white/70 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
         aria-label={masterMuted ? "소리 켜기" : "소리 끄기"}
         title={masterMuted ? "소리 켜기" : "소리 끄기"}
       >
@@ -36,7 +36,7 @@ export default function SoundToggleButton() {
       </button>
       <button
         onClick={() => setSettingsOpen(true)}
-        className="grid h-6 w-6 place-items-center rounded-full text-[11px] text-white/40 transition hover:text-white/70"
+        className="grid h-6 w-6 place-items-center rounded-full text-[11px] text-white/40 transition hover:text-white/70 light:text-slate-400 light:hover:text-slate-600"
         aria-label="사운드 설정 열기"
         title="사운드 설정"
       >

@@ -126,7 +126,7 @@ export function PlayedCardSlot({ card, playerCount, size = "md", className = "",
   if (numberRatio > 0) animation += ", destinywar39-number-glow-burst 0.55s ease-out 0.35s both";
   if (isReverse && reverseActiveThisTurn) animation += ", destinywar39-reverse-card-swirl 0.6s ease-out 0.35s both";
 
-  const sparkClass = isDeath ? "text-red-400" : isZero ? "text-sky-300" : "text-white/80";
+  const sparkClass = isDeath ? "text-red-400 light:text-red-600" : isZero ? "text-sky-300 light:text-sky-600" : "text-white/80 light:text-slate-600";
 
   return (
     <span

@@ -67,7 +67,7 @@ const WIN_REASON_LABEL: Record<WinReason, string> = {
 // A deep royal-purple "round table" panel — distinct from Bang's wooden
 // saloon and Grid Poker's navy card table, fitting Avalon's Arthurian theme.
 const TABLE_PANEL =
-  "relative overflow-hidden rounded-3xl border border-black/50 bg-gradient-to-b from-[#241735] via-[#180f26] to-[#0d0817] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)]";
+  "relative overflow-hidden rounded-3xl border border-black/50 bg-gradient-to-b from-[#241735] via-[#180f26] to-[#0d0817] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)] light:border-slate-200 light:from-white light:via-slate-50 light:to-slate-100 light:shadow-md";
 
 function TableTexture() {
   return (
@@ -155,7 +155,7 @@ export default function AvalonBoard({
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 아발론 룰북
     </button>
@@ -164,7 +164,7 @@ export default function AvalonBoard({
   const roleReopenButton = (
     <button
       onClick={() => setRoleModalOpen(true)}
-      className="rounded-full border border-amber-300/30 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-200 transition hover:border-amber-300/50"
+      className="rounded-full border border-amber-300/30 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-200 transition hover:border-amber-300/50 light:bg-amber-50 light:text-amber-700 light:border-amber-300"
     >
       🎭 내 역할 다시 보기
     </button>
@@ -180,10 +180,10 @@ export default function AvalonBoard({
       >
         <TableTexture />
         <span className="relative z-10 text-5xl">🏆</span>
-        <h2 className="relative z-10 text-2xl font-bold text-amber-100">
+        <h2 className="relative z-10 text-2xl font-bold text-amber-100 light:text-amber-700">
           {TEAM_LABEL[state.winner]}
         </h2>
-        <p className="relative z-10 text-sm text-white/60">
+        <p className="relative z-10 text-sm text-white/60 light:text-slate-600">
           {WIN_REASON_LABEL[state.winReason!]}
         </p>
         <div className="relative z-10 flex flex-wrap justify-center gap-2">
@@ -192,13 +192,13 @@ export default function AvalonBoard({
             return (
               <div
                 key={p.seat}
-                className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-xs ${
+                className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-xs light:shadow-sm ${
                   meta.team === "good"
                     ? "border-sky-400/40 bg-sky-400/10"
                     : "border-rose-400/40 bg-rose-400/10"
                 }`}
               >
-                <span className="text-white/80">{names[p.seat]}</span>
+                <span className="text-white/80 light:text-slate-700">{names[p.seat]}</span>
                 <span>
                   {meta.icon} {meta.label}
                 </span>
@@ -267,7 +267,7 @@ export default function AvalonBoard({
         className={`${TABLE_PANEL} flex min-w-0 flex-1 flex-col gap-3 p-3 sm:p-4`}
       >
         <TableTexture />
-        <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-amber-100/60">
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-amber-100/60 light:text-slate-600">
           <span>
             {state.playerCount}인 · {state.round}라운드/5 · 원정대 {teamSize}명
             필요
@@ -297,11 +297,11 @@ export default function AvalonBoard({
                 className={`relative flex h-14 w-11 flex-col items-center justify-center rounded-xl border text-[10px] ${
                   result
                     ? result.success
-                      ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-200"
-                      : "border-rose-400/50 bg-rose-400/10 text-rose-200"
+                      ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-200 light:text-emerald-700"
+                      : "border-rose-400/50 bg-rose-400/10 text-rose-200 light:text-rose-700"
                     : isCurrent
-                      ? "border-amber-300 bg-amber-400/10 text-amber-100"
-                      : "border-white/10 bg-white/5 text-white/40"
+                      ? "border-amber-300 bg-amber-400/10 text-amber-100 light:text-amber-700"
+                      : "border-white/10 bg-white/5 text-white/40 light:border-slate-300 light:bg-slate-50 light:text-slate-400"
                 }`}
               >
                 {needsTwoFails && (
@@ -322,7 +322,7 @@ export default function AvalonBoard({
 
         {/* Round table: every seat placed around an ellipse, viewer always at the bottom. */}
         <div className="relative z-10 mx-auto h-[260px] w-full max-w-md sm:h-[300px]">
-          <div className="absolute inset-[8%] rounded-[50%] border-4 border-indigo-900/60 bg-gradient-to-b from-indigo-950/70 to-black/70 shadow-inner" />
+          <div className="absolute inset-[8%] rounded-[50%] border-4 border-indigo-900/60 bg-gradient-to-b from-indigo-950/70 to-black/70 shadow-inner light:border-indigo-200 light:from-indigo-100 light:to-white" />
           {/* Viewer's own seat, pinned at the bottom center. */}
           <SeatChip
             seat={viewerSeat}
@@ -350,11 +350,11 @@ export default function AvalonBoard({
         </div>
 
         {/* Phase-specific action panel */}
-        <div className="relative z-10 rounded-xl border border-white/10 bg-black/30 p-3 text-center">
+        <div className="relative z-10 rounded-xl border border-white/10 bg-black/30 p-3 text-center light:border-slate-200 light:bg-slate-50">
           {state.phase === "team-proposal" &&
             (isLeader ? (
               <div className="flex flex-col gap-2">
-                <p className="text-xs text-amber-100/80">
+                <p className="text-xs text-amber-100/80 light:text-slate-700">
                   원정대 {teamSize}명을 골라주세요 ({selection.length}/
                   {teamSize} 선택됨) — 좌석을 눌러 선택하세요.
                 </p>
@@ -367,24 +367,24 @@ export default function AvalonBoard({
                 </button>
               </div>
             ) : (
-              <p className="text-xs text-amber-100/50">
+              <p className="text-xs text-amber-100/50 light:text-slate-500">
                 {names[state.leader]}님이 원정대를 고르는 중...
               </p>
             ))}
 
           {state.phase === "voting" &&
             (iVoted ? (
-              <p className="text-xs text-amber-100/60">
+              <p className="text-xs text-amber-100/60 light:text-slate-600">
                 투표 완료 · {votedCount}/{state.playerCount}명 투표함 — 다른
                 사람을 기다리는 중...
               </p>
             ) : (
               <div className="flex flex-col gap-2">
-                <p className="text-xs text-amber-100/80">
+                <p className="text-xs text-amber-100/80 light:text-slate-700">
                   원정대: {state.proposedTeam.map((s) => names[s]).join(", ")} —
                   찬성하시겠어요?
                 </p>
-                <p className="text-[11px] text-amber-100/40">
+                <p className="text-[11px] text-amber-100/40 light:text-slate-400">
                   {votedCount}/{state.playerCount}명 투표함
                 </p>
                 <div className="flex justify-center gap-2">
@@ -408,18 +408,18 @@ export default function AvalonBoard({
 
           {state.phase === "quest" &&
             (!iAmOnTeam ? (
-              <p className="text-xs text-amber-100/50">
+              <p className="text-xs text-amber-100/50 light:text-slate-500">
                 원정대({state.proposedTeam.map((s) => names[s]).join(", ")})가
                 카드를 제출하는 중... ({questSubmittedCount}/{teamSize})
               </p>
             ) : iSubmittedQuestCard ? (
-              <p className="text-xs text-amber-100/60">
+              <p className="text-xs text-amber-100/60 light:text-slate-600">
                 제출 완료 · {questSubmittedCount}/{teamSize}명 제출함 — 다른
                 원정대원을 기다리는 중...
               </p>
             ) : viewer.team === "good" ? (
               <div className="flex flex-col items-center gap-2">
-                <p className="text-xs text-amber-100/80">
+                <p className="text-xs text-amber-100/80 light:text-slate-700">
                   선한 세력은 무조건 성공 카드만 제출할 수 있어요.
                 </p>
                 <button
@@ -432,7 +432,7 @@ export default function AvalonBoard({
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2">
-                <p className="text-xs text-amber-100/80">
+                <p className="text-xs text-amber-100/80 light:text-slate-700">
                   원정 카드를 비공개로 제출하세요.
                 </p>
                 <div className="flex gap-2">
@@ -458,7 +458,7 @@ export default function AvalonBoard({
           {state.phase === "assassination" &&
             (isAssassin ? (
               <div className="relative flex flex-col gap-2">
-                <p className="text-xs text-amber-100/80">
+                <p className="text-xs text-amber-100/80 light:text-slate-700">
                   원정 3회 성공! 메를린으로 의심되는 사람을 지목해 암살하세요.
                   정확히 맞히면 악한 세력이 역전 승리합니다.
                 </p>
@@ -472,7 +472,7 @@ export default function AvalonBoard({
                         onMouseEnter={() => setHoveredTarget(p.seat)}
                         onMouseLeave={() => setHoveredTarget((s) => (s === p.seat ? null : s))}
                         onClick={() => confirmAssassinate(p.seat)}
-                        className="relative rounded-full border border-rose-400/40 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-100 transition hover:border-rose-400/70 hover:bg-rose-500/20 disabled:cursor-not-allowed"
+                        className="relative rounded-full border border-rose-400/40 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-100 transition hover:border-rose-400/70 hover:bg-rose-500/20 disabled:cursor-not-allowed light:border-rose-300 light:bg-rose-50 light:text-rose-700"
                       >
                         🏹 {names[p.seat]}
                         {hoveredTarget === p.seat && slashTarget === null && <AssassinCrosshair />}
@@ -482,7 +482,7 @@ export default function AvalonBoard({
                 </div>
               </div>
             ) : (
-              <p className="relative text-xs text-amber-100/50">
+              <p className="relative text-xs text-amber-100/50 light:text-slate-500">
                 원정 3회 성공!{" "}
                 {assassinSeat !== null ? names[assassinSeat] : "암살자"}님이
                 메를린을 지목하는 중...
@@ -564,22 +564,22 @@ function SeatChip({
           isSelected
             ? "border-amber-300 bg-amber-500/20 ring-2 ring-amber-300"
             : inProposedTeam
-              ? "border-sky-300/70 bg-sky-500/10"
+              ? "border-sky-300/70 bg-sky-500/10 light:bg-sky-50"
               : isLeader
-                ? "border-amber-300/60 bg-amber-950/40"
-                : "border-white/15 bg-black/40"
+                ? "border-amber-300/60 bg-amber-950/40 light:bg-amber-50"
+                : "border-white/15 bg-black/40 light:border-slate-300 light:bg-slate-100"
         } ${isSelectable ? "cursor-pointer hover:border-amber-300/60" : ""}`}
       >
         {showSubmittedPulse && <SubmittedPulseBadge />}
-        <span className="flex items-center gap-1 text-[11px] font-semibold text-white/90">
+        <span className="flex items-center gap-1 text-[11px] font-semibold text-white/90 light:text-slate-800">
           <span
-            className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`}
+            className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`}
           />
           {isLeader && <span title="리더">👑</span>}
           {names[seat]}
-          {isSelf && <span className="text-amber-200">(나)</span>}
+          {isSelf && <span className="text-amber-200 light:text-amber-700">(나)</span>}
         </span>
-        <span className="flex gap-1 text-[10px] text-amber-100/50">
+        <span className="flex gap-1 text-[10px] text-amber-100/50 light:text-slate-500">
           {votedAlready && <span title="투표 완료">🗳️</span>}
           {questSubmittedAlready && <span title="카드 제출 완료">🃏</span>}
         </span>
@@ -604,7 +604,7 @@ function RoleModal({
   const meta = ROLE_META[viewer.role];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-amber-400/30 bg-[#1a1128] p-6 text-center shadow-2xl">
+      <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-amber-400/30 bg-[#1a1128] p-6 text-center shadow-2xl light:bg-white light:border-amber-300">
         {/* Mystical hologram magic-circle + team-tinted aura pulse — gives
           Merlin/Percival's info-reveal moment (and every other role's, for
           visual consistency) the requested blue/violet mysticism. Painted
@@ -612,35 +612,35 @@ function RoleModal({
           convention as TableTexture above. */}
         <RoleAuraBackdrop team={meta.team} />
         <div className="relative z-10">
-          <p className="mb-1 text-xs text-white/40">
+          <p className="mb-1 text-xs text-white/40 light:text-slate-500">
             {names[viewerSeat]}님의 비밀 정보
           </p>
           <div className="mb-3 text-5xl">{meta.icon}</div>
           <h2
-            className={`mb-1 text-xl font-bold ${meta.team === "good" ? "text-sky-300" : "text-rose-300"}`}
+            className={`mb-1 text-xl font-bold ${meta.team === "good" ? "text-sky-300 light:text-sky-600" : "text-rose-300 light:text-rose-600"}`}
           >
             {meta.label}
           </h2>
-          <p className="mb-4 text-sm text-white/60">
+          <p className="mb-4 text-sm text-white/60 light:text-slate-600">
             당신은 {meta.team === "good" ? "선한 세력" : "악한 세력"}입니다.
           </p>
 
           {knowledge.evilSeatsKnown.length > 0 && (
-            <div className="mb-3 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">
+            <div className="mb-3 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100 light:border-rose-300 light:bg-rose-50 light:text-rose-700">
               <p className="mb-1 font-medium">악의 세력으로 확인된 사람</p>
               <p>{knowledge.evilSeatsKnown.map((s) => names[s]).join(", ")}</p>
             </div>
           )}
 
           {knowledge.merlinPercivalCandidates.length > 0 && (
-            <div className="mb-3 rounded-xl border border-sky-400/30 bg-sky-500/10 p-3 text-sm text-sky-100">
+            <div className="mb-3 rounded-xl border border-sky-400/30 bg-sky-500/10 p-3 text-sm text-sky-100 light:border-sky-300 light:bg-sky-50 light:text-sky-700">
               <p className="mb-1 font-medium">메를린 또는 모르가나</p>
               <p>
                 {knowledge.merlinPercivalCandidates
                   .map((s) => names[s])
                   .join(", ")}
               </p>
-              <p className="mt-1 text-xs text-sky-200/60">
+              <p className="mt-1 text-xs text-sky-200/60 light:text-sky-600">
                 둘 중 누가 진짜 메를린인지는 알 수 없습니다.
               </p>
             </div>
@@ -648,7 +648,7 @@ function RoleModal({
 
           {knowledge.evilSeatsKnown.length === 0 &&
             knowledge.merlinPercivalCandidates.length === 0 && (
-              <p className="mb-3 text-xs text-white/40">
+              <p className="mb-3 text-xs text-white/40 light:text-slate-500">
                 이 역할은 다른 사람에 대한 추가 정보가 없습니다.
               </p>
             )}

@@ -78,15 +78,15 @@ export function MerchantMarket({
 }) {
   return (
     <div className="flex items-start gap-1.5 sm:gap-2.5">
-      <div className="relative min-w-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-black/25 p-2 sm:p-2.5">
+      <div className="relative min-w-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-black/25 p-2 sm:p-2.5 light:border-slate-200 light:bg-white/90 light:shadow-sm">
         <MarketBanner variant="caravan" />
-        <h3 className={`relative z-10 text-[11px] font-semibold tracking-wide text-emerald-200/70 uppercase ${compact ? "mb-0.5" : "mb-2"}`}>상인 카드</h3>
+        <h3 className={`relative z-10 text-[11px] font-semibold tracking-wide text-emerald-200/70 uppercase light:text-emerald-700 ${compact ? "mb-0.5" : "mb-2"}`}>상인 카드</h3>
         <div className={`relative z-10 grid ${compact ? "grid-cols-6 gap-1 pt-1.5" : "grid-cols-3 gap-2 pt-2.5 sm:grid-cols-6"}`}>
           {Array.from({ length: MERCHANT_MARKET_SIZE }, (_, i) => {
             const card = state.merchantMarket[i];
             const staked = state.merchantMarketResources[i] ?? {};
             const stakedEntries = RESOURCE_ORDER.flatMap((r) => Array.from({ length: staked[r] ?? 0 }, () => r));
-            if (!card) return <div key={i} ref={merchantSlotRef(i)} className="rounded-xl border border-dashed border-white/10" />;
+            if (!card) return <div key={i} ref={merchantSlotRef(i)} className="rounded-xl border border-dashed border-white/10 light:border-slate-300" />;
             const affordable = isMyTurn && canAcquireMerchant(me, i);
             return (
               <div key={card.id} ref={merchantSlotRef(i)} className="relative">
@@ -108,10 +108,12 @@ export function MerchantMarket({
                 <button
                   onClick={() => onSelect(i)}
                   className={`flex w-full flex-col items-center rounded-xl border transition ${compact ? "gap-0.5 p-1" : "gap-1 p-1.5"} ${
-                    affordable ? "cursor-pointer border-emerald-300/50 bg-emerald-400/10 hover:scale-[1.03]" : "cursor-pointer border-white/10 bg-black/20 opacity-90 hover:opacity-100"
+                    affordable
+                      ? "cursor-pointer border-emerald-300/50 bg-emerald-400/10 hover:scale-[1.03] light:bg-emerald-50"
+                      : "cursor-pointer border-white/10 bg-black/20 opacity-90 hover:opacity-100 light:border-slate-200 light:bg-slate-100"
                   }`}
                 >
-                  {!compact && <span className="text-[9px] text-white/40">{i === 0 ? "무료" : `자원 ${i}개`}</span>}
+                  {!compact && <span className="text-[9px] text-white/40 light:text-slate-500">{i === 0 ? "무료" : `자원 ${i}개`}</span>}
                   <MerchantCardFace card={card} compact={compact} />
                 </button>
               </div>

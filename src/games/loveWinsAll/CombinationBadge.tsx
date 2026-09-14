@@ -66,7 +66,7 @@ export default function CombinationBadge({ hand, community, variant }: Combinati
 
   return (
     <div
-      className={`flex items-center justify-center rounded-full border bg-black/50 px-3.5 py-1.5 backdrop-blur-sm ${style.border}`}
+      className={`flex items-center justify-center rounded-full border bg-black/50 light:bg-white/90 light:shadow-sm px-3.5 py-1.5 backdrop-blur-sm ${style.border}`}
       style={{ animation } as CSSProperties}
     >
       <span className={`break-keep text-xs font-bold tracking-wide sm:text-sm ${style.text}`}>

@@ -88,24 +88,24 @@ export default function SettlementModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
-      <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl border border-white/10 bg-[#12101c] shadow-2xl sm:max-w-3xl sm:rounded-2xl">
-        <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
-          <h2 className="text-sm font-bold text-white">📊 {title} 정산표</h2>
-          <button onClick={onClose} aria-label="닫기" className="grid h-10 w-10 place-items-center rounded-full text-xl text-white/50 hover:bg-white/10 hover:text-white">
+      <div className="flex max-h-[90vh] w-full flex-col rounded-t-2xl border border-white/10 bg-[#12101c] shadow-2xl sm:max-w-3xl sm:rounded-2xl light:border-slate-200 light:bg-white">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 light:border-slate-200">
+          <h2 className="text-sm font-bold text-white light:text-slate-900">📊 {title} 정산표</h2>
+          <button onClick={onClose} aria-label="닫기" className="grid h-10 w-10 place-items-center rounded-full text-xl text-white/50 hover:bg-white/10 hover:text-white light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700">
             ×
           </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
           {view.rows.length === 0 ? (
-            <p className="text-sm text-white/40">아직 기록된 라운드가 없습니다.</p>
+            <p className="text-sm text-white/40 light:text-slate-400">아직 기록된 라운드가 없습니다.</p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-white/10">
+            <div className="overflow-x-auto rounded-xl border border-white/10 light:border-slate-200">
               <table className="w-full min-w-[28rem] border-collapse text-sm">
                 <thead>
-                  <tr className="bg-white/5 text-left text-white/60">
+                  <tr className="bg-white/5 text-left text-white/60 light:bg-slate-50 light:text-slate-600">
                     {!readOnly && mergeMode && <th className="w-8 px-2 py-2" />}
-                    <th className="sticky left-0 bg-[#181622] px-3 py-2 font-medium whitespace-nowrap">참가자</th>
+                    <th className="sticky left-0 bg-[#181622] px-3 py-2 font-medium whitespace-nowrap light:bg-slate-50">참가자</th>
                     {view.rounds.map((r) => (
                       <th key={r.round} className="px-3 py-2 text-right font-medium whitespace-nowrap">
                         {r.label}
@@ -117,7 +117,7 @@ export default function SettlementModal({
                 </thead>
                 <tbody>
                   {view.rows.map((row) => (
-                    <tr key={row.id} className="border-t border-white/5">
+                    <tr key={row.id} className="border-t border-white/5 light:border-slate-100">
                       {!readOnly && mergeMode && (
                         <td className="px-2 py-2 text-center">
                           <input
@@ -128,17 +128,17 @@ export default function SettlementModal({
                           />
                         </td>
                       )}
-                      <td className="sticky left-0 bg-[#12101c] px-3 py-2 whitespace-nowrap text-white/85">
+                      <td className="sticky left-0 bg-[#12101c] px-3 py-2 whitespace-nowrap text-white/85 light:bg-white light:text-slate-800">
                         {row.displayName}
                         {row.memberIds.length > 1 && (
-                          <span className="ml-1 text-[10px] text-white/40">({row.memberIds.length}개 별명 합침)</span>
+                          <span className="ml-1 text-[10px] text-white/40 light:text-slate-400">({row.memberIds.length}개 별명 합침)</span>
                         )}
                       </td>
                       {row.perRound.map((v, i) => (
                         <td
                           key={i}
                           className={`px-3 py-2 text-right tabular-nums ${
-                            v === null ? "text-white/25" : v >= 0 ? "text-emerald-300" : "text-rose-300"
+                            v === null ? "text-white/25 light:text-slate-300" : v >= 0 ? "text-emerald-300" : "text-rose-300"
                           }`}
                         >
                           {v === null ? "-" : `${v >= 0 ? "+" : ""}${v.toLocaleString()}`}
@@ -153,7 +153,7 @@ export default function SettlementModal({
                           {row.memberIds.length > 1 ? (
                             <button
                               onClick={() => onUnmerge?.(row.id)}
-                              className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/60 hover:border-white/30"
+                              className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
                             >
                               분리
                             </button>
@@ -161,7 +161,7 @@ export default function SettlementModal({
                             onManualAdjust && (
                               <button
                                 onClick={() => setAdjustingId(adjustingId === row.id ? null : row.id)}
-                                className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/60 hover:border-white/30"
+                                className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
                               >
                                 보정
                               </button>
@@ -177,8 +177,8 @@ export default function SettlementModal({
           )}
 
           {adjustingId && onManualAdjust && (
-            <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3">
-              <p className="mb-2 text-xs text-amber-200">
+            <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 light:border-amber-300 light:bg-amber-50">
+              <p className="mb-2 text-xs text-amber-200 light:text-amber-800">
                 {names[adjustingId] ?? adjustingId}님의 금액을 수동으로 보정합니다 (기존 합계에 더해집니다).
               </p>
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -187,13 +187,13 @@ export default function SettlementModal({
                   value={adjustAmount}
                   onChange={(e) => setAdjustAmount(e.target.value)}
                   placeholder="±금액 (원)"
-                  className="min-h-11 flex-1 rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-amber-400"
+                  className="min-h-11 flex-1 rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-amber-400 light:border-slate-300 light:bg-white light:text-slate-900"
                 />
                 <input
                   value={adjustNote}
                   onChange={(e) => setAdjustNote(e.target.value)}
                   placeholder="사유 (선택)"
-                  className="min-h-11 flex-1 rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-amber-400"
+                  className="min-h-11 flex-1 rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-amber-400 light:border-slate-300 light:bg-white light:text-slate-900"
                 />
                 <button
                   onClick={() => submitAdjust(adjustingId)}
@@ -211,13 +211,13 @@ export default function SettlementModal({
                 <button
                   onClick={() => setMergeMode(true)}
                   disabled={!onMerge || view.rows.length < 2}
-                  className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-40 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
                 >
                   🔗 동일 인물 합치기
                 </button>
               ) : (
                 <>
-                  <span className="text-xs text-white/50">{checked.length}명 선택됨 (2명 이상 선택)</span>
+                  <span className="text-xs text-white/50 light:text-slate-500">{checked.length}명 선택됨 (2명 이상 선택)</span>
                   <button
                     onClick={confirmMerge}
                     disabled={checked.length < 2}
@@ -230,7 +230,7 @@ export default function SettlementModal({
                       setMergeMode(false);
                       setChecked([]);
                     }}
-                    className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:border-white/30"
+                    className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
                   >
                     취소
                   </button>
@@ -240,7 +240,7 @@ export default function SettlementModal({
           )}
         </div>
 
-        <div className="flex shrink-0 flex-wrap gap-2 border-t border-white/10 px-4 py-3">
+        <div className="flex shrink-0 flex-wrap gap-2 border-t border-white/10 px-4 py-3 light:border-slate-200">
           <button
             onClick={handleCopy}
             disabled={view.rows.length === 0}
@@ -251,7 +251,7 @@ export default function SettlementModal({
           <button
             onClick={handleDownloadCsv}
             disabled={view.rows.length === 0}
-            className="min-h-11 flex-1 rounded-xl border border-white/15 px-3 text-sm font-semibold text-white/80 transition hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-40"
+            className="min-h-11 flex-1 rounded-xl border border-white/15 px-3 text-sm font-semibold text-white/80 transition hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-40 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
           >
             ⬇️ CSV 다운로드
           </button>

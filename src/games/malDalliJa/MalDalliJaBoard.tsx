@@ -370,7 +370,7 @@ export default function MalDalliJaBoard({
           disabled={!move && !isSelectableHorse}
           onClick={() => handleCellClick(row, col)}
           className={`relative aspect-square border border-white/[0.06] transition ${
-            (row + col) % 2 === 0 ? "bg-white/[0.02]" : "bg-black/20"
+            (row + col) % 2 === 0 ? "bg-white/[0.02]" : "bg-black/20 light:bg-slate-100"
           } ${move || isSelectableHorse ? "cursor-pointer" : "cursor-default"}`}
         >
           {/* 말달리자판.png 기준 오아시스 다이아몬드 존 — 중앙 파란 원 + 초록 원 12개 */}
@@ -420,7 +420,7 @@ export default function MalDalliJaBoard({
                   `occupant.seat`에서만 파생되므로 턴/애니메이션 상태와
                   무관하게 절대 흔들리지 않는다. */}
               <span
-                className={`absolute bottom-[2%] right-[4%] rounded bg-black/70 px-[3px] text-[9px] font-bold leading-tight ${SEAT_THEME[occupant.seat].text}`}
+                className={`absolute bottom-[2%] right-[4%] rounded bg-black/70 light:bg-white/95 light:shadow-md px-[3px] text-[9px] font-bold leading-tight ${SEAT_THEME[occupant.seat].text}`}
               >
                 {SEAT_THEME[occupant.seat].name[0]}
               </span>
@@ -434,12 +434,12 @@ export default function MalDalliJaBoard({
   return (
     <div className="relative flex flex-col gap-4">
       {/* ---- HUD ---- */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-gradient-to-b from-[#1c0a0e] via-[#12080b] to-[#050203] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 light:border-slate-200 bg-gradient-to-b from-[#1c0a0e] via-[#12080b] to-[#050203] p-4">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🐎</span>
           <div>
-            <p className="break-keep text-sm font-bold text-white">말달리자</p>
-            <p className="break-keep text-[11px] text-white/40">단판 승부 · 데스게임 하우스 룰</p>
+            <p className="break-keep text-sm font-bold text-white light:text-slate-900">말달리자</p>
+            <p className="break-keep text-[11px] text-white/40 light:text-slate-500">단판 승부 · 데스게임 하우스 룰</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -449,7 +449,7 @@ export default function MalDalliJaBoard({
               className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                 state.phase === "playing" && state.activeSeat === seat
                   ? `${SEAT_THEME[seat].ring} bg-white/10 ${SEAT_THEME[seat].text}`
-                  : "border-white/10 text-white/40"
+                  : "border-white/10 light:border-slate-200 text-white/40 light:text-slate-500"
               }`}
             >
               <Avatar size={18} />
@@ -458,11 +458,11 @@ export default function MalDalliJaBoard({
                   것을 "이 배지가 상대방으로 바뀌었다"고 오인하지 않도록,
                   `seat`에서만 고정 파생되는 흑마/백마 텍스트 태그를 이름 옆에
                   항상 나란히 표시 — 하이라이트 on/off와 무관하게 절대 안 바뀜. */}
-              <span className="break-keep rounded-full border border-white/10 px-1.5 py-0.5 text-[10px] font-normal text-white/60">
+              <span className="break-keep rounded-full border border-white/10 light:border-slate-200 px-1.5 py-0.5 text-[10px] font-normal text-white/60 light:text-slate-600">
                 {SEAT_THEME[seat].name}
               </span>
               <span className="break-keep">{names[seat]}</span>
-              {seat === viewerSeat && <span className="break-keep text-white/30">(나)</span>}
+              {seat === viewerSeat && <span className="break-keep text-white/30 light:text-slate-400">(나)</span>}
               {state.phase === "playing" && state.activeSeat === seat && (
                 <span className="ml-1 h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
               )}
@@ -475,7 +475,7 @@ export default function MalDalliJaBoard({
           )}
           <button
             onClick={() => setRulebookOpen(true)}
-            className="break-keep rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30"
+            className="break-keep rounded-full border border-white/15 light:border-slate-200 px-3 py-1.5 text-xs text-white/70 light:text-slate-700 hover:border-white/30"
           >
             📖 룰북
           </button>
@@ -485,7 +485,7 @@ export default function MalDalliJaBoard({
       {/* ---- Turn timer bar (§5 optional house rule) ---- */}
       {turnTimerSec !== null && state.phase === "playing" && remainingSec !== null && (
         <div
-          className="h-1.5 w-full overflow-hidden rounded-full bg-white/5"
+          className="h-1.5 w-full overflow-hidden rounded-full bg-white/5 light:bg-slate-900/5"
           style={remainingSec <= 5 ? { animation: "maldallija-timer-warn 0.6s ease-in-out infinite" } : undefined}
         >
           <div
@@ -499,7 +499,7 @@ export default function MalDalliJaBoard({
 
       {/* ---- Board ---- */}
       <div className="relative mx-auto w-full max-w-xl">
-        <div className="grid w-full grid-cols-11 overflow-hidden rounded-xl border border-white/10 bg-black shadow-[0_0_60px_-15px_rgba(244,63,94,0.35)]">
+        <div className="grid w-full grid-cols-11 overflow-hidden rounded-xl border border-white/10 light:border-slate-200 bg-black light:bg-white light:shadow-md shadow-[0_0_60px_-15px_rgba(244,63,94,0.35)]">
           {cells}
         </div>
         {/* ---- Move-animation overlay: flying horses + their dust/impact/
@@ -522,7 +522,7 @@ export default function MalDalliJaBoard({
         </div>
       </div>
 
-      <p className="break-keep text-center text-xs text-white/40">
+      <p className="break-keep text-center text-xs text-white/40 light:text-slate-500">
         {isMyTurn
           ? selectedHorseIndex === null
             ? "내 차례입니다 — 이동 가능한 말을 선택하세요 (🔵 = 오아시스, 도착하면 즉시 승리 · 🟢 오아시스 구역으로는 나이트 이동 착지 불가)"

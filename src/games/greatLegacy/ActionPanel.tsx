@@ -73,21 +73,21 @@ export default function ActionPanel({
 
   if (!isMyTurn) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-center text-sm text-white/40">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.02] light:border-slate-200 light:bg-slate-50 p-4 text-center text-sm text-white/40 light:text-slate-500">
         {auction.passed.includes(viewerSeat) ? "이번 경매에서 포기했습니다 — 다음 매물을 기다려주세요." : "다른 플레이어의 차례입니다..."}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/40 bg-amber-400/[0.06] p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-white/80">
+    <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/40 bg-amber-400/[0.06] light:border-amber-300 light:bg-amber-50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-white/80 light:text-slate-700">
         <span>
           내 차례 — 현재 최고 입찰{" "}
-          <b className="text-amber-200">{auction.highestBid}코인</b>
-          {auction.kind === "reverse" && <span className="ml-1 text-rose-300">(역경매: 먼저 포기하면 이 카드를 받습니다)</span>}
+          <b className="text-amber-200 light:text-amber-700">{auction.highestBid}코인</b>
+          {auction.kind === "reverse" && <span className="ml-1 text-rose-300 light:text-rose-600">(역경매: 먼저 포기하면 이 카드를 받습니다)</span>}
         </span>
-        <span className="text-white/50">
+        <span className="text-white/50 light:text-slate-500">
           내 입찰 누적 {alreadyCommittedValue}코인 → 지금 추가 {stagedValue}코인 = {newTotal}코인
         </span>
       </div>
@@ -104,12 +104,12 @@ export default function ActionPanel({
             >
               {denom}
             </button>
-            <span className="text-[10px] text-white/50">
+            <span className="text-[10px] text-white/50 light:text-slate-500">
               보유 {remainingPurse[denom]}
-              {staged[denom] > 0 && <span className="text-amber-300"> (+{staged[denom]})</span>}
+              {staged[denom] > 0 && <span className="text-amber-300 light:text-amber-700"> (+{staged[denom]})</span>}
             </span>
             {staged[denom] > 0 && (
-              <button type="button" onClick={() => removeCoin(denom)} className="text-[10px] text-white/40 underline hover:text-white/70">
+              <button type="button" onClick={() => removeCoin(denom)} className="text-[10px] text-white/40 underline hover:text-white/70 light:text-slate-400 light:hover:text-slate-600">
                 되돌리기
               </button>
             )}
@@ -130,14 +130,14 @@ export default function ActionPanel({
           type="button"
           onClick={submitMinimalBid}
           disabled={!purseContains(player.purse, minimalRaiseCoins(state, viewerSeat) ?? emptyPurse()) || !minimalRaiseCoins(state, viewerSeat)}
-          className="rounded-xl border border-amber-300/40 px-3 py-2.5 text-xs font-semibold text-amber-200 transition hover:border-amber-300/70 disabled:cursor-not-allowed disabled:opacity-30"
+          className="rounded-xl border border-amber-300/40 px-3 py-2.5 text-xs font-semibold text-amber-200 transition hover:border-amber-300/70 disabled:cursor-not-allowed disabled:opacity-30 light:border-amber-400 light:text-amber-700 light:hover:border-amber-500"
         >
           최소 입찰
         </button>
         <button
           type="button"
           onClick={submitPass}
-          className="rounded-xl border border-rose-400/40 px-4 py-2.5 text-sm font-semibold text-rose-200 transition hover:border-rose-400/70 hover:bg-rose-400/10"
+          className="rounded-xl border border-rose-400/40 px-4 py-2.5 text-sm font-semibold text-rose-200 transition hover:border-rose-400/70 hover:bg-rose-400/10 light:border-rose-400 light:text-rose-700 light:hover:border-rose-500 light:hover:bg-rose-50"
         >
           포기
         </button>

@@ -106,7 +106,7 @@ export default function WordInput({ wordLength, pool, accent, onSubmit }: WordIn
     <div className="sticky bottom-2 z-10 flex flex-col gap-2.5">
       <PieceTracker usage={usage} pool={pool} shake={shake} />
 
-      <div className="flex flex-col gap-1.5 rounded-2xl border border-white/10 bg-gradient-to-b from-[#140a1c] via-[#0c0715] to-black p-3">
+      <div className="flex flex-col gap-1.5 rounded-2xl border border-white/10 bg-gradient-to-b from-[#140a1c] via-[#0c0715] to-black p-3 light:border-slate-200 light:from-white light:via-white light:to-white light:shadow-md">
         <input
           value={value}
           onChange={handleChange}
@@ -118,26 +118,26 @@ export default function WordInput({ wordLength, pool, accent, onSubmit }: WordIn
           spellCheck={false}
           placeholder={`${wordLength}글자 단어를 입력하세요`}
           aria-label="추측 단어 입력"
-          className={`rounded-xl border bg-black/30 px-4 py-3 text-center text-lg font-bold tracking-widest text-white placeholder:text-white/20 focus:outline-none ${
+          className={`rounded-xl border bg-black/30 px-4 py-3 text-center text-lg font-bold tracking-widest text-white placeholder:text-white/20 focus:outline-none light:bg-slate-50 light:text-slate-900 light:placeholder:text-slate-400 ${
             value.length === 0
-              ? "border-white/15 focus:border-violet-400"
+              ? "border-white/15 focus:border-violet-400 light:border-slate-300"
               : valid
                 ? "border-sky-300 focus:border-sky-300"
-                : "border-rose-400/50 focus:border-rose-400"
+                : "border-rose-400/50 focus:border-rose-400 light:border-rose-400"
           }`}
         />
 
-        {errorMessage && <p className="text-center text-xs text-amber-300">{errorMessage}</p>}
+        {errorMessage && <p className="text-center text-xs text-amber-300 light:text-amber-700">{errorMessage}</p>}
 
         {suggestions.length > 0 && (
           <div className="flex flex-wrap justify-center gap-1.5">
-            <span className="text-[11px] text-white/40">완성 힌트:</span>
+            <span className="text-[11px] text-white/40 light:text-slate-500">완성 힌트:</span>
             {suggestions.map((w) => (
               <button
                 key={w}
                 type="button"
                 onClick={() => setValue(w)}
-                className={`rounded-full border border-white/15 px-2.5 py-1 text-[11px] font-medium text-white/70 transition hover:text-white ${accent}`}
+                className={`rounded-full border border-white/15 px-2.5 py-1 text-[11px] font-medium text-white/70 transition hover:text-white light:border-slate-300 light:text-slate-600 light:hover:text-slate-900 ${accent}`}
               >
                 {w}
               </button>
@@ -158,7 +158,7 @@ export default function WordInput({ wordLength, pool, accent, onSubmit }: WordIn
                   : "지금 조각 풀로는 조합할 수 없는 단어예요"
               : undefined
           }
-          className="rounded-xl bg-violet-500 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+          className="rounded-xl bg-violet-500 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-200 light:disabled:text-slate-400"
         >
           제시하기 (Enter)
         </button>

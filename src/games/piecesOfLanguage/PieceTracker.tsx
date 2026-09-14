@@ -29,7 +29,9 @@ function JamoChip({ jamo, count, available }: { jamo: string; count: number; ava
   return (
     <span
       className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-        available ? "border-white/15 bg-white/5 text-white/80" : "border-red-500/40 bg-red-500/20 text-red-400"
+        available
+          ? "border-white/15 bg-white/5 text-white/80 light:border-slate-300 light:bg-slate-50 light:text-slate-700"
+          : "border-red-500/40 bg-red-500/20 text-red-400 light:border-red-300 light:bg-red-50 light:text-red-600"
       }`}
     >
       {jamo}×{count}
@@ -46,14 +48,14 @@ export default function PieceTracker({ usage, pool, shake }: PieceTrackerProps) 
 
   return (
     <div
-      className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-black/20 p-2.5"
+      className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-black/20 p-2.5 light:border-slate-200 light:bg-white light:shadow-sm"
       style={shake ? { animation: "pol-piece-shake 0.4s ease-in-out" } : undefined}
     >
       <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
-        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-emerald-300">
+        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-emerald-300 light:text-emerald-700">
           🟢 사용 중인 자음 {consonantTotal}개
         </span>
-        <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-sky-300">
+        <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-sky-300 light:text-sky-700">
           🔵 사용 중인 모음 {vowelTotal}개
         </span>
       </div>

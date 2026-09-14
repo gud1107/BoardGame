@@ -17,7 +17,7 @@ function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-        checked ? "bg-emerald-500" : "bg-white/15"
+        checked ? "bg-emerald-500" : "bg-white/15 light:bg-slate-300"
       }`}
     >
       <span
@@ -115,7 +115,7 @@ export default function BettingSidebar() {
       >
         🎲
         {session && (
-          <span className="absolute top-1 right-1 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-[#0b0b12]" />
+          <span className="absolute top-1 right-1 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-[#0b0b12] light:ring-[#f8fafc]" />
         )}
       </button>
 
@@ -127,17 +127,17 @@ export default function BettingSidebar() {
             ? { transform: `translateY(${dragY}px)`, transition: dragging ? "none" : "transform 200ms ease-out" }
             : undefined
         }
-        className={`fixed inset-x-0 bottom-0 z-40 flex max-h-[85vh] w-full flex-col rounded-t-2xl border-t border-white/10 bg-[#12101c] shadow-2xl transition-transform duration-200 sm:inset-x-auto sm:inset-y-0 sm:right-0 sm:max-h-none sm:w-96 sm:max-w-sm sm:translate-y-0 sm:rounded-none sm:rounded-l-2xl sm:border-t-0 sm:border-l md:w-[26rem] lg:w-[30rem] ${
+        className={`fixed inset-x-0 bottom-0 z-40 flex max-h-[85vh] w-full flex-col rounded-t-2xl border-t border-white/10 bg-[#12101c] shadow-2xl transition-transform duration-200 sm:inset-x-auto sm:inset-y-0 sm:right-0 sm:max-h-none sm:w-96 sm:max-w-sm sm:translate-y-0 sm:rounded-none sm:rounded-l-2xl sm:border-t-0 sm:border-l md:w-[26rem] lg:w-[30rem] light:border-slate-200 light:bg-white ${
           sidebarOpen ? "translate-y-0 sm:translate-x-0" : "translate-y-full sm:translate-x-full"
         }`}
       >
         <div {...handlers} className="shrink-0 px-4 pt-3">
           <DragHandle />
-          <div className="flex items-center justify-between border-b border-white/10 pb-3">
-            <h2 className="text-sm font-bold text-white">🎲 내기 관리</h2>
+          <div className="flex items-center justify-between border-b border-white/10 pb-3 light:border-slate-200">
+            <h2 className="text-sm font-bold text-white light:text-slate-900">🎲 내기 관리</h2>
             <button
               onClick={closeSidebar}
-              className="-mr-2 grid h-12 w-12 place-items-center rounded-full text-xl text-white/50 transition hover:bg-white/10 hover:text-white active:bg-white/20"
+              className="-mr-2 grid h-12 w-12 place-items-center rounded-full text-xl text-white/50 transition hover:bg-white/10 hover:text-white active:bg-white/20 light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700 light:active:bg-slate-200"
               aria-label="닫기"
             >
               ×
@@ -147,13 +147,13 @@ export default function BettingSidebar() {
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           {!hydrated ? (
-            <p className="text-sm text-white/40">불러오는 중...</p>
+            <p className="text-sm text-white/40 light:text-slate-400">불러오는 중...</p>
           ) : (
             <div className="flex flex-col gap-5">
-              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 light:border-slate-200 light:bg-slate-50">
                 <div>
-                  <p className="text-sm font-medium text-white">내기 활성화</p>
-                  <p className="text-[11px] text-white/45">
+                  <p className="text-sm font-medium text-white light:text-slate-900">내기 활성화</p>
+                  <p className="text-[11px] text-white/45 light:text-slate-500">
                     {session ? "진행 중 — 끄면 오늘 기록이 저장돼요." : "꺼져 있으면 순위 기록 없이 자유 플레이"}
                   </p>
                 </div>
@@ -163,10 +163,10 @@ export default function BettingSidebar() {
               {!session && (
                 <>
                   {startError && (
-                    <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">{startError}</p>
+                    <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300 light:bg-rose-50 light:text-rose-700">{startError}</p>
                   )}
                   <div>
-                    <p className="mb-2 text-sm font-medium text-white/80">참가자 (최대 10명)</p>
+                    <p className="mb-2 text-sm font-medium text-white/80 light:text-slate-700">참가자 (최대 10명)</p>
                     <RosterEditor participants={draftParticipants} onChange={setDraftParticipants} />
                   </div>
                   {draftParticipants.length >= 2 && (
@@ -176,7 +176,7 @@ export default function BettingSidebar() {
                       onChange={setDraftPayout}
                     />
                   )}
-                  <p className="text-[11px] text-white/40">
+                  <p className="text-[11px] text-white/40 light:text-slate-400">
                     참가자를 추가하고 순위별 상금/벌금을 정한 뒤 위 스위치를 켜면 내기가 시작돼요.
                   </p>
                 </>
@@ -185,7 +185,7 @@ export default function BettingSidebar() {
               {session && (
                 <>
                   <div>
-                    <p className="mb-2 text-sm font-medium text-white/80">
+                    <p className="mb-2 text-sm font-medium text-white/80 light:text-slate-700">
                       참가자 닉네임 · 누적 스코어
                     </p>
                     <div className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2">
@@ -194,7 +194,7 @@ export default function BettingSidebar() {
                         return (
                           <div
                             key={p.playerId}
-                            className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-white/5 p-2.5"
+                            className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-white/5 p-2.5 light:border-slate-200 light:bg-slate-50"
                           >
                             <input
                               defaultValue={p.name}
@@ -204,7 +204,7 @@ export default function BettingSidebar() {
                                   void updateParticipantName(p.playerId, e.target.value);
                                 }
                               }}
-                              className="min-h-11 min-w-0 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-sm text-white outline-none focus:border-rose-400"
+                              className="min-h-11 min-w-0 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-sm text-white outline-none focus:border-rose-400 light:border-slate-300 light:bg-white light:text-slate-900"
                             />
                             <span
                               className={`text-right text-base font-bold whitespace-nowrap tabular-nums ${
@@ -218,7 +218,7 @@ export default function BettingSidebar() {
                         );
                       })}
                     </div>
-                    <p className="mt-1.5 text-[11px] text-white/40">
+                    <p className="mt-1.5 text-[11px] text-white/40 light:text-slate-400">
                       닉네임을 바꾸면 현재 진행 중인 게임에도 바로 반영돼요. 참가자 추가/삭제는 이번
                       내기를 끝낸 뒤 새로 시작해야 순위표와 어긋나지 않아요.
                     </p>
@@ -231,25 +231,25 @@ export default function BettingSidebar() {
                       onChange={handleLivePayoutChange}
                     />
                     {payoutError && (
-                      <p className="mt-2 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                      <p className="mt-2 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300 light:bg-rose-50 light:text-rose-700">
                         {payoutError} (마지막으로 저장된 값이 유지됩니다)
                       </p>
                     )}
                   </div>
 
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3 light:border-slate-200 light:bg-slate-50">
                     <div className="mb-1 flex items-center justify-between">
-                      <p className="text-sm font-medium text-white/80">진행 상황</p>
+                      <p className="text-sm font-medium text-white/80 light:text-slate-700">진행 상황</p>
                       <button
                         onClick={() => setSettlementOpen(true)}
-                        className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/70 hover:border-white/30"
+                        className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
                       >
                         📊 정산표 보기
                       </button>
                     </div>
-                    <p className="text-xs text-white/60">지금까지 {session.rounds.length}게임 진행됨</p>
+                    <p className="text-xs text-white/60 light:text-slate-600">지금까지 {session.rounds.length}게임 진행됨</p>
                     {session.rounds.length > 0 && (
-                      <ul className="mt-2 flex flex-col gap-1 text-[11px] text-white/45">
+                      <ul className="mt-2 flex flex-col gap-1 text-[11px] text-white/45 light:text-slate-500">
                         {[...session.rounds]
                           .slice(-5)
                           .reverse()
@@ -273,14 +273,14 @@ export default function BettingSidebar() {
                       내기 끝 (오늘 기록 저장)
                     </button>
                   ) : (
-                    <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
-                      <p className="mb-2 text-xs text-amber-200">
+                    <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 light:border-amber-300 light:bg-amber-50">
+                      <p className="mb-2 text-xs text-amber-200 light:text-amber-800">
                         정말 종료할까요? 오늘의 최종 순위가 저장되고 내기가 초기화됩니다.
                       </p>
                       <div className="flex gap-2">
                         <button
                           onClick={() => setConfirmingEnd(false)}
-                          className="flex-1 rounded-lg border border-white/15 py-2 text-xs text-white/70 hover:border-white/30"
+                          className="flex-1 rounded-lg border border-white/15 py-2 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
                         >
                           계속하기
                         </button>
@@ -297,14 +297,14 @@ export default function BettingSidebar() {
               )}
 
               {lastRecord && (
-                <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3">
+                <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3 light:border-emerald-300 light:bg-emerald-50">
                   <div className="mb-2 flex items-center justify-between">
-                    <p className="text-xs font-medium text-emerald-200">
+                    <p className="text-xs font-medium text-emerald-200 light:text-emerald-800">
                       {lastRecord.date} 최종 결과
                     </p>
                     <button
                       onClick={() => setLastRecord(null)}
-                      className="text-xs text-emerald-200/60 hover:text-emerald-200"
+                      className="text-xs text-emerald-200/60 hover:text-emerald-200 light:text-emerald-600 light:hover:text-emerald-800"
                     >
                       닫기
                     </button>
@@ -312,7 +312,7 @@ export default function BettingSidebar() {
                   <div className="flex flex-col gap-1">
                     {lastRecord.standings.map((s) => (
                       <div key={s.playerId} className="flex justify-between text-xs">
-                        <span className="text-white/80">
+                        <span className="text-white/80 light:text-slate-700">
                           {s.rank}위 · {s.name}
                         </span>
                         <span className={s.total >= 0 ? "text-emerald-300" : "text-rose-300"}>

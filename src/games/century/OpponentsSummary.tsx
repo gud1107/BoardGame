@@ -18,15 +18,15 @@ function PlayerSummaryRow({
     <div
       ref={setRef}
       className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs ${
-        isActive ? "border-amber-300/60 bg-amber-400/10" : "border-white/10 bg-black/20"
+        isActive ? "border-amber-300/60 bg-amber-400/10 light:bg-amber-50" : "border-white/10 bg-black/20 light:border-slate-200 light:bg-white/85"
       }`}
     >
-      <span className="flex items-center gap-1.5 font-semibold text-white/90">
-        <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-400" : "bg-white/20"}`} />
+      <span className="flex items-center gap-1.5 font-semibold text-white/90 light:text-slate-800">
+        <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`} />
         {isActive && <span title="차례">👉</span>}
         {name}
       </span>
-      <div className="flex flex-wrap items-center gap-2 text-white/70">
+      <div className="flex flex-wrap items-center gap-2 text-white/70 light:text-slate-600">
         <CartInventory resources={player.resources} limit={HAND_LIMIT} compact />
         <span>🪙{player.gold}</span>
         <span>🥈{player.silver}</span>
@@ -97,13 +97,13 @@ export function OpponentsSummaryCompact({
             key={p.seat}
             ref={setRef(p.seat)}
             className={`flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold whitespace-nowrap ${
-              isActive ? "border-amber-300/60 bg-amber-400/10 text-amber-100" : "border-white/10 bg-black/20 text-white/60"
+              isActive ? "border-amber-300/60 bg-amber-400/10 text-amber-100 light:bg-amber-50 light:text-amber-800" : "border-white/10 bg-black/20 text-white/60 light:border-slate-200 light:bg-white/85 light:text-slate-600"
             }`}
           >
-            <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(p.seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+            <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(p.seat) ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`} />
             {isActive && "👉"}
             <span className="max-w-[64px] truncate break-keep">{names[p.seat]}</span>
-            <span className="text-white/40">🏆{p.pointCards.length}</span>
+            <span className="text-white/40 light:text-slate-400">🏆{p.pointCards.length}</span>
           </div>
         );
       })}

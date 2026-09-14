@@ -101,7 +101,7 @@ export default function DashboardPage() {
           is hidden on mobile (`hidden sm:block`) so there's only one
           active input, not a confusing duplicate. */}
       <div
-        className="sticky z-30 -mx-4 -mt-8 border-b border-amber-500/15 bg-neutral-950/80 px-4 py-3 backdrop-blur sm:hidden"
+        className="sticky z-30 -mx-4 -mt-8 border-b border-amber-500/15 bg-neutral-950/80 px-4 py-3 backdrop-blur sm:hidden light:border-slate-200 light:bg-white/90"
         style={{ top: "var(--site-header-h, 96px)" }}
       >
         <div className="relative w-full">
@@ -110,14 +110,14 @@ export default function DashboardPage() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="게임 이름, 태그로 검색..."
             aria-label="게임 검색"
-            className="w-full rounded-xl border border-amber-500/15 bg-white/5 px-4 py-2.5 pr-9 text-sm text-white break-keep placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none"
+            className="w-full rounded-xl border border-amber-500/15 bg-white/5 px-4 py-2.5 pr-9 text-sm text-white break-keep placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 light:shadow-sm"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery("")}
               aria-label="검색어 지우기"
-              className="absolute top-1/2 right-2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white"
+              className="absolute top-1/2 right-2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700"
             >
               ✕
             </button>
@@ -129,7 +129,7 @@ export default function DashboardPage() {
         <h1 className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 bg-clip-text font-serif text-2xl font-bold text-transparent sm:text-3xl">
           함께할 보드게임을 골라보세요
         </h1>
-        <p className="mt-1 text-sm text-white/50">
+        <p className="mt-1 text-sm text-white/50 light:text-slate-500">
           총 {GAME_REGISTRY.length}종 · 플레이 가능 {playableCount}종 · 1~10명, 폰이나 데스크톱으로 즐기세요
         </p>
       </div>
@@ -170,7 +170,7 @@ export default function DashboardPage() {
             search query is active (kept in-flow, not collapsed, since this
             IS the replacement content for that moment — no animation needed
             for a text swap). Reverts to the static heading once cleared. */}
-        <h2 className="mb-3 text-base font-bold text-white sm:hidden">
+        <h2 className="mb-3 text-base font-bold text-white sm:hidden light:text-slate-900">
           {isSearching ? `검색 결과 (${filtered.length}개)` : "🔍 전체 게임 검색"}
         </h2>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -182,14 +182,14 @@ export default function DashboardPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="게임 이름, 태그로 검색..."
-              className="w-full rounded-xl border border-amber-500/15 bg-white/5 px-4 py-2.5 pr-9 text-sm text-white placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none"
+              className="w-full rounded-xl border border-amber-500/15 bg-white/5 px-4 py-2.5 pr-9 text-sm text-white placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 light:shadow-sm"
             />
             {query && (
               <button
                 type="button"
                 onClick={() => setQuery("")}
                 aria-label="검색어 지우기"
-                className="absolute top-1/2 right-2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white"
+                className="absolute top-1/2 right-2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700"
               >
                 ✕
               </button>
@@ -202,8 +202,8 @@ export default function DashboardPage() {
                 onClick={() => setFilterIdx(idx)}
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                   filterIdx === idx
-                    ? "border-amber-400/70 bg-amber-500/20 text-white"
-                    : "border-white/10 text-white/60 hover:border-amber-400/40"
+                    ? "border-amber-400/70 bg-amber-500/20 text-white light:text-slate-900"
+                    : "border-white/10 text-white/60 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
                 }`}
               >
                 {f.label}
@@ -217,8 +217,8 @@ export default function DashboardPage() {
             onClick={() => setGenreFilter("all")}
             className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
               genreFilter === "all"
-                ? "border-amber-400/60 bg-amber-500/15 text-white"
-                : "border-white/10 text-white/60 hover:border-amber-400/40"
+                ? "border-amber-400/60 bg-amber-500/15 text-white light:text-slate-900"
+                : "border-white/10 text-white/60 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
             }`}
           >
             전체 장르
@@ -230,7 +230,13 @@ export default function DashboardPage() {
               <button
                 key={genre}
                 onClick={() => setGenreFilter(active ? "all" : genre)}
-                className="rounded-full border px-3 py-1.5 text-xs font-medium transition"
+                // Inline `style` sets an explicit white/rgba text color per
+                // genre accent, which a plain `light:` class can't outrank —
+                // the `!` important modifier is needed here specifically to
+                // win over that inline color in light mode.
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                  active ? "light:text-slate-900!" : "light:text-slate-600!"
+                }`}
                 style={
                   active
                     ? { borderColor: meta.accent, backgroundColor: `${meta.accent}26`, color: "white" }
@@ -263,7 +269,7 @@ export default function DashboardPage() {
         {filtered.length > 0 ? (
           <GameGrid games={filtered} />
         ) : (
-          <p className="py-16 text-center text-sm text-white/40">검색 결과가 없습니다.</p>
+          <p className="py-16 text-center text-sm text-white/40 light:text-slate-400">검색 결과가 없습니다.</p>
         )}
       </div>
       </div>

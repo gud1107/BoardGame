@@ -27,19 +27,21 @@ export function MyHandCards({
   compact?: boolean;
 }) {
   return (
-    <div className={compact ? "rounded-xl border border-black/30 bg-black/20 p-1.5" : "mt-3 rounded-xl border border-black/30 bg-black/20 p-2 sm:p-2.5"}>
-      {!compact && <h4 className="mb-1 text-[11px] font-semibold tracking-wide text-sky-200/80 uppercase">내 손패 (Hand)</h4>}
+    <div className={compact ? "rounded-xl border border-black/30 bg-black/20 p-1.5 light:border-slate-200 light:bg-white/85 light:shadow-sm" : "mt-3 rounded-xl border border-black/30 bg-black/20 p-2 sm:p-2.5 light:border-slate-200 light:bg-white/85 light:shadow-sm"}>
+      {!compact && <h4 className="mb-1 text-[11px] font-semibold tracking-wide text-sky-200/80 uppercase light:text-sky-700">내 손패 (Hand)</h4>}
 
       {compact ? (
         <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {hand.length === 0 && <span className="px-1 py-2 text-[11px] whitespace-nowrap text-white/30">손패 없음</span>}
+          {hand.length === 0 && <span className="px-1 py-2 text-[11px] whitespace-nowrap text-white/30 light:text-slate-400">손패 없음</span>}
           {hand.map((card) => (
             <button
               key={card.id}
               disabled={!isMyTurn}
               onClick={() => onPlayCard(card)}
               className={`shrink-0 rounded-lg border p-1 transition ${
-                isMyTurn ? "cursor-pointer border-sky-300/40 bg-sky-400/10 active:brightness-110" : "cursor-not-allowed border-white/10 bg-black/20 opacity-70"
+                isMyTurn
+                  ? "cursor-pointer border-sky-300/40 bg-sky-400/10 active:brightness-110 light:bg-sky-50"
+                  : "cursor-not-allowed border-white/10 bg-black/20 opacity-70 light:border-slate-200 light:bg-slate-100"
               } ${card.id === highlightedCardId ? "ring-2 ring-amber-300" : ""}`}
               style={{ width: 56 }}
             >
@@ -49,7 +51,7 @@ export function MyHandCards({
         </div>
       ) : (
         <div className="flex flex-wrap items-end justify-center gap-y-2 py-1.5">
-          {hand.length === 0 && <span className="text-[11px] text-white/30">손패 없음</span>}
+          {hand.length === 0 && <span className="text-[11px] text-white/30 light:text-slate-400">손패 없음</span>}
           {hand.map((card, i) => {
             const mid = (hand.length - 1) / 2;
             const offset = i - mid;
@@ -65,9 +67,9 @@ export function MyHandCards({
                 }}
                 className={`relative rounded-xl border p-2 transition ${
                   isMyTurn
-                    ? "cursor-pointer border-sky-300/40 bg-sky-400/10 hover:z-20 hover:brightness-110"
-                    : "cursor-not-allowed border-white/10 bg-black/20 opacity-70"
-                } ${card.id === highlightedCardId ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-[#1c1208]" : ""}`}
+                    ? "cursor-pointer border-sky-300/40 bg-sky-400/10 hover:z-20 hover:brightness-110 light:bg-sky-50"
+                    : "cursor-not-allowed border-white/10 bg-black/20 opacity-70 light:border-slate-200 light:bg-slate-100"
+                } ${card.id === highlightedCardId ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-[#1c1208] light:ring-offset-white" : ""}`}
               >
                 <MerchantCardFace card={card} />
               </button>
@@ -78,13 +80,13 @@ export function MyHandCards({
 
       {!compact && playedCards.length > 0 && (
         <>
-          <h4 className="mt-2 mb-1 text-[10px] font-semibold tracking-wide text-white/40 uppercase">버린 카드 더미 (Discarded — 휴식 시 회수)</h4>
+          <h4 className="mt-2 mb-1 text-[10px] font-semibold tracking-wide text-white/40 uppercase light:text-slate-500">버린 카드 더미 (Discarded — 휴식 시 회수)</h4>
           <div className="flex flex-wrap items-center py-1 pl-3">
             {playedCards.map((card, i) => (
               <div
                 key={card.id}
                 style={{ marginLeft: i === 0 ? 0 : -26, transform: `rotate(${(i % 2 === 0 ? -1 : 1) * (3 + (i % 4))}deg)`, zIndex: i }}
-                className="rounded-xl border border-white/10 bg-black/30 p-2 opacity-60 grayscale"
+                className="rounded-xl border border-white/10 bg-black/30 p-2 opacity-60 grayscale light:border-slate-200 light:bg-slate-100"
               >
                 <MerchantCardFace card={card} />
               </div>
@@ -96,7 +98,7 @@ export function MyHandCards({
       <button
         disabled={!isMyTurn || playedCards.length === 0}
         onClick={onRest}
-        className={`w-full rounded-xl bg-indigo-600 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 ${compact ? "mt-1.5 py-1.5 text-xs" : "mt-2.5 py-2"}`}
+        className={`w-full rounded-xl bg-indigo-600 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-200 light:disabled:text-slate-400 ${compact ? "mt-1.5 py-1.5 text-xs" : "mt-2.5 py-2"}`}
       >
         😴 휴식 (사용한 카드 전부 회수{compact ? ` · ${playedCards.length}` : ""})
       </button>

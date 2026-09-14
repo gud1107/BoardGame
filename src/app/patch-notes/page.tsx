@@ -12,8 +12,8 @@ export default function PatchNotesPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
-      <h1 className="mb-1 text-2xl font-bold text-white">📋 패치노트</h1>
-      <p className="mb-6 text-sm text-white/50">
+      <h1 className="mb-1 text-2xl font-bold text-white light:text-slate-900">📋 패치노트</h1>
+      <p className="mb-6 text-sm text-white/50 light:text-slate-500">
         {oldest.releaseDate}부터 {latest.releaseDate}까지, 날짜별 수정 이력을 최신순으로
         모았습니다. 최신 버전은 {latest.version}입니다.
       </p>

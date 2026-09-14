@@ -47,11 +47,11 @@ export interface SummonersRiftBoardProps {
 /** Exported so `SummonersRiftLastRoundModal.tsx` can render the exact same kill/damage badge for a completed round's `combatLog` entries. */
 export function combatBadge(entry: RoundResult["combatLog"][number]) {
   return entry.killedBy ? (
-    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/50 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200">
+    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/50 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200 light:border-emerald-400 light:bg-emerald-100 light:text-emerald-700">
       ✅ 처치
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/50 bg-rose-400/10 px-1.5 py-0.5 text-[10px] font-bold text-rose-200">
+    <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/50 bg-rose-400/10 px-1.5 py-0.5 text-[10px] font-bold text-rose-200 light:border-rose-400 light:bg-rose-100 light:text-rose-700">
       🩸 -{entry.damageTaken}
     </span>
   );
@@ -157,7 +157,7 @@ function EncounterProgressBar({ durationMs }: { durationMs: number }) {
     return () => cancelAnimationFrame(raf);
   }, [durationMs]);
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
       <div ref={barRef} className="h-full rounded-full" style={{ background: "linear-gradient(90deg,#f0d48a,#c8933e)" }} />
     </div>
   );
@@ -219,10 +219,11 @@ function HpBanner({
 
   return (
     <section
-      className="flex flex-col items-center gap-2 rounded-2xl border p-3"
+      // Hardcoded dark inline gradient kept as-is for the panel fill (per convention, overridden below via `!` light: utilities like SummonersRiftGuideSidebar.tsx).
+      className="flex flex-col items-center gap-2 rounded-2xl border p-3 light:bg-white/95! light:border-rose-200! light:shadow-md"
       style={{ borderColor: "rgba(200,170,110,0.3)", background: "linear-gradient(160deg,#241418 0%,#160c0e 55%,#0a0506 100%)" }}
     >
-      <span className="text-[10px] font-semibold tracking-wide uppercase" style={{ color: "#c8aa6e" }}>
+      <span className="text-[10px] font-semibold tracking-wide uppercase light:text-amber-700!" style={{ color: "#c8aa6e" }}>
         ❤️ 용사 체력
       </span>
 
@@ -230,26 +231,27 @@ function HpBanner({
       {flash ? (
         flash.entry.killedBy ? (
           <div key={flashKey} className="flex items-center gap-2" style={{ animation: `rift-hp-kill-pulse ${HIT_FLASH_MS}ms ease-out` }}>
-            <span className="text-2xl font-black text-emerald-300">⚔️ 처치!</span>
-            <span className="text-lg font-bold text-white/70">HP {flash.hpBefore} 유지</span>
+            <span className="text-2xl font-black text-emerald-300 light:text-emerald-600">⚔️ 처치!</span>
+            <span className="text-lg font-bold text-white/70 light:text-slate-600">HP {flash.hpBefore} 유지</span>
           </div>
         ) : (
-          <div key={flashKey} className="flex items-center gap-2 text-3xl font-black text-white" style={{ animation: `rift-hp-damage-flash ${HIT_FLASH_MS}ms ease-out` }}>
+          <div key={flashKey} className="flex items-center gap-2 text-3xl font-black text-white light:text-slate-900" style={{ animation: `rift-hp-damage-flash ${HIT_FLASH_MS}ms ease-out` }}>
             <span>{flash.hpBefore}</span>
-            <span className="text-xl text-white/40">➔</span>
-            <span className="text-rose-300">{flash.entry.hpAfter}</span>
-            <span className="text-base font-semibold text-rose-300/80">(-{flash.entry.damageTaken})</span>
+            <span className="text-xl text-white/40 light:text-slate-400">➔</span>
+            <span className="text-rose-300 light:text-rose-600">{flash.entry.hpAfter}</span>
+            <span className="text-base font-semibold text-rose-300/80 light:text-rose-600">(-{flash.entry.damageTaken})</span>
           </div>
         )
       ) : (
-        <span className="text-3xl font-black text-white">
-          {state.currentHp} <span className="text-lg font-semibold text-white/40">/ {state.totalHp}</span>
+        <span className="text-3xl font-black text-white light:text-slate-900">
+          {state.currentHp} <span className="text-lg font-semibold text-white/40 light:text-slate-400">/ {state.totalHp}</span>
         </span>
       )}
 
       {/* 대형 게이지 바 — 작업 지시 §2 "h-6 sm:h-8, rounded-full" + 중앙 굵은 텍스트. 피격 시 좌우로 흔들리고(rift-hp-hit-shake) 붉게 번쩍인다(brightness/saturate). */}
       <div
         key={`bar-${flashKey}`}
+        // Gauge fill/track intentionally left as its own dark hardcoded look in both themes — this is a colored HP bar (like a health gauge), not neutral panel chrome.
         className="relative h-6 w-full max-w-xs overflow-hidden rounded-full border sm:h-8"
         style={{
           borderColor: "rgba(220,60,60,0.4)",
@@ -281,7 +283,7 @@ function HpBanner({
         <div key={`skip-${flashKey}`} className="flex w-full max-w-xs flex-col items-center gap-1.5">
           <EncounterProgressBar durationMs={flash.holdMs} />
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-white/45">
+            <span className="text-[10px] text-white/45 light:text-slate-500">
               <EncounterCountdown durationMs={flash.holdMs} />초 후 자동으로 다음 몬스터 공개
             </span>
             <button
@@ -299,7 +301,7 @@ function HpBanner({
           알리는 작은 표시 — 위 스킵 UI 없이도 지금 자동 진행 중임을 알 수
           있게 한다. */}
       {flash?.autoAdvance && (
-        <span key={`bulk-${flashKey}`} className="animate-pulse text-[10px] font-semibold tracking-wide" style={{ color: "#7dfcd0" }}>
+        <span key={`bulk-${flashKey}`} className="animate-pulse text-[10px] font-semibold tracking-wide light:text-emerald-700!" style={{ color: "#7dfcd0" }}>
           ⚡ 전체 오픈 진행 중...
         </span>
       )}
@@ -332,14 +334,15 @@ function MonsterHistoryPanel({ state, entries }: { state: SummonersRiftState; en
 
   return (
     <aside
-      className="flex w-full shrink-0 flex-col gap-2 rounded-[24px] border p-3 text-xs lg:w-56"
+      // The `!` important modifiers below are needed to win over this element's inline background/borderColor in light mode (same convention as SummonersRiftGuideSidebar.tsx).
+      className="flex w-full shrink-0 flex-col gap-2 rounded-[24px] border p-3 text-xs lg:w-56 light:bg-white/95! light:border-slate-200! light:shadow-md"
       style={{ borderColor: "rgba(200,170,110,0.25)", background: "linear-gradient(160deg,#151b28 0%,#0d121c 45%,#06090f 100%)" }}
     >
-      <h3 className="text-[11px] font-semibold tracking-wide uppercase" style={{ color: "#c8aa6e" }}>
+      <h3 className="text-[11px] font-semibold tracking-wide uppercase light:text-amber-700!" style={{ color: "#c8aa6e" }}>
         📜 등장 몬스터 기록
       </h3>
       {entries.length === 0 ? (
-        <p className="px-1 py-4 text-center text-[10px] leading-relaxed text-white/35">
+        <p className="px-1 py-4 text-center text-[10px] leading-relaxed text-white/35 light:text-slate-400">
           {state.phase === "declaringSpatula" ? "황금 뒤집개 지정 후 몬스터가 공개되면 여기 기록됩니다." : "아직 공개된 몬스터가 없습니다."}
         </p>
       ) : (
@@ -347,9 +350,9 @@ function MonsterHistoryPanel({ state, entries }: { state: SummonersRiftState; en
           {entries.map((entry, i) => (
             <div
               key={entry.monster.id}
-              className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 p-1.5"
+              className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 p-1.5 light:border-slate-200 light:bg-slate-50"
             >
-              <span className="w-4 shrink-0 text-center text-[9px] font-bold text-white/30">{i + 1}</span>
+              <span className="w-4 shrink-0 text-center text-[9px] font-bold text-white/30 light:text-slate-400">{i + 1}</span>
               <MonsterFace threat={entry.monster.threat} size="sm" />
               <div className="flex flex-1 flex-col items-start gap-1">
                 {combatBadge(entry)}
@@ -554,7 +557,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 소환사의 협곡 룰북
     </button>
@@ -566,7 +569,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
     <button
       onClick={() => setLastRoundOpen(true)}
       disabled={!state.lastRoundResult}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
     >
       🕓 직전 라운드 결과
     </button>
@@ -602,14 +605,14 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
     const winner = rankings.find((r) => r.rank === 1)!;
     return (
       <div
-        className="relative flex flex-col items-center gap-5 rounded-[28px] border p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        className="relative flex flex-col items-center gap-5 rounded-[28px] border p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8 light:bg-white/95! light:border-amber-200! light:shadow-md!"
         style={{ borderColor: "rgba(200,170,110,0.4)", background: "linear-gradient(160deg,#1b1408 0%,#120d05 55%,#080502 100%)" }}
       >
         <span className="text-5xl">🏆</span>
-        <h2 className="text-2xl font-bold" style={{ color: "#e8c77a" }}>
+        <h2 className="text-2xl font-bold light:text-amber-700!" style={{ color: "#e8c77a" }}>
           {names[winner.seat]}님, 협곡의 최종 승자!
         </h2>
-        <p className="max-w-sm text-xs text-white/50">
+        <p className="max-w-sm text-xs text-white/50 light:text-slate-500">
           {winner.successTokens >= SUCCESS_TOKENS_TO_WIN
             ? `성공 토큰 ${SUCCESS_TOKENS_TO_WIN}개를 가장 먼저 모아 승리했습니다.`
             : "다른 모든 소환사가 탈락해 최후의 생존자로 승리했습니다."}
@@ -618,31 +621,34 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[420px] border-collapse text-xs">
             <thead>
-              <tr className="text-white/50">
-                <th className="border-b border-white/10 px-2 py-2 text-left">순위</th>
-                <th className="border-b border-white/10 px-2 py-2 text-left">소환사</th>
-                <th className="border-b border-white/10 px-2 py-2 text-right">성공</th>
-                <th className="border-b border-white/10 px-2 py-2 text-right">실패</th>
+              <tr className="text-white/50 light:text-slate-500">
+                <th className="border-b border-white/10 px-2 py-2 text-left light:border-slate-200">순위</th>
+                <th className="border-b border-white/10 px-2 py-2 text-left light:border-slate-200">소환사</th>
+                <th className="border-b border-white/10 px-2 py-2 text-right light:border-slate-200">성공</th>
+                <th className="border-b border-white/10 px-2 py-2 text-right light:border-slate-200">실패</th>
               </tr>
             </thead>
             <tbody>
               {rankings.map(({ seat, rank, successTokens, failureTokens, eliminated }) => (
-                <tr key={seat} className={rank === 1 ? "bg-amber-400/10" : ""}>
-                  <td className="border-b border-white/5 px-2 py-2 text-left font-bold" style={{ color: rank === 1 ? "#e8c77a" : undefined }}>
+                <tr key={seat} className={rank === 1 ? "bg-amber-400/10 light:bg-amber-100" : ""}>
+                  <td
+                    className={`border-b border-white/5 px-2 py-2 text-left font-bold light:border-slate-100 ${rank === 1 ? "light:text-amber-700!" : "light:text-slate-900"}`}
+                    style={{ color: rank === 1 ? "#e8c77a" : undefined }}
+                  >
                     {rank === 1 ? "🏆 1" : rank}
                   </td>
-                  <td className="border-b border-white/5 px-2 py-2 text-left text-white">
+                  <td className="border-b border-white/5 px-2 py-2 text-left text-white light:border-slate-100 light:text-slate-900">
                     <span className="flex items-center gap-1.5">
                       <Avatar size={20} />
                       {names[seat]}
-                      {seat === viewerSeat && <span style={{ color: "#e8c77a" }}>(나)</span>}
-                      {eliminated && <span className="text-rose-300">💀</span>}
+                      {seat === viewerSeat && <span className="light:text-amber-700!" style={{ color: "#e8c77a" }}>(나)</span>}
+                      {eliminated && <span className="text-rose-300 light:text-rose-600">💀</span>}
                     </span>
                   </td>
-                  <td className="border-b border-white/5 px-2 py-2 text-right text-emerald-200">
+                  <td className="border-b border-white/5 px-2 py-2 text-right text-emerald-200 light:border-slate-100 light:text-emerald-700">
                     {"🏆".repeat(successTokens) || "—"}
                   </td>
-                  <td className="border-b border-white/5 px-2 py-2 text-right text-rose-200">{"💀".repeat(failureTokens) || "—"}</td>
+                  <td className="border-b border-white/5 px-2 py-2 text-right text-rose-200 light:border-slate-100 light:text-rose-700">{"💀".repeat(failureTokens) || "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -696,16 +702,16 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
       {dungeonPhaseActive && <MonsterHistoryPanel state={state} entries={monsterHistoryEntries} />}
       <div
-        className="flex min-w-0 flex-1 flex-col gap-3 rounded-[28px] border p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
+        className="flex min-w-0 flex-1 flex-col gap-3 rounded-[28px] border p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4 light:bg-white/95! light:border-slate-200! light:shadow-md!"
         style={{ borderColor: "rgba(200,170,110,0.3)", background: "linear-gradient(160deg,#151b28 0%,#0d121c 45%,#06090f 100%)" }}
       >
-        <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs" style={{ color: "#c8aa6e" }}>
+        <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs light:text-amber-700!" style={{ color: "#c8aa6e" }}>
           <span className="flex items-center gap-1.5">
             {state.playerCount}인 · 라운드 {state.roundNumber}
-            <span className="rounded-full border border-white/15 px-1.5 py-0.5 text-[10px] text-white/50">
+            <span className="rounded-full border border-white/15 px-1.5 py-0.5 text-[10px] text-white/50 light:border-slate-300 light:text-slate-500">
               🃏 덱 {state.deck.length}장
             </span>
-            <span className="rounded-full border border-white/15 px-1.5 py-0.5 text-[10px] text-white/50">
+            <span className="rounded-full border border-white/15 px-1.5 py-0.5 text-[10px] text-white/50 light:border-slate-300 light:text-slate-500">
               🗡️ 협곡 더미 {state.riftPile.length}장
             </span>
           </span>
@@ -716,8 +722,8 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
         </div>
 
         {roundFlash && (
-          <div className="rounded-xl border px-3 py-2 text-xs" style={{ borderColor: "rgba(200,170,110,0.4)", background: "rgba(200,170,110,0.08)" }}>
-            <p className={`text-center font-semibold ${roundFlash.outcome === "success" ? "text-emerald-200" : "text-rose-200"}`}>
+          <div className="rounded-xl border px-3 py-2 text-xs light:bg-amber-50! light:border-amber-200!" style={{ borderColor: "rgba(200,170,110,0.4)", background: "rgba(200,170,110,0.08)" }}>
+            <p className={`text-center font-semibold ${roundFlash.outcome === "success" ? "text-emerald-200 light:text-emerald-700" : "text-rose-200 light:text-rose-700"}`}>
               {roundFlash.outcome === "success"
                 ? `✅ ${names[roundFlash.challengerSeat]}님이 협곡 공략 성공! (총 HP ${roundFlash.totalHp})`
                 : `💀 ${names[roundFlash.challengerSeat]}님이 협곡 공략 실패...${roundFlash.newlyEliminated ? " (탈락!)" : ""}`}
@@ -725,7 +731,7 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
             {roundFlash.combatLog.length > 0 && (
               <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1.5">
                 {roundFlash.combatLog.map((entry, i) => (
-                  <span key={i} className="inline-flex items-center gap-1 rounded-full bg-black/25 px-1.5 py-0.5 text-[10px] text-white/70">
+                  <span key={i} className="inline-flex items-center gap-1 rounded-full bg-black/25 px-1.5 py-0.5 text-[10px] text-white/70 light:bg-white/70 light:text-slate-600">
                     {entry.monster.threat}
                     {combatBadge(entry)}
                   </span>
@@ -737,21 +743,23 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
 
         {/* Shared champion + item HUD */}
         <section
-          className="flex flex-col gap-2 rounded-2xl border p-2.5 sm:p-3"
+          className="flex flex-col gap-2 rounded-2xl border p-2.5 sm:p-3 light:bg-white/95! light:border-slate-200! light:shadow-sm!"
           style={{ borderColor: "rgba(200,170,110,0.25)", background: "linear-gradient(160deg,#1c2434 0%,#131a26 55%,#0a0e15 100%)" }}
         >
           <div className="flex items-center justify-between">
-            <h3 className="text-[11px] font-semibold tracking-wide uppercase" style={{ color: "#c8aa6e" }}>
+            <h3 className="text-[11px] font-semibold tracking-wide uppercase light:text-amber-700!" style={{ color: "#c8aa6e" }}>
               ⚔️ 공유 챔피언
             </h3>
             {/* Combat phases now own the live HP readout via the large `HpBanner` below — this small badge is only the bidding-phase equip preview, so the two never show conflicting numbers side by side (also suppressed while a prior round's final reveal is still being held on screen). */}
             {state.phase === "bidding" && !isHoldingFinalReveal && liveTotalHp !== null && (
-              <span className="flex items-center gap-1 text-xs font-bold text-white">❤️ {liveTotalHp}</span>
+              <span className="flex items-center gap-1 text-xs font-bold text-white light:text-slate-900">❤️ {liveTotalHp}</span>
             )}
           </div>
           {/* Task brief §3: the base HP-3 champion tile, physically-set-up-style — the hero card centered above the items equipped onto it. */}
           <div className="flex justify-center">
             {/*
+              One-shot theatrical life/death FX below (grayscale, glow-pulse, crack overlay) intentionally left unthemed/dark-only in both site themes — same exception as SummonersRiftEffects.tsx's full-screen overlays.
+
               라운드가 막 확정된 2.5초 동안(`lifeDeathFlash`) 챔피언 카드 자체에
               생사 판정을 덧입힌다 — 생존(성공)이면 골드/에메랄드 글로우 테두리로
               "수호"를, 사망(실패)이면 흑백화 + 손으로 그은 듯한 크랙 오버레이로
@@ -792,11 +800,12 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
           </div>
         </section>
 
-        {/* 네임드 몬스터 조우 시 백드롭 딤(전체 화면 포털) — namedFlashActive일 때만 마운트. */}
+        {/* 네임드 몬스터 조우 시 백드롭 딤(전체 화면 포털) — namedFlashActive일 때만 마운트. One-shot theatrical FX, intentionally left dark-only regardless of site theme (see SummonersRiftEffects.tsx). */}
         {namedFlashActive && <NamedMonsterDim />}
 
         {/* HP 배너 + 카드더미 묶음 — 네임드 조우 중엔 이 블록 전체를 딤 배경 위로 끌어올리고(z-index) 살짝 확대해 "카메라 줌인" 포커싱을 흉내낸다(작업 지시 §2 "카메라 줌인 또는 백드롭 딤"). */}
         <div className={`relative flex flex-col gap-3 transition-transform duration-300 ${namedFlashActive ? "z-50 scale-[1.03] sm:scale-105" : ""}`}>
+          {/* Part of the same one-shot named-monster theatrical sequence as `NamedMonsterDim` above — intentionally left dark-only in both themes. */}
           {namedFlashActive && (
             <span
               className="self-center rounded-full border px-3 py-1 text-[11px] font-black tracking-wide"
@@ -810,16 +819,16 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
           <HpBanner state={state} flash={combatFlash} onSkip={handleSkipEncounter} />
 
           {/* Card piles: the monster draw deck (task brief §1) beside the Rift accumulation pile — both face-down, remaining count badged on top. */}
-          <section className="flex flex-wrap items-start justify-center gap-4 rounded-2xl border border-white/10 bg-black/25 p-3">
+          <section className="flex flex-wrap items-start justify-center gap-4 rounded-2xl border border-white/10 bg-black/25 p-3 light:border-slate-200 light:bg-slate-50">
             <div className="flex flex-col items-center gap-2">
-              <h3 className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">🃏 던전 입장 카드더미</h3>
+              <h3 className="text-[11px] font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">🃏 던전 입장 카드더미</h3>
               <CardPileStack count={state.deck.length} emptyHint="덱 소진" />
             </div>
             <div ref={riftStackRef} className="flex flex-col items-center gap-2">
-              <h3 className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">🗡️ 협곡 더미</h3>
+              <h3 className="text-[11px] font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">🗡️ 협곡 더미</h3>
               {state.riftPile.length === 0 && state.phase === "bidding" ? (
                 <div className="flex h-16 w-12 items-center justify-center">
-                  <p className="text-center text-[9px] leading-tight text-white/30">아직 없음</p>
+                  <p className="text-center text-[9px] leading-tight text-white/30 light:text-slate-400">아직 없음</p>
                 </div>
               ) : (
                 <CardPileStack count={state.riftPile.length} />
@@ -898,12 +907,12 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
                   ref={setSeatRowRef(seat)}
                   className={`relative flex flex-wrap items-center justify-between gap-2 overflow-hidden rounded-xl border p-2 text-xs transition ${
                     p.eliminated
-                      ? "border-white/5 bg-black/10 opacity-50"
+                      ? "border-white/5 bg-black/10 opacity-50 light:border-slate-200 light:bg-slate-100"
                       : isPassed
-                        ? "border-red-500/40 bg-black/20 opacity-75"
+                        ? "border-red-500/40 bg-black/20 opacity-75 light:border-rose-300 light:bg-rose-50"
                         : isActive
-                          ? "bg-amber-400/10"
-                          : "border-white/10 bg-black/20"
+                          ? "bg-amber-400/10 light:bg-amber-100"
+                          : "border-white/10 bg-black/20 light:border-slate-200 light:bg-slate-50"
                   }`}
                   style={{
                     ...(isActive && !isPassed ? { borderColor: "rgba(200,170,110,0.6)" } : {}),
@@ -912,16 +921,16 @@ export default function SummonersRiftBoard({ state, viewerSeat, names, connected
                 >
                   {/* 패스 딤 오버레이 — 텍스트/토큰은 아래에서 별도로 z-10을 줘 그 위에 계속 읽히게 남긴다. */}
                   {isPassed && <div className="pointer-events-none absolute inset-0 rounded-xl bg-black/50 backdrop-blur-[1px]" />}
-                  <span className="relative z-10 flex items-center gap-1.5 font-semibold text-white/90">
+                  <span className="relative z-10 flex items-center gap-1.5 font-semibold text-white/90 light:text-slate-900">
                     <Avatar size={20} />
-                    <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`} />
                     {isActive && <span title="차례">👉</span>}
                     {state.challengerSeat === seat && (state.phase === "declaringSpatula" || state.phase === "resolvingRift") && <span title="도전자">🛡️</span>}
                     {names[seat]}
-                    {isSelf && <span style={{ color: "#e8c77a" }}>(나)</span>}
-                    {p.eliminated && <span className="text-rose-300">💀 탈락</span>}
+                    {isSelf && <span className="light:text-amber-700!" style={{ color: "#e8c77a" }}>(나)</span>}
+                    {p.eliminated && <span className="text-rose-300 light:text-rose-600">💀 탈락</span>}
                   </span>
-                  <div className="relative z-10 flex items-center gap-2 text-white/70">
+                  <div className="relative z-10 flex items-center gap-2 text-white/70 light:text-slate-600">
                     <span title={`성공 ${p.successTokens}/${SUCCESS_TOKENS_TO_WIN}`}>{"🏆".repeat(p.successTokens)}{"·".repeat(Math.max(0, SUCCESS_TOKENS_TO_WIN - p.successTokens))}</span>
                     <span title={`실패 ${p.failureTokens}/${FAILURE_TOKENS_TO_ELIMINATE}`}>{"💀".repeat(p.failureTokens)}{"·".repeat(Math.max(0, FAILURE_TOKENS_TO_ELIMINATE - p.failureTokens))}</span>
                     {isPassed && (
@@ -1003,8 +1012,8 @@ function TurnPanel({
 
   if (state.phase === "gameOver") {
     return (
-      <section className="rounded-2xl border p-3 text-center" style={panelStyle}>
-        <p className="text-xs font-medium" style={{ color: "#e8c77a" }}>
+      <section className="rounded-2xl border p-3 text-center light:bg-white/95! light:border-slate-200! light:shadow-sm!" style={panelStyle}>
+        <p className="text-xs font-medium light:text-amber-700!" style={{ color: "#e8c77a" }}>
           🏁 게임이 종료되었습니다 — 곧 최종 결과가 표시됩니다...
         </p>
       </section>
@@ -1012,8 +1021,8 @@ function TurnPanel({
   }
   if (holdingFinalReveal) {
     return (
-      <section className="rounded-2xl border p-3 text-center" style={panelStyle}>
-        <p className="text-xs text-white/60">⏳ 직전 라운드의 마지막 몬스터 결과를 확인하는 중입니다 — 잠시 후 다음 라운드가 시작됩니다.</p>
+      <section className="rounded-2xl border p-3 text-center light:bg-white/95! light:border-slate-200! light:shadow-sm!" style={panelStyle}>
+        <p className="text-xs text-white/60 light:text-slate-600">⏳ 직전 라운드의 마지막 몬스터 결과를 확인하는 중입니다 — 잠시 후 다음 라운드가 시작됩니다.</p>
       </section>
     );
   }
@@ -1023,8 +1032,8 @@ function TurnPanel({
     if (state.pendingDraw && state.pendingDraw.seat === viewerSeat) {
       const card = state.pendingDraw.card;
       return (
-        <section className="flex flex-col items-center gap-3 rounded-2xl border p-3" style={panelStyle}>
-          <p className="text-xs font-medium" style={{ color: "#e8c77a" }}>
+        <section className="flex flex-col items-center gap-3 rounded-2xl border p-3 light:bg-white/95! light:border-slate-200! light:shadow-sm!" style={panelStyle}>
+          <p className="text-xs font-medium light:text-amber-700!" style={{ color: "#e8c77a" }}>
             🫵 방금 뽑은 몬스터입니다 — 나만 볼 수 있어요. 협곡에 넣거나, 아이템 하나를 해제해 숨기세요.
           </p>
           <MonsterFace threat={card.threat} size="lg" />
@@ -1037,7 +1046,7 @@ function TurnPanel({
               🗡️ 협곡에 집어넣기
             </button>
           </div>
-          <p className="text-[10px] text-white/40">또는 아래 아이템 중 하나를 눌러 해제하고 이 카드를 숨기세요:</p>
+          <p className="text-[10px] text-white/40 light:text-slate-500">또는 아래 아이템 중 하나를 눌러 해제하고 이 카드를 숨기세요:</p>
           <div className="flex flex-wrap justify-center gap-2">
             {ITEM_CATALOG.filter((i) => state.equippedItemIds.includes(i.id)).map((item) => (
               <button key={item.id} onClick={() => onAction({ type: "removeItem", seat: viewerSeat, itemId: item.id as ItemId })}>
@@ -1050,15 +1059,15 @@ function TurnPanel({
     }
     if (state.pendingDraw) {
       return (
-        <section className="rounded-2xl border p-3 text-center" style={panelStyle}>
-          <p className="text-xs text-white/60">{`${state.pendingDraw.seat + 1}번 소환사가 방금 뽑은 카드를 확인하는 중...`}</p>
+        <section className="rounded-2xl border p-3 text-center light:bg-white/95! light:border-slate-200! light:shadow-sm!" style={panelStyle}>
+          <p className="text-xs text-white/60 light:text-slate-600">{`${state.pendingDraw.seat + 1}번 소환사가 방금 뽑은 카드를 확인하는 중...`}</p>
         </section>
       );
     }
     if (isMyTurn) {
       return (
-        <section className="flex flex-col items-center gap-2 rounded-2xl border p-3" style={panelStyle}>
-          <p className="text-xs font-medium" style={{ color: "#e8c77a" }}>
+        <section className="flex flex-col items-center gap-2 rounded-2xl border p-3 light:bg-white/95! light:border-slate-200! light:shadow-sm!" style={panelStyle}>
+          <p className="text-xs font-medium light:text-amber-700!" style={{ color: "#e8c77a" }}>
             🫵 당신 차례입니다!
           </p>
           <div className="flex gap-2">
@@ -1072,18 +1081,18 @@ function TurnPanel({
             </button>
             <button
               onClick={() => onAction({ type: "pass", seat: viewerSeat })}
-              className="rounded-full border border-white/20 px-5 py-2.5 text-xs font-semibold text-white/80 transition hover:border-white/40"
+              className="rounded-full border border-white/20 px-5 py-2.5 text-xs font-semibold text-white/80 transition hover:border-white/40 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
             >
               🏳️ 패스
             </button>
           </div>
-          {state.deck.length === 0 && <p className="text-[10px] text-rose-300">몬스터 덱이 모두 떨어져 패스만 할 수 있습니다.</p>}
+          {state.deck.length === 0 && <p className="text-[10px] text-rose-300 light:text-rose-600">몬스터 덱이 모두 떨어져 패스만 할 수 있습니다.</p>}
         </section>
       );
     }
     return (
-      <section className="rounded-2xl border p-3 text-center" style={panelStyle}>
-        <p className="text-xs text-white/50">
+      <section className="rounded-2xl border p-3 text-center light:bg-white/95! light:border-slate-200! light:shadow-sm!" style={panelStyle}>
+        <p className="text-xs text-white/50 light:text-slate-500">
           {me.eliminated ? "탈락했습니다 — 이번 게임을 구경하는 중..." : me.passed ? "이번 라운드는 패스했습니다 — 결과를 기다리는 중..." : `소환사 차례를 기다리는 중...`}
         </p>
       </section>
@@ -1093,14 +1102,14 @@ function TurnPanel({
   if (state.phase === "declaringSpatula") {
     if (!isChallenger) {
       return (
-        <section className="rounded-2xl border p-3 text-center" style={panelStyle}>
-          <p className="text-xs text-white/60">🛡️ 도전자가 황금 뒤집개로 지정할 몬스터를 고르는 중...</p>
+        <section className="rounded-2xl border p-3 text-center light:bg-white/95! light:border-slate-200! light:shadow-sm!" style={panelStyle}>
+          <p className="text-xs text-white/60 light:text-slate-600">🛡️ 도전자가 황금 뒤집개로 지정할 몬스터를 고르는 중...</p>
         </section>
       );
     }
     return (
-      <section className="flex flex-col items-center gap-2 rounded-2xl border p-3" style={panelStyle}>
-        <p className="text-xs font-medium" style={{ color: "#e8c77a" }}>
+      <section className="flex flex-col items-center gap-2 rounded-2xl border p-3 light:bg-white/95! light:border-slate-200! light:shadow-sm!" style={panelStyle}>
+        <p className="text-xs font-medium light:text-amber-700!" style={{ color: "#e8c77a" }}>
           🥄 황금 뒤집개로 협곡 진입 전 무력화할 몬스터 1종류를 지정하세요.
         </p>
         <div className="flex flex-wrap justify-center gap-2">
@@ -1117,18 +1126,18 @@ function TurnPanel({
   // resolvingRift
   if (!isChallenger) {
     return (
-      <section className="rounded-2xl border p-3 text-center" style={panelStyle}>
-        <p className="text-xs text-white/60">🛡️ {`도전자가 협곡을 공략하는 중... (남은 몬스터 ${state.riftPile.length}마리)`}</p>
+      <section className="rounded-2xl border p-3 text-center light:bg-white/95! light:border-slate-200! light:shadow-sm!" style={panelStyle}>
+        <p className="text-xs text-white/60 light:text-slate-600">🛡️ {`도전자가 협곡을 공략하는 중... (남은 몬스터 ${state.riftPile.length}마리)`}</p>
       </section>
     );
   }
   return (
-    <section className="flex flex-col items-center gap-2 rounded-2xl border p-3" style={panelStyle}>
-      <p className="text-xs font-medium" style={{ color: "#e8c77a" }}>
+    <section className="flex flex-col items-center gap-2 rounded-2xl border p-3 light:bg-white/95! light:border-slate-200! light:shadow-sm!" style={panelStyle}>
+      <p className="text-xs font-medium light:text-amber-700!" style={{ color: "#e8c77a" }}>
         🛡️ 당신이 협곡 최종 도전자입니다! 남은 몬스터 {state.riftPile.length}마리
       </p>
       {state.spatulaDeclaredThreat !== null && (
-        <p className="text-[10px] text-white/40">🥄 지정한 몬스터: 위협도 {state.spatulaDeclaredThreat}</p>
+        <p className="text-[10px] text-white/40 light:text-slate-500">🥄 지정한 몬스터: 위협도 {state.spatulaDeclaredThreat}</p>
       )}
       {/*
         듀얼 오픈 컨트롤러 바 — "🃏 1장씩 오픈"은 기존 "다음 몬스터 공개"와
@@ -1140,7 +1149,7 @@ function TurnPanel({
         화면에 붙잡혀 있는 동안(`revealLocked`)은 둘 다 비활성화된다.
       */}
       {revealLocked ? (
-        <span className="rounded-full border border-white/15 px-6 py-2.5 text-xs font-semibold text-white/50">⏳ 전투 연출 재생 중...</span>
+        <span className="rounded-full border border-white/15 px-6 py-2.5 text-xs font-semibold text-white/50 light:border-slate-300 light:text-slate-500">⏳ 전투 연출 재생 중...</span>
       ) : (
         <div className="flex flex-wrap justify-center gap-2">
           <button

@@ -21,12 +21,12 @@ export default function GameLeaveGuardModal({
 
   return (
     <Overlay title="게임을 나가시겠습니까?" onClose={onCancel}>
-      <div className="flex flex-col gap-4 text-sm text-white/80">
+      <div className="flex flex-col gap-4 text-sm text-white/80 light:text-slate-700">
         <p>진행 중인 게임에서 나가면 다시 들어오기 전까지 참여할 수 없어요.</p>
         <div className="flex gap-2">
           <button
             onClick={onCancel}
-            className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm font-semibold text-white/80 hover:border-white/30"
+            className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm font-semibold text-white/80 hover:border-white/30 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"
           >
             계속하기
           </button>

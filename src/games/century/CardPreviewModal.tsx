@@ -55,28 +55,28 @@ export function CardPreviewModal({
         )}
       </div>
 
-      <p className="mb-3 text-center text-xs text-white/60">
+      <p className="mb-3 text-center text-xs text-white/60 light:text-slate-600">
         {target.kind === "point"
           ? `이 카드를 완성하면 +${target.card.points}점을 얻습니다. 위에 표시된 향신료를 지불해야 합니다.`
           : effectDescription(target.card)}
       </p>
 
       {target.kind === "merchant" && (
-        <p className="mb-3 text-center text-[11px] text-white/40">{target.index === 0 ? "가장 왼쪽 카드 — 무료로 가져올 수 있습니다." : `가져오려면 앞의 ${target.index}장 위에 자원을 1개씩 올려야 합니다.`}</p>
+        <p className="mb-3 text-center text-[11px] text-white/40 light:text-slate-500">{target.index === 0 ? "가장 왼쪽 카드 — 무료로 가져올 수 있습니다." : `가져오려면 앞의 ${target.index}장 위에 자원을 1개씩 올려야 합니다.`}</p>
       )}
 
-      {!isMyTurn && <p className="mb-3 text-center text-[11px] text-amber-300/80">내 차례가 아니라 지금은 가져올 수 없어요 — 카드만 미리 볼 수 있습니다.</p>}
-      {isMyTurn && !target.affordable && <p className="mb-3 text-center text-[11px] text-rose-300/80">지금은 자원이 부족해 가져올 수 없어요.</p>}
+      {!isMyTurn && <p className="mb-3 text-center text-[11px] text-amber-300/80 light:text-amber-700">내 차례가 아니라 지금은 가져올 수 없어요 — 카드만 미리 볼 수 있습니다.</p>}
+      {isMyTurn && !target.affordable && <p className="mb-3 text-center text-[11px] text-rose-300/80 light:text-rose-600">지금은 자원이 부족해 가져올 수 없어요.</p>}
 
       <div className="flex gap-2">
-        <button onClick={onCancel} className="flex-1 rounded-xl border border-white/15 py-2 text-sm text-white/70 hover:border-white/30">
+        <button onClick={onCancel} className="flex-1 rounded-xl border border-white/15 py-2 text-sm text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400">
           닫기
         </button>
         {target.kind === "point" ? (
           <button
             onClick={() => onClaimPoint(target.index)}
             disabled={!canAct}
-            className="flex-1 rounded-xl bg-orange-600 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+            className="flex-1 rounded-xl bg-orange-600 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-200 light:disabled:text-slate-400"
           >
             획득하기
           </button>
@@ -84,7 +84,7 @@ export function CardPreviewModal({
           <button
             onClick={() => (target.index === 0 ? onAcquireFreeMerchant(target.index) : onStartAcquireMerchant(target.index))}
             disabled={!canAct}
-            className="flex-1 rounded-xl bg-emerald-600 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+            className="flex-1 rounded-xl bg-emerald-600 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-200 light:disabled:text-slate-400"
           >
             {target.index === 0 ? "무료로 가져오기" : "가져오기"}
           </button>

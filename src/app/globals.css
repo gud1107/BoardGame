@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* 2026-09-13 실시간 블랙/화이트 테마 토글 세션 — this codebase's Tailwind
+   utilities were all written unprefixed AS the dark-luxury look (no `dark:`
+   variant anywhere), so retrofitting a *standard* `dark:` variant would mean
+   moving every existing class behind a prefix across 37 games. Instead we
+   add the inverse: a custom `light:` variant that only ever ADDS overrides
+   on top of the untouched dark defaults, gated on `<html data-theme="light">`
+   (set by ThemeProvider, see src/contexts/ThemeContext.tsx). No `data-theme`
+   attribute (or `data-theme="dark"`) == today's existing dark look, byte for
+   byte. See HANDOFF.md's Theme System section for the full design. */
+@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
+
 :root {
   --background: #0b0b12;
   --foreground: #f4f4f5;
@@ -10,6 +21,18 @@
      typical two-line mobile height so there's no visible jump once the real
      value lands. */
   --site-header-h: 96px;
+
+  /* Page-background gradient token, swapped whole under [data-theme="light"]
+     below rather than expressed as separate color stops — the light look is
+     a different *shape* of gradient (soft top-down wash, not a purple-glow
+     radial), not just a palette swap of the same stops. */
+  --page-bg-gradient: radial-gradient(circle at top, #1a1230 0%, #0b0b12 55%, #08080d 100%);
+}
+
+[data-theme="light"] {
+  --background: #f8fafc;
+  --foreground: #1e293b;
+  --page-bg-gradient: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 45%, #e9eef5 100%);
 }
 
 @theme inline {
@@ -19,10 +42,20 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html,
 body {
-  background: radial-gradient(circle at top, #1a1230 0%, #0b0b12 55%, #08080d 100%);
+  /* Keeps the fixed background in sync under the mobile 100dvh frame even
+     while overscroll bounces reveal past the viewport edge — same reasoning
+     as the `background-attachment: fixed` below, just also declared on the
+     root element so there's no seam color visible during the toggle. */
+  background-color: var(--background);
+}
+
+body {
+  background: var(--page-bg-gradient);
   background-attachment: fixed;
   color: var(--foreground);
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 ::-webkit-scrollbar {

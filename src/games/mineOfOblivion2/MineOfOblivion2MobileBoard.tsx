@@ -100,35 +100,35 @@ export default function MineOfOblivion2MobileBoard({
         compact
       />
 
-      <p className={`text-center text-[11px] break-keep ${isMyTurn ? "text-orange-300" : "text-white/50"}`}>{statusText}</p>
+      <p className={`text-center text-[11px] break-keep ${isMyTurn ? "text-orange-300" : "text-white/50 light:text-slate-500"}`}>{statusText}</p>
 
       {showSetupControls && (
-        <div className="flex flex-col gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1.5">
+        <div className="flex flex-col gap-1 rounded-lg border border-white/10 light:border-slate-200 bg-white/[0.03] p-1.5">
           <div className="flex gap-1">
             <button
               type="button"
               onClick={() => setPlaceMode("mine")}
-              className={`flex-1 rounded-lg py-1 text-[11px] font-semibold transition ${placeMode === "mine" ? "bg-rose-500 text-white" : "border border-white/10 text-white/60"}`}
+              className={`flex-1 rounded-lg py-1 text-[11px] font-semibold transition ${placeMode === "mine" ? "bg-rose-500 text-white" : "border border-white/10 light:border-slate-200 text-white/60 light:text-slate-600"}`}
             >
               💣 {selectedMines.length}/{MINES_PER_PLAYER}
             </button>
             <button
               type="button"
               onClick={() => setPlaceMode("bomb")}
-              className={`flex-1 rounded-lg py-1 text-[11px] font-semibold transition ${placeMode === "bomb" ? "bg-orange-500 text-white" : "border border-white/10 text-white/60"}`}
+              className={`flex-1 rounded-lg py-1 text-[11px] font-semibold transition ${placeMode === "bomb" ? "bg-orange-500 text-white" : "border border-white/10 light:border-slate-200 text-white/60 light:text-slate-600"}`}
             >
               🧨 {selectedBombs.length}/{TIME_BOMBS_PER_PLAYER}
             </button>
           </div>
           {placeMode === "bomb" && (
-            <div className="flex items-center justify-center gap-1 text-[10px] text-white/60">
+            <div className="flex items-center justify-center gap-1 text-[10px] text-white/60 light:text-slate-600">
               <span className="break-keep">퓨즈:</span>
               {TIME_BOMB_FUSE_OPTIONS.map((f) => (
                 <button
                   key={f}
                   type="button"
                   onClick={() => setPendingFuse(f)}
-                  className={`rounded-full px-2 py-0.5 font-bold transition ${pendingFuse === f ? "bg-amber-400 text-black" : "border border-white/15 text-white/60"}`}
+                  className={`rounded-full px-2 py-0.5 font-bold transition ${pendingFuse === f ? "bg-amber-400 text-black" : "border border-white/15 light:border-slate-200 text-white/60 light:text-slate-600"}`}
                 >
                   {f}
                 </button>
@@ -186,8 +186,8 @@ export default function MineOfOblivion2MobileBoard({
         </button>
       )}
 
-      {!showSetupControls && state.phase !== "SETUP_MINE" && <p className="text-center text-[10px] text-white/30">보물 {state.treasureClaimCount}/3 획득됨</p>}
-      {state.phase === "SETUP_MINE" && iAmReady && !opponentReady && <p className="text-center text-[10px] text-white/30">상대({names[opponentSeat]}) 매설 대기 중...</p>}
+      {!showSetupControls && state.phase !== "SETUP_MINE" && <p className="text-center text-[10px] text-white/30 light:text-slate-400">보물 {state.treasureClaimCount}/3 획득됨</p>}
+      {state.phase === "SETUP_MINE" && iAmReady && !opponentReady && <p className="text-center text-[10px] text-white/30 light:text-slate-400">상대({names[opponentSeat]}) 매설 대기 중...</p>}
     </div>
   );
 }

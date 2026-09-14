@@ -141,7 +141,7 @@ export function MoneyStack({
 }) {
   if (bills.length === 0) {
     return (
-      <div className="flex h-14 w-full items-center justify-center rounded-lg border border-dashed border-white/20 bg-black/20 text-[9px] text-white/40">
+      <div className="flex h-14 w-full items-center justify-center rounded-lg border border-dashed border-white/20 bg-black/20 text-[9px] text-white/40 light:border-slate-300 light:bg-white/70 light:text-slate-500 light:shadow-sm">
         지폐 없음
       </div>
     );
@@ -197,7 +197,7 @@ export function MoneyStack({
         {bills.map((bill, i) => (
           <span
             key={i}
-            className="w-full rounded-full border border-white/20 bg-black/50 px-2 py-0.5 text-center text-[9px] font-semibold whitespace-nowrap text-emerald-200"
+            className="w-full rounded-full border border-white/20 bg-black/50 px-2 py-0.5 text-center text-[9px] font-semibold whitespace-nowrap text-emerald-200 light:border-slate-300 light:bg-white/85 light:text-emerald-700 light:shadow-sm"
           >
             {i + 1}등 {money(bill)}
           </span>
@@ -321,10 +321,10 @@ export function CasinoTile({
       <CasinoArtZone casinoNumber={casino.number} />
 
       {/* Zone 2: dice betting mat — individual dice per owner, its own bar below the art. */}
-      <div className="flex min-h-[44px] w-full flex-col items-center justify-center gap-1 rounded-lg border border-white/10 bg-black/25 p-1.5">
+      <div className="flex min-h-[44px] w-full flex-col items-center justify-center gap-1 rounded-lg border border-white/10 bg-black/25 p-1.5 light:border-slate-200 light:bg-white/70 light:shadow-sm">
         <div className="flex w-full flex-wrap items-center justify-center gap-1">
           {groups.length === 0 ? (
-            <span className="text-[9px] text-white/45">주사위 없음</span>
+            <span className="text-[9px] text-white/45 light:text-slate-500">주사위 없음</span>
           ) : (
             groups.map((g) => (
               <DiceGroupRow
@@ -338,9 +338,9 @@ export function CasinoTile({
             ))
           )}
         </div>
-        {iHaveDiceHere && <span className="text-[9px] font-semibold text-amber-200">내 주사위 있음</span>}
+        {iHaveDiceHere && <span className="text-[9px] font-semibold text-amber-200 light:text-amber-600">내 주사위 있음</span>}
         {anyTiedNow && (
-          <span className="text-[9px] font-semibold text-rose-300">⚔️ 동수 상쇄 잠정 — 정산 시 확정</span>
+          <span className="text-[9px] font-semibold text-rose-300 light:text-rose-600">⚔️ 동수 상쇄 잠정 — 정산 시 확정</span>
         )}
       </div>
 

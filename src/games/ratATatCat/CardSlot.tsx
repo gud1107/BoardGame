@@ -95,7 +95,7 @@ export default function CardSlot({
   const className = `relative flex ${SIZE_DIMS[size]} flex-col items-center justify-center gap-0.5 overflow-hidden rounded-xl border-2 font-bold shadow-sm transition ${
     showFace
       ? "border-amber-300/60 bg-gradient-to-b from-amber-50 to-amber-100 text-amber-950"
-      : "border-white/15 bg-gradient-to-br from-slate-700 to-slate-900 text-white/30"
+      : "border-white/15 light:border-slate-400 bg-gradient-to-br from-slate-700 to-slate-900 text-white/30"
   } ${selected ? "-translate-y-2 ring-4 ring-emerald-300/80" : ""} ${
     highlighted ? "ring-4 ring-sky-300/70 animate-pulse" : ""
   } ${peeking ? "ratc-peek-glow" : ""} ${faded ? "opacity-30" : ""} ${onClick ? "cursor-pointer active:scale-95" : "cursor-default"}`;
@@ -129,7 +129,7 @@ export default function CardSlot({
 
 export function CardBack({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   return (
-    <div className={`flex ${SIZE_DIMS[size]} items-center justify-center rounded-xl border-2 border-white/15 bg-gradient-to-br from-slate-700 to-slate-900 text-white/20`} aria-hidden>
+    <div className={`flex ${SIZE_DIMS[size]} items-center justify-center rounded-xl border-2 border-white/15 light:border-slate-400 bg-gradient-to-br from-slate-700 to-slate-900 text-white/20`} aria-hidden>
       🐾
     </div>
   );

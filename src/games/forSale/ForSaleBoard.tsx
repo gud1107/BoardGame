@@ -100,7 +100,7 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
   const rulebookButton = (
     <button
       onClick={() => setRulebookOpen(true)}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white"
+      className="rounded-full border border-white/15 light:border-slate-300 px-2.5 py-1 text-[11px] text-white/60 light:text-slate-600 transition hover:border-white/30 hover:text-white light:hover:border-slate-400 light:hover:text-slate-900"
     >
       📖 포세일 룰북
     </button>
@@ -114,24 +114,25 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
     const winner = rankings.filter((r) => r.rank === 1);
     return (
       <div
-        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 light:border-slate-200 light:shadow-md p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
         style={{ background: "linear-gradient(160deg,#0c2b3a 0%,#081c26 55%,#040d12 100%)" }}
       >
         <span className="text-5xl">🏆</span>
-        <h2 className="text-2xl font-bold text-sky-100">
+        <h2 className="text-2xl font-bold text-sky-100 light:text-sky-700">
           {winner.map((w) => names[w.seat]).join(", ")}
           {winner.length > 1 ? "님이 공동 승리했습니다!" : "님이 최고 부동산 중개인이 되었습니다!"}
         </h2>
-        <p className="text-xs text-white/50">수표 총액 + 남은 동전 합산이 가장 높은 사람이 승리합니다.</p>
+        <p className="text-xs text-white/50 light:text-slate-500">수표 총액 + 남은 동전 합산이 가장 높은 사람이 승리합니다.</p>
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[420px] border-collapse text-xs">
             <thead>
-              <tr className="text-white/50">
-                <th className="border-b border-white/10 px-2 py-2 text-left">순위</th>
-                <th className="border-b border-white/10 px-2 py-2 text-left">플레이어</th>
-                <th className="border-b border-white/10 px-2 py-2 text-right">수표 합계</th>
-                <th className="border-b border-white/10 px-2 py-2 text-right">남은 동전</th>
-                <th className="border-b border-white/10 px-2 py-2 text-right">총점</th>
+              <tr className="text-white/50 light:text-slate-500">
+                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">순위</th>
+                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-left">플레이어</th>
+                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-right">수표 합계</th>
+                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-right">남은 동전</th>
+                <th className="border-b border-white/10 light:border-slate-200 px-2 py-2 text-right">총점</th>
               </tr>
             </thead>
             <tbody>
@@ -139,15 +140,15 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
                 const p = state.players.find((pl) => pl.seat === seat)!;
                 const checksSum = p.checks.reduce((s, c) => s + c, 0);
                 return (
-                  <tr key={seat} className={rank === 1 ? "bg-sky-400/10" : ""}>
-                    <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-sky-200">{rank === 1 ? "🏆 1" : rank}</td>
-                    <td className="border-b border-white/5 px-2 py-2 text-left text-white">
+                  <tr key={seat} className={rank === 1 ? "bg-sky-400/10 light:bg-sky-50" : ""}>
+                    <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-left font-bold text-sky-200 light:text-sky-700">{rank === 1 ? "🏆 1" : rank}</td>
+                    <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-left text-white light:text-slate-900">
                       {names[seat]}
-                      {seat === viewerSeat && <span className="ml-1 text-sky-200">(나)</span>}
+                      {seat === viewerSeat && <span className="ml-1 text-sky-200 light:text-sky-700">(나)</span>}
                     </td>
-                    <td className="border-b border-white/5 px-2 py-2 text-right text-emerald-300">{formatDollars(checksSum)}</td>
-                    <td className="border-b border-white/5 px-2 py-2 text-right text-amber-300">{formatDollars(p.cash)}</td>
-                    <td className="border-b border-white/5 px-2 py-2 text-right font-bold text-white">{formatDollars(total)}</td>
+                    <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-right text-emerald-300 light:text-emerald-600">{formatDollars(checksSum)}</td>
+                    <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-right text-amber-300 light:text-amber-600">{formatDollars(p.cash)}</td>
+                    <td className="border-b border-white/5 light:border-slate-100 px-2 py-2 text-right font-bold text-white light:text-slate-900">{formatDollars(total)}</td>
                   </tr>
                 );
               })}
@@ -178,15 +179,16 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
 
   return (
     <div
-      className="relative flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
+      className="relative flex flex-col gap-3 rounded-[28px] border border-black/60 light:border-slate-200 light:shadow-md p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
+      // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
       style={{ background: "linear-gradient(160deg,#0f2532 0%,#0a1922 45%,#050d12 100%)" }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-sky-100/70">
+      <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-sky-100/70 light:text-sky-700">
         <span className="flex flex-wrap items-center gap-x-1.5">
           <span className="whitespace-nowrap">
             {state.playerCount}인 · {state.phase === "buying" ? "1단계: 부동산 경매" : "2단계: 수표 판매"} · 남은 현금
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1 font-semibold whitespace-nowrap text-amber-200">
+          <span className="inline-flex shrink-0 items-center gap-1 font-semibold whitespace-nowrap text-amber-200 light:text-amber-700">
             {coinBreakdown(me.cash).map(({ value, count }) => (
               <span key={value} className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap">
                 <CoinChip value={value} size="sm" />×{count}
@@ -195,7 +197,7 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
             {formatDollars(me.cash)}
           </span>
           <span className="whitespace-nowrap">· 수표 누적</span>
-          <span className="shrink-0 font-semibold whitespace-nowrap text-emerald-300">{formatDollars(me.checks.reduce((s, c) => s + c, 0))}</span>
+          <span className="shrink-0 font-semibold whitespace-nowrap text-emerald-300 light:text-emerald-600">{formatDollars(me.checks.reduce((s, c) => s + c, 0))}</span>
         </span>
         <div className="flex gap-1.5">{rulebookButton}</div>
       </div>
@@ -203,31 +205,31 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
       {/* Phase 1 — auction */}
       {state.phase === "buying" && state.auction && (
         <>
-          <section ref={auctionRowRef} className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/25 p-3">
-            <h3 className="text-[11px] font-semibold tracking-wide text-sky-200/80 uppercase">🏘️ 이번 라운드 매물</h3>
+          <section ref={auctionRowRef} className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/25 light:border-slate-200 light:bg-white/80 p-3">
+            <h3 className="text-[11px] font-semibold tracking-wide text-sky-200/80 light:text-sky-700 uppercase">🏘️ 이번 라운드 매물</h3>
             <div className="flex flex-wrap justify-center gap-2">
               {state.auction.openCards.map((c) => (
                 <PropertyCard key={c} value={c} size="lg" />
               ))}
             </div>
-            <div ref={potRef} className="flex flex-col items-center gap-1 rounded-xl border border-amber-300/25 bg-amber-400/5 px-4 py-2">
-              <span className="text-[10px] tracking-wide text-amber-200/70 uppercase">💰 입찰 팟</span>
+            <div ref={potRef} className="flex flex-col items-center gap-1 rounded-xl border border-amber-300/25 bg-amber-400/5 light:border-amber-300 light:bg-amber-50 px-4 py-2">
+              <span className="text-[10px] tracking-wide text-amber-200/70 light:text-amber-700 uppercase">💰 입찰 팟</span>
               <div className="flex min-h-[2.25rem] flex-wrap items-center justify-center gap-1">
                 {state.auction.currentBid > 0 ? (
                   coinBreakdown(state.auction.currentBid).flatMap(({ value, count }) =>
                     Array.from({ length: Math.min(count, 8) }, (_, i) => <CoinChip key={`${value}-${i}`} value={value} size="md" />),
                   )
                 ) : (
-                  <span className="text-[10px] text-white/30">아직 입찰 없음</span>
+                  <span className="text-[10px] text-white/30 light:text-slate-400">아직 입찰 없음</span>
                 )}
               </div>
-              <p className="text-xs text-white/70">
+              <p className="text-xs text-white/70 light:text-slate-600">
                 현재 입찰가:{" "}
-                <span className="font-bold text-sky-300">{formatDollars(state.auction.currentBid)}</span>
+                <span className="font-bold text-sky-300 light:text-sky-700">{formatDollars(state.auction.currentBid)}</span>
                 {state.auction.highBidderSeat !== null && <> ({names[state.auction.highBidderSeat]}님)</>}
               </p>
             </div>
-            <p className="text-xs text-white/50">
+            <p className="text-xs text-white/50 light:text-slate-500">
               {isMyBidTurn ? "🫵 당신 차례입니다!" : `${names[state.auction.activeSeat]}님의 차례를 기다리는 중...`}
             </p>
             {isMyBidTurn && (
@@ -235,14 +237,14 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setBidAmount((n) => Math.max(minBid, n - BID_INCREMENT))}
-                    className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
+                    className="h-8 w-8 rounded-full border border-white/15 light:border-slate-300 text-white/80 light:text-slate-700 hover:border-white/30 light:hover:border-slate-400"
                   >
                     −
                   </button>
-                  <span className="w-24 shrink-0 text-center text-lg font-bold whitespace-nowrap text-white">{formatDollars(bidAmount)}</span>
+                  <span className="w-24 shrink-0 text-center text-lg font-bold whitespace-nowrap text-white light:text-slate-900">{formatDollars(bidAmount)}</span>
                   <button
                     onClick={() => setBidAmount((n) => Math.min(maxBid, n + BID_INCREMENT))}
-                    className="h-8 w-8 rounded-full border border-white/15 text-white/80 hover:border-white/30"
+                    className="h-8 w-8 rounded-full border border-white/15 light:border-slate-300 text-white/80 light:text-slate-700 hover:border-white/30 light:hover:border-slate-400"
                   >
                     +
                   </button>
@@ -280,20 +282,26 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
                   key={seat}
                   ref={setSeatRowRef(seat)}
                   className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2 text-xs transition ${
-                    isActive ? "border-sky-300/60 bg-sky-400/10" : isOut ? "border-white/5 bg-black/10 opacity-60" : "border-white/10 bg-black/20"
+                    isActive
+                      ? "border-sky-300/60 bg-sky-400/10 light:border-sky-400 light:bg-sky-50"
+                      : isOut
+                        ? "border-white/5 bg-black/10 opacity-60 light:border-slate-200 light:bg-slate-100"
+                        : "border-white/10 bg-black/20 light:border-slate-200 light:bg-white/70"
                   }`}
                 >
-                  <span className="flex items-center gap-1.5 font-semibold text-white/90">
-                    <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20"}`} />
+                  <span className="flex items-center gap-1.5 font-semibold text-white/90 light:text-slate-900">
+                    <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(seat) ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`} />
                     {isActive && <span title="차례">👉</span>}
                     {names[seat]}
-                    {isSelf && <span className="text-sky-200">(나)</span>}
+                    {isSelf && <span className="text-sky-200 light:text-sky-700">(나)</span>}
                   </span>
-                  <span className="flex flex-wrap items-center gap-2 text-white/70">
+                  <span className="flex flex-wrap items-center gap-2 text-white/70 light:text-slate-600">
                     {seatBid > 0 && (
                       <span
                         className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${
-                          isHighBidder ? "border-amber-300/70 bg-amber-400/20 text-amber-200" : "border-white/15 bg-white/5 text-white/50"
+                          isHighBidder
+                            ? "border-amber-300/70 bg-amber-400/20 text-amber-200 light:border-amber-400 light:bg-amber-50 light:text-amber-700"
+                            : "border-white/15 bg-white/5 text-white/50 light:border-slate-300 light:bg-white light:text-slate-500"
                         }`}
                       >
                         {isHighBidder ? "👑" : "🎫"} {formatDollars(seatBid)}
@@ -311,10 +319,14 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
             })}
           </section>
 
-          <section className="rounded-2xl border border-sky-300/20 p-2.5 sm:p-3" style={{ background: "linear-gradient(160deg,#0c2b3a 0%,#081c26 55%,#040d12 100%)" }}>
-            <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-sky-200/90 uppercase">🏠 내 부동산 ({me.properties.length}장)</h3>
+          <section
+            className="rounded-2xl border border-sky-300/20 light:border-sky-300 light:shadow-sm p-2.5 sm:p-3"
+            // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
+            style={{ background: "linear-gradient(160deg,#0c2b3a 0%,#081c26 55%,#040d12 100%)" }}
+          >
+            <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-sky-200/90 light:text-sky-700 uppercase">🏠 내 부동산 ({me.properties.length}장)</h3>
             {me.properties.length === 0 ? (
-              <p className="text-xs text-white/30">아직 낙찰받은 부동산이 없습니다.</p>
+              <p className="text-xs text-white/30 light:text-slate-400">아직 낙찰받은 부동산이 없습니다.</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {[...me.properties]
@@ -331,8 +343,8 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
       {/* Phase 2 — selling */}
       {state.phase === "selling" && state.sale && (
         <>
-          <section className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/25 p-3">
-            <h3 className="text-[11px] font-semibold tracking-wide text-emerald-200/80 uppercase">🧾 이번 라운드 수표</h3>
+          <section className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/25 light:border-slate-200 light:bg-white/80 p-3">
+            <h3 className="text-[11px] font-semibold tracking-wide text-emerald-200/80 light:text-emerald-700 uppercase">🧾 이번 라운드 수표</h3>
             <div className="flex flex-wrap justify-center gap-2">
               {state.sale.openChecks.map((c, i) => (
                 <CheckCard key={i} value={c} size="lg" />
@@ -347,7 +359,7 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
                     <CardFlipWrapper flipKey={`${seat}-${flipRound}`} revealed={state.sale!.revealed}>
                       <PropertyCard value={property} highlight={seat === viewerSeat} />
                     </CardFlipWrapper>
-                    <span className="text-[10px] text-white/60">
+                    <span className="text-[10px] text-white/60 light:text-slate-500">
                       {names[seat]}
                       {seat === viewerSeat && " (나)"} {submitted ? (state.sale!.revealed ? "" : "✅") : "⏳"}
                     </span>
@@ -357,8 +369,8 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
             </div>
 
             {state.sale.revealed && state.lastSaleResult && (
-              <div className="mt-1 flex flex-col items-center gap-1.5 text-xs text-white/70">
-                <p className="font-semibold text-emerald-200">정산 결과</p>
+              <div className="mt-1 flex flex-col items-center gap-1.5 text-xs text-white/70 light:text-slate-600">
+                <p className="font-semibold text-emerald-200 light:text-emerald-700">정산 결과</p>
                 {[...state.lastSaleResult.assignments]
                   .sort((a, b) => b.property - a.property)
                   .map((a) => {
@@ -367,12 +379,12 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
                       <p
                         key={a.seat}
                         style={{ animation: "forsale-check-earn-pop 0.5s ease-out" }}
-                        className="flex items-center gap-1.5 rounded-full border border-emerald-300/50 bg-emerald-400/15 px-3 py-1 text-sm font-bold text-emerald-200"
+                        className="flex items-center gap-1.5 rounded-full border border-emerald-300/50 bg-emerald-400/15 px-3 py-1 text-sm font-bold text-emerald-200 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700"
                       >
-                        🎉 {a.property}번 부동산 판매 → <span className="text-base text-emerald-300">+{formatDollars(a.check)}</span>
+                        🎉 {a.property}번 부동산 판매 → <span className="text-base text-emerald-300 light:text-emerald-600">+{formatDollars(a.check)}</span>
                       </p>
                     ) : (
-                      <p key={a.seat} className="text-white/60">
+                      <p key={a.seat} className="text-white/60 light:text-slate-500">
                         {names[a.seat]}: {a.property}번 부동산 → {formatDollars(a.check)}
                       </p>
                     );
@@ -387,13 +399,17 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
             )}
           </section>
 
-          <section className="rounded-2xl border border-emerald-300/20 p-2.5 sm:p-3" style={{ background: "linear-gradient(160deg,#0c2b3a 0%,#081c26 55%,#040d12 100%)" }}>
-            <h3 className="mb-2 flex flex-wrap items-center justify-between gap-1 text-[11px] font-semibold tracking-wide text-emerald-200/90 uppercase">
+          <section
+            className="rounded-2xl border border-emerald-300/20 light:border-emerald-300 light:shadow-sm p-2.5 sm:p-3"
+            // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
+            style={{ background: "linear-gradient(160deg,#0c2b3a 0%,#081c26 55%,#040d12 100%)" }}
+          >
+            <h3 className="mb-2 flex flex-wrap items-center justify-between gap-1 text-[11px] font-semibold tracking-wide text-emerald-200/90 light:text-emerald-700 uppercase">
               <span className="whitespace-nowrap">🧾 내 수표 ({me.checks.length}장)</span>
-              <span className="shrink-0 whitespace-nowrap text-emerald-300">누적 합계 {formatDollars(me.checks.reduce((s, c) => s + c, 0))}</span>
+              <span className="shrink-0 whitespace-nowrap text-emerald-300 light:text-emerald-600">누적 합계 {formatDollars(me.checks.reduce((s, c) => s + c, 0))}</span>
             </h3>
             {me.checks.length === 0 ? (
-              <p className="text-xs text-white/30">아직 판매한 수표가 없습니다.</p>
+              <p className="text-xs text-white/30 light:text-slate-400">아직 판매한 수표가 없습니다.</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {[...me.checks]
@@ -405,12 +421,16 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
             )}
           </section>
 
-          <section className="rounded-2xl border border-emerald-300/20 p-2.5 sm:p-3" style={{ background: "linear-gradient(160deg,#0c2b3a 0%,#081c26 55%,#040d12 100%)" }}>
-            <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-emerald-200/90 uppercase">
+          <section
+            className="rounded-2xl border border-emerald-300/20 light:border-emerald-300 light:shadow-sm p-2.5 sm:p-3"
+            // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
+            style={{ background: "linear-gradient(160deg,#0c2b3a 0%,#081c26 55%,#040d12 100%)" }}
+          >
+            <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-emerald-200/90 light:text-emerald-700 uppercase">
               🏠 내 부동산 ({me.properties.length}장) — 1장을 뒷면으로 제출하세요
             </h3>
             {me.properties.length === 0 ? (
-              <p className="text-xs text-white/30">제출할 부동산이 없습니다.</p>
+              <p className="text-xs text-white/30 light:text-slate-400">제출할 부동산이 없습니다.</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {[...me.properties]
@@ -427,7 +447,7 @@ export default function ForSaleBoard({ state, viewerSeat, names, connectedSeats,
                   ))}
               </div>
             )}
-            {mySubmission !== undefined && !state.sale.revealed && <p className="mt-2 text-center text-xs text-emerald-300">✅ 제출 완료 — 다른 플레이어를 기다리는 중...</p>}
+            {mySubmission !== undefined && !state.sale.revealed && <p className="mt-2 text-center text-xs text-emerald-300 light:text-emerald-600">✅ 제출 완료 — 다른 플레이어를 기다리는 중...</p>}
           </section>
         </>
       )}

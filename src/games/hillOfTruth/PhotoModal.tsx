@@ -23,20 +23,20 @@ export default function PhotoModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
       <div
-        className="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-900 shadow-2xl"
+        className="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-900 shadow-2xl light:border-slate-200 light:bg-white"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-          <h3 className="break-keep text-sm font-bold text-white">📷 {title}</h3>
-          <button onClick={onClose} className="rounded-full p-1.5 text-white/50 hover:bg-white/10 hover:text-white">
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 light:border-slate-200">
+          <h3 className="break-keep text-sm font-bold text-white light:text-slate-900">📷 {title}</h3>
+          <button onClick={onClose} className="rounded-full p-1.5 text-white/50 hover:bg-white/10 hover:text-white light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700">
             ✕
           </button>
         </div>
-        <div className="relative flex-1 overflow-auto bg-black/30">
+        <div className="relative flex-1 overflow-auto bg-black/30 light:bg-slate-100">
           <PhotoWithFallback photo={photo} />
         </div>
-        <div className="border-t border-white/10 px-4 py-2.5">
-          <p className="break-keep text-[11px] text-white/40">출처: {photo.credit}</p>
+        <div className="border-t border-white/10 px-4 py-2.5 light:border-slate-200">
+          <p className="break-keep text-[11px] text-white/40 light:text-slate-400">출처: {photo.credit}</p>
         </div>
       </div>
     </div>
@@ -50,7 +50,7 @@ function PhotoWithFallback({ photo }: { photo: EvidencePhoto }) {
     return (
       <div className="flex h-64 w-full flex-col items-center justify-center gap-2 p-8 text-center">
         <span className="text-3xl">🖼️</span>
-        <p className="break-keep text-xs text-white/50">이미지를 불러올 수 없어요</p>
+        <p className="break-keep text-xs text-white/50 light:text-slate-400">이미지를 불러올 수 없어요</p>
       </div>
     );
   }

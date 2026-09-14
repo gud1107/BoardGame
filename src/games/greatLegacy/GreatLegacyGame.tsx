@@ -547,19 +547,19 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "supabase-missing") {
     return withGuard(
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 light:border-amber-300 light:bg-amber-50 p-8 text-center">
         <span className="text-3xl">⚠️</span>
-        <h2 className="text-lg font-bold text-white">온라인 대전을 사용할 수 없어요</h2>
-        <p className="max-w-sm text-sm text-amber-100/80">위대한 유산은 실시간 온라인 대전 전용이라 Supabase 설정이 필요합니다.</p>
+        <h2 className="text-lg font-bold text-white light:text-slate-900">온라인 대전을 사용할 수 없어요</h2>
+        <p className="max-w-sm text-sm text-amber-100/80 light:text-amber-800">위대한 유산은 실시간 온라인 대전 전용이라 Supabase 설정이 필요합니다.</p>
       </div>,
     );
   }
 
   if (phase === "room-full") {
     return withGuard(
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 light:border-rose-300 light:bg-rose-50 p-8 text-center">
         <span className="text-3xl">🚫</span>
-        <h2 className="text-lg font-bold text-white">이미 다른 사람이 참여 중인 방이에요</h2>
+        <h2 className="text-lg font-bold text-white light:text-slate-900">이미 다른 사람이 참여 중인 방이에요</h2>
         <button onClick={handleLeave} className="mt-2 rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-500">
           처음으로
         </button>
@@ -569,9 +569,9 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "channel-error") {
     return withGuard(
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 light:border-rose-300 light:bg-rose-50 p-8 text-center">
         <span className="text-3xl">📡</span>
-        <h2 className="text-lg font-bold text-white">연결에 실패했습니다</h2>
+        <h2 className="text-lg font-bold text-white light:text-slate-900">연결에 실패했습니다</h2>
         <button onClick={handleLeave} className="mt-2 rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-500">
           다시 시도
         </button>
@@ -585,7 +585,7 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
         gameId="great-legacy"
         icon="🏛️"
         title="위대한 유산 온라인 대전"
-        description={<p className="text-sm text-white/50">4인 또는 8인이 각자 기기로 접속해서 실시간 경매를 벌여요.</p>}
+        description={<p className="text-sm text-white/50 light:text-slate-500">4인 또는 8인이 각자 기기로 접속해서 실시간 경매를 벌여요.</p>}
         actions={
           <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
             <button
@@ -602,7 +602,7 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
                 setIntent("join");
                 setPhase("enter-name");
               }}
-              className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30"
+              className="w-full rounded-xl border border-white/15 light:border-slate-300 py-3 text-sm font-semibold text-white/80 light:text-slate-700 transition hover:border-white/30 light:hover:border-slate-400"
             >
               🔑 초대 코드로 참여
             </button>
@@ -614,14 +614,14 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "enter-name") {
     return withGuard(
-      <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-        <h2 className="text-base font-bold text-white">{intent === "create" ? "방 만들기" : "초대 코드로 참여"}</h2>
-        <div className="flex flex-col gap-1.5 text-sm text-white/70">
+      <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/90 light:shadow-sm p-6">
+        <h2 className="text-base font-bold text-white light:text-slate-900">{intent === "create" ? "방 만들기" : "초대 코드로 참여"}</h2>
+        <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
           내 닉네임
           <RoomNicknameField value={identity} onChange={setIdentity} onEnter={enterRoom} accent="emerald" />
         </div>
         {intent === "join" && (
-          <label className="flex flex-col gap-1.5 text-sm text-white/70">
+          <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
             초대 코드 (4자리)
             <input
               value={codeInput}
@@ -634,13 +634,13 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
               }}
               placeholder="0000"
               inputMode="numeric"
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-center text-lg font-semibold tracking-[0.3em] text-white placeholder:text-white/20 focus:border-emerald-400 focus:outline-none"
+              className="rounded-lg border border-white/10 bg-white/5 light:border-slate-300 light:bg-white px-3 py-2 text-center text-lg font-semibold tracking-[0.3em] text-white light:text-slate-900 placeholder:text-white/20 light:placeholder:text-slate-400 focus:border-emerald-400 focus:outline-none"
             />
           </label>
         )}
         {intent === "create" && (
           <>
-            <div className="flex flex-col gap-1.5 text-sm text-white/70">
+            <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
               인원 모드
               <div className="flex gap-2">
                 {(["4p", "8p"] as const).map((m) => (
@@ -649,16 +649,18 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
                     type="button"
                     onClick={() => setMode(m)}
                     className={`flex-1 rounded-xl border px-3 py-2 text-xs transition ${
-                      mode === m ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-100" : "border-white/15 text-white/60 hover:border-white/30"
+                      mode === m
+                        ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-100 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700"
+                        : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
                     }`}
                   >
                     <p className="font-semibold">{m === "4p" ? "👥 4인 (원작)" : "👥👥 8인 (리밸런싱)"}</p>
-                    <p className="text-white/50">{m === "4p" ? "140코인 · 22장 경매" : "110코인 · 25장 경매"}</p>
+                    <p className="text-white/50 light:text-slate-500">{m === "4p" ? "140코인 · 22장 경매" : "110코인 · 25장 경매"}</p>
                   </button>
                 ))}
               </div>
             </div>
-            <div className="flex flex-col gap-1.5 text-sm text-white/70">
+            <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
               턴 제한시간
               <div className="flex gap-2">
                 {(["none", "15s", "30s"] as const).map((t) => (
@@ -667,7 +669,9 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
                     type="button"
                     onClick={() => setTimeLimitMode(t)}
                     className={`flex-1 rounded-xl border px-3 py-2 text-xs transition ${
-                      timeLimitMode === t ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-100" : "border-white/15 text-white/60 hover:border-white/30"
+                      timeLimitMode === t
+                        ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-100 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700"
+                        : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
                     }`}
                   >
                     {t === "none" ? "제한 없음" : t === "15s" ? "15초" : "30초"}
@@ -675,36 +679,40 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
                 ))}
               </div>
             </div>
-            <div className="flex flex-col gap-1.5 text-sm text-white/70">
+            <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
               코인 공개 모드
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setCoinVisibility("secret")}
                   className={`flex-1 rounded-xl border px-3 py-2 text-left text-xs transition ${
-                    coinVisibility === "secret" ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-100" : "border-white/15 text-white/60 hover:border-white/30"
+                    coinVisibility === "secret"
+                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-100 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700"
+                      : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
                   }`}
                 >
                   <p className="font-semibold">🔒 비밀 모드</p>
-                  <p className="text-white/50">내 코인만 나에게 보임</p>
+                  <p className="text-white/50 light:text-slate-500">내 코인만 나에게 보임</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => setCoinVisibility("public")}
                   className={`flex-1 rounded-xl border px-3 py-2 text-left text-xs transition ${
-                    coinVisibility === "public" ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-100" : "border-white/15 text-white/60 hover:border-white/30"
+                    coinVisibility === "public"
+                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-100 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700"
+                      : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
                   }`}
                 >
                   <p className="font-semibold">👁️ 공개 모드</p>
-                  <p className="text-white/50">모두의 코인이 공개됨</p>
+                  <p className="text-white/50 light:text-slate-500">모두의 코인이 공개됨</p>
                 </button>
               </div>
             </div>
           </>
         )}
-        {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">{formError}</p>}
+        {formError && <p className="rounded-lg bg-rose-500/10 light:bg-rose-50 px-3 py-2 text-xs text-rose-300 light:text-rose-700">{formError}</p>}
         <div className="flex gap-2">
-          <button onClick={() => setPhase("choose")} className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30">
+          <button onClick={() => setPhase("choose")} className="flex-1 rounded-xl border border-white/15 light:border-slate-300 py-2.5 text-sm text-white/70 light:text-slate-600 hover:border-white/30 light:hover:border-slate-400">
             뒤로
           </button>
           <button onClick={enterRoom} className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500">
@@ -717,23 +725,23 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "connecting" || phase === "waiting") {
     return withGuard(
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/90 light:shadow-sm p-8 text-center">
         {phase === "connecting" ? (
-          <p className="text-sm text-white/50">연결하는 중...</p>
+          <p className="text-sm text-white/50 light:text-slate-500">연결하는 중...</p>
         ) : (
           <>
-            <p className="text-sm text-white/50">초대 코드</p>
-            <p className="text-4xl font-bold tracking-[0.3em] text-white">{roomCode}</p>
-            <button onClick={() => navigator.clipboard?.writeText(shareUrl)} className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-white/30">
+            <p className="text-sm text-white/50 light:text-slate-500">초대 코드</p>
+            <p className="text-4xl font-bold tracking-[0.3em] text-white light:text-slate-900">{roomCode}</p>
+            <button onClick={() => navigator.clipboard?.writeText(shareUrl)} className="rounded-full border border-white/15 light:border-slate-300 px-4 py-2 text-xs text-white/70 light:text-slate-600 hover:border-white/30 light:hover:border-slate-400">
               🔗 초대 링크 복사
             </button>
-            <p className="text-xs text-white/50">
+            <p className="text-xs text-white/50 light:text-slate-500">
               {occupants.length + botSeats.length} / {knownTargetPlayerCount}명 참여 중 ({knownMode === "4p" ? "4인 모드" : "8인 모드"})
             </p>
             {isHost && occupants.length + botSeats.length < knownTargetPlayerCount && (
               <FillEmptySeatsButton emptyCount={knownTargetPlayerCount - occupants.length - botSeats.length} onFill={fillEmptySeatsWithBots} />
             )}
-            <p className="text-xs text-white/40">
+            <p className="text-xs text-white/40 light:text-slate-400">
               {knownTimeLimitMode === "none" ? "⏱️ 제한시간 없음" : `⏱️ 턴당 ${TIME_LIMIT_SECONDS[knownTimeLimitMode]}초 제한`} ·{" "}
               {knownCoinVisibility === "public" ? "👁️ 공개 모드" : "🔒 비밀 모드"}
             </p>
@@ -743,18 +751,18 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
                 const botIdx = botSeats.indexOf(seat);
                 const isBot = botIdx >= 0;
                 return (
-                  <div key={seat} className="flex items-center justify-between gap-3 text-sm text-white/70">
+                  <div key={seat} className="flex items-center justify-between gap-3 text-sm text-white/70 light:text-slate-600">
                     <span className="flex items-center gap-1.5">
                       {occ && <Avatar size={20} />}
                       {seat === mySeat ? "나" : `${seat + 1}번`}:{" "}
-                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30">대기 중...</span>}
+                      {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30 light:text-slate-400">대기 중...</span>}
                     </span>
                     {isHost && seat !== mySeat && !occ && (isBot ? <RemoveBotButton onClick={() => removeBotAtSeat(seat)} /> : <AddBotButton onAddWithLevel={(level) => addBotAtSeat(seat, level)} />)}
                   </div>
                 );
               })}
             </div>
-            <p className="text-xs text-white/40">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다. AI 봇으로도 채울 수 있어요.</p>
+            <p className="text-xs text-white/40 light:text-slate-400">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다. AI 봇으로도 채울 수 있어요.</p>
           </>
         )}
       </div>,
@@ -769,14 +777,14 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
 
   if (phase === "post-game" && finalResult) {
     return withGuard(
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+      <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/90 light:shadow-sm p-8 text-center">
         <span className="text-4xl">🏆</span>
-        <p className="text-white/80">
+        <p className="text-white/80 light:text-slate-700">
           {finalResult.winnerName}
           {finalResult.tied ? " 님 외 공동 우승으로 게임이 끝났어요." : " 님 우승으로 게임이 끝났어요."}
         </p>
         <div className="flex gap-2">
-          <button onClick={handleLeave} className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30">
+          <button onClick={handleLeave} className="rounded-xl border border-white/15 light:border-slate-300 px-4 py-2.5 text-sm text-white/70 light:text-slate-600 hover:border-white/30 light:hover:border-slate-400">
             나가기
           </button>
           <button onClick={handleRematch} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500">

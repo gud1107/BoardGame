@@ -5,9 +5,9 @@ import {
 } from "@/constants/patchNotes";
 
 const TYPE_META: Record<PatchNoteChangeType, { label: string; className: string }> = {
-  FEAT: { label: "NEW", className: "bg-emerald-500/20 text-emerald-300" },
-  IMPROVE: { label: "IMPROVE", className: "bg-sky-500/20 text-sky-300" },
-  FIX: { label: "FIX", className: "bg-rose-500/20 text-rose-300" },
+  FEAT: { label: "NEW", className: "bg-emerald-500/20 text-emerald-300 light:bg-emerald-100 light:text-emerald-800" },
+  IMPROVE: { label: "IMPROVE", className: "bg-sky-500/20 text-sky-300 light:bg-sky-100 light:text-sky-800" },
+  FIX: { label: "FIX", className: "bg-rose-500/20 text-rose-300 light:bg-rose-100 light:text-rose-800" },
 };
 
 /**
@@ -23,13 +23,13 @@ export default function PatchNoteList() {
   return (
     <ol className="flex flex-col gap-3">
       {PATCH_NOTES.map((entry) => (
-        <li key={entry.version} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+        <li key={entry.version} className="rounded-2xl border border-white/10 bg-white/5 p-4 light:border-slate-200 light:bg-slate-50">
           <div className="mb-2.5 flex flex-wrap items-baseline gap-2">
-            <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-xs font-bold text-rose-200">
+            <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-xs font-bold text-rose-200 light:bg-rose-100 light:text-rose-800">
               {entry.version}
             </span>
-            <span className="text-xs text-white/40">{entry.releaseDate}</span>
-            <span className="text-sm font-semibold text-white">{entry.title}</span>
+            <span className="text-xs text-white/40 light:text-slate-400">{entry.releaseDate}</span>
+            <span className="text-sm font-semibold text-white light:text-slate-900">{entry.title}</span>
           </div>
           <ul className="flex flex-col gap-1.5">
             {entry.changes.map((change, i) => {
@@ -38,9 +38,9 @@ export default function PatchNoteList() {
               return (
                 <li
                   key={i}
-                  className="flex flex-wrap items-start gap-1.5 text-xs leading-relaxed text-white/70 sm:text-[13px]"
+                  className="flex flex-wrap items-start gap-1.5 text-xs leading-relaxed text-white/70 sm:text-[13px] light:text-slate-600"
                 >
-                  <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-white/70">
+                  <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-white/70 light:bg-slate-200 light:text-slate-600">
                     {gameMeta.emoji} {gameMeta.label}
                   </span>
                   <span

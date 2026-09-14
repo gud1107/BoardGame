@@ -122,7 +122,7 @@ export function FlyingPassCard({
   return createPortal(
     <div ref={elRef} className="pointer-events-none fixed z-[70] -translate-x-1/2 -translate-y-1/2" style={{ left: 0, top: 0, animation: "forsale-pass-fly 0.55s ease-out forwards" }}>
       <PropertyCard value={event.card} className="scale-90" />
-      <p className="mt-1 text-center text-[10px] font-bold text-rose-300">{event.refundPaid > 0 ? `${formatDollars(event.refundPaid)} 정산` : "포기"}</p>
+      <p className="mt-1 text-center text-[10px] font-bold text-rose-300 light:text-rose-600">{event.refundPaid > 0 ? `${formatDollars(event.refundPaid)} 정산` : "포기"}</p>
     </div>,
     document.body,
   );
@@ -140,10 +140,10 @@ export function AuctionWinToast({ winnerName, card, paid, onDone }: { winnerName
 
   return createPortal(
     <div className="pointer-events-none fixed top-6 left-1/2 z-[75] -translate-x-1/2" style={{ animation: "forsale-win-toast 1.7s ease-out forwards" }}>
-      <div className="flex items-center gap-2 rounded-full border border-sky-300/50 bg-gradient-to-r from-sky-950/95 to-black/95 px-5 py-2.5 shadow-[0_10px_40px_-10px_rgba(56,189,248,0.6)]">
+      <div className="flex items-center gap-2 rounded-full border border-sky-300/50 light:border-sky-300 bg-gradient-to-r from-sky-950/95 to-black/95 light:from-white light:to-sky-50 px-5 py-2.5 shadow-[0_10px_40px_-10px_rgba(56,189,248,0.6)] light:shadow-md">
         <span className="text-xl">🔨</span>
-        <p className="text-sm font-semibold text-sky-100">
-          {winnerName}님이 {card}번 부동산 낙찰! <span className="text-sky-300">{formatDollars(paid)}</span> 지불
+        <p className="text-sm font-semibold text-sky-100 light:text-sky-700">
+          {winnerName}님이 {card}번 부동산 낙찰! <span className="text-sky-300 light:text-sky-700">{formatDollars(paid)}</span> 지불
         </p>
       </div>
     </div>,
@@ -232,7 +232,7 @@ export function FlyingBidCoin({
       style={{ left: 0, top: 0, animation: "forsale-bid-coin-fly 0.5s ease-out forwards" }}
     >
       <CoinChip value={event.amount >= 2000 ? 2000 : 1000} size="lg" />
-      <p className="text-[10px] font-bold text-amber-300">+{formatDollars(event.amount)}</p>
+      <p className="text-[10px] font-bold text-amber-300 light:text-amber-700">+{formatDollars(event.amount)}</p>
     </div>,
     document.body,
   );

@@ -133,15 +133,15 @@ function GuideContent({
   return (
     <div className="flex flex-col gap-3">
       {/* Role & team badge */}
-      <section className="flex flex-col gap-2 rounded-xl border border-amber-300/20 bg-amber-400/[0.06] p-3">
+      <section className="flex flex-col gap-2 rounded-xl border border-amber-300/20 bg-amber-400/[0.06] p-3 light:bg-amber-50 light:border-amber-200">
         <div className="flex items-center gap-2">
           <span className="text-2xl">{roleMeta.icon}</span>
           <div className="flex flex-col">
-            <span className="text-sm font-bold text-white">
+            <span className="text-sm font-bold text-white light:text-slate-900">
               {roleMeta.label}
             </span>
             <span
-              className={`text-[11px] ${viewer.team === "good" ? "text-sky-300" : "text-rose-300"}`}
+              className={`text-[11px] ${viewer.team === "good" ? "text-sky-300 light:text-sky-600" : "text-rose-300 light:text-rose-600"}`}
             >
               {teamMeta.icon} {teamMeta.label}
             </span>

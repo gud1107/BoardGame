@@ -24,8 +24,8 @@ export default function GameCategoryRow({ category }: { category: GameCategoryDe
   return (
     <section className="mb-6">
       <div className="mb-3 px-4">
-        <h2 className="text-base font-bold text-white">{category.title}</h2>
-        <p className="mt-0.5 text-xs text-white/50">{category.description}</p>
+        <h2 className="text-base font-bold text-white light:text-slate-900">{category.title}</h2>
+        <p className="mt-0.5 text-xs text-white/50 light:text-slate-500">{category.description}</p>
       </div>
       <div
         className="scrollbar-hide flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2"
