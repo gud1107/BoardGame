@@ -3,7 +3,8 @@ import type { GameMeta } from "@/games/types";
 import GameThumbnail from "./GameThumbnail";
 import { GENRE_META } from "@/games/genres";
 import { GAME_COLLECTIONS } from "@/games/collections";
-import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { useGoldClickBurst } from "./lobby/useGoldClickBurst";
+import GoldParticleLayer from "./lobby/GoldParticleLayer";
 
 function formatPlayers(g: GameMeta) {
   const { min, max } = g.players;
@@ -17,6 +18,7 @@ function formatTime(g: GameMeta) {
 
 export default function GameCard({ game }: { game: GameMeta }) {
   const collection = game.collectionId ? GAME_COLLECTIONS[game.collectionId] : undefined;
+  const { particles, isPressed, triggerBurst } = useGoldClickBurst();
 
   const content = (
     <div
@@ -26,10 +28,12 @@ export default function GameCard({ game }: { game: GameMeta }) {
         game.playable
           ? "hover:-translate-y-1 hover:border-amber-400/50 hover:shadow-[0_8px_28px_rgba(245,158,11,0.15)] active:scale-95 light:hover:border-amber-500/60 light:hover:shadow-md"
           : "opacity-70"
-      }`}
+      } ${isPressed ? "lobby-card-pressed scale-95 brightness-125" : ""}`}
     >
       {/* 카드 상단 골드 림라이트 — 다크 럭셔리 리뉴얼(2026-09-12) */}
       <div className="absolute top-0 right-0 left-0 h-px bg-gradient-to-r from-transparent via-amber-400/0 to-transparent transition-all duration-500 group-hover:via-amber-300/60" />
+      {/* 클릭 시네마틱 골드 파티클 버스트 — 2026-09-15 세션, useGoldClickBurst.ts */}
+      <GoldParticleLayer particles={particles} />
       <div
         className="relative flex aspect-[4/5] items-center justify-center overflow-hidden text-6xl"
         style={{
@@ -96,15 +100,7 @@ export default function GameCard({ game }: { game: GameMeta }) {
     return <div className="h-full cursor-not-allowed">{content}</div>;
   }
   return (
-    <Link
-      href={`/games/${game.id}`}
-      className="h-full"
-      onClick={() => {
-        const engine = getSoundEngine();
-        engine.unlock();
-        engine.playWoodTap();
-      }}
-    >
+    <Link href={`/games/${game.id}`} className="h-full" onClick={triggerBurst}>
       {content}
     </Link>
   );

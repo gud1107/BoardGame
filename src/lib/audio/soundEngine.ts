@@ -2329,6 +2329,40 @@ class SoundEngine {
       click.stop(at + 0.06);
     });
   }
+
+  /** 로비 게임 카드 클릭(2026-09-15 세션, GameCard/GameShowcaseCard의 골드 버스트 FX 동기화용) — 묵직한 카지노 칩 드롭 저음 thunk + 곧이어 번지는 크리스탈 차임 3화음(장3화음 상행). */
+  playLuxuryChime() {
+    if (!this.gate("luxuryChime", 150)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const thunk = ctx.createOscillator();
+    thunk.type = "sine";
+    thunk.frequency.setValueAtTime(180, now);
+    thunk.frequency.exponentialRampToValueAtTime(70, now + 0.09);
+    const thunkGain = ctx.createGain();
+    thunkGain.gain.setValueAtTime(0.001, now);
+    thunkGain.gain.linearRampToValueAtTime(0.24, now + 0.008);
+    thunkGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+    thunk.connect(thunkGain).connect(this.sfxGain);
+    thunk.start(now);
+    thunk.stop(now + 0.17);
+
+    [1046.5, 1318.5, 1568].forEach((freq, i) => {
+      const at = now + 0.03 + i * 0.045;
+      const bell = ctx.createOscillator();
+      bell.type = "triangle";
+      bell.frequency.value = freq;
+      const bellGain = ctx.createGain();
+      bellGain.gain.setValueAtTime(0.001, at);
+      bellGain.gain.linearRampToValueAtTime(0.1, at + 0.012);
+      bellGain.gain.exponentialRampToValueAtTime(0.001, at + 0.32);
+      bell.connect(bellGain).connect(this.sfxGain!);
+      bell.start(at);
+      bell.stop(at + 0.34);
+    });
+  }
 }
 
 let instance: SoundEngine | null = null;

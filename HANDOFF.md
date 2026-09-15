@@ -31,6 +31,31 @@
 `vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
 길게 재시도하지 마세요.
 
+## ✨ 로비 게임 카드 클릭 시네마틱 골드 버스트 FX — 2026-09-15 신규
+
+- 요청 브리프는 카드 클릭 시 "방 만들기/입장 선택 모달이 `scale-90 -> scale-100`으로 등장"하는
+  3단계 시퀀스(프레스 → 파티클 → 모달 확장)를 전제했으나 실체와 다름 — 카드 클릭은 처음부터
+  `next/link`로 `/games/[gameId]`에 즉시 이동할 뿐 공용 모달이 없고, 방 만들기/입장은 게임별
+  페이지 자체의 개별 phase 플로우가 처리한다([[create-room-rulebook-viewer]] 세션과 동일 결론:
+  "공용 CreateRoomModal 없음"). 브리프의 `tailwind.config.js` 키프레임 추가 방식도 실체와
+  불일치 — 이 프로젝트는 Tailwind v4 CSS-first라 그런 config 파일 자체가 없고, 신규 키프레임은
+  항상 `globals.css`에 추가하는 기존 컨벤션을 그대로 따름. 존재하지 않는 모달을 지어내는 대신,
+  실제 네비게이션(Link의 기본 클릭 동작)을 가로막지 않는 순수 장식 레이어로 구현.
+- **3D 프레스 + 골드 파티클 버스트**: `src/components/lobby/useGoldClickBurst.ts`(공유 훅) +
+  `GoldParticleLayer.tsx`(공유 렌더 레이어)를 `GameCard.tsx`(모바일/일반 그리드·카테고리
+  캐러셀용)와 `GameShowcaseCard.tsx`(데스크톱 xl+ 대시보드용) 양쪽이 공유. 클릭 좌표 기준 14개
+  파티클이 `--angle`/`--distance` 인라인 커스텀 프로퍼티로 방사형 확산(기존
+  `dalmuti-fx-particle`/`dalmuti-exchange-spark`와 동일 기법), `globals.css`에
+  `lobby-card-gold-particle`/`lobby-card-press-glow` 키프레임 신규. 카드 자체는 클릭 순간
+  `scale-95 brightness-125` + 골드 림글로우 펄스로 눌림 반응, 300ms 뒤 자동 해제.
+- **오디오**: `soundEngine.ts`에 `playLuxuryChime()` 신규(저음 칩 드롭 thunk + 상행 크리스탈
+  차임 3화음) — 두 카드 컴포넌트에서만 기존 `playWoodTap()` 호출을 이걸로 교체, `playWoodTap()`
+  자체는 사운드 설정 미리듣기 등 다른 곳에서 계속 쓰이므로 그대로 둠.
+- 캐시된 Playwright Chromium으로 `next build && next start` 프로덕션 빌드를 직접 클릭해
+  검증 — 정지 스크린샷 한 프레임으로는 340ms 버스트가 잘 안 보여서(작은 파티클+빠른 페이드는
+  단일 프레임 캡처의 근본적 한계) computed style로 파티클 좌표/투명도/색상/애니메이션 적용을
+  직접 확인함. `tsc`/`eslint`/`next build` 클린.
+
 ## 📝 패치노트 일별 백필: 2026-09-10~09-14 (v1.33.1~v1.37.0) — 2026-09-15
 
 `src/constants/patchNotes.ts`(단일 소스, `/patch-notes` 페이지가 그대로 렌더링)가

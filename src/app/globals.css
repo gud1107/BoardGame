@@ -5275,3 +5275,44 @@ body {
 .hill-of-truth-fail-glow {
   animation: hill-of-truth-fail-glow 0.35s ease-out both;
 }
+
+/* 로비 게임 카드 클릭 시네마틱 골드 버스트 (2026-09-15 세션, see
+   src/components/lobby/useGoldClickBurst.ts, shared by GameCard.tsx and
+   GameShowcaseCard.tsx) — 카드를 누르는 순간 3D 프레스 + 골드 림라이트
+   번쩍임, 클릭 좌표 기준 파티클이 방사형으로 흩뿌려지는 장식. 카드 클릭은
+   실제로는 next/link의 즉시 페이지 이동이고(방 만들기/입장 선택은 공용 모달
+   없이 게임별 페이지 자체의 개별 phase 플로우 — HANDOFF.md 참고) 그 동작을
+   가로막지 않는 순수 오버레이로만 설계했다. 파티클마다 `--angle`/`--distance`를
+   인라인으로 지정하는 기법은 dalmuti-fx-particle/dalmuti-exchange-spark와
+   동일. */
+@keyframes lobby-card-press-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+  30% {
+    box-shadow: 0 0 32px 6px rgba(251, 191, 36, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+}
+.lobby-card-pressed {
+  animation: lobby-card-press-glow 0.3s ease-out;
+}
+
+@keyframes lobby-card-gold-particle {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(0) scale(1);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(var(--distance, 46px)) scale(0.2);
+  }
+}
+.lobby-card-gold-particle {
+  animation: lobby-card-gold-particle 0.34s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+}
