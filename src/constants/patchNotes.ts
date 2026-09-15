@@ -48,6 +48,126 @@ export interface PatchNoteEntry {
  */
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.37.0",
+    releaseDate: "2026-09-14",
+    title: "사이트 전체 다크/라이트 테마 전환 도입, 달무티 자동 패스 설정창 모바일 잘림 수정",
+    changes: [
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "로비 및 전 30개 온라인 게임에 다크/라이트 테마 전환 기능 추가, 새로고침 없이 즉시 전환되며 선택값 저장",
+      },
+      {
+        game: "dalmuti",
+        type: "FIX",
+        desc: "자동 패스 설정창이 모바일 좁은 화면에서 화면 밖으로 잘리던 문제 수정, 화면 중앙 모달 방식으로 전환",
+      },
+    ],
+  },
+  {
+    version: "v1.36.0",
+    releaseDate: "2026-09-13",
+    title: "기억의 만찬·위대한 유산 신규 추가, 달무티 엔딩 쇼다운 연출",
+    changes: [
+      {
+        game: "memory-feast",
+        type: "FEAT",
+        desc: "기억의 만찬 신규 추가 — 2인용 카드 위치 기억 매칭 게임, 이지/노멀/하드 난이도(접시 수·라운드 수·힌트 노출 시간 차등) 지원",
+      },
+      {
+        game: "great-legacy",
+        type: "FEAT",
+        desc: "위대한 유산 신규 추가 — 4인/8인 모드 지원",
+      },
+      {
+        game: "dalmuti",
+        type: "FEAT",
+        desc: "게임 종료 직전 마지막까지 공개되지 않은 패를 여는 쇼다운 연출 추가",
+      },
+      {
+        game: "dalmuti",
+        type: "FIX",
+        desc: "모바일에서 다른 좌석의 패스 음성이 재생되지 않던 오디오 잠금 문제 수정",
+      },
+    ],
+  },
+  {
+    version: "v1.35.0",
+    releaseDate: "2026-09-12",
+    title: "로비 데스크톱 대시보드 전면 개편, 다크 럭셔리 테마 적용",
+    changes: [
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "데스크톱 화면에 실시간 참여 가능한 방 목록(활성 방) 인프라 신규 구축",
+      },
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "데스크톱 로비를 카드 그리드 중심 레이아웃으로 재편, 게임 카드에 실시간 인원수 뱃지 표시",
+      },
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "로비 전반을 블랙&골드 톤의 다크 럭셔리 테마로 리스킨",
+      },
+      {
+        game: "common",
+        type: "FIX",
+        desc: "데스크톱 대시보드 개편 과정에서 빠졌던 인원수 필터 칩(전체/2인/3~4인/5~7인/8인) 복원",
+      },
+    ],
+  },
+  {
+    version: "v1.34.0",
+    releaseDate: "2026-09-11",
+    title: "진실의 고개 오탐 판정 수정 및 오답 연출 강화",
+    changes: [
+      {
+        game: "hill-of-truth",
+        type: "FIX",
+        desc: "특정 이름만 언급해도 무조건 정답 처리되던 오판정 버그 수정, 관련 키워드 65곳 점검 및 오탐 유발 시나리오 문구 보정",
+      },
+      {
+        game: "hill-of-truth",
+        type: "FEAT",
+        desc: "오답 선언 시 화면 흔들림·경고 배너·효과음 연출 추가",
+      },
+      {
+        game: "hill-of-truth",
+        type: "FIX",
+        desc: "복기 모달이 3초 후 자동으로 닫히거나 배경 클릭으로 닫히던 동작 제거, 버튼으로만 닫히도록 변경",
+      },
+    ],
+  },
+  {
+    version: "v1.33.1",
+    releaseDate: "2026-09-10",
+    title: "말달리자 백그라운드 복귀 애니메이션 및 페루도 모바일 조작 버튼 위치 수정",
+    changes: [
+      {
+        game: "mal-dalli-ja",
+        type: "FIX",
+        desc: "탭을 벗어났다가 돌아왔을 때 이동 중이던 말이 잠시 사라지던 문제 수정",
+      },
+      {
+        game: "mal-dalli-ja",
+        type: "FIX",
+        desc: "탭 복귀 시 정상 진행 중인 이동 애니메이션까지 강제 중단되던 문제 수정",
+      },
+      {
+        game: "perudo",
+        type: "FIX",
+        desc: "모바일에서 헤더가 인원수에 따라 늘어나 보드/조작부를 밀어내던 문제 수정, 플레이어 주사위 현황을 하단 독으로 이동",
+      },
+      {
+        game: "perudo",
+        type: "FIX",
+        desc: "언제든 호출 가능한 '맞아!' 버튼이 모바일 내부 스크롤 영역에 갇혀있던 문제 수정",
+      },
+    ],
+  },
+  {
     version: "v1.33.0",
     releaseDate: "2026-09-09",
     title: "페루도 모바일 보드 재구축, 인게임 패치노트 열람 시 접속 끊김 방지",
