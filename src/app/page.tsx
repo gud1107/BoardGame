@@ -6,9 +6,7 @@ import { GENRE_META, GENRE_ORDER } from "@/games/genres";
 import type { GameGenre } from "@/games/types";
 import GameGrid from "@/components/GameGrid";
 import CollectionShowcase from "@/components/CollectionShowcase";
-import GameCategoryRow from "@/components/lobby/GameCategoryRow";
 import DesktopDashboard from "@/components/lobby/DesktopDashboard";
-import { GAME_CATEGORIES } from "@/constants/gameCategories";
 import { PLAYER_FILTERS } from "@/constants/playerFilters";
 import { DEFAULT_SORT_OPTION, type SortOption, sortGamesBy } from "@/constants/sortOptions";
 import SortFilterChips from "@/components/lobby/SortFilterChips";
@@ -35,9 +33,9 @@ export default function DashboardPage() {
   // Query matches title (kr/en), theme tags, and description keywords —
   // this single `query` state is shared by two inputs that are never both
   // visible at once: the sticky mobile search bar pinned above the page
-  // title, and the desktop-only (`hidden sm:block`) input further down
-  // (2026-09-02 AskUserQuestion added the section below the carousel;
-  // 2026-09-03 AskUserQuestion moved its input to the sticky bar on mobile).
+  // title, and the desktop-only (`hidden sm:flex`) input at the bottom of
+  // the showcase (2026-09-16: moved there from the top filter row to keep
+  // the header uncluttered — see HANDOFF.md).
   const baseFiltered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filter = PLAYER_FILTERS[filterIdx];
@@ -141,37 +139,13 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Mobile-only (< sm) Netflix-style category carousel — a curated
-          preview shown ABOVE the full searchable catalog below (as of
-          2026-09-02 that section is no longer desktop-only; see its own
-          comment). `-mx-4` cancels the page container's own `px-4` (its only
-          horizontal padding below `sm`, since `sm:px-6` doesn't apply here)
-          so each row's cards can bleed to the viewport edge — the "next card
-          peeks in" swipe affordance only works if the row isn't boxed in by
-          the container's padding.
-
-          2026-09-06 AskUserQuestion: while a mobile search query is active,
-          this collapses out (grid-rows 1fr→0fr + opacity, not unmounted) so
-          the search results grid below reads as promoted to the top of the
-          viewport instead of pushed down by the carousel. Reappears with the
-          same transition when the query is cleared. */}
-      <div
-        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out sm:hidden ${
-          isSearching ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
-        }`}
-      >
-        <div className="-mx-4 overflow-hidden">
-          {GAME_CATEGORIES.map((category) => (
-            <GameCategoryRow key={category.id} category={category} />
-          ))}
-        </div>
-      </div>
-
-      {/* Full searchable catalog. On mobile this now renders below the
-          curated carousel above (rather than being hidden entirely) so every
-          registered game — not just the 6 curated ones — stays reachable via
-          search or scroll (2026-09-02, AskUserQuestion: keep the carousel,
-          add this section underneath on mobile too). */}
+      {/* 2026-09-16: the Netflix-style horizontal-scroll category carousel
+          that used to render here (curated preview above the full catalog)
+          was removed outright — on mobile its edge-swipe gesture competed
+          with the browser's own back/forward swipe navigation, and every
+          game it curated is already reachable in the grid below. See
+          HANDOFF.md; `GameCategoryRow.tsx`/`gameCategories.ts` were deleted
+          as dead code along with it. */}
       <div className={`sm:mt-0 ${isSearching ? "mt-4" : "mt-8"}`}>
         {/* 2026-09-06: swaps to a live match-count header while a mobile
             search query is active (kept in-flow, not collapsed, since this
@@ -180,43 +154,20 @@ export default function DashboardPage() {
         <h2 className="mb-3 text-base font-bold text-white sm:hidden light:text-slate-900">
           {isSearching ? `검색 결과 (${filtered.length}개)` : "🔍 전체 게임 검색"}
         </h2>
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          {/* Hidden on mobile — replaced by the sticky search bar pinned
-              above the page title (2026-09-03). Kept as-is for sm+, where
-              there's no sticky bar and this is still the only search input. */}
-          <div className="relative hidden w-full sm:block sm:max-w-xs">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="게임 이름, 태그로 검색..."
-              className="w-full rounded-xl border border-amber-500/15 bg-white/5 px-4 py-2.5 pr-9 text-sm text-white placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 light:shadow-sm"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label="검색어 지우기"
-                className="absolute top-1/2 right-2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-            {PLAYER_FILTERS.map((f, idx) => (
-              <button
-                key={f.label}
-                onClick={() => setFilterIdx(idx)}
-                className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                  filterIdx === idx
-                    ? "border-amber-400/70 bg-amber-500/20 text-white light:text-slate-900"
-                    : "border-white/10 text-white/60 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
+        <div className="mb-4 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {PLAYER_FILTERS.map((f, idx) => (
+            <button
+              key={f.label}
+              onClick={() => setFilterIdx(idx)}
+              className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                filterIdx === idx
+                  ? "border-amber-400/70 bg-amber-500/20 text-white light:text-slate-900"
+                  : "border-white/10 text-white/60 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
 
         <div className="mb-4 flex items-center gap-2">
@@ -285,6 +236,35 @@ export default function DashboardPage() {
         ) : (
           <p className="py-16 text-center text-sm text-white/40 light:text-slate-400">검색 결과가 없습니다.</p>
         )}
+
+        {/* sm+ real-time search — moved here from the top filter row
+            (2026-09-16) so the header above the grid stays uncluttered.
+            Hidden below `sm`, where the sticky bar pinned above the page
+            title (2026-09-03) is still the only active search input. */}
+        <div className="mt-6 hidden justify-center sm:flex">
+          <div className="relative w-full max-w-md">
+            <span className="absolute top-1/2 left-3 -translate-y-1/2 text-xs text-white/40 light:text-slate-400">
+              🔍
+            </span>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="게임 이름, 태그로 검색..."
+              aria-label="게임 검색"
+              className="h-10 w-full rounded-xl border border-amber-500/20 bg-white/5 pr-9 pl-8 text-sm text-white placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 light:shadow-sm"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="검색어 지우기"
+                className="absolute top-1/2 right-2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
       </div>
       </div>
     </>

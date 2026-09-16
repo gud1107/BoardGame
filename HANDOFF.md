@@ -31,6 +31,40 @@
 `vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
 길게 재시도하지 마세요.
 
+## 🔍 보드게임 쇼케이스 모바일 2열 정돈 & 하단 검색창 재배치 — 2026-09-16 신규
+
+요청 브리프는 이번에도 `src/pages/Lobby.tsx`/`GameCardGrid.tsx`/`SortFilterBar.tsx` 같은 파일
+구조를 전제했으나 실체와 다름(반복되는 premise-mismatch) — 실제 파일은 `src/app/page.tsx` +
+`DesktopDashboard.tsx`/`SortFilterChips.tsx`(바로 위 "보드게임 쇼케이스 정렬 엔진" 세션 참고).
+브리프의
+4개 결함 중 실제로 존재한 건 절반뿐이었다 — 손대기 전에 Playwright로 하나씩 재현부터 시도함:
+
+- **① 모바일 가로 캐러셀 제거 (실재함, 제거)**: `GAME_CATEGORIES`를 `overflow-x-auto snap-x`로
+  렌더링하던 `GameCategoryRow.tsx`가 실제로 존재했음 — mobile-only(`sm:hidden`) 섹션으로, 전체
+  검색 그리드 위에 얹힌 넷플릭스식 캐러셀. 완전히 삭제(`GameCategoryRow.tsx`/`gameCategories.ts`
+  둘 다 파일째 제거, 남은 유일한 사용처였던 `globals.css`의 `.scrollbar-hide`도 함께 정리).
+  전체 검색 그리드가 이미 모든 게임을 2열로 보여주고 있어 대체 UI가 따로 필요하지 않았음. 재발
+  방지용으로 `html,body { overflow-x:hidden; max-width:100vw }`를 `globals.css`에 신규 추가
+  (특정 버그의 수정이 아니라 방어용 백스톱).
+- **② 모바일 터치 정렬 미작동 (검증 결과: 존재하지 않음)**: Playwright를 `devices["iPhone 13"]`
+  (`isMobile`+`hasTouch`)로 에뮬레이트해 실제 `.tap()`으로 정렬 칩을 눌러봤으나 4종 모두 즉시
+  정상 재정렬됨(카드 `href` 순서로 검증, 뱃지 텍스트 오염 없이). `onClick`/`touch-none`/
+  `pointer-events-none` 관련 코드도 전혀 없었음 — 코드 변경 없음, HANDOFF 기록만 남김.
+- **③ 데스크톱 '난이도 쉬운순' 칩 잘림 (실재함, 수정)**: 1920×1080/1440×900 둘 다 실측 재현 —
+  Playwright bounding-box 프로브로 헤더 행이 필요한 폭(~1141px)보다 실제 확보 폭(~1082px)이
+  좁았고, `overflow-x-auto`인 `SortFilterChips`의 flex 최소폭이 사실상 0으로 취급되는 바람에
+  스퀴즈를 전부 그 칩 스트립이 떠안아 "난이도 쉬운순"이 "난이도"로 스크롤 클리핑되고 있었음
+  (`no-scrollbar`라 스크롤바 힌트도 없어 사용자 눈엔 그냥 잘린 것처럼 보임). `shrink-0`땜빵 대신
+  헤더 행에서 검색창 자체를 빼서(④ 참고) 확보 폭을 늘리는 쪽으로 해결 + `SortFilterChips`에
+  선택적 `className` prop 추가해 데스크톱 사용처에만 `shrink-0` 부여.
+- **④ 검색창 쇼케이스 최하단 재배치 (실재하는 개선 요청)**: 데스크톱(`DesktopDashboard.tsx`)과
+  모바일/태블릿(`page.tsx`의 `sm:flex` 입력, `sm:hidden`인 모바일 전용 상단 고정 검색바는
+  2026-09-03에 확정된 별개 기능이라 그대로 유지)의 검색창을 각각 그리드 바로 아래·바닥 바
+  직전으로 이동. 그리드 필터링 로직(useMemo 기반 `filtered`)은 손대지 않고 입력 위치만 이동.
+- `tsc`/`eslint`/`vitest`(1752개 전체) 클린 확인. Playwright로 1920/1440(칩 전체 노출)·
+  390(캐러셀 없음+가로 스크롤 없음+터치 정렬 동작)·800(하단 검색창 필터링 동작) 4개 뷰포트
+  실측 검증.
+
 ## 🏷️ 보드게임 쇼케이스 정렬 엔진 (Dynamic Sorting & Filter System) — 2026-09-16 신규
 
 요청 브리프는 `src/pages/Lobby.tsx`/`GameCardGrid.tsx`/`src/data/games.ts`/`src/data/patchNotes.ts`

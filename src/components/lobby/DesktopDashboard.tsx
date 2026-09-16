@@ -38,6 +38,19 @@ import SortFilterChips from "./SortFilterChips";
  * lifted-state pattern as the player-count filter — `sortOption` lives in
  * `page.tsx` and is applied to `games` before it ever reaches this
  * component, so this dashboard just renders whatever order it's handed.
+ *
+ * 2026-09-16 2nd follow-up: moved the search input out of this header row
+ * entirely, down to a slim bar below the grid — with the input still in
+ * this row, the header's four flex children (player filters/count/sort
+ * chips/search) narrowly overflowed the row's real available width at both
+ * 1920×1080 and 1440×900 (confirmed via a Playwright bounding-box probe:
+ * the row wanted ~1141px, the header's controls slot only had ~1082px),
+ * and since flexbox treats an `overflow-x-auto` item's intrinsic width as
+ * ~0, that squeeze landed entirely on `SortFilterChips` — silently
+ * scroll-clipping "난이도 쉬운순" down to "난이도" with no visible
+ * scrollbar. Removing the search input from this row (rather than papering
+ * over it with `shrink-0` everywhere) gives the row ~300px of slack back
+ * and was needed anyway for the bottom-search relocation.
  */
 export default function DesktopDashboard({
   games,
@@ -108,16 +121,7 @@ export default function DesktopDashboard({
             <span className="shrink-0 text-xs font-medium text-amber-500/60 light:text-amber-700">
               총 {totalCount}개 게임 · 플레이 가능 {playableCount}개
             </span>
-            <SortFilterChips value={sortOption} onChange={onSortChange} />
-            <div className="relative w-full max-w-[240px]">
-              <input
-                value={query}
-                onChange={(e) => onQueryChange(e.target.value)}
-                placeholder="게임 이름, 태그로 검색..."
-                aria-label="게임 검색"
-                className="w-full rounded-full border border-amber-500/20 bg-neutral-950/40 px-3 py-1.5 text-xs text-white placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 light:shadow-sm"
-              />
-            </div>
+            <SortFilterChips value={sortOption} onChange={onSortChange} className="shrink-0" />
           </div>
         </div>
 
@@ -135,6 +139,23 @@ export default function DesktopDashboard({
           ) : (
             <p className="py-16 text-center text-xs text-white/40 light:text-slate-400">검색 결과가 없습니다.</p>
           )}
+        </div>
+
+        {/* 실시간 검색창 — 상단 헤더 복잡도를 줄이기 위해 그리드 바로 아래,
+            바닥 바로 직전에 배치 (2026-09-16). */}
+        <div className="mt-3 flex shrink-0 justify-center border-t border-amber-500/15 pt-3 light:border-slate-200">
+          <div className="relative w-full max-w-md">
+            <span className="absolute top-1/2 left-3 -translate-y-1/2 text-xs text-white/40 light:text-slate-400">
+              🔍
+            </span>
+            <input
+              value={query}
+              onChange={(e) => onQueryChange(e.target.value)}
+              placeholder="게임 이름, 태그로 검색..."
+              aria-label="게임 검색"
+              className="h-10 w-full rounded-xl border border-amber-500/20 bg-neutral-950/40 pr-3 pl-8 text-xs text-white placeholder:text-white/30 focus:border-amber-400/70 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 light:shadow-sm"
+            />
+          </div>
         </div>
       </main>
     </div>

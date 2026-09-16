@@ -67,16 +67,17 @@ body {
   border-radius: 999px;
 }
 
-/* Hides the OS scrollbar on an `overflow-x-auto` row while keeping it
-   scrollable — used by the mobile lobby's Netflix-style category carousels
-   (see GameCategoryRow.tsx) so the horizontal scroll reads as a swipeable
-   card row instead of a scrollbar-tracked list. */
-.scrollbar-hide {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* old Edge/IE */
-}
-.scrollbar-hide::-webkit-scrollbar {
-  display: none; /* Chrome/Safari/new Edge */
+/* 2026-09-16: root-level horizontal-scroll guard, added after the mobile
+   lobby's Netflix-style category carousel (the one genuinely horizontally
+   scrollable section on the page) was removed for competing with the
+   browser's own back/forward edge-swipe gesture. Nothing on the page is
+   meant to scroll sideways any more — this is a defensive backstop against
+   any future negative-margin/overflow slip reintroducing page-level
+   horizontal "덜컹거림", not a fix for a specific still-present element. */
+html,
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 /* 허브 공통 "MY TURN" 배너 (src/components/common/MyTurnOverlay.tsx,

@@ -13,12 +13,24 @@ import { SORT_OPTIONS, type SortOption } from "@/constants/sortOptions";
 export default function SortFilterChips({
   value,
   onChange,
+  className = "",
 }: {
   value: SortOption;
   onChange: (option: SortOption) => void;
+  /**
+   * Extra classes for the root strip — e.g. `shrink-0` where this sits in a
+   * flex row alongside other siblings. Without it, a browser's flex layout
+   * treats this `overflow-x-auto` strip as free to shrink below its content
+   * width (an `overflow:auto` item's intrinsic min-width is effectively 0),
+   * which silently clips the last chip instead of showing a scrollbar (this
+   * container hides its scrollbar via `no-scrollbar`) — confirmed 2026-09-16
+   * on the desktop dashboard's wide-viewport header, where "난이도 쉬운순"
+   * was rendering as just "난이도".
+   */
+  className?: string;
 }) {
   return (
-    <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 py-1 no-scrollbar">
+    <div className={`-mx-1 flex gap-1.5 overflow-x-auto px-1 py-1 no-scrollbar ${className}`}>
       {SORT_OPTIONS.map((opt) => {
         const isActive = value === opt.key;
         return (
