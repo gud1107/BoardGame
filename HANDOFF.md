@@ -31,6 +31,30 @@
 `vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
 길게 재시도하지 마세요.
 
+## 🏷️ 보드게임 쇼케이스 정렬 엔진 (Dynamic Sorting & Filter System) — 2026-09-16 신규
+
+요청 브리프는 `src/pages/Lobby.tsx`/`GameCardGrid.tsx`/`src/data/games.ts`/`src/data/patchNotes.ts`
+같은 파일 구조를 전제했으나 실체와 다름(반복되어온 premise-mismatch 패턴) — 이 프로젝트의 로비는
+Next.js App Router의 `src/app/page.tsx`(모바일/태블릿 레이아웃) + `src/components/lobby/
+DesktopDashboard.tsx`(xl+ 데스크톱 전용, 별도로 손튜닝된 레이아웃) 두 서피스로 나뉘어 있고, 게임
+카탈로그는 `src/games/registry.ts`의 `GAME_REGISTRY`(`GameMeta[]`), 패치노트는
+`src/constants/patchNotes.ts`다. `GameMeta`에는 `updateCount`/`difficulty` 필드가 원래 없다.
+
+- **기본 정렬 = 업데이트순**: `src/constants/gameUpdateCount.ts` 신규 — `updateCount`를 하드코딩하지
+  않고 `PATCH_NOTES`에서 **실시간으로 집계**(어떤 게임을 언급한 패치노트 릴리스 개수, `"common"`
+  제외)해 항상 최신 상태 유지. 기존 "준비중 게임은 항상 맨 뒤" 불변식(`sortByPlayability`, 이미
+  모든 리스트 렌더링 전에 적용되는 확립된 규칙)은 유지 — 정렬 옵션은 이 파티셔닝 **안에서만**
+  재정렬되고, 준비중 게임이 정렬 결과로 위로 튀어오르지 않는다.
+- **4종 필터 추가**: `src/constants/sortOptions.ts`(가나다순/인원 적은순/인원 많은순/난이도 쉬운순 +
+  기본 업데이트순, `PLAYER_FILTERS`와 동일한 공유 패턴). 난이도는 기존에 이미 존재하던 편집
+  난이도 데이터 `src/constants/gameDifficulty.ts`(2026-09-12 데스크톱 개편 때 확인받고 추가된
+  1~5성 수기 평가, `GameMeta`엔 없음)를 그대로 재사용 — 새로 지어내지 않음.
+- **다크 럭셔리 골드 칩 UI**: `src/components/lobby/SortFilterChips.tsx` 신규, 모바일(`page.tsx`,
+  플레이어 인원 필터 칩 바로 아래) + 데스크톱(`DesktopDashboard.tsx`, "총 N개 게임" 카운트 옆) 양쪽
+  서피스가 공유. `overflow-x-auto no-scrollbar`로 모바일 100dvh 레이아웃이 칩 줄바꿈 때문에
+  밀리지 않도록 처리.
+- `tsc`/`eslint`/`vitest`(patchNotes.test.ts) 클린 확인.
+
 ## ✨ 로비 게임 카드 클릭 시네마틱 골드 버스트 FX — 2026-09-15 신규
 
 - 요청 브리프는 카드 클릭 시 "방 만들기/입장 선택 모달이 `scale-90 -> scale-100`으로 등장"하는

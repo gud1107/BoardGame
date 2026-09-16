@@ -10,6 +10,8 @@ import GameCategoryRow from "@/components/lobby/GameCategoryRow";
 import DesktopDashboard from "@/components/lobby/DesktopDashboard";
 import { GAME_CATEGORIES } from "@/constants/gameCategories";
 import { PLAYER_FILTERS } from "@/constants/playerFilters";
+import { DEFAULT_SORT_OPTION, type SortOption, sortGamesBy } from "@/constants/sortOptions";
+import SortFilterChips from "@/components/lobby/SortFilterChips";
 import { useGameBgm } from "@/lib/audio/useGameBgm";
 
 type GenreFilter = GameGenre | "all";
@@ -20,6 +22,7 @@ export default function DashboardPage() {
   const [query, setQuery] = useState("");
   const [filterIdx, setFilterIdx] = useState(0);
   const [genreFilter, setGenreFilter] = useState<GenreFilter>("all");
+  const [sortOption, setSortOption] = useState<SortOption>(DEFAULT_SORT_OPTION);
   // 2026-09-06 AskUserQuestion: 모바일 검색어 입력 중엔 캐러셀/쇼케이스를
   // 숨기고 결과 그리드를 최상단으로 끌어올린다 (인원수/장르 필터 칩은 유지).
   const isSearching = query.trim().length > 0;
@@ -55,11 +58,13 @@ export default function DashboardPage() {
       genreFilter === "all"
         ? baseFiltered
         : baseFiltered.filter((g) => g.genres?.includes(genreFilter));
-    // Default sort: playable games surface first, "준비중" games sink to the
-    // end — kept in sync with search/genre/player-count filtering above so
-    // it applies no matter what the user typed or selected.
-    return sortByPlayability(byGenre);
-  }, [baseFiltered, genreFilter]);
+    // User-picked sort (default: 업데이트순) runs first, then playability
+    // partitioning always runs last so "준비중" games still sink to the
+    // end regardless of sort choice — kept in sync with search/genre/
+    // player-count filtering above so it applies no matter what was typed
+    // or selected.
+    return sortByPlayability(sortGamesBy(byGenre, sortOption));
+  }, [baseFiltered, genreFilter, sortOption]);
 
   const playableCount = GAME_REGISTRY.filter((g) => g.playable).length;
 
@@ -80,6 +85,8 @@ export default function DashboardPage() {
         onQueryChange={setQuery}
         filterIdx={filterIdx}
         onFilterChange={setFilterIdx}
+        sortOption={sortOption}
+        onSortChange={setSortOption}
       />
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 xl:hidden">
@@ -210,6 +217,13 @@ export default function DashboardPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="mb-4 flex items-center gap-2">
+          <span className="shrink-0 text-[11px] font-medium text-amber-500/60 light:text-amber-700">
+            정렬
+          </span>
+          <SortFilterChips value={sortOption} onChange={setSortOption} />
         </div>
 
         <div className="mb-8 flex flex-wrap gap-2">

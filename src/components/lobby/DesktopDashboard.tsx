@@ -4,7 +4,9 @@ import { useMemo } from "react";
 import type { GameMeta } from "@/games/types";
 import { useActiveRooms } from "@/games/shared/room/useActiveRooms";
 import { PLAYER_FILTERS } from "@/constants/playerFilters";
+import type { SortOption } from "@/constants/sortOptions";
 import GameShowcaseCard from "./GameShowcaseCard";
+import SortFilterChips from "./SortFilterChips";
 
 /**
  * Desktop-only (xl+, ≥1280px) zero-scroll lobby dashboard — a single
@@ -30,6 +32,12 @@ import GameShowcaseCard from "./GameShowcaseCard";
  * still has — restored here as `filterIdx`/`onFilterChange`, sharing the
  * same `PLAYER_FILTERS` list (and the same lifted state in `page.tsx`) so
  * results never drift between the two layouts.
+ *
+ * 2026-09-16 follow-up: added the `SortFilterChips` sort-order picker
+ * (업데이트순/가나다순/인원순/난이도순) next to the total-count text, same
+ * lifted-state pattern as the player-count filter — `sortOption` lives in
+ * `page.tsx` and is applied to `games` before it ever reaches this
+ * component, so this dashboard just renders whatever order it's handed.
  */
 export default function DesktopDashboard({
   games,
@@ -39,6 +47,8 @@ export default function DesktopDashboard({
   onQueryChange,
   filterIdx,
   onFilterChange,
+  sortOption,
+  onSortChange,
 }: {
   games: GameMeta[];
   totalCount: number;
@@ -47,6 +57,8 @@ export default function DesktopDashboard({
   onQueryChange: (q: string) => void;
   filterIdx: number;
   onFilterChange: (idx: number) => void;
+  sortOption: SortOption;
+  onSortChange: (option: SortOption) => void;
 }) {
   const rooms = useActiveRooms();
 
@@ -96,6 +108,7 @@ export default function DesktopDashboard({
             <span className="shrink-0 text-xs font-medium text-amber-500/60 light:text-amber-700">
               총 {totalCount}개 게임 · 플레이 가능 {playableCount}개
             </span>
+            <SortFilterChips value={sortOption} onChange={onSortChange} />
             <div className="relative w-full max-w-[240px]">
               <input
                 value={query}
