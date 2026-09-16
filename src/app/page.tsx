@@ -88,25 +88,32 @@ export default function DashboardPage() {
       />
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 xl:hidden">
-      {/* Mobile-only (< sm) sticky search bar (2026-09-03, AskUserQuestion).
-          Pinned to the very top of the viewport, directly beneath the
-          global SiteHeader's own sticky bar — `top` reads that header's
-          real measured height off `--site-header-h` (set in
-          SiteHeader.tsx) rather than a hardcoded px offset, since that
-          header's height changes when it wraps to a second line or its
-          async badge content resolves. `-mx-4 -mt-8` cancels this
-          container's own edge padding (`px-4 py-8`) so the bar's background
-          spans full-bleed edge-to-edge and sits flush against the header
-          with no gap on first paint — it reads as pinned to the top even
-          before any scroll happens, not just once scrolled past. Kept to
-          the search input only (no player-count/genre filter chips) per
-          confirmed scope — those stay in their normal in-flow spot below,
-          so the fixed strip stays short and doesn't eat too much card
-          real estate. The full desktop-style search input further below
-          is hidden on mobile (`hidden sm:block`) so there's only one
-          active input, not a confusing duplicate. */}
+      {/* Mobile-only (< sm) sticky search+filter bar (2026-09-03,
+          AskUserQuestion; extended 2026-09-16). Pinned to the very top of
+          the viewport, directly beneath the global SiteHeader's own sticky
+          bar — `top` reads that header's real measured height off
+          `--site-header-h` (set in SiteHeader.tsx) rather than a hardcoded
+          px offset, since that header's height changes when it wraps to a
+          second line or its async badge content resolves. `-mx-4 -mt-8`
+          cancels this container's own edge padding (`px-4 py-8`) so the
+          bar's background spans full-bleed edge-to-edge and sits flush
+          against the header with no gap on first paint. The full
+          desktop-style search input further below is hidden on mobile
+          (`hidden sm:flex`) so there's only one active search input, not a
+          confusing duplicate.
+
+          2026-09-16: player-count + sort chips moved in here too (a report
+          that "정렬 필터가 안 먹힌다" traced back to these chips scrolling
+          off-screen with the rest of the page on mobile — re-tested with
+          real touch-emulated taps and the sort logic itself was always
+          correct, it just wasn't reachable mid-scroll). Their in-flow
+          counterparts further down are now `hidden sm:flex` so mobile
+          shows them only here, while tablet/desktop (no sticky bar there)
+          keep the original in-flow rows unchanged. Genre chips stay
+          in-flow, not stickied — mentioned in no report, and would eat a
+          second wrapped line of permanent header height on narrow phones. */}
       <div
-        className="sticky z-30 -mx-4 -mt-8 border-b border-amber-500/15 bg-neutral-950/80 px-4 py-3 backdrop-blur sm:hidden light:border-slate-200 light:bg-white/90"
+        className="sticky z-30 -mx-4 -mt-8 flex flex-col gap-2 border-b border-amber-500/15 bg-neutral-950/80 px-4 py-3 backdrop-blur sm:hidden light:border-slate-200 light:bg-white/90"
         style={{ top: "var(--site-header-h, 96px)" }}
       >
         <div className="relative w-full">
@@ -127,6 +134,27 @@ export default function DashboardPage() {
               ✕
             </button>
           )}
+        </div>
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 no-scrollbar">
+          {PLAYER_FILTERS.map((f, idx) => (
+            <button
+              key={f.label}
+              onClick={() => setFilterIdx(idx)}
+              className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                filterIdx === idx
+                  ? "border-amber-400/70 bg-amber-500/20 text-white light:text-slate-900"
+                  : "border-white/10 text-white/60 hover:border-amber-400/40 light:border-slate-200 light:text-slate-600 light:hover:border-amber-500/50"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="shrink-0 text-[11px] font-medium text-amber-500/60 light:text-amber-700">
+            정렬
+          </span>
+          <SortFilterChips value={sortOption} onChange={setSortOption} />
         </div>
       </div>
 
@@ -154,7 +182,10 @@ export default function DashboardPage() {
         <h2 className="mb-3 text-base font-bold text-white sm:hidden light:text-slate-900">
           {isSearching ? `검색 결과 (${filtered.length}개)` : "🔍 전체 게임 검색"}
         </h2>
-        <div className="mb-4 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {/* Mobile now gets these from the sticky bar above instead (so they
+            stay reachable mid-scroll) — hidden here below `sm` only;
+            tablet/desktop (no sticky bar there) keep this in-flow row. */}
+        <div className="mb-4 hidden -mx-1 gap-2 overflow-x-auto px-1 pb-1 sm:flex">
           {PLAYER_FILTERS.map((f, idx) => (
             <button
               key={f.label}
@@ -170,7 +201,7 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-4 hidden items-center gap-2 sm:flex">
           <span className="shrink-0 text-[11px] font-medium text-amber-500/60 light:text-amber-700">
             정렬
           </span>

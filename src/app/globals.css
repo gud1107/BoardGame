@@ -73,9 +73,27 @@ body {
    browser's own back/forward edge-swipe gesture. Nothing on the page is
    meant to scroll sideways any more — this is a defensive backstop against
    any future negative-margin/overflow slip reintroducing page-level
-   horizontal "덜컹거림", not a fix for a specific still-present element. */
-html,
-body {
+   horizontal "덜컹거림", not a fix for a specific still-present element.
+
+   `html` ONLY, never `body`: per the CSS Overflow spec, an axis left at its
+   `visible` default computes to `auto` the moment the *other* axis on that
+   same element isn't `visible` — so `overflow-x: hidden` on `body` forces
+   `overflow-y` there to `auto` too, turning `body` into a second, redundant
+   scroll container sitting between `html` (the element that actually
+   scrolls; confirmed via `document.scrollingElement`) and any `position:
+   sticky` descendant. A sticky element then sticks relative to `body`'s
+   scrollport instead of the real one — and since `body` itself never
+   develops its own scrollbar (its content height just tracks `html`'s), it
+   never "scrolls" from the sticky element's point of view, so the element
+   just scrolls away as if it were `position: static`. Confirmed 2026-09-16:
+   this exact mistake silently broke the mobile lobby's sticky search+filter
+   bar (pinned since 2026-09-03) the same day it was introduced — a report
+   of "정렬 필터가 안 먹힌다" traced back to this, not the sort logic itself
+   (which kept re-sorting correctly under a real touch-tap the whole time,
+   just scrolled out of reach because the bar meant to stay pinned didn't).
+   `html`'s own `overflow-x: hidden` alone is enough to clip page-level
+   horizontal overflow. */
+html {
   overflow-x: hidden;
   max-width: 100vw;
 }
