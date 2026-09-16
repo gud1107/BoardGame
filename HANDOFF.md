@@ -31,6 +31,26 @@
 `vercel deploy --prod`를 **한 번만** 시도하고, 다른 세션들의 동시 수동 배포 시도와 경합할 수 있으니
 길게 재시도하지 마세요.
 
+## 🐛 로비 검색/필터 상태가 뒤로가기 시 초기화되던 버그 수정 — 2026-09-16 신규
+
+바로 이전 세션에서 sticky 회귀를 고친 뒤에도 "모바일에는 업데이트순, 가나다순 적용안되는 부분"
+재보고가 들어와 프로덕션에서 실제 터치로 세 번째 재확인 — 이번엔 스크롤 없이도 재현: 정렬을
+가나다순으로 바꾸고 카드를 탭해 게임 상세로 들어갔다가 브라우저 뒤로가기로 돌아오면 정렬이
+조용히 `업데이트순` 기본값으로 리셋됨(`query`/`filterIdx`/`genreFilter`도 동일 증상). 원인은
+`DashboardPage`가 이 네 가지를 전부 평범한 `useState`로만 들고 있었다는 것 — Next.js App Router의
+뒤로가기가 이 페이지를 라우터 캐시에서 상태 그대로 복원하지 않고 컴포넌트를 다시 마운트시켜
+초기값으로 되돌림. 사용자가 "정렬이 안 먹힌다"고 느낀 정확한 지점.
+
+- **수정**: 네 상태 모두 `sessionStorage`(`lobby:filterState:v1`)에서 복원하도록 변경. 마운트
+  `useEffect` + `setState`로 복원하면 SSR 기본값과 클라이언트 복원값이 달라 하이드레이션
+  에러가 나므로, 이 프로젝트에 이미 있는 컨벤션(`PatchNoteButton.tsx`의 `hasUnseen`,
+  `NoThanksBoard.tsx`의 `revealOpponentChips`와 동일)대로 **lazy `useState` 초기화 함수**에서
+  직접 읽음 — `react-hooks/set-state-in-effect` 린트 경고도 피함. 변경 시마다
+  `sessionStorage`에 다시 쓰는 별도 effect는 유지(이건 "React 상태를 외부로 내보내는" 정상
+  방향이라 문제 없음).
+- Playwright로 "가나다순 선택 → 카드 클릭 → 뒤로가기 → 정렬 유지 확인" 정확한 재현 시나리오로
+  검증(수정 전 실패, 수정 후 통과). `tsc`/`eslint`/`vitest`(1752개) 클린.
+
 ## 🐛 모바일 검색/필터 스티키 회귀 수정 + 정렬·인원 필터 상단 고정 — 2026-09-16 신규
 
 바로 이전 세션에서 추가한 `html, body { overflow-x: hidden }`(모바일 가로 캐러셀 제거 후 넣은

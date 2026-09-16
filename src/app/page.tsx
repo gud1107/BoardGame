@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GAME_REGISTRY, sortByPlayability } from "@/games/registry";
 import { GENRE_META, GENRE_ORDER } from "@/games/genres";
 import type { GameGenre } from "@/games/types";
@@ -14,13 +14,70 @@ import { useGameBgm } from "@/lib/audio/useGameBgm";
 
 type GenreFilter = GameGenre | "all";
 
+/** sessionStorage key for restoring search/filter/sort state after a
+ * game-detail visit and back-navigation (see `readSavedLobbyState` below). */
+const LOBBY_STATE_KEY = "lobby:filterState:v1";
+
+interface SavedLobbyState {
+  query: string;
+  filterIdx: number;
+  genreFilter: GenreFilter;
+  sortOption: SortOption;
+}
+
+/**
+ * Reads persisted search/player-filter/genre/sort state back from
+ * `sessionStorage`. Needed because clicking a game card and pressing the
+ * browser's back button was observed (2026-09-16) to fully reset this
+ * page's local state instead of restoring it — a report of "가나다순으로
+ * 정렬해도 모바일에서 적용이 안 된다" traced back to exactly this: picking a
+ * sort, opening a game, then coming back silently dropped it to the
+ * 업데이트순 default.
+ *
+ * Called from each `useState`'s lazy initializer (runs during render) below
+ * rather than from a mount `useEffect` + `setState` — same pattern as
+ * `PatchNoteButton.tsx`'s `hasUnseen`/`NoThanksBoard.tsx`'s
+ * `revealOpponentChips`, and avoids the `react-hooks/set-state-in-effect`
+ * cascading-render lint warning that a mount effect here would trigger.
+ */
+function readSavedLobbyState(): Partial<SavedLobbyState> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.sessionStorage.getItem(LOBBY_STATE_KEY);
+    return raw ? (JSON.parse(raw) as Partial<SavedLobbyState>) : {};
+  } catch {
+    // Corrupt or inaccessible (private browsing) storage — fall back to defaults.
+    return {};
+  }
+}
+
 export default function DashboardPage() {
   // 편안한 Lo-fi/Jazz Hop 테마 BGM — 게임 허브(이 페이지)에 머무는 동안만 재생.
   useGameBgm("lobby");
-  const [query, setQuery] = useState("");
-  const [filterIdx, setFilterIdx] = useState(0);
-  const [genreFilter, setGenreFilter] = useState<GenreFilter>("all");
-  const [sortOption, setSortOption] = useState<SortOption>(DEFAULT_SORT_OPTION);
+  const [query, setQuery] = useState(() => readSavedLobbyState().query ?? "");
+  const [filterIdx, setFilterIdx] = useState(() => readSavedLobbyState().filterIdx ?? 0);
+  const [genreFilter, setGenreFilter] = useState<GenreFilter>(
+    () => readSavedLobbyState().genreFilter ?? "all",
+  );
+  const [sortOption, setSortOption] = useState<SortOption>(
+    () => readSavedLobbyState().sortOption ?? DEFAULT_SORT_OPTION,
+  );
+
+  // Writing TO sessionStorage in response to React state changing is the
+  // effect's proper direction (unlike reading FROM it, handled above) — so
+  // this one's fine as a plain effect.
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        LOBBY_STATE_KEY,
+        JSON.stringify({ query, filterIdx, genreFilter, sortOption }),
+      );
+    } catch {
+      // Storage full/blocked — state just won't survive this particular
+      // back-navigation, no worse than before this fix.
+    }
+  }, [query, filterIdx, genreFilter, sortOption]);
+
   // 2026-09-06 AskUserQuestion: 모바일 검색어 입력 중엔 캐러셀/쇼케이스를
   // 숨기고 결과 그리드를 최상단으로 끌어올린다 (인원수/장르 필터 칩은 유지).
   const isSearching = query.trim().length > 0;
