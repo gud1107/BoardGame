@@ -39,7 +39,44 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
-## 🎲 페루도 — 모바일 "세로 스크롤" 롤백 + 스크롤 지터 방어 — 2026-09-20 신규 (로컬 전용, 커밋/푸시/배포 보류)
+## 🎲 페루도 — 모바일 전용 컴포넌트 완전 제거, 2026-09-06 구조로 복귀 — 2026-09-20 후속 (커밋/푸시/배포 완료)
+
+**요청 배경**: 바로 아래 섹션("세로 스크롤 롤백")을 커밋/푸시/배포한 직후, 사용자가 "2026-09-06 기준으로
+배포된 버전으로 모바일 부분만 반영 가능할까요?"라고 이어서 요청. `git log`로 확인한 결과 09-06 시점
+마지막 관련 커밋(`c5f14ba`, 15:08) 당시엔 **모바일 전용 컴포넌트 자체가 존재하지 않았음** —
+`PerudoMobileBoard.tsx`는 그 이틀 뒤(09-08 23:25 `82eb808`)에야 처음 생겼고, 그전까지 모바일은
+데스크톱과 완전히 같은 `PerudoBoard.tsx` 트리를 반응형 CSS로만 공유했다. 다만 같은 파일들에 모바일
+UI와 무관한 변경(09-07 가로 스크롤 버그 수정 `abd36be`, 09-08 테두리 분리 버그 수정 `0143105`, 09-08
+봇 대체 기능 확장 `28a6ef6`, 09-09 봇 턴 멈춤 버그 수정 `3863cb7` 등)도 같이 쌓여 있어, "모바일 부분만"
+되돌리려면 이런 것들과 얽히지 않게 범위를 정확히 잘라야 했음 — `AskUserQuestion`으로 확인한 결과
+"모바일 전용 컴포넌트 완전 제거"(추천안)를 선택받음: 저 실제 버그 수정/기능들은 전부 유지하고, 오직
+09-08 이후 생긴 **모바일 전용 분기 자체**만 제거.
+
+**변경**: 코드 레벨 전체 되돌리기(`git checkout`)가 아니라 수술적 편집 — 09-14 다크/라이트 테마 토글 등
+그 사이 셰어드 트리 전반에 걸쳐 쌓인 다른 변경까지 통째로 날아가는 걸 피하기 위해, 09-06 스냅샷을
+그대로 복원하는 대신 **현재 코드에서 모바일 분기 자체만** 잘라냄:
+- [PerudoBoard.tsx](./src/games/perudo/PerudoBoard.tsx) — `useIsMobile`/`PerudoMobileBoard` import와
+  `if (isMobile) { return <PerudoMobileBoard .../> }` 분기를 전부 삭제. 이제 데스크톱/모바일 구분 없이
+  이 파일의 기존 JSX 트리 하나만 모든 뷰포트에 렌더링됨(파일 안에 이미 있던 `sm:`/`light:` 반응형
+  클래스가 그대로 모바일도 커버).
+- [PerudoMobileBoard.tsx](./src/games/perudo/PerudoMobileBoard.tsx), [useIsMobile.ts](./src/games/perudo/useIsMobile.ts) — 파일 자체 삭제(더 이상 아무도 import 안 함).
+- [PerudoSharedUI.tsx](./src/games/perudo/PerudoSharedUI.tsx) — 모바일 전용 트리만 쓰던
+  `DiceCountStrip`/`ExpectationBar`(이미 실제로는 미사용 상태였음) 삭제, 미사용된 `DIE_SIZE_PX` import
+  정리, 파일 상단/각 함수 doc 주석에서 "PerudoMobileBoard와 공유" 문구 정리.
+- [PerudoBidTrack.tsx](./src/games/perudo/PerudoBidTrack.tsx) — 코드 변경 없음(바로 위 "세로 스크롤
+  롤백" 세션에서 추가한 `overscroll-contain`/`contain:layout_paint`/`aspect-ratio` 지터 방어는 그대로
+  유지 — 이제 desktop/mobile 구분 없이 유일한 트리에 항상 적용됨). `PerudoMobileBoard.tsx`를 가리키던
+  doc 주석들만 정리.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint`(대상 4개 파일 0 에러) / `npx vitest run
+src/games/perudo`(80/80 통과). 실브라우저 재검증은 이번 세션도 생략(바로 위 섹션과 동일한 호스트 메모리
+부족 상황이 이어짐) — 순수 삭제/분기 제거라 로직 변경이 없고 tsc/eslint/vitest로 이미 충분히 확인됐다고
+판단.
+
+**커밋/푸시/배포**: 사용자가 이번엔 보류 지시 없이 진행을 요청해 커밋/푸시/GitHub 웹훅 자동 배포까지
+완료.
+
+## 🎲 페루도 — 모바일 "세로 스크롤" 롤백 + 스크롤 지터 방어 — 2026-09-20 (커밋 `361c2e1`, 푸시/배포 완료)
 
 **요청 배경**: 최근(2026-09-09~09-10) 세션들이 페루도 모바일 화면을 `calc(100dvh - offset)` 고정
 높이 + `overflow-hidden`/`touch-none`/`overscroll-none`으로 완전히 잠근 "1화면 압축 고정(Zero-Scroll)"
@@ -98,10 +135,11 @@ src/games/perudo`(80/80 통과, 엔진 무변경). 실브라우저 재검증은 
 호스트 전체가 메모리 부족 상태(`Cannot allocate memory`, PowerShell/bash 프로세스 스폰까지 실패)에
 빠져 포기 — [[dev-server-oom-environment-limit]]과 동일한 패턴. 남은 node 프로세스는 정리함.
 
-**로컬 전용**: 사용자 요청대로 커밋/푸시/배포 전부 보류. 다음 세션이 이어받을 때는 `git status`로 이
-3개 파일(`PerudoBoard.tsx`/`PerudoBidTrack.tsx`/`PerudoMobileBoard.tsx`)이 아직 그대로 있는지 먼저
-확인할 것 — 다른 동시 세션의 변경과 섞여 있을 수 있으니 전체 `git add`는 피하고 이 3개 경로만 정확히
-스테이징할 것.
+**커밋/푸시/배포**: 이 3개 파일(`PerudoBoard.tsx`/`PerudoBidTrack.tsx`/`PerudoMobileBoard.tsx`)만
+정확히 스테이징해 커밋 `361c2e1`, `git push origin main` → GitHub 웹훅 자동 배포가 정확히 이 커밋을
+빌드해 `● Ready` 상태로 라이브 확인됨(`board-game-tau-navy.vercel.app/games/perudo` 200 응답 확인).
+바로 이어서 온 "2026-09-06 버전으로 모바일만" 후속 요청은 위 섹션 참고 — 그 요청으로
+`PerudoMobileBoard.tsx`는 다시 삭제됐다.
 
 ## 🐱 랫어탯캣 — "지금 시작" 이른 시작 시 설정 단계 무한대기 버그 수정 — 2026-09-20 신규 (커밋/푸시/배포 완료)
 

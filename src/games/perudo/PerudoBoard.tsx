@@ -5,8 +5,6 @@ import { getSoundEngine } from "@/lib/audio/soundEngine";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import RulebookModal from "./RulebookModal";
-import PerudoMobileBoard from "./PerudoMobileBoard";
-import { useIsMobile } from "./useIsMobile";
 import PerudoFaceIcon from "./PerudoFaceIcon";
 import RectBidTrack, { BOARD_LAST_INDEX, LAP_SIZE, OverflowBadge, stripLength } from "./PerudoBidTrack";
 import { DieBack, DieFace, faceLabel, FacePicker, LostDiceTray, TABLE_PANEL, TableTexture } from "./PerudoSharedUI";
@@ -146,32 +144,24 @@ export default function PerudoBoard({
   // own presence-track resolves a real pick.
   const myColorway = colorways[viewerSeat] ?? playerColorwayForSeat(viewerSeat);
 
-  // 2026-09-08 모바일 화이트 오버스크롤 차단 세션: which of the two layout
-  // trees below actually mounts (`PerudoMobileBoard`'s right-sidebar/
-  // zero-scroll redesign vs. this file's own existing rect-track layout,
-  // AskUserQuestion-confirmed: 모바일 전용, 데스크톱은 기존 유지).
-  const isMobile = useIsMobile();
-
   // Overscroll-bounce containment (요구사항 1) — scoped to this component's
   // mount, restored on unmount, same pattern as `WormCanvas.tsx`'s own
   // gesture lock (see that file's doc comment). Applied regardless of
-  // phase/layout branch below (game-over and reveal screens can bounce just
-  // as easily as the playing screen can), not gated on `isMobile` either —
-  // harmless on desktop, and `matchMedia` already only ever fires the
-  // *visual* mobile layout switch above.
+  // phase (game-over and reveal screens can bounce just as easily as the
+  // playing screen can).
   //
-  // 2026-09-20 세로 스크롤 롤백 세션: was `"none"` (fully disables the native
-  // rubber-band bounce at the document's own scroll boundaries), which made
-  // sense while mobile was a fixed zero-scroll viewport with no real page
-  // scroll to bounce at all. Now that mobile restores natural page scroll
-  // (`PerudoMobileBoard.tsx`), a real "top of page"/"bottom of page" edge
-  // exists again, and `"contain"` is the correct value for it — it still
+  // 2026-09-20 세션: was `"none"` (fully disables the native rubber-band
+  // bounce at the document's own scroll boundaries) while mobile briefly had
+  // its own fixed zero-scroll viewport (removed the same session — mobile
+  // now renders this exact same tree via plain responsive CSS again, like it
+  // did before 2026-09-08, see the removed `if (isMobile)` branch's history
+  // below). `"contain"` is the correct value now that there's a real "top of
+  // page"/"bottom of page" edge to bounce at on every viewport: it still
   // stops the bounce from CHAINING past this page (pull-to-refresh/navigating
   // away mid-swipe), but lets the browser's own native bounce feedback play
   // out at the edge instead of just hard-stopping, which reads as smoother.
   // The `backgroundColor` override below was always here for exactly this
-  // case (a bounce revealing dark instead of white) — previously dead
-  // weight under `"none"`, now actually load-bearing again.
+  // case (a bounce revealing dark instead of white).
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
@@ -534,48 +524,22 @@ export default function PerudoBoard({
   // -------------------------------------------------------------------------
   const seatOrder = Array.from({ length: state.playerCount }, (_, i) => i);
 
-  // Mobile: entirely different layout tree — 2026-09-09 데스크톱 동등 단일
-  // 뷰포트 재구축 세션: a SINGLE measured-height (`calc(100dvh - offset)`),
-  // zero-scroll/zero-gesture screen (no more scroll-down second section) —
-  // see `PerudoMobileBoard.tsx`'s own file header for the full rationale.
-  // Desktop/tablet keeps the existing rect-track board below, unchanged
-  // (AskUserQuestion-confirmed scope). All state/handlers stay owned by
-  // THIS component either way — `PerudoMobileBoard` is presentation-only.
-  if (isMobile) {
-    return (
-      <PerudoMobileBoard
-        state={state}
-        viewerSeat={viewerSeat}
-        names={names}
-        colorways={colorways}
-        myColorway={myColorway}
-        onColorwayChange={onColorwayChange}
-        onAction={onAction}
-        isMyTurn={isMyTurn}
-        iAmAlive={iAmAlive}
-        me={me}
-        pendingFace={pendingFace}
-        pendingQuantity={pendingQuantity}
-        pendingFloor={pendingFloor}
-        canConfirmBet={canConfirmBet}
-        isIdenticalToCurrentBid={isIdenticalToCurrentBid}
-        pickFace={pickFace}
-        stepQuantity={stepQuantity}
-        currentCell={currentCell}
-        pendingCell={pendingCell}
-        laneOffset={laneOffset}
-        cellEnabled={cellEnabled}
-        onCellClick={selectCell}
-        showBettingMarker={showBettingMarker}
-        currentOverflows={currentOverflows}
-        pendingOverflows={pendingOverflows}
-        muteButton={muteButton}
-        rulebookButton={rulebookButton}
-        rulebookOpen={rulebookOpen}
-        onCloseRulebook={() => setRulebookOpen(false)}
-      />
-    );
-  }
+  // 2026-09-20 세션: this used to fork into a completely separate
+  // `PerudoMobileBoard` tree below `max-width: 767px` (a 2026-09-08~09-10
+  // series of sessions built a bespoke fixed-viewport zero-scroll mobile
+  // layout, `useIsMobile.ts`). Removed per user request, back to how this
+  // game worked through 2026-09-06: ONE tree, rendered identically on every
+  // viewport via the plain responsive (`sm:`/`light:`) classes already
+  // throughout this file — mobile gets a normal scrolling page like every
+  // other board in this project, not a special-cased second layout. Every
+  // fix that landed on this shared tree since then (the 09-07 horizontal-
+  // overflow fix and 09-08 border-detachment fix in `PerudoBidTrack.tsx`,
+  // the bot-takeover/light-theme/lockstep work in this file and
+  // `PerudoGame.tsx`) was never mobile-UI-specific, so none of it needed to
+  // be un-done to remove the split — only the fork itself and the
+  // mobile-only presentation components it fed (`PerudoMobileBoard.tsx`,
+  // `useIsMobile.ts`, and the `DiceCountStrip`/`ExpectationBar` helpers in
+  // `PerudoSharedUI.tsx` that only that tree consumed) were deleted.
 
   return (
     <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>

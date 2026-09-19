@@ -4,12 +4,11 @@
  * The physical rectangular bid track (2026-08-20/08-21/09-07/09-08 sessions —
  * see engine.ts's module doc for the full 30-slot sequence history). Pulled
  * out of `PerudoBoard.tsx` into its own file (2026-09-08 모바일 물리 보드 복원
- * 세션) so `PerudoMobileBoard.tsx` can render the SAME physical board instead
- * of a simplified substitute — an earlier pass of this session's mobile
- * redesign dropped the track entirely in favor of a plain "current bid" card,
- * which the user reported back as "the board disappeared" and asked to have
- * restored (AskUserQuestion-confirmed: put the physical track back into the
- * new mobile layout, not just a bid-summary card).
+ * 세션, at the time so a since-removed separate mobile board could render the
+ * SAME physical board instead of a simplified substitute — see the
+ * 2026-09-20 note on `BOARD_CELL_SIZE_CSS` below). `PerudoBoard.tsx` is now
+ * this module's only consumer again, but it stayed split out — no reason to
+ * re-inline it.
  *
  * Purely a rendering module — `trackCellAt`/`trackCellForBid`/`validateRaise`
  * (engine.ts) remain the only source of truth for track content and bid
@@ -62,10 +61,12 @@ import { trackCellAt, type Face, type TrackCell } from "./engine";
  * would even engage) so the board now fits with zero horizontal scroll on
  * every phone in practical use; only a genuinely obsolete ~320px device
  * still falls back to the scroll escape hatch. The 78px cap
- * (desktop/tablet sizing) is unchanged. This formula assumes the SAME
- * `GamePlayPage`(`px-4`/`px-6`) + panel(`p-3`/`p-4`) chrome at every call
- * site — `PerudoMobileBoard.tsx` reuses the exact same panel padding for
- * this reason (see its own doc comment).
+ * (desktop/tablet sizing) is unchanged. This formula assumes the
+ * `GamePlayPage`(`px-4`/`px-6`) + panel(`p-3`/`p-4`) chrome trivially stays
+ * consistent now that `PerudoBoard.tsx` is this module's only call site
+ * again (2026-09-20: the separate mobile board that used to duplicate this
+ * exact panel padding to keep the assumption true was removed — see this
+ * file's own module doc).
  */
 const CELL_VAR = "var(--perudo-cell)";
 const CELL_STYLE: React.CSSProperties = { width: CELL_VAR, height: CELL_VAR };
@@ -83,9 +84,9 @@ const CELL_STYLE: React.CSSProperties = { width: CELL_VAR, height: CELL_VAR };
  * `border-4` (8px, unchanged) + `p-1.5` (12px) = 100px. Both divide the
  * remainder by 9 (the 2 shared corners + the 7-cell north/south strip that
  * spans a full row), matching `buildRectFrame`'s own row layout. Injected
- * as a real `<style>` tag on `RectBidTrack`'s own root below — only one
- * board is ever mounted at a time (desktop XOR mobile), so there's no risk
- * of two conflicting copies fighting each other.
+ * as a real `<style>` tag on `RectBidTrack`'s own root below — `PerudoBoard`
+ * only ever mounts one `RectBidTrack` at a time, so there's no risk of two
+ * conflicting copies fighting each other.
  */
 const BOARD_CELL_SIZE_CSS = `
 .perudo-rect-track {
@@ -123,7 +124,7 @@ const BOARD_CELL_SIZE_CSS = `
 }
 `;
 
-/** A strip's exact content length — `cellCount * var(--perudo-cell)`, zero gap between cells (north/south hold 7 cells, west/east hold 6 — see `buildRectFrame`). Exported so callers (`PerudoBoard.tsx`/`PerudoMobileBoard.tsx`) can cap their `children`'s own width/maxWidth to match. */
+/** A strip's exact content length — `cellCount * var(--perudo-cell)`, zero gap between cells (north/south hold 7 cells, west/east hold 6 — see `buildRectFrame`). Exported so `PerudoBoard.tsx` can cap its `children`'s own width/maxWidth to match. */
 export function stripLength(cellCount: number): string {
   return `calc(${CELL_VAR} * ${cellCount})`;
 }
@@ -287,10 +288,8 @@ export function OverflowBadge({ label, tone, quantity, face }: { label: string; 
  * the grid — corner↔strip and cell↔cell alike — so the whole rectangle reads
  * as one continuous connected border track with only each tile's own 1px
  * divider border between neighbors. `children` renders inside the hollow
- * center — on desktop that's the dice graveyard + bid/액션 panel + the
- * viewer's own dice (see `PerudoBoard.tsx`); on mobile (2026-09-08 세션) it's
- * just the bid composer, since the graveyard/dice tray/color picker moved
- * elsewhere in that layout — so the whole board reads as one big
+ * center — the dice graveyard + bid/액션 panel + the viewer's own dice (see
+ * `PerudoBoard.tsx`'s call site) — so the whole board reads as one big
  * physical-board-sized panel instead of a thin strip with everything else
  * stacked below it.
  *
@@ -344,11 +343,10 @@ export default function RectBidTrack({
       // 세션): this grid's own size is already fully deterministic from
       // `--perudo-cell` (viewport width alone), so its layout/paint never
       // needs to depend on anything outside it and vice versa — isolating it
-      // this way means an ancestor's reflow during page-level scroll (now
-      // that mobile scrolls the whole document again, see
-      // `PerudoMobileBoard.tsx`) doesn't force the browser to re-measure this
-      // whole 30-cell grid on every scroll frame. Harmless on desktop too,
-      // same reasoning applies there.
+      // this way means an ancestor's reflow during page-level scroll doesn't
+      // force the browser to re-measure this whole 30-cell grid on every
+      // scroll frame. Applies on every viewport now that mobile renders this
+      // same `PerudoBoard.tsx` tree instead of a separate component.
       className="perudo-rect-track [contain:layout_paint] grid w-fit mx-auto gap-0 rounded-2xl border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-1.5 light:border-slate-400 light:shadow-md"
       // 2026-09-08 4변 밀착 세션: the middle row (west strip / children / east
       // strip) used to be `auto`-sized, which let `children`'s real content

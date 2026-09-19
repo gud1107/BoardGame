@@ -1,23 +1,22 @@
 "use client";
 
 /**
- * Small presentational pieces shared between `PerudoBoard.tsx` (desktop/
- * tablet layout) and `PerudoMobileBoard.tsx` (2026-09-08 모바일 화이트
- * 오버스크롤 차단 세션, extended the same day by a 물리 보드 복원 세션 once the
- * mobile board's first draft dropped the physical `RectBidTrack` and the
- * user reported the board itself as "missing") — pulled out of
- * `PerudoBoard.tsx`, where they used to live as unexported local functions,
- * specifically so both board variants can render the exact same
- * graveyard/face-picker/table-chrome markup instead of drifting into two
- * slightly different copies. Living in their own file (rather than just
- * exporting them from `PerudoBoard.tsx`) also avoids a circular import
- * between the two board components. See also `PerudoBidTrack.tsx`, which
- * holds the (larger) physical rectangular bid-track component both boards
- * render identically.
+ * Small presentational pieces used by `PerudoBoard.tsx` — pulled out of it,
+ * where they used to live as unexported local functions, into their own
+ * file mainly so `PerudoBidTrack.tsx` (the physical rectangular bid-track
+ * component, also its own file) can import `faceLabel` without a circular
+ * import back to `PerudoBoard.tsx`.
+ *
+ * 2026-09-08~09-10 sessions briefly split mobile into a second, bespoke
+ * `PerudoMobileBoard.tsx` tree and grew this file to be shared between the
+ * two (that's why `DiceCountStrip`/`ExpectationBar` existed here). Removed
+ * 2026-09-20 per user request — mobile renders the exact same
+ * `PerudoBoard.tsx` tree as desktop again, like it did through 2026-09-06 —
+ * so this file went back to having a single consumer.
  */
 
 import PerudoFaceIcon from "./PerudoFaceIcon";
-import { DIE_SIZE_PX, PerudoDie, type DieSize } from "./dice/PerudoDie";
+import { PerudoDie, type DieSize } from "./dice/PerudoDie";
 import type { DiceColorway } from "./dice/colorways";
 import { STARTING_DICE, type Face, type PerudoState, type SeatIndex } from "./engine";
 
@@ -28,11 +27,9 @@ export function faceLabel(face: Face): string {
 // A warm, woven fabric mat — a deep terracotta/umber gradient (cloth, not
 // cold grey stone like an earlier version) and `TableTexture` below layers a
 // woven crosshatch + Andean-stripe trim bands on top of it, standing in for
-// the textile mat the real board sits on. Shared by both `PerudoBoard.tsx`
-// (desktop) and `PerudoMobileBoard.tsx` (2026-09-08 물리 보드 복원 세션) so the
-// mobile board's chrome padding — and therefore `PerudoBidTrack.tsx`'s own
-// `BOARD_CELL_SIZE_CSS` width formula, which is baked in assuming this exact
-// panel padding — stays identical between the two layouts.
+// the textile mat the real board sits on. `PerudoBidTrack.tsx`'s own
+// `BOARD_CELL_SIZE_CSS` width formula is baked in assuming this exact panel
+// padding, so keep them in sync if this ever changes.
 export const TABLE_PANEL =
   "relative overflow-hidden rounded-3xl border border-black/60 bg-gradient-to-b from-[#2a1c14] via-[#1d130d] to-[#0d0805] shadow-[0_0_60px_-20px_rgba(0,0,0,0.9)] light:border-slate-200 light:from-white light:via-amber-50/50 light:to-white light:shadow-md";
 
@@ -76,63 +73,11 @@ export function DieBack({ size = "sm", colorway }: { size?: DieSize; colorway: D
 }
 
 /**
- * A fixed `maxSlots`-wide row of `DieBack`s in a seat's own colorway — `diceCount`
- * of them filled, the rest rendered as empty dashed placeholders — so a
- * seat's current dice count reads as "how full is this seat's dice rack"
- * rather than a bare number, and every other seat's rack is visually
- * comparable at a glance regardless of how many each has actually lost
- * (2026-09-09 모바일 색상 다이스 카운터 세션, AskUserQuestion-confirmed: fixed
- * `STARTING_DICE`-slot bar with dashed empty slots for lost dice, rather than
- * the desktop scoreboard's older "just render however many are left, no
- * empty slots" pattern — the two are allowed to diverge since this session's
- * request scoped the change to mobile only).
- *
- * `maxSlots` only sets the FLOOR on how many slots render — a successful
- * "맞아!(calza)" grants a bonus die with no upper cap (see `engine.ts`'s
- * `calza`), so `diceCount` can exceed `STARTING_DICE`. Widening the slot
- * count to fit `diceCount` in that case (rather than clamping the array to
- * `maxSlots`) keeps every die actually owned visible instead of silently
- * under-representing a seat that grew past the starting count.
- */
-export function DiceCountStrip({
-  colorway,
-  diceCount,
-  maxSlots = STARTING_DICE,
-  size = "sm",
-}: {
-  colorway: DiceColorway;
-  diceCount: number;
-  maxSlots?: number;
-  size?: DieSize;
-}) {
-  const w = DIE_SIZE_PX[size];
-  const slots = Math.max(maxSlots, diceCount);
-  return (
-    <div className="flex shrink-0 items-center gap-0.5">
-      {Array.from({ length: slots }, (_, i) =>
-        i < diceCount ? (
-          <DieBack key={i} size={size} colorway={colorway} />
-        ) : (
-          <div
-            key={i}
-            className="shrink-0 rounded-[24%] border border-dashed border-white/15 bg-white/[0.03] light:border-slate-300 light:bg-slate-100"
-            style={{ width: w, height: w }}
-            title="잃은 주사위"
-          />
-        ),
-      )}
-    </div>
-  );
-}
-
-/**
  * 2026-09-07 모바일 가로 스크롤 제거 세션: shrunk from fixed `h-9 w-9`/`gap-1.5`
  * (6×36px + 5×6px gap ≈ 246px) to `h-6 w-6`/`gap-1` (6×24px + 5×4px gap =
  * 164px) — this row's 6 buttons don't scale with `--perudo-cell` at all, so
  * at the board's smaller floor the old fixed size no longer fit inside the
- * composer panel nested in `PerudoBoard`'s desktop board. Reused as-is by
- * `PerudoMobileBoard`'s action dock (2026-09-08 세션) — the same compact
- * size already fits a thumb-friendly dock without a further resize.
+ * composer panel nested in `PerudoBoard`'s board.
  */
 export function FacePicker({ selected, onSelect }: { selected: Face; onSelect: (face: Face) => void }) {
   const faces: Face[] = [1, 2, 3, 4, 5, 6];
@@ -169,9 +114,7 @@ export function FacePicker({ selected, onSelect }: { selected: Face; onSelect: (
  * showing a negative loss. Grouped per seat so the pile also reads as "who's
  * been bleeding dice": each seat's losses render as an overlapping stack of
  * THAT seat's own dice colorway, dimmed/desaturated so a graveyard die reads
- * as spent and out of play. Rendered on the desktop board directly under
- * `TotalDiceBanner`, and as the mobile board's own "tier 2" (2026-09-08
- * 세션) right under the turn banner.
+ * as spent and out of play. Rendered directly under `TotalDiceBanner`.
  */
 export function LostDiceTray({
   state,
@@ -202,30 +145,6 @@ export function LostDiceTray({
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * Always-visible face-expectation summary (rulebook UX request, 2026-09-08
- * 모바일 개편 세션 요구사항 #2 3단): the classic Perudo doubt/call math — a
- * specific non-조커 face's expected count across every die still in play is
- * `total / 3` (its own `total/6` share plus the wild 조커's own `total/6`
- * share), while 조커(face 1) itself has no wild backing it up, so its own
- * expectation is just `total / 6`. Desktop already surfaces the general
- * figure inline (`MyDiceStatsPanel` in `PerudoBoard.tsx`, scoped to the
- * viewer's own hand); this bar is the mobile board's compact top-level
- * equivalent, scoped to the whole table's remaining dice instead.
- */
-export function ExpectationBar({ totalActiveDice }: { totalActiveDice: number }) {
-  const general = totalActiveDice / 3;
-  const jokerOnly = totalActiveDice / 6;
-  return (
-    <div className="relative z-10 flex items-center justify-center gap-1.5 rounded-xl border border-amber-300/25 bg-amber-400/10 px-2.5 py-1 text-center text-[11px] font-semibold text-amber-100 light:border-amber-400 light:bg-amber-50 light:text-amber-700">
-      <span>📊</span>
-      <span className="break-keep">
-        전체 {totalActiveDice}개 · 일반 기대값 {general.toFixed(1)}개 (1 눈금은 {jokerOnly.toFixed(1)}개)
-      </span>
     </div>
   );
 }
