@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
@@ -20,15 +20,63 @@ import {
 } from "./engine";
 
 /**
- * The "playing"-phase mobile layout — rewritten 2026-09-09 (데스크톱 동등
- * 단일 뷰포트 전면 재구축 세션, AskUserQuestion 4문항 확인 후 진행). Replaces
- * the same-day-earlier "Section 1 zero-scroll arena + Section 2 scroll-down
- * player roster" 2-section structure outright — the whole board is now a
- * SINGLE `100dvh`-fit, zero-scroll screen with no page-level scroll section
- * at all. All game state and handlers (bid-composer draft, colorway picker,
- * action dispatch) live in the parent `PerudoBoard` — this component is pure
- * presentation, mounted instead of (never alongside) the desktop tree via
- * `useIsMobile`.
+ * The "playing"-phase mobile layout. All game state and handlers
+ * (bid-composer draft, colorway picker, action dispatch) live in the parent
+ * `PerudoBoard` — this component is pure presentation, mounted instead of
+ * (never alongside) the desktop tree via `useIsMobile`.
+ *
+ * **2026-09-20 세로 스크롤 롤백 세션** (user report: the 2026-09-09 zero-scroll
+ * rebuild below felt cramped — asked to go back to the original layout where
+ * the page scrolls naturally top-to-bottom, "널찍하게 스와이프하며 플레이"). The
+ * root no longer measures/clamps itself to `calc(100dvh - offset)`, and no
+ * longer locks gestures (`touch-none`/`overscroll-none`/`select-none`) —
+ * this component is now a plain block that grows to its natural content
+ * height and lets the document scroll over it like any other page section,
+ * same as every other game's board. Every OTHER decision from the
+ * zero-scroll sessions below (header/footer/dock composition, what content
+ * lives where, the portrait lock) is left untouched — only the
+ * fixed-viewport/no-scroll MECHANISM is reverted, not the layout it produces.
+ *
+ * That original pre-zero-scroll version (natural page scroll) is also the
+ * version a real bug report traced a "board breaks/jitters while scrolling"
+ * symptom back to — the physical board (`RectBidTrack`) has always had its
+ * OWN nested scroll region for its hollow center cell
+ * (`.perudo-center-scroll`, `PerudoBidTrack.tsx`), predating the mobile
+ * split entirely. A nested scroller sitting inside a page that ALSO scrolls
+ * is a well-known mobile jank source (the browser has to arbitrate which
+ * scroller owns an in-progress touch gesture, and an unbounded rubber-band
+ * on the inner one can chain into the outer page mid-swipe). Restoring page
+ * scroll without addressing that would just reopen the same bug, so this
+ * session also hardens the two real jitter sources instead of just deleting
+ * the zero-scroll code:
+ * 1. `overscroll-contain` on `.perudo-center-scroll` itself
+ *    (`PerudoBidTrack.tsx`) — contains that cell's own bounce instead of
+ *    letting it chain into the page scroll.
+ * 2. `[contain:layout_paint]` on the board's grid root
+ *    (`.perudo-rect-track`, `PerudoBidTrack.tsx`) — this 30-cell grid's size
+ *    is already fully deterministic from `--perudo-cell` alone, so isolating
+ *    its layout/paint means the page's own scroll-driven reflow never has to
+ *    re-measure it.
+ * 3. `aspectRatio` reserved on the board's own wrapper below (based on the
+ *    frame's known 9-wide × 8-tall cell grid) — a defensive CLS guard so the
+ *    space this element occupies is claimed up front rather than potentially
+ *    resizing after paint.
+ * The document-level `overscroll-behavior` (`PerudoBoard.tsx`'s mount
+ * effect) also moved from `"none"` to `"contain"` for the same reason —
+ * there's a real page top/bottom to bounce at again now.
+ *
+ * Below this point, the surviving doc history from the zero-scroll sessions
+ * (2026-09-09/09-10) is kept as-is — it still explains why the header/dock
+ * content is shaped the way it is, just not why the ROOT no longer measures
+ * a fixed viewport height.
+ *
+ * ---
+ *
+ * Rewritten 2026-09-09 (데스크톱 동등 단일 뷰포트 전면 재구축 세션, AskUserQuestion
+ * 4문항 확인 후 진행). Replaced the same-day-earlier "Section 1 zero-scroll
+ * arena + Section 2 scroll-down player roster" 2-section structure outright
+ * with a single screen (superseded by the 2026-09-20 rollback above, but the
+ * CONTENT decisions below still stand).
  *
  * **Why Section 2 is gone rather than squeezed in** (AskUserQuestion-confirmed):
  * the request's own mockup only accounts for a header player-strip + central
@@ -42,39 +90,27 @@ import {
  * (mobile already substitutes `ExpectationBar` for the general table-wide
  * expected-value figure) and both stay out of the new single-screen budget.
  *
- * **Sizing technique** (AskUserQuestion-confirmed: keep, don't rewrite to a
- * fixed-canvas `transform: scale()`): the request's own mockup suggested a
- * fixed-size desktop-shaped canvas uniformly scaled down via CSS
- * `transform: scale()`. This file already had a battle-tested alternative
- * from three earlier 2026-09-09 sessions — measure how far this element's
- * top sits below whatever page chrome renders above it (site header + the
- * `/games/[gameId]` page's own title block) via
- * `arenaRef.getBoundingClientRect().top`, and size the root to exactly
- * `calc(100dvh - thatOffset)` — and this file has conditional-height content
- * (`OverflowBadge`s, the "동일한 배팅" hint, the raise composer only
- * appearing on my turn) that a *fixed-canvas* `transform: scale()` would
- * have to re-measure and re-apply on every single one of those toggles,
- * risking the whole board visibly growing/shrinking mid-game. The
- * `calc()`-based flex layout below reflows immediately with zero extra JS
- * whenever that conditional content changes, so it was kept as-is (now
- * governing the ENTIRE component instead of just a "Section 1").
+ * **Sizing technique — SUPERSEDED 2026-09-20**: this file used to measure how
+ * far its root sat below the page chrome above it
+ * (`arenaRef.getBoundingClientRect().top`) and clamp itself to exactly
+ * `calc(100dvh - thatOffset)`, specifically to keep a fixed-canvas
+ * `transform: scale()` rewrite from having to re-measure on every
+ * conditional-height toggle (`OverflowBadge`s, the raise composer, etc.).
+ * That reasoning only mattered because the root was trying to fit inside one
+ * screen at all — now that the root is plain natural-flow content (see the
+ * 2026-09-20 section at the top of this file), there's no viewport budget to
+ * fit into, so the measurement/clamp is gone outright rather than reworked;
+ * conditional-height content just grows the page like it would anywhere
+ * else.
  *
- * **Zero-scroll lock** (new requirement this session): previously this
- * root only clamped horizontal overflow (`overflow-x-hidden`) and relied on
- * `minHeight` + two internal `overflow-y-auto` safety valves (the physical
- * board's `<main>`, and the lost-dice tray) as a "better a nested scroll
- * than clipped content" fallback for extreme viewports. Both are gone now:
- * the root uses a firm `height` (not `minHeight`) plus `overflow-hidden`,
+ * **Zero-scroll lock — SUPERSEDED 2026-09-20**: this root used to combine a
+ * firm `height` (not `minHeight`) with `overflow-hidden`,
  * `touch-action: none`, `overscroll-behavior: none`, and `user-select: none`
- * (Tailwind `touch-none overscroll-none select-none`) so no gesture — up,
- * down, or sideways — can shift so much as a pixel of this screen or any
- * element nested inside it; the two internal safety valves became plain
- * `overflow-hidden` (clip rather than scroll) since dropping Section 2 frees
- * up enough vertical budget that this file's own content no longer needs
- * them to fit (see this session's HANDOFF entry for the actual measured
- * numbers). `html`/`body`'s own `overscroll-behavior: none` is still applied
- * globally by `PerudoBoard.tsx`'s mount effect regardless of which layout
- * branch renders — untouched here.
+ * (Tailwind `touch-none overscroll-none select-none`) so no gesture could
+ * shift a pixel of the screen. All of that is removed — the root is a plain
+ * block again. See the 2026-09-20 section at the top of this file for what
+ * replaced it (`overscroll-contain` + `[contain:layout_paint]` on the
+ * physical board itself, `PerudoBidTrack.tsx`).
  *
  * **Portrait lock** (AskUserQuestion-confirmed: portrait-only, landscape
  * shows a notice rather than a second bespoke layout): `useIsLandscape`
@@ -118,17 +154,21 @@ import {
  *    items-center justify-center`, was the outer wrapper doing this via
  *    `justify-end`) so the board visually centers in whatever room is left
  *    once the (now-fixed) header/graveyard/action-dock/footer take their
- *    share, instead of just hugging the bottom controls.
+ *    share, instead of just hugging the bottom controls. (2026-09-20: with
+ *    the root no longer fixed-height, `flex-1 min-h-0` has nothing to
+ *    flex-share against anymore and was dropped from `<main>` — the header
+ *    stays `shrink-0`/`h-8` for the same "never wraps" readability reason,
+ *    just without the fixed-viewport budget that originally motivated it.)
  * The board's own `--perudo-cell` sizing formula (`PerudoBidTrack.tsx`,
- * tuned per-breakpoint against real viewport width) and the root's
- * `calc(100dvh - offset)` measurement technique below are both
- * INTENTIONALLY left untouched — an earlier request draft this session
- * asked for a literal `min(80vw, 34dvh)` fixed-square board and a literal
- * `h-[100dvh]` root; both would silently reopen bugs those two techniques
- * were specifically built to avoid (cell-size/no-overflow tuning and
- * page-chrome double-counting respectively — see each technique's own doc
- * comment), so per this session's own `AskUserQuestion` this file only wraps
- * the existing board in a centering container instead of forcing its size.
+ * tuned per-breakpoint against real viewport width) was INTENTIONALLY left
+ * untouched by this 2026-09-09 session — an earlier request draft that day
+ * asked for a literal `min(80vw, 34dvh)` fixed-square board, which would
+ * have silently reopened the cell-size/no-overflow tuning bug that formula
+ * was specifically built to avoid — so this file only wrapped the existing
+ * board in a centering container instead of forcing its size. (The other
+ * half of that sentence — the root's own `calc(100dvh - offset)`
+ * measurement — no longer exists; see the 2026-09-20 section at the top of
+ * this file.)
  *
  * Reuses the exact same `TABLE_PANEL`/`TableTexture` chrome as the desktop
  * board (`PerudoSharedUI.tsx`) — this matters beyond visual consistency:
@@ -307,39 +347,6 @@ export default function PerudoMobileBoard({
     return entry ? (Number(entry[0]) as SeatIndex) : undefined;
   };
 
-  // Zero-scroll fit (요구사항 ①③, AskUserQuestion-confirmed "JS로 상단 여백
-  // 측정 후 calc 핏", kept over a fixed-canvas `transform: scale()` rewrite —
-  // see file header): measure how far this element's top sits from the real
-  // viewport top (site header + page title block above it) and size the
-  // WHOLE arena (there's no separate "Section 1" anymore — this component
-  // has exactly one screen now) to exactly the remaining height, instead of
-  // a literal `h-[100dvh]` that would double-count that chrome and overflow
-  // past what's actually visible. Falls back to a bare `100dvh` for the very
-  // first paint (before the effect has measured anything).
-  //
-  // Unlike the prior 2-section version, this is now a firm `height` (not
-  // `minHeight`) paired with `overflow-hidden` on the same element — this
-  // session's zero-scroll requirement means content that doesn't fit must
-  // clip, never scroll, so there's no longer a reason to let the element
-  // grow taller than the measured budget.
-  const arenaRef = useRef<HTMLDivElement | null>(null);
-  const [arenaHeight, setArenaHeight] = useState<string>("100dvh");
-  useEffect(() => {
-    const measure = () => {
-      const el = arenaRef.current;
-      if (!el) return;
-      const top = el.getBoundingClientRect().top;
-      setArenaHeight(`calc(100dvh - ${Math.max(top, 0)}px)`);
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    window.addEventListener("orientationchange", measure);
-    return () => {
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("orientationchange", measure);
-    };
-  }, []);
-
   if (isLandscape) return <LandscapeNotice />;
 
   const totalActiveDice = totalDiceInPlay(state);
@@ -347,10 +354,17 @@ export default function PerudoMobileBoard({
   const activeName = names[state.activeSeat] ?? "";
 
   return (
+    // 2026-09-20 세로 스크롤 롤백: no more `ref`/measured `height` — this is
+    // a plain block that grows to its natural content height, and the
+    // document scrolls over it (`overscroll-contain` here is a second,
+    // panel-scoped line of defense on top of `PerudoBoard.tsx`'s
+    // document-level `overscroll-behavior: contain`, not a replacement for
+    // it — this panel itself never scrolls internally). `touch-none`/
+    // `overscroll-none`/`select-none` (gesture lockdown for the old
+    // fixed-viewport screen) are gone — a normal scrollable page needs none
+    // of them.
     <div
-      ref={arenaRef}
-      style={{ height: arenaHeight }}
-      className={`${TABLE_PANEL} flex w-full max-w-[100vw] touch-none flex-col gap-1.5 overscroll-none p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] select-none sm:p-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom,0px))]`}
+      className={`${TABLE_PANEL} flex w-full max-w-[100vw] flex-col gap-3 overscroll-contain p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:p-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom,0px))]`}
     >
       <MyTurnOverlay isMyTurn={isMyTurn && iAmAlive} />
       <TableTexture />
@@ -388,15 +402,12 @@ export default function PerudoMobileBoard({
         </div>
       )}
 
-        {/* 보드+내 주사위를 한 블록으로 묶어 하단에 밀착. `<main>` 자신이
-            flex-1 min-h-0로 남는 세로 여백을 전부 흡수해 물리 보드를 그
-            안에서 수직 중앙 정렬하고(items-center justify-center), 액션
-            독/풋터는 shrink-0라 항상 바로 아래 밀착된 채로 남는다. 혹시라도
-            넘치는 만큼은(이 세션부터는) 스크롤이 아니라 클립된다 —
-            `overflow-y-auto` 안전장치가 "완전 고정" 요구사항과 상충해
-            제거됨. */}
-        <div className="relative flex min-h-0 flex-1 flex-col items-center gap-1.5">
-        <main className="relative z-10 flex min-h-0 w-full flex-1 flex-col items-center justify-center overflow-hidden">
+        {/* 보드+내 주사위를 한 블록으로 묶음. 2026-09-20 세로 스크롤 롤백: 더 이상
+            고정 높이 부모의 남는 공간을 흡수할 필요가 없어 `flex-1 min-h-0`를
+            제거 — 이 블록은 그냥 자기 콘텐츠 높이만큼 자라고, 넘치는 만큼은
+            페이지 자체가 스크롤된다(클립 없음). */}
+        <div className="relative flex flex-col items-center gap-3">
+        <main className="relative z-10 flex w-full flex-col items-center justify-center">
           <RectBidTrack
             currentCell={currentCell}
             pendingCell={pendingCell}

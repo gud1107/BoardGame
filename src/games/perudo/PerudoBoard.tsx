@@ -152,21 +152,34 @@ export default function PerudoBoard({
   // AskUserQuestion-confirmed: 모바일 전용, 데스크톱은 기존 유지).
   const isMobile = useIsMobile();
 
-  // White-overscroll-bounce lockdown (요구사항 1) — scoped to this
-  // component's mount, restored on unmount, same pattern as
-  // `WormCanvas.tsx`'s own gesture lock (see that file's doc comment).
-  // Applied regardless of phase/layout branch below (game-over and reveal
-  // screens can bounce just as easily as the playing screen can), not
-  // gated on `isMobile` either — harmless on desktop, and `matchMedia`
-  // already only ever fires the *visual* mobile layout switch above.
+  // Overscroll-bounce containment (요구사항 1) — scoped to this component's
+  // mount, restored on unmount, same pattern as `WormCanvas.tsx`'s own
+  // gesture lock (see that file's doc comment). Applied regardless of
+  // phase/layout branch below (game-over and reveal screens can bounce just
+  // as easily as the playing screen can), not gated on `isMobile` either —
+  // harmless on desktop, and `matchMedia` already only ever fires the
+  // *visual* mobile layout switch above.
+  //
+  // 2026-09-20 세로 스크롤 롤백 세션: was `"none"` (fully disables the native
+  // rubber-band bounce at the document's own scroll boundaries), which made
+  // sense while mobile was a fixed zero-scroll viewport with no real page
+  // scroll to bounce at all. Now that mobile restores natural page scroll
+  // (`PerudoMobileBoard.tsx`), a real "top of page"/"bottom of page" edge
+  // exists again, and `"contain"` is the correct value for it — it still
+  // stops the bounce from CHAINING past this page (pull-to-refresh/navigating
+  // away mid-swipe), but lets the browser's own native bounce feedback play
+  // out at the edge instead of just hard-stopping, which reads as smoother.
+  // The `backgroundColor` override below was always here for exactly this
+  // case (a bounce revealing dark instead of white) — previously dead
+  // weight under `"none"`, now actually load-bearing again.
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
     const prevHtmlOverscroll = html.style.overscrollBehavior;
     const prevBodyOverscroll = body.style.overscrollBehavior;
     const prevBodyBackground = body.style.backgroundColor;
-    html.style.overscrollBehavior = "none";
-    body.style.overscrollBehavior = "none";
+    html.style.overscrollBehavior = "contain";
+    body.style.overscrollBehavior = "contain";
     body.style.backgroundColor = "#020617"; // slate-950 — matches TABLE_PANEL's own darkest stop, so a rubber-band bounce reveals this instead of the page's default white
     return () => {
       html.style.overscrollBehavior = prevHtmlOverscroll;

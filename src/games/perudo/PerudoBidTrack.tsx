@@ -340,7 +340,16 @@ export default function RectBidTrack({
 
   return (
     <div
-      className="perudo-rect-track grid w-fit mx-auto gap-0 rounded-2xl border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-1.5 light:border-slate-400 light:shadow-md"
+      // `[contain:layout_paint]` (2026-09-20 페루도 모바일 세로 스크롤 롤백
+      // 세션): this grid's own size is already fully deterministic from
+      // `--perudo-cell` (viewport width alone), so its layout/paint never
+      // needs to depend on anything outside it and vice versa — isolating it
+      // this way means an ancestor's reflow during page-level scroll (now
+      // that mobile scrolls the whole document again, see
+      // `PerudoMobileBoard.tsx`) doesn't force the browser to re-measure this
+      // whole 30-cell grid on every scroll frame. Harmless on desktop too,
+      // same reasoning applies there.
+      className="perudo-rect-track [contain:layout_paint] grid w-fit mx-auto gap-0 rounded-2xl border-4 border-neutral-700 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black p-1 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7)] sm:p-1.5 light:border-slate-400 light:shadow-md"
       // 2026-09-08 4변 밀착 세션: the middle row (west strip / children / east
       // strip) used to be `auto`-sized, which let `children`'s real content
       // height inflate the row past `stripLength(6)`. West/east are
@@ -351,7 +360,22 @@ export default function RectBidTrack({
       // middle COLUMN via `children`'s `maxWidth: stripLength(7)` below)
       // keeps the border a seamless rectangle regardless of how tall the
       // center content gets; the center cell scrolls internally instead.
-      style={{ gridTemplateColumns: "auto auto auto", gridTemplateRows: `auto ${stripLength(6)} auto` }}
+      style={{
+        gridTemplateColumns: "auto auto auto",
+        gridTemplateRows: `auto ${stripLength(6)} auto`,
+        // `aspectRatio` (2026-09-20 세로 스크롤 롤백 세션, requested defensive
+        // technique): the frame is always 9 cells wide (2 corners + the
+        // 7-cell strip) by 8 cells tall (2 corners + the 6-cell strip), so
+        // 9/8 is this board's true ratio. Declared honestly as a redundant
+        // safety net, not a load-bearing fix — both dimensions here are
+        // already fully explicit from the grid template above (`stripLength`
+        // + each cell's own `CELL_VAR` box), so this has no visible effect
+        // today; it only matters if a future change ever lets one axis
+        // resolve from `auto` before the grid tracks do, which is exactly
+        // the class of first-paint size jump this session is guarding
+        // against elsewhere.
+        aspectRatio: "9 / 8",
+      }}
     >
       {/* `display:none` by default (the UA stylesheet), so this never becomes a grid item itself. */}
       <style>{BOARD_CELL_SIZE_CSS}</style>
@@ -400,7 +424,16 @@ export default function RectBidTrack({
           separate non-scrolling wrapper or JS scroll-position tracking.
           Harmless no-op when content doesn't actually overflow
           (desktop/tablet, bigger `--perudo-cell`). */}
-      <div className="perudo-center-scroll col-start-2 row-start-2 flex flex-col items-center overflow-y-auto">
+      {/* `overscroll-contain` (2026-09-20 세로 스크롤 롤백 세션): now that
+          mobile scrolls the whole page again instead of clipping to a fixed
+          viewport, this nested scroller sits INSIDE a page that also
+          scrolls — without containment, a touch drag that starts here can
+          hand its momentum/rubber-band off to the page scroll underneath it
+          (or vice versa) mid-gesture, which is exactly what reads as the
+          board "덜컹거리는" during a scroll. `contain` (not `none`) still lets
+          this cell bounce naturally at its own top/bottom when it's actually
+          scrolled, it just stops that bounce from chaining to the page. */}
+      <div className="perudo-center-scroll col-start-2 row-start-2 flex flex-col items-center overflow-y-auto overscroll-contain">
         <div className="pointer-events-none sticky top-0 z-10 -mb-2 h-2 w-full shrink-0 bg-gradient-to-b from-black/45 to-transparent" />
         {children}
         <div className="pointer-events-none sticky bottom-0 z-10 -mt-3 h-3 w-full shrink-0 bg-gradient-to-t from-black/60 to-transparent" />
