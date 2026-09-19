@@ -672,12 +672,12 @@ export default function PerudoBoard({
               trigger. */}
           <div
             ref={bidActionZoneRef}
-            className="relative z-10 flex w-full flex-col items-center justify-center gap-0.5 rounded-[1.25rem] border-4 border-amber-800 bg-amber-100/90 p-1 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)] sm:gap-2 sm:p-2"
+            className="relative z-10 flex w-full flex-col items-center justify-center gap-0.5 rounded-[1.25rem] border-2 border-amber-800 bg-amber-100/90 p-0.5 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)] sm:border-4 sm:gap-2 sm:p-2"
           >
             {state.currentBid ? (
               <div className="flex flex-col items-center gap-0.5 text-center">
-                <span className="text-[9px] text-amber-900/70 sm:text-[10px]">{names[state.currentBid.seat]}님의 선언</span>
-                <span className="text-lg font-black text-red-900 drop-shadow-[0_1px_0_rgba(255,255,255,0.4)] sm:text-3xl">
+                <span className="text-[9px] leading-none text-amber-900/70 sm:text-[10px] sm:leading-normal">{names[state.currentBid.seat]}님의 선언</span>
+                <span className="text-base leading-none font-black text-red-900 drop-shadow-[0_1px_0_rgba(255,255,255,0.4)] sm:text-3xl sm:leading-normal">
                   {faceLabel(state.currentBid.face)} × {state.currentBid.quantity}개↑
                 </span>
               </div>
@@ -694,8 +694,13 @@ export default function PerudoBoard({
               // (this row was never as tight as the 6-button face row).
               // 2026-09-20: stepper/confirm shrunk further still, mobile-first —
               // see this block's own parent comment.
-              <div className="flex flex-col items-center gap-0.5 rounded-xl border border-violet-900/25 bg-violet-950/5 px-1.5 py-0.5 sm:gap-1.5 sm:py-2">
-                <p className="text-center text-[9px] leading-none font-semibold text-violet-900/70 sm:text-[10px] sm:leading-tight">
+              <div className="flex flex-col items-center gap-0.5 rounded-xl border border-violet-900/25 bg-violet-950/5 px-1.5 py-0 sm:gap-1.5 sm:py-2">
+                {/* 2026-09-20 버튼 탭 영역 확대 세션: 모바일에서는 숨김(`hidden
+                    sm:block`) — 아래 확정/페루도!/맞아! 버튼을 누르기 편하게
+                    키운 만큼 이 안내문(비대화형 텍스트)에서 그 높이를
+                    되찾아옴. 데스크톱/태블릿(`sm:`)은 여유가 있어 그대로
+                    유지. */}
+                <p className="hidden text-center text-[10px] leading-tight font-semibold text-violet-900/70 sm:block">
                   🟣 눈금을 고르고 개수를 정하거나, 트랙 칸을 눌러 이동하세요
                 </p>
                 <FacePicker selected={pendingFace} onSelect={pickFace} />
@@ -723,7 +728,14 @@ export default function PerudoBoard({
                   type="button"
                   disabled={!canConfirmBet}
                   onClick={() => onAction({ type: "raise", seat: viewerSeat, quantity: pendingQuantity, face: pendingFace })}
-                  className="rounded-full bg-violet-700 px-3 py-0.5 text-[11px] font-semibold text-white shadow-[0_0_0_2px_rgba(168,85,247,0.3)] transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 disabled:shadow-none sm:px-4 sm:py-1.5 sm:text-xs"
+                  // 2026-09-20 버튼 탭 영역 확대 세션 (사용자 확인: 스마트폰에서 누르기
+                  // 작음): `py-0.5 text-[11px]` → `py-1.5 text-xs` + `min-h-[36px]`
+                  // (36px — 콘텐츠+패딩만으로는 아직 못 미쳐서 명시적으로 바닥을
+                  // 깔아줌, `flex items-center justify-center`로 실제 중앙 정렬
+                  // 보장) — 아래 페루도!/맞아! 버튼과 함께, 이 셋만 지목해 키운 것.
+                  // 늘어난 높이는 바로 아래 힌트 문구(비대화형 텍스트)를 그만큼 더
+                  // 줄여서 상쇄 — 그 문단 자체의 주석 참고.
+                  className="flex min-h-[36px] items-center justify-center rounded-full bg-violet-700 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white shadow-[0_0_0_2px_rgba(168,85,247,0.3)] transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 disabled:shadow-none sm:min-h-0 sm:px-4"
                 >
                   ✅ {faceLabel(pendingFace)} × {pendingQuantity}개로 베팅 확정
                 </button>
@@ -733,19 +745,26 @@ export default function PerudoBoard({
                     disabled while it's actually my turn: the untouched draft
                     still matches the current bid verbatim. */}
                 {isIdenticalToCurrentBid && (
-                  <p className="max-w-[220px] text-center text-[9px] leading-tight font-medium text-rose-700 sm:text-[10px]">
-                    ⚠️ 동일한 배팅은 할 수 없습니다. 눈금을 올리거나 수량을 올려주세요.
+                  // 2026-09-20 버튼 탭 영역 확대 세션: 문구를 짧게 줄임(원래 "동일한
+                  // 배팅은 할 수 없습니다. 눈금을 올리거나 수량을 올려주세요." — 확정
+                  // 버튼이 비활성화된 이유는 이미 회색으로 드러나므로, 좁은 화면에서
+                  // 한 줄에 들어가는 짧은 버전으로도 의미 전달에 지장 없음) —
+                  // 위에서 키운 버튼들 몫의 높이를 여기서 되찾아옴.
+                  <p className="max-w-[220px] text-center text-[9px] leading-none font-medium text-rose-700 sm:text-[10px] sm:leading-tight">
+                    ⚠️ 눈금이나 수량을 올려야 확정할 수 있어요
                   </p>
                 )}
               </div>
             )}
 
             {iAmAlive && (
+              // 2026-09-20 버튼 탭 영역 확대 세션 — 바로 위 확정 버튼과 같은 이유,
+              // 같은 기법(`min-h-[36px]` + `flex items-center justify-center`).
               <div className="flex gap-1.5 sm:gap-2">
                 <button
                   disabled={!isMyTurn || !state.currentBid}
                   onClick={() => onAction({ type: "dudo", seat: viewerSeat })}
-                  className="rounded-lg bg-rose-700 px-3 py-0.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
+                  className="flex min-h-[36px] flex-1 items-center justify-center rounded-lg bg-rose-700 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:min-h-0 sm:flex-none sm:px-4 sm:py-2"
                 >
                   🚨 페루도!
                 </button>
@@ -753,7 +772,7 @@ export default function PerudoBoard({
                   disabled={!state.currentBid}
                   onClick={() => onAction({ type: "calza", seat: viewerSeat })}
                   title="차례와 상관없이 외칠 수 있어요"
-                  className="rounded-lg bg-emerald-700 px-3 py-0.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
+                  className="flex min-h-[36px] flex-1 items-center justify-center rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:min-h-0 sm:flex-none sm:px-4 sm:py-2"
                 >
                   🎯 맞아!
                 </button>
