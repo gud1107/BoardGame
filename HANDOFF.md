@@ -39,6 +39,85 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🐱 랫어탯캣 — "지금 시작" 이른 시작 시 설정 단계 무한대기 버그 수정 — 2026-09-20 신규 (커밋/푸시/배포 완료)
+
+**신고 내용**: "바로시작스킵 버튼을 누르지 않은 상태에서 게임이 시작되지 않는 무한대기 현상"
+— 랫어탯캣 방에서 스킵 버튼(`⏩ 바로 시작 (스킵)`, 설정 단계 카드 확인 화면)을 누르지 않으면 게임이
+영영 시작되지 않는다는 신고.
+
+**원인**: 실제 버그는 스킵 버튼 자체가 아니라 로비의 **"지금 시작 (N명)" 이른 시작 버튼**에 있었음 —
+호스트가 목표 인원(`targetPlayerCount`, 예: 4명)을 다 채우지 않고 이 버튼으로 강제 시작하면
+([RatATatCatGame.tsx](./src/games/ratATatCat/RatATatCatGame.tsx)의 `sendGameStart`), 실제 참여자
+수(`occupants.length + botSeats.length`, 예: 2명)가 아니라 **원래 목표 인원 그대로**로
+`startGame(playerCount, seed)`를 호출하고 있었다. 그 결과 아무도 차지하지 않은 "유령 좌석"이 생기고,
+엔진의 설정 단계(`phase:"setup"`)는 `setupAcks.every(Boolean)`이 참이 될 때까지 절대 `"playing"`으로
+넘어가지 않는데 — 유령 좌석은 사람도 봇도 아니라서 `INITIAL_PEEK_DONE` 액션을 영원히 보낼 수 없음.
+즉 실재하는 좌석에서 스킵 버튼을 아무리 눌러도(그 좌석 자신의 ack만 처리하므로) 전체 설정 단계는
+절대 끝나지 않는 구조적 버그였음 — 이 방법(캐시된 Playwright 실측)으로 이미 8일 전
+([[headless-browser-verification-method]] 메모리에 "발견했지만 그때 세션 범위 밖이라 미수정"으로
+기록돼 있던 바로 그 버그)에 정확히 이 증상으로 재현된 적이 있었음.
+
+- **수정**: `sendGameStart`가 `payload.playerCount`로 `playerCountRef.current`(목표 인원) 대신
+  `Math.min(playerCountRef.current, occupantsRef.current.length + botSeatsRef.current.length)`(실제
+  채워진 좌석 수)를 브로드캐스트하도록 변경. 모든 목표 좌석이 다 찬 뒤 자동으로 시작되는 정상 경로는
+  두 값이 항상 같으므로 영향 없음 — "지금 시작" 이른 시작 경로에서만 실질적으로 값이 달라짐.
+- **검증**: `npx tsc --noEmit`(다른 세션이 이 저장소에 남겨둔 `soundEngine.ts` 미완성 변경 때문에
+  전역 실행 시 에러 2건이 뜨지만 내 변경과 무관 — `git stash`로 그 파일들만 잠시 치우고 재확인해
+  이 변경 자체는 0 에러임을 직접 확인) / `npx eslint src/games/ratATatCat/RatATatCatGame.tsx`(0
+  에러) / `npx vitest run src/games/ratATatCat`(43/43 통과, `engine.ts` 무변경이라 그대로 통과).
+  실브라우저 재검증(이른 시작 시나리오 실측)은 이번 세션에서 생략 — 코드 변경이 1줄짜리 값 치환이고
+  이미 문제의 정확한 인과관계(유령 좌석 → `setupAcks.every` 영원히 거짓)가 엔진 코드로 명확히
+  확인되어 논리적 확신이 충분하다고 판단.
+- 커밋 `e78b9af`, `git push origin main`으로 GitHub 웹훅 자동 배포 트리거 → `npx vercel inspect
+  --logs`로 프로덕션 빌드가 정확히 이 커밋(`Commit: e78b9af`)을 서빙 중임을 직접 확인, `curl`로
+  `/games/rat-a-tat-cat` 200 응답도 확인. 이 세션 작업트리에 있던 다른(무관한) 세션의 미커밋 변경
+  (`soundEngine.ts`/`DalmutiBoard.tsx`/`DalmutiEffects.tsx`/`globals.css` — 바로 아래 달무티 섹션
+  참고)은 건드리지 않고 내 파일 1개만 정확히 스테이징해서 커밋함.
+
+## 🃏 달무티 — "라스트 피니시 카드 스포트라이트" 엔딩 시퀀스 — 2026-09-20 신규 (로컬 전용, 커밋/푸시/배포 보류)
+
+**요청 배경**: 달무티는 잔여 2인(마지막 두 명)까지 좁혀진 뒤 한쪽이 마지막 손패를 모두 털어내는 순간,
+`engine.ts`의 `playCards`가 손패 남은 좌석이 정확히 1명이 되는 즉시 `phase`를 `gameOver`로 전환한다
+(`remaining.length <= 1` 분기). 이 전환 자체는 2026-09-13 세션에서 이미 한 번 다뤄져 `ShowdownReveal`
+컴포넌트가 결과 순위표 전에 `SHOWDOWN_REVEAL_MS`(당시 3500ms)만큼 "최후의 손패 공개"를 보여주도록
+되어 있었다 — 다만 그때는 **꼴찌(마지막까지 패를 못 턴 쪽)의 잔여 패**만 주인공이었고, 정작 **승자가
+무슨 카드로 게임을 끝냈는지**는 화면 어디에도 확대·강조되지 않았다. 이번 요청은 정확히 그 빈틈 —
+"마지막으로 낸 카드가 무엇인지 확인할 틈도 없이 결과창으로 바로 넘어간다" — 을 겨냥한 것.
+
+**구현 (로컬에만 반영, 커밋/푸시/프로덕션 배포는 사용자 지시로 보류)**:
+- `SHOWDOWN_REVEAL_MS`를 3500 → **5000ms**로 연장 ([DalmutiEffects.tsx](./src/games/dalmuti/DalmutiEffects.tsx)).
+- `ShowdownReveal`을 개편해 **승자의 피니시 패**(`state.trick.plays.at(-1)` — `phase`가 `gameOver`로
+  넘어가는 그 순간까지 트릭이 리셋되지 않으므로 항상 방금 낸 마지막 패)를 화면 중앙에 1.4배로
+  확대·팝인시키고, 상단에 "👑 {승자}님의 마지막 피니시 패!" 골드 엠보싱 배지를 달았다. 기존에
+  주인공이었던 꼴찌의 잔여 손패는 옆의 작은 카드형 패널로 격하해 계속 표시(요청의 "패배한 상대방의
+  잔여 패도 화면 한쪽에 함께 표시" 조건 충족).
+- FX: 카드 주위 샴페인 골드 확장 링(`dalmuti-finish-shockwave`, 기존 `dalmuti-play-shockwave`보다
+  반경·지속시간을 2배 이상 늘려 슬로모션처럼 보이게 함), 16방향 골드 스파크 버스트
+  (`dalmuti-finish-spark`), 스포트라이트 컨테이너 테두리를 따라 맥동하는 림라이트
+  (`dalmuti-finish-rim-glow`, 2회 반복) — 전부 [globals.css](./src/app/globals.css)에 신규 키프레임으로
+  추가, 기존 `dalmuti-play-*`/`dalmuti-exchange-*` 계열과 같은 "요소 절대배치 오버레이 + CSS
+  키프레임" 패턴 그대로 재사용.
+- 사운드: [soundEngine.ts](./src/lib/audio/soundEngine.ts)에 `playDalmutiFinishFanfare()` 신규
+  추가(묵직한 서브베이스 임팩트 + 골드 벨 4음 상행 아르페지오 + 하이 스파클 테일). 기존
+  `playFinishFanfare()`는 이미 말달리자(Mal Dalli Ja) 결승선 사운드가 선점하고 있어 이름 충돌로
+  `playDalmutiFinishFanfare`로 명명. `DalmutiBoard.tsx`의 `enteredGameOver` diff 트리거에서 기존
+  `playShowdownReveal()`(커튼 스윕+공) 호출을 이걸로 **교체**(두 사운드를 겹쳐 재생하면 뭉개지므로).
+- `playerCount`가 2보다 큰 게임에서도 동일 로직이 자연스럽게 적용됨: `remaining.length <= 1` 분기는
+  "활성 좌석이 2명에서 1명으로 줄어드는" 모든 경우에 걸리므로, N인 게임에서도 최종 2파전으로
+  좁혀진 뒤 승부가 갈리는 순간 동일한 스포트라이트가 뜬다 — 요청 문구가 "플레이어1 vs 플레이어2"였던
+  것은 2인 게임으로 테스트했기 때문일 뿐, 별도 분기 처리는 하지 않았다(기존 `ShowdownReveal`도 원래
+  N인 대응이었으므로 이 설계를 그대로 이어받음).
+
+**검증**: `tsc --noEmit`, `eslint`(대상 파일), `vitest run src/games/dalmuti/Dalmuti.test.ts`(75개 전부
+통과), `next build` 프로덕션 빌드까지 전부 통과 확인. 이 세션에서는 **실브라우저(Playwright) 스크린샷
+검증은 하지 않음** — 사용자가 로컬 반영까지만 요청했고 배포 전이므로, 다음에 이 기능을 실제로
+커밋/배포하기 전에는 [headless-browser 검증 방법](./docs/troubleshooting.md)으로 실제 5초 스포트라이트
+연출(카드 확대/스파크/림라이트/사운드 타이밍)을 한 번은 눈으로 확인할 것.
+
+**남은 일**: 아직 `git status`상 미커밋 상태 — 사용자가 마음에 들면 커밋 메시지 작성 후 `git push
+origin main`까지 진행하면 됨(이 저장소는 GitHub 웹훅 자동 배포이므로 푸시만으로 프로덕션 반영됨,
+수동 `vercel deploy --prod`는 하지 말 것 — 위 "⚠️ 배포 프로토콜 변경" 절 참고).
+
 ## 🐛 로비 검색/필터 상태가 뒤로가기 시 초기화되던 버그 수정 — 2026-09-16 신규
 
 바로 이전 세션에서 sticky 회귀를 고친 뒤에도 "모바일에는 업데이트순, 가나다순 적용안되는 부분"
