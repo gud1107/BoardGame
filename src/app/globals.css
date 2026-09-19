@@ -261,6 +261,30 @@ html {
   }
 }
 
+/* [베팅확정] 전용 22개 샴페인 골드 & 백금 중력 스파크 (2026-09-20 후속
+   세션). `--dx-mid`/`--dy-mid`(35% 지점, 각도를 따라 방사형으로 퍼지는 발사
+   구간)와 `--dx-end`/`--dy-end`(100% 지점, 발사 방향 유지 + 모든 입자
+   공통으로 y에 중력 낙하량이 더해진 착지 구간) 둘 다 JS(PerudoActionFX.tsx's
+   `makeGoldSparkParticles`)에서 입자별로 랜덤 계산해 주입 — 이 키프레임
+   자체는 두 지점을 잇는 궤적의 모양(가속 낙하 곡선)만 담당한다. */
+@keyframes perudo-gold-spark-burst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate(0, 0) scale(1);
+  }
+  15% {
+    opacity: 1;
+  }
+  35% {
+    opacity: 1;
+    transform: translate(-50%, -50%) translate(var(--dx-mid, 0), var(--dy-mid, 0)) scale(0.85);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate(var(--dx-end, 0), var(--dy-end, 0)) scale(0.35);
+  }
+}
+
 /* [베팅확정] 골드 스탬프 — 중앙 배팅판의 선언 숫자가 위에서 쿵 내려앉듯
    찍힘. 살짝 과장된 오버슈트(1.3배로 컸다가 0.94배로 눌렸다가 1배로 안착)로
    "도장을 찍는" 무게감을 낸다. */

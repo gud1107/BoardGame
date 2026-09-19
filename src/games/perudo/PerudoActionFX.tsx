@@ -14,7 +14,10 @@
  *    드롭인 버튼 래퍼. 순수 로컬/즉시 피드백이라 사운드는 가벼운
  *    `playUiClickTick()` 하나만 — 크고 개성 있는 액션별 사운드(스탬프/차임/
  *    천둥)는 §1의 상태-diff 트리거에서 재생돼 클릭과 확정 사이 중복 재생을
- *    피한다.
+ *    피한다. [베팅확정](`variant === "gold"`)만 후속 세션(사용자 상세
+ *    스펙)에서 공용 8입자 리플 대신 `makeGoldSparkParticles`가 만드는 22개
+ *    샴페인 골드/백금 중력 스파크 버스트를 쓴다 — 자세한 물리 근사치는 그
+ *    함수 자신의 doc 주석 참고.
  * 3. `PerudoShowdownOverlay` — [맞아]/[페루도] 선언 시 전체 화면을 덮는
  *    시네마틱 팝업(에메랄드/크림슨 엠블럼 + 충격파 + 스파크). `createPortal`로
  *    `document.body`에 직접 마운트 — Coyote의 `DeathStampOverlay`/
@@ -85,11 +88,76 @@ const FX_VARIANT_STYLE: Record<PerudoFxVariant, { glow: string; spark: string }>
 const FX_PARTICLE_COUNT = 8;
 const FX_PARTICLES = Array.from({ length: FX_PARTICLE_COUNT });
 
+/**
+ * [베팅확정] 전용 "샴페인 골드 & 백금 스파크" 중력 버스트 (2026-09-20 후속
+ * 세션, 사용자 상세 스펙: 22개 입자, 크기 1.5~3.0px, 소멸 속도 0.03~0.045).
+ * 다른 두 버튼의 공용 `FX_PARTICLES`(고정 각도 8개, 순수 방사형 직선)보다
+ * 훨씬 화려하고 물리적인 느낌을 내기 위해 이 버튼만 별도 경로로 렌더링:
+ * 매 클릭마다 22개를 새로 무작위 생성(각도/발사 거리/중력 낙하량/크기/지속
+ * 시간 전부 랜덤)하고, 3단 키프레임(`perudo-gold-spark-burst`)에 CSS 커스텀
+ * 프로퍼티(`--dx-mid`/`--dy-mid`/`--dx-end`/`--dy-end`)로 각 입자의 궤적을
+ * 개별 주입 — 발사 직후(35%)엔 각도를 따라 대체로 퍼지다가, 종료 시점
+ * (100%)엔 모든 입자의 y값에 추가 낙하량을 더해 "중력을 받아 아래로
+ * 흩어짐"을 만든다.
+ */
+const GOLD_SPARK_COUNT = 22;
+/** 샴페인 골드 / 백금 두 색을 절반씩 교차 배치. */
+const GOLD_SPARK_COLORS = ["#f5cf7a", "#e7ecf3"] as const;
+
+interface GoldSparkParticle {
+  id: number;
+  size: number;
+  color: string;
+  durationMs: number;
+  delayMs: number;
+  dxMid: string;
+  dyMid: string;
+  dxEnd: string;
+  dyEnd: string;
+}
+
+/**
+ * "소멸 속도 0.03~0.045" — 파티클 시스템 관례대로 "프레임당(60fps 기준)
+ * 잃는 불투명도"로 해석: 그 값의 역수만큼의 프레임 동안 완전히 사라지므로,
+ * durationMs = (1000/60) / decayRate ≈ 0.045일 때 ~370ms, 0.03일 때 ~556ms —
+ * 짧고 경쾌한 스파크 버스트에 맞는 자연스러운 범위로 변환됨.
+ */
+function decayRateToDurationMs(decayRate: number): number {
+  return Math.round(1000 / 60 / decayRate);
+}
+
+function makeGoldSparkParticles(seed: number): GoldSparkParticle[] {
+  return Array.from({ length: GOLD_SPARK_COUNT }, (_, i) => {
+    const angle = Math.random() * Math.PI * 2;
+    const launchDist = 16 + Math.random() * 20; // 16~36px — 방향별 발사 거리
+    const gravityDrop = 14 + Math.random() * 22; // 14~36px — 각도와 무관하게 전부 아래로 추가 낙하
+    const dxMid = Math.cos(angle) * launchDist;
+    const dyMid = Math.sin(angle) * launchDist * 0.7; // 초반엔 아직 중력이 덜 붙어 옆으로 더 퍼짐
+    const dxEnd = dxMid * 1.35;
+    const dyEnd = dyMid + gravityDrop;
+    const decayRate = 0.03 + Math.random() * 0.015; // 0.03~0.045
+    return {
+      id: seed * 1000 + i,
+      size: 1.5 + Math.random() * 1.5, // 1.5~3.0px
+      color: GOLD_SPARK_COLORS[i % 2],
+      durationMs: decayRateToDurationMs(decayRate),
+      delayMs: Math.random() * 40,
+      dxMid: `${dxMid.toFixed(1)}px`,
+      dyMid: `${dyMid.toFixed(1)}px`,
+      dxEnd: `${dxEnd.toFixed(1)}px`,
+      dyEnd: `${dyEnd.toFixed(1)}px`,
+    };
+  });
+}
+
 interface FxRipple {
   id: number;
   x: number;
   y: number;
   size: number;
+  /** [베팅확정](`variant === "gold"`)에서만 채워짐 — 있으면 이 리플은 공용
+   * `FX_PARTICLES` 대신 22개짜리 중력 스파크 버스트로 렌더링된다. */
+  goldSparks?: GoldSparkParticle[];
 }
 
 /**
@@ -121,8 +189,8 @@ export function PerudoFxButton({
     if (disabled || e.button !== 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const id = ++nextRippleId.current;
-    const size = Math.max(rect.width, rect.height) * 1.6;
-    setRipples((prev) => [...prev, { id, x: e.clientX - rect.left, y: e.clientY - rect.top, size }]);
+    const goldSparks = variant === "gold" ? makeGoldSparkParticles(id) : undefined;
+    setRipples((prev) => [...prev, { id, x: e.clientX - rect.left, y: e.clientY - rect.top, size: Math.max(rect.width, rect.height) * 1.6, goldSparks }]);
     setPressed(true);
     getSoundEngine().playUiClickTick();
   };
@@ -156,22 +224,44 @@ export function PerudoFxButton({
               }}
               onAnimationEnd={() => removeRipple(r.id)}
             />
-            {FX_PARTICLES.map((_, i) => (
-              <span
-                key={i}
-                className="absolute h-1 w-1 rounded-full"
-                style={
-                  {
-                    left: r.x,
-                    top: r.y,
-                    background: palette.spark,
-                    boxShadow: `0 0 5px 1px ${palette.spark}`,
-                    "--angle": `${(360 / FX_PARTICLE_COUNT) * i}deg`,
-                    animation: "perudo-fx-particle 480ms ease-out forwards",
-                  } as CSSProperties
-                }
-              />
-            ))}
+            {r.goldSparks
+              ? r.goldSparks.map((s) => (
+                  <span
+                    key={s.id}
+                    className="absolute rounded-full"
+                    style={
+                      {
+                        left: r.x,
+                        top: r.y,
+                        width: `${s.size}px`,
+                        height: `${s.size}px`,
+                        background: s.color,
+                        boxShadow: `0 0 ${(s.size * 2).toFixed(1)}px ${(s.size * 0.6).toFixed(1)}px ${s.color}`,
+                        "--dx-mid": s.dxMid,
+                        "--dy-mid": s.dyMid,
+                        "--dx-end": s.dxEnd,
+                        "--dy-end": s.dyEnd,
+                        animation: `perudo-gold-spark-burst ${s.durationMs}ms cubic-bezier(0.25,0.65,0.4,1) ${s.delayMs.toFixed(0)}ms forwards`,
+                      } as CSSProperties
+                    }
+                  />
+                ))
+              : FX_PARTICLES.map((_, i) => (
+                  <span
+                    key={i}
+                    className="absolute h-1 w-1 rounded-full"
+                    style={
+                      {
+                        left: r.x,
+                        top: r.y,
+                        background: palette.spark,
+                        boxShadow: `0 0 5px 1px ${palette.spark}`,
+                        "--angle": `${(360 / FX_PARTICLE_COUNT) * i}deg`,
+                        animation: "perudo-fx-particle 480ms ease-out forwards",
+                      } as CSSProperties
+                    }
+                  />
+                ))}
           </span>
         ))}
       </span>
