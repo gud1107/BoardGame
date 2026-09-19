@@ -572,15 +572,23 @@ export default function PerudoBoard({
         {isMyTurn ? "🫵 당신 차례입니다!" : `${names[state.activeSeat]}님 차례를 기다리는 중...`}
       </p>
 
+      {/* 잃은 주사위 무덤 — 2026-09-20 세션: 보드의 hollow center 안(넘침 배지
+          바로 아래)에서 여기(턴 배너 바로 아래, 보드 바로 위)로 이동. 이 이동
+          자체가 목적이기도 하고, 이 자리로 빼내는 게 center 칸의 고정 높이
+          예산에서 한 블록을 통째로 덜어내 바로 아래 `RectBidTrack`의 배팅
+          패널이 스크롤 없이 들어차기 쉬워지는 데도 도움이 된다(같은 세션의
+          다음 변경과 함께 봄). */}
+      <LostDiceTray state={state} colorways={colorways} />
+
       {/* The rectangular board itself (2026-08-20 사각형 트랙 세션) — quantities
           1-20 around 4 sides (see `RectBidTrack`'s doc comment), sized to
-          hold the dice graveyard and the bid/액션 panel inside its hollow
-          center, so the whole thing reads as one big physical-board-sized
-          panel rather than a thin strip with everything else stacked below
-          it. (2026-09-20 세션: the viewer's own dice tray + colorway picker
-          moved OUT of this center to its own panel right below the board —
-          see that panel's own doc comment — so this list is shorter than it
-          used to be.)
+          hold the bid/액션 panel inside its hollow center, so the whole
+          thing reads as one big physical-board-sized panel rather than a
+          thin strip with everything else stacked below it. (2026-09-20
+          세션: the dice graveyard moved OUT to right above this board, and
+          the viewer's own dice tray + colorway picker moved OUT to its own
+          panel right below it — see each one's own doc comment — so this
+          center now holds only the bid declaration + action-button panel.)
 
           2026-08-21 무여백 대칭 트랙 세션: the board's `--perudo-cell` now
           scales up to ~78px (요구사항 2 확장 규모) via `clamp()`, which on the
@@ -605,13 +613,16 @@ export default function PerudoBoard({
           cellEnabled={cellEnabled}
           onCellClick={selectCell}
         >
-          {/* `p-1.5 sm:p-2.5` moved here from `RectBidTrack`'s center grid
+          {/* `p-1 sm:p-2.5` moved here from `RectBidTrack`'s center grid
               cell (2026-09-07 모바일 가로 스크롤 제거 세션) — this div's own
               `maxWidth` is a real cap on ITS box (border-box), so padding
               added here shrinks its usable inner width instead of adding
               onto the outer size the way padding on the ungapped grid cell
-              outside it did. See `RectBidTrack`'s call site comment. */}
-          <div className="flex w-full flex-col items-center gap-2.5 p-1.5 sm:p-2.5" style={{ maxWidth: stripLength(7) }}>
+              outside it did. See `RectBidTrack`'s call site comment.
+              2026-09-20 세션: `gap-2.5` → `gap-1 sm:gap-2.5` and outer
+              padding tightened on mobile — see the bid panel's own comment
+              below for why (스크롤 없이 가득 채우기 세션). */}
+          <div className="flex w-full flex-col items-center gap-0.5 p-1 sm:gap-2.5 sm:p-2.5" style={{ maxWidth: stripLength(7) }}>
           {/* Capped to the exact same width as the north/south strips
               (2026-08-21 간격 정돈 세션) — otherwise this panel's natural
               width could force the board's center grid column wider than
@@ -631,27 +642,47 @@ export default function PerudoBoard({
             </div>
           )}
 
-          <LostDiceTray state={state} colorways={colorways} />
-
           {/* Bid-declaration controls — the confirmed bid, plus (on my turn) the
               FacePicker + quantity stepper composer. Both the composer's
               "확정" button and every track cell around this panel ultimately
               gate on the same `validateRaise` call, so a same-quantity face
               raise (예: "2가 1개" → "3이 1개") is never blocked by one path
-              while allowed by the other. */}
+              while allowed by the other.
+
+              2026-09-20 스크롤 없이 가득 채우기 세션 (사용자 요청: "배팅판과
+              페루도, 맞아버튼을 스크롤 없이 가득차게 반응형으로"): this whole
+              panel sits inside `RectBidTrack`'s hollow center, which is
+              height-LOCKED to `stripLength(6)` — the physical board's own
+              west/east strip height (see `RectBidTrack`'s doc comment for
+              why that lock can't just be dropped: content taller than it
+              detaches the west/east strip from the corners). On the
+              narrowest real phones `stripLength(6)` bottoms out around
+              ~190-210px, so the only lever left is shrinking THIS panel's
+              own padding/gaps/font sizes on mobile until it reliably fits
+              inside that budget without needing `.perudo-center-scroll`'s
+              internal scroll to engage — every size below is mobile-first
+              (smallest at the base class, `sm:` restores the previous
+              roomier desktop/tablet sizing). Moving the dice graveyard out
+              of this same center (see the call site above) and the "잃은
+              주사위" tray's conditional mount already free real budget too.
+              The internal scroll itself is intentionally NOT removed —
+              kept as a silent fallback for genuinely extreme cases (a very
+              old ~320px device, or every conditional badge/hint stacking at
+              once), not something a normal phone should ever actually
+              trigger. */}
           <div
             ref={bidActionZoneRef}
-            className="relative z-10 flex w-full flex-col items-center justify-center gap-2 rounded-[1.25rem] border-4 border-amber-800 bg-amber-100/90 p-2 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)]"
+            className="relative z-10 flex w-full flex-col items-center justify-center gap-0.5 rounded-[1.25rem] border-4 border-amber-800 bg-amber-100/90 p-1 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)] sm:gap-2 sm:p-2"
           >
             {state.currentBid ? (
               <div className="flex flex-col items-center gap-0.5 text-center">
-                <span className="text-[10px] text-amber-900/70">{names[state.currentBid.seat]}님의 선언</span>
-                <span className="text-2xl font-black text-red-900 drop-shadow-[0_1px_0_rgba(255,255,255,0.4)] sm:text-3xl">
+                <span className="text-[9px] text-amber-900/70 sm:text-[10px]">{names[state.currentBid.seat]}님의 선언</span>
+                <span className="text-lg font-black text-red-900 drop-shadow-[0_1px_0_rgba(255,255,255,0.4)] sm:text-3xl">
                   {faceLabel(state.currentBid.face)} × {state.currentBid.quantity}개↑
                 </span>
               </div>
             ) : (
-              <p className="px-2 text-center text-xs text-amber-900/70">
+              <p className="px-2 text-center text-[11px] text-amber-900/70 sm:text-xs">
                 {names[state.activeSeat]}님이 이번 라운드를 엽니다 — 첫 선언 대기 중
               </p>
             )}
@@ -661,27 +692,29 @@ export default function PerudoBoard({
               // stepper's `h-8 w-8`/`gap-2.5` → `h-7 w-7`/`gap-1.5` — same reason
               // as `FacePicker`'s own comment, just with a smaller margin needed
               // (this row was never as tight as the 6-button face row).
-              <div className="flex flex-col items-center gap-1.5 rounded-xl border border-violet-900/25 bg-violet-950/5 px-1.5 py-2">
-                <p className="text-center text-[10px] font-semibold text-violet-900/70">
+              // 2026-09-20: stepper/confirm shrunk further still, mobile-first —
+              // see this block's own parent comment.
+              <div className="flex flex-col items-center gap-0.5 rounded-xl border border-violet-900/25 bg-violet-950/5 px-1.5 py-0.5 sm:gap-1.5 sm:py-2">
+                <p className="text-center text-[9px] leading-none font-semibold text-violet-900/70 sm:text-[10px] sm:leading-tight">
                   🟣 눈금을 고르고 개수를 정하거나, 트랙 칸을 눌러 이동하세요
                 </p>
                 <FacePicker selected={pendingFace} onSelect={pickFace} />
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 sm:gap-1.5">
                   <button
                     type="button"
                     onClick={() => stepQuantity(-1)}
                     disabled={pendingQuantity <= pendingFloor}
                     title="개수 줄이기"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border-2 border-violet-900/30 bg-white/60 text-sm font-bold text-violet-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30"
+                    className="flex h-6 w-6 items-center justify-center rounded-lg border-2 border-violet-900/30 bg-white/60 text-sm font-bold text-violet-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30 sm:h-7 sm:w-7"
                   >
                     −
                   </button>
-                  <span className="min-w-[3ch] text-center text-lg font-black text-violet-950">{pendingQuantity}개</span>
+                  <span className="min-w-[3ch] text-center text-base font-black text-violet-950 sm:text-lg">{pendingQuantity}개</span>
                   <button
                     type="button"
                     onClick={() => stepQuantity(1)}
                     title="개수 늘리기"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border-2 border-violet-900/30 bg-white/60 text-sm font-bold text-violet-900 transition hover:bg-white"
+                    className="flex h-6 w-6 items-center justify-center rounded-lg border-2 border-violet-900/30 bg-white/60 text-sm font-bold text-violet-900 transition hover:bg-white sm:h-7 sm:w-7"
                   >
                     +
                   </button>
@@ -690,7 +723,7 @@ export default function PerudoBoard({
                   type="button"
                   disabled={!canConfirmBet}
                   onClick={() => onAction({ type: "raise", seat: viewerSeat, quantity: pendingQuantity, face: pendingFace })}
-                  className="rounded-full bg-violet-700 px-4 py-1.5 text-xs font-semibold text-white shadow-[0_0_0_2px_rgba(168,85,247,0.3)] transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 disabled:shadow-none"
+                  className="rounded-full bg-violet-700 px-3 py-0.5 text-[11px] font-semibold text-white shadow-[0_0_0_2px_rgba(168,85,247,0.3)] transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 disabled:shadow-none sm:px-4 sm:py-1.5 sm:text-xs"
                 >
                   ✅ {faceLabel(pendingFace)} × {pendingQuantity}개로 베팅 확정
                 </button>
@@ -700,7 +733,7 @@ export default function PerudoBoard({
                     disabled while it's actually my turn: the untouched draft
                     still matches the current bid verbatim. */}
                 {isIdenticalToCurrentBid && (
-                  <p className="max-w-[220px] text-center text-[10px] font-medium text-rose-700">
+                  <p className="max-w-[220px] text-center text-[9px] leading-tight font-medium text-rose-700 sm:text-[10px]">
                     ⚠️ 동일한 배팅은 할 수 없습니다. 눈금을 올리거나 수량을 올려주세요.
                   </p>
                 )}
@@ -708,11 +741,11 @@ export default function PerudoBoard({
             )}
 
             {iAmAlive && (
-              <div className="flex gap-2">
+              <div className="flex gap-1.5 sm:gap-2">
                 <button
                   disabled={!isMyTurn || !state.currentBid}
                   onClick={() => onAction({ type: "dudo", seat: viewerSeat })}
-                  className="rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
+                  className="rounded-lg bg-rose-700 px-3 py-0.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
                 >
                   🚨 페루도!
                 </button>
@@ -720,7 +753,7 @@ export default function PerudoBoard({
                   disabled={!state.currentBid}
                   onClick={() => onAction({ type: "calza", seat: viewerSeat })}
                   title="차례와 상관없이 외칠 수 있어요"
-                  className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
+                  className="rounded-lg bg-emerald-700 px-3 py-0.5 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:px-4 sm:py-2 sm:text-xs"
                 >
                   🎯 맞아!
                 </button>
