@@ -228,6 +228,185 @@ html {
   }
 }
 
+/* ---------------------------------------------------------------------
+   페루도 핵심 액션 버튼 연출 고도화 (2026-09-20 세션) — [베팅확정]/[맞아
+   (Calza)]/[페루도(Dudo)] 세 버튼의 클릭 피드백 + 화면 전체 쇼다운 연출.
+   PerudoActionFX.tsx가 이 키프레임들을 소비한다. `perudo-fx-ripple`/
+   `perudo-fx-particle`은 Dalmuti의 `dalmuti-fx-ripple`/`dalmuti-fx-particle`
+   과 도형은 동일하지만 게임 간 제로-커플링 컨벤션(ARCHITECTURE.md §2)에 따라
+   별도 네임스페이스로 복제됨 — 로직도 이 프로젝트 관례대로 컴포넌트째
+   복제(가져다 쓰지 않음).
+   --------------------------------------------------------------------- */
+@keyframes perudo-fx-ripple {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0;
+  }
+}
+@keyframes perudo-fx-particle {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(0) scale(1);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(26px) scale(0.3);
+  }
+}
+
+/* [베팅확정] 골드 스탬프 — 중앙 배팅판의 선언 숫자가 위에서 쿵 내려앉듯
+   찍힘. 살짝 과장된 오버슈트(1.3배로 컸다가 0.94배로 눌렸다가 1배로 안착)로
+   "도장을 찍는" 무게감을 낸다. */
+@keyframes perudo-bet-stamp-drop {
+  0% {
+    transform: translateY(-16px) scale(1.35);
+    opacity: 0;
+  }
+  55% {
+    transform: translateY(2px) scale(0.92);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+/* 배팅판 테두리를 따라 한 번 퍼져나가는 샴페인 골드 펄스 링. */
+@keyframes perudo-bet-gold-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(253, 224, 71, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 14px rgba(253, 224, 71, 0);
+  }
+}
+
+/* [맞아]/[페루도] 공통 화면 전체 쇼다운 — 색상(에메랄드/크림슨)은 호출부에서
+   인라인 style로 주입, 도형(타이밍 커브)만 공유. */
+@keyframes perudo-showdown-vignette-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes perudo-showdown-emblem-slam {
+  0% {
+    transform: scale(2.4) rotate(-8deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(0.92) rotate(3deg);
+    opacity: 1;
+  }
+  78% {
+    transform: scale(1.06) rotate(-1deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+@keyframes perudo-showdown-shockwave {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+@keyframes perudo-showdown-spark {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(0) scale(1);
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(72px) scale(0.2);
+  }
+}
+/* [맞아] 전용 — "신의 한 수" 판정 순간 주변 뷰포트가 살짝 줌인. */
+@keyframes perudo-viewport-zoom {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+/* [페루도] 전용 화면 진동 — 동일한 모양의 키프레임 두 개를 번갈아 사용해
+   연속으로 호출돼도(예: 다음 라운드에서 바로 또 페루도!) 매번 애니메이션이
+   처음부터 재생되도록 한다(다르무티의 dalmuti-screen-shake-1/-2와 동일
+   기법). 사용자 요청 진폭 10px 그대로 반영(다르무티는 3px). */
+@keyframes perudo-dudo-shake-1 {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-10px, 6px);
+  }
+  40% {
+    transform: translate(9px, -7px);
+  }
+  60% {
+    transform: translate(-7px, -6px);
+  }
+  80% {
+    transform: translate(6px, 5px);
+  }
+}
+@keyframes perudo-dudo-shake-2 {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-10px, 6px);
+  }
+  40% {
+    transform: translate(9px, -7px);
+  }
+  60% {
+    transform: translate(-7px, -6px);
+  }
+  80% {
+    transform: translate(6px, 5px);
+  }
+}
+/* 쇼다운 리빌 패널의 각 주사위가 컵이 열리며 나타나듯 순차적으로 뒤집혀
+   드러남 — RevealPanel(PerudoBoard.tsx)이 다이스별로 index*딜레이를 줘서
+   순차 재생. */
+@keyframes perudo-cup-reveal {
+  0% {
+    transform: translateY(-14px) rotateX(65deg) scale(0.7);
+    opacity: 0;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) rotateX(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
 /* Spot the Difference's found-spot marker (see SpotDifferenceBoard.tsx) —
    the emerald ring pops in with a small overshoot the instant either team
    confirms a difference, on both the original and modified panel. */

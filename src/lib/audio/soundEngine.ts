@@ -2436,6 +2436,149 @@ class SoundEngine {
       bell.stop(at + 0.34);
     });
   }
+
+  /**
+   * 페루도 — "베팅 확정" 골드 스탬프 (2026-09-20 액션 버튼 연출 고도화 세션).
+   * `playVictoryStamp()`와 같은 저음 thud + 하이패스 crack 골격이지만, 더
+   * 묵직한(80→30Hz) 단일 타격감에 `playLuxuryChime()`처럼 짧은 2음 벨 스파클을
+   * 얹어 "샴페인 골드"의 화려함을 더함 — 매 라운드 여러 번 눌리는 동작이라
+   * `playVictoryStamp`보다 쿨다운을 짧게(120ms) 잡음.
+   */
+  playPerudoBetStamp() {
+    if (!this.gate("perudoBetStamp", 120)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const thud = ctx.createOscillator();
+    thud.type = "sine";
+    thud.frequency.setValueAtTime(150, now);
+    thud.frequency.exponentialRampToValueAtTime(35, now + 0.16);
+    const thudGain = ctx.createGain();
+    thudGain.gain.setValueAtTime(0.34, now);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    thud.connect(thudGain).connect(this.sfxGain);
+    thud.start(now);
+    thud.stop(now + 0.22);
+
+    const crack = ctx.createBufferSource();
+    crack.buffer = noiseBuffer(ctx);
+    const crackFilter = ctx.createBiquadFilter();
+    crackFilter.type = "highpass";
+    crackFilter.frequency.value = 2200;
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.2, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    crack.connect(crackFilter).connect(crackGain).connect(this.sfxGain);
+    crack.start(now);
+    crack.stop(now + 0.07);
+
+    [1568, 2093].forEach((freq, i) => {
+      const at = now + 0.05 + i * 0.05;
+      const sparkle = ctx.createOscillator();
+      sparkle.type = "triangle";
+      sparkle.frequency.value = freq;
+      const sparkleGain = ctx.createGain();
+      sparkleGain.gain.setValueAtTime(0.001, at);
+      sparkleGain.gain.linearRampToValueAtTime(0.07, at + 0.01);
+      sparkleGain.gain.exponentialRampToValueAtTime(0.001, at + 0.18);
+      sparkle.connect(sparkleGain).connect(this.sfxGain!);
+      sparkle.start(at);
+      sparkle.stop(at + 0.2);
+    });
+  }
+
+  /**
+   * 페루도 — "맞아(Calza)" 성공 선언 전용 에메랄드 크리스탈 차임 (2026-09-20
+   * 세션). `playCorrectDing()`의 2음 상승 구조를 3음 장3화음(도미솔 위 옥타브
+   * 느낌)으로 확장하고 각 음의 어택을 더 밝게(트라이앵글파) 잡아 "정확히
+   * 맞혔다"는 쾌감을 강조 — 결과의 성패와 무관하게 "맞아!" 선언 자체를 외친
+   * 순간 재생(판정 결과 사운드는 기존 로직 그대로 별도).
+   */
+  playPerudoCalzaChime() {
+    if (!this.gate("perudoCalzaChime", 200)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    [880, 1108.7, 1318.5].forEach((freq, i) => {
+      const at = now + i * 0.07;
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.26, at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.42);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.44);
+    });
+
+    const shimmer = ctx.createBufferSource();
+    shimmer.buffer = noiseBuffer(ctx);
+    const shimmerFilter = ctx.createBiquadFilter();
+    shimmerFilter.type = "bandpass";
+    shimmerFilter.frequency.value = 6000;
+    shimmerFilter.Q.value = 1.4;
+    const shimmerGain = ctx.createGain();
+    shimmerGain.gain.setValueAtTime(0.001, now);
+    shimmerGain.gain.linearRampToValueAtTime(0.09, now + 0.02);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    shimmer.connect(shimmerFilter).connect(shimmerGain).connect(this.sfxGain);
+    shimmer.start(now);
+    shimmer.stop(now + 0.32);
+  }
+
+  /**
+   * 페루도 — "페루도(Dudo)" 블러핑 고발 선언 전용 크림슨 번개 스팅 (2026-09-20
+   * 세션). `playTimeBombBlast()`와 같은 붐+크랙 골격을 훨씬 빠르고 날카롭게
+   * (전체 ~0.35초, 폭발은 ~0.75초) 압축해 "쾅" 하는 폭발감보다 "찌릿" 한 결투
+   * 선언/경고 사이렌에 가까운 스팅으로 만듦 — 저음 붐 위에 급격히 떨어지는
+   * 톱니파 "번개" 글리산도를 얹어 ⚡ 슬래시 텍스트와 타이밍을 맞춤.
+   */
+  playPerudoDudoThunder() {
+    if (!this.gate("perudoDudoThunder", 200)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const boom = ctx.createOscillator();
+    boom.type = "sine";
+    boom.frequency.setValueAtTime(130, now);
+    boom.frequency.exponentialRampToValueAtTime(35, now + 0.22);
+    const boomGain = ctx.createGain();
+    boomGain.gain.setValueAtTime(0.42, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    boom.connect(boomGain).connect(this.sfxGain);
+    boom.start(now);
+    boom.stop(now + 0.3);
+
+    const crack = ctx.createBufferSource();
+    crack.buffer = noiseBuffer(ctx);
+    const crackFilter = ctx.createBiquadFilter();
+    crackFilter.type = "bandpass";
+    crackFilter.frequency.value = 1800;
+    crackFilter.Q.value = 1.8;
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.4, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+    crack.connect(crackFilter).connect(crackGain).connect(this.sfxGain);
+    crack.start(now);
+    crack.stop(now + 0.16);
+
+    const bolt = ctx.createOscillator();
+    bolt.type = "sawtooth";
+    bolt.frequency.setValueAtTime(1400, now + 0.01);
+    bolt.frequency.exponentialRampToValueAtTime(180, now + 0.2);
+    const boltGain = ctx.createGain();
+    boltGain.gain.setValueAtTime(0.001, now + 0.01);
+    boltGain.gain.linearRampToValueAtTime(0.14, now + 0.03);
+    boltGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    bolt.connect(boltGain).connect(this.sfxGain);
+    bolt.start(now + 0.01);
+    bolt.stop(now + 0.26);
+  }
 }
 
 let instance: SoundEngine | null = null;

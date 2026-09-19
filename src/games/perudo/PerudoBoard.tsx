@@ -6,6 +6,14 @@ import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import RulebookModal from "./RulebookModal";
 import PerudoFaceIcon from "./PerudoFaceIcon";
+import {
+  BetGoldPulseRing,
+  detectBetConfirmEvent,
+  detectShowdownEvent,
+  PerudoFxButton,
+  PerudoShowdownOverlay,
+  type PerudoShowdownKind,
+} from "./PerudoActionFX";
 import RectBidTrack, { BOARD_LAST_INDEX, LAP_SIZE, OverflowBadge, stripLength } from "./PerudoBidTrack";
 import { DieBack, DieFace, faceLabel, FacePicker, LostDiceTray, TABLE_PANEL, TableTexture } from "./PerudoSharedUI";
 import {
@@ -199,6 +207,42 @@ export default function PerudoBoard({
       bidActionZoneRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
   }, [isMyTurn, iAmAlive]);
+
+  // -------------------------------------------------------------------------
+  // 액션 버튼 연출 고도화 (2026-09-20 세션) — Dalmuti's `trackedState`
+  // render-time diff pattern (DalmutiBoard.tsx), not a `useEffect`: comparing
+  // `state` against the last-seen snapshot DURING render (guarded by
+  // `trackedState !== state`) means a transition is never missed even if this
+  // component re-renders multiple times before an effect would've fired, and
+  // — critically for [맞아]/[페루도] — every connected client (not just the
+  // one who clicked) detects the SAME `state.phase` transition off the same
+  // broadcast lockstep state, so the showdown overlay/shake/zoom play
+  // synchronized for the whole table, not just the actor. See
+  // `PerudoActionFX.tsx`'s `detectBetConfirmEvent`/`detectShowdownEvent`.
+  const [trackedFxState, setTrackedFxState] = useState(state);
+  const [betStampToken, setBetStampToken] = useState(0);
+  const [showdownFx, setShowdownFx] = useState<{ token: number; kind: PerudoShowdownKind; actorName: string } | null>(null);
+  if (trackedFxState !== state) {
+    if (detectBetConfirmEvent(trackedFxState, state)) {
+      setBetStampToken((t) => t + 1);
+      getSoundEngine().playPerudoBetStamp();
+    }
+    const showdownKind = detectShowdownEvent(trackedFxState, state);
+    if (showdownKind && state.lastResolution) {
+      setShowdownFx((prev) => ({ token: (prev?.token ?? 0) + 1, kind: showdownKind, actorName: names[state.lastResolution!.actorSeat] }));
+    }
+    setTrackedFxState(state);
+  }
+  // [페루도] 전용 화면 진동 — 다르무티의 `shake`(DalmutiBoard.tsx)와 동일하게
+  // 같은 모양의 키프레임 두 개(`perudo-dudo-shake-1`/`-2`)를 토큰 홀짝으로
+  // 번갈아 걸어, 라운드가 빨리 넘어가 연달아 페루도!가 나와도 매번 애니메이션이
+  // 처음부터 재생되도록 한다. [맞아]는 화면 흔들림 대신 살짝 줌인.
+  const showdownBoardStyle =
+    showdownFx && showdownFx.kind === "dudo"
+      ? { animation: `perudo-dudo-shake-${showdownFx.token % 2 === 0 ? 1 : 2} 380ms ease-in-out` }
+      : showdownFx && showdownFx.kind === "calza"
+        ? { animation: "perudo-viewport-zoom 700ms ease-out" }
+        : undefined;
 
   // -------------------------------------------------------------------------
   // Bid composer draft — local to this client, re-synced from
@@ -426,7 +470,19 @@ export default function PerudoBoard({
   if (state.phase === "gameOver") {
     const rankings = computeRankings(state);
     return (
-      <div className={`${TABLE_PANEL} flex flex-col items-center gap-4 p-4 text-center sm:p-8`}>
+      // 2026-09-20 세션: 경기를 끝낸 페루도!/맞아! 판정은 `reveal`을 거치지
+      // 않고 곧장 `gameOver`로 전이한다(engine.ts's applyResolution 참고) —
+      // 그 마지막 선언에도 동일한 쇼다운 연출/흔들림/줌인이 재생되도록
+      // 여기서도 똑같이 건다(바로 아래 reveal 분기와 동일 패턴).
+      <div className={`${TABLE_PANEL} flex flex-col items-center gap-4 p-4 text-center sm:p-8`} style={showdownBoardStyle}>
+        {showdownFx && (
+          <PerudoShowdownOverlay
+            key={showdownFx.token}
+            kind={showdownFx.kind}
+            actorName={showdownFx.actorName}
+            onDone={() => setShowdownFx(null)}
+          />
+        )}
         <TableTexture />
         <TotalDiceBanner state={state} />
         <LostDiceTray state={state} colorways={colorways} />
@@ -478,7 +534,19 @@ export default function PerudoBoard({
     const success = res.kind === "dudo" ? res.affectedSeat !== res.actorSeat : res.diceDelta > 0;
     const lossAmount = Math.abs(res.diceDelta);
     return (
-      <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
+      // 2026-09-20 세션: `showdownBoardStyle`이 [페루도] 판정 직후 380ms짜리
+      // 화면 흔들림, [맞아] 판정 직후 700ms짜리 살짝-줌인을 건다(둘 다 위
+      // `showdownFx` 렌더-타임 diff 블록에서 세팅) — 이 패널이 바로 그 판정
+      // 직후 렌더되는 화면이라 여기에 거는 게 자연스러움.
+      <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`} style={showdownBoardStyle}>
+        {showdownFx && (
+          <PerudoShowdownOverlay
+            key={showdownFx.token}
+            kind={showdownFx.kind}
+            actorName={showdownFx.actorName}
+            onDone={() => setShowdownFx(null)}
+          />
+        )}
         <TableTexture />
         <TotalDiceBanner state={state} />
         <LostDiceTray state={state} colorways={colorways} />
@@ -674,10 +742,20 @@ export default function PerudoBoard({
             ref={bidActionZoneRef}
             className="relative z-10 flex w-full flex-col items-center justify-center gap-0.5 rounded-[1.25rem] border-2 border-amber-800 bg-amber-100/90 p-0.5 text-neutral-900 shadow-[inset_0_2px_10px_rgba(0,0,0,0.18)] sm:border-4 sm:gap-2 sm:p-2"
           >
+            {/* [베팅확정] 골드 스탬프 & 림라이트 서지 (2026-09-20 세션) — 새
+                선언이 착지할 때마다(내 것이든 남의 것이든, 위 `betStampToken`
+                render-time diff 참고) 테두리를 감싸는 골드 펄스 링 1회. */}
+            {state.currentBid && <BetGoldPulseRing token={betStampToken} />}
             {state.currentBid ? (
               <div className="flex flex-col items-center gap-0.5 text-center">
                 <span className="text-[9px] leading-none text-amber-900/70 sm:text-[10px] sm:leading-normal">{names[state.currentBid.seat]}님의 선언</span>
-                <span className="text-base leading-none font-black text-red-900 drop-shadow-[0_1px_0_rgba(255,255,255,0.4)] sm:text-3xl sm:leading-normal">
+                {/* 선언 숫자가 위에서 쿵 하고 도장 찍히듯 내려앉는 스탬프
+                    애니메이션 — `key`로 토큰마다 remount시켜 매번 재생. */}
+                <span
+                  key={betStampToken}
+                  className="text-base leading-none font-black text-red-900 drop-shadow-[0_1px_0_rgba(255,255,255,0.4)] sm:text-3xl sm:leading-normal"
+                  style={{ animation: "perudo-bet-stamp-drop 0.4s cubic-bezier(0.34,1.56,0.64,1) both" }}
+                >
                   {faceLabel(state.currentBid.face)} × {state.currentBid.quantity}개↑
                 </span>
               </div>
@@ -724,8 +802,9 @@ export default function PerudoBoard({
                     +
                   </button>
                 </div>
-                <button
+                <PerudoFxButton
                   type="button"
+                  variant="gold"
                   disabled={!canConfirmBet}
                   onClick={() => onAction({ type: "raise", seat: viewerSeat, quantity: pendingQuantity, face: pendingFace })}
                   // 2026-09-20 버튼 탭 영역 확대 세션 (사용자 확인: 스마트폰에서 누르기
@@ -734,11 +813,14 @@ export default function PerudoBoard({
                   // 깔아줌, `flex items-center justify-center`로 실제 중앙 정렬
                   // 보장) — 아래 페루도!/맞아! 버튼과 함께, 이 셋만 지목해 키운 것.
                   // 늘어난 높이는 바로 아래 힌트 문구(비대화형 텍스트)를 그만큼 더
-                  // 줄여서 상쇄 — 그 문단 자체의 주석 참고.
+                  // 줄여서 상쇄 — 그 문단 자체의 주석 참고. 이후 세션(액션 버튼
+                  // 연출 고도화)에서 `<PerudoFxButton variant="gold">`로 교체 —
+                  // 누르는 즉시 scale-95 + 골드 리플/스파크, 기존 className은
+                  // 그대로 전달돼 레이아웃/크기는 전혀 변하지 않음.
                   className="flex min-h-[36px] items-center justify-center rounded-full bg-violet-700 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white shadow-[0_0_0_2px_rgba(168,85,247,0.3)] transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 disabled:shadow-none sm:min-h-0 sm:px-4"
                 >
                   ✅ {faceLabel(pendingFace)} × {pendingQuantity}개로 베팅 확정
-                </button>
+                </PerudoFxButton>
                 {/* Always-visible hint (not just a disabled button — 2026-08-21
                     "버그3" 세션, AskUserQuestion-confirmed: 비활성화 + 상시 안내
                     문구) for the one way this composer's confirm can be
@@ -761,21 +843,23 @@ export default function PerudoBoard({
               // 2026-09-20 버튼 탭 영역 확대 세션 — 바로 위 확정 버튼과 같은 이유,
               // 같은 기법(`min-h-[36px]` + `flex items-center justify-center`).
               <div className="flex gap-1.5 sm:gap-2">
-                <button
+                <PerudoFxButton
+                  variant="crimson"
                   disabled={!isMyTurn || !state.currentBid}
                   onClick={() => onAction({ type: "dudo", seat: viewerSeat })}
                   className="flex min-h-[36px] flex-1 items-center justify-center rounded-lg bg-rose-700 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:min-h-0 sm:flex-none sm:px-4 sm:py-2"
                 >
                   🚨 페루도!
-                </button>
-                <button
+                </PerudoFxButton>
+                <PerudoFxButton
+                  variant="emerald"
                   disabled={!state.currentBid}
                   onClick={() => onAction({ type: "calza", seat: viewerSeat })}
                   title="차례와 상관없이 외칠 수 있어요"
                   className="flex min-h-[36px] flex-1 items-center justify-center rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white transition disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-black/30 sm:min-h-0 sm:flex-none sm:px-4 sm:py-2"
                 >
                   🎯 맞아!
-                </button>
+                </PerudoFxButton>
               </div>
             )}
           </div>
@@ -893,7 +977,7 @@ function RevealPanel({
   if (!res) return null;
   return (
     <div className="relative z-10 flex w-full flex-col gap-2">
-      {Object.entries(res.revealedDice).map(([seatStr, dice]) => {
+      {Object.entries(res.revealedDice).map(([seatStr, dice], seatIdx) => {
         const seat = Number(seatStr);
         return (
           <div key={seat} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-2 light:border-slate-200 light:bg-white/70">
@@ -909,14 +993,25 @@ function RevealPanel({
                   const matches = d === res.bid.face;
                   const isWild = res.bid.face !== 1 && d === 1;
                   return (
-                    <DieFace
+                    // 2026-09-20 세션: "컵이 열리며 주사위가 드러나는" 느낌의
+                    // 순차 공개 애니메이션(`perudo-cup-reveal`) — 좌석 순서 ×
+                    // 좌석 내 주사위 순서로 스태거를 줘서, 실제 컵이 하나씩
+                    // 차례로 열리는 것처럼 읽히게 함. 이 트랜지션 자체는 순수
+                    // 연출이라 리매치/재접속 시 재생되지 않아도(즉 mount에서
+                    // 한 번만) 게임 판정에는 전혀 영향 없음.
+                    <span
                       key={i}
-                      value={d}
-                      size="sm"
-                      ring={matches ? "match" : isWild ? "wild" : undefined}
-                      colorway={colorways[seat] ?? playerColorwayForSeat(seat)}
-                      tilt={tiltFor(seat * 31 + i * 7)}
-                    />
+                      className="inline-block"
+                      style={{ perspective: "400px", animation: `perudo-cup-reveal 0.5s cubic-bezier(0.34,1.56,0.64,1) ${(seatIdx * 0.12 + i * 0.05).toFixed(2)}s both` }}
+                    >
+                      <DieFace
+                        value={d}
+                        size="sm"
+                        ring={matches ? "match" : isWild ? "wild" : undefined}
+                        colorway={colorways[seat] ?? playerColorwayForSeat(seat)}
+                        tilt={tiltFor(seat * 31 + i * 7)}
+                      />
+                    </span>
                   );
                 })
               )}

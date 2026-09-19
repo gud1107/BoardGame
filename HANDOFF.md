@@ -39,7 +39,60 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
-## 🎲 페루도 — 확정/페루도!/맞아! 버튼 탭 영역 확대 — 2026-09-20 후속 (커밋/푸시/배포 완료)
+## 🎲 페루도 — 핵심 액션 3종 연출 고도화(골드 스탬프/에메랄드·크림슨 쇼다운) — 2026-09-20 후속 (커밋/푸시/배포 완료)
+
+**요청**: [베팅확정]/[맞아(Calza)]/[페루도(Dudo)] 세 버튼의 클릭 피드백뿐 아니라, 특히 [맞아]/[페루도]
+실행 시 화면 전체를 덮는 시네마틱 연출(고유 색상 엠블럼 팝업 + 충격파 링 + 스크린 셰이크/줌인)을
+동기화 구현해달라는 상세 스펙 요청. 사운드도 웹오디오 합성으로(이 프로젝트는 mp3 없이 전부 코드로
+합성 — Dalmuti 세션의 기존 관례).
+
+**조사(구현 전 Explore 에이전트로 기존 관례 파악)**: 이 프로젝트에는 이미 거의 동일한 연출 기법이
+Coyote(`CoyoteEffects.tsx` — `createPortal` 전체화면 팝업, 백드롭 플래시, 슬래시 오버레이)와
+Dalmuti(`DalmutiEffects.tsx` — `FxButton` 드롭인 버튼 래퍼로 누름-스케일+리플+방사형 스파크,
+`PlayImpactBurst`로 충격파+네온글로우+파티클, `DalmutiBoard.tsx`의 `shake` state로 두 개의 동일 모양
+키프레임을 토큰 홀짝으로 번갈아 걸어 연속 트리거에도 매번 처음부터 재생)에 이미 구축돼 있었음 — 이걸
+그대로 재사용(로직은 게임 간 제로-커플링 컨벤션에 따라 복제, 도형/기법만 차용)하는 쪽으로 결정.
+
+**변경**:
+1. [soundEngine.ts](./src/lib/audio/soundEngine.ts) — 신규 합성 사운드 3개: `playPerudoBetStamp()`(묵직한
+   thud + 하이패스 크랙 + 2음 스파클), `playPerudoCalzaChime()`(3음 장3화음 크리스탈 차임 + 노이즈
+   시머), `playPerudoDudoThunder()`(저음 붐 + 밴드패스 크랙 + 톱니파 번개 글리산도). 기존 `playVictoryStamp`/
+   `playLuxuryChime`/`playTimeBombBlast`를 그대로 뼈대로 삼음.
+2. [globals.css](./src/app/globals.css) — `perudo-fx-ripple`/`perudo-fx-particle`(버튼 리플/스파크),
+   `perudo-bet-stamp-drop`/`perudo-bet-gold-pulse`(베팅판 스탬프+골드 링), `perudo-showdown-vignette-in`/
+   `-emblem-slam`/`-shockwave`/`-spark`(맞아/페루도 공통 전체화면 팝업 골격, 색상은 호출부 인라인
+   주입), `perudo-viewport-zoom`([맞아] 전용 살짝 줌인), `perudo-dudo-shake-1`/`-2`([페루도] 전용
+   화면 흔들림, 사용자 요청 진폭 10px 반영), `perudo-cup-reveal`(리빌 패널 주사위 순차 공개).
+3. [PerudoActionFX.tsx](./src/games/perudo/PerudoActionFX.tsx) — 신규 파일. `detectBetConfirmEvent`/
+   `detectShowdownEvent`(Coyote/Dalmuti와 동일한 순수 상태-diff 감지 함수 — 로컬 클릭이 아니라 실제
+   락스텝 상태 전이를 비교하므로 [맞아]/[페루도]는 호출한 사람뿐 아니라 테이블 전원에게 동기 재생됨),
+   `PerudoFxButton`(Dalmuti `FxButton` 복제, gold/emerald/crimson 3가지 팔레트), `PerudoShowdownOverlay`
+   (전체화면 포탈 팝업), `BetGoldPulseRing`.
+4. [PerudoBoard.tsx](./src/games/perudo/PerudoBoard.tsx) — Dalmuti의 `trackedState` render-time diff
+   패턴으로 `betStampToken`/`showdownFx` state 추가, 3개 버튼을 `<PerudoFxButton>`으로 교체(기존
+   className/로직 100% 그대로 전달), 베팅판에 골드 스탬프/펄스 적용, reveal 패널 주사위에 순차 공개
+   애니메이션, reveal/gameOver 두 화면 모두에 쇼다운 오버레이+흔들림/줌인 적용.
+
+**실제로 발견하고 고친 버그 2개 (둘 다 코드 리뷰가 아니라 실제 Playwright 스크린샷으로 잡음)**:
+- **쇼다운 오버레이가 아예 안 보임**: Dalmuti `PlayImpactBurst`의 `return () => { clearTimeout(t);
+  onDone(); }` 패턴을 그대로 복사했는데, Dalmuti는 "큐" 구조(각 이벤트가 자기 id로 self-remove)라
+  안전하지만 이 오버레이는 단일 nullable 값이라 React 개발 모드 Strict Mode의 mount→cleanup→remount
+  더블인보크 시뮬레이션에서 cleanup의 `onDone()`이 첫 페인트 전에 즉시 `showdownFx`를 `null`로
+  되돌려버려, 스크린샷에 아무것도 안 찍히는 결과로 나타남. cleanup에서 `onDone()` 호출 제거(clearTimeout만)로 수정.
+- **경기를 끝내는 마지막 페루도!/맞아!에서 연출이 통째로 빠짐**: `engine.ts`의 `applyResolution`은 그
+  판정으로 한 명만 남으면 `reveal`을 거치지 않고 `playing`에서 곧장 `gameOver`로 전이한다 — 원래
+  `detectShowdownEvent`가 `next.phase === "reveal"`만 체크해서, 가장 극적이어야 할 결정적 마지막
+  선언에서만 쇼다운이 안 뜨는 결과였음. `next.phase === "gameOver"`도 함께 체크하도록 수정 +
+  `PerudoBoard.tsx`의 gameOver 분기에도 오버레이/흔들림 적용 추가.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint`(대상 3개 파일 0 에러) / `npx vitest run
+src/games/perudo`(80/80 통과, 엔진 무변경). 호스트 메모리 문제 없이 `next dev` 정상 기동 —
+캐시된 Playwright Chromium으로 세 액션 전부 실제 화면 스크린샷 확인(베팅확정 스탬프는 스크린샷으로는
+미묘해 보여 `getComputedStyle().animationName`으로 실제 적용 여부까지 직접 확인), 여러 라운드
+연속 플레이하며 콘솔 에러 없음도 확인(잡힌 에러 전부 이 프로젝트에 이미 알려진 무관한
+`PatchNoteButton` 하이드레이션 불일치/리소스 404뿐).
+
+
 
 **요청**: "'N x N개로 베팅확정', 페루도, 맞아 버튼을 반응형에 맞게 조금만 더 크게 키워주세요 — 스마트폰에서
 버튼을 누르기 작지 않게 개선해주세요." 바로 위 섹션(배팅판/액션버튼 모바일 무스크롤)에서 그 세 버튼을
