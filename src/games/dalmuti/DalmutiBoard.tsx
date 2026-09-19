@@ -167,11 +167,13 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   // sibling-key 계열 버그, 과거 러브 윈즈 올 §4에서 실제로 겪음)가 생길 수 있어
   // 매번 증가하는 id를 key로 쓴다.
   const [passBubbles, setPassBubbles] = useState<(PassEvent & { id: number })[]>([]);
-  // 게임 종료 쇼다운 공개(task brief §1, 2026-09-13 세션) — `gameOver` 진입을
-  // 다른 모든 코스메틱 이벤트와 같은 "연속 락스텝 스냅샷 diff" 지점에서
-  // 감지해, 결과 순위표 대신 `ShowdownReveal`을 먼저 `SHOWDOWN_REVEAL_MS`만큼
-  // 보여준다. 순수 로컬 타이머로만 제어(락스텝 상태는 손대지 않음)이므로
-  // 각 클라이언트가 독립적으로 재생해도 안전 — `ShowdownReveal`의 모듈 doc 참고.
+  // 게임 종료 쇼다운 공개 — "라스트 피니시 카드 스포트라이트"(task brief §1,
+  // 2026-09-13 세션에서 시작, 2026-09-20 세션에서 확장 — 로컬 전용/미배포).
+  // `gameOver` 진입을 다른 모든 코스메틱 이벤트와 같은 "연속 락스텝 스냅샷
+  // diff" 지점에서 감지해, 결과 순위표 대신 `ShowdownReveal`을 먼저
+  // `SHOWDOWN_REVEAL_MS`(현재 5초)만큼 보여준다. 순수 로컬 타이머로만 제어
+  // (락스텝 상태는 손대지 않음)이므로 각 클라이언트가 독립적으로 재생해도
+  // 안전 — `ShowdownReveal`의 모듈 doc 참고.
   const [showdownActive, setShowdownActive] = useState(false);
   if (trackedState !== state) {
     const newTax = detectTaxEvents(trackedState, state);
@@ -184,7 +186,10 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     setTrackedState(state);
     if (enteredGameOver) {
       setShowdownActive(true);
-      getSoundEngine().playShowdownReveal();
+      // 2026-09-20 세션: 기존 `playShowdownReveal`(커튼 스윕+공)을 피니시
+      // 전용 팡파르로 교체 — "묵직한 오케스트라 피니시 임팩트음/골드 팡파르
+      // 차임" 요청, 둘 다 겹쳐 재생하면 소리가 뭉개져 대체하는 쪽을 택함.
+      getSoundEngine().playDalmutiFinishFanfare();
     }
     if (newPlayImpacts.length > 0) {
       setPlayImpacts((prev) => {

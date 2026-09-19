@@ -1115,6 +1115,77 @@ html {
   }
 }
 
+/* 달무티 — "라스트 피니시 카드 스포트라이트" (task brief, 2026-09-20 세션 —
+   로컬 전용/미배포): 잔여 2인 중 한쪽이 마지막 패를 털어내며 게임이 끝나는
+   순간, 그 피니시 카드를 SHOWDOWN_REVEAL_MS(DalmutiEffects.tsx, 5초) 동안
+   화면 중앙에 확대 고정해 보여주는 동안 재생되는 전용 이펙트 세트. 바로 위
+   dalmuti-play-* 계열(카드 제출 타격감)과 같은 "bounce + shockwave + radial
+   spark" 골격을 그대로 재사용하되, 한 판의 대미를 장식하는 연출이므로 확대율/
+   반경/지속시간을 모두 크게 키워 슬로모션처럼 보이게 했다. */
+@keyframes dalmuti-finish-card-pop {
+  0% {
+    transform: scale(0.5) translateY(-10px);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.55) translateY(4px);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1.32) translateY(0);
+  }
+  100% {
+    transform: scale(1.4) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 카드 주위로 천천히 퍼지는 샴페인 골드 충격파 — dalmuti-play-shockwave와 같은
+   구조지만 반경/지속시간을 2배 이상으로 늘려 "슬로모션 충격파"처럼 보이게 함. */
+@keyframes dalmuti-finish-shockwave {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(3.4);
+    opacity: 0;
+  }
+}
+
+/* 카드에서 사방으로 튀는 골드 스파크 — dalmuti-play-spark보다 비행 거리를
+   늘리고 느리게 재생해 화려함을 강조. */
+@keyframes dalmuti-finish-spark {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(0) scale(1);
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) translateX(78px) scale(0.2);
+  }
+}
+
+/* 스포트라이트 컨테이너 테두리를 따라 은은하게 맥동하는 골드 림라이트 — 카드
+   확대 연출과 별개로 5초 노출 시간 내내 화면이 살아있는 느낌을 주기 위해
+   호출부(DalmutiEffects.tsx)에서 반복 횟수를 지정해 두어 번 재생한다. */
+@keyframes dalmuti-finish-rim-glow {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(253, 224, 71, 0.15),
+      inset 0 0 30px 0 rgba(253, 224, 71, 0.05);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 2px rgba(253, 224, 71, 0.55),
+      inset 0 0 60px 6px rgba(245, 158, 11, 0.35);
+  }
+}
+
 /* Board-wide micro screen shake on every card play (task brief "화면 미세
    진동") — scoped to the game panel itself, not the whole page, so it reads
    as "the table jolted" rather than jarring the surrounding site chrome.

@@ -958,22 +958,31 @@ export function PassBubble({ event, getSeatEl, onDone }: { event: PassEvent; get
 }
 
 /**
- * 게임 종료 쇼다운 공개 유지 시간(ms) — task brief(2026-09-13 세션) "3~4초간의
- * SHOWDOWN 상태" 요구를 그 구간 중앙값으로 확정.
+ * 게임 종료 쇼다운 공개 유지 시간(ms) — 처음엔 task brief(2026-09-13 세션)
+ * "3~4초간의 SHOWDOWN 상태" 요구를 그 구간 중앙값(3500)으로 확정했었으나,
+ * 2026-09-20 세션(로컬 전용/미배포)에서 "라스트 피니시 카드 스포트라이트"
+ * 요구("5초 동안 큼직하게 유지·노출")로 5000까지 늘렸다.
  */
-export const SHOWDOWN_REVEAL_MS = 3500;
+export const SHOWDOWN_REVEAL_MS = 5000;
+
+const FINISH_SPARK_COUNT = 16;
 
 /**
- * 최종 쇼다운 공개(task brief, 2026-09-13 세션 §1) — `engine.ts`의
- * `playCards`는 손패가 남은 좌석이 정확히 1명이 되는 순간 그 좌석을 곧장
- * `finishOrder` 꼴찌로 편입시키며 `phase`를 `gameOver`로 전환한다(engine.ts
- * "remaining.length === 1" 분기 참고) — 즉 이 순간까지 한 번도 앞면으로
- * 공개된 적 없는 손패를 쥔 좌석은 항상 정확히 1명이다. 결과 순위표가 뜨기
- * 전 `SHOWDOWN_REVEAL_MS` 동안 그 손패를 뒤집어 보여준다.
+ * 최종 쇼다운 공개 — "라스트 피니시 카드 스포트라이트"(task brief, 2026-09-20
+ * 세션 §1, 로컬 전용/미배포). `engine.ts`의 `playCards`는 손패가 남은 좌석이
+ * 정확히 1명이 되는 순간 그 좌석을 곧장 `finishOrder` 꼴찌로 편입시키며
+ * `phase`를 `gameOver`로 전환한다(engine.ts "remaining.length <= 1" 분기
+ * 참고) — 이때 `state.trick`은 승자가 방금 낸 마지막 패를 담은 채로 그대로
+ * 남아있으므로(다음 트릭으로 리셋되기 전이라) `trick.plays.at(-1)`이 곧
+ * "우승 피니시 패"다. 원래(2026-09-13) 이 컴포넌트는 끝까지 손패를 털지
+ * 못한 꼴찌의 잔여 패만 전면에 보여줬는데, 이번 세션에서 그 승자의 피니시
+ * 패를 중앙에 확대(1.4배) 스포트라이트하는 것으로 주역을 바꾸고, 꼴찌의
+ * 잔여 패는 옆 카드형 패널로 격하했다(요청: "패배한 상대방의 잔여 패도
+ * 화면 한쪽에 함께 표시").
  *
- * `.find` 대신 `.filter`로 대상을 고르는 이유: 엔진이 훗날 바뀌어 동시에
- * 여러 좌석이 손패를 남긴 채 게임이 끝나는 경우가 생기더라도(현재는 발생하지
- * 않음) 이 컴포넌트가 별도 수정 없이 전원을 그대로 나열해 보여준다.
+ * stragglers를 `.find` 대신 `.filter`로 고르는 이유는 그대로 유지: 엔진이
+ * 훗날 바뀌어 동시에 여러 좌석이 손패를 남긴 채 게임이 끝나더라도(현재는
+ * 발생하지 않음) 이 컴포넌트가 별도 수정 없이 전원을 나열해 보여준다.
  *
  * 순수 연출 목적의 로컬 타이머로만 제어된다(`DalmutiBoard.tsx`) — 락스텝
  * 상태 자체는 건드리지 않으므로 각 클라이언트가 독립적으로 재생해도
@@ -989,31 +998,81 @@ export function ShowdownReveal({
   titleFor: (seat: SeatIndex) => string;
 }) {
   const stragglers = state.players.filter((p) => p.hand.length > 0);
+  const finishingPlay = state.trick.plays.at(-1);
+  const winnerSeat = state.trick.leaderSeat;
+  // Defensive fallback only — `finishingPlay` is always the winner's last
+  // play at this point per the module doc above; an empty array here would
+  // just mean the spotlight renders with no card (never crashes).
+  const winnerCards = finishingPlay && finishingPlay.seat === winnerSeat ? finishingPlay.cards : [];
+
   return (
     <div
-      className="relative flex min-w-0 flex-1 flex-col items-center gap-5 rounded-[28px] border border-amber-500/20 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8 light:border-amber-300 light:shadow-md"
+      className="relative flex min-w-0 flex-1 flex-col items-center gap-5 overflow-hidden rounded-[28px] border border-amber-500/20 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8 light:border-amber-300 light:shadow-md"
       // TODO(theme): hardcoded dark gradient background — not trivial to branch via a CSS class variant, left dark in light mode for now.
       style={{ background: "linear-gradient(160deg,#241a3a 0%,#160f26 55%,#0a0714 100%)" }}
     >
-      <span className="text-4xl">🕯️</span>
-      <h2 className="text-xl font-bold break-keep text-amber-100">최후의 손패, 공개합니다...</h2>
-      <p className="text-xs break-keep text-white/50">끝까지 카드를 털어내지 못한 자의 패가 드러납니다.</p>
-      <div className="flex w-full flex-col items-center gap-5">
+      {/* 화면(스포트라이트 컨테이너) 테두리를 따라 맥동하는 골드 림라이트 —
+          5초 노출 시간 내내 살아있는 느낌을 주기 위해 두 번 반복 재생. */}
+      <span className="pointer-events-none absolute inset-0 rounded-[28px]" aria-hidden style={{ animation: "dalmuti-finish-rim-glow 2.4s ease-in-out 2" }} />
+
+      <span className="flex items-center gap-1.5 rounded-full border border-amber-300/40 bg-black/30 px-4 py-1.5 text-sm font-bold tracking-wide break-keep text-amber-100 shadow-[0_0_18px_-4px_rgba(251,191,36,0.85)] light:border-amber-300 light:bg-amber-50 light:text-amber-700">
+        👑 {names[winnerSeat]}님의 마지막 피니시 패!
+      </span>
+
+      <div className="relative flex min-h-32 items-center justify-center py-3">
+        {/* 샴페인 골드 충격파 링 */}
+        <span
+          className="pointer-events-none absolute h-24 w-24 rounded-full"
+          aria-hidden
+          style={{ boxShadow: "0 0 0 2px rgba(253,224,71,0.9)", animation: "dalmuti-finish-shockwave 1.5s ease-out 0.2s both" }}
+        />
+        {/* 골드 스파크 파티클 버스트 */}
+        <span className="pointer-events-none absolute" aria-hidden>
+          {Array.from({ length: FINISH_SPARK_COUNT }).map((_, i) => (
+            <span
+              key={i}
+              className="absolute top-1/2 left-1/2 h-1.5 w-1.5 rounded-full"
+              style={
+                {
+                  background: "#fde047",
+                  boxShadow: "0 0 7px 1.5px #fde047",
+                  "--angle": `${(360 / FINISH_SPARK_COUNT) * i}deg`,
+                  animation: `dalmuti-finish-spark 1.1s ease-out ${(0.25 + i * 0.02).toFixed(2)}s forwards`,
+                } as CSSProperties
+              }
+            />
+          ))}
+        </span>
+        <div
+          className="flex items-center gap-2"
+          style={{ animation: "dalmuti-finish-card-pop 0.9s cubic-bezier(0.34,1.56,0.64,1) both", filter: "drop-shadow(0 0 22px rgba(251,191,36,0.55))" }}
+        >
+          {winnerCards.map((c) => (
+            <CardFace key={c.id} card={c} highlight />
+          ))}
+        </div>
+      </div>
+
+      <p className="text-xs break-keep text-white/50">끝까지 카드를 털어내지 못한 상대의 패도 함께 공개됩니다.</p>
+      <div className="flex w-full flex-wrap items-start justify-center gap-3">
         {stragglers.map((p) => (
-          <div key={p.seat} className="flex w-full flex-col items-center gap-2.5">
-            <span className="flex items-center gap-1.5 text-sm text-white">
-              <Avatar size={20} />
+          <div key={p.seat} className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-3 py-2.5">
+            <span className="flex items-center gap-1.5 text-xs text-white/80">
+              <Avatar size={18} />
               {names[p.seat]}
               <RoleBadge title={titleFor(p.seat)} />
             </span>
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
               {p.hand.map((c, i) => (
-                <div key={c.id} style={{ perspective: "600px", animation: `dalmuti-highlight-card-flip 0.6s cubic-bezier(0.34,1.56,0.64,1) ${(i * 0.12).toFixed(2)}s both` }}>
+                <div
+                  key={c.id}
+                  style={{ transform: "scale(0.78)", perspective: "600px", animation: `dalmuti-highlight-card-flip 0.6s cubic-bezier(0.34,1.56,0.64,1) ${(i * 0.12).toFixed(2)}s both` }}
+                >
                   <CardFace card={c} />
                 </div>
               ))}
             </div>
-            <span className="rounded-full border border-amber-300/30 bg-black/30 px-3 py-1 text-[11px] font-semibold tracking-wide break-keep text-amber-200/90 light:border-amber-300 light:bg-amber-50 light:text-amber-700">
+            <span className="rounded-full border border-amber-300/30 bg-black/30 px-2.5 py-0.5 text-[10px] font-semibold tracking-wide break-keep text-amber-200/90 light:border-amber-300 light:bg-amber-50 light:text-amber-700">
               [ 남은 패: {p.hand.map((c) => (c.isJoker ? "어릿광대" : `${c.rank}`)).join(", ")} ]
             </span>
           </div>

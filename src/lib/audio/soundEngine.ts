@@ -1428,6 +1428,79 @@ class SoundEngine {
     });
   }
 
+  /**
+   * 달무티 — "라스트 피니시 팡파르": 잔여 2인 중 한쪽이 마지막 패를 털어내
+   * 게임이 끝나는 순간 재생되는 전용 임팩트음(task brief, 2026-09-20 세션
+   * "라스트 피니시 카드 스포트라이트" — 로컬 전용/미배포). `playShowdownReveal`의
+   * 커튼-스윕+공(gong) 조합을 대체하는 자리에서 호출된다(`DalmutiBoard.tsx`의
+   * `enteredGameOver` diff 트리거). 묵직한 서브베이스 임팩트(팀파니 타격에
+   * 가깝게 `playCardSlam`의 thud보다 더 낮고 길게) 위에, 네 음으로 올라가는
+   * 골드 벨 아르페지오(도-미-솔-높은 도, 각 음에 옥타브 위 배음을 살짝 얹어
+   * "종소리" 질감)를 겹치고, 마지막 음과 함께 짧은 하이 스파클(밴드패스
+   * 화이트노이즈)로 마무리한다. `playFinishFanfare`(말달리자 결승선 환호/
+   * 징소리)와 이름이 겹쳐 `playDalmutiFinishFanfare`로 명명.
+   */
+  playDalmutiFinishFanfare() {
+    if (!this.gate("dalmutiFinishFanfare", 800)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const boom = ctx.createOscillator();
+    boom.type = "sine";
+    boom.frequency.setValueAtTime(92, now);
+    boom.frequency.exponentialRampToValueAtTime(34, now + 0.5);
+    const boomGain = ctx.createGain();
+    boomGain.gain.setValueAtTime(0.4, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    boom.connect(boomGain).connect(this.sfxGain);
+    boom.start(now);
+    boom.stop(now + 0.6);
+
+    const sub = ctx.createOscillator();
+    sub.type = "sine";
+    sub.frequency.value = 50;
+    const subGain = ctx.createGain();
+    subGain.gain.setValueAtTime(0.22, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    sub.connect(subGain).connect(this.sfxGain);
+    sub.start(now);
+    sub.stop(now + 0.45);
+
+    const arpeggio = [523.25, 659.25, 783.99, 1046.5];
+    arpeggio.forEach((freq, i) => {
+      const at = now + 0.14 + i * 0.1;
+      [freq, freq * 2].forEach((f, partial) => {
+        const osc = ctx.createOscillator();
+        osc.type = "sine";
+        osc.frequency.value = f;
+        const gain = ctx.createGain();
+        const peak = partial === 0 ? 0.22 : 0.08;
+        gain.gain.setValueAtTime(0, at);
+        gain.gain.linearRampToValueAtTime(peak, at + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, at + (i === arpeggio.length - 1 ? 1.2 : 0.5));
+        osc.connect(gain).connect(this.sfxGain!);
+        osc.start(at);
+        osc.stop(at + 1.25);
+      });
+    });
+
+    const sparkleAt = now + 0.14 + (arpeggio.length - 1) * 0.1;
+    const sparkle = ctx.createBufferSource();
+    sparkle.buffer = noiseBuffer(ctx);
+    const sparkleFilter = ctx.createBiquadFilter();
+    sparkleFilter.type = "bandpass";
+    sparkleFilter.frequency.value = 5200;
+    sparkleFilter.Q.value = 0.8;
+    const sparkleGain = ctx.createGain();
+    sparkleGain.gain.setValueAtTime(0, sparkleAt);
+    sparkleGain.gain.linearRampToValueAtTime(0.14, sparkleAt + 0.03);
+    sparkleGain.gain.exponentialRampToValueAtTime(0.001, sparkleAt + 0.65);
+    sparkle.connect(sparkleFilter).connect(sparkleGain).connect(this.sfxGain);
+    sparkle.start(sparkleAt);
+    sparkle.stop(sparkleAt + 0.65);
+  }
+
   /** 소환사의 협곡 — "패스 봉인 스탬프": a heavy dark-metal seal slamming down (deep sine thud sweep + a lowpass thump, like `playCupThud`/`playVictoryStamp` but deeper/louder) followed by a short metallic clang (inharmonic high partials, like a struck steel plate) — deliberately the loud/heavy opposite of Dalmuti's understated `playPassWhiff`, since this pass needs every other seat to notice it happened (PASS_HEAVY). */
   playPassSeal() {
     if (!this.gate("passSeal", 250)) return;
