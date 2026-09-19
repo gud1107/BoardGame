@@ -39,6 +39,53 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🎲 페루도 — [베팅확정] 35개+광선 확대 & 페루도/맞아 4분화 쇼다운 — 2026-09-20 후속 (커밋/푸시/배포 완료)
+
+**요청**: 바로 위 섹션(22개 중력 스파크)에 이어 두 가지 — (1) [베팅확정] 파티클을 35개로 확대 + 버튼
+뒤로 12줄기 황금빛 방사형 광선 방출, (2) [페루도]/[맞아] 쇼다운을 "선언했다"는 사실 하나가 아니라 실제
+판정 결과에 따라 4가지 완전히 다른 연출로 분화 — ⚡블러핑 적발 성공(BLUFF BUSTED)/❌고발 실패·역풍
+(REVERSE HIT)/🎯정확 일치(MIRACLE CALZA)/💨불일치(MISSED), 각각 고유 엠블럼·비주얼 레이어·사운드까지
+상세 스펙 지정.
+
+**변경 1 — 베팅확정 파티클 확대**: `GOLD_SPARK_COUNT` 22→35. 신규 `makeGoldRays()` — 클릭 지점에서
+30°씩 균등 배치된 12줄기 얇은 그라디언트 광선이 짧게 확장하며 소멸(`perudo-gold-light-rays`). 버튼
+자신의 `overflow-hidden`을 gold variant에서만 꺼서(다른 두 버튼은 유지) 스파크/광선이 버튼 경계에
+잘리지 않고 배팅판 안쪽으로 자유롭게 번져나가도록 함 — 이전엔 이 클리핑 때문에 스크린샷에서 효과가
+잘 안 보였던 것으로 추정.
+
+**변경 2 — 4분화 쇼다운** (가장 큰 변경): [PerudoActionFX.tsx](./src/games/perudo/PerudoActionFX.tsx)
+- `detectShowdownEvent`가 이제 `kind`("dudo"/"calza") 하나가 아니라 실제 성패까지 판정해
+  `PerudoShowdownOutcome`("dudoSuccess"/"dudoFail"/"calzaSuccess"/"calzaFail") 4가지 중 하나를
+  반환 — `PerudoBoard.tsx`가 reveal 텍스트에 이미 쓰고 있던 것과 동일한 판정식
+  (`affectedSeat !== actorSeat`/`diceDelta > 0`)을 그대로 재사용해 일관성 확보.
+- `SHOWDOWN_PALETTE`를 4개 항목으로 확장, 각각 고유 엠블럼("⚡ BLUFF BUSTED!"/"❌ REVERSE HIT!"/
+  "🎯 MIRACLE CALZA!"/"💨 MISSED!") + 결과 전용 레이어:
+  - dudoSuccess: 유리 파편 9조각(`perudo-glass-shard`) + 지목당한 상대에게 조여드는 붉은 조준
+    레티클 + 주사위 하나가 부서지며 아래로 낙하하는 이모지 연출.
+  - dudoFail: 화면을 X자로 가로지르는 붉은 균열선 2줄기(`perudo-corner-crack-in`) + (보드 레벨)
+    0.38초 화면 흔들림.
+  - calzaSuccess: 20개 에메랄드/청록 스파크 + 기존보다 한 겹 더 크고 느린 팽창 링
+    (`perudo-miracle-expansion-ring`) + (보드 레벨) 살짝 줌인.
+  - calzaFail: 블러 처리된 회색 연기 6뭉치가 떠오르며 소멸(`perudo-smoke-drift`) + "⛓️" 아이콘 흔들림
+    + (보드 레벨) 채도 저하 펄스(`perudo-desaturate-pulse`).
+- [soundEngine.ts](./src/lib/audio/soundEngine.ts) — 4개 신규 합성 사운드:
+  `playPerudoBluffBustedGong`(크랙+비화성 배음 2개로 "쇠 징" 근사), `playPerudoReverseHitBuzzer`
+  (톱니파 버저+저음 붐), `playPerudoMiracleCalzaFanfare`(3화음+4음 상승 팡파르),
+  `playPerudoCalzaMissedScrape`(하강 밴드패스 스크레이프+저음 다운비트).
+- **실제로 잡은 버그**: 채도 저하 효과를 처음엔 오버레이(포탈)의 반투명 vignette div에 걸었는데,
+  CSS `filter`는 그 엘리먼트 자기 자신의 렌더링만 바꾸고 뒤에 있는 배경(보드)엔 전혀 영향을 주지
+  않는다는 걸 뒤늦게 깨달아, `PerudoBoard.tsx`가 자기 루트 패널에 직접 거는 `showdownBoardStyle`
+  쪽으로 옮김 — 다른 보드-레벨 이펙트(흔들림/줌인)와 동일한 위치.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint`(0 에러) / `npx vitest run src/games/perudo`(80/80
+통과). 35개 파티클 + 12줄기 광선은 `getComputedStyle`로 정확한 개수·각도(0~330°, 30° 간격) 직접
+확인. 4가지 결과 중 실제 게임 플레이로 자연 발생한 2가지(dudoFail·calzaFail)는 스크린샷/DOM 텍스트로
+라이브 확인(엠블럼 텍스트가 실제 판정 결과 텍스트와 정확히 일치함까지 교차 확인) — dudoFail
+스크린샷에서 X자 균열선/붉은 비네트/REVERSE HIT 엠블럼 전부 실제로 보임. 나머지 2가지(dudoSuccess·
+calzaSuccess)는 정확한 주사위 눈을 강제할 방법이 없어 자연 발생을 못 잡았음 — 동일한 렌더링 경로(같은
+컴포넌트, 다른 설정 분기)라 판정 로직(타입 체크로 이미 검증된 4-키 매핑)과 코드 리뷰 수준의 확신으로
+대체, 정직하게 기록.
+
 ## 🎲 페루도 — [베팅확정] 22개 중력 스파크 파티클 — 2026-09-20 후속 (커밋/푸시/배포 완료)
 
 **요청**: 바로 위 섹션(핵심 액션 3종 연출 고도화)에 이어, [베팅확정] 버튼 클릭 시 파티클 스펙을 구체적으로

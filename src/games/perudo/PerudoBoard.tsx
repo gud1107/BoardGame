@@ -12,7 +12,7 @@ import {
   detectShowdownEvent,
   PerudoFxButton,
   PerudoShowdownOverlay,
-  type PerudoShowdownKind,
+  type PerudoShowdownOutcome,
 } from "./PerudoActionFX";
 import RectBidTrack, { BOARD_LAST_INDEX, LAP_SIZE, OverflowBadge, stripLength } from "./PerudoBidTrack";
 import { DieBack, DieFace, faceLabel, FacePicker, LostDiceTray, TABLE_PANEL, TableTexture } from "./PerudoSharedUI";
@@ -221,28 +221,44 @@ export default function PerudoBoard({
   // `PerudoActionFX.tsx`'s `detectBetConfirmEvent`/`detectShowdownEvent`.
   const [trackedFxState, setTrackedFxState] = useState(state);
   const [betStampToken, setBetStampToken] = useState(0);
-  const [showdownFx, setShowdownFx] = useState<{ token: number; kind: PerudoShowdownKind; actorName: string } | null>(null);
+  const [showdownFx, setShowdownFx] = useState<{ token: number; outcome: PerudoShowdownOutcome; actorName: string; bidderName: string } | null>(
+    null,
+  );
   if (trackedFxState !== state) {
     if (detectBetConfirmEvent(trackedFxState, state)) {
       setBetStampToken((t) => t + 1);
       getSoundEngine().playPerudoBetStamp();
     }
-    const showdownKind = detectShowdownEvent(trackedFxState, state);
-    if (showdownKind && state.lastResolution) {
-      setShowdownFx((prev) => ({ token: (prev?.token ?? 0) + 1, kind: showdownKind, actorName: names[state.lastResolution!.actorSeat] }));
+    const outcome = detectShowdownEvent(trackedFxState, state);
+    if (outcome && state.lastResolution) {
+      const res = state.lastResolution;
+      setShowdownFx((prev) => ({
+        token: (prev?.token ?? 0) + 1,
+        outcome,
+        actorName: names[res.actorSeat],
+        bidderName: names[res.bid.seat],
+      }));
     }
     setTrackedFxState(state);
   }
-  // [페루도] 전용 화면 진동 — 다르무티의 `shake`(DalmutiBoard.tsx)와 동일하게
-  // 같은 모양의 키프레임 두 개(`perudo-dudo-shake-1`/`-2`)를 토큰 홀짝으로
-  // 번갈아 걸어, 라운드가 빨리 넘어가 연달아 페루도!가 나와도 매번 애니메이션이
-  // 처음부터 재생되도록 한다. [맞아]는 화면 흔들림 대신 살짝 줌인.
+  // 결과별 보드-레벨 연출 (2026-09-20 후속 세션, 4가지 판정으로 분화되면서
+  // 함께 갈라짐): [페루도 실패/역풍]만 화면 진동(다르무티의
+  // `shake`(DalmutiBoard.tsx)와 동일하게 같은 모양의 키프레임 두 개를 토큰
+  // 홀짝으로 번갈아 걸어, 연달아 나와도 매번 애니메이션이 처음부터
+  // 재생되도록 함), [맞아 성공]만 살짝 줌인, [맞아 실패]만 보드 자체가
+  // 채도를 잃는 펄스(`perudo-desaturate-pulse`는 `filter`라 이 패널
+  // 자신에게 걸어야 실제로 보드가 흐려 보인다 — `PerudoShowdownOverlay`
+  // 자신에 걸면 팝업 레이어 자기 자신만 바뀌고 뒤 배경엔 영향이 없다).
+  // [페루도 성공]은 화면 레벨 이펙트 없음(유리 파편/조준 레티클은 팝업
+  // 자체 안에서만 재생).
   const showdownBoardStyle =
-    showdownFx && showdownFx.kind === "dudo"
+    showdownFx?.outcome === "dudoFail"
       ? { animation: `perudo-dudo-shake-${showdownFx.token % 2 === 0 ? 1 : 2} 380ms ease-in-out` }
-      : showdownFx && showdownFx.kind === "calza"
+      : showdownFx?.outcome === "calzaSuccess"
         ? { animation: "perudo-viewport-zoom 700ms ease-out" }
-        : undefined;
+        : showdownFx?.outcome === "calzaFail"
+          ? { animation: "perudo-desaturate-pulse 1s ease-in-out" }
+          : undefined;
 
   // -------------------------------------------------------------------------
   // Bid composer draft — local to this client, re-synced from
@@ -478,8 +494,9 @@ export default function PerudoBoard({
         {showdownFx && (
           <PerudoShowdownOverlay
             key={showdownFx.token}
-            kind={showdownFx.kind}
+            outcome={showdownFx.outcome}
             actorName={showdownFx.actorName}
+            bidderName={showdownFx.bidderName}
             onDone={() => setShowdownFx(null)}
           />
         )}
@@ -542,8 +559,9 @@ export default function PerudoBoard({
         {showdownFx && (
           <PerudoShowdownOverlay
             key={showdownFx.token}
-            kind={showdownFx.kind}
+            outcome={showdownFx.outcome}
             actorName={showdownFx.actorName}
+            bidderName={showdownFx.bidderName}
             onDone={() => setShowdownFx(null)}
           />
         )}

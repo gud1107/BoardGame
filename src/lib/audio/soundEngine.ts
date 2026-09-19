@@ -2579,6 +2579,173 @@ class SoundEngine {
     bolt.start(now + 0.01);
     bolt.stop(now + 0.26);
   }
+
+  /**
+   * 페루도 — "페루도(Dudo)" 판정 결과 4분화 (2026-09-20 후속 세션). 기존
+   * `playPerudoDudoThunder()`는 "선언 자체"의 번쩍임이었고, 이 넷은 그 선언이
+   * 실제로 어떻게 갈렸는지(고발 성공/실패, 정확 일치/불일치)에 맞춰
+   * 쇼다운 팝업과 함께 재생되는 결과음 — 판정 성패에 따라 완전히 다른 감정을
+   * 전달하도록 설계.
+   *
+   * [블러핑 적발 성공] 번개 크랙(`playPerudoDudoThunder`와 같은 밴드패스
+   * 크랙 골격) + 낮은 공(gong) 공명(저음 사인 + 배음이 안 맞는 두 개의 배음
+   * 부분음으로 "쇳소리 섞인 징" 느낌).
+   */
+  playPerudoBluffBustedGong() {
+    if (!this.gate("perudoBluffBustedGong", 250)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const crack = ctx.createBufferSource();
+    crack.buffer = noiseBuffer(ctx);
+    const crackFilter = ctx.createBiquadFilter();
+    crackFilter.type = "bandpass";
+    crackFilter.frequency.value = 2000;
+    crackFilter.Q.value = 2;
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.32, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    crack.connect(crackFilter).connect(crackGain).connect(this.sfxGain);
+    crack.start(now);
+    crack.stop(now + 0.12);
+
+    const gongFund = ctx.createOscillator();
+    gongFund.type = "sine";
+    gongFund.frequency.setValueAtTime(196, now + 0.05);
+    const gongFundGain = ctx.createGain();
+    gongFundGain.gain.setValueAtTime(0.001, now + 0.05);
+    gongFundGain.gain.linearRampToValueAtTime(0.34, now + 0.08);
+    gongFundGain.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+    gongFund.connect(gongFundGain).connect(this.sfxGain);
+    gongFund.start(now + 0.05);
+    gongFund.stop(now + 1.1);
+
+    // 비화성 배음 2개 — 순정 정수배가 아닌 주파수로 "쇠 징" 특유의 탁한
+    // 공명을 냄(순수 배음이면 그냥 음정 있는 벨소리처럼 들림).
+    [463, 611].forEach((freq, i) => {
+      const at = now + 0.06 + i * 0.01;
+      const partial = ctx.createOscillator();
+      partial.type = "triangle";
+      partial.frequency.value = freq;
+      const partialGain = ctx.createGain();
+      partialGain.gain.setValueAtTime(0.001, at);
+      partialGain.gain.linearRampToValueAtTime(0.1, at + 0.03);
+      partialGain.gain.exponentialRampToValueAtTime(0.001, at + 0.75);
+      partial.connect(partialGain).connect(this.sfxGain!);
+      partial.start(at);
+      partial.stop(at + 0.78);
+    });
+  }
+
+  /** [고발 실패/역풍] 무겁고 둔탁한 버저 + 타격음 — `playWrongBuzz`류보다 훨씬
+   * 낮고 무거운 톱니파 버저에, 착지하는 둔탁한 사인 붐을 겹침. */
+  playPerudoReverseHitBuzzer() {
+    if (!this.gate("perudoReverseHitBuzzer", 250)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const buzz = ctx.createOscillator();
+    buzz.type = "sawtooth";
+    buzz.frequency.setValueAtTime(90, now);
+    buzz.frequency.linearRampToValueAtTime(60, now + 0.35);
+    const buzzGain = ctx.createGain();
+    buzzGain.gain.setValueAtTime(0.001, now);
+    buzzGain.gain.linearRampToValueAtTime(0.3, now + 0.02);
+    buzzGain.gain.setValueAtTime(0.3, now + 0.2);
+    buzzGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    buzz.connect(buzzGain).connect(this.sfxGain);
+    buzz.start(now);
+    buzz.stop(now + 0.4);
+
+    const thud = ctx.createOscillator();
+    thud.type = "sine";
+    thud.frequency.setValueAtTime(130, now + 0.02);
+    thud.frequency.exponentialRampToValueAtTime(38, now + 0.2);
+    const thudGain = ctx.createGain();
+    thudGain.gain.setValueAtTime(0.4, now + 0.02);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    thud.connect(thudGain).connect(this.sfxGain);
+    thud.start(now + 0.02);
+    thud.stop(now + 0.32);
+  }
+
+  /** [정확 일치/신의 한 수] 고음 크리스탈 차임 + 상승 팡파르 — 기존
+   * `playPerudoCalzaChime()`의 3화음 위에, 빠르게 상승하는 4음 트라이앵글
+   * 팡파르를 이어 붙여 "천상의 하모니" 느낌을 더함. */
+  playPerudoMiracleCalzaFanfare() {
+    if (!this.gate("perudoMiracleCalzaFanfare", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    [880, 1108.7, 1318.5].forEach((freq, i) => {
+      const at = now + i * 0.06;
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.24, at + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.3);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.32);
+    });
+
+    // 상승 팡파르 — 3화음이 끝나갈 즈음부터 4음 빠르게 상승.
+    [1318.5, 1568, 1760, 2093].forEach((freq, i) => {
+      const at = now + 0.22 + i * 0.07;
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.22, at + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.4);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.42);
+    });
+  }
+
+  /** [불일치] 김빠지는 금속 마찰음 + 차가운 다운비트 — 위로 스윕하는 게 아니라
+   * 아래로 떨어지는 밴드패스 노이즈(금속이 긁히며 잦아드는 느낌) + 저음
+   * 다운비트 한 방. */
+  playPerudoCalzaMissedScrape() {
+    if (!this.gate("perudoCalzaMissedScrape", 250)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const scrape = ctx.createBufferSource();
+    scrape.buffer = noiseBuffer(ctx);
+    const scrapeFilter = ctx.createBiquadFilter();
+    scrapeFilter.type = "bandpass";
+    scrapeFilter.Q.value = 6;
+    scrapeFilter.frequency.setValueAtTime(2600, now);
+    scrapeFilter.frequency.exponentialRampToValueAtTime(400, now + 0.5);
+    const scrapeGain = ctx.createGain();
+    scrapeGain.gain.setValueAtTime(0.001, now);
+    scrapeGain.gain.linearRampToValueAtTime(0.24, now + 0.03);
+    scrapeGain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    scrape.connect(scrapeFilter).connect(scrapeGain).connect(this.sfxGain);
+    scrape.start(now);
+    scrape.stop(now + 0.56);
+
+    const downbeat = ctx.createOscillator();
+    downbeat.type = "sine";
+    downbeat.frequency.setValueAtTime(110, now + 0.35);
+    downbeat.frequency.exponentialRampToValueAtTime(42, now + 0.6);
+    const downbeatGain = ctx.createGain();
+    downbeatGain.gain.setValueAtTime(0.001, now + 0.35);
+    downbeatGain.gain.linearRampToValueAtTime(0.3, now + 0.38);
+    downbeatGain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+    downbeat.connect(downbeatGain).connect(this.sfxGain);
+    downbeat.start(now + 0.35);
+    downbeat.stop(now + 0.78);
+  }
 }
 
 let instance: SoundEngine | null = null;
