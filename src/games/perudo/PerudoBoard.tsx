@@ -593,6 +593,16 @@ export default function PerudoBoard({
                 ? `🎉 정확히 맞췄습니다! ${names[res.actorSeat]}님이 주사위 1개를 되찾았습니다.`
                 : `❌ 틀렸습니다 — ${names[res.actorSeat]}님이 주사위 ${lossAmount}개를 잃었습니다.`}
           </p>
+          {/* "경계 적중" 하우스룰(2026-09-20 추가, 룰북 §4① 참고) — 실제 개수가
+              선언 개수와 정확히 일치해 `exactHitPenaltySeats`가 채워졌을
+              때만 보임. 이걸 설명해주지 않으면 다른 플레이어들 주사위가
+              왜 같이 줄었는지 알 길이 없어서 반드시 필요한 문구. */}
+          {res.exactHitPenaltySeats.length > 0 && (
+            <p className="mt-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-2 py-1.5 text-xs font-semibold text-amber-200 light:border-amber-400 light:bg-amber-50 light:text-amber-700">
+              ⚠️ 경계 적중! 선언이 정확히 들어맞아 {names[res.bid.seat]}님을 제외한 전원이 주사위 1개씩을
+              추가로 잃었습니다 — {res.exactHitPenaltySeats.map((s) => names[s]).join(", ")}
+            </p>
+          )}
         </div>
 
         <RevealPanel state={state} names={names} viewerSeat={viewerSeat} colorways={colorways} />

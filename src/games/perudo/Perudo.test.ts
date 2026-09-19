@@ -478,6 +478,114 @@ describe("dudo (페루도!)", () => {
     expect(next.lastResolution?.actualCount).toBe(2);
     expect(next.lastResolution).not.toHaveProperty("wasPalafico");
     expect(next.players.find((p) => p.seat === 1)!.diceCount).toBe(4); // 5 - (2-2+1) = 4
+    // This scenario is ALSO an exact-hit boundary (actualCount === bid.quantity
+    // === 2) — see the dedicated "경계 적중" describe block below for the
+    // house rule this triggers. Asserted here too since this fixture happened
+    // to already be an exact-hit case before that rule existed.
+    expect(next.players.find((p) => p.seat === 2)!.diceCount).toBe(4); // bystander seat also loses 1
+    expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(1); // bidder (seat 0) untouched
+  });
+});
+
+// 2026-09-20 "경계 적중" 하우스룰 (사용자 요청, boardGameRule/페루도/페루도.md §4①
+// 갱신): 페루도! 판정에서 실제 개수가 선언 개수와 정확히 일치하면, 도전자는
+// 기존 공식대로 1개를 잃고 — 선언자를 제외한 나머지 전원도 함께 1개씩
+// 추가로 잃는다.
+describe("dudo — 경계 적중(exact-hit) 하우스룰", () => {
+  it("의심 대상이 정확히 들어맞으면 도전자는 그대로 1개, 선언자를 제외한 나머지 전원도 1개씩 추가로 잃는다", () => {
+    // face 4 count: seat0 has two 4s, seat1 has one 4, seat2 none -> 3 total, matching the bid exactly.
+    const state = makeState({
+      playerCount: 4,
+      activeSeat: 1,
+      currentBid: { seat: 0, quantity: 3, face: 4 },
+      players: [
+        { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
+        { seat: 1, diceCount: 5, dice: [4, 2, 2, 3, 5] },
+        { seat: 2, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+        { seat: 3, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+      ],
+    });
+    const next = applyAction(state, { type: "dudo", seat: 1 });
+    expect(next.lastResolution?.actualCount).toBe(3);
+    // Bidder (seat 0) is completely untouched.
+    expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(5);
+    // Doubter (seat 1) loses exactly 1 via the pre-existing formula (unchanged).
+    expect(next.players.find((p) => p.seat === 1)!.diceCount).toBe(4);
+    // Every OTHER alive seat (not the bidder, not the doubter) also loses 1.
+    expect(next.players.find((p) => p.seat === 2)!.diceCount).toBe(4);
+    expect(next.players.find((p) => p.seat === 3)!.diceCount).toBe(4);
+    expect(next.lastResolution?.exactHitPenaltySeats.sort()).toEqual([2, 3]);
+  });
+
+  it("경계 적중이 아닌 일반 판정에서는 exactHitPenaltySeats가 항상 빈 배열", () => {
+    const bidTooHigh = makeState({
+      playerCount: 3,
+      activeSeat: 0,
+      currentBid: { seat: 2, quantity: 5, face: 4 },
+      players: [
+        { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
+        { seat: 1, diceCount: 5, dice: [4, 2, 2, 3, 5] },
+        { seat: 2, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+      ],
+    });
+    expect(applyAction(bidTooHigh, { type: "dudo", seat: 0 }).lastResolution?.exactHitPenaltySeats).toEqual([]);
+
+    const bidExceeded = makeState({
+      playerCount: 3,
+      activeSeat: 0,
+      currentBid: { seat: 2, quantity: 1, face: 4 },
+      players: [
+        { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
+        { seat: 1, diceCount: 5, dice: [4, 2, 2, 3, 5] },
+        { seat: 2, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+      ],
+    });
+    expect(applyAction(bidExceeded, { type: "dudo", seat: 0 }).lastResolution?.exactHitPenaltySeats).toEqual([]);
+  });
+
+  it("추가 페널티로 다이스가 0이 된 좌석은 eliminationOrder에도 반영되고 게임 종료 판정에도 포함된다", () => {
+    // Only 1 alive besides the doubter/bidder, with 1 die left — the exact-hit
+    // house rule's -1 should eliminate it, and if that leaves only the bidder
+    // standing, the game should end.
+    const state = makeState({
+      playerCount: 3,
+      activeSeat: 1,
+      currentBid: { seat: 0, quantity: 2, face: 4 },
+      players: [
+        { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
+        { seat: 1, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+        { seat: 2, diceCount: 1, dice: [3] }, // only 1 die — the exact-hit -1 eliminates this seat
+      ],
+    });
+    const next = applyAction(state, { type: "dudo", seat: 1 });
+    expect(next.lastResolution?.actualCount).toBe(2);
+    expect(next.players.find((p) => p.seat === 2)!.diceCount).toBe(0);
+    expect(next.eliminationOrder).toContain(2);
+    // Doubter (seat 1) also loses 1 (5 -> 4) via the normal formula, bidder untouched, game continues (2 alive).
+    expect(next.players.find((p) => p.seat === 1)!.diceCount).toBe(4);
+    expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(5);
+    expect(next.phase).toBe("reveal");
+  });
+
+  it("calza(맞아!)의 정확 일치 판정은 이 하우스룰의 영향을 받지 않는다 — 외친 사람만 +1, exactHitPenaltySeats는 항상 빈 배열", () => {
+    const state = makeState({
+      playerCount: 4,
+      activeSeat: 1,
+      currentBid: { seat: 0, quantity: 3, face: 4 },
+      players: [
+        { seat: 0, diceCount: 5, dice: [4, 4, 2, 3, 5] },
+        { seat: 1, diceCount: 5, dice: [4, 2, 2, 3, 5] },
+        { seat: 2, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+        { seat: 3, diceCount: 5, dice: [2, 2, 3, 3, 5] },
+      ],
+    });
+    const next = applyAction(state, { type: "calza", seat: 2 });
+    expect(next.lastResolution?.actualCount).toBe(3);
+    expect(next.players.find((p) => p.seat === 2)!.diceCount).toBe(6); // only the caller gains
+    expect(next.players.find((p) => p.seat === 0)!.diceCount).toBe(5);
+    expect(next.players.find((p) => p.seat === 1)!.diceCount).toBe(5);
+    expect(next.players.find((p) => p.seat === 3)!.diceCount).toBe(5);
+    expect(next.lastResolution?.exactHitPenaltySeats).toEqual([]);
   });
 });
 

@@ -212,6 +212,17 @@ export interface RoundResolution {
   diceDelta: number;
   /** Full table reveal at the moment of the call, captured before any reroll — seat -> that seat's dice. */
   revealedDice: Record<SeatIndex, number[]>;
+  /**
+   * 2026-09-20 하우스룰 추가(사용자 요청, boardGameRule/페루도/페루도.md §4①에도
+   * 반영됨): "페루도!" 판정이 "경계 적중"(실제 개수가 선언 개수와 정확히
+   * 일치)일 때만 채워지는, `affectedSeat` 이외에 주사위 1개씩을 "추가로"
+   * 잃는 좌석들 — 선언자(`bid.seat`)와 도전자(`affectedSeat`, 이미 위
+   * `diceDelta`로 1개를 잃도록 처리됨)를 제외한 나머지 모든 생존 좌석
+   * 전원. 그 외의 모든 판정(경계가 아닌 페루도!, 그리고 맞아! 전체)에서는
+   * 항상 빈 배열 — `RevealPanel`/쇼다운 FX 등 이 필드를 읽는 곳은
+   * `.length > 0` 체크만으로 이 하우스룰이 발동했는지 판별하면 된다.
+   */
+  exactHitPenaltySeats: SeatIndex[];
 }
 
 export interface PerudoState {
@@ -377,27 +388,43 @@ function raise(state: PerudoState, seat: SeatIndex, quantity: number, face: Face
  * capture the full reveal, and either end the game (one seat left standing)
  * or hand off to "reveal" phase for the next round's leader to be shown
  * before dice are rerolled (see `continueRound`).
+ *
+ * `extraPenaltySeats` (2026-09-20 하우스룰 추가): normally empty — only
+ * `dudo()`'s "경계 적중" special case passes a non-empty list, each of whom
+ * loses exactly 1 die on top of `affectedSeat`'s own `delta`. Applied in the
+ * SAME pass as the primary change so a single call can eliminate multiple
+ * seats simultaneously and `eliminationOrder`/`alive`/`nextStarter` all stay
+ * consistent with each other.
  */
 function applyResolution(
   state: PerudoState,
   affectedSeat: SeatIndex,
   delta: number,
   meta: { kind: "dudo" | "calza"; actorSeat: SeatIndex; bid: Bid; actualCount: number },
+  extraPenaltySeats: SeatIndex[] = [],
 ): PerudoState {
   const revealedDice: Record<SeatIndex, number[]> = {};
   for (const p of state.players) revealedDice[p.seat] = p.dice;
 
   // No upper cap — a successful "맞아!" can push a seat's dice count past its
   // original 5 (module doc, 2026-08-17 룰북 정리). A losing call can still
-  // only ever floor at 0.
-  const players = state.players.map((p) =>
-    p.seat === affectedSeat ? { ...p, diceCount: Math.max(0, p.diceCount + delta) } : p,
-  );
+  // only ever floor at 0. `extraPenaltySeats` never overlaps `affectedSeat`
+  // (see `dudo()`'s construction of it), so no seat is ever touched twice.
+  const players = state.players.map((p) => {
+    if (p.seat === affectedSeat) return { ...p, diceCount: Math.max(0, p.diceCount + delta) };
+    if (extraPenaltySeats.includes(p.seat)) return { ...p, diceCount: Math.max(0, p.diceCount - 1) };
+    return p;
+  });
   const affectedNowDice = players.find((p) => p.seat === affectedSeat)!.diceCount;
   const justEliminated = delta < 0 && affectedNowDice === 0;
-  const eliminationOrder = justEliminated ? [...state.eliminationOrder, affectedSeat] : state.eliminationOrder;
+  let eliminationOrder = justEliminated ? [...state.eliminationOrder, affectedSeat] : state.eliminationOrder;
+  for (const s of extraPenaltySeats) {
+    const before = state.players.find((p) => p.seat === s)!.diceCount;
+    const after = players.find((p) => p.seat === s)!.diceCount;
+    if (before > 0 && after === 0) eliminationOrder = [...eliminationOrder, s];
+  }
 
-  const resolution: RoundResolution = { ...meta, affectedSeat, diceDelta: delta, revealedDice };
+  const resolution: RoundResolution = { ...meta, affectedSeat, diceDelta: delta, revealedDice, exactHitPenaltySeats: extraPenaltySeats };
   const alive = players.filter((p) => p.diceCount > 0).map((p) => p.seat);
 
   if (alive.length <= 1) {
@@ -433,6 +460,13 @@ function applyResolution(
  * - Bid held up (actualCount >= bid.quantity): the doubter loses
  *   `actualCount - bid.quantity + 1` dice (always >= 1, even for an exact
  *   match, since doubting a dead-on bid is still a bad call).
+ *
+ * 2026-09-20 "경계 적중" 하우스룰 추가(사용자 요청, 룰북 §4① 갱신):
+ * `actualCount === bid.quantity`로 정확히 들어맞은 경우, 위 공식대로 도전자
+ * 본인은 그대로 1개를 잃지만(`actualCount - bid.quantity + 1` = 0 + 1 = 1이라
+ * 값 자체는 그대로임) — 선언자(`bid.seat`)와 도전자를 제외한 나머지 모든
+ * 생존 플레이어도 함께 주사위 1개씩을 잃는다. "칼같이 적중한 선언"은 선언자
+ * 한 명만 무사하고 테이블 전원이 대가를 치르는 게 이 하우스룰의 요지.
  */
 function dudo(state: PerudoState, seat: SeatIndex): PerudoState {
   if (state.phase !== "playing") return state;
@@ -444,7 +478,13 @@ function dudo(state: PerudoState, seat: SeatIndex): PerudoState {
   const bidWasTooHigh = actualCount < bid.quantity;
   const affected = bidWasTooHigh ? bid.seat : seat;
   const loss = bidWasTooHigh ? bid.quantity - actualCount : actualCount - bid.quantity + 1;
-  return applyResolution(state, affected, -loss, { kind: "dudo", actorSeat: seat, bid, actualCount });
+
+  const isExactHit = !bidWasTooHigh && actualCount === bid.quantity;
+  const extraPenaltySeats = isExactHit
+    ? state.players.filter((p) => p.diceCount > 0 && p.seat !== bid.seat && p.seat !== seat).map((p) => p.seat)
+    : [];
+
+  return applyResolution(state, affected, -loss, { kind: "dudo", actorSeat: seat, bid, actualCount }, extraPenaltySeats);
 }
 
 /**
