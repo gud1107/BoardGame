@@ -78,11 +78,13 @@ function TotalDiceBanner({ state }: { state: PerudoState }) {
 }
 
 /**
- * Stats dashboard placed directly below the "페루도!"/"맞아!" action buttons
- * (rulebook UX request #4): my own cup's dice counts by face, plus the
- * "전체 주사위 ÷ 3" expected-value guide that drives Perudo doubt/call
- * strategy — the two numbers a player checks right after deciding whether
- * to challenge the current bid.
+ * Stats dashboard (rulebook UX request #4): my own cup's dice counts by
+ * face, plus the "전체 주사위 ÷ 3" expected-value guide that drives Perudo
+ * doubt/call strategy — the two numbers a player checks before deciding
+ * whether to bid or challenge. 2026-09-20 세션: moved from right below the
+ * board (after the "페루도!"/"맞아!" action buttons) to the very top, above
+ * the "당신의 차례입니다!" turn banner — see this file's call site — so the
+ * numbers a player needs are visible before they even reach the board.
  */
 function MyDiceStatsPanel({ state, myDice }: { state: PerudoState; myDice: number[] }) {
   const faces: Face[] = [1, 2, 3, 4, 5, 6];
@@ -557,6 +559,12 @@ export default function PerudoBoard({
         </div>
       </div>
 
+      {/* 2026-09-20 세션: 통계 현황판을 보드 아래(원래 자리)에서 여기로 이동 —
+          "당신의 차례입니다!" 배너보다 위, 라운드 판단에 필요한 숫자를 먼저
+          보고 베팅을 결정하도록. 원래 이 자리엔 아무것도 없었음(바로 턴
+          배너로 이어졌음). */}
+      <MyDiceStatsPanel state={state} myDice={me.dice} />
+
       {/* 턴 배너 — 하단 상태 텍스트는 이제 조용한 안내문 고정(한 번 튀는
           애니메이션은 위 <MyTurnOverlay>의 중앙 팝업이 전담, 2026-09-05
           세션). */}
@@ -566,10 +574,13 @@ export default function PerudoBoard({
 
       {/* The rectangular board itself (2026-08-20 사각형 트랙 세션) — quantities
           1-20 around 4 sides (see `RectBidTrack`'s doc comment), sized to
-          hold the dice graveyard, the bid/액션 panel, and the viewer's own
-          dice all inside its hollow center per user request, so the whole
-          thing reads as one big physical-board-sized panel rather than a
-          thin strip with everything else stacked below it.
+          hold the dice graveyard and the bid/액션 panel inside its hollow
+          center, so the whole thing reads as one big physical-board-sized
+          panel rather than a thin strip with everything else stacked below
+          it. (2026-09-20 세션: the viewer's own dice tray + colorway picker
+          moved OUT of this center to its own panel right below the board —
+          see that panel's own doc comment — so this list is shorter than it
+          used to be.)
 
           2026-08-21 무여백 대칭 트랙 세션: the board's `--perudo-cell` now
           scales up to ~78px (요구사항 2 확장 규모) via `clamp()`, which on the
@@ -605,9 +616,7 @@ export default function PerudoBoard({
               (2026-08-21 간격 정돈 세션) — otherwise this panel's natural
               width could force the board's center grid column wider than
               the strips sitting right above/below it, reopening the same
-              gap-inflation bug this session fixed. `DiceRollTray` already
-              `flex-wrap`s, so an unusually large dice hand just wraps to an
-              extra row here instead. */}
+              gap-inflation bug this session fixed. */}
           {/* Bids past quantity 20 (legal — dice counts are uncapped) have no
               cell on the fixed board, so they show up here instead (사용자
               확인: "트랙을 20에서 고정하고 초과분은 배지로 표시"). */}
@@ -718,50 +727,45 @@ export default function PerudoBoard({
               </div>
             )}
           </div>
-
-          {/* My dice — always fully visible, no cup or lid ever occludes them
-              (2026-08 페루도 UI 개편, 사용자 요청). `DiceRollTray` replays a short
-              CSS shake-then-settle every new round (see `dice/PerudoDie.tsx`'s
-              file header for why this replaced the earlier WebGL physics tray),
-              but never hides the settled values behind an extra "open me"
-              interaction. Moved inside the board's center (2026-08-20 사각형
-              트랙 세션, 사용자 요청: "보드판 사이즈를 좀 더 키워서 내 주사위까지
-              보이게 해주세요"). */}
-          <div className="relative z-10 flex w-full flex-col items-center gap-1.5 rounded-2xl border-2 border-amber-900/40 bg-gradient-to-b from-black/25 to-black/35 p-3 shadow-[inset_0_2px_10px_rgba(0,0,0,0.35),0_4px_14px_-6px_rgba(0,0,0,0.6)] light:border-amber-300 light:from-amber-50 light:to-white">
-            <div className="flex w-full items-center justify-between px-1">
-              <p className="text-[11px] font-semibold text-amber-100/70 light:text-amber-700">🎲 내 주사위 ({me.diceCount}개)</p>
-              {colorwayPicker}
-            </div>
-            {!iAmAlive ? (
-              <p className="text-xs text-rose-300/70 light:text-rose-600">탈락했습니다 — 관전 중</p>
-            ) : (
-              <DiceRollTray
-                dice={me.dice}
-                colorway={myColorway}
-                rollToken={state.roundNumber}
-                size="lg"
-                ringForIndex={(i) => {
-                  const d = me.dice[i];
-                  const matchesBid = state.currentBid ? d === state.currentBid.face : false;
-                  if (matchesBid) return "match";
-                  if (state.currentBid && state.currentBid.face !== 1 && d === 1) return "wild";
-                  return undefined;
-                }}
-                onRollStart={() => {
-                  const engine = getSoundEngine();
-                  engine.unlock(); // best-effort — a user gesture already happened earlier in the room lobby
-                  engine.playDiceRattle(600);
-                }}
-                onSettled={() => getSoundEngine().playCupThud()}
-              />
-            )}
-          </div>
         </div>
         </RectBidTrack>
       </div>
 
-      {/* Stats dashboard — right below the board panel above. */}
-      <MyDiceStatsPanel state={state} myDice={me.dice} />
+      {/* My dice + 색상 변경 — 2026-09-20 세션: 통계 현황판이 있던 이 자리로
+          보드 중앙(2026-08-20 사각형 트랙 세션 이후 자리)에서 옮겨옴. 항상
+          완전히 공개(컵/뚜껑으로 가리지 않음, 2026-08 페루도 UI 개편) —
+          `DiceRollTray`가 매 라운드 짧은 흔들기→정지 애니메이션을 재생한다
+          (WebGL 물리 트레이를 대체한 이유는 `dice/PerudoDie.tsx` 파일 헤더
+          참고). */}
+      <div className="relative z-10 flex w-full flex-col items-center gap-1.5 rounded-2xl border-2 border-amber-900/40 bg-gradient-to-b from-black/25 to-black/35 p-3 shadow-[inset_0_2px_10px_rgba(0,0,0,0.35),0_4px_14px_-6px_rgba(0,0,0,0.6)] light:border-amber-300 light:from-amber-50 light:to-white">
+        <div className="flex w-full items-center justify-between px-1">
+          <p className="text-[11px] font-semibold text-amber-100/70 light:text-amber-700">🎲 내 주사위 ({me.diceCount}개)</p>
+          {colorwayPicker}
+        </div>
+        {!iAmAlive ? (
+          <p className="text-xs text-rose-300/70 light:text-rose-600">탈락했습니다 — 관전 중</p>
+        ) : (
+          <DiceRollTray
+            dice={me.dice}
+            colorway={myColorway}
+            rollToken={state.roundNumber}
+            size="lg"
+            ringForIndex={(i) => {
+              const d = me.dice[i];
+              const matchesBid = state.currentBid ? d === state.currentBid.face : false;
+              if (matchesBid) return "match";
+              if (state.currentBid && state.currentBid.face !== 1 && d === 1) return "wild";
+              return undefined;
+            }}
+            onRollStart={() => {
+              const engine = getSoundEngine();
+              engine.unlock(); // best-effort — a user gesture already happened earlier in the room lobby
+              engine.playDiceRattle(600);
+            }}
+            onSettled={() => getSoundEngine().playCupThud()}
+          />
+        )}
+      </div>
 
       {/* Scoreboard — a responsive grid (not a single flex column) so it
           stays readable up to the full 8-player table instead of forcing a
