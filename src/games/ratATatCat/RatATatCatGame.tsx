@@ -382,10 +382,21 @@ export default function RatATatCatGame({ onComplete }: PlayableGameProps) {
 
   const sendGameStart = useCallback(() => {
     startSentRef.current = true;
+    // Use the actually-filled seat count, not the room's original target —
+    // the "지금 시작 (N명)" early-start button lets the host start with fewer
+    // seats than `targetPlayerCount` filled, and `startGame` must be told
+    // that real N so it doesn't create unreachable phantom seats. A phantom
+    // seat has no occupant/bot to ever send its INITIAL_PEEK_DONE ack, so
+    // `setupAcks.every(Boolean)` can never become true and the setup screen
+    // hangs forever — no skip button on any real seat can fix that, since
+    // skipping only acks seats that actually exist. The normal auto-start
+    // path (all target seats filled) is unaffected since both counts match
+    // there anyway.
+    const filledCount = Math.min(playerCountRef.current, occupantsRef.current.length + botSeatsRef.current.length);
     channelRef.current?.send({
       type: "broadcast",
       event: "game-start",
-      payload: { seed: randomSeed(), playerCount: playerCountRef.current, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
+      payload: { seed: randomSeed(), playerCount: filledCount, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
     });
   }, []);
 
