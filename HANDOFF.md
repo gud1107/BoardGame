@@ -39,6 +39,58 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🏛️ 위대한 유산 — 베팅 아레나 코인 스택 연출 — 2026-09-20 (로컬만, 커밋/푸시/배포 보류 — 요청에 따름)
+
+**요청**: 경매 중 각 플레이어의 입찰 코인을 테이블 위 코인 스택으로 시각화 + 베팅/회수/낙찰 애니메이션·사운드.
+
+**요청서 전제와 실제 코드의 차이** (착수 전 확인, AskUserQuestion으로 3가지 확정):
+- `AuctionTable.tsx`/`BettingZone.tsx`/`CoinStack.tsx`는 존재하지 않았음 — 실제 구조는
+  `GreatLegacyBoard.tsx`(상단 경매 정보 패널) + `PlayerArea.tsx`(4인/8인 대응 카드형 그리드) +
+  `ActionPanel.tsx`. `.handoff/games/great-legacy.md` 같은 게임별 handoff 파일 구조도 이 프로젝트에
+  없음(루트 `HANDOFF.md` 단일 파일).
+- 확정된 축소 스코프(전부 "권장" 옵션 선택):
+  1. **레이아웃**: 원형 경매 테이블로 전면 개편 대신, 기존 카드형 그리드는 그대로 두고 상단 경매
+     패널 안에 새 "베팅 아레나" 섹션만 추가.
+  2. **테마**: 다크 럭셔리 카지노 톤은 베팅 아레나 패널에만 적용(딥그린 펠트 + 골드 테두리, 라이트
+     모드는 다른 게임들과 동일하게 일반 화이트 카드로 대체) — 보드 전체 보라/블랙 테마·라이트모드는
+     불변.
+  3. **모바일**: `max-h-[min(85vw,36dvh)]` 무스크롤 제약은 베팅 아레나 패널에만 적용(`lg:max-h-none`),
+     페이지 전체 스크롤은 기존처럼 자연 스크롤 유지.
+
+**구현**:
+- [CoinStack.tsx](./src/games/greatLegacy/CoinStack.tsx) — `auction.committed[seat]` Purse를 받아
+  20/10/5/1 코인을 큰 단위부터 최대 15개까지 층층이 쌓아 렌더링(6개 이상이면 2~3열로 분산), 상단에
+  총액 골드 뱃지 + 하단에 `20×1 10×2` 식 구성 브레이크다운. 입찰 코인 구성은 룰북 §G-1상 제출 후
+  변경 불가일 뿐 항상 공개 정보라서 `coinVisibility`(비밀/공개 모드)와 무관하게 항상 표시.
+- [BettingArena.tsx](./src/games/greatLegacy/BettingArena.tsx) — 경매 패널 안에 삽입된 신규 서브패널.
+  중앙 🏦 금고 아이콘 + 좌석별 베팅 스팟(0코인이면 점선 "대기" 서클, 그 외엔 CoinStack).
+- [AuctionCoinEffects.tsx](./src/games/greatLegacy/AuctionCoinEffects.tsx) — No Thanks의
+  `AuctionEffects.tsx`와 동일한 "연속 상태 스냅샷 diff → 모든 접속자가 같은 연출/사운드를 재생"
+  패턴. `detectCoinEvents`가 한 번의 액션에서 여러 이벤트를 동시에 낼 수 있음을 반영(예: 역경매 첫
+  포기 한 번으로 포기자 환급 + 나머지 전원 몰수가 동시에 발생) — 코인 가치/개수만으로 정상 경매
+  승자의 "지불(소진)"과 역경매의 "몰수"를 구분 없이 같은 `vault-absorb`로 처리(둘 다 "위약금 없이
+  사라짐"이라 시각적으로 동일 취급), 자기 코인이 퍼스에 돌아오는 경우만 `refund-sweep`으로 구분.
+  게임의 마지막 경매(전체 종료로 이어지는 낙찰)는 같은 렌더에서 베팅 아레나 자체가 사라지므로 그
+  한 번만 애니메이션 없이 사운드만 재생(허용 가능한 정도로 판단, 장식용 이펙트라 무해).
+- [globals.css](./src/app/globals.css) `great-legacy-coin-toss`/`-coin-sweep`/`-vault-absorb`/
+  `-badge-pop` 키프레임(No Thanks의 `coin-toss-arc`와 같은 "left/top transition + keyframe은 장식만"
+  기법 재사용, 게임별 접두사 컨벤션 유지).
+- [soundEngine.ts](./src/lib/audio/soundEngine.ts) `playCoinDropSound`/`playCoinSweepSound`/
+  `playVaultAbsorbSound` — 전부 이 프로젝트 컨벤션대로 Web Audio 합성(mp3 자산 없음), 상태 diff 지점
+  (`GreatLegacyBoard.tsx`)에서 트리거해 전 접속자가 동일하게 들음.
+- [GreatLegacyBoard.tsx](./src/games/greatLegacy/GreatLegacyBoard.tsx) — 좌석별 ref(플레이어 카드) +
+  베팅 스팟 ref + 금고 ref를 등록해 `FlyingCoins` 포탈 애니메이션의 출발/도착 지점으로 사용.
+
+**검증**: `tsc --noEmit`/`eslint`/기존 `GreatLegacy.test.ts`(48개, 엔진 미변경이라 그대로 통과) +
+Playwright 헤드리스로 4인 방 생성→봇 채우기→실제 봇 입찰 후 베팅 아레나 렌더 스크린샷(데스크톱
+1280px, 모바일 390px) 확인 — 코인 스택/뱃지/브레이크다운 텍스트 정상 표시, 모바일에서도 패널이
+넘치지 않음. (하이드레이션 경고 1건은 이 세션 변경과 무관한 기존 헤더 배지 이슈 — 스크린샷 결과에는
+영향 없음.)
+
+**보류**: 요청대로 커밋/푸시/배포 안 함 — 아직 작업 트리에만 존재. (참고: 이 세션 시작 시점에 이미
+`src/games/mafia/`(untracked) + `roomRulebookSummaries.ts`/`playableGames.tsx`/`registry.ts`의
+커밋 안 된 변경분이 있었음 — 다른 동시 세션의 작업으로 보이며 이번 세션은 건드리지 않음.)
+
 ## 🎲 페루도 — "경계 적중" 페루도! 하우스룰 추가 — 2026-09-20 후속 (커밋/푸시/배포 완료)
 
 **요청**: 순수 연출이 아니라 실제 게임 룰 변경 + 룰북 반영 — "주사위 N개이상일 때 페루도를 외쳤는데

@@ -5774,3 +5774,69 @@ html {
 .lobby-card-gold-particle {
   animation: lobby-card-gold-particle 0.34s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
 }
+
+/* 위대한 유산 — 베팅 아레나 코인 연출 (see AuctionCoinEffects.tsx / CoinStack.tsx).
+   Same "left/top CSS transition carries position, this keyframe only adds
+   the flourish" split as No Thanks' coin-toss-arc. */
+@keyframes great-legacy-coin-toss {
+  0% {
+    transform: translate(-50%, -50%) translateY(0) scale(0.6) rotate(0deg);
+  }
+  45% {
+    transform: translate(-50%, -50%) translateY(-30px) scale(1.2) rotate(220deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) translateY(0) scale(1) rotate(400deg);
+  }
+}
+
+@keyframes great-legacy-coin-sweep {
+  0% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  60% {
+    transform: translate(-50%, -50%) scale(0.85) rotate(-140deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(0.55) rotate(-260deg);
+    opacity: 0.7;
+  }
+}
+
+@keyframes great-legacy-vault-absorb {
+  0% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+    filter: brightness(1);
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(0.7) rotate(180deg);
+    opacity: 0.85;
+    filter: brightness(1.4);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(0.1) rotate(320deg);
+    opacity: 0;
+    filter: brightness(2);
+  }
+}
+
+@keyframes great-legacy-badge-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.animate-great-legacy-badge-pop {
+  animation: great-legacy-badge-pop 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}

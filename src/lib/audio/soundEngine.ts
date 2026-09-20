@@ -2746,6 +2746,97 @@ class SoundEngine {
     downbeat.start(now + 0.35);
     downbeat.stop(now + 0.78);
   }
+
+  /** 위대한 유산 — "코인 베팅 투척음": a bright metallic clink cluster (bid submitted), landing in the bet spot. */
+  playCoinDropSound() {
+    if (!this.gate("coinDrop", 90)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [2349, 2793, 3135].forEach((freq, i) => {
+      const at = now + i * 0.035;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.001, at);
+      gain.gain.linearRampToValueAtTime(0.16, at + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.16);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.18);
+    });
+    const clack = ctx.createBufferSource();
+    clack.buffer = noiseBuffer(ctx);
+    const clackFilter = ctx.createBiquadFilter();
+    clackFilter.type = "bandpass";
+    clackFilter.frequency.value = 3200;
+    clackFilter.Q.value = 7;
+    const clackGain = ctx.createGain();
+    clackGain.gain.setValueAtTime(0.18, now);
+    clackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    clack.connect(clackFilter).connect(clackGain).connect(this.sfxGain);
+    clack.start(now);
+    clack.stop(now + 0.07);
+  }
+
+  /** 위대한 유산 — "코인 회수 스윕음": a soft descending sweep (filtered noise) as a passed-out seat's stake slides back to hand. */
+  playCoinSweepSound() {
+    if (!this.gate("coinSweep", 150)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    const duration = 0.4;
+
+    const sweep = ctx.createBufferSource();
+    sweep.buffer = noiseBuffer(ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.Q.value = 3;
+    filter.frequency.setValueAtTime(2400, now);
+    filter.frequency.exponentialRampToValueAtTime(500, now + duration);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.18, now + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    sweep.connect(filter).connect(gain).connect(this.sfxGain);
+    sweep.start(now);
+    sweep.stop(now + duration + 0.02);
+  }
+
+  /** 위대한 유산 — "금고 흡수음": a deep whoosh sucking inward, ending in a muffled metallic door-thunk — a spent/forfeited bid vanishing into the vault. */
+  playVaultAbsorbSound() {
+    if (!this.gate("vaultAbsorb", 200)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const suck = ctx.createBufferSource();
+    suck.buffer = noiseBuffer(ctx);
+    const suckFilter = ctx.createBiquadFilter();
+    suckFilter.type = "lowpass";
+    suckFilter.frequency.setValueAtTime(3500, now);
+    suckFilter.frequency.exponentialRampToValueAtTime(200, now + 0.3);
+    const suckGain = ctx.createGain();
+    suckGain.gain.setValueAtTime(0.001, now);
+    suckGain.gain.linearRampToValueAtTime(0.26, now + 0.1);
+    suckGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+    suck.connect(suckFilter).connect(suckGain).connect(this.sfxGain);
+    suck.start(now);
+    suck.stop(now + 0.34);
+
+    const thunk = ctx.createOscillator();
+    thunk.type = "sine";
+    thunk.frequency.setValueAtTime(120, now + 0.28);
+    thunk.frequency.exponentialRampToValueAtTime(40, now + 0.45);
+    const thunkGain = ctx.createGain();
+    thunkGain.gain.setValueAtTime(0.001, now + 0.28);
+    thunkGain.gain.linearRampToValueAtTime(0.34, now + 0.31);
+    thunkGain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    thunk.connect(thunkGain).connect(this.sfxGain);
+    thunk.start(now + 0.28);
+    thunk.stop(now + 0.56);
+  }
 }
 
 let instance: SoundEngine | null = null;

@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { COUNTRIES, FORMATS, RELIC_DEFS } from "./constants";
 import { computeRankings } from "./engine";
 import ActionPanel from "./ActionPanel";
 import PlayerArea from "./PlayerArea";
+import BettingArena from "./BettingArena";
+import { detectCoinEvents, FlyingCoins, type CoinAnimEvent } from "./AuctionCoinEffects";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
 import type { EngineAction, GreatLegacyState, SeatIndex } from "./types";
 
 const COUNTRY_EMOJI: Record<string, string> = { 한국: "🇰🇷", 이집트: "🇪🇬", 프랑스: "🇫🇷" };
@@ -67,6 +70,46 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
 
   const rankings = state.phase === "gameOver" ? computeRankings(state) : null;
 
+  // Coin-flight/sound effects (see AuctionCoinEffects.tsx) — diffed from
+  // consecutive state snapshots so every connected client, not just the
+  // player who acted, plays the same animation + SFX.
+  const [trackedState, setTrackedState] = useState(state);
+  const [coinEffects, setCoinEffects] = useState<CoinAnimEvent[]>([]);
+  if (trackedState !== state) {
+    const detected = detectCoinEvents(trackedState, state);
+    setTrackedState(state);
+    if (detected.length > 0) {
+      const sound = getSoundEngine();
+      let nextId = (coinEffects.at(-1)?.id ?? 0) + 1;
+      const withIds = detected.map((e) => ({ ...e, id: nextId++ }));
+      setCoinEffects((prev) => [...prev, ...withIds]);
+      for (const e of detected) {
+        if (e.kind === "bid") sound.playCoinDropSound();
+        else if (e.kind === "refund-sweep") sound.playCoinSweepSound();
+        else sound.playVaultAbsorbSound();
+      }
+    }
+  }
+  const handleCoinEffectDone = useCallback((id: number) => {
+    setCoinEffects((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+
+  const seatRefs = useRef(new Map<SeatIndex, HTMLDivElement>());
+  const betSpotRefs = useRef(new Map<SeatIndex, HTMLDivElement>());
+  const vaultRef = useRef<HTMLDivElement | null>(null);
+  function setSeatRef(seat: SeatIndex) {
+    return (el: HTMLDivElement | null) => {
+      if (el) seatRefs.current.set(seat, el);
+      else seatRefs.current.delete(seat);
+    };
+  }
+  function setBetSpotRef(seat: SeatIndex) {
+    return (el: HTMLDivElement | null) => {
+      if (el) betSpotRefs.current.set(seat, el);
+      else betSpotRefs.current.delete(seat);
+    };
+  }
+
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
       <aside className="order-2 lg:order-1 lg:w-64 lg:shrink-0">
@@ -120,6 +163,20 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
             </div>
           )}
 
+          {auction && (
+            <div className="mb-4">
+              <BettingArena
+                players={state.players}
+                auction={auction}
+                names={names}
+                registerBetSpotRef={setBetSpotRef}
+                registerVaultRef={(el) => {
+                  vaultRef.current = el;
+                }}
+              />
+            </div>
+          )}
+
           {state.phase === "playing" && auction && <ActionPanel state={state} viewerSeat={viewerSeat} onAction={onAction} />}
 
           {state.phase === "gameOver" && rankings && (
@@ -146,19 +203,36 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {state.players.map((p) => (
-            <PlayerArea
-              key={p.seat}
-              player={p}
-              name={names[p.seat] ?? "상대"}
-              viewerSeat={viewerSeat}
-              coinVisibility={state.coinVisibility}
-              isActive={auction?.activeSeat === p.seat}
-              hasPassed={auction?.passed.includes(p.seat) ?? false}
-              isConnected={connectedSeats.has(p.seat)}
-            />
+            <div key={p.seat} ref={setSeatRef(p.seat)}>
+              <PlayerArea
+                player={p}
+                name={names[p.seat] ?? "상대"}
+                viewerSeat={viewerSeat}
+                coinVisibility={state.coinVisibility}
+                isActive={auction?.activeSeat === p.seat}
+                hasPassed={auction?.passed.includes(p.seat) ?? false}
+                isConnected={connectedSeats.has(p.seat)}
+              />
+            </div>
           ))}
         </div>
       </div>
+
+      {coinEffects.map((effect) => (
+        <FlyingCoins
+          key={effect.id}
+          event={effect}
+          getSourceEl={() => (effect.kind === "bid" ? (seatRefs.current.get(effect.seat) ?? null) : (betSpotRefs.current.get(effect.seat) ?? null))}
+          getTargetEl={() =>
+            effect.kind === "bid"
+              ? (betSpotRefs.current.get(effect.seat) ?? null)
+              : effect.kind === "refund-sweep"
+                ? (seatRefs.current.get(effect.seat) ?? null)
+                : vaultRef.current
+          }
+          onDone={handleCoinEffectDone}
+        />
+      ))}
     </div>
   );
 }
