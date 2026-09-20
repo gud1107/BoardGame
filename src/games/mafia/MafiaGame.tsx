@@ -50,6 +50,7 @@ import { stripControlChars } from "@/lib/chat/sanitize";
 import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
+import { chooseDiscussionLine, chooseSelfDefenseLine } from "./mafiaBotChat";
 
 /**
  * Online-room multiplayer entry point — same lockstep pattern as every other
@@ -660,6 +661,72 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
     chooseAction,
     dispatch: handleAction,
   });
+
+  // Bot chat participation (2026-09-20 후속 요청) — separate from the engine-
+  // action autoplay above, since chat messages don't touch `MafiaState` at
+  // all. Only the host ever sends these (same single-writer rule as every
+  // other bot-driven broadcast here), so no lockstep purity concerns: line
+  // text is picked with plain `Math.random()`.
+  const sendBotChatMessage = useCallback(
+    (seat: SeatIndex, rawBody: string) => {
+      const trimmed = stripControlChars(rawBody);
+      if (!trimmed) return;
+      const { clean } = filterProfanity(trimmed);
+      const message: ChatMessage = {
+        id: uuid(),
+        channel: `room:mafia:${roomCode}`,
+        deviceId: `bot-${roomCode}-${seat}`,
+        senderName: namesRef.current[seat] ?? `${seat + 1}번`,
+        body: clean,
+        type: "USER",
+        createdAt: new Date().toISOString(),
+      };
+      channelRef.current?.send({ type: "broadcast", event: "chat-message", payload: { message } });
+      void persistMessage(message);
+    },
+    [roomCode],
+  );
+
+  // Keyed by `${phaseStartedAt}:${seat}` (unique per phase instance) rather
+  // than day/night numbers, so a re-render mid-phase never schedules the
+  // same bot seat's line twice for the same phase.
+  const botChatScheduledRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!isHost || phase !== "playing" || !gameState) return;
+    const state = gameState;
+    const phaseKey = String(state.phaseStartedAt);
+
+    if (state.phase === "dayDiscuss") {
+      for (const seat of allBotSeatSet) {
+        const p = state.players[seat];
+        if (!p?.alive) continue;
+        const key = `${phaseKey}:${seat}`;
+        if (botChatScheduledRef.current.has(key)) continue;
+        botChatScheduledRef.current.add(key);
+        const delay = 1500 + Math.random() * Math.max(500, state.phaseDurationMs - 4000);
+        window.setTimeout(() => {
+          const latest = gameStateRef.current;
+          if (!latest || latest.phaseStartedAt !== state.phaseStartedAt) return; // phase already moved on
+          sendBotChatMessage(seat, chooseDiscussionLine(latest, seat, namesRef.current));
+        }, delay);
+      }
+    }
+
+    if (state.phase === "defense" && state.suspect !== null && allBotSeatSet.has(state.suspect)) {
+      const seat = state.suspect;
+      const key = `${phaseKey}:${seat}`;
+      if (!botChatScheduledRef.current.has(key)) {
+        botChatScheduledRef.current.add(key);
+        const delay = 1000 + Math.random() * 3000;
+        window.setTimeout(() => {
+          const latest = gameStateRef.current;
+          if (!latest || latest.phaseStartedAt !== state.phaseStartedAt) return;
+          sendBotChatMessage(seat, chooseSelfDefenseLine(latest, seat));
+        }, delay);
+      }
+    }
+  }, [isHost, phase, gameState, allBotSeatSet, sendBotChatMessage]);
 
   useEffect(() => {
     if (phase !== "playing") return;
