@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import RulebookModal from "./RulebookModal";
 import RoleInspector from "./RoleInspector";
+import RoleRosterTable from "./RoleRosterTable";
 import PhaseSkipVote from "./PhaseSkipVote";
 import { MafiaRevealOverlay, useBoardShake, useMafiaReveals } from "./MafiaEffects";
 import {
@@ -22,6 +23,8 @@ export interface MafiaBoardProps {
   connectedSeats: Set<SeatIndex>;
   onAction: (action: EngineAction) => void;
   onGameEnd: () => void;
+  /** 채팅 입력창에 포커스(가상 키보드 팝업) 중이면 true — 모바일에서 `RoleInspector`의 edge-tab/드로어를 임시로 숨긴다. */
+  isChatInputFocused?: boolean;
 }
 
 const ROLE_META: Record<Role, { label: string; icon: string; team: Team; blurb: string }> = {
@@ -61,7 +64,7 @@ const PHASE_LABEL: Record<MafiaState["phase"], string> = {
   gameOver: "🏁 게임 종료",
 };
 
-export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: MafiaBoardProps) {
+export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd, isChatInputFocused = false }: MafiaBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [roleModalOpen, setRoleModalOpen] = useState(true);
   const [trackedPlayers, setTrackedPlayers] = useState(state.players);
@@ -129,7 +132,7 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
             결과 확정하고 계속하기
           </button>
         </div>
-        <RoleInspector state={state} viewerSeat={viewerSeat} names={names} />
+        <RoleInspector state={state} viewerSeat={viewerSeat} names={names} isChatInputFocused={isChatInputFocused} />
       </div>
     );
   }
@@ -137,6 +140,7 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
       <div className={`${PANEL} flex min-w-0 flex-1 flex-col gap-3 p-3 sm:p-4`} style={shakeStyle}>
+        <RoleRosterTable mode={state.config.mode} playerCount={state.players.length} />
         <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-rose-100/70 light:text-slate-600">
           <span>
             {state.config.mode === "classic" ? "🎲 기본룰" : "🃏 확장룰"} · {PHASE_LABEL[state.phase]}
@@ -185,7 +189,7 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
         {roleModalOpen && <RoleModal viewerSeat={viewerSeat} names={names} meta={meta} onClose={() => setRoleModalOpen(false)} />}
         {reveal && revealApplies && <MafiaRevealOverlay key={reveal.id} event={reveal} names={names} onDone={dismissReveal} />}
       </div>
-      <RoleInspector state={state} viewerSeat={viewerSeat} names={names} />
+      <RoleInspector state={state} viewerSeat={viewerSeat} names={names} isChatInputFocused={isChatInputFocused} />
     </div>
   );
 }

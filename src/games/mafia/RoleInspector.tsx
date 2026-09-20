@@ -90,6 +90,8 @@ export interface RoleInspectorProps {
   state: MafiaState;
   viewerSeat: SeatIndex;
   names: Record<SeatIndex, string>;
+  /** 채팅 입력창 포커스(가상 키보드 팝업) 중이면 true — 모바일 edge-tab/드로어를 임시로 숨긴다. 데스크톱 사이드바는 영향받지 않음(2026-09-20 요청). */
+  isChatInputFocused?: boolean;
 }
 
 function GuideContent({ state, viewerSeat, names }: RoleInspectorProps) {
@@ -177,9 +179,19 @@ function GuideContent({ state, viewerSeat, names }: RoleInspectorProps) {
 }
 
 export default function RoleInspector(props: RoleInspectorProps) {
+  const { isChatInputFocused = false } = props;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const viewer = props.state.players[props.viewerSeat];
   const roleMeta = ROLE_META[viewer.role];
+
+  // 채팅 입력에 포커스가 가면(가상 키보드 팝업) 모바일 드로어가 열려 있어도
+  // 즉시 닫는다 — 키보드 위로 드로어가 겹쳐 보이는 것을 방지. MafiaBoard.tsx의
+  // trackedPlayers 패턴과 동일한 "렌더 중 비교 후 setState" 방식(useEffect 없이).
+  const [prevChatFocused, setPrevChatFocused] = useState(isChatInputFocused);
+  if (isChatInputFocused !== prevChatFocused) {
+    setPrevChatFocused(isChatInputFocused);
+    if (isChatInputFocused) setDrawerOpen(false);
+  }
 
   return (
     <>
@@ -192,17 +204,20 @@ export default function RoleInspector(props: RoleInspectorProps) {
         <GuideContent {...props} />
       </aside>
 
-      {/* Mobile/tablet: a collapsed edge badge that opens a slide-in drawer, so the board is never obstructed uninvited. */}
+      {/* Mobile/tablet: a collapsed edge badge that opens a slide-in drawer, so the board is never obstructed uninvited.
+          Slides out of view while the chat input is focused (virtual keyboard up) so it never collides with the keyboard/chat sheet. */}
       <button
         onClick={() => setDrawerOpen(true)}
         aria-label="내 직업 및 목표 패널 열기"
-        className="fixed top-1/2 right-0 z-30 flex -translate-y-1/2 flex-col items-center gap-1 rounded-l-xl border border-r-0 border-amber-300/30 bg-[#120d0d] px-1.5 py-3 text-[10px] font-semibold text-amber-200 shadow-lg lg:hidden"
+        className={`fixed top-1/2 right-0 z-30 flex -translate-y-1/2 flex-col items-center gap-1 rounded-l-xl border border-r-0 border-amber-300/30 bg-[#120d0d] px-1.5 py-3 text-[10px] font-semibold text-amber-200 shadow-lg transition-all duration-200 lg:hidden ${
+          isChatInputFocused ? "pointer-events-none translate-x-full opacity-0" : "translate-x-0 opacity-100"
+        }`}
       >
         <span className="text-base">{roleMeta.icon}</span>
         <span className="[writing-mode:vertical-rl]">내 직업</span>
       </button>
 
-      {drawerOpen && (
+      {drawerOpen && !isChatInputFocused && (
         <div className="fixed inset-0 z-40 flex justify-end lg:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={() => setDrawerOpen(false)} />
           <div className="relative flex h-full w-72 max-w-[80vw] flex-col gap-3 overflow-y-auto border-l border-amber-300/20 bg-[#120d0d] p-4 text-xs shadow-2xl">

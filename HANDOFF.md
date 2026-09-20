@@ -98,6 +98,33 @@
 아침, 평화로운 밤이었습니다" 낮1 브리핑까지 자동 전환되는 것을 콘솔 에러 없이 확인(사이트 공통 헤더의
 패치노트 배지 하이드레이션 경고/이미지 404는 마피아와 무관한 기존 이슈로 확인, 이번 변경과 무관).
 
+### 🕵️ 마피아 (Mafia) Mobile Viewport & Role HUD Enhancements — 2026-09-20 후속
+
+요청서는 `src/games/mafia/Board.tsx`/`components/RoleRosterTable.tsx`/`DiscussionChat.tsx` 같은 파일 구조를
+전제했지만, 실제로는 `MafiaBoard.tsx`(보드) + 지난 세션에 이미 추가된 항시노출 `RoleInspector.tsx`(내
+직업 HUD) + 27개 게임이 공유하는 `src/components/chat/ChatDrawer.tsx`/`ChatPanel.tsx` 구조다(또 하나의
+premise-mismatch 사례). 실제 구조에 맞춰 구현:
+
+- **좌측 상단 직업 배정 현황표** — `src/games/mafia/RoleRosterTable.tsx` 신규(플랫 구조, `components/`
+  하위 폴더 없음). `engine.ts`의 `rolePoolFor(mode, playerCount)`(셔플 전 고정 분포)를 그대로 집계해
+  표시하므로 게임 시작 전에도 정확하다. 데스크톱은 항상 펼친 카드, 모바일은 `[📋 직업 구성 (N인) ▼]`
+  미니 배지 → 탭하면 절대위치 드롭다운으로 펼쳐지고 바깥을 탭하면 닫힘. `MafiaBoard.tsx`의 보드 패널
+  최상단에 문서 흐름상 배치(요청서의 `fixed`/`absolute` 오버레이 대신) — 접힌 상태든 펼친 상태든
+  생존자 그리드 위에 겹치지 않는 것을 실기기 뷰포트(390×844)에서 스크린샷으로 확인.
+- **모바일 채팅 포커스 시 내 직업 패널 자동 숨김** — 마피아 전용 `isChatInputFocused` 상태를
+  `MafiaGame.tsx`에 추가하고 게임 채팅/유령 채팅 `ChatDrawer` 양쪽의 입력 포커스·블러에 연결,
+  `MafiaBoard`→`RoleInspector`로 내려보낸다. 공유 컴포넌트인 `ChatPanel.tsx`/`ChatDrawer.tsx`에는
+  옵셔널 `onInputFocus`/`onInputBlur` 콜백만 추가(기본값 없음 → 다른 26개 게임은 전달하지 않으면 기존
+  동작 그대로). `RoleInspector.tsx`의 모바일 edge-tab 버튼은 포커스 중엔
+  `translate-x-full opacity-0 pointer-events-none`로 슬라이드 아웃하고 블러 시
+  `transition-all duration-200`으로 복귀, 열려 있던 드로어도 포커스 시 강제로 닫는다(useEffect 대신
+  기존 코드베이스의 "렌더 중 비교 후 setState" 패턴 재사용 — `react-hooks/set-state-in-effect` 린트
+  회피). 실기기 뷰포트에서 채팅 입력 포커스 전/후 스크린샷으로 edge-tab이 실제로 사라지고 돌아오는
+  것까지 확인.
+- **검증**: `npx tsc --noEmit`(0 에러) / `npx eslint`(0 에러) / `npx vitest run`(전체 1,791개 통과) +
+  캐시된 Playwright Chromium으로 모바일 뷰포트(390×844) 실브라우저 검증(6인 기본룰 방, 봇 5명 채움 →
+  직업 배정표 접힘/펼침 스크린샷 2장 + 채팅 입력 포커스 전/후 스크린샷 2장).
+
 **남은 것**: `.handoff/games/mafia.md`는 이 저장소에 애초에 존재하지 않는 경로라 만들지 않았다(`.handoff/`
 디렉토리 자체가 없음) — 이 섹션이 유일한 기록. 확장룰의 대부/보디가드/저격수/광인/연인/연쇄살인마, 영매의
 유령 대화, 모바일 실기기 레이아웃 검증, 티어드 추리 AI는 후속 세션으로 미룸.

@@ -14,6 +14,9 @@ interface Props {
   title?: string;
   /** 2026-09-03 세션 — `ChatPanel.tsx`로 그대로 전달. 코요테의 탈락 좌석 관전-전용 채팅 게이팅에 쓰인다(다른 게임은 항상 기본값 `false`). */
   readOnly?: boolean;
+  /** 2026-09-20 세션(마피아 모바일 키보드 가림 방지 요청) — `ChatPanel.tsx`의 입력창 포커스/블러를 그대로 전달. 다른 게임은 전달하지 않으면 아무 동작도 하지 않음. */
+  onInputFocus?: () => void;
+  onInputBlur?: () => void;
 }
 
 /**
@@ -34,7 +37,7 @@ interface Props {
  * full-screen panel while the keyboard is up. `sm:` and above keeps the
  * original side-drawer shape untouched.
  */
-export default function ChatDrawer({ messages, onSend, myDeviceId, cooldownUntil, title = "채팅", readOnly = false }: Props) {
+export default function ChatDrawer({ messages, onSend, myDeviceId, cooldownUntil, title = "채팅", readOnly = false, onInputFocus, onInputBlur }: Props) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
   const { dragY, dragging, handlers } = useSwipeToDismiss(close);
@@ -96,6 +99,8 @@ export default function ChatDrawer({ messages, onSend, myDeviceId, cooldownUntil
             cooldownUntil={cooldownUntil}
             placeholder="같은 방 사람들에게 메시지 보내기"
             readOnly={readOnly}
+            onInputFocus={onInputFocus}
+            onInputBlur={onInputBlur}
           />
         </div>
       </aside>

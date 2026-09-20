@@ -19,6 +19,9 @@ interface Props {
    * 라 기존 채팅 동작에 영향 없음.
    */
   readOnly?: boolean;
+  /** 2026-09-20 세션(마피아 모바일 키보드 가림 방지 요청) — 메시지 입력창의 포커스/블러를 그대로 알려준다. 다른 게임은 전달하지 않으면 아무 동작도 하지 않음. */
+  onInputFocus?: () => void;
+  onInputBlur?: () => void;
 }
 
 function bubbleClasses(message: ChatMessage, isMine: boolean): string {
@@ -39,7 +42,7 @@ function formatTime(iso: string): string {
   }
 }
 
-export default function ChatPanel({ messages, onSend, myDeviceId, cooldownUntil, placeholder = "메시지를 입력하세요", readOnly = false }: Props) {
+export default function ChatPanel({ messages, onSend, myDeviceId, cooldownUntil, placeholder = "메시지를 입력하세요", readOnly = false, onInputFocus, onInputBlur }: Props) {
   const [draft, setDraft] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   // Ticked forward by the interval below, only while a cooldown is active —
@@ -156,6 +159,8 @@ export default function ChatPanel({ messages, onSend, myDeviceId, cooldownUntil,
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
+                onFocus={onInputFocus}
+                onBlur={onInputBlur}
                 placeholder={remainingLock > 0 ? `잠시 후 다시 시도 (${remainingLock}초)` : placeholder}
                 disabled={remainingLock > 0}
                 maxLength={300}

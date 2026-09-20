@@ -145,6 +145,11 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
   const [ghostChatCooldownUntil, setGhostChatCooldownUntil] = useState<number | null>(null);
   const ghostChatThrottleRef = useRef<ThrottleState>(INITIAL_THROTTLE_STATE);
 
+  // 모바일 가상 키보드 가림 방지(2026-09-20 요청) — 채팅/유령채팅 둘 중 어느
+  // 입력창이라도 포커스되어 있으면 true. `MafiaBoard`로 내려가 `RoleInspector`의
+  // 모바일 edge-tab/드로어를 임시로 숨기는 데만 쓰인다.
+  const [isChatInputFocused, setIsChatInputFocused] = useState(false);
+
   const [botSeats, setBotSeats] = useState<SeatIndex[]>([]);
   const botSeatsRef = useRef<SeatIndex[]>([]);
   useEffect(() => {
@@ -1154,10 +1159,34 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
           ))}
         </div>
       )}
-      <MafiaBoard state={gameState} viewerSeat={mySeat} names={names} connectedSeats={connectedSeats} onAction={handleAction} onGameEnd={handleGameEnd} />
-      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      <MafiaBoard
+        state={gameState}
+        viewerSeat={mySeat}
+        names={names}
+        connectedSeats={connectedSeats}
+        onAction={handleAction}
+        onGameEnd={handleGameEnd}
+        isChatInputFocused={isChatInputFocused}
+      />
+      <ChatDrawer
+        messages={chatMessages}
+        onSend={sendChatMessage}
+        myDeviceId={deviceId}
+        cooldownUntil={chatCooldownUntil}
+        title="게임 채팅"
+        onInputFocus={() => setIsChatInputFocused(true)}
+        onInputBlur={() => setIsChatInputFocused(false)}
+      />
       {iAmGhost && (
-        <ChatDrawer messages={ghostChatMessages} onSend={sendGhostChatMessage} myDeviceId={deviceId} cooldownUntil={ghostChatCooldownUntil} title="👻 유령 전용 채팅" />
+        <ChatDrawer
+          messages={ghostChatMessages}
+          onSend={sendGhostChatMessage}
+          myDeviceId={deviceId}
+          cooldownUntil={ghostChatCooldownUntil}
+          title="👻 유령 전용 채팅"
+          onInputFocus={() => setIsChatInputFocused(true)}
+          onInputBlur={() => setIsChatInputFocused(false)}
+        />
       )}
       </>,
     );
