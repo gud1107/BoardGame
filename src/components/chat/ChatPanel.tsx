@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { ChatMessage, SendResult } from "@/lib/chat/types";
 import { QUICK_EMOJIS, QUICK_PHRASES } from "@/lib/chat/quickPhrases";
 import Avatar from "@/components/common/Avatar";
@@ -19,7 +19,14 @@ interface Props {
    * 라 기존 채팅 동작에 영향 없음.
    */
   readOnly?: boolean;
-  /** 2026-09-20 세션(마피아 모바일 키보드 가림 방지 요청) — 메시지 입력창의 포커스/블러를 그대로 알려준다. 다른 게임은 전달하지 않으면 아무 동작도 하지 않음. */
+  /**
+   * 2026-09-20 세션(마피아 모바일 키보드 가림 방지 요청) — 메시지 입력창의
+   * 포커스/블러를 그대로 알려준다. 다른 게임은 전달하지 않으면 아무 동작도
+   * 하지 않음. **호출부는 반드시 안정적인 참조(`useCallback`)로 넘길 것** —
+   * 아래 `Composer`가 `React.memo`로 감싸여 있어서, 매 렌더 새 함수를
+   * 넘기면 메모이제이션이 무력화되어 다시 "다른 사람 메시지가 도착할 때마다
+   * 입력창이 재렌더링되는" 문제가 재발한다.
+   */
   onInputFocus?: () => void;
   onInputBlur?: () => void;
 }
@@ -42,18 +49,80 @@ function formatTime(iso: string): string {
   }
 }
 
-export default function ChatPanel({ messages, onSend, myDeviceId, cooldownUntil, placeholder = "메시지를 입력하세요", readOnly = false, onInputFocus, onInputBlur }: Props) {
+/**
+ * 메시지 목록만 담당 — `React.memo`로 감싸 `myDeviceId`가 그대로인 한
+ * `messages`가 바뀔 때만 재렌더링된다(원래도 그랬을 동작). 진짜 목적은
+ * 이 컴포넌트를 `Composer`와 완전히 분리해서, 새 메시지 도착이 입력창
+ * 서브트리에 전혀 영향을 주지 않게 하는 것 — 아래 `Composer` 주석 참고.
+ */
+const MessageList = memo(function MessageList({ messages, myDeviceId }: { messages: ChatMessage[]; myDeviceId: string }) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+  }, [messages]);
+
+  return (
+    <div ref={listRef} className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-1 py-1">
+      {messages.length === 0 && (
+        <p className="mt-4 text-center text-xs text-white/30 light:text-slate-400">아직 메시지가 없어요. 먼저 인사해보세요!</p>
+      )}
+      {messages.map((m) => {
+        const isMine = m.deviceId === myDeviceId;
+        if (m.type === "SYSTEM") {
+          return (
+            <div key={m.id} className="flex max-w-[85%] flex-col gap-0.5 self-center items-center">
+              <span className={bubbleClasses(m, isMine)}>{m.body}</span>
+            </div>
+          );
+        }
+        // No cross-device avatar sync exists (see ProfileModal's note) — every
+        // sender's chat avatar renders the same DEFAULT_AVATAR (Avatar's
+        // no-`src` fallback) rather than a per-player photo.
+        return (
+          <div
+            key={m.id}
+            className={`flex max-w-[85%] items-end gap-1.5 ${isMine ? "self-end flex-row-reverse" : "self-start"}`}
+          >
+            <Avatar size={22} className="mb-0.5 shrink-0" />
+            <div className={`flex flex-col gap-0.5 ${isMine ? "items-end" : "items-start"}`}>
+              <span className="px-1 text-[10px] text-white/35 light:text-slate-400">{isMine ? "나" : m.senderName}</span>
+              <span className={bubbleClasses(m, isMine)}>{m.body}</span>
+              <span className="px-1 text-[9px] text-white/25 light:text-slate-400">{formatTime(m.createdAt)}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
+interface ComposerProps {
+  onSend: (body: string) => SendResult;
+  cooldownUntil?: number | null;
+  placeholder: string;
+  readOnly: boolean;
+  onInputFocus?: () => void;
+  onInputBlur?: () => void;
+}
+
+/**
+ * 입력 UI 전용 컴포넌트(2026-09-20 "봇/다른 사람이 채팅치면 내 입력이 안
+ * 되는 현상" 개선) — 원래는 `ChatPanel` 하나가 메시지 목록과 입력창을 함께
+ * 들고 있어서, 다른 사람/봇의 메시지가 도착해 `messages`가 바뀔 때마다
+ * 입력창을 포함한 전체 서브트리가 다시 렌더링됐다. 모바일에서 한글(IME)
+ * 조합 중에 이런 재렌더링이 끼어들면 조합 중이던 글자가 씹히거나 커서가
+ * 튀는 등 "타이핑이 안 먹히는" 증상으로 보고됨 — `messages`를 아예 이
+ * 컴포넌트에 전달하지 않고 `React.memo`로 감싸서, 다른 사람/봇의 메시지
+ * 도착이 입력창 렌더 트리에 전혀 닿지 않도록 격리한다.
+ */
+const Composer = memo(function Composer({ onSend, cooldownUntil, placeholder, readOnly, onInputFocus, onInputBlur }: ComposerProps) {
   const [draft, setDraft] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   // Ticked forward by the interval below, only while a cooldown is active —
   // `remainingLock` itself is derived from it in render, not stored, so
   // there's nothing to reset when `cooldownUntil` clears.
   const [now, setNow] = useState(() => Date.now());
-  const listRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [messages]);
 
   useEffect(() => {
     if (!cooldownUntil) return;
@@ -72,110 +141,87 @@ export default function ChatPanel({ messages, onSend, myDeviceId, cooldownUntil,
     }
   }
 
+  if (readOnly) {
+    return (
+      <p className="break-keep rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[11px] text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
+        💀 탈락 후에는 관전 전용입니다 — 채팅을 보낼 수 없어요
+      </p>
+    );
+  }
+
   return (
-    <div className="flex h-full flex-col gap-2">
-      <div ref={listRef} className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-1 py-1">
-        {messages.length === 0 && (
-          <p className="mt-4 text-center text-xs text-white/30 light:text-slate-400">아직 메시지가 없어요. 먼저 인사해보세요!</p>
-        )}
-        {messages.map((m) => {
-          const isMine = m.deviceId === myDeviceId;
-          if (m.type === "SYSTEM") {
-            return (
-              <div key={m.id} className="flex max-w-[85%] flex-col gap-0.5 self-center items-center">
-                <span className={bubbleClasses(m, isMine)}>{m.body}</span>
-              </div>
-            );
-          }
-          // No cross-device avatar sync exists (see ProfileModal's note) — every
-          // sender's chat avatar renders the same DEFAULT_AVATAR (Avatar's
-          // no-`src` fallback) rather than a per-player photo.
-          return (
-            <div
-              key={m.id}
-              className={`flex max-w-[85%] items-end gap-1.5 ${isMine ? "self-end flex-row-reverse" : "self-start"}`}
-            >
-              <Avatar size={22} className="mb-0.5 shrink-0" />
-              <div className={`flex flex-col gap-0.5 ${isMine ? "items-end" : "items-start"}`}>
-                <span className="px-1 text-[10px] text-white/35 light:text-slate-400">{isMine ? "나" : m.senderName}</span>
-                <span className={bubbleClasses(m, isMine)}>{m.body}</span>
-                <span className="px-1 text-[9px] text-white/25 light:text-slate-400">{formatTime(m.createdAt)}</span>
-              </div>
-            </div>
-          );
-        })}
+    <>
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+        {QUICK_PHRASES.map((phrase) => (
+          <button
+            key={phrase}
+            type="button"
+            onClick={() => send(phrase)}
+            className="shrink-0 rounded-full border border-white/15 px-2.5 py-1 text-[11px] whitespace-nowrap text-white/70 hover:border-amber-400 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:text-slate-900"
+          >
+            {phrase}
+          </button>
+        ))}
       </div>
 
-      <div className="flex flex-col gap-1.5 border-t border-white/10 pt-2 light:border-slate-200">
-        {readOnly ? (
-          <p className="break-keep rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[11px] text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
-            💀 탈락 후에는 관전 전용입니다 — 채팅을 보낼 수 없어요
-          </p>
-        ) : (
-          <>
-            <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-              {QUICK_PHRASES.map((phrase) => (
-                <button
-                  key={phrase}
-                  type="button"
-                  onClick={() => send(phrase)}
-                  className="shrink-0 rounded-full border border-white/15 px-2.5 py-1 text-[11px] whitespace-nowrap text-white/70 hover:border-amber-400 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:text-slate-900"
-                >
-                  {phrase}
-                </button>
-              ))}
-            </div>
-
-            {showEmoji && (
-              <div className="flex flex-wrap gap-1.5 rounded-xl border border-white/10 bg-white/5 p-2 light:border-slate-200 light:bg-slate-50">
-                {QUICK_EMOJIS.map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    onClick={() => send(emoji)}
-                    className="rounded-lg px-1.5 py-1 text-lg hover:bg-white/10 light:hover:bg-slate-200"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                send(draft);
-              }}
-              className="flex items-center gap-1.5"
+      {showEmoji && (
+        <div className="flex flex-wrap gap-1.5 rounded-xl border border-white/10 bg-white/5 p-2 light:border-slate-200 light:bg-slate-50">
+          {QUICK_EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              onClick={() => send(emoji)}
+              className="rounded-lg px-1.5 py-1 text-lg hover:bg-white/10 light:hover:bg-slate-200"
             >
-              <button
-                type="button"
-                onClick={() => setShowEmoji((v) => !v)}
-                aria-label="이모지"
-                className="shrink-0 rounded-full border border-white/15 px-2 py-1.5 text-sm text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
-              >
-                😊
-              </button>
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onFocus={onInputFocus}
-                onBlur={onInputBlur}
-                placeholder={remainingLock > 0 ? `잠시 후 다시 시도 (${remainingLock}초)` : placeholder}
-                disabled={remainingLock > 0}
-                maxLength={300}
-                className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
-              />
-              <button
-                type="submit"
-                disabled={!draft.trim() || remainingLock > 0}
-                className="shrink-0 rounded-full bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-500 disabled:opacity-40"
-              >
-                전송
-              </button>
-            </form>
-          </>
-        )}
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          send(draft);
+        }}
+        className="flex items-center gap-1.5"
+      >
+        <button
+          type="button"
+          onClick={() => setShowEmoji((v) => !v)}
+          aria-label="이모지"
+          className="shrink-0 rounded-full border border-white/15 px-2 py-1.5 text-sm text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600 light:hover:border-slate-400"
+        >
+          😊
+        </button>
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onFocus={onInputFocus}
+          onBlur={onInputBlur}
+          placeholder={remainingLock > 0 ? `잠시 후 다시 시도 (${remainingLock}초)` : placeholder}
+          disabled={remainingLock > 0}
+          maxLength={300}
+          className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
+        />
+        <button
+          type="submit"
+          disabled={!draft.trim() || remainingLock > 0}
+          className="shrink-0 rounded-full bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-500 disabled:opacity-40"
+        >
+          전송
+        </button>
+      </form>
+    </>
+  );
+});
+
+export default function ChatPanel({ messages, onSend, myDeviceId, cooldownUntil, placeholder = "메시지를 입력하세요", readOnly = false, onInputFocus, onInputBlur }: Props) {
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <MessageList messages={messages} myDeviceId={myDeviceId} />
+      <div className="flex flex-col gap-1.5 border-t border-white/10 pt-2 light:border-slate-200">
+        <Composer onSend={onSend} cooldownUntil={cooldownUntil} placeholder={placeholder} readOnly={readOnly} onInputFocus={onInputFocus} onInputBlur={onInputBlur} />
       </div>
     </div>
   );

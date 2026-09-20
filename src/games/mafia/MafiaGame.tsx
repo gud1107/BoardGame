@@ -150,6 +150,13 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
   // 입력창이라도 포커스되어 있으면 true. `MafiaBoard`로 내려가 `RoleInspector`의
   // 모바일 edge-tab/드로어를 임시로 숨기는 데만 쓰인다.
   const [isChatInputFocused, setIsChatInputFocused] = useState(false);
+  // 안정적인 참조로 고정(2026-09-20 "봇/다른 사람이 채팅치면 내 입력이 안
+  // 되는 현상" 개선) — 인라인 화살표 함수를 그대로 넘기면 `chatMessages`가
+  // 바뀔 때마다(다른 사람/봇 메시지 도착) 매번 새 함수가 생성되어
+  // `ChatPanel.tsx`의 `Composer`(`React.memo`) 메모이제이션이 무력화되고,
+  // 입력창까지 통째로 다시 렌더링되어 모바일 한글 조합이 끊기는 원인이 됐다.
+  const handleChatInputFocus = useCallback(() => setIsChatInputFocused(true), []);
+  const handleChatInputBlur = useCallback(() => setIsChatInputFocused(false), []);
 
   const [botSeats, setBotSeats] = useState<SeatIndex[]>([]);
   const botSeatsRef = useRef<SeatIndex[]>([]);
@@ -1181,8 +1188,8 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
           myDeviceId={deviceId}
           cooldownUntil={chatCooldownUntil}
           title="게임 채팅"
-          onInputFocus={() => setIsChatInputFocused(true)}
-          onInputBlur={() => setIsChatInputFocused(false)}
+          onInputFocus={handleChatInputFocus}
+          onInputBlur={handleChatInputBlur}
         />
         {iAmGhost && (
           <ChatDrawer
@@ -1191,8 +1198,8 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
             myDeviceId={deviceId}
             cooldownUntil={ghostChatCooldownUntil}
             title="👻 유령 전용 채팅"
-            onInputFocus={() => setIsChatInputFocused(true)}
-            onInputBlur={() => setIsChatInputFocused(false)}
+            onInputFocus={handleChatInputFocus}
+            onInputBlur={handleChatInputBlur}
           />
         )}
       </div>
@@ -1203,8 +1210,8 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
           myDeviceId={deviceId}
           cooldownUntil={chatCooldownUntil}
           title="게임 채팅"
-          onInputFocus={() => setIsChatInputFocused(true)}
-          onInputBlur={() => setIsChatInputFocused(false)}
+          onInputFocus={handleChatInputFocus}
+          onInputBlur={handleChatInputBlur}
         />
         {iAmGhost && (
           <MobileChatCenterModal
@@ -1213,8 +1220,8 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
             myDeviceId={deviceId}
             cooldownUntil={ghostChatCooldownUntil}
             title="👻 유령 전용 채팅"
-            onInputFocus={() => setIsChatInputFocused(true)}
-            onInputBlur={() => setIsChatInputFocused(false)}
+            onInputFocus={handleChatInputFocus}
+            onInputBlur={handleChatInputBlur}
             quickBarBottomOffsetRem={3.5}
           />
         )}

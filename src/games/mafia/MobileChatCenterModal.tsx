@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { ChatMessage, SendResult } from "@/lib/chat/types";
 import ChatPanel from "@/components/chat/ChatPanel";
 
@@ -12,14 +12,16 @@ import ChatPanel from "@/components/chat/ChatPanel";
  * 근본적으로 다른 배치를 도입한다. `ChatDrawer`/`ChatPanel.tsx`는 27개
  * 게임이 공유하는 컴포넌트라 그대로 두고(다른 게임 영향 없음), 이 파일은
  * `ChatPanel`(메시지 목록/입력/쿨다운/이모지/빠른문구 전부 포함)만 그대로
- * 재사용해 마피아 전용 배치(하단 중앙 퀵바 + 화면 상단 고정 모달)만 새로
- * 씌운다 — 요청 원안처럼 메시지 목록/입력을 직접 새로 구현하지 않는다.
+ * 재사용해 마피아 전용 배치(하단 중앙 퀵바 + 전체화면 모달)만 새로 씌운다
+ * — 요청 원안처럼 메시지 목록/입력을 직접 새로 구현하지 않는다.
  *
- * 모달을 화면 "중앙"이 아니라 상단 고정(`top-16`, `bottom-auto`)에 두는 게
- * 포인트 — 가상 키보드는 항상 뷰포트 아래쪽부터 올라오므로, 위쪽에
- * 고정하면 키보드가 아무리 커져도 절대 겹치지 않는다. `MafiaGame.tsx`가
- * `sm:hidden`으로 감싸 데스크톱/태블릿에서는 기존 `ChatDrawer`(사이드
- * 드로어)를 그대로 쓰고, 모바일에서만 이 컴포넌트로 완전히 대체한다.
+ * 2026-09-20 3차 요청 — 전체화면 모드로 전환. `fixed inset-0`(네 방향 모두
+ * 고정)을 쓰는 게 포인트: 최신 모바일 브라우저는 `position:fixed` 요소의
+ * `bottom`을 가상 키보드가 올라올 때 실제 가시 뷰포트 높이에 맞춰 다시
+ * 계산해준다(레이아웃 뷰포트 고정 + `100dvh`/`100vh` 같은 높이 값에 의존하는
+ * 것보다 이 방식이 키보드 리사이즈에 더 안정적) — 그래서 헤더/메시지목록
+ * (`flex-1 overflow-y-auto`)/입력창(`shrink-0`) 순서의 세로 flex 배치만
+ * 유지하면 입력창이 항상 키보드 바로 위에 붙는다.
  */
 
 interface Props {
@@ -47,7 +49,7 @@ export default function MobileChatCenterModal({
   quickBarBottomOffsetRem = 0,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const close = () => setOpen(false);
+  const close = useCallback(() => setOpen(false), []);
 
   // 열려 있던 시점까지 이미 본 메시지 개수 — ChatDrawer.tsx와 동일한
   // "렌더 중 비교 후 setState" 패턴으로 안 읽은 개수를 유도한다.
@@ -61,12 +63,19 @@ export default function MobileChatCenterModal({
 
   // 전송 완료 시 모달을 자동으로 닫는다(요청 명세) — ChatPanel은 onSend의
   // 반환값으로 draft 초기화 여부를 결정하므로, 원래 결과를 그대로 반환하면서
-  // 부수효과로만 닫는다.
-  const handleSend = (body: string): SendResult => {
-    const result = onSend(body);
-    if (result.ok) close();
-    return result;
-  };
+  // 부수효과로만 닫는다. `useCallback`으로 참조를 고정해야
+  // `ChatPanel.tsx`의 `Composer`(`React.memo`) 메모이제이션이 실제로
+  // 효과를 발휘한다(안 그러면 매 렌더 새 함수가 생겨 입력창이 계속
+  // 재렌더링됨 — 2026-09-20 "봇/다른 사람이 채팅치면 내 입력이 안 되는
+  // 현상" 개선 참고).
+  const handleSend = useCallback(
+    (body: string): SendResult => {
+      const result = onSend(body);
+      if (result.ok) close();
+      return result;
+    },
+    [onSend, close],
+  );
 
   return (
     <>
@@ -87,36 +96,33 @@ export default function MobileChatCenterModal({
       </button>
 
       {open && (
-        <>
-          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" onClick={close} />
-          <div className="fixed inset-x-4 top-16 z-50 flex max-h-[60vh] flex-col overflow-hidden rounded-2xl border border-amber-500/30 bg-[#12101c] shadow-2xl light:border-amber-300/50 light:bg-white">
-            <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-black/30 px-4 py-2.5 light:border-slate-200 light:bg-slate-50">
-              <h2 className="text-sm font-bold text-white light:text-slate-900">
-                💬 {title}
-                {readOnly && <span className="ml-1 text-white/40 light:text-slate-400">(관전 중)</span>}
-              </h2>
-              <button
-                onClick={close}
-                aria-label="닫기"
-                className="-mr-2 grid h-9 w-9 place-items-center rounded-full text-xl text-white/50 transition hover:bg-white/10 hover:text-white light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700"
-              >
-                ×
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 px-3 py-3">
-              <ChatPanel
-                messages={messages}
-                onSend={handleSend}
-                myDeviceId={myDeviceId}
-                cooldownUntil={cooldownUntil}
-                placeholder="같은 방 사람들에게 메시지 보내기"
-                readOnly={readOnly}
-                onInputFocus={onInputFocus}
-                onInputBlur={onInputBlur}
-              />
-            </div>
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#12101c] light:bg-white">
+          <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-black/30 px-4 py-3 light:border-slate-200 light:bg-slate-50">
+            <h2 className="text-sm font-bold text-white light:text-slate-900">
+              💬 {title}
+              {readOnly && <span className="ml-1 text-white/40 light:text-slate-400">(관전 중)</span>}
+            </h2>
+            <button
+              onClick={close}
+              aria-label="닫기"
+              className="-mr-2 grid h-10 w-10 place-items-center rounded-full text-2xl text-white/50 transition hover:bg-white/10 hover:text-white light:text-slate-400 light:hover:bg-slate-100 light:hover:text-slate-700"
+            >
+              ×
+            </button>
           </div>
-        </>
+          <div className="min-h-0 flex-1 px-3 py-3">
+            <ChatPanel
+              messages={messages}
+              onSend={handleSend}
+              myDeviceId={myDeviceId}
+              cooldownUntil={cooldownUntil}
+              placeholder="같은 방 사람들에게 메시지 보내기"
+              readOnly={readOnly}
+              onInputFocus={onInputFocus}
+              onInputBlur={onInputBlur}
+            />
+          </div>
+        </div>
       )}
     </>
   );
