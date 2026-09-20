@@ -287,7 +287,7 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
           </div>
         )}
 
-        <SeatGrid state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} revealAll={iAmGhost} />
+        <SeatGrid state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} revealAll={iAmGhost} mafiaTeammates={knowledge.mafiaTeammates} />
 
         <div className="relative z-10 rounded-xl border border-white/10 bg-black/30 p-3 text-center light:border-slate-200 light:bg-slate-50">
           <PhasePanel state={state} viewerSeat={viewerSeat} names={names} knowledge={knowledge} onAction={onAction} />
@@ -309,12 +309,15 @@ function SeatGrid({
   names,
   connectedSeats,
   revealAll,
+  mafiaTeammates,
 }: {
   state: MafiaState;
   viewerSeat: SeatIndex;
   names: Record<SeatIndex, string>;
   connectedSeats: Set<SeatIndex>;
   revealAll: boolean;
+  /** `getKnowledge(state, viewerSeat).mafiaTeammates` — 마피아 본인 또는 접선된 스파이일 때만 비어있지 않음. */
+  mafiaTeammates: readonly SeatIndex[];
 }) {
   return (
     <div className="relative z-10 grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -322,11 +325,20 @@ function SeatGrid({
         const showRole = revealAll || (!p.alive && state.config.revealRoleOnDeath) || state.phase === "gameOver";
         const m = ROLE_META[p.role];
         const isSuspect = state.suspect === p.seat && (state.phase === "defense" || state.phase === "finalVote");
-        // 정체 영구 각인(2026-09-20 요청): 이 뷰어가 직접 조사해서 알아낸 대상만
-        // 네온 배지로 표시 — 다른 사람(타 팀원 포함)에게는 절대 안 보이는
-        // 보안 뷰 격리. 이미 전 직업이 공개된 경우(유령/게임종료)는 굳이
-        // 중복 표기하지 않음.
-        const known = !revealAll && state.phase !== "gameOver" ? knownRoleFor(state, viewerSeat, p.seat) : null;
+        // 정체 영구 각인(2026-09-20 요청) + 마피아 팀 전원 표시(2026-09-21
+        // 요청) — 이 뷰어가 직접 조사해서 알아낸 대상, 또는(마피아/접선된
+        // 스파이라면) 마피아 팀 전체를 네온 배지로 표시한다. 이전엔 스파이가
+        // 접선해도 실제로 조사한 그 1명에게만 배지가 붙고 나머지 마피아
+        // 동료는 우측 RoleInspector 텍스트 목록에서만 확인 가능했다 — 팀
+        // 지식은 이미 `getKnowledge`가 팀 전원을 돌려주고 있었으므로(1명만
+        // 아는 게 아니라), 시야 격리 문제가 아니라 이 배지 UI만 그 지식을
+        // 반영하지 못하고 있던 것. 다른 사람(타 팀원 포함)에게는 절대 안
+        // 보이는 보안 뷰 격리는 그대로 유지. 이미 전 직업이 공개된
+        // 경우(유령/게임종료)는 굳이 중복 표기하지 않음.
+        const known =
+          revealAll || state.phase === "gameOver"
+            ? null
+            : (knownRoleFor(state, viewerSeat, p.seat) ?? (mafiaTeammates.includes(p.seat) ? { isMafia: true as const, role: p.role } : null));
         return (
           <div
             key={p.seat}
