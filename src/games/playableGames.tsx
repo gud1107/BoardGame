@@ -38,4 +38,5 @@ export const PLAYABLE_GAME_COMPONENTS: Record<GameId, ComponentType<PlayableGame
   "hill-of-truth": dynamic(() => import("./hillOfTruth/HillOfTruthGame"), { ssr: false }),
   "great-legacy": dynamic(() => import("./greatLegacy/GreatLegacyGame"), { ssr: false }),
   "memory-feast": dynamic(() => import("./memoryFeast/MemoryFeastGame"), { ssr: false }),
+  mafia: dynamic(() => import("./mafia/MafiaGame"), { ssr: false }),
 };
