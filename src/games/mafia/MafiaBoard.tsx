@@ -140,7 +140,7 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
       <div className={`${PANEL} flex min-w-0 flex-1 flex-col gap-3 p-3 sm:p-4`} style={shakeStyle}>
-        <RoleRosterTable mode={state.config.mode} playerCount={state.players.length} />
+        <RoleRosterTable mode={state.config.mode} playerCount={state.players.length} publicLog={state.publicLog} />
         <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-rose-100/70 light:text-slate-600">
           <span>
             {state.config.mode === "classic" ? "🎲 기본룰" : "🃏 확장룰"} · {PHASE_LABEL[state.phase]}

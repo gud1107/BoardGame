@@ -170,6 +170,7 @@ describe("night resolution — kill / heal / armor", () => {
     expect(s.phase).toBe("dayAnnounce");
     expect(s.lastNightOutcome?.victim).toBe(victim);
     expect(s.players[victim].alive).toBe(false);
+    expect(s.publicLog.at(-1)).toEqual({ type: "mafiaAttack", night: 1, victim, savedByDoctor: false, savedByArmor: false });
   });
 
   it("doctor healing the mafia's target saves them", () => {
@@ -187,6 +188,7 @@ describe("night resolution — kill / heal / armor", () => {
     expect(s.lastNightOutcome?.savedByDoctor).toBe(true);
     expect(s.players[victim].alive).toBe(true);
     expect(s.deaths).toHaveLength(0);
+    expect(s.publicLog.at(-1)).toEqual({ type: "mafiaAttack", night: 1, victim: null, savedByDoctor: true, savedByArmor: false });
   });
 
   it("doctor cannot self-heal on night 1 by default (toggle off)", () => {
@@ -217,6 +219,7 @@ describe("night resolution — kill / heal / armor", () => {
     expect(s.lastNightOutcome?.savedByArmor).toBe(true);
     expect(s.players[soldierSeat].alive).toBe(true);
     expect(s.players[soldierSeat].hasUsedArmor).toBe(true);
+    expect(s.publicLog.at(-1)).toEqual({ type: "mafiaAttack", night: 1, victim: null, savedByDoctor: false, savedByArmor: true });
   });
 });
 
@@ -342,6 +345,7 @@ describe("politician immunity + double vote", () => {
     expect(s.lastExecution?.executed).toBe(false);
     expect(s.lastExecution?.blockedByPolitician).toBe(true);
     expect(s.players[politicianSeat].alive).toBe(true);
+    expect(s.publicLog.at(-1)).toEqual({ type: "execution", day: s.dayNumber, suspect: politicianSeat, executed: false, blockedByPolitician: true });
   });
 });
 

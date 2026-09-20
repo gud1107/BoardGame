@@ -121,6 +121,23 @@ export interface ExecutionOutcome {
   readonly blockedByPolitician: boolean;
 }
 
+/**
+ * Publicly-observable game events (2026-09-20 "직업별 공개 행동 로그" 요청) —
+ * unlike `investigationLog`/`deaths[].role`, every entry here is something the
+ * existing UI already announces to ALL players via `dayAnnounce`/`execution`/
+ * `terroristRevenge` phase text, so accumulating them costs no extra secrecy:
+ * it only lets `RoleRosterTable` show a role's history after the moment
+ * passes (e.g. `lastNightOutcome`/`lastExecution` only ever hold the LATEST
+ * one). Never includes *who* has a role — a `doctorSave` entry proves "the
+ * doctor acted" without naming a seat, same trade-off as the live
+ * announcement text it mirrors.
+ */
+export type PublicLogEntry =
+  | { readonly type: "mafiaAttack"; readonly night: number; readonly victim: SeatIndex | null; readonly savedByDoctor: boolean; readonly savedByArmor: boolean }
+  | { readonly type: "execution"; readonly day: number; readonly suspect: SeatIndex; readonly executed: boolean; readonly blockedByPolitician: boolean }
+  | { readonly type: "voteVoid"; readonly day: number }
+  | { readonly type: "terroristRevenge"; readonly day: number; readonly terroristSeat: SeatIndex; readonly targetSeat: SeatIndex };
+
 export interface DeathRecord {
   readonly seat: SeatIndex;
   readonly role: Role;
@@ -158,6 +175,7 @@ export interface MafiaState {
   readonly lastNightOutcome: NightOutcome | null;
   readonly deaths: readonly DeathRecord[];
   readonly investigationLog: readonly InvestigationRecord[];
+  readonly publicLog: readonly PublicLogEntry[];
   /**
    * "시간초 과반수 스킵" (2026-09-20 요청) — only meaningful while
    * `phase` is `"night"` or `"dayDiscuss"`, reset to `{}` every time either
@@ -289,6 +307,7 @@ export function startGame(playerCount: number, seed: number, config: MafiaGameCo
     lastNightOutcome: null,
     deaths: [],
     investigationLog: [],
+    publicLog: [],
     skipVotes: {},
     nominations: {},
     suspect: null,
@@ -464,6 +483,7 @@ function resolveNight(state: MafiaState, atMs: number): MafiaState {
     players,
     deaths: [...state.deaths, ...deaths],
     lastNightOutcome: outcome,
+    publicLog: mafiaTarget === null ? state.publicLog : [...state.publicLog, { type: "mafiaAttack", night, victim, savedByDoctor, savedByArmor }],
     nightActions: { mafiaVotes: {} },
     dayNumber: state.dayNumber + 1,
   };
@@ -508,7 +528,11 @@ function resolveNomination(state: MafiaState, atMs: number): MafiaState {
     }
   }
   if (winners.length !== 1) {
-    return advancePhase({ ...state, suspect: null, nominationVoidReason: "tie", lastExecution: null }, "execution", atMs);
+    return advancePhase(
+      { ...state, suspect: null, nominationVoidReason: "tie", lastExecution: null, publicLog: [...state.publicLog, { type: "voteVoid", day: state.dayNumber }] },
+      "execution",
+      atMs,
+    );
   }
   return advancePhase({ ...state, suspect: winners[0], nominationVoidReason: null, finalVotes: {} }, "defense", atMs);
 }
@@ -539,14 +563,15 @@ function resolveFinalVote(state: MafiaState, atMs: number): MafiaState {
   const blockedByPolitician = suspectPlayer.role === "politician";
   const executed = yes > no && !blockedByPolitician;
   const outcome: ExecutionOutcome = { day: state.dayNumber, suspect, yes, no, executed, blockedByPolitician };
+  const publicLog: readonly PublicLogEntry[] = [...state.publicLog, { type: "execution", day: state.dayNumber, suspect, executed, blockedByPolitician }];
 
   if (!executed) {
-    return advancePhase({ ...state, lastExecution: outcome }, "execution", atMs);
+    return advancePhase({ ...state, lastExecution: outcome, publicLog }, "execution", atMs);
   }
 
   const players = state.players.map((p) => (p.seat === suspect ? { ...p, alive: false } : p));
   const deaths = [...state.deaths, { seat: suspect, role: suspectPlayer.role, cause: "execution" as const, at: state.dayNumber }];
-  let next: MafiaState = { ...state, players, deaths, lastExecution: outcome };
+  let next: MafiaState = { ...state, players, deaths, lastExecution: outcome, publicLog };
   next = checkWinCondition(next);
   if (next.winner) return advancePhase(next, "gameOver", atMs);
 
@@ -572,9 +597,11 @@ function terroristRevenge(state: MafiaState, action: Extract<EngineAction, { typ
 
 function resolveTerroristRevenge(state: MafiaState, target: SeatIndex, atMs: number): MafiaState {
   const targetPlayer = state.players[target];
+  const terroristSeat = state.pendingTerroristRevenge!.terroristSeat;
   const players = state.players.map((p) => (p.seat === target ? { ...p, alive: false } : p));
   const deaths = [...state.deaths, { seat: target, role: targetPlayer.role, cause: "terroristRevenge" as const, at: state.dayNumber }];
-  let next: MafiaState = { ...state, players, deaths, pendingTerroristRevenge: null };
+  const publicLog: readonly PublicLogEntry[] = [...state.publicLog, { type: "terroristRevenge", day: state.dayNumber, terroristSeat, targetSeat: target }];
+  let next: MafiaState = { ...state, players, deaths, publicLog, pendingTerroristRevenge: null };
   next = checkWinCondition(next);
   if (next.winner) return advancePhase(next, "gameOver", atMs);
   return advancePhase({ ...next, skipVotes: {} }, "night", atMs);
