@@ -50,6 +50,7 @@ import { stripControlChars } from "@/lib/chat/sanitize";
 import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
+import MobileChatCenterModal from "./MobileChatCenterModal";
 import { chooseDiscussionLine, chooseSelfDefenseLine } from "./mafiaBotChat";
 
 /**
@@ -1126,7 +1127,12 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
           </>
         )}
       </div>
-      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="대기실 채팅" />
+      <div className="hidden sm:block">
+        <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="대기실 채팅" />
+      </div>
+      <div className="sm:hidden">
+        <MobileChatCenterModal messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="대기실 채팅" />
+      </div>
       </>,
     );
   }
@@ -1168,26 +1174,51 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
         onGameEnd={handleGameEnd}
         isChatInputFocused={isChatInputFocused}
       />
-      <ChatDrawer
-        messages={chatMessages}
-        onSend={sendChatMessage}
-        myDeviceId={deviceId}
-        cooldownUntil={chatCooldownUntil}
-        title="게임 채팅"
-        onInputFocus={() => setIsChatInputFocused(true)}
-        onInputBlur={() => setIsChatInputFocused(false)}
-      />
-      {iAmGhost && (
+      <div className="hidden sm:block">
         <ChatDrawer
-          messages={ghostChatMessages}
-          onSend={sendGhostChatMessage}
+          messages={chatMessages}
+          onSend={sendChatMessage}
           myDeviceId={deviceId}
-          cooldownUntil={ghostChatCooldownUntil}
-          title="👻 유령 전용 채팅"
+          cooldownUntil={chatCooldownUntil}
+          title="게임 채팅"
           onInputFocus={() => setIsChatInputFocused(true)}
           onInputBlur={() => setIsChatInputFocused(false)}
         />
-      )}
+        {iAmGhost && (
+          <ChatDrawer
+            messages={ghostChatMessages}
+            onSend={sendGhostChatMessage}
+            myDeviceId={deviceId}
+            cooldownUntil={ghostChatCooldownUntil}
+            title="👻 유령 전용 채팅"
+            onInputFocus={() => setIsChatInputFocused(true)}
+            onInputBlur={() => setIsChatInputFocused(false)}
+          />
+        )}
+      </div>
+      <div className="sm:hidden">
+        <MobileChatCenterModal
+          messages={chatMessages}
+          onSend={sendChatMessage}
+          myDeviceId={deviceId}
+          cooldownUntil={chatCooldownUntil}
+          title="게임 채팅"
+          onInputFocus={() => setIsChatInputFocused(true)}
+          onInputBlur={() => setIsChatInputFocused(false)}
+        />
+        {iAmGhost && (
+          <MobileChatCenterModal
+            messages={ghostChatMessages}
+            onSend={sendGhostChatMessage}
+            myDeviceId={deviceId}
+            cooldownUntil={ghostChatCooldownUntil}
+            title="👻 유령 전용 채팅"
+            onInputFocus={() => setIsChatInputFocused(true)}
+            onInputBlur={() => setIsChatInputFocused(false)}
+            quickBarBottomOffsetRem={3.5}
+          />
+        )}
+      </div>
       </>,
     );
   }
@@ -1209,7 +1240,12 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
           </button>
         </div>
       </div>
-      <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      <div className="hidden sm:block">
+        <ChatDrawer messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </div>
+      <div className="sm:hidden">
+        <MobileChatCenterModal messages={chatMessages} onSend={sendChatMessage} myDeviceId={deviceId} cooldownUntil={chatCooldownUntil} title="게임 채팅" />
+      </div>
       </>,
     );
   }

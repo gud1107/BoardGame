@@ -5929,18 +5929,6 @@ html {
   }
 }
 
-/* 치료 빗나감 — 옅은 초록 잔상이 위로 떠오르며 소멸. */
-@keyframes mafia-wisp-fade {
-  0% {
-    transform: translateY(0) scale(1);
-    opacity: 0.7;
-  }
-  100% {
-    transform: translateY(-30px) scale(1.6);
-    opacity: 0;
-  }
-}
-
 /* 전체화면 플래시 공용 골격 — 경찰 마피아 적발 사이렌(붉은색)에 사용. */
 @keyframes mafia-flash-pulse {
   0%,
@@ -6003,5 +5991,52 @@ html {
   }
   50% {
     box-shadow: 0 0 12px 2px var(--badge-glow, rgba(239, 68, 68, 0.5));
+  }
+}
+
+/* 평화로운 아침 — 배경 전체에 은은하게 번졌다 사라지는 에메랄드 광채. */
+@keyframes mafia-god-glow {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 평화로운 아침 — 깃털/반짝임 파티클이 아래에서 위로 흩날리며 소멸. */
+@keyframes mafia-feather-float {
+  0% {
+    transform: translateY(0) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-320px) translateX(var(--feather-drift, 0px)) rotate(180deg);
+    opacity: 0;
+  }
+}
+
+/* 비극의 아침 — 피격 아바타가 튕기듯 확대되며 등장. */
+@keyframes mafia-avatar-zoom {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
   }
 }

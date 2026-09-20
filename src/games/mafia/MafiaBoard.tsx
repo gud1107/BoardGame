@@ -88,17 +88,17 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
   const hasVotedSkip = state.skipVotes[viewerSeat] ?? false;
 
   // 전 액션 시네마틱 FX (2026-09-20 요청) — 모든 이벤트를 순서대로 재생하되,
-  // 비공개 이벤트(치료 빗나감/경찰 조사 결과)는 당사자가 아니면 렌더링 없이
-  // 즉시 큐에서 넘긴다(다른 사람에게는 절대 노출되지 않는 보안 뷰 격리).
+  // 비공개 이벤트(경찰 조사 결과)는 당사자가 아니면 렌더링 없이 즉시 큐에서
+  // 넘긴다(다른 사람에게는 절대 노출되지 않는 보안 뷰 격리). 아침 브리핑
+  // 배너(morning-peaceful/morning-tragic)는 이미 전원에게 공개되는
+  // dayAnnounce 발표 내용을 재구성한 것뿐이라 비공개 게이팅이 필요 없다.
   const { current: reveal, dismissCurrent: dismissReveal } = useMafiaReveals(state);
-  const revealApplies =
-    reveal !== null &&
-    !((reveal.type === "heal-miss" && reveal.doctorSeat !== viewerSeat) || (reveal.type === "police-result" && reveal.policeSeat !== viewerSeat));
+  const revealApplies = reveal !== null && !(reveal.type === "police-result" && reveal.policeSeat !== viewerSeat);
   useEffect(() => {
     if (reveal && !revealApplies) dismissReveal();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-check when the event itself changes
   }, [reveal]);
-  const shakeStyle = useBoardShake(reveal?.type === "death" ? reveal.id : null);
+  const shakeStyle = useBoardShake(reveal?.type === "death" || reveal?.type === "morning-tragic" ? reveal.id : null);
 
   if (state.phase === "gameOver" && state.winner) {
     return (
@@ -221,9 +221,9 @@ function SeatGrid({
         return (
           <div
             key={p.seat}
-            className={`relative flex flex-col items-center gap-0.5 rounded-xl border p-2 text-center transition ${
+            className={`relative flex flex-col items-center gap-0.5 rounded-xl border p-2 text-center transition-all duration-700 ${
               !p.alive
-                ? "border-white/10 bg-black/40 opacity-50 light:border-slate-200 light:bg-slate-100"
+                ? "grayscale border-white/10 bg-black/40 opacity-50 light:border-slate-200 light:bg-slate-100"
                 : isSuspect
                   ? "border-amber-300/70 bg-amber-500/10 ring-2 ring-amber-300/60"
                   : "border-white/10 bg-white/5 light:border-slate-200 light:bg-white"
@@ -248,7 +248,7 @@ function SeatGrid({
               {names[p.seat]}
               {p.seat === viewerSeat && <span className="text-amber-200 light:text-amber-700">(나)</span>}
             </span>
-            {!p.alive && <span className="text-[10px] text-rose-300 light:text-rose-600">💀 사망</span>}
+            {!p.alive && <span className="text-[10px] text-rose-300 light:text-rose-600">👻 유령</span>}
             {showRole && (
               <span className="text-[10px] text-white/60 light:text-slate-500">
                 {m.icon} {m.label}

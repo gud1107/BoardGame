@@ -17,15 +17,19 @@
  * change than the FX themselves. The affected seat's NAME is always named
  * in the banner text instead.
  *
- * Investigation-result events (`heal-miss`, `police-result`) are PRIVATE —
- * every client detects the identical diff, but `MafiaRevealOverlay` only
- * ever renders them when `viewerSeat` matches the seat that earned the
- * information (checked by the caller, MafiaBoard.tsx, before rendering this
- * component at all for those two event types).
+ * The `police-result` investigation event is PRIVATE — every client detects
+ * the identical diff, but `MafiaRevealOverlay` only ever renders it when
+ * `viewerSeat` matches the seat that earned the information (checked by the
+ * caller, MafiaBoard.tsx, before rendering this component at all for that
+ * event type). `morning-peaceful`/`morning-tragic` (2026-09-20 2차 요청,
+ * replacing the old separate `heal-success`/`heal-miss` events) are public —
+ * they only restate what `dayAnnounce`'s own text already announces to
+ * everyone, so no gating is needed.
  */
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import Avatar from "@/components/common/Avatar";
 import type { DeathRecord, MafiaState, SeatIndex } from "./engine";
 
 /** A single blood/glass shard's randomized flight path — precomputed once when the event is detected (see `randomShards` below), never inside a component's render, since React's purity rules forbid calling `Math.random()` during render. */
@@ -45,12 +49,15 @@ function randomShards(count: number): ShardSpec[] {
   }));
 }
 
+/** 아침 브리핑(밤→dayAnnounce 전환) 전용 배너 — "PEACEFUL DAWN"/"TRAGIC DAWN" 통합 연출(2026-09-20 2차 요청). 밤0(상견례)은 애초에 공격 자체가 없어 대상에서 제외(engine.ts의 `resolveNight`가 night 0을 별도 분기로 처리). */
+export type MorningPeacefulReason = "doctor" | "soldier" | "no-attack";
+
 export type MafiaRevealEvent =
   | { id: number; type: "nomination-lock"; suspectSeat: SeatIndex }
   | { id: number; type: "execution-result"; suspectSeat: SeatIndex; executed: boolean; blockedByPolitician: boolean; shards: ShardSpec[] }
   | { id: number; type: "death"; seat: SeatIndex; cause: DeathRecord["cause"]; shards: ShardSpec[] }
-  | { id: number; type: "heal-success"; healedSeat: SeatIndex }
-  | { id: number; type: "heal-miss"; doctorSeat: SeatIndex }
+  | { id: number; type: "morning-peaceful"; reason: MorningPeacefulReason }
+  | { id: number; type: "morning-tragic"; victimSeat: SeatIndex; shards: ShardSpec[] }
   | { id: number; type: "police-result"; policeSeat: SeatIndex; targetSeat: SeatIndex; isMafia: boolean }
   | { id: number; type: "skip-triggered" };
 
@@ -73,18 +80,21 @@ function detectMafiaRevealEvents(prev: MafiaState, next: MafiaState, nextId: () 
   }
 
   if (next.deaths.length > prev.deaths.length) {
+    // mafiaKill 사망은 아래 "morning-tragic" 통합 배너가 대신 담당 — 같은
+    // 전환에 두 배너가 겹쳐 뜨는 걸 막는다(execution/terroristRevenge는 그대로 유지).
     for (const d of next.deaths.slice(prev.deaths.length)) {
+      if (d.cause === "mafiaKill") continue;
       events.push({ id: nextId(), type: "death", seat: d.seat, cause: d.cause, shards: randomShards(10) });
     }
   }
 
-  if (prev.phase === "night" && next.phase === "dayAnnounce" && next.lastNightOutcome && next.lastNightOutcome !== prev.lastNightOutcome) {
+  if (prev.phase === "night" && next.phase === "dayAnnounce" && next.lastNightOutcome && next.lastNightOutcome !== prev.lastNightOutcome && next.lastNightOutcome.night > 0) {
     const outcome = next.lastNightOutcome;
-    const doctorSeat = next.players.find((p) => p.role === "doctor")?.seat;
-    if (outcome.savedByDoctor && outcome.mafiaTarget !== null) {
-      events.push({ id: nextId(), type: "heal-success", healedSeat: outcome.mafiaTarget });
-    } else if (doctorSeat !== undefined && outcome.doctorTarget !== null && !outcome.savedByDoctor) {
-      events.push({ id: nextId(), type: "heal-miss", doctorSeat });
+    if (outcome.victim !== null) {
+      events.push({ id: nextId(), type: "morning-tragic", victimSeat: outcome.victim, shards: randomShards(14) });
+    } else {
+      const reason: MorningPeacefulReason = outcome.savedByDoctor ? "doctor" : outcome.savedByArmor ? "soldier" : "no-attack";
+      events.push({ id: nextId(), type: "morning-peaceful", reason });
     }
   }
 
@@ -170,6 +180,50 @@ function ShardBurst({ color, shards }: { color: string; shards: ShardSpec[] }) {
   );
 }
 
+interface FeatherSpec {
+  left: string;
+  delay: number;
+  duration: number;
+  drift: string;
+  size: string;
+  emoji: string;
+}
+
+function randomFeathers(count: number): FeatherSpec[] {
+  const emojis = ["🕊️", "✨", "🍃"];
+  return Array.from({ length: count }, () => ({
+    left: `${5 + Math.random() * 90}%`,
+    delay: Math.random() * 1.2,
+    duration: 2 + Math.random() * 1.5,
+    drift: `${(Math.random() - 0.5) * 80}px`,
+    size: `${16 + Math.random() * 14}px`,
+    emoji: emojis[Math.floor(Math.random() * emojis.length)],
+  }));
+}
+
+/** "평화로운 아침" 배경 파티클 — `useMemo`로 마운트당 한 번만 랜덤 위치를 계산해 React 순수성 규칙을 지킨다(ShardBurst의 사전계산 방식과 동일 원칙). */
+function FeatherDrift() {
+  const feathers = useMemo(() => randomFeathers(14), []);
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {feathers.map((f, i) => (
+        <span
+          key={i}
+          className="absolute bottom-0"
+          style={{
+            left: f.left,
+            fontSize: f.size,
+            animation: `mafia-feather-float ${f.duration}s ease-in ${f.delay}s forwards`,
+            ["--feather-drift" as string]: f.drift,
+          }}
+        >
+          {f.emoji}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function ShieldPulse({ color }: { color: string }) {
   return (
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -213,11 +267,11 @@ export function MafiaRevealOverlay({
       case "death":
         engine.playMafiaExecutionImpact();
         break;
-      case "heal-success":
-        engine.playMafiaHealSuccess();
+      case "morning-peaceful":
+        engine.playMafiaMorningPeaceful();
         break;
-      case "heal-miss":
-        engine.playMafiaHealMiss();
+      case "morning-tragic":
+        engine.playMafiaMorningTragic();
         break;
       case "police-result":
         if (event.isMafia) engine.playMafiaSirenAlert();
@@ -227,7 +281,8 @@ export function MafiaRevealOverlay({
         engine.playMafiaSkipBanner();
         break;
     }
-    const duration = event.type === "skip-triggered" ? 1600 : event.type === "nomination-lock" ? 1200 : 1900;
+    const duration =
+      event.type === "skip-triggered" ? 1600 : event.type === "nomination-lock" ? 1200 : event.type === "morning-peaceful" ? 3500 : event.type === "morning-tragic" ? 4000 : 1900;
     const t = setTimeout(onDone, duration);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fire exactly once per event.id, `onDone` is stable enough for this one-shot timer
@@ -283,23 +338,54 @@ export function MafiaRevealOverlay({
         </div>
       );
 
-    case "heal-success":
+    case "morning-peaceful": {
+      const sub =
+        event.reason === "doctor"
+          ? "의사의 헌신적인 치료로 어젯밤 아무도 희생되지 않았습니다!"
+          : event.reason === "soldier"
+            ? "군인의 방탄조끼가 마피아의 습격을 막아냈습니다!"
+            : "어젯밤 마을은 평화로웠습니다 — 사망자가 없습니다.";
       return (
-        <div className={BANNER_BASE}>
-          <div className={`${PANEL_BASE} border-emerald-400/70 bg-black/70`} style={{ animation: "mafia-glow-in-out 0.6s ease-out" }}>
-            <ShieldPulse color="rgba(16,185,129,0.7)" />
-            <span className="text-4xl">✨</span>
-            <p className="text-lg font-black text-emerald-300">{names[event.healedSeat]}님 치료 성공!</p>
+        <div className={`${BANNER_BASE} overflow-hidden`}>
+          <div className="absolute inset-0" style={{ background: "radial-gradient(circle, rgba(52,211,153,0.22) 0%, rgba(0,0,0,0) 65%)", animation: "mafia-god-glow 3.5s ease-out forwards" }} />
+          <FeatherDrift />
+          <div
+            className="relative flex flex-col items-center gap-2 px-8 py-6 text-center"
+            style={{ animation: "mafia-glow-in-out 0.8s cubic-bezier(0.34,1.56,0.64,1)" }}
+          >
+            <ShieldPulse color="rgba(52,211,153,0.6)" />
+            <span className="text-6xl drop-shadow-[0_0_25px_rgba(52,211,153,0.8)]">🕊️✨</span>
+            <h2 className="bg-gradient-to-r from-emerald-200 via-teal-300 to-amber-200 bg-clip-text text-3xl font-black tracking-widest text-transparent italic drop-shadow-2xl sm:text-4xl">
+              PEACEFUL DAWN
+            </h2>
+            <p className="max-w-xs font-serif text-sm font-bold text-emerald-200">{sub}</p>
           </div>
         </div>
       );
+    }
 
-    case "heal-miss":
+    case "morning-tragic":
       return (
         <div className={BANNER_BASE}>
-          <div className={`${PANEL_BASE} border-emerald-900/60 bg-black/60`} style={{ animation: "mafia-wisp-fade 1.4s ease-out forwards" }}>
-            <span className="text-3xl">🍃</span>
-            <p className="text-sm font-semibold text-emerald-200/70">치료가 빗나갔습니다...</p>
+          <div
+            className={`${PANEL_BASE} border-rose-600/70 bg-black/85`}
+            style={{ animation: "mafia-stamp-drop 0.5s ease-out" }}
+          >
+            <ShardBurst color="rgba(190,18,60,0.85)" shards={event.shards} />
+            <h2 className="text-3xl font-black tracking-widest text-rose-500 italic drop-shadow-[0_0_25px_rgba(239,68,68,0.8)] sm:text-4xl">
+              TRAGIC DAWN
+            </h2>
+            <div
+              className="relative my-1 h-20 w-20 overflow-hidden rounded-full border-2 border-rose-500 shadow-[0_0_25px_rgba(244,63,94,0.7)]"
+              style={{ animation: "mafia-avatar-zoom 0.5s cubic-bezier(0.34,1.56,0.64,1)" }}
+            >
+              <Avatar size={80} className="grayscale" />
+              <div className="absolute inset-0 flex items-center justify-center bg-red-950/50 text-2xl">💥</div>
+            </div>
+            <p className="max-w-xs font-mono text-sm font-bold text-white/90">
+              탕! 어젯밤 마피아의 습격으로 <span className="text-lg text-rose-400">{names[event.victimSeat]}</span>님이 싸늘한 주검으로 발견되었습니다.
+            </p>
+            <span className="text-xs text-white/40">사망자는 이제 유령(Ghost) 관전 모드로 전환됩니다.</span>
           </div>
         </div>
       );
