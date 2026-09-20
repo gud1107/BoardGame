@@ -6,6 +6,8 @@ import RoleInspector from "./RoleInspector";
 import RoleRosterTable from "./RoleRosterTable";
 import PhaseSkipVote from "./PhaseSkipVote";
 import { MafiaRevealOverlay, MafiaTurnCueOverlay, useBoardShake, useMafiaReveals, useMafiaTurnCue } from "./MafiaEffects";
+import { getMafiaBgm } from "./mafiaBgm";
+import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import {
   getKnowledge,
   knownRoleFor,
@@ -72,6 +74,61 @@ function useCountdown(phaseStartedAt: number, phaseDurationMs: number): number {
   return Math.max(0, Math.ceil((phaseStartedAt + phaseDurationMs - now) / 1000));
 }
 
+/**
+ * BGM 온/오프 + 볼륨 슬라이더(2026-09-21 요청). 다른 게임들의 뮤트 버튼과 달리
+ * `masterMuted`(효과음까지 전부 끔) 대신 `bgmMuted`만 토글한다 — 마피아의 턴 알림
+ * /사망·조사 결과 등 기존 SFX는 그대로 들리게 두고 배경음악만 별개로 끌 수 있어야
+ * 하기 때문(스토어 설계 의도 그대로, `audioSettings.ts` 참고). 다만 사이트 기본값이
+ * "전부 뮤트"라 `bgmMuted`만 풀어서는 아무 소리도 안 날 수 있으므로, 켜는 클릭
+ * 한정으로 `masterMuted`도 함께 풀어 "누르면 실제로 들린다"를 보장한다 — 끄는
+ * 클릭은 `masterMuted`를 건드리지 않아 사용자의 기존 전역 선택을 존중한다.
+ */
+function MafiaBgmControl() {
+  const masterMuted = useAudioSettingsStore((s) => s.masterMuted);
+  const bgmMuted = useAudioSettingsStore((s) => s.bgmMuted);
+  const bgmVolume = useAudioSettingsStore((s) => s.bgmVolume);
+  const setMasterMuted = useAudioSettingsStore((s) => s.setMasterMuted);
+  const setBgmMuted = useAudioSettingsStore((s) => s.setBgmMuted);
+  const setBgmVolume = useAudioSettingsStore((s) => s.setBgmVolume);
+  const bgmOn = !masterMuted && !bgmMuted;
+
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={() => {
+          getMafiaBgm().unlock();
+          if (bgmOn) {
+            setBgmMuted(true);
+          } else {
+            if (masterMuted) setMasterMuted(false);
+            setBgmMuted(false);
+          }
+        }}
+        title={bgmOn ? "배경음악 끄기" : "배경음악 켜기"}
+        className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+          bgmOn
+            ? "border-amber-300/50 bg-amber-400/15 text-amber-200"
+            : "border-white/15 text-white/50 hover:border-white/30 hover:text-white/80"
+        }`}
+      >
+        {bgmOn ? "🔊 BGM" : "🔇 BGM"}
+      </button>
+      {bgmOn && (
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={bgmVolume}
+          onChange={(e) => setBgmVolume(Number(e.target.value))}
+          aria-label="BGM 볼륨"
+          className="h-1 w-14 accent-amber-400 sm:w-20"
+        />
+      )}
+    </div>
+  );
+}
+
 const PHASE_LABEL: Record<MafiaState["phase"], string> = {
   night: "🌙 밤",
   dayAnnounce: "☀️ 아침 브리핑",
@@ -128,6 +185,27 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
   // 턴 알림 FX(2026-09-20 요청) — 밤 액션/투표 페이즈에 진입하는 순간 나에게만
   // 뜨는 콜아웃. 결과-발표용 `reveal` 이벤트 큐와는 완전히 별개 파이프라인.
   const { cue: turnCue, dismiss: dismissTurnCue } = useMafiaTurnCue(state, viewerSeat);
+
+  // 다이나믹 페이즈 적응형 BGM(2026-09-21 요청) — 페이즈가 바뀔 때마다 밤 드론/
+  // 낮 토론 틱톡/최후 변론·투표 심장박동 사이를 1.5초 크로스페이드로 전환한다.
+  // 브라우저 오디오 자동재생 제약 때문에 실제 재생은 첫 사용자 제스처 이후에나
+  // 들리지만, `transitionToPhase`는 매 페이즈마다 그냥 호출해 둬도 안전하다
+  // (제스처 전이면 `AudioContext`가 아직 없어 조용히 무시된다).
+  useEffect(() => {
+    getMafiaBgm().transitionToPhase(state.phase);
+  }, [state.phase]);
+  useEffect(() => {
+    const unlock = () => getMafiaBgm().unlock();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+  useEffect(() => {
+    return () => getMafiaBgm().stop();
+  }, []);
 
   if (state.phase === "gameOver" && state.winner) {
     return (
@@ -199,6 +277,7 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
             >
               📖 룰북
             </button>
+            <MafiaBgmControl />
           </div>
         </div>
 

@@ -370,6 +370,51 @@ this pass"라고 명시해뒀던 바로 그 유보 작업.
 역할을 받아 봇의 스마트 암살 로직 자체는 이 라이브런에서 트리거되지 않음(정상, 결정론적 유닛 테스트로
 별도 검증됨).
 
+### 🎵 마피아 (Mafia) Dynamic Adaptive BGM & Noir Soundscape — 2026-09-21 후속
+
+**요청**: 정적인 무음을 깨고 밤/낮 토론/최후 변론·찬반 투표 3개 페이즈에 맞춰 자동 전환되는 배경음악
+엔진. 요청서는 "경량 스트리밍 음원 연동"도 대안으로 제시했지만, `저작권, 상표권.md`가 배경음악을
+명시적으로 보호 대상 표현으로 분류해 뒀고 `bgmManager.ts`(6개 허브 게임용) 헤더가 밝히듯 이 프로젝트는
+지금까지 실제 오디오 파일을 커밋한 적이 없다 — 그래서 `soundEngine.ts`의 기존 합성 기법(오실레이터/
+필터/노이즈 버퍼)만으로 3개 트랙을 직접 만들었다(mp3/스트리밍 없음).
+
+**구현**:
+- `src/games/mafia/mafiaBgm.ts` 신규 — `getMafiaBgm()` 싱글턴. 엔진의 실제 9단계 `Phase`
+  (`night`/`dayAnnounce`/`dayDiscuss`/`nomination`/`defense`/`finalVote`/`execution`/
+  `terroristRevenge`/`gameOver`)를 3개 사운드스케이프로 묶는다: 🌙 밤 → 43.65Hz+65.41Hz 저역 드론 +
+  느리게 일렁이는 밴드패스 노이즈(찬바람), 💬 낮 토론(`dayAnnounce`/`dayDiscuss`/`nomination`) →
+  ~72bpm 금속 틱톡 + 첼로 피치카토, ⚖️ 최후 변론·찬반투표·집행·길동무(`defense`/`finalVote`/
+  `execution`/`terroristRevenge`) → ~120bpm 서브베이스 킥 + 트레몰로풍 바이올린 스팅. `gameOver`는
+  무음으로 페이드아웃.
+- 트랙 전환은 1.5초 크로스페이드 — 이전 트랙의 게인만 1→0으로 램프시키면서 새 트랙을 동시에 0→1로
+  올리는 방식(별도 마스터 게인 하나에 두 트랙을 동시에 연결). 같은 사운드스케이프 그룹 안에서 페이즈가
+  바뀌는 경우(예: `dayAnnounce`→`dayDiscuss`)는 재전환하지 않아 끊김이 없다.
+- **`bgmManager.ts`(파일 기반 `<audio>`, 6개 허브 게임 전용)가 아니라 `soundEngine.ts`식 합성 패턴을
+  따로 복제**한 이유: `bgmManager`의 크로스페이드는 HTMLAudioElement의 `.volume` 보간이라 페이즈마다
+  완전히 다른 합성 트랙(오실레이터 그래프 자체가 다름)을 매끄럽게 넘기는 용도에 안 맞고, `soundEngine`의
+  기존 `startBgm`/`stopBgm`은 페이즈 인자 없이 무작위 모티프를 순환 재생하는 범용 앰비언트 루프라
+  마피아처럼 "지금 상태"에 정확히 매핑되는 트랙이 필요한 요구와 다르다.
+- 뮤트/볼륨은 이 파일이 따로 들지 않고 `audioSettings.ts`의 공유 스토어(`bgmMuted`+`bgmVolume`,
+  `masterMuted`)를 그대로 구독 — 다른 모든 게임의 뮤트 버튼과 동일 원칙.
+- `MafiaBoard.tsx`: `state.phase` 변화마다 `getMafiaBgm().transitionToPhase()` 호출, 첫
+  `pointerdown`/`keydown`에서 `unlock()`(브라우저 오디오 자동재생 제약 해제), 언마운트 시 `stop()`.
+  헤더의 "📖 룰북" 옆에 `MafiaBgmControl` 칩 신규 — 마피아는 지금까지 게임 전용 뮤트 버튼이 전혀
+  없었다(Perudo/Dalmuti와 달리). 다른 게임들의 뮤트 버튼은 보통 `masterMuted`(효과음까지 전부 끔)를
+  토글하지만, 이 칩은 **`bgmMuted`만** 토글한다 — 마피아의 기존 SFX(턴 알림/사망·조사 리빌 등)는 그대로
+  들리게 두고 배경음악만 별도로 끌 수 있어야 하기 때문(스토어 설계 의도 그대로). 다만 사이트 기본값이
+  "전부 뮤트"라 `bgmMuted`만 풀면 여전히 무음일 수 있어, **켜는 클릭에 한해** `masterMuted`도 함께
+  풀어 "누르면 실제로 들린다"를 보장했다 — 끄는 클릭은 `masterMuted`를 건드리지 않아 사용자의 기존
+  전역 선택을 존중. 볼륨 슬라이더는 켜져 있을 때만 노출, `bgmVolume`에 직결.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint`(0 에러) / `npx vitest run`(마피아 스위트 37개 전체
+통과 — 순수 로직 변경 없음, 엔진/테스트는 건드리지 않았다). **실제 오디오 청취 검증은 이번엔 생략** —
+세션 시점에 이 저장소에서 `vercel deploy --prod`가 이미 실행 중이었고 동시에 다른 dev 프로세스들도 떠
+있어(아래 "커밋/배포" 절 참고) 새 `next dev`를 추가로 띄우는 걸 피했다. 코드 레벨로는 기존
+`tenseDroneMotif`/`heartbeatPulseMotif`(둘 다 `soundEngine.ts`, 라이브 검증된 적 있는 동일 계열
+오실레이터/필터 기법)를 그대로 재사용한 구조라 합성 자체가 무음으로 실패할 가능성은 낮다고 판단했지만,
+"밤 드론이 실제로 들리는지/크로스페이드가 자연스러운지"는 다음 세션에서 기기별(iOS Safari/Android
+Chrome/Desktop) 실청 확인이 필요.
+
 ### 🗨️ 마피아 — AI 봇 채팅 참여 — 2026-09-20 후속 (커밋/푸시 완료, 배포는 웹훅 자동)
 
 **요청**: "AI 봇도 마피아게임에 대화를 할 수 있게 개선해주세요" — 위 신규 게임 세션에서는 봇이
