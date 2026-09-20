@@ -673,6 +673,10 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
     botSeats: allBotSeatSet,
     chooseAction,
     dispatch: handleAction,
+    // "인간적인 템포"(2026-09-21 요청) — 기본값(500~1500ms)보다 조금 더 느리게,
+    // 밤 액션/투표 마다 실제로 고민하는 듯한 리듬감을 준다.
+    minDelayMs: 1200,
+    maxDelayMs: 2800,
   });
 
   // Bot chat participation (2026-09-20 후속 요청) — separate from the engine-

@@ -3,6 +3,7 @@ import {
   applyAction,
   chooseBotAction,
   computeRankings,
+  computeSuspicion,
   currentActor,
   DEFAULT_MAFIA_CONFIG,
   knownRoleFor,
@@ -12,6 +13,7 @@ import {
   type EngineAction,
   type MafiaState,
   type Role,
+  type RoundRecord,
   type SeatIndex,
 } from "./engine";
 
@@ -498,6 +500,130 @@ describe("forceAdvance idempotency", () => {
     const staleAdvance: EngineAction = { type: "forceAdvance", expectedPhase: "night", atMs: 9999 };
     const after = applyAction(s, staleAdvance);
     expect(after).toEqual(s);
+  });
+});
+
+describe("smart AI decision-making (2026-09-21)", () => {
+  function findSeatWithRole(state: MafiaState, role: Role): SeatIndex {
+    const p = state.players.find((p) => p.role === role);
+    if (!p) throw new Error(`no ${role} in this seed`);
+    return p.seat;
+  }
+
+  it("computeSuspicion: rewards voting out a mafia, punishes voting out an innocent, and bandwagon-nominating the eventual suspect", () => {
+    let s = startGame(6, 1, withConfig(), 1000);
+    const mafiaVoterRound: RoundRecord = {
+      day: 1,
+      nominations: { 2: 0 }, // seat 2 bandwagons onto seat 0
+      finalVotes: { 1: "yes", 2: "no" },
+      suspect: 0,
+      executedSeat: 0,
+      executedRole: "mafia",
+    };
+    const innocentVoterRound: RoundRecord = {
+      day: 2,
+      nominations: {},
+      finalVotes: { 3: "yes" },
+      suspect: 4,
+      executedSeat: 4,
+      executedRole: "citizen",
+    };
+    s = { ...s, roundHistory: [mafiaVoterRound, innocentVoterRound] } as MafiaState;
+    const suspicion = computeSuspicion(s);
+    expect(suspicion.get(1)).toBe(50 - 30); // decisive vote to execute a mafia
+    expect(suspicion.get(2)).toBe(50 + 8); // bandwagon-nominated the eventual (correct) suspect
+    expect(suspicion.get(3)).toBe(50 + 25); // pushed to execute an innocent citizen
+    expect(suspicion.get(5)).toBe(50); // untouched, stays neutral
+  });
+
+  it("computeSuspicion clamps to [0, 100]", () => {
+    let s = startGame(4, 5, withConfig(), 1000);
+    const rounds: RoundRecord[] = Array.from({ length: 5 }, (_, i) => ({
+      day: i + 1,
+      nominations: {},
+      finalVotes: { 0: "yes" },
+      suspect: 1,
+      executedSeat: 1,
+      executedRole: "citizen",
+    }));
+    s = { ...s, roundHistory: rounds } as MafiaState;
+    expect(computeSuspicion(s).get(0)).toBe(100);
+  });
+
+  it("a police bot with a confirmed-mafia investigation nominates that seat 100% of the time", () => {
+    const policeSeat = findSeatWithRole(startGame(6, 3, withConfig(), 1000), "police");
+    const mafiaSeat = findSeatWithRole(startGame(6, 3, withConfig(), 1000), "mafia");
+    let night1 = startGame(6, 3, withConfig(), 1000);
+    night1 = forceAdvance(night1, 2000);
+    night1 = forceAdvance(night1, 3000);
+    night1 = forceAdvance(night1, 4000);
+    for (const p of night1.players) {
+      const target = (p.seat + 1) % night1.playerCount;
+      night1 = applyAction(night1, { type: "nominate", seat: p.seat, target, atMs: 4500 });
+    }
+    if (night1.phase === "defense") {
+      night1 = forceAdvance(night1, 5000);
+      for (const p of night1.players) {
+        if (p.alive && p.seat !== night1.suspect) night1 = applyAction(night1, { type: "finalVote", seat: p.seat, vote: "no", atMs: 5500 });
+      }
+    }
+    night1 = forceAdvance(night1, 6000); // execution -> night 1
+    night1 = applyAction(night1, { type: "policeNightAction", seat: policeSeat, target: mafiaSeat });
+    expect(night1.investigationLog.at(-1)).toEqual({ investigator: policeSeat, target: mafiaSeat, kind: "police", isMafia: true, role: "mafia" });
+    night1 = forceAdvance(night1, 7000); // night1 -> dayAnnounce
+    night1 = forceAdvance(night1, 8000); // dayAnnounce -> dayDiscuss
+    night1 = forceAdvance(night1, 9000); // dayDiscuss -> nomination
+    for (let trial = 0; trial < 10; trial++) {
+      const action = chooseBotAction(night1, policeSeat, 5, () => trial / 10);
+      expect(action).toEqual({ type: "nominate", seat: policeSeat, target: mafiaSeat, atMs: expect.any(Number) });
+    }
+  });
+
+  it("a mafia bot always votes guilty (bluffs) when the defendant is an innocent citizen", () => {
+    const s = startGame(6, 3, withConfig(), 1000);
+    const mafiaSeat = s.players.find((p) => p.role === "mafia")!.seat;
+    const citizenSeat = s.players.find((p) => p.team === "citizen" && p.seat !== mafiaSeat)!.seat;
+    const inFinalVote = { ...s, phase: "finalVote" as const, suspect: citizenSeat, finalVotes: {} } as MafiaState;
+    for (let trial = 0; trial < 5; trial++) {
+      const action = chooseBotAction(inFinalVote, mafiaSeat, 5, () => trial / 5);
+      expect(action).toEqual({ type: "finalVote", seat: mafiaSeat, vote: "yes", atMs: expect.any(Number) });
+    }
+  });
+
+  it("a mafia bot protects its teammate on trial while the vote is still tied, but defects once yes-votes already lead (tail-cutting)", () => {
+    const s = startGame(7, 9, withConfig({ mode: "expansion" }), 1000);
+    const mafiaSeats = s.players.filter((p) => p.role === "mafia").map((p) => p.seat);
+    if (mafiaSeats.length < 2) return; // this seed didn't roll 2 mafia — skip rather than fail on an unrelated seed
+    const [voterSeat, defendantSeat] = mafiaSeats;
+
+    const tied = { ...s, phase: "finalVote" as const, suspect: defendantSeat, finalVotes: {} } as MafiaState;
+    expect(chooseBotAction(tied, voterSeat, 5, () => 0)).toEqual({ type: "finalVote", seat: voterSeat, vote: "no", atMs: expect.any(Number) });
+
+    const otherSeats = s.players.filter((p) => p.alive && p.seat !== defendantSeat && p.seat !== voterSeat).map((p) => p.seat);
+    const leaningGuilty = { ...s, phase: "finalVote" as const, suspect: defendantSeat, finalVotes: { [otherSeats[0]]: "yes", [otherSeats[1]]: "yes", [otherSeats[2]]: "no" } } as MafiaState;
+    expect(chooseBotAction(leaningGuilty, voterSeat, 5, () => 0)).toEqual({ type: "finalVote", seat: voterSeat, vote: "yes", atMs: expect.any(Number) });
+  });
+
+  it("a doctor bot protects the least-suspicious alive seat instead of a random one", () => {
+    let s = startGame(6, 1, withConfig(), 1000);
+    const doctorSeat = findSeatWithRole(s, "doctor");
+    // Make every other alive seat but one "trusted" (-30, voted to execute a
+    // mafia) so the doctor's pick should land on one of THEM, never on the
+    // one seat left at neutral (50).
+    const aliveOthers = s.players.filter((p) => p.alive && p.seat !== doctorSeat).map((p) => p.seat);
+    const untouchedSeat = aliveOthers[0];
+    const trustedVoters = aliveOthers.slice(1);
+    const round: RoundRecord = {
+      day: 1,
+      nominations: {},
+      finalVotes: Object.fromEntries(trustedVoters.map((seat) => [seat, "yes" as const])),
+      suspect: 99, // arbitrary placeholder seat index — executedRole is what matters for scoring, not a real alive player
+      executedSeat: 99,
+      executedRole: "mafia",
+    };
+    s = { ...s, phase: "night" as const, nightNumber: 1, roundHistory: [round] } as MafiaState;
+    const action = chooseBotAction(s, doctorSeat, 5, () => 0);
+    expect(action).not.toEqual({ type: "doctorNightAction", seat: doctorSeat, target: untouchedSeat });
   });
 });
 

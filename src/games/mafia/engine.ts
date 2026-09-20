@@ -154,6 +154,24 @@ export interface DeathRecord {
   readonly at: number;
 }
 
+/**
+ * One day-cycle's nomination/verdict shape, kept forever (2026-09-21 "스마트
+ * AI" 요청) — appended right before `nominations`/`finalVotes` reset for the
+ * next round. This is the ONLY place the engine retains WHO nominated/voted
+ * for WHOM across rounds (`state.nominations`/`state.finalVotes` themselves
+ * are wiped every round) — `computeSuspicion` below is the sole consumer.
+ * Recorded even when nomination ties out with no execution (`suspect: null`)
+ * since the nomination pattern alone is still a useful public signal.
+ */
+export interface RoundRecord {
+  readonly day: number;
+  readonly nominations: Readonly<Partial<Record<SeatIndex, SeatIndex>>>;
+  readonly finalVotes: Readonly<Partial<Record<SeatIndex, "yes" | "no">>>;
+  readonly suspect: SeatIndex | null;
+  readonly executedSeat: SeatIndex | null;
+  readonly executedRole: Role | null;
+}
+
 export interface MafiaGameConfig {
   readonly mode: MafiaMode;
   readonly discussionSeconds: 30 | 60 | 90;
@@ -184,6 +202,7 @@ export interface MafiaState {
   readonly deaths: readonly DeathRecord[];
   readonly investigationLog: readonly InvestigationRecord[];
   readonly publicLog: readonly PublicLogEntry[];
+  readonly roundHistory: readonly RoundRecord[];
   /**
    * "시간초 과반수 스킵" (2026-09-20 요청) — only meaningful while
    * `phase` is `"night"` or `"dayDiscuss"`, reset to `{}` every time either
@@ -316,6 +335,7 @@ export function startGame(playerCount: number, seed: number, config: MafiaGameCo
     deaths: [],
     investigationLog: [],
     publicLog: [],
+    roundHistory: [],
     skipVotes: {},
     nominations: {},
     suspect: null,
@@ -537,8 +557,16 @@ function resolveNomination(state: MafiaState, atMs: number): MafiaState {
     }
   }
   if (winners.length !== 1) {
+    const record: RoundRecord = { day: state.dayNumber, nominations: state.nominations, finalVotes: {}, suspect: null, executedSeat: null, executedRole: null };
     return advancePhase(
-      { ...state, suspect: null, nominationVoidReason: "tie", lastExecution: null, publicLog: [...state.publicLog, { type: "voteVoid", day: state.dayNumber }] },
+      {
+        ...state,
+        suspect: null,
+        nominationVoidReason: "tie",
+        lastExecution: null,
+        publicLog: [...state.publicLog, { type: "voteVoid", day: state.dayNumber }],
+        roundHistory: [...state.roundHistory, record],
+      },
       "execution",
       atMs,
     );
@@ -575,12 +603,14 @@ function resolveFinalVote(state: MafiaState, atMs: number): MafiaState {
   const publicLog: readonly PublicLogEntry[] = [...state.publicLog, { type: "execution", day: state.dayNumber, suspect, executed, blockedByPolitician }];
 
   if (!executed) {
-    return advancePhase({ ...state, lastExecution: outcome, publicLog }, "execution", atMs);
+    const record: RoundRecord = { day: state.dayNumber, nominations: state.nominations, finalVotes: state.finalVotes, suspect, executedSeat: null, executedRole: null };
+    return advancePhase({ ...state, lastExecution: outcome, publicLog, roundHistory: [...state.roundHistory, record] }, "execution", atMs);
   }
 
+  const record: RoundRecord = { day: state.dayNumber, nominations: state.nominations, finalVotes: state.finalVotes, suspect, executedSeat: suspect, executedRole: suspectPlayer.role };
   const players = state.players.map((p) => (p.seat === suspect ? { ...p, alive: false } : p));
   const deaths = [...state.deaths, { seat: suspect, role: suspectPlayer.role, cause: "execution" as const, at: state.dayNumber }];
-  let next: MafiaState = { ...state, players, deaths, lastExecution: outcome, publicLog };
+  let next: MafiaState = { ...state, players, deaths, lastExecution: outcome, publicLog, roundHistory: [...state.roundHistory, record] };
   next = checkWinCondition(next);
   if (next.winner) return advancePhase(next, "gameOver", atMs);
 
@@ -790,17 +820,87 @@ export function currentActor(state: MafiaState): SeatIndex | null {
 }
 
 // ---------------------------------------------------------------------------
-// AI bot support (ARCHITECTURE.md §7) — a flat-difficulty heuristic bot
-// (does not yet vary meaningfully by `level`, unlike Avalon/Bang's tiered
-// scorers — a full suspicion-tracking Mafia AI is out of scope for this
-// pass; see HANDOFF.md). `chooseBotAction` is UI/bot-loop code, not part of
-// the reducer, so it's fine for it to default `atMs` to `Date.now()` itself
-// (same convention as hillOfTruth's `chooseBotAction(..., nowMs = Date.now())`).
+// AI bot support (ARCHITECTURE.md §7) — 2026-09-21 "스마트 AI" 요청으로
+// 순수 랜덤 휴리스틱을 대체. 여전히 `_level`(BotLevel)과 무관하게 전부 같은
+// 지능으로 행동한다(요청이 난이도 티어링을 요구하지 않음, Lv.1~10 선택 UI는
+// 여전히 표시만 되고 실제 행동엔 영향 없음 — 기존 한계 유지, 이번 범위 밖).
+// `chooseBotAction`은 UI/bot-loop 코드로 리듀서가 아니라서 `atMs`를
+// `Date.now()`로 직접 채워도 안전(hillOfTruth의 동일 관례).
+//
+// 제외한 것: (1) "경찰 사칭 등 거짓 주장이 탄로났을 때 +60" — 자유 텍스트
+// 채팅에서 "나는 경찰이다" 같은 주장을 구조적으로 파싱해야 하는데 이
+// 엔진/채팅 시스템엔 그런 클레임 추적 인프라가 전혀 없어 범위 밖으로 명시.
+// (2) 마피아가 "의사의 자힐/보호 확률을 역산"하는 상대 모델링 — 의사의
+// 보호 대상은 마피아에게 완전히 비공개라 원칙적으로 추정할 신호가 없음.
 // ---------------------------------------------------------------------------
 
 function pickRandom<T>(candidates: readonly T[], rng: () => number): T | null {
   if (candidates.length === 0) return null;
   return candidates[Math.floor(rng() * candidates.length)];
+}
+
+/** 동점자는 `rng`로 무작위 선택 — 완전히 결정론적이면 매 게임 봇이 똑같은 순서로만 행동해 예측 가능해지는 것을 방지. */
+function pickTopBy<T>(candidates: readonly T[], scoreFn: (item: T) => number, rng: () => number): T | null {
+  if (candidates.length === 0) return null;
+  let best = -Infinity;
+  for (const c of candidates) best = Math.max(best, scoreFn(c));
+  const top = candidates.filter((c) => scoreFn(c) === best);
+  return pickRandom(top, rng);
+}
+
+/**
+ * 공개 의심도 매트릭스(0~100, 기본 50) — 2026-09-21 "스마트 AI" 요청.
+ * `state.roundHistory`(각 라운드가 끝나기 직전에 append됨, `resolveNomination`/
+ * `resolveFinalVote` 참고)만으로 매번 새로 계산되는 순수 함수 — 봇 인스턴스가
+ * 별도 메모리를 들고 있지 않는 이 엔진의 방식과 일치. 어떤 봇이 호출하든
+ * 완전히 동일한 "공개적으로 관찰 가능한" 값이며(비공개 조사 지식은 절대
+ * 섞이지 않음), 개인 지식(`knownRoleFor`)은 호출부가 별도로 얹는다.
+ */
+export function computeSuspicion(state: MafiaState): ReadonlyMap<SeatIndex, number> {
+  const score = new Map<SeatIndex, number>();
+  for (const p of state.players) score.set(p.seat, 50);
+  const bump = (seat: SeatIndex, delta: number) => score.set(seat, (score.get(seat) ?? 50) + delta);
+
+  for (const round of state.roundHistory) {
+    if (round.suspect !== null) {
+      for (const [nominatorStr, target] of Object.entries(round.nominations)) {
+        if (target === round.suspect) bump(Number(nominatorStr), 8); // 여론 편승(밴드왜건) 투표 반복
+      }
+    }
+    const executedTeam = round.executedRole !== null ? teamForRole(round.executedRole) : null;
+    for (const [voterStr, vote] of Object.entries(round.finalVotes)) {
+      if (vote !== "yes") continue;
+      const voter = Number(voterStr);
+      if (executedTeam === "mafia") bump(voter, -30); // 마피아를 처형시키는 결정적 표
+      else if (executedTeam === "citizen") bump(voter, 25); // 결백한 시민을 몰아간 표
+    }
+  }
+
+  for (const p of state.players) score.set(p.seat, Math.max(0, Math.min(100, score.get(p.seat) ?? 50)));
+  return score;
+}
+
+/** 공개 의심도에 뷰어 본인의 비공개 조사 지식(있다면)을 덮어씌운 실질 점수 — 확정 정보가 있으면 항상 그게 우선. */
+function effectiveSuspicion(state: MafiaState, viewerSeat: SeatIndex, targetSeat: SeatIndex, publicScore: ReadonlyMap<SeatIndex, number>): number {
+  const known = knownRoleFor(state, viewerSeat, targetSeat);
+  if (known !== null) return known.isMafia ? 100 : 0;
+  return publicScore.get(targetSeat) ?? 50;
+}
+
+/** 마피아 팀(자신+접선된 스파이) 중 누군가 이미 저 좌석을 조사해 경찰로 확인했는지 — 확인됐다면 최우선 저격 대상. */
+function teamKnowsPolice(state: MafiaState, teamSeats: readonly SeatIndex[], targetSeat: SeatIndex): boolean {
+  return state.investigationLog.some((r) => teamSeats.includes(r.investigator) && r.target === targetSeat && r.role === "police");
+}
+
+/** 과거 라운드에서 이 마피아 팀의 용의자 지명에 앞장선("찬성" 표를 던지거나 그 용의자를 지목한) 좌석일수록 위협도가 높다 — "낮에 우리를 강하게 추리한 위험 인물" 근사치. */
+function mafiaThreatScore(state: MafiaState, teamSeats: readonly SeatIndex[], candidateSeat: SeatIndex): number {
+  let score = 0;
+  for (const round of state.roundHistory) {
+    if (round.suspect === null || !teamSeats.includes(round.suspect)) continue;
+    if (round.finalVotes[candidateSeat] === "yes") score += 40;
+    if (round.nominations[candidateSeat] === round.suspect) score += 20;
+  }
+  return score;
 }
 
 export function chooseBotAction(
@@ -813,44 +913,104 @@ export function chooseBotAction(
   const player = state.players[seat];
   if (!player) return null;
   const aliveOthers = state.players.filter((p) => p.alive && p.seat !== seat);
+  const knowledge = getKnowledge(state, seat);
+  const actsAsMafia = player.role === "mafia" || (player.role === "spy" && player.spyContactedMafia);
 
   if (state.phase === "night") {
     const na = state.nightActions;
-    const knowledge = getKnowledge(state, seat);
-    if ((player.role === "mafia" || (player.role === "spy" && player.spyContactedMafia)) && na.mafiaVotes[seat] === undefined) {
+
+    if (actsAsMafia && na.mafiaVotes[seat] === undefined) {
       const candidates = aliveOthers.filter((p) => !knowledge.mafiaTeammates.includes(p.seat)).map((p) => p.seat);
       const alreadyChosen = Object.values(na.mafiaVotes).find((t): t is SeatIndex => t !== undefined && candidates.includes(t));
-      const target = alreadyChosen ?? pickRandom(candidates, rng);
+      if (alreadyChosen !== undefined) return { type: "mafiaNightVote", seat, target: alreadyChosen };
+      const teamSeats = [seat, ...knowledge.mafiaTeammates];
+      const suspicion = computeSuspicion(state);
+      const target = pickTopBy(
+        candidates,
+        (c) => (teamKnowsPolice(state, teamSeats, c) ? 1000 : mafiaThreatScore(state, teamSeats, c) + (suspicion.get(c) ?? 50) * 0.2),
+        rng,
+      );
       return target === null ? null : { type: "mafiaNightVote", seat, target };
     }
     if (player.role === "spy" && na.spyTarget === undefined) {
-      const target = pickRandom(aliveOthers.map((p) => p.seat), rng);
+      const investigated = new Set(state.investigationLog.filter((r) => r.investigator === seat).map((r) => r.target));
+      const fresh = aliveOthers.filter((p) => !investigated.has(p.seat)).map((p) => p.seat);
+      const pool = fresh.length > 0 ? fresh : aliveOthers.map((p) => p.seat);
+      const suspicion = computeSuspicion(state);
+      const target = pickTopBy(pool, (c) => suspicion.get(c) ?? 50, rng);
       return target === null ? null : { type: "spyNightAction", seat, target };
     }
     if (player.role === "doctor" && na.doctorTarget === undefined) {
       const canSelf = state.nightNumber === 1 && state.config.doctorSelfHeal;
-      const candidates = state.players.filter((p) => p.alive && (p.seat !== seat || canSelf)).map((p) => p.seat);
-      const target = pickRandom(candidates, rng);
-      return target === null ? null : { type: "doctorNightAction", seat, target };
+      if (canSelf && rng() < 0.25) return { type: "doctorNightAction", seat, target: seat };
+      const candidates = state.players.filter((p) => p.alive && p.seat !== seat).map((p) => p.seat);
+      const suspicion = computeSuspicion(state);
+      // 가장 신뢰받는(의심도 낮은) 생존자를 수호 — "핵심 인물/유력 추리자" 대리 지표(의사는 누가 경찰인지 알 방법이 없음).
+      const target = pickTopBy(candidates, (c) => -(suspicion.get(c) ?? 50), rng);
+      return target === null ? null : { type: "doctorNightAction", seat, target: target ?? seat };
     }
     if (player.role === "police" && na.policeTarget === undefined) {
-      const target = pickRandom(aliveOthers.map((p) => p.seat), rng);
+      const investigated = new Set(state.investigationLog.filter((r) => r.investigator === seat).map((r) => r.target));
+      const fresh = aliveOthers.filter((p) => !investigated.has(p.seat)).map((p) => p.seat);
+      const pool = fresh.length > 0 ? fresh : aliveOthers.map((p) => p.seat); // 전원 조사 완료 시에만 부득이 재조사 허용
+      const suspicion = computeSuspicion(state);
+      const target = pickTopBy(pool, (c) => suspicion.get(c) ?? 50, rng);
       return target === null ? null : { type: "policeNightAction", seat, target };
     }
     if (player.role === "medium" && na.mediumTarget === undefined) {
-      const target = pickRandom(state.players.filter((p) => !p.alive).map((p) => p.seat), rng);
+      const investigated = new Set(state.investigationLog.filter((r) => r.investigator === seat).map((r) => r.target));
+      const dead = state.players.filter((p) => !p.alive).map((p) => p.seat);
+      const fresh = dead.filter((s) => !investigated.has(s));
+      const target = pickRandom(fresh.length > 0 ? fresh : dead, rng); // 사망자 사이엔 공개 의심도가 의미 없어 무작위 유지
       return target === null ? null : { type: "mediumNightAction", seat, target };
     }
     return null;
   }
 
   if (state.phase === "nomination") {
-    const target = pickRandom(aliveOthers.map((p) => p.seat), rng);
+    const suspicion = computeSuspicion(state);
+
+    if (actsAsMafia) {
+      // 동료는 절대 지목하지 않고, 가장 의심도 높은(=여론이 이미 쏠려있는) 시민을 밀어준다.
+      const candidates = aliveOthers.filter((p) => !knowledge.mafiaTeammates.includes(p.seat)).map((p) => p.seat);
+      const target = pickTopBy(candidates, (c) => effectiveSuspicion(state, seat, c, suspicion), rng);
+      return target === null ? null : { type: "nominate", seat, target, atMs };
+    }
+
+    // 조사 결과 이미 마피아로 확정된 생존자가 있다면 100% 그쪽을 지목.
+    const confirmedMafia = aliveOthers.find((p) => knownRoleFor(state, seat, p.seat)?.isMafia === true);
+    if (confirmedMafia) return { type: "nominate", seat, target: confirmedMafia.seat, atMs };
+
+    // 여론 밴드왜건: 의심도 + 이번 라운드 이미 제출된 지목 득표수(가중치 15)를 합산.
+    const liveTally = new Map<SeatIndex, number>();
+    for (const target of Object.values(state.nominations)) {
+      if (target !== undefined) liveTally.set(target, (liveTally.get(target) ?? 0) + 1);
+    }
+    const candidates = aliveOthers.map((p) => p.seat);
+    const target = pickTopBy(candidates, (c) => effectiveSuspicion(state, seat, c, suspicion) + (liveTally.get(c) ?? 0) * 15, rng);
     return target === null ? null : { type: "nominate", seat, target, atMs };
   }
 
   if (state.phase === "finalVote") {
-    return { type: "finalVote", seat, vote: rng() < 0.5 ? "yes" : "no", atMs };
+    const suspect = state.suspect!;
+
+    if (actsAsMafia) {
+      if (knowledge.mafiaTeammates.includes(suspect)) {
+        // 꼬리 자르기: 이미 제출된 표가 유죄 쪽으로 기울어 있으면(과반 분위기) 동료를 버리고 동조, 아니면 방어.
+        const votes = Object.values(state.finalVotes);
+        const yesSoFar = votes.filter((v) => v === "yes").length;
+        const noSoFar = votes.filter((v) => v === "no").length;
+        return { type: "finalVote", seat, vote: yesSoFar > noSoFar ? "yes" : "no", atMs };
+      }
+      // 피고인이 시민이면 몰래 찬성표를 던져 처형을 유도(블러핑).
+      return { type: "finalVote", seat, vote: "yes", atMs };
+    }
+
+    const known = knownRoleFor(state, seat, suspect);
+    if (known !== null) return { type: "finalVote", seat, vote: known.isMafia ? "yes" : "no", atMs };
+
+    const suspicion = computeSuspicion(state);
+    return { type: "finalVote", seat, vote: (suspicion.get(suspect) ?? 50) >= 60 ? "yes" : "no", atMs };
   }
 
   if (state.phase === "terroristRevenge" && state.pendingTerroristRevenge) {
