@@ -294,9 +294,11 @@ export default function GamePlayPage() {
   // 이유로 5xl — 새 `ExchangeHistoryPanel`(DalmutiBoard.tsx)이 아발론/소환사의
   // 협곡과 동일하게 데스크톱에서 보드 옆에 항상 표시되는 고정폭 사이드바로 붙음
   // (AskUserQuestion으로 이 프로젝트의 유일한 상시 표시 사이드바 전례를 확인 후
-  // 그대로 재사용).
+  // 그대로 재사용). 2026-09-20 마피아 항시 표시 직업 HUD 세션: 마피아도 같은
+  // 이유로 5xl — `RoleInspector`(MafiaBoard.tsx)가 아발론의
+  // `AvalonRoleGuideSidebar`와 동일한 데스크톱 고정폭 사이드바 패턴.
   const pageMaxWidth =
-    game.id === "summoners-rift" || game.id === "avalon" || game.id === "dalmuti"
+    game.id === "summoners-rift" || game.id === "avalon" || game.id === "dalmuti" || game.id === "mafia"
       ? "max-w-5xl"
       : game.id === "destiny-war-39"
         ? "max-w-6xl"

@@ -2837,6 +2837,264 @@ class SoundEngine {
     thunk.start(now + 0.28);
     thunk.stop(now + 0.56);
   }
+
+  /** 마피아 — 낮 지목투표 "쿵!" 도장 임팩트: 묵직한 카지노 칩 탭음(저음 thud + 하이패스 클릭). */
+  playMafiaNominationStamp() {
+    if (!this.gate("mafiaNominationStamp", 150)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const thud = ctx.createOscillator();
+    thud.type = "sine";
+    thud.frequency.setValueAtTime(180, now);
+    thud.frequency.exponentialRampToValueAtTime(45, now + 0.14);
+    const thudGain = ctx.createGain();
+    thudGain.gain.setValueAtTime(0.3, now);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    thud.connect(thudGain).connect(this.sfxGain);
+    thud.start(now);
+    thud.stop(now + 0.2);
+
+    const tap = ctx.createBufferSource();
+    tap.buffer = noiseBuffer(ctx);
+    const tapFilter = ctx.createBiquadFilter();
+    tapFilter.type = "highpass";
+    tapFilter.frequency.value = 2800;
+    const tapGain = ctx.createGain();
+    tapGain.gain.setValueAtTime(0.16, now);
+    tapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    tap.connect(tapFilter).connect(tapGain).connect(this.sfxGain);
+    tap.start(now);
+    tap.stop(now + 0.06);
+  }
+
+  /** 마피아 — 찬반 투표 "처형(GUILTY)" 확정: 철창 닫히는 굉음(저음 붐 + 금속성 클랭). */
+  playMafiaGuiltyChainSlam() {
+    if (!this.gate("mafiaGuiltyChain", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const boom = ctx.createOscillator();
+    boom.type = "sine";
+    boom.frequency.setValueAtTime(90, now);
+    boom.frequency.exponentialRampToValueAtTime(30, now + 0.35);
+    const boomGain = ctx.createGain();
+    boomGain.gain.setValueAtTime(0.36, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+    boom.connect(boomGain).connect(this.sfxGain);
+    boom.start(now);
+    boom.stop(now + 0.5);
+
+    [0, 0.08].forEach((offset) => {
+      const at = now + offset;
+      const clank = ctx.createOscillator();
+      clank.type = "square";
+      clank.frequency.value = 220;
+      const clankFilter = ctx.createBiquadFilter();
+      clankFilter.type = "bandpass";
+      clankFilter.frequency.value = 1400;
+      clankFilter.Q.value = 5;
+      const clankGain = ctx.createGain();
+      clankGain.gain.setValueAtTime(0.001, at);
+      clankGain.gain.linearRampToValueAtTime(0.2, at + 0.01);
+      clankGain.gain.exponentialRampToValueAtTime(0.001, at + 0.2);
+      clank.connect(clankFilter).connect(clankGain).connect(this.sfxGain!);
+      clank.start(at);
+      clank.stop(at + 0.22);
+    });
+  }
+
+  /** 마피아 — 찬반 투표 "구원(INNOCENT)" 확정: 성스러운 차임(맑은 3화음 벨). */
+  playMafiaInnocentChime() {
+    if (!this.gate("mafiaInnocentChime", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    [784, 987.8, 1174.7].forEach((freq, i) => {
+      const at = now + i * 0.09;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.24, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.6);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.62);
+    });
+  }
+
+  /** 마피아 — 처형/밤 피격 사망: 기요틴 낙하 + 참수 임팩트(날카로운 스윕 + 저음 임팩트). */
+  playMafiaExecutionImpact() {
+    if (!this.gate("mafiaExecutionImpact", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const swoosh = ctx.createBufferSource();
+    swoosh.buffer = noiseBuffer(ctx);
+    const swooshFilter = ctx.createBiquadFilter();
+    swooshFilter.type = "bandpass";
+    swooshFilter.Q.value = 2;
+    swooshFilter.frequency.setValueAtTime(6000, now);
+    swooshFilter.frequency.exponentialRampToValueAtTime(300, now + 0.22);
+    const swooshGain = ctx.createGain();
+    swooshGain.gain.setValueAtTime(0.3, now);
+    swooshGain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+    swoosh.connect(swooshFilter).connect(swooshGain).connect(this.sfxGain);
+    swoosh.start(now);
+    swoosh.stop(now + 0.25);
+
+    const impact = ctx.createOscillator();
+    impact.type = "sine";
+    impact.frequency.setValueAtTime(160, now + 0.2);
+    impact.frequency.exponentialRampToValueAtTime(35, now + 0.5);
+    const impactGain = ctx.createGain();
+    impactGain.gain.setValueAtTime(0.001, now + 0.2);
+    impactGain.gain.linearRampToValueAtTime(0.4, now + 0.22);
+    impactGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    impact.connect(impactGain).connect(this.sfxGain);
+    impact.start(now + 0.2);
+    impact.stop(now + 0.62);
+  }
+
+  /** 마피아 — 의사 치료 성공(소생): 유리 튕겨내는 금속음 + 상승하는 치유 하프. */
+  playMafiaHealSuccess() {
+    if (!this.gate("mafiaHealSuccess", 250)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const chime = ctx.createOscillator();
+    chime.type = "triangle";
+    chime.frequency.value = 1760;
+    const chimeGain = ctx.createGain();
+    chimeGain.gain.setValueAtTime(0.001, now);
+    chimeGain.gain.linearRampToValueAtTime(0.14, now + 0.01);
+    chimeGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    chime.connect(chimeGain).connect(this.sfxGain);
+    chime.start(now);
+    chime.stop(now + 0.2);
+
+    [523.3, 659.3, 784, 1046.5].forEach((freq, i) => {
+      const at = now + 0.06 + i * 0.07;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.16, at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.4);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.42);
+    });
+  }
+
+  /** 마피아 — 의사 치료 빗나감: 가벼운 바람 소리(짧은 필터드 노이즈). */
+  playMafiaHealMiss() {
+    if (!this.gate("mafiaHealMiss", 250)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const wind = ctx.createBufferSource();
+    wind.buffer = noiseBuffer(ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.Q.value = 1.2;
+    filter.frequency.setValueAtTime(900, now);
+    filter.frequency.linearRampToValueAtTime(500, now + 0.4);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.08, now + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    wind.connect(filter).connect(gain).connect(this.sfxGain);
+    wind.start(now);
+    wind.stop(now + 0.46);
+  }
+
+  /** 마피아 — 경찰 조사 "마피아 적발": 비상 경보 사이렌(오르내리는 톱니파). */
+  playMafiaSirenAlert() {
+    if (!this.gate("mafiaSirenAlert", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const siren = ctx.createOscillator();
+    siren.type = "sawtooth";
+    const sirenGain = ctx.createGain();
+    sirenGain.gain.setValueAtTime(0.001, now);
+    sirenGain.gain.linearRampToValueAtTime(0.18, now + 0.05);
+    for (let i = 0; i < 3; i++) {
+      const at = now + i * 0.25;
+      siren.frequency.setValueAtTime(500, at);
+      siren.frequency.linearRampToValueAtTime(900, at + 0.12);
+      siren.frequency.linearRampToValueAtTime(500, at + 0.25);
+    }
+    sirenGain.gain.setValueAtTime(0.18, now + 0.7);
+    sirenGain.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+    siren.connect(sirenGain).connect(this.sfxGain);
+    siren.start(now);
+    siren.stop(now + 0.86);
+  }
+
+  /** 마피아 — 경찰 조사 "결백 확인": 온화한 레이더 스캔 확인음(상승 스윕 + 딩). */
+  playMafiaCleanScan() {
+    if (!this.gate("mafiaCleanScan", 300)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const sweep = ctx.createOscillator();
+    sweep.type = "sine";
+    sweep.frequency.setValueAtTime(400, now);
+    sweep.frequency.exponentialRampToValueAtTime(1200, now + 0.3);
+    const sweepGain = ctx.createGain();
+    sweepGain.gain.setValueAtTime(0.001, now);
+    sweepGain.gain.linearRampToValueAtTime(0.14, now + 0.05);
+    sweepGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+    sweep.connect(sweepGain).connect(this.sfxGain);
+    sweep.start(now);
+    sweep.stop(now + 0.32);
+
+    const ding = ctx.createOscillator();
+    ding.type = "triangle";
+    ding.frequency.value = 1568;
+    const dingGain = ctx.createGain();
+    dingGain.gain.setValueAtTime(0.001, now + 0.28);
+    dingGain.gain.linearRampToValueAtTime(0.16, now + 0.3);
+    dingGain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    ding.connect(dingGain).connect(this.sfxGain);
+    ding.start(now + 0.28);
+    ding.stop(now + 0.56);
+  }
+
+  /** 마피아 — 과반수 스킵 골드 배너: 짧고 경쾌한 팡파레 딩. */
+  playMafiaSkipBanner() {
+    if (!this.gate("mafiaSkipBanner", 200)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    [880, 1108.7].forEach((freq, i) => {
+      const at = now + i * 0.06;
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.2, at + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.24);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.34);
+    });
+  }
 }
 
 let instance: SoundEngine | null = null;

@@ -5,6 +5,7 @@ import {
   computeRankings,
   currentActor,
   DEFAULT_MAFIA_CONFIG,
+  knownRoleFor,
   rolePoolFor,
   startGame,
   teamForRole,
@@ -248,6 +249,27 @@ describe("police / spy / medium investigations", () => {
     expect(s.nightActions.policeResult).toEqual({ target: mafiaSeat, isMafia: true });
   });
 
+  it("persists the investigation permanently (survives the night resolving and the transient nightActions being wiped)", () => {
+    let s = startGame(6, 1, withConfig(), 1000);
+    s = toNight1(s);
+    const policeSeat = s.players.find((p) => p.role === "police")!.seat;
+    const mafiaSeat = s.players.find((p) => p.role === "mafia")!.seat;
+    s = applyAction(s, { type: "policeNightAction", seat: policeSeat, target: mafiaSeat });
+    s = forceAdvance(s, 40000); // night resolves -> nightActions wiped
+    expect(s.nightActions.policeResult).toBeUndefined();
+    expect(knownRoleFor(s, policeSeat, mafiaSeat)).toEqual({ isMafia: true, role: "mafia" });
+  });
+
+  it("investigation knowledge is never visible to anyone other than the investigator", () => {
+    let s = startGame(6, 1, withConfig(), 1000);
+    s = toNight1(s);
+    const policeSeat = s.players.find((p) => p.role === "police")!.seat;
+    const mafiaSeat = s.players.find((p) => p.role === "mafia")!.seat;
+    s = applyAction(s, { type: "policeNightAction", seat: policeSeat, target: mafiaSeat });
+    const someoneElse = s.players.find((p) => p.seat !== policeSeat && p.seat !== mafiaSeat)!.seat;
+    expect(knownRoleFor(s, someoneElse, mafiaSeat)).toBeNull();
+  });
+
   it("spy investigation reveals the exact role and, on a mafia hit, joins the kill vote from that night on", () => {
     let s = startGame(8, 2, withConfig({ mode: "expansion" }), 1000);
     s = toNight1(s);
@@ -384,6 +406,69 @@ describe("full game via bots only", () => {
       expect(s.phase).toBe("gameOver");
       expect(s.winner).not.toBeNull();
     }
+  });
+});
+
+describe("majority phase-skip vote", () => {
+  it("does nothing until strictly more than floor(aliveCount/2) alive seats vote yes", () => {
+    // 6-player game: floor(6/2) = 3, so a skip needs 4 yes votes.
+    let s = startGame(6, 1, withConfig(), 1000);
+    expect(s.phase).toBe("night");
+    for (let seat = 0; seat < 3; seat++) {
+      s = applyAction(s, { type: "toggleSkipVote", seat, atMs: 1500 });
+      expect(s.phase).toBe("night"); // still short of the majority
+    }
+    s = applyAction(s, { type: "toggleSkipVote", seat: 3, atMs: 1600 });
+    expect(s.phase).toBe("dayAnnounce"); // 4th yes crosses > 3, resolves immediately like a timeout would
+  });
+
+  it("toggling a vote back off never triggers a skip and doesn't count toward the majority", () => {
+    let s = startGame(6, 1, withConfig(), 1000);
+    for (let seat = 0; seat < 4; seat++) s = applyAction(s, { type: "toggleSkipVote", seat, atMs: 1000 });
+    expect(s.phase).toBe("dayAnnounce"); // sanity: 4/6 already skipped night0
+    // Move into dayDiscuss and toggle one voter on then off — should NOT skip even though 3 others (none yet) are on.
+    s = forceAdvance(s, 2000); // -> dayDiscuss
+    s = applyAction(s, { type: "toggleSkipVote", seat: 0, atMs: 2500 });
+    s = applyAction(s, { type: "toggleSkipVote", seat: 0, atMs: 2600 }); // toggled back off
+    expect(s.phase).toBe("dayDiscuss");
+    expect(s.skipVotes[0]).toBe(false);
+  });
+
+  it("only works during night/dayDiscuss, not during timed phases with their own decisions", () => {
+    let s = startGame(4, 5, withConfig(), 1000);
+    s = forceAdvance(s, 2000); // -> dayAnnounce
+    const attempted = applyAction(s, { type: "toggleSkipVote", seat: 0, atMs: 2100 });
+    expect(attempted).toEqual(s); // no-op, dayAnnounce isn't a skippable phase
+  });
+
+  it("a dead seat can't vote to skip", () => {
+    let s = startGame(4, 5, withConfig(), 1000);
+    const mafiaSeat = s.players.find((p) => p.role === "mafia")!.seat;
+    s = forceAdvance(s, 2000);
+    s = forceAdvance(s, 3000);
+    s = forceAdvance(s, 4000); // -> nomination
+    const atMs = 4500;
+    for (const p of s.players) {
+      const target = p.seat === mafiaSeat ? s.players.find((q) => q.seat !== mafiaSeat)!.seat : mafiaSeat;
+      s = applyAction(s, { type: "nominate", seat: p.seat, target, atMs });
+    }
+    s = forceAdvance(s, 6000);
+    for (const p of s.players) {
+      if (!p.alive || p.seat === mafiaSeat) continue;
+      s = applyAction(s, { type: "finalVote", seat: p.seat, vote: "yes", atMs: 7000 });
+    }
+    expect(s.players[mafiaSeat].alive).toBe(false); // now a ghost
+    const attempted = applyAction(s, { type: "toggleSkipVote", seat: mafiaSeat, atMs: 7100 });
+    expect(attempted).toEqual(s);
+  });
+
+  it("skipVotes resets whenever night or dayDiscuss is freshly entered", () => {
+    let s = startGame(6, 1, withConfig(), 1000);
+    s = applyAction(s, { type: "toggleSkipVote", seat: 0, atMs: 1000 });
+    expect(s.skipVotes[0]).toBe(true);
+    s = forceAdvance(s, 40000); // night0 times out naturally -> dayAnnounce
+    s = forceAdvance(s, 41000); // -> dayDiscuss
+    expect(s.skipVotes).toEqual({});
   });
 });
 

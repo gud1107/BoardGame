@@ -1,0 +1,342 @@
+"use client";
+
+/**
+ * Cinematic FX layer for MafiaBoard.tsx (2026-09-20 "전 액션 시네마틱 FX" 요청).
+ * Same diff-driven reveal-event pattern as avalon/AvalonEffects.tsx and
+ * perudo/PerudoActionFX.tsx: `useMafiaReveals` compares consecutive
+ * `MafiaState` snapshots (every client computes the identical diff since
+ * every client holds the same lockstep state) and queues one-shot events;
+ * `MafiaRevealOverlay` renders + plays sound for whichever event is at the
+ * front of the queue, then calls `onDone`.
+ *
+ * Scope decision (see HANDOFF.md): every event renders as a centered
+ * banner/panel rather than being spatially anchored to the exact seat card
+ * in the grid — this project's boards don't otherwise track per-seat DOM
+ * positions (SeatGrid is a plain CSS grid, not Avalon's measured oval), and
+ * adding ref-based position tracking just for this would be a much larger
+ * change than the FX themselves. The affected seat's NAME is always named
+ * in the banner text instead.
+ *
+ * Investigation-result events (`heal-miss`, `police-result`) are PRIVATE —
+ * every client detects the identical diff, but `MafiaRevealOverlay` only
+ * ever renders them when `viewerSeat` matches the seat that earned the
+ * information (checked by the caller, MafiaBoard.tsx, before rendering this
+ * component at all for those two event types).
+ */
+
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
+import type { DeathRecord, MafiaState, SeatIndex } from "./engine";
+
+/** A single blood/glass shard's randomized flight path — precomputed once when the event is detected (see `randomShards` below), never inside a component's render, since React's purity rules forbid calling `Math.random()` during render. */
+export interface ShardSpec {
+  dx: string;
+  dy: string;
+  rot: string;
+  delay: number;
+}
+
+function randomShards(count: number): ShardSpec[] {
+  return Array.from({ length: count }, () => ({
+    dx: `${(Math.random() - 0.5) * 220}px`,
+    dy: `${(Math.random() - 0.9) * 180}px`,
+    rot: `${(Math.random() - 0.5) * 540}deg`,
+    delay: Math.random() * 0.08,
+  }));
+}
+
+export type MafiaRevealEvent =
+  | { id: number; type: "nomination-lock"; suspectSeat: SeatIndex }
+  | { id: number; type: "execution-result"; suspectSeat: SeatIndex; executed: boolean; blockedByPolitician: boolean; shards: ShardSpec[] }
+  | { id: number; type: "death"; seat: SeatIndex; cause: DeathRecord["cause"]; shards: ShardSpec[] }
+  | { id: number; type: "heal-success"; healedSeat: SeatIndex }
+  | { id: number; type: "heal-miss"; doctorSeat: SeatIndex }
+  | { id: number; type: "police-result"; policeSeat: SeatIndex; targetSeat: SeatIndex; isMafia: boolean }
+  | { id: number; type: "skip-triggered" };
+
+function detectMafiaRevealEvents(prev: MafiaState, next: MafiaState, nextId: () => number): MafiaRevealEvent[] {
+  const events: MafiaRevealEvent[] = [];
+
+  if (prev.phase !== "defense" && next.phase === "defense" && next.suspect !== null) {
+    events.push({ id: nextId(), type: "nomination-lock", suspectSeat: next.suspect });
+  }
+
+  if (prev.phase === "finalVote" && next.phase !== "finalVote" && next.lastExecution) {
+    events.push({
+      id: nextId(),
+      type: "execution-result",
+      suspectSeat: next.lastExecution.suspect,
+      executed: next.lastExecution.executed,
+      blockedByPolitician: next.lastExecution.blockedByPolitician,
+      shards: randomShards(10),
+    });
+  }
+
+  if (next.deaths.length > prev.deaths.length) {
+    for (const d of next.deaths.slice(prev.deaths.length)) {
+      events.push({ id: nextId(), type: "death", seat: d.seat, cause: d.cause, shards: randomShards(10) });
+    }
+  }
+
+  if (prev.phase === "night" && next.phase === "dayAnnounce" && next.lastNightOutcome && next.lastNightOutcome !== prev.lastNightOutcome) {
+    const outcome = next.lastNightOutcome;
+    const doctorSeat = next.players.find((p) => p.role === "doctor")?.seat;
+    if (outcome.savedByDoctor && outcome.mafiaTarget !== null) {
+      events.push({ id: nextId(), type: "heal-success", healedSeat: outcome.mafiaTarget });
+    } else if (doctorSeat !== undefined && outcome.doctorTarget !== null && !outcome.savedByDoctor) {
+      events.push({ id: nextId(), type: "heal-miss", doctorSeat });
+    }
+  }
+
+  if (prev.phase === "night" && next.phase === "night" && prev.nightActions.policeResult === undefined && next.nightActions.policeResult !== undefined) {
+    const policeSeat = next.players.find((p) => p.role === "police")?.seat;
+    if (policeSeat !== undefined) {
+      events.push({
+        id: nextId(),
+        type: "police-result",
+        policeSeat,
+        targetSeat: next.nightActions.policeResult.target,
+        isMafia: next.nightActions.policeResult.isMafia,
+      });
+    }
+  }
+
+  // "시간초 과반수 스킵" 배너: 밤/낮토론 종료 시점에 직전 상태의 스킵 투표가
+  // 이미 과반수였다면 스킵으로 종료된 것으로 판단 — 자연 타임아웃과 결과
+  // 상태가 동일해서 별도 필드 없이도 이 방식으로 구분 가능.
+  if ((prev.phase === "night" || prev.phase === "dayDiscuss") && next.phase !== prev.phase) {
+    const aliveCount = prev.players.filter((p) => p.alive).length;
+    const yes = Object.values(prev.skipVotes).filter(Boolean).length;
+    if (yes > Math.floor(aliveCount / 2)) events.push({ id: nextId(), type: "skip-triggered" });
+  }
+
+  return events;
+}
+
+export function useMafiaReveals(state: MafiaState) {
+  const lastDiffedRef = useRef(state);
+  const idRef = useRef(0);
+  const [queue, setQueue] = useState<MafiaRevealEvent[]>([]);
+
+  useEffect(() => {
+    const prev = lastDiffedRef.current;
+    if (prev !== state) {
+      const events = detectMafiaRevealEvents(prev, state, () => ++idRef.current);
+      if (events.length > 0) setQueue((q) => [...q, ...events]);
+      lastDiffedRef.current = state;
+    }
+  }, [state]);
+
+  const current = queue[0] ?? null;
+  function dismissCurrent() {
+    setQueue((q) => q.slice(1));
+  }
+  return { current, dismissCurrent };
+}
+
+/** Board-root screen-shake style — apply to the panel's `style` prop; clears itself after the animation finishes. */
+export function useBoardShake(triggerId: number | null): CSSProperties {
+  const [style, setStyle] = useState<CSSProperties>({});
+  const prevRef = useRef(triggerId);
+  useEffect(() => {
+    if (triggerId !== null && prevRef.current !== triggerId) {
+      prevRef.current = triggerId;
+      setStyle({ animation: "mafia-shake 0.5s ease-in-out" });
+      const t = setTimeout(() => setStyle({}), 520);
+      return () => clearTimeout(t);
+    }
+  }, [triggerId]);
+  return style;
+}
+
+/** Purely presentational — `shards` is precomputed once by `randomShards` at event-detection time (inside `useMafiaReveals`'s effect), never here, since React's purity rules forbid calling `Math.random()` during render. */
+function ShardBurst({ color, shards }: { color: string; shards: ShardSpec[] }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      {shards.map((s, i) => (
+        <span
+          key={i}
+          className="absolute h-2.5 w-2.5 rounded-sm"
+          style={{
+            backgroundColor: color,
+            animation: `mafia-shard-burst 0.65s ease-out ${s.delay}s forwards`,
+            ["--dx" as string]: s.dx,
+            ["--dy" as string]: s.dy,
+            ["--rot" as string]: s.rot,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ShieldPulse({ color }: { color: string }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      {[0, 0.25, 0.5].map((delay) => (
+        <span
+          key={delay}
+          className="absolute h-24 w-24 rounded-full"
+          style={{
+            border: `2px solid ${color}`,
+            animation: `mafia-shield-pulse 1s ease-out ${delay}s forwards`,
+            ["--shield-color" as string]: color,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+const BANNER_BASE = "pointer-events-none fixed inset-0 z-[70] flex items-center justify-center p-4";
+const PANEL_BASE = "relative flex flex-col items-center gap-2 rounded-2xl border-2 px-8 py-6 text-center shadow-2xl backdrop-blur-sm";
+
+export function MafiaRevealOverlay({
+  event,
+  names,
+  onDone,
+}: {
+  event: MafiaRevealEvent;
+  names: Record<SeatIndex, string>;
+  onDone: () => void;
+}) {
+  useEffect(() => {
+    const engine = getSoundEngine();
+    switch (event.type) {
+      case "nomination-lock":
+        engine.playMafiaNominationStamp();
+        break;
+      case "execution-result":
+        if (event.blockedByPolitician || !event.executed) engine.playMafiaInnocentChime();
+        else engine.playMafiaGuiltyChainSlam();
+        break;
+      case "death":
+        engine.playMafiaExecutionImpact();
+        break;
+      case "heal-success":
+        engine.playMafiaHealSuccess();
+        break;
+      case "heal-miss":
+        engine.playMafiaHealMiss();
+        break;
+      case "police-result":
+        if (event.isMafia) engine.playMafiaSirenAlert();
+        else engine.playMafiaCleanScan();
+        break;
+      case "skip-triggered":
+        engine.playMafiaSkipBanner();
+        break;
+    }
+    const duration = event.type === "skip-triggered" ? 1600 : event.type === "nomination-lock" ? 1200 : 1900;
+    const t = setTimeout(onDone, duration);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire exactly once per event.id, `onDone` is stable enough for this one-shot timer
+  }, [event.id]);
+
+  switch (event.type) {
+    case "nomination-lock":
+      return (
+        <div className={BANNER_BASE}>
+          <div
+            className={`${PANEL_BASE} border-amber-400/70 bg-black/70`}
+            style={{ animation: "mafia-lock-reticle 0.4s ease-out" }}
+          >
+            <span className="text-4xl">🎯</span>
+            <p className="text-lg font-black tracking-wide text-amber-300">{names[event.suspectSeat]}님 지목 확정!</p>
+          </div>
+        </div>
+      );
+
+    case "execution-result": {
+      const spared = !event.executed;
+      return (
+        <div className={BANNER_BASE}>
+          <div
+            className={`${PANEL_BASE} ${spared ? "border-sky-300/70 bg-black/70" : "border-rose-500/70 bg-black/80"}`}
+            style={{ animation: "mafia-stamp-drop 0.55s cubic-bezier(0.34,1.56,0.64,1)" }}
+          >
+            {!spared && <ShardBurst color="rgba(244,63,94,0.7)" shards={event.shards} />}
+            <span className="text-5xl">{spared ? "👼" : "⛓️"}</span>
+            <p className={`text-xl font-black tracking-widest ${spared ? "text-sky-300" : "text-rose-400"}`}>
+              {spared ? "INNOCENT" : "GUILTY"}
+            </p>
+            <p className="text-sm text-white/80">
+              {event.blockedByPolitician
+                ? `${names[event.suspectSeat]}님은 정치인이라 처형되지 않았습니다.`
+                : spared
+                  ? `${names[event.suspectSeat]}님이 구원받았습니다.`
+                  : `${names[event.suspectSeat]}님이 처형되었습니다.`}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    case "death":
+      return (
+        <div className={BANNER_BASE}>
+          <div className={`${PANEL_BASE} border-rose-600/70 bg-black/85`} style={{ animation: "mafia-stamp-drop 0.5s ease-out" }}>
+            <ShardBurst color="rgba(190,18,60,0.85)" shards={event.shards} />
+            <span className="text-5xl">💀</span>
+            <p className="text-lg font-black text-rose-400">{names[event.seat]}님 사망</p>
+          </div>
+        </div>
+      );
+
+    case "heal-success":
+      return (
+        <div className={BANNER_BASE}>
+          <div className={`${PANEL_BASE} border-emerald-400/70 bg-black/70`} style={{ animation: "mafia-glow-in-out 0.6s ease-out" }}>
+            <ShieldPulse color="rgba(16,185,129,0.7)" />
+            <span className="text-4xl">✨</span>
+            <p className="text-lg font-black text-emerald-300">{names[event.healedSeat]}님 치료 성공!</p>
+          </div>
+        </div>
+      );
+
+    case "heal-miss":
+      return (
+        <div className={BANNER_BASE}>
+          <div className={`${PANEL_BASE} border-emerald-900/60 bg-black/60`} style={{ animation: "mafia-wisp-fade 1.4s ease-out forwards" }}>
+            <span className="text-3xl">🍃</span>
+            <p className="text-sm font-semibold text-emerald-200/70">치료가 빗나갔습니다...</p>
+          </div>
+        </div>
+      );
+
+    case "police-result":
+      return (
+        <div className={BANNER_BASE}>
+          {event.isMafia ? (
+            <div className={`${PANEL_BASE} border-rose-500/70 bg-rose-950/70`} style={{ animation: "mafia-flash-pulse 1.2s ease-in-out" }}>
+              <span className="text-4xl">🚨</span>
+              <p className="text-lg font-black tracking-wide text-rose-300">MAFIA DETECTED!</p>
+              <p className="text-sm text-rose-100/80">🔒 {names[event.targetSeat]}님은 마피아입니다.</p>
+            </div>
+          ) : (
+            <div className={`${PANEL_BASE} border-cyan-400/70 bg-cyan-950/60`} style={{ animation: "mafia-glow-in-out 0.6s ease-out" }}>
+              <ShieldPulse color="rgba(6,182,212,0.7)" />
+              <span className="text-4xl">🛡️</span>
+              <p className="text-lg font-black tracking-wide text-cyan-300">CLEAN CITIZEN</p>
+              <p className="text-sm text-cyan-100/80">{names[event.targetSeat]}님은 시민입니다.</p>
+            </div>
+          )}
+        </div>
+      );
+
+    case "skip-triggered":
+      return (
+        <div className="pointer-events-none fixed top-6 left-1/2 z-[70] -translate-x-1/2">
+          <div
+            className="flex items-center gap-2 rounded-full border-2 border-amber-300 bg-amber-500/90 px-5 py-2.5 text-sm font-black text-black shadow-[0_0_24px_rgba(245,158,11,0.7)]"
+            style={{ animation: "mafia-banner-drop 1.6s ease-in-out forwards" }}
+          >
+            ⚡ 과반수 찬성으로 시간을 건너뜁니다!
+          </div>
+        </div>
+      );
+
+    default:
+      return null;
+  }
+}

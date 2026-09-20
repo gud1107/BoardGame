@@ -2,8 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import RulebookModal from "./RulebookModal";
+import RoleInspector from "./RoleInspector";
+import PhaseSkipVote from "./PhaseSkipVote";
+import { MafiaRevealOverlay, useBoardShake, useMafiaReveals } from "./MafiaEffects";
 import {
   getKnowledge,
+  knownRoleFor,
   type MafiaState,
   type EngineAction,
   type Role,
@@ -74,81 +78,114 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
 
   const aliveMafiaCount = state.players.filter((p) => p.alive && p.team === "mafia").length;
   const aliveCitizenCount = state.players.filter((p) => p.alive && p.team === "citizen").length;
+  const aliveCount = aliveMafiaCount + aliveCitizenCount;
+  const skipThreshold = Math.floor(aliveCount / 2);
+  const skipCount = Object.values(state.skipVotes).filter(Boolean).length;
+  const canSkip = state.phase === "night" || state.phase === "dayDiscuss";
+  const hasVotedSkip = state.skipVotes[viewerSeat] ?? false;
+
+  // 전 액션 시네마틱 FX (2026-09-20 요청) — 모든 이벤트를 순서대로 재생하되,
+  // 비공개 이벤트(치료 빗나감/경찰 조사 결과)는 당사자가 아니면 렌더링 없이
+  // 즉시 큐에서 넘긴다(다른 사람에게는 절대 노출되지 않는 보안 뷰 격리).
+  const { current: reveal, dismissCurrent: dismissReveal } = useMafiaReveals(state);
+  const revealApplies =
+    reveal !== null &&
+    !((reveal.type === "heal-miss" && reveal.doctorSeat !== viewerSeat) || (reveal.type === "police-result" && reveal.policeSeat !== viewerSeat));
+  useEffect(() => {
+    if (reveal && !revealApplies) dismissReveal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-check when the event itself changes
+  }, [reveal]);
+  const shakeStyle = useBoardShake(reveal?.type === "death" ? reveal.id : null);
 
   if (state.phase === "gameOver" && state.winner) {
     return (
-      <div className={`${PANEL} flex flex-col items-center gap-5 p-8 text-center`}>
-        <span className="relative z-10 text-5xl">🏆</span>
-        <h2 className="relative z-10 text-2xl font-bold text-amber-100 light:text-amber-700">{TEAM_LABEL[state.winner]}</h2>
-        <p className="relative z-10 text-sm text-white/60 light:text-slate-600">
-          {state.winReason === "mafia-eliminated" ? "모든 마피아 진영이 제거되었습니다." : "마피아 진영의 수가 시민 진영과 같아지거나 더 많아졌습니다."}
-        </p>
-        <div className="relative z-10 flex flex-wrap justify-center gap-2">
-          {state.players.map((p) => {
-            const m = ROLE_META[p.role];
-            return (
-              <div
-                key={p.seat}
-                className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-xs light:shadow-sm ${
-                  m.team === "citizen" ? "border-sky-400/40 bg-sky-400/10" : "border-rose-400/40 bg-rose-400/10"
-                } ${!p.alive ? "opacity-60" : ""}`}
-              >
-                <span className="text-white/80 light:text-slate-700">{names[p.seat]}</span>
-                <span>
-                  {m.icon} {m.label}
-                </span>
-                {!p.alive && <span className="text-[10px] text-rose-300">💀 사망</span>}
-              </div>
-            );
-          })}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
+        <div className={`${PANEL} flex flex-1 flex-col items-center gap-5 p-8 text-center`}>
+          <span className="relative z-10 text-5xl">🏆</span>
+          <h2 className="relative z-10 text-2xl font-bold text-amber-100 light:text-amber-700">{TEAM_LABEL[state.winner]}</h2>
+          <p className="relative z-10 text-sm text-white/60 light:text-slate-600">
+            {state.winReason === "mafia-eliminated" ? "모든 마피아 진영이 제거되었습니다." : "마피아 진영의 수가 시민 진영과 같아지거나 더 많아졌습니다."}
+          </p>
+          <div className="relative z-10 flex flex-wrap justify-center gap-2">
+            {state.players.map((p) => {
+              const m = ROLE_META[p.role];
+              return (
+                <div
+                  key={p.seat}
+                  className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-xs light:shadow-sm ${
+                    m.team === "citizen" ? "border-sky-400/40 bg-sky-400/10" : "border-rose-400/40 bg-rose-400/10"
+                  } ${!p.alive ? "opacity-60" : ""}`}
+                >
+                  <span className="text-white/80 light:text-slate-700">{names[p.seat]}</span>
+                  <span>
+                    {m.icon} {m.label}
+                  </span>
+                  {!p.alive && <span className="text-[10px] text-rose-300">💀 사망</span>}
+                </div>
+              );
+            })}
+          </div>
+          <button onClick={onGameEnd} className="relative z-10 rounded-full bg-emerald-500 px-8 py-3 font-medium text-white transition hover:bg-emerald-400">
+            결과 확정하고 계속하기
+          </button>
         </div>
-        <button onClick={onGameEnd} className="relative z-10 rounded-full bg-emerald-500 px-8 py-3 font-medium text-white transition hover:bg-emerald-400">
-          결과 확정하고 계속하기
-        </button>
+        <RoleInspector state={state} viewerSeat={viewerSeat} names={names} />
       </div>
     );
   }
 
   return (
-    <div className={`${PANEL} flex min-w-0 flex-1 flex-col gap-3 p-3 sm:p-4`}>
-      <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-rose-100/70 light:text-slate-600">
-        <span>
-          {state.config.mode === "classic" ? "🎲 기본룰" : "🃏 확장룰"} · {PHASE_LABEL[state.phase]}
-          {state.dayNumber > 0 ? ` · ${state.dayNumber}일차` : ""} · 생존 시민 {aliveCitizenCount} / 마피아 {aliveMafiaCount}
-        </span>
-        <div className="flex items-center gap-1.5">
-          <span className="rounded-full border border-white/15 bg-black/30 px-2.5 py-1 font-mono text-amber-300 light:border-slate-300 light:bg-slate-100 light:text-amber-700">
-            ⏱️ {secondsLeft}s
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
+      <div className={`${PANEL} flex min-w-0 flex-1 flex-col gap-3 p-3 sm:p-4`} style={shakeStyle}>
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 text-xs text-rose-100/70 light:text-slate-600">
+          <span>
+            {state.config.mode === "classic" ? "🎲 기본룰" : "🃏 확장룰"} · {PHASE_LABEL[state.phase]}
+            {state.dayNumber > 0 ? ` · ${state.dayNumber}일차` : ""} · 생존 시민 {aliveCitizenCount} / 마피아 {aliveMafiaCount}
           </span>
-          <button
-            onClick={() => setRoleModalOpen(true)}
-            className="rounded-full border border-amber-300/30 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-200 transition hover:border-amber-300/50 light:bg-amber-50 light:text-amber-700 light:border-amber-300"
-          >
-            🎭 내 역할
-          </button>
-          <button
-            onClick={() => setRulebookOpen(true)}
-            className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600"
-          >
-            📖 룰북
-          </button>
+          <div className="flex items-center gap-1.5">
+            <span className="rounded-full border border-white/15 bg-black/30 px-2.5 py-1 font-mono text-amber-300 light:border-slate-300 light:bg-slate-100 light:text-amber-700">
+              ⏱️ {secondsLeft}s
+            </span>
+            {canSkip && !iAmGhost && (
+              <PhaseSkipVote
+                skipCount={skipCount}
+                requiredCount={skipThreshold + 1}
+                hasVotedSkip={hasVotedSkip}
+                onToggleSkip={() => onAction({ type: "toggleSkipVote", seat: viewerSeat, atMs: Date.now() })}
+              />
+            )}
+            <button
+              onClick={() => setRoleModalOpen(true)}
+              className="rounded-full border border-amber-300/30 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-200 transition hover:border-amber-300/50 light:bg-amber-50 light:text-amber-700 light:border-amber-300"
+            >
+              🎭 내 역할
+            </button>
+            <button
+              onClick={() => setRulebookOpen(true)}
+              className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600"
+            >
+              📖 룰북
+            </button>
+          </div>
         </div>
-      </div>
 
-      {iAmGhost && (
-        <div className="relative z-10 rounded-xl border border-indigo-400/30 bg-indigo-500/10 px-3 py-2 text-center text-xs text-indigo-100 light:border-indigo-300 light:bg-indigo-50 light:text-indigo-700">
-          👻 당신은 사망했습니다 — 이제부터 전체 직업을 볼 수 있는 유령 관전 모드입니다. 아래 유령 전용 채팅으로만 대화할 수 있어요.
+        {iAmGhost && (
+          <div className="relative z-10 rounded-xl border border-indigo-400/30 bg-indigo-500/10 px-3 py-2 text-center text-xs text-indigo-100 light:border-indigo-300 light:bg-indigo-50 light:text-indigo-700">
+            👻 당신은 사망했습니다 — 이제부터 전체 직업을 볼 수 있는 유령 관전 모드입니다. 아래 유령 전용 채팅으로만 대화할 수 있어요.
+          </div>
+        )}
+
+        <SeatGrid state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} revealAll={iAmGhost} />
+
+        <div className="relative z-10 rounded-xl border border-white/10 bg-black/30 p-3 text-center light:border-slate-200 light:bg-slate-50">
+          <PhasePanel state={state} viewerSeat={viewerSeat} names={names} knowledge={knowledge} onAction={onAction} />
         </div>
-      )}
 
-      <SeatGrid state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} revealAll={iAmGhost} />
-
-      <div className="relative z-10 rounded-xl border border-white/10 bg-black/30 p-3 text-center light:border-slate-200 light:bg-slate-50">
-        <PhasePanel state={state} viewerSeat={viewerSeat} names={names} knowledge={knowledge} onAction={onAction} />
+        {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
+        {roleModalOpen && <RoleModal viewerSeat={viewerSeat} names={names} meta={meta} onClose={() => setRoleModalOpen(false)} />}
+        {reveal && revealApplies && <MafiaRevealOverlay key={reveal.id} event={reveal} names={names} onDone={dismissReveal} />}
       </div>
-
-      {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
-      {roleModalOpen && <RoleModal viewerSeat={viewerSeat} names={names} meta={meta} onClose={() => setRoleModalOpen(false)} />}
+      <RoleInspector state={state} viewerSeat={viewerSeat} names={names} />
     </div>
   );
 }
@@ -172,10 +209,15 @@ function SeatGrid({
         const showRole = revealAll || (!p.alive && state.config.revealRoleOnDeath) || state.phase === "gameOver";
         const m = ROLE_META[p.role];
         const isSuspect = state.suspect === p.seat && (state.phase === "defense" || state.phase === "finalVote");
+        // 정체 영구 각인(2026-09-20 요청): 이 뷰어가 직접 조사해서 알아낸 대상만
+        // 네온 배지로 표시 — 다른 사람(타 팀원 포함)에게는 절대 안 보이는
+        // 보안 뷰 격리. 이미 전 직업이 공개된 경우(유령/게임종료)는 굳이
+        // 중복 표기하지 않음.
+        const known = !revealAll && state.phase !== "gameOver" ? knownRoleFor(state, viewerSeat, p.seat) : null;
         return (
           <div
             key={p.seat}
-            className={`flex flex-col items-center gap-0.5 rounded-xl border p-2 text-center transition ${
+            className={`relative flex flex-col items-center gap-0.5 rounded-xl border p-2 text-center transition ${
               !p.alive
                 ? "border-white/10 bg-black/40 opacity-50 light:border-slate-200 light:bg-slate-100"
                 : isSuspect
@@ -183,6 +225,20 @@ function SeatGrid({
                   : "border-white/10 bg-white/5 light:border-slate-200 light:bg-white"
             }`}
           >
+            {known && (
+              <span
+                className={`absolute -top-2 -right-1.5 rounded-full border px-1.5 py-0.5 text-[9px] font-black ${
+                  known.isMafia ? "border-red-500 bg-red-950 text-red-400" : "border-cyan-400 bg-cyan-950 text-cyan-300"
+                }`}
+                style={{
+                  animation: "mafia-badge-breathe 2s ease-in-out infinite",
+                  ["--badge-glow" as string]: known.isMafia ? "rgba(239,68,68,0.6)" : "rgba(6,182,212,0.5)",
+                }}
+                title={`확인된 직업: ${ROLE_META[known.role].label}`}
+              >
+                {known.isMafia ? "🚨 마피아" : "🛡️ 시민"}
+              </span>
+            )}
             <span className="flex items-center gap-1 text-[11px] font-semibold text-white/90 light:text-slate-800">
               <span className={`h-1.5 w-1.5 rounded-full ${connectedSeats.has(p.seat) ? "bg-emerald-400" : "bg-white/20 light:bg-slate-300"}`} />
               {names[p.seat]}

@@ -84,9 +84,29 @@ export interface NightActionsState {
   readonly mediumResult?: { readonly target: SeatIndex; readonly role: Role };
 }
 
+/**
+ * A single investigation result, kept FOREVER once learned (2026-09-20
+ * "정체 영구 각인" 요청) — unlike `NightActionsState`'s transient
+ * `policeResult`/`spyResult`/`mediumResult` (wiped every night resolution),
+ * this list only ever grows. `isMafia` collapses police/spy/medium's
+ * knowledge down to the one binary the persistent badge actually shows;
+ * `role` is kept alongside for a spy/medium's exact-role tooltip. Readable
+ * only by the investigator who earned it — see `knownRoleFor` below, which
+ * is the one place UI should query this (never render `investigationLog`
+ * directly for a seat other than the viewer).
+ */
+export interface InvestigationRecord {
+  readonly investigator: SeatIndex;
+  readonly target: SeatIndex;
+  readonly kind: "police" | "spy" | "medium";
+  readonly isMafia: boolean;
+  readonly role: Role;
+}
+
 export interface NightOutcome {
   readonly night: number;
   readonly mafiaTarget: SeatIndex | null;
+  readonly doctorTarget: SeatIndex | null;
   readonly savedByDoctor: boolean;
   readonly savedByArmor: boolean;
   readonly victim: SeatIndex | null;
@@ -137,6 +157,16 @@ export interface MafiaState {
   readonly nightActions: NightActionsState;
   readonly lastNightOutcome: NightOutcome | null;
   readonly deaths: readonly DeathRecord[];
+  readonly investigationLog: readonly InvestigationRecord[];
+  /**
+   * "시간초 과반수 스킵" (2026-09-20 요청) — only meaningful while
+   * `phase` is `"night"` or `"dayDiscuss"`, reset to `{}` every time either
+   * phase is (re-)entered (see every `advancePhase` call site that lands on
+   * one of those two phases). A seat toggles its own vote on/off;
+   * crossing `> floor(aliveCount/2)` resolves the phase immediately via the
+   * same path `forceAdvance` uses on a real timeout.
+   */
+  readonly skipVotes: Readonly<Partial<Record<SeatIndex, boolean>>>;
   readonly nominations: Readonly<Partial<Record<SeatIndex, SeatIndex>>>;
   readonly suspect: SeatIndex | null;
   readonly nominationVoidReason: "tie" | null;
@@ -156,6 +186,7 @@ export type EngineAction =
   | { type: "nominate"; seat: SeatIndex; target: SeatIndex; atMs: number }
   | { type: "finalVote"; seat: SeatIndex; vote: "yes" | "no"; atMs: number }
   | { type: "terroristRevenge"; seat: SeatIndex; target: SeatIndex; atMs: number }
+  | { type: "toggleSkipVote"; seat: SeatIndex; atMs: number }
   | { type: "forceAdvance"; expectedPhase: Phase; atMs: number };
 
 // ---------------------------------------------------------------------------
@@ -257,6 +288,8 @@ export function startGame(playerCount: number, seed: number, config: MafiaGameCo
     nightActions: { mafiaVotes: {} },
     lastNightOutcome: null,
     deaths: [],
+    investigationLog: [],
+    skipVotes: {},
     nominations: {},
     suspect: null,
     nominationVoidReason: null,
@@ -332,7 +365,12 @@ function submitPoliceAction(state: MafiaState, seat: SeatIndex, target: SeatInde
   if (state.nightActions.policeTarget !== undefined) return state;
   if (!isValidLivingTarget(state, target) || target === seat) return state;
   const isMafia = state.players[target].team === "mafia";
-  return { ...state, nightActions: { ...state.nightActions, policeTarget: target, policeResult: { target, isMafia } } };
+  const record: InvestigationRecord = { investigator: seat, target, kind: "police", isMafia, role: state.players[target].role };
+  return {
+    ...state,
+    nightActions: { ...state.nightActions, policeTarget: target, policeResult: { target, isMafia } },
+    investigationLog: [...state.investigationLog, record],
+  };
 }
 
 function submitSpyAction(state: MafiaState, seat: SeatIndex, target: SeatIndex): MafiaState {
@@ -346,10 +384,12 @@ function submitSpyAction(state: MafiaState, seat: SeatIndex, target: SeatIndex):
   const players = contacted
     ? state.players.map((p) => (p.seat === seat ? { ...p, spyContactedMafia: true } : p))
     : state.players;
+  const record: InvestigationRecord = { investigator: seat, target, kind: "spy", isMafia: contacted, role: discoveredRole };
   return {
     ...state,
     players,
     nightActions: { ...state.nightActions, spyTarget: target, spyResult: { target, role: discoveredRole } },
+    investigationLog: [...state.investigationLog, record],
   };
 }
 
@@ -360,13 +400,24 @@ function submitMediumAction(state: MafiaState, seat: SeatIndex, target: SeatInde
   if (state.nightActions.mediumTarget !== undefined) return state;
   if (target < 0 || target >= state.playerCount || state.players[target].alive) return state;
   const role = state.players[target].role;
-  return { ...state, nightActions: { ...state.nightActions, mediumTarget: target, mediumResult: { target, role } } };
+  const record: InvestigationRecord = { investigator: seat, target, kind: "medium", isMafia: state.players[target].team === "mafia", role };
+  return {
+    ...state,
+    nightActions: { ...state.nightActions, mediumTarget: target, mediumResult: { target, role } },
+    investigationLog: [...state.investigationLog, record],
+  };
+}
+
+/** The one place UI should query persistent investigation knowledge — never render `state.investigationLog` directly for a seat other than the viewer (see `InvestigationRecord`'s doc). */
+export function knownRoleFor(state: MafiaState, viewerSeat: SeatIndex, targetSeat: SeatIndex): { isMafia: boolean; role: Role } | null {
+  const record = state.investigationLog.find((r) => r.investigator === viewerSeat && r.target === targetSeat);
+  return record ? { isMafia: record.isMafia, role: record.role } : null;
 }
 
 function resolveNight(state: MafiaState, atMs: number): MafiaState {
   const night = state.nightNumber;
   if (night === 0) {
-    const next = checkWinCondition({ ...state, lastNightOutcome: { night, mafiaTarget: null, savedByDoctor: false, savedByArmor: false, victim: null }, dayNumber: state.dayNumber + 1 });
+    const next = checkWinCondition({ ...state, lastNightOutcome: { night, mafiaTarget: null, doctorTarget: null, savedByDoctor: false, savedByArmor: false, victim: null }, dayNumber: state.dayNumber + 1 });
     return advancePhase(next, "dayAnnounce", atMs);
   }
 
@@ -407,7 +458,7 @@ function resolveNight(state: MafiaState, atMs: number): MafiaState {
     }
   }
 
-  const outcome: NightOutcome = { night, mafiaTarget, savedByDoctor, savedByArmor, victim };
+  const outcome: NightOutcome = { night, mafiaTarget, doctorTarget, savedByDoctor, savedByArmor, victim };
   let next: MafiaState = {
     ...state,
     players,
@@ -526,41 +577,70 @@ function resolveTerroristRevenge(state: MafiaState, target: SeatIndex, atMs: num
   let next: MafiaState = { ...state, players, deaths, pendingTerroristRevenge: null };
   next = checkWinCondition(next);
   if (next.winner) return advancePhase(next, "gameOver", atMs);
-  return advancePhase(next, "night", atMs);
+  return advancePhase({ ...next, skipVotes: {} }, "night", atMs);
 }
 
 // ---------------------------------------------------------------------------
 // Autonomous phase guardian — see module doc. Any client may fire this once
 // its local clock says `phaseDurationMs` has elapsed; stale calls (the phase
-// already moved on) are a no-op via the `expectedPhase` check.
+// already moved on) are a no-op via the `expectedPhase` check. `toggleSkipVote`
+// below reaches the exact same transition logic the instant a majority
+// forms, instead of waiting for the timeout.
 // ---------------------------------------------------------------------------
 
-function forceAdvance(state: MafiaState, action: Extract<EngineAction, { type: "forceAdvance" }>): MafiaState {
-  if (state.phase !== action.expectedPhase) return state;
+function resolveCurrentPhase(state: MafiaState, atMs: number): MafiaState {
   switch (state.phase) {
     case "night":
-      return resolveNight(state, action.atMs);
+      return resolveNight(state, atMs);
     case "dayAnnounce":
-      return advancePhase(state, "dayDiscuss", action.atMs);
+      return advancePhase({ ...state, skipVotes: {} }, "dayDiscuss", atMs);
     case "dayDiscuss":
-      return advancePhase({ ...state, nominations: {} }, "nomination", action.atMs);
+      return advancePhase({ ...state, nominations: {} }, "nomination", atMs);
     case "nomination":
-      return resolveNomination(state, action.atMs);
+      return resolveNomination(state, atMs);
     case "defense":
-      return advancePhase(state, "finalVote", action.atMs);
+      return advancePhase(state, "finalVote", atMs);
     case "finalVote":
-      return resolveFinalVote(state, action.atMs);
+      return resolveFinalVote(state, atMs);
     case "execution":
-      return advancePhase({ ...state, nightNumber: state.nightNumber + 1 }, "night", action.atMs);
+      return advancePhase({ ...state, nightNumber: state.nightNumber + 1, skipVotes: {} }, "night", atMs);
     case "terroristRevenge": {
       const pending = state.pendingTerroristRevenge;
-      if (!pending) return advancePhase({ ...state, nightNumber: state.nightNumber + 1 }, "night", action.atMs);
+      if (!pending) return advancePhase({ ...state, nightNumber: state.nightNumber + 1, skipVotes: {} }, "night", atMs);
       const fallback = Math.min(...pending.eligibleNominators);
-      return resolveTerroristRevenge(state, fallback, action.atMs);
+      return resolveTerroristRevenge(state, fallback, atMs);
     }
     default:
       return state;
   }
+}
+
+function forceAdvance(state: MafiaState, action: Extract<EngineAction, { type: "forceAdvance" }>): MafiaState {
+  if (state.phase !== action.expectedPhase) return state;
+  return resolveCurrentPhase(state, action.atMs);
+}
+
+/**
+ * "시간초 과반수 스킵" (2026-09-20 요청): only meaningful during `night`/
+ * `dayDiscuss` (the two phases with a pure discussion/wait timer and no
+ * per-seat decision the vote could interrupt). Toggling off never triggers
+ * anything; crossing `> floor(aliveCount/2)` on a toggle-on resolves the
+ * phase immediately via the exact same `resolveCurrentPhase` a real timeout
+ * uses. Ghosts can't vote (not in `alive`), matching "생존 중인 플레이어가"
+ * in the spec.
+ */
+function toggleSkipVote(state: MafiaState, action: Extract<EngineAction, { type: "toggleSkipVote" }>): MafiaState {
+  if (state.phase !== "night" && state.phase !== "dayDiscuss") return state;
+  const player = state.players[action.seat];
+  if (!player || !player.alive) return state;
+  const wasOn = state.skipVotes[action.seat] ?? false;
+  const skipVotes = { ...state.skipVotes, [action.seat]: !wasOn };
+  const next = { ...state, skipVotes };
+  if (wasOn) return next; // turning a vote OFF never triggers a skip
+  const aliveCount = state.players.filter((p) => p.alive).length;
+  const yesCount = Object.values(skipVotes).filter(Boolean).length;
+  if (yesCount > Math.floor(aliveCount / 2)) return resolveCurrentPhase(next, action.atMs);
+  return next;
 }
 
 // ---------------------------------------------------------------------------
@@ -585,6 +665,8 @@ export function applyAction(state: MafiaState, action: EngineAction): MafiaState
       return castFinalVote(state, action);
     case "terroristRevenge":
       return terroristRevenge(state, action);
+    case "toggleSkipVote":
+      return toggleSkipVote(state, action);
     case "forceAdvance":
       return forceAdvance(state, action);
     default:

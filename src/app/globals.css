@@ -5840,3 +5840,168 @@ html {
 .animate-great-legacy-badge-pop {
   animation: great-legacy-badge-pop 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+/* ===========================================================================
+   마피아 — 전 액션 시네마틱 FX (2026-09-20 세션). 모든 애니메이션은 몇 개의
+   재사용 가능한 모션 골격(잠금/도장, 흔들림, 파편 폭발, 실드 펄스, 위스프
+   소멸, 전체화면 플래시, 글로우 인아웃, 배너 낙하)에 이벤트별 색상/내용만
+   바꿔 얹는 방식 — MafiaEffects.tsx가 인라인 색상 커스텀 프로퍼티로 주입.
+   =========================================================================== */
+
+/* 지목투표 록온 — 조준선이 스케일 축소되며 타겟에 딱 고정. */
+@keyframes mafia-lock-reticle {
+  0% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.9);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 낙하형 도장/체인/기요틴 공용 골격 — 위에서 떨어져 짧게 튕기고 정지. */
+@keyframes mafia-stamp-drop {
+  0% {
+    transform: translateY(-140%) scale(1.3);
+    opacity: 0;
+  }
+  55% {
+    transform: translateY(4%) scale(1.05);
+    opacity: 1;
+  }
+  75% {
+    transform: translateY(-2%) scale(0.98);
+  }
+  100% {
+    transform: translateY(0%) scale(1);
+    opacity: 1;
+  }
+}
+
+/* 화면 흔들림 — 처형/기요틴 임팩트 순간. */
+@keyframes mafia-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-6px, 3px);
+  }
+  40% {
+    transform: translate(5px, -4px);
+  }
+  60% {
+    transform: translate(-4px, -2px);
+  }
+  80% {
+    transform: translate(3px, 3px);
+  }
+}
+
+/* 파편 폭발 공용 골격 — 혈흔 유리조각(처형)에 사용, 개별 파편마다 랜덤 각도/거리를 커스텀 프로퍼티로 주입. */
+@keyframes mafia-shard-burst {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx, 40px), var(--dy, 40px)) rotate(var(--rot, 180deg)) scale(0.3);
+    opacity: 0;
+  }
+}
+
+/* 실드 펄스 공용 골격 — 의사 치료 성공(에메랄드) / 경찰 결백 확인(사파이어)에서 색만 바꿔 재사용, 3회 방사. */
+@keyframes mafia-shield-pulse {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.9;
+    box-shadow: 0 0 0 0 var(--shield-color, rgba(16, 185, 129, 0.6));
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+    box-shadow: 0 0 40px 12px transparent;
+  }
+}
+
+/* 치료 빗나감 — 옅은 초록 잔상이 위로 떠오르며 소멸. */
+@keyframes mafia-wisp-fade {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(-30px) scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* 전체화면 플래시 공용 골격 — 경찰 마피아 적발 사이렌(붉은색)에 사용. */
+@keyframes mafia-flash-pulse {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  15%,
+  45% {
+    opacity: 0.35;
+  }
+  30% {
+    opacity: 0.1;
+  }
+}
+
+/* 글로우 인아웃 공용 골격 — 구원 천사 날개(오렌지/화이트) / 영구 각인 배지 등장에 재사용. */
+@keyframes mafia-glow-in-out {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+    filter: brightness(1);
+  }
+  30% {
+    transform: scale(1.08);
+    opacity: 1;
+    filter: brightness(1.6);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+/* 과반수 스킵 골드 배너 — 위에서 미끄러져 내려왔다가 잠시 후 사라짐. */
+@keyframes mafia-banner-drop {
+  0% {
+    transform: translate(-50%, -120%);
+    opacity: 0;
+  }
+  15% {
+    transform: translate(-50%, 0%);
+    opacity: 1;
+  }
+  85% {
+    transform: translate(-50%, 0%);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -30%);
+    opacity: 0;
+  }
+}
+
+/* 영구 각인 네온 배지 — 매 렌더마다 살짝 숨쉬는 듯한 은은한 발광. */
+@keyframes mafia-badge-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 6px 0 var(--badge-glow, rgba(239, 68, 68, 0.5));
+  }
+  50% {
+    box-shadow: 0 0 12px 2px var(--badge-glow, rgba(239, 68, 68, 0.5));
+  }
+}
