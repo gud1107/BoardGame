@@ -550,7 +550,7 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 light:border-amber-300 light:bg-amber-50 p-8 text-center">
         <span className="text-3xl">⚠️</span>
         <h2 className="text-lg font-bold text-white light:text-slate-900">온라인 대전을 사용할 수 없어요</h2>
-        <p className="max-w-sm text-sm text-amber-100/80 light:text-amber-800">위대한 유산은 실시간 온라인 대전 전용이라 Supabase 설정이 필요합니다.</p>
+        <p className="max-w-sm text-sm text-amber-100/80 light:text-amber-800">위대한 투자는 실시간 온라인 대전 전용이라 Supabase 설정이 필요합니다.</p>
       </div>,
     );
   }
@@ -583,9 +583,9 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
     return withGuard(
       <RulebookGate
         gameId="great-legacy"
-        icon="🏛️"
-        title="위대한 유산 온라인 대전"
-        description={<p className="text-sm text-white/50 light:text-slate-500">4인 또는 8인이 각자 기기로 접속해서 실시간 경매를 벌여요.</p>}
+        icon="📈"
+        title="위대한 투자 온라인 대전"
+        description={<p className="text-sm text-white/50 light:text-slate-500">4인 또는 8인이 각자 기기로 접속해서 실시간 주식·코인 경매를 벌여요.</p>}
         actions={
           <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
             <button

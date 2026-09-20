@@ -5,11 +5,11 @@ import { purseValue } from "./constants";
 import { computeCollectionBonus, computePlayerScore } from "./engine";
 import type { CoinVisibility, PlayerState, SeatIndex } from "./types";
 
-const COUNTRY_EMOJI: Record<string, string> = { 한국: "🇰🇷", 이집트: "🇪🇬", 프랑스: "🇫🇷" };
-const FORMAT_EMOJI: Record<string, string> = { 그림: "🖼️", 조각공예: "🗿", 건축물: "🏛️" };
+const MARKET_EMOJI: Record<string, string> = { 미장: "🇺🇸", 국장: "🇰🇷", 코인: "🪙" };
+const SECTOR_EMOJI: Record<string, string> = { "빅테크&AI": "🤖", 블루칩: "🏆", "밈&테마주": "🎢" };
 
 /**
- * One seat's summary card — name, purse (respecting `coinVisibility`), relic
+ * One seat's summary card — name, purse (respecting `coinVisibility`), asset
  * count + collection badges, and the seat's current auction status (active
  * bidder / passed / not yet acted). Read-only, no interaction — bidding
  * itself lives in ActionPanel.
@@ -34,8 +34,8 @@ export default function PlayerArea({
   const isMe = player.seat === viewerSeat;
   const canSeeCoins = isMe || coinVisibility === "public";
   const score = computePlayerScore(player);
-  const { countries, formats } = computeCollectionBonus(player.relics);
-  const ownedRelics = player.relics.filter((r) => !r.discarded);
+  const { markets, sectors } = computeCollectionBonus(player.assets);
+  const ownedAssets = player.assets.filter((a) => !a.discarded);
 
   return (
     <div
@@ -60,20 +60,20 @@ export default function PlayerArea({
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/70 light:text-slate-600">
         <span>💰 {canSeeCoins ? `${purseValue(player.purse)}코인` : "??코인"}</span>
-        <span>🏺 유물 {ownedRelics.length}장</span>
+        <span>📊 보유자산 {ownedAssets.length}장</span>
         <span className="font-semibold text-white light:text-slate-900">점수 {score.total}</span>
       </div>
 
-      {(countries.length > 0 || formats.length > 0) && (
+      {(markets.length > 0 || sectors.length > 0) && (
         <div className="flex flex-wrap gap-1">
-          {countries.map((c) => (
-            <span key={c} className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] text-emerald-200 light:bg-emerald-100 light:text-emerald-700">
-              {COUNTRY_EMOJI[c] ?? "🏳️"} {c} 컬렉션 +3
+          {markets.map((m) => (
+            <span key={m} className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] text-emerald-200 light:bg-emerald-100 light:text-emerald-700">
+              {MARKET_EMOJI[m] ?? "💹"} {m} 영끌 올인 +3
             </span>
           ))}
-          {formats.map((f) => (
-            <span key={f} className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[10px] text-sky-200 light:bg-sky-100 light:text-sky-700">
-              {FORMAT_EMOJI[f] ?? "🎴"} {f} 컬렉션 +3
+          {sectors.map((s) => (
+            <span key={s} className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[10px] text-sky-200 light:bg-sky-100 light:text-sky-700">
+              {SECTOR_EMOJI[s] ?? "🎴"} {s} 분산투자 +3
             </span>
           ))}
         </div>

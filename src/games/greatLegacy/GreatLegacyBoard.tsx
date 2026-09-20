@@ -1,45 +1,46 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { COUNTRIES, FORMATS, RELIC_DEFS } from "./constants";
+import { ASSET_DEFS, MARKETS, SECTORS } from "./constants";
 import { computeRankings } from "./engine";
 import ActionPanel from "./ActionPanel";
 import PlayerArea from "./PlayerArea";
 import BettingArena from "./BettingArena";
+import RulebookModal from "./RulebookModal";
 import { detectCoinEvents, FlyingCoins, type CoinAnimEvent } from "./AuctionCoinEffects";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import type { EngineAction, GreatLegacyState, SeatIndex } from "./types";
 
-const COUNTRY_EMOJI: Record<string, string> = { 한국: "🇰🇷", 이집트: "🇪🇬", 프랑스: "🇫🇷" };
-const FORMAT_EMOJI: Record<string, string> = { 그림: "🖼️", 조각공예: "🗿", 건축물: "🏛️" };
+const MARKET_EMOJI: Record<string, string> = { 미장: "🇺🇸", 국장: "🇰🇷", 코인: "🪙" };
+const SECTOR_EMOJI: Record<string, string> = { "빅테크&AI": "🤖", 블루칩: "🏆", "밈&테마주": "🎢" };
 
 /**
- * Always-visible sidebar: the full 3(국가)×3(형식) relic score reference
- * table (confirmed layout choice) plus the viewer's own collection progress
- * — which cells they already own, and which country/format completions
- * they're one card away from.
+ * Always-visible sidebar: the full 3(시장)×3(섹터) asset score reference
+ * table (confirmed layout choice, carried over from 위대한유산) plus the
+ * viewer's own portfolio progress — which cells they already own, and which
+ * market/sector completions they're one card away from.
  */
-function RelicReferenceSidebar({ ownedRelicIds }: { ownedRelicIds: Set<string> }) {
+function AssetReferenceSidebar({ ownedAssetIds }: { ownedAssetIds: Set<string> }) {
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/90 light:shadow-sm p-3">
-      <h3 className="text-xs font-semibold text-white/60 light:text-slate-600">🏺 유물 점수표</h3>
+      <h3 className="text-xs font-semibold text-white/60 light:text-slate-600">📈 자산 점수표</h3>
       <div className="flex flex-col gap-2">
-        {COUNTRIES.map((country) => (
-          <div key={country} className="rounded-lg border border-white/5 bg-black/20 light:border-slate-200 light:bg-slate-50 p-2">
+        {MARKETS.map((market) => (
+          <div key={market} className="rounded-lg border border-white/5 bg-black/20 light:border-slate-200 light:bg-slate-50 p-2">
             <p className="mb-1 text-xs font-semibold text-white/60 light:text-slate-600">
-              {COUNTRY_EMOJI[country]} {country}
+              {MARKET_EMOJI[market]} {market}
             </p>
             <div className="flex flex-col gap-0.5">
-              {FORMATS.flatMap((format) => RELIC_DEFS.filter((r) => r.country === country && r.format === format)).map((r) => {
-                const owned = ownedRelicIds.has(r.id);
+              {SECTORS.flatMap((sector) => ASSET_DEFS.filter((a) => a.market === market && a.sector === sector)).map((a) => {
+                const owned = ownedAssetIds.has(a.id);
                 return (
-                  <div key={r.id} className={`flex items-center gap-1 text-[11px] ${owned ? "text-emerald-300 light:text-emerald-700" : "text-white/50 light:text-slate-500"}`}>
+                  <div key={a.id} className={`flex items-center gap-1 text-[11px] ${owned ? "text-emerald-300 light:text-emerald-700" : "text-white/50 light:text-slate-500"}`}>
                     <span className="shrink-0">{owned ? "✅" : "▫️"}</span>
-                    <span className="shrink-0">{FORMAT_EMOJI[r.format]}</span>
-                    <span className="min-w-0 flex-1 truncate" title={r.name}>
-                      {r.name}
+                    <span className="shrink-0">{SECTOR_EMOJI[a.sector]}</span>
+                    <span className="min-w-0 flex-1 truncate" title={a.name}>
+                      {a.name}
                     </span>
-                    <span className="shrink-0 text-white/30 light:text-slate-400">{r.baseScore}점</span>
+                    <span className="shrink-0 text-white/30 light:text-slate-400">{a.baseScore}점</span>
                   </div>
                 );
               })}
@@ -48,7 +49,7 @@ function RelicReferenceSidebar({ ownedRelicIds }: { ownedRelicIds: Set<string> }
         ))}
       </div>
       <p className="text-[10px] leading-relaxed text-white/40 light:text-slate-400">
-        국가 컬렉션: 같은 국가 그림·조각공예·건축물 각 1장 → +3점 · 작품 컬렉션: 같은 형식으로 3개국 모두 → +3점 (한 장이 두 컬렉션에 동시에 카운트될 수 있어요)
+        영끌 올인: 같은 시장의 빅테크&AI·블루칩·밈&테마주 각 1장 → +3점 · 테마 분산투자: 같은 섹터로 3개 시장 모두 → +3점 (한 장이 두 컬렉션에 동시에 카운트될 수 있어요)
       </p>
     </div>
   );
@@ -64,8 +65,9 @@ export interface GreatLegacyBoardProps {
 }
 
 export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd }: GreatLegacyBoardProps) {
+  const [rulebookOpen, setRulebookOpen] = useState(false);
   const me = state.players.find((p) => p.seat === viewerSeat)!;
-  const ownedRelicIds = useMemo(() => new Set(me.relics.filter((r) => !r.discarded).map((r) => r.relicId)), [me.relics]);
+  const ownedAssetIds = useMemo(() => new Set(me.assets.filter((a) => !a.discarded).map((a) => a.assetId)), [me.assets]);
   const auction = state.auction;
 
   const rankings = state.phase === "gameOver" ? computeRankings(state) : null;
@@ -113,7 +115,7 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
       <aside className="order-2 lg:order-1 lg:w-64 lg:shrink-0">
-        <RelicReferenceSidebar ownedRelicIds={ownedRelicIds} />
+        <AssetReferenceSidebar ownedAssetIds={ownedAssetIds} />
       </aside>
 
       <div className="order-1 flex flex-1 flex-col gap-4 lg:order-2">
@@ -122,26 +124,36 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
           // Hardcoded dark inline gradient (via Tailwind arbitrary colors) — intentionally left as-is per theme-system guidance.
         >
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white/80 light:text-slate-800">🏛️ 위대한 유산 — {state.mode === "4p" ? "4인" : "8인"} 경매</h2>
-            <span className="text-xs text-white/40 light:text-slate-400">남은 매물 {state.deck.length + (auction ? 1 : 0)}장</span>
+            <h2 className="text-sm font-bold text-white/80 light:text-slate-800">📈 위대한 투자 — {state.mode === "4p" ? "4인" : "8인"} 경매</h2>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-white/40 light:text-slate-400">남은 매물 {state.deck.length + (auction ? 1 : 0)}장</span>
+              <button
+                type="button"
+                onClick={() => setRulebookOpen(true)}
+                className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
+              >
+                📖 룰북
+              </button>
+            </div>
           </div>
 
           {auction && (
             <div className="mb-4 flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.04] light:border-slate-200 light:bg-white/80 p-3">
               <div className="flex items-center justify-between">
                 <span className="text-base font-bold text-white light:text-slate-900">
-                  {auction.card.kind === "relic" ? (
+                  {auction.card.kind === "asset" ? (
                     <>
-                      {auction.card.relic.name}{" "}
+                      {auction.card.asset.name}{" "}
                       <span className="text-xs font-normal text-white/40 light:text-slate-400">
-                        ({auction.card.relic.country} · {auction.card.relic.format} · {auction.card.relic.baseScore}점)
+                        ({auction.card.asset.market} · {auction.card.asset.sector} · {auction.card.asset.baseScore}점)
                       </span>
                     </>
                   ) : (
                     <>
-                      {auction.card.special === "재평가" && "📈 재평가"}
-                      {auction.card.special === "평가절하" && "📉 평가절하"}
-                      {auction.card.special === "가품판정" && "🗑️ 가품 판정"}
+                      {auction.card.special === "초대형호재" && "🚀 초대형 호재"}
+                      {auction.card.special === "악재어닝쇼크" && "📉 악재/어닝쇼크"}
+                      {auction.card.special === "상장폐지" && "🗑️ 상장폐지"}
+                      {auction.card.special === "강제반대매매" && "⚠️ 강제 반대매매"}
                     </>
                   )}
                 </span>
@@ -189,7 +201,7 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
                       {r.rank}위 {names[r.seat] ?? "상대"}
                     </span>
                     <span className="text-white/60 light:text-slate-500">
-                      {r.score.total}점 (유물 {r.score.relicScore} + 컬렉션 {r.score.collectionBonus}) · 잔여 {r.score.remainingCoinValue}코인
+                      {r.score.total}점 (자산 {r.score.assetScore} + 컬렉션 {r.score.collectionBonus}) · 잔여 {r.score.remainingCoinValue}코인
                     </span>
                   </div>
                 ))}
@@ -233,6 +245,8 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
           onDone={handleCoinEffectDone}
         />
       ))}
+
+      {rulebookOpen && <RulebookModal mode={state.mode} onClose={() => setRulebookOpen(false)} />}
     </div>
   );
 }

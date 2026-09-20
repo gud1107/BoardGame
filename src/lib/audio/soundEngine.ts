@@ -2747,7 +2747,7 @@ class SoundEngine {
     downbeat.stop(now + 0.78);
   }
 
-  /** 위대한 유산 — "코인 베팅 투척음": a bright metallic clink cluster (bid submitted), landing in the bet spot. */
+  /** 위대한 투자 — "코인 베팅 투척음": a bright metallic clink cluster (bid submitted), landing in the bet spot. */
   playCoinDropSound() {
     if (!this.gate("coinDrop", 90)) return;
     const ctx = this.ensureContext();
@@ -2780,7 +2780,7 @@ class SoundEngine {
     clack.stop(now + 0.07);
   }
 
-  /** 위대한 유산 — "코인 회수 스윕음": a soft descending sweep (filtered noise) as a passed-out seat's stake slides back to hand. */
+  /** 위대한 투자 — "코인 회수 스윕음": a soft descending sweep (filtered noise) as a passed-out seat's stake slides back to hand. */
   playCoinSweepSound() {
     if (!this.gate("coinSweep", 150)) return;
     const ctx = this.ensureContext();
@@ -2804,7 +2804,7 @@ class SoundEngine {
     sweep.stop(now + duration + 0.02);
   }
 
-  /** 위대한 유산 — "금고 흡수음": a deep whoosh sucking inward, ending in a muffled metallic door-thunk — a spent/forfeited bid vanishing into the vault. */
+  /** 위대한 투자 — "금고 흡수음": a deep whoosh sucking inward, ending in a muffled metallic door-thunk — a spent/forfeited bid vanishing into the vault. */
   playVaultAbsorbSound() {
     if (!this.gate("vaultAbsorb", 200)) return;
     const ctx = this.ensureContext();

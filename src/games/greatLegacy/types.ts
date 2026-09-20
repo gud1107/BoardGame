@@ -1,21 +1,29 @@
 /**
- * Type contracts for 위대한 유산 (The Great Legacy) — a psychological auction
- * game (하이 소사이어티 motif) where players bid coins to win relic cards and
- * "penalty" special cards that flip the auction upside down. See
- * `boardGameRule/위대한유산/위대한유산4인.md` / `위대한유산8인.md` for the
- * source rulebook and HANDOFF.md for the confirmed design decisions this
- * implementation is built from (every ambiguous point was asked, not
- * assumed — see that session's entries).
+ * Type contracts for 위대한 투자 (The Great Investment) — a psychological
+ * auction game (하이 소사이어티 motif, re-themed from the "위대한 유산"
+ * relic-auction engine into a stock/crypto portfolio auction) where players
+ * leverage a credit-line purse to bid on asset cards and "이벤트" special
+ * cards that flip the auction upside down. See
+ * `boardGameRule/위대한유산/위대한유산변형_위대한투자.md` for the source
+ * rulebook this implementation is built from.
  */
 
 export type SeatIndex = number;
 
-export type Country = "한국" | "이집트" | "프랑스";
-export type Format = "그림" | "조각공예" | "건축물";
+/** 3대 시장 — 미장(나스닥/뉴욕), 국장(코스피/코스닥), 코인(크립토). */
+export type Market = "미장" | "국장" | "코인";
+/** 3대 섹터 — 빅테크&AI(성장주), 블루칩(우량주), 밈&테마주(투기주). */
+export type Sector = "빅테크&AI" | "블루칩" | "밈&테마주";
 
-export type SpecialKind = "재평가" | "평가절하" | "가품판정";
+/**
+ * 4종 특수(이벤트) 카드. 초대형호재는 일반 경매(재평가 → 5점), 나머지 셋은
+ * 전부 역경매(먼저 포기한 사람이 떠안음) — 악재/어닝쇼크는 1점으로 평가절하,
+ * 상장폐지·강제반대매매는 둘 다 영구 폐기로 효과는 동일하고 이름/매수만 다름
+ * (상장폐지 2장, 강제반대매매 1장 — 원작 "가품판정 3장"을 테마상 두 카드로 쪼갠 것).
+ */
+export type SpecialKind = "초대형호재" | "악재어닝쇼크" | "상장폐지" | "강제반대매매";
 
-/** "4p" = 원작 4인 규칙 그대로. "8p" = 문서 8인안 ③(단일테이블 완전 리밸런싱), 국가/유물카드는 원작 18장 그대로 유지하고 자금·특수카드·제외매수만 조정 — 확정 내역은 HANDOFF.md 참고. */
+/** "4p" = 원작 룰북 그대로(4인). "8p" = 위대한유산 8인 리밸런싱안과 동일한 비율로 확장한 다인전 변형. */
 export type GreatLegacyMode = "4p" | "8p";
 
 /** 방장이 방 생성 시 고르는 턴 제한시간 — 없음 / 15초 / 30초. */
@@ -24,16 +32,16 @@ export type TimeLimitMode = "none" | "15s" | "30s";
 /** no-thanks의 ChipVisibility와 동일한 컨벤션 — 방장이 코인 보유 현황 공개/비공개를 선택. */
 export type CoinVisibility = "secret" | "public";
 
-export interface RelicDef {
+export interface AssetDef {
   id: string;
-  country: Country;
-  format: Format;
+  market: Market;
+  sector: Sector;
   name: string;
   baseScore: number;
 }
 
 export type AuctionCardDef =
-  | { kind: "relic"; cardId: string; relic: RelicDef }
+  | { kind: "asset"; cardId: string; asset: AssetDef }
   | { kind: "special"; cardId: string; special: SpecialKind };
 
 /** Coin denominations actually printed for this game — see constants.ts for per-mode counts. */
@@ -42,14 +50,14 @@ export type Denomination = 20 | 10 | 5 | 1;
 /** A coin purse (or a partial "coins to add" amount), keyed by denomination -> count of that coin. Always non-negative integers. */
 export type Purse = Record<Denomination, number>;
 
-export interface OwnedRelic {
-  relicId: string;
-  country: Country;
-  format: Format;
+export interface OwnedAsset {
+  assetId: string;
+  market: Market;
+  sector: Sector;
   baseScore: number;
-  /** baseScore, possibly overwritten by a 재평가(→5)/평가절하(→1) special applied to this exact relic. Meaningless once `discarded`. */
+  /** baseScore, possibly overwritten by a 초대형호재(→5)/악재·어닝쇼크(→1) special applied to this exact asset. Meaningless once `discarded`. */
   currentScore: number;
-  /** true once a 가품 판정 special discarded this relic — excluded from scoring/collections but kept in the array for history/UI. */
+  /** true once a 상장폐지/강제반대매매 special discarded this asset — excluded from scoring/collections but kept in the array for history/UI. */
   discarded: boolean;
 }
 
@@ -57,14 +65,15 @@ export interface PlayerState {
   seat: SeatIndex;
   /** Coins NOT currently committed to the live auction. */
   purse: Purse;
-  /** In acquisition order — the last entry is this player's "직전 획득 유물" special-card target. */
-  relics: OwnedRelic[];
+  /** In acquisition order — the last entry is this player's "직전 획득 자산" special-card target. */
+  assets: OwnedAsset[];
   /**
    * FIFO queue of specials won while this player owned zero (non-discarded
-   * bookkeeping aside — see engine.ts) relics, per the confirmed rule:
-   * "특수카드를 유물 없이 낙찰받으면 순서대로 유물카드 획득 시에 적용됩니다"
-   * — each queued special consumes exactly one future relic acquisition, in
-   * the order it was queued (not all stacked onto the very next relic).
+   * bookkeeping aside — see engine.ts) assets, per the confirmed rule:
+   * "보유 자산이 없을 때 낙찰된 경우, 다음번에 최초로 낙찰받는 자산 카드에
+   * 해당 효과가 즉시 발동" — each queued special consumes exactly one future
+   * asset acquisition, in the order it was queued (not all stacked onto the
+   * very next asset).
    */
   pendingSpecials: SpecialKind[];
 }

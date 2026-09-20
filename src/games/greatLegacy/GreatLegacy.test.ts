@@ -11,7 +11,7 @@ import {
   startGame,
 } from "./engine";
 import { purseValue, startingPurse, EXCLUDE_COUNT, countAuctionCards } from "./constants";
-import type { GreatLegacyState, OwnedRelic, SeatIndex } from "./types";
+import type { GreatLegacyState, OwnedAsset, SeatIndex } from "./types";
 
 function bid(state: GreatLegacyState, seat: SeatIndex, value: number): GreatLegacyState {
   const coins = greedyCoinsFor(state.players[seat].purse, value);
@@ -83,10 +83,10 @@ function findNormalAuctionSeed(mode: "4p" | "8p" = "4p"): number {
   throw new Error("no normal-auction seed found in range");
 }
 
-describe("normal auction (relic cards & 재평가)", () => {
+describe("normal auction (asset cards & 초대형호재)", () => {
   it("requires each bid to strictly exceed the previous total", () => {
     let state = startGame("4p", findNormalAuctionSeed());
-    // Force a known relic card up first for a predictable test, regardless of shuffle: just use whatever's drawn.
+    // Force a known asset card up first for a predictable test, regardless of shuffle: just use whatever's drawn.
     const opener = state.auction!.activeSeat;
     state = bid(state, opener, 10);
     expect(state.auction!.highestBid).toBe(10);
@@ -109,23 +109,23 @@ describe("normal auction (relic cards & 재평가)", () => {
     expect(purseValue(state.players[a].purse)).toBe(purseABefore);
   });
 
-  it("last remaining bidder wins the card, it's added to their relics, and they open the next auction", () => {
+  it("last remaining bidder wins the card, it's added to their assets, and they open the next auction", () => {
     let state = startGame("4p", findNormalAuctionSeed());
     const opener = state.auction!.activeSeat;
     const card = state.auction!.card;
     state = bid(state, opener, 5);
     state = letEveryoneElsePass(state, opener);
-    if (card.kind === "relic") {
-      const owned = state.players[opener].relics.find((r) => r.relicId === card.cardId);
+    if (card.kind === "asset") {
+      const owned = state.players[opener].assets.find((a) => a.assetId === card.cardId);
       expect(owned).toBeDefined();
-      expect(owned!.currentScore).toBe(card.relic.baseScore);
+      expect(owned!.currentScore).toBe(card.asset.baseScore);
     }
     expect(state.nextOpenerSeat).toBe(opener);
     expect(state.auction!.activeSeat).toBe(opener); // new auction opens with the winner
   });
 });
 
-describe("reverse auction (평가절하 / 가품 판정)", () => {
+describe("reverse auction (악재/어닝쇼크 · 상장폐지 · 강제반대매매)", () => {
   function findReverseAuctionSeed(): number {
     for (let seed = 1; seed < 200; seed++) {
       const state = startGame("4p", seed);
@@ -157,24 +157,24 @@ describe("reverse auction (평가절하 / 가품 판정)", () => {
     expect(purseValue(state.players[seatD].purse)).toBe(purseBefore(seatD) - 16);
   });
 
-  it("applies the special effect (1점 / 폐기) to the recipient's last relic, or queues it if they own none", () => {
+  it("applies the special effect (1점 / 폐기) to the recipient's last asset, or queues it if they own none", () => {
     const seed = findReverseAuctionSeed();
     let state = startGame("4p", seed);
     const kind = state.auction!.card.kind === "special" ? state.auction!.card.special : null;
     expect(kind).not.toBeNull();
     const opener = state.auction!.activeSeat;
-    state = pass(state, opener); // opener immediately passes -> wins the penalty card with zero relics owned yet
+    state = pass(state, opener); // opener immediately passes -> wins the penalty card with zero assets owned yet
     expect(state.players[opener].pendingSpecials).toEqual([kind]);
-    expect(state.players[opener].relics).toHaveLength(0);
+    expect(state.players[opener].assets).toHaveLength(0);
   });
 });
 
 describe("special-card queueing and re-targeting", () => {
-  it("a special won with zero relics queues, then consumes exactly the next relic acquired, one queued special per relic (FIFO)", () => {
+  it("a special won with zero assets queues, then consumes exactly the next asset acquired, one queued special per asset (FIFO)", () => {
     // Drive the real game forward until we find a seed where the very first
     // card is a reverse-auction special (so seat 0, its opener, can win it
-    // with zero relics owned and queue it), then keep having seat 0 win
-    // every subsequent auction and check the queue drains one-per-relic.
+    // with zero assets owned and queue it), then keep having seat 0 win
+    // every subsequent auction and check the queue drains one-per-asset.
     let seed = 1;
     let state = startGame("4p", seed);
     while (state.auction!.kind !== "reverse") {
@@ -185,127 +185,127 @@ describe("special-card queueing and re-targeting", () => {
     const firstKind = state.auction!.card.kind === "special" ? state.auction!.card.special : null;
     expect(firstKind).not.toBeNull();
 
-    state = pass(state, winner); // immediate pass in a reverse auction -> winner takes it, owns 0 relics -> queued
+    state = pass(state, winner); // immediate pass in a reverse auction -> winner takes it, owns 0 assets -> queued
     expect(state.players[winner].pendingSpecials).toEqual([firstKind]);
-    expect(state.players[winner].relics).toHaveLength(0);
+    expect(state.players[winner].assets).toHaveLength(0);
 
     // Keep letting `winner` win every following auction until they've picked
-    // up at least one relic card (skipping any further specials so the
+    // up at least one asset card (skipping any further specials so the
     // queue's contents stay predictable) — then check the queued special
-    // landed on that first relic, and only that one.
+    // landed on that first asset, and only that one.
     let guard = 0;
-    while (state.players[winner].relics.length === 0) {
+    while (state.players[winner].assets.length === 0) {
       guard++;
-      if (guard > 50) throw new Error("winner never acquired a relic — deck exhausted or logic stuck");
+      if (guard > 50) throw new Error("winner never acquired an asset — deck exhausted or logic stuck");
       state = letEveryoneElsePass(state, winner);
     }
     expect(state.players[winner].pendingSpecials).toEqual([]); // the one queued special was consumed
-    const relic = state.players[winner].relics[0];
-    if (firstKind === "재평가") expect(relic.currentScore).toBe(5);
-    if (firstKind === "평가절하") expect(relic.currentScore).toBe(1);
-    if (firstKind === "가품판정") expect(relic.discarded).toBe(true);
+    const asset = state.players[winner].assets[0];
+    if (firstKind === "초대형호재") expect(asset.currentScore).toBe(5);
+    if (firstKind === "악재어닝쇼크") expect(asset.currentScore).toBe(1);
+    if (firstKind === "상장폐지" || firstKind === "강제반대매매") expect(asset.discarded).toBe(true);
   });
 
-  it("re-targets (overwrites) the chronologically last-acquired relic when a later special is won with relics already owned", () => {
-    // Find a seed whose first TWO cards are: a relic, then 재평가 (both
-    // resolvable as normal auctions), so seat 0 can win the relic first and
-    // then have 재평가 immediately overwrite it — then verify a THIRD special
-    // re-overwrites the same still-most-recent relic (never touching an
-    // older one), matching "직전 획득 유물 = chronologically last, regardless
-    // of prior modification".
+  it("re-targets (overwrites) the chronologically last-acquired asset when a later special is won with assets already owned", () => {
+    // Find a seed whose first TWO cards are: an asset, then 초대형호재 (both
+    // resolvable as normal auctions), so seat 0 can win the asset first and
+    // then have 초대형호재 immediately overwrite it — then verify a THIRD
+    // special re-overwrites the same still-most-recent asset (never touching
+    // an older one), matching "직전 획득 자산 = chronologically last,
+    // regardless of prior modification".
     let seed = 1;
     let state = startGame("4p", seed);
-    const firstIsRelicNormal = () => state.auction!.card.kind === "relic" && state.auction!.kind === "normal";
-    while (!firstIsRelicNormal()) {
+    const firstIsAssetNormal = () => state.auction!.card.kind === "asset" && state.auction!.kind === "normal";
+    while (!firstIsAssetNormal()) {
       seed++;
       state = startGame("4p", seed);
     }
     const winner = state.auction!.activeSeat;
-    state = letEveryoneElsePass(state, winner); // seat wins the first relic
-    expect(state.players[winner].relics).toHaveLength(1);
-    const baseScore = state.players[winner].relics[0].baseScore;
+    state = letEveryoneElsePass(state, winner); // seat wins the first asset
+    expect(state.players[winner].assets).toHaveLength(1);
+    const baseScore = state.players[winner].assets[0].baseScore;
 
-    // Manually apply a 평가절하 then a 재평가 directly via the internal
-    // grant-special path by simulating a special auction win for the SAME
-    // winner without depending on shuffle order for the 2nd/3rd cards —
-    // exercised through the public reducer via a constructed reverse
+    // Manually apply an 악재어닝쇼크 then a 초대형호재 directly via the
+    // internal grant-special path by simulating a special auction win for
+    // the SAME winner without depending on shuffle order for the 2nd/3rd
+    // cards — exercised through the public reducer via a constructed reverse
     // auction state to keep this test independent of deck order.
     const withPenaltyAuction: GreatLegacyState = {
       ...state,
-      auction: { card: { kind: "special", cardId: "test-devalue", special: "평가절하" }, kind: "reverse", order: state.auction!.order, activeSeat: winner, highestBid: 0, highestBidder: null, committed: {}, passed: [] },
+      auction: { card: { kind: "special", cardId: "test-devalue", special: "악재어닝쇼크" }, kind: "reverse", order: state.auction!.order, activeSeat: winner, highestBid: 0, highestBidder: null, committed: {}, passed: [] },
     };
     const s2 = pass(withPenaltyAuction, winner); // first pass in a reverse auction -> immediate win
-    expect(s2.players[winner].relics[0].currentScore).toBe(1); // 평가절하 overwrote the last (only) relic
+    expect(s2.players[winner].assets[0].currentScore).toBe(1); // 악재어닝쇼크 overwrote the last (only) asset
 
     const withReevalAuction: GreatLegacyState = {
       ...s2,
-      auction: { card: { kind: "special", cardId: "test-reeval", special: "재평가" }, kind: "normal", order: s2.auction!.order, activeSeat: winner, highestBid: 0, highestBidder: null, committed: {}, passed: [] },
+      auction: { card: { kind: "special", cardId: "test-reeval", special: "초대형호재" }, kind: "normal", order: s2.auction!.order, activeSeat: winner, highestBid: 0, highestBidder: null, committed: {}, passed: [] },
     };
     // Normal-auction win: everyone else passes, winner takes it for free.
     const s3 = letEveryoneElsePass(withReevalAuction, winner);
-    expect(s3.players[winner].relics[0].currentScore).toBe(5); // 재평가 re-overwrote the SAME relic (still the only/last one)
-    expect(s3.players[winner].relics[0].baseScore).toBe(baseScore); // baseScore itself never changes, only currentScore
+    expect(s3.players[winner].assets[0].currentScore).toBe(5); // 초대형호재 re-overwrote the SAME asset (still the only/last one)
+    expect(s3.players[winner].assets[0].baseScore).toBe(baseScore); // baseScore itself never changes, only currentScore
   });
 
-  it("computePlayerScore excludes discarded relics and sums currentScore for the rest", () => {
-    const relics: OwnedRelic[] = [
-      { relicId: "a", country: "한국", format: "그림", baseScore: 1, currentScore: 5, discarded: false }, // 재평가 applied
-      { relicId: "b", country: "한국", format: "조각공예", baseScore: 4, currentScore: 4, discarded: false },
-      { relicId: "c", country: "한국", format: "건축물", baseScore: 5, currentScore: 5, discarded: true }, // 가품 판정 discarded
+  it("computePlayerScore excludes discarded assets and sums currentScore for the rest", () => {
+    const assets: OwnedAsset[] = [
+      { assetId: "a", market: "국장", sector: "빅테크&AI", baseScore: 1, currentScore: 5, discarded: false }, // 초대형호재 applied
+      { assetId: "b", market: "국장", sector: "블루칩", baseScore: 4, currentScore: 4, discarded: false },
+      { assetId: "c", market: "국장", sector: "밈&테마주", baseScore: 5, currentScore: 5, discarded: true }, // 상장폐지로 폐기
     ];
-    const player = { seat: 0, purse: { 20: 0, 10: 0, 5: 0, 1: 0 }, relics, pendingSpecials: [] };
+    const player = { seat: 0, purse: { 20: 0, 10: 0, 5: 0, 1: 0 }, assets, pendingSpecials: [] };
     const score = computePlayerScore(player);
-    expect(score.relicScore).toBe(9); // 5 + 4, discarded relic excluded
+    expect(score.assetScore).toBe(9); // 5 + 4, discarded asset excluded
   });
 });
 
 describe("collection bonuses", () => {
-  it("grants +3 for a completed country collection (1 painting + 1 sculpture + 1 architecture, same country)", () => {
-    const relics: OwnedRelic[] = [
-      { relicId: "kr-p", country: "한국", format: "그림", baseScore: 1, currentScore: 1, discarded: false },
-      { relicId: "kr-s", country: "한국", format: "조각공예", baseScore: 3, currentScore: 3, discarded: false },
-      { relicId: "kr-a", country: "한국", format: "건축물", baseScore: 5, currentScore: 5, discarded: false },
+  it("grants +3 for a completed market collection (영끌 올인: 빅테크·블루칩·밈 각 1장, same market)", () => {
+    const assets: OwnedAsset[] = [
+      { assetId: "kr-b", market: "국장", sector: "빅테크&AI", baseScore: 1, currentScore: 1, discarded: false },
+      { assetId: "kr-c", market: "국장", sector: "블루칩", baseScore: 3, currentScore: 3, discarded: false },
+      { assetId: "kr-a", market: "국장", sector: "밈&테마주", baseScore: 5, currentScore: 5, discarded: false },
     ];
-    const result = computeCollectionBonus(relics);
-    expect(result.countries).toEqual(["한국"]);
-    expect(result.formats).toEqual([]);
+    const result = computeCollectionBonus(assets);
+    expect(result.markets).toEqual(["국장"]);
+    expect(result.sectors).toEqual([]);
     expect(result.bonus).toBe(3);
   });
 
-  it("grants +3 for a completed format collection (same format across all 3 countries)", () => {
-    const relics: OwnedRelic[] = [
-      { relicId: "kr-p", country: "한국", format: "그림", baseScore: 1, currentScore: 1, discarded: false },
-      { relicId: "eg-p", country: "이집트", format: "그림", baseScore: 4, currentScore: 4, discarded: false },
-      { relicId: "fr-p", country: "프랑스", format: "그림", baseScore: 3, currentScore: 3, discarded: false },
+  it("grants +3 for a completed sector collection (테마 분산투자: same sector across all 3 markets)", () => {
+    const assets: OwnedAsset[] = [
+      { assetId: "kr-b", market: "국장", sector: "빅테크&AI", baseScore: 1, currentScore: 1, discarded: false },
+      { assetId: "us-b", market: "미장", sector: "빅테크&AI", baseScore: 4, currentScore: 4, discarded: false },
+      { assetId: "cr-b", market: "코인", sector: "빅테크&AI", baseScore: 3, currentScore: 3, discarded: false },
     ];
-    const result = computeCollectionBonus(relics);
-    expect(result.formats).toEqual(["그림"]);
+    const result = computeCollectionBonus(assets);
+    expect(result.sectors).toEqual(["빅테크&AI"]);
     expect(result.bonus).toBe(3);
   });
 
-  it("a single relic can count toward both its country collection and its format collection (max 2 uses)", () => {
-    const relics: OwnedRelic[] = [
-      // 한국 country collection:
-      { relicId: "kr-p", country: "한국", format: "그림", baseScore: 1, currentScore: 1, discarded: false },
-      { relicId: "kr-s", country: "한국", format: "조각공예", baseScore: 3, currentScore: 3, discarded: false },
-      { relicId: "kr-a", country: "한국", format: "건축물", baseScore: 5, currentScore: 5, discarded: false },
-      // 그림 format collection (kr-p above is shared, plus these two):
-      { relicId: "eg-p", country: "이집트", format: "그림", baseScore: 4, currentScore: 4, discarded: false },
-      { relicId: "fr-p", country: "프랑스", format: "그림", baseScore: 3, currentScore: 3, discarded: false },
+  it("a single asset can count toward both its market collection and its sector collection (max 2 uses)", () => {
+    const assets: OwnedAsset[] = [
+      // 국장 market collection:
+      { assetId: "kr-b", market: "국장", sector: "빅테크&AI", baseScore: 1, currentScore: 1, discarded: false },
+      { assetId: "kr-c", market: "국장", sector: "블루칩", baseScore: 3, currentScore: 3, discarded: false },
+      { assetId: "kr-a", market: "국장", sector: "밈&테마주", baseScore: 5, currentScore: 5, discarded: false },
+      // 빅테크&AI sector collection (kr-b above is shared, plus these two):
+      { assetId: "us-b", market: "미장", sector: "빅테크&AI", baseScore: 4, currentScore: 4, discarded: false },
+      { assetId: "cr-b", market: "코인", sector: "빅테크&AI", baseScore: 3, currentScore: 3, discarded: false },
     ];
-    const result = computeCollectionBonus(relics);
-    expect(result.countries).toEqual(["한국"]);
-    expect(result.formats).toEqual(["그림"]);
-    expect(result.bonus).toBe(6); // 3 + 3, kr-p counted toward both without being consumed
+    const result = computeCollectionBonus(assets);
+    expect(result.markets).toEqual(["국장"]);
+    expect(result.sectors).toEqual(["빅테크&AI"]);
+    expect(result.bonus).toBe(6); // 3 + 3, kr-b counted toward both without being consumed
   });
 
-  it("ignores discarded relics entirely for collection completion", () => {
-    const relics: OwnedRelic[] = [
-      { relicId: "kr-p", country: "한국", format: "그림", baseScore: 1, currentScore: 1, discarded: false },
-      { relicId: "kr-s", country: "한국", format: "조각공예", baseScore: 3, currentScore: 3, discarded: false },
-      { relicId: "kr-a", country: "한국", format: "건축물", baseScore: 5, currentScore: 5, discarded: true },
+  it("ignores discarded assets entirely for collection completion", () => {
+    const assets: OwnedAsset[] = [
+      { assetId: "kr-b", market: "국장", sector: "빅테크&AI", baseScore: 1, currentScore: 1, discarded: false },
+      { assetId: "kr-c", market: "국장", sector: "블루칩", baseScore: 3, currentScore: 3, discarded: false },
+      { assetId: "kr-a", market: "국장", sector: "밈&테마주", baseScore: 5, currentScore: 5, discarded: true },
     ];
-    expect(computeCollectionBonus(relics).bonus).toBe(0);
+    expect(computeCollectionBonus(assets).bonus).toBe(0);
   });
 });
 
@@ -314,7 +314,7 @@ describe("computeRankings", () => {
     return {
       seat,
       purse: { 20: 0, 10: 0, 5: 0, 1: coinValue },
-      relics: total > 0 ? [{ relicId: `r${seat}`, country: "한국" as const, format: "그림" as const, baseScore: total, currentScore: total, discarded: false }] : [],
+      assets: total > 0 ? [{ assetId: `r${seat}`, market: "국장" as const, sector: "빅테크&AI" as const, baseScore: total, currentScore: total, discarded: false }] : [],
       pendingSpecials: [],
     };
   }

@@ -1,4 +1,4 @@
-import type { Country, Denomination, Format, GreatLegacyMode, Purse, RelicDef, SpecialKind } from "./types";
+import type { AssetDef, Denomination, GreatLegacyMode, Market, Purse, Sector, SpecialKind } from "./types";
 
 export const MIN_PLAYERS: Record<GreatLegacyMode, number> = { "4p": 4, "8p": 8 };
 export const MAX_PLAYERS: Record<GreatLegacyMode, number> = { "4p": 4, "8p": 8 };
@@ -31,70 +31,68 @@ export function purseContains(purse: Purse, sub: Purse): boolean {
 }
 
 /**
- * Starting coin allotment per mode (rulebook §B-1 for 4인; §L-2 방안③ for
- * 8인 — 자금 110코인/코인 구성 20×2·10×3·5×6·1×10, confirmed).
+ * Starting coin allotment (= 신용대출 한도) per mode. 4인은 룰북 §2-1 그대로
+ * 140코인(20×2·10×5·5×8·1×10). 8인은 위대한유산 원작의 8인 리밸런싱안과 동일한
+ * 비율(110코인, 20×2·10×3·5×6·1×10)로 확장한 하우스룰.
  */
 export function startingPurse(mode: GreatLegacyMode): Purse {
   return mode === "4p" ? { 20: 2, 10: 5, 5: 8, 1: 10 } : { 20: 2, 10: 3, 5: 6, 1: 10 };
 }
 
 /**
- * The 18 relic cards (국가 3종 × 형식 3종 × 2매), names/scores taken directly
- * from `boardGameRule/위대한유산/카드구성.png` — identical for both 4인/8인
- * modes (confirmed: 8인 모드도 국가를 4개로 늘리지 않고 원작 18장을 그대로 씀).
+ * The 18 asset cards (3대 시장 × 3대 섹터 × 2매), scores taken directly from
+ * 룰북 §3-1 자산 카드 점수표 — identical for both 4인/8인 modes.
  */
-export const RELIC_DEFS: RelicDef[] = [
-  { id: "kr-painting-1", country: "한국", format: "그림", name: "씨름도", baseScore: 1 },
-  { id: "kr-painting-2", country: "한국", format: "그림", name: "까치호랑이", baseScore: 2 },
-  { id: "kr-sculpture-1", country: "한국", format: "조각공예", name: "금동 반가사유상", baseScore: 3 },
-  { id: "kr-sculpture-2", country: "한국", format: "조각공예", name: "고려청자", baseScore: 4 },
-  { id: "kr-architecture-1", country: "한국", format: "건축물", name: "광화문", baseScore: 5 },
-  { id: "kr-architecture-2", country: "한국", format: "건축물", name: "경복궁", baseScore: 5 },
+export const ASSET_DEFS: AssetDef[] = [
+  // 빅테크 & AI
+  { id: "us-bigtech-1", market: "미장", sector: "빅테크&AI", name: "애플", baseScore: 3 },
+  { id: "us-bigtech-2", market: "미장", sector: "빅테크&AI", name: "구글 알파벳", baseScore: 3 },
+  { id: "kr-bigtech-1", market: "국장", sector: "빅테크&AI", name: "카카오", baseScore: 2 },
+  { id: "kr-bigtech-2", market: "국장", sector: "빅테크&AI", name: "네이버", baseScore: 2 },
+  { id: "cr-bigtech-1", market: "코인", sector: "빅테크&AI", name: "솔라나", baseScore: 2 },
+  { id: "cr-bigtech-2", market: "코인", sector: "빅테크&AI", name: "리플", baseScore: 1 },
 
-  { id: "eg-painting-1", country: "이집트", format: "그림", name: "이집트 벽화(1)", baseScore: 4 },
-  { id: "eg-painting-2", country: "이집트", format: "그림", name: "이집트 벽화(2)", baseScore: 5 },
-  { id: "eg-sculpture-1", country: "이집트", format: "조각공예", name: "아메넴헤트 3세 동상", baseScore: 4 },
-  { id: "eg-sculpture-2", country: "이집트", format: "조각공예", name: "투탕카멘", baseScore: 3 },
-  { id: "eg-architecture-1", country: "이집트", format: "건축물", name: "피라미드", baseScore: 2 },
-  { id: "eg-architecture-2", country: "이집트", format: "건축물", name: "룩소르 신전", baseScore: 1 },
+  // 블루칩 (우량주)
+  { id: "us-bluechip-1", market: "미장", sector: "블루칩", name: "엔비디아", baseScore: 5 },
+  { id: "us-bluechip-2", market: "미장", sector: "블루칩", name: "마이크로소프트", baseScore: 5 },
+  { id: "kr-bluechip-1", market: "국장", sector: "블루칩", name: "삼성전자", baseScore: 4 },
+  { id: "kr-bluechip-2", market: "국장", sector: "블루칩", name: "현대차", baseScore: 3 },
+  { id: "cr-bluechip-1", market: "코인", sector: "블루칩", name: "비트코인", baseScore: 5 },
+  { id: "cr-bluechip-2", market: "코인", sector: "블루칩", name: "이더리움", baseScore: 4 },
 
-  { id: "fr-painting-1", country: "프랑스", format: "그림", name: "별이 빛나는 밤에", baseScore: 3 },
-  { id: "fr-painting-2", country: "프랑스", format: "그림", name: "모나리자", baseScore: 3 },
-  { id: "fr-sculpture-1", country: "프랑스", format: "조각공예", name: "생각하는 사람", baseScore: 3 },
-  { id: "fr-sculpture-2", country: "프랑스", format: "조각공예", name: "밀로의 비너스", baseScore: 3 },
-  { id: "fr-architecture-1", country: "프랑스", format: "건축물", name: "에펠탑", baseScore: 3 },
-  { id: "fr-architecture-2", country: "프랑스", format: "건축물", name: "노트르담 대성당", baseScore: 3 },
+  // 광기의 밈 & 테마주
+  { id: "us-meme-1", market: "미장", sector: "밈&테마주", name: "테슬라", baseScore: 3 },
+  { id: "us-meme-2", market: "미장", sector: "밈&테마주", name: "게임스탑", baseScore: 1 },
+  { id: "kr-meme-1", market: "국장", sector: "밈&테마주", name: "초전도체 테마주", baseScore: 4 },
+  { id: "kr-meme-2", market: "국장", sector: "밈&테마주", name: "정치인 테마주", baseScore: 4 },
+  { id: "cr-meme-1", market: "코인", sector: "밈&테마주", name: "도지코인", baseScore: 3 },
+  { id: "cr-meme-2", market: "코인", sector: "밈&테마주", name: "페페 코인", baseScore: 3 },
 ];
 
-export const COUNTRIES: Country[] = ["한국", "이집트", "프랑스"];
-export const FORMATS: Format[] = ["그림", "조각공예", "건축물"];
+export const MARKETS: Market[] = ["미장", "국장", "코인"];
+export const SECTORS: Sector[] = ["빅테크&AI", "블루칩", "밈&테마주"];
 
 /**
- * Special card counts per mode (rulebook §D for 4인: 재평가2/평가절하2/가품3;
- * §L-2 방안③ for 8인: 재평가3/평가절하3/가품4 — the doubled relic-country
- * count that ③ originally paired this with was declined, but the special
- * card counts themselves were confirmed as-is).
+ * Special (이벤트) card counts per mode. 4인은 룰북 §4 그대로: 초대형호재2 ·
+ * 악재/어닝쇼크2 · 상장폐지2 · 강제반대매매1 (총 7장). 8인은 위대한유산
+ * 원작 8인안(재평가3·평가절하3·가품4)과 동일 비율로 확장 — 상장폐지·
+ * 강제반대매매를 합쳐 원작 "가품판정 4"에 대응시킴.
  */
 export const SPECIAL_CARD_COUNTS: Record<GreatLegacyMode, Record<SpecialKind, number>> = {
-  "4p": { 재평가: 2, 평가절하: 2, 가품판정: 3 },
-  "8p": { 재평가: 3, 평가절하: 3, 가품판정: 4 },
+  "4p": { 초대형호재: 2, 악재어닝쇼크: 2, 상장폐지: 2, 강제반대매매: 1 },
+  "8p": { 초대형호재: 3, 악재어닝쇼크: 3, 상장폐지: 3, 강제반대매매: 1 },
 };
 
-/**
- * Cards randomly excluded at setup, never dealt. 4인은 원작 그대로 3장
- * (25장 중 3장 제외 → 22장 사용). 8인은 유물 18장을 그대로 두고 특수카드만
- * 10장으로 늘려 총 28장이 되므로, 원작과 같은 제외 비율(3/25 ≈ 12%)을
- * 유지하는 "3장 제외 → 25장 사용" 안으로 확정(HANDOFF 참고).
- */
+/** 4인은 룰북 §6 그대로 25장 중 3장 제외 → 22장 진행. 8인도 동일 비율(3/28 ≈ 위대한유산 8인안)로 3장 제외. */
 export const EXCLUDE_COUNT: Record<GreatLegacyMode, number> = { "4p": 3, "8p": 3 };
 
 /**
- * 컬렉션 보너스 — 국가/작품 컬렉션 각각 +3점. 8인도 국가 수가 3개로 원작과
- * 동일하므로 조정하지 않고 그대로 유지 (확정 사항).
+ * 컬렉션 보너스 — "영끌 올인"(시장 컬렉션) / "테마 분산투자"(섹터 컬렉션)
+ * 각각 +3점 (룰북 §5).
  */
 export const COLLECTION_BONUS = 3;
 
 export function countAuctionCards(mode: GreatLegacyMode): number {
   const specials = SPECIAL_CARD_COUNTS[mode];
-  return RELIC_DEFS.length + specials.재평가 + specials.평가절하 + specials.가품판정;
+  return ASSET_DEFS.length + specials.초대형호재 + specials.악재어닝쇼크 + specials.상장폐지 + specials.강제반대매매;
 }

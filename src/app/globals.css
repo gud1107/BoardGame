@@ -5775,7 +5775,7 @@ html {
   animation: lobby-card-gold-particle 0.34s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
 }
 
-/* 위대한 유산 — 베팅 아레나 코인 연출 (see AuctionCoinEffects.tsx / CoinStack.tsx).
+/* 위대한 투자 — 베팅 아레나 코인 연출 (see AuctionCoinEffects.tsx / CoinStack.tsx).
    Same "left/top CSS transition carries position, this keyframe only adds
    the flourish" split as No Thanks' coin-toss-arc. */
 @keyframes great-legacy-coin-toss {

@@ -1,31 +1,31 @@
 /**
- * Pure "위대한 유산" (The Great Legacy) rules engine — no React, no I/O.
- * Same online-multiplayer trust model as No Thanks/Coyote/Avalon: every
- * connected client computes and holds the FULL state (every seat's private
- * purse) from a shared RNG seed plus replayed `EngineAction`s.
+ * Pure "위대한 투자" (The Great Investment) rules engine — no React, no I/O.
+ * Re-themed from the "위대한 유산" relic-auction engine into a stock/crypto
+ * portfolio auction; the bidding/scoring primitives are unchanged, only the
+ * card content and special-effect names differ. Same online-multiplayer
+ * trust model as No Thanks/Coyote/Avalon: every connected client computes
+ * and holds the FULL state (every seat's private purse) from a shared RNG
+ * seed plus replayed `EngineAction`s.
  *
  * Two auction shapes coexist on the same bidding primitive (open-ascending,
  * strictly-increasing, cumulative, "can't un-commit, only add"):
- *  - "normal" (relic cards + 재평가): last bidder standing wins, everyone
+ *  - "normal" (asset cards + 초대형호재): last bidder standing wins, everyone
  *    else who passed already got their committed coins refunded on the way
- *    out (rulebook §G).
- *  - "reverse" (평가절하/가품 판정): the FIRST player to pass "wins" (gets
- *    stuck with) the card; per §H, "다른 모든 플레이어가 입찰했던 코인은
- *    전부 폐기됩니다" — read literally, that scopes the forfeiture to seats
- *    OTHER than the passer, so the passer's own already-committed coins are
- *    refunded to them exactly like a normal-auction pass (see the
- *    HANDOFF.md entry for this session — this is a direct textual reading,
- *    not an invented rule, and was surfaced to the user rather than shipped
- *    silently).
+ *    out (rulebook §7-1).
+ *  - "reverse" (악재/어닝쇼크, 상장폐지, 강제반대매매): the FIRST player to
+ *    pass "wins" (gets stuck with) the card; per §7-2, "나머지 플레이어들이
+ *    ... 입찰 코인은 전액 소멸" — that scopes the forfeiture to seats OTHER
+ *    than the passer, so the passer's own already-committed coins are
+ *    refunded to them exactly like a normal-auction pass.
  *
- * Special-card targeting ("직전에 획득한 유물"): always the seat's
- * chronologically LAST-acquired relic, full stop — a relic already modified
+ * Special-card targeting ("직전에 획득한 자산"): always the seat's
+ * chronologically LAST-acquired asset, full stop — an asset already modified
  * by an earlier special can be re-targeted and overwritten by a later one
- * (confirmed: "1개의 특수카드는 1개의 유물만 순서대로 적용합니다"). If the
- * seat owns zero relics yet, the special is queued (`pendingSpecials`) and
- * consumes exactly the NEXT relic that seat acquires, one queued special per
- * relic acquisition, in FIFO order (confirmed: "순서대로 유물카드 획득 시에
- * 적용").
+ * (rulebook §4-1: "특수 카드 1장은 오직 직전에 획득한 자산 카드 1장에만
+ * 적용됩니다"). If the seat owns zero assets yet, the special is queued
+ * (`pendingSpecials`) and consumes exactly the NEXT asset that seat
+ * acquires, one queued special per asset acquisition, in FIFO order
+ * (§4-1-2: "다음번에 최초로 낙찰받는 자산 카드에 해당 효과가 즉시 발동").
  */
 
 import { seededRng, shuffle } from "@/lib/rng";
@@ -33,11 +33,11 @@ export { seededRng };
 
 import {
   addPurses,
+  ASSET_DEFS,
   COLLECTION_BONUS,
-  COUNTRIES,
   EXCLUDE_COUNT,
-  FORMATS,
-  RELIC_DEFS,
+  MARKETS,
+  SECTORS,
   SPECIAL_CARD_COUNTS,
   emptyPurse,
   purseContains,
@@ -53,7 +53,7 @@ import type {
   EngineAction,
   GreatLegacyMode,
   GreatLegacyState,
-  OwnedRelic,
+  OwnedAsset,
   PlayerState,
   Purse,
   SeatIndex,
@@ -65,8 +65,8 @@ export const MIN_PLAYERS: Record<GreatLegacyMode, number> = { "4p": 4, "8p": 8 }
 export const MAX_PLAYERS: Record<GreatLegacyMode, number> = { "4p": 4, "8p": 8 };
 
 function auctionKindFor(card: AuctionCardDef): AuctionKind {
-  if (card.kind === "relic") return "normal";
-  return card.special === "재평가" ? "normal" : "reverse";
+  if (card.kind === "asset") return "normal";
+  return card.special === "초대형호재" ? "normal" : "reverse";
 }
 
 function nextActiveSeat(order: SeatIndex[], passed: SeatIndex[], from: SeatIndex): SeatIndex {
@@ -113,9 +113,9 @@ export function startGame(
       specialCards.push({ kind: "special", cardId: `special-${kind}-${i}`, special: kind });
     }
   });
-  const relicCards: AuctionCardDef[] = RELIC_DEFS.map((relic) => ({ kind: "relic", cardId: relic.id, relic }));
+  const assetCards: AuctionCardDef[] = ASSET_DEFS.map((asset) => ({ kind: "asset", cardId: asset.id, asset }));
 
-  const allCards = shuffle([...relicCards, ...specialCards], rng);
+  const allCards = shuffle([...assetCards, ...specialCards], rng);
   const excludeCount = EXCLUDE_COUNT[mode];
   const excludedCards = allCards.slice(0, excludeCount);
   const deck = allCards.slice(excludeCount);
@@ -124,7 +124,7 @@ export function startGame(
   const players: PlayerState[] = Array.from({ length: playerCount }, (_, seat) => ({
     seat,
     purse: { ...purse },
-    relics: [],
+    assets: [],
     pendingSpecials: [],
   }));
 
@@ -151,43 +151,43 @@ export function startGame(
 // Special-card application
 // ---------------------------------------------------------------------------
 
-function applySpecialToRelic(relic: OwnedRelic, kind: SpecialKind): OwnedRelic {
-  if (kind === "재평가") return { ...relic, currentScore: 5, discarded: false };
-  if (kind === "평가절하") return { ...relic, currentScore: 1, discarded: false };
-  return { ...relic, discarded: true }; // 가품 판정
+function applySpecialToAsset(asset: OwnedAsset, kind: SpecialKind): OwnedAsset {
+  if (kind === "초대형호재") return { ...asset, currentScore: 5, discarded: false };
+  if (kind === "악재어닝쇼크") return { ...asset, currentScore: 1, discarded: false };
+  return { ...asset, discarded: true }; // 상장폐지 / 강제반대매매
 }
 
-/** Grants `winner` a relic, consuming one queued pending special (if any) — see module doc. */
-function grantRelic(player: PlayerState, relicDef: AuctionCardDef & { kind: "relic" }): PlayerState {
-  let relic: OwnedRelic = {
-    relicId: relicDef.relic.id,
-    country: relicDef.relic.country,
-    format: relicDef.relic.format,
-    baseScore: relicDef.relic.baseScore,
-    currentScore: relicDef.relic.baseScore,
+/** Grants `winner` an asset, consuming one queued pending special (if any) — see module doc. */
+function grantAsset(player: PlayerState, assetDef: AuctionCardDef & { kind: "asset" }): PlayerState {
+  let asset: OwnedAsset = {
+    assetId: assetDef.asset.id,
+    market: assetDef.asset.market,
+    sector: assetDef.asset.sector,
+    baseScore: assetDef.asset.baseScore,
+    currentScore: assetDef.asset.baseScore,
     discarded: false,
   };
   const pendingSpecials = [...player.pendingSpecials];
   if (pendingSpecials.length > 0) {
     const kind = pendingSpecials.shift()!;
-    relic = applySpecialToRelic(relic, kind);
+    asset = applySpecialToAsset(asset, kind);
   }
-  return { ...player, relics: [...player.relics, relic], pendingSpecials };
+  return { ...player, assets: [...player.assets, asset], pendingSpecials };
 }
 
-/** Grants `winner` a special card — applies to their last-acquired relic immediately, or queues it if they own none yet. */
+/** Grants `winner` a special card — applies to their last-acquired asset immediately, or queues it if they own none yet. */
 function grantSpecial(player: PlayerState, kind: SpecialKind): PlayerState {
-  if (player.relics.length === 0) {
+  if (player.assets.length === 0) {
     return { ...player, pendingSpecials: [...player.pendingSpecials, kind] };
   }
-  const relics = [...player.relics];
-  const lastIdx = relics.length - 1;
-  relics[lastIdx] = applySpecialToRelic(relics[lastIdx], kind);
-  return { ...player, relics };
+  const assets = [...player.assets];
+  const lastIdx = assets.length - 1;
+  assets[lastIdx] = applySpecialToAsset(assets[lastIdx], kind);
+  return { ...player, assets };
 }
 
 function grantCard(player: PlayerState, card: AuctionCardDef): PlayerState {
-  return card.kind === "relic" ? grantRelic(player, card) : grantSpecial(player, card.special);
+  return card.kind === "asset" ? grantAsset(player, card) : grantSpecial(player, card.special);
 }
 
 // ---------------------------------------------------------------------------
@@ -368,38 +368,39 @@ export function minimalRaiseCoins(state: GreatLegacyState, seat: SeatIndex): Pur
 // Scoring
 // ---------------------------------------------------------------------------
 
-function hasCollectionCard(relics: OwnedRelic[], country: (typeof COUNTRIES)[number] | null, format: (typeof FORMATS)[number] | null): boolean {
-  return relics.some((r) => !r.discarded && (country === null || r.country === country) && (format === null || r.format === format));
+function hasCollectionCard(assets: OwnedAsset[], market: (typeof MARKETS)[number] | null, sector: (typeof SECTORS)[number] | null): boolean {
+  return assets.some((a) => !a.discarded && (market === null || a.market === market) && (sector === null || a.sector === sector));
 }
 
-export function computeCollectionBonus(relics: OwnedRelic[]): { bonus: number; countries: string[]; formats: string[] } {
-  const countries: string[] = [];
-  const formats: string[] = [];
-  for (const country of COUNTRIES) {
-    if (FORMATS.every((format) => hasCollectionCard(relics, country, format))) countries.push(country);
+/** `markets` = "영끌 올인" 컬렉션(한 시장의 3대 섹터를 모두 보유), `sectors` = "테마 분산투자" 컬렉션(한 섹터를 3대 시장 모두 보유). */
+export function computeCollectionBonus(assets: OwnedAsset[]): { bonus: number; markets: string[]; sectors: string[] } {
+  const markets: string[] = [];
+  const sectors: string[] = [];
+  for (const market of MARKETS) {
+    if (SECTORS.every((sector) => hasCollectionCard(assets, market, sector))) markets.push(market);
   }
-  for (const format of FORMATS) {
-    if (COUNTRIES.every((country) => hasCollectionCard(relics, country, format))) formats.push(format);
+  for (const sector of SECTORS) {
+    if (MARKETS.every((market) => hasCollectionCard(assets, market, sector))) sectors.push(sector);
   }
-  return { bonus: (countries.length + formats.length) * COLLECTION_BONUS, countries, formats };
+  return { bonus: (markets.length + sectors.length) * COLLECTION_BONUS, markets, sectors };
 }
 
 export interface PlayerScore {
   seat: SeatIndex;
-  relicScore: number;
+  assetScore: number;
   collectionBonus: number;
   total: number;
   remainingCoinValue: number;
 }
 
 export function computePlayerScore(player: PlayerState): PlayerScore {
-  const relicScore = player.relics.filter((r) => !r.discarded).reduce((sum, r) => sum + r.currentScore, 0);
-  const { bonus } = computeCollectionBonus(player.relics);
+  const assetScore = player.assets.filter((a) => !a.discarded).reduce((sum, a) => sum + a.currentScore, 0);
+  const { bonus } = computeCollectionBonus(player.assets);
   return {
     seat: player.seat,
-    relicScore,
+    assetScore,
     collectionBonus: bonus,
-    total: relicScore + bonus,
+    total: assetScore + bonus,
     remainingCoinValue: purseValue(player.purse),
   };
 }
@@ -448,9 +449,9 @@ export function getValidMoves(state: GreatLegacyState, seat: SeatIndex): EngineA
 
 /** Rough "how much is this card worth chasing" estimate, used only by the bot heuristic below. */
 function cardValueEstimate(card: AuctionCardDef): number {
-  if (card.kind === "relic") return card.relic.baseScore;
-  if (card.special === "재평가") return 5;
-  return 0; // 평가절하/가품판정 have no positive value to the bidder in a normal sense (only ever seen via reverse auctions below)
+  if (card.kind === "asset") return card.asset.baseScore;
+  if (card.special === "초대형호재") return 5;
+  return 0; // 악재/어닝쇼크·상장폐지·강제반대매매 have no positive value to the bidder in a normal sense (only ever seen via reverse auctions below)
 }
 
 import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
@@ -465,7 +466,7 @@ function scoreMove(state: GreatLegacyState, seat: SeatIndex, move: EngineAction,
     const value = cardValueEstimate(auction.card);
     if (move.type === "pass") return -value; // walking away from a card worth chasing is a mild loss
     const cost = purseValue(move.addCoins);
-    // Willing to chase up to ~4x a relic's score (a rough "don't blow the whole purse on a 1-point card" guard) and never more than what's left.
+    // Willing to chase up to ~4x an asset's score (a rough "don't blow the whole purse on a 1-point card" guard) and never more than what's left.
     const willingCap = Math.max(value * 4, botTier(level) === "expert" ? 20 : 10);
     return auction.highestBid + cost <= willingCap ? value * 2 - cost * 0.1 : -cost;
   }

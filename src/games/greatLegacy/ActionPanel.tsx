@@ -92,6 +92,13 @@ export default function ActionPanel({
         </span>
       </div>
 
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-semibold text-white/60 light:text-slate-600">코인 선택</span>
+        <span className="text-white/50 light:text-slate-500">
+          내 잔여 코인 합계 <b className="text-amber-200 light:text-amber-700">{purseValue(remainingPurse)}코인</b>
+        </span>
+      </div>
+
       <div className="flex flex-wrap gap-2">
         {DENOMINATIONS.map((denom) => (
           <div key={denom} className="flex flex-col items-center gap-1">
