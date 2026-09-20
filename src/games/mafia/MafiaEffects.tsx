@@ -426,3 +426,94 @@ export function MafiaRevealOverlay({
       return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// 턴 알림 시네마틱 FX (2026-09-20 요청) — `useMafiaReveals`의 결과-발표
+// 이벤트와는 별개로, "지금 당신 차례입니다" 라는 페이즈 진입 콜아웃이다.
+// 대상은 항상 뷰어 자신뿐이라(다른 사람의 턴 여부는 표시하지 않음)
+// `useMafiaReveals`처럼 모든 클라이언트가 같은 이벤트 큐를 공유할 필요가
+// 없다 — 이 훅은 `viewerSeat`을 직접 받아 그 시점에 필요한지 자체 판단한다.
+// ---------------------------------------------------------------------------
+
+export interface MafiaTurnCue {
+  id: number;
+  type: "night" | "vote" | "judgment";
+  title: string;
+  subText: string;
+}
+
+/** 밤에 실제로 할 일이 있는 역할인지 — 시민/군인/정치인/테러리스트는 밤에 능동 액션이 없고, 영매는 사망자가 아직 없으면 조사할 대상이 없다. */
+function hasNightAction(state: MafiaState, viewerSeat: SeatIndex): boolean {
+  const viewer = state.players[viewerSeat];
+  if (!viewer.alive || state.nightNumber === 0) return false;
+  if (viewer.role === "mafia" || viewer.role === "doctor" || viewer.role === "police" || viewer.role === "spy") return true;
+  if (viewer.role === "medium") return state.players.some((p) => !p.alive);
+  return false;
+}
+
+export function useMafiaTurnCue(state: MafiaState, viewerSeat: SeatIndex): { cue: MafiaTurnCue | null; dismiss: () => void } {
+  const idRef = useRef(0);
+  const prevRef = useRef<{ phase: MafiaState["phase"]; seat: SeatIndex }>({ phase: state.phase, seat: viewerSeat });
+  const [cue, setCue] = useState<MafiaTurnCue | null>(null);
+
+  useEffect(() => {
+    const prev = prevRef.current;
+    if (prev.phase === state.phase && prev.seat === viewerSeat) return;
+    prevRef.current = { phase: state.phase, seat: viewerSeat };
+
+    const viewer = state.players[viewerSeat];
+    if (!viewer.alive) return;
+
+    if (state.phase === "night" && hasNightAction(state, viewerSeat)) {
+      setCue({ id: ++idRef.current, type: "night", title: "NIGHT ACTION", subText: "어둠 속에서 비밀 행동을 수행하십시오" });
+    } else if (state.phase === "nomination") {
+      setCue({ id: ++idRef.current, type: "vote", title: "SUSPECT VOTE", subText: "처형대에 올릴 용의자를 지목하십시오" });
+    } else if (state.phase === "finalVote") {
+      setCue({ id: ++idRef.current, type: "judgment", title: "FINAL VERDICT", subText: "찬성(처형) 또는 반대(구원)를 결정하십시오" });
+    }
+  }, [state, viewerSeat]);
+
+  return { cue, dismiss: () => setCue(null) };
+}
+
+const TURN_CUE_RING: Record<MafiaTurnCue["type"], string> = {
+  night: "border-purple-500/60 shadow-[inset_0_0_60px_rgba(168,85,247,0.35)]",
+  vote: "border-amber-400/60 shadow-[inset_0_0_60px_rgba(251,191,36,0.35)]",
+  judgment: "border-rose-500/60 shadow-[inset_0_0_60px_rgba(244,63,94,0.35)]",
+};
+
+const TURN_CUE_ICON: Record<MafiaTurnCue["type"], string> = { night: "🌙", vote: "🗳️", judgment: "⚖️" };
+
+export function MafiaTurnCueOverlay({ cue, onDone }: { cue: MafiaTurnCue; onDone: () => void }) {
+  useEffect(() => {
+    const engine = getSoundEngine();
+    switch (cue.type) {
+      case "night":
+        engine.playMafiaNightActionCue();
+        break;
+      case "vote":
+        engine.playMafiaVoteGavelCue();
+        break;
+      case "judgment":
+        engine.playMafiaFinalVerdictCue();
+        break;
+    }
+    const t = setTimeout(onDone, 2200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire exactly once per cue.id
+  }, [cue.id]);
+
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[65] flex flex-col items-center justify-center" style={{ animation: "mafia-turncue-fade 2.2s ease-out forwards" }}>
+      <div className={`absolute inset-0 border-4 ${TURN_CUE_RING[cue.type]}`} style={{ animation: "mafia-turncue-breathe 1.4s ease-in-out infinite" }} />
+      <div
+        className="relative flex flex-col items-center gap-1 rounded-3xl border border-amber-500/40 bg-black/85 px-6 py-4 text-center shadow-2xl backdrop-blur-md"
+        style={{ animation: "mafia-stamp-drop 0.5s cubic-bezier(0.34,1.56,0.64,1)" }}
+      >
+        <span className="text-3xl">{TURN_CUE_ICON[cue.type]}</span>
+        <h2 className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 bg-clip-text text-2xl font-black tracking-widest text-transparent sm:text-3xl">{cue.title}</h2>
+        <p className="text-xs font-semibold text-white/70 sm:text-sm">{cue.subText}</p>
+      </div>
+    </div>
+  );
+}

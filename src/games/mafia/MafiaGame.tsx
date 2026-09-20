@@ -1144,7 +1144,7 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
     );
   }
 
-  if (phase === "playing" && gameState && mySeat !== null) {
+  if (phase === "playing" && gameState && mySeat !== null && roomCode) {
     const myVoteAsTarget = activeVoteFor(botTakeover, String(mySeat));
     const iAmTakenOver = isSeatTakenOver(botTakeover, String(mySeat));
     const voteToShow = Object.values(botTakeover.votes).find(
@@ -1180,6 +1180,7 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
         onAction={handleAction}
         onGameEnd={handleGameEnd}
         isChatInputFocused={isChatInputFocused}
+        roomCode={roomCode}
       />
       <div className="hidden sm:block">
         <ChatDrawer

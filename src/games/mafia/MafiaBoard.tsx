@@ -5,7 +5,7 @@ import RulebookModal from "./RulebookModal";
 import RoleInspector from "./RoleInspector";
 import RoleRosterTable from "./RoleRosterTable";
 import PhaseSkipVote from "./PhaseSkipVote";
-import { MafiaRevealOverlay, useBoardShake, useMafiaReveals } from "./MafiaEffects";
+import { MafiaRevealOverlay, MafiaTurnCueOverlay, useBoardShake, useMafiaReveals, useMafiaTurnCue } from "./MafiaEffects";
 import {
   getKnowledge,
   knownRoleFor,
@@ -25,6 +25,26 @@ export interface MafiaBoardProps {
   onGameEnd: () => void;
   /** 채팅 입력창에 포커스(가상 키보드 팝업) 중이면 true — 모바일에서 `RoleInspector`의 edge-tab/드로어를 임시로 숨긴다. */
   isChatInputFocused?: boolean;
+  /** 직업 공개 팝업의 "이미 봤음" 여부를 localStorage에 영구 기록하는 키로 쓰인다(2026-09-20 요청) — 재접속/새로고침에도 다시 뜨지 않게 하려면 방 코드 단위로 남겨야 한다. */
+  roomCode: string;
+}
+
+/** 이 방에서 직업 공개 팝업을 이미 본 적 있는지 — 새로고침/재접속으로 컴포넌트가 통째로 다시 마운트돼도 살아남도록 localStorage에 남긴다. */
+function hasSeenRoleIntro(roomCode: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(`mafia-role-intro-seen-${roomCode}`) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markRoleIntroSeen(roomCode: string) {
+  try {
+    window.localStorage.setItem(`mafia-role-intro-seen-${roomCode}`, "1");
+  } catch {
+    // localStorage unavailable (private mode 등) — 이번 세션엔 그냥 매번 뜨는 정도로 성능 저하.
+  }
 }
 
 const ROLE_META: Record<Role, { label: string; icon: string; team: Team; blurb: string }> = {
@@ -64,14 +84,19 @@ const PHASE_LABEL: Record<MafiaState["phase"], string> = {
   gameOver: "🏁 게임 종료",
 };
 
-export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd, isChatInputFocused = false }: MafiaBoardProps) {
+export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, onAction, onGameEnd, isChatInputFocused = false, roomCode }: MafiaBoardProps) {
   const [rulebookOpen, setRulebookOpen] = useState(false);
-  const [roleModalOpen, setRoleModalOpen] = useState(true);
-  const [trackedPlayers, setTrackedPlayers] = useState(state.players);
-  if (trackedPlayers !== state.players) {
-    setTrackedPlayers(state.players);
-    setRoleModalOpen(true);
-  }
+  // 게임 시작 직후 딱 1회만 노출(2026-09-20 요청) — 예전엔 `state.players`
+  // 배열 레퍼런스가 바뀔 때마다(사망/방탄 소모/스파이 접선 등 어떤 플레이어
+  // 상태 변화든) 팝업을 재오픈하는 버그가 있었다. 이제는 게임당 1회만 열고,
+  // localStorage에 영구 기록해 재접속/새로고침으로 컴포넌트가 통째로 다시
+  // 마운트돼도 다시 뜨지 않는다. "🎭 내 역할" 버튼으로 다시 여는 건 사용자의
+  // 명시적 요청이라 별개로 계속 허용.
+  const [roleModalOpen, setRoleModalOpen] = useState(() => !hasSeenRoleIntro(roomCode));
+  const closeRoleModal = () => {
+    markRoleIntroSeen(roomCode);
+    setRoleModalOpen(false);
+  };
 
   const viewer = state.players[viewerSeat];
   const iAmGhost = !viewer.alive;
@@ -99,6 +124,10 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-check when the event itself changes
   }, [reveal]);
   const shakeStyle = useBoardShake(reveal?.type === "death" || reveal?.type === "morning-tragic" ? reveal.id : null);
+
+  // 턴 알림 FX(2026-09-20 요청) — 밤 액션/투표 페이즈에 진입하는 순간 나에게만
+  // 뜨는 콜아웃. 결과-발표용 `reveal` 이벤트 큐와는 완전히 별개 파이프라인.
+  const { cue: turnCue, dismiss: dismissTurnCue } = useMafiaTurnCue(state, viewerSeat);
 
   if (state.phase === "gameOver" && state.winner) {
     return (
@@ -186,8 +215,9 @@ export default function MafiaBoard({ state, viewerSeat, names, connectedSeats, o
         </div>
 
         {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}
-        {roleModalOpen && <RoleModal viewerSeat={viewerSeat} names={names} meta={meta} onClose={() => setRoleModalOpen(false)} />}
+        {roleModalOpen && <RoleModal viewerSeat={viewerSeat} names={names} meta={meta} onClose={closeRoleModal} />}
         {reveal && revealApplies && <MafiaRevealOverlay key={reveal.id} event={reveal} names={names} onDone={dismissReveal} />}
+        {turnCue && <MafiaTurnCueOverlay key={turnCue.id} cue={turnCue} onDone={dismissTurnCue} />}
       </div>
       <RoleInspector state={state} viewerSeat={viewerSeat} names={names} isChatInputFocused={isChatInputFocused} />
     </div>

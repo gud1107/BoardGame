@@ -3138,6 +3138,83 @@ class SoundEngine {
       osc.stop(at + 0.34);
     });
   }
+
+  /** 마피아 — 밤 액션 차례 알림(2026-09-20 요청): 묵직한 서브베이스 텐션 드롭. */
+  playMafiaNightActionCue() {
+    if (!this.gate("mafiaNightActionCue", 400)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const drop = ctx.createOscillator();
+    drop.type = "sine";
+    drop.frequency.setValueAtTime(180, now);
+    drop.frequency.exponentialRampToValueAtTime(45, now + 0.5);
+    const dropGain = ctx.createGain();
+    dropGain.gain.setValueAtTime(0.001, now);
+    dropGain.gain.linearRampToValueAtTime(0.32, now + 0.05);
+    dropGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+    drop.connect(dropGain).connect(this.sfxGain);
+    drop.start(now);
+    drop.stop(now + 0.72);
+  }
+
+  /** 마피아 — 낮 지목투표 개시(2026-09-20 요청): 법정 망치(가벨) 2연타. */
+  playMafiaVoteGavelCue() {
+    if (!this.gate("mafiaVoteGavelCue", 400)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    [0, 0.18].forEach((offset) => {
+      const at = now + offset;
+      const crack = ctx.createBufferSource();
+      crack.buffer = noiseBuffer(ctx);
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.Q.value = 3;
+      filter.frequency.value = 1200;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.4, at);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.15);
+      crack.connect(filter).connect(gain).connect(this.sfxGain!);
+      crack.start(at);
+      crack.stop(at + 0.16);
+
+      const thud = ctx.createOscillator();
+      thud.type = "sine";
+      thud.frequency.setValueAtTime(140, at);
+      thud.frequency.exponentialRampToValueAtTime(50, at + 0.2);
+      const thudGain = ctx.createGain();
+      thudGain.gain.setValueAtTime(0.3, at);
+      thudGain.gain.exponentialRampToValueAtTime(0.001, at + 0.22);
+      thud.connect(thudGain).connect(this.sfxGain!);
+      thud.start(at);
+      thud.stop(at + 0.24);
+    });
+  }
+
+  /** 마피아 — 최종 찬반투표 개시(2026-09-20 요청): 팽팽한 심장 박동 4회(lub-dub ×2). */
+  playMafiaFinalVerdictCue() {
+    if (!this.gate("mafiaFinalVerdictCue", 400)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    [0, 0.42, 0.9, 1.3].forEach((offset, i) => {
+      const at = now + offset;
+      const beat = ctx.createOscillator();
+      beat.type = "sine";
+      beat.frequency.setValueAtTime(80, at);
+      beat.frequency.exponentialRampToValueAtTime(38, at + 0.16);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(i % 2 === 0 ? 0.32 : 0.22, at);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.18);
+      beat.connect(gain).connect(this.sfxGain!);
+      beat.start(at);
+      beat.stop(at + 0.2);
+    });
+  }
 }
 
 let instance: SoundEngine | null = null;
