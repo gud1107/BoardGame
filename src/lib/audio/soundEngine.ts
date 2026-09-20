@@ -3215,6 +3215,47 @@ class SoundEngine {
       beat.stop(at + 0.2);
     });
   }
+
+  /** 마피아 — 경찰 조사 익명 공개 발표: 성공(2026-09-21 요청). 밝게 상승하는 2음 벨(공공 방송 알림음), 좌석을 지목하는 사이렌보다 훨씬 절제된 톤. */
+  playMafiaPublicCheckSuccess() {
+    if (!this.gate("mafiaPublicCheckSuccess", 400)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    [880, 1174.7].forEach((freq, i) => {
+      const at = now + i * 0.14;
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.18, at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.35);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.37);
+    });
+  }
+
+  /** 마피아 — 경찰 조사 익명 공개 발표: 실패(2026-09-21 요청). 낮은 단음 벨 — 성공음보다 짧고 무덤덤한 톤. */
+  playMafiaPublicCheckFail() {
+    if (!this.gate("mafiaPublicCheckFail", 400)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = 440;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.14, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    osc.connect(gain).connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.42);
+  }
 }
 
 let instance: SoundEngine | null = null;

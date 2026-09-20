@@ -252,6 +252,21 @@ describe("police / spy / medium investigations", () => {
     expect(s.nightActions.policeResult).toEqual({ target: mafiaSeat, isMafia: true });
   });
 
+  it("publicly (anonymously) logs whether the police's nightly check found a mafia-aligned seat", () => {
+    let s = startGame(6, 1, withConfig(), 1000);
+    s = toNight1(s);
+    const policeSeat = s.players.find((p) => p.role === "police")!.seat;
+    const mafiaSeat = s.players.find((p) => p.role === "mafia")!.seat;
+    s = applyAction(s, { type: "policeNightAction", seat: policeSeat, target: mafiaSeat });
+    expect(s.publicLog.at(-1)).toEqual({ type: "policeCheck", night: 1, foundMafia: true });
+
+    const citizenSeat = s.players.find((p) => p.alive && p.team === "citizen" && p.seat !== policeSeat)!.seat;
+    let s2 = startGame(6, 1, withConfig(), 1000);
+    s2 = toNight1(s2);
+    s2 = applyAction(s2, { type: "policeNightAction", seat: policeSeat, target: citizenSeat });
+    expect(s2.publicLog.at(-1)).toEqual({ type: "policeCheck", night: 1, foundMafia: false });
+  });
+
   it("persists the investigation permanently (survives the night resolving and the transient nightActions being wiped)", () => {
     let s = startGame(6, 1, withConfig(), 1000);
     s = toNight1(s);

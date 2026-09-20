@@ -136,7 +136,15 @@ export type PublicLogEntry =
   | { readonly type: "mafiaAttack"; readonly night: number; readonly victim: SeatIndex | null; readonly savedByDoctor: boolean; readonly savedByArmor: boolean }
   | { readonly type: "execution"; readonly day: number; readonly suspect: SeatIndex; readonly executed: boolean; readonly blockedByPolitician: boolean }
   | { readonly type: "voteVoid"; readonly day: number }
-  | { readonly type: "terroristRevenge"; readonly day: number; readonly terroristSeat: SeatIndex; readonly targetSeat: SeatIndex };
+  | { readonly type: "terroristRevenge"; readonly day: number; readonly terroristSeat: SeatIndex; readonly targetSeat: SeatIndex }
+  /**
+   * 2026-09-21 요청 — 경찰 조사의 성공/실패(마피아를 찾았는지)만 매일 밤
+   * 즉시 전원에게 공개한다(누가 경찰인지, 누구를 조사했는지는 여전히
+   * 비공개). 위 다른 항목들과 달리 기존 UI가 이미 공개하던 사실의 재구성이
+   * 아니라, 이번 요청으로 새로 뚫린 유일한 의도적 정보 공개 — 스파이/영매
+   * 조사는 범위 밖(요청이 "경찰"만 명시), 계속 완전 비공개로 유지.
+   */
+  | { readonly type: "policeCheck"; readonly night: number; readonly foundMafia: boolean };
 
 export interface DeathRecord {
   readonly seat: SeatIndex;
@@ -389,6 +397,7 @@ function submitPoliceAction(state: MafiaState, seat: SeatIndex, target: SeatInde
     ...state,
     nightActions: { ...state.nightActions, policeTarget: target, policeResult: { target, isMafia } },
     investigationLog: [...state.investigationLog, record],
+    publicLog: [...state.publicLog, { type: "policeCheck", night: state.nightNumber, foundMafia: isMafia }],
   };
 }
 

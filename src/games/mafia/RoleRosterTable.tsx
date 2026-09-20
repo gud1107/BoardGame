@@ -36,7 +36,7 @@ const ROLE_META: Record<Role, { label: string; icon: string; team: Team }> = {
 const ROLE_ABILITY: Record<Role, string> = {
   citizen: "특수 능력은 없습니다. 낮 토론과 투표로 마피아를 찾아내는 것이 유일한 무기예요.",
   mafia: "매일 밤 동료와 함께 시민 1명을 지목해 제거합니다.",
-  police: "매일 밤 1명을 조사해 마피아인지 아닌지 확인합니다. (결과는 본인만 알 수 있어요)",
+  police: "매일 밤 1명을 조사해 마피아인지 아닌지 확인합니다. 누구를 조사했는지는 비공개지만, 성공/실패 여부는 그날 밤 전원에게 익명으로 공개돼요.",
   doctor: "매일 밤 1명을 지정해 마피아의 습격으로부터 보호합니다.",
   spy: "매일 밤 1명을 조사해 정확한 직업을 알아냅니다. 마피아를 찾아내면 그날 밤부터 암살 표결에 합류해요. (결과는 본인만 알 수 있어요)",
   soldier: "마피아의 습격을 1회 자동으로 막아냅니다 (방탄조끼, 게임당 1회).",
@@ -72,6 +72,8 @@ function publicLogLinesFor(role: Role, log: readonly PublicLogEntry[]): string[]
       lines.push(`${e.day}일차: 처형 투표가 가결됐지만 정치인이라 면제됨`);
     } else if (role === "terrorist" && e.type === "terroristRevenge") {
       lines.push(`${e.day}일차: 처형되며 길동무 1명을 함께 처형시킴`);
+    } else if (role === "police" && e.type === "policeCheck") {
+      lines.push(e.foundMafia ? `${e.night}일차 밤: 조사 성공 — 마피아를 찾아냄` : `${e.night}일차 밤: 조사 실패 — 마피아가 아니었음`);
     }
   }
   return lines;
@@ -85,7 +87,8 @@ export interface RoleRosterTableProps {
 
 function RoleDetail({ role, publicLog }: { role: Role; publicLog: readonly PublicLogEntry[] }) {
   const lines = publicLogLinesFor(role, publicLog);
-  const hasNoPublicRecord = role === "citizen" || role === "police" || role === "spy" || role === "medium";
+  // 2026-09-21 요청: 경찰만 성공/실패 여부가 매밤 공개되도록 변경(스파이/영매는 여전히 완전 비공개).
+  const hasNoPublicRecord = role === "citizen" || role === "spy" || role === "medium";
   return (
     <div className="flex flex-col gap-1.5 px-1 pt-1 pb-2 text-[10px]">
       <p className="text-white/70 light:text-slate-600">{ROLE_ABILITY[role]}</p>

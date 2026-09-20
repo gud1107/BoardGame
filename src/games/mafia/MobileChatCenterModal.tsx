@@ -22,6 +22,11 @@ import ChatPanel from "@/components/chat/ChatPanel";
  * 것보다 이 방식이 키보드 리사이즈에 더 안정적) — 그래서 헤더/메시지목록
  * (`flex-1 overflow-y-auto`)/입력창(`shrink-0`) 순서의 세로 flex 배치만
  * 유지하면 입력창이 항상 키보드 바로 위에 붙는다.
+ *
+ * 2026-09-20 4차 요청 — "전송 완료 시 자동으로 닫힘"(3차 요청 당시 명세)을
+ * 도로 제거. 여러 메시지를 연달아 보낼 때마다 매번 퀵바를 다시 눌러야 하는
+ * 게 오히려 불편하다는 피드백 — 이제는 ✕ 버튼으로만 닫힌다(사용자가 수동
+ * 제어). 다시 이 동작을 넣지 말 것.
  */
 
 interface Props {
@@ -61,22 +66,6 @@ export default function MobileChatCenterModal({
   const latest = messages[messages.length - 1];
   const preview = latest ? (latest.type === "SYSTEM" ? latest.body : `${latest.senderName}: ${latest.body}`) : "탭해서 채팅 시작하기";
 
-  // 전송 완료 시 모달을 자동으로 닫는다(요청 명세) — ChatPanel은 onSend의
-  // 반환값으로 draft 초기화 여부를 결정하므로, 원래 결과를 그대로 반환하면서
-  // 부수효과로만 닫는다. `useCallback`으로 참조를 고정해야
-  // `ChatPanel.tsx`의 `Composer`(`React.memo`) 메모이제이션이 실제로
-  // 효과를 발휘한다(안 그러면 매 렌더 새 함수가 생겨 입력창이 계속
-  // 재렌더링됨 — 2026-09-20 "봇/다른 사람이 채팅치면 내 입력이 안 되는
-  // 현상" 개선 참고).
-  const handleSend = useCallback(
-    (body: string): SendResult => {
-      const result = onSend(body);
-      if (result.ok) close();
-      return result;
-    },
-    [onSend, close],
-  );
-
   return (
     <>
       <button
@@ -113,7 +102,7 @@ export default function MobileChatCenterModal({
           <div className="min-h-0 flex-1 px-3 py-3">
             <ChatPanel
               messages={messages}
-              onSend={handleSend}
+              onSend={onSend}
               myDeviceId={myDeviceId}
               cooldownUntil={cooldownUntil}
               placeholder="같은 방 사람들에게 메시지 보내기"

@@ -59,6 +59,8 @@ export type MafiaRevealEvent =
   | { id: number; type: "morning-peaceful"; reason: MorningPeacefulReason }
   | { id: number; type: "morning-tragic"; victimSeat: SeatIndex; shards: ShardSpec[] }
   | { id: number; type: "police-result"; policeSeat: SeatIndex; targetSeat: SeatIndex; isMafia: boolean }
+  /** 2026-09-21 요청 — 경찰 조사의 성공/실패만 매밤 즉시 전원에게 익명 공개(누가 경찰인지/누구를 조사했는지는 비공개 유지). `police-result`(비공개)와 같은 순간 함께 발생하지만 게이팅 없이 모두에게 렌더링됨. */
+  | { id: number; type: "police-check-public"; foundMafia: boolean }
   | { id: number; type: "skip-triggered" };
 
 function detectMafiaRevealEvents(prev: MafiaState, next: MafiaState, nextId: () => number): MafiaRevealEvent[] {
@@ -109,6 +111,7 @@ function detectMafiaRevealEvents(prev: MafiaState, next: MafiaState, nextId: () 
         isMafia: next.nightActions.policeResult.isMafia,
       });
     }
+    events.push({ id: nextId(), type: "police-check-public", foundMafia: next.nightActions.policeResult.isMafia });
   }
 
   // "시간초 과반수 스킵" 배너: 밤/낮토론 종료 시점에 직전 상태의 스킵 투표가
@@ -277,6 +280,10 @@ export function MafiaRevealOverlay({
         if (event.isMafia) engine.playMafiaSirenAlert();
         else engine.playMafiaCleanScan();
         break;
+      case "police-check-public":
+        if (event.foundMafia) engine.playMafiaPublicCheckSuccess();
+        else engine.playMafiaPublicCheckFail();
+        break;
       case "skip-triggered":
         engine.playMafiaSkipBanner();
         break;
@@ -407,6 +414,24 @@ export function MafiaRevealOverlay({
               <p className="text-sm text-cyan-100/80">{names[event.targetSeat]}님은 시민입니다.</p>
             </div>
           )}
+        </div>
+      );
+
+    case "police-check-public":
+      // 익명 마을 방송(2026-09-21 요청) — 누가 경찰인지/누구를 조사했는지는
+      // 절대 언급하지 않고 성공/실패 결과만 상단 배너로 전원에게 흘려보낸다.
+      // 좌석을 지목하는 `police-result`(중앙 대형 배너)와 시각적으로 확실히
+      // 구분되도록 `skip-triggered`와 같은 상단 슬라이드 배너 골격을 재사용.
+      return (
+        <div className="pointer-events-none fixed top-6 left-1/2 z-[70] -translate-x-1/2">
+          <div
+            className={`flex items-center gap-2 rounded-full border-2 px-5 py-2.5 text-sm font-black shadow-lg ${
+              event.foundMafia ? "border-rose-300 bg-rose-600/90 text-white shadow-[0_0_24px_rgba(244,63,94,0.6)]" : "border-cyan-300 bg-cyan-900/90 text-cyan-100 shadow-[0_0_24px_rgba(6,182,212,0.5)]"
+            }`}
+            style={{ animation: "mafia-banner-drop 1.9s ease-in-out forwards" }}
+          >
+            {event.foundMafia ? "🚨 경찰 조사 발표: 이번 밤 마피아를 찾아냈습니다!" : "🔍 경찰 조사 발표: 이번 밤은 헛수고였습니다."}
+          </div>
         </div>
       );
 
