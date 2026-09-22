@@ -13,6 +13,7 @@ import {
   knownRoleFor,
   type MafiaState,
   type EngineAction,
+  type PublicLogEntry,
   type Role,
   type SeatIndex,
   type Team,
@@ -519,6 +520,39 @@ function PhasePanel({
   if (state.phase === "dayAnnounce") {
     const outcome = state.lastNightOutcome;
     if (!outcome || outcome.night === 0) return <p className="text-xs text-white/60 light:text-slate-600">☀️ 첫날 아침, 평화로운 밤이었습니다.</p>;
+
+    // 마피아 습격 결과 — "지난밤 요약"의 메인 문장(2026-09-22 요청: 밤에 있었던
+    // 마피아/의사 활동을 아침에 요약).
+    const mainLine =
+      outcome.victim !== null ? (
+        <p className="text-xs text-rose-200/80 light:text-rose-700">
+          💀 지난밤, <b>{names[outcome.victim]}</b>님이 마피아의 습격으로 사망했습니다.
+        </p>
+      ) : outcome.savedByDoctor ? (
+        <p className="text-xs text-emerald-200/80 light:text-emerald-700">✨ 지난밤 습격이 있었지만, 의사의 치료로 아무도 사망하지 않았습니다.</p>
+      ) : outcome.savedByArmor ? (
+        <p className="text-xs text-emerald-200/80 light:text-emerald-700">🪖 지난밤 습격이 있었지만, 군인의 방탄조끼가 막아냈습니다.</p>
+      ) : (
+        <p className="text-xs text-white/60 light:text-slate-600">☀️ 지난밤은 조용했습니다. 아무도 사망하지 않았습니다.</p>
+      );
+
+    /**
+     * 경찰 조사 요약(2026-09-22 요청: 밤에 있었던 경찰 활동도 아침에 요약해
+     * 보여달라) — 조사 성공/실패는 이미 밤중 익명 배너(`police-check-public`,
+     * `MafiaEffects.tsx`)로 순간 노출되지만 그 배너는 몇 초 뒤 사라지고 다시
+     * 볼 방법이 없었다. `publicLog`는 영구 보존되므로 그 배너와 완전히 같은
+     * 문구를 아침 브리핑에도 다시 실어 "지난밤 요약"에 포함시킨다 — 누가
+     * 경찰인지/누구를 조사했는지는 여전히 비공개.
+     */
+    const policeEntry = [...state.publicLog].reverse().find((e) => e.type === "policeCheck" && e.night === outcome.night) as
+      | Extract<PublicLogEntry, { type: "policeCheck" }>
+      | undefined;
+    const policeLine = policeEntry ? (
+      <p className="text-[11px] text-sky-200/70 light:text-slate-600">
+        👮 경찰 조사 발표: {policeEntry.foundMafia ? "이번 밤 마피아를 찾아냈습니다!" : "이번 밤은 헛수고였습니다."}
+      </p>
+    ) : null;
+
     /**
      * 의사 전용 비공개 피드백(2026-09-22 확인된 실제 갭) — 치료 성공(savedByDoctor)은
      * 이미 공개 브리핑 문구로 전원에게 명확히 드러나지만, "빗나감"(치료 대상과
@@ -531,28 +565,11 @@ function PhasePanel({
       viewer.role === "doctor" && outcome.doctorTarget !== null && !outcome.savedByDoctor ? (
         <p className="text-[11px] text-emerald-300/60 light:text-emerald-700">🩺 당신이 치료한 {names[outcome.doctorTarget]}님은 이번 밤 공격받지 않았습니다. (치료가 빗나갔어요)</p>
       ) : null;
-    if (outcome.victim !== null) {
-      return (
-        <div className="flex flex-col gap-1">
-          <p className="text-xs text-rose-200/80 light:text-rose-700">
-            💀 지난밤, <b>{names[outcome.victim]}</b>님이 마피아의 습격으로 사망했습니다.
-          </p>
-          {doctorMissNote}
-        </div>
-      );
-    }
-    if (outcome.savedByDoctor) return <p className="text-xs text-emerald-200/80 light:text-emerald-700">✨ 지난밤 습격이 있었지만, 의사의 치료로 아무도 사망하지 않았습니다.</p>;
-    if (outcome.savedByArmor) {
-      return (
-        <div className="flex flex-col gap-1">
-          <p className="text-xs text-emerald-200/80 light:text-emerald-700">🪖 지난밤 습격이 있었지만, 군인의 방탄조끼가 막아냈습니다.</p>
-          {doctorMissNote}
-        </div>
-      );
-    }
+
     return (
       <div className="flex flex-col gap-1">
-        <p className="text-xs text-white/60 light:text-slate-600">☀️ 지난밤은 조용했습니다. 아무도 사망하지 않았습니다.</p>
+        {mainLine}
+        {policeLine}
         {doctorMissNote}
       </div>
     );

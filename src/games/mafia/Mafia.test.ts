@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyAction,
   chooseBotAction,
+  chooseBotSkipVote,
   computeRankings,
   computeSuspicion,
   currentActor,
@@ -664,6 +665,55 @@ describe("smart AI decision-making (2026-09-21)", () => {
     s = { ...s, phase: "night" as const, nightNumber: 1, roundHistory: [round] } as MafiaState;
     const action = chooseBotAction(s, doctorSeat, 5, () => 0);
     expect(action).not.toEqual({ type: "doctorNightAction", seat: doctorSeat, target: untouchedSeat });
+  });
+});
+
+describe("bot skip-vote participation (2026-09-22)", () => {
+  it("never votes to skip outside night/dayDiscuss, for a dead seat, or once already voted", () => {
+    const s = startGame(6, 1, withConfig(), 1000);
+    expect(chooseBotSkipVote({ ...s, phase: "nomination" } as MafiaState, 1, () => 0)).toBe(false);
+    const deadSeat = { ...s, players: s.players.map((p) => (p.seat === 1 ? { ...p, alive: false } : p)) } as MafiaState;
+    expect(chooseBotSkipVote(deadSeat, 1, () => 0)).toBe(false);
+    const alreadyVoted = { ...s, skipVotes: { 1: true } } as MafiaState;
+    expect(chooseBotSkipVote(alreadyVoted, 1, () => 0)).toBe(false);
+  });
+
+  it("never votes to skip night 0 (orientation), and never cuts off its own still-pending night action", () => {
+    const s = startGame(6, 1, withConfig(), 1000);
+    expect(s.nightNumber).toBe(0);
+    expect(chooseBotSkipVote(s, 1, () => 0)).toBe(false); // night 0
+
+    const night1 = { ...s, nightNumber: 1 } as MafiaState;
+    const mafiaSeat = night1.players.find((p) => p.role === "mafia")!.seat;
+    // mafia's own vote is still pending (nightActions.mafiaVotes is empty) — must never skip.
+    expect(chooseBotSkipVote(night1, mafiaSeat, () => 0)).toBe(false);
+
+    const mafiaDone = { ...night1, nightActions: { ...night1.nightActions, mafiaVotes: { [mafiaSeat]: (mafiaSeat + 1) % 6 } } } as MafiaState;
+    expect(chooseBotSkipVote(mafiaDone, mafiaSeat, () => 0)).toBe(true); // rng()=0 is below any configured chance
+  });
+
+  it("dayDiscuss: citizens skip more readily than mafia once a bandwagon has formed against someone else", () => {
+    const s = startGame(6, 1, withConfig(), 1000);
+    const mafiaSeat = s.players.find((p) => p.role === "mafia")!.seat;
+    const citizenSeat = s.players.find((p) => p.team === "citizen" && p.seat !== mafiaSeat)!.seat;
+    const thirdSeat = s.players.find((p) => p.seat !== mafiaSeat && p.seat !== citizenSeat)!.seat;
+
+    const noBandwagon = { ...s, phase: "dayDiscuss" as const } as MafiaState;
+    // rng()=0.2 sits between the "quiet" chances (0.08 mafia / 0.15 citizen) and the "bandwagon" ones (0.3 / 0.55).
+    expect(chooseBotSkipVote(noBandwagon, mafiaSeat, () => 0.2)).toBe(false);
+    expect(chooseBotSkipVote(noBandwagon, citizenSeat, () => 0.2)).toBe(false);
+
+    const bandwagonRound: RoundRecord = {
+      day: 1,
+      nominations: {},
+      finalVotes: { [thirdSeat]: "yes" }, // thirdSeat voted to execute an innocent citizen -> thirdSeat's own suspicion jumps to 75
+      suspect: 99, // arbitrary placeholder seat index — executedRole is what matters for scoring, not a real alive player
+      executedSeat: 99,
+      executedRole: "citizen",
+    };
+    const bandwagon = { ...s, phase: "dayDiscuss" as const, roundHistory: [bandwagonRound] } as MafiaState;
+    expect(chooseBotSkipVote(bandwagon, citizenSeat, () => 0.2)).toBe(true);
+    expect(chooseBotSkipVote(bandwagon, mafiaSeat, () => 0.2)).toBe(true);
   });
 });
 

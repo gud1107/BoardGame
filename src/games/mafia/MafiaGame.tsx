@@ -13,6 +13,7 @@ import type { PlayableGameProps } from "@/games/types";
 import {
   applyAction,
   chooseBotAction,
+  chooseBotSkipVote,
   computeRankings,
   currentActor,
   DEFAULT_MAFIA_CONFIG,
@@ -744,6 +745,27 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
       }
     }
   }, [isHost, phase, gameState, allBotSeatSet, sendBotChatMessage]);
+
+  // 봇의 "시간초 과반수 스킵" 참여(2026-09-22 요청) — night/dayDiscuss 동안
+  // 1.5초마다 각 봇 좌석을 재평가해 `chooseBotSkipVote`가 상황에 따라(자기
+  // 밤 액션 완료 여부, 낮 의심도 쏠림, 마피아/시민 진영 차이) 스킵 투표를
+  // 켤지 결정한다. 인간 플레이어의 `PhaseSkipVote` 버튼과 동일한
+  // `toggleSkipVote` 액션을 그대로 재사용 — 봇 전용 새 액션 타입 불필요.
+  useEffect(() => {
+    if (!isHost || phase !== "playing") return;
+    const interval = window.setInterval(() => {
+      const state = gameStateRef.current;
+      if (!state) return;
+      if (state.phase !== "night" && state.phase !== "dayDiscuss") return;
+      const atMs = Date.now();
+      for (const seat of allBotSeatSet) {
+        if (chooseBotSkipVote(state, seat)) {
+          handleAction({ type: "toggleSkipVote", seat, atMs });
+        }
+      }
+    }, 1500);
+    return () => window.clearInterval(interval);
+  }, [isHost, phase, allBotSeatSet, handleAction]);
 
   useEffect(() => {
     if (phase !== "playing") return;

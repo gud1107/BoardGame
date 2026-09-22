@@ -781,7 +781,7 @@ export function getKnowledge(state: MafiaState, seat: SeatIndex): Knowledge {
 // the effect.
 // ---------------------------------------------------------------------------
 
-function seatHasPendingNightAction(state: MafiaState, seat: SeatIndex): boolean {
+export function seatHasPendingNightAction(state: MafiaState, seat: SeatIndex): boolean {
   const p = state.players[seat];
   if (!p.alive) return false;
   const na = state.nightActions;
@@ -1028,6 +1028,54 @@ export function chooseBotAction(
   }
 
   return null;
+}
+
+/**
+ * 2026-09-22 요청 — 봇도 "시간초 과반수 스킵"(`toggleSkipVote`) 투표에 상황에
+ * 따라 참여한다. 호출부(`MafiaGame.tsx`)가 night/dayDiscuss 동안 주기적으로
+ * (매 tick) 각 봇 좌석에 대해 호출해 확률적으로 켜는 방식 — `chooseBotAction`과
+ * 달리 "매 phase당 정확히 1번" 결정이 아니라 "매 tick마다 켤지 말지 재평가"라서
+ * 반환값은 액션 자체가 아니라 그 tick에 스킵 투표를 켤지 여부(boolean)다. 이미
+ * 켜져 있으면 항상 false(다시 끄지 않음 — 마음이 바뀌어 발언하고 싶어지는 것까지
+ * 시뮬레이션할 필요는 없음).
+ *
+ * 원칙:
+ * - 밤: 자기 자신의 밤 액션이 아직 안 끝났으면 절대 스킵에 투표하지 않는다
+ *   (`seatHasPendingNightAction`) — 자기 턴을 스스로 잘라먹지 않기 위함.
+ *   본인 액션이 끝났다면 시민 쪽이 마피아/접선된 스파이보다 좀 더 적극적으로
+ *   스킵한다(관찰할 만한 게 없으니 빨리 넘어가고 싶어함).
+ * - 낮 토론: 의심도가 이미 한쪽으로 뚜렷하게 쏠려 있으면(=더 얘기해봤자 결론이
+ *   안 바뀜) 시민 쪽은 스킵에 적극적, 마피아/접선된 스파이는 소극적(더 얘기해서
+ *   물타기할 시간을 벌고 싶어함) — 단, 그 뚜렷한 의심이 자신이 아닌 다른
+ *   사람에게 쏠려 있을 때(=밴드왜건이 이미 다른 시민을 향해 형성됨)는 마피아도
+ *   빨리 표결로 넘어가고 싶어하므로 스킵 확률이 함께 올라간다.
+ */
+export function chooseBotSkipVote(state: MafiaState, seat: SeatIndex, rng: () => number = Math.random): boolean {
+  if (state.phase !== "night" && state.phase !== "dayDiscuss") return false;
+  const player = state.players[seat];
+  if (!player || !player.alive) return false;
+  if (state.skipVotes[seat]) return false; // already voted — nothing to re-decide
+
+  const actsAsMafia = player.role === "mafia" || (player.role === "spy" && player.spyContactedMafia);
+
+  if (state.phase === "night") {
+    if (state.nightNumber === 0) return false; // 상견례 밤도 잠깐은 읽을 시간을 준다
+    if (seatHasPendingNightAction(state, seat)) return false;
+    return rng() < (actsAsMafia ? 0.5 : 0.75);
+  }
+
+  // dayDiscuss
+  const suspicion = computeSuspicion(state);
+  const others = state.players.filter((p) => p.alive && p.seat !== seat).map((p) => p.seat);
+  const topSuspicion = others.length > 0 ? Math.max(...others.map((s) => suspicion.get(s) ?? 50)) : 50;
+  const selfSuspicion = suspicion.get(seat) ?? 50;
+  const bandwagonFormedAgainstOther = topSuspicion >= 70;
+
+  if (actsAsMafia) {
+    const chance = bandwagonFormedAgainstOther && selfSuspicion < 60 ? 0.3 : 0.08;
+    return rng() < chance;
+  }
+  return rng() < (bandwagonFormedAgainstOther ? 0.55 : 0.15);
 }
 
 // ---------------------------------------------------------------------------
