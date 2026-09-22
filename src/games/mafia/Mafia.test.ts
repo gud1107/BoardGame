@@ -89,6 +89,22 @@ describe("mafia role pools", () => {
     }
   });
 
+  it("expansion mafia-aligned team share stays within the 25%~35% golden ratio at every player count, with a 3rd mafia added at 11+ (2026-09-22 balance overhaul)", () => {
+    const mafiaAlignedCount = (n: number) => rolePoolFor("expansion", n).filter((r) => r === "mafia" || r === "spy").length;
+    expect(mafiaAlignedCount(6)).toBe(2); // 33.3%
+    expect(mafiaAlignedCount(7)).toBe(2); // 28.6%
+    expect(mafiaAlignedCount(8)).toBe(3); // 37.5%
+    expect(mafiaAlignedCount(9)).toBe(3); // 33.3%
+    expect(mafiaAlignedCount(10)).toBe(3); // 30.0%
+    expect(mafiaAlignedCount(11)).toBe(4); // 36.4% — 3rd mafia added
+    expect(mafiaAlignedCount(12)).toBe(4); // 33.3%
+    for (let n = 6; n <= 12; n++) {
+      const ratio = mafiaAlignedCount(n) / n;
+      expect(ratio).toBeGreaterThanOrEqual(0.25);
+      expect(ratio).toBeLessThanOrEqual(0.4);
+    }
+  });
+
   it("spy's team is mafia from the start (per request table, not undercover-neutral)", () => {
     expect(teamForRole("spy")).toBe("mafia");
     expect(teamForRole("mafia")).toBe("mafia");
@@ -417,6 +433,24 @@ describe("full game via bots only", () => {
       let clock = 2000;
       let guard = 0;
       while (s.phase !== "gameOver" && guard < 400) {
+        s = autoResolveAllPending(s, seed * 97 + guard);
+        if (s.phase !== "gameOver") {
+          clock += s.phaseDurationMs + 1;
+          s = forceAdvance(s, clock);
+        }
+        guard++;
+      }
+      expect(s.phase).toBe("gameOver");
+      expect(s.winner).not.toBeNull();
+    }
+  });
+
+  it("a bot-only expansion 12p game (2026-09-22 balance overhaul's 4-mafia-aligned config) always reaches gameOver without throwing", () => {
+    for (const seed of [21, 22, 23]) {
+      let s = startGame(12, seed, withConfig({ mode: "expansion" }), 1000);
+      let clock = 2000;
+      let guard = 0;
+      while (s.phase !== "gameOver" && guard < 500) {
         s = autoResolveAllPending(s, seed * 97 + guard);
         if (s.phase !== "gameOver") {
           clock += s.phaseDurationMs + 1;

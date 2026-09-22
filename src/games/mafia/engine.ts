@@ -261,7 +261,14 @@ function classicRolePool(n: number): Role[] {
 
 /**
  * 6인 최소 구성(마피아/경찰/의사/스파이/군인) 기준, 7인+ 정치인, 8인+ 마피아
- * 2번째+테러리스트, 9인+ 영매 순으로 추가 — 2026-09-20 확인된 배분 기준.
+ * 2번째+테러리스트, 9인+ 영매, **11인+ 마피아 3번째**(2026-09-22 밸런스 개편)
+ * 순으로 추가 — 마피아 진영(마피아+스파이) 비율을 표준 마피아류 게임의
+ * "황금 비율"(25~35%)로 유지하기 위함. 8~10인은 이미 마피아2+스파이1(3명)로
+ * 30~37.5% 구간에 들어와 있었지만, 시민 특수직이 6종까지 늘어나는 11~12인
+ * 구간에서는 마피아의 실질 암살 투표권자(스파이는 접선 전까지 투표 불가,
+ * `canVoteMafiaKill` 참고)가 여전히 2명에 머물러 있어 초반 처형/경찰 적발
+ * 1회에 마피아 진영이 사실상 궤멸하는 밸런스 결함이 있었다 — 11인부터 마피아
+ * 3번째를 추가해 4명(36.4%/33.3%)으로 맞춘다.
  */
 function expansionRolePool(n: number): Role[] {
   const pool: Role[] = ["mafia", "police", "doctor", "spy", "soldier"];
@@ -269,6 +276,7 @@ function expansionRolePool(n: number): Role[] {
   if (n >= 8) pool.push("mafia");
   if (n >= 8) pool.push("terrorist");
   if (n >= 9) pool.push("medium");
+  if (n >= 11) pool.push("mafia");
   while (pool.length < n) pool.push("citizen");
   return pool;
 }
