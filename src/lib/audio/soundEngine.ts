@@ -3256,6 +3256,66 @@ class SoundEngine {
     osc.start(now);
     osc.stop(now + 0.42);
   }
+
+  /**
+   * 마피아 — "밤 강림(NIGHTFALL)" 전체 화면 시네마틱(2026-09-22 요청): 낮 페이즈가
+   * 끝나고 `night`로 진입하는 매 순간 전원에게 재생. 서늘한 바람 휘파람(필터
+   * 스윕 노이즈) → 저음 늑대 울음 느낌의 사인 스웰 → 마무리 저음 종.
+   */
+  playMafiaNightfall() {
+    if (!this.gate("mafiaNightfall", 800)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    // 바람 휘파람 — 밴드패스 필터 주파수를 위아래로 스윕하는 노이즈.
+    const wind = ctx.createBufferSource();
+    wind.buffer = noiseBuffer(ctx);
+    wind.loop = true;
+    const windFilter = ctx.createBiquadFilter();
+    windFilter.type = "bandpass";
+    windFilter.Q.value = 6;
+    windFilter.frequency.setValueAtTime(300, now);
+    windFilter.frequency.linearRampToValueAtTime(900, now + 1.1);
+    windFilter.frequency.linearRampToValueAtTime(220, now + 2.2);
+    const windGain = ctx.createGain();
+    windGain.gain.setValueAtTime(0.001, now);
+    windGain.gain.linearRampToValueAtTime(0.16, now + 0.4);
+    windGain.gain.linearRampToValueAtTime(0.1, now + 1.6);
+    windGain.gain.exponentialRampToValueAtTime(0.001, now + 2.3);
+    wind.connect(windFilter).connect(windGain).connect(this.sfxGain);
+    wind.start(now);
+    wind.stop(now + 2.3);
+
+    // 저음 늑대 울음 스웰.
+    const howl = ctx.createOscillator();
+    howl.type = "sawtooth";
+    howl.frequency.setValueAtTime(90, now + 0.3);
+    howl.frequency.linearRampToValueAtTime(160, now + 0.9);
+    howl.frequency.exponentialRampToValueAtTime(60, now + 1.8);
+    const howlFilter = ctx.createBiquadFilter();
+    howlFilter.type = "lowpass";
+    howlFilter.frequency.value = 400;
+    const howlGain = ctx.createGain();
+    howlGain.gain.setValueAtTime(0.001, now + 0.3);
+    howlGain.gain.linearRampToValueAtTime(0.22, now + 0.7);
+    howlGain.gain.exponentialRampToValueAtTime(0.001, now + 1.9);
+    howl.connect(howlFilter).connect(howlGain).connect(this.sfxGain);
+    howl.start(now + 0.3);
+    howl.stop(now + 1.95);
+
+    // 마무리 저음 종.
+    const bell = ctx.createOscillator();
+    bell.type = "sine";
+    bell.frequency.value = 87.3;
+    const bellGain = ctx.createGain();
+    bellGain.gain.setValueAtTime(0, now + 1.9);
+    bellGain.gain.linearRampToValueAtTime(0.24, now + 1.95);
+    bellGain.gain.exponentialRampToValueAtTime(0.001, now + 3.2);
+    bell.connect(bellGain).connect(this.sfxGain);
+    bell.start(now + 1.9);
+    bell.stop(now + 3.25);
+  }
 }
 
 let instance: SoundEngine | null = null;

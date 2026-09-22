@@ -533,7 +533,46 @@ FX 자체는 밤1 이후 조건부라 이번 라이브 세션에서 자연 발�
 낮토론에서 다인원 봇 없이 과반수를 만드는 라이브 시나리오는 자동화 스크립트로 다인원 클릭을 흉내내기
 어려워 엔진 단위 테스트로만 검증.
 
-## 🏛️ 위대한 유산 — 베팅 아레나 코인 스택 연출 — 2026-09-20 (로컬만, 커밋/푸시/배포 보류 — 요청에 따름)
+## 🕵️ 마피아 — 의사 치료 빗나감 피드백 / Day1 대사 버그 / 밤 강림 시네마틱 — 2026-09-22 후속 (커밋/푸시 완료, 배포는 웹훅 자동)
+
+**요청서 전제와 실제 코드의 불일치**: 요청서는 `server/games/mafiaEngine.ts`(socket.io 서버, `setTimeout`
+기반 AI 밤 액션 스케줄러)를 전제했지만, 위 2026-09-20 항목에서 이미 기록했듯 **이 프로젝트엔
+`server/games/` 자체가 없다** — 마피아는 클라이언트 lockstep 엔진(`src/games/mafia/engine.ts`)이라
+요청서의 "8일차에 딱 1회만 작동하던 턴 스케줄러 누락 버그"에 해당하는 서버측 setTimeout 루프가
+애초에 존재하지 않는다. 실제 봇 액션은 `useBotAutoplay`(`src/games/shared/bot/useBotAutoplay.ts`)가
+매 state 변화마다 `currentActor`로 "지금 액션이 필요한 좌석"을 찾아 처리하고, 5초 워치독(2026-09-03
+달무티 사고 이후 추가)까지 있어 스톨 자체가 구조적으로 어렵다 — `Mafia.test.ts`의 "full game via bots
+only" 스모크 테스트(6인/10인, 총 8시드)가 `autoResolveAllPending`으로 매 밤 경찰/의사/마피아/스파이/
+영매 전원의 제출을 강제한 뒤 `gameOver`까지 완주하는 것으로 이미 검증돼 있음. 요청서에 기재된 증상이
+재현되지 않아 이 항목은 손대지 않음(memory `mal-dalli-ja-bug-report-premise-mismatch`/
+`dalmuti-5p-tax-bug-premise-mismatch`와 동일 패턴).
+
+**실제로 확인되어 고친 것 3가지**:
+1. **의사 치료 "빗나감" 비공개 피드백** — 치료 *성공*(마피아 저격 대상과 일치)은 이미 아침 브리핑에
+   "의사의 치료로 아무도 사망하지 않았습니다"로 전원에게 공개되고 있었지만, *빗나감*(치료 대상 !=
+   저격 대상)은 어디에도 표시되지 않아 의사 본인도 자기 선택이 헛수고였는지 알 방법이 없었다.
+   `MafiaBoard.tsx`의 `dayAnnounce` 렌더링에 의사 전용 비공개 한 줄(`🩺 당신이 치료한 OO님은 이번 밤
+   공격받지 않았습니다`)을 추가 — 새 상태 없이 `lastNightOutcome.doctorTarget`(밤이 정산돼도 지워지지
+   않는 필드)만으로 계산.
+2. **1일차(Day 1) 봇 채팅 오류** — `mafiaBotChat.ts`의 `chooseDiscussionLine`이 `dayNumber <= 2`일 때
+   `lastNightOutcome.victim === null`이면 무조건 "어젯밤 아무 일도 없었던 게 오히려 수상해요" 계열
+   대사를 골랐는데, 1일차는 항상 밤 0(능력 자체가 없는 상견례 밤) 직후라 victim이 구조적으로 항상
+   null — 애초에 수상할 이유가 없는데 수상하다고 말하는 버그였다. 1일차 전용 탐색/인사 대사 5종을
+   신설하고 분기를 `dayNumber === 1` / `dayNumber === 2`로 분리(2일차 이후 기존 동작은 그대로 유지).
+3. **"밤 강림(NIGHTFALL)" 공개 시네마틱 신설** — 기존에는 그 밤 실제로 할 일이 있는 역할에게만
+   뜨는 사적 알림(`MafiaTurnCueOverlay`의 "night" 큐)만 있었고, 밤이 됐다는 사실 자체를 시민/유령
+   포함 전원에게 알리는 연출이 없었다. `MafiaEffects.tsx`에 `nightfall` 리빌 이벤트(`prev.phase !==
+   "night" && next.phase === "night"`)를 추가해 기존 `MafiaRevealOverlay` 큐에 편입 — 전체화면
+   암전 + 보름달 + "NIGHTFALL" 타이틀 2.4초, `globals.css`에 `mafia-nightfall-fade`/`-glow` 키프레임
+   신설, `soundEngine.ts`에 바람 휘파람→저음 울음→종 3단 합성 SFX(`playMafiaNightfall`) 신설.
+
+**검증**: `npx tsc --noEmit`(0 에러) / `npx eslint`(0 에러) / `npx vitest run`(전체 1,798개 통과, 신규
+로직 전용 테스트는 추가하지 않고 기존 `Mafia.test.ts`/`mafiaBotChat.test.ts` 42개 + 스모크 테스트가
+회귀 없음을 확인). **라이브 브라우저 검증은 이번엔 생략** — `nightfall`은 실행/변론/투표 페이즈를 거쳐
+밤으로 진입하는 정확한 타이밍에만 2.4초간 나타나 자동화 스크립트로 그 순간을 잡기 까다롭고, 이
+호스트의 `next dev`는 반복 OOM 이력이 있어(memory `dev-server-oom-environment-limit`) 무리하게
+재시도하지 않음 — 렌더 구조는 이미 라이브 검증된 `morning-peaceful`/`morning-tragic` 배너와 동일한
+`fixed inset-0 z-[70]` + 사전계산 애니메이션 컨벤션을 그대로 재사용했다는 점으로 대체 확인.
 
 **요청**: 경매 중 각 플레이어의 입찰 코인을 테이블 위 코인 스택으로 시각화 + 베팅/회수/낙찰 애니메이션·사운드.
 

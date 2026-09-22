@@ -45,6 +45,21 @@ const NIGHT_REACTION_NO_VICTIM = [
   "조용한 밤이었네요.",
 ];
 
+/**
+ * Day-1-only opening lines (2026-09-22 확인된 실제 버그) — `dayNumber === 1`은
+ * 항상 밤 0(상견례, 능력 자체가 없는 밤)이 지난 직후라 `lastNightOutcome.victim`이
+ * 구조적으로 항상 null이다. 이전 코드는 이 경우도 `NIGHT_REACTION_NO_VICTIM`으로
+ * 처리해 "아무 일도 없었던 게 수상하다"는 대사를 쳤는데, 애초에 아무 능력도
+ * 발동될 수 없었던 밤이라 전혀 수상할 게 없다 — 탐색형 인사말로 교체.
+ */
+const DAY1_OPENING_LINES = [
+  "오늘부터 본격적인 조사가 시작되네요. 다들 자기소개부터 해볼까요?",
+  "첫날이니 서로 발언을 잘 지켜봐야겠어요.",
+  "아직은 다 처음이라 누가 누군지 감이 안 잡히네요.",
+  "긴장되지만 차근차근 얘기해봐요.",
+  "첫날부터 무리하게 몰아가진 말죠.",
+];
+
 function accuseTemplates(name: string): string[] {
   return [
     `${name}님이 좀 수상한 것 같아요.`,
@@ -90,9 +105,12 @@ export function chooseDiscussionLine(
   const isMafiaAligned = player.team === "mafia" || (player.role === "spy" && player.spyContactedMafia);
   const nonTeammates = aliveOthers.filter((p) => !knowledge.mafiaTeammates.includes(p.seat));
 
-  if (rng() < 0.2 && state.lastNightOutcome && state.dayNumber <= 2) {
-    if (state.lastNightOutcome.victim !== null) return pick(nightReactionWithVictim(names[state.lastNightOutcome.victim]), rng);
-    return pick(NIGHT_REACTION_NO_VICTIM, rng);
+  if (rng() < 0.2 && state.lastNightOutcome) {
+    if (state.dayNumber === 1) return pick(DAY1_OPENING_LINES, rng);
+    if (state.dayNumber === 2) {
+      if (state.lastNightOutcome.victim !== null) return pick(nightReactionWithVictim(names[state.lastNightOutcome.victim]), rng);
+      return pick(NIGHT_REACTION_NO_VICTIM, rng);
+    }
   }
 
   if (isMafiaAligned) {

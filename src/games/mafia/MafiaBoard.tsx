@@ -517,16 +517,43 @@ function PhasePanel({
   if (state.phase === "dayAnnounce") {
     const outcome = state.lastNightOutcome;
     if (!outcome || outcome.night === 0) return <p className="text-xs text-white/60 light:text-slate-600">☀️ 첫날 아침, 평화로운 밤이었습니다.</p>;
+    /**
+     * 의사 전용 비공개 피드백(2026-09-22 확인된 실제 갭) — 치료 성공(savedByDoctor)은
+     * 이미 공개 브리핑 문구로 전원에게 명확히 드러나지만, "빗나감"(치료 대상과
+     * 마피아 저격 대상 불일치)은 아무 데도 표시되지 않아 의사 본인조차 자기
+     * 선택이 헛수고였는지 확신할 수 없었다. `outcome.doctorTarget`은
+     * `nightActions`와 달리 밤이 정산돼도 지워지지 않으므로 새 상태 없이도
+     * 계산 가능.
+     */
+    const doctorMissNote =
+      viewer.role === "doctor" && outcome.doctorTarget !== null && !outcome.savedByDoctor ? (
+        <p className="text-[11px] text-emerald-300/60 light:text-emerald-700">🩺 당신이 치료한 {names[outcome.doctorTarget]}님은 이번 밤 공격받지 않았습니다. (치료가 빗나갔어요)</p>
+      ) : null;
     if (outcome.victim !== null) {
       return (
-        <p className="text-xs text-rose-200/80 light:text-rose-700">
-          💀 지난밤, <b>{names[outcome.victim]}</b>님이 마피아의 습격으로 사망했습니다.
-        </p>
+        <div className="flex flex-col gap-1">
+          <p className="text-xs text-rose-200/80 light:text-rose-700">
+            💀 지난밤, <b>{names[outcome.victim]}</b>님이 마피아의 습격으로 사망했습니다.
+          </p>
+          {doctorMissNote}
+        </div>
       );
     }
     if (outcome.savedByDoctor) return <p className="text-xs text-emerald-200/80 light:text-emerald-700">✨ 지난밤 습격이 있었지만, 의사의 치료로 아무도 사망하지 않았습니다.</p>;
-    if (outcome.savedByArmor) return <p className="text-xs text-emerald-200/80 light:text-emerald-700">🪖 지난밤 습격이 있었지만, 군인의 방탄조끼가 막아냈습니다.</p>;
-    return <p className="text-xs text-white/60 light:text-slate-600">☀️ 지난밤은 조용했습니다. 아무도 사망하지 않았습니다.</p>;
+    if (outcome.savedByArmor) {
+      return (
+        <div className="flex flex-col gap-1">
+          <p className="text-xs text-emerald-200/80 light:text-emerald-700">🪖 지난밤 습격이 있었지만, 군인의 방탄조끼가 막아냈습니다.</p>
+          {doctorMissNote}
+        </div>
+      );
+    }
+    return (
+      <div className="flex flex-col gap-1">
+        <p className="text-xs text-white/60 light:text-slate-600">☀️ 지난밤은 조용했습니다. 아무도 사망하지 않았습니다.</p>
+        {doctorMissNote}
+      </div>
+    );
   }
 
   if (state.phase === "dayDiscuss") {

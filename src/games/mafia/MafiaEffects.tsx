@@ -61,10 +61,24 @@ export type MafiaRevealEvent =
   | { id: number; type: "police-result"; policeSeat: SeatIndex; targetSeat: SeatIndex; isMafia: boolean }
   /** 2026-09-21 요청 — 경찰 조사의 성공/실패만 매밤 즉시 전원에게 익명 공개(누가 경찰인지/누구를 조사했는지는 비공개 유지). `police-result`(비공개)와 같은 순간 함께 발생하지만 게이팅 없이 모두에게 렌더링됨. */
   | { id: number; type: "police-check-public"; foundMafia: boolean }
-  | { id: number; type: "skip-triggered" };
+  | { id: number; type: "skip-triggered" }
+  /**
+   * 2026-09-22 요청 — 낮 페이즈가 끝나고 `night`로 진입하는 순간 전원에게
+   * 한 번 재생되는 공개 시네마틱("🌙 NIGHTFALL"). 기존 `MafiaTurnCueOverlay`의
+   * "night" 큐는 그 밤에 실제로 할 일이 있는 역할에게만(뷰어 전용, 큐 공유
+   * 없음) 뜨는 사적 알림이라, 밤이 됐다는 것 자체를 시민/유령을 포함한
+   * 전원에게 알리는 연출이 없었다 — 이 이벤트가 그 공백을 채운다. 게임 시작
+   * 직후의 밤 0은 `useMafiaReveals`가 마운트 시점의 `state`를 기준값으로
+   * 잡기 때문에 자연히 대상에서 빠진다(첫 diff가 없음).
+   */
+  | { id: number; type: "nightfall"; nightNumber: number };
 
 function detectMafiaRevealEvents(prev: MafiaState, next: MafiaState, nextId: () => number): MafiaRevealEvent[] {
   const events: MafiaRevealEvent[] = [];
+
+  if (prev.phase !== "night" && next.phase === "night") {
+    events.push({ id: nextId(), type: "nightfall", nightNumber: next.nightNumber });
+  }
 
   if (prev.phase !== "defense" && next.phase === "defense" && next.suspect !== null) {
     events.push({ id: nextId(), type: "nomination-lock", suspectSeat: next.suspect });
@@ -287,15 +301,45 @@ export function MafiaRevealOverlay({
       case "skip-triggered":
         engine.playMafiaSkipBanner();
         break;
+      case "nightfall":
+        engine.playMafiaNightfall();
+        break;
     }
     const duration =
-      event.type === "skip-triggered" ? 1600 : event.type === "nomination-lock" ? 1200 : event.type === "morning-peaceful" ? 3500 : event.type === "morning-tragic" ? 4000 : 1900;
+      event.type === "skip-triggered"
+        ? 1600
+        : event.type === "nomination-lock"
+          ? 1200
+          : event.type === "morning-peaceful"
+            ? 3500
+            : event.type === "morning-tragic"
+              ? 4000
+              : event.type === "nightfall"
+                ? 2400
+                : 1900;
     const t = setTimeout(onDone, duration);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fire exactly once per event.id, `onDone` is stable enough for this one-shot timer
   }, [event.id]);
 
   switch (event.type) {
+    case "nightfall":
+      return (
+        <div className="pointer-events-none fixed inset-0 z-[70] flex flex-col items-center justify-center overflow-hidden bg-black/85 backdrop-blur-md" style={{ animation: "mafia-nightfall-fade 2.4s ease-in-out forwards" }}>
+          <div
+            className="absolute h-[320px] w-[320px] rounded-full sm:h-[480px] sm:w-[480px]"
+            style={{ background: "radial-gradient(circle, rgba(96,165,250,0.22) 0%, rgba(0,0,0,0) 70%)", animation: "mafia-nightfall-glow 2.4s ease-in-out forwards" }}
+          />
+          <div className="relative flex flex-col items-center gap-2" style={{ animation: "mafia-stamp-drop 0.5s cubic-bezier(0.34,1.56,0.64,1)" }}>
+            <span className="text-7xl drop-shadow-[0_0_35px_rgba(147,197,253,0.9)] sm:text-8xl">🌕</span>
+            <h2 className="bg-gradient-to-r from-blue-200 via-indigo-300 to-purple-400 bg-clip-text text-4xl font-black italic tracking-widest text-transparent drop-shadow-[0_0_35px_rgba(99,102,241,0.8)] sm:text-6xl">
+              NIGHTFALL
+            </h2>
+            <p className="font-mono text-xs font-bold tracking-widest text-indigo-200 sm:text-sm">어둠이 내려앉았습니다. 도시가 잠에 듭니다.</p>
+          </div>
+        </div>
+      );
+
     case "nomination-lock":
       return (
         <div className={BANNER_BASE}>

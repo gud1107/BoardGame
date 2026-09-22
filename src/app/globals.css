@@ -6010,6 +6010,38 @@ html {
   }
 }
 
+/* 밤 강림(NIGHTFALL, 2026-09-22) — 전체 화면 암전 배경이 나타났다 서서히 걷힘. */
+@keyframes mafia-nightfall-fade {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 밤 강림 — 중앙 달빛 림라이트가 부풀었다 가라앉음. */
+@keyframes mafia-nightfall-glow {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0.6;
+  }
+}
+
 /* 평화로운 아침 — 깃털/반짝임 파티클이 아래에서 위로 흩날리며 소멸. */
 @keyframes mafia-feather-float {
   0% {
