@@ -124,7 +124,7 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [mode, setMode] = useState<MafiaMode>("classic");
   const [targetPlayerCount, setTargetPlayerCount] = useState(6);
-  const [revealRoleOnDeath, setRevealRoleOnDeath] = useState(true);
+  const [revealRoleOnDeath, setRevealRoleOnDeath] = useState(false);
   const [doctorSelfHeal, setDoctorSelfHeal] = useState(false);
   const [discussionSeconds, setDiscussionSeconds] = useState<30 | 60 | 90>(60);
   const [formError, setFormError] = useState<string | null>(null);

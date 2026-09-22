@@ -113,6 +113,12 @@ describe("mafia role pools", () => {
   });
 });
 
+describe("hidden identity on death (2026-09-22 standardization)", () => {
+  it("defaults revealRoleOnDeath to false — hidden-identity is the standard mode, not the casual opt-in", () => {
+    expect(DEFAULT_MAFIA_CONFIG.revealRoleOnDeath).toBe(false);
+  });
+});
+
 describe("startGame", () => {
   it("is deterministic for a given seed", () => {
     const a = startGame(6, 42, withConfig(), 1000);

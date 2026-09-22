@@ -175,6 +175,7 @@ export interface RoundRecord {
 export interface MafiaGameConfig {
   readonly mode: MafiaMode;
   readonly discussionSeconds: 30 | 60 | 90;
+  /** OFF(false)이 정통 마피아 표준(사망자 직업 비공개, 블러핑/추리 보존) — 2026-09-22 기본값을 casual(true)에서 표준으로 전환. */
   readonly revealRoleOnDeath: boolean;
   /** Applies ONLY to the doctor's first real action night (nightNumber === 1) — every later night forbids self-heal regardless of this toggle (2026-09-20 clarification). */
   readonly doctorSelfHeal: boolean;
@@ -183,7 +184,7 @@ export interface MafiaGameConfig {
 export const DEFAULT_MAFIA_CONFIG: MafiaGameConfig = {
   mode: "classic",
   discussionSeconds: 60,
-  revealRoleOnDeath: true,
+  revealRoleOnDeath: false,
   doctorSelfHeal: false,
 };
 

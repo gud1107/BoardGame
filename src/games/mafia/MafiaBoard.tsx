@@ -370,10 +370,12 @@ function SeatGrid({
               {p.seat === viewerSeat && <span className="text-amber-200 light:text-amber-700">(나)</span>}
             </span>
             {!p.alive && <span className="text-[10px] text-rose-300 light:text-rose-600">👻 유령</span>}
-            {showRole && (
+            {showRole ? (
               <span className="text-[10px] text-white/60 light:text-slate-500">
                 {m.icon} {m.label}
               </span>
+            ) : (
+              !p.alive && <span className="text-[10px] text-white/30 light:text-slate-400">❓ 정체 불명</span>
             )}
           </div>
         );
