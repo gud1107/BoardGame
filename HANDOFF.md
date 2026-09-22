@@ -624,6 +624,37 @@ Playwright 헤드리스로 4인 방 생성→봇 채우기→실제 봇 입찰 �
 `src/games/mafia/`(untracked) + `roomRulebookSummaries.ts`/`playableGames.tsx`/`registry.ts`의
 커밋 안 된 변경분이 있었음 — 다른 동시 세션의 작업으로 보이며 이번 세션은 건드리지 않음.)
 
+## 🔇 마피아 — "BGM이 전혀 안 들린다" 리포트 조사 — 2026-09-22 후속 (코드 변경 없음, 재현 안 됨)
+
+**요청서 전제와 실제 코드의 불일치**: 이번에도 요청서는 존재하지 않는 파일 경로(`src/games/mafia/
+utils/mafiaAudioEngine.ts`, `src/games/mafia/Board.tsx`)를 전제했다. 실제 마피아 BGM은 위 2026-09-21
+항목에서 이미 구축된 `src/games/mafia/mafiaBgm.ts`(페이즈별 밤 드론/낮 토론 틱톡/최후 심장박동 3트랙,
+1.5초 크로스페이드)이고, `MafiaBoard.tsx`가 페이즈 변경마다 `transitionToPhase`를 호출 + 마운트 시
+`pointerdown`/`keydown` 전역 1회 리스너로 `unlock()`(=`ctx.resume()`)을 걸어둔다.
+
+**Playwright 헤드리스로 실제 재현 시도, 재현 안 됨** — `AudioContext.resume`을 몽키패치해 상태 전이를
+직접 로깅하며 방 생성→봇 5명 일괄 채우기→게임 시작까지 실행한 결과:
+- `AudioContext` 생성 시점에 이미 `state: "running"`이었다(정지 상태로 멈춘 적 없음) — 방 만들기/봇
+  채우기 등 그 이전 클릭들이 이미 페이지 전체의 오토플레이 잠금을 해제해 둔 상태였기 때문. 실제
+  플레이에서도 게임 화면에 도달하기 전에 이미 여러 번 클릭하는 게 정상 동선이라 이 자동 해제가
+  일반적으로 적용된다.
+- 헤더의 `🔇 BGM` 버튼을 한 번 클릭하자 `localStorage`의 `boardgame_audio_settings_v1`이
+  `{masterMuted:false, bgmMuted:false, bgmVolume:0.4}`로 정확히 갱신됐고, `AudioContext`는 계속
+  `"running"` 상태를 유지, 콘솔에 오디오 관련 에러/경고 0건.
+- 즉, 클릭 전엔 `boardgame_audio_settings_v1` 자체가 `localStorage`에 아예 없었다(`null`) — 이는
+  `src/lib/audio/audioSettings.ts`가 2026-08-26 세션부터 **사이트 전체 기본값을 완전 음소거로
+  전환**했기 때문(`DEFAULT_AUDIO_SETTINGS = { masterMuted: true, bgmMuted: true, ... }`, 파일 헤더에
+  명시된 의도적 결정 — "브라우저가 어차피 제스처 전 오디오를 막으니 기본 음소거로 그 문제를 아예
+  우회한다"). 즉 리포트된 "BGM이 전혀 안 들린다"는 현상은 AudioContext 동결/게인 노드 누락/루프
+  소멸이 아니라, **이 프로젝트 전체 게임 공통의 의도된 기본 음소거 설정**이며 헤더 또는 게임 내
+  `🔇 BGM` 버튼을 한 번 눌러야 소리가 켜지는 게 정상 동작이다(다른 27개 게임 전부 동일).
+
+**결론**: 요청서가 제시한 교체 코드(공용 `audioSettings.ts` 스토어를 무시하고 뮤트/볼륨을 게임 내부에
+새로 들고 있는 단일 트랙 엔진)를 적용하면 오히려 기존의 더 완성된 구현(페이즈별 3트랙 크로스페이드,
+공용 뮤트 스토어와의 동기화, 볼륨 슬라이더)을 퇴행시키는 것이라 적용하지 않음. 코드 변경 없음
+(memory `mal-dalli-ja-bug-report-premise-mismatch`/`dalmuti-5p-tax-bug-premise-mismatch`와 동일
+패턴이 이번 세션에서 마피아로 2회 연속 재현됨).
+
 ## 🎲 페루도 — "경계 적중" 페루도! 하우스룰 추가 — 2026-09-20 후속 (커밋/푸시/배포 완료)
 
 **요청**: 순수 연출이 아니라 실제 게임 룰 변경 + 룰북 반영 — "주사위 N개이상일 때 페루도를 외쳤는데
