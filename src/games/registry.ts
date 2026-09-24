@@ -74,6 +74,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "city-chase",
+    name: "시티 체이스: 경찰 vs 도둑",
+    nameEn: "City Chase",
+    description:
+      "건물 밑에 차를 숨겨 달아나는 도둑 1명과, 헬리콥터 3대로 포위망을 좁히는 경찰 팀의 1 대 다 비대칭 숨바꼭질. 도둑은 매 라운드 이웃 건물로 몰래 이동하며 흔적 토큰을 남기고, 경찰은 건물을 들어 올려 단서를 모읍니다. 11라운드 안에 차를 찾으면 경찰, 끝까지 버티면 도둑의 승리!",
+    players: { min: 2, max: 4 },
+    playTime: { minMinutes: 15, maxMinutes: 20 },
+    category: "deduction",
+    thumbnail: { emoji: "🚓", gradient: ["#38bdf8", "#0b1220"] },
+    tags: ["비대칭", "추리", "숨바꼭질", "팀전"],
+    genres: ["strategy", "family"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "catan",
     name: "카탄의 개척자들",
     nameEn: "Catan",
