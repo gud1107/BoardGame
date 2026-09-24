@@ -13,6 +13,8 @@ import {
   SPIRAL_ORDER,
   startGame,
   TOTAL_SCROLLS,
+  totalGold,
+  GOLD_SUPPLY,
   type BoardToken,
   type DuelCard,
   type OwnedCard,
@@ -250,6 +252,45 @@ describe("turn actions", () => {
   });
 });
 
+describe("gold reservoir", () => {
+  it("3 reserves drain the stand to 0, a 4th reservation-eligible player gets no gold", () => {
+    let s = startGame(41);
+    for (let i = 0; i < 3; i++) {
+      s = { ...s, activeSeat: "p1", players: { ...s.players, p1: { ...s.players.p1, reserved: [] } } };
+      s = applyAction(s, { type: "reserveCard", seat: "p1", level: 1, marketIndex: 0 });
+    }
+    expect(s.goldSupply).toBe(0);
+    expect(s.players.p1.tokens.gold).toBe(3);
+    s = { ...s, activeSeat: "p2" };
+    s = applyAction(s, { type: "reserveCard", seat: "p2", level: 2, marketIndex: 0 });
+    expect(s.players.p2.reserved).toHaveLength(1);
+    expect(s.players.p2.tokens.gold ?? 0).toBe(0);
+    expect(s.lastEvent).toMatchObject({ kind: "reserve", gainedGold: false });
+    expect(totalGold(s)).toBe(GOLD_SUPPLY);
+  });
+
+  it("gold spent on a purchase returns to the stand, never the bag", () => {
+    let s = startGame(43);
+    const card: DuelCard = { id: "g2", level: 1, color: "red", points: 0, crowns: 0, bonus: 1, cost: { blue: 2, pearl: 1 } };
+    s = { ...s, goldSupply: 0, market: { ...s.market, 1: [card, ...s.market[1].slice(1)] }, players: { ...s.players, p1: { ...s.players.p1, tokens: { gold: 3, pearl: 1 } } } };
+    s = applyAction(s, { type: "buyCard", seat: "p1", cardId: "g2", source: "market" });
+    expect(s.players.p1.tokens.gold).toBe(1);
+    expect(s.goldSupply).toBe(2);
+    expect(s.bag).toEqual(["pearl"]);
+    expect(totalGold(s)).toBe(GOLD_SUPPLY);
+  });
+
+  it("stealing gold is rejected; refills never put gold on the grid", () => {
+    let s = startGame(47);
+    const card: DuelCard = { id: "st2", level: 2, color: "blue", points: 0, crowns: 0, bonus: 1, cost: {}, ability: "stealToken" };
+    s = { ...s, market: { ...s.market, 2: [card, ...s.market[2].slice(1)] }, players: { ...s.players, p2: { ...s.players.p2, tokens: { gold: 1, red: 1 } } } };
+    s = applyAction(s, { type: "buyCard", seat: "p1", cardId: "st2", source: "market" });
+    const bogus = { type: "resolveSteal", seat: "p1", color: "gold" } as unknown as Parameters<typeof applyAction>[1];
+    expect(applyAction(s, bogus)).toBe(s);
+    expect(getValidMoves(s, "p1").every((m) => m.type === "resolveSteal" && m.color !== ("gold" as string))).toBe(true);
+  });
+});
+
 describe("victory", () => {
   const base: PlayerState = { tokens: {}, cards: [], reserved: [], royals: [], scrolls: 0 };
   it("detects each of the three conditions", () => {
@@ -285,6 +326,8 @@ describe("bot self-play", () => {
         expect(next).not.toBe(s);
         s = next;
         expect(scrollTotal(s)).toBe(TOTAL_SCROLLS);
+        expect(totalGold(s)).toBe(GOLD_SUPPLY);
+        expect([...s.bag, ...s.grid].includes("gold" as BoardToken)).toBe(false);
         const held = (["p1", "p2"] as const).reduce(
           (sum, seat) => sum + Object.entries(s.players[seat].tokens).reduce((a, [k, v]) => a + (k === "gold" ? 0 : (v ?? 0)), 0),
           0,

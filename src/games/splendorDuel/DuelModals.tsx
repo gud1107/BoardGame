@@ -43,6 +43,7 @@ export function CardActionSheet({
   player,
   fromReserved,
   canReserve,
+  goldLeft,
   onBuy,
   onReserve,
   onClose,
@@ -51,6 +52,8 @@ export function CardActionSheet({
   player: PlayerState;
   fromReserved: boolean;
   canReserve: boolean;
+  /** Gold still on the stand — 0 means reserving gives the card only. */
+  goldLeft: number;
   onBuy: () => void;
   onReserve: () => void;
   onClose: () => void;
@@ -101,7 +104,7 @@ export function CardActionSheet({
         </button>
         {!fromReserved ? (
           <button onClick={onReserve} disabled={!canReserve} className="rounded-xl border border-amber-400/40 py-2.5 text-sm font-bold text-amber-200 disabled:opacity-30 light:text-amber-700">
-            📥 예약 (+황금)
+            {goldLeft > 0 ? "📥 예약 (+황금)" : "📥 카드만 예약"}
           </button>
         ) : (
           <button onClick={onClose} className="rounded-xl border border-white/15 py-2.5 text-sm text-white/70 light:text-slate-600">
@@ -110,6 +113,9 @@ export function CardActionSheet({
         )}
       </div>
       {!fromReserved && !canReserve && <p className="mt-1.5 text-center text-[10px] text-white/40">예약은 최대 {RESERVE_LIMIT}장까지</p>}
+      {!fromReserved && canReserve && goldLeft === 0 && (
+        <p className="mt-1.5 text-center text-[11px] font-bold text-amber-300 light:text-amber-700">보드 상단에 황금 토큰이 소진되어 카드만 예약합니다.</p>
+      )}
     </Sheet>
   );
 }

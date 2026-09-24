@@ -174,6 +174,10 @@ export function BeginnerGuide({ focus }: { focus: GuideTopic | null }) {
         <p>
           황금 <DuelToken color="gold" className="inline h-3.5 w-3.5 align-text-bottom" />은 어떤 보석으로도 쓸 수 있는 만능 조커. 찜은 최대 3장.
         </p>
+        <p>
+          황금은 게임 전체에 <b>딱 3개</b>, 보드 위 GOLD 칸에서만 가져와요. 다 떨어졌으면 카드만 찜하고, 카드를 살 때 쓴 황금은 다시 GOLD 칸으로 돌아가요.
+          두루마리·강탈로는 황금을 가져올 수 없어요.
+        </p>
       </GuideCard>
 
       <GuideCard icon="💰" title="카드 사기" active={focus === "buy"}>

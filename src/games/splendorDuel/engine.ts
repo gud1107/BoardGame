@@ -680,7 +680,27 @@ function discardTokens(state: SplendorDuelState, seat: Seat, discard: TokenBundl
 // Reducer
 // ---------------------------------------------------------------------------
 
+/**
+ * Gold invariant (rulebook §1): exactly `GOLD_SUPPLY` (3) gold tokens exist —
+ * stand + both players' holdings. Gold never enters the bag or the 5×5 grid
+ * (`BoardToken` excludes it by type), is only ever gained by reserving while
+ * the stand is non-empty, and always returns to the stand when spent or
+ * discarded. Scrolls/"토큰 획득" can only target grid cells and 강탈 only
+ * gems/pearls, so none of them can move gold.
+ */
+export function totalGold(state: SplendorDuelState): number {
+  return state.goldSupply + (state.players.p1.tokens.gold ?? 0) + (state.players.p2.tokens.gold ?? 0);
+}
+
 export function applyAction(state: SplendorDuelState, action: EngineAction): SplendorDuelState {
+  const next = reduce(state, action);
+  if (process.env.NODE_ENV !== "production" && totalGold(next) !== GOLD_SUPPLY) {
+    console.error(`[SplendorDuel] gold invariant violated after ${action.type}: ${totalGold(next)} (expected ${GOLD_SUPPLY})`);
+  }
+  return next;
+}
+
+function reduce(state: SplendorDuelState, action: EngineAction): SplendorDuelState {
   switch (action.type) {
     case "useScroll":
       return spendScroll(state, action.seat, action.cell);

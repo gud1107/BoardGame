@@ -16,6 +16,7 @@ import {
   VictoryPanel,
   type GuideTopic,
 } from "./DuelSidePanels";
+import GoldReservoir from "./GoldReservoir";
 import PlayerDock from "./PlayerDock";
 import SpiralGridBoard from "./SpiralGridBoard";
 import { playDuelEventSound, playDuelVictorySound } from "./splendorDuelAudio";
@@ -77,7 +78,7 @@ function describeEvent(e: DuelEvent, names: Record<Seat, string>): string {
     case "refill":
       return `${who}: 🔄 보드 보충${scrollNote(e.scrollFrom, opp)}`;
     case "reserve":
-      return `${who}: 📥 카드 예약${e.gainedGold ? " + 황금" : ""}`;
+      return `${who}: 📥 카드 예약${e.gainedGold ? " + 황금" : " (황금 소진 — 카드만 예약)"}`;
     case "buy":
       return `${who}: 💰 카드 구매${scrollNote(e.scrollFrom, who)}`;
     case "royal":
@@ -292,13 +293,15 @@ export default function SplendorDuelBoard({
       className={`${isDesktop || mobileTab === "board" ? "flex" : "hidden"} flex-col items-center gap-1.5 rounded-3xl border border-white/10 bg-black/40 p-1.5 md:col-span-5 md:gap-2 md:p-2 light:border-slate-200 light:bg-white/70`}
     >
       <div className="flex w-full items-center justify-between px-1 text-[10px] font-bold tracking-widest text-amber-300/80">
-        <span className="font-serif">GEM BOARD</span>
-        <span
-          className="font-mono text-white/40 light:text-slate-400"
-          title="주머니 · 황금 스탠드 · 공용 스크롤"
-        >
-          👝{state.bag.length} · 🟡{state.goldSupply} · 공용📜
-          {state.tableScrolls}
+        <span className="font-serif whitespace-nowrap">GEM BOARD</span>
+        <span className="flex items-center gap-1.5">
+          <GoldReservoir count={state.goldSupply} />
+          <span
+            className="font-mono whitespace-nowrap text-white/40 light:text-slate-400"
+            title="주머니 · 공용 스크롤"
+          >
+            👝{state.bag.length} · 📜{state.tableScrolls}
+          </span>
         </span>
       </div>
       <div className="mx-auto w-full max-w-[20dvh] md:max-w-none">
@@ -506,6 +509,7 @@ export default function SplendorDuelBoard({
             player={me}
             fromReserved={sheet.fromReserved}
             canReserve={me.reserved.length < RESERVE_LIMIT}
+            goldLeft={state.goldSupply}
             onClose={() => setSheet(null)}
             onBuy={() =>
               onAction({
