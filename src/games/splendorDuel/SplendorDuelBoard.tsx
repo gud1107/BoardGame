@@ -9,7 +9,7 @@ import {
 } from "react";
 import CardMarket from "./CardMarket";
 import { CardActionSheet, PendingPanel, VictoryModal } from "./DuelModals";
-import { TOKEN_LABEL } from "./DuelToken";
+import { DuelToken, TOKEN_LABEL } from "./DuelToken";
 import {
   BeginnerGuide,
   EdgeDrawer,
@@ -97,6 +97,49 @@ function describeEvent(e: DuelEvent, names: Record<Seat, string>): string {
   }
 }
 
+/**
+ * The 3 situations in which taking/refilling hands the OPPONENT a scroll
+ * (rulebook §3), always shown under the gem board. The case the current
+ * selection would trigger lights up, so the penalty is visible before
+ * confirming. Phones get a one-line chip version to keep the board tab
+ * scroll-free.
+ */
+function PrivilegeGiftRules({ active }: { active: "pearl" | "triple" | null }) {
+  const items = [
+    { key: "pearl", icon: <><DuelToken color="pearl" className="h-3.5 w-3.5" /><DuelToken color="pearl" className="h-3.5 w-3.5" /></>, full: "진주 토큰 2개를 가져올 때", short: "진주 2개" },
+    { key: "triple", icon: <><DuelToken color="red" className="h-3.5 w-3.5" /><DuelToken color="red" className="h-3.5 w-3.5" /><DuelToken color="red" className="h-3.5 w-3.5" /></>, full: "같은 색상의 기본 보석 토큰 3개를 가져올 때", short: "같은 색 3개" },
+    { key: "refill", icon: <span className="text-[13px] leading-none">🔄</span>, full: "자신의 턴 시작 시 선택 행동으로 주머니의 토큰을 꺼내 게임 보드를 채울(리필할) 때", short: "보드 채우기" },
+  ] as const;
+  const on = (k: string) => active === k;
+  return (
+    <div className={`w-full rounded-xl border px-2 py-1 md:py-1.5 ${active ? "border-amber-300/70 bg-amber-400/10" : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white"}`}>
+      <p className="text-[10px] font-black text-amber-200 md:text-[11px] light:text-amber-700">
+        📜 상대에게 두루마리 1개를 주는 3가지 상황
+        {active && <span className="ml-1 text-amber-300">— 지금 선택이 해당돼요!</span>}
+      </p>
+      {/* Phone: one chip row */}
+      <div className="mt-0.5 flex flex-wrap gap-1 md:hidden">
+        {items.map((it) => (
+          <span key={it.key} className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-px text-[10px] font-bold ${on(it.key) ? "bg-amber-400 text-black" : "bg-black/40 text-white/75 light:bg-slate-100 light:text-slate-600"}`}>
+            {it.icon}
+            {it.short}
+          </span>
+        ))}
+      </div>
+      {/* Desktop: full sentences */}
+      <ol className="mt-1 hidden flex-col gap-0.5 md:flex">
+        {items.map((it, i) => (
+          <li key={it.key} className={`flex items-center gap-1.5 rounded-md px-1 text-[11px] leading-snug ${on(it.key) ? "bg-amber-400 font-bold text-black" : "text-white/75 light:text-slate-600"}`}>
+            <span className="w-3 shrink-0 font-mono text-[10px] opacity-70">{i + 1}</span>
+            <span className="inline-flex shrink-0 items-center">{it.icon}</span>
+            <span>{it.full}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 export default function SplendorDuelBoard({
   state,
   viewerSeat,
@@ -172,6 +215,12 @@ export default function SplendorDuelBoard({
     selected.length > 0 && isValidSelection(selected, state.grid);
   const penalty =
     selectionValid && selectionGivesPrivilege(selected, state.grid);
+  // Which of the 3 "opponent gets a scroll" cases the current selection hits.
+  const penaltyKind: "pearl" | "triple" | null = !penalty
+    ? null
+    : selected.filter((i) => state.grid[i] === "pearl").length >= 2
+      ? "pearl"
+      : "triple";
   const canRefill =
     canMain && state.bag.length > 0 && state.grid.some((t) => t === null);
 
@@ -252,7 +301,7 @@ export default function SplendorDuelBoard({
           {state.tableScrolls}
         </span>
       </div>
-      <div className="mx-auto w-full max-w-[24dvh] md:max-w-none">
+      <div className="mx-auto w-full max-w-[20dvh] md:max-w-none">
         <SpiralGridBoard
           grid={state.grid}
           selected={selected}
@@ -329,11 +378,7 @@ export default function SplendorDuelBoard({
           ❌ 잘못된 선택 — 가로/세로/대각선으로 붙어 있는 1~3개만 가능
         </p>
       )}
-      {penalty && (
-        <p className="text-[11px] font-bold text-amber-300">
-          ⚠️ 같은 색 3개/진주 2개 — 상대가 특권 스크롤을 얻습니다
-        </p>
-      )}
+      <PrivilegeGiftRules active={penaltyKind} />
     </section>
   );
 
