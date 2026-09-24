@@ -1,6 +1,6 @@
 "use client";
 
-import { COLOR_ACCENT, TokenCount } from "./DuelToken";
+import { COLOR_ACCENT, DuelToken, TOKEN_LABEL, TokenCount } from "./DuelToken";
 import { GEM_ORDER, type CardAbility, type DuelCard, type Level, type RoyalCard, type SplendorDuelState } from "./engine";
 
 export const ABILITY_META: Record<CardAbility, { icon: string; label: string; desc: string }> = {
@@ -58,11 +58,17 @@ export function DuelCardView({
         </span>
       </div>
       <div className="flex flex-1 items-center justify-center">
-        <span
-          className={`rounded-full border border-white/40 ${compact ? "h-3 w-3" : "h-5 w-5"}`}
-          style={{ background: color ? cardFace(color) : "conic-gradient(#f8fafc, #38bdf8, #34d399, #f87171, #64748b, #f8fafc)" }}
-          title={color ? `${color} 보너스 ×${card.bonus}` : card.bonus > 0 ? "복사 보너스" : "보너스 없음"}
-        />
+        {color ? (
+          <span title={`${TOKEN_LABEL[color]} 보너스 ×${card.bonus}`} className="inline-flex">
+            <DuelToken color={color} className={compact ? "h-4 w-4" : "h-7 w-7"} />
+          </span>
+        ) : (
+          <span
+            className={`rounded-full border border-white/40 ${compact ? "h-3 w-3" : "h-5 w-5"}`}
+            style={{ background: "conic-gradient(#c9e2fb, #1f6fe5, #0e9f6e, #e0194a, #3b3847, #dfe9f3)" }}
+            title={card.bonus > 0 ? "복사 보너스" : "보너스 없음"}
+          />
+        )}
         {card.bonus > 1 && <span className="ml-0.5 text-[9px] font-bold text-white/80">×{card.bonus}</span>}
       </div>
       <div className={`flex flex-wrap gap-x-1 bg-black/40 px-0.5 pb-0.5 ${compact ? "gap-y-0" : "gap-y-0.5"}`}>

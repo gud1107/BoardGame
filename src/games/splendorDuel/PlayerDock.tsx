@@ -1,7 +1,7 @@
 "use client";
 
 import { CardBack, DuelCardView } from "./CardMarket";
-import { COLOR_ACCENT, DuelToken } from "./DuelToken";
+import { DuelToken, GEM_PALETTE } from "./DuelToken";
 import {
   bonusCounts,
   colorPoints,
@@ -61,7 +61,7 @@ export function TokenShelf({ player, compact = false }: { player: PlayerState; c
         return (
           <div key={c} className="flex min-w-0 flex-1 flex-col items-center gap-0.5">
             {isGem && !compact && (
-              <span className="rounded px-1 font-mono text-[9px] font-bold text-black" style={{ background: COLOR_ACCENT[c] }} title="카드 보너스(할인)">
+              <span className="rounded px-1 font-mono text-[9px] font-bold" style={{ background: GEM_PALETTE[c].base, color: GEM_PALETTE[c].ink }} title="카드 보너스(할인)">
                 +{bonus[c]}
               </span>
             )}
