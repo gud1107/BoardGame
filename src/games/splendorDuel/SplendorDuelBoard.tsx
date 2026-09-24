@@ -16,13 +16,14 @@ import {
   VictoryPanel,
   type GuideTopic,
 } from "./DuelSidePanels";
-import GoldReservoir from "./GoldReservoir";
 import PlayerDock from "./PlayerDock";
 import SpiralGridBoard from "./SpiralGridBoard";
 import { playDuelEventSound, playDuelVictorySound } from "./splendorDuelAudio";
 import {
   canAfford,
   getValidMoves,
+  GOLD_SUPPLY,
+  goldOnBoard,
   isValidSelection,
   otherSeat,
   RESERVE_LIMIT,
@@ -272,9 +273,10 @@ export default function SplendorDuelBoard({
   } | null>(null);
   const [victoryClosed, setVictoryClosed] = useState(false);
   const [mobileTab, setMobileTab] = useState<"board" | "market">("board");
-  // Set by tapping the gold stand: "now pick a card to reserve" hint.
-  const [reserveHint, setReserveHint] = useState(false);
-  const reservoirRef = useRef<HTMLButtonElement>(null);
+  // A reservation waiting for the player to pick WHICH gold cell to take (only when 2+ gold are on the board).
+  const [reservePick, setReservePick] = useState<{ level: Level; marketIndex?: number } | null>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const bagRef = useRef<HTMLSpanElement>(null);
   const marketRef = useRef<HTMLElement>(null);
   const p1DockRef = useRef<HTMLDivElement>(null);
   const p2DockRef = useRef<HTMLDivElement>(null);
@@ -289,7 +291,7 @@ export default function SplendorDuelBoard({
     setSelected([]);
     setScrollMode(false);
     setSheet(null);
-    setReserveHint(false);
+    setReservePick(null);
     if (state.phase !== "gameOver") setVictoryClosed(false);
     if (pendingHead?.kind === "takeToken") setMobileTab("board");
   }
@@ -302,21 +304,18 @@ export default function SplendorDuelBoard({
     const e = state.lastEvent;
     if (!e) return;
     playDuelEventSound(e);
-    // Physical gold: stand slot -> reserver's dock, or spender's dock -> the slots it refills.
-    const slotRect = (i: number) => {
-      const slot = reservoirRef.current?.querySelector<HTMLElement>(
-        `[data-gold-slot="${i}"]`,
-      );
-      const r = slot?.getBoundingClientRect();
-      // The phone market tab hides the board (and its stand) - fall back to the market's rect.
-      return r && r.width > 0
-        ? r
-        : (marketRef.current?.getBoundingClientRect() ?? r);
+    // Physical gold: the picked board cell -> reserver's dock, or spender's dock -> the bag.
+    // The phone market tab hides the board (cells + bag counter) - fall back to the market's rect.
+    const visible = (el: Element | null | undefined) => {
+      const r = el?.getBoundingClientRect();
+      return r && r.width > 0 ? r : marketRef.current?.getBoundingClientRect();
     };
     const dockRect = (seat: Seat) =>
       (seat === "p1" ? p1DockRef : p2DockRef).current?.getBoundingClientRect();
-    if (e.kind === "reserve" && e.gainedGold) {
-      const from = slotRect(state.goldSupply);
+    if (e.kind === "reserve" && e.goldCell !== null) {
+      const from = visible(
+        boardRef.current?.querySelector(`[data-cell="${e.goldCell}"]`),
+      );
       const to = dockRect(e.seat);
       if (from && to) flyGold(from, to, 0);
     }
@@ -328,10 +327,10 @@ export default function SplendorDuelBoard({
           : 0;
     for (let k = 0; k < back; k++) {
       const from = dockRect(e.seat);
-      const to = slotRect(state.goldSupply - back + k);
+      const to = visible(bagRef.current);
       if (from && to) flyGold(from, to, k * 140);
     }
-  }, [state.eventSeq, state.lastEvent, state.goldSupply]);
+  }, [state.eventSeq, state.lastEvent]);
   const wasOver = useRef(state.phase === "gameOver");
   useEffect(() => {
     if (state.phase === "gameOver" && !wasOver.current) playDuelVictorySound();
@@ -367,7 +366,36 @@ export default function SplendorDuelBoard({
     [pendingHead, state.grid],
   );
 
+  const goldCells = useMemo(
+    () => new Set(state.grid.flatMap((t, i) => (t === "gold" ? [i] : []))),
+    [state.grid],
+  );
+
+  /**
+   * Reserve entry point (sheet button or deck tap). With gold on the board
+   * the player must take one gold cell: 0 gold -> card only, exactly 1 ->
+   * that one automatically, 2+ -> ask which one on the board.
+   */
+  function startReserve(level: Level, marketIndex?: number) {
+    const golds = [...goldCells];
+    if (golds.length <= 1) {
+      onAction({ type: "reserveCard", seat: viewerSeat, level, marketIndex, goldCell: golds[0] });
+      return;
+    }
+    setSheet(null);
+    setSelected([]);
+    setScrollMode(false);
+    setReservePick({ level, marketIndex });
+    setMobileTab("board");
+  }
+
   function onCellClick(cell: number) {
+    if (reservePick) {
+      if (goldCells.has(cell))
+        onAction({ type: "reserveCard", seat: viewerSeat, ...reservePick, goldCell: cell });
+      return;
+    }
+    if (state.grid[cell] === "gold") return;
     if (pendingHead?.kind === "takeToken") {
       if (takeTargets?.has(cell))
         onAction({ type: "resolveTakeToken", seat: viewerSeat, cell });
@@ -394,11 +422,7 @@ export default function SplendorDuelBoard({
     status = `⬇ 보드에서 ${TOKEN_LABEL[pendingHead.color]} 토큰 1개를 고르세요`;
   else if (state.phase === "resolving") status = "능력/정리 단계를 처리하세요";
   else if (scrollMode) status = "📜 가져올 토큰 1개를 고르세요 (황금 제외)";
-  else if (reserveHint)
-    status =
-      state.goldSupply > 0
-        ? "📥 예약할 카드(또는 덱)를 고르세요 — 황금 1개를 함께 가져와요"
-        : "📥 황금이 소진됐어요 — 예약하면 카드만 받아요";
+  else if (reservePick) status = "🪙 가져올 황금 1개를 보드에서 고르세요 (예약 중)";
   else status = "내 차례 — 토큰 선택 또는 카드 구매/예약";
 
   const lastEvent = state.lastEvent;
@@ -432,19 +456,15 @@ export default function SplendorDuelBoard({
       <div className="flex w-full flex-wrap items-center justify-between gap-y-1 px-1 text-[10px] font-bold tracking-widest text-amber-300/80">
         <span className="font-serif whitespace-nowrap">GEM BOARD</span>
         <span className="flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5">
-          <GoldReservoir
-            count={state.goldSupply}
-            innerRef={reservoirRef}
-            onClick={
-              canMain && me.reserved.length < RESERVE_LIMIT
-                ? () => {
-                    setReserveHint(true);
-                    setMobileTab("market");
-                  }
-                : undefined
-            }
-          />
           <span
+            className="inline-flex items-center gap-0.5 rounded-full border border-amber-400/40 bg-black/40 px-1.5 font-mono whitespace-nowrap text-amber-200 light:border-amber-500/40 light:bg-amber-50 light:text-amber-700"
+            title="보드 25칸 위의 황금 수 — 카드를 예약할 때만 1개 가져올 수 있어요"
+          >
+            <DuelToken color="gold" className="h-3 w-3" />
+            {goldOnBoard(state)}/{GOLD_SUPPLY}
+          </span>
+          <span
+            ref={bagRef}
             className="font-mono whitespace-nowrap text-white/40 light:text-slate-400"
             title="주머니 · 공용 스크롤"
           >
@@ -452,18 +472,20 @@ export default function SplendorDuelBoard({
           </span>
         </span>
       </div>
-      <div className="mx-auto w-full max-w-[20dvh] md:max-w-none">
+      <div ref={boardRef} className="mx-auto w-full max-w-[20dvh] md:max-w-none">
         <SpiralGridBoard
           grid={state.grid}
           selected={selected}
           selectable={
             pendingHead?.kind === "takeToken"
               ? (takeTargets ?? new Set())
-              : canMain
-                ? null
-                : new Set()
+              : reservePick
+                ? goldCells
+                : canMain
+                  ? null
+                  : new Set()
           }
-          highlight={takeTargets}
+          highlight={reservePick ? goldCells : takeTargets}
           onCellClick={
             canMain || pendingHead?.kind === "takeToken"
               ? onCellClick
@@ -473,6 +495,14 @@ export default function SplendorDuelBoard({
       </div>
       {canMain && (
         <div className="flex w-full flex-wrap items-center justify-center gap-1.5">
+          {reservePick && (
+            <button
+              onClick={() => setReservePick(null)}
+              className="rounded-lg border border-amber-300/60 px-2 py-1 text-[11px] font-bold text-amber-200"
+            >
+              예약 취소
+            </button>
+          )}
           <button
             onClick={() => {
               setScrollMode((m) => !m);
@@ -551,8 +581,7 @@ export default function SplendorDuelBoard({
         }
         onDeckClick={
           canMain && me.reserved.length < RESERVE_LIMIT
-            ? (level) =>
-                onAction({ type: "reserveCard", seat: viewerSeat, level })
+            ? (level) => startReserve(level)
             : undefined
         }
       />
@@ -664,7 +693,7 @@ export default function SplendorDuelBoard({
             player={me}
             fromReserved={sheet.fromReserved}
             canReserve={me.reserved.length < RESERVE_LIMIT}
-            goldLeft={state.goldSupply}
+            goldLeft={goldCells.size}
             onClose={() => setSheet(null)}
             onBuy={() =>
               onAction({
@@ -674,14 +703,7 @@ export default function SplendorDuelBoard({
                 source: sheet.fromReserved ? "reserved" : "market",
               })
             }
-            onReserve={() =>
-              onAction({
-                type: "reserveCard",
-                seat: viewerSeat,
-                level: sheet.level,
-                marketIndex: sheet.index,
-              })
-            }
+            onReserve={() => startReserve(sheet.level, sheet.index)}
           />
         )}
 

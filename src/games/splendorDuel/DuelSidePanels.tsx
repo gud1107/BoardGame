@@ -150,7 +150,7 @@ export function BeginnerGuide({ focus }: { focus: GuideTopic | null }) {
 
       <GuideCard icon="💎" title="보석 가져오기 (필수 행동)" active={focus === "gems"}>
         <p>보드에서 <b>한 줄로 붙어 있는 보석 1~3개</b>를 눌러 고른 뒤 &ldquo;가져오기&rdquo;.</p>
-        <p>가로·세로·대각선 모두 OK, 중간에 빈칸이 있으면 안 돼요.</p>
+        <p>가로·세로·대각선 모두 OK, 중간에 빈칸이나 황금이 있으면 안 돼요(황금은 줄로 못 가져와요).</p>
         <div className="flex flex-wrap gap-1">
           <MiniLine cells={["red", "blue", "green"]} ok />
           <MiniLine cells={["red", null, "green"]} ok={false} />
@@ -175,7 +175,7 @@ export function BeginnerGuide({ focus }: { focus: GuideTopic | null }) {
           황금 <DuelToken color="gold" className="inline h-3.5 w-3.5 align-text-bottom" />은 어떤 보석으로도 쓸 수 있는 만능 조커. 찜은 최대 3장.
         </p>
         <p>
-          황금은 게임 전체에 <b>딱 3개</b>, 보드 위 GOLD 칸에서만 가져와요. 다 떨어졌으면 카드만 찜하고, 카드를 살 때 쓴 황금은 다시 GOLD 칸으로 돌아가요.
+          황금은 게임 전체에 <b>딱 3개</b>, 보석 보드 25칸 사이에 섞여 있어요. 찜할 때 보드의 황금 1개를 골라 가져오고, 보드에 없으면 카드만 찜해요. 쓴 황금은 주머니로 돌아가 보드를 채울 때 다시 나와요.
           두루마리·강탈로는 황금을 가져올 수 없어요.
         </p>
       </GuideCard>

@@ -110,7 +110,7 @@ export type DuelEvent =
   | { kind: "take"; seat: Seat; count: number; penalty: boolean; scrollFrom: ScrollSource }
   | { kind: "scrollUse"; seat: Seat }
   | { kind: "refill"; seat: Seat; scrollFrom: ScrollSource }
-  | { kind: "reserve"; seat: Seat; gainedGold: boolean }
+  | { kind: "reserve"; seat: Seat; gainedGold: boolean; goldCell: number | null }
   | { kind: "buy"; seat: Seat; cardId: string; scrollFrom: ScrollSource; goldSpent: number }
   | { kind: "royal"; seat: Seat; royalId: string; scrollFrom: ScrollSource }
   | { kind: "steal"; seat: Seat; color: TokenColor }
@@ -129,7 +129,6 @@ export interface SplendorDuelState {
   /** Flat 25-cell board, index = row * 5 + col. */
   grid: (BoardToken | null)[];
   bag: BoardToken[];
-  goldSupply: number;
   tableScrolls: number;
   decks: Record<Level, DuelCard[]>;
   market: Record<Level, (DuelCard | null)[]>;
@@ -151,7 +150,8 @@ export type EngineAction =
   | { type: "useScroll"; seat: Seat; cell: number }
   | { type: "refillBoard"; seat: Seat }
   | { type: "takeTokens"; seat: Seat; cells: number[] }
-  | { type: "reserveCard"; seat: Seat; level: Level; marketIndex?: number }
+  /** `goldCell` = which gold cell on the board to take; required whenever the board has any gold. */
+  | { type: "reserveCard"; seat: Seat; level: Level; marketIndex?: number; goldCell?: number }
   | { type: "buyCard"; seat: Seat; cardId: string; source: "market" | "reserved" }
   | { type: "resolveCopy"; seat: Seat; color: GemColor }
   | { type: "resolveTakeToken"; seat: Seat; cell: number }
@@ -186,6 +186,8 @@ export function startGame(seed: number): SplendorDuelState {
   const bag: BoardToken[] = [];
   for (const c of GEM_ORDER) for (let i = 0; i < 4; i++) bag.push(c);
   bag.push("pearl", "pearl");
+  // Gold is mixed into the bag too and lands on 3 of the 25 cells (the board starts completely full).
+  for (let i = 0; i < GOLD_SUPPLY; i++) bag.push("gold");
   const filled = fillFromBag(Array(GRID_SIZE * GRID_SIZE).fill(null), bag, rng);
 
   const emptyPlayer = (scrolls: number): PlayerState => ({ tokens: {}, cards: [], reserved: [], royals: [], scrolls });
@@ -194,7 +196,6 @@ export function startGame(seed: number): SplendorDuelState {
     refillCount: 0,
     grid: filled.grid,
     bag: filled.bag,
-    goldSupply: GOLD_SUPPLY,
     // Rulebook §1-6 — the second player starts holding 1 scroll.
     tableScrolls: TOTAL_SCROLLS - 1,
     decks,
@@ -305,7 +306,8 @@ function cellRC(idx: number): [number, number] {
 export function isValidSelection(cells: number[], grid: (BoardToken | null)[]): boolean {
   if (cells.length < 1 || cells.length > 3) return false;
   if (new Set(cells).size !== cells.length) return false;
-  if (cells.some((i) => i < 0 || i >= grid.length || grid[i] === null)) return false;
+  // Gold can never be taken in a line (only by reserving), so a gold cell can't be part of a selection.
+  if (cells.some((i) => i < 0 || i >= grid.length || grid[i] === null || grid[i] === "gold")) return false;
   if (cells.length === 1) return true;
   const sorted = [...cells].map(cellRC).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const dr = sorted[1][0] - sorted[0][0];
@@ -330,7 +332,7 @@ export function allSelections(grid: (BoardToken | null)[]): number[][] {
   const out: number[][] = [];
   const dirs: [number, number][] = [[0, 1], [1, 0], [1, 1], [1, -1]];
   for (let idx = 0; idx < grid.length; idx++) {
-    if (grid[idx] === null) continue;
+    if (grid[idx] === null || grid[idx] === "gold") continue;
     out.push([idx]);
     const [r, c] = cellRC(idx);
     for (const [dr, dc] of dirs) {
@@ -340,7 +342,7 @@ export function allSelections(grid: (BoardToken | null)[]): number[][] {
         const nc = c + dc * k;
         if (nr < 0 || nr >= GRID_SIZE || nc < 0 || nc >= GRID_SIZE) break;
         const n = nr * GRID_SIZE + nc;
-        if (grid[n] === null) break;
+        if (grid[n] === null || grid[n] === "gold") break;
         line.push(n);
         out.push([...line]);
       }
@@ -388,7 +390,7 @@ function canAct(state: SplendorDuelState, seat: Seat): boolean {
 function spendScroll(state: SplendorDuelState, seat: Seat, cell: number): SplendorDuelState {
   if (!canAct(state, seat)) return state;
   const token = state.grid[cell];
-  if (state.players[seat].scrolls <= 0 || token === null || token === undefined) return state;
+  if (state.players[seat].scrolls <= 0 || token === null || token === undefined || token === "gold") return state;
   const grid = [...state.grid];
   grid[cell] = null;
   const p = state.players[seat];
@@ -428,10 +430,13 @@ function takeTokens(state: SplendorDuelState, seat: Seat, cells: number[]): Sple
   return continueTurn(withEvent(next, { kind: "take", seat, count: cells.length, penalty, scrollFrom: from }));
 }
 
-function reserveCard(state: SplendorDuelState, seat: Seat, level: Level, marketIndex?: number): SplendorDuelState {
+function reserveCard(state: SplendorDuelState, seat: Seat, level: Level, marketIndex?: number, goldCell?: number): SplendorDuelState {
   if (!canAct(state, seat)) return state;
   const p = state.players[seat];
   if (p.reserved.length >= RESERVE_LIMIT) return state;
+  // With gold on the board you must take one of those gold cells; with none left the card comes alone (rulebook §3 필수 행동 2).
+  const boardHasGold = state.grid.includes("gold");
+  if (boardHasGold ? goldCell === undefined || state.grid[goldCell] !== "gold" : goldCell !== undefined) return state;
   let market = state.market;
   let decks = state.decks;
   let card: DuelCard | null;
@@ -446,14 +451,14 @@ function reserveCard(state: SplendorDuelState, seat: Seat, level: Level, marketI
     if (!card) return state;
     decks = { ...decks, [level]: decks[level].slice(1) };
   }
-  // Rulebook §3 필수 행동 2 — reserving is still allowed when the gold stand is empty, just without the gold.
-  const gainedGold = state.goldSupply > 0;
+  const gainedGold = boardHasGold;
+  const grid = gainedGold ? state.grid.map((t, i) => (i === goldCell ? null : t)) : state.grid;
   const players = patchPlayer(state.players, seat, {
     reserved: [...p.reserved, card],
     tokens: gainedGold ? addTokens(p.tokens, { gold: 1 }) : p.tokens,
   });
-  const next: SplendorDuelState = { ...state, market, decks, players, goldSupply: state.goldSupply - (gainedGold ? 1 : 0), mandatoryDone: true };
-  return continueTurn(withEvent(next, { kind: "reserve", seat, gainedGold }));
+  const next: SplendorDuelState = { ...state, grid, market, decks, players, mandatoryDone: true };
+  return continueTurn(withEvent(next, { kind: "reserve", seat, gainedGold, goldCell: gainedGold ? goldCell! : null }));
 }
 
 /** Apply a card/royal ability: instant ones resolve now, choice-based ones queue a `Pending`. */
@@ -507,9 +512,9 @@ function buyCard(state: SplendorDuelState, seat: Seat, cardId: string, source: "
   const payment = autoPayment(card, p);
   if (!payment) return state;
 
+  // Everything spent — gems, pearls AND gold — goes back into the bag and re-enters the board on the next refill.
   const bagReturn: BoardToken[] = [];
   for (const [color, n] of Object.entries(payment) as [TokenColor, number][]) {
-    if (color === "gold") continue;
     for (let i = 0; i < n; i++) bagReturn.push(color);
   }
   const owned: OwnedCard = { ...card, boundColor: card.color };
@@ -524,7 +529,6 @@ function buyCard(state: SplendorDuelState, seat: Seat, cardId: string, source: "
     decks,
     players,
     bag: [...state.bag, ...bagReturn],
-    goldSupply: state.goldSupply + (payment.gold ?? 0),
     mandatoryDone: true,
   };
   const applied = applyAbility(next, seat, card.ability, { cardId: card.id, color: card.color });
@@ -677,14 +681,12 @@ function discardTokens(state: SplendorDuelState, seat: Seat, discard: TokenBundl
   if (tokenTotal(tokens) !== TOKEN_LIMIT) return state;
   const bagReturn: BoardToken[] = [];
   for (const [color, n] of Object.entries(discard) as [TokenColor, number][]) {
-    if (color === "gold") continue;
     for (let i = 0; i < n; i++) bagReturn.push(color);
   }
   const next = {
     ...state,
     players: patchPlayer(state.players, seat, { tokens }),
     bag: [...state.bag, ...bagReturn],
-    goldSupply: state.goldSupply + (discard.gold ?? 0),
     pending: state.pending.slice(1),
   };
   return continueTurn(withEvent(next, { kind: "discard", seat, goldReturned: discard.gold ?? 0 }));
@@ -695,15 +697,18 @@ function discardTokens(state: SplendorDuelState, seat: Seat, discard: TokenBundl
 // ---------------------------------------------------------------------------
 
 /**
- * Gold invariant (rulebook §1): exactly `GOLD_SUPPLY` (3) gold tokens exist —
- * stand + both players' holdings. Gold never enters the bag or the 5×5 grid
- * (`BoardToken` excludes it by type), is only ever gained by reserving while
- * the stand is non-empty, and always returns to the stand when spent or
- * discarded. Scrolls/"토큰 획득" can only target grid cells and 강탈 only
- * gems/pearls, so none of them can move gold.
+ * Gold invariant: exactly `GOLD_SUPPLY` (3) gold tokens exist, spread over
+ * the 5×5 grid, the bag and both players' holdings. Gold sits on 3 of the 25
+ * cells like any other token, but can ONLY be picked up by reserving (never
+ * in a line, never with a scroll or "토큰 획득", never stolen); spent or
+ * discarded gold goes back into the bag and returns to the board on refill.
  */
+export function goldOnBoard(state: SplendorDuelState): number {
+  return state.grid.filter((t) => t === "gold").length;
+}
+
 export function totalGold(state: SplendorDuelState): number {
-  return state.goldSupply + (state.players.p1.tokens.gold ?? 0) + (state.players.p2.tokens.gold ?? 0);
+  return goldOnBoard(state) + state.bag.filter((t) => t === "gold").length + (state.players.p1.tokens.gold ?? 0) + (state.players.p2.tokens.gold ?? 0);
 }
 
 export function applyAction(state: SplendorDuelState, action: EngineAction): SplendorDuelState {
@@ -723,7 +728,7 @@ function reduce(state: SplendorDuelState, action: EngineAction): SplendorDuelSta
     case "takeTokens":
       return takeTokens(state, action.seat, action.cells);
     case "reserveCard":
-      return reserveCard(state, action.seat, action.level, action.marketIndex);
+      return reserveCard(state, action.seat, action.level, action.marketIndex, action.goldCell);
     case "buyCard":
       return buyCard(state, action.seat, action.cardId, action.source);
     case "resolveCopy":
@@ -757,9 +762,11 @@ function getMandatoryMoves(state: SplendorDuelState, seat: Seat): EngineAction[]
   const moves: EngineAction[] = [];
   for (const cells of allSelections(state.grid)) moves.push({ type: "takeTokens", seat, cells });
   if (p.reserved.length < RESERVE_LIMIT) {
+    const gold = state.grid.indexOf("gold");
+    const goldCell = gold >= 0 ? gold : undefined;
     for (const level of [1, 2, 3] as Level[]) {
-      state.market[level].forEach((c, marketIndex) => c && moves.push({ type: "reserveCard", seat, level, marketIndex }));
-      if (state.decks[level].length > 0) moves.push({ type: "reserveCard", seat, level });
+      state.market[level].forEach((c, marketIndex) => c && moves.push({ type: "reserveCard", seat, level, marketIndex, goldCell }));
+      if (state.decks[level].length > 0) moves.push({ type: "reserveCard", seat, level, goldCell });
     }
   }
   for (const level of [1, 2, 3] as Level[]) {
@@ -809,7 +816,7 @@ export function getValidMoves(state: SplendorDuelState, seat: Seat): EngineActio
   // refill when the board has nothing left to take, spend a scroll when
   // holding 2+ (a hoarded scroll is just something the opponent can steal).
   if (state.bag.length > 0 && allSelections(state.grid).length === 0) moves.push({ type: "refillBoard", seat });
-  if (p.scrolls >= 2) state.grid.forEach((t, cell) => t && moves.push({ type: "useScroll", seat, cell }));
+  if (p.scrolls >= 2) state.grid.forEach((t, cell) => t && t !== "gold" && moves.push({ type: "useScroll", seat, cell }));
   if (moves.length === 0) return [{ type: "pass", seat }];
   return moves;
 }
@@ -860,7 +867,7 @@ function scoreMove(state: SplendorDuelState, seat: Seat, move: EngineAction, lev
     }
     case "reserveCard": {
       const card = move.marketIndex !== undefined ? state.market[move.level][move.marketIndex] : null;
-      const gold = state.goldSupply > 0 ? 5 : 0;
+      const gold = move.goldCell !== undefined ? 5 : 0;
       return 2 + gold + (card ? cardValue(card, seat, state, expert) * 0.25 : 2) - p.reserved.length * 2;
     }
     case "useScroll":

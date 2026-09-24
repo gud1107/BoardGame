@@ -53,7 +53,7 @@ export function CardActionSheet({
   player: PlayerState;
   fromReserved: boolean;
   canReserve: boolean;
-  /** Gold still on the stand — 0 means reserving gives the card only. */
+  /** Gold still on the board — 0 means reserving gives the card only. */
   goldLeft: number;
   onBuy: () => void;
   onReserve: () => void;
@@ -96,7 +96,7 @@ export function CardActionSheet({
             )}
             {payment && (payment.gold ?? 0) > 0 && (
               <p className="mt-1 text-[10px] text-amber-200/90 light:text-amber-700">
-                🪙 황금 {payment.gold}개 사용 (보유 {player.tokens.gold ?? 0}개 → {(player.tokens.gold ?? 0) - (payment.gold ?? 0)}개) · 쓴 황금은 보드 위 GOLD 칸으로 돌아가요
+                🪙 황금 {payment.gold}개 사용 (보유 {player.tokens.gold ?? 0}개 → {(player.tokens.gold ?? 0) - (payment.gold ?? 0)}개) · 쓴 황금은 주머니로 돌아가요
               </p>
             )}
           </div>
@@ -122,7 +122,7 @@ export function CardActionSheet({
       </div>
       {!fromReserved && !canReserve && <p className="mt-1.5 text-center text-[10px] text-white/40">예약은 최대 {RESERVE_LIMIT}장까지</p>}
       {!fromReserved && canReserve && goldLeft === 0 && (
-        <p className="mt-1.5 text-center text-[11px] font-bold text-amber-300 light:text-amber-700">보드 상단에 황금 토큰이 소진되어 카드만 예약합니다.</p>
+        <p className="mt-1.5 text-center text-[11px] font-bold text-amber-300 light:text-amber-700">보드에 황금 토큰이 없어 카드만 예약합니다.</p>
       )}
     </Sheet>
   );

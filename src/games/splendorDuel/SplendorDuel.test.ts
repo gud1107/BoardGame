@@ -39,7 +39,7 @@ function scrollTotal(s: SplendorDuelState) {
 }
 
 describe("setup", () => {
-  it("builds the documented 30/24/13 deck and a spiral-filled board with 3 empty cells", () => {
+  it("builds the 30/24/13 deck and fills all 25 cells: 20 gems + 2 pearls + 3 gold", () => {
     const deck = createDevelopmentDeck();
     expect(deck.filter((c) => c.level === 1)).toHaveLength(30);
     expect(deck.filter((c) => c.level === 2)).toHaveLength(24);
@@ -47,12 +47,12 @@ describe("setup", () => {
     expect(new Set(deck.map((c) => c.id)).size).toBe(67);
 
     const s = startGame(42);
-    expect(s.grid.filter((t) => t !== null)).toHaveLength(22);
+    expect(s.grid.filter((t) => t !== null)).toHaveLength(25);
     expect(s.grid.filter((t) => t === "pearl")).toHaveLength(2);
-    // The last 3 spiral positions are the empty ones.
-    expect(SPIRAL_ORDER.slice(22).every((i) => s.grid[i] === null)).toBe(true);
+    expect(s.grid.filter((t) => t === "gold")).toHaveLength(3);
+    expect(SPIRAL_ORDER).toHaveLength(25);
     expect(s.bag).toHaveLength(0);
-    expect(s.goldSupply).toBe(3);
+    expect(totalGold(s)).toBe(GOLD_SUPPLY);
     expect(s.players.p2.scrolls).toBe(1);
     expect(s.tableScrolls).toBe(2);
     expect(s.market[1]).toHaveLength(5);
@@ -125,7 +125,9 @@ describe("turn actions", () => {
   it("using a scroll takes any token and returns the scroll to the table", () => {
     let s = startGame(3);
     s = { ...s, activeSeat: "p2" };
-    const cell = s.grid.findIndex((t) => t !== null);
+    const goldCell = s.grid.indexOf("gold");
+    expect(applyAction(s, { type: "useScroll", seat: "p2", cell: goldCell })).toBe(s); // scrolls can't take gold
+    const cell = s.grid.findIndex((t) => t !== null && t !== "gold");
     const token = s.grid[cell]!;
     s = applyAction(s, { type: "useScroll", seat: "p2", cell });
     expect(s.players.p2.scrolls).toBe(0);
@@ -137,35 +139,43 @@ describe("turn actions", () => {
   it("refilling the board fills empty cells from the bag and gives the opponent a scroll", () => {
     let s = startGame(5);
     s = { ...s, grid: s.grid.map((t, i) => (i < 5 ? null : t)), bag: [...s.grid.slice(0, 5).filter((t): t is BoardToken => t !== null)] };
-    const bagSize = s.bag.length;
     s = applyAction(s, { type: "refillBoard", seat: "p1" });
     expect(s.bag).toHaveLength(0);
-    expect(s.grid.filter((t) => t !== null)).toHaveLength(22 - (5 - bagSize) + (5 - bagSize));
+    expect(s.grid.filter((t) => t !== null)).toHaveLength(25);
     expect(s.players.p2.scrolls).toBe(2);
     expect(s.refillCount).toBe(1);
   });
 
-  it("buys with bonus discount and gold, returning gems to the bag and gold to the stand", () => {
+  it("buys with bonus discount and gold, returning everything spent (gold included) to the bag", () => {
     let s = startGame(9);
     const card: DuelCard = { id: "test-card", level: 1, color: "red", points: 1, crowns: 0, bonus: 1, cost: { blue: 3, pearl: 1 } };
     const p1: PlayerState = { ...s.players.p1, tokens: { blue: 1, gold: 2 }, cards: [owned({ color: "blue" })] };
-    s = { ...s, goldSupply: 1, market: { ...s.market, 1: [card, ...s.market[1].slice(1)] }, players: { ...s.players, p1 } };
+    // Take 2 gold off the board so the invariant (3 gold total) still holds with p1 holding 2.
+    const grid = [...s.grid];
+    for (let k = 0; k < 2; k++) grid[grid.indexOf("gold")] = null;
+    s = { ...s, grid, market: { ...s.market, 1: [card, ...s.market[1].slice(1)] }, players: { ...s.players, p1 } };
     expect(effectiveCost(card, p1)).toEqual({ blue: 2, pearl: 1 });
     s = applyAction(s, { type: "buyCard", seat: "p1", cardId: "test-card", source: "market" });
     expect(s.players.p1.cards.map((c) => c.id)).toContain("test-card");
     expect(s.players.p1.tokens.blue).toBe(0);
     expect(s.players.p1.tokens.gold).toBe(0);
-    expect(s.goldSupply).toBe(3);
-    expect(s.bag).toEqual(["blue"]);
+    expect([...s.bag].sort()).toEqual(["blue", "gold", "gold"]);
+    expect(totalGold(s)).toBe(GOLD_SUPPLY);
     expect(s.market[1]).toHaveLength(5);
   });
 
-  it("reserving gives gold, caps at 3, and still works with the gold stand empty", () => {
+  it("reserving takes a chosen gold cell off the board, caps at 3, and works with no gold left", () => {
     let s = startGame(11);
-    s = applyAction(s, { type: "reserveCard", seat: "p1", level: 1, marketIndex: 0 });
+    const goldCell = s.grid.indexOf("gold");
+    // With gold on the board a gold cell must be named, and it must really be gold.
+    expect(applyAction(s, { type: "reserveCard", seat: "p1", level: 1, marketIndex: 0 })).toBe(s);
+    expect(applyAction(s, { type: "reserveCard", seat: "p1", level: 1, marketIndex: 0, goldCell: s.grid.findIndex((t) => t !== "gold") })).toBe(s);
+    s = applyAction(s, { type: "reserveCard", seat: "p1", level: 1, marketIndex: 0, goldCell });
     expect(s.players.p1.reserved).toHaveLength(1);
     expect(s.players.p1.tokens.gold).toBe(1);
-    s = { ...s, activeSeat: "p1", goldSupply: 0 };
+    expect(s.grid[goldCell]).toBeNull();
+    // No gold on the board -> the card comes alone (and naming a gold cell is rejected).
+    s = { ...s, activeSeat: "p1", grid: s.grid.map((t) => (t === "gold" ? null : t)), bag: [...s.bag, "gold", "gold"] };
     s = applyAction(s, { type: "reserveCard", seat: "p1", level: 2 });
     expect(s.players.p1.reserved).toHaveLength(2);
     expect(s.players.p1.tokens.gold).toBe(1);
@@ -231,7 +241,7 @@ describe("turn actions", () => {
 
   it("take-matching-token grabs the card's color from the board", () => {
     let s = startGame(29);
-    const color = s.grid.find((t): t is Exclude<BoardToken, "pearl"> => t !== null && t !== "pearl")!;
+    const color = s.grid.find((t): t is Exclude<BoardToken, "pearl" | "gold"> => t !== null && t !== "pearl" && t !== "gold")!;
     const card: DuelCard = { id: "tk", level: 1, color, points: 0, crowns: 0, bonus: 1, cost: {}, ability: "takeToken" };
     s = { ...s, market: { ...s.market, 1: [card, ...s.market[1].slice(1)] } };
     s = applyAction(s, { type: "buyCard", seat: "p1", cardId: "tk", source: "market" });
@@ -254,35 +264,46 @@ describe("turn actions", () => {
   });
 });
 
-describe("gold reservoir", () => {
-  it("3 reserves drain the stand to 0, a 4th reservation-eligible player gets no gold", () => {
+describe("gold on the board", () => {
+  it("gold can't be taken in a line and blocks lines through it", () => {
+    const grid = fullGrid("red");
+    grid[1] = "gold";
+    expect(isValidSelection([1], grid)).toBe(false);
+    expect(isValidSelection([0, 1, 2], grid)).toBe(false);
+    expect(allSelections(grid).some((line) => line.includes(1))).toBe(false);
+  });
+
+  it("3 reserves take all 3 board gold, then reserving gives the card only", () => {
     let s = startGame(41);
     for (let i = 0; i < 3; i++) {
       s = { ...s, activeSeat: "p1", players: { ...s.players, p1: { ...s.players.p1, reserved: [] } } };
-      s = applyAction(s, { type: "reserveCard", seat: "p1", level: 1, marketIndex: 0 });
+      s = applyAction(s, { type: "reserveCard", seat: "p1", level: 1, marketIndex: 0, goldCell: s.grid.indexOf("gold") });
     }
-    expect(s.goldSupply).toBe(0);
+    expect(s.grid.includes("gold")).toBe(false);
     expect(s.players.p1.tokens.gold).toBe(3);
     s = { ...s, activeSeat: "p2" };
     s = applyAction(s, { type: "reserveCard", seat: "p2", level: 2, marketIndex: 0 });
     expect(s.players.p2.reserved).toHaveLength(1);
     expect(s.players.p2.tokens.gold ?? 0).toBe(0);
-    expect(s.lastEvent).toMatchObject({ kind: "reserve", gainedGold: false });
+    expect(s.lastEvent).toMatchObject({ kind: "reserve", gainedGold: false, goldCell: null });
     expect(totalGold(s)).toBe(GOLD_SUPPLY);
   });
 
-  it("gold spent on a purchase returns to the stand, never the bag", () => {
+  it("gold spent on a purchase goes into the bag and comes back to the board on refill", () => {
     let s = startGame(43);
     const card: DuelCard = { id: "g2", level: 1, color: "red", points: 0, crowns: 0, bonus: 1, cost: { blue: 2, pearl: 1 } };
-    s = { ...s, goldSupply: 0, market: { ...s.market, 1: [card, ...s.market[1].slice(1)] }, players: { ...s.players, p1: { ...s.players.p1, tokens: { gold: 3, pearl: 1 } } } };
+    s = { ...s, grid: s.grid.map((t) => (t === "gold" ? null : t)), market: { ...s.market, 1: [card, ...s.market[1].slice(1)] }, players: { ...s.players, p1: { ...s.players.p1, tokens: { gold: 3, pearl: 1 } } } };
     s = applyAction(s, { type: "buyCard", seat: "p1", cardId: "g2", source: "market" });
     expect(s.players.p1.tokens.gold).toBe(1);
-    expect(s.goldSupply).toBe(2);
-    expect(s.bag).toEqual(["pearl"]);
+    expect([...s.bag].sort()).toEqual(["gold", "gold", "pearl"]);
+    expect(totalGold(s)).toBe(GOLD_SUPPLY);
+    s = { ...s, activeSeat: "p1", mandatoryDone: false, phase: "playing" };
+    s = applyAction(s, { type: "refillBoard", seat: "p1" });
+    expect(s.grid.filter((t) => t === "gold")).toHaveLength(2);
     expect(totalGold(s)).toBe(GOLD_SUPPLY);
   });
 
-  it("stealing gold is rejected; refills never put gold on the grid", () => {
+  it("stealing gold is rejected", () => {
     let s = startGame(47);
     const card: DuelCard = { id: "st2", level: 2, color: "blue", points: 0, crowns: 0, bonus: 1, cost: {}, ability: "stealToken" };
     s = { ...s, market: { ...s.market, 2: [card, ...s.market[2].slice(1)] }, players: { ...s.players, p2: { ...s.players.p2, tokens: { gold: 1, red: 1 } } } };
@@ -310,10 +331,10 @@ describe("gold hard cap (2026-09-25 report: 'gold usable without holding any')",
     const p1 = { ...s.players.p1, tokens: { blue: 1, gold: 2 } };
     expect(autoPayment(card, p1)).toBeNull(); // short 3, holds 2
     const p1b = { ...p1, tokens: { blue: 1, gold: 3 } };
-    s = { ...s, goldSupply: 0, market: { ...s.market, 1: [card, ...s.market[1].slice(1)] }, players: { ...s.players, p1: p1b } };
+    s = { ...s, grid: s.grid.map((t) => (t === "gold" ? null : t)), market: { ...s.market, 1: [card, ...s.market[1].slice(1)] }, players: { ...s.players, p1: p1b } };
     s = applyAction(s, { type: "buyCard", seat: "p1", cardId: "short2", source: "market" });
     expect(s.players.p1.tokens.gold).toBe(0);
-    expect(s.goldSupply).toBe(3);
+    expect(s.bag.filter((t) => t === "gold")).toHaveLength(3);
   });
 
   it("across 100 bot games, every affordability call matches 'shortfall <= held gold' and no token goes negative", { timeout: 30_000 }, () => {
@@ -374,12 +395,12 @@ describe("bot self-play", () => {
         s = next;
         expect(scrollTotal(s)).toBe(TOTAL_SCROLLS);
         expect(totalGold(s)).toBe(GOLD_SUPPLY);
-        expect([...s.bag, ...s.grid].includes("gold" as BoardToken)).toBe(false);
         const held = (["p1", "p2"] as const).reduce(
-          (sum, seat) => sum + Object.entries(s.players[seat].tokens).reduce((a, [k, v]) => a + (k === "gold" ? 0 : (v ?? 0)), 0),
+          (sum, seat) => sum + Object.entries(s.players[seat].tokens).reduce((a, [, v]) => a + (v ?? 0), 0),
           0,
         );
-        expect(held + s.bag.length + s.grid.filter((t) => t !== null).length).toBe(22);
+        // All 25 tokens (20 gems + 2 pearls + 3 gold) are always somewhere: a hand, the bag, or the board.
+        expect(held + s.bag.length + s.grid.filter((t) => t !== null).length).toBe(25);
       }
       if (s.phase === "gameOver") finished++;
       if (s.phase === "gameOver") expect(checkVictory(s.players[s.winner!])).not.toBeNull();

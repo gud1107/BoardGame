@@ -13,7 +13,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
       <div className="flex flex-col gap-5 text-sm text-white/80 light:text-slate-700">
         <section>
           <p className="text-white/70 light:text-slate-600">
-            2인 전용 보석 쟁탈전. 5×5 보석 보드에서 토큰을 모아 발전 카드를 사고, 카드 보너스로 다음 구매를 할인받으며 엔진을 키웁니다.
+            2인 전용 보석 쟁탈전. 5×5 보석 보드(25칸: 기본 보석 20 · 진주 2 · 황금 3)에서 토큰을 모아 발전 카드를 사고, 카드 보너스로 다음 구매를 할인받으며 엔진을 키웁니다.
             후공은 특권 스크롤 1개를 들고 시작합니다.
           </p>
         </section>
@@ -55,13 +55,13 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             <div className={box}>
               <p className="mb-1 font-medium text-white light:text-slate-900">② 예약 + 황금</p>
               <p className="text-xs text-white/60 light:text-slate-600">
-                펼쳐진 카드나 덱 맨 위 카드를 손으로 예약(최대 3장)하고 황금 1개를 받습니다. 황금이 없어도 예약은 가능.
+                펼쳐진 카드나 덱 맨 위 카드를 손으로 예약(최대 3장)하고, 보드 위 황금 1개를 골라 가져옵니다. 보드에 황금이 없으면 카드만 예약. 황금은 이 방법으로만 가져올 수 있어요.
               </p>
             </div>
             <div className={box}>
               <p className="mb-1 font-medium text-white light:text-slate-900">③ 카드 구매</p>
               <p className="text-xs text-white/60 light:text-slate-600">
-                비용에서 내 카드 보너스만큼 할인. 모자란 보석·진주는 황금으로 대신 냅니다. 쓴 보석/진주는 주머니로, 황금은 스탠드로.
+                비용에서 내 카드 보너스만큼 할인. 모자란 보석·진주는 황금으로 대신 냅니다. 쓴 토큰은 황금까지 모두 주머니로 돌아갑니다.
               </p>
             </div>
           </div>

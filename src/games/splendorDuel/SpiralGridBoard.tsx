@@ -36,11 +36,13 @@ export default function SpiralGridBoard({
     >
       {grid.map((token, cell) => {
         const isSel = selected.includes(cell);
-        const canTap = onCellClick && token !== null && (selectable === null || selectable.has(cell));
+        // Gold is never tappable in normal play (it can only be taken by reserving) unless the parent lists it explicitly.
+        const canTap = onCellClick && token !== null && (selectable === null ? token !== "gold" : selectable.has(cell));
         const glow = highlight?.has(cell);
         return (
           <button
             key={cell}
+            data-cell={cell}
             type="button"
             disabled={!canTap}
             onClick={() => onCellClick?.(cell)}

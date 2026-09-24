@@ -22,8 +22,8 @@
 export type GemColor = "white" | "blue" | "green" | "red" | "black";
 /** Gold is the joker — held/spent as a token only, never a card cost or bonus. Pearl is a card cost but never a bonus. */
 export type TokenColor = GemColor | "pearl" | "gold";
-/** What can physically sit on the 5×5 board / in the bag — gold lives on its own stand above the board in this rulebook. */
-export type BoardToken = GemColor | "pearl";
+/** What can physically sit on the 5×5 board / in the bag — every token type, gold included (3 of the 25 cells). */
+export type BoardToken = GemColor | "pearl" | "gold";
 
 export const GEM_ORDER: GemColor[] = ["white", "blue", "green", "red", "black"];
 export const TOKEN_ORDER: TokenColor[] = [...GEM_ORDER, "pearl", "gold"];

@@ -52,7 +52,6 @@ export function VictoryGauges({ player }: { player: PlayerState }) {
 export function TokenShelf({ player, compact = false }: { player: PlayerState; compact?: boolean }) {
   const bonus = bonusCounts(player);
   const pts = colorPoints(player);
-  const total = tokenTotal(player.tokens);
   return (
     <div className="flex items-end gap-1">
       {TOKEN_ORDER.map((c) => {
@@ -73,10 +72,27 @@ export function TokenShelf({ player, compact = false }: { player: PlayerState; c
           </div>
         );
       })}
-      <span className={`ml-1 shrink-0 font-mono text-[10px] font-bold ${total > TOKEN_LIMIT ? "text-rose-400" : "text-white/50 light:text-slate-500"}`}>
-        {total}/{TOKEN_LIMIT}
-      </span>
     </div>
+  );
+}
+
+/**
+ * "How many of my 10 tokens am I holding" (rulebook §4-2: max 10 incl. gold
+ * at turn end) — count + a 10-segment meter in the dock header. Amber from 8
+ * so the limit is visible before it bites, red above 10 (discard pending).
+ */
+export function TokenLimitBadge({ total }: { total: number }) {
+  const tone = total > TOKEN_LIMIT ? "text-rose-300 border-rose-400/60 bg-rose-500/15" : total >= 8 ? "text-amber-200 border-amber-400/60 bg-amber-500/10" : "text-white/80 border-white/15 bg-white/5 light:text-slate-700 light:border-slate-300";
+  const seg = total > TOKEN_LIMIT ? "bg-rose-400" : total >= 8 ? "bg-amber-300" : "bg-emerald-300";
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-px font-mono text-[10px] font-black ${tone}`} title={`보유 토큰 ${total}개 / 최대 ${TOKEN_LIMIT}개 (황금 포함)`}>
+      🎒 토큰 {total}/{TOKEN_LIMIT}
+      <span className="hidden gap-px sm:inline-flex" aria-hidden="true">
+        {Array.from({ length: TOKEN_LIMIT }, (_, i) => (
+          <span key={i} className={`h-2 w-1 rounded-sm ${i < total ? seg : "bg-white/15 light:bg-slate-200"}`} />
+        ))}
+      </span>
+    </span>
   );
 }
 
@@ -124,6 +140,7 @@ export default function PlayerDock({
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
+          <TokenLimitBadge total={tokenTotal(player.tokens)} />
           <ScrollPips count={player.scrolls} />
           {player.royals.length > 0 && <span className="text-[10px] text-amber-200">👑×{player.royals.length}</span>}
           <span className="text-[10px] text-white/50 light:text-slate-500">카드 {player.cards.length}</span>
