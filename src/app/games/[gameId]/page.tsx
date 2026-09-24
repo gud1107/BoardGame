@@ -297,11 +297,13 @@ export default function GamePlayPage() {
   // 그대로 재사용). 2026-09-20 마피아 항시 표시 직업 HUD 세션: 마피아도 같은
   // 이유로 5xl — `RoleInspector`(MafiaBoard.tsx)가 아발론의
   // `AvalonRoleGuideSidebar`와 동일한 데스크톱 고정폭 사이드바 패턴.
-  // 2026-09-25 스플렌더 대결: 데스크톱에서 5×5 보석 보드와 12장 카드 마켓을
-  // 좌우 2열로 나란히 두므로 5xl.
+  // 2026-09-25 스플렌더 대결: 좌측 승리 조건 패널 + 가운데 보석 보드|카드
+  // 마켓 2열 + 우측 초보자 가이드 패널까지 4열이라 7xl.
   const pageMaxWidth =
-    game.id === "summoners-rift" || game.id === "avalon" || game.id === "dalmuti" || game.id === "mafia" || game.id === "splendor-duel"
-      ? "max-w-5xl"
+    game.id === "splendor-duel"
+      ? "max-w-7xl"
+      : game.id === "summoners-rift" || game.id === "avalon" || game.id === "dalmuti" || game.id === "mafia"
+        ? "max-w-5xl"
       : game.id === "destiny-war-39"
         ? "max-w-6xl"
         : game.id === "perudo"

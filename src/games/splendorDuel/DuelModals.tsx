@@ -139,7 +139,9 @@ export function PendingPanel({
           {state.royals.map((r) => (
             <div key={r.id} className="flex flex-col gap-1">
               <RoyalCardView royal={r} onClick={() => onAction({ type: "chooseRoyal", seat, royalId: r.id })} />
-              <p className="text-center text-[9px] text-white/50">{r.ability ? ABILITY_META[r.ability].label : "능력 없음"}</p>
+              <p className="text-center text-[9px] leading-tight text-white/60 light:text-slate-500">
+                {r.points}점 · {r.ability ? ABILITY_META[r.ability].label : "능력 없음"}
+              </p>
             </div>
           ))}
         </div>

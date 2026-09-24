@@ -50,6 +50,8 @@ export interface DuelCard {
 
 export interface RoyalCard {
   id: string;
+  /** Fictional character shown on the card (no real person) — see RoyalPortrait.tsx. */
+  name: string;
   points: number;
   ability?: CardAbility;
 }
@@ -140,10 +142,10 @@ export function createDevelopmentDeck(): DuelCard[] {
 /** Rulebook §5 — 4 royal cards, laid out face up (not shuffled). Points + abilities, never a gem bonus. */
 export function createRoyalCards(): RoyalCard[] {
   return [
-    { id: "royal-steal", points: 2, ability: "stealToken" },
-    { id: "royal-privilege", points: 2, ability: "gainPrivilege" },
-    { id: "royal-extra", points: 2, ability: "extraTurn" },
-    { id: "royal-plain", points: 3 },
+    { id: "royal-steal", name: "여왕 세라피나", points: 2, ability: "stealToken" },
+    { id: "royal-privilege", name: "재상 알베른", points: 2, ability: "gainPrivilege" },
+    { id: "royal-extra", name: "왕자 레온", points: 2, ability: "extraTurn" },
+    { id: "royal-plain", name: "국왕 아르투르", points: 3 },
   ];
 }
 

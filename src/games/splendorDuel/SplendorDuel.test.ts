@@ -254,7 +254,7 @@ describe("victory", () => {
   const base: PlayerState = { tokens: {}, cards: [], reserved: [], royals: [], scrolls: 0 };
   it("detects each of the three conditions", () => {
     expect(checkVictory(base)).toBeNull();
-    expect(checkVictory({ ...base, cards: [owned({ color: "red", points: 5 }), owned({ color: "blue", points: 5 }), owned({ color: "green", points: 5 })], royals: [{ id: "r", points: 5 }] })).toBe("prestige");
+    expect(checkVictory({ ...base, cards: [owned({ color: "red", points: 5 }), owned({ color: "blue", points: 5 }), owned({ color: "green", points: 5 })], royals: [{ id: "r", name: "테스트", points: 5 }] })).toBe("prestige");
     expect(checkVictory({ ...base, cards: [owned({ color: "red", crowns: 5 }), owned({ color: "blue", crowns: 5 })] })).toBe("crowns");
     expect(checkVictory({ ...base, cards: [owned({ color: "red", points: 6 }), owned({ color: null, points: 4 }, "red")] })).toBe("singleColor");
   });
