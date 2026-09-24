@@ -212,6 +212,27 @@ premise-mismatch 사례). 게임 ID는 다른 게임들과 같은 kebab-case `sp
 - **검증:** 신규 테스트 3개(3회 연속 예약 → 스탠드 0, 스탠드 0에서 예약 → 황금 없이 카드만, 황금 2개로 구매 → 스탠드 복귀·주머니엔 진주만, 황금 강탈 액션 거부) + 봇 자가대전 40시드 **매 액션마다** 황금 총합 3·주머니/격자에 황금 없음 assert.
 - 참고: 요청서가 전제한 `engine/gameEngine.ts`·`components/GoldReservoirHUD.tsx`·`.handoff/games/splendorDuel.md` 구조는 이 저장소에 없음(플랫 구조, `.handoff/` 디렉터리 없음) — 이 섹션이 유일한 기록. 규칙 자체는 최초 구현(2026-09-25) 때부터 엔진에 이미 들어가 있었고, 이번엔 불변성 검증·테스트·UI 표시·안내 문구를 보강함.
 
+### 💎 스플랜더 대결 (Splendor Duel) Gold Token Physics & Inventory Cap Fix
+- **Gold Inventory Hard-Cap Enforcement:**
+  - 카드 구매 시 보유 황금 수량(`player.tokens.gold`)을 초과하여 결제할 수 없도록 검증 — **단, 신고된 "황금 무제한 공짜 조커" 버그는 재현되지 않았다.**
+    `engine.ts`의 `autoPayment`는 최초 구현부터 부족분 > 보유 황금이면 `null`(구매 불가)을 반환했고, 구매 시트 버튼도 그때 비활성화된다.
+    봇 200판 시뮬레이션에서 모든 구매 가능 판정을 신고서의 엄격한 식(부족 보석 총합 ≤ 보유 황금)과 대조해 불일치 0건, 음수 토큰 0건이었다.
+    회귀 방지 테스트 3개를 추가했다: 황금 0개로 1개 부족한 카드 구매 거부, 부족 3개·보유 2개 거부 후 3개일 때 정확히 3개만 소모,
+    봇 100판 전수 대조(`SplendorDuel.test.ts`의 "gold hard cap" 블록). 새 헬퍼 `goldNeeded(card, player)`는 부족분 계산을 한 곳으로 모은 것이다.
+- **Physical Board-Mounted Gold Stand:**
+  - `GoldReservoir.tsx`를 실제 코인 슬롯 3칸으로 교체했다. 코인이 있으면 금빛 림라이트, 없으면 음각 홈이 보이고, 각 칸에 `data-gold-slot` 속성이 있다.
+    폰은 16px(무스크롤 유지), md 이상은 24px. 내 턴에 스탠드를 누르면 폰에서는 카드 마켓 탭으로 이동하고 상태줄에 "예약할 카드를 고르세요 — 황금 1개를 함께 가져와요"
+    (소진 시 "카드만 받아요")가 나온다.
+  - 예약하면 비워진 슬롯에서 예약한 사람의 인벤토리(독)로 코인 1개가 포물선을 그리며 날아간다(`SplendorDuelBoard.tsx`의 `flyGold`, Web Animations API,
+    React 상태·레이아웃 없음, prefers-reduced-motion이면 생략).
+- **Exact Gold Restitution Pipeline:**
+  - 카드 구매 시 지불된 황금 토큰만 정확히 차감 후 보드 상단 슬롯으로 즉시 반납 — 엔진은 원래 그렇게 동작했다. 이번에 `buy` 이벤트에 `goldSpent`,
+    `discard` 이벤트에 `goldReturned`를 실어 쓴 개수만큼 코인이 독에서 스탠드의 해당 칸으로 날아가게 했고, 로그에도 "(황금 n개 → 스탠드 반납)"을 표시한다.
+  - 구매 시트: 부족하면 "보유 황금 부족 — 황금 N개가 필요한데 M개뿐이에요", 황금을 쓰면 "황금 n개 사용 (보유 a → b개)"를 안내한다.
+    황금 개수 -/+ 수동 선택기는 만들지 않았다 — 요청서의 "필요한 만큼만 자동 할당" 쪽이고, 엔진의 자동 지불(보석 먼저, 부족분만 황금)이 항상 최선이라
+    더 많은 황금을 쓰는 선택지는 손해뿐이다.
+- 참고: 이번 요청서가 전제한 `engine/gameEngine.ts`·`components/BuyCardModal.tsx`·`GoldReservoirHUD.tsx`·`.handoff/games/splendorDuel.md`는 이 저장소에 없다(플랫 구조).
+
 ## 🎭 마피아 — 기본룰/확장룰 듀얼 모드 온라인 대전 신규 게임 — 2026-09-20 신규 (커밋/푸시 완료, 배포는 웹훅 자동)
 
 **요청**: `boardGameRule/마피아게임.md` 룰북 기준, 방 생성 시 [기본룰(Classic)]/[확장룰(Expansion)]을 고를 수 있는 듀얼 모드

@@ -5,6 +5,7 @@ import { ABILITY_META, DuelCardView, RoyalCardView } from "./CardMarket";
 import { DuelToken, TOKEN_LABEL } from "./DuelToken";
 import {
   autoPayment,
+  goldNeeded,
   GEM_ORDER,
   otherSeat,
   prestigeOf,
@@ -89,7 +90,14 @@ export function CardActionSheet({
                 ))}
               </div>
             ) : (
-              <p className="text-rose-300">토큰이 부족합니다</p>
+              <p className="font-bold text-rose-300">
+                보유 황금 부족 — 황금 {goldNeeded(card, player)}개가 필요한데 {player.tokens.gold ?? 0}개뿐이에요
+              </p>
+            )}
+            {payment && (payment.gold ?? 0) > 0 && (
+              <p className="mt-1 text-[10px] text-amber-200/90 light:text-amber-700">
+                🪙 황금 {payment.gold}개 사용 (보유 {player.tokens.gold ?? 0}개 → {(player.tokens.gold ?? 0) - (payment.gold ?? 0)}개) · 쓴 황금은 보드 위 GOLD 칸으로 돌아가요
+              </p>
             )}
           </div>
         </div>

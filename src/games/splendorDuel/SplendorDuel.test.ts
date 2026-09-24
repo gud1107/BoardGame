@@ -3,6 +3,8 @@ import { createDevelopmentDeck } from "./cards";
 import {
   allSelections,
   applyAction,
+  autoPayment,
+  canAfford,
   checkVictory,
   chooseBotAction,
   effectiveCost,
@@ -288,6 +290,51 @@ describe("gold reservoir", () => {
     const bogus = { type: "resolveSteal", seat: "p1", color: "gold" } as unknown as Parameters<typeof applyAction>[1];
     expect(applyAction(s, bogus)).toBe(s);
     expect(getValidMoves(s, "p1").every((m) => m.type === "resolveSteal" && m.color !== ("gold" as string))).toBe(true);
+  });
+});
+
+describe("gold hard cap (2026-09-25 report: 'gold usable without holding any')", () => {
+  it("a player with 0 gold cannot buy a card they're even 1 gem short of", () => {
+    let s = startGame(53);
+    const card: DuelCard = { id: "short1", level: 1, color: "red", points: 0, crowns: 0, bonus: 1, cost: { blue: 2 } };
+    s = { ...s, market: { ...s.market, 1: [card, ...s.market[1].slice(1)] }, players: { ...s.players, p1: { ...s.players.p1, tokens: { blue: 1 } } } };
+    expect(canAfford(card, s.players.p1)).toBe(false);
+    expect(autoPayment(card, s.players.p1)).toBeNull();
+    expect(applyAction(s, { type: "buyCard", seat: "p1", cardId: "short1", source: "market" })).toBe(s);
+    expect(getValidMoves(s, "p1").some((m) => m.type === "buyCard" && m.cardId === "short1")).toBe(false);
+  });
+
+  it("gold covers the shortfall only up to what is held, and exactly that much is spent", () => {
+    let s = startGame(59);
+    const card: DuelCard = { id: "short2", level: 1, color: "red", points: 0, crowns: 0, bonus: 1, cost: { blue: 3, green: 1 } };
+    const p1 = { ...s.players.p1, tokens: { blue: 1, gold: 2 } };
+    expect(autoPayment(card, p1)).toBeNull(); // short 3, holds 2
+    const p1b = { ...p1, tokens: { blue: 1, gold: 3 } };
+    s = { ...s, goldSupply: 0, market: { ...s.market, 1: [card, ...s.market[1].slice(1)] }, players: { ...s.players, p1: p1b } };
+    s = applyAction(s, { type: "buyCard", seat: "p1", cardId: "short2", source: "market" });
+    expect(s.players.p1.tokens.gold).toBe(0);
+    expect(s.goldSupply).toBe(3);
+  });
+
+  it("across 100 bot games, every affordability call matches 'shortfall <= held gold' and no token goes negative", { timeout: 30_000 }, () => {
+    let violations = 0;
+    for (let seed = 1; seed <= 100; seed++) {
+      let s = startGame(seed);
+      for (let step = 0; step < 3000 && s.phase !== "gameOver"; step++) {
+        const p = s.players[s.activeSeat];
+        const bonus: Record<string, number> = {};
+        for (const o of p.cards) if (o.boundColor) bonus[o.boundColor] = (bonus[o.boundColor] ?? 0) + o.bonus;
+        const cards = [...(([1, 2, 3] as const).flatMap((l) => s.market[l]).filter(Boolean) as DuelCard[]), ...p.reserved];
+        for (const c of cards) {
+          let short = 0;
+          for (const [k, v] of Object.entries(c.cost)) short += Math.max(0, Math.max(0, v! - (k === "pearl" ? 0 : (bonus[k] ?? 0))) - ((p.tokens as Record<string, number>)[k] ?? 0));
+          if (canAfford(c, p) !== short <= (p.tokens.gold ?? 0)) violations++;
+        }
+        s = applyAction(s, chooseBotAction(s, s.activeSeat, 7)!);
+        for (const st of ["p1", "p2"] as const) for (const v of Object.values(s.players[st].tokens)) if ((v ?? 0) < 0) violations++;
+      }
+    }
+    expect(violations).toBe(0);
   });
 });
 

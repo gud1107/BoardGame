@@ -80,7 +80,7 @@ function describeEvent(e: DuelEvent, names: Record<Seat, string>): string {
     case "reserve":
       return `${who}: 📥 카드 예약${e.gainedGold ? " + 황금" : " (황금 소진 — 카드만 예약)"}`;
     case "buy":
-      return `${who}: 💰 카드 구매${scrollNote(e.scrollFrom, who)}`;
+      return `${who}: 💰 카드 구매${e.goldSpent > 0 ? ` (황금 ${e.goldSpent}개 → 스탠드 반납)` : ""}${scrollNote(e.scrollFrom, who)}`;
     case "royal":
       return `${who}: 👑 왕실 카드 획득${scrollNote(e.scrollFrom, who)}`;
     case "steal":
@@ -107,21 +107,54 @@ function describeEvent(e: DuelEvent, names: Record<Seat, string>): string {
  */
 function PrivilegeGiftRules({ active }: { active: "pearl" | "triple" | null }) {
   const items = [
-    { key: "pearl", icon: <><DuelToken color="pearl" className="h-3.5 w-3.5" /><DuelToken color="pearl" className="h-3.5 w-3.5" /></>, full: "진주 토큰 2개를 가져올 때", short: "진주 2개" },
-    { key: "triple", icon: <><DuelToken color="red" className="h-3.5 w-3.5" /><DuelToken color="red" className="h-3.5 w-3.5" /><DuelToken color="red" className="h-3.5 w-3.5" /></>, full: "같은 색상의 기본 보석 토큰 3개를 가져올 때", short: "같은 색 3개" },
-    { key: "refill", icon: <span className="text-[13px] leading-none">🔄</span>, full: "자신의 턴 시작 시 선택 행동으로 주머니의 토큰을 꺼내 게임 보드를 채울(리필할) 때", short: "보드 채우기" },
+    {
+      key: "pearl",
+      icon: (
+        <>
+          <DuelToken color="pearl" className="h-3.5 w-3.5" />
+          <DuelToken color="pearl" className="h-3.5 w-3.5" />
+        </>
+      ),
+      full: "진주 토큰 2개를 가져올 때",
+      short: "진주 2개",
+    },
+    {
+      key: "triple",
+      icon: (
+        <>
+          <DuelToken color="red" className="h-3.5 w-3.5" />
+          <DuelToken color="red" className="h-3.5 w-3.5" />
+          <DuelToken color="red" className="h-3.5 w-3.5" />
+        </>
+      ),
+      full: "같은 색상의 기본 보석 토큰 3개를 가져올 때",
+      short: "같은 색 3개",
+    },
+    {
+      key: "refill",
+      icon: <span className="text-[13px] leading-none">🔄</span>,
+      full: "자신의 턴 시작 시 선택 행동으로 주머니의 토큰을 꺼내 게임 보드를 채울(리필할) 때",
+      short: "보드 채우기",
+    },
   ] as const;
   const on = (k: string) => active === k;
   return (
-    <div className={`w-full rounded-xl border px-2 py-1 md:py-1.5 ${active ? "border-amber-300/70 bg-amber-400/10" : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white"}`}>
+    <div
+      className={`w-full rounded-xl border px-2 py-1 md:py-1.5 ${active ? "border-amber-300/70 bg-amber-400/10" : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white"}`}
+    >
       <p className="text-[10px] font-black text-amber-200 md:text-[11px] light:text-amber-700">
         📜 상대에게 두루마리 1개를 주는 3가지 상황
-        {active && <span className="ml-1 text-amber-300">— 지금 선택이 해당돼요!</span>}
+        {active && (
+          <span className="ml-1 text-amber-300">— 지금 선택이 해당돼요!</span>
+        )}
       </p>
       {/* Phone: one chip row */}
       <div className="mt-0.5 flex flex-wrap gap-1 md:hidden">
         {items.map((it) => (
-          <span key={it.key} className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-px text-[10px] font-bold ${on(it.key) ? "bg-amber-400 text-black" : "bg-black/40 text-white/75 light:bg-slate-100 light:text-slate-600"}`}>
+          <span
+            key={it.key}
+            className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-px text-[10px] font-bold ${on(it.key) ? "bg-amber-400 text-black" : "bg-black/40 text-white/75 light:bg-slate-100 light:text-slate-600"}`}
+          >
             {it.icon}
             {it.short}
           </span>
@@ -130,8 +163,13 @@ function PrivilegeGiftRules({ active }: { active: "pearl" | "triple" | null }) {
       {/* Desktop: full sentences */}
       <ol className="mt-1 hidden flex-col gap-0.5 md:flex">
         {items.map((it, i) => (
-          <li key={it.key} className={`flex items-center gap-1.5 rounded-md px-1 text-[11px] leading-snug ${on(it.key) ? "bg-amber-400 font-bold text-black" : "text-white/75 light:text-slate-600"}`}>
-            <span className="w-3 shrink-0 font-mono text-[10px] opacity-70">{i + 1}</span>
+          <li
+            key={it.key}
+            className={`flex items-center gap-1.5 rounded-md px-1 text-[11px] leading-snug ${on(it.key) ? "bg-amber-400 font-bold text-black" : "text-white/75 light:text-slate-600"}`}
+          >
+            <span className="w-3 shrink-0 font-mono text-[10px] opacity-70">
+              {i + 1}
+            </span>
             <span className="inline-flex shrink-0 items-center">{it.icon}</span>
             <span>{it.full}</span>
           </li>
@@ -139,6 +177,62 @@ function PrivilegeGiftRules({ active }: { active: "pearl" | "triple" | null }) {
       </ol>
     </div>
   );
+}
+
+/**
+ * Flies one gold coin between two screen rects (stand slot <-> a player's
+ * dock) - a throwaway fixed-position DOM node driven by the Web Animations
+ * API, so the physical "take / return gold" moment is visible without adding
+ * React state or layout. Purely cosmetic; skipped under reduced motion.
+ */
+function flyGold(from: DOMRect, to: DOMRect, delayMs: number) {
+  if (
+    typeof window === "undefined" ||
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  )
+    return;
+  if (from.width === 0 || to.width === 0) return;
+  const size = 26;
+  const coin = document.createElement("div");
+  Object.assign(coin.style, {
+    position: "fixed",
+    left: `${from.left + from.width / 2 - size / 2}px`,
+    top: `${from.top + from.height / 2 - size / 2}px`,
+    width: `${size}px`,
+    height: `${size}px`,
+    borderRadius: "9999px",
+    background:
+      "radial-gradient(circle at 35% 30%, #fff4b8 0%, #f2b705 45%, #7a4a00 100%)",
+    boxShadow:
+      "0 0 14px rgba(251,191,36,0.9), inset 0 0 0 2px rgba(255,241,168,0.7)",
+    zIndex: "60",
+    pointerEvents: "none",
+  });
+  document.body.appendChild(coin);
+  const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+  const dy = to.top + to.height / 2 - (from.top + from.height / 2);
+  const anim = coin.animate(
+    [
+      { transform: "translate(0,0) scale(1)", opacity: 1 },
+      {
+        transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 60}px) scale(1.35) rotate(180deg)`,
+        opacity: 1,
+        offset: 0.5,
+      },
+      {
+        transform: `translate(${dx}px, ${dy}px) scale(0.7) rotate(360deg)`,
+        opacity: 0.2,
+      },
+    ],
+    {
+      duration: 750,
+      delay: delayMs,
+      easing: "cubic-bezier(.45,.05,.35,1)",
+      fill: "both",
+    },
+  );
+  anim.onfinish = () => coin.remove();
+  anim.oncancel = () => coin.remove();
 }
 
 export default function SplendorDuelBoard({
@@ -178,6 +272,12 @@ export default function SplendorDuelBoard({
   } | null>(null);
   const [victoryClosed, setVictoryClosed] = useState(false);
   const [mobileTab, setMobileTab] = useState<"board" | "market">("board");
+  // Set by tapping the gold stand: "now pick a card to reserve" hint.
+  const [reserveHint, setReserveHint] = useState(false);
+  const reservoirRef = useRef<HTMLButtonElement>(null);
+  const marketRef = useRef<HTMLElement>(null);
+  const p1DockRef = useRef<HTMLDivElement>(null);
+  const p2DockRef = useRef<HTMLDivElement>(null);
 
   // Reset local UI selection whenever the turn/phase moves on — "compare
   // during render" pattern (no setState-in-effect), same as the rest of this
@@ -189,6 +289,7 @@ export default function SplendorDuelBoard({
     setSelected([]);
     setScrollMode(false);
     setSheet(null);
+    setReserveHint(false);
     if (state.phase !== "gameOver") setVictoryClosed(false);
     if (pendingHead?.kind === "takeToken") setMobileTab("board");
   }
@@ -198,8 +299,39 @@ export default function SplendorDuelBoard({
   useEffect(() => {
     if (state.eventSeq === lastSoundSeq.current) return;
     lastSoundSeq.current = state.eventSeq;
-    if (state.lastEvent) playDuelEventSound(state.lastEvent);
-  }, [state.eventSeq, state.lastEvent]);
+    const e = state.lastEvent;
+    if (!e) return;
+    playDuelEventSound(e);
+    // Physical gold: stand slot -> reserver's dock, or spender's dock -> the slots it refills.
+    const slotRect = (i: number) => {
+      const slot = reservoirRef.current?.querySelector<HTMLElement>(
+        `[data-gold-slot="${i}"]`,
+      );
+      const r = slot?.getBoundingClientRect();
+      // The phone market tab hides the board (and its stand) - fall back to the market's rect.
+      return r && r.width > 0
+        ? r
+        : (marketRef.current?.getBoundingClientRect() ?? r);
+    };
+    const dockRect = (seat: Seat) =>
+      (seat === "p1" ? p1DockRef : p2DockRef).current?.getBoundingClientRect();
+    if (e.kind === "reserve" && e.gainedGold) {
+      const from = slotRect(state.goldSupply);
+      const to = dockRect(e.seat);
+      if (from && to) flyGold(from, to, 0);
+    }
+    const back =
+      e.kind === "buy"
+        ? e.goldSpent
+        : e.kind === "discard"
+          ? e.goldReturned
+          : 0;
+    for (let k = 0; k < back; k++) {
+      const from = dockRect(e.seat);
+      const to = slotRect(state.goldSupply - back + k);
+      if (from && to) flyGold(from, to, k * 140);
+    }
+  }, [state.eventSeq, state.lastEvent, state.goldSupply]);
   const wasOver = useRef(state.phase === "gameOver");
   useEffect(() => {
     if (state.phase === "gameOver" && !wasOver.current) playDuelVictorySound();
@@ -262,6 +394,11 @@ export default function SplendorDuelBoard({
     status = `⬇ 보드에서 ${TOKEN_LABEL[pendingHead.color]} 토큰 1개를 고르세요`;
   else if (state.phase === "resolving") status = "능력/정리 단계를 처리하세요";
   else if (scrollMode) status = "📜 가져올 토큰 1개를 고르세요 (황금 제외)";
+  else if (reserveHint)
+    status =
+      state.goldSupply > 0
+        ? "📥 예약할 카드(또는 덱)를 고르세요 — 황금 1개를 함께 가져와요"
+        : "📥 황금이 소진됐어요 — 예약하면 카드만 받아요";
   else status = "내 차례 — 토큰 선택 또는 카드 구매/예약";
 
   const lastEvent = state.lastEvent;
@@ -292,10 +429,21 @@ export default function SplendorDuelBoard({
     <section
       className={`${isDesktop || mobileTab === "board" ? "flex" : "hidden"} flex-col items-center gap-1.5 rounded-3xl border border-white/10 bg-black/40 p-1.5 md:col-span-5 md:gap-2 md:p-2 light:border-slate-200 light:bg-white/70`}
     >
-      <div className="flex w-full items-center justify-between px-1 text-[10px] font-bold tracking-widest text-amber-300/80">
+      <div className="flex w-full flex-wrap items-center justify-between gap-y-1 px-1 text-[10px] font-bold tracking-widest text-amber-300/80">
         <span className="font-serif whitespace-nowrap">GEM BOARD</span>
-        <span className="flex items-center gap-1.5">
-          <GoldReservoir count={state.goldSupply} />
+        <span className="flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5">
+          <GoldReservoir
+            count={state.goldSupply}
+            innerRef={reservoirRef}
+            onClick={
+              canMain && me.reserved.length < RESERVE_LIMIT
+                ? () => {
+                    setReserveHint(true);
+                    setMobileTab("market");
+                  }
+                : undefined
+            }
+          />
           <span
             className="font-mono whitespace-nowrap text-white/40 light:text-slate-400"
             title="주머니 · 공용 스크롤"
@@ -387,6 +535,7 @@ export default function SplendorDuelBoard({
 
   const marketSection = (
     <section
+      ref={marketRef}
       className={`${isDesktop || mobileTab === "market" ? "block" : "hidden"} rounded-3xl border border-white/10 bg-black/30 p-2 md:col-span-7 light:border-slate-200 light:bg-white/70`}
     >
       <CardMarket
@@ -436,13 +585,17 @@ export default function SplendorDuelBoard({
         .sd-victory-pop { animation: sd-pop 0.5s cubic-bezier(.2,.9,.3,1.2) both; }
       `}</style>
 
-        <PlayerDock
-          player={state.players[oppSeat]}
-          name={names[oppSeat]}
-          isMe={false}
-          isActive={state.activeSeat === oppSeat && state.phase !== "gameOver"}
-          compact={!isDesktop}
-        />
+        <div ref={oppSeat === "p1" ? p1DockRef : p2DockRef}>
+          <PlayerDock
+            player={state.players[oppSeat]}
+            name={names[oppSeat]}
+            isMe={false}
+            isActive={
+              state.activeSeat === oppSeat && state.phase !== "gameOver"
+            }
+            compact={!isDesktop}
+          />
+        </div>
 
         <div className="flex items-center justify-between gap-2 px-1">
           <p
@@ -488,20 +641,22 @@ export default function SplendorDuelBoard({
           {marketSection}
         </div>
 
-        <PlayerDock
-          player={me}
-          name={names[viewerSeat]}
-          isMe
-          isActive={myTurn}
-          compact={!isDesktop}
-          canBuyReserved={(c) => canMain && canAfford(c, me)}
-          onReservedClick={
-            canMain
-              ? (card) =>
-                  setSheet({ card, level: card.level, fromReserved: true })
-              : undefined
-          }
-        />
+        <div ref={viewerSeat === "p1" ? p1DockRef : p2DockRef}>
+          <PlayerDock
+            player={me}
+            name={names[viewerSeat]}
+            isMe
+            isActive={myTurn}
+            compact={!isDesktop}
+            canBuyReserved={(c) => canMain && canAfford(c, me)}
+            onReservedClick={
+              canMain
+                ? (card) =>
+                    setSheet({ card, level: card.level, fromReserved: true })
+                : undefined
+            }
+          />
+        </div>
 
         {sheet && canMain && (
           <CardActionSheet

@@ -111,12 +111,12 @@ export type DuelEvent =
   | { kind: "scrollUse"; seat: Seat }
   | { kind: "refill"; seat: Seat; scrollFrom: ScrollSource }
   | { kind: "reserve"; seat: Seat; gainedGold: boolean }
-  | { kind: "buy"; seat: Seat; cardId: string; scrollFrom: ScrollSource }
+  | { kind: "buy"; seat: Seat; cardId: string; scrollFrom: ScrollSource; goldSpent: number }
   | { kind: "royal"; seat: Seat; royalId: string; scrollFrom: ScrollSource }
   | { kind: "steal"; seat: Seat; color: TokenColor }
   | { kind: "copy"; seat: Seat; color: GemColor }
   | { kind: "takeMatching"; seat: Seat; color: GemColor }
-  | { kind: "discard"; seat: Seat }
+  | { kind: "discard"; seat: Seat; goldReturned: number }
   | { kind: "extraTurn"; seat: Seat }
   | { kind: "pass"; seat: Seat };
 
@@ -258,7 +258,21 @@ export function effectiveCost(card: DuelCard, player: PlayerState): Partial<Reco
   return out;
 }
 
-/** Spend matching tokens first, gold only for the shortfall — never worse than any other valid payment (see splendor/engine.ts `computeAutoPayment`). */
+/** Gems/pearls still missing after bonuses and held tokens — exactly how many gold this purchase would need. */
+export function goldNeeded(card: DuelCard, player: PlayerState): number {
+  let short = 0;
+  for (const [color, need] of Object.entries(effectiveCost(card, player)) as [GemColor | "pearl", number][]) {
+    short += Math.max(0, need - (player.tokens[color] ?? 0));
+  }
+  return short;
+}
+
+/**
+ * Spend matching tokens first, gold only for the shortfall — never worse than
+ * any other valid payment (see splendor/engine.ts `computeAutoPayment`).
+ * Hard cap: returns null (unaffordable) whenever the shortfall exceeds the
+ * gold the player actually holds, so gold is never conjured from nothing.
+ */
 export function autoPayment(card: DuelCard, player: PlayerState): TokenBundle | null {
   const cost = effectiveCost(card, player);
   const payment: TokenBundle = {};
@@ -515,7 +529,7 @@ function buyCard(state: SplendorDuelState, seat: Seat, cardId: string, source: "
   };
   const applied = applyAbility(next, seat, card.ability, { cardId: card.id, color: card.color });
   next = applied.state;
-  return continueTurn(withEvent(next, { kind: "buy", seat, cardId: card.id, scrollFrom: applied.scrollFrom }));
+  return continueTurn(withEvent(next, { kind: "buy", seat, cardId: card.id, scrollFrom: applied.scrollFrom, goldSpent: payment.gold ?? 0 }));
 }
 
 function pass(state: SplendorDuelState, seat: Seat): SplendorDuelState {
@@ -673,7 +687,7 @@ function discardTokens(state: SplendorDuelState, seat: Seat, discard: TokenBundl
     goldSupply: state.goldSupply + (discard.gold ?? 0),
     pending: state.pending.slice(1),
   };
-  return continueTurn(withEvent(next, { kind: "discard", seat }));
+  return continueTurn(withEvent(next, { kind: "discard", seat, goldReturned: discard.gold ?? 0 }));
 }
 
 // ---------------------------------------------------------------------------
