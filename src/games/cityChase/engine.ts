@@ -37,10 +37,12 @@ export const MAX_PLAYERS = 4;
 
 /**
  * "게임판에 표시된 시작 교차점" — the rulebook doesn't print coordinates, so
- * these were picked by bot self-play balance (see CityChase.test.ts): three
- * interior corners in a wide triangle, each watching 4 buildings.
+ * these were picked by bot self-play balance: three outer corners of the
+ * board (A1 · E1 · E5). Under the no-revisit house rule, equal-level bots
+ * give the thief ~41-43% (the earlier interior triangle (1,1)/(3,4)/(4,1)
+ * dropped the thief to ~10% once revisiting was banned).
  */
-export const HELI_START_POINTS: readonly Point[] = [pointOf(1, 1), pointOf(3, 4), pointOf(4, 1)];
+export const HELI_START_POINTS: readonly Point[] = [pointOf(0, 0), pointOf(0, 5), pointOf(5, 5)];
 
 export type TokenColor = "yellow" | "blue" | "red";
 
@@ -66,7 +68,8 @@ export type CityEvent =
   | { kind: "thiefMove"; round: number }
   | { kind: "heliMove"; heli: number; from: Point; to: Point }
   | { kind: "search"; heli: number; cell: Cell; result: SearchResult; tokens: TokenColor[] }
-  | { kind: "escaped" };
+  | { kind: "escaped" }
+  | { kind: "trapped" };
 
 export interface CityChaseState {
   playerCount: number;
@@ -211,12 +214,17 @@ export function thiefCell(state: CityChaseState): Cell | null {
   return state.path.length > 0 ? state.path[state.path.length - 1] : null;
 }
 
-/** Buildings the thief may drive to this turn. */
+/**
+ * Buildings the thief may drive to this turn. House rule (2026-09-25, user
+ * request): a building the car has already been under can never be entered
+ * again, so the route is a self-avoiding walk and the rulebook's "도둑이 더
+ * 이상 이동할 수 없으면 경찰 승리" becomes a real way to lose.
+ */
 export function legalThiefCells(state: CityChaseState): Cell[] {
   if (state.phase !== "thief") return [];
   const at = thiefCell(state);
   if (at === null) return Array.from({ length: CELL_COUNT }, (_, c) => c);
-  return [...cellNeighbors(at)];
+  return cellNeighbors(at).filter((n) => !state.path.includes(n));
 }
 
 /** Trail tokens + car currently under `cell` (the thief's private view). */
@@ -259,10 +267,10 @@ function advanceAfterHeli(state: CityChaseState): CityChaseState {
     return { ...state, phase: "gameOver", winner: "thief", endReason: "escaped", lastEvent: { kind: "escaped" } };
   }
   const next: CityChaseState = { ...state, round: state.round + 1, phase: "thief", heliTurn: 0 };
-  // "도둑이 더 이상 인접한 칸으로 이동할 수 없는 상태에 빠져도 경찰이 승리" — kept for
-  // rulebook fidelity; on an open 5×5 grid every building has ≥2 neighbours.
+  // "도둑이 더 이상 인접한 칸으로 이동할 수 없는 상태에 빠져도 경찰이 승리" — with the
+  // no-revisit rule the car can box itself into a dead end.
   if (legalThiefCells(next).length === 0) {
-    return { ...next, phase: "gameOver", winner: "police", endReason: "trapped" };
+    return { ...next, phase: "gameOver", winner: "police", endReason: "trapped", lastEvent: { kind: "trapped" } };
   }
   return next;
 }
@@ -346,15 +354,21 @@ const ALL_CELLS: Cell[] = Array.from({ length: CELL_COUNT }, (_, c) => c);
  * a helicopter can lift this turn whenever a safe neighbour exists (the core
  * tension of the rulebook — the car MUST move every round).
  */
-function stepWeights(from: Cell | null, covered: Uint8Array): { cells: readonly Cell[]; weights: number[] } {
-  const cells = from === null ? ALL_CELLS : CELL_NEIGHBORS[from];
+function stepWeights(
+  from: Cell | null,
+  covered: Uint8Array,
+  visited: readonly Cell[] = [],
+): { cells: readonly Cell[]; weights: number[] } {
+  const cells = from === null ? ALL_CELLS : CELL_NEIGHBORS[from].filter((c) => !visited.includes(c));
   const anySafe = cells.some((c) => !covered[c]);
   const weights = cells.map((c) => (!anySafe || !covered[c] ? 1 : RISK_LEAK));
   return { cells, weights };
 }
 
-function sampleStep(from: Cell | null, covered: Uint8Array, rng: () => number): Cell {
-  const { cells, weights } = stepWeights(from, covered);
+/** Next building for a particle route, or -1 when it has driven into a dead end. */
+function sampleStep(path: readonly Cell[], covered: Uint8Array, rng: () => number): Cell {
+  const { cells, weights } = stepWeights(path.length ? path[path.length - 1] : null, covered, path);
+  if (cells.length === 0) return -1;
   const total = weights.reduce((a, w) => a + w, 0);
   let x = rng() * total;
   for (let i = 0; i < cells.length; i++) {
@@ -393,10 +407,10 @@ export function policeBelief(
   const coverByRound = Array.from({ length: upToRound }, (_, i) => coveredCells(heliHistory[i] ?? HELI_START_POINTS));
   let particles: Cell[][] = Array.from({ length: particleCount }, () => []);
   for (let r = 1; r <= upToRound; r++) {
-    for (const p of particles) p.push(sampleStep(p.length ? p[p.length - 1] : null, coverByRound[r - 1], rng));
-    const obs = byRound.get(r);
-    if (!obs) continue;
-    const alive = particles.filter((p) => obs.every((s) => matchesSearch(p, s)));
+    for (const p of particles) p.push(sampleStep(p, coverByRound[r - 1], rng));
+    // A route that dead-ended would already have ended the game — drop it too.
+    const obs = byRound.get(r) ?? [];
+    const alive = particles.filter((p) => p[r - 1] >= 0 && obs.every((s) => matchesSearch(p, s)));
     if (alive.length === 0) return null;
     particles = Array.from({ length: particleCount }, (_, n) => (n < alive.length ? alive[n] : alive[Math.floor(rng() * alive.length)]).slice());
   }
@@ -513,6 +527,23 @@ function immediateDanger(state: CityChaseState, cell: Cell): number {
   return d;
 }
 
+/**
+ * Can a no-revisit route starting on `path`'s last building still last
+ * `steps` more moves? Plain DFS — at most 10 steps with ≤3 branches each.
+ */
+function canKeepMoving(path: Cell[], steps: number): boolean {
+  if (steps <= 0) return true;
+  const at = path[path.length - 1];
+  for (const n of CELL_NEIGHBORS[at]) {
+    if (path.includes(n)) continue;
+    path.push(n);
+    const ok = canKeepMoving(path, steps - 1);
+    path.pop();
+    if (ok) return true;
+  }
+  return false;
+}
+
 function chooseThiefMove(state: CityChaseState, seat: SeatIndex, level: BotLevel, rng: () => number): EngineAction | null {
   const options = legalThiefCells(state);
   if (options.length === 0) return null;
@@ -528,9 +559,12 @@ function chooseThiefMove(state: CityChaseState, seat: SeatIndex, level: BotLevel
     for (const p of state.helis) nearest = Math.min(nearest, heliStepsToCell(p, cell));
     score += Math.min(nearest, 4) * (state.round === 1 ? 6 : 2);
     if (predicted) score -= 40 * predicted[cell];
-    // Keep escape routes open: buildings next door that are not watched yet.
-    const exits = cellNeighbors(cell).filter((n) => immediateDanger(state, n) === 0).length;
-    score += 3 * exits;
+    // Keep escape routes open: unvisited, unwatched buildings next door.
+    const route = [...state.path, cell];
+    const exits = cellNeighbors(cell).filter((n) => !route.includes(n));
+    score += 3 * exits.filter((n) => immediateDanger(state, n) === 0).length + 1.5 * exits.length;
+    // Never drive into a dead end that can't last until round 11.
+    if (!canKeepMoving(route, TOTAL_ROUNDS - state.round)) score -= 1000;
     return { move: { type: "THIEF_MOVE", seat, cell }, score };
   });
   return pickByLevel(candidates, level, rng);

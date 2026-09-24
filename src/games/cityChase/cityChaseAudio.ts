@@ -24,6 +24,9 @@ export function playCityEventSound(event: CityEvent) {
         sfx.playWoodTap();
       }
       return;
+    case "trapped":
+      sfx.playRatCallSiren();
+      return;
     case "escaped":
       sfx.playFinishFanfare();
       return;

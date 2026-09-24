@@ -79,11 +79,12 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
   const thiefName = names[state.thiefSeat] ?? "도둑";
   const status = (() => {
     if (over) {
+      if (state.endReason === "trapped") return { tone: "police", text: `🚧 도둑이 막다른 곳에 갇혔습니다! 경찰 팀 승리 (${state.round}라운드)` };
       if (state.winner === "police") return { tone: "police", text: `🚨 검거 성공! 경찰 팀 승리 (${state.round}라운드)` };
       return { tone: "thief", text: `🏁 ${thiefName}이(가) 11라운드를 버텨내고 도주 성공!` };
     }
     if (state.phase === "thief") {
-      if (isThief) return { tone: "thief", text: state.round === 1 ? "차를 숨길 건물을 고르세요 (아무 건물이나)" : "상·하·좌·우로 붙은 건물로 이동하세요" };
+      if (isThief) return { tone: "thief", text: state.round === 1 ? "차를 숨길 건물을 고르세요 (아무 건물이나)" : "아직 안 가본 상·하·좌·우 건물로 이동하세요 (되돌아가기 불가)" };
       return { tone: "wait", text: "🙈 도둑이 몰래 이동 중… 경찰은 눈을 감으세요" };
     }
     const heliName = `🚁${state.heliTurn + 1}`;
@@ -224,7 +225,7 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
 
           {isThief && !over && (
             <p className="rounded-lg bg-rose-500/10 px-2 py-1.5 text-[11px] text-rose-100/80 light:bg-rose-50 light:text-rose-800">
-              💡 파란 빛 건물은 지금 헬기가 바로 들어 올릴 수 있는 곳이에요. 숫자는 내가 지나간 라운드.
+              💡 파란 빛 건물은 지금 헬기가 바로 들어 올릴 수 있는 곳이에요. 숫자는 내가 지나간 라운드 — 그 건물로는 다시 못 가니 막다른 길을 조심하세요!
             </p>
           )}
         </div>

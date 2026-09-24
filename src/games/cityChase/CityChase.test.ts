@@ -79,8 +79,9 @@ describe("city chase rules", () => {
     expect(applyAction(s, { type: "HELI_MOVE", seat: 1, heli: 2, to: pointNeighbors(s.helis[2])[0] })).toBe(s);
   });
 
-  it("search reveals trail tokens, revisits stack them, and finding the car wins", () => {
-    let s = startGame(2, 0);
+  it("search reveals trail tokens and finding the car wins", () => {
+    // Put heli 0 on interior point (1,1) so it can reach four buildings.
+    let s: CityChaseState = { ...startGame(2, 0), helis: [pointOf(1, 1), pointOf(3, 4), pointOf(4, 1)] };
     const skipOthers = () => {
       s = applyAction(s, { type: "HELI_MOVE", seat: 1, heli: 1, to: pointNeighbors(s.helis[1])[0] });
       s = applyAction(s, { type: "HELI_MOVE", seat: 1, heli: 2, to: pointNeighbors(s.helis[2])[0] });
@@ -95,10 +96,14 @@ describe("city chase rules", () => {
     s = applyAction(s, { type: "HELI_SEARCH", seat: 1, heli: 0, cell: cellOf(1, 1) });
     expect(s.searches.at(-1)).toMatchObject({ result: "trail", tokens: ["yellow"] });
     skipOthers();
-    // round 3: car drives back to (1,1) and is found there.
-    s = applyAction(s, { type: "THIEF_MOVE", seat: 0, cell: cellOf(1, 1) });
-    expect(s.heliHistory).toHaveLength(3);
-    s = applyAction(s, { type: "HELI_SEARCH", seat: 1, heli: 0, cell: cellOf(1, 1) });
+    // round 3: (0,2); heli 0 flies to point (1,2).
+    s = applyAction(s, { type: "THIEF_MOVE", seat: 0, cell: cellOf(0, 2) });
+    s = applyAction(s, { type: "HELI_MOVE", seat: 1, heli: 0, to: pointOf(1, 2) });
+    skipOthers();
+    // round 4: (0,1) is found from point (1,2).
+    s = applyAction(s, { type: "THIEF_MOVE", seat: 0, cell: cellOf(0, 1) });
+    expect(s.heliHistory).toHaveLength(4);
+    s = applyAction(s, { type: "HELI_SEARCH", seat: 1, heli: 0, cell: cellOf(0, 1) });
     expect(s.searches.at(-1)).toMatchObject({ result: "caught" });
     expect(s.phase).toBe("gameOver");
     expect(s.winner).toBe("police");
@@ -109,15 +114,41 @@ describe("city chase rules", () => {
     ]);
   });
 
+  it("a building the car already visited can never be entered again", () => {
+    let s = startGame(2, 0);
+    const policePass = () => {
+      for (let h = 0; h < 3; h++) s = applyAction(s, { type: "HELI_MOVE", seat: 1, heli: h, to: pointNeighbors(s.helis[h])[0] });
+    };
+    s = applyAction(s, { type: "THIEF_MOVE", seat: 0, cell: cellOf(2, 2) });
+    policePass();
+    s = applyAction(s, { type: "THIEF_MOVE", seat: 0, cell: cellOf(2, 3) });
+    policePass();
+    expect(legalThiefCells(s)).not.toContain(cellOf(2, 2));
+    expect(applyAction(s, { type: "THIEF_MOVE", seat: 0, cell: cellOf(2, 2) })).toBe(s);
+  });
+
+  it("police win when the car drives into a dead end", () => {
+    let s = startGame(2, 0);
+    for (const cell of [cellOf(1, 0), cellOf(1, 1), cellOf(0, 1), cellOf(0, 0)]) {
+      s = applyAction(s, { type: "THIEF_MOVE", seat: 0, cell });
+      for (let h = 0; h < 3; h++) s = applyAction(s, { type: "HELI_MOVE", seat: 1, heli: h, to: pointNeighbors(s.helis[h]).at(-1)! });
+    }
+    expect(s.phase).toBe("gameOver");
+    expect(s.winner).toBe("police");
+    expect(s.endReason).toBe("trapped");
+    expect(s.round).toBe(5);
+  });
+
   it("thief escapes after surviving round 11's police turn", () => {
     let s = startGame(2, 0);
-    const route = [cellOf(4, 0), cellOf(4, 1)];
+    const route = [
+      cellOf(4, 0), cellOf(4, 1), cellOf(4, 2), cellOf(4, 3), cellOf(4, 4), cellOf(3, 4),
+      cellOf(3, 3), cellOf(3, 2), cellOf(3, 1), cellOf(3, 0), cellOf(2, 0),
+    ];
     for (let r = 1; r <= TOTAL_ROUNDS; r++) {
-      s = applyAction(s, { type: "THIEF_MOVE", seat: 0, cell: route[(r - 1) % 2] });
+      s = applyAction(s, { type: "THIEF_MOVE", seat: 0, cell: route[r - 1] });
       for (let h = 0; h < 3; h++) {
-        const at = s.helis[h];
-        const back = pointNeighbors(at)[0];
-        s = applyAction(s, { type: "HELI_MOVE", seat: 1, heli: h, to: back });
+        s = applyAction(s, { type: "HELI_MOVE", seat: 1, heli: h, to: pointNeighbors(s.helis[h])[0] });
       }
     }
     expect(s.phase).toBe("gameOver");
@@ -129,9 +160,9 @@ describe("city chase rules", () => {
   it("police belief never puts weight on a building just searched empty", () => {
     let s = startGame(2, 0);
     s = applyAction(s, { type: "THIEF_MOVE", seat: 0, cell: cellOf(4, 4) });
-    s = applyAction(s, { type: "HELI_SEARCH", seat: 1, heli: 0, cell: cellOf(1, 1) });
+    s = applyAction(s, { type: "HELI_SEARCH", seat: 1, heli: 0, cell: cellOf(0, 0) });
     const b = policeBelief(s.searches, s.heliHistory, s.round, 500, seededRng(3))!;
-    expect(b[cellOf(1, 1)]).toBe(0);
+    expect(b[cellOf(0, 0)]).toBe(0);
     expect(b.reduce((a, v) => a + v, 0)).toBeCloseTo(1, 6);
   });
 });
