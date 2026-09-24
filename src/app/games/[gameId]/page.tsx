@@ -298,11 +298,12 @@ export default function GamePlayPage() {
   // 이유로 5xl — `RoleInspector`(MafiaBoard.tsx)가 아발론의
   // `AvalonRoleGuideSidebar`와 동일한 데스크톱 고정폭 사이드바 패턴.
   // 2026-09-25 스플렌더 대결: 좌측 승리 조건 패널 + 가운데 보석 보드|카드
-  // 마켓 2열 + 우측 초보자 가이드 패널까지 4열이라 7xl.
+  // 마켓 2열 + 우측 초보자 가이드 패널까지 4열이라 7xl. 2026-09-25 반지의 제왕:
+  // 대결: 데스크톱에서 가운데땅 지도 | 상태·손패 패널 2열이라 5xl.
   const pageMaxWidth =
     game.id === "splendor-duel"
       ? "max-w-7xl"
-      : game.id === "summoners-rift" || game.id === "avalon" || game.id === "dalmuti" || game.id === "mafia"
+      : game.id === "summoners-rift" || game.id === "avalon" || game.id === "dalmuti" || game.id === "mafia" || game.id === "lotr-confrontation"
         ? "max-w-5xl"
       : game.id === "destiny-war-39"
         ? "max-w-6xl"

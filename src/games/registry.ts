@@ -58,6 +58,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "lotr-confrontation",
+    name: "반지의 제왕: 대결",
+    nameEn: "The Lord of the Rings: The Confrontation",
+    description:
+      "샤이어에서 모르도르까지! 안개 속에서 정체를 숨긴 채 전진하는 원정대와 사우론의 치열한 2인 두뇌 혈전. 상대 말은 전투가 벌어지기 전까지 정체를 알 수 없고, 18장의 전투 카드로 심리전을 벌입니다. 프로도가 모르도르에 닿거나, 프로도가 쓰러지거나, 사우론 군세 3기가 샤이어를 점령하면 즉시 승부가 납니다.",
+    players: { min: 2, max: 2 },
+    playTime: { minMinutes: 20, maxMinutes: 30 },
+    category: "strategy",
+    thumbnail: { emoji: "💍", gradient: ["#f59e0b", "#0b0a10"] },
+    tags: ["2인전용", "블러핑", "심리전", "비대칭"],
+    genres: ["strategy", "bluffing"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "catan",
     name: "카탄의 개척자들",
     nameEn: "Catan",
