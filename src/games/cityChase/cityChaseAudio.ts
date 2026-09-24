@@ -12,6 +12,7 @@ export function playCityEventSound(event: CityEvent) {
     case "thiefMove":
       sfx.playCardFlick();
       return;
+    case "heliPlace":
     case "heliMove":
       sfx.playBoostWind();
       return;

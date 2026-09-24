@@ -9,6 +9,7 @@ import {
   heliController,
   HELI_COUNT,
   latestSearchByCell,
+  legalPlacements,
   legalThiefCells,
   pointCells,
   pointNeighbors,
@@ -66,14 +67,18 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
           moveTargets: pointNeighbors(state.helis[state.heliTurn]),
           searchTargets: pointCells(state.helis[state.heliTurn]),
         }
-      : null;
+      : !isThief && isMyTurn && state.phase === "deploy"
+        ? { heli: state.heliTurn, moveTargets: legalPlacements(state), searchTargets: [] as Cell[], placing: true }
+        : null;
 
   function handleCell(cell: Cell) {
     if (thiefTargets?.has(cell)) onAction({ type: "THIEF_MOVE", seat: viewerSeat, cell });
     else if (heliControls?.searchTargets.includes(cell)) onAction({ type: "HELI_SEARCH", seat: viewerSeat, heli: heliControls.heli, cell });
   }
   function handlePoint(p: Point) {
-    if (heliControls?.moveTargets.includes(p)) onAction({ type: "HELI_MOVE", seat: viewerSeat, heli: heliControls.heli, to: p });
+    if (!heliControls?.moveTargets.includes(p)) return;
+    if (state.phase === "deploy") onAction({ type: "HELI_PLACE", seat: viewerSeat, heli: heliControls.heli, at: p });
+    else onAction({ type: "HELI_MOVE", seat: viewerSeat, heli: heliControls.heli, to: p });
   }
 
   const thiefName = names[state.thiefSeat] ?? "도둑";
@@ -89,6 +94,11 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
     }
     const heliName = `🚁${state.heliTurn + 1}`;
     const pilot = names[heliController(state, state.heliTurn)] ?? "경찰";
+    if (state.phase === "deploy") {
+      if (!isThief && isMyTurn) return { tone: "police", text: `${heliName} 배치 — 헬기를 띄울 교차로(＋)를 고르세요. 1라운드는 배치로 끝나요` };
+      if (isThief) return { tone: "wait", text: `🚁 경찰이 헬기를 배치하는 중… (${pilot})` };
+      return { tone: "wait", text: `${heliName} ${pilot} 배치 중…` };
+    }
     if (!isThief && isMyTurn) return { tone: "police", text: `${heliName} 조종 차례 — 교차로로 이동(↗)하거나 맞닿은 건물을 수색(🔍)하세요` };
     return { tone: "wait", text: `${heliName} ${pilot} 조종 중…` };
   })();
@@ -135,11 +145,19 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
 
       <div className={`rounded-xl border px-3 py-2 text-center text-sm font-semibold ${toneClass}`}>{status.text}</div>
 
+      {over && (
+        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 rounded-xl border border-red-500/60 bg-neutral-950/95 px-3 py-1.5 text-center shadow-[0_0_15px_rgba(239,68,68,0.35)] light:bg-white">
+          <span className="shrink-0 text-xs font-bold text-red-400 light:text-red-600">🗺️ 도둑의 실제 경로:</span>
+          <span className="font-mono text-xs font-black tracking-wider text-white light:text-slate-900">{state.path.map(cellLabel).join(" → ")}</span>
+        </div>
+      )}
+
       <div className="flex flex-col gap-3 md:flex-row md:items-start">
         <div className="relative md:flex-1">
           <CityMap
             state={state}
             showSecret={isThief || over}
+            revealRoute={over}
             thiefTargets={thiefTargets}
             heliControls={heliControls}
             onCellClick={handleCell}
@@ -151,7 +169,7 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl bg-black/55 backdrop-blur-[2px]">
               <div className="text-center">
                 <div className="text-4xl">🙈</div>
-                <p className="mt-1 text-sm font-semibold text-white">도둑이 차를 옮기는 중…</p>
+                <p className="mt-1 text-sm font-semibold text-white">{state.round === 1 ? "도둑이 숨을 건물을 고르는 중…" : "도둑이 차를 옮기는 중…"}</p>
               </div>
             </div>
           )}
@@ -233,9 +251,6 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
 
       {over && (
         <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-center light:border-slate-200 light:bg-white">
-          <p className="text-sm text-white/70 light:text-slate-600">
-            도둑의 실제 경로: <span className="font-semibold text-white light:text-slate-900">{state.path.map(cellLabel).join(" → ")}</span>
-          </p>
           <button onClick={onGameEnd} className="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-500">
             결과 확인
           </button>

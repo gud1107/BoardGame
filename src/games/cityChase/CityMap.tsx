@@ -47,6 +47,8 @@ function buildingLook(cell: Cell) {
 export interface HeliControls {
   heli: number;
   moveTargets: readonly Point[];
+  /** Round-1 deploy: the targets are free intersections to place on, not moves. */
+  placing?: boolean;
   searchTargets: readonly Cell[];
 }
 
@@ -54,6 +56,8 @@ export interface CityMapProps {
   state: CityChaseState;
   /** Thief's private view (car, trail tokens) — also used for the post-game reveal. */
   showSecret: boolean;
+  /** Game over: draw the thief's real route as a red line with numbered pads, for everyone. */
+  revealRoute?: boolean;
   thiefTargets?: ReadonlySet<Cell>;
   heliControls?: HeliControls | null;
   onCellClick?: (cell: Cell) => void;
@@ -65,7 +69,7 @@ export interface CityMapProps {
 
 type Reveal = { cell: Cell; result: SearchRecord["result"]; tokens: TokenColor[]; key: number };
 
-export default function CityMap({ state, showSecret, thiefTargets, heliControls, onCellClick, onPointClick, heat, latestSearch }: CityMapProps) {
+export default function CityMap({ state, showSecret, revealRoute = false, thiefTargets, heliControls, onCellClick, onPointClick, heat, latestSearch }: CityMapProps) {
   const [reveal, setReveal] = useState<Reveal | null>(null);
   const [lastSeq, setLastSeq] = useState(state.seq);
 
@@ -96,6 +100,9 @@ export default function CityMap({ state, showSecret, thiefTargets, heliControls,
         @keyframes cc-siren { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.0) } 50% { box-shadow: 0 0 28px 8px rgba(239,68,68,.75) } }
         @keyframes cc-pulse { 0%, 100% { transform: translate(-50%,-50%) scale(1) } 50% { transform: translate(-50%,-50%) scale(1.12) } }
         @keyframes cc-rotor { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+        @keyframes cc-route-draw { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
+        @keyframes cc-pad-in { 0% { transform: translate(-50%,-50%) scale(0); opacity: 0 } 70% { transform: translate(-50%,-50%) scale(1.2); opacity: 1 } 100% { transform: translate(-50%,-50%) scale(1); opacity: 1 } }
+        @keyframes cc-fade-out { to { opacity: 0; transform: scale(.9) } }
         @keyframes cc-pop { 0% { transform: scale(.3); opacity: 0 } 60% { transform: scale(1.15); opacity: 1 } 100% { transform: scale(1) } }
       `}</style>
       <div className="relative h-full w-full">
@@ -219,7 +226,7 @@ export default function CityMap({ state, showSecret, thiefTargets, heliControls,
                     )}
                   </span>
                 )}
-                {showSecret && (pathOrder.get(cell)?.length ?? 0) > 0 && !hasCar && (
+                {showSecret && !revealRoute && (pathOrder.get(cell)?.length ?? 0) > 0 && !hasCar && (
                   <span className="pointer-events-none absolute bottom-0.5 right-1 text-[8px] font-bold text-rose-200/90 sm:text-[10px]">
                     {pathOrder.get(cell)!.join("·")}
                   </span>
@@ -232,6 +239,80 @@ export default function CityMap({ state, showSecret, thiefTargets, heliControls,
           );
         })}
 
+        {/* Post-game: the thief's real route, drawn round by round */}
+        {revealRoute && state.path.length > 0 && (
+          <>
+            <svg className="pointer-events-none absolute inset-0 z-[35] h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <polyline
+                points={state.path.map((c) => `${(cellRC(c)[1] + 0.5) * STEP},${(cellRC(c)[0] + 0.5) * STEP}`).join(" ")}
+                fill="none"
+                stroke="rgba(0,0,0,0.55)"
+                strokeWidth={3.2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <polyline
+                points={state.path.map((c) => `${(cellRC(c)[1] + 0.5) * STEP},${(cellRC(c)[0] + 0.5) * STEP}`).join(" ")}
+                fill="none"
+                stroke="#ef4444"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                pathLength={1}
+                strokeDasharray={1}
+                style={{
+                  animation: `cc-route-draw ${0.25 * state.path.length}s linear both`,
+                  filter: "drop-shadow(0 0 1.5px rgba(239,68,68,0.9))",
+                }}
+              />
+            </svg>
+            {state.path.map((c, i) => {
+              const [r, col] = cellRC(c);
+              const round = i + 1;
+              const last = i === state.path.length - 1;
+              return (
+                <div
+                  key={`pad${i}`}
+                  className={`pointer-events-none absolute z-[36] flex h-[7%] w-[7%] items-center justify-center rounded-md border-2 text-[min(3vw,14px)] font-black shadow-lg ${
+                    round === 1
+                      ? "border-yellow-100 bg-yellow-300 text-black"
+                      : last
+                        ? "border-white bg-red-600 text-white"
+                        : "border-red-200 bg-red-500 text-white"
+                  } ${last ? "ring-2 ring-white/80" : ""}`}
+                  style={{
+                    top: `${(r + 0.5) * STEP}%`,
+                    left: `${(col + 0.5) * STEP}%`,
+                    animation: `cc-pad-in .35s ease-out ${0.25 * i}s both`,
+                  }}
+                  title={`${round}라운드 ${cellLabel(c)}`}
+                >
+                  {round}
+                  {(round === 1 || last) && (
+                    <span
+                      className={`absolute left-1/2 top-full mt-0.5 -translate-x-1/2 whitespace-nowrap rounded border px-1 text-[8px] font-black leading-tight sm:text-[9px] ${
+                        last && state.winner === "thief"
+                          ? "border-emerald-500 bg-emerald-950/90 text-emerald-300"
+                          : last
+                            ? "border-red-500 bg-red-950/90 text-rose-200"
+                            : "border-yellow-500/50 bg-black/85 text-yellow-300"
+                      }`}
+                    >
+                      {last
+                        ? state.winner === "thief"
+                          ? "🏆 ESCAPE"
+                          : state.endReason === "trapped"
+                            ? "🚧 TRAPPED"
+                            : "🚨 CAUGHT"
+                        : "START"}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        )}
+
         {/* Move targets for the active helicopter */}
         {heliControls?.moveTargets.map((p) => {
           const [i, j] = pointIJ(p);
@@ -242,9 +323,9 @@ export default function CityMap({ state, showSecret, thiefTargets, heliControls,
               onClick={() => onPointClick?.(p)}
               className={`absolute z-30 flex h-[7%] w-[7%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-dashed ${HELI_STYLES[heliControls.heli].border} bg-black/50 text-[10px] font-bold text-white hover:bg-white/20`}
               style={{ top: `${i * STEP}%`, left: `${j * STEP}%` }}
-              aria-label="헬기 이동"
+              aria-label={heliControls.placing ? "헬기 배치" : "헬기 이동"}
             >
-              ↗
+              {heliControls.placing ? "＋" : "↗"}
             </button>
           );
         })}
@@ -279,7 +360,7 @@ export default function CityMap({ state, showSecret, thiefTargets, heliControls,
 
         {reveal && reveal.result === "caught" && (
           <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center">
-            <div className="rounded-2xl bg-red-600/90 px-5 py-3 text-center text-lg font-black text-white shadow-2xl" style={{ animation: "cc-pop .5s ease-out both" }}>
+            <div className="rounded-2xl bg-red-600/90 px-5 py-3 text-center text-lg font-black text-white shadow-2xl" style={{ animation: "cc-pop .5s ease-out both, cc-fade-out .5s ease-in 2.2s forwards" }}>
               🚨 검거! {cellLabel(reveal.cell)}
             </div>
           </div>

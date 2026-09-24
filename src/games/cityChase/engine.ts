@@ -35,15 +35,6 @@ export const HELI_COUNT = 3;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 4;
 
-/**
- * "게임판에 표시된 시작 교차점" — the rulebook doesn't print coordinates, so
- * these were picked by bot self-play balance: three outer corners of the
- * board (A1 · E1 · E5). Under the no-revisit house rule, equal-level bots
- * give the thief ~41-43% (the earlier interior triangle (1,1)/(3,4)/(4,1)
- * dropped the thief to ~10% once revisiting was banned).
- */
-export const HELI_START_POINTS: readonly Point[] = [pointOf(0, 0), pointOf(0, 5), pointOf(5, 5)];
-
 export type TokenColor = "yellow" | "blue" | "red";
 
 export function tokenColor(round: number): TokenColor {
@@ -66,6 +57,7 @@ export interface SearchRecord {
 
 export type CityEvent =
   | { kind: "thiefMove"; round: number }
+  | { kind: "heliPlace"; heli: number; at: Point }
   | { kind: "heliMove"; heli: number; from: Point; to: Point }
   | { kind: "search"; heli: number; cell: Cell; result: SearchResult; tokens: TokenColor[] }
   | { kind: "escaped" }
@@ -76,14 +68,20 @@ export interface CityChaseState {
   thiefSeat: SeatIndex;
   /** Police seats in seat order; helicopter h is flown by `policeSeats[h % policeSeats.length]`. */
   policeSeats: SeatIndex[];
-  phase: "thief" | "police" | "gameOver";
+  /**
+   * Round 1 (house rule, 2026-09-25): the thief hides first, then "deploy" —
+   * the police place the 3 helicopters on any free intersections, and that
+   * placement IS the police's whole round-1 turn (no search in round 1).
+   */
+  phase: "thief" | "deploy" | "police" | "gameOver";
   round: number;
   /** path[r - 1] = the building the car sits under during round r. SECRET from police viewers. */
   path: Cell[];
+  /** Placed helicopters (empty until the round-1 deploy, then always 3). */
   helis: Point[];
   /** heliHistory[r - 1] = helicopter positions the thief saw when choosing round r's building (public). */
   heliHistory: Point[][];
-  /** During the police phase: which helicopter acts next (0..2). */
+  /** During the deploy/police phase: which helicopter acts next (0..2). */
   heliTurn: number;
   searches: SearchRecord[];
   winner: "thief" | "police" | null;
@@ -95,6 +93,7 @@ export interface CityChaseState {
 
 export type EngineAction =
   | { type: "THIEF_MOVE"; seat: SeatIndex; cell: Cell }
+  | { type: "HELI_PLACE"; seat: SeatIndex; heli: number; at: Point }
   | { type: "HELI_MOVE"; seat: SeatIndex; heli: number; to: Point }
   | { type: "HELI_SEARCH"; seat: SeatIndex; heli: number; cell: Cell };
 
@@ -185,7 +184,7 @@ export function startGame(playerCount: number, thiefSeat: SeatIndex): CityChaseS
     phase: "thief",
     round: 1,
     path: [],
-    helis: [...HELI_START_POINTS],
+    helis: [],
     heliHistory: [],
     heliTurn: 0,
     searches: [],
@@ -202,7 +201,7 @@ export function heliController(state: CityChaseState, heli: number): SeatIndex {
 
 export function currentActor(state: CityChaseState): SeatIndex | null {
   if (state.phase === "thief") return state.thiefSeat;
-  if (state.phase === "police") return heliController(state, state.heliTurn);
+  if (state.phase === "police" || state.phase === "deploy") return heliController(state, state.heliTurn);
   return null;
 }
 
@@ -225,6 +224,12 @@ export function legalThiefCells(state: CityChaseState): Cell[] {
   const at = thiefCell(state);
   if (at === null) return Array.from({ length: CELL_COUNT }, (_, c) => c);
   return cellNeighbors(at).filter((n) => !state.path.includes(n));
+}
+
+/** Free intersections the next helicopter may be deployed on (no stacking). */
+export function legalPlacements(state: CityChaseState): Point[] {
+  if (state.phase !== "deploy") return [];
+  return Array.from({ length: POINT_COUNT }, (_, p) => p).filter((p) => !state.helis.includes(p));
 }
 
 /** Trail tokens + car currently under `cell` (the thief's private view). */
@@ -287,11 +292,21 @@ export function applyAction(state: CityChaseState, action: EngineAction): CityCh
         ...state,
         path: [...state.path, action.cell],
         heliHistory: [...state.heliHistory, state.helis.slice()],
-        phase: "police",
+        phase: state.round === 1 ? "deploy" : "police",
         heliTurn: 0,
         lastEvent: { kind: "thiefMove", round: state.round },
         seq: state.seq + 1,
       };
+    }
+    case "HELI_PLACE": {
+      if (state.phase !== "deploy" || action.heli !== state.heliTurn) return state;
+      if (!legalPlacements(state).includes(action.at)) return state;
+      return advanceAfterHeli({
+        ...state,
+        helis: [...state.helis, action.at],
+        lastEvent: { kind: "heliPlace", heli: action.heli, at: action.at },
+        seq: state.seq + 1,
+      });
     }
     case "HELI_MOVE": {
       if (state.phase !== "police" || action.heli !== state.heliTurn) return state;
@@ -404,7 +419,7 @@ export function policeBelief(
     list.push(s);
     byRound.set(s.round, list);
   }
-  const coverByRound = Array.from({ length: upToRound }, (_, i) => coveredCells(heliHistory[i] ?? HELI_START_POINTS));
+  const coverByRound = Array.from({ length: upToRound }, (_, i) => coveredCells(heliHistory[i] ?? []));
   let particles: Cell[][] = Array.from({ length: particleCount }, () => []);
   for (let r = 1; r <= upToRound; r++) {
     for (const p of particles) p.push(sampleStep(p, coverByRound[r - 1], rng));
@@ -544,6 +559,23 @@ function canKeepMoving(path: Cell[], steps: number): boolean {
   return false;
 }
 
+/** Unvisited buildings still reachable from `route`'s end without re-entering the route. */
+function openRegion(route: readonly Cell[]): number {
+  const seen = new Set<Cell>(route);
+  const stack = [route[route.length - 1]];
+  let size = 0;
+  while (stack.length) {
+    const c = stack.pop()!;
+    for (const n of CELL_NEIGHBORS[c]) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      size += 1;
+      stack.push(n);
+    }
+  }
+  return size;
+}
+
 function chooseThiefMove(state: CityChaseState, seat: SeatIndex, level: BotLevel, rng: () => number): EngineAction | null {
   const options = legalThiefCells(state);
   if (options.length === 0) return null;
@@ -553,19 +585,40 @@ function chooseThiefMove(state: CityChaseState, seat: SeatIndex, level: BotLevel
     const prev = policeBelief(state.searches, state.heliHistory, state.round - 1, particlesForLevel(level), rng);
     if (prev) predicted = predictNext(prev, state.helis);
   }
+  const stepsLeft = TOTAL_ROUNDS - state.round;
   const candidates: ScoredCandidate<EngineAction>[] = options.map((cell) => {
     let score = -40 * immediateDanger(state, cell);
-    let nearest = Infinity;
-    for (const p of state.helis) nearest = Math.min(nearest, heliStepsToCell(p, cell));
-    score += Math.min(nearest, 4) * (state.round === 1 ? 6 : 2);
-    if (predicted) score -= 40 * predicted[cell];
-    // Keep escape routes open: unvisited, unwatched buildings next door.
+    if (state.helis.length > 0) {
+      let nearest = Infinity;
+      for (const p of state.helis) nearest = Math.min(nearest, heliStepsToCell(p, cell));
+      score += Math.min(nearest, 4) * 3;
+    }
+    if (predicted) score -= 80 * predicted[cell];
     const route = [...state.path, cell];
+    // Keep escape routes open: unvisited, unwatched buildings next door, and room to roam.
     const exits = cellNeighbors(cell).filter((n) => !route.includes(n));
     score += 3 * exits.filter((n) => immediateDanger(state, n) === 0).length + 1.5 * exits.length;
+    score += 1 * Math.min(openRegion(route), stepsLeft + 4);
     // Never drive into a dead end that can't last until round 11.
-    if (!canKeepMoving(route, TOTAL_ROUNDS - state.round)) score -= 1000;
+    if (!canKeepMoving(route, stepsLeft)) score -= 1000;
     return { move: { type: "THIEF_MOVE", seat, cell }, score };
+  });
+  return pickByLevel(candidates, level, rng);
+}
+
+function chooseHeliPlacement(state: CityChaseState, seat: SeatIndex, level: BotLevel, rng: () => number): EngineAction {
+  const heli = state.heliTurn;
+  // Round 1 gives the police no clue at all: spread out to squeeze the most
+  // buildings for round 2, same pressure score the flying bot uses.
+  const belief = flatBelief([]);
+  const candidates: ScoredCandidate<EngineAction>[] = legalPlacements(state).map((at) => {
+    const helis = [...state.helis, at];
+    const next = predictNext(belief, helis);
+    const overlap = POINT_CELLS[at].filter((c) => state.helis.some((p) => POINT_CELLS[p].includes(c))).length;
+    return {
+      move: { type: "HELI_PLACE", seat, heli, at },
+      score: 100 * layoutPressure(next, helis) + 4 * POINT_CELLS[at].length - 6 * overlap + rng() * 0.5,
+    };
   });
   return pickByLevel(candidates, level, rng);
 }
@@ -578,6 +631,7 @@ export function chooseBotAction(
 ): EngineAction | null {
   if (currentActor(state) !== seat) return null;
   if (state.phase === "thief") return chooseThiefMove(state, seat, level, rng);
+  if (state.phase === "deploy") return chooseHeliPlacement(state, seat, level, rng);
   if (state.phase === "police") return chooseHeliAction(state, seat, level, rng);
   return null;
 }
