@@ -42,6 +42,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     chatEnabled: true,
   },
   {
+    id: "splendor-duel",
+    name: "스플렌더 대결",
+    nameEn: "Splendor Duel",
+    description:
+      "5×5 소용돌이 보석 보드에서 펼쳐지는 2인 전용 두뇌 보석 쟁탈전. 가로·세로·대각선으로 이어진 토큰을 골라 카드를 사고, 특권 스크롤을 빼앗고 빼앗기며, 위신 20점·왕관 10개·단일 색상 10점 중 하나를 먼저 달성하면 즉시 승리합니다.",
+    players: { min: 2, max: 2 },
+    playTime: { minMinutes: 30, maxMinutes: 30 },
+    category: "strategy",
+    thumbnail: { emoji: "💎", gradient: ["#fbbf24", "#1c1917"] },
+    tags: ["2인전용", "엔진빌딩", "보석수집", "전략"],
+    genres: ["strategy"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "catan",
     name: "카탄의 개척자들",
     nameEn: "Catan",

@@ -18,6 +18,7 @@
 export const GAME_DIFFICULTY: Record<string, 1 | 2 | 3 | 4 | 5> = {
   "hanamikoji": 2,
   "splendor": 2,
+  "splendor-duel": 3,
   "avalon": 3,
   "bang": 3,
   "grid-poker": 3,
