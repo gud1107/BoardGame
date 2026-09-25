@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { chooseBotAction } from "./bot";
-import { CARD_BY_ID, CHAPTER_DECKS, FRODO_START, LANDMARKS, TOKENS, TRACK_LENGTH } from "./data";
+import { CARD_BY_ID, CHAPTER_DECKS, FRODO_START, LANDMARKS, NAZGUL_START, RING_TRACK_SPACES, TOKENS, TRACK_LENGTH } from "./data";
 import {
+  advanceRing,
   applyAction,
   availableSlots,
   calculateCardCost,
@@ -231,5 +232,76 @@ describe("chapters", () => {
       expect(s.phase).toBe("GAME_OVER");
       expect(s.winner).not.toBeNull();
     }
+  });
+});
+
+describe("ring track (0 Shire … 16 Mount Doom)", () => {
+  it("has 17 spaces and the Nazgûl start in the pursuit zone behind Frodo", () => {
+    expect(RING_TRACK_SPACES).toHaveLength(17);
+    expect(TRACK_LENGTH).toBe(16);
+    const s = startGame(1);
+    expect(s.ringTrack.frodoPosition).toBe(0);
+    expect(s.ringTrack.nazgulPosition).toBe(NAZGUL_START);
+    expect(NAZGUL_START).toBeLessThan(0);
+  });
+
+  it("pays every space passed through or landed on: 1 → 4 gives Bree 1 + Rivendell Gate 2 = 3 coins", () => {
+    const s = startGame(1);
+    s.ringTrack.frodoPosition = 1;
+    const before = s.players.FELLOWSHIP.coins;
+    expect(advanceRing(s, "FELLOWSHIP", 3)).toEqual([]);
+    expect(s.ringTrack.frodoPosition).toBe(4);
+    expect(s.players.FELLOWSHIP.coins).toBe(before + 3);
+  });
+
+  it("queues the choice rewards in track order (Rivendell → Lothlórien → Dead Marshes)", () => {
+    const s = startGame(1);
+    s.ringTrack.frodoPosition = 4;
+    const before = s.players.FELLOWSHIP.coins;
+    const steps = advanceRing(s, "FELLOWSHIP", 7);
+    expect(steps.map((x) => x.kind)).toEqual(["TOKEN_RACE", "PLACE", "MOVE"]);
+    expect(s.players.FELLOWSHIP.coins).toBe(before + 2 + 3); // Moria gate + Amon Hen
+  });
+
+  it("the Nazgûl collect rewards too, but only from space 1 on", () => {
+    const s = startGame(1);
+    const before = s.players.SAURON.coins;
+    advanceRing(s, "SAURON", 3);
+    expect(s.ringTrack.nazgulPosition).toBe(NAZGUL_START + 3);
+    expect(s.players.SAURON.coins).toBe(before);
+    s.ringTrack.frodoPosition = 10;
+    s.ringTrack.nazgulPosition = -1;
+    advanceRing(s, "SAURON", 3);
+    expect(s.players.SAURON.coins).toBe(before + 1); // space 2 (Bree)
+  });
+
+  it("Nazgûl reaching or passing Frodo wins at once with no rewards for that move", () => {
+    const s = startGame(1);
+    s.ringTrack.frodoPosition = 12;
+    s.ringTrack.nazgulPosition = 10;
+    const before = s.players.SAURON.coins;
+    expect(advanceRing(s, "SAURON", 3)).toEqual([]);
+    expect(s.players.SAURON.coins).toBe(before);
+    expect(checkInstantVictory(s)).toEqual({ winner: "SAURON", type: "RING_QUEST" });
+  });
+
+  it("Frodo reaching Mount Doom (16) wins at once", () => {
+    const s = startGame(1);
+    s.ringTrack.frodoPosition = 14;
+    expect(advanceRing(s, "FELLOWSHIP", 3)).toEqual([]);
+    expect(s.ringTrack.frodoPosition).toBe(16);
+    expect(checkInstantVictory(s)).toEqual({ winner: "FELLOWSHIP", type: "RING_QUEST" });
+  });
+
+  it("a blue card played by the Fellowship queues the landed-on space's reward", () => {
+    let s = startGame(1);
+    s.turn = "FELLOWSHIP";
+    s.ringTrack.frodoPosition = 7;
+    const slot = s.pyramidGrid.findIndex((p) => p.row === 4);
+    s.pyramidGrid[slot].card = card("엘론드의 회의"); // ring +1, 2 coins
+    s = applyAction(s, { type: "TAKE_CARD", faction: "FELLOWSHIP", slot, mode: "PLAY" });
+    expect(s.ringTrack.frodoPosition).toBe(8);
+    expect(s.pending[0]).toMatchObject({ kind: "PLACE", count: 1 });
+    expect(s.turn).toBe("FELLOWSHIP");
   });
 });

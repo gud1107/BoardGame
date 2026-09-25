@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import { FortressArt, SealStamp } from "./CardArt";
 import { CardFace, COLOR_STYLE, CostChips, cardGlyph, describeCard } from "./CardFace";
-import { ADJACENCY, CHAIN_INFO, COLOR_INFO, FACTION_EMOJI, FACTION_LABEL, FRODO_START, RACES, RACE_INFO, REGIONS, REGION_INFO, TECHS, TECH_INFO, TOKENS } from "./data";
+import { ADJACENCY, CHAIN_INFO, COLOR_INFO, FACTION_EMOJI, FACTION_LABEL, RACES, RACE_INFO, REGIONS, REGION_INFO, TECHS, TECH_INFO, TOKENS } from "./data";
 import {
   WIN_TEXT,
   availableSlots,
@@ -32,6 +32,7 @@ import { ActionCinematicFX, EndingFX, FX_KEYFRAMES, type ActionFX } from "./Acti
 import { diffFx, type FxEvents } from "./fxEvents";
 import { getLotrAudio } from "./lotrAudioEngine";
 import MiddleEarthMap from "./MiddleEarthMap";
+import RingTrackBoard from "./RingTrackBoard";
 
 /**
  * 반지의 제왕: 가운데땅에서의 대결 in-game view.
@@ -265,7 +266,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
           지역 지배 💍 {controlledCount(state, "FELLOWSHIP")}/7 · 👁️ {controlledCount(state, "SAURON")}/7
         </span>
         <span className="text-xs text-white/60 light:text-slate-600">
-          원정 🧝 {fr}/{L} · 🐉 {nz} (간격 {fr - nz})
+          원정 🧝 {fr}/{L} · 🐉 {nz < 0 ? `대기 ${nz}` : nz} (간격 {fr - nz})
         </span>
         <span className="ml-auto flex items-center gap-2">
           <BgmControl />
@@ -387,32 +388,9 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
         <div className="order-3 flex flex-col gap-3">
           <div className={panel}>
             <p className={h3}>반지 원정 트랙</p>
-            <div key={trail?.key ?? 0} className="grid grid-cols-4 gap-1">
-              {[0, 1, 2, 3].map((piece) => (
-                <div key={piece} className="grid grid-cols-4 gap-px rounded-md border border-amber-800/40 bg-amber-950/30 p-0.5 light:bg-amber-50">
-                  {Array.from({ length: 4 }, (_, k) => {
-                    const pos = piece * 4 + k;
-                    if (pos > L) return <div key={k} />;
-                    return (
-                      <div
-                        key={k}
-                        className={`relative flex aspect-square flex-col items-center justify-center rounded-sm text-[10px] leading-none ${pos === L ? "bg-red-900/60" : pos < FRODO_START ? "bg-black/30" : "bg-white/5"} ${
-                          trail && pos > trail.from && pos <= trail.to ? (trail.faction === "FELLOWSHIP" ? "lotrfx-trail-blue" : "lotrfx-trail-red") : ""
-                        }`}
-                        title={pos === L ? "운명의 산" : `${pos}`}
-                      >
-                        {pos === L && <span>🌋</span>}
-                        {pos === fr && <span className="text-sm drop-shadow-[0_0_4px_gold]">🧝</span>}
-                        {pos === nz && <span className="text-sm drop-shadow-[0_0_4px_red]">🐉</span>}
-                        {pos !== L && pos !== fr && pos !== nz && <span className="text-white/20 light:text-slate-400">{pos}</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
+            <RingTrackBoard key={trail?.key ?? 0} frodoPos={fr} nazgulPos={nz} trail={trail} />
             <p className="mt-2 text-[11px] text-white/55 light:text-slate-600">
-              🧝 프로도 & 샘이 🌋 운명의 산({L})에 닿으면 원정대 즉시 승리 · 🐉 나즈굴이 따라잡으면 사우론 즉시 승리. 파란 카드의 💍는 <b>내 말</b>을 전진시킵니다.
+              파란 카드의 💍는 <b>내 말</b>을 전진시키고, <b>지나가거나 멈춘 모든 칸의 보상</b>을 순서대로 받습니다. 🧝 프로도 & 샘이 🌋 운명의 산({L})에 닿으면 원정대 즉시 승리 · 🐉 나즈굴이 프로도 칸에 닿거나 추월하면 사우론 즉시 승리.
             </p>
           </div>
 

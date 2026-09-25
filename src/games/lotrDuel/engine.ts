@@ -11,6 +11,7 @@ import {
   RACES,
   REGIONS,
   REGION_INFO,
+  RING_TRACK_SPACES,
   TECHS,
   TOKENS,
   TOKEN_IDS_BY_RACE,
@@ -302,11 +303,52 @@ function fight(state: LotrDuelState, regionId: RegionId) {
   log(state, null, `⚔️ ${REGION_INFO[regionId].name} 교전 — 양측 유닛 ${res.casualties.fellowship}개씩 전사`);
 }
 
-function advanceRing(state: LotrDuelState, faction: Faction, n: number) {
-  if (n <= 0) return;
-  if (faction === "FELLOWSHIP") state.ringTrack.frodoPosition = Math.min(state.ringTrack.trackLength, state.ringTrack.frodoPosition + n);
-  else state.ringTrack.nazgulPosition = Math.min(state.ringTrack.trackLength, state.ringTrack.nazgulPosition + n);
-  log(state, faction, `${faction === "FELLOWSHIP" ? "🧝 프로도 & 샘" : "🐉 나즈굴"} ${n}칸 전진`);
+/**
+ * Moves `faction`'s ring marker `n` spaces and pays every space passed through
+ * or landed on (from+1 … to), in order: coins at once, choices as pending steps
+ * (returned, for the caller to queue). The Nazgûl reaching/passing Frodo, or
+ * Frodo reaching Mount Doom, ends the game at once — no rewards for that move
+ * (`settle()` declares the win right after).
+ */
+export function advanceRing(state: LotrDuelState, faction: Faction, n: number): PendingStep[] {
+  if (n <= 0) return [];
+  const track = state.ringTrack;
+  const fellowship = faction === "FELLOWSHIP";
+  const from = fellowship ? track.frodoPosition : track.nazgulPosition;
+  const to = Math.min(track.trackLength, from + n);
+  if (fellowship) track.frodoPosition = to;
+  else track.nazgulPosition = to;
+  log(state, faction, `${fellowship ? "🧝 프로도 & 샘" : "🐉 나즈굴"} ${to - from}칸 전진 → ${to >= 0 ? RING_TRACK_SPACES[to].theme : `추격 대기 ${to}`}`);
+  if (fellowship ? to >= track.trackLength : to >= track.frodoPosition) return [];
+  const steps: PendingStep[] = [];
+  for (let pos = Math.max(1, from + 1); pos <= to; pos++) {
+    const space = RING_TRACK_SPACES[pos];
+    const source = `원정 트랙 ${pos} · ${space.theme}`;
+    switch (space.rewardType) {
+      case "COINS":
+        state.players[faction].coins += space.rewardValue ?? 0;
+        log(state, faction, `${space.theme} 통과 — 🪙${space.rewardValue}`);
+        break;
+      case "ALLIANCE_TOKEN_CHOICE":
+        steps.push({ kind: "TOKEN_RACE", source });
+        break;
+      case "PLACE_UNIT":
+        steps.push({ kind: "PLACE", count: space.rewardValue ?? 1, regions: REGIONS, source });
+        break;
+      case "MOVE_UNIT":
+        steps.push({ kind: "MOVE", remaining: space.rewardValue ?? 1, source });
+        break;
+      case "SNIPE_UNIT":
+        steps.push({ kind: "SNIPE", count: space.rewardValue ?? 1, source });
+        break;
+      case "DESTROY_FORTRESS":
+        steps.push({ kind: "DESTROY_FORTRESS", source });
+        break;
+      case "NONE":
+        break;
+    }
+  }
+  return steps;
 }
 
 export function raceSymbols(player: PlayerDuelState): Set<RaceSymbol> {
@@ -391,10 +433,10 @@ function cardEffects(state: LotrDuelState, faction: Faction, card: LotrDuelCard,
     case "YELLOW":
       me.coins += card.coinsReward ?? 0;
       if (hasToken(me, "ELF_YELLOW_EXTRA_TURN")) state.extraTurn = true;
-      if (hasToken(me, "HUMAN_YELLOW_RING")) advanceRing(state, faction, 1);
+      if (hasToken(me, "HUMAN_YELLOW_RING")) steps.push(...advanceRing(state, faction, 1));
       break;
     case "BLUE":
-      advanceRing(state, faction, card.ringAdvance ?? 0);
+      steps.push(...advanceRing(state, faction, card.ringAdvance ?? 0));
       if (hasToken(me, "HOBBIT_BLUE_UNIT")) steps.push({ kind: "PLACE", count: 1, regions: REGIONS, source: "호빗 동행" });
       break;
     case "PURPLE":
@@ -439,11 +481,11 @@ function landmarkEffects(state: LotrDuelState, faction: Faction, tile: LandmarkT
       break;
     case "ISENGARD":
       steps.push({ kind: "DESTROY_GRAY", source: tile.name });
-      advanceRing(state, faction, 1);
+      steps.push(...advanceRing(state, faction, 1));
       break;
     case "MINAS_TIRITH":
       placeUnits(state, faction, "GONDOR", 1);
-      advanceRing(state, faction, 2);
+      steps.push(...advanceRing(state, faction, 2));
       break;
   }
   if (hasToken(state.players[faction], "DWARF_LANDMARK_EXTRA_TURN")) state.extraTurn = true;
@@ -454,7 +496,7 @@ function tokenEffects(state: LotrDuelState, faction: Faction, id: AllianceTokenI
   const steps: PendingStep[] = [];
   switch (id) {
     case "ENT_RING_TWO":
-      advanceRing(state, faction, 2);
+      steps.push(...advanceRing(state, faction, 2));
       break;
     case "ENT_DESTROY_FORTRESS":
       steps.push({ kind: "DESTROY_FORTRESS", source: TOKENS[id].name });
