@@ -6,7 +6,6 @@ import { FortressArt, SealStamp } from "./CardArt";
 import { CardFace, COLOR_STYLE, CostChips, cardGlyph, describeCard } from "./CardFace";
 import { ADJACENCY, CHAIN_INFO, COLOR_INFO, FACTION_EMOJI, FACTION_LABEL, OFFICIAL_RING_TRACK, RACES, RACE_INFO, REGIONS, REGION_INFO, TECHS, TECH_INFO } from "./data";
 import {
-  WIN_TEXT,
   availableSlots,
   calculateCardCost,
   calculateLandmarkCost,
@@ -32,6 +31,7 @@ import { diffFx, type FxEvents } from "./fxEvents";
 import { getLotrAudio } from "./lotrAudioEngine";
 import AllianceTokenSelectModal from "./AllianceTokenSelectModal";
 import MiddleEarthMap from "./MiddleEarthMap";
+import VictoryCinematicModal from "./VictoryCinematicModal";
 import type { RingTrackReward } from "./data";
 
 /**
@@ -259,7 +259,6 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
   });
 
   const { frodoPosition: fr, nazgulPosition: nz, trackLength: L } = state.ringTrack;
-  const winnerIsMe = state.winner === myFaction;
 
   return (
     <div className="flex flex-col gap-3 text-white light:text-slate-900">
@@ -503,29 +502,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
       </div>
 
       {state.phase === "GAME_OVER" && state.winner && !victoryClosed && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="lotrd-in w-full max-w-sm rounded-3xl border border-amber-400/40 bg-gradient-to-b from-[#221a0c] to-[#0b0906] p-6 text-center text-white shadow-[0_0_60px_rgba(251,191,36,.25)]">
-            <div className="lotrd-emblem text-6xl">{state.winner === "FELLOWSHIP" ? "💍" : "👁️"}</div>
-            <p className="mt-3 text-xl font-black">{winnerIsMe ? "승리!" : "패배"}</p>
-            <p className="mt-1 text-sm text-amber-200">
-              {FACTION_LABEL[state.winner]} — {state.winType ? WIN_TEXT[state.winType] : ""}
-            </p>
-            <p className="mt-2 text-xs text-white/50">
-              지역 {controlledCount(state, "FELLOWSHIP")} : {controlledCount(state, "SAURON")} · 원정 🧝{fr} 🐉{nz} · 종족 {raceSymbols(state.players.FELLOWSHIP).size} : {raceSymbols(state.players.SAURON).size}
-            </p>
-            <div className="mt-5 flex gap-2">
-              <button onClick={onRematch} className="flex-1 rounded-xl bg-amber-500 py-2.5 text-sm font-bold text-black hover:bg-amber-400">
-                재대결 (진영 교대)
-              </button>
-              <button onClick={onLeave} className="flex-1 rounded-xl border border-white/20 py-2.5 text-sm text-white/80 hover:border-white/40">
-                나가기
-              </button>
-            </div>
-            <button onClick={() => setVictoryClosed(true)} className="mt-3 text-xs text-white/40 hover:text-white/70">
-              보드 보기
-            </button>
-          </div>
-        </div>
+        <VictoryCinematicModal state={state} myFaction={myFaction} onRematch={onRematch} onLeave={onLeave} onClose={() => setVictoryClosed(true)} />
       )}
     </div>
   );

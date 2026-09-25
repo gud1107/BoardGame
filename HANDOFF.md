@@ -205,6 +205,21 @@ UI는 `LotrDuelBoard.tsx`의 트랙 패널(이름 트랙용 `RingTrackBoard.tsx`
   `prefers-reduced-motion`이면 애니메이션 생략.
 - 검증: tsc/eslint/vitest 통과. 임시 페이지로 2장(데스크톱)·3장(모바일 390px)·종족 더미 선택(모바일) 3가지 상태를 렌더해 캡처 확인 후 삭제.
 
+### 🏆 반지의 제왕: 가운데땅에서의 대결 (LotR Duel) Endgame Showdown & Victory Reason Overlay — 2026-09-25 후속 (커밋/푸시, 배포는 웹훅 자동)
+
+요청서의 `Board.tsx`·`components/VictoryCinematicModal.tsx`·`engine/types.ts`·`.handoff/`는 없다 — `src/games/lotrDuel/VictoryCinematicModal.tsx`를 새로 만들어
+`LotrDuelBoard.tsx`의 기존 간단한 승리 모달을 대체했다(엔진 변경 없음, 기존 `winner`/`winType` 사용, 뒤의 `EndingFX` 암전·광선/화산재 연출과 엔딩 테마 사운드는 유지).
+
+- **Explicit Victory Cause Callouts:** 4대 승리 유형(원정대 반지 파괴 / 사우론 나즈굴 추격 / 6종족 동맹 / 7개 지역 완전 정복 / 3챕터 영토 과반)마다
+  영문 킥커(예: RING DESTROYED · FELLOWSHIP VICTORY) + "○○의 승리" + 대형 제목 + 상세 사유 브리핑 박스(칸 번호·지역 수 등 실제 수치 포함),
+  승리 유형별 핵심 달성 지표 카드 2장. 판정승이 동률 타이브레이크로 난 경우 그 사실을 문구에 명시.
+- **High-Impact Cinematic Visuals:** 반지 파괴 = 금반지가 백색·황금 섬광 속에 파편으로 흩어지고 🌋 + 잔광 / 나즈굴 추격 = 붉은 눈(동공 수축) + 검보라 번개 + 💀 /
+  종족 동맹 = 승리자의 종족 인장(실제 보유 종족, 독수리 포함)이 원형 궤도로 모이는 금빛 오라 / 완전 정복 = 7개 지역 미니 지도에 승리 진영 깃발이 차례로 솟고 충격파 /
+  판정승 = ⚖️ + 양 진영 지배 지역 막대 그래프. 모두 CSS 애니메이션, `prefers-reduced-motion` 시 생략.
+- **Clear Turnout Feedback:** 승패 배지(VICTORY/DEFEAT) + "⚔️ 격돌 요약" 양 진영 비교(장악 지역, 원정 트랙 위치, 종족 기호, 남은 주화, 유닛·요새, 동맹 토큰·카드 —
+  승리 유형과 관련된 줄 강조) + 챕터·턴·원정 트랙 최종 간격. 재대결(진영 교대)·나가기·보드 보기.
+- 검증: tsc/eslint/vitest 통과. 임시 페이지로 5가지 결말(원정대 반지·사우론 추격·종족 동맹·정복·판정승)을 데스크톱/모바일(390px)로 렌더해 캡처 확인 후 삭제.
+
 ## 💎 스플렌더 대결 (Splendor Duel) — 2인 전용 신규 게임 — 2026-09-25 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: `boardGameRule/스플랜더 대결/스플랜더 대결.md` 룰북 기준 2인 전용 풀스택 신규 게임. 요청서는 `src/data/games.ts`
