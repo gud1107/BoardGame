@@ -14,6 +14,8 @@ export default function MiddleEarthMap({
   selectedFrom,
   onRegion,
   rise,
+  preview,
+  drops,
 }: {
   state: LotrDuelState;
   targets: Set<RegionId>;
@@ -21,6 +23,10 @@ export default function MiddleEarthMap({
   onRegion: (r: RegionId) => void;
   /** Region whose fortress was just built — replays the rising-keep animation. */
   rise?: { key: number; region: RegionId } | null;
+  /** Predictive highlight: regions a pending card would affect. */
+  preview?: { regions: RegionId[]; tone: "red" | "violet" } | null;
+  /** Units that just arrived — dropped in from above. */
+  drops?: { key: number; items: { region: RegionId; faction: "FELLOWSHIP" | "SAURON"; count: number }[] } | null;
 }) {
   const edges: [RegionId, RegionId][] = [];
   for (const a of REGIONS) for (const b of ADJACENCY[a]) if (a < b) edges.push([a, b]);
@@ -74,6 +80,23 @@ export default function MiddleEarthMap({
             }`}
           >
             {flashing && <span key={flash.no} className="lotrd-clash pointer-events-none absolute inset-0 rounded-xl" />}
+            {preview?.regions.includes(r) && <span className={`pointer-events-none absolute -inset-1 rounded-2xl ${preview.tone === "violet" ? "lotrp-violet" : "lotrp-red"}`} />}
+            {drops?.items
+              .filter((d) => d.region === r)
+              .map((d) => (
+                <span key={`d${drops.key}${d.faction}`} className="pointer-events-none absolute -top-2 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center">
+                  <span className="lotrm-drop flex items-center gap-0.5 rounded-full border px-1.5 text-[11px] font-black whitespace-nowrap shadow-lg" style={{ borderColor: d.faction === "FELLOWSHIP" ? "#fcd34d" : "#f87171", background: d.faction === "FELLOWSHIP" ? "linear-gradient(#fde68a,#d97706)" : "linear-gradient(#991b1b,#450a0a)", color: d.faction === "FELLOWSHIP" ? "#1c1917" : "#fef2f2" }}>
+                    🗡️{d.faction === "FELLOWSHIP" ? "💍" : "👁️"} +{d.count}
+                  </span>
+                  <span className="lotrm-dust mt-0.5 h-2 w-12 rounded-[50%] bg-amber-100/50 blur-[2px]" />
+                </span>
+              ))}
+            {flashing && (
+              <span key={`m${flash.no}`} className="pointer-events-none absolute inset-x-0 top-1/2 z-10 flex -translate-y-1/2 justify-center gap-3 text-lg">
+                <span className="lotrm-dissolve">💍</span>
+                <span className="lotrm-dissolve">👁️</span>
+              </span>
+            )}
             {flashing && (
               <span key={`x${flash.no}`} className="pointer-events-none absolute -top-5 left-1/2 -translate-x-1/2 text-xl drop-shadow-[0_0_8px_rgba(244,63,94,.9)]" style={{ animation: "lotrfx-rim 1.2s ease-out both" }}>
                 ⚔️

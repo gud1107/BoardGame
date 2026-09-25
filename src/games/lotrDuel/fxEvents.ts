@@ -1,5 +1,5 @@
 import { LANDMARKS, REGIONS } from "./data";
-import type { AllianceToken, Faction, LandmarkId, LotrDuelState, RegionId } from "./types";
+import type { AllianceRace, AllianceToken, Faction, LandmarkId, LotrDuelState, RegionId, TechSymbol } from "./types";
 
 /**
  * What visibly happened between two replayed states — shared by the board's
@@ -17,6 +17,8 @@ export interface FxEvents {
   chapter: 2 | 3 | null;
   unitsPlaced: boolean;
   moved: boolean;
+  /** Regions where a side's unit count went up this step (placement or move arrival). */
+  drops: { region: RegionId; faction: Faction; count: number }[];
   gameOver: Faction | null;
 }
 
@@ -37,6 +39,7 @@ export function diffFx(p: LotrDuelState, s: LotrDuelState): FxEvents | null {
     chapter: !sameChapter && (s.chapter === 2 || s.chapter === 3) ? s.chapter : null,
     unitsPlaced: false,
     moved: false,
+    drops: [],
     gameOver: s.phase === "GAME_OVER" && p.phase !== "GAME_OVER" ? s.winner : null,
   };
   if (s.lastAction && s.lastAction.no !== p.lastAction?.no) {
@@ -63,5 +66,26 @@ export function diffFx(p: LotrDuelState, s: LotrDuelState): FxEvents | null {
   const newLogs = s.log.filter((e) => e.no > (p.log[p.log.length - 1]?.no ?? 0));
   ev.moved = newLogs.some((e) => e.kind === "MOVE");
   ev.unitsPlaced = !ev.moved && unitTotal(s) > unitTotal(p);
+  for (const r of REGIONS) {
+    const df = s.boardRegions[r].fellowshipUnits - p.boardRegions[r].fellowshipUnits;
+    const ds = s.boardRegions[r].sauronUnits - p.boardRegions[r].sauronUnits;
+    if (df > 0) ev.drops.push({ region: r, faction: "FELLOWSHIP", count: df });
+    if (ds > 0) ev.drops.push({ region: r, faction: "SAURON", count: ds });
+  }
   return ev;
+}
+
+/**
+ * What a pyramid card would change, shown on the board while its center
+ * modal is open (the "predictive highlight"): coins → the coin HUD, ring →
+ * the track path, units/tactics → map regions, tech → HUD tech slots,
+ * race → HUD race seal.
+ */
+export interface CardPreview {
+  coins?: number;
+  regions?: RegionId[];
+  regionTone?: "red" | "violet";
+  ring?: { faction: Faction; from: number; to: number };
+  techs?: TechSymbol[];
+  race?: AllianceRace;
 }

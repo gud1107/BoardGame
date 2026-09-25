@@ -53,6 +53,7 @@ export function CenterModal({
   footer,
   onClose,
   closeLabel = "닫기",
+  backdrop = "strong",
 }: {
   icon: ReactNode;
   title: string;
@@ -61,10 +62,12 @@ export function CenterModal({
   footer?: ReactNode;
   onClose?: () => void;
   closeLabel?: string;
+  /** "light" keeps the board readable behind the modal (for the card preview highlights). */
+  backdrop?: "strong" | "light";
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md select-none"
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 select-none ${backdrop === "light" ? "bg-black/35" : "bg-black/75 backdrop-blur-md"}`}
       style={{ animation: "lotrc-fade .2s ease-out both" }}
       role="dialog"
       aria-modal="true"
@@ -100,13 +103,42 @@ const optBtn = "lotrc-opt rounded-2xl border-2 border-neutral-700/80 bg-gradient
 // Card: buy & place vs discard
 // ---------------------------------------------------------------------------
 
-export function CardChoiceModal({ state, faction, card, onPlay, onDiscard, onClose }: { state: LotrDuelState; faction: Faction; card: LotrDuelCard; onPlay: () => void; onDiscard: () => void; onClose: () => void }) {
+export function CardChoiceModal({
+  state,
+  faction,
+  card,
+  onPlay,
+  onDiscard,
+  onClose,
+  onPreview,
+}: {
+  state: LotrDuelState;
+  faction: Faction;
+  card: LotrDuelCard;
+  onPlay: () => void;
+  onDiscard: () => void;
+  onClose: () => void;
+  /** Which choice the board should preview (hover/focus on a button); the board defaults to "PLAY". */
+  onPreview?: (mode: "PLAY" | "DISCARD") => void;
+}) {
   const me = state.players[faction];
   const cost = calculateCardCost(me, card);
   const missing = missingTech(me, card.cost.tech);
   const gain = discardValue(state, faction);
   return (
-    <CenterModal icon="🃏" title={card.name} subtitle={`${COLOR_INFO[card.color].emoji} ${COLOR_INFO[card.color].name} 카드 · ${state.chapter}챕터`} onClose={onClose} closeLabel="취소하고 다른 카드 보기">
+    <CenterModal
+      icon="🃏"
+      title={card.name}
+      subtitle={
+        <>
+          {COLOR_INFO[card.color].emoji} {COLOR_INFO[card.color].name} 카드 · {state.chapter}챕터
+          <span className="mt-0.5 block text-[10px] text-amber-300/80">✨ 보드에서 빛나는 곳이 이 선택으로 바뀝니다</span>
+        </>
+      }
+      onClose={onClose}
+      closeLabel="취소하고 다른 카드 보기"
+      backdrop="light"
+    >
       <div className="mx-auto aspect-[3/4] w-36" style={{ animation: "lotrc-zoom .45s cubic-bezier(.2,.9,.2,1) both" }}>
         <CardFace card={card} available chapter={state.chapter} affordable={cost.canAfford} costInCoins={cost.costInCoins} viaChain={cost.viaChain} />
       </div>
@@ -130,11 +162,19 @@ export function CardChoiceModal({ state, faction, card, onPlay, onDiscard, onClo
           type="button"
           disabled={!cost.canAfford}
           onClick={onPlay}
+          onMouseEnter={() => onPreview?.("PLAY")}
+          onFocus={() => onPreview?.("PLAY")}
           className="rounded-xl bg-gradient-to-b from-amber-300 to-amber-600 px-2 py-3 text-sm font-black text-neutral-950 shadow-lg hover:brightness-110 disabled:from-neutral-700 disabled:to-neutral-800 disabled:text-neutral-400"
         >
           📥 {cost.viaChain ? "연계로 무료 내려놓기" : cost.canAfford ? `구매하여 내려놓기 (${cost.costInCoins}주화)` : `주화 부족 (${cost.costInCoins} 필요)`}
         </button>
-        <button type="button" onClick={onDiscard} className="rounded-xl border border-neutral-600 bg-neutral-800 px-2 py-3 text-sm font-bold text-neutral-100 hover:border-amber-400">
+        <button
+          type="button"
+          onClick={onDiscard}
+          onMouseEnter={() => onPreview?.("DISCARD")}
+          onFocus={() => onPreview?.("DISCARD")}
+          onMouseLeave={() => onPreview?.("PLAY")}
+          className="rounded-xl border border-neutral-600 bg-neutral-800 px-2 py-3 text-sm font-bold text-neutral-100 hover:border-amber-400">
           🪙 버리고 {gain}주화 획득
         </button>
       </div>

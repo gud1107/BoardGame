@@ -4,13 +4,15 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import { FortressArt, SealStamp } from "./CardArt";
 import { CardFace, COLOR_STYLE } from "./CardFace";
-import { ADJACENCY, CHAIN_INFO, COLOR_INFO, FACTION_EMOJI, FACTION_LABEL, OFFICIAL_RING_TRACK, RACES, RACE_INFO, REGIONS, REGION_INFO, TECHS, TECH_INFO } from "./data";
+import { ADJACENCY, CARD_BY_ID, CHAIN_INFO, COLOR_INFO, FACTION_EMOJI, FACTION_LABEL, OFFICIAL_RING_TRACK, RACES, RACE_INFO, REGIONS, REGION_INFO, TECHS, TECH_INFO } from "./data";
 import {
   availableSlots,
   calculateCardCost,
   calculateLandmarkCost,
   controlledCount,
+  discardValue,
   fortressOf,
+  hasToken,
   missingTech,
   otherFaction,
   raceSymbols,
@@ -19,6 +21,7 @@ import {
   type EngineAction,
   type Faction,
   type LandmarkTile,
+  type LotrDuelCard,
   type LotrDuelState,
   type PendingStep,
   type PyramidSlot,
@@ -26,7 +29,8 @@ import {
   type Seat,
 } from "./engine";
 import { ActionCinematicFX, EndingFX, FX_KEYFRAMES, type ActionFX } from "./ActionCinematicFX";
-import { diffFx, type FxEvents } from "./fxEvents";
+import { diffFx, type CardPreview, type FxEvents } from "./fxEvents";
+import { bump, centerOf, flyTo, imprint, visible } from "./motionFx";
 import { getLotrAudio } from "./lotrAudioEngine";
 import { CardChoiceModal, LandmarkConfirmModal, PendingChoiceModal } from "./ActionChoiceModal";
 import AllianceTokenSelectModal from "./AllianceTokenSelectModal";
@@ -47,6 +51,32 @@ import type { RingTrackReward } from "./data";
  */
 
 const KEYFRAMES = `
+@keyframes lotrp-gold { 0%,100% { box-shadow: 0 0 10px rgba(251,191,36,.45), inset 0 0 6px rgba(251,191,36,.2) } 50% { box-shadow: 0 0 26px rgba(251,191,36,.95), inset 0 0 14px rgba(251,191,36,.5) } }
+.lotrp-gold { animation: lotrp-gold 1s ease-in-out infinite; background: rgba(251,191,36,.12) }
+@keyframes lotrp-tech { 0%,100% { box-shadow: 0 0 8px rgba(251,191,36,.5); border-color: rgba(251,191,36,.6) } 50% { box-shadow: 0 0 22px rgba(251,191,36,1); border-color: rgba(253,230,138,1) } }
+.lotrp-tech { animation: lotrp-tech 1s ease-in-out infinite; border-style: solid !important }
+@keyframes lotrp-ember { 0%,100% { box-shadow: 0 0 6px rgba(249,115,22,.5) } 50% { box-shadow: 0 0 20px rgba(249,115,22,1) } }
+.lotrp-ember { animation: lotrp-ember 1s ease-in-out infinite }
+@keyframes lotrp-red { 0%,100% { box-shadow: 0 0 0 2px rgba(244,63,94,.55), 0 0 10px rgba(244,63,94,.4) } 50% { box-shadow: 0 0 0 3px rgba(251,113,133,1), 0 0 26px rgba(244,63,94,.9) } }
+.lotrp-red { animation: lotrp-red .9s ease-in-out infinite }
+@keyframes lotrp-violet { 0%,100% { box-shadow: 0 0 0 2px rgba(168,85,247,.55), 0 0 10px rgba(168,85,247,.4) } 50% { box-shadow: 0 0 0 3px rgba(216,180,254,1), 0 0 26px rgba(168,85,247,.9) } }
+.lotrp-violet { animation: lotrp-violet .9s ease-in-out infinite }
+@keyframes lotrp-cyan { 0%,100% { background: rgba(34,211,238,.18); box-shadow: 0 0 4px rgba(34,211,238,.5) } 50% { background: rgba(34,211,238,.4); box-shadow: 0 0 12px rgba(34,211,238,1) } }
+.lotrp-cyan { animation: lotrp-cyan .9s ease-in-out infinite }
+@keyframes lotrp-float { 0%,100% { transform: translate(-50%, 0) } 50% { transform: translate(-50%, -3px) } }
+.lotrp-float { animation: lotrp-float 1s ease-in-out infinite; text-shadow: 0 0 6px rgba(251,191,36,.9) }
+@keyframes lotrm-hop { 0% { transform: translateY(0) scale(.8) } 40% { transform: translateY(-9px) scale(1.15) } 100% { transform: translateY(0) scale(1) } }
+.lotrm-hop { display: inline-block; animation: lotrm-hop .2s ease-out both }
+@keyframes lotrm-reward { 0% { transform: translate(-50%, 0) scale(.6); opacity: 0 } 20% { opacity: 1; transform: translate(-50%, -6px) scale(1.15) } 100% { transform: translate(-50%, -26px) scale(1); opacity: 0 } }
+.lotrm-reward { animation: lotrm-reward 1.1s ease-out both; text-shadow: 0 0 6px rgba(0,0,0,.9) }
+@keyframes lotrm-drop { 0% { transform: translateY(-60px) scale(1.3); opacity: 0 } 55% { transform: translateY(4px) scale(.95); opacity: 1 } 70% { transform: translateY(-3px) } 85%,100% { transform: none; opacity: 1 } }
+.lotrm-drop { animation: lotrm-drop .55s cubic-bezier(.3,.1,.4,1.4) both, lotrm-fadeout .4s ease-in 1.6s forwards }
+@keyframes lotrm-fadeout { to { opacity: 0 } }
+@keyframes lotrm-dust { 0%,45% { transform: scaleX(.2); opacity: 0 } 60% { opacity: .9 } 100% { transform: scaleX(2.2); opacity: 0 } }
+.lotrm-dust { animation: lotrm-dust .9s ease-out both }
+@keyframes lotrm-dissolve { 0% { transform: scale(1); opacity: 1; filter: none } 40% { transform: scale(1.3); filter: brightness(2) drop-shadow(0 0 8px #f97316) } 100% { transform: scale(.4) translateY(-12px); opacity: 0; filter: blur(3px) brightness(3) sepia(1) } }
+.lotrm-dissolve { display: inline-block; animation: lotrm-dissolve .9s ease-in .25s both }
+@media (prefers-reduced-motion: reduce) { .lotrm-hop, .lotrm-reward, .lotrm-drop, .lotrm-dust, .lotrm-dissolve { animation-duration: .01ms !important; animation-delay: 0s !important } }
 @keyframes lotrd-rim { 0%,100% { box-shadow: 0 0 6px 1px rgba(251,191,36,.45), 0 4px 10px rgba(0,0,0,.55) } 50% { box-shadow: 0 0 16px 4px rgba(251,191,36,.85), 0 4px 10px rgba(0,0,0,.55) } }
 .lotrd-rim { animation: lotrd-rim 2.2s ease-in-out infinite }
 @keyframes lotrd-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,.55) } 50% { box-shadow: 0 0 0 5px rgba(52,211,153,0) } }
@@ -67,6 +97,7 @@ const TRACK_PIECES: [number, number][] = [
   [19, 24],
 ];
 const TRACK_REWARD_ICON: Record<RingTrackReward, string> = { NONE: "", COIN_1: "🪙", ALLIANCE_TOKEN: "📜", MOVE_UNIT: "🔄", PLACE_UNIT: "⚔️", MOUNT_DOOM_VICTORY: "🌋" };
+const TRACK_REWARD_FLOAT: Record<RingTrackReward, string> = { NONE: "", COIN_1: "+1🪙", ALLIANCE_TOKEN: "📜선택!", MOVE_UNIT: "🔄이동!", PLACE_UNIT: "⚔️배치!", MOUNT_DOOM_VICTORY: "" };
 const TRACK_REWARD_TEXT: Record<RingTrackReward, string> = {
   NONE: "보상 없음",
   COIN_1: "주화 1개",
@@ -152,6 +183,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
   const [trail, setTrail] = useState<{ key: number; faction: Faction; from: number; to: number } | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
   const [rise, setRise] = useState<{ key: number; region: RegionId } | null>(null);
+  const [drops, setDrops] = useState<{ key: number; items: FxEvents["drops"] } | null>(null);
   if (fxPrev !== state) {
     const ev = diffFx(fxPrev, state);
     setFxPrev(state);
@@ -163,6 +195,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
       if (ring) setTrail({ key: n, ...ring });
       if (ev.combat) setShakeKey((k) => k + 1);
       if (ev.landmark) setRise({ key: n, region: ev.landmark.region });
+      if (ev.drops.length > 0) setDrops({ key: (drops?.key ?? 0) + 1, items: ev.drops });
       const banner = bannerFor(ev, myFaction, n);
       if (banner) setFx(banner);
     } else if (fxPrev.seed !== state.seed) {
@@ -171,6 +204,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
       setGhost(null);
       setTrail(null);
       setRise(null);
+      setDrops(null);
     }
   }
   const dismissFx = useCallback(() => setFx(null), []);
@@ -195,6 +229,35 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
     if (ev.combat) window.setTimeout(() => audio.play("COMBAT"), 120);
     ev.ring.forEach((r) => window.setTimeout(() => audio.play(r.faction === "FELLOWSHIP" ? "RING_FELLOWSHIP" : "RING_NAZGUL"), 250));
     if (ev.alliance) window.setTimeout(() => audio.playAlliance(ev.alliance!.token.race), 300);
+    // Motion: coins / tech runes / race seals flying into my HUD.
+    const lastCard =
+      state.lastAction && state.lastAction.no !== p.lastAction?.no && state.lastAction.faction === myFaction && state.lastAction.cardId ? CARD_BY_ID[state.lastAction.cardId] : null;
+    const ghostPt = ev.taken ? centerOf(visible("[data-lotr-ghost]")) : null;
+    const srcPt = ghostPt ?? (ev.ring.length ? centerOf(visible("[data-lotr-track]")) : null) ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    const gain = state.players[myFaction].coins - p.players[myFaction].coins;
+    const coinEl = visible("[data-lotr-coins]");
+    if (gain > 0 && coinEl) {
+      const n = Math.min(gain, 6);
+      for (let i = 0; i < n; i++)
+        flyTo("🪙", srcPt, coinEl, {
+          delay: 120 + i * 120,
+          onLand: () => {
+            bump(coinEl);
+            audio.play("COIN");
+          },
+        });
+    }
+    if (lastCard && ev.taken?.mode === "PLAY" && ghostPt) {
+      if (lastCard.color === "GRAY")
+        for (const t of lastCard.providesTech ?? lastCard.selectTechChoice ?? []) {
+          const slot = visible(`[data-lotr-tech="${t}"]`);
+          if (slot) flyTo(TECH_INFO[t].emoji, ghostPt, slot, { delay: 150, duration: 750, size: 30, onLand: () => imprint(slot) });
+        }
+      if (lastCard.color === "GREEN" && lastCard.race) {
+        const seal = visible(`[data-lotr-race="${lastCard.race}"]`);
+        if (seal) flyTo(RACE_INFO[lastCard.race].emoji, ghostPt, seal, { delay: 150, duration: 750, size: 30, glow: "rgba(52,211,153,.95)", onLand: () => bump(seal, "rgba(249,115,22,.9)") });
+      }
+    }
     if (ev.chapter) audio.play("CHAPTER");
     else if (state.phase === "PLAYING" && state.turn === myFaction && p.turn !== myFaction) window.setTimeout(() => audio.play("MY_TURN"), 450);
   }, [state, myFaction]);
@@ -213,6 +276,27 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
       getLotrAudio().stop();
     };
   }, []);
+
+  // ---- ring markers hop one space every 0.2s instead of teleporting ----
+  const [shown, setShown] = useState({ seed: state.seed, fr: state.ringTrack.frodoPosition, nz: state.ringTrack.nazgulPosition });
+  if (shown.seed !== state.seed) setShown({ seed: state.seed, fr: state.ringTrack.frodoPosition, nz: state.ringTrack.nazgulPosition });
+  useEffect(() => {
+    const { frodoPosition, nazgulPosition } = state.ringTrack;
+    if (shown.fr === frodoPosition && shown.nz === nazgulPosition) return;
+    const t = window.setTimeout(
+      () =>
+        setShown((cur) => ({
+          ...cur,
+          fr: cur.fr < frodoPosition ? cur.fr + 1 : frodoPosition,
+          nz: cur.nz < nazgulPosition ? cur.nz + 1 : nazgulPosition,
+        })),
+      200,
+    );
+    return () => window.clearTimeout(t);
+  }, [shown, state.ringTrack]);
+
+  // ---- predictive highlight while a pyramid card's modal is open ----
+  const [previewMode, setPreviewMode] = useState<"PLAY" | "DISCARD">("PLAY");
 
   // ---- map targets for region-based pending steps ----
   const targets = new Set<RegionId>();
@@ -262,6 +346,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
   });
 
   const { frodoPosition: fr, nazgulPosition: nz, trackLength: L } = state.ringTrack;
+  const preview = selected && myTurn && !front ? previewFor(state, myFaction, selected.card, previewMode) : null;
 
   return (
     <div className="flex items-start gap-3 text-white light:text-slate-900">
@@ -346,7 +431,15 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
         <div className="order-2 flex flex-col gap-2 lg:order-1">
           <p className={h3}>가운데땅 지도</p>
           <div key={shakeKey} className={shakeKey > 0 ? "lotrfx-shake" : undefined}>
-            <MiddleEarthMap state={state} targets={targets} selectedFrom={moveFrom} onRegion={onRegion} rise={rise} />
+            <MiddleEarthMap
+              state={state}
+              targets={targets}
+              selectedFrom={moveFrom}
+              onRegion={onRegion}
+              rise={rise}
+              drops={drops}
+              preview={preview?.regions ? { regions: preview.regions, tone: preview.regionTone ?? "red" } : null}
+            />
           </div>
           <p className="text-[11px] text-white/40 light:text-slate-500">
             <b className="text-amber-300">💍 원정대 xN</b> · <b className="text-red-300">👁️ 사우론 xN</b> 유닛 · 🏰 원정대 / 🌋 사우론 요새 (전투로 파괴되지 않음). 같은 지역에 양측 유닛이 모이면 1:1로 동시에 사라집니다.
@@ -388,7 +481,10 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
                     viaChain={cost.viaChain}
                     locked={slot.isOpen && !available}
                     selected={selectedSlot === i}
-                    onClick={() => setSelectedSlot(selectedSlot === i ? null : i)}
+                    onClick={() => {
+                      setPreviewMode("PLAY");
+                      setSelectedSlot(selectedSlot === i ? null : i);
+                    }}
                   />
                   </div>
                 </div>
@@ -396,7 +492,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
             })}
             {/* Taken card rises out of the pyramid in a rune light pillar (ends fully transparent, so it can stay mounted). */}
             {ghost && (
-              <div key={ghost.key} className="pointer-events-none absolute" style={{ ...slotBox(ghost.slot), zIndex: 40 }}>
+              <div key={ghost.key} data-lotr-ghost className="pointer-events-none absolute" style={{ ...slotBox(ghost.slot), zIndex: 40 }}>
                 <span
                   className={`lotrfx-pillar absolute -top-[120%] left-[15%] h-[220%] w-[70%] rounded-full blur-md ${ghost.mode === "PLAY" ? "bg-gradient-to-t from-amber-300/80 via-amber-200/30 to-transparent" : "bg-gradient-to-t from-slate-300/60 to-transparent"}`}
                 />
@@ -418,14 +514,22 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
               onPlay={() => act({ type: "TAKE_CARD", faction: myFaction, slot: selectedSlot!, mode: "PLAY" })}
               onDiscard={() => act({ type: "TAKE_CARD", faction: myFaction, slot: selectedSlot!, mode: "DISCARD" })}
               onClose={() => setSelectedSlot(null)}
+              onPreview={setPreviewMode}
             />
           )}
         </div>
 
         {/* ---- ring track + landmarks + log ---- */}
         <div className="order-3 flex flex-col gap-3">
-          <div className={panel}>
-            <p className={h3}>반지 원정 트랙</p>
+          <div className={panel} data-lotr-track>
+            <p className={h3}>
+              반지 원정 트랙
+              {preview?.ring && (
+                <span className="ml-2 rounded bg-cyan-500/20 px-1.5 text-[10px] font-bold text-cyan-200 normal-case">
+                  💍 {preview.ring.to - preview.ring.from}칸 전진 예정 → {preview.ring.to}번 칸
+                </span>
+              )}
+            </p>
             <div key={trail?.key ?? 0} className="grid grid-cols-2 gap-1">
               {TRACK_PIECES.map(([start, end]) => (
                 <div key={start} className="grid grid-cols-7 gap-px rounded-md border border-amber-800/40 bg-amber-950/30 p-0.5 light:bg-amber-50">
@@ -437,13 +541,28 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
                         key={pos}
                         className={`relative flex aspect-square flex-col items-center justify-center rounded-sm text-[10px] leading-none ${
                           pos === L ? "bg-red-900/60" : point.isNazgulStart ? "bg-black/70 ring-2 ring-zinc-600" : point.isFrodoStart ? "bg-yellow-950/70 ring-2 ring-yellow-400/80 ring-offset-1 ring-offset-yellow-900" : "bg-white/5"
-                        } ${trail && pos > trail.from && pos <= trail.to ? (trail.faction === "FELLOWSHIP" ? "lotrfx-trail-blue" : "lotrfx-trail-red") : ""}`}
+                        } ${
+                          trail && pos > trail.from && pos <= trail.to && pos <= (trail.faction === "FELLOWSHIP" ? shown.fr : shown.nz)
+                            ? trail.faction === "FELLOWSHIP"
+                              ? "lotrfx-trail-blue"
+                              : "lotrfx-trail-red"
+                            : ""
+                        } ${preview?.ring && pos > preview.ring.from && pos <= preview.ring.to ? `lotrp-cyan ${pos === preview.ring.to ? "ring-2 ring-cyan-300" : ""}` : ""}`}
                         title={`${pos} — ${TRACK_REWARD_TEXT[point.reward]}${point.isNazgulStart ? " · 나즈굴 출발" : ""}${point.isFrodoStart ? " · 프로도 & 샘 출발" : ""}`}
                       >
-                        {pos === fr ? (
-                          <span className="text-sm drop-shadow-[0_0_4px_gold]">🧝</span>
-                        ) : pos === nz ? (
-                          <span className="text-sm drop-shadow-[0_0_4px_red]">🐉</span>
+                        {trail && pos > trail.from && pos <= trail.to && pos === (trail.faction === "FELLOWSHIP" ? shown.fr : shown.nz) && TRACK_REWARD_FLOAT[point.reward] && (
+                          <span key={`rw${trail.key}-${pos}`} className="lotrm-reward pointer-events-none absolute -top-2 left-1/2 z-10 font-mono text-[10px] font-black whitespace-nowrap text-amber-200">
+                            {TRACK_REWARD_FLOAT[point.reward]}
+                          </span>
+                        )}
+                        {pos === shown.fr ? (
+                          <span key={`f${pos}`} className="lotrm-hop text-sm drop-shadow-[0_0_4px_gold]">
+                            🧝
+                          </span>
+                        ) : pos === shown.nz ? (
+                          <span key={`n${pos}`} className="lotrm-hop text-sm drop-shadow-[0_0_4px_red]">
+                            🐉
+                          </span>
                         ) : pos === L ? (
                           <span>🌋</span>
                         ) : TRACK_REWARD_ICON[point.reward] ? (
@@ -492,7 +611,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
         <PlayerDock state={state} faction={oppFaction} label={`상대 · ${names[oppSeat]}`} />
       </div>
 
-      {state.phase === "PLAYING" && <PlayerTechHUD state={state} faction={myFaction} />}
+      {state.phase === "PLAYING" && <PlayerTechHUD state={state} faction={myFaction} preview={preview} />}
       </div>
 
       {state.phase === "GAME_OVER" && state.winner && !victoryClosed && (
@@ -816,4 +935,30 @@ function LandmarkTileCard({
       </div>
     </div>
   );
+}
+
+/** What `card` would change if taken in `mode` — drives the predictive highlight. */
+function previewFor(state: LotrDuelState, faction: Faction, card: LotrDuelCard, mode: "PLAY" | "DISCARD"): CardPreview | null {
+  if (mode === "DISCARD") return { coins: discardValue(state, faction) };
+  const me = state.players[faction];
+  const opp = otherFaction(faction);
+  switch (card.color) {
+    case "YELLOW":
+      return { coins: card.coinsReward ?? 0 };
+    case "BLUE": {
+      const from = faction === "FELLOWSHIP" ? state.ringTrack.frodoPosition : state.ringTrack.nazgulPosition;
+      return { ring: { faction, from, to: Math.min(state.ringTrack.trackLength, from + (card.ringAdvance ?? 0)) } };
+    }
+    case "RED":
+      return { regions: hasToken(me, "ELF_RED_ANYWHERE") ? REGIONS : card.militaryUnits!.allowedRegions, regionTone: "red" };
+    case "GRAY":
+      return { techs: card.providesTech ?? card.selectTechChoice ?? [] };
+    case "GREEN":
+      return card.race ? { race: card.race } : null;
+    case "PURPLE":
+      if (card.tacticsType === "MULTI_MOVE") return { regions: REGIONS.filter((r) => unitsOf(state.boardRegions[r], faction) > 0), regionTone: "violet" };
+      if (card.tacticsType === "SNIPE_UNIT") return { regions: REGIONS.filter((r) => unitsOf(state.boardRegions[r], opp) > 0), regionTone: "red" };
+      return null;
+  }
+  return null;
 }

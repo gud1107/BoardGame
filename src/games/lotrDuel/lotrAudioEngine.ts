@@ -38,6 +38,7 @@ export type LotrSfx =
   | "UNIT_PLACE"
   | "MOVE"
   | "SELECT"
+  | "COIN"
   | "MY_TURN"
   | "CHAPTER";
 
@@ -433,6 +434,11 @@ class LotrAudioEngine {
     const t = ctx.currentTime + 0.01;
     const out = this.sfxBus;
     switch (kind) {
+      case "COIN":
+        // Coin landing in the treasury: two bright metallic pings.
+        [2637, 3520].forEach((fr, k) => this.tone(out, t + k * 0.05, fr, 0.25, 0.06, { type: "triangle", release: 0.28 }));
+        this.noiseHit(out, t, 0.05, 0.05, "highpass", 5000);
+        break;
       case "SELECT":
         this.tone(out, t, 1320, 0.06, 0.08, { type: "sine", release: 0.07 });
         break;

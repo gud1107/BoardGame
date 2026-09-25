@@ -4,6 +4,7 @@ import { useState } from "react";
 import { SealStamp } from "./CardArt";
 import { FACTION_EMOJI, FACTION_LABEL, RACES, TECHS, TECH_INFO } from "./data";
 import { raceSymbols, techProduction, type Faction, type LotrDuelState, type TechSymbol } from "./engine";
+import type { CardPreview } from "./fxEvents";
 
 /**
  * Always-on "my tech" HUD — pinned to the bottom of the viewport (sticky
@@ -25,7 +26,7 @@ const TECH_EN: Record<TechSymbol, string> = { BOOK: "Lore", FLAG: "Command", SWO
 
 type Info = { key: string; title: string; lines: string[] };
 
-export default function PlayerTechHUD({ state, faction }: { state: LotrDuelState; faction: Faction }) {
+export default function PlayerTechHUD({ state, faction, preview }: { state: LotrDuelState; faction: Faction; preview?: CardPreview | null }) {
   const p = state.players[faction];
   const { fixed, choices, wild } = techProduction(p);
   const races = raceSymbols(p);
@@ -51,9 +52,14 @@ export default function PlayerTechHUD({ state, faction }: { state: LotrDuelState
       <span className="hidden text-xs font-bold text-neutral-300 sm:inline">
         {FACTION_EMOJI[faction]} 내 진영: {FACTION_LABEL[faction]}
       </span>
-      <span className="flex items-center gap-1 border-white/10 pr-2 sm:border-l sm:pl-3" title="보유 주화">
+      <span
+        data-lotr-coins
+        className={`relative flex items-center gap-1 rounded-xl border-white/10 px-1.5 pr-2 sm:border-l sm:pl-3 ${preview?.coins ? "lotrp-gold" : ""}`}
+        title="보유 주화"
+      >
         <span className="text-sm">🪙</span>
         <span className="font-mono text-sm font-black text-amber-300">{p.coins}</span>
+        {preview?.coins ? <span className="lotrp-float absolute -top-4 left-1/2 -translate-x-1/2 font-mono text-[11px] font-black text-amber-200">+{preview.coins}</span> : null}
       </span>
       <span className="flex items-center gap-1.5" aria-label="내 기술 기호">
         {TECHS.map((t) => {
@@ -63,12 +69,14 @@ export default function PlayerTechHUD({ state, faction }: { state: LotrDuelState
             <button
               key={t}
               type="button"
+              data-lotr-tech={t}
               {...bind(techInfo(t))}
               aria-label={`${TECH_INFO[t].name} ${n}개 — 설명 보기`}
               className={`relative flex h-11 w-10 flex-col items-center justify-center rounded-xl border text-sm leading-none transition ${
                 has ? `${TECH_TONE[t]} bg-neutral-900 shadow-[0_0_10px_rgba(251,191,36,.35)]` : "border-dashed border-neutral-700 bg-neutral-950/50 opacity-45 grayscale hover:opacity-80"
-              } ${shown?.key === t ? "ring-2 ring-amber-300" : ""}`}
+              } ${shown?.key === t ? "ring-2 ring-amber-300" : ""} ${preview?.techs?.includes(t) ? "lotrp-tech !opacity-100 !grayscale-0" : ""}`}
             >
+              {preview?.techs?.includes(t) && <span className="lotrp-float absolute -top-4 left-1/2 -translate-x-1/2 font-mono text-[10px] font-black text-amber-200">+1</span>}
               {TECH_INFO[t].emoji}
               <span className="mt-0.5 font-serif text-[9px] font-bold">{TECH_INFO[t].name}</span>
               {has && <span className="absolute -top-1.5 -right-1.5 rounded-full border border-amber-400 bg-neutral-900 px-1 font-mono text-[9px] font-black text-amber-300">x{n}</span>}
@@ -105,7 +113,7 @@ export default function PlayerTechHUD({ state, faction }: { state: LotrDuelState
       )}
       <span className="ml-auto flex items-center gap-0.5" title={`종족 기호 ${races.size}/6`}>
         {RACES.map((r) => (
-          <span key={r} className={`h-6 w-6 ${races.has(r) ? "" : "opacity-25 grayscale"}`}>
+          <span key={r} data-lotr-race={r} className={`h-6 w-6 rounded-full ${preview?.race === r ? "lotrp-ember" : races.has(r) ? "" : "opacity-25 grayscale"}`}>
             <SealStamp race={r} />
           </span>
         ))}

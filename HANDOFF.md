@@ -273,6 +273,25 @@ UI는 `LotrDuelBoard.tsx`의 트랙 패널(이름 트랙용 `RingTrackBoard.tsx`
   원정 트랙 이동과 칸 보상, 토큰 등).
 - 테스트 1개 추가(버리기/구매 로그에 카드 메타 부착). 봇 대전으로 데스크톱 로그 클릭·모바일 드로어 안 클릭 → 중앙 모달 캡처, ESC 닫힘 확인.
 
+### ✨ 반지의 제왕: 가운데땅에서의 대결 (LotR Duel) Predictive Highlight & Action Motion FX — 2026-09-25 후속 (커밋/푸시, 배포는 웹훅 자동)
+
+요청서의 `Board.tsx`·`components/FlyingCoinsFX.tsx`·`components/CardActionModal.tsx`·`tailwind.config.js` 키프레임은 이 저장소 구조와 다르다 —
+카드 모달은 기존 `ActionChoiceModal.tsx`의 `CardChoiceModal`을 확장, 비행 FX는 새 `motionFx.ts`(명령형 Web Animations API), 키프레임은 이 게임 관례대로
+`LotrDuelBoard.tsx`의 인라인 `<style>`(이 프로젝트는 Tailwind v4, JS 설정 파일 없음). 엔진 변경 없음.
+
+- **Target Predictive Highlighting Engine:** 피라미드 카드 모달이 열려 있는 동안 `previewFor()`가 계산한 대상을 보드에 투사 — 노랑/버리기: 하단 국고 HUD 골드 펄스 +
+  `+N` / 파랑: 원정 트랙 현재 칸→도착 칸 청록 경로(도착 칸 링) + 트랙 제목에 "N칸 전진 예정 → n번 칸" / 빨강: 배치 가능 지역 붉은 펄스 테두리(엘프 길잡이 보유 시 7개 전부) /
+  회색: 해당 기술 슬롯 금빛 점등 + `+1` / 초록: 해당 종족 인장 엠버 펄스 / 보라: 연속 이동=내 유닛 지역 보라 펄스, 저격=적 유닛 지역 붉은 펄스.
+  버튼 호버/포커스로 "구매" ↔ "버리기" 미리보기 전환. 하이라이트가 보이도록 카드 모달만 배경을 옅은 딤(블러 없음)으로 변경(`CenterModal backdrop="light"`).
+- **Physics-Based Flying Coins Motion:** 내 주화가 늘면(구매한 노랑 카드·버리기·트랙 주화 칸·에레보르 등) 증가분(최대 6개)만큼 🪙가 원천(방금 가져간 카드 고스트 → 원정 트랙
+  패널 → 화면 중앙 순)에서 포물선으로 국고 HUD까지 0.12초 간격 비행, 착지마다 HUD 바운스 + 새 `COIN` 효과음. 회색 카드는 기술 룬이 해당 슬롯으로 날아가 360° 금빛
+  엠보싱 링(`imprint`), 초록 카드는 종족 문양이 인장 슬롯으로 비행. DOM 좌표가 필요해 React 상태 대신 커밋 후 effect에서 `<body>`에 임시 요소를 붙여 애니메이션 후 제거.
+- **Stepping Ring Track Animation:** 트랙 말은 실제 위치로 순간이동하지 않고 표시 위치가 0.2초마다 1칸씩 따라가며 칸마다 홉 애니메이션, 지나간 칸에만 궤적 발광,
+  보상 칸을 밟을 때 `+1🪙` / `📜선택!` / `🔄이동!` / `⚔️배치!` 플로팅 텍스트.
+- **Military Drop & Clash Dissolve:** 유닛 수가 늘어난 지역(배치·이동 도착)에 진영 색 `🗡️💍 +N` / `🗡️👁️ +N` 배지가 상공에서 떨어지며 모래먼지 충격파,
+  교전 지역은 기존 섬광·칼날에 더해 양측 미플(💍/👁️)이 불꽃으로 산화(디졸브).
+- 모든 모션은 `prefers-reduced-motion`에서 생략. 검증: tsc/eslint/vitest 통과, 봇 대전(1500px)으로 빨간 카드 지역 펄스·버리기 호버 국고 펄스·버린 직후 금화 비행 캡처 확인.
+
 ## 💎 스플렌더 대결 (Splendor Duel) — 2인 전용 신규 게임 — 2026-09-25 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: `boardGameRule/스플랜더 대결/스플랜더 대결.md` 룰북 기준 2인 전용 풀스택 신규 게임. 요청서는 `src/data/games.ts`
