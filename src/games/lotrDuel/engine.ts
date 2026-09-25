@@ -205,19 +205,32 @@ export function techProduction(player: PlayerDuelState): { fixed: Record<TechSym
  * more than a handful of cards).
  */
 export function missingTech(player: PlayerDuelState, needed: TechSymbol[] = []): number {
+  return techCoverage(player, needed).filter((covered) => !covered).length;
+}
+
+/**
+ * Per printed tech symbol (same order as `needed`): can my own production
+ * cover it this turn? Fixed symbols first, then choice cards / the Dwarf wild
+ * tech via an optimal bipartite matching — so the uncovered ones are exactly
+ * the symbols the cost calculation charges 1 coin for (UI: ✓ vs +🪙1).
+ */
+export function techCoverage(player: PlayerDuelState, needed: TechSymbol[] = []): boolean[] {
   const { fixed, choices, wild } = techProduction(player);
   const left = { ...fixed };
-  const rest: TechSymbol[] = [];
-  for (const s of needed) {
-    if (left[s] > 0) left[s] -= 1;
-    else rest.push(s);
-  }
-  if (rest.length === 0) return 0;
+  const covered = needed.map(() => false);
+  const rest: number[] = []; // indices into `needed` not covered by fixed symbols
+  needed.forEach((s, i) => {
+    if (left[s] > 0) {
+      left[s] -= 1;
+      covered[i] = true;
+    } else rest.push(i);
+  });
+  if (rest.length === 0) return covered;
   const suppliers: TechSymbol[][] = [...choices, ...Array.from({ length: wild }, () => TECHS)];
-  const matchOf: number[] = rest.map(() => -1); // need index → supplier index
+  const matchOf: number[] = rest.map(() => -1); // rest slot → supplier index
   const tryAssign = (sup: number, seen: boolean[]): boolean => {
     for (let n = 0; n < rest.length; n++) {
-      if (seen[n] || !suppliers[sup].includes(rest[n])) continue;
+      if (seen[n] || !suppliers[sup].includes(needed[rest[n]])) continue;
       seen[n] = true;
       if (matchOf[n] === -1 || tryAssign(matchOf[n], seen)) {
         matchOf[n] = sup;
@@ -226,9 +239,11 @@ export function missingTech(player: PlayerDuelState, needed: TechSymbol[] = []):
     }
     return false;
   };
-  let matched = 0;
-  for (let sup = 0; sup < suppliers.length; sup++) if (tryAssign(sup, rest.map(() => false))) matched++;
-  return rest.length - matched;
+  for (let sup = 0; sup < suppliers.length; sup++) tryAssign(sup, rest.map(() => false));
+  rest.forEach((idx, n) => {
+    if (matchOf[n] !== -1) covered[idx] = true;
+  });
+  return covered;
 }
 
 export function calculateCardCost(player: PlayerDuelState, card: LotrDuelCard): { canAfford: boolean; costInCoins: number; viaChain: boolean } {

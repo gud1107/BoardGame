@@ -14,6 +14,7 @@ import {
   fortressOf,
   hasToken,
   missingTech,
+  techCoverage,
   otherFaction,
   raceSymbols,
   techProduction,
@@ -492,6 +493,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
                     available={available && myTurn && !front}
                     affordable={cost.canAfford}
                     costInCoins={cost.costInCoins}
+                    coverage={techCoverage(me, slot.card.cost.tech)}
                     viaChain={cost.viaChain}
                     locked={slot.isOpen && !available}
                     selected={selectedSlot === i}

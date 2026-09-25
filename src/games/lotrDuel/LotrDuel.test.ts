@@ -7,6 +7,8 @@ import {
   availableSlots,
   calculateCardCost,
   calculateLandmarkCost,
+  missingTech,
+  techCoverage,
   checkInstantVictory,
   legalActions,
   resolveCombat,
@@ -325,5 +327,19 @@ describe("history log card metadata", () => {
     expect(p?.card).toMatchObject({ id: card("브리 여관").id, use: "PLAY", coins: 0 });
     expect(p?.faction).toBe("FELLOWSHIP");
     expect(CARD_BY_ID[p!.card!.id].name).toBe("브리 여관");
+  });
+});
+
+describe("techCoverage (dual-cost display)", () => {
+  it("marks each printed tech symbol covered/uncovered consistently with missingTech", () => {
+    const s = startGame(1);
+    const p = s.players.FELLOWSHIP;
+    const need = card("강행군").cost.tech!; // FLAG FLAG SWORD
+    expect(techCoverage(p, need)).toEqual([false, false, false]);
+    p.tableauCards.push(card("곤도르 봉화")); // FLAG
+    expect(techCoverage(p, need)).toEqual([true, false, false]);
+    p.tableauCards.push(card("전쟁 회의")); // SWORD | FLAG — optimal matching covers one more
+    expect(techCoverage(p, need).filter(Boolean)).toHaveLength(2);
+    expect(techCoverage(p, need).filter((c) => !c)).toHaveLength(missingTech(p, need));
   });
 });

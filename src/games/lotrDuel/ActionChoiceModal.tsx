@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { FortressArt } from "./CardArt";
-import { CardFace, CostChips, describeCard } from "./CardFace";
+import { CardFace, describeCard } from "./CardFace";
 import { ADJACENCY, CHAIN_INFO, COLOR_INFO, REGIONS, REGION_INFO, TECH_INFO } from "./data";
 import {
   calculateCardCost,
@@ -11,6 +11,7 @@ import {
   fortressOf,
   missingTech,
   otherFaction,
+  techCoverage,
   unitsOf,
   type EngineAction,
   type Faction,
@@ -123,7 +124,8 @@ export function CardChoiceModal({
 }) {
   const me = state.players[faction];
   const cost = calculateCardCost(me, card);
-  const missing = missingTech(me, card.cost.tech);
+  const coverage = techCoverage(me, card.cost.tech);
+  const missing = coverage.filter((c) => !c).length;
   const gain = discardValue(state, faction);
   return (
     <CenterModal
@@ -140,22 +142,58 @@ export function CardChoiceModal({
       backdrop="light"
     >
       <div className="mx-auto aspect-[3/4] w-36" style={{ animation: "lotrc-zoom .45s cubic-bezier(.2,.9,.2,1) both" }}>
-        <CardFace card={card} available chapter={state.chapter} affordable={cost.canAfford} costInCoins={cost.costInCoins} viaChain={cost.viaChain} />
+        <CardFace card={card} available chapter={state.chapter} affordable={cost.canAfford} costInCoins={cost.costInCoins} viaChain={cost.viaChain} coverage={coverage} />
       </div>
       <p className="mt-3 text-sm font-semibold text-neutral-100">{describeCard(card)}</p>
-      <div className="mx-auto mt-2 max-w-sm rounded-xl border border-white/10 bg-white/[0.03] p-2 text-left text-[11px] text-neutral-300">
-        <p>
-          인쇄 비용: <CostChips card={card} />
-        </p>
-        {cost.viaChain ? (
-          <p className="text-emerald-300">🔗 연계 기호 {CHAIN_INFO[card.cost.chainSymbol!]}를 이미 가지고 있어 완전 무료입니다.</p>
-        ) : (
-          <p>
-            내 기술로 {(card.cost.tech?.length ?? 0) - missing}개 충당 · 부족 {missing}개 × 1주화
-            {card.cost.coins ? ` + 인쇄 주화 ${card.cost.coins}` : ""} = <b className={cost.canAfford ? "text-amber-200" : "text-rose-300"}>{cost.costInCoins}주화</b> (보유 {me.coins})
-          </p>
+      {/* cost settlement: printed cost → what my techs cover / coins for the rest → final payment */}
+      <div className="mx-auto mt-2 max-w-sm space-y-1.5 rounded-2xl border border-neutral-800 bg-neutral-900/90 p-3 text-left text-[11px] text-neutral-300 shadow-inner">
+        <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1">
+          <span className="text-neutral-400">인쇄 요구 비용</span>
+          <span className="flex flex-wrap items-center justify-end gap-1 font-bold text-neutral-100">
+            {card.cost.chainSymbol && <span className="rounded bg-amber-500/20 px-1 text-amber-100 ring-1 ring-amber-400/40">🔗 {CHAIN_INFO[card.cost.chainSymbol]} 연계</span>}
+            {card.cost.tech?.map((t, i) => (
+              <span key={i} className="rounded bg-white/10 px-1">
+                {TECH_INFO[t].emoji} {TECH_INFO[t].name}
+              </span>
+            ))}
+            {card.cost.coins ? <span className="rounded bg-amber-500/20 px-1 text-amber-100">🪙 {card.cost.coins}</span> : null}
+            {!card.cost.chainSymbol && !card.cost.tech?.length && !card.cost.coins && <span className="text-emerald-300">기본 무료</span>}
+          </span>
+        </div>
+        {!cost.viaChain && (card.cost.tech?.length ?? 0) > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {card.cost.tech!.map((t, i) =>
+              coverage[i] ? (
+                <span key={i} className="rounded-md bg-emerald-600/25 px-1.5 py-0.5 font-bold text-emerald-200 ring-1 ring-emerald-400/40">
+                  {TECH_INFO[t].emoji} ✓ 보유
+                </span>
+              ) : (
+                <span key={i} className="rounded-md bg-neutral-800 px-1.5 py-0.5 font-bold text-amber-200 ring-1 ring-amber-500/40">
+                  {TECH_INFO[t].emoji} ✗ → +🪙1
+                </span>
+              ),
+            )}
+          </div>
         )}
-        {card.providesChain && <p>이 카드는 다음 챕터용 연계 기호 {CHAIN_INFO[card.providesChain]}를 제공합니다.</p>}
+        <div className="flex items-center justify-between gap-2 pt-0.5">
+          <span className="text-neutral-400">내 최종 지불</span>
+          <span className="text-right font-mono font-black">
+            {cost.viaChain ? (
+              <span className="text-emerald-300">🔗 연계 일치 → 0주화 (전액 무료!)</span>
+            ) : cost.costInCoins === 0 ? (
+              <span className="text-emerald-300">기술 충족 → 0주화 (무료!)</span>
+            ) : (
+              <span className={cost.canAfford ? "text-amber-200" : "text-rose-300"}>
+                {card.cost.coins ? `🪙${card.cost.coins}` : "🪙0"}
+                {missing > 0 ? ` + 부족 ${missing}×🪙1` : ""} = 🪙{cost.costInCoins}
+              </span>
+            )}
+          </span>
+        </div>
+        <p className={`text-right text-[10px] ${cost.canAfford ? "text-neutral-400" : "font-bold text-rose-300"}`}>
+          보유 🪙{me.coins} → {cost.canAfford ? `구매 가능 (남는 주화 ${me.coins - cost.costInCoins})` : `🔴 ${cost.costInCoins - me.coins}주화 부족 — 구매 불가`}
+        </p>
+        {card.providesChain && <p className="text-[10px] text-neutral-400">이 카드는 다음 챕터용 연계 기호 {CHAIN_INFO[card.providesChain]}를 제공합니다.</p>}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2">
         <button

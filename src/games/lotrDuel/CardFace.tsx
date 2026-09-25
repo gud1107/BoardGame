@@ -99,8 +99,11 @@ function DecoFrame() {
 }
 
 /**
- * Art-deco pyramid card: embossed gold frame, header (chain symbol left, the
- * viewer's real cost right), SVG illustration window, effect badge + name.
+ * Art-deco pyramid card: embossed gold frame; header = the PRINTED cost
+ * (required chain, tech chips — green ✓ when I produce that symbol, dimmed
+ * when it will cost a coin — and printed coins); SVG illustration window;
+ * status strip = what I would really pay (🔗무료 / ✓ 무료 / 🪙N (+missing) /
+ * 🔴 부족), shown when `costInCoins` is given; effect badge + name.
  * The parent sets the box size (3:4); every inner size scales with it.
  *
  * States: `available` (uncovered, my turn) glows with a gold rim light;
@@ -117,6 +120,7 @@ export function CardFace({
   locked,
   costInCoins,
   viaChain,
+  coverage,
   onClick,
 }: {
   card: LotrDuelCard | null;
@@ -126,8 +130,11 @@ export function CardFace({
   affordable?: boolean;
   selected?: boolean;
   locked?: boolean;
+  /** My real cost (the status strip is shown only when this is given). */
   costInCoins?: number;
   viaChain?: boolean;
+  /** Per printed tech symbol: covered by my own production? (engine `techCoverage`) */
+  coverage?: boolean[];
   onClick?: () => void;
 }) {
   if (faceDown || !card) {
@@ -141,6 +148,7 @@ export function CardFace({
   }
   const tint = FRAME_TINT[card.color];
   const cost = costInCoins ?? (card.cost.coins ?? 0) + (card.cost.tech?.length ?? 0);
+  const missing = coverage ? coverage.filter((c) => !c).length : 0;
   return (
     <button
       type="button"
@@ -156,21 +164,32 @@ export function CardFace({
       } shadow-[0_4px_10px_rgba(0,0,0,.55)]`}
     >
       <div className={`relative flex h-full w-full flex-col overflow-hidden rounded-[6%] bg-gradient-to-b ${tint.inner}`}>
-        {/* header: chain symbol + cost gem */}
-        <div className="flex h-[17%] shrink-0 items-center justify-between px-[6%] text-[clamp(6px,1.35vw,11px)] leading-none">
-          <span className={card.cost.chainSymbol ? "text-amber-200" : "font-serif text-amber-200/50"} title={card.cost.chainSymbol ? "연계 기호 — 보유 시 무료" : undefined}>
+        {/* header: the PRINTED cost — required chain, tech symbols (✓ when I produce it), printed coins */}
+        <div className="flex h-[16%] shrink-0 items-center justify-between gap-[3%] px-[5%] text-[clamp(5.5px,1.2vw,10px)] leading-none">
+          <span
+            className={card.cost.chainSymbol ? "rounded bg-amber-500/25 px-[0.25em] py-[0.1em] text-amber-100 ring-1 ring-amber-400/50" : "font-serif text-amber-200/50"}
+            title={card.cost.chainSymbol ? "필요 연계 — 이 기호를 가진 카드가 있으면 무료" : undefined}
+          >
             {card.cost.chainSymbol ? `🔗${CHAIN_INFO[card.cost.chainSymbol]}` : ["Ⅰ", "Ⅱ", "Ⅲ"][card.chapter - 1]}
           </span>
-          <span
-            className={`rounded-full px-[0.35em] py-[0.1em] font-black ring-1 ${
-              viaChain || cost === 0
-                ? "bg-emerald-500/25 text-emerald-200 ring-emerald-300/50"
-                : affordable === false
-                  ? "bg-rose-600/30 text-rose-200 ring-rose-300/50"
-                  : "bg-amber-400/25 text-amber-100 ring-amber-300/60"
-            }`}
-          >
-            {viaChain ? "🔗무료" : cost === 0 ? "무료" : `🪙${cost}`}
+          <span className="flex min-w-0 items-center gap-[0.15em]">
+            {(card.cost.tech ?? []).map((t, i) => {
+              const ok = coverage?.[i];
+              return (
+                <span
+                  key={i}
+                  title={`요구 기술: ${TECH_INFO[t].name}${coverage ? (ok ? " (보유 — 무료 충당)" : " (미보유 — 1주화로 대체)") : ""}`}
+                  className={`relative rounded-[0.3em] px-[0.1em] py-[0.05em] shadow-[inset_0_1px_0_rgba(255,255,255,.25),inset_0_-1px_0_rgba(0,0,0,.5)] ${
+                    coverage === undefined ? "bg-white/15" : ok ? "bg-emerald-600/45 ring-1 ring-emerald-300/70" : "bg-neutral-800/90 opacity-60 grayscale"
+                  }`}
+                >
+                  {TECH_INFO[t].emoji}
+                  {ok && <span className="absolute -right-[0.3em] -bottom-[0.35em] text-[0.7em] font-black text-emerald-300">✓</span>}
+                </span>
+              );
+            })}
+            {card.cost.coins ? <span className="rounded-[0.3em] bg-amber-500/30 px-[0.15em] py-[0.05em] font-black text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,.25)]">🪙{card.cost.coins}</span> : null}
+            {!card.cost.coins && !card.cost.tech?.length && <span className="font-bold text-emerald-300/90">무료</span>}
           </span>
         </div>
         {/* illustration window */}
@@ -182,8 +201,25 @@ export function CardFace({
             </span>
           )}
         </div>
+        {/* status strip: what *I* would really pay */}
+        {costInCoins !== undefined && (
+          <div className="mx-[5%] mt-[3%] flex h-[11%] shrink-0 items-center justify-center">
+            <span
+              className={`rounded-full px-[0.5em] py-[0.1em] text-[clamp(5.5px,1.15vw,10px)] leading-none font-black whitespace-nowrap ring-1 ${
+                viaChain || cost === 0
+                  ? "bg-emerald-500/30 text-emerald-100 ring-emerald-300/60"
+                  : affordable === false
+                    ? "bg-rose-600/40 text-rose-100 ring-rose-300/60"
+                    : "bg-amber-400/25 text-amber-100 ring-amber-300/60"
+              }`}
+              title={viaChain ? "연계 기호 보유 — 전액 무료" : missing > 0 ? `인쇄 주화 ${card.cost.coins ?? 0} + 부족 기술 ${missing}개 × 1주화` : undefined}
+            >
+              {viaChain ? "🔗무료" : cost === 0 ? "✓ 무료" : affordable === false ? `🔴🪙${cost} 부족` : missing > 0 ? `🪙${cost} (+${missing})` : `🪙${cost}`}
+            </span>
+          </div>
+        )}
         {/* footer: effect badge + name */}
-        <div className={`mt-[4%] flex h-[21%] shrink-0 flex-col items-center justify-center bg-gradient-to-b ${tint.band} px-[4%] text-center`}>
+        <div className={`mt-[3%] flex h-[19%] shrink-0 flex-col items-center justify-center bg-gradient-to-b ${tint.band} px-[4%] text-center`}>
           <span className="text-[clamp(7px,1.45vw,12px)] leading-none font-black text-white drop-shadow">{cardGlyph(card)}</span>
           <span className="w-full truncate font-serif text-[clamp(5.5px,1.1vw,9px)] leading-tight text-amber-50/90">{card.name}</span>
         </div>
