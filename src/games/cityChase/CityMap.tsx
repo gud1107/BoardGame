@@ -35,6 +35,9 @@ export const TOKEN_CLASS: Record<TokenColor, string> = {
 };
 
 const STEP = 100 / GRID; // % distance between two road lines
+
+/** Midpoint of the 11-round chase — highlighted purple in the post-game route replay. */
+export const MIDPOINT_ROUND = 6;
 const INSET = 2.6; // % gap between a building and the road centre line
 
 // Deterministic per-building look (height tier + facade hue) so the skyline isn't a flat grid.
@@ -270,15 +273,19 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
               const [r, col] = cellRC(c);
               const round = i + 1;
               const last = i === state.path.length - 1;
+              // Round 6 is the midpoint of the 11-round chase — neon purple milestone.
+              const midpoint = round === MIDPOINT_ROUND;
               return (
                 <div
                   key={`pad${i}`}
                   className={`pointer-events-none absolute z-[36] flex h-[7%] w-[7%] items-center justify-center rounded-md border-2 text-[min(3vw,14px)] font-black shadow-lg ${
                     round === 1
                       ? "border-yellow-100 bg-yellow-300 text-black"
-                      : last
-                        ? "border-white bg-red-600 text-white"
-                        : "border-red-200 bg-red-500 text-white"
+                      : midpoint
+                        ? "border-purple-200 bg-gradient-to-tr from-purple-800 via-purple-600 to-fuchsia-500 text-purple-50 shadow-[0_0_15px_rgba(168,85,247,0.85)] ring-2 ring-purple-400/70"
+                        : last
+                          ? "border-white bg-red-600 text-white"
+                          : "border-red-200 bg-red-500 text-white"
                   } ${last ? "ring-2 ring-white/80" : ""}`}
                   style={{
                     top: `${(r + 0.5) * STEP}%`,
@@ -288,6 +295,12 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
                   title={`${round}라운드 ${cellLabel(c)}`}
                 >
                   {round}
+                  {midpoint && <span className="absolute -right-1 -top-1.5 text-[min(2.4vw,10px)] leading-none">💜</span>}
+                  {midpoint && !last && (
+                    <span className="absolute left-1/2 top-full mt-0.5 -translate-x-1/2 whitespace-nowrap rounded border border-purple-400 bg-purple-950/90 px-1 text-[8px] font-black leading-tight text-purple-200 shadow-[0_0_8px_rgba(192,132,252,0.6)] sm:text-[9px]">
+                      💜 6TH TURN
+                    </span>
+                  )}
                   {(round === 1 || last) && (
                     <span
                       className={`absolute left-1/2 top-full mt-0.5 -translate-x-1/2 whitespace-nowrap rounded border px-1 text-[8px] font-black leading-tight sm:text-[9px] ${

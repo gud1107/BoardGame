@@ -68,6 +68,14 @@
 - **Coordinate String Serializer:**
   - `cellLabel(cell)`(`CityMap.tsx`)이 (row, col)을 A1~E5로 직렬화(열 A~E, 행 1~5, 예: (2,2) → C3) — 게임 종료 시 보드 바로 위 브리핑 바에 "🗺️ 도둑의 실제 경로: C3 → D3 → D2 …" 표출.
 
+### 🚁 시티 체이스 (City Chase) Round 6 Purple Milestone Marker
+(요청서가 전제한 `components/ThiefPathOverlay.tsx`·`.handoff/games/cityChase.md`는 없음 — 실제 궤적 패드는 `CityMap.tsx`의 `revealRoute` 블록, 경로 요약 바는 `CityChaseBoard.tsx`.)
+- **6th Turn Custom Purple Badge:**
+  - 도둑 경로 리플레이 시 6번째 이동 지점(Round 6, `MIDPOINT_ROUND` 상수 — `CityMap.tsx`)에 네온 퍼플 그라데이션(`from-purple-800 via-purple-600 to-fuchsia-500`, `border-purple-200`, 보랏빛 글로우 + `ring-purple-400/70`), 우상단 💜 엠블럼, 하단 `💜 6TH TURN` 캡션.
+  - 6라운드가 마지막 칸(6라운드에 검거/고립)이면 패드는 보라색 유지, 캡션은 결과 캡션(`🚨 CAUGHT`/`🚧 TRAPPED`)이 우선 — 게임 결과가 더 중요한 정보라서. 1라운드 START(노랑)는 그대로.
+- **Visual Midpoint Emphasis:**
+  - 상단 텍스트 경로 요약("🗺️ 도둑의 실제 경로: …")에서도 6번째 방문 건물만 `text-purple-400 font-extrabold underline` + 💜로 강조 — 보드판 오버레이와 양측 일치. 도둑이 6라운드 전에 잡히면 보라색 표시 없음.
+
 ## 💍 반지의 제왕: 가운데땅에서의 대결 (The Confrontation) — 2인 비대칭 신규 게임 — 2026-09-25 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: `반지의제왕가운데땅에서의대결.md` 룰북 기준 2인 비대칭 블러핑 전략 게임 풀스택 신규 구축. 실제 룰북 위치는

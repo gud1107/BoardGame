@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
-import CityMap, { cellLabel, HELI_STYLES, TOKEN_CLASS } from "./CityMap";
+import CityMap, { cellLabel, HELI_STYLES, MIDPOINT_ROUND, TOKEN_CLASS } from "./CityMap";
 import {
   currentActor,
   currentPoliceBelief,
@@ -148,7 +148,18 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
       {over && (
         <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 rounded-xl border border-red-500/60 bg-neutral-950/95 px-3 py-1.5 text-center shadow-[0_0_15px_rgba(239,68,68,0.35)] light:bg-white">
           <span className="shrink-0 text-xs font-bold text-red-400 light:text-red-600">🗺️ 도둑의 실제 경로:</span>
-          <span className="font-mono text-xs font-black tracking-wider text-white light:text-slate-900">{state.path.map(cellLabel).join(" → ")}</span>
+          <span className="font-mono text-xs font-black tracking-wider text-white light:text-slate-900">
+            {state.path.map((c, i) => (
+              <span key={i}>
+                {i > 0 && " → "}
+                {i + 1 === MIDPOINT_ROUND ? (
+                  <span className="font-extrabold text-purple-400 underline light:text-purple-700">{cellLabel(c)}💜</span>
+                ) : (
+                  cellLabel(c)
+                )}
+              </span>
+            ))}
+          </span>
         </div>
       )}
 
