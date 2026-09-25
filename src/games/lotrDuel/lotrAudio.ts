@@ -1,7 +1,7 @@
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 
 /**
- * Cues for 반지의 제왕: 대결, all reusing the project's shared code-synthesized
+ * Cues for 반지의 제왕: 가운데땅에서의 대결, all reusing the project's shared code-synthesized
  * SFX (src/lib/audio/soundEngine.ts — no mp3 assets anywhere in this project,
  * and that file is left untouched here).
  */

@@ -1,0 +1,606 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { CardFace, COLOR_STYLE, CostChips, cardGlyph, describeCard } from "./CardFace";
+import { ADJACENCY, CHAIN_INFO, COLOR_INFO, FACTION_EMOJI, FACTION_LABEL, FRODO_START, RACES, RACE_INFO, REGIONS, REGION_INFO, TECHS, TECH_INFO, TOKENS } from "./data";
+import {
+  WIN_TEXT,
+  availableSlots,
+  calculateCardCost,
+  calculateLandmarkCost,
+  controlledCount,
+  discardValue,
+  fortressOf,
+  otherFaction,
+  raceSymbols,
+  techProduction,
+  tokenOptions,
+  unitsOf,
+  type EngineAction,
+  type Faction,
+  type LotrDuelState,
+  type PendingStep,
+  type RegionId,
+  type Seat,
+} from "./engine";
+import { lotrSfx } from "./lotrAudio";
+import MiddleEarthMap from "./MiddleEarthMap";
+
+/**
+ * 반지의 제왕: 가운데땅에서의 대결 in-game view.
+ *
+ * Desktop (lg+): header HUD, then 3 columns — map | chapter pyramid | ring
+ * track + landmarks — and a bottom dock with both players' tableaus.
+ * Phones: the same blocks stacked, with the action prompt and the pyramid
+ * first (that's where every turn starts). Content-sized, no hard 100dvh (the
+ * shared `/games/[gameId]` page chrome would make it overflow).
+ */
+
+const KEYFRAMES = `
+@keyframes lotrd-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,.55) } 50% { box-shadow: 0 0 0 5px rgba(52,211,153,0) } }
+.lotrd-target { animation: lotrd-pulse 1.4s ease-in-out infinite }
+@keyframes lotrd-clash { 0% { background: rgba(244,63,94,.65); transform: scale(1.25) } 100% { background: rgba(244,63,94,0); transform: scale(1) } }
+.lotrd-clash { animation: lotrd-clash .9s ease-out both }
+@keyframes lotrd-in { 0% { opacity: 0; transform: translateY(6px) } 100% { opacity: 1; transform: none } }
+.lotrd-in { animation: lotrd-in .3s ease-out both }
+@keyframes lotrd-emblem { 0% { transform: scale(.4) rotate(-20deg); opacity: 0 } 60% { transform: scale(1.15) rotate(4deg); opacity: 1 } 100% { transform: scale(1) } }
+.lotrd-emblem { animation: lotrd-emblem .9s cubic-bezier(.2,.9,.2,1) both }
+`;
+
+const panel = "rounded-2xl border border-white/10 bg-white/[0.04] p-3 light:border-slate-200 light:bg-white light:shadow-sm";
+const h3 = "mb-2 text-[11px] font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
+
+interface Props {
+  state: LotrDuelState;
+  viewerSeat: Seat;
+  names: Record<Seat, string>;
+  opponentConnected: boolean;
+  onAction: (action: EngineAction) => void;
+  onLeave: () => void;
+  onRematch: () => void;
+  onOpenRulebook: () => void;
+}
+
+function stepText(step: PendingStep): string {
+  switch (step.kind) {
+    case "PLACE":
+      return `유닛 ${step.count}개를 배치할 지역을 고르세요 (${step.regions.length === REGIONS.length ? "어느 지역이든" : step.regions.map((r) => REGION_INFO[r].name).join(" / ")})`;
+    case "MOVE":
+      return `유닛 이동 (남은 ${step.remaining}회) — 출발 지역 → 인접 도착 지역 순으로 고르세요`;
+    case "SNIPE":
+      return `제거할 적 유닛이 있는 지역을 고르세요 (남은 ${step.count}개)`;
+    case "DESTROY_FORTRESS":
+      return "파괴할 적 요새를 고르세요";
+    case "DESTROY_GRAY":
+      return "파괴할 상대의 회색(기술) 카드를 고르세요";
+    case "DISCARD_PLAY":
+      return "버린 카드 더미에서 무료로 내려놓을 카드 1장을 고르세요";
+    case "TOKEN_RACE":
+      return "동맹 토큰을 볼 종족 더미를 고르세요";
+    case "TOKEN":
+      return "공개된 동맹 토큰 중 1개를 가져가세요";
+    case "ENT_CHOICE":
+      return `엔트 행진 — 효과를 고르세요 (남은 ${step.remaining}번)`;
+  }
+}
+
+export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnected, onAction, onLeave, onRematch, onOpenRulebook }: Props) {
+  const myFaction = state.factionOf[viewerSeat];
+  const oppFaction = otherFaction(myFaction);
+  const oppSeat: Seat = viewerSeat === "p1" ? "p2" : "p1";
+  const nameOf = (f: Faction) => (f === myFaction ? names[viewerSeat] : names[oppSeat]);
+  const me = state.players[myFaction];
+
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  const [moveFrom, setMoveFrom] = useState<RegionId | null>(null);
+  const [victoryClosed, setVictoryClosed] = useState(false);
+  // Clear local selections whenever the game moves on (derived during render, no effect).
+  const [seenTurn, setSeenTurn] = useState(`${state.turnNumber}:${state.pending.length}:${state.seed}`);
+  const turnKey = `${state.turnNumber}:${state.pending.length}:${state.seed}`;
+  if (seenTurn !== turnKey) {
+    setSeenTurn(turnKey);
+    setSelectedSlot(null);
+    setMoveFrom(null);
+    if (state.phase === "PLAYING") setVictoryClosed(false);
+  }
+
+  const myTurn = state.phase === "PLAYING" && state.turn === myFaction;
+  const front = state.pending[0];
+  const act = (a: EngineAction) => {
+    lotrSfx.select();
+    onAction(a);
+  };
+
+  // ---- sound cues ----
+  const prev = useRef(state);
+  useEffect(() => {
+    const p = prev.current;
+    prev.current = state;
+    if (p === state) return;
+    if (state.combatFlash && state.combatFlash.no !== p.combatFlash?.no) lotrSfx.battle();
+    else if (state.lastAction && state.lastAction.no !== p.lastAction?.no) lotrSfx.pick();
+    if (state.ringTrack.frodoPosition !== p.ringTrack.frodoPosition || state.ringTrack.nazgulPosition !== p.ringTrack.nazgulPosition) lotrSfx.escape();
+    if (state.phase === "GAME_OVER" && p.phase !== "GAME_OVER") window.setTimeout(() => (state.winner === myFaction ? lotrSfx.victory() : lotrSfx.defeat()), 500);
+    else if (state.phase === "PLAYING" && state.turn === myFaction && p.turn !== myFaction) lotrSfx.myTurn();
+  }, [state, myFaction]);
+
+  // ---- map targets for region-based pending steps ----
+  const targets = new Set<RegionId>();
+  if (myTurn && front) {
+    if (front.kind === "PLACE") front.regions.forEach((r) => targets.add(r));
+    else if (front.kind === "MOVE") {
+      if (moveFrom) {
+        ADJACENCY[moveFrom].forEach((r) => targets.add(r));
+        targets.add(moveFrom);
+      } else REGIONS.filter((r) => unitsOf(state.boardRegions[r], myFaction) > 0).forEach((r) => targets.add(r));
+    } else if (front.kind === "SNIPE") REGIONS.filter((r) => unitsOf(state.boardRegions[r], oppFaction) > 0).forEach((r) => targets.add(r));
+    else if (front.kind === "DESTROY_FORTRESS") REGIONS.filter((r) => fortressOf(state.boardRegions[r], oppFaction)).forEach((r) => targets.add(r));
+  }
+  function onRegion(r: RegionId) {
+    if (!myTurn || !front) return;
+    if (front.kind === "PLACE") act({ type: "PLACE", faction: myFaction, region: r });
+    else if (front.kind === "SNIPE") act({ type: "SNIPE", faction: myFaction, region: r });
+    else if (front.kind === "DESTROY_FORTRESS") act({ type: "DESTROY_FORTRESS", faction: myFaction, region: r });
+    else if (front.kind === "MOVE") {
+      if (!moveFrom) setMoveFrom(r);
+      else if (r === moveFrom) setMoveFrom(null);
+      else {
+        lotrSfx.move();
+        onAction({ type: "MOVE", faction: myFaction, from: moveFrom, to: r });
+        setMoveFrom(null);
+      }
+    }
+  }
+
+  const open = new Set(availableSlots(state));
+  const selected = selectedSlot !== null && open.has(selectedSlot) ? state.pyramidGrid[selectedSlot] : null;
+  const selectedCost = selected ? calculateCardCost(me, selected.card) : null;
+
+  // ---- pyramid geometry (half-card units) ----
+  const rows = Math.max(...state.pyramidGrid.map((s) => s.row)) + 1;
+  const maxX = Math.max(...state.pyramidGrid.map((s) => Math.abs(s.x)));
+  const span = (maxX + 1) * 2; // in half-card units
+  const cardW = 2 / span; // fraction of width
+  const cardH = cardW * 1.42;
+  const rowStep = cardH * 0.52;
+  const totalH = (rows - 1) * rowStep + cardH;
+
+  const { frodoPosition: fr, nazgulPosition: nz, trackLength: L } = state.ringTrack;
+  const winnerIsMe = state.winner === myFaction;
+
+  return (
+    <div className="flex flex-col gap-3 text-white light:text-slate-900">
+      <style>{KEYFRAMES}</style>
+
+      {/* ---- header HUD ---- */}
+      <div className={`${panel} flex flex-wrap items-center gap-x-4 gap-y-2 bg-gradient-to-r from-amber-900/20 to-transparent`}>
+        <span className="rounded-lg bg-amber-500/20 px-2 py-1 text-sm font-bold text-amber-200 light:text-amber-800">📖 {state.chapter}챕터</span>
+        <span className="text-sm">
+          {state.phase === "GAME_OVER" ? (
+            <b>게임 종료</b>
+          ) : myTurn ? (
+            <b className="text-emerald-300 light:text-emerald-700">내 차례 ({FACTION_EMOJI[myFaction]} {FACTION_LABEL[myFaction]})</b>
+          ) : (
+            <span className="text-white/60 light:text-slate-500">
+              {nameOf(state.turn)}의 차례 ({FACTION_EMOJI[state.turn]} {FACTION_LABEL[state.turn]})
+            </span>
+          )}
+        </span>
+        <span className="text-xs text-white/60 light:text-slate-600">
+          지역 지배 💍 {controlledCount(state, "FELLOWSHIP")}/7 · 👁️ {controlledCount(state, "SAURON")}/7
+        </span>
+        <span className="text-xs text-white/60 light:text-slate-600">
+          원정 🧝 {fr}/{L} · 🐉 {nz} (간격 {fr - nz})
+        </span>
+        <span className="ml-auto flex items-center gap-2">
+          {!opponentConnected && <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[11px] text-rose-200">상대 연결 끊김</span>}
+          <button onClick={onOpenRulebook} className="rounded-full border border-white/15 px-3 py-1 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600">
+            📖 룰북
+          </button>
+        </span>
+      </div>
+
+      {/* ---- action prompt ---- */}
+      <ActionPrompt state={state} myFaction={myFaction} myTurn={myTurn} front={front} moveFrom={moveFrom} opponentName={nameOf(oppFaction)} act={act} />
+
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,0.9fr)]">
+        {/* ---- map ---- */}
+        <div className="order-2 flex flex-col gap-2 lg:order-1">
+          <p className={h3}>가운데땅 지도</p>
+          <MiddleEarthMap state={state} targets={targets} selectedFrom={moveFrom} onRegion={onRegion} />
+          <p className="text-[11px] text-white/40 light:text-slate-500">
+            🟡 원정대 유닛 · ⚫ 사우론 유닛 · 🏰/🏯 요새 (전투로 파괴되지 않음). 같은 지역에 양측 유닛이 모이면 1:1로 동시에 사라집니다.
+          </p>
+        </div>
+
+        {/* ---- pyramid ---- */}
+        <div className="order-1 flex flex-col gap-2 lg:order-2">
+          <p className={h3}>
+            {state.chapter}챕터 카드 피라미드 · 남은 {state.pyramidGrid.filter((s) => !s.isTaken).length}장
+          </p>
+          <div className="relative w-full" style={{ aspectRatio: `${1} / ${totalH}` }}>
+            {state.pyramidGrid.map((slot, i) => {
+              if (slot.isTaken) return null;
+              const available = open.has(i);
+              const aff = calculateCardCost(me, slot.card).canAfford;
+              return (
+                <div
+                  key={slot.card.id}
+                  className="absolute"
+                  style={{
+                    left: `${((slot.x - 1 + span / 2) / span) * 100}%`,
+                    top: `${((slot.row * rowStep) / totalH) * 100}%`,
+                    width: `${cardW * 100}%`,
+                    height: `${(cardH / totalH) * 100}%`,
+                    zIndex: selectedSlot === i ? 30 : slot.row + 1,
+                    padding: "1.5%",
+                  }}
+                >
+                  <CardFace
+                    card={slot.isOpen ? slot.card : null}
+                    faceDown={!slot.isOpen}
+                    chapter={state.chapter}
+                    available={available && myTurn && !front}
+                    affordable={aff}
+                    selected={selectedSlot === i}
+                    onClick={() => setSelectedSlot(selectedSlot === i ? null : i)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          {selected && selectedCost && myTurn && !front && (
+            <div className={`${panel} lotrd-in flex flex-col gap-2 border-amber-400/40`}>
+              <div className="flex items-start gap-3">
+                <div className="h-24 w-[68px] shrink-0">
+                  <CardFace card={selected.card} available chapter={state.chapter} affordable={selectedCost.canAfford} />
+                </div>
+                <div className="min-w-0 text-sm">
+                  <p className="font-bold">
+                    {selected.card.name} <span className="text-xs font-normal text-white/50 light:text-slate-500">({COLOR_INFO[selected.card.color].name})</span>
+                  </p>
+                  <p className="text-xs text-white/70 light:text-slate-600">{describeCard(selected.card)}</p>
+                  <p className="mt-1 text-xs text-white/60 light:text-slate-500">
+                    비용: <CostChips card={selected.card} />
+                    {selected.card.providesChain && <span className="ml-2">연계 제공 {CHAIN_INFO[selected.card.providesChain]}</span>}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  disabled={!selectedCost.canAfford}
+                  onClick={() => act({ type: "TAKE_CARD", faction: myFaction, slot: selectedSlot!, mode: "PLAY" })}
+                  className="flex-1 rounded-xl bg-amber-500 py-2 text-sm font-semibold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
+                >
+                  {selectedCost.viaChain ? "🔗 연계로 무료 내려놓기" : selectedCost.canAfford ? `내려놓기 (${selectedCost.costInCoins}주화)` : `주화 부족 (${selectedCost.costInCoins} 필요)`}
+                </button>
+                <button
+                  onClick={() => act({ type: "TAKE_CARD", faction: myFaction, slot: selectedSlot!, mode: "DISCARD" })}
+                  className="flex-1 rounded-xl border border-white/20 py-2 text-sm font-semibold text-white/80 hover:border-white/40 light:border-slate-300 light:text-slate-700"
+                >
+                  버리기 (+{discardValue(state, myFaction)}주화)
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ---- ring track + landmarks + log ---- */}
+        <div className="order-3 flex flex-col gap-3">
+          <div className={panel}>
+            <p className={h3}>반지 원정 트랙</p>
+            <div className="grid grid-cols-4 gap-1">
+              {[0, 1, 2, 3].map((piece) => (
+                <div key={piece} className="grid grid-cols-4 gap-px rounded-md border border-amber-800/40 bg-amber-950/30 p-0.5 light:bg-amber-50">
+                  {Array.from({ length: 4 }, (_, k) => {
+                    const pos = piece * 4 + k;
+                    if (pos > L) return <div key={k} />;
+                    return (
+                      <div
+                        key={k}
+                        className={`relative flex aspect-square flex-col items-center justify-center rounded-sm text-[10px] leading-none ${pos === L ? "bg-red-900/60" : pos < FRODO_START ? "bg-black/30" : "bg-white/5"}`}
+                        title={pos === L ? "운명의 산" : `${pos}`}
+                      >
+                        {pos === L && <span>🌋</span>}
+                        {pos === fr && <span className="text-sm drop-shadow-[0_0_4px_gold]">🧝</span>}
+                        {pos === nz && <span className="text-sm drop-shadow-[0_0_4px_red]">🐉</span>}
+                        {pos !== L && pos !== fr && pos !== nz && <span className="text-white/20 light:text-slate-400">{pos}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-white/55 light:text-slate-600">
+              🧝 프로도 & 샘이 🌋 운명의 산({L})에 닿으면 원정대 즉시 승리 · 🐉 나즈굴이 따라잡으면 사우론 즉시 승리. 파란 카드의 💍는 <b>내 말</b>을 전진시킵니다.
+            </p>
+          </div>
+
+          <div className={panel}>
+            <p className={h3}>랜드마크 (공개 {state.revealedLandmarks.length}장 · 더미 {state.landmarkDeck.length})</p>
+            <div className="flex flex-col gap-1.5">
+              {state.revealedLandmarks.length === 0 && <p className="text-xs text-white/40">이번 챕터엔 남은 랜드마크가 없습니다. 챕터가 끝나면 3장으로 채워집니다.</p>}
+              {state.revealedLandmarks.map((tile) => {
+                const cost = calculateLandmarkCost(state, myFaction, tile);
+                return (
+                  <div key={tile.id} className="flex items-center gap-2 rounded-xl border border-amber-700/30 bg-gradient-to-r from-amber-900/25 to-transparent p-2 light:bg-amber-50">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold">
+                        🏰 {tile.name} <span className="text-[11px] font-normal text-white/50 light:text-slate-500">{REGION_INFO[tile.targetRegion].name}</span>
+                      </p>
+                      <p className="text-[11px] text-white/65 light:text-slate-600">{tile.description}</p>
+                      <p className="text-[11px] text-white/50 light:text-slate-500">
+                        기본 🪙{tile.baseCost.coins}
+                        {tile.baseCost.tech?.map((s) => TECH_INFO[s].emoji).join("")} + 내 요새당 🪙1 → 지금 <b>{cost.costInCoins}주화</b>
+                      </p>
+                    </div>
+                    {myTurn && !front && (
+                      <button
+                        disabled={!cost.canAfford}
+                        onClick={() => act({ type: "TAKE_LANDMARK", faction: myFaction, landmarkId: tile.id })}
+                        className="shrink-0 rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-bold text-black hover:bg-amber-400 disabled:bg-white/10 disabled:text-white/35"
+                      >
+                        건설
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className={`${panel} max-h-48 overflow-y-auto`}>
+            <p className={h3}>기록</p>
+            <ul className="flex flex-col gap-0.5 text-[11px] text-white/65 light:text-slate-600">
+              {[...state.log].reverse().slice(0, 14).map((e) => (
+                <li key={e.no} className={e.faction === "FELLOWSHIP" ? "text-amber-200/90 light:text-amber-800" : e.faction === "SAURON" ? "text-rose-200/80 light:text-rose-800" : ""}>
+                  {e.faction ? FACTION_EMOJI[e.faction] : "•"} {e.text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* ---- bottom dock ---- */}
+      <div className="grid gap-3 md:grid-cols-2">
+        <PlayerDock state={state} faction={myFaction} label={`나 · ${names[viewerSeat]}`} highlight />
+        <PlayerDock state={state} faction={oppFaction} label={`상대 · ${names[oppSeat]}`} />
+      </div>
+
+      {state.phase === "GAME_OVER" && state.winner && !victoryClosed && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="lotrd-in w-full max-w-sm rounded-3xl border border-amber-400/40 bg-gradient-to-b from-[#221a0c] to-[#0b0906] p-6 text-center text-white shadow-[0_0_60px_rgba(251,191,36,.25)]">
+            <div className="lotrd-emblem text-6xl">{state.winner === "FELLOWSHIP" ? "💍" : "👁️"}</div>
+            <p className="mt-3 text-xl font-black">{winnerIsMe ? "승리!" : "패배"}</p>
+            <p className="mt-1 text-sm text-amber-200">
+              {FACTION_LABEL[state.winner]} — {state.winType ? WIN_TEXT[state.winType] : ""}
+            </p>
+            <p className="mt-2 text-xs text-white/50">
+              지역 {controlledCount(state, "FELLOWSHIP")} : {controlledCount(state, "SAURON")} · 원정 🧝{fr} 🐉{nz} · 종족 {raceSymbols(state.players.FELLOWSHIP).size} : {raceSymbols(state.players.SAURON).size}
+            </p>
+            <div className="mt-5 flex gap-2">
+              <button onClick={onRematch} className="flex-1 rounded-xl bg-amber-500 py-2.5 text-sm font-bold text-black hover:bg-amber-400">
+                재대결 (진영 교대)
+              </button>
+              <button onClick={onLeave} className="flex-1 rounded-xl border border-white/20 py-2.5 text-sm text-white/80 hover:border-white/40">
+                나가기
+              </button>
+            </div>
+            <button onClick={() => setVictoryClosed(true)} className="mt-3 text-xs text-white/40 hover:text-white/70">
+              보드 보기
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActionPrompt({
+  state,
+  myFaction,
+  myTurn,
+  front,
+  moveFrom,
+  opponentName,
+  act,
+}: {
+  state: LotrDuelState;
+  myFaction: Faction;
+  myTurn: boolean;
+  front: PendingStep | undefined;
+  moveFrom: RegionId | null;
+  opponentName: string;
+  act: (a: EngineAction) => void;
+}) {
+  if (state.phase !== "PLAYING") return null;
+  const opp = otherFaction(myFaction);
+  if (!myTurn) {
+    return (
+      <div className={`${panel} text-sm text-white/60 light:text-slate-600`}>
+        ⏳ {opponentName}이(가) {front ? `선택 중 — ${stepText(front)}` : "카드나 랜드마크를 고르는 중입니다."}
+      </div>
+    );
+  }
+  if (!front) {
+    return (
+      <div className={`${panel} border-emerald-400/40 text-sm`}>
+        <b className="text-emerald-300 light:text-emerald-700">내 차례</b> — 피라미드에서 앞면이 드러난(🟢 초록 점 = 지불 가능) 카드를 골라 내려놓거나 버리고, 또는 랜드마크를 건설하세요.
+        {state.extraTurn && <span className="ml-2 rounded bg-amber-500/25 px-1.5 text-xs text-amber-200">이번 턴 후 추가 턴</span>}
+      </div>
+    );
+  }
+  const btn = "rounded-lg border border-white/20 bg-white/5 px-2.5 py-1.5 text-xs font-semibold hover:border-amber-300 light:border-slate-300 light:bg-white";
+  return (
+    <div className={`${panel} lotrd-in flex flex-col gap-2 border-amber-400/50 bg-amber-500/10`}>
+      <p className="text-sm">
+        <span className="mr-1 rounded bg-amber-500/30 px-1.5 text-xs">{front.source}</span>
+        <b>{stepText(front)}</b>
+        {front.kind === "MOVE" && moveFrom && <span className="ml-1 text-xs text-amber-200">출발: {REGION_INFO[moveFrom].name}</span>}
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {front.kind === "PLACE" &&
+          front.regions.map((r) => (
+            <button key={r} className={btn} onClick={() => act({ type: "PLACE", faction: myFaction, region: r })}>
+              {REGION_INFO[r].name}
+            </button>
+          ))}
+        {front.kind === "SNIPE" &&
+          REGIONS.filter((r) => unitsOf(state.boardRegions[r], opp) > 0).map((r) => (
+            <button key={r} className={btn} onClick={() => act({ type: "SNIPE", faction: myFaction, region: r })}>
+              🎯 {REGION_INFO[r].name} ({unitsOf(state.boardRegions[r], opp)})
+            </button>
+          ))}
+        {front.kind === "DESTROY_FORTRESS" &&
+          REGIONS.filter((r) => fortressOf(state.boardRegions[r], opp)).map((r) => (
+            <button key={r} className={btn} onClick={() => act({ type: "DESTROY_FORTRESS", faction: myFaction, region: r })}>
+              🌳 {REGION_INFO[r].name} 요새
+            </button>
+          ))}
+        {front.kind === "MOVE" && (
+          <>
+            <span className="self-center text-xs text-white/60 light:text-slate-500">지도에서 출발 → 도착 지역을 누르세요.</span>
+            <button className={btn} onClick={() => act({ type: "SKIP", faction: myFaction })}>
+              이동 종료
+            </button>
+          </>
+        )}
+        {front.kind === "DESTROY_GRAY" &&
+          state.players[opp].tableauCards
+            .filter((c) => c.color === "GRAY")
+            .map((c) => (
+              <button key={c.id} className={btn} onClick={() => act({ type: "DESTROY_GRAY", faction: myFaction, cardId: c.id })}>
+                🔥 {c.name} {cardGlyph(c)}
+              </button>
+            ))}
+        {front.kind === "DISCARD_PLAY" &&
+          state.discardedCards.map((c) => (
+            <button key={c.id} className={`${btn} ${COLOR_STYLE[c.color].chip}`} onClick={() => act({ type: "DISCARD_PLAY", faction: myFaction, cardId: c.id })} title={describeCard(c)}>
+              {cardGlyph(c)} {c.name}
+            </button>
+          ))}
+        {front.kind === "TOKEN_RACE" &&
+          RACES.filter((r) => state.allianceTokenDecks[r].length > 0).map((r) => (
+            <button key={r} className={btn} onClick={() => act({ type: "PICK_RACE", faction: myFaction, race: r })}>
+              {RACE_INFO[r].emoji} {RACE_INFO[r].name} ({state.allianceTokenDecks[r].length})
+            </button>
+          ))}
+        {front.kind === "TOKEN" &&
+          tokenOptions(state, front).map((id) => {
+            const t = TOKENS[id];
+            return (
+              <button key={id} className={`${btn} max-w-[15rem] text-left`} onClick={() => act({ type: "PICK_TOKEN", faction: myFaction, tokenId: id })}>
+                <span className="block">
+                  {RACE_INFO[t.race].emoji} {t.name} <span className="text-[10px] text-white/50">{t.isOneShot ? "즉시 1회" : "지속"}</span>
+                </span>
+                <span className="block text-[11px] font-normal text-white/65 light:text-slate-600">{t.description}</span>
+              </button>
+            );
+          })}
+        {front.kind === "ENT_CHOICE" && (
+          <>
+            <button className={btn} onClick={() => act({ type: "ENT_PICK", faction: myFaction, option: "SNIPE" })}>
+              🎯 적 유닛 1개 제거
+            </button>
+            <button className={btn} onClick={() => act({ type: "ENT_PICK", faction: myFaction, option: "DRAIN" })}>
+              🪙 상대 주화 1개 차감
+            </button>
+            <button className={btn} onClick={() => act({ type: "ENT_PICK", faction: myFaction, option: "MOVE" })}>
+              👣 유닛 이동 1회
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlayerDock({ state, faction, label, highlight }: { state: LotrDuelState; faction: Faction; label: string; highlight?: boolean }) {
+  const p = state.players[faction];
+  const { fixed, choices, wild } = techProduction(p);
+  const races = raceSymbols(p);
+  const raceCount = (r: string) => p.tableauCards.filter((c) => c.color === "GREEN" && c.race === r).length;
+  const colorCounts = p.tableauCards.reduce<Record<string, number>>((m, c) => ({ ...m, [c.color]: (m[c.color] ?? 0) + 1 }), {});
+  const chains = [...new Set(p.tableauCards.map((c) => c.providesChain).filter((x): x is string => !!x))];
+  return (
+    <div className={`${panel} ${highlight ? "border-amber-400/30" : ""} ${state.turn === faction && state.phase === "PLAYING" ? "ring-1 ring-emerald-400/50" : ""}`}>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <b className="text-sm">
+          {FACTION_EMOJI[faction]} {FACTION_LABEL[faction]}
+        </b>
+        <span className="text-xs text-white/50 light:text-slate-500">{label}</span>
+        <span className="ml-auto flex gap-2 text-sm font-bold">
+          <span title="주화">🪙 {p.coins}</span>
+          <span title="보급처 유닛" className="text-white/70 light:text-slate-600">
+            🪖 {p.unitsInSupply}
+          </span>
+          <span title="보급처 요새" className="text-white/70 light:text-slate-600">
+            🏰 {p.fortressesInSupply}
+          </span>
+        </span>
+      </div>
+      <div className="flex flex-col gap-1.5 text-xs">
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="w-14 shrink-0 text-white/45 light:text-slate-500">기술</span>
+          {TECHS.filter((s) => fixed[s] > 0).map((s) => (
+            <span key={s} className="rounded bg-slate-500/25 px-1.5 py-0.5" title={TECH_INFO[s].name}>
+              {TECH_INFO[s].emoji}×{fixed[s]}
+            </span>
+          ))}
+          {choices.map((c, i) => (
+            <span key={i} className="rounded bg-slate-500/25 px-1.5 py-0.5" title="매 턴 둘 중 하나">
+              {c.map((s) => TECH_INFO[s].emoji).join("/")}
+            </span>
+          ))}
+          {wild > 0 && <span className="rounded bg-slate-500/25 px-1.5 py-0.5">⛏️아무거나</span>}
+          {TECHS.every((s) => fixed[s] === 0) && choices.length === 0 && wild === 0 && <span className="text-white/30">없음 (부족분 1개당 1주화)</span>}
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="w-14 shrink-0 text-white/45 light:text-slate-500">종족 {races.size}/6</span>
+          {RACES.map((r) => (
+            <span
+              key={r}
+              title={RACE_INFO[r].name}
+              className={`rounded px-1 py-0.5 ${races.has(r) ? "bg-emerald-500/30 text-white" : "bg-white/5 opacity-35 grayscale"} ${p.pairRacesClaimed.includes(r) ? "ring-1 ring-emerald-300" : ""}`}
+            >
+              {RACE_INFO[r].emoji}
+              {raceCount(r) > 1 ? raceCount(r) : ""}
+            </span>
+          ))}
+          {races.has("EAGLE") && <span className="rounded bg-sky-500/30 px-1 py-0.5">🦅</span>}
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="w-14 shrink-0 text-white/45 light:text-slate-500">카드</span>
+          {(["GRAY", "GREEN", "RED", "YELLOW", "BLUE", "PURPLE"] as const).map((c) =>
+            colorCounts[c] ? (
+              <span key={c} className={`rounded px-1.5 py-0.5 ${COLOR_STYLE[c].chip}`}>
+                {COLOR_INFO[c].emoji}
+                {colorCounts[c]}
+              </span>
+            ) : null,
+          )}
+          {chains.length > 0 && <span className="text-white/60">🔗{chains.map((c) => CHAIN_INFO[c]).join("")}</span>}
+        </div>
+        {(p.allianceTokens.length > 0 || p.constructedLandmarks.length > 0) && (
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="w-14 shrink-0 text-white/45 light:text-slate-500">동맹</span>
+            {p.allianceTokens.map((t) => (
+              <span key={t.id} title={t.description} className={`rounded px-1.5 py-0.5 ${t.isOneShot ? "bg-white/5 text-white/50" : "bg-amber-500/20 text-amber-100 light:text-amber-800"}`}>
+                {RACE_INFO[t.race].emoji} {t.name}
+              </span>
+            ))}
+            {p.constructedLandmarks.map((l) => (
+              <span key={l.id} className="rounded bg-white/10 px-1.5 py-0.5" title={l.description}>
+                🏰 {l.name}
+              </span>
+            ))}
+          </div>
+        )}
+        <p className="text-[11px] text-white/40 light:text-slate-500">
+          주둔 지역 {controlledCount(state, faction)}/7 · 보드 유닛 {REGIONS.reduce((n, r) => n + unitsOf(state.boardRegions[r], faction), 0)}
+        </p>
+      </div>
+    </div>
+  );
+}

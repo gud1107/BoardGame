@@ -299,11 +299,12 @@ export default function GamePlayPage() {
   // `AvalonRoleGuideSidebar`와 동일한 데스크톱 고정폭 사이드바 패턴.
   // 2026-09-25 스플렌더 대결: 좌측 승리 조건 패널 + 가운데 보석 보드|카드
   // 마켓 2열 + 우측 초보자 가이드 패널까지 4열이라 7xl. 2026-09-25 반지의 제왕:
-  // 대결: 데스크톱에서 가운데땅 지도 | 상태·손패 패널 2열이라 5xl.
+  // 가운데땅에서의 대결(Duel for Middle-earth 재구축): 지도 | 카드 피라미드 |
+  // 원정 트랙·랜드마크 3열이라 스플렌더 대결과 같은 7xl.
   const pageMaxWidth =
-    game.id === "splendor-duel"
+    game.id === "splendor-duel" || game.id === "lotr-duel"
       ? "max-w-7xl"
-      : game.id === "summoners-rift" || game.id === "avalon" || game.id === "dalmuti" || game.id === "mafia" || game.id === "lotr-confrontation"
+      : game.id === "summoners-rift" || game.id === "avalon" || game.id === "dalmuti" || game.id === "mafia"
         ? "max-w-5xl"
       : game.id === "destiny-war-39"
         ? "max-w-6xl"

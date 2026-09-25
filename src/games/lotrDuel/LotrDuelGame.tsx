@@ -12,8 +12,8 @@ import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import { chooseBotAction } from "./bot";
-import { applyAction, otherSeat, pendingFactions, seatOf, startGame, type EngineAction, type Faction, type LotrState, type Seat } from "./engine";
-import LotrConfrontationBoard from "./LotrConfrontationBoard";
+import { applyAction, otherSeat, pendingFactions, seatOf, startGame, type EngineAction, type Faction, type LotrDuelState, type Seat } from "./engine";
+import LotrDuelBoard from "./LotrDuelBoard";
 import LotrRulebookModal from "./RulebookModal";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
@@ -39,11 +39,9 @@ import {
  * plays the Fellowship, both clients build the identical state (`startGame`),
  * and every move replays through the pure reducer.
  *
- * Unlike the strictly turn-based games, two steps here are simultaneous
- * (secret setup, blind card pick), so both seats may broadcast at once. The
- * engine makes those actions commutative — see engine.ts's header — and the
- * bot scheduler below prefers a bot seat whenever both are pending, so a
- * waiting human never blocks the AI.
+ * Strictly turn-based: only `state.turn` acts, including every pending
+ * choice (unit placement, moves, token picks), so exactly one seat is ever
+ * pending.
  *
  * Same scope as Splendor Duel: bot seats, vote-based bot takeover on
  * disconnect/idle, leave guard, background resync and the lobby active-room
@@ -65,23 +63,22 @@ function generateRoomCode(): string {
 }
 
 function getStoredRole(code: string): Seat | null {
-  const v = window.localStorage.getItem(`lotr-confrontation-role-${code}`);
+  const v = window.localStorage.getItem(`lotr-duel-role-${code}`);
   return v === "p1" || v === "p2" ? v : null;
 }
 
 function storeRole(code: string, role: Seat) {
-  window.localStorage.setItem(`lotr-confrontation-role-${code}`, role);
+  window.localStorage.setItem(`lotr-duel-role-${code}`, role);
 }
 
 type HostFaction = Faction | "RANDOM";
 
-/** Seats the game is waiting on, bot seats first (see the module doc). */
-function pendingSeats(state: LotrState, botSeats: ReadonlySet<Seat>): Seat[] {
-  const seats = pendingFactions(state).map((f) => seatOf(state, f));
-  return [...seats.filter((s) => botSeats.has(s)), ...seats.filter((s) => !botSeats.has(s))];
+/** The one seat the game is waiting on, if any. */
+function pendingSeats(state: LotrDuelState): Seat[] {
+  return pendingFactions(state).map((f) => seatOf(state, f));
 }
 
-export default function LotrConfrontationGame({ onComplete }: PlayableGameProps) {
+export default function LotrDuelGame({ onComplete }: PlayableGameProps) {
   const [roomFromUrl] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("room");
@@ -101,7 +98,7 @@ export default function LotrConfrontationGame({ onComplete }: PlayableGameProps)
   const [myName, setMyName] = useState("");
   const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
-  const [gameState, setGameState] = useState<LotrState | null>(null);
+  const [gameState, setGameState] = useState<LotrDuelState | null>(null);
 
   // Host-controlled AI bot roster (ARCHITECTURE.md §7) — same shape as every
   // other online game here. `botLevels[i]` is the Level 1–10 difficulty for
@@ -153,7 +150,7 @@ export default function LotrConfrontationGame({ onComplete }: PlayableGameProps)
   // Guards `onComplete` firing more than once for the same finished game.
   const completedRef = useRef(false);
 
-  const gameStateRef = useRef<LotrState | null>(null);
+  const gameStateRef = useRef<LotrDuelState | null>(null);
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
@@ -216,7 +213,7 @@ export default function LotrConfrontationGame({ onComplete }: PlayableGameProps)
     const supabase = getSupabase();
     if (!supabase) return;
     const deviceId = getDeviceId();
-    const channel = supabase.channel(`lotr-confrontation-room-${roomCode}`, {
+    const channel = supabase.channel(`lotr-duel-room-${roomCode}`, {
       config: { broadcast: { self: true }, presence: { key: deviceId } },
     });
     channelRef.current = channel;
@@ -292,7 +289,7 @@ export default function LotrConfrontationGame({ onComplete }: PlayableGameProps)
     });
 
     channel.on("broadcast", { event: "state-sync" }, ({ payload }) => {
-      const syncedState = payload?.state as LotrState | undefined;
+      const syncedState = payload?.state as LotrDuelState | undefined;
       if (!syncedState) return;
       const roster = (payload?.botRoles as Seat[] | undefined) ?? [];
       const levels = (payload?.botLevels as BotLevel[] | undefined) ?? [];
@@ -426,20 +423,15 @@ export default function LotrConfrontationGame({ onComplete }: PlayableGameProps)
   }, []);
 
   // Cheap synchronous heuristic (bot.ts) — no search deep enough to warrant a Web Worker.
-  const chooseAction = useCallback((state: LotrState, actor: Seat): EngineAction | null => {
+  const chooseAction = useCallback((state: LotrDuelState, actor: Seat): EngineAction | null => {
     const idx = botRolesRef.current.indexOf(actor);
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
     return chooseBotAction(state, state.factionOf[actor], level);
   }, []);
 
-  // Stable identity (reads the bot roster off a ref) so useBotAutoplay doesn't reschedule every render.
-  const allBotRoleSetRef = useRef<ReadonlySet<Seat>>(allBotRoleSet);
-  useEffect(() => {
-    allBotRoleSetRef.current = allBotRoleSet;
-  }, [allBotRoleSet]);
-  const lotrCurrentActor = useCallback((state: LotrState): Seat | null => pendingSeats(state, allBotRoleSetRef.current)[0] ?? null, []);
+  const lotrCurrentActor = useCallback((state: LotrDuelState): Seat | null => pendingSeats(state)[0] ?? null, []);
 
-  useBotAutoplay<LotrState, EngineAction, Seat>({
+  useBotAutoplay<LotrDuelState, EngineAction, Seat>({
     active: isHost && phase === "playing",
     state: gameState,
     currentActor: lotrCurrentActor,
@@ -495,7 +487,7 @@ export default function LotrConfrontationGame({ onComplete }: PlayableGameProps)
   // Report the finished game up to the betting/history layer the instant
   // every client's replayed state reaches `gameOver` — independent of
   // whether that viewer has dismissed the victory modal, so `onComplete`
-  // never depends on UI-only state. Rulebook §6: no draws are possible.
+  // never depends on UI-only state. The engine's tie-breaks (engine.ts `finalWinner`) mean there are no draws.
   useEffect(() => {
     if (!gameState || gameState.phase !== "GAME_OVER" || !gameState.winner || completedRef.current) return;
     completedRef.current = true;
@@ -552,10 +544,10 @@ export default function LotrConfrontationGame({ onComplete }: PlayableGameProps)
   const { exitConfirmOpen, cancelExit, confirmExit } = useGameLeaveGuard(roomCode !== null, handleLeave);
   useBackgroundResync(roomCode !== null, requestStateSync);
   // Desktop lobby dashboard "실시간 활성 대기실" panel (src/app/page.tsx) —
-  // best-effort, see useActiveRoomListing.ts. The Confrontation is a fixed 2-seat
+  // best-effort, see useActiveRoomListing.ts. Duel for Middle-earth is a fixed 2-seat
   // (p1/p2) game, so maxPlayers is always 2.
   useActiveRoomListing({
-    gameId: "lotr-confrontation",
+    gameId: "lotr-duel",
     roomCode,
     isHost,
     isWaiting: phase === "waiting",
@@ -580,7 +572,7 @@ export default function LotrConfrontationGame({ onComplete }: PlayableGameProps)
         <span className="text-3xl">⚠️</span>
         <h2 className="text-lg font-bold text-white">온라인 대전을 사용할 수 없어요</h2>
         <p className="max-w-sm text-sm text-amber-100/80">
-          반지의 제왕: 대결은 실시간 온라인 대전 전용이라 Supabase 설정이 필요합니다.{" "}
+          반지의 제왕: 가운데땅에서의 대결은 실시간 온라인 대전 전용이라 Supabase 설정이 필요합니다.{" "}
           <code className="mx-1 rounded bg-black/30 px-1.5 py-0.5 text-xs">.env.local</code>
           에{" "}
           <code className="rounded bg-black/30 px-1.5 py-0.5 text-xs">NEXT_PUBLIC_SUPABASE_URL</code> /{" "}
@@ -618,11 +610,11 @@ export default function LotrConfrontationGame({ onComplete }: PlayableGameProps)
   if (phase === "choose") {
     return withGuard(
       <RulebookGate
-        gameId="lotr-confrontation"
+        gameId="lotr-duel"
         containerClassName="border-white/10 bg-gradient-to-b from-[#15121c] via-[#0b0a10] to-black light:border-slate-200 light:bg-none light:bg-white"
         icon="💍"
-        title="반지의 제왕: 대결 온라인 대전"
-        description={<p className="text-sm text-white/50">원정대와 사우론, 두 사람이 각자 기기로 접속해 안개 속에 정체를 숨긴 채 대결해요.</p>}
+        title="반지의 제왕: 가운데땅에서의 대결"
+        description={<p className="text-sm text-white/50">원정대와 사우론, 두 사람이 각자 기기로 접속해 피라미드 카드 드래프트로 가운데땅의 운명을 겨뤄요.</p>}
         actions={
           <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
             <button
@@ -722,7 +714,7 @@ export default function LotrConfrontationGame({ onComplete }: PlayableGameProps)
             </div>
             {isHost ? (
               <div className="flex flex-col items-center gap-1.5">
-                <p className="text-xs text-white/50">내 진영 (원정대가 항상 선공)</p>
+                <p className="text-xs text-white/50">내 진영 (사우론이 항상 선공)</p>
                 <div className="flex gap-1.5">
                   {(
                     [
@@ -777,7 +769,7 @@ export default function LotrConfrontationGame({ onComplete }: PlayableGameProps)
             ))}
           </div>
         )}
-        <LotrConfrontationBoard
+        <LotrDuelBoard
           state={gameState}
           viewerSeat={myRole}
           names={names}
