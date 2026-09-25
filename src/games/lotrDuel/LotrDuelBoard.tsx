@@ -53,6 +53,10 @@ import type { RingTrackReward } from "./data";
  */
 
 const KEYFRAMES = `
+@keyframes lotrd-replay { 0%,100% { box-shadow: 0 0 10px rgba(251,191,36,.45) } 50% { box-shadow: 0 0 24px rgba(251,191,36,.95) } }
+.lotrd-replay { animation: lotrd-replay 1.6s ease-in-out infinite }
+@keyframes lotrd-anchor { 0%,100% { transform: translate(-50%, 0) } 50% { transform: translate(-50%, -4px) } }
+.lotrd-anchor { animation: lotrd-anchor 1.4s ease-in-out infinite }
 @keyframes lotrp-passive { 0%,100% { box-shadow: 0 0 6px var(--wax, rgba(251,191,36,.6)) } 50% { box-shadow: 0 0 18px 3px var(--wax, rgba(251,191,36,1)) } }
 .lotrp-passive { animation: lotrp-passive .8s ease-in-out infinite }
 @keyframes lotrp-gold { 0%,100% { box-shadow: 0 0 10px rgba(251,191,36,.45), inset 0 0 6px rgba(251,191,36,.2) } 50% { box-shadow: 0 0 26px rgba(251,191,36,.95), inset 0 0 14px rgba(251,191,36,.5) } }
@@ -159,6 +163,9 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
   const [moveFrom, setMoveFrom] = useState<RegionId | null>(null);
   const [victoryClosed, setVictoryClosed] = useState(false);
   const [choiceHidden, setChoiceHidden] = useState(false);
+  // Minimised (not cancelled) card / landmark choices — reopened from the floating anchor.
+  const [cardHidden, setCardHidden] = useState(false);
+  const [landmarkHidden, setLandmarkHidden] = useState(false);
   const [confirmLandmark, setConfirmLandmark] = useState<LandmarkTile["id"] | null>(null);
   // Clear local selections whenever the game moves on (derived during render, no effect).
   const [seenTurn, setSeenTurn] = useState(`${state.turnNumber}:${state.pending.length}:${state.seed}`);
@@ -168,6 +175,8 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
     setSelectedSlot(null);
     setMoveFrom(null);
     setChoiceHidden(false);
+    setCardHidden(false);
+    setLandmarkHidden(false);
     setConfirmLandmark(null);
     if (state.phase === "PLAYING") setVictoryClosed(false);
   }
@@ -392,6 +401,15 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
           원정 🧝 {fr}/{L} · 🐉 {nz} (간격 {fr - nz})
         </span>
         <span className="ml-auto flex items-center gap-2">
+          {state.phase === "GAME_OVER" && state.winner && victoryClosed && (
+            <button
+              type="button"
+              onClick={() => setVictoryClosed(false)}
+              className="lotrd-replay flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 px-3 py-1.5 text-xs font-black text-neutral-950 shadow-[0_0_15px_rgba(251,191,36,.6)] hover:scale-105"
+            >
+              🏆 승패 결과판 다시보기
+            </button>
+          )}
           <BgmControl />
           {!opponentConnected && <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[11px] text-rose-200">상대 연결 끊김</span>}
           <button onClick={onOpenRulebook} className="rounded-full border border-white/15 px-3 py-1 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600">
@@ -431,15 +449,27 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
           onMinimize={() => setChoiceHidden(true)}
         />
       )}
-      {myTurn && !front && confirmLandmark && state.revealedLandmarks.some((t) => t.id === confirmLandmark) && (
+      {myTurn && !front && confirmLandmark && !landmarkHidden && state.revealedLandmarks.some((t) => t.id === confirmLandmark) && (
         <LandmarkConfirmModal
           state={state}
           faction={myFaction}
           tile={state.revealedLandmarks.find((t) => t.id === confirmLandmark)!}
           onBuild={() => act({ type: "TAKE_LANDMARK", faction: myFaction, landmarkId: confirmLandmark })}
           onClose={() => setConfirmLandmark(null)}
+          onMinimize={() => setLandmarkHidden(true)}
         />
       )}
+      <ReopenAnchor
+        anchor={
+          myTurn && front && choiceHidden
+            ? { icon: front.kind === "TOKEN" || front.kind === "TOKEN_RACE" ? "📜" : "⚡", label: `선택 대기 중: ${PENDING_LABEL[front.kind]} 다시 열기`, tone: front.kind === "TOKEN" || front.kind === "TOKEN_RACE" ? "emerald" : "amber", onClick: () => setChoiceHidden(false) }
+            : myTurn && !front && selected && cardHidden
+              ? { icon: "📥", label: `선택한 「${selected.card.name}」 처리창 다시 열기`, tone: "amber", onClick: () => setCardHidden(false) }
+              : myTurn && !front && confirmLandmark && landmarkHidden
+                ? { icon: "🏰", label: `「${state.revealedLandmarks.find((t) => t.id === confirmLandmark)?.name ?? "랜드마크"}」 건설창 다시 열기`, tone: "amber", onClick: () => setLandmarkHidden(false) }
+                : null
+        }
+      />
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,0.9fr)]">
         {/* ---- map ---- */}
@@ -499,7 +529,8 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
                     selected={selectedSlot === i}
                     onClick={() => {
                       setPreviewMode("PLAY");
-                      setSelectedSlot(selectedSlot === i ? null : i);
+                      setCardHidden(false);
+                      setSelectedSlot(selectedSlot === i && !cardHidden ? null : i);
                     }}
                   />
                   </div>
@@ -521,7 +552,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
               </div>
             )}
           </div>
-          {selected && myTurn && !front && (
+          {selected && myTurn && !front && !cardHidden && (
             <CardChoiceModal
               key={selected.card.id}
               state={state}
@@ -530,6 +561,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
               onPlay={() => act({ type: "TAKE_CARD", faction: myFaction, slot: selectedSlot!, mode: "PLAY" })}
               onDiscard={() => act({ type: "TAKE_CARD", faction: myFaction, slot: selectedSlot!, mode: "DISCARD" })}
               onClose={() => setSelectedSlot(null)}
+              onMinimize={() => setCardHidden(true)}
               onPreview={setPreviewMode}
             />
           )}
@@ -611,7 +643,10 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
                     surcharge={cost.costInCoins - tile.baseCost.coins - missingTech(me, tile.baseCost.tech)}
                     canAfford={cost.canAfford}
                     canBuild={myTurn && !front}
-                    onBuild={() => setConfirmLandmark(tile.id)}
+                    onBuild={() => {
+                      setLandmarkHidden(false);
+                      setConfirmLandmark(tile.id);
+                    }}
                   />
                 );
               })}
@@ -977,4 +1012,39 @@ function previewFor(state: LotrDuelState, faction: Faction, card: LotrDuelCard, 
       return null;
   }
   return null;
+}
+
+const PENDING_LABEL: Record<PendingStep["kind"], string> = {
+  TOKEN: "종족 동맹 능력 선택창",
+  TOKEN_RACE: "종족 지원 더미 선택창",
+  PLACE: "유닛 배치 선택창",
+  MOVE: "유닛 이동 선택창",
+  SNIPE: "적 유닛 제거 선택창",
+  DESTROY_FORTRESS: "적 요새 파괴 선택창",
+  DESTROY_GRAY: "회색 카드 파괴 선택창",
+  DISCARD_PLAY: "버린 카드 선택창",
+  ENT_CHOICE: "엔트 행진 선택창",
+};
+
+/**
+ * Floating "reopen" anchor for a minimised modal — the choice itself is
+ * never cancelled by minimising, so this pulsing button (bottom-center,
+ * above the sticky HUD) brings the same modal back.
+ */
+function ReopenAnchor({ anchor }: { anchor: { icon: string; label: string; tone: "amber" | "emerald"; onClick: () => void } | null }) {
+  if (!anchor) return null;
+  return (
+    <button
+      type="button"
+      onClick={anchor.onClick}
+      className={`lotrd-anchor fixed bottom-28 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-2xl border-2 bg-neutral-950/95 px-4 py-2.5 text-xs font-bold shadow-2xl backdrop-blur-md sm:bottom-24 ${
+        anchor.tone === "emerald"
+          ? "border-emerald-400 text-emerald-200 shadow-[0_0_25px_rgba(52,211,153,.5)] hover:bg-emerald-950"
+          : "border-amber-400 text-amber-200 shadow-[0_0_22px_rgba(251,191,36,.5)] hover:bg-amber-950"
+      }`}
+    >
+      <span className="text-base">{anchor.icon}</span>
+      <span className="truncate">{anchor.label}</span>
+    </button>
+  );
 }

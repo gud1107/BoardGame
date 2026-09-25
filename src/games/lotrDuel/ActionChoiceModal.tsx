@@ -55,6 +55,7 @@ export function CenterModal({
   onClose,
   closeLabel = "닫기",
   backdrop = "strong",
+  secondary,
 }: {
   icon: ReactNode;
   title: string;
@@ -65,6 +66,8 @@ export function CenterModal({
   closeLabel?: string;
   /** "light" keeps the board readable behind the modal (for the card preview highlights). */
   backdrop?: "strong" | "light";
+  /** A second text action next to the close link (e.g. "선택 취소" when closing only minimises). */
+  secondary?: { label: string; onClick: () => void };
 }) {
   return (
     <div
@@ -87,10 +90,19 @@ export function CenterModal({
           {subtitle && <div className="mx-auto mt-1 mb-4 max-w-sm text-xs text-neutral-400">{subtitle}</div>}
           {children}
           {footer}
-          {onClose && (
-            <button type="button" onClick={onClose} className="mt-4 text-[11px] text-neutral-400 underline-offset-2 hover:text-neutral-200 hover:underline">
-              {closeLabel}
-            </button>
+          {(onClose || secondary) && (
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+              {onClose && (
+                <button type="button" onClick={onClose} className="text-[11px] text-neutral-300 underline-offset-2 hover:text-white hover:underline">
+                  {closeLabel}
+                </button>
+              )}
+              {secondary && (
+                <button type="button" onClick={secondary.onClick} className="text-[11px] text-neutral-500 underline-offset-2 hover:text-neutral-200 hover:underline">
+                  {secondary.label}
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -111,6 +123,7 @@ export function CardChoiceModal({
   onPlay,
   onDiscard,
   onClose,
+  onMinimize,
   onPreview,
 }: {
   state: LotrDuelState;
@@ -118,7 +131,10 @@ export function CardChoiceModal({
   card: LotrDuelCard;
   onPlay: () => void;
   onDiscard: () => void;
+  /** Cancels the selection. */
   onClose: () => void;
+  /** Hides the modal but keeps the card selected (reopen anchor on the board). */
+  onMinimize: () => void;
   /** Which choice the board should preview (hover/focus on a button); the board defaults to "PLAY". */
   onPreview?: (mode: "PLAY" | "DISCARD") => void;
 }) {
@@ -137,8 +153,9 @@ export function CardChoiceModal({
           <span className="mt-0.5 block text-[10px] text-amber-300/80">✨ 보드에서 빛나는 곳이 이 선택으로 바뀝니다</span>
         </>
       }
-      onClose={onClose}
-      closeLabel="취소하고 다른 카드 보기"
+      onClose={onMinimize}
+      closeLabel="🗺️ 잠시 보드 보기"
+      secondary={{ label: "선택 취소 (다른 카드 고르기)", onClick: onClose }}
       backdrop="light"
     >
       <div className="mx-auto aspect-[3/4] w-36" style={{ animation: "lotrc-zoom .45s cubic-bezier(.2,.9,.2,1) both" }}>
@@ -224,13 +241,31 @@ export function CardChoiceModal({
 // Landmark confirm
 // ---------------------------------------------------------------------------
 
-export function LandmarkConfirmModal({ state, faction, tile, onBuild, onClose }: { state: LotrDuelState; faction: Faction; tile: LandmarkTile; onBuild: () => void; onClose: () => void }) {
+export function LandmarkConfirmModal({
+  state,
+  faction,
+  tile,
+  onBuild,
+  onClose,
+  onMinimize,
+}: {
+  state: LotrDuelState;
+  faction: Faction;
+  tile: LandmarkTile;
+  onBuild: () => void;
+  onClose: () => void;
+  onMinimize: () => void;
+}) {
   const me = state.players[faction];
   const cost = calculateLandmarkCost(state, faction, tile);
   const missing = missingTech(me, tile.baseCost.tech);
   const surcharge = cost.costInCoins - tile.baseCost.coins - missing;
   return (
-    <CenterModal icon="🏰" title={`${tile.name} 요새 건설`} subtitle={`${REGION_INFO[tile.targetRegion].name}에 내 요새를 세웁니다`} onClose={onClose} closeLabel="취소">
+    <CenterModal icon="🏰" title={`${tile.name} 요새 건설`} subtitle={`${REGION_INFO[tile.targetRegion].name}에 내 요새를 세웁니다`}
+      onClose={onMinimize}
+      closeLabel="🗺️ 잠시 보드 보기"
+      secondary={{ label: "건설 취소", onClick: onClose }}
+    >
       <div className="mx-auto h-36 w-36 overflow-hidden rounded-2xl ring-2 ring-amber-300/60" style={{ animation: "lotrc-zoom .45s cubic-bezier(.2,.9,.2,1) both" }}>
         <FortressArt owner={faction} />
       </div>
@@ -423,7 +458,7 @@ export function PendingChoiceModal({ state, faction, step, act, onMinimize }: { 
         ) : null
       }
       onClose={onMinimize}
-      closeLabel="잠시 보드 보기"
+      closeLabel="🗺️ 잠시 보드 보기"
     >
       {body}
     </CenterModal>

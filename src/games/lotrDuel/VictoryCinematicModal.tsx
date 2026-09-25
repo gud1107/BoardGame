@@ -334,6 +334,14 @@ export default function VictoryCinematicModal({
         className="relative flex max-h-[92dvh] w-full max-w-xl flex-col overflow-y-auto rounded-3xl border-2 border-amber-500/60 bg-neutral-950/95 p-5 text-center text-white shadow-[0_0_80px_rgba(245,158,11,.3)]"
         style={{ animation: "lotrv-in .7s cubic-bezier(.2,.9,.2,1) both" }}
       >
+        <button
+          type="button"
+          onClick={onClose}
+          title="결과창을 닫고 최종 보드판 둘러보기 — 헤더의 🏆 버튼으로 다시 열 수 있어요"
+          className="absolute top-3 right-3 z-10 rounded-xl border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs text-neutral-300 hover:text-white"
+        >
+          ✕ 보드 보기
+        </button>
         <div className="flex justify-center">
           <span
             className={`rounded-full border px-4 py-1 text-xs font-black tracking-widest ${iWon ? "border-amber-400 bg-amber-500/20 text-amber-300" : "border-rose-500 bg-rose-500/20 text-rose-300"}`}
@@ -397,13 +405,14 @@ export default function VictoryCinematicModal({
           <button onClick={onRematch} className="flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 py-3 text-sm font-black text-neutral-950 shadow-lg hover:from-amber-400 hover:to-yellow-400">
             🔄 재대결 (진영 교대)
           </button>
-          <button onClick={onLeave} className="rounded-xl border border-neutral-700 bg-neutral-800 px-5 py-3 text-sm font-bold text-neutral-300 hover:bg-neutral-700">
+          <button onClick={onClose} className="rounded-xl border border-amber-500/40 bg-neutral-800 px-4 py-3 text-sm font-bold text-amber-300 hover:bg-neutral-700">
+            🗺️ 보드판 둘러보기
+          </button>
+          <button onClick={onLeave} className="rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm font-bold text-neutral-400 hover:text-white">
             나가기
           </button>
         </div>
-        <button onClick={onClose} className="mt-3 text-xs text-white/40 hover:text-white/70">
-          보드 보기
-        </button>
+        <p className="mt-2 text-[10px] text-neutral-500">창을 닫아도 상단의 🏆 버튼으로 언제든 다시 볼 수 있어요</p>
       </div>
     </div>
   );

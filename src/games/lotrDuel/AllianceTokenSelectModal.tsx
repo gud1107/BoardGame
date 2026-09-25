@@ -162,7 +162,7 @@ export default function AllianceTokenSelectModal({
 
           <p className="mt-4 text-[10px] text-neutral-500">※ 선택하지 않은 토큰은 해당 종족 더미 맨 위로 돌아갑니다.</p>
           <button type="button" onClick={onMinimize} className="mt-2 text-[11px] text-neutral-400 underline-offset-2 hover:text-neutral-200 hover:underline">
-            잠시 보드 보기
+            🗺️ 잠시 보드 보기 (나중에 다시 열 수 있어요)
           </button>
         </div>
       </div>

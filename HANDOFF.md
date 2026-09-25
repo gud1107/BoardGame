@@ -321,6 +321,23 @@ UI는 `LotrDuelBoard.tsx`의 트랙 패널(이름 트랙용 `RingTrackBoard.tsx`
   재구현해 카드 칩의 ✓/+🪙1과 실제 비용 계산이 항상 일치. 테스트 1개 추가.
 - 검증: tsc/eslint/vitest 통과, 봇 대전으로 데스크톱 피라미드(인쇄 칩 + `🪙1 (+1)`/`✓ 무료` 스트립)·카드 모달 정산 박스·모바일 피라미드 캡처 확인.
 
+### 🔄 반지의 제왕: 가운데땅에서의 대결 (LotR Duel) Persistent Reopen Dock & Toggle Anchors — 2026-09-26 후속 (커밋/푸시, 배포는 웹훅 자동)
+
+요청서의 `Board.tsx`·`VictoryCinematicModal.tsx`(components/)·`.handoff/`는 이 저장소 경로와 다르다 — `src/games/lotrDuel/LotrDuelBoard.tsx`,
+`VictoryCinematicModal.tsx`, `ActionChoiceModal.tsx`, `AllianceTokenSelectModal.tsx` 수정. 요청서 스니펫의 `h-[100dvh]` 레이아웃은 쓰지 않음(기존 이유 동일). 엔진 변경 없음.
+
+- **Endgame Result Replay Anchor:** 결과 모달 우상단 `✕ 보드 보기` + 하단 `🗺️ 보드판 둘러보기`로 닫으면 헤더 우측에 금빛 펄스 `🏆 승패 결과판 다시보기` 버튼이 상시
+  노출되어 같은 시네마틱 결과창(엔딩 배경 FX 포함)을 재소환. 재대결 시 자동 초기화.
+- **Non-Destructive In-Game Modal Minimize:** 모든 선택 모달의 닫기 동작을 "최소화"로 통일 — 선택 상태(엔진 `pending`, 선택한 카드, 확인 중인 랜드마크)는 유지.
+  - 카드 구매/버리기 모달: `🗺️ 잠시 보드 보기`(배경 탭도 최소화)와 별도의 `선택 취소 (다른 카드 고르기)` 분리 — 최소화 중에도 예측 하이라이트 유지, 다른 카드를 누르면 그 카드로 전환.
+  - 랜드마크 건설 확인: `🗺️ 잠시 보드 보기` / `건설 취소` 분리.
+  - 동맹 토큰·유닛 배치/이동·저격·파괴·버린 카드·엔트 등 대기 선택: 기존 최소화 유지.
+  - 최소화되면 화면 하단 중앙(sticky HUD 바로 위, `fixed bottom-24/28`)에 떠 있는 펄스 앵커 버튼(`ReopenAnchor`)이 뜬다:
+    `📜/⚡ 선택 대기 중: {동맹 능력·유닛 배치·…} 선택창 다시 열기` / `📥 선택한 「카드」 처리창 다시 열기` / `🏰 「랜드마크」 건설창 다시 열기`. 행동 안내의 "🎯 선택 창 열기"도 유지.
+- **Free Board Inspection:** 게임 기록(데스크톱 패널·모바일 탭), 기술/동맹 패시브 팝오버, 로그 카드 인스펙터는 원래부터 각자의 버튼으로 언제든 다시 열 수 있음 — 변경 없음.
+- 검증: tsc/eslint/vitest 통과. 임시 페이지(종료 상태 보드)로 결과창 닫기 → 헤더 🏆 버튼 → 재오픈 확인, 봇 대전 모바일(390px)로 카드 모달 최소화 → 하단 앵커 → 재오픈 확인.
+  (Playwright 자동 클릭은 앵커의 상하 부유 애니메이션 때문에 `force` 필요 — 실제 탭에는 영향 없음.)
+
 ## 💎 스플렌더 대결 (Splendor Duel) — 2인 전용 신규 게임 — 2026-09-25 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: `boardGameRule/스플랜더 대결/스플랜더 대결.md` 룰북 기준 2인 전용 풀스택 신규 게임. 요청서는 `src/data/games.ts`
