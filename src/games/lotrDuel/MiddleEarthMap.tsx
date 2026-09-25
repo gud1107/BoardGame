@@ -1,7 +1,7 @@
 "use client";
 
 import { ADJACENCY, LANDMARKS, REGIONS, REGION_INFO } from "./data";
-import type { LotrDuelState, RegionId } from "./types";
+import type { LotrDuelState, RegionId, RegionState } from "./types";
 
 /**
  * 7-region Middle-earth map as an SVG node graph (the rulebook has no map
@@ -65,7 +65,7 @@ export default function MiddleEarthMap({
             disabled={!isTarget}
             onClick={() => onRegion(r)}
             style={{ left: `${info.x}%`, top: `${info.y}%` }}
-            className={`absolute flex w-[23%] max-w-[118px] -translate-x-1/2 -translate-y-1/2 flex-col items-center rounded-xl border px-1 py-1 text-center backdrop-blur-sm transition ${
+            className={`absolute flex w-[27%] max-w-[132px] -translate-x-1/2 -translate-y-1/2 flex-col items-center rounded-xl border px-1 py-1 text-center backdrop-blur-sm transition ${
               isFrom
                 ? "border-amber-300 bg-amber-500/30 ring-2 ring-amber-300"
                 : isTarget
@@ -84,28 +84,47 @@ export default function MiddleEarthMap({
             )}
             <span className="text-[clamp(9px,1.9vw,13px)] leading-tight font-bold text-amber-100 light:text-amber-900">{info.name}</span>
             <span className="text-[clamp(7px,1.3vw,9px)] leading-tight text-white/45 light:text-slate-500">{lm?.name}</span>
-            <span className="mt-0.5 flex items-center gap-1 text-[clamp(9px,1.8vw,12px)] font-bold">
-              {reg.fellowshipFortress && (
-                <span key={rise?.region === r ? `f${rise.key}` : "f"} title="원정대 요새" className={`rounded bg-amber-400/90 px-0.5 text-[0.8em] text-black ${rise?.region === r ? "lotrfx-keep" : ""}`}>
-                  🏰
-                </span>
-              )}
-              {reg.fellowshipUnits > 0 && (
-                <span className="flex items-center rounded-full bg-gradient-to-b from-amber-300 to-amber-600 px-1.5 text-black shadow-[0_0_6px_rgba(251,191,36,.6)]">{reg.fellowshipUnits}</span>
-              )}
-              {reg.sauronUnits > 0 && (
-                <span className="flex items-center rounded-full bg-gradient-to-b from-zinc-400 to-zinc-700 px-1.5 text-white shadow-[0_0_6px_rgba(244,63,94,.45)]">{reg.sauronUnits}</span>
-              )}
-              {reg.sauronFortress && (
-                <span key={rise?.region === r ? `s${rise.key}` : "s"} title="사우론 요새" className={`rounded bg-zinc-600 px-0.5 text-[0.8em] ${rise?.region === r ? "lotrfx-keep" : ""}`}>
-                  🏯
-                </span>
-              )}
-              {!reg.fellowshipFortress && !reg.sauronFortress && reg.fellowshipUnits === 0 && reg.sauronUnits === 0 && <span className="text-white/25 light:text-slate-400">·</span>}
-            </span>
+            <FactionBadges region={reg} riseKey={rise?.region === r ? rise.key : undefined} className="mt-0.5" />
           </button>
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Who holds a region, spelled out: gold "💍 원정대 xN" and crimson
+ * "👁️ 사우론 xN" unit badges plus "🏰 원정대 요새" / "🌋 사우론 요새". When both
+ * sides are present (a fortress facing enemy units) the two rows stack so
+ * the stand-off reads at a glance. Reused by the center choice modals.
+ */
+export function FactionBadges({ region, riseKey, className = "", size = "map" }: { region: RegionState; riseKey?: number; className?: string; size?: "map" | "modal" }) {
+  const text = size === "map" ? "text-[clamp(7.5px,1.45vw,10.5px)]" : "text-[11px]";
+  const empty = region.fellowshipUnits === 0 && region.sauronUnits === 0 && !region.fellowshipFortress && !region.sauronFortress;
+  const keep = riseKey !== undefined ? "lotrfx-keep" : "";
+  return (
+    <span className={`flex w-full flex-col items-stretch gap-0.5 font-bold whitespace-nowrap ${text} ${className}`}>
+      {(region.fellowshipUnits > 0 || region.fellowshipFortress) && (
+        <span className="flex items-center justify-center gap-0.5 rounded-md border border-amber-300/80 bg-gradient-to-b from-amber-300 to-amber-600 px-1 text-black shadow-[0_0_6px_rgba(251,191,36,.6)]">
+          {region.fellowshipUnits > 0 && <span title={`원정대 유닛 ${region.fellowshipUnits}개`}>💍 원정대 x{region.fellowshipUnits}</span>}
+          {region.fellowshipFortress && (
+            <span key={riseKey !== undefined ? `f${riseKey}` : "f"} title="원정대 요새 (전투로 파괴되지 않음)" className={keep}>
+              {region.fellowshipUnits > 0 ? "🏰" : "🏰 원정대 요새"}
+            </span>
+          )}
+        </span>
+      )}
+      {(region.sauronUnits > 0 || region.sauronFortress) && (
+        <span className="flex items-center justify-center gap-0.5 rounded-md border border-red-400/70 bg-gradient-to-b from-red-800 to-red-950 px-1 text-red-50 shadow-[0_0_6px_rgba(244,63,94,.55)]">
+          {region.sauronUnits > 0 && <span title={`사우론 유닛 ${region.sauronUnits}개`}>👁️ 사우론 x{region.sauronUnits}</span>}
+          {region.sauronFortress && (
+            <span key={riseKey !== undefined ? `s${riseKey}` : "s"} title="사우론 요새 (전투로 파괴되지 않음)" className={keep}>
+              {region.sauronUnits > 0 ? "🌋" : "🌋 사우론 요새"}
+            </span>
+          )}
+        </span>
+      )}
+      {empty && <span className="text-center font-normal text-white/30 light:text-slate-400">주둔 없음</span>}
+    </span>
   );
 }

@@ -238,6 +238,25 @@ UI는 `LotrDuelBoard.tsx`의 트랙 패널(이름 트랙용 `RingTrackBoard.tsx`
   보관 한도 60 → 400(게임 전체). `fxEvents.ts`의 이동 감지도 로그 문구 대신 `kind === "MOVE"`로 변경.
 - 검증: tsc/eslint/vitest 통과(봇 게임 포함 테스트 시간 ~0.6s → ~0.7s로 로그 확대 영향 미미). 봇 대전으로 데스크톱(1500px)·모바일(390px)·모바일 드로어 열림 캡처 확인.
 
+### 🛡️ 반지의 제왕: 가운데땅에서의 대결 (LotR Duel) UI & Visual Clarity Overhaul — 2026-09-25 후속 (커밋/푸시, 배포는 웹훅 자동)
+
+요청서의 `Board.tsx`·`components/*`(MiddleEarthMap/PlayerTechHUD/ActionChoiceModal)·`.handoff/`는 없다 — 실제 파일은 `src/games/lotrDuel/` 플랫
+(`LotrDuelBoard.tsx`, `MiddleEarthMap.tsx`, `PlayerTechHUD.tsx`, 새 `ActionChoiceModal.tsx`). 엔진 변경 없음.
+
+- **Descriptive Tech Tooltips & Labels (`PlayerTechHUD.tsx`):** 5대 기술 슬롯에 국문 라벨(지식·지휘·무력·계략·용기) 상시 병기, 호버 시 가이드 팝오버,
+  탭/클릭 시 고정(다시 탭 또는 ✕로 닫기 — 모바일 대응). 내용: 이름(영문 병기)·보유 수·"매 턴 N개까지 무료 공급(소모되지 않음)"·"없는 기호는 1개당 1주화" 팁.
+  선택형 카드(택1)·드워프 와일드 배지도 같은 팝오버. 아이콘은 이 게임 기존 이모지 유지(요청서의 📖/🛡️ 아님).
+- **Explicit Faction Ownership on Middle-earth Map (`MiddleEarthMap.tsx` `FactionBadges`):** 숫자만 있던 표기를 `💍 원정대 xN`(골드 그라데이션 뱃지) /
+  `👁️ 사우론 xN`(크림슨 뱃지), 요새 `🏰 원정대 요새` / `🌋 사우론 요새`로 교체(유닛과 요새가 같이 있으면 한 뱃지에 🏰/🌋 병기). 양측이 같은 지역에 있으면(요새 vs 유닛
+  대치) 두 뱃지가 위아래로 분리 노출. 빈 지역은 "주둔 없음". 지역 노드 폭 23% → 27%, 린돈/모르도르 좌표를 가장자리 잘림 방지로 조정.
+  요청서의 격자형 지역 카드 레이아웃은 쓰지 않고 기존 노드 그래프 지도 유지(인접 관계 선이 이동 규칙에 필요).
+- **Universal Center-Modal Interaction (`ActionChoiceModal.tsx`):** 공용 `CenterModal` 셸(딤+블러, 골드 림라이트, `max-h-[85dvh]`) 위에
+  카드 선택 `CardChoiceModal`(카드 3D 줌인 + 비용 내역 + "📥 구매하여 내려놓기" / "🪙 버리고 N주화 획득"; 기존 피라미드 아래 패널 대체),
+  랜드마크 `LandmarkConfirmModal`(요새 아트 + 인쇄 비용·부족 기술·요새 추가분 내역 + 건설 확정), 대기 효과 `PendingChoiceModal`(유닛 배치 / 이동 = 출발→도착 2단계 +
+  이동 종료 / 적 유닛 제거 / 적 요새 파괴 / 상대 회색 카드 파괴 / 버린 카드 무료 획득 / 엔트 3택) — 지역 선택지는 `FactionBadges`와 "⚔️ 교전 발생" 표시.
+  동맹 토큰은 기존 `AllianceTokenSelectModal`. 모든 선택 모달은 "잠시 보드 보기"로 접고 행동 안내의 "🎯 선택 창 열기"로 재오픈, 접힌 상태에선 지도 클릭 선택도 계속 동작.
+- 검증: tsc/eslint/vitest 통과. 봇 대전(데스크톱 1500px — 지도 뱃지·기술 팝오버·카드 모달, 모바일 390px — 지도 뱃지)과 임시 페이지(배치 모달 모바일, 랜드마크 모달)를 캡처 확인 후 임시 페이지 삭제.
+
 ## 💎 스플렌더 대결 (Splendor Duel) — 2인 전용 신규 게임 — 2026-09-25 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: `boardGameRule/스플랜더 대결/스플랜더 대결.md` 룰북 기준 2인 전용 풀스택 신규 게임. 요청서는 `src/data/games.ts`

@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import { FortressArt, SealStamp } from "./CardArt";
-import { CardFace, COLOR_STYLE, CostChips, cardGlyph, describeCard } from "./CardFace";
+import { CardFace, COLOR_STYLE } from "./CardFace";
 import { ADJACENCY, CHAIN_INFO, COLOR_INFO, FACTION_EMOJI, FACTION_LABEL, OFFICIAL_RING_TRACK, RACES, RACE_INFO, REGIONS, REGION_INFO, TECHS, TECH_INFO } from "./data";
 import {
   availableSlots,
   calculateCardCost,
   calculateLandmarkCost,
   controlledCount,
-  discardValue,
   fortressOf,
   missingTech,
   otherFaction,
@@ -29,6 +28,7 @@ import {
 import { ActionCinematicFX, EndingFX, FX_KEYFRAMES, type ActionFX } from "./ActionCinematicFX";
 import { diffFx, type FxEvents } from "./fxEvents";
 import { getLotrAudio } from "./lotrAudioEngine";
+import { CardChoiceModal, LandmarkConfirmModal, PendingChoiceModal } from "./ActionChoiceModal";
 import AllianceTokenSelectModal from "./AllianceTokenSelectModal";
 import HistoryLogDrawer from "./HistoryLogDrawer";
 import MiddleEarthMap from "./MiddleEarthMap";
@@ -123,7 +123,8 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [moveFrom, setMoveFrom] = useState<RegionId | null>(null);
   const [victoryClosed, setVictoryClosed] = useState(false);
-  const [allianceHidden, setAllianceHidden] = useState(false);
+  const [choiceHidden, setChoiceHidden] = useState(false);
+  const [confirmLandmark, setConfirmLandmark] = useState<LandmarkTile["id"] | null>(null);
   // Clear local selections whenever the game moves on (derived during render, no effect).
   const [seenTurn, setSeenTurn] = useState(`${state.turnNumber}:${state.pending.length}:${state.seed}`);
   const turnKey = `${state.turnNumber}:${state.pending.length}:${state.seed}`;
@@ -131,7 +132,8 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
     setSeenTurn(turnKey);
     setSelectedSlot(null);
     setMoveFrom(null);
-    setAllianceHidden(false);
+    setChoiceHidden(false);
+    setConfirmLandmark(null);
     if (state.phase === "PLAYING") setVictoryClosed(false);
   }
 
@@ -241,7 +243,6 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
 
   const open = new Set(availableSlots(state));
   const selected = selectedSlot !== null && open.has(selectedSlot) ? state.pyramidGrid[selectedSlot] : null;
-  const selectedCost = selected ? calculateCardCost(me, selected.card) : null;
 
   // ---- pyramid geometry (half-card units) ----
   const rows = Math.max(...state.pyramidGrid.map((s) => s.row)) + 1;
@@ -308,16 +309,35 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
         moveFrom={moveFrom}
         opponentName={nameOf(oppFaction)}
         act={act}
-        onOpenAlliance={() => setAllianceHidden(false)}
+        onOpenAlliance={() => setChoiceHidden(false)}
       />
-      {myTurn && front && (front.kind === "TOKEN" || front.kind === "TOKEN_RACE") && !allianceHidden && (
+      {myTurn && front && (front.kind === "TOKEN" || front.kind === "TOKEN_RACE") && !choiceHidden && (
         <AllianceTokenSelectModal
           key={`${state.turnNumber}:${state.pending.length}:${front.kind}`}
           state={state}
           step={front}
           onPickRace={(race) => act({ type: "PICK_RACE", faction: myFaction, race })}
           onPickToken={(tokenId) => act({ type: "PICK_TOKEN", faction: myFaction, tokenId })}
-          onMinimize={() => setAllianceHidden(true)}
+          onMinimize={() => setChoiceHidden(true)}
+        />
+      )}
+      {myTurn && front && front.kind !== "TOKEN" && front.kind !== "TOKEN_RACE" && !choiceHidden && (
+        <PendingChoiceModal
+          key={`${state.turnNumber}:${state.pending.length}:${front.kind}`}
+          state={state}
+          faction={myFaction}
+          step={front}
+          act={act}
+          onMinimize={() => setChoiceHidden(true)}
+        />
+      )}
+      {myTurn && !front && confirmLandmark && state.revealedLandmarks.some((t) => t.id === confirmLandmark) && (
+        <LandmarkConfirmModal
+          state={state}
+          faction={myFaction}
+          tile={state.revealedLandmarks.find((t) => t.id === confirmLandmark)!}
+          onBuild={() => act({ type: "TAKE_LANDMARK", faction: myFaction, landmarkId: confirmLandmark })}
+          onClose={() => setConfirmLandmark(null)}
         />
       )}
 
@@ -329,7 +349,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
             <MiddleEarthMap state={state} targets={targets} selectedFrom={moveFrom} onRegion={onRegion} rise={rise} />
           </div>
           <p className="text-[11px] text-white/40 light:text-slate-500">
-            🟡 원정대 유닛 · ⚫ 사우론 유닛 · 🏰/🏯 요새 (전투로 파괴되지 않음). 같은 지역에 양측 유닛이 모이면 1:1로 동시에 사라집니다.
+            <b className="text-amber-300">💍 원정대 xN</b> · <b className="text-red-300">👁️ 사우론 xN</b> 유닛 · 🏰 원정대 / 🌋 사우론 요새 (전투로 파괴되지 않음). 같은 지역에 양측 유닛이 모이면 1:1로 동시에 사라집니다.
           </p>
         </div>
 
@@ -389,39 +409,16 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
               </div>
             )}
           </div>
-          {selected && selectedCost && myTurn && !front && (
-            <div className={`${panel} lotrd-in flex flex-col gap-2 border-amber-400/40`}>
-              <div className="flex items-start gap-3">
-                <div className="aspect-[3/4] w-[84px] shrink-0">
-                  <CardFace card={selected.card} available chapter={state.chapter} affordable={selectedCost.canAfford} costInCoins={selectedCost.costInCoins} viaChain={selectedCost.viaChain} />
-                </div>
-                <div className="min-w-0 text-sm">
-                  <p className="font-bold">
-                    {selected.card.name} <span className="text-xs font-normal text-white/50 light:text-slate-500">({COLOR_INFO[selected.card.color].name})</span>
-                  </p>
-                  <p className="text-xs text-white/70 light:text-slate-600">{describeCard(selected.card)}</p>
-                  <p className="mt-1 text-xs text-white/60 light:text-slate-500">
-                    비용: <CostChips card={selected.card} />
-                    {selected.card.providesChain && <span className="ml-2">연계 제공 {CHAIN_INFO[selected.card.providesChain]}</span>}
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  disabled={!selectedCost.canAfford}
-                  onClick={() => act({ type: "TAKE_CARD", faction: myFaction, slot: selectedSlot!, mode: "PLAY" })}
-                  className="flex-1 rounded-xl bg-amber-500 py-2 text-sm font-semibold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
-                >
-                  {selectedCost.viaChain ? "🔗 연계로 무료 내려놓기" : selectedCost.canAfford ? `내려놓기 (${selectedCost.costInCoins}주화)` : `주화 부족 (${selectedCost.costInCoins} 필요)`}
-                </button>
-                <button
-                  onClick={() => act({ type: "TAKE_CARD", faction: myFaction, slot: selectedSlot!, mode: "DISCARD" })}
-                  className="flex-1 rounded-xl border border-white/20 py-2 text-sm font-semibold text-white/80 hover:border-white/40 light:border-slate-300 light:text-slate-700"
-                >
-                  버리기 (+{discardValue(state, myFaction)}주화)
-                </button>
-              </div>
-            </div>
+          {selected && myTurn && !front && (
+            <CardChoiceModal
+              key={selected.card.id}
+              state={state}
+              faction={myFaction}
+              card={selected.card}
+              onPlay={() => act({ type: "TAKE_CARD", faction: myFaction, slot: selectedSlot!, mode: "PLAY" })}
+              onDiscard={() => act({ type: "TAKE_CARD", faction: myFaction, slot: selectedSlot!, mode: "DISCARD" })}
+              onClose={() => setSelectedSlot(null)}
+            />
           )}
         </div>
 
@@ -479,7 +476,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
                     surcharge={cost.costInCoins - tile.baseCost.coins - missingTech(me, tile.baseCost.tech)}
                     canAfford={cost.canAfford}
                     canBuild={myTurn && !front}
-                    onBuild={() => act({ type: "TAKE_LANDMARK", faction: myFaction, landmarkId: tile.id })}
+                    onBuild={() => setConfirmLandmark(tile.id)}
                   />
                 );
               })}
@@ -525,7 +522,6 @@ function ActionPrompt({
   onOpenAlliance: () => void;
 }) {
   if (state.phase !== "PLAYING") return null;
-  const opp = otherFaction(myFaction);
   if (!myTurn) {
     return (
       <div className={`${panel} text-sm text-white/60 light:text-slate-600`}>
@@ -549,64 +545,20 @@ function ActionPrompt({
         <b>{stepText(front)}</b>
         {front.kind === "MOVE" && moveFrom && <span className="ml-1 text-xs text-amber-200">출발: {REGION_INFO[moveFrom].name}</span>}
       </p>
-      <div className="flex flex-wrap gap-1.5">
-        {front.kind === "PLACE" &&
-          front.regions.map((r) => (
-            <button key={r} className={btn} onClick={() => act({ type: "PLACE", faction: myFaction, region: r })}>
-              {REGION_INFO[r].name}
-            </button>
-          ))}
-        {front.kind === "SNIPE" &&
-          REGIONS.filter((r) => unitsOf(state.boardRegions[r], opp) > 0).map((r) => (
-            <button key={r} className={btn} onClick={() => act({ type: "SNIPE", faction: myFaction, region: r })}>
-              🎯 {REGION_INFO[r].name} ({unitsOf(state.boardRegions[r], opp)})
-            </button>
-          ))}
-        {front.kind === "DESTROY_FORTRESS" &&
-          REGIONS.filter((r) => fortressOf(state.boardRegions[r], opp)).map((r) => (
-            <button key={r} className={btn} onClick={() => act({ type: "DESTROY_FORTRESS", faction: myFaction, region: r })}>
-              🌳 {REGION_INFO[r].name} 요새
-            </button>
-          ))}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button className={`${btn} border-amber-400/60 bg-amber-500/20`} onClick={onOpenAlliance}>
+          🎯 선택 창 열기
+        </button>
         {front.kind === "MOVE" && (
           <>
-            <span className="self-center text-xs text-white/60 light:text-slate-500">지도에서 출발 → 도착 지역을 누르세요.</span>
+            <span className="text-xs text-white/60 light:text-slate-500">또는 지도에서 출발 → 도착 지역을 누르세요.</span>
             <button className={btn} onClick={() => act({ type: "SKIP", faction: myFaction })}>
               이동 종료
             </button>
           </>
         )}
-        {front.kind === "DESTROY_GRAY" &&
-          state.players[opp].tableauCards
-            .filter((c) => c.color === "GRAY")
-            .map((c) => (
-              <button key={c.id} className={btn} onClick={() => act({ type: "DESTROY_GRAY", faction: myFaction, cardId: c.id })}>
-                🔥 {c.name} {cardGlyph(c)}
-              </button>
-            ))}
-        {front.kind === "DISCARD_PLAY" &&
-          state.discardedCards.map((c) => (
-            <button key={c.id} className={`${btn} ${COLOR_STYLE[c.color].chip}`} onClick={() => act({ type: "DISCARD_PLAY", faction: myFaction, cardId: c.id })} title={describeCard(c)}>
-              {cardGlyph(c)} {c.name}
-            </button>
-          ))}
-        {(front.kind === "TOKEN_RACE" || front.kind === "TOKEN") && (
-          <button className={`${btn} border-amber-400/60 bg-amber-500/20`} onClick={onOpenAlliance}>
-            📜 동맹 선택 창 열기
-          </button>
-        )}
-        {front.kind === "ENT_CHOICE" && (
-          <>
-            <button className={btn} onClick={() => act({ type: "ENT_PICK", faction: myFaction, option: "SNIPE" })}>
-              🎯 적 유닛 1개 제거
-            </button>
-            <button className={btn} onClick={() => act({ type: "ENT_PICK", faction: myFaction, option: "DRAIN" })}>
-              🪙 상대 주화 1개 차감
-            </button>
-            <button className={btn} onClick={() => act({ type: "ENT_PICK", faction: myFaction, option: "MOVE" })}>
-              👣 유닛 이동 1회
-            </button>
-          </>
+        {(front.kind === "PLACE" || front.kind === "SNIPE" || front.kind === "DESTROY_FORTRESS") && (
+          <span className="text-xs text-white/60 light:text-slate-500">또는 지도에서 빛나는 지역을 누르세요.</span>
         )}
       </div>
     </div>

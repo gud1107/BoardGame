@@ -24,13 +24,13 @@ import type {
 export const REGIONS: RegionId[] = ["LINDON", "ARNOR", "ENEDWAITH", "RHOVANION", "ROHAN", "GONDOR", "MORDOR"];
 
 export const REGION_INFO: Record<RegionId, { name: string; sub: string; x: number; y: number }> = {
-  LINDON: { name: "린돈", sub: "회색 항구", x: 13, y: 38 },
+  LINDON: { name: "린돈", sub: "회색 항구", x: 15, y: 38 },
   ARNOR: { name: "아르노르", sub: "브리", x: 32, y: 22 },
   ENEDWAITH: { name: "에네드와이스", sub: "아이센가드", x: 28, y: 64 },
   RHOVANION: { name: "로바니온", sub: "에레보르", x: 66, y: 18 },
   ROHAN: { name: "로한", sub: "헬름 협곡", x: 52, y: 58 },
   GONDOR: { name: "곤도르", sub: "미나스 티리스", x: 62, y: 86 },
-  MORDOR: { name: "모르도르", sub: "바라드두르", x: 86, y: 62 },
+  MORDOR: { name: "모르도르", sub: "바라드두르", x: 85, y: 62 },
 };
 
 /** Self-designed adjacency (the rulebook has no map picture) — a loop with two cross links. */
