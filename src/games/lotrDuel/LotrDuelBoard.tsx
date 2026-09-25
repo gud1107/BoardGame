@@ -468,7 +468,6 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,0.9fr)]">
         {/* ---- map ---- */}
         <div className="order-2 flex flex-col gap-2 lg:order-1">
-          <p className={h3}>가운데땅 지도</p>
           <div key={shakeKey} className={shakeKey > 0 ? "lotrfx-shake" : undefined}>
             <MiddleEarthMap
               state={state}

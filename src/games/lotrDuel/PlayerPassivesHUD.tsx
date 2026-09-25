@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SealStamp, RACE_WAX } from "./CardArt";
 import { RACE_INFO } from "./data";
 import type { AllianceToken, AllianceTokenId, CardColor } from "./types";
@@ -46,6 +46,16 @@ export default function PlayerPassivesHUD({ tokens, trigger }: { tokens: Allianc
   const shownId = pinned ?? hover;
   const shown = passives.find((t) => t.id === shownId);
   const shownInfo = shown ? PASSIVE_INFO[shown.id] : undefined;
+  // A tapped (pinned) popover closes on any tap outside the tray.
+  const rootRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!pinned) return;
+    const close = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setPinned(null);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [pinned]);
 
   if (passives.length === 0) {
     return (
@@ -56,7 +66,7 @@ export default function PlayerPassivesHUD({ tokens, trigger }: { tokens: Allianc
   }
 
   return (
-    <span className="relative flex min-w-0 max-w-full flex-1 items-center gap-1.5 rounded-2xl border border-emerald-500/30 bg-neutral-950/80 px-2 pb-1 sm:flex-initial">
+    <span ref={rootRef} className="relative flex min-w-0 max-w-full flex-1 items-center gap-1.5 rounded-2xl border border-emerald-500/30 bg-neutral-950/80 px-2 pb-1 sm:flex-initial">
       <span className="flex shrink-0 items-center gap-1 border-r border-white/10 pr-1.5 font-serif text-[10px] font-bold text-emerald-300">
         📜<span className="hidden sm:inline">동맹 능력</span>
         <span className="font-mono text-emerald-400">({passives.length})</span>
@@ -88,29 +98,45 @@ export default function PlayerPassivesHUD({ tokens, trigger }: { tokens: Allianc
         })}
       </span>
       {shown && (
-        <span className="absolute bottom-full left-0 z-40 mb-2 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border-2 border-emerald-500/70 bg-neutral-900/95 p-3 text-left shadow-2xl backdrop-blur-md" role="tooltip">
-          <span className="mb-1.5 flex items-center justify-between gap-2 border-b border-white/10 pb-1.5">
-            <span className="flex items-center gap-1 font-serif text-xs font-bold text-emerald-300">
-              <span className="inline-block h-5 w-5">
+        <span
+          onMouseEnter={() => setHover(shown.id)}
+          onMouseLeave={() => setHover(null)}
+          className="absolute bottom-full left-0 z-40 mb-3 w-80 max-w-[calc(100vw-2rem)] rounded-3xl border-2 bg-neutral-950/55 p-4 text-left shadow-2xl backdrop-blur-2xl backdrop-saturate-150"
+          style={{ borderColor: RACE_WAX[shown.race].glow, boxShadow: `0 0 26px ${RACE_WAX[shown.race].glow}, inset 0 1px 0 rgba(255,255,255,.12)` }}
+          role="tooltip"
+        >
+          <span className="mb-2 flex items-center justify-between gap-2 border-b border-white/10 pb-2">
+            <span className="flex items-center gap-1.5 font-serif text-xs font-black tracking-wide" style={{ color: RACE_WAX[shown.race].wax }}>
+              <span className="inline-block h-7 w-7 drop-shadow">
                 <SealStamp race={shown.id === "HOBBIT_EAGLE" ? "EAGLE" : shown.race} />
               </span>
-              {RACE_INFO[shown.race].name} 동맹 · {shown.name}
+              {RACE_INFO[shown.race].name} 동맹
             </span>
-            {pinned && (
-              <button type="button" onClick={() => setPinned(null)} className="p-1 text-xs text-neutral-400 hover:text-white" aria-label="설명 닫기">
-                ✕
-              </button>
-            )}
+            <span className="flex items-center gap-1">
+              <span className="rounded-full border border-amber-500/40 bg-black/60 px-2 py-0.5 font-mono text-[9px] font-bold text-amber-300">♾️ 영구 지속</span>
+              {pinned && (
+                <button type="button" onClick={() => setPinned(null)} className="p-1 text-xs text-neutral-400 hover:text-white" aria-label="설명 닫기">
+                  ✕
+                </button>
+              )}
+            </span>
           </span>
-          <span className="block space-y-1 text-[11px] leading-relaxed text-neutral-200">
-            <span className="block">• 발동 조건: {shownInfo?.when ?? "—"}</span>
-            <span className="block">• 효과: {shownInfo?.effect ?? shown.description}</span>
-            <span className="flex items-center justify-between pt-1 text-[9px] text-neutral-400">
-              <span>♾️ 영구 지속 (게임 끝까지)</span>
-              <span className={trigger && shownInfo?.fires(trigger) ? "font-bold text-amber-300" : "text-emerald-300"}>
-                {trigger && shownInfo?.fires(trigger) ? "⚡ 지금 선택으로 발동" : "조건 만족 시 자동 적용"}
-              </span>
+          <span className="block font-serif text-sm font-black text-white">📜 {shown.name}</span>
+          <span className="mt-1.5 block space-y-1 rounded-2xl border border-white/10 bg-white/[0.06] p-3 text-[11px] leading-relaxed text-neutral-100 shadow-inner">
+            <span className="block">
+              <b className="text-amber-200">발동 조건</b> · {shownInfo?.when ?? "—"}
             </span>
+            <span className="block">
+              <b className="text-emerald-200">효과</b> · {shownInfo?.effect ?? shown.description}
+            </span>
+          </span>
+          <span className="mt-2 flex items-center justify-between border-t border-white/10 pt-2 font-mono text-[9px] text-neutral-400">
+            {trigger && shownInfo?.fires(trigger) ? (
+              <span className="font-bold text-amber-300">⚡ 지금 선택으로 발동</span>
+            ) : (
+              <span className="font-bold text-emerald-400">● 상시 발동 대기 중</span>
+            )}
+            <span>조건 달성 시 자동 적용</span>
           </span>
         </span>
       )}
