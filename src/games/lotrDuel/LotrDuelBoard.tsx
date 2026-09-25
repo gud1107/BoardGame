@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import { FortressArt, SealStamp } from "./CardArt";
 import { CardFace, COLOR_STYLE, CostChips, cardGlyph, describeCard } from "./CardFace";
-import { ADJACENCY, CHAIN_INFO, COLOR_INFO, FACTION_EMOJI, FACTION_LABEL, RACES, RACE_INFO, REGIONS, REGION_INFO, TECHS, TECH_INFO, TOKENS } from "./data";
+import { ADJACENCY, CHAIN_INFO, COLOR_INFO, FACTION_EMOJI, FACTION_LABEL, OFFICIAL_RING_TRACK, RACES, RACE_INFO, REGIONS, REGION_INFO, TECHS, TECH_INFO, TOKENS } from "./data";
 import {
   WIN_TEXT,
   availableSlots,
@@ -32,7 +32,7 @@ import { ActionCinematicFX, EndingFX, FX_KEYFRAMES, type ActionFX } from "./Acti
 import { diffFx, type FxEvents } from "./fxEvents";
 import { getLotrAudio } from "./lotrAudioEngine";
 import MiddleEarthMap from "./MiddleEarthMap";
-import RingTrackBoard from "./RingTrackBoard";
+import type { RingTrackReward } from "./data";
 
 /**
  * 반지의 제왕: 가운데땅에서의 대결 in-game view.
@@ -56,6 +56,23 @@ const KEYFRAMES = `
 @keyframes lotrd-emblem { 0% { transform: scale(.4) rotate(-20deg); opacity: 0 } 60% { transform: scale(1.15) rotate(4deg); opacity: 1 } 100% { transform: scale(1) } }
 .lotrd-emblem { animation: lotrd-emblem .9s cubic-bezier(.2,.9,.2,1) both }
 `;
+
+/** The 4 assembled track pieces (first/last point of each). */
+const TRACK_PIECES: [number, number][] = [
+  [0, 6],
+  [7, 12],
+  [13, 18],
+  [19, 24],
+];
+const TRACK_REWARD_ICON: Record<RingTrackReward, string> = { NONE: "", COIN_1: "🪙", ALLIANCE_TOKEN: "📜", MOVE_UNIT: "🔄", PLACE_UNIT: "⚔️", MOUNT_DOOM_VICTORY: "🌋" };
+const TRACK_REWARD_TEXT: Record<RingTrackReward, string> = {
+  NONE: "보상 없음",
+  COIN_1: "주화 1개",
+  ALLIANCE_TOKEN: "원하는 종족 더미 위 2개 중 동맹 토큰 1개",
+  MOVE_UNIT: "내 유닛 1개를 인접 지역으로 이동",
+  PLACE_UNIT: "원하는 지역에 내 유닛 1개 배치",
+  MOUNT_DOOM_VICTORY: "운명의 산 — 프로도 & 샘 도착 시 원정대 승리",
+};
 
 const panel = "rounded-2xl border border-white/10 bg-white/[0.04] p-3 light:border-slate-200 light:bg-white light:shadow-sm";
 const h3 = "mb-2 text-[11px] font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
@@ -266,7 +283,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
           지역 지배 💍 {controlledCount(state, "FELLOWSHIP")}/7 · 👁️ {controlledCount(state, "SAURON")}/7
         </span>
         <span className="text-xs text-white/60 light:text-slate-600">
-          원정 🧝 {fr}/{L} · 🐉 {nz < 0 ? `대기 ${nz}` : nz} (간격 {fr - nz})
+          원정 🧝 {fr}/{L} · 🐉 {nz} (간격 {fr - nz})
         </span>
         <span className="ml-auto flex items-center gap-2">
           <BgmControl />
@@ -388,9 +405,39 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
         <div className="order-3 flex flex-col gap-3">
           <div className={panel}>
             <p className={h3}>반지 원정 트랙</p>
-            <RingTrackBoard key={trail?.key ?? 0} frodoPos={fr} nazgulPos={nz} trail={trail} />
+            <div key={trail?.key ?? 0} className="grid grid-cols-2 gap-1">
+              {TRACK_PIECES.map(([start, end]) => (
+                <div key={start} className="grid grid-cols-7 gap-px rounded-md border border-amber-800/40 bg-amber-950/30 p-0.5 light:bg-amber-50">
+                  {Array.from({ length: end - start + 1 }, (_, k) => {
+                    const pos = start + k;
+                    const point = OFFICIAL_RING_TRACK[pos];
+                    return (
+                      <div
+                        key={pos}
+                        className={`relative flex aspect-square flex-col items-center justify-center rounded-sm text-[10px] leading-none ${
+                          pos === L ? "bg-red-900/60" : point.isNazgulStart ? "bg-black/70 ring-2 ring-zinc-600" : point.isFrodoStart ? "bg-yellow-950/70 ring-2 ring-yellow-400/80 ring-offset-1 ring-offset-yellow-900" : "bg-white/5"
+                        } ${trail && pos > trail.from && pos <= trail.to ? (trail.faction === "FELLOWSHIP" ? "lotrfx-trail-blue" : "lotrfx-trail-red") : ""}`}
+                        title={`${pos} — ${TRACK_REWARD_TEXT[point.reward]}${point.isNazgulStart ? " · 나즈굴 출발" : ""}${point.isFrodoStart ? " · 프로도 & 샘 출발" : ""}`}
+                      >
+                        {pos === fr ? (
+                          <span className="text-sm drop-shadow-[0_0_4px_gold]">🧝</span>
+                        ) : pos === nz ? (
+                          <span className="text-sm drop-shadow-[0_0_4px_red]">🐉</span>
+                        ) : pos === L ? (
+                          <span>🌋</span>
+                        ) : TRACK_REWARD_ICON[point.reward] ? (
+                          <span className="text-[9px]">{TRACK_REWARD_ICON[point.reward]}</span>
+                        ) : (
+                          <span className="text-white/20 light:text-slate-400">{pos}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
             <p className="mt-2 text-[11px] text-white/55 light:text-slate-600">
-              파란 카드의 💍는 <b>내 말</b>을 전진시키고, <b>지나가거나 멈춘 모든 칸의 보상</b>을 순서대로 받습니다. 🧝 프로도 & 샘이 🌋 운명의 산({L})에 닿으면 원정대 즉시 승리 · 🐉 나즈굴이 프로도 칸에 닿거나 추월하면 사우론 즉시 승리.
+              🧝 프로도 & 샘이 🌋 운명의 산({L})에 닿으면 원정대 즉시 승리 · 🐉 나즈굴이 따라잡으면 사우론 즉시 승리. 파란 카드의 💍는 <b>내 말</b>을 전진시키고, 지나가거나 멈춘 칸의 보상(🪙 주화 · 📜 동맹 토큰 · 🔄 유닛 이동 · ⚔️ 유닛 배치)을 받습니다.
             </p>
           </div>
 

@@ -339,58 +339,53 @@ export function otherFaction(f: Faction): Faction {
 }
 
 // ---------------------------------------------------------------------------
-// Ring track — 17 spaces (0 = the Shire … 16 = Mount Doom), 4 assembled tiles
+// Ring track — official board: 25 points (0 … 24)
 // ---------------------------------------------------------------------------
 
-export type TrackRewardType = "COINS" | "ALLIANCE_TOKEN_CHOICE" | "PLACE_UNIT" | "MOVE_UNIT" | "SNIPE_UNIT" | "DESTROY_FORTRESS" | "NONE";
+export type RingTrackReward = "NONE" | "COIN_1" | "ALLIANCE_TOKEN" | "MOVE_UNIT" | "PLACE_UNIT" | "MOUNT_DOOM_VICTORY";
 
-export interface TrackSpace {
+export interface RingTrackPoint {
   index: number;
-  name: string;
-  theme: string;
-  rewardType: TrackRewardType;
-  rewardValue?: number;
+  reward: RingTrackReward;
+  isNazgulStart?: boolean;
+  isFrodoStart?: boolean;
 }
 
 /**
- * Every space a marker passes through OR lands on pays its reward once, in
- * order (engine.ts `advanceRing`). Both the Fellowship and the Nazgûl collect.
+ * 1:1 with the physical board (per the request's photo reading): the Nazgûl
+ * start on 0, Frodo & Sam on 13, Mount Doom is 24. Every point a marker passes
+ * through or lands on pays its reward once, in order (engine.ts `advanceRing`)
+ * — for both sides.
  */
-export const RING_TRACK_SPACES: TrackSpace[] = [
-  { index: 0, name: "The Shire", theme: "샤이어", rewardType: "NONE" },
-  { index: 1, name: "Bridgeford Woods", theme: "브리지포드 숲", rewardType: "NONE" },
-  { index: 2, name: "Bree", theme: "브리", rewardType: "COINS", rewardValue: 1 },
-  { index: 3, name: "Weathertop", theme: "바람산", rewardType: "NONE" },
-  { index: 4, name: "Rivendell Gate", theme: "리븐델 관문", rewardType: "COINS", rewardValue: 2 },
-  { index: 5, name: "Rivendell", theme: "리븐델", rewardType: "ALLIANCE_TOKEN_CHOICE" },
-  { index: 6, name: "Caradhras", theme: "카라드라스", rewardType: "NONE" },
-  { index: 7, name: "West-gate of Moria", theme: "모리아 서문", rewardType: "COINS", rewardValue: 2 },
-  { index: 8, name: "Lothlórien", theme: "로스로리엔", rewardType: "PLACE_UNIT", rewardValue: 1 },
-  { index: 9, name: "River Anduin", theme: "안두인 강", rewardType: "NONE" },
-  { index: 10, name: "Amon Hen", theme: "아몬 헨", rewardType: "COINS", rewardValue: 3 },
-  { index: 11, name: "Dead Marshes", theme: "죽음의 늪", rewardType: "MOVE_UNIT", rewardValue: 1 },
-  { index: 12, name: "The Black Gate", theme: "검은 문", rewardType: "NONE" },
-  { index: 13, name: "Ithilien", theme: "이실리엔", rewardType: "SNIPE_UNIT", rewardValue: 1 },
-  { index: 14, name: "Cirith Ungol", theme: "키리스 웅골", rewardType: "DESTROY_FORTRESS", rewardValue: 1 },
-  { index: 15, name: "Plains of Mordor", theme: "모르도르 평원", rewardType: "NONE" },
-  { index: 16, name: "Mount Doom", theme: "운명의 산", rewardType: "NONE" },
-];
-
-export const TRACK_TILES: { name: string; from: number; to: number; tone: string }[] = [
-  { name: "샤이어에서 리븐델로", from: 1, to: 4, tone: "from-emerald-900/50 to-lime-900/20" },
-  { name: "안개산맥과 황금숲", from: 5, to: 8, tone: "from-sky-900/50 to-emerald-900/25" },
-  { name: "대하와 죽음의 늪", from: 9, to: 12, tone: "from-cyan-950/60 to-zinc-900/40" },
-  { name: "그림자의 땅", from: 13, to: 16, tone: "from-red-950/70 to-orange-950/40" },
+export const OFFICIAL_RING_TRACK: RingTrackPoint[] = [
+  { index: 0, reward: "NONE", isNazgulStart: true },
+  { index: 1, reward: "NONE" },
+  { index: 2, reward: "COIN_1" },
+  { index: 3, reward: "NONE" },
+  { index: 4, reward: "NONE" },
+  { index: 5, reward: "ALLIANCE_TOKEN" },
+  { index: 6, reward: "NONE" },
+  { index: 7, reward: "NONE" },
+  { index: 8, reward: "MOVE_UNIT" },
+  { index: 9, reward: "NONE" },
+  { index: 10, reward: "NONE" },
+  { index: 11, reward: "PLACE_UNIT" },
+  { index: 12, reward: "NONE" },
+  { index: 13, reward: "COIN_1", isFrodoStart: true },
+  { index: 14, reward: "NONE" },
+  { index: 15, reward: "NONE" },
+  { index: 16, reward: "ALLIANCE_TOKEN" },
+  { index: 17, reward: "NONE" },
+  { index: 18, reward: "NONE" },
+  { index: 19, reward: "MOVE_UNIT" },
+  { index: 20, reward: "NONE" },
+  { index: 21, reward: "NONE" },
+  { index: 22, reward: "PLACE_UNIT" },
+  { index: 23, reward: "NONE" },
+  { index: 24, reward: "MOUNT_DOOM_VICTORY" },
 ];
 
 /** Mount Doom. */
-export const TRACK_LENGTH = 16;
-/** Frodo & Sam start in the Shire. */
-export const FRODO_START = 0;
-/**
- * The Nazgûl start OFF the track, in a pursuit zone behind the Shire. The
- * request had both markers at space 0, but "Nazgûl reaching Frodo's space wins"
- * would then hand Sauron (who moves first) the game with the first ring card —
- * so the Nazgûl begin this many spaces back (length tuned by bot self-play).
- */
-export const NAZGUL_START = -5;
+export const TRACK_LENGTH = 24;
+export const FRODO_START = 13;
+export const NAZGUL_START = 0;

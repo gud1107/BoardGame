@@ -10,8 +10,8 @@ import {
   RACE_INFO,
   RACES,
   REGIONS,
+  OFFICIAL_RING_TRACK,
   REGION_INFO,
-  RING_TRACK_SPACES,
   TECHS,
   TOKENS,
   TOKEN_IDS_BY_RACE,
@@ -318,32 +318,26 @@ export function advanceRing(state: LotrDuelState, faction: Faction, n: number): 
   const to = Math.min(track.trackLength, from + n);
   if (fellowship) track.frodoPosition = to;
   else track.nazgulPosition = to;
-  log(state, faction, `${fellowship ? "🧝 프로도 & 샘" : "🐉 나즈굴"} ${to - from}칸 전진 → ${to >= 0 ? RING_TRACK_SPACES[to].theme : `추격 대기 ${to}`}`);
+  log(state, faction, `${fellowship ? "🧝 프로도 & 샘" : "🐉 나즈굴"} ${to - from}칸 전진 → ${to}번 칸`);
   if (fellowship ? to >= track.trackLength : to >= track.frodoPosition) return [];
   const steps: PendingStep[] = [];
-  for (let pos = Math.max(1, from + 1); pos <= to; pos++) {
-    const space = RING_TRACK_SPACES[pos];
-    const source = `원정 트랙 ${pos} · ${space.theme}`;
-    switch (space.rewardType) {
-      case "COINS":
-        state.players[faction].coins += space.rewardValue ?? 0;
-        log(state, faction, `${space.theme} 통과 — 🪙${space.rewardValue}`);
+  for (let pos = from + 1; pos <= to; pos++) {
+    const source = `원정 트랙 ${pos}번 칸`;
+    switch (OFFICIAL_RING_TRACK[pos].reward) {
+      case "COIN_1":
+        state.players[faction].coins += 1;
+        log(state, faction, `원정 트랙 ${pos}번 칸 — 🪙1`);
         break;
-      case "ALLIANCE_TOKEN_CHOICE":
+      case "ALLIANCE_TOKEN":
         steps.push({ kind: "TOKEN_RACE", source });
         break;
       case "PLACE_UNIT":
-        steps.push({ kind: "PLACE", count: space.rewardValue ?? 1, regions: REGIONS, source });
+        steps.push({ kind: "PLACE", count: 1, regions: REGIONS, source });
         break;
       case "MOVE_UNIT":
-        steps.push({ kind: "MOVE", remaining: space.rewardValue ?? 1, source });
+        steps.push({ kind: "MOVE", remaining: 1, source });
         break;
-      case "SNIPE_UNIT":
-        steps.push({ kind: "SNIPE", count: space.rewardValue ?? 1, source });
-        break;
-      case "DESTROY_FORTRESS":
-        steps.push({ kind: "DESTROY_FORTRESS", source });
-        break;
+      case "MOUNT_DOOM_VICTORY":
       case "NONE":
         break;
     }
