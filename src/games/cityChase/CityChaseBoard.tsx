@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
-import CityMap, { cellLabel, HELI_STYLES, MIDPOINT_ROUND, TOKEN_CLASS } from "./CityMap";
+import CityMap, { cellLabel, HELI_STYLES, TOKEN_CLASS, TokenChip } from "./CityMap";
 import {
   currentActor,
   currentPoliceBelief,
@@ -13,6 +13,7 @@ import {
   legalThiefCells,
   pointCells,
   pointNeighbors,
+  MIDPOINT_ROUND,
   tokenColor,
   TOTAL_ROUNDS,
   type Cell,
@@ -134,7 +135,7 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
                 title={`${r}라운드`}
                 className={`flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-bold sm:h-6 sm:w-6 sm:text-[10px] ${TOKEN_CLASS[tokenColor(r)]} ${
                   done ? "opacity-35" : ""
-                } ${current ? "scale-125 ring-2 ring-white shadow-[0_0_10px_rgba(255,255,255,0.6)]" : ""} text-black/80`}
+                } ${current ? "scale-125 ring-2 ring-white shadow-[0_0_10px_rgba(255,255,255,0.6)]" : ""}`}
               >
                 {r}
               </span>
@@ -240,7 +241,7 @@ export default function CityChaseBoard({ state, viewerSeat, names, connectedSeat
                       <span className="flex items-center gap-0.5 text-amber-300 light:text-amber-600">
                         흔적
                         {s.tokens.map((t, k) => (
-                          <span key={k} className={`h-2 w-2 rounded-full border ${TOKEN_CLASS[t]}`} />
+                          <TokenChip key={k} color={t} />
                         ))}
                       </span>
                     ) : (

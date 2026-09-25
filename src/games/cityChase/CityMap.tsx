@@ -6,6 +6,7 @@ import {
   cellRC,
   CELL_COUNT,
   GRID,
+  MIDPOINT_ROUND,
   POINT_GRID,
   pointCells,
   pointIJ,
@@ -13,6 +14,7 @@ import {
   type CityChaseState,
   type Point,
   type SearchRecord,
+  TOKEN_ROUND,
   type TokenColor,
 } from "./engine";
 
@@ -28,16 +30,54 @@ export const HELI_STYLES = [
   { ring: "ring-fuchsia-400", border: "border-fuchsia-400", bg: "bg-fuchsia-500", text: "text-fuchsia-300", hex: "#e879f9" },
 ] as const;
 
+/** Flat token swatch (round track): fill + border + number colour. */
 export const TOKEN_CLASS: Record<TokenColor, string> = {
-  yellow: "bg-yellow-300 border-yellow-100",
-  blue: "bg-blue-500 border-blue-200",
-  red: "bg-red-500 border-red-200",
+  yellow: "bg-yellow-300 border-yellow-100 text-black/80",
+  blue: "bg-cyan-400 border-cyan-100 text-black/80",
+  purple: "bg-purple-500 border-purple-200 text-white",
+  red: "bg-red-500 border-red-200 text-white",
 };
 
-const STEP = 100 / GRID; // % distance between two road lines
+/** High-visibility neon chip (search finds, police notes, search log). */
+const TOKEN_CHIP: Record<TokenColor, string> = {
+  yellow: "bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-200 border-yellow-100 text-neutral-950 shadow-[0_0_12px_rgba(250,204,21,0.85)] ring-yellow-400/50",
+  blue: "bg-gradient-to-tr from-blue-700 via-cyan-400 to-sky-200 border-cyan-100 text-white shadow-[0_0_14px_rgba(6,182,212,0.9)] ring-cyan-400/60",
+  purple: "bg-gradient-to-tr from-purple-800 via-purple-500 to-fuchsia-300 border-purple-100 text-white shadow-[0_0_16px_rgba(168,85,247,0.95)] ring-purple-400/80",
+  red: "bg-gradient-to-tr from-rose-700 via-red-500 to-rose-200 border-red-100 text-white shadow-[0_0_14px_rgba(239,68,68,0.9)] ring-red-400/70",
+};
 
-/** Midpoint of the 11-round chase — highlighted purple in the post-game route replay. */
-export const MIDPOINT_ROUND = 6;
+const CHIP_SIZE = {
+  lg: "h-[min(7.5vw,36px)] w-[min(7.5vw,36px)] border-2 ring-2 text-[min(3.4vw,15px)]",
+  sm: "h-3.5 w-3.5 border ring-1 text-[8px] sm:h-4 sm:w-4 sm:text-[9px]",
+} as const;
+
+/**
+ * One trail token. The number is shown only when the viewer can know it: the thief
+ * passes `round`; everyone else sees what the colour alone reveals (1 / 6 / 11) —
+ * a blue token's round stays hidden, exactly like the physical game.
+ */
+export function TokenChip({ color, round, size = "sm", caption = false }: { color: TokenColor; round?: number; size?: keyof typeof CHIP_SIZE; caption?: boolean }) {
+  const n = round ?? TOKEN_ROUND[color];
+  return (
+    <span className="relative inline-flex flex-col items-center">
+      <span
+        className={`inline-flex shrink-0 items-center justify-center rounded-full font-mono font-black leading-none [text-shadow:0_1px_1px_rgba(0,0,0,0.45)] ${CHIP_SIZE[size]} ${TOKEN_CHIP[color]} ${
+          color === "yellow" ? "[text-shadow:none]" : ""
+        }`}
+        title={n ? `${n}라운드 흔적` : "2~5·7~10라운드 흔적"}
+      >
+        {n ?? ""}
+      </span>
+      {caption && color === "purple" && (
+        <span className="absolute left-1/2 top-full mt-0.5 -translate-x-1/2 whitespace-nowrap rounded border border-purple-400 bg-purple-950/90 px-1 text-[8px] font-black leading-tight text-purple-200 shadow-[0_0_8px_rgba(192,132,252,0.6)] sm:text-[9px]">
+          💜 6R
+        </span>
+      )}
+    </span>
+  );
+}
+
+const STEP = 100 / GRID; // % distance between two road lines
 const INSET = 2.6; // % gap between a building and the road centre line
 
 // Deterministic per-building look (height tier + facade hue) so the skyline isn't a flat grid.
@@ -149,10 +189,12 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
                 {(lifting ? reveal!.result === "caught" : hasCar) && (
                   <span className="text-[min(5.5vw,26px)] leading-none drop-shadow-[0_0_8px_rgba(239,68,68,0.9)]">🚗</span>
                 )}
-                <div className="flex flex-wrap justify-center gap-0.5">
-                  {(lifting ? reveal!.tokens : (contents?.tokens.filter((_, i, arr) => !(hasCar && i === arr.length - 1)) ?? [])).map((t, i) => (
-                    <span key={i} className={`h-2 w-2 rounded-full border sm:h-2.5 sm:w-2.5 ${TOKEN_CLASS[t]}`} />
-                  ))}
+                <div className="flex flex-wrap justify-center gap-1">
+                  {lifting
+                    ? reveal!.tokens.map((t, i) => <TokenChip key={i} color={t} size="lg" caption />)
+                    : (contents?.tokens.filter((_, i, arr) => !(hasCar && i === arr.length - 1)) ?? []).map((t, i) => (
+                        <TokenChip key={i} color={t} round={pathOrder.get(cell)?.[i]} size="lg" caption />
+                      ))}
                 </div>
                 {lifting && reveal!.result === "empty" && <span className="text-[9px] font-bold text-white/60 sm:text-[10px]">텅 빔</span>}
               </div>
@@ -220,7 +262,7 @@ export default function CityMap({ state, showSecret, revealRoute = false, thiefT
                     {note.result === "trail" ? (
                       <>
                         {note.tokens.map((t, i) => (
-                          <span key={i} className={`h-1.5 w-1.5 rounded-full border ${TOKEN_CLASS[t]}`} />
+                          <TokenChip key={i} color={t} />
                         ))}
                         R{note.round}
                       </>

@@ -76,6 +76,19 @@
 - **Visual Midpoint Emphasis:**
   - 상단 텍스트 경로 요약("🗺️ 도둑의 실제 경로: …")에서도 6번째 방문 건물만 `text-purple-400 font-extrabold underline` + 💜로 강조 — 보드판 오버레이와 양측 일치. 도둑이 6라운드 전에 잡히면 보라색 표시 없음.
 
+### 🚁 시티 체이스 (City Chase) Token Color Scheme & High-Visibility Blue Badges
+(요청서가 전제한 `engine/gameEngine.ts`·`engine/types.ts`·`components/BuildingLiftModal.tsx`·`BuildingGrid.tsx`·`BuildingItem.tsx`·`TraceToken`·`.handoff/`는 없음 —
+색 판정은 `engine.ts`의 `tokenColor()`, 수색 시 드러나는 흔적은 `CityMap.tsx`의 건물 들어올림(ground) 영역, 미니 뱃지는 같은 파일의 경찰 메모 뱃지 + `CityChaseBoard.tsx` 수색 기록/라운드 트랙.)
+- **Round 6 Purple Token Standard (하우스 룰):**
+  - `TokenColor = "yellow" | "blue" | "purple" | "red"`, `tokenColor(6) === "purple"`(`MIDPOINT_ROUND`는 이제 `engine.ts`에 정의). 도둑 본인 뷰·수색 발견·경찰 메모·수색 기록·라운드 트랙 모두 동일하게 보라.
+  - **게임플레이 영향**: 원 룰북은 6라운드도 파랑이라, 보라 토큰은 경찰에게 "정확히 6라운드에 여기 있었다"는 추가 정보를 준다. 추론 로직 `matchesSearch`(경찰 봇·도둑 봇·수사 지도 공통)도 노랑과 함께 보라 개수까지 비교하도록 갱신. 룰북 모달·방 만들기 요약 문구 갱신, `tokenColor` 1~11 테스트 추가.
+- **Electric Neon Blue for General Clues (Rounds 2~5, 7~10):**
+  - 공용 `TokenChip`(`CityMap.tsx`): 색별 그라데이션(파랑 `from-blue-700 via-cyan-400 to-sky-200` 등) + `border` + 네온 글로우 `shadow` + `ring`. 건물 들어올림 시 큰 칩(`lg`), 경찰 메모/수색 기록은 작은 칩(`sm`).
+- **Enriched Building Lift Inspection:**
+  - 들어올린 건물 밑 흔적에 큰 발광 칩 + 보라는 `💜 6R` 캡션.
+  - **숫자 표기 원칙(요청서와 다름)**: 경찰에게 보이는 칩에는 색만으로 이미 알 수 있는 번호(노랑 1·보라 6·빨강 11)만 표시, **파랑은 번호 없이** 표시. 파랑에 실제 라운드를 찍으면 경찰이 도둑이 언제 그 건물에 있었는지 정확히 알게 되어 숨바꼭질의 핵심 비공개 정보가 무너짐. 도둑 본인 뷰는 자기 경로를 아니까 모든 칩에 실제 번호 표시.
+  - 엔드게임 경로 리플레이 패드(빨강/6번 보라)는 기존 그대로.
+
 ## 💍 반지의 제왕: 가운데땅에서의 대결 (The Confrontation) — 2인 비대칭 신규 게임 — 2026-09-25 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: `반지의제왕가운데땅에서의대결.md` 룰북 기준 2인 비대칭 블러핑 전략 게임 풀스택 신규 구축. 실제 룰북 위치는

@@ -30,7 +30,7 @@ export default function CityChaseRulebookModal({ onClose }: { onClose: () => voi
             <ul className="list-disc space-y-1 pl-4 text-xs text-white/70 light:text-slate-600">
               <li>1라운드: 원하는 건물 1개 밑에 차와 <span className="font-semibold text-yellow-300 light:text-yellow-600">노란 토큰</span>을 숨깁니다. 이때 판 위엔 아직 헬기가 없어요.</li>
               <li>2~11라운드: <b>상·하·좌·우로 붙은 건물</b>로만 이동 (대각선 불가, 제자리 불가 — 매 라운드 반드시 이동).</li>
-              <li>떠난 건물에는 그 라운드의 흔적 토큰이 남습니다 (2~10라운드 <span className="font-semibold text-blue-300 light:text-blue-600">파랑</span>, 11라운드 <span className="font-semibold text-red-300 light:text-red-600">빨강</span>).</li>
+              <li>떠난 건물에는 그 라운드의 흔적 토큰이 남습니다 (2~5·7~10라운드 <span className="font-semibold text-cyan-300 light:text-cyan-600">파랑</span>, 6라운드 <span className="font-semibold text-purple-300 light:text-purple-600">보라</span>, 11라운드 <span className="font-semibold text-red-300 light:text-red-600">빨강</span>).</li>
               <li><b>한 번 지나간 건물로는 다시 돌아갈 수 없습니다.</b> 막다른 곳에 몰려 더 이동할 수 없으면 그 즉시 경찰 승리!</li>
             </ul>
           </div>

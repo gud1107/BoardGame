@@ -10,6 +10,7 @@ import {
   heliController,
   legalPlacements,
   legalThiefCells,
+  tokenColor,
   pointCells,
   pointNeighbors,
   pointOf,
@@ -109,6 +110,12 @@ describe("city chase rules", () => {
     s = applyAction(s, { type: "THIEF_MOVE", seat: 0, cell: cellOf(4, 0) });
     expect(applyAction(s, { type: "HELI_PLACE", seat: 1, heli: 2, at: pointOf(1, 1) })).toBe(s);
     expect(applyAction(s, { type: "HELI_SEARCH", seat: 1, heli: 0, cell: cellOf(4, 0) })).toBe(s);
+  });
+
+  it("token colours: 1 yellow, 6 purple, 11 red, the rest blue", () => {
+    expect(Array.from({ length: 11 }, (_, i) => tokenColor(i + 1))).toEqual([
+      "yellow", "blue", "blue", "blue", "blue", "purple", "blue", "blue", "blue", "blue", "red",
+    ]);
   });
 
   it("search reveals trail tokens and finding the car wins", () => {

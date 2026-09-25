@@ -35,13 +35,20 @@ export const HELI_COUNT = 3;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 4;
 
-export type TokenColor = "yellow" | "blue" | "red";
+/** Midpoint of the 11-round chase — its trail token is purple (house rule on top of the rulebook's yellow/blue/red). */
+export const MIDPOINT_ROUND = 6;
+
+export type TokenColor = "yellow" | "blue" | "purple" | "red";
 
 export function tokenColor(round: number): TokenColor {
   if (round === 1) return "yellow";
+  if (round === MIDPOINT_ROUND) return "purple";
   if (round === TOTAL_ROUNDS) return "red";
   return "blue";
 }
+
+/** The round a token colour pins down on its own (blue could be any of 2~5, 7~10). */
+export const TOKEN_ROUND: Record<TokenColor, number | null> = { yellow: 1, blue: null, purple: MIDPOINT_ROUND, red: TOTAL_ROUNDS };
 
 export type SearchResult = "empty" | "trail" | "caught";
 
@@ -349,8 +356,10 @@ function matchesSearch(path: readonly Cell[], s: SearchRecord): boolean {
   if (s.result === "caught") return car;
   if (car) return false;
   if (tokens.length !== s.tokens.length) return false;
-  // Yellow is the only colour that can differ at equal counts (red is always the car's own).
-  return tokens.filter((t) => t === "yellow").length === s.tokens.filter((t) => t === "yellow").length;
+  // Yellow and purple pin the round down; red is always the car's own, so it never shows up here.
+  return (["yellow", "purple"] as const).every(
+    (col) => tokens.filter((t) => t === col).length === s.tokens.filter((t) => t === col).length,
+  );
 }
 
 function coveredCells(helis: readonly Point[]): Uint8Array {
