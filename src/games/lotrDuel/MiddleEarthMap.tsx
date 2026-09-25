@@ -13,11 +13,14 @@ export default function MiddleEarthMap({
   targets,
   selectedFrom,
   onRegion,
+  rise,
 }: {
   state: LotrDuelState;
   targets: Set<RegionId>;
   selectedFrom: RegionId | null;
   onRegion: (r: RegionId) => void;
+  /** Region whose fortress was just built — replays the rising-keep animation. */
+  rise?: { key: number; region: RegionId } | null;
 }) {
   const edges: [RegionId, RegionId][] = [];
   for (const a of REGIONS) for (const b of ADJACENCY[a]) if (a < b) edges.push([a, b]);
@@ -71,17 +74,33 @@ export default function MiddleEarthMap({
             }`}
           >
             {flashing && <span key={flash.no} className="lotrd-clash pointer-events-none absolute inset-0 rounded-xl" />}
+            {flashing && (
+              <span key={`x${flash.no}`} className="pointer-events-none absolute -top-5 left-1/2 -translate-x-1/2 text-xl drop-shadow-[0_0_8px_rgba(244,63,94,.9)]" style={{ animation: "lotrfx-rim 1.2s ease-out both" }}>
+                ⚔️
+              </span>
+            )}
+            {rise?.region === r && (
+              <span key={`r${rise.key}`} className="pointer-events-none absolute inset-0 rounded-xl" style={{ boxShadow: "0 0 0 2px rgba(251,191,36,.9), 0 0 28px 6px rgba(251,191,36,.6)", animation: "lotrfx-rim 1.8s ease-out both" }} />
+            )}
             <span className="text-[clamp(9px,1.9vw,13px)] leading-tight font-bold text-amber-100 light:text-amber-900">{info.name}</span>
             <span className="text-[clamp(7px,1.3vw,9px)] leading-tight text-white/45 light:text-slate-500">{lm?.name}</span>
             <span className="mt-0.5 flex items-center gap-1 text-[clamp(9px,1.8vw,12px)] font-bold">
-              {reg.fellowshipFortress && <span title="원정대 요새" className="rounded bg-amber-400/90 px-0.5 text-[0.8em] text-black">🏰</span>}
+              {reg.fellowshipFortress && (
+                <span key={rise?.region === r ? `f${rise.key}` : "f"} title="원정대 요새" className={`rounded bg-amber-400/90 px-0.5 text-[0.8em] text-black ${rise?.region === r ? "lotrfx-keep" : ""}`}>
+                  🏰
+                </span>
+              )}
               {reg.fellowshipUnits > 0 && (
                 <span className="flex items-center rounded-full bg-gradient-to-b from-amber-300 to-amber-600 px-1.5 text-black shadow-[0_0_6px_rgba(251,191,36,.6)]">{reg.fellowshipUnits}</span>
               )}
               {reg.sauronUnits > 0 && (
                 <span className="flex items-center rounded-full bg-gradient-to-b from-zinc-400 to-zinc-700 px-1.5 text-white shadow-[0_0_6px_rgba(244,63,94,.45)]">{reg.sauronUnits}</span>
               )}
-              {reg.sauronFortress && <span title="사우론 요새" className="rounded bg-zinc-600 px-0.5 text-[0.8em]">🏯</span>}
+              {reg.sauronFortress && (
+                <span key={rise?.region === r ? `s${rise.key}` : "s"} title="사우론 요새" className={`rounded bg-zinc-600 px-0.5 text-[0.8em] ${rise?.region === r ? "lotrfx-keep" : ""}`}>
+                  🏯
+                </span>
+              )}
               {!reg.fellowshipFortress && !reg.sauronFortress && reg.fellowshipUnits === 0 && reg.sauronUnits === 0 && <span className="text-white/25 light:text-slate-400">·</span>}
             </span>
           </button>

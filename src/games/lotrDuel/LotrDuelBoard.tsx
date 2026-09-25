@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import { CardFace, COLOR_STYLE, CostChips, cardGlyph, describeCard } from "./CardFace";
 import { ADJACENCY, CHAIN_INFO, COLOR_INFO, FACTION_EMOJI, FACTION_LABEL, FRODO_START, RACES, RACE_INFO, REGIONS, REGION_INFO, TECHS, TECH_INFO, TOKENS } from "./data";
 import {
@@ -20,10 +21,13 @@ import {
   type Faction,
   type LotrDuelState,
   type PendingStep,
+  type PyramidSlot,
   type RegionId,
   type Seat,
 } from "./engine";
-import { lotrSfx } from "./lotrAudio";
+import { ActionCinematicFX, EndingFX, FX_KEYFRAMES, type ActionFX } from "./ActionCinematicFX";
+import { diffFx, type FxEvents } from "./fxEvents";
+import { getLotrAudio } from "./lotrAudioEngine";
 import MiddleEarthMap from "./MiddleEarthMap";
 
 /**
@@ -107,22 +111,79 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
   const myTurn = state.phase === "PLAYING" && state.turn === myFaction;
   const front = state.pending[0];
   const act = (a: EngineAction) => {
-    lotrSfx.select();
+    getLotrAudio().play("SELECT");
     onAction(a);
   };
 
-  // ---- sound cues ----
+  // ---- cinematic FX, derived during render from the previous replayed state ----
+  const [fxPrev, setFxPrev] = useState(state);
+  const [fx, setFx] = useState<ActionFX | null>(null);
+  const [ghost, setGhost] = useState<{ key: number; slot: PyramidSlot; mode: "PLAY" | "DISCARD" } | null>(null);
+  const [flipped, setFlipped] = useState<ReadonlySet<string>>(new Set());
+  const [trail, setTrail] = useState<{ key: number; faction: Faction; from: number; to: number } | null>(null);
+  const [shakeKey, setShakeKey] = useState(0);
+  const [rise, setRise] = useState<{ key: number; region: RegionId } | null>(null);
+  if (fxPrev !== state) {
+    const ev = diffFx(fxPrev, state);
+    setFxPrev(state);
+    if (ev) {
+      const n = (state.lastAction?.no ?? 0) * 100 + state.turnNumber;
+      if (ev.taken) setGhost({ key: n, slot: fxPrev.pyramidGrid[ev.taken.slot], mode: ev.taken.mode });
+      if (ev.flippedCardIds.length > 0) setFlipped(new Set(ev.flippedCardIds));
+      const ring = ev.ring[ev.ring.length - 1];
+      if (ring) setTrail({ key: n, ...ring });
+      if (ev.combat) setShakeKey((k) => k + 1);
+      if (ev.landmark) setRise({ key: n, region: ev.landmark.region });
+      const banner = bannerFor(ev, myFaction, n);
+      if (banner) setFx(banner);
+    } else if (fxPrev.seed !== state.seed) {
+      // Rematch — drop leftovers from the previous game.
+      setFx(null);
+      setGhost(null);
+      setTrail(null);
+      setRise(null);
+    }
+  }
+  const dismissFx = useCallback(() => setFx(null), []);
+
+  // ---- sound cues + chapter BGM ----
   const prev = useRef(state);
   useEffect(() => {
     const p = prev.current;
     prev.current = state;
-    if (p === state) return;
-    if (state.combatFlash && state.combatFlash.no !== p.combatFlash?.no) lotrSfx.battle();
-    else if (state.lastAction && state.lastAction.no !== p.lastAction?.no) lotrSfx.pick();
-    if (state.ringTrack.frodoPosition !== p.ringTrack.frodoPosition || state.ringTrack.nazgulPosition !== p.ringTrack.nazgulPosition) lotrSfx.escape();
-    if (state.phase === "GAME_OVER" && p.phase !== "GAME_OVER") window.setTimeout(() => (state.winner === myFaction ? lotrSfx.victory() : lotrSfx.defeat()), 500);
-    else if (state.phase === "PLAYING" && state.turn === myFaction && p.turn !== myFaction) lotrSfx.myTurn();
+    const ev = diffFx(p, state);
+    if (!ev) return;
+    const audio = getLotrAudio();
+    if (ev.gameOver) {
+      window.setTimeout(() => audio.playEnding(ev.gameOver!), 400);
+      return;
+    }
+    if (ev.landmark) audio.play("LANDMARK");
+    else if (ev.taken) audio.play(ev.taken.mode === "PLAY" ? "CARD_PICK" : "CARD_DISCARD");
+    else if (ev.moved) audio.play("MOVE");
+    else if (ev.unitsPlaced) audio.play("UNIT_PLACE");
+    if (ev.flippedCardIds.length > 0) window.setTimeout(() => audio.play("CARD_FLIP"), 180);
+    if (ev.combat) window.setTimeout(() => audio.play("COMBAT"), 120);
+    ev.ring.forEach((r) => window.setTimeout(() => audio.play(r.faction === "FELLOWSHIP" ? "RING_FELLOWSHIP" : "RING_NAZGUL"), 250));
+    if (ev.alliance) window.setTimeout(() => audio.playAlliance(ev.alliance!.token.race), 300);
+    if (ev.chapter) audio.play("CHAPTER");
+    else if (state.phase === "PLAYING" && state.turn === myFaction && p.turn !== myFaction) window.setTimeout(() => audio.play("MY_TURN"), 450);
   }, [state, myFaction]);
+
+  // Chapter theme — silently ignored until the first gesture unlocks audio.
+  useEffect(() => {
+    getLotrAudio().setTheme(state.phase === "GAME_OVER" ? "silence" : state.chapter);
+  }, [state.chapter, state.phase]);
+  useEffect(() => {
+    const unlock = () => getLotrAudio().unlock();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      getLotrAudio().stop();
+    };
+  }, []);
 
   // ---- map targets for region-based pending steps ----
   const targets = new Set<RegionId>();
@@ -145,7 +206,6 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
       if (!moveFrom) setMoveFrom(r);
       else if (r === moveFrom) setMoveFrom(null);
       else {
-        lotrSfx.move();
         onAction({ type: "MOVE", faction: myFaction, from: moveFrom, to: r });
         setMoveFrom(null);
       }
@@ -165,12 +225,22 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
   const rowStep = cardH * 0.52;
   const totalH = (rows - 1) * rowStep + cardH;
 
+  const slotBox = (slot: PyramidSlot): CSSProperties => ({
+    left: `${((slot.x - 1 + span / 2) / span) * 100}%`,
+    top: `${((slot.row * rowStep) / totalH) * 100}%`,
+    width: `${cardW * 100}%`,
+    height: `${(cardH / totalH) * 100}%`,
+    padding: "1.5%",
+  });
+
   const { frodoPosition: fr, nazgulPosition: nz, trackLength: L } = state.ringTrack;
   const winnerIsMe = state.winner === myFaction;
 
   return (
     <div className="flex flex-col gap-3 text-white light:text-slate-900">
-      <style>{KEYFRAMES}</style>
+      <style>{KEYFRAMES + FX_KEYFRAMES}</style>
+      <ActionCinematicFX fx={fx} onDismiss={dismissFx} />
+      {state.phase === "GAME_OVER" && state.winner && !victoryClosed && <EndingFX winner={state.winner} />}
 
       {/* ---- header HUD ---- */}
       <div className={`${panel} flex flex-wrap items-center gap-x-4 gap-y-2 bg-gradient-to-r from-amber-900/20 to-transparent`}>
@@ -193,6 +263,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
           원정 🧝 {fr}/{L} · 🐉 {nz} (간격 {fr - nz})
         </span>
         <span className="ml-auto flex items-center gap-2">
+          <BgmControl />
           {!opponentConnected && <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[11px] text-rose-200">상대 연결 끊김</span>}
           <button onClick={onOpenRulebook} className="rounded-full border border-white/15 px-3 py-1 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600">
             📖 룰북
@@ -207,7 +278,9 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
         {/* ---- map ---- */}
         <div className="order-2 flex flex-col gap-2 lg:order-1">
           <p className={h3}>가운데땅 지도</p>
-          <MiddleEarthMap state={state} targets={targets} selectedFrom={moveFrom} onRegion={onRegion} />
+          <div key={shakeKey} className={shakeKey > 0 ? "lotrfx-shake" : undefined}>
+            <MiddleEarthMap state={state} targets={targets} selectedFrom={moveFrom} onRegion={onRegion} rise={rise} />
+          </div>
           <p className="text-[11px] text-white/40 light:text-slate-500">
             🟡 원정대 유닛 · ⚫ 사우론 유닛 · 🏰/🏯 요새 (전투로 파괴되지 않음). 같은 지역에 양측 유닛이 모이면 1:1로 동시에 사라집니다.
           </p>
@@ -223,19 +296,21 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
               if (slot.isTaken) return null;
               const available = open.has(i);
               const aff = calculateCardCost(me, slot.card).canAfford;
+              const justFlipped = flipped.has(slot.card.id);
               return (
-                <div
-                  key={slot.card.id}
-                  className="absolute"
-                  style={{
-                    left: `${((slot.x - 1 + span / 2) / span) * 100}%`,
-                    top: `${((slot.row * rowStep) / totalH) * 100}%`,
-                    width: `${cardW * 100}%`,
-                    height: `${(cardH / totalH) * 100}%`,
-                    zIndex: selectedSlot === i ? 30 : slot.row + 1,
-                    padding: "1.5%",
-                  }}
-                >
+                <div key={slot.card.id} className="absolute" style={{ ...slotBox(slot), zIndex: selectedSlot === i ? 30 : slot.row + 1 }}>
+                  {justFlipped && (
+                    <span className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                      {Array.from({ length: 8 }, (_, k) => (
+                        <span
+                          key={k}
+                          className="absolute h-1.5 w-1.5 rounded-full bg-amber-200 shadow-[0_0_6px_#fbbf24]"
+                          style={{ ["--a" as string]: `${k * 45}deg`, animation: `lotrfx-flip-spark 700ms ease-out ${150 + k * 15}ms both` } as CSSProperties}
+                        />
+                      ))}
+                    </span>
+                  )}
+                  <div className={`h-full w-full ${justFlipped ? "lotrfx-flip" : ""}`}>
                   <CardFace
                     card={slot.isOpen ? slot.card : null}
                     faceDown={!slot.isOpen}
@@ -245,9 +320,24 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
                     selected={selectedSlot === i}
                     onClick={() => setSelectedSlot(selectedSlot === i ? null : i)}
                   />
+                  </div>
                 </div>
               );
             })}
+            {/* Taken card rises out of the pyramid in a rune light pillar (ends fully transparent, so it can stay mounted). */}
+            {ghost && (
+              <div key={ghost.key} className="pointer-events-none absolute" style={{ ...slotBox(ghost.slot), zIndex: 40 }}>
+                <span
+                  className={`lotrfx-pillar absolute -top-[120%] left-[15%] h-[220%] w-[70%] rounded-full blur-md ${ghost.mode === "PLAY" ? "bg-gradient-to-t from-amber-300/80 via-amber-200/30 to-transparent" : "bg-gradient-to-t from-slate-300/60 to-transparent"}`}
+                />
+                <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[clamp(10px,2vw,16px)] text-amber-200 drop-shadow-[0_0_6px_gold]" style={{ animation: "lotrfx-rim 900ms ease-out both" }}>
+                  ᚱᛁᛜ
+                </span>
+                <div className="lotrfx-card-rise h-full w-full">
+                  <CardFace card={ghost.slot.card} available chapter={state.chapter} affordable />
+                </div>
+              </div>
+            )}
           </div>
           {selected && selectedCost && myTurn && !front && (
             <div className={`${panel} lotrd-in flex flex-col gap-2 border-amber-400/40`}>
@@ -289,7 +379,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
         <div className="order-3 flex flex-col gap-3">
           <div className={panel}>
             <p className={h3}>반지 원정 트랙</p>
-            <div className="grid grid-cols-4 gap-1">
+            <div key={trail?.key ?? 0} className="grid grid-cols-4 gap-1">
               {[0, 1, 2, 3].map((piece) => (
                 <div key={piece} className="grid grid-cols-4 gap-px rounded-md border border-amber-800/40 bg-amber-950/30 p-0.5 light:bg-amber-50">
                   {Array.from({ length: 4 }, (_, k) => {
@@ -298,7 +388,9 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
                     return (
                       <div
                         key={k}
-                        className={`relative flex aspect-square flex-col items-center justify-center rounded-sm text-[10px] leading-none ${pos === L ? "bg-red-900/60" : pos < FRODO_START ? "bg-black/30" : "bg-white/5"}`}
+                        className={`relative flex aspect-square flex-col items-center justify-center rounded-sm text-[10px] leading-none ${pos === L ? "bg-red-900/60" : pos < FRODO_START ? "bg-black/30" : "bg-white/5"} ${
+                          trail && pos > trail.from && pos <= trail.to ? (trail.faction === "FELLOWSHIP" ? "lotrfx-trail-blue" : "lotrfx-trail-red") : ""
+                        }`}
                         title={pos === L ? "운명의 산" : `${pos}`}
                       >
                         {pos === L && <span>🌋</span>}
@@ -602,5 +694,108 @@ function PlayerDock({ state, faction, label, highlight }: { state: LotrDuelState
         </p>
       </div>
     </div>
+  );
+}
+
+const RACE_BANNER_COLOR = { ELF: "EMERALD", DWARF: "GOLD", HOBBIT: "EMERALD", HUMAN: "BLUE", ENT: "EMERALD", WIZARD: "BLUE" } as const;
+
+/** Picks the one banner worth a full-screen moment — alliance > fortress > clash > chapter > ring. */
+function bannerFor(ev: FxEvents, myFaction: Faction, id: number): ActionFX | null {
+  if (ev.gameOver) return null;
+  const who = (f: Faction) => (f === myFaction ? "내" : "상대");
+  if (ev.alliance) {
+    const t = ev.alliance.token;
+    return { id, type: "ALLIANCE_SPARK", emblem: RACE_INFO[t.race].emoji, color: RACE_BANNER_COLOR[t.race], title: `${RACE_INFO[t.race].name} 동맹`, subText: `${who(ev.alliance.faction)} 동맹 토큰 「${t.name}」 — ${t.description}` };
+  }
+  if (ev.landmark) {
+    return { id, type: "LANDMARK_RISE", emblem: "🏰", color: "GOLD", title: "요새 건립", subText: `${who(ev.landmark.faction)} ${REGION_INFO[ev.landmark.region].name} 요새 — 전투로 무너지지 않습니다` };
+  }
+  if (ev.combat) {
+    return { id, type: "COMBAT", emblem: "⚔️", color: "RED", title: "격돌!", subText: `${REGION_INFO[ev.combat.region].name} — 양측 유닛 ${ev.combat.losses}개씩 전사` };
+  }
+  if (ev.chapter) {
+    return {
+      id,
+      type: "CHAPTER",
+      emblem: ev.chapter === 2 ? "🐉" : "🌋",
+      color: ev.chapter === 2 ? "BLUE" : "RED",
+      title: `${ev.chapter}챕터`,
+      subText: ev.chapter === 2 ? "전란의 격돌 — 나즈굴의 추격이 시작된다" : "운명의 산 결전 — 대군세가 몰려온다",
+    };
+  }
+  const ring = ev.ring[ev.ring.length - 1];
+  if (ring) {
+    const fellowship = ring.faction === "FELLOWSHIP";
+    return {
+      id,
+      type: "RING_PULSE",
+      emblem: fellowship ? "💍" : "🐉",
+      color: fellowship ? "BLUE" : "RED",
+      title: fellowship ? "원정 전진" : "나즈굴 추격",
+      subText: `${fellowship ? "프로도 & 샘" : "나즈굴"} ${ring.to - ring.from}칸 전진 ${fellowship ? "— 운명의 산으로" : "— 반지의 사자를 쫓는다"}`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Sound effects on/off, BGM on/off + volume, reading the shared audio settings store (same control
+ * as mafia's — turning it on also lifts the site-wide default mute so it
+ * actually plays; turning it off leaves the master switch alone).
+ */
+function BgmControl() {
+  const masterMuted = useAudioSettingsStore((s) => s.masterMuted);
+  const bgmMuted = useAudioSettingsStore((s) => s.bgmMuted);
+  const bgmVolume = useAudioSettingsStore((s) => s.bgmVolume);
+  const setMasterMuted = useAudioSettingsStore((s) => s.setMasterMuted);
+  const setBgmMuted = useAudioSettingsStore((s) => s.setBgmMuted);
+  const setBgmVolume = useAudioSettingsStore((s) => s.setBgmVolume);
+  const sfxMuted = useAudioSettingsStore((s) => s.sfxMuted);
+  const setSfxMuted = useAudioSettingsStore((s) => s.setSfxMuted);
+  const on = !masterMuted && !bgmMuted;
+  const sfxOn = !masterMuted && !sfxMuted;
+  return (
+    <span className="flex items-center gap-1">
+      <button
+        onClick={() => {
+          getLotrAudio().unlock();
+          if (sfxOn) setSfxMuted(true);
+          else {
+            if (masterMuted) setMasterMuted(false);
+            setSfxMuted(false);
+          }
+        }}
+        title={sfxOn ? "효과음 끄기" : "효과음 켜기"}
+        className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${sfxOn ? "border-amber-300/50 bg-amber-400/15 text-amber-200 light:text-amber-800" : "border-white/15 text-white/50 hover:border-white/30 light:border-slate-300 light:text-slate-500"}`}
+      >
+        {sfxOn ? "🔔 효과음" : "🔕 효과음"}
+      </button>
+      <button
+        onClick={() => {
+          getLotrAudio().unlock();
+          if (on) setBgmMuted(true);
+          else {
+            if (masterMuted) setMasterMuted(false);
+            setBgmMuted(false);
+          }
+        }}
+        title={on ? "배경음악 끄기" : "배경음악 켜기"}
+        className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${on ? "border-amber-300/50 bg-amber-400/15 text-amber-200 light:text-amber-800" : "border-white/15 text-white/50 hover:border-white/30 light:border-slate-300 light:text-slate-500"}`}
+      >
+        {on ? "🔊 BGM" : "🔇 BGM"}
+      </button>
+      {on && (
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={bgmVolume}
+          onChange={(e) => setBgmVolume(Number(e.target.value))}
+          aria-label="배경음악 볼륨"
+          className="hidden w-16 accent-amber-400 sm:block"
+        />
+      )}
+    </span>
   );
 }
