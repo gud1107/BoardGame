@@ -30,7 +30,9 @@ import { ActionCinematicFX, EndingFX, FX_KEYFRAMES, type ActionFX } from "./Acti
 import { diffFx, type FxEvents } from "./fxEvents";
 import { getLotrAudio } from "./lotrAudioEngine";
 import AllianceTokenSelectModal from "./AllianceTokenSelectModal";
+import HistoryLogDrawer from "./HistoryLogDrawer";
 import MiddleEarthMap from "./MiddleEarthMap";
+import PlayerTechHUD from "./PlayerTechHUD";
 import VictoryCinematicModal from "./VictoryCinematicModal";
 import type { RingTrackReward } from "./data";
 
@@ -261,7 +263,9 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
   const { frodoPosition: fr, nazgulPosition: nz, trackLength: L } = state.ringTrack;
 
   return (
-    <div className="flex flex-col gap-3 text-white light:text-slate-900">
+    <div className="flex items-start gap-3 text-white light:text-slate-900">
+      <HistoryLogDrawer log={state.log} />
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
       <style>{KEYFRAMES + FX_KEYFRAMES}</style>
       <ActionCinematicFX fx={fx} onDismiss={dismissFx} />
       {state.phase === "GAME_OVER" && state.winner && !victoryClosed && <EndingFX winner={state.winner} />}
@@ -482,16 +486,6 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
             </div>
           </div>
 
-          <div className={`${panel} max-h-48 overflow-y-auto`}>
-            <p className={h3}>기록</p>
-            <ul className="flex flex-col gap-0.5 text-[11px] text-white/65 light:text-slate-600">
-              {[...state.log].reverse().slice(0, 14).map((e) => (
-                <li key={e.no} className={e.faction === "FELLOWSHIP" ? "text-amber-200/90 light:text-amber-800" : e.faction === "SAURON" ? "text-rose-200/80 light:text-rose-800" : ""}>
-                  {e.faction ? FACTION_EMOJI[e.faction] : "•"} {e.text}
-                </li>
-              ))}
-            </ul>
-          </div>
         </div>
       </div>
 
@@ -499,6 +493,9 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
       <div className="grid gap-3 md:grid-cols-2">
         <PlayerDock state={state} faction={myFaction} label={`나 · ${names[viewerSeat]}`} highlight />
         <PlayerDock state={state} faction={oppFaction} label={`상대 · ${names[oppSeat]}`} />
+      </div>
+
+      {state.phase === "PLAYING" && <PlayerTechHUD state={state} faction={myFaction} />}
       </div>
 
       {state.phase === "GAME_OVER" && state.winner && !victoryClosed && (

@@ -132,9 +132,14 @@ export type PendingStep =
 
 export type WinType = "RING_QUEST" | "RACE_ALLIANCE" | "CONQUEST" | "TERRITORY_MAJORITY";
 
+export type LogKind = "CARD" | "DISCARD" | "TRACK" | "COIN" | "COMBAT" | "UNIT" | "MOVE" | "LANDMARK" | "TOKEN" | "TACTIC" | "SYSTEM";
+
 export interface LogEntry {
   no: number;
+  /** Turn the entry happened on (the history log's "timestamp" — wall-clock time would differ between lockstep clients). */
+  turn: number;
   faction: Faction | null;
+  kind: LogKind;
   text: string;
 }
 

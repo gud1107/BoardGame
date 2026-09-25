@@ -220,6 +220,24 @@ UI는 `LotrDuelBoard.tsx`의 트랙 패널(이름 트랙용 `RingTrackBoard.tsx`
   승리 유형과 관련된 줄 강조) + 챕터·턴·원정 트랙 최종 간격. 재대결(진영 교대)·나가기·보드 보기.
 - 검증: tsc/eslint/vitest 통과. 임시 페이지로 5가지 결말(원정대 반지·사우론 추격·종족 동맹·정복·판정승)을 데스크톱/모바일(390px)로 렌더해 캡처 확인 후 삭제.
 
+### 📜 반지의 제왕: 가운데땅에서의 대결 (LotR Duel) Always-On Tech HUD & Collapsible History Log — 2026-09-25 후속 (커밋/푸시, 배포는 웹훅 자동)
+
+요청서의 `Board.tsx`·`components/PlayerTechHUD.tsx`·`components/HistoryLogDrawer.tsx`·`.handoff/`는 없다 — 관례대로 `src/games/lotrDuel/PlayerTechHUD.tsx`,
+`src/games/lotrDuel/HistoryLogDrawer.tsx`를 새로 만들어 `LotrDuelBoard.tsx`에 연결. 요청서 스니펫의 `h-[100dvh]` 고정 레이아웃은 쓰지 않았다(공용 `/games/[gameId]`
+페이지 크롬 안에서 넘침 — 기존 보드 헤더 주석과 동일 이유).
+
+- **Always-On Player Tech HUD (`PlayerTechHUD.tsx`):** 게임 열 하단에 `sticky bottom-2`로 항상 보이는 바 — 주화, 5대 기술(📜 지식·🚩 지휘·⚔️ 무력·🎭 계략·🔥 용기)
+  보유 시 골드 림라이트 + `xN`, 미보유는 점선·반투명(툴팁: 필요 시 1개당 1주화), 선택형 카드 `📜/🎭 택1` 배지, 드워프 `⛏️ 아무거나 1`, 종족 인장 + `n/6`.
+  사이트 전역 🎲 내기 버튼(우하단 고정)에 가리지 않도록 오른쪽 여백(`pr-16`). 기호 아이콘은 이 게임 기존 `TECH_INFO` 이모지를 그대로 사용(요청서의 📖/🛡️와 다름).
+- **Left-Aligned Collapsible History Log (`HistoryLogDrawer.tsx`):** 데스크톱(lg+) 좌측 `w-60` sticky 패널, 모바일은 **좌측 가장자리 세로 탭**(`📜 기록 n`)
+  → 좌측 슬라이드 드로어(`w-72`, 바깥 탭/✕로 닫기). 요청서의 "좌측 상단 플로팅 칩" 대신 가장자리 탭인 이유: 모바일 사이트 헤더가 sticky이면서 2줄(약 110px)이라 상단 칩이 헤더에 가림.
+  기존 우측 열의 작은 "기록" 패널은 제거. 이 게임 페이지 최대 폭은 로그 열만큼 넓힘(`max-w-7xl` → `max-w-[96rem]`, `app/games/[gameId]/page.tsx`).
+- **엔진 로그 구조화:** `LogEntry`에 `turn`(표시용 "타임스탬프" — lockstep 클라이언트마다 벽시계가 달라 턴 번호 사용)과 `kind`
+  (CARD/DISCARD/TRACK/COIN/COMBAT/UNIT/MOVE/LANDMARK/TOKEN/TACTIC/SYSTEM) 추가, 문구를 주어가 명확한 문장으로 교체
+  (예: "반지 원정대이(가) 「…」 카드를 버리고 2주화를 획득", "로한에서 유닛 격돌! 원정대 1개 vs 사우론 1개 동시 전사", "모르도르에 「바라드두르」 요새를 건설").
+  보관 한도 60 → 400(게임 전체). `fxEvents.ts`의 이동 감지도 로그 문구 대신 `kind === "MOVE"`로 변경.
+- 검증: tsc/eslint/vitest 통과(봇 게임 포함 테스트 시간 ~0.6s → ~0.7s로 로그 확대 영향 미미). 봇 대전으로 데스크톱(1500px)·모바일(390px)·모바일 드로어 열림 캡처 확인.
+
 ## 💎 스플렌더 대결 (Splendor Duel) — 2인 전용 신규 게임 — 2026-09-25 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: `boardGameRule/스플랜더 대결/스플랜더 대결.md` 룰북 기준 2인 전용 풀스택 신규 게임. 요청서는 `src/data/games.ts`

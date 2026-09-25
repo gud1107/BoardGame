@@ -35,6 +35,7 @@ import type {
   Seat,
   TechSymbol,
   WinType,
+  LogKind,
 } from "./types";
 
 export * from "./types";
@@ -300,7 +301,7 @@ function fight(state: LotrDuelState, regionId: RegionId) {
   state.players.FELLOWSHIP.unitsInSupply += res.casualties.fellowship;
   state.players.SAURON.unitsInSupply += res.casualties.sauron;
   state.combatFlash = { no: (state.combatFlash?.no ?? 0) + 1, region: regionId, losses: res.casualties.fellowship };
-  log(state, null, `⚔️ ${REGION_INFO[regionId].name} 교전 — 양측 유닛 ${res.casualties.fellowship}개씩 전사`);
+  log(state, null, `⚔️ ${REGION_INFO[regionId].name}에서 유닛 격돌! 원정대 ${res.casualties.fellowship}개 vs 사우론 ${res.casualties.sauron}개 동시 전사`, "COMBAT");
 }
 
 /**
@@ -318,7 +319,7 @@ export function advanceRing(state: LotrDuelState, faction: Faction, n: number): 
   const to = Math.min(track.trackLength, from + n);
   if (fellowship) track.frodoPosition = to;
   else track.nazgulPosition = to;
-  log(state, faction, `${fellowship ? "🧝 프로도 & 샘" : "🐉 나즈굴"} ${to - from}칸 전진 → ${to}번 칸`);
+  log(state, faction, `${fellowship ? "🧝 프로도와 샘이" : "🐉 나즈굴이"} ${to - from}칸 전진해 원정 트랙 ${to}번 칸에 도착`, "TRACK");
   if (fellowship ? to >= track.trackLength : to >= track.frodoPosition) return [];
   const steps: PendingStep[] = [];
   for (let pos = from + 1; pos <= to; pos++) {
@@ -326,7 +327,7 @@ export function advanceRing(state: LotrDuelState, faction: Faction, n: number): 
     switch (OFFICIAL_RING_TRACK[pos].reward) {
       case "COIN_1":
         state.players[faction].coins += 1;
-        log(state, faction, `원정 트랙 ${pos}번 칸 — 🪙1`);
+        log(state, faction, `원정 트랙 ${pos}번 칸 보상 — ${who(faction)} 주화 1개 획득`, "COIN");
         break;
       case "ALLIANCE_TOKEN":
         steps.push({ kind: "TOKEN_RACE", source });
@@ -439,7 +440,7 @@ function cardEffects(state: LotrDuelState, faction: Faction, card: LotrDuelCard,
       else if (card.tacticsType === "DRAIN_COINS") {
         const n = Math.min(opp.coins, card.tacticsAmount ?? 3);
         opp.coins -= n;
-        log(state, faction, `🪙 상대 주화 ${n}개 은행으로 반납`);
+        log(state, faction, `💸 ${who(otherFaction(faction))}의 주화 ${n}개를 은행으로 반납시킴`, "TACTIC");
       }
       break;
     case "GRAY":
@@ -519,7 +520,7 @@ function placeUnits(state: LotrDuelState, faction: Faction, regionId: RegionId, 
   if (n <= 0) return;
   me.unitsInSupply -= n;
   addUnits(state.boardRegions[regionId], faction, n);
-  log(state, faction, `${REGION_INFO[regionId].name}에 유닛 ${n}개 배치`);
+  log(state, faction, `🪖 ${who(faction)}이(가) ${REGION_INFO[regionId].name}에 유닛 ${n}개 배치`, "UNIT");
   fight(state, regionId);
 }
 
@@ -566,15 +567,20 @@ function settle(state: LotrDuelState): boolean {
   state.winner = win.winner;
   state.winType = win.type;
   state.pending = [];
-  log(state, win.winner, `🏆 ${FACTION_LABEL[win.winner]} — ${WIN_TEXT[win.type]}!`);
+  log(state, win.winner, `🏆 ${FACTION_LABEL[win.winner]} — ${WIN_TEXT[win.type]}!`, "SYSTEM");
   return true;
 }
 
-function log(state: LotrDuelState, faction: Faction | null, text: string) {
+/** Keeps the whole game's history for the log panel (a full game is ~150–250 entries). */
+const LOG_LIMIT = 400;
+
+function log(state: LotrDuelState, faction: Faction | null, text: string, kind: LogKind = "SYSTEM") {
   const no = (state.log[state.log.length - 1]?.no ?? 0) + 1;
-  state.log.push({ no, faction, text });
-  if (state.log.length > 60) state.log.splice(0, state.log.length - 60);
+  state.log.push({ no, turn: state.turnNumber, faction, kind, text });
+  if (state.log.length > LOG_LIMIT) state.log.splice(0, state.log.length - LOG_LIMIT);
 }
+
+const who = (f: Faction) => FACTION_LABEL[f];
 
 /** Drops leading steps that can't do anything, then ends the turn if nothing is left. */
 function advance(state: LotrDuelState) {
@@ -611,7 +617,7 @@ function endTurn(state: LotrDuelState) {
   }
   if (state.extraTurn) {
     state.extraTurn = false;
-    log(state, state.turn, "추가 턴!");
+    log(state, state.turn, `⏩ ${who(state.turn)} 추가 턴`, "SYSTEM");
     return;
   }
   state.turn = otherFaction(state.turn);
@@ -653,10 +659,10 @@ export function applyAction(state: LotrDuelState, action: EngineAction): LotrDue
         const gain = discardValue(s, f);
         me.coins += gain;
         s.discardedCards.push(card);
-        log(s, f, `「${card.name}」 버리고 ${gain}주화`);
+        log(s, f, `🗑️ ${who(f)}이(가) 「${card.name}」 카드를 버리고 ${gain}주화를 획득`, "DISCARD");
       } else {
         me.coins -= cost.costInCoins;
-        log(s, f, `「${card.name}」 ${cost.viaChain ? "연계로 무료 " : cost.costInCoins > 0 ? `${cost.costInCoins}주화로 ` : ""}내려놓음`);
+        log(s, f, `🃏 ${who(f)}이(가) 「${card.name}」 카드를 획득${cost.viaChain ? " (연계 무료)" : cost.costInCoins > 0 ? ` (${cost.costInCoins}주화 지불)` : " (무료)"}`, "CARD");
         playCard(s, f, card, cost.viaChain);
       }
       advance(s);
@@ -672,7 +678,7 @@ export function applyAction(state: LotrDuelState, action: EngineAction): LotrDue
     s.revealedLandmarks = s.revealedLandmarks.filter((l) => l.id !== tile.id);
     me.constructedLandmarks.push(tile);
     s.lastAction = { no: (s.lastAction?.no ?? 0) + 1, faction: f, kind: "LANDMARK", landmarkId: tile.id };
-    log(s, f, `🏰 랜드마크 「${tile.name}」 건설 (${cost.costInCoins}주화)`);
+    log(s, f, `🏰 ${who(f)}이(가) ${REGION_INFO[tile.targetRegion].name}에 「${tile.name}」 요새를 건설 (${cost.costInCoins}주화)`, "LANDMARK");
     landmarkEffects(s, f, tile);
     advance(s);
     return s;
@@ -697,7 +703,7 @@ export function applyAction(state: LotrDuelState, action: EngineAction): LotrDue
       const step = s.pending.shift() as Extract<PendingStep, { kind: "MOVE" }>;
       addUnits(s.boardRegions[action.from], f, -1);
       addUnits(s.boardRegions[action.to], f, 1);
-      log(s, f, `유닛 이동 ${REGION_INFO[action.from].name} → ${REGION_INFO[action.to].name}`);
+      log(s, f, `👣 ${who(f)} 유닛 이동: ${REGION_INFO[action.from].name} → ${REGION_INFO[action.to].name}`, "MOVE");
       fight(s, action.to);
       if (step.remaining > 1) prepend(s, [{ ...step, remaining: step.remaining - 1 }]);
       advance(s);
@@ -716,7 +722,7 @@ export function applyAction(state: LotrDuelState, action: EngineAction): LotrDue
       s.pending.shift();
       addUnits(s.boardRegions[action.region], opp, -1);
       s.players[opp].unitsInSupply += 1;
-      log(s, f, `🎯 ${REGION_INFO[action.region].name}의 적 유닛 1개 제거`);
+      log(s, f, `🎯 ${who(f)}이(가) ${REGION_INFO[action.region].name}의 적 유닛 1개 제거`, "TACTIC");
       if (front.count > 1) prepend(s, [{ ...front, count: front.count - 1 }]);
       advance(s);
       return s;
@@ -729,7 +735,7 @@ export function applyAction(state: LotrDuelState, action: EngineAction): LotrDue
       if (opp === "FELLOWSHIP") r.fellowshipFortress = false;
       else r.sauronFortress = false;
       s.players[opp].fortressesInSupply += 1;
-      log(s, f, `🌳 ${REGION_INFO[action.region].name}의 적 요새 파괴`);
+      log(s, f, `💥 ${who(f)}이(가) ${REGION_INFO[action.region].name}의 적 요새 파괴`, "TACTIC");
       advance(s);
       return s;
     }
@@ -741,7 +747,7 @@ export function applyAction(state: LotrDuelState, action: EngineAction): LotrDue
       s.pending.shift();
       const [card] = s.players[opp].tableauCards.splice(idx, 1);
       s.discardedCards.push(card);
-      log(s, f, `🔥 상대의 「${card.name}」 파괴`);
+      log(s, f, `🔥 ${who(f)}이(가) 상대의 「${card.name}」 카드를 파괴`, "TACTIC");
       advance(s);
       return s;
     }
@@ -752,7 +758,7 @@ export function applyAction(state: LotrDuelState, action: EngineAction): LotrDue
       const s = clone(state);
       s.pending.shift();
       const [card] = s.discardedCards.splice(idx, 1);
-      log(s, f, `♻️ 버린 카드 「${card.name}」 무료로 내려놓음`);
+      log(s, f, `♻️ ${who(f)}이(가) 버린 카드 「${card.name}」를 무료로 획득`, "CARD");
       playCard(s, f, card, false);
       advance(s);
       return s;
@@ -772,7 +778,7 @@ export function applyAction(state: LotrDuelState, action: EngineAction): LotrDue
       const token = TOKENS[action.tokenId];
       s.allianceTokenDecks[token.race] = s.allianceTokenDecks[token.race].filter((id) => id !== token.id);
       s.players[f].allianceTokens.push(token);
-      log(s, f, `🤝 동맹 토큰 「${token.name}」 획득`);
+      log(s, f, `🤝 ${who(f)}이(가) 동맹 토큰 「${token.name}」 획득`, "TOKEN");
       tokenEffects(s, f, token.id);
       advance(s);
       return s;
@@ -785,7 +791,7 @@ export function applyAction(state: LotrDuelState, action: EngineAction): LotrDue
       if (action.option === "DRAIN") {
         const n = Math.min(1, s.players[opp].coins);
         s.players[opp].coins -= n;
-        log(s, f, `🌳 상대 주화 ${n}개 차감`);
+        log(s, f, `🌳 ${who(opp)}의 주화 ${n}개 차감`, "TACTIC");
         prepend(s, rest);
       } else if (action.option === "SNIPE") prepend(s, [{ kind: "SNIPE", count: 1, source: front.source }, ...rest]);
       else prepend(s, [{ kind: "MOVE", remaining: 1, source: front.source }, ...rest]);

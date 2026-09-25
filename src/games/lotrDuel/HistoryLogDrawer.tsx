@@ -1,0 +1,105 @@
+"use client";
+
+import { useState } from "react";
+import type { LogEntry, LogKind } from "./types";
+
+/**
+ * Whole-game history for 반지의 제왕: 가운데땅에서의 대결 — card picks and
+ * discards, coins, ring-track moves, clashes, units, fortresses, tokens.
+ *
+ * Desktop (lg+): a slim sticky panel on the left of the board.
+ * Phones: a small "📜 기록" tab on the left edge (the site header is sticky
+ * and tall on phones, so a top-left chip would sit under it); tapping it
+ * slides a drawer in from the left, closed by tapping outside or ✕.
+ *
+ * The "timestamp" is the turn number — every client replays the same state,
+ * so wall-clock times would differ between the two players.
+ */
+
+const KIND_ICON: Record<LogKind, string> = {
+  CARD: "🃏",
+  DISCARD: "🗑️",
+  TRACK: "💍",
+  COIN: "🪙",
+  COMBAT: "⚔️",
+  UNIT: "🪖",
+  MOVE: "👣",
+  LANDMARK: "🏰",
+  TOKEN: "🤝",
+  TACTIC: "🎯",
+  SYSTEM: "📖",
+};
+
+function LogList({ log, onClose }: { log: LogEntry[]; onClose?: () => void }) {
+  return (
+    <div className="flex h-full flex-col overflow-hidden bg-neutral-950/95 select-none">
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/10 bg-neutral-900/90 px-3">
+        <span className="font-serif text-xs font-black text-amber-300">📜 게임 기록 ({log.length})</span>
+        {onClose && (
+          <button onClick={onClose} className="p-1 text-sm text-neutral-400 hover:text-white" aria-label="기록 닫기">
+            ✕
+          </button>
+        )}
+      </div>
+      <ol className="flex-1 space-y-1.5 overflow-y-auto p-2">
+        {log.length === 0 && <li className="py-10 text-center text-[11px] text-neutral-500">기록된 행동이 없습니다.</li>}
+        {[...log].reverse().map((e) => (
+          <li
+            key={e.no}
+            className={`rounded-xl border p-2 text-[11px] leading-relaxed ${
+              e.faction === "FELLOWSHIP"
+                ? "border-amber-500/30 bg-amber-950/20 text-amber-50"
+                : e.faction === "SAURON"
+                  ? "border-rose-500/30 bg-rose-950/20 text-rose-50"
+                  : e.kind === "COMBAT"
+                    ? "border-red-500/40 bg-red-950/30 text-red-50"
+                    : "border-white/10 bg-white/[0.03] text-neutral-200"
+            }`}
+          >
+            <span className="mb-0.5 flex items-center justify-between font-mono text-[9px] text-neutral-400">
+              <span className={e.faction === "FELLOWSHIP" ? "font-bold text-amber-300" : e.faction === "SAURON" ? "font-bold text-rose-300" : "font-bold text-neutral-300"}>
+                {KIND_ICON[e.kind]} {e.faction === "FELLOWSHIP" ? "원정대" : e.faction === "SAURON" ? "사우론" : e.kind === "COMBAT" ? "교전" : "진행"}
+              </span>
+              <span>{e.turn}턴</span>
+            </span>
+            <span className="break-keep">{e.text}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+export default function HistoryLogDrawer({ log }: { log: LogEntry[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      {/* phones: left-edge tab */}
+      <button
+        onClick={() => setOpen(true)}
+        className="fixed top-1/3 left-0 z-30 flex flex-col items-center gap-1 rounded-r-xl border border-l-0 border-amber-500/40 bg-neutral-900/90 px-1.5 py-2 text-[11px] font-bold text-amber-300 shadow-lg backdrop-blur-md lg:hidden"
+        aria-label="게임 기록 열기"
+      >
+        <span>📜</span>
+        <span className="[writing-mode:vertical-rl]">기록</span>
+        <span className="rounded-full bg-amber-500/25 px-1 font-mono text-[9px]">{log.length}</span>
+      </button>
+
+      {/* desktop: sticky left panel */}
+      <aside className="sticky top-20 hidden h-[calc(100dvh-7rem)] w-60 shrink-0 overflow-hidden rounded-2xl border border-amber-500/20 shadow-2xl lg:block">
+        <LogList log={log} />
+      </aside>
+
+      {/* phones: slide-over drawer */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex lg:hidden" role="dialog" aria-modal="true" aria-label="게임 기록">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" onClick={() => setOpen(false)} />
+          <div className="relative h-full w-72 max-w-[85vw] border-r border-amber-500/20 shadow-2xl" style={{ animation: "lotrlog-in .28s cubic-bezier(.2,.9,.2,1) both" }}>
+            <style>{"@keyframes lotrlog-in { 0% { transform: translateX(-100%) } 100% { transform: none } }"}</style>
+            <LogList log={log} onClose={() => setOpen(false)} />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

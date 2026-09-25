@@ -61,7 +61,7 @@ export function diffFx(p: LotrDuelState, s: LotrDuelState): FxEvents | null {
     if (after.length > before) ev.alliance = { faction: f, token: after[after.length - 1] };
   }
   const newLogs = s.log.filter((e) => e.no > (p.log[p.log.length - 1]?.no ?? 0));
-  ev.moved = newLogs.some((e) => e.text.startsWith("유닛 이동"));
+  ev.moved = newLogs.some((e) => e.kind === "MOVE");
   ev.unitsPlaced = !ev.moved && unitTotal(s) > unitTotal(p);
   return ev;
 }
