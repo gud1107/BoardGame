@@ -1,5 +1,6 @@
 "use client";
 
+import { CardBackArt, CardIllustration } from "./CardArt";
 import { CHAIN_INFO, RACE_INFO, REGION_INFO, TECH_INFO } from "./data";
 import type { CardColor, LotrDuelCard, TechSymbol } from "./types";
 
@@ -72,7 +73,40 @@ export function CostChips({ card, className = "" }: { card: LotrDuelCard; classN
   );
 }
 
-/** Compact pyramid card. Width is set by the parent; the face scales with it. */
+export const FRAME_TINT: Record<CardColor, { inner: string; band: string; label: string }> = {
+  GRAY: { inner: "from-[#1e2330] to-[#0b0d13]", band: "from-slate-500/80 to-slate-800/90", label: "기술" },
+  GREEN: { inner: "from-[#0f2a20] to-[#05100b]", band: "from-emerald-600/80 to-emerald-900/90", label: "종족" },
+  RED: { inner: "from-[#2d0d14] to-[#0f0306]", band: "from-rose-600/85 to-rose-950/90", label: "군사" },
+  YELLOW: { inner: "from-[#2b1d06] to-[#0e0802]", band: "from-amber-500/85 to-amber-900/90", label: "재정" },
+  BLUE: { inner: "from-[#0a1f33] to-[#030812]", band: "from-cyan-600/80 to-blue-950/90", label: "반지" },
+  PURPLE: { inner: "from-[#231036] to-[#08030f]", band: "from-fuchsia-600/80 to-violet-950/90", label: "전술" },
+};
+
+/** Stepped art-deco corner ornaments + inner hairline, drawn over the card in its own box. */
+function DecoFrame() {
+  const corner = "M0 7 V2 Q0 0 2 0 H7 M3 9 V4 Q3 3 4 3 H9";
+  return (
+    <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 60 80" preserveAspectRatio="none" aria-hidden>
+      <g fill="none" stroke="#f2c14e" strokeOpacity=".85" strokeWidth="1" vectorEffect="non-scaling-stroke">
+        <path d={corner} transform="translate(2 2)" />
+        <path d={corner} transform="translate(58 2) scale(-1 1)" />
+        <path d={corner} transform="translate(2 78) scale(1 -1)" />
+        <path d={corner} transform="translate(58 78) scale(-1 -1)" />
+        <rect x="4.5" y="4.5" width="51" height="71" rx="2" strokeOpacity=".22" />
+      </g>
+    </svg>
+  );
+}
+
+/**
+ * Art-deco pyramid card: embossed gold frame, header (chain symbol left, the
+ * viewer's real cost right), SVG illustration window, effect badge + name.
+ * The parent sets the box size (3:4); every inner size scales with it.
+ *
+ * States: `available` (uncovered, my turn) glows with a gold rim light;
+ * `locked` (face-up but still covered) is dimmed behind a faint hologram
+ * seal; face-down cards show the rune-seal back.
+ */
 export function CardFace({
   card,
   faceDown,
@@ -80,6 +114,9 @@ export function CardFace({
   available,
   affordable,
   selected,
+  locked,
+  costInCoins,
+  viaChain,
   onClick,
 }: {
   card: LotrDuelCard | null;
@@ -88,36 +125,76 @@ export function CardFace({
   available?: boolean;
   affordable?: boolean;
   selected?: boolean;
+  locked?: boolean;
+  costInCoins?: number;
+  viaChain?: boolean;
   onClick?: () => void;
 }) {
   if (faceDown || !card) {
     return (
-      <div className="flex h-full w-full items-center justify-center rounded-md border border-amber-900/50 bg-[radial-gradient(circle_at_50%_40%,#3b2a12,#120d07)] text-[clamp(10px,2.4vw,18px)] font-bold text-amber-500/60 shadow-md">
-        {"Ⅰ Ⅱ Ⅲ".split(" ")[(chapter ?? 1) - 1]}
+      <div className="h-full w-full rounded-[7%] bg-gradient-to-br from-[#8a6421] via-[#3b2a12] to-[#8a6421] p-[3%] shadow-[0_4px_10px_rgba(0,0,0,.6)]">
+        <div className="h-full w-full overflow-hidden rounded-[6%]">
+          <CardBackArt chapter={chapter ?? 1} />
+        </div>
       </div>
     );
   }
-  const st = COLOR_STYLE[card.color];
+  const tint = FRAME_TINT[card.color];
+  const cost = costInCoins ?? (card.cost.coins ?? 0) + (card.cost.tech?.length ?? 0);
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={!available}
-      className={`group relative flex h-full w-full flex-col overflow-hidden rounded-md border bg-[#16131c] text-left shadow-md transition ${
-        selected ? "z-20 -translate-y-1 border-amber-300 ring-2 ring-amber-300" : available ? `border-white/30 hover:-translate-y-0.5 hover:ring-2 ${st.ring}` : "border-white/10 brightness-[.55]"
-      } ${available && !affordable ? "opacity-90" : ""}`}
       title={`${card.name} — ${describeCard(card)}`}
+      className={`group relative block h-full w-full rounded-[7%] p-[3%] text-left transition duration-300 ${
+        selected
+          ? "z-20 -translate-y-[6%] bg-gradient-to-b from-[#fff2c2] via-[#f2c14e] to-[#a8741f] shadow-[0_0_18px_rgba(251,191,36,.85)]"
+          : available
+            ? `lotrd-rim bg-gradient-to-b from-[#f7dc8c] via-[#a8741f] to-[#f2c14e] hover:-translate-y-[4%] ${affordable ? "" : "saturate-[.7]"}`
+            : "bg-gradient-to-b from-[#6b5424] via-[#3a2d14] to-[#6b5424]"
+      } shadow-[0_4px_10px_rgba(0,0,0,.55)]`}
     >
-      <div className={`h-[18%] w-full bg-gradient-to-r ${st.band}`} />
-      {card.providesChain && <span className="absolute top-0 right-0.5 text-[clamp(7px,1.4vw,11px)] leading-tight">{CHAIN_INFO[card.providesChain]}</span>}
-      <div className="flex flex-1 items-center justify-center px-0.5 text-center text-[clamp(9px,2vw,16px)] leading-none font-bold text-white">{cardGlyph(card)}</div>
-      <p className="truncate px-0.5 text-center text-[clamp(6px,1.25vw,10px)] leading-tight text-white/80">{card.name}</p>
-      <div className="flex min-h-[18%] items-center justify-center bg-black/40 px-0.5 text-[clamp(6px,1.3vw,10px)] leading-none text-white/85">
-        <CostChips card={card} />
+      <div className={`relative flex h-full w-full flex-col overflow-hidden rounded-[6%] bg-gradient-to-b ${tint.inner}`}>
+        {/* header: chain symbol + cost gem */}
+        <div className="flex h-[17%] shrink-0 items-center justify-between px-[6%] text-[clamp(6px,1.35vw,11px)] leading-none">
+          <span className={card.cost.chainSymbol ? "text-amber-200" : "font-serif text-amber-200/50"} title={card.cost.chainSymbol ? "연계 기호 — 보유 시 무료" : undefined}>
+            {card.cost.chainSymbol ? `🔗${CHAIN_INFO[card.cost.chainSymbol]}` : ["Ⅰ", "Ⅱ", "Ⅲ"][card.chapter - 1]}
+          </span>
+          <span
+            className={`rounded-full px-[0.35em] py-[0.1em] font-black ring-1 ${
+              viaChain || cost === 0
+                ? "bg-emerald-500/25 text-emerald-200 ring-emerald-300/50"
+                : affordable === false
+                  ? "bg-rose-600/30 text-rose-200 ring-rose-300/50"
+                  : "bg-amber-400/25 text-amber-100 ring-amber-300/60"
+            }`}
+          >
+            {viaChain ? "🔗무료" : cost === 0 ? "무료" : `🪙${cost}`}
+          </span>
+        </div>
+        {/* illustration window */}
+        <div className="relative mx-[5%] min-h-0 flex-1 overflow-hidden rounded-[8%] ring-1 ring-amber-300/40">
+          <CardIllustration card={card} />
+          {card.providesChain && (
+            <span className="absolute right-[4%] bottom-[4%] rounded bg-black/65 px-[0.25em] text-[clamp(6px,1.2vw,10px)] leading-tight ring-1 ring-amber-300/50" title="이 카드가 제공하는 연계 기호">
+              {CHAIN_INFO[card.providesChain]}
+            </span>
+          )}
+        </div>
+        {/* footer: effect badge + name */}
+        <div className={`mt-[4%] flex h-[21%] shrink-0 flex-col items-center justify-center bg-gradient-to-b ${tint.band} px-[4%] text-center`}>
+          <span className="text-[clamp(7px,1.45vw,12px)] leading-none font-black text-white drop-shadow">{cardGlyph(card)}</span>
+          <span className="w-full truncate font-serif text-[clamp(5.5px,1.1vw,9px)] leading-tight text-amber-50/90">{card.name}</span>
+        </div>
+        <DecoFrame />
+        {locked && (
+          <span className="pointer-events-none absolute inset-0 flex items-start justify-center bg-[repeating-linear-gradient(0deg,rgba(148,163,184,.08)_0_2px,transparent_2px_4px)] bg-black/30 pt-[26%]">
+            <span className="rounded-full bg-black/60 px-[0.35em] text-[clamp(8px,1.6vw,13px)] opacity-80 ring-1 ring-sky-300/40">🔒</span>
+          </span>
+        )}
+        {available && <span className="pointer-events-none absolute inset-0 rounded-[6%] bg-gradient-to-tr from-transparent via-white/10 to-transparent opacity-0 transition group-hover:opacity-100" />}
       </div>
-      {available && (
-        <span className={`absolute top-[20%] left-0.5 h-1.5 w-1.5 rounded-full ${affordable ? "bg-emerald-400 shadow-[0_0_6px_#34d399]" : "bg-rose-400"}`} />
-      )}
     </button>
   );
 }

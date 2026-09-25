@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
+import { FortressArt, SealStamp } from "./CardArt";
 import { CardFace, COLOR_STYLE, CostChips, cardGlyph, describeCard } from "./CardFace";
 import { ADJACENCY, CHAIN_INFO, COLOR_INFO, FACTION_EMOJI, FACTION_LABEL, FRODO_START, RACES, RACE_INFO, REGIONS, REGION_INFO, TECHS, TECH_INFO, TOKENS } from "./data";
 import {
@@ -12,6 +13,7 @@ import {
   controlledCount,
   discardValue,
   fortressOf,
+  missingTech,
   otherFaction,
   raceSymbols,
   techProduction,
@@ -19,6 +21,7 @@ import {
   unitsOf,
   type EngineAction,
   type Faction,
+  type LandmarkTile,
   type LotrDuelState,
   type PendingStep,
   type PyramidSlot,
@@ -41,6 +44,8 @@ import MiddleEarthMap from "./MiddleEarthMap";
  */
 
 const KEYFRAMES = `
+@keyframes lotrd-rim { 0%,100% { box-shadow: 0 0 6px 1px rgba(251,191,36,.45), 0 4px 10px rgba(0,0,0,.55) } 50% { box-shadow: 0 0 16px 4px rgba(251,191,36,.85), 0 4px 10px rgba(0,0,0,.55) } }
+.lotrd-rim { animation: lotrd-rim 2.2s ease-in-out infinite }
 @keyframes lotrd-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,.55) } 50% { box-shadow: 0 0 0 5px rgba(52,211,153,0) } }
 .lotrd-target { animation: lotrd-pulse 1.4s ease-in-out infinite }
 @keyframes lotrd-clash { 0% { background: rgba(244,63,94,.65); transform: scale(1.25) } 100% { background: rgba(244,63,94,0); transform: scale(1) } }
@@ -221,7 +226,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
   const maxX = Math.max(...state.pyramidGrid.map((s) => Math.abs(s.x)));
   const span = (maxX + 1) * 2; // in half-card units
   const cardW = 2 / span; // fraction of width
-  const cardH = cardW * 1.42;
+  const cardH = (cardW * 4) / 3; // 3:4 cards
   const rowStep = cardH * 0.52;
   const totalH = (rows - 1) * rowStep + cardH;
 
@@ -295,7 +300,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
             {state.pyramidGrid.map((slot, i) => {
               if (slot.isTaken) return null;
               const available = open.has(i);
-              const aff = calculateCardCost(me, slot.card).canAfford;
+              const cost = calculateCardCost(me, slot.card);
               const justFlipped = flipped.has(slot.card.id);
               return (
                 <div key={slot.card.id} className="absolute" style={{ ...slotBox(slot), zIndex: selectedSlot === i ? 30 : slot.row + 1 }}>
@@ -316,7 +321,10 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
                     faceDown={!slot.isOpen}
                     chapter={state.chapter}
                     available={available && myTurn && !front}
-                    affordable={aff}
+                    affordable={cost.canAfford}
+                    costInCoins={cost.costInCoins}
+                    viaChain={cost.viaChain}
+                    locked={slot.isOpen && !available}
                     selected={selectedSlot === i}
                     onClick={() => setSelectedSlot(selectedSlot === i ? null : i)}
                   />
@@ -342,8 +350,8 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
           {selected && selectedCost && myTurn && !front && (
             <div className={`${panel} lotrd-in flex flex-col gap-2 border-amber-400/40`}>
               <div className="flex items-start gap-3">
-                <div className="h-24 w-[68px] shrink-0">
-                  <CardFace card={selected.card} available chapter={state.chapter} affordable={selectedCost.canAfford} />
+                <div className="aspect-[3/4] w-[84px] shrink-0">
+                  <CardFace card={selected.card} available chapter={state.chapter} affordable={selectedCost.canAfford} costInCoins={selectedCost.costInCoins} viaChain={selectedCost.viaChain} />
                 </div>
                 <div className="min-w-0 text-sm">
                   <p className="font-bold">
@@ -415,27 +423,15 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
               {state.revealedLandmarks.map((tile) => {
                 const cost = calculateLandmarkCost(state, myFaction, tile);
                 return (
-                  <div key={tile.id} className="flex items-center gap-2 rounded-xl border border-amber-700/30 bg-gradient-to-r from-amber-900/25 to-transparent p-2 light:bg-amber-50">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold">
-                        🏰 {tile.name} <span className="text-[11px] font-normal text-white/50 light:text-slate-500">{REGION_INFO[tile.targetRegion].name}</span>
-                      </p>
-                      <p className="text-[11px] text-white/65 light:text-slate-600">{tile.description}</p>
-                      <p className="text-[11px] text-white/50 light:text-slate-500">
-                        기본 🪙{tile.baseCost.coins}
-                        {tile.baseCost.tech?.map((s) => TECH_INFO[s].emoji).join("")} + 내 요새당 🪙1 → 지금 <b>{cost.costInCoins}주화</b>
-                      </p>
-                    </div>
-                    {myTurn && !front && (
-                      <button
-                        disabled={!cost.canAfford}
-                        onClick={() => act({ type: "TAKE_LANDMARK", faction: myFaction, landmarkId: tile.id })}
-                        className="shrink-0 rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-bold text-black hover:bg-amber-400 disabled:bg-white/10 disabled:text-white/35"
-                      >
-                        건설
-                      </button>
-                    )}
-                  </div>
+                  <LandmarkTileCard
+                    key={tile.id}
+                    tile={tile}
+                    cost={cost.costInCoins}
+                    surcharge={cost.costInCoins - tile.baseCost.coins - missingTech(me, tile.baseCost.tech)}
+                    canAfford={cost.canAfford}
+                    canBuild={myTurn && !front}
+                    onBuild={() => act({ type: "TAKE_LANDMARK", faction: myFaction, landmarkId: tile.id })}
+                  />
                 );
               })}
             </div>
@@ -583,8 +579,11 @@ function ActionPrompt({
             const t = TOKENS[id];
             return (
               <button key={id} className={`${btn} max-w-[15rem] text-left`} onClick={() => act({ type: "PICK_TOKEN", faction: myFaction, tokenId: id })}>
-                <span className="block">
-                  {RACE_INFO[t.race].emoji} {t.name} <span className="text-[10px] text-white/50">{t.isOneShot ? "즉시 1회" : "지속"}</span>
+                <span className="flex items-center gap-1">
+                  <span className="inline-block h-6 w-6 shrink-0">
+                    <SealStamp race={t.race} />
+                  </span>
+                  {t.name} <span className="text-[10px] text-white/50">{t.isOneShot ? "즉시 1회" : "지속"}</span>
                 </span>
                 <span className="block text-[11px] font-normal text-white/65 light:text-slate-600">{t.description}</span>
               </button>
@@ -653,14 +652,16 @@ function PlayerDock({ state, faction, label, highlight }: { state: LotrDuelState
           {RACES.map((r) => (
             <span
               key={r}
-              title={RACE_INFO[r].name}
-              className={`rounded px-1 py-0.5 ${races.has(r) ? "bg-emerald-500/30 text-white" : "bg-white/5 opacity-35 grayscale"} ${p.pairRacesClaimed.includes(r) ? "ring-1 ring-emerald-300" : ""}`}
+              title={`${RACE_INFO[r].name}${raceCount(r) ? ` ×${raceCount(r)}` : ""}${p.pairRacesClaimed.includes(r) ? " (2장 동맹 획득)" : ""}`}
+              className={`relative h-7 w-7 transition ${races.has(r) ? "" : "opacity-30 grayscale"}`}
             >
-              {RACE_INFO[r].emoji}
-              {raceCount(r) > 1 ? raceCount(r) : ""}
+              <SealStamp race={r} />
+              {raceCount(r) > 1 && <span className="absolute -right-1 -bottom-1 rounded-full bg-black/80 px-1 text-[9px] font-bold text-amber-200 ring-1 ring-amber-300/50">{raceCount(r)}</span>}
             </span>
           ))}
-          {races.has("EAGLE") && <span className="rounded bg-sky-500/30 px-1 py-0.5">🦅</span>}
+          <span title="독수리 (호빗 동맹 토큰)" className={`h-7 w-7 ${races.has("EAGLE") ? "" : "opacity-20 grayscale"}`}>
+            <SealStamp race="EAGLE" />
+          </span>
         </div>
         <div className="flex flex-wrap items-center gap-1">
           <span className="w-14 shrink-0 text-white/45 light:text-slate-500">카드</span>
@@ -797,5 +798,64 @@ function BgmControl() {
         />
       )}
     </span>
+  );
+}
+
+/**
+ * Art-deco landmark tile — fortress illustration, target region, bonus text,
+ * and a cost badge that spells out the "+1 per own fortress" surcharge.
+ */
+function LandmarkTileCard({
+  tile,
+  cost,
+  surcharge,
+  canAfford,
+  canBuild,
+  onBuild,
+}: {
+  tile: LandmarkTile;
+  cost: number;
+  surcharge: number;
+  canAfford: boolean;
+  canBuild: boolean;
+  onBuild: () => void;
+}) {
+  const ready = canBuild && canAfford;
+  return (
+    <div
+      className={`rounded-2xl p-[2px] transition ${ready ? "lotrd-rim bg-gradient-to-r from-[#f7dc8c] via-[#a8741f] to-[#f2c14e]" : "bg-gradient-to-r from-[#5a4520] via-[#2e2410] to-[#5a4520]"}`}
+    >
+      <div className="relative flex items-stretch gap-2 overflow-hidden rounded-[14px] bg-gradient-to-r from-[#0d0b10] via-[#17131f] to-[#0d0b10] p-2">
+        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl ring-1 ring-amber-300/40">
+          <FortressArt />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-1">
+            <div className="min-w-0">
+              <h4 className="truncate font-serif text-sm font-black tracking-wide text-amber-200">{tile.name}</h4>
+              <p className="text-[10px] text-amber-400/80">📍 {REGION_INFO[tile.targetRegion].name}에 요새</p>
+            </div>
+            <span className="flex shrink-0 items-center gap-0.5 rounded-xl bg-black/60 px-1.5 py-0.5 text-[11px] font-black ring-1 ring-amber-500/30">
+              <span className={canAfford ? "text-amber-200" : "text-rose-300"}>🪙{cost}</span>
+              {surcharge > 0 && <span className="text-[9px] text-white/50">(요새+{surcharge})</span>}
+            </span>
+          </div>
+          <p className="mt-1 rounded-lg bg-black/40 p-1 text-[10px] leading-tight text-white/75 ring-1 ring-white/5">{tile.description}</p>
+          <p className="mt-0.5 text-[10px] text-white/45">
+            인쇄 비용 🪙{tile.baseCost.coins}
+            {tile.baseCost.tech?.map((s) => TECH_INFO[s].emoji).join("")}
+          </p>
+        </div>
+        {canBuild && (
+          <button
+            disabled={!canAfford}
+            onClick={onBuild}
+            className="self-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-600 px-2.5 py-1.5 text-xs font-black text-black shadow hover:brightness-110 disabled:from-white/10 disabled:to-white/10 disabled:text-white/35"
+          >
+            건설
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
