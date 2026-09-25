@@ -5,6 +5,7 @@ import { SealStamp } from "./CardArt";
 import { FACTION_EMOJI, FACTION_LABEL, RACES, TECHS, TECH_INFO } from "./data";
 import { raceSymbols, techProduction, type Faction, type LotrDuelState, type TechSymbol } from "./engine";
 import type { CardPreview } from "./fxEvents";
+import PlayerPassivesHUD, { type PassiveTrigger } from "./PlayerPassivesHUD";
 
 /**
  * Always-on "my tech" HUD — pinned to the bottom of the viewport (sticky
@@ -26,7 +27,17 @@ const TECH_EN: Record<TechSymbol, string> = { BOOK: "Lore", FLAG: "Command", SWO
 
 type Info = { key: string; title: string; lines: string[] };
 
-export default function PlayerTechHUD({ state, faction, preview }: { state: LotrDuelState; faction: Faction; preview?: CardPreview | null }) {
+export default function PlayerTechHUD({
+  state,
+  faction,
+  preview,
+  trigger,
+}: {
+  state: LotrDuelState;
+  faction: Faction;
+  preview?: CardPreview | null;
+  trigger?: PassiveTrigger | null;
+}) {
   const p = state.players[faction];
   const { fixed, choices, wild } = techProduction(p);
   const races = raceSymbols(p);
@@ -111,7 +122,11 @@ export default function PlayerTechHUD({ state, faction, preview }: { state: Lotr
           )}
         </span>
       )}
-      <span className="ml-auto flex items-center gap-0.5" title={`종족 기호 ${races.size}/6`}>
+      <PlayerPassivesHUD tokens={p.allianceTokens} trigger={trigger} />
+      <span className="shrink-0 font-mono text-[11px] font-bold text-emerald-300 sm:hidden" title="종족 기호">
+        🌿 {races.size}/6
+      </span>
+      <span className="ml-auto hidden items-center gap-0.5 sm:flex" title={`종족 기호 ${races.size}/6`}>
         {RACES.map((r) => (
           <span key={r} data-lotr-race={r} className={`h-6 w-6 rounded-full ${preview?.race === r ? "lotrp-ember" : races.has(r) ? "" : "opacity-25 grayscale"}`}>
             <SealStamp race={r} />

@@ -36,6 +36,7 @@ import { CardChoiceModal, LandmarkConfirmModal, PendingChoiceModal } from "./Act
 import AllianceTokenSelectModal from "./AllianceTokenSelectModal";
 import HistoryLogDrawer from "./HistoryLogDrawer";
 import MiddleEarthMap from "./MiddleEarthMap";
+import type { PassiveTrigger } from "./PlayerPassivesHUD";
 import PlayerTechHUD from "./PlayerTechHUD";
 import VictoryCinematicModal from "./VictoryCinematicModal";
 import type { RingTrackReward } from "./data";
@@ -51,6 +52,8 @@ import type { RingTrackReward } from "./data";
  */
 
 const KEYFRAMES = `
+@keyframes lotrp-passive { 0%,100% { box-shadow: 0 0 6px var(--wax, rgba(251,191,36,.6)) } 50% { box-shadow: 0 0 18px 3px var(--wax, rgba(251,191,36,1)) } }
+.lotrp-passive { animation: lotrp-passive .8s ease-in-out infinite }
 @keyframes lotrp-gold { 0%,100% { box-shadow: 0 0 10px rgba(251,191,36,.45), inset 0 0 6px rgba(251,191,36,.2) } 50% { box-shadow: 0 0 26px rgba(251,191,36,.95), inset 0 0 14px rgba(251,191,36,.5) } }
 .lotrp-gold { animation: lotrp-gold 1s ease-in-out infinite; background: rgba(251,191,36,.12) }
 @keyframes lotrp-tech { 0%,100% { box-shadow: 0 0 8px rgba(251,191,36,.5); border-color: rgba(251,191,36,.6) } 50% { box-shadow: 0 0 22px rgba(251,191,36,1); border-color: rgba(253,230,138,1) } }
@@ -347,6 +350,17 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
 
   const { frodoPosition: fr, nazgulPosition: nz, trackLength: L } = state.ringTrack;
   const preview = selected && myTurn && !front ? previewFor(state, myFaction, selected.card, previewMode) : null;
+  // Which of my permanent alliance powers the current choice would set off (glows in the HUD tray).
+  const passiveTrigger: PassiveTrigger | null =
+    selected && myTurn && !front
+      ? (() => {
+          const cost = calculateCardCost(me, selected.card);
+          const withoutWild = { ...me, allianceTokens: me.allianceTokens.filter((t) => t.id !== "DWARF_WILD_TECH") };
+          return { cardColor: selected.card.color, mode: previewMode, viaChain: cost.viaChain, needsTech: !cost.viaChain && missingTech(withoutWild, selected.card.cost.tech) > 0 };
+        })()
+      : confirmLandmark && myTurn && !front
+        ? { landmark: true }
+        : null;
 
   return (
     <div className="flex items-start gap-3 text-white light:text-slate-900">
@@ -611,7 +625,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
         <PlayerDock state={state} faction={oppFaction} label={`상대 · ${names[oppSeat]}`} />
       </div>
 
-      {state.phase === "PLAYING" && <PlayerTechHUD state={state} faction={myFaction} preview={preview} />}
+      {state.phase === "PLAYING" && <PlayerTechHUD state={state} faction={myFaction} preview={preview} trigger={passiveTrigger} />}
       </div>
 
       {state.phase === "GAME_OVER" && state.winner && !victoryClosed && (
