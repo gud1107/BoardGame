@@ -165,6 +165,8 @@ export interface LotrDuelState {
     frodoPosition: number;
     nazgulPosition: number;
     trackLength: number;
+    /** Set the moment the Nazgûl catch Frodo from behind (Sauron's ring-quest win). */
+    caught?: boolean;
   };
   pyramidGrid: PyramidSlot[];
   /** The 3 cards secretly removed from the current chapter's deck. */

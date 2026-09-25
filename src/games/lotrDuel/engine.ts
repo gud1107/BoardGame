@@ -118,7 +118,7 @@ export function startGame(seed: number, fellowshipSeat: Seat = "p1"): LotrDuelSt
     firstPlayerOverall: "SAURON",
     players: { FELLOWSHIP: newPlayer("FELLOWSHIP"), SAURON: newPlayer("SAURON") },
     boardRegions,
-    ringTrack: { frodoPosition: FRODO_START, nazgulPosition: NAZGUL_START, trackLength: TRACK_LENGTH },
+    ringTrack: { frodoPosition: FRODO_START, nazgulPosition: NAZGUL_START, trackLength: TRACK_LENGTH, caught: false },
     pyramidGrid: [],
     removedCards: [],
     revealedLandmarks: [],
@@ -321,11 +321,15 @@ function fight(state: LotrDuelState, regionId: RegionId) {
 }
 
 /**
- * Moves `faction`'s ring marker `n` spaces and pays every space passed through
- * or landed on (from+1 … to), in order: coins at once, choices as pending steps
- * (returned, for the caller to queue). The Nazgûl reaching/passing Frodo, or
- * Frodo reaching Mount Doom, ends the game at once — no rewards for that move
- * (`settle()` declares the win right after).
+ * Moves `faction`'s ring marker `n` spaces and pays every point passed
+ * through or landed on (from+1 … to), in order: coins / the extra turn at
+ * once, choices as pending steps (returned, for the caller to queue).
+ *
+ * Both markers start together on 0, so "the Nazgûl reach or pass Frodo" is
+ * read as catching him **from behind**: it only counts when the Nazgûl were
+ * strictly behind Frodo before this move (otherwise Sauron, who moves first,
+ * would win with his very first ring symbol). That catch, or Frodo reaching
+ * Mount Doom, ends the game at once with no rewards for that move.
  */
 export function advanceRing(state: LotrDuelState, faction: Faction, n: number): PendingStep[] {
   if (n <= 0) return [];
@@ -336,7 +340,11 @@ export function advanceRing(state: LotrDuelState, faction: Faction, n: number): 
   if (fellowship) track.frodoPosition = to;
   else track.nazgulPosition = to;
   log(state, faction, `${fellowship ? "🧝 프로도와 샘이" : "🐉 나즈굴이"} ${to - from}칸 전진해 원정 트랙 ${to}번 칸에 도착`, "TRACK");
-  if (fellowship ? to >= track.trackLength : to >= track.frodoPosition) return [];
+  if (fellowship && to >= track.trackLength) return [];
+  if (!fellowship && from < track.frodoPosition && to >= track.frodoPosition) {
+    track.caught = true;
+    return [];
+  }
   const steps: PendingStep[] = [];
   for (let pos = from + 1; pos <= to; pos++) {
     const source = `원정 트랙 ${pos}번 칸`;
@@ -345,14 +353,18 @@ export function advanceRing(state: LotrDuelState, faction: Faction, n: number): 
         state.players[faction].coins += 1;
         log(state, faction, `원정 트랙 ${pos}번 칸 보상 — ${who(faction)} 주화 1개 획득`, "COIN");
         break;
-      case "ALLIANCE_TOKEN":
-        steps.push({ kind: "TOKEN_RACE", source });
-        break;
       case "PLACE_UNIT":
         steps.push({ kind: "PLACE", count: 1, regions: REGIONS, source });
         break;
-      case "MOVE_UNIT":
-        steps.push({ kind: "MOVE", remaining: 1, source });
+      case "ALLIANCE_TOKEN":
+        steps.push({ kind: "TOKEN_RACE", source });
+        break;
+      case "EXTRA_TURN":
+        state.extraTurn = true;
+        log(state, faction, `원정 트랙 ${pos}번 칸 보상 — ${who(faction)} 이번 차례 후 추가 턴`, "TRACK");
+        break;
+      case "DESTROY_FORTRESS":
+        steps.push({ kind: "DESTROY_FORTRESS", source });
         break;
       case "MOUNT_DOOM_VICTORY":
       case "NONE":
@@ -546,7 +558,7 @@ function placeUnits(state: LotrDuelState, faction: Faction, regionId: RegionId, 
 
 export function checkInstantVictory(state: LotrDuelState, activeFirst: Faction = state.turn): { winner: Faction; type: Exclude<WinType, "TERRITORY_MAJORITY"> } | null {
   if (state.ringTrack.frodoPosition >= state.ringTrack.trackLength) return { winner: "FELLOWSHIP", type: "RING_QUEST" };
-  if (state.ringTrack.nazgulPosition >= state.ringTrack.frodoPosition) return { winner: "SAURON", type: "RING_QUEST" };
+  if (state.ringTrack.caught) return { winner: "SAURON", type: "RING_QUEST" };
   const order: Faction[] = [activeFirst, otherFaction(activeFirst)];
   for (const f of order) if (raceSymbols(state.players[f]).size >= 6) return { winner: f, type: "RACE_ALLIANCE" };
   for (const f of order) if (controlledCount(state, f) === REGIONS.length) return { winner: f, type: "CONQUEST" };

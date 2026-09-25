@@ -339,53 +339,44 @@ export function otherFaction(f: Faction): Faction {
 }
 
 // ---------------------------------------------------------------------------
-// Ring track — official board: 25 points (0 … 24)
+// Ring track — single integrated track, 15 points (0 … 14)
 // ---------------------------------------------------------------------------
 
-export type RingTrackReward = "NONE" | "COIN_1" | "ALLIANCE_TOKEN" | "MOVE_UNIT" | "PLACE_UNIT" | "MOUNT_DOOM_VICTORY";
+export type RingTrackReward = "NONE" | "COIN_1" | "PLACE_UNIT" | "ALLIANCE_TOKEN" | "EXTRA_TURN" | "DESTROY_FORTRESS" | "MOUNT_DOOM_VICTORY";
 
 export interface RingTrackPoint {
   index: number;
   reward: RingTrackReward;
-  isNazgulStart?: boolean;
-  isFrodoStart?: boolean;
+  name: string;
+  isStart?: boolean;
 }
 
 /**
- * 1:1 with the physical board (per the request's photo reading): the Nazgûl
- * start on 0, Frodo & Sam on 13, Mount Doom is 24. Every point a marker passes
- * through or lands on pays its reward once, in order (engine.ts `advanceRing`)
- * — for both sides.
+ * Both markers start on 0; a core reward every 2 spaces; Mount Doom is 14.
+ * Every point a marker passes through or lands on pays its reward once, in
+ * order (engine.ts `advanceRing`) — for both sides.
  */
 export const OFFICIAL_RING_TRACK: RingTrackPoint[] = [
-  { index: 0, reward: "NONE", isNazgulStart: true },
-  { index: 1, reward: "NONE" },
-  { index: 2, reward: "COIN_1" },
-  { index: 3, reward: "NONE" },
-  { index: 4, reward: "NONE" },
-  { index: 5, reward: "ALLIANCE_TOKEN" },
-  { index: 6, reward: "NONE" },
-  { index: 7, reward: "NONE" },
-  { index: 8, reward: "MOVE_UNIT" },
-  { index: 9, reward: "NONE" },
-  { index: 10, reward: "NONE" },
-  { index: 11, reward: "PLACE_UNIT" },
-  { index: 12, reward: "NONE" },
-  { index: 13, reward: "COIN_1", isFrodoStart: true },
-  { index: 14, reward: "NONE" },
-  { index: 15, reward: "NONE" },
-  { index: 16, reward: "ALLIANCE_TOKEN" },
-  { index: 17, reward: "NONE" },
-  { index: 18, reward: "NONE" },
-  { index: 19, reward: "MOVE_UNIT" },
-  { index: 20, reward: "NONE" },
-  { index: 21, reward: "NONE" },
-  { index: 22, reward: "PLACE_UNIT" },
-  { index: 23, reward: "NONE" },
-  { index: 24, reward: "MOUNT_DOOM_VICTORY" },
+  { index: 0, reward: "NONE", name: "출발점", isStart: true },
+  { index: 1, reward: "NONE", name: "빈칸" },
+  { index: 2, reward: "COIN_1", name: "주화 획득 (+1🪙)" },
+  { index: 3, reward: "NONE", name: "빈칸" },
+  { index: 4, reward: "PLACE_UNIT", name: "병사 배치 (+1⚔️)" },
+  { index: 5, reward: "NONE", name: "빈칸" },
+  { index: 6, reward: "ALLIANCE_TOKEN", name: "종족 선택 (📜토큰)" },
+  { index: 7, reward: "NONE", name: "빈칸" },
+  { index: 8, reward: "EXTRA_TURN", name: "한 턴 더 (⏩추가 턴)" },
+  { index: 9, reward: "NONE", name: "빈칸" },
+  { index: 10, reward: "DESTROY_FORTRESS", name: "성(요새) 부수기 (💥파괴)" },
+  { index: 11, reward: "NONE", name: "빈칸" },
+  { index: 12, reward: "NONE", name: "빈칸" },
+  { index: 13, reward: "NONE", name: "빈칸" },
+  { index: 14, reward: "MOUNT_DOOM_VICTORY", name: "운명의 산 (🌋원정대 승리)" },
 ];
+export const OFFICIAL_RING_TRACK_14 = OFFICIAL_RING_TRACK;
 
 /** Mount Doom. */
-export const TRACK_LENGTH = 24;
-export const FRODO_START = 13;
+export const TRACK_LENGTH = 14;
+/** Both markers start on 0. */
+export const FRODO_START = 0;
 export const NAZGUL_START = 0;

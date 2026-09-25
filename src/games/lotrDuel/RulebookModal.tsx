@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { COLOR_INFO, FRODO_START, LANDMARKS, NAZGUL_START, RACES, RACE_INFO, TECHS, TECH_INFO, TOKENS, TOKEN_IDS_BY_RACE, TRACK_LENGTH } from "./data";
+import { COLOR_INFO, FRODO_START, LANDMARKS, RACES, RACE_INFO, TECHS, TECH_INFO, TOKENS, TOKEN_IDS_BY_RACE, TRACK_LENGTH } from "./data";
 
 const box = "rounded-xl border border-white/10 bg-white/5 p-3 light:border-slate-200 light:bg-white light:shadow-sm";
 const h3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
@@ -93,10 +93,10 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <p className={h3}>승리 조건</p>
           <ul className="flex list-disc flex-col gap-1 pl-4">
             <li className={li}>
-              💍 <b>반지 원정</b>: 파란 카드 등의 반지 기호는 <b>내 말</b>을 전진시킵니다. 트랙은 0~{TRACK_LENGTH}번(4개 조각)이고 나즈굴은 {NAZGUL_START}번, 프로도 & 샘은 {FRODO_START}번에서
-              출발합니다. 말이 <b>지나가거나 멈춘 모든 칸</b>의 보상을 순서대로 받습니다(양 진영 모두): 2·13번 🪙 주화 1, 5·16번 📜 동맹 토큰(종족 선택 → 위 2개 중 1개),
-              8·19번 🔄 유닛 이동 1회, 11·22번 ⚔️ 유닛 1개 배치. 프로도가 {TRACK_LENGTH}번 운명의 산에 닿으면 원정대, 나즈굴이 프로도의 칸에 닿거나 추월하면 사우론이 즉시 승리 — 그 이동의
-              칸 보상은 받지 않습니다.
+              💍 <b>반지 원정</b>: 파란 카드 등의 반지 기호는 <b>내 말</b>을 전진시킵니다. 트랙은 0~{TRACK_LENGTH}번 한 줄이고 프로도 & 샘과 나즈굴 모두 {FRODO_START}번에서 함께
+              출발합니다. 말이 <b>지나가거나 멈춘 모든 칸</b>의 보상을 순서대로 받습니다(양 진영 모두): 2번 🪙 주화 1, 4번 ⚔️ 유닛 1개 배치, 6번 📜 동맹 토큰(종족 선택 → 위 2개 중 1개),
+              8번 ⏩ 이번 차례 후 추가 턴, 10번 💥 적 요새 1개 파괴. 프로도가 {TRACK_LENGTH}번 운명의 산에 닿으면 원정대, 나즈굴이 <b>뒤에서</b> 프로도의 칸에 닿거나 추월하면 사우론이
+              즉시 승리 — 그 이동의 칸 보상은 받지 않습니다. (둘이 같은 칸이거나 나즈굴이 앞서 있을 때 나즈굴이 움직이는 것은 추격이 아닙니다.)
             </li>
             <li className={li}>
               🌿 <b>종족 동맹</b>: 서로 다른 종족 기호 6개(🦅 독수리 토큰 포함) 달성 시 즉시 승리.

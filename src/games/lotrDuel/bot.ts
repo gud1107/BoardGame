@@ -52,7 +52,9 @@ function sideScore(state: LotrDuelState, f: Faction): number {
 export function evaluate(state: LotrDuelState, me: Faction): number {
   if (state.phase === "GAME_OVER") return state.winner === me ? WIN : -WIN;
   const { frodoPosition: fr, nazgulPosition: nz, trackLength: L } = state.ringTrack;
-  const ringForFellowship = 60 / Math.max(1, L - fr) - 60 / Math.max(1, fr - nz);
+  // The Nazgûl can only catch Frodo from behind (engine `advanceRing`), so they threaten only while fr > nz.
+  const chase = fr > nz ? 60 / Math.max(1, fr - nz) : 0;
+  const ringForFellowship = 60 / Math.max(1, L - fr) - chase;
   const ring = me === "FELLOWSHIP" ? ringForFellowship : -ringForFellowship;
   return ring + sideScore(state, me) - sideScore(state, otherFaction(me));
 }

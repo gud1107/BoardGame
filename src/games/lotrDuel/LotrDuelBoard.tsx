@@ -97,21 +97,15 @@ const KEYFRAMES = `
 .lotrd-emblem { animation: lotrd-emblem .9s cubic-bezier(.2,.9,.2,1) both }
 `;
 
-/** The 4 assembled track pieces (first/last point of each). */
-const TRACK_PIECES: [number, number][] = [
-  [0, 6],
-  [7, 12],
-  [13, 18],
-  [19, 24],
-];
-const TRACK_REWARD_ICON: Record<RingTrackReward, string> = { NONE: "", COIN_1: "🪙", ALLIANCE_TOKEN: "📜", MOVE_UNIT: "🔄", PLACE_UNIT: "⚔️", MOUNT_DOOM_VICTORY: "🌋" };
-const TRACK_REWARD_FLOAT: Record<RingTrackReward, string> = { NONE: "", COIN_1: "+1🪙", ALLIANCE_TOKEN: "📜선택!", MOVE_UNIT: "🔄이동!", PLACE_UNIT: "⚔️배치!", MOUNT_DOOM_VICTORY: "" };
+const TRACK_REWARD_ICON: Record<RingTrackReward, string> = { NONE: "", COIN_1: "🪙", PLACE_UNIT: "⚔️", ALLIANCE_TOKEN: "📜", EXTRA_TURN: "⏩", DESTROY_FORTRESS: "💥", MOUNT_DOOM_VICTORY: "🌋" };
+const TRACK_REWARD_FLOAT: Record<RingTrackReward, string> = { NONE: "", COIN_1: "+1🪙", PLACE_UNIT: "⚔️배치!", ALLIANCE_TOKEN: "📜선택!", EXTRA_TURN: "⏩한 턴 더!", DESTROY_FORTRESS: "💥파괴!", MOUNT_DOOM_VICTORY: "" };
 const TRACK_REWARD_TEXT: Record<RingTrackReward, string> = {
   NONE: "보상 없음",
   COIN_1: "주화 1개",
-  ALLIANCE_TOKEN: "원하는 종족 더미 위 2개 중 동맹 토큰 1개",
-  MOVE_UNIT: "내 유닛 1개를 인접 지역으로 이동",
   PLACE_UNIT: "원하는 지역에 내 유닛 1개 배치",
+  ALLIANCE_TOKEN: "원하는 종족 더미 위 2개 중 동맹 토큰 1개",
+  EXTRA_TURN: "이번 차례 후 추가 턴 1회",
+  DESTROY_FORTRESS: "적 요새 1개 파괴",
   MOUNT_DOOM_VICTORY: "운명의 산 — 프로도 & 샘 도착 시 원정대 승리",
 };
 
@@ -398,7 +392,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
           지역 지배 💍 {controlledCount(state, "FELLOWSHIP")}/7 · 👁️ {controlledCount(state, "SAURON")}/7
         </span>
         <span className="text-xs text-white/60 light:text-slate-600">
-          원정 🧝 {fr}/{L} · 🐉 {nz} (간격 {fr - nz})
+          원정 🧝 {fr}/{L} · 🐉 {nz}/{L} ({fr > nz ? `나즈굴 ${fr - nz}칸 뒤` : nz > fr ? `나즈굴이 ${nz - fr}칸 앞` : "같은 칸"})
         </span>
         <span className="ml-auto flex items-center gap-2">
           {state.phase === "GAME_OVER" && state.winner && victoryClosed && (
@@ -578,54 +572,51 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
                 </span>
               )}
             </p>
-            <div key={trail?.key ?? 0} className="grid grid-cols-2 gap-1">
-              {TRACK_PIECES.map(([start, end]) => (
-                <div key={start} className="grid grid-cols-7 gap-px rounded-md border border-amber-800/40 bg-amber-950/30 p-0.5 light:bg-amber-50">
-                  {Array.from({ length: end - start + 1 }, (_, k) => {
-                    const pos = start + k;
-                    const point = OFFICIAL_RING_TRACK[pos];
-                    return (
-                      <div
-                        key={pos}
-                        className={`relative flex aspect-square flex-col items-center justify-center rounded-sm text-[10px] leading-none ${
-                          pos === L ? "bg-red-900/60" : point.isNazgulStart ? "bg-black/70 ring-2 ring-zinc-600" : point.isFrodoStart ? "bg-yellow-950/70 ring-2 ring-yellow-400/80 ring-offset-1 ring-offset-yellow-900" : "bg-white/5"
-                        } ${
-                          trail && pos > trail.from && pos <= trail.to && pos <= (trail.faction === "FELLOWSHIP" ? shown.fr : shown.nz)
-                            ? trail.faction === "FELLOWSHIP"
-                              ? "lotrfx-trail-blue"
-                              : "lotrfx-trail-red"
-                            : ""
-                        } ${preview?.ring && pos > preview.ring.from && pos <= preview.ring.to ? `lotrp-cyan ${pos === preview.ring.to ? "ring-2 ring-cyan-300" : ""}` : ""}`}
-                        title={`${pos} — ${TRACK_REWARD_TEXT[point.reward]}${point.isNazgulStart ? " · 나즈굴 출발" : ""}${point.isFrodoStart ? " · 프로도 & 샘 출발" : ""}`}
-                      >
-                        {trail && pos > trail.from && pos <= trail.to && pos === (trail.faction === "FELLOWSHIP" ? shown.fr : shown.nz) && TRACK_REWARD_FLOAT[point.reward] && (
-                          <span key={`rw${trail.key}-${pos}`} className="lotrm-reward pointer-events-none absolute -top-2 left-1/2 z-10 font-mono text-[10px] font-black whitespace-nowrap text-amber-200">
-                            {TRACK_REWARD_FLOAT[point.reward]}
-                          </span>
-                        )}
-                        {pos === shown.fr ? (
-                          <span key={`f${pos}`} className="lotrm-hop text-sm drop-shadow-[0_0_4px_gold]">
-                            🧝
-                          </span>
-                        ) : pos === shown.nz ? (
-                          <span key={`n${pos}`} className="lotrm-hop text-sm drop-shadow-[0_0_4px_red]">
-                            🐉
-                          </span>
-                        ) : pos === L ? (
-                          <span>🌋</span>
-                        ) : TRACK_REWARD_ICON[point.reward] ? (
-                          <span className="text-[9px]">{TRACK_REWARD_ICON[point.reward]}</span>
-                        ) : (
-                          <span className="text-white/20 light:text-slate-400">{pos}</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+            {/* single integrated track, 0 … 14 in one row */}
+            <div key={trail?.key ?? 0} className="grid grid-cols-[repeat(15,minmax(0,1fr))] gap-px rounded-lg border border-amber-800/40 bg-gradient-to-r from-emerald-950/50 via-neutral-900/60 to-rose-950/60 p-0.5 light:bg-amber-50">
+              {OFFICIAL_RING_TRACK.map((point) => {
+                const pos = point.index;
+                const icon = TRACK_REWARD_ICON[point.reward];
+                return (
+                  <div
+                    key={pos}
+                    className={`relative flex h-14 flex-col items-center justify-between rounded-sm py-0.5 leading-none ${
+                      pos === L ? "bg-red-900/60 ring-1 ring-rose-500/70" : point.isStart ? "bg-black/60 ring-1 ring-zinc-500" : icon ? "bg-amber-500/10 ring-1 ring-amber-400/30" : "bg-white/5"
+                    } ${
+                      trail && pos > trail.from && pos <= trail.to && pos <= (trail.faction === "FELLOWSHIP" ? shown.fr : shown.nz)
+                        ? trail.faction === "FELLOWSHIP"
+                          ? "lotrfx-trail-blue"
+                          : "lotrfx-trail-red"
+                        : ""
+                    } ${preview?.ring && pos > preview.ring.from && pos <= preview.ring.to ? `lotrp-cyan ${pos === preview.ring.to ? "ring-2 ring-cyan-300" : ""}` : ""}`}
+                    title={`${pos}번 — ${pos === 0 ? "출발점 (원정대·나즈굴 함께 출발)" : TRACK_REWARD_TEXT[point.reward]}`}
+                  >
+                    {trail && pos > trail.from && pos <= trail.to && pos === (trail.faction === "FELLOWSHIP" ? shown.fr : shown.nz) && TRACK_REWARD_FLOAT[point.reward] && (
+                      <span key={`rw${trail.key}-${pos}`} className="lotrm-reward pointer-events-none absolute -top-2 left-1/2 z-10 font-mono text-[10px] font-black whitespace-nowrap text-amber-200">
+                        {TRACK_REWARD_FLOAT[point.reward]}
+                      </span>
+                    )}
+                    <span className={`font-mono text-[8px] font-bold ${icon ? "text-amber-300" : "text-white/30 light:text-slate-400"}`}>{pos}</span>
+                    <span className="text-[10px]">{icon}</span>
+                    <span className="flex flex-col items-center leading-none">
+                      {pos === shown.fr && (
+                        <span key={`f${pos}`} className="lotrm-hop text-[11px] drop-shadow-[0_0_4px_gold]" title="프로도 & 샘">
+                          🧝
+                        </span>
+                      )}
+                      {pos === shown.nz && (
+                        <span key={`n${pos}`} className="lotrm-hop text-[11px] drop-shadow-[0_0_4px_red]" title="나즈굴">
+                          🐉
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-            <p className="mt-2 text-[11px] text-white/55 light:text-slate-600">
-              🧝 프로도 & 샘이 🌋 운명의 산({L})에 닿으면 원정대 즉시 승리 · 🐉 나즈굴이 따라잡으면 사우론 즉시 승리. 파란 카드의 💍는 <b>내 말</b>을 전진시키고, 지나가거나 멈춘 칸의 보상(🪙 주화 · 📜 동맹 토큰 · 🔄 유닛 이동 · ⚔️ 유닛 배치)을 받습니다.
+            <p className="mt-1.5 text-[10px] text-white/45 light:text-slate-500">2칸마다 핵심 보상: 🪙주화 → ⚔️병사 → 📜종족 → ⏩한 턴 더 → 💥요새 파괴</p>
+            <p className="mt-1 text-[11px] text-white/55 light:text-slate-600">
+              🧝 프로도 & 샘이 🌋 운명의 산({L})에 닿으면 원정대 즉시 승리 · 🐉 나즈굴이 <b>뒤에서</b> 프로도의 칸에 닿거나 추월하면 사우론 즉시 승리. 💍 반지 기호는 <b>내 말</b>을 전진시키고 지나가거나 멈춘 칸의 보상을 받습니다.
             </p>
           </div>
 
