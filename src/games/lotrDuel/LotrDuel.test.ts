@@ -307,3 +307,23 @@ describe("official ring track (0 … 24)", () => {
     expect(s.turn).toBe("FELLOWSHIP");
   });
 });
+
+describe("history log card metadata", () => {
+  it("binds the bought / discarded card (id, use, coins) to its log entry", () => {
+    let s = startGame(11);
+    const slots = availableSlots(s);
+    const discarded = s.pyramidGrid[slots[0]].card;
+    s = applyAction(s, { type: "TAKE_CARD", faction: "SAURON", slot: slots[0], mode: "DISCARD" });
+    const d = s.log.find((e) => e.kind === "DISCARD");
+    expect(d?.card).toEqual({ id: discarded.id, use: "DISCARD", coins: 1 });
+    expect(d?.turn).toBe(1);
+
+    const slot = availableSlots(s)[0];
+    s.pyramidGrid[slot].card = card("브리 여관"); // free yellow
+    s = applyAction(s, { type: "TAKE_CARD", faction: "FELLOWSHIP", slot, mode: "PLAY" });
+    const p = s.log.find((e) => e.kind === "CARD");
+    expect(p?.card).toMatchObject({ id: card("브리 여관").id, use: "PLAY", coins: 0 });
+    expect(p?.faction).toBe("FELLOWSHIP");
+    expect(CARD_BY_ID[p!.card!.id].name).toBe("브리 여관");
+  });
+});

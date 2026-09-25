@@ -35,6 +35,7 @@ import type {
   Seat,
   TechSymbol,
   WinType,
+  LogEntry,
   LogKind,
 } from "./types";
 
@@ -574,9 +575,9 @@ function settle(state: LotrDuelState): boolean {
 /** Keeps the whole game's history for the log panel (a full game is ~150–250 entries). */
 const LOG_LIMIT = 400;
 
-function log(state: LotrDuelState, faction: Faction | null, text: string, kind: LogKind = "SYSTEM") {
+function log(state: LotrDuelState, faction: Faction | null, text: string, kind: LogKind = "SYSTEM", card?: LogEntry["card"]) {
   const no = (state.log[state.log.length - 1]?.no ?? 0) + 1;
-  state.log.push({ no, turn: state.turnNumber, faction, kind, text });
+  state.log.push({ no, turn: state.turnNumber, faction, kind, text, ...(card ? { card } : {}) });
   if (state.log.length > LOG_LIMIT) state.log.splice(0, state.log.length - LOG_LIMIT);
 }
 
@@ -659,10 +660,10 @@ export function applyAction(state: LotrDuelState, action: EngineAction): LotrDue
         const gain = discardValue(s, f);
         me.coins += gain;
         s.discardedCards.push(card);
-        log(s, f, `🗑️ ${who(f)}이(가) 「${card.name}」 카드를 버리고 ${gain}주화를 획득`, "DISCARD");
+        log(s, f, `🗑️ ${who(f)}이(가) 「${card.name}」 카드를 버리고 ${gain}주화를 획득`, "DISCARD", { id: card.id, use: "DISCARD", coins: gain });
       } else {
         me.coins -= cost.costInCoins;
-        log(s, f, `🃏 ${who(f)}이(가) 「${card.name}」 카드를 획득${cost.viaChain ? " (연계 무료)" : cost.costInCoins > 0 ? ` (${cost.costInCoins}주화 지불)` : " (무료)"}`, "CARD");
+        log(s, f, `🃏 ${who(f)}이(가) 「${card.name}」 카드를 획득${cost.viaChain ? " (연계 무료)" : cost.costInCoins > 0 ? ` (${cost.costInCoins}주화 지불)` : " (무료)"}`, "CARD", { id: card.id, use: "PLAY", coins: cost.costInCoins, viaChain: cost.viaChain });
         playCard(s, f, card, cost.viaChain);
       }
       advance(s);
@@ -747,7 +748,7 @@ export function applyAction(state: LotrDuelState, action: EngineAction): LotrDue
       s.pending.shift();
       const [card] = s.players[opp].tableauCards.splice(idx, 1);
       s.discardedCards.push(card);
-      log(s, f, `🔥 ${who(f)}이(가) 상대의 「${card.name}」 카드를 파괴`, "TACTIC");
+      log(s, f, `🔥 ${who(f)}이(가) 상대의 「${card.name}」 카드를 파괴`, "TACTIC", { id: card.id, use: "DESTROYED", coins: 0 });
       advance(s);
       return s;
     }
@@ -758,7 +759,7 @@ export function applyAction(state: LotrDuelState, action: EngineAction): LotrDue
       const s = clone(state);
       s.pending.shift();
       const [card] = s.discardedCards.splice(idx, 1);
-      log(s, f, `♻️ ${who(f)}이(가) 버린 카드 「${card.name}」를 무료로 획득`, "CARD");
+      log(s, f, `♻️ ${who(f)}이(가) 버린 카드 「${card.name}」를 무료로 획득`, "CARD", { id: card.id, use: "FREE", coins: 0 });
       playCard(s, f, card, false);
       advance(s);
       return s;

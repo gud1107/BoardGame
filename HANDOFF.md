@@ -257,6 +257,22 @@ UI는 `LotrDuelBoard.tsx`의 트랙 패널(이름 트랙용 `RingTrackBoard.tsx`
   동맹 토큰은 기존 `AllianceTokenSelectModal`. 모든 선택 모달은 "잠시 보드 보기"로 접고 행동 안내의 "🎯 선택 창 열기"로 재오픈, 접힌 상태에선 지도 클릭 선택도 계속 동작.
 - 검증: tsc/eslint/vitest 통과. 봇 대전(데스크톱 1500px — 지도 뱃지·기술 팝오버·카드 모달, 모바일 390px — 지도 뱃지)과 임시 페이지(배치 모달 모바일, 랜드마크 모달)를 캡처 확인 후 임시 페이지 삭제.
 
+### 🔍 반지의 제왕: 가운데땅에서의 대결 (LotR Duel) History Card Inspector — 2026-09-25 후속 (커밋/푸시, 배포는 웹훅 자동)
+
+요청서의 `components/HistoryLogDrawer.tsx`·`components/DuelCardItem.tsx`·`components/CardDetailModal.tsx`·`engine/types.ts`·`.handoff/`는 없다 — 실제 파일은
+`src/games/lotrDuel/` 플랫(`HistoryLogDrawer.tsx`, 카드 렌더러 `CardFace.tsx`, `types.ts`, 새 `CardDetailModal.tsx`).
+
+- **Logged Card Metadata Binding:** `LogEntry.card = { id, use: PLAY | DISCARD | FREE | DESTROYED, coins, viaChain? }` — 구매(지불 주화·연계 여부), 버리기(획득 주화),
+  버린 더미 무료 획득(마법사/바라드두르), 상대 회색 카드 파괴(아이센가드)에 부착. **카드 객체 대신 카드 id**를 저장하고 `CARD_BY_ID`로 복원(요청서는 `card?: LotrDuelCard`)
+  — lockstep 상태는 봇 탐색에서 매 수 수천 번 복제되므로 로그 400개에 카드 객체를 넣으면 무거워짐. 표시 결과는 동일.
+- **Interactive Log Card Inspection:** 카드 로그 항목에 `🔍 카드 보기` 태그, 호버 시 골드 글로우 + 밑줄, 키보드(Enter/Space)로도 열림. 클릭 시 `CardDetailModal`
+  — 화면 정중앙(`max-h-[90dvh]` 내부 스크롤), 기존 아르데코 `CardFace`를 3D 회전 줌인으로 크게 표시(호버 시 살짝 기울임), ✕/바깥 탭/ESC로 닫기,
+  z-[60]이라 모바일 기록 드로어 위에도 뜬다.
+- **Complete Card Spec Transparency:** 사용 주체·턴·사용 방식 배지, 효과 설명, 챕터, 분류(색), 인쇄 비용, 실제 지불(구매 시), 필요/제공 연계 기호,
+  제공 효과(영구 기술 / 선택 기술 / 종족 기호 / 유닛 수와 배치 가능 지역 / 반지 전진 / 주화) + **"이 카드로 일어난 일"**(같은 턴 뒤따른 로그 — 실제 배치 지역, 교전,
+  원정 트랙 이동과 칸 보상, 토큰 등).
+- 테스트 1개 추가(버리기/구매 로그에 카드 메타 부착). 봇 대전으로 데스크톱 로그 클릭·모바일 드로어 안 클릭 → 중앙 모달 캡처, ESC 닫힘 확인.
+
 ## 💎 스플렌더 대결 (Splendor Duel) — 2인 전용 신규 게임 — 2026-09-25 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: `boardGameRule/스플랜더 대결/스플랜더 대결.md` 룰북 기준 2인 전용 풀스택 신규 게임. 요청서는 `src/data/games.ts`

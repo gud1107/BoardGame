@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import CardDetailModal from "./CardDetailModal";
 import type { LogEntry, LogKind } from "./types";
 
 /**
@@ -11,6 +12,9 @@ import type { LogEntry, LogKind } from "./types";
  * Phones: a small "📜 기록" tab on the left edge (the site header is sticky
  * and tall on phones, so a top-left chip would sit under it); tapping it
  * slides a drawer in from the left, closed by tapping outside or ✕.
+ *
+ * Card entries (buy / discard / free play / destroyed) carry a 🔍 tag and
+ * open `CardDetailModal` in the centre of the screen.
  *
  * The "timestamp" is the turn number — every client replays the same state,
  * so wall-clock times would differ between the two players.
@@ -30,7 +34,7 @@ const KIND_ICON: Record<LogKind, string> = {
   SYSTEM: "📖",
 };
 
-function LogList({ log, onClose }: { log: LogEntry[]; onClose?: () => void }) {
+function LogList({ log, onClose, onInspect }: { log: LogEntry[]; onClose?: () => void; onInspect: (e: LogEntry) => void }) {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-neutral-950/95 select-none">
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/10 bg-neutral-900/90 px-3">
@@ -46,7 +50,18 @@ function LogList({ log, onClose }: { log: LogEntry[]; onClose?: () => void }) {
         {[...log].reverse().map((e) => (
           <li
             key={e.no}
-            className={`rounded-xl border p-2 text-[11px] leading-relaxed ${
+            {...(e.card
+              ? {
+                  role: "button",
+                  tabIndex: 0,
+                  title: "클릭하면 카드 상세를 봅니다",
+                  onClick: () => onInspect(e),
+                  onKeyDown: (k: React.KeyboardEvent) => (k.key === "Enter" || k.key === " ") && (k.preventDefault(), onInspect(e)),
+                }
+              : {})}
+            className={`group rounded-xl border p-2 text-[11px] leading-relaxed ${
+              e.card ? "cursor-pointer transition hover:border-amber-400/80 hover:shadow-[0_0_12px_rgba(251,191,36,.25)] focus-visible:outline-2 focus-visible:outline-amber-400" : ""
+            } ${
               e.faction === "FELLOWSHIP"
                 ? "border-amber-500/30 bg-amber-950/20 text-amber-50"
                 : e.faction === "SAURON"
@@ -60,9 +75,12 @@ function LogList({ log, onClose }: { log: LogEntry[]; onClose?: () => void }) {
               <span className={e.faction === "FELLOWSHIP" ? "font-bold text-amber-300" : e.faction === "SAURON" ? "font-bold text-rose-300" : "font-bold text-neutral-300"}>
                 {KIND_ICON[e.kind]} {e.faction === "FELLOWSHIP" ? "원정대" : e.faction === "SAURON" ? "사우론" : e.kind === "COMBAT" ? "교전" : "진행"}
               </span>
-              <span>{e.turn}턴</span>
+              <span className="flex items-center gap-1.5">
+                {e.card && <span className="rounded border border-amber-500/40 bg-amber-500/20 px-1 font-bold text-amber-300">🔍 카드 보기</span>}
+                <span>{e.turn}턴</span>
+              </span>
             </span>
-            <span className="break-keep">{e.text}</span>
+            <span className={`break-keep ${e.card ? "decoration-amber-300/70 underline-offset-2 group-hover:text-amber-100 group-hover:underline" : ""}`}>{e.text}</span>
           </li>
         ))}
       </ol>
@@ -72,6 +90,7 @@ function LogList({ log, onClose }: { log: LogEntry[]; onClose?: () => void }) {
 
 export default function HistoryLogDrawer({ log }: { log: LogEntry[] }) {
   const [open, setOpen] = useState(false);
+  const [inspecting, setInspecting] = useState<LogEntry | null>(null);
   return (
     <>
       {/* phones: left-edge tab */}
@@ -87,7 +106,7 @@ export default function HistoryLogDrawer({ log }: { log: LogEntry[] }) {
 
       {/* desktop: sticky left panel */}
       <aside className="sticky top-20 hidden h-[calc(100dvh-7rem)] w-60 shrink-0 overflow-hidden rounded-2xl border border-amber-500/20 shadow-2xl lg:block">
-        <LogList log={log} />
+        <LogList log={log} onInspect={setInspecting} />
       </aside>
 
       {/* phones: slide-over drawer */}
@@ -96,10 +115,13 @@ export default function HistoryLogDrawer({ log }: { log: LogEntry[] }) {
           <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" onClick={() => setOpen(false)} />
           <div className="relative h-full w-72 max-w-[85vw] border-r border-amber-500/20 shadow-2xl" style={{ animation: "lotrlog-in .28s cubic-bezier(.2,.9,.2,1) both" }}>
             <style>{"@keyframes lotrlog-in { 0% { transform: translateX(-100%) } 100% { transform: none } }"}</style>
-            <LogList log={log} onClose={() => setOpen(false)} />
+            <LogList log={log} onClose={() => setOpen(false)} onInspect={setInspecting} />
           </div>
         </div>
       )}
+
+      {/* card inspector — above the mobile drawer too */}
+      {inspecting?.card && <CardDetailModal entry={inspecting} log={log} onClose={() => setInspecting(null)} />}
     </>
   );
 }

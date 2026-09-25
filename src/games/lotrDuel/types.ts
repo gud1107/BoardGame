@@ -141,6 +141,13 @@ export interface LogEntry {
   faction: Faction | null;
   kind: LogKind;
   text: string;
+  /**
+   * The card this entry is about (bought, discarded, played free from the
+   * discard pile, or destroyed) — an id into `CARD_BY_ID`, not the card
+   * object, so the replayed/cloned state stays small. Drives the history
+   * log's card inspector.
+   */
+  card?: { id: string; use: "PLAY" | "DISCARD" | "FREE" | "DESTROYED"; coins: number; viaChain?: boolean };
 }
 
 export interface LotrDuelState {
