@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import { FortressArt, SealStamp } from "./CardArt";
 import { CardFace, COLOR_STYLE, CostChips, cardGlyph, describeCard } from "./CardFace";
-import { ADJACENCY, CHAIN_INFO, COLOR_INFO, FACTION_EMOJI, FACTION_LABEL, OFFICIAL_RING_TRACK, RACES, RACE_INFO, REGIONS, REGION_INFO, TECHS, TECH_INFO, TOKENS } from "./data";
+import { ADJACENCY, CHAIN_INFO, COLOR_INFO, FACTION_EMOJI, FACTION_LABEL, OFFICIAL_RING_TRACK, RACES, RACE_INFO, REGIONS, REGION_INFO, TECHS, TECH_INFO } from "./data";
 import {
   WIN_TEXT,
   availableSlots,
@@ -17,7 +17,6 @@ import {
   otherFaction,
   raceSymbols,
   techProduction,
-  tokenOptions,
   unitsOf,
   type EngineAction,
   type Faction,
@@ -31,6 +30,7 @@ import {
 import { ActionCinematicFX, EndingFX, FX_KEYFRAMES, type ActionFX } from "./ActionCinematicFX";
 import { diffFx, type FxEvents } from "./fxEvents";
 import { getLotrAudio } from "./lotrAudioEngine";
+import AllianceTokenSelectModal from "./AllianceTokenSelectModal";
 import MiddleEarthMap from "./MiddleEarthMap";
 import type { RingTrackReward } from "./data";
 
@@ -121,6 +121,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [moveFrom, setMoveFrom] = useState<RegionId | null>(null);
   const [victoryClosed, setVictoryClosed] = useState(false);
+  const [allianceHidden, setAllianceHidden] = useState(false);
   // Clear local selections whenever the game moves on (derived during render, no effect).
   const [seenTurn, setSeenTurn] = useState(`${state.turnNumber}:${state.pending.length}:${state.seed}`);
   const turnKey = `${state.turnNumber}:${state.pending.length}:${state.seed}`;
@@ -128,6 +129,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
     setSeenTurn(turnKey);
     setSelectedSlot(null);
     setMoveFrom(null);
+    setAllianceHidden(false);
     if (state.phase === "PLAYING") setVictoryClosed(false);
   }
 
@@ -295,7 +297,26 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
       </div>
 
       {/* ---- action prompt ---- */}
-      <ActionPrompt state={state} myFaction={myFaction} myTurn={myTurn} front={front} moveFrom={moveFrom} opponentName={nameOf(oppFaction)} act={act} />
+      <ActionPrompt
+        state={state}
+        myFaction={myFaction}
+        myTurn={myTurn}
+        front={front}
+        moveFrom={moveFrom}
+        opponentName={nameOf(oppFaction)}
+        act={act}
+        onOpenAlliance={() => setAllianceHidden(false)}
+      />
+      {myTurn && front && (front.kind === "TOKEN" || front.kind === "TOKEN_RACE") && !allianceHidden && (
+        <AllianceTokenSelectModal
+          key={`${state.turnNumber}:${state.pending.length}:${front.kind}`}
+          state={state}
+          step={front}
+          onPickRace={(race) => act({ type: "PICK_RACE", faction: myFaction, race })}
+          onPickToken={(tokenId) => act({ type: "PICK_TOKEN", faction: myFaction, tokenId })}
+          onMinimize={() => setAllianceHidden(true)}
+        />
+      )}
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,0.9fr)]">
         {/* ---- map ---- */}
@@ -518,6 +539,7 @@ function ActionPrompt({
   moveFrom,
   opponentName,
   act,
+  onOpenAlliance,
 }: {
   state: LotrDuelState;
   myFaction: Faction;
@@ -526,6 +548,7 @@ function ActionPrompt({
   moveFrom: RegionId | null;
   opponentName: string;
   act: (a: EngineAction) => void;
+  onOpenAlliance: () => void;
 }) {
   if (state.phase !== "PLAYING") return null;
   const opp = otherFaction(myFaction);
@@ -593,27 +616,11 @@ function ActionPrompt({
               {cardGlyph(c)} {c.name}
             </button>
           ))}
-        {front.kind === "TOKEN_RACE" &&
-          RACES.filter((r) => state.allianceTokenDecks[r].length > 0).map((r) => (
-            <button key={r} className={btn} onClick={() => act({ type: "PICK_RACE", faction: myFaction, race: r })}>
-              {RACE_INFO[r].emoji} {RACE_INFO[r].name} ({state.allianceTokenDecks[r].length})
-            </button>
-          ))}
-        {front.kind === "TOKEN" &&
-          tokenOptions(state, front).map((id) => {
-            const t = TOKENS[id];
-            return (
-              <button key={id} className={`${btn} max-w-[15rem] text-left`} onClick={() => act({ type: "PICK_TOKEN", faction: myFaction, tokenId: id })}>
-                <span className="flex items-center gap-1">
-                  <span className="inline-block h-6 w-6 shrink-0">
-                    <SealStamp race={t.race} />
-                  </span>
-                  {t.name} <span className="text-[10px] text-white/50">{t.isOneShot ? "즉시 1회" : "지속"}</span>
-                </span>
-                <span className="block text-[11px] font-normal text-white/65 light:text-slate-600">{t.description}</span>
-              </button>
-            );
-          })}
+        {(front.kind === "TOKEN_RACE" || front.kind === "TOKEN") && (
+          <button className={`${btn} border-amber-400/60 bg-amber-500/20`} onClick={onOpenAlliance}>
+            📜 동맹 선택 창 열기
+          </button>
+        )}
         {front.kind === "ENT_CHOICE" && (
           <>
             <button className={btn} onClick={() => act({ type: "ENT_PICK", faction: myFaction, option: "SNIPE" })}>

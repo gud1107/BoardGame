@@ -190,6 +190,21 @@ UI는 `LotrDuelBoard.tsx`의 트랙 패널(이름 트랙용 `RingTrackBoard.tsx`
 - **밸런스 관찰(수치는 요청값 그대로, 조정 안 함)**: 봇 자가대전 100판(Lv8) 원정대 56 : 사우론 44. 원정대 반지 원정 승리 18판, **사우론 나즈굴 추격 승리 0판** —
   시작 간격 13칸이라 추격 승리가 사실상 나오지 않음. 조정이 필요하면 `FRODO_START`/`NAZGUL_START` 또는 카드 반지 수치를 손볼 것.
 
+### 📜 반지의 제왕: 가운데땅에서의 대결 (LotR Duel) Center Floating Alliance Modal — 2026-09-25 후속 (커밋/푸시, 배포는 웹훅 자동)
+
+요청서의 `components/AllianceTokenSelectModal.tsx`·`Board.tsx`·`engine/types.ts`·`.handoff/`는 없다 — 관례대로 `src/games/lotrDuel/AllianceTokenSelectModal.tsx`를
+새로 만들고 `LotrDuelBoard.tsx`에 마운트했다(엔진 변경 없음, 기존 `TOKEN_RACE`/`TOKEN` 대기 단계를 그대로 사용).
+
+- **Center Modal Viewport Placement:** 같은 종족 2장, 서로 다른 3종족(게임 중 1회), 원정 트랙 5/16번 경유, 회색 항구 랜드마크 — 모든 동맹 토큰 선택이
+  화면 정중앙 플로팅 모달(`fixed inset-0` + 중앙 정렬, `max-w-lg`, `max-h-[85dvh]` 내부 스크롤)로 뜬다. 배경 딤+블러, 골드 림라이트 펄스.
+  트랙/회색 항구는 1단계 "종족 더미 선택"(6종족 인장 + 남은 토큰 수, 더미 내용은 비공개) → 2단계 "토큰 선택"으로 같은 모달에서 이어진다.
+- **Interactive Token Comparison Cards:** 공개된 2장(또는 3장)을 인장·지속/즉시 배지·효과 설명 카드로 나란히 배치(3장은 모바일에서 세로 행 레이아웃),
+  카드 등장 3D 플립-인, 호버/포커스 3D 줌인. 선택 시 0.5초 트랜지션(선택 카드 상승·금빛 발광, 나머지는 아래로 기울며 "더미 복귀") 후 액션 전송 →
+  엔진이 토큰을 진영에 등록하고 즉시형은 효과 실행.
+- 선택 차례인 플레이어에게만 열린다(상대는 기존 행동 안내에 "선택 중" 표시). "잠시 보드 보기"로 접을 수 있고 행동 안내의 "📜 동맹 선택 창 열기"로 다시 연다.
+  `prefers-reduced-motion`이면 애니메이션 생략.
+- 검증: tsc/eslint/vitest 통과. 임시 페이지로 2장(데스크톱)·3장(모바일 390px)·종족 더미 선택(모바일) 3가지 상태를 렌더해 캡처 확인 후 삭제.
+
 ## 💎 스플렌더 대결 (Splendor Duel) — 2인 전용 신규 게임 — 2026-09-25 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: `boardGameRule/스플랜더 대결/스플랜더 대결.md` 룰북 기준 2인 전용 풀스택 신규 게임. 요청서는 `src/data/games.ts`
