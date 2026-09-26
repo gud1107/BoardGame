@@ -119,13 +119,13 @@ const CHAPTER_1: CardInit[] = [
   // Green (6): one per race
   { color: "GREEN", name: "로리엔 궁수", cost: { tech: t("BOOK") }, race: "ELF", providesChain: "LEAF" },
   { color: "GREEN", name: "철산 도끼병", cost: { tech: t("SWORD") }, race: "DWARF", providesChain: "AXE" },
-  { color: "GREEN", name: "샤이어 파이프", cost: { coins: 1 }, race: "HOBBIT", providesChain: "PIPE" },
+  { color: "GREEN", name: "샤이어 파이프", cost: { tech: t("BOOK") }, race: "HOBBIT", providesChain: "PIPE" },
   { color: "GREEN", name: "로한 기마병", cost: { tech: t("FLAG") }, race: "HUMAN", providesChain: "HORN" },
   { color: "GREEN", name: "팡고른의 속삭임", cost: { tech: t("COURAGE") }, race: "ENT", providesChain: "ROOT" },
   { color: "GREEN", name: "회색 순례자", cost: { tech: t("MASK") }, race: "WIZARD", providesChain: "STAFF" },
   // Red (4): 1 unit into one of two adjacent regions
   { color: "RED", name: "국경 순찰대", cost: { tech: t("SWORD") }, militaryUnits: { count: 1, allowedRegions: ["LINDON", "ARNOR"] } },
-  { color: "RED", name: "아이센 여울 전초", cost: { coins: 1 }, militaryUnits: { count: 1, allowedRegions: ["ENEDWAITH", "ROHAN"] } },
+  { color: "RED", name: "아이센 여울 전초", cost: { tech: t("FLAG") }, militaryUnits: { count: 1, allowedRegions: ["ENEDWAITH", "ROHAN"] } },
   { color: "RED", name: "동부 정찰병", cost: { tech: t("FLAG") }, militaryUnits: { count: 1, allowedRegions: ["ARNOR", "RHOVANION"] } },
   { color: "RED", name: "오스길리아스 수비대", cost: { tech: t("COURAGE") }, militaryUnits: { count: 1, allowedRegions: ["GONDOR", "MORDOR"] }, providesChain: "TOWER" },
   // Yellow (4): 2–3 coins + chain for the next chapter
@@ -136,7 +136,7 @@ const CHAPTER_1: CardInit[] = [
   // Blue (3): ring +1
   { color: "BLUE", name: "반지의 속삭임", cost: { tech: t("MASK") }, ringAdvance: 1 },
   { color: "BLUE", name: "은밀한 샛길", cost: { tech: t("COURAGE") }, ringAdvance: 1 },
-  { color: "BLUE", name: "엘론드의 회의", cost: { coins: 2 }, ringAdvance: 1, providesChain: "EYE" },
+  { color: "BLUE", name: "엘론드의 회의", cost: { coins: 1, tech: t("COURAGE") }, ringAdvance: 1, providesChain: "EYE" },
 ];
 
 const CHAPTER_2: CardInit[] = [

@@ -328,7 +328,7 @@ describe("single integrated ring track (0 … 14)", () => {
     s.turn = "FELLOWSHIP";
     s.ringTrack.frodoPosition = 7;
     const slot = s.pyramidGrid.findIndex((p) => p.row === 4);
-    s.pyramidGrid[slot].card = card("엘론드의 회의"); // ring +1, 2 coins
+    s.pyramidGrid[slot].card = card("엘론드의 회의"); // ring +1, 🔥 + 1 coin (2 coins without courage)
     s = applyAction(s, { type: "TAKE_CARD", faction: "FELLOWSHIP", slot, mode: "PLAY" });
     expect(s.ringTrack.frodoPosition).toBe(8);
     expect(s.turn).toBe("FELLOWSHIP");
