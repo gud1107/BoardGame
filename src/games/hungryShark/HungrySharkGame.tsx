@@ -17,6 +17,8 @@ import {
 import type { RunSummary } from "./engine";
 import HungrySharkCanvas from "./HungrySharkCanvas";
 import RulebookModal from "./RulebookModal";
+import BestiaryPanel from "./BestiaryPanel";
+import Overlay from "@/components/Overlay";
 import { drawSharkShape } from "./render";
 import { freshSave, loadSave, upgradesFor, writeSave, type SharkSave } from "./save";
 
@@ -38,6 +40,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
   const [runKey, setRunKey] = useState(0);
   const [summary, setSummary] = useState<{ s: RunSummary; newBest: boolean; missionCoins: number } | null>(null);
   const [showRules, setShowRules] = useState(false);
+  const [showBestiary, setShowBestiary] = useState(false);
   const [bestThisSession, setBestThisSession] = useState(0);
 
   const update = (fn: (s: SharkSave) => SharkSave) => {
@@ -88,6 +91,8 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
         upgrades={upgradesFor(save, def.id)}
         muted={save.muted}
         onToggleMute={() => update((s) => ({ ...s, muted: !s.muted }))}
+        markersOn={save.markers}
+        onToggleMarkers={() => update((s) => ({ ...s, markers: !s.markers }))}
         onEnd={handleEnd}
         onQuit={() => setScreen("menu")}
       />
@@ -242,6 +247,12 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
               📖 룰북
             </button>
             <button
+              onClick={() => setShowBestiary(true)}
+              className="rounded-xl border border-emerald-400/30 px-4 py-3 text-sm font-semibold text-emerald-300 hover:border-emerald-300/60 light:border-emerald-300 light:text-emerald-700"
+            >
+              🐟 먹이 도감
+            </button>
+            <button
               onClick={finish}
               className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white/60 hover:border-white/40 light:border-slate-300 light:text-slate-600"
               title={bestThisSession > 0 ? `이번 세션 최고 ${bestThisSession.toLocaleString()}점` : undefined}
@@ -256,6 +267,11 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
       )}
 
       {showRules && <RulebookModal onClose={() => setShowRules(false)} />}
+      {showBestiary && (
+        <Overlay title="📖 해양 생태계 먹이 도감" onClose={() => setShowBestiary(false)} wide>
+          <BestiaryPanel tier={viewDef.tier} sharkName={viewDef.name} biteLevel={ups.bite} />
+        </Overlay>
+      )}
     </div>
   );
 }

@@ -272,3 +272,60 @@ describe("save", () => {
     expect(decodeSave(tampered).coins).toBe(0);
   });
 });
+
+describe("target feed indicator", () => {
+  it("green for edible prey with heal/score, red skull with required shark for dangerous", async () => {
+    const { selectMarkers } = await import("./markers");
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 21);
+    isolate(w);
+    w.shark.angle = 0;
+    place(w, "swimmer", w.shark.x + 120, w.shark.y);
+    place(w, "puffer", w.shark.x + 150, w.shark.y + 80);
+    place(w, "fishingBoat", w.shark.x + 200, w.shark.y - 120);
+    const ms = selectMarkers(w);
+    const by = (k: string) => ms.find((m) => m.e.kind === k)!;
+    expect(by("swimmer").kind).toBe("edible");
+    expect(by("swimmer").label).toBe("+15 HP");
+    expect(by("puffer").kind).toBe("danger");
+    expect(by("puffer").label).toContain("T2 청상아리 필요");
+    expect(by("fishingBoat").kind).toBe("blocked");
+  });
+
+  it("ignores things behind the head except chasing threats, and collapses fish schools", async () => {
+    const { selectMarkers } = await import("./markers");
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 22);
+    isolate(w);
+    w.shark.angle = 0;
+    place(w, "crab", w.shark.x - 200, w.shark.y);
+    const hunter = place(w, "smallShark", w.shark.x - 220, w.shark.y);
+    for (let i = 0; i < 6; i++) place(w, "smallFish", w.shark.x + 150 + i * 5, w.shark.y + i * 4);
+    place(w, "grouper", w.shark.x + 5000, w.shark.y);
+    const ms = selectMarkers(w);
+    expect(ms.some((m) => m.e.kind === "crab")).toBe(false);
+    expect(ms[0].e).toBe(hunter);
+    expect(ms.filter((m) => m.e.kind === "smallFish")).toHaveLength(1);
+    expect(ms.some((m) => m.e.kind === "grouper")).toBe(false);
+  });
+
+  it("gold rush swaps edible markers to gold; mega makes mines gold too", async () => {
+    const { selectMarkers } = await import("./markers");
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 23);
+    isolate(w);
+    w.shark.angle = 0;
+    place(w, "smallFish", w.shark.x + 100, w.shark.y);
+    place(w, "mineS", w.shark.x + 200, w.shark.y + 100);
+    forceGoldRush(w);
+    let ms = selectMarkers(w);
+    expect(ms.find((m) => m.e.kind === "smallFish")!.kind).toBe("gold");
+    expect(ms.find((m) => m.e.kind === "mineS")!.kind).toBe("blocked"); // invulnerable, not edible
+    w.gold.mega = true;
+    ms = selectMarkers(w);
+    expect(ms.find((m) => m.e.kind === "mineS")!.kind).toBe("mega");
+  });
+
+  it("bestiary lists every non-player entity kind exactly once", async () => {
+    const { BESTIARY_ORDER } = await import("./markers");
+    expect(new Set(BESTIARY_ORDER).size).toBe(BESTIARY_ORDER.length);
+    expect([...BESTIARY_ORDER].sort()).toEqual(Object.keys(ENTITY_DEFS).sort());
+  });
+});

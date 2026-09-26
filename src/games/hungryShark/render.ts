@@ -5,8 +5,9 @@
  * same as `worm/WormCanvas.tsx`.
  */
 
-import { seabedY, SEABED_BASE, SKY_TOP, SURFACE_Y, WORLD_W, type SharkDef } from "./data";
+import { ENTITY_DEFS, seabedY, SEABED_BASE, SKY_TOP, SURFACE_Y, WORLD_W, type EntityKind, type SharkDef } from "./data";
 import { isDangerous, isEdible, mouthPos, type Entity, type World } from "./engine";
+import { MARKER_COLORS, type Marker } from "./markers";
 
 export interface Camera {
   x: number;
@@ -43,7 +44,7 @@ function h01(n: number): number {
   return s - Math.floor(s);
 }
 
-export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, vw: number, vh: number, t: number, dpr = 1) {
+export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, vw: number, vh: number, t: number, dpr = 1, markers: Marker[] = []) {
   const z = cam.zoom;
   const shakeX = w.shake > 0 ? (h01(t * 91) - 0.5) * w.shake : 0;
   const shakeY = w.shake > 0 ? (h01(t * 57 + 3) - 0.5) * w.shake : 0;
@@ -341,8 +342,108 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     ctx.fillRect(0, 0, vw, vh);
   }
 
+  // Reticles go on top of the depth darkness so they stay readable in the abyss.
+  ctx.setTransform(z * dpr, 0, 0, z * dpr, ox * dpr, oy * dpr);
+  drawMarkers(ctx, markers, z, t);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
   drawThreatArrows(ctx, w, cam, vw, vh, t);
   drawMinimap(ctx, w, vw, vh);
+}
+
+// ── Target Feed Indicator (world-space reticles) ────────────────────────────
+
+function drawMarkers(ctx: CanvasRenderingContext2D, markers: Marker[], z: number, t: number) {
+  if (!markers.length) return;
+  const k = 1 / Math.max(0.45, z); // keep reticles/text roughly screen-constant
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const placed: { x: number; y: number; w: number; h: number }[] = [];
+  for (const m of markers) {
+    const e = m.e;
+    const col = MARKER_COLORS[m.kind];
+    const warn = m.kind === "danger";
+    const blink = warn ? 0.55 + 0.45 * Math.abs(Math.sin(t * 7)) : 1;
+    const r = e.def.radius + 9 * k;
+    ctx.globalAlpha = 0.9 * blink;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2.2 * k;
+    const shiny = m.kind === "gold" || m.kind === "mega";
+    if (shiny) {
+      ctx.shadowColor = col;
+      ctx.shadowBlur = 12;
+    }
+    // Rotating dashed ring + 4 corner ticks (crosshair).
+    ctx.setLineDash([7 * k, 5 * k]);
+    ctx.lineDashOffset = -t * (warn ? 40 : 18) * k;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI) / 2 + Math.PI / 4;
+      ctx.beginPath();
+      ctx.moveTo(e.x + Math.cos(a) * (r + 3 * k), e.y + Math.sin(a) * (r + 3 * k));
+      ctx.lineTo(e.x + Math.cos(a) * (r + 9 * k), e.y + Math.sin(a) * (r + 9 * k));
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+
+    // Label pill above the target.
+    let ly = e.y - r - 22 * k;
+    ctx.font = `800 ${12 * k}px system-ui, sans-serif`;
+    const lw = ctx.measureText(m.label).width;
+    ctx.font = `600 ${9.5 * k}px system-ui, sans-serif`;
+    const sw = ctx.measureText(m.sub).width;
+    const pw = Math.max(lw, sw) + 12 * k;
+    const ph = 28 * k;
+    // Clustered targets: stack overlapping pills upward instead of overdrawing.
+    for (let tries = 0; tries < 6; tries++) {
+      const hit = placed.find((p) => Math.abs(p.x - e.x) < (p.w + pw) / 2 && Math.abs(p.y - ly) < (p.h + ph) / 2);
+      if (!hit) break;
+      ly = hit.y - (hit.h + ph) / 2 - 3 * k;
+    }
+    placed.push({ x: e.x, y: ly, w: pw, h: ph });
+    ctx.globalAlpha = 0.82 * (warn ? Math.max(0.75, blink) : 1);
+    ctx.fillStyle = "rgba(2,6,23,0.78)";
+    ctx.beginPath();
+    ctx.roundRect(e.x - pw / 2, ly - ph / 2, pw, ph, 7 * k);
+    ctx.fill();
+    ctx.lineWidth = 1.2 * k;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = col;
+    ctx.font = `800 ${12 * k}px system-ui, sans-serif`;
+    ctx.fillText(m.label, e.x, ly - 5.5 * k);
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.font = `600 ${9.5 * k}px system-ui, sans-serif`;
+    ctx.fillText(m.sub, e.x, ly + 7 * k);
+  }
+  ctx.restore();
+}
+
+/** Draws one entity kind centered in a `size`×`size` box (bestiary icons). */
+export function drawEntityIcon(ctx: CanvasRenderingContext2D, kind: EntityKind, size: number, t = 0) {
+  const def = ENTITY_DEFS[kind];
+  const e: Entity = {
+    id: 1, kind, def, alive: true, x: 0, y: 0, vx: 0, vy: 0, angle: 0, hp: def.toughness,
+    phase: t, timer: 0, attackCd: 0, hitFlash: 0, homeY: 0, dir: 1, state: "patrol",
+  };
+  // Visual extent in units of radius, per silhouette.
+  const extent =
+    kind === "smallShark" || kind === "ghostShark" ? 3.4
+    : kind === "fishingBoat" || kind === "yacht" || kind === "submarine" ? 2.8
+    : kind === "helicopter" ? 3.4
+    : kind === "ray" || kind === "pelican" ? 3.2
+    : kind.startsWith("mine") ? 2.8
+    : 2.6;
+  const scale = (size * 0.86) / (def.radius * extent);
+  ctx.save();
+  ctx.translate(size / 2, size / 2);
+  ctx.scale(scale, scale);
+  drawEntity(ctx, e, t, false, false);
+  ctx.restore();
 }
 
 // ── Threat indicators ───────────────────────────────────────────────────────

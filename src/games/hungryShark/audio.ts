@@ -156,6 +156,11 @@ export class SharkAudio {
   mission() {
     [659, 880, 1175].forEach((n, i) => this.tone(n, 0.18, "square", 0.07, undefined, i * 0.09, true));
   }
+  /** Danger-approach warning (Target Feed Indicator). */
+  beep() {
+    this.tone(1175, 0.07, "square", 0.06, undefined, 0, true);
+    this.tone(1175, 0.07, "square", 0.06, undefined, 0.11, true);
+  }
   death() {
     this.tone(220, 1.2, "sawtooth", 0.2, 40);
   }

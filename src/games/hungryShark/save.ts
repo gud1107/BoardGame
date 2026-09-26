@@ -17,6 +17,8 @@ export interface SharkSave {
   totalRuns: number;
   totalEaten: number;
   muted: boolean;
+  /** Target Feed Indicator on/off (older saves lack it → default on). */
+  markers: boolean;
 }
 
 const KEY = "hungry-shark-save-v1";
@@ -33,6 +35,7 @@ export function freshSave(): SharkSave {
     totalRuns: 0,
     totalEaten: 0,
     muted: false,
+    markers: true,
   };
 }
 

@@ -57,6 +57,18 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
+          <h3 className={H3}>먹이 인디케이터 · 먹이 도감</h3>
+          <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
+            <li>상어 머리 주변 시야 안의 생물 위에 조준 링이 뜹니다(최대 8개, 물고기 떼는 하나로 묶음).</li>
+            <li><span className="font-bold text-emerald-400">🟢 녹색 링</span>: 지금 먹을 수 있음 — 회복량(+HP)과 점수 표시. 여러 번 물어야 하는 대상은 남은 물기 횟수도 표시.</li>
+            <li><span className="font-bold text-red-400">🔴 ☠ 적색 링(깜빡임)</span>: 티어 부족 + 위험 — 필요한 상어(예: &quot;T3 귀상어 필요&quot;)와 위험 종류. 새 위협이 링 안에 들어오면 경고 비프음. 쫓아오는 포식자·어뢰·낙석은 뒤쪽에 있어도 표시.</li>
+            <li><span className="font-bold text-red-300">🔴 ✖ 적색 링</span>: 티어 부족이지만 무해 — 부딪히면 튕겨 나갈 뿐입니다.</li>
+            <li><span className="font-bold text-yellow-300">🟡 황금 링</span>: 골드 러시 중 먹을 수 있는 대상(코인 드롭 + 체력 완전 회복). 메가 골드 러시에선 분홍빛으로 모든 대상이 바뀝니다.</li>
+            <li>🎯 버튼으로 인디케이터를 끄고 켤 수 있습니다. 📖 버튼·일시정지 메뉴·<b>B</b> 키로 <b>먹이 도감</b>을 열면 현재 티어 기준 사냥 가능/티어 부족/위험 생물을 필터링해 회복량·점수·코인·출몰 수심을 볼 수 있습니다.</li>
+          </ul>
+        </section>
+
+        <section>
           <h3 className={H3}>상어 티어별 먹이</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">

@@ -5,6 +5,8 @@ import { ZONES, zoneAt, type SharkDef, type UpgradeLevels } from "./data";
 import { createWorld, depthMeters, step, summarize, type MissionState, type RunSummary, type SharkInput, type World } from "./engine";
 import { drawWorld, updateCamera, viewHeightFor, type Camera } from "./render";
 import { SharkAudio } from "./audio";
+import BestiaryPanel from "./BestiaryPanel";
+import { selectMarkers } from "./markers";
 
 /**
  * requestAnimationFrame host for one dive: owns the mutable `World`, turns
@@ -50,6 +52,8 @@ export default function HungrySharkCanvas({
   upgrades,
   muted,
   onToggleMute,
+  markersOn,
+  onToggleMarkers,
   onEnd,
   onQuit,
 }: {
@@ -57,6 +61,8 @@ export default function HungrySharkCanvas({
   upgrades: UpgradeLevels;
   muted: boolean;
   onToggleMute: () => void;
+  markersOn: boolean;
+  onToggleMarkers: () => void;
   onEnd: (summary: RunSummary) => void;
   onQuit: () => void;
 }) {
@@ -67,6 +73,11 @@ export default function HungrySharkCanvas({
   const audioRef = useRef<SharkAudio | null>(null);
   const sizeRef = useRef({ w: 800, h: 500, dpr: 1 });
   const pausedRef = useRef(false);
+  const markersOnRef = useRef(markersOn);
+  useEffect(() => {
+    markersOnRef.current = markersOn;
+  }, [markersOn]);
+  const bestiaryRef = useRef(false);
   const input = useRef({
     keys: new Set<string>(),
     mouse: null as { x: number; y: number } | null,
@@ -87,6 +98,18 @@ export default function HungrySharkCanvas({
   const [joyView, setJoyView] = useState<{ ox: number; oy: number; x: number; y: number } | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [dead, setDead] = useState<string | null>(null);
+  const [bestiary, setBestiary] = useState<{ eaten: World["run"]["eaten"] } | null>(null);
+
+  const openBestiary = useCallback((open: boolean) => {
+    const w = worldRef.current;
+    if (!w || w.over) return;
+    bestiaryRef.current = open;
+    if (open) {
+      pausedRef.current = true;
+      setPaused(true);
+      setBestiary({ eaten: { ...w.run.eaten } });
+    } else setBestiary(null);
+  }, []);
 
   const pushBanner = useCallback((b: Omit<Banner, "id">) => {
     const id = Date.now() + Math.random();
@@ -147,8 +170,14 @@ export default function HungrySharkCanvas({
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
+      if (k === "b") {
+        openBestiary(!bestiaryRef.current);
+        return;
+      }
       if (k === "escape" || k === "p") {
-        setPause(!pausedRef.current);
+        // Esc inside the bestiary just closes it (stays paused).
+        if (bestiaryRef.current) openBestiary(false);
+        else setPause(!pausedRef.current);
         return;
       }
       if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", "shift"].includes(k)) {
@@ -175,7 +204,7 @@ export default function HungrySharkCanvas({
       window.removeEventListener("blur", blur);
       document.removeEventListener("visibilitychange", vis);
     };
-  }, [setPause]);
+  }, [setPause, openBestiary]);
 
   // Main loop.
   useEffect(() => {
@@ -192,6 +221,8 @@ export default function HungrySharkCanvas({
     let last = performance.now();
     let hudAcc = 0;
     let endTimer: number | null = null;
+    let lastBeep = 0;
+    let seenDanger = new Set<number>();
 
     const readInput = (): SharkInput => {
       const inp = input.current;
@@ -264,7 +295,23 @@ export default function HungrySharkCanvas({
         const hpFrac = world.shark.hp / world.stats.maxHealth;
         if (hpFrac < 0.25 && !world.over && !world.gold.active) audioRef.current?.heartbeat(now, 1 - hpFrac / 0.25);
       }
-      drawWorld(ctx, world, camRef.current, w, h, now / 1000, dpr);
+      const markers = markersOnRef.current ? selectMarkers(world) : [];
+      // Danger-approach beep: only when a new threat first enters the reticle set.
+      if (!pausedRef.current && markers.length) {
+        const cur = new Set<number>();
+        let fresh = false;
+        for (const m of markers)
+          if (m.kind === "danger") {
+            cur.add(m.e.id);
+            if (!seenDanger.has(m.e.id)) fresh = true;
+          }
+        if (fresh && now - lastBeep > 700) {
+          lastBeep = now;
+          audioRef.current?.beep();
+        }
+        seenDanger = cur;
+      }
+      drawWorld(ctx, world, camRef.current, w, h, now / 1000, dpr, markers);
 
       hudAcc += dt;
       if (hudAcc > 0.1) {
@@ -449,6 +496,17 @@ export default function HungrySharkCanvas({
         <button onClick={() => setPause(!paused)} className="rounded-md bg-black/50 px-2 py-1 text-xs text-white hover:bg-black/70" aria-label="일시정지">
           {paused ? "▶" : "⏸"}
         </button>
+        <button
+          onClick={onToggleMarkers}
+          className={`rounded-md px-2 py-1 text-xs text-white hover:bg-black/70 ${markersOn ? "bg-emerald-600/70" : "bg-black/50"}`}
+          aria-label="먹이 인디케이터"
+          title="먹이 인디케이터 켜기/끄기"
+        >
+          🎯
+        </button>
+        <button onClick={() => openBestiary(true)} className="rounded-md bg-black/50 px-2 py-1 text-xs text-white hover:bg-black/70" aria-label="먹이 도감" title="먹이 도감 (B)">
+          📖
+        </button>
         <button onClick={onToggleMute} className="rounded-md bg-black/50 px-2 py-1 text-xs text-white hover:bg-black/70" aria-label="소리">
           {muted ? "🔇" : "🔊"}
         </button>
@@ -504,16 +562,44 @@ export default function HungrySharkCanvas({
       )}
 
       {/* Pause overlay */}
-      {paused && !dead && (
+      {paused && !dead && !bestiary && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/70 backdrop-blur-sm">
           <div className="text-3xl font-black text-white">일시정지</div>
-          <p className="text-xs text-white/60">Esc / P 키로 재개</p>
+          <p className="text-xs text-white/60">Esc / P 키로 재개 · B 먹이 도감</p>
           <button onClick={() => setPause(false)} className="w-48 rounded-xl bg-sky-500 py-2.5 font-bold text-white hover:bg-sky-400">
             ▶ 계속하기
           </button>
           <button onClick={onQuit} className="w-48 rounded-xl bg-white/10 py-2.5 font-semibold text-white hover:bg-white/20">
             🏳️ 포기하고 나가기
           </button>
+          <button onClick={() => openBestiary(true)} className="w-48 rounded-xl bg-emerald-600/80 py-2.5 font-semibold text-white hover:bg-emerald-500">
+            📖 먹이 도감
+          </button>
+        </div>
+      )}
+
+      {bestiary && !dead && (
+        <div className="absolute inset-0 flex flex-col bg-slate-950/90 backdrop-blur-sm">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
+            <div className="text-base font-black text-white">📖 해양 생태계 먹이 도감</div>
+            <div className="flex gap-1.5">
+              <button onClick={() => openBestiary(false)} className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20">
+                ← 일시정지 메뉴
+              </button>
+              <button
+                onClick={() => {
+                  openBestiary(false);
+                  setPause(false);
+                }}
+                className="rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-400"
+              >
+                ▶ 계속하기
+              </button>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <BestiaryPanel tier={def.tier} sharkName={def.name} biteLevel={upgrades.bite} eaten={bestiary.eaten} />
+          </div>
         </div>
       )}
 
