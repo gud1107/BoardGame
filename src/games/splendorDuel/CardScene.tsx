@@ -17,7 +17,10 @@ import type { DuelCard, GemColor, Level } from "./engine";
  * vein, the stone under the loupe, the lady's gown…) so the art still reads
  * as "a sapphire card" at a glance. Glows are radial gradients, not blur
  * filters — ~20 cards are on screen at once, and gradients are free to
- * rasterize; the only filter is one static canvas-grain pass per card.
+ * rasterize; the only filter is one static canvas pass per card (grain +
+ * brushstrokes), with craquelure as a tiled pattern. Live flames flicker via
+ * an opacity-only SMIL loop; the gem's light disperses into faint rainbow
+ * caustic fans with seeded gem dust.
  *
  * Drawn in a 100×100 box and rendered with `slice`, so the window can be any
  * aspect. Figures sit left-of-center: the bonus gem floats bottom-right on top.
@@ -112,17 +115,49 @@ function LightDefs({ id, a }: SceneProps) {
         <stop offset="0.65" stopColor="#b9aea2" />
         <stop offset="1" stopColor="#3a3431" />
       </linearGradient>
+      {/* Canvas finish in one pass: fine linen grain + horizontally stretched
+          noise that reads as dragged brushstrokes. */}
       <filter id={`${id}-grain`} x="0" y="0" width="100%" height="100%">
-        <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="7" />
-        <feColorMatrix values="0 0 0 0 0.5  0 0 0 0 0.4  0 0 0 0 0.3  0 0 0 0.55 0" />
+        <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="7" result="g" />
+        <feTurbulence type="fractalNoise" baseFrequency="0.05 0.9" numOctaves="2" seed="3" result="s" />
+        <feBlend in="g" in2="s" mode="multiply" />
+        <feColorMatrix values="0 0 0 0 0.5  0 0 0 0 0.4  0 0 0 0 0.3  0 0 0 0.6 0" />
         <feComposite in2="SourceGraphic" operator="in" />
       </filter>
+      {/* Craquelure: aged-varnish hairline cracks (dark crack + lit lip), tiled. */}
+      <pattern id={`${id}-crack`} width="34" height="30" patternUnits="userSpaceOnUse" patternTransform="rotate(-8)">
+        <path
+          d="M0 7 L6 9 L11 5 L18 8 L24 4 L34 7 M11 5 L12 14 L8 21 L10 30 M24 4 L26 12 L21 18 L27 24 L25 30 M12 14 L21 18 M0 21 L8 21 M27 24 L34 22"
+          fill="none"
+          stroke="#120a04"
+          strokeOpacity="0.55"
+          strokeWidth="0.35"
+        />
+        <path d="M0 7.5 L6 9.5 L11 5.5 L18 8.5 M12.4 14 L21 18.4" fill="none" stroke="#fff3d6" strokeOpacity="0.18" strokeWidth="0.25" />
+      </pattern>
+      {/* Prismatic caustic: a spectral band split out of the gem's light. */}
+      <linearGradient id={`${id}-prism`} x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stopColor="#ff3b6b" stopOpacity="0" />
+        <stop offset="0.2" stopColor="#ff5e5e" />
+        <stop offset="0.36" stopColor="#ffd84a" />
+        <stop offset="0.52" stopColor="#5cf08a" />
+        <stop offset="0.68" stopColor="#4ab8ff" />
+        <stop offset="0.84" stopColor="#a86bff" />
+        <stop offset="1" stopColor="#a86bff" stopOpacity="0" />
+      </linearGradient>
     </defs>
   );
 }
 
-const Glow = ({ id, kind, cx, cy, r }: { id: string; kind: "gA" | "gW" | "gC"; cx: number; cy: number; r: number }) => (
-  <circle cx={cx} cy={cy} r={r} fill={`url(#${id}-${kind})`} />
+/**
+ * `flicker` = a live flame (torch, candle, chandelier): the glow breathes on
+ * an irregular 1.7s loop, desynced per card by `id` so a market row of
+ * candlelit cards doesn't pulse in unison. Opacity-only, so it stays cheap.
+ */
+const Glow = ({ id, kind, cx, cy, r, flicker = false }: { id: string; kind: "gA" | "gW" | "gC"; cx: number; cy: number; r: number; flicker?: boolean }) => (
+  <circle cx={cx} cy={cy} r={r} fill={`url(#${id}-${kind})`}>
+    {flicker && <animate attributeName="opacity" values="1;0.78;0.94;0.7;0.9;1" dur="1.7s" begin={`-${(hash(id) % 17) / 10}s`} repeatCount="indefinite" />}
+  </circle>
 );
 
 /** Volumetric beam: a trapezoid from (x, top) widening downward, tilted by `lean`. */
@@ -214,7 +249,7 @@ function Bust({
 function Chandelier({ id, x, y, s = 1 }: { id: string; x: number; y: number; s?: number }) {
   return (
     <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <Glow id={id} kind="gW" cx={0} cy={4} r={22} />
+      <Glow id={id} kind="gW" cx={0} cy={4} r={22} flicker />
       <path d="M0 -30 V0" stroke="#c9971c" strokeWidth="0.8" />
       <path d="M-14 2 Q-14 8 0 8 Q14 8 14 2 M-8 2 Q-8 6 0 6 Q8 6 8 2" fill="none" stroke="#e0b44a" strokeWidth="1.2" />
       {[-14, -8, 8, 14].map((dx) => (
@@ -247,6 +282,11 @@ function Drape({ id, color, side }: { id: string; color: string; side: "left" | 
       </defs>
       <path d={L ? "M0 0 H28 Q18 42 26 100 H0 Z" : "M100 0 H74 Q84 45 72 100 H100 Z"} fill={`url(#${gid})`} />
       <path d={L ? "M28 0 Q18 42 26 100" : "M74 0 Q84 45 72 100"} fill="none" stroke="#f2c14e" strokeOpacity="0.55" strokeWidth="1" />
+      {/* Gold-thread embroidery: a running stitch just inside the hem + fleur studs */}
+      <path d={L ? "M24 0 Q14 42 22 100" : "M78 0 Q88 45 76 100"} fill="none" stroke="#f7d774" strokeOpacity="0.6" strokeWidth="0.6" strokeDasharray="1.4 1.2" />
+      {(L ? [[18, 20], [15, 48], [18, 76]] : [[82, 20], [85, 48], [81, 76]]).map(([x, y]) => (
+        <path key={y} d={`M${x} ${y - 2.2} L${x + 1.2} ${y} L${x} ${y + 2.2} L${x - 1.2} ${y} Z`} fill="#f7d774" fillOpacity="0.7" />
+      ))}
     </g>
   );
 }
@@ -277,7 +317,7 @@ function MinerScene({ id, a }: SceneProps) {
       <Crystal id={id} x={92} y={70} s={0.8} a={a} />
       <Crystal id={id} x={76} y={74} s={0.6} a={a} glow={false} />
       {/* Torch (key light, left) */}
-      <Glow id={id} kind="gW" cx={16} cy={40} r={36} />
+      <Glow id={id} kind="gW" cx={16} cy={40} r={36} flicker />
       <path d="M14 58 L18 42" stroke="#4a2c14" strokeWidth="2.6" strokeLinecap="round" />
       <path d="M18 42 C13 36 18 31 17.5 26 C22 31 23.5 36 18 42 Z" fill="#f59e0b" />
       <path d="M18 41 C16 37 18.5 34 18.3 31 C20.5 34 20.5 37 18 41 Z" fill="#fff1c4" />
@@ -415,7 +455,7 @@ function CutterScene({ id, a }: SceneProps) {
       <path d="M2 84 L26 82 L28 96 L4 98 Z" fill="#e9d6a8" />
       <path d="M6 88 Q14 85 22 90 M8 93 L20 91" stroke="#8a6a3a" strokeWidth="0.6" fill="none" />
       {/* Candle (warm key) */}
-      <Glow id={id} kind="gW" cx={92} cy={70} r={20} />
+      <Glow id={id} kind="gW" cx={92} cy={70} r={20} flicker />
       <rect x="90" y="72" width="4" height="10" fill="#f5ecd5" />
       <path d="M92 72 q-1.5 -3 0 -5 q1.5 2 0 5 Z" fill="#ffd166" />
       <Bust id={`${id}-b`} cx={38} skin="#e3b391" cloth="#23304a" light="right" rim="#ffe0a8" collar="#c9a14a">
@@ -649,12 +689,29 @@ export default function CardScene({ card, color, className = "" }: { card: Pick<
   const scene = sceneFor(card);
   const a = color ? GEM_PALETTE[color] : PRISM;
   const Scene = RENDER[scene.key];
+  // 7 motes along the caustic fans, seeded by card id so both clients match.
+  const seed = hash(card.id);
+  const dust = Array.from({ length: 7 }, (_, i) => {
+    const t = ((seed >> (i * 3)) & 7) / 8;
+    return [88 - (20 + i * 9) * (0.9 + t * 0.2), 88 - (14 + i * 7) * (0.8 + t * 0.4), 0.35 + t * 0.5] as const;
+  });
   return (
     <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" className={`pointer-events-none absolute inset-0 h-full w-full ${className}`} aria-hidden="true">
       <LightDefs id={id} a={a} />
       <Scene id={id} a={a} />
-      {/* Oil-painting finish: canvas grain, tier varnish, gem-tinted ambient, vignette */}
+      {/* Spectral dispersion: the bonus stone (floating bottom-right) splits
+          its light into two faint rainbow fans across the canvas, plus a
+          stable scatter of gem dust in its color. */}
+      <g style={{ mixBlendMode: "screen" }} opacity={card.level === 3 ? 0.3 : 0.2}>
+        <rect x="-10" y="70" width="130" height="7" fill={`url(#${id}-prism)`} transform="rotate(-38 88 88)" />
+        <rect x="-10" y="80" width="120" height="4" fill={`url(#${id}-prism)`} transform="rotate(-24 88 88)" opacity="0.7" />
+      </g>
+      {dust.map(([x, y, r], i) => (
+        <circle key={i} cx={x} cy={y} r={r} fill={i % 3 ? a.light : "#ffffff"} fillOpacity={0.55 + (i % 2) * 0.3} />
+      ))}
+      {/* Oil-painting finish: canvas grain + brushstrokes, craquelure, tier varnish, gem-tinted ambient, vignette */}
       <rect width="100" height="100" fill="#000" filter={`url(#${id}-grain)`} opacity="0.35" />
+      <rect width="100" height="100" fill={`url(#${id}-crack)`} />
       <linearGradient id={`${id}-var`} x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stopColor={LEVEL_TONE[card.level]} stopOpacity="0.2" />
         <stop offset="0.6" stopColor={a.base} stopOpacity="0.08" />

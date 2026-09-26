@@ -1,7 +1,7 @@
 "use client";
 
 import { COLOR_ACCENT, DuelToken, TOKEN_LABEL, TokenCount } from "./DuelToken";
-import { AbilityJewel, cardFrameStyle, CrownRow, GemWindow, GoldNumeral, royalFrameStyle, WaxSeal } from "./LuxuryArt";
+import { AbilityJewel, cardFrameStyle, CrownRow, FiligreeCorners, GemWindow, GoldNumeral, royalFrameStyle, WaxSeal } from "./LuxuryArt";
 import CardScene, { sceneFor } from "./CardScene";
 import RoyalPortrait from "./RoyalPortrait";
 import { crownsOf, GEM_ORDER, ROYAL_CROWN_THRESHOLDS, type CardAbility, type DuelCard, type Level, type PlayerState, type RoyalCard, type SplendorDuelState } from "./engine";
@@ -81,6 +81,7 @@ export function DuelCardView({
           {card.bonus > 1 && <span className="absolute -right-0.5 bottom-0 rounded bg-black/70 px-0.5 text-[9px] font-bold text-amber-100">×{card.bonus}</span>}
         </span>
       </div>
+      <FiligreeCorners lit={affordable || card.level === 3} className={compact ? "h-2 w-2" : "h-3.5 w-3.5"} />
       {!compact && (
         <div className="flex flex-wrap gap-x-1 gap-y-0.5 border-t border-amber-200/20 bg-black/50 px-0.5 pb-0.5">
           {costEntries.map((c) => (
@@ -124,6 +125,7 @@ export function RoyalCardView({ royal, onClick, compact = false }: { royal: Roya
       <RoyalPortrait royalId={royal.id} className="absolute inset-0 h-full w-full" />
       {/* Gilded inner filet */}
       <span className="pointer-events-none absolute inset-[2px] rounded-md border border-amber-200/40" />
+      <FiligreeCorners lit className={compact ? "h-2 w-2" : "h-3.5 w-3.5"} />
       <span className="relative flex items-start justify-between p-0.5">
         <span className="rounded bg-black/60 px-1 leading-tight">
           <GoldNumeral value={royal.points} className={compact ? "text-[10px]" : "text-sm"} />

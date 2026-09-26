@@ -35,6 +35,54 @@ export function royalFrameStyle(): CSSProperties {
   return { background: `#000 padding-box, ${GOLD_RIM} border-box`, border: "2px solid transparent" };
 }
 
+const CORNERS = [
+  { pos: "left-0 top-0", flip: "" },
+  { pos: "right-0 top-0", flip: "scaleX(-1)" },
+  { pos: "left-0 bottom-0", flip: "scaleY(-1)" },
+  { pos: "right-0 bottom-0", flip: "scale(-1,-1)" },
+];
+
+/**
+ * 18K gold filigree: four scrolled corner flourishes (acanthus curl + bead
+ * + milled edge) laid over a card's rim. Absolute overlay — adds no height.
+ * Hairline strokes only, so the corner numeral/crowns stay readable through it.
+ * `lit` = gold (affordable / level III), otherwise antique dull brass.
+ */
+export function FiligreeCorners({ lit, className = "h-3 w-3" }: { lit: boolean; className?: string }) {
+  const id = useId().replace(/:/g, "");
+  return (
+    <>
+      <svg width="0" height="0" className="absolute" aria-hidden="true">
+        <defs>
+          <linearGradient id={`${id}-f`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor={lit ? "#fff4c2" : "#b8a578"} />
+            <stop offset="0.5" stopColor={lit ? "#e0a40a" : "#7d6c45"} />
+            <stop offset="1" stopColor={lit ? "#7a4a00" : "#3d321c"} />
+          </linearGradient>
+        </defs>
+      </svg>
+      {CORNERS.map((c) => (
+        <svg
+          key={c.pos}
+          viewBox="0 0 20 20"
+          className={`pointer-events-none absolute z-10 ${c.pos} ${className}`}
+          style={{ transform: c.flip || undefined, filter: "drop-shadow(0 0.5px 0.5px rgba(0,0,0,0.8))" }}
+          aria-hidden="true"
+        >
+          <g fill="none" stroke={`url(#${id}-f)`} strokeLinecap="round">
+            <path d="M1.5 18 V4 Q1.5 1.5 4 1.5 H18" strokeWidth="1.3" />
+            <path d="M3.5 12 Q3.5 3.5 12 3.5" strokeWidth="0.8" />
+            <path d="M12 3.5 q3 0 3 2.2 q0 1.6 -1.6 1.6 q-1.2 0 -1.2 -1.1" strokeWidth="0.7" />
+            <path d="M3.5 12 q0 3 2.2 3 q1.6 0 1.6 -1.6 q0 -1.2 -1.1 -1.2" strokeWidth="0.7" />
+          </g>
+          <circle cx="5.2" cy="5.2" r="1.3" fill={`url(#${id}-f)`} />
+          <circle cx="4.8" cy="4.8" r="0.4" fill="#fff" fillOpacity={lit ? 0.8 : 0.3} />
+        </svg>
+      ))}
+    </>
+  );
+}
+
 /** Embossed gold numeral (prestige points) — text-clipped gradient + dark bevel shadow. */
 export function GoldNumeral({ value, className = "" }: { value: number; className?: string }) {
   return (
