@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { chooseBotAction } from "./bot";
+import { WAR_SCENE_BY_NAME, warSceneFor } from "./MilitaryWarArt";
 import { CARD_BY_ID, CHAPTER_DECKS, FRODO_START, LANDMARKS, NAZGUL_START, OFFICIAL_RING_TRACK, TOKENS, TRACK_LENGTH } from "./data";
 import {
   advanceRing,
@@ -366,5 +367,14 @@ describe("techCoverage (dual-cost display)", () => {
     p.tableauCards.push(card("전쟁 회의")); // SWORD | FLAG — optimal matching covers one more
     expect(techCoverage(p, need).filter(Boolean)).toHaveLength(2);
     expect(techCoverage(p, need).filter((c) => !c)).toHaveLength(missingTech(p, need));
+  });
+});
+
+describe("military war artworks", () => {
+  it("every red card has its own explicit battle scene, and all six scenes are used", () => {
+    const reds = [...CHAPTER_DECKS[1], ...CHAPTER_DECKS[2], ...CHAPTER_DECKS[3]].filter((c) => c.color === "RED");
+    expect(reds.length).toBeGreaterThan(0);
+    for (const c of reds) expect(WAR_SCENE_BY_NAME[c.name], c.name).toBeDefined();
+    expect(new Set(reds.map((c) => warSceneFor(c.name, c.militaryUnits?.count))).size).toBe(6);
   });
 });

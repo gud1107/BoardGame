@@ -518,6 +518,25 @@ UI는 `LotrDuelBoard.tsx`의 트랙 패널(이름 트랙용 `RingTrackBoard.tsx`
 - **③ 타깃 유도:** 모든 좌표는 매번 `getBoundingClientRect` 실측 — 내 쪽은 하단 HUD/내 독, 상대 쪽은 헤더 상대 칩(화면 밖이면 화면 안의 상대 독), 지도·트랙은 해당 지역/칸.
 - 검증: tsc/eslint 통과, lotrDuel 29개 통과. 헤드리스 봇전에서 카드 획득 150ms 후 DOM에 링 2 + 입자 22 + 카드명 캡션 생성 확인(스크린샷 1장 + DOM 카운트). 흡수·저격·요새 파괴·배치 연출은 해당 카드 상황을 만들기 어려워 실기기 미확인.
 
+### ⚔️ 반지의 제왕: 가운데땅에서의 대결 (LotR Duel) Military War Artworks — 2026-09-27 후속 (커밋/푸시, 배포는 웹훅 자동)
+
+요청서의 `components/illustrations/MilitaryWarArt.tsx`·`components/DraftCardItem.tsx`·`.handoff/`는 없다 — 실제 카드 렌더러는 `CardFace.tsx` → `CardArt.tsx`의 `CardIllustration`.
+빨간 카드 16장이 전부 같은 `MilitaryArt`(방패 + 교차 검) 한 장이었던 것을 새 **`src/games/lotrDuel/MilitaryWarArt.tsx`** 로 교체하고 옛 `MilitaryArt`는 삭제. 엔진 변경 없음.
+
+- **Individual War Battlefield Illustrations (`MilitaryWarArt.tsx`):** 64×64 인라인 SVG 6종(기존 CardArt와 같은 규약 — `useId` 그라디언트, 외부 이미지 없음, 영화 스틸/로고 없는 일반 판타지 실루엣, 불씨·화살 배치 결정적).
+  공통 다크 크림슨 하늘 + 불빛 글로우 + 비네팅(`Sky`/`Vignette`/`Embers`)으로 한 세트처럼 보이게.
+  - `ROHAN_CAVALRY` 새벽 태양 아래 황금 갈기 백마 기수 + 장창 + 펄럭이는 초록 군기 + 말발굽 흙먼지
+  - `SHIELD_WALL` 성벽 총안 + 서로 맞물린 연 방패 4 + 방패 틈 창날 + 쏟아지는 불화살
+  - `SIEGE_CATAPULT` 불타는 흰 계단식 성채 + 공성탑 + 투석기 + 포물선 화염 거석
+  - `ORC_HORDE` 핏빛 달 + 가시 투구 대열 8 + 피 묻은 식칼 + 톱날 도끼 + 횃불
+  - `ARCHER_VOLLEY` 어두운 숲 + 당겨진 장궁과 화살 + 하늘을 가르는 일제 사격
+  - `MORDOR_ONSLAUGHT` 화산재 구름 + 분화하는 봉우리 + 쇠망치 든 트롤 + 용암 전선
+- **매핑:** 요청서의 키워드 규칙("기마/투석/방패/궁병/병력≥2→모르도르")은 실제 카드 이름에 맞지 않아(예: 펠렌노르 대군·북방 연합군이 병력 수로 전부 모르도르) **16장 이름별 명시 테이블 `WAR_SCENE_BY_NAME`** 사용 —
+  기마 2(로히림 돌격·아이센 여울 전초) / 방패벽 3(헬름 협곡·오스길리아스·린돈 수비대) / 공성 2(곤도르 탑 경비대·펠렌노르 대군) / 오크 3(우루크하이 선봉·안개산맥 오크떼·던랜드 부족) /
+  궁병 4(국경 순찰대·동부 정찰병·북방 연합군·어둠숲 거미떼) / 모르도르 2(검은 문 군단·하라드림 원군). 테이블에 없는 미래 카드는 `warSceneFor` 키워드·병력 수 폴백.
+- 요청서의 카드 하단 장면 이름 라벨은 넣지 않음(카드 하단에 이미 이름 띠가 있고 피라미드 크기에선 8px 라벨이 읽히지 않음). 이름은 `WAR_SCENE_LABEL`로만 export.
+- 테스트 1개 추가: 모든 빨간 카드가 명시 매핑을 갖고 6장면이 모두 쓰이는지(lotrDuel 30개 통과). tsc/eslint 통과. 임시 갤러리 페이지로 6장면을 실제 `CardFace` 150×200 크기에서 캡처 확인 후 삭제.
+
 ## 💎 스플렌더 대결 (Splendor Duel) — 2인 전용 신규 게임 — 2026-09-25 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: `boardGameRule/스플랜더 대결/스플랜더 대결.md` 룰북 기준 2인 전용 풀스택 신규 게임. 요청서는 `src/data/games.ts`

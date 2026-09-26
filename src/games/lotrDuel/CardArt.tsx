@@ -2,6 +2,7 @@
 
 import { useId, type ReactNode } from "react";
 import type { LotrDuelCard, RaceSymbol, TechSymbol } from "./types";
+import { MilitaryWarArt } from "./MilitaryWarArt";
 
 /**
  * Inline SVG illustrations for 반지의 제왕: 가운데땅에서의 대결 — the dark-luxury
@@ -224,37 +225,6 @@ export function TechArt({ techs }: { techs: TechSymbol[] }) {
 // Military / treasury / ring / tactics
 // ---------------------------------------------------------------------------
 
-export function MilitaryArt() {
-  const d = useDefs();
-  return (
-    <Frame>
-      <defs>
-        <radialGradient id={d.id("bg")} cx="50%" cy="80%" r="80%">
-          <stop offset="0%" stopColor="#f97316" stopOpacity=".85" />
-          <stop offset="40%" stopColor="#9f1239" />
-          <stop offset="100%" stopColor="#1c0509" />
-        </radialGradient>
-        <linearGradient id={d.id("blade")} x1="0" x2="1">
-          <stop offset="0%" stopColor="#f8fafc" />
-          <stop offset="100%" stopColor="#94a3b8" />
-        </linearGradient>
-      </defs>
-      <rect width="64" height="64" fill={d.url("bg")} />
-      {/* smoke */}
-      <path d="M0 50 C10 44 18 52 28 46 C38 40 46 50 64 44 V64 H0 Z" fill="#000" opacity=".35" />
-      {/* orc shield */}
-      <path d="M32 20 L46 25 C46 38 41 46 32 51 C23 46 18 38 18 25 Z" fill="#292524" stroke="#57534e" strokeWidth="1.2" />
-      <path d="M26 31 L32 41 L38 31" fill="none" stroke="#b91c1c" strokeWidth="2" />
-      {/* crossed mithril blades */}
-      <g stroke="#e2e8f0" strokeWidth=".6">
-        <path d="M12 10 L15 8 L44 40 L41 43 Z" fill={d.url("blade")} />
-        <path d="M52 10 L49 8 L20 40 L23 43 Z" fill={d.url("blade")} />
-      </g>
-      <path d="M38 44 L46 36 M26 44 L18 36" stroke="#f2c14e" strokeWidth="2.4" strokeLinecap="round" />
-    </Frame>
-  );
-}
-
 export function TreasuryArt({ coins }: { coins: number }) {
   const d = useDefs();
   const stack = (x: number, n: number) =>
@@ -419,7 +389,7 @@ export function CardIllustration({ card }: { card: LotrDuelCard }) {
     case "GRAY":
       return <TechArt techs={card.selectTechChoice ?? card.providesTech ?? ["BOOK"]} />;
     case "RED":
-      return <MilitaryArt />;
+      return <MilitaryWarArt name={card.name} units={card.militaryUnits?.count} />;
     case "YELLOW":
       return <TreasuryArt coins={card.coinsReward ?? 2} />;
     case "BLUE":
