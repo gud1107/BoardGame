@@ -118,7 +118,7 @@ export function startGame(seed: number, fellowshipSeat: Seat = "p1"): LotrDuelSt
     firstPlayerOverall: "SAURON",
     players: { FELLOWSHIP: newPlayer("FELLOWSHIP"), SAURON: newPlayer("SAURON") },
     boardRegions,
-    ringTrack: { frodoPosition: FRODO_START, nazgulPosition: NAZGUL_START, trackLength: TRACK_LENGTH, caught: false },
+    ringTrack: { frodoPosition: FRODO_START, nazgulPosition: NAZGUL_START, trackLength: TRACK_LENGTH },
     pyramidGrid: [],
     removedCards: [],
     revealedLandmarks: [],
@@ -325,11 +325,10 @@ function fight(state: LotrDuelState, regionId: RegionId) {
  * through or landed on (from+1 … to), in order: coins / the extra turn at
  * once, choices as pending steps (returned, for the caller to queue).
  *
- * Both markers start together on 0, so "the Nazgûl reach or pass Frodo" is
- * read as catching him **from behind**: it only counts when the Nazgûl were
- * strictly behind Frodo before this move (otherwise Sauron, who moves first,
- * would win with his very first ring symbol). That catch, or Frodo reaching
- * Mount Doom, ends the game at once with no rewards for that move.
+ * Race to the end: both markers start together on 0 and run the same track
+ * independently — sharing a space or overtaking never ends the game. Whichever
+ * marker reaches the last point (14) first wins at once, with no rewards for
+ * that final move.
  */
 export function advanceRing(state: LotrDuelState, faction: Faction, n: number): PendingStep[] {
   if (n <= 0) return [];
@@ -340,11 +339,7 @@ export function advanceRing(state: LotrDuelState, faction: Faction, n: number): 
   if (fellowship) track.frodoPosition = to;
   else track.nazgulPosition = to;
   log(state, faction, `${fellowship ? "🧝 프로도와 샘이" : "🐉 나즈굴이"} ${to - from}칸 전진해 원정 트랙 ${to}번 칸에 도착`, "TRACK");
-  if (fellowship && to >= track.trackLength) return [];
-  if (!fellowship && from < track.frodoPosition && to >= track.frodoPosition) {
-    track.caught = true;
-    return [];
-  }
+  if (to >= track.trackLength) return [];
   const steps: PendingStep[] = [];
   for (let pos = from + 1; pos <= to; pos++) {
     const source = `원정 트랙 ${pos}번 칸`;
@@ -558,7 +553,7 @@ function placeUnits(state: LotrDuelState, faction: Faction, regionId: RegionId, 
 
 export function checkInstantVictory(state: LotrDuelState, activeFirst: Faction = state.turn): { winner: Faction; type: Exclude<WinType, "TERRITORY_MAJORITY"> } | null {
   if (state.ringTrack.frodoPosition >= state.ringTrack.trackLength) return { winner: "FELLOWSHIP", type: "RING_QUEST" };
-  if (state.ringTrack.caught) return { winner: "SAURON", type: "RING_QUEST" };
+  if (state.ringTrack.nazgulPosition >= state.ringTrack.trackLength) return { winner: "SAURON", type: "RING_QUEST" };
   const order: Faction[] = [activeFirst, otherFaction(activeFirst)];
   for (const f of order) if (raceSymbols(state.players[f]).size >= 6) return { winner: f, type: "RACE_ALLIANCE" };
   for (const f of order) if (controlledCount(state, f) === REGIONS.length) return { winner: f, type: "CONQUEST" };
@@ -568,7 +563,7 @@ export function checkInstantVictory(state: LotrDuelState, activeFirst: Faction =
 /**
  * End of chapter 3: more regions with your units/fortress wins. The rulebook
  * has no tie-break, so (self-decided) ties go to more race symbols, then more
- * coins, then the Fellowship — the Ring was never caught.
+ * coins, then the Fellowship — neither marker reached the end.
  */
 export function finalWinner(state: LotrDuelState): Faction {
   const cmp = (f: (x: Faction) => number) => f("FELLOWSHIP") - f("SAURON");

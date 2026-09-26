@@ -37,7 +37,7 @@ import { CardChoiceModal, LandmarkConfirmModal, PendingChoiceModal } from "./Act
 import AllianceTokenSelectModal from "./AllianceTokenSelectModal";
 import HistoryLogDrawer from "./HistoryLogDrawer";
 import MiddleEarthMap from "./MiddleEarthMap";
-import RingTrackBoard, { chaseDanger } from "./RingTrackBoard";
+import RingTrackBoard, { raceDanger } from "./RingTrackBoard";
 import type { PassiveTrigger } from "./PlayerPassivesHUD";
 import PlayerTechHUD from "./PlayerTechHUD";
 import VictoryCinematicModal from "./VictoryCinematicModal";
@@ -363,8 +363,8 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
       <div className="flex min-w-0 flex-1 flex-col gap-3">
       <style>{KEYFRAMES + FX_KEYFRAMES}</style>
       <ActionCinematicFX fx={fx} onDismiss={dismissFx} />
-      {/* chase danger: the Nazgûl 1–2 spaces behind Frodo — red vignette around the whole board */}
-      {state.phase === "PLAYING" && chaseDanger(state.ringTrack.frodoPosition, state.ringTrack.nazgulPosition) && (
+      {/* race danger: a marker 1–2 spaces from the finish — red vignette around the whole board */}
+      {state.phase === "PLAYING" && raceDanger(state.ringTrack.frodoPosition, state.ringTrack.nazgulPosition, state.ringTrack.trackLength) && (
         <div className="lotrt-vignette pointer-events-none fixed inset-0 z-[35]" style={{ boxShadow: "inset 0 0 90px 18px rgba(225,29,72,.55)" }} aria-hidden />
       )}
       {state.phase === "GAME_OVER" && state.winner && !victoryClosed && <EndingFX winner={state.winner} />}
@@ -806,8 +806,8 @@ function bannerFor(ev: FxEvents, myFaction: Faction, id: number): ActionFX | nul
       type: "RING_PULSE",
       emblem: fellowship ? "💍" : "🐉",
       color: fellowship ? "BLUE" : "RED",
-      title: fellowship ? "원정 전진" : "나즈굴 추격",
-      subText: `${fellowship ? "프로도 & 샘" : "나즈굴"} ${ring.to - ring.from}칸 전진 ${fellowship ? "— 운명의 산으로" : "— 반지의 사자를 쫓는다"}`,
+      title: fellowship ? "원정 전진" : "나즈굴 질주",
+      subText: `${fellowship ? "프로도 & 샘" : "나즈굴"} ${ring.to - ring.from}칸 전진 ${fellowship ? "— 운명의 산으로" : "— 종착점으로 질주한다"}`,
     };
   }
   return null;

@@ -403,6 +403,26 @@ UI는 `LotrDuelBoard.tsx`의 트랙 패널(이름 트랙용 `RingTrackBoard.tsx`
 - **`LotrDuelBoard.tsx`** 헤더 HUD에 `📜 종족 도감 (18)` 버튼(📖 룰북 왼쪽, 게임 중/종료 후 상시).
 - 검증: tsc/eslint/lotrDuel vitest 통과 + 임시 SSR 렌더 테스트(18장, 내 것 1·상대 것 1·더미 16 뱃지) 확인 후 삭제.
 
+### 💍 반지의 제왕: 가운데땅에서의 대결 (LotR Duel) Left-to-Right Ring Track Race Rule — 2026-09-26 후속 (커밋/푸시, 배포는 웹훅 자동)
+
+요청서의 `engine/ringTrack.ts`(`advanceRingTrackRace`)·`.handoff/games/lotrDuel.md`는 없다 — 실제 로직은 `engine.ts`의 `advanceRing`/`checkInstantVictory`,
+트랙 데이터는 `data.ts`의 `OFFICIAL_RING_TRACK`. **이 섹션이 위 "0~14 Single Track Calibration"·"Cinematic Chase Panorama Track"의 사우론 승리 조건(뒤에서 추격)을 대체한다.**
+
+- **Elimination of Collision/Catch-up Sudden Death:**
+  - 나즈굴이 프로도&샘 말이 있는 칸에 도달하거나 지나쳐도 사우론이 즉시 승리하던 규칙을 완전히 제거(`ringTrack.caught` 플래그 삭제).
+  - 두 말이 같은 칸에 머물거나 교차해도 게임은 지속되며 각 칸의 보상만 독립적으로 수령.
+- **Independent Race to the Right-Edge:**
+  - 원정대와 사우론 모두 좌측에서 출발하여 우측 끝(종착점, 인덱스 14)에 먼저 도달하는 진영이 즉시 반지 퀘스트 승리(RING_QUEST)를 달성하도록 판정 엔진 개편.
+  - 출발점은 기존대로 **둘 다 0번**(`FRODO_START = NAZGUL_START = 0`) — 요청서의 "사우론은 원정대보다 뒤/초기 기준선"을 같은 0번 출발로 해석(별도 음수 칸 추가 없음).
+  - 종착점에 닿는 그 이동은 기존처럼 칸 보상 없이 즉시 종료(양 진영 공통). 14번 칸 이름은 `종착점 (🌋먼저 도달한 진영 승리)`.
+- **UI:** `RingTrackBoard.tsx` 제목 `💍 반지 원정 트랙 레이스`, 종착점 슬롯 위 `🏁 승리` 깃발, 헤더 `원정대 N칸 앞 / 같은 칸 / 나즈굴 N칸 앞`. 프로도는 오솔길 위·나즈굴은 아래라
+  같은 칸이어도 겹치지 않음(기존 구조 유지). 위험 경보 `chaseDanger` → **`raceDanger(fr, nz, L)`** = 어느 한쪽이 종착점 1~2칸 앞(테두리 적색 + 보드 비네팅).
+  `VictoryCinematicModal` 사우론 반지 승리 문구를 "나즈굴, 종착점 선착"으로, 룰북·트랙 캡션·도감 팁·나즈굴 전진 시네마틱 문구의 "추격" 표현을 레이스로 교체.
+- **봇:** `evaluate`의 반지 항목 = `60/(L-fr) − 60/(L-nz)` 대칭 레이스(추격 항 제거).
+- 테스트: 추격 승리 테스트 2개를 "같은 칸 착지·추월해도 비종료 + 보상 정상" / "프로도가 추월해도 비종료" / "나즈굴 14번 선착 즉시 승리(보상 없음)"로 교체, 파란 카드 즉시 종료 테스트는
+  나즈굴 13→14로 변경. lotrDuel 29개 통과, tsc/eslint 통과.
+- 밸런스(봇 Lv8 자가대전 100판): 원정대 49 : 사우론 51 — 반지 승리 사우론 9 / 원정대 3, 종족 동맹 22/14, 지역 판정 13/24, 정복 7/8. 23판에서 두 말이 같은 칸에 섰지만 게임은 계속됨.
+
 ## 💎 스플렌더 대결 (Splendor Duel) — 2인 전용 신규 게임 — 2026-09-25 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: `boardGameRule/스플랜더 대결/스플랜더 대결.md` 룰북 기준 2인 전용 풀스택 신규 게임. 요청서는 `src/data/games.ts`

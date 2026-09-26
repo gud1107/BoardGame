@@ -352,7 +352,8 @@ export interface RingTrackPoint {
 }
 
 /**
- * Both markers start on 0; a core reward every 2 spaces; Mount Doom is 14.
+ * Both markers start on 0; a core reward every 2 spaces; 14 is the finish
+ * line for both sides (first to reach it wins — engine.ts `advanceRing`).
  * Every point a marker passes through or lands on pays its reward once, in
  * order (engine.ts `advanceRing`) — for both sides.
  */
@@ -371,7 +372,7 @@ export const OFFICIAL_RING_TRACK: RingTrackPoint[] = [
   { index: 11, reward: "NONE", name: "빈칸" },
   { index: 12, reward: "NONE", name: "빈칸" },
   { index: 13, reward: "NONE", name: "빈칸" },
-  { index: 14, reward: "MOUNT_DOOM_VICTORY", name: "운명의 산 (🌋원정대 승리)" },
+  { index: 14, reward: "MOUNT_DOOM_VICTORY", name: "종착점 (🌋먼저 도달한 진영 승리)" },
 ];
 export const OFFICIAL_RING_TRACK_14 = OFFICIAL_RING_TRACK;
 

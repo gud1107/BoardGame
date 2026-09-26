@@ -58,8 +58,8 @@ function copyFor(state: LotrDuelState, winner: Faction, type: WinType): WinCopy 
           }
         : {
             kicker: "RING RETRIEVED · SAURON VICTORY",
-            title: "나즈굴의 추격 성공",
-            banner: `나즈굴이 ${state.ringTrack.nazgulPosition}번 칸에서 프로도와 샘을 덮쳐 절대반지를 사우론의 손에 되찾아 바쳤습니다!`,
+            title: "나즈굴, 종착점 선착",
+            banner: `나즈굴이 프로도와 샘보다 먼저 종착점(${state.ringTrack.trackLength}번 칸)에 도달해 절대반지의 길을 봉쇄했습니다!`,
             tone: "from-red-700/40 via-rose-950/30 to-black",
             titleGrad: "from-rose-200 via-red-400 to-red-700",
           };
@@ -287,11 +287,11 @@ export default function VictoryCinematicModal({
       ? winner === "FELLOWSHIP"
         ? [
             { icon: "🧝", label: "프로도 & 샘", value: `${fr}/${L}칸 도달` },
-            { icon: "🐉", label: "따돌린 나즈굴", value: `${fr - nz}칸 뒤` },
+            { icon: "🐉", label: "나즈굴 위치", value: `${nz}/${L}칸` },
           ]
         : [
-            { icon: "🐉", label: "나즈굴 위치", value: `${nz}번 칸` },
-            { icon: "🧝", label: "붙잡힌 프로도", value: `${fr}번 칸 · 운명의 산까지 ${L - fr}칸` },
+            { icon: "🐉", label: "나즈굴", value: `${nz}/${L}칸 도달` },
+            { icon: "🧝", label: "뒤처진 프로도", value: `${fr}번 칸 · 종착점까지 ${L - fr}칸` },
           ]
       : type === "RACE_ALLIANCE"
         ? [

@@ -164,7 +164,7 @@ describe("instant victory", () => {
     expect(s.ringTrack.frodoPosition).toBe(FRODO_START);
     expect(checkInstantVictory(s)).toBeNull();
     expect(checkInstantVictory({ ...s, ringTrack: { ...s.ringTrack, frodoPosition: TRACK_LENGTH } })).toEqual({ winner: "FELLOWSHIP", type: "RING_QUEST" });
-    expect(checkInstantVictory({ ...s, ringTrack: { ...s.ringTrack, caught: true } })).toEqual({ winner: "SAURON", type: "RING_QUEST" });
+    expect(checkInstantVictory({ ...s, ringTrack: { ...s.ringTrack, nazgulPosition: TRACK_LENGTH } })).toEqual({ winner: "SAURON", type: "RING_QUEST" });
   });
 
   it("race alliance: six different races, the eagle token counting as one", () => {
@@ -185,10 +185,10 @@ describe("instant victory", () => {
     expect(checkInstantVictory(s)).toEqual({ winner: "SAURON", type: "CONQUEST" });
   });
 
-  it("playing a blue card that lets the Nazgûl catch Frodo ends the game at once", () => {
+  it("playing a blue card that brings the Nazgûl to the finish ends the game at once", () => {
     let s = startGame(1);
     s.ringTrack.frodoPosition = 5;
-    s.ringTrack.nazgulPosition = 4;
+    s.ringTrack.nazgulPosition = 13;
     const slot = s.pyramidGrid.findIndex((p) => p.row === 4);
     s.pyramidGrid[slot].card = card("엘론드의 회의");
     s = applyAction(s, { type: "TAKE_CARD", faction: "SAURON", slot, mode: "PLAY" });
@@ -279,23 +279,39 @@ describe("single integrated ring track (0 … 14)", () => {
     expect(checkInstantVictory(s)).toBeNull();
   });
 
-  it("Nazgûl catching Frodo from behind (reach or pass) wins at once with no rewards", () => {
+  it("the Nazgûl landing on or passing Frodo's space does not end the game, and still pay rewards", () => {
     const s = startGame(1);
     s.ringTrack.frodoPosition = 6;
     s.ringTrack.nazgulPosition = 3;
+    expect(advanceRing(s, "SAURON", 3).map((x) => x.kind)).toEqual(["PLACE", "TOKEN_RACE"]);
+    expect(s.ringTrack.nazgulPosition).toBe(6);
+    expect(checkInstantVictory(s)).toBeNull();
     const before = s.players.SAURON.coins;
-    expect(advanceRing(s, "SAURON", 3)).toEqual([]);
+    advanceRing(s, "SAURON", 3);
+    expect(s.ringTrack.nazgulPosition).toBe(9);
     expect(s.players.SAURON.coins).toBe(before);
-    expect(checkInstantVictory(s)).toEqual({ winner: "SAURON", type: "RING_QUEST" });
+    expect(s.extraTurn).toBe(true);
+    expect(checkInstantVictory(s)).toBeNull();
   });
 
-  it("a Nazgûl already level with / ahead of Frodo moving on is not a catch", () => {
+  it("Frodo overtaking the Nazgûl does not end the game either", () => {
     const s = startGame(1);
-    s.ringTrack.frodoPosition = 4;
-    s.ringTrack.nazgulPosition = 4;
-    advanceRing(s, "SAURON", 2);
-    expect(s.ringTrack.caught).toBeFalsy();
+    s.ringTrack.frodoPosition = 3;
+    s.ringTrack.nazgulPosition = 5;
+    advanceRing(s, "FELLOWSHIP", 4);
+    expect(s.ringTrack.frodoPosition).toBe(7);
     expect(checkInstantVictory(s)).toBeNull();
+  });
+
+  it("the Nazgûl reaching the finish (14) first wins at once with no rewards", () => {
+    const s = startGame(1);
+    s.ringTrack.frodoPosition = 13;
+    s.ringTrack.nazgulPosition = 12;
+    const before = s.players.SAURON.coins;
+    expect(advanceRing(s, "SAURON", 5)).toEqual([]);
+    expect(s.ringTrack.nazgulPosition).toBe(14);
+    expect(s.players.SAURON.coins).toBe(before);
+    expect(checkInstantVictory(s)).toEqual({ winner: "SAURON", type: "RING_QUEST" });
   });
 
   it("Frodo reaching Mount Doom (14) wins at once", () => {

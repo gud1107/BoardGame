@@ -10,9 +10,12 @@ import type { Faction } from "./types";
  * erupting Mount Doom. Frodo & Sam ride above the path (gold star-glass
  * glow), the Nazgûl gallop below it trailing red shadow.
  *
- * The Nazgûl only win by catching Frodo from behind (engine `advanceRing`),
- * so "danger" = the Nazgûl 1–2 spaces behind him: the panel border turns red
- * and the board shows a red vignette (`danger` is exported for that).
+ * Race to the end (engine `advanceRing`): both markers run the same track and
+ * the first to reach the last point wins; sharing a space or overtaking is
+ * harmless (Frodo rides above the path, the Nazgûl below, so they never
+ * overlap). "danger" = either marker 1–2 spaces from the finish: the panel
+ * border turns red and the board shows a red vignette (`raceDanger` is
+ * exported for that).
  *
  * `shownFr`/`shownNz` are the hop-animated display positions; `trail`,
  * `preview` and the reward pop-ups are the board's existing motion FX.
@@ -27,7 +30,7 @@ const TEXT: Record<RingTrackReward, string> = {
   ALLIANCE_TOKEN: "원하는 종족 더미 위 2개 중 동맹 토큰 1개",
   EXTRA_TURN: "이번 차례 후 추가 턴 1회",
   DESTROY_FORTRESS: "적 요새 1개 파괴",
-  MOUNT_DOOM_VICTORY: "운명의 산 — 프로도 & 샘 도착 시 원정대 승리",
+  MOUNT_DOOM_VICTORY: "종착점 — 먼저 도달한 진영 즉시 승리",
 };
 const GLOW: Partial<Record<RingTrackReward, string>> = {
   COIN_1: "rgba(251,191,36,.8)",
@@ -49,9 +52,9 @@ export const TRACK_KEYFRAMES = `
 @media (prefers-reduced-motion: reduce) { .lotrt-anim { animation: none !important } }
 `;
 
-/** 1–2 spaces behind Frodo = the Nazgûl can catch him with one more ring symbol. */
-export function chaseDanger(fr: number, nz: number): boolean {
-  return fr - nz > 0 && fr - nz <= 2;
+/** Either marker 1–2 spaces from the finish = one more ring symbol may end the game. */
+export function raceDanger(fr: number, nz: number, L: number): boolean {
+  return Math.max(fr, nz) < L && Math.max(fr, nz) >= L - 2;
 }
 
 function Landscape() {
@@ -129,19 +132,19 @@ export default function RingTrackBoard({
   trail: { key: number; faction: Faction; from: number; to: number } | null;
   preview: { from: number; to: number } | null;
 }) {
-  const danger = chaseDanger(fr, nz);
+  const danger = raceDanger(fr, nz, L);
   const gap = fr - nz;
   return (
     <div className={`relative overflow-hidden rounded-2xl border-2 bg-[#08090e] p-2 transition ${danger ? "border-rose-600" : "border-amber-600/40"}`} style={danger ? { animation: "lotrt-danger 1.2s ease-in-out infinite" } : undefined}>
       <style>{TRACK_KEYFRAMES}</style>
       {/* header */}
       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-1 border-b border-white/10 pb-1.5">
-        <span className="font-serif text-[11px] font-black tracking-wide text-amber-200">💍 운명의 산 추격 트랙</span>
+        <span className="font-serif text-[11px] font-black tracking-wide text-amber-200">💍 반지 원정 트랙 레이스</span>
         <span className="flex items-center gap-1 font-mono text-[10px] font-bold">
           <span className="rounded-md border border-yellow-400/50 bg-yellow-950/70 px-1.5 text-yellow-200">🧝 {fr}/{L}</span>
           <span className={`rounded-md border px-1.5 ${danger ? "border-red-500 bg-red-950 text-rose-200" : "border-neutral-700 bg-neutral-900 text-neutral-300"}`}>🐎 {nz}/{L}</span>
           <span className={`rounded-md px-1.5 ${danger ? "bg-red-600 text-white" : "text-neutral-400"}`}>
-            {danger ? `⚠️ 위험! ${gap}칸` : gap > 0 ? `격차 ${gap}칸` : gap === 0 ? "같은 칸" : `나즈굴 ${-gap}칸 앞`}
+            {danger ? `⚠️ 종착점 임박! ${L - Math.max(fr, nz)}칸` : gap > 0 ? `원정대 ${gap}칸 앞` : gap === 0 ? "같은 칸" : `나즈굴 ${-gap}칸 앞`}
           </span>
         </span>
       </div>
@@ -199,6 +202,9 @@ export default function RingTrackBoard({
                 >
                   {ICON[reward] || <span className="font-mono text-[7px] font-bold text-neutral-400">{pos}</span>}
                 </span>
+                {pos === L && (
+                  <span className="pointer-events-none absolute bottom-[calc(50%+11px)] z-20 rounded border border-red-500/70 bg-red-950/90 px-0.5 text-[7px] font-black whitespace-nowrap text-rose-200">🏁 승리</span>
+                )}
                 {ICON[reward] && <span className={`absolute top-[calc(50%+11px)] font-mono text-[7px] font-bold ${pos === L ? "text-rose-400" : "text-amber-300"}`}>{pos}</span>}
               </div>
             );
@@ -210,12 +216,12 @@ export default function RingTrackBoard({
       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-2 text-[9.5px] text-neutral-400">
         <span>
           <span className="text-emerald-400">🌿 샤이어</span> ➔ <span className="text-sky-300">🏔️ 리븐델</span> ➔ <span className="text-amber-300">🌲 로스로리엔</span> ➔{" "}
-          <span className="font-bold text-rose-400">🌋 운명의 산</span>
+          <span className="font-bold text-rose-400">🏁 종착점</span>
         </span>
         <span>2칸마다: 🪙→⚔️→📜→⏩→💥</span>
       </div>
       <p className="mt-1 text-[10.5px] text-white/55">
-        🧝 프로도 & 샘이 {L}번에 닿으면 원정대 승리 · 🐎 나즈굴이 <b>뒤에서</b> 프로도 칸에 닿거나 추월하면 사우론 승리. 💍 반지 기호는 내 말을 전진시키고 지나간 칸의 보상을 받습니다.
+        🚩 두 진영 모두 0번에서 출발 — {L}번 종착점에 <b>먼저</b> 도달한 진영(🧝 원정대 / 🐎 나즈굴)이 즉시 승리. 같은 칸에 서거나 추월해도 게임은 끝나지 않습니다. 💍 반지 기호는 내 말을 전진시키고 지나간 칸의 보상을 받습니다.
       </p>
     </div>
   );

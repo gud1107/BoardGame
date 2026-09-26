@@ -62,7 +62,7 @@ export const TOKEN_COMPENDIUM: Record<AllianceTokenId, TokenCompendiumDetail> = 
   HUMAN_YELLOW_RING: {
     triggerCondition: "노란색(재정) 카드를 내려놓을 때",
     detail: "반지 트랙에서 자신의 말을 1칸 전진시킵니다.",
-    strategyTip: "재정 턴에도 운명의 산으로 나아가거나 나즈굴의 추격 거리를 좁힐 수 있습니다.",
+    strategyTip: "재정 턴에도 종착점을 향한 레이스에서 한 칸 더 앞서 나갈 수 있습니다.",
   },
   HUMAN_RED_EXTRA_UNIT: {
     triggerCondition: "빨간색(군사) 카드를 내려놓을 때",
@@ -77,7 +77,7 @@ export const TOKEN_COMPENDIUM: Record<AllianceTokenId, TokenCompendiumDetail> = 
   ENT_RING_TWO: {
     triggerCondition: "토큰 획득 즉시 1회",
     detail: "반지 트랙에서 자신의 말을 즉시 2칸 전진시킵니다.",
-    strategyTip: "원정대의 마지막 스퍼트, 혹은 나즈굴의 추격 결승타로 쓸 수 있습니다.",
+    strategyTip: "원정대의 마지막 스퍼트, 혹은 나즈굴의 종착점 결승 스퍼트로 쓸 수 있습니다.",
   },
   ENT_DESTROY_FORTRESS: {
     triggerCondition: "토큰 획득 즉시 1회",
