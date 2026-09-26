@@ -657,6 +657,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "hungry-shark",
+    name: "배고픈 상어: 딥 에볼루션",
+    nameEn: "Hungry Deep: Shark Evolution",
+    description:
+      "헝그리 샤크 에볼루션 스타일의 1인용 실시간 해양 액션 서바이벌. 가만히 있어도 점점 빨라지는 굶주림 속에서 물고기·수영객·보트·잠수함·헬리콥터까지 사냥하고, 골드 러시(무적·점수 폭발)와 8회마다 터지는 메가 골드 러시로 기록을 갱신하세요. 기뢰·해파리·어뢰·포식자 상어를 피하며 모은 코인으로 암초상어부터 메갈로돈까지 6단계 상어를 해금하고 업그레이드합니다.",
+    players: { min: 1, max: 1 },
+    playTime: { minMinutes: 3, maxMinutes: 10 },
+    category: "party",
+    thumbnail: { emoji: "🦈", gradient: ["#0ea5e9", "#082f49"], image: "/games/hungry-shark.svg" },
+    tags: ["실시간액션", "1인용", "서바이벌", "업그레이드"],
+    genres: ["party"],
+    playable: true,
+    supportsAutoRanking: true,
+  },
+  {
     id: "lost-cities",
     name: "로스트 시티",
     nameEn: "Lost Cities",

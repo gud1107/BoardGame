@@ -301,8 +301,11 @@ export default function GamePlayPage() {
   // 마켓 2열 + 우측 초보자 가이드 패널까지 4열이라 7xl. 2026-09-25 반지의 제왕:
   // 가운데땅에서의 대결(Duel for Middle-earth 재구축): 지도 | 카드 피라미드 |
   // 원정 트랙·랜드마크 3열 + 좌측 게임 기록 패널(w-60)까지 붙어 96rem.
+  // 2026-09-26 배고픈 상어: 실시간 캔버스 액션이라 화면이 넓을수록 시야가 넓어져 6xl.
   const pageMaxWidth =
-    game.id === "lotr-duel"
+    game.id === "hungry-shark"
+      ? "max-w-6xl"
+      : game.id === "lotr-duel"
       ? "max-w-[96rem]"
       : game.id === "splendor-duel"
       ? "max-w-7xl"

@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7dd3fc"/>
+      <stop offset="0.28" stop-color="#0ea5e9"/>
+      <stop offset="0.3" stop-color="#0284c7"/>
+      <stop offset="0.7" stop-color="#0c4a6e"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#475569"/>
+      <stop offset="0.52" stop-color="#64748b"/>
+      <stop offset="0.6" stop-color="#f1f5f9"/>
+      <stop offset="1" stop-color="#e2e8f0"/>
+    </linearGradient>
+    <radialGradient id="gold" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fde047" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#fde047" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="300" height="400" fill="url(#sea)"/>
+  <path d="M0 118 Q 25 110 50 118 T 100 118 T 150 118 T 200 118 T 250 118 T 300 118 V124 H0Z" fill="#e0f2fe" opacity="0.8"/>
+  <g opacity="0.12" fill="#e0f2fe">
+    <polygon points="40,120 70,120 130,330 90,330"/>
+    <polygon points="170,120 195,120 250,330 215,330"/>
+  </g>
+  <circle cx="150" cy="235" r="120" fill="url(#gold)"/>
+  <g fill="#fbbf24">
+    <ellipse cx="236" cy="190" rx="10" ry="5"/><polygon points="226,190 218,184 218,196"/>
+    <ellipse cx="252" cy="206" rx="10" ry="5"/><polygon points="242,206 234,200 234,212"/>
+    <ellipse cx="232" cy="218" rx="10" ry="5"/><polygon points="222,218 214,212 214,224"/>
+  </g>
+  <g transform="translate(150 235) rotate(-18) scale(2.1)">
+    <path d="M-44 -2 Q-54 -10 -64 -26 Q-57 -6 -54 0 Q-57 6 -59 15 Q-50 6 -44 3Z" fill="#475569"/>
+    <path d="M6 -13 Q-2 -20 -10 -33 Q-10 -20 -16 -10Z" fill="#475569"/>
+    <path d="M14 9 Q6 20 -4 27 Q2 14 0 10Z" fill="#475569"/>
+    <path d="M50 2 Q40 -16 10 -15.5 Q-20 -13 -42 -3.5 L-45 0 L-42 3 Q-20 13 10 13.5 Q30 13 44 7Z" fill="url(#body)"/>
+    <path d="M27 6 L48 4 L44 17 Z" fill="#450a0a"/>
+    <g fill="#fff">
+      <polygon points="30,5.5 33,5.3 31.5,9"/><polygon points="36,5 39,4.8 37.5,8.5"/><polygon points="42,4.6 45,4.4 43.5,8"/>
+      <polygon points="31,11 34,12.5 31,8.5"/><polygon points="37,13 40,14.5 37.5,10.5"/>
+    </g>
+    <path d="M27 6 L44 17 L40 20 Q32 13 23 11Z" fill="#e2e8f0"/>
+    <circle cx="34" cy="-4.5" r="2.4" fill="#020617"/>
+    <circle cx="34.5" cy="-5.2" r="0.8" fill="#fff"/>
+  </g>
+  <g fill="none" stroke="#e0f2fe" stroke-opacity="0.7">
+    <circle cx="60" cy="300" r="5"/><circle cx="72" cy="280" r="3"/><circle cx="240" cy="320" r="4"/>
+  </g>
+  <path d="M0 370 Q 60 350 120 368 T 300 360 V400 H0Z" fill="#292524"/>
+</svg>
