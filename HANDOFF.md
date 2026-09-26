@@ -391,6 +391,18 @@ UI는 `LotrDuelBoard.tsx`의 트랙 패널(이름 트랙용 `RingTrackBoard.tsx`
 - 검증: tsc/eslint/vitest 통과(전체 실행 중 무관한 ratATatCat 고정 시드 봇 테스트가 한 번 부하로 실패 — 단독 3/3 통과, 전체 재실행 통과). 임시 페이지로 출발(0/0)·위험(6/4)·
   나즈굴 앞섬(11/12) 3상태를 실제 패널 폭(330px)에서 캡처 확인 후 삭제(0번 말 좌측 잘림·샤이어 햇빛 경계 보정).
 
+### 📜 반지의 제왕: 가운데땅에서의 대결 (LotR Duel) 18-Alliance Token Compendium — 2026-09-26 후속 (커밋/푸시, 배포는 웹훅 자동)
+
+요청서의 `engine/allianceData.ts`·`components/AllianceCompendiumModal.tsx`·`Board.tsx`·`.handoff/games/lotrDuel.md`는 없다 — 관례대로 플랫 폴더에 추가.
+요청서의 토큰 ID(`ELF_GREEN_MOVE_2` 등)·이름(갈라드리엘의 은총 등)은 실제 `TOKENS`(data.ts)와 달라 **기존 ID·이름을 그대로 유지**(HUD·토큰 선택 모달·로그와 같은 이름이어야 함).
+
+- **`allianceCompendiumData.ts`**: `TOKEN_COMPENDIUM: Record<AllianceTokenId, {triggerCondition, detail, strategyTip}>` — 도감 전용 장문만 추가(이름·종족·1회성 여부는 `TOKENS`가 단일 출처).
+  문구는 engine.ts 실제 동작 기준으로 교정(예: 마법사의 지혜는 "비밀리에" 아님, 엔트 행진은 같은 효과 반복 가능, 드워프 장인은 비용 지불 시 와일드 기술 1개).
+- **`AllianceCompendiumModal.tsx`**: 전체/6종족 탭, 18장 카드(⚡ 획득 즉시 1회 / ♾️ 영구 지속, 조건·효과·💡 전략 팁), 소유 뱃지 `내가 보유 중 / 상대가 보유 중 / 📦 미획득 · 더미 대기` —
+  토큰은 항상 더미 또는 한쪽 태블로에만 있으므로(`PICK_TOKEN`이 더미→태블로 이동) `state.players[*].allianceTokens`에서 바로 파생, 실시간 동기화. `max-h-[90dvh]` 내부 스크롤, ✕/배경/Esc로 닫기, z-[60].
+- **`LotrDuelBoard.tsx`** 헤더 HUD에 `📜 종족 도감 (18)` 버튼(📖 룰북 왼쪽, 게임 중/종료 후 상시).
+- 검증: tsc/eslint/lotrDuel vitest 통과 + 임시 SSR 렌더 테스트(18장, 내 것 1·상대 것 1·더미 16 뱃지) 확인 후 삭제.
+
 ## 💎 스플렌더 대결 (Splendor Duel) — 2인 전용 신규 게임 — 2026-09-25 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: `boardGameRule/스플랜더 대결/스플랜더 대결.md` 룰북 기준 2인 전용 풀스택 신규 게임. 요청서는 `src/data/games.ts`

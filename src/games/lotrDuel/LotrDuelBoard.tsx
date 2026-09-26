@@ -41,6 +41,7 @@ import RingTrackBoard, { chaseDanger } from "./RingTrackBoard";
 import type { PassiveTrigger } from "./PlayerPassivesHUD";
 import PlayerTechHUD from "./PlayerTechHUD";
 import VictoryCinematicModal from "./VictoryCinematicModal";
+import AllianceCompendiumModal from "./AllianceCompendiumModal";
 
 /**
  * 반지의 제왕: 가운데땅에서의 대결 in-game view.
@@ -145,6 +146,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [moveFrom, setMoveFrom] = useState<RegionId | null>(null);
   const [victoryClosed, setVictoryClosed] = useState(false);
+  const [showCompendium, setShowCompendium] = useState(false);
   const [choiceHidden, setChoiceHidden] = useState(false);
   // Minimised (not cancelled) card / landmark choices — reopened from the floating anchor.
   const [cardHidden, setCardHidden] = useState(false);
@@ -399,11 +401,20 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
           )}
           <BgmControl />
           {!opponentConnected && <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[11px] text-rose-200">상대 연결 끊김</span>}
+          <button
+            type="button"
+            onClick={() => setShowCompendium(true)}
+            title="6종족 18개 동맹 능력 전체 도감"
+            className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-200 hover:border-amber-400 light:border-amber-400 light:bg-amber-50 light:text-amber-800"
+          >
+            📜 종족 도감 (18)
+          </button>
           <button onClick={onOpenRulebook} className="rounded-full border border-white/15 px-3 py-1 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600">
             📖 룰북
           </button>
         </span>
       </div>
+      {showCompendium && <AllianceCompendiumModal state={state} myFaction={myFaction} onClose={() => setShowCompendium(false)} />}
 
       {/* ---- action prompt ---- */}
       <ActionPrompt
