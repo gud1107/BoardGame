@@ -18,7 +18,9 @@ import {
 } from "./DuelSidePanels";
 import PlayerDock from "./PlayerDock";
 import SpiralGridBoard from "./SpiralGridBoard";
+import DuelSoundHud from "./DuelSoundHud";
 import { playDuelEventSound, playDuelVictorySound } from "./splendorDuelAudio";
+import { getSplendorDuelSound } from "./splendorDuelSound";
 import {
   canAfford,
   getValidMoves,
@@ -296,6 +298,13 @@ export default function SplendorDuelBoard({
     if (pendingHead?.kind === "takeToken") setMobileTab("board");
   }
 
+  // Lute BGM plays while the board is mounted (and BGM is unmuted).
+  useEffect(() => {
+    const sound = getSplendorDuelSound();
+    sound.setBgmWanted(true);
+    return () => sound.setBgmWanted(false);
+  }, []);
+
   // Sound for every new engine event; skip whatever event was already there on mount/resync.
   const lastSoundSeq = useRef(state.eventSeq);
   useEffect(() => {
@@ -390,9 +399,12 @@ export default function SplendorDuelBoard({
   }
 
   function onCellClick(cell: number) {
+    const sound = getSplendorDuelSound();
     if (reservePick) {
-      if (goldCells.has(cell))
+      if (goldCells.has(cell)) {
+        sound.goldPick();
         onAction({ type: "reserveCard", seat: viewerSeat, ...reservePick, goldCell: cell });
+      }
       return;
     }
     if (state.grid[cell] === "gold") return;
@@ -406,6 +418,8 @@ export default function SplendorDuelBoard({
       onAction({ type: "useScroll", seat: viewerSeat, cell });
       return;
     }
+    // Instant crystal ping on picking a gem (not on un-picking) — before the engine confirms anything.
+    if (!selected.includes(cell)) sound.gemPick();
     setSelected((prev) => {
       if (prev.includes(cell)) return prev.filter((c) => c !== cell);
       const next = [...prev, cell];
@@ -594,7 +608,10 @@ export default function SplendorDuelBoard({
   );
 
   return (
-    <div className="xl:grid xl:grid-cols-[200px_minmax(0,1fr)_236px] xl:items-start xl:gap-3">
+    <div
+      className="xl:grid xl:grid-cols-[200px_minmax(0,1fr)_236px] xl:items-start xl:gap-3"
+      onPointerDown={() => getSplendorDuelSound().unlock()}
+    >
       <aside className="sticky top-20 hidden max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-3xl border border-amber-500/20 bg-stone-950/80 p-3 xl:block light:border-amber-500/30 light:bg-white/80">
         <VictoryPanel state={state} viewerSeat={viewerSeat} names={names} />
       </aside>
@@ -642,6 +659,7 @@ export default function SplendorDuelBoard({
                 {describeEvent(lastEvent, names)}
               </p>
             )}
+            <DuelSoundHud />
             <button
               onClick={onOpenRulebook}
               className="shrink-0 rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-white/50 hover:border-white/25 light:border-slate-200 light:text-slate-500"
