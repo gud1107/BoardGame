@@ -189,6 +189,7 @@ export default function RingTrackBoard({
                 )}
                 {/* stone rune slot */}
                 <span
+                  data-lotr-track-slot={pos}
                   className={`relative flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 text-[9px] backdrop-blur-sm sm:h-5 sm:w-5 ${
                     pos === L
                       ? "border-red-500 bg-red-950/90 shadow-[0_0_14px_rgba(239,68,68,.9)]"

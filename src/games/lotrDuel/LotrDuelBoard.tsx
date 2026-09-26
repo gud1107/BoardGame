@@ -42,6 +42,7 @@ import RingTrackBoard, { raceDanger } from "./RingTrackBoard";
 import type { PassiveTrigger } from "./PlayerPassivesHUD";
 import PlayerTechHUD from "./PlayerTechHUD";
 import VictoryCinematicModal from "./VictoryCinematicModal";
+import { CARD_TINT, claimBurst, drainBeam, groundSlam, runeSteps, sealFanfare, shatter } from "./actionFx";
 import AllianceCompendiumModal from "./AllianceCompendiumModal";
 
 /**
@@ -288,9 +289,48 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
         }
       if (lastCard.color === "GREEN" && lastCard.race) {
         const seal = visible(`[data-lotr-race="${lastCard.race}"]`);
-        if (seal) flyTo(RACE_INFO[lastCard.race].emoji, ghostPt, seal, { delay: 150, duration: 750, size: 30, glow: "rgba(52,211,153,.95)", onLand: () => bump(seal, "rgba(249,115,22,.9)") });
+        if (seal) flyTo(RACE_INFO[lastCard.race].emoji, ghostPt, seal, { delay: 700, duration: 750, size: 30, glow: "rgba(52,211,153,.95)", onLand: () => bump(seal, "rgba(249,115,22,.9)") });
       }
     }
+
+    // ---- all-action cinematic FX (actionFx.ts) — derived from the state diff, so both
+    // players (and bot turns) see the same thing. The actor is whoever's turn it was. ----
+    const actor = p.turn;
+    const victim = otherFaction(actor);
+    const oppChip = () => inView("[data-lotr-opp-dock]") ?? inView(`[data-lotr-dock="${oppFaction}"]`) ?? visible("[data-lotr-opp-dock]");
+    // 1. card claimed / discarded: shockwave + disintegrating parchment shards
+    if (ev.taken && actorCard) claimBurst(ghostPt, ev.taken.mode, CARD_TINT[actorCard.card.color], actorCard.card.name);
+    // 6/7. the opponent's tech runes and race seal fly up into their header chip (mine fly into my HUD above)
+    if (actorCard && actorCard.faction === oppFaction && ev.taken?.mode === "PLAY" && ghostPt) {
+      const chip = oppChip();
+      const glow = `rgba(${AURA[oppFaction].rgb},.95)`;
+      if (chip && actorCard.card.color === "GRAY")
+        (actorCard.card.providesTech ?? actorCard.card.selectTechChoice ?? []).forEach((t, i) =>
+          flyTo(TECH_INFO[t].emoji, ghostPt, chip, { delay: 150 + i * 90, duration: 750, size: 28, glow, onLand: () => bump(chip, glow) }),
+        );
+      if (chip && actorCard.card.color === "GREEN" && actorCard.card.race)
+        flyTo(RACE_INFO[actorCard.card.race].emoji, ghostPt, chip, { delay: 700, duration: 750, size: 28, glow, onLand: () => bump(chip, glow) });
+    }
+    // 7. race support gained: the seal spins in mid-air with a spark fanfare
+    if (actorCard && ev.taken?.mode === "PLAY" && actorCard.card.color === "GREEN" && actorCard.card.race) sealFanfare(ghostPt, RACE_INFO[actorCard.card.race].emoji);
+    // 3. drain (DRAIN_COINS / Ent drain): the victim's coins go down while it isn't their turn
+    const drained = p.players[victim].coins - state.players[victim].coins;
+    if (drained > 0) drainBeam(dockOf(actor, "coins"), dockOf(victim, "coins"), drained, victim === myFaction);
+    // 4. units placed (not moved): blade drop + ground slam on each region
+    if (!ev.moved) ev.drops.forEach((d, i) => groundSlam(visible(`[data-lotr-region="${d.region}"]`), d.faction, d.count, i * 180));
+    // 5. ring advance: rune footprints on every space passed
+    ev.ring.forEach((r) => runeSteps(Array.from({ length: r.to - r.from }, (_, k) => visible(`[data-lotr-track-slot="${r.from + k + 1}"]`)), r.faction));
+    // 8. destroyed: enemy fortress / sniped units (not combat losses) / a gray card from the tableau
+    let shattered = 0;
+    for (const r of REGIONS) {
+      const before = p.boardRegions[r];
+      const after = state.boardRegions[r];
+      const regionEl = visible(`[data-lotr-region="${r}"]`);
+      const lostFortress = victim === "FELLOWSHIP" ? before.fellowshipFortress && !after.fellowshipFortress : before.sauronFortress && !after.sauronFortress;
+      if (lostFortress) shatter(regionEl, "FORTRESS", shattered++ * 200);
+      if (ev.combat?.region !== r && unitsOf(after, victim) < unitsOf(before, victim)) shatter(regionEl, "UNIT", shattered++ * 200);
+    }
+    if (state.players[victim].tableauCards.length < p.players[victim].tableauCards.length) shatter(victim === myFaction ? inView(`[data-lotr-dock="${victim}"]`) ?? visible("[data-lotr-hud]") : oppChip(), "CARD", shattered * 200);
     if (ev.chapter) audio.play("CHAPTER");
     else if (state.phase === "PLAYING" && state.turn === myFaction && p.turn !== myFaction) window.setTimeout(() => audio.play("MY_TURN"), 450);
   }, [state, myFaction, oppFaction]);

@@ -209,6 +209,7 @@ export default function MiddleEarthMap({
           return (
             <button
               key={r}
+              data-lotr-region={r}
               type="button"
               disabled={!isTarget}
               onClick={() => onRegion(r)}
