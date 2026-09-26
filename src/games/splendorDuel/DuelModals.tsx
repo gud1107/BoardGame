@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ABILITY_META, DuelCardView, RoyalCardView } from "./CardMarket";
+import { AbilityJewel } from "./LuxuryArt";
 import { DuelToken, TOKEN_LABEL } from "./DuelToken";
 import {
   autoPayment,
@@ -75,7 +76,7 @@ export function CardActionSheet({
           </p>
           {card.ability && (
             <p className="rounded-lg bg-amber-500/10 px-2 py-1 text-amber-100 light:text-amber-800">
-              {ABILITY_META[card.ability].icon} <b>{ABILITY_META[card.ability].label}</b> — {ABILITY_META[card.ability].desc}
+              <AbilityJewel ability={card.ability} className="mr-1 h-4 w-4" /> <b>{ABILITY_META[card.ability].label}</b> — {ABILITY_META[card.ability].desc}
             </p>
           )}
           <div className="mt-1">

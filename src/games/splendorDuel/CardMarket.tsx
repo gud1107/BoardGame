@@ -1,6 +1,7 @@
 "use client";
 
 import { COLOR_ACCENT, DuelToken, TOKEN_LABEL, TokenCount } from "./DuelToken";
+import { AbilityJewel, cardFrameStyle, CrownRow, GemWindow, GoldNumeral, royalFrameStyle, WaxSeal } from "./LuxuryArt";
 import RoyalPortrait from "./RoyalPortrait";
 import { crownsOf, GEM_ORDER, ROYAL_CROWN_THRESHOLDS, type CardAbility, type DuelCard, type Level, type PlayerState, type RoyalCard, type SplendorDuelState } from "./engine";
 
@@ -43,50 +44,44 @@ export function DuelCardView({
       type="button"
       onClick={onClick}
       disabled={!onClick}
-      className={`relative flex aspect-[5/7] w-full flex-col overflow-hidden rounded-lg border bg-gradient-to-b text-left transition ${LEVEL_FRAME[card.level]} ${
-        affordable ? "border-amber-300/80 shadow-[0_0_12px_rgba(252,211,77,0.35)]" : "border-white/10"
-      } ${onClick ? "hover:-translate-y-0.5 hover:border-amber-200" : ""}`}
+      style={cardFrameStyle(card.level, affordable)}
+      className={`relative flex aspect-[5/7] w-full flex-col overflow-hidden rounded-lg text-left transition ${
+        affordable ? "shadow-[0_0_14px_rgba(252,211,77,0.45)]" : "shadow-[0_2px_6px_rgba(0,0,0,0.6)]"
+      } ${onClick ? "hover:-translate-y-0.5 hover:brightness-110" : ""}`}
     >
-      <div className="flex items-start justify-between px-1 pt-0.5" style={{ background: `linear-gradient(90deg, ${cardFace(color)}55, transparent)` }}>
-        <span className={`font-serif font-black text-white drop-shadow ${compact ? "text-xs" : "text-base"}`}>{card.points > 0 ? card.points : ""}</span>
-        <span className="flex flex-col items-end leading-none">
-          {card.crowns > 0 && <span className={compact ? "text-[8px]" : "text-[11px]"}>{"👑".repeat(card.crowns)}</span>}
-          {card.ability && (
-            <span className={`mt-0.5 rounded bg-black/60 px-0.5 font-bold text-amber-200 ${compact ? "text-[8px]" : "text-[10px]"}`} title={ABILITY_META[card.ability].label}>
-              {ABILITY_META[card.ability].icon}
-            </span>
-          )}
+      <div className="flex items-start justify-between px-1 pt-0.5" style={{ background: `linear-gradient(90deg, ${cardFace(color)}66, transparent 85%)` }}>
+        {card.points > 0 ? <GoldNumeral value={card.points} className={compact ? "text-xs" : "text-base"} /> : <span />}
+        <span className="flex flex-col items-end gap-px leading-none">
+          <CrownRow count={card.crowns} className={compact ? "h-2 w-2.5" : "h-3 w-3.5"} />
+          {card.ability && <AbilityJewel ability={card.ability} title={ABILITY_META[card.ability].label} className={compact ? "h-3.5 w-3.5" : "h-5 w-5"} />}
         </span>
       </div>
-      <div className={`flex flex-1 ${compact ? "min-h-0 items-end justify-between gap-0.5 px-0.5 pb-0.5" : "items-center justify-center"}`}>
+      <div className={`flex flex-1 ${compact ? "min-h-0 items-end justify-between gap-0.5 px-0.5 pb-0.5" : "min-h-0 px-1 py-0.5"}`}>
         {/* Phone cards: costs stack down the left edge (like the printed card) so they never wrap and get clipped. */}
         {compact && (
           <div className="flex flex-col gap-px">
             {costEntries.map((c) => (
-              <span key={c} className="inline-flex items-center gap-px font-mono text-[9px] leading-none font-bold">
+              <span key={c} className="inline-flex items-center gap-px rounded-sm bg-black/55 pr-0.5 font-mono text-[9px] leading-none font-bold text-amber-50 ring-1 ring-amber-300/25">
                 <DuelToken color={c} className="h-2.5 w-2.5" />
                 {card.cost[c]}
               </span>
             ))}
           </div>
         )}
-        <span className={`inline-flex items-center ${compact ? "self-center" : ""}`}>
-          {color ? (
-            <span title={`${TOKEN_LABEL[color]} 보너스 ×${card.bonus}`} className="inline-flex">
-              <DuelToken color={color} className={compact ? "h-4 w-4" : "h-7 w-7"} />
-            </span>
-          ) : (
-            <span
-              className={`rounded-full border border-white/40 ${compact ? "h-3 w-3" : "h-5 w-5"}`}
-              style={{ background: "conic-gradient(#c9e2fb, #1f6fe5, #0e9f6e, #e0194a, #3b3847, #dfe9f3)" }}
-              title={card.bonus > 0 ? "복사 보너스" : "보너스 없음"}
-            />
-          )}
-          {card.bonus > 1 && <span className="ml-0.5 text-[9px] font-bold text-white/80">×{card.bonus}</span>}
+        <span
+          className={`relative inline-flex items-center ${compact ? "self-center" : "flex-1 justify-center"}`}
+          title={color ? `${TOKEN_LABEL[color]} 보너스 ×${card.bonus}` : card.bonus > 0 ? "복사 보너스" : "보너스 없음"}
+        >
+          <GemWindow
+            color={color}
+            stoneClass={compact ? "h-4 w-4" : "h-8 w-8"}
+            className={compact ? "p-0.5" : "h-full w-full border border-amber-200/20 bg-black/35 shadow-[inset_0_0_10px_rgba(0,0,0,0.7)]"}
+          />
+          {card.bonus > 1 && <span className="absolute -right-0.5 bottom-0 rounded bg-black/70 px-0.5 text-[9px] font-bold text-amber-100">×{card.bonus}</span>}
         </span>
       </div>
       {!compact && (
-        <div className="flex flex-wrap gap-x-1 gap-y-0.5 bg-black/40 px-0.5 pb-0.5">
+        <div className="flex flex-wrap gap-x-1 gap-y-0.5 border-t border-amber-200/20 bg-black/50 px-0.5 pb-0.5">
           {costEntries.map((c) => (
             <TokenCount key={c} color={c} count={card.cost[c]!} size="h-3 w-3" />
           ))}
@@ -102,9 +97,12 @@ export function CardBack({ level, count, onClick, compact = false }: { level: Le
       type="button"
       onClick={onClick}
       disabled={!onClick}
-      className={`relative flex aspect-[5/7] w-full flex-col items-center justify-center rounded-lg border border-amber-500/30 bg-gradient-to-br ${LEVEL_FRAME[level]} ${onClick ? "hover:border-amber-300" : ""}`}
+      style={cardFrameStyle(level, true)}
+      className={`relative flex aspect-[5/7] w-full flex-col items-center justify-center rounded-lg bg-gradient-to-br ${LEVEL_FRAME[level]} ${onClick ? "hover:brightness-125" : ""}`}
     >
-      <span className={`font-serif font-black text-amber-300/80 ${compact ? "text-xs" : "text-lg"}`}>{"Ⅰ Ⅱ Ⅲ".split(" ")[level - 1]}</span>
+      <span className={`flex items-center justify-center rounded-full border border-amber-300/60 bg-black/40 ${compact ? "h-6 w-6" : "h-9 w-9"}`}>
+        <span className={`font-serif font-black text-amber-300 ${compact ? "text-[10px]" : "text-lg"}`}>{"Ⅰ Ⅱ Ⅲ".split(" ")[level - 1]}</span>
+      </span>
       {count !== undefined && <span className="text-[9px] text-white/50">{count}장</span>}
     </button>
   );
@@ -117,19 +115,25 @@ export function RoyalCardView({ royal, onClick, compact = false }: { royal: Roya
       onClick={onClick}
       disabled={!onClick}
       title={`${royal.name} · ${royal.points}점${royal.ability ? ` · ${ABILITY_META[royal.ability].label}` : ""}`}
-      className={`relative flex aspect-[5/6] w-full flex-col overflow-hidden rounded-lg border border-amber-300/60 bg-black text-center shadow-[inset_0_0_0_1px_rgba(0,0,0,0.6)] ${
-        onClick ? "ring-2 ring-amber-300/70 hover:border-amber-100" : ""
+      style={royalFrameStyle()}
+      className={`relative flex aspect-[5/6] w-full flex-col overflow-hidden rounded-lg text-center shadow-[0_0_10px_rgba(251,191,36,0.25)] ${
+        onClick ? "ring-2 ring-amber-300/70 hover:brightness-110" : ""
       }`}
     >
       <RoyalPortrait royalId={royal.id} className="absolute inset-0 h-full w-full" />
+      {/* Gilded inner filet */}
+      <span className="pointer-events-none absolute inset-[2px] rounded-md border border-amber-200/40" />
       <span className="relative flex items-start justify-between p-0.5">
-        <span className={`rounded bg-black/55 px-1 font-serif font-black text-amber-200 ${compact ? "text-[10px]" : "text-sm"}`}>{royal.points}</span>
-        {royal.ability && (
-          <span className={`rounded bg-black/60 px-0.5 font-bold text-amber-200 ${compact ? "text-[8px]" : "text-[11px]"}`}>{ABILITY_META[royal.ability].icon}</span>
-        )}
+        <span className="rounded bg-black/60 px-1 leading-tight">
+          <GoldNumeral value={royal.points} className={compact ? "text-[10px]" : "text-sm"} />
+        </span>
+        {royal.ability && <AbilityJewel ability={royal.ability} title={ABILITY_META[royal.ability].label} className={compact ? "h-3.5 w-3.5" : "h-5 w-5"} />}
       </span>
+      <WaxSeal royalId={royal.id} className={`absolute ${compact ? "right-0 bottom-0 h-3.5 w-3.5" : "right-1 bottom-6 h-7 w-7"}`} />
       {!compact && (
-        <span className="relative mt-auto bg-gradient-to-t from-black/90 to-transparent px-1 pt-3 pb-1 text-[10px] font-bold text-amber-100">{royal.name}</span>
+        <span className="relative mt-auto border-t border-amber-300/50 bg-gradient-to-t from-black/95 via-black/80 to-transparent px-1 pt-1 pb-1 font-serif text-[10px] font-bold tracking-wide text-amber-100">
+          {royal.name}
+        </span>
       )}
     </button>
   );

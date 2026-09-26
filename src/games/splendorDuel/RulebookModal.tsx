@@ -2,6 +2,7 @@
 
 import Overlay from "@/components/Overlay";
 import { ABILITY_META } from "./CardMarket";
+import { AbilityJewel } from "./LuxuryArt";
 import type { CardAbility } from "./engine";
 
 const box = "rounded-xl border border-white/10 bg-white/5 p-3 light:border-slate-200 light:bg-white light:shadow-sm";
@@ -72,7 +73,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <div className="grid gap-1.5 sm:grid-cols-2">
             {(Object.keys(ABILITY_META) as CardAbility[]).map((a) => (
               <p key={a} className="text-xs">
-                <span className="mr-1 inline-block w-5 rounded bg-black/40 text-center font-bold text-amber-200">{ABILITY_META[a].icon}</span>
+                <AbilityJewel ability={a} className="mr-1 h-5 w-5" />
                 <b>{ABILITY_META[a].label}</b> — {ABILITY_META[a].desc}
               </p>
             ))}
