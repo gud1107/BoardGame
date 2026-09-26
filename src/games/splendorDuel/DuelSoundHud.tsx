@@ -1,7 +1,7 @@
 "use client";
 
 import { isBgmEffectivelyMuted, isSfxEffectivelyMuted, useAudioSettingsStore } from "@/lib/audio/audioSettings";
-import { getSplendorDuelSound } from "./splendorDuelSound";
+import { getSplendorDuelSound, type TensionTier } from "./splendorDuelSound";
 
 /**
  * 🎻 Chamber Noir BGM / 🔔 SFX toggles next to the rulebook button. Both write the
@@ -9,7 +9,10 @@ import { getSplendorDuelSound } from "./splendorDuelSound";
  * 🔇/🔊 and the settings modal (where the volume sliders live). Turning one
  * on from the all-muted default also lifts the master mute.
  */
-export default function DuelSoundHud() {
+/** Icon pulse period per tension tier — the violin "breathes" faster as the race tightens. */
+const PULSE: Record<TensionTier, string> = { 0: "2s", 1: "1.4s", 2: "0.9s", 3: "0.55s" };
+
+export default function DuelSoundHud({ tension }: { tension: TensionTier }) {
   const s = useAudioSettingsStore();
   const bgmOn = !isBgmEffectivelyMuted(s);
   const sfxOn = !isSfxEffectivelyMuted(s);
@@ -40,7 +43,7 @@ export default function DuelSoundHud() {
   return (
     <span className="flex shrink-0 items-center gap-1">
       <button type="button" onClick={() => toggle("bgm")} className={cls(bgmOn, true)} title={bgmOn ? "챔버 느와르 BGM 끄기 (볼륨은 상단 설정)" : "챔버 느와르 BGM 켜기"} aria-pressed={bgmOn}>
-        <span className={`inline-block ${bgmOn ? "animate-pulse" : "opacity-50 grayscale"}`}>🎻</span>
+        <span className={`inline-block ${bgmOn ? "animate-pulse" : "opacity-50 grayscale"}`} style={bgmOn ? { animationDuration: PULSE[tension] } : undefined}>🎻</span>
         <span className={`ml-0.5 hidden sm:inline ${bgmOn ? "" : "line-through"}`}>BGM</span>
       </button>
       <button type="button" onClick={() => toggle("sfx")} className={cls(sfxOn)} title={sfxOn ? "효과음 끄기 (볼륨은 상단 설정)" : "효과음 켜기"} aria-pressed={sfxOn}>

@@ -1,5 +1,5 @@
 import { isBgmEffectivelyMuted, isSfxEffectivelyMuted, useAudioSettingsStore, type AudioSettings } from "@/lib/audio/audioSettings";
-import type { DuelEvent } from "./engine";
+import { colorPoints, crownsOf, prestigeOf, SEATS, WIN_CROWNS, WIN_PRESTIGE, WIN_SINGLE_COLOR, type DuelEvent, type SplendorDuelState } from "./engine";
 
 /**
  * 스플렌더 대결 전용 procedural sound suite — "Chamber Noir" trio BGM + gem /
@@ -45,6 +45,9 @@ class SplendorDuelSound {
   private bgmTimer: ReturnType<typeof setInterval> | null = null;
   private nextBeatTime = 0;
   private beat = 0;
+  /** Tension tier actually playing, and the one requested (applied on the next bar line). */
+  private tier: TensionTier = 0;
+  private pendingTier: TensionTier = 0;
 
   private settings(): AudioSettings {
     return useAudioSettingsStore.getState();
@@ -526,8 +529,18 @@ class SplendorDuelSound {
    *    one of 4 figures per bar so the 4-bar phrase keeps moving; every 8th bar
    *    drops out for a breath and climbs back in over the A (leading tone C#).
    * 0 in a figure = rest.
+   *
+   * Late-game tension (`setTension`, fed by `matchTension`) raises the tempo
+   * and stacks layers, switching only on a bar line:
+   *  - tier 1: 120 bpm, harpsichord's 4' octave string comes forward;
+   *  - tier 2: 128 bpm, pizzicato clock doubles to every off-sixteenth of the
+   *    last beat, cello drives sixteenths into the downbeat, no breath bars,
+   *    timpani on beat 1;
+   *  - tier 3: 138 bpm, plus a high violin tremolo grinding a minor second
+   *    (A5 / Bb5) over every bar.
+   * Each step up is announced once with a timpani crescendo roll.
    */
-  private static readonly TEMPO = 112;
+  private static readonly TEMPOS: Record<TensionTier, number> = { 0: 112, 1: 120, 2: 128, 3: 138 };
   private static readonly CELLO = [38, 38, 38, 38, 34, 34, 33, 33];
   private static readonly CELLO_ACCENT = [1, 0.62, 0.85, 0.6, 0.95, 0.65, 0.95, 0.7];
   private static readonly PIZZ: Record<number, number> = { 2: 50, 6: 50, 10: 53, 14: 52 };
@@ -543,6 +556,7 @@ class SplendorDuelSound {
   /** Board mount/unmount. Actual playback also waits for BGM to be unmuted. */
   setBgmWanted(wanted: boolean) {
     this.bgmWanted = wanted;
+    if (!wanted) this.tier = this.pendingTier = 0;
     if (wanted) this.ensure();
     this.syncBgm();
   }
@@ -564,9 +578,13 @@ class SplendorDuelSound {
   private schedule() {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== "running") return;
-    const sixteenth = 60 / SplendorDuelSound.TEMPO / 4;
     if (this.nextBeatTime < ctx.currentTime) this.nextBeatTime = ctx.currentTime + 0.05; // tab was throttled
     while (this.nextBeatTime < ctx.currentTime + 0.2) {
+      if (this.beat % 16 === 0 && this.pendingTier !== this.tier) {
+        if (this.pendingTier > this.tier) this.timpaniRoll(this.nextBeatTime);
+        this.tier = this.pendingTier;
+      }
+      const sixteenth = 60 / SplendorDuelSound.TEMPOS[this.tier] / 4;
       this.playSixteenth(this.beat, this.nextBeatTime, sixteenth);
       this.nextBeatTime += sixteenth;
       this.beat++;
@@ -575,19 +593,93 @@ class SplendorDuelSound {
 
   private playSixteenth(step: number, t: number, sixteenth: number) {
     const S = SplendorDuelSound;
+    const tier = this.tier;
     const pos = step % 16;
     const bar = Math.floor(step / 16);
 
+    // Cello: eighth heartbeat; from tier 2 the last beat drives in sixteenths (A1 A1 A1 A1 → downbeat).
     if (pos % 2 === 0) {
       const i = pos / 2;
-      this.cello(t, hz(S.CELLO[i]), sixteenth * 1.9, 0.3 * S.CELLO_ACCENT[i]);
+      this.cello(t, hz(S.CELLO[i]), sixteenth * 1.9, 0.3 * S.CELLO_ACCENT[i] * (1 + tier * 0.08));
+    } else if (tier >= 2 && pos >= 13) {
+      this.cello(t, hz(33), sixteenth * 0.95, 0.2);
     }
+    // Pizzicato clock; from tier 2 it ticks every off-sixteenth of the last beat too.
     const pz = S.PIZZ[pos];
-    if (pz) this.pluck("bgm", t, hz(pz), { gain: 0.42, dur: 0.32, damp: 0.35, decay: 0.985, wet: 0.25, pan: -0.35 });
+    if (pz) this.pluck("bgm", t, hz(pz), { gain: 0.42 + tier * 0.04, dur: 0.32, damp: 0.35, decay: 0.985, wet: 0.25, pan: -0.35 });
+    else if (tier >= 2 && (pos === 13 || pos === 15)) this.pluck("bgm", t, hz(pos === 13 ? 52 : 50), { gain: 0.3, dur: 0.25, damp: 0.35, decay: 0.98, wet: 0.2, pan: -0.35 });
 
-    const figure = bar % 8 === 7 ? S.HARPSI_BREATH : S.HARPSI[bar % 4];
+    // Harpsichord runs; breath bars vanish once the race is on.
+    const figure = bar % 8 === 7 && tier < 2 ? S.HARPSI_BREATH : S.HARPSI[bar % 4];
     const m = figure[pos];
-    if (m) this.harpsichord(t, hz(m), pos % 4 === 0 ? 0.3 : 0.22);
+    if (m) this.harpsichord(t, hz(m), pos % 4 === 0 ? 0.3 : 0.22, tier >= 1 ? 0.6 : 0.35);
+
+    if (tier >= 2 && pos === 0) this.timpani(t, hz(26), 0.5);
+    if (tier >= 3 && pos === 0) this.tremolo(t, hz(bar % 2 ? 82 : 81), sixteenth * 16);
+  }
+
+  /** Request a tension tier (0–3); takes effect at the next bar line. */
+  setTension(tier: TensionTier) {
+    this.pendingTier = tier;
+  }
+
+  /** Timpani: tuned sine with a pitch drop + felt-mallet noise. */
+  private timpani(t: number, freq: number, gain: number) {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(freq * 1.5, t);
+    o.frequency.exponentialRampToValueAtTime(freq, t + 0.06);
+    const e = ctx.createGain();
+    e.gain.setValueAtTime(0.0001, t);
+    e.gain.exponentialRampToValueAtTime(gain, t + 0.008);
+    e.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    o.connect(e).connect(this.bgmBus!);
+    if (this.reverbIn) {
+      const send = ctx.createGain();
+      send.gain.value = 0.35;
+      e.connect(send).connect(this.reverbIn);
+    }
+    o.start(t);
+    o.stop(t + 0.95);
+  }
+
+  /** Tension step-up cue: a half-bar timpani roll swelling into the downbeat `t`. */
+  private timpaniRoll(t: number) {
+    for (let i = 0; i < 10; i++) this.timpani(t - 0.6 + i * 0.06, hz(26), 0.08 + i * 0.045);
+  }
+
+  /** High violin tremolo: saw through a bandpass, amplitude chopped at ~13Hz. */
+  private tremolo(t: number, freq: number, dur: number) {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.value = freq;
+    const f = ctx.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = freq * 1.5;
+    f.Q.value = 1.4;
+    const trem = ctx.createGain();
+    trem.gain.value = 0.5;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 13;
+    const depth = ctx.createGain();
+    depth.gain.value = 0.5;
+    lfo.connect(depth).connect(trem.gain);
+    const e = ctx.createGain();
+    e.gain.setValueAtTime(0.0001, t);
+    e.gain.linearRampToValueAtTime(0.05, t + dur * 0.3);
+    e.gain.linearRampToValueAtTime(0.0001, t + dur);
+    o.connect(f).connect(trem).connect(e).connect(this.bgmBus!);
+    if (this.reverbIn) {
+      const send = ctx.createGain();
+      send.gain.value = 0.6;
+      e.connect(send).connect(this.reverbIn);
+    }
+    o.start(t);
+    lfo.start(t);
+    o.stop(t + dur + 0.05);
+    lfo.stop(t + dur + 0.05);
   }
 
   /** Bowed cello: detuned saw pair -> resonant 380Hz lowpass, bow-scrape attack. */
@@ -621,10 +713,29 @@ class SplendorDuelSound {
   }
 
   /** Harpsichord: bright plucked 8' string + quieter 4' (octave) string, thinned by a highpass. */
-  private harpsichord(t: number, freq: number, gain: number) {
+  private harpsichord(t: number, freq: number, gain: number, fourFoot = 0.35) {
     this.pluck("bgm", t, freq, { gain, dur: 0.55, damp: 0.92, decay: 0.994, wet: 0.35, pan: 0.3, hp: 420 });
-    this.pluck("bgm", t + 0.004, freq * 2, { gain: gain * 0.35, dur: 0.35, damp: 0.95, decay: 0.99, wet: 0.3, pan: 0.4, hp: 900 });
+    this.pluck("bgm", t + 0.004, freq * 2, { gain: gain * fourFoot, dur: 0.35, damp: 0.95, decay: 0.99, wet: 0.3, pan: 0.4, hp: 900 });
   }
+}
+
+export type TensionTier = 0 | 1 | 2 | 3;
+
+/**
+ * How close the match is to ending, as a BGM tension tier: the nearest either
+ * player is to ANY win condition (20 prestige / 10 crowns / 10 in one color).
+ * <50% → 0, ≥50% → 1, ≥70% → 2, ≥85% (e.g. 17 pts, 9 crowns, 9 in a color) → 3.
+ * Pure (safe for tests); calm again once the game is over.
+ */
+export function matchTension(state: SplendorDuelState): TensionTier {
+  if (state.phase === "gameOver") return 0;
+  let p = 0;
+  for (const seat of SEATS) {
+    const pl = state.players[seat];
+    const color = Math.max(...Object.values(colorPoints(pl)));
+    p = Math.max(p, prestigeOf(pl) / WIN_PRESTIGE, crownsOf(pl) / WIN_CROWNS, color / WIN_SINGLE_COLOR);
+  }
+  return p >= 0.85 ? 3 : p >= 0.7 ? 2 : p >= 0.5 ? 1 : 0;
 }
 
 let instance: SplendorDuelSound | null = null;

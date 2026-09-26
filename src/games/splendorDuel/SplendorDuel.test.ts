@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDevelopmentDeck } from "./cards";
+import { matchTension } from "./splendorDuelSound";
 import {
   allSelections,
   applyAction,
@@ -376,6 +377,18 @@ describe("victory", () => {
     expect(s.phase).toBe("gameOver");
     expect(s.winner).toBe("p1");
     expect(s.winReason).toBe("singleColor");
+  });
+});
+
+describe("BGM tension tier", () => {
+  const withP2 = (s: SplendorDuelState, p2: Partial<PlayerState>) => ({ ...s, players: { ...s.players, p2: { ...s.players.p2, ...p2 } } });
+  it("follows whichever player is closest to any win condition", () => {
+    const s = startGame(5);
+    expect(matchTension(s)).toBe(0);
+    expect(matchTension(withP2(s, { cards: [owned({ color: "red", points: 5 }), owned({ color: "blue", points: 5 })] }))).toBe(1); // 10/20
+    expect(matchTension(withP2(s, { cards: [owned({ color: "red", crowns: 7 })] }))).toBe(2); // 7/10 crowns
+    expect(matchTension(withP2(s, { cards: [owned({ color: "red", points: 9 })] }))).toBe(3); // 9/10 in red
+    expect(matchTension({ ...withP2(s, { cards: [owned({ color: "red", points: 9 })] }), phase: "gameOver" })).toBe(0);
   });
 });
 

@@ -20,7 +20,7 @@ import PlayerDock from "./PlayerDock";
 import SpiralGridBoard from "./SpiralGridBoard";
 import DuelSoundHud from "./DuelSoundHud";
 import { playDuelEventSound, playDuelVictorySound } from "./splendorDuelAudio";
-import { getSplendorDuelSound } from "./splendorDuelSound";
+import { getSplendorDuelSound, matchTension } from "./splendorDuelSound";
 import {
   canAfford,
   getValidMoves,
@@ -304,6 +304,11 @@ export default function SplendorDuelBoard({
     sound.setBgmWanted(true);
     return () => sound.setBgmWanted(false);
   }, []);
+  // Late game (either player ≥50/70/85% of a win condition) → faster, denser BGM.
+  const tension = matchTension(state);
+  useEffect(() => {
+    getSplendorDuelSound().setTension(tension);
+  }, [tension]);
 
   // Sound for every new engine event; skip whatever event was already there on mount/resync.
   const lastSoundSeq = useRef(state.eventSeq);
@@ -659,7 +664,7 @@ export default function SplendorDuelBoard({
                 {describeEvent(lastEvent, names)}
               </p>
             )}
-            <DuelSoundHud />
+            <DuelSoundHud tension={tension} />
             <button
               onClick={onOpenRulebook}
               className="shrink-0 rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-white/50 hover:border-white/25 light:border-slate-200 light:text-slate-500"
