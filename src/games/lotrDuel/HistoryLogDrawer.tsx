@@ -8,7 +8,9 @@ import type { LogEntry, LogKind } from "./types";
  * Whole-game history for 반지의 제왕: 가운데땅에서의 대결 — card picks and
  * discards, coins, ring-track moves, clashes, units, fortresses, tokens.
  *
- * Desktop (lg+): a slim sticky panel on the left of the board.
+ * Desktop (lg+): a slim sticky panel on the left of the board; its ◀ button
+ * folds it into a thin sticky tab (📜 기록 + count) so the board gets the
+ * width back, and tapping the tab unfolds it again.
  * Phones: a small "📜 기록" tab on the left edge (the site header is sticky
  * and tall on phones, so a top-left chip would sit under it); tapping it
  * slides a drawer in from the left, closed by tapping outside or ✕.
@@ -34,11 +36,16 @@ const KIND_ICON: Record<LogKind, string> = {
   SYSTEM: "📖",
 };
 
-function LogList({ log, onClose, onInspect }: { log: LogEntry[]; onClose?: () => void; onInspect: (e: LogEntry) => void }) {
+function LogList({ log, onClose, onCollapse, onInspect }: { log: LogEntry[]; onClose?: () => void; onCollapse?: () => void; onInspect: (e: LogEntry) => void }) {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-neutral-950/95 select-none">
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/10 bg-neutral-900/90 px-3">
         <span className="font-serif text-xs font-black text-amber-300">📜 게임 기록 ({log.length})</span>
+        {onCollapse && (
+          <button onClick={onCollapse} className="rounded-md px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-white/10 hover:text-amber-200" aria-label="기록 접기" title="기록 접기">
+            ◀ 접기
+          </button>
+        )}
         {onClose && (
           <button onClick={onClose} className="p-1 text-sm text-neutral-400 hover:text-white" aria-label="기록 닫기">
             ✕
@@ -90,6 +97,7 @@ function LogList({ log, onClose, onInspect }: { log: LogEntry[]; onClose?: () =>
 
 export default function HistoryLogDrawer({ log }: { log: LogEntry[] }) {
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [inspecting, setInspecting] = useState<LogEntry | null>(null);
   return (
     <>
@@ -104,10 +112,24 @@ export default function HistoryLogDrawer({ log }: { log: LogEntry[] }) {
         <span className="rounded-full bg-amber-500/25 px-1 font-mono text-[9px]">{log.length}</span>
       </button>
 
-      {/* desktop: sticky left panel */}
-      <aside className="sticky top-20 hidden h-[calc(100dvh-7rem)] w-60 shrink-0 overflow-hidden rounded-2xl border border-amber-500/20 shadow-2xl lg:block">
-        <LogList log={log} onInspect={setInspecting} />
-      </aside>
+      {/* desktop: sticky left panel, foldable into a thin tab */}
+      {collapsed ? (
+        <button
+          onClick={() => setCollapsed(false)}
+          className="sticky top-20 hidden shrink-0 flex-col items-center gap-1.5 rounded-2xl border border-amber-500/30 bg-neutral-900/90 px-1.5 py-3 text-[11px] font-bold text-amber-300 shadow-2xl transition hover:border-amber-400/70 hover:bg-neutral-800 lg:flex"
+          aria-label="게임 기록 펼치기"
+          title="기록 펼치기"
+        >
+          <span>📜</span>
+          <span className="[writing-mode:vertical-rl]">기록</span>
+          <span className="rounded-full bg-amber-500/25 px-1 font-mono text-[9px]">{log.length}</span>
+          <span className="text-[10px] text-neutral-400">▶</span>
+        </button>
+      ) : (
+        <aside className="sticky top-20 hidden h-[calc(100dvh-7rem)] w-60 shrink-0 overflow-hidden rounded-2xl border border-amber-500/20 shadow-2xl lg:block">
+          <LogList log={log} onCollapse={() => setCollapsed(true)} onInspect={setInspecting} />
+        </aside>
+      )}
 
       {/* phones: slide-over drawer */}
       {open && (
