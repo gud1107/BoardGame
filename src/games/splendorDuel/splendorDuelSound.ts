@@ -2,7 +2,7 @@ import { isBgmEffectivelyMuted, isSfxEffectivelyMuted, useAudioSettingsStore, ty
 import type { DuelEvent } from "./engine";
 
 /**
- * 스플렌더 대결 전용 procedural sound suite — Renaissance lute BGM + gem /
+ * 스플렌더 대결 전용 procedural sound suite — "Chamber Noir" trio BGM + gem /
  * card / royal / scroll SFX, all synthesized in code (no audio files, same
  * rule as src/lib/audio/soundEngine.ts).
  *
@@ -13,14 +13,16 @@ import type { DuelEvent } from "./engine";
  * modal's BGM/SFX sliders and this game's own HUD all flip the same flags.
  *
  * Instruments:
- *  - lute / harp / pizzicato: Karplus-Strong plucked string rendered into an
+ *  - harp / harpsichord / pizzicato: Karplus-Strong plucked string rendered into an
  *    AudioBuffer (cached per pitch), so it sounds like a real string rather
  *    than a bare oscillator.
  *  - bell: inharmonic sine partials (church-bell ratios), each decaying on
  *    its own.
  *  - brass: two detuned saws through a lowpass whose cutoff swells open.
  *  - parchment / pebbles: shaped noise bursts.
- * Everything runs into a shared generated-impulse "cathedral" reverb send.
+ *  - cello: detuned saw pair through a resonant lowpass.
+ * Everything runs into a shared generated-impulse "cathedral" reverb send and
+ * a master glue compressor; the BGM bus is ducked whenever an SFX fires.
  */
 
 const SEMITONE = Math.pow(2, 1 / 12);
@@ -33,6 +35,7 @@ class SplendorDuelSound {
   private ctx: AudioContext | null = null;
   private sfxBus: GainNode | null = null;
   private bgmBus: GainNode | null = null;
+  private duck: GainNode | null = null;
   private reverbIn: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private strings = new Map<string, AudioBuffer>();
@@ -55,15 +58,21 @@ class SplendorDuelSound {
       const ctx = new Ctor();
       this.ctx = ctx;
 
+      // Master glue compressor: keeps SFX + BGM tight and un-clipped when they stack.
       const limiter = ctx.createDynamicsCompressor();
-      limiter.threshold.value = -10;
-      limiter.ratio.value = 6;
+      limiter.threshold.value = -18;
+      limiter.knee.value = 12;
+      limiter.ratio.value = 5;
+      limiter.attack.value = 0.003;
+      limiter.release.value = 0.15;
       limiter.connect(ctx.destination);
 
       this.sfxBus = ctx.createGain();
       this.bgmBus = ctx.createGain();
+      // BGM runs through a duck stage so every SFX cuts through the music.
+      this.duck = ctx.createGain();
       this.sfxBus.connect(limiter);
-      this.bgmBus.connect(limiter);
+      this.bgmBus.connect(this.duck).connect(limiter);
 
       // Cathedral: 2.4s stereo decaying-noise impulse, generated once.
       const conv = ctx.createConvolver();
@@ -95,7 +104,7 @@ class SplendorDuelSound {
     if (!ctx || !this.sfxBus || !this.bgmBus) return;
     const t = ctx.currentTime;
     this.sfxBus.gain.setTargetAtTime(isSfxEffectivelyMuted(s) ? 0 : s.sfxVolume * 0.9, t, 0.02);
-    this.bgmBus.gain.setTargetAtTime(isBgmEffectivelyMuted(s) ? 0 : s.bgmVolume * 0.55, t, 0.15);
+    this.bgmBus.gain.setTargetAtTime(isBgmEffectivelyMuted(s) ? 0 : s.bgmVolume * 0.6, t, 0.05);
     this.syncBgm();
   }
 
@@ -115,6 +124,13 @@ class SplendorDuelSound {
     if (bus === "sfx" ? isSfxEffectivelyMuted(s) : isBgmEffectivelyMuted(s)) return null;
     const ctx = this.ensure();
     if (!ctx || ctx.state !== "running") return null;
+    if (bus === "sfx" && this.duck) {
+      // Duck the music ~9dB for the length of a typical cue, then ease back.
+      const t = ctx.currentTime;
+      this.duck.gain.cancelScheduledValues(t);
+      this.duck.gain.setTargetAtTime(0.35, t, 0.015);
+      this.duck.gain.setTargetAtTime(1, t + 0.4, 0.3);
+    }
     return ctx;
   }
 
@@ -147,9 +163,9 @@ class SplendorDuelSound {
     return buf;
   }
 
-  private pluck(bus: Bus, t: number, freq: number, opts: { gain?: number; dur?: number; damp?: number; decay?: number; wet?: number; pan?: number } = {}) {
+  private pluck(bus: Bus, t: number, freq: number, opts: { gain?: number; dur?: number; damp?: number; decay?: number; wet?: number; pan?: number; hp?: number } = {}) {
     const ctx = this.ctx!;
-    const { gain = 0.5, dur = 1.6, damp = 0.5, decay = 0.996, wet = 0.5, pan = 0 } = opts;
+    const { gain = 0.5, dur = 1.6, damp = 0.5, decay = 0.996, wet = 0.5, pan = 0, hp } = opts;
     const src = ctx.createBufferSource();
     src.buffer = this.stringBuffer(ctx, freq, dur, damp, decay);
     const g = ctx.createGain();
@@ -157,7 +173,12 @@ class SplendorDuelSound {
     g.gain.setTargetAtTime(0, t + dur * 0.7, dur * 0.1);
     const p = ctx.createStereoPanner();
     p.pan.value = pan;
-    src.connect(g).connect(p);
+    if (hp) {
+      const f = ctx.createBiquadFilter();
+      f.type = "highpass";
+      f.frequency.value = hp;
+      src.connect(f).connect(g).connect(p);
+    } else src.connect(g).connect(p);
     p.connect(this.out(bus));
     if (wet > 0 && this.reverbIn) {
       const send = ctx.createGain();
@@ -494,28 +515,30 @@ class SplendorDuelSound {
     if ("scrollFrom" in e && (e.scrollFrom === "table" || e.scrollFrom === "opponent")) this.scroll(0.35);
   }
 
-  /* ── BGM: D-dorian pavane on lute + viol bass ────────────────────────── */
+  /* ── BGM: "Chamber Noir" trio — cello ostinato, pizzicato clock, harpsichord ── */
 
   /**
-   * 3/4 at ~66 bpm, 8 bars (passamezzo-style: Dm C Dm A | Dm C F-A Dm).
-   * Each bar: bass on beat 1, lute broken chord on eighths, a sparse treble
-   * line from the D-dorian scale (B natural = the dorian colour) with some
-   * variation per loop so it doesn't feel mechanical.
+   * 112 bpm, D minor, 16 sixteenths per bar. Three voices lock together:
+   *  - cello: eighth-note heartbeat ostinato D2 D2 D2 D2 | Bb1 Bb1 | A1 A1
+   *    (bowed saw pair through a 380Hz lowpass), accents on 1 and 3;
+   *  - pizzicato: off-beat "tick-tock" D3 . D3 . F3 . E3;
+   *  - harpsichord: fast sixteenth runs over the same harmony (Dm -> Bb -> A),
+   *    one of 4 figures per bar so the 4-bar phrase keeps moving; every 8th bar
+   *    drops out for a breath and climbs back in over the A (leading tone C#).
+   * 0 in a figure = rest.
    */
-  private static readonly BARS: { bass: number; chord: number[] }[] = [
-    { bass: 38, chord: [50, 57, 62, 65] }, // Dm
-    { bass: 36, chord: [48, 55, 60, 64] }, // C
-    { bass: 38, chord: [50, 57, 62, 65] }, // Dm
-    { bass: 33, chord: [45, 57, 61, 64] }, // A
-    { bass: 38, chord: [50, 57, 62, 65] }, // Dm
-    { bass: 36, chord: [48, 55, 60, 64] }, // C
-    { bass: 41, chord: [53, 57, 60, 65] }, // F
-    { bass: 33, chord: [45, 57, 61, 64] }, // A → back to Dm
+  private static readonly TEMPO = 112;
+  private static readonly CELLO = [38, 38, 38, 38, 34, 34, 33, 33];
+  private static readonly CELLO_ACCENT = [1, 0.62, 0.85, 0.6, 0.95, 0.65, 0.95, 0.7];
+  private static readonly PIZZ: Record<number, number> = { 2: 50, 6: 50, 10: 53, 14: 52 };
+  private static readonly HARPSI: number[][] = [
+    [74, 69, 65, 69, 74, 77, 76, 74, 70, 74, 77, 74, 73, 76, 79, 76],
+    [62, 65, 69, 74, 72, 69, 65, 67, 65, 70, 74, 70, 64, 69, 73, 76],
+    [74, 0, 72, 69, 65, 67, 69, 0, 74, 77, 76, 74, 73, 69, 64, 61],
+    [77, 76, 74, 72, 70, 69, 67, 65, 70, 65, 62, 65, 73, 76, 79, 81],
   ];
-  /** D dorian treble pool (D E F G A B C). */
-  private static readonly SCALE = [74, 76, 77, 79, 81, 83, 84, 86];
-
-  private static readonly SPB = 60 / 66; // seconds per beat
+  /** The breath bar: silence, then a rising run into the next phrase. */
+  private static readonly HARPSI_BREATH = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 69, 73, 76, 79];
 
   /** Board mount/unmount. Actual playback also waits for BGM to be unmuted. */
   setBgmWanted(wanted: boolean) {
@@ -527,53 +550,81 @@ class SplendorDuelSound {
   private syncBgm() {
     const on = this.bgmWanted && !isBgmEffectivelyMuted(this.settings()) && !!this.ctx;
     if (on && !this.bgmTimer) {
-      this.nextBeatTime = this.ctx!.currentTime + 0.15;
+      // (Re)start on a bar line so un-muting comes back in tempo, from the top of the phrase.
+      this.nextBeatTime = this.ctx!.currentTime + 0.12;
       this.beat = 0;
-      this.bgmTimer = setInterval(() => this.schedule(), 120);
+      this.bgmTimer = setInterval(() => this.schedule(), 50);
     } else if (!on && this.bgmTimer) {
       clearInterval(this.bgmTimer);
       this.bgmTimer = null;
     }
   }
 
-  /** Look-ahead scheduler: queue every half-beat falling in the next 0.4s. */
+  /** Look-ahead clock: queue every sixteenth that falls in the next 0.2s, timed on ctx.currentTime. */
   private schedule() {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== "running") return;
-    const half = SplendorDuelSound.SPB / 2;
+    const sixteenth = 60 / SplendorDuelSound.TEMPO / 4;
     if (this.nextBeatTime < ctx.currentTime) this.nextBeatTime = ctx.currentTime + 0.05; // tab was throttled
-    while (this.nextBeatTime < ctx.currentTime + 0.4) {
-      this.playHalfBeat(this.beat, this.nextBeatTime);
-      this.nextBeatTime += half;
+    while (this.nextBeatTime < ctx.currentTime + 0.2) {
+      this.playSixteenth(this.beat, this.nextBeatTime, sixteenth);
+      this.nextBeatTime += sixteenth;
       this.beat++;
     }
   }
 
-  private playHalfBeat(step: number, t: number) {
-    const bars = SplendorDuelSound.BARS;
-    const perBar = 6; // 3 beats × 2 eighths
-    const barIdx = Math.floor(step / perBar) % bars.length;
-    const loop = Math.floor(step / (perBar * bars.length));
-    const pos = step % perBar;
-    const bar = bars[barIdx];
-    const spb = SplendorDuelSound.SPB;
+  private playSixteenth(step: number, t: number, sixteenth: number) {
+    const S = SplendorDuelSound;
+    const pos = step % 16;
+    const bar = Math.floor(step / 16);
 
-    // Viol bass: long, dark, on the downbeat.
-    if (pos === 0) this.pluck("bgm", t, hz(bar.bass), { gain: 0.55, dur: spb * 3.2, damp: 0.25, decay: 0.998, wet: 0.35, pan: -0.2 });
-    // Lute broken chord: low-high-mid pattern on eighths, gentle strum on beat 1.
-    const pattern = [0, 2, 1, 3, 2, 1];
-    const note = bar.chord[pattern[pos]];
-    const accent = pos === 0 ? 0.42 : pos % 2 === 0 ? 0.3 : 0.22;
-    this.pluck("bgm", t + (pos === 0 ? 0 : Math.random() * 0.012), hz(note), { gain: accent, dur: 1.4, damp: 0.45, decay: 0.996, wet: 0.45, pan: 0.15 });
-    // Treble line: on beats 1 and 3 (and a passing eighth sometimes), chord tone or scale neighbour.
-    if (pos === 0 || pos === 4 || (pos === 3 && (loop + barIdx) % 3 === 1)) {
-      const tones = bar.chord.map((m) => m + 12).filter((m) => m >= 72 && m <= 88);
-      const pool = (barIdx + loop) % 2 ? SplendorDuelSound.SCALE : tones;
-      const pick = pool[(barIdx * 3 + pos + loop * 2) % pool.length];
-      this.pluck("bgm", t, hz(pick), { gain: 0.2, dur: 1.8, damp: 0.6, decay: 0.997, wet: 0.7, pan: 0.35 });
+    if (pos % 2 === 0) {
+      const i = pos / 2;
+      this.cello(t, hz(S.CELLO[i]), sixteenth * 1.9, 0.3 * S.CELLO_ACCENT[i]);
+    }
+    const pz = S.PIZZ[pos];
+    if (pz) this.pluck("bgm", t, hz(pz), { gain: 0.42, dur: 0.32, damp: 0.35, decay: 0.985, wet: 0.25, pan: -0.35 });
+
+    const figure = bar % 8 === 7 ? S.HARPSI_BREATH : S.HARPSI[bar % 4];
+    const m = figure[pos];
+    if (m) this.harpsichord(t, hz(m), pos % 4 === 0 ? 0.3 : 0.22);
+  }
+
+  /** Bowed cello: detuned saw pair -> resonant 380Hz lowpass, bow-scrape attack. */
+  private cello(t: number, freq: number, dur: number, gain: number) {
+    const ctx = this.ctx!;
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.Q.value = 4;
+    f.frequency.setValueAtTime(240, t);
+    f.frequency.linearRampToValueAtTime(380, t + 0.06);
+    const e = ctx.createGain();
+    e.gain.setValueAtTime(0.0001, t);
+    e.gain.linearRampToValueAtTime(gain, t + 0.05);
+    e.gain.setTargetAtTime(gain * 0.7, t + 0.05, dur * 0.3);
+    e.gain.setTargetAtTime(0.0001, t + dur * 0.85, 0.04);
+    f.connect(e).connect(this.bgmBus!);
+    if (this.reverbIn) {
+      const send = ctx.createGain();
+      send.gain.value = 0.2;
+      e.connect(send).connect(this.reverbIn);
+    }
+    for (const det of [-7, 7]) {
+      const o = ctx.createOscillator();
+      o.type = "sawtooth";
+      o.frequency.value = freq;
+      o.detune.value = det;
+      o.connect(f);
+      o.start(t);
+      o.stop(t + dur + 0.3);
     }
   }
 
+  /** Harpsichord: bright plucked 8' string + quieter 4' (octave) string, thinned by a highpass. */
+  private harpsichord(t: number, freq: number, gain: number) {
+    this.pluck("bgm", t, freq, { gain, dur: 0.55, damp: 0.92, decay: 0.994, wet: 0.35, pan: 0.3, hp: 420 });
+    this.pluck("bgm", t + 0.004, freq * 2, { gain: gain * 0.35, dur: 0.35, damp: 0.95, decay: 0.99, wet: 0.3, pan: 0.4, hp: 900 });
+  }
 }
 
 let instance: SplendorDuelSound | null = null;
