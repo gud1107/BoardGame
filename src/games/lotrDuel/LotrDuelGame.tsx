@@ -13,7 +13,7 @@ import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity
 import type { PlayableGameProps } from "@/games/types";
 import { chooseBotAction } from "./bot";
 import { applyAction, otherSeat, pendingFactions, seatOf, startGame, type EngineAction, type Faction, type LotrDuelState, type Seat } from "./engine";
-import LotrDuelBoard from "./LotrDuelBoard";
+import LotrDuelBoard, { type CardFocus } from "./LotrDuelBoard";
 import LotrRulebookModal from "./RulebookModal";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
@@ -95,6 +95,7 @@ export default function LotrDuelGame({ onComplete }: PlayableGameProps) {
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<Seat | null>(null);
+  const [opponentFocus, setOpponentFocus] = useState<CardFocus | null>(null);
   const [myName, setMyName] = useState("");
   const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
@@ -234,6 +235,12 @@ export default function LotrDuelGame({ onComplete }: PlayableGameProps) {
       completedRef.current = false;
       setGameState(startGame(seed, fellowshipSeat));
       setPhase("playing");
+    });
+
+    // Ephemeral "which card am I looking at" — only drives the opponent's dust/aura FX, never game state.
+    channel.on("broadcast", { event: "card-focus" }, ({ payload }) => {
+      const focus = payload as CardFocus | undefined;
+      if (focus && focus.seat !== myRole) setOpponentFocus(focus);
     });
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
@@ -417,6 +424,14 @@ export default function LotrDuelGame({ onComplete }: PlayableGameProps) {
       setBotLevels(keepIdx.map((i) => botLevels[i]));
     }
   }
+
+  const handleFocus = useCallback(
+    (slot: number | null, turn: number) => {
+      if (!myRole) return;
+      channelRef.current?.send({ type: "broadcast", event: "card-focus", payload: { seat: myRole, slot, turn } satisfies CardFocus });
+    },
+    [myRole],
+  );
 
   const handleAction = useCallback((action: EngineAction) => {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
@@ -778,6 +793,8 @@ export default function LotrDuelGame({ onComplete }: PlayableGameProps) {
           onLeave={handleLeave}
           onRematch={handleRematch}
           onOpenRulebook={() => setShowRulebook(true)}
+          opponentFocus={opponentFocus}
+          onFocus={handleFocus}
         />
       </>,
     );

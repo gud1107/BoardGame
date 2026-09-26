@@ -464,6 +464,31 @@ UI는 `LotrDuelBoard.tsx`의 트랙 패널(이름 트랙용 `RingTrackBoard.tsx`
 `HistoryLogDrawer.tsx`만 수정(엔진 변경 없음). PC(lg+)의 좌측 sticky 기록 패널 헤더에 `◀ 접기` 버튼 → 접으면 얇은 sticky 세로 탭(📜 기록 + 개수 + ▶)만 남고
 보드가 그 폭(w-60)을 돌려받음, 탭 클릭 시 다시 펼침. 기본은 펼침, 상태는 컴포넌트 로컬(새로고침 시 펼침으로 복귀 — 저장 안 함). 모바일 좌측 탭 + 슬라이드 드로어는 그대로.
 
+### ✨ 반지의 제왕: 가운데땅에서의 대결 (LotR Duel) Turn FX & Dynamic Trajectory Engine — 2026-09-26 후속 (커밋/푸시, 배포는 웹훅 자동)
+
+요청서의 `components/DynamicFlyingFx.tsx`·`components/OpponentActionSparkles.tsx`·`Board.tsx`·`engine/types.ts`·`tailwind.config.js`·`.handoff/games/lotrDuel.md`는 없다
+(Tailwind v4, JS 설정 없음 — 키프레임은 인라인 `<style>`). 요청서의 `h-[100dvh]` 전체 레이아웃 교체·상단 헤더/하단 푸터 재배치는 하지 않고 기존 보드에 얹었다.
+새 파일 `TurnAmbientFX.tsx`, 수정 `LotrDuelBoard.tsx`·`PlayerTechHUD.tsx`·`motionFx.ts`·`LotrDuelGame.tsx`. 엔진 변경 없음.
+
+- **Cinematic Active Turn Ambient FX:**
+  - 오라 색은 **차례인 진영 고유색**(`AURA`: 원정대 = 엘프 골드 + 에메랄드, 사우론 = 진홍) — 요청서 도식이 "나 = 원정대"를 가정했기 때문에 "내 턴 = 금색"이 아니라 진영색으로 일반화.
+    내/상대 구분은 세기와 문구로: 내 턴이면 테두리가 강하고, 상대 턴이면 약한 테두리와 "상대 턴 진행 중" 문구.
+  - `TurnRimLight`: 뷰포트 전체 `fixed inset-0` 인셋 림라이트 맥동(z-34, 클릭 통과). 종착점 임박 적색 비네팅(z-35)은 그 위에 그대로.
+  - 헤더 HUD 테두리 호흡 오라(`lotrturn-breathe`, CSS 변수 `--aura`) + 내 턴 `★ 내 차례 (YOUR TURN)` 부유 뱃지 / 상대 턴 `● 상대 턴 진행 중` + "…이(가) 고심하고 있습니다…".
+  - 하단 sticky `PlayerTechHUD`에 `active` prop — 내 턴에 진영색 테두리 호흡 + `★ YOUR TURN` 뱃지. 하단 `PlayerDock`의 차례 표시도 `ring-1` → 같은 호흡 오라.
+- **Real-Time Opponent Action Dust & Aura (`OpponentFocusAura`):**
+  - 새 브로드캐스트 `card-focus` `{seat, slot, turn}` — 게임 상태와 무관한 휘발성 이벤트(재접속 sync 없음). 내 턴·대기 단계 없음일 때 **마우스 호버(pointerType mouse만)** 또는
+    **연 카드(selectedSlot)** 가 바뀔 때만 전송(같은 값 중복 전송 안 함). 받는 쪽은 상대 좌석·현재 턴 번호가 일치할 때만 그 피라미드 칸에 진영색 안개 오라 + 떨어지는 룬 가루 9개(결정적 배치, Math.random 없음) + "👁️ 사우론 검토 중…" 칩.
+  - **봇 상대는 포커스를 보내지 않는다**(봇은 즉시 행동) — 사람 대 사람 온라인 방에서만 보임.
+- **Dynamic Bidirectional Flight Trajectory:**
+  - 기존엔 **내** 주화 증가만 하단 HUD 주화 칸으로 날아갔고 상대 획득은 연출이 없었다. 이제 양 진영 모두: 내 주화 → 하단 HUD `[data-lotr-coins]`, 상대 주화 → 헤더의 새
+    상대 프로필 칩 `[data-lotr-opp-dock]`/`[data-lotr-opp-coins]`(🪙·🃏 수 표시)로 포물선 비행(기존 `flyTo` 재사용, 상대 쪽은 진영색 글로우·착지 범프).
+  - 카드 내려놓기(PLAY) 시 색 테두리 미니 카드(`motionFx.miniCard`)가 유령 카드 위치에서 행동 주체의 독으로 비행 — 나: 화면 안에 보이는 내 `PlayerDock`, 없으면 하단 HUD / 상대: 헤더 칩.
+    목적지는 `inView()`(뷰포트 안에 보이는 요소 우선)로 매번 실측 — 헤더가 스크롤로 사라졌으면 화면 안의 상대 `PlayerDock`, 둘 다 없으면 헤더 칩(화면 위로 날아감).
+- 헤더 원정 요약 문구도 레이스 규칙에 맞춰 `원정대 N칸 앞 / 나즈굴 N칸 앞 / 같은 칸`으로 교정.
+- 검증: tsc/eslint 통과, lotrDuel 29개 통과. 헤드리스 1440×900 봇전 스크린샷 1장으로 내 턴 림라이트·헤더 뱃지·상대 칩·하단 독 오라 확인(레이아웃 깨짐 없음).
+  상대 포커스 가루(사람 2명 필요)와 비행 궤적(애니메이션)은 실기기 미확인.
+
 ## 💎 스플렌더 대결 (Splendor Duel) — 2인 전용 신규 게임 — 2026-09-25 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: `boardGameRule/스플랜더 대결/스플랜더 대결.md` 룰북 기준 2인 전용 풀스택 신규 게임. 요청서는 `src/data/games.ts`

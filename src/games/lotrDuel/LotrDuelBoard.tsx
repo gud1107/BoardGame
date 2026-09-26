@@ -30,8 +30,9 @@ import {
   type Seat,
 } from "./engine";
 import { ActionCinematicFX, EndingFX, FX_KEYFRAMES, type ActionFX } from "./ActionCinematicFX";
+import { AURA, OpponentFocusAura, TURN_KEYFRAMES, TurnRimLight } from "./TurnAmbientFX";
 import { diffFx, type CardPreview, type FxEvents } from "./fxEvents";
-import { bump, centerOf, flyTo, imprint, visible } from "./motionFx";
+import { bump, centerOf, flyTo, imprint, inView, miniCard, visible } from "./motionFx";
 import { getLotrAudio } from "./lotrAudioEngine";
 import { CardChoiceModal, LandmarkConfirmModal, PendingChoiceModal } from "./ActionChoiceModal";
 import AllianceTokenSelectModal from "./AllianceTokenSelectModal";
@@ -111,7 +112,13 @@ interface Props {
   onLeave: () => void;
   onRematch: () => void;
   onOpenRulebook: () => void;
+  /** The opponent's live card focus (hovered / opened pyramid slot), from the room's `card-focus` broadcast. */
+  opponentFocus?: CardFocus | null;
+  /** Reports my own focused pyramid slot (null = none) so the opponent can see it. */
+  onFocus?: (slot: number | null, turn: number) => void;
 }
+
+export type CardFocus = { seat: Seat; slot: number | null; turn: number };
 
 function stepText(step: PendingStep): string {
   switch (step.kind) {
@@ -136,7 +143,7 @@ function stepText(step: PendingStep): string {
   }
 }
 
-export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnected, onAction, onLeave, onRematch, onOpenRulebook }: Props) {
+export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnected, onAction, onLeave, onRematch, onOpenRulebook, opponentFocus, onFocus }: Props) {
   const myFaction = state.factionOf[viewerSeat];
   const oppFaction = otherFaction(myFaction);
   const oppSeat: Seat = viewerSeat === "p1" ? "p2" : "p1";
@@ -172,6 +179,19 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
     getLotrAudio().play("SELECT");
     onAction(a);
   };
+
+  // ---- live card focus: mine goes out (mouse hover / opened card), the opponent's comes in ----
+  const [hoveredSlot, setHoveredSlot] = useState<number | null>(null);
+  const myFocus = myTurn && !front ? (selectedSlot ?? hoveredSlot) : null;
+  const sentFocus = useRef<number | null>(null);
+  const turnNumber = state.turnNumber;
+  useEffect(() => {
+    if (sentFocus.current === myFocus) return;
+    sentFocus.current = myFocus;
+    onFocus?.(myFocus, turnNumber);
+  }, [myFocus, turnNumber, onFocus]);
+  const oppFocusSlot =
+    state.phase === "PLAYING" && !myTurn && opponentFocus && opponentFocus.seat === oppSeat && opponentFocus.turn === state.turnNumber ? opponentFocus.slot : null;
 
   // ---- cinematic FX, derived during render from the previous replayed state ----
   const [fxPrev, setFxPrev] = useState(state);
@@ -227,23 +247,38 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
     if (ev.combat) window.setTimeout(() => audio.play("COMBAT"), 120);
     ev.ring.forEach((r) => window.setTimeout(() => audio.play(r.faction === "FELLOWSHIP" ? "RING_FELLOWSHIP" : "RING_NAZGUL"), 250));
     if (ev.alliance) window.setTimeout(() => audio.playAlliance(ev.alliance!.token.race), 300);
-    // Motion: coins / tech runes / race seals flying into my HUD.
-    const lastCard =
-      state.lastAction && state.lastAction.no !== p.lastAction?.no && state.lastAction.faction === myFaction && state.lastAction.cardId ? CARD_BY_ID[state.lastAction.cardId] : null;
+    // Motion: coins / cards fly to whoever gained them — mine into my bottom HUD / dock, the
+    // opponent's up into their profile chip in the header — plus tech runes / race seals for me.
+    const actorCard =
+      state.lastAction && state.lastAction.no !== p.lastAction?.no && state.lastAction.cardId ? { faction: state.lastAction.faction, card: CARD_BY_ID[state.lastAction.cardId] } : null;
+    const lastCard = actorCard && actorCard.faction === myFaction ? actorCard.card : null;
     const ghostPt = ev.taken ? centerOf(visible("[data-lotr-ghost]")) : null;
     const srcPt = ghostPt ?? (ev.ring.length ? centerOf(visible("[data-lotr-track]")) : null) ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-    const gain = state.players[myFaction].coins - p.players[myFaction].coins;
-    const coinEl = visible("[data-lotr-coins]");
-    if (gain > 0 && coinEl) {
-      const n = Math.min(gain, 6);
-      for (let i = 0; i < n; i++)
+    const dockOf = (f: Faction, part: "coins" | "cards"): Element | null =>
+      f === myFaction
+        ? part === "coins"
+          ? visible("[data-lotr-coins]")
+          : (inView(`[data-lotr-dock="${f}"]`) ?? visible("[data-lotr-hud]"))
+        : (inView(part === "coins" ? "[data-lotr-opp-coins]" : "[data-lotr-opp-dock]") ?? inView(`[data-lotr-dock="${f}"]`) ?? visible("[data-lotr-opp-dock]"));
+    for (const f of [myFaction, oppFaction]) {
+      const gain = state.players[f].coins - p.players[f].coins;
+      const coinEl = gain > 0 ? dockOf(f, "coins") : null;
+      if (!coinEl) continue;
+      const mine = f === myFaction;
+      for (let i = 0; i < Math.min(gain, 6); i++)
         flyTo("🪙", srcPt, coinEl, {
           delay: 120 + i * 120,
+          glow: mine ? undefined : `rgba(${AURA[f].rgb},.95)`,
           onLand: () => {
-            bump(coinEl);
-            audio.play("COIN");
+            bump(coinEl, mine ? undefined : `rgba(${AURA[f].rgb},.9)`);
+            if (mine || i === 0) audio.play("COIN");
           },
         });
+    }
+    if (actorCard && ev.taken?.mode === "PLAY" && ghostPt) {
+      const target = dockOf(actorCard.faction, "cards");
+      const glow = `rgba(${AURA[actorCard.faction].rgb},.95)`;
+      if (target) flyTo(miniCard(actorCard.card.color, actorCard.card.name), ghostPt, target, { delay: 60, duration: 820, size: 40, glow, onLand: () => bump(target, glow) });
     }
     if (lastCard && ev.taken?.mode === "PLAY" && ghostPt) {
       if (lastCard.color === "GRAY")
@@ -258,7 +293,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
     }
     if (ev.chapter) audio.play("CHAPTER");
     else if (state.phase === "PLAYING" && state.turn === myFaction && p.turn !== myFaction) window.setTimeout(() => audio.play("MY_TURN"), 450);
-  }, [state, myFaction]);
+  }, [state, myFaction, oppFaction]);
 
   // Chapter theme — silently ignored until the first gesture unlocks audio.
   useEffect(() => {
@@ -361,8 +396,10 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
     <div className="flex items-start gap-3 text-white light:text-slate-900">
       <HistoryLogDrawer log={state.log} />
       <div className="flex min-w-0 flex-1 flex-col gap-3">
-      <style>{KEYFRAMES + FX_KEYFRAMES}</style>
+      <style>{KEYFRAMES + FX_KEYFRAMES + TURN_KEYFRAMES}</style>
       <ActionCinematicFX fx={fx} onDismiss={dismissFx} />
+      {/* whose turn: breathing rim of light around the viewport in the active faction's colour */}
+      {state.phase === "PLAYING" && <TurnRimLight faction={state.turn} mine={myTurn} />}
       {/* race danger: a marker 1–2 spaces from the finish — red vignette around the whole board */}
       {state.phase === "PLAYING" && raceDanger(state.ringTrack.frodoPosition, state.ringTrack.nazgulPosition, state.ringTrack.trackLength) && (
         <div className="lotrt-vignette pointer-events-none fixed inset-0 z-[35]" style={{ boxShadow: "inset 0 0 90px 18px rgba(225,29,72,.55)" }} aria-hidden />
@@ -370,24 +407,53 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
       {state.phase === "GAME_OVER" && state.winner && !victoryClosed && <EndingFX winner={state.winner} />}
 
       {/* ---- header HUD ---- */}
-      <div className={`${panel} flex flex-wrap items-center gap-x-4 gap-y-2 bg-gradient-to-r from-amber-900/20 to-transparent`}>
+      <div
+        className={`${panel} flex flex-wrap items-center gap-x-4 gap-y-2 bg-gradient-to-r from-amber-900/20 to-transparent transition-colors duration-500 ${state.phase === "PLAYING" ? "lotrturn-breathe" : ""}`}
+        style={state.phase === "PLAYING" ? ({ "--aura": AURA[state.turn].rgb, borderColor: `rgba(${AURA[state.turn].rgb},${myTurn ? 0.75 : 0.45})` } as CSSProperties) : undefined}
+      >
         <span className="rounded-lg bg-amber-500/20 px-2 py-1 text-sm font-bold text-amber-200 light:text-amber-800">📖 {state.chapter}챕터</span>
         <span className="text-sm">
           {state.phase === "GAME_OVER" ? (
             <b>게임 종료</b>
           ) : myTurn ? (
-            <b className="text-emerald-300 light:text-emerald-700">내 차례 ({FACTION_EMOJI[myFaction]} {FACTION_LABEL[myFaction]})</b>
+            <span className="flex items-center gap-2">
+              <span
+                className="lotrturn-float inline-block rounded-full px-2.5 py-0.5 font-mono text-[11px] font-black text-neutral-950"
+                style={{ background: `linear-gradient(90deg, ${AURA[myFaction].hex}, rgb(${AURA[myFaction].alt}))`, boxShadow: `0 0 14px rgba(${AURA[myFaction].rgb},.9)` }}
+              >
+                ★ 내 차례 (YOUR TURN)
+              </span>
+              <b className="text-emerald-300 light:text-emerald-700">
+                {FACTION_EMOJI[myFaction]} {FACTION_LABEL[myFaction]}
+              </b>
+            </span>
           ) : (
-            <span className="text-white/60 light:text-slate-500">
-              {nameOf(state.turn)}의 차례 ({FACTION_EMOJI[state.turn]} {FACTION_LABEL[state.turn]})
+            <span className="flex items-center gap-2">
+              <span className="animate-pulse rounded-full px-2.5 py-0.5 font-mono text-[11px] font-black text-white" style={{ background: AURA[state.turn].hex }}>
+                ● 상대 턴 진행 중
+              </span>
+              <span className="text-white/60 light:text-slate-500">
+                {nameOf(state.turn)}({FACTION_EMOJI[state.turn]} {FACTION_LABEL[state.turn]})이(가) 고심하고 있습니다…
+              </span>
             </span>
           )}
+        </span>
+        <span
+          data-lotr-opp-dock
+          title="상대 진영 — 상대가 얻은 주화·카드는 여기로 날아옵니다"
+          className={`flex items-center gap-1.5 rounded-xl border px-2 py-0.5 text-xs font-bold transition ${!myTurn && state.phase === "PLAYING" ? "lotrturn-breathe" : "border-white/10"}`}
+          style={!myTurn && state.phase === "PLAYING" ? ({ "--aura": AURA[oppFaction].rgb, borderColor: AURA[oppFaction].hex, background: `rgba(${AURA[oppFaction].rgb},.12)` } as CSSProperties) : undefined}
+        >
+          <span>{FACTION_EMOJI[oppFaction]}</span>
+          <span className="max-w-[7rem] truncate text-white/80 light:text-slate-700">상대 · {nameOf(oppFaction)}</span>
+          <span data-lotr-opp-coins className="font-mono text-amber-300 light:text-amber-700">🪙 {state.players[oppFaction].coins}</span>
+          <span className="font-mono text-white/60 light:text-slate-500">🃏 {state.players[oppFaction].tableauCards.length}</span>
         </span>
         <span className="text-xs text-white/60 light:text-slate-600">
           지역 지배 💍 {controlledCount(state, "FELLOWSHIP")}/7 · 👁️ {controlledCount(state, "SAURON")}/7
         </span>
         <span className="text-xs text-white/60 light:text-slate-600">
-          원정 🧝 {fr}/{L} · 🐉 {nz}/{L} ({fr > nz ? `나즈굴 ${fr - nz}칸 뒤` : nz > fr ? `나즈굴이 ${nz - fr}칸 앞` : "같은 칸"})
+          원정 🧝 {fr}/{L} · 🐉 {nz}/{L} ({fr > nz ? `원정대 ${fr - nz}칸 앞` : nz > fr ? `나즈굴 ${nz - fr}칸 앞` : "같은 칸"})
         </span>
         <span className="ml-auto flex items-center gap-2">
           {state.phase === "GAME_OVER" && state.winner && victoryClosed && (
@@ -500,7 +566,16 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
               const cost = calculateCardCost(me, slot.card);
               const justFlipped = flipped.has(slot.card.id);
               return (
-                <div key={slot.card.id} className="absolute" style={{ ...slotBox(slot), zIndex: selectedSlot === i ? 30 : slot.row + 1 }}>
+                <div
+                  key={slot.card.id}
+                  className="absolute"
+                  style={{ ...slotBox(slot), zIndex: selectedSlot === i || oppFocusSlot === i ? 30 : slot.row + 1 }}
+                  onPointerEnter={(e) => {
+                    if (e.pointerType === "mouse" && available && slot.isOpen) setHoveredSlot(i);
+                  }}
+                  onPointerLeave={() => setHoveredSlot((h) => (h === i ? null : h))}
+                >
+                  {oppFocusSlot === i && <OpponentFocusAura faction={oppFaction} />}
                   {justFlipped && (
                     <span className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
                       {Array.from({ length: 8 }, (_, k) => (
@@ -608,7 +683,7 @@ export default function LotrDuelBoard({ state, viewerSeat, names, opponentConnec
         <PlayerDock state={state} faction={oppFaction} label={`상대 · ${names[oppSeat]}`} />
       </div>
 
-      {state.phase === "PLAYING" && <PlayerTechHUD state={state} faction={myFaction} preview={preview} trigger={passiveTrigger} />}
+      {state.phase === "PLAYING" && <PlayerTechHUD state={state} faction={myFaction} preview={preview} trigger={passiveTrigger} active={myTurn} />}
       </div>
 
       {state.phase === "GAME_OVER" && state.winner && !victoryClosed && (
@@ -689,7 +764,11 @@ function PlayerDock({ state, faction, label, highlight }: { state: LotrDuelState
   const colorCounts = p.tableauCards.reduce<Record<string, number>>((m, c) => ({ ...m, [c.color]: (m[c.color] ?? 0) + 1 }), {});
   const chains = [...new Set(p.tableauCards.map((c) => c.providesChain).filter((x): x is string => !!x))];
   return (
-    <div className={`${panel} ${highlight ? "border-amber-400/30" : ""} ${state.turn === faction && state.phase === "PLAYING" ? "ring-1 ring-emerald-400/50" : ""}`}>
+    <div
+      data-lotr-dock={faction}
+      className={`${panel} ${highlight ? "border-amber-400/30" : ""} ${state.turn === faction && state.phase === "PLAYING" ? "lotrturn-breathe" : ""}`}
+      style={state.turn === faction && state.phase === "PLAYING" ? ({ "--aura": AURA[faction].rgb, borderColor: `rgba(${AURA[faction].rgb},.6)` } as CSSProperties) : undefined}
+    >
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <b className="text-sm">
           {FACTION_EMOJI[faction]} {FACTION_LABEL[faction]}

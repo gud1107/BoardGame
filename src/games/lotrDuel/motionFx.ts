@@ -127,3 +127,22 @@ export function imprint(el: Element | null) {
   a.oncancel = () => ring.remove();
   bump(el);
 }
+
+/** Like `visible`, but only an element at least partly inside the viewport. */
+export function inView(selector: string): Element | null {
+  for (const el of Array.from(document.querySelectorAll(selector))) {
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth) return el;
+  }
+  return null;
+}
+
+const MINI_CARD_TINT: Record<string, string> = { GRAY: "#94a3b8", GREEN: "#34d399", RED: "#f43f5e", YELLOW: "#fbbf24", BLUE: "#38bdf8", PURPLE: "#a78bfa" };
+const MINI_CARD_ICON: Record<string, string> = { GRAY: "⚙️", GREEN: "🌿", RED: "⚔️", YELLOW: "🪙", BLUE: "💍", PURPLE: "🗡️" };
+
+/** Markup for a tiny flying card (colour frame + icon + name) for `flyTo`. */
+export function miniCard(color: string, name: string): string {
+  const tint = MINI_CARD_TINT[color] ?? "#fbbf24";
+  const label = name.replace(/[&<>"']/g, "").slice(0, 6);
+  return `<div style="width:30px;height:40px;border-radius:5px;border:2px solid ${tint};background:linear-gradient(160deg,#1c1917,#0a0a0a);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:13px;line-height:1"><span>${MINI_CARD_ICON[color] ?? "🃏"}</span><span style="font-size:6px;font-weight:900;color:${tint};max-width:26px;overflow:hidden;white-space:nowrap">${label}</span></div>`;
+}

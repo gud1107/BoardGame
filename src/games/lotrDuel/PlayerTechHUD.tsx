@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { SealStamp } from "./CardArt";
 import { FACTION_EMOJI, FACTION_LABEL, RACES, TECHS, TECH_INFO } from "./data";
 import { raceSymbols, techProduction, type Faction, type LotrDuelState, type TechSymbol } from "./engine";
 import type { CardPreview } from "./fxEvents";
 import PlayerPassivesHUD, { type PassiveTrigger } from "./PlayerPassivesHUD";
+import { AURA } from "./TurnAmbientFX";
 
 /**
  * Always-on "my tech" HUD — pinned to the bottom of the viewport (sticky
@@ -32,11 +33,14 @@ export default function PlayerTechHUD({
   faction,
   preview,
   trigger,
+  active,
 }: {
   state: LotrDuelState;
   faction: Faction;
   preview?: CardPreview | null;
   trigger?: PassiveTrigger | null;
+  /** My turn — the dock glows in my faction's aura and floats gently. */
+  active?: boolean;
 }) {
   const p = state.players[faction];
   const { fixed, choices, wild } = techProduction(p);
@@ -59,10 +63,22 @@ export default function PlayerTechHUD({
     ],
   });
   return (
-    <div className="sticky bottom-2 z-30 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl border border-amber-500/35 bg-neutral-950/92 py-2 pr-16 pl-3 text-white shadow-[0_6px_30px_rgba(0,0,0,.6)] backdrop-blur-md select-none">
+    <div
+      data-lotr-hud
+      className={`sticky bottom-2 z-30 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl border border-amber-500/35 bg-neutral-950/92 py-2 pr-16 pl-3 text-white shadow-[0_6px_30px_rgba(0,0,0,.6)] backdrop-blur-md transition-colors duration-500 select-none ${active ? "lotrturn-breathe" : ""}`}
+      style={active ? ({ "--aura": AURA[faction].rgb, borderColor: AURA[faction].hex } as CSSProperties) : undefined}
+    >
       <span className="hidden text-xs font-bold text-neutral-300 sm:inline">
         {FACTION_EMOJI[faction]} 내 진영: {FACTION_LABEL[faction]}
       </span>
+      {active && (
+        <span
+          className="lotrturn-float inline-block rounded-full px-2 py-0.5 font-mono text-[10px] font-black text-neutral-950"
+          style={{ background: `linear-gradient(90deg, ${AURA[faction].hex}, rgb(${AURA[faction].alt}))`, boxShadow: `0 0 12px rgba(${AURA[faction].rgb},.9)` }}
+        >
+          ★ YOUR TURN
+        </span>
+      )}
       <span
         data-lotr-coins
         className={`relative flex items-center gap-1 rounded-xl border-white/10 px-1.5 pr-2 sm:border-l sm:pl-3 ${preview?.coins ? "lotrp-gold" : ""}`}
