@@ -2,6 +2,7 @@
 
 import { COLOR_ACCENT, DuelToken, TOKEN_LABEL, TokenCount } from "./DuelToken";
 import { AbilityJewel, cardFrameStyle, CrownRow, GemWindow, GoldNumeral, royalFrameStyle, WaxSeal } from "./LuxuryArt";
+import CardScene, { sceneFor } from "./CardScene";
 import RoyalPortrait from "./RoyalPortrait";
 import { crownsOf, GEM_ORDER, ROYAL_CROWN_THRESHOLDS, type CardAbility, type DuelCard, type Level, type PlayerState, type RoyalCard, type SplendorDuelState } from "./engine";
 
@@ -39,13 +40,14 @@ export function DuelCardView({
 }) {
   const color = boundColor ?? card.color;
   const costEntries = ([...GEM_ORDER, "pearl"] as const).filter((c) => (card.cost[c] ?? 0) > 0);
+  const scene = sceneFor(card);
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={!onClick}
       style={cardFrameStyle(card.level, affordable)}
-      className={`relative flex aspect-[5/7] w-full flex-col overflow-hidden rounded-lg text-left transition ${
+      className={`group relative flex aspect-[5/7] w-full flex-col overflow-hidden rounded-lg text-left transition ${
         affordable ? "shadow-[0_0_14px_rgba(252,211,77,0.45)]" : "shadow-[0_2px_6px_rgba(0,0,0,0.6)]"
       } ${onClick ? "hover:-translate-y-0.5 hover:brightness-110" : ""}`}
     >
@@ -56,12 +58,14 @@ export function DuelCardView({
           {card.ability && <AbilityJewel ability={card.ability} title={ABILITY_META[card.ability].label} className={compact ? "h-3.5 w-3.5" : "h-5 w-5"} />}
         </span>
       </div>
-      <div className={`flex flex-1 ${compact ? "min-h-0 items-end justify-between gap-0.5 px-0.5 pb-0.5" : "min-h-0 px-1 py-0.5"}`}>
+      <div className={`relative flex flex-1 overflow-hidden ${compact ? "min-h-0 items-end justify-between gap-0.5 px-0.5 pb-0.5" : "min-h-0 px-1 py-0.5"}`}>
+        {/* Phone cards: the scene fills the whole middle band behind the cost column. */}
+        {compact && <CardScene card={card} color={color} className="opacity-80 transition-transform duration-500 group-hover:scale-110" />}
         {/* Phone cards: costs stack down the left edge (like the printed card) so they never wrap and get clipped. */}
         {compact && (
-          <div className="flex flex-col gap-px">
+          <div className="relative flex flex-col gap-px">
             {costEntries.map((c) => (
-              <span key={c} className="inline-flex items-center gap-px rounded-sm bg-black/55 pr-0.5 font-mono text-[9px] leading-none font-bold text-amber-50 ring-1 ring-amber-300/25">
+              <span key={c} className="inline-flex items-center gap-px rounded-sm bg-black/70 pr-0.5 font-mono text-[9px] leading-none font-bold text-amber-50 ring-1 ring-amber-300/25">
                 <DuelToken color={c} className="h-2.5 w-2.5" />
                 {card.cost[c]}
               </span>
@@ -69,14 +73,11 @@ export function DuelCardView({
           </div>
         )}
         <span
-          className={`relative inline-flex items-center ${compact ? "self-center" : "flex-1 justify-center"}`}
-          title={color ? `${TOKEN_LABEL[color]} 보너스 ×${card.bonus}` : card.bonus > 0 ? "복사 보너스" : "보너스 없음"}
+          className={`relative inline-flex ${compact ? "self-end" : "flex-1 items-end justify-end overflow-hidden rounded-md border border-amber-200/30 shadow-[inset_0_0_10px_rgba(0,0,0,0.7)]"}`}
+          title={`${scene.label} · ${color ? `${TOKEN_LABEL[color]} 보너스 ×${card.bonus}` : card.bonus > 0 ? "복사 보너스" : "보너스 없음"}`}
         >
-          <GemWindow
-            color={color}
-            stoneClass={compact ? "h-4 w-4" : "h-8 w-8"}
-            className={compact ? "p-0.5" : "h-full w-full border border-amber-200/20 bg-black/35 shadow-[inset_0_0_10px_rgba(0,0,0,0.7)]"}
-          />
+          {!compact && <CardScene card={card} color={color} className="transition-transform duration-500 group-hover:scale-110" />}
+          <GemWindow color={color} stoneClass={compact ? "h-4 w-4" : "h-6 w-6"} className={compact ? "p-0.5" : "m-0.5 p-0.5"} />
           {card.bonus > 1 && <span className="absolute -right-0.5 bottom-0 rounded bg-black/70 px-0.5 text-[9px] font-bold text-amber-100">×{card.bonus}</span>}
         </span>
       </div>

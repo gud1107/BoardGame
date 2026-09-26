@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ABILITY_META, DuelCardView, RoyalCardView } from "./CardMarket";
+import { sceneFor } from "./CardScene";
 import { AbilityJewel } from "./LuxuryArt";
 import { DuelToken, TOKEN_LABEL } from "./DuelToken";
 import {
@@ -69,7 +70,7 @@ export function CardActionSheet({
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5 text-xs">
           <p className="font-serif text-sm font-bold text-amber-200 light:text-amber-700">
-            {card.level}레벨 카드 · {card.color ? TOKEN_LABEL[card.color] : "무색"}
+            {card.level}레벨 카드 · {card.color ? TOKEN_LABEL[card.color] : "무색"} · {sceneFor(card).label}
           </p>
           <p className="text-white/70 light:text-slate-600">
             ⭐ {card.points}점 · 👑 {card.crowns} · 보너스 {card.bonus}
