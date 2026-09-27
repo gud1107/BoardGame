@@ -38,7 +38,7 @@
 | [analytics-local-store-limitations.md](./analytics-local-store-limitations.md) | 방문/게임 통계를 로컬 파일(`localStore.ts`)로 저장하기로 한 결정이 Vercel 프로덕션에서 구체적으로 어떤 충돌 시나리오·불편함을 낳는지 정리 |
 | [dalmuti-court-bgm-spec.md](./dalmuti-court-bgm-spec.md) | 달무티 중세 궁정 류트 BGM/SFX 신디 엔진 명세(미구현 검토본) — 기존 사운드와의 대조, 명세 코드 결함, 결정 대기 항목 |
 | [coyote-sound-suite.md](./coyote-sound-suite.md) | 코요테 스파게티 웨스턴 밴조/휘파람 BGM + 블러핑 SFX — 파일 구성, 명세와 다르게 한 부분, 검증 결과 |
-| [rat-a-tat-cat-audio-suite.md](./rat-a-tat-cat-audio-suite.md) | 랫어탯캣 살금살금 피치카토 BGM + 카드 액션 SFX(로컬 구현, 배포 대기) — 파일 구성, 명세와 다르게 한 부분, 검증 결과 |
+| [rat-a-tat-cat-audio-suite.md](./rat-a-tat-cat-audio-suite.md) | 랫어탯캣 살금살금 피치카토 BGM + 카드 액션 SFX — 파일 구성, 명세와 다르게 한 부분, 검증 결과 |
 | [coyote-sound-suite.md](./coyote-sound-suite.md) | 코요테 스파게티 웨스턴 밴조/휘파람 BGM + 블러핑 SFX(로컬 구현, 배포 대기) — 파일 구성, 명세와 다르게 한 부분, 검증 결과 |
 
 루트 문서(이 폴더 밖):

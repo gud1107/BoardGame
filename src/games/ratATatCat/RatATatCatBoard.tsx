@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import Avatar from "@/components/common/Avatar";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
-import { getSoundEngine } from "@/lib/audio/soundEngine";
 import CardFlightEffect, { type CardFlight } from "./CardFlightEffect";
 import CardSlot, { CardBack } from "./CardSlot";
 import GameOverReveal from "./RatATatCatEffects";
 import RatATatCatCallModal from "./RatATatCatCallModal";
+import { getRatSound } from "./ratSound";
+import { ratSoundCues } from "./ratSneakScore";
 import { getValidMoves, SLOTS, type EngineAction, type RatATatCatState, type SeatIndex, type SlotIndex } from "./engine";
 
 /**
@@ -344,7 +345,6 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
             source: drawSource,
           },
         ]);
-        getSoundEngine().playCardDrawWhoosh();
       }
       if (drawer !== viewerSeat) pushOpponentBadge(drawer, "📥 드로우 완료");
     }
@@ -367,6 +367,30 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
       }
     }
   }, [state, viewerSeat]);
+
+  // Rat-a-Tat Cat Audio Suite (ratSound.ts): the same consecutive-snapshot
+  // diff with its own ref, so every client hears every seat's draw / swap /
+  // Draw 2 / call — bots included. The card draw flutter replaces the
+  // shared soundEngine whoosh this effect above used to play.
+  const soundPrevRef = useRef(state);
+  useEffect(() => {
+    const prev = soundPrevRef.current;
+    soundPrevRef.current = state;
+    const sound = getRatSound();
+    for (const cue of ratSoundCues(prev, state, viewerSeat)) sound.playCue(cue);
+  }, [state, viewerSeat]);
+  // Sneaking BGM while the round is live (and BGM is unmuted in the site
+  // settings), tenser once someone has called.
+  const bgmLive = state.phase === "playing";
+  useEffect(() => {
+    const sound = getRatSound();
+    sound.setBgmWanted(bgmLive);
+    return () => sound.setBgmWanted(false);
+  }, [bgmLive]);
+  const finalLap = state.callerId !== null;
+  useEffect(() => {
+    getRatSound().setFinalLap(finalLap);
+  }, [finalLap]);
 
   if (state.phase === "gameOver") {
     return <GameOverReveal state={state} names={names} viewerSeat={viewerSeat} onDone={onGameEnd} />;
@@ -497,6 +521,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
     }
     if (state.turnPhase === "EXECUTE_POWER" && state.drawnCard?.kind === "peek") {
       onAction({ type: "USE_SPECIAL_CARD", seat: viewerSeat, power: "peek", slot });
+      getRatSound().peekAction(); // own click only — a Peek use can't be told apart from a plain discard in the state diff (ratSneakScore.ts)
       startPeekReveal(slot);
       return;
     }
@@ -517,7 +542,7 @@ export default function RatATatCatBoard({ state, viewerSeat, names, connectedSea
   const inReplacePick = isMyTurn && state.turnPhase === "DECIDE_CARD";
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5" onPointerDownCapture={() => getRatSound().unlock()}>
       <MyTurnOverlay isMyTurn={isMyTurn} />
       <CardFlightEffect flights={flights} onFlightDone={handleFlightDone} />
       {activeCallModal !== null && (

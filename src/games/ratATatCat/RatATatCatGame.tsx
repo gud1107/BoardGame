@@ -26,6 +26,7 @@ import {
 } from "./engine";
 import RatATatCatBoard from "./RatATatCatBoard";
 import RatATatCatRulebookModal from "./RulebookModal";
+import RatSoundHud from "./RatSoundHud";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
@@ -882,7 +883,8 @@ export default function RatATatCatGame({ onComplete }: PlayableGameProps) {
             ))}
           </div>
         )}
-        <div className="mb-2 flex justify-end">
+        <div className="mb-2 flex items-center justify-end gap-1.5">
+          <RatSoundHud />
           <button onClick={() => setShowRulebook(true)} className="rounded-full border border-white/10 light:border-slate-200 px-3 py-1 text-[11px] text-white/50 light:text-slate-500 hover:border-white/25 light:hover:border-slate-400">
             📖 룰북
           </button>
