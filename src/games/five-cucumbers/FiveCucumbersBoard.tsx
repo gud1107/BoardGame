@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import Avatar from "@/components/common/Avatar";
 import RulebookModal from "./RulebookModal";
+import CucumberSoundHud from "./CucumberSoundHud";
+import { getCucumberSound } from "./cucumberSound";
+import { cardPlaySound, trickTension } from "./cucumberWaltz";
 import { CucumberCluster, CucumberIcon } from "./CucumberIcon";
 import {
   buildCucumberPickupEvents,
@@ -273,6 +276,35 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
       setCardFlyEvents((prev) => [...prev, { ...cardPlay, id: (prev.at(-1)?.id ?? 0) + 1 }]);
     }
   }
+  // Cucumber Sound Suite (cucumberSound.ts): the same consecutive-snapshot
+  // diff, but in an effect (side effects can't run during render) with its
+  // own ref, so every client hears every seat's play — bots included.
+  const soundPrevRef = useRef(state);
+  useEffect(() => {
+    const prev = soundPrevRef.current;
+    soundPrevRef.current = state;
+    if (prev === state) return;
+    const sound = getCucumberSound();
+    const play = detectCardPlayEvent(prev, state);
+    if (play) {
+      const trickMaxBefore = prev.trickPlays.length > 0 ? Math.max(...prev.trickPlays.map((p) => p.card.value)) : null;
+      sound.cardPlayed(cardPlaySound(play.card.value, trickMaxBefore));
+    }
+    const round = state.lastRoundSummary;
+    if (round && round !== prev.lastRoundSummary && round.cucumberPenaltyEach > 0) sound.eatCucumber();
+  }, [state]);
+  // Waltz BGM while the board is on screen and the game is live (and BGM is
+  // unmuted in the site settings), speeding up toward the 7th trick.
+  const bgmLive = state.phase === "playing";
+  useEffect(() => {
+    const sound = getCucumberSound();
+    sound.setBgmWanted(bgmLive);
+    return () => sound.setBgmWanted(false);
+  }, [bgmLive]);
+  useEffect(() => {
+    getCucumberSound().setTension(trickTension(state.trickNumber, TRICKS_PER_ROUND));
+  }, [state.trickNumber]);
+
   // Hold timer — `trickFlash` is a fresh object every time a trick resolves
   // (engine.ts always returns a new `TrickResult`), so this effect reliably
   // re-fires per trick even when two consecutive tricks share the same
@@ -446,6 +478,7 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
 
   return (
     <div
+      onPointerDownCapture={() => getCucumberSound().unlock()}
       className="flex flex-col gap-3 rounded-[28px] border border-black/60 light:border-slate-200 light:shadow-md p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4"
       // Hardcoded dark inline gradient — intentionally left as-is per theme-system guidance.
       style={{ background: "linear-gradient(160deg,#0f2418 0%,#0a1710 45%,#050b07 100%)" }}
@@ -460,7 +493,10 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
             탈락 기준 🥒{state.eliminationThreshold}개
           </span>
         </span>
-        <div className="flex gap-1.5">{rulebookButton}</div>
+        <div className="flex items-center gap-1.5">
+          <CucumberSoundHud />
+          {rulebookButton}
+        </div>
       </div>
 
       {/* `!isHoldActive` guard: once trick 7 resolves, `state.trickNumber` only
