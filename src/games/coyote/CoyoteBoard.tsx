@@ -5,6 +5,9 @@ import Avatar from "@/components/common/Avatar";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
 import RulebookModal from "./RulebookModal";
+import CoyoteSoundHud from "./CoyoteSoundHud";
+import { getCoyoteSound } from "./coyoteSound";
+import { coyoteSoundCues } from "./coyoteWesternScore";
 import { CardFace, EliminatedFace, HeartPips } from "./CardArt";
 import {
   buildFormulaTerms,
@@ -156,6 +159,9 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   const [showFormula, setShowFormula] = useState(false);
   const [displayedTotal, setDisplayedTotal] = useState(0);
   const skippedRef = useRef(false);
+  // Coyote Sound Suite: whether this resolution's heart-loss trombone already
+  // played — the skip button plays it early, the timer must not repeat it.
+  const heartStingPlayedRef = useRef(false);
   if (trackedRes !== res) {
     setTrackedRes(res);
     const noSpecialStages = !res || (!hasQuestionStage && !hasMaxZeroStage);
@@ -183,17 +189,33 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   // 오버레이라 전체화면 데스 스탬프와 겹쳐도 무관, 대기시킬 필요 없음).
   useEffect(() => {
     skippedRef.current = false;
+    heartStingPlayedRef.current = false;
     if (!res || state.phase === "playing") return;
     const timers: number[] = [];
     let t = 0;
+    // Coyote Sound Suite stings ride this same timeline; a skip mutes the
+    // special-card chimes still pending (their visuals are skipped too).
+    const chime = () => {
+      if (!skippedRef.current) getCoyoteSound().specialCard();
+    };
     if (hasQuestionStage) {
-      timers.push(window.setTimeout(() => setQuestionStage("popup"), QUESTION_PULSE_MS));
+      timers.push(
+        window.setTimeout(() => {
+          setQuestionStage("popup");
+          chime();
+        }, QUESTION_PULSE_MS),
+      );
       t = QUESTION_PULSE_MS + QUESTION_POPUP_MS;
       timers.push(window.setTimeout(() => setQuestionStage("done"), t));
     }
     if (hasMaxZeroStage) {
       const slashAt = t;
-      timers.push(window.setTimeout(() => setMaxZeroStage("slashing"), slashAt));
+      timers.push(
+        window.setTimeout(() => {
+          setMaxZeroStage("slashing");
+          chime();
+        }, slashAt),
+      );
       t = slashAt + MAXZERO_SLASH_MS;
       timers.push(window.setTimeout(() => setMaxZeroStage("done"), t));
     }
@@ -205,6 +227,11 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
         }, t),
       );
     }
+    // x2 / 밤 have no stage of their own — they chime as the formula appears.
+    if (res.doubled || res.nightCardHolderSeat !== null) timers.push(window.setTimeout(chime, t));
+    // The verdict: the loser's sad trombone once the count-up lands. An
+    // elimination skips it — the shake → shatter → skull chain has its own stings.
+    if (!hasDeathStage) timers.push(window.setTimeout(playHeartSting, t + 600));
     if (hasDeathStage) {
       const deathStartAt = hasQuestionStage ? QUESTION_PULSE_MS + QUESTION_POPUP_MS + 100 : 150;
       timers.push(
@@ -247,10 +274,17 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     return () => cancelAnimationFrame(raf);
   }, [countingActive, res]);
 
+  function playHeartSting() {
+    if (heartStingPlayedRef.current) return;
+    heartStingPlayedRef.current = true;
+    getCoyoteSound().loseHeart();
+  }
+
   /** "⏩ 스킵" — 애니메이션을 기다리지 않고 즉시 "?"/MAX 연출을 건너뛴 계산식+하이라이트 완료 화면으로 전환. */
   function handleSkipReveal() {
     if (revealSettled) return;
     skippedRef.current = true;
+    if (!hasDeathStage) playHeartSting();
     setQuestionStage("done");
     setMaxZeroStage("done");
     setDeathStage("done");
@@ -259,6 +293,25 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     if (res) setDisplayedTotal(res.finalTotal);
     setRevealSettled(true);
   }
+
+  // Coyote Sound Suite (coyoteSound.ts): every client hears every seat's
+  // declaration and "코요테!" call — bots and remote players included — from
+  // its own consecutive-snapshot diff.
+  const soundPrevRef = useRef(state);
+  useEffect(() => {
+    const prev = soundPrevRef.current;
+    soundPrevRef.current = state;
+    const sound = getCoyoteSound();
+    for (const cue of coyoteSoundCues(prev, state)) sound.playCue(cue);
+  }, [state]);
+  // Western BGM while a round's bidding is live (and BGM is unmuted in the
+  // site settings); it rests through the showdown, whose stings take over.
+  const bgmLive = state.phase === "playing";
+  useEffect(() => {
+    const sound = getCoyoteSound();
+    sound.setBgmWanted(bgmLive);
+    return () => sound.setBgmWanted(false);
+  }, [bgmLive]);
 
   const rulebookButton = (
     <button
@@ -432,6 +485,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
 
   return (
     <div
+      onPointerDownCapture={() => getCoyoteSound().unlock()}
       className={`relative flex flex-col gap-3 rounded-[28px] border border-black/60 p-2.5 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-4 ${boardShaking ? DEATH_SHAKE_CLASS : ""}`}
       // Hardcoded dark wood-table gradient — deliberately left as-is in light mode (thematic board felt, not UI chrome); direct-child text/header below is left unstyled too since this backdrop never lightens.
       style={{ background: "linear-gradient(160deg,#3a2410 0%,#20140a 45%,#0d0805 100%)" }}
@@ -441,7 +495,10 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
         <span>
           {state.playerCount}인 · {state.roundNumber}라운드 · 하트 {STARTING_HEARTS}개 모두 잃으면 탈락
         </span>
-        <div className="flex gap-1.5">{rulebookButton}</div>
+        <div className="flex items-center gap-1.5">
+          <CoyoteSoundHud />
+          {rulebookButton}
+        </div>
       </div>
 
       {/* Round table: every seat's forehead card placed around an ellipse, viewer at the bottom. Widens for 7-8 players (see `compact`) so seatPosition's slightly larger radius has more physical room to spread cards apart. */}
