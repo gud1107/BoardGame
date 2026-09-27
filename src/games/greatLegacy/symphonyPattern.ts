@@ -1,5 +1,5 @@
 /**
- * The 위대한 투자 "로열 체임버 심포니" BGM score as pure data:
+ * The 최고의 투자 "로열 체임버 심포니" BGM score as pure data:
  * `symphonyEventsAt(step)` says what plays on each eighth-note step. No Web
  * Audio here (the synth is investmentSound.ts), so the score is testable.
  *

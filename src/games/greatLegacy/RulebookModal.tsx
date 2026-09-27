@@ -13,7 +13,7 @@ export default function RulebookModal({ onClose, mode }: { onClose: () => void; 
   const spec8p = MODE_SPEC["8p"];
 
   return (
-    <Overlay title="📖 위대한 투자 룰북" onClose={onClose} wide>
+    <Overlay title="📖 최고의 투자 룰북" onClose={onClose} wide>
       <div className="flex flex-col gap-5 text-sm text-white/80 light:text-slate-700">
         <section>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500">목표</h3>

@@ -2,7 +2,7 @@ import { isBgmEffectivelyMuted, isSfxEffectivelyMuted, useAudioSettingsStore, ty
 import { STEPS_PER_BAR, symphonyEventsAt, symphonyTempo, type SymphonyContext, type SymphonyEvent, type SymphonyMood } from "./symphonyPattern";
 
 /**
- * 위대한 투자 전용 procedural audio ("Investment Sound Suite") — a restrained
+ * 최고의 투자 전용 procedural audio ("Investment Sound Suite") — a restrained
  * royal-chamber-symphony BGM (low strings, French-horn pad, grand-piano line,
  * soft timpani; score in symphonyPattern.ts — with a darker penalty-card
  * mood and a "heat" level that speeds/thickens it as bids climb) plus

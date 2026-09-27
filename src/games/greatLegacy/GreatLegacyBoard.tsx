@@ -192,7 +192,7 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
           // Hardcoded dark inline gradient (via Tailwind arbitrary colors) — intentionally left as-is per theme-system guidance.
         >
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white/80 light:text-slate-800">📈 위대한 투자 — {state.mode === "4p" ? "4인" : "8인"} 경매</h2>
+            <h2 className="text-sm font-bold text-white/80 light:text-slate-800">📈 최고의 투자 — {state.mode === "4p" ? "4인" : "8인"} 경매</h2>
             <div className="flex items-center gap-2">
               <span className="text-xs text-white/40 light:text-slate-400">남은 매물 {state.deck.length + (auction ? 1 : 0)}장</span>
               <InvestmentSoundHud />

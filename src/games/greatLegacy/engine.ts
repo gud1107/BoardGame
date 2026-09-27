@@ -1,5 +1,5 @@
 /**
- * Pure "위대한 투자" (The Great Investment) rules engine — no React, no I/O.
+ * Pure "최고의 투자" (The Best Investment) rules engine — no React, no I/O.
  * Re-themed from the "위대한 유산" relic-auction engine into a stock/crypto
  * portfolio auction; the bidding/scoring primitives are unchanged, only the
  * card content and special-effect names differ. Same online-multiplayer

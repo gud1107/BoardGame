@@ -1,5 +1,5 @@
 /**
- * Type contracts for 위대한 투자 (The Great Investment) — a psychological
+ * Type contracts for 최고의 투자 (The Best Investment) — a psychological
  * auction game (하이 소사이어티 motif, re-themed from the "위대한 유산"
  * relic-auction engine into a stock/crypto portfolio auction) where players
  * leverage a credit-line purse to bid on asset cards and "이벤트" special
