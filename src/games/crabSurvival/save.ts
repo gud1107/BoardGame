@@ -21,7 +21,18 @@ export interface CrabSave {
   totalKills: number;
   kingSeconds: number;
   maxLevel: number;
+  /** Per-species lifetime records. */
+  speciesStats: Partial<Record<SpeciesId, SpeciesRecord>>;
 }
+
+export interface SpeciesRecord {
+  best: number;
+  wins: number;
+  matches: number;
+  maxLevel: number;
+}
+
+export const EMPTY_RECORD: SpeciesRecord = { best: 0, wins: 0, matches: 0, maxLevel: 1 };
 
 const KEY = "crab-survival-save-v1";
 
@@ -41,6 +52,7 @@ export function freshSave(): CrabSave {
     totalKills: 0,
     kingSeconds: 0,
     maxLevel: 1,
+    speciesStats: {},
   };
 }
 

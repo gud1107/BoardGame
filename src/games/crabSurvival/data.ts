@@ -69,6 +69,10 @@ export interface SpeciesDef {
   lateCost: number;
   /** Body proportions for the renderer. */
   build: { clawL: number; clawR: number; leg: number; body: number };
+  /** Lifetime trophies needed to pick this species in the lobby (0 = free). */
+  unlock: number;
+  /** Species trait that flares up on every level-up. */
+  perk: { icon: string; name: string; desc: string; seconds: number; color: string };
 }
 
 export const SPECIES: Record<SpeciesId, SpeciesDef> = {
@@ -77,28 +81,46 @@ export const SPECIES: Record<SpeciesId, SpeciesDef> = {
     blurb: "기획서 기준 로드맵 그대로. 어느 구간에서도 무난하게 싸우고 자랍니다.",
     atk: 1, hp: 1, speed: 1, scale: 1, crit: 0, staminaDrain: 1, regen: 1, earlyCost: 1, lateCost: 1,
     build: { clawL: 1, clawR: 1, leg: 1, body: 1 },
+    unlock: 0,
+    perk: { icon: "🌸", name: "꽃잎 회복", desc: "레벨업 때 체력 10% 추가 회복", seconds: 0, color: "#f472b6" },
   },
   fiddler: {
     id: "fiddler", name: "농게", role: "파워형",
     blurb: "한쪽 집게가 거대합니다. 공격력 +30%·치명타 +5%, 대신 체력과 발이 조금 약합니다.",
     atk: 1.3, hp: 0.9, speed: 0.95, scale: 1, crit: 0.05, staminaDrain: 1, regen: 1, earlyCost: 1.05, lateCost: 1,
     build: { clawL: 0.7, clawR: 1.75, leg: 1, body: 0.95 },
+    unlock: 20,
+    perk: { icon: "💥", name: "분노의 집게", desc: "레벨업 후 3초간 공격력 +25%", seconds: 3, color: "#fb923c" },
   },
   ghost: {
     id: "ghost", name: "달랑게", role: "스피드형",
     blurb: "모래사장의 단거리 선수. 이동 +15%·부스트 소모 -30%, 초반 레벨업이 빠르지만 후반 성장은 더딥니다.",
     atk: 0.85, hp: 0.85, speed: 1.15, scale: 0.92, crit: 0.02, staminaDrain: 0.7, regen: 1, earlyCost: 0.75, lateCost: 1.15,
     build: { clawL: 0.8, clawR: 0.8, leg: 1.35, body: 0.9 },
+    unlock: 60,
+    perk: { icon: "💨", name: "질주 본능", desc: "레벨업 때 스태미나 가득 + 2.5초간 이동 +20%", seconds: 2.5, color: "#fde68a" },
   },
   snow: {
     id: "snow", name: "대게", role: "탱커형",
     blurb: "긴 다리의 철갑. 체력 +35%·자연 회복 +50%, 초반엔 느리게 크지만 후반 레벨업이 가장 빠릅니다.",
     atk: 0.9, hp: 1.35, speed: 0.9, scale: 1.08, crit: 0, staminaDrain: 1, regen: 1.5, earlyCost: 1.2, lateCost: 0.88,
     build: { clawL: 0.9, clawR: 0.9, leg: 1.5, body: 1.05 },
+    unlock: 120,
+    perk: { icon: "🧊", name: "철갑 경화", desc: "레벨업 후 3초간 받는 피해 -30%", seconds: 3, color: "#7dd3fc" },
   },
 };
 
 export const SPECIES_LIST: SpeciesDef[] = Object.values(SPECIES);
+
+/** Level-up surge strengths (see SpeciesDef.perk). */
+export const PERK_ATK = 1.25;
+export const PERK_SPEED = 1.2;
+export const PERK_ARMOR = 0.7;
+export const PERK_HEAL = 0.1;
+
+export function isUnlocked(species: SpeciesId, trophies: number): boolean {
+  return trophies >= SPECIES[species].unlock;
+}
 
 const roadmapCache = new Map<SpeciesId, LevelDef[]>();
 

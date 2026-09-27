@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LEVELS, levelForScore, MAX_LEVEL, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES_LIST, STAMINA_MAX } from "./data";
+import { isUnlocked, LEVELS, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
 import { addScore, botThink, createWorld, player, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
 
 const idle: CrabInput = { moveX: 0, moveY: 0, boost: false, attack: false };
@@ -180,6 +180,50 @@ describe("combat", () => {
     expect(me.score).toBe(5_000);
     expect(me.weapon).toEqual({ kind: "bat", dur: 4 });
     expect(w.revivesLeft).toBe(0);
+  });
+});
+
+describe("species level-up traits + unlocks", () => {
+  it("only 꽃게 is free; the rest unlock by lifetime trophies", () => {
+    expect(isUnlocked("flower", 0)).toBe(true);
+    for (const sp of SPECIES_LIST.filter((x) => x.id !== "flower")) {
+      expect(isUnlocked(sp.id, sp.unlock - 1)).toBe(false);
+      expect(isUnlocked(sp.id, sp.unlock)).toBe(true);
+    }
+  });
+
+  it("each species fires its own surge on level-up", () => {
+    const w = bare();
+    const me = player(w);
+
+    me.species = "ghost";
+    me.stamina = 10;
+    addScore(w, me, 500);
+    expect(me.level).toBeGreaterThan(1);
+    expect(me.stamina).toBe(STAMINA_MAX);
+    expect(me.surge).toBeCloseTo(SPECIES.ghost.perk.seconds);
+    const ev = w.events.find((e) => e.type === "levelUp");
+    expect(ev && ev.type === "levelUp" && ev.species).toBe("ghost");
+    expect(w.particles.some((p) => p.kind === "streak")).toBe(true);
+
+    const w2 = bare(1);
+    const [tank, foe] = w2.crabs;
+    tank.species = "snow";
+    foe.x = 40;
+    tank.angle = 0; // facing away from nothing in particular; no shield anyway
+    foe.angle = Math.PI;
+    tank.hp = tank.maxHp = 1e6;
+    swing(w2, foe);
+    const plain = 1e6 - tank.hp;
+    tank.hp = 1e6;
+    tank.surge = 3;
+    foe.attackCd = 0;
+    foe.combo = 0;
+    foe.comboT = 0;
+    swing(w2, foe);
+    const armored = 1e6 - tank.hp;
+    expect(armored).toBeLessThanOrEqual(Math.ceil(plain * PERK_ARMOR * 1.25 * 1.75));
+    expect(armored).toBeLessThan(plain * 1.25);
   });
 });
 

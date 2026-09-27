@@ -77,7 +77,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className={H3}>성장 경로 (게 종류)</h3>
           <p className={`mb-2 text-xs ${P}`}>
-            로비에서 고른 게 종류에 따라 위 표에 능력치 배율이 붙고, 레벨업 필요 점수 곡선도 달라집니다. AI 게들도 무작위 종류로 등장합니다.
+            로비에서 고른 게 종류에 따라 위 표에 능력치 배율이 붙고, 레벨업 필요 점수 곡선도 달라집니다. 레벨업할 때마다 종류별 <b>특성</b>이 잠깐 발동합니다. 꽃게 외 경로는 누적 🏆 트로피로 해금되며(1위 +30 · 2위 +20 · 3위 +14 · 상위 절반 +8 · 그 외 +2), 종류별 전적(최고 점수·1위 횟수)이 따로 기록됩니다. AI 게들은 무작위 종류로 등장합니다.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-center text-xs">
@@ -90,6 +90,8 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
                   <th className="px-2 py-1">특성</th>
                   <th className="px-2 py-1">Lv7 필요</th>
                   <th className="px-2 py-1">Lv12 필요</th>
+                  <th className="px-2 py-1">레벨업 특성</th>
+                  <th className="px-2 py-1">해금</th>
                 </tr>
               </thead>
               <tbody>
@@ -112,6 +114,10 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
                       <td className={TD}>{extra.join(" · ") || "—"}</td>
                       <td className={`${TD} tabular-nums`}>{road[6].points.toLocaleString()}</td>
                       <td className={`${TD} tabular-nums`}>{road[11].points.toLocaleString()}</td>
+                      <td className={TD}>
+                        {sp.perk.icon} {sp.perk.name} — {sp.perk.desc}
+                      </td>
+                      <td className={TD}>{sp.unlock === 0 ? "기본" : `🏆 ${sp.unlock}`}</td>
                     </tr>
                   );
                 })}

@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PlayableGameProps } from "../types";
-import { CRAB_COLORS, MATCH_LENGTHS, roadmap, SPECIES, SPECIES_LIST, type CrabColor, type ShieldKind, type SpeciesId, type WeaponKind } from "./data";
+import { CRAB_COLORS, isUnlocked, MATCH_LENGTHS, roadmap, SPECIES, SPECIES_LIST, type CrabColor, type ShieldKind, type SpeciesId, type WeaponKind } from "./data";
 import type { MatchSummary } from "./engine";
 import CrabSurvivalCanvas from "./CrabSurvivalCanvas";
 import RulebookModal from "./RulebookModal";
 import { drawCrabPreview } from "./render";
-import { freshSave, loadSave, trophiesFor, writeSave, type CrabSave } from "./save";
+import { EMPTY_RECORD, freshSave, loadSave, trophiesFor, writeSave, type CrabSave, type SpeciesRecord } from "./save";
 
 /**
  * Solo arcade loop: 로비(닉네임·색·경기 시간) → 경기(CrabSurvivalCanvas, AI 게
@@ -18,6 +18,17 @@ import { freshSave, loadSave, trophiesFor, writeSave, type CrabSave } from "./sa
 
 type Screen = "menu" | "playing" | "results";
 
+interface MatchResult {
+  s: MatchSummary;
+  newBest: boolean;
+  trophies: number;
+  species: SpeciesId;
+  record: SpeciesRecord;
+  /** Beat this species' previous best (not counted on its first match). */
+  speciesBest: boolean;
+  unlocked: SpeciesId[];
+}
+
 export default function CrabSurvivalGame({ participants, onComplete }: PlayableGameProps) {
   // Client-only component (dynamic import with ssr:false), so localStorage is safe here.
   const [save, setSave] = useState<CrabSave>(() => {
@@ -26,7 +37,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
   });
   const [screen, setScreen] = useState<Screen>("menu");
   const [runKey, setRunKey] = useState(0);
-  const [result, setResult] = useState<{ s: MatchSummary; newBest: boolean; trophies: number } | null>(null);
+  const [result, setResult] = useState<MatchResult | null>(null);
   const [showRules, setShowRules] = useState(false);
 
   const update = (fn: (s: CrabSave) => CrabSave) => {
@@ -38,6 +49,8 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
   };
 
   const color = CRAB_COLORS.find((c) => c.id === save.colorId) ?? CRAB_COLORS[0];
+  // A species only counts once unlocked; anything else falls back to 꽃게.
+  const species: SpeciesId = isUnlocked(save.species, save.trophies) ? save.species : "flower";
 
   const start = () => {
     setRunKey((k) => k + 1);
@@ -47,6 +60,14 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
   const handleEnd = (s: MatchSummary) => {
     const trophies = trophiesFor(s.rank, s.total);
     const newBest = s.score > save.best;
+    const prevRec = save.speciesStats[species] ?? EMPTY_RECORD;
+    const record: SpeciesRecord = {
+      best: Math.max(prevRec.best, s.score),
+      wins: prevRec.wins + (s.rank === 1 ? 1 : 0),
+      matches: prevRec.matches + 1,
+      maxLevel: Math.max(prevRec.maxLevel, s.stats.maxLevel),
+    };
+    const unlocked = SPECIES_LIST.filter((sp) => !isUnlocked(sp.id, save.trophies) && isUnlocked(sp.id, save.trophies + trophies)).map((sp) => sp.id);
     update((sv) => ({
       ...sv,
       best: Math.max(sv.best, s.score),
@@ -56,8 +77,9 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
       totalKills: sv.totalKills + s.stats.kills,
       kingSeconds: sv.kingSeconds + Math.round(s.stats.kingSeconds),
       maxLevel: Math.max(sv.maxLevel, s.stats.maxLevel),
+      speciesStats: { ...sv.speciesStats, [species]: record },
     }));
-    setResult({ s, newBest, trophies });
+    setResult({ s, newBest, trophies, species, record, speciesBest: s.score > prevRec.best && prevRec.matches > 0, unlocked });
     setScreen("results");
   };
 
@@ -72,7 +94,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
         key={runKey}
         playerName={save.name.trim() || "나"}
         colorId={save.colorId}
-        species={save.species}
+        species={species}
         duration={save.duration}
         muted={save.muted}
         onToggleMute={() => update((s) => ({ ...s, muted: !s.muted }))}
@@ -85,7 +107,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
 
   return (
     <div className="flex flex-col gap-4">
-      {screen === "results" && result && <ResultsPanel result={result} color={color} species={save.species} onRetry={start} onMenu={() => setScreen("menu")} />}
+      {screen === "results" && result && <ResultsPanel result={result} color={color} onRetry={start} onMenu={() => setScreen("menu")} />}
 
       {screen === "menu" && (
         <>
@@ -113,10 +135,10 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
             {/* Preview */}
             <div className="flex flex-col items-center gap-2">
               <div className="w-full rounded-xl bg-gradient-to-b from-amber-100 to-amber-200 p-2 light:from-amber-50 light:to-amber-100">
-                <CrabPreview color={color} species={save.species} width={260} height={170} animate weapon="bat" shield="potLid" />
+                <CrabPreview color={color} species={species} width={260} height={170} animate weapon="bat" shield="potLid" />
               </div>
               <div className="text-center text-sm font-black text-white light:text-slate-900">
-                {save.name.trim() || "이름 없는 게"} <span className="text-xs font-semibold text-white/50 light:text-slate-400">· {SPECIES[save.species].name}({SPECIES[save.species].role}) · {color.name}</span>
+                {save.name.trim() || "이름 없는 게"} <span className="text-xs font-semibold text-white/50 light:text-slate-400">· {SPECIES[species].name}({SPECIES[species].role}) · {color.name}</span>
               </div>
               <div className="grid w-full grid-cols-3 gap-1 text-center text-[10px] text-white/60 light:text-slate-500">
                 <Stat label="누적 처치" value={`✂️ ${save.totalKills}`} />
@@ -149,7 +171,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
                       }`}
                       title={c.name}
                     >
-                      <CrabPreview color={c} species={save.species} width={56} height={40} />
+                      <CrabPreview color={c} species={species} width={56} height={40} />
                       <span className="truncate text-[9px] text-white/70 light:text-slate-600">{c.name}</span>
                     </button>
                   ))}
@@ -171,11 +193,11 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
                   ))}
                 </div>
               </div>
-              <RoadmapChips species={save.species} />
+              <RoadmapChips species={species} />
             </div>
           </div>
 
-          <SpeciesPicker value={save.species} color={color} onChange={(id) => update((s) => ({ ...s, species: id }))} />
+          <SpeciesPicker value={species} color={color} trophies={save.trophies} records={save.speciesStats} onChange={(id) => update((s) => ({ ...s, species: id }))} />
 
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
@@ -263,17 +285,16 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 function ResultsPanel({
   result,
   color,
-  species,
   onRetry,
   onMenu,
 }: {
-  result: { s: MatchSummary; newBest: boolean; trophies: number };
+  result: MatchResult;
   color: CrabColor;
-  species: SpeciesId;
   onRetry: () => void;
   onMenu: () => void;
 }) {
-  const { s, newBest, trophies } = result;
+  const { s, newBest, trophies, species, record, speciesBest, unlocked } = result;
+  const sp = SPECIES[species];
   const lv = roadmap(species)[Math.max(0, s.stats.maxLevel - 1)];
   const title = s.rank === 1 ? "👑 섬의 왕!" : s.rank <= 3 ? "🥈 포디움 입성!" : s.endedByDeath ? "뒤집혔지만 잘 싸웠다!" : "생존 완료!";
   return (
@@ -289,11 +310,31 @@ function ResultsPanel({
         <div className="mt-1 text-xl font-black text-yellow-300 tabular-nums light:text-amber-600">{s.score.toLocaleString()}점</div>
         <div className="mt-1 flex gap-1.5">
           {newBest && <span className="animate-bounce rounded-full bg-yellow-400 px-3 py-0.5 text-xs font-black text-slate-900">🏆 최고 기록!</span>}
+          {speciesBest && <span className="rounded-full bg-pink-400 px-3 py-0.5 text-xs font-black text-slate-900">🧬 {sp.name} 신기록!</span>}
           <span className="rounded-full bg-orange-500/20 px-3 py-0.5 text-xs font-black text-orange-200 light:text-orange-700">트로피 +{trophies}</span>
         </div>
         <p className="mt-2 text-xs text-white/50 light:text-slate-500">
           {Math.floor(s.seconds / 60)}분 {s.seconds % 60}초 · {s.endedByDeath ? `${s.killedBy ?? "누군가"}에게 뒤집혀 종료` : "제한 시간 생존"}
         </p>
+      </div>
+      {unlocked.length > 0 && (
+        <div className="rounded-xl border border-yellow-300/40 bg-yellow-400/10 p-3 text-center">
+          <div className="text-sm font-black text-yellow-200 light:text-amber-700">🔓 새 성장 경로 해금!</div>
+          <div className="mt-0.5 text-xs text-white/70 light:text-slate-600">
+            {unlocked.map((id) => `${SPECIES[id].name}(${SPECIES[id].role})`).join(" · ")} — 로비에서 골라 보세요
+          </div>
+        </div>
+      )}
+      <div className="rounded-xl bg-white/5 p-3 light:bg-slate-100">
+        <div className="mb-1.5 text-xs font-semibold text-white/50 light:text-slate-500">
+          🧬 {sp.name}({sp.role}) 전적
+        </div>
+        <div className="grid grid-cols-4 gap-2 text-center">
+          <Stat label="최고 점수" value={fmtK(record.best)} />
+          <Stat label="1위" value={`${record.wins}회`} />
+          <Stat label="플레이" value={`${record.matches}판`} />
+          <Stat label="최대 성장" value={`Lv${record.maxLevel}`} />
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
         <Stat label="처치" value={`✂️ ${s.stats.kills}`} />
@@ -373,7 +414,19 @@ function RoadmapChips({ species }: { species: SpeciesId }) {
   );
 }
 
-function SpeciesPicker({ value, color, onChange }: { value: SpeciesId; color: CrabColor; onChange: (id: SpeciesId) => void }) {
+function SpeciesPicker({
+  value,
+  color,
+  trophies,
+  records,
+  onChange,
+}: {
+  value: SpeciesId;
+  color: CrabColor;
+  trophies: number;
+  records: CrabSave["speciesStats"];
+  onChange: (id: SpeciesId) => void;
+}) {
   const base = roadmap("flower");
   const bar = (v: number) => `${Math.max(8, Math.min(100, (v / 1.4) * 100))}%`;
   const tone = (v: number) => (v < 1 ? "text-emerald-300 light:text-emerald-600" : v > 1 ? "text-rose-300 light:text-rose-600" : "");
@@ -381,12 +434,14 @@ function SpeciesPicker({ value, color, onChange }: { value: SpeciesId; color: Cr
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 light:border-slate-200 light:bg-white light:shadow-sm">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-1">
         <div className="text-sm font-black text-white light:text-slate-900">🧬 성장 경로 선택</div>
-        <div className="text-[10px] text-white/40 light:text-slate-400">게 종류마다 능력치와 레벨업 곡선이 다릅니다</div>
+        <div className="text-[10px] text-white/40 light:text-slate-400">트로피를 모아 새 경로를 해금하세요 · 보유 🏆 {trophies}</div>
       </div>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {SPECIES_LIST.map((sp) => {
           const road = roadmap(sp.id);
           const active = sp.id === value;
+          const open = isUnlocked(sp.id, trophies);
+          const rec = records[sp.id];
           // Cost to reach Lv7 (성체) vs 꽃게, and cost of Lv7→Lv12 vs 꽃게.
           const early = road[6].points / base[6].points;
           const late = (road[11].points - road[6].points) / (base[11].points - base[6].points);
@@ -398,14 +453,24 @@ function SpeciesPicker({ value, color, onChange }: { value: SpeciesId; color: Cr
           return (
             <button
               key={sp.id}
+              disabled={!open}
               onClick={() => onChange(sp.id)}
-              className={`flex flex-col gap-1 rounded-xl border p-2 text-left transition ${
+              className={`relative flex flex-col gap-1 rounded-xl border p-2 text-left transition disabled:cursor-not-allowed ${
                 active ? "border-orange-400 bg-orange-500/15 ring-2 ring-orange-400/50" : "border-white/10 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-slate-50"
               }`}
             >
-              <div className="rounded-lg bg-gradient-to-b from-amber-100 to-amber-200">
+              <div className={`relative rounded-lg bg-gradient-to-b from-amber-100 to-amber-200 ${open ? "" : "opacity-40 grayscale"}`}>
                 <CrabPreview color={color} species={sp.id} width={120} height={70} animate={active} />
               </div>
+              {!open && (
+                <div className="absolute inset-x-2 top-2 flex h-[70px] flex-col items-center justify-center gap-1 rounded-lg bg-slate-950/55 text-white">
+                  <span className="text-lg">🔒</span>
+                  <span className="text-[10px] font-black">🏆 {sp.unlock} 필요</span>
+                  <div className="h-1 w-3/4 overflow-hidden rounded-full bg-white/20">
+                    <div className="h-full rounded-full bg-yellow-300" style={{ width: `${Math.min(100, (trophies / sp.unlock) * 100)}%` }} />
+                  </div>
+                </div>
+              )}
               <div className="flex items-baseline gap-1">
                 <span className="text-sm font-black text-white light:text-slate-900">{sp.name}</span>
                 <span className="text-[10px] font-bold text-orange-300 light:text-orange-600">{sp.role}</span>
@@ -423,12 +488,33 @@ function SpeciesPicker({ value, color, onChange }: { value: SpeciesId; color: Cr
               <div className="text-[9px] text-white/50 light:text-slate-500">
                 필요 점수 초반 <b className={tone(early)}>{Math.round(early * 100)}%</b> · 후반 <b className={tone(late)}>{Math.round(late * 100)}%</b>
               </div>
+              <div className="rounded bg-black/20 px-1.5 py-1 text-[9px] leading-snug text-white/70 light:bg-white light:text-slate-600">
+                <b style={{ color: sp.perk.color }}>
+                  {sp.perk.icon} {sp.perk.name}
+                </b>{" "}
+                {sp.perk.desc}
+              </div>
+              <div className="text-[9px] text-white/60 light:text-slate-500">
+                {rec && rec.matches > 0 ? (
+                  <>
+                    📊 최고 <b className="text-white/85 light:text-slate-800">{fmtK(rec.best)}</b> · 1위 {rec.wins}회 · {rec.matches}판
+                  </>
+                ) : (
+                  "📊 아직 전적 없음"
+                )}
+              </div>
             </button>
           );
         })}
       </div>
     </div>
   );
+}
+
+function fmtK(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 10_000) return `${(n / 1000).toFixed(1)}k`;
+  return n.toLocaleString();
 }
 
 function SandWaves() {

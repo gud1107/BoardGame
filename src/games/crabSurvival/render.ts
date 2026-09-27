@@ -237,6 +237,56 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     ctx.globalAlpha = a;
     ctx.fillStyle = p.color;
     const s = p.size * Math.max(0.5, z);
+    if (p.kind === "ring") {
+      // Expanding ground shockwave (squashed like the ground plane).
+      const [gx, gy] = toScreen(view, W, H, p.x, p.y);
+      const k = 1 - a;
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = Math.max(2, 7 * a * z);
+      ctx.beginPath();
+      ctx.ellipse(gx, gy, p.size * k * z, p.size * k * z * TILT, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      continue;
+    }
+    if (p.kind === "streak") {
+      const len = Math.hypot(p.vx, p.vy) * 0.06 * z;
+      const ang = Math.atan2(p.vy * TILT, p.vx);
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = Math.max(1.5, s * 0.6);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx - Math.cos(ang) * len, sy - Math.sin(ang) * len);
+      ctx.stroke();
+      ctx.lineCap = "butt";
+      continue;
+    }
+    if (p.kind === "petal") {
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(t * 5 + p.x * 0.7);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, s * 1.1, s * 0.55, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      continue;
+    }
+    if (p.kind === "shard") {
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(p.y * 0.5 + t * 3);
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 1.4);
+      ctx.lineTo(s * 0.55, 0);
+      ctx.lineTo(0, s * 1.4);
+      ctx.lineTo(-s * 0.55, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.fillRect(-s * 0.12, -s * 0.9, s * 0.24, s * 0.9);
+      ctx.restore();
+      continue;
+    }
     if (p.kind === "star" || p.kind === "gold") {
       drawStar(ctx, sx, sy, s * 1.2, t * 4 + p.x);
     } else if (p.kind === "heal") {
@@ -604,6 +654,20 @@ function drawPickup(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: nu
 
 function drawCrabWorld(ctx: CanvasRenderingContext2D, c: Crab, t: number, king: boolean) {
   const s = c.scale;
+  if (c.alive && c.surge > 0) {
+    const sp = SPECIES[c.species];
+    const k = Math.min(1, c.surge / Math.max(0.1, sp.perk.seconds));
+    const r = CRAB_RADIUS * s * (1.7 + 0.15 * Math.sin(t * 14));
+    const g = ctx.createRadialGradient(c.x, c.y, r * 0.3, c.x, c.y, r);
+    g.addColorStop(0, "rgba(255,255,255,0)");
+    g.addColorStop(1, sp.perk.color);
+    ctx.globalAlpha = 0.25 + 0.35 * k;
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
   ctx.save();
   // Slight lift so the body floats above its shadow.
   ctx.translate(c.x, c.y - (3 * s) / TILT);

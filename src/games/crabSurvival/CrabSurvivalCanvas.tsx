@@ -352,8 +352,13 @@ export default function CrabSurvivalCanvas({
             break;
           case "levelUp":
             if (ev.player) {
-              a?.levelUp();
-              pushBanner({ text: `LEVEL UP! Lv${ev.level}`, sub: `${road[ev.level - 1].name}(으)로 성장! 몸집 ×${road[ev.level - 1].scale}`, tone: "level" });
+              a?.levelUp(ev.species);
+              const perk = SPECIES[ev.species].perk;
+              pushBanner({
+                text: `LEVEL UP! Lv${ev.level}`,
+                sub: `${road[ev.level - 1].name}(으)로 성장 · ${perk.icon} ${perk.name}: ${perk.desc.replace("레벨업 ", "")}`,
+                tone: "level",
+              });
             }
             break;
           case "kingNew":

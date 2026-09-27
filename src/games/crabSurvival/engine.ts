@@ -38,6 +38,10 @@ import {
   roadmap,
   SPECIES,
   SPECIES_LIST,
+  PERK_ARMOR,
+  PERK_ATK,
+  PERK_HEAL,
+  PERK_SPEED,
   POOL_HEAL_RATE,
   POPULATION,
   REGEN_DELAY,
@@ -127,6 +131,8 @@ export interface Crab {
   kills: number;
   lastAttacker: string | null;
   inPool: boolean;
+  /** Seconds left on the species level-up surge (see SpeciesDef.perk). */
+  surge: number;
   brain: Brain | null;
 }
 
@@ -214,7 +220,7 @@ export interface Deco {
 }
 
 export interface Particle {
-  kind: "sand" | "spark" | "splinter" | "coin" | "star" | "splash" | "heal" | "gold";
+  kind: "sand" | "spark" | "splinter" | "coin" | "star" | "splash" | "heal" | "gold" | "petal" | "ring" | "streak" | "shard";
   x: number;
   y: number;
   z: number;
@@ -248,7 +254,7 @@ export type GameEvent =
   | { type: "coin"; player: boolean }
   | { type: "equip"; name: string; emoji: string }
   | { type: "key" }
-  | { type: "levelUp"; level: number; name: string; player: boolean }
+  | { type: "levelUp"; level: number; name: string; player: boolean; species: SpeciesId }
   | { type: "kingNew"; name: string; player: boolean }
   | { type: "kingDown"; name: string; by: string | null; player: boolean; byPlayer: boolean }
   | { type: "kill"; killer: string; victim: string; byPlayer: boolean; victimPlayer: boolean }
@@ -497,6 +503,7 @@ function makeCrab(w: World, name: string, color: CrabColor, isPlayer: boolean, s
     kills: 0,
     lastAttacker: null,
     inPool: false,
+    surge: 0,
     brain: isPlayer
       ? null
       : {
@@ -710,11 +717,49 @@ export function addScore(w: World, c: Crab, pts: number) {
   c.score += Math.round(pts);
   if (c.isPlayer) w.stats.peakScore = Math.max(w.stats.peakScore, c.score);
   if (syncLevel(c) && c.level > before) {
-    w.events.push({ type: "levelUp", level: c.level, name: c.name, player: c.isPlayer });
+    w.events.push({ type: "levelUp", level: c.level, name: c.name, player: c.isPlayer, species: c.species });
     floatText(w, c.x, c.y - 30 * c.scale, `LEVEL UP! Lv${c.level}`, "#fde047", 22, 1.6);
-    burst(w, "star", c.x, c.y, 18, 220, "#fde047", 5, 0.9, 200);
+    burst(w, "star", c.x, c.y, 12, 220, "#fde047", 5, 0.9, 200);
+    speciesSurge(w, c);
     if (c.isPlayer) w.stats.maxLevel = Math.max(w.stats.maxLevel, c.level);
   }
+}
+
+/** The species trait flares up on each level-up (spec'd in SpeciesDef.perk). */
+function speciesSurge(w: World, c: Crab) {
+  const sp = SPECIES[c.species];
+  const r = crabRadius(c);
+  c.surge = sp.perk.seconds;
+  switch (c.species) {
+    case "flower":
+      c.hp = Math.min(c.maxHp, c.hp + c.maxHp * PERK_HEAL);
+      burst(w, "petal", c.x, c.y, 22, 180 + 30 * c.scale, "#f9a8d4", 5 * Math.sqrt(c.scale), 1.3, 240);
+      burst(w, "petal", c.x, c.y, 10, 150, "#fb7185", 5 * Math.sqrt(c.scale), 1.2, 220);
+      break;
+    case "fiddler":
+      ring(w, c.x, c.y, r * 3.2, "#fb923c", 0.55);
+      burst(w, "spark", c.x + Math.cos(c.angle) * r, c.y + Math.sin(c.angle) * r, 16, 320, "#fdba74", 4, 0.45, 160);
+      w.shake = Math.max(w.shake, c.isPlayer ? 0.5 : 0);
+      break;
+    case "ghost":
+      c.stamina = STAMINA_MAX;
+      for (let i = 0; i < 14; i++) {
+        const a = rand(w) * Math.PI * 2;
+        w.particles.push({ kind: "streak", x: c.x, y: c.y, z: 6, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, vz: 0, life: 0.4, maxLife: 0.4, size: 3 + 2 * c.scale, color: "#fde68a" });
+      }
+      burst(w, "sand", c.x, c.y, 12, 160, "#e8cf94", 5 * c.scale, 0.6, 60);
+      break;
+    case "snow":
+      ring(w, c.x, c.y, r * 2.6, "#7dd3fc", 0.7);
+      burst(w, "shard", c.x, c.y, 16, 200, "#bae6fd", 5 * Math.sqrt(c.scale), 0.9, 220);
+      break;
+  }
+  floatText(w, c.x, c.y - 30 * c.scale - 22, `${sp.perk.icon} ${sp.perk.name}`, sp.perk.color, 16, 1.5);
+}
+
+function ring(w: World, x: number, y: number, radius: number, color: string, life: number) {
+  // "size" carries the final radius; the renderer grows it over the lifetime.
+  w.particles.push({ kind: "ring", x, y, z: 2, vx: 0, vy: 0, vz: 0, life, maxLife: life, size: radius, color });
 }
 
 // ── Main step ───────────────────────────────────────────────────────────────
@@ -801,6 +846,7 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
   c.guardFlash = Math.max(0, c.guardFlash - dt);
   c.stun = Math.max(0, c.stun - dt);
   c.invuln = Math.max(0, c.invuln - dt);
+  c.surge = Math.max(0, c.surge - dt);
   c.sinceHurt += dt;
   if (c.comboT > 0) {
     c.comboT -= dt;
@@ -835,6 +881,7 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
   }
 
   let speed = lv.speed * (c.boosting ? BOOST_MULT : 1);
+  if (c.surge > 0 && c.species === "ghost") speed *= PERK_SPEED;
   if (isShallow(c.x, c.y)) speed *= SHALLOW_SLOW;
   if (c.attackCd > 0 && c.weapon && WEAPONS[c.weapon.kind].family === "heavy") speed *= 0.8;
 
@@ -902,6 +949,7 @@ export function swing(w: World, c: Crab) {
   let hitLiving = false;
   let hitAny = false;
   const lv = levelDef(c);
+  const atk = lv.atk * (c.surge > 0 && c.species === "fiddler" ? PERK_ATK : 1);
   const nextCombo = c.comboT > 0 ? c.combo + 1 : 1;
 
   for (const t of w.crabs) {
@@ -909,7 +957,7 @@ export function swing(w: World, c: Crab) {
     if (!inCone(c, { x: t.x, y: t.y, r: crabRadius(t) }, reach, wd.arc)) continue;
     const crit = rand(w) < BASE_CRIT + wd.crit + SPECIES[c.species].crit;
     const counter = !!c.counter && c.counter.by === t.id;
-    let dmg = lv.atk * wd.dmg * comboMultiplier(nextCombo) * range(w, 0.9, 1.1);
+    let dmg = atk * wd.dmg * comboMultiplier(nextCombo) * range(w, 0.9, 1.1);
     if (crit) dmg *= CRIT_MULT;
     if (counter) {
       dmg *= COUNTER_MULT;
@@ -923,7 +971,7 @@ export function swing(w: World, c: Crab) {
     if (!cr.alive) continue;
     if (!inCone(c, { x: cr.x, y: cr.y, r: cr.def.radius }, reach, wd.arc)) continue;
     const crit = rand(w) < BASE_CRIT + wd.crit + SPECIES[c.species].crit;
-    let dmg = lv.atk * wd.dmg * comboMultiplier(nextCombo) * range(w, 0.9, 1.1);
+    let dmg = atk * wd.dmg * comboMultiplier(nextCombo) * range(w, 0.9, 1.1);
     if (crit) dmg *= CRIT_MULT;
     damageCreature(w, cr, dmg, c, crit, wd.knockback);
     hitLiving = true;
@@ -932,7 +980,7 @@ export function swing(w: World, c: Crab) {
   for (const b of w.boxes) {
     if (!b.alive) continue;
     if (!inCone(c, { x: b.x, y: b.y, r: BOXES[b.kind].radius }, reach, wd.arc)) continue;
-    hitBox(w, b, c, lv.atk * wd.dmg);
+    hitBox(w, b, c, atk * wd.dmg);
     hitAny = true;
   }
 
@@ -985,6 +1033,7 @@ function damageCrab(
       }
     }
   }
+  if (t.surge > 0 && t.species === "snow") dmg *= PERK_ARMOR;
   dmg = Math.max(1, Math.round(dmg));
   t.hp -= dmg;
   t.sinceHurt = 0;
@@ -1518,6 +1567,7 @@ function respawnBot(w: World, c: Crab) {
   c.hp = c.maxHp;
   c.stamina = STAMINA_MAX;
   c.invuln = SPAWN_SHIELD;
+  c.surge = 0;
   c.combo = 0;
   c.counter = null;
   c.stun = 0;
@@ -1544,6 +1594,7 @@ export function revivePlayer(w: World): boolean {
   me.hp = me.maxHp;
   me.stamina = STAMINA_MAX;
   me.invuln = SPAWN_SHIELD;
+  me.surge = 0;
   me.weapon = snap?.weapon ? { ...snap.weapon, dur: Math.max(1, Math.ceil(snap.weapon.dur / 2)) } : null;
   me.shield = snap?.shield ? { ...snap.shield, dur: Math.max(1, Math.ceil(snap.shield.dur / 2)) } : null;
   me.combo = 0;

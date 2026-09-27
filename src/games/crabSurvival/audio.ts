@@ -237,9 +237,26 @@ export class CrabAudio {
     if (!this.ctx) return;
     [1568, 2093].forEach((f, i) => this.tone(f, this.now + i * 0.07, 0.15, "sine", 0.18));
   }
-  levelUp() {
+  levelUp(species?: "flower" | "fiddler" | "ghost" | "snow") {
     if (!this.ctx) return;
     [523, 659, 784, 1047].forEach((f, i) => this.tone(f, this.now + i * 0.08, 0.3, "triangle", 0.22));
+    const at = this.now + 0.34;
+    switch (species) {
+      case "flower": // soft chime sparkle
+        [1568, 2093, 2637].forEach((f, i) => this.tone(f, at + i * 0.06, 0.35, "sine", 0.1));
+        break;
+      case "fiddler": // heavy claw slam
+        this.tone(110, at, 0.35, "sine", 0.6, undefined, 45);
+        this.noise(0.25, 300, 0.8, 0.45, "lowpass", 80);
+        break;
+      case "ghost": // whoosh up
+        this.noise(0.35, 600, 1.2, 0.3, "bandpass", 5000);
+        break;
+      case "snow": // icy ring
+        this.tone(2637, at, 0.5, "triangle", 0.1, undefined, 2349);
+        this.tone(3520, at + 0.05, 0.4, "sine", 0.06);
+        break;
+    }
   }
   counter() {
     if (!this.ctx) return;
