@@ -1,5 +1,6 @@
 "use client";
 
+import { assetImageSrc, LOT_PHOTOS } from "./lotPhotos";
 import type { AuctionCardDef, AuctionKind, SpecialKind } from "./types";
 
 const MARKET_LABEL: Record<string, string> = { 미장: "🇺🇸 미국 증시", 국장: "🇰🇷 한국 증시", 코인: "🪙 가상자산" };
@@ -12,9 +13,9 @@ const SPECIAL_INFO: Record<SpecialKind, { file: string; title: string; subtitle:
   강제반대매매: { file: "special-margin-call", title: "강제 반대매매", subtitle: "Margin Call", effect: "떠안은 사람의 직전 획득 자산이 영구 폐기됩니다." },
 };
 
-/** Public path of the catalog "lot photo" for any auction card (art in public/images/great-legacy/, original motifs — no real logos). */
+/** Public path of the catalog "lot photo" for any auction card — a licensed real photo when lotPhotos.ts has one, else the original SVG illustration. */
 export function lotImageSrc(card: AuctionCardDef): string {
-  return `/images/great-legacy/${card.kind === "asset" ? card.asset.id : SPECIAL_INFO[card.special].file}.svg`;
+  return card.kind === "asset" ? assetImageSrc(card.asset.id) : `/images/great-legacy/${SPECIAL_INFO[card.special].file}.svg`;
 }
 
 /**
@@ -40,6 +41,7 @@ export default function LotCatalogCard({
   const special = card.kind === "special" ? SPECIAL_INFO[card.special] : null;
   const title = card.kind === "asset" ? card.asset.name : special!.title;
   const lotLabel = `LOT ${String(lotNumber).padStart(2, "0")}`;
+  const credit = card.kind === "asset" ? LOT_PHOTOS[card.asset.id] : undefined;
 
   return (
     <div
@@ -57,11 +59,27 @@ export default function LotCatalogCard({
         <div className="relative w-32 shrink-0 min-[400px]:w-36 sm:w-56 lg:w-64">
           <div className="rounded-lg bg-gradient-to-br from-[#f7e3a1] via-[#b8862b] to-[#6e4a12] p-[3px] shadow-[0_8px_24px_-8px_rgba(0,0,0,0.8)]">
             <div className="relative overflow-hidden rounded-[5px] border border-black/60">
-              {/* eslint-disable-next-line @next/next/no-img-element -- static SVG art, no optimisation needed */}
-              <img src={lotImageSrc(card)} alt={`${title} 경매품 이미지`} width={400} height={300} className="block aspect-[4/3] w-full select-none" draggable={false} />
+              {/* eslint-disable-next-line @next/next/no-img-element -- small static lot art, no optimisation needed */}
+              <img src={lotImageSrc(card)} alt={`${title} 경매품 이미지`} width={400} height={300} className="block aspect-[4/3] w-full object-cover select-none" draggable={false} />
+              {credit && (
+                // Photos get the same "spotlit gallery" tone as the illustrations: dark vignette + warm top light.
+                <span aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,236,190,0.18),transparent_55%),radial-gradient(ellipse_at_center,transparent_55%,rgba(0,0,0,0.55))]" />
+              )}
               <span aria-hidden className="gl-lot-sheen pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/25 to-transparent" />
             </div>
           </div>
+          {credit && (
+            <p className="mt-1 text-[9px] leading-tight break-words text-[#fbf1d6]/40 light:text-[#5c4515]/60" title={`사진: ${credit.author} · ${credit.license} · Wikimedia Commons`}>
+              사진{" "}
+              <a href={credit.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted hover:text-[#e9c874]">
+                {credit.author}
+              </a>{" "}
+              ·{" "}
+              <a href={credit.licenseUrl} target="_blank" rel="noopener noreferrer license" className="underline decoration-dotted hover:text-[#e9c874]">
+                {credit.license}
+              </a>
+            </p>
+          )}
           <span className="absolute -top-2 left-2 rounded-sm bg-[#0b0806] px-2 py-0.5 font-serif text-[10px] font-bold tracking-[0.2em] text-[#e9c874] ring-1 ring-[#c9a24a]/70 light:bg-[#fffaf0] light:text-[#8a6418]">
             {lotLabel}
           </span>

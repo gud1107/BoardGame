@@ -2,6 +2,7 @@
 
 import Avatar from "@/components/common/Avatar";
 import { ASSET_DEFS, purseValue } from "./constants";
+import { assetImageSrc, LOT_PHOTOS } from "./lotPhotos";
 import { computeCollectionBonus, computePlayerScore } from "./engine";
 import type { CoinVisibility, PlayerState, SeatIndex } from "./types";
 
@@ -70,11 +71,11 @@ export default function PlayerArea({
           {player.assets.map((a) => (
             <div
               key={a.assetId}
-              title={`${ASSET_NAME.get(a.assetId) ?? a.assetId}${a.discarded ? " (폐기)" : ` · ${a.currentScore}점`}`}
+              title={`${ASSET_NAME.get(a.assetId) ?? a.assetId}${a.discarded ? " (폐기)" : ` · ${a.currentScore}점`}${LOT_PHOTOS[a.assetId] ? ` — 사진: ${LOT_PHOTOS[a.assetId].author} (${LOT_PHOTOS[a.assetId].license})` : ""}`}
               className={`relative h-8 w-11 overflow-hidden rounded-[3px] ring-1 ${a.discarded ? "opacity-35 ring-rose-400/60 grayscale" : "ring-[#c9a24a]/70"}`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- static SVG art */}
-              <img src={`/images/great-legacy/${a.assetId}.svg`} alt="" className="h-full w-full object-cover" draggable={false} />
+              <img src={assetImageSrc(a.assetId)} alt="" className="h-full w-full object-cover" draggable={false} />
               {!a.discarded && (
                 <span className="absolute right-0 bottom-0 rounded-tl-[3px] bg-black/75 px-0.5 font-serif text-[9px] leading-tight font-bold text-[#f2c94c]">{a.currentScore}</span>
               )}
