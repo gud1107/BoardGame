@@ -4,6 +4,8 @@
  * bed plus a light marimba-ish loop that picks up tempo while you're king.
  */
 
+import type { SpeciesId } from "./data";
+
 export class CrabAudio {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -237,7 +239,7 @@ export class CrabAudio {
     if (!this.ctx) return;
     [1568, 2093].forEach((f, i) => this.tone(f, this.now + i * 0.07, 0.15, "sine", 0.18));
   }
-  levelUp(species?: "flower" | "fiddler" | "ghost" | "snow") {
+  levelUp(species?: SpeciesId) {
     if (!this.ctx) return;
     [523, 659, 784, 1047].forEach((f, i) => this.tone(f, this.now + i * 0.08, 0.3, "triangle", 0.22));
     const at = this.now + 0.34;
@@ -255,6 +257,20 @@ export class CrabAudio {
       case "snow": // icy ring
         this.tone(2637, at, 0.5, "triangle", 0.1, undefined, 2349);
         this.tone(3520, at + 0.05, 0.4, "sine", 0.06);
+        break;
+      case "hermit": // hollow shell knock
+        this.tone(420, at, 0.18, "triangle", 0.3, undefined, 380);
+        this.tone(630, at + 0.1, 0.22, "triangle", 0.2, undefined, 560);
+        break;
+      case "mitten": // warm pulse
+        [392, 523].forEach((f, i) => this.tone(f, at + i * 0.12, 0.35, "sine", 0.22));
+        break;
+      case "hairy": // electric zap
+        this.tone(1800, at, 0.2, "sawtooth", 0.08, undefined, 300);
+        this.noise(0.12, 4000, 1.5, 0.2, "highpass");
+        break;
+      case "redsnow": // coin shower
+        [1318, 1568, 1976, 2349, 2637].forEach((f, i) => this.tone(f, at + i * 0.045, 0.1, "square", 0.05));
         break;
     }
   }

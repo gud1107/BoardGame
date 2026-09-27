@@ -49,7 +49,7 @@ export const MAX_LEVEL = LEVELS.length;
 
 // ── Species roadmaps ────────────────────────────────────────────────────────
 
-export type SpeciesId = "flower" | "fiddler" | "ghost" | "snow";
+export type SpeciesId = "flower" | "fiddler" | "ghost" | "snow" | "hermit" | "mitten" | "hairy" | "redsnow";
 
 export interface SpeciesDef {
   id: SpeciesId;
@@ -64,11 +64,13 @@ export interface SpeciesDef {
   crit: number; // added crit chance
   staminaDrain: number;
   regen: number;
+  /** Multiplier on the level point-gain (bigger = earns more from food/creatures/box coins). */
+  gain?: number;
   /** Level-threshold multiplier at Lv2 (early) → Lv12 (late): <1 = cheaper. */
   earlyCost: number;
   lateCost: number;
   /** Body proportions for the renderer. */
-  build: { clawL: number; clawR: number; leg: number; body: number };
+  build: { clawL: number; clawR: number; leg: number; body: number; shell?: boolean; fur?: boolean; spikes?: boolean };
   /** Lifetime trophies needed to pick this species in the lobby (0 = free). */
   unlock: number;
   /** Species trait that flares up on every level-up. */
@@ -108,6 +110,38 @@ export const SPECIES: Record<SpeciesId, SpeciesDef> = {
     unlock: 120,
     perk: { icon: "🧊", name: "철갑 경화", desc: "레벨업 후 3초간 받는 피해 -30%", seconds: 3, color: "#7dd3fc" },
   },
+  hermit: {
+    id: "hermit", name: "소라게", role: "방어형",
+    blurb: "등에 소라 껍데기를 지고 다닙니다. 체력 +25%, 레벨업할 때마다 방패를 새것처럼 고칩니다.",
+    atk: 0.95, hp: 1.25, speed: 0.95, scale: 0.95, crit: 0, staminaDrain: 1, regen: 1.1, earlyCost: 0.95, lateCost: 1.05,
+    build: { clawL: 1.1, clawR: 0.8, leg: 0.9, body: 0.9, shell: true },
+    unlock: 180,
+    perk: { icon: "🐚", name: "껍데기 수선", desc: "레벨업 때 방패 내구도 완전 회복(없으면 냄비 뚜껑 지급)", seconds: 0, color: "#e9d5ff" },
+  },
+  mitten: {
+    id: "mitten", name: "참게", role: "흡혈형",
+    blurb: "털 난 집게로 물고 늘어지는 끈질긴 싸움꾼. 공격 +5%·회복 +20%, 레벨업 직후엔 때릴수록 체력이 찹니다.",
+    atk: 1.05, hp: 1, speed: 1, scale: 1, crit: 0, staminaDrain: 1, regen: 1.2, earlyCost: 1, lateCost: 1,
+    build: { clawL: 1.1, clawR: 1.1, leg: 1, body: 1, fur: true },
+    unlock: 250,
+    perk: { icon: "🩸", name: "털집게 흡혈", desc: "레벨업 후 4초간 가한 피해의 25%만큼 회복", seconds: 4, color: "#4ade80" },
+  },
+  hairy: {
+    id: "hairy", name: "털게", role: "치명타형",
+    blurb: "온몸의 가시털이 급소를 노립니다. 치명타 +10%·공격 +10%, 대신 체력이 15% 낮습니다.",
+    atk: 1.1, hp: 0.85, speed: 1.02, scale: 0.95, crit: 0.1, staminaDrain: 1, regen: 1, earlyCost: 1, lateCost: 1.02,
+    build: { clawL: 0.95, clawR: 0.95, leg: 0.95, body: 0.95, spikes: true },
+    unlock: 330,
+    perk: { icon: "⚡", name: "가시털 폭발", desc: "레벨업 후 3초간 치명타 확률 +50%", seconds: 3, color: "#facc15" },
+  },
+  redsnow: {
+    id: "redsnow", name: "홍게", role: "수집형",
+    blurb: "심해에서 올라온 보물 사냥꾼. 점수 흡수 +6%·이동 +5%, 대신 공격과 체력이 10% 낮습니다.",
+    atk: 0.9, hp: 0.9, speed: 1.05, scale: 1, crit: 0, staminaDrain: 0.9, regen: 1, gain: 1.06, earlyCost: 0.9, lateCost: 1.05,
+    build: { clawL: 0.85, clawR: 0.85, leg: 1.4, body: 1 },
+    unlock: 420,
+    perk: { icon: "💰", name: "심해의 보물", desc: "레벨업 때 주변에 보물 코인이 쏟아짐", seconds: 0, color: "#fbbf24" },
+  },
 };
 
 export const SPECIES_LIST: SpeciesDef[] = Object.values(SPECIES);
@@ -117,6 +151,8 @@ export const PERK_ATK = 1.25;
 export const PERK_SPEED = 1.2;
 export const PERK_ARMOR = 0.7;
 export const PERK_HEAL = 0.1;
+export const PERK_LIFESTEAL = 0.25;
+export const PERK_CRIT = 0.5;
 
 export function isUnlocked(species: SpeciesId, trophies: number): boolean {
   return trophies >= SPECIES[species].unlock;
@@ -139,6 +175,7 @@ export function roadmap(species: SpeciesId = "flower"): LevelDef[] {
       atk: Math.round(l.atk * sp.atk),
       hp: Math.round((l.hp * sp.hp) / 10) * 10,
       speed: Math.round(l.speed * sp.speed),
+      gain: +(l.gain * (sp.gain ?? 1)).toFixed(2),
     };
   });
   roadmapCache.set(species, r);

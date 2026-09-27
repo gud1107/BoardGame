@@ -40,7 +40,9 @@ import {
   SPECIES_LIST,
   PERK_ARMOR,
   PERK_ATK,
+  PERK_CRIT,
   PERK_HEAL,
+  PERK_LIFESTEAL,
   PERK_SPEED,
   POOL_HEAL_RATE,
   POPULATION,
@@ -753,6 +755,32 @@ function speciesSurge(w: World, c: Crab) {
       ring(w, c.x, c.y, r * 2.6, "#7dd3fc", 0.7);
       burst(w, "shard", c.x, c.y, 16, 200, "#bae6fd", 5 * Math.sqrt(c.scale), 0.9, 220);
       break;
+    case "hermit":
+      if (c.shield) c.shield.dur = SHIELDS[c.shield.kind].durability;
+      else c.shield = { kind: "potLid", dur: SHIELDS.potLid.durability };
+      ring(w, c.x, c.y, r * 2.2, "#e9d5ff", 0.6);
+      burst(w, "shard", c.x, c.y, 10, 150, "#f5d0fe", 4 * Math.sqrt(c.scale), 0.7, 180);
+      break;
+    case "mitten":
+      burst(w, "heal", c.x, c.y, 14, 140, "#4ade80", 6, 1, 160);
+      ring(w, c.x, c.y, r * 2.4, "#4ade80", 0.6);
+      break;
+    case "hairy":
+      burst(w, "star", c.x, c.y, 20, 280, "#facc15", 5, 0.7, 180);
+      burst(w, "spark", c.x, c.y, 12, 260, "#fef08a", 3.5, 0.4, 120);
+      break;
+    case "redsnow": {
+      // A small treasure shower anyone nearby can grab — the owner is usually closest.
+      for (let i = 0; i < 6; i++) {
+        const pk = newPickup(w, "coin", c.x, c.y, 25 * c.level, false, 10, 25);
+        const a = rand(w) * Math.PI * 2, v = range(w, 90, 200);
+        pk.vx = Math.cos(a) * v;
+        pk.vy = Math.sin(a) * v;
+        pk.vz = range(w, 180, 280);
+      }
+      burst(w, "gold", c.x, c.y, 18, 240, "#fbbf24", 5, 1, 240);
+      break;
+    }
   }
   floatText(w, c.x, c.y - 30 * c.scale - 22, `${sp.perk.icon} ${sp.perk.name}`, sp.perk.color, 16, 1.5);
 }
@@ -955,7 +983,7 @@ export function swing(w: World, c: Crab) {
   for (const t of w.crabs) {
     if (t === c || !t.alive || t.invuln > 0) continue;
     if (!inCone(c, { x: t.x, y: t.y, r: crabRadius(t) }, reach, wd.arc)) continue;
-    const crit = rand(w) < BASE_CRIT + wd.crit + SPECIES[c.species].crit;
+    const crit = rand(w) < BASE_CRIT + wd.crit + SPECIES[c.species].crit + (c.surge > 0 && c.species === "hairy" ? PERK_CRIT : 0);
     const counter = !!c.counter && c.counter.by === t.id;
     let dmg = atk * wd.dmg * comboMultiplier(nextCombo) * range(w, 0.9, 1.1);
     if (crit) dmg *= CRIT_MULT;
@@ -970,7 +998,7 @@ export function swing(w: World, c: Crab) {
   for (const cr of w.creatures) {
     if (!cr.alive) continue;
     if (!inCone(c, { x: cr.x, y: cr.y, r: cr.def.radius }, reach, wd.arc)) continue;
-    const crit = rand(w) < BASE_CRIT + wd.crit + SPECIES[c.species].crit;
+    const crit = rand(w) < BASE_CRIT + wd.crit + SPECIES[c.species].crit + (c.surge > 0 && c.species === "hairy" ? PERK_CRIT : 0);
     let dmg = atk * wd.dmg * comboMultiplier(nextCombo) * range(w, 0.9, 1.1);
     if (crit) dmg *= CRIT_MULT;
     damageCreature(w, cr, dmg, c, crit, wd.knockback);
@@ -1036,6 +1064,7 @@ function damageCrab(
   if (t.surge > 0 && t.species === "snow") dmg *= PERK_ARMOR;
   dmg = Math.max(1, Math.round(dmg));
   t.hp -= dmg;
+  if (by && by.surge > 0 && by.species === "mitten") by.hp = Math.min(by.maxHp, by.hp + dmg * PERK_LIFESTEAL);
   t.sinceHurt = 0;
   t.hitFlash = 0.14;
   if (by) {
@@ -1136,6 +1165,7 @@ function dropEquip(w: World, x: number, y: number, type: "weapon" | "shield", e:
 function damageCreature(w: World, cr: Creature, dmg: number, by: Crab, crit: boolean, kb: number) {
   const d = Math.max(1, Math.round(dmg));
   cr.hp -= d;
+  if (by.surge > 0 && by.species === "mitten") by.hp = Math.min(by.maxHp, by.hp + d * PERK_LIFESTEAL);
   cr.hitFlash = 0.14;
   cr.aggroId = by.id;
   cr.aggroT = 5;

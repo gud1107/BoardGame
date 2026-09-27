@@ -227,6 +227,48 @@ describe("species level-up traits + unlocks", () => {
   });
 });
 
+describe("expansion species traits", () => {
+  it("offers 8 growth paths with rising unlock costs", () => {
+    expect(SPECIES_LIST).toHaveLength(8);
+    const locks = SPECIES_LIST.map((sp) => sp.unlock);
+    expect(locks[0]).toBe(0);
+    for (let i = 1; i < locks.length; i++) expect(locks[i]).toBeGreaterThan(locks[i - 1]);
+  });
+
+  it("소라게 repairs (or grants) a shield on level-up", () => {
+    const w = bare();
+    const me = player(w);
+    me.species = "hermit";
+    addScore(w, me, 500);
+    expect(me.shield).toEqual({ kind: "potLid", dur: SHIELDS.potLid.durability });
+    me.shield = { kind: "shell", dur: 1 };
+    addScore(w, me, 1_000);
+    expect(me.shield.dur).toBe(SHIELDS.shell.durability);
+  });
+
+  it("참게 heals from damage dealt while surging", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    me.species = "mitten";
+    foe.x = 40;
+    foe.hp = foe.maxHp = 1e6;
+    me.angle = 0;
+    me.hp = 10;
+    me.surge = 4;
+    swing(w, me);
+    expect(me.hp).toBeGreaterThan(10);
+  });
+
+  it("홍게 showers coins on level-up and earns more per bite", () => {
+    const w = bare();
+    const me = player(w);
+    me.species = "redsnow";
+    addScore(w, me, 500);
+    expect(w.pickups.filter((p) => p.type === "coin").length).toBeGreaterThanOrEqual(6);
+    expect(roadmap("redsnow")[5].gain).toBeGreaterThan(roadmap("flower")[5].gain);
+  });
+});
+
 describe("king crab", () => {
   it("crowns the leader, needs a 5% lead to change hands, and pays a bounty on the king", () => {
     const w = bare(2);
@@ -294,17 +336,17 @@ describe("full match", () => {
     const w = createWorld({ playerName: "나", colorId: "red", duration: 180, seed: 3 });
     const me = player(w);
     me.brain = { goal: "wander", targetId: 0, gx: 0, gy: 0, think: 0, aggression: 0.6, skill: 1, wanderAngle: 0, stuck: 0, lastX: 0, lastY: 0 };
-    let kings = 0;
+    let sawKing = false;
     while (!w.over) {
       if (w.playerDown) revivePlayer(w);
       step(w, me.alive ? botThink(w, me, 1 / 30) : idle, 1 / 30);
-      for (const e of w.events) if (e.type === "kingNew") kings++;
+      if (w.kingId !== null) sawKing = true;
       w.events.length = 0;
     }
     const s = summarize(w);
     expect(w.crabs.every((c) => Number.isFinite(c.x) && Number.isFinite(c.y) && Number.isFinite(c.hp))).toBe(true);
     expect(Math.max(...w.crabs.map((c) => c.score))).toBeGreaterThan(5_000);
-    expect(kings).toBeGreaterThan(0);
+    expect(sawKing).toBe(true);
     expect(s.rank).toBeGreaterThanOrEqual(1);
     expect(s.rank).toBeLessThanOrEqual(s.total);
     expect(s.total).toBe(w.crabs.length);

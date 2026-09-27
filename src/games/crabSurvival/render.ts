@@ -851,6 +851,16 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
     ctx.fill();
     ctx.restore();
     ctx.restore();
+    // 참게: furry "mittens" on the claw base.
+    if (pose.build?.fur) {
+      ctx.fillStyle = "rgba(40,30,20,0.75)";
+      for (let i = 0; i < 6; i++) {
+        const fa = (i / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(ex + Math.cos(fa) * 4.5, ey + Math.sin(fa) * 4.5, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
     // Shield on the left claw.
     if (side === -1 && pose.shield) {
       ctx.save();
@@ -865,6 +875,20 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
   // Carapace: wide, with the swimming crab's long lateral spines.
   ctx.save();
   ctx.scale(bodyK, bodyK);
+  if (pose.build?.spikes) {
+    // 털게: bristly outline.
+    ctx.fillStyle = dark;
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2;
+      const rx = R * 0.95, ry = R * 1.15;
+      const bx = Math.cos(a) * rx, by = Math.sin(a) * ry;
+      ctx.beginPath();
+      ctx.moveTo(bx + Math.cos(a + 1.4) * 2.2, by + Math.sin(a + 1.4) * 2.2);
+      ctx.lineTo(Math.cos(a) * (rx + 5), Math.sin(a) * (ry + 5));
+      ctx.lineTo(bx + Math.cos(a - 1.4) * 2.2, by + Math.sin(a - 1.4) * 2.2);
+      ctx.fill();
+    }
+  }
   ctx.fillStyle = dark;
   ctx.beginPath();
   ctx.moveTo(R * 0.55, -R * 0.95);
@@ -909,6 +933,31 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
     ctx.moveTo(4, -6);
     ctx.quadraticCurveTo(-4, 0, 4, 6);
     ctx.stroke();
+  }
+  if (pose.build?.shell) {
+    // 소라게: spiral whelk shell riding on the back.
+    ctx.save();
+    ctx.translate(-R * 0.55, 0);
+    const sg = ctx.createRadialGradient(-3, -4, 2, 0, 0, R * 0.95);
+    sg.addColorStop(0, pose.flash ? "#fff" : "#fdf4e3");
+    sg.addColorStop(0.6, pose.flash ? "#fff" : "#e7c9a0");
+    sg.addColorStop(1, pose.flash ? "#eee" : "#a47148");
+    ctx.fillStyle = sg;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, R * 0.95, R * 0.85, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(120,70,30,0.7)";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i <= 40; i++) {
+      const a = i * 0.42;
+      const rr = R * 0.8 * (1 - i / 44);
+      const x = Math.cos(a) * rr, y = Math.sin(a) * rr * 0.9;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
   }
   // Eye stalks.
   for (const e of [-1, 1]) {
