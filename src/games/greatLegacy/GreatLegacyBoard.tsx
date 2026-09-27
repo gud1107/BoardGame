@@ -7,6 +7,8 @@ import ActionPanel from "./ActionPanel";
 import PlayerArea from "./PlayerArea";
 import BettingArena from "./BettingArena";
 import CollectionSynergyPanel from "./CollectionSynergyPanel";
+import SynergyCompleteFX from "./SynergyCompleteFX";
+import { collectionTitle, detectSynergyCompletions, lotSynergyImpact, type SynergyCompletionEvent } from "./synergy";
 import LotCatalogCard from "./LotCatalogCard";
 import RulebookModal from "./RulebookModal";
 import { detectCoinEvents, FlyingCoins, type CoinAnimEvent } from "./AuctionCoinEffects";
@@ -85,9 +87,18 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
   // player who acted, plays the same animation + SFX.
   const [trackedState, setTrackedState] = useState(state);
   const [coinEffects, setCoinEffects] = useState<CoinAnimEvent[]>([]);
+  // Collection-complete fanfare queue — shown one at a time (a single resolve can complete two collections).
+  const [synergyQueue, setSynergyQueue] = useState<SynergyCompletionEvent[]>([]);
   if (trackedState !== state) {
     const detected = detectCoinEvents(trackedState, state);
+    const completions = detectSynergyCompletions(trackedState, state);
     setTrackedState(state);
+    if (completions.length > 0) {
+      setSynergyQueue((prev) => [...prev, ...completions]);
+      const sound = getSoundEngine();
+      if (completions.some((c) => c.seat === viewerSeat)) sound.playSynergyCompleteSound();
+      else sound.playSynergyRivalSound();
+    }
     if (detected.length > 0) {
       const sound = getSoundEngine();
       let nextId = (coinEffects.at(-1)?.id ?? 0) + 1;
@@ -100,6 +111,7 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
       }
     }
   }
+  const handleSynergyFxDone = useCallback(() => setSynergyQueue((prev) => prev.slice(1)), []);
   const handleCoinEffectDone = useCallback((id: number) => {
     setCoinEffects((prev) => prev.filter((e) => e.id !== id));
   }, []);
@@ -124,7 +136,14 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
     <div className="flex flex-col gap-4 lg:flex-row">
       <aside className="order-2 lg:order-1 lg:w-64 lg:shrink-0">
         <div className="flex flex-col gap-4">
-          <CollectionSynergyPanel assets={me.assets} pendingSpecials={me.pendingSpecials} auctionCard={auction?.card ?? null} />
+          <CollectionSynergyPanel
+            assets={me.assets}
+            pendingSpecials={me.pendingSpecials}
+            auctionCard={auction?.card ?? null}
+            rivals={state.players
+              .filter((p) => p.seat !== viewerSeat)
+              .map((p) => ({ seat: p.seat, name: names[p.seat] ?? "상대", assets: p.assets, pendingSpecials: p.pendingSpecials }))}
+          />
           <AssetReferenceSidebar ownedAssetIds={ownedAssetIds} lotAssetId={auction?.card.kind === "asset" ? auction.card.asset.id : null} />
         </div>
       </aside>
@@ -215,6 +234,7 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
                 isActive={auction?.activeSeat === p.seat}
                 hasPassed={auction?.passed.includes(p.seat) ?? false}
                 isConnected={connectedSeats.has(p.seat)}
+                lotCompletes={auction?.card.kind === "asset" ? lotSynergyImpact(p.assets, p.pendingSpecials, auction.card).gained.map(collectionTitle) : []}
               />
             </div>
           ))}
@@ -236,6 +256,16 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
           onDone={handleCoinEffectDone}
         />
       ))}
+
+      {synergyQueue[0] && (
+        <SynergyCompleteFX
+          key={`${synergyQueue.length}-${synergyQueue[0].seat}-${collectionTitle(synergyQueue[0].collection)}`}
+          collection={synergyQueue[0].collection}
+          playerName={names[synergyQueue[0].seat] ?? "상대"}
+          mine={synergyQueue[0].seat === viewerSeat}
+          onDone={handleSynergyFxDone}
+        />
+      )}
 
       {rulebookOpen && <RulebookModal mode={state.mode} onClose={() => setRulebookOpen(false)} />}
     </div>

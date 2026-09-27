@@ -94,6 +94,24 @@
   규칙(대기 특수카드는 다음 자산에, 특수카드는 직전 자산에)을 그대로 복제했으므로 **엔진 규칙을 바꾸면 여기도
   같이 고칠 것**. [synergy.test.ts](./src/games/greatLegacy/synergy.test.ts) 4케이스.
 
+### 🎺 후속 (2026-09-27): 시너지 완성 연출/효과음 + 상대 시너지 진행도
+- **완성 감지**: `synergy.ts` `detectSynergyCompletions(prev, next)` — 코인 FX와 같은 "연속 상태 스냅샷 diff"
+  방식이라 모든 접속자가 같은 순간에 연출을 봄. 한 번의 낙찰로 시너지 2개(시장+섹터)가 동시에 완성될 수 있어
+  보드의 `synergyQueue`로 하나씩 순서대로 재생.
+- [SynergyCompleteFX.tsx](./src/games/greatLegacy/SynergyCompleteFX.tsx) — `document.body` 포털(조상 overflow/transform
+  클리핑 방지), `pointer-events-none`. **내 완성**: 전체 화면 암전 + 회전 금빛 광선 + "SYNERGY +3" 메달 + 금박
+  컨페티(결정적 배치, Math.random 없음) 2.6초. **상대 완성**: 상단 슬라이드 배너 "⚠️ 상대 시너지 완성 · {이름} ·
+  {시너지}" 2.4초(보드를 가리지 않음). `prefers-reduced-motion` 존중.
+- [soundEngine.ts](./src/lib/audio/soundEngine.ts) `playSynergyCompleteSound`(C–E–G–C 상승 아르페지오 + 벨 배음 +
+  반짝이 노이즈) / `playSynergyRivalSound`(작은 단조 2음 차임). 기존 컨벤션대로 Web Audio 합성.
+- **상대 진행도**: CollectionSynergyPanel에 `rivals` prop — "👀 상대 시너지" 섹션에 상대별 시너지 점수, 완성한
+  시너지(금색 ✓), 2/3 "완성 직전" 시너지(하늘색), 그중 **현재 매물로 완성되는 것은 붉게 펄스 + "이 매물로 완성!"**.
+  "🔨 이 매물을 낙찰받으면" 박스에 "⚠️ 상대가 낙찰받으면 시너지 완성"(자산 매물) / "🎯 상대가 떠안으면 시너지
+  붕괴"(상장폐지·강제반대매매) 목록 추가. [PlayerArea.tsx](./src/games/greatLegacy/PlayerArea.tsx) 좌석 카드에도
+  `lotCompletes` 배지 "🔥 이 매물 낙찰 시 시너지 완성". 상대의 보유 자산/대기 특수카드는 이미 공개 정보(낙찰은
+  모두가 봄)라 숨김 정보 노출 없음.
+- `synergy.test.ts` 6케이스(완성 감지 · 시장+섹터 동시 완성 추가).
+
 ## ✏️ 그림 전화기: 낙서 릴레이 (갈틱폰 스타일) — 4~14인 동시 진행 신규 게임 — 2026-09-27 신규 (로컬 전용, 커밋/푸시 안 함)
 
 **요청**: "갈틱폰 게임을 만들어주세요" + `boardGameRule/갈틱폰/갈틱폰.md`(룰북·시스템 명세가 중복된 두 부분 → **하나로 합쳐 재작성**) + socket.io 서버 기준 참고 코드(`GarticGameRoom` 등) — "참고만 하여 유지보수 편하게".

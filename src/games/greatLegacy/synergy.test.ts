@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { ASSET_DEFS } from "./constants";
 import { computeCollectionBonus } from "./engine";
-import { projectWin } from "./synergy";
-import type { AuctionCardDef, OwnedAsset } from "./types";
+import { collectionTitle, detectSynergyCompletions, lotSynergyImpact, projectWin } from "./synergy";
+import type { AuctionCardDef, GreatLegacyState, OwnedAsset, PlayerState } from "./types";
 
 function owned(id: string, discarded = false): OwnedAsset {
   const a = ASSET_DEFS.find((d) => d.id === id)!;
@@ -35,5 +35,24 @@ describe("projectWin (collection synergy preview)", () => {
   it("score-only specials and specials with no assets leave collections alone", () => {
     expect(projectWin(twoUs, [], { kind: "special", cardId: "s", special: "악재어닝쇼크" })).toBe(twoUs);
     expect(projectWin([], [], { kind: "special", cardId: "s", special: "강제반대매매" })).toEqual([]);
+  });
+});
+
+describe("detectSynergyCompletions / lotSynergyImpact", () => {
+  function stateWith(assetsBySeat: OwnedAsset[][]): GreatLegacyState {
+    const players = assetsBySeat.map((assets, seat) => ({ seat, assets, pendingSpecials: [] }) as unknown as PlayerState);
+    return { players } as unknown as GreatLegacyState;
+  }
+
+  it("reports only the seat and collection that newly completed", () => {
+    const prev = stateWith([[owned("us-bigtech-1"), owned("us-bluechip-1")], [owned("kr-meme-1")]]);
+    const next = stateWith([[owned("us-bigtech-1"), owned("us-bluechip-1"), owned("us-meme-1")], prev.players[1].assets]);
+    const events = detectSynergyCompletions(prev, next);
+    expect(events.map((e) => [e.seat, collectionTitle(e.collection)])).toEqual([[0, "🇺🇸 미장 영끌 올인"]]);
+  });
+
+  it("one asset can complete a market and a sector collection at once", () => {
+    const assets = [owned("us-bigtech-1"), owned("us-bluechip-1"), owned("kr-meme-1"), owned("cr-meme-1")];
+    expect(lotSynergyImpact(assets, [], assetCard("us-meme-1")).gained.map(collectionTitle)).toEqual(["🇺🇸 미장 영끌 올인", "🎢 밈&테마주 분산투자"]);
   });
 });

@@ -2838,6 +2838,68 @@ class SoundEngine {
     thunk.stop(now + 0.56);
   }
 
+  /** 위대한 투자 — "시너지 완성 팡파르": rising major arpeggio (C–E–G–C) with a bright bell shimmer + sparkle noise tail, for the viewer completing a +3 collection. */
+  playSynergyCompleteSound() {
+    if (!this.gate("synergyComplete", 600)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+      const t = now + i * 0.09;
+      for (const [type, mult, vol] of [
+        ["triangle", 1, 0.2],
+        ["sine", 2, 0.07],
+      ] as const) {
+        const osc = ctx.createOscillator();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq * mult, t);
+        const g = ctx.createGain();
+        const hold = i === 3 ? 0.9 : 0.28;
+        g.gain.setValueAtTime(0.001, t);
+        g.gain.linearRampToValueAtTime(vol, t + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.001, t + hold);
+        osc.connect(g).connect(this.sfxGain!);
+        osc.start(t);
+        osc.stop(t + hold + 0.02);
+      }
+    });
+
+    const sparkle = ctx.createBufferSource();
+    sparkle.buffer = noiseBuffer(ctx);
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.setValueAtTime(6000, now);
+    const sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.001, now + 0.27);
+    sg.gain.linearRampToValueAtTime(0.09, now + 0.32);
+    sg.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+    sparkle.connect(hp).connect(sg).connect(this.sfxGain);
+    sparkle.start(now + 0.27);
+    sparkle.stop(now + 1.12);
+  }
+
+  /** 위대한 투자 — "상대 시너지 완성 알림": a short two-note minor chime (G–E♭), quieter than the viewer's own fanfare. */
+  playSynergyRivalSound() {
+    if (!this.gate("synergyRival", 400)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [783.99, 622.25].forEach((freq, i) => {
+      const t = now + i * 0.14;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, t);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.001, t);
+      g.gain.linearRampToValueAtTime(0.16, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+      osc.connect(g).connect(this.sfxGain!);
+      osc.start(t);
+      osc.stop(t + 0.47);
+    });
+  }
+
   /** 마피아 — 낮 지목투표 "쿵!" 도장 임팩트: 묵직한 카지노 칩 탭음(저음 thud + 하이패스 클릭). */
   playMafiaNominationStamp() {
     if (!this.gate("mafiaNominationStamp", 150)) return;

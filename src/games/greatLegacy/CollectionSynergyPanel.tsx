@@ -2,20 +2,33 @@
 
 import { ASSET_DEFS, COLLECTION_BONUS, MARKETS, SECTORS } from "./constants";
 import { computeCollectionBonus } from "./engine";
-import { isDiscardKind, projectWin } from "./synergy";
-import type { AuctionCardDef, Market, OwnedAsset, Sector, SpecialKind } from "./types";
+import { collectionKey, collectionTitle, completedCollections, isDiscardKind, lotSynergyImpact, projectWin, type CollectionRef } from "./synergy";
+import type { AuctionCardDef, Market, OwnedAsset, SeatIndex, Sector, SpecialKind } from "./types";
 
 const MARKET_EMOJI: Record<Market, string> = { 미장: "🇺🇸", 국장: "🇰🇷", 코인: "🪙" };
 const SECTOR_EMOJI: Record<Sector, string> = { "빅테크&AI": "🤖", 블루칩: "🏆", "밈&테마주": "🎢" };
 const ASSET_NAME = new Map(ASSET_DEFS.map((a) => [a.id, a.name]));
 
-type CollectionKey = { kind: "market"; market: Market } | { kind: "sector"; sector: Sector };
+type CollectionKey = CollectionRef;
+const collectionId = collectionKey;
+const collectionLabel = collectionTitle;
+const ALL_COLLECTIONS: CollectionRef[] = [
+  ...MARKETS.map((market) => ({ kind: "market", market }) as const),
+  ...SECTORS.map((sector) => ({ kind: "sector", sector }) as const),
+];
 
-function collectionId(c: CollectionKey) {
-  return c.kind === "market" ? `m:${c.market}` : `s:${c.sector}`;
+/** How many of the collection's 3 slots `assets` fills (non-discarded only). */
+function slotCount(assets: OwnedAsset[], c: CollectionKey) {
+  return (c.kind === "market" ? SECTORS : MARKETS).filter((other) =>
+    assets.some((a) => !a.discarded && (c.kind === "market" ? a.market === c.market && a.sector === other : a.sector === c.sector && a.market === other)),
+  ).length;
 }
-function collectionLabel(c: CollectionKey) {
-  return c.kind === "market" ? `${MARKET_EMOJI[c.market]} ${c.market} 영끌 올인` : `${SECTOR_EMOJI[c.sector]} ${c.sector} 분산투자`;
+
+export interface RivalSynergyInfo {
+  seat: SeatIndex;
+  name: string;
+  assets: OwnedAsset[];
+  pendingSpecials: SpecialKind[];
 }
 /** Row label — the group heading already says 영끌 올인 / 분산투자. */
 function collectionShortLabel(c: CollectionKey) {
@@ -36,10 +49,13 @@ export default function CollectionSynergyPanel({
   assets,
   pendingSpecials,
   auctionCard,
+  rivals,
 }: {
   assets: OwnedAsset[];
   pendingSpecials: SpecialKind[];
   auctionCard: AuctionCardDef | null;
+  /** Every other seat — their collections are public (won lots are visible to all). */
+  rivals: RivalSynergyInfo[];
 }) {
   const current = computeCollectionBonus(assets);
   const projected = auctionCard ? projectWin(assets, pendingSpecials, auctionCard) : null;
@@ -58,6 +74,16 @@ export default function CollectionSynergyPanel({
       ? groups.flatMap((g) => g.rows).filter((c) => isDone(assets, c) && !isDone(projected, c))
       : [];
   const lastAsset = assets.at(-1);
+
+  const rivalView = rivals.map((r) => {
+    const impact = auctionCard ? lotSynergyImpact(r.assets, r.pendingSpecials, auctionCard) : { gained: [], lost: [] };
+    const done = completedCollections(r.assets);
+    const doneKeys = new Set(done.map(collectionKey));
+    const reach = ALL_COLLECTIONS.filter((c) => !doneKeys.has(collectionKey(c)) && slotCount(r.assets, c) === 2);
+    return { ...r, impact, done, reach, bonus: computeCollectionBonus(r.assets).bonus };
+  });
+  const rivalThreats = rivalView.filter((r) => r.impact.gained.length > 0);
+  const rivalBreaks = rivalView.filter((r) => r.impact.lost.length > 0);
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-[#c9a24a]/30 bg-gradient-to-b from-[#1b140c]/80 to-white/[0.02] p-3 light:border-amber-300 light:from-amber-50 light:to-white">
@@ -178,6 +204,72 @@ export default function CollectionSynergyPanel({
           ) : (
             <p>자산 점수만 바뀌고 컬렉션 시너지는 그대로예요.</p>
           )}
+          {rivalThreats.length > 0 && (
+            <div className="mt-1.5 rounded-md bg-rose-500/15 px-2 py-1 text-rose-100 ring-1 ring-rose-400/50 light:bg-rose-50 light:text-rose-800 light:ring-rose-300">
+              <p className="font-semibold">⚠️ 상대가 낙찰받으면 시너지 완성</p>
+              {rivalThreats.map((r) => (
+                <p key={r.seat}>
+                  <b>{r.name}</b> — {r.impact.gained.map(collectionLabel).join(", ")} (+{r.impact.gained.length * COLLECTION_BONUS})
+                </p>
+              ))}
+            </div>
+          )}
+          {rivalBreaks.length > 0 && (
+            <div className="mt-1.5 rounded-md bg-emerald-500/10 px-2 py-1 text-emerald-100 ring-1 ring-emerald-400/40 light:bg-emerald-50 light:text-emerald-800 light:ring-emerald-300">
+              <p className="font-semibold">🎯 상대가 떠안으면 시너지 붕괴</p>
+              {rivalBreaks.map((r) => (
+                <p key={r.seat}>
+                  <b>{r.name}</b> — {r.impact.lost.map(collectionLabel).join(", ")} (−{r.impact.lost.length * COLLECTION_BONUS})
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {rivalView.length > 0 && (
+        <div className="flex flex-col gap-1.5 border-t border-white/10 pt-2.5 light:border-slate-200">
+          <h4 className="text-[11px] font-semibold text-white/60 light:text-slate-600">👀 상대 시너지</h4>
+          {rivalView.map((r) => (
+            <div
+              key={r.seat}
+              className={`flex flex-col gap-1 rounded-lg px-2 py-1.5 text-[10px] ring-1 ${
+                r.impact.gained.length > 0 ? "bg-rose-500/10 ring-rose-400/60 light:bg-rose-50 light:ring-rose-300" : "bg-black/20 ring-white/5 light:bg-slate-50 light:ring-slate-200"
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-white/80 light:text-slate-800">{r.name}</span>
+                <span className="shrink-0 font-serif font-bold text-[#f2c94c] light:text-amber-700">+{r.bonus}</span>
+              </div>
+              {r.done.length + r.reach.length === 0 ? (
+                <span className="text-white/35 light:text-slate-400">완성 직전 시너지 없음</span>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {r.done.map((c) => (
+                    <span key={collectionKey(c)} className="rounded-full bg-amber-400/20 px-1.5 py-px text-amber-100 ring-1 ring-amber-300/50 light:bg-amber-100 light:text-amber-800">
+                      {collectionLabel(c)} ✓
+                    </span>
+                  ))}
+                  {r.reach.map((c) => {
+                    const hot = r.impact.gained.some((g) => collectionKey(g) === collectionKey(c));
+                    return (
+                      <span
+                        key={collectionKey(c)}
+                        title={hot ? "지금 경매 중인 매물을 낙찰받으면 완성" : "한 장만 더 모으면 완성"}
+                        className={`rounded-full px-1.5 py-px ring-1 ${
+                          hot
+                            ? "gl-synergy-pulse bg-rose-500/30 font-bold text-rose-50 ring-rose-300 light:bg-rose-200 light:text-rose-900"
+                            : "bg-sky-400/10 text-sky-100 ring-sky-300/40 light:bg-sky-50 light:text-sky-800"
+                        }`}
+                      >
+                        {collectionLabel(c)} 2/3{hot ? " · 이 매물로 완성!" : ""}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

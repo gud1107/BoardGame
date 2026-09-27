@@ -24,6 +24,7 @@ export default function PlayerArea({
   isActive,
   hasPassed,
   isConnected,
+  lotCompletes = [],
 }: {
   player: PlayerState;
   name: string;
@@ -32,6 +33,8 @@ export default function PlayerArea({
   isActive: boolean;
   hasPassed: boolean;
   isConnected: boolean;
+  /** Collections this seat would complete by winning the lot currently on the block. */
+  lotCompletes?: string[];
 }) {
   const isMe = player.seat === viewerSeat;
   const canSeeCoins = isMe || coinVisibility === "public";
@@ -65,6 +68,12 @@ export default function PlayerArea({
         <span>📊 보유자산 {ownedAssets.length}장</span>
         <span className="font-semibold text-white light:text-slate-900">점수 {score.total}</span>
       </div>
+
+      {lotCompletes.length > 0 && (
+        <div className="rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] font-semibold text-rose-100 ring-1 ring-rose-400/50 light:bg-rose-50 light:text-rose-800 light:ring-rose-300">
+          🔥 이 매물 낙찰 시 시너지 완성 — {lotCompletes.join(", ")}
+        </div>
+      )}
 
       {player.assets.length > 0 && (
         <div className="flex flex-wrap gap-1">
