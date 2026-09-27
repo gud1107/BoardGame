@@ -27,8 +27,17 @@ export default function ResourceIcon({
     <svg viewBox="0 0 24 24" className={className} role="img" aria-label={title ?? meta.label}>
       <title>{title ?? meta.label}</title>
       <polygon points="12,2 21,9 17,22 7,22 3,9" fill={meta.fill} stroke={meta.stroke} strokeWidth="1.5" strokeLinejoin="round" />
-      <polygon points="12,2 21,9 12,11.5 3,9" fill="#ffffff" opacity="0.3" />
-      <polygon points="7,22 17,22 12,11.5" fill="#000000" opacity="0.12" />
+      {/* Faceted cut: a pentagonal table facet with crown facets fanning out
+          to each girdle vertex — lit facets top-left, shaded bottom-right,
+          plus a thin prism highlight, so it reads as a cut gemstone. */}
+      <polygon points="12,2 21,9 16,10.5 12,6.5" fill="#ffffff" opacity="0.38" />
+      <polygon points="12,2 12,6.5 8,10.5 3,9" fill="#ffffff" opacity="0.55" />
+      <polygon points="3,9 8,10.5 9.5,16 7,22" fill="#ffffff" opacity="0.14" />
+      <polygon points="21,9 17,22 14.5,16 16,10.5" fill="#000000" opacity="0.2" />
+      <polygon points="7,22 17,22 14.5,16 9.5,16" fill="#000000" opacity="0.26" />
+      <polygon points="12,6.5 16,10.5 14.5,16 9.5,16 8,10.5" fill={meta.fill} stroke={meta.stroke} strokeWidth="0.4" strokeOpacity="0.6" />
+      <polygon points="12,6.5 16,10.5 12,11 8,10.5" fill="#ffffff" opacity="0.3" />
+      <line x1="7" y1="5.6" x2="10.2" y2="3.4" stroke="#ffffff" strokeWidth="0.9" strokeLinecap="round" opacity="0.85" />
     </svg>
   );
 }
@@ -64,6 +73,12 @@ export function ResourceCube({
         border: `1px solid ${meta.stroke}`,
       }}
     >
+      {/* Faceted-gem planes: a lit upper-left bevel and a shaded lower-right
+          bevel split by hard stops, so the cube catches light like a cut stone. */}
+      <span
+        className="absolute inset-0 rounded-[5px]"
+        style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.32) 0 30%, rgba(255,255,255,0.06) 30% 58%, rgba(0,0,0,0.2) 58% 100%)" }}
+      />
       <span
         className="absolute top-[12%] left-[14%] h-[35%] w-[35%] rounded-full"
         style={{ background: "radial-gradient(circle, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0) 75%)" }}

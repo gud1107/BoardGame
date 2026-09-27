@@ -54,6 +54,15 @@
 
 **검증**: `tsc`(century 관련 에러 0 — `.next/dev/types`의 `zz-lot-preview` 에러는 다른 세션 산출물), `eslint src/games/century` 0, `vitest src/games/century` 58/58, 6개 씬을 정적 렌더→헤드리스 Chromium 스크린샷으로 육안 확인(hero/strip 두 크기). 실제 게임 화면 플레이 확인은 안 함.
 
+### 🖼️ 후속 (2026-09-27): 앤틱 유화 질감 + 금박 필리그리 프레임 + 패싯 젬 향신료
+
+두 번째 명세("Fine-Art Antique Oil Painting Suite")를 같은 `CardIllustration.tsx` 위에 반영 — 이번에도 명세의 `CenturyMasterpieceIllustration`/`FacetedSpiceIcon`/`CenturyCardItem` 병렬 컴포넌트·타입은 만들지 않음(기존 카드 얼굴/`ResourceIcon`을 강화).
+- **유화 레이어**: 씬마다 광원 좌표(`LIGHT`) 중심의 키아로스쿠로 암부 → `feTurbulence` 캔버스 결(곱하기 합성) → 저주파 turbulence를 얇은 알파 선으로 바꾼 크랙(craquelure). 기존 비네트는 키아로스쿠로로 대체.
+- **금박 프레임**: 금 그라디언트 베젤 + 리벳 달린 아라베스크 코너 4개. `slice`로 잘리는 SVG 바깥의 DOM이라 비율과 무관하게 찌그러지지 않음.
+- **씬 디테일**: 터번 보석 핀/금실 안감, 벨벳 인디고 터번의 거상 + 흔들리는 황동 램프 + 향로 연기, 3본 마스트 갤리선(노·깃발), 대리석 광택 기둥 + 모자이크 아치 + 샹들리에, 알렘빅 증류관 등. 애니메이션은 `motion-safe:`로만.
+- **패싯 젬**: `ResourceIcon`(점수 카드 비용 등) 보석 글리프에 테이블/크라운 면 + 프리즘 하이라이트, `ResourceCube`에 명·암 베벨 면 추가 — 캐러밴 칸/시장 스테이크 큐브 등 전역에 반영됨.
+- **검증**: tsc/eslint 0, century vitest 58/58, 정적 렌더 → 헤드리스 스크린샷 확인. 실제 게임 화면 플레이 확인은 안 함.
+
 ## 🖼️ 위대한 투자 (`great-legacy`) 경매 카탈로그 매물 이미지 — 2026-09-27 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: 실제 경매장 매물 카탈로그처럼 고급스럽게 보이도록 경매 상품마다 이미지를 넣기.
