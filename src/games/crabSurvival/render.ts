@@ -1371,9 +1371,12 @@ function drawKingMarker(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H
   ctx.strokeStyle = "rgba(0,0,0,0.7)";
   const label = `${k.name} ${dist}m`;
   const ly = py + (py > H / 2 ? -34 : 18);
-  ctx.strokeText(label, px, ly);
+  // Keep the label on-screen when the marker hugs the left/right edge.
+  const half = ctx.measureText(label).width / 2 + 4;
+  const lx = Math.min(W - half, Math.max(half, px));
+  ctx.strokeText(label, lx, ly);
   ctx.fillStyle = "#fde047";
-  ctx.fillText(label, px, ly);
+  ctx.fillText(label, lx, ly);
 }
 
 /** Minimap: island, pools, gold chests, you, and the king ping. */

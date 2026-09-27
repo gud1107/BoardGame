@@ -702,7 +702,7 @@ export default function CrabSurvivalCanvas({
             🦀
           </TouchButton>
           <TouchButton
-            className="right-28 bottom-4 h-16 w-16 border-sky-200/60 bg-sky-500/40 text-2xl active:bg-sky-400/60"
+            className="right-8 bottom-32 h-16 w-16 border-sky-200/60 bg-sky-500/40 text-2xl active:bg-sky-400/60"
             label="부스트"
             onChange={(v) => {
               audioRef.current?.unlock();
