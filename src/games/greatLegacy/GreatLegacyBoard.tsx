@@ -10,8 +10,8 @@ import CollectionSynergyPanel from "./CollectionSynergyPanel";
 import SynergyCompleteFX from "./SynergyCompleteFX";
 import InvestmentSoundHud from "./InvestmentSoundHud";
 import { getInvestmentSound } from "./investmentSound";
-import { detectAuctionCues } from "./auctionCues";
-import { collectionKey, collectionTitle, completedCollections, detectSynergyChanges, lotSynergyImpact, type SynergyChangeEvent } from "./synergy";
+import { auctionHeat, detectAuctionCues } from "./auctionCues";
+import { collectionKey, collectionTitle, completedCollections, parseCollectionKey, detectSynergyChanges, lotSynergyImpact, type SynergyChangeEvent } from "./synergy";
 import { assetImageSrc } from "./lotPhotos";
 import LotCatalogCard from "./LotCatalogCard";
 import RulebookModal from "./RulebookModal";
@@ -109,11 +109,12 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
     }
     if (synergyChanges.length > 0) {
       setSynergyQueue((prev) => [...prev, ...synergyChanges]);
-      const sound = getSoundEngine();
+      // Orchestral cues (investmentSound.ts) so they sit inside the symphony instead of on top of it.
+      const investment = getInvestmentSound();
       const mine = synergyChanges.filter((c) => c.seat === viewerSeat);
-      if (mine.some((c) => c.type === "break")) sound.playSynergyBreakSound();
-      else if (mine.length > 0) sound.playSynergyCompleteSound();
-      else sound.playSynergyRivalSound();
+      if (mine.some((c) => c.type === "break")) investment.synergyBreak();
+      else if (mine.length > 0) investment.synergyComplete();
+      else investment.synergyRival();
     }
     if (detected.length > 0) {
       const sound = getSoundEngine();
@@ -133,6 +134,12 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
     investment.setBgmWanted(true);
     return () => investment.setBgmWanted(false);
   }, []);
+  // Penalty card on the block → darker variant; climbing bids → faster, denser score.
+  const bgmMood = auction?.kind === "reverse" ? "reverse" : "normal";
+  const bgmHeat = auctionHeat(state);
+  useEffect(() => {
+    getInvestmentSound().setAuctionMood(bgmMood, bgmHeat);
+  }, [bgmMood, bgmHeat]);
 
   const handleSynergyFxDone = useCallback(() => setSynergyQueue((prev) => prev.slice(1)), []);
   const handleCoinEffectDone = useCallback((id: number) => {
@@ -244,7 +251,7 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-1 text-[11px]">
-                        {synergies.length === 0 ? (
+                        {synergies.length === 0 && (player.brokenCollections ?? []).length === 0 ? (
                           <span className="text-white/35 light:text-slate-400">완성한 시너지 없음</span>
                         ) : (
                           synergies.map((c) => (
@@ -253,6 +260,16 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
                             </span>
                           ))
                         )}
+                        {(player.brokenCollections ?? []).map((key, i) => (
+                          // A collection can break, be rebuilt and break again — index keeps repeats distinct.
+                          <span
+                            key={`broken-${key}-${i}`}
+                            title="이번 판에서 완성했다가 상장폐지/강제 반대매매로 깨진 시너지"
+                            className="rounded-full bg-rose-500/15 px-2 py-0.5 text-rose-200 ring-1 ring-rose-400/50 light:bg-rose-50 light:text-rose-700"
+                          >
+                            💔 <span className="line-through decoration-rose-400/80">{collectionTitle(parseCollectionKey(key))}</span> 붕괴
+                          </span>
+                        ))}
                       </div>
                       {player.assets.length > 0 && (
                         <div className="flex flex-wrap gap-1">

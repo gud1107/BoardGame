@@ -11,6 +11,11 @@ export function collectionKey(c: CollectionRef): string {
   return c.kind === "market" ? `m:${c.market}` : `s:${c.sector}`;
 }
 
+/** Inverse of collectionKey (for keys persisted in state, e.g. PlayerState.brokenCollections). */
+export function parseCollectionKey(key: string): CollectionRef {
+  return key.startsWith("m:") ? { kind: "market", market: key.slice(2) as Market } : { kind: "sector", sector: key.slice(2) as Sector };
+}
+
 export function collectionTitle(c: CollectionRef): string {
   return c.kind === "market" ? `${MARKET_EMOJI[c.market]} ${c.market} 영끌 올인` : `${SECTOR_EMOJI[c.sector]} ${c.sector} 분산투자`;
 }

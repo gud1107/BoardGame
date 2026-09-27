@@ -1,3 +1,4 @@
+import { emptyPurse, purseValue } from "./constants";
 import type { AuctionKind, GreatLegacyState, SeatIndex } from "./types";
 
 export interface AuctionCues {
@@ -33,4 +34,16 @@ export function detectAuctionCues(prev: GreatLegacyState, next: GreatLegacyState
   });
   cues.sold = { winnerSeat: winner?.seat ?? null, kind: before.kind };
   return cues;
+}
+
+/**
+ * 0..1 "how heated is this lot" for the BGM: the high bid relative to a
+ * quarter of the table's average money (floored at 12 coins, so opening bids
+ * stay calm). ~20 coins on a fresh 4-player table ≈ 0.57.
+ */
+export function auctionHeat(state: GreatLegacyState): number {
+  const auction = state.auction;
+  if (!auction || state.players.length === 0) return 0;
+  const avgMoney = state.players.reduce((sum, p) => sum + purseValue(p.purse) + purseValue(auction.committed[p.seat] ?? emptyPurse()), 0) / state.players.length;
+  return Math.min(1, auction.highestBid / Math.max(12, avgMoney * 0.25));
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ASSET_DEFS } from "./constants";
-import { chooseBotAction, computeCollectionBonus, getValidMoves, startGame } from "./engine";
+import { applyAction, chooseBotAction, computeCollectionBonus, getValidMoves, startGame } from "./engine";
 import { collectionTitle, detectSynergyChanges, lotSynergyImpact, projectWin } from "./synergy";
 import type { AuctionCardDef, GreatLegacyState, OwnedAsset, PlayerState } from "./types";
 
@@ -65,7 +65,7 @@ describe("detectSynergyChanges / lotSynergyImpact", () => {
 });
 
 describe("bot synergy awareness", () => {
-  // A 3-point asset already bid up to 10 — plain value alone isn't worth an 11-coin raise.
+  // A 3-point asset already bid up to 20 — plain value alone isn't worth a 21-coin bid.
   function contested(rivalAssets: OwnedAsset[]): { state: GreatLegacyState; bot: number } {
     const base = startGame("4p", 9);
     const bot = base.auction!.activeSeat;
@@ -77,9 +77,9 @@ describe("bot synergy awareness", () => {
         ...base.auction!,
         card: assetCard("us-meme-1"),
         kind: "normal",
-        highestBid: 10,
+        highestBid: 20,
         highestBidder: rival,
-        committed: { ...base.auction!.committed, [rival]: { 20: 0, 10: 1, 5: 0, 1: 0 } },
+        committed: { ...base.auction!.committed, [rival]: { 20: 1, 10: 0, 5: 0, 1: 0 } },
       },
     };
     return { state, bot };
@@ -98,14 +98,38 @@ describe("bot synergy awareness", () => {
     expect(chooseBotAction(threat.state, threat.bot, 1, () => 0.99)?.type).toBe("pass");
   });
 
-  it("a nearly broke bot takes a reverse-auction penalty card instead of bidding itself dry", () => {
+  function reverseLot(lastAsset: string, highestBid: number) {
     const base = startGame("4p", 9);
     const bot = base.auction!.activeSeat;
     const state: GreatLegacyState = {
       ...base,
-      players: base.players.map((p) => (p.seat === bot ? { ...p, purse: { 20: 0, 10: 0, 5: 0, 1: 3 }, assets: [owned("kr-meme-2")] } : p)),
-      auction: { ...base.auction!, card: { kind: "special", cardId: "s", special: "상장폐지" }, kind: "reverse", highestBid: 1 },
+      players: base.players.map((p) => (p.seat === bot ? { ...p, assets: [owned(lastAsset)] } : p)),
+      auction: { ...base.auction!, card: { kind: "special", cardId: "s", special: "상장폐지" }, kind: "reverse", highestBid },
     };
-    expect(chooseBotAction(state, bot, 10, () => 0.99)?.type).toBe("pass");
+    return { state, bot };
+  }
+
+  it("reverse auction: keeps dodging while the table is cheaper than the penalty, takes the card once it isn't", () => {
+    const cheap = reverseLot("kr-meme-2", 1); // losing a 4-point asset vs. a 2-coin bid → stay in
+    expect(chooseBotAction(cheap.state, cheap.bot, 10, () => 0.99)?.type).toBe("bid");
+    const pricey = reverseLot("us-meme-2", 30); // losing a 1-point asset vs. a 31-coin bid → take it (refunded)
+    expect(chooseBotAction(pricey.state, pricey.bot, 10, () => 0.99)?.type).toBe("pass");
+  });
+
+});
+
+describe("brokenCollections record (engine)", () => {
+  it("a 상장폐지 that breaks a finished collection is logged on the player who took it", () => {
+    const base = startGame("4p", 9);
+    const bot = base.auction!.activeSeat;
+    const full = [owned("us-bigtech-1"), owned("us-bluechip-1"), owned("us-meme-1")];
+    const state: GreatLegacyState = {
+      ...base,
+      players: base.players.map((p) => (p.seat === bot ? { ...p, assets: full } : p)),
+      auction: { ...base.auction!, card: { kind: "special", cardId: "s", special: "상장폐지" }, kind: "reverse", highestBid: 0 },
+    };
+    const after = applyAction(state, { type: "pass", seat: bot }); // first pass in a reverse auction takes the card
+    expect(after.players.find((p) => p.seat === bot)!.brokenCollections).toEqual(["m:미장"]);
+    expect(after.players.filter((p) => p.seat !== bot).every((p) => p.brokenCollections === undefined)).toBe(true);
   });
 });

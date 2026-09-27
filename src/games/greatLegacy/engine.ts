@@ -186,6 +186,17 @@ function grantSpecial(player: PlayerState, kind: SpecialKind): PlayerState {
   return { ...player, assets };
 }
 
+/** Appends any collection `before` had completed but `after` no longer has to `after.brokenCollections` (for the game-over "깨진 시너지" record). */
+function recordBrokenCollections(before: PlayerState, after: PlayerState): PlayerState {
+  const was = computeCollectionBonus(before.assets);
+  const now = computeCollectionBonus(after.assets);
+  const lost = [
+    ...was.markets.filter((m) => !now.markets.includes(m)).map((m) => `m:${m}`),
+    ...was.sectors.filter((x) => !now.sectors.includes(x)).map((x) => `s:${x}`),
+  ];
+  return lost.length === 0 ? after : { ...after, brokenCollections: [...(after.brokenCollections ?? []), ...lost] };
+}
+
 function grantCard(player: PlayerState, card: AuctionCardDef): PlayerState {
   return card.kind === "asset" ? grantAsset(player, card) : grantSpecial(player, card.special);
 }
@@ -213,7 +224,7 @@ function resolveAuction(state: GreatLegacyState, winnerSeat: SeatIndex): GreatLe
     }
   }
 
-  players = players.map((p) => (p.seat === winnerSeat ? grantCard(p, auction.card) : p));
+  players = players.map((p) => (p.seat === winnerSeat ? recordBrokenCollections(p, grantCard(p, auction.card)) : p));
 
   const deck = state.deck;
   if (deck.length === 0) {
@@ -487,37 +498,90 @@ function penaltyCost(state: GreatLegacyState, seat: SeatIndex, ownDelta: number)
   return Math.max(2, scoreLoss - Math.min(0, ownDelta));
 }
 
+/**
+ * Coins this seat can afford to sink into each lot it expects to win:
+ * total money ÷ its fair share of the lots still to come. Pacing every bid
+ * against this is what keeps an aggressive bot from blowing its purse by
+ * mid-game and handing the rest of the deck to whoever still has money.
+ */
+function budgetPerLot(state: GreatLegacyState, seat: SeatIndex): number {
+  const player = state.players.find((p) => p.seat === seat)!;
+  const total = purseValue(player.purse) + purseValue(state.auction?.committed[seat] ?? emptyPurse());
+  const lotsLeft = state.deck.length + (state.auction ? 1 : 0);
+  return total / Math.max(1, lotsLeft / state.players.length);
+}
+
+/** Rough coins-per-point exchange rate for this seat (a lot is worth ~3 points), clamped to a sane band. */
+function coinsPerPoint(state: GreatLegacyState, seat: SeatIndex): number {
+  return Math.min(6, Math.max(1, budgetPerLot(state, seat) / 3));
+}
+
+/** How many coins this seat should be willing to sink to dodge the reverse-auction card on the block. */
+function penaltyCoins(state: GreatLegacyState, seat: SeatIndex): number {
+  const p = state.players.find((q) => q.seat === seat)!;
+  const own = lotSynergyImpact(p.assets, p.pendingSpecials, state.auction!.card);
+  const ownDelta = (own.gained.length - own.lost.length) * COLLECTION_BONUS;
+  return penaltyCost(state, seat, ownDelta) * coinsPerPoint(state, seat);
+}
+
 function scoreMove(state: GreatLegacyState, seat: SeatIndex, move: EngineAction, level: BotLevel): number {
   const auction = state.auction!;
   const player = state.players.find((p) => p.seat === seat)!;
-  const purseTotal = purseValue(player.purse) + purseValue(auction.committed[seat] ?? emptyPurse());
+  const committed = purseValue(auction.committed[seat] ?? emptyPurse());
+  const purseTotal = purseValue(player.purse) + committed;
   const scarcity = purseTotal <= 0 ? 0 : 1; // guards a divide-by-zero edge case, not a real scarcity model
 
   const tier = botTier(level);
   // Novice bots ignore synergies entirely; core/expert weigh their own +3s, and deny rivals' at half/full weight.
   const stakes = tier === "novice" ? { ownDelta: 0, rivalGain: 0, rivalLoss: 0 } : synergyStakes(state, seat);
   const denialWeight = tier === "expert" ? 1 : tier === "core" ? 0.5 : 0;
+  // The bid total this move would put on the table (what the cap must be compared against —
+  // the old code compared highestBid + the coins being added, which double-counted).
+  const newTotal = move.type === "bid" ? committed + purseValue(move.addCoins) : committed;
 
   if (auction.kind === "normal") {
     const value = cardValueEstimate(auction.card) + Math.max(0, stakes.ownDelta) + stakes.rivalGain * denialWeight;
     if (move.type === "pass") return -value; // walking away from a card worth chasing is a mild loss
-    const cost = purseValue(move.addCoins);
-    // Willing to chase up to ~4x the card's value (asset score + synergy it completes + rival synergy it blocks) and never more than what's left.
-    const willingCap = Math.max(value * 4, tier === "expert" ? 20 : 10);
-    return auction.highestBid + cost <= willingCap ? value * 2 - cost * 0.1 : -cost;
+    // Willing to chase up to ~4x the card's value (asset score + synergy it completes + rival synergy it blocks)…
+    let willingCap = Math.max(value * 4, tier === "expert" ? 20 : 10);
+    // …but core/expert also pace against their budget: a lot worth the average ~3 points gets about one
+    // lot's share of the purse, a more valuable one proportionally more (never the whole purse on one lot).
+    if (tier !== "novice") willingCap = Math.min(willingCap, budgetPerLot(state, seat) * Math.max(0.5, value / 3));
+    // Endgame spend-down: leftover coins only break ties, so in the last ~round of lots let the budget
+    // (not the flat 20-coin cap) bound what a lot is worth chasing.
+    const lotsLeft = state.deck.length + 1;
+    if (tier !== "novice" && lotsLeft <= state.players.length) {
+      willingCap = Math.max(willingCap, Math.min(purseTotal, budgetPerLot(state, seat)) * Math.min(1, value / 3));
+    }
+    return newTotal <= willingCap ? value * 2 - newTotal * 0.1 : -newTotal;
   }
 
-  // Reverse auction: passing means "I accept the penalty card" — worth
-  // avoiding in proportion to what it would cost (score + broken synergy),
-  // and a bit more while a still-in rival would lose a synergy by taking it.
-  const avoid = penaltyCost(state, seat, stakes.ownDelta) + stakes.rivalLoss * denialWeight * 0.5;
-  if (move.type === "pass") return -avoid;
-  const cost = purseValue(move.addCoins);
-  const affordableMargin = purseTotal - cost;
-  // Keep dodging while it's cheap relative to what's left; a costly penalty (≥ one synergy) justifies dodging at a thinner margin.
-  const marginFactor = avoid >= COLLECTION_BONUS ? 1 : 2;
-  // (Previously the fallback was -1, which still beat passing's -2, so bots never actually took the card when coins ran thin.)
-  return affordableMargin > cost * marginFactor ? 1 * scarcity : -(avoid + 1);
+  // Reverse auction: the FIRST to pass takes the card but is refunded;
+  // everyone else forfeits what they committed. So staying in only ever
+  // costs coins in the branch where someone else folds first — and in that
+  // branch it saves the penalty. Staying is therefore right exactly while
+  // the total on the table is below what the penalty is worth in coins.
+  if (tier === "novice") {
+    const avoid = 2;
+    if (move.type === "pass") return -avoid;
+    const affordableMargin = purseTotal - purseValue(move.addCoins);
+    // (Previously the fallback was -1, which still beat passing's -2, so bots never actually took the card when coins ran thin.)
+    return affordableMargin > purseValue(move.addCoins) * 2 ? 1 * scarcity : -(avoid + 1);
+  }
+  if (move.type === "pass") return 0;
+  const myCap = penaltyCoins(state, seat);
+  let stay = myCap - newTotal;
+  if (tier === "expert" && stay > 0) {
+    // Dump pressure: if a still-in rival's own dodge budget is already below this level, they are
+    // about to fold and eat the card — hold on one more round to push it onto them.
+    const rivalFolds = state.players.some((p) => {
+      if (p.seat === seat || auction.passed.includes(p.seat)) return false;
+      const theirMoney = purseValue(p.purse) + purseValue(auction.committed[p.seat] ?? emptyPurse());
+      return penaltyCoins(state, p.seat) < newTotal + 1 || theirMoney <= newTotal;
+    });
+    if (rivalFolds) stay += 2;
+  }
+  return stay >= 0 ? 1 + stay * 0.1 : stay;
 }
 
 /** Picks a move for `seat` per the shared Level 1–10 curve, or null if it isn't their turn / they have no legal move. */

@@ -76,6 +76,13 @@ export interface PlayerState {
    * very next asset).
    */
   pendingSpecials: SpecialKind[];
+  /**
+   * Completed +3 collections this player later lost (상장폐지/강제반대매매
+   * discarding one of their cards), in the order they broke — keys like
+   * "m:미장" / "s:블루칩" (synergy.ts collectionKey). Optional so games
+   * already in flight before this field existed still load.
+   */
+  brokenCollections?: string[];
 }
 
 export type AuctionKind = "normal" | "reverse";
