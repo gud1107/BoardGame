@@ -17,11 +17,25 @@ import {
   type Point,
 } from "./drawing";
 import { getDoodlePhoneSound } from "./doodlePhoneSound";
+import DrawingView from "./DrawingView";
+import { ONION_OPACITY } from "./modes";
 import { clearToPaper, prepareContext, renderDrawing, renderOp, strokePath } from "./drawingRenderer";
 
 /**
  * Drawing editor (rulebook §4): pen, eraser, paint bucket, undo/redo, clear,
  * 5 brush sizes, 20 colors, and an ink gauge for the per-drawing size cap.
+ *
+ * Mode features (modes.ts):
+ * - `blind` (비밀): strokes are painted to an offscreen canvas — the real
+ *   pixels still exist, so the paint bucket keeps working — while the
+ *   visible sheet stays blank.
+ * - `baseDrawing` (보완): the previous player's picture is a locked first
+ *   layer; undo never reaches below it and "전체 지우기" is hidden. The
+ *   result is base ops + your ops, so the ink gauge shows what's left for the
+ *   whole shared sheet.
+ * - `onionDrawing` (애니메이션): the previous frame as a faint grayscale ghost
+ *   over the paper (multiply blend, so it reads as "under" your strokes).
+ * - `allowUndo`: host option; hides undo/redo and their shortcuts.
  *
  * Uncontrolled on purpose: pointer moves arrive far faster than React should
  * re-render, so the op list lives in refs and is painted straight onto the
@@ -49,9 +63,21 @@ const TOOLS: { id: Tool; icon: string; label: string }[] = [
   { id: "fill", icon: "🪣", label: "채우기" },
 ];
 
-export default function DoodleCanvas({ ref, disabled = false }: { ref?: Ref<DoodleCanvasHandle>; disabled?: boolean }) {
+interface DoodleCanvasProps {
+  ref?: Ref<DoodleCanvasHandle>;
+  disabled?: boolean;
+  blind?: boolean;
+  baseDrawing?: Drawing | null;
+  onionDrawing?: Drawing | null;
+  allowUndo?: boolean;
+}
+
+export default function DoodleCanvas({ ref, disabled = false, blind = false, baseDrawing = null, onionDrawing = null, allowUndo = true }: DoodleCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  /** Where strokes are painted: the visible canvas, or an offscreen one in blind mode. */
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+  // Fixed for the lifetime of this editor (it is keyed per turn by its parent).
+  const baseOpsRef = useRef<readonly DrawOp[]>(baseDrawing?.ops ?? []);
   const opsRef = useRef<DrawOp[]>([]);
   const redoRef = useRef<DrawOp[]>([]);
   const strokeRef = useRef<{ points: Point[]; color: number; size: number } | null>(null);
@@ -62,21 +88,26 @@ export default function DoodleCanvas({ ref, disabled = false }: { ref?: Ref<Dood
   // Mirrors of the op refs that the toolbar renders from.
   const [history, setHistory] = useState({ undo: 0, redo: 0, ink: 0 });
 
+  const currentDrawing = useCallback((extra: readonly DrawOp[] = []): Drawing => ({ v: 1, ops: [...baseOpsRef.current, ...opsRef.current, ...extra] }), []);
+
   const syncHistory = useCallback(() => {
-    setHistory({ undo: opsRef.current.length, redo: redoRef.current.length, ink: serializedLength({ v: 1, ops: opsRef.current }) });
-  }, []);
+    setHistory({ undo: opsRef.current.length, redo: redoRef.current.length, ink: serializedLength(currentDrawing()) });
+  }, [currentDrawing]);
 
   const repaint = useCallback(() => {
     const ctx = ctxRef.current;
-    if (ctx) renderDrawing(ctx, { v: 1, ops: opsRef.current });
-  }, []);
+    if (ctx) renderDrawing(ctx, currentDrawing());
+  }, [currentDrawing]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    ctxRef.current = prepareContext(canvas, PIXEL_SCALE);
-    if (ctxRef.current) clearToPaper(ctxRef.current);
-  }, []);
+    const visible = prepareContext(canvas, PIXEL_SCALE);
+    if (visible) clearToPaper(visible);
+    ctxRef.current = blind ? prepareContext(document.createElement("canvas"), PIXEL_SCALE) : visible;
+    repaint();
+    syncHistory();
+  }, [blind, repaint, syncHistory]);
 
   const commitOp = useCallback(
     (op: DrawOp) => {
@@ -110,10 +141,10 @@ export default function DoodleCanvas({ ref, disabled = false }: { ref?: Ref<Dood
     commitOp(op);
   }, [commitOp]);
 
-  useImperativeHandle(ref, () => ({ getDrawing: () => ({ v: 1, ops: [...opsRef.current] }) }), []);
+  useImperativeHandle(ref, () => ({ getDrawing: () => currentDrawing() }), [currentDrawing]);
 
   useEffect(() => {
-    if (disabled) return;
+    if (disabled || !allowUndo) return;
     const onKey = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       if (!(e.ctrlKey || e.metaKey) || (key !== "z" && key !== "y")) return;
@@ -123,7 +154,7 @@ export default function DoodleCanvas({ ref, disabled = false }: { ref?: Ref<Dood
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [disabled, undo, redo]);
+  }, [disabled, allowUndo, undo, redo]);
 
   const inkLeft = MAX_DRAWING_CHARS - history.ink;
   const outOfInk = inkLeft < 200;
@@ -138,7 +169,7 @@ export default function DoodleCanvas({ ref, disabled = false }: { ref?: Ref<Dood
     strokeRef.current = null;
     if (!stroke) return;
     const op = strokeOp(stroke.color, stroke.size, stroke.points);
-    if (serializedLength({ v: 1, ops: [...opsRef.current, op] }) > MAX_DRAWING_CHARS) {
+    if (serializedLength(currentDrawing([op])) > MAX_DRAWING_CHARS) {
       repaint(); // drop the overflowing stroke from the screen too
       return;
     }
@@ -189,6 +220,7 @@ export default function DoodleCanvas({ ref, disabled = false }: { ref?: Ref<Dood
 
   return (
     <div className="flex flex-col gap-2">
+      <div className="relative">
       <canvas
         ref={canvasRef}
         onPointerDown={handlePointerDown}
@@ -200,6 +232,17 @@ export default function DoodleCanvas({ ref, disabled = false }: { ref?: Ref<Dood
         }`}
         aria-label="그림판"
       />
+      {onionDrawing && (
+        <div className="pointer-events-none absolute inset-0 mix-blend-multiply grayscale" style={{ opacity: ONION_OPACITY }} aria-hidden>
+          <DrawingView drawing={onionDrawing} label="이전 프레임 잔상" className="shadow-none ring-0" />
+        </div>
+      )}
+      {blind && (
+        <p className="pointer-events-none absolute top-3 left-3 rounded-full bg-rose-500/90 px-3 py-1 text-xs font-bold text-white shadow">
+          🙈 비밀 모드 — 그린 선이 화면에 보이지 않아요
+        </p>
+      )}
+      </div>
 
       {!disabled && (
         <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/20 p-2 light:border-slate-200 light:bg-slate-50">
@@ -211,15 +254,21 @@ export default function DoodleCanvas({ ref, disabled = false }: { ref?: Ref<Dood
               </button>
             ))}
             <span className="mx-1 h-6 w-px bg-white/10 light:bg-slate-200" />
-            <button type="button" title="되돌리기 (Ctrl+Z)" onClick={undo} disabled={history.undo === 0} className={`${toolButton} ${idle}`}>
-              ↶
-            </button>
-            <button type="button" title="다시하기 (Ctrl+Y)" onClick={redo} disabled={history.redo === 0} className={`${toolButton} ${idle}`}>
-              ↷
-            </button>
-            <button type="button" title="전체 지우기" onClick={clearAll} disabled={history.undo === 0} className={`${toolButton} ${idle}`}>
-              🗑️
-            </button>
+            {allowUndo && (
+              <>
+                <button type="button" title="되돌리기 (Ctrl+Z)" onClick={undo} disabled={history.undo === 0} className={`${toolButton} ${idle}`}>
+                  ↶
+                </button>
+                <button type="button" title="다시하기 (Ctrl+Y)" onClick={redo} disabled={history.redo === 0} className={`${toolButton} ${idle}`}>
+                  ↷
+                </button>
+              </>
+            )}
+            {!baseDrawing?.ops.length && (
+              <button type="button" title="전체 지우기" onClick={clearAll} disabled={history.undo === 0} className={`${toolButton} ${idle}`}>
+                🗑️
+              </button>
+            )}
             <span className="mx-1 h-6 w-px bg-white/10 light:bg-slate-200" />
             {BRUSH_SIZES.map((px, i) => (
               <button key={px} type="button" title={`굵기 ${i + 1}`} aria-pressed={size === i} onClick={() => setSize(i)} className={`${toolButton} w-9 ${size === i ? active : idle}`}>

@@ -132,6 +132,7 @@ export const ROOM_RULEBOOK_SUMMARIES: Record<string, RoomRulebookSummary> = {
     specialRules: [
       "⏰ 시간이 끝나면 그리던 그림은 그대로 제출, 빈 문장은 랜덤 제시어로 자동 채움",
       "🤖 연결이 끊긴 자리는 투표로 AI 봇이 이어서 그리고 추측",
+      "🎮 방장이 대기실에서 9가지 모드(넉오프·비밀·애니메이션·아이스브레이커·덧그리기·점수·스피드런·샌드위치) 중 선택",
     ],
   },
   "lost-cities": {

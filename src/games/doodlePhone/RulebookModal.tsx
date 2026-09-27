@@ -1,12 +1,13 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { MAX_PLAYERS, MIN_PLAYERS, PACE_LABELS, PACE_SECONDS, TEXT_MAX_CHARS, TEXT_MIN_CHARS, type TimerPace } from "./engine";
+import { MAX_PLAYERS, MIN_PLAYERS, TEXT_MAX_CHARS, TEXT_MIN_CHARS } from "./engine";
+import { GAME_MODES, MODES, TIME_MULTIPLIER_MAX, TIME_MULTIPLIER_MIN } from "./modes";
 
 const box = "rounded-xl border border-white/10 bg-white/5 p-3 light:border-slate-200 light:bg-white light:shadow-sm";
 const h3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 
-/** In-app summary of boardGameRule/갈틱폰/갈틱폰.md. Timer numbers come from engine.ts so they can't drift. */
+/** In-app summary of boardGameRule/갈틱폰/갈틱폰.md. Mode names and times come from modes.ts so they can't drift. */
 export default function DoodlePhoneRulebookModal({ onClose }: { onClose: () => void }) {
   return (
     <Overlay title="✏️ 그림 전화기 룰북" onClose={onClose} wide>
@@ -16,7 +17,7 @@ export default function DoodlePhoneRulebookModal({ onClose }: { onClose: () => v
         </p>
 
         <section>
-          <h3 className={h3}>진행</h3>
+          <h3 className={h3}>진행 (일반 모드 기준)</h3>
           <div className={box}>
             <ol className="list-decimal space-y-1 pl-4 text-xs text-white/70 light:text-slate-600">
               <li>1턴: 모두 각자 자기 앨범에 재미있는 문장(제시어)을 씁니다.</li>
@@ -28,19 +29,21 @@ export default function DoodlePhoneRulebookModal({ onClose }: { onClose: () => v
         </section>
 
         <section>
-          <h3 className={h3}>제한 시간 (방 만들 때 선택)</h3>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {(Object.keys(PACE_SECONDS) as TimerPace[]).map((pace) => (
-              <div key={pace} className={box}>
-                <b>{PACE_LABELS[pace]}</b>
-                <p className="mt-1 text-xs text-white/60 light:text-slate-500">
-                  제시어 {PACE_SECONDS[pace].opening}초 · 그림 {PACE_SECONDS[pace].drawing}초 · 추측 {PACE_SECONDS[pace].guess}초
-                </p>
+          <h3 className={h3}>게임 모드 9종 (방장이 대기실에서 선택)</h3>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {GAME_MODES.map((mode) => (
+              <div key={mode} className={box}>
+                <b>
+                  {MODES[mode].icon} {MODES[mode].title}
+                </b>
+                <p className="mt-1 text-xs text-white/70 light:text-slate-600">{MODES[mode].description}</p>
+                <p className="mt-1 text-[11px] text-white/45 light:text-slate-400">⏱ {MODES[mode].timeLabel}</p>
               </div>
             ))}
           </div>
           <p className="mt-2 text-xs text-white/50 light:text-slate-500">
-            모두 제출하면 시간이 남아도 바로 다음 턴으로 넘어가요. 0초가 되면 그리던 그림은 그대로 제출되고, 비어 있는 문장은 랜덤 제시어로 자동 채워져요(⏰ 자동 표시).
+            방장은 제한 시간 배율({TIME_MULTIPLIER_MIN}×~{TIME_MULTIPLIER_MAX}×), 애니메이션 잔상 표시, 되돌리기 허용 여부도 정할 수 있어요. 모두 제출하면 시간이
+            남아도 바로 다음 턴으로 넘어가요. 0초가 되면 그리던 그림은 그대로 제출되고, 비어 있는 문장은 랜덤 제시어로 자동 채워져요(⏰ 자동 표시).
           </p>
         </section>
 
@@ -58,7 +61,7 @@ export default function DoodlePhoneRulebookModal({ onClose }: { onClose: () => v
             <ul className="list-disc space-y-1 pl-4 text-xs text-white/70 light:text-slate-600">
               <li>방장이 앨범을 한 장씩 넘기며 공개해요(자동 넘기기 가능). 그림은 그려지는 과정이 재생됩니다.</li>
               <li>누구나 😂 🤯 👏 ❤️ 🤔 리액션을 보낼 수 있어요 — 한 장에 최대 3번, 내 작품에는 불가.</li>
-              <li>리액션을 가장 많이 받은 사람이 <b>웃음왕</b>! 결과 화면에서 모든 앨범을 다시 보고 그림을 PNG로 저장할 수 있어요.</li>
+              <li>리액션을 가장 많이 받은 사람이 <b>웃음왕</b>! (점수 모드에서는 앨범마다 최고의 장면 투표 득표 수로 순위를 정해요.) 결과 화면에서 모든 앨범을 다시 보고 그림을 PNG로 저장할 수 있어요.</li>
             </ul>
           </div>
         </section>

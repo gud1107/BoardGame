@@ -12,6 +12,12 @@
  *   was handed, never at the album history, and guesses from which colors
  *   carry the most ink.
  *
+ * - Mode-specific drawing turns (see modes.ts `DrawingReference`): copy /
+ *   memory → redraw the previous picture by hand (wobblier at low levels);
+ *   onion → redraw it nudged sideways so the flipbook moves; base → keep the
+ *   picture and add a small doodle of its own.
+ * - Icebreaker: a canned answer per question.
+ *
  * Lower levels wobble more and more often fall back to the random
  * candidate (`pickByLevel`).
  */
@@ -20,6 +26,7 @@ import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDiffi
 import { CANVAS_H, CANVAS_W, EMPTY_DRAWING, MAX_DRAWING_CHARS, decodePoints, isBlankDrawing, serializedLength, strokeOp, type DrawOp, type Drawing, type Point } from "./drawing";
 import {
   TEXT_MAX_CHARS,
+  albumFor,
   currentTurn,
   hasSubmitted,
   isValidText,
@@ -29,6 +36,7 @@ import {
   type EngineAction,
   type SeatIndex,
 } from "./engine";
+import { ICEBREAKER_QUESTIONS, drawingReferenceFor, icebreakerQuestion, inspirationWord } from "./modes";
 import { BOT_OPENING_PROMPTS, FALLBACK_PROMPTS } from "./prompts";
 
 // ---------------------------------------------------------------------------
@@ -320,20 +328,22 @@ function templatesIn(text: string): Template[] {
   return found.slice(0, 2);
 }
 
+function defaultBoxes(count: number): Box[] {
+  return count === 1
+    ? [{ x: 120, y: 40, size: 240 }]
+    : [
+        { x: 30, y: 80, size: 200 },
+        { x: 250, y: 80, size: 200 },
+      ];
+}
+
 function wobbleFor(level: BotLevel): number {
   const tier = botTier(level);
   return tier === "expert" ? 0.6 : tier === "core" ? 1.6 : 3.2;
 }
 
 /** Composes one or two templates onto the canvas. Deterministic for a given rng. */
-export function drawTemplates(templates: readonly Template[], rng: () => number, level: BotLevel): Drawing {
-  const boxes: Box[] =
-    templates.length === 1
-      ? [{ x: 120, y: 40, size: 240 }]
-      : [
-          { x: 30, y: 80, size: 200 },
-          { x: 250, y: 80, size: 200 },
-        ];
+export function drawTemplates(templates: readonly Template[], rng: () => number, level: BotLevel, boxes: readonly Box[] = defaultBoxes(templates.length)): Drawing {
   const ops: DrawOp[] = [];
   templates.forEach((t, i) => {
     const pen = new Pen(boxes[i], rng, wobbleFor(level));
@@ -351,6 +361,37 @@ export function botDrawingFor(prompt: string, rng: () => number, level: BotLevel
     understood: drawTemplates(matched.length > 0 ? matched : [random], rng, level),
     misread: drawTemplates([random], rng, level),
   };
+}
+
+/**
+ * Redraws `source` by hand: every point jittered by the level's wobble and
+ * shifted by (dx, dy). Used to copy (knock-off/sandwich) and, with a small
+ * shift, to draw the next animation frame.
+ */
+export function redrawDrawing(source: Drawing, rng: () => number, level: BotLevel, dx = 0, dy = 0): Drawing {
+  const wobble = wobbleFor(level) * 1.5;
+  const j = () => (rng() - 0.5) * 2 * wobble;
+  const ops = source.ops.map((op): DrawOp => {
+    if (op.k === "x") return op;
+    if (op.k === "f") return { ...op, x: Math.round(Math.min(CANVAS_W, Math.max(0, op.x + dx))), y: Math.round(Math.min(CANVAS_H, Math.max(0, op.y + dy))) };
+    return strokeOp(op.c, op.w, decodePoints(op.p).map((pt) => ({ x: pt.x + dx + j(), y: pt.y + dy + j() })));
+  });
+  const drawing: Drawing = { v: 1, ops };
+  return serializedLength(drawing) <= MAX_DRAWING_CHARS ? drawing : source;
+}
+
+/** Complement mode: keep every existing op and add one small doodle somewhere on the sheet. */
+export function addToDrawing(base: Drawing, rng: () => number, level: BotLevel): Drawing {
+  const size = 90 + rng() * 50;
+  const box: Box = { x: rng() * (CANVAS_W - size), y: rng() * (CANVAS_H - size), size };
+  const extra = drawTemplates([TEMPLATES[Math.floor(rng() * TEMPLATES.length)]], rng, level, [box]);
+  const drawing: Drawing = { v: 1, ops: [...base.ops, ...extra.ops] };
+  return serializedLength(drawing) <= MAX_DRAWING_CHARS ? drawing : base;
+}
+
+function templateNamed(word: string): Template[] {
+  const found = templatesIn(word);
+  return found.length > 0 ? found : [TEMPLATES[0]];
 }
 
 // ---------------------------------------------------------------------------
@@ -418,6 +459,25 @@ export function guessFromDrawing(drawing: Drawing, rng: () => number): string {
   return Array.from(guess).slice(0, TEXT_MAX_CHARS).join("");
 }
 
+/** One canned answer list per ICEBREAKER_QUESTIONS entry (same order). */
+const ICEBREAKER_ANSWERS: readonly (readonly string[])[] = [
+  ["치킨", "떡볶이", "라면"],
+  ["바다가 보이는 집", "빨간 자동차", "우주 여행"],
+  ["제주도 바다", "비 오는 캠핑장", "눈 덮인 산"],
+  ["순간이동", "하늘을 나는 능력", "투명인간"],
+  ["고양이", "강아지", "문어"],
+  ["피자", "우산", "로봇 친구"],
+  ["우주비행사", "요리사", "선생님"],
+  ["피자", "케이크", "라면"],
+  ["케이크 몰래 먹기", "여행 가기", "잠자기"],
+  ["거미", "구름 낀 밤", "상어"],
+];
+
+function icebreakerAnswer(question: string, rng: () => number): string {
+  const pool = ICEBREAKER_ANSWERS[ICEBREAKER_QUESTIONS.indexOf(question)] ?? BOT_OPENING_PROMPTS;
+  return pool[Math.floor(rng() * pool.length)];
+}
+
 function randomPhrase(rng: () => number): string {
   const pool = [...FALLBACK_PROMPTS, ...BOT_OPENING_PROMPTS];
   return pool[Math.floor(rng() * pool.length)];
@@ -442,21 +502,40 @@ function candidates(state: DoodlePhoneState, seat: SeatIndex, level: BotLevel, r
   if (turn > state.playerCount || hasSubmitted(state, seat, turn)) return [];
   const prompt = promptFor(state, seat, turn);
   if (prompt === undefined) return []; // previous page still in flight — wait for it
+  const album = albumFor(state.playerCount, seat, turn);
 
-  if (turnKind(turn) === "text") {
+  if (turnKind(state, turn) === "text") {
     const text = (t: string, score: number): Candidate => ({ action: { type: "SUBMIT_TEXT", seat, turn, text: t }, score });
     const random = text(randomPhrase(rng), 0);
-    if (prompt === null) return [random, text(BOT_OPENING_PROMPTS[Math.floor(rng() * BOT_OPENING_PROMPTS.length)], 1)];
+    if (prompt === null) {
+      const opening =
+        state.options.mode === "ICEBREAKER" ? icebreakerAnswer(icebreakerQuestion(state.seed, album), rng) : BOT_OPENING_PROMPTS[Math.floor(rng() * BOT_OPENING_PROMPTS.length)];
+      return [random, text(opening, 1)];
+    }
     const guess = prompt.kind === "drawing" ? guessFromDrawing(prompt.drawing, rng) : prompt.text;
     return [random, text(isValidText(guess) ? guess : randomPhrase(rng), 1)];
   }
 
-  const source = prompt?.kind === "text" ? prompt.text : "";
-  const { understood, misread } = botDrawingFor(source, rng, level);
-  return [
-    { action: { type: "SUBMIT_DRAWING", seat, turn, drawing: misread }, score: 0 },
-    { action: { type: "SUBMIT_DRAWING", seat, turn, drawing: understood }, score: 1 },
-  ];
+  const drawing = (d: Drawing, score: number): Candidate => ({ action: { type: "SUBMIT_DRAWING", seat, turn, drawing: d }, score });
+  const scribble = drawing(drawTemplates([TEMPLATES[Math.floor(rng() * TEMPLATES.length)]], rng, level), 0);
+  const reference = drawingReferenceFor(state.options.mode, prompt?.kind ?? null);
+  switch (reference) {
+    case "free":
+      return [scribble, drawing(drawTemplates(templateNamed(inspirationWord(state.seed, album)), rng, level), 1)];
+    case "prompt": {
+      const { understood, misread } = botDrawingFor(prompt?.kind === "text" ? prompt.text : "", rng, level);
+      return [drawing(misread, 0), drawing(understood, 1)];
+    }
+    case "copy":
+    case "memory":
+      return [scribble, drawing(redrawDrawing(prompt?.kind === "drawing" ? prompt.drawing : EMPTY_DRAWING, rng, level), 1)];
+    case "onion": {
+      const dx = 10 + rng() * 14;
+      return [scribble, drawing(redrawDrawing(prompt?.kind === "drawing" ? prompt.drawing : EMPTY_DRAWING, rng, level, dx, (rng() - 0.5) * 8), 1)];
+    }
+    case "base":
+      return [scribble, drawing(addToDrawing(prompt?.kind === "drawing" ? prompt.drawing : EMPTY_DRAWING, rng, level), 1)];
+  }
 }
 
 /**

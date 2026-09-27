@@ -66,6 +66,16 @@ vitest 24/24(+registry), tsc 0 에러(`.next/dev/types`의 다른 세션 `tmp-wa
 - 연결: 보드 마운트 시 BGM, 캔버스 pointerdown/move → `drawTick`, 제출(수동·0초 자동) → `submitPop`, 턴 변경 → `turnStartChime`(공용 `playMyTurnChime` 대체). 결과 발표 효과음은 공용 엔진 그대로.
 - 검증: Playwright에서 오실레이터 생성 수 계측 — BGM 켜면 계속 증가/끄면 정지, 40회 스트로크 이동에 틱 6회(스로틀 동작), 페이지 에러 없음.
 
+### 🎮 후속 (2026-09-27): 게임 모드 9종 + 방장 옵션
+**요청**: 명세서 붙여넣기 — 9대 모드(일반/넉오프/비밀/애니메이션/아이스브레이커/보완/점수/스피드런/샌드위치) + 대기실 모드 선택·세부 옵션(`RoomOptions`, `LobbyOptionsModal`, `GarticSpecializedCanvas` 참고 코드).
+- **`modes.ts`(신규)**: 모드별 규칙을 전부 한 표(`MODES`)에 — 턴 흐름(`alternate`/`allDrawing`/`sandwich`), 기본 시간 함수, 앞 그림 표시 방식(`DrawingReference`: prompt/copy/memory/onion/base/free), 블라인드 여부. `sanitizeOptions`(네트워크로 온 방장 옵션 검증), 아이스브레이커 질문·영감 단어(시드+앨범 결정론).
+- **엔진**: `pace` → `options: GameOptions`(`startGame(n, seed, options)`), `turnKind(state, turn)`/`turnDurationMs(state, turn)`, 점수 모드 `VOTE` 액션 + `votes`(앨범당 1인 1표, 자기 장 불가). **REACT/VOTE의 자기 장 판정을 `receiverOf`로 바꿈** — 페이지가 아직 도착 안 한 기기에서도 같은 결과(순서 독립 유지). 순위는 점수 모드면 득표, 아니면 리액션(`playerScores`).
+- **대기실**: `LobbyOptionsPanel.tsx`(9개 모드 카드 + 시간 배율 0.7~1.5× + 어니언 스킨 + 되돌리기 허용), `room-options` 브로드캐스트로 동기화, `game-start`에 포함. **자리가 차면 자동 시작하던 동작 제거** → 방장이 "🚀 [모드] 게임 시작" 버튼(최소 4명). 방 만들기 화면의 속도(pace) 선택도 제거(배율로 대체).
+- **그리기**: `DoodleCanvas`에 `blind`(오프스크린 캔버스에 그려 채우기 도구도 정상), `baseDrawing`(잠긴 밑그림, 결과 = 밑그림 ops + 내 ops), `onionDrawing`(35% 흑백 multiply 오버레이), `allowUndo`. 넉오프 원본 10초 노출(`MemoryPeek`), 비밀 모드 글자 가림은 `-webkit-text-security`(password 타입은 한글 IME 불가).
+- **발표/결과**: 모드 배지, 아이스브레이커 질문, 애니메이션 `Flipbook.tsx`(GIF 대신 플립북), 점수 모드 `VotePanel`(20초, 투표 후 집계 공개, 방장 자동 넘기기는 투표 대기). 봇: 따라 그리기(`redrawDrawing`, 애니메이션은 옆으로 이동), 덧그리기(`addToDrawing`), 아이스브레이커 답변, 점수 모드 투표.
+- 명세와 다른 점은 룰북 md §9 표 아래에 정리(요약표 숫자 우선, GIF→플립북, scoreVotingEnabled 생략 등).
+- 검증: vitest 36/36(9개 모드 전부 봇 풀게임, 시간 공식, 옵션 검증, 투표 규칙, 모드별 봇 그림), tsc/eslint 0. **다른 세션의 dev 서버(3217)가 같은 폴더를 점유 + 워커 크래시 상태라** 격리 워크트리(`next dev --webpack`)에서 Playwright로 확인: 대기실 9모드 패널, 애니메이션 2턴 잔상, 점수 모드 투표→득표 순위까지 통과.
+
 ## 🦈 배고픈 상어: 딥 에볼루션 (Hungry Shark-style) — 1인용 실시간 해양 액션 신규 게임 — 2026-09-26 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: "Hungry Shark Evolution 게임 만들어주세요" + Unity(C#) 기준 상용 수준 기술 명세서(체력 감쇠 공식, 골드 러시/메가 골드 러시, 티어 포식 테이블, Rigidbody 물리, 입 방향 내적 판정, Boids, 기뢰/해파리 수식, 오브젝트 풀링·존 컬링, 상점/업그레이드/세이브) 붙여넣기 → "추가할 부분은 추가하여" 구현, 커밋·푸시·배포, HANDOFF 문서화 + 룰북.

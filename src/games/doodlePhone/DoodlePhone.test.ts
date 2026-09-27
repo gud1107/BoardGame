@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededRng, shuffle } from "@/lib/rng";
-import { chooseBotAction, getValidMoves, guessFromDrawing, botDrawingFor, nextBotActor } from "./bot";
+import { addToDrawing, chooseBotAction, getValidMoves, guessFromDrawing, botDrawingFor, nextBotActor, redrawDrawing } from "./bot";
 import { EMPTY_DRAWING, MAX_DRAWING_CHARS, decodePoints, encodePoints, isValidDrawing, strokeOp, type Drawing } from "./drawing";
 import {
   MAX_REACTIONS_PER_PAGE,
@@ -24,12 +24,14 @@ import {
 import { FALLBACK_PROMPTS } from "./prompts";
 import { ChunkAssembler, splitIntoChunks } from "./syncChunks";
 import { CHORDS, LOOP_STEPS, STEPS_PER_BAR, lofiEventsAt, midiToHz } from "./lofiPattern";
+import { GAME_MODES, ICEBREAKER_QUESTIONS, icebreakerQuestion, sanitizeOptions, turnKindFor, turnSecondsFor, type GameMode } from "./modes";
 
 const doodle = (seat: number): Drawing => ({ v: 1, ops: [strokeOp(1, 1, [{ x: 10 + seat, y: 10 }, { x: 100, y: 120 }])] });
 
 /** The action a well-behaved human in `seat` would send for `turn`. */
-function humanSubmit(seat: number, turn: number): EngineAction {
-  return turnKind(turn) === "text"
+function humanSubmit(seat: number, turn: number, state?: DoodlePhoneState): EngineAction {
+  const kind = state ? turnKind(state, turn) : turnKindFor("NORMAL", turn, 4);
+  return kind === "text"
     ? { type: "SUBMIT_TEXT", seat, turn, text: `좌석${seat} 턴${turn}` }
     : { type: "SUBMIT_DRAWING", seat, turn, drawing: doodle(seat) };
 }
@@ -37,7 +39,7 @@ function humanSubmit(seat: number, turn: number): EngineAction {
 function playAllTurns(state: DoodlePhoneState): DoodlePhoneState {
   let s = state;
   for (let turn = 1; turn <= s.playerCount; turn++) {
-    for (let seat = 0; seat < s.playerCount; seat++) s = applyAction(s, humanSubmit(seat, turn));
+    for (let seat = 0; seat < s.playerCount; seat++) s = applyAction(s, humanSubmit(seat, turn, s));
   }
   return s;
 }
@@ -67,7 +69,7 @@ describe("routing (rulebook §3)", () => {
   });
 
   it("alternates text and drawing turns, starting with text", () => {
-    expect([1, 2, 3, 4, 5].map(turnKind)).toEqual(["text", "drawing", "text", "drawing", "text"]);
+    expect([1, 2, 3, 4, 5].map((t) => turnKindFor("NORMAL", t, 5))).toEqual(["text", "drawing", "text", "drawing", "text"]);
   });
 });
 
@@ -309,5 +311,103 @@ describe("lo-fi BGM score (lofiPattern.ts)", () => {
     expect(Math.min(...notes)).toBeGreaterThanOrEqual(40);
     expect(Math.max(...notes)).toBeLessThanOrEqual(84);
     expect(midiToHz(69)).toBe(440);
+  });
+});
+
+describe("game modes (modes.ts, rulebook §9)", () => {
+  const kinds = (mode: GameMode, n: number) => Array.from({ length: n }, (_, i) => turnKindFor(mode, i + 1, n));
+
+  it("routes each mode's turns to the right kind", () => {
+    expect(kinds("NORMAL", 4)).toEqual(["text", "drawing", "text", "drawing"]);
+    expect(kinds("SANDWICH", 4)).toEqual(["text", "drawing", "drawing", "text"]);
+    expect(kinds("SANDWICH", 6)).toEqual(["text", "drawing", "drawing", "drawing", "drawing", "text"]);
+    for (const mode of ["KNOCK_OFF", "ANIMATION", "COMPLEMENT"] as const) expect(new Set(kinds(mode, 5))).toEqual(new Set(["drawing"]));
+    for (const mode of ["SECRET", "ICEBREAKER", "SCORE", "SPEEDRUN"] as const) expect(kinds(mode, 4)).toEqual(kinds("NORMAL", 4));
+  });
+
+  it("computes turn times per mode, with speedrun accelerating and the host multiplier applied", () => {
+    const opts = (mode: GameMode, timeMultiplier = 1) => sanitizeOptions({ mode, timeMultiplier });
+    expect(turnSecondsFor(opts("NORMAL"), 1, 6)).toBe(60);
+    expect(turnSecondsFor(opts("NORMAL"), 2, 6)).toBe(90);
+    expect(turnSecondsFor(opts("KNOCK_OFF"), 3, 6)).toBe(80);
+    expect(turnSecondsFor(opts("SPEEDRUN"), 1, 6)).toBe(18);
+    expect(turnSecondsFor(opts("SPEEDRUN"), 2, 6)).toBe(31);
+    expect(turnSecondsFor(opts("SPEEDRUN"), 7, 8)).toBe(10);
+    expect(turnSecondsFor(opts("NORMAL", 1.5), 2, 6)).toBe(135);
+    expect(turnSecondsFor(opts("NORMAL", 0.7), 2, 6)).toBe(63);
+  });
+
+  it("clamps untrusted host options", () => {
+    expect(sanitizeOptions({ mode: "HACK", timeMultiplier: 9, ghostFrames: "yes" })).toEqual({ mode: "NORMAL", timeMultiplier: 1.5, ghostFrames: true, allowUndo: true });
+    expect(sanitizeOptions(null).timeMultiplier).toBe(1);
+  });
+
+  it("an all-bot game finishes in every mode", () => {
+    for (const mode of GAME_MODES) {
+      for (const n of [4, 5]) {
+        let s = startGame(n, 40 + n, { mode });
+        const bots = new Set(Array.from({ length: n }, (_, i) => i));
+        const rng = seededRng(n * 13);
+        for (let guard = 0; guard < 200 && gamePhase(s) === "turns"; guard++) {
+          const actor = nextBotActor(s, bots);
+          const action = actor === null ? null : chooseBotAction(s, actor, 6, rng);
+          expect(action, `${mode} n=${n}`).not.toBeNull();
+          const next = applyAction(s, action!);
+          expect(next, `${mode} n=${n}`).not.toBe(s);
+          s = next;
+        }
+        expect(gamePhase(s), mode).toBe("showcase");
+        expect(s.albums.flat().every((p) => p !== null && !p.auto), mode).toBe(true);
+      }
+    }
+  });
+
+  it("complement bots keep the whole previous picture and add to it", () => {
+    const base = botDrawingFor("고양이", seededRng(1), 10).understood;
+    const added = addToDrawing(base, seededRng(2), 10);
+    expect(added.ops.slice(0, base.ops.length)).toEqual(base.ops);
+    expect(added.ops.length).toBeGreaterThan(base.ops.length);
+    expect(isValidDrawing(added)).toBe(true);
+  });
+
+  it("animation bots redraw the previous frame shifted, so the flipbook moves", () => {
+    const frame = botDrawingFor("자동차", seededRng(3), 10).understood;
+    const next = redrawDrawing(frame, seededRng(4), 10, 12, 0);
+    expect(next.ops.length).toBe(frame.ops.length);
+    expect(next).not.toEqual(frame);
+    expect(isValidDrawing(next)).toBe(true);
+  });
+
+  it("gives icebreaker albums a deterministic question and bots answer it", () => {
+    const s = startGame(4, 77, { mode: "ICEBREAKER" });
+    expect(icebreakerQuestion(77, 2)).toBe(icebreakerQuestion(77, 2));
+    expect(ICEBREAKER_QUESTIONS).toContain(icebreakerQuestion(77, 2));
+    const action = chooseBotAction(s, 0, 10, seededRng(1));
+    expect(action?.type).toBe("SUBMIT_TEXT");
+  });
+});
+
+describe("score mode voting", () => {
+  it("accepts one vote per seat per album, never for your own page, and only in score mode", () => {
+    const normal = playAllTurns(startGame(4, 50));
+    expect(applyAction(normal, { type: "VOTE", seat: 0, album: 1, turn: 1 })).toBe(normal);
+
+    let s = playAllTurns(startGame(4, 50, { mode: "SCORE" }));
+    const own = receiverOf(4, 1, 2);
+    expect(applyAction(s, { type: "VOTE", seat: own, album: 1, turn: 2 })).toBe(s);
+    const voter = (own + 1) % 4;
+    s = applyAction(s, { type: "VOTE", seat: voter, album: 1, turn: 2 });
+    expect(applyAction(s, { type: "VOTE", seat: voter, album: 1, turn: 3 })).toBe(s);
+    expect(computeRankings(s)[0]).toEqual({ seat: own, rank: 1, score: 1 });
+  });
+
+  it("counts a reaction or vote even if it arrives before the page itself", () => {
+    const early = startGame(4, 60, { mode: "SCORE" });
+    const author = receiverOf(4, 0, 1);
+    const fan = (author + 1) % 4;
+    const reacted = applyAction(early, { type: "REACT", seat: fan, album: 0, turn: 1, emoji: "👏" });
+    expect(reacted.reactions["0:1"]).toEqual({ "👏": 1 });
+    const voted = applyAction(early, { type: "VOTE", seat: fan, album: 0, turn: 1 });
+    expect(voted.votes["0:" + fan]).toBe(1);
   });
 });

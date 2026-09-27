@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { drawingToPngDataUrl } from "./drawingRenderer";
+import Flipbook from "./Flipbook";
+import { MODES, icebreakerQuestion } from "./modes";
 import PageCard from "./PageCard";
-import { REACTION_EMOJIS, computeRankings, pageAt, pageKey, type DoodlePhoneState, type Page, type SeatIndex } from "./engine";
+import { REACTION_EMOJIS, albumDrawings, computeRankings, pageAt, pageKey, votesFor, type DoodlePhoneState, type Page, type SeatIndex } from "./engine";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
@@ -25,11 +27,18 @@ export default function ResultsStage({
 }) {
   const [album, setAlbum] = useState(viewerSeat);
   const rankings = computeRankings(state);
+  const { mode } = state.options;
+  const scoring = mode === "SCORE";
 
   return (
     <div className="flex flex-col gap-5">
       <section className="rounded-2xl border border-amber-300/30 bg-gradient-to-br from-amber-400/15 via-fuchsia-500/10 to-transparent p-5 light:border-amber-200 light:from-amber-50 light:via-fuchsia-50">
-        <h2 className="text-center text-lg font-extrabold text-white light:text-slate-900">🏆 웃음왕 — 리액션을 가장 많이 받은 사람</h2>
+        <h2 className="text-center text-lg font-extrabold text-white light:text-slate-900">
+          {scoring ? "🏆 최다 득표 — 최고의 장면 투표 결과" : "🏆 웃음왕 — 리액션을 가장 많이 받은 사람"}
+        </h2>
+        <p className="mt-1 text-center text-xs text-white/50 light:text-slate-500">
+          {MODES[mode].icon} {MODES[mode].title} 모드
+        </p>
         <ol className="mt-3 flex flex-col gap-1.5">
           {rankings.map(({ seat, rank, score }) => (
             <li
@@ -42,7 +51,10 @@ export default function ResultsStage({
                 {MEDALS[rank - 1] ?? `${rank}위`} {names[seat]}
                 {seat === viewerSeat && " (나)"}
               </span>
-              <span className="tabular-nums">{score}개</span>
+              <span className="tabular-nums">
+                {score}
+                {scoring ? "표" : "개"}
+              </span>
             </li>
           ))}
         </ol>
@@ -65,6 +77,8 @@ export default function ResultsStage({
             </button>
           ))}
         </div>
+        {mode === "ICEBREAKER" && <p className="text-sm text-cyan-100 light:text-cyan-700">💡 질문: {icebreakerQuestion(state.seed, album)}</p>}
+        {mode === "ANIMATION" && <Flipbook key={album} frames={albumDrawings(state, album)} title={`🎞️ ${names[album]}님의 앨범 애니메이션`} />}
         <div className="flex flex-col gap-3">
           {Array.from({ length: state.playerCount }, (_, i) => {
             const turn = i + 1;
@@ -75,7 +89,14 @@ export default function ResultsStage({
                 page={page}
                 turn={turn}
                 authorName={page ? names[page.author] : "…"}
-                footer={<PageFooter page={page} tally={state.reactions[pageKey(album, turn)]} fileName={`낙서릴레이_${names[album]}_${turn}.png`} />}
+                footer={
+                  <PageFooter
+                    page={page}
+                    tally={state.reactions[pageKey(album, turn)]}
+                    votes={scoring ? votesFor(state, album, turn) : 0}
+                    fileName={`낙서릴레이_${names[album]}_${turn}.png`}
+                  />
+                }
               />
             );
           })}
@@ -98,12 +119,13 @@ export default function ResultsStage({
   );
 }
 
-function PageFooter({ page, tally, fileName }: { page: Page | null; tally: DoodlePhoneState["reactions"][string] | undefined; fileName: string }) {
+function PageFooter({ page, tally, votes, fileName }: { page: Page | null; tally: DoodlePhoneState["reactions"][string] | undefined; votes: number; fileName: string }) {
   const counts = REACTION_EMOJIS.filter((e) => (tally?.[e] ?? 0) > 0);
-  if (counts.length === 0 && page?.kind !== "drawing") return null;
+  if (counts.length === 0 && votes === 0 && page?.kind !== "drawing") return null;
   return (
     <div className="flex items-center justify-between gap-2 text-sm">
       <span className="flex flex-wrap gap-2 text-white/70 light:text-slate-600">
+        {votes > 0 && <span className="font-bold text-amber-200 light:text-amber-700">🏆 {votes}표</span>}
         {counts.map((e) => (
           <span key={e}>
             {e} {tally?.[e]}

@@ -30,8 +30,6 @@ import {
 import {
   MAX_PLAYERS,
   MIN_PLAYERS,
-  PACE_LABELS,
-  PACE_SECONDS,
   REACTION_EMOJIS,
   TIMEOUT_GRACE_MS,
   applyAction,
@@ -42,14 +40,16 @@ import {
   mergeStates,
   pageAt,
   pendingSeats,
+  receiverOf,
   startGame,
   turnDurationMs,
   turnKind,
   type DoodlePhoneState,
   type EngineAction,
   type SeatIndex,
-  type TimerPace,
 } from "./engine";
+import LobbyOptionsPanel from "./LobbyOptionsPanel";
+import { DEFAULT_OPTIONS, MODES, VOTE_WINDOW_MS, sanitizeOptions, type GameOptions } from "./modes";
 import { chooseBotAction, nextBotActor } from "./bot";
 import DoodlePhoneBoard from "./DoodlePhoneBoard";
 import DoodleSoundHud from "./DoodleSoundHud";
@@ -71,6 +71,11 @@ import { ChunkAssembler, splitIntoChunks, type SyncChunk } from "./syncChunks";
  *    from when it saw the turn open, and only the host sends `TIMEOUT`.
  * 4. Bots are paced one seat at a time through `useBotAutoplay`, with a
  *    longer "thinking" window on drawing turns.
+ *
+ * Game mode + options (rulebook §9) are chosen by the host in the waiting
+ * room, mirrored to guests via `room-options`, and frozen into `game-start`.
+ * Because of that the room no longer auto-starts when seats fill — the host
+ * presses start once the mode is set.
  */
 
 type Occupant = {
@@ -128,7 +133,7 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
   const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [targetPlayerCount, setTargetPlayerCount] = useState(6);
-  const [pace, setPace] = useState<TimerPace>("normal");
+  const [options, setOptions] = useState<GameOptions>(DEFAULT_OPTIONS);
   const [formError, setFormError] = useState<string | null>(null);
   const [showRulebook, setShowRulebook] = useState(false);
 
@@ -161,7 +166,7 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
   const occupantsRef = useRef<Occupant[]>([]);
   const namesRef = useRef<Record<SeatIndex, string>>({});
   const mySeatRef = useRef<SeatIndex | null>(null);
-  const paceRef = useRef<TimerPace>(pace);
+  const optionsRef = useRef<GameOptions>(options);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
@@ -173,7 +178,7 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
     phaseRef.current = phase;
     occupantsRef.current = occupants;
     mySeatRef.current = mySeat;
-    paceRef.current = pace;
+    optionsRef.current = options;
     onCompleteRef.current = onComplete;
     turnStartedAtRef.current = turnStartedAt;
   });
@@ -255,16 +260,22 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
     const assembler = new ChunkAssembler();
 
     channel.on("broadcast", { event: "game-start" }, ({ payload }) => {
-      const { seed, playerCount, pace: matchPace } = payload as { seed: number; playerCount: number; pace: TimerPace };
+      const { seed, playerCount } = payload as { seed: number; playerCount: number };
+      const matchOptions = sanitizeOptions(payload?.options);
       playerCountRef.current = playerCount;
+      setOptions(matchOptions);
       setRoster((payload?.botSeats as SeatIndex[] | undefined) ?? [], (payload?.botLevels as BotLevel[] | undefined) ?? []);
       setTakeover(INITIAL_BOT_TAKEOVER_STATE);
-      commitState(startGame(playerCount, seed, matchPace));
+      commitState(startGame(playerCount, seed, matchOptions));
       setPhase("playing");
     });
 
     channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => {
       setRoster((payload?.botSeats as SeatIndex[] | undefined) ?? [], (payload?.botLevels as BotLevel[] | undefined) ?? []);
+    });
+
+    channel.on("broadcast", { event: "room-options" }, ({ payload }) => {
+      if (!isHost) setOptions(sanitizeOptions(payload?.options));
     });
 
     channel.on("broadcast", { event: "game-action" }, ({ payload }) => {
@@ -292,7 +303,10 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
       const requester = payload?.deviceId as string | undefined;
       const state = gameStateRef.current;
       if (!state) {
-        if (isHost) channel.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: botSeatsRef.current, botLevels: botLevelsRef.current } });
+        if (isHost) {
+          channel.send({ type: "broadcast", event: "bot-roster", payload: { botSeats: botSeatsRef.current, botLevels: botLevelsRef.current } });
+          channel.send({ type: "broadcast", event: "room-options", payload: { options: optionsRef.current } });
+        }
         return;
       }
       if (!requester || requester === deviceId) return;
@@ -441,17 +455,23 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
       payload: {
         seed: Math.floor(Math.random() * 2 ** 31),
         playerCount,
-        pace: paceRef.current,
+        options: optionsRef.current,
         botSeats: botSeatsRef.current,
         botLevels: botLevelsRef.current,
       },
     });
   }, []);
 
-  useEffect(() => {
-    if (phase !== "waiting" || !isHost || startSentRef.current) return;
-    if (occupants.length + botSeats.length >= knownTargetPlayerCount) sendGameStart();
-  }, [occupants, botSeats, phase, knownTargetPlayerCount, isHost, sendGameStart]);
+  const updateOptions = useCallback(
+    (patch: Partial<GameOptions>) => {
+      if (!isHost) return;
+      const next = sanitizeOptions({ ...optionsRef.current, ...patch });
+      optionsRef.current = next;
+      setOptions(next);
+      channelRef.current?.send({ type: "broadcast", event: "room-options", payload: { options: next } });
+    },
+    [isHost],
+  );
 
   const broadcastRoster = useCallback(
     (seats: SeatIndex[], levels: BotLevel[]) => {
@@ -517,7 +537,7 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
     const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
     return chooseBotAction(state, actor, level);
   }, []);
-  const botDrawingTurn = gameState !== null && turnKind(currentTurn(gameState)) === "drawing";
+  const botDrawingTurn = gameState !== null && gamePhase(gameState) === "turns" && turnKind(gameState, currentTurn(gameState)) === "drawing";
 
   useBotAutoplay<DoodlePhoneState, EngineAction, SeatIndex>({
     active: isHost && phase === "playing" && gameState !== null && gamePhase(gameState) === "turns",
@@ -550,6 +570,21 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
     return () => timers.forEach((t) => window.clearTimeout(t));
   }, [isHost, showcaseKey, allBotSeatSet, handleAction]);
 
+  // Host: in score mode, bots cast their best-page vote once an album is fully revealed.
+  useEffect(() => {
+    const state = gameStateRef.current;
+    if (!isHost || !showcaseKey || !state || state.options.mode !== "SCORE" || state.showcase.revealed !== state.playerCount) return;
+    const { album } = state.showcase;
+    const timers = [...allBotSeatSet]
+      .filter((seat) => seat < state.playerCount)
+      .map((seat) => {
+        const choices = Array.from({ length: state.playerCount }, (_, i) => i + 1).filter((turn) => receiverOf(state.playerCount, album, turn) !== seat);
+        const turn = choices[Math.floor(Math.random() * choices.length)];
+        return window.setTimeout(() => handleAction({ type: "VOTE", seat, album, turn }), 1_500 + Math.random() * (VOTE_WINDOW_MS / 3));
+      });
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [isHost, showcaseKey, allBotSeatSet, handleAction]);
+
   // --- Host: turn timeout + idle takeover (rulebook §5) ---------------------
   const timeoutSentForRef = useRef<string | null>(null);
   const idleVoteSentRef = useRef(new Set<string>());
@@ -562,7 +597,7 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
 
       const turnKey = `${state.seed}:${turn}`;
       const elapsed = Date.now() - turnStartedAtRef.current;
-      if (timeoutSentForRef.current !== turnKey && elapsed >= turnDurationMs(state.pace, turn) + TIMEOUT_GRACE_MS) {
+      if (timeoutSentForRef.current !== turnKey && elapsed >= turnDurationMs(state, turn) + TIMEOUT_GRACE_MS) {
         timeoutSentForRef.current = turnKey;
         handleAction({ type: "TIMEOUT", turn, seats: pendingSeats(state) });
       }
@@ -792,26 +827,6 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
                 </button>
               </div>
             </div>
-            <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
-              제한 시간
-              <div className="grid grid-cols-3 gap-1.5">
-                {(Object.keys(PACE_SECONDS) as TimerPace[]).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setPace(value)}
-                    className={`rounded-lg border px-2 py-2 text-xs font-semibold transition ${
-                      pace === value
-                        ? "border-fuchsia-400 bg-fuchsia-500/20 text-white light:bg-fuchsia-50 light:text-fuchsia-800"
-                        : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-600"
-                    }`}
-                  >
-                    {PACE_LABELS[value]}
-                    <span className="mt-0.5 block text-[10px] font-normal opacity-70">그림 {PACE_SECONDS[value].drawing}초</span>
-                  </button>
-                ))}
-              </div>
-            </div>
           </>
         )}
         {formError && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300 light:bg-rose-50 light:text-rose-700">{formError}</p>}
@@ -860,11 +875,19 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
                 );
               })}
             </div>
-            <p className="text-xs text-white/40 light:text-slate-400">{knownTargetPlayerCount}명이 모이면 자동으로 시작돼요. AI 봇으로도 채울 수 있어요.</p>
-            {isHost && filled >= MIN_PLAYERS && filled < knownTargetPlayerCount && (
-              <button onClick={sendGameStart} className="rounded-full bg-fuchsia-600 px-4 py-2 text-xs font-semibold text-white hover:bg-fuchsia-500">
-                지금 시작 ({filled}명)
+            <LobbyOptionsPanel options={options} isHost={isHost} onChange={updateOptions} />
+            {isHost ? (
+              <button
+                onClick={sendGameStart}
+                disabled={filled < MIN_PLAYERS}
+                className="w-full rounded-xl bg-fuchsia-600 py-3 text-sm font-bold text-white transition hover:bg-fuchsia-500 disabled:bg-white/10 disabled:text-white/40 light:disabled:bg-slate-200 light:disabled:text-slate-400"
+              >
+                {filled < MIN_PLAYERS
+                  ? `최소 ${MIN_PLAYERS}명이 필요해요 (지금 ${filled}명 · AI 봇으로 채울 수 있어요)`
+                  : `🚀 [${MODES[options.mode].title} 모드] 게임 시작 (${filled}명)`}
               </button>
+            ) : (
+              <p className="text-xs text-white/50 light:text-slate-500">방장이 게임 모드를 고르고 시작하길 기다리는 중이에요…</p>
             )}
             <button onClick={() => setShowRulebook(true)} className="rounded-full border border-white/10 px-3 py-1 text-[11px] text-white/50 hover:border-white/25 light:border-slate-200 light:text-slate-500">
               📖 룰북

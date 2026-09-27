@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { isBlankDrawing } from "./drawing";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { isBlankDrawing, type Drawing } from "./drawing";
 import { getDoodlePhoneSound } from "./doodlePhoneSound";
 import DoodleCanvas, { type DoodleCanvasHandle } from "./DoodleCanvas";
 import DrawingView from "./DrawingView";
 import {
   TEXT_MAX_CHARS,
   TEXT_MIN_CHARS,
+  albumFor,
   currentTurn,
   hasSubmitted,
   isValidText,
@@ -18,9 +19,15 @@ import {
   turnKind,
   type DoodlePhoneState,
   type EngineAction,
+  type Page,
   type SeatIndex,
 } from "./engine";
+import { KNOCK_OFF_PEEK_MS, MODES, drawingReferenceFor, icebreakerQuestion, inspirationWord, type DrawingReference } from "./modes";
 import { FALLBACK_PROMPTS } from "./prompts";
+import { useNow } from "./useNow";
+
+/** Chrome/Safari/Firefox mask a normal text input with this — unlike type="password", Korean IME still works. */
+const MASKED_INPUT_STYLE = { WebkitTextSecurity: "disc" } as CSSProperties;
 
 /** The simultaneous write/draw/guess phase (rulebook §2 TURN_INPUT). */
 export default function TurnStage({
@@ -39,24 +46,21 @@ export default function TurnStage({
   onAction: (action: EngineAction) => void;
 }) {
   const turn = currentTurn(state);
-  const durationMs = turnDurationMs(state.pace, turn);
-  const deadline = turnStartedAt + durationMs;
-  const remainingMs = useRemainingMs(deadline);
+  const durationMs = turnDurationMs(state, turn);
+  const remainingMs = useRemainingMs(turnStartedAt + durationMs);
   const mine = slotFor(state, viewerSeat, turn);
 
   return (
     <div className="flex flex-col gap-4">
-      <TurnHeader turn={turn} totalTurns={state.playerCount} remainingMs={remainingMs} durationMs={durationMs} />
+      <TurnHeader title={turnTitle(state, viewerSeat, turn)} state={state} turn={turn} remainingMs={remainingMs} durationMs={durationMs} />
       {hasSubmitted(state, viewerSeat, turn) ? (
         <div className="flex flex-col items-center gap-2 rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-6 text-center light:border-emerald-200 light:bg-emerald-50">
           <span className="text-3xl">{mine?.auto ? "⏰" : "✅"}</span>
-          <p className="font-semibold text-white light:text-slate-900">
-            {mine?.auto ? "시간이 다 돼 자동으로 채워졌어요" : "제출 완료!"}
-          </p>
+          <p className="font-semibold text-white light:text-slate-900">{mine?.auto ? "시간이 다 돼 자동으로 채워졌어요" : "제출 완료!"}</p>
           <p className="text-sm text-white/60 light:text-slate-500">다른 플레이어를 기다리는 중이에요…</p>
         </div>
       ) : (
-        <TurnComposer key={`${state.seed}:${turn}`} state={state} turn={turn} seat={viewerSeat} deadline={deadline} onAction={onAction} />
+        <TurnComposer key={`${state.seed}:${turn}`} state={state} turn={turn} seat={viewerSeat} turnStartedAt={turnStartedAt} deadline={turnStartedAt + durationMs} onAction={onAction} />
       )}
       <SubmissionRoster state={state} turn={turn} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} />
     </div>
@@ -64,29 +68,58 @@ export default function TurnStage({
 }
 
 function useRemainingMs(deadline: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 250);
-    return () => window.clearInterval(id);
-  }, []);
-  return Math.max(0, deadline - now);
+  return Math.max(0, deadline - useNow());
 }
 
-function TurnHeader({ turn, totalTurns, remainingMs, durationMs }: { turn: number; totalTurns: number; remainingMs: number; durationMs: number }) {
-  const kind = turnKind(turn);
-  const title = turn === 1 ? "✍️ 제시어 쓰기" : kind === "drawing" ? "🎨 그림 그리기" : "🤔 무슨 그림일까요?";
+/** How the current drawing turn presents the previous page, or null on a text turn / while it's still in flight. */
+function referenceFor(state: DoodlePhoneState, seat: SeatIndex, turn: number): DrawingReference | null {
+  if (turnKind(state, turn) !== "drawing") return null;
+  const prompt = promptFor(state, seat, turn);
+  if (prompt === undefined) return null;
+  return drawingReferenceFor(state.options.mode, prompt?.kind ?? null);
+}
+
+const DRAWING_TITLES: Record<DrawingReference, string> = {
+  prompt: "🎨 그림 그리기",
+  copy: "🖼️ 똑같이 따라 그리기",
+  memory: "👥 기억해서 따라 그리기",
+  onion: "🎞️ 다음 프레임 그리기",
+  base: "🖍️ 이어서 덧그리기",
+  free: "🎨 자유롭게 그리기",
+};
+
+function turnTitle(state: DoodlePhoneState, seat: SeatIndex, turn: number): string {
+  if (turnKind(state, turn) === "text") {
+    if (turn > 1) return "🤔 무슨 그림일까요?";
+    return state.options.mode === "ICEBREAKER" ? "🧊 질문에 답하기" : "✍️ 제시어 쓰기";
+  }
+  const reference = referenceFor(state, seat, turn) ?? "prompt";
+  if (reference === "free" && state.options.mode === "ANIMATION") return "🎞️ 첫 프레임 그리기";
+  if (reference === "free" && state.options.mode === "COMPLEMENT") return "🖍️ 밑그림 그리기";
+  return DRAWING_TITLES[reference];
+}
+
+function TurnHeader({ title, state, turn, remainingMs, durationMs }: { title: string; state: DoodlePhoneState; turn: number; remainingMs: number; durationMs: number }) {
+  const mode = MODES[state.options.mode];
   const seconds = Math.ceil(remainingMs / 1000);
   const urgent = seconds <= 10;
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-baseline gap-2">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
           <h2 className="text-lg font-extrabold text-white light:text-slate-900">{title}</h2>
           <span className="text-xs text-white/50 light:text-slate-500">
-            턴 {turn} / {totalTurns}
+            턴 {turn} / {state.playerCount}
+          </span>
+          <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-semibold text-violet-100 light:bg-violet-100 light:text-violet-700">
+            {mode.icon} {mode.title}
           </span>
         </div>
-        <span className={`rounded-full px-3 py-1 font-mono text-sm font-bold tabular-nums ${urgent ? "animate-pulse bg-rose-500/25 text-rose-200 light:bg-rose-100 light:text-rose-700" : "bg-white/10 text-white light:bg-slate-100 light:text-slate-800"}`}>
+        <span
+          className={`shrink-0 rounded-full px-3 py-1 font-mono text-sm font-bold tabular-nums ${
+            urgent ? "animate-pulse bg-rose-500/25 text-rose-200 light:bg-rose-100 light:text-rose-700" : "bg-white/10 text-white light:bg-slate-100 light:text-slate-800"
+          }`}
+        >
           ⏱ {seconds}s
         </span>
       </div>
@@ -110,17 +143,24 @@ function TurnComposer({
   state,
   turn,
   seat,
+  turnStartedAt,
   deadline,
   onAction,
 }: {
   state: DoodlePhoneState;
   turn: number;
   seat: SeatIndex;
+  turnStartedAt: number;
   deadline: number;
   onAction: (action: EngineAction) => void;
 }) {
-  const kind = turnKind(turn);
+  const kind = turnKind(state, turn);
   const prompt = promptFor(state, seat, turn);
+  const reference = referenceFor(state, seat, turn);
+  const { mode, ghostFrames, allowUndo } = state.options;
+  const blind = MODES[mode].blind;
+  const previousDrawing = prompt?.kind === "drawing" ? prompt.drawing : null;
+
   const [draft, setDraft] = useState("");
   const [sent, setSent] = useState(false);
   const [confirmBlank, setConfirmBlank] = useState(false);
@@ -162,11 +202,11 @@ function TurnComposer({
   }, [deadline]);
 
   const length = textLength(draft.trim());
-  const placeholder = `예: ${FALLBACK_PROMPTS[(state.seed + seat) % FALLBACK_PROMPTS.length]}`;
+  const placeholder = blind ? "글자가 가려진 채로 입력돼요…" : turn === 1 ? `예: ${FALLBACK_PROMPTS[(state.seed + seat) % FALLBACK_PROMPTS.length]}` : "이 그림은…";
 
   return (
     <div className="flex flex-col gap-3">
-      <PromptPanel turn={turn} prompt={prompt} />
+      <PromptPanel state={state} seat={seat} turn={turn} prompt={prompt} reference={reference} turnStartedAt={turnStartedAt} />
 
       {kind === "text" ? (
         <div className="flex flex-col gap-1.5">
@@ -175,6 +215,8 @@ function TurnComposer({
               autoFocus
               value={draft}
               disabled={sent}
+              autoComplete="off"
+              style={blind ? MASKED_INPUT_STYLE : undefined}
               onChange={(e) => {
                 const next = Array.from(e.target.value).slice(0, TEXT_MAX_CHARS).join("");
                 draftRef.current = next;
@@ -186,7 +228,7 @@ function TurnComposer({
                   submit(false);
                 }
               }}
-              placeholder={turn === 1 ? placeholder : "이 그림은…"}
+              placeholder={placeholder}
               className="min-w-0 flex-1 rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-base text-white placeholder:text-white/30 focus:border-fuchsia-400 focus:outline-none disabled:opacity-60 light:border-slate-300 light:bg-white light:text-slate-900 light:placeholder:text-slate-400"
             />
             <button
@@ -199,12 +241,20 @@ function TurnComposer({
             </button>
           </div>
           <p className="text-right text-[11px] text-white/40 light:text-slate-400">
+            {blind && "🙈 비밀 모드 · "}
             {length}/{TEXT_MAX_CHARS}자 · 최소 {TEXT_MIN_CHARS}자 · Enter로 제출
           </p>
         </div>
       ) : (
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
-          <DoodleCanvas ref={canvasRef} disabled={sent} />
+          <DoodleCanvas
+            ref={canvasRef}
+            disabled={sent}
+            blind={blind}
+            allowUndo={allowUndo}
+            baseDrawing={reference === "base" ? previousDrawing : null}
+            onionDrawing={reference === "onion" && ghostFrames ? previousDrawing : null}
+          />
           <button
             type="button"
             onClick={() => submit(false)}
@@ -219,17 +269,53 @@ function TurnComposer({
   );
 }
 
-function PromptPanel({ turn, prompt }: { turn: number; prompt: ReturnType<typeof promptFor> }) {
-  if (turn === 1) {
+const hintBox = "rounded-2xl border px-4 py-3 text-sm";
+const fuchsiaHint = `${hintBox} border-fuchsia-400/20 bg-fuchsia-500/10 text-fuchsia-100 light:border-fuchsia-200 light:bg-fuchsia-50 light:text-fuchsia-800`;
+
+function PromptPanel({
+  state,
+  seat,
+  turn,
+  prompt,
+  reference,
+  turnStartedAt,
+}: {
+  state: DoodlePhoneState;
+  seat: SeatIndex;
+  turn: number;
+  prompt: Page | null | undefined;
+  reference: DrawingReference | null;
+  turnStartedAt: number;
+}) {
+  const album = albumFor(state.playerCount, seat, turn);
+
+  if (turn === 1 && turnKind(state, 1) === "text") {
+    if (state.options.mode === "ICEBREAKER") {
+      return (
+        <div className="rounded-2xl border border-cyan-300/30 bg-cyan-400/15 px-4 py-4 text-center light:border-cyan-200 light:bg-cyan-50">
+          <p className="text-xs text-cyan-100/80 light:text-cyan-700">💡 질문</p>
+          <p className="mt-1 text-xl font-extrabold break-keep text-white light:text-slate-900">{icebreakerQuestion(state.seed, album)}</p>
+          <p className="mt-1 text-xs text-white/60 light:text-slate-500">내 대답이 곧 이 앨범의 제시어가 돼요.</p>
+        </div>
+      );
+    }
+    return <p className={fuchsiaHint}>엉뚱하고 재미있는 문장을 적어주세요. 이 문장이 옆 사람에게 넘어가 그림이 되고, 그 그림이 다시 문장이 됩니다!</p>;
+  }
+
+  if (reference === "free") {
     return (
-      <p className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 px-4 py-3 text-sm text-fuchsia-100 light:border-fuchsia-200 light:bg-fuchsia-50 light:text-fuchsia-800">
-        엉뚱하고 재미있는 문장을 적어주세요. 이 문장이 옆 사람에게 넘어가 그림이 되고, 그 그림이 다시 문장이 됩니다!
+      <p className={fuchsiaHint}>
+        첫 장은 자유롭게 그려요. 아이디어가 필요하면 — <b>“{inspirationWord(state.seed, album)}”</b>
+        {state.options.mode === "ANIMATION" && " (다음 사람들이 이 그림을 한 프레임씩 움직여요)"}
+        {state.options.mode === "COMPLEMENT" && " (다음 사람들이 이 그림 위에 계속 덧그려요)"}
       </p>
     );
   }
+
   if (prompt === undefined || prompt === null) {
     return <p className="animate-pulse rounded-2xl bg-white/5 px-4 py-6 text-center text-sm text-white/50 light:bg-slate-100 light:text-slate-500">앞사람의 작업을 받는 중…</p>;
   }
+
   if (prompt.kind === "text") {
     return (
       <div className="rounded-2xl border border-fuchsia-400/25 bg-gradient-to-br from-fuchsia-500/15 to-violet-500/10 px-4 py-4 text-center light:border-fuchsia-200 light:from-fuchsia-50 light:to-violet-50">
@@ -238,10 +324,48 @@ function PromptPanel({ turn, prompt }: { turn: number; prompt: ReturnType<typeof
       </div>
     );
   }
+
+  switch (reference) {
+    case "memory":
+      return <MemoryPeek drawing={prompt.drawing} revealUntil={turnStartedAt + KNOCK_OFF_PEEK_MS} />;
+    case "onion":
+      return state.options.ghostFrames ? (
+        <p className={fuchsiaHint}>👻 앞 프레임이 도화지에 흐릿하게 깔려 있어요. 살짝 움직인 다음 장면을 그려주세요!</p>
+      ) : (
+        <ReferenceDrawing caption="앞 프레임 — 이어지는 다음 장면을 그려주세요" drawing={prompt.drawing} />
+      );
+    case "base":
+      return <p className={fuchsiaHint}>🖍️ 앞사람 그림 위에 그대로 이어 그려요. 지우개로 고칠 수도 있지만 원래 그림은 되돌리기로 지워지지 않아요.</p>;
+    case "copy":
+      return <ReferenceDrawing caption="이 그림을 최대한 똑같이 따라 그려주세요" drawing={prompt.drawing} />;
+    default:
+      return <ReferenceDrawing caption="앞사람이 그린 그림이에요. 무엇을 그렸을까요?" drawing={prompt.drawing} />;
+  }
+}
+
+function ReferenceDrawing({ caption, drawing }: { caption: string; drawing: Drawing }) {
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-2">
-      <p className="text-center text-xs text-white/60 light:text-slate-500">앞사람이 그린 그림이에요. 무엇을 그렸을까요?</p>
-      <DrawingView drawing={prompt.drawing} label="추측할 그림" />
+      <p className="text-center text-xs text-white/60 light:text-slate-500">{caption}</p>
+      <DrawingView drawing={drawing} label="참고 그림" />
+    </div>
+  );
+}
+
+/** Knock-off: the original is visible for KNOCK_OFF_PEEK_MS from the moment this device saw the turn open. */
+function MemoryPeek({ drawing, revealUntil }: { drawing: Drawing; revealUntil: number }) {
+  const secondsLeft = Math.ceil((revealUntil - useNow()) / 1000);
+  if (secondsLeft <= 0) {
+    return (
+      <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-white/60 light:border-slate-200 light:bg-slate-100 light:text-slate-500">
+        🔒 원본이 가려졌어요! 기억나는 대로 그려주세요.
+      </p>
+    );
+  }
+  return (
+    <div className="mx-auto flex w-full max-w-md flex-col gap-2">
+      <p className="text-center text-xs font-semibold text-rose-200 light:text-rose-600">👀 원본을 기억하세요 — {secondsLeft}초 후 가려져요</p>
+      <DrawingView drawing={drawing} label="기억할 원본" />
     </div>
   );
 }

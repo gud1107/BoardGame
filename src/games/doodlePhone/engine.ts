@@ -25,11 +25,18 @@
  *
  * Time is not part of the engine at all: each client runs its own countdown
  * from when it saw a turn open, and only the host decides a timeout.
+ *
+ * Game modes (rulebook §9) only change *which* kind each turn is, how long it
+ * lasts and how the previous page is presented — all table-driven from
+ * modes.ts. Routing, submission and timeout rules are identical in every mode.
  */
 
 import { seededRng } from "@/lib/rng";
 import { EMPTY_DRAWING, isValidDrawing, type Drawing } from "./drawing";
+import { DEFAULT_OPTIONS, sanitizeOptions, turnKindFor, turnSecondsFor, type GameOptions, type PageKind } from "./modes";
 import { FALLBACK_PROMPTS } from "./prompts";
+
+export type { GameMode, GameOptions, PageKind } from "./modes";
 
 export type SeatIndex = number;
 
@@ -44,22 +51,6 @@ export const TIMEOUT_GRACE_MS = 4_000;
 
 export const REACTION_EMOJIS = ["😂", "🤯", "👏", "❤️", "🤔"] as const;
 export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
-
-export type TimerPace = "relaxed" | "normal" | "fast";
-export type PageKind = "text" | "drawing";
-
-/** Seconds per turn kind: [opening prompt, drawing, guess] (rulebook §2). */
-export const PACE_SECONDS: Record<TimerPace, { opening: number; drawing: number; guess: number }> = {
-  relaxed: { opening: 90, drawing: 150, guess: 75 },
-  normal: { opening: 60, drawing: 90, guess: 50 },
-  fast: { opening: 40, drawing: 60, guess: 35 },
-};
-
-export const PACE_LABELS: Record<TimerPace, string> = {
-  relaxed: "느긋",
-  normal: "보통",
-  fast: "빠름",
-};
 
 interface PageBase {
   readonly author: SeatIndex;
@@ -88,7 +79,7 @@ export type ReactionTally = Partial<Record<ReactionEmoji, number>>;
 export interface DoodlePhoneState {
   readonly playerCount: number;
   readonly seed: number;
-  readonly pace: TimerPace;
+  readonly options: GameOptions;
   /** `albums[owner][turn - 1]` — album `owner` is the one seat `owner` started. */
   readonly albums: readonly (readonly (Page | null)[])[];
   /** Turns the host force-closed → seats whose slot got fallback content. */
@@ -98,6 +89,8 @@ export interface DoodlePhoneState {
   readonly reactions: Readonly<Record<string, ReactionTally>>;
   /** Keyed by `reactionUseKey(album, turn, seat)` — enforces MAX_REACTIONS_PER_PAGE. */
   readonly reactionUse: Readonly<Record<string, number>>;
+  /** Score mode: `voteKey(album, seat)` → the turn that seat voted best in that album. */
+  readonly votes: Readonly<Record<string, number>>;
 }
 
 export type EngineAction =
@@ -105,7 +98,8 @@ export type EngineAction =
   | { type: "SUBMIT_DRAWING"; seat: SeatIndex; turn: number; drawing: Drawing }
   | { type: "TIMEOUT"; turn: number; seats: SeatIndex[] }
   | { type: "SHOWCASE_NEXT"; from: ShowcaseCursor }
-  | { type: "REACT"; seat: SeatIndex; album: number; turn: number; emoji: ReactionEmoji };
+  | { type: "REACT"; seat: SeatIndex; album: number; turn: number; emoji: ReactionEmoji }
+  | { type: "VOTE"; seat: SeatIndex; album: number; turn: number };
 
 export type GamePhase = "turns" | "showcase" | "finished";
 
@@ -113,19 +107,20 @@ export type GamePhase = "turns" | "showcase" | "finished";
 // Setup
 // ---------------------------------------------------------------------------
 
-export function startGame(playerCount: number, seed: number, pace: TimerPace = "normal"): DoodlePhoneState {
+export function startGame(playerCount: number, seed: number, options: Partial<GameOptions> = DEFAULT_OPTIONS): DoodlePhoneState {
   if (!Number.isInteger(playerCount) || playerCount < 2 || playerCount > MAX_PLAYERS) {
     throw new Error(`doodle-phone: unsupported player count ${playerCount}`);
   }
   return {
     playerCount,
     seed,
-    pace,
+    options: sanitizeOptions(options),
     albums: Array.from({ length: playerCount }, () => Array<Page | null>(playerCount).fill(null)),
     timeouts: {},
     showcase: { album: 0, revealed: 0 },
     reactions: {},
     reactionUse: {},
+    votes: {},
   };
 }
 
@@ -147,14 +142,12 @@ export function receiverOf(playerCount: number, album: number, turn: number): Se
   return mod(album + turn - 1, playerCount);
 }
 
-export function turnKind(turn: number): PageKind {
-  return turn % 2 === 1 ? "text" : "drawing";
+export function turnKind(state: DoodlePhoneState, turn: number): PageKind {
+  return turnKindFor(state.options.mode, turn, state.playerCount);
 }
 
-export function turnDurationMs(pace: TimerPace, turn: number): number {
-  const s = PACE_SECONDS[pace];
-  if (turn === 1) return s.opening * 1000;
-  return (turnKind(turn) === "drawing" ? s.drawing : s.guess) * 1000;
+export function turnDurationMs(state: DoodlePhoneState, turn: number): number {
+  return turnSecondsFor(state.options, turn, state.playerCount) * 1000;
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +166,11 @@ export function slotFor(state: DoodlePhoneState, seat: SeatIndex, turn: number):
 export function isTurnClosed(state: DoodlePhoneState, turn: number): boolean {
   if (state.timeouts[turn]) return true;
   return state.albums.every((album) => album[turn - 1] !== null);
+}
+
+/** An album's drawing pages in order — the frames of an animation-mode flipbook. */
+export function albumDrawings(state: DoodlePhoneState, album: number): Drawing[] {
+  return (state.albums[album] ?? []).flatMap((page) => (page?.kind === "drawing" ? [page.drawing] : []));
 }
 
 /** First turn still open, or `playerCount + 1` once every turn is closed. */
@@ -244,7 +242,7 @@ export function fallbackPrompt(seed: number, album: number, turn: number): strin
 
 function fallbackPage(state: DoodlePhoneState, seat: SeatIndex, turn: number): Page {
   const album = albumFor(state.playerCount, seat, turn);
-  return turnKind(turn) === "text"
+  return turnKind(state, turn) === "text"
     ? { kind: "text", author: seat, auto: true, text: fallbackPrompt(state.seed, album, turn) }
     : { kind: "drawing", author: seat, auto: true, drawing: EMPTY_DRAWING };
 }
@@ -276,20 +274,41 @@ export function reactionTotal(tally: ReactionTally | undefined): number {
   return Object.values(tally).reduce((sum, n) => sum + (n ?? 0), 0);
 }
 
-/** Reactions each seat received on pages it authored. */
-export function reactionScores(state: DoodlePhoneState): number[] {
+export function voteKey(album: number, seat: SeatIndex): string {
+  return `${album}:${seat}`;
+}
+
+/** The turn `seat` voted best in `album` (score mode), or null. */
+export function voteOf(state: DoodlePhoneState, album: number, seat: SeatIndex): number | null {
+  return state.votes[voteKey(album, seat)] ?? null;
+}
+
+/** Best-page votes a page received. */
+export function votesFor(state: DoodlePhoneState, album: number, turn: number): number {
+  let n = 0;
+  for (let seat = 0; seat < state.playerCount; seat++) if (voteOf(state, album, seat) === turn) n++;
+  return n;
+}
+
+/**
+ * Points per seat for pages it authored — best-page votes in score mode,
+ * reactions otherwise. A slot's author is always `receiverOf(album, turn)`
+ * (fallback pages included), so this never depends on a page having arrived.
+ */
+export function playerScores(state: DoodlePhoneState): number[] {
   const scores = Array<number>(state.playerCount).fill(0);
-  state.albums.forEach((pages, album) =>
-    pages.forEach((page, i) => {
-      if (page) scores[page.author] += reactionTotal(state.reactions[pageKey(album, i + 1)]);
-    }),
-  );
+  for (let album = 0; album < state.playerCount; album++) {
+    for (let turn = 1; turn <= state.playerCount; turn++) {
+      const author = receiverOf(state.playerCount, album, turn);
+      scores[author] += state.options.mode === "SCORE" ? votesFor(state, album, turn) : reactionTotal(state.reactions[pageKey(album, turn)]);
+    }
+  }
   return scores;
 }
 
-/** Standard competition ranking by reactions received ("웃음왕" = rank 1); ties share a rank. */
+/** Standard competition ranking by `playerScores` (rank 1 = 웃음왕 / 최다 득표); ties share a rank. */
 export function computeRankings(state: DoodlePhoneState): { seat: SeatIndex; rank: number; score: number }[] {
-  const scores = reactionScores(state);
+  const scores = playerScores(state);
   const ordered = scores.map((score, seat) => ({ seat, score })).sort((a, b) => b.score - a.score || a.seat - b.seat);
   return ordered.map((entry) => ({ ...entry, rank: 1 + ordered.filter((o) => o.score > entry.score).length }));
 }
@@ -325,7 +344,7 @@ function submit(state: DoodlePhoneState, seat: SeatIndex, turn: number, page: Pa
 export function applyAction(state: DoodlePhoneState, action: EngineAction): DoodlePhoneState {
   switch (action.type) {
     case "SUBMIT_TEXT": {
-      if (!isSeat(state, action.seat) || !isTurn(state, action.turn) || turnKind(action.turn) !== "text") return state;
+      if (!isSeat(state, action.seat) || !isTurn(state, action.turn) || turnKind(state, action.turn) !== "text") return state;
       if (typeof action.text !== "string" || !isValidText(action.text)) return state;
       return submit(state, action.seat, action.turn, {
         kind: "text",
@@ -335,7 +354,7 @@ export function applyAction(state: DoodlePhoneState, action: EngineAction): Dood
       });
     }
     case "SUBMIT_DRAWING": {
-      if (!isSeat(state, action.seat) || !isTurn(state, action.turn) || turnKind(action.turn) !== "drawing") return state;
+      if (!isSeat(state, action.seat) || !isTurn(state, action.turn) || turnKind(state, action.turn) !== "drawing") return state;
       if (!isValidDrawing(action.drawing)) return state;
       return submit(state, action.seat, action.turn, { kind: "drawing", author: action.seat, auto: false, drawing: action.drawing });
     }
@@ -361,8 +380,9 @@ export function applyAction(state: DoodlePhoneState, action: EngineAction): Dood
       const { seat, album, turn, emoji } = action;
       if (!isSeat(state, seat) || !isSeat(state, album) || !isTurn(state, turn)) return state;
       if (!REACTION_EMOJIS.includes(emoji)) return state;
-      const page = pageAt(state, album, turn);
-      if (!page || page.author === seat) return state;
+      // Own-page check via routing, not the page itself: the page may still be
+      // in flight on this client, and the result must not depend on that.
+      if (receiverOf(state.playerCount, album, turn) === seat) return state;
       if (reactionsLeft(state, seat, album, turn) <= 0) return state;
       const key = pageKey(album, turn);
       const tally = state.reactions[key] ?? {};
@@ -371,6 +391,12 @@ export function applyAction(state: DoodlePhoneState, action: EngineAction): Dood
         reactions: { ...state.reactions, [key]: { ...tally, [emoji]: (tally[emoji] ?? 0) + 1 } },
         reactionUse: { ...state.reactionUse, [reactionUseKey(album, turn, seat)]: (state.reactionUse[reactionUseKey(album, turn, seat)] ?? 0) + 1 },
       };
+    }
+    case "VOTE": {
+      const { seat, album, turn } = action;
+      if (state.options.mode !== "SCORE" || !isSeat(state, seat) || !isSeat(state, album) || !isTurn(state, turn)) return state;
+      if (receiverOf(state.playerCount, album, turn) === seat || voteOf(state, album, seat) !== null) return state;
+      return { ...state, votes: { ...state.votes, [voteKey(album, seat)]: turn } };
     }
     default:
       return state;
@@ -407,6 +433,8 @@ export function mergeStates(local: DoodlePhoneState, incoming: DoodlePhoneState)
     showcase:
       cursorRank(incoming.showcase, local.playerCount) > cursorRank(local.showcase, local.playerCount) ? incoming.showcase : local.showcase,
     reactionUse: maxRecord(local.reactionUse, incoming.reactionUse),
+    // One vote per (album, seat) and a seat never changes it, so a union is exact.
+    votes: { ...incoming.votes, ...local.votes },
     reactions: Object.fromEntries(
       [...new Set([...Object.keys(local.reactions), ...Object.keys(incoming.reactions)])].map((key) => [
         key,
