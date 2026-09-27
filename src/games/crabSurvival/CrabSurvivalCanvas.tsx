@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LEVELS, SHIELDS, STAMINA_MAX, WEAPONS, comboMultiplier } from "./data";
+import { roadmap, SHIELDS, SPECIES, STAMINA_MAX, WEAPONS, comboMultiplier, type SpeciesId } from "./data";
 import {
   attackReach,
   createWorld,
@@ -73,6 +73,7 @@ const JOY_R = 54;
 export default function CrabSurvivalCanvas({
   playerName,
   colorId,
+  species,
   duration,
   muted,
   onToggleMute,
@@ -82,6 +83,7 @@ export default function CrabSurvivalCanvas({
 }: {
   playerName: string;
   colorId: string;
+  species: SpeciesId;
   duration: number;
   muted: boolean;
   onToggleMute: () => void;
@@ -89,6 +91,7 @@ export default function CrabSurvivalCanvas({
   onToggleFollow: () => void;
   onEnd: (s: MatchSummary) => void;
 }) {
+  const road = roadmap(species);
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const miniRef = useRef<HTMLCanvasElement>(null);
@@ -230,7 +233,7 @@ export default function CrabSurvivalCanvas({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const world = createWorld({ playerName, colorId, duration });
+    const world = createWorld({ playerName, colorId, species, duration });
     worldRef.current = world;
     const me0 = player(world);
     const { w: W0, h: H0 } = sizeRef.current;
@@ -350,7 +353,7 @@ export default function CrabSurvivalCanvas({
           case "levelUp":
             if (ev.player) {
               a?.levelUp();
-              pushBanner({ text: `LEVEL UP! Lv${ev.level}`, sub: `${LEVELS[ev.level - 1].name}(으)로 성장! 몸집 ×${LEVELS[ev.level - 1].scale}`, tone: "level" });
+              pushBanner({ text: `LEVEL UP! Lv${ev.level}`, sub: `${road[ev.level - 1].name}(으)로 성장! 몸집 ×${road[ev.level - 1].scale}`, tone: "level" });
             }
             break;
           case "kingNew":
@@ -524,8 +527,8 @@ export default function CrabSurvivalCanvas({
     endMatch(w);
   };
 
-  const lv = hud ? LEVELS[hud.level - 1] : LEVELS[0];
-  const nextLv = hud && hud.level < LEVELS.length ? LEVELS[hud.level] : null;
+  const lv = hud ? road[hud.level - 1] : road[0];
+  const nextLv = hud && hud.level < road.length ? road[hud.level] : null;
   const xpPct = hud && nextLv ? Math.min(1, (hud.score - lv.points) / (nextLv.points - lv.points)) : 1;
   const hpPct = hud ? Math.max(0, hud.hp / hud.maxHp) : 1;
   const mm = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -626,7 +629,9 @@ export default function CrabSurvivalCanvas({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between text-[11px] font-bold text-white drop-shadow">
-                <span>{lv.name}</span>
+                <span>
+                  {lv.name} <span className="font-semibold text-white/60">· {SPECIES[species].name}</span>
+                </span>
                 <span className="tabular-nums text-yellow-200">{hud.score.toLocaleString()} pts</span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-black/50 ring-1 ring-white/20">

@@ -4,12 +4,13 @@
  * fresh profile.
  */
 
-import { CRAB_COLORS, MATCH_LENGTHS } from "./data";
+import { CRAB_COLORS, MATCH_LENGTHS, SPECIES, type SpeciesId } from "./data";
 
 export interface CrabSave {
   version: 1;
   name: string;
   colorId: string;
+  species: SpeciesId;
   duration: number;
   muted: boolean;
   followMouse: boolean;
@@ -29,6 +30,7 @@ export function freshSave(): CrabSave {
     version: 1,
     name: "",
     colorId: CRAB_COLORS[0].id,
+    species: "flower",
     duration: MATCH_LENGTHS[1].seconds,
     muted: false,
     followMouse: true,
@@ -48,7 +50,9 @@ export function loadSave(): CrabSave {
     if (!raw) return freshSave();
     const parsed = JSON.parse(raw) as Partial<CrabSave>;
     if (parsed.version !== 1) return freshSave();
-    return { ...freshSave(), ...parsed };
+    const merged = { ...freshSave(), ...parsed };
+    if (!SPECIES[merged.species]) merged.species = "flower";
+    return merged;
   } catch {
     return freshSave();
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LEVELS, levelForScore, POOL_HEAL_RATE, SHIELDS, STAMINA_MAX } from "./data";
+import { LEVELS, levelForScore, MAX_LEVEL, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES_LIST, STAMINA_MAX } from "./data";
 import { addScore, botThink, createWorld, player, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
 
 const idle: CrabInput = { moveX: 0, moveY: 0, boost: false, attack: false };
@@ -15,6 +15,7 @@ function bare(bots = 0): World {
   w.creatures = [];
   w.kingId = null;
   for (const c of w.crabs) {
+    c.species = "flower";
     c.invuln = 0;
     c.x = 0;
     c.y = 0;
@@ -31,8 +32,10 @@ function face(a: Crab, b: Crab) {
 }
 
 describe("level table (spec §2.2)", () => {
-  it("matches the spec thresholds, scales, ATK and HP", () => {
-    expect(LEVELS.map((l) => [l.points, l.scale, l.atk, l.hp])).toEqual([
+  it("keeps the spec's six milestones inside the finer 12-step base roadmap", () => {
+    expect(MAX_LEVEL).toBe(12);
+    const anchors = [0, 2, 4, 6, 8, 11].map((i) => LEVELS[i]);
+    expect(anchors.map((l) => [l.points, l.scale, l.atk, l.hp])).toEqual([
       [0, 1.0, 10, 100],
       [1_000, 1.3, 18, 200],
       [5_000, 1.7, 35, 450],
@@ -40,17 +43,39 @@ describe("level table (spec §2.2)", () => {
       [100_000, 2.8, 120, 2_500],
       [500_000, 3.5, 220, 5_000],
     ]);
-    expect(levelForScore(999).level).toBe(1);
-    expect(levelForScore(1000).level).toBe(2);
-    expect(levelForScore(499_999).level).toBe(5);
-    expect(levelForScore(500_000).level).toBe(6);
+    expect(levelForScore(399).level).toBe(1);
+    expect(levelForScore(400).level).toBe(2);
+    expect(levelForScore(499_999).level).toBe(11);
+    expect(levelForScore(500_000).level).toBe(12);
+    // Gaps shrink: no step asks for more than ~2.3x the previous threshold.
+    for (let i = 2; i < LEVELS.length; i++) expect(LEVELS[i].points / LEVELS[i - 1].points).toBeLessThan(2.6);
+  });
+
+  it("every species roadmap is strictly increasing and differs where it should", () => {
+    for (const sp of SPECIES_LIST) {
+      const r = roadmap(sp.id);
+      expect(r).toHaveLength(12);
+      for (let i = 1; i < r.length; i++) {
+        expect(r[i].points).toBeGreaterThan(r[i - 1].points);
+        expect(r[i].hp).toBeGreaterThan(r[i - 1].hp);
+        expect(r[i].scale).toBeGreaterThan(r[i - 1].scale);
+      }
+    }
+    const [flower, ghost, snow, fiddler] = (["flower", "ghost", "snow", "fiddler"] as const).map((id) => roadmap(id));
+    expect(ghost[6].points).toBeLessThan(flower[6].points); // speed: early levels cheaper
+    expect(ghost[11].points).toBeGreaterThan(flower[11].points); // ...late ones pricier
+    expect(snow[6].points).toBeGreaterThan(flower[6].points); // tank: slow start
+    expect(snow[11].points).toBeLessThan(flower[11].points); // ...fast finish
+    expect(snow[11].hp).toBeGreaterThan(flower[11].hp);
+    expect(fiddler[11].atk).toBeGreaterThan(flower[11].atk);
+    expect(ghost[0].speed).toBeGreaterThan(flower[0].speed);
   });
 
   it("levels up on score, grows HP, and lerps the body scale smoothly", () => {
     const w = bare();
     const me = player(w);
     addScore(w, me, 5_000);
-    expect(me.level).toBe(3);
+    expect(me.level).toBe(5);
     expect(me.maxHp).toBe(450);
     expect(w.events.some((e) => e.type === "levelUp" && e.player)).toBe(true);
     step(w, idle, 1 / 60);
@@ -149,7 +174,7 @@ describe("combat", () => {
     expect(w.playerDown).toBe(true);
     expect(w.pickups.some((p) => p.type === "coin")).toBe(true);
     expect(w.pickups.some((p) => p.type === "weapon" && p.weapon?.kind === "bat")).toBe(true);
-    expect(foe.score).toBeGreaterThanOrEqual(2_000 + 150);
+    expect(foe.score).toBeGreaterThanOrEqual(2_000 + 75);
     expect(revivePlayer(w)).toBe(true);
     expect(me.alive).toBe(true);
     expect(me.score).toBe(5_000);

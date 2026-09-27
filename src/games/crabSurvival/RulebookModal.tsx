@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { BOXES, CREATURES, FOODS, LEVELS, SHIELDS, WEAPONS } from "./data";
+import { BOXES, CREATURES, FOODS, LEVELS, roadmap, SHIELDS, SPECIES_LIST, WEAPONS } from "./data";
 
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const P = "text-white/70 light:text-slate-600";
@@ -37,7 +37,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
-          <h3 className={H3}>성장 단계</h3>
+          <h3 className={H3}>성장 단계 (기본: 꽃게 로드맵 12단계)</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-center text-xs">
               <thead className="text-white/50 light:text-slate-500">
@@ -70,8 +70,54 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           </div>
           <p className={`mt-2 text-xs ${P}`}>
             몸집이 커질수록 공격력·체력·사정거리가 늘고 카메라가 멀어져 시야가 넓어지지만, 느려지고 피격 판정도 커집니다.
-            <b> 흡수 배율</b>만큼 음식·생물·상자 코인 점수를 더 받습니다. 레벨업하면 체력이 비율대로 늘고 최대 체력의 20%를 즉시 회복합니다.
+            <b> 흡수 배율</b>만큼 음식·생물·상자 코인 점수를 더 받습니다. 레벨업하면 체력이 비율대로 늘고 최대 체력의 12%를 즉시 회복합니다. 기획서의 6개 기준점(Lv1·3·5·7·9·12)은 그대로 두고 사이를 잘게 나눴습니다.
           </p>
+        </section>
+
+        <section>
+          <h3 className={H3}>성장 경로 (게 종류)</h3>
+          <p className={`mb-2 text-xs ${P}`}>
+            로비에서 고른 게 종류에 따라 위 표에 능력치 배율이 붙고, 레벨업 필요 점수 곡선도 달라집니다. AI 게들도 무작위 종류로 등장합니다.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-center text-xs">
+              <thead className="text-white/50 light:text-slate-500">
+                <tr>
+                  <th className="px-2 py-1">종류</th>
+                  <th className="px-2 py-1">공격</th>
+                  <th className="px-2 py-1">체력</th>
+                  <th className="px-2 py-1">속도</th>
+                  <th className="px-2 py-1">특성</th>
+                  <th className="px-2 py-1">Lv7 필요</th>
+                  <th className="px-2 py-1">Lv12 필요</th>
+                </tr>
+              </thead>
+              <tbody>
+                {SPECIES_LIST.map((sp) => {
+                  const road = roadmap(sp.id);
+                  const extra = [
+                    sp.crit > 0 ? `치명 +${Math.round(sp.crit * 100)}%` : "",
+                    sp.staminaDrain < 1 ? `부스트 소모 -${Math.round((1 - sp.staminaDrain) * 100)}%` : "",
+                    sp.regen > 1 ? `회복 +${Math.round((sp.regen - 1) * 100)}%` : "",
+                    sp.scale !== 1 ? `몸집 ×${sp.scale}` : "",
+                  ].filter(Boolean);
+                  return (
+                    <tr key={sp.id}>
+                      <td className={TD}>
+                        <b>{sp.name}</b> {sp.role}
+                      </td>
+                      <td className={TD}>×{sp.atk}</td>
+                      <td className={TD}>×{sp.hp}</td>
+                      <td className={TD}>×{sp.speed}</td>
+                      <td className={TD}>{extra.join(" · ") || "—"}</td>
+                      <td className={`${TD} tabular-nums`}>{road[6].points.toLocaleString()}</td>
+                      <td className={`${TD} tabular-nums`}>{road[11].points.toLocaleString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section>
@@ -151,7 +197,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               <b>{BOXES.gold.name}</b>: 잠겨 있어 <b>🔑 열쇠</b>를 들고 한 번 치면 열립니다. 상급 무기·방패와 대량의 코인, 수박이 나옵니다. 열쇠는 한 번에 하나만 들 수 있고, 절반은 <b>바위 고리 안쪽</b>에 숨어 있습니다.
             </li>
             <li>
-              <b>바위 고리</b>: 바위 사이 틈은 <b>Lv2 이하의 작은 게만</b> 빠져나갈 수 있습니다. 큰 게에게 쫓기면 틈으로 도망치세요.
+              <b>바위 고리</b>: 바위 사이 틈은 <b>몸집 1.4배 이하의 작은 게만</b> 빠져나갈 수 있습니다. 큰 게에게 쫓기면 틈으로 도망치세요.
             </li>
             <li>
               <b>💧 치유의 웅덩이</b>: 안에 있으면 매초 최대 체력의 5%를 회복합니다. 전투 없이 5초가 지나도 천천히 회복됩니다.

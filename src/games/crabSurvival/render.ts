@@ -5,7 +5,7 @@
  * crabs walk behind/in front of props correctly.
  */
 
-import { BOXES, CRAB_RADIUS, FOODS, islandRadiusAt, SHALLOW_W, SHIELDS, WEAPONS, type CrabColor, type ShieldKind, type WeaponKind } from "./data";
+import { BOXES, CRAB_RADIUS, FOODS, islandRadiusAt, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
 import { crabRadius, player, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type World } from "./engine";
 
 export const TILT = 0.72;
@@ -612,10 +612,11 @@ function drawCrabWorld(ctx: CanvasRenderingContext2D, c: Crab, t: number, king: 
   if (!c.alive) {
     const fade = c.isPlayer ? 1 : Math.max(0, 1 - Math.max(0, c.deadT - 2));
     ctx.globalAlpha = fade;
-    drawCrabBody(ctx, c.color, { walk: t * 12, dead: true, flipT: Math.min(1, c.deadT * 3) });
+    drawCrabBody(ctx, c.color, { walk: t * 12, dead: true, flipT: Math.min(1, c.deadT * 3), build: SPECIES[c.species].build });
   } else {
     if (c.invuln > 0 && Math.sin(t * 30) > 0) ctx.globalAlpha = 0.45;
     drawCrabBody(ctx, c.color, {
+      build: SPECIES[c.species].build,
       walk: c.moving ? c.walk : 0,
       flash: c.hitFlash > 0,
       swing: c.swing > 0 ? 1 - c.swing / 0.24 : -1,
@@ -641,6 +642,8 @@ export interface CrabPose {
   dead?: boolean;
   flipT?: number;
   king?: boolean;
+  /** Species proportions (claw sizes, leg length, shell size). */
+  build?: SpeciesDef["build"];
 }
 
 /**
@@ -648,6 +651,8 @@ export interface CrabPose {
  * "Right" claw is +y (clockwise of facing), "left" claw is −y.
  */
 export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose: CrabPose) {
+  const legK = pose.build?.leg ?? 1, bodyK = pose.build?.body ?? 1;
+  const clawL = pose.build?.clawL ?? 1, clawR = pose.build?.clawR ?? 1;
   const R = CRAB_RADIUS;
   const shell = pose.flash ? "#ffffff" : col.shell;
   const dark = pose.flash ? "#f1f5f9" : col.dark;
@@ -707,9 +712,9 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
       const sw = Math.sin(phase) * 0.35;
       const bx = 6 - i * 5.2, by = side * R * 0.72;
       const a1 = side * (Math.PI / 2 + 0.25 + i * 0.28) + sw;
-      const kx = bx + Math.cos(a1) * 11, ky = by + Math.sin(a1) * 11;
+      const kx = bx + Math.cos(a1) * 11 * legK, ky = by + Math.sin(a1) * 11 * legK;
       const a2 = a1 + side * 0.7 - sw * 0.5;
-      const fx = kx + Math.cos(a2) * 10, fy = ky + Math.sin(a2) * 10;
+      const fx = kx + Math.cos(a2) * 10 * legK, fy = ky + Math.sin(a2) * 10 * legK;
       ctx.lineWidth = 3.4;
       ctx.beginPath();
       ctx.moveTo(bx, by);
@@ -734,9 +739,10 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
     const armA = active ? side * (1.1 - 1.9 * easeOut(sp)) : base;
     const reach = active ? 1 + 0.35 * Math.sin(sp * Math.PI) : 1;
     const sx = 8, sy = side * R * 0.55;
-    const ex = sx + Math.cos(armA) * 14 * reach, ey = sy + Math.sin(armA) * 14 * reach;
+    const armLen = 14 * Math.sqrt(side === 1 ? clawR : clawL);
+    const ex = sx + Math.cos(armA) * armLen * reach, ey = sy + Math.sin(armA) * armLen * reach;
     ctx.strokeStyle = shell;
-    ctx.lineWidth = 5.5;
+    ctx.lineWidth = 5.5 * Math.sqrt(side === 1 ? clawR : clawL);
     ctx.beginPath();
     ctx.moveTo(sx, sy);
     ctx.lineTo(ex, ey);
@@ -754,7 +760,7 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
     ctx.translate(ex, ey);
     ctx.rotate(armA * 0.6);
     const open = active ? 0.2 + 0.5 * Math.sin(sp * Math.PI) : 0.28;
-    const big = 1.15;
+    const big = 1.15 * (side === 1 ? clawR : clawL);
     ctx.fillStyle = shell;
     ctx.beginPath();
     ctx.ellipse(3, 0, 7 * big, 5.5 * big, 0, 0, Math.PI * 2);
@@ -793,6 +799,8 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
   drawArm(1);
 
   // Carapace: wide, with the swimming crab's long lateral spines.
+  ctx.save();
+  ctx.scale(bodyK, bodyK);
   ctx.fillStyle = dark;
   ctx.beginPath();
   ctx.moveTo(R * 0.55, -R * 0.95);
@@ -855,6 +863,7 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
     ctx.arc(R * 0.95 + 0.9, e * 6.8 - 0.9, 1.1, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
   ctx.lineCap = "butt";
 }
 
@@ -1453,7 +1462,7 @@ export function drawMinimap(ctx: CanvasRenderingContext2D, w: World, size: numbe
 }
 
 /** Standalone preview (menu): one crab, idle-animated, optional gear/crown. */
-export function drawCrabPreview(ctx: CanvasRenderingContext2D, col: CrabColor, W: number, H: number, t: number, opts: { weapon?: WeaponKind | null; shield?: ShieldKind | null; crown?: boolean } = {}) {
+export function drawCrabPreview(ctx: CanvasRenderingContext2D, col: CrabColor, W: number, H: number, t: number, opts: { weapon?: WeaponKind | null; shield?: ShieldKind | null; crown?: boolean; species?: SpeciesId } = {}) {
   ctx.clearRect(0, 0, W, H);
   const s = Math.min(W, H) / 70;
   ctx.save();
@@ -1465,7 +1474,7 @@ export function drawCrabPreview(ctx: CanvasRenderingContext2D, col: CrabColor, W
   ctx.scale(s, s * TILT);
   ctx.rotate(-Math.PI / 2);
   const sp = (t * 0.8) % 2.2;
-  drawCrabBody(ctx, col, { walk: t * 6, swing: sp < 1 ? sp : -1, swingSide: 1, weapon: opts.weapon ?? null, shield: opts.shield ?? null });
+  drawCrabBody(ctx, col, { walk: t * 6, swing: sp < 1 ? sp : -1, swingSide: 1, weapon: opts.weapon ?? null, shield: opts.shield ?? null, build: SPECIES[opts.species ?? "flower"].build });
   ctx.restore();
   if (opts.crown) drawCrown(ctx, W / 2, H / 2 - 22 * s, 7 * s, t);
 }

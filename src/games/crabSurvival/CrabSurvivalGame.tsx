@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PlayableGameProps } from "../types";
-import { CRAB_COLORS, LEVELS, MATCH_LENGTHS, type CrabColor, type ShieldKind, type WeaponKind } from "./data";
+import { CRAB_COLORS, MATCH_LENGTHS, roadmap, SPECIES, SPECIES_LIST, type CrabColor, type ShieldKind, type SpeciesId, type WeaponKind } from "./data";
 import type { MatchSummary } from "./engine";
 import CrabSurvivalCanvas from "./CrabSurvivalCanvas";
 import RulebookModal from "./RulebookModal";
@@ -72,6 +72,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
         key={runKey}
         playerName={save.name.trim() || "나"}
         colorId={save.colorId}
+        species={save.species}
         duration={save.duration}
         muted={save.muted}
         onToggleMute={() => update((s) => ({ ...s, muted: !s.muted }))}
@@ -84,7 +85,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
 
   return (
     <div className="flex flex-col gap-4">
-      {screen === "results" && result && <ResultsPanel result={result} color={color} onRetry={start} onMenu={() => setScreen("menu")} />}
+      {screen === "results" && result && <ResultsPanel result={result} color={color} species={save.species} onRetry={start} onMenu={() => setScreen("menu")} />}
 
       {screen === "menu" && (
         <>
@@ -112,10 +113,10 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
             {/* Preview */}
             <div className="flex flex-col items-center gap-2">
               <div className="w-full rounded-xl bg-gradient-to-b from-amber-100 to-amber-200 p-2 light:from-amber-50 light:to-amber-100">
-                <CrabPreview color={color} width={260} height={170} animate weapon="bat" shield="potLid" />
+                <CrabPreview color={color} species={save.species} width={260} height={170} animate weapon="bat" shield="potLid" />
               </div>
               <div className="text-center text-sm font-black text-white light:text-slate-900">
-                {save.name.trim() || "이름 없는 게"} <span className="text-xs font-semibold text-white/50 light:text-slate-400">· {color.name}</span>
+                {save.name.trim() || "이름 없는 게"} <span className="text-xs font-semibold text-white/50 light:text-slate-400">· {SPECIES[save.species].name}({SPECIES[save.species].role}) · {color.name}</span>
               </div>
               <div className="grid w-full grid-cols-3 gap-1 text-center text-[10px] text-white/60 light:text-slate-500">
                 <Stat label="누적 처치" value={`✂️ ${save.totalKills}`} />
@@ -148,7 +149,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
                       }`}
                       title={c.name}
                     >
-                      <CrabPreview color={c} width={56} height={40} />
+                      <CrabPreview color={c} species={save.species} width={56} height={40} />
                       <span className="truncate text-[9px] text-white/70 light:text-slate-600">{c.name}</span>
                     </button>
                   ))}
@@ -170,18 +171,11 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
                   ))}
                 </div>
               </div>
-              <div className="rounded-lg bg-black/20 p-2.5 text-[11px] text-white/65 light:bg-slate-50 light:text-slate-600">
-                <div className="mb-1 font-bold text-white/80 light:text-slate-700">성장 로드맵</div>
-                <div className="flex flex-wrap gap-1">
-                  {LEVELS.map((l) => (
-                    <span key={l.level} className="rounded bg-white/5 px-1.5 py-0.5 light:bg-white">
-                      Lv{l.level} {l.name} <b className="tabular-nums">{l.points >= 1000 ? `${l.points / 1000}k` : l.points}</b>
-                    </span>
-                  ))}
-                </div>
-              </div>
+              <RoadmapChips species={save.species} />
             </div>
           </div>
+
+          <SpeciesPicker value={save.species} color={color} onChange={(id) => update((s) => ({ ...s, species: id }))} />
 
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
@@ -218,6 +212,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
 
 function CrabPreview({
   color,
+  species,
   width,
   height,
   animate,
@@ -226,6 +221,7 @@ function CrabPreview({
   crown,
 }: {
   color: CrabColor;
+  species?: SpeciesId;
   width: number;
   height: number;
   animate?: boolean;
@@ -245,12 +241,12 @@ function CrabPreview({
     let raf = 0;
     const draw = (t: number) => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawCrabPreview(ctx, color, width, height, animate ? t / 1000 : 0.4, { weapon, shield, crown });
+      drawCrabPreview(ctx, color, width, height, animate ? t / 1000 : 0.4, { weapon, shield, crown, species });
       if (animate) raf = requestAnimationFrame(draw);
     };
     draw(0);
     return () => cancelAnimationFrame(raf);
-  }, [color, width, height, animate, weapon, shield, crown]);
+  }, [color, species, width, height, animate, weapon, shield, crown]);
   return <canvas ref={ref} style={{ width, height, maxWidth: "100%" }} className="mx-auto block" />;
 }
 
@@ -267,22 +263,24 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 function ResultsPanel({
   result,
   color,
+  species,
   onRetry,
   onMenu,
 }: {
   result: { s: MatchSummary; newBest: boolean; trophies: number };
   color: CrabColor;
+  species: SpeciesId;
   onRetry: () => void;
   onMenu: () => void;
 }) {
   const { s, newBest, trophies } = result;
-  const lv = LEVELS[Math.max(0, s.stats.maxLevel - 1)];
+  const lv = roadmap(species)[Math.max(0, s.stats.maxLevel - 1)];
   const title = s.rank === 1 ? "👑 섬의 왕!" : s.rank <= 3 ? "🥈 포디움 입성!" : s.endedByDeath ? "뒤집혔지만 잘 싸웠다!" : "생존 완료!";
   return (
     <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 p-5 light:border-slate-200 light:from-white light:to-slate-50">
       <div className="flex flex-col items-center text-center">
         <div className="text-xs font-bold tracking-[0.3em] text-white/40 light:text-slate-400">MATCH RESULT</div>
-        <CrabPreview color={color} width={160} height={100} animate crown={s.rank === 1} />
+        <CrabPreview color={color} species={species} width={160} height={100} animate crown={s.rank === 1} />
         <div className="text-lg font-black text-white light:text-slate-900">{title}</div>
         <div className="mt-1 text-4xl font-black text-white tabular-nums light:text-slate-900">
           {s.rank}
@@ -341,6 +339,93 @@ function ResultsPanel({
         <button onClick={onMenu} className="flex-1 rounded-xl bg-white/10 py-3 font-black text-white hover:bg-white/20 light:bg-slate-200 light:text-slate-800">
           🏝️ 로비로
         </button>
+      </div>
+    </div>
+  );
+}
+
+function RoadmapChips({ species }: { species: SpeciesId }) {
+  const road = roadmap(species);
+  const sp = SPECIES[species];
+  const k = (n: number) => (n >= 1000 ? `${+(n / 1000).toFixed(1)}k` : `${n}`);
+  return (
+    <div className="rounded-lg bg-black/20 p-2 text-[10px] text-white/65 light:bg-slate-50 light:text-slate-600">
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="text-[11px] font-bold text-white/80 light:text-slate-700">
+          성장 로드맵 · {sp.name}({sp.role})
+        </span>
+        <span className="text-white/40 light:text-slate-400">12단계</span>
+      </div>
+      <div className="grid grid-cols-4 gap-0.5">
+        {road.map((l) => (
+          <div
+            key={l.level}
+            className={`rounded px-1 py-0.5 leading-tight ${l.level === road.length ? "bg-yellow-400/20 text-yellow-200 light:text-amber-700" : "bg-white/5 light:bg-white"}`}
+          >
+            <div className="truncate">
+              Lv{l.level} {l.name}
+            </div>
+            <b className="tabular-nums">{k(l.points)}</b> <span className="opacity-60">×{l.scale}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SpeciesPicker({ value, color, onChange }: { value: SpeciesId; color: CrabColor; onChange: (id: SpeciesId) => void }) {
+  const base = roadmap("flower");
+  const bar = (v: number) => `${Math.max(8, Math.min(100, (v / 1.4) * 100))}%`;
+  const tone = (v: number) => (v < 1 ? "text-emerald-300 light:text-emerald-600" : v > 1 ? "text-rose-300 light:text-rose-600" : "");
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 light:border-slate-200 light:bg-white light:shadow-sm">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-1">
+        <div className="text-sm font-black text-white light:text-slate-900">🧬 성장 경로 선택</div>
+        <div className="text-[10px] text-white/40 light:text-slate-400">게 종류마다 능력치와 레벨업 곡선이 다릅니다</div>
+      </div>
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        {SPECIES_LIST.map((sp) => {
+          const road = roadmap(sp.id);
+          const active = sp.id === value;
+          // Cost to reach Lv7 (성체) vs 꽃게, and cost of Lv7→Lv12 vs 꽃게.
+          const early = road[6].points / base[6].points;
+          const late = (road[11].points - road[6].points) / (base[11].points - base[6].points);
+          const stats: [string, number][] = [
+            ["공격", sp.atk],
+            ["체력", sp.hp],
+            ["속도", sp.speed],
+          ];
+          return (
+            <button
+              key={sp.id}
+              onClick={() => onChange(sp.id)}
+              className={`flex flex-col gap-1 rounded-xl border p-2 text-left transition ${
+                active ? "border-orange-400 bg-orange-500/15 ring-2 ring-orange-400/50" : "border-white/10 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-slate-50"
+              }`}
+            >
+              <div className="rounded-lg bg-gradient-to-b from-amber-100 to-amber-200">
+                <CrabPreview color={color} species={sp.id} width={120} height={70} animate={active} />
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-sm font-black text-white light:text-slate-900">{sp.name}</span>
+                <span className="text-[10px] font-bold text-orange-300 light:text-orange-600">{sp.role}</span>
+              </div>
+              <p className="text-[10px] leading-snug text-white/55 light:text-slate-500">{sp.blurb}</p>
+              {stats.map(([label, v]) => (
+                <div key={label} className="flex items-center gap-1 text-[9px]">
+                  <span className="w-6 shrink-0 text-white/50 light:text-slate-500">{label}</span>
+                  <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
+                    <div className={`h-full rounded-full ${v > 1 ? "bg-emerald-400" : v < 1 ? "bg-rose-400" : "bg-sky-400"}`} style={{ width: bar(v) }} />
+                  </div>
+                  <span className="w-8 shrink-0 text-right tabular-nums text-white/70 light:text-slate-600">×{v}</span>
+                </div>
+              ))}
+              <div className="text-[9px] text-white/50 light:text-slate-500">
+                필요 점수 초반 <b className={tone(early)}>{Math.round(early * 100)}%</b> · 후반 <b className={tone(late)}>{Math.round(late * 100)}%</b>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

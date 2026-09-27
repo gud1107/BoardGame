@@ -34,8 +34,10 @@ import {
   GUARD_COS,
   HIT_STOP,
   islandRadiusAt,
-  LEVELS,
   levelForScore,
+  roadmap,
+  SPECIES,
+  SPECIES_LIST,
   POOL_HEAL_RATE,
   POPULATION,
   REGEN_DELAY,
@@ -57,6 +59,7 @@ import {
   type FoodKind,
   type LevelDef,
   type ShieldKind,
+  type SpeciesId,
   type WeaponKind,
 } from "./data";
 
@@ -86,6 +89,7 @@ export interface Crab {
   name: string;
   isPlayer: boolean;
   color: CrabColor;
+  species: SpeciesId;
   alive: boolean;
   x: number;
   y: number;
@@ -324,7 +328,7 @@ export function crabRadius(c: Crab): number {
   return CRAB_RADIUS * c.scale;
 }
 export function levelDef(c: Crab): LevelDef {
-  return LEVELS[c.level - 1];
+  return roadmap(c.species)[c.level - 1];
 }
 /** Unarmed claw reach beyond the body edge. */
 export const CLAW_REACH = 26;
@@ -382,6 +386,7 @@ function randomShallowPoint(w: World): { x: number; y: number } {
 export interface MatchOptions {
   playerName: string;
   colorId: string;
+  species?: SpeciesId;
   duration: number;
   seed?: number;
   bots?: number;
@@ -423,7 +428,7 @@ export function createWorld(opts: MatchOptions): World {
   generateMap(w);
 
   const color = CRAB_COLORS.find((c) => c.id === opts.colorId) ?? CRAB_COLORS[0];
-  const me = makeCrab(w, opts.playerName.trim() || "나", color, true);
+  const me = makeCrab(w, opts.playerName.trim() || "나", color, true, opts.species ?? "flower");
   w.playerId = me.id;
   w.crabs.push(me);
 
@@ -432,7 +437,7 @@ export function createWorld(opts: MatchOptions): World {
   for (let i = 0; i < botCount; i++) {
     const name = names.splice(Math.floor(rand(w) * names.length), 1)[0] ?? `게${i + 1}`;
     const bc = CRAB_COLORS[(i + 1 + CRAB_COLORS.indexOf(color)) % CRAB_COLORS.length];
-    const b = makeCrab(w, name, bc, false);
+    const b = makeCrab(w, name, bc, false, SPECIES_LIST[Math.floor(rand(w) * SPECIES_LIST.length)].id);
     // A staggered head start so the leaderboard isn't a flat line of zeros.
     const head = Math.floor(rand(w) * rand(w) * 2600);
     b.score = head;
@@ -449,13 +454,14 @@ export function createWorld(opts: MatchOptions): World {
   return w;
 }
 
-function makeCrab(w: World, name: string, color: CrabColor, isPlayer: boolean): Crab {
+function makeCrab(w: World, name: string, color: CrabColor, isPlayer: boolean, species: SpeciesId): Crab {
   const p = randomLandPoint(w, 30, true, 0.85);
   const c: Crab = {
     id: w.nextId++,
     name,
     isPlayer,
     color,
+    species,
     alive: true,
     x: p.x,
     y: p.y,
@@ -466,9 +472,9 @@ function makeCrab(w: World, name: string, color: CrabColor, isPlayer: boolean): 
     walk: 0,
     score: 0,
     level: 1,
-    scale: 1,
-    hp: LEVELS[0].hp,
-    maxHp: LEVELS[0].hp,
+    scale: roadmap(species)[0].scale,
+    hp: roadmap(species)[0].hp,
+    maxHp: roadmap(species)[0].hp,
     stamina: STAMINA_MAX,
     staminaDelay: 0,
     boosting: false,
@@ -688,12 +694,12 @@ function floatText(w: World, x: number, y: number, text: string, color: string, 
 // ── Score / growth ──────────────────────────────────────────────────────────
 
 function syncLevel(c: Crab, instant = false) {
-  const lv = levelForScore(c.score);
+  const lv = levelForScore(c.score, c.species);
   if (lv.level === c.level && !instant) return false;
   const oldMax = c.maxHp;
   c.level = lv.level;
   c.maxHp = lv.hp;
-  c.hp = instant ? lv.hp : Math.min(lv.hp, c.hp * (lv.hp / oldMax) + lv.hp * 0.2);
+  c.hp = instant ? lv.hp : Math.min(lv.hp, c.hp * (lv.hp / oldMax) + lv.hp * 0.12);
   if (instant) c.scale = lv.scale;
   return true;
 }
@@ -820,7 +826,7 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
   const wantBoost = inp.boost && c.moving && c.stamina > 0;
   if (wantBoost) {
     c.boosting = true;
-    c.stamina = Math.max(0, c.stamina - STAMINA_DRAIN * dt);
+    c.stamina = Math.max(0, c.stamina - STAMINA_DRAIN * SPECIES[c.species].staminaDrain * dt);
     c.staminaDelay = STAMINA_DELAY;
   } else {
     c.boosting = false;
@@ -858,7 +864,7 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
   c.scale += (lv.scale - c.scale) * (1 - Math.exp(-2.5 * dt));
 
   // Out-of-combat regen.
-  if (c.sinceHurt > REGEN_DELAY && c.hp < c.maxHp) c.hp = Math.min(c.maxHp, c.hp + c.maxHp * REGEN_RATE * dt);
+  if (c.sinceHurt > REGEN_DELAY && c.hp < c.maxHp) c.hp = Math.min(c.maxHp, c.hp + c.maxHp * REGEN_RATE * SPECIES[c.species].regen * dt);
 
   if (c.boosting && w.particles.length < 400 && rand(w) < dt * 18) {
     burst(w, "sand", c.x - Math.cos(c.angle) * crabRadius(c), c.y - Math.sin(c.angle) * crabRadius(c), 1, 40, "#e8cf94", 4 * c.scale, 0.5, 40);
@@ -901,7 +907,7 @@ export function swing(w: World, c: Crab) {
   for (const t of w.crabs) {
     if (t === c || !t.alive || t.invuln > 0) continue;
     if (!inCone(c, { x: t.x, y: t.y, r: crabRadius(t) }, reach, wd.arc)) continue;
-    const crit = rand(w) < BASE_CRIT + wd.crit;
+    const crit = rand(w) < BASE_CRIT + wd.crit + SPECIES[c.species].crit;
     const counter = !!c.counter && c.counter.by === t.id;
     let dmg = lv.atk * wd.dmg * comboMultiplier(nextCombo) * range(w, 0.9, 1.1);
     if (crit) dmg *= CRIT_MULT;
@@ -916,7 +922,7 @@ export function swing(w: World, c: Crab) {
   for (const cr of w.creatures) {
     if (!cr.alive) continue;
     if (!inCone(c, { x: cr.x, y: cr.y, r: cr.def.radius }, reach, wd.arc)) continue;
-    const crit = rand(w) < BASE_CRIT + wd.crit;
+    const crit = rand(w) < BASE_CRIT + wd.crit + SPECIES[c.species].crit;
     let dmg = lv.atk * wd.dmg * comboMultiplier(nextCombo) * range(w, 0.9, 1.1);
     if (crit) dmg *= CRIT_MULT;
     damageCreature(w, cr, dmg, c, crit, wd.knockback);
@@ -1032,7 +1038,7 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
     pk.lockId = v.id;
     pk.lockT = 0.4;
   }
-  const meat = newPickup(w, "food", v.x, v.y, 40 * v.level, false, 11, 45);
+  const meat = newPickup(w, "food", v.x, v.y, 20 * v.level, false, 11, 45);
   meat.food = "meat";
   if (v.weapon) dropEquip(w, v.x, v.y, "weapon", v.weapon);
   if (v.shield) dropEquip(w, v.x, v.y, "shield", v.shield);
@@ -1054,7 +1060,7 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
   if (by) {
     by.kills++;
     if (by.isPlayer) w.stats.kills++;
-    let reward = Math.floor(score * 0.2) + 150 * v.level;
+    let reward = Math.floor(score * 0.2) + 75 * v.level;
     if (wasKing) reward += Math.floor(score * 0.3) + 10_000;
     addScore(w, by, reward);
     floatText(w, by.x, by.y - 40 * by.scale, `+${Math.round(reward).toLocaleString()}`, "#fde047", wasKing ? 26 : 18, 1.4);
@@ -1237,7 +1243,7 @@ function updateCreature(w: World, cr: Creature, dt: number) {
   } else if (def.kind === "lobster") {
     // The big lobster guards its patch: anything small that wanders close gets pinched.
     for (const c of w.crabs) {
-      if (c.alive && Math.hypot(c.x - cr.x, c.y - cr.y) < 170 && c.level <= 3) {
+      if (c.alive && Math.hypot(c.x - cr.x, c.y - cr.y) < 170 && c.level <= 5) {
         cr.aggroId = c.id;
         cr.aggroT = 3;
         break;
@@ -1706,8 +1712,8 @@ function decide(w: World, c: Crab, br: Brain, hpFrac: number) {
     const mine = timeToKill(c, o), theirs = timeToKill(o, c);
     if (mine > theirs * (0.55 + br.aggression * 0.55)) continue;
     // Big crabs mostly ignore small fry — not worth the chase.
-    const smallFry = o.level < c.level - 1 ? 0.25 : 1;
-    const payoff = (o.score * 0.6 + 400 * o.level * lv.gain) * smallFry + (isKing ? o.score * 0.5 + 10_000 : 0);
+    const smallFry = o.level < c.level - 3 ? 0.25 : 1;
+    const payoff = (o.score * 0.6 + 200 * o.level * lv.gain) * smallFry + (isKing ? o.score * 0.5 + 10_000 : 0);
     consider("crab", o.id, o.x, o.y, (payoff * (0.4 + br.aggression)) / (d + 150));
   }
   for (const cr of w.creatures) {
@@ -1791,7 +1797,7 @@ export function summarize(w: World): MatchSummary {
   const me = player(w);
   const score = w.over ? w.finalScore : me.alive ? me.score : (w.deathSnapshot?.score ?? 0);
   const others = w.crabs.filter((c) => !c.isPlayer).map((c) => ({ name: c.name, score: c.alive ? c.score : 0, isPlayer: false, level: c.level }));
-  const all = [...others, { name: me.name, score, isPlayer: true, level: levelForScore(score).level }].sort((a, b) => b.score - a.score);
+  const all = [...others, { name: me.name, score, isPlayer: true, level: levelForScore(score, me.species).level }].sort((a, b) => b.score - a.score);
   return {
     score,
     rank: all.findIndex((x) => x.isPlayer) + 1,

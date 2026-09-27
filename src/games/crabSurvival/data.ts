@@ -25,18 +25,108 @@ export interface LevelDef {
   gain: number;
 }
 
+/**
+ * Base (꽃게/균형형) roadmap: 12 finer steps. The spec's six milestones are kept
+ * exactly at Lv1/3/5/7/9/12 (0·1k·5k·20k·100k·500k), with in-between steps
+ * interpolated so level-ups come about twice as often.
+ */
 export const LEVELS: LevelDef[] = [
   { level: 1, name: "아기 게", points: 0, scale: 1.0, atk: 10, hp: 100, speed: 250, speedLabel: "가장 빠름", gain: 1 },
-  { level: 2, name: "어린 게", points: 1_000, scale: 1.3, atk: 18, hp: 200, speed: 240, speedLabel: "빠름", gain: 1.4 },
-  { level: 3, name: "청년 게", points: 5_000, scale: 1.7, atk: 35, hp: 450, speed: 222, speedLabel: "보통", gain: 2 },
-  { level: 4, name: "성체 게", points: 20_000, scale: 2.2, atk: 65, hp: 1_000, speed: 205, speedLabel: "약간 느림", gain: 3 },
-  { level: 5, name: "거대 게", points: 100_000, scale: 2.8, atk: 120, hp: 2_500, speed: 188, speedLabel: "느림", gain: 4.5 },
-  { level: 6, name: "킹 크랩", points: 500_000, scale: 3.5, atk: 220, hp: 5_000, speed: 175, speedLabel: "묵직함", gain: 6 },
+  { level: 2, name: "꼬마 게", points: 400, scale: 1.15, atk: 14, hp: 150, speed: 245, speedLabel: "가장 빠름", gain: 1.1 },
+  { level: 3, name: "어린 게", points: 1_000, scale: 1.3, atk: 18, hp: 200, speed: 240, speedLabel: "빠름", gain: 1.4 },
+  { level: 4, name: "소년 게", points: 2_200, scale: 1.5, atk: 26, hp: 300, speed: 231, speedLabel: "빠름", gain: 1.55 },
+  { level: 5, name: "청년 게", points: 5_000, scale: 1.7, atk: 35, hp: 450, speed: 222, speedLabel: "보통", gain: 2 },
+  { level: 6, name: "젊은 게", points: 10_000, scale: 1.95, atk: 48, hp: 700, speed: 213, speedLabel: "보통", gain: 2.2 },
+  { level: 7, name: "성체 게", points: 20_000, scale: 2.2, atk: 65, hp: 1_000, speed: 205, speedLabel: "약간 느림", gain: 3 },
+  { level: 8, name: "노련한 게", points: 45_000, scale: 2.5, atk: 90, hp: 1_600, speed: 196, speedLabel: "약간 느림", gain: 3.3 },
+  { level: 9, name: "거대 게", points: 100_000, scale: 2.8, atk: 120, hp: 2_500, speed: 188, speedLabel: "느림", gain: 4.5 },
+  { level: 10, name: "대왕 게", points: 200_000, scale: 3.1, atk: 160, hp: 3_500, speed: 182, speedLabel: "느림", gain: 4.8 },
+  { level: 11, name: "전설의 게", points: 350_000, scale: 3.3, atk: 190, hp: 4_300, speed: 178, speedLabel: "묵직함", gain: 5.3 },
+  { level: 12, name: "킹 크랩", points: 500_000, scale: 3.5, atk: 220, hp: 5_000, speed: 175, speedLabel: "묵직함", gain: 6 },
 ];
 
-export function levelForScore(score: number): LevelDef {
-  let lv = LEVELS[0];
-  for (const l of LEVELS) if (score >= l.points) lv = l;
+export const MAX_LEVEL = LEVELS.length;
+
+// ── Species roadmaps ────────────────────────────────────────────────────────
+
+export type SpeciesId = "flower" | "fiddler" | "ghost" | "snow";
+
+export interface SpeciesDef {
+  id: SpeciesId;
+  name: string;
+  role: string;
+  blurb: string;
+  /** Stat multipliers applied on top of the base roadmap. */
+  atk: number;
+  hp: number;
+  speed: number;
+  scale: number;
+  crit: number; // added crit chance
+  staminaDrain: number;
+  regen: number;
+  /** Level-threshold multiplier at Lv2 (early) → Lv12 (late): <1 = cheaper. */
+  earlyCost: number;
+  lateCost: number;
+  /** Body proportions for the renderer. */
+  build: { clawL: number; clawR: number; leg: number; body: number };
+}
+
+export const SPECIES: Record<SpeciesId, SpeciesDef> = {
+  flower: {
+    id: "flower", name: "꽃게", role: "균형형",
+    blurb: "기획서 기준 로드맵 그대로. 어느 구간에서도 무난하게 싸우고 자랍니다.",
+    atk: 1, hp: 1, speed: 1, scale: 1, crit: 0, staminaDrain: 1, regen: 1, earlyCost: 1, lateCost: 1,
+    build: { clawL: 1, clawR: 1, leg: 1, body: 1 },
+  },
+  fiddler: {
+    id: "fiddler", name: "농게", role: "파워형",
+    blurb: "한쪽 집게가 거대합니다. 공격력 +30%·치명타 +5%, 대신 체력과 발이 조금 약합니다.",
+    atk: 1.3, hp: 0.9, speed: 0.95, scale: 1, crit: 0.05, staminaDrain: 1, regen: 1, earlyCost: 1.05, lateCost: 1,
+    build: { clawL: 0.7, clawR: 1.75, leg: 1, body: 0.95 },
+  },
+  ghost: {
+    id: "ghost", name: "달랑게", role: "스피드형",
+    blurb: "모래사장의 단거리 선수. 이동 +15%·부스트 소모 -30%, 초반 레벨업이 빠르지만 후반 성장은 더딥니다.",
+    atk: 0.85, hp: 0.85, speed: 1.15, scale: 0.92, crit: 0.02, staminaDrain: 0.7, regen: 1, earlyCost: 0.75, lateCost: 1.15,
+    build: { clawL: 0.8, clawR: 0.8, leg: 1.35, body: 0.9 },
+  },
+  snow: {
+    id: "snow", name: "대게", role: "탱커형",
+    blurb: "긴 다리의 철갑. 체력 +35%·자연 회복 +50%, 초반엔 느리게 크지만 후반 레벨업이 가장 빠릅니다.",
+    atk: 0.9, hp: 1.35, speed: 0.9, scale: 1.08, crit: 0, staminaDrain: 1, regen: 1.5, earlyCost: 1.2, lateCost: 0.88,
+    build: { clawL: 0.9, clawR: 0.9, leg: 1.5, body: 1.05 },
+  },
+};
+
+export const SPECIES_LIST: SpeciesDef[] = Object.values(SPECIES);
+
+const roadmapCache = new Map<SpeciesId, LevelDef[]>();
+
+/** The 12-step roadmap for one species (base table × species multipliers). */
+export function roadmap(species: SpeciesId = "flower"): LevelDef[] {
+  let r = roadmapCache.get(species);
+  if (r) return r;
+  const sp = SPECIES[species];
+  r = LEVELS.map((l, i) => {
+    const t = i <= 1 ? 0 : (i - 1) / (LEVELS.length - 2);
+    const cost = sp.earlyCost + (sp.lateCost - sp.earlyCost) * t;
+    return {
+      ...l,
+      points: i === 0 ? 0 : Math.round((l.points * cost) / 100) * 100,
+      scale: +(l.scale * sp.scale).toFixed(2),
+      atk: Math.round(l.atk * sp.atk),
+      hp: Math.round((l.hp * sp.hp) / 10) * 10,
+      speed: Math.round(l.speed * sp.speed),
+    };
+  });
+  roadmapCache.set(species, r);
+  return r;
+}
+
+export function levelForScore(score: number, species: SpeciesId = "flower"): LevelDef {
+  const table = roadmap(species);
+  let lv = table[0];
+  for (const l of table) if (score >= l.points) lv = l;
   return lv;
 }
 
