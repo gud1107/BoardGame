@@ -23,6 +23,7 @@ import {
 } from "./engine";
 import { FALLBACK_PROMPTS } from "./prompts";
 import { ChunkAssembler, splitIntoChunks } from "./syncChunks";
+import { CHORDS, LOOP_STEPS, STEPS_PER_BAR, lofiEventsAt, midiToHz } from "./lofiPattern";
 
 const doodle = (seat: number): Drawing => ({ v: 1, ops: [strokeOp(1, 1, [{ x: 10 + seat, y: 10 }, { x: 100, y: 120 }])] });
 
@@ -286,5 +287,27 @@ describe("AI bots (ARCHITECTURE.md §7)", () => {
     const novice = chooseBotAction(s, 0, 1, always0);
     const expert = chooseBotAction(s, 0, 10, always0);
     expect(novice).not.toEqual(expert);
+  });
+});
+
+describe("lo-fi BGM score (lofiPattern.ts)", () => {
+  const loop = (pass: number) => Array.from({ length: LOOP_STEPS }, (_, i) => lofiEventsAt(pass * LOOP_STEPS + i));
+
+  it("strikes each chord of the loop once, on the downbeat of its bar", () => {
+    const chords = loop(0).flatMap((events, step) => events.filter((e) => e.voice === "chord").map((e) => ({ step, notes: e.notes })));
+    expect(chords).toEqual(CHORDS.map((notes, bar) => ({ step: bar * STEPS_PER_BAR, notes })));
+  });
+
+  it("is deterministic per pass but varies the arpeggio between passes", () => {
+    expect(loop(3)).toEqual(loop(3));
+    const arps = (pass: number) => loop(pass).map((events) => events.filter((e) => e.voice === "arp").map((e) => e.notes[0]).join());
+    expect(arps(0)).not.toEqual(arps(1));
+  });
+
+  it("keeps every pitched note in a soft, audible range", () => {
+    const notes = [0, 1, 2, 3].flatMap((pass) => loop(pass).flat().flatMap((e) => e.notes));
+    expect(Math.min(...notes)).toBeGreaterThanOrEqual(40);
+    expect(Math.max(...notes)).toBeLessThanOrEqual(84);
+    expect(midiToHz(69)).toBe(440);
   });
 });

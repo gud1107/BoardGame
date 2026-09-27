@@ -16,6 +16,7 @@ import {
   type Drawing,
   type Point,
 } from "./drawing";
+import { getDoodlePhoneSound } from "./doodlePhoneSound";
 import { clearToPaper, prepareContext, renderDrawing, renderOp, strokePath } from "./drawingRenderer";
 
 /**
@@ -148,6 +149,9 @@ export default function DoodleCanvas({ ref, disabled = false }: { ref?: Ref<Dood
     const ctx = ctxRef.current;
     if (disabled || outOfInk || !ctx || e.button > 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
+    const sound = getDoodlePhoneSound();
+    sound.unlock();
+    sound.drawTick();
     const p = toLogical(e);
     if (tool === "fill") {
       const op: DrawOp = { k: "f", c: color, x: p.x, y: p.y };
@@ -169,6 +173,7 @@ export default function DoodleCanvas({ ref, disabled = false }: { ref?: Ref<Dood
     if (Math.hypot(p.x - last.x, p.y - last.y) < MIN_POINT_GAP) return;
     stroke.points.push(p);
     strokePath(ctx, stroke.color, stroke.size, [last, p]);
+    getDoodlePhoneSound().drawTick(); // self-throttled to one tick per 120ms
     const projected = history.ink + stroke.points.length * CHARS_PER_POINT;
     if (projected > MAX_DRAWING_CHARS) {
       finishStroke();

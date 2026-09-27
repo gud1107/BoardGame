@@ -52,6 +52,7 @@ import {
 } from "./engine";
 import { chooseBotAction, nextBotActor } from "./bot";
 import DoodlePhoneBoard from "./DoodlePhoneBoard";
+import DoodleSoundHud from "./DoodleSoundHud";
 import DoodlePhoneRulebookModal from "./RulebookModal";
 import { playTransitionSounds } from "./sounds";
 import { ChunkAssembler, splitIntoChunks, type SyncChunk } from "./syncChunks";
@@ -910,9 +911,12 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
               <BotSeatBadge key={seat} variant="takeover" label={botTakeover.takeovers[seat]?.originalName ?? "이탈"} />
             ))}
           </div>
-          <button onClick={() => setShowRulebook(true)} className="rounded-full border border-white/10 px-3 py-1 text-[11px] text-white/50 hover:border-white/25 light:border-slate-200 light:text-slate-500">
-            📖 룰북
-          </button>
+          <div className="flex items-center gap-1.5">
+            <DoodleSoundHud />
+            <button onClick={() => setShowRulebook(true)} className="rounded-full border border-white/10 px-3 py-1 text-[11px] text-white/50 hover:border-white/25 light:border-slate-200 light:text-slate-500">
+              📖 룰북
+            </button>
+          </div>
         </div>
         <DoodlePhoneBoard
           state={gameState}

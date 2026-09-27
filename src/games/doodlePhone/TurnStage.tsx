@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { isBlankDrawing } from "./drawing";
+import { getDoodlePhoneSound } from "./doodlePhoneSound";
 import DoodleCanvas, { type DoodleCanvasHandle } from "./DoodleCanvas";
 import DrawingView from "./DrawingView";
 import {
@@ -129,6 +130,7 @@ function TurnComposer({
 
   function submit(auto: boolean) {
     if (sentRef.current) return;
+    if (!auto) getDoodlePhoneSound().unlock();
     if (kind === "text") {
       if (!isValidText(draftRef.current)) return;
       onAction({ type: "SUBMIT_TEXT", seat, turn, text: draftRef.current });
@@ -143,6 +145,7 @@ function TurnComposer({
     }
     sentRef.current = true;
     setSent(true);
+    getDoodlePhoneSound().submitPop();
   }
 
   const submitRef = useRef(submit);

@@ -59,6 +59,13 @@
 ### 검증
 vitest 24/24(+registry), tsc 0 에러(`.next/dev/types`의 다른 세션 `tmp-war-art` 잔여물 제외), eslint 0. Playwright로 나+봇3 4인 빠름 모드 전체 흐름(제시어→그림→추측→그림→발표→웃음왕) 통과. **실제 여러 기기 동시 접속·재접속 조각 동기화는 미검증.**
 
+### 🎵 후속 (2026-09-27): 로파이 BGM + 드로잉 효과음
+**요청**: 명세서 붙여넣기 — Web Audio 합성 로파이 칠 BGM + 그리기 틱/제출 팝/턴 차임 (`garticSoundEngine.ts` 참고 코드).
+- `lofiPattern.ts`(순수 악보: Cmaj7–Am7–Fmaj7–G7, 78BPM, 스윙, 패스별 결정론적 아르페지오 변주 — 테스트 3개) + `doodlePhoneSound.ts`(EP·베이스·브러시 햇·바이닐 크랙클, 테이프 wow LFO, 버스 전체 로우패스). 효과음은 명세 수치 그대로(그리기 틱은 오디오 시계 기준 120ms 스로틀).
+- **명세와 다르게 한 점**: ① 자체 `isMuted`/`toggleMute` 대신 사이트 전역 `audioSettings` 스토어를 따름(헤더 🔇/🔊·설정 모달 볼륨과 항상 일치, 스플렌더 대결과 같은 구조). ② 2초 `setTimeout` 연쇄 대신 `AudioContext.currentTime` 룩어헤드 스케줄러(탭 스로틀에도 박자 유지). ③ 토글은 BGM/효과음 두 개(`DoodleSoundHud.tsx`, 룰북 버튼 옆).
+- 연결: 보드 마운트 시 BGM, 캔버스 pointerdown/move → `drawTick`, 제출(수동·0초 자동) → `submitPop`, 턴 변경 → `turnStartChime`(공용 `playMyTurnChime` 대체). 결과 발표 효과음은 공용 엔진 그대로.
+- 검증: Playwright에서 오실레이터 생성 수 계측 — BGM 켜면 계속 증가/끄면 정지, 40회 스트로크 이동에 틱 6회(스로틀 동작), 페이지 에러 없음.
+
 ## 🦈 배고픈 상어: 딥 에볼루션 (Hungry Shark-style) — 1인용 실시간 해양 액션 신규 게임 — 2026-09-26 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: "Hungry Shark Evolution 게임 만들어주세요" + Unity(C#) 기준 상용 수준 기술 명세서(체력 감쇠 공식, 골드 러시/메가 골드 러시, 티어 포식 테이블, Rigidbody 물리, 입 방향 내적 판정, Boids, 기뢰/해파리 수식, 오브젝트 풀링·존 컬링, 상점/업그레이드/세이브) 붙여넣기 → "추가할 부분은 추가하여" 구현, 커밋·푸시·배포, HANDOFF 문서화 + 룰북.

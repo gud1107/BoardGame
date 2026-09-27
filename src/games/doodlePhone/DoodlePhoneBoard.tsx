@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import { getDoodlePhoneSound } from "./doodlePhoneSound";
 import { gamePhase, type DoodlePhoneState, type EngineAction, type SeatIndex } from "./engine";
 import ResultsStage from "./ResultsStage";
 import ShowcaseStage from "./ShowcaseStage";
@@ -25,6 +27,14 @@ export interface DoodlePhoneBoardProps {
  */
 export default function DoodlePhoneBoard(props: DoodlePhoneBoardProps) {
   const { state, viewerSeat, names, connectedSeats, isHost, turnStartedAt, onAction, onRematch, onLeave } = props;
+
+  // The lo-fi BGM plays while a match is on screen (and BGM is unmuted in the site settings).
+  useEffect(() => {
+    const sound = getDoodlePhoneSound();
+    sound.setBgmWanted(true);
+    return () => sound.setBgmWanted(false);
+  }, []);
+
   switch (gamePhase(state)) {
     case "turns":
       return <TurnStage state={state} viewerSeat={viewerSeat} names={names} connectedSeats={connectedSeats} turnStartedAt={turnStartedAt} onAction={onAction} />;
