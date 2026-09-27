@@ -29,7 +29,21 @@ import { getDoodlePhoneSound } from "./doodlePhoneSound";
 import DrawingView from "./DrawingView";
 import { ONION_OPACITY } from "./modes";
 import { clearToPaper, prepareContext, renderDrawing, renderOp, strokePath } from "./drawingRenderer";
-import { boxFrom, handleAt, handlesFor, hitTest, opBounds, opsInBox, resizeShape, translateGroup, type Handle } from "./editing";
+import {
+  boxFrom,
+  handleAt,
+  handlesFor,
+  hitTest,
+  opBounds,
+  opsInBox,
+  pasteOps,
+  reorderOps,
+  resizeShape,
+  restyleOps,
+  translateGroup,
+  type Handle,
+  type StylePatch,
+} from "./editing";
 
 /**
  * Drawing editor (rulebook §4, §11–§13): pen, straight line, rectangle,
@@ -50,6 +64,9 @@ import { boxFrom, handleAt, handlesFor, hitTest, opBounds, opsInBox, resizeShape
  * Shift/⌘-click or the "여러 개 선택" toggle to add/remove one, or "전체
  * 선택". Dragging any selected op moves the whole group, clamped as a group
  * at the sheet edge. Resize handles appear only for a single selected shape.
+ * While something is selected, the palette / color picker / brush sizes
+ * restyle the selection instead of just setting the next stroke's style, and
+ * the selection can be duplicated (Ctrl+C/V/D) or sent to front/back.
  *
  * Zoom: two fingers pinch/pan the sheet (CSS transform on the stage);
  * Ctrl/⌘ + wheel does the same on desktop. Pointer→canvas mapping already
@@ -179,6 +196,11 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
   const [selected, setSelected] = useState<{ count: number; resizable: boolean }>({ count: 0, resizable: false });
   /** Mobile stand-in for Shift-click: taps add/remove instead of replacing the selection. */
   const [addMode, setAddMode] = useState(false);
+  /** Copied ops (Ctrl+C / 📋 복제) — lives only for this turn's editor. */
+  const clipboardRef = useRef<readonly DrawOp[]>([]);
+  const [hasClipboard, setHasClipboard] = useState(false);
+  /** One-line feedback in the select toolbar (e.g. out of ink for a paste). */
+  const [notice, setNotice] = useState<string | null>(null);
   /** Zoom level for the "원래대로" badge (the live value is in zoomRef). */
   const [zoomPercent, setZoomPercent] = useState(100);
 
@@ -275,6 +297,12 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     if (disabled || tool !== "select") return;
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const key = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && (key === "c" || key === "v" || key === "d")) {
+        e.preventDefault();
+        clipboardActionRef.current(key);
+        return;
+      }
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
         deleteRef.current();
@@ -331,7 +359,63 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     const normalized = normalizeColor(next);
     setColor(normalized);
     if (typeof normalized === "string") setRecentColors((list) => [normalized, ...list.filter((c) => c !== normalized)].slice(0, MAX_RECENT_COLORS));
+    if (tool === "select" && selectedRef.current.length > 0) {
+      restyleSelection({ color: normalized });
+      return;
+    }
     if (tool === "eraser" || tool === "picker" || tool === "select") chooseTool(lastDrawingToolRef.current);
+  }
+
+  function chooseSize(next: number) {
+    setSize(next);
+    if (tool === "select" && selectedRef.current.length > 0) restyleSelection({ size: next });
+  }
+
+  /**
+   * Applies an edit that changes this player's ops and the selection in one
+   * undoable step. Refused (with a notice) if the result would overflow the
+   * ink cap — only a paste can grow the drawing noticeably.
+   */
+  function commitEdit(next: readonly DrawOp[], nextSelection: readonly number[]) {
+    if (serializedLength({ v: 1, ops: [...baseOpsRef.current, ...next] }) > MAX_DRAWING_CHARS) {
+      setNotice("잉크가 부족해서 할 수 없어요");
+      return;
+    }
+    setNotice(null);
+    setOps(next);
+    select(nextSelection);
+    repaint();
+    drawOverlay(null);
+  }
+
+  function restyleSelection(patch: StylePatch) {
+    commitEdit(restyleOps(opsRef.current, selectedRef.current, patch), selectedRef.current);
+  }
+
+  function copySelection() {
+    const chosen = new Set(selectedRef.current);
+    clipboardRef.current = opsRef.current.filter((_, i) => chosen.has(i));
+    setHasClipboard(clipboardRef.current.length > 0);
+  }
+
+  function pasteClipboard() {
+    if (clipboardRef.current.length === 0) return;
+    const { ops, indices } = pasteOps(opsRef.current, clipboardRef.current);
+    commitEdit(ops, indices);
+    // The next paste steps a bit further, like most editors.
+    const chosen = new Set(indices);
+    clipboardRef.current = ops.filter((_, i) => chosen.has(i));
+  }
+
+  function duplicateSelection() {
+    copySelection();
+    pasteClipboard();
+  }
+
+  function sendSelection(where: "front" | "back") {
+    if (selectedRef.current.length === 0) return;
+    const { ops, indices } = reorderOps(opsRef.current, selectedRef.current, where, firstSelectable());
+    commitEdit(ops, indices);
   }
 
   function chooseTool(next: Tool) {
@@ -618,9 +702,15 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
   }
 
   const drawOverlayRef = useRef(drawOverlay);
+  const clipboardActionRef = useRef<(key: "c" | "v" | "d") => void>(() => {});
   useEffect(() => {
     deleteRef.current = deleteSelected;
     drawOverlayRef.current = drawOverlay;
+    clipboardActionRef.current = (key) => {
+      if (key === "c") copySelection();
+      else if (key === "v") pasteClipboard();
+      else duplicateSelection();
+    };
   });
 
   const toolButton = "flex h-9 w-7 shrink-0 items-center justify-center rounded-lg border text-sm transition disabled:opacity-40 sm:w-9";
@@ -697,7 +787,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
                 type="button"
                 title={`굵기 ${size + 1}/${BRUSH_SIZES.length} (눌러서 바꾸기)`}
                 aria-label={`굵기 ${size + 1}, 눌러서 바꾸기`}
-                onClick={() => setSize((i) => (i + 1) % BRUSH_SIZES.length)}
+                onClick={() => chooseSize((size + 1) % BRUSH_SIZES.length)}
                 className={`${toolButton} ${active}`}
               >
                 <BrushDot px={BRUSH_SIZES[size]} />
@@ -705,7 +795,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
             </span>
             <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
               {BRUSH_SIZES.map((px, i) => (
-                <button key={px} type="button" title={`굵기 ${i + 1}`} aria-label={`굵기 ${i + 1}`} aria-pressed={size === i} onClick={() => setSize(i)} className={`${toolButton} ${size === i ? active : idle}`}>
+                <button key={px} type="button" title={`굵기 ${i + 1}`} aria-label={`굵기 ${i + 1}`} aria-pressed={size === i} onClick={() => chooseSize(i)} className={`${toolButton} ${size === i ? active : idle}`}>
                   <BrushDot px={px} />
                 </button>
               ))}
@@ -720,13 +810,28 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
               <button type="button" onClick={selectAll} className={`rounded-md border px-2 py-0.5 ${idle}`}>
                 전체 선택
               </button>
+              {hasClipboard && (
+                <button type="button" title="붙여넣기 (Ctrl+V)" onClick={pasteClipboard} className={`rounded-md border px-2 py-0.5 ${idle}`}>
+                  📌 붙여넣기
+                </button>
+              )}
+              {notice && <span className="font-semibold text-rose-300 light:text-rose-600">{notice}</span>}
               {selected.count === 0 ? (
                 <span>👆 선·도형을 누르거나, 빈 곳을 끌어 한꺼번에 골라요.</span>
               ) : (
                 <>
                   <span className="text-fuchsia-200 light:text-fuchsia-700">
-                    {selected.count}개 선택 — 끌어서 같이 옮기기{selected.resizable && " · □ 끌어서 크기 조절"}
+                    {selected.count}개 선택 — 끌어서 같이 옮기기{selected.resizable && " · □ 끌어서 크기 조절"} · 색·굵기를 누르면 바로 바뀌어요
                   </span>
+                  <button type="button" title="복제 (Ctrl+D)" onClick={duplicateSelection} className={`rounded-md border px-2 py-0.5 ${idle}`}>
+                    📋 복제
+                  </button>
+                  <button type="button" title="맨 앞으로" onClick={() => sendSelection("front")} className={`rounded-md border px-2 py-0.5 ${idle}`}>
+                    ⬆ 맨 앞
+                  </button>
+                  <button type="button" title="맨 뒤로" onClick={() => sendSelection("back")} className={`rounded-md border px-2 py-0.5 ${idle}`}>
+                    ⬇ 맨 뒤
+                  </button>
                   <button type="button" onClick={deleteSelected} className={`rounded-md border px-2 py-0.5 ${idle}`}>
                     🗑 지우기
                   </button>

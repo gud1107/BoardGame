@@ -18,6 +18,7 @@ import {
   pointCount,
   shapeOp,
   strokeOp,
+  type DrawOp,
   type Drawing,
 } from "./drawing";
 import {
@@ -42,7 +43,7 @@ import {
 } from "./engine";
 import { FALLBACK_PROMPTS } from "./prompts";
 import { ChunkAssembler, splitIntoChunks } from "./syncChunks";
-import { boxFrom, handleAt, handlesFor, hitTest, hitsOp, opsInBox, resizeShape, translateGroup, translateOp, unionBounds } from "./editing";
+import { boxFrom, handleAt, handlesFor, hitTest, hitsOp, opsInBox, pasteOps, reorderOps, resizeShape, restyleOps, translateGroup, translateOp, unionBounds } from "./editing";
 import { CHORDS, LOOP_STEPS, STEPS_PER_BAR, lofiEventsAt, midiToHz } from "./lofiPattern";
 import { GAME_MODES, ICEBREAKER_QUESTIONS, icebreakerQuestion, openingChoices, sanitizeOptions, turnKindFor, turnSecondsFor, type GameMode } from "./modes";
 import { THEME_BANK, themeChoices } from "./themes";
@@ -619,5 +620,39 @@ describe("multi-selection (editing.ts)", () => {
     expect(moved[0]).toMatchObject({ p: [0, 10, 50, 60] });
     expect(moved[1]).toMatchObject({ p: [90, 20, 150, 80] });
     expect(unionBounds([moved[0], moved[1]])).toEqual({ minX: 0, minY: 10, maxX: 150, maxY: 80 });
+  });
+});
+
+describe("restyle / duplicate / reorder a selection (editing.ts)", () => {
+  const ink = strokeOp(1, 1, [{ x: 10, y: 10 }, { x: 40, y: 20 }]);
+  const eraser = strokeOp(0, 3, [{ x: 20, y: 20 }, { x: 60, y: 20 }]);
+  const box = shapeOp("r", 13, 2, { x: 100, y: 100 }, { x: 200, y: 150 });
+  const fill = fillOp(7, { x: 150, y: 120 });
+
+  it("recolors strokes and shapes but never turns an eraser stroke into ink; size applies to all", () => {
+    const out = restyleOps([ink, eraser, box, fill], [0, 1, 2, 3], { color: "#12ab9f", size: 4 });
+    expect(out[0]).toMatchObject({ c: "#12ab9f", w: 4 });
+    expect(out[1]).toMatchObject({ c: 0, w: 4 });
+    expect(out[2]).toMatchObject({ c: "#12ab9f", w: 4 });
+    expect(out[3]).toBe(fill);
+    expect(restyleOps([ink], [0], { color: PALETTE[5] })[0]).toHaveProperty("c", 5);
+  });
+
+  it("pastes offset copies on top and reports their indices", () => {
+    const { ops, indices } = pasteOps([ink, box], [box]);
+    expect(indices).toEqual([2]);
+    expect(ops[2]).toMatchObject({ p: [116, 116, 216, 166] });
+    const edge = shapeOp("r", 1, 1, { x: 400, y: 300 }, { x: 480, y: 360 });
+    expect(pasteOps([], [edge]).ops[0]).toMatchObject({ p: [384, 284, 464, 344] }); // nudged back inside
+  });
+
+  it("sends to front/back keeping the pieces' order, and never below the last clear", () => {
+    const a = strokeOp(1, 1, [{ x: 1, y: 1 }]);
+    const b = strokeOp(2, 1, [{ x: 2, y: 2 }]);
+    const c = strokeOp(3, 1, [{ x: 3, y: 3 }]);
+    const clear: DrawOp = { k: "x" };
+    expect(reorderOps([a, b, c], [0, 1], "front")).toEqual({ ops: [c, a, b], indices: [1, 2] });
+    expect(reorderOps([a, b, c], [2], "back")).toEqual({ ops: [c, a, b], indices: [0] });
+    expect(reorderOps([a, clear, b, c], [3], "back", 2)).toEqual({ ops: [a, clear, c, b], indices: [2] });
   });
 });

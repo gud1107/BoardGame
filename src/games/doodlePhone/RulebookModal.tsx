@@ -70,7 +70,7 @@ export default function DoodlePhoneRulebookModal({ onClose }: { onClose: () => v
           <h3 className={h3}>입력</h3>
           <div className="grid gap-2 sm:grid-cols-2">
             <div className={box}>✍️ 문장은 {TEXT_MIN_CHARS}~{TEXT_MAX_CHARS}자, Enter로 바로 제출.</div>
-            <div className={box}>🎨 펜 · 직선 · 네모 · 원(면 채우기 가능, Shift로 정사각형·정원) · 채우기 · 지우개 · 되돌리기(Ctrl+Z) · 다시하기(Ctrl+Y) · 전체 지우기, 👆 선택·이동(옮기기·크기 조절·선택 삭제, 빈 곳을 끌거나 「여러 개 선택」으로 한꺼번에 골라 같이 옮기기), 굵기 5단계, 20색 + 🎨 직접 고르기 + 💧 스포이드, 농도(연하게 ↔ 짙게). 📱 두 손가락으로 확대·이동(데스크톱은 Ctrl+휠). 잉크 게이지를 다 쓰면 더 그릴 수 없어요.</div>
+            <div className={box}>🎨 펜 · 직선 · 네모 · 원(면 채우기 가능, Shift로 정사각형·정원) · 채우기 · 지우개 · 되돌리기(Ctrl+Z) · 다시하기(Ctrl+Y) · 전체 지우기, 👆 선택·이동(옮기기·크기 조절·선택 삭제, 빈 곳을 끌거나 「여러 개 선택」으로 한꺼번에 골라 같이 옮기기, 고른 것의 색·굵기 바꾸기, 📋 복제, 맨 앞/맨 뒤), 굵기 5단계, 20색 + 🎨 직접 고르기 + 💧 스포이드, 농도(연하게 ↔ 짙게). 📱 두 손가락으로 확대·이동(데스크톱은 Ctrl+휠). 잉크 게이지를 다 쓰면 더 그릴 수 없어요.</div>
           </div>
         </section>
 

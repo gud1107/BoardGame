@@ -9,7 +9,7 @@
  *   the two endpoints of a line, the four corners of a rect/ellipse box.
  */
 
-import { CANVAS_H, CANVAS_W, BRUSH_SIZES, decodePoints, isShapeOp, type DrawOp, type Point } from "./drawing";
+import { BRUSH_SIZES, CANVAS_H, CANVAS_W, PALETTE, PAPER_COLOR, colorHex, decodePoints, isShapeOp, normalizeColor, type ColorRef, type DrawOp, type Point } from "./drawing";
 
 export interface Bounds {
   minX: number;
@@ -198,4 +198,66 @@ export function translateGroup(ops: readonly DrawOp[], indices: readonly number[
   const cdx = Math.round(Math.min(CANVAS_W - b.maxX, Math.max(-b.minX, dx)));
   const cdy = Math.round(Math.min(CANVAS_H - b.maxY, Math.max(-b.minY, dy)));
   return ops.map((op, i) => (chosen.has(i) ? translateOp(op, cdx, cdy) : op));
+}
+
+// ---------------------------------------------------------------------------
+// Restyle / duplicate / reorder a selection
+// ---------------------------------------------------------------------------
+
+export interface StylePatch {
+  color?: ColorRef;
+  /** BRUSH_SIZES index. */
+  size?: number;
+}
+
+/**
+ * Selected strokes/shapes with a new color and/or brush size. Eraser strokes
+ * (paper-colored) keep their color — recoloring them would turn old erasures
+ * back into visible lines, e.g. after "전체 선택" — but do take a new size.
+ */
+export function restyleOps(ops: readonly DrawOp[], indices: readonly number[], patch: StylePatch): DrawOp[] {
+  const chosen = new Set(indices);
+  return ops.map((op, i) => {
+    if (!chosen.has(i) || !isSelectable(op) || op.k === "f" || op.k === "x") return op;
+    const isEraser = colorHex(op.c) === PALETTE[PAPER_COLOR];
+    return {
+      ...op,
+      ...(patch.color !== undefined && !isEraser ? { c: normalizeColor(patch.color) } : {}),
+      ...(patch.size !== undefined ? { w: Math.min(BRUSH_SIZES.length - 1, Math.max(0, patch.size)) } : {}),
+    };
+  });
+}
+
+/** How far a duplicate lands from its original (logical px). */
+export const DUPLICATE_OFFSET = 16;
+
+/**
+ * Copies of `copies` appended on top of `ops`, nudged by DUPLICATE_OFFSET so
+ * they don't hide exactly behind the originals (nudged back the other way
+ * when they would leave the sheet). Returns the new list and the copies'
+ * indices, so the caller can select them.
+ */
+export function pasteOps(ops: readonly DrawOp[], copies: readonly DrawOp[]): { ops: DrawOp[]; indices: number[] } {
+  const b = unionBounds(copies);
+  if (!b || copies.length === 0) return { ops: [...ops], indices: [] };
+  const dx = b.maxX + DUPLICATE_OFFSET <= CANVAS_W ? DUPLICATE_OFFSET : -DUPLICATE_OFFSET;
+  const dy = b.maxY + DUPLICATE_OFFSET <= CANVAS_H ? DUPLICATE_OFFSET : -DUPLICATE_OFFSET;
+  const shifted = translateGroup(copies, copies.map((_, i) => i), dx, dy);
+  return { ops: [...ops, ...shifted], indices: shifted.map((_, i) => ops.length + i) };
+}
+
+/**
+ * Moves the selection to the top ("front", drawn last) or the bottom
+ * ("back", drawn first) of the stack, keeping the pieces' own order.
+ * "Back" stops at `floor` (just after the last "전체 지우기"): anything
+ * before a clear is wiped by it, so sending it lower would make it vanish.
+ */
+export function reorderOps(ops: readonly DrawOp[], indices: readonly number[], where: "front" | "back", floor = 0): { ops: DrawOp[]; indices: number[] } {
+  const chosen = new Set(indices);
+  const picked = ops.filter((_, i) => chosen.has(i));
+  const rest = ops.filter((_, i) => !chosen.has(i));
+  if (where === "front") return { ops: [...rest, ...picked], indices: picked.map((_, i) => rest.length + i) };
+  const below = rest.slice(0, floor);
+  const above = rest.slice(floor);
+  return { ops: [...below, ...picked, ...above], indices: picked.map((_, i) => below.length + i) };
 }
