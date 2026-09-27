@@ -13,6 +13,28 @@ export const RESOURCE_META: Record<Resource, { fill: string; stroke: string; lab
   brown: { fill: "#a16207", stroke: "#3f2408", label: "갈색 (시나몬)" },
 };
 
+/**
+ * Jewel palette per spice — deliberately richer than RESOURCE_META's flat
+ * UI colors: each spice reads as a real stone (citrine, ruby, emerald,
+ * smoky topaz). `hi`→`mid`→`lo` is the lit-to-shadow body ramp, `rim` the
+ * girdle outline, `glint` the specular tint.
+ */
+const GEM: Record<Resource, { hi: string; mid: string; lo: string; rim: string; glint: string }> = {
+  yellow: { hi: "#fff7c2", mid: "#f5b90b", lo: "#9a5b04", rim: "#6b3d02", glint: "#fffdf0" },
+  red: { hi: "#ffd1dc", mid: "#e0183f", lo: "#6d0a22", rim: "#4a0616", glint: "#fff1f4" },
+  green: { hi: "#c9fbe4", mid: "#0fae6f", lo: "#04513a", rim: "#033527", glint: "#effff7" },
+  brown: { hi: "#f6d9b8", mid: "#a4581f", lo: "#43200a", rim: "#2c1405", glint: "#fff6ec" },
+};
+
+/**
+ * Octagonal step-cut ("emerald cut") gemstone glyph — an outer girdle, four
+ * trapezoid crown facets lit from the top-left, a flat table with a soft
+ * inner glow, a thin gold-white rim line and one four-point sparkle. Kept
+ * to a handful of large shapes so it still reads cleanly at 10-16px (point
+ * card cost rows). Gradient ids are per-resource and identical wherever
+ * they're repeated, so a duplicate id resolving to another instance is
+ * harmless.
+ */
 export default function ResourceIcon({
   resource,
   className = "h-5 w-5",
@@ -23,21 +45,40 @@ export default function ResourceIcon({
   title?: string;
 }) {
   const meta = RESOURCE_META[resource];
+  const g = GEM[resource];
+  const id = (n: string) => `century-gem-${n}-${resource}`;
   return (
     <svg viewBox="0 0 24 24" className={className} role="img" aria-label={title ?? meta.label}>
       <title>{title ?? meta.label}</title>
-      <polygon points="12,2 21,9 17,22 7,22 3,9" fill={meta.fill} stroke={meta.stroke} strokeWidth="1.5" strokeLinejoin="round" />
-      {/* Faceted cut: a pentagonal table facet with crown facets fanning out
-          to each girdle vertex — lit facets top-left, shaded bottom-right,
-          plus a thin prism highlight, so it reads as a cut gemstone. */}
-      <polygon points="12,2 21,9 16,10.5 12,6.5" fill="#ffffff" opacity="0.38" />
-      <polygon points="12,2 12,6.5 8,10.5 3,9" fill="#ffffff" opacity="0.55" />
-      <polygon points="3,9 8,10.5 9.5,16 7,22" fill="#ffffff" opacity="0.14" />
-      <polygon points="21,9 17,22 14.5,16 16,10.5" fill="#000000" opacity="0.2" />
-      <polygon points="7,22 17,22 14.5,16 9.5,16" fill="#000000" opacity="0.26" />
-      <polygon points="12,6.5 16,10.5 14.5,16 9.5,16 8,10.5" fill={meta.fill} stroke={meta.stroke} strokeWidth="0.4" strokeOpacity="0.6" />
-      <polygon points="12,6.5 16,10.5 12,11 8,10.5" fill="#ffffff" opacity="0.3" />
-      <line x1="7" y1="5.6" x2="10.2" y2="3.4" stroke="#ffffff" strokeWidth="0.9" strokeLinecap="round" opacity="0.85" />
+      <defs>
+        <linearGradient id={id("body")} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor={g.hi} />
+          <stop offset="45%" stopColor={g.mid} />
+          <stop offset="100%" stopColor={g.lo} />
+        </linearGradient>
+        <radialGradient id={id("table")} cx="38%" cy="32%" r="80%">
+          <stop offset="0%" stopColor={g.glint} stopOpacity="0.95" />
+          <stop offset="35%" stopColor={g.mid} />
+          <stop offset="100%" stopColor={g.lo} />
+        </radialGradient>
+      </defs>
+      {/* Drop shadow + girdle */}
+      <polygon points="7.5,3.2 16.5,3.2 21.3,8 21.3,17 16.5,21.8 7.5,21.8 2.7,17 2.7,8" fill="#000" opacity="0.25" transform="translate(0 0.8)" />
+      <polygon points="7.5,2.2 16.5,2.2 21.3,7 21.3,16 16.5,20.8 7.5,20.8 2.7,16 2.7,7" fill={`url(#${id("body")})`} stroke={g.rim} strokeWidth="0.9" strokeLinejoin="round" />
+      {/* Crown facets: top/left lit, right/bottom in shadow */}
+      <polygon points="7.5,2.2 16.5,2.2 15,6.4 9,6.4" fill="#fff" opacity="0.5" />
+      <polygon points="2.7,7 7.5,2.2 9,6.4 6.9,8.5" fill="#fff" opacity="0.62" />
+      <polygon points="2.7,7 6.9,8.5 6.9,14.5 2.7,16" fill="#fff" opacity="0.28" />
+      <polygon points="16.5,2.2 21.3,7 17.1,8.5 15,6.4" fill="#fff" opacity="0.22" />
+      <polygon points="21.3,7 21.3,16 17.1,14.5 17.1,8.5" fill="#000" opacity="0.18" />
+      <polygon points="2.7,16 6.9,14.5 9,16.6 7.5,20.8" fill="#000" opacity="0.12" />
+      <polygon points="21.3,16 16.5,20.8 15,16.6 17.1,14.5" fill="#000" opacity="0.3" />
+      <polygon points="7.5,20.8 16.5,20.8 15,16.6 9,16.6" fill="#000" opacity="0.24" />
+      {/* Table */}
+      <polygon points="9,6.4 15,6.4 17.1,8.5 17.1,14.5 15,16.6 9,16.6 6.9,14.5 6.9,8.5" fill={`url(#${id("table")})`} stroke={g.glint} strokeOpacity="0.55" strokeWidth="0.45" strokeLinejoin="round" />
+      <polygon points="9.6,7.6 13.4,7.6 11,10.4 8.1,10.4 8.1,9.1" fill="#fff" opacity="0.35" />
+      {/* Sparkle */}
+      <path d="M6.2 4.4 L6.7 5.8 L8.1 6.3 L6.7 6.8 L6.2 8.2 L5.7 6.8 L4.3 6.3 L5.7 5.8 Z" fill={g.glint} opacity="0.95" />
     </svg>
   );
 }
@@ -68,20 +109,24 @@ export function ResourceCube({
       title={title ?? meta.label}
       className={`relative inline-block shrink-0 rounded-[6px] ${className}`}
       style={{
-        background: `linear-gradient(155deg, ${meta.fill}f2 0%, ${meta.fill} 45%, ${meta.stroke} 130%)`,
-        boxShadow: `inset 0 1.5px 1.5px rgba(255,255,255,0.75), inset 0 -2px 3px rgba(0,0,0,0.35), 0 2px 3px rgba(0,0,0,0.5)`,
-        border: `1px solid ${meta.stroke}`,
+        background: `linear-gradient(145deg, ${GEM[resource].hi} 0%, ${GEM[resource].mid} 42%, ${GEM[resource].lo} 100%)`,
+        boxShadow: `inset 0 1px 1px rgba(255,255,255,0.7), inset 0 -1.5px 2px rgba(0,0,0,0.35), 0 1.5px 2.5px rgba(0,0,0,0.45)`,
+        border: `1px solid ${GEM[resource].rim}`,
       }}
     >
-      {/* Faceted-gem planes: a lit upper-left bevel and a shaded lower-right
-          bevel split by hard stops, so the cube catches light like a cut stone. */}
+      {/* Polished step-cut: a soft bevel ring (lit top-left, shaded
+          bottom-right) around an inset "table" facet with its own sheen. */}
       <span
-        className="absolute inset-0 rounded-[5px]"
-        style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.32) 0 30%, rgba(255,255,255,0.06) 30% 58%, rgba(0,0,0,0.2) 58% 100%)" }}
+        className="absolute inset-[18%] rounded-[3px]"
+        style={{
+          background: `linear-gradient(145deg, ${GEM[resource].hi} 0%, ${GEM[resource].mid} 55%, ${GEM[resource].lo} 120%)`,
+          boxShadow: `0 0 0 0.5px ${GEM[resource].glint}99, inset 0 -1px 1.5px rgba(0,0,0,0.25)`,
+          opacity: 0.9,
+        }}
       />
       <span
-        className="absolute top-[12%] left-[14%] h-[35%] w-[35%] rounded-full"
-        style={{ background: "radial-gradient(circle, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0) 75%)" }}
+        className="absolute top-[10%] left-[12%] h-[28%] w-[28%] rounded-full"
+        style={{ background: "radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 70%)" }}
       />
     </span>
   );
