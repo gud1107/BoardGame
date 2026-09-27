@@ -6,6 +6,7 @@ import { computeRankings } from "./engine";
 import ActionPanel from "./ActionPanel";
 import PlayerArea from "./PlayerArea";
 import BettingArena from "./BettingArena";
+import CollectionSynergyPanel from "./CollectionSynergyPanel";
 import LotCatalogCard from "./LotCatalogCard";
 import RulebookModal from "./RulebookModal";
 import { detectCoinEvents, FlyingCoins, type CoinAnimEvent } from "./AuctionCoinEffects";
@@ -21,7 +22,7 @@ const SECTOR_EMOJI: Record<string, string> = { "빅테크&AI": "🤖", 블루칩
  * viewer's own portfolio progress — which cells they already own, and which
  * market/sector completions they're one card away from.
  */
-function AssetReferenceSidebar({ ownedAssetIds }: { ownedAssetIds: Set<string> }) {
+function AssetReferenceSidebar({ ownedAssetIds, lotAssetId }: { ownedAssetIds: Set<string>; lotAssetId: string | null }) {
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/90 light:shadow-sm p-3">
       <h3 className="text-xs font-semibold text-white/60 light:text-slate-600">📈 자산 점수표</h3>
@@ -34,8 +35,13 @@ function AssetReferenceSidebar({ ownedAssetIds }: { ownedAssetIds: Set<string> }
             <div className="flex flex-col gap-0.5">
               {SECTORS.flatMap((sector) => ASSET_DEFS.filter((a) => a.market === market && a.sector === sector)).map((a) => {
                 const owned = ownedAssetIds.has(a.id);
+                const onBlock = a.id === lotAssetId;
                 return (
-                  <div key={a.id} className={`flex items-center gap-1 text-[11px] ${owned ? "text-emerald-300 light:text-emerald-700" : "text-white/50 light:text-slate-500"}`}>
+                  <div
+                    key={a.id}
+                    className={`flex items-center gap-1 text-[11px] ${owned ? "text-emerald-300 light:text-emerald-700" : "text-white/50 light:text-slate-500"} ${onBlock ? "-mx-1 rounded bg-sky-400/15 px-1 font-semibold text-sky-100 ring-1 ring-sky-300/60 light:bg-sky-50 light:text-sky-900 light:ring-sky-300" : ""}`}
+                    title={onBlock ? "지금 경매 중인 매물" : undefined}
+                  >
                     <span className="shrink-0">{owned ? "✅" : "▫️"}</span>
                     <span className="shrink-0">{SECTOR_EMOJI[a.sector]}</span>
                     <span className="min-w-0 flex-1 truncate" title={a.name}>
@@ -117,7 +123,10 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
       <aside className="order-2 lg:order-1 lg:w-64 lg:shrink-0">
-        <AssetReferenceSidebar ownedAssetIds={ownedAssetIds} />
+        <div className="flex flex-col gap-4">
+          <CollectionSynergyPanel assets={me.assets} pendingSpecials={me.pendingSpecials} auctionCard={auction?.card ?? null} />
+          <AssetReferenceSidebar ownedAssetIds={ownedAssetIds} lotAssetId={auction?.card.kind === "asset" ? auction.card.asset.id : null} />
+        </div>
       </aside>
 
       <div className="order-1 flex flex-1 flex-col gap-4 lg:order-2">
