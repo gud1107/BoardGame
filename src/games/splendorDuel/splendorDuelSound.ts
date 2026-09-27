@@ -29,6 +29,13 @@ import { colorPoints, crownsOf, prestigeOf, SEATS, WIN_CROWNS, WIN_PRESTIGE, WIN
 const SEMITONE = Math.pow(2, 1 / 12);
 /** MIDI note → Hz. */
 const hz = (midi: number) => 440 * Math.pow(SEMITONE, midi - 69);
+/** Deterministic 0..1 hash of (pass, step) — BGM micro-variation without Math.random, so a pass is reproducible. */
+const variation = (pass: number, step: number) => {
+  let h = Math.imul(pass + 1, 0x9e3779b1) ^ Math.imul(step + 7, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  h ^= h >>> 13;
+  return (h >>> 0) / 4294967296;
+};
 
 type Bus = "sfx" | "bgm";
 
@@ -520,33 +527,61 @@ class SplendorDuelSound {
     if ("scrollFrom" in e && (e.scrollFrom === "table" || e.scrollFrom === "opponent")) this.scroll(0.35);
   }
 
-  /* ── BGM: "Minimal Chamber Noir" — cello drone, felt piano, sub heartbeat ── */
+  /* ── BGM: "Minimal Chamber Noir" — 4-part progression, cello, felt piano, woodwind ── */
 
   /**
    * Soft-tension background for thinking, not for listening: no fast runs and
    * nothing bright above ~1kHz, so it never competes with the SFX or the
-   * player's arithmetic. 88 bpm, D minor, stepped in eighth notes, 2-bar
-   * (16-step) phrase:
-   *  - cello drone: one warm triangle note per beat through a 240Hz lowpass
-   *    with a slow 0.4s bow swell, held ~2 beats so consecutive notes overlap
-   *    into a continuous floor — D2 D2 F2 F2 | Bb1 Bb1 A1 A1;
-   *  - felt piano: sparse sine drops (A3 D4 F4 D4 | C4 E4 A3 · ) with a round
-   *    900Hz lowpass and a long reverb tail; every 4th phrase rests for a breath;
-   *  - sub heartbeat: a 55→45Hz sine thump every other beat, felt more than heard.
+   * player's arithmetic. 88 bpm 4/4, stepped in eighth notes; one pass is
+   * 8 bars / 32 beats / 64 steps in four 2-bar parts:
+   *   A  Dm      — quiet search          (D2 · A2 · D3)
+   *   B  B♭maj7  — hidden expansion      (B♭1 · F2 · A2)
+   *   C  Gm6     — pressure              (G1 · D2 · E2), woodwind long tone
+   *   D  A7♭9    — climax, B♭→A→G→E→C♯ descent resolving to the loop top.
+   * Voices:
+   *  - cello: warm triangle through a 260Hz lowpass, one note per beat held
+   *    ~2 beats (legato overlap), with octave leaps inside each part;
+   *  - felt piano: a 64-step through-composed line with rests as breathing room;
+   *  - woodwind: breathy triangle long tones with slow vibrato at part
+   *    changes (C and D every pass, B on odd passes);
+   *  - sub heartbeat: a 55→42Hz sine thump on beats 1 & 3.
+   *
+   * Micro-variation: pass 0 plays the theme straight; later passes run every
+   * piano note through a deterministic hash of (pass, step) — occasional rests,
+   * octave lifts, velocity humanising and soft echoes, bar downbeats always
+   * kept — plus an alternate part-D ending on odd passes, an octave-up cello
+   * lift on every third pass and a piano-free "breath" over part A on every
+   * third pass. So no two passes (~22s each) are identical.
    *
    * Late-game tension (`setTension`, fed by `matchTension`) tightens gently,
-   * switching only on a phrase line — the music leans in, it never gets loud:
-   *  - tier 1: 92 bpm, piano gains a quiet open fifth on its strong notes;
-   *  - tier 2: 96 bpm, the heartbeat doubles to every beat, no breath phrases;
-   *  - tier 3: 100 bpm, plus a faint high sine pad grinding a minor second
-   *    (A5 / Bb5) under everything.
+   * switching only on a part line — the music leans in, it never gets loud:
+   *  - tier 1: 92 bpm, woodwind enters on every part;
+   *  - tier 2: 96 bpm, the heartbeat doubles to every beat, no breath passes;
+   *  - tier 3: 100 bpm, plus a faint high sine pad drifting A5 → B♭5 across
+   *    the parts (minor-second unease).
    * Each step up is announced once with a low sub swell into the downbeat.
    */
   private static readonly TEMPOS: Record<TensionTier, number> = { 0: 88, 1: 92, 2: 96, 3: 100 };
-  /** One root per beat (every 2 steps). */
-  private static readonly DRONE = [38, 38, 41, 41, 34, 34, 33, 33];
-  /** Per step; 0 = rest. */
-  private static readonly PIANO = [57, 0, 62, 0, 65, 0, 62, 0, 60, 0, 64, 0, 57, 0, 0, 0];
+  /** Cello, one root per beat (32 beats, parts A–D). */
+  private static readonly BASS = [
+    38, 38, 45, 38, 38, 50, 45, 41, // A  Dm
+    34, 34, 41, 34, 34, 46, 41, 45, // B  B♭maj7
+    31, 31, 38, 31, 31, 43, 38, 40, // C  Gm6
+    33, 33, 40, 33, 37, 40, 43, 37, // D  A7♭9 → back to D
+  ];
+  /** Felt piano, per eighth step (64); 0 = rest. */
+  private static readonly MELODY = [
+    57, 0, 62, 0, 65, 0, 0, 0, /**/ 69, 0, 0, 67, 65, 0, 62, 0, // A
+    58, 0, 62, 0, 65, 0, 69, 0, /**/ 0, 0, 70, 0, 69, 0, 65, 0, // B
+    55, 0, 62, 0, 64, 0, 0, 0, /**/ 67, 0, 70, 0, 69, 0, 67, 0, // C
+    57, 0, 61, 0, 64, 0, 67, 0, /**/ 70, 0, 69, 0, 0, 67, 0, 61, // D
+  ];
+  /** Part-D second bar on odd passes: a chromatic-leaning fall into the loop top. */
+  private static readonly ALT_ENDING = [0, 0, 70, 69, 67, 0, 64, 61];
+  /** Woodwind long tones at part starts (step → midi); B only on odd passes / tier ≥1, A only at tier ≥1. */
+  private static readonly WOODWIND: Record<number, number> = { 0: 74, 16: 65, 32: 70, 48: 69 };
+  /** Tier-3 pad pitch per part (A5 A5 B♭5 B♭5). */
+  private static readonly PAD = [81, 81, 82, 82];
 
   /** Board mount/unmount. Actual playback also waits for BGM to be unmuted. */
   setBgmWanted(wanted: boolean) {
@@ -589,30 +624,83 @@ class SplendorDuelSound {
   private playEighth(step: number, t: number, beat: number) {
     const S = SplendorDuelSound;
     const tier = this.tier;
-    const pos = step % 16;
-    const phrase = Math.floor(step / 16);
+    const pos = step % 64;
+    const pass = Math.floor(step / 64);
+    const part = pos >> 4;
 
     // Heartbeat on beats 1 & 3 of each bar; from tier 2, every beat.
     if (pos % 4 === 0 || (tier >= 2 && pos % 2 === 0)) this.subPulse(t, pos % 8 === 0 ? 0.5 : 0.36);
 
-    if (pos % 2 === 0) this.celloDrone(t, hz(S.DRONE[pos / 2]), beat * 1.9);
-
-    const breath = phrase % 4 === 3 && tier < 2;
-    const m = breath ? 0 : S.PIANO[pos];
-    if (m) {
-      this.feltPiano(t, hz(m), beat * 1.6, 0.26);
-      if (tier >= 1 && pos % 4 === 0) this.feltPiano(t + 0.02, hz(m + 7), beat * 1.4, 0.1);
+    if (pos % 2 === 0) {
+      const b = pos / 2;
+      // Every third pass lifts each part's closing beat an octave — the cello "leans" into the next chord.
+      const lift = pass % 3 === 2 && b % 8 === 7 && S.BASS[b] < 45 ? 12 : 0;
+      this.celloDrone(t, hz(S.BASS[b] + lift), beat * 2.05);
     }
 
-    if (tier >= 3 && pos === 0) this.highPad(t, hz(phrase % 2 ? 82 : 81), beat * 8);
+    const breath = pass % 3 === 2 && part === 0 && tier < 2;
+    let m = pass % 2 === 1 && pos >= 56 ? S.ALT_ENDING[pos - 56] : S.MELODY[pos];
+    if (breath) m = 0;
+    if (m) {
+      let vel = pos % 8 === 0 ? 0.26 : 0.2;
+      if (pass > 0) {
+        const r = variation(pass, pos);
+        if (pos % 8 !== 0 && r < 0.12) m = 0;
+        else if (r < 0.22 && m + 12 <= 81) m += 12;
+        vel *= 0.85 + variation(pass, pos + 101) * 0.3;
+      }
+      if (m) this.feltPiano(t, hz(m), beat * 1.6, vel);
+    } else if (!breath && pass > 0 && pos > 0 && variation(pass, pos + 211) < 0.1) {
+      // A soft echo of the last note, filling a rest.
+      const prev = S.MELODY[pos - 1];
+      if (prev) this.feltPiano(t, hz(prev), beat * 1.2, 0.08);
+    }
+
+    const ww = S.WOODWIND[pos];
+    if (ww && (pos >= 32 || tier >= 1 || (pos === 16 && pass % 2 === 1))) this.woodwind(t, hz(ww), beat * 3.5);
+
+    if (tier >= 3 && pos % 16 === 0) this.highPad(t, hz(S.PAD[part]), beat * 8);
   }
 
-  /** Request a tension tier (0–3); takes effect at the next phrase line. */
+  /** Request a tension tier (0–3); takes effect at the next part line (every 2 bars). */
   setTension(tier: TensionTier) {
     this.pendingTier = tier;
   }
 
-  /** Warm cello drone: triangle through a 240Hz resonant lowpass, slow bow swell. */
+  /** Woodwind long tone: triangle through a bandpass, slow breath swell and ~5Hz vibrato. */
+  private woodwind(t: number, freq: number, dur: number) {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = "triangle";
+    o.frequency.value = freq;
+    const vib = ctx.createOscillator();
+    vib.frequency.value = 5;
+    const vibDepth = ctx.createGain();
+    vibDepth.gain.setValueAtTime(0, t);
+    vibDepth.gain.linearRampToValueAtTime(freq * 0.004, t + dur * 0.5);
+    vib.connect(vibDepth).connect(o.frequency);
+    const f = ctx.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = freq;
+    f.Q.value = 4;
+    const e = ctx.createGain();
+    e.gain.setValueAtTime(0.0001, t);
+    e.gain.linearRampToValueAtTime(0.18, t + 0.6);
+    e.gain.setTargetAtTime(0.13, t + 0.6, dur * 0.3);
+    e.gain.setTargetAtTime(0.0001, t + dur * 0.8, dur * 0.08);
+    o.connect(f).connect(e).connect(this.bgmBus!);
+    if (this.reverbIn) {
+      const send = ctx.createGain();
+      send.gain.value = 0.6;
+      e.connect(send).connect(this.reverbIn);
+    }
+    o.start(t);
+    vib.start(t);
+    o.stop(t + dur + 0.1);
+    vib.stop(t + dur + 0.1);
+  }
+
+  /** Warm cello drone: triangle through a 260Hz resonant lowpass, slow bow swell (legato overlap). */
   private celloDrone(t: number, freq: number, dur: number) {
     const ctx = this.ctx!;
     const o = ctx.createOscillator();
@@ -620,11 +708,11 @@ class SplendorDuelSound {
     o.frequency.value = freq;
     const f = ctx.createBiquadFilter();
     f.type = "lowpass";
-    f.frequency.value = 240;
+    f.frequency.value = 260;
     f.Q.value = 2;
     const e = ctx.createGain();
     e.gain.setValueAtTime(0.0001, t);
-    e.gain.linearRampToValueAtTime(0.5, t + 0.4);
+    e.gain.linearRampToValueAtTime(0.5, t + 0.35);
     e.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(f).connect(e).connect(this.bgmBus!);
     if (this.reverbIn) {
@@ -667,13 +755,13 @@ class SplendorDuelSound {
     }
   }
 
-  /** Deep sub heartbeat: 55→45Hz sine thump, no click. */
+  /** Deep sub heartbeat: 55→42Hz sine thump, no click. */
   private subPulse(t: number, gain: number) {
     const ctx = this.ctx!;
     const o = ctx.createOscillator();
     o.type = "sine";
     o.frequency.setValueAtTime(55, t);
-    o.frequency.exponentialRampToValueAtTime(45, t + 0.15);
+    o.frequency.exponentialRampToValueAtTime(42, t + 0.15);
     const e = ctx.createGain();
     e.gain.setValueAtTime(0.0001, t);
     e.gain.exponentialRampToValueAtTime(gain, t + 0.012);
