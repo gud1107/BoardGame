@@ -111,8 +111,9 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
   // The desktop hand fan sizes each card to exactly a market card's face
   // width (`handCardWidth`), so a bought card keeps its size in hand. The
   // market grid is responsive, so this is measured live off slot 0 rather
-  // than hardcoded; 14px = the market button's p-1.5 padding + 1px border
-  // on each side (the slot div itself is the button's full width).
+  // than hardcoded. It observes the card face element itself (the slot
+  // button's last child) — deriving it from the slot width minus padding
+  // guesses came out a few px off in production.
   const [handCardWidth, setHandCardWidth] = useState<number | null>(null);
   const slotObserver = useRef<ResizeObserver | null>(null);
   useEffect(() => () => slotObserver.current?.disconnect(), []);
@@ -122,11 +123,13 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
       else merchantSlotRefs.current.delete(index);
       if (index === 0 && el && typeof ResizeObserver !== "undefined") {
         slotObserver.current?.disconnect();
+        const face = el.querySelector("button")?.lastElementChild ?? null;
+        if (!face) return;
         slotObserver.current = new ResizeObserver(([entry]) => {
-          const w = Math.round(entry.contentRect.width) - 14;
+          const w = Math.round(entry.target.getBoundingClientRect().width);
           if (w > 0) setHandCardWidth((prev) => (prev === w ? prev : w));
         });
-        slotObserver.current.observe(el);
+        slotObserver.current.observe(face);
       }
     };
   }
