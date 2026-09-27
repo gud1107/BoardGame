@@ -38,9 +38,9 @@
 | [analytics-local-store-limitations.md](./analytics-local-store-limitations.md) | 방문/게임 통계를 로컬 파일(`localStore.ts`)로 저장하기로 한 결정이 Vercel 프로덕션에서 구체적으로 어떤 충돌 시나리오·불편함을 낳는지 정리 |
 | [dalmuti-court-bgm-spec.md](./dalmuti-court-bgm-spec.md) | 달무티 중세 궁정 류트 BGM/SFX 신디 엔진 명세(미구현 검토본) — 기존 사운드와의 대조, 명세 코드 결함, 결정 대기 항목 |
 | [dalmuti-class-saga-bgm.md](./dalmuti-class-saga-bgm.md) | 달무티 "계급 서사" 32스텝 프로시저럴 BGM(농노→상인→귀족→달무티, 4바퀴 변주) — 파일 구성, 명세와 다르게 한 부분, 검증 결과 |
-| [coyote-sound-suite.md](./coyote-sound-suite.md) | 코요테 스파게티 웨스턴 밴조/휘파람 BGM + 블러핑 SFX — 파일 구성, 명세와 다르게 한 부분, 검증 결과 |
 | [rat-a-tat-cat-audio-suite.md](./rat-a-tat-cat-audio-suite.md) | 랫어탯캣 살금살금 피치카토 BGM + 카드 액션 SFX — 파일 구성, 명세와 다르게 한 부분, 검증 결과 |
-| [coyote-sound-suite.md](./coyote-sound-suite.md) | 코요테 스파게티 웨스턴 밴조/휘파람 BGM + 블러핑 SFX(로컬 구현, 배포 대기) — 파일 구성, 명세와 다르게 한 부분, 검증 결과 |
+| [coyote-sound-suite.md](./coyote-sound-suite.md) | 코요테 스파게티 웨스턴 밴조/휘파람 BGM + 블러핑 SFX — 파일 구성, 명세와 다르게 한 부분, 검증 결과 |
+| [perudo-sound-suite.md](./perudo-sound-suite.md) | 페루도 잉카 미스터리 BGM(톰/셰이커/나일론 기타/판플루트) + 🎲/🔔 HUD — SFX를 새로 안 만든 이유, 명세와 다르게 한 부분 |
 
 루트 문서(이 폴더 밖):
 

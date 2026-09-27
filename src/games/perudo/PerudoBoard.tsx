@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
-import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import RulebookModal from "./RulebookModal";
+import PerudoSoundHud from "./PerudoSoundHud";
+import { getPerudoSound } from "./perudoSound";
 import PerudoFaceIcon from "./PerudoFaceIcon";
 import {
   BetGoldPulseRing,
@@ -414,11 +415,16 @@ export default function PerudoBoard({
   // A player's own dice are ALWAYS visible the instant they render — no cup
   // or timer ever hides them (2026-08 페루도 UI 개편, 사용자 요청).
 
-  // Reads the site-wide `audioSettings` store directly (2026-08-26 세션)
-  // instead of a local copy of `soundEngine.isMuted()`, so this button stays
-  // in sync with the header's global toggle and the settings modal.
-  const muted = useAudioSettingsStore((s) => s.masterMuted);
-  const toggleMuted = useAudioSettingsStore((s) => s.toggleMasterMuted);
+  // Perudo Sound Suite (2026-09-28, perudoSound.ts): the "Inca Dice" BGM
+  // plays while a round's bidding is live and BGM is unmuted in the site
+  // settings; it rests through the reveal/game-over screens, whose showdown
+  // cinematics and stings take over.
+  const bgmLive = state.phase === "playing";
+  useEffect(() => {
+    const sound = getPerudoSound();
+    sound.setBgmWanted(bgmLive);
+    return () => sound.setBgmWanted(false);
+  }, [bgmLive]);
 
   const rulebookButton = (
     <button
@@ -429,18 +435,9 @@ export default function PerudoBoard({
     </button>
   );
 
-  const muteButton = (
-    <button
-      onClick={() => {
-        toggleMuted();
-        getSoundEngine().unlock();
-      }}
-      title={muted ? "효과음 켜기" : "효과음 끄기"}
-      className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 transition hover:border-white/30 hover:text-white light:border-slate-300 light:text-slate-600 light:hover:border-slate-400 light:hover:text-slate-900"
-    >
-      {muted ? "🔇" : "🔊"}
-    </button>
-  );
+  // 🎲 Inca Dice BGM / 🔔 효과음 toggles — replaced the old single master-mute
+  // 🔊 button (2026-09-28); both read/write the site-wide audio settings store.
+  const muteButton = <PerudoSoundHud />;
 
   // In-game color swatch picker (2026-09-04 색상 확장/중복 방지 세션) — "taken" is
   // derived straight from `colorways` (every seat is guaranteed filled once
@@ -572,7 +569,7 @@ export default function PerudoBoard({
           <span>
             {state.playerCount}인 · {state.roundNumber}라운드 결과
           </span>
-          <div className="flex gap-1.5">
+          <div className="flex items-center gap-1.5">
             {muteButton}
             {rulebookButton}
           </div>
@@ -640,7 +637,7 @@ export default function PerudoBoard({
   // `PerudoSharedUI.tsx` that only that tree consumed) were deleted.
 
   return (
-    <div className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
+    <div onPointerDownCapture={() => getPerudoSound().unlock()} className={`${TABLE_PANEL} flex flex-col gap-3 p-3 sm:p-4`}>
       <MyTurnOverlay isMyTurn={isMyTurn && iAmAlive} />
       <TableTexture />
       <TotalDiceBanner state={state} />
@@ -649,7 +646,7 @@ export default function PerudoBoard({
         <span className="flex items-center gap-1.5">
           {state.playerCount}인 · {state.roundNumber}라운드
         </span>
-        <div className="flex gap-1.5">
+        <div className="flex items-center gap-1.5">
           {muteButton}
           {rulebookButton}
         </div>
