@@ -19,7 +19,7 @@ export const RESOURCE_META: Record<Resource, { fill: string; stroke: string; lab
  * smoky topaz). `hi`→`mid`→`lo` is the lit-to-shadow body ramp, `rim` the
  * girdle outline, `glint` the specular tint.
  */
-const GEM: Record<Resource, { hi: string; mid: string; lo: string; rim: string; glint: string }> = {
+export const GEM: Record<Resource, { hi: string; mid: string; lo: string; rim: string; glint: string }> = {
   yellow: { hi: "#fff7c2", mid: "#f5b90b", lo: "#9a5b04", rim: "#6b3d02", glint: "#fffdf0" },
   red: { hi: "#ffd1dc", mid: "#e0183f", lo: "#6d0a22", rim: "#4a0616", glint: "#fff1f4" },
   green: { hi: "#c9fbe4", mid: "#0fae6f", lo: "#04513a", rim: "#033527", glint: "#effff7" },

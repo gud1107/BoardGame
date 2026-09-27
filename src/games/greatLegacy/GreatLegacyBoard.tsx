@@ -134,6 +134,13 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
     investment.setBgmWanted(true);
     return () => investment.setBgmWanted(false);
   }, []);
+  // Game over → the symphony stops and resolves on a grand closing chord; a fresh game re-arms the loop.
+  const isGameOver = state.phase === "gameOver";
+  useEffect(() => {
+    const investment = getInvestmentSound();
+    if (isGameOver) investment.finale();
+    else investment.resumeAfterFinale();
+  }, [isGameOver]);
   // Penalty card on the block → darker variant; climbing bids → faster, denser score.
   const bgmMood = auction?.kind === "reverse" ? "reverse" : "normal";
   const bgmHeat = auctionHeat(state);

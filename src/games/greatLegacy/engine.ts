@@ -465,7 +465,7 @@ function cardValueEstimate(card: AuctionCardDef): number {
   return 0; // 악재/어닝쇼크·상장폐지·강제반대매매 have no positive value to the bidder in a normal sense (only ever seen via reverse auctions below)
 }
 
-import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import { isDiscardKind, lotSynergyImpact } from "./synergy";
 
 /**
@@ -524,6 +524,71 @@ function penaltyCoins(state: GreatLegacyState, seat: SeatIndex): number {
   return penaltyCost(state, seat, ownDelta) * coinsPerPoint(state, seat);
 }
 
+/**
+ * Per-level bidding personality. Every knob scales continuously with the
+ * level (not in three tiers), so each step from Lv1 to Lv10 plays a little
+ * sharper: more synergy denial, bigger budget on the lots that matter,
+ * pickier about junk lots, and harder penalty-card dumping.
+ */
+interface BotProfile {
+  /** Values its own synergy completions (+3s). */
+  synergy: boolean;
+  /** 0..1 weight on the +3s a rival would gain from this lot (outbidding to deny it). */
+  denial: number;
+  /** Paces bids against budgetPerLot (false = the old flat "4× value" guess). */
+  paced: boolean;
+  /** Multiplier on the per-lot budget — how hard it leans into a lot it wants. */
+  budgetMult: number;
+  /** Minimum coins it will go to on any lot before value/budget caps kick in. */
+  floor: number;
+  /** Exponent on value/3: >1 chases high-value lots harder and lets cheap lots go. */
+  selectivity: number;
+  /** Uses the reverse-auction EV rule (else the old "dodge while cheap" guess). */
+  reverseEV: boolean;
+  /** Extra "stay in" weight when a rival is about to fold on a penalty card. */
+  dump: number;
+  /** 0..1 weight on partial synergy progress (a lot that takes a collection from 1/3 to 2/3 is worth something before it completes). */
+  foresight: number;
+}
+
+function botProfile(level: BotLevel): BotProfile {
+  const l = Math.min(10, Math.max(1, level));
+  return {
+    synergy: l >= 2,
+    denial: Math.min(1, Math.max(0, (l - 3) / 6)),
+    paced: l >= 4,
+    // Money knobs and foresight stop growing at Lv8: head-to-head sims (Lv8 vs Lv10, 400 seeds) showed
+    // every extra notch of spending/foresight past Lv8 made Lv10 *lose* to Lv8 (46% vs 55%). Lv9–10 pull
+    // ahead instead on move precision (pickByLevel: no mistakes, tighter ties) plus denial and dumping.
+    budgetMult: 0.75 + 0.06 * (Math.min(l, 8) - 4),
+    floor: 8 + 2 * (Math.min(l, 8) - 1),
+    selectivity: Math.max(1, 1 + 0.08 * (Math.min(l, 8) - 4)),
+    reverseEV: l >= 4,
+    dump: Math.min(1, Math.max(0, (l - 5) / 4)) * 2,
+    foresight: Math.min(1, Math.max(0, (Math.min(l, 8) - 7) / 3)),
+  };
+}
+
+/**
+ * Value of the asset lot on the block as *progress* toward collections this
+ * seat hasn't finished yet: for each of the two collections it feeds (its
+ * market's 영끌 올인 and its sector's 분산투자), bringing it to 2/3 is worth a
+ * share of the +3. Completions themselves are counted separately via ownDelta.
+ */
+function synergyProgressValue(state: GreatLegacyState, seat: SeatIndex): number {
+  const card = state.auction!.card;
+  if (card.kind !== "asset") return 0;
+  const { assets } = state.players.find((p) => p.seat === seat)!;
+  if (hasCollectionCard(assets, card.asset.market, card.asset.sector)) return 0; // slot already filled
+  let value = 0;
+  const marketSlots = SECTORS.filter((sec) => hasCollectionCard(assets, card.asset.market, sec)).length;
+  const sectorSlots = MARKETS.filter((m) => hasCollectionCard(assets, m, card.asset.sector)).length;
+  // Only the 1/3 → 2/3 step counts: sims showed crediting 0 → 1/3 too made Lv10 overbuy stray lots whose
+  // collections never completed. 2/3 is a real threat (one card away), worth ~40% of the +3.
+  for (const filled of [marketSlots, sectorSlots]) if (filled === 1) value += COLLECTION_BONUS * 0.4;
+  return value;
+}
+
 function scoreMove(state: GreatLegacyState, seat: SeatIndex, move: EngineAction, level: BotLevel): number {
   const auction = state.auction!;
   const player = state.players.find((p) => p.seat === seat)!;
@@ -531,26 +596,31 @@ function scoreMove(state: GreatLegacyState, seat: SeatIndex, move: EngineAction,
   const purseTotal = purseValue(player.purse) + committed;
   const scarcity = purseTotal <= 0 ? 0 : 1; // guards a divide-by-zero edge case, not a real scarcity model
 
-  const tier = botTier(level);
-  // Novice bots ignore synergies entirely; core/expert weigh their own +3s, and deny rivals' at half/full weight.
-  const stakes = tier === "novice" ? { ownDelta: 0, rivalGain: 0, rivalLoss: 0 } : synergyStakes(state, seat);
-  const denialWeight = tier === "expert" ? 1 : tier === "core" ? 0.5 : 0;
+  const profile = botProfile(level);
+  const stakes = profile.synergy ? synergyStakes(state, seat) : { ownDelta: 0, rivalGain: 0, rivalLoss: 0 };
   // The bid total this move would put on the table (what the cap must be compared against —
   // the old code compared highestBid + the coins being added, which double-counted).
   const newTotal = move.type === "bid" ? committed + purseValue(move.addCoins) : committed;
 
   if (auction.kind === "normal") {
-    const value = cardValueEstimate(auction.card) + Math.max(0, stakes.ownDelta) + stakes.rivalGain * denialWeight;
+    const value =
+      cardValueEstimate(auction.card) +
+      Math.max(0, stakes.ownDelta) +
+      stakes.rivalGain * profile.denial +
+      (profile.foresight > 0 ? synergyProgressValue(state, seat) * profile.foresight : 0);
     if (move.type === "pass") return -value; // walking away from a card worth chasing is a mild loss
     // Willing to chase up to ~4x the card's value (asset score + synergy it completes + rival synergy it blocks)…
-    let willingCap = Math.max(value * 4, tier === "expert" ? 20 : 10);
-    // …but core/expert also pace against their budget: a lot worth the average ~3 points gets about one
-    // lot's share of the purse, a more valuable one proportionally more (never the whole purse on one lot).
-    if (tier !== "novice") willingCap = Math.min(willingCap, budgetPerLot(state, seat) * Math.max(0.5, value / 3));
+    let willingCap = Math.max(value * 4, profile.floor);
+    // …but paced levels also budget: a lot worth the average ~3 points gets about one lot's share of the
+    // purse (× budgetMult), a more valuable one more — steeply more at high selectivity — and never the whole purse.
+    if (profile.paced) {
+      const weight = Math.max(0.5, Math.pow(value / 3, profile.selectivity));
+      willingCap = Math.min(willingCap, budgetPerLot(state, seat) * profile.budgetMult * weight);
+    }
     // Endgame spend-down: leftover coins only break ties, so in the last ~round of lots let the budget
     // (not the flat 20-coin cap) bound what a lot is worth chasing.
     const lotsLeft = state.deck.length + 1;
-    if (tier !== "novice" && lotsLeft <= state.players.length) {
+    if (profile.paced && lotsLeft <= state.players.length) {
       willingCap = Math.max(willingCap, Math.min(purseTotal, budgetPerLot(state, seat)) * Math.min(1, value / 3));
     }
     return newTotal <= willingCap ? value * 2 - newTotal * 0.1 : -newTotal;
@@ -561,7 +631,7 @@ function scoreMove(state: GreatLegacyState, seat: SeatIndex, move: EngineAction,
   // costs coins in the branch where someone else folds first — and in that
   // branch it saves the penalty. Staying is therefore right exactly while
   // the total on the table is below what the penalty is worth in coins.
-  if (tier === "novice") {
+  if (!profile.reverseEV) {
     const avoid = 2;
     if (move.type === "pass") return -avoid;
     const affordableMargin = purseTotal - purseValue(move.addCoins);
@@ -571,7 +641,7 @@ function scoreMove(state: GreatLegacyState, seat: SeatIndex, move: EngineAction,
   if (move.type === "pass") return 0;
   const myCap = penaltyCoins(state, seat);
   let stay = myCap - newTotal;
-  if (tier === "expert" && stay > 0) {
+  if (profile.dump > 0 && stay > 0) {
     // Dump pressure: if a still-in rival's own dodge budget is already below this level, they are
     // about to fold and eat the card — hold on one more round to push it onto them.
     const rivalFolds = state.players.some((p) => {
@@ -579,7 +649,7 @@ function scoreMove(state: GreatLegacyState, seat: SeatIndex, move: EngineAction,
       const theirMoney = purseValue(p.purse) + purseValue(auction.committed[p.seat] ?? emptyPurse());
       return penaltyCoins(state, p.seat) < newTotal + 1 || theirMoney <= newTotal;
     });
-    if (rivalFolds) stay += 2;
+    if (rivalFolds) stay += profile.dump;
   }
   return stay >= 0 ? 1 + stay * 0.1 : stay;
 }

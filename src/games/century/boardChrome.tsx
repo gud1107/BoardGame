@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { GemSparkle } from "./GemSparkle";
 import { ResourceCube, RESOURCE_META } from "./ResourceIcon";
 import { RESOURCE_ORDER, type Resource, type ResourceBundle } from "./cards";
 
@@ -112,6 +114,29 @@ export function CartInventory({
   }
   const slots = Array.from({ length: limit }, (_, i) => cubes[i] ?? null);
   const overflowCubes = cubes.slice(limit);
+
+  // "Gem just landed" sparkle (GemSparkle.tsx): diff the previous render's
+  // per-color counts against this one's during render (same prop-diff
+  // pattern CenturyBoard uses for its acquire effects — no useEffect) and
+  // flash the slots each color's *added* cubes now occupy. A fresh `nonce`
+  // per change makes every sparkle key unique, so a slot that sparkled
+  // before replays instead of being reused.
+  const [prevResources, setPrevResources] = useState(resources);
+  const [sparkle, setSparkle] = useState<{ nonce: number; slots: Set<number> }>({ nonce: 0, slots: new Set() });
+  if (prevResources !== resources) {
+    const added = new Set<number>();
+    let start = 0;
+    for (const r of RESOURCE_ORDER) {
+      const before = prevResources[r] ?? 0;
+      const now = resources[r] ?? 0;
+      for (let k = before; k < now; k++) added.add(start + k);
+      start += now;
+    }
+    setPrevResources(resources);
+    if (added.size > 0) setSparkle((s) => ({ nonce: s.nonce + 1, slots: added }));
+  }
+  const sparkleAt = (i: number, r: Resource) =>
+    sparkle.slots.has(i) ? <GemSparkle key={`${sparkle.nonce}-${i}`} resource={r} compact={compact} /> : null;
   // TODO(theme): well background is a hardcoded dark carved-hollow radial gradient via inline style; left as-is in light mode (physical caravan-board art, not a plain UI panel).
   const wellStyle = (filled: boolean): React.CSSProperties => ({
     background: "radial-gradient(circle at 50% 38%, #241708 0%, #100b04 72%)",
@@ -123,17 +148,19 @@ export function CartInventory({
   return (
     <div className={compact ? "flex flex-wrap gap-1" : "grid grid-cols-5 gap-1.5 sm:gap-2"}>
       {slots.map((r, i) => (
-        <div key={i} className={`flex items-center justify-center rounded-full ${resolvedSlot}`} style={wellStyle(!!r)}>
+        <div key={i} className={`relative flex items-center justify-center rounded-full ${resolvedSlot}`} style={wellStyle(!!r)}>
           {r ? <ResourceCube resource={r} className={resolvedCube} /> : <span className="h-1 w-1 rounded-full bg-white/10 light:bg-black/10" />}
+          {r && sparkleAt(i, r)}
         </div>
       ))}
       {overflowCubes.map((r, i) => (
         <div
           key={`overflow-${i}`}
-          className={`flex items-center justify-center rounded-full border-2 border-rose-400/70 bg-rose-500/10 shadow-[0_0_10px_-1px_rgba(244,63,94,0.7)] light:bg-rose-100 ${resolvedSlot}`}
+          className={`relative flex items-center justify-center rounded-full border-2 border-rose-400/70 bg-rose-500/10 shadow-[0_0_10px_-1px_rgba(244,63,94,0.7)] light:bg-rose-100 ${resolvedSlot}`}
           title="10개 한도 초과 — 버려야 합니다"
         >
           <ResourceCube resource={r} className={resolvedCube} />
+          {sparkleAt(limit + i, r)}
         </div>
       ))}
     </div>

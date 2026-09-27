@@ -42,6 +42,8 @@ class InvestmentSound {
   /** What the score is playing now; `wantedMood` switches in at the next bar line so a mood change never cuts a bar in half. */
   private music: SymphonyContext = { mood: "normal", heat: 0 };
   private wantedMood: SymphonyMood = "normal";
+  /** Set once the game-over finale has played: the loop stays silent until `resumeAfterFinale()` (e.g. a rematch). */
+  private finaleDone = false;
 
   private settings(): AudioSettings {
     return useAudioSettingsStore.getState();
@@ -202,6 +204,62 @@ class InvestmentSound {
     );
   }
 
+  /* ── Game-over finale ──────────────────────────────────────────────── */
+
+  /**
+   * 🏛️ Grand closing cadence when the game ends: the loop stops, then — after
+   * the last gavel has landed — a crescendoing D7 over a timpani roll resolves
+   * to a full G-*major* tutti (a Picardy third on the G-minor symphony), held
+   * and released over ~4s. Plays on the BGM bus (it is the music's ending);
+   * if only effects are enabled it still plays, on the effects bus. Idempotent
+   * until `resumeAfterFinale()`.
+   */
+  finale() {
+    if (this.finaleDone) return;
+    this.finaleDone = true;
+    this.syncBgm(); // stops the loop
+    const ctx = this.ready("bgm") ?? this.ready("sfx");
+    const bus = ctx && (this.ready("bgm") ? this.bgmBus : this.sfxBus);
+    if (!ctx || !bus) return;
+    const t0 = ctx.currentTime + 0.6;
+
+    // Dominant: D7 (D3 F♯3 A3 C4) swelling in horns + strings.
+    for (const freq of [146.83, 185.0, 220.0, 261.63]) {
+      for (const detune of [1, 1.004]) {
+        this.voice(ctx, bus, { type: "sawtooth", freq: freq * detune, t: t0, attack: 0.8, dur: 1.05, peak: 0.03, filter: { type: "lowpass", freq: 900, q: 1.5 } });
+      }
+    }
+    this.voice(ctx, bus, { type: "triangle", freq: 73.42, t: t0, attack: 0.3, dur: 1.05, peak: 0.12, filter: { type: "lowpass", freq: 220 } });
+    // Timpani roll accelerating into the downbeat.
+    for (let i = 0; i < 10; i++) {
+      const t = t0 + 0.95 * (1 - Math.pow(0.8, i + 1)) / (1 - Math.pow(0.8, 10));
+      this.voice(ctx, bus, { type: "sine", freq: 62, glideTo: 44, t, attack: 0.003, dur: 0.2, peak: 0.06 + i * 0.012 });
+    }
+
+    // Tonic: G major tutti.
+    const t1 = t0 + 1.0;
+    const hold = 4.2;
+    for (const freq of [49.0, 98.0]) {
+      this.voice(ctx, bus, { type: "triangle", freq, t: t1, attack: 0.05, dur: hold, peak: 0.13, filter: { type: "lowpass", freq: 260 } });
+    }
+    for (const freq of [196.0, 246.94, 293.66, 392.0]) {
+      for (const detune of [1, 1.005]) {
+        this.voice(ctx, bus, { type: "sawtooth", freq: freq * detune, t: t1, attack: 0.12, dur: hold, peak: 0.028, filter: { type: "lowpass", freq: 1300, q: 1.2 } });
+      }
+    }
+    [392.0, 493.88, 587.33, 783.99].forEach((freq, i) =>
+      this.voice(ctx, bus, { type: "sine", freq, t: t1 + i * 0.07, attack: 0.02, dur: 3, peak: 0.07 }),
+    );
+    this.voice(ctx, bus, { type: "sine", freq: 66, glideTo: 40, t: t1, attack: 0.004, dur: 0.9, peak: 0.34 });
+  }
+
+  /** Re-arms the loop after a finale (a new game on the same board). */
+  resumeAfterFinale() {
+    if (!this.finaleDone) return;
+    this.finaleDone = false;
+    this.syncBgm();
+  }
+
   /* ── BGM ─────────────────────────────────────────────────────────────── */
 
   /**
@@ -222,7 +280,7 @@ class InvestmentSound {
   }
 
   private syncBgm() {
-    const on = this.bgmWanted && !!this.ctx && !isBgmEffectivelyMuted(this.settings());
+    const on = this.bgmWanted && !this.finaleDone && !!this.ctx && !isBgmEffectivelyMuted(this.settings());
     if (on && !this.bgmTimer) {
       this.nextStepTime = this.ctx!.currentTime + 0.1;
       this.step = 0;

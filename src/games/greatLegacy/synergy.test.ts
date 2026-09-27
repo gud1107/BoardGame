@@ -65,7 +65,7 @@ describe("detectSynergyChanges / lotSynergyImpact", () => {
 });
 
 describe("bot synergy awareness", () => {
-  // A 3-point asset already bid up to 20 — plain value alone isn't worth a 21-coin bid.
+  // A 3-point asset already bid up to 22 — plain value alone isn't worth a 23-coin bid (Lv10 floor is 22).
   function contested(rivalAssets: OwnedAsset[]): { state: GreatLegacyState; bot: number } {
     const base = startGame("4p", 9);
     const bot = base.auction!.activeSeat;
@@ -77,9 +77,9 @@ describe("bot synergy awareness", () => {
         ...base.auction!,
         card: assetCard("us-meme-1"),
         kind: "normal",
-        highestBid: 20,
+        highestBid: 22,
         highestBidder: rival,
-        committed: { ...base.auction!.committed, [rival]: { 20: 1, 10: 0, 5: 0, 1: 0 } },
+        committed: { ...base.auction!.committed, [rival]: { 20: 1, 10: 0, 5: 0, 1: 2 } },
       },
     };
     return { state, bot };
