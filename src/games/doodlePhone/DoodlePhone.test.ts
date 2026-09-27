@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { seededRng, shuffle } from "@/lib/rng";
-import { addToDrawing, chooseBotAction, getValidMoves, guessFromDrawing, botDrawingFor, nextBotActor, redrawDrawing } from "./bot";
-import { EMPTY_DRAWING, MAX_DRAWING_CHARS, decodePoints, encodePoints, isValidDrawing, strokeOp, type Drawing } from "./drawing";
+import { addToDrawing, chooseBotAction, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, redrawDrawing } from "./bot";
+import { EMPTY_DRAWING, MAX_DRAWING_CHARS, decodePoints, encodePoints, fillOp, isValidDrawing, opAlpha, opCost, shapeOp, strokeOp, type Drawing } from "./drawing";
 import {
   MAX_REACTIONS_PER_PAGE,
   albumFor,
@@ -457,5 +457,52 @@ describe("theme packs (themes.ts, rulebook §10)", () => {
       for (let guard = 0; guard < 100 && gamePhase(s) === "turns"; guard++) s = applyAction(s, chooseBotAction(s, nextBotActor(s, bots)!, 6, rng)!);
       expect(gamePhase(s), mode).toBe("showcase");
     }
+  });
+});
+
+describe("shape tools + opacity (drawing.ts)", () => {
+  const box = (k: "l" | "r" | "e", filled = false, opacity = 100) => shapeOp(k, 5, 2, { x: 40, y: 50 }, { x: 200, y: 180 }, { filled, opacity });
+
+  it("encodes line/rect/ellipse as absolute corners and validates them", () => {
+    for (const k of ["l", "r", "e"] as const) {
+      const op = box(k, true);
+      expect(op).toMatchObject({ k, c: 5, w: 2, p: [40, 50, 200, 180] });
+      expect(isValidDrawing({ v: 1, ops: [op] })).toBe(true);
+    }
+    expect(box("l", true)).not.toHaveProperty("f"); // a line has no inside to fill
+    expect(box("r", true)).toHaveProperty("f", 1);
+    const bad = [
+      { k: "r", c: 1, w: 1, p: [0, 0, 999, 10] },
+      { k: "e", c: 1, w: 1, p: [0, 0, 10] },
+      { k: "r", c: 1, w: 1, p: [0, 0, 10, 10], f: 2 },
+      { k: "s", c: 1, w: 1, p: [1, 1], a: 5 },
+    ];
+    for (const op of bad) expect(isValidDrawing({ v: 1, ops: [op] } as unknown as Drawing), JSON.stringify(op)).toBe(false);
+  });
+
+  it("stores opacity only when translucent, so opaque drawings stay byte-identical", () => {
+    expect(strokeOp(1, 1, [{ x: 1, y: 1 }])).not.toHaveProperty("a");
+    expect(strokeOp(1, 1, [{ x: 1, y: 1 }], 25)).toHaveProperty("a", 25);
+    expect(fillOp(3, { x: 10, y: 10 }, 3)).toHaveProperty("a", 10); // clamped to the minimum
+    expect(opAlpha(box("e", false, 40))).toBeCloseTo(0.4);
+    expect(opCost(box("r"))).toBe(1);
+  });
+
+  it("the engine accepts a drawing made with every tool", () => {
+    let s = startGame(4, 70);
+    for (let seat = 0; seat < 4; seat++) s = applyAction(s, humanSubmit(seat, 1, s));
+    const drawing: Drawing = { v: 1, ops: [strokeOp(1, 1, [{ x: 5, y: 5 }, { x: 50, y: 60 }], 30), box("l"), box("r", true, 60), box("e"), fillOp(7, { x: 300, y: 300 }, 50)] };
+    const next = applyAction(s, { type: "SUBMIT_DRAWING", seat: 0, turn: 2, drawing });
+    expect(pageAt(next, albumFor(4, 0, 2), 2)).toMatchObject({ kind: "drawing", drawing });
+  });
+
+  it("bots copy shapes correctly and count their ink when guessing", () => {
+    const source: Drawing = { v: 1, ops: [box("r", true), box("e", false, 50)] };
+    const copy = redrawDrawing(source, seededRng(8), 10, 12, 0);
+    expect(isValidDrawing(copy)).toBe(true);
+    expect(copy.ops.map((o) => o.k)).toEqual(["r", "e"]);
+    expect(copy.ops[0]).toHaveProperty("f", 1);
+    expect(copy.ops[1]).toHaveProperty("a", 50);
+    expect(inkByColor(source).get(5)).toBeGreaterThan(0);
   });
 });

@@ -25,7 +25,7 @@
  */
 
 import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
-import { CANVAS_H, CANVAS_W, EMPTY_DRAWING, MAX_DRAWING_CHARS, decodePoints, isBlankDrawing, serializedLength, strokeOp, type DrawOp, type Drawing, type Point } from "./drawing";
+import { CANVAS_H, CANVAS_W, EMPTY_DRAWING, MAX_DRAWING_CHARS, decodePoints, isBlankDrawing, isShapeOp, opAlpha, serializedLength, shapeOp, strokeOp, type DrawOp, type Drawing, type Point } from "./drawing";
 import {
   TEXT_MAX_CHARS,
   albumFor,
@@ -376,7 +376,13 @@ export function redrawDrawing(source: Drawing, rng: () => number, level: BotLeve
   const ops = source.ops.map((op): DrawOp => {
     if (op.k === "x") return op;
     if (op.k === "f") return { ...op, x: Math.round(Math.min(CANVAS_W, Math.max(0, op.x + dx))), y: Math.round(Math.min(CANVAS_H, Math.max(0, op.y + dy))) };
-    return strokeOp(op.c, op.w, decodePoints(op.p).map((pt) => ({ x: pt.x + dx + j(), y: pt.y + dy + j() })));
+    if (isShapeOp(op)) {
+      // Shapes store absolute corners, not deltas — jitter and shift each corner.
+      const [x1, y1, x2, y2] = op.p;
+      const moved = shapeOp(op.k, op.c, op.w, { x: x1 + dx + j(), y: y1 + dy + j() }, { x: x2 + dx + j(), y: y2 + dy + j() }, { opacity: opAlpha(op) * 100, filled: op.f === 1 });
+      return moved;
+    }
+    return strokeOp(op.c, op.w, decodePoints(op.p).map((pt) => ({ x: pt.x + dx + j(), y: pt.y + dy + j() })), opAlpha(op) * 100);
   });
   const drawing: Drawing = { v: 1, ops };
   return serializedLength(drawing) <= MAX_DRAWING_CHARS ? drawing : source;
@@ -435,8 +441,14 @@ export function inkByColor(drawing: Drawing): Map<number, number> {
       let len = 1;
       for (let i = 1; i < points.length; i++) len += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
       amount = len * (op.w + 1);
+    } else if (isShapeOp(op)) {
+      const [x1, y1, x2, y2] = op.p;
+      const w = Math.abs(x2 - x1);
+      const h = Math.abs(y2 - y1);
+      // Filled shapes count their area (scaled like a fill), outlines their perimeter like a stroke.
+      amount = op.k === "l" ? Math.hypot(w, h) * (op.w + 1) : op.f === 1 ? (w * h) / 40 : 2 * (w + h) * (op.w + 1);
     }
-    ink.set(op.c, (ink.get(op.c) ?? 0) + amount);
+    ink.set(op.c, (ink.get(op.c) ?? 0) + amount * opAlpha(op));
   }
   ink.delete(0);
   return ink;

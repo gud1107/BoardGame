@@ -36,16 +36,28 @@ export const BRUSH_SIZES: readonly number[] = [2, 5, 10, 18, 30];
  */
 export const MAX_DRAWING_CHARS = 48_000;
 
+/** Opacity range for `a` (percent). Omitted `a` means fully opaque, which keeps old drawings and payloads unchanged. */
+export const MIN_OPACITY = 10;
+export const MAX_OPACITY = 100;
+
+export type ShapeKind = "l" | "r" | "e";
+
 /**
  * - `s` stroke: `p` is [x0, y0, dx1, dy1, dx2, dy2, …] — the first point is
  *   absolute, the rest are deltas from the previous point (small numbers →
  *   short JSON).
  * - `f` flood fill at (x, y).
+ * - `l` / `r` / `e` straight line / rectangle / ellipse: `p` is
+ *   [x1, y1, x2, y2] (line ends, or the drag box for rect/ellipse); `f: 1`
+ *   fills the shape instead of outlining it.
  * - `x` clear the whole canvas to paper color.
+ *
+ * `a` (10–100, percent) is the "연하게/짙게" opacity; the eraser never uses it.
  */
 export type DrawOp =
-  | { readonly k: "s"; readonly c: number; readonly w: number; readonly p: readonly number[] }
-  | { readonly k: "f"; readonly c: number; readonly x: number; readonly y: number }
+  | { readonly k: "s"; readonly c: number; readonly w: number; readonly p: readonly number[]; readonly a?: number }
+  | { readonly k: "f"; readonly c: number; readonly x: number; readonly y: number; readonly a?: number }
+  | { readonly k: ShapeKind; readonly c: number; readonly w: number; readonly p: readonly number[]; readonly a?: number; readonly f?: 1 }
   | { readonly k: "x" };
 
 export interface Drawing {
@@ -96,8 +108,35 @@ export function decodePoints(encoded: readonly number[]): Point[] {
   return points;
 }
 
-export function strokeOp(color: number, sizeIndex: number, points: readonly Point[]): DrawOp {
-  return { k: "s", c: color, w: sizeIndex, p: encodePoints(points) };
+/** Only stores `a` when it isn't fully opaque. */
+function withOpacity<T extends object>(op: T, opacity: number): T & { a?: number } {
+  const a = Math.round(Math.min(MAX_OPACITY, Math.max(MIN_OPACITY, opacity)));
+  return a >= MAX_OPACITY ? op : { ...op, a };
+}
+
+export function strokeOp(color: number, sizeIndex: number, points: readonly Point[], opacity = MAX_OPACITY): DrawOp {
+  return withOpacity({ k: "s" as const, c: color, w: sizeIndex, p: encodePoints(points) }, opacity);
+}
+
+export function fillOp(color: number, at: Point, opacity = MAX_OPACITY): DrawOp {
+  const p = clampToCanvas(at);
+  return withOpacity({ k: "f" as const, c: color, x: p.x, y: p.y }, opacity);
+}
+
+export function shapeOp(kind: ShapeKind, color: number, sizeIndex: number, from: Point, to: Point, opts: { opacity?: number; filled?: boolean } = {}): DrawOp {
+  const a = clampToCanvas(from);
+  const b = clampToCanvas(to);
+  const op = { k: kind, c: color, w: sizeIndex, p: [a.x, a.y, b.x, b.y], ...(opts.filled && kind !== "l" ? { f: 1 as const } : {}) };
+  return withOpacity(op, opts.opacity ?? MAX_OPACITY);
+}
+
+export function isShapeOp(op: DrawOp): op is Extract<DrawOp, { k: ShapeKind }> {
+  return op.k === "l" || op.k === "r" || op.k === "e";
+}
+
+/** 0..1 alpha of an op (1 when `a` is omitted). */
+export function opAlpha(op: DrawOp): number {
+  return "a" in op && op.a !== undefined ? op.a / 100 : 1;
 }
 
 export function serializedLength(drawing: Drawing): number {
@@ -107,8 +146,13 @@ export function serializedLength(drawing: Drawing): number {
 /** Number of stroke points — the unit the showcase replay animates over. */
 export function pointCount(drawing: Drawing): number {
   let n = 0;
-  for (const op of drawing.ops) n += op.k === "s" ? op.p.length / 2 : 1;
+  for (const op of drawing.ops) n += opCost(op);
   return n;
+}
+
+/** Replay cost of one op in "points": a stroke costs its points, everything else draws in one step. */
+export function opCost(op: DrawOp): number {
+  return op.k === "s" ? op.p.length / 2 : 1;
 }
 
 /** True when nothing visible was drawn (only erasing/clearing or no ops). */
@@ -134,12 +178,18 @@ export function isValidDrawing(value: unknown): value is Drawing {
     const o = op as Record<string, unknown>;
     if (o.k === "x") continue;
     if (!isInt(o.c, 0, PALETTE.length - 1)) return false;
+    if (o.a !== undefined && !isInt(o.a, MIN_OPACITY, MAX_OPACITY)) return false;
     if (o.k === "f") {
       if (!isInt(o.x, 0, CANVAS_W) || !isInt(o.y, 0, CANVAS_H)) return false;
       continue;
     }
-    if (o.k !== "s" || !isInt(o.w, 0, BRUSH_SIZES.length - 1)) return false;
-    if (!Array.isArray(o.p) || o.p.length < 2 || o.p.length % 2 !== 0) return false;
+    if (!isInt(o.w, 0, BRUSH_SIZES.length - 1) || !Array.isArray(o.p)) return false;
+    if (o.k === "l" || o.k === "r" || o.k === "e") {
+      if (o.p.length !== 4 || !isInt(o.p[0], 0, CANVAS_W) || !isInt(o.p[1], 0, CANVAS_H) || !isInt(o.p[2], 0, CANVAS_W) || !isInt(o.p[3], 0, CANVAS_H)) return false;
+      if (o.f !== undefined && o.f !== 1) return false;
+      continue;
+    }
+    if (o.k !== "s" || o.p.length < 2 || o.p.length % 2 !== 0) return false;
     if (!o.p.every((n) => isInt(n, -CANVAS_W, CANVAS_W))) return false;
   }
   return serializedLength(value as Drawing) <= MAX_DRAWING_CHARS;

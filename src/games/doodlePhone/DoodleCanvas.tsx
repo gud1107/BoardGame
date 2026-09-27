@@ -7,11 +7,16 @@ import {
   CANVAS_W,
   INK_COLOR,
   MAX_DRAWING_CHARS,
+  MAX_OPACITY,
+  MIN_OPACITY,
   PALETTE,
   PAPER_COLOR,
   clampToCanvas,
+  fillOp,
   serializedLength,
+  shapeOp,
   strokeOp,
+  type ShapeKind,
   type DrawOp,
   type Drawing,
   type Point,
@@ -22,8 +27,16 @@ import { ONION_OPACITY } from "./modes";
 import { clearToPaper, prepareContext, renderDrawing, renderOp, strokePath } from "./drawingRenderer";
 
 /**
- * Drawing editor (rulebook §4): pen, eraser, paint bucket, undo/redo, clear,
- * 5 brush sizes, 20 colors, and an ink gauge for the per-drawing size cap.
+ * Drawing editor (rulebook §4): pen, straight line, rectangle, ellipse
+ * (outline or filled), paint bucket, eraser, undo/redo, clear, 5 brush sizes,
+ * 20 colors, an opacity slider ("연하게 ↔ 짙게") and an ink gauge for the
+ * per-drawing size cap.
+ *
+ * Two layers: the gesture in progress — a pen stroke or a shape being dragged
+ * — is drawn on a transparent preview canvas on top and only baked into the
+ * main canvas on release. That keeps a dragged shape from smearing the
+ * picture underneath, and lets a translucent stroke be stroked as one path
+ * (segment-by-segment painting would darken every joint).
  *
  * Mode features (modes.ts):
  * - `blind` (비밀): strokes are painted to an offscreen canvas — the real
@@ -47,7 +60,17 @@ export interface DoodleCanvasHandle {
   getDrawing(): Drawing;
 }
 
-type Tool = "pen" | "eraser" | "fill";
+type Tool = "pen" | "line" | "rect" | "ellipse" | "fill" | "eraser";
+
+const SHAPE_OF: Partial<Record<Tool, ShapeKind>> = { line: "l", rect: "r", ellipse: "e" };
+/** "연하게" preset — sketch/underdrawing strength. */
+const LIGHT_OPACITY = 25;
+/** A drag shorter than this (logical px) is treated as a stray click, not a shape. */
+const MIN_SHAPE_SIZE = 2;
+
+type Gesture =
+  | { kind: "stroke"; points: Point[]; color: number; size: number; opacity: number }
+  | { kind: "shape"; shape: ShapeKind; from: Point; to: Point; color: number; size: number; opacity: number; filled: boolean };
 
 const PIXEL_SCALE = 2;
 /** Skip pointer samples closer than this (logical px) — keeps payloads small without visible loss. */
@@ -59,9 +82,18 @@ const CHARS_PER_POINT = 8;
 
 const TOOLS: { id: Tool; icon: string; label: string }[] = [
   { id: "pen", icon: "✏️", label: "펜" },
-  { id: "eraser", icon: "🧽", label: "지우개" },
+  { id: "line", icon: "📏", label: "직선" },
+  { id: "rect", icon: "⬜", label: "네모" },
+  { id: "ellipse", icon: "⚪", label: "원" },
   { id: "fill", icon: "🪣", label: "채우기" },
+  { id: "eraser", icon: "🧽", label: "지우개" },
 ];
+
+/** Shift-drag makes a perfect square/circle. */
+function constrainSquare(from: Point, to: Point): Point {
+  const side = Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y));
+  return clampToCanvas({ x: from.x + Math.sign(to.x - from.x || 1) * side, y: from.y + Math.sign(to.y - from.y || 1) * side });
+}
 
 interface DoodleCanvasProps {
   ref?: Ref<DoodleCanvasHandle>;
@@ -80,11 +112,15 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
   const baseOpsRef = useRef<readonly DrawOp[]>(baseDrawing?.ops ?? []);
   const opsRef = useRef<DrawOp[]>([]);
   const redoRef = useRef<DrawOp[]>([]);
-  const strokeRef = useRef<{ points: Point[]; color: number; size: number } | null>(null);
+  const gestureRef = useRef<Gesture | null>(null);
+  const previewRef = useRef<HTMLCanvasElement | null>(null);
+  const previewCtxRef = useRef<CanvasRenderingContext2D | null>(null);
 
   const [tool, setTool] = useState<Tool>("pen");
   const [color, setColor] = useState(INK_COLOR);
   const [size, setSize] = useState(1);
+  const [opacity, setOpacity] = useState(MAX_OPACITY);
+  const [filledShape, setFilledShape] = useState(false);
   // Mirrors of the op refs that the toolbar renders from.
   const [history, setHistory] = useState({ undo: 0, redo: 0, ink: 0 });
 
@@ -105,6 +141,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     const visible = prepareContext(canvas, PIXEL_SCALE);
     if (visible) clearToPaper(visible);
     ctxRef.current = blind ? prepareContext(document.createElement("canvas"), PIXEL_SCALE) : visible;
+    previewCtxRef.current = previewRef.current ? prepareContext(previewRef.current, PIXEL_SCALE) : null;
     repaint();
     syncHistory();
   }, [blind, repaint, syncHistory]);
@@ -164,15 +201,33 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     return clampToCanvas({ x: ((e.clientX - rect.left) / rect.width) * CANVAS_W, y: ((e.clientY - rect.top) / rect.height) * CANVAS_H });
   }
 
-  function finishStroke() {
-    const stroke = strokeRef.current;
-    strokeRef.current = null;
-    if (!stroke) return;
-    const op = strokeOp(stroke.color, stroke.size, stroke.points);
-    if (serializedLength(currentDrawing([op])) > MAX_DRAWING_CHARS) {
-      repaint(); // drop the overflowing stroke from the screen too
-      return;
-    }
+  /** Redraws the in-progress gesture on the preview layer (nothing in blind mode — that's the point of it). */
+  function drawPreview(gesture: Gesture | null) {
+    const pctx = previewCtxRef.current;
+    if (!pctx) return;
+    pctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+    if (!gesture || blind) return;
+    if (gesture.kind === "stroke") strokePath(pctx, gesture.color, gesture.size, gesture.points, gesture.opacity / 100);
+    else renderOp(pctx, gestureToOp(gesture));
+  }
+
+  function gestureToOp(gesture: Gesture): DrawOp {
+    return gesture.kind === "stroke"
+      ? strokeOp(gesture.color, gesture.size, gesture.points, gesture.opacity)
+      : shapeOp(gesture.shape, gesture.color, gesture.size, gesture.from, gesture.to, { opacity: gesture.opacity, filled: gesture.filled });
+  }
+
+  /** Bakes the gesture into the main layer as one op (dropped if it would overflow the ink cap). */
+  function finishGesture() {
+    const gesture = gestureRef.current;
+    gestureRef.current = null;
+    drawPreview(null);
+    const ctx = ctxRef.current;
+    if (!gesture || !ctx) return;
+    if (gesture.kind === "shape" && Math.abs(gesture.to.x - gesture.from.x) < MIN_SHAPE_SIZE && Math.abs(gesture.to.y - gesture.from.y) < MIN_SHAPE_SIZE) return;
+    const op = gestureToOp(gesture);
+    if (serializedLength(currentDrawing([op])) > MAX_DRAWING_CHARS) return;
+    renderOp(ctx, op);
     commitOp(op);
   }
 
@@ -185,32 +240,38 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     sound.drawTick();
     const p = toLogical(e);
     if (tool === "fill") {
-      const op: DrawOp = { k: "f", c: color, x: p.x, y: p.y };
+      const op = fillOp(color, p, opacity);
       renderOp(ctx, op);
       commitOp(op);
       return;
     }
-    const strokeColor = tool === "eraser" ? PAPER_COLOR : color;
-    strokeRef.current = { points: [p], color: strokeColor, size };
-    strokePath(ctx, strokeColor, size, [p]);
+    const shape = SHAPE_OF[tool];
+    gestureRef.current = shape
+      ? { kind: "shape", shape, from: p, to: p, color, size, opacity, filled: filledShape }
+      : { kind: "stroke", points: [p], color: tool === "eraser" ? PAPER_COLOR : color, size, opacity: tool === "eraser" ? MAX_OPACITY : opacity };
+    drawPreview(gestureRef.current);
   }
 
   function handlePointerMove(e: ReactPointerEvent<HTMLCanvasElement>) {
-    const stroke = strokeRef.current;
-    const ctx = ctxRef.current;
-    if (!stroke || !ctx) return;
+    const gesture = gestureRef.current;
+    if (!gesture) return;
     const p = toLogical(e);
-    const last = stroke.points[stroke.points.length - 1];
+    if (gesture.kind === "shape") {
+      gesture.to = e.shiftKey && gesture.shape !== "l" ? constrainSquare(gesture.from, p) : p;
+      drawPreview(gesture);
+      return;
+    }
+    const last = gesture.points[gesture.points.length - 1];
     if (Math.hypot(p.x - last.x, p.y - last.y) < MIN_POINT_GAP) return;
-    stroke.points.push(p);
-    strokePath(ctx, stroke.color, stroke.size, [last, p]);
+    gesture.points.push(p);
+    drawPreview(gesture);
     getDoodlePhoneSound().drawTick(); // self-throttled to one tick per 120ms
-    const projected = history.ink + stroke.points.length * CHARS_PER_POINT;
+    const projected = history.ink + gesture.points.length * CHARS_PER_POINT;
     if (projected > MAX_DRAWING_CHARS) {
-      finishStroke();
-    } else if (stroke.points.length >= MAX_POINTS_PER_STROKE) {
-      finishStroke();
-      strokeRef.current = { points: [p], color: stroke.color, size: stroke.size };
+      finishGesture();
+    } else if (gesture.points.length >= MAX_POINTS_PER_STROKE) {
+      finishGesture();
+      gestureRef.current = { ...gesture, points: [p] };
     }
   }
 
@@ -225,13 +286,14 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
         ref={canvasRef}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerUp={finishStroke}
-        onPointerCancel={finishStroke}
+        onPointerUp={finishGesture}
+        onPointerCancel={finishGesture}
         className={`block aspect-[4/3] w-full touch-none rounded-xl bg-white shadow-lg ring-2 ring-fuchsia-400/40 select-none ${
           disabled ? "cursor-not-allowed opacity-80" : tool === "fill" ? "cursor-cell" : "cursor-crosshair"
         }`}
         aria-label="그림판"
       />
+      <canvas ref={previewRef} className="pointer-events-none absolute inset-0 block aspect-[4/3] w-full rounded-xl" aria-hidden />
       {onionDrawing && (
         <div className="pointer-events-none absolute inset-0 mix-blend-multiply grayscale" style={{ opacity: ONION_OPACITY }} aria-hidden>
           <DrawingView drawing={onionDrawing} label="이전 프레임 잔상" className="shadow-none ring-0" />
@@ -275,6 +337,45 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
                 <span className="rounded-full bg-current" style={{ width: Math.min(22, px * 0.75 + 2), height: Math.min(22, px * 0.75 + 2) }} />
               </button>
             ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/60 light:text-slate-500">
+            <span className="whitespace-nowrap">🌫️ 농도 {opacity}%</span>
+            <input
+              type="range"
+              min={MIN_OPACITY}
+              max={MAX_OPACITY}
+              step={5}
+              value={opacity}
+              disabled={tool === "eraser"}
+              onChange={(e) => setOpacity(Number(e.target.value))}
+              className="min-w-24 flex-1 accent-fuchsia-500 disabled:opacity-40"
+              aria-label="농도"
+            />
+            {(
+              [
+                [LIGHT_OPACITY, "연하게"],
+                [MAX_OPACITY, "짙게"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={opacity === value}
+                disabled={tool === "eraser"}
+                onClick={() => setOpacity(value)}
+                className={`rounded-md border px-2 py-0.5 transition disabled:opacity-40 ${opacity === value ? active : idle}`}
+              >
+                {label}
+              </button>
+            ))}
+            {(tool === "rect" || tool === "ellipse") && (
+              <label className="flex items-center gap-1 whitespace-nowrap text-white/80 light:text-slate-700">
+                <input type="checkbox" checked={filledShape} onChange={(e) => setFilledShape(e.target.checked)} className="accent-fuchsia-500" />
+                도형 속 채우기
+              </label>
+            )}
+            {SHAPE_OF[tool] && tool !== "line" && <span className="text-white/40 light:text-slate-400">Shift = 정사각형·정원</span>}
           </div>
 
           <div className="grid grid-cols-10 gap-1">
