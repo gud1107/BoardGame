@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import RulebookModal from "./RulebookModal";
 import { RESOURCE_ORDER, bundleTotal, type MerchantCard, type Resource, type ResourceBundle } from "./cards";
@@ -108,10 +108,26 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
   // comment) refs so a flying-resource animation can read "where the
   // acquired card used to sit" even after the market has already shifted.
   const merchantSlotRefs = useRef(new Map<number, HTMLElement>());
+  // The desktop hand fan sizes each card to exactly a market card's face
+  // width (`handCardWidth`), so a bought card keeps its size in hand. The
+  // market grid is responsive, so this is measured live off slot 0 rather
+  // than hardcoded; 14px = the market button's p-1.5 padding + 1px border
+  // on each side (the slot div itself is the button's full width).
+  const [handCardWidth, setHandCardWidth] = useState<number | null>(null);
+  const slotObserver = useRef<ResizeObserver | null>(null);
+  useEffect(() => () => slotObserver.current?.disconnect(), []);
   function setMerchantSlotRef(index: number) {
     return (el: HTMLDivElement | null) => {
       if (el) merchantSlotRefs.current.set(index, el);
       else merchantSlotRefs.current.delete(index);
+      if (index === 0 && el && typeof ResizeObserver !== "undefined") {
+        slotObserver.current?.disconnect();
+        slotObserver.current = new ResizeObserver(([entry]) => {
+          const w = Math.round(entry.contentRect.width) - 14;
+          if (w > 0) setHandCardWidth((prev) => (prev === w ? prev : w));
+        });
+        slotObserver.current.observe(el);
+      }
     };
   }
   const cartRef = useRef<HTMLDivElement | null>(null);
@@ -353,7 +369,7 @@ export default function CenturyBoard({ state, viewerSeat, names, connectedSeats,
           wells, gold/silver/point totals, my fanned-out hand, and my
           discard pile (recovered by "휴식"). */}
       <MyCaravan me={me} forwardedRef={cartRef} />
-      <MyHandCards hand={me.hand} playedCards={me.playedCards} isMyTurn={isMyTurn} highlightedCardId={highlightedCardId} onPlayCard={playCard} onRest={() => onAction({ type: "rest", seat: viewerSeat })} />
+      <MyHandCards hand={me.hand} playedCards={me.playedCards} isMyTurn={isMyTurn} highlightedCardId={highlightedCardId} onPlayCard={playCard} onRest={() => onAction({ type: "rest", seat: viewerSeat })} cardWidth={handCardWidth} />
 
       <OpponentsSummary players={otherPlayers} names={names} activeSeat={state.activeSeat} connectedSeats={connectedSeats} setRef={setPlayerSummaryRef} />
 

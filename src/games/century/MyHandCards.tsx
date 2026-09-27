@@ -17,6 +17,7 @@ export function MyHandCards({
   onPlayCard,
   onRest,
   compact = false,
+  cardWidth,
 }: {
   hand: MerchantCard[];
   playedCards: MerchantCard[];
@@ -25,6 +26,8 @@ export function MyHandCards({
   onPlayCard: (card: MerchantCard) => void;
   onRest: () => void;
   compact?: boolean;
+  /** Desktop fan only: a market card face's measured width, so hand cards match it (see CenturyBoard). */
+  cardWidth?: number | null;
 }) {
   return (
     <div className={compact ? "rounded-xl border border-black/30 bg-black/20 p-1.5 light:border-slate-200 light:bg-white/85 light:shadow-sm" : "mt-3 rounded-xl border border-black/30 bg-black/20 p-2 sm:p-2.5 light:border-slate-200 light:bg-white/85 light:shadow-sm"}>
@@ -71,7 +74,9 @@ export function MyHandCards({
                     : "cursor-not-allowed border-white/10 bg-black/20 opacity-70 light:border-slate-200 light:bg-slate-100"
                 } ${card.id === highlightedCardId ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-[#1c1208] light:ring-offset-white" : ""}`}
               >
-                <MerchantCardFace card={card} art="strip" />
+                <div style={{ width: cardWidth ?? 88 }}>
+                  <MerchantCardFace card={card} art="strip" />
+                </div>
               </button>
             );
           })}

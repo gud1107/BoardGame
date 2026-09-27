@@ -12,7 +12,7 @@ import { canAcquireMerchant, MERCHANT_MARKET_SIZE, type CenturyState, type Playe
  * small corner watermark so the zero-scroll mobile layout doesn't grow.
  */
 export function MerchantCardFace({ card, compact = false, art }: { card: MerchantCard; compact?: boolean; art?: "strip" | "hero" }) {
-  const frameClass = `relative flex w-full flex-col items-center overflow-hidden rounded-md border border-[#7a5a2e] ${compact ? "gap-0.5 px-1 py-1" : "gap-1 px-1.5 py-2"} ${art ? "min-w-[4.5rem]" : ""}`;
+  const frameClass = `relative flex w-full flex-col items-center overflow-hidden rounded-md border border-[#7a5a2e] ${compact ? "gap-0.5 px-1 py-1" : "gap-1 px-1.5 py-2"}`;
   const decor = art ? <CenturyCardIllustration scene={sceneForMerchant(card)} size={art} /> : <CardWatermark kind="jug" />;
   const labelClass = `relative z-10 font-bold uppercase tracking-widest ${compact ? "text-[6px]" : "text-[8px]"}`;
   const cubeSize = compact ? "h-2.5 w-2.5" : "h-4 w-4";
