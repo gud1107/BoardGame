@@ -39,6 +39,26 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## ✏️ 그림 전화기: 낙서 릴레이 (갈틱폰 스타일) — 4~14인 동시 진행 신규 게임 — 2026-09-27 신규 (로컬 전용, 커밋/푸시 안 함)
+
+**요청**: "갈틱폰 게임을 만들어주세요" + `boardGameRule/갈틱폰/갈틱폰.md`(룰북·시스템 명세가 중복된 두 부분 → **하나로 합쳐 재작성**) + socket.io 서버 기준 참고 코드(`GarticGameRoom` 등) — "참고만 하여 유지보수 편하게".
+**이름**: 상표 방침상 표시명 "그림 전화기: 낙서 릴레이", 설명/태그에만 "갈틱폰". id `doodle-phone`, 폴더 `src/games/doodlePhone/`. 같은 메커니즘의 미구현 카탈로그 항목 `telestrations`는 삭제(대체).
+
+### 참고 코드와 다르게 한 핵심 설계
+- **서버가 없으므로 `GarticGameRoom` 클래스 대신 순수 리듀서**. 동시 제출 게임이라 Realtime 메시지 도착 순서가 기기마다 다를 수 있어서, 엔진을 **액션 적용 순서와 무관하게 같은 상태**가 나오도록 설계(`engine.ts` 상단 주석): 제출은 "현재 턴"이 아니라 "빈 칸"만 검사, 현재 턴/페이즈는 저장하지 않고 채워진 칸에서 파생, 방장의 `TIMEOUT`은 못 받은 좌석 칸을 fallback으로 **덮어쓰고 잠금**. 테스트가 무작위 순서 25회로 검증.
+- **그림은 PNG가 아니라 벡터 획 기록**(`drawing.ts`, 480×360 논리 좌표, 델타 인코딩, 1장 최대 48KB = 잉크 게이지). Realtime 용량 한도 대응 + 결과 발표 때 그리는 과정 재생.
+- **재접속 `state-sync`는 60KB 조각 전송**(`syncChunks.ts`, 이벤트 `state-sync-chunk`) + 응답자 1명(방장, 없으면 최저 좌석) + 받은 스냅샷은 `mergeStates`로 병합.
+- **타이머는 엔진 밖**: 각 기기가 턴이 열린 걸 본 시각부터 로컬 카운트다운, 0초에 그리던 그림/유효한 문장 자동 제출, 방장만 +4초 유예 후 `TIMEOUT`. 2턴 연속 타임아웃 좌석은 idle 봇 대체 투표.
+- **봇**(`bot.ts`): 키워드 템플릿 낙서 21종(고양이·집·피자…) + 그림의 잉크 색 분포만 보고 추측(정보 공정성). `nextBotActor`로 한 좌석씩 `useBotAutoplay`. 결과 발표 중 봇도 리액션.
+- **순위**: 원작엔 승패 없음 → 리액션(😂🤯👏❤️🤔, 한 장당 1인 3회, 자기 작품 불가) 받은 수로 "웃음왕". `finished` 도달 시 `onComplete` 자동 1회.
+
+### 파일
+`engine.ts`(규칙·라우팅·병합) · `drawing.ts`(벡터 모델/검증) · `drawingRenderer.ts`(캔버스 재생·flood fill·PNG) · `bot.ts` · `prompts.ts` · `syncChunks.ts` · `sounds.ts`(공용 합성 SFX 재사용) · `DoodleCanvas.tsx`(펜/지우개/채우기/↶↷/전체지우기/굵기5/20색) · `DrawingView.tsx` · `TurnStage.tsx` · `ShowcaseStage.tsx`(방장 넘기기·자동, 플로팅 리액션) · `ResultsStage.tsx`(웃음왕·앨범 다시보기·PNG 저장) · `DoodlePhoneBoard.tsx` · `DoodlePhoneGame.tsx`(CityChase 방 흐름 복제) · `RulebookModal.tsx` · `DoodlePhone.test.ts`(24개).
+그 외: `registry.ts`, `playableGames.tsx`, `[gameId]/page.tsx`(max-w-3xl), `roomRulebookSummaries.ts`, `gameDifficulty.ts`(★1).
+
+### 검증
+vitest 24/24(+registry), tsc 0 에러(`.next/dev/types`의 다른 세션 `tmp-war-art` 잔여물 제외), eslint 0. Playwright로 나+봇3 4인 빠름 모드 전체 흐름(제시어→그림→추측→그림→발표→웃음왕) 통과. **실제 여러 기기 동시 접속·재접속 조각 동기화는 미검증.**
+
 ## 🦈 배고픈 상어: 딥 에볼루션 (Hungry Shark-style) — 1인용 실시간 해양 액션 신규 게임 — 2026-09-26 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: "Hungry Shark Evolution 게임 만들어주세요" + Unity(C#) 기준 상용 수준 기술 명세서(체력 감쇠 공식, 골드 러시/메가 골드 러시, 티어 포식 테이블, Rigidbody 물리, 입 방향 내적 판정, Boids, 기뢰/해파리 수식, 오브젝트 풀링·존 컬링, 상점/업그레이드/세이브) 붙여넣기 → "추가할 부분은 추가하여" 구현, 커밋·푸시·배포, HANDOFF 문서화 + 룰북.

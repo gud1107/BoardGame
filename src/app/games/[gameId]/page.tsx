@@ -302,9 +302,12 @@ export default function GamePlayPage() {
   // 가운데땅에서의 대결(Duel for Middle-earth 재구축): 지도 | 카드 피라미드 |
   // 원정 트랙·랜드마크 3열 + 좌측 게임 기록 패널(w-60)까지 붙어 96rem.
   // 2026-09-26 배고픈 상어: 실시간 캔버스 액션이라 화면이 넓을수록 시야가 넓어져 6xl.
+  // 2026-09-27 그림 전화기: 그림판(4:3)이 2xl 폭에선 너무 작아 3xl.
   const pageMaxWidth =
     game.id === "hungry-shark"
       ? "max-w-6xl"
+      : game.id === "doodle-phone"
+      ? "max-w-3xl"
       : game.id === "lotr-duel"
       ? "max-w-[96rem]"
       : game.id === "splendor-duel"
