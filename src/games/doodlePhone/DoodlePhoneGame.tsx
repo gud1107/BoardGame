@@ -49,7 +49,8 @@ import {
   type SeatIndex,
 } from "./engine";
 import LobbyOptionsPanel from "./LobbyOptionsPanel";
-import { DEFAULT_OPTIONS, MODES, VOTE_WINDOW_MS, sanitizeOptions, type GameOptions } from "./modes";
+import { DEFAULT_OPTIONS, MODES, VOTE_WINDOW_MS, sanitizeOptions, themeApplies, type GameOptions } from "./modes";
+import { THEME_INFO } from "./themes";
 import { chooseBotAction, nextBotActor } from "./bot";
 import DoodlePhoneBoard from "./DoodlePhoneBoard";
 import DoodleSoundHud from "./DoodleSoundHud";
@@ -884,7 +885,7 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
               >
                 {filled < MIN_PLAYERS
                   ? `최소 ${MIN_PLAYERS}명이 필요해요 (지금 ${filled}명 · AI 봇으로 채울 수 있어요)`
-                  : `🚀 [${MODES[options.mode].title} 모드] 게임 시작 (${filled}명)`}
+                  : `🚀 [${MODES[options.mode].title} 모드${themeApplies(options) ? ` × ${THEME_INFO[options.theme].name}` : ""}] 게임 시작 (${filled}명)`}
               </button>
             ) : (
               <p className="text-xs text-white/50 light:text-slate-500">방장이 게임 모드를 고르고 시작하길 기다리는 중이에요…</p>

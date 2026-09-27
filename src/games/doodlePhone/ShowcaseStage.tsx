@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Flipbook from "./Flipbook";
-import { MODES, VOTE_WINDOW_MS, icebreakerQuestion } from "./modes";
+import { MODES, VOTE_WINDOW_MS, icebreakerQuestion, themeApplies } from "./modes";
+import { THEME_INFO } from "./themes";
 import PageCard, { pageRoleLabel } from "./PageCard";
 import { useNow } from "./useNow";
 import {
@@ -79,6 +80,7 @@ export default function ShowcaseStage({
           🎬 결과 발표{" "}
           <span className="align-middle text-[11px] font-semibold text-violet-200 light:text-violet-700">
             {MODES[mode].icon} {MODES[mode].title}
+            {themeApplies(state.options) && ` × ${THEME_INFO[state.options.theme].icon} ${THEME_INFO[state.options.theme].name}`}
           </span>
         </h2>
         <span className="text-xs text-white/50 light:text-slate-500">

@@ -22,7 +22,8 @@ import {
   type Page,
   type SeatIndex,
 } from "./engine";
-import { KNOCK_OFF_PEEK_MS, MODES, drawingReferenceFor, icebreakerQuestion, inspirationWord, type DrawingReference } from "./modes";
+import { KNOCK_OFF_PEEK_MS, MODES, drawingReferenceFor, icebreakerQuestion, inspirationWord, openingChoices, themeApplies, type DrawingReference } from "./modes";
+import { THEME_INFO } from "./themes";
 import { FALLBACK_PROMPTS } from "./prompts";
 import { useNow } from "./useNow";
 
@@ -114,6 +115,11 @@ function TurnHeader({ title, state, turn, remainingMs, durationMs }: { title: st
           <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-semibold text-violet-100 light:bg-violet-100 light:text-violet-700">
             {mode.icon} {mode.title}
           </span>
+          {themeApplies(state.options) && (
+            <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-[10px] font-semibold text-amber-100 light:bg-amber-100 light:text-amber-800">
+              {THEME_INFO[state.options.theme].icon} {THEME_INFO[state.options.theme].name}
+            </span>
+          )}
         </div>
         <span
           className={`shrink-0 rounded-full px-3 py-1 font-mono text-sm font-bold tabular-nums ${
@@ -207,6 +213,19 @@ function TurnComposer({
   return (
     <div className="flex flex-col gap-3">
       <PromptPanel state={state} seat={seat} turn={turn} prompt={prompt} reference={reference} turnStartedAt={turnStartedAt} />
+
+      {kind === "text" && turn === 1 && (
+        <ThemeChoiceChips
+          choices={openingChoices(state.options, state.seed, albumFor(state.playerCount, seat, turn))}
+          themeName={THEME_INFO[state.options.theme].name}
+          selected={draft}
+          disabled={sent}
+          onPick={(choice) => {
+            draftRef.current = choice;
+            setDraft(choice);
+          }}
+        />
+      )}
 
       {kind === "text" ? (
         <div className="flex flex-col gap-1.5">
@@ -303,9 +322,17 @@ function PromptPanel({
   }
 
   if (reference === "free") {
+    const ideas = openingChoices(state.options, state.seed, album);
     return (
       <p className={fuchsiaHint}>
-        첫 장은 자유롭게 그려요. 아이디어가 필요하면 — <b>“{inspirationWord(state.seed, album)}”</b>
+        첫 장은 자유롭게 그려요. 아이디어가 필요하면 —{" "}
+        {ideas.length > 0 ? (
+          <>
+            {THEME_INFO[state.options.theme].icon} {ideas.map((idea) => `“${idea}”`).join(" · ")}
+          </>
+        ) : (
+          <b>“{inspirationWord(state.seed, album)}”</b>
+        )}
         {state.options.mode === "ANIMATION" && " (다음 사람들이 이 그림을 한 프레임씩 움직여요)"}
         {state.options.mode === "COMPLEMENT" && " (다음 사람들이 이 그림 위에 계속 덧그려요)"}
       </p>
@@ -341,6 +368,52 @@ function PromptPanel({
     default:
       return <ReferenceDrawing caption="앞사람이 그린 그림이에요. 무엇을 그렸을까요?" drawing={prompt.drawing} />;
   }
+}
+
+/**
+ * Theme packs (themes.ts): turn-1 keyword suggestions. One click fills the
+ * input; the text stays editable, and typing something else is fine too.
+ */
+function ThemeChoiceChips({
+  choices,
+  themeName,
+  selected,
+  disabled,
+  onPick,
+}: {
+  choices: readonly string[];
+  themeName: string;
+  selected: string;
+  disabled: boolean;
+  onPick: (choice: string) => void;
+}) {
+  if (choices.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-amber-300/30 bg-amber-400/10 p-3 light:border-amber-200 light:bg-amber-50">
+      <span className="text-xs font-bold text-amber-100 light:text-amber-800">🎲 추천 {themeName} 키워드 — 눌러서 고르거나 직접 써도 돼요</span>
+      <div className="flex flex-wrap gap-1.5">
+        {choices.map((choice) => {
+          const active = selected === choice;
+          return (
+            <button
+              key={choice}
+              type="button"
+              disabled={disabled}
+              aria-pressed={active}
+              onClick={() => onPick(choice)}
+              className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                active
+                  ? "bg-amber-300 font-bold text-slate-900"
+                  : "bg-white/10 text-white/85 hover:bg-white/20 light:bg-white light:text-slate-700 light:ring-1 light:ring-amber-200"
+              }`}
+            >
+              {choice}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function ReferenceDrawing({ caption, drawing }: { caption: string; drawing: Drawing }) {

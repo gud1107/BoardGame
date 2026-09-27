@@ -17,6 +17,8 @@
  *   onion → redraw it nudged sideways so the flipbook moves; base → keep the
  *   picture and add a small doodle of its own.
  * - Icebreaker: a canned answer per question.
+ * - Theme packs: on turn 1 the bot picks one of the album's offered keywords
+ *   (and doodles it, if it knows a template for any word in it).
  *
  * Lower levels wobble more and more often fall back to the random
  * candidate (`pickByLevel`).
@@ -36,7 +38,7 @@ import {
   type EngineAction,
   type SeatIndex,
 } from "./engine";
-import { ICEBREAKER_QUESTIONS, drawingReferenceFor, icebreakerQuestion, inspirationWord } from "./modes";
+import { ICEBREAKER_QUESTIONS, drawingReferenceFor, icebreakerQuestion, inspirationWord, openingChoices } from "./modes";
 import { BOT_OPENING_PROMPTS, FALLBACK_PROMPTS } from "./prompts";
 
 // ---------------------------------------------------------------------------
@@ -389,9 +391,9 @@ export function addToDrawing(base: Drawing, rng: () => number, level: BotLevel):
   return serializedLength(drawing) <= MAX_DRAWING_CHARS ? drawing : base;
 }
 
-function templateNamed(word: string): Template[] {
+function templateNamed(word: string, rng: () => number): Template[] {
   const found = templatesIn(word);
-  return found.length > 0 ? found : [TEMPLATES[0]];
+  return found.length > 0 ? found : [TEMPLATES[Math.floor(rng() * TEMPLATES.length)]];
 }
 
 // ---------------------------------------------------------------------------
@@ -508,8 +510,13 @@ function candidates(state: DoodlePhoneState, seat: SeatIndex, level: BotLevel, r
     const text = (t: string, score: number): Candidate => ({ action: { type: "SUBMIT_TEXT", seat, turn, text: t }, score });
     const random = text(randomPhrase(rng), 0);
     if (prompt === null) {
+      const themed = openingChoices(state.options, state.seed, album);
       const opening =
-        state.options.mode === "ICEBREAKER" ? icebreakerAnswer(icebreakerQuestion(state.seed, album), rng) : BOT_OPENING_PROMPTS[Math.floor(rng() * BOT_OPENING_PROMPTS.length)];
+        state.options.mode === "ICEBREAKER"
+          ? icebreakerAnswer(icebreakerQuestion(state.seed, album), rng)
+          : themed.length > 0
+            ? themed[Math.floor(rng() * themed.length)]
+            : BOT_OPENING_PROMPTS[Math.floor(rng() * BOT_OPENING_PROMPTS.length)];
       return [random, text(opening, 1)];
     }
     const guess = prompt.kind === "drawing" ? guessFromDrawing(prompt.drawing, rng) : prompt.text;
@@ -520,8 +527,11 @@ function candidates(state: DoodlePhoneState, seat: SeatIndex, level: BotLevel, r
   const scribble = drawing(drawTemplates([TEMPLATES[Math.floor(rng() * TEMPLATES.length)]], rng, level), 0);
   const reference = drawingReferenceFor(state.options.mode, prompt?.kind ?? null);
   switch (reference) {
-    case "free":
-      return [scribble, drawing(drawTemplates(templateNamed(inspirationWord(state.seed, album)), rng, level), 1)];
+    case "free": {
+      const ideas = openingChoices(state.options, state.seed, album);
+      const idea = ideas.length > 0 ? ideas[Math.floor(rng() * ideas.length)] : inspirationWord(state.seed, album);
+      return [scribble, drawing(drawTemplates(templateNamed(idea, rng), rng, level), 1)];
+    }
     case "prompt": {
       const { understood, misread } = botDrawingFor(prompt?.kind === "text" ? prompt.text : "", rng, level);
       return [drawing(misread, 0), drawing(understood, 1)];

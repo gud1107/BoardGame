@@ -11,6 +11,7 @@ import {
   currentTurn,
   fallbackPrompt,
   gamePhase,
+  isValidText,
   mergeStates,
   pageAt,
   pendingSeats,
@@ -24,7 +25,8 @@ import {
 import { FALLBACK_PROMPTS } from "./prompts";
 import { ChunkAssembler, splitIntoChunks } from "./syncChunks";
 import { CHORDS, LOOP_STEPS, STEPS_PER_BAR, lofiEventsAt, midiToHz } from "./lofiPattern";
-import { GAME_MODES, ICEBREAKER_QUESTIONS, icebreakerQuestion, sanitizeOptions, turnKindFor, turnSecondsFor, type GameMode } from "./modes";
+import { GAME_MODES, ICEBREAKER_QUESTIONS, icebreakerQuestion, openingChoices, sanitizeOptions, turnKindFor, turnSecondsFor, type GameMode } from "./modes";
+import { THEME_BANK, themeChoices } from "./themes";
 
 const doodle = (seat: number): Drawing => ({ v: 1, ops: [strokeOp(1, 1, [{ x: 10 + seat, y: 10 }, { x: 100, y: 120 }])] });
 
@@ -338,7 +340,7 @@ describe("game modes (modes.ts, rulebook §9)", () => {
   });
 
   it("clamps untrusted host options", () => {
-    expect(sanitizeOptions({ mode: "HACK", timeMultiplier: 9, ghostFrames: "yes" })).toEqual({ mode: "NORMAL", timeMultiplier: 1.5, ghostFrames: true, allowUndo: true });
+    expect(sanitizeOptions({ mode: "HACK", timeMultiplier: 9, ghostFrames: "yes", theme: "NSFW" })).toEqual({ mode: "NORMAL", timeMultiplier: 1.5, ghostFrames: true, allowUndo: true, theme: "FREE" });
     expect(sanitizeOptions(null).timeMultiplier).toBe(1);
   });
 
@@ -409,5 +411,51 @@ describe("score mode voting", () => {
     expect(reacted.reactions["0:1"]).toEqual({ "👏": 1 });
     const voted = applyAction(early, { type: "VOTE", seat: fan, album: 0, turn: 1 });
     expect(voted.votes["0:" + fan]).toBe(1);
+  });
+});
+
+describe("theme packs (themes.ts, rulebook §10)", () => {
+  const packs = Object.keys(THEME_BANK) as (keyof typeof THEME_BANK)[];
+
+  it("offers 3 distinct in-pack keywords per album, the same on every device", () => {
+    for (const theme of packs) {
+      const a = themeChoices(theme, 99, 2);
+      expect(a).toEqual(themeChoices(theme, 99, 2));
+      expect(new Set(a).size).toBe(3);
+      expect(a.every((w) => THEME_BANK[theme].includes(w))).toBe(true);
+    }
+    expect(themeChoices("FREE", 99, 2)).toEqual([]);
+  });
+
+  it("every keyword is a valid prompt (2~35 chars)", () => {
+    for (const theme of packs) for (const word of THEME_BANK[theme]) expect(isValidText(word), word).toBe(true);
+  });
+
+  it("is ignored in icebreaker mode, where the opening is an answer", () => {
+    expect(openingChoices(sanitizeOptions({ mode: "ICEBREAKER", theme: "MOVIE" }), 1, 0)).toEqual([]);
+    expect(openingChoices(sanitizeOptions({ mode: "KNOCK_OFF", theme: "MOVIE" }), 1, 0)).toHaveLength(3);
+  });
+
+  it("keeps a timed-out themed opening on theme", () => {
+    let s = startGame(4, 21, { theme: "PROVERB" });
+    s = applyAction(s, { type: "TIMEOUT", turn: 1, seats: [0, 1, 2, 3] });
+    const page = pageAt(s, 1, 1);
+    expect(page?.kind === "text" && THEME_BANK.PROVERB.includes(page.text)).toBe(true);
+  });
+
+  it("bots open with one of the offered keywords", () => {
+    const s = startGame(4, 22, { theme: "ANIME" });
+    const action = chooseBotAction(s, 0, 10, seededRng(5));
+    expect(action?.type === "SUBMIT_TEXT" && themeChoices("ANIME", 22, 0).includes(action.text)).toBe(true);
+  });
+
+  it("any mode × theme combination plays through with bots", () => {
+    for (const mode of GAME_MODES) {
+      let s = startGame(4, 31, { mode, theme: "MOVIE" });
+      const bots = new Set([0, 1, 2, 3]);
+      const rng = seededRng(9);
+      for (let guard = 0; guard < 100 && gamePhase(s) === "turns"; guard++) s = applyAction(s, chooseBotAction(s, nextBotActor(s, bots)!, 6, rng)!);
+      expect(gamePhase(s), mode).toBe("showcase");
+    }
   });
 });

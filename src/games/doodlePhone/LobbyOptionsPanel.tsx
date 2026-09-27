@@ -1,9 +1,11 @@
 "use client";
 
 import { GAME_MODES, MODES, TIME_MULTIPLIER_MAX, TIME_MULTIPLIER_MIN, TIME_MULTIPLIER_STEP, type GameOptions } from "./modes";
+import { THEME_CATEGORIES, THEME_CHOICE_COUNT, THEME_INFO } from "./themes";
 
 /**
- * Waiting-room "게임 모드 & 룰 설정" (rulebook §9). The host edits, everyone
+ * Waiting-room "게임 모드 & 룰 설정" (rulebook §9) plus the independent theme
+ * pack axis (§10) — any mode can be combined with any theme. The host edits, everyone
  * else sees the same options read-only — the room adapter syncs them with a
  * `room-options` broadcast and bakes them into `game-start`.
  */
@@ -50,6 +52,42 @@ export default function LobbyOptionsPanel({
             </button>
           );
         })}
+      </div>
+
+      <div className="flex flex-col gap-2 rounded-xl border border-amber-300/20 bg-amber-400/[0.06] p-3 light:border-amber-200 light:bg-amber-50/60">
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="text-sm font-bold text-white light:text-slate-900">🎯 테마 팩</h3>
+          <span className="text-[10px] text-white/50 light:text-slate-500">
+            {options.theme === "FREE" ? "자유 작성" : `1턴에 테마 키워드 ${THEME_CHOICE_COUNT}개를 추천해요`}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+          {THEME_CATEGORIES.map((theme) => {
+            const info = THEME_INFO[theme];
+            const active = options.theme === theme;
+            return (
+              <button
+                key={theme}
+                type="button"
+                disabled={!isHost}
+                aria-pressed={active}
+                title={info.description}
+                onClick={() => onChange({ theme })}
+                className={`flex flex-col items-center gap-0.5 rounded-lg border px-1.5 py-2 transition disabled:cursor-default ${
+                  active
+                    ? "border-amber-300 bg-amber-400/20 text-amber-100 light:bg-amber-100 light:text-amber-900"
+                    : "border-white/10 bg-black/20 text-white/70 enabled:hover:border-white/30 light:border-slate-200 light:bg-white light:text-slate-600"
+                } ${!isHost && !active ? "opacity-50" : ""}`}
+              >
+                <span className="text-lg">{info.icon}</span>
+                <span className="text-[11px] font-bold">{info.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        {options.theme !== "FREE" && options.mode === "ICEBREAKER" && (
+          <p className="text-[10px] text-amber-200/80 light:text-amber-700">🧊 아이스브레이커 모드는 질문의 답이 제시어라 테마가 적용되지 않아요.</p>
+        )}
       </div>
 
       <div className="flex flex-col gap-2.5 rounded-xl border border-white/10 bg-black/20 p-3 light:border-slate-200 light:bg-slate-50">

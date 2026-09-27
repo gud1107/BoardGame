@@ -33,7 +33,7 @@
 
 import { seededRng } from "@/lib/rng";
 import { EMPTY_DRAWING, isValidDrawing, type Drawing } from "./drawing";
-import { DEFAULT_OPTIONS, sanitizeOptions, turnKindFor, turnSecondsFor, type GameOptions, type PageKind } from "./modes";
+import { DEFAULT_OPTIONS, openingChoices, sanitizeOptions, turnKindFor, turnSecondsFor, type GameOptions, type PageKind } from "./modes";
 import { FALLBACK_PROMPTS } from "./prompts";
 
 export type { GameMode, GameOptions, PageKind } from "./modes";
@@ -242,8 +242,10 @@ export function fallbackPrompt(seed: number, album: number, turn: number): strin
 
 function fallbackPage(state: DoodlePhoneState, seat: SeatIndex, turn: number): Page {
   const album = albumFor(state.playerCount, seat, turn);
+  // A themed opening falls back to the first of that album's offered choices, so it stays on theme.
+  const themed = turn === 1 ? openingChoices(state.options, state.seed, album)[0] : undefined;
   return turnKind(state, turn) === "text"
-    ? { kind: "text", author: seat, auto: true, text: fallbackPrompt(state.seed, album, turn) }
+    ? { kind: "text", author: seat, auto: true, text: themed ?? fallbackPrompt(state.seed, album, turn) }
     : { kind: "drawing", author: seat, auto: true, drawing: EMPTY_DRAWING };
 }
 

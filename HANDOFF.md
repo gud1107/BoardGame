@@ -76,6 +76,14 @@ vitest 24/24(+registry), tsc 0 에러(`.next/dev/types`의 다른 세션 `tmp-wa
 - 명세와 다른 점은 룰북 md §9 표 아래에 정리(요약표 숫자 우선, GIF→플립북, scoreVotingEnabled 생략 등).
 - 검증: vitest 36/36(9개 모드 전부 봇 풀게임, 시간 공식, 옵션 검증, 투표 규칙, 모드별 봇 그림), tsc/eslint 0. **다른 세션의 dev 서버(3217)가 같은 폴더를 점유 + 워커 크래시 상태라** 격리 워크트리(`next dev --webpack`)에서 Playwright로 확인: 대기실 9모드 패널, 애니메이션 2턴 잔상, 점수 모드 투표→득표 순위까지 통과.
 
+### 🎯 후속 (2026-09-27): 테마 팩 (모드 × 테마 2축)
+**요청**: 명세서 붙여넣기 — 게임 모드와 독립된 테마 카테고리(FREE/ANIME/PROVERB/MOVIE/CELEBRITY), 1턴에 테마 키워드 3개 추천, 대기실 테마 선택기. "중복이거나 이미 구현돼 있으면 적용 안 해도 됨".
+- **`themes.ts`(신규)**: 테마 정보·키워드 뱅크(명세 그대로 4×10개) + `themeChoices(theme, seed, album)` — 명세의 `sort(() => 0.5 - Math.random())` 대신 시드+앨범 결정론(락스텝: 모든 기기가 같은 3개).
+- `GameOptions.theme` 추가(`sanitizeOptions` 검증, 기존 `room-options`/`game-start` 동기화 그대로 재사용 — 새 이벤트 없음). `themeApplies`/`openingChoices`(modes.ts): 아이스브레이커 모드는 테마 무시.
+- **이미 있어서 합친 것**: 전부 그림 모드의 1턴 "영감 단어" 자리를 테마 추천 3개로 대체. 명세의 `scoreVotingEnabled`는 여전히 생략(점수 모드가 곧 투표).
+- UI: 대기실 `LobbyOptionsPanel`에 🎯 테마 팩 5칸, 시작 버튼 "[모드 × 테마]", 턴 헤더·발표·결과에 테마 배지, 1턴 글 입력 위 `ThemeChoiceChips`(누르면 입력창 채움, 수정 가능). 1턴 시간초과 fallback은 그 앨범 추천 키워드 첫 번째. 봇은 추천 키워드 중 하나로 시작.
+- 검증: vitest 42/42(결정론·뱅크 전 항목 2~35자·아이스브레이커 무시·fallback 테마 유지·봇 선택·9모드×테마 풀게임), tsc/eslint 0. 격리 워크트리(`next dev --webpack`) Playwright: 속담 테마 → 시작 버튼 라벨, 1턴 칩 3개, 클릭 시 입력창 채워짐 확인.
+
 ## 🦈 배고픈 상어: 딥 에볼루션 (Hungry Shark-style) — 1인용 실시간 해양 액션 신규 게임 — 2026-09-26 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: "Hungry Shark Evolution 게임 만들어주세요" + Unity(C#) 기준 상용 수준 기술 명세서(체력 감쇠 공식, 골드 러시/메가 골드 러시, 티어 포식 테이블, Rigidbody 물리, 입 방향 내적 판정, Boids, 기뢰/해파리 수식, 오브젝트 풀링·존 컬링, 상점/업그레이드/세이브) 붙여넣기 → "추가할 부분은 추가하여" 구현, 커밋·푸시·배포, HANDOFF 문서화 + 룰북.

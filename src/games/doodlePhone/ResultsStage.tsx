@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { drawingToPngDataUrl } from "./drawingRenderer";
 import Flipbook from "./Flipbook";
-import { MODES, icebreakerQuestion } from "./modes";
+import { MODES, icebreakerQuestion, themeApplies } from "./modes";
+import { THEME_INFO } from "./themes";
 import PageCard from "./PageCard";
 import { REACTION_EMOJIS, albumDrawings, computeRankings, pageAt, pageKey, votesFor, type DoodlePhoneState, type Page, type SeatIndex } from "./engine";
 
@@ -38,6 +39,7 @@ export default function ResultsStage({
         </h2>
         <p className="mt-1 text-center text-xs text-white/50 light:text-slate-500">
           {MODES[mode].icon} {MODES[mode].title} 모드
+          {themeApplies(state.options) && ` × ${THEME_INFO[state.options.theme].icon} ${THEME_INFO[state.options.theme].name} 테마`}
         </p>
         <ol className="mt-3 flex flex-col gap-1.5">
           {rankings.map(({ seat, rank, score }) => (

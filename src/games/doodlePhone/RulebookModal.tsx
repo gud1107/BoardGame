@@ -3,6 +3,7 @@
 import Overlay from "@/components/Overlay";
 import { MAX_PLAYERS, MIN_PLAYERS, TEXT_MAX_CHARS, TEXT_MIN_CHARS } from "./engine";
 import { GAME_MODES, MODES, TIME_MULTIPLIER_MAX, TIME_MULTIPLIER_MIN } from "./modes";
+import { THEME_CATEGORIES, THEME_CHOICE_COUNT, THEME_INFO } from "./themes";
 
 const box = "rounded-xl border border-white/10 bg-white/5 p-3 light:border-slate-200 light:bg-white light:shadow-sm";
 const h3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
@@ -44,6 +45,24 @@ export default function DoodlePhoneRulebookModal({ onClose }: { onClose: () => v
           <p className="mt-2 text-xs text-white/50 light:text-slate-500">
             방장은 제한 시간 배율({TIME_MULTIPLIER_MIN}×~{TIME_MULTIPLIER_MAX}×), 애니메이션 잔상 표시, 되돌리기 허용 여부도 정할 수 있어요. 모두 제출하면 시간이
             남아도 바로 다음 턴으로 넘어가요. 0초가 되면 그리던 그림은 그대로 제출되고, 비어 있는 문장은 랜덤 제시어로 자동 채워져요(⏰ 자동 표시).
+          </p>
+        </section>
+
+        <section>
+          <h3 className={h3}>테마 팩 (모드와 자유롭게 조합)</h3>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {THEME_CATEGORIES.map((theme) => (
+              <div key={theme} className={box}>
+                <b>
+                  {THEME_INFO[theme].icon} {THEME_INFO[theme].name}
+                </b>
+                <p className="mt-1 text-xs text-white/60 light:text-slate-500">{THEME_INFO[theme].description}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-white/50 light:text-slate-500">
+            자유 주제가 아니면 1턴에 앨범마다 테마 키워드 {THEME_CHOICE_COUNT}개를 추천해요 — 눌러서 고르거나 직접 써도 돼요. 전부 그림인 모드에서는 첫 그림의
+            아이디어로 보여줘요. 아이스브레이커 모드는 질문의 답이 제시어라 테마가 적용되지 않아요.
           </p>
         </section>
 

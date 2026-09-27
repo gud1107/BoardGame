@@ -10,6 +10,7 @@
  */
 
 import { seededRng } from "@/lib/rng";
+import { isThemeCategory, themeChoices, type ThemeCategory } from "./themes";
 
 export type GameMode = "NORMAL" | "KNOCK_OFF" | "SECRET" | "ANIMATION" | "ICEBREAKER" | "COMPLEMENT" | "SCORE" | "SPEEDRUN" | "SANDWICH";
 export type PageKind = "text" | "drawing";
@@ -33,6 +34,8 @@ export interface GameOptions {
   ghostFrames: boolean;
   /** Undo/redo buttons and Ctrl+Z/Y in the drawing editor. */
   allowUndo: boolean;
+  /** Theme pack for turn-1 keyword choices (themes.ts) — independent of `mode`. */
+  theme: ThemeCategory;
 }
 
 export const TIME_MULTIPLIER_MIN = 0.7;
@@ -44,7 +47,7 @@ export const ONION_OPACITY = 0.35;
 export const VOTE_WINDOW_MS = 20_000;
 const MIN_TURN_SECONDS = 8;
 
-export const DEFAULT_OPTIONS: GameOptions = { mode: "NORMAL", timeMultiplier: 1, ghostFrames: true, allowUndo: true };
+export const DEFAULT_OPTIONS: GameOptions = { mode: "NORMAL", timeMultiplier: 1, ghostFrames: true, allowUndo: true, theme: "FREE" };
 
 type Flow = "alternate" | "allDrawing" | "sandwich";
 
@@ -181,7 +184,18 @@ export function sanitizeOptions(raw: unknown): GameOptions {
     timeMultiplier: Math.round(Math.min(TIME_MULTIPLIER_MAX, Math.max(TIME_MULTIPLIER_MIN, multiplier)) * 10) / 10,
     ghostFrames: typeof o.ghostFrames === "boolean" ? o.ghostFrames : DEFAULT_OPTIONS.ghostFrames,
     allowUndo: typeof o.allowUndo === "boolean" ? o.allowUndo : DEFAULT_OPTIONS.allowUndo,
+    theme: isThemeCategory(o.theme) ? o.theme : DEFAULT_OPTIONS.theme,
   };
+}
+
+/** Whether the theme pack shapes openings in this mode — icebreaker's opening is the answer to its question instead. */
+export function themeApplies(options: GameOptions): boolean {
+  return options.theme !== "FREE" && options.mode !== "ICEBREAKER";
+}
+
+/** Turn-1 keyword choices for `album` under the room's theme (empty when no theme applies). */
+export function openingChoices(options: GameOptions, seed: number, album: number): string[] {
+  return themeApplies(options) ? themeChoices(options.theme, seed, album) : [];
 }
 
 export function turnKindFor(mode: GameMode, turn: number, playerCount: number): PageKind {
