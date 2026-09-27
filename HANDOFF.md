@@ -162,6 +162,12 @@ vitest 24/24(+registry), tsc 0 에러(`.next/dev/types`의 다른 세션 `tmp-wa
 - **`DoodleCanvas`**: 선택이 있으면 `chooseColor`/`chooseSize`가 선택을 바로 바꿈(`restyleSelection`). `commitEdit`(op 목록+선택을 한 번의 되돌리기 단계로, 잉크 초과 시 거부+안내). 📋 복제/📌 붙여넣기/⬆ 맨 앞/⬇ 맨 뒤 버튼, Ctrl+C/V/D(선택 도구, 입력창 제외). 클립보드는 이번 턴 그림판 한정(ref).
 - 검증: vitest 60/60(+3), tsc/eslint 0. 격리 워크트리 Playwright: 빨강 맨 뒤 → 파랑이 겹친 부분 덮음, 전체 선택 → 초록+굵기 5 적용, 복제 → 16px 비킨 사본 3개 선택 — 스크린샷 2장.
 
+### 📌 후속 (2026-09-27): 복사한 것을 다음 턴에도 붙여넣기
+**요청**: "복사한 것을 다음 턴 그림에도 붙여넣을 수 있게".
+- **`clipboard.ts`(신규)**: `readClipboard(match)`/`writeClipboard(match, ops)` — 게임 시드로 판 구분(새 판은 빈 버퍼), sessionStorage 저장(새로고침 유지) + 메모리 폴백, 읽을 때 `isValidDrawing`으로 재검증.
+- **`DoodleCanvas`**: 버퍼를 ref → state(`readClipboard(matchKey)`로 lazy 초기화)로, 복사·붙여넣기 시 `writeClipboard`. `matchKey` prop(TurnStage가 `state.seed` 전달). 복제는 최신 선택을 바로 붙이도록 `pasteFrom`으로 정리, `commitEdit`가 성공 여부 반환. 하단에 "📋 복사해 둔 그림 N개" 안내.
+- 검증: vitest 62/62(+2 버퍼 판 구분·검증), tsc/eslint 0. 격리 워크트리 Playwright: 2턴에서 빨간 네모 복사 → 4턴 새 그림판에 안내 표시 → 붙여넣기로 네모가 들어오고 선택됨(스크린샷).
+
 ## 🦈 배고픈 상어: 딥 에볼루션 (Hungry Shark-style) — 1인용 실시간 해양 액션 신규 게임 — 2026-09-26 신규 (커밋/푸시, 배포는 웹훅 자동)
 
 **요청**: "Hungry Shark Evolution 게임 만들어주세요" + Unity(C#) 기준 상용 수준 기술 명세서(체력 감쇠 공식, 골드 러시/메가 골드 러시, 티어 포식 테이블, Rigidbody 물리, 입 방향 내적 판정, Boids, 기뢰/해파리 수식, 오브젝트 풀링·존 컬링, 상점/업그레이드/세이브) 붙여넣기 → "추가할 부분은 추가하여" 구현, 커밋·푸시·배포, HANDOFF 문서화 + 룰북.

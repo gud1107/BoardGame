@@ -43,6 +43,7 @@ import {
 } from "./engine";
 import { FALLBACK_PROMPTS } from "./prompts";
 import { ChunkAssembler, splitIntoChunks } from "./syncChunks";
+import { readClipboard, resetClipboardMemory, writeClipboard } from "./clipboard";
 import { boxFrom, handleAt, handlesFor, hitTest, hitsOp, opsInBox, pasteOps, reorderOps, resizeShape, restyleOps, translateGroup, translateOp, unionBounds } from "./editing";
 import { CHORDS, LOOP_STEPS, STEPS_PER_BAR, lofiEventsAt, midiToHz } from "./lofiPattern";
 import { GAME_MODES, ICEBREAKER_QUESTIONS, icebreakerQuestion, openingChoices, sanitizeOptions, turnKindFor, turnSecondsFor, type GameMode } from "./modes";
@@ -654,5 +655,25 @@ describe("restyle / duplicate / reorder a selection (editing.ts)", () => {
     expect(reorderOps([a, b, c], [0, 1], "front")).toEqual({ ops: [c, a, b], indices: [1, 2] });
     expect(reorderOps([a, b, c], [2], "back")).toEqual({ ops: [c, a, b], indices: [0] });
     expect(reorderOps([a, clear, b, c], [3], "back", 2)).toEqual({ ops: [a, clear, c, b], indices: [2] });
+  });
+});
+
+describe("cross-turn clipboard (clipboard.ts)", () => {
+  const op = shapeOp("r", 1, 1, { x: 10, y: 10 }, { x: 50, y: 50 });
+
+  it("keeps a copy for later turns of the same match only", () => {
+    resetClipboardMemory();
+    expect(readClipboard(123)).toEqual([]);
+    writeClipboard(123, [op]);
+    expect(readClipboard(123)).toEqual([op]); // a later turn's fresh editor reads it back
+    expect(readClipboard(456)).toEqual([]); // a rematch (new seed) starts clean
+  });
+
+  it("ignores empty or invalid entries", () => {
+    resetClipboardMemory();
+    writeClipboard(1, []);
+    expect(readClipboard(1)).toEqual([]);
+    writeClipboard(1, [{ k: "r", c: 99, w: 1, p: [0, 0, 1, 1] } as unknown as DrawOp]);
+    expect(readClipboard(1)).toEqual([]);
   });
 });

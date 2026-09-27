@@ -25,6 +25,7 @@ import {
   type Point,
   type ShapeKind,
 } from "./drawing";
+import { readClipboard, writeClipboard } from "./clipboard";
 import { getDoodlePhoneSound } from "./doodlePhoneSound";
 import DrawingView from "./DrawingView";
 import { ONION_OPACITY } from "./modes";
@@ -66,7 +67,9 @@ import {
  * at the sheet edge. Resize handles appear only for a single selected shape.
  * While something is selected, the palette / color picker / brush sizes
  * restyle the selection instead of just setting the next stroke's style, and
- * the selection can be duplicated (Ctrl+C/V/D) or sent to front/back.
+ * the selection can be duplicated (Ctrl+C/V/D) or sent to front/back. The
+ * copy buffer lives in clipboard.ts (keyed by `matchKey`), so something
+ * copied on one drawing turn can be pasted on a later one in the same match.
  *
  * Zoom: two fingers pinch/pan the sheet (CSS transform on the stage);
  * Ctrl/⌘ + wheel does the same on desktop. Pointer→canvas mapping already
@@ -158,9 +161,11 @@ interface DoodleCanvasProps {
   baseDrawing?: Drawing | null;
   onionDrawing?: Drawing | null;
   allowUndo?: boolean;
+  /** Identifies the match (its seed) so the copy buffer carries across turns but not into a rematch. */
+  matchKey?: number;
 }
 
-export default function DoodleCanvas({ ref, disabled = false, blind = false, baseDrawing = null, onionDrawing = null, allowUndo = true }: DoodleCanvasProps) {
+export default function DoodleCanvas({ ref, disabled = false, blind = false, baseDrawing = null, onionDrawing = null, allowUndo = true, matchKey = 0 }: DoodleCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   /** Where strokes are painted: the visible canvas, or an offscreen one in blind mode. */
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
@@ -196,9 +201,8 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
   const [selected, setSelected] = useState<{ count: number; resizable: boolean }>({ count: 0, resizable: false });
   /** Mobile stand-in for Shift-click: taps add/remove instead of replacing the selection. */
   const [addMode, setAddMode] = useState(false);
-  /** Copied ops (Ctrl+C / 📋 복제) — lives only for this turn's editor. */
-  const clipboardRef = useRef<readonly DrawOp[]>([]);
-  const [hasClipboard, setHasClipboard] = useState(false);
+  /** Copied ops (Ctrl+C / 📋 복제), shared with later turns of this match through clipboard.ts. */
+  const [clipboard, setClipboard] = useState<readonly DrawOp[]>(() => readClipboard(matchKey));
   /** One-line feedback in the select toolbar (e.g. out of ink for a paste). */
   const [notice, setNotice] = useState<string | null>(null);
   /** Zoom level for the "원래대로" badge (the live value is in zoomRef). */
@@ -376,40 +380,53 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
    * undoable step. Refused (with a notice) if the result would overflow the
    * ink cap — only a paste can grow the drawing noticeably.
    */
-  function commitEdit(next: readonly DrawOp[], nextSelection: readonly number[]) {
+  function commitEdit(next: readonly DrawOp[], nextSelection: readonly number[]): boolean {
     if (serializedLength({ v: 1, ops: [...baseOpsRef.current, ...next] }) > MAX_DRAWING_CHARS) {
       setNotice("잉크가 부족해서 할 수 없어요");
-      return;
+      return false;
     }
     setNotice(null);
     setOps(next);
     select(nextSelection);
     repaint();
     drawOverlay(null);
+    return true;
   }
 
   function restyleSelection(patch: StylePatch) {
     commitEdit(restyleOps(opsRef.current, selectedRef.current, patch), selectedRef.current);
   }
 
+  function updateClipboard(ops: readonly DrawOp[]) {
+    if (ops.length === 0) return;
+    setClipboard(ops);
+    writeClipboard(matchKey, ops);
+  }
+
   function copySelection() {
     const chosen = new Set(selectedRef.current);
-    clipboardRef.current = opsRef.current.filter((_, i) => chosen.has(i));
-    setHasClipboard(clipboardRef.current.length > 0);
+    updateClipboard(opsRef.current.filter((_, i) => chosen.has(i)));
   }
 
   function pasteClipboard() {
-    if (clipboardRef.current.length === 0) return;
-    const { ops, indices } = pasteOps(opsRef.current, clipboardRef.current);
-    commitEdit(ops, indices);
+    pasteFrom(clipboard);
+  }
+
+  /** Pastes `copies` on top; the pasted copies become the clipboard, so the next paste steps a bit further. */
+  function pasteFrom(copies: readonly DrawOp[]) {
+    if (copies.length === 0) return;
+    const { ops, indices } = pasteOps(opsRef.current, copies);
+    if (!commitEdit(ops, indices)) return;
     // The next paste steps a bit further, like most editors.
     const chosen = new Set(indices);
-    clipboardRef.current = ops.filter((_, i) => chosen.has(i));
+    updateClipboard(ops.filter((_, i) => chosen.has(i)));
   }
 
   function duplicateSelection() {
-    copySelection();
-    pasteClipboard();
+    const chosen = new Set(selectedRef.current);
+    const copies = opsRef.current.filter((_, i) => chosen.has(i));
+    if (copies.length === 0) return;
+    pasteFrom(copies);
   }
 
   function sendSelection(where: "front" | "back") {
@@ -810,7 +827,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
               <button type="button" onClick={selectAll} className={`rounded-md border px-2 py-0.5 ${idle}`}>
                 전체 선택
               </button>
-              {hasClipboard && (
+              {clipboard.length > 0 && (
                 <button type="button" title="붙여넣기 (Ctrl+V)" onClick={pasteClipboard} className={`rounded-md border px-2 py-0.5 ${idle}`}>
                   📌 붙여넣기
                 </button>
@@ -947,7 +964,10 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
             </div>
             {outOfInk && <span className="font-semibold text-rose-300 light:text-rose-600">잉크가 다 떨어졌어요 — 되돌리기로 공간을 만들 수 있어요</span>}
           </div>
-          <p className="text-[10px] text-white/35 light:text-slate-400">📱 두 손가락으로 확대·이동 · 🖱️ Ctrl+휠로 확대</p>
+          <p className="text-[10px] text-white/35 light:text-slate-400">
+            📱 두 손가락으로 확대·이동 · 🖱️ Ctrl+휠로 확대
+            {clipboard.length > 0 && !blind && ` · 📋 복사해 둔 그림 ${clipboard.length}개 — 👆 선택 도구에서 붙여넣기`}
+          </p>
         </div>
       )}
     </div>

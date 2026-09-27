@@ -273,6 +273,7 @@ function TurnComposer({
             allowUndo={allowUndo}
             baseDrawing={reference === "base" ? previousDrawing : null}
             onionDrawing={reference === "onion" && ghostFrames ? previousDrawing : null}
+            matchKey={state.seed}
           />
           <button
             type="button"
