@@ -42,6 +42,7 @@ import {
 } from "./engine";
 import { FALLBACK_PROMPTS } from "./prompts";
 import { ChunkAssembler, splitIntoChunks } from "./syncChunks";
+import { handleAt, handlesFor, hitTest, hitsOp, resizeShape, translateOp } from "./editing";
 import { CHORDS, LOOP_STEPS, STEPS_PER_BAR, lofiEventsAt, midiToHz } from "./lofiPattern";
 import { GAME_MODES, ICEBREAKER_QUESTIONS, icebreakerQuestion, openingChoices, sanitizeOptions, turnKindFor, turnSecondsFor, type GameMode } from "./modes";
 import { THEME_BANK, themeChoices } from "./themes";
@@ -545,5 +546,50 @@ describe("free colors — picker & eyedropper (drawing.ts)", () => {
     expect(isBlankDrawing({ v: 1, ops: [strokeOp("#ffffff", 1, [{ x: 1, y: 1 }])] })).toBe(true);
     const custom: Drawing = { v: 1, ops: [shapeOp("r", "#1f9a45", 2, { x: 10, y: 10 }, { x: 300, y: 300 }, { filled: true })] };
     expect([...inkByColor(custom).keys()]).toEqual([nearestPaletteIndex("#1f9a45")]);
+  });
+});
+
+describe("select / move / resize geometry (editing.ts)", () => {
+  const rect = shapeOp("r", 1, 1, { x: 100, y: 100 }, { x: 200, y: 180 });
+  const filledRect = shapeOp("r", 1, 1, { x: 100, y: 100 }, { x: 200, y: 180 }, { filled: true });
+  const ellipse = shapeOp("e", 1, 1, { x: 100, y: 100 }, { x: 300, y: 200 });
+  const line = shapeOp("l", 1, 1, { x: 10, y: 10 }, { x: 110, y: 10 });
+  const stroke = strokeOp(1, 1, [{ x: 50, y: 300 }, { x: 80, y: 310 }, { x: 120, y: 305 }]);
+
+  it("hits outlines, not the hollow inside; filled shapes hit anywhere inside", () => {
+    expect(hitsOp(rect, { x: 100, y: 140 })).toBe(true);
+    expect(hitsOp(rect, { x: 150, y: 140 })).toBe(false);
+    expect(hitsOp(filledRect, { x: 150, y: 140 })).toBe(true);
+    expect(hitsOp(ellipse, { x: 300, y: 150 })).toBe(true);
+    expect(hitsOp(ellipse, { x: 200, y: 150 })).toBe(false);
+    expect(hitsOp(line, { x: 60, y: 14 })).toBe(true);
+    expect(hitsOp(stroke, { x: 80, y: 312 })).toBe(true);
+  });
+
+  it("picks the topmost selectable op, skips fills and anything before `from`", () => {
+    const ops = [rect, filledRect, fillOp(3, { x: 150, y: 140 })];
+    expect(hitTest(ops, { x: 150, y: 140 })).toBe(1);
+    expect(hitTest(ops, { x: 150, y: 140 }, 2)).toBe(-1);
+    expect(hitTest(ops, { x: 400, y: 20 })).toBe(-1);
+  });
+
+  it("moves shapes but keeps them on the sheet", () => {
+    expect(translateOp(rect, 20, -30)).toMatchObject({ p: [120, 70, 220, 150] });
+    expect(translateOp(rect, 1000, 1000)).toMatchObject({ p: [380, 280, 480, 360] });
+    expect(isValidDrawing({ v: 1, ops: [translateOp(ellipse, -999, 0)] })).toBe(true);
+  });
+
+  it("moves a stroke by shifting only its absolute first point", () => {
+    const moved = translateOp(stroke, 10, 5);
+    expect(decodePoints((moved as unknown as { p: number[] }).p)).toEqual([{ x: 60, y: 305 }, { x: 90, y: 315 }, { x: 130, y: 310 }]);
+  });
+
+  it("resizes from a handle, keeping the opposite corner / endpoint fixed", () => {
+    expect(handleAt(rect, { x: 199, y: 181 })).toBe("se");
+    expect(resizeShape(rect, "se", { x: 260, y: 240 })).toMatchObject({ p: [100, 100, 260, 240] });
+    expect(resizeShape(rect, "nw", { x: 40, y: 50 })).toMatchObject({ p: [200, 180, 40, 50] });
+    expect(resizeShape(line, "p2", { x: 999, y: 50 })).toMatchObject({ p: [10, 10, 480, 50] });
+    expect(handlesFor(stroke)).toEqual([]);
+    expect(resizeShape(stroke, "se", { x: 1, y: 1 })).toBe(stroke);
   });
 });
