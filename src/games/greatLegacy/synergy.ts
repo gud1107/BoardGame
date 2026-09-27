@@ -65,22 +65,26 @@ export function lotSynergyImpact(assets: OwnedAsset[], pendingSpecials: SpecialK
   return diffCollections(assets, projectWin(assets, pendingSpecials, card));
 }
 
-export interface SynergyCompletionEvent {
+export interface SynergyChangeEvent {
   seat: SeatIndex;
   collection: CollectionRef;
+  /** "complete" = newly finished +3; "break" = a finished one lost (상장폐지/강제반대매매 discarding one of its cards). */
+  type: "complete" | "break";
 }
 
 /**
- * Collections each seat newly completed between two consecutive state
- * snapshots — drives the completion fanfare/overlay on every client (same
- * diff-based approach as AuctionCoinEffects' detectCoinEvents).
+ * Collections each seat newly completed or lost between two consecutive
+ * state snapshots — drives the fanfare / red-warning overlays on every
+ * client (same diff-based approach as AuctionCoinEffects' detectCoinEvents).
  */
-export function detectSynergyCompletions(prev: GreatLegacyState, next: GreatLegacyState): SynergyCompletionEvent[] {
-  const events: SynergyCompletionEvent[] = [];
+export function detectSynergyChanges(prev: GreatLegacyState, next: GreatLegacyState): SynergyChangeEvent[] {
+  const events: SynergyChangeEvent[] = [];
   for (const p of next.players) {
     const before = prev.players.find((q) => q.seat === p.seat);
     if (!before || before.assets === p.assets) continue;
-    for (const collection of diffCollections(before.assets, p.assets).gained) events.push({ seat: p.seat, collection });
+    const { gained, lost } = diffCollections(before.assets, p.assets);
+    for (const collection of lost) events.push({ seat: p.seat, collection, type: "break" });
+    for (const collection of gained) events.push({ seat: p.seat, collection, type: "complete" });
   }
   return events;
 }

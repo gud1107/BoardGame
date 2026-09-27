@@ -455,6 +455,37 @@ function cardValueEstimate(card: AuctionCardDef): number {
 }
 
 import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
+import { isDiscardKind, lotSynergyImpact } from "./synergy";
+
+/**
+ * Collection-synergy stakes of the card on the block, for the bot heuristic:
+ * - `ownDelta`: +3 per collection this seat would complete by winning it, −3 per one it would break.
+ * - `rivalGain`: the most +3 points any rival would gain by winning it (what outbidding them denies).
+ * - `rivalLoss`: the most points a still-in rival would lose by being stuck with a penalty card.
+ */
+function synergyStakes(state: GreatLegacyState, seat: SeatIndex) {
+  const card = state.auction!.card;
+  const me = state.players.find((p) => p.seat === seat)!;
+  const mine = lotSynergyImpact(me.assets, me.pendingSpecials, card);
+  let rivalGain = 0;
+  let rivalLoss = 0;
+  for (const p of state.players) {
+    if (p.seat === seat || state.auction!.passed.includes(p.seat)) continue;
+    const impact = lotSynergyImpact(p.assets, p.pendingSpecials, card);
+    rivalGain = Math.max(rivalGain, impact.gained.length * COLLECTION_BONUS);
+    rivalLoss = Math.max(rivalLoss, impact.lost.length * COLLECTION_BONUS);
+  }
+  return { ownDelta: (mine.gained.length - mine.lost.length) * COLLECTION_BONUS, rivalGain, rivalLoss };
+}
+
+/** Points this seat loses by being stuck with a reverse-auction penalty card (its last asset's score drop, plus any broken synergy). */
+function penaltyCost(state: GreatLegacyState, seat: SeatIndex, ownDelta: number): number {
+  const card = state.auction!.card;
+  const last = state.players.find((p) => p.seat === seat)!.assets.at(-1);
+  if (card.kind !== "special" || !last || last.discarded) return 2; // nothing to lose yet (queued) — keep the old modest avoidance value
+  const scoreLoss = isDiscardKind(card.special) ? last.currentScore : Math.max(0, last.currentScore - 1);
+  return Math.max(2, scoreLoss - Math.min(0, ownDelta));
+}
 
 function scoreMove(state: GreatLegacyState, seat: SeatIndex, move: EngineAction, level: BotLevel): number {
   const auction = state.auction!;
@@ -462,21 +493,31 @@ function scoreMove(state: GreatLegacyState, seat: SeatIndex, move: EngineAction,
   const purseTotal = purseValue(player.purse) + purseValue(auction.committed[seat] ?? emptyPurse());
   const scarcity = purseTotal <= 0 ? 0 : 1; // guards a divide-by-zero edge case, not a real scarcity model
 
+  const tier = botTier(level);
+  // Novice bots ignore synergies entirely; core/expert weigh their own +3s, and deny rivals' at half/full weight.
+  const stakes = tier === "novice" ? { ownDelta: 0, rivalGain: 0, rivalLoss: 0 } : synergyStakes(state, seat);
+  const denialWeight = tier === "expert" ? 1 : tier === "core" ? 0.5 : 0;
+
   if (auction.kind === "normal") {
-    const value = cardValueEstimate(auction.card);
+    const value = cardValueEstimate(auction.card) + Math.max(0, stakes.ownDelta) + stakes.rivalGain * denialWeight;
     if (move.type === "pass") return -value; // walking away from a card worth chasing is a mild loss
     const cost = purseValue(move.addCoins);
-    // Willing to chase up to ~4x an asset's score (a rough "don't blow the whole purse on a 1-point card" guard) and never more than what's left.
-    const willingCap = Math.max(value * 4, botTier(level) === "expert" ? 20 : 10);
+    // Willing to chase up to ~4x the card's value (asset score + synergy it completes + rival synergy it blocks) and never more than what's left.
+    const willingCap = Math.max(value * 4, tier === "expert" ? 20 : 10);
     return auction.highestBid + cost <= willingCap ? value * 2 - cost * 0.1 : -cost;
   }
 
   // Reverse auction: passing means "I accept the penalty card" — worth
-  // avoiding while cheap, but not worth going broke over.
-  if (move.type === "pass") return -2; // small, deliberately modest penalty-avoidance value
+  // avoiding in proportion to what it would cost (score + broken synergy),
+  // and a bit more while a still-in rival would lose a synergy by taking it.
+  const avoid = penaltyCost(state, seat, stakes.ownDelta) + stakes.rivalLoss * denialWeight * 0.5;
+  if (move.type === "pass") return -avoid;
   const cost = purseValue(move.addCoins);
   const affordableMargin = purseTotal - cost;
-  return affordableMargin > cost * 2 ? 1 * scarcity : -1; // keep dodging while it's still cheap relative to what's left, otherwise prefer to just take the card
+  // Keep dodging while it's cheap relative to what's left; a costly penalty (≥ one synergy) justifies dodging at a thinner margin.
+  const marginFactor = avoid >= COLLECTION_BONUS ? 1 : 2;
+  // (Previously the fallback was -1, which still beat passing's -2, so bots never actually took the card when coins ran thin.)
+  return affordableMargin > cost * marginFactor ? 1 * scarcity : -(avoid + 1);
 }
 
 /** Picks a move for `seat` per the shared Level 1–10 curve, or null if it isn't their turn / they have no legal move. */

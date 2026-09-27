@@ -8,7 +8,8 @@ import PlayerArea from "./PlayerArea";
 import BettingArena from "./BettingArena";
 import CollectionSynergyPanel from "./CollectionSynergyPanel";
 import SynergyCompleteFX from "./SynergyCompleteFX";
-import { collectionTitle, detectSynergyCompletions, lotSynergyImpact, type SynergyCompletionEvent } from "./synergy";
+import { collectionKey, collectionTitle, completedCollections, detectSynergyChanges, lotSynergyImpact, type SynergyChangeEvent } from "./synergy";
+import { assetImageSrc } from "./lotPhotos";
 import LotCatalogCard from "./LotCatalogCard";
 import RulebookModal from "./RulebookModal";
 import { detectCoinEvents, FlyingCoins, type CoinAnimEvent } from "./AuctionCoinEffects";
@@ -87,16 +88,18 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
   // player who acted, plays the same animation + SFX.
   const [trackedState, setTrackedState] = useState(state);
   const [coinEffects, setCoinEffects] = useState<CoinAnimEvent[]>([]);
-  // Collection-complete fanfare queue — shown one at a time (a single resolve can complete two collections).
-  const [synergyQueue, setSynergyQueue] = useState<SynergyCompletionEvent[]>([]);
+  // Collection complete/break overlay queue — shown one at a time (a single resolve can complete two collections).
+  const [synergyQueue, setSynergyQueue] = useState<SynergyChangeEvent[]>([]);
   if (trackedState !== state) {
     const detected = detectCoinEvents(trackedState, state);
-    const completions = detectSynergyCompletions(trackedState, state);
+    const synergyChanges = detectSynergyChanges(trackedState, state);
     setTrackedState(state);
-    if (completions.length > 0) {
-      setSynergyQueue((prev) => [...prev, ...completions]);
+    if (synergyChanges.length > 0) {
+      setSynergyQueue((prev) => [...prev, ...synergyChanges]);
       const sound = getSoundEngine();
-      if (completions.some((c) => c.seat === viewerSeat)) sound.playSynergyCompleteSound();
+      const mine = synergyChanges.filter((c) => c.seat === viewerSeat);
+      if (mine.some((c) => c.type === "break")) sound.playSynergyBreakSound();
+      else if (mine.length > 0) sound.playSynergyCompleteSound();
       else sound.playSynergyRivalSound();
     }
     if (detected.length > 0) {
@@ -205,16 +208,47 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
             <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 light:border-amber-300 light:bg-amber-50 p-4 text-center">
               <p className="text-lg font-bold text-white light:text-slate-900">🏆 게임 종료!</p>
               <div className="flex flex-col gap-1 text-sm text-white/80 light:text-slate-700">
-                {rankings.map((r) => (
-                  <div key={r.seat} className="flex items-center justify-between rounded-lg bg-black/20 light:bg-white/70 px-3 py-1.5">
-                    <span>
-                      {r.rank}위 {names[r.seat] ?? "상대"}
-                    </span>
-                    <span className="text-white/60 light:text-slate-500">
-                      {r.score.total}점 (자산 {r.score.assetScore} + 컬렉션 {r.score.collectionBonus}) · 잔여 {r.score.remainingCoinValue}코인
-                    </span>
-                  </div>
-                ))}
+                {rankings.map((r) => {
+                  const player = state.players.find((p) => p.seat === r.seat)!;
+                  const synergies = completedCollections(player.assets);
+                  return (
+                    <div key={r.seat} className="flex flex-col gap-1.5 rounded-lg bg-black/20 light:bg-white/70 px-3 py-2 text-left">
+                      <div className="flex flex-wrap items-center justify-between gap-x-3">
+                        <span className="font-semibold">
+                          {r.rank}위 {names[r.seat] ?? "상대"}
+                        </span>
+                        <span className="text-white/60 light:text-slate-500">
+                          {r.score.total}점 (자산 {r.score.assetScore} + 컬렉션 {r.score.collectionBonus}) · 잔여 {r.score.remainingCoinValue}코인
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                        {synergies.length === 0 ? (
+                          <span className="text-white/35 light:text-slate-400">완성한 시너지 없음</span>
+                        ) : (
+                          synergies.map((c) => (
+                            <span key={collectionKey(c)} className="rounded-full bg-amber-400/20 px-2 py-0.5 font-semibold text-amber-100 ring-1 ring-amber-300/60 light:bg-amber-100 light:text-amber-800">
+                              ✨ {collectionTitle(c)} +3
+                            </span>
+                          ))
+                        )}
+                      </div>
+                      {player.assets.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {player.assets.map((a) => (
+                            // eslint-disable-next-line @next/next/no-img-element -- small static lot art
+                            <img
+                              key={a.assetId}
+                              src={assetImageSrc(a.assetId)}
+                              alt=""
+                              className={`h-7 w-9 rounded-[3px] object-cover ring-1 ${a.discarded ? "opacity-35 ring-rose-400/60 grayscale" : "ring-[#c9a24a]/70"}`}
+                              draggable={false}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <button onClick={onGameEnd} className="mx-auto rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-500">
                 결과 확인
@@ -259,10 +293,11 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
 
       {synergyQueue[0] && (
         <SynergyCompleteFX
-          key={`${synergyQueue.length}-${synergyQueue[0].seat}-${collectionTitle(synergyQueue[0].collection)}`}
+          key={`${synergyQueue.length}-${synergyQueue[0].seat}-${synergyQueue[0].type}-${collectionKey(synergyQueue[0].collection)}`}
           collection={synergyQueue[0].collection}
           playerName={names[synergyQueue[0].seat] ?? "상대"}
           mine={synergyQueue[0].seat === viewerSeat}
+          variant={synergyQueue[0].type}
           onDone={handleSynergyFxDone}
         />
       )}

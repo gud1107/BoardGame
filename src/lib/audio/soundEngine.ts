@@ -2879,6 +2879,49 @@ class SoundEngine {
     sparkle.stop(now + 1.12);
   }
 
+  /** 위대한 투자 — "시너지 붕괴 경고": a glassy crack (bandpassed noise snap) over a sliding-down minor-second alarm, for the viewer losing a +3 collection. */
+  playSynergyBreakSound() {
+    if (!this.gate("synergyBreak", 600)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+
+    const crack = ctx.createBufferSource();
+    crack.buffer = noiseBuffer(ctx);
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(2600, now);
+    bp.Q.setValueAtTime(3, now);
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.001, now);
+    cg.gain.linearRampToValueAtTime(0.32, now + 0.005);
+    cg.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    crack.connect(bp).connect(cg).connect(this.sfxGain);
+    crack.start(now);
+    crack.stop(now + 0.2);
+
+    [
+      [440, 0.12],
+      [415.3, 0.34],
+    ].forEach(([freq, start]) => {
+      const t = now + start;
+      const osc = ctx.createOscillator();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.7, t + 0.4);
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.setValueAtTime(1400, t);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.001, t);
+      g.gain.linearRampToValueAtTime(0.12, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+      osc.connect(lp).connect(g).connect(this.sfxGain!);
+      osc.start(t);
+      osc.stop(t + 0.44);
+    });
+  }
+
   /** 위대한 투자 — "상대 시너지 완성 알림": a short two-note minor chime (G–E♭), quieter than the viewer's own fanfare. */
   playSynergyRivalSound() {
     if (!this.gate("synergyRival", 400)) return;

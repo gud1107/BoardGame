@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ASSET_DEFS } from "./constants";
-import { computeCollectionBonus } from "./engine";
-import { collectionTitle, detectSynergyCompletions, lotSynergyImpact, projectWin } from "./synergy";
+import { chooseBotAction, computeCollectionBonus, getValidMoves, startGame } from "./engine";
+import { collectionTitle, detectSynergyChanges, lotSynergyImpact, projectWin } from "./synergy";
 import type { AuctionCardDef, GreatLegacyState, OwnedAsset, PlayerState } from "./types";
 
 function owned(id: string, discarded = false): OwnedAsset {
@@ -38,7 +38,7 @@ describe("projectWin (collection synergy preview)", () => {
   });
 });
 
-describe("detectSynergyCompletions / lotSynergyImpact", () => {
+describe("detectSynergyChanges / lotSynergyImpact", () => {
   function stateWith(assetsBySeat: OwnedAsset[][]): GreatLegacyState {
     const players = assetsBySeat.map((assets, seat) => ({ seat, assets, pendingSpecials: [] }) as unknown as PlayerState);
     return { players } as unknown as GreatLegacyState;
@@ -47,12 +47,65 @@ describe("detectSynergyCompletions / lotSynergyImpact", () => {
   it("reports only the seat and collection that newly completed", () => {
     const prev = stateWith([[owned("us-bigtech-1"), owned("us-bluechip-1")], [owned("kr-meme-1")]]);
     const next = stateWith([[owned("us-bigtech-1"), owned("us-bluechip-1"), owned("us-meme-1")], prev.players[1].assets]);
-    const events = detectSynergyCompletions(prev, next);
-    expect(events.map((e) => [e.seat, collectionTitle(e.collection)])).toEqual([[0, "🇺🇸 미장 영끌 올인"]]);
+    const events = detectSynergyChanges(prev, next);
+    expect(events.map((e) => [e.seat, e.type, collectionTitle(e.collection)])).toEqual([[0, "complete", "🇺🇸 미장 영끌 올인"]]);
+  });
+
+  it("reports a break when a completed collection loses a card", () => {
+    const full = [owned("us-bigtech-1"), owned("us-bluechip-1"), owned("us-meme-1")];
+    const prev = stateWith([full]);
+    const next = stateWith([[full[0], full[1], { ...full[2], discarded: true }]]);
+    expect(detectSynergyChanges(prev, next).map((e) => [e.type, collectionTitle(e.collection)])).toEqual([["break", "🇺🇸 미장 영끌 올인"]]);
   });
 
   it("one asset can complete a market and a sector collection at once", () => {
     const assets = [owned("us-bigtech-1"), owned("us-bluechip-1"), owned("kr-meme-1"), owned("cr-meme-1")];
     expect(lotSynergyImpact(assets, [], assetCard("us-meme-1")).gained.map(collectionTitle)).toEqual(["🇺🇸 미장 영끌 올인", "🎢 밈&테마주 분산투자"]);
+  });
+});
+
+describe("bot synergy awareness", () => {
+  // A 3-point asset already bid up to 10 — plain value alone isn't worth an 11-coin raise.
+  function contested(rivalAssets: OwnedAsset[]): { state: GreatLegacyState; bot: number } {
+    const base = startGame("4p", 9);
+    const bot = base.auction!.activeSeat;
+    const rival = base.auction!.order.find((s) => s !== bot)!;
+    const state: GreatLegacyState = {
+      ...base,
+      players: base.players.map((p) => (p.seat === rival ? { ...p, assets: rivalAssets } : { ...p, assets: [] })),
+      auction: {
+        ...base.auction!,
+        card: assetCard("us-meme-1"),
+        kind: "normal",
+        highestBid: 10,
+        highestBidder: rival,
+        committed: { ...base.auction!.committed, [rival]: { 20: 0, 10: 1, 5: 0, 1: 0 } },
+      },
+    };
+    return { state, bot };
+  }
+
+  it("an expert bot passes a merely overpriced lot but outbids to block a rival's synergy", () => {
+    const plain = contested([owned("kr-meme-1")]);
+    expect(chooseBotAction(plain.state, plain.bot, 10, () => 0.99)?.type).toBe("pass");
+    const threat = contested([owned("us-bigtech-1"), owned("us-bluechip-1")]);
+    expect(chooseBotAction(threat.state, threat.bot, 10, () => 0.99)?.type).toBe("bid");
+  });
+
+  it("novice bots ignore rival synergies", () => {
+    const threat = contested([owned("us-bigtech-1"), owned("us-bluechip-1")]);
+    expect(getValidMoves(threat.state, threat.bot).some((m) => m.type === "bid")).toBe(true);
+    expect(chooseBotAction(threat.state, threat.bot, 1, () => 0.99)?.type).toBe("pass");
+  });
+
+  it("a nearly broke bot takes a reverse-auction penalty card instead of bidding itself dry", () => {
+    const base = startGame("4p", 9);
+    const bot = base.auction!.activeSeat;
+    const state: GreatLegacyState = {
+      ...base,
+      players: base.players.map((p) => (p.seat === bot ? { ...p, purse: { 20: 0, 10: 0, 5: 0, 1: 3 }, assets: [owned("kr-meme-2")] } : p)),
+      auction: { ...base.auction!, card: { kind: "special", cardId: "s", special: "상장폐지" }, kind: "reverse", highestBid: 1 },
+    };
+    expect(chooseBotAction(state, bot, 10, () => 0.99)?.type).toBe("pass");
   });
 });
