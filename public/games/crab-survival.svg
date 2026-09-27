@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="0.35" stop-color="#22d3ee"/>
+      <stop offset="0.36" stop-color="#5fd0e6"/>
+      <stop offset="0.5" stop-color="#2bb3d6"/>
+    </linearGradient>
+    <radialGradient id="sand" cx="0.5" cy="0.2" r="0.9">
+      <stop offset="0" stop-color="#fbeec6"/>
+      <stop offset="1" stop-color="#e9cd8b"/>
+    </radialGradient>
+    <radialGradient id="shell" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#ff9a7a"/>
+      <stop offset="0.55" stop-color="#e0472f"/>
+      <stop offset="1" stop-color="#8f1f12"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fde047" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#fde047" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="300" height="400" fill="url(#sky)"/>
+  <path d="M0 150 Q 40 138 80 150 T 160 150 T 240 150 T 320 150 V400 H0Z" fill="url(#sand)"/>
+  <path d="M0 150 Q 40 138 80 150 T 160 150 T 240 150 T 320 150" fill="none" stroke="#fff" stroke-width="5" stroke-dasharray="26 14" opacity="0.85"/>
+  <!-- palm -->
+  <path d="M250 150 Q 262 100 248 60" stroke="#8b5a2b" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <g fill="#2f8f3a">
+    <path d="M248 60 Q 220 40 196 62 Q 222 52 248 64Z"/>
+    <path d="M248 60 Q 276 36 298 58 Q 272 50 248 64Z"/>
+    <path d="M248 60 Q 238 30 250 16 Q 252 40 250 62Z"/>
+    <path d="M248 60 Q 226 74 214 96 Q 234 76 250 64Z"/>
+    <path d="M248 60 Q 272 76 284 98 Q 262 78 248 64Z"/>
+  </g>
+  <!-- tide pool -->
+  <ellipse cx="62" cy="330" rx="46" ry="20" fill="#b8a687"/>
+  <ellipse cx="62" cy="330" rx="38" ry="15" fill="#35c4c9"/>
+  <ellipse cx="56" cy="326" rx="16" ry="5" fill="#9ff3e4" opacity="0.7"/>
+  <!-- small rival crab -->
+  <g transform="translate(236 300) scale(0.55)">
+    <ellipse cx="0" cy="8" rx="36" ry="10" fill="#000" opacity="0.15"/>
+    <g stroke="#123c8f" stroke-width="5" stroke-linecap="round" fill="none">
+      <path d="M-20 0 L-40 10 L-46 24"/><path d="M-18 6 L-34 20 L-36 32"/><path d="M20 0 L40 10 L46 24"/><path d="M18 6 L34 20 L36 32"/>
+    </g>
+    <ellipse cx="0" cy="-2" rx="30" ry="20" fill="#2f7de0"/>
+    <circle cx="-9" cy="-24" r="5" fill="#111"/><circle cx="9" cy="-24" r="5" fill="#111"/>
+    <ellipse cx="-34" cy="-24" rx="12" ry="9" fill="#2f7de0"/><ellipse cx="34" cy="-24" rx="12" ry="9" fill="#2f7de0"/>
+  </g>
+  <!-- king crab -->
+  <circle cx="150" cy="238" r="110" fill="url(#glow)"/>
+  <ellipse cx="150" cy="300" rx="86" ry="18" fill="#000" opacity="0.18"/>
+  <g stroke="#8f1f12" stroke-width="9" stroke-linecap="round" fill="none">
+    <path d="M100 262 L66 276 L56 300"/>
+    <path d="M104 274 L76 296 L72 318"/>
+    <path d="M112 282 L94 308 L94 330"/>
+    <path d="M200 262 L234 276 L244 300"/>
+    <path d="M196 274 L224 296 L228 318"/>
+    <path d="M188 282 L206 308 L206 330"/>
+  </g>
+  <!-- claws -->
+  <path d="M104 236 L74 206" stroke="#e0472f" stroke-width="14" stroke-linecap="round"/>
+  <path d="M196 236 L230 204" stroke="#e0472f" stroke-width="14" stroke-linecap="round"/>
+  <ellipse cx="68" cy="196" rx="22" ry="17" fill="#e0472f"/>
+  <path d="M58 184 Q 52 156 74 150 L 72 182Z" fill="#8f1f12"/>
+  <path d="M84 188 Q 96 164 82 152 L 76 182Z" fill="#8f1f12"/>
+  <!-- bat in right claw -->
+  <g transform="translate(236 198) rotate(-58)">
+    <path d="M0 -5 L 92 -11 Q 106 0 92 11 L 0 5Z" fill="#d6a15e" stroke="#8b5a2b" stroke-width="2"/>
+    <rect x="-6" y="-6" width="16" height="12" fill="#1f2937"/>
+  </g>
+  <ellipse cx="236" cy="198" rx="22" ry="17" fill="#e0472f"/>
+  <!-- shell with lateral spines -->
+  <path d="M84 240 L 40 226 L 92 222Z" fill="#8f1f12"/>
+  <path d="M216 240 L 260 226 L 208 222Z" fill="#8f1f12"/>
+  <path d="M86 236 Q 88 196 150 190 Q 212 196 214 236 Q 206 282 150 288 Q 94 282 86 236Z" fill="url(#shell)" stroke="#8f1f12" stroke-width="3"/>
+  <g fill="#fff" opacity="0.3">
+    <circle cx="124" cy="226" r="6"/><circle cx="170" cy="222" r="5"/><circle cx="150" cy="250" r="7"/><circle cx="186" cy="252" r="4"/><circle cx="116" cy="258" r="4"/>
+  </g>
+  <!-- eyes -->
+  <path d="M136 196 L 132 176 M164 196 L 168 176" stroke="#8f1f12" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="132" cy="172" r="8" fill="#111"/><circle cx="168" cy="172" r="8" fill="#111"/>
+  <circle cx="135" cy="169" r="3" fill="#fff"/><circle cx="171" cy="169" r="3" fill="#fff"/>
+  <!-- crown -->
+  <path d="M118 150 L118 118 L134 134 L150 106 L166 134 L182 118 L182 150Z" fill="#facc15" stroke="#a16207" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="150" cy="138" r="5" fill="#ef4444"/>
+  <circle cx="128" cy="142" r="3.5" fill="#3b82f6"/><circle cx="172" cy="142" r="3.5" fill="#3b82f6"/>
+  <!-- coins -->
+  <g fill="#facc15" stroke="#b8860b" stroke-width="2">
+    <ellipse cx="44" cy="232" rx="9" ry="9"/><ellipse cx="270" cy="252" rx="7" ry="9"/><ellipse cx="116" cy="352" rx="9" ry="9"/><ellipse cx="190" cy="360" rx="6" ry="9"/>
+  </g>
+</svg>

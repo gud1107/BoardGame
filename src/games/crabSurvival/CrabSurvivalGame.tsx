@@ -1,0 +1,356 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import type { PlayableGameProps } from "../types";
+import { CRAB_COLORS, LEVELS, MATCH_LENGTHS, type CrabColor, type ShieldKind, type WeaponKind } from "./data";
+import type { MatchSummary } from "./engine";
+import CrabSurvivalCanvas from "./CrabSurvivalCanvas";
+import RulebookModal from "./RulebookModal";
+import { drawCrabPreview } from "./render";
+import { freshSave, loadSave, trophiesFor, writeSave, type CrabSave } from "./save";
+
+/**
+ * Solo arcade loop: 로비(닉네임·색·경기 시간) → 경기(CrabSurvivalCanvas, AI 게
+ * 13마리) → 결과 → 로비... The shared game page only hears about it once the
+ * player explicitly leaves ("기록 저장하고 나가기"), which reports a trivial
+ * 1-player ranking so the play still lands in history/analytics.
+ */
+
+type Screen = "menu" | "playing" | "results";
+
+export default function CrabSurvivalGame({ participants, onComplete }: PlayableGameProps) {
+  // Client-only component (dynamic import with ssr:false), so localStorage is safe here.
+  const [save, setSave] = useState<CrabSave>(() => {
+    const s = typeof window === "undefined" ? freshSave() : loadSave();
+    return s.name ? s : { ...s, name: participants[0]?.name?.slice(0, 10) ?? "" };
+  });
+  const [screen, setScreen] = useState<Screen>("menu");
+  const [runKey, setRunKey] = useState(0);
+  const [result, setResult] = useState<{ s: MatchSummary; newBest: boolean; trophies: number } | null>(null);
+  const [showRules, setShowRules] = useState(false);
+
+  const update = (fn: (s: CrabSave) => CrabSave) => {
+    setSave((prev) => {
+      const next = fn(prev);
+      writeSave(next);
+      return next;
+    });
+  };
+
+  const color = CRAB_COLORS.find((c) => c.id === save.colorId) ?? CRAB_COLORS[0];
+
+  const start = () => {
+    setRunKey((k) => k + 1);
+    setScreen("playing");
+  };
+
+  const handleEnd = (s: MatchSummary) => {
+    const trophies = trophiesFor(s.rank, s.total);
+    const newBest = s.score > save.best;
+    update((sv) => ({
+      ...sv,
+      best: Math.max(sv.best, s.score),
+      matches: sv.matches + 1,
+      wins: sv.wins + (s.rank === 1 ? 1 : 0),
+      trophies: sv.trophies + trophies,
+      totalKills: sv.totalKills + s.stats.kills,
+      kingSeconds: sv.kingSeconds + Math.round(s.stats.kingSeconds),
+      maxLevel: Math.max(sv.maxLevel, s.stats.maxLevel),
+    }));
+    setResult({ s, newBest, trophies });
+    setScreen("results");
+  };
+
+  const finish = () => {
+    const pid = participants[0]?.id ?? "solo";
+    onComplete({ rankings: [{ playerId: pid, rank: 1 }], finishedAt: new Date().toISOString() });
+  };
+
+  if (screen === "playing") {
+    return (
+      <CrabSurvivalCanvas
+        key={runKey}
+        playerName={save.name.trim() || "나"}
+        colorId={save.colorId}
+        duration={save.duration}
+        muted={save.muted}
+        onToggleMute={() => update((s) => ({ ...s, muted: !s.muted }))}
+        followMouse={save.followMouse}
+        onToggleFollow={() => update((s) => ({ ...s, followMouse: !s.followMouse }))}
+        onEnd={handleEnd}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {screen === "results" && result && <ResultsPanel result={result} color={color} onRetry={start} onMenu={() => setScreen("menu")} />}
+
+      {screen === "menu" && (
+        <>
+          {/* Header */}
+          <div className="relative overflow-hidden rounded-2xl border border-orange-300/20 bg-gradient-to-b from-sky-400 via-cyan-600 to-amber-200 p-5 light:border-orange-200">
+            <SandWaves />
+            <div className="relative z-10 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold tracking-[0.3em] text-white/85 drop-shadow">BEACH BATTLE ROYALE</div>
+                <h2 className="text-2xl font-black text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)] sm:text-3xl">🦀 꽃게 서바이벌</h2>
+                <p className="mt-1 max-w-md text-xs font-medium text-white/90 drop-shadow">
+                  아기 꽃게로 시작해 먹고, 부수고, 뒤집으며 3.5배까지 거대해지세요. 섬에서 가장 큰 게만이 왕관을 씁니다.
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <div className="rounded-full bg-black/35 px-3 py-1 text-sm font-black text-yellow-200">🏆 {save.trophies.toLocaleString()}</div>
+                <div className="text-[11px] font-semibold text-slate-800/80">
+                  {save.matches}판 · 1위 {save.wins}회 · 최고 {save.best.toLocaleString()}점
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:grid-cols-[1fr_1.25fr] light:border-slate-200 light:bg-white light:shadow-sm">
+            {/* Preview */}
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-full rounded-xl bg-gradient-to-b from-amber-100 to-amber-200 p-2 light:from-amber-50 light:to-amber-100">
+                <CrabPreview color={color} width={260} height={170} animate weapon="bat" shield="potLid" />
+              </div>
+              <div className="text-center text-sm font-black text-white light:text-slate-900">
+                {save.name.trim() || "이름 없는 게"} <span className="text-xs font-semibold text-white/50 light:text-slate-400">· {color.name}</span>
+              </div>
+              <div className="grid w-full grid-cols-3 gap-1 text-center text-[10px] text-white/60 light:text-slate-500">
+                <Stat label="누적 처치" value={`✂️ ${save.totalKills}`} />
+                <Stat label="왕좌 시간" value={`👑 ${Math.floor(save.kingSeconds / 60)}분`} />
+                <Stat label="최대 성장" value={`Lv${save.maxLevel}`} />
+              </div>
+            </div>
+
+            {/* Setup */}
+            <div className="flex flex-col gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-white/60 light:text-slate-500">닉네임</span>
+                <input
+                  value={save.name}
+                  maxLength={10}
+                  placeholder="꽃게 이름 (최대 10자)"
+                  onChange={(e) => update((s) => ({ ...s, name: e.target.value }))}
+                  className="rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-orange-400 light:border-slate-300 light:bg-white light:text-slate-900"
+                />
+              </label>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-white/60 light:text-slate-500">껍데기 색</div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {CRAB_COLORS.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => update((s) => ({ ...s, colorId: c.id }))}
+                      className={`flex flex-col items-center rounded-lg border p-1 transition ${
+                        c.id === color.id ? "border-orange-400 bg-orange-500/15 ring-2 ring-orange-400/50" : "border-white/10 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-slate-50"
+                      }`}
+                      title={c.name}
+                    >
+                      <CrabPreview color={c} width={56} height={40} />
+                      <span className="truncate text-[9px] text-white/70 light:text-slate-600">{c.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-white/60 light:text-slate-500">경기 시간</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {MATCH_LENGTHS.map((m) => (
+                    <button
+                      key={m.seconds}
+                      onClick={() => update((s) => ({ ...s, duration: m.seconds }))}
+                      className={`rounded-lg border px-2 py-2 text-xs font-bold transition ${
+                        save.duration === m.seconds ? "border-orange-400 bg-orange-500/20 text-orange-200 light:text-orange-700" : "border-white/10 text-white/70 hover:border-white/30 light:border-slate-200 light:text-slate-600"
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg bg-black/20 p-2.5 text-[11px] text-white/65 light:bg-slate-50 light:text-slate-600">
+                <div className="mb-1 font-bold text-white/80 light:text-slate-700">성장 로드맵</div>
+                <div className="flex flex-wrap gap-1">
+                  {LEVELS.map((l) => (
+                    <span key={l.level} className="rounded bg-white/5 px-1.5 py-0.5 light:bg-white">
+                      Lv{l.level} {l.name} <b className="tabular-nums">{l.points >= 1000 ? `${l.points / 1000}k` : l.points}</b>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              onClick={start}
+              className="flex-1 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 py-3.5 text-base font-black text-white shadow-lg shadow-orange-500/30 transition hover:brightness-110"
+            >
+              🏝️ 섬으로 출발!
+            </button>
+            <button
+              onClick={() => setShowRules(true)}
+              className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white/80 hover:border-white/40 light:border-slate-300 light:text-slate-700"
+            >
+              📖 룰북
+            </button>
+            <button
+              onClick={finish}
+              className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white/60 hover:border-white/40 light:border-slate-300 light:text-slate-600"
+            >
+              🏁 기록 저장하고 나가기
+            </button>
+          </div>
+          <p className="text-center text-[11px] text-white/35 light:text-slate-400">
+            PC: 마우스 방향 이동 · 좌클릭/스페이스 공격 · 우클릭/Shift 부스트 · WASD 이동 가능 · Esc 일시정지 &nbsp;|&nbsp; 모바일: 드래그 조이스틱 + 🦀 공격 · 💨 부스트
+          </p>
+        </>
+      )}
+
+      {showRules && <RulebookModal onClose={() => setShowRules(false)} />}
+    </div>
+  );
+}
+
+// ── Pieces ──────────────────────────────────────────────────────────────────
+
+function CrabPreview({
+  color,
+  width,
+  height,
+  animate,
+  weapon,
+  shield,
+  crown,
+}: {
+  color: CrabColor;
+  width: number;
+  height: number;
+  animate?: boolean;
+  weapon?: WeaponKind;
+  shield?: ShieldKind;
+  crown?: boolean;
+}) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    c.width = width * dpr;
+    c.height = height * dpr;
+    let raf = 0;
+    const draw = (t: number) => {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawCrabPreview(ctx, color, width, height, animate ? t / 1000 : 0.4, { weapon, shield, crown });
+      if (animate) raf = requestAnimationFrame(draw);
+    };
+    draw(0);
+    return () => cancelAnimationFrame(raf);
+  }, [color, width, height, animate, weapon, shield, crown]);
+  return <canvas ref={ref} style={{ width, height, maxWidth: "100%" }} className="mx-auto block" />;
+}
+
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-lg bg-white/5 px-2 py-2 light:bg-slate-100">
+      <div className="text-[10px] text-white/45 light:text-slate-500">{label}</div>
+      <div className="text-base font-black text-white light:text-slate-900">{value}</div>
+      {sub && <div className="text-[10px] text-white/40 light:text-slate-400">{sub}</div>}
+    </div>
+  );
+}
+
+function ResultsPanel({
+  result,
+  color,
+  onRetry,
+  onMenu,
+}: {
+  result: { s: MatchSummary; newBest: boolean; trophies: number };
+  color: CrabColor;
+  onRetry: () => void;
+  onMenu: () => void;
+}) {
+  const { s, newBest, trophies } = result;
+  const lv = LEVELS[Math.max(0, s.stats.maxLevel - 1)];
+  const title = s.rank === 1 ? "👑 섬의 왕!" : s.rank <= 3 ? "🥈 포디움 입성!" : s.endedByDeath ? "뒤집혔지만 잘 싸웠다!" : "생존 완료!";
+  return (
+    <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 p-5 light:border-slate-200 light:from-white light:to-slate-50">
+      <div className="flex flex-col items-center text-center">
+        <div className="text-xs font-bold tracking-[0.3em] text-white/40 light:text-slate-400">MATCH RESULT</div>
+        <CrabPreview color={color} width={160} height={100} animate crown={s.rank === 1} />
+        <div className="text-lg font-black text-white light:text-slate-900">{title}</div>
+        <div className="mt-1 text-4xl font-black text-white tabular-nums light:text-slate-900">
+          {s.rank}
+          <span className="text-lg text-white/50 light:text-slate-400"> / {s.total}위</span>
+        </div>
+        <div className="mt-1 text-xl font-black text-yellow-300 tabular-nums light:text-amber-600">{s.score.toLocaleString()}점</div>
+        <div className="mt-1 flex gap-1.5">
+          {newBest && <span className="animate-bounce rounded-full bg-yellow-400 px-3 py-0.5 text-xs font-black text-slate-900">🏆 최고 기록!</span>}
+          <span className="rounded-full bg-orange-500/20 px-3 py-0.5 text-xs font-black text-orange-200 light:text-orange-700">트로피 +{trophies}</span>
+        </div>
+        <p className="mt-2 text-xs text-white/50 light:text-slate-500">
+          {Math.floor(s.seconds / 60)}분 {s.seconds % 60}초 · {s.endedByDeath ? `${s.killedBy ?? "누군가"}에게 뒤집혀 종료` : "제한 시간 생존"}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+        <Stat label="처치" value={`✂️ ${s.stats.kills}`} />
+        <Stat label="최대 성장" value={`Lv${s.stats.maxLevel}`} sub={lv.name} />
+        <Stat label="최고 콤보" value={`${s.stats.bestCombo}`} />
+        <Stat label="왕좌 시간" value={`${Math.round(s.stats.kingSeconds)}초`} />
+        <Stat label="최고 점수" value={s.stats.peakScore.toLocaleString()} />
+        <Stat label="부순 상자" value={`${s.stats.boxes}`} />
+        <Stat label="먹은 것" value={`${s.stats.eaten}`} />
+        <Stat label="가한 피해" value={s.stats.damageDealt.toLocaleString()} />
+      </div>
+      <div>
+        <div className="mb-1.5 text-xs font-semibold text-white/50 light:text-slate-500">최종 순위</div>
+        <div className="flex flex-col gap-0.5">
+          {s.top.map((r, i) => (
+            <div
+              key={`${r.name}-${i}`}
+              className={`flex items-center gap-2 rounded-md px-2.5 py-1 text-xs ${r.isPlayer ? "bg-cyan-500/20 font-black text-cyan-200 light:text-cyan-800" : "bg-white/5 text-white/70 light:bg-slate-100 light:text-slate-600"}`}
+            >
+              <span className="w-5 text-right tabular-nums">{i + 1}</span>
+              <span className="flex-1 truncate">
+                {i === 0 ? "👑 " : ""}
+                {r.name}
+                {r.isPlayer ? " (나)" : ""}
+              </span>
+              <span className="text-[10px] opacity-70">Lv{r.level}</span>
+              <span className="w-20 text-right tabular-nums">{r.score.toLocaleString()}</span>
+            </div>
+          ))}
+          {s.rank > s.top.length && (
+            <div className="flex items-center gap-2 rounded-md bg-cyan-500/20 px-2.5 py-1 text-xs font-black text-cyan-200 light:text-cyan-800">
+              <span className="w-5 text-right tabular-nums">{s.rank}</span>
+              <span className="flex-1">나</span>
+              <span className="w-20 text-right tabular-nums">{s.score.toLocaleString()}</span>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={onRetry} className="flex-1 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 py-3 font-black text-white hover:brightness-110">
+          🔁 다시 도전
+        </button>
+        <button onClick={onMenu} className="flex-1 rounded-xl bg-white/10 py-3 font-black text-white hover:bg-white/20 light:bg-slate-200 light:text-slate-800">
+          🏝️ 로비로
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SandWaves() {
+  return (
+    <svg className="pointer-events-none absolute inset-x-0 bottom-0 h-16 w-full opacity-70" viewBox="0 0 400 60" preserveAspectRatio="none" aria-hidden>
+      <path d="M0 30 Q 50 18 100 30 T 200 30 T 300 30 T 400 30 V60 H0Z" fill="#fde68a" />
+      <path d="M0 30 Q 50 18 100 30 T 200 30 T 300 30 T 400 30" fill="none" stroke="#fff" strokeWidth="3" opacity="0.8" />
+    </svg>
+  );
+}

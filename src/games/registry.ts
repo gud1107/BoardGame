@@ -673,6 +673,21 @@ export const GAME_REGISTRY: GameMeta[] = [
     supportsAutoRanking: true,
   },
   {
+    id: "crab-survival",
+    name: "꽃게 서바이벌",
+    nameEn: "Crab Survival: Beach Royale",
+    description:
+      "킹 오브 크랩 스타일의 쿼터뷰 실시간 액션 배틀로얄. 아기 꽃게로 시작해 해변의 음식과 생물을 먹고, 상자를 부숴 야구방망이·칼·닻 같은 무기와 냄비 뚜껑·조개 방패를 양손에 장착하며 6단계(1.0x→3.5x)로 거대해집니다. 콤보·치명타·반격·정면 방패 가드가 있는 집게 전투로 AI 게 13마리를 뒤집어 점수를 빼앗고, 실시간 1위는 황금 왕관의 킹 크랩이 되어 모두의 표적이 됩니다.",
+    players: { min: 1, max: 1 },
+    playTime: { minMinutes: 5, maxMinutes: 12 },
+    category: "party",
+    thumbnail: { emoji: "🦀", gradient: ["#f97316", "#0e7490"], image: "/games/crab-survival.svg" },
+    tags: ["실시간액션", "1인용", "배틀로얄", "성장", ".io"],
+    genres: ["party"],
+    playable: true,
+    supportsAutoRanking: true,
+  },
+  {
     id: "lost-cities",
     name: "로스트 시티",
     nameEn: "Lost Cities",
