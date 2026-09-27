@@ -29,7 +29,7 @@ import { getDoodlePhoneSound } from "./doodlePhoneSound";
 import DrawingView from "./DrawingView";
 import { ONION_OPACITY } from "./modes";
 import { clearToPaper, prepareContext, renderDrawing, renderOp, strokePath } from "./drawingRenderer";
-import { handleAt, handlesFor, hitTest, opBounds, resizeShape, translateOp, type Handle } from "./editing";
+import { boxFrom, handleAt, handlesFor, hitTest, opBounds, opsInBox, resizeShape, translateGroup, type Handle } from "./editing";
 
 /**
  * Drawing editor (rulebook §4, §11–§13): pen, straight line, rectangle,
@@ -45,6 +45,11 @@ import { handleAt, handlesFor, hitTest, opBounds, resizeShape, translateOp, type
  *
  * History is a stack of op-list snapshots, not "pop the last op", so editing
  * an earlier stroke or shape with the select tool is undoable like drawing.
+ *
+ * Selection can hold several ops: drag a box on empty space (marquee),
+ * Shift/⌘-click or the "여러 개 선택" toggle to add/remove one, or "전체
+ * 선택". Dragging any selected op moves the whole group, clamped as a group
+ * at the sheet edge. Resize handles appear only for a single selected shape.
  *
  * Zoom: two fingers pinch/pan the sheet (CSS transform on the stage);
  * Ctrl/⌘ + wheel does the same on desktop. Pointer→canvas mapping already
@@ -97,8 +102,9 @@ const MIN_SHAPE_SIZE = 2;
 type Gesture =
   | { kind: "stroke"; points: Point[]; color: ColorRef; size: number; opacity: number }
   | { kind: "shape"; shape: ShapeKind; from: Point; to: Point; color: ColorRef; size: number; opacity: number; filled: boolean }
-  | { kind: "move"; index: number; start: Point; original: DrawOp; current: DrawOp }
-  | { kind: "resize"; index: number; handle: Handle; original: DrawOp; current: DrawOp };
+  | { kind: "move"; indices: readonly number[]; start: Point; before: readonly DrawOp[]; after: readonly DrawOp[] }
+  | { kind: "resize"; index: number; handle: Handle; original: DrawOp; current: DrawOp }
+  | { kind: "marquee"; from: Point; to: Point; additive: boolean };
 
 interface Zoom {
   scale: number;
@@ -150,7 +156,8 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
   const undoStackRef = useRef<(readonly DrawOp[])[]>([]);
   const redoStackRef = useRef<(readonly DrawOp[])[]>([]);
   const gestureRef = useRef<Gesture | null>(null);
-  const selectedRef = useRef<number | null>(null);
+  /** Selected indices into opsRef, ascending (drawing order). */
+  const selectedRef = useRef<readonly number[]>([]);
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -168,8 +175,10 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
   const [filledShape, setFilledShape] = useState(false);
   // Mirrors of the refs that the toolbar renders from.
   const [history, setHistory] = useState({ undo: 0, redo: 0, ink: 0, count: 0 });
-  /** The selected op's index and whether it has resize handles (shapes do, strokes don't). */
-  const [selected, setSelected] = useState<{ index: number; resizable: boolean } | null>(null);
+  /** Mirror of the selection for the toolbar: how many, and whether it's a single resizable shape. */
+  const [selected, setSelected] = useState<{ count: number; resizable: boolean }>({ count: 0, resizable: false });
+  /** Mobile stand-in for Shift-click: taps add/remove instead of replacing the selection. */
+  const [addMode, setAddMode] = useState(false);
   /** Zoom level for the "원래대로" badge (the live value is in zoomRef). */
   const [zoomPercent, setZoomPercent] = useState(100);
 
@@ -179,18 +188,19 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     setHistory({ undo: undoStackRef.current.length, redo: redoStackRef.current.length, ink: serializedLength(currentDrawing()), count: opsRef.current.length });
   }, [currentDrawing]);
 
-  /** Repaints the main layer, optionally leaving one of this player's ops out (it's being dragged on the preview layer). */
-  const repaint = useCallback((liftedIndex: number | null = null) => {
+  /** Repaints the main layer, optionally leaving some of this player's ops out (they're being dragged on the preview layer). */
+  const repaint = useCallback((lifted: readonly number[] = []) => {
     const ctx = ctxRef.current;
     if (!ctx) return;
-    const own = liftedIndex === null ? opsRef.current : opsRef.current.filter((_, i) => i !== liftedIndex);
-    renderDrawing(ctx, { v: 1, ops: [...baseOpsRef.current, ...own] });
+    const skip = new Set(lifted);
+    renderDrawing(ctx, { v: 1, ops: [...baseOpsRef.current, ...opsRef.current.filter((_, i) => !skip.has(i))] });
   }, []);
 
-  const select = useCallback((index: number | null) => {
-    selectedRef.current = index;
-    const op = index === null ? undefined : opsRef.current[index];
-    setSelected(op && index !== null ? { index, resizable: handlesFor(op).length > 0 } : null);
+  const select = useCallback((indices: readonly number[]) => {
+    const sorted = [...new Set(indices)].filter((i) => opsRef.current[i]).sort((a, b) => a - b);
+    selectedRef.current = sorted;
+    const single = sorted.length === 1 ? opsRef.current[sorted[0]] : undefined;
+    setSelected({ count: sorted.length, resizable: !!single && handlesFor(single).length > 0 });
   }, []);
 
   useEffect(() => {
@@ -224,7 +234,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
       from.current = from.current.slice(0, -1);
       to.current = [...to.current, opsRef.current];
       opsRef.current = previous;
-      select(null);
+      select([]);
       drawOverlay(null);
       repaint();
       syncHistory();
@@ -240,7 +250,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     if (!ctxRef.current || opsRef.current.length === 0) return;
     const op: DrawOp = { k: "x" };
     renderOp(ctxRef.current, op);
-    select(null);
+    select([]);
     commitOp(op);
   }, [commitOp, select]);
 
@@ -258,6 +268,24 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [disabled, allowUndo, undo, redo]);
+
+  // Select tool shortcuts: Delete/Backspace removes the selection, Esc clears it.
+  const deleteRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (disabled || tool !== "select") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        deleteRef.current();
+      } else if (e.key === "Escape") {
+        select([]);
+        drawOverlayRef.current(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [disabled, tool, select]);
 
   // Ctrl/⌘ + wheel zooms around the cursor on desktop (a passive React onWheel can't preventDefault).
   useEffect(() => {
@@ -309,7 +337,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
   function chooseTool(next: Tool) {
     if (next !== "eraser" && next !== "picker" && next !== "select") lastDrawingToolRef.current = next;
     if (next !== "select") {
-      select(null);
+      select([]);
       drawOverlay(null);
     }
     setTool(next);
@@ -332,13 +360,15 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
         return strokeOp(gesture.color, gesture.size, gesture.points, gesture.opacity);
       case "shape":
         return shapeOp(gesture.shape, gesture.color, gesture.size, gesture.from, gesture.to, { opacity: gesture.opacity, filled: gesture.filled });
-      default:
+      case "resize":
         return gesture.current;
+      default:
+        throw new Error(`gestureToOp: ${gesture.kind} is not a single op`);
     }
   }
 
   /** Selection box + resize handles for `op`, drawn on the preview layer. */
-  function drawSelectionFrame(pctx: CanvasRenderingContext2D, op: DrawOp) {
+  function drawSelectionFrame(pctx: CanvasRenderingContext2D, op: DrawOp, withHandles: boolean) {
     const b = opBounds(op);
     if (!b) return;
     const pad = ("w" in op ? (BRUSH_SIZES[op.w] ?? 5) / 2 : 0) + 4;
@@ -348,7 +378,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     pctx.setLineDash([6, 4]);
     pctx.strokeRect(b.minX - pad, b.minY - pad, b.maxX - b.minX + pad * 2, b.maxY - b.minY + pad * 2);
     pctx.setLineDash([]);
-    for (const h of handlesFor(op)) {
+    for (const h of withHandles ? handlesFor(op) : []) {
       pctx.fillStyle = "#ffffff";
       pctx.fillRect(h.at.x - 5, h.at.y - 5, 10, 10);
       pctx.strokeRect(h.at.x - 5, h.at.y - 5, 10, 10);
@@ -366,9 +396,25 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     pctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
     if (blind) return;
     if (gesture?.kind === "stroke") strokePath(pctx, gesture.color, gesture.size, gesture.points, gesture.opacity / 100);
-    else if (gesture) renderOp(pctx, gestureToOp(gesture));
-    const index = gesture && (gesture.kind === "move" || gesture.kind === "resize") ? gesture.index : selectedRef.current;
-    if (index !== null && opsRef.current[index]) drawSelectionFrame(pctx, gesture && "current" in gesture ? gesture.current : opsRef.current[index]);
+    else if (gesture?.kind === "move") for (const i of gesture.indices) renderOp(pctx, gesture.after[i]);
+    else if (gesture?.kind === "marquee") {
+      const box = boxFrom(gesture.from, gesture.to);
+      pctx.save();
+      pctx.fillStyle = "rgba(217, 70, 239, 0.08)";
+      pctx.strokeStyle = "#d946ef";
+      pctx.setLineDash([4, 3]);
+      pctx.fillRect(box.minX, box.minY, box.maxX - box.minX, box.maxY - box.minY);
+      pctx.strokeRect(box.minX, box.minY, box.maxX - box.minX, box.maxY - box.minY);
+      pctx.restore();
+    } else if (gesture) renderOp(pctx, gestureToOp(gesture));
+
+    // Selection frames: the ops as they currently look (mid-drag or at rest). Handles only for a lone shape.
+    const shown = gesture?.kind === "move" ? gesture.after : opsRef.current;
+    const indices = gesture?.kind === "resize" ? [gesture.index] : selectedRef.current;
+    for (const i of indices) {
+      const op = gesture?.kind === "resize" && i === gesture.index ? gesture.current : shown[i];
+      if (op) drawSelectionFrame(pctx, op, indices.length === 1);
+    }
   }
 
   /** Bakes the gesture into the main layer (dropped if it would overflow the ink cap). */
@@ -380,7 +426,19 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
       drawOverlay(null);
       return;
     }
-    if (gesture.kind === "move" || gesture.kind === "resize") {
+    if (gesture.kind === "marquee") {
+      const found = opsInBox(opsRef.current, boxFrom(gesture.from, gesture.to), firstSelectable());
+      select(gesture.additive ? [...selectedRef.current, ...found] : found);
+      drawOverlay(null);
+      return;
+    }
+    if (gesture.kind === "move") {
+      if (gesture.after !== gesture.before) setOps(gesture.after);
+      repaint();
+      drawOverlay(null);
+      return;
+    }
+    if (gesture.kind === "resize") {
       if (gesture.current !== gesture.original) setOps(opsRef.current.map((op, i) => (i === gesture.index ? gesture.current : op)));
       repaint();
       drawOverlay(null);
@@ -401,6 +459,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     const gesture = gestureRef.current;
     gestureRef.current = null;
     if (gesture && (gesture.kind === "move" || gesture.kind === "resize")) repaint();
+    if (gesture?.kind === "marquee") select(selectedRef.current);
     drawOverlay(null);
     const rect = viewportRef.current!.getBoundingClientRect();
     pinchRef.current = {
@@ -439,21 +498,29 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     const p = toLogical(e);
 
     if (tool === "select") {
-      const current = selectedRef.current;
-      const handle = current !== null && opsRef.current[current] ? handleAt(opsRef.current[current], p) : null;
-      if (current !== null && handle) {
-        gestureRef.current = { kind: "resize", index: current, handle, original: opsRef.current[current], current: opsRef.current[current] };
+      const chosen = selectedRef.current;
+      const lone = chosen.length === 1 ? opsRef.current[chosen[0]] : undefined;
+      const handle = lone ? handleAt(lone, p) : null;
+      const additive = addMode || e.shiftKey || e.metaKey || e.ctrlKey;
+      const hit = hitTest(opsRef.current, p, firstSelectable());
+      if (lone && handle) {
+        gestureRef.current = { kind: "resize", index: chosen[0], handle, original: lone, current: lone };
+        repaint([chosen[0]]);
+      } else if (hit < 0) {
+        // Empty space: drag a box to select what it touches.
+        gestureRef.current = { kind: "marquee", from: p, to: p, additive };
+        if (!additive) select([]);
+      } else if (additive) {
+        select(chosen.includes(hit) ? chosen.filter((i) => i !== hit) : [...chosen, hit]);
+        drawOverlay(null);
+        return;
       } else {
-        const hit = hitTest(opsRef.current, p, firstSelectable());
-        select(hit >= 0 ? hit : null);
-        if (hit < 0) {
-          drawOverlay(null);
-          return;
-        }
-        gestureRef.current = { kind: "move", index: hit, start: p, original: opsRef.current[hit], current: opsRef.current[hit] };
+        const group = chosen.includes(hit) ? chosen : [hit];
+        select(group);
+        gestureRef.current = { kind: "move", indices: selectedRef.current, start: p, before: opsRef.current, after: opsRef.current };
+        // Lift the group off the main layer while it's dragged on the preview layer.
+        repaint(selectedRef.current);
       }
-      // Lift the op off the main layer while it's dragged on the preview layer.
-      repaint(gestureRef.current.index);
       drawOverlay(gestureRef.current);
       return;
     }
@@ -492,7 +559,11 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     const p = toLogical(e);
     switch (gesture.kind) {
       case "move":
-        gesture.current = translateOp(gesture.original, p.x - gesture.start.x, p.y - gesture.start.y);
+        gesture.after = translateGroup(gesture.before, gesture.indices, p.x - gesture.start.x, p.y - gesture.start.y);
+        drawOverlay(gesture);
+        return;
+      case "marquee":
+        gesture.to = p;
         drawOverlay(gesture);
         return;
       case "resize":
@@ -532,13 +603,25 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
   }
 
   function deleteSelected() {
-    const index = selectedRef.current;
-    if (index === null) return;
-    select(null);
-    setOps(opsRef.current.filter((_, i) => i !== index));
+    const doomed = new Set(selectedRef.current);
+    if (doomed.size === 0) return;
+    select([]);
+    setOps(opsRef.current.filter((_, i) => !doomed.has(i)));
     repaint();
     drawOverlay(null);
   }
+
+  function selectAll() {
+    const from = firstSelectable();
+    select(opsInBox(opsRef.current, { minX: 0, minY: 0, maxX: CANVAS_W, maxY: CANVAS_H }, from));
+    drawOverlay(null);
+  }
+
+  const drawOverlayRef = useRef(drawOverlay);
+  useEffect(() => {
+    deleteRef.current = deleteSelected;
+    drawOverlayRef.current = drawOverlay;
+  });
 
   const toolButton = "flex h-9 w-7 shrink-0 items-center justify-center rounded-lg border text-sm transition disabled:opacity-40 sm:w-9";
   const idle = "border-white/10 bg-white/5 text-white/80 hover:border-white/30 light:border-slate-200 light:bg-white light:text-slate-700";
@@ -630,19 +713,27 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
           </div>
 
           {tool === "select" ? (
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/60 light:text-slate-500">
-              {selected === null ? (
-                <span>👆 옮기거나 크기를 바꿀 선·도형을 누르세요. 도형은 모서리 □를 끌면 크기가 바뀌어요.</span>
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-white/60 light:text-slate-500">
+              <button type="button" aria-pressed={addMode} onClick={() => setAddMode((v) => !v)} className={`rounded-md border px-2 py-0.5 ${addMode ? active : idle}`}>
+                ➕ 여러 개 선택
+              </button>
+              <button type="button" onClick={selectAll} className={`rounded-md border px-2 py-0.5 ${idle}`}>
+                전체 선택
+              </button>
+              {selected.count === 0 ? (
+                <span>👆 선·도형을 누르거나, 빈 곳을 끌어 한꺼번에 골라요.</span>
               ) : (
                 <>
-                  <span className="text-fuchsia-200 light:text-fuchsia-700">선택됨 — 끌어서 옮기기{selected.resizable && " · □ 끌어서 크기 조절"}</span>
+                  <span className="text-fuchsia-200 light:text-fuchsia-700">
+                    {selected.count}개 선택 — 끌어서 같이 옮기기{selected.resizable && " · □ 끌어서 크기 조절"}
+                  </span>
                   <button type="button" onClick={deleteSelected} className={`rounded-md border px-2 py-0.5 ${idle}`}>
-                    🗑 선택한 것 지우기
+                    🗑 지우기
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      select(null);
+                      select([]);
                       drawOverlay(null);
                     }}
                     className={`rounded-md border px-2 py-0.5 ${idle}`}

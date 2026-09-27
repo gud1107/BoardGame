@@ -154,3 +154,48 @@ export function resizeShape(op: DrawOp, handle: Handle, to: Point): DrawOp {
   if (!fixed) return op;
   return { ...op, p: [fixed.x, fixed.y, x, y] };
 }
+
+// ---------------------------------------------------------------------------
+// Multi-selection
+// ---------------------------------------------------------------------------
+
+export function unionBounds(ops: readonly DrawOp[]): Bounds | null {
+  const all = ops.map(opBounds).filter((b): b is Bounds => b !== null);
+  if (all.length === 0) return null;
+  return {
+    minX: Math.min(...all.map((b) => b.minX)),
+    minY: Math.min(...all.map((b) => b.minY)),
+    maxX: Math.max(...all.map((b) => b.maxX)),
+    maxY: Math.max(...all.map((b) => b.maxY)),
+  };
+}
+
+/** Normalized box from two drag corners. */
+export function boxFrom(a: Point, b: Point): Bounds {
+  return { minX: Math.min(a.x, b.x), minY: Math.min(a.y, b.y), maxX: Math.max(a.x, b.x), maxY: Math.max(a.y, b.y) };
+}
+
+/** Indices of selectable ops in `ops[from..]` whose bounds touch `box` — the marquee (drag-to-select) rule. */
+export function opsInBox(ops: readonly DrawOp[], box: Bounds, from = 0): number[] {
+  const hits: number[] = [];
+  for (let i = from; i < ops.length; i++) {
+    const b = isSelectable(ops[i]) ? opBounds(ops[i]) : null;
+    if (b && b.minX <= box.maxX && b.maxX >= box.minX && b.minY <= box.maxY && b.maxY >= box.minY) hits.push(i);
+  }
+  return hits;
+}
+
+/**
+ * `ops` with every op at `indices` shifted by the same (dx, dy). The shift is
+ * clamped on the group's combined bounds, so the whole selection stops at the
+ * sheet edge together instead of each piece clamping on its own and the
+ * arrangement getting squashed.
+ */
+export function translateGroup(ops: readonly DrawOp[], indices: readonly number[], dx: number, dy: number): DrawOp[] {
+  const chosen = new Set(indices);
+  const b = unionBounds(ops.filter((_, i) => chosen.has(i)));
+  if (!b) return [...ops];
+  const cdx = Math.round(Math.min(CANVAS_W - b.maxX, Math.max(-b.minX, dx)));
+  const cdy = Math.round(Math.min(CANVAS_H - b.maxY, Math.max(-b.minY, dy)));
+  return ops.map((op, i) => (chosen.has(i) ? translateOp(op, cdx, cdy) : op));
+}

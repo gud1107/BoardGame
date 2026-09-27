@@ -42,7 +42,7 @@ import {
 } from "./engine";
 import { FALLBACK_PROMPTS } from "./prompts";
 import { ChunkAssembler, splitIntoChunks } from "./syncChunks";
-import { handleAt, handlesFor, hitTest, hitsOp, resizeShape, translateOp } from "./editing";
+import { boxFrom, handleAt, handlesFor, hitTest, hitsOp, opsInBox, resizeShape, translateGroup, translateOp, unionBounds } from "./editing";
 import { CHORDS, LOOP_STEPS, STEPS_PER_BAR, lofiEventsAt, midiToHz } from "./lofiPattern";
 import { GAME_MODES, ICEBREAKER_QUESTIONS, icebreakerQuestion, openingChoices, sanitizeOptions, turnKindFor, turnSecondsFor, type GameMode } from "./modes";
 import { THEME_BANK, themeChoices } from "./themes";
@@ -591,5 +591,33 @@ describe("select / move / resize geometry (editing.ts)", () => {
     expect(resizeShape(line, "p2", { x: 999, y: 50 })).toMatchObject({ p: [10, 10, 480, 50] });
     expect(handlesFor(stroke)).toEqual([]);
     expect(resizeShape(stroke, "se", { x: 1, y: 1 })).toBe(stroke);
+  });
+});
+
+describe("multi-selection (editing.ts)", () => {
+  const a = shapeOp("r", 1, 1, { x: 10, y: 10 }, { x: 60, y: 60 });
+  const b = shapeOp("e", 1, 1, { x: 100, y: 20 }, { x: 160, y: 80 });
+  const c = strokeOp(1, 1, [{ x: 300, y: 300 }, { x: 350, y: 320 }]);
+  const ops = [a, b, fillOp(2, { x: 30, y: 30 }), c];
+
+  it("marquee selects every selectable op it touches, skipping fills and anything before `from`", () => {
+    expect(opsInBox(ops, boxFrom({ x: 0, y: 0 }, { x: 110, y: 40 }))).toEqual([0, 1]);
+    expect(opsInBox(ops, boxFrom({ x: 480, y: 360 }, { x: 0, y: 0 }))).toEqual([0, 1, 3]);
+    expect(opsInBox(ops, boxFrom({ x: 0, y: 0 }, { x: 480, y: 360 }), 2)).toEqual([3]);
+  });
+
+  it("moves a group together and leaves the rest untouched", () => {
+    const moved = translateGroup(ops, [0, 1], 20, 5);
+    expect(moved[0]).toMatchObject({ p: [30, 15, 80, 65] });
+    expect(moved[1]).toMatchObject({ p: [120, 25, 180, 85] });
+    expect(moved[2]).toBe(ops[2]);
+    expect(moved[3]).toBe(ops[3]);
+  });
+
+  it("clamps the group as a whole at the sheet edge, keeping the spacing between pieces", () => {
+    const moved = translateGroup(ops, [0, 1], -500, 0); // group minX is 10 → can only move 10 left
+    expect(moved[0]).toMatchObject({ p: [0, 10, 50, 60] });
+    expect(moved[1]).toMatchObject({ p: [90, 20, 150, 80] });
+    expect(unionBounds([moved[0], moved[1]])).toEqual({ minX: 0, minY: 10, maxX: 150, maxY: 80 });
   });
 });
