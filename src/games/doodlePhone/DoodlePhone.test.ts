@@ -1,7 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { seededRng, shuffle } from "@/lib/rng";
 import { addToDrawing, chooseBotAction, getValidMoves, guessFromDrawing, botDrawingFor, inkByColor, nextBotActor, redrawDrawing } from "./bot";
-import { EMPTY_DRAWING, MAX_DRAWING_CHARS, decodePoints, encodePoints, fillOp, isValidDrawing, opAlpha, opCost, shapeOp, strokeOp, type Drawing } from "./drawing";
+import {
+  EMPTY_DRAWING,
+  MAX_DRAWING_CHARS,
+  PALETTE,
+  SHAPE_REPLAY_STEPS,
+  decodePoints,
+  encodePoints,
+  fillOp,
+  isBlankDrawing,
+  isValidDrawing,
+  nearestPaletteIndex,
+  normalizeColor,
+  opAlpha,
+  opCost,
+  pointCount,
+  shapeOp,
+  strokeOp,
+  type Drawing,
+} from "./drawing";
 import {
   MAX_REACTIONS_PER_PAGE,
   albumFor,
@@ -485,7 +503,8 @@ describe("shape tools + opacity (drawing.ts)", () => {
     expect(strokeOp(1, 1, [{ x: 1, y: 1 }], 25)).toHaveProperty("a", 25);
     expect(fillOp(3, { x: 10, y: 10 }, 3)).toHaveProperty("a", 10); // clamped to the minimum
     expect(opAlpha(box("e", false, 40))).toBeCloseTo(0.4);
-    expect(opCost(box("r"))).toBe(1);
+    expect(opCost(box("r"))).toBe(SHAPE_REPLAY_STEPS); // shapes replay progressively in the showcase
+    expect(pointCount({ v: 1, ops: [box("l"), fillOp(1, { x: 1, y: 1 })] })).toBe(SHAPE_REPLAY_STEPS + 1);
   });
 
   it("the engine accepts a drawing made with every tool", () => {
@@ -504,5 +523,27 @@ describe("shape tools + opacity (drawing.ts)", () => {
     expect(copy.ops[0]).toHaveProperty("f", 1);
     expect(copy.ops[1]).toHaveProperty("a", 50);
     expect(inkByColor(source).get(5)).toBeGreaterThan(0);
+  });
+});
+
+describe("free colors — picker & eyedropper (drawing.ts)", () => {
+  it("accepts palette indices and #rrggbb, rejects anything else", () => {
+    const ok = (c: unknown) => isValidDrawing({ v: 1, ops: [{ k: "s", c, w: 1, p: [1, 1] }] } as unknown as Drawing);
+    expect(ok(3)).toBe(true);
+    expect(ok("#12ab9f")).toBe(true);
+    for (const bad of [20, -1, "#12AB9", "red", "#12ab9fz", null]) expect(ok(bad), String(bad)).toBe(false);
+  });
+
+  it("stores a picked palette color as its index and lowercases free hex", () => {
+    expect(normalizeColor(PALETTE[5].toUpperCase())).toBe(5);
+    expect(strokeOp("#12AB9F", 1, [{ x: 1, y: 1 }])).toHaveProperty("c", "#12ab9f");
+    expect(shapeOp("r", PALETTE[13], 1, { x: 1, y: 1 }, { x: 9, y: 9 })).toHaveProperty("c", 13);
+  });
+
+  it("maps free colors to the nearest palette entry and treats picked white as paper", () => {
+    expect(nearestPaletteIndex("#ee4040")).toBe(5); // ≈ red
+    expect(isBlankDrawing({ v: 1, ops: [strokeOp("#ffffff", 1, [{ x: 1, y: 1 }])] })).toBe(true);
+    const custom: Drawing = { v: 1, ops: [shapeOp("r", "#1f9a45", 2, { x: 10, y: 10 }, { x: 300, y: 300 }, { filled: true })] };
+    expect([...inkByColor(custom).keys()]).toEqual([nearestPaletteIndex("#1f9a45")]);
   });
 });

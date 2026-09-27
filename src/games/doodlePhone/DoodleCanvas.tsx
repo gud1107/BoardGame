@@ -12,10 +12,14 @@ import {
   PALETTE,
   PAPER_COLOR,
   clampToCanvas,
+  colorHex,
   fillOp,
+  normalizeColor,
+  rgbToHex,
   serializedLength,
   shapeOp,
   strokeOp,
+  type ColorRef,
   type ShapeKind,
   type DrawOp,
   type Drawing,
@@ -29,8 +33,10 @@ import { clearToPaper, prepareContext, renderDrawing, renderOp, strokePath } fro
 /**
  * Drawing editor (rulebook §4): pen, straight line, rectangle, ellipse
  * (outline or filled), paint bucket, eraser, undo/redo, clear, 5 brush sizes,
- * 20 colors, an opacity slider ("연하게 ↔ 짙게") and an ink gauge for the
- * per-drawing size cap.
+ * 20 colors plus a free color picker and an eyedropper, an opacity slider
+ * ("연하게 ↔ 짙게") and an ink gauge for the per-drawing size cap. The tool
+ * row is a single line: icon-only buttons with tooltips, and on phones the
+ * five brush sizes collapse into one button that cycles through them.
  *
  * Two layers: the gesture in progress — a pen stroke or a shape being dragged
  * — is drawn on a transparent preview canvas on top and only baked into the
@@ -60,7 +66,10 @@ export interface DoodleCanvasHandle {
   getDrawing(): Drawing;
 }
 
-type Tool = "pen" | "line" | "rect" | "ellipse" | "fill" | "eraser";
+type Tool = "pen" | "line" | "rect" | "ellipse" | "fill" | "eraser" | "picker";
+
+/** How many recently picked free colors stay one tap away. */
+const MAX_RECENT_COLORS = 6;
 
 const SHAPE_OF: Partial<Record<Tool, ShapeKind>> = { line: "l", rect: "r", ellipse: "e" };
 /** "연하게" preset — sketch/underdrawing strength. */
@@ -69,8 +78,8 @@ const LIGHT_OPACITY = 25;
 const MIN_SHAPE_SIZE = 2;
 
 type Gesture =
-  | { kind: "stroke"; points: Point[]; color: number; size: number; opacity: number }
-  | { kind: "shape"; shape: ShapeKind; from: Point; to: Point; color: number; size: number; opacity: number; filled: boolean };
+  | { kind: "stroke"; points: Point[]; color: ColorRef; size: number; opacity: number }
+  | { kind: "shape"; shape: ShapeKind; from: Point; to: Point; color: ColorRef; size: number; opacity: number; filled: boolean };
 
 const PIXEL_SCALE = 2;
 /** Skip pointer samples closer than this (logical px) — keeps payloads small without visible loss. */
@@ -87,6 +96,7 @@ const TOOLS: { id: Tool; icon: string; label: string }[] = [
   { id: "ellipse", icon: "⚪", label: "원" },
   { id: "fill", icon: "🪣", label: "채우기" },
   { id: "eraser", icon: "🧽", label: "지우개" },
+  { id: "picker", icon: "💧", label: "스포이드 (그림에서 색 가져오기)" },
 ];
 
 /** Shift-drag makes a perfect square/circle. */
@@ -117,7 +127,10 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
   const previewCtxRef = useRef<CanvasRenderingContext2D | null>(null);
 
   const [tool, setTool] = useState<Tool>("pen");
-  const [color, setColor] = useState(INK_COLOR);
+  const [color, setColor] = useState<ColorRef>(INK_COLOR);
+  const [recentColors, setRecentColors] = useState<string[]>([]);
+  /** Drawing tool to return to after a one-shot eyedropper pick. */
+  const lastDrawingToolRef = useRef<Tool>("pen");
   const [size, setSize] = useState(1);
   const [opacity, setOpacity] = useState(MAX_OPACITY);
   const [filledShape, setFilledShape] = useState(false);
@@ -201,6 +214,30 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     return clampToCanvas({ x: ((e.clientX - rect.left) / rect.width) * CANVAS_W, y: ((e.clientY - rect.top) / rect.height) * CANVAS_H });
   }
 
+  /** Selects a color; free (non-palette) colors are remembered as recents. Leaves eraser/eyedropper for the last drawing tool. */
+  function chooseColor(next: ColorRef) {
+    const normalized = normalizeColor(next);
+    setColor(normalized);
+    if (typeof normalized === "string") setRecentColors((list) => [normalized, ...list.filter((c) => c !== normalized)].slice(0, MAX_RECENT_COLORS));
+    if (tool === "eraser" || tool === "picker") setTool(lastDrawingToolRef.current);
+  }
+
+  function chooseTool(next: Tool) {
+    if (next !== "eraser" && next !== "picker") lastDrawingToolRef.current = next;
+    setTool(next);
+  }
+
+  /** Eyedropper: the pixel under the pointer on the real layer (the offscreen one in blind mode). */
+  function pickColorAt(p: Point) {
+    const ctx = ctxRef.current;
+    if (!ctx) return;
+    const scale = ctx.getTransform().a || 1;
+    const x = Math.min(ctx.canvas.width - 1, Math.floor(p.x * scale));
+    const y = Math.min(ctx.canvas.height - 1, Math.floor(p.y * scale));
+    const [r, g, b] = ctx.getImageData(x, y, 1, 1).data;
+    chooseColor(rgbToHex(r, g, b));
+  }
+
   /** Redraws the in-progress gesture on the preview layer (nothing in blind mode — that's the point of it). */
   function drawPreview(gesture: Gesture | null) {
     const pctx = previewCtxRef.current;
@@ -239,6 +276,10 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     sound.unlock();
     sound.drawTick();
     const p = toLogical(e);
+    if (tool === "picker") {
+      pickColorAt(p);
+      return;
+    }
     if (tool === "fill") {
       const op = fillOp(color, p, opacity);
       renderOp(ctx, op);
@@ -275,7 +316,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
     }
   }
 
-  const toolButton = "flex h-9 min-w-9 items-center justify-center rounded-lg border px-2 text-sm transition disabled:opacity-40";
+  const toolButton = "flex h-9 w-7 shrink-0 items-center justify-center rounded-lg border text-sm transition disabled:opacity-40 sm:w-9";
   const idle = "border-white/10 bg-white/5 text-white/80 hover:border-white/30 light:border-slate-200 light:bg-white light:text-slate-700";
   const active = "border-fuchsia-400 bg-fuchsia-500/25 text-white light:bg-fuchsia-50 light:text-fuchsia-800";
 
@@ -289,7 +330,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
         onPointerUp={finishGesture}
         onPointerCancel={finishGesture}
         className={`block aspect-[4/3] w-full touch-none rounded-xl bg-white shadow-lg ring-2 ring-fuchsia-400/40 select-none ${
-          disabled ? "cursor-not-allowed opacity-80" : tool === "fill" ? "cursor-cell" : "cursor-crosshair"
+          disabled ? "cursor-not-allowed opacity-80" : tool === "fill" || tool === "picker" ? "cursor-cell" : "cursor-crosshair"
         }`}
         aria-label="그림판"
       />
@@ -308,35 +349,48 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
 
       {!disabled && (
         <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/20 p-2 light:border-slate-200 light:bg-slate-50">
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-nowrap items-center gap-0.5 overflow-x-auto [scrollbar-width:none] sm:gap-1.5 [&::-webkit-scrollbar]:hidden">
             {TOOLS.map((t) => (
-              <button key={t.id} type="button" title={t.label} aria-pressed={tool === t.id} onClick={() => setTool(t.id)} className={`${toolButton} ${tool === t.id ? active : idle}`}>
+              <button key={t.id} type="button" title={t.label} aria-label={t.label} aria-pressed={tool === t.id} onClick={() => chooseTool(t.id)} className={`${toolButton} ${tool === t.id ? active : idle}`}>
                 {t.icon}
-                <span className="ml-1 hidden text-xs sm:inline">{t.label}</span>
               </button>
             ))}
-            <span className="mx-1 h-6 w-px bg-white/10 light:bg-slate-200" />
+            <span className="mx-0.5 hidden h-6 w-px shrink-0 bg-white/10 sm:block light:bg-slate-200" />
             {allowUndo && (
               <>
-                <button type="button" title="되돌리기 (Ctrl+Z)" onClick={undo} disabled={history.undo === 0} className={`${toolButton} ${idle}`}>
+                <button type="button" title="되돌리기 (Ctrl+Z)" aria-label="되돌리기" onClick={undo} disabled={history.undo === 0} className={`${toolButton} ${idle}`}>
                   ↶
                 </button>
-                <button type="button" title="다시하기 (Ctrl+Y)" onClick={redo} disabled={history.redo === 0} className={`${toolButton} ${idle}`}>
+                <button type="button" title="다시하기 (Ctrl+Y)" aria-label="다시하기" onClick={redo} disabled={history.redo === 0} className={`${toolButton} ${idle}`}>
                   ↷
                 </button>
               </>
             )}
             {!baseDrawing?.ops.length && (
-              <button type="button" title="전체 지우기" onClick={clearAll} disabled={history.undo === 0} className={`${toolButton} ${idle}`}>
+              <button type="button" title="전체 지우기" aria-label="전체 지우기" onClick={clearAll} disabled={history.undo === 0} className={`${toolButton} ${idle}`}>
                 🗑️
               </button>
             )}
-            <span className="mx-1 h-6 w-px bg-white/10 light:bg-slate-200" />
-            {BRUSH_SIZES.map((px, i) => (
-              <button key={px} type="button" title={`굵기 ${i + 1}`} aria-pressed={size === i} onClick={() => setSize(i)} className={`${toolButton} w-9 ${size === i ? active : idle}`}>
-                <span className="rounded-full bg-current" style={{ width: Math.min(22, px * 0.75 + 2), height: Math.min(22, px * 0.75 + 2) }} />
+            <span className="mx-0.5 hidden h-6 w-px shrink-0 bg-white/10 sm:block light:bg-slate-200" />
+            {/* Phones: one button cycling through the sizes keeps the row to a single line. */}
+            <span className="shrink-0 sm:hidden">
+              <button
+                type="button"
+                title={`굵기 ${size + 1}/${BRUSH_SIZES.length} (눌러서 바꾸기)`}
+                aria-label={`굵기 ${size + 1}, 눌러서 바꾸기`}
+                onClick={() => setSize((i) => (i + 1) % BRUSH_SIZES.length)}
+                className={`${toolButton} ${active}`}
+              >
+                <BrushDot px={BRUSH_SIZES[size]} />
               </button>
-            ))}
+            </span>
+            <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
+              {BRUSH_SIZES.map((px, i) => (
+                <button key={px} type="button" title={`굵기 ${i + 1}`} aria-label={`굵기 ${i + 1}`} aria-pressed={size === i} onClick={() => setSize(i)} className={`${toolButton} ${size === i ? active : idle}`}>
+                  <BrushDot px={px} />
+                </button>
+              ))}
+            </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/60 light:text-slate-500">
@@ -385,14 +439,35 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
                 type="button"
                 title={i === PAPER_COLOR ? "흰색" : hex}
                 aria-pressed={color === i}
-                onClick={() => {
-                  setColor(i);
-                  if (tool === "eraser") setTool("pen");
-                }}
+                onClick={() => chooseColor(i)}
                 className={`aspect-square rounded-md border transition ${color === i ? "scale-110 border-fuchsia-300 ring-2 ring-fuchsia-400" : "border-black/20 hover:scale-105"}`}
                 style={{ backgroundColor: hex }}
               />
             ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-white/60 light:text-slate-500">
+            <label
+              title="팔레트 밖의 색 직접 고르기"
+              className="relative flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-white/15 px-2 hover:border-white/30 light:border-slate-300"
+            >
+              <span className="h-4 w-4 rounded-sm border border-black/20" style={{ backgroundColor: colorHex(color) }} />
+              🎨 직접 고르기
+              <input type="color" value={colorHex(color)} onChange={(e) => chooseColor(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label="색 직접 고르기" />
+            </label>
+            {recentColors.map((hex) => (
+              <button
+                key={hex}
+                type="button"
+                title={hex}
+                aria-label={`최근 색 ${hex}`}
+                aria-pressed={color === hex}
+                onClick={() => chooseColor(hex)}
+                className={`h-7 w-7 rounded-md border transition ${color === hex ? "scale-110 border-fuchsia-300 ring-2 ring-fuchsia-400" : "border-black/20 hover:scale-105"}`}
+                style={{ backgroundColor: hex }}
+              />
+            ))}
+            {tool === "picker" && <span className="text-fuchsia-200 light:text-fuchsia-700">💧 그림을 눌러 그 색을 가져와요</span>}
           </div>
 
           <div className="flex items-center gap-2 text-[11px] text-white/50 light:text-slate-500">
@@ -409,4 +484,9 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
       )}
     </div>
   );
+}
+
+function BrushDot({ px }: { px: number }) {
+  const d = Math.min(22, px * 0.75 + 2);
+  return <span className="rounded-full bg-current" style={{ width: d, height: d }} />;
 }

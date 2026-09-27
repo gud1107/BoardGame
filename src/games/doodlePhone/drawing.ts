@@ -25,6 +25,57 @@ export const PALETTE: readonly string[] = [
 export const PAPER_COLOR = 0;
 export const INK_COLOR = 1;
 
+/**
+ * An op's color: a PALETTE index (compact — the usual case) or a free
+ * `#rrggbb` from the color picker / eyedropper. `normalizeColor` turns a hex
+ * that equals a palette entry back into its index, so picking a palette color
+ * with the eyedropper doesn't grow the payload.
+ */
+export type ColorRef = number | string;
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/;
+
+export function isColorRef(value: unknown): value is ColorRef {
+  return (typeof value === "number" && Number.isInteger(value) && value >= 0 && value < PALETTE.length) || (typeof value === "string" && HEX_COLOR.test(value));
+}
+
+export function colorHex(color: ColorRef): string {
+  return typeof color === "number" ? (PALETTE[color] ?? PALETTE[INK_COLOR]) : color;
+}
+
+export function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+export function rgbToHex(r: number, g: number, b: number): string {
+  return `#${[r, g, b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
+}
+
+export function normalizeColor(color: ColorRef): ColorRef {
+  if (typeof color === "number") return color;
+  const hex = color.toLowerCase();
+  const index = PALETTE.indexOf(hex);
+  return index >= 0 ? index : hex;
+}
+
+/** Closest palette entry by RGB distance — lets palette-keyed logic (bot guesses, blank check) understand free colors. */
+export function nearestPaletteIndex(color: ColorRef): number {
+  if (typeof color === "number") return color;
+  const [r, g, b] = hexToRgb(color);
+  let best = 0;
+  let bestDist = Infinity;
+  PALETTE.forEach((hex, i) => {
+    const [pr, pg, pb] = hexToRgb(hex);
+    const d = (pr - r) ** 2 + (pg - g) ** 2 + (pb - b) ** 2;
+    if (d < bestDist) {
+      bestDist = d;
+      best = i;
+    }
+  });
+  return best;
+}
+
 /** Brush diameters in logical px, smallest to largest. */
 export const BRUSH_SIZES: readonly number[] = [2, 5, 10, 18, 30];
 
@@ -55,9 +106,9 @@ export type ShapeKind = "l" | "r" | "e";
  * `a` (10–100, percent) is the "연하게/짙게" opacity; the eraser never uses it.
  */
 export type DrawOp =
-  | { readonly k: "s"; readonly c: number; readonly w: number; readonly p: readonly number[]; readonly a?: number }
-  | { readonly k: "f"; readonly c: number; readonly x: number; readonly y: number; readonly a?: number }
-  | { readonly k: ShapeKind; readonly c: number; readonly w: number; readonly p: readonly number[]; readonly a?: number; readonly f?: 1 }
+  | { readonly k: "s"; readonly c: ColorRef; readonly w: number; readonly p: readonly number[]; readonly a?: number }
+  | { readonly k: "f"; readonly c: ColorRef; readonly x: number; readonly y: number; readonly a?: number }
+  | { readonly k: ShapeKind; readonly c: ColorRef; readonly w: number; readonly p: readonly number[]; readonly a?: number; readonly f?: 1 }
   | { readonly k: "x" };
 
 export interface Drawing {
@@ -114,19 +165,19 @@ function withOpacity<T extends object>(op: T, opacity: number): T & { a?: number
   return a >= MAX_OPACITY ? op : { ...op, a };
 }
 
-export function strokeOp(color: number, sizeIndex: number, points: readonly Point[], opacity = MAX_OPACITY): DrawOp {
-  return withOpacity({ k: "s" as const, c: color, w: sizeIndex, p: encodePoints(points) }, opacity);
+export function strokeOp(color: ColorRef, sizeIndex: number, points: readonly Point[], opacity = MAX_OPACITY): DrawOp {
+  return withOpacity({ k: "s" as const, c: normalizeColor(color), w: sizeIndex, p: encodePoints(points) }, opacity);
 }
 
-export function fillOp(color: number, at: Point, opacity = MAX_OPACITY): DrawOp {
+export function fillOp(color: ColorRef, at: Point, opacity = MAX_OPACITY): DrawOp {
   const p = clampToCanvas(at);
-  return withOpacity({ k: "f" as const, c: color, x: p.x, y: p.y }, opacity);
+  return withOpacity({ k: "f" as const, c: normalizeColor(color), x: p.x, y: p.y }, opacity);
 }
 
-export function shapeOp(kind: ShapeKind, color: number, sizeIndex: number, from: Point, to: Point, opts: { opacity?: number; filled?: boolean } = {}): DrawOp {
+export function shapeOp(kind: ShapeKind, color: ColorRef, sizeIndex: number, from: Point, to: Point, opts: { opacity?: number; filled?: boolean } = {}): DrawOp {
   const a = clampToCanvas(from);
   const b = clampToCanvas(to);
-  const op = { k: kind, c: color, w: sizeIndex, p: [a.x, a.y, b.x, b.y], ...(opts.filled && kind !== "l" ? { f: 1 as const } : {}) };
+  const op = { k: kind, c: normalizeColor(color), w: sizeIndex, p: [a.x, a.y, b.x, b.y], ...(opts.filled && kind !== "l" ? { f: 1 as const } : {}) };
   return withOpacity(op, opts.opacity ?? MAX_OPACITY);
 }
 
@@ -150,14 +201,18 @@ export function pointCount(drawing: Drawing): number {
   return n;
 }
 
-/** Replay cost of one op in "points": a stroke costs its points, everything else draws in one step. */
+/** Replay steps a shape is spread over, so the showcase draws it progressively like a stroke. */
+export const SHAPE_REPLAY_STEPS = 24;
+
+/** Replay cost of one op in "points": a stroke costs its points, a shape SHAPE_REPLAY_STEPS, fills/clears one step. */
 export function opCost(op: DrawOp): number {
-  return op.k === "s" ? op.p.length / 2 : 1;
+  if (op.k === "s") return op.p.length / 2;
+  return isShapeOp(op) ? SHAPE_REPLAY_STEPS : 1;
 }
 
 /** True when nothing visible was drawn (only erasing/clearing or no ops). */
 export function isBlankDrawing(drawing: Drawing): boolean {
-  return drawing.ops.every((op) => op.k === "x" || op.c === PAPER_COLOR);
+  return drawing.ops.every((op) => op.k === "x" || colorHex(op.c) === PALETTE[PAPER_COLOR]);
 }
 
 function isInt(n: unknown, min: number, max: number): n is number {
@@ -177,7 +232,7 @@ export function isValidDrawing(value: unknown): value is Drawing {
     if (typeof op !== "object" || op === null) return false;
     const o = op as Record<string, unknown>;
     if (o.k === "x") continue;
-    if (!isInt(o.c, 0, PALETTE.length - 1)) return false;
+    if (!isColorRef(o.c)) return false;
     if (o.a !== undefined && !isInt(o.a, MIN_OPACITY, MAX_OPACITY)) return false;
     if (o.k === "f") {
       if (!isInt(o.x, 0, CANVAS_W) || !isInt(o.y, 0, CANVAS_H)) return false;

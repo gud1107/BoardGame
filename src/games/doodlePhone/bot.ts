@@ -25,7 +25,7 @@
  */
 
 import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
-import { CANVAS_H, CANVAS_W, EMPTY_DRAWING, MAX_DRAWING_CHARS, decodePoints, isBlankDrawing, isShapeOp, opAlpha, serializedLength, shapeOp, strokeOp, type DrawOp, type Drawing, type Point } from "./drawing";
+import { CANVAS_H, CANVAS_W, EMPTY_DRAWING, MAX_DRAWING_CHARS, decodePoints, isBlankDrawing, isShapeOp, nearestPaletteIndex, opAlpha, serializedLength, shapeOp, strokeOp, type DrawOp, type Drawing, type Point } from "./drawing";
 import {
   TEXT_MAX_CHARS,
   albumFor,
@@ -448,7 +448,8 @@ export function inkByColor(drawing: Drawing): Map<number, number> {
       // Filled shapes count their area (scaled like a fill), outlines their perimeter like a stroke.
       amount = op.k === "l" ? Math.hypot(w, h) * (op.w + 1) : op.f === 1 ? (w * h) / 40 : 2 * (w + h) * (op.w + 1);
     }
-    ink.set(op.c, (ink.get(op.c) ?? 0) + amount * opAlpha(op));
+    const key = nearestPaletteIndex(op.c); // free picker colors count as their closest palette color
+    ink.set(key, (ink.get(key) ?? 0) + amount * opAlpha(op));
   }
   ink.delete(0);
   return ink;
