@@ -1,12 +1,13 @@
 "use client";
 
 import Avatar from "@/components/common/Avatar";
-import { purseValue } from "./constants";
+import { ASSET_DEFS, purseValue } from "./constants";
 import { computeCollectionBonus, computePlayerScore } from "./engine";
 import type { CoinVisibility, PlayerState, SeatIndex } from "./types";
 
 const MARKET_EMOJI: Record<string, string> = { 미장: "🇺🇸", 국장: "🇰🇷", 코인: "🪙" };
 const SECTOR_EMOJI: Record<string, string> = { "빅테크&AI": "🤖", 블루칩: "🏆", "밈&테마주": "🎢" };
+const ASSET_NAME = new Map(ASSET_DEFS.map((a) => [a.id, a.name]));
 
 /**
  * One seat's summary card — name, purse (respecting `coinVisibility`), asset
@@ -63,6 +64,24 @@ export default function PlayerArea({
         <span>📊 보유자산 {ownedAssets.length}장</span>
         <span className="font-semibold text-white light:text-slate-900">점수 {score.total}</span>
       </div>
+
+      {player.assets.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {player.assets.map((a) => (
+            <div
+              key={a.assetId}
+              title={`${ASSET_NAME.get(a.assetId) ?? a.assetId}${a.discarded ? " (폐기)" : ` · ${a.currentScore}점`}`}
+              className={`relative h-8 w-11 overflow-hidden rounded-[3px] ring-1 ${a.discarded ? "opacity-35 ring-rose-400/60 grayscale" : "ring-[#c9a24a]/70"}`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- static SVG art */}
+              <img src={`/images/great-legacy/${a.assetId}.svg`} alt="" className="h-full w-full object-cover" draggable={false} />
+              {!a.discarded && (
+                <span className="absolute right-0 bottom-0 rounded-tl-[3px] bg-black/75 px-0.5 font-serif text-[9px] leading-tight font-bold text-[#f2c94c]">{a.currentScore}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {(markets.length > 0 || sectors.length > 0) && (
         <div className="flex flex-wrap gap-1">

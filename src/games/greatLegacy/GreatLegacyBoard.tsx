@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { ASSET_DEFS, MARKETS, SECTORS } from "./constants";
+import { ASSET_DEFS, countAuctionCards, EXCLUDE_COUNT, MARKETS, SECTORS } from "./constants";
 import { computeRankings } from "./engine";
 import ActionPanel from "./ActionPanel";
 import PlayerArea from "./PlayerArea";
 import BettingArena from "./BettingArena";
+import LotCatalogCard from "./LotCatalogCard";
 import RulebookModal from "./RulebookModal";
 import { detectCoinEvents, FlyingCoins, type CoinAnimEvent } from "./AuctionCoinEffects";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
@@ -69,6 +70,7 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
   const me = state.players.find((p) => p.seat === viewerSeat)!;
   const ownedAssetIds = useMemo(() => new Set(me.assets.filter((a) => !a.discarded).map((a) => a.assetId)), [me.assets]);
   const auction = state.auction;
+  const totalLots = countAuctionCards(state.mode) - EXCLUDE_COUNT[state.mode];
 
   const rankings = state.phase === "gameOver" ? computeRankings(state) : null;
 
@@ -138,40 +140,20 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
           </div>
 
           {auction && (
-            <div className="mb-4 flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.04] light:border-slate-200 light:bg-white/80 p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-base font-bold text-white light:text-slate-900">
-                  {auction.card.kind === "asset" ? (
-                    <>
-                      {auction.card.asset.name}{" "}
-                      <span className="text-xs font-normal text-white/40 light:text-slate-400">
-                        ({auction.card.asset.market} · {auction.card.asset.sector} · {auction.card.asset.baseScore}점)
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      {auction.card.special === "초대형호재" && "🚀 초대형 호재"}
-                      {auction.card.special === "악재어닝쇼크" && "📉 악재/어닝쇼크"}
-                      {auction.card.special === "상장폐지" && "🗑️ 상장폐지"}
-                      {auction.card.special === "강제반대매매" && "⚠️ 강제 반대매매"}
-                    </>
-                  )}
+            <div className="mb-4">
+              <LotCatalogCard
+                key={auction.card.cardId}
+                card={auction.card}
+                auctionKind={auction.kind}
+                lotNumber={totalLots - state.deck.length}
+                totalLots={totalLots}
+              >
+                <span className="text-[#fbf1d6]/60 light:text-[#5c4515]">
+                  현재 최고 입찰 <b className="font-serif text-sm text-[#f2c94c] light:text-[#8a6418]">{auction.highestBid}코인</b>
+                  {auction.highestBidder !== null && ` (${names[auction.highestBidder] ?? "상대"})`} · 차례:{" "}
+                  <b className="text-[#fbf1d6] light:text-[#2a1d08]">{names[auction.activeSeat] ?? "상대"}</b>
                 </span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                    auction.kind === "reverse"
-                      ? "bg-rose-400/20 text-rose-200 light:bg-rose-100 light:text-rose-700"
-                      : "bg-emerald-400/20 text-emerald-200 light:bg-emerald-100 light:text-emerald-700"
-                  }`}
-                >
-                  {auction.kind === "reverse" ? "역경매 — 먼저 포기하면 낙찰" : "일반 경매"}
-                </span>
-              </div>
-              <div className="text-xs text-white/50 light:text-slate-500">
-                현재 최고 입찰 <b className="text-amber-200 light:text-amber-700">{auction.highestBid}코인</b>
-                {auction.highestBidder !== null && ` (${names[auction.highestBidder] ?? "상대"})`} · 차례:{" "}
-                <b className="text-white/80 light:text-slate-700">{names[auction.activeSeat] ?? "상대"}</b>
-              </div>
+              </LotCatalogCard>
             </div>
           )}
 
