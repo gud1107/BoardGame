@@ -24,7 +24,6 @@ import {
   type SeatIndex,
 } from "./engine";
 import DalmutiBoard from "./DalmutiBoard";
-import { useGameBgm } from "@/lib/audio/useGameBgm";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
@@ -149,8 +148,9 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
   });
 
   const [phase, setPhase] = useState<Phase>(roomFromUrl ? "enter-name" : "choose");
-  // 중세풍 하프시코드 테마 BGM — 실제 대국 중에만 크로스페이드로 재생 (2026-08-26 세션).
-  useGameBgm(phase === "playing" ? "dalmuti" : null);
+  // BGM: `dalmuti.mp3` (2026-08-26 useGameBgm) was never added to the repo, so it
+  // was silent — replaced 2026-09-28 by the procedural "계급 서사" engine that
+  // DalmutiBoard.tsx starts on mount (audio/dalmutiSoundEngine.ts).
   const [intent, setIntent] = useState<"create" | "join">(roomFromUrl ? "join" : "create");
   const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");

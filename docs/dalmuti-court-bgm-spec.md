@@ -1,7 +1,7 @@
 # 달무티 — 중세 궁정 류트 & 광대 BGM/SFX 엔진 명세 (검토본)
 
 - 작성일: 2026-09-27
-- 상태: **명세 문서화만 완료 — 미구현** (코드 변경 없음, 커밋/푸시/배포 대기)
+- 상태: **BGM 부분은 2026-09-28에 구현됨** → [dalmuti-class-saga-bgm.md](./dalmuti-class-saga-bgm.md) (§5 결정 1번 확정: mp3 대신 신디 BGM). SFX 항목은 여전히 미구현
 - 대상 게임: `src/games/dalmuti/` (id `dalmuti`)
 
 ## 1. 요청 요약

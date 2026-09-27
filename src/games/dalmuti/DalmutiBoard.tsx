@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Avatar from "@/components/common/Avatar";
 import MyTurnOverlay from "@/components/common/MyTurnOverlay";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
-import { useAudioSettingsStore } from "@/lib/audio/audioSettings";
+import { isBgmEffectivelyMuted, useAudioSettingsStore } from "@/lib/audio/audioSettings";
+import { getDalmutiSound } from "./audio/dalmutiSoundEngine";
 import RulebookModal from "./RulebookModal";
 import CardExchangeModal from "./CardExchangeModal";
 import { CardFace, RoleBadge, type AuraTier } from "./CardArt";
@@ -87,10 +88,33 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   function toggleMuted() {
     toggleMasterMuted();
     getSoundEngine().unlock();
+    getDalmutiSound().unlock();
   }
+  // 🪕 "계급 서사" procedural BGM (audio/dalmutiSoundEngine.ts, 2026-09-28) —
+  // plays while this board is mounted; mute/volume follow the site-wide
+  // settings. BGM defaults to muted site-wide, so this toggle (like the
+  // Rat-a-Tat Cat / Coyote HUDs) also lifts the master mute when turning on.
+  const bgmOn = useAudioSettingsStore((s) => !isBgmEffectivelyMuted(s));
+  const setBgmMuted = useAudioSettingsStore((s) => s.setBgmMuted);
+  const setMasterMuted = useAudioSettingsStore((s) => s.setMasterMuted);
+  function toggleBgm() {
+    getDalmutiSound().unlock();
+    if (bgmOn) {
+      setBgmMuted(true);
+      return;
+    }
+    setMasterMuted(false);
+    setBgmMuted(false);
+  }
+  useEffect(() => {
+    const bgm = getDalmutiSound();
+    bgm.setBgmWanted(true);
+    return () => bgm.setBgmWanted(false);
+  }, []);
   function dispatch(action: EngineAction) {
     const engine = getSoundEngine();
     engine.unlock();
+    getDalmutiSound().unlock();
     // 양피지 카드 제출음 / 조공·세금 금화 소리 — 실제 카드 교환(진상/하사) VFX와는
     // 별개로, 매 트릭 제출·세금 반환 시점의 SFX (2026-08-26 세션).
     if (action.type === "playCards") engine.playParchmentSubmit();
@@ -117,6 +141,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
   // 래퍼의 `onPointerDownCapture`에 건다(멱등 — 이후 호출은 전부 그냥 no-op).
   function unlockAudio() {
     getSoundEngine().unlock();
+    getDalmutiSound().unlock();
   }
   /** Role title for a seat, independent of the viewer — used by the exchange FX's third-party message. */
   const titleFor = useCallback((seat: SeatIndex) => rankTitle(state.rankOrder.indexOf(seat), state.playerCount), [state.rankOrder, state.playerCount]);
@@ -408,6 +433,21 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
     </button>
   );
 
+  const bgmButton = (
+    <button
+      onClick={toggleBgm}
+      aria-pressed={bgmOn}
+      title={bgmOn ? "궁정 BGM 끄기 (볼륨은 상단 설정)" : "궁정 BGM 켜기"}
+      className={`rounded-full border px-2.5 py-1 text-[11px] transition ${
+        bgmOn
+          ? "border-amber-300/60 bg-amber-400/10 text-amber-100 light:border-amber-400 light:bg-amber-50 light:text-amber-800 light:shadow-sm"
+          : "border-white/15 text-white/60 hover:border-white/30 hover:text-white light:border-slate-300 light:bg-white/80 light:text-slate-600 light:shadow-sm light:hover:border-slate-400 light:hover:text-slate-900"
+      }`}
+    >
+      {bgmOn ? "🪕" : "🔇"} <span className={bgmOn ? "" : "line-through"}>BGM</span>
+    </button>
+  );
+
   // ⚙️ 자동 패스 설정 모달 토글 — task brief §3, 2026-09-14 세션에 화면 중앙
   // 포탈 모달로 재배치(AutoPass.tsx 참고, 모바일 화면 밖 잘림 버그 수정).
   // 열고 닫는 상태(`autoPassPanelOpen`)만 로컬 UI 상태이고, 실제 조건 값은
@@ -629,6 +669,7 @@ export default function DalmutiBoard({ state, viewerSeat, names, connectedSeats,
         </span>
         <div className="flex flex-wrap gap-1.5">
           {autoPassButton}
+          {bgmButton}
           {muteButton}
           {rulebookButton}
         </div>
