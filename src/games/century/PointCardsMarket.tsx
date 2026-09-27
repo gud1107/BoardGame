@@ -1,5 +1,6 @@
 import { CARD_FRAME_STYLE, CoinStack, DeckStack } from "./boardChrome";
 import { CardWatermark, MarketBanner } from "./CardArt";
+import { CenturyCardIllustration } from "./CardIllustration";
 import ResourceIcon from "./ResourceIcon";
 import { RESOURCE_ORDER, type PointCard } from "./cards";
 import { canClaimPoint, POINT_MARKET_SIZE, type CenturyState, type PlayerState } from "./engine";
@@ -12,6 +13,7 @@ export function PointCardFace({
   silverSupply,
   coinCapacity,
   compact = false,
+  art,
 }: {
   card: PointCard;
   affordable: boolean;
@@ -20,6 +22,8 @@ export function PointCardFace({
   silverSupply: number;
   coinCapacity: number;
   compact?: boolean;
+  /** Sultan's-palace scene window — see MerchantCardFace's `art` doc. */
+  art?: "strip" | "hero";
 }) {
   return (
     <div
@@ -28,7 +32,7 @@ export function PointCardFace({
       } ${affordable ? "border-amber-300 shadow-[0_0_16px_-2px_rgba(251,191,36,0.75)]" : "border-[#8a6d3b]"}`}
       style={CARD_FRAME_STYLE}
     >
-      <CardWatermark kind="ship" />
+      {!art && <CardWatermark kind="ship" />}
       {slotBonus &&
         (compact ? (
           // A full floating coin stack (see the non-compact branch) needs
@@ -60,6 +64,7 @@ export function PointCardFace({
       >
         {card.points}
       </span>
+      {art && <CenturyCardIllustration scene="SULTAN_PALACE" size={art} />}
       <div className={`relative z-10 flex flex-wrap items-center justify-center rounded-md border border-black/10 bg-black/5 ${compact ? "gap-0.5 px-0.5 py-0.5" : "mt-1 gap-1 px-1.5 py-1"}`}>
         {RESOURCE_ORDER.filter((r) => (card.cost[r] ?? 0) > 0).map((r) => (
           <span key={r} className="flex items-center gap-0.5">
@@ -123,6 +128,7 @@ export function PointCardsMarket({
                   silverSupply={state.silverSupply}
                   coinCapacity={state.playerCount * 2}
                   compact={compact}
+                  art={compact ? undefined : "strip"}
                 />
               </button>
             );

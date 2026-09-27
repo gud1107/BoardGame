@@ -1,19 +1,27 @@
 import { ArrowGlyph, CARD_FRAME_STYLE, CubeStack, DeckStack, UpgradeGlyph } from "./boardChrome";
 import { CardWatermark, MarketBanner } from "./CardArt";
+import { CenturyCardIllustration, sceneForMerchant } from "./CardIllustration";
 import { ResourceCube } from "./ResourceIcon";
 import { RESOURCE_ORDER, type MerchantCard } from "./cards";
 import { canAcquireMerchant, MERCHANT_MARKET_SIZE, type CenturyState, type PlayerState } from "./engine";
 
-export function MerchantCardFace({ card, compact = false }: { card: MerchantCard; compact?: boolean }) {
-  const frameClass = `relative flex w-full flex-col items-center overflow-hidden rounded-md border border-[#7a5a2e] ${compact ? "gap-0.5 px-1 py-1" : "gap-1 px-1.5 py-2"}`;
+/**
+ * `art` opts a card into the painted scene window (CardIllustration.tsx) —
+ * only where there's room for it (desktop market, desktop hand fan, preview
+ * modal). The mobile compact dashboard and the discarded-pile stack keep the
+ * small corner watermark so the zero-scroll mobile layout doesn't grow.
+ */
+export function MerchantCardFace({ card, compact = false, art }: { card: MerchantCard; compact?: boolean; art?: "strip" | "hero" }) {
+  const frameClass = `relative flex w-full flex-col items-center overflow-hidden rounded-md border border-[#7a5a2e] ${compact ? "gap-0.5 px-1 py-1" : "gap-1 px-1.5 py-2"} ${art ? "min-w-[4.5rem]" : ""}`;
+  const decor = art ? <CenturyCardIllustration scene={sceneForMerchant(card)} size={art} /> : <CardWatermark kind="jug" />;
   const labelClass = `relative z-10 font-bold uppercase tracking-widest ${compact ? "text-[6px]" : "text-[8px]"}`;
   const cubeSize = compact ? "h-2.5 w-2.5" : "h-4 w-4";
   const arrowSize = compact ? "h-2.5 w-2.5" : "h-3.5 w-3.5";
   if (card.effect.kind === "production") {
     return (
       <div className={frameClass} style={CARD_FRAME_STYLE}>
-        <CardWatermark kind="jug" />
         <span className={`${labelClass} text-emerald-800`}>생산</span>
+        {decor}
         <ArrowGlyph className={`relative z-10 ${arrowSize} text-emerald-700`} />
         <span className="relative z-10">
           <CubeStack bundle={card.effect.gain} size={cubeSize} />
@@ -24,8 +32,8 @@ export function MerchantCardFace({ card, compact = false }: { card: MerchantCard
   if (card.effect.kind === "upgrade") {
     return (
       <div className={frameClass} style={CARD_FRAME_STYLE}>
-        <CardWatermark kind="jug" />
         <span className={`${labelClass} text-sky-800`}>업그레이드</span>
+        {decor}
         <span className="relative z-10">
           <UpgradeGlyph compact={compact} />
         </span>
@@ -35,8 +43,8 @@ export function MerchantCardFace({ card, compact = false }: { card: MerchantCard
   }
   return (
     <div className={frameClass} style={CARD_FRAME_STYLE}>
-      <CardWatermark kind="jug" />
       <span className={`${labelClass} text-amber-900`}>교환</span>
+      {decor}
       <span className="relative z-10">
         <CubeStack bundle={card.effect.cost} size={cubeSize} />
       </span>
@@ -114,7 +122,7 @@ export function MerchantMarket({
                   }`}
                 >
                   {!compact && <span className="text-[9px] text-white/40 light:text-slate-500">{i === 0 ? "무료" : `자원 ${i}개`}</span>}
-                  <MerchantCardFace card={card} compact={compact} />
+                  <MerchantCardFace card={card} compact={compact} art={compact ? undefined : "strip"} />
                 </button>
               </div>
             );

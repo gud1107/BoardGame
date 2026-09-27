@@ -71,7 +71,7 @@ export function MyHandCards({
                     : "cursor-not-allowed border-white/10 bg-black/20 opacity-70 light:border-slate-200 light:bg-slate-100"
                 } ${card.id === highlightedCardId ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-[#1c1208] light:ring-offset-white" : ""}`}
               >
-                <MerchantCardFace card={card} />
+                <MerchantCardFace card={card} art="strip" />
               </button>
             );
           })}

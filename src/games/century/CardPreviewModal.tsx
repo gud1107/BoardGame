@@ -47,11 +47,11 @@ export function CardPreviewModal({
 
   return (
     <ModalShell title={target.kind === "point" ? "점수 카드 미리보기" : "상인 카드 미리보기"}>
-      <div className="mx-auto mb-3 w-32 sm:w-36">
+      <div className="mx-auto mb-3 w-40 sm:w-44">
         {target.kind === "point" ? (
-          <PointCardFace card={target.card} affordable={target.affordable} slotBonus={null} goldSupply={0} silverSupply={0} coinCapacity={1} />
+          <PointCardFace card={target.card} affordable={target.affordable} slotBonus={null} goldSupply={0} silverSupply={0} coinCapacity={1} art="hero" />
         ) : (
-          <MerchantCardFace card={target.card} />
+          <MerchantCardFace card={target.card} art="hero" />
         )}
       </div>
 
