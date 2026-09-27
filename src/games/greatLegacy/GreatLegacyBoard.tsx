@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ASSET_DEFS, countAuctionCards, EXCLUDE_COUNT, MARKETS, SECTORS } from "./constants";
 import { computeRankings } from "./engine";
 import ActionPanel from "./ActionPanel";
@@ -8,6 +8,9 @@ import PlayerArea from "./PlayerArea";
 import BettingArena from "./BettingArena";
 import CollectionSynergyPanel from "./CollectionSynergyPanel";
 import SynergyCompleteFX from "./SynergyCompleteFX";
+import InvestmentSoundHud from "./InvestmentSoundHud";
+import { getInvestmentSound } from "./investmentSound";
+import { detectAuctionCues } from "./auctionCues";
 import { collectionKey, collectionTitle, completedCollections, detectSynergyChanges, lotSynergyImpact, type SynergyChangeEvent } from "./synergy";
 import { assetImageSrc } from "./lotPhotos";
 import LotCatalogCard from "./LotCatalogCard";
@@ -93,7 +96,17 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
   if (trackedState !== state) {
     const detected = detectCoinEvents(trackedState, state);
     const synergyChanges = detectSynergyChanges(trackedState, state);
+    const cues = detectAuctionCues(trackedState, state);
     setTrackedState(state);
+    // Auction SFX suite (investmentSound.ts): chip on a raise, pizzicato on a pass, gavel on every sale,
+    // plus the winning fanfare for the viewer when they win a normal (non-penalty) lot.
+    const investment = getInvestmentSound();
+    if (cues.bid) investment.bidRaise();
+    if (cues.pass) investment.pass();
+    if (cues.sold) {
+      investment.gavelStrike();
+      if (cues.sold.kind === "normal" && cues.sold.winnerSeat === viewerSeat) setTimeout(() => investment.wonAuction(), 250);
+    }
     if (synergyChanges.length > 0) {
       setSynergyQueue((prev) => [...prev, ...synergyChanges]);
       const sound = getSoundEngine();
@@ -108,12 +121,19 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
       const withIds = detected.map((e) => ({ ...e, id: nextId++ }));
       setCoinEffects((prev) => [...prev, ...withIds]);
       for (const e of detected) {
-        if (e.kind === "bid") sound.playCoinDropSound();
-        else if (e.kind === "refund-sweep") sound.playCoinSweepSound();
-        else sound.playVaultAbsorbSound();
+        // "bid" coins are voiced by investmentSound's bidRaise chip above — no second clink here.
+        if (e.kind === "refund-sweep") sound.playCoinSweepSound();
+        else if (e.kind === "vault-absorb") sound.playVaultAbsorbSound();
       }
     }
   }
+  // Royal chamber symphony BGM while the board is on screen (and BGM is unmuted in the site settings).
+  useEffect(() => {
+    const investment = getInvestmentSound();
+    investment.setBgmWanted(true);
+    return () => investment.setBgmWanted(false);
+  }, []);
+
   const handleSynergyFxDone = useCallback(() => setSynergyQueue((prev) => prev.slice(1)), []);
   const handleCoinEffectDone = useCallback((id: number) => {
     setCoinEffects((prev) => prev.filter((e) => e.id !== id));
@@ -136,7 +156,8 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
   }
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row">
+    // Any tap on the board doubles as the gesture that unlocks Web Audio (browser autoplay policy).
+    <div className="flex flex-col gap-4 lg:flex-row" onPointerDownCapture={() => getInvestmentSound().unlock()}>
       <aside className="order-2 lg:order-1 lg:w-64 lg:shrink-0">
         <div className="flex flex-col gap-4">
           <CollectionSynergyPanel
@@ -160,6 +181,7 @@ export default function GreatLegacyBoard({ state, viewerSeat, names, connectedSe
             <h2 className="text-sm font-bold text-white/80 light:text-slate-800">📈 위대한 투자 — {state.mode === "4p" ? "4인" : "8인"} 경매</h2>
             <div className="flex items-center gap-2">
               <span className="text-xs text-white/40 light:text-slate-400">남은 매물 {state.deck.length + (auction ? 1 : 0)}장</span>
+              <InvestmentSoundHud />
               <button
                 type="button"
                 onClick={() => setRulebookOpen(true)}

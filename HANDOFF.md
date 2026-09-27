@@ -145,6 +145,30 @@
   - 검증: 봇끼리 4인·8인 각 60시드 전부 정상 종료(임시 시뮬레이션, 커밋 안 함). `synergy.test.ts` 10케이스
     (붕괴 감지, expert 저지 입찰, novice 무시, 코인 부족 시 역경매 포기).
 
+### 🎻 후속 (2026-09-27): 로열 체임버 심포니 BGM + 경매 효과음 (Investment Sound Suite)
+**요청**: 명세서 붙여넣기 — Web Audio 합성 관현악 BGM(G단조 80BPM 32스텝: 첼로/콘트라베이스 · 프렌치 호른
+패드 · 그랜드 피아노 · 소프트 팀파니) + 경매 효과음(경매봉/입찰 칩/낙찰 팡파르/패스) + 상단 사운드 토글.
+- **명세 전제와 실제 코드 차이**: 명세의 `src/games/greatInvestment/audio/…`, `components/SoundControlHUD.tsx`,
+  `AuctionBoard.tsx`는 없음 — 실제 게임은 `src/games/greatLegacy/`, 보드는 `GreatLegacyBoard.tsx`.
+- 파일: [symphonyPattern.ts](./src/games/greatLegacy/symphonyPattern.ts)(순수 악보) ·
+  [investmentSound.ts](./src/games/greatLegacy/investmentSound.ts)(합성 엔진, `getInvestmentSound()`) ·
+  [InvestmentSoundHud.tsx](./src/games/greatLegacy/InvestmentSoundHud.tsx)(🎻 Symphony / 🔔 효과음, 룰북 버튼 옆) ·
+  [auctionCues.ts](./src/games/greatLegacy/auctionCues.ts)(상태 diff → 입찰/패스/낙찰+낙찰자) ·
+  `investmentAudio.test.ts` 3케이스.
+- **명세와 다르게 한 점** (그림 전화기 로파이 BGM과 같은 방침): ① 자체 `isMuted`/`toggleMute` 대신 사이트 전역
+  `audioSettings` 스토어(헤더 🔇/🔊·설정 모달 볼륨과 항상 일치). 기본 슬라이더(BGM 0.4 / 효과음 0.7)에서 명세의
+  게인 0.11 / 0.38이 나오도록 버스 레벨 환산. ② 50ms `setTimeout` 연쇄 대신 `currentTime` 룩어헤드 +
+  `setInterval`(탭 스로틀 후 몰아치지 않고 박자 재합류). ③ 효과음은 핸들러가 아니라 **상태 diff**로 재생 → 누가
+  행동하든 모든 접속자가 같은 소리를 들음. ④ 악보 교정 2곳: 1마디 호른 B3 → B♭3(B3면 G장조가 됨), 4마디 C♯4 →
+  C4(D7 구성음이 아니고 같은 마디 피아노 C4와 반음 충돌). ⑤ 호른은 살짝 디튠한 2중 톱니파, 피아노엔 옥타브
+  배음, 경매봉엔 홀 저음 쿵을 추가.
+- 효과음 매핑: 호가 상승 → 입찰 칩(기존 공용 `playCoinDropSound`는 중복이라 이 게임에서 제거, 회수 스윕·금고
+  흡수음은 유지) · 패스 → 피치카토 · 모든 낙찰 → 경매봉 · **내가 일반 경매를 낙찰받았을 때만** 250ms 뒤 팡파르
+  (역경매로 벌칙 카드를 떠안은 경우엔 팡파르 없음).
+- 보드 마운트 동안 BGM(설정에서 BGM이 켜져 있을 때만), 보드 아무 곳이나 탭하면 AudioContext 언락.
+- 검증: Playwright에서 `createOscillator` 계측 — 켠 뒤 3초간 21개 생성(악보 밀도와 일치), 끈 뒤 증가 0.
+  (프리뷰에서 뜬 hydration 경고는 사이트 헤더 `PatchNoteButton`의 기존 문제로 이번 변경과 무관.)
+
 ## ✏️ 그림 전화기: 낙서 릴레이 (갈틱폰 스타일) — 4~14인 동시 진행 신규 게임 — 2026-09-27 신규 (로컬 전용, 커밋/푸시 안 함)
 
 **요청**: "갈틱폰 게임을 만들어주세요" + `boardGameRule/갈틱폰/갈틱폰.md`(룰북·시스템 명세가 중복된 두 부분 → **하나로 합쳐 재작성**) + socket.io 서버 기준 참고 코드(`GarticGameRoom` 등) — "참고만 하여 유지보수 편하게".
