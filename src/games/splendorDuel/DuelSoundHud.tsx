@@ -42,9 +42,9 @@ export default function DuelSoundHud({ tension }: { tension: TensionTier }) {
 
   return (
     <span className="flex shrink-0 items-center gap-1">
-      <button type="button" onClick={() => toggle("bgm")} className={cls(bgmOn, true)} title={bgmOn ? "챔버 느와르 BGM 끄기 (볼륨은 상단 설정)" : "챔버 느와르 BGM 켜기"} aria-pressed={bgmOn}>
-        <span className={`inline-block ${bgmOn ? "animate-pulse" : "opacity-50 grayscale"}`} style={bgmOn ? { animationDuration: PULSE[tension] } : undefined}>🎻</span>
-        <span className={`ml-0.5 hidden sm:inline ${bgmOn ? "" : "line-through"}`}>BGM</span>
+      <button type="button" onClick={() => toggle("bgm")} className={cls(bgmOn, true)} title={bgmOn ? "차분한 서스펜스 BGM 끄기 (볼륨은 상단 설정)" : "차분한 서스펜스 BGM 켜기"} aria-pressed={bgmOn}>
+        <span className={`inline-block ${bgmOn ? "animate-pulse" : "opacity-50 grayscale"}`} style={bgmOn ? { animationDuration: PULSE[tension] } : undefined}>{bgmOn ? "🎻" : "🔇"}</span>
+        <span className={`ml-0.5 hidden font-serif uppercase tracking-wider sm:inline ${bgmOn ? "" : "line-through"}`}>{bgmOn ? "Noir Tension" : "BGM"}</span>
       </button>
       <button type="button" onClick={() => toggle("sfx")} className={cls(sfxOn)} title={sfxOn ? "효과음 끄기 (볼륨은 상단 설정)" : "효과음 켜기"} aria-pressed={sfxOn}>
         {sfxOn ? "🔔" : "🔕"}

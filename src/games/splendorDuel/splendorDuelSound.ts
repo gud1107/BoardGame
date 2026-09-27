@@ -2,7 +2,7 @@ import { isBgmEffectivelyMuted, isSfxEffectivelyMuted, useAudioSettingsStore, ty
 import { colorPoints, crownsOf, prestigeOf, SEATS, WIN_CROWNS, WIN_PRESTIGE, WIN_SINGLE_COLOR, type DuelEvent, type SplendorDuelState } from "./engine";
 
 /**
- * 스플렌더 대결 전용 procedural sound suite — "Chamber Noir" trio BGM + gem /
+ * 스플렌더 대결 전용 procedural sound suite — "Minimal Chamber Noir" BGM + gem /
  * card / royal / scroll SFX, all synthesized in code (no audio files, same
  * rule as src/lib/audio/soundEngine.ts).
  *
@@ -13,14 +13,15 @@ import { colorPoints, crownsOf, prestigeOf, SEATS, WIN_CROWNS, WIN_PRESTIGE, WIN
  * modal's BGM/SFX sliders and this game's own HUD all flip the same flags.
  *
  * Instruments:
- *  - harp / harpsichord / pizzicato: Karplus-Strong plucked string rendered into an
+ *  - harp / pizzicato: Karplus-Strong plucked string rendered into an
  *    AudioBuffer (cached per pitch), so it sounds like a real string rather
  *    than a bare oscillator.
  *  - bell: inharmonic sine partials (church-bell ratios), each decaying on
  *    its own.
  *  - brass: two detuned saws through a lowpass whose cutoff swells open.
  *  - parchment / pebbles: shaped noise bursts.
- *  - cello: detuned saw pair through a resonant lowpass.
+ *  - BGM voices (cello drone, felt piano, sub pulse): soft sines/triangles
+ *    only — see the BGM section.
  * Everything runs into a shared generated-impulse "cathedral" reverb send and
  * a master glue compressor; the BGM bus is ducked whenever an SFX fires.
  */
@@ -107,7 +108,8 @@ class SplendorDuelSound {
     if (!ctx || !this.sfxBus || !this.bgmBus) return;
     const t = ctx.currentTime;
     this.sfxBus.gain.setTargetAtTime(isSfxEffectivelyMuted(s) ? 0 : s.sfxVolume * 0.9, t, 0.02);
-    this.bgmBus.gain.setTargetAtTime(isBgmEffectivelyMuted(s) ? 0 : s.bgmVolume * 0.6, t, 0.05);
+    // BGM sits well under the SFX (≈0.09 at the default 0.4 slider) so gem/card cues always read clearly.
+    this.bgmBus.gain.setTargetAtTime(isBgmEffectivelyMuted(s) ? 0 : s.bgmVolume * 0.225, t, 0.05);
     this.syncBgm();
   }
 
@@ -518,40 +520,33 @@ class SplendorDuelSound {
     if ("scrollFrom" in e && (e.scrollFrom === "table" || e.scrollFrom === "opponent")) this.scroll(0.35);
   }
 
-  /* ── BGM: "Chamber Noir" trio — cello ostinato, pizzicato clock, harpsichord ── */
+  /* ── BGM: "Minimal Chamber Noir" — cello drone, felt piano, sub heartbeat ── */
 
   /**
-   * 112 bpm, D minor, 16 sixteenths per bar. Three voices lock together:
-   *  - cello: eighth-note heartbeat ostinato D2 D2 D2 D2 | Bb1 Bb1 | A1 A1
-   *    (bowed saw pair through a 380Hz lowpass), accents on 1 and 3;
-   *  - pizzicato: off-beat "tick-tock" D3 . D3 . F3 . E3;
-   *  - harpsichord: fast sixteenth runs over the same harmony (Dm -> Bb -> A),
-   *    one of 4 figures per bar so the 4-bar phrase keeps moving; every 8th bar
-   *    drops out for a breath and climbs back in over the A (leading tone C#).
-   * 0 in a figure = rest.
+   * Soft-tension background for thinking, not for listening: no fast runs and
+   * nothing bright above ~1kHz, so it never competes with the SFX or the
+   * player's arithmetic. 88 bpm, D minor, stepped in eighth notes, 2-bar
+   * (16-step) phrase:
+   *  - cello drone: one warm triangle note per beat through a 240Hz lowpass
+   *    with a slow 0.4s bow swell, held ~2 beats so consecutive notes overlap
+   *    into a continuous floor — D2 D2 F2 F2 | Bb1 Bb1 A1 A1;
+   *  - felt piano: sparse sine drops (A3 D4 F4 D4 | C4 E4 A3 · ) with a round
+   *    900Hz lowpass and a long reverb tail; every 4th phrase rests for a breath;
+   *  - sub heartbeat: a 55→45Hz sine thump every other beat, felt more than heard.
    *
-   * Late-game tension (`setTension`, fed by `matchTension`) raises the tempo
-   * and stacks layers, switching only on a bar line:
-   *  - tier 1: 120 bpm, harpsichord's 4' octave string comes forward;
-   *  - tier 2: 128 bpm, pizzicato clock doubles to every off-sixteenth of the
-   *    last beat, cello drives sixteenths into the downbeat, no breath bars,
-   *    timpani on beat 1;
-   *  - tier 3: 138 bpm, plus a high violin tremolo grinding a minor second
-   *    (A5 / Bb5) over every bar.
-   * Each step up is announced once with a timpani crescendo roll.
+   * Late-game tension (`setTension`, fed by `matchTension`) tightens gently,
+   * switching only on a phrase line — the music leans in, it never gets loud:
+   *  - tier 1: 92 bpm, piano gains a quiet open fifth on its strong notes;
+   *  - tier 2: 96 bpm, the heartbeat doubles to every beat, no breath phrases;
+   *  - tier 3: 100 bpm, plus a faint high sine pad grinding a minor second
+   *    (A5 / Bb5) under everything.
+   * Each step up is announced once with a low sub swell into the downbeat.
    */
-  private static readonly TEMPOS: Record<TensionTier, number> = { 0: 112, 1: 120, 2: 128, 3: 138 };
-  private static readonly CELLO = [38, 38, 38, 38, 34, 34, 33, 33];
-  private static readonly CELLO_ACCENT = [1, 0.62, 0.85, 0.6, 0.95, 0.65, 0.95, 0.7];
-  private static readonly PIZZ: Record<number, number> = { 2: 50, 6: 50, 10: 53, 14: 52 };
-  private static readonly HARPSI: number[][] = [
-    [74, 69, 65, 69, 74, 77, 76, 74, 70, 74, 77, 74, 73, 76, 79, 76],
-    [62, 65, 69, 74, 72, 69, 65, 67, 65, 70, 74, 70, 64, 69, 73, 76],
-    [74, 0, 72, 69, 65, 67, 69, 0, 74, 77, 76, 74, 73, 69, 64, 61],
-    [77, 76, 74, 72, 70, 69, 67, 65, 70, 65, 62, 65, 73, 76, 79, 81],
-  ];
-  /** The breath bar: silence, then a rising run into the next phrase. */
-  private static readonly HARPSI_BREATH = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 69, 73, 76, 79];
+  private static readonly TEMPOS: Record<TensionTier, number> = { 0: 88, 1: 92, 2: 96, 3: 100 };
+  /** One root per beat (every 2 steps). */
+  private static readonly DRONE = [38, 38, 41, 41, 34, 34, 33, 33];
+  /** Per step; 0 = rest. */
+  private static readonly PIANO = [57, 0, 62, 0, 65, 0, 62, 0, 60, 0, 64, 0, 57, 0, 0, 0];
 
   /** Board mount/unmount. Actual playback also waits for BGM to be unmuted. */
   setBgmWanted(wanted: boolean) {
@@ -564,7 +559,7 @@ class SplendorDuelSound {
   private syncBgm() {
     const on = this.bgmWanted && !isBgmEffectivelyMuted(this.settings()) && !!this.ctx;
     if (on && !this.bgmTimer) {
-      // (Re)start on a bar line so un-muting comes back in tempo, from the top of the phrase.
+      // (Re)start on a phrase line so un-muting comes back in tempo, from the top of the phrase.
       this.nextBeatTime = this.ctx!.currentTime + 0.12;
       this.beat = 0;
       this.bgmTimer = setInterval(() => this.schedule(), 50);
@@ -574,148 +569,155 @@ class SplendorDuelSound {
     }
   }
 
-  /** Look-ahead clock: queue every sixteenth that falls in the next 0.2s, timed on ctx.currentTime. */
+  /** Look-ahead clock: queue every eighth that falls in the next 0.2s, timed on ctx.currentTime. */
   private schedule() {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== "running") return;
     if (this.nextBeatTime < ctx.currentTime) this.nextBeatTime = ctx.currentTime + 0.05; // tab was throttled
     while (this.nextBeatTime < ctx.currentTime + 0.2) {
       if (this.beat % 16 === 0 && this.pendingTier !== this.tier) {
-        if (this.pendingTier > this.tier) this.timpaniRoll(this.nextBeatTime);
+        if (this.pendingTier > this.tier) this.subSwell(this.nextBeatTime);
         this.tier = this.pendingTier;
       }
-      const sixteenth = 60 / SplendorDuelSound.TEMPOS[this.tier] / 4;
-      this.playSixteenth(this.beat, this.nextBeatTime, sixteenth);
-      this.nextBeatTime += sixteenth;
+      const beat = 60 / SplendorDuelSound.TEMPOS[this.tier];
+      this.playEighth(this.beat, this.nextBeatTime, beat);
+      this.nextBeatTime += beat / 2;
       this.beat++;
     }
   }
 
-  private playSixteenth(step: number, t: number, sixteenth: number) {
+  private playEighth(step: number, t: number, beat: number) {
     const S = SplendorDuelSound;
     const tier = this.tier;
     const pos = step % 16;
-    const bar = Math.floor(step / 16);
+    const phrase = Math.floor(step / 16);
 
-    // Cello: eighth heartbeat; from tier 2 the last beat drives in sixteenths (A1 A1 A1 A1 → downbeat).
-    if (pos % 2 === 0) {
-      const i = pos / 2;
-      this.cello(t, hz(S.CELLO[i]), sixteenth * 1.9, 0.3 * S.CELLO_ACCENT[i] * (1 + tier * 0.08));
-    } else if (tier >= 2 && pos >= 13) {
-      this.cello(t, hz(33), sixteenth * 0.95, 0.2);
+    // Heartbeat on beats 1 & 3 of each bar; from tier 2, every beat.
+    if (pos % 4 === 0 || (tier >= 2 && pos % 2 === 0)) this.subPulse(t, pos % 8 === 0 ? 0.5 : 0.36);
+
+    if (pos % 2 === 0) this.celloDrone(t, hz(S.DRONE[pos / 2]), beat * 1.9);
+
+    const breath = phrase % 4 === 3 && tier < 2;
+    const m = breath ? 0 : S.PIANO[pos];
+    if (m) {
+      this.feltPiano(t, hz(m), beat * 1.6, 0.26);
+      if (tier >= 1 && pos % 4 === 0) this.feltPiano(t + 0.02, hz(m + 7), beat * 1.4, 0.1);
     }
-    // Pizzicato clock; from tier 2 it ticks every off-sixteenth of the last beat too.
-    const pz = S.PIZZ[pos];
-    if (pz) this.pluck("bgm", t, hz(pz), { gain: 0.42 + tier * 0.04, dur: 0.32, damp: 0.35, decay: 0.985, wet: 0.25, pan: -0.35 });
-    else if (tier >= 2 && (pos === 13 || pos === 15)) this.pluck("bgm", t, hz(pos === 13 ? 52 : 50), { gain: 0.3, dur: 0.25, damp: 0.35, decay: 0.98, wet: 0.2, pan: -0.35 });
 
-    // Harpsichord runs; breath bars vanish once the race is on.
-    const figure = bar % 8 === 7 && tier < 2 ? S.HARPSI_BREATH : S.HARPSI[bar % 4];
-    const m = figure[pos];
-    if (m) this.harpsichord(t, hz(m), pos % 4 === 0 ? 0.3 : 0.22, tier >= 1 ? 0.6 : 0.35);
-
-    if (tier >= 2 && pos === 0) this.timpani(t, hz(26), 0.5);
-    if (tier >= 3 && pos === 0) this.tremolo(t, hz(bar % 2 ? 82 : 81), sixteenth * 16);
+    if (tier >= 3 && pos === 0) this.highPad(t, hz(phrase % 2 ? 82 : 81), beat * 8);
   }
 
-  /** Request a tension tier (0–3); takes effect at the next bar line. */
+  /** Request a tension tier (0–3); takes effect at the next phrase line. */
   setTension(tier: TensionTier) {
     this.pendingTier = tier;
   }
 
-  /** Timpani: tuned sine with a pitch drop + felt-mallet noise. */
-  private timpani(t: number, freq: number, gain: number) {
+  /** Warm cello drone: triangle through a 240Hz resonant lowpass, slow bow swell. */
+  private celloDrone(t: number, freq: number, dur: number) {
     const ctx = this.ctx!;
     const o = ctx.createOscillator();
-    o.type = "sine";
-    o.frequency.setValueAtTime(freq * 1.5, t);
-    o.frequency.exponentialRampToValueAtTime(freq, t + 0.06);
+    o.type = "triangle";
+    o.frequency.value = freq;
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 240;
+    f.Q.value = 2;
     const e = ctx.createGain();
     e.gain.setValueAtTime(0.0001, t);
-    e.gain.exponentialRampToValueAtTime(gain, t + 0.008);
-    e.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
-    o.connect(e).connect(this.bgmBus!);
+    e.gain.linearRampToValueAtTime(0.5, t + 0.4);
+    e.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(f).connect(e).connect(this.bgmBus!);
     if (this.reverbIn) {
       const send = ctx.createGain();
-      send.gain.value = 0.35;
+      send.gain.value = 0.15;
       e.connect(send).connect(this.reverbIn);
     }
     o.start(t);
-    o.stop(t + 0.95);
+    o.stop(t + dur + 0.02);
   }
 
-  /** Tension step-up cue: a half-bar timpani roll swelling into the downbeat `t`. */
-  private timpaniRoll(t: number) {
-    for (let i = 0; i < 10; i++) this.timpani(t - 0.6 + i * 0.06, hz(26), 0.08 + i * 0.045);
-  }
-
-  /** High violin tremolo: saw through a bandpass, amplitude chopped at ~13Hz. */
-  private tremolo(t: number, freq: number, dur: number) {
+  /** Felt piano: sine + a faint octave partial, soft hammer, rounded by a 900Hz lowpass. */
+  private feltPiano(t: number, freq: number, dur: number, gain: number) {
     const ctx = this.ctx!;
-    const o = ctx.createOscillator();
-    o.type = "sawtooth";
-    o.frequency.value = freq;
     const f = ctx.createBiquadFilter();
-    f.type = "bandpass";
-    f.frequency.value = freq * 1.5;
-    f.Q.value = 1.4;
-    const trem = ctx.createGain();
-    trem.gain.value = 0.5;
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 13;
-    const depth = ctx.createGain();
-    depth.gain.value = 0.5;
-    lfo.connect(depth).connect(trem.gain);
+    f.type = "lowpass";
+    f.frequency.value = 900;
     const e = ctx.createGain();
     e.gain.setValueAtTime(0.0001, t);
-    e.gain.linearRampToValueAtTime(0.05, t + dur * 0.3);
+    e.gain.linearRampToValueAtTime(gain, t + 0.04);
+    e.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    f.connect(e).connect(this.bgmBus!);
+    if (this.reverbIn) {
+      const send = ctx.createGain();
+      send.gain.value = 0.55;
+      e.connect(send).connect(this.reverbIn);
+    }
+    for (const [ratio, amp] of [
+      [1, 1],
+      [2, 0.12],
+    ] as const) {
+      const o = ctx.createOscillator();
+      o.type = "sine";
+      o.frequency.value = freq * ratio;
+      const a = ctx.createGain();
+      a.gain.value = amp;
+      o.connect(a).connect(f);
+      o.start(t);
+      o.stop(t + dur + 0.02);
+    }
+  }
+
+  /** Deep sub heartbeat: 55→45Hz sine thump, no click. */
+  private subPulse(t: number, gain: number) {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(55, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.15);
+    const e = ctx.createGain();
+    e.gain.setValueAtTime(0.0001, t);
+    e.gain.exponentialRampToValueAtTime(gain, t + 0.012);
+    e.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    o.connect(e).connect(this.bgmBus!);
+    o.start(t);
+    o.stop(t + 0.25);
+  }
+
+  /** Tension step-up cue: a low sine swell rising into the downbeat `t`. */
+  private subSwell(t: number) {
+    const ctx = this.ctx!;
+    const start = Math.max(ctx.currentTime, t - 1.2);
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(36.7, start);
+    o.frequency.exponentialRampToValueAtTime(55, t);
+    const e = ctx.createGain();
+    e.gain.setValueAtTime(0.0001, start);
+    e.gain.exponentialRampToValueAtTime(0.4, t);
+    e.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    o.connect(e).connect(this.bgmBus!);
+    o.start(start);
+    o.stop(t + 0.4);
+  }
+
+  /** Faint high sine pad — pure tone, so the minor-second grind stays uneasy rather than shrill. */
+  private highPad(t: number, freq: number, dur: number) {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    o.frequency.value = freq;
+    const e = ctx.createGain();
+    e.gain.setValueAtTime(0.0001, t);
+    e.gain.linearRampToValueAtTime(0.03, t + dur * 0.4);
     e.gain.linearRampToValueAtTime(0.0001, t + dur);
-    o.connect(f).connect(trem).connect(e).connect(this.bgmBus!);
+    o.connect(e).connect(this.bgmBus!);
     if (this.reverbIn) {
       const send = ctx.createGain();
       send.gain.value = 0.6;
       e.connect(send).connect(this.reverbIn);
     }
     o.start(t);
-    lfo.start(t);
     o.stop(t + dur + 0.05);
-    lfo.stop(t + dur + 0.05);
-  }
-
-  /** Bowed cello: detuned saw pair -> resonant 380Hz lowpass, bow-scrape attack. */
-  private cello(t: number, freq: number, dur: number, gain: number) {
-    const ctx = this.ctx!;
-    const f = ctx.createBiquadFilter();
-    f.type = "lowpass";
-    f.Q.value = 4;
-    f.frequency.setValueAtTime(240, t);
-    f.frequency.linearRampToValueAtTime(380, t + 0.06);
-    const e = ctx.createGain();
-    e.gain.setValueAtTime(0.0001, t);
-    e.gain.linearRampToValueAtTime(gain, t + 0.05);
-    e.gain.setTargetAtTime(gain * 0.7, t + 0.05, dur * 0.3);
-    e.gain.setTargetAtTime(0.0001, t + dur * 0.85, 0.04);
-    f.connect(e).connect(this.bgmBus!);
-    if (this.reverbIn) {
-      const send = ctx.createGain();
-      send.gain.value = 0.2;
-      e.connect(send).connect(this.reverbIn);
-    }
-    for (const det of [-7, 7]) {
-      const o = ctx.createOscillator();
-      o.type = "sawtooth";
-      o.frequency.value = freq;
-      o.detune.value = det;
-      o.connect(f);
-      o.start(t);
-      o.stop(t + dur + 0.3);
-    }
-  }
-
-  /** Harpsichord: bright plucked 8' string + quieter 4' (octave) string, thinned by a highpass. */
-  private harpsichord(t: number, freq: number, gain: number, fourFoot = 0.35) {
-    this.pluck("bgm", t, freq, { gain, dur: 0.55, damp: 0.92, decay: 0.994, wet: 0.35, pan: 0.3, hp: 420 });
-    this.pluck("bgm", t + 0.004, freq * 2, { gain: gain * fourFoot, dur: 0.35, damp: 0.95, decay: 0.99, wet: 0.3, pan: 0.4, hp: 900 });
   }
 }
 
