@@ -78,6 +78,15 @@
   AudioContext 언락.
 - 검증: `npx vitest run src/games/five-cucumbers` 49/49 통과(기존 40 + 신규 9), eslint 통과, `tsc`는 이번 파일 에러 0
   (다른 세션의 `.next/dev/types`의 `zz-lot-preview` 잔여 에러만 존재). **브라우저에서 실제 소리 확인은 하지 않음.**
+  → 아래 후속에서 운영 사이트 계측으로 확인함.
+
+### 😮‍💨 후속 (2026-09-27): 오이 먹은 사람이 나 / 남일 때 효과음 분리 + 운영 합성 계측
+- `cucumberEater(winnerSeats, viewerSeat)`(순수, 테스트 2건) → **나**: 기존 크런치 4번 + 비극 트롬본 그대로. **남**(관전 포함):
+  작고 높은 크런치 2번 + 부드러운 숨소리 노이즈 + G5–B5–D6 장조 벨 "휴~ 다행"(`rivalAteCucumber`). 엔진 진입점은
+  `cucumberEaten(eater)`. 보드 효과의 의존성에 `viewerSeat` 추가. vitest 51/51.
+- 운영 계측(83d7e42 배포본, Playwright에서 `createOscillator`/`createBufferSource` 가로채기, 2인 봇전): HUD로 켠 뒤
+  3초간 오실레이터 28개(BGM), 카드 슬라이드·1 챠임·낮은 카드 슬라이드·집시 멜로디·7번째 트릭 틱 모두 실제 생성 확인.
+  첫 실행에서 오이 먹기 소리를 못 본 건 스크립트 문제(손패 1장이면 `fanStyle`에 `rotate`가 없어 카드 버튼을 못 찾음).
 
 ## 🐫 센추리: 향신료의 길 (`century`) 실크로드 파인아트 카드 일러스트 — 2026-09-27 (커밋/푸시, 배포는 웹훅 자동)
 

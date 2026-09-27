@@ -5,7 +5,7 @@ import Avatar from "@/components/common/Avatar";
 import RulebookModal from "./RulebookModal";
 import CucumberSoundHud from "./CucumberSoundHud";
 import { getCucumberSound } from "./cucumberSound";
-import { cardPlaySound, trickTension } from "./cucumberWaltz";
+import { cardPlaySound, cucumberEater, trickTension } from "./cucumberWaltz";
 import { CucumberCluster, CucumberIcon } from "./CucumberIcon";
 import {
   buildCucumberPickupEvents,
@@ -291,8 +291,8 @@ export default function FiveCucumbersBoard({ state, viewerSeat, names, connected
       sound.cardPlayed(cardPlaySound(play.card.value, trickMaxBefore));
     }
     const round = state.lastRoundSummary;
-    if (round && round !== prev.lastRoundSummary && round.cucumberPenaltyEach > 0) sound.eatCucumber();
-  }, [state]);
+    if (round && round !== prev.lastRoundSummary && round.cucumberPenaltyEach > 0) sound.cucumberEaten(cucumberEater(round.winnerSeats, viewerSeat));
+  }, [state, viewerSeat]);
   // Waltz BGM while the board is on screen and the game is live (and BGM is
   // unmuted in the site settings), speeding up toward the 7th trick.
   const bgmLive = state.phase === "playing";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardPlaySound, LOOP_STEPS, trickTension, waltzEventsAt, waltzTempo, WALTZ_BPM, WALTZ_MAX_BPM } from "./cucumberWaltz";
+import { cardPlaySound, cucumberEater, LOOP_STEPS, trickTension, waltzEventsAt, waltzTempo, WALTZ_BPM, WALTZ_MAX_BPM } from "./cucumberWaltz";
 
 describe("cardPlaySound", () => {
   it("15 always gets the orchestra hit, even when leading", () => {
@@ -52,5 +52,16 @@ describe("waltz score", () => {
   it("loops every 12 steps and tolerates negative steps", () => {
     expect(waltzEventsAt(LOOP_STEPS + 4, 1)).toEqual(waltzEventsAt(4, 1));
     expect(waltzEventsAt(-1, 0)).toEqual(waltzEventsAt(LOOP_STEPS - 1, 0));
+  });
+});
+
+describe("cucumberEater", () => {
+  it("is 'me' only when the viewer is the trick-7 winner", () => {
+    expect(cucumberEater([1], 1)).toBe("me");
+    expect(cucumberEater([0], 1)).toBe("rival");
+  });
+
+  it("a spectator seat outside the table always hears the rival cue", () => {
+    expect(cucumberEater([2], -1)).toBe("rival");
   });
 });

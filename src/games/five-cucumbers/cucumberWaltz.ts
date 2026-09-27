@@ -98,3 +98,14 @@ export function cardPlaySound(value: number, trickMaxBefore: number | null): Car
   if (trickMaxBefore !== null && value < trickMaxBefore) return "discardLow";
   return "normal";
 }
+
+/**
+ * Whose cucumbers these are, from this client's point of view: `"me"` gets
+ * the full crunch + sad trombone, `"rival"` (someone else ate — including
+ * when this client is only spectating) a light nibble + a relieved "휴~" chime.
+ */
+export type CucumberEater = "me" | "rival";
+
+export function cucumberEater(winnerSeats: readonly number[], viewerSeat: number): CucumberEater {
+  return winnerSeats.includes(viewerSeat) ? "me" : "rival";
+}

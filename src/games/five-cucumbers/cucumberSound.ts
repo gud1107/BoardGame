@@ -1,5 +1,5 @@
 import { isBgmEffectivelyMuted, isSfxEffectivelyMuted, useAudioSettingsStore, type AudioSettings } from "@/lib/audio/audioSettings";
-import { STEPS_PER_BAR, waltzEventsAt, waltzTempo, type CardPlaySound, type WaltzEvent } from "./cucumberWaltz";
+import { STEPS_PER_BAR, waltzEventsAt, waltzTempo, type CardPlaySound, type CucumberEater, type WaltzEvent } from "./cucumberWaltz";
 
 /**
  * 오이 다섯 개 전용 procedural audio ("Cucumber Sound Suite") — a comic-
@@ -227,8 +227,14 @@ class CucumberSound {
     this.voice(ctx, this.sfxBus, { type: "triangle", freq: 520, glideTo: 180, glideTime: 0.3, t, attack: 0.01, dur: 0.34, peak: 0.3, vibrato: { rate: 11, depth: 14 } });
   }
 
+  /** Routes the 7th trick's penalty to the eater-specific cue (see `cucumberEater`). */
+  cucumberEaten(eater: CucumberEater, delay = 0.3) {
+    if (eater === "me") this.eatCucumber(delay);
+    else this.rivalAteCucumber(delay);
+  }
+
   /**
-   * 🥒 Eating cucumbers: "아작!" crunch (4 bandpassed noise snaps + pitch pops)
+   * 🥒 I ate the cucumbers: "아작!" crunch (4 bandpassed noise snaps + pitch pops)
    * then the sad trombone F#3 → F3 → E3, the last note held with a droopy
    * vibrato. Starts `delay` seconds out so it lands after the 7th trick's
    * final card sting instead of on top of it.
@@ -257,6 +263,26 @@ class CucumberSound {
         vibrato: last ? { rate: 5, depth: 6 } : undefined,
       });
     });
+  }
+
+  /**
+   * 😮‍💨 Someone else ate them: a quieter, higher two-snap nibble (heard from
+   * across the table) then a relieved rising "휴~ 다행" — G5 → B5 → D6 bell
+   * notes over a soft falling breath of noise. Deliberately major and light so
+   * it never reads as the viewer's own loss.
+   */
+  rivalAteCucumber(delay = 0.3) {
+    const ctx = this.ready("sfx");
+    if (!ctx || !this.sfxBus) return;
+    const t = ctx.currentTime + delay;
+    for (let i = 0; i < 2; i++) {
+      const pt = t + i * 0.06;
+      this.noiseBurst(ctx, this.sfxBus, { t: pt, dur: 0.04, peak: 0.14, offset: 0.1 + i * 0.05, filter: { type: "bandpass", freq: 3400 - i * 400, q: 1.6 } });
+    }
+    this.noiseBurst(ctx, this.sfxBus, { t: t + 0.18, dur: 0.35, peak: 0.06, filter: { type: "bandpass", freq: 1800, q: 0.7, sweepTo: 600 } });
+    [783.99, 987.77, 1174.66].forEach((freq, i) =>
+      this.voice(ctx, this.sfxBus!, { type: "triangle", freq, t: t + 0.2 + i * 0.09, attack: 0.005, dur: 0.35, peak: 0.16 }),
+    );
   }
 
   /* ── BGM ─────────────────────────────────────────────────────────────── */
