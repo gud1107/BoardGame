@@ -17,23 +17,43 @@ import type { CasinoNumber } from "./engine";
  * below and in CREDITS.md.
  */
 const CASINO_PHOTOS: Partial<Record<CasinoNumber, { src: string; position: string; source: string }>> = {
+  // CC0 — "Gold bullion bars.jpg" by Stevebidmead
+  1: {
+    src: "/images/lasVegas/casino-1-gold.jpg",
+    position: "50% 50%",
+    source: "https://commons.wikimedia.org/wiki/File:Gold_bullion_bars.jpg",
+  },
   // CC0 — "Colonnade Parthenon Acropolis, Athens, Greece.jpg" by Jebulon
   2: {
     src: "/images/lasVegas/casino-2-temple.jpg",
     position: "50% 50%",
     source: "https://commons.wikimedia.org/wiki/File:Colonnade_Parthenon_Acropolis,_Athens,_Greece.jpg",
   },
-  // Public domain (US government work, CIA) — "Arenal Volcano, Costa Rica.jpg"
+  // CC0 — "Flowers Growing Under the Volcano (2912198264).jpg" by cogdogblog
   3: {
     src: "/images/lasVegas/casino-3-volcano.jpg",
-    position: "50% 40%",
-    source: "https://commons.wikimedia.org/wiki/File:Arenal_Volcano,_Costa_Rica.jpg",
+    position: "45% 50%",
+    source: "https://commons.wikimedia.org/wiki/File:Flowers_Growing_Under_the_Volcano_(2912198264).jpg",
   },
   // CC0 — "Taj Mahal 2018.jpg" by Almbauer
   4: {
     src: "/images/lasVegas/casino-4-palace.jpg",
     position: "50% 50%",
     source: "https://commons.wikimedia.org/wiki/File:Taj_Mahal_2018.jpg",
+  },
+  // CC0 — Giza pyramids, 1870-1880, Hippolyte Béchard (Museo Egizio, Turin archive)
+  5: {
+    src: "/images/lasVegas/casino-5-pyramid.jpg",
+    position: "58% 50%",
+    source:
+      "https://commons.wikimedia.org/wiki/File:Giza,_Pyramids,_Pictures,_1870-1880,_photo_1_of_27_-_Archivio_fotografico_Museo_Egizio,_Turin_INV01_003.jpg",
+  },
+  // CC0 — "Pop Circus at historic drydock in Uraga (44875).jpg" by Syced; the
+  // across-the-water shot, chosen because no signage or poster art is in frame
+  6: {
+    src: "/images/lasVegas/casino-6-circus.jpg",
+    position: "50% 50%",
+    source: "https://commons.wikimedia.org/wiki/File:Pop_Circus_at_historic_drydock_in_Uraga_(44875).jpg",
   },
 };
 

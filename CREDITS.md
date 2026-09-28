@@ -59,8 +59,11 @@ Wikimedia Commons의 CC0/퍼블릭 도메인 파일(1280px 축소본)이라 표�
 
 | 파일 | 카지노 | 원본 | 작가 | 라이선스 |
 |---|---|---|---|---|
+| `casino-1-gold.jpg` | 1 황금 광맥 | https://commons.wikimedia.org/wiki/File:Gold_bullion_bars.jpg | Stevebidmead | CC0 |
 | `casino-2-temple.jpg` | 2 올림포스 신전 | https://commons.wikimedia.org/wiki/File:Colonnade_Parthenon_Acropolis,_Athens,_Greece.jpg | Jebulon | CC0 |
-| `casino-3-volcano.jpg` | 3 화산섬 오아시스 | https://commons.wikimedia.org/wiki/File:Arenal_Volcano,_Costa_Rica.jpg | Central Intelligence Agency | Public domain |
+| `casino-3-volcano.jpg` | 3 화산섬 오아시스 | https://commons.wikimedia.org/wiki/File:Flowers_Growing_Under_the_Volcano_(2912198264).jpg | cogdogblog | CC0 |
 | `casino-4-palace.jpg` | 4 사막의 별궁 | https://commons.wikimedia.org/wiki/File:Taj_Mahal_2018.jpg | Almbauer | CC0 |
+| `casino-5-pyramid.jpg` | 5 태양의 피라미드 | https://commons.wikimedia.org/wiki/File:Giza,_Pyramids,_Pictures,_1870-1880,_photo_1_of_27_-_Archivio_fotografico_Museo_Egizio,_Turin_INV01_003.jpg | Hippolyte Béchard (Museo Egizio 소장) | CC0 |
+| `casino-6-circus.jpg` | 6 별빛 서커스 | https://commons.wikimedia.org/wiki/File:Pop_Circus_at_historic_drydock_in_Uraga_(44875).jpg | Syced | CC0 |
 
-1·5·6번 카지노는 적합한 CC0 사진을 찾을 때까지 자체 제작 SVG를 씁니다.
+자체 제작 SVG(`CasinoEmblem.tsx`)는 사진이 없는 카지노용 대체 이미지로 남아 있습니다.
