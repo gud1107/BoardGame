@@ -5,7 +5,9 @@ import type { CasinoNumber } from "./engine";
  * image assets, same "<Feature>Icon.tsx" convention as DiceIcon.tsx. The
  * rulebook never names the casinos (always just "N번 카지노"), so all six are
  * fictional venues with original scenes (gold vein / temple colonnade /
- * volcano oasis / domed desert palace / sandstone pyramid / big-top tent).
+ * volcano oasis / domed desert palace / sandstone pyramid / big-top tent),
+ * drawn as a matched Art Deco set: gold hairlines on deep jewel tones (see
+ * `DecoScene`).
  *
  * 2026-09-28 저작권 정리: this used to sit under `CasinoPhotoArt.tsx`, which
  * rendered real photos of 6 Las Vegas Strip casinos (one a watermarked,
@@ -33,310 +35,365 @@ export const CASINO_THEME_NAMES: Record<CasinoNumber, { ko: string; en: string }
 // Full-bleed 3:4 tile art (the "table mat" background)
 // ---------------------------------------------------------------------
 
-/** Shared 240x320 canvas + rounded-rect clip every scene paints into. */
-function TileScene({ id, children }: { id: string; children: React.ReactNode }) {
+/**
+ * Shared Art Deco "poster" treatment every scene paints into (2026-09-28
+ * "세련되고 우아한" 재디자인): a deep jewel-tone gradient, a faint gold
+ * sunburst radiating from the scene's focal point, a soft focal glow, and a
+ * double gold hairline frame with fan-shaped corner ornaments. Each scene
+ * then draws its motif in the shared `${id}-gold` gradient with thin strokes,
+ * so the six tiles read as one matched set.
+ */
+function DecoScene({
+  id,
+  top,
+  bottom,
+  focus,
+  children,
+}: {
+  id: string;
+  top: string;
+  bottom: string;
+  focus: [number, number];
+  children: React.ReactNode;
+}) {
+  const [fx, fy] = focus;
+  const rays = 40;
   return (
     <>
       <defs>
         <clipPath id={`${id}-tile-clip`}>
           <rect x="0" y="0" width="240" height="320" rx="18" ry="18" />
         </clipPath>
+        <linearGradient id={`${id}-bg`} x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor={top} />
+          <stop offset="100%" stopColor={bottom} />
+        </linearGradient>
+        <linearGradient id={`${id}-gold`} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#fbefc4" />
+          <stop offset="45%" stopColor="#d9b25a" />
+          <stop offset="100%" stopColor="#9a7428" />
+        </linearGradient>
+        <radialGradient id={`${id}-glow`} cx={fx / 240} cy={fy / 320} r="0.55">
+          <stop offset="0%" stopColor="#f6dc98" stopOpacity="0.32" />
+          <stop offset="100%" stopColor="#f6dc98" stopOpacity="0" />
+        </radialGradient>
       </defs>
-      <g clipPath={`url(#${id}-tile-clip)`}>{children}</g>
+      <g clipPath={`url(#${id}-tile-clip)`}>
+        <rect x="0" y="0" width="240" height="320" fill={`url(#${id}-bg)`} />
+        <rect x="0" y="0" width="240" height="320" fill={`url(#${id}-glow)`} />
+        <g stroke="#e8c874" strokeWidth="0.5" opacity="0.14">
+          {[...Array(rays)].map((_, i) => {
+            const a = (i / rays) * Math.PI * 2;
+            return <path key={i} d={`M${fx} ${fy} L${fx + Math.cos(a) * 420} ${fy + Math.sin(a) * 420}`} />;
+          })}
+        </g>
+        {children}
+        <DecoFrame id={id} />
+      </g>
     </>
   );
 }
 
-function scatterStars(seedX: number[], seedY: number[], r: number[], opacity = 0.85) {
+/** Double gold hairline frame + stepped fan ornaments in each corner. */
+function DecoFrame({ id }: { id: string }) {
+  const gold = `url(#${id}-gold)`;
+  const corners: [number, number, number, number][] = [
+    [14, 14, 1, 1],
+    [226, 14, -1, 1],
+    [14, 306, 1, -1],
+    [226, 306, -1, -1],
+  ];
   return (
-    <g fill="#fff7dc" opacity={opacity}>
-      {seedX.map((x, i) => (
-        <circle key={i} cx={x} cy={seedY[i]} r={r[i % r.length]} />
+    <g fill="none" stroke={gold}>
+      <rect x="9" y="9" width="222" height="302" rx="12" strokeWidth="1.3" />
+      <rect x="14" y="14" width="212" height="292" rx="8" strokeWidth="0.5" opacity="0.7" />
+      {corners.map(([x, y, sx, sy], i) => (
+        <g key={i} strokeWidth="0.7">
+          {[10, 16, 22].map((r) => (
+            <path key={r} d={`M${x + sx * r} ${y} A${r} ${r} 0 0 ${sx * sy > 0 ? 1 : 0} ${x} ${y + sy * r}`} />
+          ))}
+          <path d={`M${x} ${y} L${x + sx * 7} ${y + sy * 7}`} />
+        </g>
       ))}
+      {/* bottom-center keystone ornament */}
+      <g strokeWidth="0.8">
+        <path d="M120 300 l6 -6 -6 -6 -6 6Z" fill={gold} />
+        <path d="M84 294 H108 M132 294 H156" />
+      </g>
     </g>
   );
 }
 
-function GoldVeinTile({ id }: { id: string }) {
+/** Tiny four-point gold sparkle. */
+function Sparkle({ x, y, r, gold, opacity = 1 }: { x: number; y: number; r: number; gold: string; opacity?: number }) {
+  const k = r * 0.28;
   return (
-    <TileScene id={id}>
-      <defs>
-        <linearGradient id={`${id}-sky`} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#ffe9a8" />
-          <stop offset="45%" stopColor="#e8a531" />
-          <stop offset="100%" stopColor="#4a2a06" />
-        </linearGradient>
-        <radialGradient id={`${id}-nugget`} cx="35%" cy="25%" r="85%">
-          <stop offset="0%" stopColor="#fff3c4" />
-          <stop offset="55%" stopColor="#f2b632" />
-          <stop offset="100%" stopColor="#7a4e07" />
-        </radialGradient>
-      </defs>
-      <rect x="0" y="0" width="240" height="320" fill={`url(#${id}-sky)`} />
-      {/* distant mountain range */}
-      <path d="M-10 175 L40 130 L75 160 L115 110 L150 155 L190 125 L250 168 L250 240 L-10 240 Z" fill="#7a4e07" opacity="0.55" />
-      {/* mining-town skyline at the base */}
-      <g fill="#2c1a04" opacity="0.75">
-        <rect x="18" y="255" width="16" height="34" />
-        <path d="M20 255 h12 l-6 -14 Z" />
-        <rect x="188" y="248" width="20" height="41" />
-        <rect x="196" y="238" width="4" height="14" />
-        <rect x="60" y="262" width="10" height="27" />
-      </g>
-      {/* big faceted nugget centerpiece */}
-      <path
-        d="M60 240 L72 178 L120 148 L172 172 L188 235 L150 296 L92 292 Z"
-        fill={`url(#${id}-nugget)`}
-        stroke="#5c3a05"
-        strokeWidth="3"
-        strokeLinejoin="round"
-      />
-      <g stroke="#c07f10" strokeWidth="2" opacity="0.65" strokeLinecap="round" fill="none">
-        <path d="M88 200 L120 186 L152 208" />
-        <path d="M100 240 L140 252" />
-        <path d="M120 148 L118 292" />
-      </g>
-      {/* sparkle */}
-      <path d="M150 158 l6 13 13 6 -13 6 -6 13 -6 -13 -13 -6 13 -6Z" fill="#fff7dc" />
-      <path d="M188 200 l3.5 8 8 3.5 -8 3.5 -3.5 8 -3.5 -8 -8 -3.5 8 -3.5Z" fill="#fff7dc" opacity="0.9" />
-    </TileScene>
+    <path
+      d={`M${x} ${y - r} L${x + k} ${y - k} L${x + r} ${y} L${x + k} ${y + k} L${x} ${y + r} L${x - k} ${y + k} L${x - r} ${y} L${x - k} ${y - k}Z`}
+      fill={gold}
+      opacity={opacity}
+    />
   );
 }
 
-function OlympusTempleTile({ id }: { id: string }) {
-  const columnXs = [30, 74, 166, 210];
+/** Casino 1 — 황금 광맥: a brilliant-cut gold gem over a hairline mountain range. */
+function GoldVeinTile({ id }: { id: string }) {
+  const gold = `url(#${id}-gold)`;
+  const outer: [number, number][] = [
+    [120, 96], [168, 118], [186, 168], [166, 222], [120, 246], [74, 222], [54, 168], [72, 118],
+  ];
+  const inner: [number, number][] = [
+    [120, 134], [144, 146], [152, 172], [140, 198], [120, 206], [100, 198], [88, 172], [96, 146],
+  ];
+  const pts = (p: [number, number][]) => p.map(([x, y]) => `${x},${y}`).join(" ");
   return (
-    <TileScene id={id}>
-      <defs>
-        <linearGradient id={`${id}-sky`} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#fdf6e3" />
-          <stop offset="45%" stopColor="#b48a3f" />
-          <stop offset="100%" stopColor="#301a3c" />
-        </linearGradient>
-      </defs>
-      <rect x="0" y="0" width="240" height="320" fill={`url(#${id}-sky)`} />
-      {/* receding colonnade */}
-      {columnXs.map((x, i) => (
-        <g key={i}>
-          <rect x={x} y={100} width="18" height="180" fill="#fde68a" stroke="#78350f" strokeWidth="1.5" />
-          <rect x={x - 4} y={92} width="26" height="10" fill="#fde68a" stroke="#78350f" strokeWidth="1.5" />
-          <g stroke="#78350f" strokeWidth="1" opacity="0.6">
-            <path d={`M${x + 4} 100 V280`} />
-            <path d={`M${x + 9} 100 V280`} />
-            <path d={`M${x + 14} 100 V280`} />
-          </g>
-        </g>
-      ))}
-      {/* central marble pillar (hero column) */}
-      <rect x="98" y="60" width="44" height="230" fill="#fef3c7" stroke="#78350f" strokeWidth="2" />
-      <rect x="90" y="48" width="60" height="16" fill="#fef3c7" stroke="#78350f" strokeWidth="2" />
-      <rect x="90" y="284" width="60" height="14" fill="#fef3c7" stroke="#78350f" strokeWidth="2" />
-      <g stroke="#78350f" strokeWidth="1.2" opacity="0.7">
-        <path d="M108 64 V284" />
-        <path d="M120 64 V284" />
-        <path d="M132 64 V284" />
-      </g>
-      {/* laurel wreath arc around the hero column */}
-      <g fill="#facc15" stroke="#78350f" strokeWidth="0.8">
-        {[...Array(6)].map((_, i) => {
-          const t = i / 5;
-          const x = 70 + t * 50;
-          const y = 44 + Math.sin(t * Math.PI) * 26;
-          const rot = -70 + t * 140;
-          return <ellipse key={`l${i}`} cx={x} cy={y} rx="8" ry="4" transform={`rotate(${rot} ${x} ${y})`} />;
-        })}
-        {[...Array(6)].map((_, i) => {
-          const t = i / 5;
-          const x = 170 - t * 50;
-          const y = 44 + Math.sin(t * Math.PI) * 26;
-          const rot = 70 - t * 140;
-          return <ellipse key={`r${i}`} cx={x} cy={y} rx="8" ry="4" transform={`rotate(${rot} ${x} ${y})`} />;
-        })}
-      </g>
-      {/* marble floor strip */}
-      <g opacity="0.35" stroke="#301a3c" strokeWidth="1">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
-          <path key={i} d={`M${i * 48} 300 L${i * 48 + 30} 320`} />
+    <DecoScene id={id} top="#0d4a38" bottom="#03150f" focus={[120, 170]}>
+      <path d="M22 290 L58 262 L86 280 L120 252 L154 280 L182 262 L218 290" fill="none" stroke={gold} strokeWidth="1" opacity="0.7" />
+      <polygon points={pts(outer)} fill={gold} stroke="#fbefc4" strokeWidth="1" strokeLinejoin="round" />
+      <polygon points={pts(inner)} fill="#fbefc4" fillOpacity="0.35" stroke="#6b4f16" strokeWidth="0.8" strokeLinejoin="round" />
+      <g stroke="#6b4f16" strokeWidth="0.7" opacity="0.75">
+        {outer.map(([x, y], i) => (
+          <path key={i} d={`M${x} ${y} L${inner[i][0]} ${inner[i][1]}`} />
         ))}
       </g>
-    </TileScene>
+      <path d="M120 96 L96 146 M120 96 L144 146" stroke="#fff8dc" strokeWidth="0.8" opacity="0.8" />
+      <Sparkle x={170} y={106} r={9} gold="#fff8dc" />
+      <Sparkle x={62} y={214} r={6} gold="#fff8dc" opacity={0.85} />
+      <Sparkle x={196} y={206} r={4} gold={gold} opacity={0.8} />
+    </DecoScene>
   );
 }
 
-function VolcanoOasisTile({ id }: { id: string }) {
+/** Casino 2 — 올림포스 신전: a classical temple facade in gold line, laurel above. */
+function OlympusTempleTile({ id }: { id: string }) {
+  const gold = `url(#${id}-gold)`;
+  const columnXs = [66, 88, 110, 130, 152, 174];
+  const leaves = (side: 1 | -1) =>
+    [...Array(5)].map((_, i) => {
+      const a = Math.PI / 2 + side * (0.3 + i * 0.3);
+      const x = 120 + Math.cos(a) * 30;
+      const y = 78 - Math.sin(a) * 30;
+      // each leaf points outward-and-up, angled 40° off the wreath's tangent
+      const deg = (-a * 180) / Math.PI + side * 50;
+      return <ellipse key={`${side}-${i}`} cx={x} cy={y} rx="6.5" ry="2.6" transform={`rotate(${deg} ${x} ${y})`} />;
+    });
   return (
-    <TileScene id={id}>
-      <defs>
-        <linearGradient id={`${id}-sky`} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#c7fbee" />
-          <stop offset="45%" stopColor="#14b8a6" />
-          <stop offset="100%" stopColor="#062b29" />
-        </linearGradient>
-      </defs>
-      <rect x="0" y="0" width="240" height="320" fill={`url(#${id}-sky)`} />
-      {/* volcano */}
-      <path d="M70 220 L120 90 L170 220 Z" fill="#3f5c31" stroke="#1e3417" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M108 130 Q120 100 132 130 L120 175 Z" fill="#fb923c" />
-      <path d="M118 96 q6 -14 14 -8 q-4 10 -10 14Z" fill="#fde68a" opacity="0.9" />
-      {/* palms either side */}
-      {[
-        { x: 40, s: 1 },
-        { x: 200, s: -1 },
-      ].map(({ x, s }, i) => (
-        <g key={i} transform={`translate(${x} 235)`}>
-          <path d={`M0 0 Q${6 * s} -30 ${2 * s} -58`} stroke="#2c1a04" strokeWidth="5" fill="none" strokeLinecap="round" />
-          <g fill="#166534">
-            <ellipse cx={2 * s} cy={-58} rx="22" ry="8" transform={`rotate(${-20 * s} ${2 * s} -58)`} />
-            <ellipse cx={2 * s} cy={-58} rx="22" ry="8" transform={`rotate(${20 * s} ${2 * s} -58)`} />
-            <ellipse cx={2 * s} cy={-58} rx="20" ry="7" transform={`rotate(${70 * s} ${2 * s} -58)`} />
-          </g>
+    <DecoScene id={id} top="#5a1426" bottom="#17040a" focus={[120, 96]}>
+      {/* laurel wreath */}
+      <g fill={gold} opacity="0.95">
+        {leaves(1)}
+        {leaves(-1)}
+      </g>
+      {/* pediment + entablature */}
+      <path d="M54 124 L120 88 L186 124 Z" fill={gold} fillOpacity="0.14" stroke={gold} strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M74 119 L120 95 L166 119 Z" fill="none" stroke={gold} strokeWidth="0.6" opacity="0.7" />
+      <circle cx="120" cy="110" r="5" fill="none" stroke={gold} strokeWidth="0.8" />
+      <rect x="54" y="124" width="132" height="12" fill={gold} fillOpacity="0.2" stroke={gold} strokeWidth="1" />
+      <g stroke={gold} strokeWidth="0.5" opacity="0.7">
+        {[...Array(16)].map((_, i) => (
+          <path key={i} d={`M${60 + i * 8} 126 V134`} />
+        ))}
+      </g>
+      {/* fluted columns */}
+      {columnXs.map((x) => (
+        <g key={x}>
+          <rect x={x - 6} y="138" width="12" height="4" fill={gold} />
+          <rect x={x - 4} y="142" width="8" height="104" fill={gold} fillOpacity="0.16" stroke={gold} strokeWidth="0.9" />
+          <path d={`M${x - 1.5} 144 V244 M${x + 1.5} 144 V244`} stroke={gold} strokeWidth="0.4" opacity="0.7" />
+          <rect x={x - 6} y="246" width="12" height="4" fill={gold} />
         </g>
       ))}
-      {/* oasis water + reflection ripples */}
-      <rect x="0" y="235" width="240" height="85" fill="#0d9488" opacity="0.9" />
-      <g stroke="#5eead4" strokeWidth="1.6" opacity="0.55" strokeLinecap="round">
-        <path d="M14 255 h44" />
-        <path d="M90 268 h60" />
-        <path d="M20 285 h56" />
-        <path d="M120 250 h50" />
-        <path d="M160 298 h60" />
-        <path d="M30 305 h70" />
+      {/* stylobate steps */}
+      <g fill="none" stroke={gold} strokeWidth="1">
+        <rect x="48" y="252" width="144" height="7" />
+        <rect x="40" y="259" width="160" height="7" />
+        <rect x="32" y="266" width="176" height="7" />
       </g>
-    </TileScene>
+    </DecoScene>
   );
 }
 
+/** Casino 3 — 화산섬 오아시스: a volcano under a gold moon, palms, still water. */
+function VolcanoOasisTile({ id }: { id: string }) {
+  const gold = `url(#${id}-gold)`;
+  const palm = (x: number, s: number) => (
+    <g transform={`translate(${x} 244)`} fill="none" stroke={gold} strokeLinecap="round">
+      <path d={`M0 0 Q${8 * s} -34 ${3 * s} -66`} strokeWidth="1.6" />
+      <g strokeWidth="1">
+        <path d={`M${3 * s} -66 q${-14 * s} -8 ${-28 * s} 4`} />
+        <path d={`M${3 * s} -66 q${14 * s} -10 ${30 * s} 2`} />
+        <path d={`M${3 * s} -66 q${-6 * s} -14 ${-18 * s} -16`} />
+        <path d={`M${3 * s} -66 q${8 * s} -14 ${22 * s} -14`} />
+        <path d={`M${3 * s} -66 q${-2 * s} 10 ${-14 * s} 18`} />
+      </g>
+    </g>
+  );
+  return (
+    <DecoScene id={id} top="#0f4a54" bottom="#02161b" focus={[120, 96]}>
+      <circle cx="120" cy="96" r="34" fill={gold} fillOpacity="0.14" stroke={gold} strokeWidth="1" />
+      <circle cx="120" cy="96" r="40" fill="none" stroke={gold} strokeWidth="0.4" opacity="0.6" />
+      {/* smoke plume */}
+      <path d="M120 128 C108 112 134 104 122 88 C112 76 130 66 126 52" fill="none" stroke={gold} strokeWidth="1" opacity="0.8" />
+      {/* volcano */}
+      <path d="M44 242 L102 138 Q120 126 138 138 L196 242 Z" fill="#05282e" stroke={gold} strokeWidth="1.4" strokeLinejoin="round" />
+      <g stroke={gold} strokeWidth="0.7" opacity="0.75" fill="none">
+        <path d="M112 136 Q108 170 92 206" />
+        <path d="M122 134 Q124 180 118 228" />
+        <path d="M132 138 Q142 170 156 200" />
+      </g>
+      {palm(34, 1)}
+      {palm(206, -1)}
+      {/* water */}
+      <path d="M22 244 H218" stroke={gold} strokeWidth="1" />
+      <g stroke={gold} strokeWidth="0.7" strokeLinecap="round">
+        <path d="M60 256 H180" opacity="0.7" />
+        <path d="M78 266 H162" opacity="0.55" />
+        <path d="M94 276 H146" opacity="0.4" />
+      </g>
+    </DecoScene>
+  );
+}
+
+/** Casino 4 — 사막의 별궁: a domed palace with minarets under a crescent moon. */
 function DesertPalaceTile({ id }: { id: string }) {
-  const starX = [24, 58, 96, 130, 168, 200, 46, 150, 210, 12];
-  const starY = [22, 46, 14, 34, 20, 50, 70, 62, 74, 88];
-  const starR = [1.1, 0.8, 1.3, 0.7, 1, 0.9];
+  const gold = `url(#${id}-gold)`;
+  const minaret = (x: number) => (
+    <g>
+      <rect x={x - 5} y="150" width="10" height="92" fill={gold} fillOpacity="0.14" stroke={gold} strokeWidth="0.9" />
+      <path d={`M${x - 7} 150 H${x + 7} M${x - 7} 176 H${x + 7}`} stroke={gold} strokeWidth="0.9" />
+      <path d={`M${x - 6} 150 Q${x - 6} 136 ${x} 128 Q${x + 6} 136 ${x + 6} 150 Z`} fill={gold} fillOpacity="0.3" stroke={gold} strokeWidth="0.9" />
+      <path d={`M${x} 128 V118`} stroke={gold} strokeWidth="0.8" />
+    </g>
+  );
   return (
-    <TileScene id={id}>
-      <defs>
-        <linearGradient id={`${id}-sky`} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#0b1245" />
-          <stop offset="42%" stopColor="#3b2f6b" />
-          <stop offset="72%" stopColor="#c9862f" />
-          <stop offset="100%" stopColor="#f2b632" />
-        </linearGradient>
-      </defs>
-      <rect x="0" y="0" width="240" height="320" fill={`url(#${id}-sky)`} />
-      {scatterStars(starX, starY, starR)}
-      {/* dune horizon */}
-      <path d="M-10 220 Q60 190 130 218 T250 205 L250 320 L-10 320 Z" fill="#fde68a" opacity="0.95" />
-      <path d="M-10 250 Q80 225 150 248 T250 238 L250 320 L-10 320 Z" fill="#e8a531" opacity="0.9" />
-      {/* onion dome palace */}
-      <g transform="translate(120 130)">
-        <path d="M-26 90 V30 H26 V90 Z" fill="#fef3c7" stroke="#8a5a08" strokeWidth="2" />
-        <path d="M-30 30 Q0 -34 30 30 Z" fill="#0d9488" stroke="#04463f" strokeWidth="2" />
-        <path d="M-2 -34 h4 v-14 h-4 Z" fill="#0d9488" />
-        <circle cx="0" cy="-50" r="4" fill="#facc15" />
-        <path d="M-18 40 h36 M-18 55 h36 M-18 70 h36" stroke="#8a5a08" strokeWidth="1.4" opacity="0.6" />
+    <DecoScene id={id} top="#1d1f5c" bottom="#07071f" focus={[120, 150]}>
+      {/* crescent moon + stars */}
+      <path d="M186 42 A20 20 0 1 0 198 78 A16 16 0 1 1 186 42 Z" fill={gold} />
+      <Sparkle x={52} y={52} r={5} gold="#fff8dc" />
+      <Sparkle x={86} y={34} r={3} gold={gold} opacity={0.85} />
+      <Sparkle x={148} y={62} r={3.5} gold={gold} opacity={0.8} />
+      <Sparkle x={36} y={96} r={2.5} gold={gold} opacity={0.7} />
+      <Sparkle x={206} y={110} r={3} gold={gold} opacity={0.7} />
+      {minaret(58)}
+      {minaret(182)}
+      {/* main dome + finial */}
+      <path d="M86 172 Q84 126 120 108 Q156 126 154 172 Z" fill={gold} fillOpacity="0.22" stroke={gold} strokeWidth="1.3" />
+      <path d="M100 172 Q100 136 120 118 Q140 136 140 172" fill="none" stroke={gold} strokeWidth="0.5" opacity="0.7" />
+      <path d="M120 108 V90" stroke={gold} strokeWidth="1" />
+      <circle cx="120" cy="86" r="4" fill={gold} />
+      {/* palace body with arched windows + door */}
+      <rect x="76" y="172" width="88" height="70" fill={gold} fillOpacity="0.1" stroke={gold} strokeWidth="1.2" />
+      <path d="M72 172 H168" stroke={gold} strokeWidth="1.6" />
+      {[92, 148].map((x) => (
+        <path key={x} d={`M${x - 6} 214 V196 Q${x} 186 ${x + 6} 196 V214 Z`} fill="none" stroke={gold} strokeWidth="0.8" />
+      ))}
+      <path d="M108 242 V206 Q120 190 132 206 V242" fill="#07071f" stroke={gold} strokeWidth="1" />
+      {/* dunes */}
+      <g fill="none" stroke={gold} strokeLinecap="round">
+        <path d="M22 250 Q80 236 130 252 T218 246" strokeWidth="1" />
+        <path d="M22 268 Q90 254 150 270 T218 264" strokeWidth="0.7" opacity="0.6" />
+        <path d="M22 284 Q70 276 120 286 T218 282" strokeWidth="0.5" opacity="0.4" />
       </g>
-      {/* camel silhouette walking the dune line */}
-      <g transform="translate(38 208) scale(0.85)" fill="#3d2a10" opacity="0.85">
-        <path d="M0 40 Q2 18 14 14 Q16 2 26 4 Q30 -8 38 2 Q44 -2 46 8 Q54 8 54 18 L54 40 L46 40 L46 30 L36 30 L36 40 L28 40 L28 26 L14 26 L14 40 Z" />
-      </g>
-    </TileScene>
+    </DecoScene>
   );
 }
 
+/** Casino 5 — 태양의 피라미드: a gold-lined pyramid before an Art Deco rising sun. */
 function SunPyramidTile({ id }: { id: string }) {
+  const gold = `url(#${id}-gold)`;
+  const sunRays = 13;
   return (
-    <TileScene id={id}>
-      <defs>
-        <linearGradient id={`${id}-sky`} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#3b1d5c" />
-          <stop offset="50%" stopColor="#e0703a" />
-          <stop offset="100%" stopColor="#fbbf24" />
-        </linearGradient>
-        <radialGradient id={`${id}-sun`} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#fff7dc" />
-          <stop offset="70%" stopColor="#fde68a" />
-          <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-      <rect x="0" y="0" width="240" height="320" fill={`url(#${id}-sky)`} />
-      {/* setting sun behind the apex */}
-      <circle cx="120" cy="110" r="58" fill={`url(#${id}-sun)`} />
-      {/* sandstone step pyramid */}
-      <path d="M56 260 L120 96 L184 260 Z" fill="#d6a24a" stroke="#7a4e07" strokeWidth="2.5" strokeLinejoin="round" />
-      <path d="M120 96 L184 260 L140 260 Z" fill="#a8741f" opacity="0.75" />
-      <g stroke="#7a4e07" strokeWidth="1" opacity="0.45">
-        <path d="M101 145 H139" />
-        <path d="M88 178 H152" />
-        <path d="M75 211 H165" />
-        <path d="M63 242 H177" />
+    <DecoScene id={id} top="#3a220c" bottom="#0e0703" focus={[120, 150]}>
+      {/* deco sun: disc + fanned rays */}
+      <g stroke={gold} strokeWidth="1" opacity="0.8">
+        {[...Array(sunRays)].map((_, i) => {
+          const a = Math.PI + (i / (sunRays - 1)) * Math.PI;
+          return (
+            <path
+              key={i}
+              d={`M${120 + Math.cos(a) * 52} ${150 + Math.sin(a) * 52} L${120 + Math.cos(a) * 86} ${150 + Math.sin(a) * 86}`}
+            />
+          );
+        })}
       </g>
-      {/* obelisk */}
-      <path d="M198 260 L206 150 L214 150 L222 260 Z" fill="#c68f3a" stroke="#7a4e07" strokeWidth="1.4" />
-      <g stroke="#7a4e07" strokeWidth="0.6" opacity="0.55">
-        <path d="M204 175 h14" />
-        <path d="M203 200 h16" />
-        <path d="M202 225 h18" />
+      <circle cx="120" cy="150" r="44" fill={gold} fillOpacity="0.2" stroke={gold} strokeWidth="1.2" />
+      {/* side pyramids */}
+      <path d="M22 256 L50 206 L78 256 Z" fill="#0e0703" stroke={gold} strokeWidth="0.9" opacity="0.8" />
+      <path d="M162 256 L190 206 L218 256 Z" fill="#0e0703" stroke={gold} strokeWidth="0.9" opacity="0.8" />
+      {/* main pyramid */}
+      <path d="M50 256 L120 116 L190 256 Z" fill="#140a04" stroke={gold} strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M120 116 L190 256 L136 256 Z" fill={gold} fillOpacity="0.2" />
+      <g stroke={gold} strokeWidth="0.6" opacity="0.6">
+        <path d="M100 156 H140" />
+        <path d="M90 176 H150" />
+        <path d="M80 196 H160" />
+        <path d="M70 216 H170" />
+        <path d="M60 236 H180" />
       </g>
-      {/* distant palm at the base */}
-      <g transform="translate(36 262)">
-        <path d="M0 0 Q4 -24 1 -46" stroke="#4a2a06" strokeWidth="4" fill="none" strokeLinecap="round" />
-        <g fill="#3f5c31">
-          <ellipse cx="1" cy="-46" rx="18" ry="6" transform="rotate(-20 1 -46)" />
-          <ellipse cx="1" cy="-46" rx="18" ry="6" transform="rotate(20 1 -46)" />
-        </g>
+      <path d="M113 130 L127 130 L120 116 Z" fill={gold} />
+      <path d="M22 256 H218" stroke={gold} strokeWidth="1" />
+      <g stroke={gold} strokeWidth="0.6" opacity="0.5">
+        <path d="M40 270 H200" />
+        <path d="M64 282 H176" />
       </g>
-      {/* sand line */}
-      <rect x="0" y="260" width="240" height="60" fill="#e8a531" opacity="0.9" />
-    </TileScene>
+    </DecoScene>
   );
 }
 
+/** Casino 6 — 별빛 서커스: a striped big-top pavilion under a starry sky. */
 function StarlightCircusTile({ id }: { id: string }) {
-  const stripes = 9;
-  const apexX = 120;
-  const apexY = 20;
-  const baseY = 250;
-  const halfWidth = 150;
+  const gold = `url(#${id}-gold)`;
+  const stripes = 8;
+  const left = 44;
+  const right = 196;
+  const eaveY = 160;
+  const w = (right - left) / stripes;
   return (
-    <TileScene id={id}>
-      <defs>
-        <linearGradient id={`${id}-sky`} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#fee2e2" />
-          <stop offset="55%" stopColor="#dc2626" />
-          <stop offset="100%" stopColor="#450a0a" />
-        </linearGradient>
-      </defs>
-      <rect x="0" y="0" width="240" height="320" fill={`url(#${id}-sky)`} />
-      {/* big-top canopy radiating from the peak */}
+    <DecoScene id={id} top="#3f1253" bottom="#12031b" focus={[120, 76]}>
+      <Sparkle x={48} y={60} r={4} gold="#fff8dc" />
+      <Sparkle x={190} y={48} r={5} gold="#fff8dc" />
+      <Sparkle x={200} y={112} r={2.5} gold={gold} opacity={0.8} />
+      <Sparkle x={34} y={120} r={3} gold={gold} opacity={0.75} />
+      {/* pennant on the king pole */}
+      <path d="M120 76 V44" stroke={gold} strokeWidth="1.2" />
+      <path d="M120 44 L140 50 L120 56 Z" fill={gold} />
+      {/* canopy: alternating gold / dark gores */}
       {[...Array(stripes)].map((_, i) => {
-        const t0 = i / stripes;
-        const t1 = (i + 1) / stripes;
-        const x0 = apexX - halfWidth + t0 * halfWidth * 2;
-        const x1 = apexX - halfWidth + t1 * halfWidth * 2;
-        const dip = Math.sin(((i + 0.5) / stripes) * Math.PI) * 22;
+        const x0 = left + i * w;
+        const x1 = x0 + w;
         return (
           <path
             key={i}
-            d={`M${apexX} ${apexY} L${x0} ${baseY - dip} Q${(x0 + x1) / 2} ${baseY - dip + 26} ${x1} ${baseY - dip} Z`}
-            fill={i % 2 === 0 ? "#fef2f2" : "#dc2626"}
+            d={`M120 76 L${x0} ${eaveY} Q${(x0 + x1) / 2} ${eaveY + 10} ${x1} ${eaveY} Z`}
+            fill={i % 2 === 0 ? gold : "#2a0a38"}
+            fillOpacity={i % 2 === 0 ? 0.85 : 1}
+            stroke={gold}
+            strokeWidth="0.6"
           />
         );
       })}
-      {/* topper star */}
-      <circle cx={apexX} cy={apexY} r="6" fill="#fde68a" stroke="#78350f" strokeWidth="1" />
-      <path d={`m${apexX} ${apexY - 22} 4 8 8 4 -8 4 -4 8 -4 -8 -8 -4 8 -4Z`} fill="#fef2f2" />
-      {/* scalloped tent trim */}
-      <g fill="#fde68a">
+      {/* drum walls */}
+      <rect x="54" y="166" width="132" height="82" fill="#1d0628" stroke={gold} strokeWidth="1.1" />
+      <g stroke={gold} strokeWidth="0.5" opacity="0.55">
         {[...Array(10)].map((_, i) => (
-          <circle key={i} cx={12 + i * 24} cy={252} r="12" />
+          <path key={i} d={`M${54 + (i + 1) * 12} 166 V248`} />
         ))}
       </g>
-      {/* red/white checker band at the base */}
-      <g>
-        {[...Array(10)].map((_, i) => (
-          <rect key={i} x={i * 24} y={264} width="24" height="24" fill={i % 2 === 0 ? "#fef2f2" : "#dc2626"} />
+      {/* scalloped valance over the wall top */}
+      <g fill={gold} stroke={gold} strokeWidth="0.6">
+        {[...Array(stripes)].map((_, i) => (
+          <path key={i} d={`M${left + i * w} ${eaveY} Q${left + (i + 0.5) * w} ${eaveY + 14} ${left + (i + 1) * w} ${eaveY} Z`} />
         ))}
       </g>
-      <rect x="0" y="288" width="240" height="32" fill="#450a0a" />
-    </TileScene>
+      {/* entrance with swept-back drapes */}
+      <path d="M100 248 V204 Q120 178 140 204 V248 Z" fill="#12031b" stroke={gold} strokeWidth="1.1" />
+      <path d="M100 204 Q108 222 104 248 M140 204 Q132 222 136 248" fill="none" stroke={gold} strokeWidth="0.8" />
+      <path d="M22 248 H218" stroke={gold} strokeWidth="1" />
+      <g stroke={gold} strokeWidth="0.6" opacity="0.5">
+        <path d="M48 262 H192" />
+        <path d="M72 274 H168" />
+      </g>
+    </DecoScene>
   );
 }
 
