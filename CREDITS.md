@@ -50,3 +50,17 @@ Web Audio API로 직접 합성하므로 별도 출처가 없습니다 — 아래
 3. 이 표의 해당 행(트랙명/아티스트/라이선스/링크)을 갱신합니다.
 
 코드 변경은 필요 없습니다 — `bgmManager.ts`는 파일 존재 여부만으로 동작합니다.
+
+## 이미지 (라스베가스 카지노 사진)
+
+[src/games/lasVegas/CasinoPhotoArt.tsx](src/games/lasVegas/CasinoPhotoArt.tsx)가 쓰는 사진. 모두
+Wikimedia Commons의 CC0/퍼블릭 도메인 파일(1280px 축소본)이라 표기 의무는 없지만 출처를 기록해 둡니다.
+간판·상호가 없는 피사체만 골랐습니다 — 라이선스가 자유여도 사진 속 상표는 별개입니다.
+
+| 파일 | 카지노 | 원본 | 작가 | 라이선스 |
+|---|---|---|---|---|
+| `casino-2-temple.jpg` | 2 올림포스 신전 | https://commons.wikimedia.org/wiki/File:Colonnade_Parthenon_Acropolis,_Athens,_Greece.jpg | Jebulon | CC0 |
+| `casino-3-volcano.jpg` | 3 화산섬 오아시스 | https://commons.wikimedia.org/wiki/File:Arenal_Volcano,_Costa_Rica.jpg | Central Intelligence Agency | Public domain |
+| `casino-4-palace.jpg` | 4 사막의 별궁 | https://commons.wikimedia.org/wiki/File:Taj_Mahal_2018.jpg | Almbauer | CC0 |
+
+1·5·6번 카지노는 적합한 CC0 사진을 찾을 때까지 자체 제작 SVG를 씁니다.

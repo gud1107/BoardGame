@@ -16,8 +16,9 @@ import type { CasinoNumber } from "./engine";
  * Keep it that way: don't reintroduce real casino names, logos, or photos.
  *
  * Two renders of the same 6 scenes are exported:
- *  - `CasinoTileArt`  — the full-bleed 3:4 background, used by
- *    `CasinoTile.tsx`'s art zone.
+ *  - `CasinoTileArt`  — the full-bleed 3:4 background, shown by
+ *    `CasinoPhotoArt.tsx`'s `CasinoMatArt` for every casino that has no
+ *    license-free photo.
  *  - `CasinoEmblem`   — a small circular medallion, kept in case a compact
  *    badge is ever wanted (dashboard card, rulebook, etc.).
  */

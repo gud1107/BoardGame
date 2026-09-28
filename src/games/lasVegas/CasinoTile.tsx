@@ -1,5 +1,5 @@
 import { MoneyBillArt } from "./MoneyBillArt";
-import { CasinoTileArt } from "./CasinoEmblem";
+import { CasinoMatArt } from "./CasinoPhotoArt";
 import { DiceFace, diceColorForSeat, NEUTRAL_DICE_COLOR } from "./DiceIcon";
 import { tallyDiceGroups, NEUTRAL_OWNER, type CasinoNumber, type CasinoState, type DiceOwner, type SeatIndex } from "./engine";
 
@@ -211,9 +211,9 @@ export function MoneyStack({
  * Three-tier casino block — per HANDOFF.md's Las Vegas section, each of the
  * 6 casinos is a *stack of three non-overlapping zones* instead of a single
  * art tile with money/dice laid on top:
- *   1. Theme mat (top) — `CasinoTileArt` at its native 3:4 ratio: an
- *      original SVG scene of a fictional casino (see `CasinoEmblem.tsx`'s
- *      doc — no real casino photos/names). A number-only badge
+ *   1. Theme mat (top) — `CasinoMatArt` at its native 3:4 ratio: a
+ *      CC0/public-domain photo where one fits the fictional casino, else the
+ *      original Art Deco SVG (see `CasinoPhotoArt.tsx`). A number-only badge
  *      (enlarged die-pip icon + bold numeral, no theme name — 2026-08-23
  *      요청) stays pinned to its top-left corner, since the rulebook
  *      identifies casinos by their 1-6 face value, not a name.
@@ -357,7 +357,7 @@ export function CasinoTile({
 function CasinoArtZone({ casinoNumber }: { casinoNumber: CasinoNumber }) {
   return (
     <div className="relative aspect-[3/4] w-full overflow-hidden rounded-xl">
-      <CasinoTileArt casino={casinoNumber} className="absolute inset-0 h-full w-full" />
+      <CasinoMatArt casino={casinoNumber} className="absolute inset-0 h-full w-full" />
       <div
         className="pointer-events-none absolute inset-0"
         style={{ background: "radial-gradient(60% 40% at 8% 8%, rgba(0,0,0,0.55) 0%, transparent 70%)" }}
