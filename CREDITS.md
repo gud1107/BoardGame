@@ -54,16 +54,16 @@ Web Audio API로 직접 합성하므로 별도 출처가 없습니다 — 아래
 ## 이미지 (라스베가스 카지노 사진)
 
 [src/games/lasVegas/CasinoPhotoArt.tsx](src/games/lasVegas/CasinoPhotoArt.tsx)가 쓰는 사진. 모두
-Wikimedia Commons의 CC0/퍼블릭 도메인 파일(1280px 축소본)이라 표기 의무는 없지만 출처를 기록해 둡니다.
-간판·상호가 없는 피사체만 골랐습니다 — 라이선스가 자유여도 사진 속 상표는 별개입니다.
+Wikimedia Commons의 CC0/퍼블릭 도메인 파일(최대 1280×1400 축소본)이라 표기 의무는 없지만 출처를 기록해 둡니다.
+간판·상호·브랜드 로고가 없는 사진만 골랐습니다 — 라이선스가 자유여도 사진 속 상표는 별개입니다.
 
 | 파일 | 카지노 | 원본 | 작가 | 라이선스 |
 |---|---|---|---|---|
-| `casino-1-chandelier.jpg` | 1 황금 샹들리에 | https://commons.wikimedia.org/wiki/File:Chandelier_of_the_Crystal_Staircase,_Dolmabah%C3%A7e_Palace,_Istanbul.jpg | Julian Lupyan | CC0 |
-| `casino-2-yacht.jpg` | 2 리비에라 요트 클럽 | https://commons.wikimedia.org/wiki/File:Samsara_Yacht.jpg | Davidley | CC0 |
-| `casino-3-lagoon.jpg` | 3 몰디브 라군 | https://commons.wikimedia.org/wiki/File:Boathouse_neighborhood_(Unsplash).jpg | Ishan @seefromthesky (Unsplash) | CC0 |
-| `casino-4-mirrors.jpg` | 4 거울의 궁전 | https://commons.wikimedia.org/wiki/File:Palace_of_Versailles_Hall_of_Mirrors_(27738100023).jpg | Gary Todd | CC0 |
-| `casino-5-santorini.jpg` | 5 산토리니 선셋 | https://commons.wikimedia.org/wiki/File:Santorini_Sunset_(26536503).jpeg | Reid Gower | CC0 |
-| `casino-6-champagne.jpg` | 6 샴페인 라운지 | https://commons.wikimedia.org/wiki/File:Champagne-glasses-1940262_1920.jpg | Myriam Zilles | CC0 |
+| `casino-1-roulette.jpg` | 1 로열 룰렛 | https://commons.wikimedia.org/wiki/File:Roulette-Tisch.jpg | Sozi | Public domain |
+| `casino-2-chips.jpg` | 2 황금 칩 금고 | https://commons.wikimedia.org/wiki/File:Pile_of_Poker_Chips.jpg | Julian Lupyan | CC0 |
+| `casino-3-royal-flush.jpg` | 3 로열 플러시 라운지 | https://commons.wikimedia.org/wiki/File:Royal_flush.JPG | Wingchun1990 at English Wikipedia | Public domain |
+| `casino-4-dice.jpg` | 4 루비 다이스 | https://commons.wikimedia.org/wiki/File:Casino-3262947_1920.jpg | Jonathan Petersson | CC0 |
+| `casino-5-high-roller.jpg` | 5 하이롤러 살롱 | https://commons.wikimedia.org/wiki/File:Poker_chips_2.jpg | Jismab | CC0 |
+| `casino-6-emerald.jpg` | 6 에메랄드 테이블 | https://commons.wikimedia.org/wiki/File:Casino_Dice_(11275288753).jpg | davidgsteadman | Public domain |
 
 자체 제작 SVG(`CasinoEmblem.tsx`)는 사진이 없는 카지노용 대체 이미지로 남아 있습니다.

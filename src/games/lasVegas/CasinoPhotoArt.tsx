@@ -3,10 +3,11 @@ import { CasinoTileArt, CASINO_THEME_NAMES } from "./CasinoEmblem";
 import type { CasinoNumber } from "./engine";
 
 /**
- * Real-photo backgrounds for the six casinos (2026-09-28, "고급스럽고 누구나
- * 가지고 싶은" 재요청): only CC0 / public-domain Wikimedia Commons photos of
- * aspirational, sign-free subjects (palace chandelier, superyacht, overwater
- * villas, Hall of Mirrors, Santorini at dusk, champagne) — casino names in
+ * Real-photo backgrounds for the six casinos (2026-09-28, "세련된 고급 카지노
+ * 사진" 재요청 — casino-table close-ups, not scenery): only CC0 /
+ * public-domain Wikimedia Commons photos with no brand marks in frame (chips
+ * printed with a sportsbook logo and a deck stamped with its maker's seal were
+ * rejected for that reason). Casino names in
  * `CASINO_THEME_NAMES` follow these photos. Casinos without such a photo fall back to the original Art
  * Deco SVG (`CasinoTileArt`) until a good one is found.
  *
@@ -18,41 +19,41 @@ import type { CasinoNumber } from "./engine";
  * below and in CREDITS.md.
  */
 const CASINO_PHOTOS: Partial<Record<CasinoNumber, { src: string; position: string; source: string }>> = {
-  // CC0 — "Chandelier of the Crystal Staircase, Dolmabahçe Palace" by Julian Lupyan
+  // Public domain — "Roulette-Tisch.jpg" by Sozi
   1: {
-    src: "/images/lasVegas/casino-1-chandelier.jpg",
+    src: "/images/lasVegas/casino-1-roulette.jpg",
     position: "50% 50%",
-    source: "https://commons.wikimedia.org/wiki/File:Chandelier_of_the_Crystal_Staircase,_Dolmabah%C3%A7e_Palace,_Istanbul.jpg",
+    source: "https://commons.wikimedia.org/wiki/File:Roulette-Tisch.jpg",
   },
-  // CC0 — "Samsara Yacht.jpg" by Davidley
+  // CC0 — "Pile of Poker Chips.jpg" by Julian Lupyan
   2: {
-    src: "/images/lasVegas/casino-2-yacht.jpg",
+    src: "/images/lasVegas/casino-2-chips.jpg",
     position: "50% 50%",
-    source: "https://commons.wikimedia.org/wiki/File:Samsara_Yacht.jpg",
+    source: "https://commons.wikimedia.org/wiki/File:Pile_of_Poker_Chips.jpg",
   },
-  // CC0 — "Boathouse neighborhood (Unsplash).jpg" by Ishan @seefromthesky
+  // Public domain — "Royal flush.JPG" by Wingchun1990 at English Wikipedia
   3: {
-    src: "/images/lasVegas/casino-3-lagoon.jpg",
-    position: "55% 50%",
-    source: "https://commons.wikimedia.org/wiki/File:Boathouse_neighborhood_(Unsplash).jpg",
+    src: "/images/lasVegas/casino-3-royal-flush.jpg",
+    position: "20% 50%",
+    source: "https://commons.wikimedia.org/wiki/File:Royal_flush.JPG",
   },
-  // CC0 — "Palace of Versailles Hall of Mirrors (27738100023).jpg" by Gary Todd
+  // CC0 — "Casino-3262947 1920.jpg" by Jonathan Petersson
   4: {
-    src: "/images/lasVegas/casino-4-mirrors.jpg",
+    src: "/images/lasVegas/casino-4-dice.jpg",
     position: "50% 50%",
-    source: "https://commons.wikimedia.org/wiki/File:Palace_of_Versailles_Hall_of_Mirrors_(27738100023).jpg",
+    source: "https://commons.wikimedia.org/wiki/File:Casino-3262947_1920.jpg",
   },
-  // CC0 — "Santorini Sunset (26536503).jpeg" by Reid Gower
+  // CC0 — "Poker chips 2.jpg" by Jismab
   5: {
-    src: "/images/lasVegas/casino-5-santorini.jpg",
-    position: "50% 50%",
-    source: "https://commons.wikimedia.org/wiki/File:Santorini_Sunset_(26536503).jpeg",
+    src: "/images/lasVegas/casino-5-high-roller.jpg",
+    position: "40% 50%",
+    source: "https://commons.wikimedia.org/wiki/File:Poker_chips_2.jpg",
   },
-  // CC0 — "Champagne-glasses-1940262 1920.jpg" by Myriam Zilles
+  // Public domain — "Casino Dice (11275288753).jpg" by davidgsteadman
   6: {
-    src: "/images/lasVegas/casino-6-champagne.jpg",
-    position: "50% 50%",
-    source: "https://commons.wikimedia.org/wiki/File:Champagne-glasses-1940262_1920.jpg",
+    src: "/images/lasVegas/casino-6-emerald.jpg",
+    position: "75% 50%",
+    source: "https://commons.wikimedia.org/wiki/File:Casino_Dice_(11275288753).jpg",
   },
 };
 
