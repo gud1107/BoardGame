@@ -4,8 +4,7 @@
  * "<Feature>Icon.tsx"/pure-SVG convention as `CasinoEmblem.tsx`/`DiceIcon.tsx`,
  * and the deliberate choice for this one asset per the user's decision
  * (2026-08-23 라스베가스 실사 에셋 요청): no real dollar-bill photo exists in
- * `boardGameRule/라스베가스/` to sync in (see `CasinoPhotoArt.tsx`'s doc for
- * the casino-photo half of that same request), so this renders as a fresh
+ * `boardGameRule/라스베가스/` to sync in, so this renders as a fresh
  * illustrated casino chip-note — a distinct per-denomination color, an
  * engraved-guilloche-style border, and a die-pip corner mark tying it to the
  * game's own theme — rather than a photo-real US bank note (avoiding any
