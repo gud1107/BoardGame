@@ -55,15 +55,15 @@ Web Audio API로 직접 합성하므로 별도 출처가 없습니다 — 아래
 
 [src/games/lasVegas/CasinoPhotoArt.tsx](src/games/lasVegas/CasinoPhotoArt.tsx)가 쓰는 사진. 모두
 Wikimedia Commons의 CC0/퍼블릭 도메인 파일(최대 1280×1400 축소본)이라 표기 의무는 없지만 출처를 기록해 둡니다.
-간판·상호·브랜드 로고가 없는 사진만 골랐습니다 — 라이선스가 자유여도 사진 속 상표는 별개입니다.
+간판·상호·기업 로고를 알아볼 수 없는 사진만 골랐습니다 — 라이선스가 자유여도 사진 속 상표는 별개입니다.
 
 | 파일 | 카지노 | 원본 | 작가 | 라이선스 |
 |---|---|---|---|---|
-| `casino-1-roulette.jpg` | 1 로열 룰렛 | https://commons.wikimedia.org/wiki/File:Roulette-Tisch.jpg | Sozi | Public domain |
-| `casino-2-chips.jpg` | 2 황금 칩 금고 | https://commons.wikimedia.org/wiki/File:Pile_of_Poker_Chips.jpg | Julian Lupyan | CC0 |
-| `casino-3-royal-flush.jpg` | 3 로열 플러시 라운지 | https://commons.wikimedia.org/wiki/File:Royal_flush.JPG | Wingchun1990 at English Wikipedia | Public domain |
-| `casino-4-dice.jpg` | 4 루비 다이스 | https://commons.wikimedia.org/wiki/File:Casino-3262947_1920.jpg | Jonathan Petersson | CC0 |
-| `casino-5-high-roller.jpg` | 5 하이롤러 살롱 | https://commons.wikimedia.org/wiki/File:Poker_chips_2.jpg | Jismab | CC0 |
-| `casino-6-emerald.jpg` | 6 에메랄드 테이블 | https://commons.wikimedia.org/wiki/File:Casino_Dice_(11275288753).jpg | davidgsteadman | Public domain |
+| `casino-1-manhattan.jpg` | 1 맨해튼 펜트하우스 | https://commons.wikimedia.org/wiki/File:City_of_lights_(Unsplash).jpg | Luca Bravo lucabravo | CC0 |
+| `casino-2-harbour.jpg` | 2 빅토리아 하버 | https://commons.wikimedia.org/wiki/File:Victoria_Harbour_skyscrapers.jpg | Wilfredor | CC0 |
+| `casino-3-crystal-tower.jpg` | 3 크리스털 타워 | https://commons.wikimedia.org/wiki/File:Glass_london_skyscrapers_(Unsplash).jpg | Samuel Zeller samuelzeller | CC0 |
+| `casino-4-golden-curve.jpg` | 4 골든 커브 레지던스 | https://commons.wikimedia.org/wiki/File:Curved_skyscraper_in_sun_(Unsplash).jpg | Scott Webb scottwebb | CC0 |
+| `casino-5-sunset-skyline.jpg` | 5 선셋 스카이라인 | https://commons.wikimedia.org/wiki/File:Best_City_in_the_World_(Unsplash).jpg | Matt Lamers lamerbrain | CC0 |
+| `casino-6-harbourfront.jpg` | 6 하버프론트 타워 | https://commons.wikimedia.org/wiki/File:Hong_Kong_skyscrapers_in_a_night_of_typhoon.jpg | Wilfredor | CC0 |
 
 자체 제작 SVG(`CasinoEmblem.tsx`)는 사진이 없는 카지노용 대체 이미지로 남아 있습니다.

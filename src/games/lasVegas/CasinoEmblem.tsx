@@ -25,12 +25,12 @@ import type { CasinoNumber } from "./engine";
  */
 
 export const CASINO_THEME_NAMES: Record<CasinoNumber, { ko: string; en: string }> = {
-  1: { ko: "로열 룰렛", en: "Royal Roulette" },
-  2: { ko: "황금 칩 금고", en: "Golden Chip Vault" },
-  3: { ko: "로열 플러시 라운지", en: "Royal Flush Lounge" },
-  4: { ko: "루비 다이스", en: "Ruby Dice" },
-  5: { ko: "하이롤러 살롱", en: "High Roller Salon" },
-  6: { ko: "에메랄드 테이블", en: "Emerald Table" },
+  1: { ko: "맨해튼 펜트하우스", en: "Manhattan Penthouse" },
+  2: { ko: "빅토리아 하버", en: "Victoria Harbour" },
+  3: { ko: "크리스털 타워", en: "Crystal Tower" },
+  4: { ko: "골든 커브 레지던스", en: "Golden Curve Residence" },
+  5: { ko: "선셋 스카이라인", en: "Sunset Skyline" },
+  6: { ko: "하버프론트 타워", en: "Harbourfront Tower" },
 };
 
 // ---------------------------------------------------------------------
