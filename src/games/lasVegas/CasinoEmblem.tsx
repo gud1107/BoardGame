@@ -16,20 +16,21 @@ import type { CasinoNumber } from "./engine";
  * Keep it that way: don't reintroduce real casino names, logos, or photos.
  *
  * Two renders of the same 6 scenes are exported:
- *  - `CasinoTileArt`  — the full-bleed 3:4 background, shown by
- *    `CasinoPhotoArt.tsx`'s `CasinoMatArt` for every casino that has no
- *    license-free photo.
+ *  - `CasinoTileArt`  — the full-bleed 3:4 background. Since every casino
+ *    now has a CC0 photo (`CasinoPhotoArt.tsx`), this is only the fallback;
+ *    its scenes are the earlier motif set and don't match the current,
+ *    photo-driven `CASINO_THEME_NAMES`.
  *  - `CasinoEmblem`   — a small circular medallion, kept in case a compact
  *    badge is ever wanted (dashboard card, rulebook, etc.).
  */
 
 export const CASINO_THEME_NAMES: Record<CasinoNumber, { ko: string; en: string }> = {
-  1: { ko: "황금 광맥", en: "Gold Vein" },
-  2: { ko: "올림포스 신전", en: "Olympus Temple" },
-  3: { ko: "화산섬 오아시스", en: "Volcano Oasis" },
-  4: { ko: "사막의 별궁", en: "Desert Star Palace" },
-  5: { ko: "태양의 피라미드", en: "Sun Pyramid" },
-  6: { ko: "별빛 서커스", en: "Starlight Circus" },
+  1: { ko: "황금 샹들리에", en: "Golden Chandelier" },
+  2: { ko: "리비에라 요트 클럽", en: "Riviera Yacht Club" },
+  3: { ko: "몰디브 라군", en: "Maldives Lagoon" },
+  4: { ko: "거울의 궁전", en: "Palace of Mirrors" },
+  5: { ko: "산토리니 선셋", en: "Santorini Sunset" },
+  6: { ko: "샴페인 라운지", en: "Champagne Lounge" },
 };
 
 // ---------------------------------------------------------------------
