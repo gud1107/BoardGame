@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { getSpotSound } from "./spotSound";
+import SpotSoundHud from "./SpotSoundHud";
 import RulebookModal from "./RulebookModal";
 import PhotoStageCanvas from "./PhotoStageCanvas";
 import SpotDifferenceScene from "./SpotDifferenceScene";
@@ -59,7 +60,10 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
   const [flash, setFlash] = useState<"correct" | "wrong" | null>(null);
   const timeUpSentRef = useRef(false);
   const prevPenaltyRef = useRef<number | undefined>(state.penalties[viewerSeat]);
-  const prevFoundIdsRef = useRef<Set<string>>(new Set());
+  const prevFoundRef = useRef<{ total: number; stageIndex: number } | null>({
+    total: foundSpotCount(state),
+    stageIndex: state.currentStageIndex,
+  });
   // Other seats' (bots included) wrong clicks, shown as a brief ❌ where they
   // landed. Keyed off local arrival time, not the clicker's clock, so device
   // clock skew can't hide or linger the marker.
@@ -99,7 +103,7 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
   useEffect(() => {
     const current = state.penalties[viewerSeat];
     if (current !== undefined && current !== prevPenaltyRef.current) {
-      getSoundEngine().playWrongBuzz();
+      getSpotSound().playMissClick();
       setFlash("wrong");
       const id = setTimeout(() => setFlash(null), 400);
       prevPenaltyRef.current = current;
@@ -122,20 +126,22 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
     setTimeout(() => setMissMarks((marks) => marks.filter((m) => !keys.has(m.key))), 900);
   }, [state.lastMiss, viewerSeat]);
 
-  // Detects any newly-found spot (by any team) to play the correct-answer
-  // chime — a shared match event everyone should hear, not just the finder.
+  // Detects any newly-found spot (by any team) — a shared match event
+  // everyone should hear, not just the finder. Counted across all stages
+  // because a stage's last find switches `currentStageIndex` (or ends the
+  // match) in the same update; that case gets the stage-clear fanfare.
+  const foundTotal = foundSpotCount(state);
   useEffect(() => {
-    if (!stage) return;
-    const currentIds = new Set(Object.keys(stage.foundBy));
-    let isNew = false;
-    for (const id of currentIds) if (!prevFoundIdsRef.current.has(id)) isNew = true;
-    if (isNew && prevFoundIdsRef.current.size > 0) {
-      getSoundEngine().playCorrectDing();
-      setFlash("correct");
-      setTimeout(() => setFlash(null), 350);
-    }
-    prevFoundIdsRef.current = currentIds;
-  }, [stage]);
+    const prev = prevFoundRef.current;
+    prevFoundRef.current = { total: foundTotal, stageIndex: state.currentStageIndex };
+    if (!prev || foundTotal <= prev.total) return;
+    const cleared = state.currentStageIndex > prev.stageIndex || (state.phase === "gameOver" && foundTotal === totalSpotCount(state));
+    if (cleared) getSpotSound().playStageClear();
+    else getSpotSound().playFindSuccess();
+    setFlash("correct");
+    const id = setTimeout(() => setFlash(null), 350);
+    return () => clearTimeout(id);
+  }, [foundTotal, state]);
 
   if (!stage || !myTeam) return null;
 
@@ -150,7 +156,7 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
     const rect = e.currentTarget.getBoundingClientRect();
     const xPct = ((e.clientX - rect.left) / rect.width) * 100;
     const yPct = ((e.clientY - rect.top) / rect.height) * 100;
-    getSoundEngine().unlock();
+    getSpotSound().unlock();
     onAction({ type: "click", seat: viewerSeat, xPct, yPct, atMs: Date.now() });
   }
 
@@ -238,12 +244,15 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
             {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
           </p>
         </div>
-        <button
-          onClick={() => setRulebookOpen(true)}
-          className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
-        >
-          📖 룰북
-        </button>
+        <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center">
+          <SpotSoundHud />
+          <button
+            onClick={() => setRulebookOpen(true)}
+            className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-500 light:hover:border-slate-400"
+          >
+            📖 룰북
+          </button>
+        </div>
       </div>
 
       {state.stages.length > 1 && (

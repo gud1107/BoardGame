@@ -8,7 +8,7 @@ import GameLeaveGuardModal from "@/components/GameLeaveGuardModal";
 import { useGameLeaveGuard } from "@/hooks/useGameLeaveGuard";
 import { useBackgroundResync } from "@/hooks/useBackgroundResync";
 import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
-import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { getSpotSound } from "./spotSound";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import {
@@ -277,9 +277,10 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
   }, [occupants]);
 
   useEffect(() => {
+    // Detective waltz (spotSound.ts) replaces the shared soundEngine's tension loop for this game.
     if (phase !== "playing") return;
-    getSoundEngine().startBgm();
-    return () => getSoundEngine().stopBgm();
+    getSpotSound().setBgmWanted(true);
+    return () => getSpotSound().setBgmWanted(false);
   }, [phase]);
 
   async function handlePhotoSelected(file: File | undefined) {
@@ -298,7 +299,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
 
   function enterRoom() {
     setFormError(null);
-    getSoundEngine().unlock();
+    getSpotSound().unlock();
     if (!getSupabase()) {
       setPhase("supabase-missing");
       return;

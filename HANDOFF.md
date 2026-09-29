@@ -49,6 +49,14 @@
   - 명세 §4의 `SpotDifferenceView.tsx`는 만들지 않았다. 기존 `SpotDifferenceBoard`가 이미 그 역할을 한다.
 - 검증: vitest 42/42, eslint 통과, tsc는 다른 세션의 `.next/dev` stale 파일 1건 외 0. 4개 테마 원본/전변형 정적 렌더를 스크린샷 1장으로 육안 확인했다. **실제 방에서의 플레이 확인은 하지 않았다.**
 
+### 🔍 후속 (2026-09-29): 탐정 관찰 왈츠 BGM + 효과음 (Spot Sound Suite)
+- 명세서 붙여넣기. 104 BPM 3/4 박자, 8마디 24스텝이다. 첫 박에 피치카토 베이스, 2·3박에 시계 틱/톡, 매 박에 마림바가 나온다. 명세의 음표와 볼륨(BGM 0.09 / SFX 0.32)을 그대로 썼다. 파일은 [spotDetectiveScore.ts](./src/games/spot-difference/spotDetectiveScore.ts)(순수 악보, 테스트 3건), [spotSound.ts](./src/games/spot-difference/spotSound.ts)(`getSpotSound()`), [SpotSoundHud.tsx](./src/games/spot-difference/SpotSoundHud.tsx)(🔍 / 🔔, 룰북 버튼 옆)이다.
+- 이 게임은 공용 `soundEngine`의 `startBgm` 긴장 루프, `playCorrectDing`, `playWrongBuzz` 대신 새 엔진을 쓴다. 두 번 울리지 않는다. 공용 `startBgm`은 이제 호출하는 곳이 없지만 지우지 않았다.
+- 명세와 다른 점: 음소거/볼륨은 명세의 자체 `isMuted` 대신 사이트 공용 설정을 따른다. 코요테/페루도와 같은 방식이다.
+- 기존 버그 수정: 정답 효과음 감지가 스테이지의 첫 발견과 마지막 발견에서 울리지 않았다. 마지막 발견은 같은 업데이트에서 다음 스테이지로 넘어가기 때문이다. 발견 수를 세는 방식으로 바꿨고, 스테이지를 클리어하면 팡파르가 나온다.
+- 명세의 외부 OST 추천(레이튼/역전재판/핑크 팬더)은 저작권 음원이라 넣지 않았다.
+- 검증: vitest 45/45, eslint 통과. **실제 청음은 하지 않았다.**
+
 ## 🎲 페루도 (`perudo`) 잉카 미스터리 BGM (Perudo Sound Suite) — 2026-09-28 (커밋/푸시, 배포는 웹훅 자동)
 
 - **요청**: 명세서 붙여넣기. 외부 오디오 파일 없이 Web Audio로 96 BPM D 마이너 톰/셰이커/나일론 기타/판플루트 32스텝 루프, SFX 5종(컵 슬램, 호가, 듀도, 칼자, 주사위 탈락), 상단 HUD.
