@@ -5,6 +5,7 @@ import SiteHeader from "@/components/SiteHeader";
 import BettingSidebar from "@/components/betting/BettingSidebar";
 import AnalyticsVisitTracker from "@/components/AnalyticsVisitTracker";
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/contexts/ThemeContext";
+import { KAKAO_INAPP_ESCAPE_SCRIPT } from "@/lib/kakaoInAppEscape";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,6 +37,9 @@ export default function RootLayout({
             so a light-mode revisit never flashes the dark default first —
             see ThemeContext.tsx's THEME_INIT_SCRIPT doc comment. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* KakaoTalk in-app browser → reopen in the default browser so its
+            bottom toolbar doesn't cover games — see kakaoInAppEscape.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: KAKAO_INAPP_ESCAPE_SCRIPT }} />
       </head>
       <body className="flex min-h-full flex-col text-zinc-100 light:text-slate-900">
         <ThemeProvider>
