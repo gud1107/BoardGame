@@ -45,8 +45,9 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <ul className="list-disc space-y-1 pl-4 text-white/70 light:text-slate-600">
             <li>
               <span className="text-white/90 light:text-slate-900">기본 스테이지</span> — 사이버펑크 골목 · 온실 티하우스 · 마법 서재 ·
-              심해 연구 돔 4개 테마 그림(스테이지당 5개 차이). 테마마다 바뀔 수 있는 곳이 8~9군데 있고 매 판 그중 5곳이
-              무작위로 골라져서, 같은 그림이어도 정답 위치가 매번 달라요. 방 만들 때 1~4 스테이지를 이어서 플레이할 수 있어요.
+              심해 연구 돔 · 바자르 · 우주 정거장 · 베이커리 · 오락실 · 캠핑장 · 유령 저택, 10개 테마 그림(스테이지당 5개
+              차이). 테마마다 바뀔 수 있는 곳이 8~9군데 있고 매 판 그중 5곳이 무작위로 골라져서, 같은 그림이어도 정답
+              위치가 매번 달라요. 방장이 최근에 한 그림은 뒤로 미뤄져서 연달아 같은 그림이 나오지 않아요. 방 만들 때 1~4 스테이지를 이어서 플레이할 수 있어요.
             </li>
             <li>
               <span className="text-white/90 light:text-slate-900">내 사진으로 게임하기 📸</span> — 직접 업로드한 사진 하나를 원본

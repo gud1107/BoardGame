@@ -24,7 +24,38 @@ import {
   type SpotDifferenceState,
 } from "./engine";
 import { BUILTIN_SCENES } from "./scenes";
-import { findThemeScene, THEME_DIFFS_PER_STAGE, THEME_SCENES } from "./themeScenes";
+import { findThemeScene, nextRecentSceneIds, THEME_DIFFS_PER_STAGE, THEME_SCENES } from "./themeScenes";
+
+describe("recently-played theme deck", () => {
+  it("orders recently played themes after every fresh one, oldest first", () => {
+    const recent = ["theme-bakery", "theme-haunted", "theme-cyberpunk"];
+    const s = startGame(2, 99, { source: { kind: "builtin" }, stageCount: 999, recentSceneIds: recent });
+    const themes = s.builtinSceneIds.slice(0, THEME_SCENES.length);
+    expect(themes.slice(-3)).toEqual(recent);
+    expect(new Set(themes).size).toBe(THEME_SCENES.length);
+  });
+
+  it("caps the deck one short of the theme count and keeps the newest last", () => {
+    let deck: string[] = [];
+    for (const t of THEME_SCENES) deck = nextRecentSceneIds(deck, [t.id]);
+    expect(deck).toHaveLength(THEME_SCENES.length - 1);
+    expect(deck.at(-1)).toBe(THEME_SCENES.at(-1)!.id);
+    expect(nextRecentSceneIds(["theme-arcade", "park"], ["theme-arcade"])).toEqual(["theme-arcade"]); // dedupes, drops classic ids
+  });
+
+  it("a host replaying single-stage matches never sees the same first picture within a full cycle", () => {
+    let deck: string[] = [];
+    const firsts: string[] = [];
+    for (let match = 0; match < 40; match++) {
+      const s = startGame(2, 1000 + match * 7919, { source: { kind: "builtin" }, stageCount: 1, recentSceneIds: deck });
+      firsts.push(s.builtinSceneIds[0]);
+      deck = nextRecentSceneIds(deck, s.builtinSceneIds);
+    }
+    for (let i = 0; i + THEME_SCENES.length <= firsts.length; i++) {
+      expect(new Set(firsts.slice(i, i + THEME_SCENES.length)).size).toBe(THEME_SCENES.length);
+    }
+  });
+});
 
 describe("themed scenes (mutation pool)", () => {
   it("every theme's candidates are unique, in-bounds, and never overlap each other's hit radius", () => {

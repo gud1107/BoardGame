@@ -272,7 +272,7 @@ export const ROOM_RULEBOOK_SUMMARIES: Record<string, RoomRulebookSummary> = {
     ],
     specialRules: [
       "📸 방장이 직접 찍은 사진을 업로드해 커스텀 문제를 자동 생성하는 모드 지원",
-      "🎨 기본 스테이지는 4개 테마 그림, 매 판 정답 5곳이 무작위로 바뀜",
+      "🎨 기본 스테이지는 10개 테마 그림, 매 판 정답 5곳이 무작위로 바뀌고 최근 그림은 뒤로 밀림",
       "💡 팀별로 정해진 횟수만큼 힌트를 사용해 미발견 스팟 위치를 확인 가능",
     ],
   },

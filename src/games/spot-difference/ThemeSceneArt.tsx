@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, type ReactNode } from "react";
+import { Arcade, Bakery, Bazaar, Camping, Haunted, Orbital } from "./ThemeSceneArtMore";
 
 /**
  * Hand-built SVG artwork for the themed stages (themeScenes.ts). Same
@@ -32,6 +33,12 @@ export default function ThemeSceneArt({
   else if (themeId === "theme-greenhouse") art = <Greenhouse on={on} p={p} />;
   else if (themeId === "theme-alchemy") art = <Alchemy on={on} p={p} />;
   else if (themeId === "theme-deepsea") art = <DeepSea on={on} p={p} />;
+  else if (themeId === "theme-bazaar") art = <Bazaar on={on} p={p} />;
+  else if (themeId === "theme-orbital") art = <Orbital on={on} p={p} />;
+  else if (themeId === "theme-bakery") art = <Bakery on={on} p={p} />;
+  else if (themeId === "theme-arcade") art = <Arcade on={on} p={p} />;
+  else if (themeId === "theme-camping") art = <Camping on={on} p={p} />;
+  else if (themeId === "theme-haunted") art = <Haunted on={on} p={p} />;
   return (
     <svg viewBox="0 0 100 100" preserveAspectRatio="none" className={className}>
       {art}

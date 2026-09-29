@@ -92,6 +92,97 @@ export const THEME_SCENES: ThemeScene[] = [
       { id: "mug", name: "콘솔 위 머그컵", xPct: 84, yPct: 84, rPct: 6 },
     ],
   },
+  // 2026-09-30: +6 themes (10 total) so back-to-back matches stop landing on the same picture.
+  {
+    id: "theme-bazaar",
+    name: "실크로드 황혼의 바자르",
+    mutations: [
+      { id: "moonStar", name: "초승달 옆 별", xPct: 26, yPct: 16, rPct: 6 },
+      { id: "pennant", name: "천막 깃발 색", xPct: 50, yPct: 10, rPct: 6 },
+      { id: "carpet", name: "양탄자 가운데 문양", xPct: 84, yPct: 28, rPct: 7 },
+      { id: "camelBell", name: "낙타 안장 방울", xPct: 16, yPct: 46, rPct: 6 },
+      { id: "lampSmoke", name: "황동 향로 연기", xPct: 66, yPct: 48, rPct: 6 },
+      { id: "spice", name: "향신료 더미 색", xPct: 30, yPct: 66, rPct: 7 },
+      { id: "scales", name: "천칭 저울 기울기", xPct: 56, yPct: 70, rPct: 6 },
+      { id: "pomegranate", name: "바구니 석류 개수", xPct: 38, yPct: 87, rPct: 6 },
+      { id: "copperPot", name: "구리 주전자 문양", xPct: 80, yPct: 82, rPct: 6 },
+    ],
+  },
+  {
+    id: "theme-orbital",
+    name: "궤도 정거장 라운지",
+    mutations: [
+      { id: "star", name: "창밖의 밝은 별", xPct: 58, yPct: 13, rPct: 5 },
+      { id: "antenna", name: "위성 안테나 각도", xPct: 80, yPct: 18, rPct: 6 },
+      { id: "aurora", name: "지구 오로라 색", xPct: 40, yPct: 34, rPct: 7 },
+      { id: "dockLight", name: "도킹 신호등", xPct: 12, yPct: 44, rPct: 5 },
+      { id: "solarPanel", name: "태양광 패널 반사", xPct: 88, yPct: 48, rPct: 6 },
+      { id: "coffee", name: "무중력 커피 방울 위치", xPct: 28, yPct: 66, rPct: 6 },
+      { id: "robotArm", name: "로봇 집게 모양", xPct: 72, yPct: 68, rPct: 7 },
+      { id: "helmet", name: "헬멧 바이저 줄무늬", xPct: 52, yPct: 76, rPct: 6 },
+      { id: "holoPlant", name: "홀로그램 분재 잎 색", xPct: 30, yPct: 86, rPct: 6 },
+    ],
+  },
+  {
+    id: "theme-bakery",
+    name: "새벽의 골목 베이커리",
+    mutations: [
+      { id: "awning", name: "차양 가운데 줄무늬 색", xPct: 50, yPct: 11, rPct: 6 },
+      { id: "sign", name: "간판 빵 모양", xPct: 26, yPct: 27, rPct: 6 },
+      { id: "clock", name: "벽시계 바늘", xPct: 76, yPct: 27, rPct: 6 },
+      { id: "chefHat", name: "제빵사 모자", xPct: 58, yPct: 45, rPct: 6 },
+      { id: "flowerBox", name: "창가 제라늄 색", xPct: 88, yPct: 47, rPct: 6 },
+      { id: "croissants", name: "크루아상 개수", xPct: 26, yPct: 60, rPct: 7 },
+      { id: "ribbon", name: "바구니 리본 색", xPct: 46, yPct: 75, rPct: 6 },
+      { id: "flourSack", name: "밀가루 포대 인장", xPct: 80, yPct: 78, rPct: 6 },
+      { id: "chalkboard", name: "입간판 바게트 그림", xPct: 12, yPct: 84, rPct: 6 },
+    ],
+  },
+  {
+    id: "theme-arcade",
+    name: "80년대 레트로 오락실",
+    mutations: [
+      { id: "ceilingLight", name: "천장 조명", xPct: 40, yPct: 11, rPct: 6 },
+      { id: "ghostSign", name: "픽셀 유령 네온 색", xPct: 70, yPct: 18, rPct: 7 },
+      { id: "hiScore", name: "하이스코어 막대", xPct: 24, yPct: 37, rPct: 6 },
+      { id: "claw", name: "인형뽑기 속 인형", xPct: 86, yPct: 54, rPct: 7 },
+      { id: "soda", name: "음료 캔 색", xPct: 9, yPct: 60, rPct: 5 },
+      { id: "jukebox", name: "주크박스 조명 색", xPct: 58, yPct: 58, rPct: 7 },
+      { id: "joystick", name: "조이스틱 볼 색", xPct: 26, yPct: 63, rPct: 6 },
+      { id: "coinLed", name: "동전 투입구 LED", xPct: 28, yPct: 82, rPct: 5 },
+      { id: "carpet", name: "카펫 무늬", xPct: 56, yPct: 89, rPct: 6 },
+    ],
+  },
+  {
+    id: "theme-camping",
+    name: "은하수 캠핑장과 모닥불",
+    mutations: [
+      { id: "moon", name: "초승달 방향", xPct: 11, yPct: 13, rPct: 6 },
+      { id: "shootingStar", name: "별똥별", xPct: 34, yPct: 14, rPct: 7 },
+      { id: "dipper", name: "북두칠성 연결선", xPct: 66, yPct: 19, rPct: 7 },
+      { id: "owl", name: "전나무 위 부엉이", xPct: 88, yPct: 38, rPct: 6 },
+      { id: "lantern", name: "텐트 랜턴 색", xPct: 22, yPct: 56, rPct: 6 },
+      { id: "sparks", name: "모닥불 불티", xPct: 50, yPct: 61, rPct: 6 },
+      { id: "marshmallow", name: "꼬치 마시멜로 개수", xPct: 67, yPct: 72, rPct: 6 },
+      { id: "guitarStrap", name: "기타 멜빵 색", xPct: 86, yPct: 78, rPct: 6 },
+      { id: "thermos", name: "보온병 컵 색", xPct: 38, yPct: 86, rPct: 6 },
+    ],
+  },
+  {
+    id: "theme-haunted",
+    name: "할로윈 유령의 대저택",
+    mutations: [
+      { id: "bats", name: "달 앞 박쥐 수", xPct: 24, yPct: 17, rPct: 7 },
+      { id: "atticHand", name: "다락방 창문 손자국", xPct: 60, yPct: 15, rPct: 6 },
+      { id: "gargoyle", name: "가고일 눈빛", xPct: 12, yPct: 42, rPct: 6 },
+      { id: "spider", name: "샹들리에 거미", xPct: 46, yPct: 36, rPct: 6 },
+      { id: "portrait", name: "초상화 눈동자", xPct: 84, yPct: 38, rPct: 6 },
+      { id: "floatCandle", name: "떠 있는 촛불", xPct: 32, yPct: 57, rPct: 6 },
+      { id: "ghost", name: "창가 유령", xPct: 87, yPct: 64, rPct: 6 },
+      { id: "pumpkin", name: "호박 입 모양", xPct: 68, yPct: 78, rPct: 7 },
+      { id: "gateCrest", name: "카펫 문장", xPct: 46, yPct: 87, rPct: 6 },
+    ],
+  },
 ];
 
 export function findThemeScene(id: string): ThemeScene | undefined {
@@ -106,6 +197,19 @@ export function themeSpotId(themeId: string, mutationId: string): string {
 export function activeThemeMutationIds(themeId: string, spotIds: string[]): Set<string> {
   const prefix = `${themeId}:`;
   return new Set(spotIds.filter((id) => id.startsWith(prefix)).map((id) => id.slice(prefix.length)));
+}
+
+/**
+ * Recently-played deck (host-side, per device): which themes were just shown,
+ * oldest first, so the next `startGame` pushes them to the back of the order.
+ * Capped at one fewer than the theme count — once nearly every theme has had
+ * its turn the oldest drops off, so the deck cycles without ever blocking
+ * the whole pool, and the most recent theme is always last in line.
+ */
+export function nextRecentSceneIds(prev: string[], played: string[], cap = THEME_SCENES.length - 1): string[] {
+  const playedThemes = played.filter((id) => findThemeScene(id));
+  const merged = [...prev.filter((id) => findThemeScene(id) && !playedThemes.includes(id)), ...playedThemes];
+  return merged.slice(Math.max(0, merged.length - cap));
 }
 
 /** Seeded draw of this stage's differences from the theme's pool (partial Fisher–Yates on a copy). */

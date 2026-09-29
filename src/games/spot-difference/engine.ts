@@ -155,6 +155,8 @@ export interface StartGameOptions {
   source: StageSource;
   /** Builtin mode only — how many scenes to chain, clamped to [1, BUILTIN_STAGE_POOL_SIZE]. */
   stageCount?: number;
+  /** Builtin mode only — themes the host just played (oldest first); they're ordered after every fresh theme. See `nextRecentSceneIds`. */
+  recentSceneIds?: string[];
   /** Photo mode only — how many diff regions to generate, clamped to [MIN_PHOTO_DIFFS, MAX_PHOTO_DIFFS]. */
   diffCount?: number;
   timerSeconds?: number;
@@ -174,11 +176,16 @@ export function startGame(playerCount: number, seed: number, options: StartGameO
     // Detailed themed scenes come first (their differences are redrawn from
     // a mutation pool every match); the three classic fixed-answer shape
     // scenes only fill in once every theme is already in the chain.
+    // Recently played themes (host's deck, broadcast in the start payload so
+    // every client orders identically) go to the back, oldest first.
+    const recent = (options.recentSceneIds ?? []).filter((id) => findThemeScene(id));
+    const shuffledThemes = shuffle(
+      THEME_SCENES.map((t) => t.id),
+      rng,
+    );
     const order = [
-      ...shuffle(
-        THEME_SCENES.map((t) => t.id),
-        rng,
-      ),
+      ...shuffledThemes.filter((id) => !recent.includes(id)),
+      ...recent.filter((id, i) => recent.indexOf(id) === i),
       ...shuffle(
         BUILTIN_SCENES.map((s) => s.id),
         rng,

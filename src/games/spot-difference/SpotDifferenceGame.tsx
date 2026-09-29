@@ -30,6 +30,7 @@ import {
   type TeamId,
 } from "./engine";
 import SpotDifferenceBoard from "./SpotDifferenceBoard";
+import { nextRecentSceneIds } from "./themeScenes";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
@@ -118,6 +119,29 @@ function getStoredSeat(code: string): number | null {
 
 function storeSeat(code: string, seat: number) {
   window.localStorage.setItem(`spot-difference-seat-${code}`, String(seat));
+}
+
+// Per-device "recently played themes" deck — read by the host into the
+// game-start payload (so every client orders stages identically), updated
+// on every client when a builtin match starts. Best-effort: storage can be
+// unavailable (private mode etc.), in which case we just skip the deck.
+const RECENT_SCENES_KEY = "spot-difference-recent-scenes";
+
+function readRecentScenes(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(RECENT_SCENES_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberScenes(played: string[]) {
+  try {
+    window.localStorage.setItem(RECENT_SCENES_KEY, JSON.stringify(nextRecentSceneIds(readRecentScenes(), played)));
+  } catch {
+    // storage unavailable — the deck is a nicety, not required
+  }
 }
 
 function randomSeed(): number {
@@ -369,14 +393,16 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       // shouldn't silently carry a seat's control into this one.
       botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
-      setGameState(
-        startGame(playerCount, seed, {
-          source,
-          stageCount: stageCountPayload,
-          diffCount: diffCountPayload,
-          timerSeconds: timerSecondsPayload,
-        }),
-      );
+      const recentSceneIds = (payload?.recentSceneIds as string[] | undefined) ?? [];
+      const started = startGame(playerCount, seed, {
+        source,
+        stageCount: stageCountPayload,
+        recentSceneIds,
+        diffCount: diffCountPayload,
+        timerSeconds: timerSecondsPayload,
+      });
+      if (source.kind === "builtin") rememberScenes(started.builtinSceneIds);
+      setGameState(started);
       setFinalResult(null);
       setPhase("playing");
     });
@@ -627,6 +653,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       event: "game-start",
       payload: {
         seed: randomSeed(),
+        recentSceneIds: readRecentScenes(),
         playerCount: playerCountRef.current,
         source: sourceRef.current,
         stageCount: stageCountRef.current,
