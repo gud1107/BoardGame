@@ -6,6 +6,8 @@ import RulebookModal from "./RulebookModal";
 import PhotoStageCanvas from "./PhotoStageCanvas";
 import SpotDifferenceScene from "./SpotDifferenceScene";
 import { applySceneDiffs, BUILTIN_SCENES } from "./scenes";
+import ThemeSceneArt from "./ThemeSceneArt";
+import { activeThemeMutationIds, findThemeScene } from "./themeScenes";
 import {
   computeTeamRankings,
   computeTeamScores,
@@ -339,7 +341,7 @@ function StagePanel({
           className="h-full w-full object-contain"
         />
       ) : (
-        <BuiltinStagePanel sceneId={sceneIdForStage(state)} variant={variant} className="h-full w-full" />
+        <BuiltinStagePanel sceneId={sceneIdForStage(state)} spotIds={stage.spots.map((s) => s.id)} variant={variant} className="h-full w-full" />
       )}
 
       {/* Found-spot markers */}
@@ -392,7 +394,21 @@ function sceneIdForStage(state: SpotDifferenceState): string {
   return state.builtinSceneIds[state.currentStageIndex] ?? state.builtinSceneIds[0];
 }
 
-function BuiltinStagePanel({ sceneId, variant, className }: { sceneId: string; variant: "original" | "modified"; className?: string }) {
+function BuiltinStagePanel({
+  sceneId,
+  spotIds,
+  variant,
+  className,
+}: {
+  sceneId: string;
+  spotIds: string[];
+  variant: "original" | "modified";
+  className?: string;
+}) {
+  if (findThemeScene(sceneId)) {
+    const active = variant === "modified" ? activeThemeMutationIds(sceneId, spotIds) : new Set<string>();
+    return <ThemeSceneArt themeId={sceneId} active={active} className={className} />;
+  }
   const scene = BUILTIN_SCENES.find((s) => s.id === sceneId);
   if (!scene) return null;
   const shapes = variant === "original" ? scene.shapes : applySceneDiffs(scene.shapes, scene.diffs);

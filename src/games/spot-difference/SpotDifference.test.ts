@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyAction,
   BOT_PACING,
+  BUILTIN_STAGE_POOL_SIZE,
   botPaceTier,
   botScanDelayMs,
   chooseBotAction,
@@ -23,6 +24,34 @@ import {
   type SpotDifferenceState,
 } from "./engine";
 import { BUILTIN_SCENES } from "./scenes";
+import { findThemeScene, THEME_DIFFS_PER_STAGE, THEME_SCENES } from "./themeScenes";
+
+describe("themed scenes (mutation pool)", () => {
+  it("every theme's candidates are unique, in-bounds, and never overlap each other's hit radius", () => {
+    for (const theme of THEME_SCENES) {
+      expect(theme.mutations.length).toBeGreaterThan(THEME_DIFFS_PER_STAGE);
+      expect(new Set(theme.mutations.map((m) => m.id)).size).toBe(theme.mutations.length);
+      for (const [i, a] of theme.mutations.entries()) {
+        expect(a.xPct - a.rPct).toBeGreaterThan(2);
+        expect(a.yPct - a.rPct).toBeGreaterThan(2);
+        expect(a.xPct + a.rPct).toBeLessThan(100);
+        expect(a.yPct + a.rPct).toBeLessThan(100);
+        for (const b of theme.mutations.slice(i + 1)) {
+          expect(Math.hypot(a.xPct - b.xPct, a.yPct - b.yPct)).toBeGreaterThan(a.rPct + b.rPct);
+        }
+      }
+    }
+  });
+
+  it("draws 5 differences per themed stage, identical for the same seed and varying across seeds", () => {
+    const keyOf = (seed: number) => startGame(2, seed, { source: { kind: "builtin" }, stageCount: 4 }).stages.map((s) => s.spots.map((sp) => sp.id).join(",")).join("|");
+    const a = startGame(2, 7, { source: { kind: "builtin" }, stageCount: 4 });
+    for (const stage of a.stages) expect(stage.spots).toHaveLength(THEME_DIFFS_PER_STAGE);
+    expect(keyOf(7)).toBe(keyOf(7));
+    const distinct = new Set(Array.from({ length: 20 }, (_, i) => keyOf(i + 1)));
+    expect(distinct.size).toBeGreaterThan(15);
+  });
+});
 
 function freshState(overrides: Partial<Parameters<typeof startGame>[2]> = {}): SpotDifferenceState {
   return startGame(4, 42, { source: { kind: "builtin" }, stageCount: 1, ...overrides });
@@ -43,13 +72,15 @@ describe("startGame", () => {
     expect(state.stages).toHaveLength(3);
     expect(new Set(state.builtinSceneIds).size).toBe(3); // no repeats
     for (const id of state.builtinSceneIds) {
-      expect(BUILTIN_SCENES.some((s) => s.id === id)).toBe(true);
+      expect(THEME_SCENES.some((t) => t.id === id)).toBe(true); // themed scenes always come first
     }
   });
 
-  it("clamps stageCount to the number of available scenes", () => {
+  it("clamps stageCount to the number of available scenes, themes before classic scenes", () => {
     const state = freshState({ stageCount: 999 });
-    expect(state.stages).toHaveLength(BUILTIN_SCENES.length);
+    expect(state.stages).toHaveLength(BUILTIN_STAGE_POOL_SIZE);
+    expect(state.builtinSceneIds.slice(0, THEME_SCENES.length).every((id) => findThemeScene(id))).toBe(true);
+    expect(state.builtinSceneIds.slice(THEME_SCENES.length).every((id) => BUILTIN_SCENES.some((s) => s.id === id))).toBe(true);
   });
 
   it("generates the requested number of photo-mode diff spots, clamped to the allowed range", () => {

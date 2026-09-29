@@ -14,6 +14,7 @@ import type { PlayableGameProps } from "@/games/types";
 import {
   applyAction,
   botScanDelayMs,
+  BUILTIN_STAGE_POOL_SIZE,
   chooseHumanizedBotAction,
   computeRankings,
   computeTeamRankings,
@@ -28,7 +29,6 @@ import {
   type StageSource,
   type TeamId,
 } from "./engine";
-import { BUILTIN_SCENES } from "./scenes";
 import SpotDifferenceBoard from "./SpotDifferenceBoard";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
@@ -125,7 +125,8 @@ function randomSeed(): number {
 }
 
 const TIMER_PRESETS = [60, 90, 120, 180];
-const STAGE_COUNT_PRESETS = [1, 2, Math.min(3, BUILTIN_SCENES.length)];
+// Up to 4 = one full pass through every themed scene (engine.ts orders themes first).
+const STAGE_COUNT_PRESETS = [1, 2, 3, 4].filter((n) => n <= BUILTIN_STAGE_POOL_SIZE);
 const DIFF_COUNT_PRESETS = [5, 8, 10];
 const MAX_PHOTO_DIMENSION = 900;
 const MAX_PHOTO_BYTES = 170_000;

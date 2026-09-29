@@ -2,7 +2,9 @@
  * Pure "틀린 그림 찾기" (Spot the Difference) rules engine — no React, no
  * timers, no DOM. Two team-battle modes share one reducer:
  *
- *  - "builtin": a handful of generated-shape scenes (scenes.ts) with a
+ *  - "builtin": detailed themed SVG scenes (themeScenes.ts) whose 5 diffs
+ *    are drawn per match from a larger mutation pool via the seeded RNG,
+ *    followed by the classic generated-shape scenes (scenes.ts) with a
  *    baked-in, fixed answer key (5 diffs per stage).
  *  - "photo": the host's own uploaded photo. There is no object-detection
  *    step — instead `generatePhotoDiffSpots` deterministically derives N
@@ -44,6 +46,10 @@ export const MAX_PHOTO_DIFFS = 10;
 export const DEFAULT_TIMER_SECONDS = 90;
 
 import { BUILTIN_SCENES, TOLERANCE_RADIUS_PCT, type BuiltinScene } from "./scenes";
+import { findThemeScene, pickThemeMutations, THEME_SCENES, themeSpotId } from "./themeScenes";
+
+/** Every scene the builtin mode can chain: the themed scenes plus the classic shape scenes. */
+export const BUILTIN_STAGE_POOL_SIZE = THEME_SCENES.length + BUILTIN_SCENES.length;
 
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
@@ -147,7 +153,7 @@ function computeSpotsForScene(scene: BuiltinScene): Spot[] {
 
 export interface StartGameOptions {
   source: StageSource;
-  /** Builtin mode only — how many scenes to chain, clamped to [1, BUILTIN_SCENES.length]. */
+  /** Builtin mode only — how many scenes to chain, clamped to [1, BUILTIN_STAGE_POOL_SIZE]. */
   stageCount?: number;
   /** Photo mode only — how many diff regions to generate, clamped to [MIN_PHOTO_DIFFS, MAX_PHOTO_DIFFS]. */
   diffCount?: number;
@@ -165,13 +171,27 @@ export function startGame(playerCount: number, seed: number, options: StartGameO
   let stages: StageResult[];
   let builtinSceneIds: string[] = [];
   if (options.source.kind === "builtin") {
-    const order = shuffle(
-      BUILTIN_SCENES.map((s) => s.id),
-      rng,
-    );
-    const count = Math.min(Math.max(options.stageCount ?? 1, 1), BUILTIN_SCENES.length);
+    // Detailed themed scenes come first (their differences are redrawn from
+    // a mutation pool every match); the three classic fixed-answer shape
+    // scenes only fill in once every theme is already in the chain.
+    const order = [
+      ...shuffle(
+        THEME_SCENES.map((t) => t.id),
+        rng,
+      ),
+      ...shuffle(
+        BUILTIN_SCENES.map((s) => s.id),
+        rng,
+      ),
+    ];
+    const count = Math.min(Math.max(options.stageCount ?? 1, 1), BUILTIN_STAGE_POOL_SIZE);
     builtinSceneIds = order.slice(0, count);
     stages = builtinSceneIds.map((id) => {
+      const theme = findThemeScene(id);
+      if (theme) {
+        const spots = pickThemeMutations(theme, rng).map((m) => ({ id: themeSpotId(theme.id, m.id), xPct: m.xPct, yPct: m.yPct, rPct: m.rPct }));
+        return { spots, foundBy: {} };
+      }
       const scene = BUILTIN_SCENES.find((s) => s.id === id)!;
       return { spots: computeSpotsForScene(scene), foundBy: {} };
     });
