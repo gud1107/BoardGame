@@ -61,9 +61,10 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
   const [flash, setFlash] = useState<"correct" | "wrong" | null>(null);
   const timeUpSentRef = useRef(false);
   const prevPenaltyRef = useRef<number | undefined>(state.penalties[viewerSeat]);
-  const prevFoundRef = useRef<{ total: number; stageIndex: number } | null>({
+  const prevFoundRef = useRef<{ total: number; stageIndex: number; mine: number } | null>({
     total: foundSpotCount(state),
     stageIndex: state.currentStageIndex,
+    mine: state.teamOf[viewerSeat] ? computeTeamScores(state)[state.teamOf[viewerSeat]] : 0,
   });
   // Other seats' (bots included) wrong clicks, shown as a brief ❌ where they
   // landed. Keyed off local arrival time, not the clicker's clock, so device
@@ -150,8 +151,11 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
   );
   useEffect(() => {
     const prev = prevFoundRef.current;
-    prevFoundRef.current = { total: foundTotal, stageIndex: state.currentStageIndex };
+    const mine = myTeam ? computeTeamScores(state)[myTeam] : 0;
+    prevFoundRef.current = { total: foundTotal, stageIndex: state.currentStageIndex, mine };
     if (!prev || foundTotal <= prev.total) return;
+    // Mine if my team's score rose in this update (ties in one batched update go to "mine").
+    const byMyTeam = mine > prev.mine;
     const cleared = state.currentStageIndex > prev.stageIndex || (state.phase === "gameOver" && foundTotal === totalSpotCount(state));
     if (cleared) {
       getSpotSound().playStageClear();
@@ -159,11 +163,12 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
       setClearFx({ n: foundTotal, final: state.phase === "gameOver" });
       if (clearFxTimerRef.current) clearTimeout(clearFxTimerRef.current);
       clearFxTimerRef.current = setTimeout(() => setClearFx(null), STAGE_CLEAR_FX_MS);
-    } else getSpotSound().playFindSuccess();
+    } else if (byMyTeam) getSpotSound().playFindSuccess();
+    else getSpotSound().playRivalFind();
     setFlash("correct");
     const id = setTimeout(() => setFlash(null), 350);
     return () => clearTimeout(id);
-  }, [foundTotal, state]);
+  }, [foundTotal, state, myTeam]);
 
   if (!stage || !myTeam) return null;
 

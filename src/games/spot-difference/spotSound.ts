@@ -212,7 +212,7 @@ class SpotSound {
     return { ctx, bus: this.sfxBus, t: ctx.currentTime + 0.01 };
   }
 
-  /** ✨ A spot was found (by anyone): quick bright C-E-G sparkle. */
+  /** ✨ My team found a spot: quick bright C-E-G sparkle. */
   playFindSuccess() {
     const s = this.sfxStart();
     if (!s) return;
@@ -236,6 +236,19 @@ class SpotSound {
     if (!s) return;
     const lift = soft ? 1.25 : 1;
     this.voice(s.ctx, s.bus, { type: "triangle", freq: 280 * lift, glideTo: 110 * lift, glideTime: 0.08, t: s.t, attack: 0.003, dur: soft ? 0.1 : 0.14, peak: soft ? 0.09 : 0.26 });
+  }
+
+  /**
+   * 🕵️ The rival team found a spot: a softer, lower falling minor third
+   * (E5 → C#5) — clearly "not ours" at a glance, without the sting of a
+   * wrong-answer buzz.
+   */
+  playRivalFind() {
+    const s = this.sfxStart();
+    if (!s) return;
+    [659.25, 554.37].forEach((freq, i) => {
+      this.voice(s.ctx, s.bus, { type: "triangle", freq, t: s.t + i * 0.09, attack: 0.012, dur: 0.3, peak: 0.15, filter: { type: "lowpass", freq: 1800 } });
+    });
   }
 
   /** 🏆 A stage's last spot was found: rising C-major five-note fanfare. */
