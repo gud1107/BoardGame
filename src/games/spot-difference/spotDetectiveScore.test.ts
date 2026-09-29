@@ -1,11 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { BEATS_PER_BAR, LOOP_STEPS, TICK_HZ, TOCK_HZ, waltzEventsAt, WALTZ_BPM } from "./spotDetectiveScore";
-import { URGENT_BPM } from "./spotSound";
+import { SOFT_MISS_MIN_GAP_MS, URGENT_BPM, URGENT_CLOCK_GAIN, URGENT_CLOCK_PITCH } from "./spotSound";
+import { WRONG_CLICK_PENALTY_MS } from "./engine";
 
 describe("detective waltz tempo", () => {
   it("the final-seconds hurry is faster but stays a moderate waltz", () => {
     expect(URGENT_BPM).toBeGreaterThan(WALTZ_BPM);
     expect(URGENT_BPM / WALTZ_BPM).toBeLessThan(1.5);
+  });
+
+  it("the final-seconds clock rises and gets louder but stays below the harsh register", () => {
+    expect(URGENT_CLOCK_PITCH).toBeGreaterThan(1);
+    expect(URGENT_CLOCK_GAIN).toBeGreaterThan(1);
+    expect(TICK_HZ * URGENT_CLOCK_PITCH).toBeLessThan(1000);
+  });
+
+  it("others' soft miss thunks are rate-limited to a patter", () => {
+    expect(SOFT_MISS_MIN_GAP_MS).toBeGreaterThanOrEqual(500);
+    expect(SOFT_MISS_MIN_GAP_MS).toBeLessThan(WRONG_CLICK_PENALTY_MS);
   });
 });
 

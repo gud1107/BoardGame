@@ -26,6 +26,11 @@ const LOOKAHEAD_S = 0.12;
 const SCHEDULER_INTERVAL_MS = 40;
 /** Final-seconds tempo: 104 → 132 BPM (≈1.27×), still a waltz, just hurried. */
 export const URGENT_BPM = 132;
+/** Final-seconds clock: tick/tock raised a whole tone and ~1.8× louder, so the hurry is felt even under the marimba. */
+export const URGENT_CLOCK_PITCH = 1.12;
+export const URGENT_CLOCK_GAIN = 1.8;
+/** Others' soft miss thunks closer together than this collapse into one — a table of error-prone bots stays a patter, not a drumroll. */
+export const SOFT_MISS_MIN_GAP_MS = 700;
 
 class SpotSound {
   private ctx: AudioContext | null = null;
@@ -37,6 +42,8 @@ class SpotSound {
   private nextStepTime = 0;
   private step = 0;
   private beatS = 60 / WALTZ_BPM;
+  private urgent = false;
+  private lastSoftMissAt = -Infinity;
 
   private settings(): AudioSettings {
     return useAudioSettingsStore.getState();
@@ -149,6 +156,7 @@ class SpotSound {
 
   /** Last-10-seconds hurry: the next scheduled beat onward runs at URGENT_BPM (the score and step position carry on). */
   setUrgent(urgent: boolean) {
+    this.urgent = urgent;
     this.beatS = 60 / (urgent ? URGENT_BPM : WALTZ_BPM);
   }
 
@@ -172,18 +180,20 @@ class SpotSound {
         this.voice(ctx, bus, { type: "triangle", freq: e.freq, t, attack: 0.02, dur: 0.32, peak: 0.14, filter: { type: "lowpass", freq: 240 } });
         break;
       case "tick":
-      case "tock":
-        // ⏱️ Clock: narrow bandpassed sine blip, tock lower and softer.
+      case "tock": {
+        // ⏱️ Clock: narrow bandpassed sine blip, tock lower and softer; higher and louder in the final seconds.
+        const freq = e.freq * (this.urgent ? URGENT_CLOCK_PITCH : 1);
         this.voice(ctx, bus, {
           type: "sine",
-          freq: e.freq,
+          freq,
           t,
           attack: 0.005,
           dur: 0.08,
-          peak: e.voice === "tick" ? 0.04 : 0.025,
-          filter: { type: "bandpass", freq: e.freq, q: 8 },
+          peak: (e.voice === "tick" ? 0.04 : 0.025) * (this.urgent ? URGENT_CLOCK_GAIN : 1),
+          filter: { type: "bandpass", freq, q: 8 },
         });
         break;
+      }
       case "marimba":
         // 🪵 Marimba: lowpassed triangle with a soft resonance, rings ~0.9 beat.
         this.voice(ctx, bus, { type: "triangle", freq: e.freq, t, attack: 0.015, dur: this.beatS * 0.9, peak: e.accent ? 0.08 : 0.055, filter: { type: "lowpass", freq: 1400, q: 2.5 } });
@@ -217,6 +227,11 @@ class SpotSound {
    * background information rather than your own mistake.
    */
   playMissClick(soft = false) {
+    if (soft) {
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      if (now - this.lastSoftMissAt < SOFT_MISS_MIN_GAP_MS) return;
+      this.lastSoftMissAt = now;
+    }
     const s = this.sfxStart();
     if (!s) return;
     const lift = soft ? 1.25 : 1;

@@ -63,6 +63,12 @@
 - 공용 [soundEngine.ts](./src/lib/audio/soundEngine.ts)에서 `startBgm`/`stopBgm`, 모티프 3종, `bgmGain`을 삭제했다. 틀린그림찾기가 유일한 사용처였다. `playCorrectDing`/`playWrongBuzz`는 그리드포커와 진실의 언덕이 계속 쓰므로 남겼다.
 - 검증: vitest 70/70(spot-difference와 lib/audio), eslint 통과. **실제 청음은 하지 않았다.**
 
+### ✨ 후속 (2026-09-30): 마지막 10초 시계 강조 · 남의 오답 "통" 간격 제한 · 스테이지 클리어 화면 연출
+- 마지막 10초에는 템포만 올라가는 것이 아니다. 시계 틱/톡 음이 한 음(×1.12) 올라가고 소리도 ×1.8 커진다(`URGENT_CLOCK_*`).
+- 다른 사람이나 봇의 "통"은 700ms(`SOFT_MISS_MIN_GAP_MS`) 안에 여러 번 나도 한 번만 울린다. 내 오답은 제한하지 않는다.
+- 스테이지 클리어 팡파르에 맞춰 [StageClearFx.tsx](./src/games/spot-difference/StageClearFx.tsx)를 1.8초 띄운다. 금빛 화면 글로우, 반짝이 14개 방사, "🔍 스테이지 클리어!" 배너가 나오고, 마지막 스테이지에서는 "🏆 사건 해결!"이 결과 화면 위에 뜬다. 키프레임은 `globals.css`의 `spot-diff-clear-*`이다. 모션 줄이기 설정에서는 반짝이를 숨긴다. 숨김 타이머는 별도 ref로 관리한다. 발견 효과의 effect는 상태가 바뀔 때마다 cleanup되므로 봇 클릭이 연출 도중 타이머를 지우는 일을 막기 위해서다.
+- 검증: vitest 72/72, eslint·tsc 통과. **청음과 연출의 실제 화면 확인은 하지 않았다.**
+
 ## 🎲 페루도 (`perudo`) 잉카 미스터리 BGM (Perudo Sound Suite) — 2026-09-28 (커밋/푸시, 배포는 웹훅 자동)
 
 - **요청**: 명세서 붙여넣기. 외부 오디오 파일 없이 Web Audio로 96 BPM D 마이너 톰/셰이커/나일론 기타/판플루트 32스텝 루프, SFX 5종(컵 슬램, 호가, 듀도, 칼자, 주사위 탈락), 상단 HUD.

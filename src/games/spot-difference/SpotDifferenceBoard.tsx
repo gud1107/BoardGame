@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { getSpotSound } from "./spotSound";
 import SpotSoundHud from "./SpotSoundHud";
+import StageClearFx, { STAGE_CLEAR_FX_MS } from "./StageClearFx";
 import RulebookModal from "./RulebookModal";
 import PhotoStageCanvas from "./PhotoStageCanvas";
 import SpotDifferenceScene from "./SpotDifferenceScene";
@@ -139,19 +140,34 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
   // because a stage's last find switches `currentStageIndex` (or ends the
   // match) in the same update; that case gets the stage-clear fanfare.
   const foundTotal = foundSpotCount(state);
+  const [clearFx, setClearFx] = useState<{ n: number; final: boolean } | null>(null);
+  const clearFxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (clearFxTimerRef.current) clearTimeout(clearFxTimerRef.current);
+    },
+    [],
+  );
   useEffect(() => {
     const prev = prevFoundRef.current;
     prevFoundRef.current = { total: foundTotal, stageIndex: state.currentStageIndex };
     if (!prev || foundTotal <= prev.total) return;
     const cleared = state.currentStageIndex > prev.stageIndex || (state.phase === "gameOver" && foundTotal === totalSpotCount(state));
-    if (cleared) getSpotSound().playStageClear();
-    else getSpotSound().playFindSuccess();
+    if (cleared) {
+      getSpotSound().playStageClear();
+      // Own timer ref: this effect re-runs (and cleans up) on every state change, e.g. a bot click mid-flourish.
+      setClearFx({ n: foundTotal, final: state.phase === "gameOver" });
+      if (clearFxTimerRef.current) clearTimeout(clearFxTimerRef.current);
+      clearFxTimerRef.current = setTimeout(() => setClearFx(null), STAGE_CLEAR_FX_MS);
+    } else getSpotSound().playFindSuccess();
     setFlash("correct");
     const id = setTimeout(() => setFlash(null), 350);
     return () => clearTimeout(id);
   }, [foundTotal, state]);
 
   if (!stage || !myTeam) return null;
+
+  const clearOverlay = clearFx && <StageClearFx key={clearFx.n} final={clearFx.final} />;
 
   const scores = computeTeamScores(state);
   const remaining = totalSpotCount(state) - foundSpotCount(state);
@@ -187,6 +203,7 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
     const tied = winners.length > 1;
     return (
       <div className="flex flex-col items-center gap-6 rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-center light:border-slate-200 light:bg-white light:shadow-sm">
+        {clearOverlay}
         <span className="text-4xl">{tied ? "🤝" : "🏆"}</span>
         <h2 className="text-lg font-bold text-white light:text-slate-900">
           {tied ? "무승부! 두 팀 모두 잘 찾았어요" : `${TEAM_STYLE[winners[0].team].label} 승리!`}
@@ -227,6 +244,7 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
   // -------------------------------------------------------------------------
   return (
     <div className="flex flex-col gap-4">
+      {clearOverlay}
       <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] p-3 light:border-slate-200 light:bg-white light:shadow-sm">
         <div className="flex gap-2">
           {(["A", "B"] as TeamId[]).map((team) => (
