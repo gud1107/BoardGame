@@ -6,7 +6,7 @@ import Flipbook from "./Flipbook";
 import { MODES, icebreakerQuestion, themeApplies } from "./modes";
 import { THEME_INFO } from "./themes";
 import PageCard from "./PageCard";
-import { REACTION_EMOJIS, albumDrawings, computeRankings, pageAt, pageKey, votesFor, type DoodlePhoneState, type Page, type SeatIndex } from "./engine";
+import { REACTION_EMOJIS, albumDrawings, computeRankings, pageKey, shownPageAt, votesFor, type DoodlePhoneState, type Page, type SeatIndex } from "./engine";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
@@ -84,7 +84,7 @@ export default function ResultsStage({
         <div className="flex flex-col gap-3">
           {Array.from({ length: state.playerCount }, (_, i) => {
             const turn = i + 1;
-            const page = pageAt(state, album, turn);
+            const page = shownPageAt(state, album, turn);
             return (
               <PageCard
                 key={pageKey(album, turn)}

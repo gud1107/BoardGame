@@ -9,8 +9,8 @@ import { useNow } from "./useNow";
 import {
   REACTION_EMOJIS,
   albumDrawings,
-  pageAt,
   pageKey,
+  shownPageAt,
   reactionsLeft,
   receiverOf,
   turnKind,
@@ -100,7 +100,7 @@ export default function ShowcaseStage({
       <div className="flex flex-col gap-3">
         {Array.from({ length: revealed }, (_, i) => {
           const turn = i + 1;
-          const page = pageAt(state, album, turn);
+          const page = shownPageAt(state, album, turn);
           const isNewest = turn === revealed;
           return (
             <div key={pageKey(album, turn)} ref={isNewest ? newestRef : undefined} className={isNewest ? "animate-[doodle-page-in_420ms_ease-out]" : ""}>

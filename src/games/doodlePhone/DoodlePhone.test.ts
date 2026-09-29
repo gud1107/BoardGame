@@ -23,6 +23,7 @@ import {
 } from "./drawing";
 import {
   MAX_REACTIONS_PER_PAGE,
+  albumDrawings,
   albumFor,
   applyAction,
   computeRankings,
@@ -36,6 +37,7 @@ import {
   pendingSeats,
   promptFor,
   receiverOf,
+  shownPageAt,
   startGame,
   turnKind,
   type DoodlePhoneState,
@@ -165,6 +167,30 @@ describe("timeouts (rulebook §5)", () => {
     for (let seat = 0; seat < 4; seat++) s = applyAction(s, humanSubmit(seat, 1));
     s = applyAction(s, { type: "TIMEOUT", turn: 2, seats: [0, 1, 2, 3] });
     expect(pageAt(s, 3, 2)).toMatchObject({ kind: "drawing", auto: true, drawing: EMPTY_DRAWING });
+  });
+
+  it("shows a timed-out animation/complement frame as the previous drawing, resolved on read", () => {
+    for (const mode of ["ANIMATION", "COMPLEMENT"] as const) {
+      const start = startGame(4, 9, { mode });
+      const turn1 = [0, 1, 2, 3].map((seat) => humanSubmit(seat, 1, start));
+      const timeout2: EngineAction = { type: "TIMEOUT", turn: 2, seats: [1] };
+      const timeout3: EngineAction = { type: "TIMEOUT", turn: 3, seats: [2] };
+      // Seat 1 → album 0 on turn 2, seat 2 → album 0 on turn 3: two timeouts in a row on one album.
+      const s = [...turn1, timeout2, timeout3].reduce(applyAction, start);
+      expect(pageAt(s, 0, 2)).toMatchObject({ auto: true, drawing: EMPTY_DRAWING });
+      expect(shownPageAt(s, 0, 2)).toMatchObject({ auto: true, drawing: doodle(0) });
+      expect(shownPageAt(s, 0, 3)).toMatchObject({ auto: true, drawing: doodle(0) });
+      expect(promptFor(s, 3, 4)).toMatchObject({ kind: "drawing", drawing: doodle(0) });
+      expect(albumDrawings(s, 0).slice(0, 3)).toEqual([doodle(0), doodle(0), doodle(0)]);
+      // Order-independent: the timeout landing before the frame it copies changes nothing.
+      const reordered = [timeout2, timeout3, ...turn1].reduce(applyAction, start);
+      expect(reordered).toEqual(s);
+    }
+    // Other modes keep the blank sheet (a guesser should see what really happened).
+    let normal = startGame(4, 7);
+    for (let seat = 0; seat < 4; seat++) normal = applyAction(normal, humanSubmit(seat, 1));
+    normal = applyAction(normal, { type: "TIMEOUT", turn: 2, seats: [0] });
+    expect(shownPageAt(normal, albumFor(4, 0, 2), 2)).toMatchObject({ drawing: EMPTY_DRAWING });
   });
 
   it("locks timed-out slots so a late submission loses on every device", () => {

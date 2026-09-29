@@ -33,7 +33,7 @@
 
 import { seededRng } from "@/lib/rng";
 import { EMPTY_DRAWING, isValidDrawing, type Drawing } from "./drawing";
-import { DEFAULT_OPTIONS, openingChoices, sanitizeOptions, turnKindFor, turnSecondsFor, type GameOptions, type PageKind } from "./modes";
+import { DEFAULT_OPTIONS, MODES, openingChoices, sanitizeOptions, turnKindFor, turnSecondsFor, type GameOptions, type PageKind } from "./modes";
 import { FALLBACK_PROMPTS } from "./prompts";
 
 export type { GameMode, GameOptions, PageKind } from "./modes";
@@ -158,6 +158,23 @@ export function pageAt(state: DoodlePhoneState, album: number, turn: number): Pa
   return state.albums[album]?.[turn - 1] ?? null;
 }
 
+/**
+ * `pageAt` as players see it. In modes that build on the previous drawing
+ * (애니메이션 onion, 보완 base), a timed-out drawing shows the previous
+ * drawing instead of a blank sheet, so the flipbook / shared picture doesn't
+ * break. Resolved on read, not stored by `TIMEOUT`: the previous page may
+ * still be in flight on some client, and the stored state must not depend on
+ * arrival order (module doc).
+ */
+export function shownPageAt(state: DoodlePhoneState, album: number, turn: number): Page | null {
+  const page = pageAt(state, album, turn);
+  if (page?.kind !== "drawing" || !page.auto || turn <= 1) return page;
+  const reference = MODES[state.options.mode].drawingFromDrawing;
+  if (reference !== "onion" && reference !== "base") return page;
+  const previous = shownPageAt(state, album, turn - 1);
+  return previous?.kind === "drawing" ? { ...page, drawing: previous.drawing } : page;
+}
+
 /** The slot `seat` fills during `turn`, or null once already filled. */
 export function slotFor(state: DoodlePhoneState, seat: SeatIndex, turn: number): Page | null {
   return pageAt(state, albumFor(state.playerCount, seat, turn), turn);
@@ -170,7 +187,10 @@ export function isTurnClosed(state: DoodlePhoneState, turn: number): boolean {
 
 /** An album's drawing pages in order — the frames of an animation-mode flipbook. */
 export function albumDrawings(state: DoodlePhoneState, album: number): Drawing[] {
-  return (state.albums[album] ?? []).flatMap((page) => (page?.kind === "drawing" ? [page.drawing] : []));
+  return (state.albums[album] ?? []).flatMap((_, i) => {
+    const page = shownPageAt(state, album, i + 1);
+    return page?.kind === "drawing" ? [page.drawing] : [];
+  });
 }
 
 /** First turn still open, or `playerCount + 1` once every turn is closed. */
@@ -204,7 +224,7 @@ export function pendingSeats(state: DoodlePhoneState): SeatIndex[] {
  */
 export function promptFor(state: DoodlePhoneState, seat: SeatIndex, turn: number): Page | null | undefined {
   if (turn <= 1) return null;
-  return pageAt(state, albumFor(state.playerCount, seat, turn), turn - 1) ?? undefined;
+  return shownPageAt(state, albumFor(state.playerCount, seat, turn), turn - 1) ?? undefined;
 }
 
 /** How many turns in a row (ending at the latest closed turn) `seat` was auto-filled by a timeout. */
