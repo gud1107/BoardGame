@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   applyAction,
+  BOT_PACING,
+  botPaceTier,
+  botScanDelayMs,
   chooseBotAction,
+  chooseHumanizedBotAction,
   computeRankings,
   computeTeamRankings,
   computeTeamScores,
@@ -324,6 +328,62 @@ describe("chooseBotAction (AI bot support, Level 1–10)", () => {
 
     const level10Action = chooseBotAction(state, 0, 10, () => 0, 0);
     expect(level10Action).toEqual({ type: "click", seat: 0, xPct: 80, yPct: 80, atMs: 0 });
+  });
+});
+
+describe("humanized bot pacing (탐색 딜레이 / 오클릭 / 스턴)", () => {
+  it("maps Lv.1–10 onto easy/normal/hard/master", () => {
+    expect([1, 3, 4, 6, 7, 8, 9, 10].map(botPaceTier)).toEqual(["easy", "easy", "normal", "normal", "hard", "hard", "master", "master"]);
+  });
+
+  it("keeps scan delays inside each tier's first/next ranges", () => {
+    for (let level = 1; level <= 10; level++) {
+      const cfg = BOT_PACING[botPaceTier(level)];
+      for (const r of [0, 0.5, 0.999]) {
+        const first = botScanDelayMs(level, true, () => r);
+        const next = botScanDelayMs(level, false, () => r);
+        expect(first).toBeGreaterThanOrEqual(cfg.firstFindMs[0]);
+        expect(first).toBeLessThanOrEqual(cfg.firstFindMs[1]);
+        expect(next).toBeGreaterThanOrEqual(cfg.nextFindMs[0]);
+        expect(next).toBeLessThanOrEqual(cfg.nextFindMs[1]);
+      }
+    }
+  });
+
+  it("a find decision always lands inside an undiscovered spot (despite touch jitter)", () => {
+    const state = customSpotsState();
+    let seed = 1;
+    const rng = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < 300; i++) {
+      const d = chooseHumanizedBotAction(state, 0, 10, rng, 0);
+      if (d?.kind !== "find") continue;
+      const next = applyAction(state, d.action);
+      expect(foundSpotCount(next)).toBe(1);
+    }
+  });
+
+  it("a miss decision is a genuine wrong click near a spot, locks the seat, and records where it landed", () => {
+    const state = customSpotsState();
+    const d = chooseHumanizedBotAction(state, 0, 1, () => 0.01, 0); // 0.01 < easy's 35% miss chance
+    expect(d?.kind).toBe("miss");
+    if (d?.kind !== "miss" || d.action.type !== "click") throw new Error("expected miss click");
+    expect(d.stunMs).toBe(BOT_PACING.easy.stunMs);
+    const next = applyAction(state, d.action);
+    expect(foundSpotCount(next)).toBe(0);
+    expect(next.penalties[0]).toBe(WRONG_CLICK_PENALTY_MS);
+    expect(next.lastMiss?.[0]).toEqual({ xPct: d.action.xPct, yPct: d.action.yPct, atMs: 0 });
+  });
+
+  it("returns null while penalty-locked", () => {
+    const state = applyAction(customSpotsState(), { type: "click", seat: 0, xPct: 2, yPct: 2, atMs: 0 });
+    expect(chooseHumanizedBotAction(state, 0, 5, Math.random, 500)).toBeNull();
+  });
+
+  it("expert bots still prefer their team's hinted spot", () => {
+    const state = { ...customSpotsState(), activeHint: { team: "A" as const, spotId: "s2" } };
+    const d = chooseHumanizedBotAction(state, 0, 10, () => 0.5, 0);
+    expect(d?.kind).toBe("find");
+    expect(applyAction(state, d!.action).stages[0].foundBy.s2).toBe("A");
   });
 });
 

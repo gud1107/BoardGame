@@ -48,7 +48,7 @@ import { BUILTIN_SCENES, TOLERANCE_RADIUS_PCT, type BuiltinScene } from "./scene
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
 export { seededRng };
-import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
+import { botTier, clampBotLevel, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
 
 export interface Spot {
   id: string;
@@ -118,6 +118,8 @@ export interface SpotDifferenceState {
   timeUp: boolean;
   /** seat -> timestamp (ms) until which that seat's clicks are ignored. */
   penalties: Record<SeatIndex, number>;
+  /** seat -> where that seat's most recent wrong click landed, so every board can flash a ❌ there (bots included). Optional for older snapshots. */
+  lastMiss?: Record<SeatIndex, { xPct: number; yPct: number; atMs: number }>;
   hints: Record<TeamId, number>;
   activeHint: ActiveHint | null;
   phase: "playing" | "gameOver";
@@ -219,7 +221,11 @@ function click(state: SpotDifferenceState, seat: SeatIndex, xPct: number, yPct: 
   }
   if (!hit) {
     // Wrong click — lock this seat out per the rulebook §4 penalty option.
-    return { ...state, penalties: { ...state.penalties, [seat]: atMs + WRONG_CLICK_PENALTY_MS } };
+    return {
+      ...state,
+      penalties: { ...state.penalties, [seat]: atMs + WRONG_CLICK_PENALTY_MS },
+      lastMiss: { ...state.lastMiss, [seat]: { xPct, yPct, atMs } },
+    };
   }
 
   const foundBy = { ...stage.foundBy, [hit.id]: team };
@@ -390,4 +396,95 @@ export function chooseBotAction(
   const tier = botTier(level);
   const candidates: ScoredCandidate<EngineAction>[] = moves.map((move) => ({ move, score: scoreMove(state, seat, move, tier) }));
   return pickByLevel(candidates, level, rng);
+}
+
+// ---------------------------------------------------------------------------
+// Humanized scanning pace (2026-09-29). The old per-seat timer clicked every
+// 0.7–1.8s straight onto a spot's exact center, so a bot "found" the first
+// difference before a human had even taken in the picture. Instead each bot
+// now waits a human scan time before each find (longer for the first find of
+// a stage), sometimes clicks near-but-off a real spot (a genuine wrong click
+// that takes the engine's own WRONG_CLICK_PENALTY_MS lock), then "stares" for
+// a stun pause. The Lv.1–10 picker maps onto four pacing tiers.
+// ---------------------------------------------------------------------------
+
+export type BotPaceTier = "easy" | "normal" | "hard" | "master";
+
+export interface BotPacing {
+  firstFindMs: [number, number];
+  nextFindMs: [number, number];
+  missClickChance: number;
+  stunMs: number;
+}
+
+export const BOT_PACING: Record<BotPaceTier, BotPacing> = {
+  easy: { firstFindMs: [9000, 15000], nextFindMs: [7000, 12000], missClickChance: 0.35, stunMs: 3000 },
+  normal: { firstFindMs: [5500, 9000], nextFindMs: [4000, 7000], missClickChance: 0.18, stunMs: 2000 },
+  hard: { firstFindMs: [3500, 5500], nextFindMs: [2500, 4000], missClickChance: 0.07, stunMs: 1000 },
+  master: { firstFindMs: [2000, 3500], nextFindMs: [1500, 2500], missClickChance: 0.02, stunMs: 500 },
+};
+
+export function botPaceTier(level: BotLevel): BotPaceTier {
+  const l = clampBotLevel(level);
+  if (l <= 3) return "easy";
+  if (l <= 6) return "normal";
+  if (l <= 8) return "hard";
+  return "master";
+}
+
+/** Human-like "scan the picture" delay before the bot's next attempt. Roughly bell-shaped (mean of two uniforms) inside the tier's range. */
+export function botScanDelayMs(level: BotLevel, firstOfStage: boolean, rng: () => number = Math.random): number {
+  const cfg = BOT_PACING[botPaceTier(level)];
+  const [min, max] = firstOfStage ? cfg.firstFindMs : cfg.nextFindMs;
+  return Math.floor(min + ((rng() + rng()) / 2) * (max - min));
+}
+
+export type HumanizedBotDecision =
+  | { kind: "find"; action: EngineAction }
+  | { kind: "miss"; action: EngineAction; stunMs: number };
+
+/**
+ * One humanized bot attempt: either a near-miss wrong click beside a real
+ * undiscovered spot (never inside any spot's radius) or a find with a small
+ * touch jitter that stays inside the target's radius. Expert-level bots still
+ * prefer their own team's hinted spot, same as `scoreMove`. Returns null when
+ * the seat can't act (locked, not playing, nothing left).
+ */
+export function chooseHumanizedBotAction(
+  state: SpotDifferenceState,
+  seat: SeatIndex,
+  level: BotLevel,
+  rng: () => number = Math.random,
+  atMs: number = Date.now(),
+): HumanizedBotDecision | null {
+  if (state.phase !== "playing") return null;
+  const team = state.teamOf[seat];
+  if (!team || isLocked(state, seat, atMs)) return null;
+  const stage = state.stages[state.currentStageIndex];
+  if (!stage) return null;
+  const remaining = stage.spots.filter((s) => !stage.foundBy[s.id]);
+  if (remaining.length === 0) return null;
+  const cfg = BOT_PACING[botPaceTier(level)];
+
+  if (rng() < cfg.missClickChance) {
+    const near = remaining[Math.floor(rng() * remaining.length)];
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const xPct = Math.min(95, Math.max(5, near.xPct + (rng() - 0.5) * 18));
+      const yPct = Math.min(95, Math.max(5, near.yPct + (rng() - 0.5) * 18));
+      if (!stage.spots.some((s) => Math.hypot(s.xPct - xPct, s.yPct - yPct) <= s.rPct)) {
+        return { kind: "miss", action: { type: "click", seat, xPct, yPct, atMs }, stunMs: cfg.stunMs };
+      }
+    }
+    return { kind: "miss", action: { type: "click", seat, xPct: MISS_XPCT, yPct: MISS_YPCT, atMs }, stunMs: cfg.stunMs };
+  }
+
+  const hinted =
+    botTier(level) === "expert" && state.activeHint?.team === team
+      ? remaining.find((s) => s.id === state.activeHint?.spotId)
+      : undefined;
+  const target = hinted ?? remaining[Math.floor(rng() * remaining.length)];
+  const jitter = Math.min(2, target.rPct * 0.4);
+  const xPct = target.xPct + (rng() - 0.5) * 2 * jitter;
+  const yPct = target.yPct + (rng() - 0.5) * 2 * jitter;
+  return { kind: "find", action: { type: "click", seat, xPct, yPct, atMs } };
 }

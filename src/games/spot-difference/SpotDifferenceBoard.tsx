@@ -58,6 +58,11 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
   const timeUpSentRef = useRef(false);
   const prevPenaltyRef = useRef<number | undefined>(state.penalties[viewerSeat]);
   const prevFoundIdsRef = useRef<Set<string>>(new Set());
+  // Other seats' (bots included) wrong clicks, shown as a brief ❌ where they
+  // landed. Keyed off local arrival time, not the clicker's clock, so device
+  // clock skew can't hide or linger the marker.
+  const [missMarks, setMissMarks] = useState<{ key: string; seat: SeatIndex; xPct: number; yPct: number }[]>([]);
+  const prevMissRef = useRef(state.lastMiss);
 
   const myTeam = state.teamOf[viewerSeat];
   const stage = state.stages[state.currentStageIndex];
@@ -100,6 +105,20 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
     }
     prevPenaltyRef.current = current;
   }, [state.penalties, viewerSeat]);
+
+  useEffect(() => {
+    const prev = prevMissRef.current;
+    prevMissRef.current = state.lastMiss;
+    if (!state.lastMiss || state.lastMiss === prev) return;
+    const fresh = Object.entries(state.lastMiss)
+      .map(([seat, m]) => ({ seat: Number(seat), ...m }))
+      .filter((m) => m.seat !== viewerSeat && prev?.[m.seat]?.atMs !== m.atMs)
+      .map((m) => ({ key: `${m.seat}:${m.atMs}`, seat: m.seat, xPct: m.xPct, yPct: m.yPct }));
+    if (fresh.length === 0) return;
+    setMissMarks((marks) => [...marks, ...fresh]);
+    const keys = new Set(fresh.map((m) => m.key));
+    setTimeout(() => setMissMarks((marks) => marks.filter((m) => !keys.has(m.key))), 900);
+  }, [state.lastMiss, viewerSeat]);
 
   // Detects any newly-found spot (by any team) to play the correct-answer
   // chime — a shared match event everyone should hear, not just the finder.
@@ -260,6 +279,8 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
           onClick={handleClick}
           activeHintSpot={activeHintSpot}
           isLocked={isLocked}
+          missMarks={missMarks}
+          names={names}
         />
         <StagePanel
           state={state}
@@ -268,6 +289,8 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
           onClick={handleClick}
           activeHintSpot={activeHintSpot}
           isLocked={isLocked}
+          missMarks={missMarks}
+          names={names}
         />
       </div>
 
@@ -289,6 +312,8 @@ function StagePanel({
   onClick,
   activeHintSpot,
   isLocked,
+  missMarks,
+  names,
 }: {
   state: SpotDifferenceState;
   stage: SpotDifferenceState["stages"][number];
@@ -296,6 +321,8 @@ function StagePanel({
   onClick: (e: MouseEvent<HTMLDivElement>) => void;
   activeHintSpot: { xPct: number; yPct: number; rPct: number } | undefined;
   isLocked: boolean;
+  missMarks: { key: string; seat: SeatIndex; xPct: number; yPct: number }[];
+  names: Record<number, string>;
 }) {
   return (
     <div
@@ -330,6 +357,20 @@ function StagePanel({
             }}
           />
         ))}
+
+      {/* Other seats' wrong clicks */}
+      {missMarks.map((m) => (
+        <div
+          key={m.key}
+          className="pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center animate-[spot-diff-pop_0.35s_ease-out]"
+          style={{ left: `${m.xPct}%`, top: `${m.yPct}%` }}
+        >
+          <span className="text-lg font-black leading-none text-rose-500 drop-shadow">❌</span>
+          <span className="mt-0.5 whitespace-nowrap rounded bg-black/70 px-1 text-[10px] font-bold text-rose-200">
+            {names[m.seat] ?? `${m.seat + 1}번`}
+          </span>
+        </div>
+      ))}
 
       {/* Active team hint wiggle */}
       {activeHintSpot && (

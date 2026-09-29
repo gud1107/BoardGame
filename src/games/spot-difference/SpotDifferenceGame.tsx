@@ -13,7 +13,8 @@ import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity
 import type { PlayableGameProps } from "@/games/types";
 import {
   applyAction,
-  chooseBotAction,
+  botScanDelayMs,
+  chooseHumanizedBotAction,
   computeRankings,
   computeTeamRankings,
   defaultTeamAssignment,
@@ -758,9 +759,9 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
   // `useBotAutoplay` hook (built around one pending decision at a time)
   // doesn't fit — see engine.ts's bot-support module doc. Instead, every bot
   // seat (lobby-added or takeover-converted) gets its own independent
-  // repeating timer (host-only) that tries a click roughly every 0.7-1.8s,
-  // same human-like "thinking" cadence as every other game's single-decision
-  // bot delay.
+  // repeating timer (host-only) paced like a human scanning the picture:
+  // a longer first-find delay per stage, shorter scans between finds, and
+  // an extra stun pause after a wrong click (engine.ts `BOT_PACING`).
   useEffect(() => {
     if (!isHost || phase !== "playing" || allBotSeats.length === 0) return;
     const timers: number[] = [];
@@ -771,18 +772,35 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
       // controlled until now) — fall back to the room's default level.
       const idx = botSeats.indexOf(seat);
       const level = idx >= 0 ? (botLevels[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
+      // Stage whose "first find" scan this bot already sat through — a new
+      // stage (or a fresh effect run) restarts with the long first-find delay.
+      let scannedStage = -1;
+      const schedule = (extraMs: number) => {
+        if (cancelled || gameStateRef.current?.phase !== "playing") return;
+        const stageIdx = gameStateRef.current.currentStageIndex;
+        const firstOfStage = scannedStage !== stageIdx;
+        scannedStage = stageIdx;
+        timers.push(window.setTimeout(tick, extraMs + botScanDelayMs(level, firstOfStage)));
+      };
       const tick = () => {
         if (cancelled) return;
         const state = gameStateRef.current;
-        if (state && state.phase === "playing") {
-          const action = chooseBotAction(state, seat, level);
-          if (action) handleAction(action);
+        if (!state || state.phase !== "playing") return;
+        if (state.currentStageIndex !== scannedStage) {
+          // Stage advanced while this bot was mid-scan — start the new picture from scratch.
+          schedule(0);
+          return;
         }
-        if (!cancelled && gameStateRef.current?.phase === "playing") {
-          timers.push(window.setTimeout(tick, 700 + Math.random() * 1100));
+        const decision = chooseHumanizedBotAction(state, seat, level);
+        if (!decision) {
+          // Locked out or nothing left right now — glance again shortly.
+          timers.push(window.setTimeout(tick, 400));
+          return;
         }
+        handleAction(decision.action);
+        schedule(decision.kind === "miss" ? decision.stunMs : 0);
       };
-      timers.push(window.setTimeout(tick, 700 + Math.random() * 1100));
+      schedule(0);
     });
 
     return () => {
