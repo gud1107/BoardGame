@@ -272,6 +272,7 @@ function TurnComposer({
             blind={blind}
             allowUndo={allowUndo}
             baseDrawing={reference === "base" ? previousDrawing : null}
+            startDrawing={reference === "onion" ? previousDrawing : null}
             onionDrawing={reference === "onion" && ghostFrames ? previousDrawing : null}
             matchKey={state.seed}
           />
@@ -358,9 +359,9 @@ function PromptPanel({
       return <MemoryPeek drawing={prompt.drawing} revealUntil={turnStartedAt + KNOCK_OFF_PEEK_MS} />;
     case "onion":
       return state.options.ghostFrames ? (
-        <p className={fuchsiaHint}>👻 앞 프레임이 도화지에 흐릿하게 깔려 있어요. 살짝 움직인 다음 장면을 그려주세요!</p>
+        <p className={fuchsiaHint}>🎞️ 앞 프레임이 도화지에 그대로 복사돼 있어요(흐린 잔상은 원래 위치). 👆 선택·이동이나 지우개로 살짝 움직여 다음 장면을 만들어주세요!</p>
       ) : (
-        <ReferenceDrawing caption="앞 프레임 — 이어지는 다음 장면을 그려주세요" drawing={prompt.drawing} />
+        <ReferenceDrawing caption="앞 프레임이 도화지에 복사돼 있어요 — 살짝 움직여 다음 장면을 만들어주세요" drawing={prompt.drawing} />
       );
     case "base":
       return <p className={fuchsiaHint}>🖍️ 앞사람 그림 위에 그대로 이어 그려요. 지우개로 고칠 수도 있지만 원래 그림은 되돌리기로 지워지지 않아요.</p>;

@@ -105,7 +105,7 @@ export const MODES: Record<GameMode, ModeInfo> = {
     title: "애니메이션",
     icon: "🎞️",
     badge: "창작",
-    description: "앞 프레임 잔상(어니언 스킨)을 보며 다음 장면을 이어 그려 움직이는 그림 완성",
+    description: "앞 프레임이 복사된 도화지를 살짝 움직여 다음 장면을 만들고, 이어 붙여 움직이는 그림 완성",
     flow: "allDrawing",
     seconds: () => 70,
     timeLabel: "프레임당 70초",

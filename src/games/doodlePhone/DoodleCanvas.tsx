@@ -84,6 +84,10 @@ import {
  * - `baseDrawing` (보완): the previous player's picture is a locked first
  *   layer; undo and the select tool never reach it and "전체 지우기" is
  *   hidden. The result is base ops + your ops.
+ * - `startDrawing` (애니메이션): the previous frame copied in as this player's
+ *   own, fully editable ops — move/erase/clear it to make the next frame. Each
+ *   flipbook frame is a whole picture, so a frame drawn only as "additions"
+ *   would otherwise lose the original.
  * - `onionDrawing` (애니메이션): the previous frame as a faint grayscale ghost
  *   over the paper (multiply blend, so it reads as "under" your strokes).
  * - `allowUndo`: host option; hides undo/redo and their shortcuts.
@@ -159,13 +163,14 @@ interface DoodleCanvasProps {
   disabled?: boolean;
   blind?: boolean;
   baseDrawing?: Drawing | null;
+  startDrawing?: Drawing | null;
   onionDrawing?: Drawing | null;
   allowUndo?: boolean;
   /** Identifies the match (its seed) so the copy buffer carries across turns but not into a rematch. */
   matchKey?: number;
 }
 
-export default function DoodleCanvas({ ref, disabled = false, blind = false, baseDrawing = null, onionDrawing = null, allowUndo = true, matchKey = 0 }: DoodleCanvasProps) {
+export default function DoodleCanvas({ ref, disabled = false, blind = false, baseDrawing = null, startDrawing = null, onionDrawing = null, allowUndo = true, matchKey = 0 }: DoodleCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   /** Where strokes are painted: the visible canvas, or an offscreen one in blind mode. */
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
@@ -174,7 +179,7 @@ export default function DoodleCanvas({ ref, disabled = false, blind = false, bas
   // Fixed for the lifetime of this editor (it is keyed per turn by its parent).
   const baseOpsRef = useRef<readonly DrawOp[]>(baseDrawing?.ops ?? []);
   /** This player's ops (the base layer excluded). Replaced, never mutated, so history can keep snapshots. */
-  const opsRef = useRef<readonly DrawOp[]>([]);
+  const opsRef = useRef<readonly DrawOp[]>(startDrawing?.ops ?? []);
   const undoStackRef = useRef<(readonly DrawOp[])[]>([]);
   const redoStackRef = useRef<(readonly DrawOp[])[]>([]);
   const gestureRef = useRef<Gesture | null>(null);
