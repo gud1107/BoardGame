@@ -194,6 +194,15 @@ export function themeSpotId(themeId: string, mutationId: string): string {
   return `${themeId}:${mutationId}`;
 }
 
+/** The mutation behind a themed spot id (`${themeId}:${mutationId}`) — for the end-of-match answer reveal. */
+export function themeMutationForSpotId(spotId: string): ThemeMutation | undefined {
+  const sep = spotId.indexOf(":");
+  if (sep < 0) return undefined;
+  const theme = findThemeScene(spotId.slice(0, sep));
+  const mutationId = spotId.slice(sep + 1);
+  return theme?.mutations.find((m) => m.id === mutationId);
+}
+
 export function activeThemeMutationIds(themeId: string, spotIds: string[]): Set<string> {
   const prefix = `${themeId}:`;
   return new Set(spotIds.filter((id) => id.startsWith(prefix)).map((id) => id.slice(prefix.length)));

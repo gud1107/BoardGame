@@ -6,10 +6,9 @@ import SpotSoundHud from "./SpotSoundHud";
 import StageClearFx, { STAGE_CLEAR_FX_MS } from "./StageClearFx";
 import RulebookModal from "./RulebookModal";
 import PhotoStageCanvas from "./PhotoStageCanvas";
-import SpotDifferenceScene from "./SpotDifferenceScene";
-import { applySceneDiffs, BUILTIN_SCENES } from "./scenes";
+import DiffRevealPanel from "./DiffRevealPanel";
 import ThemeSceneArt from "./ThemeSceneArt";
-import { activeThemeMutationIds, findThemeScene } from "./themeScenes";
+import { activeThemeMutationIds } from "./themeScenes";
 import {
   computeTeamRankings,
   computeTeamScores,
@@ -234,6 +233,7 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
             </div>
           ))}
         </div>
+        <DiffRevealPanel state={state} />
         <button
           onClick={onGameEnd}
           className="rounded-full bg-fuchsia-500 px-8 py-3 font-medium text-white transition hover:bg-fuchsia-400"
@@ -445,12 +445,7 @@ function BuiltinStagePanel({
   variant: "original" | "modified";
   className?: string;
 }) {
-  if (findThemeScene(sceneId)) {
-    const active = variant === "modified" ? activeThemeMutationIds(sceneId, spotIds) : new Set<string>();
-    return <ThemeSceneArt themeId={sceneId} active={active} className={className} />;
-  }
-  const scene = BUILTIN_SCENES.find((s) => s.id === sceneId);
-  if (!scene) return null;
-  const shapes = variant === "original" ? scene.shapes : applySceneDiffs(scene.shapes, scene.diffs);
-  return <SpotDifferenceScene shapes={shapes} background={scene.background} className={className} />;
+  // Unknown ids (e.g. a pre-2026-09-30 snapshot naming a retired classic scene) just render ThemeSceneArt's empty frame.
+  const active = variant === "modified" ? activeThemeMutationIds(sceneId, spotIds) : new Set<string>();
+  return <ThemeSceneArt themeId={sceneId} active={active} className={className} />;
 }

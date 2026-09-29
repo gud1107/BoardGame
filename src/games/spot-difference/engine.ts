@@ -3,9 +3,9 @@
  * timers, no DOM. Two team-battle modes share one reducer:
  *
  *  - "builtin": detailed themed SVG scenes (themeScenes.ts) whose 5 diffs
- *    are drawn per match from a larger mutation pool via the seeded RNG,
- *    followed by the classic generated-shape scenes (scenes.ts) with a
- *    baked-in, fixed answer key (5 diffs per stage).
+ *    are drawn per match from a larger mutation pool via the seeded RNG.
+ *    (The original three fixed-answer shape scenes, scenes.ts, were retired
+ *    2026-09-30 once ten themes existed.)
  *  - "photo": the host's own uploaded photo. There is no object-detection
  *    step — instead `generatePhotoDiffSpots` deterministically derives N
  *    click-hit regions (position + which visual "damage" effect to render
@@ -45,11 +45,10 @@ export const MIN_PHOTO_DIFFS = 3;
 export const MAX_PHOTO_DIFFS = 10;
 export const DEFAULT_TIMER_SECONDS = 90;
 
-import { BUILTIN_SCENES, TOLERANCE_RADIUS_PCT, type BuiltinScene } from "./scenes";
 import { findThemeScene, pickThemeMutations, THEME_SCENES, themeSpotId } from "./themeScenes";
 
-/** Every scene the builtin mode can chain: the themed scenes plus the classic shape scenes. */
-export const BUILTIN_STAGE_POOL_SIZE = THEME_SCENES.length + BUILTIN_SCENES.length;
+/** Every scene the builtin mode can chain — one per theme. */
+export const BUILTIN_STAGE_POOL_SIZE = THEME_SCENES.length;
 
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
@@ -143,14 +142,6 @@ export function defaultTeamAssignment(playerCount: number): Record<SeatIndex, Te
   return teamOf;
 }
 
-function computeSpotsForScene(scene: BuiltinScene): Spot[] {
-  return scene.diffs.map((diff) => {
-    const shape = scene.shapes.find((s) => s.id === diff.shapeId);
-    if (!shape) throw new Error(`Scene "${scene.id}" diff references unknown shape "${diff.shapeId}"`);
-    return { id: `${scene.id}:${diff.shapeId}`, xPct: shape.xPct, yPct: shape.yPct, rPct: TOLERANCE_RADIUS_PCT };
-  });
-}
-
 export interface StartGameOptions {
   source: StageSource;
   /** Builtin mode only — how many scenes to chain, clamped to [1, BUILTIN_STAGE_POOL_SIZE]. */
@@ -173,9 +164,6 @@ export function startGame(playerCount: number, seed: number, options: StartGameO
   let stages: StageResult[];
   let builtinSceneIds: string[] = [];
   if (options.source.kind === "builtin") {
-    // Detailed themed scenes come first (their differences are redrawn from
-    // a mutation pool every match); the three classic fixed-answer shape
-    // scenes only fill in once every theme is already in the chain.
     // Recently played themes (host's deck, broadcast in the start payload so
     // every client orders identically) go to the back, oldest first.
     const recent = (options.recentSceneIds ?? []).filter((id) => findThemeScene(id));
@@ -186,21 +174,13 @@ export function startGame(playerCount: number, seed: number, options: StartGameO
     const order = [
       ...shuffledThemes.filter((id) => !recent.includes(id)),
       ...recent.filter((id, i) => recent.indexOf(id) === i),
-      ...shuffle(
-        BUILTIN_SCENES.map((s) => s.id),
-        rng,
-      ),
     ];
     const count = Math.min(Math.max(options.stageCount ?? 1, 1), BUILTIN_STAGE_POOL_SIZE);
     builtinSceneIds = order.slice(0, count);
     stages = builtinSceneIds.map((id) => {
-      const theme = findThemeScene(id);
-      if (theme) {
-        const spots = pickThemeMutations(theme, rng).map((m) => ({ id: themeSpotId(theme.id, m.id), xPct: m.xPct, yPct: m.yPct, rPct: m.rPct }));
-        return { spots, foundBy: {} };
-      }
-      const scene = BUILTIN_SCENES.find((s) => s.id === id)!;
-      return { spots: computeSpotsForScene(scene), foundBy: {} };
+      const theme = findThemeScene(id)!;
+      const spots = pickThemeMutations(theme, rng).map((m) => ({ id: themeSpotId(theme.id, m.id), xPct: m.xPct, yPct: m.yPct, rPct: m.rPct }));
+      return { spots, foundBy: {} };
     });
   } else {
     const diffCount = options.diffCount ?? 5;
@@ -365,7 +345,7 @@ export function computeRankings(state: SpotDifferenceState): { seat: SeatIndex; 
 // SpotDifferenceGame.tsx).
 // ---------------------------------------------------------------------------
 
-/** A synthetic off-target click, safely outside every possible spot's radius (spots only ever live in the 12–88% band with a single-digit rPct, see `generatePhotoDiffSpots`/`scenes.ts`) — lets novice-tier bots occasionally whiff a real wrong click, same as a distracted human. */
+/** A synthetic off-target click, safely outside every possible spot's radius (spots only ever live in the 12–88% band with a single-digit rPct, see `generatePhotoDiffSpots`/`themeScenes.ts`, whose test keeps every candidate clear of the edges) — lets novice-tier bots occasionally whiff a real wrong click, same as a distracted human. */
 const MISS_XPCT = 2;
 const MISS_YPCT = 2;
 

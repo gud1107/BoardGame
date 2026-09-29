@@ -23,8 +23,7 @@ import {
   type EngineAction,
   type SpotDifferenceState,
 } from "./engine";
-import { BUILTIN_SCENES } from "./scenes";
-import { findThemeScene, nextRecentSceneIds, THEME_DIFFS_PER_STAGE, THEME_SCENES } from "./themeScenes";
+import { findThemeScene, nextRecentSceneIds, THEME_DIFFS_PER_STAGE, THEME_SCENES, themeMutationForSpotId } from "./themeScenes";
 
 describe("recently-played theme deck", () => {
   it("orders recently played themes after every fresh one, oldest first", () => {
@@ -107,11 +106,18 @@ describe("startGame", () => {
     }
   });
 
-  it("clamps stageCount to the number of available scenes, themes before classic scenes", () => {
+  it("clamps stageCount to the number of themes, every stage a distinct theme", () => {
     const state = freshState({ stageCount: 999 });
     expect(state.stages).toHaveLength(BUILTIN_STAGE_POOL_SIZE);
-    expect(state.builtinSceneIds.slice(0, THEME_SCENES.length).every((id) => findThemeScene(id))).toBe(true);
-    expect(state.builtinSceneIds.slice(THEME_SCENES.length).every((id) => BUILTIN_SCENES.some((s) => s.id === id))).toBe(true);
+    expect(BUILTIN_STAGE_POOL_SIZE).toBe(THEME_SCENES.length);
+    expect(state.builtinSceneIds.every((id) => findThemeScene(id))).toBe(true);
+    expect(new Set(state.builtinSceneIds).size).toBe(THEME_SCENES.length);
+  });
+
+  it("every themed spot maps back to a named mutation (end-of-match reveal)", () => {
+    const state = freshState({ stageCount: 999 });
+    for (const stage of state.stages) for (const spot of stage.spots) expect(themeMutationForSpotId(spot.id)?.name).toBeTruthy();
+    expect(themeMutationForSpotId("park:sun")).toBeUndefined();
   });
 
   it("generates the requested number of photo-mode diff spots, clamped to the allowed range", () => {

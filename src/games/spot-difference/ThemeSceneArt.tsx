@@ -5,7 +5,7 @@ import { Arcade, Bakery, Bazaar, Camping, Haunted, Orbital } from "./ThemeSceneA
 
 /**
  * Hand-built SVG artwork for the themed stages (themeScenes.ts). Same
- * 0..100 stretched viewBox as SpotDifferenceScene.tsx, so every mutation's
+ * 0..100 stretched viewBox as the click space, so every mutation's
  * `xPct`/`yPct` is directly its drawing position. `active` holds the
  * mutation ids that differ on this side — always empty for the original
  * panel, the stage's drawn subset for the modified one. Every mutation's
