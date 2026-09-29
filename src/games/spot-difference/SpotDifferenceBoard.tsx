@@ -92,6 +92,13 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
     return () => clearInterval(id);
   }, [state.phase, onAction]);
 
+  // Last 10 seconds: the detective waltz hurries (104 → 132 BPM).
+  const urgent = state.phase === "playing" && timeLeft > 0 && timeLeft <= 10;
+  useEffect(() => {
+    getSpotSound().setUrgent(urgent);
+    return () => getSpotSound().setUrgent(false);
+  }, [urgent]);
+
   // Redraws the "locked out" countdown on the viewer's own click smoothly.
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 200);
@@ -121,6 +128,7 @@ export default function SpotDifferenceBoard({ state, viewerSeat, names, connecte
       .filter((m) => m.seat !== viewerSeat && prev?.[m.seat]?.atMs !== m.atMs)
       .map((m) => ({ key: `${m.seat}:${m.atMs}`, seat: m.seat, xPct: m.xPct, yPct: m.yPct }));
     if (fresh.length === 0) return;
+    getSpotSound().playMissClick(true); // soft "통" — one per update, however many seats missed at once
     setMissMarks((marks) => [...marks, ...fresh]);
     const keys = new Set(fresh.map((m) => m.key));
     setTimeout(() => setMissMarks((marks) => marks.filter((m) => !keys.has(m.key))), 900);

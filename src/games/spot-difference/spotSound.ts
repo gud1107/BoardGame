@@ -24,7 +24,8 @@ const BGM_LEVEL = 0.09 / 0.4;
 const SFX_LEVEL = 0.32 / 0.7;
 const LOOKAHEAD_S = 0.12;
 const SCHEDULER_INTERVAL_MS = 40;
-const BEAT_S = 60 / WALTZ_BPM;
+/** Final-seconds tempo: 104 → 132 BPM (≈1.27×), still a waltz, just hurried. */
+export const URGENT_BPM = 132;
 
 class SpotSound {
   private ctx: AudioContext | null = null;
@@ -35,6 +36,7 @@ class SpotSound {
   private bgmTimer: ReturnType<typeof setInterval> | null = null;
   private nextStepTime = 0;
   private step = 0;
+  private beatS = 60 / WALTZ_BPM;
 
   private settings(): AudioSettings {
     return useAudioSettingsStore.getState();
@@ -129,6 +131,7 @@ class SpotSound {
   setBgmWanted(wanted: boolean) {
     this.bgmWanted = wanted;
     if (wanted) this.ensure();
+    else this.setUrgent(false); // next match starts at the normal tempo
     this.syncBgm();
   }
 
@@ -144,13 +147,18 @@ class SpotSound {
     }
   }
 
+  /** Last-10-seconds hurry: the next scheduled beat onward runs at URGENT_BPM (the score and step position carry on). */
+  setUrgent(urgent: boolean) {
+    this.beatS = 60 / (urgent ? URGENT_BPM : WALTZ_BPM);
+  }
+
   private schedule() {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== "running") return;
     if (this.nextStepTime < ctx.currentTime) this.nextStepTime = ctx.currentTime + 0.05; // tab was throttled — rejoin, don't burst
     while (this.nextStepTime < ctx.currentTime + LOOKAHEAD_S) {
       for (const event of waltzEventsAt(this.step)) this.playEvent(ctx, event, this.nextStepTime);
-      this.nextStepTime += BEAT_S;
+      this.nextStepTime += this.beatS;
       this.step++;
     }
   }
@@ -178,7 +186,7 @@ class SpotSound {
         break;
       case "marimba":
         // 🪵 Marimba: lowpassed triangle with a soft resonance, rings ~0.9 beat.
-        this.voice(ctx, bus, { type: "triangle", freq: e.freq, t, attack: 0.015, dur: BEAT_S * 0.9, peak: e.accent ? 0.08 : 0.055, filter: { type: "lowpass", freq: 1400, q: 2.5 } });
+        this.voice(ctx, bus, { type: "triangle", freq: e.freq, t, attack: 0.015, dur: this.beatS * 0.9, peak: e.accent ? 0.08 : 0.055, filter: { type: "lowpass", freq: 1400, q: 2.5 } });
         break;
     }
   }
@@ -203,11 +211,16 @@ class SpotSound {
     });
   }
 
-  /** ❌ The viewer's own wrong click: a wooden "통" dropping in pitch. */
-  playMissClick() {
+  /**
+   * ❌ A wrong click: a wooden "통" dropping in pitch. `soft` is someone
+   * else's (bot included) miss — quieter and a little higher, so it reads as
+   * background information rather than your own mistake.
+   */
+  playMissClick(soft = false) {
     const s = this.sfxStart();
     if (!s) return;
-    this.voice(s.ctx, s.bus, { type: "triangle", freq: 280, glideTo: 110, glideTime: 0.08, t: s.t, attack: 0.003, dur: 0.14, peak: 0.26 });
+    const lift = soft ? 1.25 : 1;
+    this.voice(s.ctx, s.bus, { type: "triangle", freq: 280 * lift, glideTo: 110 * lift, glideTime: 0.08, t: s.t, attack: 0.003, dur: soft ? 0.1 : 0.14, peak: soft ? 0.09 : 0.26 });
   }
 
   /** 🏆 A stage's last spot was found: rising C-major five-note fanfare. */

@@ -4,10 +4,12 @@
  * `저작권, 상표권.md`, which flags "배경음악" as copyright-protected
  * expression like any other), and generating tones/noise in code has zero
  * asset weight and no licensing question. This file owns every *effect*
- * sound in the project plus one legacy ambient-loop pathway (`startBgm`/
- * `stopBgm`, still used by Spot the Difference); the six hub games' new
- * *themed background music* is real royalty-free `<audio>` playback instead
- * (see `bgmManager.ts`) — SFX and BGM are deliberately different pipelines
+ * sound in the project. It no longer carries any background music: the old
+ * ambient tension loop (`startBgm`/`stopBgm`, Spot the Difference's only
+ * user) was removed 2026-09-30 once that game got its own procedural BGM
+ * (spot-difference/spotSound.ts). Background music lives in per-game
+ * procedural engines (coyoteSound.ts, perudoSound.ts, …) or `bgmManager.ts`
+ * `<audio>` playback — SFX and BGM are deliberately different pipelines
  * with independent mute/volume, both reading from the single shared
  * `audioSettings.ts` store.
  *
@@ -18,10 +20,9 @@
  *    (Perudo/Dalmuti/Grid Poker's mute buttons) keeps working unchanged,
  *    but now toggles the same flag the header's global 🔇/🔊 button and the
  *    settings modal use, so every mute control in the app stays in sync.
- *  - One-shot SFX run through `sfxGain`, gated by `sfxMuted`+`sfxVolume`.
- *    The legacy ambient `startBgm`/`stopBgm` loop runs through a *separate*
- *    `bgmGain`, gated by `bgmMuted`+`bgmVolume` — so a user can duck one
- *    without the other via the settings modal's two sliders.
+ *  - One-shot SFX run through `sfxGain`, gated by `sfxMuted`+`sfxVolume`
+ *    (BGM engines gate on `bgmMuted`+`bgmVolume`, so a user can duck one
+ *    without the other via the settings modal's two sliders).
  *  - Polyphony control: `gate()` applies a per-SFX-type cooldown (so e.g.
  *    two nearly-simultaneous `CARD_PLAY` events don't both fire and smear
  *    together) plus a global concurrent-channel cap (so a burst of *different*
@@ -38,9 +39,7 @@
  * both flips the flag and calls `unlock()`.
  */
 
-import { isBgmEffectivelyMuted, isSfxEffectivelyMuted, useAudioSettingsStore } from "./audioSettings";
-
-type MotifFn = (ctx: AudioContext, out: GainNode) => number; // returns loop length in seconds
+import { isSfxEffectivelyMuted, useAudioSettingsStore } from "./audioSettings";
 
 /** Concurrent one-shot SFX channel cap — see file header "Polyphony control". */
 const MAX_CONCURRENT_SFX_CHANNELS = 8;
@@ -58,102 +57,6 @@ function noiseBuffer(ctx: AudioContext): AudioBuffer {
   return buffer;
 }
 
-/** Slow detuned drone (beating dissonance) with a distant dissonant "sting" near the end. */
-function tenseDroneMotif(ctx: AudioContext, out: GainNode): number {
-  const duration = 16;
-  const now = ctx.currentTime;
-  for (const freq of [55, 58.5]) {
-    const osc = ctx.createOscillator();
-    osc.type = "sawtooth";
-    osc.frequency.value = freq;
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = 400;
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.16, now + 1.5);
-    gain.gain.setValueAtTime(0.16, now + duration - 1.5);
-    gain.gain.linearRampToValueAtTime(0, now + duration);
-    osc.connect(filter).connect(gain).connect(out);
-    osc.start(now);
-    osc.stop(now + duration);
-  }
-  const stingAt = now + duration - 3;
-  const sting = ctx.createOscillator();
-  sting.type = "triangle";
-  sting.frequency.value = 233; // dissonant interval above the drone
-  const stingGain = ctx.createGain();
-  stingGain.gain.setValueAtTime(0, stingAt);
-  stingGain.gain.linearRampToValueAtTime(0.1, stingAt + 0.4);
-  stingGain.gain.exponentialRampToValueAtTime(0.001, stingAt + 2.5);
-  sting.connect(stingGain).connect(out);
-  sting.start(stingAt);
-  sting.stop(stingAt + 2.5);
-  return duration;
-}
-
-/** Rhythmic low "heartbeat" thumps under a thin sustained pad — faster tension. */
-function heartbeatPulseMotif(ctx: AudioContext, out: GainNode): number {
-  const duration = 8;
-  const now = ctx.currentTime;
-  const beat = 60 / 100; // 100bpm
-  for (let t = 0; t < duration; t += beat) {
-    const at = now + t;
-    const osc = ctx.createOscillator();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(80, at);
-    osc.frequency.exponentialRampToValueAtTime(40, at + 0.15);
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.28, at);
-    gain.gain.exponentialRampToValueAtTime(0.001, at + 0.2);
-    osc.connect(gain).connect(out);
-    osc.start(at);
-    osc.stop(at + 0.2);
-  }
-  const pad = ctx.createOscillator();
-  pad.type = "sawtooth";
-  pad.frequency.value = 110;
-  const padFilter = ctx.createBiquadFilter();
-  padFilter.type = "lowpass";
-  padFilter.frequency.value = 300;
-  const padGain = ctx.createGain();
-  padGain.gain.value = 0.05;
-  pad.connect(padFilter).connect(padGain).connect(out);
-  pad.start(now);
-  pad.stop(now + duration);
-  return duration;
-}
-
-/** Fast dissonant square-wave arpeggio (root/minor-3rd/tritone) — the most "urgent" motif. */
-function dissonantArpMotif(ctx: AudioContext, out: GainNode): number {
-  const duration = 12;
-  const now = ctx.currentTime;
-  const root = 220;
-  const intervalsInSemitones = [0, 3, 6, 3];
-  const noteLen = 0.22;
-  let t = 0;
-  let i = 0;
-  while (t < duration) {
-    const semis = intervalsInSemitones[i % intervalsInSemitones.length];
-    const freq = root * Math.pow(2, semis / 12);
-    const at = now + t;
-    const osc = ctx.createOscillator();
-    osc.type = "square";
-    osc.frequency.value = freq;
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.07, at);
-    gain.gain.exponentialRampToValueAtTime(0.001, at + noteLen * 0.9);
-    osc.connect(gain).connect(out);
-    osc.start(at);
-    osc.stop(at + noteLen);
-    t += noteLen;
-    i++;
-  }
-  return duration;
-}
-
-const MOTIFS: MotifFn[] = [tenseDroneMotif, heartbeatPulseMotif, dissonantArpMotif];
-
 /** Base pitch per 달무티 exchange tier for `playExchangeLaunch`/`playExchangeArrival` — brightest (king) down to warmest (commoner). */
 const EXCHANGE_TIER_BASE_FREQ: Record<"king" | "noble" | "commoner", number> = {
   king: 1046.5, // C6
@@ -164,9 +67,6 @@ const EXCHANGE_TIER_BASE_FREQ: Record<"king" | "noble" | "commoner", number> = {
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private sfxGain: GainNode | null = null;
-  private bgmGain: GainNode | null = null;
-  private bgmTimer: ReturnType<typeof setTimeout> | null = null;
-  private bgmToken = 0;
   private fuseTimer: ReturnType<typeof setInterval> | null = null;
   private storeSubscribed = false;
   private lastPlayedAt = new Map<string, number>();
@@ -200,13 +100,12 @@ class SoundEngine {
     return this.ctx;
   }
 
-  /** Keeps `sfxGain`/`bgmGain` live as the shared settings change (slider drags, other tabs' mute toggle, etc.) — set up once per engine instance. */
+  /** Keeps `sfxGain` live as the shared settings change (slider drags, other tabs' mute toggle, etc.) — set up once per engine instance. */
   private subscribeToSettings() {
     if (this.storeSubscribed) return;
     this.storeSubscribed = true;
     useAudioSettingsStore.subscribe((settings) => {
       if (this.sfxGain) this.sfxGain.gain.value = isSfxEffectivelyMuted(settings) ? 0 : settings.sfxVolume;
-      if (this.bgmGain) this.bgmGain.gain.value = isBgmEffectivelyMuted(settings) ? 0 : settings.bgmVolume;
     });
   }
 
@@ -294,39 +193,6 @@ class SoundEngine {
     if (this.fuseTimer) {
       clearInterval(this.fuseTimer);
       this.fuseTimer = null;
-    }
-  }
-
-  /** Legacy ambient tension loop (Spot the Difference) — routes through `bgmGain`, independent of SFX mute/volume. */
-  startBgm() {
-    const ctx = this.ensureContext();
-    if (!ctx || this.bgmTimer) return;
-    if (!this.bgmGain) {
-      this.bgmGain = ctx.createGain();
-      const settings = useAudioSettingsStore.getState();
-      this.bgmGain.gain.value = isBgmEffectivelyMuted(settings) ? 0 : settings.bgmVolume;
-      this.bgmGain.connect(ctx.destination);
-    }
-    this.bgmToken++;
-    this.scheduleNextMotif(this.bgmToken);
-  }
-
-  private scheduleNextMotif(token: number) {
-    if (!this.ctx || !this.bgmGain || token !== this.bgmToken) return;
-    const motif = MOTIFS[Math.floor(Math.random() * MOTIFS.length)];
-    const durationSeconds = motif(this.ctx, this.bgmGain);
-    this.bgmTimer = setTimeout(() => this.scheduleNextMotif(token), durationSeconds * 1000);
-  }
-
-  stopBgm() {
-    this.bgmToken++; // invalidates any in-flight scheduled continuation
-    if (this.bgmTimer) {
-      clearTimeout(this.bgmTimer);
-      this.bgmTimer = null;
-    }
-    if (this.bgmGain) {
-      this.bgmGain.disconnect();
-      this.bgmGain = null;
     }
   }
 

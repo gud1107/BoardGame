@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { BEATS_PER_BAR, LOOP_STEPS, TICK_HZ, TOCK_HZ, waltzEventsAt } from "./spotDetectiveScore";
+import { BEATS_PER_BAR, LOOP_STEPS, TICK_HZ, TOCK_HZ, waltzEventsAt, WALTZ_BPM } from "./spotDetectiveScore";
+import { URGENT_BPM } from "./spotSound";
+
+describe("detective waltz tempo", () => {
+  it("the final-seconds hurry is faster but stays a moderate waltz", () => {
+    expect(URGENT_BPM).toBeGreaterThan(WALTZ_BPM);
+    expect(URGENT_BPM / WALTZ_BPM).toBeLessThan(1.5);
+  });
+});
 
 describe("detective waltz score", () => {
   it("is 8 bars of 3/4: bass on beat 1, tick on 2, tock on 3", () => {
