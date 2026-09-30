@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { recordGameComplete, recordGameStart } from "@/lib/analytics/localStore";
+import { bumpGamePlayCount } from "@/lib/analytics/playCounts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +39,8 @@ export async function POST(request: NextRequest) {
   if (body.action === "start") {
     if (!body.gameId) return NextResponse.json({ error: "gameId required" }, { status: 400 });
     recordGameStart(body.gameId);
+    // Durable counter behind the lobby's 인기순 sort (localStore resets on Vercel).
+    await bumpGamePlayCount(body.gameId);
     return NextResponse.json({ playId: randomUUID() });
   }
 

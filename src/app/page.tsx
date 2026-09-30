@@ -11,6 +11,7 @@ import { PLAYER_FILTERS } from "@/constants/playerFilters";
 import { DEFAULT_SORT_OPTION, type SortOption, sortGamesBy } from "@/constants/sortOptions";
 import SortFilterChips from "@/components/lobby/SortFilterChips";
 import { useGameBgm } from "@/lib/audio/useGameBgm";
+import { fetchGamePlayCounts } from "@/lib/analytics/playCounts";
 
 type GenreFilter = GameGenre | "all";
 
@@ -63,6 +64,20 @@ export default function DashboardPage() {
     () => readSavedLobbyState().sortOption ?? DEFAULT_SORT_OPTION,
   );
 
+  // All-time plays per game for the default 인기순 sort. Until this
+  // resolves (or if Supabase is unreachable) every count reads as 0 and
+  // 인기순 falls back to recency, so the grid never waits on it.
+  const [playCounts, setPlayCounts] = useState<ReadonlyMap<string, number>>(() => new Map());
+  useEffect(() => {
+    let cancelled = false;
+    void fetchGamePlayCounts().then((counts) => {
+      if (!cancelled) setPlayCounts(counts);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Writing TO sessionStorage in response to React state changing is the
   // effect's proper direction (unlike reading FROM it, handled above) — so
   // this one's fine as a plain effect.
@@ -113,13 +128,13 @@ export default function DashboardPage() {
       genreFilter === "all"
         ? baseFiltered
         : baseFiltered.filter((g) => g.genres?.includes(genreFilter));
-    // User-picked sort (default: 업데이트순) runs first, then playability
+    // User-picked sort (default: 인기순) runs first, then playability
     // partitioning always runs last so "준비중" games still sink to the
     // end regardless of sort choice — kept in sync with search/genre/
     // player-count filtering above so it applies no matter what was typed
     // or selected.
-    return sortByPlayability(sortGamesBy(byGenre, sortOption));
-  }, [baseFiltered, genreFilter, sortOption]);
+    return sortByPlayability(sortGamesBy(byGenre, sortOption, playCounts));
+  }, [baseFiltered, genreFilter, sortOption, playCounts]);
 
   const playableCount = GAME_REGISTRY.filter((g) => g.playable).length;
 
