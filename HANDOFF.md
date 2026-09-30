@@ -39,6 +39,23 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🔓 관리자 IP 원문 보기 + 내 IP 기본 표시 + 과거 기록 복구 가능성 조사 — 2026-10-01
+
+- 사용자 요청: 관리자 페이지에서 기기 IP를 누르면 실제 IP를 보고 싶고, **자기 IP는 기본으로 표시**되길 원한다. 지금까지는 salt 해시만
+  저장해서 원문을 복원할 수 없었다. `supabase/game_events_ip.sql`(사용자 실행 필요)에서 `game_events.ip`/`visitor_devices.ip`
+  원문 칸을 추가하고, `log_game_event`/`record_visitor_visit`이 저장하게 했다. plpgsql 변수는 칸 이름과 겹치지 않게 `v_ip`로 했다.
+  `admin_game_participants`는 `ip_map jsonb`(해시 → 원문)를 반환하도록 drop 후 재생성했다. anon에 기본 권한으로 열려 있던
+  `hash_ip`/`admin_game_funnel`/`admin_list_visitors`의 실행 권한도 회수했다.
+  **이 SQL을 실행하기 전 기록은 해시만 있어 원문이 없다("원문 없음" 표시).**
+- `/api/my-ip`(호출자 본인 IP, no-store)로 관리자 화면 상단에 "👤 내 IP"를 표시한다. 내 IP와 일치하는 기기는 원문과 "👤 나"를
+  기본으로 보여주고, 다른 기기는 `🔒 해시` 버튼을 눌러야 원문이 보인다(`IpCell`).
+- **과거 운영 플레이 기록**: 서버 쪽 복구는 불가능하다. 예전 운영 기록은 Vercel `/tmp` JSON(콜드 스타트마다 삭제)에만 있었고,
+  Supabase 테이블은 10-01 전까지 하나도 없었다. 예외는 구 방식(페이지 열기 = +1)으로 쌓인 `game_play_counts` 14회뿐이다.
+  **각 사용자 브라우저에는 흔적이 남아 있다**: IndexedDB `boardgame-db`의 `gameResults`(완료한 판의 gameId·playedAt·참가자,
+  `/games/[gameId]` 래퍼의 `saveGameResult`), localStorage `{game}-seat-{방코드}`/`-role-{방코드}`(들어갔던 방, 시각 없음,
+  지우지 않음), `hungry-shark-save-v1.totalRuns`, `crab-survival-save-v1.matches`, `bg_chat_nickname`. 재방문하면 1회 업로드하는
+  백필은 제안만 했고 아직 만들지 않았다(사용자 결정 대기).
+
 ## 🛠 관리자 진입 메뉴 추가 + 로그인 직후 헤더 갱신 — 2026-10-01
 
 - 사용자 보고: "관리자 페이지가 보이지 않는다". 사이트 어디에도 `/admin/games` 링크가 없었다. `SiteHeader`에 `useIsSiteAdmin(userId)`

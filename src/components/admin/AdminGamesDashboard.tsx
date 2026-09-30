@@ -22,6 +22,8 @@ interface ParticipantRow {
   device_id: string;
   nicknames: string[];
   ip_hashes: string[];
+  /** hash → raw IP, only for events recorded after supabase/game_events_ip.sql ran. */
+  ip_map: Record<string, string> | null;
   hub_clicks: number;
   room_creates: number;
   invite_clicks: number;
@@ -107,7 +109,58 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
   );
 }
 
-function Participants({ gameId, since }: { gameId: string; since: string | null }) {
+/**
+ * One device's IPs. The admin's own IP is shown outright (and marked);
+ * anyone else's stays a hash until clicked. Events from before the raw IP
+ * was stored only have the hash, which can't be turned back into an IP.
+ */
+function IpCell({ hashes, ipMap, myIp }: { hashes: string[]; ipMap: Record<string, string>; myIp: string | null }) {
+  const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
+  if (hashes.length === 0) return <span className="text-white/30">—</span>;
+  return (
+    <div className="flex flex-col items-start gap-1">
+      {hashes.map((h) => {
+        const raw = ipMap[h];
+        if (raw && raw === myIp) {
+          return (
+            <span key={h} className="font-mono text-[11px] text-emerald-300">
+              {raw} <span className="font-sans font-bold">👤 나</span>
+            </span>
+          );
+        }
+        if (!raw) {
+          return (
+            <span key={h} className="font-mono text-[10px] text-white/40" title="이전 기록이라 암호화 값만 있고 IP 원문은 없습니다">
+              {h} <span className="font-sans">(원문 없음)</span>
+            </span>
+          );
+        }
+        const open = revealed.has(h);
+        return (
+          <button
+            key={h}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setRevealed((prev) => {
+                const next = new Set(prev);
+                if (next.has(h)) next.delete(h);
+                else next.add(h);
+                return next;
+              });
+            }}
+            className="rounded border border-white/10 px-1.5 py-0.5 font-mono text-[11px] text-white/70 hover:border-amber-400"
+            title={open ? "다시 숨기기" : "눌러서 IP 보기"}
+          >
+            {open ? raw : `🔒 ${h}`}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Participants({ gameId, since, myIp }: { gameId: string; since: string | null; myIp: string | null }) {
   const [rows, setRows] = useState<ParticipantRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [onlySuspects, setOnlySuspects] = useState(false);
@@ -154,7 +207,7 @@ function Participants({ gameId, since }: { gameId: string; since: string | null 
             <thead className="bg-white/[0.04] text-white/50 light:bg-slate-50 light:text-slate-500">
               <tr>
                 <th className="px-3 py-2 font-medium">닉네임 / 기기 ID</th>
-                <th className="px-3 py-2 font-medium">IP(해시)</th>
+                <th className="px-3 py-2 font-medium">IP (눌러서 보기)</th>
                 <th className="px-3 py-2 font-medium">중복 검토</th>
                 <th className="px-3 py-2 text-right font-medium">클릭</th>
                 <th className="px-3 py-2 text-right font-medium">방</th>
@@ -168,15 +221,24 @@ function Participants({ gameId, since }: { gameId: string; since: string | null 
             <tbody className="divide-y divide-white/5 light:divide-slate-100">
               {visible.map((r) => {
                 const f = flags.get(r.device_id);
+                const ipMap = r.ip_map ?? {};
+                const isMe = !!myIp && Object.values(ipMap).includes(myIp);
                 return (
                   <tr key={r.device_id ?? "none"} className="align-top">
                     <td className="px-3 py-2">
                       <p className="font-semibold text-white light:text-slate-900">
                         {r.nicknames.length ? r.nicknames.join(", ") : <span className="font-normal text-white/40">익명</span>}
+                        {isMe && (
+                          <span className="ml-1.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
+                            👤 나
+                          </span>
+                        )}
                       </p>
                       <p className="font-mono text-[10px] text-white/30">{(r.device_id ?? "—").slice(0, 8)}</p>
                     </td>
-                    <td className="px-3 py-2 font-mono text-[10px] text-white/50">{r.ip_hashes.join(", ") || "—"}</td>
+                    <td className="px-3 py-2">
+                      <IpCell hashes={r.ip_hashes} ipMap={ipMap} myIp={myIp} />
+                    </td>
                     <td className="px-3 py-2">
                       <div className="flex flex-col gap-0.5">
                         {f && f.sameIpDevices > 0 && <span className="text-amber-300">같은 IP 기기 {f.sameIpDevices}대</span>}
@@ -209,7 +271,22 @@ export default function AdminGamesDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [openGame, setOpenGame] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [myIp, setMyIp] = useState<string | null>(null);
   const since = useMemo(() => sinceFor(period), [period]);
+
+  // The admin's own IP, shown up top and used to mark their own devices.
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/my-ip", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: { ip?: string | null }) => {
+        if (!cancelled) setMyIp(d.ip ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const load = useCallback(async (sinceIso: string | null) => {
     const supabase = getAuthSupabase();
@@ -268,7 +345,10 @@ export default function AdminGamesDashboard() {
         <div>
           <h1 className="text-2xl font-bold text-white light:text-slate-900">🎲 게임 통계</h1>
           <p className="mt-1 text-xs text-white/40 light:text-slate-500">
-            운영 사이트 실제 사용자만 · 자동화 브라우저(클로드 봇) 제외 · IP는 암호화된 해시로만 저장
+            운영 사이트 실제 사용자만 · 자동화 브라우저(클로드 봇) 제외 · 다른 사람 IP는 눌러야 보임
+          </p>
+          <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-300">
+            👤 내 IP <span className="font-mono font-semibold">{myIp ?? "확인 중…"}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -346,7 +426,7 @@ export default function AdminGamesDashboard() {
                   {open && (
                     <tr>
                       <td colSpan={7} className="bg-black/20 px-3 pb-4 light:bg-slate-50">
-                        <Participants gameId={r.game_id} since={since} />
+                        <Participants gameId={r.game_id} since={since} myIp={myIp} />
                       </td>
                     </tr>
                   )}
