@@ -23,10 +23,13 @@ export default function GameCard({
   game,
   badge = null,
   plays = 0,
+  now = 0,
 }: {
   game: GameMeta;
   badge?: GameFreshnessBadge | null;
   plays?: number;
+  /** Page-load timestamp, for the play label's month name. */
+  now?: number;
 }) {
   const collection = game.collectionId ? GAME_COLLECTIONS[game.collectionId] : undefined;
   const { particles, isPressed, triggerBurst } = useGoldClickBurst();
@@ -83,7 +86,7 @@ export default function GameCard({
           <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-100/80 light:bg-amber-100 light:text-amber-800">👥 {formatPlayers(game)}</span>
           <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-100/80 light:bg-amber-100 light:text-amber-800">⏱ {formatTime(game)}</span>
         </div>
-        <PlayCountLabel plays={plays} className="text-[11px] font-semibold" />
+        <PlayCountLabel plays={plays} now={now} className="text-[11px] font-semibold" />
         {game.genres && game.genres.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {game.genres.map((genre) => {

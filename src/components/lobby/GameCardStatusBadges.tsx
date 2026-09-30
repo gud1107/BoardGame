@@ -17,12 +17,19 @@ export function FreshnessBadge({ badge }: { badge: GameFreshnessBadge | null }) 
   );
 }
 
-/** "🔥 N회 플레이" — hidden at 0 so an empty counter never reads as "unpopular". */
-export function PlayCountLabel({ plays, className = "" }: { plays: number; className?: string }) {
+const KST_MONTH = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric" });
+
+/** "10월" for the given instant, in Korea time. */
+export function kstMonthLabel(now: number): string {
+  return KST_MONTH.format(new Date(now));
+}
+
+/** "🔥 10월 N회 플레이" (this month's real starts) — hidden at 0 so an empty counter never reads as "unpopular". */
+export function PlayCountLabel({ plays, now, className = "" }: { plays: number; now: number; className?: string }) {
   if (plays <= 0) return null;
   return (
     <span className={`text-orange-300/90 light:text-orange-600 ${className}`}>
-      🔥 {plays.toLocaleString("ko-KR")}회 플레이
+      🔥 {kstMonthLabel(now)} {plays.toLocaleString("ko-KR")}회 플레이
     </span>
   );
 }

@@ -63,7 +63,7 @@ export default function DesktopDashboard({
   onFilterChange,
   sortOption,
   onSortChange,
-  playCounts,
+  monthPlays,
   now,
 }: {
   games: GameMeta[];
@@ -75,7 +75,8 @@ export default function DesktopDashboard({
   onFilterChange: (idx: number) => void;
   sortOption: SortOption;
   onSortChange: (option: SortOption) => void;
-  playCounts: ReadonlyMap<string, number>;
+  /** This month's real starts per game (shown as "🔥 10월 N회 플레이"). */
+  monthPlays: ReadonlyMap<string, number>;
   now: number;
 }) {
   const rooms = useActiveRooms();
@@ -139,7 +140,8 @@ export default function DesktopDashboard({
                   game={game}
                   liveRoomCount={liveCountByGame.get(game.id) ?? 0}
                   badge={getGameFreshnessBadge(game.id, now)}
-                  plays={playCounts.get(game.id) ?? 0}
+                  plays={monthPlays.get(game.id) ?? 0}
+                  now={now}
                 />
               ))}
             </div>

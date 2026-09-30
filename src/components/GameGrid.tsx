@@ -4,11 +4,12 @@ import { getGameFreshnessBadge } from "@/constants/gameUpdateCount";
 
 export default function GameGrid({
   games,
-  playCounts,
+  monthPlays,
   now,
 }: {
   games: GameMeta[];
-  playCounts: ReadonlyMap<string, number>;
+  /** This month's real starts per game (shown as "🔥 10월 N회 플레이"). */
+  monthPlays: ReadonlyMap<string, number>;
   now: number;
 }) {
   return (
@@ -22,7 +23,8 @@ export default function GameGrid({
           key={game.id}
           game={game}
           badge={getGameFreshnessBadge(game.id, now)}
-          plays={playCounts.get(game.id) ?? 0}
+          plays={monthPlays.get(game.id) ?? 0}
+          now={now}
         />
       ))}
     </div>

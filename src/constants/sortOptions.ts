@@ -46,7 +46,7 @@ function byLastUpdatedDesc(a: GameMeta, b: GameMeta): number {
 
 /**
  * `playCounts` (all-time plays per game id, from Supabase via
- * `fetchGamePlayCounts`) is only read by `POPULAR_DESC`; while it's still
+ * `fetchGamePlayStats().total`) is only read by `POPULAR_DESC`; while it's still
  * loading, or for games nobody has played, ties fall back to recency.
  */
 export function sortGamesBy<T extends GameMeta>(

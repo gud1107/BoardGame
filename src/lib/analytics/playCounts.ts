@@ -1,14 +1,12 @@
 import { getSupabase } from "@/lib/supabase/client";
 
 /**
- * Durable all-time play counts per game, stored in Supabase's
- * `game_play_counts` table (see `supabase/game_play_counts.sql`) — the
- * source for the lobby's "인기순" sort and the cards' "🔥 N회 플레이". It is
- * bumped once per real match, by the host's `game_start` event inside the
- * `log_game_event` RPC (`supabase/game_events.sql`). Separate
- * from `localStore.ts`, whose file store resets on every Vercel cold start.
- * Best-effort and never throws: no Supabase config or the
- * table not yet created just means every game reads as 0 plays.
+ * Public play counts for the lobby's "인기순" sort and the cards'
+ * "🔥 10월 N회 플레이" — one per real match (the host's `game_start`), see
+ * `fetchGamePlayStats`. Separate from `localStore.ts`, whose file store
+ * resets on every Vercel cold start. Best-effort and never throws: no
+ * Supabase config or the RPC not yet created just means every game reads
+ * as 0 plays.
  *
  * Real players only (2026-10-01 decision): the old local analytics totals
  * (`data/analytics.json`, mostly Claude's Playwright test runs) are kept in
@@ -26,18 +24,32 @@ export function isAutomatedClient(userAgent: string | null, webdriverFlag: unkno
   return webdriverFlag === true || AUTOMATION_UA.test(userAgent ?? "");
 }
 
-export async function fetchGamePlayCounts(): Promise<Map<string, number>> {
-  const counts = new Map<string, number>();
+export interface GamePlayStats {
+  /** All-time real match starts per game — the 인기순 sort key. */
+  total: Map<string, number>;
+  /** This calendar month (Korea time) — shown on cards as "🔥 10월 N회 플레이". */
+  month: Map<string, number>;
+}
+
+/**
+ * Real match starts per game (a host's `game_start` event), via the
+ * `public_game_play_stats` RPC (`supabase/play_stats_monthly.sql`), which
+ * counts straight from `game_events` — the old "opening a game page = +1"
+ * counts can never appear here.
+ */
+export async function fetchGamePlayStats(): Promise<GamePlayStats> {
+  const stats: GamePlayStats = { total: new Map(), month: new Map() };
   const supabase = getSupabase();
-  if (!supabase) return counts;
+  if (!supabase) return stats;
   try {
-    const { data, error } = await supabase.from("game_play_counts").select("game_id, plays");
-    if (error || !data) return counts;
-    for (const row of data as { game_id: string; plays: number }[]) {
-      counts.set(row.game_id, Number(row.plays) || 0);
+    const { data, error } = await supabase.rpc("public_game_play_stats");
+    if (error || !data) return stats;
+    for (const row of data as { game_id: string; total_plays: number; month_plays: number }[]) {
+      stats.total.set(row.game_id, Number(row.total_plays) || 0);
+      stats.month.set(row.game_id, Number(row.month_plays) || 0);
     }
   } catch {
-    // Network/table missing — every game reads as 0, 인기순 falls back to recency.
+    // Network/RPC missing — every game reads as 0, 인기순 falls back to recency.
   }
-  return counts;
+  return stats;
 }

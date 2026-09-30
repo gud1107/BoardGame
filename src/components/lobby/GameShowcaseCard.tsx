@@ -38,11 +38,14 @@ export default function GameShowcaseCard({
   liveRoomCount,
   badge = null,
   plays = 0,
+  now = 0,
 }: {
   game: GameMeta;
   liveRoomCount: number;
   badge?: GameFreshnessBadge | null;
   plays?: number;
+  /** Page-load timestamp, for the play label's month name. */
+  now?: number;
 }) {
   const difficulty = getGameDifficulty(game.id);
   const genreTags = (game.genres ?? []).slice(0, MAX_GENRE_TAGS);
@@ -90,7 +93,7 @@ export default function GameShowcaseCard({
               <span className="text-white/20 light:text-slate-300">{"★".repeat(5 - difficulty)}</span>
             </span>
           )}
-          <PlayCountLabel plays={plays} className="font-semibold" />
+          <PlayCountLabel plays={plays} now={now} className="font-semibold" />
         </div>
         {genreTags.length > 0 && (
           <div className="mt-auto flex flex-wrap gap-1 pt-1">

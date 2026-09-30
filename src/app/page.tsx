@@ -11,7 +11,7 @@ import { PLAYER_FILTERS } from "@/constants/playerFilters";
 import { DEFAULT_SORT_OPTION, type SortOption, sortGamesBy } from "@/constants/sortOptions";
 import SortFilterChips from "@/components/lobby/SortFilterChips";
 import { useGameBgm } from "@/lib/audio/useGameBgm";
-import { fetchGamePlayCounts } from "@/lib/analytics/playCounts";
+import { fetchGamePlayStats } from "@/lib/analytics/playCounts";
 
 type GenreFilter = GameGenre | "all";
 
@@ -67,15 +67,18 @@ export default function DashboardPage() {
   // One timestamp per page load for the NEW/UPDATED card badges (lazy init
   // keeps render pure; a badge flipping mid-visit wouldn't matter anyway).
   const [now] = useState(() => Date.now());
-  // All-time plays per game for the default 인기순 sort and the cards'
-  // "🔥 N회 플레이" (real production plays only). Until this resolves, or if
+  // Real match starts per game: all-time for the default 인기순 sort, this
+  // month for the cards' "🔥 10월 N회 플레이". Until this resolves, or if
   // Supabase is unreachable, every count reads as 0 and 인기순 falls back to
   // recency, so the grid never waits on the network.
   const [playCounts, setPlayCounts] = useState<ReadonlyMap<string, number>>(() => new Map());
+  const [monthPlays, setMonthPlays] = useState<ReadonlyMap<string, number>>(() => new Map());
   useEffect(() => {
     let cancelled = false;
-    void fetchGamePlayCounts().then((counts) => {
-      if (!cancelled) setPlayCounts(counts);
+    void fetchGamePlayStats().then((stats) => {
+      if (cancelled) return;
+      setPlayCounts(stats.total);
+      setMonthPlays(stats.month);
     });
     return () => {
       cancelled = true;
@@ -161,7 +164,7 @@ export default function DashboardPage() {
         onFilterChange={setFilterIdx}
         sortOption={sortOption}
         onSortChange={setSortOption}
-        playCounts={playCounts}
+        monthPlays={monthPlays}
         now={now}
       />
 
@@ -335,13 +338,13 @@ export default function DashboardPage() {
             }`}
           >
             <div className="overflow-hidden">
-              <CollectionShowcase collectionId="netflix-death-game" games={baseFiltered} playCounts={playCounts} now={now} />
+              <CollectionShowcase collectionId="netflix-death-game" games={baseFiltered} monthPlays={monthPlays} now={now} />
             </div>
           </div>
         )}
 
         {filtered.length > 0 ? (
-          <GameGrid games={filtered} playCounts={playCounts} now={now} />
+          <GameGrid games={filtered} monthPlays={monthPlays} now={now} />
         ) : (
           <p className="py-16 text-center text-sm text-white/40 light:text-slate-400">검색 결과가 없습니다.</p>
         )}
