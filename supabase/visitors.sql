@@ -116,7 +116,9 @@ do $$
 declare
   pw text := '여기에-비밀번호-입력';
 begin
-  if pw = '여기에-비밀번호-입력' or length(pw) < 8 then
+  -- Partial-match check (not the full placeholder) so a find-and-replace
+  -- of the placeholder can't also rewrite this guard.
+  if pw like '여기에-%' or length(pw) < 8 then
     raise exception '비밀번호를 8자 이상으로 바꾼 뒤 실행하세요 (pw 줄)';
   end if;
   insert into visitor_admin_key (id, key_hash)
