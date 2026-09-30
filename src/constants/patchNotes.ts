@@ -32,7 +32,7 @@ export interface PatchNoteEntry {
  * appended.
  *
  * Coverage (confirmed with the user 2026-09-01 via AskUserQuestion): backfilled
- * from the very first commit (2026-08-01) through today, one entry per
+ * from the very first commit (2026-08-01) through 2026-09-30 (latest backfill), one entry per
  * calendar date that shipped a user-facing change — derived from `git log`
  * (excluding `docs(handoff)`/internal-doc-only commits) and cross-checked
  * against HANDOFF.md for the more recent, more detailed sessions. A single
@@ -47,6 +47,420 @@ export interface PatchNoteEntry {
  * that full history is in scope.
  */
 export const PATCH_NOTES: PatchNoteEntry[] = [
+  {
+    version: "v1.49.0",
+    releaseDate: "2026-09-30",
+    title: "틀린 그림 찾기 테마 10종·정답 해설, 카카오톡 인앱 브라우저 자동 전환",
+    changes: [
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "카카오톡 인앱 브라우저로 접속하면 하단 툴바가 게임 화면을 가리지 않도록 기본 브라우저로 자동 전환",
+      },
+      {
+        game: "spot-difference",
+        type: "FEAT",
+        desc: "장면 테마를 10종으로 확장하고, 최근에 플레이한 테마는 다시 나오지 않도록 테마 덱 도입",
+      },
+      {
+        game: "spot-difference",
+        type: "FEAT",
+        desc: "게임 종료 시 '이번에 바뀐 곳' 정답 해설 화면 추가, 기존 도형 장면 3종은 제거",
+      },
+      {
+        game: "spot-difference",
+        type: "IMPROVE",
+        desc: "우리 팀/상대 팀 정답 효과음 분리, 마지막 10초 시계 강조와 BGM 템포 업, 스테이지 클리어 연출 추가",
+      },
+      {
+        game: "spot-difference",
+        type: "IMPROVE",
+        desc: "다른 플레이어의 오답은 작은 소리로만 재생하고 연속 재생 간격을 제한해 소음 완화",
+      },
+      {
+        game: "doodle-phone",
+        type: "IMPROVE",
+        desc: "결과 화면에서 이전과 똑같은 그림이 넘어온 장면을 표시하고, 페이지마다 그림/문장 종류 라벨 추가",
+      },
+    ],
+  },
+  {
+    version: "v1.48.0",
+    releaseDate: "2026-09-29",
+    title: "틀린 그림 찾기 테마 장면·사람 같은 봇·탐정 BGM, 그림 전화기 애니메이션 프레임 수정",
+    changes: [
+      {
+        game: "spot-difference",
+        type: "FEAT",
+        desc: "4가지 테마 그림 장면 추가, 판마다 바뀌는 곳이 무작위로 달라지도록 변경",
+      },
+      {
+        game: "spot-difference",
+        type: "IMPROVE",
+        desc: "봇이 사람처럼 훑어보는 시간을 두고 가끔 빗나가게 클릭하도록 개선",
+      },
+      {
+        game: "spot-difference",
+        type: "FEAT",
+        desc: "탐정 관찰 왈츠 BGM과 정답/오답/클리어 효과음 추가",
+      },
+      {
+        game: "doodle-phone",
+        type: "FIX",
+        desc: "애니메이션 모드에서 다음 프레임이 이전 그림의 편집 가능한 사본에서 시작하도록 수정",
+      },
+      {
+        game: "doodle-phone",
+        type: "FIX",
+        desc: "애니메이션/이어 그리기 프레임에서 시간이 초과되면 빈 화면 대신 이전 그림이 보이도록 수정",
+      },
+    ],
+  },
+  {
+    version: "v1.47.0",
+    releaseDate: "2026-09-28",
+    title: "라스베가스 카지노 타일 리뉴얼, 달무티·페루도 BGM, 최고의 투자로 이름 변경",
+    changes: [
+      {
+        game: "las-vegas",
+        type: "FIX",
+        desc: "실제 카지노 사진·이름을 가상의 카지노로 교체",
+      },
+      {
+        game: "las-vegas",
+        type: "FEAT",
+        desc: "6개 카지노 타일을 아르데코 디자인과 자유 라이선스(CC0) 야경·타워 사진으로 리뉴얼",
+      },
+      {
+        game: "dalmuti",
+        type: "FEAT",
+        desc: "누락되어 있던 BGM을 신분 서사 테마의 BGM으로 새로 추가",
+      },
+      {
+        game: "perudo",
+        type: "FEAT",
+        desc: "잉카 미스터리 테마 BGM 추가, BGM/효과음 개별 조절 패널 도입",
+      },
+      {
+        game: "great-legacy",
+        type: "IMPROVE",
+        desc: "게임 이름을 '위대한 투자'에서 '최고의 투자'로 변경",
+      },
+    ],
+  },
+  {
+    version: "v1.46.0",
+    releaseDate: "2026-09-27",
+    title: "그림 전화기·꽃게 서바이벌 신규 추가, 최고의 투자 시너지 시스템, 센추리 카드 일러스트",
+    changes: [
+      {
+        game: "doodle-phone",
+        type: "FEAT",
+        desc: "그림 전화기 신규 추가 — 4~14인이 그림과 문장을 번갈아 이어가는 릴레이 드로잉 게임, 게임 모드 9종과 테마 팩 지원",
+      },
+      {
+        game: "doodle-phone",
+        type: "FEAT",
+        desc: "도형 도구·투명도·컬러피커/스포이드, 두 손가락 확대, 선택·이동·크기 조절·복제·복사 붙여넣기 등 그리기 도구 확장",
+      },
+      {
+        game: "doodle-phone",
+        type: "FEAT",
+        desc: "로파이 BGM과 드로잉/제출/턴 효과음 추가",
+      },
+      {
+        game: "crab-survival",
+        type: "FEAT",
+        desc: "꽃게 서바이벌 신규 추가 — 13마리 AI 꽃게와 겨루는 1인용 해변 배틀로얄, 12단계 성장 로드맵과 트로피로 해금하는 8종 게",
+      },
+      {
+        game: "crab-survival",
+        type: "FIX",
+        desc: "모바일에서 부스트 버튼이 체력바를 가리던 문제와 왕 추적 표시가 화면 밖으로 나가던 문제 수정",
+      },
+      {
+        game: "great-legacy",
+        type: "FEAT",
+        desc: "경매 매물마다 카탈로그 이미지(자유 라이선스 기업 사진) 추가",
+      },
+      {
+        game: "great-legacy",
+        type: "FEAT",
+        desc: "컬렉션 시너지 트래커, 시너지 완성 팡파르·붕괴 경고, 종료 화면 시너지 요약, 시너지를 고려하는 봇 추가",
+      },
+      {
+        game: "great-legacy",
+        type: "FEAT",
+        desc: "체임버 심포니 BGM과 경매 효과음 추가, 봇 레벨별 입찰 성향과 역경매 전략 개선",
+      },
+      {
+        game: "century",
+        type: "FEAT",
+        desc: "카드에 실크로드 풍경 유화 일러스트·금박 프레임 추가, 향신료 보석 디자인 개선 및 획득 반짝임 효과",
+      },
+      {
+        game: "century",
+        type: "FIX",
+        desc: "내 손패 카드 크기가 시장 카드와 다르게 보이던 문제 수정",
+      },
+      {
+        game: "five-cucumbers",
+        type: "FEAT",
+        desc: "카바레 왈츠 BGM과 트릭테이킹 효과음 추가, 오이를 먹은 사람이 나인지 남인지에 따라 다른 효과음",
+      },
+      {
+        game: "rat-a-tat-cat",
+        type: "FEAT",
+        desc: "살금살금 피치카토 BGM과 카드 액션 효과음 추가",
+      },
+      {
+        game: "coyote",
+        type: "FEAT",
+        desc: "스파게티 웨스턴 밴조 BGM과 블러핑 효과음 추가",
+      },
+      {
+        game: "splendor-duel",
+        type: "IMPROVE",
+        desc: "BGM을 누아르 체임버 4성부 편곡으로 교체",
+      },
+      {
+        game: "lotr-duel",
+        type: "FEAT",
+        desc: "모든 행동에 시네마틱 효과 추가, 붉은 군사 카드별 전투 장면 일러스트 6종",
+      },
+      {
+        game: "lotr-duel",
+        type: "IMPROVE",
+        desc: "1장 카드 밸런스 조정 — 동전만 주던 마지막 카드의 동전 하나를 기술 심볼로 교체",
+      },
+    ],
+  },
+  {
+    version: "v1.45.0",
+    releaseDate: "2026-09-26",
+    title: "배고픈 상어 신규 추가, 반지의 제왕 대결 트랙 규칙 개편, 스플렌더 대결 르네상스 아트",
+    changes: [
+      {
+        game: "hungry-shark",
+        type: "FEAT",
+        desc: "배고픈 상어: 딥 에볼루션 신규 추가 — 1인용 실시간 해양 생존 게임",
+      },
+      {
+        game: "hungry-shark",
+        type: "FEAT",
+        desc: "먹을 수 있는 먹이를 알려주는 조준 표시와 먹이 도감 추가",
+      },
+      {
+        game: "lotr-duel",
+        type: "FEAT",
+        desc: "반지 트랙을 0~14 단일 트랙으로 개편, 먼저 14에 도달한 쪽이 승리하는 경주 규칙 적용",
+      },
+      {
+        game: "lotr-duel",
+        type: "FEAT",
+        desc: "전술 지도 아트, 추격 파노라마 트랙, 동맹 토큰 18종 도감, 상시 표시되는 동맹 능력 트레이 추가",
+      },
+      {
+        game: "lotr-duel",
+        type: "IMPROVE",
+        desc: "카드 원가/실제 비용 동시 표시, 최소화한 창 다시 열기 버튼, 데스크톱 접이식 기록창, 턴 효과 개선",
+      },
+      {
+        game: "splendor-duel",
+        type: "FEAT",
+        desc: "카드를 르네상스 명화 스타일로 리뉴얼 — 금 테두리, 보석 창, 등급별 풍경화, 금 메달 로열 카드",
+      },
+      {
+        game: "splendor-duel",
+        type: "FEAT",
+        desc: "르네상스 류트 BGM과 보석/로열/스크롤 효과음 추가, 승리가 가까워질수록 BGM 긴장감 상승",
+      },
+    ],
+  },
+  {
+    version: "v1.44.0",
+    releaseDate: "2026-09-25",
+    title: "스플렌더 대결·시티 체이스·반지의 제왕 대결 신규 추가",
+    changes: [
+      {
+        game: "splendor-duel",
+        type: "FEAT",
+        desc: "스플렌더 대결 신규 추가 — 2인용 나선형 보석 보드, 크라운 트랙, 초보자 가이드, 승리 조건 패널",
+      },
+      {
+        game: "splendor-duel",
+        type: "IMPROVE",
+        desc: "금 3개를 25칸 보드에 배치, 보석 토큰 n/10 표시, 구매 카드와 토큰을 분리된 트레이로 표시",
+      },
+      {
+        game: "city-chase",
+        type: "FEAT",
+        desc: "시티 체이스 신규 추가 — 2~4인 비대칭 도둑 vs 경찰 헬리콥터 추격 게임, 게임 종료 후 도주 경로 리플레이",
+      },
+      {
+        game: "city-chase",
+        type: "IMPROVE",
+        desc: "이미 지난 건물 재방문 금지, 헬기 시작 위치 재조정, 6라운드 보라색 표식 추가",
+      },
+      {
+        game: "lotr-duel",
+        type: "FEAT",
+        desc: "반지의 제왕: 가운데땅에서의 대결 신규 추가 — 2인용 피라미드 드래프트 카드 게임, 챕터별 BGM과 행동 연출",
+      },
+      {
+        game: "lotr-duel",
+        type: "FEAT",
+        desc: "동맹 토큰 선택 모달, 종료 쇼다운 연출, 상시 기술 HUD, 기록창 카드 확인, 선택 가능한 카드 미리 강조 추가",
+      },
+    ],
+  },
+  {
+    version: "v1.43.0",
+    releaseDate: "2026-09-23",
+    title: "마피아 봇 투표 개선, 아침 브리핑 확장",
+    changes: [
+      {
+        game: "mafia",
+        type: "FEAT",
+        desc: "봇이 상황에 따라 투표를 건너뛰도록 개선, 아침 브리핑에 경찰 조사 결과 요약 추가",
+      },
+    ],
+  },
+  {
+    version: "v1.42.0",
+    releaseDate: "2026-09-22",
+    title: "마피아 11~12인 밸런스 조정 및 밤 연출",
+    changes: [
+      {
+        game: "mafia",
+        type: "FEAT",
+        desc: "확장 모드 11~12인 판에 마피아 3명 배치로 밸런스 조정",
+      },
+      {
+        game: "mafia",
+        type: "FEAT",
+        desc: "밤이 찾아오는 시네마틱 연출 추가, 의사가 치료에 실패하면 본인에게만 알림",
+      },
+      {
+        game: "mafia",
+        type: "FIX",
+        desc: "첫째 날 채팅 안내 문구 오류 수정, 사망 시 정체 비공개 옵션의 기본값을 표준(끔)으로 수정",
+      },
+    ],
+  },
+  {
+    version: "v1.41.0",
+    releaseDate: "2026-09-21",
+    title: "마피아 스마트 봇 AI·국면별 BGM",
+    changes: [
+      {
+        game: "mafia",
+        type: "FEAT",
+        desc: "무작위로 행동하던 봇을 의심도 기반으로 판단하는 봇 AI로 교체",
+      },
+      {
+        game: "mafia",
+        type: "FEAT",
+        desc: "밤/낮 토론/최후 변론 국면에 따라 바뀌는 BGM 추가",
+      },
+      {
+        game: "mafia",
+        type: "FEAT",
+        desc: "경찰 조사 성공/실패 여부를 익명으로 공개, 스파이가 접선하면 마피아 팀 전체 뱃지 표시",
+      },
+      {
+        game: "mafia",
+        type: "FIX",
+        desc: "모바일 채팅창이 메시지를 보낸 뒤 닫히던 문제 수정",
+      },
+    ],
+  },
+  {
+    version: "v1.40.0",
+    releaseDate: "2026-09-20",
+    title: "마피아 신규 추가, 위대한 투자 개편, 페루도 액션 연출·정확 적중 룰",
+    changes: [
+      {
+        game: "mafia",
+        type: "FEAT",
+        desc: "마피아 신규 추가 — 클래식/확장 두 가지 모드, 봇도 토론 채팅에 참여",
+      },
+      {
+        game: "mafia",
+        type: "FEAT",
+        desc: "상시 역할 HUD, 과반수 동의 시 국면 스킵, 접이식 역할표(능력·공개 행동 기록), 모바일 전체화면 채팅, 아침 연출 추가",
+      },
+      {
+        game: "mafia",
+        type: "FIX",
+        desc: "상태가 바뀔 때마다 역할 팝업이 다시 열리던 문제 수정, 내 차례 알림 연출 추가",
+      },
+      {
+        game: "great-legacy",
+        type: "FEAT",
+        desc: "주식 경매 테마의 '위대한 투자'로 개편, 베팅 코인 더미 시각화와 연출 추가",
+      },
+      {
+        game: "perudo",
+        type: "FEAT",
+        desc: "베팅 확정/두도/칼사 버튼에 시네마틱 연출 추가, 결과별 4가지 쇼다운 연출",
+      },
+      {
+        game: "perudo",
+        type: "FEAT",
+        desc: "하우스 룰 추가 — 두도 선언 시 입찰이 정확히 맞으면 나머지 모든 플레이어가 주사위 1개씩 잃음",
+      },
+      {
+        game: "perudo",
+        type: "FIX",
+        desc: "모바일을 자연스러운 세로 스크롤 방식으로 되돌리고 화면 떨림 방지, 버튼 크기 확대 및 레이아웃 재배치",
+      },
+      {
+        game: "dalmuti",
+        type: "FEAT",
+        desc: "게임 종료 시 마지막으로 낸 카드를 5초간 조명하는 연출 추가",
+      },
+      {
+        game: "rat-a-tat-cat",
+        type: "FIX",
+        desc: "인원이 다 차기 전에 시작하면 준비 단계에서 무한 대기하던 문제 수정",
+      },
+    ],
+  },
+  {
+    version: "v1.39.0",
+    releaseDate: "2026-09-16",
+    title: "로비 게임 정렬 필터 추가, 모바일 검색창 개선",
+    changes: [
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "로비에 게임 정렬 필터 추가(기본값: 업데이트 많은 순)",
+      },
+      {
+        game: "common",
+        type: "FIX",
+        desc: "모바일 캐러셀 제거 및 상단 고정 검색창 복원, 데스크톱 정렬 칩 잘림 수정",
+      },
+      {
+        game: "common",
+        type: "FIX",
+        desc: "게임에서 뒤로 돌아와도 검색어·필터·정렬 상태가 유지되도록 수정",
+      },
+    ],
+  },
+  {
+    version: "v1.38.0",
+    releaseDate: "2026-09-15",
+    title: "로비 게임 카드 클릭 연출",
+    changes: [
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "로비에서 게임 카드를 클릭하면 금빛 파티클이 터지는 연출 추가",
+      },
+    ],
+  },
   {
     version: "v1.37.0",
     releaseDate: "2026-09-14",
