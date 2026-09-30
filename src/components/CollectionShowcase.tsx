@@ -14,9 +14,13 @@ import GameGrid from "./GameGrid";
 export default function CollectionShowcase({
   collectionId,
   games,
+  playCounts,
+  now,
 }: {
   collectionId: GameCollectionId;
   games: GameMeta[];
+  playCounts: ReadonlyMap<string, number>;
+  now: number;
 }) {
   const matches = games.filter((g) => g.collectionId === collectionId);
   if (matches.length === 0) return null;
@@ -38,7 +42,7 @@ export default function CollectionShowcase({
           <p className="mt-0.5 text-xs text-white/50 sm:text-sm light:text-slate-500">{meta.description}</p>
         </div>
       </div>
-      <GameGrid games={matches} />
+      <GameGrid games={matches} playCounts={playCounts} now={now} />
     </section>
   );
 }

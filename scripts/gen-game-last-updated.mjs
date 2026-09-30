@@ -1,9 +1,10 @@
 // Regenerates src/constants/gameLastUpdated.generated.ts — the lobby's
-// "최근 업데이트순" sort key. For each game directory under src/games/ it
-// records the date of the newest commit that touched that game specifically.
+// "최근 업데이트순" sort key and NEW/UPDATED card badges. For each game
+// directory under src/games/ it records the date of the newest commit that
+// touched that game specifically, plus the first commit that ever touched it.
 // Site-wide sweeps (one commit touching many game dirs at once, e.g. the
-// 2026-09-14 dark-theme pass) are skipped so they don't flatten every game
-// onto the same date. Run: npm run gen:last-updated
+// 2026-09-14 dark-theme pass) are skipped for "last updated" so they don't
+// flatten every game onto the same date. Run: npm run gen:last-updated
 import { execSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 
@@ -26,6 +27,9 @@ const log = execSync(
 );
 
 const latest = new Map();
+// First commit that ever touched each game dir — its "added" date. Not
+// sweep-filtered: a game's first commit only ever touches its own dir.
+const added = new Map();
 for (const chunk of log.split("__C__").slice(1)) {
   const [date, ...files] = chunk.trim().split("\n");
   const dirs = new Set(
@@ -33,17 +37,19 @@ for (const chunk of log.split("__C__").slice(1)) {
       .map((f) => f.match(/^src\/games\/([^/]+)\//)?.[1])
       .filter((d) => d && !SKIP_DIRS.has(d) && existsSync(`src/games/${d}`)),
   );
+  for (const dir of dirs) added.set(toId(dir), date); // log is newest-first, so oldest wins
   if (dirs.size === 0 || dirs.size > MAX_GAMES_PER_COMMIT) continue;
   for (const dir of dirs) {
     const id = toId(dir);
-    if (!latest.has(id)) latest.set(id, date); // git log is newest-first
+    if (!latest.has(id)) latest.set(id, date);
   }
 }
 
-const rows = [...latest.entries()]
-  .sort((a, b) => b[1].localeCompare(a[1]))
-  .map(([id, date]) => `  "${id}": "${date}",`)
-  .join("\n");
+const toRows = (map) =>
+  [...map.entries()]
+    .sort((a, b) => b[1].localeCompare(a[1]))
+    .map(([id, date]) => `  "${id}": "${date}",`)
+    .join("\n");
 
 writeFileSync(
   "src/constants/gameLastUpdated.generated.ts",
@@ -52,8 +58,13 @@ writeFileSync(
 import type { GameId } from "@/games/types";
 
 export const GAME_LAST_UPDATED: Partial<Record<GameId, string>> = {
-${rows}
+${toRows(latest)}
+};
+
+/** First commit that touched each game — drives the lobby's NEW badge. */
+export const GAME_ADDED: Partial<Record<GameId, string>> = {
+${toRows(added)}
 };
 `,
 );
-console.log(rows);
+console.log(`${latest.size} games`);

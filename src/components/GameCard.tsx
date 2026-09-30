@@ -5,6 +5,8 @@ import { GENRE_META } from "@/games/genres";
 import { GAME_COLLECTIONS } from "@/games/collections";
 import { useGoldClickBurst } from "./lobby/useGoldClickBurst";
 import GoldParticleLayer from "./lobby/GoldParticleLayer";
+import { FreshnessBadge, PlayCountLabel } from "./lobby/GameCardStatusBadges";
+import type { GameFreshnessBadge } from "@/constants/gameUpdateCount";
 
 function formatPlayers(g: GameMeta) {
   const { min, max } = g.players;
@@ -16,7 +18,15 @@ function formatTime(g: GameMeta) {
   return minMinutes === maxMinutes ? `${minMinutes}분` : `${minMinutes}~${maxMinutes}분`;
 }
 
-export default function GameCard({ game }: { game: GameMeta }) {
+export default function GameCard({
+  game,
+  badge = null,
+  plays = 0,
+}: {
+  game: GameMeta;
+  badge?: GameFreshnessBadge | null;
+  plays?: number;
+}) {
   const collection = game.collectionId ? GAME_COLLECTIONS[game.collectionId] : undefined;
   const { particles, isPressed, triggerBurst } = useGoldClickBurst();
 
@@ -56,6 +66,7 @@ export default function GameCard({ game }: { game: GameMeta }) {
             {collection.emoji} 데스게임
           </span>
         )}
+        {game.playable && <FreshnessBadge badge={badge} />}
         {!game.playable && (
           <span className="absolute top-2 right-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white/80 backdrop-blur">
             준비중
@@ -71,6 +82,7 @@ export default function GameCard({ game }: { game: GameMeta }) {
           <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-100/80 light:bg-amber-100 light:text-amber-800">👥 {formatPlayers(game)}</span>
           <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-100/80 light:bg-amber-100 light:text-amber-800">⏱ {formatTime(game)}</span>
         </div>
+        <PlayCountLabel plays={plays} className="text-[11px] font-semibold" />
         {game.genres && game.genres.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {game.genres.map((genre) => {

@@ -39,6 +39,20 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🏷️ 로비 게임 카드 NEW/UPDATED 배지 + "🔥 N회 플레이" + 인기순 시드 — 2026-10-01 (커밋/푸시, 배포는 웹훅 자동)
+
+- **NEW/UPDATED 배지**: 썸네일 우상단에 표시(플레이 가능한 게임만. 준비중 게임은 그 자리에 "준비중"이 뜬다).
+  `getGameFreshnessBadge(id, now)`(`gameUpdateCount.ts`): 첫 커밋 후 `NEW_BADGE_DAYS`=14일 이내면 NEW,
+  아니면 마지막 게임별 업데이트 후 `UPDATED_BADGE_DAYS`=5일 이내면 UPDATED. 첫 커밋 날짜는 생성 스크립트에
+  추가한 `GAME_ADDED`에서 온다. 스윕 커밋 필터는 적용하지 않는다. `now`는 `page.tsx`에서 페이지 로드당 한 번 고정한다.
+- **🔥 N회 플레이**: `playCounts`(Supabase `game_play_counts`)를 모바일 `GameCard`(인원/시간 칩 아래)와 데스크톱
+  `GameShowcaseCard`(인원·난이도 줄)에 표시하고, 0회면 숨긴다. 공용 UI는 `lobby/GameCardStatusBadges.tsx`.
+  `GameGrid`/`CollectionShowcase`/`DesktopDashboard`가 `playCounts`/`now`를 prop으로 전달한다.
+- **시드**: `schema.sql`의 `game_play_counts` 블록 뒤에 로컬 `data/analytics.json` 합계(perudo 113, dalmuti 79 …)를
+  넣는 insert를 추가했다. lotr-confrontation의 12회는 lotr-duel에 합쳐 20회로 넣었다. `greatest`를 써서 다시 실행해도 안전하다.
+  **테이블 생성과 시드 SQL 모두 사용자가 Supabase SQL Editor에서 실행해야 한다(아직 미실행).**
+- tsc/eslint/vitest 클린. 실제 화면은 확인하지 않았다.
+
 ## 👑 로비 정렬에 "인기순" 추가 + 기본값 지정 — 2026-10-01 (커밋/푸시, 배포는 웹훅 자동)
 
 - `POPULAR_DESC`("👑 인기순")를 정렬 칩 맨 앞에 추가하고 `DEFAULT_SORT_OPTION`으로 지정. 누적 플레이 횟수가

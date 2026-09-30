@@ -7,6 +7,8 @@ import { getGameDifficulty } from "@/constants/gameDifficulty";
 import GameThumbnail from "@/components/GameThumbnail";
 import { useGoldClickBurst } from "./useGoldClickBurst";
 import GoldParticleLayer from "./GoldParticleLayer";
+import { FreshnessBadge, PlayCountLabel } from "./GameCardStatusBadges";
+import type { GameFreshnessBadge } from "@/constants/gameUpdateCount";
 
 function formatPlayers(g: GameMeta) {
   const { min, max } = g.players;
@@ -33,9 +35,13 @@ const MAX_GENRE_TAGS = 2;
 export default function GameShowcaseCard({
   game,
   liveRoomCount,
+  badge = null,
+  plays = 0,
 }: {
   game: GameMeta;
   liveRoomCount: number;
+  badge?: GameFreshnessBadge | null;
+  plays?: number;
 }) {
   const difficulty = getGameDifficulty(game.id);
   const genreTags = (game.genres ?? []).slice(0, MAX_GENRE_TAGS);
@@ -66,6 +72,7 @@ export default function GameShowcaseCard({
             {liveRoomCount}개 방 오픈
           </span>
         )}
+        {game.playable && <FreshnessBadge badge={badge} />}
         {!game.playable && (
           <span className="absolute top-1.5 right-1.5 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white/80 backdrop-blur">
             준비중
@@ -82,6 +89,7 @@ export default function GameShowcaseCard({
               <span className="text-white/20 light:text-slate-300">{"★".repeat(5 - difficulty)}</span>
             </span>
           )}
+          <PlayCountLabel plays={plays} className="font-semibold" />
         </div>
         {genreTags.length > 0 && (
           <div className="mt-auto flex flex-wrap gap-1 pt-1">

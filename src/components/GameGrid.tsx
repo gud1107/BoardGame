@@ -1,7 +1,16 @@
 import type { GameMeta } from "@/games/types";
 import GameCard from "./GameCard";
+import { getGameFreshnessBadge } from "@/constants/gameUpdateCount";
 
-export default function GameGrid({ games }: { games: GameMeta[] }) {
+export default function GameGrid({
+  games,
+  playCounts,
+  now,
+}: {
+  games: GameMeta[];
+  playCounts: ReadonlyMap<string, number>;
+  now: number;
+}) {
   return (
     // Mobile (base, no breakpoint below sm exists in this Tailwind config):
     // 2 cols. Tablet (sm/md): 2 cols. Desktop (lg/xl): 3~4 cols — capped at 4
@@ -9,7 +18,12 @@ export default function GameGrid({ games }: { games: GameMeta[] }) {
     // stays legible instead of shrinking into a dense wall of tiny cards.
     <div className="grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
       {games.map((game) => (
-        <GameCard key={game.id} game={game} />
+        <GameCard
+          key={game.id}
+          game={game}
+          badge={getGameFreshnessBadge(game.id, now)}
+          plays={playCounts.get(game.id) ?? 0}
+        />
       ))}
     </div>
   );

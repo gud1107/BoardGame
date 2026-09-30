@@ -67,6 +67,9 @@ export default function DashboardPage() {
   // All-time plays per game for the default 인기순 sort. Until this
   // resolves (or if Supabase is unreachable) every count reads as 0 and
   // 인기순 falls back to recency, so the grid never waits on it.
+  // One timestamp per page load for the NEW/UPDATED card badges (lazy init
+  // keeps render pure; a badge flipping mid-visit wouldn't matter anyway).
+  const [now] = useState(() => Date.now());
   const [playCounts, setPlayCounts] = useState<ReadonlyMap<string, number>>(() => new Map());
   useEffect(() => {
     let cancelled = false;
@@ -157,6 +160,8 @@ export default function DashboardPage() {
         onFilterChange={setFilterIdx}
         sortOption={sortOption}
         onSortChange={setSortOption}
+        playCounts={playCounts}
+        now={now}
       />
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 xl:hidden">
@@ -329,13 +334,13 @@ export default function DashboardPage() {
             }`}
           >
             <div className="overflow-hidden">
-              <CollectionShowcase collectionId="netflix-death-game" games={baseFiltered} />
+              <CollectionShowcase collectionId="netflix-death-game" games={baseFiltered} playCounts={playCounts} now={now} />
             </div>
           </div>
         )}
 
         {filtered.length > 0 ? (
-          <GameGrid games={filtered} />
+          <GameGrid games={filtered} playCounts={playCounts} now={now} />
         ) : (
           <p className="py-16 text-center text-sm text-white/40 light:text-slate-400">검색 결과가 없습니다.</p>
         )}

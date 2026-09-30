@@ -6,6 +6,7 @@ import { useActiveRooms } from "@/games/shared/room/useActiveRooms";
 import { PLAYER_FILTERS } from "@/constants/playerFilters";
 import type { SortOption } from "@/constants/sortOptions";
 import GameShowcaseCard from "./GameShowcaseCard";
+import { getGameFreshnessBadge } from "@/constants/gameUpdateCount";
 import SortFilterChips from "./SortFilterChips";
 
 /**
@@ -62,6 +63,8 @@ export default function DesktopDashboard({
   onFilterChange,
   sortOption,
   onSortChange,
+  playCounts,
+  now,
 }: {
   games: GameMeta[];
   totalCount: number;
@@ -72,6 +75,8 @@ export default function DesktopDashboard({
   onFilterChange: (idx: number) => void;
   sortOption: SortOption;
   onSortChange: (option: SortOption) => void;
+  playCounts: ReadonlyMap<string, number>;
+  now: number;
 }) {
   const rooms = useActiveRooms();
 
@@ -133,6 +138,8 @@ export default function DesktopDashboard({
                   key={game.id}
                   game={game}
                   liveRoomCount={liveCountByGame.get(game.id) ?? 0}
+                  badge={getGameFreshnessBadge(game.id, now)}
+                  plays={playCounts.get(game.id) ?? 0}
                 />
               ))}
             </div>
