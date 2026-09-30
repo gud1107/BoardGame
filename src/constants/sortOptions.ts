@@ -1,13 +1,13 @@
 import type { GameMeta } from "@/games/types";
 import { getGameDifficulty } from "./gameDifficulty";
-import { getGameUpdateCount } from "./gameUpdateCount";
+import { getGameLastUpdated, getGameUpdateCount } from "./gameUpdateCount";
 
 /**
  * Sort options for the lobby's game showcase grid — shared between the
  * mobile/tablet catalog (`src/app/page.tsx`) and the xl+ desktop dashboard
  * (`DesktopDashboard.tsx`), same pattern as `PLAYER_FILTERS`. Default is
- * `UPDATE_DESC` (2026-09-16 request: surface the most actively-patched
- * games first) — applied in each surface's own `useMemo`, then always run
+ * `UPDATE_DESC` — most recently updated game first (2026-09-30; was
+ * "most patch releases first" from 2026-09-16, which buried new games) — applied in each surface's own `useMemo`, then always run
  * through `sortByPlayability` afterward so the existing "준비중 games sink
  * to the bottom" invariant (see `registry.ts`) is never disturbed by a sort
  * choice; a "쉬운순"/"가나다순" pick only reorders *within* the playable and
@@ -21,7 +21,7 @@ export type SortOption =
   | "DIFFICULTY_ASC";
 
 export const SORT_OPTIONS: { key: SortOption; label: string }[] = [
-  { key: "UPDATE_DESC", label: "🔥 업데이트순" },
+  { key: "UPDATE_DESC", label: "🔥 최근 업데이트순" },
   { key: "NAME_ASC", label: "가나다순" },
   { key: "PLAYERS_ASC", label: "인원 적은순" },
   { key: "PLAYERS_DESC", label: "인원 많은순" },
@@ -40,7 +40,10 @@ export function sortGamesBy<T extends GameMeta>(
   return [...games].sort((a, b) => {
     switch (option) {
       case "UPDATE_DESC":
-        return getGameUpdateCount(b.id) - getGameUpdateCount(a.id);
+        return (
+          getGameLastUpdated(b.id).localeCompare(getGameLastUpdated(a.id)) ||
+          getGameUpdateCount(b.id) - getGameUpdateCount(a.id)
+        );
       case "NAME_ASC":
         return a.name.localeCompare(b.name, "ko");
       case "PLAYERS_ASC":

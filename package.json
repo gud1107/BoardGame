@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:bench": "vitest run --config vitest.bench.config.mts"
+    "test:bench": "vitest run --config vitest.bench.config.mts",
+    "gen:last-updated": "node scripts/gen-game-last-updated.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
