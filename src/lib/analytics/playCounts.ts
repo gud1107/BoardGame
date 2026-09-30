@@ -34,7 +34,14 @@ export const GAME_PLAY_COUNT_SEED: ReadonlyMap<string, number> = new Map([
   ["great-legacy", 1],
 ]);
 
+/**
+ * Server-only (called from `/api/analytics/game-play`). Counts production
+ * plays only: local `next dev`/Playwright sessions — including Claude's
+ * automated test runs — share the same Supabase project, and the 2026-10-01
+ * review of the old local analytics showed those runs dominate the numbers.
+ */
 export async function bumpGamePlayCount(gameId: string): Promise<void> {
+  if (process.env.VERCEL_ENV !== "production") return;
   const supabase = getSupabase();
   if (!supabase) return;
   try {
