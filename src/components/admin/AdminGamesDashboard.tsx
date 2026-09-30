@@ -1,280 +1,91 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { getAuthSupabase } from "@/lib/supabase/authClient";
-import { GAME_REGISTRY, getGameMeta } from "@/games/registry";
-import { computeDuplicateFlags, isSuspectedDuplicate } from "@/lib/analytics/duplicateFlags";
-import { kstDay } from "@/lib/analytics/visitorSummary";
+import { getDeviceId } from "@/lib/identity/deviceId";
+import { PERIODS, sinceFor, type ExcludeMe, type Period } from "./adminApi";
+import { Chip, Loading } from "./adminUi";
+import GamesTab from "./tabs/GamesTab";
+import TrendTab from "./tabs/TrendTab";
+import HoursTab from "./tabs/HoursTab";
+import DropOffTab from "./tabs/DropOffTab";
+import RoomsTab from "./tabs/RoomsTab";
+import SourcesTab from "./tabs/SourcesTab";
+import BugReportsTab from "./tabs/BugReportsTab";
+import NoticeTab from "./tabs/NoticeTab";
+import GameVisibilityTab from "./tabs/GameVisibilityTab";
 
-interface FunnelRow {
-  game_id: string;
-  hub_clicks: number;
-  room_creates: number;
-  invite_clicks: number;
-  joins: number;
-  game_starts: number;
-  unique_devices: number;
-  unique_ips: number;
-}
+type TabKey = "games" | "trend" | "hours" | "dropoff" | "rooms" | "sources" | "bugs" | "notice" | "visibility";
 
-interface ParticipantRow {
-  device_id: string;
-  nicknames: string[];
-  ip_hashes: string[];
-  /** hash → raw IP, only for events recorded after supabase/game_events_ip.sql ran. */
-  ip_map: Record<string, string> | null;
-  hub_clicks: number;
-  room_creates: number;
-  invite_clicks: number;
-  joins: number;
-  game_starts: number;
-  first_at: string;
-  last_at: string;
-  device_type: string | null;
-  os: string | null;
-  browser: string | null;
-}
-
-type Period = "all" | "30d" | "7d" | "today";
-
-const PERIODS: { key: Period; label: string }[] = [
-  { key: "all", label: "전체" },
-  { key: "30d", label: "최근 30일" },
-  { key: "7d", label: "최근 7일" },
-  { key: "today", label: "오늘" },
+/** `period`: whether the 전체/30일/7일/오늘 filter applies. `stats`: whether "내 기록 제외" applies. */
+const TABS: { key: TabKey; label: string; period: boolean; stats: boolean }[] = [
+  { key: "games", label: "🎲 게임 통계", period: true, stats: true },
+  { key: "trend", label: "📈 추이", period: false, stats: true },
+  { key: "hours", label: "🕒 시간대", period: true, stats: true },
+  { key: "dropoff", label: "🪜 이탈 분석", period: true, stats: true },
+  { key: "rooms", label: "🚪 방 기록", period: true, stats: true },
+  { key: "sources", label: "🧭 유입 경로", period: true, stats: true },
+  { key: "bugs", label: "🐛 버그 리포트", period: false, stats: false },
+  { key: "notice", label: "📢 공지", period: false, stats: false },
+  { key: "visibility", label: "👁 게임 관리", period: false, stats: false },
 ];
 
-const METRICS: { key: keyof Omit<FunnelRow, "game_id" | "unique_devices" | "unique_ips">; label: string; hint: string }[] = [
-  { key: "hub_clicks", label: "허브 클릭", hint: "보드게임 허브에서 게임 카드를 누른 횟수" },
-  { key: "room_creates", label: "방 만들기", hint: "게임에 들어가 실제로 방을 연 횟수" },
-  { key: "invite_clicks", label: "초대코드 클릭", hint: "'초대 코드로 참여' 버튼을 누른 횟수" },
-  { key: "joins", label: "참여", hint: "다른 사람 방에 실제로 들어간 횟수" },
-  { key: "game_starts", label: "게임 시작", hint: "방장이 실제로 게임을 시작한 횟수 (혼자 하는 게임은 매 판)" },
-];
+const TAB_KEY = "bg_admin_tab";
+const EXCLUDE_KEY = "bg_admin_exclude_me";
 
-function sinceFor(period: Period): string | null {
-  const now = Date.now();
-  if (period === "all") return null;
-  if (period === "today") return new Date(`${kstDay(now)}T00:00:00+09:00`).toISOString();
-  const days = period === "7d" ? 7 : 30;
-  return new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
+function readStored(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
 }
 
-const DATE_TIME = new Intl.DateTimeFormat("ko-KR", {
-  timeZone: "Asia/Seoul",
-  month: "numeric",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-
-const fmt = (n: number) => Number(n).toLocaleString("ko-KR");
-const gameName = (id: string) => getGameMeta(id)?.name ?? id;
-
-function rate(part: number, whole: number): string {
-  return whole > 0 ? `${Math.round((Number(part) / Number(whole)) * 100)}%` : "—";
+function store(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {}
 }
 
-function errorMessage(code: string | undefined): string {
-  if (code === "42501") return "관리자 계정만 볼 수 있습니다. freedom_03@naver.com으로 로그인했는지 확인하세요.";
-  if (code === "PGRST202") return "통계 테이블이 아직 없습니다. supabase/game_events.sql을 먼저 실행하세요.";
-  return `불러오지 못했습니다 (${code ?? "unknown"}).`;
-}
+const noopSubscribe = () => () => {};
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-        active
-          ? "border-amber-400 bg-amber-500/20 text-amber-200 light:text-amber-800"
-          : "border-white/15 text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-600"
-      }`}
-    >
-      {children}
-    </button>
+/**
+ * The hub restores the last tab and the "내 기록 제외" choice from
+ * localStorage, which the server render can't know — so it renders only
+ * after hydration instead of mismatching the server HTML.
+ */
+export default function AdminGamesDashboard() {
+  const hydrated = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
   );
-}
-
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 light:border-slate-200 light:bg-white">
-      <p className="text-xs text-white/50 light:text-slate-500">{label}</p>
-      <p className="mt-1.5 text-2xl font-bold text-white tabular-nums light:text-slate-900">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-white/40 light:text-slate-400">{sub}</p>}
-    </div>
-  );
+  return hydrated ? <AdminHub /> : <Loading />;
 }
 
 /**
- * One device's IPs. The admin's own IP is shown outright (and marked);
- * anyone else's stays a hash until clicked. Events from before the raw IP
- * was stored only have the hash, which can't be turned back into an IP.
+ * /admin/games — the site admin hub. Gated by `src/proxy.ts` (login +
+ * `is_site_admin()`), and every RPC re-checks `is_site_admin()` in the
+ * database (supabase/game_events.sql, supabase/admin_suite.sql).
  */
-function IpCell({ hashes, ipMap, myIp }: { hashes: string[]; ipMap: Record<string, string>; myIp: string | null }) {
-  const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
-  if (hashes.length === 0) return <span className="text-white/30">—</span>;
-  return (
-    <div className="flex flex-col items-start gap-1">
-      {hashes.map((h) => {
-        const raw = ipMap[h];
-        if (raw && raw === myIp) {
-          return (
-            <span key={h} className="font-mono text-[11px] text-emerald-300">
-              {raw} <span className="font-sans font-bold">👤 나</span>
-            </span>
-          );
-        }
-        if (!raw) {
-          return (
-            <span key={h} className="font-mono text-[10px] text-white/40" title="이전 기록이라 암호화 값만 있고 IP 원문은 없습니다">
-              {h} <span className="font-sans">(원문 없음)</span>
-            </span>
-          );
-        }
-        const open = revealed.has(h);
-        return (
-          <button
-            key={h}
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setRevealed((prev) => {
-                const next = new Set(prev);
-                if (next.has(h)) next.delete(h);
-                else next.add(h);
-                return next;
-              });
-            }}
-            className="rounded border border-white/10 px-1.5 py-0.5 font-mono text-[11px] text-white/70 hover:border-amber-400"
-            title={open ? "다시 숨기기" : "눌러서 IP 보기"}
-          >
-            {open ? raw : `🔒 ${h}`}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function Participants({ gameId, since, myIp }: { gameId: string; since: string | null; myIp: string | null }) {
-  const [rows, setRows] = useState<ParticipantRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [onlySuspects, setOnlySuspects] = useState(false);
-
-  useEffect(() => {
-    const supabase = getAuthSupabase();
-    if (!supabase) return;
-    let cancelled = false;
-    void supabase.rpc("admin_game_participants", { p_game_id: gameId, p_since: since }).then(({ data, error }) => {
-      if (cancelled) return;
-      if (error) setError(errorMessage(error.code));
-      else setRows((data ?? []) as ParticipantRow[]);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [gameId, since]);
-
-  const flags = useMemo(() => computeDuplicateFlags(rows ?? []), [rows]);
-  const visible = (rows ?? []).filter((r) => !onlySuspects || isSuspectedDuplicate(flags.get(r.device_id)));
-  const suspects = (rows ?? []).filter((r) => isSuspectedDuplicate(flags.get(r.device_id))).length;
-
-  if (error) return <p className="py-4 text-sm text-rose-400">{error}</p>;
-  if (!rows) return <p className="py-4 text-sm text-white/40">불러오는 중…</p>;
-
-  return (
-    <div className="mt-2">
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-white/50 light:text-slate-500">
-        <span>
-          기기 {fmt(rows.length)}대 · 중복 의심 {fmt(suspects)}대
-        </span>
-        <Chip active={!onlySuspects} onClick={() => setOnlySuspects(false)}>
-          전체
-        </Chip>
-        <Chip active={onlySuspects} onClick={() => setOnlySuspects(true)}>
-          ⚠️ 중복 의심만
-        </Chip>
-      </div>
-      {visible.length === 0 ? (
-        <p className="py-4 text-sm text-white/40">해당하는 기기가 없습니다.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10 light:border-slate-200">
-          <table className="w-full min-w-[720px] text-left text-xs">
-            <thead className="bg-white/[0.04] text-white/50 light:bg-slate-50 light:text-slate-500">
-              <tr>
-                <th className="px-3 py-2 font-medium">닉네임 / 기기 ID</th>
-                <th className="px-3 py-2 font-medium">IP (눌러서 보기)</th>
-                <th className="px-3 py-2 font-medium">중복 검토</th>
-                <th className="px-3 py-2 text-right font-medium">클릭</th>
-                <th className="px-3 py-2 text-right font-medium">방</th>
-                <th className="px-3 py-2 text-right font-medium">초대</th>
-                <th className="px-3 py-2 text-right font-medium">참여</th>
-                <th className="px-3 py-2 text-right font-medium">시작</th>
-                <th className="px-3 py-2 font-medium">기기</th>
-                <th className="px-3 py-2 font-medium">최근</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-100">
-              {visible.map((r) => {
-                const f = flags.get(r.device_id);
-                const ipMap = r.ip_map ?? {};
-                const isMe = !!myIp && Object.values(ipMap).includes(myIp);
-                return (
-                  <tr key={r.device_id ?? "none"} className="align-top">
-                    <td className="px-3 py-2">
-                      <p className="font-semibold text-white light:text-slate-900">
-                        {r.nicknames.length ? r.nicknames.join(", ") : <span className="font-normal text-white/40">익명</span>}
-                        {isMe && (
-                          <span className="ml-1.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
-                            👤 나
-                          </span>
-                        )}
-                      </p>
-                      <p className="font-mono text-[10px] text-white/30">{(r.device_id ?? "—").slice(0, 8)}</p>
-                    </td>
-                    <td className="px-3 py-2">
-                      <IpCell hashes={r.ip_hashes} ipMap={ipMap} myIp={myIp} />
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-col gap-0.5">
-                        {f && f.sameIpDevices > 0 && <span className="text-amber-300">같은 IP 기기 {f.sameIpDevices}대</span>}
-                        {f && f.sameNicknameDevices > 0 && <span className="text-amber-300">같은 닉네임 기기 {f.sameNicknameDevices}대</span>}
-                        {f?.multipleNicknames && <span className="text-sky-300">닉네임 여러 개</span>}
-                        {!isSuspectedDuplicate(f) && !f?.multipleNicknames && <span className="text-white/30">—</span>}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmt(r.hub_clicks)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmt(r.room_creates)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmt(r.invite_clicks)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmt(r.joins)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmt(r.game_starts)}</td>
-                    <td className="px-3 py-2 text-white/60">{[r.device_type, r.os, r.browser].filter(Boolean).join(" · ") || "—"}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-white/60 tabular-nums">{DATE_TIME.format(new Date(r.last_at))}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function AdminGamesDashboard() {
+function AdminHub() {
+  const [tab, setTab] = useState<TabKey>(() => {
+    const saved = readStored(TAB_KEY);
+    return TABS.some((t) => t.key === saved) ? (saved as TabKey) : "games";
+  });
   const [period, setPeriod] = useState<Period>("all");
-  const [rows, setRows] = useState<FunnelRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [openGame, setOpenGame] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [myIp, setMyIp] = useState<string | null>(null);
-  const since = useMemo(() => sinceFor(period), [period]);
+  const [excludeMe, setExcludeMe] = useState(() => readStored(EXCLUDE_KEY) === "1");
+  const [myDevice] = useState<string | null>(() => {
+    try {
+      return getDeviceId();
+    } catch {
+      return null;
+    }
+  });
 
-  // The admin's own IP, shown up top and used to mark their own devices.
+  // The admin's own IP, shown up top, marked in device lists, and used by "내 기록 제외".
   useEffect(() => {
     let cancelled = false;
     void fetch("/api/my-ip", { cache: "no-store" })
@@ -288,71 +99,47 @@ export default function AdminGamesDashboard() {
     };
   }, []);
 
-  const load = useCallback(async (sinceIso: string | null) => {
-    const supabase = getAuthSupabase();
-    if (!supabase) return { error: "Supabase 설정이 없습니다." };
-    const { data, error } = await supabase.rpc("admin_game_funnel", { p_since: sinceIso });
-    if (error) return { error: errorMessage(error.code) };
-    return { rows: (data ?? []) as FunnelRow[] };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void load(since).then((result) => {
-      if (cancelled) return;
-      if ("error" in result) {
-        setError(result.error ?? null);
-        setRows(null);
-      } else {
-        setError(null);
-        setRows(result.rows);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [load, since, reloadKey]);
-
-  // Every playable game gets a row, even with no events yet.
-  const table = useMemo(() => {
-    const byId = new Map((rows ?? []).map((r) => [r.game_id, r]));
-    return GAME_REGISTRY.filter((g) => g.playable)
-      .map(
-        (g) =>
-          byId.get(g.id) ?? {
-            game_id: g.id,
-            hub_clicks: 0,
-            room_creates: 0,
-            invite_clicks: 0,
-            joins: 0,
-            game_starts: 0,
-            unique_devices: 0,
-            unique_ips: 0,
-          },
-      )
-      .sort((a, b) => Number(b.game_starts) - Number(a.game_starts) || Number(b.hub_clicks) - Number(a.hub_clicks));
-  }, [rows]);
-
-  const totals = useMemo(() => {
-    const t = { hub_clicks: 0, room_creates: 0, invite_clicks: 0, joins: 0, game_starts: 0 };
-    for (const r of table) for (const k of Object.keys(t) as (keyof typeof t)[]) t[k] += Number(r[k]);
-    return t;
-  }, [table]);
+  const since = useMemo(() => sinceFor(period), [period]);
+  const exclude: ExcludeMe | null = useMemo(
+    () => (excludeMe ? { ip: myIp, device: myDevice } : null),
+    [excludeMe, myIp, myDevice],
+  );
+  const current = TABS.find((t) => t.key === tab)!;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white light:text-slate-900">🎲 게임 통계</h1>
+          <h1 className="text-2xl font-bold text-white light:text-slate-900">🛠 관리자</h1>
           <p className="mt-1 text-xs text-white/40 light:text-slate-500">
             운영 사이트 실제 사용자만 · 자동화 브라우저(클로드 봇) 제외 · 다른 사람 IP는 눌러야 보임
           </p>
-          <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-300">
-            👤 내 IP <span className="font-mono font-semibold">{myIp ?? "확인 중…"}</span>
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-300">
+              👤 내 IP <span className="font-mono font-semibold">{myIp ?? "확인 중…"}</span>
+            </span>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/80 light:border-slate-300 light:text-slate-700">
+              <input
+                type="checkbox"
+                checked={excludeMe}
+                onChange={(e) => {
+                  setExcludeMe(e.target.checked);
+                  store(EXCLUDE_KEY, e.target.checked ? "1" : "0");
+                }}
+                className="accent-amber-500"
+              />
+              내 기록 제외하고 보기
+              <span className="text-white/40" title="이 브라우저의 기기 ID와 지금 IP에서 나온 기록을 통계에서 뺍니다">
+                (이 기기·내 IP)
+              </span>
+            </label>
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/visitors" className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-amber-400 light:border-slate-300 light:text-slate-600">
+          <Link
+            href="/visitors"
+            className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-amber-400 light:border-slate-300 light:text-slate-600"
+          >
             👥 방문자
           </Link>
           <button
@@ -365,77 +152,46 @@ export default function AdminGamesDashboard() {
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        {PERIODS.map((p) => (
-          <Chip key={p.key} active={period === p.key} onClick={() => setPeriod(p.key)}>
-            {p.label}
-          </Chip>
+      <nav className="-mx-4 mb-4 flex gap-1 overflow-x-auto border-b border-white/10 px-4 pb-px no-scrollbar sm:mx-0 sm:px-0 light:border-slate-200">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => {
+              setTab(t.key);
+              store(TAB_KEY, t.key);
+            }}
+            className={`shrink-0 border-b-2 px-3 py-2 text-sm whitespace-nowrap transition ${
+              tab === t.key
+                ? "border-amber-400 font-semibold text-amber-200 light:text-amber-700"
+                : "border-transparent text-white/50 hover:text-white/80 light:text-slate-500"
+            }`}
+          >
+            {t.label}
+          </button>
         ))}
-      </div>
+      </nav>
 
-      {error && <p className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-300">{error}</p>}
+      {current.period && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {PERIODS.map((p) => (
+            <Chip key={p.key} active={period === p.key} onClick={() => setPeriod(p.key)}>
+              {p.label}
+            </Chip>
+          ))}
+          {current.stats && excludeMe && <span className="self-center text-xs text-amber-300/80">· 내 기록 제외 중</span>}
+        </div>
+      )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {METRICS.map((m) => (
-          <StatCard key={m.key} label={m.label} value={rows ? fmt(totals[m.key]) : "—"} sub={m.hint} />
-        ))}
-      </div>
-
-      <p className="mt-6 mb-2 text-xs text-white/40 light:text-slate-500">
-        게임을 누르면 기기별 기록과 중복 사용자(같은 IP·같은 닉네임) 검토가 열립니다. 전환율 = 방 만들기 ÷ 허브 클릭, 참여 ÷ 초대코드 클릭.
-      </p>
-
-      <div className="overflow-x-auto rounded-xl border border-white/10 light:border-slate-200">
-        <table className="w-full min-w-[760px] text-left text-xs">
-          <thead className="bg-white/[0.04] text-white/50 light:bg-slate-50 light:text-slate-500">
-            <tr>
-              <th className="px-3 py-2 font-medium">게임</th>
-              <th className="px-3 py-2 text-right font-medium">허브 클릭</th>
-              <th className="px-3 py-2 text-right font-medium">방 만들기</th>
-              <th className="px-3 py-2 text-right font-medium">초대코드 클릭</th>
-              <th className="px-3 py-2 text-right font-medium">참여</th>
-              <th className="px-3 py-2 text-right font-medium">게임 시작</th>
-              <th className="px-3 py-2 text-right font-medium">기기 / IP</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5 light:divide-slate-100">
-            {table.map((r) => {
-              const open = openGame === r.game_id;
-              return (
-                <Fragment key={r.game_id}>
-                  <tr
-                    onClick={() => setOpenGame(open ? null : r.game_id)}
-                    className={`cursor-pointer transition hover:bg-white/[0.03] ${open ? "bg-amber-500/5" : ""}`}
-                  >
-                    <td className="px-3 py-2 font-semibold text-white light:text-slate-900">
-                      {open ? "▾" : "▸"} {gameName(r.game_id)}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-white/80">{fmt(r.hub_clicks)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-white/80">
-                      {fmt(r.room_creates)} <span className="text-white/30">{rate(r.room_creates, r.hub_clicks)}</span>
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-white/80">{fmt(r.invite_clicks)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-white/80">
-                      {fmt(r.joins)} <span className="text-white/30">{rate(r.joins, r.invite_clicks)}</span>
-                    </td>
-                    <td className="px-3 py-2 text-right font-bold tabular-nums text-amber-300">{fmt(r.game_starts)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-white/60">
-                      {fmt(r.unique_devices)} / {fmt(r.unique_ips)}
-                    </td>
-                  </tr>
-                  {open && (
-                    <tr>
-                      <td colSpan={7} className="bg-black/20 px-3 pb-4 light:bg-slate-50">
-                        <Participants gameId={r.game_id} since={since} myIp={myIp} />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {tab === "games" && <GamesTab since={since} exclude={exclude} myIp={myIp} reloadKey={reloadKey} />}
+      {tab === "trend" && <TrendTab exclude={exclude} reloadKey={reloadKey} />}
+      {tab === "hours" && <HoursTab since={since} exclude={exclude} reloadKey={reloadKey} />}
+      {tab === "dropoff" && <DropOffTab since={since} exclude={exclude} reloadKey={reloadKey} />}
+      {tab === "rooms" && <RoomsTab since={since} exclude={exclude} reloadKey={reloadKey} />}
+      {tab === "sources" && <SourcesTab since={since} exclude={exclude} reloadKey={reloadKey} />}
+      {tab === "bugs" && <BugReportsTab reloadKey={reloadKey} />}
+      {tab === "notice" && <NoticeTab />}
+      {tab === "visibility" && <GameVisibilityTab />}
     </div>
   );
 }

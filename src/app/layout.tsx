@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import SiteHeader from "@/components/SiteHeader";
+import SiteNoticeBanner from "@/components/siteNotice/SiteNoticeBanner";
 import BettingSidebar from "@/components/betting/BettingSidebar";
 import AnalyticsVisitTracker from "@/components/AnalyticsVisitTracker";
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/contexts/ThemeContext";
@@ -45,6 +46,7 @@ export default function RootLayout({
         <ThemeProvider>
           <AnalyticsVisitTracker />
           <SiteHeader />
+          <SiteNoticeBanner />
           <main className="flex-1">{children}</main>
           <BettingSidebar />
         </ThemeProvider>

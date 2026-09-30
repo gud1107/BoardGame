@@ -29,6 +29,9 @@ export function recordVisit(path: string): void {
     userAgent: navigator.userAgent,
     nickname: getVisitorNickname(),
     automated: navigator.webdriver === true,
+    // Only the tab's first page view is recorded, so this is the real
+    // external referrer (or empty for a direct visit / in-app browser).
+    referrer: document.referrer,
   });
 }
 

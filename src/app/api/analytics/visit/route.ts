@@ -13,6 +13,7 @@ interface VisitBody {
   nickname?: string;
   /** Client's `navigator.webdriver` — true under Playwright (Claude's test runs). */
   automated?: boolean;
+  referrer?: string;
 }
 
 /**
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
       userAgent,
       nickname: body.nickname,
       ip: clientIp(request),
+      referrer: body.referrer,
     });
   }
 

@@ -1,5 +1,6 @@
 import { getSupabase } from "@/lib/supabase/client";
 import { summarizeUserAgent } from "./userAgent";
+import { classifyTrafficSource } from "./trafficSource";
 
 /**
  * Server-only writer for Supabase `visitor_devices` (see
@@ -19,13 +20,16 @@ export async function recordVisitorVisit(input: {
   path: string;
   userAgent: string | null;
   nickname?: string;
-  /** Raw caller IP — hashed with a secret salt inside the database, never stored. */
+  /** Raw caller IP (admins can see it on /admin/games; a salted hash is kept too). */
   ip?: string | null;
+  /** `document.referrer` of the tab's first page — classified into a 유입 경로. */
+  referrer?: string;
 }): Promise<void> {
   if (!canRecord()) return;
   const supabase = getSupabase();
   if (!supabase) return;
   const { deviceType, os, browser } = summarizeUserAgent(input.userAgent);
+  const { source, referrerHost } = classifyTrafficSource(input.userAgent, input.referrer);
   const args = {
     p_device_id: input.deviceId,
     p_path: input.path,
@@ -35,8 +39,15 @@ export async function recordVisitorVisit(input: {
     p_nickname: input.nickname ?? "",
   };
   try {
-    const { error } = await supabase.rpc("record_visitor_visit", { ...args, p_ip: input.ip ?? null });
-    // Before supabase/game_events.sql runs, only the 6-argument version exists.
+    // Newest signature first (supabase/admin_suite.sql), then the older
+    // ones, so visits keep recording whichever migration has been run.
+    let { error } = await supabase.rpc("record_visitor_visit", {
+      ...args,
+      p_ip: input.ip ?? null,
+      p_source: source,
+      p_referrer_host: referrerHost,
+    });
+    if (error?.code === "PGRST202") ({ error } = await supabase.rpc("record_visitor_visit", { ...args, p_ip: input.ip ?? null }));
     if (error?.code === "PGRST202") await supabase.rpc("record_visitor_visit", args);
   } catch {
     // Best-effort.

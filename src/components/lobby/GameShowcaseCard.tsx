@@ -8,7 +8,7 @@ import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import GameThumbnail from "@/components/GameThumbnail";
 import { useGoldClickBurst } from "./useGoldClickBurst";
 import GoldParticleLayer from "./GoldParticleLayer";
-import { FreshnessBadge, PlayCountLabel } from "./GameCardStatusBadges";
+import { FeaturedBadge, FreshnessBadge, isFeatured, PlayCountLabel } from "./GameCardStatusBadges";
 import type { GameFreshnessBadge } from "@/constants/gameUpdateCount";
 
 function formatPlayers(g: GameMeta) {
@@ -77,6 +77,7 @@ export default function GameShowcaseCard({
           </span>
         )}
         {game.playable && <FreshnessBadge badge={badge} />}
+        <FeaturedBadge featured={isFeatured(game)} />
         {!game.playable && (
           <span className="absolute top-1.5 right-1.5 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white/80 backdrop-blur">
             준비중

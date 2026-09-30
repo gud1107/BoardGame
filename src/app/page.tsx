@@ -12,6 +12,7 @@ import { DEFAULT_SORT_OPTION, type SortOption, sortGamesBy } from "@/constants/s
 import SortFilterChips from "@/components/lobby/SortFilterChips";
 import { useGameBgm } from "@/lib/audio/useGameBgm";
 import { fetchGamePlayStats } from "@/lib/analytics/playCounts";
+import { applyGameOverrides, fetchGameOverrides, type GameOverride } from "@/lib/siteConfig/siteConfig";
 
 type GenreFilter = GameGenre | "all";
 
@@ -85,6 +86,20 @@ export default function DashboardPage() {
     };
   }, []);
 
+  // Admin visibility settings (/admin/games 게임 관리): hidden games drop out,
+  // 준비중 overrides become unplayable, featured games lead the grid.
+  const [overrides, setOverrides] = useState<ReadonlyMap<string, GameOverride>>(() => new Map());
+  useEffect(() => {
+    let cancelled = false;
+    void fetchGameOverrides().then((map) => {
+      if (!cancelled) setOverrides(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const catalog = useMemo(() => applyGameOverrides(GAME_REGISTRY, overrides), [overrides]);
+
   // Writing TO sessionStorage in response to React state changing is the
   // effect's proper direction (unlike reading FROM it, handled above) — so
   // this one's fine as a plain effect.
@@ -118,7 +133,7 @@ export default function DashboardPage() {
   const baseFiltered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filter = PLAYER_FILTERS[filterIdx];
-    return GAME_REGISTRY.filter((g) => {
+    return catalog.filter((g) => {
       const matchesQuery =
         !q ||
         g.name.toLowerCase().includes(q) ||
@@ -128,7 +143,7 @@ export default function DashboardPage() {
       const matchesPlayers = filter.test(g.players.min, g.players.max);
       return matchesQuery && matchesPlayers;
     });
-  }, [query, filterIdx]);
+  }, [query, filterIdx, catalog]);
 
   const filtered = useMemo(() => {
     const byGenre =
@@ -140,10 +155,13 @@ export default function DashboardPage() {
     // end regardless of sort choice — kept in sync with search/genre/
     // player-count filtering above so it applies no matter what was typed
     // or selected.
-    return sortByPlayability(sortGamesBy(byGenre, sortOption, playCounts));
+    const sorted = sortGamesBy(byGenre, sortOption, playCounts);
+    // Admin-featured games first (stable, so the chosen sort still orders
+    // them among themselves); playability partitioning still runs last.
+    return sortByPlayability([...sorted.filter((g) => g.featured), ...sorted.filter((g) => !g.featured)]);
   }, [baseFiltered, genreFilter, sortOption, playCounts]);
 
-  const playableCount = GAME_REGISTRY.filter((g) => g.playable).length;
+  const playableCount = catalog.filter((g) => g.playable).length;
 
   return (
     <>
@@ -156,7 +174,7 @@ export default function DashboardPage() {
           never drift out of sync between the two layouts. */}
       <DesktopDashboard
         games={filtered}
-        totalCount={GAME_REGISTRY.length}
+        totalCount={catalog.length}
         playableCount={playableCount}
         query={query}
         onQueryChange={setQuery}
@@ -244,7 +262,7 @@ export default function DashboardPage() {
           함께할 보드게임을 골라보세요
         </h1>
         <p className="mt-1 text-sm text-white/50 light:text-slate-500">
-          총 {GAME_REGISTRY.length}종 · 플레이 가능 {playableCount}종 · 1~10명, 폰이나 데스크톱으로 즐기세요
+          총 {catalog.length}종 · 플레이 가능 {playableCount}종 · 1~10명, 폰이나 데스크톱으로 즐기세요
         </p>
       </div>
 

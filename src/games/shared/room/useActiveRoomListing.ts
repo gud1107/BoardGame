@@ -84,7 +84,8 @@ export function useActiveRoomListing({
  * online game already passes this hook (so no per-game instrumentation):
  * the first time this tab reaches a room's waiting lobby it's a
  * `room_create` (host) or `join` (guest); each entry into `playing` is one
- * `game_start` (rematches count again). A tab that lands straight in
+ * `game_start` (rematches count again), and leaving `playing` again — the
+ * match finishing, or the room being left — is its `game_end`. A tab that lands straight in
  * `playing` without having been in this room's waiting lobby — a reload or
  * reconnect mid-match — logs nothing. Only real starts bump the public play
  * count — see `supabase/game_events.sql`.
@@ -111,9 +112,35 @@ function useRoomFunnelEvents({
     trackGameEvent(gameId, isHost ? "room_create" : "join", { roomCode, isHost });
   }, [gameId, roomCode, isHost, isWaiting]);
 
+  // Room code of the match this tab is currently counting as started, so
+  // the matching `game_end` still carries it even if the code has already
+  // been cleared (leaving the room tears both down in the same render).
+  const playingRoom = useRef<string | null>(null);
+
   useEffect(() => {
     const started = isPlaying && !wasPlaying.current;
+    const stopped = !isPlaying && wasPlaying.current;
     wasPlaying.current = isPlaying;
-    if (started && roomCode && enteredRoom.current === roomCode) trackGameEvent(gameId, "game_start", { roomCode, isHost });
+    if (started && roomCode && enteredRoom.current === roomCode) {
+      playingRoom.current = roomCode;
+      trackGameEvent(gameId, "game_start", { roomCode, isHost });
+    } else if (stopped && playingRoom.current) {
+      trackGameEvent(gameId, "game_end", { roomCode: playingRoom.current, isHost });
+      playingRoom.current = null;
+    }
   }, [gameId, roomCode, isHost, isPlaying]);
+
+  // Navigating away mid-match unmounts without `isPlaying` ever falling.
+  const latest = useRef({ gameId, isHost });
+  useEffect(() => {
+    latest.current = { gameId, isHost };
+  });
+  useEffect(
+    () => () => {
+      if (playingRoom.current) {
+        trackGameEvent(latest.current.gameId, "game_end", { roomCode: playingRoom.current, isHost: latest.current.isHost });
+      }
+    },
+    [],
+  );
 }

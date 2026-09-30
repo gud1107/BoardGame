@@ -6,7 +6,7 @@ import { GENRE_META } from "@/games/genres";
 import { GAME_COLLECTIONS } from "@/games/collections";
 import { useGoldClickBurst } from "./lobby/useGoldClickBurst";
 import GoldParticleLayer from "./lobby/GoldParticleLayer";
-import { FreshnessBadge, PlayCountLabel } from "./lobby/GameCardStatusBadges";
+import { FeaturedBadge, FreshnessBadge, isFeatured, PlayCountLabel } from "./lobby/GameCardStatusBadges";
 import type { GameFreshnessBadge } from "@/constants/gameUpdateCount";
 
 function formatPlayers(g: GameMeta) {
@@ -71,6 +71,7 @@ export default function GameCard({
           </span>
         )}
         {game.playable && <FreshnessBadge badge={badge} />}
+        <FeaturedBadge featured={isFeatured(game)} />
         {!game.playable && (
           <span className="absolute top-2 right-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white/80 backdrop-blur">
             준비중

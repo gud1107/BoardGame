@@ -5,10 +5,14 @@ import { getLastGuestSubmissionAt, insertCloudBugReport, listCloudBugReports } f
 import { validateBugReportInput, validateGuestPassword, type BugReportFormInput } from "@/lib/bugReports/validate";
 import type { BugReportAttachment } from "@/lib/db/types";
 
-/** Public — the board is readable by anyone, same as before this feature added accounts. */
+/**
+ * Public — the board is readable by anyone, same as before this feature added accounts.
+ * `configured` tells the admin page whether the server-side store is set up
+ * (SUPABASE_SERVICE_ROLE_KEY present), so an empty list isn't mistaken for "no reports".
+ */
 export async function GET() {
   const reports = await listCloudBugReports();
-  return NextResponse.json({ reports });
+  return NextResponse.json({ reports, configured: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY) });
 }
 
 interface CreateBody extends BugReportFormInput {

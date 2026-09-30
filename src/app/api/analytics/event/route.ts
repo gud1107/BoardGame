@@ -7,7 +7,7 @@ import { clientIp } from "@/lib/analytics/clientIp";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const EVENTS = new Set(["hub_click", "room_create", "invite_click", "join", "game_start"]);
+const EVENTS = new Set(["hub_click", "room_create", "invite_click", "join", "game_start", "game_end"]);
 
 interface EventBody {
   gameId?: string;

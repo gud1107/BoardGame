@@ -39,6 +39,31 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🧰 관리자 허브 9종(추이·시간대·이탈·방 기록·유입·내 기록 제외·버그·공지·게임 관리) — 2026-10-01 (커밋/푸시, 배포는 웹훅 자동)
+
+- 사용자 보고 "허브에 N월 플레이 횟수가 안 나온다": 코드 문제가 아니었다. `play_stats_monthly.sql`이 실행되지 않아서 RPC
+  `public_game_play_stats`가 없었고(PGRST202), 그래서 모두 0으로 처리돼 라벨이 숨겨졌다. 실행할 SQL이 여러 개로 흩어져 있었기 때문에
+  **`supabase/admin_suite.sql` 하나로 통합**했다(game_events_ip + play_stats_monthly + 이번 기능 전부 포함, 배포된 앱과 호환, 재실행 가능).
+  2026-10-01 커밋 시점에는 아직 실행되지 않았다.
+- **DB(admin_suite.sql)**: `site_visits`(방문 1회당 1행: is_new, ip/ip_hash, source, referrer_host, device_type)와 9인자
+  `record_visitor_visit`(p_ip, p_source, p_referrer_host를 기본값과 함께 추가. 앱은 9 → 7 → 6인자 순으로 PGRST202 폴백한다).
+  `log_game_event`에 `game_end`를 추가했다. `is_excluded_row(...)`는 기기 ID, 원문 IP, 해시로 "내 기록 제외"를 판정한다. 관리자 RPC:
+  `admin_game_funnel`/`admin_game_participants`(p_ex_ip, p_ex_device 추가, drop 후 재생성), `admin_daily_stats(p_days)`,
+  `admin_hourly_stats`(KST 요일×시간), `admin_rooms`(game+room_code+KST일 단위: 인원, 판 수, 완료, host 기준 start→end 분),
+  `admin_traffic_sources`, `admin_set_notice`, `admin_set_game_override`. 공개 테이블 `site_notice`(1행)와 `game_overrides`는 select만 허용한다.
+  버그 리포트용 `profiles`와 `bug_reports`, 관리자 profile row(role=admin)도 넣는다. 관리자 함수는 public/anon 권한을 회수하고 authenticated만 실행하게 했다.
+- **앱**: `/admin/games`를 탭 허브로 개편했다(`components/admin/AdminGamesDashboard.tsx` + `tabs/*` + `adminApi.ts`(`adminRpc`: 제외 인자를
+  넣은 호출이 PGRST202면 인자 없이 재시도) / `adminUi.tsx` / `useAdminQuery.ts`). 탭과 제외 여부는 localStorage에 저장하고, 하이드레이션 이후에만
+  렌더한다(`useSyncExternalStore`). 차트는 dataviz 검증 팔레트(#3987e5/#d95926/#199e70, 순서형 #86b6ef/#3987e5/#1c5cab)를 두 모드에서 PASS 받았다.
+  - 유입: `lib/analytics/trafficSource.ts`(+test). UA로 인앱 브라우저(카카오톡 등)를 먼저 판정하고, 그다음 referrer 호스트로 검색/외부/직접을 나눈다.
+    `track.ts`가 `document.referrer`를 전송한다.
+  - 방 종료: 공용 훅이 `isPlaying` 하강 에지나 언마운트 시 `game_end`를 기록한다(`playingRoom` ref).
+  - 공지: `components/siteNotice/SiteNoticeBanner.tsx`(layout의 헤더 아래). info/warning은 닫을 수 있고(updated_at 기준으로 기억), maintenance는 닫을 수 없다.
+  - 게임 관리: `lib/siteConfig/siteConfig.ts`(`applyGameOverrides`+test). 로비는 hidden이면 제외, coming_soon이면 playable=false, featured면 맨 앞에 두고
+    `⭐ 추천` 배지를 단다. `/games/[gameId]`는 hidden/coming_soon일 때 준비중 화면을 보여준다.
+  - 버그: `tabs/BugReportsTab.tsx`는 기존 `/api/bug-reports` GET과 `[id]` PATCH를 쓴다. GET 응답에 `configured`(service key 유무)를 추가했다.
+    **운영 Vercel에 `SUPABASE_SERVICE_ROLE_KEY`가 없어서 사용자가 추가하고 재배포해야 한다.**
+
 ## 📅 로비 카드 "🔥 10월 N회 플레이" + 예전 방식 횟수 초기화 — 2026-10-01
 
 - 카드 라벨은 **이번 달(KST) 실제 게임 시작 수**로 표시하고(`PlayCountLabel`의 `kstMonthLabel(now)`), 인기순 정렬은 기존처럼 **전체 누적**을

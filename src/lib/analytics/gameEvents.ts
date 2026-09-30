@@ -9,8 +9,10 @@ import { getVisitorNickname } from "@/lib/identity/lastNickname";
  * - `join`         — a guest actually got into someone's waiting room
  * - `game_start`   — a match actually started (every participant logs one;
  *                    only the host's counts toward the public play count)
+ * - `game_end`     — that match left the playing phase (finished, or the
+ *                    room ended); start→end gives the room's play time
  */
-export type GameEventName = "hub_click" | "room_create" | "invite_click" | "join" | "game_start";
+export type GameEventName = "hub_click" | "room_create" | "invite_click" | "join" | "game_start" | "game_end";
 
 /**
  * Fire-and-forget. The server route drops it outside production and for

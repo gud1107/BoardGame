@@ -33,3 +33,18 @@ export function PlayCountLabel({ plays, now, className = "" }: { plays: number; 
     </span>
   );
 }
+
+/** "⭐ 추천" — set per game from /admin/games (게임 관리). */
+export function FeaturedBadge({ featured }: { featured: boolean }) {
+  if (!featured) return null;
+  return (
+    <span className="absolute bottom-2 left-2 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 px-2 py-0.5 text-[10px] font-extrabold text-black shadow-sm">
+      ⭐ 추천
+    </span>
+  );
+}
+
+/** The lobby tags admin-featured games with `featured: true` (see applyGameOverrides). */
+export function isFeatured(game: object): boolean {
+  return "featured" in game && (game as { featured?: unknown }).featured === true;
+}

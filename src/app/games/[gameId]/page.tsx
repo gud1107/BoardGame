@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getGameMeta } from "@/games/registry";
 import { PLAYABLE_GAME_COMPONENTS } from "@/games/playableGames";
+import { fetchGameOverrides } from "@/lib/siteConfig/siteConfig";
 import type { GameCompletionResult } from "@/games/types";
 import { useBettingStore } from "@/store/bettingStore";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
@@ -47,6 +48,20 @@ export default function GamePlayPage() {
   useEffect(() => {
     void initSubscription();
   }, [initSubscription]);
+
+  // Admin visibility settings (/admin/games 게임 관리): a hidden or 준비중-
+  // overridden game shows the 준비중 screen even when opened by URL.
+  const [adminBlocked, setAdminBlocked] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchGameOverrides().then((map) => {
+      const o = game ? map.get(game.id) : undefined;
+      if (!cancelled && o && (o.hidden || o.coming_soon)) setAdminBlocked(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [game]);
 
   const [gateStatus, setGateStatus] = useState<GateStatus>("checking");
   if (gateStatus === "checking" && subHydrated) {
@@ -162,7 +177,7 @@ export default function GamePlayPage() {
     );
   }
 
-  if (!game.playable) {
+  if (!game.playable || adminBlocked) {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
         <div className="relative mx-auto flex h-28 w-24 items-center justify-center overflow-hidden rounded-lg bg-white/5 light:bg-slate-100">
