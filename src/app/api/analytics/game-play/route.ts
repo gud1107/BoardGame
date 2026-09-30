@@ -1,9 +1,6 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { recordGameComplete, recordGameStart } from "@/lib/analytics/localStore";
-import { bumpGamePlayCount, isAutomatedClient } from "@/lib/analytics/playCounts";
-import { getGameMeta } from "@/games/registry";
-import { recordVisitorPlay } from "@/lib/analytics/visitors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,10 +8,6 @@ export const dynamic = "force-dynamic";
 interface StartBody {
   action: "start";
   gameId?: string;
-  /** Client's `navigator.webdriver` — true under Playwright (Claude's test runs). */
-  automated?: boolean;
-  deviceId?: string;
-  nickname?: string;
 }
 
 interface EndBody {
@@ -45,16 +38,9 @@ export async function POST(request: NextRequest) {
   if (body.action === "start") {
     if (!body.gameId) return NextResponse.json({ error: "gameId required" }, { status: 400 });
     recordGameStart(body.gameId);
-    // Durable counter behind the lobby's 인기순 sort (localStore resets on
-    // Vercel). Real people on real games only: automated browsers and ids
-    // outside the registry never reach the public count.
-    const automated = isAutomatedClient(request.headers.get("user-agent"), body.automated);
-    if (!automated && getGameMeta(body.gameId)?.playable) {
-      await bumpGamePlayCount(body.gameId);
-      if (body.deviceId) {
-        await recordVisitorPlay({ deviceId: body.deviceId, gameId: body.gameId, nickname: body.nickname });
-      }
-    }
+    // Fires when a game page opens, not when a match starts — so it no longer
+    // feeds the public play count; that comes from `game_start` events
+    // (`/api/analytics/event`, see src/lib/analytics/gameEvents.ts).
     return NextResponse.json({ playId: randomUUID() });
   }
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { deleteActiveRoom, upsertActiveRoom } from "@/lib/activeRooms/repository";
+import { trackGameEvent } from "@/lib/analytics/gameEvents";
 
 /**
  * Re-upsert cadence while a room stays in its waiting lobby. Comfortably
@@ -18,6 +19,8 @@ interface UseActiveRoomListingInput {
   isHost: boolean;
   /** True only while the room is joinable (pre-start lobby, not full, not already playing). */
   isWaiting: boolean;
+  /** True while a match is in progress (`phase === "playing"`) — its rising edge is logged as a game start. */
+  isPlaying?: boolean;
   hostName?: string | null;
   playerCount: number;
   maxPlayers: number;
@@ -36,10 +39,13 @@ export function useActiveRoomListing({
   roomCode,
   isHost,
   isWaiting,
+  isPlaying = false,
   hostName,
   playerCount,
   maxPlayers,
 }: UseActiveRoomListingInput): void {
+  useRoomFunnelEvents({ gameId, roomCode, isHost, isWaiting, isPlaying });
+
   // Heartbeat reads the latest counts without needing to restart the
   // interval every time they change. Synced in its own effect (not during
   // render) per the rules of hooks.
@@ -71,4 +77,43 @@ export function useActiveRoomListing({
       void deleteActiveRoom(gameId, roomCode);
     };
   }, [gameId, roomCode, shouldPublish]);
+}
+
+/**
+ * Funnel analytics for /admin/games, derived from the same room state every
+ * online game already passes this hook (so no per-game instrumentation):
+ * the first time this tab reaches a room's waiting lobby it's a
+ * `room_create` (host) or `join` (guest); each entry into `playing` is one
+ * `game_start` (rematches count again). A tab that lands straight in
+ * `playing` without having been in this room's waiting lobby — a reload or
+ * reconnect mid-match — logs nothing. Only real starts bump the public play
+ * count — see `supabase/game_events.sql`.
+ */
+function useRoomFunnelEvents({
+  gameId,
+  roomCode,
+  isHost,
+  isWaiting,
+  isPlaying,
+}: {
+  gameId: string;
+  roomCode: string | null | undefined;
+  isHost: boolean;
+  isWaiting: boolean;
+  isPlaying: boolean;
+}): void {
+  const enteredRoom = useRef<string | null>(null);
+  const wasPlaying = useRef(false);
+
+  useEffect(() => {
+    if (!roomCode || !isWaiting || enteredRoom.current === roomCode) return;
+    enteredRoom.current = roomCode;
+    trackGameEvent(gameId, isHost ? "room_create" : "join", { roomCode, isHost });
+  }, [gameId, roomCode, isHost, isWaiting]);
+
+  useEffect(() => {
+    const started = isPlaying && !wasPlaying.current;
+    wasPlaying.current = isPlaying;
+    if (started && roomCode && enteredRoom.current === roomCode) trackGameEvent(gameId, "game_start", { roomCode, isHost });
+  }, [gameId, roomCode, isHost, isPlaying]);
 }

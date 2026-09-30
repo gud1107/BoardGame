@@ -9,6 +9,7 @@ import Avatar from "@/components/common/Avatar";
 import { useGameLeaveGuard } from "@/hooks/useGameLeaveGuard";
 import { useBackgroundResync } from "@/hooks/useBackgroundResync";
 import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
+import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import { seededRng } from "@/lib/rng";
@@ -747,6 +748,7 @@ export default function ShowMeTheCoinGame({ onComplete }: PlayableGameProps) {
     roomCode,
     isHost,
     isWaiting: phase === "waiting",
+    isPlaying: phase === "playing",
     hostName: myName,
     playerCount: occupants.length,
     maxPlayers: 2,
@@ -824,6 +826,7 @@ export default function ShowMeTheCoinGame({ onComplete }: PlayableGameProps) {
             <button
               onClick={() => {
                 setIntent("join");
+                trackGameEvent("show-me-the-coin", "invite_click");
                 setPhase("enter-name");
               }}
               className="w-full rounded-xl border border-white/15 light:border-slate-300 py-3 text-sm font-semibold text-white/80 light:text-slate-700 transition hover:border-white/30 light:hover:border-slate-400"

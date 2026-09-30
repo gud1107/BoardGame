@@ -45,9 +45,16 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (profile?.role !== "admin") {
-    return NextResponse.redirect(new URL("/", request.url));
+  // Site admins are checked inside the database (`is_site_admin()`, see
+  // supabase/game_events.sql: a confirmed email listed in `site_admins`),
+  // which works without the `profiles` table or a service-role key —
+  // neither exists in production. `profiles.role` stays as a fallback.
+  const { data: isSiteAdmin } = await supabase.rpc("is_site_admin");
+  if (isSiteAdmin !== true) {
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    if (profile?.role !== "admin") {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
   }
 
   return response;

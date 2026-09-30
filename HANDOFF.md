@@ -39,6 +39,30 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🎲 게임별 퍼널 이벤트 + 관리자 페이지 `/admin/games` + "진짜 게임 시작"만 플레이 횟수로 — 2026-10-01 (커밋/푸시, 배포는 웹훅 자동)
+
+- **버그 수정(사용자 보고)**: 허브에서 게임을 누르기만 해도 플레이 횟수가 올랐다. `/games/[gameId]` 래퍼의 `startGamePlay`가 게임
+  페이지를 열 때 발생하기 때문이었다. 이제 공개 `game_play_counts`는 **방장의 실제 게임 시작 1회 = +1**로만 올라간다(혼자 하는 게임은 매 판).
+  `game-play` route는 로컬 analytics만 기록한다. `bumpGamePlayCount`/`recordVisitorPlay`는 삭제했고, SQL에서 `increment_game_play`/
+  `record_visitor_play`의 실행 권한도 회수한다.
+- **이벤트 5종**(`lib/analytics/gameEvents.ts` → `/api/analytics/event` → RPC `log_game_event`, 테이블 `game_events`):
+  `hub_click`(`GameCard`/`GameShowcaseCard` 클릭), `room_create`/`join`(공용 `useActiveRoomListing`의 `useRoomFunnelEvents`:
+  이 탭이 해당 방의 waiting에 처음 들어간 순간, 방장이면 create이고 아니면 join), `invite_click`(35개 게임의 "🔑 초대 코드로 참여"
+  onClick에 스크립트로 삽입), `game_start`(`isPlaying: phase === "playing"` 상승 에지. 35개 호출부에 `isPlaying`을 추가했다. 이 탭이
+  대기실을 거치지 않고 곧바로 playing에 들어간 경우, 즉 새로고침·재접속은 제외한다. 모든 참가자가 기록하고 공개 카운트는 is_host만 올린다.
+  hungryShark `startDive`/retry와 crabSurvival `start`는 직접 호출한다). 기록은 운영에서만 하고 자동화 브라우저는 제외한다.
+- **IP**: route가 `x-forwarded-for` 첫 IP를 RPC로 넘긴다. DB는 `analytics_secret`의 랜덤 salt로 SHA-256 앞 12자리만 저장한다(`hash_ip`).
+  `visitor_devices.ip_hash`도 추가했다. `record_visitor_visit`에 `p_ip`를 추가했고, 구 6인자 버전만 있을 때(PGRST202)는 인자 없이 재시도한다.
+- **관리자**: `site_admins` 테이블(`freedom_03@naver.com`)과 `is_site_admin()`이 `auth.users`의 **이메일 인증 완료** 계정인지 DB 안에서
+  확인한다. service key도 profiles 테이블도 필요 없다. `src/proxy.ts`는 `/admin/**`에서 `rpc("is_site_admin")`를 먼저 확인하고,
+  아니면 기존 profiles.role로 판단한다. 관리자 RPC는 `admin_game_funnel(p_since)`, `admin_game_participants(game, p_since)`,
+  `admin_list_visitors()`이고, 모두 내부에서 is_site_admin을 다시 확인한다.
+- **화면** `components/admin/AdminGamesDashboard.tsx`: 기간(전체/30일/7일/오늘 KST), 합계 카드 5개, 게임별 표(허브 클릭 / 방
+  만들기와 전환율 / 초대코드 클릭 / 참여와 전환율 / 게임 시작 / 고유 기기·IP). 행을 누르면 기기별 표와 중복 검토 배지가 펼쳐진다
+  (`lib/analytics/duplicateFlags.ts`+test: 같은 IP 기기 / 같은 닉네임 기기 / 닉네임 여러 개, 자동 병합은 하지 않는다).
+- **⚠️ 사용자 작업 필요**: `supabase/game_events.sql` 실행(visitors.sql 이후). 실행 전에는 모든 이벤트 RPC가 실패해 아무것도
+  기록되지 않고, 공개 플레이 횟수도 멈춘다. 그 뒤 `/login`에서 freedom_03@naver.com으로 로그인(인증된 계정 필요)하고 `/admin/games`로 이동한다.
+
 ## 👥 방문자 페이지 `/visitors` (누가 왔는지·재방문자) — 2026-10-01 (커밋/푸시, 배포는 웹훅 자동)
 
 - 사용자 결정(AskUserQuestion): **사이트 안 비밀번호 페이지** + **익명 기기 ID와 닉네임**(IP는 저장하지 않음).

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PlayableGameProps } from "../types";
+import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import {
   effectiveStats,
   ENTITY_DEFS,
@@ -57,6 +58,8 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
 
   const startDive = () => {
     update((s) => ({ ...s, selected: viewId }));
+    // Solo game: every dive is a real start (public play count + /admin/games).
+    trackGameEvent("hungry-shark", "game_start", { isHost: true });
     setRunKey((k) => k + 1);
     setScreen("playing");
   };
@@ -105,6 +108,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
         <ResultsPanel
           summary={summary}
           onRetry={() => {
+            trackGameEvent("hungry-shark", "game_start", { isHost: true });
             setRunKey((k) => k + 1);
             setScreen("playing");
           }}

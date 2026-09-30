@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { recordVisit } from "@/lib/analytics/localStore";
 import { isAutomatedClient } from "@/lib/analytics/playCounts";
 import { recordVisitorVisit } from "@/lib/analytics/visitors";
+import { clientIp } from "@/lib/analytics/clientIp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +30,13 @@ export async function POST(request: NextRequest) {
   // Durable per-device record for the /visitors page (who came, who came back).
   const userAgent = request.headers.get("user-agent");
   if (!isAutomatedClient(userAgent, body.automated)) {
-    await recordVisitorVisit({ deviceId: body.deviceId, path: body.path, userAgent, nickname: body.nickname });
+    await recordVisitorVisit({
+      deviceId: body.deviceId,
+      path: body.path,
+      userAgent,
+      nickname: body.nickname,
+      ip: clientIp(request),
+    });
   }
 
   return NextResponse.json({ ok: true });

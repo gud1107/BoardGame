@@ -8,6 +8,7 @@ import GameLeaveGuardModal from "@/components/GameLeaveGuardModal";
 import { useGameLeaveGuard } from "@/hooks/useGameLeaveGuard";
 import { useBackgroundResync } from "@/hooks/useBackgroundResync";
 import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
+import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import {
@@ -757,6 +758,7 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     roomCode,
     isHost,
     isWaiting: phase === "waiting",
+    isPlaying: phase === "playing",
     hostName: myName,
     playerCount: occupants.length,
     maxPlayers: 2,
@@ -851,6 +853,7 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
             <button
               onClick={() => {
                 setIntent("join");
+                trackGameEvent("hanamikoji", "invite_click");
                 setPhase("enter-name");
               }}
               className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30 light:border-slate-300 light:text-slate-700 light:hover:border-slate-400"

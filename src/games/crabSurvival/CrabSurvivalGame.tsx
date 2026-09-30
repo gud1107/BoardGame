@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PlayableGameProps } from "../types";
+import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { CRAB_COLORS, isUnlocked, MATCH_LENGTHS, roadmap, SPECIES, SPECIES_LIST, type CrabColor, type ShieldKind, type SpeciesId, type WeaponKind } from "./data";
 import type { MatchSummary } from "./engine";
 import CrabSurvivalCanvas from "./CrabSurvivalCanvas";
@@ -53,6 +54,8 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
   const species: SpeciesId = isUnlocked(save.species, save.trophies) ? save.species : "flower";
 
   const start = () => {
+    // Solo game: every match is a real start (public play count + /admin/games).
+    trackGameEvent("crab-survival", "game_start", { isHost: true });
     setRunKey((k) => k + 1);
     setScreen("playing");
   };

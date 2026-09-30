@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { GameMeta } from "@/games/types";
+import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import GameThumbnail from "./GameThumbnail";
 import { GENRE_META } from "@/games/genres";
 import { GAME_COLLECTIONS } from "@/games/collections";
@@ -112,7 +113,14 @@ export default function GameCard({
     return <div className="h-full cursor-not-allowed">{content}</div>;
   }
   return (
-    <Link href={`/games/${game.id}`} className="h-full" onClick={triggerBurst}>
+    <Link
+      href={`/games/${game.id}`}
+      className="h-full"
+      onClick={(e) => {
+        trackGameEvent(game.id, "hub_click");
+        triggerBurst(e);
+      }}
+    >
       {content}
     </Link>
   );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { GameMeta } from "@/games/types";
 import { GENRE_META } from "@/games/genres";
 import { getGameDifficulty } from "@/constants/gameDifficulty";
+import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import GameThumbnail from "@/components/GameThumbnail";
 import { useGoldClickBurst } from "./useGoldClickBurst";
 import GoldParticleLayer from "./GoldParticleLayer";
@@ -115,7 +116,14 @@ export default function GameShowcaseCard({
     return <div className="h-full cursor-not-allowed">{content}</div>;
   }
   return (
-    <Link href={`/games/${game.id}`} className="h-full" onClick={triggerBurst}>
+    <Link
+      href={`/games/${game.id}`}
+      className="h-full"
+      onClick={(e) => {
+        trackGameEvent(game.id, "hub_click");
+        triggerBurst(e);
+      }}
+    >
       {content}
     </Link>
   );
