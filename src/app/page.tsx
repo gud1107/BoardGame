@@ -11,7 +11,7 @@ import { PLAYER_FILTERS } from "@/constants/playerFilters";
 import { DEFAULT_SORT_OPTION, type SortOption, sortGamesBy } from "@/constants/sortOptions";
 import SortFilterChips from "@/components/lobby/SortFilterChips";
 import { useGameBgm } from "@/lib/audio/useGameBgm";
-import { fetchGamePlayCounts, GAME_PLAY_COUNT_SEED } from "@/lib/analytics/playCounts";
+import { fetchGamePlayCounts } from "@/lib/analytics/playCounts";
 
 type GenreFilter = GameGenre | "all";
 
@@ -68,9 +68,10 @@ export default function DashboardPage() {
   // keeps render pure; a badge flipping mid-visit wouldn't matter anyway).
   const [now] = useState(() => Date.now());
   // All-time plays per game for the default 인기순 sort and the cards'
-  // "🔥 N회 플레이". Renders from the seed baseline immediately, then swaps in
-  // the Supabase counts, so the grid never waits on the network.
-  const [playCounts, setPlayCounts] = useState<ReadonlyMap<string, number>>(GAME_PLAY_COUNT_SEED);
+  // "🔥 N회 플레이" (real production plays only). Until this resolves, or if
+  // Supabase is unreachable, every count reads as 0 and 인기순 falls back to
+  // recency, so the grid never waits on the network.
+  const [playCounts, setPlayCounts] = useState<ReadonlyMap<string, number>>(() => new Map());
   useEffect(() => {
     let cancelled = false;
     void fetchGamePlayCounts().then((counts) => {

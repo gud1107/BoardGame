@@ -42,26 +42,3 @@ $$ language plpgsql security definer set search_path = public;
 
 revoke all on function increment_game_play(text) from public;
 grant execute on function increment_game_play(text) to anon, authenticated;
-
--- Seed (2026-10-01): all-time starts from the pre-Supabase local analytics
--- file (`data/analytics.json`, 2026-09-14~27) so 인기순 isn't empty on day
--- one. lotr-confrontation's 12 are folded into its replacement lotr-duel.
--- `greatest` keeps this idempotent and never lowers a count that real plays
--- have already pushed past the seed — safe to re-run.
-insert into game_play_counts (game_id, plays) values
-  ('perudo', 113),
-  ('dalmuti', 79),
-  ('mafia', 42),
-  ('splendor-duel', 24),
-  ('rat-a-tat-cat', 20),
-  ('lotr-duel', 20),
-  ('hill-of-truth', 10),
-  ('century', 8),
-  ('lost-cities', 6),
-  ('mine-of-oblivion-2', 6),
-  ('coyote', 4),
-  ('destiny-war-39', 2),
-  ('crab-survival', 2),
-  ('great-legacy', 1)
-on conflict (game_id)
-do update set plays = greatest(game_play_counts.plays, excluded.plays), updated_at = now();
