@@ -60,22 +60,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "spot-difference",
         type: "FEAT",
-        desc: "장면 테마를 10종으로 확장하고, 최근에 플레이한 테마는 다시 나오지 않도록 테마 덱 도입",
-      },
-      {
-        game: "spot-difference",
-        type: "FEAT",
-        desc: "게임 종료 시 '이번에 바뀐 곳' 정답 해설 화면 추가, 기존 도형 장면 3종은 제거",
-      },
-      {
-        game: "spot-difference",
-        type: "IMPROVE",
-        desc: "우리 팀/상대 팀 정답 효과음 분리, 마지막 10초 시계 강조와 BGM 템포 업, 스테이지 클리어 연출 추가",
-      },
-      {
-        game: "spot-difference",
-        type: "IMPROVE",
-        desc: "다른 플레이어의 오답은 작은 소리로만 재생하고 연속 재생 간격을 제한해 소음 완화",
+        desc: "테마 10종으로 확장(최근 테마 재등장 방지), 종료 시 '이번에 바뀐 곳' 정답 해설, 팀별 정답 효과음·마지막 10초 연출·클리어 연출 추가, 남의 오답 소음 완화 (기존 도형 장면 3종 제거)",
       },
       {
         game: "doodle-phone",
@@ -92,27 +77,12 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "spot-difference",
         type: "FEAT",
-        desc: "4가지 테마 그림 장면 추가, 판마다 바뀌는 곳이 무작위로 달라지도록 변경",
-      },
-      {
-        game: "spot-difference",
-        type: "IMPROVE",
-        desc: "봇이 사람처럼 훑어보는 시간을 두고 가끔 빗나가게 클릭하도록 개선",
-      },
-      {
-        game: "spot-difference",
-        type: "FEAT",
-        desc: "탐정 관찰 왈츠 BGM과 정답/오답/클리어 효과음 추가",
+        desc: "4가지 테마 그림 장면(판마다 바뀌는 곳 무작위), 사람처럼 훑어보고 가끔 빗나가는 봇, 탐정 왈츠 BGM과 효과음 추가",
       },
       {
         game: "doodle-phone",
         type: "FIX",
-        desc: "애니메이션 모드에서 다음 프레임이 이전 그림의 편집 가능한 사본에서 시작하도록 수정",
-      },
-      {
-        game: "doodle-phone",
-        type: "FIX",
-        desc: "애니메이션/이어 그리기 프레임에서 시간이 초과되면 빈 화면 대신 이전 그림이 보이도록 수정",
+        desc: "애니메이션 프레임이 이전 그림의 편집 가능한 사본에서 시작하고, 시간 초과 시 빈 화면 대신 이전 그림이 보이도록 수정",
       },
     ],
   },
@@ -123,13 +93,8 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       {
         game: "las-vegas",
-        type: "FIX",
-        desc: "실제 카지노 사진·이름을 가상의 카지노로 교체",
-      },
-      {
-        game: "las-vegas",
         type: "FEAT",
-        desc: "6개 카지노 타일을 아르데코 디자인과 자유 라이선스(CC0) 야경·타워 사진으로 리뉴얼",
+        desc: "실제 카지노 사진·이름을 가상의 카지노로 교체하고, 아르데코 디자인과 자유 라이선스(CC0) 야경·타워 사진으로 타일 리뉴얼",
       },
       {
         game: "dalmuti",
@@ -156,17 +121,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "doodle-phone",
         type: "FEAT",
-        desc: "그림 전화기 신규 추가 — 4~14인이 그림과 문장을 번갈아 이어가는 릴레이 드로잉 게임, 게임 모드 9종과 테마 팩 지원",
-      },
-      {
-        game: "doodle-phone",
-        type: "FEAT",
-        desc: "도형 도구·투명도·컬러피커/스포이드, 두 손가락 확대, 선택·이동·크기 조절·복제·복사 붙여넣기 등 그리기 도구 확장",
-      },
-      {
-        game: "doodle-phone",
-        type: "FEAT",
-        desc: "로파이 BGM과 드로잉/제출/턴 효과음 추가",
+        desc: "그림 전화기 신규 추가 — 4~14인 릴레이 드로잉 게임, 게임 모드 9종·테마 팩, 도형·선택·확대 등 그리기 도구, 로파이 BGM과 효과음",
       },
       {
         game: "crab-survival",
@@ -174,34 +129,14 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "꽃게 서바이벌 신규 추가 — 13마리 AI 꽃게와 겨루는 1인용 해변 배틀로얄, 12단계 성장 로드맵과 트로피로 해금하는 8종 게",
       },
       {
-        game: "crab-survival",
-        type: "FIX",
-        desc: "모바일에서 부스트 버튼이 체력바를 가리던 문제와 왕 추적 표시가 화면 밖으로 나가던 문제 수정",
-      },
-      {
         game: "great-legacy",
         type: "FEAT",
-        desc: "경매 매물마다 카탈로그 이미지(자유 라이선스 기업 사진) 추가",
-      },
-      {
-        game: "great-legacy",
-        type: "FEAT",
-        desc: "컬렉션 시너지 트래커, 시너지 완성 팡파르·붕괴 경고, 종료 화면 시너지 요약, 시너지를 고려하는 봇 추가",
-      },
-      {
-        game: "great-legacy",
-        type: "FEAT",
-        desc: "체임버 심포니 BGM과 경매 효과음 추가, 봇 레벨별 입찰 성향과 역경매 전략 개선",
+        desc: "매물 카탈로그 이미지, 컬렉션 시너지 시스템(트래커·완성 팡파르·붕괴 경고·종료 요약), 체임버 심포니 BGM과 경매 효과음, 봇 입찰 전략 개선",
       },
       {
         game: "century",
         type: "FEAT",
-        desc: "카드에 실크로드 풍경 유화 일러스트·금박 프레임 추가, 향신료 보석 디자인 개선 및 획득 반짝임 효과",
-      },
-      {
-        game: "century",
-        type: "FIX",
-        desc: "내 손패 카드 크기가 시장 카드와 다르게 보이던 문제 수정",
+        desc: "카드에 실크로드 풍경 유화 일러스트·금박 프레임 추가, 향신료 보석 디자인과 획득 반짝임 효과, 손패 카드 크기 불일치 수정",
       },
       {
         game: "five-cucumbers",
@@ -219,19 +154,14 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "스파게티 웨스턴 밴조 BGM과 블러핑 효과음 추가",
       },
       {
+        game: "lotr-duel",
+        type: "FEAT",
+        desc: "모든 행동에 시네마틱 효과, 붉은 군사 카드 전투 장면 일러스트 6종 추가, 1장 카드 밸런스 조정",
+      },
+      {
         game: "splendor-duel",
         type: "IMPROVE",
         desc: "BGM을 누아르 체임버 4성부 편곡으로 교체",
-      },
-      {
-        game: "lotr-duel",
-        type: "FEAT",
-        desc: "모든 행동에 시네마틱 효과 추가, 붉은 군사 카드별 전투 장면 일러스트 6종",
-      },
-      {
-        game: "lotr-duel",
-        type: "IMPROVE",
-        desc: "1장 카드 밸런스 조정 — 동전만 주던 마지막 카드의 동전 하나를 기술 심볼로 교체",
       },
     ],
   },
@@ -243,37 +173,17 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "hungry-shark",
         type: "FEAT",
-        desc: "배고픈 상어: 딥 에볼루션 신규 추가 — 1인용 실시간 해양 생존 게임",
-      },
-      {
-        game: "hungry-shark",
-        type: "FEAT",
-        desc: "먹을 수 있는 먹이를 알려주는 조준 표시와 먹이 도감 추가",
+        desc: "배고픈 상어: 딥 에볼루션 신규 추가 — 1인용 실시간 해양 생존 게임, 먹이 조준 표시와 먹이 도감",
       },
       {
         game: "lotr-duel",
         type: "FEAT",
-        desc: "반지 트랙을 0~14 단일 트랙으로 개편, 먼저 14에 도달한 쪽이 승리하는 경주 규칙 적용",
-      },
-      {
-        game: "lotr-duel",
-        type: "FEAT",
-        desc: "전술 지도 아트, 추격 파노라마 트랙, 동맹 토큰 18종 도감, 상시 표시되는 동맹 능력 트레이 추가",
-      },
-      {
-        game: "lotr-duel",
-        type: "IMPROVE",
-        desc: "카드 원가/실제 비용 동시 표시, 최소화한 창 다시 열기 버튼, 데스크톱 접이식 기록창, 턴 효과 개선",
+        desc: "0~14 단일 트랙·먼저 14 도달 시 승리 규칙으로 개편, 전술 지도·추격 파노라마·동맹 토큰 도감·비용 이중 표시 등 화면 개선",
       },
       {
         game: "splendor-duel",
         type: "FEAT",
-        desc: "카드를 르네상스 명화 스타일로 리뉴얼 — 금 테두리, 보석 창, 등급별 풍경화, 금 메달 로열 카드",
-      },
-      {
-        game: "splendor-duel",
-        type: "FEAT",
-        desc: "르네상스 류트 BGM과 보석/로열/스크롤 효과음 추가, 승리가 가까워질수록 BGM 긴장감 상승",
+        desc: "카드를 르네상스 명화 스타일로 리뉴얼, 류트 BGM과 효과음 추가(승리가 가까울수록 긴장감 상승)",
       },
     ],
   },
@@ -285,32 +195,17 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "splendor-duel",
         type: "FEAT",
-        desc: "스플렌더 대결 신규 추가 — 2인용 나선형 보석 보드, 크라운 트랙, 초보자 가이드, 승리 조건 패널",
-      },
-      {
-        game: "splendor-duel",
-        type: "IMPROVE",
-        desc: "금 3개를 25칸 보드에 배치, 보석 토큰 n/10 표시, 구매 카드와 토큰을 분리된 트레이로 표시",
+        desc: "스플렌더 대결 신규 추가 — 2인용 나선형 보석 보드, 크라운 트랙, 초보자 가이드, 구매 카드/토큰 분리 트레이",
       },
       {
         game: "city-chase",
         type: "FEAT",
-        desc: "시티 체이스 신규 추가 — 2~4인 비대칭 도둑 vs 경찰 헬리콥터 추격 게임, 게임 종료 후 도주 경로 리플레이",
-      },
-      {
-        game: "city-chase",
-        type: "IMPROVE",
-        desc: "이미 지난 건물 재방문 금지, 헬기 시작 위치 재조정, 6라운드 보라색 표식 추가",
+        desc: "시티 체이스 신규 추가 — 2~4인 비대칭 도둑 vs 경찰 헬리콥터 추격 게임, 종료 후 도주 경로 리플레이",
       },
       {
         game: "lotr-duel",
         type: "FEAT",
-        desc: "반지의 제왕: 가운데땅에서의 대결 신규 추가 — 2인용 피라미드 드래프트 카드 게임, 챕터별 BGM과 행동 연출",
-      },
-      {
-        game: "lotr-duel",
-        type: "FEAT",
-        desc: "동맹 토큰 선택 모달, 종료 쇼다운 연출, 상시 기술 HUD, 기록창 카드 확인, 선택 가능한 카드 미리 강조 추가",
+        desc: "반지의 제왕: 가운데땅에서의 대결 신규 추가 — 2인용 피라미드 드래프트 카드 게임, 챕터별 BGM·행동 연출·종료 쇼다운",
       },
     ],
   },
@@ -334,17 +229,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "mafia",
         type: "FEAT",
-        desc: "확장 모드 11~12인 판에 마피아 3명 배치로 밸런스 조정",
-      },
-      {
-        game: "mafia",
-        type: "FEAT",
-        desc: "밤이 찾아오는 시네마틱 연출 추가, 의사가 치료에 실패하면 본인에게만 알림",
-      },
-      {
-        game: "mafia",
-        type: "FIX",
-        desc: "첫째 날 채팅 안내 문구 오류 수정, 사망 시 정체 비공개 옵션의 기본값을 표준(끔)으로 수정",
+        desc: "11~12인 판 마피아 3명으로 밸런스 조정, 밤 시네마틱 연출, 의사 치료 실패 알림 추가, 첫째 날 안내 문구·정체 비공개 기본값 수정",
       },
     ],
   },
@@ -356,22 +241,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "mafia",
         type: "FEAT",
-        desc: "무작위로 행동하던 봇을 의심도 기반으로 판단하는 봇 AI로 교체",
-      },
-      {
-        game: "mafia",
-        type: "FEAT",
-        desc: "밤/낮 토론/최후 변론 국면에 따라 바뀌는 BGM 추가",
-      },
-      {
-        game: "mafia",
-        type: "FEAT",
-        desc: "경찰 조사 성공/실패 여부를 익명으로 공개, 스파이가 접선하면 마피아 팀 전체 뱃지 표시",
-      },
-      {
-        game: "mafia",
-        type: "FIX",
-        desc: "모바일 채팅창이 메시지를 보낸 뒤 닫히던 문제 수정",
+        desc: "의심도 기반 봇 AI, 국면별 BGM, 경찰 조사 결과 익명 공개, 스파이 접선 시 마피아 팀 뱃지 추가, 모바일 채팅창이 전송 후 닫히던 문제 수정",
       },
     ],
   },
@@ -383,17 +253,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "mafia",
         type: "FEAT",
-        desc: "마피아 신규 추가 — 클래식/확장 두 가지 모드, 봇도 토론 채팅에 참여",
-      },
-      {
-        game: "mafia",
-        type: "FEAT",
-        desc: "상시 역할 HUD, 과반수 동의 시 국면 스킵, 접이식 역할표(능력·공개 행동 기록), 모바일 전체화면 채팅, 아침 연출 추가",
-      },
-      {
-        game: "mafia",
-        type: "FIX",
-        desc: "상태가 바뀔 때마다 역할 팝업이 다시 열리던 문제 수정, 내 차례 알림 연출 추가",
+        desc: "마피아 신규 추가 — 클래식/확장 모드, 채팅하는 봇, 상시 역할 HUD, 과반수 국면 스킵, 접이식 역할표, 모바일 전체화면 채팅",
       },
       {
         game: "great-legacy",
@@ -403,17 +263,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "perudo",
         type: "FEAT",
-        desc: "베팅 확정/두도/칼사 버튼에 시네마틱 연출 추가, 결과별 4가지 쇼다운 연출",
-      },
-      {
-        game: "perudo",
-        type: "FEAT",
-        desc: "하우스 룰 추가 — 두도 선언 시 입찰이 정확히 맞으면 나머지 모든 플레이어가 주사위 1개씩 잃음",
-      },
-      {
-        game: "perudo",
-        type: "FIX",
-        desc: "모바일을 자연스러운 세로 스크롤 방식으로 되돌리고 화면 떨림 방지, 버튼 크기 확대 및 레이아웃 재배치",
+        desc: "액션 버튼 시네마틱 연출, 두도 정확 적중 하우스 룰 추가, 모바일 세로 스크롤 복원 및 레이아웃 재배치",
       },
       {
         game: "dalmuti",
@@ -435,17 +285,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "common",
         type: "FEAT",
-        desc: "로비에 게임 정렬 필터 추가(기본값: 업데이트 많은 순)",
-      },
-      {
-        game: "common",
-        type: "FIX",
-        desc: "모바일 캐러셀 제거 및 상단 고정 검색창 복원, 데스크톱 정렬 칩 잘림 수정",
-      },
-      {
-        game: "common",
-        type: "FIX",
-        desc: "게임에서 뒤로 돌아와도 검색어·필터·정렬 상태가 유지되도록 수정",
+        desc: "로비 게임 정렬 필터 추가(기본값: 업데이트 많은 순), 모바일 고정 검색창 복원, 뒤로 가기 시 검색·필터 상태 유지",
       },
     ],
   },
