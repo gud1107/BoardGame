@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { recordGameComplete, recordGameStart } from "@/lib/analytics/localStore";
-import { bumpGamePlayCount } from "@/lib/analytics/playCounts";
+import { bumpGamePlayCount, isAutomatedClient } from "@/lib/analytics/playCounts";
+import { getGameMeta } from "@/games/registry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +10,8 @@ export const dynamic = "force-dynamic";
 interface StartBody {
   action: "start";
   gameId?: string;
+  /** Client's `navigator.webdriver` — true under Playwright (Claude's test runs). */
+  automated?: boolean;
 }
 
 interface EndBody {
@@ -39,8 +42,13 @@ export async function POST(request: NextRequest) {
   if (body.action === "start") {
     if (!body.gameId) return NextResponse.json({ error: "gameId required" }, { status: 400 });
     recordGameStart(body.gameId);
-    // Durable counter behind the lobby's 인기순 sort (localStore resets on Vercel).
-    await bumpGamePlayCount(body.gameId);
+    // Durable counter behind the lobby's 인기순 sort (localStore resets on
+    // Vercel). Real people on real games only: automated browsers and ids
+    // outside the registry never reach the public count.
+    const automated = isAutomatedClient(request.headers.get("user-agent"), body.automated);
+    if (!automated && getGameMeta(body.gameId)?.playable) {
+      await bumpGamePlayCount(body.gameId);
+    }
     return NextResponse.json({ playId: randomUUID() });
   }
 

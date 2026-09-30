@@ -13,6 +13,17 @@ import { getSupabase } from "@/lib/supabase/client";
  * that file but are neither seeded into the table nor shown.
  */
 
+const AUTOMATION_UA = /HeadlessChrome|Playwright|Puppeteer|Selenium|PhantomJS|bot\b|crawler|spider/i;
+
+/**
+ * True for a scripted browser rather than a person: the client-reported
+ * `navigator.webdriver` flag (always set under Playwright) or a headless /
+ * crawler User-Agent. Used to keep Claude's test runs out of the count.
+ */
+export function isAutomatedClient(userAgent: string | null, webdriverFlag: unknown): boolean {
+  return webdriverFlag === true || AUTOMATION_UA.test(userAgent ?? "");
+}
+
 /**
  * Server-only (called from `/api/analytics/game-play`). Counts production
  * plays only: local `next dev`/Playwright sessions — including Claude's

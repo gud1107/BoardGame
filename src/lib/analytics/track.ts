@@ -40,7 +40,9 @@ export async function startGamePlay(gameId: string): Promise<string | null> {
     const res = await fetch("/api/analytics/game-play", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "start", gameId }),
+      // `navigator.webdriver` is true under Playwright/Selenium — lets the
+      // server keep automated (Claude test) runs out of the public play count.
+      body: JSON.stringify({ action: "start", gameId, automated: navigator.webdriver === true }),
     });
     if (!res.ok) return null;
     const data = (await res.json().catch(() => null)) as { playId?: string } | null;
