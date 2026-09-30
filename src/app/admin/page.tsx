@@ -33,13 +33,26 @@ export default function AdminPage() {
   }, [init, initSubscription]);
 
   if (loading || !settings) {
-    return <div className="mx-auto max-w-5xl px-4 py-16 text-center text-sm text-white/40">불러오는 중…</div>;
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-16 text-center text-sm text-white/40">
+        불러오는 중…
+        <Link href="/admin/games" className="mt-4 block text-amber-300 underline">
+          🎲 게임 통계로 이동
+        </Link>
+      </div>
+    );
   }
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold text-white">관리자 대시보드</h1>
+        <Link
+          href="/admin/games"
+          className="rounded-lg bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/30"
+        >
+          🎲 게임 통계 →
+        </Link>
         <Link
           href="/admin/stats"
           className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-white/30"

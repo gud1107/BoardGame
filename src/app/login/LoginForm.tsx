@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSubscriptionStore } from "@/store/subscriptionStore";
 import { getAuthSupabase } from "@/lib/supabase/authClient";
 import SupabaseRequiredNotice from "@/components/SupabaseRequiredNotice";
 
@@ -33,6 +34,10 @@ export default function LoginForm() {
     // Idempotent — self-heals a profile that never got created on signup
     // (e.g. email confirmation was required, so no session existed then).
     await fetch("/api/auth/bootstrap", { method: "POST" }).catch(() => {});
+    // The header's subscription store only fetches once per page load, so
+    // without this it keeps showing "게스트" (and no 🛠 관리자 link) until a
+    // full reload.
+    await useSubscriptionStore.getState().refresh();
     router.push(searchParams.get("next") || "/");
     router.refresh();
   }

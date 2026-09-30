@@ -11,6 +11,7 @@ import PatchNoteButton from "@/components/patchNotes/PatchNoteButton";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import Avatar from "@/components/common/Avatar";
 import ProfileModal from "@/components/profile/ProfileModal";
+import { useIsSiteAdmin } from "@/lib/admin/useIsSiteAdmin";
 
 export default function SiteHeader() {
   const session = useBettingStore((s) => s.session);
@@ -21,6 +22,7 @@ export default function SiteHeader() {
   const tier = useSubscriptionStore((s) => s.tier);
   const entitlement = useSubscriptionStore((s) => s.entitlement);
   const initSubscription = useSubscriptionStore((s) => s.init);
+  const isSiteAdmin = useIsSiteAdmin(userId);
 
   const profileAvatarUrl = useProfileStore((s) => s.avatarUrl);
   const initProfile = useProfileStore((s) => s.init);
@@ -123,6 +125,14 @@ export default function SiteHeader() {
                 </span>
               )}
               */}
+            </Link>
+          )}
+          {isSiteAdmin && (
+            <Link
+              href="/admin/games"
+              className="shrink-0 whitespace-nowrap break-keep rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 sm:text-sm light:bg-amber-100 light:text-amber-700"
+            >
+              🛠 관리자
             </Link>
           )}
           <Link
