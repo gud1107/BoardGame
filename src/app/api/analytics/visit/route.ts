@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordVisit } from "@/lib/analytics/localStore";
+import { isAutomatedClient } from "@/lib/analytics/playCounts";
+import { recordVisitorVisit } from "@/lib/analytics/visitors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,6 +9,9 @@ export const dynamic = "force-dynamic";
 interface VisitBody {
   deviceId?: string;
   path?: string;
+  nickname?: string;
+  /** Client's `navigator.webdriver` — true under Playwright (Claude's test runs). */
+  automated?: boolean;
 }
 
 /**
@@ -20,6 +25,12 @@ export async function POST(request: NextRequest) {
   if (!body?.deviceId || !body.path) return NextResponse.json({ error: "invalid body" }, { status: 400 });
 
   recordVisit(body.deviceId);
+
+  // Durable per-device record for the /visitors page (who came, who came back).
+  const userAgent = request.headers.get("user-agent");
+  if (!isAutomatedClient(userAgent, body.automated)) {
+    await recordVisitorVisit({ deviceId: body.deviceId, path: body.path, userAgent, nickname: body.nickname });
+  }
 
   return NextResponse.json({ ok: true });
 }

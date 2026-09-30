@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useBettingStore } from "@/store/bettingStore";
+import { rememberRoomNickname } from "@/lib/identity/lastNickname";
 
 export interface RoomIdentityValue {
   name: string;
@@ -53,7 +54,12 @@ const ACCENT_CLASSES: Record<NonNullable<Props["accent"]>, { input: string; chip
  * synced across every player's phone. When there's no active session this
  * renders identically to the old plain text input.
  */
-export default function RoomNicknameField({ value, onChange, placeholder = "닉네임을 입력하세요", accent = "emerald", onEnter }: Props) {
+export default function RoomNicknameField({ value, onChange: onChangeProp, placeholder = "닉네임을 입력하세요", accent = "emerald", onEnter }: Props) {
+  // Remember the typed name for the /visitors page (see lastNickname.ts).
+  const onChange = (next: RoomIdentityValue) => {
+    rememberRoomNickname(next.name);
+    onChangeProp(next);
+  };
   const session = useBettingStore((s) => s.session);
   const hasRoster = Boolean(session && session.participants.length > 0);
   const [guestMode, setGuestMode] = useState(!hasRoster);

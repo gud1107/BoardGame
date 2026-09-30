@@ -1,4 +1,5 @@
 import { getDeviceId } from "@/lib/identity/deviceId";
+import { getVisitorNickname } from "@/lib/identity/lastNickname";
 
 /**
  * Fire-and-forget POST helper shared by every tracker below. `sendBeacon` is
@@ -22,7 +23,13 @@ function beacon(url: string, payload: unknown): void {
 /** Records one site visit (see `AnalyticsVisitTracker`). Best-effort, never throws. */
 export function recordVisit(path: string): void {
   if (typeof window === "undefined") return;
-  beacon("/api/analytics/visit", { deviceId: getDeviceId(), path, userAgent: navigator.userAgent });
+  beacon("/api/analytics/visit", {
+    deviceId: getDeviceId(),
+    path,
+    userAgent: navigator.userAgent,
+    nickname: getVisitorNickname(),
+    automated: navigator.webdriver === true,
+  });
 }
 
 /**
@@ -42,7 +49,13 @@ export async function startGamePlay(gameId: string): Promise<string | null> {
       headers: { "Content-Type": "application/json" },
       // `navigator.webdriver` is true under Playwright/Selenium — lets the
       // server keep automated (Claude test) runs out of the public play count.
-      body: JSON.stringify({ action: "start", gameId, automated: navigator.webdriver === true }),
+      body: JSON.stringify({
+        action: "start",
+        gameId,
+        automated: navigator.webdriver === true,
+        deviceId: getDeviceId(),
+        nickname: getVisitorNickname(),
+      }),
     });
     if (!res.ok) return null;
     const data = (await res.json().catch(() => null)) as { playId?: string } | null;

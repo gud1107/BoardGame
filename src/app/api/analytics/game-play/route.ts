@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { recordGameComplete, recordGameStart } from "@/lib/analytics/localStore";
 import { bumpGamePlayCount, isAutomatedClient } from "@/lib/analytics/playCounts";
 import { getGameMeta } from "@/games/registry";
+import { recordVisitorPlay } from "@/lib/analytics/visitors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,8 @@ interface StartBody {
   gameId?: string;
   /** Client's `navigator.webdriver` — true under Playwright (Claude's test runs). */
   automated?: boolean;
+  deviceId?: string;
+  nickname?: string;
 }
 
 interface EndBody {
@@ -48,6 +51,9 @@ export async function POST(request: NextRequest) {
     const automated = isAutomatedClient(request.headers.get("user-agent"), body.automated);
     if (!automated && getGameMeta(body.gameId)?.playable) {
       await bumpGamePlayCount(body.gameId);
+      if (body.deviceId) {
+        await recordVisitorPlay({ deviceId: body.deviceId, gameId: body.gameId, nickname: body.nickname });
+      }
     }
     return NextResponse.json({ playId: randomUUID() });
   }

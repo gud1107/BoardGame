@@ -39,6 +39,25 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 👥 방문자 페이지 `/visitors` (누가 왔는지·재방문자) — 2026-10-01 (커밋/푸시, 배포는 웹훅 자동)
+
+- 사용자 결정(AskUserQuestion): **사이트 안 비밀번호 페이지** + **익명 기기 ID와 닉네임**(IP는 저장하지 않음).
+  `/admin` 아래가 아닌 `/visitors`에 둔 이유: `src/proxy.ts`가 `/admin/**`에 Supabase 관리자 로그인을 요구하는데,
+  운영에는 그 로그인 체계(profiles 테이블, service key)가 없다. noindex 처리.
+- **DB**: `supabase/visitors.sql`. `visitor_devices`는 `bg_device_id`당 1행이고 최초·최근 방문, visit_count, play_count,
+  games jsonb, 기기 종류/OS/브라우저, 닉네임, 마지막 경로를 담는다. RLS를 켜고 정책은 두지 않아 anon은 직접 읽거나 쓸 수 없다.
+  쓰기는 security definer RPC `record_visitor_visit`/`record_visitor_play`로만 한다. 읽기는 `list_visitors(p_password)`로만
+  하고, `visitor_admin_key`에 저장된 SHA-256과 비교하며 실패하면 1초 sleep 후 28P01을 낸다. 비밀번호는 SQL 파일 맨 아래 `pw` 줄에서
+  사용자가 직접 정한다(8자 이상이 아니거나 기본 문구 그대로면 실행 거부). 레포나 Vercel에는 비밀번호가 없다.
+- **기록 경로**: `/api/analytics/visit`(탭 세션당 1회, `AnalyticsVisitTracker`)와 `/api/analytics/game-play` start를 쓴다.
+  `lib/analytics/visitors.ts`는 `VERCEL_ENV=production`에서만 기록하고, `isAutomatedClient`에 걸리면 기록하지 않는다(클로드 봇 제외).
+  닉네임은 `lib/identity/lastNickname.ts`에서 온다. 공용 `RoomNicknameField`(온라인 게임 35개가 사용)의 onChange가
+  `bg_last_room_nickname`에 저장하고, 없으면 로비 채팅 닉네임을 쓴다.
+- **화면**: `components/visitors/VisitorsDashboard.tsx`. 요약 카드 6개(전체/재방문자·재방문율/오늘/오늘 신규/7일/총 플레이),
+  필터(전체·재방문자·1회 방문·닉네임 있음), 닉네임·ID 검색, 모바일은 카드 목록이고 sm 이상은 표. 재방문 기준은 visit_count ≥ 2
+  (탭 세션 2회 이상)이고 날짜는 KST. 순수 로직과 테스트는 `visitorSummary.ts`, `userAgent.ts`(+test)에 있다.
+- 한계: 같은 사람이라도 기기나 브라우저가 다르면(또는 사이트 데이터를 지우면) 다른 방문자로 잡힌다.
+
 ## ✅ game_play_counts SQL 적용 확인 + 자동화 브라우저(클로드 봇) 플레이 제외 — 2026-10-01
 
 - 사용자가 `supabase/game_play_counts.sql`를 실행했고 anon REST로 검증했다: 테이블 존재(빈 상태), RPC 존재(형식에 안 맞는 id로

@@ -516,3 +516,8 @@ $$ language plpgsql security definer set search_path = public;
 
 revoke all on function increment_game_play(text) from public;
 grant execute on function increment_game_play(text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Visitor tracking (visitor_devices, list_visitors, …) lives in its own file,
+-- supabase/visitors.sql, because it needs a password edited in before running.
+-- ---------------------------------------------------------------------------
