@@ -1381,7 +1381,8 @@ function resolveContacts(w: World, dt: number) {
       if (w.bounceCd <= 0) {
         w.bounceCd = 0.5;
         w.events.push({ type: "bounce" });
-        floatText(w, e.x, e.y - e.def.radius - 10, `티어 ${e.def.requiredTier} 필요`, "#cbd5e1", 14);
+        const msg = e.def.requiredTier >= NEVER ? `${e.def.name} — 통과 불가` : `티어 ${e.def.requiredTier} 필요`;
+        floatText(w, e.x, e.y - e.def.radius - 10, msg, "#cbd5e1", 14);
       }
     }
   }

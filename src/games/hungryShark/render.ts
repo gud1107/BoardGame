@@ -5,7 +5,7 @@
  * same as `worm/WormCanvas.tsx`.
  */
 
-import { ENTITY_DEFS, seabedY, SEABED_BASE, SKY_TOP, SURFACE_Y, WORLD_W, type EntityKind, type SharkDef } from "./data";
+import { ENTITY_DEFS, seabedExtent, seabedY, SEABED_BASE, SKY_TOP, SURFACE_Y, WORLD_W, worldBottom, type EntityKind, type SharkDef } from "./data";
 import { bodyLength, bodyScale, isCloaked, isDangerous, isEdible, mouthPos, type Entity, type World } from "./engine";
 import { MARKER_COLORS, type Marker } from "./markers";
 
@@ -33,7 +33,8 @@ export function updateCamera(cam: Camera, w: World, viewW: number, viewH: number
   const halfW = viewW / 2 / cam.zoom;
   cam.x = Math.max(halfW - 200, Math.min(WORLD_W - halfW + 200, cam.x));
   const halfH = viewH / 2 / cam.zoom;
-  cam.y = Math.max(SKY_TOP + halfH, Math.min(SEABED_BASE + 260 - halfH, cam.y));
+  // Map-aware floor: 얼음 해협 trenches dip below the old fixed 3560 limit.
+  cam.y = Math.max(SKY_TOP + halfH, Math.min(worldBottom() - halfH, cam.y));
 }
 
 const GOLD = "#facc15";
@@ -140,7 +141,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
   }
 
   // ── Seabed ──
-  if (bottom > SEABED_BASE - 300) {
+  if (bottom > seabedExtent().min - 20) {
     const sand = ctx.createLinearGradient(0, SEABED_BASE - 200, 0, SEABED_BASE + 400);
     sand.addColorStop(0, pal.sand[0]);
     sand.addColorStop(1, pal.sand[1]);
@@ -505,7 +506,7 @@ function drawThreatArrows(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
 
 function drawMinimap(ctx: CanvasRenderingContext2D, w: World, vw: number, vh: number) {
   const mw = Math.min(190, vw * 0.3);
-  const worldH = SEABED_BASE + 300 - SKY_TOP;
+  const worldH = worldBottom() + 40 - SKY_TOP;
   const mh = (mw * worldH) / WORLD_W;
   const mx = vw - mw - 10;
   const my = vh - mh - 10;

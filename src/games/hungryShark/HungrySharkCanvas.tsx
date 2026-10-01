@@ -110,6 +110,7 @@ export default function HungrySharkCanvas({
   const [cur, setCur] = useState<{ def: SharkDef; upgrades: UpgradeLevels }>({ def, upgrades });
   const [evolveOpen, setEvolveOpen] = useState(false);
   const evolveRef = useRef(false);
+  const pausedBeforeEvolveRef = useRef(false);
 
   const [hud, setHud] = useState<Hud | null>(null);
   const [paused, setPaused] = useState(false);
@@ -134,12 +135,15 @@ export default function HungrySharkCanvas({
 
   const openEvolve = useCallback((open: boolean) => {
     const w = worldRef.current;
-    if (!w || w.over) return;
-    if (open && w.def.nextIds.length === 0) return;
+    if (!w || w.over || open === evolveRef.current) return;
+    if (open && (w.def.nextIds.length === 0 || bestiaryRef.current)) return;
     evolveRef.current = open;
     setEvolveOpen(open);
-    pausedRef.current = open;
-    setPaused(open);
+    // Restore whatever pause state the player had before opening (Esc menu stays up).
+    if (open) pausedBeforeEvolveRef.current = pausedRef.current;
+    const p = open ? true : pausedBeforeEvolveRef.current;
+    pausedRef.current = p;
+    setPaused(p);
   }, []);
 
   const pushBanner = useCallback((b: Omit<Banner, "id">) => {
@@ -202,15 +206,16 @@ export default function HungrySharkCanvas({
     const down = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       if (k === "b") {
-        openBestiary(!bestiaryRef.current);
+        if (!evolveRef.current) openBestiary(!bestiaryRef.current);
         return;
       }
       if (k === "v") {
         openEvolve(!evolveRef.current);
         return;
       }
-      if (evolveRef.current && k === "escape") {
-        openEvolve(false);
+      if (evolveRef.current && (k === "escape" || k === "p")) {
+        // Esc closes the modal; P is ignored so the dive can't resume behind it.
+        if (k === "escape") openEvolve(false);
         return;
       }
       if (k === "escape" || k === "p") {

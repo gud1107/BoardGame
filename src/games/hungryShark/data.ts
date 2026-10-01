@@ -82,10 +82,11 @@ export const MAPS: MapDef[] = [
   },
   {
     id: "frozenStrait", name: "얼음 해협", emoji: "🧊", recommendedTier: 2,
-    desc: "떠다니는 빙산이 수면을 막는 차가운 바다. 참치·가오리·상어가 많고 수영객은 드뭅니다. 코인 ×1.25.",
+    desc: "떠다니는 빙산이 수면을 막는 차가운 바다. 참치·가오리·상어가 많고 수영객은 드뭅니다. 코인 ×1.4.",
     width: 12000, chestCount: 9,
     terrain: [[220, 0.0008, 0.7], [90, 0.0029, 2.1], [20, 0.011, 1.1]],
-    coinBonus: 1.25,
+    // Sim (8 seeds × 5 sharks): ×1.25 left per-dive income ≈ 딥 블루 despite more deaths → ×1.4.
+    coinBonus: 1.4,
     population: { swimmer: 0.3, crab: 0.5, pelican: 0.5, tuna: 1.6, ray: 1.5, smallShark: 1.4, grouper: 1.3, redJelly: 1.4, iceberg: 1 },
     darknessStart: 1000, feature: "icebergs",
     palette: {
@@ -129,6 +130,17 @@ export function setActiveMap(map: MapDef) {
 
 export function getActiveMap(): MapDef {
   return activeMap;
+}
+
+/** Shallowest / deepest the active map's seabed can get (sum of octave amplitudes). */
+export function seabedExtent(): { min: number; max: number } {
+  const amp = activeMap.terrain.reduce((a, [amp]) => a + amp, 0);
+  return { min: SEABED_BASE - amp, max: SEABED_BASE + amp };
+}
+
+/** Lowest world y the camera / minimap must be able to show on the active map. */
+export function worldBottom(): number {
+  return Math.max(SEABED_BASE + 260, seabedExtent().max + 90);
 }
 
 /** Rolling seabed profile of the active map — deterministic, so render and physics agree. */

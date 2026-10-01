@@ -558,3 +558,59 @@ describe("mid-dive evolution", () => {
     expect(isEdible(w, place(w, "puffer", 0, 0))).toBe(true);
   });
 });
+
+describe("map invariant sweep", () => {
+  const MAP_IDS = ["deepBlue", "frozenStrait", "shipwreck"] as const;
+  it.each(MAP_IDS.flatMap((m) => SHARKS.map((s) => [m, s.id] as const)))(
+    "%s × %s: 45s dive with skills + mid-dive evolution keeps every invariant",
+    async (mapId, sharkId) => {
+      const { evolveWorld } = await import("./engine");
+      const data = await import("./data");
+      const w = createWorld(sharkById(sharkId), { bite: 2, speed: 2, boost: 2 }, 777, mapId);
+      const chests0 = w.entities.filter((e) => e.kind === "chest").length;
+      let t = 0;
+      for (let i = 0; i < 60 * 45 && !w.over; i++) {
+        t += 1 / 60;
+        if (i === 60 * 15 && w.def.nextIds.length) evolveWorld(w, sharkById(w.def.nextIds[0]), NO_UPGRADES);
+        // Wander everywhere: surface jumps, deep trenches, world edges.
+        step(w, { dirX: Math.cos(t * 0.35) + 0.3, dirY: Math.sin(t * 0.55) * 1.2, boost: Math.sin(t * 1.3) > 0.4, skill: i % 90 === 0 }, 1 / 60);
+        w.events.length = 0;
+        const s = w.shark;
+        if (!Number.isFinite(s.x) || !Number.isFinite(s.y) || !Number.isFinite(s.hp)) throw new Error(`non-finite shark @${i}`);
+        if (s.x < 0 || s.x > data.WORLD_W) throw new Error(`shark x out of world: ${s.x}`);
+        if (s.y > data.seabedY(s.x) + 1) throw new Error(`shark below seabed: ${s.y} > ${data.seabedY(s.x)}`);
+        if (s.y < data.SKY_TOP) throw new Error(`shark above sky: ${s.y}`);
+        if (i % 30 === 0) {
+          for (const e of w.entities) {
+            if (!e.alive) continue;
+            if (!Number.isFinite(e.x) || !Number.isFinite(e.y)) throw new Error(`non-finite ${e.kind}`);
+            if (e.x < 0 || e.x > data.WORLD_W) throw new Error(`${e.kind} x out of world: ${e.x}`);
+            if (e.kind === "iceberg" && mapId !== "frozenStrait") throw new Error("iceberg on wrong map");
+          }
+          if (w.entities.filter((e) => e.kind === "chest" && e.alive).length > chests0) throw new Error("chests respawned");
+        }
+      }
+      expect(w.entities.length).toBeLessThan(450);
+      expect(summarize(w).mapId).toBe(mapId);
+    },
+    20000,
+  );
+
+  it("camera can always show a shark lying on the deepest seabed of every map", async () => {
+    const { updateCamera, viewHeightFor } = await import("./render");
+    const data = await import("./data");
+    for (const m of data.MAPS) {
+      const w = createWorld(sharkById("megalodon"), NO_UPGRADES, 90, m.id);
+      // Find the deepest floor point.
+      let bx = 0, by = -1;
+      for (let x = 0; x < data.WORLD_W; x += 5) if (data.seabedY(x) > by) { by = data.seabedY(x); bx = x; }
+      w.shark.x = bx;
+      w.shark.y = by - w.stats.length * 0.3;
+      const vh = 500;
+      const cam = { x: w.shark.x, y: w.shark.y, zoom: vh / viewHeightFor(w.def) };
+      for (let i = 0; i < 300; i++) updateCamera(cam, w, 900, vh, 1 / 60);
+      const screenY = (w.shark.y - cam.y) * cam.zoom + vh / 2;
+      expect(screenY, `${m.id} shark off-screen at floor y=${by.toFixed(0)}`).toBeLessThan(vh - 10);
+    }
+  });
+});
