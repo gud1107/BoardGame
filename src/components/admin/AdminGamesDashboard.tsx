@@ -16,6 +16,7 @@ import BugReportsTab from "./tabs/BugReportsTab";
 import NoticeTab from "./tabs/NoticeTab";
 import GameVisibilityTab from "./tabs/GameVisibilityTab";
 import SetupStatus from "./SetupStatus";
+import AdminErrorBoundary from "./AdminErrorBoundary";
 import IpLabelsTab from "./tabs/IpLabelsTab";
 import { useIpLabels } from "./useIpLabels";
 import LabeledActivityPanel from "./LabeledActivityPanel";
@@ -180,8 +181,12 @@ function AdminHub() {
         </div>
       </div>
 
-      <SetupStatus />
-      <LabeledActivityPanel key={ipLabels.size} reloadKey={reloadKey} labels={ipLabels} />
+      <AdminErrorBoundary name="DB 설정 확인">
+        <SetupStatus />
+      </AdminErrorBoundary>
+      <AdminErrorBoundary name="🔔 접속 알림">
+        <LabeledActivityPanel key={ipLabels.size} reloadKey={reloadKey} labels={ipLabels} />
+      </AdminErrorBoundary>
 
       <nav className="-mx-4 mb-4 flex gap-1 overflow-x-auto border-b border-white/10 px-4 pb-px no-scrollbar sm:mx-0 sm:px-0 light:border-slate-200">
         {TABS.map((t) => (
@@ -218,19 +223,21 @@ function AdminHub() {
         </div>
       )}
 
-      {tab === "games" && <GamesTab since={since} exclude={exclude} myIp={myIp} ipLabels={ipLabels} reloadKey={reloadKey} />}
-      {tab === "monthly" && <MonthlyTab exclude={exclude} reloadKey={reloadKey} />}
-      {tab === "trend" && <TrendTab exclude={exclude} reloadKey={reloadKey} />}
-      {tab === "hours" && <HoursTab since={since} exclude={exclude} reloadKey={reloadKey} />}
-      {tab === "dropoff" && <DropOffTab since={since} exclude={exclude} reloadKey={reloadKey} />}
-      {tab === "rooms" && <RoomsTab since={since} exclude={exclude} reloadKey={reloadKey} />}
-      {tab === "sources" && <SourcesTab since={since} exclude={exclude} reloadKey={reloadKey} />}
-      {tab === "ips" && (
-        <IpLabelsTab since={since} myIp={myIp} labels={ipLabels} onLabelsChanged={reloadIpLabels} reloadKey={reloadKey} />
-      )}
-      {tab === "bugs" && <BugReportsTab reloadKey={reloadKey} />}
-      {tab === "notice" && <NoticeTab />}
-      {tab === "visibility" && <GameVisibilityTab />}
+      <AdminErrorBoundary key={tab} name={`${current.label} 탭`}>
+        {tab === "games" && <GamesTab since={since} exclude={exclude} myIp={myIp} ipLabels={ipLabels} reloadKey={reloadKey} />}
+        {tab === "monthly" && <MonthlyTab exclude={exclude} reloadKey={reloadKey} />}
+        {tab === "trend" && <TrendTab exclude={exclude} reloadKey={reloadKey} />}
+        {tab === "hours" && <HoursTab since={since} exclude={exclude} reloadKey={reloadKey} />}
+        {tab === "dropoff" && <DropOffTab since={since} exclude={exclude} reloadKey={reloadKey} />}
+        {tab === "rooms" && <RoomsTab since={since} exclude={exclude} reloadKey={reloadKey} />}
+        {tab === "sources" && <SourcesTab since={since} exclude={exclude} reloadKey={reloadKey} />}
+        {tab === "ips" && (
+          <IpLabelsTab since={since} myIp={myIp} labels={ipLabels} onLabelsChanged={reloadIpLabels} reloadKey={reloadKey} />
+        )}
+        {tab === "bugs" && <BugReportsTab reloadKey={reloadKey} />}
+        {tab === "notice" && <NoticeTab />}
+        {tab === "visibility" && <GameVisibilityTab />}
+      </AdminErrorBoundary>
     </div>
   );
 }

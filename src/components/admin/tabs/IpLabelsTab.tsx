@@ -12,7 +12,7 @@ interface TopIpRow {
   game_starts: number;
   events: number;
   devices: number;
-  nicknames: string[];
+  nicknames: string[] | null;
   first_at: string;
   last_at: string;
   label: string | null;
@@ -252,7 +252,7 @@ export default function IpLabelsTab({
                   <td className="px-3 py-2 text-right tabular-nums">{fmt(r.visits)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmt(r.game_starts)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmt(r.devices)}대</td>
-                  <td className="px-3 py-2">{r.nicknames.length ? r.nicknames.join(", ") : <span className="text-white/30">—</span>}</td>
+                  <td className="px-3 py-2">{r.nicknames?.length ? r.nicknames.join(", ") : <span className="text-white/30">—</span>}</td>
                   <td className="px-3 py-2 whitespace-nowrap tabular-nums">{DATE_TIME.format(new Date(r.last_at))}</td>
                 </tr>
               ))}

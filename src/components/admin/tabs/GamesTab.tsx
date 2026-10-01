@@ -21,8 +21,8 @@ export interface FunnelRow {
 
 interface ParticipantRow {
   device_id: string;
-  nicknames: string[];
-  ip_hashes: string[];
+  nicknames: string[] | null;
+  ip_hashes: string[] | null;
   /** hash → raw IP, only for events recorded after the raw IP started being stored. */
   ip_map: Record<string, string> | null;
   hub_clicks: number;
@@ -164,7 +164,10 @@ function Participants({
     JSON.stringify([gameId, since, exclude]),
   );
 
-  const flags = useMemo(() => computeDuplicateFlags(rows ?? []), [rows]);
+  const flags = useMemo(
+    () => computeDuplicateFlags((rows ?? []).map((r) => ({ ...r, nicknames: r.nicknames ?? [], ip_hashes: r.ip_hashes ?? [] }))),
+    [rows],
+  );
   if (error) return <ErrorNote message={error} />;
   if (!rows) return <Loading />;
 
@@ -212,7 +215,7 @@ function Participants({
                   <tr key={r.device_id ?? "none"} className="align-top">
                     <td className="px-3 py-2">
                       <p className="font-semibold text-white light:text-slate-900">
-                        {r.nicknames.length ? r.nicknames.join(", ") : <span className="font-normal text-white/40">익명</span>}
+                        {r.nicknames?.length ? r.nicknames.join(", ") : <span className="font-normal text-white/40">익명</span>}
                         {isMe && (
                           <span className="ml-1.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
                             👤 나
@@ -222,7 +225,7 @@ function Participants({
                       <p className="font-mono text-[10px] text-white/30">{(r.device_id ?? "—").slice(0, 8)}</p>
                     </td>
                     <td className="px-3 py-2">
-                      <IpCell hashes={r.ip_hashes} ipMap={ipMap} myIp={myIp} labels={ipLabels} />
+                      <IpCell hashes={r.ip_hashes ?? []} ipMap={ipMap} myIp={myIp} labels={ipLabels} />
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex flex-col gap-0.5">

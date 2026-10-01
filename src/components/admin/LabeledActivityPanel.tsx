@@ -11,8 +11,10 @@ interface ActivityRow {
   last_at: string | null;
   visits_since: number;
   starts_since: number;
-  games_since: string[];
-  nicknames_since: string[];
+  // Postgres returns NULL (not an empty array) when nothing matched the
+  // FILTER — e.g. a named person who visited but didn't start a game.
+  games_since: string[] | null;
+  nicknames_since: string[] | null;
 }
 
 const CHECKED_KEY = "bg_admin_labels_checked_at";
@@ -105,7 +107,7 @@ export default function LabeledActivityPanel({ reloadKey, labels }: { reloadKey:
           </div>
           <ul className="mt-2 flex flex-col gap-1.5">
             {fresh.map((r) => {
-              const games = r.games_since.map((g) => getGameMeta(g)?.name ?? g);
+              const games = (r.games_since ?? []).map((g) => getGameMeta(g)?.name ?? g);
               return (
                 <li key={r.ip} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
                   <span className="rounded-full bg-amber-500/20 px-2 py-0.5 font-semibold text-amber-200 light:text-amber-800">🏷️ {r.label}</span>
@@ -116,7 +118,9 @@ export default function LabeledActivityPanel({ reloadKey, labels }: { reloadKey:
                       🎲 {games.join(", ")} ({Number(r.starts_since)}판 시작)
                     </span>
                   )}
-                  {r.nicknames_since.length > 0 && <span className="text-white/40">닉네임: {r.nicknames_since.join(", ")}</span>}
+                  {(r.nicknames_since ?? []).length > 0 && (
+                    <span className="text-white/40">닉네임: {(r.nicknames_since ?? []).join(", ")}</span>
+                  )}
                 </li>
               );
             })}
