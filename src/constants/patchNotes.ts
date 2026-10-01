@@ -48,6 +48,18 @@ export interface PatchNoteEntry {
  */
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.50.0",
+    releaseDate: "2026-10-02",
+    title: "꽃게 서바이벌 하이퍼 성장 — 해저 무기·변이 아이템·진화 티어 특수기",
+    changes: [
+      {
+        game: "crab-survival",
+        type: "FEAT",
+        desc: "초반 성장 대폭 단축(약 2배 빠른 킹 크랩), 진화 4티어와 E키 특수기(대시·버블 기절·모래 잠복·수류 빔), 자동 발사 해저 무기 7종(일반·희귀·전설 등급, 같은 무기 겹치면 ★강화, 전설 획득 시 섬 전체 현상수배), 강화·리스크 변이 아이템 8종(리스크는 벌칙이 짧고 이점이 길게) 추가",
+      },
+    ],
+  },
+  {
     version: "v1.49.0",
     releaseDate: "2026-09-30",
     title: "틀린 그림 찾기 테마 10종·정답 해설, 카카오톡 인앱 브라우저 자동 전환",

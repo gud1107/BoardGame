@@ -30,7 +30,12 @@ import {
   DASH_SPEED,
   GEAR_DROP,
   GEAR_RARITY,
+  GEAR_STACK_CD,
+  GEAR_STACK_DMG,
+  GEAR_STACK_MAX,
   GEARS,
+  EPIC_HUNT_PAYOFF,
+  EPIC_HUNT_VISION,
   GIANT_SCALE,
   MAGNET_BASE,
   MAX_GEAR,
@@ -188,6 +193,8 @@ export interface GearSlot {
   kind: GearKind;
   t: number;
   cd: number;
+  /** Upgrade stars from picking up duplicates (1..GEAR_STACK_MAX). */
+  lv: number;
 }
 
 export interface MutSlot {
@@ -374,7 +381,8 @@ export type GameEvent =
   | { type: "kingDown"; name: string; by: string | null; player: boolean; byPlayer: boolean }
   | { type: "kill"; killer: string; victim: string; byPlayer: boolean; victimPlayer: boolean }
   | { type: "counter" }
-  | { type: "gear"; name: string; emoji: string; player: boolean; rarity: GearRarity }
+  | { type: "gear"; name: string; emoji: string; player: boolean; rarity: GearRarity; lv: number }
+  | { type: "epicAlert"; who: string; gear: string; emoji: string; player: boolean }
   | { type: "mutation"; kind: MutationKind; player: boolean }
   | { type: "skill"; tier: CrabTier; player: boolean }
   | { type: "blast"; x: number; y: number; player: boolean }
@@ -473,7 +481,7 @@ export function attackReach(c: Crab): number {
 export function crabDps(c: Crab): number {
   const wd = c.weapon ? WEAPONS[c.weapon.kind] : UNARMED;
   let gearDps = 0;
-  for (const g of c.gear) gearDps += GEARS[g.kind].dmg * (g.kind === "shotgun" ? 3 : 1) / GEARS[g.kind].cooldown;
+  for (const g of c.gear) gearDps += (GEARS[g.kind].dmg * (1 + GEAR_STACK_DMG * (g.lv - 1)) * (g.kind === "shotgun" ? 3 : 1)) / (GEARS[g.kind].cooldown * (1 - GEAR_STACK_CD * (g.lv - 1)));
   return levelDef(c).atk * atkMult(c) * (wd.dmg / wd.cooldown + gearDps * 0.6);
 }
 
@@ -2106,12 +2114,13 @@ function decide(w: World, c: Crab, br: Brain, hpFrac: number) {
     if (o === c || !o.alive || untouchable(o)) continue;
     const d = Math.hypot(o.x - c.x, o.y - c.y);
     const isKing = o.id === w.kingId;
-    if (d > vision * (isKing ? 1.8 : 1)) continue;
+    const epic = holdsEpic(o);
+    if (d > vision * (isKing ? 1.8 : epic ? EPIC_HUNT_VISION : 1)) continue;
     const mine = timeToKill(c, o), theirs = timeToKill(o, c);
     if (mine > theirs * (0.55 + br.aggression * 0.55)) continue;
     // Big crabs mostly ignore small fry — not worth the chase.
     const smallFry = o.level < c.level - 3 ? 0.25 : 1;
-    const payoff = (o.score * 0.6 + 200 * o.level * lv.gain) * smallFry + (isKing ? o.score * 0.5 + 10_000 : 0);
+    const payoff = (o.score * 0.6 + 200 * o.level * lv.gain) * smallFry + (isKing ? o.score * 0.5 + 10_000 : 0) + (epic ? EPIC_HUNT_PAYOFF * lv.gain : 0);
     consider("crab", o.id, o.x, o.y, (payoff * (0.4 + br.aggression)) / (d + 150));
   }
   for (const cr of w.creatures) {
@@ -2152,7 +2161,8 @@ function decide(w: World, c: Crab, br: Brain, hpFrac: number) {
     } else if (p.type === "gear" && p.gear) {
       const g = p.gear;
       const rk = GEAR_RARITY[GEARS[g].rarity].rank;
-      v = c.gear.length < MAX_GEAR || c.gear.some((x) => x.kind === g || x.t < 8 || GEAR_RARITY[GEARS[x.kind].rarity].rank < rk) ? (1000 + 400 * rk) * lv.gain : 0;
+      const dup = c.gear.find((x) => x.kind === g);
+      v = dup ? (dup.lv < GEAR_STACK_MAX ? (1400 + 400 * rk) * lv.gain : 300 * lv.gain) : c.gear.length < MAX_GEAR || c.gear.some((x) => x.t < 8 || GEAR_RARITY[GEARS[x.kind].rarity].rank < rk) ? (1000 + 400 * rk) * lv.gain : 0;
     } else if (p.type === "mutation" && p.mutation) {
       const m = MUTATIONS[p.mutation];
       // Bold bots gamble on the risky ones; nobody wants the oil slick.
@@ -2252,22 +2262,43 @@ function dropMutation(w: World, x: number, y: number, allowRisk = true) {
 export function equipGear(w: World, c: Crab, kind: GearKind): boolean {
   const def = GEARS[kind];
   const same = c.gear.find((g) => g.kind === kind);
-  if (same) same.t = def.duration;
-  else if (c.gear.length < MAX_GEAR) c.gear.push({ kind, t: def.duration, cd: 0.2 });
+  const hadEpic = holdsEpic(c);
+  // A duplicate upgrades the one you hold (★ up to GEAR_STACK_MAX) and refills its timer.
+  if (same) {
+    same.t = def.duration;
+    if (same.lv < GEAR_STACK_MAX) {
+      same.lv++;
+      ring(w, c.x, c.y, crabRadius(c) * 2.6, def.color, 0.5);
+      floatText(w, c.x, c.y - 46 * c.scale, `${def.emoji} 강화 ${"★".repeat(same.lv)}`, "#fde68a", c.isPlayer ? 18 : 13, 1.3);
+    }
+  } else if (c.gear.length < MAX_GEAR) c.gear.push({ kind, t: def.duration, cd: 0.2, lv: 1 });
   else {
     const rank = (k: GearKind) => GEAR_RARITY[GEARS[k].rarity].rank;
     const worst = c.gear.reduce((a, g) => (rank(g.kind) < rank(a.kind) || (rank(g.kind) === rank(a.kind) && g.t < a.t) ? g : a), c.gear[0]);
     if (rank(kind) <= rank(worst.kind) && worst.t > def.duration * 0.8) return false;
     // A lower tier only gets in once the rarer one is nearly spent.
     if (rank(kind) < rank(worst.kind) && worst.t > GEARS[worst.kind].duration * 0.25) return false;
-    c.gear[c.gear.indexOf(worst)] = { kind, t: def.duration, cd: 0.2 };
+    c.gear[c.gear.indexOf(worst)] = { kind, t: def.duration, cd: 0.2, lv: 1 };
   }
   burst(w, "star", c.x, c.y, 8, 160, def.color, 4, 0.6, 160);
   if (c.isPlayer) {
-    w.events.push({ type: "gear", name: def.name, emoji: def.emoji, player: true, rarity: def.rarity });
-    floatText(w, c.x, c.y - 34 * c.scale, `${def.emoji} ${def.name}!`, "#a5f3fc", 16, 1.2);
+    w.events.push({ type: "gear", name: def.name, emoji: def.emoji, player: true, rarity: def.rarity, lv: same?.lv ?? 1 });
+    if (!same) floatText(w, c.x, c.y - 34 * c.scale, `${def.emoji} ${def.name}!`, "#a5f3fc", 16, 1.2);
+  }
+  // A fresh legendary is announced to the whole island — its holder becomes the hunted.
+  if (def.rarity === "epic" && !hadEpic) {
+    w.events.push({ type: "epicAlert", who: c.name, gear: def.name, emoji: def.emoji, player: c.isPlayer });
+    burst(w, "gold", c.x, c.y, 24, 260, "#fbbf24", 5, 1, 260);
   }
   return true;
+}
+
+export function holdsEpic(c: Crab): boolean {
+  return c.alive && c.gear.some((g) => GEARS[g.kind].rarity === "epic");
+}
+
+function gearLv(c: Crab, kind: GearKind): number {
+  return c.gear.find((g) => g.kind === kind)?.lv ?? 1;
 }
 
 export function applyMutation(w: World, c: Crab, kind: MutationKind) {
@@ -2341,7 +2372,8 @@ function nearestFoe(w: World, c: Crab, range: number, skip: number[] = [], fromX
 
 function gearHit(w: World, c: Crab, kind: GearKind, mult = 1): { dmg: number; crit: boolean } {
   const crit = rand(w) < critChance(c, 0);
-  let dmg = levelDef(c).atk * GEARS[kind].dmg * atkMult(c) * mult * range(w, 0.9, 1.1);
+  const stack = 1 + GEAR_STACK_DMG * (gearLv(c, kind) - 1);
+  let dmg = levelDef(c).atk * GEARS[kind].dmg * stack * atkMult(c) * mult * range(w, 0.9, 1.1);
   if (crit) dmg *= CRIT_MULT;
   return { dmg, crit };
 }
@@ -2370,14 +2402,16 @@ function updateGear(w: World, c: Crab, dt: number) {
       case "trident": {
         const t = nearestFoe(w, c, def.range * reachK);
         if (!t) continue;
-        g.cd = def.cooldown;
+        g.cd = def.cooldown * (1 - GEAR_STACK_CD * (g.lv - 1));
         const a = Math.atan2(t.y - c.y, t.x - c.x);
         const ox = c.x + Math.cos(a) * r, oy = c.y + Math.sin(a) * r;
         if (g.kind === "shotgun") {
           const speed = 760;
-          for (let i = -2; i <= 2; i++) {
+          // ★3 shotgun fans out 7 shards instead of 5.
+          const spread = g.lv >= GEAR_STACK_MAX ? 3 : 2;
+          for (let i = -spread; i <= spread; i++) {
             const h = gearHit(w, c, "shotgun");
-            const aa = a + i * 0.15;
+            const aa = a + i * (spread === 3 ? 0.12 : 0.15);
             w.shots.push({ owner: c.id, kind: "shotgun", x: ox, y: oy, vx: Math.cos(aa) * speed, vy: Math.sin(aa) * speed, life: (def.range * reachK) / speed, dmg: h.dmg, crit: h.crit, r: 7 * Math.sqrt(c.scale), knock: 120, pierce: false, hit: [] });
           }
           burst(w, "shard", ox, oy, 5, 200, def.color, 3, 0.25, 40);
@@ -2400,7 +2434,7 @@ function updateGear(w: World, c: Crab, dt: number) {
       case "zap": {
         let t = nearestFoe(w, c, def.range * reachK);
         if (!t) continue;
-        g.cd = def.cooldown;
+        g.cd = def.cooldown * (1 - GEAR_STACK_CD * (g.lv - 1));
         // Chain lightning: up to 3 links, each hop picking the nearest unzapped foe.
         const hit: number[] = [];
         let fx = c.x, fy = c.y;
@@ -2424,7 +2458,7 @@ function updateGear(w: World, c: Crab, dt: number) {
       }
       case "mine": {
         if (!c.moving) continue;
-        g.cd = def.cooldown;
+        g.cd = def.cooldown * (1 - GEAR_STACK_CD * (g.lv - 1));
         const h = gearHit(w, c, "mine");
         const mine: Mine = { id: w.nextId++, owner: c.id, x: c.x - c.lastMx * r * 1.3, y: c.y - c.lastMy * r * 1.3, arm: 0.6, life: 14, dmg: h.dmg, blast: 85 * reachK };
         if (w.mines.filter((m) => m.owner === c.id).length >= 5) w.mines.splice(w.mines.findIndex((m) => m.owner === c.id), 1);
@@ -2432,7 +2466,7 @@ function updateGear(w: World, c: Crab, dt: number) {
         break;
       }
       case "saw": {
-        g.cd = def.cooldown;
+        g.cd = def.cooldown * (1 - GEAR_STACK_CD * (g.lv - 1));
         const reach = r + 30 * c.scale;
         for (const t of w.crabs) {
           if (t === c || !t.alive || untouchable(t)) continue;

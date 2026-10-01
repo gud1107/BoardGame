@@ -632,3 +632,49 @@ describe("weapon rarity", () => {
     expect(equipGear(w, me, "shotgun")).toBe(true); // ...until it's nearly spent
   });
 });
+
+describe("duplicate stacking + legendary bounty", () => {
+  it("a duplicate weapon upgrades to ★3 max, hitting harder and firing faster", () => {
+    const run = (stars: number) => {
+      const w = bare(1);
+      const [me, foe] = w.crabs;
+      foe.brain = null;
+      foe.x = 150;
+      foe.hp = foe.maxHp = 100_000;
+      for (let i = 0; i < stars; i++) equipGear(w, me, "needle");
+      for (let i = 0; i < 120; i++) step(w, idle, 1 / 60);
+      return { lv: me.gear[0].lv, dealt: 100_000 - foe.hp };
+    };
+    const one = run(1), three = run(3), five = run(5);
+    expect(one.lv).toBe(1);
+    expect(three.lv).toBe(3);
+    expect(five.lv).toBe(3); // capped
+    expect(three.dealt).toBeGreaterThan(one.dealt * 1.5);
+  });
+
+  it("picking up a legendary alerts the island once, not on refresh", () => {
+    const w = bare(1);
+    const foe = w.crabs[1];
+    equipGear(w, foe, "trident");
+    expect(w.events.filter((e) => e.type === "epicAlert")).toHaveLength(1);
+    equipGear(w, foe, "trident");
+    expect(w.events.filter((e) => e.type === "epicAlert")).toHaveLength(1);
+  });
+
+  it("bots go after whoever carries a legendary", () => {
+    const w = bare(3);
+    const [, hunter, plain, epic] = w.crabs;
+    player(w).x = 3000;
+    addScore(w, hunter, 15_000);
+    hunter.hp = hunter.maxHp;
+    hunter.brain!.aggression = 0.6;
+    plain.x = 300;
+    epic.x = -300;
+    plain.brain = epic.brain = null;
+    equipGear(w, epic, "vortex");
+    epic.gear[0].t = 999;
+    hunter.brain!.think = 0;
+    botThink(w, hunter, 1 / 60);
+    expect(hunter.brain!.targetId).toBe(epic.id);
+  });
+});

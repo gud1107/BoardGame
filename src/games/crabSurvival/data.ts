@@ -487,6 +487,13 @@ export interface GearDef {
 }
 
 export const MAX_GEAR = 2;
+/** Picking up a weapon you already hold upgrades it (★1 → ★3): +25% damage and -12% cooldown per star. */
+export const GEAR_STACK_MAX = 3;
+export const GEAR_STACK_DMG = 0.25;
+export const GEAR_STACK_CD = 0.12;
+/** Bots go out of their way (vision ×, payoff +) to hunt anyone carrying a legendary weapon. */
+export const EPIC_HUNT_VISION = 1.6;
+export const EPIC_HUNT_PAYOFF = 4_000;
 
 type GearBase = Omit<GearDef, "baseDmg" | "baseDuration">;
 

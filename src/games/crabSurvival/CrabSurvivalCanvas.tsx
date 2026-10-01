@@ -57,7 +57,7 @@ interface Hud {
   tier: CrabTier;
   skillCd: number;
   burrow: boolean;
-  gear: { emoji: string; name: string; t: number; max: number; color: string; label: string }[];
+  gear: { emoji: string; name: string; t: number; max: number; color: string; label: string; lv: number }[];
   muts: { kind: MutationKind; t: number; pen: number }[];
   pearl: number;
 }
@@ -251,6 +251,8 @@ export default function CrabSurvivalCanvas({
     let last = performance.now();
     let hudAcc = 0;
     let endTimer: number | null = null;
+    // Legendary pickups happen every ~20s across the island — only one big banner per 30s, the rest go to the feed.
+    let lastEpicBanner = -Infinity;
 
     const readInput = (): CrabInput => {
       const inp = input.current;
@@ -392,9 +394,13 @@ export default function CrabSurvivalCanvas({
             break;
           case "gear":
             a?.gear();
+            if (ev.lv > 1) {
+              pushBanner({ text: `⬆️ ${ev.emoji} ${ev.name} ${"★".repeat(ev.lv)}`, sub: `같은 무기 겹치기 강화! 피해 +${Math.round((ev.lv - 1) * 25)}% · 연사 +${Math.round((ev.lv - 1) * 12)}%${ev.lv >= 3 ? " (최대)" : ""}`, tone: "level" });
+              break;
+            }
             pushBanner({
               text: `${ev.rarity === "epic" ? "🌟 " : ev.rarity === "rare" ? "✨ " : ""}${ev.emoji} ${ev.name}`,
-              sub: `${GEAR_RARITY[ev.rarity].label} 무기 · 자동 발사 장착! (최대 2개)`,
+              sub: ev.rarity === "epic" ? "전설 무기 장착! 섬 전체에 위치가 알려졌습니다 — 모두가 노립니다" : `${GEAR_RARITY[ev.rarity].label} 무기 · 자동 발사 장착! (같은 무기를 또 주우면 강화)`,
               tone: ev.rarity === "common" ? "info" : "king",
             });
             if (ev.rarity === "epic") a?.fanfare();
@@ -409,6 +415,14 @@ export default function CrabSurvivalCanvas({
           }
           case "skill":
             if (ev.player) a?.skill(ev.tier);
+            break;
+          case "epicAlert":
+            pushFeed(`🌟 ${ev.who} ${ev.emoji} ${ev.gear} 획득`, ev.player);
+            if (!ev.player && world.time - lastEpicBanner > 30) {
+              lastEpicBanner = world.time;
+              a?.locked();
+              pushBanner({ text: `🌟 ${ev.who}: 전설 ${ev.emoji} 획득!`, sub: "미니맵의 금빛 점 · 쓰러뜨리면 전설 무기를 빼앗을 수 있어요", tone: "king" });
+            }
             break;
           case "blast":
             if (ev.player) a?.blast();
@@ -500,7 +514,7 @@ export default function CrabSurvivalCanvas({
           tier: tierForLevel(me.level),
           skillCd: me.skillCd,
           burrow: me.burrow > 0,
-          gear: me.gear.map((g) => ({ emoji: GEARS[g.kind].emoji, name: GEARS[g.kind].name, t: g.t, max: GEARS[g.kind].duration, color: GEAR_RARITY[GEARS[g.kind].rarity].color, label: GEAR_RARITY[GEARS[g.kind].rarity].label })),
+          gear: me.gear.map((g) => ({ emoji: GEARS[g.kind].emoji, name: GEARS[g.kind].name, t: g.t, max: GEARS[g.kind].duration, color: GEAR_RARITY[GEARS[g.kind].rarity].color, label: GEAR_RARITY[GEARS[g.kind].rarity].label, lv: g.lv })),
           muts: me.muts.map((m) => ({ kind: m.kind, t: m.t, pen: penaltyLeft(me, m.kind) })),
           pearl: me.pearl,
         });
@@ -693,6 +707,7 @@ export default function CrabSurvivalCanvas({
               {hud.gear.map((g, i) => (
                 <div key={`g${i}`} className="flex items-center gap-1 rounded-lg bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-white" style={{ boxShadow: `0 0 0 1px ${g.color}` }} title={`[${g.label}] ${g.name}`}>
                   <span className="text-sm leading-none">{g.emoji}</span>
+                  {g.lv > 1 && <span className="text-[9px] text-amber-300">{"★".repeat(g.lv)}</span>}
                   {!compact && <span className="max-w-[78px] truncate font-bold" style={{ color: g.color }}>{g.name}</span>}
                   <span className={`font-mono tabular-nums ${g.t < 5 ? "animate-pulse text-rose-300" : "text-cyan-300"}`}>{Math.ceil(g.t)}s</span>
                 </div>

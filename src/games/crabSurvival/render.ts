@@ -6,7 +6,7 @@
  */
 
 import { BOXES, CRAB_RADIUS, FOODS, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
-import { crabRadius, hasMut, penaltyLeft, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
+import { crabRadius, hasMut, holdsEpic, penaltyLeft, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
 
 export const TILT = 0.72;
 
@@ -949,6 +949,17 @@ function drawCrabWorld(ctx: CanvasRenderingContext2D, c: Crab, t: number, king: 
     return;
   }
   if (c.alive && c.muts.length) drawMutationAura(ctx, c, t);
+  if (holdsEpic(c)) {
+    const r = CRAB_RADIUS * s;
+    ctx.strokeStyle = `rgba(251,191,36,${0.55 + 0.25 * Math.sin(t * 6)})`;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 8]);
+    ctx.lineDashOffset = -t * 30;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r * 1.9, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   if (c.alive && c.surge > 0) {
     const sp = SPECIES[c.species];
     const k = Math.min(1, c.surge / Math.max(0.1, sp.perk.seconds));
@@ -1906,6 +1917,20 @@ export function drawMinimap(ctx: CanvasRenderingContext2D, w: World, size: numbe
 
   const me = player(w);
   const dot = (x: number, y: number) => [R + x * k, R + y * k] as const;
+  for (const c of w.crabs) {
+    if (c.isPlayer || !holdsEpic(c)) continue;
+    const [x, y] = dot(c.x, c.y);
+    const ph = (t * 1.6 + c.id * 0.13) % 1;
+    ctx.strokeStyle = `rgba(251,191,36,${1 - ph})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x, y, 3 + ph * 9, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#fbbf24";
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
   if (w.kingId !== null && w.kingId !== w.playerId) {
     const king = w.crabs.find((c) => c.id === w.kingId);
     if (king?.alive) {
