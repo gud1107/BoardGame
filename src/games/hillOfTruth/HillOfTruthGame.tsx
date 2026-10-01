@@ -38,6 +38,7 @@ import {
   type BotTakeoverEvent,
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
+import { selfResult } from "@/games/shared/selfResult";
 
 /**
  * 진실의 고개 온라인 대전 진입점 — 다른 게임들과 동일한 락스텝 패턴
@@ -623,7 +624,7 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
   function handleGameEnd() {
     if (!gameState || gameState.phase !== "ended") return;
     const rankings = computeRankings(gameState);
-    onComplete({ rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })), finishedAt: new Date().toISOString() });
+    onComplete({ rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })), self: selfResult(mySeat, rankings, botTakeover.takeovers), finishedAt: new Date().toISOString() });
     setFinalResult({ winnerSeat: gameState.winnerSeat });
     setPhase("post-game");
   }

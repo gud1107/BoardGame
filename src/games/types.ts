@@ -51,9 +51,22 @@ export interface GameRankingEntry {
   rank: number;
 }
 
+/**
+ * How the player on *this* device finished — feeds the personal stats
+ * (`src/lib/stats/`). Absent when the game can't tell which seat is "me"
+ * (hot-seat/local modes), in which case nothing is recorded.
+ */
+export interface GameSelfResult {
+  rank: number;
+  playerCount: number;
+  /** A takeover bot played this seat at the end — not counted as the owner's result. */
+  botPlayed: boolean;
+}
+
 export interface GameCompletionResult {
   rankings: GameRankingEntry[];
   finishedAt: string;
+  self?: GameSelfResult;
 }
 
 /**

@@ -48,6 +48,7 @@ import { stripControlChars } from "@/lib/chat/sanitize";
 import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
+import { selfResult } from "@/games/shared/selfResult";
 
 /**
  * e.g. "지수님이 민준님에게 쿠데타를 선언했습니다" for a Coup `declareAction`
@@ -784,6 +785,7 @@ export default function CoupGame({ onComplete }: PlayableGameProps) {
     const rankings = computeRankings(gameState);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
+      self: selfResult(mySeat, rankings, botTakeover.takeovers),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerName: gameState.winnerSeat !== null ? (names[gameState.winnerSeat] ?? "상대") : "?" });

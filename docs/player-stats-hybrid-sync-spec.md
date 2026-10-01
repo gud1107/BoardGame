@@ -1,6 +1,6 @@
-# 게스트/로그인 통합 전적 통계 — 설계 검토 (미구현)
+# 게스트/로그인 통합 전적 통계 — 설계 검토 + 1단계 구현
 
-2026-10-02 접수된 제안서를 실제 코드와 대조해 정리한 문서. **아직 구현하지 않았다.** 아래 "결정 필요" 항목이 정해지면 그때 구현한다.
+2026-10-02 접수된 제안서를 실제 코드와 대조해 정리한 문서. 같은 날 §4 권장안대로 **1단계(전 게임 기본 전적 + 로그인 병합)를 구현했다** — §6 참고. 게임별 세부 지표(2단계)와 §5 결정 항목은 아직 남아 있다.
 
 ## 1. 제안 요약
 
@@ -47,3 +47,37 @@
 2. "위대한 투자"가 `great-legacy`인지 `for-sale`인지. 지표는 For Sale 쪽 내용이다.
 3. 첫 단계 범위: 9종 전부의 세부 지표를 한 번에 할지, 기본 승/패/판수를 전 게임에 먼저 깔고 세부 지표를 게임별로 붙일지(후자 권장).
 4. 소셜 로그인 작업(`src/app/auth/`, `supabase/social_auth.sql`)이 아직 커밋되지 않았다. 병합 기능은 그 작업이 들어간 다음에 붙인다.
+
+## 6. 1단계 구현 (2026-10-02)
+
+| 파일 | 역할 |
+| --- | --- |
+| `src/games/types.ts` | `GameCompletionResult.self?: { rank, playerCount, botPlayed }` — 이 기기 플레이어의 결과 |
+| `src/games/shared/selfResult.ts` | `computeRankings()` 결과 + `mySeat` + `botTakeover.takeovers`로 `self`를 만든다. 20개 온라인 게임(`ids[r.seat]` 공통 패턴 19개 + 그림전화기)이 `onComplete`에 실어 보낸다 |
+| `src/app/games/[gameId]/page.tsx` | `handleGameComplete`에서 `res.self`가 있으면 `recordMatchStat()` |
+| `src/lib/db/client.ts` | IndexedDB v3: `statTotals`(표시용 누적), `statPending`(업로드 대기 경기) |
+| `src/lib/stats/playerStats.ts` | 기록 → 큐 → RPC 업로드 → 서버 누적값으로 로컬 갱신. 로그아웃 시 계정 누적값 삭제 후 게스트 대기분만 남김 |
+| `src/components/stats/PlayerStatsSync.tsx` | 루트 레이아웃. 첫 로드·`SIGNED_IN`·`online` 때 동기화, `SIGNED_OUT` 때 초기화 |
+| `src/app/stats/page.tsx` | "내 전적" 페이지(헤더 "전적" 링크). 게스트도 볼 수 있음 |
+| `supabase/player_stats.sql` | `player_game_stats`, `player_match_log`, `record_match_stats()` RPC |
+
+### §3 문제 → 이렇게 막았다
+
+1. 이중 합산 → 서버에는 누적값을 보내지 않고 `statPending`의 경기 단위 델타만 보낸다. 업로드 성공 시 큐에서 지운다.
+2. 기기 간 덮어쓰기 → 서버가 `played = played + 1`로 더한다. 로컬 누적값은 동기화 후 서버 값으로 교체된다.
+3. RPC 권한 → 인자에 user_id가 없고 `auth.uid()`만 쓴다. `security definer set search_path = public`, anon 실행 권한 회수.
+4. 위조 → 테이블 직접 INSERT/UPDATE 정책 없음(RLS로 차단). RPC가 rank 범위, `won = (rank = 1)`, 게임 id 형식, 미래 날짜, 시간당 300판을 검사한다. 읽기는 본인 행만(공개 랭킹은 미정).
+5. 같은 경기 중복 → `(user_id, match_id)` PK, 중복이면 `false` 반환하고 무시.
+6. 봇 대리 경기 → `self.botPlayed`면 기록 자체를 안 한다. `mySeat`가 없는 로컬/핫시트 판도 기록 안 함.
+7. 다른 계정 → 로그인 상태에서 친 판은 `userId`가 붙어 그 계정이 로그인했을 때만 올라간다. 게스트 판(`userId: null`)은 다음에 로그인하는 계정으로 합쳐진다.
+
+승패 기준: 1위(공동 1위 포함)면 승, 나머지는 패. 1인 솔로 게임(배고픈 상어, 크랩 서바이벌)과 `self`를 안 보내는 게임은 기록되지 않는다.
+
+### 검증
+
+- `npx tsc --noEmit`, eslint 통과. `selfResult` 단위 테스트.
+- `player_stats.sql`을 embedded-postgres(Supabase 역할/auth 스텁)에서 실행: 재실행 안전, 중복 match_id 무시, 사용자별 격리, anon 호출·직접 INSERT 차단, 잘못된 rank/won/게임 id/미래 날짜 거부 확인.
+
+### 운영 적용 (사람이 해야 함)
+
+Supabase SQL Editor에서 `supabase/player_stats.sql` 실행. 실행 전에는 업로드가 실패해 큐에 쌓여 있다가, 실행 후 첫 동기화 때 한꺼번에 올라간다(그 사이 기록은 유실되지 않음).

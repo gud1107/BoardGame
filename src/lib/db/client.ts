@@ -6,10 +6,12 @@ import type {
   DeviceIdentityRecord,
   GameResultRecord,
   PlayerRecord,
+  PendingMatchStat,
+  StatTotalsRecord,
 } from "./types";
 
 const DB_NAME = "boardgame-db";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 interface BoardGameDB extends DBSchema {
   players: {
@@ -41,6 +43,14 @@ interface BoardGameDB extends DBSchema {
     key: string;
     value: BugReportRecord;
     indexes: { "by-status": string; "by-game": string };
+  };
+  statTotals: {
+    key: string; // gameId
+    value: StatTotalsRecord;
+  };
+  statPending: {
+    key: string; // matchId
+    value: PendingMatchStat;
   };
 }
 
@@ -87,6 +97,11 @@ export function getDb(): Promise<IDBPDatabase<BoardGameDB>> {
           const bugReports = db.createObjectStore("bugReports", { keyPath: "id" });
           bugReports.createIndex("by-status", "status");
           bugReports.createIndex("by-game", "gameId");
+        }
+
+        if (oldVersion < 3) {
+          db.createObjectStore("statTotals", { keyPath: "gameId" });
+          db.createObjectStore("statPending", { keyPath: "matchId" });
         }
       },
     });

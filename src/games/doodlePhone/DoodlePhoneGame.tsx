@@ -58,6 +58,7 @@ import DoodleSoundHud from "./DoodleSoundHud";
 import DoodlePhoneRulebookModal from "./RulebookModal";
 import { playTransitionSounds } from "./sounds";
 import { ChunkAssembler, splitIntoChunks, type SyncChunk } from "./syncChunks";
+import { selfResult } from "@/games/shared/selfResult";
 
 /**
  * Online room for 그림 전화기 — the standard lockstep room (docs/cloud-sync.md,
@@ -215,8 +216,10 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
     playTransitionSounds(prev, next);
     if (next && gamePhase(next) === "finished" && completedSeedRef.current !== next.seed) {
       completedSeedRef.current = next.seed;
+      const rankings = computeRankings(next);
       onCompleteRef.current({
-        rankings: computeRankings(next).map((r) => ({ playerId: idsRef.current[r.seat] ?? `seat-${r.seat}`, rank: r.rank })),
+        rankings: rankings.map((r) => ({ playerId: idsRef.current[r.seat] ?? `seat-${r.seat}`, rank: r.rank })),
+        self: selfResult(mySeatRef.current, rankings, botTakeoverRef.current.takeovers),
         finishedAt: new Date().toISOString(),
       });
     }

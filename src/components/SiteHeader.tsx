@@ -142,6 +142,12 @@ export default function SiteHeader() {
             💬 로비
           </Link>
           <Link
+            href="/stats"
+            className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm light:text-slate-500 light:hover:text-amber-600"
+          >
+            전적
+          </Link>
+          <Link
             href="/history"
             className="shrink-0 whitespace-nowrap break-keep text-xs text-white/50 hover:text-amber-200 sm:text-sm light:text-slate-500 light:hover:text-amber-600"
           >

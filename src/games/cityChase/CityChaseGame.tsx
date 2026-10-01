@@ -43,6 +43,7 @@ import {
   type BotTakeoverEvent,
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
+import { selfResult } from "@/games/shared/selfResult";
 
 /**
  * Online-room multiplayer entry point for 시티 체이스 — same lockstep pattern
@@ -592,6 +593,7 @@ export default function CityChaseGame({ onComplete }: PlayableGameProps) {
     const rankings = computeRankings(gameState);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
+      self: selfResult(mySeat, rankings, botTakeover.takeovers),
       finishedAt: new Date().toISOString(),
     });
     const thiefWon = gameState.winner === "thief";

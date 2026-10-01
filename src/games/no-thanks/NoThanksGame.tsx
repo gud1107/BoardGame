@@ -57,6 +57,7 @@ import { stripControlChars } from "@/lib/chat/sanitize";
 import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
+import { selfResult } from "@/games/shared/selfResult";
 
 /**
  * Pure system-log line formatter for the one system message No Thanks emits
@@ -899,6 +900,7 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
     const winners = rankings.filter((r) => r.rank === 1);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
+      self: selfResult(mySeat, rankings, botTakeover.takeovers),
       finishedAt: new Date().toISOString(),
     });
     if (roomBettingRef.current.active) {

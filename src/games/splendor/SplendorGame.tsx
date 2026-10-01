@@ -47,6 +47,7 @@ import { stripControlChars } from "@/lib/chat/sanitize";
 import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
+import { selfResult } from "@/games/shared/selfResult";
 
 /** Whose decision is pending, for `useBotAutoplay` — covers all three phases a turn can be blocked on (playing/discarding/choosingNoble). */
 function splendorCurrentActor(state: SplendorState): SeatIndex | null {
@@ -806,6 +807,7 @@ export default function SplendorGame({ onComplete }: PlayableGameProps) {
     const rankings = computeRankings(gameState);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
+      self: selfResult(mySeat, rankings, botTakeover.takeovers),
       finishedAt: new Date().toISOString(),
     });
     const winner = rankings.find((r) => r.rank === 1)!;

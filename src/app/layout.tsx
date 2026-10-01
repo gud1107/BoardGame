@@ -5,6 +5,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteNoticeBanner from "@/components/siteNotice/SiteNoticeBanner";
 import BettingSidebar from "@/components/betting/BettingSidebar";
 import AnalyticsVisitTracker from "@/components/AnalyticsVisitTracker";
+import PlayerStatsSync from "@/components/stats/PlayerStatsSync";
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/contexts/ThemeContext";
 import { KAKAO_INAPP_ESCAPE_SCRIPT } from "@/lib/kakaoInAppEscape";
 
@@ -45,6 +46,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col text-zinc-100 light:text-slate-900">
         <ThemeProvider>
           <AnalyticsVisitTracker />
+          <PlayerStatsSync />
           <SiteHeader />
           <SiteNoticeBanner />
           <main className="flex-1">{children}</main>

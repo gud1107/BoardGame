@@ -111,6 +111,38 @@ export interface GameResultRecord {
   bettingSessionId?: string;
 }
 
+/**
+ * Per-game personal stats as shown on /stats. For a logged-in user this is
+ * a cache of the server row (`player_game_stats`) plus any matches still in
+ * `PendingMatchStat`; for a guest it is the only copy. See `src/lib/stats/`.
+ */
+export interface StatTotalsRecord {
+  gameId: string;
+  played: number;
+  wins: number;
+  losses: number;
+  /** Best (lowest) finishing rank ever. */
+  bestRank: number | null;
+  updatedAt: string;
+}
+
+/**
+ * One finished match not yet uploaded. Only these are ever sent to the
+ * server — never the totals — so logging in/out repeatedly or playing on
+ * two devices can't double-count or overwrite anything.
+ */
+export interface PendingMatchStat {
+  /** Random id; the server ignores a second upload with the same id. */
+  matchId: string;
+  gameId: string;
+  won: boolean;
+  rank: number;
+  playerCount: number;
+  playedAt: string;
+  /** Account that was logged in when it was played; null = guest (goes to whoever logs in next). */
+  userId: string | null;
+}
+
 export type BugReportStatus = "접수됨" | "확인 중" | "수정 완료";
 
 export interface BugReportAttachment {

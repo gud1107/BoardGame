@@ -38,6 +38,7 @@ import {
   type WormState,
 } from "./engine";
 import WormCanvas from "./WormCanvas";
+import { selfResult } from "@/games/shared/selfResult";
 
 /**
  * Online-room multiplayer entry point.
@@ -605,6 +606,7 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
     const rankings = computeRankings(sim);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
+      self: selfResult(mySeat, rankings, botTakeover.takeovers),
       finishedAt: new Date().toISOString(),
     });
     setFinalRankings(rankings);

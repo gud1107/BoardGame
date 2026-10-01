@@ -61,6 +61,7 @@ import { stripControlChars } from "@/lib/chat/sanitize";
 import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/lib/chat/history";
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
+import { selfResult } from "@/games/shared/selfResult";
 
 /**
  * e.g. "지수님이 27 카드를 냈습니다" / "지수님이 사신 카드를 냈습니다" for a
@@ -924,6 +925,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
     }
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
+      self: selfResult(mySeat, rankings, botTakeover.takeovers),
       finishedAt: new Date().toISOString(),
     });
     const winnerNames = rankings.filter((r) => r.rank === 1).map((r) => names[r.seat]);

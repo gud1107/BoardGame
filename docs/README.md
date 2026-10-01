@@ -39,7 +39,7 @@
 | [dalmuti-court-bgm-spec.md](./dalmuti-court-bgm-spec.md) | 달무티 중세 궁정 류트 BGM/SFX 신디 엔진 명세(미구현 검토본) — 기존 사운드와의 대조, 명세 코드 결함, 결정 대기 항목 |
 | [dalmuti-class-saga-bgm.md](./dalmuti-class-saga-bgm.md) | 달무티 "계급 서사" 32스텝 프로시저럴 BGM(농노→상인→귀족→달무티, 4바퀴 변주) — 파일 구성, 명세와 다르게 한 부분, 검증 결과 |
 | [doodle-phone-prompt-generator-spec.md](./doodle-phone-prompt-generator-spec.md) | 그림 전화기 제시어 "LLM 버퍼 큐 + 문법 엔진" 개편 제안(미구현 검토본) — 락스텝 결정론·35자 제한·서버리스 충돌, 단계별 권장안, 결정 대기 항목 |
-| [player-stats-hybrid-sync-spec.md](./player-stats-hybrid-sync-spec.md) | 게스트(로컬)/로그인(Supabase) 통합 전적 + 로그인 시 병합 제안(미구현 검토본) — 실제 코드와 다른 전제, 이중 합산·기기 간 덮어쓰기·RPC 권한 구멍, 권장 구조, 결정 대기 항목 |
+| [player-stats-hybrid-sync-spec.md](./player-stats-hybrid-sync-spec.md) | 게스트(로컬)/로그인(Supabase) 통합 전적 + 로그인 시 병합 — 제안서 검토(다른 전제·이중 합산·덮어쓰기·RPC 권한 구멍) + 1단계 구현(`/stats`, `player_stats.sql`, 대기 큐+멱등 RPC) |
 | [rat-a-tat-cat-audio-suite.md](./rat-a-tat-cat-audio-suite.md) | 랫어탯캣 살금살금 피치카토 BGM + 카드 액션 SFX — 파일 구성, 명세와 다르게 한 부분, 검증 결과 |
 | [coyote-sound-suite.md](./coyote-sound-suite.md) | 코요테 스파게티 웨스턴 밴조/휘파람 BGM + 블러핑 SFX — 파일 구성, 명세와 다르게 한 부분, 검증 결과 |
 | [perudo-sound-suite.md](./perudo-sound-suite.md) | 페루도 잉카 미스터리 BGM(톰/셰이커/나일론 기타/판플루트) + 🎲/🔔 HUD — SFX를 새로 안 만든 이유, 명세와 다르게 한 부분 |

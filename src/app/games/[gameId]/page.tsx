@@ -15,6 +15,7 @@ import RoundResultEntry from "@/components/betting/RoundResultEntry";
 import GameThumbnail from "@/components/GameThumbnail";
 import BugReportFloatingButton from "@/components/bugReport/BugReportFloatingButton";
 import ThemeToggle from "@/components/theme/ThemeToggle";
+import { recordMatchStat } from "@/lib/stats/playerStats";
 
 type Stage = "select" | "playing" | "record" | "done";
 /** Frozen once per page load right after the subscription store hydrates — see the entitlement gate below. */
@@ -259,6 +260,7 @@ export default function GamePlayPage() {
       const minutes = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
       void recordPlay(minutes);
     }
+    if (res.self) void recordMatchStat(game!.id, res.self, res.finishedAt);
     await saveGameResult({
       gameId: game!.id,
       gameName: game!.name,
