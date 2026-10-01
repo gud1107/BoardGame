@@ -18,6 +18,7 @@ import GameVisibilityTab from "./tabs/GameVisibilityTab";
 import SetupStatus from "./SetupStatus";
 import IpLabelsTab from "./tabs/IpLabelsTab";
 import { useIpLabels } from "./useIpLabels";
+import LabeledActivityPanel from "./LabeledActivityPanel";
 
 type TabKey = "games" | "monthly" | "trend" | "hours" | "dropoff" | "rooms" | "sources" | "ips" | "bugs" | "notice" | "visibility";
 
@@ -38,6 +39,7 @@ const TABS: { key: TabKey; label: string; period: boolean; stats: boolean }[] = 
 
 const TAB_KEY = "bg_admin_tab";
 const EXCLUDE_KEY = "bg_admin_exclude_me";
+const EXCLUDE_LABELED_KEY = "bg_admin_exclude_labeled";
 
 function readStored(key: string): string | null {
   try {
@@ -83,6 +85,7 @@ function AdminHub() {
   const [reloadKey, setReloadKey] = useState(0);
   const [myIp, setMyIp] = useState<string | null>(null);
   const [excludeMe, setExcludeMe] = useState(() => readStored(EXCLUDE_KEY) === "1");
+  const [excludeLabeled, setExcludeLabeled] = useState(() => readStored(EXCLUDE_LABELED_KEY) === "1");
   const [myDevice] = useState<string | null>(() => {
     try {
       return getDeviceId();
@@ -107,10 +110,13 @@ function AdminHub() {
 
   const since = useMemo(() => sinceFor(period), [period]);
   const { labels: ipLabels, reload: reloadIpLabels } = useIpLabels();
-  const exclude: ExcludeMe | null = useMemo(
-    () => (excludeMe ? { ip: myIp, device: myDevice } : null),
-    [excludeMe, myIp, myDevice],
-  );
+  // `ip` is a comma-separated list for the database's is_excluded_row; the
+  // @labeled token there means "every IP named in 🏷️ IP 관리".
+  const exclude: ExcludeMe | null = useMemo(() => {
+    if (!excludeMe && !excludeLabeled) return null;
+    const ips = [excludeMe ? myIp : null, excludeLabeled ? "@labeled" : null].filter(Boolean);
+    return { ip: ips.length ? ips.join(",") : null, device: excludeMe ? myDevice : null };
+  }, [excludeMe, excludeLabeled, myIp, myDevice]);
   const current = TABS.find((t) => t.key === tab)!;
 
   return (
@@ -140,6 +146,21 @@ function AdminHub() {
                 (이 기기·내 IP)
               </span>
             </label>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/80 light:border-slate-300 light:text-slate-700">
+              <input
+                type="checkbox"
+                checked={excludeLabeled}
+                onChange={(e) => {
+                  setExcludeLabeled(e.target.checked);
+                  store(EXCLUDE_LABELED_KEY, e.target.checked ? "1" : "0");
+                }}
+                className="accent-amber-500"
+              />
+              이름 붙인 IP 제외
+              <span className="text-white/40" title="🏷️ IP 관리에서 이름을 붙인 IP(가족·지인 등)의 기록을 통계에서 뺍니다">
+                ({ipLabels.size}개)
+              </span>
+            </label>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -160,6 +181,7 @@ function AdminHub() {
       </div>
 
       <SetupStatus />
+      <LabeledActivityPanel key={ipLabels.size} reloadKey={reloadKey} />
 
       <nav className="-mx-4 mb-4 flex gap-1 overflow-x-auto border-b border-white/10 px-4 pb-px no-scrollbar sm:mx-0 sm:px-0 light:border-slate-200">
         {TABS.map((t) => (
@@ -188,7 +210,11 @@ function AdminHub() {
               {p.label}
             </Chip>
           ))}
-          {current.stats && excludeMe && <span className="self-center text-xs text-amber-300/80">· 내 기록 제외 중</span>}
+          {current.stats && (excludeMe || excludeLabeled) && (
+            <span className="self-center text-xs text-amber-300/80">
+              · {[excludeMe && "내 기록", excludeLabeled && "이름 붙인 IP"].filter(Boolean).join(" · ")} 제외 중
+            </span>
+          )}
         </div>
       )}
 

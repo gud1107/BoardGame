@@ -40,6 +40,13 @@ const CHECKS = [
     effect: "🏷️ IP 관리 탭과 IP 이름 표시",
     destructive: false,
   },
+  {
+    file: "supabase/admin_ip_labels_2.sql",
+    rpc: "admin_labeled_activity",
+    args: {},
+    effect: "🔔 이름 붙인 사람 접속 알림과 \"이름 붙인 IP 제외\"",
+    destructive: false,
+  },
 ];
 
 export default function SetupStatus() {

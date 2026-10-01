@@ -35,3 +35,14 @@ describe("monthOverMonth", () => {
     expect(monthOverMonth(0, 0)).toBeNull();
   });
 });
+
+import { timeAgo } from "../LabeledActivityPanel";
+
+describe("timeAgo", () => {
+  const now = Date.parse("2026-10-02T12:00:00Z");
+  it("reads like a notification", () => {
+    expect(timeAgo("2026-10-02T11:59:40Z", now)).toBe("방금");
+    expect(timeAgo("2026-10-02T11:48:00Z", now)).toBe("12분 전");
+    expect(timeAgo("2026-10-02T09:00:00Z", now)).toBe("3시간 전");
+  });
+});
