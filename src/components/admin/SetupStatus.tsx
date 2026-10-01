@@ -6,35 +6,67 @@ import { getSupabase } from "@/lib/supabase/client";
 const SQL_EDITOR_URL = "https://supabase.com/dashboard/project/kamwwbveqizpfufsebof/sql/new";
 
 /**
- * Warns on /admin/games when supabase/admin_suite.sql hasn't been applied
+ * Warns on /admin/games when a required supabase/*.sql file hasn't been applied
  * to the live database — without it the lobby's "🔥 10월 N회 플레이",
  * the notice banner and game visibility all silently do nothing, which is
  * easy to miss (the SQL editor asks to confirm its DROP/DELETE statements,
  * and dismissing that dialog runs nothing).
  */
+/**
+ * Each SQL file the admin hub depends on, and one function it creates. The
+ * probe runs with the anon key: a missing function answers PGRST202, an
+ * existing admin-only one answers "permission denied" — either way nothing
+ * is read or written.
+ */
+const CHECKS = [
+  {
+    file: "supabase/admin_suite.sql",
+    rpc: "public_game_play_stats",
+    args: {},
+    effect: "허브의 \"🔥 10월 N회 플레이\", 추이·시간대·방 기록·유입 경로, 공지, 게임 관리",
+    destructive: true,
+  },
+  {
+    file: "supabase/admin_monthly.sql",
+    rpc: "admin_monthly_stats",
+    args: { p_months: 1 },
+    effect: "📅 월별 탭",
+    destructive: false,
+  },
+];
+
 export default function SetupStatus() {
-  const [missing, setMissing] = useState(false);
+  const [missing, setMissing] = useState<typeof CHECKS>([]);
 
   useEffect(() => {
     const supabase = getSupabase();
     if (!supabase) return;
     let cancelled = false;
-    void supabase.rpc("public_game_play_stats").then(({ error }) => {
-      if (!cancelled && error?.code === "PGRST202") setMissing(true);
+    void Promise.all(
+      CHECKS.map(async (c) => {
+        const { error } = await supabase.rpc(c.rpc, c.args);
+        return error?.code === "PGRST202" ? c : null;
+      }),
+    ).then((results) => {
+      if (!cancelled) setMissing(results.filter((c): c is (typeof CHECKS)[number] => c !== null));
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  if (!missing) return null;
+  if (missing.length === 0) return null;
   return (
     <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100 light:text-amber-900">
-      <p className="font-semibold">⚠️ DB 설정이 아직 적용되지 않았습니다 (supabase/admin_suite.sql)</p>
-      <p className="mt-1 text-xs leading-relaxed text-amber-100/80 light:text-amber-800">
-        이 상태에서는 허브의 &quot;🔥 10월 N회 플레이&quot;, 추이·시간대·방 기록·유입 경로, 공지, 게임 관리가 동작하지 않습니다.
-        SQL Editor에 파일 전체를 붙여넣고 Run → 확인 창(&quot;destructive operation&quot;)이 뜨면 <b>Run this query</b>를 누르세요.
-      </p>
+      <p className="font-semibold">⚠️ 아직 적용되지 않은 DB 설정이 있습니다</p>
+      <ul className="mt-1 list-disc pl-5 text-xs leading-relaxed text-amber-100/80 light:text-amber-800">
+        {missing.map((c) => (
+          <li key={c.file}>
+            <b className="font-mono">{c.file}</b> — 없으면 {c.effect}이(가) 동작하지 않습니다.
+            {c.destructive && " Run 후 확인 창(\"destructive operation\")이 뜨면 Run this query를 누르세요."}
+          </li>
+        ))}
+      </ul>
       <a
         href={SQL_EDITOR_URL}
         target="_blank"

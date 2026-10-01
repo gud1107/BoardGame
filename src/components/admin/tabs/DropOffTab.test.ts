@@ -20,3 +20,18 @@ describe("roomStatus", () => {
     expect(roomStatus({ starts: 2, ends: 1 })).toBe("진행 중/중단");
   });
 });
+
+import { monthOverMonth } from "./MonthlyTab";
+
+describe("monthOverMonth", () => {
+  it("formats the change against last month", () => {
+    expect(monthOverMonth(15, 10)).toEqual({ text: "▲ 50%", up: true });
+    expect(monthOverMonth(5, 10)).toEqual({ text: "▼ 50%", up: false });
+    expect(monthOverMonth(10, 10)).toEqual({ text: "±0%", up: null });
+  });
+
+  it("marks a first month as new and an empty pair as nothing", () => {
+    expect(monthOverMonth(3, 0)).toEqual({ text: "신규", up: true });
+    expect(monthOverMonth(0, 0)).toBeNull();
+  });
+});

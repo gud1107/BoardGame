@@ -7,6 +7,7 @@ import { PERIODS, sinceFor, type ExcludeMe, type Period } from "./adminApi";
 import { Chip, Loading } from "./adminUi";
 import GamesTab from "./tabs/GamesTab";
 import TrendTab from "./tabs/TrendTab";
+import MonthlyTab from "./tabs/MonthlyTab";
 import HoursTab from "./tabs/HoursTab";
 import DropOffTab from "./tabs/DropOffTab";
 import RoomsTab from "./tabs/RoomsTab";
@@ -16,11 +17,12 @@ import NoticeTab from "./tabs/NoticeTab";
 import GameVisibilityTab from "./tabs/GameVisibilityTab";
 import SetupStatus from "./SetupStatus";
 
-type TabKey = "games" | "trend" | "hours" | "dropoff" | "rooms" | "sources" | "bugs" | "notice" | "visibility";
+type TabKey = "games" | "monthly" | "trend" | "hours" | "dropoff" | "rooms" | "sources" | "bugs" | "notice" | "visibility";
 
 /** `period`: whether the 전체/30일/7일/오늘 filter applies. `stats`: whether "내 기록 제외" applies. */
 const TABS: { key: TabKey; label: string; period: boolean; stats: boolean }[] = [
   { key: "games", label: "🎲 게임 통계", period: true, stats: true },
+  { key: "monthly", label: "📅 월별", period: false, stats: true },
   { key: "trend", label: "📈 추이", period: false, stats: true },
   { key: "hours", label: "🕒 시간대", period: true, stats: true },
   { key: "dropoff", label: "🪜 이탈 분석", period: true, stats: true },
@@ -187,6 +189,7 @@ function AdminHub() {
       )}
 
       {tab === "games" && <GamesTab since={since} exclude={exclude} myIp={myIp} reloadKey={reloadKey} />}
+      {tab === "monthly" && <MonthlyTab exclude={exclude} reloadKey={reloadKey} />}
       {tab === "trend" && <TrendTab exclude={exclude} reloadKey={reloadKey} />}
       {tab === "hours" && <HoursTab since={since} exclude={exclude} reloadKey={reloadKey} />}
       {tab === "dropoff" && <DropOffTab since={since} exclude={exclude} reloadKey={reloadKey} />}

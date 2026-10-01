@@ -39,6 +39,18 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 📅 관리자 월별 통계 탭 — 2026-10-02 (커밋/푸시, 배포는 웹훅 자동)
+
+- `supabase/admin_monthly.sql`(**사용자 실행 필요**, DROP/DELETE가 없어 확인 창이 뜨지 않음): `admin_monthly_stats(p_months, p_ex_ip, p_ex_device)`는
+  KST 월별로 방문자(그달의 고유 기기 수, 일별 합이 아님), 신규/재방문, 방문 횟수, 방 만들기, 참여, 게임 시작/종료(host), 플레이한 사람(game_start의 고유 기기 수)을 반환하고,
+  `admin_monthly_game_stats`는 월×게임별 클릭/방/참여/시작/플레이어를 반환한다. 둘 다 is_site_admin을 확인하고 anon 권한은 회수했다.
+  embedded-postgres로 검증했다(10월 행 정확, 비관리자·anon 거부, 재실행 OK).
+- `components/admin/tabs/MonthlyTab.tsx`: 이번 달 카드 4개(지난달 대비 ▲▼%, `monthOverMonth`+test), 월별 방문자 누적 막대(신규/재방문), 월별 게임 시작
+  막대, 월별 표, 월을 골라 보는 게임별 월간 순위(지난달 대비). 6/12개월 선택. 허브 탭 순서는 게임 통계 다음이다. React Compiler가
+  useMemo를 보존하지 못해(preserve-manual-memoization 에러) 인라인 계산으로 바꿨다.
+- `SetupStatus`를 일반화했다: `CHECKS` 목록(admin_suite, admin_monthly)을 anon으로 확인하고, PGRST202가 나는 파일만 경고에 나열한다.
+- 커밋 시점에 다른 세션의 미완성 `src/games/hungryShark/data.ts` 변경이 있어 HungryShark 테스트 2건이 실패했다. 이 커밋에는 포함하지 않았다.
+
 ## 🔎 "10월 N회 플레이" 미표시 재보고 → SQL 미적용 확인 + SQL 로컬 검증 + 관리자 경고 — 2026-10-01
 
 - 재보고 시점에도 운영 DB에 `public_game_play_stats`/`site_notice`/`game_overrides`가 없었다(PGRST202/205). `hash_ip` anon 권한도
