@@ -47,9 +47,14 @@ function notifyChanged() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(STATS_CHANGED_EVENT));
 }
 
-/** Called once per finished match from the game page. Never throws. */
-export async function recordMatchStat(gameId: string, self: GameSelfResult, playedAt: string): Promise<void> {
-  if (self.botPlayed) return;
+/**
+ * Called once per finished match from the game page. Never throws. Resolves
+ * to this game's updated local totals (for the post-game card), or null when
+ * nothing was recorded.
+ */
+export async function recordMatchStat(gameId: string, self: GameSelfResult, playedAt: string): Promise<StatTotalsRecord | null> {
+  if (self.botPlayed) return null;
+  let updated: StatTotalsRecord;
   try {
     const userId = await currentUserId();
     const won = self.rank === 1;
@@ -66,7 +71,7 @@ export async function recordMatchStat(gameId: string, self: GameSelfResult, play
     const db = await getDb();
     const tx = db.transaction(["statTotals", "statPending"], "readwrite");
     const totals = (await tx.objectStore("statTotals").get(gameId)) ?? emptyTotals(gameId);
-    await tx.objectStore("statTotals").put({
+    updated = {
       ...totals,
       played: totals.played + 1,
       wins: totals.wins + (won ? 1 : 0),
@@ -74,15 +79,17 @@ export async function recordMatchStat(gameId: string, self: GameSelfResult, play
       bestRank: totals.bestRank === null ? self.rank : Math.min(totals.bestRank, self.rank),
       details: mergeStatDetails(totals.details, self.details),
       updatedAt: new Date().toISOString(),
-    });
+    };
+    await tx.objectStore("statTotals").put(updated);
     await tx.objectStore("statPending").put(pending);
     await tx.done;
     notifyChanged();
   } catch (err) {
     console.warn("[stats] local record failed", err);
-    return;
+    return null;
   }
   void syncPlayerStats();
+  return updated;
 }
 
 let syncInFlight: Promise<void> | null = null;

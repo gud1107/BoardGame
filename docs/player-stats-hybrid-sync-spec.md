@@ -163,3 +163,25 @@ Supabase SQL Editor에서 `supabase/player_stats.sql` 실행. 실행 전에는 �
 
 ### 운영 적용
 `supabase/player_stats.sql`을 다시 한 번 실행.
+
+## 9. 이번 판 기록 카드 + 세부 지표 랭킹 + 운영 점검 (2026-10-02)
+
+### 이번 판 기록 카드
+- `src/components/stats/MatchRecordCard.tsx`, `src/app/games/[gameId]/page.tsx`에서 `recordMatchStat()`이 끝나면 띄운다(이제 갱신된 누적값을 돌려줌).
+- 내용: 승/패 · 순위/인원, 이번 판에 **실제로 일어난** 세부 기록만(0인 항목 숨김, 단 `min*` 점수는 0도 표시), 누적 판/승/패/승률 + 전적 보기 링크, 비로그인이면 노란 "사라질 수 있어요" 경고.
+- 온라인 게임은 방 안에서 자체 결과 화면을 쓰므로(스테이지를 바꾸면 Realtime 채널이 끊김) 화면을 바꾸지 않고 **떠 있는 카드**로 띄운다. 모바일은 상단 전체 폭, 데스크톱은 우상단. 닫기·접기 가능, 20초 뒤 자동으로 사라짐.
+- 표시 행 설정: `src/lib/stats/presentation.ts`의 `MATCH_SUMMARY_ROWS`.
+
+### 세부 지표 랭킹
+- `/stats` → 공개 랭킹 → 게임을 고르면 "세부 기록" 칩이 나온다(게임당 3개, `STAT_RANK_METRICS`). 예: 페루도 "페루도! 적중률"(10번 이상 호출한 회원만), 랫어탯캣 "최저 점수"(낮을수록 위), 센추리 "최단 승리".
+- RPC `public_metric_leaderboard(p_game_id, p_num, p_den, p_asc, p_min_den, p_limit)`: `p_den` 있으면 비율(`'played'`면 판당 평균) + 최소 분모, 없으면 값 그대로이고 기록 없음/0(높을수록 좋은 순위)인 사람은 제외. 키는 정규식으로 검사(SQL 주입 불가). 노출 범위는 `public_leaderboard`와 같음(랭킹 닉네임·사이트 아바타만, 내 행은 순위 밖이어도 포함).
+- RPC가 없으면(PGRST202) 랭킹 탭에 "랭킹 서버 설정이 아직 끝나지 않았어요" 안내.
+
+### 운영 점검 스크립트
+`node scripts/check-player-stats.mjs` — `.env.local`의 Supabase에 4개 RPC가 있는지(anon 키, 아무것도 쓰지 않음) 확인하고, `SUPABASE_SERVICE_ROLE_KEY`가 있으면 저장된 회원×게임 행 수, 기록된 판 수, 랭킹 닉네임 수, 최근 5판(세부 지표 개수 포함)을 보여준다.
+
+2026-10-02 실행 결과: **4개 RPC 모두 없음 = `player_stats.sql` 미적용**(`user_profiles`는 있음 = `social_auth.sql`은 적용됨). 적용 전까지 로그인 유저의 기록은 각 브라우저 대기 큐에 쌓여 있다가, SQL 실행 후 다음 접속/로그인 때 올라간다.
+
+### 검증
+- tsc / eslint 통과, 통계 단위 테스트 34개(`presentation.test.ts` 포함) 통과.
+- embedded-postgres: 비율(최소 분모)·판당 평균·낮을수록 순위·값 0 제외·키 주입 거부·limit 밖 내 행 포함 확인. 이전 배포본 위 재적용 안전.

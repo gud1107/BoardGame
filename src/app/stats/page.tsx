@@ -1,11 +1,12 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { getGameMeta, GAME_REGISTRY } from "@/games/registry";
 import type { StatTotalsRecord } from "@/lib/db/types";
 import { STAT_DETAIL_ROWS } from "@/lib/stats/details";
-import { fetchLeaderboard, type LeaderboardRow, type LeaderboardSort } from "@/lib/stats/leaderboard";
+import { fetchLeaderboard, fetchMetricLeaderboard, type LeaderboardSort } from "@/lib/stats/leaderboard";
+import { formatRankMetric, STAT_RANK_METRICS } from "@/lib/stats/presentation";
 import { countPendingStats, listPlayerStats, STATS_CHANGED_EVENT, syncPlayerStats } from "@/lib/stats/playerStats";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
 import { useProfileStore } from "@/store/profileStore";
@@ -195,28 +196,75 @@ function MyStats({ loggedIn }: { loggedIn: boolean }) {
 
 const RANKED_GAMES = GAME_REGISTRY.filter((g) => g.playable && g.id !== "hungry-shark" && g.id !== "crab-survival");
 
+interface BoardRow {
+  rank: number;
+  nickname: string;
+  avatarUrl: string | null;
+  isMe: boolean;
+  right: ReactNode;
+}
+
 function Ranking({ loggedIn }: { loggedIn: boolean }) {
   const [gameId, setGameId] = useState<string>("");
-  const [sort, setSort] = useState<LeaderboardSort>("wins");
-  const key = `${gameId}|${sort}`;
+  // "wins" | "rate" | a STAT_RANK_METRICS id for the selected game.
+  const [sort, setSort] = useState<string>("wins");
+  const metrics = gameId ? (STAT_RANK_METRICS[gameId] ?? []) : [];
+  const metric = metrics.find((m) => m.id === sort) ?? null;
+  const effectiveSort = metric ? metric.id : sort === "rate" ? "rate" : "wins";
+  const key = `${gameId}|${effectiveSort}`;
   // Result tagged with the query it answers, so switching game/sort shows
   // "loading" without resetting state inside the effect.
-  const [result, setResult] = useState<{ key: string; rows: LeaderboardRow[] | null } | null>(null);
+  const [result, setResult] = useState<{ key: string; rows: BoardRow[] | "not-installed" | null } | null>(null);
   const rows = result?.key === key ? result.rows : undefined;
 
   useEffect(() => {
     let cancelled = false;
-    void fetchLeaderboard(gameId || null, sort).then((r) => {
+    const load = async (): Promise<BoardRow[] | "not-installed" | null> => {
+      if (metric) {
+        const r = await fetchMetricLeaderboard(gameId, metric);
+        if (!Array.isArray(r)) return r;
+        return r.map((x) => ({
+          ...x,
+          right: <b className="text-sm text-white light:text-slate-900">{formatRankMetric(metric, x.value, x.num, x.den)}</b>,
+        }));
+      }
+      const r = await fetchLeaderboard(gameId || null, effectiveSort as LeaderboardSort);
+      if (!Array.isArray(r)) return r;
+      return r.map((x) => ({
+        ...x,
+        right: (
+          <>
+            <b className="text-sm text-white light:text-slate-900">{x.wins}</b>승 {x.losses}패
+            <span className="ml-2">{x.winRate === null ? "-" : `${x.winRate}%`}</span>
+          </>
+        ),
+      }));
+    };
+    void load().then((r) => {
       if (!cancelled) setResult({ key, rows: r });
     });
     return () => {
       cancelled = true;
     };
-  }, [gameId, sort, key]);
+    // `metric` is derived from gameId + sort, both already covered by `key`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  const chip = (id: string, label: string) => (
+    <button
+      key={id}
+      onClick={() => setSort(id)}
+      className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
+        effectiveSort === id ? "bg-white/15 text-white light:bg-slate-200 light:text-slate-900" : "text-white/50 light:text-slate-500"
+      }`}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <select
           value={gameId}
           onChange={(e) => setGameId(e.target.value)}
@@ -230,33 +278,30 @@ function Ranking({ loggedIn }: { loggedIn: boolean }) {
           ))}
         </select>
         <div className="flex gap-1 rounded-xl border border-white/10 p-1 light:border-slate-200">
-          {(
-            [
-              ["wins", "승수"],
-              ["rate", "승률 (10판↑)"],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setSort(id)}
-              className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
-                sort === id ? "bg-white/15 text-white light:bg-slate-200 light:text-slate-900" : "text-white/50 light:text-slate-500"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+          {chip("wins", "승수")}
+          {chip("rate", "승률 (10판↑)")}
         </div>
       </div>
+      {metrics.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-1 rounded-xl border border-white/10 p-1 light:border-slate-200">
+          <span className="px-1.5 text-[11px] text-white/40 light:text-slate-400">세부 기록</span>
+          {metrics.map((m) => chip(m.id, m.label))}
+        </div>
+      )}
 
       {loggedIn && <MyRankingName />}
 
       <p className="mb-3 text-xs text-white/40 light:text-slate-400">
         로그인한 회원의 기록만 올라가요. 결과는 각 플레이어 기기에서 계산되므로 참고용 랭킹입니다.
+        {metric?.minDen && metric.minDen > 1 && ` 이 순위는 ${metric.den === "played" ? `${metric.minDen}판` : `${metric.minDen}번`} 이상 기록한 회원만 들어가요.`}
         {!loggedIn && " 내 기록을 올리려면 로그인하세요."}
       </p>
 
-      {rows === null ? (
+      {rows === "not-installed" ? (
+        <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-6 text-center text-sm text-amber-200 light:text-amber-700">
+          랭킹 서버 설정이 아직 끝나지 않았어요. 곧 열릴 예정이에요! (기록은 지금도 계속 쌓이고 있어요)
+        </p>
+      ) : rows === null ? (
         <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
           랭킹을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
         </p>
@@ -264,7 +309,11 @@ function Ranking({ loggedIn }: { loggedIn: boolean }) {
         <p className="text-sm text-white/40 light:text-slate-400">불러오는 중...</p>
       ) : rows.length === 0 ? (
         <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
-          {sort === "rate" ? "아직 10판 이상 플레이한 회원이 없어요." : "아직 랭킹에 오른 회원이 없어요. 첫 번째 주인공이 되어보세요!"}
+          {effectiveSort === "rate"
+            ? "아직 10판 이상 플레이한 회원이 없어요."
+            : metric
+              ? "아직 이 기록으로 순위에 오른 회원이 없어요."
+              : "아직 랭킹에 오른 회원이 없어요. 첫 번째 주인공이 되어보세요!"}
         </p>
       ) : (
         <ol className="flex flex-col gap-1.5">
@@ -295,10 +344,7 @@ function Ranking({ loggedIn }: { loggedIn: boolean }) {
                     {r.nickname}
                     {r.isMe && <span className="ml-1.5 text-xs font-semibold text-rose-300 light:text-rose-600">나</span>}
                   </span>
-                  <span className="shrink-0 text-right text-xs tabular-nums text-white/60 light:text-slate-500">
-                    <b className="text-sm text-white light:text-slate-900">{r.wins}</b>승 {r.losses}패
-                    <span className="ml-2">{r.winRate === null ? "-" : `${r.winRate}%`}</span>
-                  </span>
+                  <span className="shrink-0 text-right text-xs tabular-nums text-white/60 light:text-slate-500">{r.right}</span>
                 </li>
               </Fragment>
             );

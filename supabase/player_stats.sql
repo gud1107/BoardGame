@@ -270,3 +270,67 @@ create or replace function public_leaderboard(
 $$ language sql stable security definer set search_path = public;
 
 grant execute on function public_leaderboard(text, text, integer, integer) to anon, authenticated;
+
+-- Per-game detail-stat leaderboard (e.g. 페루도 "페루도!" 적중률).
+-- p_num / p_den are keys in player_game_stats.details; p_den = 'played' means
+-- a per-game average. With p_den set, value = num / den (a ratio, not a
+-- percentage) and only players with den >= p_min_den qualify. Without it,
+-- value = num and players who never recorded the key (or recorded 0 on a
+-- higher-is-better board) are left out. Same exposure as public_leaderboard:
+-- public_name / public_avatar_url only, plus the caller's own row (is_me).
+drop function if exists public_metric_leaderboard(text, text, text, boolean, integer, integer);
+create or replace function public_metric_leaderboard(
+  p_game_id text,
+  p_num text,
+  p_den text default null,
+  p_asc boolean default false,
+  p_min_den integer default 1,
+  p_limit integer default 50
+) returns table (
+  rank bigint,
+  nickname text,
+  avatar_url text,
+  value numeric,
+  num numeric,
+  den numeric,
+  played integer,
+  is_me boolean
+) as $$
+  with base as (
+    select s.user_id,
+           s.played,
+           case when p_den is null then (s.details ->> p_num)::numeric
+                else coalesce((s.details ->> p_num)::numeric, 0) end as num,
+           case when p_den is null then null
+                when p_den = 'played' then s.played::numeric
+                else coalesce((s.details ->> p_den)::numeric, 0) end as den
+    from player_game_stats s
+    where s.game_id = p_game_id
+      and p_num ~ '^[a-zA-Z][a-zA-Z0-9]{0,39}$'
+      and (p_den is null or p_den ~ '^[a-zA-Z][a-zA-Z0-9]{0,39}$')
+  ),
+  vals as (
+    select b.*, case when p_den is null then b.num else round(b.num / b.den, 4) end as value
+    from base b
+    where b.num is not null
+      and (p_den is not null or p_asc or b.num > 0)
+      and (p_den is null or b.den >= greatest(coalesce(p_min_den, 1), 1))
+  ),
+  ranked as (
+    select v.*,
+           case when p_asc then rank() over (order by v.value asc)
+                else rank() over (order by v.value desc) end as rnk
+    from vals v
+  )
+  select r.rnk,
+         coalesce(p.public_name, '게이머_' || substring(r.user_id::text from 1 for 6))::text,
+         p.public_avatar_url,
+         r.value, r.num, r.den, r.played,
+         (r.user_id = auth.uid())
+  from ranked r
+  left join public.user_profiles p on p.id = r.user_id
+  where r.rnk <= least(greatest(coalesce(p_limit, 50), 1), 100) or r.user_id = auth.uid()
+  order by r.rnk, r.played desc;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function public_metric_leaderboard(text, text, text, boolean, integer, integer) to anon, authenticated;

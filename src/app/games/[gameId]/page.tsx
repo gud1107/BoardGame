@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getGameMeta } from "@/games/registry";
@@ -16,6 +16,7 @@ import GameThumbnail from "@/components/GameThumbnail";
 import BugReportFloatingButton from "@/components/bugReport/BugReportFloatingButton";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import { recordMatchStat } from "@/lib/stats/playerStats";
+import MatchRecordCard, { type MatchRecord } from "@/components/stats/MatchRecordCard";
 
 type Stage = "select" | "playing" | "record" | "done";
 /** Frozen once per page load right after the subscription store hydrates — see the entitlement gate below. */
@@ -91,6 +92,8 @@ export default function GamePlayPage() {
   // in place of this page's local participant-selection step.
   const [stage, setStage] = useState<Stage>(game?.onlineMultiplayer ? "playing" : "select");
   const [result, setResult] = useState<GameCompletionResult | null>(null);
+  const [matchRecord, setMatchRecord] = useState<MatchRecord | null>(null);
+  const closeMatchRecord = useCallback(() => setMatchRecord(null), []);
 
   useEffect(() => {
     if (stage === "playing" && playStartedAtRef.current === null) {
@@ -260,7 +263,13 @@ export default function GamePlayPage() {
       const minutes = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
       void recordPlay(minutes);
     }
-    if (res.self) void recordMatchStat(game!.id, res.self, res.finishedAt);
+    if (res.self && !res.self.botPlayed) {
+      const self = res.self;
+      const gameId = game!.id;
+      void recordMatchStat(gameId, self, res.finishedAt).then((totals) =>
+        setMatchRecord({ id: `${gameId}-${res.finishedAt}`, gameId, self, totals }),
+      );
+    }
     await saveGameResult({
       gameId: game!.id,
       gameName: game!.name,
@@ -457,6 +466,8 @@ export default function GamePlayPage() {
       {stage === "playing" && hydrated && (
         <GameComponent participants={activeParticipants} onComplete={handleGameComplete} />
       )}
+
+      {matchRecord && <MatchRecordCard key={matchRecord.id} record={matchRecord} onClose={closeMatchRecord} />}
 
       {stage === "record" && session && result && (
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 light:border-slate-200 light:bg-white light:shadow-sm">
