@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
 import { getAuthSupabase } from "@/lib/supabase/authClient";
 import SupabaseRequiredNotice from "@/components/SupabaseRequiredNotice";
+import SocialLoginButtons from "@/components/auth/SocialLoginButtons";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -14,7 +15,9 @@ export default function LoginForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    searchParams.get("error") === "oauth" ? "소셜 로그인에 실패했습니다. 다시 시도해주세요." : null,
+  );
   const [loading, setLoading] = useState(false);
 
   if (!supabase) {
@@ -45,6 +48,7 @@ export default function LoginForm() {
   return (
     <>
       <h1 className="mb-6 text-xl font-bold text-white light:text-slate-900">로그인</h1>
+      <SocialLoginButtons next={searchParams.get("next")} />
       <form
         onSubmit={handleSubmit}
         className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5 light:border-slate-200 light:bg-white light:shadow-sm"

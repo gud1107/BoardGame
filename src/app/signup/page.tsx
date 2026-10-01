@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAuthSupabase } from "@/lib/supabase/authClient";
 import SupabaseRequiredNotice from "@/components/SupabaseRequiredNotice";
+import SocialLoginButtons from "@/components/auth/SocialLoginButtons";
 import { TRIAL_DAYS } from "@/lib/entitlements/types";
 
 export default function SignupPage() {
@@ -69,6 +70,7 @@ export default function SignupPage() {
     <div className="mx-auto max-w-md px-4 py-16">
       <h1 className="mb-2 text-xl font-bold text-white light:text-slate-900">회원가입</h1>
       <p className="mb-6 text-sm text-white/50 light:text-slate-500">가입하면 {TRIAL_DAYS}일 무료 Lite 체험이 자동으로 시작돼요.</p>
+      <SocialLoginButtons />
       <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5 light:border-slate-200 light:bg-white light:shadow-sm">
         <input
           type="email"
