@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGameMeta } from "@/games/registry";
-import { isAutomatedClient } from "@/lib/analytics/playCounts";
+import { isAutomatedClient, isClaudeTestClient } from "@/lib/analytics/playCounts";
 import { getSupabase } from "@/lib/supabase/client";
 import { clientIp } from "@/lib/analytics/clientIp";
+import { CLAUDE_DEVICE_ID, CLAUDE_NICKNAME } from "@/lib/analytics/claude";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +24,8 @@ interface EventBody {
  * Funnel event sink (see `src/lib/analytics/gameEvents.ts`). Writes through
  * the `log_game_event` RPC (`supabase/game_events.sql`), which also bumps
  * the public play count on a host's `game_start`. Production only — local
- * dev shares the Supabase project — and automated browsers are dropped.
+ * dev shares the Supabase project — and automated browsers are recorded as
+ * Claude (`claude.ts`), which the database keeps out of public counts.
  * The raw IP is passed to the RPC and only its salted hash is stored.
  */
 export async function POST(request: NextRequest) {
@@ -33,17 +35,20 @@ export async function POST(request: NextRequest) {
   }
   if (!getGameMeta(body.gameId)?.playable) return NextResponse.json({ ok: true });
   if (process.env.VERCEL_ENV !== "production") return NextResponse.json({ ok: true });
-  if (isAutomatedClient(request.headers.get("user-agent"), body.automated)) return NextResponse.json({ ok: true });
+  // Claude's test browsers are kept, but as "🤖 클로드" (claude.ts); other bots are dropped.
+  const userAgent = request.headers.get("user-agent");
+  const isClaude = isClaudeTestClient(userAgent, body.automated);
+  if (!isClaude && isAutomatedClient(userAgent, body.automated)) return NextResponse.json({ ok: true });
 
   const supabase = getSupabase();
   if (supabase) {
     try {
       await supabase.rpc("log_game_event", {
-        p_device_id: body.deviceId ?? null,
+        p_device_id: isClaude ? CLAUDE_DEVICE_ID : (body.deviceId ?? null),
         p_game_id: body.gameId,
         p_event: body.event,
         p_room_code: body.roomCode ?? null,
-        p_nickname: body.nickname ?? "",
+        p_nickname: isClaude ? CLAUDE_NICKNAME : (body.nickname ?? ""),
         p_ip: clientIp(request),
         p_is_host: body.isHost === true,
       });

@@ -18,10 +18,23 @@ const AUTOMATION_UA = /HeadlessChrome|Playwright|Puppeteer|Selenium|PhantomJS|bo
 /**
  * True for a scripted browser rather than a person: the client-reported
  * `navigator.webdriver` flag (always set under Playwright) or a headless /
- * crawler User-Agent. Used to keep Claude's test runs out of the count.
+ * crawler User-Agent. Claude's own test browsers among them are recorded as
+ * "🤖 클로드" (`isClaudeTestClient`); other bots aren't recorded at all.
  */
 export function isAutomatedClient(userAgent: string | null, webdriverFlag: unknown): boolean {
   return webdriverFlag === true || AUTOMATION_UA.test(userAgent ?? "");
+}
+
+const TEST_BROWSER_UA = /HeadlessChrome|Playwright/;
+
+/**
+ * The subset of automated clients that are Claude's own test runs — a
+ * Playwright-driven browser (`navigator.webdriver`) or headless Chrome —
+ * recorded as "🤖 클로드" (claude.ts). Search-engine crawlers and other bots
+ * are automated too but aren't Claude; those stay unrecorded.
+ */
+export function isClaudeTestClient(userAgent: string | null, webdriverFlag: unknown): boolean {
+  return webdriverFlag === true || TEST_BROWSER_UA.test(userAgent ?? "");
 }
 
 export interface GamePlayStats {

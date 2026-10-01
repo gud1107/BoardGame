@@ -54,6 +54,13 @@ const CHECKS = [
     effect: "📱 휴대폰 알림(ntfy)과 사람별 🔔 선택",
     destructive: false,
   },
+  {
+    file: "supabase/admin_claude.sql",
+    rpc: "claude_device_id",
+    args: {},
+    effect: "클로드 테스트를 공개 플레이 횟수·알림에서 빼는 처리 (실행 전에는 클로드 게임 시작이 공개 횟수에 섞일 수 있음)",
+    destructive: false,
+  },
 ];
 
 export default function SetupStatus() {

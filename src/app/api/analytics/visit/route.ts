@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordVisit } from "@/lib/analytics/localStore";
-import { isAutomatedClient } from "@/lib/analytics/playCounts";
+import { isAutomatedClient, isClaudeTestClient } from "@/lib/analytics/playCounts";
 import { recordVisitorVisit } from "@/lib/analytics/visitors";
 import { clientIp } from "@/lib/analytics/clientIp";
+import { CLAUDE_DEVICE_ID, CLAUDE_NICKNAME } from "@/lib/analytics/claude";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,17 +30,18 @@ export async function POST(request: NextRequest) {
   recordVisit(body.deviceId);
 
   // Durable per-device record for the /visitors page (who came, who came back).
+  // Claude's test browsers are kept, but as "🤖 클로드" (claude.ts); other bots are dropped.
   const userAgent = request.headers.get("user-agent");
-  if (!isAutomatedClient(userAgent, body.automated)) {
-    await recordVisitorVisit({
-      deviceId: body.deviceId,
-      path: body.path,
-      userAgent,
-      nickname: body.nickname,
-      ip: clientIp(request),
-      referrer: body.referrer,
-    });
-  }
+  const isClaude = isClaudeTestClient(userAgent, body.automated);
+  if (!isClaude && isAutomatedClient(userAgent, body.automated)) return NextResponse.json({ ok: true });
+  await recordVisitorVisit({
+    deviceId: isClaude ? CLAUDE_DEVICE_ID : body.deviceId,
+    path: body.path,
+    userAgent,
+    nickname: isClaude ? CLAUDE_NICKNAME : body.nickname,
+    ip: clientIp(request),
+    referrer: body.referrer,
+  });
 
   return NextResponse.json({ ok: true });
 }

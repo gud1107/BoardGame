@@ -25,3 +25,14 @@ describe("isAutomatedClient", () => {
     expect(isAutomatedClient("Mozilla/5.0 (compatible; Googlebot/2.1)", false)).toBe(true);
   });
 });
+
+import { isClaudeTestClient } from "./playCounts";
+
+describe("isClaudeTestClient", () => {
+  it("is Claude's Playwright / headless test browser, not every bot", () => {
+    expect(isClaudeTestClient(DESKTOP_CHROME, true)).toBe(true);
+    expect(isClaudeTestClient(DESKTOP_CHROME.replace("Chrome/", "HeadlessChrome/"), false)).toBe(true);
+    expect(isClaudeTestClient("Mozilla/5.0 (compatible; Googlebot/2.1)", false)).toBe(false);
+    expect(isClaudeTestClient(IPHONE_SAFARI, false)).toBe(false);
+  });
+});

@@ -44,6 +44,7 @@ const EXCLUDE_KEY = "bg_admin_exclude_me";
 const EXCLUDE_LABELED_KEY = "bg_admin_exclude_labeled";
 /** "all" | "labeled" (only named IPs) | an IP (only that named person). */
 const FOCUS_KEY = "bg_admin_focus";
+const INCLUDE_CLAUDE_KEY = "bg_admin_include_claude";
 
 function readStored(key: string): string | null {
   try {
@@ -122,6 +123,8 @@ function AdminHub() {
   const [excludeMe, setExcludeMe] = useState(() => readStored(EXCLUDE_KEY) === "1");
   const [excludeLabeled, setExcludeLabeled] = useState(() => readStored(EXCLUDE_LABELED_KEY) === "1");
   const [focus, setFocus] = useState<string>(() => readStored(FOCUS_KEY) || "all");
+  // Claude's test runs (recorded as "🤖 클로드") stay out of the stats unless asked for.
+  const [includeClaude, setIncludeClaude] = useState(() => readStored(INCLUDE_CLAUDE_KEY) === "1");
   const [myDevice] = useState<string | null>(() => {
     try {
       return getDeviceId();
@@ -158,10 +161,11 @@ function AdminHub() {
       excludeLabeled && activeFocus === "all" ? "@labeled" : null,
       activeFocus === "labeled" ? "@only-labeled" : null,
       activeFocus !== "all" && activeFocus !== "labeled" ? `@only:${activeFocus}` : null,
+      includeClaude ? null : "@no-claude",
     ].filter(Boolean);
     if (!items.length && !excludeMe) return null;
     return { ip: items.length ? items.join(",") : null, device: excludeMe ? myDevice : null };
-  }, [excludeMe, excludeLabeled, activeFocus, myIp, myDevice]);
+  }, [excludeMe, excludeLabeled, activeFocus, includeClaude, myIp, myDevice]);
   const focusLabel =
     activeFocus === "all" ? null : activeFocus === "labeled" ? "이름 붙인 IP만" : `🏷️ ${ipLabels.get(activeFocus)?.label ?? activeFocus}만`;
   const current = TABS.find((t) => t.key === tab)!;
@@ -172,7 +176,7 @@ function AdminHub() {
         <div>
           <h1 className="text-2xl font-bold text-white light:text-slate-900">🛠 관리자</h1>
           <p className="mt-1 text-xs text-white/40 light:text-slate-500">
-            운영 사이트 실제 사용자만 · 자동화 브라우저(클로드 봇) 제외 · 다른 사람 IP는 눌러야 보임
+            운영 사이트 기록 · 클로드 테스트는 「🤖 클로드」로 따로 기록(기본 제외) · 다른 사람 IP는 눌러야 보임
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-300">
@@ -208,6 +212,18 @@ function AdminHub() {
               <span className="text-white/40" title="🏷️ IP 관리에서 이름을 붙인 IP(가족·지인 등)의 기록을 통계에서 뺍니다">
                 ({ipLabels.size}개)
               </span>
+            </label>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/80 light:border-slate-300 light:text-slate-700">
+              <input
+                type="checkbox"
+                checked={includeClaude}
+                onChange={(e) => {
+                  setIncludeClaude(e.target.checked);
+                  store(INCLUDE_CLAUDE_KEY, e.target.checked ? "1" : "0");
+                }}
+                className="accent-amber-500"
+              />
+              🤖 클로드 테스트 포함
             </label>
             <label className="inline-flex items-center gap-2 rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/80 light:border-slate-300 light:text-slate-700">
               보기 대상
@@ -285,6 +301,7 @@ function AdminHub() {
               </Chip>
             ))}
           {current.stats && focusLabel && <span className="self-center text-xs font-semibold text-sky-300">· {focusLabel} 보는 중</span>}
+          {current.stats && includeClaude && <span className="self-center text-xs text-violet-300">· 🤖 클로드 테스트 포함</span>}
           {current.stats && (excludeMe || (excludeLabeled && activeFocus === "all")) && (
             <span className="self-center text-xs text-amber-300/80">
               · {[excludeMe && "내 기록", excludeLabeled && activeFocus === "all" && "이름 붙인 IP"].filter(Boolean).join(" · ")} 제외 중
