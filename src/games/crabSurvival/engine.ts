@@ -210,6 +210,8 @@ export interface Shot {
   knock: number;
   pierce: boolean;
   hit: number[];
+  /** Vortex damage-tick timer. */
+  tick?: number;
 }
 
 export interface Mine {
@@ -2364,6 +2366,7 @@ function updateGear(w: World, c: Crab, dt: number) {
     switch (g.kind) {
       case "shotgun":
       case "needle":
+      case "vortex":
       case "trident": {
         const t = nearestFoe(w, c, def.range * reachK);
         if (!t) continue;
@@ -2378,6 +2381,10 @@ function updateGear(w: World, c: Crab, dt: number) {
             w.shots.push({ owner: c.id, kind: "shotgun", x: ox, y: oy, vx: Math.cos(aa) * speed, vy: Math.sin(aa) * speed, life: (def.range * reachK) / speed, dmg: h.dmg, crit: h.crit, r: 7 * Math.sqrt(c.scale), knock: 120, pierce: false, hit: [] });
           }
           burst(w, "shard", ox, oy, 5, 200, def.color, 3, 0.25, 40);
+        } else if (g.kind === "vortex") {
+          // A slow whirlpool lobbed at the target; it drags everything nearby into its eye.
+          const h = gearHit(w, c, "vortex");
+          w.shots.push({ owner: c.id, kind: "vortex", x: ox, y: oy, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260, life: 2.2, dmg: h.dmg, crit: h.crit, r: 62 * Math.sqrt(c.scale), knock: 0, pierce: true, hit: [], tick: 0.1 });
         } else if (g.kind === "needle") {
           const speed = 980;
           const h = gearHit(w, c, "needle");
@@ -2454,6 +2461,10 @@ function updateShots(w: World, dt: number) {
     s.life -= dt;
     s.x += s.vx * dt;
     s.y += s.vy * dt;
+    if (s.kind === "vortex") {
+      if (updateVortex(w, s, dt)) keep.push(s);
+      continue;
+    }
     let dead = s.life <= 0;
     if (!dead) {
       for (const k of w.rocks) {
@@ -2497,6 +2508,42 @@ function updateShots(w: World, dt: number) {
     keep.push(s);
   }
   w.shots = keep;
+}
+
+/** Kraken vortex: drifts to a stop, pulls foes toward its eye, grinds them every 0.25s. */
+function updateVortex(w: World, s: Shot, dt: number): boolean {
+  const owner = w.crabs.find((c) => c.id === s.owner && c.alive);
+  if (!owner || s.life <= 0) {
+    burst(w, "bubble", s.x, s.y, 10, 160, "#c7d2fe", 4, 0.5, 60);
+    return false;
+  }
+  const slow = Math.exp(-1.6 * dt);
+  s.vx *= slow;
+  s.vy *= slow;
+  const pullR = s.r * 1.9;
+  const pull = (o: { x: number; y: number }, mass: number) => {
+    const dx = s.x - o.x, dy = s.y - o.y, d = Math.hypot(dx, dy);
+    if (d < 4 || d > pullR) return;
+    const v = Math.min(d, (170 / mass) * dt);
+    o.x += (dx / d) * v;
+    o.y += (dy / d) * v;
+  };
+  for (const t of w.crabs) if (t !== owner && t.alive && !untouchable(t) && !hasMut(t, "salt")) pull(t, Math.max(1, t.scale * 0.8));
+  for (const t of w.creatures) if (t.alive && t.def.behavior !== "tank") pull(t, Math.max(1, t.def.radius / 18));
+  s.tick = (s.tick ?? 0) - dt;
+  if (s.tick <= 0) {
+    s.tick = 0.25;
+    for (const t of w.crabs) {
+      if (t === owner || !t.alive || untouchable(t)) continue;
+      if (Math.hypot(t.x - s.x, t.y - s.y) > s.r + crabRadius(t) * 0.6) continue;
+      damageCrab(w, t, s.dmg, owner, { crit: s.crit, counter: false, knockback: 0, stun: 0, light: true, sourceName: GEARS.vortex.name, sx: s.x, sy: s.y });
+    }
+    for (const t of w.creatures) {
+      if (!t.alive || Math.hypot(t.x - s.x, t.y - s.y) > s.r + t.def.radius * 0.6) continue;
+      damageCreature(w, t, s.dmg, owner, s.crit, 0, true);
+    }
+  }
+  return true;
 }
 
 function explode(w: World, x: number, y: number, radius: number, dmg: number, owner: Crab | null, ownerId: number, opts: { stun: number; knock: number; color: string; name: string; crit?: boolean }) {

@@ -44,12 +44,12 @@ describe("level table (spec §2.2)", () => {
       [3_000, 1.7, 35, 450],
       [15_000, 2.2, 65, 1_000],
       [90_000, 2.8, 120, 2_500],
-      [600_000, 3.5, 220, 5_000],
+      [680_000, 3.5, 220, 5_000],
     ]);
     expect(levelForScore(299).level).toBe(1);
     expect(levelForScore(300).level).toBe(2);
-    expect(levelForScore(599_999).level).toBe(11);
-    expect(levelForScore(600_000).level).toBe(12);
+    expect(levelForScore(679_999).level).toBe(11);
+    expect(levelForScore(680_000).level).toBe(12);
     // Gaps shrink: no step asks for more than ~2.3x the previous threshold.
     for (let i = 2; i < LEVELS.length; i++) expect(LEVELS[i].points / LEVELS[i - 1].points).toBeLessThan(2.6);
   });
@@ -403,7 +403,7 @@ describe("하이퍼 성장: tiers + special skills", () => {
   it("Tier 4 hydro cannon pierces everything on its line", () => {
     const w = bare(2);
     const [me, a, b] = w.crabs;
-    addScore(w, me, 400_000);
+    addScore(w, me, 440_000);
     me.angle = 0;
     a.x = 200;
     b.x = 420;
@@ -427,12 +427,12 @@ describe("field weapons", () => {
     me.gear[1].t = 2;
     expect(equipGear(w, me, "trident")).toBe(true);
     expect(me.gear.map((g) => g.kind).sort()).toEqual(["shotgun", "trident"]);
-    for (let i = 0; i < 60 * 31; i++) step(w, idle, 1 / 60);
+    for (let i = 0; i < 60 * 43; i++) step(w, idle, 1 / 60);
     expect(me.gear).toHaveLength(0);
   });
 
   it("auto-fire at the nearest foe and land hits", () => {
-    for (const kind of ["shotgun", "needle", "trident", "zap"] as const) {
+    for (const kind of ["shotgun", "needle", "trident", "zap", "vortex"] as const) {
       const w = bare(1);
       const [me, foe] = w.crabs;
       foe.brain = null; // a sitting target — live bots dash out of the way
@@ -584,6 +584,32 @@ describe("risk mutations: short penalty, long upside", () => {
 });
 
 describe("weapon rarity", () => {
+  it("rarer weapons hit harder and last longer", () => {
+    expect(GEARS.shotgun.dmg).toBe(GEARS.shotgun.baseDmg);
+    expect(GEARS.zap.dmg).toBeCloseTo(GEARS.zap.baseDmg * 1.15, 3);
+    expect(GEARS.zap.duration).toBe(36);
+    expect(GEARS.trident.dmg).toBeCloseTo(GEARS.trident.baseDmg * 1.3, 3);
+    expect(GEARS.trident.duration).toBe(42);
+    expect(GEARS.vortex.rarity).toBe("epic");
+  });
+
+  it("the kraken vortex drags a crab into its eye and grinds it", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    foe.brain = null;
+    foe.x = 200;
+    foe.y = 60;
+    foe.hp = foe.maxHp = 10_000;
+    equipGear(w, me, "vortex");
+    for (let i = 0; i < 20; i++) step(w, idle, 1 / 60);
+    const v = w.shots.find((s) => s.kind === "vortex");
+    expect(v).toBeDefined();
+    const d0 = Math.hypot(foe.x - v!.x, foe.y - v!.y);
+    for (let i = 0; i < 40; i++) step(w, idle, 1 / 60);
+    expect(Math.hypot(foe.x - v!.x, foe.y - v!.y)).toBeLessThan(d0);
+    expect(foe.hp).toBeLessThan(10_000);
+  });
+
   it("rarer weapons drop less often; golden chests skip commons", () => {
     const all = gearDropOdds(), rare = gearDropOdds("rare");
     expect(all.trident).toBeLessThan(all.zap);

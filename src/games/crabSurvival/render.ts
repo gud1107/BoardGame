@@ -276,8 +276,9 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
   // Field-weapon projectiles and line FX (screen space).
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   for (const s of w.shots) {
-    if (!inView(s.x, s.y)) continue;
-    drawShot(ctx, view, W, H, s);
+    if (!inView(s.x, s.y, s.r * 2)) continue;
+    if (s.kind === "vortex") drawVortex(ctx, view, W, H, s, t);
+    else drawShot(ctx, view, W, H, s);
   }
   for (const b of w.beams) drawBeam(ctx, view, W, H, b, t);
 
@@ -501,6 +502,40 @@ function drawShot(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: numb
       ctx.beginPath();
       ctx.arc(0, 0, 4 * k, 0, Math.PI * 2);
       ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawVortex(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: number, s: Shot, t: number) {
+  const z = cam.zoom;
+  const [x, y] = toScreen(cam, W, H, s.x, s.y, 4);
+  const fade = Math.min(1, s.life / 0.4);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1, TILT);
+  const R = s.r * z;
+  const g = ctx.createRadialGradient(0, 0, R * 0.1, 0, 0, R * 1.25);
+  g.addColorStop(0, `rgba(30,27,75,${0.75 * fade})`);
+  g.addColorStop(0.6, `rgba(79,70,229,${0.45 * fade})`);
+  g.addColorStop(1, "rgba(129,140,248,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 1.25, 0, Math.PI * 2);
+  ctx.fill();
+  // Spiral arms spinning inward.
+  ctx.lineCap = "round";
+  for (let arm = 0; arm < 4; arm++) {
+    ctx.strokeStyle = `rgba(199,210,254,${(arm % 2 ? 0.5 : 0.85) * fade})`;
+    ctx.lineWidth = Math.max(1.5, 3 * z);
+    ctx.beginPath();
+    for (let i = 0; i <= 24; i++) {
+      const k = i / 24;
+      const a = -t * 7 + arm * (Math.PI / 2) + k * 4.2;
+      const rr = R * (1.15 - k);
+      if (i === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    ctx.stroke();
   }
   ctx.restore();
 }

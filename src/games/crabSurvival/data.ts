@@ -43,9 +43,9 @@ export const LEVELS: LevelDef[] = [
   { level: 7, name: "성체 게", points: 15_000, scale: 2.2, atk: 65, hp: 1_000, speed: 205, speedLabel: "약간 느림", gain: 3 },
   { level: 8, name: "노련한 게", points: 36_000, scale: 2.5, atk: 90, hp: 1_600, speed: 196, speedLabel: "약간 느림", gain: 3.3 },
   { level: 9, name: "거대 게", points: 90_000, scale: 2.8, atk: 120, hp: 2_500, speed: 188, speedLabel: "느림", gain: 4.5 },
-  { level: 10, name: "대왕 게", points: 210_000, scale: 3.1, atk: 160, hp: 3_500, speed: 182, speedLabel: "느림", gain: 4.8 },
-  { level: 11, name: "전설의 게", points: 400_000, scale: 3.3, atk: 190, hp: 4_300, speed: 178, speedLabel: "묵직함", gain: 5.3 },
-  { level: 12, name: "킹 크랩", points: 600_000, scale: 3.5, atk: 220, hp: 5_000, speed: 175, speedLabel: "묵직함", gain: 6 },
+  { level: 10, name: "대왕 게", points: 230_000, scale: 3.1, atk: 160, hp: 3_500, speed: 182, speedLabel: "느림", gain: 4.8 },
+  { level: 11, name: "전설의 게", points: 440_000, scale: 3.3, atk: 190, hp: 4_300, speed: 178, speedLabel: "묵직함", gain: 5.3 },
+  { level: 12, name: "킹 크랩", points: 680_000, scale: 3.5, atk: 220, hp: 5_000, speed: 175, speedLabel: "묵직함", gain: 6 },
 ];
 
 export const MAX_LEVEL = LEVELS.length;
@@ -454,14 +454,15 @@ export const BEAM_DMG = 4; // × ATK
 
 // ── 필드 드롭 해저 무기 (auto-firing, timed; max 2) ─────────────────────────
 
-export type GearKind = "shotgun" | "needle" | "zap" | "mine" | "trident" | "saw";
+export type GearKind = "shotgun" | "needle" | "zap" | "mine" | "trident" | "saw" | "vortex";
 
 export type GearRarity = "common" | "rare" | "epic";
 
-export const GEAR_RARITY: Record<GearRarity, { label: string; rank: number; color: string; glow: string }> = {
-  common: { label: "일반", rank: 1, color: "#67e8f9", glow: "rgba(34,211,238,0.7)" },
-  rare: { label: "희귀", rank: 2, color: "#c084fc", glow: "rgba(192,132,252,0.8)" },
-  epic: { label: "전설", rank: 3, color: "#fbbf24", glow: "rgba(251,191,36,0.9)" },
+/** `dmg`/`dur` are the rarity bonuses baked into GEARS (rarer = hits harder and lasts longer). */
+export const GEAR_RARITY: Record<GearRarity, { label: string; rank: number; color: string; glow: string; dmg: number; dur: number }> = {
+  common: { label: "일반", rank: 1, color: "#67e8f9", glow: "rgba(34,211,238,0.7)", dmg: 1, dur: 1 },
+  rare: { label: "희귀", rank: 2, color: "#c084fc", glow: "rgba(192,132,252,0.8)", dmg: 1.15, dur: 1.2 },
+  epic: { label: "전설", rank: 3, color: "#fbbf24", glow: "rgba(251,191,36,0.9)", dmg: 1.3, dur: 1.4 },
 };
 
 export interface GearDef {
@@ -472,11 +473,14 @@ export interface GearDef {
   rarity: GearRarity;
   /** Relative drop weight — rarer weapons drop less often. */
   weight: number;
-  /** Damage per hit as a multiple of the owner's level ATK. */
+  /** Damage per hit as a multiple of the owner's level ATK (rarity bonus included). */
   dmg: number;
+  /** Before the rarity bonus — the rulebook shows both. */
+  baseDmg: number;
   cooldown: number;
-  /** Seconds the weapon lasts after pickup. */
+  /** Seconds the weapon lasts after pickup (rarity bonus included). */
   duration: number;
+  baseDuration: number;
   /** Auto-aim range (world units, before scale bonus). */
   range: number;
   color: string;
@@ -484,14 +488,24 @@ export interface GearDef {
 
 export const MAX_GEAR = 2;
 
-export const GEARS: Record<GearKind, GearDef> = {
+type GearBase = Omit<GearDef, "baseDmg" | "baseDuration">;
+
+const GEAR_BASE: Record<GearKind, GearBase> = {
   shotgun: { kind: "shotgun", name: "조개껍질 산탄총", emoji: "🐚", desc: "전방 부채꼴로 패각 파편 5발", rarity: "common", weight: 30, dmg: 0.5, cooldown: 0.8, duration: 30, range: 300, color: "#fbcfe8" },
   needle: { kind: "needle", name: "가시 산호 기관총", emoji: "🪸", desc: "가시 침 초연사 + 넉백", rarity: "common", weight: 28, dmg: 0.2, cooldown: 0.15, duration: 25, range: 380, color: "#fb7185" },
   zap: { kind: "zap", name: "해파리 감전 채찍", emoji: "⚡", desc: "체인 라이트닝 3체 연쇄 감전", rarity: "rare", weight: 12, dmg: 0.9, cooldown: 1.2, duration: 30, range: 260, color: "#c4b5fd" },
   mine: { kind: "mine", name: "복어 맹독 지뢰포", emoji: "🐡", desc: "지나간 자리에 독 거품 지뢰", rarity: "common", weight: 26, dmg: 2.2, cooldown: 2.0, duration: 30, range: 0, color: "#a3e635" },
   trident: { kind: "trident", name: "넵튠의 청동 삼지창", emoji: "🔱", desc: "일직선 관통 수류창", rarity: "epic", weight: 5, dmg: 1.8, cooldown: 1.8, duration: 30, range: 520, color: "#fbbf24" },
+  vortex: { kind: "vortex", name: "크라켄 소용돌이 포", emoji: "🌀", desc: "적을 빨아들이며 갈아버리는 소용돌이 발사", rarity: "epic", weight: 4, dmg: 0.42, cooldown: 2.6, duration: 30, range: 420, color: "#818cf8" },
   saw: { kind: "saw", name: "톱날 전기톱 집게", emoji: "🪚", desc: "초근접 회전 톱날 지속 피해", rarity: "rare", weight: 12, dmg: 0.32, cooldown: 0.2, duration: 25, range: 0, color: "#e2e8f0" },
 };
+
+export const GEARS = Object.fromEntries(
+  Object.values(GEAR_BASE).map((g) => {
+    const r = GEAR_RARITY[g.rarity];
+    return [g.kind, { ...g, baseDmg: g.dmg, baseDuration: g.duration, dmg: +(g.dmg * r.dmg).toFixed(3), duration: Math.round(g.duration * r.dur) }];
+  }),
+) as Record<GearKind, GearDef>;
 
 export const GEAR_LIST: GearDef[] = Object.values(GEARS);
 
