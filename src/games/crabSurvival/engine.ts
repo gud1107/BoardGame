@@ -29,6 +29,7 @@ import {
   DASH_INVULN,
   DASH_SPEED,
   GEAR_DROP,
+  GEAR_RARITY,
   GEARS,
   GIANT_SCALE,
   MAGNET_BASE,
@@ -87,6 +88,7 @@ import {
   type CrabTier,
   type FoodKind,
   type GearKind,
+  type GearRarity,
   type MutationKind,
   type LevelDef,
   type ShieldKind,
@@ -370,7 +372,7 @@ export type GameEvent =
   | { type: "kingDown"; name: string; by: string | null; player: boolean; byPlayer: boolean }
   | { type: "kill"; killer: string; victim: string; byPlayer: boolean; victimPlayer: boolean }
   | { type: "counter" }
-  | { type: "gear"; name: string; emoji: string; player: boolean }
+  | { type: "gear"; name: string; emoji: string; player: boolean; rarity: GearRarity }
   | { type: "mutation"; kind: MutationKind; player: boolean }
   | { type: "skill"; tier: CrabTier; player: boolean }
   | { type: "blast"; x: number; y: number; player: boolean }
@@ -478,6 +480,14 @@ export function tierOf(c: Crab): CrabTier {
 }
 export function hasMut(c: Crab, k: MutationKind): boolean {
   return c.muts.some((m) => m.kind === k);
+}
+/** Seconds of a risk mutation's downside still left (0 = only the upside remains). */
+export function penaltyLeft(c: Crab, k: MutationKind): number {
+  const m = c.muts.find((x) => x.kind === k);
+  if (!m) return 0;
+  const def = MUTATIONS[k];
+  if (!def.risk) return 0;
+  return Math.max(0, (def.penalty ?? def.duration) - (def.duration - m.t));
 }
 /** Outgoing damage multiplier: tier passive × mutations × 농게 surge. */
 export function atkMult(c: Crab): number {
@@ -1086,8 +1096,8 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
 
   const lv = levelDef(c);
   let mx = inp.moveX, my = inp.moveY;
-  // 럼주: every direction comes out backwards.
-  if (hasMut(c, "rum")) {
+  // 럼주: every direction comes out backwards (only while still drunk — the crits outlast it).
+  if (penaltyLeft(c, "rum") > 0) {
     mx = -mx;
     my = -my;
   }
@@ -1120,7 +1130,7 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
   }
 
   let speed = lv.speed * (c.boosting ? BOOST_MULT : 1) * TIERS[tierOf(c)].speed;
-  for (const m of c.muts) speed *= MUTATIONS[m.kind].speed;
+  for (const m of c.muts) if (!MUTATIONS[m.kind].risk || penaltyLeft(c, m.kind) > 0) speed *= MUTATIONS[m.kind].speed;
   if (c.burrow > 0) speed *= 0.85;
   if (c.surge > 0 && c.species === "ghost") speed *= PERK_SPEED;
   if (isShallow(c.x, c.y)) speed *= SHALLOW_SLOW;
@@ -1433,7 +1443,7 @@ function damageCreature(w: World, cr: Creature, dmg: number, by: Crab, crit: boo
       w.stats.eaten++;
       floatText(w, cr.x, cr.y - cr.def.radius - 10, `+${Math.round(pts).toLocaleString()}`, "#fde047", 15, 1);
     }
-    if (rand(w) < GEAR_DROP[cr.kind]) dropGear(w, cr.x, cr.y, randomGear(w));
+    if (rand(w) < GEAR_DROP[cr.kind]) dropGear(w, cr.x, cr.y, randomGear(w, cr.kind === "lobster" ? "rare" : "common"));
     else if (rand(w) < 0.12) dropMutation(w, cr.x, cr.y);
     for (let i = 0; i < cr.def.meat; i++) {
       const m = newPickup(w, "food", cr.x, cr.y, Math.round(cr.def.points * 0.15), false, 11, 40);
@@ -1505,7 +1515,7 @@ function breakBox(w: World, b: Box, by: Crab) {
   const nCoins = gold ? 6 : 3;
   for (let i = 0; i < nCoins; i++) scatter(newPickup(w, "coin", b.x, b.y, Math.round(coinTotal / nCoins), false, gold ? 12 : 9, 40));
   if (gold) {
-    dropGear(w, b.x, b.y, randomGear(w));
+    dropGear(w, b.x, b.y, randomGear(w, "rare"));
     if (rand(w) < 0.5) dropMutation(w, b.x, b.y, false);
     scatter(dropEquip(w, b.x, b.y, "weapon", freshWeapon(randomWeapon(w, 3, 5))));
     if (rand(w) < 0.6) scatter(dropEquip(w, b.x, b.y, "shield", freshShield(randomShield(w, 2, 3))));
@@ -2139,11 +2149,12 @@ function decide(w: World, c: Crab, br: Brain, hpFrac: number) {
       v = SHIELDS[p.shield.kind].tier > curTier ? 900 * lv.gain : 0;
     } else if (p.type === "gear" && p.gear) {
       const g = p.gear;
-      v = c.gear.length < MAX_GEAR || c.gear.some((x) => x.kind === g || x.t < 8) ? 1400 * lv.gain : 0;
+      const rk = GEAR_RARITY[GEARS[g].rarity].rank;
+      v = c.gear.length < MAX_GEAR || c.gear.some((x) => x.kind === g || x.t < 8 || GEAR_RARITY[GEARS[x.kind].rarity].rank < rk) ? (1000 + 400 * rk) * lv.gain : 0;
     } else if (p.type === "mutation" && p.mutation) {
       const m = MUTATIONS[p.mutation];
       // Bold bots gamble on the risky ones; nobody wants the oil slick.
-      v = p.mutation === "oil" ? 0 : m.risk ? 500 * lv.gain * br.aggression : 1100 * lv.gain;
+      v = p.mutation === "oil" ? 0 : m.risk ? 800 * lv.gain * br.aggression : 1100 * lv.gain;
       if (hasMut(c, p.mutation)) v *= 0.3;
     }
     if (v > 0) consider("food", p.id, p.x, p.y, v / (d + 40));
@@ -2186,8 +2197,16 @@ function clearPowers(c: Crab) {
   c.dashT = 0;
 }
 
-function randomGear(w: World): GearKind {
-  return pick(w, Object.keys(GEARS) as GearKind[]);
+/** Rarity-weighted weapon roll; `minRarity` restricts the pool (golden chests / lobsters: rare+). */
+function randomGear(w: World, minRarity: GearRarity = "common"): GearKind {
+  const pool = Object.values(GEARS).filter((g) => GEAR_RARITY[g.rarity].rank >= GEAR_RARITY[minRarity].rank);
+  const total = pool.reduce((a, g) => a + g.weight, 0);
+  let r = rand(w) * total;
+  for (const g of pool) {
+    r -= g.weight;
+    if (r <= 0) return g.kind;
+  }
+  return pool[0].kind;
 }
 
 function weightedMutation(w: World): MutationKind {
@@ -2234,13 +2253,16 @@ export function equipGear(w: World, c: Crab, kind: GearKind): boolean {
   if (same) same.t = def.duration;
   else if (c.gear.length < MAX_GEAR) c.gear.push({ kind, t: def.duration, cd: 0.2 });
   else {
-    const worst = c.gear.reduce((a, g) => (g.t < a.t ? g : a), c.gear[0]);
-    if (worst.t > def.duration * 0.8) return false;
+    const rank = (k: GearKind) => GEAR_RARITY[GEARS[k].rarity].rank;
+    const worst = c.gear.reduce((a, g) => (rank(g.kind) < rank(a.kind) || (rank(g.kind) === rank(a.kind) && g.t < a.t) ? g : a), c.gear[0]);
+    if (rank(kind) <= rank(worst.kind) && worst.t > def.duration * 0.8) return false;
+    // A lower tier only gets in once the rarer one is nearly spent.
+    if (rank(kind) < rank(worst.kind) && worst.t > GEARS[worst.kind].duration * 0.25) return false;
     c.gear[c.gear.indexOf(worst)] = { kind, t: def.duration, cd: 0.2 };
   }
   burst(w, "star", c.x, c.y, 8, 160, def.color, 4, 0.6, 160);
   if (c.isPlayer) {
-    w.events.push({ type: "gear", name: def.name, emoji: def.emoji, player: true });
+    w.events.push({ type: "gear", name: def.name, emoji: def.emoji, player: true, rarity: def.rarity });
     floatText(w, c.x, c.y - 34 * c.scale, `${def.emoji} ${def.name}!`, "#a5f3fc", 16, 1.2);
   }
   return true;
@@ -2267,7 +2289,7 @@ export function applyMutation(w: World, c: Crab, kind: MutationKind) {
 function tickMutations(w: World, c: Crab, dt: number) {
   if (!c.muts.length) return;
   for (const m of c.muts) m.t -= dt;
-  if (hasMut(c, "toxic")) {
+  if (penaltyLeft(c, "toxic") > 0) {
     // Self-poisoning counts as being hurt (no natural regen), but never kills on its own.
     c.sinceHurt = 0;
     c.hp = Math.max(1, c.hp - c.maxHp * TOXIC_DOT * dt);
@@ -2571,7 +2593,7 @@ export function castSkill(w: World, c: Crab, inp: CrabInput) {
     case 1: {
       // 옆걸음 대시: roll toward the stick (or facing), briefly untouchable.
       let dx = inp.moveX, dy = inp.moveY;
-      if (hasMut(c, "rum")) {
+      if (penaltyLeft(c, "rum") > 0) {
         dx = -dx;
         dy = -dy;
       }

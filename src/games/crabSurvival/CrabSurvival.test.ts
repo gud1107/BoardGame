@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { BUBBLE_STUN, GEARS, isUnlocked, LEVELS, tierForLevel, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
-import { addScore, applyMutation, atkMult, botThink, createWorld, equipGear, player, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
+import { BUBBLE_STUN, gearDropOdds, GEARS, isUnlocked, MUTATIONS, LEVELS, tierForLevel, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
+import { addScore, applyMutation, armorMult, atkMult, botThink, createWorld, equipGear, penaltyLeft, player, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
 
 const idle: CrabInput = { moveX: 0, moveY: 0, boost: false, attack: false };
 
@@ -403,7 +403,7 @@ describe("하이퍼 성장: tiers + special skills", () => {
   it("Tier 4 hydro cannon pierces everything on its line", () => {
     const w = bare(2);
     const [me, a, b] = w.crabs;
-    addScore(w, me, 380_000);
+    addScore(w, me, 400_000);
     me.angle = 0;
     a.x = 200;
     b.x = 420;
@@ -532,5 +532,77 @@ describe("mutations", () => {
     for (let i = 0; i < 30; i++) step(w, idle, 1 / 60);
     expect(w.pickups.find((p) => p.id === 999)).toBeUndefined();
     expect(me.score).toBe(186);
+  });
+});
+
+describe("risk mutations: short penalty, long upside", () => {
+  it("every risk item's downside ends before its upside", () => {
+    for (const m of Object.values(MUTATIONS)) if (m.risk && m.kind !== "oil") expect(m.penalty!).toBeLessThan(m.duration);
+  });
+
+  it("rum: controls come back after the penalty but the crits stay", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    foe.brain = null;
+    foe.x = 3000;
+    applyMutation(w, me, "rum");
+    for (let i = 0; i < 60 * 5.2; i++) step(w, idle, 1 / 60);
+    expect(penaltyLeft(me, "rum")).toBe(0);
+    me.x = 0;
+    step(w, { ...idle, moveX: 1 }, 1 / 60);
+    expect(me.x).toBeGreaterThan(0);
+    foe.x = 40;
+    foe.y = me.y;
+    face(me, foe);
+    w.texts = [];
+    swing(w, me);
+    expect(w.texts.some((t) => t.text.startsWith("치명타"))).toBe(true);
+  });
+
+  it("salt: the slow wears off while the armor holds", () => {
+    const w = bare();
+    const me = player(w);
+    applyMutation(w, me, "salt");
+    for (let i = 0; i < 60 * 4.2; i++) step(w, idle, 1 / 60);
+    expect(armorMult(me)).toBeLessThan(0.6);
+    const x0 = me.x;
+    step(w, { ...idle, moveX: 1 }, 1 / 10);
+    expect(me.x - x0).toBeCloseTo(12.5, 1); // full 250 u/s Lv1 speed (step clamps dt to 0.05)
+  });
+
+  it("toxic: the self-damage stops after the penalty, the triple damage doesn't", () => {
+    const w = bare();
+    const me = player(w);
+    applyMutation(w, me, "toxic");
+    me.hp = me.maxHp = 1000;
+    for (let i = 0; i < 60 * 7; i++) step(w, idle, 1 / 60);
+    const hp = me.hp;
+    for (let i = 0; i < 60 * 2; i++) step(w, idle, 1 / 60);
+    expect(me.hp).toBeGreaterThanOrEqual(hp);
+    expect(atkMult(me)).toBeCloseTo(3, 5);
+  });
+});
+
+describe("weapon rarity", () => {
+  it("rarer weapons drop less often; golden chests skip commons", () => {
+    const all = gearDropOdds(), rare = gearDropOdds("rare");
+    expect(all.trident).toBeLessThan(all.zap);
+    expect(all.zap).toBeLessThan(all.shotgun);
+    expect(Object.values(all).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 5);
+    expect(rare.shotgun).toBe(0);
+    expect(rare.trident).toBeGreaterThan(all.trident * 3);
+  });
+
+  it("a rarer weapon bumps a common one off a full rack, never the reverse", () => {
+    const w = bare();
+    const me = player(w);
+    equipGear(w, me, "shotgun");
+    equipGear(w, me, "trident");
+    expect(equipGear(w, me, "needle")).toBe(false); // fresh common can't push out a fresh common/epic
+    expect(equipGear(w, me, "zap")).toBe(true); // rare replaces the common
+    expect(me.gear.map((g) => g.kind).sort()).toEqual(["trident", "zap"]);
+    expect(equipGear(w, me, "shotgun")).toBe(false); // a fresh rare/epic beats a common
+    me.gear.forEach((g) => (g.t = 1));
+    expect(equipGear(w, me, "shotgun")).toBe(true); // ...until it's nearly spent
   });
 });

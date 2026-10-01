@@ -5,8 +5,8 @@
  * crabs walk behind/in front of props correctly.
  */
 
-import { BOXES, CRAB_RADIUS, FOODS, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
-import { crabRadius, hasMut, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
+import { BOXES, CRAB_RADIUS, FOODS, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
+import { crabRadius, hasMut, penaltyLeft, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
 
 export const TILT = 0.72;
 
@@ -414,7 +414,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
   }
 
   // 방사능: green-warped vision. 럼주: a woozy purple swirl at the edges.
-  if (me.alive && hasMut(me, "toxic")) {
+  if (me.alive && penaltyLeft(me, "toxic") > 0) {
     ctx.fillStyle = `rgba(101,163,13,${0.16 + 0.05 * Math.sin(t * 5)})`;
     ctx.fillRect(0, 0, W, H);
     const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.7);
@@ -423,7 +423,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
   }
-  if (me.alive && hasMut(me, "rum")) {
+  if (me.alive && penaltyLeft(me, "rum") > 0) {
     const g = ctx.createRadialGradient(W / 2 + Math.sin(t * 2) * 40, H / 2 + Math.cos(t * 1.7) * 30, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7);
     g.addColorStop(0, "rgba(168,85,247,0)");
     g.addColorStop(1, `rgba(126,34,206,${0.25 + 0.1 * Math.sin(t * 3)})`);
@@ -851,7 +851,7 @@ function drawPickup(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: nu
     glow = "rgba(134,239,172,0.55)";
   } else if (p.type === "gear" && p.gear) {
     emoji = GEARS[p.gear].emoji;
-    glow = "rgba(34,211,238,0.7)";
+    glow = GEAR_RARITY[GEARS[p.gear].rarity].glow;
   } else if (p.type === "mutation" && p.mutation) {
     const m = MUTATIONS[p.mutation];
     emoji = m.emoji;
@@ -869,11 +869,21 @@ function drawPickup(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: nu
   }
   const sp = emojiSprite(emoji);
   ctx.drawImage(sp, x - size / 2, y - size * 0.95, size, size);
-  if (p.type === "gear") {
-    // Twinkle so dropped weapons read as "shiny loot" from across the beach.
-    ctx.fillStyle = "#ecfeff";
-    for (let i = 0; i < 2; i++) {
-      const a = t * 2.5 + i * Math.PI + p.id;
+  if (p.type === "gear" && p.gear) {
+    // Twinkle so dropped weapons read as "shiny loot" from across the beach — rarer = more sparkles.
+    const rank = GEAR_RARITY[GEARS[p.gear].rarity].rank;
+    ctx.fillStyle = rank >= 3 ? "#fef3c7" : rank === 2 ? "#f3e8ff" : "#ecfeff";
+    if (rank >= 3) {
+      // Legendary: a light pillar so it can be spotted from off-screen-ish distances.
+      const pg = ctx.createLinearGradient(x, y - size * 3.2, x, y);
+      pg.addColorStop(0, "rgba(251,191,36,0)");
+      pg.addColorStop(1, `rgba(251,191,36,${0.35 + 0.15 * Math.sin(t * 5)})`);
+      ctx.fillStyle = pg;
+      ctx.fillRect(x - size * 0.22, y - size * 3.2, size * 0.44, size * 3.2);
+      ctx.fillStyle = "#fef3c7";
+    }
+    for (let i = 0; i < rank * 2; i++) {
+      const a = t * 2.5 + (i / rank) * Math.PI + p.id;
       const k = 0.5 + 0.5 * Math.sin(t * 6 + i * 2);
       drawStar(ctx, x + Math.cos(a) * size * 0.6, y - size * 0.45 + Math.sin(a) * size * 0.35, 4 * k + 1, a);
     }
@@ -1525,7 +1535,7 @@ function drawCrabOverlay(ctx: CanvasRenderingContext2D, cam: Camera, W: number, 
   if (c.burrow > 0) return;
   const icons = [...c.gear.map((g) => GEARS[g.kind].emoji), ...c.muts.filter((m) => m.kind !== "oil").map((m) => MUTATIONS[m.kind].emoji)];
   if (c.slide) icons.push("🛢️");
-  if (hasMut(c, "rum")) {
+  if (penaltyLeft(c, "rum") > 0) {
     // Drunken swirl over the head.
     ctx.fillStyle = "#c084fc";
     for (let i = 0; i < 3; i++) {

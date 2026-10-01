@@ -44,7 +44,7 @@ export const LEVELS: LevelDef[] = [
   { level: 8, name: "노련한 게", points: 36_000, scale: 2.5, atk: 90, hp: 1_600, speed: 196, speedLabel: "약간 느림", gain: 3.3 },
   { level: 9, name: "거대 게", points: 90_000, scale: 2.8, atk: 120, hp: 2_500, speed: 188, speedLabel: "느림", gain: 4.5 },
   { level: 10, name: "대왕 게", points: 210_000, scale: 3.1, atk: 160, hp: 3_500, speed: 182, speedLabel: "느림", gain: 4.8 },
-  { level: 11, name: "전설의 게", points: 380_000, scale: 3.3, atk: 190, hp: 4_300, speed: 178, speedLabel: "묵직함", gain: 5.3 },
+  { level: 11, name: "전설의 게", points: 400_000, scale: 3.3, atk: 190, hp: 4_300, speed: 178, speedLabel: "묵직함", gain: 5.3 },
   { level: 12, name: "킹 크랩", points: 600_000, scale: 3.5, atk: 220, hp: 5_000, speed: 175, speedLabel: "묵직함", gain: 6 },
 ];
 
@@ -456,11 +456,22 @@ export const BEAM_DMG = 4; // × ATK
 
 export type GearKind = "shotgun" | "needle" | "zap" | "mine" | "trident" | "saw";
 
+export type GearRarity = "common" | "rare" | "epic";
+
+export const GEAR_RARITY: Record<GearRarity, { label: string; rank: number; color: string; glow: string }> = {
+  common: { label: "일반", rank: 1, color: "#67e8f9", glow: "rgba(34,211,238,0.7)" },
+  rare: { label: "희귀", rank: 2, color: "#c084fc", glow: "rgba(192,132,252,0.8)" },
+  epic: { label: "전설", rank: 3, color: "#fbbf24", glow: "rgba(251,191,36,0.9)" },
+};
+
 export interface GearDef {
   kind: GearKind;
   name: string;
   emoji: string;
   desc: string;
+  rarity: GearRarity;
+  /** Relative drop weight — rarer weapons drop less often. */
+  weight: number;
   /** Damage per hit as a multiple of the owner's level ATK. */
   dmg: number;
   cooldown: number;
@@ -474,15 +485,24 @@ export interface GearDef {
 export const MAX_GEAR = 2;
 
 export const GEARS: Record<GearKind, GearDef> = {
-  shotgun: { kind: "shotgun", name: "조개껍질 산탄총", emoji: "🐚", desc: "전방 부채꼴로 패각 파편 5발", dmg: 0.5, cooldown: 0.8, duration: 30, range: 300, color: "#fbcfe8" },
-  needle: { kind: "needle", name: "가시 산호 기관총", emoji: "🪸", desc: "가시 침 초연사 + 넉백", dmg: 0.2, cooldown: 0.15, duration: 25, range: 380, color: "#fb7185" },
-  zap: { kind: "zap", name: "해파리 감전 채찍", emoji: "⚡", desc: "체인 라이트닝 3체 연쇄 감전", dmg: 0.9, cooldown: 1.2, duration: 30, range: 260, color: "#c4b5fd" },
-  mine: { kind: "mine", name: "복어 맹독 지뢰포", emoji: "🐡", desc: "지나간 자리에 독 거품 지뢰", dmg: 2.2, cooldown: 2.0, duration: 30, range: 0, color: "#a3e635" },
-  trident: { kind: "trident", name: "넵튠의 청동 삼지창", emoji: "🔱", desc: "일직선 관통 수류창", dmg: 1.8, cooldown: 1.8, duration: 30, range: 520, color: "#fbbf24" },
-  saw: { kind: "saw", name: "톱날 전기톱 집게", emoji: "🪚", desc: "초근접 회전 톱날 지속 피해", dmg: 0.32, cooldown: 0.2, duration: 25, range: 0, color: "#e2e8f0" },
+  shotgun: { kind: "shotgun", name: "조개껍질 산탄총", emoji: "🐚", desc: "전방 부채꼴로 패각 파편 5발", rarity: "common", weight: 30, dmg: 0.5, cooldown: 0.8, duration: 30, range: 300, color: "#fbcfe8" },
+  needle: { kind: "needle", name: "가시 산호 기관총", emoji: "🪸", desc: "가시 침 초연사 + 넉백", rarity: "common", weight: 28, dmg: 0.2, cooldown: 0.15, duration: 25, range: 380, color: "#fb7185" },
+  zap: { kind: "zap", name: "해파리 감전 채찍", emoji: "⚡", desc: "체인 라이트닝 3체 연쇄 감전", rarity: "rare", weight: 12, dmg: 0.9, cooldown: 1.2, duration: 30, range: 260, color: "#c4b5fd" },
+  mine: { kind: "mine", name: "복어 맹독 지뢰포", emoji: "🐡", desc: "지나간 자리에 독 거품 지뢰", rarity: "common", weight: 26, dmg: 2.2, cooldown: 2.0, duration: 30, range: 0, color: "#a3e635" },
+  trident: { kind: "trident", name: "넵튠의 청동 삼지창", emoji: "🔱", desc: "일직선 관통 수류창", rarity: "epic", weight: 5, dmg: 1.8, cooldown: 1.8, duration: 30, range: 520, color: "#fbbf24" },
+  saw: { kind: "saw", name: "톱날 전기톱 집게", emoji: "🪚", desc: "초근접 회전 톱날 지속 피해", rarity: "rare", weight: 12, dmg: 0.32, cooldown: 0.2, duration: 25, range: 0, color: "#e2e8f0" },
 };
 
 export const GEAR_LIST: GearDef[] = Object.values(GEARS);
+
+/** Drop chance of each weapon from a pool restricted to `minRarity` and up. */
+export function gearDropOdds(minRarity: GearRarity = "common"): Record<GearKind, number> {
+  const pool = GEAR_LIST.filter((g) => GEAR_RARITY[g.rarity].rank >= GEAR_RARITY[minRarity].rank);
+  const total = pool.reduce((a, g) => a + g.weight, 0);
+  const out = {} as Record<GearKind, number>;
+  for (const g of GEAR_LIST) out[g.kind] = pool.includes(g) ? g.weight / total : 0;
+  return out;
+}
 
 /** Chance a slain creature drops a weapon. */
 export const GEAR_DROP: Record<CreatureKind, number> = { babyCrab: 0.06, fish: 0.06, crayfish: 0.25, turtle: 0.7, lobster: 1 };
@@ -496,7 +516,10 @@ export interface MutationDef {
   name: string;
   emoji: string;
   risk: boolean;
+  /** Seconds the upside lasts. */
   duration: number;
+  /** Risk items: the downside only lasts this long (from pickup), the upside keeps going. */
+  penalty?: number;
   /** Upside / downside for the HUD and rulebook. */
   good: string;
   bad?: string;
@@ -512,10 +535,10 @@ export const MUTATIONS: Record<MutationKind, MutationDef> = {
   pearl: { kind: "pearl", name: "진주 보호막", emoji: "🔮", risk: false, duration: 25, good: "공격 2회 무효화 + 수류 반사 폭발", atk: 1, speed: 1, armor: 1, weight: 12, color: "#e0f2fe" },
   pepper: { kind: "pepper", name: "매운 고추 미역", emoji: "🌶️", risk: false, duration: 12, good: "이동속도 +70% · 지나간 자리에 불꽃", atk: 1, speed: 1.7, armor: 1, weight: 13, color: "#f97316" },
   giant: { kind: "giant", name: "거대화 킹 바닷가재 즙", emoji: "🦞", risk: false, duration: 10, good: "몸집 2배 · 닿는 잡몹 즉사", atk: 1.25, speed: 1, armor: 1, weight: 9, color: "#ef4444" },
-  toxic: { kind: "toxic", name: "방사능 폐기물 통", emoji: "☢️", risk: true, duration: 10, good: "공격력 +200%", bad: "초록 시야 + 초당 2% 자해", atk: 3, speed: 1, armor: 1, weight: 9, color: "#84cc16" },
-  salt: { kind: "salt", name: "고농도 소금 덩어리", emoji: "🧂", risk: true, duration: 6, good: "방어력 +80% · 넉백 면역", bad: "이동속도 -40%", atk: 1, speed: 0.6, armor: 1 / 1.8, weight: 9, color: "#f1f5f9" },
-  rum: { kind: "rum", name: "취한 해적의 럼주 병", emoji: "🥃", risk: true, duration: 8, good: "모든 타격 치명타", bad: "조작 방향 반전(혼란)", atk: 1, speed: 1, armor: 1, weight: 8, color: "#d97706" },
-  oil: { kind: "oil", name: "미끄러운 기름 찌꺼기", emoji: "🛢️", risk: true, duration: 3, good: "", bad: "3초간 미끄러져 방향 제어 불가", atk: 1, speed: 1, armor: 1, weight: 10, color: "#334155" },
+  toxic: { kind: "toxic", name: "방사능 폐기물 통", emoji: "☢️", risk: true, duration: 14, penalty: 6, good: "공격력 +200%", bad: "초록 시야 + 초당 2% 자해", atk: 3, speed: 1, armor: 1, weight: 9, color: "#84cc16" },
+  salt: { kind: "salt", name: "고농도 소금 덩어리", emoji: "🧂", risk: true, duration: 10, penalty: 4, good: "방어력 +80% · 넉백 면역", bad: "이동속도 -40%", atk: 1, speed: 0.6, armor: 1 / 1.8, weight: 9, color: "#f1f5f9" },
+  rum: { kind: "rum", name: "취한 해적의 럼주 병", emoji: "🥃", risk: true, duration: 12, penalty: 5, good: "모든 타격 치명타", bad: "조작 방향 반전(혼란)", atk: 1, speed: 1, armor: 1, weight: 8, color: "#d97706" },
+  oil: { kind: "oil", name: "미끄러운 기름 찌꺼기", emoji: "🛢️", risk: true, duration: 2, penalty: 2, good: "", bad: "미끄러져 방향 제어 불가", atk: 1, speed: 1, armor: 1, weight: 10, color: "#334155" },
 };
 
 export const MUTATION_LIST: MutationDef[] = Object.values(MUTATIONS);

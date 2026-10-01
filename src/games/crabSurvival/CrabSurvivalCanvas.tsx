@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GEARS, MUTATIONS, roadmap, SHIELDS, SPECIES, STAMINA_MAX, TIERS, tierForLevel, WEAPONS, comboMultiplier, type CrabTier, type MutationKind, type SpeciesId } from "./data";
+import { GEAR_RARITY, GEARS, MUTATIONS, roadmap, SHIELDS, SPECIES, STAMINA_MAX, TIERS, tierForLevel, WEAPONS, comboMultiplier, type CrabTier, type MutationKind, type SpeciesId } from "./data";
 import {
   attackReach,
   createWorld,
   crabRadius,
   endMatch,
+  penaltyLeft,
   player,
   rankOf,
   revivePlayer,
@@ -56,8 +57,8 @@ interface Hud {
   tier: CrabTier;
   skillCd: number;
   burrow: boolean;
-  gear: { emoji: string; name: string; t: number; max: number }[];
-  muts: { kind: MutationKind; t: number }[];
+  gear: { emoji: string; name: string; t: number; max: number; color: string; label: string }[];
+  muts: { kind: MutationKind; t: number; pen: number }[];
   pearl: number;
 }
 
@@ -391,12 +392,18 @@ export default function CrabSurvivalCanvas({
             break;
           case "gear":
             a?.gear();
-            pushBanner({ text: `${ev.emoji} ${ev.name}`, sub: "자동 발사 무기 장착! (최대 2개)", tone: "info" });
+            pushBanner({
+              text: `${ev.rarity === "epic" ? "🌟 " : ev.rarity === "rare" ? "✨ " : ""}${ev.emoji} ${ev.name}`,
+              sub: `${GEAR_RARITY[ev.rarity].label} 무기 · 자동 발사 장착! (최대 2개)`,
+              tone: ev.rarity === "common" ? "info" : "king",
+            });
+            if (ev.rarity === "epic") a?.fanfare();
             break;
           case "mutation": {
             const m = MUTATIONS[ev.kind];
             a?.mutation(m.risk);
-            pushBanner({ text: `${m.emoji} ${m.name}`, sub: m.bad ? (m.good ? `▲ ${m.good}  ▼ ${m.bad}` : `▼ ${m.bad}`) : `▲ ${m.good}`, tone: m.risk ? "down" : "level" });
+            const bad = m.bad ? `▼ ${m.bad} (${m.penalty ?? m.duration}초)` : "";
+            pushBanner({ text: `${m.emoji} ${m.name}`, sub: m.good ? `▲ ${m.good} (${m.duration}초)${bad ? `  ${bad}` : ""}` : bad, tone: m.risk ? "down" : "level" });
             if (m.risk && navigator.vibrate) navigator.vibrate(60);
             break;
           }
@@ -493,8 +500,8 @@ export default function CrabSurvivalCanvas({
           tier: tierForLevel(me.level),
           skillCd: me.skillCd,
           burrow: me.burrow > 0,
-          gear: me.gear.map((g) => ({ emoji: GEARS[g.kind].emoji, name: GEARS[g.kind].name, t: g.t, max: GEARS[g.kind].duration })),
-          muts: me.muts.map((m) => ({ kind: m.kind, t: m.t })),
+          gear: me.gear.map((g) => ({ emoji: GEARS[g.kind].emoji, name: GEARS[g.kind].name, t: g.t, max: GEARS[g.kind].duration, color: GEAR_RARITY[GEARS[g.kind].rarity].color, label: GEAR_RARITY[GEARS[g.kind].rarity].label })),
+          muts: me.muts.map((m) => ({ kind: m.kind, t: m.t, pen: penaltyLeft(me, m.kind) })),
           pearl: me.pearl,
         });
       }
@@ -684,9 +691,9 @@ export default function CrabSurvivalCanvas({
           {(hud.gear.length > 0 || hud.muts.length > 0) && (
             <div className="flex flex-wrap items-center gap-1">
               {hud.gear.map((g, i) => (
-                <div key={`g${i}`} className="flex items-center gap-1 rounded-lg bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-cyan-100 ring-1 ring-cyan-400/60" title={g.name}>
+                <div key={`g${i}`} className="flex items-center gap-1 rounded-lg bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-white" style={{ boxShadow: `0 0 0 1px ${g.color}` }} title={`[${g.label}] ${g.name}`}>
                   <span className="text-sm leading-none">{g.emoji}</span>
-                  {!compact && <span className="max-w-[78px] truncate font-bold">{g.name}</span>}
+                  {!compact && <span className="max-w-[78px] truncate font-bold" style={{ color: g.color }}>{g.name}</span>}
                   <span className={`font-mono tabular-nums ${g.t < 5 ? "animate-pulse text-rose-300" : "text-cyan-300"}`}>{Math.ceil(g.t)}s</span>
                 </div>
               ))}
@@ -695,13 +702,14 @@ export default function CrabSurvivalCanvas({
                 return (
                   <div
                     key={m.kind}
-                    className={`flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[10px] font-bold ring-1 ${def.risk ? "animate-pulse bg-rose-950/85 text-rose-200 ring-rose-500" : "bg-emerald-950/85 text-emerald-200 ring-emerald-500"}`}
+                    className={`flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[10px] font-bold ring-1 ${m.pen > 0 ? "animate-pulse bg-rose-950/85 text-rose-200 ring-rose-500" : def.risk ? "bg-amber-950/85 text-amber-200 ring-amber-500" : "bg-emerald-950/85 text-emerald-200 ring-emerald-500"}`}
                     title={`${def.name} — ${def.good}${def.bad ? ` / ${def.bad}` : ""}`}
                   >
-                    <span>{def.risk ? "⚠️" : "🔼"}</span>
+                    <span>{m.pen > 0 ? "⚠️" : "🔼"}</span>
                     <span className="text-sm leading-none">{def.emoji}</span>
                     {!compact && <span className="max-w-[80px] truncate">{def.name}</span>}
                     {m.kind === "pearl" && <span>×{hud.pearl}</span>}
+                    {m.pen > 0 && m.kind !== "oil" && <span className="font-mono tabular-nums text-rose-300">벌칙 {Math.ceil(m.pen)}</span>}
                     <span className="font-mono tabular-nums">{Math.ceil(m.t)}s</span>
                   </div>
                 );

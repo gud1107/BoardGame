@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { BOXES, CREATURES, FOODS, GEARS, LEVELS, MAX_GEAR, MUTATION_LIST, roadmap, SHIELDS, SPECIES_LIST, TIERS, WEAPONS } from "./data";
+import { BOXES, CREATURES, FOODS, GEAR_RARITY, gearDropOdds, GEARS, LEVELS, MAX_GEAR, MUTATION_LIST, roadmap, SHIELDS, SPECIES_LIST, TIERS, WEAPONS } from "./data";
 
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const P = "text-white/70 light:text-slate-600";
@@ -201,18 +201,20 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className={H3}>필드 드롭 해저 무기 (자동 발사)</h3>
           <p className={`mb-2 text-xs ${P}`}>
-            생물을 처치하거나(꼬마 게·물고기 6%·가재 25%·바다거북 70%·대왕 랍스터 100%) 황금 상자를 열면(100%), 나무 상자에서도 22% 확률로 반짝이는 해저 무기가 떨어집니다. 밟으면 집게에 장착되어 <b>가장 가까운 적을 향해 자동으로 발사</b>되고, 정해진 시간이 지나면 사라집니다. 최대 {MAX_GEAR}개까지 동시에 들 수 있고 같은 무기를 또 주우면 시간이 다시 찹니다. 꽉 찬 상태에서는 시간이 가장 적게 남은 무기와 교체합니다. 장착 중인 집게 공격과는 따로 작동하며, 무기 피해는 내 레벨 공격력에 비례합니다. 게가 쓰러지면 남은 시간이 가장 긴 무기를 떨어뜨립니다.
+            생물을 처치하거나(꼬마 게·물고기 6%·가재 25%·바다거북 70%·대왕 랍스터 100%) 황금 상자를 열면(100%), 나무 상자에서도 22% 확률로 반짝이는 해저 무기가 떨어집니다. 밟으면 집게에 장착되어 <b>가장 가까운 적을 향해 자동으로 발사</b>되고, 정해진 시간이 지나면 사라집니다. 최대 {MAX_GEAR}개까지 동시에 들 수 있고 같은 무기를 또 주우면 시간이 다시 찹니다. 꽉 찬 상태에서는 등급이 가장 낮은(같으면 시간이 가장 적게 남은) 무기와 교체하고, 더 높은 등급 무기는 언제든 낮은 등급을 밀어냅니다(낮은 등급은 높은 등급의 시간이 25% 미만 남았을 때만 교체). 무기는 <b>일반 · 희귀 · 전설</b> 등급이 있고 높을수록 드물게 떨어집니다. 황금 상자와 대왕 랍스터는 희귀 이상만 떨어뜨리고, 전설 무기는 바닥에 금빛 기둥이 솟습니다. 장착 중인 집게 공격과는 따로 작동하며, 무기 피해는 내 레벨 공격력에 비례합니다. 게가 쓰러지면 남은 시간이 가장 긴 무기를 떨어뜨립니다.
           </p>
           <div className="grid gap-1.5 text-xs sm:grid-cols-2">
             {Object.values(GEARS).map((g) => (
-              <div key={g.kind} className="rounded-md bg-cyan-500/10 px-2 py-1.5">
+              <div key={g.kind} className="rounded-md bg-cyan-500/10 px-2 py-1.5" style={{ boxShadow: `inset 3px 0 0 ${GEAR_RARITY[g.rarity].color}` }}>
+                <b style={{ color: GEAR_RARITY[g.rarity].color }}>[{GEAR_RARITY[g.rarity].label}]</b>{" "}
                 <b>
                   {g.emoji} {g.name}
                 </b>{" "}
                 <span className="text-white/50 light:text-slate-500">{g.desc}</span>
                 <div className="text-white/60 light:text-slate-600">
                   피해 ×{g.dmg}
-                  {g.kind === "shotgun" ? "(발당)" : ""} · 쿨타임 {g.cooldown}s · 사용 시간 {g.duration}초
+                  {g.kind === "shotgun" ? "(발당)" : ""} · 쿨타임 {g.cooldown}s · 사용 시간 {g.duration}초 · 드롭 {Math.round(gearDropOdds()[g.kind] * 100)}%
+                  {g.rarity !== "common" && <> (황금 상자 {Math.round(gearDropOdds("rare")[g.kind] * 100)}%)</>}
                 </div>
               </div>
             ))}
@@ -222,7 +224,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className={H3}>변이 아이템 (강화 · 리스크)</h3>
           <p className={`mb-2 text-xs ${P}`}>
-            섬 곳곳(항상 26개 유지)에 놓이고 생물을 잡으면 12% 확률로 떨어지는 변이 아이템은 먹는 순간 효과가 걸립니다. 🟢 초록 빛은 순수 강화, 🔴 빨간 빛은 강력하지만 대가가 따르는 리스크 아이템이고, 바닥의 검은 <b>기름 웅덩이</b>는 함정입니다. 같은 변이를 다시 먹으면 시간이 갱신됩니다. AI 게들도 먹습니다 — 대담한 게일수록 리스크 아이템을 노립니다.
+            섬 곳곳(항상 26개 유지)에 놓이고 생물을 잡으면 12% 확률로 떨어지는 변이 아이템은 먹는 순간 효과가 걸립니다. 🟢 초록 빛은 순수 강화, 🔴 빨간 빛은 강력하지만 대가가 따르는 리스크 아이템입니다. 리스크 아이템의 <b>벌칙은 처음 몇 초만</b> 걸리고 이점은 그보다 오래 남으니, 벌칙이 끝날 때까지 버티면 이득만 남습니다. 바닥의 바닥의 검은 <b>기름 웅덩이</b>는 함정입니다. 같은 변이를 다시 먹으면 시간이 갱신됩니다. AI 게들도 먹습니다 — 대담한 게일수록 리스크 아이템을 노립니다.
           </p>
           <div className="grid gap-1.5 text-xs sm:grid-cols-2">
             {MUTATION_LIST.map((m) => (
@@ -230,11 +232,15 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
                 <b>
                   {m.emoji} {m.name}
                 </b>{" "}
-                <span className="text-white/50 light:text-slate-500">{m.duration}초</span>
+                <span className="text-white/50 light:text-slate-500">{m.good ? `${m.duration}초` : ""}</span>
                 <div className="text-white/60 light:text-slate-600">
                   {m.good && <>▲ {m.good}</>}
                   {m.good && m.bad ? " · " : ""}
-                  {m.bad && <span className="text-rose-300 light:text-rose-600">▼ {m.bad}</span>}
+                  {m.bad && (
+                    <span className="text-rose-300 light:text-rose-600">
+                      ▼ {m.bad} ({m.penalty ?? m.duration}초)
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
