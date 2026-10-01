@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { getDeviceId } from "@/lib/identity/deviceId";
+import { getAuthSupabase } from "@/lib/supabase/authClient";
 import { PERIODS, sinceFor, type ExcludeMe, type Period } from "./adminApi";
 import { Chip, Loading } from "./adminUi";
 import GamesTab from "./tabs/GamesTab";
@@ -41,6 +42,8 @@ const TABS: { key: TabKey; label: string; period: boolean; stats: boolean }[] = 
 const TAB_KEY = "bg_admin_tab";
 const EXCLUDE_KEY = "bg_admin_exclude_me";
 const EXCLUDE_LABELED_KEY = "bg_admin_exclude_labeled";
+/** "all" | "labeled" (only named IPs) | an IP (only that named person). */
+const FOCUS_KEY = "bg_admin_focus";
 
 function readStored(key: string): string | null {
   try {
@@ -57,6 +60,37 @@ function store(key: string, value: string) {
 }
 
 const noopSubscribe = () => () => {};
+
+/**
+ * Whether the database understands the @only… focus items (admin_ip_filter.sql).
+ * An older is_excluded_row treats them as unknown IPs and silently keeps
+ * everyone, so ask it directly: a row from 1.1.1.1 must be excluded by
+ * "@only:2.2.2.2". null while checking.
+ */
+function useFocusFilterSupported(): boolean | null {
+  const [supported, setSupported] = useState<boolean | null>(null);
+  useEffect(() => {
+    const supabase = getAuthSupabase();
+    if (!supabase) return;
+    let cancelled = false;
+    void supabase
+      .rpc("is_excluded_row", {
+        r_device: null,
+        r_ip: "1.1.1.1",
+        r_ip_hash: null,
+        p_ex_device: null,
+        p_ex_ip: "@only:2.2.2.2",
+        p_ex_hash: null,
+      })
+      .then(({ data, error }) => {
+        if (!cancelled) setSupported(error ? null : data === true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return supported;
+}
 
 /**
  * The hub restores the last tab and the "내 기록 제외" choice from
@@ -87,6 +121,7 @@ function AdminHub() {
   const [myIp, setMyIp] = useState<string | null>(null);
   const [excludeMe, setExcludeMe] = useState(() => readStored(EXCLUDE_KEY) === "1");
   const [excludeLabeled, setExcludeLabeled] = useState(() => readStored(EXCLUDE_LABELED_KEY) === "1");
+  const [focus, setFocus] = useState<string>(() => readStored(FOCUS_KEY) || "all");
   const [myDevice] = useState<string | null>(() => {
     try {
       return getDeviceId();
@@ -111,13 +146,24 @@ function AdminHub() {
 
   const since = useMemo(() => sinceFor(period), [period]);
   const { labels: ipLabels, reload: reloadIpLabels } = useIpLabels();
-  // `ip` is a comma-separated list for the database's is_excluded_row; the
-  // @labeled token there means "every IP named in 🏷️ IP 관리".
+  // A focused person whose name was since removed falls back to everyone.
+  const activeFocus = focus === "all" || focus === "labeled" || ipLabels.has(focus) ? focus : "all";
+  const focusSupported = useFocusFilterSupported();
+  // `ip` is a comma-separated list for the database's is_excluded_row:
+  // plain IPs and @labeled exclude, @only-labeled / @only:<ip> keep only
+  // those (supabase/admin_ip_labels_2.sql, admin_ip_filter.sql).
   const exclude: ExcludeMe | null = useMemo(() => {
-    if (!excludeMe && !excludeLabeled) return null;
-    const ips = [excludeMe ? myIp : null, excludeLabeled ? "@labeled" : null].filter(Boolean);
-    return { ip: ips.length ? ips.join(",") : null, device: excludeMe ? myDevice : null };
-  }, [excludeMe, excludeLabeled, myIp, myDevice]);
+    const items = [
+      excludeMe ? myIp : null,
+      excludeLabeled && activeFocus === "all" ? "@labeled" : null,
+      activeFocus === "labeled" ? "@only-labeled" : null,
+      activeFocus !== "all" && activeFocus !== "labeled" ? `@only:${activeFocus}` : null,
+    ].filter(Boolean);
+    if (!items.length && !excludeMe) return null;
+    return { ip: items.length ? items.join(",") : null, device: excludeMe ? myDevice : null };
+  }, [excludeMe, excludeLabeled, activeFocus, myIp, myDevice]);
+  const focusLabel =
+    activeFocus === "all" ? null : activeFocus === "labeled" ? "이름 붙인 IP만" : `🏷️ ${ipLabels.get(activeFocus)?.label ?? activeFocus}만`;
   const current = TABS.find((t) => t.key === tab)!;
 
   return (
@@ -150,7 +196,8 @@ function AdminHub() {
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/80 light:border-slate-300 light:text-slate-700">
               <input
                 type="checkbox"
-                checked={excludeLabeled}
+                checked={excludeLabeled && activeFocus === "all"}
+                disabled={activeFocus !== "all"}
                 onChange={(e) => {
                   setExcludeLabeled(e.target.checked);
                   store(EXCLUDE_LABELED_KEY, e.target.checked ? "1" : "0");
@@ -161,6 +208,27 @@ function AdminHub() {
               <span className="text-white/40" title="🏷️ IP 관리에서 이름을 붙인 IP(가족·지인 등)의 기록을 통계에서 뺍니다">
                 ({ipLabels.size}개)
               </span>
+            </label>
+            <label className="inline-flex items-center gap-2 rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/80 light:border-slate-300 light:text-slate-700">
+              보기 대상
+              <select
+                value={activeFocus}
+                onChange={(e) => {
+                  setFocus(e.target.value);
+                  store(FOCUS_KEY, e.target.value);
+                }}
+                className="bg-transparent text-xs font-semibold text-amber-200 outline-none light:text-amber-800"
+              >
+                <option value="all">전체 사용자</option>
+                <option value="labeled" disabled={ipLabels.size === 0}>
+                  이름 붙인 IP만 ({ipLabels.size}개)
+                </option>
+                {[...ipLabels.values()].map((l) => (
+                  <option key={l.ip} value={l.ip}>
+                    🏷️ {l.label}만
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
         </div>
@@ -208,16 +276,23 @@ function AdminHub() {
         ))}
       </nav>
 
-      {current.period && (
+      {(current.period || current.stats) && (
         <div className="mb-4 flex flex-wrap gap-2">
-          {PERIODS.map((p) => (
-            <Chip key={p.key} active={period === p.key} onClick={() => setPeriod(p.key)}>
-              {p.label}
-            </Chip>
-          ))}
-          {current.stats && (excludeMe || excludeLabeled) && (
+          {current.period &&
+            PERIODS.map((p) => (
+              <Chip key={p.key} active={period === p.key} onClick={() => setPeriod(p.key)}>
+                {p.label}
+              </Chip>
+            ))}
+          {current.stats && focusLabel && <span className="self-center text-xs font-semibold text-sky-300">· {focusLabel} 보는 중</span>}
+          {current.stats && (excludeMe || (excludeLabeled && activeFocus === "all")) && (
             <span className="self-center text-xs text-amber-300/80">
-              · {[excludeMe && "내 기록", excludeLabeled && "이름 붙인 IP"].filter(Boolean).join(" · ")} 제외 중
+              · {[excludeMe && "내 기록", excludeLabeled && activeFocus === "all" && "이름 붙인 IP"].filter(Boolean).join(" · ")} 제외 중
+            </span>
+          )}
+          {current.stats && focusLabel && focusSupported === false && (
+            <span className="self-center text-xs text-rose-300">
+              · ⚠️ supabase/admin_ip_filter.sql을 실행해야 이 필터가 적용됩니다 (지금은 전체가 보입니다)
             </span>
           )}
         </div>
