@@ -10,7 +10,6 @@
 
 // ── World layout ────────────────────────────────────────────────────────────
 
-export const WORLD_W = 9000;
 export const SKY_TOP = -900;
 export const SURFACE_Y = 0;
 /** Base seabed depth; the actual floor is `seabedY(x)` (rolling terrain). */
@@ -30,14 +29,113 @@ export function zoneAt(y: number): ZoneId {
   return "abyss";
 }
 
-/** Rolling seabed profile — deterministic, so render and physics agree. */
+// ── Maps (selectable dive sites) ────────────────────────────────────────────
+//
+// Every map keeps the same depth bands (ZONES) so prey depth ranges still
+// mean the same thing; maps differ in width, terrain, palette, spawn mix,
+// coin bonus and one gimmick. `createWorld` activates the chosen map, which
+// updates the live `WORLD_W` binding + `seabedY` for engine and renderer.
+
+export type MapId = "deepBlue" | "frozenStrait" | "shipwreck";
+
+export interface MapDef {
+  id: MapId;
+  name: string;
+  emoji: string;
+  desc: string;
+  /** Recommended shark tier (informational only — every map is open). */
+  recommendedTier: number;
+  width: number;
+  chestCount: number;
+  /** Seabed undulation: [amplitude, frequency, phase] × 3 octaves. */
+  terrain: [number, number, number][];
+  /** Coin multiplier for everything earned on this map. */
+  coinBonus: number;
+  /** Spawn-count multiplier per kind (missing = ×1). */
+  population: Partial<Record<EntityKind, number>>;
+  /** Depth (world y) where the deep-water darkness starts. */
+  darknessStart: number;
+  feature: "none" | "icebergs" | "wrecks";
+  palette: {
+    sky: [string, string, string];
+    water: [string, string, string, string, string];
+    ridge: string;
+    sand: [string, string];
+    sun: string;
+  };
+}
+
+export const MAPS: MapDef[] = [
+  {
+    id: "deepBlue", name: "딥 블루 오션", emoji: "🌊", recommendedTier: 1,
+    desc: "산호초부터 화산 해구까지 이어지는 넓은 기본 바다. 균형 잡힌 먹이 분포.",
+    width: 14000, chestCount: 11,
+    terrain: [[140, 0.0011, 0], [60, 0.0037, 1.3], [14, 0.013, 0.4]],
+    coinBonus: 1, population: {}, darknessStart: 1100, feature: "none",
+    palette: {
+      sky: ["#0ea5e9", "#7dd3fc", "#e0f2fe"],
+      water: ["#22b8e8", "#0679b8", "#0a4a78", "#082b4a", "#020617"],
+      ridge: "rgba(8,47,73,0.55)",
+      sand: ["#3f3a2e", "#0c0a09"],
+      sun: "rgba(254,240,138,0.9)",
+    },
+  },
+  {
+    id: "frozenStrait", name: "얼음 해협", emoji: "🧊", recommendedTier: 2,
+    desc: "떠다니는 빙산이 수면을 막는 차가운 바다. 참치·가오리·상어가 많고 수영객은 드뭅니다. 코인 ×1.25.",
+    width: 12000, chestCount: 9,
+    terrain: [[220, 0.0008, 0.7], [90, 0.0029, 2.1], [20, 0.011, 1.1]],
+    coinBonus: 1.25,
+    population: { swimmer: 0.3, crab: 0.5, pelican: 0.5, tuna: 1.6, ray: 1.5, smallShark: 1.4, grouper: 1.3, redJelly: 1.4, iceberg: 1 },
+    darknessStart: 1000, feature: "icebergs",
+    palette: {
+      sky: ["#94a3b8", "#cbd5e1", "#f1f5f9"],
+      water: ["#67e8f9", "#0e7490", "#164e63", "#0c2a3a", "#020617"],
+      ridge: "rgba(22,78,99,0.55)",
+      sand: ["#94a3b8", "#1e293b"],
+      sun: "rgba(241,245,249,0.85)",
+    },
+  },
+  {
+    id: "shipwreck", name: "난파선 무덤", emoji: "⚓", recommendedTier: 3,
+    desc: "침몰선이 잠든 어두운 바다. 보물 상자가 두 배지만 기뢰·아귀·유령 상어도 득실거립니다. 코인 ×1.35.",
+    width: 13000, chestCount: 20,
+    terrain: [[110, 0.0015, 2.2], [120, 0.0045, 0.3], [30, 0.017, 2.7]],
+    coinBonus: 1.35,
+    population: { mineS: 1.5, mineM: 1.6, mineL: 1.6, angler: 1.6, ghostShark: 1.5, greenJelly: 1.4, diver: 1.6, submarine: 1.5, swimmer: 0.6 },
+    darknessStart: 600, feature: "wrecks",
+    palette: {
+      sky: ["#475569", "#64748b", "#cbd5e1"],
+      water: ["#2d8a7a", "#155e63", "#123a46", "#0b1f2a", "#020617"],
+      ridge: "rgba(18,58,70,0.6)",
+      sand: ["#3b3524", "#0a0907"],
+      sun: "rgba(226,232,240,0.6)",
+    },
+  },
+];
+
+export function mapById(id: string | undefined): MapDef {
+  return MAPS.find((m) => m.id === id) ?? MAPS[0];
+}
+
+let activeMap: MapDef = MAPS[0];
+/** Width of the active map (live binding — updated by `setActiveMap`). */
+export let WORLD_W = activeMap.width;
+
+export function setActiveMap(map: MapDef) {
+  activeMap = map;
+  WORLD_W = map.width;
+}
+
+export function getActiveMap(): MapDef {
+  return activeMap;
+}
+
+/** Rolling seabed profile of the active map — deterministic, so render and physics agree. */
 export function seabedY(x: number): number {
-  return (
-    SEABED_BASE +
-    Math.sin(x * 0.0011) * 140 +
-    Math.sin(x * 0.0037 + 1.3) * 60 +
-    Math.sin(x * 0.013 + 0.4) * 14
-  );
+  let y = SEABED_BASE;
+  for (const [a, f, ph] of activeMap.terrain) y += Math.sin(x * f + ph) * a;
+  return y;
 }
 
 // ── Sharks: 3-branch evolution tree (Tier 1 → 2 → 3 → 4) ─────────────────────
@@ -402,6 +500,7 @@ export type EntityKind =
   | "submarine" | "ghostShark"
   | "yacht" | "helicopter" | "rock"
   | "goldenTuna"
+  | "iceberg"
   | "chest";
 
 export type Behavior =
@@ -465,6 +564,7 @@ export const ENTITY_DEFS: Record<EntityKind, EntityDef> = {
   helicopter: D({ kind: "helicopter", name: "헬리콥터", requiredTier: 4, heal: 100, score: 3000, coins: 186, coinChance: 1, radius: 40, speed: 90, toughness: 120, behavior: "heli", damage: 0, damageKind: "contact", depth: [-420, -240], color: "#dc2626" }),
   rock: D({ kind: "rock", name: "화산 암석", requiredTier: NEVER, heal: 30, score: 400, coins: 24, coinChance: 1, radius: 16, speed: 0, toughness: 1, behavior: "rock", damage: 30, damageKind: "contact", depth: [2400, 2400], color: "#7c2d12" }),
   goldenTuna: D({ kind: "goldenTuna", name: "황금 참치", requiredTier: 1, heal: 30, score: 300, coins: 150, coinChance: 1, radius: 15, speed: 235, toughness: 1, behavior: "wander", damage: 0, damageKind: "contact", depth: [200, 2200], color: "#facc15" }),
+  iceberg: D({ kind: "iceberg", name: "빙산", requiredTier: NEVER, heal: 60, score: 900, coins: 40, coinChance: 1, radius: 70, speed: 18, toughness: 1, behavior: "surfaceBoat", damage: 0, damageKind: "contact", depth: [0, 0], color: "#e0f2fe" }),
   chest: D({ kind: "chest", name: "보물 상자", requiredTier: 1, heal: 0, score: 500, coins: 300, coinChance: 1, radius: 18, speed: 0, toughness: 1, behavior: "static", damage: 0, damageKind: "contact", depth: [0, 0], color: "#ca8a04" }),
 };
 
@@ -568,6 +668,7 @@ export function populationTargets(tier: SharkTier): Partial<Record<EntityKind, n
     helicopter: tier >= 3 ? 2 : 1,
     // Rare: the spawner only rolls it in occasionally (see engine runSpawner).
     goldenTuna: 1,
+    iceberg: activeMap.feature === "icebergs" ? 6 : 0,
   };
 }
 

@@ -128,7 +128,7 @@ export function habitatLabel(kind: EntityKind): string {
     case "surfaceSwim":
     case "surfaceBoat": return "수면";
     case "crawl": return "해저 바닥";
-    case "static": return "해저 바닥 (7곳)";
+    case "static": return "해저 바닥 (맵마다 9~20곳)";
     case "torpedo": return "잠수함 주변";
     case "rock": return "해구 (250m~)";
     default: return `${M(def.depth[0])}~${M(def.depth[1])}m`;
@@ -143,7 +143,7 @@ export const BESTIARY_ORDER: EntityKind[] = [
   "angler", "fishingBoat", "passenger", "smallShark",
   "cageDiver", "submarine",
   "ghostShark", "yacht", "helicopter",
-  "greenJelly", "redJelly", "mineS", "mineM", "mineL", "mineXL", "torpedo", "rock",
+  "greenJelly", "redJelly", "mineS", "mineM", "mineL", "mineXL", "torpedo", "rock", "iceberg",
 ];
 
 export const BESTIARY_TIPS: Partial<Record<EntityKind, string>> = {
@@ -175,4 +175,5 @@ export const BESTIARY_TIPS: Partial<Record<EntityKind, string>> = {
   mineXL: "폭발 반경 280. 해구의 최대 위험.",
   torpedo: "6초간 상어를 추적한 뒤 폭발합니다.",
   rock: "해구에서 위로부터 떨어집니다.",
+  iceberg: "얼음 해협에만 떠다니는 빙산. 해롭진 않지만 부딪히면 튕겨 나가고 점프를 막습니다.",
 };

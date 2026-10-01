@@ -32,12 +32,17 @@ export default function SharkEvolutionModal({
   currentSharkId,
   playerGold,
   owned,
+  goldNote,
+  closeLabel = "닫기",
   onEvolve,
   onClose,
 }: {
   currentSharkId: string;
   playerGold: number;
   owned: string[];
+  /** Small caption under the gold amount (e.g. "보유 + 이번 잠수"). */
+  goldNote?: string;
+  closeLabel?: string;
   onEvolve: (target: SharkDef) => void;
   onClose: () => void;
 }) {
@@ -60,6 +65,7 @@ export default function SharkEvolutionModal({
           <div className="text-right">
             <span className="text-xs text-neutral-400">보유 골드</span>
             <div className="font-mono text-lg font-black text-amber-300 sm:text-xl">🪙 {playerGold.toLocaleString()}</div>
+            {goldNote && <div className="text-[10px] text-neutral-500">{goldNote}</div>}
           </div>
         </div>
 
@@ -153,7 +159,7 @@ export default function SharkEvolutionModal({
 
         <div className="flex justify-end">
           <button onClick={onClose} className="rounded-xl bg-neutral-800 px-5 py-2 text-xs font-bold text-neutral-300 hover:bg-neutral-700">
-            닫기
+            {closeLabel}
           </button>
         </div>
       </div>

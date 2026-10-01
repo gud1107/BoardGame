@@ -5,7 +5,7 @@
  * to trust anyway). Corrupt/tampered saves fall back to a fresh profile.
  */
 
-import { evolutionPath, SHARKS, type UpgradeLevels } from "./data";
+import { evolutionPath, SHARKS, type MapId, type UpgradeLevels } from "./data";
 
 export interface SharkSave {
   version: 1;
@@ -19,6 +19,8 @@ export interface SharkSave {
   muted: boolean;
   /** Target Feed Indicator on/off (older saves lack it → default on). */
   markers: boolean;
+  /** Last chosen dive map (older saves lack it → 딥 블루 오션). */
+  mapId: MapId;
 }
 
 const KEY = "hungry-shark-save-v1";
@@ -36,6 +38,7 @@ export function freshSave(): SharkSave {
     totalEaten: 0,
     muted: false,
     markers: true,
+    mapId: "deepBlue",
   };
 }
 

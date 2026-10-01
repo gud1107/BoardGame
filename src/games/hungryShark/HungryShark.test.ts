@@ -490,3 +490,71 @@ describe("active skills", () => {
     expect(w.entities.length).toBeLessThan(400);
   });
 });
+
+describe("maps", () => {
+  it("each map sets its own width/terrain/chests and the default is wider than the old 9000", async () => {
+    const { MAPS } = await import("./data");
+    expect(MAPS.map((m) => m.id)).toEqual(["deepBlue", "frozenStrait", "shipwreck"]);
+    for (const m of MAPS) {
+      const w = createWorld(sharkById("reef"), NO_UPGRADES, 50, m.id);
+      const data = await import("./data");
+      expect(data.WORLD_W).toBe(m.width);
+      expect(w.entities.filter((e) => e.kind === "chest")).toHaveLength(m.chestCount);
+      expect(summarize(w).mapId).toBe(m.id);
+    }
+    expect(MAPS[0].width).toBeGreaterThan(9000);
+  });
+
+  it("icebergs only drift in the frozen strait and are bounced off, not eaten", () => {
+    const run = (id: "deepBlue" | "frozenStrait") => {
+      const w = createWorld(sharkById("reef"), NO_UPGRADES, 51, id);
+      w.shark.y = 120;
+      for (let i = 0; i < 60 * 8; i++) step(w, idle, 1 / 60);
+      return w.entities.filter((e) => e.kind === "iceberg").length;
+    };
+    expect(run("deepBlue")).toBe(0);
+    expect(run("frozenStrait")).toBeGreaterThan(0);
+    const w = createWorld(sharkById("megalodon"), NO_UPGRADES, 52, "frozenStrait");
+    const ice = w.entities.find((e) => e.kind === "iceberg") ?? place(w, "iceberg", 0, 0);
+    expect(isEdible(w, ice)).toBe(false);
+  });
+
+  it("map coin bonus multiplies drops", () => {
+    const coinsOn = (id: "deepBlue" | "shipwreck") => {
+      const w = createWorld(sharkById("reef"), NO_UPGRADES, 53, id);
+      isolate(w);
+      w.shark.angle = 0;
+      forceGoldRush(w);
+      const c0 = w.coins;
+      const f = place(w, "swimmer", w.shark.x + 45, w.shark.y);
+      f.def = { ...f.def, behavior: "static" };
+      step(w, idle, 1 / 60);
+      return w.coins - c0;
+    };
+    expect(coinsOn("deepBlue")).toBe(10);
+    expect(coinsOn("shipwreck")).toBe(Math.round(10 * 1.35));
+  });
+});
+
+describe("mid-dive evolution", () => {
+  it("swaps the shark in place, keeps score/coins/position, full heal, fresh skill", async () => {
+    const { evolveWorld } = await import("./engine");
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 60);
+    isolate(w);
+    for (let i = 0; i < 120; i++) step(w, { dirX: 1, dirY: 0, boost: false }, 1 / 60);
+    w.score = 1234;
+    w.coins = 500;
+    w.shark.hp = 10;
+    w.skill.cooldown = 4;
+    const x = w.shark.x, y = w.shark.y;
+    evolveWorld(w, sharkById("mako"), NO_UPGRADES);
+    expect(w.def.id).toBe("mako");
+    expect(w.skill.id).toBe("sonicBreak");
+    expect(w.skill.cooldown).toBe(0);
+    expect(w.shark.hp).toBe(w.stats.maxHealth);
+    expect([w.shark.x, w.shark.y, w.score, w.coins]).toEqual([x, y, 1234, 500]);
+    expect(w.events.some((e) => e.type === "evolve")).toBe(true);
+    // Now eats tier-2 prey.
+    expect(isEdible(w, place(w, "puffer", 0, 0))).toBe(true);
+  });
+});

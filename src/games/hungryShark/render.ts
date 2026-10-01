@@ -58,18 +58,19 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, vw, vh);
   ctx.setTransform(z * dpr, 0, 0, z * dpr, ox * dpr, oy * dpr);
+  const pal = w.map.palette;
 
   // ── Sky ──
   if (top < SURFACE_Y) {
     const sky = ctx.createLinearGradient(0, SKY_TOP, 0, SURFACE_Y);
-    sky.addColorStop(0, "#0ea5e9");
-    sky.addColorStop(0.7, "#7dd3fc");
-    sky.addColorStop(1, "#e0f2fe");
+    sky.addColorStop(0, pal.sky[0]);
+    sky.addColorStop(0.7, pal.sky[1]);
+    sky.addColorStop(1, pal.sky[2]);
     ctx.fillStyle = sky;
     ctx.fillRect(left, Math.max(SKY_TOP - 400, top), right - left, SURFACE_Y - Math.max(SKY_TOP - 400, top));
     // Sun + clouds (parallax 0.3).
     const px = cam.x * 0.7;
-    ctx.fillStyle = "rgba(254,240,138,0.9)";
+    ctx.fillStyle = pal.sun;
     ctx.beginPath();
     ctx.arc(px + 500, SKY_TOP + 260, 70, 0, Math.PI * 2);
     ctx.fill();
@@ -96,16 +97,16 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
   const wtop = Math.max(SURFACE_Y, top);
   if (bottom > SURFACE_Y) {
     const water = ctx.createLinearGradient(0, SURFACE_Y, 0, SEABED_BASE + 300);
-    water.addColorStop(0, "#22b8e8");
-    water.addColorStop(0.2, "#0679b8");
-    water.addColorStop(0.47, "#0a4a78");
-    water.addColorStop(0.73, "#082b4a");
-    water.addColorStop(1, "#020617");
+    water.addColorStop(0, pal.water[0]);
+    water.addColorStop(0.2, pal.water[1]);
+    water.addColorStop(0.47, pal.water[2]);
+    water.addColorStop(0.73, pal.water[3]);
+    water.addColorStop(1, pal.water[4]);
     ctx.fillStyle = water;
     ctx.fillRect(left, wtop, right - left, bottom - wtop);
 
     // Distant parallax ridges.
-    ctx.fillStyle = "rgba(8,47,73,0.55)";
+    ctx.fillStyle = pal.ridge;
     ctx.beginPath();
     const par = 0.55;
     ctx.moveTo(left, bottom);
@@ -141,8 +142,8 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
   // ── Seabed ──
   if (bottom > SEABED_BASE - 300) {
     const sand = ctx.createLinearGradient(0, SEABED_BASE - 200, 0, SEABED_BASE + 400);
-    sand.addColorStop(0, "#3f3a2e");
-    sand.addColorStop(1, "#0c0a09");
+    sand.addColorStop(0, pal.sand[0]);
+    sand.addColorStop(1, pal.sand[1]);
     ctx.fillStyle = sand;
     ctx.beginPath();
     ctx.moveTo(left, bottom + 400);
@@ -189,6 +190,9 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
       }
     }
   }
+
+  if (w.map.feature === "wrecks" && bottom > SEABED_BASE - 600) drawWrecks(ctx, left, right, t);
+  if (w.map.feature === "icebergs" && top < SURFACE_Y + 200) drawIceShelf(ctx, left, right);
 
   // ── Entities ──
   const goldOn = w.gold.active;
@@ -292,7 +296,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
   const sy = (w.shark.y - cam.y) * z + vh / 2;
 
   // Depth darkness with a light bubble around the shark (spec: deep-water fog).
-  const dark = Math.max(0, Math.min(0.9, (cam.y - 1100) / 2000));
+  const dark = Math.max(0, Math.min(0.9, (cam.y - w.map.darknessStart) / 2000));
   if (dark > 0.01) {
     const lightR = (230 + bodyLength(w) * 1.4) * z;
     const g = ctx.createRadialGradient(sx, sy, lightR * 0.25, sx, sy, lightR * 1.6);
@@ -450,6 +454,7 @@ export function drawEntityIcon(ctx: CanvasRenderingContext2D, kind: EntityKind, 
     kind === "smallShark" || kind === "ghostShark" ? 3.4
     : kind === "fishingBoat" || kind === "yacht" || kind === "submarine" ? 2.8
     : kind === "helicopter" ? 3.4
+    : kind === "iceberg" ? 2.4
     : kind === "ray" || kind === "pelican" ? 3.2
     : kind.startsWith("mine") ? 2.8
     : 2.6;
@@ -529,6 +534,72 @@ function drawMinimap(ctx: CanvasRenderingContext2D, w: World, vw: number, vh: nu
   ctx.beginPath();
   ctx.arc(mx + w.shark.x * kx, my + (w.shark.y - SKY_TOP) * ky, 3, 0, Math.PI * 2);
   ctx.fill();
+}
+
+// ── Map scenery ─────────────────────────────────────────────────────────────
+
+/** 난파선 무덤: broken hulls and masts half-buried in the seabed (render only). */
+function drawWrecks(ctx: CanvasRenderingContext2D, left: number, right: number, t: number) {
+  const SPAN = 1300;
+  for (let i = Math.floor(left / SPAN) - 1; i <= right / SPAN + 1; i++) {
+    if (h01(i * 7.3) < 0.25) continue;
+    const x = i * SPAN + h01(i) * 600;
+    const y = seabedY(x);
+    const L = 260 + h01(i + 3) * 220;
+    const tilt = (h01(i + 9) - 0.5) * 0.5;
+    ctx.save();
+    ctx.translate(x, y - 20);
+    ctx.rotate(tilt);
+    ctx.fillStyle = "#2a2118";
+    ctx.beginPath();
+    ctx.moveTo(-L / 2, -40);
+    ctx.lineTo(L / 2, -55);
+    ctx.lineTo(L / 2 - 50, 30);
+    ctx.lineTo(-L / 2 + 30, 30);
+    ctx.closePath();
+    ctx.fill();
+    // Hull planks + a gaping hole.
+    ctx.strokeStyle = "rgba(120,90,60,0.5)";
+    ctx.lineWidth = 3;
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      ctx.moveTo(-L / 2 + 10, -25 + k * 18);
+      ctx.lineTo(L / 2 - 20, -38 + k * 18);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#07080a";
+    ctx.beginPath();
+    ctx.ellipse(L * 0.12, -8, 26, 18, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    // Broken mast with tattered sail.
+    ctx.strokeStyle = "#3b2f22";
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(-L * 0.1, -45);
+    ctx.lineTo(-L * 0.18, -200 - h01(i + 5) * 80);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(203,213,225,0.18)";
+    ctx.beginPath();
+    ctx.moveTo(-L * 0.12, -90);
+    ctx.quadraticCurveTo(-L * 0.02 + Math.sin(t + i) * 8, -130, -L * 0.16, -170);
+    ctx.lineTo(-L * 0.12, -90);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/** 얼음 해협: thin drift-ice crust along the surface. */
+function drawIceShelf(ctx: CanvasRenderingContext2D, left: number, right: number) {
+  ctx.fillStyle = "rgba(240,249,255,0.55)";
+  const STEP = 180;
+  for (let i = Math.floor(left / STEP); i <= right / STEP; i++) {
+    if (h01(i * 3.1) < 0.45) continue;
+    const x = i * STEP + h01(i) * 60;
+    const wdt = 50 + h01(i + 1) * 90;
+    ctx.beginPath();
+    ctx.ellipse(x, SURFACE_Y + 3, wdt / 2, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 // ── Skill FX ────────────────────────────────────────────────────────────────
@@ -1289,6 +1360,34 @@ function drawEntity(ctx: CanvasRenderingContext2D, e: Entity, t: number, gold: b
       ctx.fill();
       ctx.strokeStyle = "#f97316";
       ctx.lineWidth = 2;
+      ctx.stroke();
+      break;
+    }
+    case "iceberg": {
+      // Floating ice: small cap above the waterline, big translucent body below.
+      const bob = Math.sin(e.phase * 0.8) * 3;
+      ctx.translate(0, bob);
+      ctx.fillStyle = gold ? GOLD : "rgba(224,242,254,0.95)";
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.7, 4);
+      ctx.lineTo(-r * 0.35, -r * 0.45);
+      ctx.lineTo(r * 0.05, -r * 0.6);
+      ctx.lineTo(r * 0.45, -r * 0.3);
+      ctx.lineTo(r * 0.75, 4);
+      ctx.fill();
+      ctx.fillStyle = gold ? "#fde68a" : "rgba(186,230,253,0.6)";
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.8, 4);
+      ctx.lineTo(r * 0.85, 4);
+      ctx.lineTo(r * 0.55, r * 0.9);
+      ctx.lineTo(-r * 0.2, r * 1.15);
+      ctx.lineTo(-r * 0.7, r * 0.6);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.7)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.35, -r * 0.45);
+      ctx.lineTo(-r * 0.1, -r * 0.1);
       ctx.stroke();
       break;
     }

@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { frenzyMultiplier, ZONES, zoneAt, type SharkDef, type UpgradeLevels } from "./data";
-import { createWorld, depthMeters, step, summarize, type MissionState, type RunSummary, type SharkInput, type World } from "./engine";
+import { frenzyMultiplier, mapById, sharkById, ZONES, zoneAt, type MapId, type SharkDef, type UpgradeLevels } from "./data";
+import { createWorld, depthMeters, evolveWorld, step, summarize, type MissionState, type RunSummary, type SharkInput, type World } from "./engine";
 import { drawWorld, updateCamera, viewHeightFor, type Camera } from "./render";
 import { SharkAudio } from "./audio";
 import BestiaryPanel from "./BestiaryPanel";
 import { selectMarkers } from "./markers";
+import SharkEvolutionModal from "./SharkEvolutionModal";
 
 /**
  * requestAnimationFrame host for one dive: owns the mutable `World`, turns
@@ -45,14 +46,21 @@ interface Banner {
   id: number;
   text: string;
   sub?: string;
-  tone: "gold" | "mega" | "mission" | "chest";
+  tone: "gold" | "mega" | "mission" | "chest" | "evolve";
 }
 
 const JOY_R = 52;
 
+/** Parent pays for a mid-dive evolution: banked coins first, then this dive's. */
+export type EvolveHandler = (target: SharkDef, runCoins: number) => { fromRun: number; upgrades: UpgradeLevels } | null;
+
 export default function HungrySharkCanvas({
   def,
   upgrades,
+  mapId,
+  bankCoins,
+  owned,
+  onEvolve,
   muted,
   onToggleMute,
   markersOn,
@@ -62,6 +70,11 @@ export default function HungrySharkCanvas({
 }: {
   def: SharkDef;
   upgrades: UpgradeLevels;
+  mapId: MapId;
+  /** Banked (saved) coins — spendable on a mid-dive evolution with run coins. */
+  bankCoins: number;
+  owned: string[];
+  onEvolve: EvolveHandler;
   muted: boolean;
   onToggleMute: () => void;
   markersOn: boolean;
@@ -93,6 +106,10 @@ export default function HungrySharkCanvas({
   useEffect(() => {
     onEndRef.current = onEnd;
   }, [onEnd]);
+  // Current form (changes on a mid-dive evolution) + its upgrades.
+  const [cur, setCur] = useState<{ def: SharkDef; upgrades: UpgradeLevels }>({ def, upgrades });
+  const [evolveOpen, setEvolveOpen] = useState(false);
+  const evolveRef = useRef(false);
 
   const [hud, setHud] = useState<Hud | null>(null);
   const [paused, setPaused] = useState(false);
@@ -113,6 +130,16 @@ export default function HungrySharkCanvas({
       setPaused(true);
       setBestiary({ eaten: { ...w.run.eaten } });
     } else setBestiary(null);
+  }, []);
+
+  const openEvolve = useCallback((open: boolean) => {
+    const w = worldRef.current;
+    if (!w || w.over) return;
+    if (open && w.def.nextIds.length === 0) return;
+    evolveRef.current = open;
+    setEvolveOpen(open);
+    pausedRef.current = open;
+    setPaused(open);
   }, []);
 
   const pushBanner = useCallback((b: Omit<Banner, "id">) => {
@@ -178,6 +205,14 @@ export default function HungrySharkCanvas({
         openBestiary(!bestiaryRef.current);
         return;
       }
+      if (k === "v") {
+        openEvolve(!evolveRef.current);
+        return;
+      }
+      if (evolveRef.current && k === "escape") {
+        openEvolve(false);
+        return;
+      }
       if (k === "escape" || k === "p") {
         // Esc inside the bestiary just closes it (stays paused).
         if (bestiaryRef.current) openBestiary(false);
@@ -208,7 +243,7 @@ export default function HungrySharkCanvas({
       window.removeEventListener("blur", blur);
       document.removeEventListener("visibilitychange", vis);
     };
-  }, [setPause, openBestiary]);
+  }, [setPause, openBestiary, openEvolve]);
 
   // Main loop.
   useEffect(() => {
@@ -216,7 +251,7 @@ export default function HungrySharkCanvas({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const world = createWorld(def, upgrades);
+    const world = createWorld(def, upgrades, undefined, mapId);
     worldRef.current = world;
     const { h } = sizeRef.current;
     camRef.current = { x: world.shark.x, y: world.shark.y, zoom: h / viewHeightFor(def) };
@@ -286,6 +321,12 @@ export default function HungrySharkCanvas({
           case "mission": a?.mission(); pushBanner({ text: "미션 완료!", sub: `${ev.label} · +${ev.reward}🪙`, tone: "mission" }); break;
           case "chest": pushBanner({ text: "보물 상자 발견!", sub: `+${ev.amount}🪙`, tone: "chest" }); break;
           case "death": a?.death(); break;
+          case "evolve": {
+            a?.goldRush(true);
+            const nd = sharkById(ev.sharkId);
+            pushBanner({ text: "EVOLUTION!", sub: `🧬 ${nd.name} · 체력·부스트 완전 회복`, tone: "evolve" });
+            break;
+          }
         }
       }
       world.events.length = 0;
@@ -341,7 +382,7 @@ export default function HungrySharkCanvas({
           coins: world.coins,
           combo: world.combo,
           depth: depthMeters(s.y),
-          zone: s.y < 0 ? "공중" : (ZONES.find((z) => z.id === zoneAt(s.y))?.name ?? ""),
+          zone: `${mapById(mapId).emoji} ${s.y < 0 ? "공중" : (ZONES.find((z) => z.id === zoneAt(s.y))?.name ?? "")}`,
           time: world.time,
           poisoned: !!s.poison,
           airborne: s.airborne,
@@ -475,11 +516,11 @@ export default function HungrySharkCanvas({
               <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-black/50 ring-1 ring-violet-300/40">
                 <div
                   className={`h-full rounded-full ${hud.skillCd <= 0 ? "bg-gradient-to-r from-violet-300 to-fuchsia-400" : "bg-violet-500/60"} ${hud.skillActive ? "animate-pulse" : ""}`}
-                  style={{ width: `${(1 - hud.skillCd / def.skill.cooldown) * 100}%` }}
+                  style={{ width: `${(1 - hud.skillCd / cur.def.skill.cooldown) * 100}%` }}
                 />
               </div>
               <span className="w-24 truncate text-[10px] font-bold text-violet-200 drop-shadow">
-                {hud.skillCd <= 0 ? (isTouch ? def.skill.name : `[Space] ${def.skill.name}`) : `${hud.skillCd.toFixed(1)}s`}
+                {hud.skillCd <= 0 ? (isTouch ? cur.def.skill.name : `[Space] ${cur.def.skill.name}`) : `${hud.skillCd.toFixed(1)}s`}
               </span>
             </div>
           </div>
@@ -517,6 +558,23 @@ export default function HungrySharkCanvas({
         </>
       )}
 
+      {/* Mid-dive evolution: pulses once the next form is affordable (bank + this dive). */}
+      {hud && !dead && cur.def.nextIds.length > 0 && (() => {
+        const ready = cur.def.nextIds.some((id) => owned.includes(id) || bankCoins + hud.coins >= sharkById(id).cost);
+        const cheapest = Math.min(...cur.def.nextIds.map((id) => sharkById(id).cost));
+        return (
+          <button
+            onClick={() => openEvolve(true)}
+            className={`absolute top-[6.6rem] right-2 rounded-lg px-2.5 py-1.5 text-xs font-black shadow-lg sm:top-28 ${
+              ready ? "animate-pulse bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 shadow-amber-500/40" : "bg-black/50 text-white/60"
+            }`}
+            title="진화 (V)"
+          >
+            🧬 {ready ? "진화 가능!" : `진화 ${Math.max(0, cheapest - bankCoins - hud.coins).toLocaleString()}🪙 남음`}
+          </button>
+        );
+      })()}
+
       {/* Top-right controls row (under the score block). */}
       <div className="absolute top-[4.6rem] right-2 flex gap-1 sm:top-20">
         <button onClick={() => setPause(!paused)} className="rounded-md bg-black/50 px-2 py-1 text-xs text-white hover:bg-black/70" aria-label="일시정지">
@@ -550,6 +608,7 @@ export default function HungrySharkCanvas({
                 b.tone === "mega" ? "bg-gradient-to-r from-pink-300 via-yellow-200 to-pink-300 bg-clip-text text-transparent"
                 : b.tone === "gold" ? "text-yellow-300"
                 : b.tone === "chest" ? "text-amber-300"
+                : b.tone === "evolve" ? "bg-gradient-to-r from-amber-200 via-orange-300 to-rose-300 bg-clip-text text-transparent"
                 : "text-emerald-300"
               }`}
             >
@@ -599,7 +658,7 @@ export default function HungrySharkCanvas({
           onPointerUp={() => (input.current.touchSkill = false)}
           onPointerCancel={() => (input.current.touchSkill = false)}
           onPointerLeave={() => (input.current.touchSkill = false)}
-          aria-label={`스킬: ${def.skill.name}`}
+          aria-label={`스킬: ${cur.def.skill.name}`}
         >
           ⚡
           {hud && hud.skillCd > 0 && <span className="text-[10px] font-bold">{Math.ceil(hud.skillCd)}s</span>}
@@ -607,7 +666,7 @@ export default function HungrySharkCanvas({
       )}
 
       {/* Pause overlay */}
-      {paused && !dead && !bestiary && (
+      {paused && !dead && !bestiary && !evolveOpen && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/70 backdrop-blur-sm">
           <div className="text-3xl font-black text-white">일시정지</div>
           <p className="text-xs text-white/60">Esc / P 키로 재개 · B 먹이 도감</p>
@@ -643,9 +702,30 @@ export default function HungrySharkCanvas({
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            <BestiaryPanel tier={def.tier} sharkName={def.name} biteLevel={upgrades.bite} eaten={bestiary.eaten} />
+            <BestiaryPanel tier={cur.def.tier} sharkName={cur.def.name} biteLevel={cur.upgrades.bite} eaten={bestiary.eaten} />
           </div>
         </div>
+      )}
+
+      {evolveOpen && hud && !dead && (
+        <SharkEvolutionModal
+          currentSharkId={cur.def.id}
+          playerGold={bankCoins + hud.coins}
+          goldNote="보유 코인 + 이번 잠수 코인"
+          owned={owned}
+          closeLabel="▶ 사냥 계속하기"
+          onEvolve={(target) => {
+            const w = worldRef.current;
+            if (!w || w.over) return;
+            const paid = onEvolve(target, w.coins);
+            if (!paid) return;
+            w.coins = Math.max(0, w.coins - paid.fromRun);
+            evolveWorld(w, target, paid.upgrades);
+            setCur({ def: target, upgrades: paid.upgrades });
+            openEvolve(false);
+          }}
+          onClose={() => openEvolve(false)}
+        />
       )}
 
       {dead && (

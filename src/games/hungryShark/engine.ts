@@ -20,6 +20,7 @@ import {
   ENTITY_DEFS,
   explosionDamage,
   frenzyMultiplier,
+  getActiveMap,
   GOLD_GAUGE_RATE,
   GOLD_RUSH_COIN_MULT,
   GOLD_RUSH_DURATION,
@@ -27,6 +28,7 @@ import {
   goldRushMultiplier,
   healGain,
   MEGA_EVERY,
+  mapById,
   MEGA_GOLD_RUSH_DURATION,
   mineExplosionRadius,
   MISSIONS,
@@ -37,6 +39,7 @@ import {
   populationTargets,
   PREY_EFFECTS,
   seabedY,
+  setActiveMap,
   SKY_TOP,
   SURFACE_Y,
   UNITS_PER_METER,
@@ -44,6 +47,8 @@ import {
   type EffectiveStats,
   type EntityDef,
   type EntityKind,
+  type MapDef,
+  type MapId,
   type MissionId,
   type SharkDef,
   type SkillId,
@@ -140,6 +145,7 @@ export type GameEvent =
   | { type: "skill"; id: SkillId }
   | { type: "skillReady" }
   | { type: "preyFx"; label: string }
+  | { type: "evolve"; sharkId: string }
   | { type: "death"; cause: string };
 
 export interface MissionState {
@@ -213,6 +219,7 @@ export interface Ring {
 }
 
 export interface World {
+  map: MapDef;
   seed: number;
   rngState: number;
   time: number;
@@ -264,7 +271,6 @@ const MAX_PARTICLES = 700;
 const CELL = 120;
 const FLEE_BASE = 200;
 const NEIGHBOR_R = 46;
-const CHEST_COUNT = 7;
 
 // ── RNG ─────────────────────────────────────────────────────────────────────
 
@@ -278,9 +284,12 @@ const range = (w: World, a: number, b: number) => a + rand(w) * (b - a);
 
 // ── Construction ────────────────────────────────────────────────────────────
 
-export function createWorld(def: SharkDef, upgrades: UpgradeLevels, seed = Date.now() & 0x7fffffff): World {
+export function createWorld(def: SharkDef, upgrades: UpgradeLevels, seed = Date.now() & 0x7fffffff, mapId: MapId = "deepBlue"): World {
+  const map = mapById(mapId);
+  setActiveMap(map);
   const stats = effectiveStats(def, upgrades);
   const w: World = {
+    map,
     seed,
     rngState: seed | 0,
     time: 0,
@@ -357,8 +366,8 @@ export function createWorld(def: SharkDef, upgrades: UpgradeLevels, seed = Date.
   }
 
   // Treasure chests: fixed seabed spots for this run (not respawned).
-  for (let i = 0; i < CHEST_COUNT; i++) {
-    const x = ((i + 0.5) / CHEST_COUNT) * WORLD_W + range(w, -300, 300);
+  for (let i = 0; i < map.chestCount; i++) {
+    const x = ((i + 0.5) / map.chestCount) * WORLD_W + range(w, -300, 300);
     const e = spawn(w, "chest", x, 0);
     e.y = seabedY(x) - e.def.radius + 4;
   }
@@ -546,6 +555,7 @@ function floatText(w: World, x: number, y: number, text: string, color: string, 
 
 export function step(w: World, input: SharkInput, rawDt: number): void {
   if (w.over) return;
+  if (getActiveMap() !== w.map) setActiveMap(w.map);
   const dt = Math.min(0.05, Math.max(0, rawDt));
   w.time += dt;
 
@@ -1013,7 +1023,7 @@ function consume(w: World, e: Entity) {
   let coins = 0;
   const frenzy = goldOn ? 1 : frenzyMultiplier(w.combo);
   if (e.kind === "chest") {
-    coins = Math.round((def.coins + Math.floor(rand(w) * 200)) * w.stats.goldMultiplier);
+    coins = Math.round((def.coins + Math.floor(rand(w) * 200)) * w.stats.goldMultiplier * w.map.coinBonus);
     w.run.chests++;
     w.events.push({ type: "chest", amount: coins });
     burst(w, "gold", e.x, e.y, 30, 260, "#facc15", 4, 1.2);
@@ -1022,7 +1032,7 @@ function consume(w: World, e: Entity) {
     if (e.kind === "goldenTuna") base = def.coins + Math.floor(rand(w) * 151);
     else if (goldOn) base = Math.max(1, def.coins) * GOLD_RUSH_COIN_MULT * (w.gold.mega ? 2 : 1);
     else if (rand(w) < def.coinChance) base = def.coins;
-    if (base > 0) coins = Math.round(base * frenzy * w.stats.goldMultiplier);
+    if (base > 0) coins = Math.round(base * frenzy * w.stats.goldMultiplier * w.map.coinBonus);
   }
   if (frenzy > 1 && coins > 0) floatText(w, e.x, e.y + 14, `🪙×${frenzy} FRENZY`, "#fde047", 13);
   if (coins > 0) {
@@ -1437,6 +1447,32 @@ function maybeStartGoldRush(w: World) {
   w.events.push({ type: "goldStart", mega: g.mega, multiplier: g.multiplier });
 }
 
+/**
+ * Mid-dive evolution: swap the player's shark in place (position, score,
+ * coins, missions and Gold Rush progress carry over). The new form arrives at
+ * full HP + boost with a ready skill and a brief invulnerability window.
+ */
+export function evolveWorld(w: World, def: SharkDef, upgrades: UpgradeLevels) {
+  if (w.over) return;
+  const s = w.shark;
+  w.def = def;
+  w.stats = effectiveStats(def, upgrades);
+  s.hp = w.stats.maxHealth;
+  s.boost = w.stats.boostDuration;
+  s.poison = null;
+  s.invuln = 1.5;
+  s.shield = Math.max(s.shield, 1.5);
+  const cap = goldGaugeCapacity(def.tier);
+  w.gold.gauge = Math.min(w.gold.active ? cap : cap * 0.999, (w.gold.gauge / w.gold.capacity) * cap);
+  w.gold.capacity = cap;
+  w.skill = { id: def.skill.id, cooldown: 0, active: 0, ambush: false, reveal: 0, vortex: null };
+  w.rings.push({ x: s.x, y: s.y, radius: 600, life: 1.2, maxLife: 1.2, color: "#fbbf24" });
+  burst(w, "gold", s.x, s.y, 60, 420, "#facc15", 5, 1.4);
+  w.shake = Math.max(w.shake, 14);
+  floatText(w, s.x, s.y - 80, `🧬 ${def.name}(으)로 진화!`, "#fde047", 26);
+  w.events.push({ type: "evolve", sharkId: def.id });
+}
+
 /** Debug/test hook: instantly fill the gauge and trigger a rush. */
 export function forceGoldRush(w: World) {
   w.gold.gauge = w.gold.capacity;
@@ -1527,7 +1563,7 @@ function runSpawner(w: World, initial: boolean) {
   const counts = countKinds(w);
   const s = w.shark;
   for (const kind of Object.keys(targets) as EntityKind[]) {
-    const want = targets[kind] ?? 0;
+    const want = Math.round((targets[kind] ?? 0) * (w.map.population[kind] ?? 1));
     if ((counts[kind] ?? 0) >= want) continue;
     // Golden tuna: rolled in rarely (≈ once a minute on average), never at start.
     if (kind === "goldenTuna" && (initial || rand(w) > 0.0035)) continue;
@@ -1586,6 +1622,7 @@ function despawnFar(w: World) {
 // ── Results ─────────────────────────────────────────────────────────────────
 
 export interface RunSummary {
+  mapId: MapId;
   sharkId: string;
   score: number;
   coins: number;
@@ -1598,6 +1635,7 @@ export interface RunSummary {
 export function summarize(w: World): RunSummary {
   return {
     sharkId: w.def.id,
+    mapId: w.map.id,
     score: w.score,
     coins: w.coins,
     seconds: Math.floor(w.time),

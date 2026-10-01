@@ -5,6 +5,8 @@ import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import {
   BRANCH_INFO,
+  MAPS,
+  mapById,
   effectiveStats,
   ENTITY_DEFS,
   MAX_UPGRADE_LEVEL,
@@ -105,6 +107,25 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
         key={runKey}
         def={def}
         upgrades={upgradesFor(save, def.id)}
+        mapId={save.mapId}
+        bankCoins={save.coins}
+        owned={save.owned}
+        onEvolve={(target, runCoins) => {
+          // Owned already → free swap. Otherwise pay from the bank first, then this dive's coins.
+          const have = save.owned.includes(target.id);
+          if (!have && (target.parentId && !save.owned.includes(target.parentId))) return null;
+          if (!have && save.coins + runCoins < target.cost) return null;
+          const fromBank = have ? 0 : Math.min(save.coins, target.cost);
+          const fromRun = have ? 0 : target.cost - fromBank;
+          update((sv) => ({
+            ...sv,
+            coins: sv.coins - fromBank,
+            owned: sv.owned.includes(target.id) ? sv.owned : [...sv.owned, target.id],
+            selected: target.id,
+          }));
+          setViewId(target.id);
+          return { fromRun, upgrades: upgradesFor(save, target.id) };
+        }}
         muted={save.muted}
         onToggleMute={() => update((s) => ({ ...s, muted: !s.muted }))}
         markersOn={save.markers}
@@ -253,13 +274,49 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
             </div>
           </div>
 
+          {/* Dive site picker */}
+          <div>
+            <div className="mb-1.5 text-xs font-semibold text-white/50 light:text-slate-500">🗺️ 잠수 지역 선택</div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {MAPS.map((m) => {
+                const active = save.mapId === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => update((s) => ({ ...s, mapId: m.id }))}
+                    className={`relative overflow-hidden rounded-xl border p-3 text-left transition ${
+                      active ? "border-cyan-300 ring-2 ring-cyan-300/50" : "border-white/10 hover:border-white/30 light:border-slate-200"
+                    }`}
+                    style={{ background: `linear-gradient(180deg, ${m.palette.water[0]} 0%, ${m.palette.water[2]} 60%, ${m.palette.water[4]} 100%)` }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-black text-white drop-shadow">
+                        {m.emoji} {m.name}
+                      </span>
+                      <span className="shrink-0 rounded-full bg-black/40 px-2 py-0.5 text-[10px] font-bold text-white/85">
+                        권장 T{m.recommendedTier}+
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] leading-snug text-white/85 drop-shadow">{m.desc}</p>
+                    <div className="mt-1.5 flex flex-wrap gap-x-2 text-[10px] font-semibold text-white/75">
+                      <span>↔ {(m.width / 10).toLocaleString()}m</span>
+                      <span>🎁 상자 {m.chestCount}개</span>
+                      {m.coinBonus > 1 && <span className="text-yellow-200">🪙 ×{m.coinBonus}</span>}
+                    </div>
+                    {active && <span className="absolute right-2 bottom-2 text-xs font-black text-cyan-200">✔ 선택됨</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
               disabled={!owned}
               onClick={startDive}
               className="flex-1 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-400 py-3.5 text-base font-black text-white shadow-lg shadow-sky-500/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:from-slate-600 disabled:to-slate-700 disabled:shadow-none"
             >
-              🌊 {owned ? `${viewDef.name}(으)로 잠수 시작` : "잠금 해제 후 플레이 가능"}
+              🌊 {owned ? `${viewDef.name}(으)로 ${mapById(save.mapId).name} 잠수` : "잠금 해제 후 플레이 가능"}
             </button>
             {owned && viewDef.nextIds.length > 0 && (
               <button
@@ -290,7 +347,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
             </button>
           </div>
           <p className="text-center text-[11px] text-white/35 light:text-slate-400">
-            PC: 마우스로 방향 · 클릭/Shift 부스트 · <b>Space(E) 스킬</b> · WASD/방향키 · Esc 일시정지 &nbsp;|&nbsp; 모바일: 화면 드래그 조이스틱 + 🚀 부스트 · ⚡ 스킬
+            PC: 마우스로 방향 · 클릭/Shift 부스트 · <b>Space(E) 스킬</b> · V 잠수 중 진화 · WASD/방향키 · Esc 일시정지 &nbsp;|&nbsp; 모바일: 화면 드래그 조이스틱 + 🚀 부스트 · ⚡ 스킬
           </p>
         </>
       )}
@@ -437,7 +494,7 @@ function EdibleList({ def }: { def: SharkDef }) {
 const EATEN_LABEL_ORDER: EntityKind[] = [
   "smallFish", "crab", "swimmer", "goldenTuna", "puffer", "pelican", "diver", "grouper", "ray", "tuna", "sailor", "angler",
   "fishingBoat", "passenger", "smallShark", "cageDiver", "submarine", "ghostShark", "yacht", "helicopter",
-  "greenJelly", "redJelly", "mineS", "mineM", "mineL", "mineXL", "torpedo", "rock", "chest",
+  "greenJelly", "redJelly", "mineS", "mineM", "mineL", "mineXL", "torpedo", "rock", "iceberg", "chest",
 ];
 
 function ResultsPanel({
@@ -459,7 +516,7 @@ function ResultsPanel({
         <div className="mt-1 text-4xl font-black text-white tabular-nums light:text-slate-900">{s.score.toLocaleString()}</div>
         {newBest && <div className="mt-1 inline-block animate-bounce rounded-full bg-yellow-400 px-3 py-0.5 text-xs font-black text-slate-900">🏆 신기록!</div>}
         <p className="mt-2 text-xs text-white/50 light:text-slate-500">
-          {def.name} · {Math.floor(s.seconds / 60)}분 {s.seconds % 60}초 생존 · 사인: {s.cause}
+          {mapById(s.mapId).emoji} {mapById(s.mapId).name} · {def.name} · {Math.floor(s.seconds / 60)}분 {s.seconds % 60}초 생존 · 사인: {s.cause}
         </p>
       </div>
       <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">

@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { BRANCH_INFO, ENTITY_DEFS, FRENZY_STEPS, NEVER, PREY_EFFECTS, preyEffectLabel, SHARKS, sharksOfTier, type EntityKind } from "./data";
+import { BRANCH_INFO, ENTITY_DEFS, MAPS, FRENZY_STEPS, NEVER, PREY_EFFECTS, preyEffectLabel, SHARKS, sharksOfTier, type EntityKind } from "./data";
 
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const P = "text-white/70 light:text-slate-600";
@@ -107,6 +107,28 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
+          <h3 className={H3}>잠수 중 진화</h3>
+          <p className={P}>
+            잠수 도중 <b>보유 코인 + 이번 잠수에서 번 코인</b>이 다음 진화 비용을 넘으면 화면 오른쪽에 <b>🧬 진화 가능!</b> 버튼이
+            깜빡입니다(PC는 <b>V</b> 키). 누르면 게임이 멈추고 진화 분기를 고를 수 있으며, 비용은 보유 코인에서 먼저 빠지고 모자란 만큼
+            이번 잠수 코인에서 빠집니다. 진화하면 그 자리에서 체력·부스트가 가득 찬 새 상어로 바뀌고 점수·미션·골드 게이지는 그대로 이어집니다.
+            이미 보유한 상어로는 비용 없이 바꿀 수 있습니다.
+          </p>
+        </section>
+
+        <section>
+          <h3 className={H3}>잠수 지역 (맵)</h3>
+          <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
+            {MAPS.map((m) => (
+              <li key={m.id}>
+                <b>{m.emoji} {m.name}</b> (가로 {(m.width / 10).toLocaleString()}m · 보물 상자 {m.chestCount}개{m.coinBonus > 1 ? ` · 코인 ×${m.coinBonus}` : ""}): {m.desc}
+              </li>
+            ))}
+          </ul>
+          <p className={`mt-1 text-xs ${P}`}>상점 아래 &quot;잠수 지역 선택&quot;에서 고릅니다. 권장 티어는 참고용이며 모든 지역이 처음부터 열려 있습니다.</p>
+        </section>
+
+        <section>
           <h3 className={H3}>티어별 먹이</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -178,7 +200,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
             <li>먹이를 먹으면 확률적으로 코인이 나옵니다(골드 러시 중엔 100%). 코인은 잠수가 끝나도 유지됩니다.</li>
             <li>잠수마다 <b>무작위 미션 3개</b>가 주어지고, 달성 즉시 보너스 코인을 받습니다.</li>
-            <li>해저 곳곳에 <b>보물 상자 7개</b>가 숨어 있습니다(미니맵의 노란 점). 입으로 물면 코인이 쏟아집니다.</li>
+            <li>해저 곳곳에 <b>보물 상자</b>(지역마다 9~20개)가 숨어 있습니다(미니맵의 노란 점). 입으로 물면 코인이 쏟아집니다.</li>
             <li>상점에서 상어마다 <b>물어뜯기 · 속도 · 부스트</b>를 각각 10레벨까지 강화할 수 있습니다. 진행 상황은 이 브라우저에 저장됩니다.</li>
           </ul>
         </section>
