@@ -83,6 +83,12 @@ export interface PlayerState {
    * already in flight before this field existed still load.
    */
   brokenCollections?: string[];
+  /**
+   * Coin value paid for each normal auction this player won, in order
+   * (reverse auctions aren't purchases). Only feeds the personal stats;
+   * optional so games already in flight still load.
+   */
+  winningBids?: number[];
 }
 
 export type AuctionKind = "normal" | "reverse";

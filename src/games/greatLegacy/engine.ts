@@ -214,6 +214,7 @@ function resolveAuction(state: GreatLegacyState, winnerSeat: SeatIndex): GreatLe
     // Winner's committed coins are spent (sunk cost — money leaves the
     // player's economy, never refunded); everyone else already got refunded
     // when they passed.
+    players = players.map((p) => (p.seat === winnerSeat ? { ...p, winningBids: [...(p.winningBids ?? []), auction.highestBid] } : p));
   } else {
     // Reverse auction: the passer (winnerSeat) gets their own committed
     // coins refunded; everyone else's committed coins are forfeited outright

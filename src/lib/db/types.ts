@@ -123,6 +123,8 @@ export interface StatTotalsRecord {
   losses: number;
   /** Best (lowest) finishing rank ever. */
   bestRank: number | null;
+  /** Game-specific totals — merge rule in src/lib/stats/details.ts. Absent on rows from before details existed. */
+  details?: Record<string, number>;
   updatedAt: string;
 }
 
@@ -139,6 +141,7 @@ export interface PendingMatchStat {
   rank: number;
   playerCount: number;
   playedAt: string;
+  details?: Record<string, number>;
   /** Account that was logged in when it was played; null = guest (goes to whoever logs in next). */
   userId: string | null;
 }

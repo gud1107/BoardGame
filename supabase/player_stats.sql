@@ -10,9 +10,14 @@
 -- - Each match is uploaded once as a delta with a client-generated match_id.
 --   player_match_log's (user_id, match_id) key makes re-uploads no-ops, so
 --   retries, re-logins and two devices can't double-count or overwrite.
--- - Rows are private (owner-only read) until a public leaderboard is decided.
---   Results come from lockstep clients the server can't verify, so the
---   checks below only reject impossible values and floods, not cheating.
+-- - Raw rows are owner-only. The public leaderboard is served by
+--   public_leaderboard(), which exposes only nickname/avatar + counts (no
+--   user ids, no emails). Results come from lockstep clients the server
+--   can't verify, so the checks below only reject impossible values and
+--   floods, not cheating — the UI labels the ranking accordingly.
+-- - `details` holds game-specific numbers. Merge rule (mirrors
+--   src/lib/stats/details.ts): keys starting with `max` keep the highest,
+--   every other key is summed.
 
 create table if not exists player_game_stats (
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -40,6 +45,21 @@ create table if not exists player_match_log (
 create index if not exists player_match_log_user_recorded
   on player_match_log (user_id, recorded_at desc);
 
+-- Added with the detail stats (2026-10-02); no-ops on a fresh install.
+alter table player_game_stats add column if not exists details jsonb not null default '{}'::jsonb;
+alter table player_match_log add column if not exists details jsonb not null default '{}'::jsonb;
+
+-- Normally created by social_auth.sql; mirrored here (same definition) so the
+-- leaderboard works even if that file hasn't been run yet.
+create table if not exists public.user_profiles (
+  id uuid primary key references auth.users (id) on delete cascade,
+  nickname varchar(50) not null,
+  avatar_url text,
+  provider varchar(20) default 'email',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 alter table player_game_stats enable row level security;
 alter table player_match_log enable row level security;
 
@@ -51,6 +71,23 @@ drop policy if exists "own player_match_log" on player_match_log;
 create policy "own player_match_log" on player_match_log
   for select to authenticated using (auth.uid() = user_id);
 
+create or replace function merge_stat_details(p_base jsonb, p_delta jsonb)
+returns jsonb as $$
+  select coalesce(p_base, '{}'::jsonb) || coalesce((
+    select jsonb_object_agg(
+      d.key,
+      case
+        when not (coalesce(p_base, '{}'::jsonb) ? d.key) then d.value
+        when d.key like 'max%' then to_jsonb(greatest((p_base ->> d.key)::numeric, (d.value #>> '{}')::numeric))
+        else to_jsonb((p_base ->> d.key)::numeric + (d.value #>> '{}')::numeric)
+      end)
+    from jsonb_each(coalesce(p_delta, '{}'::jsonb)) d
+  ), '{}'::jsonb);
+$$ language sql immutable set search_path = public;
+
+-- The pre-details 6-argument version, if an earlier copy of this file ran.
+drop function if exists record_match_stats(text, text, boolean, integer, integer, timestamptz);
+
 -- Returns true when the match was counted, false when it was already counted.
 create or replace function record_match_stats(
   p_match_id text,
@@ -58,11 +95,13 @@ create or replace function record_match_stats(
   p_won boolean,
   p_rank integer,
   p_player_count integer,
-  p_played_at timestamptz
+  p_played_at timestamptz,
+  p_details jsonb default '{}'::jsonb
 ) returns boolean as $$
 declare
   v_uid uuid := auth.uid();
   v_inserted integer;
+  v_details jsonb := coalesce(p_details, '{}'::jsonb);
 begin
   if v_uid is null then
     raise exception 'not authenticated';
@@ -85,30 +124,100 @@ begin
      or p_played_at < now() - interval '400 days' then
     raise exception 'bad played_at';
   end if;
+  if jsonb_typeof(v_details) <> 'object'
+     or (select count(*) from jsonb_object_keys(v_details)) > 24
+     or exists (
+       select 1 from jsonb_each(v_details) d
+       where d.key !~ '^[a-zA-Z][a-zA-Z0-9]{0,39}$'
+          or jsonb_typeof(d.value) <> 'number'
+          or (d.value #>> '{}')::numeric not between 0 and 1000000000
+     ) then
+    raise exception 'bad details';
+  end if;
   if (select count(*) from player_match_log
       where user_id = v_uid and recorded_at > now() - interval '1 hour') >= 300 then
     raise exception 'rate limited';
   end if;
 
-  insert into player_match_log (user_id, match_id, game_id, won, rank, player_count, played_at)
-  values (v_uid, p_match_id, p_game_id, p_won, p_rank, p_player_count, p_played_at)
+  insert into player_match_log (user_id, match_id, game_id, won, rank, player_count, played_at, details)
+  values (v_uid, p_match_id, p_game_id, p_won, p_rank, p_player_count, p_played_at, v_details)
   on conflict (user_id, match_id) do nothing;
   get diagnostics v_inserted = row_count;
   if v_inserted = 0 then
     return false;
   end if;
 
-  insert into player_game_stats as s (user_id, game_id, played, wins, losses, best_rank, updated_at)
-  values (v_uid, p_game_id, 1, case when p_won then 1 else 0 end, case when p_won then 0 else 1 end, p_rank, now())
+  insert into player_game_stats as s (user_id, game_id, played, wins, losses, best_rank, details, updated_at)
+  values (v_uid, p_game_id, 1, case when p_won then 1 else 0 end, case when p_won then 0 else 1 end, p_rank, v_details, now())
   on conflict (user_id, game_id) do update set
     played = s.played + 1,
     wins = s.wins + excluded.wins,
     losses = s.losses + excluded.losses,
     best_rank = least(coalesce(s.best_rank, excluded.best_rank), excluded.best_rank),
+    details = merge_stat_details(s.details, excluded.details),
     updated_at = now();
   return true;
 end;
 $$ language plpgsql security definer set search_path = public;
 
-revoke all on function record_match_stats(text, text, boolean, integer, integer, timestamptz) from public, anon;
-grant execute on function record_match_stats(text, text, boolean, integer, integer, timestamptz) to authenticated;
+revoke all on function record_match_stats(text, text, boolean, integer, integer, timestamptz, jsonb) from public, anon;
+grant execute on function record_match_stats(text, text, boolean, integer, integer, timestamptz, jsonb) to authenticated;
+
+-- Public leaderboard. p_game_id null = all games combined.
+-- p_sort 'wins' (default) = most wins; 'rate' = win rate among players with
+-- at least p_min_played games. Returns the top p_limit rows plus the
+-- caller's own row (is_me) even when it's outside the top.
+drop function if exists public_leaderboard(text, text, integer, integer);
+create or replace function public_leaderboard(
+  p_game_id text default null,
+  p_sort text default 'wins',
+  p_min_played integer default 10,
+  p_limit integer default 50
+) returns table (
+  rank bigint,
+  nickname text,
+  avatar_url text,
+  played integer,
+  wins integer,
+  losses integer,
+  win_rate numeric,
+  best_rank integer,
+  details jsonb,
+  is_me boolean
+) as $$
+  with agg as (
+    select s.user_id,
+           sum(s.played)::integer as played,
+           sum(s.wins)::integer as wins,
+           sum(s.losses)::integer as losses,
+           min(s.best_rank) as best_rank,
+           case when p_game_id is null then '{}'::jsonb else (array_agg(s.details))[1] end as details
+    from player_game_stats s
+    where p_game_id is null or s.game_id = p_game_id
+    group by s.user_id
+  ),
+  eligible as (
+    select a.*, round(a.wins::numeric * 100 / nullif(a.played, 0), 1) as win_rate
+    from agg a
+    where a.played >= case when p_sort = 'rate' then greatest(coalesce(p_min_played, 1), 1) else 1 end
+  ),
+  ranked as (
+    select e.*,
+           case when p_sort = 'rate'
+             then rank() over (order by e.win_rate desc, e.wins desc)
+             else rank() over (order by e.wins desc, e.win_rate desc)
+           end as rnk
+    from eligible e
+  )
+  select r.rnk,
+         coalesce(p.nickname, '게이머_' || left(replace(r.user_id::text, '-', ''), 6))::text,
+         p.avatar_url,
+         r.played, r.wins, r.losses, r.win_rate, r.best_rank, r.details,
+         (r.user_id = auth.uid())
+  from ranked r
+  left join public.user_profiles p on p.id = r.user_id
+  where r.rnk <= least(greatest(coalesce(p_limit, 50), 1), 100) or r.user_id = auth.uid()
+  order by r.rnk, r.played desc;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function public_leaderboard(text, text, integer, integer) to anon, authenticated;

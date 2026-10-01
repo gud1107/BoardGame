@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db/client";
 import type { PendingMatchStat, StatTotalsRecord } from "@/lib/db/types";
 import { getAuthSupabase } from "@/lib/supabase/authClient";
 import type { GameSelfResult } from "@/games/types";
+import { mergeStatDetails } from "./details";
 
 /**
  * Personal per-game stats (played / wins / losses / best rank).
@@ -59,6 +60,7 @@ export async function recordMatchStat(gameId: string, self: GameSelfResult, play
       rank: self.rank,
       playerCount: self.playerCount,
       playedAt,
+      details: self.details,
       userId,
     };
     const db = await getDb();
@@ -70,6 +72,7 @@ export async function recordMatchStat(gameId: string, self: GameSelfResult, play
       wins: totals.wins + (won ? 1 : 0),
       losses: totals.losses + (won ? 0 : 1),
       bestRank: totals.bestRank === null ? self.rank : Math.min(totals.bestRank, self.rank),
+      details: mergeStatDetails(totals.details, self.details),
       updatedAt: new Date().toISOString(),
     });
     await tx.objectStore("statPending").put(pending);
@@ -117,6 +120,7 @@ async function runSync(): Promise<void> {
         p_rank: p.rank,
         p_player_count: p.playerCount,
         p_played_at: p.playedAt,
+        p_details: p.details ?? {},
       });
       if (error) {
         // Table/function not installed yet, offline, rate limit… keep the
@@ -131,7 +135,7 @@ async function runSync(): Promise<void> {
 
     const { data, error } = await supabase
       .from("player_game_stats")
-      .select("game_id, played, wins, losses, best_rank, updated_at")
+      .select("game_id, played, wins, losses, best_rank, details, updated_at")
       .eq("user_id", userId);
     if (error || !data) return;
 
@@ -148,6 +152,7 @@ async function runSync(): Promise<void> {
         wins: row.wins,
         losses: row.losses,
         bestRank: row.best_rank,
+        details: row.details ?? {},
         updatedAt: row.updated_at,
       });
     }
@@ -159,6 +164,7 @@ async function runSync(): Promise<void> {
         wins: t.wins + (p.won ? 1 : 0),
         losses: t.losses + (p.won ? 0 : 1),
         bestRank: t.bestRank === null ? p.rank : Math.min(t.bestRank, p.rank),
+        details: mergeStatDetails(t.details, p.details),
       });
     }
     for (const t of byGame.values()) await tx.store.put(t);
@@ -205,6 +211,7 @@ export async function resetLocalStatsToGuest(): Promise<void> {
         wins: t.wins + (p.won ? 1 : 0),
         losses: t.losses + (p.won ? 0 : 1),
         bestRank: t.bestRank === null ? p.rank : Math.min(t.bestRank, p.rank),
+        details: mergeStatDetails(t.details, p.details),
       });
     }
     const tx = db.transaction("statTotals", "readwrite");

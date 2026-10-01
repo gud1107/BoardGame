@@ -49,6 +49,7 @@ import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
+import { forSaleStatDetails } from "./stats";
 
 /**
  * Small local system-log formatter for the "bid" headline action (see
@@ -778,7 +779,7 @@ export default function ForSaleGame({ onComplete }: PlayableGameProps) {
     const winners = rankings.filter((r) => r.rank === 1);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, botTakeover.takeovers),
+      self: selfResult(mySeat, rankings, botTakeover.takeovers, (seat, rank) => forSaleStatDetails(gameState, seat, rank)),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerNames: winners.map((w) => names[w.seat]).join(", ") });

@@ -21,6 +21,7 @@ import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } fro
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { DEFAULT_BOT_LEVEL, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import { selfResult } from "@/games/shared/selfResult";
+import { greatLegacyStatDetails } from "./stats";
 
 /**
  * Online-room multiplayer entry point, same lockstep pattern as
@@ -492,7 +493,7 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
     const winners = rankings.filter((r) => r.rank === 1);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings),
+      self: selfResult(mySeat, rankings, undefined, (seat) => greatLegacyStatDetails(gameState, seat)),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerName: names[winners[0].seat], tied: winners.length > 1 });

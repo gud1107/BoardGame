@@ -1,16 +1,83 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { getGameMeta } from "@/games/registry";
+import { getGameMeta, GAME_REGISTRY } from "@/games/registry";
 import type { StatTotalsRecord } from "@/lib/db/types";
+import { STAT_DETAIL_ROWS } from "@/lib/stats/details";
+import { fetchLeaderboard, type LeaderboardRow, type LeaderboardSort } from "@/lib/stats/leaderboard";
 import { countPendingStats, listPlayerStats, STATS_CHANGED_EVENT, syncPlayerStats } from "@/lib/stats/playerStats";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
 
+type Tab = "mine" | "ranking";
+
 export default function StatsPage() {
   const userId = useSubscriptionStore((s) => s.userId);
+  const hydrated = useSubscriptionStore((s) => s.hydrated);
+  const [tab, setTab] = useState<Tab>("mine");
+
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+      <h1 className="mb-4 text-2xl font-bold text-white light:text-slate-900">전적</h1>
+
+      {hydrated && !userId && <GuestWarning />}
+
+      <div className="mb-5 flex gap-1 rounded-xl border border-white/10 bg-white/5 p-1 light:border-slate-200 light:bg-slate-100">
+        {(
+          [
+            ["mine", "내 전적"],
+            ["ranking", "공개 랭킹"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+              tab === id
+                ? "bg-rose-500 text-white"
+                : "text-white/60 hover:text-white light:text-slate-500 light:hover:text-slate-900"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "mine" ? <MyStats loggedIn={!!userId} /> : <Ranking loggedIn={!!userId} />}
+    </div>
+  );
+}
+
+function GuestWarning() {
+  return (
+    <div
+      role="alert"
+      className="mb-5 rounded-2xl border-2 border-amber-400/70 bg-amber-400/15 p-4 shadow-[0_0_24px_rgba(251,191,36,0.15)] light:border-amber-500 light:bg-amber-50"
+    >
+      <p className="flex items-center gap-2 text-base font-bold text-amber-200 light:text-amber-800">
+        <span aria-hidden>⚠️</span> 로그인하지 않은 기록은 언제든 사라질 수 있어요
+      </p>
+      <p className="mt-1.5 text-sm leading-relaxed text-amber-100/90 light:text-amber-900">
+        지금 전적은 <b>이 브라우저에만</b> 저장돼 있어요. 브라우저 기록·사이트 데이터 삭제, 시크릿 모드, 저장공간 자동 정리,
+        다른 기기나 브라우저로 바꾸는 순간 <b>복구할 수 없이 사라집니다.</b> 공개 랭킹에도 오르지 않아요.
+      </p>
+      <p className="mt-1.5 text-sm text-amber-100/90 light:text-amber-900">
+        로그인하면 지금까지 쌓은 기록이 그대로 계정에 합쳐져 안전하게 보관됩니다.
+      </p>
+      <Link
+        href="/login?next=/stats"
+        className="mt-3 inline-block rounded-xl bg-amber-400 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-amber-300"
+      >
+        로그인하고 기록 지키기
+      </Link>
+    </div>
+  );
+}
+
+function MyStats({ loggedIn }: { loggedIn: boolean }) {
   const [stats, setStats] = useState<StatTotalsRecord[] | null>(null);
   const [pending, setPending] = useState(0);
+  const [open, setOpen] = useState<string | null>(null);
 
   const load = useCallback(() => {
     void Promise.all([listPlayerStats(), countPendingStats()]).then(([rows, n]) => {
@@ -32,24 +99,13 @@ export default function StatsPage() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
-      <h1 className="mb-1 text-2xl font-bold text-white light:text-slate-900">내 전적</h1>
-      <p className="mb-6 text-sm text-white/50 light:text-slate-500">
-        {userId ? (
-          <>계정에 저장된 전적입니다. 다른 기기에서 로그인해도 같은 기록이 보여요.</>
-        ) : (
-          <>
-            지금은 이 브라우저에만 저장돼요.{" "}
-            <Link href="/login?next=/stats" className="text-rose-300 underline light:text-rose-600">
-              로그인
-            </Link>
-            하면 지금까지의 기록이 계정으로 합쳐집니다.
-          </>
-        )}
-        {" "}1등은 승, 그 외 순위는 패로 집계하고, 봇이 대신 둔 판은 빠집니다.
+    <>
+      <p className="mb-4 text-sm text-white/50 light:text-slate-500">
+        {loggedIn ? "계정에 저장된 전적이에요. 다른 기기에서 로그인해도 같은 기록이 보여요." : "이 브라우저에 저장된 전적이에요."}{" "}
+        1등은 승, 그 외 순위는 패로 집계하고, 봇이 대신 둔 판은 빠집니다.
       </p>
 
-      {userId && pending > 0 && (
+      {loggedIn && pending > 0 && (
         <p className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-xs text-amber-200 light:text-amber-700">
           아직 계정에 올라가지 않은 기록 {pending}판이 있어요. 연결되면 자동으로 올라갑니다.
         </p>
@@ -83,20 +139,47 @@ export default function StatsPage() {
               <tbody>
                 {stats.map((s) => {
                   const meta = getGameMeta(s.gameId);
+                  const rows = STAT_DETAIL_ROWS[s.gameId];
+                  const expandable = !!rows && !!s.details && Object.keys(s.details).length > 0;
+                  const isOpen = open === s.gameId;
                   return (
-                    <tr key={s.gameId} className="border-t border-white/5 light:border-slate-100">
-                      <td className="px-3 py-2 text-white/85 light:text-slate-800">
-                        <span className="mr-1.5">{meta?.thumbnail.emoji ?? "🎲"}</span>
-                        {meta?.name ?? s.gameId}
-                      </td>
-                      <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.played}</td>
-                      <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.wins}</td>
-                      <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.losses}</td>
-                      <td className="px-2 py-2 text-right tabular-nums text-white/85 light:text-slate-800">{pct(s.wins, s.played)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-white/70 light:text-slate-600">
-                        {s.bestRank === null ? "-" : `${s.bestRank}위`}
-                      </td>
-                    </tr>
+                    <Fragment key={s.gameId}>
+                      <tr
+                        className={`border-t border-white/5 light:border-slate-100 ${expandable ? "cursor-pointer hover:bg-white/[0.04] light:hover:bg-slate-50" : ""}`}
+                        onClick={expandable ? () => setOpen(isOpen ? null : s.gameId) : undefined}
+                      >
+                        <td className="px-3 py-2 text-white/85 light:text-slate-800">
+                          <span className="mr-1.5">{meta?.thumbnail.emoji ?? "🎲"}</span>
+                          {meta?.name ?? s.gameId}
+                          {expandable && <span className="ml-1.5 text-xs text-rose-300">{isOpen ? "▲" : "세부 ▼"}</span>}
+                        </td>
+                        <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.played}</td>
+                        <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.wins}</td>
+                        <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.losses}</td>
+                        <td className="px-2 py-2 text-right tabular-nums text-white/85 light:text-slate-800">{pct(s.wins, s.played)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-white/70 light:text-slate-600">
+                          {s.bestRank === null ? "-" : `${s.bestRank}위`}
+                        </td>
+                      </tr>
+                      {expandable && isOpen && (
+                        <tr className="bg-white/[0.03] light:bg-slate-50">
+                          <td colSpan={6} className="px-3 py-3">
+                            <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                              {rows.map((r) => {
+                                const v = r.value(s.details!, s.played);
+                                if (v === null) return null;
+                                return (
+                                  <div key={r.label} className="flex justify-between gap-3 text-xs">
+                                    <dt className="text-white/50 light:text-slate-500">{r.label}</dt>
+                                    <dd className="tabular-nums text-white/85 light:text-slate-800">{v}</dd>
+                                  </div>
+                                );
+                              })}
+                            </dl>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -104,7 +187,121 @@ export default function StatsPage() {
           </div>
         </>
       )}
-    </div>
+    </>
+  );
+}
+
+const RANKED_GAMES = GAME_REGISTRY.filter((g) => g.playable && g.id !== "hungry-shark" && g.id !== "crab-survival");
+
+function Ranking({ loggedIn }: { loggedIn: boolean }) {
+  const [gameId, setGameId] = useState<string>("");
+  const [sort, setSort] = useState<LeaderboardSort>("wins");
+  const key = `${gameId}|${sort}`;
+  // Result tagged with the query it answers, so switching game/sort shows
+  // "loading" without resetting state inside the effect.
+  const [result, setResult] = useState<{ key: string; rows: LeaderboardRow[] | null } | null>(null);
+  const rows = result?.key === key ? result.rows : undefined;
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchLeaderboard(gameId || null, sort).then((r) => {
+      if (!cancelled) setResult({ key, rows: r });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [gameId, sort, key]);
+
+  return (
+    <>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <select
+          value={gameId}
+          onChange={(e) => setGameId(e.target.value)}
+          className="min-w-0 flex-1 rounded-xl border border-white/15 bg-zinc-900 px-3 py-2 text-sm text-white light:border-slate-300 light:bg-white light:text-slate-900"
+        >
+          <option value="">전체 게임 합산</option>
+          {RANKED_GAMES.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.thumbnail.emoji} {g.name}
+            </option>
+          ))}
+        </select>
+        <div className="flex gap-1 rounded-xl border border-white/10 p-1 light:border-slate-200">
+          {(
+            [
+              ["wins", "승수"],
+              ["rate", "승률 (10판↑)"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setSort(id)}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
+                sort === id ? "bg-white/15 text-white light:bg-slate-200 light:text-slate-900" : "text-white/50 light:text-slate-500"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <p className="mb-3 text-xs text-white/40 light:text-slate-400">
+        로그인한 회원의 기록만 올라가요. 결과는 각 플레이어 기기에서 계산되므로 참고용 랭킹입니다.
+        {!loggedIn && " 내 기록을 올리려면 로그인하세요."}
+      </p>
+
+      {rows === null ? (
+        <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
+          랭킹을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
+        </p>
+      ) : rows === undefined ? (
+        <p className="text-sm text-white/40 light:text-slate-400">불러오는 중...</p>
+      ) : rows.length === 0 ? (
+        <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
+          {sort === "rate" ? "아직 10판 이상 플레이한 회원이 없어요." : "아직 랭킹에 오른 회원이 없어요. 첫 번째 주인공이 되어보세요!"}
+        </p>
+      ) : (
+        <ol className="flex flex-col gap-1.5">
+          {rows.map((r, i) => {
+            const gap = i > 0 && r.isMe && r.rank > rows[i - 1].rank + 1;
+            return (
+              <Fragment key={`${r.rank}-${r.nickname}-${i}`}>
+                {gap && <li className="py-1 text-center text-xs text-white/30 light:text-slate-400">⋯</li>}
+                <li
+                  className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${
+                    r.isMe
+                      ? "border-rose-400/60 bg-rose-500/10 light:border-rose-400 light:bg-rose-50"
+                      : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white"
+                  }`}
+                >
+                  <span className="w-8 shrink-0 text-center text-sm font-bold tabular-nums text-white/80 light:text-slate-700">
+                    {r.rank <= 3 ? ["🥇", "🥈", "🥉"][r.rank - 1] : r.rank}
+                  </span>
+                  {r.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={r.avatarUrl} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
+                  ) : (
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs light:bg-slate-200">
+                      👤
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-sm text-white light:text-slate-900">
+                    {r.nickname}
+                    {r.isMe && <span className="ml-1.5 text-xs font-semibold text-rose-300 light:text-rose-600">나</span>}
+                  </span>
+                  <span className="shrink-0 text-right text-xs tabular-nums text-white/60 light:text-slate-500">
+                    <b className="text-sm text-white light:text-slate-900">{r.wins}</b>승 {r.losses}패
+                    <span className="ml-2">{r.winRate === null ? "-" : `${r.winRate}%`}</span>
+                  </span>
+                </li>
+              </Fragment>
+            );
+          })}
+        </ol>
+      )}
+    </>
   );
 }
 

@@ -110,6 +110,12 @@ export interface PlayerState {
   properties: number[];
   /** Check card values already won in Phase 2. */
   checks: number[];
+  /**
+   * Phase 2 history, one entry per sale in order — only for the personal
+   * stats (e.g. "sold #30 for $0"). Optional so games in flight before this
+   * field existed still load.
+   */
+  sales?: { property: number; check: number }[];
 }
 
 export interface AuctionRoundResult {
@@ -413,7 +419,7 @@ function submitCard(state: ForSaleState, seat: SeatIndex, property: number): For
   let players = state.players;
   const assignments: SaleAssignment[] = order.map(({ seat: s, property: p }, i) => {
     const check = sortedChecks[i];
-    players = players.map((pl) => (pl.seat === s ? { ...pl, checks: [...pl.checks, check], properties: pl.properties.filter((c) => c !== p) } : pl));
+    players = players.map((pl) => (pl.seat === s ? { ...pl, checks: [...pl.checks, check], properties: pl.properties.filter((c) => c !== p), sales: [...(pl.sales ?? []), { property: p, check }] } : pl));
     return { seat: s, property: p, check };
   });
 

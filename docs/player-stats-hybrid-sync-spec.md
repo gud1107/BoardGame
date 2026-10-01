@@ -17,7 +17,7 @@
 | `src/pages/AuthCallbackPage.tsx` + `navigate()` | App Router 프로젝트. 콜백은 서버 라우트 `src/app/auth/callback/route.ts`(2026-10-02 소셜 로그인 작업, 아직 커밋 전)라서 `localStorage`를 읽을 수 없다. 병합은 콜백이 리디렉트한 뒤의 클라이언트 쪽에서 해야 한다 |
 | 게임 키 `'DALMUTI'` 등 대문자 enum | 레지스트리 id는 `dalmuti`, `five-cucumbers`, `coyote`, `perudo`, `great-legacy`, `century`, `rat-a-tat-cat`, `spot-difference`, `doodle-phone` 같은 소문자 문자열. 새 enum을 만들지 말고 이 id를 그대로 쓴다 |
 | 1차 저장소가 `localStorage` | 이 프로젝트의 1차 저장소는 IndexedDB(`src/lib/db/`, [architecture.md §1.1](./architecture.md)). 게임 종료 시 이미 `saveGameResult()`가 `GameResultRecord`를 IndexedDB에 쌓고 있다(`src/app/games/[gameId]/page.tsx`의 `handleGameComplete`) |
-| "위대한 투자": 0원 수표 낙찰, 30번 랜드마크, 파산 | `great-legacy`(화면 이름 "최고의 투자")에는 수표·랜드마크·파산 개념이 없다. 0원 수표와 30번 매물은 **For Sale**(`src/games/forSale/`)의 규칙이다. 두 게임이 섞인 것으로 보인다 |
+| "위대한 투자": 0원 수표 낙찰, 30번 랜드마크, 파산 | `great-legacy`(화면 이름 "최고의 투자")에는 수표·랜드마크가 없다. 0원 수표와 30번 매물은 **For Sale**(`src/games/forSale/`)의 규칙이다. → 2026-10-02 확인: 위대한 투자와 For Sale은 **서로 다른 게임**. 지표를 게임별로 나눠 각각 적용했다(§7) |
 | 그림전화기: 명예의 전당 '좋아요' 득표, 트롤러 지수 | `doodlePhone`에는 좋아요·명예의 전당 기능이 없다. "원문 보존율"을 재려면 문장 유사도 판정도 새로 만들어야 한다 |
 | 틀린그림찾기: MASTER 봇 | 봇 난이도는 Lv.1–10 숫자다. "Lv.10 상대 승리"로 바꿔야 한다 |
 
@@ -43,8 +43,8 @@
 
 ## 5. 결정 필요
 
-1. 전적을 **공개 랭킹**에 쓸 것인가, 본인만 보는 기록장인가. 공개 랭킹이면 3-4의 위조 대책이 필수다.
-2. "위대한 투자"가 `great-legacy`인지 `for-sale`인지. 지표는 For Sale 쪽 내용이다.
+1. ~~공개 랭킹 여부~~ → **공개 랭킹으로 결정**(2026-10-02, §7).
+2. ~~위대한 투자 = ?~~ → 위대한 투자(`great-legacy`)와 For Sale(`for-sale`)은 다른 게임. 각각 적용(§7).
 3. 첫 단계 범위: 9종 전부의 세부 지표를 한 번에 할지, 기본 승/패/판수를 전 게임에 먼저 깔고 세부 지표를 게임별로 붙일지(후자 권장).
 4. 소셜 로그인 작업(`src/app/auth/`, `supabase/social_auth.sql`)이 아직 커밋되지 않았다. 병합 기능은 그 작업이 들어간 다음에 붙인다.
 
@@ -81,3 +81,53 @@
 ### 운영 적용 (사람이 해야 함)
 
 Supabase SQL Editor에서 `supabase/player_stats.sql` 실행. 실행 전에는 업로드가 실패해 큐에 쌓여 있다가, 실행 후 첫 동기화 때 한꺼번에 올라간다(그 사이 기록은 유실되지 않음).
+
+## 7. 공개 랭킹 + 게임별 세부 지표 (2026-10-02)
+
+### 공개 랭킹
+- `public_leaderboard(p_game_id, p_sort, p_min_played, p_limit)` RPC(anon도 호출 가능). 원본 테이블은 여전히 본인만 읽을 수 있고, 이 함수는 **닉네임·아바타·판/승/패/승률/최고순위/세부지표만** 돌려준다(user_id·이메일 없음).
+- `p_game_id = null`이면 전체 게임 합산. 정렬: `wins`(승수) / `rate`(승률, 10판 이상만).
+- 상위 N명 + **내 행(`is_me`)은 순위 밖이어도 항상 포함**. 닉네임은 `user_profiles.nickname`, 없으면 `게이머_xxxxxx`.
+- `player_stats.sql`이 `user_profiles`를 `social_auth.sql`과 같은 정의로 `create table if not exists` 한다 — 그 파일을 안 돌렸어도 랭킹이 깨지지 않게.
+- 클라이언트: `src/lib/stats/leaderboard.ts`, `/stats`의 "공개 랭킹" 탭(게임 선택, 승수/승률 정렬, 내 행 강조). "결과는 각 기기에서 계산되는 참고용 랭킹" 문구 표시.
+
+### 게스트 주의 문구
+`/stats` 상단에 비로그인일 때만 노란 테두리 경고 박스(`role="alert"`): 이 브라우저에만 저장, 데이터 삭제·시크릿 모드·저장공간 정리·기기 변경 시 복구 불가, 랭킹 미등재, 로그인하면 계정에 합쳐진다는 안내 + 로그인 버튼.
+
+### 세부 지표 공통 구조
+- `GameSelfResult.details?: Record<string, number>` → 대기 큐 → RPC `p_details` → `player_game_stats.details`(jsonb).
+- 합산 규칙(클라 `src/lib/stats/details.ts`, 서버 `merge_stat_details()` 동일): 키가 `max`로 시작하면 최댓값, 나머지는 합. RPC는 키 24개 이하, 키 형식, 0~10억 숫자만 허용.
+- 화면 라벨: `STAT_DETAIL_ROWS`(게임 id → 표시 행). `/stats` 내 전적 표에서 행을 누르면 펼쳐진다.
+
+### 위대한 투자 (`great-legacy`, 화면 이름 "최고의 투자") — `src/games/greatLegacy/stats.ts`
+엔진에 `PlayerState.winningBids?: number[]`(일반 경매 낙찰가 기록, 역경매 제외) 추가.
+
+| 키 | 의미 |
+| --- | --- |
+| `maxScore` / `totalScore` | 최고 점수 / 평균 점수용 합 |
+| `maxWinningBid` | 한 번에 가장 비싸게 낙찰받은 금액 |
+| `totalPaid` / `totalAssetScore` | 투자 효율(자산점수 ÷ 낙찰가) |
+| `synergies` / `maxSynergies` | 완성한 마켓·섹터 컬렉션 수 |
+| `boosted` / `crashed` | 초대형호재 / 악재·어닝쇼크를 맞은 자산 |
+| `delisted` | 상장폐지·강제반대매매로 잃은 자산 |
+| `brokeGames` | 코인 0으로 끝낸 판(파산) |
+
+### For Sale (`for-sale`) — `src/games/forSale/stats.ts`
+엔진에 `PlayerState.sales?: { property, check }[]`(판매 기록) 추가.
+
+| 키 | 의미 |
+| --- | --- |
+| `maxTotal` / `totalMoney` | 최고 / 평균 최종 자산 |
+| `maxCheck` | 받은 가장 큰 수표 |
+| `zeroChecks` | 0원 수표 받은 횟수 |
+| `had30` / `won30` | 30번 매물 보유한 판 / 보유하고 1위 |
+| `sold30ForZero` | 30번 매물을 0원 수표에 판 굴욕 |
+
+나머지 게임(달무티·오이·코요테·페루도·센추리·랫어탯캣·틀린그림찾기·그림전화기)의 세부 지표는 같은 구조로 `stats.ts` + `STAT_DETAIL_ROWS`만 추가하면 된다.
+
+### 검증
+- tsc / eslint 통과. vitest: `mergeStatDetails`, 두 게임 `stats.ts`(봇끼리 끝까지 둔 판에서 지표 계산 확인), 기존 For Sale·최고의 투자 테스트 포함 126개 통과.
+- embedded-postgres: 이전 버전 SQL 위에 새 SQL 적용·재실행 안전, details 합산(max/합) 정확, 잘못된 details(문자열·음수·배열) 거부, anon이 랭킹은 보지만 원본 테이블은 0행, limit 밖의 내 행 포함, 승률 정렬 최소 판수, 프로필 닉네임 반영 확인.
+
+### 운영 적용
+`supabase/player_stats.sql`을 **다시 한 번** SQL Editor에서 실행(이전 버전을 이미 돌렸어도 안전하게 업그레이드됨).

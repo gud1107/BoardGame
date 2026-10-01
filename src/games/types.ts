@@ -61,6 +61,8 @@ export interface GameSelfResult {
   playerCount: number;
   /** A takeover bot played this seat at the end — not counted as the owner's result. */
   botPlayed: boolean;
+  /** Game-specific numbers; `max*` keys keep the best, others are summed (src/lib/stats/details.ts). */
+  details?: Record<string, number>;
 }
 
 export interface GameCompletionResult {
