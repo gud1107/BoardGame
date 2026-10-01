@@ -4,6 +4,7 @@ import { useState } from "react";
 import { adminRpc, adminWrite, DATE_TIME, fmt, type IpLabelMap } from "../adminApi";
 import { Chip, Empty, ErrorNote, Loading, Panel } from "../adminUi";
 import { useAdminQuery } from "../useAdminQuery";
+import AlertSettingsPanel from "../AlertSettingsPanel";
 
 interface TopIpRow {
   ip: string;
@@ -16,6 +17,32 @@ interface TopIpRow {
   last_at: string;
   label: string | null;
   memo: string | null;
+}
+
+/** Per-name 🔔: phone alerts for this IP (supabase/admin_alerts.sql). Only named IPs can alert. */
+function AlertSwitch({ ip, labels, onSaved }: { ip: string; labels: IpLabelMap; onSaved: () => void }) {
+  const [saving, setSaving] = useState(false);
+  const entry = labels.get(ip);
+  if (!entry || entry.alert === undefined) return null;
+  const on = entry.alert;
+  return (
+    <button
+      type="button"
+      disabled={saving}
+      title={on ? "이 사람 알림 끄기" : "이 사람이 오면 휴대폰으로 알림 받기"}
+      onClick={async () => {
+        setSaving(true);
+        await adminWrite("admin_set_ip_alert", { p_ip: ip, p_alert: !on });
+        setSaving(false);
+        onSaved();
+      }}
+      className={`rounded-full px-2 py-0.5 text-xs font-semibold transition disabled:opacity-40 ${
+        on ? "bg-sky-500/20 text-sky-200 light:bg-sky-100 light:text-sky-800" : "text-white/40 hover:text-white/70 light:text-slate-400"
+      }`}
+    >
+      {on ? "🔔 알림 켜짐" : "🔕 알림 꺼짐"}
+    </button>
+  );
 }
 
 /** Inline "name this IP" editor: shows the saved name, or a form while editing. */
@@ -143,6 +170,7 @@ export default function IpLabelsTab({
 
   return (
     <div className="flex flex-col gap-4">
+      <AlertSettingsPanel />
       <Panel title="IP에 이름 붙이기" note="자주 오는 IP가 누구인지 적어두면 게임 통계의 기기 목록에도 그 이름이 보입니다. 이름은 관리자만 볼 수 있습니다.">
         <form
           onSubmit={(e) => {
@@ -200,6 +228,7 @@ export default function IpLabelsTab({
               <tr>
                 <th className="px-3 py-2 font-medium">IP</th>
                 <th className="px-3 py-2 font-medium">이름 / 메모</th>
+                <th className="px-3 py-2 font-medium">휴대폰 알림</th>
                 <th className="px-3 py-2 text-right font-medium">방문</th>
                 <th className="px-3 py-2 text-right font-medium">게임 시작</th>
                 <th className="px-3 py-2 text-right font-medium">기기</th>
@@ -216,6 +245,9 @@ export default function IpLabelsTab({
                   </td>
                   <td className="px-3 py-2">
                     <LabelEditor ip={r.ip} label={r.label} memo={r.memo} onSaved={saved} />
+                  </td>
+                  <td className="px-3 py-2">
+                    {r.label ? <AlertSwitch ip={r.ip} labels={labels} onSaved={saved} /> : <span className="text-white/25">이름 먼저</span>}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmt(r.visits)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmt(r.game_starts)}</td>
@@ -236,6 +268,7 @@ export default function IpLabelsTab({
               <li key={l.ip} className="flex flex-wrap items-center gap-3 text-xs">
                 <span className="font-mono text-white/70">{l.ip}</span>
                 <LabelEditor ip={l.ip} label={l.label} memo={l.memo} onSaved={saved} />
+                <AlertSwitch ip={l.ip} labels={labels} onSaved={saved} />
               </li>
             ))}
           </ul>

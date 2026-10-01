@@ -86,6 +86,8 @@ export interface IpLabel {
   label: string;
   memo: string | null;
   updated_at: string;
+  /** 🔔 phone alert switch (supabase/admin_alerts.sql); undefined before that SQL runs. */
+  alert?: boolean;
 }
 
 export type IpLabelMap = ReadonlyMap<string, IpLabel>;

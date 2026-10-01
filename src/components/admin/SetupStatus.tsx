@@ -47,6 +47,13 @@ const CHECKS = [
     effect: "🔔 이름 붙인 사람 접속 알림과 \"이름 붙인 IP 제외\"",
     destructive: false,
   },
+  {
+    file: "supabase/admin_alerts.sql",
+    rpc: "admin_get_alert_settings",
+    args: {},
+    effect: "📱 휴대폰 알림(ntfy)과 사람별 🔔 선택",
+    destructive: false,
+  },
 ];
 
 export default function SetupStatus() {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getGameMeta } from "@/games/registry";
-import { adminRpc, DATE_TIME } from "./adminApi";
+import { adminRpc, DATE_TIME, type IpLabelMap } from "./adminApi";
 
 interface ActivityRow {
   ip: string;
@@ -45,7 +45,7 @@ export function timeAgo(iso: string, now: number): string {
  * this browser). Refreshes every minute while the hub is open. Renders
  * nothing until at least one IP has a name.
  */
-export default function LabeledActivityPanel({ reloadKey }: { reloadKey: number }) {
+export default function LabeledActivityPanel({ reloadKey, labels }: { reloadKey: number; labels: IpLabelMap }) {
   const [checkedAt, setCheckedAt] = useState<string>(readChecked);
   const [rows, setRows] = useState<ActivityRow[] | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -68,8 +68,12 @@ export default function LabeledActivityPanel({ reloadKey }: { reloadKey: number 
 
   if (!rows || rows.length === 0) return null;
 
-  const fresh = rows.filter((r) => r.last_at && Date.parse(r.last_at) > Date.parse(checkedAt));
-  const latest = rows.find((r) => r.last_at);
+  // When some names have 🔔 on, only those count as "new" — the rest are
+  // people the admin chose not to be alerted about.
+  const alertIps = new Set([...labels.values()].filter((l) => l.alert).map((l) => l.ip));
+  const watched = alertIps.size > 0 ? rows.filter((r) => alertIps.has(r.ip)) : rows;
+  const fresh = watched.filter((r) => r.last_at && Date.parse(r.last_at) > Date.parse(checkedAt));
+  const latest = watched.find((r) => r.last_at);
 
   return (
     <div
@@ -82,7 +86,9 @@ export default function LabeledActivityPanel({ reloadKey }: { reloadKey: number 
       {fresh.length > 0 ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-semibold">🔔 이름 붙인 사람 {fresh.length}명이 새로 접속했어요</p>
+            <p className="font-semibold">
+              🔔 {alertIps.size > 0 ? "알림 켠 사람" : "이름 붙인 사람"} {fresh.length}명이 새로 접속했어요
+            </p>
             <button
               type="button"
               onClick={() => {
@@ -118,7 +124,7 @@ export default function LabeledActivityPanel({ reloadKey }: { reloadKey: number 
         </>
       ) : (
         <p className="text-xs">
-          🔔 마지막 확인({timeAgo(checkedAt, now)}) 이후 새로 접속한 이름 붙인 사람이 없어요
+          🔔 마지막 확인({timeAgo(checkedAt, now)}) 이후 새로 접속한 {alertIps.size > 0 ? "알림 켠 사람" : "이름 붙인 사람"}이 없어요
           {latest?.last_at && (
             <>
               {" "}

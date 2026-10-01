@@ -39,6 +39,21 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 📱 휴대폰 알림(ntfy) + 사람별 🔔 선택 — 2026-10-02 (커밋/푸시, 배포는 웹훅 자동)
+
+- 사용자 선택(AskUserQuestion): **ntfy 앱**. `supabase/admin_alerts.sql`(**사용자 실행 필요**, DROP/DELETE 없음. 트리거는 `create or replace trigger`로 만든다):
+  `create extension if not exists pg_net`. `ip_labels`에 `alert`, `last_visit_alert_at`, `last_start_alert_at` 칸을 추가했다. 1행짜리 `alert_settings`
+  (enabled, ntfy_topic, notify_visits, notify_starts)와 `game_names`(registry에서 뽑은 48개, 매 실행마다 upsert)를 만든다. `send_admin_alert`는
+  `net.http_post('https://ntfy.sh', JSON {topic,title,message,tags,click})`로 보내고 public/anon/authenticated 권한은 모두 회수했다. AFTER INSERT 트리거
+  `site_visits_alert`(접속, IP당 30분 쿨다운)와 `game_events_alert`(game_start, 10분 쿨다운)는 `update ... returning label`로 쿨다운을 원자적으로 처리하고,
+  `exception when others`로 기록 자체는 절대 막지 않는다. 관리자 RPC: `admin_get/set_alert_settings`(topic은 12~64자 `[A-Za-z0-9_-]`),
+  `admin_send_test_alert`, `admin_set_ip_alert`, `admin_ip_alert_flags`. **DB가 직접 발송하므로 service key가 필요 없다.** 메시지에는 이름과 게임명만 넣고 IP는 넣지 않는다.
+- 검증: embedded-postgres에서 `net.http_post`를 발송 기록 테이블로 대체해 확인했다(`run_alerts.mjs`). 🔔 off면 0건, on이면 1건, 30분 내 재접속은 0건,
+  게임 시작 메시지에 한글 게임명, 다른 사람 off, 전체 off, 테스트 발송, 짧은 topic 거부, anon 거부.
+- 앱: `components/admin/AlertSettingsPanel.tsx`(IP 관리 탭 상단. ntfy 앱 링크, `makeTopic()` 랜덤 주제 `bghub-` + 20자, 복사/새로 만들기, 알림 켜기·접속·
+  게임 시작 토글, 테스트 버튼). IpLabelsTab 행마다 `AlertSwitch`(이름이 있을 때만). `useIpLabels`가 `admin_ip_alert_flags`를 합쳐서
+  `IpLabel.alert`를 채운다. LabeledActivityPanel은 🔔 켠 사람이 하나라도 있으면 그 사람들만 "새 접속"으로 센다. SetupStatus CHECKS에 항목을 추가했다.
+
 ## 🔔 이름 붙인 사람 접속 알림 + "이름 붙인 IP 제외" — 2026-10-02 (커밋/푸시, 배포는 웹훅 자동)
 
 - `supabase/admin_ip_labels_2.sql`(**사용자 실행 필요**, 함수 교체·추가만 하므로 확인 창 없음): `is_excluded_row`를 같은 시그니처로 확장했다(stable

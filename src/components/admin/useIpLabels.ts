@@ -14,9 +14,14 @@ export function useIpLabels(): { labels: IpLabelMap; reload: () => void } {
 
   useEffect(() => {
     let cancelled = false;
-    void adminRpc<IpLabel>("admin_list_ip_labels", {}).then((result) => {
+    void Promise.all([
+      adminRpc<IpLabel>("admin_list_ip_labels", {}),
+      // 🔔 switches — absent until supabase/admin_alerts.sql has run.
+      adminRpc<{ ip: string; alert: boolean }>("admin_ip_alert_flags", {}),
+    ]).then(([result, flags]) => {
       if (cancelled || "error" in result) return;
-      setLabels(new Map(result.data.map((l) => [l.ip, l])));
+      const alertByIp = new Map("error" in flags ? [] : flags.data.map((f) => [f.ip, f.alert]));
+      setLabels(new Map(result.data.map((l) => [l.ip, { ...l, alert: alertByIp.get(l.ip) }])));
     });
     return () => {
       cancelled = true;

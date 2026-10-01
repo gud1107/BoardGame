@@ -46,3 +46,14 @@ describe("timeAgo", () => {
     expect(timeAgo("2026-10-02T09:00:00Z", now)).toBe("3시간 전");
   });
 });
+
+import { makeTopic } from "../AlertSettingsPanel";
+
+describe("makeTopic", () => {
+  it("makes a long random topic the database will accept", () => {
+    const a = makeTopic();
+    expect(a).toMatch(/^bghub-[a-z0-9]{20}$/);
+    expect(a).toMatch(/^[A-Za-z0-9_-]{12,64}$/);
+    expect(makeTopic()).not.toBe(a);
+  });
+});
