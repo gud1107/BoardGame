@@ -14,6 +14,7 @@ import SourcesTab from "./tabs/SourcesTab";
 import BugReportsTab from "./tabs/BugReportsTab";
 import NoticeTab from "./tabs/NoticeTab";
 import GameVisibilityTab from "./tabs/GameVisibilityTab";
+import SetupStatus from "./SetupStatus";
 
 type TabKey = "games" | "trend" | "hours" | "dropoff" | "rooms" | "sources" | "bugs" | "notice" | "visibility";
 
@@ -151,6 +152,8 @@ function AdminHub() {
           </button>
         </div>
       </div>
+
+      <SetupStatus />
 
       <nav className="-mx-4 mb-4 flex gap-1 overflow-x-auto border-b border-white/10 px-4 pb-px no-scrollbar sm:mx-0 sm:px-0 light:border-slate-200">
         {TABS.map((t) => (

@@ -39,6 +39,17 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🔎 "10월 N회 플레이" 미표시 재보고 → SQL 미적용 확인 + SQL 로컬 검증 + 관리자 경고 — 2026-10-01
+
+- 재보고 시점에도 운영 DB에 `public_game_play_stats`/`site_notice`/`game_overrides`가 없었다(PGRST202/205). `hash_ip` anon 권한도
+  그대로여서 `admin_suite.sql`이 실행되지 않은 상태였다. 기록 자체는 정상이었다(10/1 배고픈 상어 2, 다섯 오이 1, 틀린그림찾기 +1).
+- **SQL 로컬 검증 방법**: scratchpad에 `embedded-postgres@16.14.0-beta.17` + `pg`를 설치한다(18.x beta는 Windows initdb에서 0xC0000005로
+  크래시, locale은 `--locale=C`). anon/authenticated 역할, `auth.users`, `auth.uid()`(request.jwt.claim.sub), default privileges를
+  stub으로 만들고, game_play_counts → visitors → game_events → admin_suite 순서로 실행한 뒤 앱 쓰기와 관리자 RPC 7종, 비관리자·anon 거부를
+  확인했다. 재실행도 OK였다. 결론: SQL에는 오류가 없다.
+- 실행이 막힌 원인 추정: SQL Editor가 DROP/DELETE를 보고 "destructive operation" 확인 창을 띄우는데, 이를 취소하면 아무것도 실행되지 않는다.
+  `components/admin/SetupStatus.tsx`는 `public_game_play_stats`가 PGRST202이면 관리자 허브 상단에 경고와 SQL Editor 링크를 표시한다.
+
 ## 🧰 관리자 허브 9종(추이·시간대·이탈·방 기록·유입·내 기록 제외·버그·공지·게임 관리) — 2026-10-01 (커밋/푸시, 배포는 웹훅 자동)
 
 - 사용자 보고 "허브에 N월 플레이 횟수가 안 나온다": 코드 문제가 아니었다. `play_stats_monthly.sql`이 실행되지 않아서 RPC
