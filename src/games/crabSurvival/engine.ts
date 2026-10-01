@@ -17,7 +17,29 @@
 
 import {
   BASE_CRIT,
+  BEAM_DMG,
+  BEAM_LENGTH,
+  BEAM_WIDTH,
   BOOST_MULT,
+  BUBBLE_RADIUS,
+  BUBBLE_STUN,
+  BURROW_DMG,
+  BURROW_RADIUS,
+  BURROW_TIME,
+  DASH_INVULN,
+  DASH_SPEED,
+  GEAR_DROP,
+  GEARS,
+  GIANT_SCALE,
+  MAGNET_BASE,
+  MAX_GEAR,
+  MUTATION_LIST,
+  MUTATION_POP,
+  MUTATIONS,
+  PEARL_CHARGES,
+  tierForLevel,
+  TIERS,
+  TOXIC_DOT,
   BOT_COUNT,
   BOT_NAMES,
   BOT_RESPAWN,
@@ -62,7 +84,10 @@ import {
   type CrabColor,
   type CreatureDef,
   type CreatureKind,
+  type CrabTier,
   type FoodKind,
+  type GearKind,
+  type MutationKind,
   type LevelDef,
   type ShieldKind,
   type SpeciesId,
@@ -135,7 +160,87 @@ export interface Crab {
   inPool: boolean;
   /** Seconds left on the species level-up surge (see SpeciesDef.perk). */
   surge: number;
+  /** Auto-firing field weapons (max 2), each with its own timer + cooldown. */
+  gear: GearSlot[];
+  /** Active buff / risk mutations. */
+  muts: MutSlot[];
+  /** Pearl-shield hits left. */
+  pearl: number;
+  /** Tier special-skill cooldown. */
+  skillCd: number;
+  /** Seconds left hidden under the sand (Tier 3 skill). */
+  burrow: number;
+  /** Seconds left on the dash roll trail (visual). */
+  dashT: number;
+  /** Oil-slick slide velocity (input ignored while set). */
+  slide: { vx: number; vy: number } | null;
+  /** Last walk direction (for the oil slide). */
+  lastMx: number;
+  lastMy: number;
+  trailT: number;
+  burnT: number;
   brain: Brain | null;
+}
+
+export interface GearSlot {
+  kind: GearKind;
+  t: number;
+  cd: number;
+}
+
+export interface MutSlot {
+  kind: MutationKind;
+  t: number;
+}
+
+/** Projectile from a field weapon. */
+export interface Shot {
+  owner: number;
+  kind: GearKind;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  dmg: number;
+  crit: boolean;
+  r: number;
+  knock: number;
+  pierce: boolean;
+  hit: number[];
+}
+
+export interface Mine {
+  id: number;
+  owner: number;
+  x: number;
+  y: number;
+  arm: number;
+  life: number;
+  dmg: number;
+  blast: number;
+}
+
+export interface Hazard {
+  owner: number;
+  x: number;
+  y: number;
+  r: number;
+  life: number;
+  maxLife: number;
+  dmg: number;
+}
+
+/** Short-lived line FX: chain lightning and the Tier 4 hydro beam. */
+export interface Beam {
+  kind: "zap" | "hydro";
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  width: number;
+  life: number;
+  maxLife: number;
 }
 
 export interface Creature {
@@ -156,9 +261,11 @@ export interface Creature {
   aggroT: number;
   walk: number;
   deadT: number;
+  stun: number;
+  burnT: number;
 }
 
-export type PickupType = "food" | "coin" | "weapon" | "shield" | "key";
+export type PickupType = "food" | "coin" | "weapon" | "shield" | "key" | "gear" | "mutation";
 
 export interface Pickup {
   id: number;
@@ -166,6 +273,8 @@ export interface Pickup {
   food?: FoodKind;
   weapon?: Equip<WeaponKind>;
   shield?: Equip<ShieldKind>;
+  gear?: GearKind;
+  mutation?: MutationKind;
   /** Points; food/meat/box coins are scaled by the collector's level gain, crab drops are absolute. */
   value: number;
   absolute: boolean;
@@ -222,7 +331,7 @@ export interface Deco {
 }
 
 export interface Particle {
-  kind: "sand" | "spark" | "splinter" | "coin" | "star" | "splash" | "heal" | "gold" | "petal" | "ring" | "streak" | "shard";
+  kind: "bubble" | "sand" | "spark" | "splinter" | "coin" | "star" | "splash" | "heal" | "gold" | "petal" | "ring" | "streak" | "shard";
   x: number;
   y: number;
   z: number;
@@ -261,6 +370,11 @@ export type GameEvent =
   | { type: "kingDown"; name: string; by: string | null; player: boolean; byPlayer: boolean }
   | { type: "kill"; killer: string; victim: string; byPlayer: boolean; victimPlayer: boolean }
   | { type: "counter" }
+  | { type: "gear"; name: string; emoji: string; player: boolean }
+  | { type: "mutation"; kind: MutationKind; player: boolean }
+  | { type: "skill"; tier: CrabTier; player: boolean }
+  | { type: "blast"; x: number; y: number; player: boolean }
+  | { type: "pearl"; player: boolean }
   | { type: "playerDeath"; by: string }
   | { type: "matchEnd" };
 
@@ -285,6 +399,8 @@ export interface CrabInput {
   faceY?: number;
   boost: boolean;
   attack: boolean;
+  /** Tier special skill (E key / ⚡ button). */
+  skill?: boolean;
 }
 
 export interface World {
@@ -304,6 +420,10 @@ export interface World {
   particles: Particle[];
   texts: FloatText[];
   events: GameEvent[];
+  shots: Shot[];
+  mines: Mine[];
+  hazards: Hazard[];
+  beams: Beam[];
   hitStop: number;
   shake: number;
   playerId: number;
@@ -348,7 +468,45 @@ export function attackReach(c: Crab): number {
 
 export function crabDps(c: Crab): number {
   const wd = c.weapon ? WEAPONS[c.weapon.kind] : UNARMED;
-  return (levelDef(c).atk * wd.dmg) / wd.cooldown;
+  let gearDps = 0;
+  for (const g of c.gear) gearDps += GEARS[g.kind].dmg * (g.kind === "shotgun" ? 3 : 1) / GEARS[g.kind].cooldown;
+  return levelDef(c).atk * atkMult(c) * (wd.dmg / wd.cooldown + gearDps * 0.6);
+}
+
+export function tierOf(c: Crab): CrabTier {
+  return tierForLevel(c.level);
+}
+export function hasMut(c: Crab, k: MutationKind): boolean {
+  return c.muts.some((m) => m.kind === k);
+}
+/** Outgoing damage multiplier: tier passive × mutations × 농게 surge. */
+export function atkMult(c: Crab): number {
+  let m = TIERS[tierOf(c)].atk;
+  for (const s of c.muts) m *= MUTATIONS[s.kind].atk;
+  if (c.surge > 0 && c.species === "fiddler") m *= PERK_ATK;
+  return m;
+}
+/** Incoming damage multiplier from tier armor and mutations (<1 = tougher). */
+export function armorMult(c: Crab): number {
+  let m = TIERS[tierOf(c)].armor;
+  for (const s of c.muts) m *= MUTATIONS[s.kind].armor;
+  if (c.surge > 0 && c.species === "snow") m *= PERK_ARMOR;
+  return m;
+}
+function critChance(c: Crab, extra: number): number {
+  if (hasMut(c, "rum")) return 1;
+  return BASE_CRIT + extra + SPECIES[c.species].crit + (c.surge > 0 && c.species === "hairy" ? PERK_CRIT : 0);
+}
+/** Score multiplier on food (황금 플랑크톤 캡슐 = 300%). */
+function gainMult(c: Crab): number {
+  return hasMut(c, "capsule") ? 3 : 1;
+}
+/** Hidden under the sand or rolling: nothing can touch it. */
+export function untouchable(c: Crab): boolean {
+  return c.invuln > 0 || c.burrow > 0;
+}
+export function targetScale(c: Crab): number {
+  return levelDef(c).scale * (hasMut(c, "giant") ? GIANT_SCALE : 1);
 }
 
 export function player(w: World): Crab {
@@ -419,6 +577,10 @@ export function createWorld(opts: MatchOptions): World {
     particles: [],
     texts: [],
     events: [],
+    shots: [],
+    mines: [],
+    hazards: [],
+    beams: [],
     hitStop: 0,
     shake: 0,
     playerId: 0,
@@ -447,7 +609,7 @@ export function createWorld(opts: MatchOptions): World {
     const bc = CRAB_COLORS[(i + 1 + CRAB_COLORS.indexOf(color)) % CRAB_COLORS.length];
     const b = makeCrab(w, name, bc, false, SPECIES_LIST[Math.floor(rand(w) * SPECIES_LIST.length)].id);
     // A staggered head start so the leaderboard isn't a flat line of zeros.
-    const head = Math.floor(rand(w) * rand(w) * 2600);
+    const head = Math.floor(rand(w) * rand(w) * 1600);
     b.score = head;
     syncLevel(b, true);
     w.crabs.push(b);
@@ -458,6 +620,7 @@ export function createWorld(opts: MatchOptions): World {
   for (let i = 0; i < POPULATION.wood; i++) spawnBox(w, "wood");
   for (let i = 0; i < POPULATION.gold; i++) spawnBox(w, "gold");
   for (let i = 0; i < POPULATION.keys; i++) spawnKey(w);
+  for (let i = 0; i < MUTATION_POP; i++) spawnMutation(w);
   updateLeaderboard(w, true);
   return w;
 }
@@ -506,6 +669,17 @@ function makeCrab(w: World, name: string, color: CrabColor, isPlayer: boolean, s
     lastAttacker: null,
     inPool: false,
     surge: 0,
+    gear: [],
+    muts: [],
+    pearl: 0,
+    skillCd: 0,
+    burrow: 0,
+    dashT: 0,
+    slide: null,
+    lastMx: Math.cos(0),
+    lastMy: 0,
+    trailT: 0,
+    burnT: 0,
     brain: isPlayer
       ? null
       : {
@@ -665,6 +839,8 @@ function spawnCreature(w: World, kind = weightedCreature(w)) {
     aggroT: 0,
     walk: 0,
     deadT: 0,
+    stun: 0,
+    burnT: 0,
   });
 }
 
@@ -677,6 +853,8 @@ function runSpawner(w: World) {
   if (wood < POPULATION.wood && rand(w) < 0.12) spawnBox(w, "wood");
   const gold = w.boxes.filter((b) => b.alive && b.kind === "gold").length;
   if (gold < POPULATION.gold && rand(w) < 0.03) spawnBox(w, "gold");
+  const muts = w.pickups.filter((p) => p.type === "mutation" && p.ttl === Infinity).length;
+  if (muts < MUTATION_POP && rand(w) < 0.3) spawnMutation(w);
   const keys = w.pickups.filter((p) => p.type === "key").length + w.crabs.filter((c) => c.alive && c.hasKey).length;
   if (keys < POPULATION.keys && rand(w) < 0.05) spawnKey(w);
   // Garbage-collect corpses & dead boxes.
@@ -813,9 +991,18 @@ export function step(w: World, input: CrabInput, rawDt: number): void {
     }
     const inp = c.isPlayer ? input : botThink(w, c, dt);
     moveCrab(w, c, inp, dt);
-    if (inp.attack && c.attackCd <= 0 && c.stun <= 0) swing(w, c);
+    if (!c.alive) continue;
+    if (inp.skill && c.skillCd <= 0 && c.stun <= 0 && c.burrow <= 0 && !c.slide) castSkill(w, c, inp);
+    if (inp.attack && c.attackCd <= 0 && c.stun <= 0 && c.burrow <= 0) swing(w, c);
+    updateGear(w, c, dt);
   }
   for (const cr of w.creatures) updateCreature(w, cr, dt);
+  updateShots(w, dt);
+  updateMines(w, dt);
+  updateHazards(w, dt);
+  giantStomp(w);
+  for (const b of w.beams) b.life -= dt;
+  w.beams = w.beams.filter((b) => b.life > 0);
   resolveCollisions(w);
   updatePickups(w, dt);
   applyZones(w, dt);
@@ -875,7 +1062,19 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
   c.stun = Math.max(0, c.stun - dt);
   c.invuln = Math.max(0, c.invuln - dt);
   c.surge = Math.max(0, c.surge - dt);
+  c.skillCd = Math.max(0, c.skillCd - dt);
+  c.dashT = Math.max(0, c.dashT - dt);
+  c.burnT = Math.max(0, c.burnT - dt);
   c.sinceHurt += dt;
+  tickMutations(w, c, dt);
+  if (!c.alive) return;
+  if (c.burrow > 0) {
+    c.burrow -= dt;
+    if (c.burrow <= 0) {
+      c.burrow = 0;
+      erupt(w, c);
+    }
+  }
   if (c.comboT > 0) {
     c.comboT -= dt;
     if (c.comboT <= 0) c.combo = 0;
@@ -887,13 +1086,25 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
 
   const lv = levelDef(c);
   let mx = inp.moveX, my = inp.moveY;
+  // 럼주: every direction comes out backwards.
+  if (hasMut(c, "rum")) {
+    mx = -mx;
+    my = -my;
+  }
   const ml = Math.hypot(mx, my);
   c.moving = ml > 0.001 && c.stun <= 0;
   if (c.moving) {
     mx /= ml;
     my /= ml;
+    c.lastMx = mx;
+    c.lastMy = my;
   } else {
     mx = my = 0;
+  }
+  // 기름 찌꺼기: input ignored, the crab skates along its slide vector.
+  if (c.slide) {
+    mx = my = 0;
+    c.moving = true;
   }
 
   // Boost / stamina.
@@ -908,13 +1119,16 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
     else c.stamina = Math.min(STAMINA_MAX, c.stamina + STAMINA_REGEN * dt);
   }
 
-  let speed = lv.speed * (c.boosting ? BOOST_MULT : 1);
+  let speed = lv.speed * (c.boosting ? BOOST_MULT : 1) * TIERS[tierOf(c)].speed;
+  for (const m of c.muts) speed *= MUTATIONS[m.kind].speed;
+  if (c.burrow > 0) speed *= 0.85;
   if (c.surge > 0 && c.species === "ghost") speed *= PERK_SPEED;
   if (isShallow(c.x, c.y)) speed *= SHALLOW_SLOW;
   if (c.attackCd > 0 && c.weapon && WEAPONS[c.weapon.kind].family === "heavy") speed *= 0.8;
 
-  c.x += (mx * speed + c.vx) * dt;
-  c.y += (my * speed + c.vy) * dt;
+  c.x += (mx * speed + c.vx + (c.slide?.vx ?? 0)) * dt;
+  c.y += (my * speed + c.vy + (c.slide?.vy ?? 0)) * dt;
+  if (c.slide) c.angle += dt * 9;
   const decay = Math.exp(-7 * dt);
   c.vx *= decay;
   c.vy *= decay;
@@ -925,7 +1139,7 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
     fx = mx;
     fy = my;
   }
-  if (Math.hypot(fx, fy) > 0.001 && c.stun <= 0) {
+  if (Math.hypot(fx, fy) > 0.001 && c.stun <= 0 && !c.slide) {
     const target = Math.atan2(fy, fx);
     let diff = target - c.angle;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -936,7 +1150,17 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
   if (c.moving) c.walk += dt * speed * 0.09 / Math.sqrt(c.scale);
 
   // Growth lerp (Transform scale + collider).
-  c.scale += (lv.scale - c.scale) * (1 - Math.exp(-2.5 * dt));
+  c.scale += (targetScale(c) - c.scale) * (1 - Math.exp(-2.5 * dt));
+
+  // 매운 고추 미역: a trail of burning seaweed behind the runner.
+  if (hasMut(c, "pepper") && c.moving) {
+    c.trailT -= dt;
+    if (c.trailT <= 0 && w.hazards.length < 160) {
+      c.trailT = 0.11;
+      const r = crabRadius(c);
+      w.hazards.push({ owner: c.id, x: c.x - c.lastMx * r * 0.8, y: c.y - c.lastMy * r * 0.8, r: r * 0.85 + 6, life: 2.4, maxLife: 2.4, dmg: lv.atk * 0.35 * atkMult(c) });
+    }
+  }
 
   // Out-of-combat regen.
   if (c.sinceHurt > REGEN_DELAY && c.hp < c.maxHp) c.hp = Math.min(c.maxHp, c.hp + c.maxHp * REGEN_RATE * SPECIES[c.species].regen * dt);
@@ -977,13 +1201,13 @@ export function swing(w: World, c: Crab) {
   let hitLiving = false;
   let hitAny = false;
   const lv = levelDef(c);
-  const atk = lv.atk * (c.surge > 0 && c.species === "fiddler" ? PERK_ATK : 1);
+  const atk = lv.atk * atkMult(c);
   const nextCombo = c.comboT > 0 ? c.combo + 1 : 1;
 
   for (const t of w.crabs) {
-    if (t === c || !t.alive || t.invuln > 0) continue;
+    if (t === c || !t.alive || untouchable(t)) continue;
     if (!inCone(c, { x: t.x, y: t.y, r: crabRadius(t) }, reach, wd.arc)) continue;
-    const crit = rand(w) < BASE_CRIT + wd.crit + SPECIES[c.species].crit + (c.surge > 0 && c.species === "hairy" ? PERK_CRIT : 0);
+    const crit = rand(w) < critChance(c, wd.crit);
     const counter = !!c.counter && c.counter.by === t.id;
     let dmg = atk * wd.dmg * comboMultiplier(nextCombo) * range(w, 0.9, 1.1);
     if (crit) dmg *= CRIT_MULT;
@@ -998,7 +1222,7 @@ export function swing(w: World, c: Crab) {
   for (const cr of w.creatures) {
     if (!cr.alive) continue;
     if (!inCone(c, { x: cr.x, y: cr.y, r: cr.def.radius }, reach, wd.arc)) continue;
-    const crit = rand(w) < BASE_CRIT + wd.crit + SPECIES[c.species].crit + (c.surge > 0 && c.species === "hairy" ? PERK_CRIT : 0);
+    const crit = rand(w) < critChance(c, wd.crit);
     let dmg = atk * wd.dmg * comboMultiplier(nextCombo) * range(w, 0.9, 1.1);
     if (crit) dmg *= CRIT_MULT;
     damageCreature(w, cr, dmg, c, crit, wd.knockback);
@@ -1036,12 +1260,27 @@ function damageCrab(
   t: Crab,
   raw: number,
   by: Crab | null,
-  o: { crit: boolean; counter: boolean; knockback: number; stun: number; sourceName?: string; sx?: number; sy?: number },
+  o: { crit: boolean; counter: boolean; knockback: number; stun: number; sourceName?: string; sx?: number; sy?: number; light?: boolean },
 ) {
-  const sx = by ? by.x : (o.sx ?? t.x), sy = by ? by.y : (o.sy ?? t.y);
+  if (t.burrow > 0) return;
+  const sx = o.sx ?? (by ? by.x : t.x), sy = o.sy ?? (by ? by.y : t.y);
   const dx = t.x - sx, dy = t.y - sy;
   const d = Math.hypot(dx, dy) || 1;
-  let dmg = raw;
+  // 진주 보호막: swallow the hit outright and fire a reflecting water blast.
+  if (t.pearl > 0) {
+    t.pearl--;
+    if (t.pearl <= 0) t.muts = t.muts.filter((m) => m.kind !== "pearl");
+    t.guardFlash = 0.2;
+    floatText(w, t.x, t.y - 28 * t.scale, "🔮 무효!", "#e0f2fe", 17, 0.9);
+    ring(w, t.x, t.y, crabRadius(t) * 3.2, "#bae6fd", 0.5);
+    burst(w, "splash", t.x, t.y, 14, 220, "#bae6fd", 4, 0.6, 140);
+    w.events.push({ type: "pearl", player: t.isPlayer });
+    if (by && by.alive && Math.hypot(by.x - t.x, by.y - t.y) < crabRadius(t) * 2 + crabRadius(by) + 160) {
+      damageCrab(w, by, levelDef(t).atk * 1.2 * atkMult(t), t, { crit: false, counter: false, knockback: 320, stun: 0.3, light: true });
+    }
+    return;
+  }
+  let dmg = raw * armorMult(t);
   let guarded = false;
   // Frontal guard: shield up and the hit comes from within ±60° of facing.
   if (t.shield) {
@@ -1061,7 +1300,6 @@ function damageCrab(
       }
     }
   }
-  if (t.surge > 0 && t.species === "snow") dmg *= PERK_ARMOR;
   dmg = Math.max(1, Math.round(dmg));
   t.hp -= dmg;
   if (by && by.surge > 0 && by.species === "mitten") by.hp = Math.min(by.maxHp, by.hp + dmg * PERK_LIFESTEAL);
@@ -1074,7 +1312,7 @@ function damageCrab(
   } else if (o.sourceName) t.lastAttacker = o.sourceName;
   // Knockback scaled by relative size; guarding halves it.
   const ratio = by ? clamp(by.scale / t.scale, 0.35, 2.2) : 1;
-  const kb = o.knockback * ratio * (guarded ? 0.5 : 1);
+  const kb = hasMut(t, "salt") ? 0 : o.knockback * ratio * (guarded ? 0.5 : 1);
   t.vx += (dx / d) * kb;
   t.vy += (dy / d) * kb;
   if (o.stun > 0 && !guarded) t.stun = Math.max(t.stun, o.stun * clamp(ratio, 0.4, 1.3));
@@ -1082,17 +1320,17 @@ function damageCrab(
   const big = dmg >= t.maxHp * 0.3;
   const label = o.counter ? "반격! " : big ? "일격! " : o.crit ? "치명타! " : "";
   const color = guarded ? "#93c5fd" : o.counter ? "#f0abfc" : big ? "#fb923c" : o.crit ? "#fde047" : t.isPlayer ? "#f87171" : "#ffffff";
-  floatText(w, t.x, t.y - 24 * t.scale, `${label}${guarded ? "🛡" : ""}${dmg}`, color, label ? 19 : 15);
-  burst(w, "spark", t.x - (dx / d) * crabRadius(t) * 0.7, t.y - (dy / d) * crabRadius(t) * 0.7, o.crit || big ? 12 : 6, 220, guarded ? "#bfdbfe" : "#fff7ae", 3.5, 0.35, 90);
+  floatText(w, t.x, t.y - 24 * t.scale, `${label}${guarded ? "🛡" : ""}${dmg}`, color, o.light ? (label ? 15 : 12) : label ? 19 : 15, o.light ? 0.6 : 0.9);
+  burst(w, "spark", t.x - (dx / d) * crabRadius(t) * 0.7, t.y - (dy / d) * crabRadius(t) * 0.7, o.light ? 3 : o.crit || big ? 12 : 6, 220, guarded ? "#bfdbfe" : "#fff7ae", 3.5, 0.35, 90);
   if (guarded) w.events.push({ type: "guard", player: t.isPlayer || !!by?.isPlayer });
   if (o.counter && by?.isPlayer) w.events.push({ type: "counter" });
 
   const playerInvolved = t.isPlayer || !!by?.isPlayer;
-  w.events.push({ type: "hit", x: t.x, y: t.y, crit: o.crit, big, player: !!by?.isPlayer, hurtPlayer: t.isPlayer });
-  if (playerInvolved) {
+  if (!o.light || t.isPlayer) w.events.push({ type: "hit", x: t.x, y: t.y, crit: o.crit, big, player: !!by?.isPlayer, hurtPlayer: t.isPlayer });
+  if (playerInvolved && !o.light) {
     w.hitStop = HIT_STOP;
     w.shake = Math.max(w.shake, t.isPlayer ? 0.6 : o.crit || big ? 0.45 : 0.22);
-  }
+  } else if (playerInvolved) w.shake = Math.max(w.shake, t.isPlayer ? 0.3 : 0.08);
   if (t.hp <= 0) killCrab(w, t, by, o.sourceName);
 }
 
@@ -1129,10 +1367,14 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
     w.stats.deaths++;
     w.events.push({ type: "playerDeath", by: killerName });
   }
+  // A field weapon with time left spills out for whoever wins the scramble.
+  const best = [...v.gear].sort((a, b) => b.t - a.t)[0];
+  if (best && best.t > 6) dropGear(w, v.x, v.y, best.kind);
   v.weapon = null;
   v.shield = null;
   v.hasKey = false;
   v.score = 0;
+  clearPowers(v);
   burst(w, "splash", v.x, v.y, 16, 200, v.color.shell, 5, 0.8, 180);
 
   if (by) {
@@ -1162,7 +1404,7 @@ function dropEquip(w: World, x: number, y: number, type: "weapon" | "shield", e:
   return pk;
 }
 
-function damageCreature(w: World, cr: Creature, dmg: number, by: Crab, crit: boolean, kb: number) {
+function damageCreature(w: World, cr: Creature, dmg: number, by: Crab, crit: boolean, kb: number, light = false) {
   const d = Math.max(1, Math.round(dmg));
   cr.hp -= d;
   if (by.surge > 0 && by.species === "mitten") by.hp = Math.min(by.maxHp, by.hp + d * PERK_LIFESTEAL);
@@ -1174,20 +1416,25 @@ function damageCreature(w: World, cr: Creature, dmg: number, by: Crab, crit: boo
   cr.vx += (dx / dd) * push;
   cr.vy += (dy / dd) * push;
   if (by.isPlayer) {
-    floatText(w, cr.x, cr.y - cr.def.radius, `${crit ? "치명타! " : ""}${d}`, crit ? "#fde047" : "#ffffff", crit ? 17 : 13, 0.7);
-    w.hitStop = Math.max(w.hitStop, HIT_STOP * 0.6);
-    w.shake = Math.max(w.shake, 0.12);
-    w.events.push({ type: "hit", x: cr.x, y: cr.y, crit, big: false, player: true, hurtPlayer: false });
+    floatText(w, cr.x, cr.y - cr.def.radius, `${crit ? "치명타! " : ""}${d}`, crit ? "#fde047" : "#ffffff", light ? 11 : crit ? 17 : 13, 0.7);
+    if (!light) {
+      w.hitStop = Math.max(w.hitStop, HIT_STOP * 0.6);
+      w.shake = Math.max(w.shake, 0.12);
+      w.events.push({ type: "hit", x: cr.x, y: cr.y, crit, big: false, player: true, hurtPlayer: false });
+    }
   }
-  burst(w, "spark", cr.x, cr.y, 5, 160, "#fff7ae", 3, 0.3, 80);
+  burst(w, "spark", cr.x, cr.y, light ? 2 : 5, 160, "#fff7ae", 3, 0.3, 80);
   if (cr.hp <= 0) {
     cr.alive = false;
     cr.deadT = 0;
-    addScore(w, by, cr.def.points * levelDef(by).gain);
+    const pts = cr.def.points * levelDef(by).gain;
+    addScore(w, by, pts);
     if (by.isPlayer) {
       w.stats.eaten++;
-      floatText(w, cr.x, cr.y - cr.def.radius - 10, `+${Math.round(cr.def.points * levelDef(by).gain).toLocaleString()}`, "#fde047", 15, 1);
+      floatText(w, cr.x, cr.y - cr.def.radius - 10, `+${Math.round(pts).toLocaleString()}`, "#fde047", 15, 1);
     }
+    if (rand(w) < GEAR_DROP[cr.kind]) dropGear(w, cr.x, cr.y, randomGear(w));
+    else if (rand(w) < 0.08) dropMutation(w, cr.x, cr.y);
     for (let i = 0; i < cr.def.meat; i++) {
       const m = newPickup(w, "food", cr.x, cr.y, Math.round(cr.def.points * 0.15), false, 11, 40);
       m.food = "meat";
@@ -1258,6 +1505,8 @@ function breakBox(w: World, b: Box, by: Crab) {
   const nCoins = gold ? 6 : 3;
   for (let i = 0; i < nCoins; i++) scatter(newPickup(w, "coin", b.x, b.y, Math.round(coinTotal / nCoins), false, gold ? 12 : 9, 40));
   if (gold) {
+    dropGear(w, b.x, b.y, randomGear(w));
+    if (rand(w) < 0.5) dropMutation(w, b.x, b.y, false);
     scatter(dropEquip(w, b.x, b.y, "weapon", freshWeapon(randomWeapon(w, 3, 5))));
     if (rand(w) < 0.6) scatter(dropEquip(w, b.x, b.y, "shield", freshShield(randomShield(w, 2, 3))));
     const m = newPickup(w, "food", b.x, b.y, FOODS.watermelon.points, false, FOODS.watermelon.radius, 40);
@@ -1267,6 +1516,7 @@ function breakBox(w: World, b: Box, by: Crab) {
     const r = rand(w);
     if (r < 0.55) scatter(dropEquip(w, b.x, b.y, "weapon", freshWeapon(randomWeapon(w, 1, 4))));
     else if (r < 0.85) scatter(dropEquip(w, b.x, b.y, "shield", freshShield(randomShield(w, 1, 2))));
+    if (rand(w) < 0.12) dropGear(w, b.x, b.y, randomGear(w));
     if (rand(w) < 0.4) {
       const f = weightedFood(w);
       const m = newPickup(w, "food", b.x, b.y, FOODS[f].points, false, FOODS[f].radius, 40);
@@ -1288,6 +1538,16 @@ function updateCreature(w: World, cr: Creature, dt: number) {
   }
   cr.hitFlash = Math.max(0, cr.hitFlash - dt);
   cr.attackCd = Math.max(0, cr.attackCd - dt);
+  cr.burnT = Math.max(0, cr.burnT - dt);
+  if (cr.stun > 0) {
+    // Bubbled / knocked airborne: drift with the knockback, no AI.
+    cr.stun -= dt;
+    cr.x += cr.vx * dt;
+    cr.y += cr.vy * dt;
+    cr.vx *= Math.exp(-6 * dt);
+    cr.vy *= Math.exp(-6 * dt);
+    return;
+  }
   cr.aggroT = Math.max(0, cr.aggroT - dt);
   cr.timer -= dt;
   const def = cr.def;
@@ -1434,7 +1694,7 @@ function tryCollect(w: World, c: Crab, p: Pickup): boolean {
   switch (p.type) {
     case "food": {
       const f = FOODS[p.food ?? "banana"];
-      const pts = p.value * lv.gain;
+      const pts = p.value * lv.gain * gainMult(c);
       addScore(w, c, pts);
       c.hp = Math.min(c.maxHp, c.hp + c.maxHp * f.heal);
       if (c.isPlayer) {
@@ -1455,6 +1715,11 @@ function tryCollect(w: World, c: Crab, p: Pickup): boolean {
       burst(w, "coin", p.x, p.y, 4, 80, "#facc15", 3, 0.4, 80);
       return true;
     }
+    case "gear":
+      return equipGear(w, c, p.gear ?? "shotgun");
+    case "mutation":
+      applyMutation(w, c, p.mutation ?? "capsule");
+      return true;
     case "key":
       if (c.hasKey) return false;
       c.hasKey = true;
@@ -1504,10 +1769,24 @@ function tryCollect(w: World, c: Crab, p: Pickup): boolean {
 
 function updatePickups(w: World, dt: number) {
   const alive = w.crabs.filter((c) => c.alive);
+  const magnets = alive.filter((c) => hasMut(c, "capsule"));
   const keep: Pickup[] = [];
   for (const p of w.pickups) {
     p.age += dt;
     if (p.lockT > 0) p.lockT -= dt;
+    // 황금 플랑크톤 캡슐: food & coins within 3× the pull radius fly to the crab.
+    if (magnets.length && (p.type === "food" || p.type === "coin")) {
+      for (const c of magnets) {
+        const R = (crabRadius(c) + MAGNET_BASE) * 3;
+        const dx = c.x - p.x, dy = c.y - p.y, d = Math.hypot(dx, dy);
+        if (d < R && d > 1) {
+          const v = Math.min(d, 560 * dt);
+          p.x += (dx / d) * v;
+          p.y += (dy / d) * v;
+          break;
+        }
+      }
+    }
     if (p.vx || p.vy || p.z > 0 || p.vz) {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
@@ -1601,6 +1880,7 @@ function respawnBot(w: World, c: Crab) {
   c.combo = 0;
   c.counter = null;
   c.stun = 0;
+  clearPowers(c);
   if (c.brain) {
     c.brain.goal = "wander";
     c.brain.aggression = clamp(c.brain.aggression + range(w, -0.15, 0.15), 0.1, 1);
@@ -1630,6 +1910,7 @@ export function revivePlayer(w: World): boolean {
   me.combo = 0;
   me.counter = null;
   me.stun = 0;
+  clearPowers(me);
   w.deathSnapshot = null;
   return true;
 }
@@ -1677,7 +1958,7 @@ export function botThink(w: World, c: Crab, dt: number): CrabInput {
     const t = w.crabs.find((o) => o.id === br.targetId);
     if (!t || !t.alive) br.think = 0;
     else {
-      tx = t.x; ty = t.y; tr = crabRadius(t); attackable = t.invuln <= 0;
+      tx = t.x; ty = t.y; tr = crabRadius(t); attackable = !untouchable(t);
     }
   } else if (br.goal === "creature") {
     const t = w.creatures.find((o) => o.id === br.targetId);
@@ -1742,7 +2023,31 @@ export function botThink(w: World, c: Crab, dt: number): CrabInput {
 
   const chasing = br.goal === "crab" && dist < 420 && dist > reach;
   const boost = (br.goal === "flee" || (chasing && c.stamina > 35)) && c.stamina > 5;
-  return { moveX: dx, moveY: dy, faceX: attack || (attackable && dist < reach * 1.5) ? faceX : undefined, faceY: attack || (attackable && dist < reach * 1.5) ? faceY : undefined, boost, attack };
+  const skill = c.skillCd <= 0 && rand(w) < dt * (1 + 3 * br.skill) && botWantsSkill(w, c, br, dist, tr, reach, attackable);
+  return { moveX: dx, moveY: dy, faceX: attack || (attackable && dist < reach * 1.5) ? faceX : undefined, faceY: attack || (attackable && dist < reach * 1.5) ? faceY : undefined, boost, attack, skill };
+}
+
+/** When each tier's special pays off for a bot. */
+function botWantsSkill(w: World, c: Crab, br: Brain, dist: number, tr: number, reach: number, attackable: boolean): boolean {
+  const r = crabRadius(c);
+  const near = (R: number) => w.crabs.filter((o) => o !== c && o.alive && !untouchable(o) && Math.hypot(o.x - c.x, o.y - c.y) < R + crabRadius(o)).length;
+  switch (tierOf(c)) {
+    case 1:
+      return (br.goal === "flee" && near(r + 140) > 0) || (br.goal === "crab" && attackable && dist - tr > reach && dist - tr < reach + 160);
+    case 2:
+      return near(BUBBLE_RADIUS * c.scale * 0.85) > 0;
+    case 3:
+      return near(BURROW_RADIUS * c.scale * 0.7) > (c.hp < c.maxHp * 0.5 ? 0 : 1) || (br.goal === "flee" && c.hp < c.maxHp * 0.35);
+    case 4: {
+      if (!attackable || br.goal === "food" || br.goal === "box") return false;
+      const len = BEAM_LENGTH * (0.8 + 0.2 * c.scale);
+      if (dist > len * 0.85) return false;
+      const want = Math.atan2(br.gy - c.y, br.gx - c.x);
+      const t = br.goal === "crab" ? w.crabs.find((o) => o.id === br.targetId) : null;
+      const aimAt = t ? Math.atan2(t.y - c.y, t.x - c.x) : want;
+      return Math.abs(Math.atan2(Math.sin(aimAt - c.angle), Math.cos(aimAt - c.angle))) < 0.12;
+    }
+  }
 }
 
 function decide(w: World, c: Crab, br: Brain, hpFrac: number) {
@@ -1786,7 +2091,7 @@ function decide(w: World, c: Crab, br: Brain, hpFrac: number) {
   };
 
   for (const o of w.crabs) {
-    if (o === c || !o.alive || o.invuln > 0) continue;
+    if (o === c || !o.alive || untouchable(o)) continue;
     const d = Math.hypot(o.x - c.x, o.y - c.y);
     const isKing = o.id === w.kingId;
     if (d > vision * (isKing ? 1.8 : 1)) continue;
@@ -1832,6 +2137,14 @@ function decide(w: World, c: Crab, br: Brain, hpFrac: number) {
     } else if (p.type === "shield" && p.shield) {
       const curTier = c.shield ? SHIELDS[c.shield.kind].tier : 0;
       v = SHIELDS[p.shield.kind].tier > curTier ? 900 * lv.gain : 0;
+    } else if (p.type === "gear" && p.gear) {
+      const g = p.gear;
+      v = c.gear.length < MAX_GEAR || c.gear.some((x) => x.kind === g || x.t < 8) ? 1400 * lv.gain : 0;
+    } else if (p.type === "mutation" && p.mutation) {
+      const m = MUTATIONS[p.mutation];
+      // Bold bots gamble on the risky ones; nobody wants the oil slick.
+      v = p.mutation === "oil" ? 0 : m.risk ? 500 * lv.gain * br.aggression : 1100 * lv.gain;
+      if (hasMut(c, p.mutation)) v *= 0.3;
     }
     if (v > 0) consider("food", p.id, p.x, p.y, v / (d + 40));
   }
@@ -1859,6 +2172,506 @@ function setFlee(br: Brain, c: Crab, threat: Crab) {
   const edgeBias = Math.hypot(c.x, c.y) > 1300 ? 0.9 : 0.2;
   br.gx = c.x + ((ax / l) + cx * edgeBias) * 300;
   br.gy = c.y + ((ay / l) + cy * edgeBias) * 300;
+}
+
+// ── 하이퍼 성장 파워업: field weapons, mutations, tier skills ────────────────
+
+function clearPowers(c: Crab) {
+  c.gear = [];
+  c.muts = [];
+  c.pearl = 0;
+  c.burrow = 0;
+  c.slide = null;
+  c.skillCd = 0;
+  c.dashT = 0;
+}
+
+function randomGear(w: World): GearKind {
+  return pick(w, Object.keys(GEARS) as GearKind[]);
+}
+
+function weightedMutation(w: World): MutationKind {
+  const total = MUTATION_LIST.reduce((a, m) => a + m.weight, 0);
+  let r = rand(w) * total;
+  for (const m of MUTATION_LIST) {
+    r -= m.weight;
+    if (r <= 0) return m.kind;
+  }
+  return "capsule";
+}
+
+function spawnMutation(w: World) {
+  const p = randomLandPoint(w, 14, true, 0.92);
+  const pk = newPickup(w, "mutation", p.x, p.y, 0, true, 13);
+  pk.mutation = weightedMutation(w);
+}
+
+function dropGear(w: World, x: number, y: number, kind: GearKind) {
+  const pk = newPickup(w, "gear", x, y, 0, true, 15, 40);
+  pk.gear = kind;
+  const a = rand(w) * Math.PI * 2;
+  pk.vx = Math.cos(a) * 110;
+  pk.vy = Math.sin(a) * 110;
+  pk.vz = 230;
+  return pk;
+}
+
+function dropMutation(w: World, x: number, y: number, allowRisk = true) {
+  let kind = weightedMutation(w);
+  for (let i = 0; i < 4 && !allowRisk && MUTATIONS[kind].risk; i++) kind = weightedMutation(w);
+  const pk = newPickup(w, "mutation", x, y, 0, true, 13, 40);
+  pk.mutation = kind;
+  const a = rand(w) * Math.PI * 2;
+  pk.vx = Math.cos(a) * 90;
+  pk.vy = Math.sin(a) * 90;
+  pk.vz = 200;
+}
+
+/** Same weapon refreshes its timer; a full rack swaps out the one closest to expiring. */
+export function equipGear(w: World, c: Crab, kind: GearKind): boolean {
+  const def = GEARS[kind];
+  const same = c.gear.find((g) => g.kind === kind);
+  if (same) same.t = def.duration;
+  else if (c.gear.length < MAX_GEAR) c.gear.push({ kind, t: def.duration, cd: 0.2 });
+  else {
+    const worst = c.gear.reduce((a, g) => (g.t < a.t ? g : a), c.gear[0]);
+    if (worst.t > def.duration * 0.8) return false;
+    c.gear[c.gear.indexOf(worst)] = { kind, t: def.duration, cd: 0.2 };
+  }
+  burst(w, "star", c.x, c.y, 8, 160, def.color, 4, 0.6, 160);
+  if (c.isPlayer) {
+    w.events.push({ type: "gear", name: def.name, emoji: def.emoji, player: true });
+    floatText(w, c.x, c.y - 34 * c.scale, `${def.emoji} ${def.name}!`, "#a5f3fc", 16, 1.2);
+  }
+  return true;
+}
+
+export function applyMutation(w: World, c: Crab, kind: MutationKind) {
+  const def = MUTATIONS[kind];
+  c.muts = c.muts.filter((m) => m.kind !== kind);
+  c.muts.push({ kind, t: def.duration });
+  if (kind === "pearl") c.pearl = PEARL_CHARGES;
+  if (kind === "oil") {
+    const sp = levelDef(c).speed * 1.15;
+    const mx = c.moving ? c.lastMx : Math.cos(c.angle), my = c.moving ? c.lastMy : Math.sin(c.angle);
+    c.slide = { vx: mx * sp, vy: my * sp };
+    burst(w, "splash", c.x, c.y, 10, 120, "#1e293b", 5, 0.7, 60);
+  } else {
+    burst(w, def.risk ? "spark" : "star", c.x, c.y, 12, 200, def.color, 4.5, 0.7, 180);
+    ring(w, c.x, c.y, crabRadius(c) * 2.4, def.color, 0.5);
+  }
+  if (c.isPlayer) w.events.push({ type: "mutation", kind, player: true });
+  floatText(w, c.x, c.y - 34 * c.scale - (c.isPlayer ? 0 : 6), `${def.emoji} ${def.name}`, def.risk ? "#fca5a5" : "#86efac", c.isPlayer ? 17 : 12, 1.3);
+}
+
+function tickMutations(w: World, c: Crab, dt: number) {
+  if (!c.muts.length) return;
+  for (const m of c.muts) m.t -= dt;
+  if (hasMut(c, "toxic")) {
+    // Self-poisoning counts as being hurt (no natural regen), but never kills on its own.
+    c.sinceHurt = 0;
+    c.hp = Math.max(1, c.hp - c.maxHp * TOXIC_DOT * dt);
+    if (rand(w) < dt * 8) burst(w, "heal", c.x, c.y, 1, 30, "#84cc16", 4, 0.7, 80);
+  }
+  if (c.slide) {
+    // Skidding on oil: bounce off the sea wall instead of pinning against it.
+    const d = Math.hypot(c.x, c.y);
+    if (d > wallRadius(c.x, c.y) - crabRadius(c) - 4 && c.slide.vx * c.x + c.slide.vy * c.y > 0) {
+      c.slide.vx = -c.slide.vx;
+      c.slide.vy = -c.slide.vy;
+    }
+  }
+  const expired = c.muts.filter((m) => m.t <= 0);
+  if (!expired.length) return;
+  c.muts = c.muts.filter((m) => m.t > 0);
+  for (const m of expired) {
+    if (m.kind === "pearl") c.pearl = 0;
+    if (m.kind === "oil") c.slide = null;
+  }
+}
+
+type Foe = { x: number; y: number; r: number; crab?: Crab; cr?: Creature };
+
+/** Auto-aim: the nearest crab or creature within range. */
+function nearestFoe(w: World, c: Crab, range: number, skip: number[] = [], fromX = c.x, fromY = c.y): Foe | null {
+  let best: Foe | null = null;
+  let bd = range;
+  for (const o of w.crabs) {
+    if (o === c || !o.alive || untouchable(o) || skip.includes(o.id)) continue;
+    const d = Math.hypot(o.x - fromX, o.y - fromY) - crabRadius(o) - 20;
+    if (d < bd) {
+      bd = d;
+      best = { x: o.x, y: o.y, r: crabRadius(o), crab: o };
+    }
+  }
+  for (const o of w.creatures) {
+    if (!o.alive || skip.includes(o.id)) continue;
+    const d = Math.hypot(o.x - fromX, o.y - fromY) - o.def.radius;
+    if (d < bd) {
+      bd = d;
+      best = { x: o.x, y: o.y, r: o.def.radius, cr: o };
+    }
+  }
+  return best;
+}
+
+function gearHit(w: World, c: Crab, kind: GearKind, mult = 1): { dmg: number; crit: boolean } {
+  const crit = rand(w) < critChance(c, 0);
+  let dmg = levelDef(c).atk * GEARS[kind].dmg * atkMult(c) * mult * range(w, 0.9, 1.1);
+  if (crit) dmg *= CRIT_MULT;
+  return { dmg, crit };
+}
+
+function updateGear(w: World, c: Crab, dt: number) {
+  if (!c.gear.length) return;
+  for (const g of c.gear) {
+    g.t -= dt;
+    g.cd -= dt;
+  }
+  const gone = c.gear.filter((g) => g.t <= 0);
+  if (gone.length) {
+    c.gear = c.gear.filter((g) => g.t > 0);
+    if (c.isPlayer) for (const g of gone) floatText(w, c.x, c.y - 30 * c.scale, `${GEARS[g.kind].emoji} 사용 시간 종료`, "#cbd5e1", 13, 1);
+  }
+  if (c.burrow > 0 || c.stun > 0) return;
+  const r = crabRadius(c);
+  const reachK = 0.8 + 0.2 * c.scale;
+  for (const g of c.gear) {
+    if (g.cd > 0) continue;
+    const def = GEARS[g.kind];
+    switch (g.kind) {
+      case "shotgun":
+      case "needle":
+      case "trident": {
+        const t = nearestFoe(w, c, def.range * reachK);
+        if (!t) continue;
+        g.cd = def.cooldown;
+        const a = Math.atan2(t.y - c.y, t.x - c.x);
+        const ox = c.x + Math.cos(a) * r, oy = c.y + Math.sin(a) * r;
+        if (g.kind === "shotgun") {
+          const speed = 760;
+          for (let i = -2; i <= 2; i++) {
+            const h = gearHit(w, c, "shotgun");
+            const aa = a + i * 0.15;
+            w.shots.push({ owner: c.id, kind: "shotgun", x: ox, y: oy, vx: Math.cos(aa) * speed, vy: Math.sin(aa) * speed, life: (def.range * reachK) / speed, dmg: h.dmg, crit: h.crit, r: 7 * Math.sqrt(c.scale), knock: 120, pierce: false, hit: [] });
+          }
+          burst(w, "shard", ox, oy, 5, 200, def.color, 3, 0.25, 40);
+        } else if (g.kind === "needle") {
+          const speed = 980;
+          const h = gearHit(w, c, "needle");
+          const aa = a + range(w, -0.06, 0.06);
+          w.shots.push({ owner: c.id, kind: "needle", x: ox, y: oy, vx: Math.cos(aa) * speed, vy: Math.sin(aa) * speed, life: (def.range * reachK) / speed, dmg: h.dmg, crit: h.crit, r: 6 * Math.sqrt(c.scale), knock: 170, pierce: false, hit: [] });
+        } else {
+          const speed = 840;
+          const h = gearHit(w, c, "trident");
+          w.shots.push({ owner: c.id, kind: "trident", x: ox, y: oy, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: (def.range * reachK * 1.3) / speed, dmg: h.dmg, crit: h.crit, r: 13 * Math.sqrt(c.scale), knock: 280, pierce: true, hit: [] });
+        }
+        break;
+      }
+      case "zap": {
+        let t = nearestFoe(w, c, def.range * reachK);
+        if (!t) continue;
+        g.cd = def.cooldown;
+        // Chain lightning: up to 3 links, each hop picking the nearest unzapped foe.
+        const hit: number[] = [];
+        let fx = c.x, fy = c.y;
+        for (let i = 0; i < 3 && t; i++) {
+          w.beams.push({ kind: "zap", x1: fx, y1: fy, x2: t.x, y2: t.y, width: 3 + c.scale, life: 0.28, maxLife: 0.28 });
+          const h = gearHit(w, c, "zap", 1 - i * 0.15);
+          if (t.crab) {
+            hit.push(t.crab.id);
+            damageCrab(w, t.crab, h.dmg, c, { crit: h.crit, counter: false, knockback: 40, stun: 0.25, light: true, sx: fx, sy: fy });
+          } else if (t.cr) {
+            hit.push(t.cr.id);
+            damageCreature(w, t.cr, h.dmg, c, h.crit, 40, true);
+            t.cr.stun = Math.max(t.cr.stun, 0.25);
+          }
+          burst(w, "spark", t.x, t.y, 6, 200, "#ddd6fe", 3, 0.3, 80);
+          fx = t.x;
+          fy = t.y;
+          t = nearestFoe(w, c, 210 * reachK, hit, fx, fy);
+        }
+        break;
+      }
+      case "mine": {
+        if (!c.moving) continue;
+        g.cd = def.cooldown;
+        const h = gearHit(w, c, "mine");
+        const mine: Mine = { id: w.nextId++, owner: c.id, x: c.x - c.lastMx * r * 1.3, y: c.y - c.lastMy * r * 1.3, arm: 0.6, life: 14, dmg: h.dmg, blast: 85 * reachK };
+        if (w.mines.filter((m) => m.owner === c.id).length >= 5) w.mines.splice(w.mines.findIndex((m) => m.owner === c.id), 1);
+        w.mines.push(mine);
+        break;
+      }
+      case "saw": {
+        g.cd = def.cooldown;
+        const reach = r + 30 * c.scale;
+        for (const t of w.crabs) {
+          if (t === c || !t.alive || untouchable(t)) continue;
+          if (!inCone(c, { x: t.x, y: t.y, r: crabRadius(t) }, reach, 1.3)) continue;
+          const h = gearHit(w, c, "saw");
+          damageCrab(w, t, h.dmg, c, { crit: h.crit, counter: false, knockback: 25, stun: 0, light: true });
+        }
+        for (const t of w.creatures) {
+          if (!t.alive || !inCone(c, { x: t.x, y: t.y, r: t.def.radius }, reach, 1.3)) continue;
+          const h = gearHit(w, c, "saw");
+          damageCreature(w, t, h.dmg, c, h.crit, 25, true);
+        }
+        for (const b of w.boxes) {
+          if (b.alive && b.kind === "wood" && inCone(c, { x: b.x, y: b.y, r: BOXES.wood.radius }, reach, 1.3)) hitBox(w, b, c, gearHit(w, c, "saw").dmg);
+        }
+        break;
+      }
+    }
+  }
+}
+
+function updateShots(w: World, dt: number) {
+  if (!w.shots.length) return;
+  const keep: Shot[] = [];
+  for (const s of w.shots) {
+    s.life -= dt;
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    let dead = s.life <= 0;
+    if (!dead) {
+      for (const k of w.rocks) {
+        if (Math.hypot(s.x - k.x, s.y - k.y) < k.r) {
+          dead = true;
+          break;
+        }
+      }
+    }
+    const owner = w.crabs.find((c) => c.id === s.owner);
+    if (!dead && owner) {
+      const sv = Math.hypot(s.vx, s.vy) || 1;
+      const sx = s.x - (s.vx / sv) * 40, sy = s.y - (s.vy / sv) * 40;
+      for (const t of w.crabs) {
+        if (t === owner || !t.alive || untouchable(t) || s.hit.includes(t.id)) continue;
+        if (Math.hypot(t.x - s.x, t.y - s.y) > crabRadius(t) + s.r) continue;
+        s.hit.push(t.id);
+        damageCrab(w, t, s.dmg, owner.alive ? owner : null, { crit: s.crit, counter: false, knockback: s.knock, stun: 0, light: s.kind !== "trident", sourceName: GEARS[s.kind].name, sx, sy });
+        if (!s.pierce) {
+          dead = true;
+          break;
+        }
+      }
+      if (!dead && owner.alive) {
+        for (const t of w.creatures) {
+          if (!t.alive || s.hit.includes(t.id)) continue;
+          if (Math.hypot(t.x - s.x, t.y - s.y) > t.def.radius + s.r) continue;
+          s.hit.push(t.id);
+          damageCreature(w, t, s.dmg, owner, s.crit, s.knock, s.kind !== "trident");
+          if (!s.pierce) {
+            dead = true;
+            break;
+          }
+        }
+      }
+    }
+    if (dead) {
+      if (s.life > 0) burst(w, "spark", s.x, s.y, 2, 120, GEARS[s.kind].color, 2.5, 0.25, 40);
+      continue;
+    }
+    keep.push(s);
+  }
+  w.shots = keep;
+}
+
+function explode(w: World, x: number, y: number, radius: number, dmg: number, owner: Crab | null, ownerId: number, opts: { stun: number; knock: number; color: string; name: string; crit?: boolean }) {
+  for (const t of w.crabs) {
+    if (t.id === ownerId || !t.alive || untouchable(t)) continue;
+    if (Math.hypot(t.x - x, t.y - y) > radius + crabRadius(t)) continue;
+    damageCrab(w, t, dmg, owner, { crit: !!opts.crit, counter: false, knockback: opts.knock, stun: 0, sourceName: opts.name, sx: x, sy: y });
+    if (opts.stun > 0) t.stun = Math.max(t.stun, opts.stun);
+  }
+  if (owner) {
+    for (const t of w.creatures) {
+      if (!t.alive || Math.hypot(t.x - x, t.y - y) > radius + t.def.radius) continue;
+      damageCreature(w, t, dmg, owner, !!opts.crit, opts.knock, true);
+      if (opts.stun > 0) t.stun = Math.max(t.stun, opts.stun);
+    }
+  }
+  ring(w, x, y, radius, opts.color, 0.5);
+  burst(w, "splash", x, y, 18, 260, opts.color, 5, 0.7, 220);
+  w.events.push({ type: "blast", x, y, player: !!owner?.isPlayer });
+}
+
+function updateMines(w: World, dt: number) {
+  if (!w.mines.length) return;
+  const keep: Mine[] = [];
+  for (const m of w.mines) {
+    m.life -= dt;
+    m.arm -= dt;
+    if (m.life <= 0) continue;
+    if (m.arm > 0) {
+      keep.push(m);
+      continue;
+    }
+    const trig =
+      w.crabs.some((c) => c.alive && c.id !== m.owner && !untouchable(c) && Math.hypot(c.x - m.x, c.y - m.y) < crabRadius(c) + 14) ||
+      w.creatures.some((c) => c.alive && Math.hypot(c.x - m.x, c.y - m.y) < c.def.radius + 14);
+    if (!trig) {
+      keep.push(m);
+      continue;
+    }
+    const owner = w.crabs.find((c) => c.id === m.owner && c.alive) ?? null;
+    explode(w, m.x, m.y, m.blast, m.dmg, owner, m.owner, { stun: 0.4, knock: 260, color: "#a3e635", name: "복어 독 거품" });
+  }
+  w.mines = keep;
+}
+
+function updateHazards(w: World, dt: number) {
+  if (!w.hazards.length) return;
+  for (const h of w.hazards) h.life -= dt;
+  w.hazards = w.hazards.filter((h) => h.life > 0);
+  for (const c of w.crabs) {
+    if (!c.alive || c.burnT > 0 || untouchable(c)) continue;
+    const r = crabRadius(c);
+    const h = w.hazards.find((z) => z.owner !== c.id && Math.hypot(c.x - z.x, c.y - z.y) < z.r + r * 0.7);
+    if (!h) continue;
+    c.burnT = 0.45;
+    const owner = w.crabs.find((o) => o.id === h.owner && o.alive) ?? null;
+    damageCrab(w, c, h.dmg, owner, { crit: false, counter: false, knockback: 0, stun: 0, light: true, sourceName: "불꽃 미역", sx: h.x, sy: h.y });
+  }
+  for (const cr of w.creatures) {
+    if (!cr.alive || cr.burnT > 0) continue;
+    const h = w.hazards.find((z) => Math.hypot(cr.x - z.x, cr.y - z.y) < z.r + cr.def.radius * 0.7);
+    if (!h) continue;
+    const owner = w.crabs.find((o) => o.id === h.owner && o.alive);
+    if (!owner) continue;
+    cr.burnT = 0.45;
+    damageCreature(w, cr, h.dmg, owner, false, 0, true);
+  }
+}
+
+/** 거대화: small fry under a giant's feet are squashed flat. */
+function giantStomp(w: World) {
+  for (const c of w.crabs) {
+    if (!c.alive || !hasMut(c, "giant")) continue;
+    const r = crabRadius(c);
+    for (const cr of w.creatures) {
+      if (!cr.alive || cr.def.hp > 120) continue;
+      if (Math.hypot(cr.x - c.x, cr.y - c.y) > r * 0.95 + cr.def.radius) continue;
+      damageCreature(w, cr, cr.hp + 1, c, false, 200, true);
+      burst(w, "sand", cr.x, cr.y, 8, 160, "#e8cf94", 5, 0.5, 80);
+    }
+  }
+}
+
+// ── Tier skills (spec: 게딱지 특수기) ─────────────────────────────────────
+
+export function castSkill(w: World, c: Crab, inp: CrabInput) {
+  const tier = tierOf(c);
+  const def = TIERS[tier];
+  c.skillCd = def.skillCooldown;
+  const r = crabRadius(c);
+  const atk = levelDef(c).atk * atkMult(c);
+  w.events.push({ type: "skill", tier, player: c.isPlayer });
+  switch (tier) {
+    case 1: {
+      // 옆걸음 대시: roll toward the stick (or facing), briefly untouchable.
+      let dx = inp.moveX, dy = inp.moveY;
+      if (hasMut(c, "rum")) {
+        dx = -dx;
+        dy = -dy;
+      }
+      const l = Math.hypot(dx, dy);
+      if (l < 0.01) {
+        dx = Math.cos(c.angle);
+        dy = Math.sin(c.angle);
+      } else {
+        dx /= l;
+        dy /= l;
+      }
+      c.vx += dx * DASH_SPEED;
+      c.vy += dy * DASH_SPEED;
+      c.invuln = Math.max(c.invuln, DASH_INVULN);
+      c.dashT = 0.35;
+      for (let i = 0; i < 10; i++) {
+        w.particles.push({ kind: "streak", x: c.x + range(w, -r, r), y: c.y + range(w, -r, r), z: 6, vx: -dx * 380, vy: -dy * 380, vz: 0, life: 0.3, maxLife: 0.3, size: 3 + 2 * c.scale, color: "#fed7aa" });
+      }
+      burst(w, "sand", c.x, c.y, 10, 160, "#e8cf94", 5 * c.scale, 0.5, 60);
+      break;
+    }
+    case 2: {
+      // 버블 스핏: 360° oxygen-bubble burst that stuns everything around.
+      const R = BUBBLE_RADIUS * c.scale;
+      for (const t of w.crabs) {
+        if (t === c || !t.alive || untouchable(t)) continue;
+        if (Math.hypot(t.x - c.x, t.y - c.y) > R + crabRadius(t)) continue;
+        damageCrab(w, t, atk * 0.5, c, { crit: false, counter: false, knockback: 160, stun: 0 });
+        t.stun = Math.max(t.stun, BUBBLE_STUN);
+      }
+      for (const t of w.creatures) {
+        if (!t.alive || Math.hypot(t.x - c.x, t.y - c.y) > R + t.def.radius) continue;
+        damageCreature(w, t, atk * 0.5, c, false, 160, true);
+        t.stun = Math.max(t.stun, BUBBLE_STUN);
+      }
+      ring(w, c.x, c.y, R, "#7dd3fc", 0.6);
+      ring(w, c.x, c.y, R * 0.6, "#e0f2fe", 0.45);
+      for (let i = 0; i < 26 && w.particles.length < 500; i++) {
+        const a = (i / 26) * Math.PI * 2;
+        const v = R * 2.2;
+        w.particles.push({ kind: "bubble", x: c.x, y: c.y, z: 8, vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: 60, life: 0.7, maxLife: 0.7, size: 4 + 2 * c.scale, color: "#bae6fd" });
+      }
+      break;
+    }
+    case 3: {
+      // 모래 잠복: vanish under the sand; `erupt` fires when the timer runs out.
+      c.burrow = BURROW_TIME;
+      c.swing = 0;
+      burst(w, "sand", c.x, c.y, 22, 200, "#d6b673", 6 * c.scale, 0.8, 140);
+      break;
+    }
+    case 4: {
+      // 고압 수류 멜트 빔: an instant piercing water laser down the facing line.
+      const len = BEAM_LENGTH * (0.8 + 0.2 * c.scale);
+      const hw = BEAM_WIDTH * c.scale;
+      const ux = Math.cos(c.angle), uy = Math.sin(c.angle);
+      const x1 = c.x + ux * r * 0.8, y1 = c.y + uy * r * 0.8;
+      const along = (x: number, y: number) => {
+        const px = x - x1, py = y - y1;
+        return { t: px * ux + py * uy, d: Math.abs(px * -uy + py * ux) };
+      };
+      for (const t of w.crabs) {
+        if (t === c || !t.alive || untouchable(t)) continue;
+        const a = along(t.x, t.y);
+        if (a.t < -crabRadius(t) || a.t > len + crabRadius(t) || a.d > hw + crabRadius(t)) continue;
+        const crit = rand(w) < critChance(c, 0);
+        damageCrab(w, t, atk * BEAM_DMG * (crit ? CRIT_MULT : 1), c, { crit, counter: false, knockback: 420, stun: 0.3, sx: x1 + ux * (a.t - 60), sy: y1 + uy * (a.t - 60) });
+      }
+      for (const t of w.creatures) {
+        if (!t.alive) continue;
+        const a = along(t.x, t.y);
+        if (a.t < -t.def.radius || a.t > len + t.def.radius || a.d > hw + t.def.radius) continue;
+        damageCreature(w, t, atk * BEAM_DMG, c, false, 420, true);
+      }
+      for (const b of w.boxes) {
+        if (!b.alive || b.kind !== "wood") continue;
+        const a = along(b.x, b.y);
+        if (a.t > 0 && a.t < len && a.d < hw + BOXES.wood.radius) hitBox(w, b, c, atk * BEAM_DMG);
+      }
+      w.beams.push({ kind: "hydro", x1, y1, x2: x1 + ux * len, y2: y1 + uy * len, width: hw, life: 0.55, maxLife: 0.55 });
+      c.vx -= ux * 160;
+      c.vy -= uy * 160;
+      for (let i = 0; i < 18 && w.particles.length < 500; i++) {
+        const t = rand(w) * len;
+        w.particles.push({ kind: "splash", x: x1 + ux * t, y: y1 + uy * t, z: 10, vx: range(w, -80, 80), vy: range(w, -80, 80), vz: range(w, 120, 260), life: 0.6, maxLife: 0.6, size: 4 + 2 * c.scale, color: "#a5f3fc" });
+      }
+      if (c.isPlayer) w.shake = Math.max(w.shake, 0.55);
+      break;
+    }
+  }
+}
+
+/** Tier 3: burst out of the sand, launching everything around into the air. */
+function erupt(w: World, c: Crab) {
+  const R = BURROW_RADIUS * c.scale;
+  const atk = levelDef(c).atk * atkMult(c);
+  explode(w, c.x, c.y, R, atk * BURROW_DMG, c, c.id, { stun: 1, knock: 380, color: "#d6b673", name: c.name, crit: hasMut(c, "rum") });
+  burst(w, "sand", c.x, c.y, 30, 320, "#e8cf94", 7 * c.scale, 0.9, 320);
+  c.invuln = Math.max(c.invuln, 0.3);
+  if (c.isPlayer) w.shake = Math.max(w.shake, 0.6);
 }
 
 // ── Summary ─────────────────────────────────────────────────────────────────

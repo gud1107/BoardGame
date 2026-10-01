@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isUnlocked, LEVELS, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
-import { addScore, botThink, createWorld, player, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
+import { BUBBLE_STUN, GEARS, isUnlocked, LEVELS, tierForLevel, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
+import { addScore, applyMutation, atkMult, botThink, createWorld, equipGear, player, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
 
 const idle: CrabInput = { moveX: 0, moveY: 0, boost: false, attack: false };
 
@@ -14,6 +14,9 @@ function bare(bots = 0): World {
   w.pickups = [];
   w.creatures = [];
   w.kingId = null;
+  w.mines = [];
+  w.hazards = [];
+  w.shots = [];
   for (const c of w.crabs) {
     c.species = "flower";
     c.invuln = 0;
@@ -32,21 +35,21 @@ function face(a: Crab, b: Crab) {
 }
 
 describe("level table (spec §2.2)", () => {
-  it("keeps the spec's six milestones inside the finer 12-step base roadmap", () => {
+  it("하이퍼 성장: early milestones cut 40%, late ones tuned so Lv12 lands ~1.8x sooner", () => {
     expect(MAX_LEVEL).toBe(12);
     const anchors = [0, 2, 4, 6, 8, 11].map((i) => LEVELS[i]);
     expect(anchors.map((l) => [l.points, l.scale, l.atk, l.hp])).toEqual([
       [0, 1.0, 10, 100],
-      [1_000, 1.3, 18, 200],
-      [5_000, 1.7, 35, 450],
-      [20_000, 2.2, 65, 1_000],
-      [100_000, 2.8, 120, 2_500],
-      [500_000, 3.5, 220, 5_000],
+      [600, 1.3, 18, 200],
+      [3_000, 1.7, 35, 450],
+      [15_000, 2.2, 65, 1_000],
+      [90_000, 2.8, 120, 2_500],
+      [520_000, 3.5, 220, 5_000],
     ]);
-    expect(levelForScore(399).level).toBe(1);
-    expect(levelForScore(400).level).toBe(2);
-    expect(levelForScore(499_999).level).toBe(11);
-    expect(levelForScore(500_000).level).toBe(12);
+    expect(levelForScore(299).level).toBe(1);
+    expect(levelForScore(300).level).toBe(2);
+    expect(levelForScore(519_999).level).toBe(11);
+    expect(levelForScore(520_000).level).toBe(12);
     // Gaps shrink: no step asks for more than ~2.3x the previous threshold.
     for (let i = 2; i < LEVELS.length; i++) expect(LEVELS[i].points / LEVELS[i - 1].points).toBeLessThan(2.6);
   });
@@ -74,7 +77,7 @@ describe("level table (spec §2.2)", () => {
   it("levels up on score, grows HP, and lerps the body scale smoothly", () => {
     const w = bare();
     const me = player(w);
-    addScore(w, me, 5_000);
+    addScore(w, me, 3_000);
     expect(me.level).toBe(5);
     expect(me.maxHp).toBe(450);
     expect(w.events.some((e) => e.type === "levelUp" && e.player)).toBe(true);
@@ -351,4 +354,183 @@ describe("full match", () => {
     expect(s.rank).toBeLessThanOrEqual(s.total);
     expect(s.total).toBe(w.crabs.length);
   }, 30_000);
+});
+
+describe("하이퍼 성장: tiers + special skills", () => {
+  it("maps levels to the 4 evolution tiers", () => {
+    expect([1, 3, 4, 7, 8, 10, 11, 12].map(tierForLevel)).toEqual([1, 1, 2, 2, 3, 3, 4, 4]);
+  });
+
+  it("Tier 1 dash rolls you forward and makes you briefly untouchable", () => {
+    const w = bare(1);
+    const me = player(w);
+    step(w, { ...idle, moveX: 1, skill: true }, 1 / 60);
+    expect(me.invuln).toBeGreaterThan(0.2);
+    expect(me.vx).toBeGreaterThan(400);
+    expect(me.skillCd).toBeGreaterThan(3);
+  });
+
+  it("Tier 2 bubble spit stuns every crab around", () => {
+    const w = bare(2);
+    const [me, a, b] = w.crabs;
+    addScore(w, me, 1_300);
+    a.x = 80;
+    b.x = -90;
+    step(w, { ...idle, skill: true }, 1 / 60);
+    expect(a.stun).toBeGreaterThan(BUBBLE_STUN - 0.1);
+    expect(b.stun).toBeGreaterThan(BUBBLE_STUN - 0.1);
+  });
+
+  it("Tier 3 burrow is immune, then erupts and launches nearby crabs", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    addScore(w, me, 36_000);
+    me.scale = 2.5;
+    foe.x = 400;
+    step(w, { ...idle, skill: true }, 1 / 60);
+    expect(me.burrow).toBeGreaterThan(1);
+    foe.x = 60;
+    face(foe, me);
+    const hp = me.hp;
+    swing(w, foe);
+    expect(me.hp).toBe(hp);
+    const foeHp = foe.hp;
+    for (let i = 0; i < 100; i++) step(w, idle, 1 / 60);
+    expect(me.burrow).toBe(0);
+    expect(foe.hp).toBeLessThan(foeHp);
+  });
+
+  it("Tier 4 hydro cannon pierces everything on its line", () => {
+    const w = bare(2);
+    const [me, a, b] = w.crabs;
+    addScore(w, me, 340_000);
+    me.angle = 0;
+    a.x = 200;
+    b.x = 420;
+    a.hp = a.maxHp = b.hp = b.maxHp = 5_000;
+    step(w, { ...idle, skill: true }, 1 / 60);
+    expect(a.hp).toBeLessThan(5_000);
+    expect(b.hp).toBeLessThan(5_000);
+    expect(w.beams.some((x) => x.kind === "hydro")).toBe(true);
+  });
+});
+
+describe("field weapons", () => {
+  it("hold at most two, refresh on a duplicate, and expire", () => {
+    const w = bare();
+    const me = player(w);
+    expect(equipGear(w, me, "shotgun")).toBe(true);
+    expect(equipGear(w, me, "needle")).toBe(true);
+    me.gear[0].t = 1;
+    expect(equipGear(w, me, "shotgun")).toBe(true);
+    expect(me.gear[0].t).toBe(GEARS.shotgun.duration);
+    me.gear[1].t = 2;
+    expect(equipGear(w, me, "trident")).toBe(true);
+    expect(me.gear.map((g) => g.kind).sort()).toEqual(["shotgun", "trident"]);
+    for (let i = 0; i < 60 * 25; i++) step(w, idle, 1 / 60);
+    expect(me.gear).toHaveLength(0);
+  });
+
+  it("auto-fire at the nearest foe and land hits", () => {
+    for (const kind of ["shotgun", "needle", "trident", "zap"] as const) {
+      const w = bare(1);
+      const [me, foe] = w.crabs;
+      foe.brain = null; // a sitting target — live bots dash out of the way
+      foe.x = 160;
+      foe.hp = foe.maxHp = 10_000;
+      equipGear(w, me, kind);
+      for (let i = 0; i < 60; i++) step(w, idle, 1 / 60);
+      expect(foe.hp, kind).toBeLessThan(10_000);
+    }
+  });
+
+  it("puffer mines arm behind you and blow up under a pursuer", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    foe.x = -2000;
+    equipGear(w, me, "mine");
+    for (let i = 0; i < 20; i++) step(w, { ...idle, moveX: 1 }, 1 / 60);
+    expect(w.mines.length).toBeGreaterThan(0);
+    const m = w.mines[0];
+    for (let i = 0; i < 60; i++) step(w, idle, 1 / 60);
+    foe.x = m.x;
+    foe.y = m.y;
+    foe.hp = foe.maxHp = 10_000;
+    step(w, idle, 1 / 60);
+    expect(foe.hp).toBeLessThan(10_000);
+  });
+});
+
+describe("mutations", () => {
+  it("rum reverses the controls but every hit crits", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    applyMutation(w, me, "rum");
+    step(w, { ...idle, moveX: 1 }, 1 / 60);
+    expect(me.x).toBeLessThan(0);
+    me.x = 0;
+    foe.x = 40;
+    face(me, foe);
+    swing(w, me);
+    expect(w.texts.some((t) => t.text.startsWith("치명타"))).toBe(true);
+  });
+
+  it("toxic barrel triples damage and drains 2% HP per second", () => {
+    const w = bare();
+    const me = player(w);
+    const base = atkMult(me);
+    applyMutation(w, me, "toxic");
+    expect(atkMult(me)).toBeCloseTo(base * 3, 5);
+    me.hp = me.maxHp = 1000;
+    for (let i = 0; i < 60; i++) step(w, idle, 1 / 60);
+    expect(me.hp).toBeCloseTo(980, 0);
+  });
+
+  it("salt slows you and shrugs off knockback", () => {
+    const a = bare(), b = bare();
+    applyMutation(b, player(b), "salt");
+    for (let i = 0; i < 30; i++) {
+      step(a, { ...idle, moveX: 1 }, 1 / 60);
+      step(b, { ...idle, moveX: 1 }, 1 / 60);
+    }
+    expect(player(b).x / player(a).x).toBeCloseTo(0.6, 1);
+  });
+
+  it("pearl shield eats two hits then pops", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    applyMutation(w, me, "pearl");
+    foe.x = 40;
+    face(foe, me);
+    const hp = me.hp;
+    swing(w, foe);
+    foe.attackCd = 0;
+    swing(w, foe);
+    expect(me.hp).toBe(hp);
+    expect(me.pearl).toBe(0);
+    swing(w, foe);
+    expect(me.hp).toBeLessThan(hp);
+  });
+
+  it("oil slick takes the wheel for 3 seconds", () => {
+    const w = bare();
+    const me = player(w);
+    step(w, { ...idle, moveX: 1 }, 1 / 60);
+    applyMutation(w, me, "oil");
+    const x0 = me.x;
+    for (let i = 0; i < 30; i++) step(w, { ...idle, moveX: -1 }, 1 / 60);
+    expect(me.x).toBeGreaterThan(x0); // still skating right despite pushing left
+    for (let i = 0; i < 180; i++) step(w, idle, 1 / 60);
+    expect(me.slide).toBeNull();
+  });
+
+  it("golden capsule pulls food in and pays triple", () => {
+    const w = bare();
+    const me = player(w);
+    applyMutation(w, me, "capsule");
+    w.pickups.push({ id: 999, type: "food", food: "banana", value: 62, absolute: false, x: 70, y: 0, vx: 0, vy: 0, z: 0, vz: 0, radius: 9, age: 0, ttl: Infinity, lockId: 0, lockT: 0 });
+    for (let i = 0; i < 30; i++) step(w, idle, 1 / 60);
+    expect(w.pickups.find((p) => p.id === 999)).toBeUndefined();
+    expect(me.score).toBe(186);
+  });
 });

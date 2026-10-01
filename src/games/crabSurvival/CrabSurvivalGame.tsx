@@ -223,7 +223,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
             </button>
           </div>
           <p className="text-center text-[11px] text-white/35 light:text-slate-400">
-            PC: 마우스 방향 이동 · 좌클릭/스페이스 공격 · 우클릭/Shift 부스트 · WASD 이동 가능 · Esc 일시정지 &nbsp;|&nbsp; 모바일: 드래그 조이스틱 + 🦀 공격 · 💨 부스트
+            PC: 마우스 방향 이동 · 좌클릭/스페이스 공격 · 우클릭/Shift 부스트 · E 특수기 · WASD 이동 가능 · Esc 일시정지 &nbsp;|&nbsp; 모바일: 드래그 조이스틱 + 🦀 공격 · 💨 부스트 · 노란 버튼 특수기
           </p>
         </>
       )}

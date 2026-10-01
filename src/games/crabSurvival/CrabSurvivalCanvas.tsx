@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { roadmap, SHIELDS, SPECIES, STAMINA_MAX, WEAPONS, comboMultiplier, type SpeciesId } from "./data";
+import { GEARS, MUTATIONS, roadmap, SHIELDS, SPECIES, STAMINA_MAX, TIERS, tierForLevel, WEAPONS, comboMultiplier, type CrabTier, type MutationKind, type SpeciesId } from "./data";
 import {
   attackReach,
   createWorld,
@@ -53,6 +53,12 @@ interface Hud {
   kingName: string | null;
   inPool: boolean;
   kills: number;
+  tier: CrabTier;
+  skillCd: number;
+  burrow: boolean;
+  gear: { emoji: string; name: string; t: number; max: number }[];
+  muts: { kind: MutationKind; t: number }[];
+  pearl: number;
 }
 
 interface Banner {
@@ -112,6 +118,7 @@ export default function CrabSurvivalCanvas({
     joy: null as { id: number; ox: number; oy: number; x: number; y: number } | null,
     touchAttack: false,
     touchBoost: false,
+    touchSkill: false,
   });
   const onEndRef = useRef(onEnd);
   useEffect(() => {
@@ -200,7 +207,7 @@ export default function CrabSurvivalCanvas({
         setPause(!pausedRef.current);
         return;
       }
-      if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", "shift", "j", "k"].includes(k)) {
+      if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", "shift", "j", "k", "e", "l", "q"].includes(k)) {
         e.preventDefault();
         input.current.keys.add(k);
         audioRef.current?.unlock();
@@ -304,7 +311,22 @@ export default function CrabSurvivalCanvas({
         }
       }
       const boost = k.has("shift") || k.has("k") || inp.mouseBoost || inp.touchBoost;
-      return { moveX: dx, moveY: dy, faceX: fx, faceY: fy, boost, attack };
+      const skill = k.has("e") || k.has("q") || k.has("l") || inp.touchSkill;
+      // Tier 4 beam fires down the facing: on touch, snap it to the nearest crab in range.
+      if (inp.touchSkill && me.alive && tierForLevel(me.level) === 4 && fx === undefined) {
+        let best = 700, bx = 0, by = 0;
+        for (const c of world.crabs) {
+          if (c === me || !c.alive) continue;
+          const d = Math.hypot(c.x - me.x, c.y - me.y);
+          if (d < best) { best = d; bx = c.x; by = c.y; }
+        }
+        if (best < 700) {
+          fx = bx - me.x;
+          fy = by - me.y;
+          me.angle = Math.atan2(fy, fx);
+        }
+      }
+      return { moveX: dx, moveY: dy, faceX: fx, faceY: fy, boost, attack, skill };
     };
 
     const handleEvents = () => {
@@ -354,12 +376,38 @@ export default function CrabSurvivalCanvas({
             if (ev.player) {
               a?.levelUp(ev.species);
               const perk = SPECIES[ev.species].perk;
-              pushBanner({
-                text: `LEVEL UP! Lv${ev.level}`,
-                sub: `${road[ev.level - 1].name}(으)로 성장 · ${perk.icon} ${perk.name}: ${perk.desc.replace("레벨업 ", "")}`,
-                tone: "level",
-              });
+              const tier = tierForLevel(ev.level);
+              if (tier > tierForLevel(ev.level - 1)) {
+                const td = TIERS[tier];
+                pushBanner({ text: `🧬 진화! Tier ${tier} ${td.name}`, sub: `${td.passive} · ${td.skillIcon} ${td.skillName} 해금 [E]`, tone: "level" });
+              } else {
+                pushBanner({
+                  text: `LEVEL UP! Lv${ev.level}`,
+                  sub: `${road[ev.level - 1].name}(으)로 성장 · ${perk.icon} ${perk.name}: ${perk.desc.replace("레벨업 ", "")}`,
+                  tone: "level",
+                });
+              }
             }
+            break;
+          case "gear":
+            a?.gear();
+            pushBanner({ text: `${ev.emoji} ${ev.name}`, sub: "자동 발사 무기 장착! (최대 2개)", tone: "info" });
+            break;
+          case "mutation": {
+            const m = MUTATIONS[ev.kind];
+            a?.mutation(m.risk);
+            pushBanner({ text: `${m.emoji} ${m.name}`, sub: m.bad ? (m.good ? `▲ ${m.good}  ▼ ${m.bad}` : `▼ ${m.bad}`) : `▲ ${m.good}`, tone: m.risk ? "down" : "level" });
+            if (m.risk && navigator.vibrate) navigator.vibrate(60);
+            break;
+          }
+          case "skill":
+            if (ev.player) a?.skill(ev.tier);
+            break;
+          case "blast":
+            if (ev.player) a?.blast();
+            break;
+          case "pearl":
+            if (ev.player) a?.guard();
             break;
           case "kingNew":
             a?.fanfare();
@@ -442,6 +490,12 @@ export default function CrabSurvivalCanvas({
           kingName: king?.alive ? king.name : null,
           inPool: me.inPool,
           kills: world.stats.kills,
+          tier: tierForLevel(me.level),
+          skillCd: me.skillCd,
+          burrow: me.burrow > 0,
+          gear: me.gear.map((g) => ({ emoji: GEARS[g.kind].emoji, name: GEARS[g.kind].name, t: g.t, max: GEARS[g.kind].duration })),
+          muts: me.muts.map((m) => ({ kind: m.kind, t: m.t })),
+          pearl: me.pearl,
         });
       }
       if (world.over && endTimer === null) {
@@ -624,9 +678,36 @@ export default function CrabSurvivalCanvas({
         </div>
       </div>
 
-      {/* ── Player status (bottom-left) ── */}
+      {/* ── Player status (bottom-left): field weapons + mutations on top ── */}
       {hud && hud.alive && (
         <div className={`pointer-events-none absolute left-2 flex w-[min(62%,300px)] flex-col gap-1 bottom-2`}>
+          {(hud.gear.length > 0 || hud.muts.length > 0) && (
+            <div className="flex flex-wrap items-center gap-1">
+              {hud.gear.map((g, i) => (
+                <div key={`g${i}`} className="flex items-center gap-1 rounded-lg bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-cyan-100 ring-1 ring-cyan-400/60" title={g.name}>
+                  <span className="text-sm leading-none">{g.emoji}</span>
+                  {!compact && <span className="max-w-[78px] truncate font-bold">{g.name}</span>}
+                  <span className={`font-mono tabular-nums ${g.t < 5 ? "animate-pulse text-rose-300" : "text-cyan-300"}`}>{Math.ceil(g.t)}s</span>
+                </div>
+              ))}
+              {hud.muts.map((m) => {
+                const def = MUTATIONS[m.kind];
+                return (
+                  <div
+                    key={m.kind}
+                    className={`flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[10px] font-bold ring-1 ${def.risk ? "animate-pulse bg-rose-950/85 text-rose-200 ring-rose-500" : "bg-emerald-950/85 text-emerald-200 ring-emerald-500"}`}
+                    title={`${def.name} — ${def.good}${def.bad ? ` / ${def.bad}` : ""}`}
+                  >
+                    <span>{def.risk ? "⚠️" : "🔼"}</span>
+                    <span className="text-sm leading-none">{def.emoji}</span>
+                    {!compact && <span className="max-w-[80px] truncate">{def.name}</span>}
+                    {m.kind === "pearl" && <span>×{hud.pearl}</span>}
+                    <span className="font-mono tabular-nums">{Math.ceil(m.t)}s</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="flex items-end gap-2">
             <div className="rounded-lg bg-gradient-to-b from-orange-400 to-red-600 px-2 py-1 text-center leading-none text-white shadow ring-1 ring-white/30">
               <div className="text-[9px] font-bold opacity-80">LV</div>
@@ -664,6 +745,7 @@ export default function CrabSurvivalCanvas({
               🔑
             </div>
             {hud.kills > 0 && <div className="flex h-10 items-center rounded-lg bg-black/40 px-2 text-xs font-bold text-white ring-1 ring-white/15">✂️ {hud.kills}</div>}
+            {!isTouch && <SkillChip tier={hud.tier} cd={hud.skillCd} burrow={hud.burrow} />}
           </div>
         </div>
       )}
@@ -720,6 +802,19 @@ export default function CrabSurvivalCanvas({
             }}
           >
             💨
+          </TouchButton>
+          <TouchButton
+            className={`right-6 bottom-52 h-16 w-16 text-2xl ${hud.skillCd > 0 || hud.burrow ? "border-white/25 bg-slate-700/50" : "border-amber-200/80 bg-amber-500/50 active:bg-amber-400/70"}`}
+            label="특수기"
+            onChange={(v) => {
+              audioRef.current?.unlock();
+              input.current.touchSkill = v;
+            }}
+          >
+            <span className="relative">
+              {TIERS[hud.tier].skillIcon}
+              {hud.skillCd > 0 && <span className="absolute inset-0 flex items-center justify-center text-sm font-black text-white drop-shadow">{Math.ceil(hud.skillCd)}</span>}
+            </span>
           </TouchButton>
         </>
       )}
@@ -790,6 +885,24 @@ function Slot({ label, item, empty }: { label: string; item: { emoji: string; na
           <span className="absolute -top-1 -right-1 rounded bg-black/70 px-0.5 text-[8px] font-bold text-white tabular-nums">{item.dur}</span>
         </>
       )}
+    </div>
+  );
+}
+
+function SkillChip({ tier, cd, burrow }: { tier: CrabTier; cd: number; burrow: boolean }) {
+  const td = TIERS[tier];
+  const ready = cd <= 0 && !burrow;
+  return (
+    <div
+      className={`relative flex h-10 items-center gap-1.5 overflow-hidden rounded-lg px-2 ring-1 ${ready ? "bg-amber-500/35 ring-amber-300" : "bg-black/45 ring-white/15"}`}
+      title={`Tier ${tier} ${td.name} — ${td.skillName}: ${td.skillDescription}`}
+    >
+      {!ready && <div className="absolute inset-y-0 left-0 bg-white/10" style={{ width: `${(1 - cd / td.skillCooldown) * 100}%` }} />}
+      <span className="relative text-lg leading-none">{td.skillIcon}</span>
+      <div className="relative flex flex-col leading-tight">
+        <span className="text-[9px] text-white/70">T{tier} · {td.skillName}</span>
+        <span className={`font-mono text-[11px] font-bold ${ready ? "text-amber-200" : "text-white/80"}`}>{burrow ? "잠복 중…" : ready ? "READY [E]" : `${cd.toFixed(1)}s`}</span>
+      </div>
     </div>
   );
 }

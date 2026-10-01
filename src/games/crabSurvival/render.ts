@@ -5,8 +5,8 @@
  * crabs walk behind/in front of props correctly.
  */
 
-import { BOXES, CRAB_RADIUS, FOODS, islandRadiusAt, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
-import { crabRadius, player, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type World } from "./engine";
+import { BOXES, CRAB_RADIUS, FOODS, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
+import { crabRadius, hasMut, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
 
 export const TILT = 0.72;
 
@@ -171,6 +171,51 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     drawPool(ctx, p.x, p.y, p.r, t);
   }
 
+  // Burning seaweed trail (매운 고추 미역) and armed puffer mines.
+  for (const h of w.hazards) {
+    if (!inView(h.x, h.y)) continue;
+    const a = h.life / h.maxLife;
+    const flick = 0.8 + 0.2 * Math.sin(t * 22 + h.x);
+    const g = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, h.r * flick);
+    g.addColorStop(0, `rgba(254,240,138,${0.75 * a})`);
+    g.addColorStop(0.45, `rgba(249,115,22,${0.6 * a})`);
+    g.addColorStop(1, "rgba(220,38,38,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(h.x, h.y, h.r * flick, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (const m of w.mines) {
+    if (!inView(m.x, m.y)) continue;
+    const armed = m.arm <= 0;
+    const blink = armed && Math.sin(t * 10 + m.id) > 0.4;
+    ctx.fillStyle = "rgba(60,40,10,0.25)";
+    ctx.beginPath();
+    ctx.ellipse(m.x + 3, m.y + 4, 13, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const g = ctx.createRadialGradient(m.x - 4, m.y - 4, 2, m.x, m.y, 14);
+    g.addColorStop(0, "#ecfccb");
+    g.addColorStop(1, blink ? "#65a30d" : "#a3e635");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#3f6212";
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + m.id;
+      ctx.beginPath();
+      ctx.arc(m.x + Math.cos(a) * 12, m.y + Math.sin(a) * 12, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (blink) {
+      ctx.strokeStyle = "rgba(190,242,100,0.6)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.blast, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
   // Shadows (ground plane).
   ctx.fillStyle = "rgba(60,40,10,0.22)";
   for (const c of w.crabs) {
@@ -228,6 +273,14 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     }
   }
 
+  // Field-weapon projectiles and line FX (screen space).
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  for (const s of w.shots) {
+    if (!inView(s.x, s.y)) continue;
+    drawShot(ctx, view, W, H, s);
+  }
+  for (const b of w.beams) drawBeam(ctx, view, W, H, b, t);
+
   // Particles (screen space with height).
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   for (const p of w.particles) {
@@ -259,6 +312,18 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
       ctx.lineTo(sx - Math.cos(ang) * len, sy - Math.sin(ang) * len);
       ctx.stroke();
       ctx.lineCap = "butt";
+      continue;
+    }
+    if (p.kind === "bubble") {
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = Math.max(1.5, s * 0.3);
+      ctx.beginPath();
+      ctx.arc(sx, sy, s, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.beginPath();
+      ctx.arc(sx - s * 0.35, sy - s * 0.35, s * 0.25, 0, Math.PI * 2);
+      ctx.fill();
       continue;
     }
     if (p.kind === "petal") {
@@ -348,7 +413,140 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     ctx.fillRect(0, 0, W, H);
   }
 
+  // 방사능: green-warped vision. 럼주: a woozy purple swirl at the edges.
+  if (me.alive && hasMut(me, "toxic")) {
+    ctx.fillStyle = `rgba(101,163,13,${0.16 + 0.05 * Math.sin(t * 5)})`;
+    ctx.fillRect(0, 0, W, H);
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.7);
+    g.addColorStop(0, "rgba(132,204,22,0)");
+    g.addColorStop(1, "rgba(77,124,15,0.45)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+  if (me.alive && hasMut(me, "rum")) {
+    const g = ctx.createRadialGradient(W / 2 + Math.sin(t * 2) * 40, H / 2 + Math.cos(t * 1.7) * 30, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7);
+    g.addColorStop(0, "rgba(168,85,247,0)");
+    g.addColorStop(1, `rgba(126,34,206,${0.25 + 0.1 * Math.sin(t * 3)})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+
   drawKingMarker(ctx, view, W, H, w, t);
+}
+
+function drawShot(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: number, s: Shot) {
+  const z = cam.zoom;
+  const [x, y] = toScreen(cam, W, H, s.x, s.y, 12);
+  const ang = Math.atan2(s.vy * TILT, s.vx);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  const k = Math.max(0.7, z);
+  switch (s.kind) {
+    case "shotgun":
+      ctx.fillStyle = "#fbcfe8";
+      ctx.strokeStyle = "#9d174d";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(8 * k, 0);
+      ctx.lineTo(-4 * k, -4 * k);
+      ctx.lineTo(-2 * k, 0);
+      ctx.lineTo(-4 * k, 4 * k);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+    case "needle":
+      ctx.strokeStyle = "rgba(251,113,133,0.45)";
+      ctx.lineWidth = 3 * k;
+      ctx.beginPath();
+      ctx.moveTo(-18 * k, 0);
+      ctx.lineTo(0, 0);
+      ctx.stroke();
+      ctx.strokeStyle = "#fecdd3";
+      ctx.lineWidth = 2 * k;
+      ctx.beginPath();
+      ctx.moveTo(-7 * k, 0);
+      ctx.lineTo(7 * k, 0);
+      ctx.stroke();
+      break;
+    case "trident": {
+      const L = 26 * k * Math.sqrt(s.r / 13);
+      ctx.strokeStyle = "rgba(56,189,248,0.5)";
+      ctx.lineWidth = 7 * k;
+      ctx.beginPath();
+      ctx.moveTo(-L * 1.6, 0);
+      ctx.lineTo(0, 0);
+      ctx.stroke();
+      ctx.strokeStyle = "#b45309";
+      ctx.lineWidth = 3 * k;
+      ctx.beginPath();
+      ctx.moveTo(-L, 0);
+      ctx.lineTo(L * 0.4, 0);
+      ctx.stroke();
+      ctx.strokeStyle = "#fbbf24";
+      ctx.lineWidth = 2.5 * k;
+      ctx.beginPath();
+      ctx.moveTo(L * 0.4, -6 * k);
+      ctx.lineTo(L * 0.4, 6 * k);
+      for (const off of [-6, 0, 6]) {
+        ctx.moveTo(L * 0.4, off * k);
+        ctx.lineTo(L * 0.85, off * k);
+      }
+      ctx.stroke();
+      break;
+    }
+    default:
+      ctx.fillStyle = GEARS[s.kind].color;
+      ctx.beginPath();
+      ctx.arc(0, 0, 4 * k, 0, Math.PI * 2);
+      ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawBeam(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: number, b: Beam, t: number) {
+  const z = cam.zoom;
+  const a = b.life / b.maxLife;
+  const h = b.kind === "zap" ? 14 : 10;
+  const [x1, y1] = toScreen(cam, W, H, b.x1, b.y1, h);
+  const [x2, y2] = toScreen(cam, W, H, b.x2, b.y2, h);
+  ctx.save();
+  ctx.lineCap = "round";
+  if (b.kind === "zap") {
+    // Jagged lightning, re-jittered every frame.
+    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    const segs = Math.max(4, Math.round(len / 18));
+    const pts: [number, number][] = [[x1, y1]];
+    for (let i = 1; i < segs; i++) {
+      const j = Math.sin(t * 90 + i * 12.9898 + b.x1) * 9 * Math.max(0.7, z);
+      pts.push([x1 + (dx * i) / segs + nx * j, y1 + (dy * i) / segs + ny * j]);
+    }
+    pts.push([x2, y2]);
+    for (const [w, col] of [[b.width * 3 * Math.max(0.7, z), `rgba(167,139,250,${0.35 * a})`], [b.width * Math.max(0.7, z), `rgba(237,233,254,${a})`]] as const) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+      ctx.stroke();
+    }
+  } else {
+    const wpx = b.width * 2 * z * (0.6 + 0.4 * a);
+    for (const [k, col] of [[1.6, `rgba(14,165,233,${0.35 * a})`], [1, `rgba(103,232,249,${0.8 * a})`], [0.4, `rgba(240,253,255,${a})`]] as const) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = wpx * k * (1 + 0.06 * Math.sin(t * 40));
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = `rgba(224,242,254,${a})`;
+    ctx.beginPath();
+    ctx.arc(x1, y1, wpx * 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 // ── Ground bits ─────────────────────────────────────────────────────────────
@@ -611,6 +809,22 @@ function drawPickup(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: nu
   ctx.ellipse(gx, gy + 2, p.radius * z * 0.9, p.radius * z * 0.4, 0, 0, Math.PI * 2);
   ctx.fill();
   const size = p.radius * 2.3 * z;
+  if (p.type === "mutation" && p.mutation === "oil") {
+    // The oil slick is a trap on the ground, not a floating prize.
+    ctx.fillStyle = "rgba(15,23,42,0.82)";
+    ctx.beginPath();
+    ctx.ellipse(gx, gy, size * 1.1, size * 0.62, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(167,139,250,${0.25 + 0.15 * Math.sin(t * 2 + p.id)})`;
+    ctx.beginPath();
+    ctx.ellipse(gx - size * 0.3, gy - size * 0.12, size * 0.4, size * 0.16, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(56,189,248,0.25)";
+    ctx.beginPath();
+    ctx.ellipse(gx + size * 0.35, gy + size * 0.1, size * 0.28, size * 0.1, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
   if (p.type === "coin") {
     const spin = Math.abs(Math.cos(t * 3 + p.id));
     ctx.fillStyle = "#b8860b";
@@ -635,6 +849,13 @@ function drawPickup(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: nu
   } else if (p.type === "shield" && p.shield) {
     emoji = SHIELDS[p.shield.kind].emoji;
     glow = "rgba(134,239,172,0.55)";
+  } else if (p.type === "gear" && p.gear) {
+    emoji = GEARS[p.gear].emoji;
+    glow = "rgba(34,211,238,0.7)";
+  } else if (p.type === "mutation" && p.mutation) {
+    const m = MUTATIONS[p.mutation];
+    emoji = m.emoji;
+    glow = m.risk ? "rgba(239,68,68,0.6)" : "rgba(74,222,128,0.65)";
   }
   if (glow) {
     const r = size * (0.85 + 0.12 * Math.sin(t * 4 + p.id));
@@ -648,12 +869,41 @@ function drawPickup(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: nu
   }
   const sp = emojiSprite(emoji);
   ctx.drawImage(sp, x - size / 2, y - size * 0.95, size, size);
+  if (p.type === "gear") {
+    // Twinkle so dropped weapons read as "shiny loot" from across the beach.
+    ctx.fillStyle = "#ecfeff";
+    for (let i = 0; i < 2; i++) {
+      const a = t * 2.5 + i * Math.PI + p.id;
+      const k = 0.5 + 0.5 * Math.sin(t * 6 + i * 2);
+      drawStar(ctx, x + Math.cos(a) * size * 0.6, y - size * 0.45 + Math.sin(a) * size * 0.35, 4 * k + 1, a);
+    }
+  }
 }
 
 // ── Crabs ───────────────────────────────────────────────────────────────────
 
 function drawCrabWorld(ctx: CanvasRenderingContext2D, c: Crab, t: number, king: boolean) {
   const s = c.scale;
+  if (c.alive && c.burrow > 0) {
+    // Hidden under the sand: a trembling mound with eye-stalks peeking out.
+    const R = CRAB_RADIUS * s * 1.3;
+    ctx.fillStyle = "#c9a35f";
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, R * (1 + 0.06 * Math.sin(t * 30)), R * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#e6c98e";
+    ctx.beginPath();
+    ctx.ellipse(c.x - R * 0.15, c.y - R * 0.2, R * 0.7, R * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#111827";
+    for (const sx of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(c.x + sx * R * 0.22, c.y - R * 0.35, 2.4 * s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+  if (c.alive && c.muts.length) drawMutationAura(ctx, c, t);
   if (c.alive && c.surge > 0) {
     const sp = SPECIES[c.species];
     const k = Math.min(1, c.surge / Math.max(0.1, sp.perk.seconds));
@@ -690,9 +940,66 @@ function drawCrabWorld(ctx: CanvasRenderingContext2D, c: Crab, t: number, king: 
       guard: c.guardFlash > 0,
       king,
     });
+    if (c.gear.some((g) => g.kind === "saw")) {
+      // Spinning saw blade bolted to the claws.
+      ctx.save();
+      ctx.translate(CRAB_RADIUS * 1.55, 0);
+      ctx.rotate(t * 24);
+      ctx.fillStyle = "#cbd5e1";
+      ctx.beginPath();
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        const rr = i % 2 ? 9 : 13;
+        ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#475569";
+      ctx.beginPath();
+      ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   }
   ctx.restore();
   ctx.globalAlpha = 1;
+}
+
+function drawMutationAura(ctx: CanvasRenderingContext2D, c: Crab, t: number) {
+  const r = CRAB_RADIUS * c.scale;
+  const glow = (color: string, k: number, alpha: number) => {
+    const R = r * k;
+    const g = ctx.createRadialGradient(c.x, c.y, R * 0.35, c.x, c.y, R);
+    g.addColorStop(0, "rgba(255,255,255,0)");
+    g.addColorStop(1, color);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  };
+  if (hasMut(c, "capsule")) glow("#facc15", 2.4 + 0.15 * Math.sin(t * 8), 0.35);
+  if (hasMut(c, "toxic")) glow("#84cc16", 1.8 + 0.2 * Math.sin(t * 11), 0.55);
+  if (hasMut(c, "giant")) glow("#ef4444", 1.5, 0.3);
+  if (hasMut(c, "salt")) glow("#f8fafc", 1.45, 0.55);
+  if (hasMut(c, "pepper")) glow("#f97316", 1.6 + 0.2 * Math.sin(t * 25), 0.45);
+  if (c.pearl > 0) {
+    ctx.strokeStyle = `rgba(224,242,254,${0.55 + 0.2 * Math.sin(t * 4)})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r * 1.55, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(186,230,253,0.18)";
+    ctx.fill();
+    for (let i = 0; i < c.pearl; i++) {
+      const a = t * 2 + (i / Math.max(1, c.pearl)) * Math.PI * 2;
+      ctx.fillStyle = "#f8fafc";
+      ctx.beginPath();
+      ctx.arc(c.x + Math.cos(a) * r * 1.55, c.y + Math.sin(a) * r * 1.55, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 }
 
 export interface CrabPose {
@@ -1215,6 +1522,23 @@ function drawCrabOverlay(ctx: CanvasRenderingContext2D, cam: Camera, W: number, 
     const sp = emojiSprite("🔑");
     ctx.drawImage(sp, sx + Math.max(34, r * z * 2) / 2 + 2, top - 12, 14, 14);
   }
+  if (c.burrow > 0) return;
+  const icons = [...c.gear.map((g) => GEARS[g.kind].emoji), ...c.muts.filter((m) => m.kind !== "oil").map((m) => MUTATIONS[m.kind].emoji)];
+  if (c.slide) icons.push("🛢️");
+  if (hasMut(c, "rum")) {
+    // Drunken swirl over the head.
+    ctx.fillStyle = "#c084fc";
+    for (let i = 0; i < 3; i++) {
+      const a = t * 5 + (i / 3) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(sx + Math.cos(a) * 12, top - 30 + Math.sin(a) * 4, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (!icons.length) return;
+  const sz = 13;
+  const x0 = sx - (icons.length * (sz + 1)) / 2;
+  icons.forEach((e, i) => ctx.drawImage(emojiSprite(e), x0 + i * (sz + 1), top - 22 - sz, sz, sz));
 }
 
 function drawCrown(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: number) {

@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { BOXES, CREATURES, FOODS, LEVELS, roadmap, SHIELDS, SPECIES_LIST, WEAPONS } from "./data";
+import { BOXES, CREATURES, FOODS, GEARS, LEVELS, MAX_GEAR, MUTATION_LIST, roadmap, SHIELDS, SPECIES_LIST, TIERS, WEAPONS } from "./data";
 
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const P = "text-white/70 light:text-slate-600";
@@ -25,10 +25,10 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
             <li>
               <b>PC</b>: 마우스 커서 쪽으로 이동하며 커서 방향을 바라봅니다(🖱️ 버튼으로 끄면 <b>WASD/방향키 이동 + 마우스 조준</b>). <b>좌클릭 / 스페이스 / J</b> 집게 공격(누르고 있으면 연속 공격),{" "}
-              <b>우클릭 / Shift / K</b> 부스트, Esc·P 일시정지.
+              <b>우클릭 / Shift / K</b> 부스트, <b>E / Q / L</b> 티어 특수기, Esc·P 일시정지.
             </li>
             <li>
-              <b>모바일</b>: 화면 아무 곳이나 눌러 끌면 조이스틱. 🦀 버튼 공격(가까운 대상 자동 조준), 💨 버튼 부스트.
+              <b>모바일</b>: 화면 아무 곳이나 눌러 끌면 조이스틱. 🦀 버튼 공격(가까운 대상 자동 조준), 💨 버튼 부스트, 그 위 노란 버튼이 티어 특수기(남은 쿨타임 숫자 표시).
             </li>
             <li>
               <b>부스트</b>: 이동 속도 +50%, 스태미나를 소모합니다. 손을 떼고 2초 뒤부터 빠르게 다시 찹니다.
@@ -70,7 +70,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           </div>
           <p className={`mt-2 text-xs ${P}`}>
             몸집이 커질수록 공격력·체력·사정거리가 늘고 카메라가 멀어져 시야가 넓어지지만, 느려지고 피격 판정도 커집니다.
-            <b> 흡수 배율</b>만큼 음식·생물·상자 코인 점수를 더 받습니다. 레벨업하면 체력이 비율대로 늘고 최대 체력의 12%를 즉시 회복합니다. 기획서의 6개 기준점(Lv1·3·5·7·9·12)은 그대로 두고 사이를 잘게 나눴습니다.
+            <b> 흡수 배율</b>만큼 음식·생물·상자 코인 점수를 더 받습니다. 레벨업하면 체력이 비율대로 늘고 최대 체력의 12%를 즉시 회복합니다. <b>하이퍼 성장</b> 업데이트로 초반(Lv2~6) 필요 점수를 40% 줄이고 🍌바나나·🦪조개 점수를 2.5배로 올려, 초반 1~3분 안에 Tier 3까지 도달할 수 있습니다. 후반 구간은 새 무기·변이·특수기로 늘어난 수입에 맞춰 다시 조정했습니다(킹 크랩 도달이 이전보다 약 1.8배 빠름).
           </p>
         </section>
 
@@ -172,6 +172,69 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
                 </b>
                 <div className="text-white/60 light:text-slate-600">
                   정면 피해 -{Math.round(sd.block * 100)}% · 내구도 {sd.durability}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h3 className={H3}>진화 티어 · 게딱지 특수기</h3>
+          <p className={`mb-2 text-xs ${P}`}>
+            레벨이 오르면 4단계로 <b>진화</b>합니다. 티어 보너스는 누적되며, 티어마다 <b>E 키(모바일 노란 버튼)</b>로 쓰는 특수기가 바뀝니다. 기획서의 Tier 4(Lv15)는 최대 레벨(12)을 넘으므로 Lv11에서 열립니다.
+          </p>
+          <div className="grid gap-1.5 text-xs sm:grid-cols-2">
+            {Object.values(TIERS).map((t) => (
+              <div key={t.tier} className="rounded-md bg-white/5 px-2 py-1.5 light:bg-slate-100">
+                <b>
+                  Tier {t.tier} {t.name}
+                </b>{" "}
+                <span className="text-white/50 light:text-slate-500">Lv{t.level}~ · {t.passive}</span>
+                <div className="text-white/60 light:text-slate-600">
+                  {t.skillIcon} <b>{t.skillName}</b> (쿨타임 {t.skillCooldown}초) — {t.skillDescription}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h3 className={H3}>필드 드롭 해저 무기 (자동 발사)</h3>
+          <p className={`mb-2 text-xs ${P}`}>
+            생물을 처치하거나(가재 15%·바다거북 50%·대왕 랍스터 100%) 황금 상자를 열면, 나무 상자에서 가끔 반짝이는 해저 무기가 떨어집니다. 밟으면 집게에 장착되어 <b>가장 가까운 적을 향해 자동으로 발사</b>되고, 정해진 시간이 지나면 사라집니다. 최대 {MAX_GEAR}개까지 동시에 들 수 있고 같은 무기를 또 주우면 시간이 다시 찹니다. 꽉 찬 상태에서는 시간이 가장 적게 남은 무기와 교체합니다. 장착 중인 집게 공격과는 따로 작동하며, 무기 피해는 내 레벨 공격력에 비례합니다. 게가 쓰러지면 남은 시간이 가장 긴 무기를 떨어뜨립니다.
+          </p>
+          <div className="grid gap-1.5 text-xs sm:grid-cols-2">
+            {Object.values(GEARS).map((g) => (
+              <div key={g.kind} className="rounded-md bg-cyan-500/10 px-2 py-1.5">
+                <b>
+                  {g.emoji} {g.name}
+                </b>{" "}
+                <span className="text-white/50 light:text-slate-500">{g.desc}</span>
+                <div className="text-white/60 light:text-slate-600">
+                  피해 ×{g.dmg}
+                  {g.kind === "shotgun" ? "(발당)" : ""} · 쿨타임 {g.cooldown}s · 사용 시간 {g.duration}초
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h3 className={H3}>변이 아이템 (강화 · 리스크)</h3>
+          <p className={`mb-2 text-xs ${P}`}>
+            섬 곳곳에 놓인 변이 아이템은 먹는 순간 효과가 걸립니다. 🟢 초록 빛은 순수 강화, 🔴 빨간 빛은 강력하지만 대가가 따르는 리스크 아이템이고, 바닥의 검은 <b>기름 웅덩이</b>는 함정입니다. 같은 변이를 다시 먹으면 시간이 갱신됩니다. AI 게들도 먹습니다 — 대담한 게일수록 리스크 아이템을 노립니다.
+          </p>
+          <div className="grid gap-1.5 text-xs sm:grid-cols-2">
+            {MUTATION_LIST.map((m) => (
+              <div key={m.kind} className={`rounded-md px-2 py-1.5 ${m.risk ? "bg-rose-500/10" : "bg-emerald-500/10"}`}>
+                <b>
+                  {m.emoji} {m.name}
+                </b>{" "}
+                <span className="text-white/50 light:text-slate-500">{m.duration}초</span>
+                <div className="text-white/60 light:text-slate-600">
+                  {m.good && <>▲ {m.good}</>}
+                  {m.good && m.bad ? " · " : ""}
+                  {m.bad && <span className="text-rose-300 light:text-rose-600">▼ {m.bad}</span>}
                 </div>
               </div>
             ))}

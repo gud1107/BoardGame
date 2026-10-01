@@ -299,6 +299,44 @@ export class CrabAudio {
     if (!this.ctx) return;
     this.tone(880, this.now, 0.25, "sine", 0.08, undefined, 1320);
   }
+  /** Field weapon picked up: a bright mechanical "ka-chunk". */
+  gear() {
+    if (!this.ctx) return;
+    this.noise(0.06, 3000, 2, 0.25, "bandpass");
+    [660, 990, 1320].forEach((f, i) => this.tone(f, this.now + 0.05 + i * 0.05, 0.12, "square", 0.07));
+  }
+  mutation(risk: boolean) {
+    if (!this.ctx) return;
+    if (risk) {
+      this.tone(330, this.now, 0.35, "sawtooth", 0.1, undefined, 165);
+      this.tone(311, this.now + 0.04, 0.35, "sawtooth", 0.08, undefined, 155);
+    } else [784, 988, 1175, 1568].forEach((f, i) => this.tone(f, this.now + i * 0.05, 0.22, "sine", 0.14));
+  }
+  /** Tier skills: 1 roll whoosh, 2 bubble pops, 3 sand rumble, 4 hydro laser. */
+  skill(tier: number) {
+    if (!this.ctx) return;
+    switch (tier) {
+      case 1:
+        this.noise(0.25, 500, 1, 0.35, "bandpass", 3500);
+        break;
+      case 2:
+        for (let i = 0; i < 6; i++) this.tone(500 + Math.random() * 700, this.now + i * 0.035, 0.06, "sine", 0.18, undefined, 1400);
+        break;
+      case 3:
+        this.noise(0.5, 220, 0.7, 0.45, "lowpass", 90);
+        break;
+      case 4:
+        this.tone(140, this.now, 0.6, "sawtooth", 0.2, undefined, 70);
+        this.noise(0.6, 1800, 0.6, 0.4, "bandpass", 600);
+        this.tone(2400, this.now, 0.4, "sine", 0.06, undefined, 1200);
+        break;
+    }
+  }
+  blast() {
+    if (!this.ctx) return;
+    this.tone(90, this.now, 0.4, "sine", 0.5, undefined, 40);
+    this.noise(0.35, 600, 0.8, 0.4, "lowpass", 120);
+  }
 }
 
 function midi(n: number) {

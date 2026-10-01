@@ -26,23 +26,26 @@ export interface LevelDef {
 }
 
 /**
- * Base (꽃게/균형형) roadmap: 12 finer steps. The spec's six milestones are kept
- * exactly at Lv1/3/5/7/9/12 (0·1k·5k·20k·100k·500k), with in-between steps
- * interpolated so level-ups come about twice as often.
+ * Base (꽃게/균형형) roadmap: 12 finer steps. Originally the spec's six
+ * milestones sat at Lv1/3/5/7/9/12 (0·1k·5k·20k·100k·500k). The 하이퍼 성장
+ * update cut the early thresholds by 40% (Lv2–6) and made 바나나/조개 2.5×
+ * richer; the late ones were re-tuned by bot self-play against the new income
+ * (field weapons, mutations, tier skills) so a runaway crab hits Lv11 ~2× and
+ * Lv12 ~1.8× sooner than before rather than in the first two minutes.
  */
 export const LEVELS: LevelDef[] = [
   { level: 1, name: "아기 게", points: 0, scale: 1.0, atk: 10, hp: 100, speed: 250, speedLabel: "가장 빠름", gain: 1 },
-  { level: 2, name: "꼬마 게", points: 400, scale: 1.15, atk: 14, hp: 150, speed: 245, speedLabel: "가장 빠름", gain: 1.1 },
-  { level: 3, name: "어린 게", points: 1_000, scale: 1.3, atk: 18, hp: 200, speed: 240, speedLabel: "빠름", gain: 1.4 },
-  { level: 4, name: "소년 게", points: 2_200, scale: 1.5, atk: 26, hp: 300, speed: 231, speedLabel: "빠름", gain: 1.55 },
-  { level: 5, name: "청년 게", points: 5_000, scale: 1.7, atk: 35, hp: 450, speed: 222, speedLabel: "보통", gain: 2 },
-  { level: 6, name: "젊은 게", points: 10_000, scale: 1.95, atk: 48, hp: 700, speed: 213, speedLabel: "보통", gain: 2.2 },
-  { level: 7, name: "성체 게", points: 20_000, scale: 2.2, atk: 65, hp: 1_000, speed: 205, speedLabel: "약간 느림", gain: 3 },
-  { level: 8, name: "노련한 게", points: 45_000, scale: 2.5, atk: 90, hp: 1_600, speed: 196, speedLabel: "약간 느림", gain: 3.3 },
-  { level: 9, name: "거대 게", points: 100_000, scale: 2.8, atk: 120, hp: 2_500, speed: 188, speedLabel: "느림", gain: 4.5 },
-  { level: 10, name: "대왕 게", points: 200_000, scale: 3.1, atk: 160, hp: 3_500, speed: 182, speedLabel: "느림", gain: 4.8 },
-  { level: 11, name: "전설의 게", points: 350_000, scale: 3.3, atk: 190, hp: 4_300, speed: 178, speedLabel: "묵직함", gain: 5.3 },
-  { level: 12, name: "킹 크랩", points: 500_000, scale: 3.5, atk: 220, hp: 5_000, speed: 175, speedLabel: "묵직함", gain: 6 },
+  { level: 2, name: "꼬마 게", points: 300, scale: 1.15, atk: 14, hp: 150, speed: 245, speedLabel: "가장 빠름", gain: 1.1 },
+  { level: 3, name: "어린 게", points: 600, scale: 1.3, atk: 18, hp: 200, speed: 240, speedLabel: "빠름", gain: 1.4 },
+  { level: 4, name: "소년 게", points: 1_300, scale: 1.5, atk: 26, hp: 300, speed: 231, speedLabel: "빠름", gain: 1.55 },
+  { level: 5, name: "청년 게", points: 3_000, scale: 1.7, atk: 35, hp: 450, speed: 222, speedLabel: "보통", gain: 2 },
+  { level: 6, name: "젊은 게", points: 6_000, scale: 1.95, atk: 48, hp: 700, speed: 213, speedLabel: "보통", gain: 2.2 },
+  { level: 7, name: "성체 게", points: 15_000, scale: 2.2, atk: 65, hp: 1_000, speed: 205, speedLabel: "약간 느림", gain: 3 },
+  { level: 8, name: "노련한 게", points: 36_000, scale: 2.5, atk: 90, hp: 1_600, speed: 196, speedLabel: "약간 느림", gain: 3.3 },
+  { level: 9, name: "거대 게", points: 90_000, scale: 2.8, atk: 120, hp: 2_500, speed: 188, speedLabel: "느림", gain: 4.5 },
+  { level: 10, name: "대왕 게", points: 190_000, scale: 3.1, atk: 160, hp: 3_500, speed: 182, speedLabel: "느림", gain: 4.8 },
+  { level: 11, name: "전설의 게", points: 340_000, scale: 3.3, atk: 190, hp: 4_300, speed: 178, speedLabel: "묵직함", gain: 5.3 },
+  { level: 12, name: "킹 크랩", points: 520_000, scale: 3.5, atk: 220, hp: 5_000, speed: 175, speedLabel: "묵직함", gain: 6 },
 ];
 
 export const MAX_LEVEL = LEVELS.length;
@@ -280,8 +283,8 @@ export interface FoodDef {
 }
 
 export const FOODS: Record<FoodKind, FoodDef> = {
-  banana: { kind: "banana", name: "바나나", emoji: "🍌", points: 25, heal: 0.02, radius: 9, weight: 34 },
-  clam: { kind: "clam", name: "조개", emoji: "🦪", points: 60, heal: 0.02, radius: 9, weight: 22 },
+  banana: { kind: "banana", name: "바나나", emoji: "🍌", points: 62, heal: 0.02, radius: 9, weight: 34 },
+  clam: { kind: "clam", name: "조개", emoji: "🦪", points: 150, heal: 0.02, radius: 9, weight: 22 },
   donut: { kind: "donut", name: "도넛", emoji: "🍩", points: 90, heal: 0.03, radius: 10, weight: 16 },
   coconut: { kind: "coconut", name: "코코넛", emoji: "🥥", points: 150, heal: 0.04, radius: 11, weight: 12 },
   starfish: { kind: "starfish", name: "불가사리", emoji: "⭐", points: 220, heal: 0.03, radius: 11, weight: 8 },
@@ -381,3 +384,143 @@ export const BOT_NAMES = [
   "꽃게탕", "대게왕", "소라껍데기", "갯벌의제왕", "바위틈", "집게손", "빨간집게", "밀물", "썰물", "코코넛헌터",
   "불가사리수집가", "해적게", "망치집게", "모래성파괴자", "게딱지", "짠물", "바다향기", "게걸음", "왕집게",
 ];
+
+// ── 하이퍼 성장: evolution tiers + 게딱지 특수기 ─────────────────────────────
+
+export type CrabTier = 1 | 2 | 3 | 4;
+
+export interface TierDef {
+  tier: CrabTier;
+  /** First level of this tier. */
+  level: number;
+  name: string;
+  passive: string;
+  /** Cumulative passive multipliers. */
+  speed: number;
+  armor: number; // damage taken multiplier
+  atk: number;
+  skillName: string;
+  skillIcon: string;
+  skillCooldown: number;
+  skillDescription: string;
+  color: string;
+}
+
+/**
+ * The spec's 4-step evolution tree mapped onto the 12-level roadmap
+ * (Lv4/8 as written; the spec's Lv15 is past our Lv12 cap, so Tier 4 opens at Lv11).
+ */
+export const TIERS: Record<CrabTier, TierDef> = {
+  1: {
+    tier: 1, level: 1, name: "아기 게", passive: "기본 집게발",
+    speed: 1, armor: 1, atk: 1,
+    skillName: "옆걸음 대시", skillIcon: "💨", skillCooldown: 4,
+    skillDescription: "진행 방향으로 빠르게 굴러 0.35초간 모든 공격을 회피합니다.", color: "#fdba74",
+  },
+  2: {
+    tier: 2, level: 4, name: "갯벌 돌방게", passive: "이동속도 +30%",
+    speed: 1.3, armor: 1, atk: 1,
+    skillName: "버블 스핏", skillIcon: "🫧", skillCooldown: 5,
+    skillDescription: "주변 360도로 산소 방울을 터뜨려 적을 1.5초간 기절시킵니다.", color: "#7dd3fc",
+  },
+  3: {
+    tier: 3, level: 8, name: "티타늄 투구 왕게", passive: "이동속도 +30% · 받는 피해 -33%(방어 +50%)",
+    speed: 1.3, armor: 1 / 1.5, atk: 1,
+    skillName: "모래 잠복 폭발", skillIcon: "🏜️", skillCooldown: 7,
+    skillDescription: "1.5초간 모래 속에 숨어 무적이 된 뒤 솟구치며 주변을 띄워 올립니다(광역 피해+기절).", color: "#fcd34d",
+  },
+  4: {
+    tier: 4, level: 11, name: "심해 메카 바나클 크랩", passive: "이동 +30% · 방어 +50% · 듀얼 집게포(공격 +30%)",
+    speed: 1.3, armor: 1 / 1.5, atk: 1.3,
+    skillName: "고압 수류 멜트 빔", skillIcon: "🔫", skillCooldown: 10,
+    skillDescription: "전방에 거대한 수압 레이저를 발사해 일직선상의 모든 적을 관통 분쇄합니다.", color: "#22d3ee",
+  },
+};
+
+export function tierForLevel(level: number): CrabTier {
+  return level >= TIERS[4].level ? 4 : level >= TIERS[3].level ? 3 : level >= TIERS[2].level ? 2 : 1;
+}
+
+export const DASH_SPEED = 720;
+export const DASH_INVULN = 0.35;
+export const BUBBLE_RADIUS = 150; // × scale
+export const BUBBLE_STUN = 1.5;
+export const BURROW_TIME = 1.5;
+export const BURROW_RADIUS = 175; // × scale
+export const BURROW_DMG = 2.5; // × ATK
+export const BEAM_LENGTH = 760;
+export const BEAM_WIDTH = 34; // × scale (half-width)
+export const BEAM_DMG = 4; // × ATK
+
+// ── 필드 드롭 해저 무기 (auto-firing, timed; max 2) ─────────────────────────
+
+export type GearKind = "shotgun" | "needle" | "zap" | "mine" | "trident" | "saw";
+
+export interface GearDef {
+  kind: GearKind;
+  name: string;
+  emoji: string;
+  desc: string;
+  /** Damage per hit as a multiple of the owner's level ATK. */
+  dmg: number;
+  cooldown: number;
+  /** Seconds the weapon lasts after pickup. */
+  duration: number;
+  /** Auto-aim range (world units, before scale bonus). */
+  range: number;
+  color: string;
+}
+
+export const MAX_GEAR = 2;
+
+export const GEARS: Record<GearKind, GearDef> = {
+  shotgun: { kind: "shotgun", name: "조개껍질 산탄총", emoji: "🐚", desc: "전방 부채꼴로 패각 파편 5발", dmg: 0.5, cooldown: 0.8, duration: 22, range: 300, color: "#fbcfe8" },
+  needle: { kind: "needle", name: "가시 산호 기관총", emoji: "🪸", desc: "가시 침 초연사 + 넉백", dmg: 0.2, cooldown: 0.15, duration: 18, range: 380, color: "#fb7185" },
+  zap: { kind: "zap", name: "해파리 감전 채찍", emoji: "⚡", desc: "체인 라이트닝 3체 연쇄 감전", dmg: 0.9, cooldown: 1.2, duration: 22, range: 260, color: "#c4b5fd" },
+  mine: { kind: "mine", name: "복어 맹독 지뢰포", emoji: "🐡", desc: "지나간 자리에 독 거품 지뢰", dmg: 2.2, cooldown: 2.0, duration: 22, range: 0, color: "#a3e635" },
+  trident: { kind: "trident", name: "넵튠의 청동 삼지창", emoji: "🔱", desc: "일직선 관통 수류창", dmg: 1.8, cooldown: 1.8, duration: 22, range: 520, color: "#fbbf24" },
+  saw: { kind: "saw", name: "톱날 전기톱 집게", emoji: "🪚", desc: "초근접 회전 톱날 지속 피해", dmg: 0.32, cooldown: 0.2, duration: 18, range: 0, color: "#e2e8f0" },
+};
+
+export const GEAR_LIST: GearDef[] = Object.values(GEARS);
+
+/** Chance a slain creature drops a weapon. */
+export const GEAR_DROP: Record<CreatureKind, number> = { babyCrab: 0.03, fish: 0.03, crayfish: 0.15, turtle: 0.5, lobster: 1 };
+
+// ── 변이 아이템 (buffs & risk traps) ───────────────────────────────────────
+
+export type MutationKind = "capsule" | "pearl" | "pepper" | "giant" | "toxic" | "salt" | "rum" | "oil";
+
+export interface MutationDef {
+  kind: MutationKind;
+  name: string;
+  emoji: string;
+  risk: boolean;
+  duration: number;
+  /** Upside / downside for the HUD and rulebook. */
+  good: string;
+  bad?: string;
+  atk: number;
+  speed: number;
+  armor: number; // damage taken multiplier
+  weight: number;
+  color: string;
+}
+
+export const MUTATIONS: Record<MutationKind, MutationDef> = {
+  capsule: { kind: "capsule", name: "황금 플랑크톤 캡슐", emoji: "💊", risk: false, duration: 8, good: "자석 반경 3배 + 먹이 점수 300%", atk: 1, speed: 1, armor: 1, weight: 14, color: "#facc15" },
+  pearl: { kind: "pearl", name: "진주 보호막", emoji: "🔮", risk: false, duration: 20, good: "공격 2회 무효화 + 수류 반사 폭발", atk: 1, speed: 1, armor: 1, weight: 12, color: "#e0f2fe" },
+  pepper: { kind: "pepper", name: "매운 고추 미역", emoji: "🌶️", risk: false, duration: 10, good: "이동속도 +70% · 지나간 자리에 불꽃", atk: 1, speed: 1.7, armor: 1, weight: 13, color: "#f97316" },
+  giant: { kind: "giant", name: "거대화 킹 바닷가재 즙", emoji: "🦞", risk: false, duration: 8, good: "몸집 2배 · 닿는 잡몹 즉사", atk: 1.25, speed: 1, armor: 1, weight: 9, color: "#ef4444" },
+  toxic: { kind: "toxic", name: "방사능 폐기물 통", emoji: "☢️", risk: true, duration: 10, good: "공격력 +200%", bad: "초록 시야 + 초당 2% 자해", atk: 3, speed: 1, armor: 1, weight: 9, color: "#84cc16" },
+  salt: { kind: "salt", name: "고농도 소금 덩어리", emoji: "🧂", risk: true, duration: 6, good: "방어력 +80% · 넉백 면역", bad: "이동속도 -40%", atk: 1, speed: 0.6, armor: 1 / 1.8, weight: 9, color: "#f1f5f9" },
+  rum: { kind: "rum", name: "취한 해적의 럼주 병", emoji: "🥃", risk: true, duration: 8, good: "모든 타격 치명타", bad: "조작 방향 반전(혼란)", atk: 1, speed: 1, armor: 1, weight: 8, color: "#d97706" },
+  oil: { kind: "oil", name: "미끄러운 기름 찌꺼기", emoji: "🛢️", risk: true, duration: 3, good: "", bad: "3초간 미끄러져 방향 제어 불가", atk: 1, speed: 1, armor: 1, weight: 10, color: "#334155" },
+};
+
+export const MUTATION_LIST: MutationDef[] = Object.values(MUTATIONS);
+export const MUTATION_POP = 18;
+export const MAGNET_BASE = 12; // pull radius = (body + this) × 3 while the capsule lasts
+export const PEARL_CHARGES = 2;
+export const TOXIC_DOT = 0.02; // of max HP per second
+export const GIANT_SCALE = 2;
