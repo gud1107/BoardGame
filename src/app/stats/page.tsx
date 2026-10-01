@@ -8,6 +8,8 @@ import { STAT_DETAIL_ROWS } from "@/lib/stats/details";
 import { fetchLeaderboard, type LeaderboardRow, type LeaderboardSort } from "@/lib/stats/leaderboard";
 import { countPendingStats, listPlayerStats, STATS_CHANGED_EVENT, syncPlayerStats } from "@/lib/stats/playerStats";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
+import { useProfileStore } from "@/store/profileStore";
+import ProfileModal from "@/components/profile/ProfileModal";
 
 type Tab = "mine" | "ranking";
 
@@ -247,6 +249,8 @@ function Ranking({ loggedIn }: { loggedIn: boolean }) {
         </div>
       </div>
 
+      {loggedIn && <MyRankingName />}
+
       <p className="mb-3 text-xs text-white/40 light:text-slate-400">
         로그인한 회원의 기록만 올라가요. 결과는 각 플레이어 기기에서 계산되므로 참고용 랭킹입니다.
         {!loggedIn && " 내 기록을 올리려면 로그인하세요."}
@@ -302,6 +306,38 @@ function Ranking({ loggedIn }: { loggedIn: boolean }) {
         </ol>
       )}
     </>
+  );
+}
+
+function MyRankingName() {
+  const publicName = useProfileStore((s) => s.publicName);
+  const hydrated = useProfileStore((s) => s.hydrated);
+  const init = useProfileStore((s) => s.init);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    void init();
+  }, [init]);
+
+  if (!hydrated) return null;
+  return (
+    <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 light:border-slate-200 light:bg-white">
+      <p className="min-w-0 truncate text-sm text-white/70 light:text-slate-600">
+        내 랭킹 닉네임:{" "}
+        {publicName ? (
+          <b className="text-white light:text-slate-900">{publicName}</b>
+        ) : (
+          <span className="text-white/40 light:text-slate-400">아직 없음 (게이머_xxxxxx로 표시)</span>
+        )}
+      </p>
+      <button
+        onClick={() => setOpen(true)}
+        className="shrink-0 rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-400"
+      >
+        {publicName ? "변경" : "정하기"}
+      </button>
+      {open && <ProfileModal onClose={() => setOpen(false)} />}
+    </div>
   );
 }
 

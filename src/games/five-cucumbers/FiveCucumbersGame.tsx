@@ -52,6 +52,7 @@ import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
+import { fiveCucumbersStatDetails } from "./stats";
 
 /** Whose decision `useBotAutoplay` should drive right now. */
 function fiveCucumbersCurrentActor(state: FiveCucumbersState): SeatIndex | null {
@@ -801,7 +802,7 @@ export default function FiveCucumbersGame({ onComplete }: PlayableGameProps) {
     const winners = rankings.filter((r) => r.rank === 1);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, botTakeover.takeovers),
+      self: selfResult(mySeat, rankings, botTakeover.takeovers, (seat) => fiveCucumbersStatDetails(gameState, seat)),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerName: names[winners[0].seat], tied: winners.length > 1 });

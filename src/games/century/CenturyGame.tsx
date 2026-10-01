@@ -48,6 +48,7 @@ import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
+import { centuryStatDetails } from "./stats";
 
 /**
  * Pure system-log line formatter for the in-game chat system-log pilot (see
@@ -766,7 +767,7 @@ export default function CenturyGame({ onComplete }: PlayableGameProps) {
     const rankings = computeRankings(gameState);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, botTakeover.takeovers),
+      self: selfResult(mySeat, rankings, botTakeover.takeovers, (seat, rank) => centuryStatDetails(gameState, seat, rank)),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerName: names[rankings[0].seat] });

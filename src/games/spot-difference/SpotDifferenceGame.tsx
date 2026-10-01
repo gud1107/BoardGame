@@ -56,6 +56,7 @@ import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
+import { spotDifferenceStatDetails } from "./stats";
 
 /**
  * Pure system-log line formatter for the in-game chat system-log pilot (see
@@ -903,7 +904,14 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
     const tied = teamRanks.filter((r) => r.rank === 1).length > 1;
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, botTakeover.takeovers),
+      self: selfResult(mySeat, rankings, botTakeover.takeovers, (seat, rank) =>
+        spotDifferenceStatDetails(
+          gameState,
+          seat,
+          rank,
+          botSeats.flatMap((s, i) => (gameState.teamOf[s] !== gameState.teamOf[seat] ? [botLevels[i]] : [])),
+        ),
+      ),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ tied, winningTeam });

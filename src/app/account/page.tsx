@@ -67,7 +67,7 @@ export default function AccountPage() {
               onClick={() => setProfileModalOpen(true)}
               className="mt-1 text-xs text-rose-300 hover:text-rose-200"
             >
-              프로필 이미지 변경
+              닉네임 · 프로필 이미지 변경
             </button>
           </div>
         </div>

@@ -60,6 +60,18 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Mirror into the public leaderboard's avatar (supabase/player_stats.sql).
+  // Best-effort: that column may not exist yet, and it must never block the
+  // avatar change itself.
+  await service
+    .from("user_profiles")
+    .update({ public_avatar_url: body.avatarUrl })
+    .eq("id", user.id)
+    .then(
+      () => undefined,
+      () => undefined,
+    );
+
   const { error } = await service.from("profiles").update({ avatar_url: body.avatarUrl }).eq("id", user.id);
   if (error) return NextResponse.json({ error: "update failed" }, { status: 500 });
 

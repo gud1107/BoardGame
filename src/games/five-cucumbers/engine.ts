@@ -119,12 +119,15 @@ export interface FiveCucumbersState {
    * whole round.
    */
   roundPlayedCards: Card[];
+  /** Personal-stats counters (src/games/shared/statTally.ts) — see five-cucumbers/stats.ts. */
+  statTally?: StatTally;
 }
 
 export type EngineAction = { type: "playCard"; seat: SeatIndex; cardId: string };
 
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
+import { tallyAdd, tallyMax, type StatTally } from "@/games/shared/statTally";
 export { seededRng };
 import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
 
@@ -298,6 +301,23 @@ function resolveLeadingTrickWinner(plays: PlayedCard[]): SeatIndex {
   return winner.seat;
 }
 
+/** Personal-stats counters for one finished trick (keys explained in five-cucumbers/stats.ts). */
+function cucumberTally(t: StatTally | undefined, plays: PlayedCard[], winnerSeat: SeatIndex, isFinal: boolean, penaltyEach: number): StatTally {
+  const winning = plays.find((p) => p.seat === winnerSeat)!.card.value;
+  if (!isFinal) {
+    if (winning === CARD_MAX) t = tallyAdd(t, winnerSeat, "topCardTricks");
+    return t!;
+  }
+  for (const p of plays) {
+    t = tallyAdd(t, p.seat, "finalTricks");
+    if (p.seat !== winnerSeat) {
+      t = tallyAdd(t, p.seat, "finalTricksSurvived");
+      if (p.card.value === 1) t = tallyAdd(t, p.seat, "oneCardDefenses");
+    }
+  }
+  return tallyMax(t, winnerSeat, "maxPenaltyOnce", penaltyEach);
+}
+
 function playCard(state: FiveCucumbersState, seat: SeatIndex, cardId: string): FiveCucumbersState {
   if (state.phase !== "playing" || seat !== state.activeSeat) return state;
   if (!legalCardIds(state, seat).has(cardId)) return state;
@@ -336,6 +356,7 @@ function playCard(state: FiveCucumbersState, seat: SeatIndex, cardId: string): F
       activeSeat: winnerSeat,
       lastTrickResult,
       roundPlayedCards,
+      statTally: cucumberTally(state.statTally, trickPlays, winnerSeat, false, 0),
     };
   }
 
@@ -384,7 +405,8 @@ function playCard(state: FiveCucumbersState, seat: SeatIndex, cardId: string): F
     newlyEliminatedSeats,
   };
 
-  const settled: FiveCucumbersState = { ...state, players, trickPlays: [], lastTrickResult, lastRoundSummary, roundPlayedCards };
+  const statTally = cucumberTally(state.statTally, trickPlays, winnerSeat, true, penaltyEach);
+  const settled: FiveCucumbersState = { ...state, players, trickPlays: [], lastTrickResult, lastRoundSummary, roundPlayedCards, statTally };
   const remaining = activeSeats(players);
   if (remaining.length <= 1) {
     return { ...settled, phase: "gameOver" };

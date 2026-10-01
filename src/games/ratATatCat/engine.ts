@@ -116,6 +116,7 @@
  */
 
 import { seededRng, shuffle } from "@/lib/rng";
+import { tallyAdd, type StatTally } from "@/games/shared/statTally";
 import { botTier, pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
 
 export type SeatIndex = number;
@@ -228,6 +229,8 @@ export interface RatATatCatState {
   finalRoundTurnsLeft: number | null;
   /** Monotonic counter incremented on every applied action — mirrors malDalliJa/showMeTheCoin's `isStateSyncStale` guard for the reconnect `state-sync` race (docs/cloud-sync.md §2.3). */
   seq: number;
+  /** Personal-stats counters (src/games/shared/statTally.ts) — see ratATatCat/stats.ts. */
+  statTally?: StatTally;
 }
 
 export type EngineAction =
@@ -443,7 +446,11 @@ function resolveSwap(state: RatATatCatState, seat: SeatIndex, mySlot: SlotIndex,
     return hand;
   });
   const discardPile = [...state.discardPile, drawn];
-  return awaitTurnDecision({ ...state, hands, discardPile, seq: state.seq + 1 });
+  let statTally = tallyAdd(state.statTally, seat, "swaps");
+  if (mine.card.kind === "number" && theirs.card.kind === "number" && theirs.card.value < mine.card.value) {
+    statTally = tallyAdd(statTally, seat, "gainfulSwaps");
+  }
+  return awaitTurnDecision({ ...state, hands, discardPile, statTally, seq: state.seq + 1 });
 }
 
 function resolveDrawTwo(state: RatATatCatState, seat: SeatIndex): RatATatCatState {

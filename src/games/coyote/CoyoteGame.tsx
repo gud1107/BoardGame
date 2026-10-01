@@ -48,6 +48,7 @@ import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/
 import { formatBotTakeoverLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
+import { coyoteStatDetails } from "./stats";
 
 /**
  * Whose decision `useBotAutoplay` should drive right now. "reveal" (the
@@ -790,7 +791,7 @@ export default function CoyoteGame({ onComplete }: PlayableGameProps) {
     const winner = rankings.find((r) => r.rank === 1)!;
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, botTakeover.takeovers),
+      self: selfResult(mySeat, rankings, botTakeover.takeovers, (seat, rank) => coyoteStatDetails(gameState, seat, rank)),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerName: names[winner.seat] });

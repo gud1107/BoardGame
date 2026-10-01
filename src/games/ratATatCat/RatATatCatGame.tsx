@@ -45,6 +45,7 @@ import {
   type BotTakeoverState,
 } from "@/games/shared/bot/botTakeover";
 import { selfResult } from "@/games/shared/selfResult";
+import { ratATatCatStatDetails } from "./stats";
 
 /**
  * Online-room multiplayer entry point, same lockstep pattern as every other
@@ -608,7 +609,7 @@ export default function RatATatCatGame({ onComplete }: PlayableGameProps) {
     const winners = rankings.filter((r) => r.rank === 1);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, botTakeover.takeovers),
+      self: selfResult(mySeat, rankings, botTakeover.takeovers, (seat, rank) => ratATatCatStatDetails(gameState, seat, rank)),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerName: names[winners[0].seat], tied: winners.length > 1 });

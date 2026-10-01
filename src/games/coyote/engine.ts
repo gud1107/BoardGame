@@ -99,6 +99,7 @@ export const MIN_OPENING_DECLARE = 1;
 
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
+import { tallyAdd, type StatTally } from "@/games/shared/statTally";
 export { seededRng };
 
 // ---------------------------------------------------------------------------
@@ -209,6 +210,8 @@ export interface CoyoteState {
   /** Seats in the order they were eliminated (hearts hit 0) — needed for final rankings. */
   eliminationOrder: SeatIndex[];
   winnerSeat: SeatIndex | null;
+  /** Personal-stats counters (src/games/shared/statTally.ts) — see coyote/stats.ts. */
+  statTally?: StatTally;
 }
 
 export type EngineAction =
@@ -429,6 +432,15 @@ function resolveCoyoteCall(state: CoyoteState, callerSeat: SeatIndex, bid: Bid):
     nightCardHolderSeat,
   };
 
+  let statTally = tallyAdd(state.statTally, callerSeat, "coyoteCalls");
+  statTally = tallyAdd(statTally, bid.seat, "bidsChallenged");
+  statTally = bidderOver ? tallyAdd(statTally, callerSeat, "coyoteCorrect") : tallyAdd(statTally, bid.seat, "bidsHeld");
+  for (const [seat, card] of Object.entries(tableCards)) {
+    if (card.kind === "question" || card.kind === "maxZero" || card.kind === "double") {
+      statTally = tallyAdd(statTally, Number(seat), "specialCardRounds");
+    }
+  }
+
   const alive = players.filter((p) => p.hearts > 0).map((p) => p.seat);
   if (alive.length <= 1) {
     return {
@@ -438,10 +450,11 @@ function resolveCoyoteCall(state: CoyoteState, callerSeat: SeatIndex, bid: Bid):
       lastResolution: resolution,
       eliminationOrder,
       winnerSeat: alive[0] ?? null,
+      statTally,
     };
   }
 
-  return { ...state, players, phase: "reveal", lastResolution: resolution, eliminationOrder };
+  return { ...state, players, phase: "reveal", lastResolution: resolution, eliminationOrder, statTally };
 }
 
 /**

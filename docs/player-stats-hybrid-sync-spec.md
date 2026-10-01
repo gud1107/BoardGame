@@ -96,7 +96,7 @@ Supabase SQL Editor에서 `supabase/player_stats.sql` 실행. 실행 전에는 �
 
 ### 세부 지표 공통 구조
 - `GameSelfResult.details?: Record<string, number>` → 대기 큐 → RPC `p_details` → `player_game_stats.details`(jsonb).
-- 합산 규칙(클라 `src/lib/stats/details.ts`, 서버 `merge_stat_details()` 동일): 키가 `max`로 시작하면 최댓값, 나머지는 합. RPC는 키 24개 이하, 키 형식, 0~10억 숫자만 허용.
+- 합산 규칙(클라 `src/lib/stats/details.ts`, 서버 `merge_stat_details()` 동일): 키가 `max`로 시작하면 최댓값, `min`으로 시작하면 최솟값(§8에서 추가), 나머지는 합. RPC는 키 24개 이하, 키 형식, 0~10억 숫자만 허용.
 - 화면 라벨: `STAT_DETAIL_ROWS`(게임 id → 표시 행). `/stats` 내 전적 표에서 행을 누르면 펼쳐진다.
 
 ### 위대한 투자 (`great-legacy`, 화면 이름 "최고의 투자") — `src/games/greatLegacy/stats.ts`
@@ -123,7 +123,7 @@ Supabase SQL Editor에서 `supabase/player_stats.sql` 실행. 실행 전에는 �
 | `had30` / `won30` | 30번 매물 보유한 판 / 보유하고 1위 |
 | `sold30ForZero` | 30번 매물을 0원 수표에 판 굴욕 |
 
-나머지 게임(달무티·오이·코요테·페루도·센추리·랫어탯캣·틀린그림찾기·그림전화기)의 세부 지표는 같은 구조로 `stats.ts` + `STAT_DETAIL_ROWS`만 추가하면 된다.
+나머지 8개 게임은 §8에서 추가했다.
 
 ### 검증
 - tsc / eslint 통과. vitest: `mergeStatDetails`, 두 게임 `stats.ts`(봇끼리 끝까지 둔 판에서 지표 계산 확인), 기존 For Sale·최고의 투자 테스트 포함 126개 통과.
@@ -131,3 +131,35 @@ Supabase SQL Editor에서 `supabase/player_stats.sql` 실행. 실행 전에는 �
 
 ### 운영 적용
 `supabase/player_stats.sql`을 **다시 한 번** SQL Editor에서 실행(이전 버전을 이미 돌렸어도 안전하게 업그레이드됨).
+
+## 8. 나머지 8개 게임 세부 지표 + 랭킹 닉네임 (2026-10-02)
+
+### 공통: 엔진 안의 이벤트 카운터
+"페루도! 적중"처럼 라운드마다 일어나는 일은 최종 상태에 남지 않는다. 컴포넌트에서 세면 재접속(`state-sync`) 때 중복/누락되므로, 각 엔진 상태에 `statTally?: StatTally`(좌석 → 키 → 숫자)를 두고 리듀서 안에서 센다 — `src/games/shared/statTally.ts`(`tallyAdd`/`tallyMax`/`tallyFlag`). 락스텝 결정론이 유지되고 state-sync로 그대로 넘어간다. 필드가 선택적이라 진행 중이던 판도 그대로 로드된다.
+
+각 게임 `stats.ts`가 최종 상태 + `statTally`로 `details`를 만들고, `*Game.tsx`의 `selfResult(..., details)`로 넘긴다. 화면 라벨은 `STAT_DETAIL_ROWS`.
+
+| 게임 | 지표 (키) |
+| --- | --- |
+| 페루도 | 페루도!/맞아! 호출·적중(`dudoCalls/dudoCorrect`, `calzaCalls/calzaCorrect`), 내 선언이 들킴/버팀(`bluffsCaught/bidsHeld`), 경계 적중(`exactHits`), 주사위 1개에서 역전승(`oneDieComebacks`), 한 번에 잃은 최대 주사위(`maxDiceLostOnce`) |
+| 달무티 | 1등/꼴찌(`finishedFirst/finishedLast`), 농노→1등(`winAsPeon`), 달무티→꼴찌(`loseAsDalmuti`), 혁명/대혁명, 조커로 마무리(`jokerFinishes`), 한 번에 낸 최대 장수 |
+| 오이 다섯 개 | 누적 오이(`cucumbersEaten`), 마지막 트릭 참여/생존(`finalTricks/finalTricksSurvived`), 15로 딴 트릭(`topCardTricks`), 마지막 트릭 1로 방어(`oneCardDefenses`), 한 번에 먹은 최대 오이, 탈락 |
+| 코요테 | 코요테! 호출·적중, 내 선언 의심받음/버팀, 하트 무손실 1위(`flawlessWins`), 이마에 ?·MAX→0·x2가 붙은 라운드. 원작 "깃털 3개"는 이 구현에서 하트 2개(`STARTING_HEARTS`) |
+| 랫어탯캣 | 최저 점수(`minHandScore`, 낮을수록 좋음), 평균 점수, 0점 핸드, 랫어탯캣! 선언 후 1등, Swap 사용/이득 본 Swap |
+| 센추리 | 최고/평균 승점, 금화/은화, 승점 카드 수, 갈색(시나몬) 확보량(`brownGained`), 가장 빨리 이긴 라운드(`minWinRounds`, 이긴 판에만) |
+| 틀린그림찾기 | 찾은 곳, 오클릭, 한 판 최다, 오답 없는 판, Lv.10 봇(상대 팀) 상대 승리. 원작 지표의 "MASTER 봇"은 Lv.10으로 |
+| 그림전화기 | 그린 그림/쓴 문장, 원래 문장 정확히 맞힘(`exactGuesses`), 받은 반응(😂🤯👏❤️🤔 — 제안서의 "좋아요"에 해당), 한 장 최다 반응, 받은 투표(점수 모드), 시간 초과 자동 제출 |
+
+빠진 것: 제안서의 "평균 탐색 시간"(틀린그림찾기)은 엔진이 벽시계를 쓰지 않아 제외, "트롤러 지수"(그림전화기)는 판정 기준이 없어 제외.
+
+### 랭킹 닉네임
+- **어디서 바꾸나**: `/stats` → 공개 랭킹 탭의 "내 랭킹 닉네임 [정하기/변경]", 또는 헤더 아바타/`/account`의 "닉네임 · 프로필 이미지 변경" → 프로필 모달 맨 위.
+- 소셜 로그인은 `user_profiles.nickname`/`avatar_url`에 **실명·실사진이 들어올 수 있어** 랭킹에 쓰지 않는다. 대신 새 컬럼 `public_name`(본인이 정한 랭킹 닉네임)과 `public_avatar_url`(이 사이트에 올린 프로필 이미지 — `/api/profile/avatar`가 함께 기록)만 쓴다. 안 정하면 `게이머_xxxxxx`.
+- `set_my_public_name(p_name)` RPC: 2~12자, 한글·영문·숫자·밑줄·공백, 대소문자 무시 중복 금지(부분 유니크 인덱스), `관리자`·`admin`·`게이머_…` 등 예약어 금지, 빈 값이면 해제.
+
+### 검증
+- tsc / eslint 통과. 10개 게임 + 통계 테스트 646개 통과, 봇 풀게임으로 페루도·코요테·오이 지표 정합성 확인(`src/lib/stats/gameDetails.test.ts`).
+- embedded-postgres: 이전 배포본 위에 적용·재실행 안전, `min*` 합산(최솟값 유지), 닉네임 규칙 5종 거부·anon 거부, 소셜 실명이 랭킹에 안 나옴, 아바타 미러 반영, 닉네임 해제 시 `게이머_` 복귀.
+
+### 운영 적용
+`supabase/player_stats.sql`을 다시 한 번 실행.

@@ -59,6 +59,7 @@ import DoodlePhoneRulebookModal from "./RulebookModal";
 import { playTransitionSounds } from "./sounds";
 import { ChunkAssembler, splitIntoChunks, type SyncChunk } from "./syncChunks";
 import { selfResult } from "@/games/shared/selfResult";
+import { doodlePhoneStatDetails } from "./stats";
 
 /**
  * Online room for 그림 전화기 — the standard lockstep room (docs/cloud-sync.md,
@@ -219,7 +220,7 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
       const rankings = computeRankings(next);
       onCompleteRef.current({
         rankings: rankings.map((r) => ({ playerId: idsRef.current[r.seat] ?? `seat-${r.seat}`, rank: r.rank })),
-        self: selfResult(mySeatRef.current, rankings, botTakeoverRef.current.takeovers),
+        self: selfResult(mySeatRef.current, rankings, botTakeoverRef.current.takeovers, (seat) => doodlePhoneStatDetails(next, seat)),
         finishedAt: new Date().toISOString(),
       });
     }

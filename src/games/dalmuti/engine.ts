@@ -109,6 +109,7 @@
  */
 
 import { seededRng, shuffle } from "@/lib/rng";
+import { tallyFlag, tallyMax, type StatTally } from "@/games/shared/statTally";
 export { seededRng };
 import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
 
@@ -228,6 +229,8 @@ export interface DalmutiState {
   finishOrder: SeatIndex[];
   lastTrickResult: TrickResult | null;
   revolutionDeclared: { seat: SeatIndex; isGrand: boolean } | null;
+  /** Personal-stats counters (src/games/shared/statTally.ts) — see dalmuti/stats.ts. */
+  statTally?: StatTally;
   initialSeed: number;
 }
 
@@ -658,6 +661,8 @@ function playCards(state: DalmutiState, seat: SeatIndex, cardIds: string[]): Dal
     return { ...p, hand, finishedAtOrder };
   });
   if (finishedNow) finishOrder = [...finishOrder, seat];
+  let statTally = tallyMax(state.statTally, seat, "maxCardsInOnePlay", cards.length);
+  if (finishedNow && cards.some((c) => c.isJoker)) statTally = tallyFlag(statTally, seat, "jokerFinish");
 
   const trick: CurrentTrick = {
     rankValue,
@@ -670,10 +675,10 @@ function playCards(state: DalmutiState, seat: SeatIndex, cardIds: string[]): Dal
   const remaining = activeSeatsWithCards(players);
   if (remaining.length <= 1) {
     if (remaining.length === 1) finishOrder = [...finishOrder, remaining[0]];
-    return { ...state, players, trick, finishOrder, phase: "gameOver", activeSeat: seat };
+    return { ...state, players, trick, finishOrder, statTally, phase: "gameOver", activeSeat: seat };
   }
 
-  const nextState = { ...state, players, trick, finishOrder };
+  const nextState = { ...state, players, trick, finishOrder, statTally };
   return { ...nextState, activeSeat: nextActiveSeatInRankOrder(nextState, seat) };
 }
 

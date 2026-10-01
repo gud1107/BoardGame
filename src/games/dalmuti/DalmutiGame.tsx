@@ -58,6 +58,7 @@ import { loadRecentMessages, mergeHistoryIntoMessages, persistMessage } from "@/
 import { formatBotTakeoverLog, formatDalmutiTributeLog } from "@/lib/chat/systemLog";
 import ChatDrawer from "@/components/chat/ChatDrawer";
 import { selfResult } from "@/games/shared/selfResult";
+import { dalmutiStatDetails } from "./stats";
 
 /**
  * Whose decision `useBotAutoplay` should drive right now. `taxReturn` can
@@ -898,7 +899,7 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
     const winner = rankings.find((r) => r.rank === 1)!;
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, botTakeover.takeovers),
+      self: selfResult(mySeat, rankings, botTakeover.takeovers, (seat, rank) => dalmutiStatDetails(gameState, seat, rank)),
       finishedAt: new Date().toISOString(),
     });
     if (roomBettingRef.current.active) {

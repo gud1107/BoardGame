@@ -240,6 +240,8 @@ export interface PerudoState {
   /** Seats in the order they were eliminated (dice hit 0) — needed for final rankings, since dice counts alone don't record *when* someone dropped out. */
   eliminationOrder: SeatIndex[];
   winnerSeat: SeatIndex | null;
+  /** Personal-stats counters (src/games/shared/statTally.ts) — see `perudoTally`. */
+  statTally?: StatTally;
 }
 
 export type EngineAction =
@@ -250,6 +252,7 @@ export type EngineAction =
 
 /** Deterministic PRNG, shared across every engine — see src/lib/rng.ts. */
 import { seededRng } from "@/lib/rng";
+import { tallyAdd, tallyFlag, tallyMax, type StatTally } from "@/games/shared/statTally";
 export { seededRng };
 
 function rollDice(rng: () => number, count: number): number[] {
@@ -383,6 +386,29 @@ function raise(state: PerudoState, seat: SeatIndex, quantity: number, face: Face
   };
 }
 
+/** Personal-stats counters for one resolved call (keys explained in perudo/stats.ts). */
+function perudoTally(t: StatTally | undefined, r: RoundResolution, players: PlayerState[]): StatTally {
+  const actor = r.actorSeat;
+  const bidder = r.bid.seat;
+  if (r.kind === "dudo") {
+    t = tallyAdd(t, actor, "dudoCalls");
+    const callerWon = r.affectedSeat !== actor;
+    if (callerWon) {
+      t = tallyAdd(t, actor, "dudoCorrect");
+      t = tallyAdd(t, bidder, "bluffsCaught");
+    } else {
+      t = tallyAdd(t, bidder, "bidsHeld");
+    }
+    if (r.exactHitPenaltySeats.length > 0) t = tallyAdd(t, bidder, "exactHits");
+  } else {
+    t = tallyAdd(t, actor, "calzaCalls");
+    if (r.diceDelta > 0) t = tallyAdd(t, actor, "calzaCorrect");
+  }
+  if (r.diceDelta < 0) t = tallyMax(t, r.affectedSeat, "maxDiceLostOnce", -r.diceDelta);
+  for (const p of players) if (p.diceCount === 1) t = tallyFlag(t, p.seat, "downToOne");
+  return t;
+}
+
 /**
  * Shared tail end of both `dudo` and `calza`: apply the dice-count change,
  * capture the full reveal, and either end the game (one seat left standing)
@@ -425,6 +451,7 @@ function applyResolution(
   }
 
   const resolution: RoundResolution = { ...meta, affectedSeat, diceDelta: delta, revealedDice, exactHitPenaltySeats: extraPenaltySeats };
+  const statTally = perudoTally(state.statTally, resolution, players);
   const alive = players.filter((p) => p.diceCount > 0).map((p) => p.seat);
 
   if (alive.length <= 1) {
@@ -435,6 +462,7 @@ function applyResolution(
       lastResolution: resolution,
       eliminationOrder,
       winnerSeat: alive[0] ?? null,
+      statTally,
     };
   }
 
@@ -445,6 +473,7 @@ function applyResolution(
     phase: "reveal",
     lastResolution: resolution,
     eliminationOrder,
+    statTally,
     roundStarter: nextStarter,
     activeSeat: nextStarter,
   };

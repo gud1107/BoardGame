@@ -45,6 +45,7 @@ export const MIN_PHOTO_DIFFS = 3;
 export const MAX_PHOTO_DIFFS = 10;
 export const DEFAULT_TIMER_SECONDS = 90;
 
+import { tallyAdd, type StatTally } from "@/games/shared/statTally";
 import { findThemeScene, pickThemeMutations, THEME_SCENES, themeSpotId } from "./themeScenes";
 
 /** Every scene the builtin mode can chain — one per theme. */
@@ -128,6 +129,8 @@ export interface SpotDifferenceState {
   hints: Record<TeamId, number>;
   activeHint: ActiveHint | null;
   phase: "playing" | "gameOver";
+  /** Personal-stats counters (src/games/shared/statTally.ts) — see spot-difference/stats.ts. */
+  statTally?: StatTally;
 }
 
 export type EngineAction =
@@ -232,6 +235,7 @@ function click(state: SpotDifferenceState, seat: SeatIndex, xPct: number, yPct: 
       ...state,
       penalties: { ...state.penalties, [seat]: atMs + WRONG_CLICK_PENALTY_MS },
       lastMiss: { ...state.lastMiss, [seat]: { xPct, yPct, atMs } },
+      statTally: tallyAdd(state.statTally, seat, "missClicks"),
     };
   }
 
@@ -240,16 +244,17 @@ function click(state: SpotDifferenceState, seat: SeatIndex, xPct: number, yPct: 
   const stages = state.stages.map((s, i) => (i === state.currentStageIndex ? newStage : s));
   const activeHint = state.activeHint?.spotId === hit.id ? null : state.activeHint;
   const stageCleared = Object.keys(foundBy).length >= newStage.spots.length;
+  const statTally = tallyAdd(state.statTally, seat, "spotsFound");
 
   if (!stageCleared) {
-    return { ...state, stages, activeHint };
+    return { ...state, stages, activeHint, statTally };
   }
   const nextIndex = state.currentStageIndex + 1;
   if (nextIndex >= stages.length) {
     // Every stage's every spot found — immediate win per the rulebook's "스피드전" rule.
-    return { ...state, stages, phase: "gameOver", activeHint: null };
+    return { ...state, stages, phase: "gameOver", activeHint: null, statTally };
   }
-  return { ...state, stages, currentStageIndex: nextIndex, activeHint: null };
+  return { ...state, stages, currentStageIndex: nextIndex, activeHint: null, statTally };
 }
 
 function applyHint(state: SpotDifferenceState, team: TeamId, atMs: number): SpotDifferenceState {

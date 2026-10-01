@@ -11,13 +11,14 @@
 --   player_match_log's (user_id, match_id) key makes re-uploads no-ops, so
 --   retries, re-logins and two devices can't double-count or overwrite.
 -- - Raw rows are owner-only. The public leaderboard is served by
---   public_leaderboard(), which exposes only nickname/avatar + counts (no
---   user ids, no emails). Results come from lockstep clients the server
+--   public_leaderboard(), which exposes only the self-chosen ranking name
+--   (public_name) / site avatar + counts — no user ids, emails, or the
+--   provider-supplied (possibly real) name. Results come from lockstep clients the server
 --   can't verify, so the checks below only reject impossible values and
 --   floods, not cheating — the UI labels the ranking accordingly.
 -- - `details` holds game-specific numbers. Merge rule (mirrors
 --   src/lib/stats/details.ts): keys starting with `max` keep the highest,
---   every other key is summed.
+--   keys starting with `min` keep the lowest, every other key is summed.
 
 create table if not exists player_game_stats (
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -60,6 +61,53 @@ create table if not exists public.user_profiles (
   updated_at timestamptz default now()
 );
 
+-- What the public leaderboard shows. Deliberately separate from
+-- user_profiles.nickname/avatar_url, which social logins fill from the
+-- provider (often a real name / face photo): nothing appears publicly until
+-- the player picks a ranking name themselves (set_my_public_name) or uploads
+-- a site avatar (/api/profile/avatar mirrors it into public_avatar_url).
+alter table public.user_profiles add column if not exists public_name varchar(12);
+alter table public.user_profiles add column if not exists public_avatar_url text;
+create unique index if not exists user_profiles_public_name_unique
+  on public.user_profiles (lower(public_name)) where public_name is not null;
+
+-- Set (or clear, with null/blank) the caller's ranking name. Raises
+-- 'invalid name' / 'reserved name' / 'name taken' for the client to map.
+create or replace function set_my_public_name(p_name text)
+returns text as $$
+declare
+  v_uid uuid := auth.uid();
+  v_name text := nullif(btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')), '');
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+  if v_name is not null then
+    if char_length(v_name) not between 2 and 12 or v_name !~ '^[가-힣ㄱ-ㅎa-zA-Z0-9_ ]+$' then
+      raise exception 'invalid name';
+    end if;
+    if lower(v_name) in ('admin', 'administrator', '관리자', '운영자', '운영팀', 'gm')
+       or v_name like '게이머\_%' then
+      raise exception 'reserved name';
+    end if;
+    if exists (select 1 from public.user_profiles
+               where lower(public_name) = lower(v_name) and id <> v_uid) then
+      raise exception 'name taken';
+    end if;
+  end if;
+
+  insert into public.user_profiles (id, nickname, public_name)
+  values (v_uid, coalesce(v_name, '게이머_' || substring(v_uid::text from 1 for 6)), v_name)
+  on conflict (id) do update set public_name = excluded.public_name, updated_at = now();
+  return v_name;
+exception when unique_violation then
+  raise exception 'name taken';
+end;
+$$ language plpgsql security definer set search_path = public;
+
+revoke all on function set_my_public_name(text) from public, anon;
+grant execute on function set_my_public_name(text) to authenticated;
+
 alter table player_game_stats enable row level security;
 alter table player_match_log enable row level security;
 
@@ -79,6 +127,7 @@ returns jsonb as $$
       case
         when not (coalesce(p_base, '{}'::jsonb) ? d.key) then d.value
         when d.key like 'max%' then to_jsonb(greatest((p_base ->> d.key)::numeric, (d.value #>> '{}')::numeric))
+        when d.key like 'min%' then to_jsonb(least((p_base ->> d.key)::numeric, (d.value #>> '{}')::numeric))
         else to_jsonb((p_base ->> d.key)::numeric + (d.value #>> '{}')::numeric)
       end)
     from jsonb_each(coalesce(p_delta, '{}'::jsonb)) d
@@ -210,8 +259,8 @@ create or replace function public_leaderboard(
     from eligible e
   )
   select r.rnk,
-         coalesce(p.nickname, '게이머_' || left(replace(r.user_id::text, '-', ''), 6))::text,
-         p.avatar_url,
+         coalesce(p.public_name, '게이머_' || substring(r.user_id::text from 1 for 6))::text,
+         p.public_avatar_url,
          r.played, r.wins, r.losses, r.win_rate, r.best_rank, r.details,
          (r.user_id = auth.uid())
   from ranked r

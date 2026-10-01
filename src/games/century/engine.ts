@@ -113,6 +113,8 @@ export interface CenturyState {
   turnNumber: number;
   /** 5 for 4-5 players, 6 for 2-3 (rulebook §7.1). */
   pointCardGoal: number;
+  /** Personal-stats counters (src/games/shared/statTally.ts) — see century/stats.ts. */
+  statTally?: StatTally;
 }
 
 export type EngineAction =
@@ -126,6 +128,7 @@ export type EngineAction =
 
 /** Deterministic PRNG + shuffle, shared across every engine — see src/lib/rng.ts. */
 import { seededRng, shuffle } from "@/lib/rng";
+import { tallyAdd, type StatTally } from "@/games/shared/statTally";
 export { seededRng };
 import { botTier, pickByLevel, type BotLevel, type BotTier, type ScoredCandidate } from "@/games/shared/bot/botDifficulty";
 
@@ -403,6 +406,15 @@ function discardToLimit(state: CenturyState, seat: SeatIndex, discard: ResourceB
 
 /** Single entry point applying any `EngineAction` to a state — the whole engine as one reducer. */
 export function applyAction(state: CenturyState, action: EngineAction): CenturyState {
+  const next = reduceAction(state, action);
+  if (next === state || action.type === "discardToLimit") return next;
+  // Brown (top-tier) cubes gained by this action — produce/upgrade/trade all count.
+  const before = findPlayer(state, action.seat)?.resources.brown ?? 0;
+  const after = findPlayer(next, action.seat)?.resources.brown ?? 0;
+  return after > before ? { ...next, statTally: tallyAdd(next.statTally, action.seat, "brownGained", after - before) } : next;
+}
+
+function reduceAction(state: CenturyState, action: EngineAction): CenturyState {
   switch (action.type) {
     case "playProduction":
       return playProduction(state, action.seat, action.cardId);
