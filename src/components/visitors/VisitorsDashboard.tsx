@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase/client";
+import { getAuthSupabase } from "@/lib/supabase/authClient";
 import { getGameMeta } from "@/games/registry";
 import type { VisitorRow } from "@/lib/analytics/visitors";
 import { isReturning, summarizeVisitors, topGames } from "@/lib/analytics/visitorSummary";
@@ -46,6 +47,18 @@ function readSavedPassword(): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * Signed in as a site admin (freedom_03@naver.com)? Then the list comes
+ * from `admin_list_visitors()` (supabase/game_events.sql) with no password.
+ * Null when not signed in / not an admin.
+ */
+async function fetchVisitorsAsAdmin(): Promise<VisitorRow[] | null> {
+  const supabase = getAuthSupabase();
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc("admin_list_visitors");
+  return error ? null : ((data ?? []) as VisitorRow[]);
 }
 
 async function fetchVisitors(password: string): Promise<{ rows: VisitorRow[] } | { error: string }> {
@@ -129,12 +142,22 @@ export default function VisitorsDashboard() {
     } catch {}
   }, []);
 
-  // Re-open with the password already entered in this tab.
+  // Admin login opens it directly; otherwise re-open with the password
+  // already entered in this tab.
+  const [adminMode, setAdminMode] = useState(false);
   useEffect(() => {
-    const saved = readSavedPassword();
-    if (!saved) return;
     let cancelled = false;
-    void fetchVisitors(saved).then((result) => {
+    void fetchVisitorsAsAdmin().then(async (adminRows) => {
+      if (cancelled) return;
+      if (adminRows) {
+        setAdminMode(true);
+        setRows(adminRows);
+        setLoadedAt(Date.now());
+        return;
+      }
+      const saved = readSavedPassword();
+      if (!saved) return;
+      const result = await fetchVisitors(saved);
       if (cancelled || "error" in result) return;
       setPassword(saved);
       setRows(result.rows);
@@ -144,6 +167,17 @@ export default function VisitorsDashboard() {
       cancelled = true;
     };
   }, []);
+
+  const refresh = useCallback(async () => {
+    if (!adminMode) return load(password);
+    setLoading(true);
+    const adminRows = await fetchVisitorsAsAdmin();
+    setLoading(false);
+    if (adminRows) {
+      setRows(adminRows);
+      setLoadedAt(Date.now());
+    }
+  }, [adminMode, load, password]);
 
   const summary = useMemo(() => (rows ? summarizeVisitors(rows, loadedAt) : null), [rows, loadedAt]);
 
@@ -163,7 +197,9 @@ export default function VisitorsDashboard() {
     return (
       <div className="mx-auto flex min-h-[70dvh] max-w-sm flex-col justify-center px-4 py-10">
         <h1 className="mb-1 text-2xl font-bold text-white light:text-slate-900">👥 방문자</h1>
-        <p className="mb-6 text-sm text-white/50 light:text-slate-500">비밀번호를 입력하면 방문자 목록을 볼 수 있습니다.</p>
+        <p className="mb-6 text-sm text-white/50 light:text-slate-500">
+          관리자 계정으로 로그인하면 바로 열립니다. 로그인하지 않았다면 방문자 페이지 전용 비밀번호(supabase/visitors.sql 실행 때 정한 것)를 입력하세요.
+        </p>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -206,7 +242,7 @@ export default function VisitorsDashboard() {
         </div>
         <button
           type="button"
-          onClick={() => void load(password)}
+          onClick={() => void refresh()}
           disabled={loading}
           className="rounded-full border border-white/15 px-4 py-1.5 text-sm text-white/80 transition hover:border-amber-400 disabled:opacity-40 light:border-slate-300 light:text-slate-700"
         >
