@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { GAME_REGISTRY, getGameMeta } from "@/games/registry";
 import { computeDuplicateFlags, isSuspectedDuplicate } from "@/lib/analytics/duplicateFlags";
-import { adminRpc, DATE_TIME, fmt, rate, type ExcludeMe } from "../adminApi";
+import { adminRpc, DATE_TIME, fmt, rate, type ExcludeMe, type IpLabelMap } from "../adminApi";
 import { Chip, ErrorNote, Loading, StatCard } from "../adminUi";
 import { useAdminQuery } from "../useAdminQuery";
 
@@ -65,22 +65,43 @@ export function withAllGames(rows: FunnelRow[] | null): FunnelRow[] {
   );
 }
 
+function NameTag({ name }: { name: string }) {
+  return (
+    <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-amber-200 light:bg-amber-100 light:text-amber-800">
+      🏷️ {name}
+    </span>
+  );
+}
+
 /**
  * One device's IPs. The admin's own IP is shown outright (and marked);
- * anyone else's stays a hash until clicked. Events from before the raw IP
- * was stored only have the hash, which can't be turned back into an IP.
+ * anyone else's stays hidden until clicked — as the admin's name for it
+ * (🏷️ IP 관리) when one is set, otherwise as its hash. Events from before
+ * the raw IP was stored only have the hash, which can't be turned back
+ * into an IP.
  */
-function IpCell({ hashes, ipMap, myIp }: { hashes: string[]; ipMap: Record<string, string>; myIp: string | null }) {
+function IpCell({
+  hashes,
+  ipMap,
+  myIp,
+  labels,
+}: {
+  hashes: string[];
+  ipMap: Record<string, string>;
+  myIp: string | null;
+  labels: IpLabelMap;
+}) {
   const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
   if (hashes.length === 0) return <span className="text-white/30">—</span>;
   return (
     <div className="flex flex-col items-start gap-1">
       {hashes.map((h) => {
         const raw = ipMap[h];
+        const name = raw ? labels.get(raw)?.label : undefined;
         if (raw && raw === myIp) {
           return (
             <span key={h} className="font-mono text-[11px] text-emerald-300">
-              {raw} <span className="font-sans font-bold">👤 나</span>
+              {raw} <span className="font-sans font-bold">👤 나</span> {name && <NameTag name={name} />}
             </span>
           );
         }
@@ -108,7 +129,15 @@ function IpCell({ hashes, ipMap, myIp }: { hashes: string[]; ipMap: Record<strin
             className="rounded border border-white/10 px-1.5 py-0.5 font-mono text-[11px] text-white/70 hover:border-amber-400"
             title={open ? "다시 숨기기" : "눌러서 IP 보기"}
           >
-            {open ? raw : `🔒 ${h}`}
+            {open ? (
+              <>
+                {raw} {name && <NameTag name={name} />}
+              </>
+            ) : name ? (
+              <NameTag name={name} />
+            ) : (
+              `🔒 ${h}`
+            )}
           </button>
         );
       })}
@@ -121,11 +150,13 @@ function Participants({
   since,
   exclude,
   myIp,
+  ipLabels,
 }: {
   gameId: string;
   since: string | null;
   exclude: ExcludeMe | null;
   myIp: string | null;
+  ipLabels: IpLabelMap;
 }) {
   const [onlySuspects, setOnlySuspects] = useState(false);
   const { data: rows, error } = useAdminQuery<ParticipantRow>(
@@ -191,7 +222,7 @@ function Participants({
                       <p className="font-mono text-[10px] text-white/30">{(r.device_id ?? "—").slice(0, 8)}</p>
                     </td>
                     <td className="px-3 py-2">
-                      <IpCell hashes={r.ip_hashes} ipMap={ipMap} myIp={myIp} />
+                      <IpCell hashes={r.ip_hashes} ipMap={ipMap} myIp={myIp} labels={ipLabels} />
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex flex-col gap-0.5">
@@ -224,11 +255,13 @@ export default function GamesTab({
   since,
   exclude,
   myIp,
+  ipLabels,
   reloadKey,
 }: {
   since: string | null;
   exclude: ExcludeMe | null;
   myIp: string | null;
+  ipLabels: IpLabelMap;
   reloadKey: number;
 }) {
   const [openGame, setOpenGame] = useState<string | null>(null);
@@ -304,7 +337,7 @@ export default function GamesTab({
                   {open && (
                     <tr>
                       <td colSpan={7} className="bg-black/20 px-3 pb-4 light:bg-slate-50">
-                        <Participants gameId={r.game_id} since={since} exclude={exclude} myIp={myIp} />
+                        <Participants gameId={r.game_id} since={since} exclude={exclude} myIp={myIp} ipLabels={ipLabels} />
                       </td>
                     </tr>
                   )}

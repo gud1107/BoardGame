@@ -16,8 +16,10 @@ import BugReportsTab from "./tabs/BugReportsTab";
 import NoticeTab from "./tabs/NoticeTab";
 import GameVisibilityTab from "./tabs/GameVisibilityTab";
 import SetupStatus from "./SetupStatus";
+import IpLabelsTab from "./tabs/IpLabelsTab";
+import { useIpLabels } from "./useIpLabels";
 
-type TabKey = "games" | "monthly" | "trend" | "hours" | "dropoff" | "rooms" | "sources" | "bugs" | "notice" | "visibility";
+type TabKey = "games" | "monthly" | "trend" | "hours" | "dropoff" | "rooms" | "sources" | "ips" | "bugs" | "notice" | "visibility";
 
 /** `period`: whether the 전체/30일/7일/오늘 filter applies. `stats`: whether "내 기록 제외" applies. */
 const TABS: { key: TabKey; label: string; period: boolean; stats: boolean }[] = [
@@ -28,6 +30,7 @@ const TABS: { key: TabKey; label: string; period: boolean; stats: boolean }[] = 
   { key: "dropoff", label: "🪜 이탈 분석", period: true, stats: true },
   { key: "rooms", label: "🚪 방 기록", period: true, stats: true },
   { key: "sources", label: "🧭 유입 경로", period: true, stats: true },
+  { key: "ips", label: "🏷️ IP 관리", period: true, stats: false },
   { key: "bugs", label: "🐛 버그 리포트", period: false, stats: false },
   { key: "notice", label: "📢 공지", period: false, stats: false },
   { key: "visibility", label: "👁 게임 관리", period: false, stats: false },
@@ -103,6 +106,7 @@ function AdminHub() {
   }, []);
 
   const since = useMemo(() => sinceFor(period), [period]);
+  const { labels: ipLabels, reload: reloadIpLabels } = useIpLabels();
   const exclude: ExcludeMe | null = useMemo(
     () => (excludeMe ? { ip: myIp, device: myDevice } : null),
     [excludeMe, myIp, myDevice],
@@ -188,13 +192,16 @@ function AdminHub() {
         </div>
       )}
 
-      {tab === "games" && <GamesTab since={since} exclude={exclude} myIp={myIp} reloadKey={reloadKey} />}
+      {tab === "games" && <GamesTab since={since} exclude={exclude} myIp={myIp} ipLabels={ipLabels} reloadKey={reloadKey} />}
       {tab === "monthly" && <MonthlyTab exclude={exclude} reloadKey={reloadKey} />}
       {tab === "trend" && <TrendTab exclude={exclude} reloadKey={reloadKey} />}
       {tab === "hours" && <HoursTab since={since} exclude={exclude} reloadKey={reloadKey} />}
       {tab === "dropoff" && <DropOffTab since={since} exclude={exclude} reloadKey={reloadKey} />}
       {tab === "rooms" && <RoomsTab since={since} exclude={exclude} reloadKey={reloadKey} />}
       {tab === "sources" && <SourcesTab since={since} exclude={exclude} reloadKey={reloadKey} />}
+      {tab === "ips" && (
+        <IpLabelsTab since={since} myIp={myIp} labels={ipLabels} onLabelsChanged={reloadIpLabels} reloadKey={reloadKey} />
+      )}
       {tab === "bugs" && <BugReportsTab reloadKey={reloadKey} />}
       {tab === "notice" && <NoticeTab />}
       {tab === "visibility" && <GameVisibilityTab />}

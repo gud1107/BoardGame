@@ -33,6 +33,13 @@ const CHECKS = [
     effect: "📅 월별 탭",
     destructive: false,
   },
+  {
+    file: "supabase/admin_ip_labels.sql",
+    rpc: "admin_list_ip_labels",
+    args: {},
+    effect: "🏷️ IP 관리 탭과 IP 이름 표시",
+    destructive: false,
+  },
 ];
 
 export default function SetupStatus() {

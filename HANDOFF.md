@@ -39,6 +39,17 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🏷️ 관리자 IP 이름 등록(IP 관리 탭) — 2026-10-02 (커밋/푸시, 배포는 웹훅 자동)
+
+- 사용자 요청: 자주 들어오는 IP가 누구인지 직접 등록할 수 있게 해달라. `supabase/admin_ip_labels.sql`(**사용자 실행 필요**, 추가만 하므로 확인 창 없음):
+  `ip_labels(ip pk, label, memo)`(RLS, 정책 없음), `admin_list_ip_labels()`, `admin_set_ip_label(ip, label, memo)`(빈 label = 지우기. DELETE 대신
+  null을 저장해 SQL Editor의 destructive 확인 창을 피한다), `admin_top_ips(p_since, p_limit)`(site_visits + game_events의 원문 IP 기준으로
+  방문/게임 시작/이벤트/기기 수/닉네임/최초·최근/이름). 모두 is_site_admin을 확인하고 anon 권한은 회수했다. embedded-postgres로 검증했다(등록, 지우기, 재실행, 거부).
+- 앱: `tabs/IpLabelsTab.tsx`(많이 들어온 IP 순위, 행마다 인라인 이름/메모 편집, IP 직접 입력, "내 IP 넣기", 이 기간 활동이 없는 이름 붙은 IP 목록),
+  `useIpLabels`(허브에서 1회 로드하고 저장 후 reload). 게임 통계 기기 목록의 `IpCell`은 이름이 있으면 `🔒 해시` 대신 `🏷️ 이름`을 보여주고, 누르면 원문 + 이름을 보여준다.
+  `SetupStatus` CHECKS에 admin_ip_labels를 추가했다.
+- 커밋 시점에 다른 세션의 hungryShark/crabSurvival 미완성 변경(zz_* 테스트 포함, tsc 에러 1건)이 있었다. 이 커밋에는 포함하지 않았다.
+
 ## 📅 관리자 월별 통계 탭 — 2026-10-02 (커밋/푸시, 배포는 웹훅 자동)
 
 - `supabase/admin_monthly.sql`(**사용자 실행 필요**, DROP/DELETE가 없어 확인 창이 뜨지 않음): `admin_monthly_stats(p_months, p_ex_ip, p_ex_device)`는

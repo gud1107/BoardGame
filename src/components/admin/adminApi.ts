@@ -79,3 +79,13 @@ export const SERIES = {
   orange: "#d95926",
   aqua: "#199e70",
 } as const;
+
+/** An admin-given name for an IP (supabase/admin_ip_labels.sql). */
+export interface IpLabel {
+  ip: string;
+  label: string;
+  memo: string | null;
+  updated_at: string;
+}
+
+export type IpLabelMap = ReadonlyMap<string, IpLabel>;
