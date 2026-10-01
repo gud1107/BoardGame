@@ -1434,7 +1434,7 @@ function damageCreature(w: World, cr: Creature, dmg: number, by: Crab, crit: boo
       floatText(w, cr.x, cr.y - cr.def.radius - 10, `+${Math.round(pts).toLocaleString()}`, "#fde047", 15, 1);
     }
     if (rand(w) < GEAR_DROP[cr.kind]) dropGear(w, cr.x, cr.y, randomGear(w));
-    else if (rand(w) < 0.08) dropMutation(w, cr.x, cr.y);
+    else if (rand(w) < 0.12) dropMutation(w, cr.x, cr.y);
     for (let i = 0; i < cr.def.meat; i++) {
       const m = newPickup(w, "food", cr.x, cr.y, Math.round(cr.def.points * 0.15), false, 11, 40);
       m.food = "meat";
@@ -1516,7 +1516,7 @@ function breakBox(w: World, b: Box, by: Crab) {
     const r = rand(w);
     if (r < 0.55) scatter(dropEquip(w, b.x, b.y, "weapon", freshWeapon(randomWeapon(w, 1, 4))));
     else if (r < 0.85) scatter(dropEquip(w, b.x, b.y, "shield", freshShield(randomShield(w, 1, 2))));
-    if (rand(w) < 0.12) dropGear(w, b.x, b.y, randomGear(w));
+    if (rand(w) < 0.22) dropGear(w, b.x, b.y, randomGear(w));
     if (rand(w) < 0.4) {
       const f = weightedFood(w);
       const m = newPickup(w, "food", b.x, b.y, FOODS[f].points, false, FOODS[f].radius, 40);

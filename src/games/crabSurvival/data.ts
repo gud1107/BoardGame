@@ -31,7 +31,7 @@ export interface LevelDef {
  * update cut the early thresholds by 40% (Lv2–6) and made 바나나/조개 2.5×
  * richer; the late ones were re-tuned by bot self-play against the new income
  * (field weapons, mutations, tier skills) so a runaway crab hits Lv11 ~2× and
- * Lv12 ~1.8× sooner than before rather than in the first two minutes.
+ * Lv12 ~2× sooner than before rather than in the first two minutes.
  */
 export const LEVELS: LevelDef[] = [
   { level: 1, name: "아기 게", points: 0, scale: 1.0, atk: 10, hp: 100, speed: 250, speedLabel: "가장 빠름", gain: 1 },
@@ -43,9 +43,9 @@ export const LEVELS: LevelDef[] = [
   { level: 7, name: "성체 게", points: 15_000, scale: 2.2, atk: 65, hp: 1_000, speed: 205, speedLabel: "약간 느림", gain: 3 },
   { level: 8, name: "노련한 게", points: 36_000, scale: 2.5, atk: 90, hp: 1_600, speed: 196, speedLabel: "약간 느림", gain: 3.3 },
   { level: 9, name: "거대 게", points: 90_000, scale: 2.8, atk: 120, hp: 2_500, speed: 188, speedLabel: "느림", gain: 4.5 },
-  { level: 10, name: "대왕 게", points: 190_000, scale: 3.1, atk: 160, hp: 3_500, speed: 182, speedLabel: "느림", gain: 4.8 },
-  { level: 11, name: "전설의 게", points: 340_000, scale: 3.3, atk: 190, hp: 4_300, speed: 178, speedLabel: "묵직함", gain: 5.3 },
-  { level: 12, name: "킹 크랩", points: 520_000, scale: 3.5, atk: 220, hp: 5_000, speed: 175, speedLabel: "묵직함", gain: 6 },
+  { level: 10, name: "대왕 게", points: 210_000, scale: 3.1, atk: 160, hp: 3_500, speed: 182, speedLabel: "느림", gain: 4.8 },
+  { level: 11, name: "전설의 게", points: 380_000, scale: 3.3, atk: 190, hp: 4_300, speed: 178, speedLabel: "묵직함", gain: 5.3 },
+  { level: 12, name: "킹 크랩", points: 600_000, scale: 3.5, atk: 220, hp: 5_000, speed: 175, speedLabel: "묵직함", gain: 6 },
 ];
 
 export const MAX_LEVEL = LEVELS.length;
@@ -474,18 +474,18 @@ export interface GearDef {
 export const MAX_GEAR = 2;
 
 export const GEARS: Record<GearKind, GearDef> = {
-  shotgun: { kind: "shotgun", name: "조개껍질 산탄총", emoji: "🐚", desc: "전방 부채꼴로 패각 파편 5발", dmg: 0.5, cooldown: 0.8, duration: 22, range: 300, color: "#fbcfe8" },
-  needle: { kind: "needle", name: "가시 산호 기관총", emoji: "🪸", desc: "가시 침 초연사 + 넉백", dmg: 0.2, cooldown: 0.15, duration: 18, range: 380, color: "#fb7185" },
-  zap: { kind: "zap", name: "해파리 감전 채찍", emoji: "⚡", desc: "체인 라이트닝 3체 연쇄 감전", dmg: 0.9, cooldown: 1.2, duration: 22, range: 260, color: "#c4b5fd" },
-  mine: { kind: "mine", name: "복어 맹독 지뢰포", emoji: "🐡", desc: "지나간 자리에 독 거품 지뢰", dmg: 2.2, cooldown: 2.0, duration: 22, range: 0, color: "#a3e635" },
-  trident: { kind: "trident", name: "넵튠의 청동 삼지창", emoji: "🔱", desc: "일직선 관통 수류창", dmg: 1.8, cooldown: 1.8, duration: 22, range: 520, color: "#fbbf24" },
-  saw: { kind: "saw", name: "톱날 전기톱 집게", emoji: "🪚", desc: "초근접 회전 톱날 지속 피해", dmg: 0.32, cooldown: 0.2, duration: 18, range: 0, color: "#e2e8f0" },
+  shotgun: { kind: "shotgun", name: "조개껍질 산탄총", emoji: "🐚", desc: "전방 부채꼴로 패각 파편 5발", dmg: 0.5, cooldown: 0.8, duration: 30, range: 300, color: "#fbcfe8" },
+  needle: { kind: "needle", name: "가시 산호 기관총", emoji: "🪸", desc: "가시 침 초연사 + 넉백", dmg: 0.2, cooldown: 0.15, duration: 25, range: 380, color: "#fb7185" },
+  zap: { kind: "zap", name: "해파리 감전 채찍", emoji: "⚡", desc: "체인 라이트닝 3체 연쇄 감전", dmg: 0.9, cooldown: 1.2, duration: 30, range: 260, color: "#c4b5fd" },
+  mine: { kind: "mine", name: "복어 맹독 지뢰포", emoji: "🐡", desc: "지나간 자리에 독 거품 지뢰", dmg: 2.2, cooldown: 2.0, duration: 30, range: 0, color: "#a3e635" },
+  trident: { kind: "trident", name: "넵튠의 청동 삼지창", emoji: "🔱", desc: "일직선 관통 수류창", dmg: 1.8, cooldown: 1.8, duration: 30, range: 520, color: "#fbbf24" },
+  saw: { kind: "saw", name: "톱날 전기톱 집게", emoji: "🪚", desc: "초근접 회전 톱날 지속 피해", dmg: 0.32, cooldown: 0.2, duration: 25, range: 0, color: "#e2e8f0" },
 };
 
 export const GEAR_LIST: GearDef[] = Object.values(GEARS);
 
 /** Chance a slain creature drops a weapon. */
-export const GEAR_DROP: Record<CreatureKind, number> = { babyCrab: 0.03, fish: 0.03, crayfish: 0.15, turtle: 0.5, lobster: 1 };
+export const GEAR_DROP: Record<CreatureKind, number> = { babyCrab: 0.06, fish: 0.06, crayfish: 0.25, turtle: 0.7, lobster: 1 };
 
 // ── 변이 아이템 (buffs & risk traps) ───────────────────────────────────────
 
@@ -508,10 +508,10 @@ export interface MutationDef {
 }
 
 export const MUTATIONS: Record<MutationKind, MutationDef> = {
-  capsule: { kind: "capsule", name: "황금 플랑크톤 캡슐", emoji: "💊", risk: false, duration: 8, good: "자석 반경 3배 + 먹이 점수 300%", atk: 1, speed: 1, armor: 1, weight: 14, color: "#facc15" },
-  pearl: { kind: "pearl", name: "진주 보호막", emoji: "🔮", risk: false, duration: 20, good: "공격 2회 무효화 + 수류 반사 폭발", atk: 1, speed: 1, armor: 1, weight: 12, color: "#e0f2fe" },
-  pepper: { kind: "pepper", name: "매운 고추 미역", emoji: "🌶️", risk: false, duration: 10, good: "이동속도 +70% · 지나간 자리에 불꽃", atk: 1, speed: 1.7, armor: 1, weight: 13, color: "#f97316" },
-  giant: { kind: "giant", name: "거대화 킹 바닷가재 즙", emoji: "🦞", risk: false, duration: 8, good: "몸집 2배 · 닿는 잡몹 즉사", atk: 1.25, speed: 1, armor: 1, weight: 9, color: "#ef4444" },
+  capsule: { kind: "capsule", name: "황금 플랑크톤 캡슐", emoji: "💊", risk: false, duration: 10, good: "자석 반경 3배 + 먹이 점수 300%", atk: 1, speed: 1, armor: 1, weight: 14, color: "#facc15" },
+  pearl: { kind: "pearl", name: "진주 보호막", emoji: "🔮", risk: false, duration: 25, good: "공격 2회 무효화 + 수류 반사 폭발", atk: 1, speed: 1, armor: 1, weight: 12, color: "#e0f2fe" },
+  pepper: { kind: "pepper", name: "매운 고추 미역", emoji: "🌶️", risk: false, duration: 12, good: "이동속도 +70% · 지나간 자리에 불꽃", atk: 1, speed: 1.7, armor: 1, weight: 13, color: "#f97316" },
+  giant: { kind: "giant", name: "거대화 킹 바닷가재 즙", emoji: "🦞", risk: false, duration: 10, good: "몸집 2배 · 닿는 잡몹 즉사", atk: 1.25, speed: 1, armor: 1, weight: 9, color: "#ef4444" },
   toxic: { kind: "toxic", name: "방사능 폐기물 통", emoji: "☢️", risk: true, duration: 10, good: "공격력 +200%", bad: "초록 시야 + 초당 2% 자해", atk: 3, speed: 1, armor: 1, weight: 9, color: "#84cc16" },
   salt: { kind: "salt", name: "고농도 소금 덩어리", emoji: "🧂", risk: true, duration: 6, good: "방어력 +80% · 넉백 면역", bad: "이동속도 -40%", atk: 1, speed: 0.6, armor: 1 / 1.8, weight: 9, color: "#f1f5f9" },
   rum: { kind: "rum", name: "취한 해적의 럼주 병", emoji: "🥃", risk: true, duration: 8, good: "모든 타격 치명타", bad: "조작 방향 반전(혼란)", atk: 1, speed: 1, armor: 1, weight: 8, color: "#d97706" },
@@ -519,7 +519,7 @@ export const MUTATIONS: Record<MutationKind, MutationDef> = {
 };
 
 export const MUTATION_LIST: MutationDef[] = Object.values(MUTATIONS);
-export const MUTATION_POP = 18;
+export const MUTATION_POP = 26;
 export const MAGNET_BASE = 12; // pull radius = (body + this) × 3 while the capsule lasts
 export const PEARL_CHARGES = 2;
 export const TOXIC_DOT = 0.02; // of max HP per second

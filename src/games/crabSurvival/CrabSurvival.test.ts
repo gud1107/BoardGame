@@ -35,7 +35,7 @@ function face(a: Crab, b: Crab) {
 }
 
 describe("level table (spec §2.2)", () => {
-  it("하이퍼 성장: early milestones cut 40%, late ones tuned so Lv12 lands ~1.8x sooner", () => {
+  it("하이퍼 성장: early milestones cut 40%, late ones tuned so Lv12 lands ~2x sooner", () => {
     expect(MAX_LEVEL).toBe(12);
     const anchors = [0, 2, 4, 6, 8, 11].map((i) => LEVELS[i]);
     expect(anchors.map((l) => [l.points, l.scale, l.atk, l.hp])).toEqual([
@@ -44,12 +44,12 @@ describe("level table (spec §2.2)", () => {
       [3_000, 1.7, 35, 450],
       [15_000, 2.2, 65, 1_000],
       [90_000, 2.8, 120, 2_500],
-      [520_000, 3.5, 220, 5_000],
+      [600_000, 3.5, 220, 5_000],
     ]);
     expect(levelForScore(299).level).toBe(1);
     expect(levelForScore(300).level).toBe(2);
-    expect(levelForScore(519_999).level).toBe(11);
-    expect(levelForScore(520_000).level).toBe(12);
+    expect(levelForScore(599_999).level).toBe(11);
+    expect(levelForScore(600_000).level).toBe(12);
     // Gaps shrink: no step asks for more than ~2.3x the previous threshold.
     for (let i = 2; i < LEVELS.length; i++) expect(LEVELS[i].points / LEVELS[i - 1].points).toBeLessThan(2.6);
   });
@@ -403,7 +403,7 @@ describe("하이퍼 성장: tiers + special skills", () => {
   it("Tier 4 hydro cannon pierces everything on its line", () => {
     const w = bare(2);
     const [me, a, b] = w.crabs;
-    addScore(w, me, 340_000);
+    addScore(w, me, 380_000);
     me.angle = 0;
     a.x = 200;
     b.x = 420;
@@ -427,7 +427,7 @@ describe("field weapons", () => {
     me.gear[1].t = 2;
     expect(equipGear(w, me, "trident")).toBe(true);
     expect(me.gear.map((g) => g.kind).sort()).toEqual(["shotgun", "trident"]);
-    for (let i = 0; i < 60 * 25; i++) step(w, idle, 1 / 60);
+    for (let i = 0; i < 60 * 31; i++) step(w, idle, 1 / 60);
     expect(me.gear).toHaveLength(0);
   });
 
