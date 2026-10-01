@@ -19,7 +19,9 @@ import {
   effectiveStats,
   ENTITY_DEFS,
   explosionDamage,
+  frenzyMultiplier,
   GOLD_GAUGE_RATE,
+  GOLD_RUSH_COIN_MULT,
   GOLD_RUSH_DURATION,
   goldGaugeCapacity,
   goldRushMultiplier,
@@ -33,6 +35,7 @@ import {
   POISON_SLOW,
   POISON_TICK,
   populationTargets,
+  PREY_EFFECTS,
   seabedY,
   SKY_TOP,
   SURFACE_Y,
@@ -43,6 +46,7 @@ import {
   type EntityKind,
   type MissionId,
   type SharkDef,
+  type SkillId,
   type UpgradeLevels,
 } from "./data";
 
@@ -69,6 +73,8 @@ export interface Entity {
   homeY: number;
   dir: 1 | -1;
   state: "patrol" | "chase" | "flee";
+  /** Seconds left frozen by a skill (EMP / roar / ram): no movement, no harm. */
+  stun: number;
 }
 
 export type ParticleKind = "blood" | "chunk" | "bubble" | "splash" | "spark" | "smoke" | "coin" | "flash" | "gold";
@@ -112,6 +118,8 @@ export interface SharkState {
   poison: { remaining: number; tick: number; pct: number } | null;
   hurtFlash: number;
   invuln: number;
+  /** Seconds of damage immunity from eating a ray / small shark. */
+  shield: number;
 }
 
 export type GameEvent =
@@ -129,6 +137,9 @@ export type GameEvent =
   | { type: "chest"; amount: number }
   | { type: "mission"; label: string; reward: number }
   | { type: "torpedo" }
+  | { type: "skill"; id: SkillId }
+  | { type: "skillReady" }
+  | { type: "preyFx"; label: string }
   | { type: "death"; cause: string };
 
 export interface MissionState {
@@ -165,6 +176,42 @@ export interface GoldRushState {
   multiplier: number;
 }
 
+export interface SkillState {
+  id: SkillId;
+  /** Seconds until the skill can be cast again. */
+  cooldown: number;
+  /** Seconds left of the current cast's active effect (0 = idle). */
+  active: number;
+  /** 그림자 은신: the next bite on multi-bite prey deals ×5. */
+  ambush: boolean;
+  /** 소나 펄스: seconds left of the edge radar. */
+  reveal: number;
+  /** 블랙홀 소용돌이 in progress. */
+  vortex: { x: number; y: number; remaining: number; radius: number } | null;
+}
+
+/** Short-lived line FX (lightning / snap-jaw cable), drawn by render.ts. */
+export interface Beam {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  zigzag: boolean;
+}
+
+/** Expanding ring FX (shockwave / sonar / roar). */
+export interface Ring {
+  x: number;
+  y: number;
+  radius: number;
+  life: number;
+  maxLife: number;
+  color: string;
+}
+
 export interface World {
   seed: number;
   rngState: number;
@@ -190,6 +237,9 @@ export interface World {
   deathCause: string | null;
   spawnTimer: number;
   bounceCd: number;
+  skill: SkillState;
+  beams: Beam[];
+  rings: Ring[];
 }
 
 export interface SharkInput {
@@ -197,6 +247,8 @@ export interface SharkInput {
   dirX: number;
   dirY: number;
   boost: boolean;
+  /** Cast the shark's active skill (held = recast as soon as it's ready). */
+  skill?: boolean;
 }
 
 // ── Tunables ────────────────────────────────────────────────────────────────
@@ -249,6 +301,7 @@ export function createWorld(def: SharkDef, upgrades: UpgradeLevels, seed = Date.
       poison: null,
       hurtFlash: 0,
       invuln: 0,
+      shield: 0,
     },
     entities: [],
     pool: [],
@@ -289,11 +342,14 @@ export function createWorld(def: SharkDef, upgrades: UpgradeLevels, seed = Date.
     deathCause: null,
     spawnTimer: 0,
     bounceCd: 0,
+    skill: { id: def.skill.id, cooldown: 0, active: 0, ambush: false, reveal: 0, vortex: null },
+    beams: [],
+    rings: [],
   };
 
   // Three distinct missions, goal difficulty scaled by tier.
   const pool = [...MISSIONS];
-  const goalIdx = Math.min(2, Math.floor((def.tier - 1) / 2));
+  const goalIdx = Math.min(2, def.tier - 1);
   for (let i = 0; i < 3 && pool.length; i++) {
     const m = pool.splice(Math.floor(rand(w) * pool.length), 1)[0];
     const goal = m.goals[goalIdx];
@@ -334,6 +390,7 @@ function spawn(w: World, kind: EntityKind, x: number, y: number): Entity {
   e.hitFlash = 0;
   e.homeY = y;
   e.state = "patrol";
+  e.stun = 0;
   w.entities.push(e);
   return e;
 }
@@ -393,6 +450,8 @@ export function sharkTier(w: World): number {
 /** Can the player currently eat this entity? (spec §1-3 + Mega Gold Rush) */
 export function isEdible(w: World, e: Entity): boolean {
   if (w.gold.active && w.gold.mega) return true;
+  // 크러시 바이트: mines / jellies / torpedoes get chewed up instead of hurting.
+  if (w.skill.id === "crush" && w.skill.active > 0 && e.def.requiredTier >= NEVER && e.kind !== "rock") return true;
   return e.def.requiredTier <= w.def.tier;
 }
 
@@ -402,9 +461,31 @@ export function isDangerous(w: World, e: Entity): boolean {
   return !isEdible(w, e) && e.def.damage > 0;
 }
 
+/** Skill-driven damage immunity (ram / sonic break / roar / cloak) or a prey shield. */
+export function isInvulnerable(w: World): boolean {
+  if (w.gold.active || w.shark.shield > 0) return true;
+  const sk = w.skill;
+  if (sk.active <= 0) return false;
+  return sk.id === "surgeRam" || sk.id === "sonicBreak" || sk.id === "titanRoar" || sk.id === "shadowCloak";
+}
+
+/** 그림자 은신 active: hunters and submarines lose track of the shark. */
+export function isCloaked(w: World): boolean {
+  return w.skill.id === "shadowCloak" && w.skill.active > 0;
+}
+
+/** 타이탄의 포효 doubles the shark's size (reach + collision + drawing). */
+export function bodyScale(w: World): number {
+  return w.skill.id === "titanRoar" && w.skill.active > 0 ? 2 : 1;
+}
+
+export function bodyLength(w: World): number {
+  return w.stats.length * bodyScale(w);
+}
+
 export function mouthPos(w: World): { x: number; y: number } {
   const s = w.shark;
-  const L = w.stats.length * 0.46;
+  const L = bodyLength(w) * 0.46;
   return { x: s.x + Math.cos(s.angle) * L, y: s.y + Math.sin(s.angle) * L };
 }
 
@@ -468,10 +549,13 @@ export function step(w: World, input: SharkInput, rawDt: number): void {
   const dt = Math.min(0.05, Math.max(0, rawDt));
   w.time += dt;
 
+  updateSkill(w, input, dt);
   stepShark(w, input, dt);
   if (w.over) return;
   buildGrid(w);
   updateEntities(w, dt);
+  applyMagnet(w, dt);
+  updateVortex(w, dt);
   buildGrid(w);
   resolveBites(w);
   resolveContacts(w, dt);
@@ -507,7 +591,6 @@ function killShark(w: World, cause: string) {
 function stepShark(w: World, input: SharkInput, dt: number) {
   const s = w.shark;
   const st = w.stats;
-  const tier = w.def.tier;
   const mag = Math.hypot(input.dirX, input.dirY);
   const wasAirborne = s.airborne;
 
@@ -515,16 +598,18 @@ function stepShark(w: World, input: SharkInput, dt: number) {
   s.biteCooldown = Math.max(0, s.biteCooldown - dt);
   s.hurtFlash = Math.max(0, s.hurtFlash - dt);
   s.invuln = Math.max(0, s.invuln - dt);
+  s.shield = Math.max(0, s.shield - dt);
 
   if (!s.airborne) {
-    const turnRate = 5.2 - tier * 0.32;
-    let speed = st.swimSpeed;
+    // Bigger sharks turn slower (≈4.9 rad/s for the reef shark → ≈3.2 for apexes).
+    const turnRate = Math.max(2.9, 4.88 - (st.length - 70) * 0.0114);
+    let speed = st.swimSpeed * skillSpeedMul(w);
     if (s.poison) speed *= 1 - POISON_SLOW;
     const canBoost = input.boost && mag > 0.01 && (w.gold.active || s.boost > 0.05);
     s.boosting = canBoost;
     if (canBoost) {
       speed *= st.boostMultiplier;
-      if (!w.gold.active) s.boost = Math.max(0, s.boost - dt);
+      if (!w.gold.active) s.boost = Math.max(0, s.boost - dt * st.boostDrain);
       if (rand(w) < 0.5) {
         const tail = w.stats.length * 0.5;
         addParticle(w, {
@@ -618,7 +703,7 @@ function stepShark(w: World, input: SharkInput, dt: number) {
 }
 
 function hurt(w: World, amount: number, cause: string, silent = false) {
-  if (w.gold.active || amount <= 0) return;
+  if (isInvulnerable(w) || amount <= 0) return;
   const s = w.shark;
   s.hp -= amount;
   s.hurtFlash = 0.35;
@@ -639,6 +724,10 @@ function updateEntities(w: World, dt: number) {
     e.phase += dt;
     e.hitFlash = Math.max(0, e.hitFlash - dt);
     e.attackCd = Math.max(0, e.attackCd - dt);
+    if (e.stun > 0) {
+      e.stun = Math.max(0, e.stun - dt);
+      if (e.def.behavior !== "rock" && e.def.behavior !== "torpedo") continue;
+    }
     const dx = e.x - s.x, dy = e.y - s.y;
     const far = Math.abs(dx) > ACTIVE_RADIUS || Math.abs(dy) > ACTIVE_RADIUS;
     // Zone culling: distant entities are frozen (spec §7).
@@ -709,7 +798,7 @@ function updateEntities(w: World, dt: number) {
         e.timer -= dt;
         if (e.timer <= 0) {
           e.timer = range(w, 3.5, 5.5);
-          if (dist < 850 && w.def.tier <= 5 && !w.shark.airborne) {
+          if (dist < 850 && w.def.tier <= ENTITY_DEFS.submarine.requiredTier && !w.shark.airborne && !isCloaked(w)) {
             const t = spawn(w, "torpedo", e.x + e.dir * 50, e.y + 10);
             t.angle = Math.atan2(-dy, -dx);
             t.timer = 6;
@@ -828,7 +917,7 @@ function updateWander(w: World, e: Entity, dist: number, dx: number, dy: number,
 
 /** Enemy shark / anglerfish FSM: patrol → chase (if player is prey) / flee (if predator). */
 function updateHunter(w: World, e: Entity, dist: number, dx: number, dy: number, dt: number) {
-  const danger = isDangerous(w, e);
+  const danger = isDangerous(w, e) && !isCloaked(w);
   const aggro = e.kind === "angler" ? 360 : e.kind === "ghostShark" ? 600 : 440;
   if (danger && dist < aggro && !w.shark.airborne && e.attackCd <= 0.4) {
     // Stamina: a chase lasts ~5s, then the hunter tires and backs off.
@@ -870,7 +959,7 @@ function resolveBites(w: World) {
   const s = w.shark;
   const m = mouthPos(w);
   const hx = Math.cos(s.angle), hy = Math.sin(s.angle);
-  const reach = w.stats.eatRadius;
+  const reach = w.stats.eatRadius * bodyScale(w);
   for (const e of queryGrid(m.x, m.y, reach + 70, scratchB)) {
     if (!e.alive) continue;
     const dx = e.x - m.x, dy = e.y - m.y;
@@ -886,7 +975,15 @@ function resolveBites(w: World) {
     } else if (s.biteCooldown <= 0) {
       s.biteCooldown = 0.28;
       s.jaw = 0.22;
-      e.hp -= w.stats.biteForce * (w.gold.active ? 2 : 1);
+      let dmg = w.stats.biteForce * (w.gold.active ? 2 : 1);
+      if (w.skill.ambush) {
+        // 그림자 은신 → 시공 암살: the first bite out of the shadows hits ×5.
+        dmg *= 5;
+        w.skill.ambush = false;
+        floatText(w, e.x, e.y - e.def.radius - 20, "암살 500%!", "#c084fc", 24);
+        burst(w, "spark", e.x, e.y, 24, 320, "#c084fc", 4, 0.7);
+      }
+      e.hp -= dmg;
       e.hitFlash = 0.15;
       burst(w, e.y < SURFACE_Y + 6 ? "chunk" : "blood", e.x, e.y, 6, 150, e.y < SURFACE_Y + 6 ? "#78716c" : "#dc2626", 4, 0.7);
       w.shake = Math.max(w.shake, 4);
@@ -910,16 +1007,24 @@ function consume(w: World, e: Entity) {
   if (!goldOn) w.gold.gauge += def.score * cm * GOLD_GAUGE_RATE;
 
   if (goldOn) s.hp = w.stats.maxHealth;
-  else s.hp = Math.min(w.stats.maxHealth, s.hp + healGain(def.heal, w.stats.biteLevel));
+  else s.hp = Math.min(w.stats.maxHealth, s.hp + healGain(def.heal, w.stats.biteLevel) * w.stats.healMul);
 
+  // Coins: base drop × frenzy (consecutive eats) × shark gold bonus × Gold Rush ×3.
   let coins = 0;
+  const frenzy = goldOn ? 1 : frenzyMultiplier(w.combo);
   if (e.kind === "chest") {
-    coins = def.coins + Math.floor(rand(w) * 80);
+    coins = Math.round((def.coins + Math.floor(rand(w) * 200)) * w.stats.goldMultiplier);
     w.run.chests++;
     w.events.push({ type: "chest", amount: coins });
     burst(w, "gold", e.x, e.y, 30, 260, "#facc15", 4, 1.2);
-  } else if (goldOn) coins = Math.max(1, def.coins) * (w.gold.mega ? 2 : 1);
-  else if (rand(w) < def.coinChance) coins = def.coins;
+  } else {
+    let base = 0;
+    if (e.kind === "goldenTuna") base = def.coins + Math.floor(rand(w) * 151);
+    else if (goldOn) base = Math.max(1, def.coins) * GOLD_RUSH_COIN_MULT * (w.gold.mega ? 2 : 1);
+    else if (rand(w) < def.coinChance) base = def.coins;
+    if (base > 0) coins = Math.round(base * frenzy * w.stats.goldMultiplier);
+  }
+  if (frenzy > 1 && coins > 0) floatText(w, e.x, e.y + 14, `🪙×${frenzy} FRENZY`, "#fde047", 13);
   if (coins > 0) {
     w.coins += coins;
     w.events.push({ type: "coin", amount: coins });
@@ -948,22 +1053,282 @@ function consume(w: World, e: Entity) {
     burst(w, "chunk", e.x, e.y, 18, 300, "#92400e", 5, 1.2, 600);
   }
 
+  applyPreyEffect(w, e);
+
   w.events.push({ type: "eat", kind: e.kind, x: e.x, y: e.y, points });
   release(w, e);
   maybeStartGoldRush(w);
+}
+
+function applyPreyEffect(w: World, e: Entity) {
+  const fx = PREY_EFFECTS[e.kind];
+  if (!fx) return;
+  const s = w.shark;
+  switch (fx.type) {
+    case "boost":
+      s.boost = Math.min(w.stats.boostDuration, s.boost + w.stats.boostDuration * fx.amount);
+      break;
+    case "heal":
+      if (!w.gold.active) s.hp = Math.min(w.stats.maxHealth, s.hp + w.stats.maxHealth * fx.amount);
+      break;
+    case "shield":
+      s.shield = Math.max(s.shield, fx.seconds);
+      floatText(w, s.x, s.y - 50, "🛡 실드!", "#7dd3fc", 16);
+      w.events.push({ type: "preyFx", label: "실드" });
+      break;
+    case "gauge":
+      if (!w.gold.active) {
+        w.gold.gauge += w.gold.capacity * fx.amount;
+        floatText(w, e.x, e.y - 34, "골드 게이지 +15%", "#fde047", 14);
+      }
+      break;
+    case "skill":
+      if (w.skill.cooldown > 0) {
+        w.skill.cooldown = Math.max(0, w.skill.cooldown - w.def.skill.cooldown * 0.5);
+        floatText(w, s.x, s.y - 54, "⚡ 메가 바이트 충전!", "#c4b5fd", 18);
+        w.events.push({ type: "skillReady" });
+      }
+      break;
+    case "rush":
+      if (!w.gold.active) {
+        w.gold.gauge = w.gold.capacity;
+        floatText(w, e.x, e.y - 40, "황금 참치! 골드 러시!", "#facc15", 24);
+      }
+      break;
+  }
+}
+
+// ── Passive magnet (spec: magnetRadius) ─────────────────────────────────────
+
+/** Small edible prey near the mouth gets sucked in — stronger closer in. */
+function applyMagnet(w: World, dt: number) {
+  const R = w.stats.magnetRadius * bodyScale(w);
+  if (R <= 0 || w.shark.airborne) return;
+  const m = mouthPos(w);
+  const reach = R + 40;
+  for (const e of queryGrid(m.x, m.y, reach, scratchA)) {
+    if (!e.alive || e.def.toughness > 1 || e.kind === "chest") continue;
+    const b = e.def.behavior;
+    if (b === "static" || b === "fly" || b === "heli" || b === "surfaceBoat" || b === "crawl" || b === "rock") continue;
+    if (!isEdible(w, e)) continue;
+    const dx = m.x - e.x, dy = m.y - e.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const edge = R + e.def.radius;
+    if (d > edge) continue;
+    const pull = Math.min(d, (90 + (edge - d) * 5) * w.stats.magnetPower * dt);
+    e.x += (dx / d) * pull;
+    e.y += (dy / d) * pull;
+  }
+}
+
+// ── Active skills ───────────────────────────────────────────────────────────
+
+const SKILL_ACTIVE: Record<SkillId, number> = {
+  sprint: 0.6,
+  sonicBreak: 0.9,
+  crush: 4,
+  surgeRam: 0.7,
+  titanRoar: 6,
+  sonar: 0,
+  shadowCloak: 4,
+  emp: 0,
+  snapJaw: 0,
+  blackHole: 0,
+};
+
+function skillSpeedMul(w: World): number {
+  const sk = w.skill;
+  if (sk.active <= 0) return 1;
+  switch (sk.id) {
+    case "sprint": return 2;
+    case "sonicBreak": return 2.4;
+    case "surgeRam": return 2.6;
+    case "titanRoar": return 1.25;
+    case "shadowCloak": return 1.15;
+    default: return 1;
+  }
+}
+
+function updateSkill(w: World, input: SharkInput, dt: number) {
+  const sk = w.skill;
+  const wasCooling = sk.cooldown > 0;
+  sk.cooldown = Math.max(0, sk.cooldown - dt);
+  sk.active = Math.max(0, sk.active - dt);
+  sk.reveal = Math.max(0, sk.reveal - dt);
+  if (wasCooling && sk.cooldown === 0) w.events.push({ type: "skillReady" });
+  for (const b of w.beams) b.life -= dt;
+  w.beams = w.beams.filter((b) => b.life > 0);
+  for (const r of w.rings) r.life -= dt;
+  w.rings = w.rings.filter((r) => r.life > 0);
+  if (input.skill && sk.cooldown <= 0 && !w.shark.airborne) castSkill(w);
+}
+
+/** Debug/test hook + the engine's own cast path. */
+export function castSkill(w: World) {
+  const sk = w.skill;
+  const s = w.shark;
+  sk.cooldown = w.def.skill.cooldown;
+  sk.active = SKILL_ACTIVE[sk.id];
+  const hx = Math.cos(s.angle), hy = Math.sin(s.angle);
+  const m = mouthPos(w);
+  w.events.push({ type: "skill", id: sk.id });
+  floatText(w, s.x, s.y - 60, `⚡ ${w.def.skill.name}`, "#c4b5fd", 18);
+  switch (sk.id) {
+    case "sprint":
+    case "sonicBreak": {
+      const v = w.stats.swimSpeed * (sk.id === "sprint" ? 1.6 : 2.2);
+      s.vx = hx * v;
+      s.vy = hy * v;
+      burst(w, "bubble", s.x, s.y, 16, 200, "#e0f2fe", 3.5, 0.8);
+      break;
+    }
+    case "crush":
+      burst(w, "spark", m.x, m.y, 14, 160, "#fbbf24", 3, 0.5);
+      break;
+    case "surgeRam": {
+      s.vx = hx * w.stats.swimSpeed * 2.4;
+      s.vy = hy * w.stats.swimSpeed * 2.4;
+      shockwave(w, m.x + hx * 40, m.y + hy * 40, 260, w.stats.biteForce * 4, 2);
+      break;
+    }
+    case "titanRoar": {
+      for (const e of w.entities) {
+        if (!e.alive || e.kind === "chest") continue;
+        if (Math.abs(e.x - s.x) < 1500 && Math.abs(e.y - s.y) < 1100) e.stun = Math.max(e.stun, 3);
+      }
+      w.rings.push({ x: s.x, y: s.y, radius: 1400, life: 1.1, maxLife: 1.1, color: "#f87171" });
+      w.shake = Math.max(w.shake, 24);
+      break;
+    }
+    case "sonar":
+      sk.reveal = 8;
+      w.rings.push({ x: s.x, y: s.y, radius: 1800, life: 1.4, maxLife: 1.4, color: "#38bdf8" });
+      break;
+    case "shadowCloak":
+      sk.ambush = true;
+      burst(w, "smoke", s.x, s.y, 24, 160, "#312e81", 10, 1.2);
+      for (const e of w.entities) if (e.alive && e.state === "chase") e.state = "patrol";
+      break;
+    case "emp": {
+      const R = 420;
+      const chain: Entity[] = [];
+      for (const e of w.entities) {
+        if (!e.alive || e.kind === "chest") continue;
+        const d = Math.hypot(e.x - s.x, e.y - s.y);
+        if (d > R) continue;
+        e.stun = Math.max(e.stun, 3);
+        if (d < 320 && e.def.toughness <= 1 && isEdible(w, e)) chain.push(e);
+      }
+      chain.sort((a, b) => Math.hypot(a.x - s.x, a.y - s.y) - Math.hypot(b.x - s.x, b.y - s.y));
+      let px = m.x, py = m.y;
+      for (const e of chain.slice(0, 6)) {
+        w.beams.push({ x1: px, y1: py, x2: e.x, y2: e.y, life: 0.35, maxLife: 0.35, color: "#67e8f9", zigzag: true });
+        px = e.x;
+        py = e.y;
+        consume(w, e);
+      }
+      w.rings.push({ x: s.x, y: s.y, radius: R, life: 0.5, maxLife: 0.5, color: "#22d3ee" });
+      burst(w, "spark", s.x, s.y, 30, 380, "#67e8f9", 3, 0.5);
+      break;
+    }
+    case "snapJaw": {
+      // Best target in a narrow forward cone, 3× the normal bite reach.
+      const range = 380 + w.stats.length;
+      let best: Entity | null = null;
+      let bestScore = -1;
+      for (const e of w.entities) {
+        if (!e.alive || !isEdible(w, e)) continue;
+        const dx = e.x - m.x, dy = e.y - m.y;
+        const d = Math.hypot(dx, dy) || 1;
+        if (d > range + e.def.radius || (hx * dx + hy * dy) / d < 0.75) continue;
+        const score = e.def.score / (1 + d / 300);
+        if (score > bestScore) { bestScore = score; best = e; }
+      }
+      if (best) {
+        w.beams.push({ x1: m.x, y1: m.y, x2: best.x, y2: best.y, life: 0.4, maxLife: 0.4, color: "#f9a8d4", zigzag: false });
+        burst(w, "blood", best.x, best.y, 10, 160, "#dc2626", 4, 0.7);
+        if (best.def.toughness > 1) {
+          best.hp -= w.stats.biteForce * 3;
+          best.hitFlash = 0.2;
+          best.x += (m.x - best.x) * 0.5;
+          best.y += (m.y - best.y) * 0.5;
+          if (best.hp <= 0) consume(w, best);
+        } else consume(w, best);
+      } else {
+        w.beams.push({ x1: m.x, y1: m.y, x2: m.x + hx * range, y2: m.y + hy * range, life: 0.3, maxLife: 0.3, color: "#f9a8d4", zigzag: false });
+      }
+      break;
+    }
+    case "blackHole":
+      sk.vortex = { x: m.x + hx * 160, y: Math.max(SURFACE_Y + 60, m.y + hy * 160), remaining: 4, radius: 240 };
+      w.shake = Math.max(w.shake, 10);
+      break;
+  }
+}
+
+/** 서지 램 shockwave: big damage to edible prey, sets off mines, stuns threats. */
+function shockwave(w: World, x: number, y: number, R: number, damage: number, stun: number) {
+  w.rings.push({ x, y, radius: R, life: 0.6, maxLife: 0.6, color: "#fde68a" });
+  burst(w, "bubble", x, y, 30, R * 1.4, "#e0f2fe", 4, 0.9);
+  w.shake = Math.max(w.shake, 16);
+  for (const e of w.entities.slice()) {
+    if (!e.alive || e.kind === "chest") continue;
+    const d = Math.hypot(e.x - x, e.y - y);
+    if (d > R + e.def.radius) continue;
+    if (isEdible(w, e)) {
+      e.hp -= damage;
+      e.hitFlash = 0.2;
+      if (e.hp <= 0 || e.def.toughness <= 1) consume(w, e);
+    } else if (e.def.damageKind === "explode") explode(w, e);
+    else e.stun = Math.max(e.stun, stun);
+  }
+}
+
+/** 블랙홀 소용돌이: pulls everything in; eats what it can, crushes hazards. */
+function updateVortex(w: World, dt: number) {
+  const v = w.skill.vortex;
+  if (!v) return;
+  v.remaining -= dt;
+  if (v.remaining <= 0) {
+    w.skill.vortex = null;
+    return;
+  }
+  if (rand(w) < 0.7)
+    addParticle(w, { kind: "spark", x: v.x + range(w, -v.radius, v.radius), y: v.y + range(w, -v.radius, v.radius), vx: 0, vy: 0, life: 0.5, maxLife: 0.5, size: 2.5, color: "#a855f7", gravity: 0 });
+  for (const e of w.entities.slice()) {
+    if (!e.alive || e.kind === "chest") continue;
+    const dx = v.x - e.x, dy = v.y - e.y;
+    const d = Math.hypot(dx, dy) || 1;
+    if (d > v.radius + e.def.radius) continue;
+    const pull = Math.min(d, (160 + (v.radius - d) * 3) * dt);
+    e.x += (dx / d) * pull;
+    e.y += (dy / d) * pull;
+    if (d < 34 + e.def.radius * 0.5) {
+      if (isEdible(w, e)) {
+        if (e.def.toughness > 1) {
+          e.hp -= w.stats.biteForce * 2 * dt * 4;
+          if (e.hp <= 0) consume(w, e);
+        } else consume(w, e);
+      } else {
+        burst(w, "smoke", e.x, e.y, 6, 80, "#4c1d95", 6, 0.8);
+        release(w, e);
+      }
+    }
+  }
 }
 
 // ── Contacts: hazards, poison, bouncing (spec §4 "NO → Knockback/Damage") ───
 
 function resolveContacts(w: World, dt: number) {
   const s = w.shark;
-  const L = w.stats.length;
+  const L = bodyLength(w);
   const hx = Math.cos(s.angle), hy = Math.sin(s.angle);
   const bodyR = L * 0.2;
   for (const e of queryGrid(s.x, s.y, L + 80, scratchB)) {
     if (!e.alive) continue;
     const edible = isEdible(w, e);
     if (edible) continue; // edible but outside the mouth cone — just glide past
+    if (e.stun > 0 && e.def.behavior !== "rock") continue; // EMP'd / stunned: harmless
     // Closest point on the shark's spine segment.
     const px = e.x - s.x, py = e.y - s.y;
     const t = Math.max(-L * 0.45, Math.min(L * 0.45, px * hx + py * hy));
@@ -976,14 +1341,14 @@ function resolveContacts(w: World, dt: number) {
     if (e.def.damageKind === "explode") {
       explode(w, e);
     } else if (e.def.damageKind === "poison") {
-      if (!w.gold.active && (!s.poison || s.poison.remaining < POISON_DURATION - 0.6)) {
+      if (!isInvulnerable(w) && (!s.poison || s.poison.remaining < POISON_DURATION - 0.6)) {
         s.poison = { remaining: POISON_DURATION + (e.kind === "redJelly" ? 0.5 : 0), tick: POISON_TICK, pct: e.def.damage };
         w.events.push({ type: "poison" });
         floatText(w, s.x, s.y - 40, "중독!", "#86efac", 18);
         burst(w, "spark", s.x, s.y, 10, 120, "#86efac", 3, 0.6);
       }
     } else if (e.def.damage > 0) {
-      if (e.attackCd <= 0 && s.invuln <= 0 && !w.gold.active) {
+      if (e.attackCd <= 0 && s.invuln <= 0 && !isInvulnerable(w)) {
         e.attackCd = 1.1;
         s.invuln = 0.3;
         hurt(w, e.def.damage, e.def.name);
@@ -1044,7 +1409,7 @@ export function explode(w: World, e: Entity) {
     const od = Math.hypot(o.x - e.x, o.y - e.y);
     if (od > R) continue;
     if (o.def.damageKind === "explode" && od < R * 0.55) explode(w, o);
-    else if (o.def.toughness <= 1 && o.def.requiredTier <= 3 && o.kind !== "chest") {
+    else if (o.def.toughness <= 1 && o.def.requiredTier <= 2 && o.kind !== "chest" && o.kind !== "goldenTuna") {
       burst(w, "blood", o.x, o.y, 4, 80, "#b91c1c", 3, 0.6);
       release(w, o);
     }
@@ -1164,6 +1529,8 @@ function runSpawner(w: World, initial: boolean) {
   for (const kind of Object.keys(targets) as EntityKind[]) {
     const want = targets[kind] ?? 0;
     if ((counts[kind] ?? 0) >= want) continue;
+    // Golden tuna: rolled in rarely (≈ once a minute on average), never at start.
+    if (kind === "goldenTuna" && (initial || rand(w) > 0.0035)) continue;
     const def = ENTITY_DEFS[kind];
     // Pick an x in the ring around the player (or anywhere nearby initially).
     const side = rand(w) < 0.5 ? -1 : 1;

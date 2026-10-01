@@ -10,7 +10,7 @@
  *   blocked 🔴 red ring    ✖ "T4 뱀상어 필요" — harmless, you just bounce off
  */
 
-import { healGain, NEVER, SHARKS, ENTITY_DEFS, type EntityDef, type EntityKind } from "./data";
+import { GOLD_RUSH_COIN_MULT, healGain, NEVER, PREY_EFFECTS, preyEffectLabel, sharksOfTier, ENTITY_DEFS, type EntityDef, type EntityKind } from "./data";
 import { isEdible, mouthPos, type Entity, type World } from "./engine";
 
 export type MarkerKind = "edible" | "gold" | "mega" | "danger" | "blocked";
@@ -31,9 +31,11 @@ export function markerDetectRadius(w: World): number {
   return 240 + w.stats.length * 1.3;
 }
 
+const TIER_NAMES: Record<number, string> = { 1: "암초상어", 2: "2단계 진화", 3: "3단계 진화", 4: "최종 진화" };
+
 export function tierLabel(tier: number): string {
-  const s = SHARKS.find((x) => x.tier === tier);
-  return s ? `T${tier} ${s.name}` : `T${tier}`;
+  const name = TIER_NAMES[tier] ?? sharksOfTier(tier)[0]?.name;
+  return name ? `T${tier} ${name}` : `T${tier}`;
 }
 
 /** Short warning line for things that hurt (also used by the bestiary). */
@@ -50,7 +52,9 @@ export function classify(w: World, e: Entity): Marker {
   const gold = w.gold.active;
   if (isEdible(w, e)) {
     if (gold) {
-      const coins = e.kind === "chest" ? def.coins : Math.max(1, def.coins) * (w.gold.mega ? 2 : 1);
+      const coins = Math.round(
+        (e.kind === "chest" ? def.coins : Math.max(1, def.coins) * GOLD_RUSH_COIN_MULT * (w.gold.mega ? 2 : 1)) * w.stats.goldMultiplier,
+      );
       return {
         e,
         kind: w.gold.mega ? "mega" : "gold",
@@ -58,13 +62,14 @@ export function classify(w: World, e: Entity): Marker {
         sub: `🪙+${coins} · HP 완전회복`,
       };
     }
-    if (e.kind === "chest") return { e, kind: "edible", label: "🎁 보물 상자", sub: `🪙+${def.coins}~` };
+    if (e.kind === "chest") return { e, kind: "edible", label: "🎁 보물 상자", sub: `🪙+${Math.round(def.coins * w.stats.goldMultiplier)}~` };
+    if (e.kind === "goldenTuna") return { e, kind: "gold", label: "✨ 황금 참치", sub: "즉시 골드 러시!" };
     const bites = def.toughness > 1 ? Math.ceil(e.hp / w.stats.biteForce) : 0;
     return {
       e,
       kind: "edible",
-      label: `+${Math.round(healGain(def.heal, w.stats.biteLevel))} HP`,
-      sub: bites > 1 ? `+${def.score}점 · ${bites}번 물기` : `+${def.score}점`,
+      label: `+${Math.round(healGain(def.heal, w.stats.biteLevel) * w.stats.healMul)} HP`,
+      sub: bites > 1 ? `+${def.score}점 · ${bites}번 물기` : PREY_EFFECTS[e.kind] ? `+${def.score}점 · ${preyEffectLabel(PREY_EFFECTS[e.kind]!)}` : `+${def.score}점`,
     };
   }
   const need = def.requiredTier >= NEVER ? "메가 골드 러시 전용" : `${tierLabel(def.requiredTier)} 필요`;
@@ -132,7 +137,7 @@ export function habitatLabel(kind: EntityKind): string {
 
 /** Order + flavor for the bestiary. */
 export const BESTIARY_ORDER: EntityKind[] = [
-  "smallFish", "crab", "swimmer", "chest",
+  "smallFish", "crab", "swimmer", "chest", "goldenTuna",
   "puffer", "pelican", "diver", "grouper",
   "ray", "tuna", "sailor",
   "angler", "fishingBoat", "passenger", "smallShark",
@@ -146,6 +151,7 @@ export const BESTIARY_TIPS: Partial<Record<EntityKind, string>> = {
   crab: "해저 바닥을 기어 다닙니다.",
   swimmer: "수면에서 헤엄칩니다. 가까이 가면 허둥지둥 도망쳐요.",
   chest: "미니맵의 노란 점. 입으로 물면 코인이 쏟아집니다.",
+  goldenTuna: "아주 드물게 나타나는 번쩍이는 참치. 먹으면 즉시 골드 러시 + 코인 150~300.",
   puffer: "가시가 있어 T1 상어가 물면 따끔합니다.",
   pelican: "수면 위를 날다 가끔 급강하합니다. 점프해서 잡으세요.",
   diver: "산소통을 멘 다이버. 도망치는 속도가 느립니다.",
@@ -157,7 +163,7 @@ export const BESTIARY_TIPS: Partial<Record<EntityKind, string>> = {
   passenger: "보트가 부서지면 물에 빠집니다.",
   smallShark: "약한 상어를 5초간 추격합니다.",
   cageDiver: "철창 안에서 작살을 쏩니다.",
-  submarine: "T5 이하 상어에게 유도 어뢰를 쏩니다.",
+  submarine: "T3 이하 상어에게 유도 어뢰를 쏩니다(은신 중엔 못 쏩니다).",
   ghostShark: "해구에 사는 반투명 포식자. 멀리서도 쫓아옵니다.",
   yacht: "부수면 승객들이 물에 빠집니다.",
   helicopter: "높이 떠 있어 부스트 점프가 필요합니다.",

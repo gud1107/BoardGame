@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { ENTITY_DEFS, NEVER, SHARKS, type EntityKind } from "./data";
+import { BRANCH_INFO, ENTITY_DEFS, FRENZY_STEPS, NEVER, PREY_EFFECTS, preyEffectLabel, SHARKS, sharksOfTier, type EntityKind } from "./data";
 
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const P = "text-white/70 light:text-slate-600";
@@ -32,8 +32,8 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className={H3}>조작법</h3>
           <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
-            <li><b>PC</b>: 마우스 커서 방향으로 헤엄칩니다(WASD/방향키가 우선). <b>마우스 클릭 유지 / 스페이스 / Shift</b>로 부스트. Esc·P로 일시정지.</li>
-            <li><b>모바일</b>: 화면 아무 곳이나 누른 채 끌면 그 자리에 가상 조이스틱이 생깁니다. 오른쪽 🚀 버튼을 누르고 있으면 부스트.</li>
+            <li><b>PC</b>: 마우스 커서 방향으로 헤엄칩니다(WASD/방향키가 우선). <b>마우스 클릭 유지 / Shift</b>로 부스트, <b>Space(또는 E·Q)</b>로 상어 고유 스킬 발동. Esc·P로 일시정지.</li>
+            <li><b>모바일</b>: 화면 아무 곳이나 누른 채 끌면 그 자리에 가상 조이스틱이 생깁니다. 오른쪽 🚀 버튼을 누르고 있으면 부스트, ⚡ 버튼으로 스킬.</li>
             <li>부스트 게이지는 쓰지 않을 때 서서히 다시 찹니다. 수면 위로 부스트를 쓰며 뛰어오르면 더 높이 점프합니다.</li>
           </ul>
         </section>
@@ -52,7 +52,8 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             <li><b>입 앞쪽</b>에 닿아야 먹습니다 — 상어가 향한 방향 기준 전방 약 75° 안쪽만 유효. 옆구리나 꼬리로 스치면 그냥 지나갑니다.</li>
             <li><b>티어 검사</b>: 내 상어 티어 ≥ 먹이의 필요 티어일 때만 먹을 수 있습니다. 모자라면 튕겨나가거나(무해한 대상), 피해를 입습니다(위험한 대상).</li>
             <li>보트·잠수함·헬리콥터·큰 상어처럼 <b>체력 바가 있는 대상</b>은 여러 번 물어뜯어야 쓰러집니다(물기 피해 = 물어뜯기 업그레이드).</li>
-            <li>빠르게 연속으로 먹으면 <b>콤보</b>가 쌓여 점수가 ×1.5(6콤보) · ×2(15콤보) · ×3(30콤보)이 됩니다.</li>
+            <li>1.5초 안에 연속으로 먹으면 <b>콤보</b>가 쌓여 점수가 ×1.5(6콤보) · ×2(15콤보) · ×3(30콤보)이 됩니다.</li>
+            <li>콤보는 <b>FRENZY 코인 배율</b>도 올립니다: {[...FRENZY_STEPS].reverse().map(([at, m]) => `${at}콤보 ×${m}`).join(" · ")} (최대 ×5).</li>
           </ol>
         </section>
 
@@ -69,37 +70,84 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
-          <h3 className={H3}>상어 티어별 먹이</h3>
+          <h3 className={H3}>진화 트리 (3계통 · 10종)</h3>
+          <p className={`mb-2 ${P}`}>
+            암초상어에서 출발해 2티어부터 <b>세 갈래 계통</b> 중 하나로 진화합니다. 상위 상어를 해금하려면 바로 이전 단계를 먼저 보유해야
+            하며, 다른 계통도 언제든 따로 키울 수 있습니다. 같은 티어의 상어는 같은 먹이를 먹고, 계통마다 능력치·패시브·고유 스킬이 다릅니다.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="text-white/50 light:text-slate-500">
+                <tr>
+                  <th className="py-1 pr-2">상어</th>
+                  <th className="py-1 pr-2">계통</th>
+                  <th className="py-1 pr-2">스킬 (Space)</th>
+                  <th className="py-1">해금</th>
+                </tr>
+              </thead>
+              <tbody className="text-white/75 light:text-slate-700">
+                {SHARKS.map((s) => (
+                  <tr key={s.id} className="border-t border-white/5 align-top light:border-slate-200">
+                    <td className="py-1.5 pr-2 font-bold whitespace-nowrap">T{s.tier} {s.name}</td>
+                    <td className="py-1.5 pr-2 whitespace-nowrap">{BRANCH_INFO[s.branch].emoji} {BRANCH_INFO[s.branch].short}</td>
+                    <td className="py-1.5 pr-2">
+                      <b>{s.skill.name}</b> ({s.skill.cooldown}초) — {s.skill.desc}
+                      {s.passive && <div className="text-emerald-400 light:text-emerald-700">패시브 {s.passive.name}: {s.passive.desc}</div>}
+                      <div className="text-amber-300/80 light:text-amber-700">골드 ×{s.goldMultiplier.toFixed(1)} · 자석 {s.magnetRadius} · 부스트 효율 ×{s.boostEfficiency.toFixed(1)}</div>
+                    </td>
+                    <td className="py-1.5 whitespace-nowrap">{s.cost ? `${s.cost.toLocaleString()}🪙` : "기본"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className={`mt-2 text-xs ${P}`}>
+            <b>먹이 자석</b>: 상어 입 주변 반경 안의 작은 먹이가 입으로 빨려 들어옵니다. <b>골드 배율</b>은 그 상어로 얻는 모든 코인에 곱해집니다.
+          </p>
+        </section>
+
+        <section>
+          <h3 className={H3}>티어별 먹이</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="text-white/50 light:text-slate-500">
                 <tr>
                   <th className="py-1 pr-2">티어</th>
                   <th className="py-1 pr-2">상어</th>
-                  <th className="py-1 pr-2">새로 먹을 수 있는 것</th>
-                  <th className="py-1">해금 비용</th>
+                  <th className="py-1">새로 먹을 수 있는 것</th>
                 </tr>
               </thead>
               <tbody className="text-white/75 light:text-slate-700">
-                {SHARKS.map((s) => (
-                  <tr key={s.id} className="border-t border-white/5 light:border-slate-200">
-                    <td className="py-1.5 pr-2 font-bold">T{s.tier}</td>
-                    <td className="py-1.5 pr-2">{s.name}</td>
-                    <td className="py-1.5 pr-2">{byTier(s.tier)}</td>
-                    <td className="py-1.5">{s.cost ? `${s.cost.toLocaleString()}🪙` : "기본"}</td>
+                {[1, 2, 3, 4].map((t) => (
+                  <tr key={t} className="border-t border-white/5 light:border-slate-200">
+                    <td className="py-1.5 pr-2 font-bold">T{t}</td>
+                    <td className="py-1.5 pr-2">{sharksOfTier(t).map((s) => s.name).join(" / ")}</td>
+                    <td className="py-1.5">{byTier(t)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <p className={`mt-2 text-xs ${P}`}>상위 티어는 하위 티어의 먹이도 전부 먹을 수 있습니다. <b>{neverEdible}</b>은 메가 골드 러시 중에만 먹을 수 있습니다.</p>
+          <p className={`mt-2 text-xs ${P}`}>상위 티어는 하위 티어의 먹이도 전부 먹을 수 있습니다. <b>{neverEdible}</b>은 메가 골드 러시 중에만 먹을 수 있습니다(샌드타이거의 크러시 바이트 중엔 화산 암석을 뺀 나머지도 가능).</p>
+        </section>
+
+        <section>
+          <h3 className={H3}>특수 먹이 효과</h3>
+          <ul className={`list-disc space-y-1 pl-4 ${P}`}>
+            {(Object.keys(PREY_EFFECTS) as EntityKind[]).map((k) => (
+              <li key={k}>
+                <b>{ENTITY_DEFS[k].name}</b>: {preyEffectLabel(PREY_EFFECTS[k]!)}
+              </li>
+            ))}
+          </ul>
+          <p className={`mt-1 text-xs ${P}`}><b>황금 참치</b>는 아주 드물게 나타나며 코인 150~300과 함께 즉시 골드 러시를 터뜨립니다. 귀상어의 소나 펄스로 위치를 찾을 수 있습니다.</p>
         </section>
 
         <section>
           <h3 className={H3}>골드 러시 · 메가 골드 러시</h3>
           <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
             <li>먹을 때마다 (획득 점수 × 0.02)만큼 화면 위쪽 황금 게이지가 찹니다. 가득 차면 <b>골드 러시</b> 발동!</li>
-            <li>8초 동안 <b>무적</b>, 굶주림 정지, <b>부스트 무제한</b>, 먹을 수 있는 모든 먹이가 황금색으로 빛나며 먹을 때마다 <b>체력 완전 회복 + 코인 100% 드롭</b>.</li>
+            <li>8초 동안 <b>무적</b>, 굶주림 정지, <b>부스트 무제한</b>, 먹을 수 있는 모든 먹이가 황금색으로 빛나며 먹을 때마다 <b>체력 완전 회복 + 코인 100% 드롭(×2)</b>.</li>
             <li>점수 배율은 발동 횟수에 따라 ×2 → ×3 → … → 최대 ×8.</li>
             <li><b>8번째 발동마다 메가 골드 러시</b>(10초, ×10): 기뢰·해파리·어뢰·나보다 큰 상어까지 화면의 <b>모든 것</b>을 한입에 먹을 수 있습니다.</li>
           </ul>
@@ -110,7 +158,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
             <li><b>기뢰</b>: 가까이 가면 폭발. 피해 = 최대 피해 × (1 − 거리 ÷ 폭발 반경). 폭발은 주변 작은 물고기를 죽이고 근처 기뢰를 연쇄 폭발시킵니다. 수심이 깊을수록 더 큰 기뢰가 있습니다.</li>
             <li><b>해파리</b>: 닿으면 3초간(붉은 해파리 4초) 0.5초마다 최대 체력의 5%(붉은 8%) 피해 + 이동 속도 40% 감소.</li>
-            <li><b>잠수함</b>은 티어 5 이하 상어에게 유도 어뢰를 발사합니다. <b>소형 상어·심해 아귀·유령 상어</b>는 나보다 강하면 쫓아와 물어뜯습니다(화면 가장자리 빨간 화살표로 경고).</li>
+            <li><b>잠수함</b>은 티어 3 이하 상어에게 유도 어뢰를 발사합니다. <b>소형 상어·심해 아귀·유령 상어</b>는 나보다 강하면 쫓아와 물어뜯습니다(화면 가장자리 빨간 화살표로 경고).</li>
             <li>수심 250m 아래 <b>해구(화산 지대)</b>에서는 화산 암석이 떨어집니다. 깊을수록 어두워지고 시야가 좁아집니다.</li>
             <li>체력이 25% 아래로 떨어지면 화면이 붉게 맥동하며 심장 박동 경고음이 울립니다.</li>
           </ul>

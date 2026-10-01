@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ENTITY_DEFS, healGain, NEVER, type EntityKind } from "./data";
+import { ENTITY_DEFS, healGain, NEVER, PREY_EFFECTS, preyEffectLabel, type EntityKind } from "./data";
 import { BESTIARY_ORDER, BESTIARY_TIPS, habitatLabel, hazardTip, tierLabel } from "./markers";
 import { drawEntityIcon } from "./render";
 
@@ -104,6 +104,7 @@ export default function BestiaryPanel({
                 <span>🪙 {def.coins}{def.coinChance < 1 ? ` (${Math.round(def.coinChance * 100)}%)` : ""}</span>
                 <span>🌊 {habitatLabel(kind)}</span>
                 {def.toughness > 1 && <span>🦷 여러 번 물기</span>}
+                {PREY_EFFECTS[kind] && <span className="text-amber-300 light:text-amber-700">✨ {preyEffectLabel(PREY_EFFECTS[kind]!)}</span>}
                 {eaten?.[kind] ? <span className="text-sky-300 light:text-sky-600">이번 잠수 ×{eaten[kind]}</span> : null}
               </div>
               {(danger || BESTIARY_TIPS[kind]) && (
@@ -118,7 +119,7 @@ export default function BestiaryPanel({
       </div>
       <p className="text-[11px] text-white/40 light:text-slate-400">
         상위 티어는 하위 티어의 먹이를 모두 먹을 수 있습니다. 골드 러시 중엔 사냥 가능한 먹이가 전부 황금색이 되고, 메가 골드 러시
-        중엔 위 목록의 <b>모든 것</b>을 먹을 수 있습니다. ❤️ 회복량은 현재 물어뜯기 업그레이드가 반영된 값입니다.
+        중엔 위 목록의 <b>모든 것</b>을 먹을 수 있습니다. ❤️ 회복량은 현재 물어뜯기 업그레이드가 반영된 값이고, 🪙 코인은 기본값입니다(연속 포식 FRENZY ×2~×5 · 상어 골드 보너스 · 골드 러시 ×2가 추가로 곱해집니다).
       </p>
     </div>
   );

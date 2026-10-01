@@ -36,6 +36,7 @@ function place(w: World, kind: keyof typeof ENTITY_DEFS, x: number, y: number): 
     homeY: y,
     dir: 1,
     state: "patrol",
+    stun: 0,
   };
   w.entities.push(e);
   return e;
@@ -192,7 +193,7 @@ describe("hazards (spec §6)", () => {
   });
 
   it("mine explosion damages with distance falloff and chains", () => {
-    const w = createWorld(sharkById("tiger"), NO_UPGRADES, 9);
+    const w = createWorld(sharkById("sandTiger"), NO_UPGRADES, 9);
     isolate(w);
     const m1 = place(w, "mineM", w.shark.x + 80, w.shark.y);
     const m2 = place(w, "mineS", w.shark.x + 130, w.shark.y);
@@ -285,9 +286,9 @@ describe("target feed indicator", () => {
     const ms = selectMarkers(w);
     const by = (k: string) => ms.find((m) => m.e.kind === k)!;
     expect(by("swimmer").kind).toBe("edible");
-    expect(by("swimmer").label).toBe("+15 HP");
+    expect(by("swimmer").label).toBe("+18 HP"); // 15 × 왕성한 식욕 1.2
     expect(by("puffer").kind).toBe("danger");
-    expect(by("puffer").label).toContain("T2 청상아리 필요");
+    expect(by("puffer").label).toContain("T2 2단계 진화 필요");
     expect(by("fishingBoat").kind).toBe("blocked");
   });
 
@@ -327,5 +328,165 @@ describe("target feed indicator", () => {
     const { BESTIARY_ORDER } = await import("./markers");
     expect(new Set(BESTIARY_ORDER).size).toBe(BESTIARY_ORDER.length);
     expect([...BESTIARY_ORDER].sort()).toEqual(Object.keys(ENTITY_DEFS).sort());
+  });
+});
+
+describe("evolution tree", () => {
+  it("has 10 sharks: 1 root + 3 branches × tiers 2-4, each child points at its parent", async () => {
+    const { evolutionPath } = await import("./data");
+    expect(SHARKS).toHaveLength(10);
+    expect(sharkById("reef").nextIds).toEqual(["sandTiger", "mako", "elecShark"]);
+    for (const s of SHARKS) {
+      for (const n of s.nextIds) expect(sharkById(n).parentId).toBe(s.id);
+      if (s.parentId) expect(sharkById(s.parentId).tier).toBe(s.tier - 1);
+    }
+    expect(evolutionPath("megalodon").map((s) => s.id)).toEqual(["reef", "sandTiger", "white", "megalodon"]);
+    expect(evolutionPath("leviathan").map((s) => s.branch)).toEqual(["BASE", "VOID", "VOID", "VOID"]);
+  });
+
+  it("migrates old linear-ladder saves: tiger → sandTiger + refund, ancestors filled in", async () => {
+    const { migrateSave } = await import("./save");
+    const old = { ...freshSave(), coins: 100, owned: ["reef", "tiger", "megalodon"], selected: "tiger", best: { tiger: 5000 }, upgrades: { tiger: { bite: 2, speed: 1, boost: 0 } } };
+    const m = migrateSave(old);
+    expect(m.owned).toEqual(expect.arrayContaining(["reef", "sandTiger", "white", "megalodon"]));
+    expect(m.owned).not.toContain("tiger");
+    expect(m.selected).toBe("sandTiger");
+    expect(m.coins).toBe(100 + 7800);
+    expect(m.best.sandTiger).toBe(5000);
+    expect(m.upgrades.sandTiger).toEqual({ bite: 2, speed: 1, boost: 0 });
+    // Idempotent.
+    expect(migrateSave(m)).toEqual(m);
+  });
+});
+
+describe("economy overhaul", () => {
+  it("frenzy multiplier steps ×2 → ×5 with consecutive eats", async () => {
+    const { frenzyMultiplier } = await import("./data");
+    expect(frenzyMultiplier(4)).toBe(1);
+    expect(frenzyMultiplier(5)).toBe(2);
+    expect(frenzyMultiplier(12)).toBe(3);
+    expect(frenzyMultiplier(20)).toBe(4);
+    expect(frenzyMultiplier(30)).toBe(5);
+    expect(frenzyMultiplier(99)).toBe(5);
+  });
+
+  it("gold rush coins are ×2 and scaled by the shark's gold multiplier", () => {
+    const w = createWorld(sharkById("white"), NO_UPGRADES, 31);
+    isolate(w);
+    w.shark.angle = 0;
+    forceGoldRush(w);
+    const c0 = w.coins;
+    const f = place(w, "swimmer", w.shark.x + 80, w.shark.y);
+    f.def = { ...f.def, behavior: "static" };
+    step(w, idle, 1 / 60);
+    expect(f.alive).toBe(false);
+    // 5 base × 2 (rush) × 1.5 (백상아리), no frenzy during a rush
+    expect(w.coins - c0).toBe(15);
+  });
+
+  it("golden tuna triggers an instant gold rush", () => {
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 32);
+    isolate(w);
+    w.shark.angle = 0;
+    const g = place(w, "goldenTuna", w.shark.x + 45, w.shark.y);
+    g.def = { ...g.def, behavior: "static" };
+    step(w, idle, 1 / 60);
+    expect(g.alive).toBe(false);
+    expect(w.gold.active).toBe(true);
+    expect(w.coins).toBeGreaterThanOrEqual(150);
+  });
+
+  it("magnet passive pulls small edible prey toward the mouth", () => {
+    const w = createWorld(sharkById("elecShark"), NO_UPGRADES, 33);
+    isolate(w);
+    w.shark.angle = 0;
+    const f = place(w, "smallFish", w.shark.x + 115, w.shark.y); // mouth reach ≈ 29, magnet 85
+    f.def = { ...f.def, behavior: "mine" }; // stays put on its own; magnet must move it
+    const d0 = Math.hypot(f.x - w.shark.x, f.y - w.shark.y);
+    step(w, idle, 1 / 60);
+    expect(Math.hypot(f.x - w.shark.x, f.y - w.shark.y)).toBeLessThan(d0);
+    for (let i = 0; i < 40 && f.alive; i++) step(w, idle, 1 / 60);
+    expect(f.alive).toBe(false);
+  });
+});
+
+describe("active skills", () => {
+  const cast = (id: string, seed: number) => {
+    const w = createWorld(sharkById(id), NO_UPGRADES, seed);
+    isolate(w);
+    w.shark.angle = 0;
+    return w;
+  };
+
+  it("Space casts the skill and starts its cooldown", () => {
+    const w = cast("reef", 40);
+    step(w, { ...idle, skill: true }, 1 / 60);
+    expect(w.skill.cooldown).toBeGreaterThan(5);
+    expect(w.skill.active).toBeGreaterThan(0);
+  });
+
+  it("크러시 바이트 lets the sand tiger eat a mine without exploding", () => {
+    const w = cast("sandTiger", 41);
+    const m = place(w, "mineS", w.shark.x + 70, w.shark.y);
+    const hp0 = w.shark.hp;
+    step(w, { ...idle, skill: true }, 1 / 60);
+    for (let i = 0; i < 5 && m.alive; i++) step(w, idle, 1 / 60);
+    expect(m.alive).toBe(false);
+    expect(w.shark.hp).toBeGreaterThan(hp0 - 1);
+    expect(w.run.eaten.mineS).toBe(1);
+  });
+
+  it("EMP chain-lightning eats nearby small prey and stuns hazards", () => {
+    const w = cast("elecShark", 42);
+    const fish = [0, 1, 2].map((i) => place(w, "crab", w.shark.x + 150 + i * 30, w.shark.y + 100));
+    const jelly = place(w, "greenJelly", w.shark.x - 200, w.shark.y);
+    step(w, { ...idle, skill: true }, 1 / 60);
+    expect(fish.every((f) => !f.alive)).toBe(true);
+    expect(jelly.stun).toBeGreaterThan(0);
+  });
+
+  it("그림자 은신: invulnerable while cloaked and the next big bite deals ×5", () => {
+    const w = cast("phantom", 43);
+    step(w, { ...idle, skill: true }, 1 / 60);
+    const hp0 = w.shark.hp;
+    explode(w, place(w, "mineL", w.shark.x + 40, w.shark.y));
+    expect(w.shark.hp).toBe(hp0);
+    expect(w.skill.ambush).toBe(true);
+    const sub = place(w, "submarine", w.shark.x + 130, w.shark.y);
+    sub.def = { ...sub.def, behavior: "static" };
+    for (let i = 0; i < 3; i++) step(w, idle, 1 / 60);
+    expect(w.skill.ambush).toBe(false);
+    expect(ENTITY_DEFS.submarine.toughness - sub.hp).toBeCloseTo(w.stats.biteForce * 5);
+  });
+
+  it("블랙홀 swallows prey inside its radius", () => {
+    const w = cast("leviathan", 44);
+    step(w, { ...idle, skill: true }, 1 / 60);
+    const v = w.skill.vortex!;
+    expect(v).not.toBeNull();
+    const f = place(w, "grouper", v.x + 150, v.y);
+    for (let i = 0; i < 120 && f.alive; i++) step(w, idle, 1 / 60);
+    expect(f.alive).toBe(false);
+  });
+
+  it("타이탄의 포효 doubles size and stuns everything around", async () => {
+    const { bodyScale } = await import("./engine");
+    const w = cast("megalodon", 45);
+    const h = place(w, "smallShark", w.shark.x + 600, w.shark.y);
+    step(w, { ...idle, skill: true }, 1 / 60);
+    expect(bodyScale(w)).toBe(2);
+    expect(h.stun).toBeGreaterThan(2);
+  });
+
+  it.each(SHARKS.map((s) => s.id))("%s survives a 60s dive spamming its skill", (id) => {
+    const w = createWorld(sharkById(id), { bite: 3, speed: 3, boost: 3 }, 4321);
+    let t = 0;
+    for (let i = 0; i < 60 * 60 && !w.over; i++) {
+      t += 1 / 60;
+      step(w, { dirX: Math.cos(t * 0.4), dirY: Math.sin(t * 0.7), boost: Math.sin(t) > 0.6, skill: true }, 1 / 60);
+      w.events.length = 0;
+    }
+    expect(Number.isFinite(w.shark.x) && Number.isFinite(w.shark.y)).toBe(true);
+    expect(w.entities.length).toBeLessThan(400);
   });
 });

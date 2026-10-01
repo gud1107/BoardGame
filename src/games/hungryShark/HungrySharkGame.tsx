@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import {
+  BRANCH_INFO,
   effectiveStats,
   ENTITY_DEFS,
   MAX_UPGRADE_LEVEL,
   SHARKS,
   sharkById,
+  sharksOfTier,
   UPGRADE_LABELS,
   upgradeCost,
   type EntityKind,
@@ -22,6 +24,7 @@ import BestiaryPanel from "./BestiaryPanel";
 import Overlay from "@/components/Overlay";
 import { drawSharkShape } from "./render";
 import { freshSave, loadSave, upgradesFor, writeSave, type SharkSave } from "./save";
+import SharkEvolutionModal, { BranchBadge } from "./SharkEvolutionModal";
 
 /**
  * Solo arcade loop: 상점(상어 선택/업그레이드) → 잠수(HungrySharkCanvas) →
@@ -42,6 +45,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
   const [summary, setSummary] = useState<{ s: RunSummary; newBest: boolean; missionCoins: number } | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [showBestiary, setShowBestiary] = useState(false);
+  const [showEvolve, setShowEvolve] = useState(false);
   const [bestThisSession, setBestThisSession] = useState(0);
 
   const update = (fn: (s: SharkSave) => SharkSave) => {
@@ -55,6 +59,15 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
   const viewDef = sharkById(viewId);
   const owned = save.owned.includes(viewId);
   const ups = upgradesFor(save, viewId);
+  const parent = viewDef.parentId ? sharkById(viewDef.parentId) : null;
+  const parentOwned = !parent || save.owned.includes(parent.id);
+
+  const unlock = (def: SharkDef) =>
+    update((s) =>
+      s.owned.includes(def.id) || s.coins < def.cost || (def.parentId && !s.owned.includes(def.parentId))
+        ? s
+        : { ...s, coins: s.coins - def.cost, owned: [...s.owned, def.id], selected: def.id },
+    );
 
   const startDive = () => {
     update((s) => ({ ...s, selected: viewId }));
@@ -138,30 +151,28 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
             <BubbleDecor />
           </div>
 
-          {/* Shark picker */}
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-            {SHARKS.map((sh) => {
-              const own = save.owned.includes(sh.id);
-              const active = sh.id === viewId;
-              return (
-                <button
-                  key={sh.id}
-                  onClick={() => setViewId(sh.id)}
-                  className={`group relative flex flex-col items-center rounded-xl border p-2 transition ${
-                    active
-                      ? "border-sky-400 bg-sky-500/15 ring-2 ring-sky-400/50"
-                      : "border-white/10 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-white"
-                  }`}
-                >
-                  <span className="absolute top-1 left-1.5 text-[9px] font-black text-white/50 light:text-slate-400">T{sh.tier}</span>
-                  <SharkPreview def={sh} width={96} height={44} dim={!own} />
-                  <span className="mt-0.5 text-xs font-bold text-white light:text-slate-800">{sh.name}</span>
-                  <span className="text-[10px] text-white/50 light:text-slate-500">
-                    {own ? `최고 ${(save.best[sh.id] ?? 0).toLocaleString()}` : `🔒 ${sh.cost.toLocaleString()}🪙`}
-                  </span>
-                </button>
-              );
-            })}
+          {/* Evolution tree picker: T1 root, then 3 branch columns × T2..T4 */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-2 light:border-slate-200 light:bg-white">
+            <div className="mb-2 flex justify-center">
+              {sharksOfTier(1).map((sh) => (
+                <SharkCard key={sh.id} sh={sh} save={save} active={sh.id === viewId} onClick={() => setViewId(sh.id)} />
+              ))}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+              {(["BRUTE", "SPEED", "VOID"] as const).map((br) => (
+                <div key={br} className="flex flex-col gap-1.5">
+                  <div className="text-center text-[10px] font-black text-white/60 light:text-slate-500">
+                    {BRANCH_INFO[br].emoji} {BRANCH_INFO[br].name}
+                    <div className="hidden text-[9px] font-semibold text-white/35 sm:block light:text-slate-400">{BRANCH_INFO[br].desc}</div>
+                  </div>
+                  {SHARKS.filter((x) => x.branch === br)
+                    .sort((a, b) => a.tier - b.tier)
+                    .map((sh) => (
+                      <SharkCard key={sh.id} sh={sh} save={save} active={sh.id === viewId} onClick={() => setViewId(sh.id)} />
+                    ))}
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Detail + upgrades */}
@@ -174,8 +185,12 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                 <div className="text-lg font-black text-white light:text-slate-900">
                   {viewDef.name} <span className="text-xs font-semibold text-white/40 light:text-slate-400">{viewDef.nameEn} · 티어 {viewDef.tier}</span>
                 </div>
+                <div className="mt-1 flex justify-center">
+                  <BranchBadge branch={viewDef.branch} />
+                </div>
                 <p className="mt-1 text-xs text-white/60 light:text-slate-600">{viewDef.blurb}</p>
               </div>
+              <SkillBox def={viewDef} />
               <EdibleList def={viewDef} />
             </div>
 
@@ -220,15 +235,17 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                 })
               ) : (
                 <div className="flex flex-col items-center gap-2 rounded-lg bg-black/20 p-4 light:bg-slate-50">
-                  <p className="text-sm text-white/70 light:text-slate-600">이 상어는 아직 잠겨 있습니다.</p>
+                  <p className="text-sm text-white/70 light:text-slate-600">
+                    {parentOwned ? "이 상어는 아직 잠겨 있습니다." : `먼저 이전 진화 단계 "${parent?.name}"부터 해금하세요.`}
+                  </p>
                   <button
-                    disabled={save.coins < viewDef.cost}
-                    onClick={() => update((s) => ({ ...s, coins: s.coins - viewDef.cost, owned: [...s.owned, viewDef.id], selected: viewDef.id }))}
+                    disabled={!parentOwned || save.coins < viewDef.cost}
+                    onClick={() => unlock(viewDef)}
                     className="rounded-xl bg-yellow-400 px-5 py-2 text-sm font-black text-slate-900 hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 light:disabled:bg-slate-200 light:disabled:text-slate-400"
                   >
                     🔓 {viewDef.cost.toLocaleString()}🪙에 잠금 해제
                   </button>
-                  {save.coins < viewDef.cost && (
+                  {parentOwned && save.coins < viewDef.cost && (
                     <p className="text-[11px] text-white/40 light:text-slate-400">{(viewDef.cost - save.coins).toLocaleString()}🪙 더 필요합니다</p>
                   )}
                 </div>
@@ -244,6 +261,14 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
             >
               🌊 {owned ? `${viewDef.name}(으)로 잠수 시작` : "잠금 해제 후 플레이 가능"}
             </button>
+            {owned && viewDef.nextIds.length > 0 && (
+              <button
+                onClick={() => setShowEvolve(true)}
+                className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 text-sm font-black text-slate-950 shadow-lg shadow-amber-500/20 hover:brightness-110"
+              >
+                🧬 진화 분기
+              </button>
+            )}
             <button
               onClick={() => setShowRules(true)}
               className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white/80 hover:border-white/40 light:border-slate-300 light:text-slate-700"
@@ -265,12 +290,26 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
             </button>
           </div>
           <p className="text-center text-[11px] text-white/35 light:text-slate-400">
-            PC: 마우스로 방향 · 클릭/스페이스 부스트 · WASD/방향키 · Esc 일시정지 &nbsp;|&nbsp; 모바일: 화면 드래그 조이스틱 + 🚀 버튼
+            PC: 마우스로 방향 · 클릭/Shift 부스트 · <b>Space(E) 스킬</b> · WASD/방향키 · Esc 일시정지 &nbsp;|&nbsp; 모바일: 화면 드래그 조이스틱 + 🚀 부스트 · ⚡ 스킬
           </p>
         </>
       )}
 
       {showRules && <RulebookModal onClose={() => setShowRules(false)} />}
+      {showEvolve && (
+        <SharkEvolutionModal
+          currentSharkId={viewId}
+          playerGold={save.coins}
+          owned={save.owned}
+          onEvolve={(target) => {
+            if (save.owned.includes(target.id)) update((s) => ({ ...s, selected: target.id }));
+            else unlock(target);
+            setViewId(target.id);
+            setShowEvolve(false);
+          }}
+          onClose={() => setShowEvolve(false)}
+        />
+      )}
       {showBestiary && (
         <Overlay title="📖 해양 생태계 먹이 도감" onClose={() => setShowBestiary(false)} wide>
           <BestiaryPanel tier={viewDef.tier} sharkName={viewDef.name} biteLevel={ups.bite} />
@@ -297,7 +336,7 @@ function SharkPreview({ def, width, height, dim, animate }: { def: SharkDef; wid
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
       ctx.translate(width / 2, height / 2 + height * 0.05);
-      const L = Math.min(width * 0.8, height * 2.1) * (0.72 + def.tier * 0.045);
+      const L = Math.min(width * 0.8, height * 2.1) * (0.74 + (def.length - 70) * 0.0019);
       ctx.globalAlpha = dim ? 0.35 : 1;
       drawSharkShape(ctx, def, L, animate ? 0.25 + 0.25 * Math.sin(t / 500) : 0.1, t / 180, false, false);
       if (animate) raf = requestAnimationFrame(draw);
@@ -309,11 +348,54 @@ function SharkPreview({ def, width, height, dim, animate }: { def: SharkDef; wid
   return <canvas ref={ref} style={{ width, height, maxWidth: "100%" }} className="mx-auto block" />;
 }
 
+function SharkCard({ sh, save, active, onClick }: { sh: SharkDef; save: SharkSave; active: boolean; onClick: () => void }) {
+  const own = save.owned.includes(sh.id);
+  const reachable = !sh.parentId || save.owned.includes(sh.parentId);
+  return (
+    <button
+      onClick={onClick}
+      className={`group relative flex w-full min-w-0 flex-col items-center rounded-xl border p-1.5 transition sm:p-2 ${
+        active
+          ? "border-sky-400 bg-sky-500/15 ring-2 ring-sky-400/50"
+          : "border-white/10 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-white"
+      } ${sh.tier === 1 ? "max-w-[11rem]" : ""}`}
+    >
+      <span className="absolute top-1 left-1.5 text-[9px] font-black text-white/50 light:text-slate-400">T{sh.tier}</span>
+      <SharkPreview def={sh} width={88} height={40} dim={!own} />
+      <span className="mt-0.5 w-full truncate text-center text-[11px] font-bold text-white sm:text-xs light:text-slate-800">{sh.name}</span>
+      <span className="text-[10px] text-white/50 light:text-slate-500">
+        {own ? `최고 ${(save.best[sh.id] ?? 0).toLocaleString()}` : reachable ? `🔒 ${sh.cost.toLocaleString()}🪙` : "🔒 이전 단계 필요"}
+      </span>
+    </button>
+  );
+}
+
+function SkillBox({ def }: { def: SharkDef }) {
+  return (
+    <div className="w-full space-y-1 rounded-lg border border-violet-400/20 bg-violet-500/10 p-2 text-[11px] light:border-violet-200 light:bg-violet-50">
+      <div className="font-bold text-violet-300 light:text-violet-700">
+        ⚡ {def.skill.name} <span className="font-normal opacity-70">· 쿨타임 {def.skill.cooldown}초 · Space/⚡</span>
+      </div>
+      <div className="text-white/65 light:text-slate-600">{def.skill.desc}</div>
+      {def.passive && (
+        <div className="text-emerald-300 light:text-emerald-700">
+          🧬 패시브 {def.passive.name}: {def.passive.desc}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-x-2 text-amber-300 light:text-amber-700">
+        <span>🪙 골드 ×{def.goldMultiplier.toFixed(1)}</span>
+        <span>🧲 자석 {def.magnetRadius}</span>
+        <span>🚀 부스트 효율 ×{def.boostEfficiency.toFixed(1)}</span>
+      </div>
+    </div>
+  );
+}
+
 function StatBars({ def, save }: { def: SharkDef; save: SharkSave }) {
   const st = effectiveStats(def, upgradesFor(save, def.id));
   const rows: [string, number, number, string][] = [
-    ["최대 체력", st.maxHealth, 420, `${st.maxHealth}`],
-    ["초당 허기", def.baseDrainRate, 6.2, `${def.baseDrainRate.toFixed(1)} HP/s`],
+    ["최대 체력", st.maxHealth, 460, `${st.maxHealth}`],
+    ["초당 허기", def.baseDrainRate, 7.2, `${def.baseDrainRate.toFixed(1)} HP/s`],
     ["속도", st.swimSpeed, 440, `${Math.round(st.swimSpeed)}`],
     ["부스트", st.boostDuration, 6, `${st.boostDuration.toFixed(1)}s`],
     ["물기 피해", st.biteForce, 100, `${Math.round(st.biteForce)}`],
@@ -353,7 +435,7 @@ function EdibleList({ def }: { def: SharkDef }) {
 }
 
 const EATEN_LABEL_ORDER: EntityKind[] = [
-  "smallFish", "crab", "swimmer", "puffer", "pelican", "diver", "grouper", "ray", "tuna", "sailor", "angler",
+  "smallFish", "crab", "swimmer", "goldenTuna", "puffer", "pelican", "diver", "grouper", "ray", "tuna", "sailor", "angler",
   "fishingBoat", "passenger", "smallShark", "cageDiver", "submarine", "ghostShark", "yacht", "helicopter",
   "greenJelly", "redJelly", "mineS", "mineM", "mineL", "mineXL", "torpedo", "rock", "chest",
 ];

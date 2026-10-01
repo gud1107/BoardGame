@@ -6,7 +6,7 @@
  */
 
 import { ENTITY_DEFS, seabedY, SEABED_BASE, SKY_TOP, SURFACE_Y, WORLD_W, type EntityKind, type SharkDef } from "./data";
-import { isDangerous, isEdible, mouthPos, type Entity, type World } from "./engine";
+import { bodyLength, bodyScale, isCloaked, isDangerous, isEdible, mouthPos, type Entity, type World } from "./engine";
 import { MARKER_COLORS, type Marker } from "./markers";
 
 export interface Camera {
@@ -22,7 +22,7 @@ export function viewHeightFor(def: SharkDef): number {
 /** Smoothly follows the shark with a little velocity look-ahead. */
 export function updateCamera(cam: Camera, w: World, viewW: number, viewH: number, dt: number) {
   const s = w.shark;
-  const targetZoom = viewH / (viewHeightFor(w.def) * (s.boosting ? 1.08 : 1));
+  const targetZoom = viewH / (viewHeightFor(w.def) * (s.boosting ? 1.08 : 1) * (bodyScale(w) > 1 ? 1.5 : 1));
   cam.zoom += (targetZoom - cam.zoom) * Math.min(1, dt * 2);
   const tx = s.x + s.vx * 0.28;
   const ty = s.y + s.vy * 0.2;
@@ -200,6 +200,19 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     drawEntity(ctx, e, t, goldOn && edible, w.gold.mega && goldOn);
   }
 
+  // Stunned (EMP / roar / ram): electric halo.
+  for (const e of w.entities) {
+    if (!e.alive || e.stun <= 0) continue;
+    if (e.x < left || e.x > right || e.y < top || e.y > bottom) continue;
+    ctx.strokeStyle = `rgba(103,232,249,${0.4 + 0.4 * Math.abs(Math.sin(t * 14 + e.id))})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.def.radius + 6, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  drawSkillFx(ctx, w, t);
+
   // ── Shark ──
   drawPlayerShark(ctx, w, t);
 
@@ -281,7 +294,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
   // Depth darkness with a light bubble around the shark (spec: deep-water fog).
   const dark = Math.max(0, Math.min(0.9, (cam.y - 1100) / 2000));
   if (dark > 0.01) {
-    const lightR = (230 + w.def.length * 1.4) * z;
+    const lightR = (230 + bodyLength(w) * 1.4) * z;
     const g = ctx.createRadialGradient(sx, sy, lightR * 0.25, sx, sy, lightR * 1.6);
     g.addColorStop(0, "rgba(2,6,23,0)");
     g.addColorStop(1, `rgba(2,6,23,${dark})`);
@@ -298,6 +311,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
         : e.kind === "redJelly" ? "rgba(248,113,113,0.35)"
         : e.kind === "ghostShark" ? "rgba(186,230,253,0.25)"
         : e.kind === "rock" ? "rgba(249,115,22,0.5)"
+        : e.kind === "goldenTuna" ? "rgba(250,204,21,0.55)"
         : null;
       if (!glow) continue;
       const ex = (e.x - cam.x) * z + vw / 2;
@@ -348,6 +362,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   drawThreatArrows(ctx, w, cam, vw, vh, t);
+  if (w.skill.reveal > 0) drawSonar(ctx, w, cam, vw, vh, t);
   drawMinimap(ctx, w, vw, vh);
 }
 
@@ -428,7 +443,7 @@ export function drawEntityIcon(ctx: CanvasRenderingContext2D, kind: EntityKind, 
   const def = ENTITY_DEFS[kind];
   const e: Entity = {
     id: 1, kind, def, alive: true, x: 0, y: 0, vx: 0, vy: 0, angle: 0, hp: def.toughness,
-    phase: t, timer: 0, attackCd: 0, hitFlash: 0, homeY: 0, dir: 1, state: "patrol",
+    phase: t, timer: 0, attackCd: 0, hitFlash: 0, homeY: 0, dir: 1, state: "patrol", stun: 0,
   };
   // Visual extent in units of radius, per silhouette.
   const extent =
@@ -516,13 +531,136 @@ function drawMinimap(ctx: CanvasRenderingContext2D, w: World, vw: number, vh: nu
   ctx.fill();
 }
 
+// ── Skill FX ────────────────────────────────────────────────────────────────
+
+function drawSkillFx(ctx: CanvasRenderingContext2D, w: World, t: number) {
+  for (const r of w.rings) {
+    const k = 1 - r.life / r.maxLife;
+    ctx.globalAlpha = Math.max(0, 1 - k) * 0.8;
+    ctx.strokeStyle = r.color;
+    ctx.lineWidth = 6 * (1 - k) + 1.5;
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, r.radius * (0.15 + 0.85 * k), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  for (const b of w.beams) {
+    ctx.globalAlpha = Math.max(0, b.life / b.maxLife);
+    ctx.strokeStyle = b.color;
+    ctx.lineWidth = b.zigzag ? 3 : 7;
+    ctx.shadowColor = b.color;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.moveTo(b.x1, b.y1);
+    if (b.zigzag) {
+      const n = 6;
+      for (let i = 1; i < n; i++) {
+        const f = i / n;
+        const jitter = (h01(i * 13.7 + Math.floor(t * 30)) - 0.5) * 26;
+        const nx = -(b.y2 - b.y1), ny = b.x2 - b.x1;
+        const nl = Math.hypot(nx, ny) || 1;
+        ctx.lineTo(b.x1 + (b.x2 - b.x1) * f + (nx / nl) * jitter, b.y1 + (b.y2 - b.y1) * f + (ny / nl) * jitter);
+      }
+    }
+    ctx.lineTo(b.x2, b.y2);
+    ctx.stroke();
+    if (!b.zigzag) {
+      // Snap-jaw head at the tip.
+      ctx.fillStyle = "#fce7f3";
+      ctx.beginPath();
+      ctx.arc(b.x2, b.y2, 9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+  const v = w.skill.vortex;
+  if (v) {
+    const fade = Math.min(1, v.remaining / 0.5);
+    const g = ctx.createRadialGradient(v.x, v.y, 0, v.x, v.y, v.radius);
+    g.addColorStop(0, `rgba(2,0,10,${0.95 * fade})`);
+    g.addColorStop(0.18, `rgba(76,29,149,${0.8 * fade})`);
+    g.addColorStop(0.6, `rgba(168,85,247,${0.25 * fade})`);
+    g.addColorStop(1, "rgba(168,85,247,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(v.x, v.y, v.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(216,180,254,${0.6 * fade})`;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      const a0 = t * 5 + (i * Math.PI) / 2;
+      ctx.arc(v.x, v.y, v.radius * (0.3 + i * 0.16), a0, a0 + 1.6);
+      ctx.stroke();
+    }
+  }
+}
+
+/** 소나 펄스: edge-of-screen arrows to chests, golden tuna and big edible prey. */
+function drawSonar(ctx: CanvasRenderingContext2D, w: World, cam: Camera, vw: number, vh: number, t: number) {
+  const z = cam.zoom;
+  const s = w.shark;
+  const picks: { e: Entity; color: string; label: string }[] = [];
+  for (const e of w.entities) {
+    if (!e.alive) continue;
+    if (e.kind === "chest") picks.push({ e, color: "#facc15", label: "🎁" });
+    else if (e.kind === "goldenTuna") picks.push({ e, color: "#fde047", label: "🐟" });
+    else if (e.def.toughness > 1 && isEdible(w, e)) picks.push({ e, color: "#4ade80", label: "🍖" });
+  }
+  picks.sort((a, b) => Math.hypot(a.e.x - s.x, a.e.y - s.y) - Math.hypot(b.e.x - s.x, b.e.y - s.y));
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "700 11px system-ui, sans-serif";
+  for (const { e, color, label } of picks.slice(0, 8)) {
+    const ex = (e.x - cam.x) * z + vw / 2;
+    const ey = (e.y - cam.y) * z + vh / 2;
+    const onScreen = ex > 0 && ex < vw && ey > 0 && ey < vh;
+    const a = Math.atan2(ey - vh / 2, ex - vw / 2);
+    const m = 40;
+    const kx = Math.cos(a), ky = Math.sin(a);
+    const sc = Math.min((vw / 2 - m) / Math.abs(kx || 1e-6), (vh / 2 - m) / Math.abs(ky || 1e-6));
+    const ax = onScreen ? ex : vw / 2 + kx * sc;
+    const ay = onScreen ? ey : vh / 2 + ky * sc;
+    ctx.globalAlpha = 0.7 + 0.3 * Math.sin(t * 6);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(ax, ay, 14 + 3 * Math.sin(t * 6), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(2,6,23,0.6)";
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.fillText(label, ax, ay);
+    if (!onScreen) {
+      const dm = Math.round(Math.hypot(e.x - s.x, e.y - s.y) / 10);
+      ctx.fillStyle = color;
+      ctx.fillText(`${dm}m`, ax, ay + 24);
+    }
+  }
+  ctx.restore();
+}
+
 // ── Player shark ────────────────────────────────────────────────────────────
 
 function drawPlayerShark(ctx: CanvasRenderingContext2D, w: World, t: number) {
   const s = w.shark;
-  const L = w.stats.length;
+  const L = bodyLength(w);
   ctx.save();
   ctx.translate(s.x, s.y);
+  if (s.shield > 0) {
+    ctx.strokeStyle = `rgba(125,211,252,${0.35 + 0.25 * Math.sin(t * 10)})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, L * 0.55, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  if (isCloaked(w)) ctx.globalAlpha = 0.28 + 0.1 * Math.sin(t * 12);
+  else if (w.skill.ambush) {
+    ctx.shadowColor = "#c084fc";
+    ctx.shadowBlur = 24;
+  }
   ctx.rotate(s.angle);
   if (Math.cos(s.angle) < 0) ctx.scale(1, -1);
   const open = s.jaw > 0 ? Math.sin((s.jaw / 0.22) * Math.PI) : nearPreyOpen(w);
@@ -539,7 +677,7 @@ function drawPlayerShark(ctx: CanvasRenderingContext2D, w: World, t: number) {
 /** Mouth hangs slightly open while something edible is right in front. */
 function nearPreyOpen(w: World): number {
   const m = mouthPos(w);
-  const R = w.stats.eatRadius + 90;
+  const R = w.stats.eatRadius * bodyScale(w) + 90;
   for (const e of w.entities) {
     if (!e.alive || !isEdible(w, e)) continue;
     if (Math.abs(e.x - m.x) < R && Math.abs(e.y - m.y) < R) return 0.55;
@@ -620,15 +758,40 @@ export function drawSharkShape(
   ctx.shadowBlur = 0;
 
   // Species details.
-  if (def.id === "tiger" && !gold) {
-    ctx.strokeStyle = "rgba(28,25,23,0.55)";
-    ctx.lineWidth = 0.025 * u;
-    for (let i = 0; i < 6; i++) {
-      const x = 0.12 * u - i * 0.08 * u;
+  if (def.id === "sandTiger" && !gold) {
+    // Scattered dark spots.
+    ctx.fillStyle = "rgba(63,47,29,0.5)";
+    for (let i = 0; i < 9; i++) {
       ctx.beginPath();
-      ctx.moveTo(x, -0.13 * u + i * 0.01 * u);
-      ctx.lineTo(x - 0.04 * u, -0.03 * u);
-      ctx.stroke();
+      ctx.arc(0.2 * u - i * 0.065 * u, -0.1 * u + (i % 3) * 0.03 * u, 0.012 * u, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (def.id === "elecShark" && !gold) {
+    // Glowing electric zigzag along the flank.
+    ctx.strokeStyle = `rgba(103,232,249,${0.6 + 0.4 * Math.sin(phase * 2)})`;
+    ctx.lineWidth = 0.014 * u;
+    ctx.beginPath();
+    ctx.moveTo(0.22 * u, -0.07 * u);
+    for (let i = 1; i <= 8; i++) ctx.lineTo(0.22 * u - i * 0.07 * u, -0.07 * u + (i % 2 ? 0.035 : -0.01) * u);
+    ctx.stroke();
+  }
+  if (def.id === "goblin") {
+    // Long blade-like snout over the mouth.
+    ctx.fillStyle = gold ? "#eab308" : back;
+    ctx.beginPath();
+    ctx.moveTo(0.4 * u, -0.07 * u);
+    ctx.quadraticCurveTo(0.62 * u, -0.06 * u, 0.66 * u, -0.02 * u);
+    ctx.quadraticCurveTo(0.55 * u, 0.0, 0.42 * u, 0.0);
+    ctx.fill();
+  }
+  if ((def.id === "phantom" || def.id === "leviathan") && !gold) {
+    // Bioluminescent spine dots.
+    ctx.fillStyle = def.id === "phantom" ? "rgba(192,132,252,0.9)" : "rgba(129,140,248,0.9)";
+    for (let i = 0; i < 6; i++) {
+      ctx.beginPath();
+      ctx.arc(0.18 * u - i * 0.09 * u, -0.11 * u + i * 0.012 * u, 0.012 * u * (1 + 0.3 * Math.sin(phase + i)), 0, Math.PI * 2);
+      ctx.fill();
     }
   }
   if (def.id === "hammer") {
@@ -699,7 +862,7 @@ export function drawSharkShape(
   ctx.fill();
 
   // Eye.
-  ctx.fillStyle = "#020617";
+  ctx.fillStyle = (def.id === "leviathan" || def.id === "phantom") && !gold ? accent : "#020617";
   ctx.beginPath();
   ctx.arc(0.34 * u, -0.045 * u, 0.024 * u, 0, Math.PI * 2);
   ctx.fill();
@@ -707,7 +870,7 @@ export function drawSharkShape(
   ctx.beginPath();
   ctx.arc(0.345 * u, -0.052 * u, 0.008 * u, 0, Math.PI * 2);
   ctx.fill();
-  void accent;
+
 }
 
 // ── Entities ────────────────────────────────────────────────────────────────
@@ -725,13 +888,19 @@ function drawEntity(ctx: CanvasRenderingContext2D, e: Entity, t: number, gold: b
   switch (e.kind) {
     case "smallFish":
     case "grouper":
-    case "tuna": {
+    case "tuna":
+    case "goldenTuna": {
       ctx.rotate(e.angle);
       if (faceLeft) ctx.scale(1, -1);
       const wag = Math.sin(e.phase * 14) * 0.3;
       ctx.fillStyle = col;
       ctx.beginPath();
-      ctx.ellipse(0, 0, r * 1.25, r * (e.kind === "tuna" ? 0.5 : 0.62), 0, 0, Math.PI * 2);
+      if (e.kind === "goldenTuna") {
+        ctx.shadowColor = GOLD;
+        ctx.shadowBlur = 18 + 8 * Math.sin(t * 6);
+        ctx.fillStyle = "#facc15";
+      }
+      ctx.ellipse(0, 0, r * 1.25, r * (e.kind === "tuna" || e.kind === "goldenTuna" ? 0.5 : 0.62), 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.save();
       ctx.translate(-r * 1.1, 0);
@@ -742,6 +911,18 @@ function drawEntity(ctx: CanvasRenderingContext2D, e: Entity, t: number, gold: b
       ctx.lineTo(-r * 0.8, r * 0.6);
       ctx.fill();
       ctx.restore();
+      if (e.kind === "goldenTuna") {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#fef9c3";
+        ctx.beginPath();
+        ctx.ellipse(0, r * 0.18, r * 1.1, r * 0.22, 0, 0, Math.PI * 2);
+        ctx.fill();
+        const tw = 0.5 + 0.5 * Math.sin(t * 9 + e.id);
+        ctx.fillStyle = `rgba(255,255,255,${tw})`;
+        ctx.beginPath();
+        ctx.arc(-r * 0.3, -r * 0.25, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
       if (e.kind === "tuna" && !gold) {
         ctx.fillStyle = "#e2e8f0";
         ctx.beginPath();

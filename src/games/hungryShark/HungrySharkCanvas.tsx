@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ZONES, zoneAt, type SharkDef, type UpgradeLevels } from "./data";
+import { frenzyMultiplier, ZONES, zoneAt, type SharkDef, type UpgradeLevels } from "./data";
 import { createWorld, depthMeters, step, summarize, type MissionState, type RunSummary, type SharkInput, type World } from "./engine";
 import { drawWorld, updateCamera, viewHeightFor, type Camera } from "./render";
 import { SharkAudio } from "./audio";
@@ -36,6 +36,9 @@ interface Hud {
   poisoned: boolean;
   airborne: boolean;
   missions: MissionState[];
+  skillCd: number;
+  skillActive: boolean;
+  shield: boolean;
 }
 
 interface Banner {
@@ -84,6 +87,7 @@ export default function HungrySharkCanvas({
     mouseDown: false,
     joy: null as { id: number; ox: number; oy: number; x: number; y: number } | null,
     touchBoost: false,
+    touchSkill: false,
   });
   const onEndRef = useRef(onEnd);
   useEffect(() => {
@@ -180,7 +184,7 @@ export default function HungrySharkCanvas({
         else setPause(!pausedRef.current);
         return;
       }
-      if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", "shift"].includes(k)) {
+      if ([" ", "e", "q", "arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", "shift"].includes(k)) {
         e.preventDefault();
         input.current.keys.add(k);
         audioRef.current?.unlock();
@@ -245,8 +249,10 @@ export default function HungrySharkCanvas({
           if (Math.hypot(mx, my) > 24) { dx = mx; dy = my; }
         }
       }
-      const boost = k.has(" ") || k.has("shift") || inp.mouseDown || inp.touchBoost;
-      return { dirX: dx, dirY: dy, boost };
+      // Space / E / Q cast the shark's skill; boost is Shift, mouse hold or 🚀.
+      const boost = k.has("shift") || inp.mouseDown || inp.touchBoost;
+      const skill = k.has(" ") || k.has("e") || k.has("q") || inp.touchSkill;
+      return { dirX: dx, dirY: dy, boost, skill };
     };
 
     const handleEvents = () => {
@@ -268,11 +274,13 @@ export default function HungrySharkCanvas({
           case "splash": a?.splash(ev.strength); a?.setAirborne(false); break;
           case "coin": a?.coin(); break;
           case "torpedo": a?.torpedo(); break;
+          case "skill": a?.skill(ev.id); break;
+          case "skillReady": a?.skillReady(); break;
           case "goldStart":
             a?.goldRush(ev.mega);
             pushBanner(ev.mega
               ? { text: "MEGA GOLD RUSH!", sub: `×${ev.multiplier} · 무엇이든 먹어치워라!`, tone: "mega" }
-              : { text: "GOLD RUSH!", sub: `×${ev.multiplier} 점수 · 무적 · 부스트 무제한`, tone: "gold" });
+              : { text: "GOLD RUSH!", sub: `×${ev.multiplier} 점수 · 코인 ×2 · 무적 · 부스트 무제한`, tone: "gold" });
             break;
           case "goldEnd": a?.goldEnd(); break;
           case "mission": a?.mission(); pushBanner({ text: "미션 완료!", sub: `${ev.label} · +${ev.reward}🪙`, tone: "mission" }); break;
@@ -338,6 +346,9 @@ export default function HungrySharkCanvas({
           poisoned: !!s.poison,
           airborne: s.airborne,
           missions: world.missions.map((m) => ({ ...m })),
+          skillCd: world.skill.cooldown,
+          skillActive: world.skill.active > 0 || world.skill.vortex !== null || world.skill.reveal > 0,
+          shield: s.shield > 0,
         });
       }
       if (world.over && endTimer === null) {
@@ -457,6 +468,19 @@ export default function HungrySharkCanvas({
             </div>
             <div className="text-[11px] font-semibold text-white/85 drop-shadow">
               {hud.airborne ? "🌤️ 공중" : `🌊 ${hud.depth}m · ${hud.zone}`}
+              {hud.shield && <span className="ml-1 text-sky-300">🛡</span>}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm">⚡</span>
+              <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-black/50 ring-1 ring-violet-300/40">
+                <div
+                  className={`h-full rounded-full ${hud.skillCd <= 0 ? "bg-gradient-to-r from-violet-300 to-fuchsia-400" : "bg-violet-500/60"} ${hud.skillActive ? "animate-pulse" : ""}`}
+                  style={{ width: `${(1 - hud.skillCd / def.skill.cooldown) * 100}%` }}
+                />
+              </div>
+              <span className="w-24 truncate text-[10px] font-bold text-violet-200 drop-shadow">
+                {hud.skillCd <= 0 ? (isTouch ? def.skill.name : `[Space] ${def.skill.name}`) : `${hud.skillCd.toFixed(1)}s`}
+              </span>
             </div>
           </div>
 
@@ -477,7 +501,9 @@ export default function HungrySharkCanvas({
             <div className="mt-0.5 text-xs font-bold text-yellow-300 tabular-nums">🪙 {hud.coins.toLocaleString()}</div>
             <div className="text-[11px] text-white/70 tabular-nums">⏱ {mm(hud.time)}</div>
             {hud.combo >= 3 && (
-              <div className="mt-1 animate-pulse text-sm font-black text-orange-300">{hud.combo} 콤보!</div>
+              <div className="mt-1 animate-pulse text-sm font-black text-orange-300">
+                {hud.combo} 콤보! <span className="text-yellow-300">🪙×{frenzyMultiplier(hud.combo)}</span>
+              </div>
             )}
           </div>
 
@@ -558,6 +584,25 @@ export default function HungrySharkCanvas({
           aria-label="부스트"
         >
           🚀
+        </button>
+      )}
+      {isTouch && (
+        <button
+          className={`absolute right-24 bottom-[20%] flex h-16 w-16 flex-col items-center justify-center rounded-full border-2 text-2xl text-white active:scale-95 ${
+            hud && hud.skillCd <= 0 ? "border-fuchsia-200/80 bg-violet-500/60" : "border-white/20 bg-black/40"
+          }`}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            audioRef.current?.unlock();
+            input.current.touchSkill = true;
+          }}
+          onPointerUp={() => (input.current.touchSkill = false)}
+          onPointerCancel={() => (input.current.touchSkill = false)}
+          onPointerLeave={() => (input.current.touchSkill = false)}
+          aria-label={`스킬: ${def.skill.name}`}
+        >
+          ⚡
+          {hud && hud.skillCd > 0 && <span className="text-[10px] font-bold">{Math.ceil(hud.skillCd)}s</span>}
         </button>
       )}
 

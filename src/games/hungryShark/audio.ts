@@ -161,6 +161,48 @@ export class SharkAudio {
     this.tone(1175, 0.07, "square", 0.06, undefined, 0, true);
     this.tone(1175, 0.07, "square", 0.06, undefined, 0.11, true);
   }
+  /** Active-skill cast stinger, one flavor per branch of the evolution tree. */
+  skill(id: string) {
+    switch (id) {
+      case "sprint":
+      case "sonicBreak":
+        this.noise(0.35, 1800, 0.8, 0.5, 6000);
+        this.tone(440, 0.25, "sawtooth", 0.08, 1320);
+        break;
+      case "crush":
+        this.crunch(true);
+        this.tone(90, 0.3, "square", 0.15, 50);
+        break;
+      case "surgeRam":
+      case "titanRoar":
+        this.explosion(id === "titanRoar");
+        this.tone(55, 0.9, "sawtooth", 0.25, 35);
+        break;
+      case "sonar":
+        [880, 660, 440].forEach((n, i) => this.tone(n, 0.5, "sine", 0.12, undefined, i * 0.18, true));
+        break;
+      case "shadowCloak":
+        this.tone(300, 0.6, "sine", 0.15, 90);
+        this.noise(0.6, 600, 2, 0.3, 150);
+        break;
+      case "emp":
+        this.noise(0.4, 4000, 3, 0.6, 800);
+        this.tone(1200, 0.3, "square", 0.06, 200, 0, true);
+        break;
+      case "snapJaw":
+        this.tone(700, 0.12, "triangle", 0.15, 1400);
+        this.crunch(false);
+        break;
+      case "blackHole":
+        this.tone(220, 1.6, "sine", 0.3, 30);
+        this.noise(1.6, 300, 1.5, 0.5, 60, "lowpass");
+        break;
+    }
+  }
+  skillReady() {
+    this.tone(1046, 0.1, "triangle", 0.06, undefined, 0, true);
+    this.tone(1568, 0.14, "triangle", 0.06, undefined, 0.07, true);
+  }
   death() {
     this.tone(220, 1.2, "sawtooth", 0.2, 40);
   }

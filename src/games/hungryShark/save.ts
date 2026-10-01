@@ -5,7 +5,7 @@
  * to trust anyway). Corrupt/tampered saves fall back to a fresh profile.
  */
 
-import { SHARKS, type UpgradeLevels } from "./data";
+import { evolutionPath, SHARKS, type UpgradeLevels } from "./data";
 
 export interface SharkSave {
   version: 1;
@@ -65,10 +65,46 @@ export function decodeSave(raw: string | null): SharkSave {
     if (checksum(json) !== sum) return freshSave();
     const parsed = JSON.parse(json) as SharkSave;
     if (parsed.version !== 1) return freshSave();
-    return { ...freshSave(), ...parsed };
+    return migrateSave({ ...freshSave(), ...parsed });
   } catch {
     return freshSave();
   }
+}
+
+/** Old linear-ladder shark that no longer exists in the evolution tree. */
+const RETIRED: Record<string, { to: string; refund: number }> = {
+  // 뱀상어 (old T4, 9,000🪙) → 샌드타이거 (T2 BRUTE, 1,200🪙) + the difference back.
+  tiger: { to: "sandTiger", refund: 9000 - 1200 },
+};
+
+/**
+ * Linear 6-shark ladder → 3-branch evolution tree. Retired ids are swapped
+ * (with a coin refund), and every owned shark's ancestors become owned too so
+ * the tree's "parent first" rule never strands an existing purchase.
+ * Idempotent: a migrated save has no retired ids left.
+ */
+export function migrateSave(save: SharkSave): SharkSave {
+  const known = new Set(SHARKS.map((s) => s.id));
+  let coins = save.coins;
+  const upgrades = { ...save.upgrades };
+  const best = { ...save.best };
+  const owned = new Set<string>();
+  for (const id of save.owned) {
+    const r = RETIRED[id];
+    if (r) {
+      coins += r.refund;
+      owned.add(r.to);
+      if (upgrades[id] && !upgrades[r.to]) upgrades[r.to] = upgrades[id];
+      if (best[id]) best[r.to] = Math.max(best[r.to] ?? 0, best[id]);
+      delete upgrades[id];
+      delete best[id];
+    } else if (known.has(id)) owned.add(id);
+  }
+  for (const id of [...owned]) for (const anc of evolutionPath(id)) owned.add(anc.id);
+  owned.add(SHARKS[0].id);
+  let selected = RETIRED[save.selected]?.to ?? save.selected;
+  if (!owned.has(selected)) selected = SHARKS[0].id;
+  return { ...save, coins, owned: SHARKS.map((s) => s.id).filter((id) => owned.has(id)), selected, upgrades, best };
 }
 
 export function loadSave(): SharkSave {
