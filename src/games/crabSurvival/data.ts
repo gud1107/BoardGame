@@ -494,6 +494,10 @@ export const GEAR_STACK_CD = 0.12;
 /** Bots go out of their way (vision ×, payoff +) to hunt anyone carrying a legendary weapon. */
 export const EPIC_HUNT_VISION = 1.6;
 export const EPIC_HUNT_PAYOFF = 4_000;
+/** Bounty paid (flat, on top of the normal kill reward) for flipping a legendary carrier. */
+export function epicBounty(victimLevel: number): number {
+  return 3_000 + 500 * victimLevel;
+}
 
 type GearBase = Omit<GearDef, "baseDmg" | "baseDuration">;
 

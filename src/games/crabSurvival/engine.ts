@@ -35,6 +35,7 @@ import {
   GEAR_STACK_MAX,
   GEARS,
   EPIC_HUNT_PAYOFF,
+  epicBounty,
   EPIC_HUNT_VISION,
   GIANT_SCALE,
   MAGNET_BASE,
@@ -219,6 +220,8 @@ export interface Shot {
   hit: number[];
   /** Vortex damage-tick timer. */
   tick?: number;
+  /** Weapon ★ level (visual: ★3 shots are bigger and gilded). */
+  lv?: number;
 }
 
 export interface Mine {
@@ -230,6 +233,7 @@ export interface Mine {
   life: number;
   dmg: number;
   blast: number;
+  lv?: number;
 }
 
 export interface Hazard {
@@ -252,6 +256,7 @@ export interface Beam {
   width: number;
   life: number;
   maxLife: number;
+  lv?: number;
 }
 
 export interface Creature {
@@ -379,7 +384,7 @@ export type GameEvent =
   | { type: "levelUp"; level: number; name: string; player: boolean; species: SpeciesId }
   | { type: "kingNew"; name: string; player: boolean }
   | { type: "kingDown"; name: string; by: string | null; player: boolean; byPlayer: boolean }
-  | { type: "kill"; killer: string; victim: string; byPlayer: boolean; victimPlayer: boolean }
+  | { type: "kill"; killer: string; victim: string; byPlayer: boolean; victimPlayer: boolean; bounty: number }
   | { type: "counter" }
   | { type: "gear"; name: string; emoji: string; player: boolean; rarity: GearRarity; lv: number }
   | { type: "epicAlert"; who: string; gear: string; emoji: string; player: boolean }
@@ -1360,6 +1365,7 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
   v.deadT = 0;
   v.respawnT = BOT_RESPAWN;
   const wasKing = w.kingId === v.id;
+  const wasEpic = v.gear.some((g) => GEARS[g.kind].rarity === "epic");
   const score = v.score;
 
   // Coins: 35% of the victim's score scattered around the corpse.
@@ -1397,15 +1403,23 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
   clearPowers(v);
   burst(w, "splash", v.x, v.y, 16, 200, v.color.shell, 5, 0.8, 180);
 
+  let bounty = 0;
   if (by) {
     by.kills++;
     if (by.isPlayer) w.stats.kills++;
     let reward = Math.floor(score * 0.2) + 75 * v.level;
     if (wasKing) reward += Math.floor(score * 0.3) + 10_000;
+    // 전설 현상금: flat bounty for flipping a legendary carrier.
+    if (wasEpic) {
+      bounty = epicBounty(v.level);
+      reward += bounty;
+      floatText(w, by.x, by.y - 62 * by.scale, `💰 현상금 +${bounty.toLocaleString()}`, "#fbbf24", 20, 1.6);
+      burst(w, "gold", v.x, v.y, 22, 260, "#fbbf24", 5, 1, 240);
+    }
     addScore(w, by, reward);
     floatText(w, by.x, by.y - 40 * by.scale, `+${Math.round(reward).toLocaleString()}`, "#fde047", wasKing ? 26 : 18, 1.4);
   }
-  w.events.push({ type: "kill", killer: killerName, victim: v.name, byPlayer: !!by?.isPlayer, victimPlayer: v.isPlayer });
+  w.events.push({ type: "kill", killer: killerName, victim: v.name, byPlayer: !!by?.isPlayer, victimPlayer: v.isPlayer, bounty });
   if (wasKing) {
     w.kingId = null;
     w.events.push({ type: "kingDown", name: v.name, by: by?.name ?? null, player: v.isPlayer, byPlayer: !!by?.isPlayer });
@@ -2412,22 +2426,22 @@ function updateGear(w: World, c: Crab, dt: number) {
           for (let i = -spread; i <= spread; i++) {
             const h = gearHit(w, c, "shotgun");
             const aa = a + i * (spread === 3 ? 0.12 : 0.15);
-            w.shots.push({ owner: c.id, kind: "shotgun", x: ox, y: oy, vx: Math.cos(aa) * speed, vy: Math.sin(aa) * speed, life: (def.range * reachK) / speed, dmg: h.dmg, crit: h.crit, r: 7 * Math.sqrt(c.scale), knock: 120, pierce: false, hit: [] });
+            w.shots.push({ owner: c.id, kind: "shotgun", x: ox, y: oy, vx: Math.cos(aa) * speed, vy: Math.sin(aa) * speed, life: (def.range * reachK) / speed, dmg: h.dmg, crit: h.crit, r: 7 * Math.sqrt(c.scale), knock: 120, pierce: false, hit: [], lv: g.lv });
           }
           burst(w, "shard", ox, oy, 5, 200, def.color, 3, 0.25, 40);
         } else if (g.kind === "vortex") {
           // A slow whirlpool lobbed at the target; it drags everything nearby into its eye.
           const h = gearHit(w, c, "vortex");
-          w.shots.push({ owner: c.id, kind: "vortex", x: ox, y: oy, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260, life: 2.2, dmg: h.dmg, crit: h.crit, r: 62 * Math.sqrt(c.scale), knock: 0, pierce: true, hit: [], tick: 0.1 });
+          w.shots.push({ owner: c.id, kind: "vortex", x: ox, y: oy, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260, life: 2.2, dmg: h.dmg, crit: h.crit, r: 62 * Math.sqrt(c.scale), knock: 0, pierce: true, hit: [], tick: 0.1, lv: g.lv });
         } else if (g.kind === "needle") {
           const speed = 980;
           const h = gearHit(w, c, "needle");
           const aa = a + range(w, -0.06, 0.06);
-          w.shots.push({ owner: c.id, kind: "needle", x: ox, y: oy, vx: Math.cos(aa) * speed, vy: Math.sin(aa) * speed, life: (def.range * reachK) / speed, dmg: h.dmg, crit: h.crit, r: 6 * Math.sqrt(c.scale), knock: 170, pierce: false, hit: [] });
+          w.shots.push({ owner: c.id, kind: "needle", x: ox, y: oy, vx: Math.cos(aa) * speed, vy: Math.sin(aa) * speed, life: (def.range * reachK) / speed, dmg: h.dmg, crit: h.crit, r: 6 * Math.sqrt(c.scale), knock: 170, pierce: false, hit: [], lv: g.lv });
         } else {
           const speed = 840;
           const h = gearHit(w, c, "trident");
-          w.shots.push({ owner: c.id, kind: "trident", x: ox, y: oy, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: (def.range * reachK * 1.3) / speed, dmg: h.dmg, crit: h.crit, r: 13 * Math.sqrt(c.scale), knock: 280, pierce: true, hit: [] });
+          w.shots.push({ owner: c.id, kind: "trident", x: ox, y: oy, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: (def.range * reachK * 1.3) / speed, dmg: h.dmg, crit: h.crit, r: 13 * Math.sqrt(c.scale), knock: 280, pierce: true, hit: [], lv: g.lv });
         }
         break;
       }
@@ -2439,7 +2453,7 @@ function updateGear(w: World, c: Crab, dt: number) {
         const hit: number[] = [];
         let fx = c.x, fy = c.y;
         for (let i = 0; i < 3 && t; i++) {
-          w.beams.push({ kind: "zap", x1: fx, y1: fy, x2: t.x, y2: t.y, width: 3 + c.scale, life: 0.28, maxLife: 0.28 });
+          w.beams.push({ kind: "zap", x1: fx, y1: fy, x2: t.x, y2: t.y, width: 3 + c.scale, life: 0.28, maxLife: 0.28, lv: g.lv });
           const h = gearHit(w, c, "zap", 1 - i * 0.15);
           if (t.crab) {
             hit.push(t.crab.id);
@@ -2460,7 +2474,7 @@ function updateGear(w: World, c: Crab, dt: number) {
         if (!c.moving) continue;
         g.cd = def.cooldown * (1 - GEAR_STACK_CD * (g.lv - 1));
         const h = gearHit(w, c, "mine");
-        const mine: Mine = { id: w.nextId++, owner: c.id, x: c.x - c.lastMx * r * 1.3, y: c.y - c.lastMy * r * 1.3, arm: 0.6, life: 14, dmg: h.dmg, blast: 85 * reachK };
+        const mine: Mine = { id: w.nextId++, owner: c.id, x: c.x - c.lastMx * r * 1.3, y: c.y - c.lastMy * r * 1.3, arm: 0.6, life: 14, dmg: h.dmg, blast: 85 * reachK, lv: g.lv };
         if (w.mines.filter((m) => m.owner === c.id).length >= 5) w.mines.splice(w.mines.findIndex((m) => m.owner === c.id), 1);
         w.mines.push(mine);
         break;

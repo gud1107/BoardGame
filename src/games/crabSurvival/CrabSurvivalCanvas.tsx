@@ -400,7 +400,7 @@ export default function CrabSurvivalCanvas({
             }
             pushBanner({
               text: `${ev.rarity === "epic" ? "🌟 " : ev.rarity === "rare" ? "✨ " : ""}${ev.emoji} ${ev.name}`,
-              sub: ev.rarity === "epic" ? "전설 무기 장착! 섬 전체에 위치가 알려졌습니다 — 모두가 노립니다" : `${GEAR_RARITY[ev.rarity].label} 무기 · 자동 발사 장착! (같은 무기를 또 주우면 강화)`,
+              sub: ev.rarity === "epic" ? "전설 무기 장착! 섬 전체에 위치가 알려졌고 현상금이 걸렸습니다 — 모두가 노립니다" : `${GEAR_RARITY[ev.rarity].label} 무기 · 자동 발사 장착! (같은 무기를 또 주우면 강화)`,
               tone: ev.rarity === "common" ? "info" : "king",
             });
             if (ev.rarity === "epic") a?.fanfare();
@@ -421,7 +421,7 @@ export default function CrabSurvivalCanvas({
             if (!ev.player && world.time - lastEpicBanner > 30) {
               lastEpicBanner = world.time;
               a?.locked();
-              pushBanner({ text: `🌟 ${ev.who}: 전설 ${ev.emoji} 획득!`, sub: "미니맵의 금빛 점 · 쓰러뜨리면 전설 무기를 빼앗을 수 있어요", tone: "king" });
+              pushBanner({ text: `🌟 ${ev.who}: 전설 ${ev.emoji} 획득!`, sub: "미니맵의 금빛 점 · 쓰러뜨리면 💰현상금 + 전설 무기를 빼앗을 수 있어요", tone: "king" });
             }
             break;
           case "blast":
@@ -445,10 +445,13 @@ export default function CrabSurvivalCanvas({
             });
             break;
           case "kill":
-            pushFeed(`${ev.killer} 🦀✂️ ${ev.victim}`, ev.byPlayer || ev.victimPlayer);
+            pushFeed(`${ev.killer} 🦀✂️ ${ev.victim}${ev.bounty ? " 💰현상금" : ""}`, ev.byPlayer || ev.victimPlayer);
             if (ev.byPlayer) {
               a?.hit(true);
-              pushBanner({ text: "처치!", sub: `${ev.victim}을(를) 뒤집었습니다`, tone: "kill" });
+              if (ev.bounty) {
+                a?.boxBreak(true);
+                pushBanner({ text: `💰 현상금 +${ev.bounty.toLocaleString()}!`, sub: `전설 무기를 든 ${ev.victim}을(를) 뒤집었습니다 — 떨어진 전설 무기를 챙기세요`, tone: "king" });
+              } else pushBanner({ text: "처치!", sub: `${ev.victim}을(를) 뒤집었습니다`, tone: "kill" });
             }
             break;
           case "playerDeath":
@@ -705,7 +708,7 @@ export default function CrabSurvivalCanvas({
           {(hud.gear.length > 0 || hud.muts.length > 0) && (
             <div className="flex flex-wrap items-center gap-1">
               {hud.gear.map((g, i) => (
-                <div key={`g${i}`} className="flex items-center gap-1 rounded-lg bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-white" style={{ boxShadow: `0 0 0 1px ${g.color}` }} title={`[${g.label}] ${g.name}`}>
+                <div key={`g${i}`} className={`flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[10px] text-white ${g.lv >= 3 ? "bg-gradient-to-r from-amber-900/90 to-slate-950/85" : "bg-slate-950/80"}`} style={{ boxShadow: g.lv >= 3 ? `0 0 0 1.5px #fbbf24, 0 0 8px rgba(251,191,36,0.6)` : `0 0 0 1px ${g.color}` }} title={`[${g.label}] ${g.name}`}>
                   <span className="text-sm leading-none">{g.emoji}</span>
                   {g.lv > 1 && <span className="text-[9px] text-amber-300">{"★".repeat(g.lv)}</span>}
                   {!compact && <span className="max-w-[78px] truncate font-bold" style={{ color: g.color }}>{g.name}</span>}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUBBLE_STUN, gearDropOdds, GEARS, isUnlocked, MUTATIONS, LEVELS, tierForLevel, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
+import { BUBBLE_STUN, epicBounty, gearDropOdds, GEARS, isUnlocked, MUTATIONS, LEVELS, tierForLevel, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
 import { addScore, applyMutation, armorMult, atkMult, botThink, createWorld, equipGear, penaltyLeft, player, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
 
 const idle: CrabInput = { moveX: 0, moveY: 0, boost: false, attack: false };
@@ -676,5 +676,27 @@ describe("duplicate stacking + legendary bounty", () => {
     hunter.brain!.think = 0;
     botThink(w, hunter, 1 / 60);
     expect(hunter.brain!.targetId).toBe(epic.id);
+  });
+});
+
+describe("legendary bounty", () => {
+  it("flipping a legendary carrier pays the bounty on top of the kill reward", () => {
+    const pay = (epic: boolean) => {
+      const w = bare(1);
+      const [me, foe] = w.crabs;
+      foe.brain = null;
+      foe.x = 40;
+      if (epic) equipGear(w, foe, "trident");
+      foe.hp = 1;
+      face(me, foe);
+      swing(w, me);
+      expect(foe.alive).toBe(false);
+      const kill = w.events.find((e) => e.type === "kill");
+      return { score: me.score, bounty: kill && kill.type === "kill" ? kill.bounty : -1 };
+    };
+    const plain = pay(false), epic = pay(true);
+    expect(plain.bounty).toBe(0);
+    expect(epic.bounty).toBe(epicBounty(1));
+    expect(epic.score - plain.score).toBeGreaterThanOrEqual(epicBounty(1) - 50);
   });
 });

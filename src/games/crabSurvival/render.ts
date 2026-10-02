@@ -189,6 +189,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     if (!inView(m.x, m.y)) continue;
     const armed = m.arm <= 0;
     const blink = armed && Math.sin(t * 10 + m.id) > 0.4;
+    const gold = (m.lv ?? 1) >= 3;
     ctx.fillStyle = "rgba(60,40,10,0.25)";
     ctx.beginPath();
     ctx.ellipse(m.x + 3, m.y + 4, 13, 11, 0, 0, Math.PI * 2);
@@ -200,11 +201,11 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     ctx.beginPath();
     ctx.arc(m.x, m.y, 12, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#3f6212";
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2 + m.id;
+    ctx.fillStyle = gold ? "#f59e0b" : "#3f6212";
+    for (let i = 0; i < (gold ? 12 : 8); i++) {
+      const a = (i / (gold ? 12 : 8)) * Math.PI * 2 + m.id;
       ctx.beginPath();
-      ctx.arc(m.x + Math.cos(a) * 12, m.y + Math.sin(a) * 12, 2.2, 0, Math.PI * 2);
+      ctx.arc(m.x + Math.cos(a) * 12, m.y + Math.sin(a) * 12, gold ? 3 : 2.2, 0, Math.PI * 2);
       ctx.fill();
     }
     if (blink) {
@@ -439,14 +440,26 @@ function drawShot(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: numb
   const z = cam.zoom;
   const [x, y] = toScreen(cam, W, H, s.x, s.y, 12);
   const ang = Math.atan2(s.vy * TILT, s.vx);
+  const lv = s.lv ?? 1;
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(ang);
-  const k = Math.max(0.7, z);
+  // ★2 shots are a touch bigger; ★3 shots are big, gilded and haloed.
+  const k = Math.max(0.7, z) * (lv >= 3 ? 1.45 : lv === 2 ? 1.15 : 1);
+  if (lv >= 3) {
+    const hr = (s.kind === "trident" ? 20 : 11) * k;
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, hr);
+    g.addColorStop(0, "rgba(253,230,138,0.65)");
+    g.addColorStop(1, "rgba(251,191,36,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(-hr * 0.3, 0, hr * 1.4, hr, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
   switch (s.kind) {
     case "shotgun":
-      ctx.fillStyle = "#fbcfe8";
-      ctx.strokeStyle = "#9d174d";
+      ctx.fillStyle = lv >= 3 ? "#fde68a" : "#fbcfe8";
+      ctx.strokeStyle = lv >= 3 ? "#b45309" : "#9d174d";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(8 * k, 0);
@@ -464,7 +477,7 @@ function drawShot(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: numb
       ctx.moveTo(-18 * k, 0);
       ctx.lineTo(0, 0);
       ctx.stroke();
-      ctx.strokeStyle = "#fecdd3";
+      ctx.strokeStyle = lv >= 3 ? "#fef3c7" : "#fecdd3";
       ctx.lineWidth = 2 * k;
       ctx.beginPath();
       ctx.moveTo(-7 * k, 0);
@@ -473,7 +486,7 @@ function drawShot(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: numb
       break;
     case "trident": {
       const L = 26 * k * Math.sqrt(s.r / 13);
-      ctx.strokeStyle = "rgba(56,189,248,0.5)";
+      ctx.strokeStyle = lv >= 3 ? "rgba(251,191,36,0.55)" : "rgba(56,189,248,0.5)";
       ctx.lineWidth = 7 * k;
       ctx.beginPath();
       ctx.moveTo(-L * 1.6, 0);
@@ -525,7 +538,7 @@ function drawVortex(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: nu
   // Spiral arms spinning inward.
   ctx.lineCap = "round";
   for (let arm = 0; arm < 4; arm++) {
-    ctx.strokeStyle = `rgba(199,210,254,${(arm % 2 ? 0.5 : 0.85) * fade})`;
+    ctx.strokeStyle = (s.lv ?? 1) >= 3 ? `rgba(253,224,71,${(arm % 2 ? 0.55 : 0.9) * fade})` : `rgba(199,210,254,${(arm % 2 ? 0.5 : 0.85) * fade})`;
     ctx.lineWidth = Math.max(1.5, 3 * z);
     ctx.beginPath();
     for (let i = 0; i <= 24; i++) {
@@ -559,7 +572,9 @@ function drawBeam(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: numb
       pts.push([x1 + (dx * i) / segs + nx * j, y1 + (dy * i) / segs + ny * j]);
     }
     pts.push([x2, y2]);
-    for (const [w, col] of [[b.width * 3 * Math.max(0.7, z), `rgba(167,139,250,${0.35 * a})`], [b.width * Math.max(0.7, z), `rgba(237,233,254,${a})`]] as const) {
+    const gold = (b.lv ?? 1) >= 3;
+    const wk = gold ? 1.5 : 1;
+    for (const [w, col] of [[b.width * 3 * wk * Math.max(0.7, z), gold ? `rgba(251,191,36,${0.4 * a})` : `rgba(167,139,250,${0.35 * a})`], [b.width * wk * Math.max(0.7, z), gold ? `rgba(254,243,199,${a})` : `rgba(237,233,254,${a})`]] as const) {
       ctx.strokeStyle = col;
       ctx.lineWidth = w;
       ctx.beginPath();
@@ -996,12 +1011,15 @@ function drawCrabWorld(ctx: CanvasRenderingContext2D, c: Crab, t: number, king: 
       guard: c.guardFlash > 0,
       king,
     });
-    if (c.gear.some((g) => g.kind === "saw")) {
-      // Spinning saw blade bolted to the claws.
+    const saw = c.gear.find((g) => g.kind === "saw");
+    if (saw) {
+      // Spinning saw blade bolted to the claws (★3: oversized and gilded).
+      const big = saw.lv >= 3 ? 1.45 : saw.lv === 2 ? 1.15 : 1;
       ctx.save();
-      ctx.translate(CRAB_RADIUS * 1.55, 0);
-      ctx.rotate(t * 24);
-      ctx.fillStyle = "#cbd5e1";
+      ctx.translate(CRAB_RADIUS * (1.55 + (big - 1) * 0.6), 0);
+      ctx.rotate(t * (saw.lv >= 3 ? 34 : 24));
+      ctx.scale(big, big);
+      ctx.fillStyle = saw.lv >= 3 ? "#fcd34d" : "#cbd5e1";
       ctx.beginPath();
       for (let i = 0; i < 16; i++) {
         const a = (i / 16) * Math.PI * 2;
