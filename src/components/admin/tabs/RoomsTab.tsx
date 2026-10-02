@@ -5,6 +5,7 @@ import { getGameMeta } from "@/games/registry";
 import { adminRpc, DATE_TIME, fmt, rate, type ExcludeMe } from "../adminApi";
 import { Chip, Empty, ErrorNote, Loading, StatCard } from "../adminUi";
 import { useAdminQuery } from "../useAdminQuery";
+import { CLAUDE_NICKNAME } from "@/lib/analytics/claude";
 
 interface RoomRow {
   game_id: string;
@@ -123,13 +124,18 @@ export default function RoomsTab({
               {visible.map((r) => {
                 const status = roomStatus(r);
                 return (
-                  <tr key={`${r.game_id}-${r.room_code}-${r.day}`}>
+                  <tr
+                    key={`${r.game_id}-${r.room_code}-${r.day}`}
+                    className={r.host_nickname === CLAUDE_NICKNAME ? "bg-violet-500/10 light:bg-violet-50" : undefined}
+                  >
                     <td className="px-3 py-2">
                       <span className="font-semibold text-white light:text-slate-900">{getGameMeta(r.game_id)?.name ?? r.game_id}</span>
                       <span className="ml-1.5 font-mono text-white/40">#{r.room_code}</span>
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap tabular-nums">{DATE_TIME.format(new Date(r.opened_at))}</td>
-                    <td className="px-3 py-2">{r.host_nickname ?? <span className="text-white/40">—</span>}</td>
+                    <td className={`px-3 py-2 ${r.host_nickname === CLAUDE_NICKNAME ? "font-semibold text-violet-300 light:text-violet-700" : ""}`}>
+                      {r.host_nickname ?? <span className="text-white/40">—</span>}
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmt(r.players)}명</td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {fmt(r.starts)}

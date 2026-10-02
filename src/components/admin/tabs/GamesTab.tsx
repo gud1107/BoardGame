@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { GAME_REGISTRY, getGameMeta } from "@/games/registry";
 import { computeDuplicateFlags, isSuspectedDuplicate } from "@/lib/analytics/duplicateFlags";
+import { CLAUDE_DEVICE_ID } from "@/lib/analytics/claude";
 import { adminRpc, DATE_TIME, fmt, rate, type ExcludeMe, type IpLabelMap } from "../adminApi";
 import { Chip, ErrorNote, Loading, StatCard } from "../adminUi";
 import { useAdminQuery } from "../useAdminQuery";
@@ -212,7 +213,11 @@ function Participants({
                 const ipMap = r.ip_map ?? {};
                 const isMe = !!myIp && Object.values(ipMap).includes(myIp);
                 return (
-                  <tr key={r.device_id ?? "none"} className="align-top">
+                  <tr
+                    key={r.device_id ?? "none"}
+                    className={`align-top ${r.device_id === CLAUDE_DEVICE_ID ? "bg-violet-500/10 light:bg-violet-50" : ""}`}
+                    title={r.device_id === CLAUDE_DEVICE_ID ? "클로드의 자동 테스트 기록 (공개 통계에는 포함되지 않음)" : undefined}
+                  >
                     <td className="px-3 py-2">
                       <p className="font-semibold text-white light:text-slate-900">
                         {r.nicknames?.length ? r.nicknames.join(", ") : <span className="font-normal text-white/40">익명</span>}

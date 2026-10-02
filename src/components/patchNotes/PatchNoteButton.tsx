@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Overlay from "@/components/Overlay";
 import PatchNoteList from "@/components/patchNotes/PatchNoteList";
 import { LATEST_PATCH_VERSION } from "@/constants/patchNotes";
@@ -25,32 +25,45 @@ const LAST_SEEN_KEY = "last_seen_version";
  * place for direct links/sharing — only this button's own click behavior
  * changes.
  *
- * Read via a lazy `useState` initializer (runs during render, not in an
- * effect) rather than `useEffect` + `setState` on mount — same pattern as
- * `NoThanksBoard.tsx`'s `revealOpponentChips`, and avoids the
- * `react-hooks/set-state-in-effect` cascading-render lint warning that a
- * mount effect here would trigger.
+ * Read through `useSyncExternalStore` with a server snapshot of "seen": the
+ * server can't know this browser's localStorage, so the dot must not be in
+ * the first (hydration) render or React throws #418 (hydration mismatch) on
+ * every page — which is what the earlier lazy-`useState` read did
+ * (2026-10-02). React re-renders with the real value right after hydrating.
  */
+const listeners = new Set<() => void>();
+
+function subscribe(onChange: () => void) {
+  listeners.add(onChange);
+  // Another tab opening the notes clears the dot here too.
+  window.addEventListener("storage", onChange);
+  return () => {
+    listeners.delete(onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+function readHasUnseen(): boolean {
+  try {
+    return window.localStorage.getItem(LAST_SEEN_KEY) !== LATEST_PATCH_VERSION;
+  } catch {
+    // localStorage unavailable (private browsing 등) — 뱃지 없이 진행, 기능엔 지장 없음.
+    return false;
+  }
+}
+
 export default function PatchNoteButton() {
   const [open, setOpen] = useState(false);
-  const [hasUnseen, setHasUnseen] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem(LAST_SEEN_KEY) !== LATEST_PATCH_VERSION;
-    } catch {
-      // localStorage unavailable (private browsing 등) — 뱃지 없이 진행, 기능엔 지장 없음.
-      return false;
-    }
-  });
+  const hasUnseen = useSyncExternalStore(subscribe, readHasUnseen, () => false);
 
   function handleOpen() {
     setOpen(true);
-    setHasUnseen(false);
     try {
       window.localStorage.setItem(LAST_SEEN_KEY, LATEST_PATCH_VERSION);
     } catch {
       // 저장 실패 시 다음 방문에 뱃지가 다시 뜰 뿐 — 무시해도 안전.
     }
+    for (const notify of listeners) notify();
   }
 
   return (

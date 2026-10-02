@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase/client";
 import { getAuthSupabase } from "@/lib/supabase/authClient";
+import { CLAUDE_DEVICE_ID } from "@/lib/analytics/claude";
 import { getGameMeta } from "@/games/registry";
 import type { VisitorRow } from "@/lib/analytics/visitors";
 import { isReturning, summarizeVisitors, topGames } from "@/lib/analytics/visitorSummary";
@@ -298,7 +299,14 @@ export default function VisitorsDashboard() {
           {/* Phone: one card per visitor */}
           <ul className="mt-2 flex flex-col gap-2 sm:hidden">
             {visible.map((r) => (
-              <li key={r.device_id} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs light:border-slate-200 light:bg-white">
+              <li
+                key={r.device_id}
+                className={`rounded-xl border p-3 text-xs ${
+                  r.device_id === CLAUDE_DEVICE_ID
+                    ? "border-violet-400/40 bg-violet-500/10 light:border-violet-300 light:bg-violet-50"
+                    : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white"
+                }`}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <VisitorName row={r} />
                   <p className="shrink-0 text-right text-white/60 tabular-nums light:text-slate-600">
@@ -332,7 +340,10 @@ export default function VisitorsDashboard() {
               </thead>
               <tbody className="divide-y divide-white/5 light:divide-slate-100">
                 {visible.map((r) => (
-                  <tr key={r.device_id} className="align-top">
+                  <tr
+                    key={r.device_id}
+                    className={`align-top ${r.device_id === CLAUDE_DEVICE_ID ? "bg-violet-500/10 light:bg-violet-50" : ""}`}
+                  >
                     <td className="max-w-[12rem] px-3 py-2">
                       <VisitorName row={r} />
                     </td>
