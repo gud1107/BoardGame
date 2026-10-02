@@ -39,6 +39,16 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🧹 허브 재방문자 #418 + 로비 채팅 30일 자동 정리 — 2026-10-02 (커밋/푸시, 배포는 웹훅 자동)
+
+- 로비 `page.tsx`: 저장된 검색/인원/장르/정렬을 lazy `useState`로 읽던 방식을 `useSyncExternalStore(noop, readSavedLobbyState, () => EMPTY_SAVED)`로 바꿨다.
+  readSavedLobbyState는 같은 raw면 캐시한 같은 객체를 반환한다. 여기에 사용자 선택값 override(`queryPick` 등, 초기값 null)를 위에 얹는다. 배지 시계 `now`도
+  `useSyncExternalStore(…, readClientNow, () => 0)`로 바꿨다. 허브는 빌드 시 prerender되므로 서버 시계는 빌드 시각이다. `now <= 0`이면
+  `getGameFreshnessBadge`와 `PlayCountLabel`이 숨는다(안 그러면 now=0에서 전부 NEW가 된다). **주의**: sessionStorage 저장 effect는 `hydrated`가 false일 때 건너뛴다.
+  hydration 렌더의 기본값을 써 버리면 저장된 필터가 복원되기 전에 지워지기 때문이다.
+- `supabase/base_tables.sql`에 로비 채팅 보존 기간을 추가했다. `prune_old_chat_messages` AFTER INSERT 트리거가 약 5% 확률로 30일 지난 chat_messages를 삭제한다
+  (`create or replace trigger`, 예외는 무시). embedded-postgres로 검증했다(40일 전 메시지 삭제, 2일 전 메시지 유지). 이 파일은 **2026-10-02 커밋 시점에 아직 미실행**이다.
+
 ## 🧹 콘솔 React #418 + Supabase 404 정리, 🤖 클로드 줄 강조 — 2026-10-02 (커밋/푸시, 배포는 웹훅 자동)
 
 - **#418 원인**: 서버 HTML과 hydration 이후 DOM을 태그 단위로 비교했다(JS를 끈 컨텍스트 vs 정상 로드, `hydr.cjs`). 유일한 실제 차이는 `PatchNoteButton`의

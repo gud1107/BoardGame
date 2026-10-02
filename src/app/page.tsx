@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { GAME_REGISTRY, sortByPlayability } from "@/games/registry";
 import { GENRE_META, GENRE_ORDER } from "@/games/genres";
 import type { GameGenre } from "@/games/types";
@@ -36,38 +36,68 @@ interface SavedLobbyState {
  * sort, opening a game, then coming back silently dropped it to the
  * 업데이트순 default.
  *
- * Called from each `useState`'s lazy initializer (runs during render) below
- * rather than from a mount `useEffect` + `setState` — same pattern as
- * `PatchNoteButton.tsx`'s `hasUnseen`/`NoThanksBoard.tsx`'s
- * `revealOpponentChips`, and avoids the `react-hooks/set-state-in-effect`
- * cascading-render lint warning that a mount effect here would trigger.
+ * Read through `useSyncExternalStore` with an empty server snapshot, and
+ * layered under per-field overrides set by the user: the server can't see
+ * this tab's sessionStorage, so restoring it in the first (hydration) render
+ * made the server HTML and the client disagree — React #418 for every
+ * returning visitor with a saved sort/filter (2026-10-02). React re-renders
+ * with the saved values right after hydrating; a client-side back
+ * navigation (no hydration) restores them immediately as before.
  */
+const EMPTY_SAVED: Partial<SavedLobbyState> = {};
+let savedCache: { raw: string | null; value: Partial<SavedLobbyState> } | null = null;
+
 function readSavedLobbyState(): Partial<SavedLobbyState> {
-  if (typeof window === "undefined") return {};
+  let raw: string | null = null;
   try {
-    const raw = window.sessionStorage.getItem(LOBBY_STATE_KEY);
-    return raw ? (JSON.parse(raw) as Partial<SavedLobbyState>) : {};
+    raw = window.sessionStorage.getItem(LOBBY_STATE_KEY);
   } catch {
-    // Corrupt or inaccessible (private browsing) storage — fall back to defaults.
-    return {};
+    // Inaccessible (private browsing) storage — fall back to defaults.
   }
+  // useSyncExternalStore needs the same object back while nothing changed.
+  if (savedCache && savedCache.raw === raw) return savedCache.value;
+  let value: Partial<SavedLobbyState> = EMPTY_SAVED;
+  try {
+    value = raw ? (JSON.parse(raw) as Partial<SavedLobbyState>) : EMPTY_SAVED;
+  } catch {
+    // Corrupt — defaults.
+  }
+  savedCache = { raw, value };
+  return value;
+}
+
+const noopSubscribe = () => () => {};
+
+/**
+ * The time NEW/UPDATED badges and the "10월" play label are judged against.
+ * Null on the server and during hydration (this page is prerendered at
+ * build time, so a server clock would be the build's), then the client's
+ * clock — fixed once per page load.
+ */
+let clientNow: number | null = null;
+function readClientNow(): number {
+  if (clientNow === null) clientNow = Date.now();
+  return clientNow;
 }
 
 export default function DashboardPage() {
   // 편안한 Lo-fi/Jazz Hop 테마 BGM — 게임 허브(이 페이지)에 머무는 동안만 재생.
   useGameBgm("lobby");
-  const [query, setQuery] = useState(() => readSavedLobbyState().query ?? "");
-  const [filterIdx, setFilterIdx] = useState(() => readSavedLobbyState().filterIdx ?? 0);
-  const [genreFilter, setGenreFilter] = useState<GenreFilter>(
-    () => readSavedLobbyState().genreFilter ?? "all",
-  );
-  const [sortOption, setSortOption] = useState<SortOption>(
-    () => readSavedLobbyState().sortOption ?? DEFAULT_SORT_OPTION,
-  );
+  // Saved filters (hydration-safe, see readSavedLobbyState) under whatever
+  // the user picks on this visit.
+  const saved = useSyncExternalStore(noopSubscribe, readSavedLobbyState, () => EMPTY_SAVED);
+  const [queryPick, setQuery] = useState<string | null>(null);
+  const [filterIdxPick, setFilterIdx] = useState<number | null>(null);
+  const [genrePick, setGenreFilter] = useState<GenreFilter | null>(null);
+  const [sortPick, setSortOption] = useState<SortOption | null>(null);
+  const query = queryPick ?? saved.query ?? "";
+  const filterIdx = filterIdxPick ?? saved.filterIdx ?? 0;
+  const genreFilter = genrePick ?? saved.genreFilter ?? "all";
+  const sortOption = sortPick ?? saved.sortOption ?? DEFAULT_SORT_OPTION;
 
-  // One timestamp per page load for the NEW/UPDATED card badges (lazy init
-  // keeps render pure; a badge flipping mid-visit wouldn't matter anyway).
-  const [now] = useState(() => Date.now());
+  // Badge clock: 0 until hydrated (no NEW/UPDATED badges or month label in
+  // the prerendered HTML), then this load's client time.
+  const now = useSyncExternalStore(noopSubscribe, readClientNow, () => 0);
   // Real match starts per game: all-time for the default 인기순 sort, this
   // month for the cards' "🔥 10월 N회 플레이". Until this resolves, or if
   // Supabase is unreachable, every count reads as 0 and 인기순 falls back to
@@ -102,8 +132,16 @@ export default function DashboardPage() {
 
   // Writing TO sessionStorage in response to React state changing is the
   // effect's proper direction (unlike reading FROM it, handled above) — so
-  // this one's fine as a plain effect.
+  // this one's fine as a plain effect. Skipped for the hydration render,
+  // whose values are the defaults: writing those would erase the saved
+  // filters before the post-hydration render could restore them.
+  const hydrated = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
   useEffect(() => {
+    if (!hydrated) return;
     try {
       window.sessionStorage.setItem(
         LOBBY_STATE_KEY,
@@ -113,7 +151,7 @@ export default function DashboardPage() {
       // Storage full/blocked — state just won't survive this particular
       // back-navigation, no worse than before this fix.
     }
-  }, [query, filterIdx, genreFilter, sortOption]);
+  }, [hydrated, query, filterIdx, genreFilter, sortOption]);
 
   // 2026-09-06 AskUserQuestion: 모바일 검색어 입력 중엔 캐러셀/쇼케이스를
   // 숨기고 결과 그리드를 최상단으로 끌어올린다 (인원수/장르 필터 칩은 유지).

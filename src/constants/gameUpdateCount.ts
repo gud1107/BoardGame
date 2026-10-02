@@ -74,6 +74,7 @@ export const UPDATED_BADGE_DAYS = 5;
  * timestamp per page load and keep render pure.
  */
 export function getGameFreshnessBadge(gameId: GameId, now: number): GameFreshnessBadge | null {
+  if (!(now > 0)) return null; // clock not known yet (server / hydration render)
   const addedAt = GAME_ADDED[gameId];
   if (addedAt && now - Date.parse(addedAt) < NEW_BADGE_DAYS * DAY_MS) return "NEW";
   const updatedAt = getGameLastUpdated(gameId);

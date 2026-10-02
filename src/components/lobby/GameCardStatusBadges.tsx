@@ -26,7 +26,7 @@ export function kstMonthLabel(now: number): string {
 
 /** "🔥 10월 N회 플레이" (this month's real starts) — hidden at 0 so an empty counter never reads as "unpopular". */
 export function PlayCountLabel({ plays, now, className = "" }: { plays: number; now: number; className?: string }) {
-  if (plays <= 0) return null;
+  if (plays <= 0 || !(now > 0)) return null;
   return (
     <span className={`text-orange-300/90 light:text-orange-600 ${className}`}>
       🔥 {kstMonthLabel(now)} {plays.toLocaleString("ko-KR")}회 플레이

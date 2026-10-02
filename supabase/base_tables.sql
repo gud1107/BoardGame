@@ -12,9 +12,9 @@
 --   guest_usage   — per-device daily usage for guests (only enforced if limits are turned on)
 --   active_rooms  — joinable rooms, shown on the desktop lobby cards
 --   chat_messages — lobby chat history
--- Note: the editor may ask to confirm because of the word "delete" in the
--- active_rooms policy (closing a room removes its row) — that's expected;
--- choose "Run this query". Nothing existing is dropped or deleted.
+-- Note: the editor may ask to confirm because of the word "delete" (the
+-- active_rooms policy, and the 30-day chat pruning at the end) — expected;
+-- choose "Run this query". Nothing is dropped; only chat older than 30 days is ever removed.
 
 -- ── app_settings ──
 create table if not exists app_settings (
@@ -95,3 +95,23 @@ begin
     end if;
   end loop;
 end $$;
+
+-- ── Lobby chat retention: keep 30 days ──
+-- The lobby only ever shows the latest few dozen messages, so older rows
+-- are dead weight. Rather than a scheduled job, roughly one insert in 20
+-- clears messages older than 30 days (cheap, and needs no extension).
+-- Change the interval below to keep more or less.
+create or replace function prune_old_chat_messages() returns trigger as $$
+begin
+  if random() < 0.05 then
+    delete from chat_messages where created_at < now() - interval '30 days';
+  end if;
+  return new;
+exception when others then
+  return new; -- pruning must never block a message from being saved
+end;
+$$ language plpgsql security definer set search_path = public;
+revoke all on function prune_old_chat_messages() from public, anon, authenticated;
+
+create or replace trigger chat_messages_prune after insert on chat_messages
+  for each row execute function prune_old_chat_messages();
