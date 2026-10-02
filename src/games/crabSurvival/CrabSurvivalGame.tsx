@@ -348,6 +348,10 @@ function ResultsPanel({
         <Stat label="부순 상자" value={`${s.stats.boxes}`} />
         <Stat label="먹은 것" value={`${s.stats.eaten}`} />
         <Stat label="가한 피해" value={s.stats.damageDealt.toLocaleString()} />
+        <Stat label="💰 현상금 획득" value={`${s.stats.bounties ?? 0}회`} sub={s.stats.bountyPoints ? `+${s.stats.bountyPoints.toLocaleString()}점` : undefined} />
+        <Stat label="최고 무기 ★" value={s.stats.bestStar ? "★".repeat(s.stats.bestStar) : "—"} />
+        <Stat label="🌟 전설 보유" value={`${Math.round(s.stats.epicSeconds ?? 0)}초`} />
+        <Stat label="🛡 생존 보상" value={s.stats.survivalBonus ? `+${s.stats.survivalBonus.toLocaleString()}` : "—"} />
       </div>
       <div>
         <div className="mb-1.5 text-xs font-semibold text-white/50 light:text-slate-500">최종 순위</div>

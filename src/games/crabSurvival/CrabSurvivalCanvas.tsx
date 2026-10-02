@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GEAR_RARITY, GEARS, MUTATIONS, roadmap, SHIELDS, SPECIES, STAMINA_MAX, TIERS, tierForLevel, WEAPONS, comboMultiplier, type CrabTier, type MutationKind, type SpeciesId } from "./data";
+import { epicBounty, EPIC_SURVIVE_EVERY, GEAR_RARITY, GEARS, MUTATIONS, roadmap, SHIELDS, SPECIES, STAMINA_MAX, TIERS, tierForLevel, WEAPONS, comboMultiplier, type CrabTier, type MutationKind, type SpeciesId } from "./data";
 import {
   attackReach,
   createWorld,
   crabRadius,
   endMatch,
+  holdsEpic,
   penaltyLeft,
   player,
   rankOf,
@@ -60,6 +61,9 @@ interface Hud {
   gear: { emoji: string; name: string; t: number; max: number; color: string; label: string; lv: number }[];
   muts: { kind: MutationKind; t: number; pen: number }[];
   pearl: number;
+  /** Bounty on my own shell while I carry a legendary (0 = none) + seconds to the next 생존 보상. */
+  myBounty: number;
+  nextSurvive: number;
 }
 
 interface Banner {
@@ -520,6 +524,8 @@ export default function CrabSurvivalCanvas({
           gear: me.gear.map((g) => ({ emoji: GEARS[g.kind].emoji, name: GEARS[g.kind].name, t: g.t, max: GEARS[g.kind].duration, color: GEAR_RARITY[GEARS[g.kind].rarity].color, label: GEAR_RARITY[GEARS[g.kind].rarity].label, lv: g.lv })),
           muts: me.muts.map((m) => ({ kind: m.kind, t: m.t, pen: penaltyLeft(me, m.kind) })),
           pearl: me.pearl,
+          myBounty: holdsEpic(me) ? epicBounty(me.level, me.epicT) : 0,
+          nextSurvive: EPIC_SURVIVE_EVERY - (me.epicT % EPIC_SURVIVE_EVERY),
         });
       }
       if (world.over && endTimer === null) {
@@ -707,6 +713,12 @@ export default function CrabSurvivalCanvas({
         <div className={`pointer-events-none absolute left-2 flex w-[min(62%,300px)] flex-col gap-1 bottom-2`}>
           {(hud.gear.length > 0 || hud.muts.length > 0) && (
             <div className="flex flex-wrap items-center gap-1">
+              {hud.myBounty > 0 && (
+                <div className="flex items-center gap-1 rounded-lg bg-amber-950/85 px-1.5 py-0.5 text-[10px] font-bold text-amber-200 ring-1 ring-amber-400" title="전설 무기를 들고 버틸수록 내 현상금과 생존 보상이 쌓입니다">
+                  <span>💰 현상금 {hud.myBounty.toLocaleString()}</span>
+                  <span className="font-mono text-amber-300/80">🛡 {Math.ceil(hud.nextSurvive)}s</span>
+                </div>
+              )}
               {hud.gear.map((g, i) => (
                 <div key={`g${i}`} className={`flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[10px] text-white ${g.lv >= 3 ? "bg-gradient-to-r from-amber-900/90 to-slate-950/85" : "bg-slate-950/80"}`} style={{ boxShadow: g.lv >= 3 ? `0 0 0 1.5px #fbbf24, 0 0 8px rgba(251,191,36,0.6)` : `0 0 0 1px ${g.color}` }} title={`[${g.label}] ${g.name}`}>
                   <span className="text-sm leading-none">{g.emoji}</span>

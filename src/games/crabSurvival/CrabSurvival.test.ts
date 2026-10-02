@@ -44,12 +44,12 @@ describe("level table (spec §2.2)", () => {
       [3_000, 1.7, 35, 450],
       [15_000, 2.2, 65, 1_000],
       [90_000, 2.8, 120, 2_500],
-      [680_000, 3.5, 220, 5_000],
+      [720_000, 3.5, 220, 5_000],
     ]);
     expect(levelForScore(299).level).toBe(1);
     expect(levelForScore(300).level).toBe(2);
-    expect(levelForScore(679_999).level).toBe(11);
-    expect(levelForScore(680_000).level).toBe(12);
+    expect(levelForScore(719_999).level).toBe(11);
+    expect(levelForScore(720_000).level).toBe(12);
     // Gaps shrink: no step asks for more than ~2.3x the previous threshold.
     for (let i = 2; i < LEVELS.length; i++) expect(LEVELS[i].points / LEVELS[i - 1].points).toBeLessThan(2.6);
   });
@@ -698,5 +698,48 @@ describe("legendary bounty", () => {
     expect(plain.bounty).toBe(0);
     expect(epic.bounty).toBe(epicBounty(1));
     expect(epic.score - plain.score).toBeGreaterThanOrEqual(epicBounty(1) - 50);
+  });
+});
+
+describe("growing bounty + 생존 보상 + match record", () => {
+  it("the bounty grows the longer a legendary is carried, up to the cap", () => {
+    expect(epicBounty(5, 0)).toBe(5_500);
+    expect(epicBounty(5, 30)).toBe(5_500 + 30 * 120);
+    expect(epicBounty(5, 10_000)).toBe(5_500 + 15_000);
+  });
+
+  it("carrying a legendary pays a survival bonus every 5s and grows my bounty", () => {
+    const w = bare();
+    const me = player(w);
+    equipGear(w, me, "trident");
+    me.gear[0].t = 999;
+    for (let i = 0; i < 60 * 10.2; i++) step(w, idle, 1 / 60);
+    expect(me.epicT).toBeGreaterThan(10);
+    expect(w.stats.survivalBonus).toBe(2 * 150);
+    expect(w.stats.epicSeconds).toBeGreaterThan(10);
+    expect(me.score).toBeGreaterThanOrEqual(300);
+  });
+
+  it("killing a long-time carrier pays the grown bounty and records it", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    foe.brain = null;
+    foe.x = 40;
+    equipGear(w, foe, "vortex");
+    foe.gear[0].t = 999;
+    foe.epicT = 20;
+    foe.hp = 1;
+    face(me, foe);
+    swing(w, me);
+    expect(w.stats.bounties).toBe(1);
+    expect(w.stats.bountyPoints).toBe(epicBounty(foe.level, 20));
+  });
+
+  it("records the best weapon star", () => {
+    const w = bare();
+    const me = player(w);
+    equipGear(w, me, "needle");
+    equipGear(w, me, "needle");
+    expect(w.stats.bestStar).toBe(2);
   });
 });

@@ -5,7 +5,7 @@
  * crabs walk behind/in front of props correctly.
  */
 
-import { BOXES, CRAB_RADIUS, FOODS, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
+import { BOXES, CRAB_RADIUS, epicBounty, FOODS, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
 import { crabRadius, hasMut, holdsEpic, penaltyLeft, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
 
 export const TILT = 0.72;
@@ -1597,6 +1597,20 @@ function drawCrabOverlay(ctx: CanvasRenderingContext2D, cam: Camera, W: number, 
     ctx.drawImage(sp, sx + Math.max(34, r * z * 2) / 2 + 2, top - 12, 14, 14);
   }
   if (c.burrow > 0) return;
+  if (holdsEpic(c)) {
+    // Wanted poster: the bounty on this shell, growing the longer it survives.
+    const txt = `💰${epicBounty(c.level, c.epicT).toLocaleString()}`;
+    ctx.font = "900 11px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    const bx = sx + Math.max(34, r * z * 2) / 2 + (c.hasKey ? 18 : 4);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,0.7)";
+    ctx.strokeText(txt, bx, top - 4);
+    ctx.fillStyle = "#fbbf24";
+    ctx.fillText(txt, bx, top - 4);
+    ctx.textAlign = "center";
+  }
   const icons = [...c.gear.map((g) => GEARS[g.kind].emoji), ...c.muts.filter((m) => m.kind !== "oil").map((m) => MUTATIONS[m.kind].emoji)];
   if (c.slide) icons.push("🛢️");
   if (penaltyLeft(c, "rum") > 0) {

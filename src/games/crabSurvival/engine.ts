@@ -36,6 +36,8 @@ import {
   GEARS,
   EPIC_HUNT_PAYOFF,
   epicBounty,
+  EPIC_SURVIVE_EVERY,
+  EPIC_SURVIVE_PTS,
   EPIC_HUNT_VISION,
   GIANT_SCALE,
   MAGNET_BASE,
@@ -187,6 +189,8 @@ export interface Crab {
   lastMy: number;
   trailT: number;
   burnT: number;
+  /** Seconds continuously carrying a legendary (grows the bounty, drives 생존 보상). */
+  epicT: number;
   brain: Brain | null;
 }
 
@@ -405,6 +409,14 @@ export interface MatchStats {
   peakScore: number;
   deaths: number;
   damageDealt: number;
+  /** Legendary bounties the player cashed in (count / points). */
+  bounties: number;
+  bountyPoints: number;
+  /** Highest weapon ★ the player reached. */
+  bestStar: number;
+  /** Seconds the player carried a legendary, and the 생존 보상 it paid. */
+  epicSeconds: number;
+  survivalBonus: number;
 }
 
 export interface CrabInput {
@@ -616,7 +628,7 @@ export function createWorld(opts: MatchOptions): World {
     ranking: [],
     lbTimer: 0,
     spawnTimer: 0,
-    stats: { kills: 0, bestCombo: 0, maxLevel: 1, boxes: 0, eaten: 0, kingSeconds: 0, peakScore: 0, deaths: 0, damageDealt: 0 },
+    stats: { kills: 0, bestCombo: 0, maxLevel: 1, boxes: 0, eaten: 0, kingSeconds: 0, peakScore: 0, deaths: 0, damageDealt: 0, bounties: 0, bountyPoints: 0, bestStar: 0, epicSeconds: 0, survivalBonus: 0 },
     over: false,
     finalScore: 0,
   };
@@ -705,6 +717,7 @@ function makeCrab(w: World, name: string, color: CrabColor, isPlayer: boolean, s
     lastMy: 0,
     trailT: 0,
     burnT: 0,
+    epicT: 0,
     brain: isPlayer
       ? null
       : {
@@ -1366,6 +1379,7 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
   v.respawnT = BOT_RESPAWN;
   const wasKing = w.kingId === v.id;
   const wasEpic = v.gear.some((g) => GEARS[g.kind].rarity === "epic");
+  const heldEpic = v.epicT;
   const score = v.score;
 
   // Coins: 35% of the victim's score scattered around the corpse.
@@ -1411,7 +1425,11 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
     if (wasKing) reward += Math.floor(score * 0.3) + 10_000;
     // 전설 현상금: flat bounty for flipping a legendary carrier.
     if (wasEpic) {
-      bounty = epicBounty(v.level);
+      bounty = epicBounty(v.level, heldEpic);
+      if (by.isPlayer) {
+        w.stats.bounties++;
+        w.stats.bountyPoints += bounty;
+      }
       reward += bounty;
       floatText(w, by.x, by.y - 62 * by.scale, `💰 현상금 +${bounty.toLocaleString()}`, "#fbbf24", 20, 1.6);
       burst(w, "gold", v.x, v.y, 22, 260, "#fbbf24", 5, 1, 240);
@@ -2221,6 +2239,7 @@ function clearPowers(c: Crab) {
   c.slide = null;
   c.skillCd = 0;
   c.dashT = 0;
+  c.epicT = 0;
 }
 
 /** Rarity-weighted weapon roll; `minRarity` restricts the pool (golden chests / lobsters: rare+). */
@@ -2297,6 +2316,7 @@ export function equipGear(w: World, c: Crab, kind: GearKind): boolean {
   burst(w, "star", c.x, c.y, 8, 160, def.color, 4, 0.6, 160);
   if (c.isPlayer) {
     w.events.push({ type: "gear", name: def.name, emoji: def.emoji, player: true, rarity: def.rarity, lv: same?.lv ?? 1 });
+    w.stats.bestStar = Math.max(w.stats.bestStar, same?.lv ?? 1);
     if (!same) floatText(w, c.x, c.y - 34 * c.scale, `${def.emoji} ${def.name}!`, "#a5f3fc", 16, 1.2);
   }
   // A fresh legendary is announced to the whole island — its holder becomes the hunted.
@@ -2393,6 +2413,20 @@ function gearHit(w: World, c: Crab, kind: GearKind, mult = 1): { dmg: number; cr
 }
 
 function updateGear(w: World, c: Crab, dt: number) {
+  if (holdsEpic(c)) {
+    const before = c.epicT;
+    c.epicT += dt;
+    if (c.isPlayer) w.stats.epicSeconds += dt;
+    // 생존 보상: a payout for every EPIC_SURVIVE_EVERY seconds you keep the legendary.
+    if (Math.floor(c.epicT / EPIC_SURVIVE_EVERY) > Math.floor(before / EPIC_SURVIVE_EVERY)) {
+      const pts = Math.round(EPIC_SURVIVE_PTS * levelDef(c).gain);
+      addScore(w, c, pts);
+      if (c.isPlayer) {
+        w.stats.survivalBonus += pts;
+        floatText(w, c.x, c.y - 52 * c.scale, `🛡 생존 보상 +${pts.toLocaleString()}`, "#fcd34d", 15, 1.1);
+      }
+    }
+  } else c.epicT = 0;
   if (!c.gear.length) return;
   for (const g of c.gear) {
     g.t -= dt;

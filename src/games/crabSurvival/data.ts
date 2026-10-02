@@ -45,7 +45,7 @@ export const LEVELS: LevelDef[] = [
   { level: 9, name: "거대 게", points: 90_000, scale: 2.8, atk: 120, hp: 2_500, speed: 188, speedLabel: "느림", gain: 4.5 },
   { level: 10, name: "대왕 게", points: 230_000, scale: 3.1, atk: 160, hp: 3_500, speed: 182, speedLabel: "느림", gain: 4.8 },
   { level: 11, name: "전설의 게", points: 440_000, scale: 3.3, atk: 190, hp: 4_300, speed: 178, speedLabel: "묵직함", gain: 5.3 },
-  { level: 12, name: "킹 크랩", points: 680_000, scale: 3.5, atk: 220, hp: 5_000, speed: 175, speedLabel: "묵직함", gain: 6 },
+  { level: 12, name: "킹 크랩", points: 720_000, scale: 3.5, atk: 220, hp: 5_000, speed: 175, speedLabel: "묵직함", gain: 6 },
 ];
 
 export const MAX_LEVEL = LEVELS.length;
@@ -494,10 +494,16 @@ export const GEAR_STACK_CD = 0.12;
 /** Bots go out of their way (vision ×, payoff +) to hunt anyone carrying a legendary weapon. */
 export const EPIC_HUNT_VISION = 1.6;
 export const EPIC_HUNT_PAYOFF = 4_000;
-/** Bounty paid (flat, on top of the normal kill reward) for flipping a legendary carrier. */
-export function epicBounty(victimLevel: number): number {
-  return 3_000 + 500 * victimLevel;
+/** The longer a legendary carrier survives, the fatter the bounty on its shell (capped). */
+export const EPIC_BOUNTY_PER_SEC = 120;
+export const EPIC_BOUNTY_MAX_EXTRA = 15_000;
+/** Bounty paid (on top of the normal kill reward) for flipping a legendary carrier. */
+export function epicBounty(victimLevel: number, heldSeconds = 0): number {
+  return 3_000 + 500 * victimLevel + Math.min(EPIC_BOUNTY_MAX_EXTRA, Math.floor(heldSeconds) * EPIC_BOUNTY_PER_SEC);
 }
+/** 생존 보상: every EPIC_SURVIVE_EVERY seconds a legendary carrier stays alive it earns this × its point gain. */
+export const EPIC_SURVIVE_EVERY = 5;
+export const EPIC_SURVIVE_PTS = 150;
 
 type GearBase = Omit<GearDef, "baseDmg" | "baseDuration">;
 
