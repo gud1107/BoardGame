@@ -29,10 +29,42 @@
   --page-bg-gradient: radial-gradient(circle at top, #1a1230 0%, #0b0b12 55%, #08080d 100%);
 }
 
+/* 2026-10-03 글로벌 앰비언트 백드롭 (눈부심 저감) — the light theme's page
+   surface moved off near-white onto slate-100 with a soft top-center
+   vignette, so the large always-visible areas (page backdrop, overscroll
+   seam) stop reading as a lit lightbox. Dark stays byte-for-byte as above.
+   Deliberately NOT a separate wrapper component / second theme store: the
+   existing ThemeProvider + no-flash head script already own `data-theme`
+   and persistence (`bgh_theme`), and a parallel one would fight them. */
 [data-theme="light"] {
-  --background: #f8fafc;
+  --background: #f1f5f9;
   --foreground: #1e293b;
-  --page-bg-gradient: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 45%, #e9eef5 100%);
+  --page-bg-gradient: radial-gradient(circle at 50% 10%, #f8fafc 0%, #f1f5f9 45%, #e2e8f0 100%);
+  /* Tone that light-mode "panel white" resolves to — see the rule below. */
+  --panel-surface: #fbfcfd;
+}
+
+/* Light-mode HUD/panel de-glare in ONE place instead of ~430 call sites:
+   every `light:bg-white[/NN]` utility (the classes written specifically as
+   light-mode panel backgrounds) reads `var(--color-white)`, so re-pointing
+   that variable on just those elements softens pure #fff panels without
+   touching card faces / boards / canvases drawn with unprefixed `bg-white`
+   or their own hex fills. Setting a custom property (rather than a competing
+   `background-color`) means no cascade-layer fight with `light:hover:*`
+   states. Inherits to descendants, which is harmless at this ~1% shift. */
+[data-theme="light"]
+  :is(
+    .light\:bg-white,
+    .light\:bg-white\/40,
+    .light\:bg-white\/50,
+    .light\:bg-white\/60,
+    .light\:bg-white\/70,
+    .light\:bg-white\/80,
+    .light\:bg-white\/85,
+    .light\:bg-white\/90,
+    .light\:bg-white\/95
+  ) {
+  --color-white: var(--panel-surface);
 }
 
 @theme inline {
