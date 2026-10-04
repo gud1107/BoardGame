@@ -3,6 +3,14 @@ import type { AdminCommitEntry } from "./adminChangelog";
 
 export const ADMIN_COMMITS: AdminCommitEntry[] = [
   {
+    "hash": "7c77770",
+    "date": "2026-10-04",
+    "type": "FEAT",
+    "scope": "admin",
+    "desc": "Korean text for auto changelog rows, hide curated overlaps by default",
+    "ko": "자동 기록을 한국어로 표시(Admin-Ko 커밋 트레일러 + 이전 커밋 번역), 기본 보기에서 정리된 기록과 겹치는 자동 기록 숨김"
+  },
+  {
     "hash": "9db267c",
     "date": "2026-10-04",
     "type": "FEAT",
