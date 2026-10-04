@@ -80,6 +80,8 @@ interface Feed {
 }
 
 const JOY_R = 54;
+/** Bot evolutions within this many world units are heard (quietly, fading with distance). */
+const NEAR_EVO = 650;
 
 export default function CrabSurvivalCanvas({
   playerName,
@@ -257,6 +259,7 @@ export default function CrabSurvivalCanvas({
     let endTimer: number | null = null;
     // Legendary pickups happen every ~20s across the island — only one big banner per 30s, the rest go to the feed.
     let lastEpicBanner = -Infinity;
+    let lastBotEvo = -Infinity;
 
     const readInput = (): CrabInput => {
       const inp = input.current;
@@ -394,6 +397,14 @@ export default function CrabSurvivalCanvas({
                   sub: `${road[ev.level - 1].name}(으)로 성장 · ${perk.icon} ${perk.name}: ${perk.desc.replace("레벨업 ", "")}`,
                   tone: "level",
                 });
+              }
+            } else {
+              // A bot evolving nearby: a quieter, distance-scaled echo of the same sound (throttled).
+              const me = player(world);
+              const d = Math.hypot(ev.x - me.x, ev.y - me.y);
+              if (me.alive && d < NEAR_EVO && world.time - lastBotEvo > 1.2) {
+                lastBotEvo = world.time;
+                a?.evolve(ev.species, ev.level, 0.4 * (1 - d / NEAR_EVO));
               }
             }
             break;

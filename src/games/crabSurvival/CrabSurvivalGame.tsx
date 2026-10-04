@@ -7,6 +7,7 @@ import { CRAB_COLORS, EVO_REVEAL, isUnlocked, MATCH_LENGTHS, roadmap, SHELL_BAND
 import type { MatchSummary } from "./engine";
 import CrabSurvivalCanvas from "./CrabSurvivalCanvas";
 import RulebookModal from "./RulebookModal";
+import { CrabAudio } from "./audio";
 import { drawCrabPreview } from "./render";
 import { EMPTY_RECORD, freshSave, loadSave, nextSpeciesRecord, trophiesFor, writeSave, type CrabSave, type SpeciesRecord } from "./save";
 
@@ -206,7 +207,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
                 </div>
               </div>
               <RoadmapChips species={species} />
-              <GrowthLooks color={color} species={species} />
+              <GrowthLooks color={color} species={species} muted={save.muted} />
             </div>
           </div>
 
@@ -436,8 +437,23 @@ const LOOKS_LOOP: Record<number, { period: number; offset: number }> = {
 };
 
 /** 성장 외형: what the shell pattern looks like at each evolution tier. */
-function GrowthLooks({ color, species }: { color: CrabColor; species: SpeciesId }) {
+function GrowthLooks({ color, species, muted }: { color: CrabColor; species: SpeciesId; muted: boolean }) {
   const style = SHELL_STYLE[species];
+  // Lobby-only SFX player (no waves/music); created lazily on the first tap.
+  const audio = useRef<CrabAudio | null>(null);
+  const [loops, setLoops] = useState(LOOKS_LOOP);
+  useEffect(() => () => audio.current?.dispose(), []);
+  const audition = (lv: number) => {
+    if (lv <= 1) return;
+    // Restart this preview's reveal right now so picture and sound line up.
+    const period = LOOKS_LOOP[lv].period;
+    setLoops((prev) => ({ ...prev, [lv]: { period, offset: period - ((performance.now() / 1000) % period) } }));
+    if (muted) return;
+    if (!audio.current) audio.current = new CrabAudio();
+    audio.current.unlock(true);
+    audio.current.levelUp(species);
+    audio.current.evolve(species, lv);
+  };
   const steps: [number, string][] = [
     [1, "Lv1 기본"],
     [4, `Lv4 ${SHELL_BAND_LABEL[style.band]}`],
@@ -446,13 +462,26 @@ function GrowthLooks({ color, species }: { color: CrabColor; species: SpeciesId 
   ];
   return (
     <div className="rounded-lg bg-black/20 p-2 light:bg-slate-50">
-      <div className="mb-1 text-[11px] font-bold text-white/80 light:text-slate-700">✨ 성장 외형 — 진화할수록 등딱지가 화려해져요</div>
+      <div className="mb-1 flex items-baseline justify-between gap-1">
+        <span className="text-[11px] font-bold text-white/80 light:text-slate-700">✨ 성장 외형 — 진화할수록 등딱지가 화려해져요</span>
+        <span className="text-[9px] text-white/45 light:text-slate-400">{muted ? "🔇 음소거 중" : "눌러서 진화음 듣기 🔊"}</span>
+      </div>
       <div className="grid grid-cols-4 gap-1">
         {steps.map(([lv, label]) => (
-          <div key={lv} className="flex flex-col items-center rounded bg-gradient-to-b from-amber-100 to-amber-200 py-0.5">
-            <CrabPreview color={color} species={species} width={70} height={48} level={lv} animate={lv >= 11} revealLoop={lv > 1 ? LOOKS_LOOP[lv] : undefined} />
-            <span className="text-[9px] font-semibold text-slate-700">{label}</span>
-          </div>
+          <button
+            key={lv}
+            type="button"
+            onClick={() => audition(lv)}
+            disabled={lv <= 1}
+            title={lv > 1 ? "눌러서 이 단계의 진화 연출과 효과음 보기" : undefined}
+            className="flex flex-col items-center rounded bg-gradient-to-b from-amber-100 to-amber-200 py-0.5 transition enabled:hover:ring-2 enabled:hover:ring-orange-400/60 enabled:active:scale-95 disabled:cursor-default"
+          >
+            <CrabPreview color={color} species={species} width={70} height={48} level={lv} animate={lv >= 11} revealLoop={lv > 1 ? loops[lv] : undefined} />
+            <span className="text-[9px] font-semibold text-slate-700">
+              {label}
+              {lv > 1 && " 🔊"}
+            </span>
+          </button>
         ))}
       </div>
     </div>

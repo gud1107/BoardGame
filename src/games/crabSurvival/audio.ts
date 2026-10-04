@@ -18,8 +18,11 @@ export class CrabAudio {
   king = false;
   muted = false;
 
-  /** Must be called from a user gesture (browser autoplay policy). */
-  unlock() {
+  /**
+   * Must be called from a user gesture (browser autoplay policy). `sfxOnly` skips the
+   * wave bed and the music loop — the lobby uses that to audition evolution sounds.
+   */
+  unlock(sfxOnly = false) {
     if (this.ctx) {
       if (this.ctx.state === "suspended") void this.ctx.resume();
       return;
@@ -38,6 +41,7 @@ export class CrabAudio {
     this.noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    if (sfxOnly) return;
     this.startWaves();
     this.nextNote = ctx.currentTime + 0.1;
     this.musicTimer = window.setInterval(() => this.scheduleMusic(), 60);
@@ -304,52 +308,59 @@ export class CrabAudio {
    * chevron = bright plucked strokes, streak = a fast whoosh with ticks, hex = metallic plate clinks,
    * dots = bubbly pops. Evolution levels (Lv4/8/11) add a tier flourish: stripes / gold chimes / shimmer pad.
    */
-  evolve(species: SpeciesId, level: number) {
-    if (!this.ctx) return;
+  evolve(species: SpeciesId, level: number, vol = 1) {
+    const ctx = this.ctx;
+    if (!ctx || !this.master || vol <= 0) return;
+    // A per-call bus so a distant bot's evolution can play quietly.
+    const bus = ctx.createGain();
+    bus.gain.value = Math.min(1, vol);
+    bus.connect(this.master);
+    window.setTimeout(() => bus.disconnect(), 3000);
+    const tn = (f: number, at: number, d: number, type: OscillatorType, g: number, sweepTo?: number) => this.tone(f, at, d, type, g, bus, sweepTo);
     const at = this.now + 0.12;
     const D = EVO_REVEAL;
     const style = SHELL_STYLE[species];
     // The brush itself: a filtered noise sweep across the reveal.
-    this.noiseAt(at, D, 900, 1.4, 0.12, "bandpass", 4200);
+    this.noiseAt(at, D, 900, 1.4, 0.12, "bandpass", 4200, bus);
     const n = 6;
     for (let i = 0; i < n; i++) {
       const tt = at + (i / n) * D;
       switch (style.band) {
         case "chevron":
-          this.tone(midi(72 + [0, 4, 7, 12, 7, 16][i]), tt, 0.16, "triangle", 0.09);
+          tn(midi(72 + [0, 4, 7, 12, 7, 16][i]), tt, 0.16, "triangle", 0.09);
           break;
         case "streak":
-          this.tone(2600 + i * 260, tt, 0.04, "square", 0.035);
+          tn(2600 + i * 260, tt, 0.04, "square", 0.035);
           break;
         case "hex":
-          this.tone(1900 + (i % 2) * 380, tt, 0.12, "triangle", 0.07, undefined, 1500);
-          this.tone(3800, tt, 0.05, "sine", 0.03);
+          tn(1900 + (i % 2) * 380, tt, 0.12, "triangle", 0.07, 1500);
+          tn(3800, tt, 0.05, "sine", 0.03);
           break;
         case "dots":
-          this.tone(420 + i * 90, tt, 0.07, "sine", 0.13, undefined, 900 + i * 120);
+          tn(420 + i * 90, tt, 0.07, "sine", 0.13, 900 + i * 120);
           break;
       }
     }
-    if (style.band === "streak") this.noiseAt(at, 0.35, 700, 1, 0.25, "bandpass", 6000);
+    if (style.band === "streak") this.noiseAt(at, 0.35, 700, 1, 0.25, "bandpass", 6000, bus);
     const end = at + D;
     if (level === 8) {
       // Gold: a little chime cascade (coins jingle for the coin emblem).
       const notes = style.piece === "coin" ? [2637, 3136, 2794, 3520, 3136] : [1568, 1976, 2349, 2637, 3136];
-      notes.forEach((f, i) => this.tone(f, end + i * 0.055, 0.32, style.piece === "coin" ? "square" : "sine", style.piece === "coin" ? 0.03 : 0.08));
+      notes.forEach((f, i) => tn(f, end + i * 0.055, 0.32, style.piece === "coin" ? "square" : "sine", style.piece === "coin" ? 0.03 : 0.08));
     } else if (level === 11) {
       // Iridescent shimmer: a detuned major pad swelling under a high sparkle.
       [523, 659, 784, 1047].forEach((f) => {
-        this.tone(f, end, 1.1, "sine", 0.06);
-        this.tone(f * 1.006, end + 0.02, 1.1, "sine", 0.05);
+        tn(f, end, 1.1, "sine", 0.06);
+        tn(f * 1.006, end + 0.02, 1.1, "sine", 0.05);
       });
-      for (let i = 0; i < 6; i++) this.tone(3136 + i * 240, end + 0.15 + i * 0.07, 0.12, "sine", 0.04);
+      for (let i = 0; i < 6; i++) tn(3136 + i * 240, end + 0.15 + i * 0.07, 0.12, "sine", 0.04);
     } else if (level === 4) {
-      this.tone(midi(84), end, 0.25, "triangle", 0.08);
-      this.tone(midi(88), end + 0.06, 0.3, "triangle", 0.07);
+      tn(midi(84), end, 0.25, "triangle", 0.08);
+      tn(midi(88), end + 0.06, 0.3, "triangle", 0.07);
     }
   }
 
-  private noiseAt(at: number, dur: number, freq: number, q: number, gain: number, type: BiquadFilterType, sweepTo?: number) {
+  private noiseAt(at: number, dur: number, freq: number, q: number, gain: number, type: BiquadFilterType, sweepTo?: number, dest?: AudioNode) {
     const ctx = this.ctx;
     if (!ctx || !this.noiseBuf || !this.master) return;
     const src = ctx.createBufferSource();
@@ -363,7 +374,7 @@ export class CrabAudio {
     g.gain.setValueAtTime(0.0001, at);
     g.gain.exponentialRampToValueAtTime(gain, at + dur * 0.4);
     g.gain.exponentialRampToValueAtTime(0.001, at + dur);
-    src.connect(f).connect(g).connect(this.master);
+    src.connect(f).connect(g).connect(dest ?? this.master);
     src.start(at, Math.random() * 1.5);
     src.stop(at + dur + 0.05);
   }

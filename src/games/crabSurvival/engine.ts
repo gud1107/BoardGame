@@ -389,7 +389,7 @@ export type GameEvent =
   | { type: "coin"; player: boolean }
   | { type: "equip"; name: string; emoji: string }
   | { type: "key" }
-  | { type: "levelUp"; level: number; name: string; player: boolean; species: SpeciesId }
+  | { type: "levelUp"; level: number; name: string; player: boolean; species: SpeciesId; x: number; y: number }
   | { type: "kingNew"; name: string; player: boolean }
   | { type: "kingDown"; name: string; by: string | null; player: boolean; byPlayer: boolean }
   | { type: "kill"; killer: string; victim: string; byPlayer: boolean; victimPlayer: boolean; bounty: number }
@@ -941,7 +941,7 @@ export function addScore(w: World, c: Crab, pts: number) {
   c.score += Math.round(pts);
   if (c.isPlayer) w.stats.peakScore = Math.max(w.stats.peakScore, c.score);
   if (syncLevel(c) && c.level > before) {
-    w.events.push({ type: "levelUp", level: c.level, name: c.name, player: c.isPlayer, species: c.species });
+    w.events.push({ type: "levelUp", level: c.level, name: c.name, player: c.isPlayer, species: c.species, x: c.x, y: c.y });
     floatText(w, c.x, c.y - 30 * c.scale, `LEVEL UP! Lv${c.level}`, "#fde047", 22, 1.6);
     burst(w, "star", c.x, c.y, 12, 220, "#fde047", 5, 0.9, 200);
     speciesSurge(w, c);
