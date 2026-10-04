@@ -17,6 +17,13 @@ export interface MatchRecord {
 
 const AUTO_HIDE_MS = 20_000;
 
+/** Which /stats bot filter this match counts under. */
+export function botTag(self: Pick<GameSelfResult, "withBots" | "botLevel">): string {
+  if (!self.withBots) return "👥 이번 판: 사람끼리";
+  if (self.botLevel !== null) return `🤖 이번 판: Lv.${self.botLevel} 봇 포함`;
+  return "🤖 이번 판: 봇 포함 (도중 교체)";
+}
+
 /**
  * "이번 판 기록" — floating card shown over a game's own post-game screen
  * right after `recordMatchStat`. Floats (rather than replacing the stage)
@@ -49,6 +56,15 @@ export default function MatchRecordCard({ record, onClose }: { record: MatchReco
           <p className="text-[11px] font-semibold tracking-wide text-white/50 light:text-slate-500">이번 판 기록</p>
           <p className={`text-lg font-bold ${won ? "text-amber-300 light:text-amber-600" : "text-white light:text-slate-900"}`}>
             {won ? "🏆 승리" : "패배"} · {self.rank}위 / {self.playerCount}명
+          </p>
+          <p
+            className={`mt-1 inline-block rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${
+              self.withBots
+                ? "bg-sky-400/15 text-sky-200 light:bg-sky-100 light:text-sky-700"
+                : "bg-emerald-400/15 text-emerald-200 light:bg-emerald-100 light:text-emerald-700"
+            }`}
+          >
+            {botTag(self)}
           </p>
         </div>
         <div className="flex gap-1">
