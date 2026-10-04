@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useState, type ReactNode } from "reac
 import Link from "next/link";
 import { getGameMeta, GAME_REGISTRY } from "@/games/registry";
 import type { StatTotalsRecord } from "@/lib/db/types";
-import { STAT_DETAIL_ROWS } from "@/lib/stats/details";
+import { SOLO_HEADLINE, STAT_DETAIL_ROWS } from "@/lib/stats/details";
 import {
   fetchBotLevelBoard,
   fetchLeaderboard,
@@ -116,13 +116,13 @@ function MyStats({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilt
     return () => window.removeEventListener(STATS_CHANGED_EVENT, load);
   }, [load]);
 
+  // 1-player games get their own 솔로 기록 table below (no opponents → no wins/losses or bot filter).
+  const solo = (stats ?? []).filter((t) => SOLO_GAME_IDS.has(t.gameId) && t.played > 0);
   const shown = (stats ?? [])
+    .filter((t) => !SOLO_GAME_IDS.has(t.gameId))
     .map((t) => ({ gameId: t.gameId, s: pickSlice(t, filter) }))
     .filter((x): x is { gameId: string; s: NonNullable<typeof x.s> } => x.s !== null);
-  // Solo games always finish 1st of 1 — keep them out of the win totals (their rows show details instead).
-  const total = shown
-    .filter(({ gameId }) => !SOLO_GAME_IDS.has(gameId))
-    .reduce((acc, { s }) => ({ played: acc.played + s.played, wins: acc.wins + s.wins }), { played: 0, wins: 0 });
+  const total = shown.reduce((acc, { s }) => ({ played: acc.played + s.played, wins: acc.wins + s.wins }), { played: 0, wins: 0 });
 
   return (
     <>
@@ -149,8 +149,10 @@ function MyStats({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilt
         <p className="text-sm text-white/40 light:text-slate-400">불러오는 중...</p>
       ) : shown.length === 0 ? (
         <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
-          {stats.length === 0
-            ? "아직 기록된 게임이 없어요. 온라인 방에서 한 판 끝내면 여기에 쌓입니다."
+          {stats.filter((t) => !SOLO_GAME_IDS.has(t.gameId)).length === 0
+            ? solo.length > 0
+              ? "아직 기록된 대전 게임이 없어요. 혼자 한 게임은 아래 솔로 기록에 있어요."
+              : "아직 기록된 게임이 없어요. 온라인 방에서 한 판 끝내면 여기에 쌓입니다."
             : `이 조건에 맞는 기록이 아직 없어요. (봇 필터는 ${BOT_FILTER_SINCE} 이후 판부터 집계돼요)`}
         </p>
       ) : (
@@ -190,20 +192,12 @@ function MyStats({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilt
                           {expandable && <span className="ml-1.5 text-xs text-rose-300">{isOpen ? "▲" : "세부 ▼"}</span>}
                         </td>
                         <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.played}</td>
-                        {SOLO_GAME_IDS.has(gameId) ? (
-                          <td colSpan={4} className="px-3 py-2 text-right text-xs text-white/40 light:text-slate-400">
-                            1인 게임 · 승패 집계 제외
-                          </td>
-                        ) : (
-                          <>
-                            <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.wins}</td>
-                            <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.losses}</td>
-                            <td className="px-2 py-2 text-right tabular-nums text-white/85 light:text-slate-800">{pct(s.wins, s.played)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-white/70 light:text-slate-600">
-                              {s.bestRank === null ? "-" : `${s.bestRank}위`}
-                            </td>
-                          </>
-                        )}
+                        <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.wins}</td>
+                        <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.losses}</td>
+                        <td className="px-2 py-2 text-right tabular-nums text-white/85 light:text-slate-800">{pct(s.wins, s.played)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-white/70 light:text-slate-600">
+                          {s.bestRank === null ? "-" : `${s.bestRank}위`}
+                        </td>
                       </tr>
                       {expandable && isOpen && (
                         <tr className="bg-white/[0.03] light:bg-slate-50">
@@ -232,11 +226,66 @@ function MyStats({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilt
         </>
       )}
 
+      {solo.length > 0 && <SoloRecords solo={solo} />}
+
       {/* Solo games have no opponents or bots — they'd only show up as fake 100% "사람끼리" wins here. */}
       {stats !== null && stats.some((t) => !SOLO_GAME_IDS.has(t.gameId)) && (
         <BotLevelTable stats={stats.filter((t) => !SOLO_GAME_IDS.has(t.gameId))} />
       )}
     </>
+  );
+}
+
+/** 솔로 기록: 1-player games, every run counted (bot filter doesn't apply — the AI is the game). */
+function SoloRecords({ solo }: { solo: StatTotalsRecord[] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  return (
+    <section className="mt-6">
+      <h2 className="mb-1 text-sm font-bold text-white/85 light:text-slate-800">🎮 솔로 기록</h2>
+      <p className="mb-2 text-[11px] text-white/40 light:text-slate-400">혼자 하는 게임은 승패 대신 기록을 모아요. 판이 끝날 때마다 바로 저장돼요.</p>
+      <div className="overflow-hidden rounded-2xl border border-white/10 light:border-slate-200">
+        {solo.map((t) => {
+          const meta = getGameMeta(t.gameId);
+          const rows = STAT_DETAIL_ROWS[t.gameId] ?? [];
+          const d = t.details ?? {};
+          const isOpen = open === t.gameId;
+          return (
+            <div key={t.gameId} className="border-t border-white/5 first:border-t-0 light:border-slate-100">
+              <button
+                type="button"
+                onClick={() => setOpen(isOpen ? null : t.gameId)}
+                aria-expanded={isOpen}
+                className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-white/[0.04] light:hover:bg-slate-50"
+              >
+                <span className="min-w-0 text-white/85 light:text-slate-800">
+                  <span className="mr-1.5">{meta?.thumbnail.emoji ?? "🎲"}</span>
+                  {meta?.name ?? t.gameId}
+                  <span className="ml-2 text-xs text-white/45 light:text-slate-500">{t.played.toLocaleString("ko-KR")}판</span>
+                </span>
+                <span className="shrink-0 text-right text-xs tabular-nums text-white/70 light:text-slate-600">
+                  {SOLO_HEADLINE[t.gameId]?.(d) ?? ""}
+                  <span className="ml-1.5 text-rose-300">{isOpen ? "▲" : "▼"}</span>
+                </span>
+              </button>
+              {isOpen && rows.length > 0 && (
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 bg-white/[0.03] px-3 py-3 sm:grid-cols-2 light:bg-slate-50">
+                  {rows.map((r) => {
+                    const v = r.value(d, t.played);
+                    if (v === null) return null;
+                    return (
+                      <div key={r.label} className="flex justify-between gap-3 text-xs">
+                        <dt className="text-white/50 light:text-slate-500">{r.label}</dt>
+                        <dd className="tabular-nums text-white/85 light:text-slate-800">{v}</dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

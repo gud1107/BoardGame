@@ -31,6 +31,12 @@ const ratio = (hit: number | undefined, total: number | undefined) =>
 const avg = (sum: number | undefined, count: number, digits = 1) =>
   count > 0 && sum !== undefined ? (sum / count).toFixed(digits) : null;
 
+/** One-line headline per 1-player game for the /stats 솔로 기록 table. */
+export const SOLO_HEADLINE: Record<string, (d: StatDetails) => string> = {
+  "hungry-shark": (d) => `최고 ${n(d.maxScore)}점 · 🔥 최고 연속 올클리어 ${n(d.maxMissionStreak)}회`,
+  "crab-survival": (d) => `최고 ${n(d.maxScore)}점 · 👑 1등 ${n(d.firsts)}회${d.minRank !== undefined ? ` · 최고 ${n(d.minRank)}위` : ""}`,
+};
+
 /** What /stats shows per game — only games listed here have a detail panel. */
 export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
   "great-legacy": [
@@ -107,6 +113,16 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "한 장에 받은 최다 반응", value: (d) => n(d.maxReactionsOnePage) },
     { label: "받은 투표 (점수 모드)", value: (d) => n(d.votesReceived) },
     { label: "시간 초과로 자동 제출", value: (d) => n(d.autoFilled) },
+  ],
+  "crab-survival": [
+    { label: "최고 점수 (한 판)", value: (d) => n(d.maxScore) },
+    { label: "1등", value: (d) => ratio(d.firsts, d.matches) },
+    { label: "3위 안", value: (d) => ratio(d.top3, d.matches) },
+    { label: "최고 순위", value: (d) => (d.minRank === undefined ? null : `${n(d.minRank)}위`) },
+    { label: "처치 (판당 평균 · 한 판 최다)", value: (d) => `${avg(d.kills, d.matches ?? 0) ?? "-"} · ${n(d.maxKills)}` },
+    { label: "왕관 보유 시간", value: (d) => `${n(Math.round((d.kingSeconds ?? 0) / 60))}분` },
+    { label: "최고 레벨", value: (d) => n(d.maxLevel) },
+    { label: "현상금 / 역습", value: (d) => `${n(d.bounties)} / ${n(d.revenges)}` },
   ],
   "hungry-shark": [
     { label: "최고 점수 (한 잠수)", value: (d) => n(d.maxScore) },

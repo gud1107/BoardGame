@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
+import { recordSoloRun } from "@/lib/stats/soloResult";
 import {
   BRANCH_INFO,
   MAPS,
@@ -56,9 +57,6 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
   const [showBestiary, setShowBestiary] = useState(false);
   const [showEvolve, setShowEvolve] = useState(false);
   const [bestThisSession, setBestThisSession] = useState(0);
-  // This visit's dives / all-clears, reported to /stats on "기록 저장하고 나가기".
-  const [sessionDives, setSessionDives] = useState(0);
-  const [sessionAllClears, setSessionAllClears] = useState(0);
 
   const update = (fn: (s: SharkSave) => SharkSave) => {
     setSave((prev) => {
@@ -118,8 +116,13 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
       bestMissionStreak: Math.max(sv.bestMissionStreak, streak),
     }));
     setBestThisSession((b) => Math.max(b, s.score));
-    setSessionDives((n) => n + 1);
-    if (allClear) setSessionAllClears((n) => n + 1);
+    // /stats: recorded per dive right away, so leaving the page any way never loses it.
+    recordSoloRun("hungry-shark", {
+      dives: 1,
+      missionAllClears: allClear ? 1 : 0,
+      maxScore: s.score,
+      maxMissionStreak: Math.max(save.bestMissionStreak, streak),
+    });
     setSummary({
       s, newBest: s.score > prevBest, missionCoins, prevMapBest, newMapBest, causeCount, streak,
       brokenStreak: allClear ? 0 : save.missionStreak,
@@ -130,27 +133,8 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
 
   const finish = () => {
     const pid = participants[0]?.id ?? "solo";
-    onComplete({
-      rankings: [{ playerId: pid, rank: 1 }],
-      finishedAt: new Date().toISOString(),
-      // Solo: rank is always 1/1, so /stats keeps it out of win totals and shows these details instead.
-      self:
-        sessionDives > 0
-          ? {
-              rank: 1,
-              playerCount: 1,
-              botPlayed: false,
-              withBots: false,
-              botLevel: null,
-              details: {
-                dives: sessionDives,
-                missionAllClears: sessionAllClears,
-                maxScore: bestThisSession,
-                maxMissionStreak: save.bestMissionStreak,
-              },
-            }
-          : undefined,
-    });
+    // No `self` here: every dive was already recorded to /stats when it ended (recordSoloRun).
+    onComplete({ rankings: [{ playerId: pid, rank: 1 }], finishedAt: new Date().toISOString() });
   };
 
   if (screen === "playing") {

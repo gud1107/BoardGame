@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
+import { recordSoloRun } from "@/lib/stats/soloResult";
 import { CRAB_COLORS, EVO_REVEAL, isUnlocked, MATCH_LENGTHS, roadmap, SHELL_BAND_LABEL, SHELL_PIECE_LABEL, SHELL_STYLE, SPECIES, SPECIES_LIST, type CrabColor, type ShieldKind, type SpeciesId, type WeaponKind } from "./data";
 import type { CrownLogEntry, MatchSummary, MomentEntry } from "./engine";
 import CrabSurvivalCanvas from "./CrabSurvivalCanvas";
@@ -71,6 +72,21 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
     const prevRec = save.speciesStats[species] ?? EMPTY_RECORD;
     const { record, bountyRecord, epicRecord, revengeRecord } = nextSpeciesRecord(prevRec, { score: s.score, rank: s.rank, ...s.stats });
     const unlocked = SPECIES_LIST.filter((sp) => !isUnlocked(sp.id, save.trophies) && isUnlocked(sp.id, save.trophies + trophies)).map((sp) => sp.id);
+    // /stats (솔로 기록): one record per match, saved right away. The real placement vs the AI field
+    // lives in details (`minRank` keeps the best) — the stat itself is a 1-of-1 solo run.
+    recordSoloRun("crab-survival", {
+      matches: 1,
+      firsts: s.rank === 1 ? 1 : 0,
+      top3: s.rank <= 3 ? 1 : 0,
+      minRank: s.rank,
+      maxScore: s.score,
+      kills: s.stats.kills,
+      maxKills: s.stats.kills,
+      kingSeconds: s.stats.kingSeconds,
+      maxLevel: s.stats.maxLevel,
+      bounties: s.stats.bounties,
+      revenges: s.stats.revenges,
+    });
     update((sv) => ({
       ...sv,
       best: Math.max(sv.best, s.score),

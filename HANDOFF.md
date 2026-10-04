@@ -39,6 +39,13 @@
 - **2026-09-19 문서 정리 세션에서 실제로 있었던 일**: 이 규칙이 2026-08-09(Phase 28) 이후 약 40일간 지켜지지 않아 `HANDOFF.md`가 9,206줄/1.8MB까지 불어나 있었다. 아래쪽 "1. Executive Summary"~"4. Resume Prompt" 고정 섹션도 실제로는 Phase 27~29 시점(2026-08-09~23) 내용에서 멈춰 있어 최신 상태와 전혀 안 맞았다. 이번 세션에서 2026-08-14~09-12 사이의 날짜별 항목(약 4,700줄)을 전부 `docs/history.md`에 "Phase 29+ 대량 이관 아카이브"로 원문 그대로 옮기고, 아래 고정 4개 섹션은 현재 코드베이스를 다시 조사해 새로 썼다. **이관된 옛 기록이 필요하면 `docs/history.md`를 열어볼 것** — 이 파일에는 더 이상 없다.
 - 참고로 바로 아래에 남아있는 "🌗 실시간 블랙/화이트 테마 토글 시스템 (2026-09-14)" 섹션 하나가 유독 크다(3,500줄+) — 여러 날짜의 후속 세션 기록이 그 헤더 하나 밑에 `_이전 갱신: ...`_ 형태로 계속 이어붙는 방식으로 작성돼 왔기 때문. 같은 문제가 다른 섹션에서도 반복될 수 있으니, **한 헤더 아래 내용이 감당 안 되게 길어지면 그때그때 history.md로 옮길 것** — 다음 정리를 또 한 달 넘게 미루지 말 것.
 
+## 🎮 솔로 게임 개인 통계: 판마다 즉시 기록 + 게 생존 연동 + /stats "솔로 기록" — 2026-10-04 (커밋/푸시, 배포는 웹훅 자동)
+
+- **설계 변경 — "탭 닫을 때 저장" 대신 "판이 끝날 때마다 바로 저장"**: `recordMatchStat`은 IndexedDB에 비동기로 쓰는데 pagehide/unload에서 시작한 IndexedDB 쓰기는 보장되지 않음. 그래서 탭 닫기 훅을 다는 대신 잠수/판이 끝나는 순간(페이지가 살아 있을 때) 한 판씩 기록 → 어떤 식으로 나가도 끝난 판은 안 잃음(진행 중이던 판은 결과가 없으니 원래 기록 대상 아님). 공용 헬퍼 `src/lib/stats/soloResult.ts` `recordSoloRun(gameId, details)`(1인 1위로 기록, 값 정리). "기록 저장하고 나가기"의 `onComplete`는 다시 `self` 없이 → 중복 집계 없음. 그 결과 배고픈 상어 `/stats` "판" = 잠수 수.
+- **게 생존 연동**(`CrabSurvivalGame.tsx` `handleEnd`에 한 줄 블록만 추가 — 다른 세션이 자주 커밋하는 파일이라 최소 변경): 판마다 `matches, firsts(1등), top3, minRank(최고 순위 — min 병합), maxScore, kills, maxKills, kingSeconds, maxLevel, bounties, revenges`. 실제 순위(14마리 중)는 details에만, 기록 자체는 1인 1위. `STAT_DETAIL_ROWS["crab-survival"]` 8줄.
+- **/stats "🎮 솔로 기록" 섹션**: 1인 게임(`SOLO_GAME_IDS`)은 대전 표·합계·봇 레벨 표에서 모두 빠지고 별도 표로 — 게임 / 판수 / 한 줄 요약(`SOLO_HEADLINE`: 상어 "최고 N점 · 🔥 최고 연속 올클리어 N회", 게 "최고 N점 · 👑 1등 N회 · 최고 N위") / ▼ 세부. 봇 필터는 솔로에 적용 안 함(상대가 게임 자체의 AI). 대전 기록이 없고 솔로만 있으면 안내 문구 "혼자 한 게임은 아래 솔로 기록에 있어요".
+- 검증: tsc/eslint 0, `vitest src/games/hungryShark src/games/crabSurvival src/lib/stats` 192/192(신규 `soloStats.test.ts`: 게 생존 병합 — 최고 순위는 낮게·최고값은 높게·횟수 합산 — 과 표시 문자열, 요약 문구).
+
 ## 🦈 배고픈 상어: 썸네일 → 룰북 지역 이동 + 미니맵 수심 구역선 + /stats 개인 통계 연동 — 2026-10-04 (커밋/푸시, 배포는 웹훅 자동)
 
 - **썸네일 → 룰북**: 상점 지역 카드를 `<div>` + 카드 전체를 덮는 선택용 `<button>`(z-0) + 내용(pointer-events-none) 구조로 바꾸고, 썸네일만 `pointer-events-auto` 버튼("🔍 지형 자세히") → `setShowRules(mapId)`. `RulebookModal`에 `focusMap` — 그 지역 카드(`id="rb-map-<id>"`)로 부드럽게 스크롤 + 청록 테두리 강조. (버튼 안에 버튼을 넣지 않으려고 구조 변경.)
