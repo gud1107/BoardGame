@@ -4,12 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/gen-admin-changelog.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
     "test:bench": "vitest run --config vitest.bench.config.mts",
-    "gen:last-updated": "node scripts/gen-game-last-updated.mjs"
+    "gen:last-updated": "node scripts/gen-game-last-updated.mjs",
+    "gen:admin-changelog": "node scripts/gen-admin-changelog.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

@@ -5,6 +5,12 @@
  * out on 2026-10-04 at the user's request. Rendered by the 🗒 변경 기록 tab
  * of `/admin/games`. Newest first; dates match the git commit date.
  *
+ * Hand-written rows (Korean, curated) live in `ADMIN_CHANGELOG` below.
+ * Commits with an admin scope — feat(admin), fix(visitors), tune(analytics) —
+ * are picked up automatically into `adminChangelog.generated.ts` by
+ * `scripts/gen-admin-changelog.mjs` (runs on every build), so nobody has to
+ * remember to add a row; curate one here only when a summary helps.
+ *
  * `patchNotes.test.ts` fails when a public patch note mentions 관리자, so
  * anything admin-only goes here.
  */
@@ -12,6 +18,15 @@ export interface AdminChangelogEntry {
   /** ISO date the change shipped, e.g. "2026-10-02". */
   date: string;
   type: "FEAT" | "FIX" | "IMPROVE";
+  desc: string;
+}
+
+/** One auto-collected commit (subject text, English). */
+export interface AdminCommitEntry {
+  hash: string;
+  date: string;
+  type: AdminChangelogEntry["type"];
+  scope: string;
   desc: string;
 }
 

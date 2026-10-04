@@ -39,7 +39,7 @@ export interface PatchNoteEntry {
  * date with zero user-facing commits (2026-08-06, internal docs only) has no
  * entry — the array is not guaranteed to have one row per calendar day.
  *
- * Keep each `desc` short (≤ 120 chars, enforced by patchNotes.test.ts) —
+ * Keep each `desc` short (≤ PATCH_NOTE_DESC_MAX chars, enforced by patchNotes.test.ts) —
  * one line per game per date, headline features only. Admin-only changes
  * (관리자 허브·통계·알림) never go here; add them to `adminChangelog.ts`.
  *
@@ -50,6 +50,12 @@ export interface PatchNoteEntry {
  * this supersedes the earlier "2026-08-24 as v1.0.0 baseline" decision now
  * that full history is in scope.
  */
+/**
+ * Longest allowed `desc` (characters), checked by patchNotes.test.ts. Raise or
+ * lower this one number to change the rule; 120 ≈ two lines on mobile.
+ */
+export const PATCH_NOTE_DESC_MAX = 120;
+
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.52.0",

@@ -3,6 +3,7 @@ import { GAME_REGISTRY } from "@/games/registry";
 import {
   PATCH_NOTES,
   LATEST_PATCH_VERSION,
+  PATCH_NOTE_DESC_MAX,
   getPatchNoteGameMeta,
 } from "./patchNotes";
 import { ADMIN_CHANGELOG } from "./adminChangelog";
@@ -94,9 +95,9 @@ describe("PATCH_NOTES content rules", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("keeps every change line at 120 characters or less", () => {
+  it(`keeps every change line at ${PATCH_NOTE_DESC_MAX} characters or less`, () => {
     const tooLong = PATCH_NOTES.flatMap((e) =>
-      e.changes.filter((c) => c.desc.length > 120).map((c) => `${e.version} (${c.desc.length}자): ${c.desc}`),
+      e.changes.filter((c) => c.desc.length > PATCH_NOTE_DESC_MAX).map((c) => `${e.version} (${c.desc.length}자): ${c.desc}`),
     );
     expect(tooLong).toEqual([]);
   });
