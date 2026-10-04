@@ -16,13 +16,14 @@ import SourcesTab from "./tabs/SourcesTab";
 import BugReportsTab from "./tabs/BugReportsTab";
 import NoticeTab from "./tabs/NoticeTab";
 import GameVisibilityTab from "./tabs/GameVisibilityTab";
+import ChangelogTab from "./tabs/ChangelogTab";
 import SetupStatus from "./SetupStatus";
 import AdminErrorBoundary from "./AdminErrorBoundary";
 import IpLabelsTab from "./tabs/IpLabelsTab";
 import { useIpLabels } from "./useIpLabels";
 import LabeledActivityPanel from "./LabeledActivityPanel";
 
-type TabKey = "games" | "monthly" | "trend" | "hours" | "dropoff" | "rooms" | "sources" | "ips" | "bugs" | "notice" | "visibility";
+type TabKey = "games" | "monthly" | "trend" | "hours" | "dropoff" | "rooms" | "sources" | "ips" | "bugs" | "notice" | "visibility" | "changelog";
 
 /** `period`: whether the 전체/30일/7일/오늘 filter applies. `stats`: whether "내 기록 제외" applies. */
 const TABS: { key: TabKey; label: string; period: boolean; stats: boolean }[] = [
@@ -37,6 +38,7 @@ const TABS: { key: TabKey; label: string; period: boolean; stats: boolean }[] = 
   { key: "bugs", label: "🐛 버그 리포트", period: false, stats: false },
   { key: "notice", label: "📢 공지", period: false, stats: false },
   { key: "visibility", label: "👁 게임 관리", period: false, stats: false },
+  { key: "changelog", label: "🗒 변경 기록", period: false, stats: false },
 ];
 
 const TAB_KEY = "bg_admin_tab";
@@ -329,6 +331,7 @@ function AdminHub() {
         {tab === "bugs" && <BugReportsTab reloadKey={reloadKey} />}
         {tab === "notice" && <NoticeTab />}
         {tab === "visibility" && <GameVisibilityTab />}
+        {tab === "changelog" && <ChangelogTab />}
       </AdminErrorBoundary>
     </div>
   );

@@ -39,6 +39,10 @@ export interface PatchNoteEntry {
  * date with zero user-facing commits (2026-08-06, internal docs only) has no
  * entry — the array is not guaranteed to have one row per calendar day.
  *
+ * Keep each `desc` short (≤ 120 chars, enforced by patchNotes.test.ts) —
+ * one line per game per date, headline features only. Admin-only changes
+ * (관리자 허브·통계·알림) never go here; add them to `adminChangelog.ts`.
+ *
  * Version bump rule (confirmed with the user 2026-08-27, applied
  * retroactively): a date containing any FEAT → minor (+0.1.0), reset patch to
  * 0; a date with only FIX/IMPROVE → patch (+0.0.1). v1.0.0 is the actual
@@ -55,17 +59,17 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "common",
         type: "IMPROVE",
-        desc: "선택 상자 목록·날짜 선택기·체크박스·스크롤바 같은 브라우저 기본 UI가 다크/라이트 테마를 따라가도록 개선(다크 모드에서 흰 목록이 번쩍 열리던 문제 해소), 라이트 모드 스크롤바가 보이도록 수정, 모바일 브라우저 주소창 색도 테마에 맞춤, '동작 줄이기' 설정 시 테마 전환 애니메이션 생략",
+        desc: "선택 상자·날짜 선택기·스크롤바 등 브라우저 기본 UI와 모바일 주소창 색이 테마를 따라가도록 개선, '동작 줄이기' 설정 시 테마 전환 애니메이션 생략",
       },
       {
         game: "crab-survival",
         type: "FEAT",
-        desc: "현상금 1만 점을 넘긴 전설 보유자는 '🚨 현상수배'로 알림과 미니맵 빨간 대형 표시, 게 종류별 최다 현상금·최장 전설 보유 기록 저장(결과 화면 신기록 배지), 로비에 처음 플레이하는 사람용 무기·변이·특수기·현상금 팁 카드(닫은 뒤 '팁 다시 보기' 가능) 추가, 화면 밖 현상수배 대상은 가장자리 빨간 화살표로 방향 표시, 로비 상단에 전체 종류 통틀어 최다 현상금·최장 전설 보유 기록 표시, 꽃게 디자인 리뉴얼(마디가 있는 다리·진짜 집게 모양·옆가시와 광택이 있는 등딱지), 진화할수록 화려해지는 종류별 등딱지 무늬와 레벨업 진화 연출",
+        desc: "현상금 1만 점 이상 전설 보유자 '🚨 현상수배' 표시(미니맵·화면 밖 화살표), 종류별·전체 현상금 기록, 첫 플레이 팁 카드, 꽃게 디자인 리뉴얼과 진화할수록 화려해지는 등딱지 무늬",
       },
       {
         game: "hungry-shark",
         type: "FEAT",
-        desc: "얼음 해협(수면 전체 빙판·숨구멍에서만 점프·깊은 해구·고드름/얼음 기둥)과 난파선 무덤(계단식 단구·충돌하는 거대 선체와 돛대·폭풍 하늘)을 지형부터 완전히 다른 맵으로 분리, 맵 전용 몬스터 8종(펭귄·물범·일각고래·범고래 / 보물 사냥꾼·꼬치고기·곰치·대왕오징어)과 도감 '서식 지역' 표시, 몬스터 개체수 1.4배, 상어 진화 비용 1.3배, 상어 선택 화면 정렬(가격·티어·체력·속도·최고 점수·골드 배율·부스트 효율, 높은/낮은 순)·'보유 상어 숨기기'·'지금 살 수 있는 상어만' 필터 추가(설정은 다시 들어와도 유지)",
+        desc: "얼음 해협·난파선 무덤을 지형부터 다른 맵으로 분리하고 맵 전용 몬스터 8종 추가, 몬스터 1.4배·진화 비용 1.3배, 상어 선택 화면 정렬·필터(설정 유지) 추가",
       },
     ],
   },
@@ -89,7 +93,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "common",
         type: "FEAT",
-        desc: "소셜 로그인(카카오·구글·깃허브·디스코드)과 개인 전적 페이지(/stats) 추가 — 게스트 기록은 로그인 시 계정에 합쳐지고, 공개 랭킹·랭킹 닉네임·판 종료 후 '이번 판 기록' 카드, 10개 게임 세부 기록 지원",
+        desc: "소셜 로그인(카카오·구글·깃허브·디스코드)과 개인 전적 페이지(/stats) 추가 — 게스트 기록은 로그인 시 계정에 합쳐지고, 공개 랭킹·판 종료 후 기록 카드·10개 게임 세부 기록 지원",
       },
       {
         game: "common",
@@ -116,7 +120,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "common",
         type: "FEAT",
-        desc: "로비에 실제 게임 시작 횟수 기준 '인기순' 정렬 추가(기본값), 게임 카드에 '🔥 10월 N회 플레이'와 NEW(최근 14일 신작)/UPDATED(최근 5일 업데이트) 배지 표시, '업데이트순'을 최근 업데이트 날짜 기준으로 변경, 테스트·자동화 브라우저 플레이는 횟수에서 제외",
+        desc: "로비에 '인기순' 정렬(기본값)과 카드별 '🔥 이번 달 N회 플레이'·NEW/UPDATED 배지 추가, '업데이트순'은 최근 업데이트 날짜 기준으로 변경",
       },
     ],
   },

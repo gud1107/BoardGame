@@ -5,6 +5,7 @@ import {
   LATEST_PATCH_VERSION,
   getPatchNoteGameMeta,
 } from "./patchNotes";
+import { ADMIN_CHANGELOG } from "./adminChangelog";
 
 /**
  * This project's `<Game>Board.tsx`/header-level components have no
@@ -71,5 +72,41 @@ describe("getPatchNoteGameMeta", () => {
 
   it("falls back to the raw tag for an unknown/removed game id", () => {
     expect(getPatchNoteGameMeta("no-such-game")).toEqual({ emoji: "🎲", label: "no-such-game" });
+  });
+});
+
+/**
+ * Public patch notes stay short and player-facing (2026-10-04 user
+ * request): admin-only changes belong in `adminChangelog.ts`, and each line
+ * is a headline, not a feature list.
+ */
+describe("PATCH_NOTES content rules", () => {
+  // Player-facing lines that merely mention admins (bug-report edit rights).
+  const ADMIN_WORD_ALLOWED = ["버그 리포트에 작성자/관리자 권한 기반 수정·삭제 기능 추가"];
+
+  it("keeps admin-only changes out (put them in adminChangelog.ts)", () => {
+    const offenders = PATCH_NOTES.flatMap((e) => [
+      ...(/관리자/.test(e.title) ? [`${e.version} title: ${e.title}`] : []),
+      ...e.changes
+        .filter((c) => /관리자/.test(c.desc) && !ADMIN_WORD_ALLOWED.includes(c.desc))
+        .map((c) => `${e.version}: ${c.desc}`),
+    ]);
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps every change line at 120 characters or less", () => {
+    const tooLong = PATCH_NOTES.flatMap((e) =>
+      e.changes.filter((c) => c.desc.length > 120).map((c) => `${e.version} (${c.desc.length}자): ${c.desc}`),
+    );
+    expect(tooLong).toEqual([]);
+  });
+});
+
+describe("ADMIN_CHANGELOG", () => {
+  it("is newest first with ISO dates", () => {
+    for (const e of ADMIN_CHANGELOG) expect(e.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    for (let i = 1; i < ADMIN_CHANGELOG.length; i++) {
+      expect(ADMIN_CHANGELOG[i - 1].date >= ADMIN_CHANGELOG[i].date).toBe(true);
+    }
   });
 });
