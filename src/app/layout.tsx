@@ -36,7 +36,8 @@ export default function RootLayout({
     >
       <head>
         {/* Sets data-theme="light" (if that's what's saved) before hydration
-            so a light-mode revisit never flashes the dark default first —
+            so a light-mode revisit never flashes the dark default first (and
+            injects the matching <meta name="theme-color"> for mobile chrome) —
             see ThemeContext.tsx's THEME_INIT_SCRIPT doc comment. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         {/* KakaoTalk in-app browser → reopen in the default browser so its

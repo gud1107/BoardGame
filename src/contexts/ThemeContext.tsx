@@ -23,6 +23,11 @@ export type Theme = "dark" | "light";
 
 const STORAGE_KEY = "bgh_theme";
 
+/** Mobile browser chrome (address bar / status bar) tint per theme — matches
+ *  each theme's `--background` in globals.css so the bar doesn't sit as a
+ *  dark-navy stripe above the light page (or vice versa). */
+export const THEME_COLORS: Record<Theme, string> = { dark: "#0b0b12", light: "#f1f5f9" };
+
 interface ThemeContextValue {
   theme: Theme;
   setTheme: (theme: Theme) => void;
@@ -46,6 +51,7 @@ function applyTheme(theme: Theme) {
     // unprefixed utility class exactly as it already renders today.
     root.removeAttribute("data-theme");
   }
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLORS[theme]);
   try {
     localStorage.setItem(STORAGE_KEY, theme);
   } catch {
@@ -89,7 +95,12 @@ export const THEME_INIT_SCRIPT = `
 (function () {
   try {
     var t = localStorage.getItem("${STORAGE_KEY}");
-    if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+    var light = t === "light";
+    if (light) document.documentElement.setAttribute("data-theme", "light");
+    var m = document.createElement("meta");
+    m.name = "theme-color";
+    m.content = light ? "${THEME_COLORS.light}" : "${THEME_COLORS.dark}";
+    document.head.appendChild(m);
   } catch (e) {}
 })();
 `;

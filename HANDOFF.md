@@ -2868,6 +2868,14 @@ GitHub 웹훅 자동 배포로 프로덕션 반영 확인(`dpl_3r6q5CG54vbM1dhq9
   **의도적으로 다크 전용 유지**(각 파일에 `// TODO(theme)` 또는 사유 주석). 각 게임 보드 루트의
   인라인 `style={{background: ...}}` 하드코딩 그라데이션도 같은 이유로 미변환.
 - **검증**: `npx tsc --noEmit`/`npx eslint .`/`npm run build`/`npx vitest run`(1752개) 전부 그린.
+- **2026-10-03 눈부심 저감 (35860d8)**: 라이트 페이지 바탕을 slate-100 + 상단 비네트로, `light:bg-white[/NN]`
+  패널은 `globals.css`의 `--color-white` 한 곳 재지정으로 `#fbfcfd`. 외부 제안서의 `GameBackdropShell`
+  래퍼/`app-theme` 별도 저장소는 기존 `ThemeProvider`/`bgh_theme`와 충돌하므로 **도입하지 않음**.
+- **2026-10-04 네이티브 UI 테마 연동**: `:root`에 `color-scheme: dark`, 라이트에 `color-scheme: light`
+  (select 드롭다운 목록·날짜 선택기·체크박스/레인지·Firefox 스크롤바가 테마를 따름), 웹킷 스크롤바
+  thumb를 `--scrollbar-thumb` 토큰으로(라이트에서 안 보이던 흰색 반투명 → 슬레이트), 모바일 주소창
+  색 `<meta name="theme-color">`를 `THEME_INIT_SCRIPT`가 주입·`applyTheme`가 갱신(`THEME_COLORS`),
+  `prefers-reduced-motion`이면 body 배경 전환 애니메이션 끔.
 
 _최종 갱신: 2026-09-14 (**보드게임허브 & 전 게임 공통 — 실시간 블랙/화이트 테마 토글 시스템** — 위
 "🌗 실시간 블랙/화이트 테마 토글 시스템" 섹션 참고. 요청 범위(로비 헤더 + 전 인게임 원터치 토글,

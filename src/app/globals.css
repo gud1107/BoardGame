@@ -27,6 +27,13 @@
      a different *shape* of gradient (soft top-down wash, not a purple-glow
      radial), not just a palette swap of the same stops. */
   --page-bg-gradient: radial-gradient(circle at top, #1a1230 0%, #0b0b12 55%, #08080d 100%);
+  /* 2026-10-04: tells the browser which palette its *native* UI should use —
+     <select> dropdown lists, date pickers, checkbox/range chrome, Firefox
+     scrollbars. Without it they stayed light-scheme on the dark theme (a
+     white option list flashing open over a dark page, or white-on-white
+     option text under a `text-white` select). */
+  color-scheme: dark;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.15);
 }
 
 /* 2026-10-03 글로벌 앰비언트 백드롭 (눈부심 저감) — the light theme's page
@@ -42,6 +49,9 @@
   --page-bg-gradient: radial-gradient(circle at 50% 10%, #f8fafc 0%, #f1f5f9 45%, #e2e8f0 100%);
   /* Tone that light-mode "panel white" resolves to — see the rule below. */
   --panel-surface: #fbfcfd;
+  color-scheme: light;
+  /* The dark theme's white-alpha thumb is invisible on the slate backdrop. */
+  --scrollbar-thumb: rgba(30, 41, 59, 0.22);
 }
 
 /* Light-mode HUD/panel de-glare in ONE place instead of ~430 call sites:
@@ -90,12 +100,18 @@ body {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  body {
+    transition: none;
+  }
+}
+
 ::-webkit-scrollbar {
   height: 8px;
   width: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--scrollbar-thumb);
   border-radius: 999px;
 }
 
