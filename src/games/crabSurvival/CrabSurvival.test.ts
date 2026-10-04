@@ -771,3 +771,15 @@ describe("WANTED carriers + per-species bounty records", () => {
     expect(legacy.bountyRecord).toBe(false);
   });
 });
+
+describe("evolution reveal", () => {
+  it("a level-up starts the shell-pattern reveal, which runs out on its own", () => {
+    const w = bare();
+    const me = player(w);
+    expect(me.evoT).toBe(0);
+    addScore(w, me, 1_300);
+    expect(me.evoT).toBeGreaterThan(0.5);
+    for (let i = 0; i < 60; i++) step(w, idle, 1 / 60);
+    expect(me.evoT).toBe(0);
+  });
+});

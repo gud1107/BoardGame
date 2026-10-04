@@ -441,6 +441,9 @@ export function tierForLevel(level: number): CrabTier {
   return level >= TIERS[4].level ? 4 : level >= TIERS[3].level ? 3 : level >= TIERS[2].level ? 2 : 1;
 }
 
+/** Seconds the level-up "new shell pattern paints itself on" reveal lasts. */
+export const EVO_REVEAL = 0.9;
+
 export const DASH_SPEED = 720;
 export const DASH_INVULN = 0.35;
 export const BUBBLE_RADIUS = 150; // × scale

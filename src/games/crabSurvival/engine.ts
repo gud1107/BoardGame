@@ -39,6 +39,7 @@ import {
   EPIC_SURVIVE_EVERY,
   EPIC_SURVIVE_PTS,
   EPIC_WANTED,
+  EVO_REVEAL,
   EPIC_HUNT_VISION,
   GIANT_SCALE,
   MAGNET_BASE,
@@ -192,6 +193,8 @@ export interface Crab {
   burnT: number;
   /** Seconds continuously carrying a legendary (grows the bounty, drives 생존 보상). */
   epicT: number;
+  /** Seconds left on the level-up shell-pattern reveal (visual). */
+  evoT: number;
   brain: Brain | null;
 }
 
@@ -720,6 +723,7 @@ function makeCrab(w: World, name: string, color: CrabColor, isPlayer: boolean, s
     trailT: 0,
     burnT: 0,
     epicT: 0,
+    evoT: 0,
     brain: isPlayer
       ? null
       : {
@@ -941,6 +945,7 @@ export function addScore(w: World, c: Crab, pts: number) {
     floatText(w, c.x, c.y - 30 * c.scale, `LEVEL UP! Lv${c.level}`, "#fde047", 22, 1.6);
     burst(w, "star", c.x, c.y, 12, 220, "#fde047", 5, 0.9, 200);
     speciesSurge(w, c);
+    c.evoT = EVO_REVEAL;
     if (c.isPlayer) w.stats.maxLevel = Math.max(w.stats.maxLevel, c.level);
   }
 }
@@ -1104,6 +1109,7 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
   c.surge = Math.max(0, c.surge - dt);
   c.skillCd = Math.max(0, c.skillCd - dt);
   c.dashT = Math.max(0, c.dashT - dt);
+  c.evoT = Math.max(0, c.evoT - dt);
   c.burnT = Math.max(0, c.burnT - dt);
   c.sinceHurt += dt;
   tickMutations(w, c, dt);

@@ -5,7 +5,7 @@
  * crabs walk behind/in front of props correctly.
  */
 
-import { BOXES, CRAB_RADIUS, epicBounty, EPIC_WANTED, FOODS, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
+import { BOXES, CRAB_RADIUS, epicBounty, EPIC_WANTED, EVO_REVEAL, FOODS, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
 import { crabRadius, hasMut, holdsEpic, penaltyLeft, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
 
 export const TILT = 0.72;
@@ -1013,6 +1013,8 @@ function drawCrabWorld(ctx: CanvasRenderingContext2D, c: Crab, t: number, king: 
       king,
       level: c.level,
       t,
+      species: c.species,
+      reveal: c.evoT > 0 ? 1 - c.evoT / EVO_REVEAL : undefined,
     });
     const saw = c.gear.find((g) => g.kind === "saw");
     if (saw) {
@@ -1096,6 +1098,10 @@ export interface CrabPose {
   level?: number;
   /** Seconds, for the Tier 4 shimmer. */
   t?: number;
+  /** Species picks the pattern flavour (band style, centrepiece, species-part trims). */
+  species?: SpeciesId;
+  /** 0..1 progress of the level-up "pattern paints itself on" reveal (undefined = idle). */
+  reveal?: number;
 }
 
 /**
@@ -1279,15 +1285,53 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
     ctx.beginPath();
     ctx.ellipse(3 * big, -2.8 * big, 3 * big, 1.1 * big, -0.25, 0, Math.PI * 2);
     ctx.fill();
+    // 농게: the giant claw carries the trophy trim (stripes → gold band → gem).
+    if (pose.species === "fiddler" && k > 1.3 && !pose.flash) {
+      const lv = pose.level ?? 1;
+      if (lv >= 4) {
+        ctx.strokeStyle = dark;
+        ctx.globalAlpha = 0.55;
+        ctx.lineWidth = 1.4 * big;
+        for (const x of [0.5, 3]) {
+          ctx.beginPath();
+          ctx.moveTo(x * big, -4.6 * big);
+          ctx.quadraticCurveTo((x + 1.6) * big, 0, x * big, 4.6 * big);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
+      if (lv >= 8) {
+        ctx.strokeStyle = "#fbbf24";
+        ctx.lineWidth = 1.3 * big;
+        ctx.beginPath();
+        ctx.moveTo(6 * big, -4.8 * big);
+        ctx.quadraticCurveTo(7.4 * big, 0, 6 * big, 4.8 * big);
+        ctx.stroke();
+      }
+      if (lv >= 11) gem(ctx, 3.4 * big, 0.6 * big, 2.2 * big, pose.t ?? 0);
+    }
     ctx.restore();
-    // 참게: furry "mittens" on the claw base.
+    // 참게: furry "mittens" on the claw base (gold-tipped from Lv8, glowing from Lv11).
     if (pose.build?.fur) {
-      ctx.fillStyle = "rgba(40,30,20,0.75)";
+      const lv = pose.level ?? 1;
       for (let i = 0; i < 7; i++) {
         const fa = (i / 7) * Math.PI * 2;
+        const fx2 = ex + Math.cos(fa) * 4.6, fy2 = ey + Math.sin(fa) * 4.6;
+        ctx.fillStyle = "rgba(40,30,20,0.75)";
         ctx.beginPath();
-        ctx.arc(ex + Math.cos(fa) * 4.6, ey + Math.sin(fa) * 4.6, 2.4, 0, Math.PI * 2);
+        ctx.arc(fx2, fy2, 2.4, 0, Math.PI * 2);
         ctx.fill();
+        if (lv >= 8 && !pose.flash) {
+          ctx.fillStyle = lv >= 11 ? `rgba(134,239,172,${0.7 + 0.3 * Math.sin((pose.t ?? 0) * 4 + i)})` : "#fbbf24";
+          ctx.beginPath();
+          ctx.arc(ex + Math.cos(fa) * 6.4, ey + Math.sin(fa) * 6.4, 0.9, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (lv >= 4 && !pose.flash) {
+          ctx.fillStyle = "rgba(255,255,255,0.45)";
+          ctx.beginPath();
+          ctx.arc(ex + Math.cos(fa) * 6.2, ey + Math.sin(fa) * 6.2, 0.7, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
     // Shield on the left claw.
@@ -1318,6 +1362,28 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
       ctx.lineTo(bx + Math.cos(a - 1.4) * 2.2, by + Math.sin(a - 1.4) * 2.2);
       ctx.fill();
     }
+    // 털게: the bristle tips are where its pattern grows (pale → gold → glowing).
+    const lv = pose.level ?? 1;
+    if (lv >= 4 && !pose.flash) {
+      for (let i = 0; i < 22; i++) {
+        const a = (i / 22) * Math.PI * 2;
+        const x = Math.cos(a) * (R * 0.92 + 5.2), y = Math.sin(a) * (R * 1.1 + 5.2);
+        if (lv >= 8) goldDot(ctx, x, y, lv >= 11 ? 1.5 : 1.2);
+        else {
+          ctx.fillStyle = "rgba(255,255,255,0.75)";
+          ctx.beginPath();
+          ctx.arc(x, y, 1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        if (lv >= 11) {
+          ctx.fillStyle = `rgba(253,224,71,${0.3 + 0.3 * Math.sin((pose.t ?? 0) * 6 + i)})`;
+          ctx.beginPath();
+          ctx.arc(x, y, 2.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+    ctx.fillStyle = dark;
   }
   const shellPath = carapacePath(R);
   // Soft contact shadow under the rim.
@@ -1365,7 +1431,36 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
       ctx.ellipse(px, py, pr * 1.3, pr, 0.4, 0, Math.PI * 2);
       ctx.fill();
     }
-    drawShellOrnament(ctx, R, shellPath, pose.level ?? 1, pose.t ?? 0, col);
+    const lv = pose.level ?? 1;
+    const sp: SpeciesId = pose.species ?? "flower";
+    if (pose.reveal === undefined) drawShellOrnament(ctx, R, shellPath, lv, pose.t ?? 0, col, sp);
+    else {
+      // 진화 연출: the old pattern stays, the new one paints itself on from the front edge backwards.
+      drawShellOrnament(ctx, R, shellPath, lv - 1, pose.t ?? 0, col, sp);
+      const k = easeOut(Math.min(1, pose.reveal));
+      const edge = R * 1.2 - k * R * 2.6;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(edge, -R * 2, R * 3, R * 4);
+      ctx.clip();
+      drawShellOrnament(ctx, R, shellPath, lv, pose.t ?? 0, col, sp);
+      ctx.restore();
+      // The glowing brush stroke at the reveal front.
+      ctx.save();
+      ctx.clip(shellPath);
+      const bg = ctx.createLinearGradient(edge - 5, 0, edge + 4, 0);
+      bg.addColorStop(0, "rgba(255,255,255,0)");
+      bg.addColorStop(0.6, `rgba(255,250,220,${0.85 * (1 - k * 0.6)})`);
+      bg.addColorStop(1, "rgba(253,224,71,0)");
+      ctx.fillStyle = bg;
+      ctx.fillRect(edge - 5, -R * 2, 9, R * 4);
+      ctx.restore();
+      ctx.fillStyle = `rgba(254,240,138,${1 - k})`;
+      for (let i = 0; i < 6; i++) {
+        const y = (i / 5 - 0.5) * R * 2 + Math.sin(i * 7.3 + k * 9) * 3;
+        drawStar(ctx, edge + Math.sin(i * 3.1) * 2, y, 1.6 + (i % 2), k * 6 + i);
+      }
+    }
     // Specular gloss.
     const sg = ctx.createRadialGradient(R * 0.05, -R * 0.42, 0, R * 0.05, -R * 0.42, R * 0.55);
     sg.addColorStop(0, "rgba(255,255,255,0.5)");
@@ -1401,6 +1496,55 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
       else ctx.lineTo(x, y);
     }
     ctx.stroke();
+    // 소라게: its pattern lives on the borrowed shell — bands, then a gilded spiral, then a pearl.
+    const lv = pose.level ?? 1;
+    if (!pose.flash && lv >= 4) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(0, 0, R * 0.95, R * 0.85, 0, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.strokeStyle = col.shell;
+      ctx.globalAlpha = 0.45;
+      ctx.lineWidth = 2.2;
+      for (let i = 0; i < Math.min(4, lv - 2); i++) {
+        const a = -0.9 + i * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a) * R, Math.sin(a) * R);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+    if (!pose.flash && lv >= 8) {
+      ctx.strokeStyle = "#fbbf24";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      for (let i = 0; i <= 40; i++) {
+        const a = i * 0.42;
+        const rr = R * 0.8 * (1 - i / 44);
+        const x = Math.cos(a) * rr, y = Math.sin(a) * rr * 0.9;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    if (!pose.flash && lv >= 11) {
+      const pr = 3.2;
+      const pg = ctx.createRadialGradient(-0.8, -0.8, 0.2, 0, 0, pr);
+      pg.addColorStop(0, "#ffffff");
+      pg.addColorStop(0.6, "#fce7f3");
+      pg.addColorStop(1, "#c4b5fd");
+      ctx.fillStyle = pg;
+      ctx.beginPath();
+      ctx.arc(0, 0, pr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(244,114,182,${0.4 + 0.4 * Math.sin((pose.t ?? 0) * 4)})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, pr + 1.6, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.fillStyle = "rgba(255,255,255,0.35)";
     ctx.beginPath();
     ctx.ellipse(-2, -R * 0.45, R * 0.4, R * 0.14, -0.2, 0, Math.PI * 2);
@@ -1442,24 +1586,74 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
  *   Tier 3 (Lv8-10) gilded spine tips, a gold rosette and gold beads along the front teeth
  *   Tier 4 (Lv11+)  an iridescent shimmer sweeping across the shell, glowing grooves and a centre gem
  */
-function drawShellOrnament(ctx: CanvasRenderingContext2D, R: number, shellPath: Path2D, level: number, t: number, col: CrabColor) {
+function drawShellOrnament(ctx: CanvasRenderingContext2D, R: number, shellPath: Path2D, level: number, t: number, col: CrabColor, species: SpeciesId = "flower") {
   if (level < 4) return;
+  const style = SHELL_STYLE[species];
   ctx.save();
   ctx.clip(shellPath);
-  // Chevron bands across the back.
   const bands = Math.min(4, level - 2);
   ctx.lineCap = "round";
-  for (let i = 0; i < bands; i++) {
-    const x = -R * 0.72 + i * R * 0.19;
-    // A dark band with a pale highlight riding just in front of it — tiger-stripe chevrons.
+  const pair = (draw: () => void) => {
+    // A dark stroke with a pale highlight riding just beside it.
     for (const [dx, w, c] of [[0, 3, col.dark], [2.4, 1.3, "rgba(255,255,255,0.4)"]] as const) {
+      ctx.save();
+      ctx.translate(dx, 0);
       ctx.strokeStyle = c;
       ctx.globalAlpha = dx === 0 ? 0.6 : 1;
       ctx.lineWidth = w;
       ctx.beginPath();
-      ctx.moveTo(x + dx - 3, -R * 0.95);
-      ctx.quadraticCurveTo(x + dx + 6, 0, x + dx - 3, R * 0.95);
+      draw();
       ctx.stroke();
+      ctx.restore();
+    }
+  };
+  if (style.band === "chevron") {
+    // Tiger-stripe chevrons across the back.
+    for (let i = 0; i < bands; i++) {
+      const x = -R * 0.72 + i * R * 0.19;
+      pair(() => {
+        ctx.moveTo(x - 3, -R * 0.95);
+        ctx.quadraticCurveTo(x + 6, 0, x - 3, R * 0.95);
+      });
+    }
+  } else if (style.band === "streak") {
+    // Speed streaks raking back from each flank.
+    for (let i = 0; i < bands; i++) {
+      const x = R * 0.25 - i * R * 0.24;
+      for (const e of [-1, 1]) {
+        pair(() => {
+          ctx.moveTo(x, e * R * 1.05);
+          ctx.lineTo(x - R * 0.42, e * R * 0.3);
+        });
+      }
+    }
+  } else if (style.band === "hex") {
+    // Armour plates: a honeycomb over the back half.
+    const cells: [number, number][] = [[-R * 0.45, 0], [-R * 0.3, -R * 0.4], [-R * 0.3, R * 0.4], [-R * 0.7, -R * 0.22], [-R * 0.7, R * 0.22], [-R * 0.12, 0], [-R * 0.55, -R * 0.62], [-R * 0.55, R * 0.62]];
+    for (const [cx, cy] of cells.slice(0, bands * 2)) {
+      pair(() => {
+        for (let j = 0; j <= 6; j++) {
+          const a = (j / 6) * Math.PI * 2;
+          const x = cx + Math.cos(a) * 3.8, y = cy + Math.sin(a) * 3.8;
+          if (j === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+      });
+    }
+  } else {
+    // Polka dots: pale rings with a dark centre, more each level.
+    const dots: [number, number][] = [[-R * 0.5, -R * 0.3], [-R * 0.5, R * 0.3], [-R * 0.2, -R * 0.75], [-R * 0.2, R * 0.75], [-R * 0.75, 0], [R * 0.1, -R * 0.45], [R * 0.1, R * 0.45], [-R * 0.25, 0]];
+    for (const [dx, dy] of dots.slice(0, bands * 2)) {
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.beginPath();
+      ctx.arc(dx, dy, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = col.dark;
+      ctx.globalAlpha = 0.65;
+      ctx.beginPath();
+      ctx.arc(dx, dy, 1.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
     }
   }
   ctx.globalAlpha = 1;
@@ -1519,16 +1713,7 @@ function drawShellOrnament(ctx: CanvasRenderingContext2D, R: number, shellPath: 
   ctx.restore();
 
   if (level >= 8) {
-    const gold = (x: number, y: number, r: number) => {
-      const gg = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, 0, x, y, r);
-      gg.addColorStop(0, "#fff7cc");
-      gg.addColorStop(0.5, "#fbbf24");
-      gg.addColorStop(1, "#a16207");
-      ctx.fillStyle = gg;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-    };
+    const gold = (x: number, y: number, r: number) => goldDot(ctx, x, y, r);
     // Gilded flank-spine tips.
     for (const e of [-1, 1]) {
       const a = 1.27 * e;
@@ -1539,8 +1724,32 @@ function drawShellOrnament(ctx: CanvasRenderingContext2D, R: number, shellPath: 
       const a = (i / 3) * 0.95;
       gold(Math.cos(a) * R * 0.84 * 0.93, Math.sin(a) * R * 1.1 * 0.93, i === 0 ? 1.5 : 1.15);
     }
-    // Rosette on the back.
+    // Centrepiece on the back — each species has its own emblem.
     const cx = -R * 0.3;
+    if (style.piece === "star") {
+      const sg = ctx.createRadialGradient(cx - 1, -1, 0, cx, 0, 5);
+      sg.addColorStop(0, "#fff7cc");
+      sg.addColorStop(0.6, "#fbbf24");
+      sg.addColorStop(1, "#a16207");
+      ctx.fillStyle = sg;
+      drawStar(ctx, cx, 0, 5, -Math.PI / 2);
+    } else if (style.piece === "rivets") {
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        gold(cx + Math.cos(a) * 5, Math.sin(a) * 5, 1);
+      }
+      gold(cx, 0, 2);
+    } else if (style.piece === "coin") {
+      for (const [dx, dy] of [[-2.5, -2], [2, -1], [-0.5, 2.5]] as const) {
+        gold(cx + dx, dy, 2.7);
+        ctx.strokeStyle = "rgba(120,53,15,0.8)";
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.arc(cx + dx, dy, 1.7, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    if (style.piece !== "rosette") return finishGem();
     ctx.strokeStyle = "rgba(120,53,15,0.7)";
     ctx.lineWidth = 0.8;
     for (let i = 0; i < 6; i++) {
@@ -1561,34 +1770,70 @@ function drawShellOrnament(ctx: CanvasRenderingContext2D, R: number, shellPath: 
     }
     gold(cx, 0, 1.8);
   }
-  if (level >= 11) {
-    // Centre gem.
-    const gx = R * 0.1;
+  finishGem();
+
+  function finishGem() {
+    if (level >= 11) gem(ctx, R * 0.1, 0, 4, t);
+  }
+}
+
+/** Shell pattern flavour per species: Tier 2 band style and Tier 3 centrepiece. */
+const SHELL_STYLE: Record<SpeciesId, { band: "chevron" | "streak" | "hex" | "dots"; piece: "rosette" | "star" | "rivets" | "coin" }> = {
+  flower: { band: "chevron", piece: "rosette" },
+  fiddler: { band: "chevron", piece: "star" },
+  ghost: { band: "streak", piece: "star" },
+  snow: { band: "hex", piece: "rivets" },
+  hermit: { band: "dots", piece: "rosette" },
+  mitten: { band: "dots", piece: "rosette" },
+  hairy: { band: "streak", piece: "rivets" },
+  redsnow: { band: "dots", piece: "coin" },
+};
+
+function goldDot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  const gg = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, 0, x, y, r);
+  gg.addColorStop(0, "#fff7cc");
+  gg.addColorStop(0.5, "#fbbf24");
+  gg.addColorStop(1, "#a16207");
+  ctx.fillStyle = gg;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** A faceted cyan gem with a twinkling catch-light (Tier 4 emblem). */
+function gem(ctx: CanvasRenderingContext2D, gx: number, gy: number, s: number, t: number) {
+  ctx.save();
+  ctx.translate(0, gy);
+  {
+    const k = s / 4;
+    ctx.scale(k, k);
+    const x0 = gx / k;
     ctx.fillStyle = "#0e7490";
     ctx.beginPath();
-    ctx.moveTo(gx + 4, 0);
-    ctx.lineTo(gx, -3);
-    ctx.lineTo(gx - 4, 0);
-    ctx.lineTo(gx, 3);
+    ctx.moveTo(x0 + 4, 0);
+    ctx.lineTo(x0, -3);
+    ctx.lineTo(x0 - 4, 0);
+    ctx.lineTo(x0, 3);
     ctx.closePath();
     ctx.fill();
-    const gg = ctx.createLinearGradient(gx - 4, -3, gx + 4, 3);
+    const gg = ctx.createLinearGradient(x0 - 4, -3, x0 + 4, 3);
     gg.addColorStop(0, "#ecfeff");
     gg.addColorStop(0.5, "#22d3ee");
     gg.addColorStop(1, "#155e75");
     ctx.fillStyle = gg;
     ctx.beginPath();
-    ctx.moveTo(gx + 3, 0);
-    ctx.lineTo(gx, -2.2);
-    ctx.lineTo(gx - 3, 0);
-    ctx.lineTo(gx, 2.2);
+    ctx.moveTo(x0 + 3, 0);
+    ctx.lineTo(x0, -2.2);
+    ctx.lineTo(x0 - 3, 0);
+    ctx.lineTo(x0, 2.2);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = `rgba(255,255,255,${0.6 + 0.4 * Math.sin(t * 5)})`;
     ctx.beginPath();
-    ctx.arc(gx - 0.8, -0.8, 0.8, 0, Math.PI * 2);
+    ctx.arc(x0 - 0.8, -0.8, 0.8, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
 }
 
 /** A tapered limb segment: a quad from width w1 at (x1,y1) to w2 at (x2,y2) with rounded ends. */
@@ -2342,7 +2587,7 @@ export function drawMinimap(ctx: CanvasRenderingContext2D, w: World, size: numbe
 }
 
 /** Standalone preview (menu): one crab, idle-animated, optional gear/crown. */
-export function drawCrabPreview(ctx: CanvasRenderingContext2D, col: CrabColor, W: number, H: number, t: number, opts: { weapon?: WeaponKind | null; shield?: ShieldKind | null; crown?: boolean; species?: SpeciesId; level?: number } = {}) {
+export function drawCrabPreview(ctx: CanvasRenderingContext2D, col: CrabColor, W: number, H: number, t: number, opts: { weapon?: WeaponKind | null; shield?: ShieldKind | null; crown?: boolean; species?: SpeciesId; level?: number; reveal?: number } = {}) {
   ctx.clearRect(0, 0, W, H);
   const s = Math.min(W, H) / 70;
   ctx.save();
@@ -2354,7 +2599,7 @@ export function drawCrabPreview(ctx: CanvasRenderingContext2D, col: CrabColor, W
   ctx.scale(s, s * TILT);
   ctx.rotate(-Math.PI / 2);
   const sp = (t * 0.8) % 2.2;
-  drawCrabBody(ctx, col, { walk: t * 6, swing: sp < 1 ? sp : -1, swingSide: 1, weapon: opts.weapon ?? null, shield: opts.shield ?? null, build: SPECIES[opts.species ?? "flower"].build, level: opts.level, t });
+  drawCrabBody(ctx, col, { walk: t * 6, swing: sp < 1 ? sp : -1, swingSide: 1, weapon: opts.weapon ?? null, shield: opts.shield ?? null, build: SPECIES[opts.species ?? "flower"].build, level: opts.level, t, species: opts.species ?? "flower", reveal: opts.reveal });
   ctx.restore();
   if (opts.crown) drawCrown(ctx, W / 2, H / 2 - 22 * s, 7 * s, t);
 }
