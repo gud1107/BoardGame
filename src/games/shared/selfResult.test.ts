@@ -9,7 +9,7 @@ const rankings = [
 
 describe("selfResult", () => {
   it("finds this device's seat rank", () => {
-    expect(selfResult(0, rankings)).toEqual({ rank: 2, playerCount: 3, botPlayed: false, withBots: false });
+    expect(selfResult(0, rankings)).toEqual({ rank: 2, playerCount: 3, botPlayed: false, withBots: false, botLevel: null });
     expect(selfResult(2, rankings)?.rank).toBe(1);
   });
 
@@ -28,5 +28,11 @@ describe("selfResult", () => {
     expect(selfResult(0, rankings, { takeovers: { "1": {} } })?.withBots).toBe(true);
     // Only my own seat taken over → no bot opponents.
     expect(selfResult(1, rankings, { takeovers: { "1": {} } })?.withBots).toBe(false);
+  });
+
+  it("records the highest lobby-bot level still at the table", () => {
+    expect(selfResult(0, rankings, { botSeats: [2, 1], botLevels: [3, 9] })?.botLevel).toBe(9);
+    expect(selfResult(0, rankings, { botSeats: [2, 7], botLevels: [3, 10] })?.botLevel).toBe(3);
+    expect(selfResult(0, rankings, { takeovers: { "1": {} } })?.botLevel).toBeNull();
   });
 });

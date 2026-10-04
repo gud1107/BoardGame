@@ -2,6 +2,7 @@
 
 import { getAuthSupabase } from "@/lib/supabase/authClient";
 import type { RankMetric } from "./presentation";
+import type { StatsBotFilter } from "./botFilter";
 
 export type LeaderboardSort = "wins" | "rate";
 
@@ -39,6 +40,13 @@ export type LeaderboardResult<T> = T[] | "not-installed" | null;
 /** Minimum games for the win-rate leaderboard — keep in sync with the "10판↑" label on /stats. */
 export const RATE_MIN_PLAYED = 10;
 
+function filterArgs(f: StatsBotFilter) {
+  return {
+    ...(f.includeBots ? {} : { p_include_bots: false }),
+    ...(f.includeBots && f.botLevel !== null ? { p_bot_level: f.botLevel } : {}),
+  };
+}
+
 function classify(error: { code?: string } | null): "not-installed" | null {
   return error?.code === "PGRST202" ? "not-installed" : null;
 }
@@ -46,12 +54,12 @@ function classify(error: { code?: string } | null): "not-installed" | null {
 /**
  * Public leaderboard via the `public_leaderboard` RPC (supabase/player_stats.sql).
  * Uses the auth-aware client so the caller's own row comes back flagged `isMe`.
- * `includeBots = false` ranks only matches that had no bot at the table.
+ * `filter` narrows it to bot-free matches or one bot level (see botFilter.ts).
  */
 export async function fetchLeaderboard(
   gameId: string | null,
   sort: LeaderboardSort,
-  includeBots = true,
+  filter: StatsBotFilter = { includeBots: true, botLevel: null },
   limit = 50,
 ): Promise<LeaderboardResult<LeaderboardRow>> {
   const supabase = getAuthSupabase();
@@ -63,7 +71,7 @@ export async function fetchLeaderboard(
     p_limit: limit,
     // Sent only when filtering, so the default view also works against a
     // project still on the pre-bot-filter SQL.
-    ...(includeBots ? {} : { p_include_bots: false }),
+    ...filterArgs(filter),
   });
   if (error || !Array.isArray(data)) return classify(error);
   return data.map((r) => ({
@@ -84,7 +92,7 @@ export async function fetchLeaderboard(
 export async function fetchMetricLeaderboard(
   gameId: string,
   metric: RankMetric,
-  includeBots = true,
+  filter: StatsBotFilter = { includeBots: true, botLevel: null },
   limit = 50,
 ): Promise<LeaderboardResult<MetricLeaderboardRow>> {
   const supabase = getAuthSupabase();
@@ -98,7 +106,7 @@ export async function fetchMetricLeaderboard(
     p_limit: limit,
     // Sent only when filtering, so the default view also works against a
     // project still on the pre-bot-filter SQL.
-    ...(includeBots ? {} : { p_include_bots: false }),
+    ...filterArgs(filter),
   });
   if (error || !Array.isArray(data)) return classify(error);
   return data.map((r) => ({

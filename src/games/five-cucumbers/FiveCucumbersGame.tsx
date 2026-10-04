@@ -802,7 +802,7 @@ export default function FiveCucumbersGame({ onComplete }: PlayableGameProps) {
     const winners = rankings.filter((r) => r.rank === 1);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats }, (seat) => fiveCucumbersStatDetails(gameState, seat)),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat) => fiveCucumbersStatDetails(gameState, seat)),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerName: names[winners[0].seat], tied: winners.length > 1 });

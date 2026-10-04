@@ -899,7 +899,7 @@ export default function DalmutiGame({ onComplete }: PlayableGameProps) {
     const winner = rankings.find((r) => r.rank === 1)!;
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats }, (seat, rank) => dalmutiStatDetails(gameState, seat, rank)),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat, rank) => dalmutiStatDetails(gameState, seat, rank)),
       finishedAt: new Date().toISOString(),
     });
     if (roomBettingRef.current.active) {

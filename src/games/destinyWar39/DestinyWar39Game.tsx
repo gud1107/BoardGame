@@ -925,7 +925,7 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
     }
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats }),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }),
       finishedAt: new Date().toISOString(),
     });
     const winnerNames = rankings.filter((r) => r.rank === 1).map((r) => names[r.seat]);

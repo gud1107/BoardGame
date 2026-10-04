@@ -220,7 +220,7 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
       const rankings = computeRankings(next);
       onCompleteRef.current({
         rankings: rankings.map((r) => ({ playerId: idsRef.current[r.seat] ?? `seat-${r.seat}`, rank: r.rank })),
-        self: selfResult(mySeatRef.current, rankings, { takeovers: botTakeoverRef.current.takeovers, botSeats: botSeatsRef.current }, (seat) => doodlePhoneStatDetails(next, seat)),
+        self: selfResult(mySeatRef.current, rankings, { takeovers: botTakeoverRef.current.takeovers, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current }, (seat) => doodlePhoneStatDetails(next, seat)),
         finishedAt: new Date().toISOString(),
       });
     }

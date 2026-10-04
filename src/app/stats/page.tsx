@@ -7,6 +7,7 @@ import type { StatTotalsRecord } from "@/lib/db/types";
 import { STAT_DETAIL_ROWS } from "@/lib/stats/details";
 import { fetchLeaderboard, fetchMetricLeaderboard, type LeaderboardSort } from "@/lib/stats/leaderboard";
 import { formatRankMetric, STAT_RANK_METRICS } from "@/lib/stats/presentation";
+import { BOT_FILTER_SINCE, isDefaultBotFilter, pickSlice, useStatsBotFilter, type StatsBotFilter } from "@/lib/stats/botFilter";
 import { countPendingStats, listPlayerStats, STATS_CHANGED_EVENT, syncPlayerStats } from "@/lib/stats/playerStats";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
 import { useProfileStore } from "@/store/profileStore";
@@ -18,6 +19,7 @@ export default function StatsPage() {
   const userId = useSubscriptionStore((s) => s.userId);
   const hydrated = useSubscriptionStore((s) => s.hydrated);
   const [tab, setTab] = useState<Tab>("mine");
+  const [botFilter, setBotFilter] = useStatsBotFilter();
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
@@ -46,7 +48,9 @@ export default function StatsPage() {
         ))}
       </div>
 
-      {tab === "mine" ? <MyStats loggedIn={!!userId} /> : <Ranking loggedIn={!!userId} />}
+      <BotFilterBar filter={botFilter} onChange={setBotFilter} />
+
+      {tab === "mine" ? <MyStats loggedIn={!!userId} filter={botFilter} /> : <Ranking loggedIn={!!userId} filter={botFilter} />}
     </div>
   );
 }
@@ -77,7 +81,7 @@ function GuestWarning() {
   );
 }
 
-function MyStats({ loggedIn }: { loggedIn: boolean }) {
+function MyStats({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilter }) {
   const [stats, setStats] = useState<StatTotalsRecord[] | null>(null);
   const [pending, setPending] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
@@ -96,8 +100,11 @@ function MyStats({ loggedIn }: { loggedIn: boolean }) {
     return () => window.removeEventListener(STATS_CHANGED_EVENT, load);
   }, [load]);
 
-  const total = (stats ?? []).reduce(
-    (acc, s) => ({ played: acc.played + s.played, wins: acc.wins + s.wins }),
+  const shown = (stats ?? [])
+    .map((t) => ({ gameId: t.gameId, s: pickSlice(t, filter) }))
+    .filter((x): x is { gameId: string; s: NonNullable<typeof x.s> } => x.s !== null);
+  const total = shown.reduce(
+    (acc, { s }) => ({ played: acc.played + s.played, wins: acc.wins + s.wins }),
     { played: 0, wins: 0 },
   );
 
@@ -116,9 +123,11 @@ function MyStats({ loggedIn }: { loggedIn: boolean }) {
 
       {stats === null ? (
         <p className="text-sm text-white/40 light:text-slate-400">불러오는 중...</p>
-      ) : stats.length === 0 ? (
+      ) : shown.length === 0 ? (
         <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
-          아직 기록된 게임이 없어요. 온라인 방에서 한 판 끝내면 여기에 쌓입니다.
+          {stats.length === 0
+            ? "아직 기록된 게임이 없어요. 온라인 방에서 한 판 끝내면 여기에 쌓입니다."
+            : `이 조건에 맞는 기록이 아직 없어요. (봇 필터는 ${BOT_FILTER_SINCE} 이후 판부터 집계돼요)`}
         </p>
       ) : (
         <>
@@ -140,20 +149,20 @@ function MyStats({ loggedIn }: { loggedIn: boolean }) {
                 </tr>
               </thead>
               <tbody>
-                {stats.map((s) => {
-                  const meta = getGameMeta(s.gameId);
-                  const rows = STAT_DETAIL_ROWS[s.gameId];
+                {shown.map(({ gameId, s }) => {
+                  const meta = getGameMeta(gameId);
+                  const rows = STAT_DETAIL_ROWS[gameId];
                   const expandable = !!rows && !!s.details && Object.keys(s.details).length > 0;
-                  const isOpen = open === s.gameId;
+                  const isOpen = open === gameId;
                   return (
-                    <Fragment key={s.gameId}>
+                    <Fragment key={gameId}>
                       <tr
                         className={`border-t border-white/5 light:border-slate-100 ${expandable ? "cursor-pointer hover:bg-white/[0.04] light:hover:bg-slate-50" : ""}`}
-                        onClick={expandable ? () => setOpen(isOpen ? null : s.gameId) : undefined}
+                        onClick={expandable ? () => setOpen(isOpen ? null : gameId) : undefined}
                       >
                         <td className="px-3 py-2 text-white/85 light:text-slate-800">
                           <span className="mr-1.5">{meta?.thumbnail.emoji ?? "🎲"}</span>
-                          {meta?.name ?? s.gameId}
+                          {meta?.name ?? gameId}
                           {expandable && <span className="ml-1.5 text-xs text-rose-300">{isOpen ? "▲" : "세부 ▼"}</span>}
                         </td>
                         <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.played}</td>
@@ -204,15 +213,14 @@ interface BoardRow {
   right: ReactNode;
 }
 
-function Ranking({ loggedIn }: { loggedIn: boolean }) {
+function Ranking({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilter }) {
   const [gameId, setGameId] = useState<string>("");
   // "wins" | "rate" | a STAT_RANK_METRICS id for the selected game.
   const [sort, setSort] = useState<string>("wins");
   const metrics = gameId ? (STAT_RANK_METRICS[gameId] ?? []) : [];
   const metric = metrics.find((m) => m.id === sort) ?? null;
   const effectiveSort = metric ? metric.id : sort === "rate" ? "rate" : "wins";
-  const [includeBots, setIncludeBots] = useState(true);
-  const key = `${gameId}|${effectiveSort}|${includeBots ? "bots" : "nobots"}`;
+  const key = `${gameId}|${effectiveSort}|${filter.includeBots ? "bots" : "nobots"}|${filter.botLevel ?? "all"}`;
   // Result tagged with the query it answers, so switching game/sort shows
   // "loading" without resetting state inside the effect.
   const [result, setResult] = useState<{ key: string; rows: BoardRow[] | "not-installed" | null } | null>(null);
@@ -222,14 +230,14 @@ function Ranking({ loggedIn }: { loggedIn: boolean }) {
     let cancelled = false;
     const load = async (): Promise<BoardRow[] | "not-installed" | null> => {
       if (metric) {
-        const r = await fetchMetricLeaderboard(gameId, metric, includeBots);
+        const r = await fetchMetricLeaderboard(gameId, metric, filter);
         if (!Array.isArray(r)) return r;
         return r.map((x) => ({
           ...x,
           right: <b className="text-sm text-white light:text-slate-900">{formatRankMetric(metric, x.value, x.num, x.den)}</b>,
         }));
       }
-      const r = await fetchLeaderboard(gameId || null, effectiveSort as LeaderboardSort, includeBots);
+      const r = await fetchLeaderboard(gameId || null, effectiveSort as LeaderboardSort, filter);
       if (!Array.isArray(r)) return r;
       return r.map((x) => ({
         ...x,
@@ -247,7 +255,7 @@ function Ranking({ loggedIn }: { loggedIn: boolean }) {
     return () => {
       cancelled = true;
     };
-    // `metric` / `includeBots` are derived from or part of `key`.
+    // `metric` / `filter` are derived from or part of `key`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
@@ -290,33 +298,12 @@ function Ranking({ loggedIn }: { loggedIn: boolean }) {
         </div>
       )}
 
-      <button
-        type="button"
-        role="switch"
-        aria-checked={includeBots}
-        onClick={() => setIncludeBots((v) => !v)}
-        className="mb-3 flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left light:border-slate-200 light:bg-white"
-      >
-        <span className="min-w-0 text-sm text-white/80 light:text-slate-700">
-          🤖 봇과 한 판 포함
-          <span className="ml-1.5 text-xs text-white/40 light:text-slate-400">
-            {includeBots ? "봇이 한 명이라도 있던 판까지 모두 집계" : "사람끼리만 한 판으로 집계"}
-          </span>
-        </span>
-        <span
-          aria-hidden
-          className={`relative h-5 w-9 shrink-0 rounded-full transition ${includeBots ? "bg-rose-500" : "bg-white/20 light:bg-slate-300"}`}
-        >
-          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${includeBots ? "left-[18px]" : "left-0.5"}`} />
-        </span>
-      </button>
-
       {loggedIn && <MyRankingName />}
 
       <p className="mb-3 text-xs text-white/40 light:text-slate-400">
         로그인한 회원의 기록만 올라가요. 결과는 각 플레이어 기기에서 계산되므로 참고용 랭킹입니다.
         {metric?.minDen && metric.minDen > 1 && ` 이 순위는 ${metric.den === "played" ? `${metric.minDen}판` : `${metric.minDen}번`} 이상 기록한 회원만 들어가요.`}
-        {!includeBots && " 봇 제외 집계는 2026-10-04 이후 기록부터 반영돼요."}
+        {!isDefaultBotFilter(filter) && ` 봇 필터는 ${BOT_FILTER_SINCE} 이후 판부터 집계돼요.`}
         {!loggedIn && " 내 기록을 올리려면 로그인하세요."}
       </p>
 
@@ -375,6 +362,50 @@ function Ranking({ loggedIn }: { loggedIn: boolean }) {
         </ol>
       )}
     </>
+  );
+}
+
+const BOT_LEVEL_OPTIONS = Array.from({ length: 10 }, (_, i) => i + 1);
+
+function BotFilterBar({ filter, onChange }: { filter: StatsBotFilter; onChange: (next: StatsBotFilter) => void }) {
+  const { includeBots, botLevel } = filter;
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 light:border-slate-200 light:bg-white">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={includeBots}
+        onClick={() => onChange({ includeBots: !includeBots, botLevel })}
+        className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+      >
+        <span className="min-w-0 text-sm text-white/80 light:text-slate-700">
+          🤖 봇과 한 판 포함
+          <span className="ml-1.5 text-xs text-white/40 light:text-slate-400">
+            {!includeBots ? "사람끼리만 한 판" : botLevel === null ? "봇 있던 판까지 모두" : `가장 강한 봇이 Lv.${botLevel}였던 판만`}
+          </span>
+        </span>
+        <span
+          aria-hidden
+          className={`relative h-5 w-9 shrink-0 rounded-full transition ${includeBots ? "bg-rose-500" : "bg-white/20 light:bg-slate-300"}`}
+        >
+          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${includeBots ? "left-[18px]" : "left-0.5"}`} />
+        </span>
+      </button>
+      <select
+        aria-label="봇 레벨"
+        value={botLevel ?? ""}
+        disabled={!includeBots}
+        onChange={(e) => onChange({ includeBots, botLevel: e.target.value ? Number(e.target.value) : null })}
+        className="rounded-lg border border-white/15 bg-zinc-900 px-2 py-1 text-xs text-white disabled:opacity-40 light:border-slate-300 light:bg-white light:text-slate-900"
+      >
+        <option value="">봇 레벨 전체</option>
+        {BOT_LEVEL_OPTIONS.map((lv) => (
+          <option key={lv} value={lv}>
+            Lv.{lv} 봇
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 

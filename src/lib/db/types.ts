@@ -116,8 +116,7 @@ export interface GameResultRecord {
  * a cache of the server row (`player_game_stats`) plus any matches still in
  * `PendingMatchStat`; for a guest it is the only copy. See `src/lib/stats/`.
  */
-export interface StatTotalsRecord {
-  gameId: string;
+export interface StatSlice {
   played: number;
   wins: number;
   losses: number;
@@ -125,7 +124,15 @@ export interface StatTotalsRecord {
   bestRank: number | null;
   /** Game-specific totals — merge rule in src/lib/stats/details.ts. Absent on rows from before details existed. */
   details?: Record<string, number>;
+}
+
+export interface StatTotalsRecord extends StatSlice {
+  gameId: string;
   updatedAt: string;
+  /** Same totals over matches with no bot at the table (from 2026-10-04; absent before). */
+  noBot?: StatSlice;
+  /** Matches keyed by the highest lobby-bot level at the table ("1".."10"; from 2026-10-04). */
+  byBotLevel?: Record<string, StatSlice>;
 }
 
 /**
@@ -144,6 +151,8 @@ export interface PendingMatchStat {
   details?: Record<string, number>;
   /** A bot sat at the table (absent on matches queued before this flag existed). */
   withBots?: boolean;
+  /** Highest lobby-bot level at the table, null = none (absent on older queued matches). */
+  botLevel?: number | null;
   /** Account that was logged in when it was played; null = guest (goes to whoever logs in next). */
   userId: string | null;
 }

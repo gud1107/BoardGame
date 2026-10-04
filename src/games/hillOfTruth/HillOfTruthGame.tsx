@@ -624,7 +624,7 @@ export default function HillOfTruthGame({ onComplete }: PlayableGameProps) {
   function handleGameEnd() {
     if (!gameState || gameState.phase !== "ended") return;
     const rankings = computeRankings(gameState);
-    onComplete({ rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })), self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats }), finishedAt: new Date().toISOString() });
+    onComplete({ rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })), self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }), finishedAt: new Date().toISOString() });
     setFinalResult({ winnerSeat: gameState.winnerSeat });
     setPhase("post-game");
   }

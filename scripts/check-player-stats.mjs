@@ -61,15 +61,18 @@ const line = (good, label, detail = "") => {
 
 console.log(`Supabase: ${url}\n`);
 
-const lb = await rpc("public_leaderboard", { p_game_id: null, p_sort: "wins", p_min_played: 10, p_limit: 5, p_include_bots: false });
+const lb = await rpc("public_leaderboard", { p_game_id: null, p_sort: "wins", p_min_played: 10, p_limit: 5, p_include_bots: true, p_bot_level: 10 });
 line(!missing(lb) && lb.status === 200, "public_leaderboard", missing(lb) ? "없음/구버전 — 최신 player_stats.sql 미적용" : `${Array.isArray(lb.json) ? lb.json.length : "?"}행`);
 
-const mlb = await rpc("public_metric_leaderboard", { p_game_id: "perudo", p_num: "dudoCorrect", p_den: "dudoCalls", p_asc: false, p_min_den: 1, p_limit: 5, p_include_bots: false });
+const mlb = await rpc("public_metric_leaderboard", { p_game_id: "perudo", p_num: "dudoCorrect", p_den: "dudoCalls", p_asc: false, p_min_den: 1, p_limit: 5, p_include_bots: true, p_bot_level: 10 });
 line(!missing(mlb) && mlb.status === 200, "public_metric_leaderboard", missing(mlb) ? "없음 — 최신 player_stats.sql 미적용" : "");
 
 // anon may not execute these; "permission denied" (42501) proves they exist.
-const rec = await rpc("record_match_stats", { p_match_id: "x", p_game_id: "x", p_won: true, p_rank: 1, p_player_count: 1, p_played_at: new Date().toISOString(), p_details: {}, p_with_bots: false });
-line(!missing(rec), "record_match_stats (8인자, 봇 필터)", missing(rec) ? "없음/구버전 — player_stats.sql 재실행 필요" : "존재");
+const rec = await rpc("record_match_stats", { p_match_id: "x", p_game_id: "x", p_won: true, p_rank: 1, p_player_count: 1, p_played_at: new Date().toISOString(), p_details: {}, p_with_bots: true, p_bot_level: 5 });
+line(!missing(rec), "record_match_stats (9인자, 봇 필터·레벨)", missing(rec) ? "없음/구버전 — player_stats.sql 재실행 필요" : "존재");
+
+const mine = await rpc("my_bot_level_stats", {});
+line(!missing(mine), "my_bot_level_stats", missing(mine) ? "없음 — 최신 player_stats.sql 미적용" : "존재");
 
 const name = await rpc("set_my_public_name", { p_name: null });
 line(!missing(name), "set_my_public_name", missing(name) ? "없음 — 최신 player_stats.sql 미적용" : "존재");

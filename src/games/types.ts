@@ -63,6 +63,8 @@ export interface GameSelfResult {
   botPlayed: boolean;
   /** Another seat was a lobby bot or a takeover bot — the public ranking can filter these games out. */
   withBots: boolean;
+  /** Highest lobby-bot level (1..10) at the table; null when there was none. */
+  botLevel: number | null;
   /** Game-specific numbers; `max*` keys keep the best, others are summed (src/lib/stats/details.ts). */
   details?: Record<string, number>;
 }

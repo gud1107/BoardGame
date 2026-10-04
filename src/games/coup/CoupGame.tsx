@@ -785,7 +785,7 @@ export default function CoupGame({ onComplete }: PlayableGameProps) {
     const rankings = computeRankings(gameState);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats }),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerName: gameState.winnerSeat !== null ? (names[gameState.winnerSeat] ?? "상대") : "?" });

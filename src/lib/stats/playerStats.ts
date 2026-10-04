@@ -1,7 +1,7 @@
 "use client";
 
 import { getDb } from "@/lib/db/client";
-import type { PendingMatchStat, StatTotalsRecord } from "@/lib/db/types";
+import type { PendingMatchStat, StatSlice, StatTotalsRecord } from "@/lib/db/types";
 import { getAuthSupabase } from "@/lib/supabase/authClient";
 import type { GameSelfResult } from "@/games/types";
 import { mergeStatDetails } from "./details";
@@ -17,6 +17,8 @@ import { mergeStatDetails } from "./details";
  *   login — that *is* the guest → account merge.
  * - Only per-match deltas ever reach the server, never totals, which is
  *   what makes re-login and multi-device play safe.
+ * - Each total also carries `noBot` (matches without bots) and `byBotLevel`
+ *   (keyed by the highest lobby-bot level at the table) for the /stats filter.
  *
  * Design review: docs/player-stats-hybrid-sync-spec.md.
  */
@@ -25,6 +27,31 @@ export const STATS_CHANGED_EVENT = "player-stats-changed";
 
 function emptyTotals(gameId: string): StatTotalsRecord {
   return { gameId, played: 0, wins: 0, losses: 0, bestRank: null, updatedAt: new Date().toISOString() };
+}
+
+const EMPTY_SLICE: StatSlice = { played: 0, wins: 0, losses: 0, bestRank: null };
+
+type MatchFacts = Pick<PendingMatchStat, "won" | "rank" | "details" | "withBots" | "botLevel">;
+
+function addToSlice(s: StatSlice, m: MatchFacts): StatSlice {
+  return {
+    played: s.played + 1,
+    wins: s.wins + (m.won ? 1 : 0),
+    losses: s.losses + (m.won ? 0 : 1),
+    bestRank: s.bestRank === null ? m.rank : Math.min(s.bestRank, m.rank),
+    details: mergeStatDetails(s.details, m.details),
+  };
+}
+
+/** Adds one match to every slice it belongs to. `withBots` absent = unknown → not in `noBot`. */
+function applyMatch(t: StatTotalsRecord, m: MatchFacts): StatTotalsRecord {
+  const out: StatTotalsRecord = { ...t, ...addToSlice(t, m) };
+  if (m.withBots === false) out.noBot = addToSlice(t.noBot ?? EMPTY_SLICE, m);
+  if (typeof m.botLevel === "number") {
+    const key = String(m.botLevel);
+    out.byBotLevel = { ...t.byBotLevel, [key]: addToSlice(t.byBotLevel?.[key] ?? EMPTY_SLICE, m) };
+  }
+  return out;
 }
 
 function newMatchId(): string {
@@ -57,30 +84,22 @@ export async function recordMatchStat(gameId: string, self: GameSelfResult, play
   let updated: StatTotalsRecord;
   try {
     const userId = await currentUserId();
-    const won = self.rank === 1;
     const pending: PendingMatchStat = {
       matchId: newMatchId(),
       gameId,
-      won,
+      won: self.rank === 1,
       rank: self.rank,
       playerCount: self.playerCount,
       playedAt,
       details: self.details,
       withBots: self.withBots,
+      botLevel: self.botLevel,
       userId,
     };
     const db = await getDb();
     const tx = db.transaction(["statTotals", "statPending"], "readwrite");
     const totals = (await tx.objectStore("statTotals").get(gameId)) ?? emptyTotals(gameId);
-    updated = {
-      ...totals,
-      played: totals.played + 1,
-      wins: totals.wins + (won ? 1 : 0),
-      losses: totals.losses + (won ? 0 : 1),
-      bestRank: totals.bestRank === null ? self.rank : Math.min(totals.bestRank, self.rank),
-      details: mergeStatDetails(totals.details, self.details),
-      updatedAt: new Date().toISOString(),
-    };
+    updated = { ...applyMatch(totals, pending), updatedAt: new Date().toISOString() };
     await tx.objectStore("statTotals").put(updated);
     await tx.objectStore("statPending").put(pending);
     await tx.done;
@@ -109,6 +128,19 @@ export function syncPlayerStats(): Promise<void> {
   return syncInFlight;
 }
 
+interface SliceRow {
+  game_id: string;
+  played: number;
+  wins: number;
+  losses: number;
+  best_rank: number | null;
+  details?: Record<string, number> | null;
+}
+
+function toSlice(row: SliceRow): StatSlice {
+  return { played: row.played, wins: row.wins, losses: row.losses, bestRank: row.best_rank, details: row.details ?? {} };
+}
+
 async function runSync(): Promise<void> {
   const supabase = getAuthSupabase();
   const userId = await currentUserId();
@@ -131,6 +163,7 @@ async function runSync(): Promise<void> {
         p_details: p.details ?? {},
         // Queued before this flag existed → unknown, so keep it out of the no-bots board.
         p_with_bots: p.withBots ?? true,
+        p_bot_level: p.botLevel ?? null,
       });
       if (error) {
         // Table/function not installed yet, offline, rate limit… keep the
@@ -143,40 +176,45 @@ async function runSync(): Promise<void> {
     }
     if (uploadFailed) return;
 
-    const { data, error } = await supabase
-      .from("player_game_stats")
-      .select("game_id, played, wins, losses, best_rank, details, updated_at")
-      .eq("user_id", userId);
-    if (error || !data) return;
+    const [all, noBot, byLevel] = await Promise.all([
+      supabase.from("player_game_stats").select("game_id, played, wins, losses, best_rank, details, updated_at").eq("user_id", userId),
+      supabase.from("player_game_stats_nobot").select("game_id, played, wins, losses, best_rank, details").eq("user_id", userId),
+      supabase.rpc("my_bot_level_stats"),
+    ]);
+    if (all.error || !all.data) return;
 
-    // Server is now the source of truth for this account. Re-add anything
-    // still queued (e.g. another account's matches) so they stay visible.
-    const stillPending = await db.getAll("statPending");
-    const tx = db.transaction("statTotals", "readwrite");
-    await tx.store.clear();
+    // Server is now the source of truth for this account. If the filter
+    // tables aren't readable (older SQL), keep this device's slices instead.
+    const previous = new Map((await db.getAll("statTotals")).map((t) => [t.gameId, t]));
     const byGame = new Map<string, StatTotalsRecord>();
-    for (const row of data) {
+    for (const row of all.data) {
       byGame.set(row.game_id, {
         gameId: row.game_id,
-        played: row.played,
-        wins: row.wins,
-        losses: row.losses,
-        bestRank: row.best_rank,
-        details: row.details ?? {},
+        ...toSlice(row),
         updatedAt: row.updated_at,
+        ...(noBot.error || byLevel.error
+          ? { noBot: previous.get(row.game_id)?.noBot, byBotLevel: previous.get(row.game_id)?.byBotLevel }
+          : {}),
       });
     }
-    for (const p of stillPending) {
-      const t = byGame.get(p.gameId) ?? emptyTotals(p.gameId);
-      byGame.set(p.gameId, {
-        ...t,
-        played: t.played + 1,
-        wins: t.wins + (p.won ? 1 : 0),
-        losses: t.losses + (p.won ? 0 : 1),
-        bestRank: t.bestRank === null ? p.rank : Math.min(t.bestRank, p.rank),
-        details: mergeStatDetails(t.details, p.details),
-      });
+    if (!noBot.error && noBot.data) {
+      for (const row of noBot.data as SliceRow[]) {
+        const t = byGame.get(row.game_id);
+        if (t) t.noBot = toSlice(row);
+      }
     }
+    if (!byLevel.error && Array.isArray(byLevel.data)) {
+      for (const row of byLevel.data as (SliceRow & { bot_level: number })[]) {
+        const t = byGame.get(row.game_id);
+        if (t) t.byBotLevel = { ...t.byBotLevel, [String(row.bot_level)]: toSlice(row) };
+      }
+    }
+    // Re-add anything still queued (e.g. another account's matches) so they stay visible.
+    for (const p of await db.getAll("statPending")) {
+      byGame.set(p.gameId, applyMatch(byGame.get(p.gameId) ?? emptyTotals(p.gameId), p));
+    }
+    const tx = db.transaction("statTotals", "readwrite");
+    await tx.store.clear();
     for (const t of byGame.values()) await tx.store.put(t);
     await tx.done;
     notifyChanged();
@@ -214,15 +252,7 @@ export async function resetLocalStatsToGuest(): Promise<void> {
     const guestPending = (await db.getAll("statPending")).filter((p) => p.userId === null);
     const byGame = new Map<string, StatTotalsRecord>();
     for (const p of guestPending) {
-      const t = byGame.get(p.gameId) ?? emptyTotals(p.gameId);
-      byGame.set(p.gameId, {
-        ...t,
-        played: t.played + 1,
-        wins: t.wins + (p.won ? 1 : 0),
-        losses: t.losses + (p.won ? 0 : 1),
-        bestRank: t.bestRank === null ? p.rank : Math.min(t.bestRank, p.rank),
-        details: mergeStatDetails(t.details, p.details),
-      });
+      byGame.set(p.gameId, applyMatch(byGame.get(p.gameId) ?? emptyTotals(p.gameId), p));
     }
     const tx = db.transaction("statTotals", "readwrite");
     await tx.store.clear();

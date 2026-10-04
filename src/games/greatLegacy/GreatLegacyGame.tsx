@@ -493,7 +493,7 @@ export default function GreatLegacyGame({ onComplete }: PlayableGameProps) {
     const winners = rankings.filter((r) => r.rank === 1);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { botSeats }, (seat) => greatLegacyStatDetails(gameState, seat)),
+      self: selfResult(mySeat, rankings, { botSeats, botLevels }, (seat) => greatLegacyStatDetails(gameState, seat)),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerName: names[winners[0].seat], tied: winners.length > 1 });

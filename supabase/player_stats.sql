@@ -55,6 +55,11 @@ alter table player_match_log add column if not exists details jsonb not null def
 -- keeps every match; player_game_stats_nobot the same totals over matches
 -- with no bots only, so the public ranking can switch between the two.
 alter table player_match_log add column if not exists with_bots boolean;
+-- Highest lobby-bot level (1..10) at the table; null = none or unknown.
+-- Per-level views aggregate player_match_log directly (no totals table).
+alter table player_match_log add column if not exists bot_level smallint;
+create index if not exists player_match_log_bot_level
+  on player_match_log (bot_level, game_id) where bot_level is not null;
 create table if not exists player_game_stats_nobot (
   user_id uuid not null references auth.users(id) on delete cascade,
   game_id text not null,
@@ -156,11 +161,19 @@ returns jsonb as $$
   ), '{}'::jsonb);
 $$ language sql immutable set search_path = public;
 
--- Earlier versions (6 args = pre-details, 7 args = pre-bot-filter), if an
--- earlier copy of this file ran. Clients that still send 7 args land on the
--- new version with p_with_bots = true (unknown → kept off the no-bots board).
+-- merge_stat_details as an aggregate, for totals built from player_match_log.
+create or replace aggregate stat_details_agg(jsonb) (
+  sfunc = merge_stat_details,
+  stype = jsonb,
+  initcond = '{}'
+);
+
+-- Earlier versions (6 args = pre-details, 7 = pre-bot-filter, 8 = pre-bot-level),
+-- if an earlier copy of this file ran. Clients that send fewer args land on
+-- the new version's defaults (with bots = unknown → off the no-bots board).
 drop function if exists record_match_stats(text, text, boolean, integer, integer, timestamptz);
 drop function if exists record_match_stats(text, text, boolean, integer, integer, timestamptz, jsonb);
+drop function if exists record_match_stats(text, text, boolean, integer, integer, timestamptz, jsonb, boolean);
 
 -- Returns true when the match was counted, false when it was already counted.
 create or replace function record_match_stats(
@@ -171,7 +184,8 @@ create or replace function record_match_stats(
   p_player_count integer,
   p_played_at timestamptz,
   p_details jsonb default '{}'::jsonb,
-  p_with_bots boolean default true
+  p_with_bots boolean default true,
+  p_bot_level integer default null
 ) returns boolean as $$
 declare
   v_uid uuid := auth.uid();
@@ -194,6 +208,9 @@ begin
   if p_won is distinct from (p_rank = 1) then
     raise exception 'won must match rank 1';
   end if;
+  if p_bot_level is not null and (p_bot_level not between 1 and 10 or p_with_bots is distinct from true) then
+    raise exception 'bad bot level';
+  end if;
   -- Guest matches can be old (they wait for the first login), but not from the future.
   if p_played_at is null or p_played_at > now() + interval '10 minutes'
      or p_played_at < now() - interval '400 days' then
@@ -214,8 +231,8 @@ begin
     raise exception 'rate limited';
   end if;
 
-  insert into player_match_log (user_id, match_id, game_id, won, rank, player_count, played_at, details, with_bots)
-  values (v_uid, p_match_id, p_game_id, p_won, p_rank, p_player_count, p_played_at, v_details, coalesce(p_with_bots, true))
+  insert into player_match_log (user_id, match_id, game_id, won, rank, player_count, played_at, details, with_bots, bot_level)
+  values (v_uid, p_match_id, p_game_id, p_won, p_rank, p_player_count, p_played_at, v_details, coalesce(p_with_bots, true), p_bot_level)
   on conflict (user_id, match_id) do nothing;
   get diagnostics v_inserted = row_count;
   if v_inserted = 0 then
@@ -247,22 +264,60 @@ begin
 end;
 $$ language plpgsql security definer set search_path = public;
 
-revoke all on function record_match_stats(text, text, boolean, integer, integer, timestamptz, jsonb, boolean) from public, anon;
-grant execute on function record_match_stats(text, text, boolean, integer, integer, timestamptz, jsonb, boolean) to authenticated;
+revoke all on function record_match_stats(text, text, boolean, integer, integer, timestamptz, jsonb, boolean, integer) from public, anon;
+grant execute on function record_match_stats(text, text, boolean, integer, integer, timestamptz, jsonb, boolean, integer) to authenticated;
+
+-- Per-user, per-game totals the rankings read, for the chosen filter:
+--   p_bot_level set  → matches whose strongest lobby bot was that level (from the log)
+--   p_include_bots   → every match (true) or bot-free matches only (false)
+-- Internal: exposes user ids, so only the security-definer RPCs below call it.
+create or replace function stats_source(p_include_bots boolean, p_bot_level integer)
+returns table (user_id uuid, game_id text, played integer, wins integer, losses integer, best_rank integer, details jsonb) as $$
+  select s.user_id, s.game_id, s.played, s.wins, s.losses, s.best_rank, s.details
+  from player_game_stats s
+  where p_bot_level is null and p_include_bots is distinct from false
+  union all
+  select s.user_id, s.game_id, s.played, s.wins, s.losses, s.best_rank, s.details
+  from player_game_stats_nobot s
+  where p_bot_level is null and p_include_bots = false
+  union all
+  select l.user_id, l.game_id, count(*)::integer, count(*) filter (where l.won)::integer,
+         count(*) filter (where not l.won)::integer, min(l.rank), stat_details_agg(l.details order by l.played_at)
+  from player_match_log l
+  where p_bot_level is not null and l.bot_level = p_bot_level
+  group by l.user_id, l.game_id;
+$$ language sql stable security definer set search_path = public;
+
+revoke all on function stats_source(boolean, integer) from public, anon, authenticated;
+
+-- The caller's own totals per game and bot level (내 전적 → 봇 레벨 filter).
+create or replace function my_bot_level_stats()
+returns table (game_id text, bot_level smallint, played integer, wins integer, losses integer, best_rank integer, details jsonb) as $$
+  select l.game_id, l.bot_level, count(*)::integer, count(*) filter (where l.won)::integer,
+         count(*) filter (where not l.won)::integer, min(l.rank), stat_details_agg(l.details order by l.played_at)
+  from player_match_log l
+  where l.user_id = auth.uid() and l.bot_level is not null
+  group by l.game_id, l.bot_level;
+$$ language sql stable security definer set search_path = public;
+
+revoke all on function my_bot_level_stats() from public, anon;
+grant execute on function my_bot_level_stats() to authenticated;
 
 -- Public leaderboard. p_game_id null = all games combined.
 -- p_sort 'wins' (default) = most wins; 'rate' = win rate among players with
--- at least p_min_played games. p_include_bots = false ranks matches without
--- bots only. Returns the top p_limit rows plus the caller's own row (is_me)
--- even when it's outside the top.
+-- at least p_min_played games. p_include_bots / p_bot_level filter the
+-- matches (see stats_source). Returns the top p_limit rows plus the caller's
+-- own row (is_me) even when it's outside the top.
 drop function if exists public_leaderboard(text, text, integer, integer);
 drop function if exists public_leaderboard(text, text, integer, integer, boolean);
+drop function if exists public_leaderboard(text, text, integer, integer, boolean, integer);
 create or replace function public_leaderboard(
   p_game_id text default null,
   p_sort text default 'wins',
   p_min_played integer default 10,
   p_limit integer default 50,
-  p_include_bots boolean default true
+  p_include_bots boolean default true,
+  p_bot_level integer default null
 ) returns table (
   rank bigint,
   nickname text,
@@ -282,9 +337,7 @@ create or replace function public_leaderboard(
            sum(s.losses)::integer as losses,
            min(s.best_rank) as best_rank,
            case when p_game_id is null then '{}'::jsonb else (array_agg(s.details))[1] end as details
-    from (select user_id, game_id, played, wins, losses, best_rank, details from player_game_stats where p_include_bots is distinct from false
-          union all
-          select user_id, game_id, played, wins, losses, best_rank, details from player_game_stats_nobot where p_include_bots = false) s
+    from stats_source(p_include_bots, p_bot_level) s
     where p_game_id is null or s.game_id = p_game_id
     group by s.user_id
   ),
@@ -312,7 +365,7 @@ create or replace function public_leaderboard(
   order by r.rnk, r.played desc;
 $$ language sql stable security definer set search_path = public;
 
-grant execute on function public_leaderboard(text, text, integer, integer, boolean) to anon, authenticated;
+grant execute on function public_leaderboard(text, text, integer, integer, boolean, integer) to anon, authenticated;
 
 -- Per-game detail-stat leaderboard (e.g. 페루도 "페루도!" 적중률).
 -- p_num / p_den are keys in player_game_stats.details; p_den = 'played' means
@@ -323,6 +376,7 @@ grant execute on function public_leaderboard(text, text, integer, integer, boole
 -- public_name / public_avatar_url only, plus the caller's own row (is_me).
 drop function if exists public_metric_leaderboard(text, text, text, boolean, integer, integer);
 drop function if exists public_metric_leaderboard(text, text, text, boolean, integer, integer, boolean);
+drop function if exists public_metric_leaderboard(text, text, text, boolean, integer, integer, boolean, integer);
 create or replace function public_metric_leaderboard(
   p_game_id text,
   p_num text,
@@ -330,7 +384,8 @@ create or replace function public_metric_leaderboard(
   p_asc boolean default false,
   p_min_den integer default 1,
   p_limit integer default 50,
-  p_include_bots boolean default true
+  p_include_bots boolean default true,
+  p_bot_level integer default null
 ) returns table (
   rank bigint,
   nickname text,
@@ -349,9 +404,7 @@ create or replace function public_metric_leaderboard(
            case when p_den is null then null
                 when p_den = 'played' then s.played::numeric
                 else coalesce((s.details ->> p_den)::numeric, 0) end as den
-    from (select user_id, game_id, played, wins, losses, best_rank, details from player_game_stats where p_include_bots is distinct from false
-          union all
-          select user_id, game_id, played, wins, losses, best_rank, details from player_game_stats_nobot where p_include_bots = false) s
+    from stats_source(p_include_bots, p_bot_level) s
     where s.game_id = p_game_id
       and p_num ~ '^[a-zA-Z][a-zA-Z0-9]{0,39}$'
       and (p_den is null or p_den ~ '^[a-zA-Z][a-zA-Z0-9]{0,39}$')
@@ -380,4 +433,4 @@ create or replace function public_metric_leaderboard(
   order by r.rnk, r.played desc;
 $$ language sql stable security definer set search_path = public;
 
-grant execute on function public_metric_leaderboard(text, text, text, boolean, integer, integer, boolean) to anon, authenticated;
+grant execute on function public_metric_leaderboard(text, text, text, boolean, integer, integer, boolean, integer) to anon, authenticated;

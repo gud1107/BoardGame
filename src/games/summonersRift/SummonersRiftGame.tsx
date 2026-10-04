@@ -779,7 +779,7 @@ export default function SummonersRiftGame({ onComplete }: PlayableGameProps) {
     const winner = rankings.find((r) => r.rank === 1)!;
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats }),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerName: names[winner.seat] });
