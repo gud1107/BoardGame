@@ -5,7 +5,7 @@
  * same as `worm/WormCanvas.tsx`.
  */
 
-import { activeGeometry, ceilingY, ENTITY_DEFS, isUnderIce, seabedExtent, seabedY, SEABED_BASE, SKY_TOP, SURFACE_Y, WORLD_W, worldBottom, type EntityKind, type SharkDef } from "./data";
+import { activeGeometry, ceilingY, ENTITY_DEFS, isUnderIce, seabedExtent, seabedY, SEABED_BASE, SKY_TOP, SURFACE_Y, WORLD_W, worldBottom, ZONES, type EntityKind, type SharkDef } from "./data";
 import { ICE_TOP, type Structure } from "./mapGeometry";
 import { bodyLength, bodyScale, isCloaked, isDangerous, isEdible, mouthPos, type Entity, type World } from "./engine";
 import { MARKER_COLORS, type Marker } from "./markers";
@@ -537,6 +537,19 @@ function drawMinimap(ctx: CanvasRenderingContext2D, w: World, vw: number, vh: nu
   for (let x = 0; x <= WORLD_W; x += 100) ctx.lineTo(mx + x * kx, my + (seabedY(x) - SKY_TOP) * ky);
   ctx.lineTo(mx + mw, my + mh);
   ctx.fill();
+  // Depth-zone boundaries (얕은 바다 | 산호초 | 심해 | 해구), drawn over water and seabed alike.
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.28)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  for (const z of ZONES.slice(0, -1)) {
+    const zy = my + (z.to - SKY_TOP) * ky;
+    ctx.beginPath();
+    ctx.moveTo(mx, zy);
+    ctx.lineTo(mx + mw, zy);
+    ctx.stroke();
+  }
+  ctx.restore();
   const geo = activeGeometry();
   if (geo.ice) {
     ctx.fillStyle = "rgba(240,249,255,0.85)";

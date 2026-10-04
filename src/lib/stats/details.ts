@@ -108,6 +108,12 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "받은 투표 (점수 모드)", value: (d) => n(d.votesReceived) },
     { label: "시간 초과로 자동 제출", value: (d) => n(d.autoFilled) },
   ],
+  "hungry-shark": [
+    { label: "최고 점수 (한 잠수)", value: (d) => n(d.maxScore) },
+    { label: "누적 잠수", value: (d) => `${n(d.dives)}회` },
+    { label: "미션 올클리어", value: (d) => ratio(d.missionAllClears, d.dives) },
+    { label: "최고 연속 미션 올클리어", value: (d) => `${n(d.maxMissionStreak)}회` },
+  ],
   "for-sale": [
     { label: "최고 최종 자산", value: (d) => `$${n(d.maxTotal)}` },
     { label: "평균 최종 자산", value: (d, played) => (played ? `$${n(Math.round((d.totalMoney ?? 0) / played))}` : null) },

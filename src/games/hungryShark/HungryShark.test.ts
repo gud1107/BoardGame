@@ -1032,3 +1032,15 @@ describe("rulebook cross-section chest spots", () => {
     }
   });
 });
+
+describe("/stats details", () => {
+  it("hungry-shark session details merge (max streak/score kept, dives summed) and render", async () => {
+    const { mergeStatDetails, STAT_DETAIL_ROWS } = await import("@/lib/stats/details");
+    const a = { dives: 4, missionAllClears: 1, maxScore: 9000, maxMissionStreak: 1 };
+    const b = { dives: 6, missionAllClears: 3, maxScore: 4000, maxMissionStreak: 3 };
+    const m = mergeStatDetails(a, b);
+    expect(m).toEqual({ dives: 10, missionAllClears: 4, maxScore: 9000, maxMissionStreak: 3 });
+    const shown = STAT_DETAIL_ROWS["hungry-shark"].map((r) => r.value(m, 2));
+    expect(shown).toEqual(["9,000", "10회", "40% (4/10)", "3회"]);
+  });
+});

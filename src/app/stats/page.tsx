@@ -119,10 +119,10 @@ function MyStats({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilt
   const shown = (stats ?? [])
     .map((t) => ({ gameId: t.gameId, s: pickSlice(t, filter) }))
     .filter((x): x is { gameId: string; s: NonNullable<typeof x.s> } => x.s !== null);
-  const total = shown.reduce(
-    (acc, { s }) => ({ played: acc.played + s.played, wins: acc.wins + s.wins }),
-    { played: 0, wins: 0 },
-  );
+  // Solo games always finish 1st of 1 — keep them out of the win totals (their rows show details instead).
+  const total = shown
+    .filter(({ gameId }) => !SOLO_GAME_IDS.has(gameId))
+    .reduce((acc, { s }) => ({ played: acc.played + s.played, wins: acc.wins + s.wins }), { played: 0, wins: 0 });
 
   return (
     <>
@@ -190,12 +190,20 @@ function MyStats({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilt
                           {expandable && <span className="ml-1.5 text-xs text-rose-300">{isOpen ? "▲" : "세부 ▼"}</span>}
                         </td>
                         <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.played}</td>
-                        <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.wins}</td>
-                        <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.losses}</td>
-                        <td className="px-2 py-2 text-right tabular-nums text-white/85 light:text-slate-800">{pct(s.wins, s.played)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-white/70 light:text-slate-600">
-                          {s.bestRank === null ? "-" : `${s.bestRank}위`}
-                        </td>
+                        {SOLO_GAME_IDS.has(gameId) ? (
+                          <td colSpan={4} className="px-3 py-2 text-right text-xs text-white/40 light:text-slate-400">
+                            1인 게임 · 승패 집계 제외
+                          </td>
+                        ) : (
+                          <>
+                            <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.wins}</td>
+                            <td className="px-2 py-2 text-right tabular-nums text-white/70 light:text-slate-600">{s.losses}</td>
+                            <td className="px-2 py-2 text-right tabular-nums text-white/85 light:text-slate-800">{pct(s.wins, s.played)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-white/70 light:text-slate-600">
+                              {s.bestRank === null ? "-" : `${s.bestRank}위`}
+                            </td>
+                          </>
+                        )}
                       </tr>
                       {expandable && isOpen && (
                         <tr className="bg-white/[0.03] light:bg-slate-50">
@@ -314,6 +322,8 @@ function BotLevelTable({ stats }: { stats: StatTotalsRecord[] }) {
 }
 
 const RANKED_GAMES = GAME_REGISTRY.filter((g) => g.playable && g.id !== "hungry-shark" && g.id !== "crab-survival");
+/** 1-player games: always rank 1 of 1, so they never count toward wins / win rate. */
+const SOLO_GAME_IDS = new Set(GAME_REGISTRY.filter((g) => g.players.max === 1).map((g) => g.id));
 
 interface BoardRow {
   rank: number;

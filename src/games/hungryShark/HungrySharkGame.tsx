@@ -51,10 +51,14 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
   const [viewId, setViewId] = useState(() => save.selected);
   const [runKey, setRunKey] = useState(0);
   const [summary, setSummary] = useState<DiveSummary | null>(null);
-  const [showRules, setShowRules] = useState(false);
+  // false = closed; true = open at the top; a MapId = open scrolled to that map's card.
+  const [showRules, setShowRules] = useState<boolean | MapId>(false);
   const [showBestiary, setShowBestiary] = useState(false);
   const [showEvolve, setShowEvolve] = useState(false);
   const [bestThisSession, setBestThisSession] = useState(0);
+  // This visit's dives / all-clears, reported to /stats on "기록 저장하고 나가기".
+  const [sessionDives, setSessionDives] = useState(0);
+  const [sessionAllClears, setSessionAllClears] = useState(0);
 
   const update = (fn: (s: SharkSave) => SharkSave) => {
     setSave((prev) => {
@@ -114,6 +118,8 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
       bestMissionStreak: Math.max(sv.bestMissionStreak, streak),
     }));
     setBestThisSession((b) => Math.max(b, s.score));
+    setSessionDives((n) => n + 1);
+    if (allClear) setSessionAllClears((n) => n + 1);
     setSummary({
       s, newBest: s.score > prevBest, missionCoins, prevMapBest, newMapBest, causeCount, streak,
       brokenStreak: allClear ? 0 : save.missionStreak,
@@ -124,7 +130,27 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
 
   const finish = () => {
     const pid = participants[0]?.id ?? "solo";
-    onComplete({ rankings: [{ playerId: pid, rank: 1 }], finishedAt: new Date().toISOString() });
+    onComplete({
+      rankings: [{ playerId: pid, rank: 1 }],
+      finishedAt: new Date().toISOString(),
+      // Solo: rank is always 1/1, so /stats keeps it out of win totals and shows these details instead.
+      self:
+        sessionDives > 0
+          ? {
+              rank: 1,
+              playerCount: 1,
+              botPlayed: false,
+              withBots: false,
+              botLevel: null,
+              details: {
+                dives: sessionDives,
+                missionAllClears: sessionAllClears,
+                maxScore: bestThisSession,
+                maxMissionStreak: save.bestMissionStreak,
+              },
+            }
+          : undefined,
+    });
   };
 
   if (screen === "playing") {
@@ -351,14 +377,22 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
               {MAPS.map((m) => {
                 const active = save.mapId === m.id;
                 return (
-                  <button
+                  <div
                     key={m.id}
-                    onClick={() => update((s) => ({ ...s, mapId: m.id }))}
                     className={`relative overflow-hidden rounded-xl border p-3 text-left transition ${
                       active ? "border-cyan-300 ring-2 ring-cyan-300/50" : "border-white/10 hover:border-white/30 light:border-slate-200"
                     }`}
                     style={{ background: `linear-gradient(180deg, ${m.palette.water[0]} 0%, ${m.palette.water[2]} 60%, ${m.palette.water[4]} 100%)` }}
                   >
+                    {/* Whole card selects the map; the thumbnail on top opens the rulebook at this map. */}
+                    <button
+                      type="button"
+                      onClick={() => update((s) => ({ ...s, mapId: m.id }))}
+                      aria-pressed={active}
+                      aria-label={`${m.name} 선택`}
+                      className="absolute inset-0 z-0 cursor-pointer"
+                    />
+                    <div className="pointer-events-none relative z-10">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-black text-white drop-shadow">
                         {m.emoji} {m.name}
@@ -367,7 +401,17 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                         권장 T{m.recommendedTier}+
                       </span>
                     </div>
-                    <MapProfile map={m} compact />
+                    <button
+                      type="button"
+                      onClick={() => setShowRules(m.id)}
+                      title="룰북에서 이 지역 지형 자세히 보기"
+                      className="group pointer-events-auto relative block w-full rounded-md"
+                    >
+                      <MapProfile map={m} compact />
+                      <span className="absolute right-1 bottom-1 rounded bg-black/55 px-1.5 py-0.5 text-[9px] font-bold text-white/90 transition group-hover:bg-black/75">
+                        🔍 지형 자세히
+                      </span>
+                    </button>
                     <p className="mt-1 text-[11px] leading-snug text-white/85 drop-shadow">{m.desc}</p>
                     <div className="mt-1.5 flex flex-wrap gap-x-2 text-[10px] font-semibold text-white/75">
                       <span>↔ {(m.width / 10).toLocaleString()}m</span>
@@ -379,8 +423,9 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                     <div className={`mt-1 text-[10px] font-semibold text-white/80 ${active ? "pr-16" : ""}`}>
                       🐾 전용: {mapExclusives(m).map((k) => ENTITY_DEFS[k].name).join(" · ")}
                     </div>
-                    {active && <span className="absolute right-2 bottom-2 text-xs font-black text-cyan-200">✔ 선택됨</span>}
-                  </button>
+                    </div>
+                    {active && <span className="pointer-events-none absolute right-2 bottom-2 z-10 text-xs font-black text-cyan-200">✔ 선택됨</span>}
+                  </div>
                 );
               })}
             </div>
@@ -428,7 +473,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
         </>
       )}
 
-      {showRules && <RulebookModal onClose={() => setShowRules(false)} />}
+      {showRules && <RulebookModal focusMap={typeof showRules === "string" ? showRules : undefined} onClose={() => setShowRules(false)} />}
       {showEvolve && (
         <SharkEvolutionModal
           currentSharkId={viewId}

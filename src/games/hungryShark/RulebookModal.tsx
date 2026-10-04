@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Overlay from "@/components/Overlay";
 import { ALL_MISSIONS_BONUS_RATE, allMissionsBonusRate, MISSION_STREAK_CAP, MISSION_STREAK_STEP, BRANCH_INFO, ENTITY_DEFS, MAPS, FRENZY_STEPS, mapCoinBonus, MISSIONS, NEVER, PREY_EFFECTS, preyEffectLabel, SHARKS, sharksOfTier, type EntityKind, type MapDef } from "./data";
 import { mapExclusives } from "./markers";
@@ -27,7 +28,13 @@ const MAP_FEATURES: Record<MapDef["id"], string[]> = {
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const P = "text-white/70 light:text-slate-600";
 
-export default function RulebookModal({ onClose }: { onClose: () => void }) {
+export default function RulebookModal({ onClose, focusMap }: { onClose: () => void; focusMap?: MapDef["id"] }) {
+  useEffect(() => {
+    if (!focusMap) return;
+    // Wait a frame for the overlay to lay out, then bring that map's card to the middle.
+    const t = window.setTimeout(() => document.getElementById(`rb-map-${focusMap}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 60);
+    return () => window.clearTimeout(t);
+  }, [focusMap]);
   const byTier = (tier: number) =>
     (Object.values(ENTITY_DEFS) as (typeof ENTITY_DEFS)[EntityKind][])
       .filter((d) => d.requiredTier === tier && d.kind !== "chest")
@@ -143,7 +150,11 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <p className={`mb-2 ${P}`}>세 지역은 색만 다른 게 아니라 <b>지형·장애물·몬스터·고유 위험</b>이 모두 다릅니다. 지역 전용 몬스터는 다른 지역에 나오지 않습니다. 단면도는 실제 지형을 같은 비율로 줄인 것입니다(갈색 = 침몰선, 흰색 = 빙판·고드름·얼음 기둥).</p>
           <div className="flex flex-col gap-2">
             {MAPS.map((m) => (
-              <div key={m.id} className="rounded-lg border border-white/10 p-2.5 light:border-slate-200">
+              <div
+                key={m.id}
+                id={`rb-map-${m.id}`}
+                className={`scroll-mt-4 rounded-lg border p-2.5 ${m.id === focusMap ? "border-cyan-300 ring-2 ring-cyan-300/40" : "border-white/10 light:border-slate-200"}`}
+              >
                 <div className="font-bold text-white light:text-slate-900">
                   {m.emoji} {m.name}{" "}
                   <span className="text-xs font-normal text-white/50 light:text-slate-500">
