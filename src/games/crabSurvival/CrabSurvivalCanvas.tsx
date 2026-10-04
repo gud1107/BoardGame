@@ -90,6 +90,8 @@ export default function CrabSurvivalCanvas({
   duration,
   muted,
   onToggleMute,
+  noShake,
+  onToggleShake,
   followMouse,
   onToggleFollow,
   onEnd,
@@ -100,6 +102,8 @@ export default function CrabSurvivalCanvas({
   duration: number;
   muted: boolean;
   onToggleMute: () => void;
+  noShake: boolean;
+  onToggleShake: () => void;
   followMouse: boolean;
   onToggleFollow: () => void;
   onEnd: (s: MatchSummary) => void;
@@ -113,6 +117,10 @@ export default function CrabSurvivalCanvas({
   const audioRef = useRef<CrabAudio | null>(null);
   const sizeRef = useRef({ w: 800, h: 500, dpr: 1 });
   const pausedRef = useRef(false);
+  const noShakeRef = useRef(noShake);
+  useEffect(() => {
+    noShakeRef.current = noShake;
+  }, [noShake]);
   const followRef = useRef(followMouse);
   useEffect(() => {
     followRef.current = followMouse;
@@ -501,7 +509,7 @@ export default function CrabSurvivalCanvas({
         handleEvents();
         updateCamera(camRef.current, world, w, h, dt);
       }
-      drawWorld(ctx, world, camRef.current, w, h, now / 1000, dpr);
+      drawWorld(ctx, world, camRef.current, w, h, now / 1000, dpr, { noShake: noShakeRef.current });
       const mini = miniRef.current;
       if (mini) {
         const mctx = mini.getContext("2d");
@@ -711,6 +719,15 @@ export default function CrabSurvivalCanvas({
               🖱️
             </button>
           )}
+          <button
+            onClick={onToggleShake}
+            className={`${hardBtn} ${noShake ? "bg-slate-600/80" : ""}`}
+            title={noShake ? "화면 흔들림: 꺼짐" : "화면 흔들림: 켜짐"}
+            aria-label="화면 흔들림"
+            aria-pressed={!noShake}
+          >
+            {noShake ? "🚫" : "📳"}
+          </button>
           <button onClick={onToggleMute} className={hardBtn} aria-label="소리">
             {muted ? "🔇" : "🔊"}
           </button>

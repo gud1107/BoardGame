@@ -459,6 +459,9 @@ export const SHELL_STYLE: Record<SpeciesId, { band: ShellBand; piece: ShellPiece
 export const SHELL_BAND_LABEL: Record<ShellBand, string> = { chevron: "줄무늬", streak: "속도선", hex: "육각 갑옷", dots: "물방울" };
 export const SHELL_PIECE_LABEL: Record<ShellPiece, string> = { rosette: "황금 꽃", star: "황금 별", rivets: "황금 리벳", coin: "황금 동전" };
 
+/** Seconds of the gold screen flourish when you take the crown. */
+export const KING_FX = 1.3;
+
 /** Seconds the level-up "new shell pattern paints itself on" reveal lasts. */
 export const EVO_REVEAL = 0.9;
 

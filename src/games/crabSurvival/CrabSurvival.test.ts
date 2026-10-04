@@ -783,3 +783,29 @@ describe("evolution reveal", () => {
     expect(me.evoT).toBe(0);
   });
 });
+
+describe("crown flourish", () => {
+  it("taking the crown (after the opening 10s) starts the player's gold flourish, which runs out", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    w.time = 20;
+    foe.score = 100;
+    me.score = 50_000;
+    updateLeaderboard(w);
+    expect(w.kingId).toBe(me.id);
+    expect(w.kingFx).toBeGreaterThan(1);
+    for (let i = 0; i < 60 * 1.5; i++) step(w, idle, 1 / 60);
+    expect(w.kingFx).toBe(0);
+  });
+
+  it("a bot taking the crown doesn't trigger it", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    w.time = 20;
+    me.score = 10;
+    foe.score = 50_000;
+    updateLeaderboard(w);
+    expect(w.kingId).toBe(foe.id);
+    expect(w.kingFx).toBe(0);
+  });
+});

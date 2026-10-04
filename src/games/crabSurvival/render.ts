@@ -5,7 +5,7 @@
  * crabs walk behind/in front of props correctly.
  */
 
-import { BOXES, CRAB_RADIUS, epicBounty, EPIC_WANTED, EVO_REVEAL, FOODS, SHELL_STYLE, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
+import { BOXES, CRAB_RADIUS, epicBounty, EPIC_WANTED, EVO_REVEAL, FOODS, KING_FX, SHELL_STYLE, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
 import { crabRadius, hasMut, holdsEpic, penaltyLeft, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
 
 export const TILT = 0.72;
@@ -100,14 +100,17 @@ type Drawable =
   | { y: number; k: "box"; o: Box }
   | { y: number; k: "pickup"; o: Pickup };
 
-export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, W: number, H: number, t: number, dpr: number) {
+export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, W: number, H: number, t: number, dpr: number, opts: { noShake?: boolean } = {}) {
   const z = cam.zoom;
   const me = player(w);
   const evo = evoFx(me);
-  const shake = w.shake > 0 ? w.shake * w.shake * 14 : 0;
-  // My own evolution adds a soft rumble that swells and settles with the reveal.
-  const shx = (shake ? Math.sin(t * 91) * shake : 0) + (evo ? Math.sin(t * 47) * evo.env * evo.shake : 0);
-  const shy = (shake ? Math.cos(t * 77) * shake : 0) + (evo ? Math.cos(t * 39) * evo.env * evo.shake * 0.6 : 0);
+  const king = kingFx(w, me);
+  // "화면 흔들림 끄기" zeroes every camera shake source; the glows still play.
+  const shake = !opts.noShake && w.shake > 0 ? w.shake * w.shake * 14 : 0;
+  // My own evolution / crowning adds a soft rumble that swells and settles.
+  const rumble = opts.noShake ? 0 : (evo ? evo.env * evo.shake : 0) + (king ? king.env * king.shake : 0);
+  const shx = (shake ? Math.sin(t * 91) * shake : 0) + Math.sin(t * 47) * rumble;
+  const shy = (shake ? Math.cos(t * 77) * shake : 0) + Math.cos(t * 39) * rumble * 0.6;
   const cx = cam.x - shx / z, cy = cam.y - shy / (z * TILT);
   const view: Camera = { x: cx, y: cy, zoom: z };
 
@@ -418,6 +421,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
   }
 
   if (evo) drawEvoGlow(ctx, view, W, H, me, evo, t);
+  if (king) drawEvoGlow(ctx, view, W, H, me, king, t, [250, 204, 21]);
 
   // 방사능: green-warped vision. 럼주: a woozy purple swirl at the edges.
   if (me.alive && penaltyLeft(me, "toxic") > 0) {
@@ -2448,14 +2452,23 @@ function evoFx(me: Crab): EvoFx | null {
   return { k, env, big, shake: big ? 3.2 : 1.4 };
 }
 
+/** The gold flourish when the player takes the crown — same shape as the evolution glow, longer. */
+function kingFx(w: World, me: Crab): EvoFx | null {
+  if (!me.alive || w.kingFx <= 0) return null;
+  const k = 1 - w.kingFx / KING_FX;
+  const env = k < 0.25 ? k / 0.25 : Math.max(0, 1 - (k - 0.25) / 0.75) ** 1.5;
+  return { k, env, big: true, shake: 2.6 };
+}
+
 /**
  * The player's evolution glow: a vignette tinted to the new look (shell colour → gold at Lv8+ →
  * cycling iridescence at Lv11+) plus a light ring rippling out from the crab.
  */
-function drawEvoGlow(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: number, me: Crab, fx: EvoFx, t: number) {
+function drawEvoGlow(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: number, me: Crab, fx: EvoFx, t: number, tint?: [number, number, number]) {
   const [sx, sy] = toScreen(cam, W, H, me.x, me.y);
-  const rgb =
-    me.level >= 11
+  const rgb = tint
+    ? tint
+    : me.level >= 11
       ? hueRgb((t * 180) % 360)
       : me.level >= 8
         ? [251, 191, 36]

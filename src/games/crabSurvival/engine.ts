@@ -40,6 +40,7 @@ import {
   EPIC_SURVIVE_PTS,
   EPIC_WANTED,
   EVO_REVEAL,
+  KING_FX,
   EPIC_HUNT_VISION,
   GIANT_SCALE,
   MAGNET_BASE,
@@ -460,6 +461,8 @@ export interface World {
   beams: Beam[];
   hitStop: number;
   shake: number;
+  /** Seconds left on the player's "you took the crown" gold flourish (visual). */
+  kingFx: number;
   playerId: number;
   /** Player is flipped over, waiting for the revive/end choice. */
   playerDown: boolean;
@@ -625,6 +628,7 @@ export function createWorld(opts: MatchOptions): World {
     beams: [],
     hitStop: 0,
     shake: 0,
+    kingFx: 0,
     playerId: 0,
     playerDown: false,
     deathSnapshot: null,
@@ -1019,6 +1023,7 @@ export function step(w: World, input: CrabInput, rawDt: number): void {
   if (w.over) return;
   const dt = Math.min(0.05, rawDt);
   w.shake = Math.max(0, w.shake - dt * 3);
+  w.kingFx = Math.max(0, w.kingFx - dt);
   if (w.hitStop > 0) {
     w.hitStop -= dt;
     return;
@@ -1915,6 +1920,7 @@ export function updateLeaderboard(w: World, initial = false) {
   // The opening seconds reshuffle a lot — crown silently until things settle.
   if (!initial && w.time >= 10) {
     w.events.push({ type: "kingNew", name: top.name, player: top.isPlayer });
+    if (top.isPlayer) w.kingFx = KING_FX;
     burst(w, "gold", top.x, top.y, 24, 240, "#facc15", 5, 1, 240);
   }
 }

@@ -25,6 +25,8 @@ export interface CrabSave {
   speciesStats: Partial<Record<SpeciesId, SpeciesRecord>>;
   /** The lobby's "처음이라면" tip card was dismissed. */
   tipsDismissed: boolean;
+  /** 화면 흔들림 끄기: no camera shake (glows/flashes stay). */
+  noShake: boolean;
 }
 
 export interface SpeciesRecord {
@@ -60,6 +62,8 @@ export function freshSave(): CrabSave {
     maxLevel: 1,
     speciesStats: {},
     tipsDismissed: false,
+    // Start with shake off for anyone whose OS asks for reduced motion.
+    noShake: typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
   };
 }
 

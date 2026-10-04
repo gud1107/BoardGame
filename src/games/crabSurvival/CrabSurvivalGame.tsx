@@ -110,6 +110,8 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
         duration={save.duration}
         muted={save.muted}
         onToggleMute={() => update((s) => ({ ...s, muted: !s.muted }))}
+        noShake={save.noShake}
+        onToggleShake={() => update((s) => ({ ...s, noShake: !s.noShake }))}
         followMouse={save.followMouse}
         onToggleFollow={() => update((s) => ({ ...s, followMouse: !s.followMouse }))}
         onEnd={handleEnd}
@@ -206,6 +208,17 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
                   ))}
                 </div>
               </div>
+              <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-black/20 px-2.5 py-2 text-xs light:bg-slate-50">
+                <span className="font-semibold text-white/75 light:text-slate-600">
+                  📳 화면 흔들림 <span className="font-normal text-white/45 light:text-slate-400">(타격·진화·왕관 연출)</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={!save.noShake}
+                  onChange={() => update((s) => ({ ...s, noShake: !s.noShake }))}
+                  className="h-4 w-4 accent-orange-500"
+                />
+              </label>
               <RoadmapChips species={species} />
               <GrowthLooks color={color} species={species} muted={save.muted} />
             </div>
