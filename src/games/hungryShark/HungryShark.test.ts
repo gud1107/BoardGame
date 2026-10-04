@@ -905,3 +905,48 @@ describe("death cause credit", () => {
     expect(die(7)).toBe("굶주림");
   });
 });
+
+describe("shipwreck safe start + near-tier mercy", () => {
+  it("no hunter gets inside the start bubble while it lasts, then it expires", async () => {
+    const { safeZoneActive } = await import("./engine");
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 600, "shipwreck");
+    expect(w.safe).not.toBeNull();
+    const sf = w.safe!;
+    // Drop a barracuda right next to the idle shark: it must swim out, never bite.
+    const b = place(w, "barracuda", sf.x + 60, sf.y);
+    const hp0 = w.shark.hp;
+    let minD = Infinity;
+    for (let i = 0; i < 60 * 10; i++) {
+      step(w, idle, 1 / 60);
+      for (const e of w.entities) if (e.alive && e.def.behavior === "hunter") minD = Math.min(minD, Math.hypot(e.x - sf.x, e.y - sf.y));
+    }
+    expect(b.alive).toBe(true);
+    expect(minD).toBeGreaterThan(sf.r * 0.8);
+    expect(w.run.damageTaken).toBe(0);
+    expect(w.shark.hp).toBeLessThan(hp0); // only hunger
+    for (let i = 0; i < 60 * 6; i++) step(w, idle, 1 / 60);
+    expect(safeZoneActive(w)).toBe(false);
+    // Other maps have no bubble.
+    expect(createWorld(sharkById("reef"), NO_UPGRADES, 601, "deepBlue").safe).toBeNull();
+  });
+
+  it("one-tier-gap hunters (꼬치고기 vs T1) also thin out on the shipwreck", () => {
+    const barracudas = (sharkId: string) => {
+      let n = 0;
+      for (const seed of [1, 2, 3]) {
+        const w = createWorld(sharkById(sharkId), NO_UPGRADES, 700 + seed, "shipwreck");
+        for (let i = 0; i < 60 * 25; i++) {
+          w.shark.x = 4300;
+          w.shark.y = 1500;
+          w.shark.hp = 99999;
+          step(w, idle, 1 / 60);
+          w.events.length = 0;
+        }
+        n += w.entities.filter((e) => e.alive && e.kind === "barracuda").length;
+      }
+      return n;
+    };
+    // T1 reef gets the `near` mercy vs 꼬치고기(T2); T2 mako eats them (no mercy).
+    expect(barracudas("reef")).toBeLessThan(barracudas("mako"));
+  });
+});

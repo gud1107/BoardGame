@@ -249,6 +249,8 @@ export interface World {
   run: RunStats;
   over: boolean;
   deathCause: string | null;
+  /** Hunter-free bubble around the start point while `w.time < until` (MapDef.safeStart). */
+  safe: { x: number; y: number; r: number; until: number } | null;
   /** Last damage source + when (world time) — a starvation tick that finishes a freshly hurt shark is credited to it. */
   lastHit: { cause: string; time: number } | null;
   spawnTimer: number;
@@ -358,6 +360,7 @@ export function createWorld(def: SharkDef, upgrades: UpgradeLevels, seed = Date.
     },
     over: false,
     deathCause: null,
+    safe: null,
     lastHit: null,
     spawnTimer: 0,
     bounceCd: 0,
@@ -384,6 +387,8 @@ export function createWorld(def: SharkDef, upgrades: UpgradeLevels, seed = Date.
     const e = spawn(w, "chest", x, 0);
     e.y = seabedY(x) - e.def.radius + 4;
   }
+
+  if (map.safeStart) w.safe = { x: w.shark.x, y: w.shark.y, r: map.safeStart.radius, until: map.safeStart.seconds };
 
   // Initial population so the first seconds aren't empty.
   for (let i = 0; i < 40; i++) runSpawner(w, true);
@@ -583,6 +588,7 @@ export function step(w: World, input: SharkInput, rawDt: number): void {
   buildGrid(w);
   resolveBites(w);
   resolveContacts(w, dt);
+  pushOutOfStructures(w);
   updateGoldRush(w, dt);
   updateCombo(w, dt);
   updateParticles(w, dt);
@@ -759,8 +765,15 @@ function collideLevel(w: World, prevX: number, prevY: number, dt: number) {
       }
     }
   }
+  pushOutOfStructures(w);
+}
+
+/** Solid structures vs. the shark's spine (3 points). Also re-run after entity contacts, which can shove the shark into a hull/mast. */
+function pushOutOfStructures(w: World) {
+  const s = w.shark;
   const geo = activeGeometry();
   if (!geo.colliders.length) return;
+  const L = bodyLength(w);
   const hx = Math.cos(s.angle), hy = Math.sin(s.angle);
   const bodyR = L * 0.2;
   for (const off of [0.38, 0, -0.38]) {
@@ -1030,9 +1043,23 @@ function updateWander(w: World, e: Entity, dist: number, dx: number, dy: number,
   if (Math.abs(mx) > 1) e.angle = Math.atan2(my * 0.4, mx);
 }
 
-/** A hunter two or more tiers out of the player's reach (the targets of `MapDef.lowTierMercy`). */
-function outclasses(w: World, def: EntityDef): boolean {
-  return def.behavior === "hunter" && def.requiredTier < NEVER && def.requiredTier >= w.def.tier + 2;
+/**
+ * `MapDef.lowTierMercy` factors for a hunter the player's shark can't eat yet:
+ * the full mercy when it needs ≥2 more tiers, the milder `near` one when it needs exactly 1.
+ */
+function mercyFor(w: World, def: EntityDef): { spawn: number; aggro: number } | null {
+  const m = w.map.lowTierMercy;
+  if (!m || def.behavior !== "hunter" || def.requiredTier >= NEVER) return null;
+  const gap = def.requiredTier - w.def.tier;
+  return gap >= 2 ? m : gap === 1 ? (m.near ?? null) : null;
+}
+
+export function safeZoneActive(w: World): boolean {
+  return !!w.safe && w.time < w.safe.until;
+}
+
+function inSafeZone(w: World, x: number, y: number, pad = 0): boolean {
+  return safeZoneActive(w) && Math.hypot(x - w.safe!.x, y - w.safe!.y) < w.safe!.r + pad;
 }
 
 const HUNTER_AGGRO: Partial<Record<EntityKind, number>> = {
@@ -1043,7 +1070,23 @@ const HUNTER_AGGRO: Partial<Record<EntityKind, number>> = {
 function updateHunter(w: World, e: Entity, dist: number, dx: number, dy: number, dt: number) {
   const danger = isDangerous(w, e) && !isCloaked(w);
   let aggro = HUNTER_AGGRO[e.kind] ?? 440;
-  if (w.map.lowTierMercy && outclasses(w, e.def)) aggro *= w.map.lowTierMercy.aggro;
+  aggro *= mercyFor(w, e.def)?.aggro ?? 1;
+  if (inSafeZone(w, e.x, e.y, 60)) {
+    // Start bubble: no chasing — swim straight back out of it.
+    const sf = w.safe!;
+    const d = Math.hypot(e.x - sf.x, e.y - sf.y) || 1;
+    e.state = "patrol";
+    e.angle = angleLerp(e.angle, Math.atan2(e.y - sf.y, e.x - sf.x), 4 * dt);
+    e.vx = Math.cos(e.angle) * e.def.speed * 0.8;
+    e.vy = Math.sin(e.angle) * e.def.speed * 0.8;
+    e.x += e.vx * dt;
+    e.y += e.vy * dt;
+    if (d < sf.r * 0.85) {
+      e.x = sf.x + ((e.x - sf.x) / d) * sf.r * 0.85;
+      e.y = sf.y + ((e.y - sf.y) / d) * sf.r * 0.85;
+    }
+    return;
+  }
   if (danger && dist < aggro && !w.shark.airborne && e.attackCd <= 0.4) {
     // Stamina: a chase lasts ~5s, then the hunter tires and backs off.
     if (e.state !== "chase") e.timer = 5;
@@ -1685,7 +1728,7 @@ function runSpawner(w: World, initial: boolean) {
     const mul = w.map.spawns[kind];
     if (!mul) continue; // not on this map's roster
     let dens = kind === "goldenTuna" ? 1 : w.map.density * (ENTITY_DEFS[kind].damage > 0 ? w.map.threatDensity : 1);
-    if (w.map.lowTierMercy && outclasses(w, ENTITY_DEFS[kind])) dens *= w.map.lowTierMercy.spawn;
+    dens *= mercyFor(w, ENTITY_DEFS[kind])?.spawn ?? 1;
     const want = Math.round((targets[kind] ?? 0) * mul * dens);
     if ((counts[kind] ?? 0) >= want) continue;
     // Golden tuna: rolled in rarely (≈ once a minute on average), never at start.
@@ -1714,6 +1757,7 @@ function runSpawner(w: World, initial: boolean) {
       }
     }
     if (!surfaceKind && def.behavior !== "fly" && def.behavior !== "heli" && insideAny(activeGeometry(), x, y, def.radius + 10, scratchC)) continue;
+    if (def.behavior === "hunter" && inSafeZone(w, x, y, 150)) continue;
     if (def.behavior === "boid") {
       const n = 8 + Math.floor(rand(w) * 7);
       const dir = rand(w) < 0.5 ? -1 : 1;

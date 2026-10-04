@@ -224,6 +224,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     ctx.stroke();
   }
 
+  drawSafeZone(ctx, w, t);
   drawSkillFx(ctx, w, t);
 
   // ── Shark ──
@@ -906,6 +907,37 @@ function drawWreckFloorDecor(ctx: CanvasRenderingContext2D, left: number, right:
       ctx.stroke();
     }
   }
+}
+
+/** Start bubble (MapDef.safeStart): dashed shield ring + countdown, fading out in its last 3 seconds. */
+function drawSafeZone(ctx: CanvasRenderingContext2D, w: World, t: number) {
+  const sf = w.safe;
+  if (!sf || w.time >= sf.until) return;
+  const left = sf.until - w.time;
+  const a = Math.min(1, left / 3);
+  ctx.save();
+  ctx.globalAlpha = a * (0.55 + 0.15 * Math.sin(t * 4));
+  ctx.strokeStyle = "#5eead4";
+  ctx.lineWidth = 4;
+  ctx.setLineDash([22, 16]);
+  ctx.lineDashOffset = -t * 30;
+  ctx.beginPath();
+  ctx.arc(sf.x, sf.y, sf.r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = a * 0.07;
+  ctx.fillStyle = "#5eead4";
+  ctx.fill();
+  ctx.globalAlpha = a;
+  ctx.font = "900 26px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = "rgba(0,0,0,0.55)";
+  const label = `🛡 안전 구역 ${Math.ceil(left)}초`;
+  ctx.strokeText(label, sf.x, sf.y - sf.r - 14);
+  ctx.fillStyle = "#99f6e4";
+  ctx.fillText(label, sf.x, sf.y - sf.r - 14);
+  ctx.restore();
 }
 
 // ── Skill FX ────────────────────────────────────────────────────────────────

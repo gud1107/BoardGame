@@ -4,12 +4,14 @@ import { useEffect, useRef } from "react";
 import { SharkAudio } from "./audio";
 
 /**
- * Results-screen celebration when a dive breaks a record: a confetti + coin
- * burst over the panel and a synthesized fanfare. `big` = new map record
- * (longer, two cannons + gold coins), otherwise a shark personal best.
+ * Results-screen celebration when a dive breaks a record (or clears every
+ * mission): a confetti + coin burst over the panel and a synthesized fanfare.
+ * `big` = new map record (longer, three cannons + gold coins), otherwise a
+ * shark personal best / all-missions clear. `missions` tints the confetti
+ * mission-green and adds the mission chime.
  * Canvas-only overlay (pointer-events: none), cleaned up after ~3.5s.
  */
-export default function RecordCelebration({ big, muted }: { big: boolean; muted: boolean }) {
+export default function RecordCelebration({ big, muted, missions = false }: { big: boolean; muted: boolean; missions?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -17,13 +19,15 @@ export default function RecordCelebration({ big, muted }: { big: boolean; muted:
     // The dive's own audio context is gone with the canvas; the player has interacted, so a fresh one may start.
     const a = new SharkAudio();
     a.unlock(false);
-    a.fanfare(big);
+    if (missions) a.mission();
+    const f = window.setTimeout(() => a.fanfare(big), missions ? 320 : 0);
     const t = window.setTimeout(() => a.dispose(), 4000);
     return () => {
+      window.clearTimeout(f);
       window.clearTimeout(t);
       a.dispose();
     };
-  }, [big, muted]);
+  }, [big, muted, missions]);
 
   useEffect(() => {
     const c = ref.current;
@@ -36,7 +40,9 @@ export default function RecordCelebration({ big, muted }: { big: boolean; muted:
     c.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const COLORS = ["#facc15", "#38bdf8", "#f472b6", "#4ade80", "#fb923c", "#a78bfa", "#ffffff"];
+    const COLORS = missions && !big
+      ? ["#4ade80", "#86efac", "#22c55e", "#facc15", "#ffffff", "#34d399"]
+      : ["#facc15", "#38bdf8", "#f472b6", "#4ade80", "#fb923c", "#a78bfa", "#ffffff"];
     type P = { x: number; y: number; vx: number; vy: number; rot: number; vr: number; w: number; h: number; color: string; coin: boolean; delay: number };
     const parts: P[] = [];
     const cannon = (x: number, dir: number, n: number, delay: number) => {
@@ -100,7 +106,7 @@ export default function RecordCelebration({ big, muted }: { big: boolean; muted:
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [big]);
+  }, [big, missions]);
 
   return <canvas ref={ref} aria-hidden className="pointer-events-none absolute inset-0 z-20 h-full w-full" />;
 }

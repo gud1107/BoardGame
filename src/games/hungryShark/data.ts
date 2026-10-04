@@ -60,7 +60,9 @@ export interface MapDef {
    * Gentler for under-tiered sharks: hunters needing ≥2 tiers more than the player's shark spawn
    * `spawn`× as often and notice it from `aggro`× the range (난파선 deep zone vs. T1/T2).
    */
-  lowTierMercy?: { spawn: number; aggro: number };
+  lowTierMercy?: { spawn: number; aggro: number; near?: { spawn: number; aggro: number } };
+  /** Hunter-free bubble around the dive start for the first `seconds` (hunters steer out, none spawn inside). */
+  safeStart?: { seconds: number; radius: number };
   /** Per-tier override multiplied on top of coinBonus (얼음 해협 T4 over-earned ~1.8× 딥 블루 in the bot sim). */
   tierCoinBonus?: Partial<Record<SharkTier, number>>;
   /** Whole-map population factor on top of POPULATION_SCALE. */
@@ -128,7 +130,8 @@ export const MAPS: MapDef[] = [
     // Megalodon-class sharks vacuum up the packed shelf: ×0.75 brings T4 from ≈1.8× to ≈1.35× 딥 블루.
     tierCoinBonus: { 4: 0.75 },
     // Same rule as 난파선: 일각고래(T3) eases off for T1, 범고래(T4) for T1/T2.
-    lowTierMercy: { spawn: 0.5, aggro: 0.75 },
+    // `near` = the milder version for hunters only one tier out of reach (일각고래 vs T2).
+    lowTierMercy: { spawn: 0.5, aggro: 0.75, near: { spawn: 0.8, aggro: 0.85 } },
     density: 1,
     threatDensity: 0.7,
     spawns: {
@@ -158,7 +161,10 @@ export const MAPS: MapDef[] = [
     ice: null,
     coinBonus: 1.25,
     // Bot sim: T1/T2 deaths here were mostly 대왕오징어 / 유령 상어 / 곰치 / 아귀 in the deep terraces.
-    lowTierMercy: { spawn: 0.4, aggro: 0.7 },
+    // `near` covers 꼬치고기(T2) vs a T1 reef shark, 곰치/아귀/소형 상어(T3) vs T2.
+    lowTierMercy: { spawn: 0.4, aggro: 0.7, near: { spawn: 0.75, aggro: 0.85 } },
+    // Prod check: an idle reef shark kept dying to 꼬치고기/소형 상어 within 13~21s of the start.
+    safeStart: { seconds: 15, radius: 650 },
     density: 1,
     threatDensity: 0.55,
     spawns: {
