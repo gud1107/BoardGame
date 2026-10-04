@@ -1,0 +1,73 @@
+"use client";
+
+import { geometryFor, SKY_TOP, type MapDef } from "./data";
+import { geoFloor, ICE_TOP } from "./mapGeometry";
+
+/**
+ * Rulebook mini map: a to-scale side cross-section of a dive site, drawn from
+ * the same geometry the engine collides with — seabed profile, ice sheet with
+ * its breathing holes, solid structures, the dive start and its safe zone.
+ */
+export default function MapProfile({ map }: { map: MapDef }) {
+  const g = geometryFor(map);
+  const W = map.width;
+  const top = Math.max(SKY_TOP * 0.35, -320);
+  const bottom = g.floorMax + 160;
+  const H = bottom - top;
+  const step = 40;
+  const floorPts: string[] = [];
+  for (let x = 0; x <= W; x += step) floorPts.push(`${x},${geoFloor(g, x).toFixed(0)}`);
+  const floorPath = `M0,${bottom} L${floorPts.join(" L")} L${W},${bottom} Z`;
+
+  // Ice sheet as runs between breathing holes.
+  const ice: [number, number][] = [];
+  if (g.ice) {
+    let start: number | null = null;
+    for (let x = 0; x <= W; x += 20) {
+      const covered = !g.ice.holes.some(([cx, wd]) => Math.abs(x - cx) < wd / 2);
+      if (covered && start === null) start = x;
+      if ((!covered || x + 20 > W) && start !== null) {
+        ice.push([start, covered ? W : x]);
+        start = null;
+      }
+    }
+  }
+  const startX = 1400, startY = 260;
+  const gradId = `mp-water-${map.id}`;
+  const sky = map.palette.sky;
+  const water = map.palette.water;
+  const structColor = (k: string) => (k === "hull" || k === "mast" ? "#3b2a1a" : "#e0f2fe");
+  const depthM = Math.round(g.floorMax / 10);
+
+  return (
+    <figure className="mt-1.5">
+      <svg viewBox={`0 ${top} ${W} ${H}`} className="block h-auto w-full rounded-md" role="img" aria-label={`${map.name} 지형 단면도`}>
+        <defs>
+          <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor={water[0]} />
+            <stop offset="0.3" stopColor={water[1]} />
+            <stop offset="0.65" stopColor={water[2]} />
+            <stop offset="1" stopColor={water[4]} />
+          </linearGradient>
+        </defs>
+        <rect x={0} y={top} width={W} height={-top} fill={sky[1]} />
+        <rect x={0} y={0} width={W} height={bottom} fill={`url(#${gradId})`} />
+        <path d={floorPath} fill={map.palette.sand[0]} stroke="rgba(0,0,0,0.35)" strokeWidth={14} />
+        {ice.map(([a, b]) => (
+          <rect key={a} x={a} y={ICE_TOP - 20} width={b - a} height={g.ice!.thickness + 40} fill="#f0f9ff" opacity={0.95} />
+        ))}
+        {g.colliders.map((c, i) => (
+          <circle key={i} cx={c.x} cy={c.y} r={c.r} fill={structColor(c.kind ?? "")} />
+        ))}
+        {map.safeStart && (
+          <circle cx={startX} cy={startY} r={map.safeStart.radius} fill="rgba(94,234,212,0.12)" stroke="#5eead4" strokeWidth={22} strokeDasharray="90 70" />
+        )}
+        <text x={startX} y={startY + 90} fontSize={260} textAnchor="middle">🦈</text>
+      </svg>
+      <figcaption className="mt-0.5 flex justify-between text-[10px] text-white/45 light:text-slate-500">
+        <span>◀ 0m · 🦈 시작 지점{map.safeStart ? " (🛡 안전 구역)" : ""}</span>
+        <span>가로 {(W / 10).toLocaleString()}m · 최대 수심 약 {depthM}m ▶</span>
+      </figcaption>
+    </figure>
+  );
+}

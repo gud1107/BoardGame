@@ -197,7 +197,8 @@ export function mapById(id: string | undefined): MapDef {
 }
 
 const geometryCache = new Map<MapId, MapGeometry>();
-function geometryFor(map: MapDef): MapGeometry {
+/** Level geometry of any map (cached) — the rulebook's cross-section uses it without activating the map. */
+export function geometryFor(map: MapDef): MapGeometry {
   let g = geometryCache.get(map.id);
   if (!g) {
     g = buildGeometry(map.width, map.terrain, map.ice, map.feature);
@@ -842,6 +843,15 @@ export interface MissionDef {
 
 /** Clearing every mission of a dive pays this share of their rewards on top (2026-10-04). */
 export const ALL_MISSIONS_BONUS_RATE = 0.5;
+/** Each previous consecutive all-clear dive adds this much to the rate… */
+export const MISSION_STREAK_STEP = 0.1;
+/** …counting at most this many (0.5 + 5 × 0.1 = 100%). */
+export const MISSION_STREAK_CAP = 5;
+
+/** All-clear bonus rate for a dive started with `streak` consecutive all-clears behind it. */
+export function allMissionsBonusRate(streak: number): number {
+  return ALL_MISSIONS_BONUS_RATE + MISSION_STREAK_STEP * Math.max(0, Math.min(MISSION_STREAK_CAP, Math.floor(streak)));
+}
 
 export const MISSIONS: MissionDef[] = [
   { id: "eatFish", label: (g) => `물고기 ${g}마리 먹기`, goals: [25, 50, 90], reward: 190 },

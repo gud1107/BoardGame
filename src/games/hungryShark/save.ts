@@ -49,6 +49,9 @@ export interface SharkSave {
   mapSharkBest: Partial<Record<MapId, Record<string, MapRecord>>>;
   /** How each dive ended, per map: cause → count (results screen "자주 당한 원인"). */
   deaths: Partial<Record<MapId, Record<string, number>>>;
+  /** Consecutive dives that cleared every mission (reset by a dive that didn't). */
+  missionStreak: number;
+  bestMissionStreak: number;
 }
 
 const KEY = "hungry-shark-save-v1";
@@ -71,6 +74,8 @@ export function freshSave(): SharkSave {
     mapBest: {},
     mapSharkBest: {},
     deaths: {},
+    missionStreak: 0,
+    bestMissionStreak: 0,
   };
 }
 
@@ -172,7 +177,10 @@ export function migrateSave(save: SharkSave): SharkSave {
       deaths[m.id] = clean;
     }
   }
-  return { ...save, coins, owned: SHARKS.map((s) => s.id).filter((id) => owned.has(id)), selected, upgrades, best, picker, mapBest, mapSharkBest, deaths };
+  const streak = (v: unknown) => (Number.isFinite(v) && (v as number) > 0 ? Math.floor(v as number) : 0);
+  const missionStreak = streak(save.missionStreak);
+  const bestMissionStreak = Math.max(missionStreak, streak(save.bestMissionStreak));
+  return { ...save, coins, owned: SHARKS.map((s) => s.id).filter((id) => owned.has(id)), selected, upgrades, best, picker, mapBest, mapSharkBest, deaths, missionStreak, bestMissionStreak };
 }
 
 export function loadSave(): SharkSave {

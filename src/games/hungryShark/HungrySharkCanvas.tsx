@@ -68,6 +68,7 @@ export default function HungrySharkCanvas({
   onEnd,
   onQuit,
   deaths,
+  missionStreak = 0,
 }: {
   def: SharkDef;
   upgrades: UpgradeLevels;
@@ -84,6 +85,8 @@ export default function HungrySharkCanvas({
   onQuit: () => void;
   /** Saved per-map death causes, for the bestiary's "가장 많이 죽인 생물" ranking. */
   deaths?: DeathStats;
+  /** Consecutive all-clear dives so far (sets this dive's all-clear bonus rate). */
+  missionStreak?: number;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -259,7 +262,7 @@ export default function HungrySharkCanvas({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const world = createWorld(def, upgrades, undefined, mapId);
+    const world = createWorld(def, upgrades, undefined, mapId, { missionStreak });
     worldRef.current = world;
     const { h } = sizeRef.current;
     camRef.current = { x: world.shark.x, y: world.shark.y, zoom: h / viewHeightFor(def) };
@@ -329,7 +332,14 @@ export default function HungrySharkCanvas({
             break;
           case "goldEnd": a?.goldEnd(); break;
           case "mission": a?.mission(); pushBanner({ text: "미션 완료!", sub: `${ev.label} · +${ev.reward}🪙`, tone: "mission" }); break;
-          case "missionsAll": a?.goldRush(false); pushBanner({ text: "🎯 미션 올클리어!", sub: `보너스 +${ev.bonus}🪙`, tone: "mission" }); break;
+          case "missionsAll":
+            a?.goldRush(false);
+            pushBanner({
+              text: ev.streak > 1 ? `🎯 미션 올클리어! 🔥${ev.streak}연속` : "🎯 미션 올클리어!",
+              sub: `보너스 +${ev.bonus}🪙 (${Math.round(ev.rate * 100)}%)`,
+              tone: "mission",
+            });
+            break;
           case "chest": pushBanner({ text: "보물 상자 발견!", sub: `+${ev.amount}🪙`, tone: "chest" }); break;
           case "death": a?.death(); break;
           case "evolve": {

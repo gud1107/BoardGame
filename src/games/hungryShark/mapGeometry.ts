@@ -47,6 +47,8 @@ export interface Circle {
   x: number;
   y: number;
   r: number;
+  /** Which structure this collider belongs to (rulebook cross-section colors). */
+  kind?: StructureKind;
 }
 
 export interface MapGeometry {
@@ -167,13 +169,13 @@ export function buildGeometry(width: number, terrain: TerrainSpec, ice: IceSpec 
       // Tapers to a point: 3 shrinking circles down the length.
       for (let k = 0; k < 3; k++) {
         const f = 0.18 + k * 0.3;
-        colliders.push({ x: s.x, y: s.y + s.len * f, r: (s.thick / 2) * (1 - f * 0.85) + 4 });
+        colliders.push({ kind: s.kind, x: s.x, y: s.y + s.len * f, r: (s.thick / 2) * (1 - f * 0.85) + 4 });
       }
     } else if (s.kind === "icePillar") {
       const nC = Math.ceil(s.len / 70);
       for (let k = 0; k < nC; k++) {
         const f = k / nC;
-        colliders.push({ x: s.x, y: s.y - s.len * f, r: (s.thick / 2) * (1 - f * 0.7) });
+        colliders.push({ kind: s.kind, x: s.x, y: s.y - s.len * f, r: (s.thick / 2) * (1 - f * 0.7) });
       }
     } else if (s.kind === "hull") {
       const ca = Math.cos(s.angle), sa = Math.sin(s.angle);
@@ -181,14 +183,14 @@ export function buildGeometry(width: number, terrain: TerrainSpec, ice: IceSpec 
       const nC = Math.max(2, Math.round(s.len / (r * 0.9)));
       for (let k = 0; k <= nC; k++) {
         const along = -s.len / 2 + r * 0.7 + (k / nC) * (s.len - r * 1.4);
-        colliders.push({ x: s.x + ca * along, y: s.y + sa * along, r });
+        colliders.push({ kind: s.kind, x: s.x + ca * along, y: s.y + sa * along, r });
       }
     } else if (s.kind === "mast") {
       const dx = Math.sin(s.angle), dy = -Math.cos(s.angle);
       const nC = Math.ceil(s.len / 40);
       for (let k = 1; k <= nC; k++) {
         const along = (k / nC) * s.len;
-        colliders.push({ x: s.x + dx * along, y: s.y + dy * along, r: s.thick / 2 + 4 });
+        colliders.push({ kind: s.kind, x: s.x + dx * along, y: s.y + dy * along, r: s.thick / 2 + 4 });
       }
     }
   }

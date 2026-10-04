@@ -36,7 +36,7 @@ import {
   MEGA_GOLD_RUSH_DURATION,
   mineExplosionRadius,
   MISSIONS,
-  ALL_MISSIONS_BONUS_RATE,
+  allMissionsBonusRate,
   NEVER,
   POISON_DURATION,
   POISON_SLOW,
@@ -150,7 +150,7 @@ export type GameEvent =
   | { type: "torpedo" }
   | { type: "icicle" }
   | { type: "creak" }
-  | { type: "missionsAll"; bonus: number }
+  | { type: "missionsAll"; bonus: number; rate: number; streak: number }
   | { type: "skill"; id: SkillId }
   | { type: "skillReady" }
   | { type: "preyFx"; label: string }
@@ -253,6 +253,8 @@ export interface World {
   deathCause: string | null;
   /** Coins paid for clearing every mission this dive (0 until then). */
   missionBonus: number;
+  /** Consecutive all-clear dives before this one (raises the all-clear bonus rate). */
+  missionStreak: number;
   /** Hunter-free bubble around the start point while `w.time < until` (MapDef.safeStart). */
   safe: { x: number; y: number; r: number; until: number } | null;
   /** Last damage source + when (world time) — a starvation tick that finishes a freshly hurt shark is credited to it. */
@@ -299,7 +301,13 @@ const range = (w: World, a: number, b: number) => a + rand(w) * (b - a);
 
 // ── Construction ────────────────────────────────────────────────────────────
 
-export function createWorld(def: SharkDef, upgrades: UpgradeLevels, seed = Date.now() & 0x7fffffff, mapId: MapId = "deepBlue"): World {
+export function createWorld(
+  def: SharkDef,
+  upgrades: UpgradeLevels,
+  seed = Date.now() & 0x7fffffff,
+  mapId: MapId = "deepBlue",
+  opts: { missionStreak?: number } = {},
+): World {
   const map = mapById(mapId);
   setActiveMap(map);
   const stats = effectiveStats(def, upgrades);
@@ -365,6 +373,7 @@ export function createWorld(def: SharkDef, upgrades: UpgradeLevels, seed = Date.
     over: false,
     deathCause: null,
     missionBonus: 0,
+    missionStreak: Math.max(0, Math.floor(opts.missionStreak ?? 0)),
     safe: null,
     lastHit: null,
     spawnTimer: 0,
@@ -1716,12 +1725,13 @@ function updateMissions(w: World) {
     }
   }
   if (!w.missionBonus && w.missions.length && w.missions.every((m) => m.done)) {
-    const bonus = Math.round(w.missions.reduce((a, m) => a + m.reward, 0) * ALL_MISSIONS_BONUS_RATE);
+    const rate = allMissionsBonusRate(w.missionStreak);
+    const bonus = Math.round(w.missions.reduce((a, m) => a + m.reward, 0) * rate);
     w.missionBonus = bonus;
     w.coins += bonus;
     floatText(w, w.shark.x, w.shark.y - 90, `🎯 미션 올클리어! +${bonus}🪙`, "#fde047", 24);
     burst(w, "gold", w.shark.x, w.shark.y, 24, 240, "#facc15", 4, 1.1);
-    w.events.push({ type: "missionsAll", bonus });
+    w.events.push({ type: "missionsAll", bonus, rate, streak: w.missionStreak + 1 });
   }
 }
 

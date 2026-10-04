@@ -980,3 +980,36 @@ describe("all-missions bonus", () => {
     expect(summarize(w).missionBonus).toBe(bonus);
   });
 });
+
+describe("mission all-clear streak", () => {
+  it("each prior consecutive all-clear adds 10%p to the bonus, capped at 100%", async () => {
+    const { allMissionsBonusRate } = await import("./data");
+    expect([0, 1, 2, 5, 9].map(allMissionsBonusRate)).toEqual([0.5, 0.6, 0.7, 1, 1]);
+    const bonusAt = (streak: number) => {
+      const w = createWorld(sharkById("reef"), NO_UPGRADES, 810, "deepBlue", { missionStreak: streak });
+      isolate(w);
+      for (const m of w.missions) m.goal = 0;
+      step(w, idle, 1 / 60);
+      const ev = w.events.find((e) => e.type === "missionsAll");
+      return { bonus: w.missionBonus, total: w.missions.reduce((a, m) => a + m.reward, 0), ev };
+    };
+    const a = bonusAt(0), b = bonusAt(3);
+    expect(a.bonus).toBe(Math.round(a.total * 0.5));
+    expect(b.bonus).toBe(Math.round(b.total * 0.8));
+    expect(b.ev && b.ev.type === "missionsAll" && b.ev.streak).toBe(4);
+  });
+
+  it("streak survives the save round-trip; junk resets to 0", () => {
+    const s = { ...freshSave(), missionStreak: 3, bestMissionStreak: 7 };
+    const back = decodeSave(encodeSave(s));
+    expect([back.missionStreak, back.bestMissionStreak]).toEqual([3, 7]);
+    const junk = { ...freshSave(), missionStreak: -2, bestMissionStreak: "x" } as unknown as typeof s;
+    const j = decodeSave(encodeSave(junk));
+    expect([j.missionStreak, j.bestMissionStreak]).toEqual([0, 0]);
+  });
+
+  it("every map's geometry tags its colliders with a structure kind (rulebook cross-section)", async () => {
+    const { MAPS, geometryFor } = await import("./data");
+    for (const m of MAPS) for (const c of geometryFor(m).colliders) expect(c.kind).toBeDefined();
+  });
+});

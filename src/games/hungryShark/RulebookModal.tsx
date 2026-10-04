@@ -1,8 +1,9 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { ALL_MISSIONS_BONUS_RATE, BRANCH_INFO, ENTITY_DEFS, MAPS, FRENZY_STEPS, mapCoinBonus, MISSIONS, NEVER, PREY_EFFECTS, preyEffectLabel, SHARKS, sharksOfTier, type EntityKind, type MapDef } from "./data";
+import { ALL_MISSIONS_BONUS_RATE, allMissionsBonusRate, MISSION_STREAK_CAP, MISSION_STREAK_STEP, BRANCH_INFO, ENTITY_DEFS, MAPS, FRENZY_STEPS, mapCoinBonus, MISSIONS, NEVER, PREY_EFFECTS, preyEffectLabel, SHARKS, sharksOfTier, type EntityKind, type MapDef } from "./data";
 import { mapExclusives } from "./markers";
+import MapProfile from "./MapProfile";
 
 /** Level layout + map-only rules, one line each (data-driven where the numbers live in MapDef). */
 const MAP_FEATURES: Record<MapDef["id"], string[]> = {
@@ -139,7 +140,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
 
         <section>
           <h3 className={H3}>잠수 지역 (맵)</h3>
-          <p className={`mb-2 ${P}`}>세 지역은 색만 다른 게 아니라 <b>지형·장애물·몬스터·고유 위험</b>이 모두 다릅니다. 지역 전용 몬스터는 다른 지역에 나오지 않습니다.</p>
+          <p className={`mb-2 ${P}`}>세 지역은 색만 다른 게 아니라 <b>지형·장애물·몬스터·고유 위험</b>이 모두 다릅니다. 지역 전용 몬스터는 다른 지역에 나오지 않습니다. 단면도는 실제 지형을 같은 비율로 줄인 것입니다(갈색 = 침몰선, 흰색 = 빙판·고드름·얼음 기둥).</p>
           <div className="flex flex-col gap-2">
             {MAPS.map((m) => (
               <div key={m.id} className="rounded-lg border border-white/10 p-2.5 light:border-slate-200">
@@ -150,6 +151,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
                     {m.tierCoinBonus?.[4] ? ` (T4 ×${mapCoinBonus(m, 4).toFixed(2)})` : ""}
                   </span>
                 </div>
+                <MapProfile map={m} />
                 <ul className={`mt-1 list-disc space-y-0.5 pl-4 text-xs ${P}`}>
                   {MAP_FEATURES[m.id].map((f) => (
                     <li key={f}>{f}</li>
@@ -247,7 +249,10 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
             <li>먹이를 먹으면 확률적으로 코인이 나옵니다(골드 러시 중엔 100%). 코인은 잠수가 끝나도 유지됩니다.</li>
             <li>잠수마다 <b>무작위 미션 3개</b>가 주어지고, 달성 즉시 보상 코인을 받습니다(기본 {Math.min(...MISSIONS.map((m) => m.reward))}~{Math.max(...MISSIONS.map((m) => m.reward))}🪙, 티어가 높을수록 목표와 보상이 커짐).</li>
-            <li>한 잠수에서 <b>미션 3개를 모두 완료</b>하면 그 세 보상 합계의 {Math.round(ALL_MISSIONS_BONUS_RATE * 100)}%를 <b>올클리어 보너스</b>로 추가로 받습니다.</li>
+            <li>
+              한 잠수에서 <b>미션 3개를 모두 완료</b>하면 그 세 보상 합계의 {Math.round(ALL_MISSIONS_BONUS_RATE * 100)}%를 <b>올클리어 보너스</b>로 추가로 받습니다.
+              여러 잠수 <b>🔥 연속으로</b> 올클리어하면 1회마다 +{Math.round(MISSION_STREAK_STEP * 100)}%p씩 커집니다(최대 {Math.round(allMissionsBonusRate(MISSION_STREAK_CAP) * 100)}%). 올클리어하지 못한 잠수가 끝나면 연속 기록은 0으로 돌아갑니다.
+            </li>
             <li>해저 곳곳에 <b>보물 상자</b>(지역마다 9~20개)가 숨어 있습니다(미니맵의 노란 점). 입으로 물면 코인이 쏟아집니다.</li>
             <li>상점에서 상어마다 <b>물어뜯기 · 속도 · 부스트</b>를 각각 10레벨까지 강화할 수 있습니다. 진행 상황은 이 브라우저에 저장됩니다.</li>
           </ul>
