@@ -461,6 +461,8 @@ export const SHELL_PIECE_LABEL: Record<ShellPiece, string> = { rosette: "황금 
 
 /** Seconds of the gold screen flourish when you take the crown. */
 export const KING_FX = 1.3;
+/** Seconds the new king stays highlighted (arrow/ring) after taking your crown. */
+export const USURP_FX = 4;
 
 /** Seconds the level-up "new shell pattern paints itself on" reveal lasts. */
 export const EVO_REVEAL = 0.9;

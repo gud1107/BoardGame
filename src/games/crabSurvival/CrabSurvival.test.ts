@@ -824,6 +824,9 @@ describe("crown lost", () => {
     updateLeaderboard(w);
     expect(w.kingId).toBe(foe.id);
     expect(w.crownLostFx).toBeGreaterThan(1);
+    expect(w.usurpFx).toBeGreaterThan(3); // the new king stays highlighted for a few seconds
     expect(w.events.some((e) => e.type === "crownLost" && e.by === foe.name)).toBe(true);
+    for (let i = 0; i < 60 * 4.2; i++) step(w, idle, 1 / 60);
+    expect(w.usurpFx).toBe(0);
   });
 });

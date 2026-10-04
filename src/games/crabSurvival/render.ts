@@ -2414,7 +2414,12 @@ function drawKingMarker(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H
   if (!k || !k.alive) return;
   const [sx, sy] = toScreen(cam, W, H, k.x, k.y);
   const m = 34;
-  if (sx > m && sx < W - m && sy > m && sy < H - m) return;
+  // Right after it took your crown, the usurper gets a big red callout for a few seconds.
+  const usurp = w.usurpFx > 0 ? Math.min(1, w.usurpFx / 0.6) : 0;
+  if (sx > m && sx < W - m && sy > m && sy < H - m) {
+    if (usurp > 0) drawUsurperCallout(ctx, cam, W, H, k, t, usurp);
+    return;
+  }
   const cx = W / 2, cy = H / 2;
   const dx = sx - cx, dy = sy - cy;
   const s = Math.min((W / 2 - m) / Math.abs(dx || 1), (H / 2 - m) / Math.abs(dy || 1));
@@ -2422,9 +2427,12 @@ function drawKingMarker(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H
   const a = Math.atan2(dy, dx);
   const me = player(w);
   const dist = Math.round(Math.hypot(k.x - me.x, k.y - me.y) / 10);
+  const big = 1 + 0.5 * usurp;
   ctx.save();
   ctx.translate(px, py);
-  ctx.fillStyle = `rgba(250,204,21,${0.75 + 0.25 * Math.sin(t * 6)})`;
+  ctx.scale(big, big);
+  const pulse = calm ? 0.9 : 0.75 + 0.25 * Math.sin(t * (usurp ? 12 : 6));
+  ctx.fillStyle = usurp ? `rgba(239,68,68,${pulse})` : `rgba(250,204,21,${pulse})`;
   ctx.save();
   ctx.rotate(a);
   ctx.beginPath();
@@ -2438,21 +2446,71 @@ function drawKingMarker(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H
   ctx.beginPath();
   ctx.arc(0, 0, 15, 0, Math.PI * 2);
   ctx.fill();
+  if (usurp) {
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
   ctx.restore();
-  drawCrown(ctx, px, py, 9, t);
+  drawCrown(ctx, px, py, 9 * big, t);
   ctx.font = "800 11px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.lineWidth = 3;
   ctx.strokeStyle = "rgba(0,0,0,0.7)";
-  const label = `${k.name} ${dist}m`;
-  const ly = py + (py > H / 2 ? -34 : 18);
+  const label = usurp ? `👑 탈환 목표 ${k.name} ${dist}m` : `${k.name} ${dist}m`;
+  const ly = py + (py > H / 2 ? -34 - 10 * usurp : 18 + 10 * usurp);
   // Keep the label on-screen when the marker hugs the left/right edge.
   const half = ctx.measureText(label).width / 2 + 4;
   const lx = Math.min(W - half, Math.max(half, px));
   ctx.strokeText(label, lx, ly);
-  ctx.fillStyle = "#fde047";
+  ctx.fillStyle = usurp ? "#fca5a5" : "#fde047";
   ctx.fillText(label, lx, ly);
+}
+
+/** On-screen usurper callout: a bouncing red arrow over the new king plus a ring on the ground. */
+function drawUsurperCallout(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: number, k: Crab, t: number, a: number) {
+  const z = cam.zoom;
+  const r = crabRadius(k) * z;
+  const [gx, gy] = toScreen(cam, W, H, k.x, k.y);
+  const [hx, hy] = toScreen(cam, W, H, k.x, k.y, crabRadius(k) * 1.2 + 6);
+  const bob = calm ? 0 : Math.abs(Math.sin(t * 7)) * 8;
+  ctx.save();
+  ctx.globalAlpha = a;
+  // Ground ring.
+  ctx.strokeStyle = "#ef4444";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([8, 6]);
+  ctx.lineDashOffset = calm ? 0 : -t * 40;
+  ctx.beginPath();
+  ctx.ellipse(gx, gy, r * 1.9, r * 1.9 * TILT, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // Arrow above the name tag.
+  const ay = hy - 58 - bob;
+  ctx.fillStyle = "#ef4444";
+  ctx.strokeStyle = "rgba(0,0,0,0.6)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(hx, ay + 22);
+  ctx.lineTo(hx - 13, ay + 6);
+  ctx.lineTo(hx - 5, ay + 6);
+  ctx.lineTo(hx - 5, ay - 8);
+  ctx.lineTo(hx + 5, ay - 8);
+  ctx.lineTo(hx + 5, ay + 6);
+  ctx.lineTo(hx + 13, ay + 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.font = "900 12px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(0,0,0,0.75)";
+  ctx.strokeText("👑 탈환 목표", hx, ay - 11);
+  ctx.fillStyle = "#fca5a5";
+  ctx.fillText("👑 탈환 목표", hx, ay - 11);
+  ctx.restore();
 }
 
 interface EvoFx {

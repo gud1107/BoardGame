@@ -41,6 +41,7 @@ import {
   EPIC_WANTED,
   EVO_REVEAL,
   KING_FX,
+  USURP_FX,
   EPIC_HUNT_VISION,
   GIANT_SCALE,
   MAGNET_BASE,
@@ -466,6 +467,8 @@ export interface World {
   kingFx: number;
   /** Seconds left on the red "your crown was taken" flourish (visual). */
   crownLostFx: number;
+  /** Seconds left highlighting the crab that just took your crown (visual). */
+  usurpFx: number;
   playerId: number;
   /** Player is flipped over, waiting for the revive/end choice. */
   playerDown: boolean;
@@ -633,6 +636,7 @@ export function createWorld(opts: MatchOptions): World {
     shake: 0,
     kingFx: 0,
     crownLostFx: 0,
+    usurpFx: 0,
     playerId: 0,
     playerDown: false,
     deathSnapshot: null,
@@ -1029,6 +1033,7 @@ export function step(w: World, input: CrabInput, rawDt: number): void {
   w.shake = Math.max(0, w.shake - dt * 3);
   w.kingFx = Math.max(0, w.kingFx - dt);
   w.crownLostFx = Math.max(0, w.crownLostFx - dt);
+  w.usurpFx = Math.max(0, w.usurpFx - dt);
   if (w.hitStop > 0) {
     w.hitStop -= dt;
     return;
@@ -1924,6 +1929,7 @@ export function updateLeaderboard(w: World, initial = false) {
   // Overtaken while still alive (a death is handled by kingDown + the death screen).
   if (cur && cur.isPlayer && cur.alive && !initial && w.time >= 10) {
     w.crownLostFx = KING_FX;
+    w.usurpFx = USURP_FX;
     w.events.push({ type: "crownLost", by: top.name });
   }
   w.kingId = top.id;
