@@ -420,6 +420,14 @@ export default function CrabSurvivalCanvas({
           case "skill":
             if (ev.player) a?.skill(ev.tier);
             break;
+          case "wanted":
+            pushFeed(`🚨 ${ev.who} 현상금 ${ev.bounty.toLocaleString()} 돌파`, ev.player);
+            if (ev.player) pushBanner({ text: "🚨 현상수배!", sub: `내 현상금이 ${ev.bounty.toLocaleString()}점을 넘었습니다 — 미니맵에 빨갛게 표시됩니다`, tone: "down" });
+            else if (world.time - lastEpicBanner > 30) {
+              lastEpicBanner = world.time;
+              pushBanner({ text: `🚨 ${ev.who} 현상수배!`, sub: `현상금 ${ev.bounty.toLocaleString()}점 — 미니맵의 빨간 표시를 쫓으세요`, tone: "down" });
+            }
+            break;
           case "epicAlert":
             pushFeed(`🌟 ${ev.who} ${ev.emoji} ${ev.gear} 획득`, ev.player);
             if (!ev.player && world.time - lastEpicBanner > 30) {

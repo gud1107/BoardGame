@@ -48,6 +48,18 @@ export interface PatchNoteEntry {
  */
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.51.0",
+    releaseDate: "2026-10-04",
+    title: "꽃게 서바이벌 현상수배 표시·종류별 현상금 기록·첫 플레이 팁",
+    changes: [
+      {
+        game: "crab-survival",
+        type: "FEAT",
+        desc: "현상금 1만 점을 넘긴 전설 보유자는 '🚨 현상수배'로 알림과 미니맵 빨간 대형 표시, 게 종류별 최다 현상금·최장 전설 보유 기록 저장(결과 화면 신기록 배지), 로비에 처음 플레이하는 사람용 무기·변이·특수기·현상금 팁 카드 추가",
+      },
+    ],
+  },
+  {
     version: "v1.50.0",
     releaseDate: "2026-10-02",
     title: "꽃게 서바이벌 하이퍼 성장 — 해저 무기·변이 아이템·진화 티어 특수기",

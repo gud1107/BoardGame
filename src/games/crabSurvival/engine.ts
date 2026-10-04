@@ -38,6 +38,7 @@ import {
   epicBounty,
   EPIC_SURVIVE_EVERY,
   EPIC_SURVIVE_PTS,
+  EPIC_WANTED,
   EPIC_HUNT_VISION,
   GIANT_SCALE,
   MAGNET_BASE,
@@ -392,6 +393,7 @@ export type GameEvent =
   | { type: "counter" }
   | { type: "gear"; name: string; emoji: string; player: boolean; rarity: GearRarity; lv: number }
   | { type: "epicAlert"; who: string; gear: string; emoji: string; player: boolean }
+  | { type: "wanted"; who: string; bounty: number; player: boolean }
   | { type: "mutation"; kind: MutationKind; player: boolean }
   | { type: "skill"; tier: CrabTier; player: boolean }
   | { type: "blast"; x: number; y: number; player: boolean }
@@ -2416,6 +2418,10 @@ function updateGear(w: World, c: Crab, dt: number) {
   if (holdsEpic(c)) {
     const before = c.epicT;
     c.epicT += dt;
+    // Crossing the WANTED line is announced once per carry.
+    if (epicBounty(c.level, before) < EPIC_WANTED && epicBounty(c.level, c.epicT) >= EPIC_WANTED) {
+      w.events.push({ type: "wanted", who: c.name, bounty: epicBounty(c.level, c.epicT), player: c.isPlayer });
+    }
     if (c.isPlayer) w.stats.epicSeconds += dt;
     // 생존 보상: a payout for every EPIC_SURVIVE_EVERY seconds you keep the legendary.
     if (Math.floor(c.epicT / EPIC_SURVIVE_EVERY) > Math.floor(before / EPIC_SURVIVE_EVERY)) {

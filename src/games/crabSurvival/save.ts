@@ -23,6 +23,8 @@ export interface CrabSave {
   maxLevel: number;
   /** Per-species lifetime records. */
   speciesStats: Partial<Record<SpeciesId, SpeciesRecord>>;
+  /** The lobby's "처음이라면" tip card was dismissed. */
+  tipsDismissed: boolean;
 }
 
 export interface SpeciesRecord {
@@ -30,9 +32,13 @@ export interface SpeciesRecord {
   wins: number;
   matches: number;
   maxLevel: number;
+  /** Most legendary-bounty points cashed in a single match (absent on pre-10-04 saves). */
+  bestBounty?: number;
+  /** Longest legendary carry in a single match, seconds. */
+  longestEpic?: number;
 }
 
-export const EMPTY_RECORD: SpeciesRecord = { best: 0, wins: 0, matches: 0, maxLevel: 1 };
+export const EMPTY_RECORD: SpeciesRecord = { best: 0, wins: 0, matches: 0, maxLevel: 1, bestBounty: 0, longestEpic: 0 };
 
 const KEY = "crab-survival-save-v1";
 
@@ -53,6 +59,7 @@ export function freshSave(): CrabSave {
     kingSeconds: 0,
     maxLevel: 1,
     speciesStats: {},
+    tipsDismissed: false,
   };
 }
 
@@ -76,6 +83,27 @@ export function writeSave(save: CrabSave) {
   } catch {
     /* private mode / storage full — records just won't persist */
   }
+}
+
+/** Fold one finished match into a species record; flags which per-species records it broke. */
+export function nextSpeciesRecord(
+  prev: SpeciesRecord,
+  m: { score: number; rank: number; maxLevel: number; bountyPoints?: number; epicSeconds?: number },
+): { record: SpeciesRecord; bountyRecord: boolean; epicRecord: boolean } {
+  const bounty = m.bountyPoints ?? 0;
+  const epic = Math.round(m.epicSeconds ?? 0);
+  return {
+    record: {
+      best: Math.max(prev.best, m.score),
+      wins: prev.wins + (m.rank === 1 ? 1 : 0),
+      matches: prev.matches + 1,
+      maxLevel: Math.max(prev.maxLevel, m.maxLevel),
+      bestBounty: Math.max(prev.bestBounty ?? 0, bounty),
+      longestEpic: Math.max(prev.longestEpic ?? 0, epic),
+    },
+    bountyRecord: bounty > 0 && bounty > (prev.bestBounty ?? 0),
+    epicRecord: epic > 0 && epic > (prev.longestEpic ?? 0),
+  };
 }
 
 /** Trophy points for a finish: podium-heavy, everyone in the top half scores. */

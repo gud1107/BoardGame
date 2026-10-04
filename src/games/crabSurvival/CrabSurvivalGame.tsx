@@ -8,7 +8,7 @@ import type { MatchSummary } from "./engine";
 import CrabSurvivalCanvas from "./CrabSurvivalCanvas";
 import RulebookModal from "./RulebookModal";
 import { drawCrabPreview } from "./render";
-import { EMPTY_RECORD, freshSave, loadSave, trophiesFor, writeSave, type CrabSave, type SpeciesRecord } from "./save";
+import { EMPTY_RECORD, freshSave, loadSave, nextSpeciesRecord, trophiesFor, writeSave, type CrabSave, type SpeciesRecord } from "./save";
 
 /**
  * Solo arcade loop: 로비(닉네임·색·경기 시간) → 경기(CrabSurvivalCanvas, AI 게
@@ -27,6 +27,9 @@ interface MatchResult {
   record: SpeciesRecord;
   /** Beat this species' previous best (not counted on its first match). */
   speciesBest: boolean;
+  /** New species records for bounty points / legendary carry time this match. */
+  bountyRecord: boolean;
+  epicRecord: boolean;
   unlocked: SpeciesId[];
 }
 
@@ -64,12 +67,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
     const trophies = trophiesFor(s.rank, s.total);
     const newBest = s.score > save.best;
     const prevRec = save.speciesStats[species] ?? EMPTY_RECORD;
-    const record: SpeciesRecord = {
-      best: Math.max(prevRec.best, s.score),
-      wins: prevRec.wins + (s.rank === 1 ? 1 : 0),
-      matches: prevRec.matches + 1,
-      maxLevel: Math.max(prevRec.maxLevel, s.stats.maxLevel),
-    };
+    const { record, bountyRecord, epicRecord } = nextSpeciesRecord(prevRec, { score: s.score, rank: s.rank, ...s.stats });
     const unlocked = SPECIES_LIST.filter((sp) => !isUnlocked(sp.id, save.trophies) && isUnlocked(sp.id, save.trophies + trophies)).map((sp) => sp.id);
     update((sv) => ({
       ...sv,
@@ -82,7 +80,17 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
       maxLevel: Math.max(sv.maxLevel, s.stats.maxLevel),
       speciesStats: { ...sv.speciesStats, [species]: record },
     }));
-    setResult({ s, newBest, trophies, species, record, speciesBest: s.score > prevRec.best && prevRec.matches > 0, unlocked });
+    setResult({
+      s,
+      newBest,
+      trophies,
+      species,
+      record,
+      speciesBest: s.score > prevRec.best && prevRec.matches > 0,
+      bountyRecord,
+      epicRecord,
+      unlocked,
+    });
     setScreen("results");
   };
 
@@ -202,6 +210,8 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
 
           <SpeciesPicker value={species} color={color} trophies={save.trophies} records={save.speciesStats} onChange={(id) => update((s) => ({ ...s, species: id }))} />
 
+          {!save.tipsDismissed && <TipCard onDismiss={() => update((s) => ({ ...s, tipsDismissed: true }))} onRules={() => setShowRules(true)} />}
+
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
               onClick={start}
@@ -296,7 +306,7 @@ function ResultsPanel({
   onRetry: () => void;
   onMenu: () => void;
 }) {
-  const { s, newBest, trophies, species, record, speciesBest, unlocked } = result;
+  const { s, newBest, trophies, species, record, speciesBest, bountyRecord, epicRecord, unlocked } = result;
   const sp = SPECIES[species];
   const lv = roadmap(species)[Math.max(0, s.stats.maxLevel - 1)];
   const title = s.rank === 1 ? "👑 섬의 왕!" : s.rank <= 3 ? "🥈 포디움 입성!" : s.endedByDeath ? "뒤집혔지만 잘 싸웠다!" : "생존 완료!";
@@ -314,6 +324,8 @@ function ResultsPanel({
         <div className="mt-1 flex gap-1.5">
           {newBest && <span className="animate-bounce rounded-full bg-yellow-400 px-3 py-0.5 text-xs font-black text-slate-900">🏆 최고 기록!</span>}
           {speciesBest && <span className="rounded-full bg-pink-400 px-3 py-0.5 text-xs font-black text-slate-900">🧬 {sp.name} 신기록!</span>}
+          {bountyRecord && <span className="rounded-full bg-amber-400 px-3 py-0.5 text-xs font-black text-slate-900">💰 현상금 신기록!</span>}
+          {epicRecord && <span className="rounded-full bg-yellow-200 px-3 py-0.5 text-xs font-black text-slate-900">🌟 전설 보유 신기록!</span>}
           <span className="rounded-full bg-orange-500/20 px-3 py-0.5 text-xs font-black text-orange-200 light:text-orange-700">트로피 +{trophies}</span>
         </div>
         <p className="mt-2 text-xs text-white/50 light:text-slate-500">
@@ -332,11 +344,13 @@ function ResultsPanel({
         <div className="mb-1.5 text-xs font-semibold text-white/50 light:text-slate-500">
           🧬 {sp.name}({sp.role}) 전적
         </div>
-        <div className="grid grid-cols-4 gap-2 text-center">
+        <div className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
           <Stat label="최고 점수" value={fmtK(record.best)} />
           <Stat label="1위" value={`${record.wins}회`} />
           <Stat label="플레이" value={`${record.matches}판`} />
           <Stat label="최대 성장" value={`Lv${record.maxLevel}`} />
+          <Stat label="💰 최다 현상금" value={record.bestBounty ? fmtK(record.bestBounty) : "—"} />
+          <Stat label="🌟 최장 전설 보유" value={record.longestEpic ? `${record.longestEpic}초` : "—"} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
@@ -505,6 +519,13 @@ function SpeciesPicker({
                 {rec && rec.matches > 0 ? (
                   <>
                     📊 최고 <b className="text-white/85 light:text-slate-800">{fmtK(rec.best)}</b> · 1위 {rec.wins}회 · {rec.matches}판
+                    {(rec.bestBounty || rec.longestEpic) ? (
+                      <div>
+                        {rec.bestBounty ? <>💰 {fmtK(rec.bestBounty)}</> : null}
+                        {rec.bestBounty && rec.longestEpic ? " · " : ""}
+                        {rec.longestEpic ? <>🌟 {rec.longestEpic}초</> : null}
+                      </div>
+                    ) : null}
                   </>
                 ) : (
                   "📊 아직 전적 없음"
@@ -513,6 +534,42 @@ function SpeciesPicker({
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/** First-timer primer for the 하이퍼 성장 systems; hidden for good once dismissed. */
+function TipCard({ onDismiss, onRules }: { onDismiss: () => void; onRules: () => void }) {
+  const tips: [string, string, string][] = [
+    ["🔱", "해저 무기", "반짝이는 무기를 밟으면 가장 가까운 적에게 자동 발사돼요. 최대 2개, 같은 무기를 또 주우면 ★강화. 등급은 일반 < 희귀 < 전설."],
+    ["🧪", "변이 아이템", "초록 빛은 순수 강화, 빨간 빛은 리스크 — 벌칙은 처음 몇 초뿐이고 이점은 더 오래가요. 바닥의 검은 웅덩이는 미끄러운 기름 함정!"],
+    ["⚡", "진화 특수기", "Lv4·8·11에서 진화할 때마다 E키(모바일 노란 버튼) 특수기가 바뀌어요: 대시 → 버블 기절 → 모래 잠복 → 수류 빔."],
+    ["💰", "전설 현상금", "전설 무기를 들면 섬 전체의 표적! 버틸수록 생존 보상과 내 현상금이 쌓이고, 남의 전설 보유자를 쓰러뜨리면 현상금을 받아요."],
+  ];
+  return (
+    <div className="rounded-2xl border border-cyan-300/30 bg-gradient-to-br from-cyan-500/10 to-amber-400/10 p-3 light:border-cyan-200 light:from-cyan-50 light:to-amber-50">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-sm font-black text-white light:text-slate-900">🆕 처음이라면 알아두세요</div>
+        <div className="flex gap-1.5">
+          <button onClick={onRules} className="rounded-lg border border-white/20 px-2 py-1 text-[11px] font-semibold text-white/80 hover:border-white/50 light:border-slate-300 light:text-slate-600">
+            📖 자세히
+          </button>
+          <button onClick={onDismiss} className="rounded-lg bg-cyan-500/30 px-2 py-1 text-[11px] font-bold text-cyan-100 hover:bg-cyan-500/50 light:bg-cyan-100 light:text-cyan-800">
+            알겠어요 ✕
+          </button>
+        </div>
+      </div>
+      <div className="grid gap-1.5 sm:grid-cols-2">
+        {tips.map(([icon, title, body]) => (
+          <div key={title} className="flex gap-2 rounded-lg bg-black/20 p-2 light:bg-white">
+            <span className="text-xl leading-none">{icon}</span>
+            <div>
+              <div className="text-xs font-black text-white light:text-slate-800">{title}</div>
+              <p className="text-[11px] leading-snug text-white/65 light:text-slate-600">{body}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

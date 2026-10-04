@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUBBLE_STUN, epicBounty, gearDropOdds, GEARS, isUnlocked, MUTATIONS, LEVELS, tierForLevel, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
+import { EMPTY_RECORD, nextSpeciesRecord } from "./save";
 import { addScore, applyMutation, armorMult, atkMult, botThink, createWorld, equipGear, penaltyLeft, player, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
 
 const idle: CrabInput = { moveX: 0, moveY: 0, boost: false, attack: false };
@@ -741,5 +742,32 @@ describe("growing bounty + 생존 보상 + match record", () => {
     equipGear(w, me, "needle");
     equipGear(w, me, "needle");
     expect(w.stats.bestStar).toBe(2);
+  });
+});
+
+describe("WANTED carriers + per-species bounty records", () => {
+  it("announces a carrier once when its bounty crosses the WANTED line", () => {
+    const w = bare();
+    const me = player(w);
+    equipGear(w, me, "trident");
+    me.gear[0].t = 9_999;
+    w.events.length = 0;
+    // Lv1: 3,500 base → crosses 10,000 after ~55s of carrying.
+    for (let i = 0; i < 60 * 70; i++) step(w, idle, 1 / 60);
+    expect(w.events.filter((e) => e.type === "wanted")).toHaveLength(1);
+  });
+
+  it("keeps the best bounty / longest carry per species and flags new records", () => {
+    const first = nextSpeciesRecord(EMPTY_RECORD, { score: 1000, rank: 3, maxLevel: 5, bountyPoints: 8000, epicSeconds: 40.4 });
+    expect(first.record.bestBounty).toBe(8000);
+    expect(first.record.longestEpic).toBe(40);
+    expect(first.bountyRecord && first.epicRecord).toBe(true);
+    const worse = nextSpeciesRecord(first.record, { score: 500, rank: 5, maxLevel: 4, bountyPoints: 3000, epicSeconds: 10 });
+    expect(worse.record.bestBounty).toBe(8000);
+    expect(worse.bountyRecord || worse.epicRecord).toBe(false);
+    // Saves from before these fields existed still work.
+    const legacy = nextSpeciesRecord({ best: 10, wins: 0, matches: 3, maxLevel: 2 }, { score: 5, rank: 9, maxLevel: 1 });
+    expect(legacy.record.bestBounty).toBe(0);
+    expect(legacy.bountyRecord).toBe(false);
   });
 });

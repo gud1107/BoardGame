@@ -5,7 +5,7 @@
  * crabs walk behind/in front of props correctly.
  */
 
-import { BOXES, CRAB_RADIUS, epicBounty, FOODS, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
+import { BOXES, CRAB_RADIUS, epicBounty, EPIC_WANTED, FOODS, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
 import { crabRadius, hasMut, holdsEpic, penaltyLeft, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
 
 export const TILT = 0.72;
@@ -1599,7 +1599,9 @@ function drawCrabOverlay(ctx: CanvasRenderingContext2D, cam: Camera, W: number, 
   if (c.burrow > 0) return;
   if (holdsEpic(c)) {
     // Wanted poster: the bounty on this shell, growing the longer it survives.
-    const txt = `💰${epicBounty(c.level, c.epicT).toLocaleString()}`;
+    const bounty = epicBounty(c.level, c.epicT);
+    const wanted = bounty >= EPIC_WANTED;
+    const txt = `${wanted ? "🚨" : "💰"}${bounty.toLocaleString()}`;
     ctx.font = "900 11px system-ui, sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "bottom";
@@ -1607,7 +1609,7 @@ function drawCrabOverlay(ctx: CanvasRenderingContext2D, cam: Camera, W: number, 
     ctx.lineWidth = 3;
     ctx.strokeStyle = "rgba(0,0,0,0.7)";
     ctx.strokeText(txt, bx, top - 4);
-    ctx.fillStyle = "#fbbf24";
+    ctx.fillStyle = wanted ? "#f87171" : "#fbbf24";
     ctx.fillText(txt, bx, top - 4);
     ctx.textAlign = "center";
   }
@@ -1952,15 +1954,24 @@ export function drawMinimap(ctx: CanvasRenderingContext2D, w: World, size: numbe
   for (const c of w.crabs) {
     if (c.isPlayer || !holdsEpic(c)) continue;
     const [x, y] = dot(c.x, c.y);
-    const ph = (t * 1.6 + c.id * 0.13) % 1;
-    ctx.strokeStyle = `rgba(251,191,36,${1 - ph})`;
-    ctx.lineWidth = 1.5;
+    // WANTED carriers (bounty ≥ EPIC_WANTED) get a bigger, faster, red-and-gold blip.
+    const wanted = epicBounty(c.level, c.epicT) >= EPIC_WANTED;
+    const ph = (t * (wanted ? 2.6 : 1.6) + c.id * 0.13) % 1;
+    ctx.strokeStyle = wanted ? `rgba(239,68,68,${1 - ph})` : `rgba(251,191,36,${1 - ph})`;
+    ctx.lineWidth = wanted ? 2.5 : 1.5;
     ctx.beginPath();
-    ctx.arc(x, y, 3 + ph * 9, 0, Math.PI * 2);
+    ctx.arc(x, y, (wanted ? 5 : 3) + ph * (wanted ? 15 : 9), 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillStyle = "#fbbf24";
+    if (wanted) {
+      ctx.strokeStyle = "#fbbf24";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, 7, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = wanted ? "#ef4444" : "#fbbf24";
     ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.arc(x, y, wanted ? 4.5 : 3, 0, Math.PI * 2);
     ctx.fill();
   }
   if (w.kingId !== null && w.kingId !== w.playerId) {

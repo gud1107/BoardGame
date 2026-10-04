@@ -504,6 +504,8 @@ export function epicBounty(victimLevel: number, heldSeconds = 0): number {
 /** 생존 보상: every EPIC_SURVIVE_EVERY seconds a legendary carrier stays alive it earns this × its point gain. */
 export const EPIC_SURVIVE_EVERY = 5;
 export const EPIC_SURVIVE_PTS = 150;
+/** A carrier whose bounty has grown past this is "WANTED": bigger red blip on the minimap, red price tag. */
+export const EPIC_WANTED = 10_000;
 
 type GearBase = Omit<GearDef, "baseDmg" | "baseDuration">;
 
