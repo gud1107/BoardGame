@@ -1149,9 +1149,9 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
     return;
   }
 
-  // Walking legs (4 per side, the swimming crab's back pair is paddle-shaped).
-  ctx.strokeStyle = dark;
-  ctx.lineCap = "round";
+  // Walking legs (4 per side): tapered two-segment limbs with a dark rim and
+  // dark tips; the swimming crab's back pair ends in a flat paddle.
+  const legFill = pose.flash ? "#ffffff" : col.shell;
   for (const side of [-1, 1]) {
     for (let i = 0; i < 4; i++) {
       const phase = pose.walk + i * 1.6 + (side > 0 ? Math.PI : 0);
@@ -1161,37 +1161,59 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
       const kx = bx + Math.cos(a1) * 11 * legK, ky = by + Math.sin(a1) * 11 * legK;
       const a2 = a1 + side * 0.7 - sw * 0.5;
       const fx = kx + Math.cos(a2) * 10 * legK, fy = ky + Math.sin(a2) * 10 * legK;
-      ctx.lineWidth = 3.4;
-      ctx.beginPath();
-      ctx.moveTo(bx, by);
-      ctx.lineTo(kx, ky);
-      ctx.lineTo(fx, fy);
-      ctx.stroke();
+      // Outline pass, then fill pass a touch thinner.
+      limb(ctx, bx, by, kx, ky, 5.2, 4.2, dark);
+      limb(ctx, kx, ky, fx, fy, 4.2, 1.6, dark);
+      limb(ctx, bx, by, kx, ky, 3.6, 2.7, legFill);
       if (i === 3) {
-        ctx.fillStyle = dark;
+        limb(ctx, kx, ky, fx, fy, 2.7, 1.6, legFill);
+        ctx.fillStyle = legFill;
+        ctx.strokeStyle = dark;
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.ellipse(fx, fy, 4, 2.2, a2, 0, Math.PI * 2);
+        ctx.ellipse(fx, fy, 4.6, 2.5, a2, 0, Math.PI * 2);
         ctx.fill();
+        ctx.stroke();
+      } else {
+        // Dactyl: shell-coloured shin fading to a dark pointed tip.
+        const mx = kx + (fx - kx) * 0.6, my = ky + (fy - ky) * 0.6;
+        limb(ctx, kx, ky, mx, my, 2.7, 1.9, legFill);
       }
+      // Knee knuckle.
+      ctx.fillStyle = dark;
+      ctx.beginPath();
+      ctx.arc(kx, ky, 1.6, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 
-  // Claw arms: idle pose, swing sweeps the active claw across the front.
+  // Claw arms (merus → carpus → chela). Idle pose; a swing sweeps the active claw across the front.
   const drawArm = (side: 1 | -1) => {
     const active = pose.swing !== undefined && pose.swing >= 0 && (pose.weapon ? side === 1 : pose.swingSide === side);
     const sp = active ? pose.swing! : -1;
+    const k = side === 1 ? clawR : clawL;
     // Sweep: raised outward (wind-up) → snaps across the front.
     const base = side * 0.55;
     const armA = active ? side * (1.1 - 1.9 * easeOut(sp)) : base;
     const reach = active ? 1 + 0.35 * Math.sin(sp * Math.PI) : 1;
     const sx = 8, sy = side * R * 0.55;
-    const armLen = 14 * Math.sqrt(side === 1 ? clawR : clawL);
+    const armLen = 14 * Math.sqrt(k);
     const ex = sx + Math.cos(armA) * armLen * reach, ey = sy + Math.sin(armA) * armLen * reach;
-    ctx.strokeStyle = shell;
-    ctx.lineWidth = 5.5 * Math.sqrt(side === 1 ? clawR : clawL);
+    // Elbow bows outward so the arm reads as two segments.
+    const nx = -Math.sin(armA) * side, ny = Math.cos(armA) * side;
+    const elx = (sx + ex) / 2 + nx * 2.6, ely = (sy + ey) / 2 + ny * 2.6;
+    const aw = Math.sqrt(k);
+    limb(ctx, sx, sy, elx, ely, 7.2 * aw, 6.4 * aw, dark);
+    limb(ctx, elx, ely, ex, ey, 6.4 * aw, 6.8 * aw, dark);
+    limb(ctx, sx, sy, elx, ely, 5.4 * aw, 4.6 * aw, shell);
+    limb(ctx, elx, ely, ex, ey, 4.6 * aw, 5 * aw, shell);
+    // A pale ridge along the arm.
+    ctx.strokeStyle = "rgba(255,255,255,0.28)";
+    ctx.lineWidth = 1.1 * aw;
+    ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
+    ctx.moveTo(sx + nx * 1.2, sy + ny * 1.2);
+    ctx.lineTo(elx + nx * 1.2, ely + ny * 1.2);
     ctx.stroke();
     // Weapon in the right claw.
     if (side === 1 && pose.weapon) {
@@ -1201,45 +1223,64 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
       drawWeapon(ctx, pose.weapon);
       ctx.restore();
     }
-    // Pincer.
+    // Chela: a bulbous palm with a fixed finger and a hinged dactyl, both dark-tipped.
     ctx.save();
     ctx.translate(ex, ey);
     ctx.rotate(armA * 0.6);
     const open = active ? 0.2 + 0.5 * Math.sin(sp * Math.PI) : 0.28;
-    const big = 1.15 * (side === 1 ? clawR : clawL);
-    ctx.fillStyle = shell;
+    const big = 1.15 * k;
+    const finger = (upper: boolean) => {
+      const s = upper ? -1 : 1;
+      ctx.save();
+      ctx.translate(8 * big, s * 1.6 * big);
+      ctx.rotate(s * open);
+      const fg = ctx.createLinearGradient(0, 0, 10 * big, 0);
+      fg.addColorStop(0, shell);
+      fg.addColorStop(0.4, shell);
+      fg.addColorStop(0.75, dark);
+      fg.addColorStop(1, pose.flash ? "#e2e8f0" : "#1a1210");
+      ctx.fillStyle = fg;
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(-1, s * 2.6 * big);
+      ctx.quadraticCurveTo(6 * big, s * 4.2 * big, (upper ? 10 : 9) * big, s * 0.4);
+      ctx.quadraticCurveTo(5 * big, s * 0.2, -1, -s * 1.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    };
+    finger(false);
+    finger(true);
+    const pg = ctx.createRadialGradient(1.5 * big, -2.4 * big, 0.5, 3 * big, 0, 8.5 * big);
+    pg.addColorStop(0, pose.flash ? "#fff" : lighten(col.shell));
+    pg.addColorStop(0.6, shell);
+    pg.addColorStop(1, dark);
+    ctx.fillStyle = pg;
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 1.3;
     ctx.beginPath();
-    ctx.ellipse(3, 0, 7 * big, 5.5 * big, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = dark;
-    // Upper finger.
-    ctx.save();
-    ctx.rotate(-open);
-    ctx.beginPath();
-    ctx.moveTo(6, -2);
-    ctx.quadraticCurveTo(15 * big, -6, 17 * big, 0);
-    ctx.lineTo(7, 0);
+    ctx.moveTo(-2 * big, -3.4 * big);
+    ctx.bezierCurveTo(3 * big, -7 * big, 9.5 * big, -5.4 * big, 9.5 * big, -0.6 * big);
+    ctx.bezierCurveTo(9.5 * big, 4.6 * big, 3 * big, 6.6 * big, -2 * big, 3.6 * big);
+    ctx.quadraticCurveTo(-4 * big, 0, -2 * big, -3.4 * big);
     ctx.closePath();
     ctx.fill();
-    ctx.restore();
-    // Lower finger.
-    ctx.save();
-    ctx.rotate(open);
+    ctx.stroke();
+    // Gloss.
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
     ctx.beginPath();
-    ctx.moveTo(6, 2);
-    ctx.quadraticCurveTo(14 * big, 6, 15 * big, 1);
-    ctx.lineTo(7, 0);
-    ctx.closePath();
+    ctx.ellipse(3 * big, -2.8 * big, 3 * big, 1.1 * big, -0.25, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
     ctx.restore();
     // 참게: furry "mittens" on the claw base.
     if (pose.build?.fur) {
       ctx.fillStyle = "rgba(40,30,20,0.75)";
-      for (let i = 0; i < 6; i++) {
-        const fa = (i / 6) * Math.PI * 2;
+      for (let i = 0; i < 7; i++) {
+        const fa = (i / 7) * Math.PI * 2;
         ctx.beginPath();
-        ctx.arc(ex + Math.cos(fa) * 4.5, ey + Math.sin(fa) * 4.5, 2.6, 0, Math.PI * 2);
+        ctx.arc(ex + Math.cos(fa) * 4.6, ey + Math.sin(fa) * 4.6, 2.4, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -1254,80 +1295,94 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
   drawArm(-1);
   drawArm(1);
 
-  // Carapace: wide, with the swimming crab's long lateral spines.
+  // Carapace: a wide swimming-crab shell — serrated front margin, a long spine
+  // on each flank, smooth rounded back.
   ctx.save();
   ctx.scale(bodyK, bodyK);
   if (pose.build?.spikes) {
     // 털게: bristly outline.
     ctx.fillStyle = dark;
-    for (let i = 0; i < 18; i++) {
-      const a = (i / 18) * Math.PI * 2;
-      const rx = R * 0.95, ry = R * 1.15;
+    for (let i = 0; i < 22; i++) {
+      const a = (i / 22) * Math.PI * 2;
+      const rx = R * 0.92, ry = R * 1.1;
       const bx = Math.cos(a) * rx, by = Math.sin(a) * ry;
       ctx.beginPath();
       ctx.moveTo(bx + Math.cos(a + 1.4) * 2.2, by + Math.sin(a + 1.4) * 2.2);
-      ctx.lineTo(Math.cos(a) * (rx + 5), Math.sin(a) * (ry + 5));
+      ctx.lineTo(Math.cos(a) * (rx + 5.5), Math.sin(a) * (ry + 5.5));
       ctx.lineTo(bx + Math.cos(a - 1.4) * 2.2, by + Math.sin(a - 1.4) * 2.2);
       ctx.fill();
     }
   }
-  ctx.fillStyle = dark;
-  ctx.beginPath();
-  ctx.moveTo(R * 0.55, -R * 0.95);
-  ctx.lineTo(R * 0.25, -R * 1.55);
-  ctx.lineTo(-R * 0.05, -R * 0.95);
-  ctx.moveTo(R * 0.55, R * 0.95);
-  ctx.lineTo(R * 0.25, R * 1.55);
-  ctx.lineTo(-R * 0.05, R * 0.95);
-  ctx.fill();
-  const g = ctx.createRadialGradient(-R * 0.1, -R * 0.35, R * 0.1, 0, 0, R * 1.2);
+  const shellPath = carapacePath(R);
+  // Soft contact shadow under the rim.
+  ctx.save();
+  ctx.translate(-0.8, 1.6);
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.fill(shellPath);
+  ctx.restore();
+  const g = ctx.createRadialGradient(-R * 0.05, -R * 0.38, R * 0.08, -R * 0.1, 0, R * 1.35);
   g.addColorStop(0, pose.flash ? "#fff" : lighten(col.shell));
-  g.addColorStop(0.55, shell);
+  g.addColorStop(0.5, shell);
   g.addColorStop(1, dark);
   ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.moveTo(R * 0.72, -R * 0.2);
-  // Serrated front edge.
-  for (let i = 0; i <= 8; i++) {
-    const a = -1.1 + (i / 8) * 2.2;
-    const rr = i % 2 ? R * 0.78 : R * 0.9;
-    ctx.lineTo(Math.cos(a) * rr * 0.85, Math.sin(a) * rr * 1.2);
-  }
-  ctx.quadraticCurveTo(-R * 0.5, R * 1.05, -R * 0.8, R * 0.2);
-  ctx.quadraticCurveTo(-R * 0.95, 0, -R * 0.8, -R * 0.2);
-  ctx.quadraticCurveTo(-R * 0.5, -R * 1.05, Math.cos(-1.1) * R * 0.9 * 0.85, Math.sin(-1.1) * R * 0.9 * 1.2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = "rgba(0,0,0,0.25)";
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
-  // Pale spots (꽃게 pattern) + a centre groove.
+  ctx.fill(shellPath);
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = 1.6;
+  ctx.lineJoin = "round";
+  ctx.stroke(shellPath);
+  ctx.lineJoin = "miter";
   if (!pose.flash) {
-    ctx.fillStyle = "rgba(255,255,255,0.28)";
-    for (const [sx, sy, sr] of [[-4, -8, 2.6], [-6, 7, 2.2], [3, -3, 1.8], [-10, -1, 2], [2, 9, 1.6]] as const) {
+    // Inner rim light.
+    ctx.save();
+    ctx.clip(shellPath);
+    ctx.strokeStyle = "rgba(255,255,255,0.22)";
+    ctx.lineWidth = 2.2;
+    ctx.translate(0.6, -0.9);
+    ctx.stroke(shellPath);
+    ctx.restore();
+    // Region grooves: the H-shaped gastric/cardiac outline real crabs show.
+    ctx.strokeStyle = "rgba(0,0,0,0.13)";
+    ctx.lineWidth = 1;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(R * 0.32, -R * 0.38);
+    ctx.quadraticCurveTo(-R * 0.05, -R * 0.2, -R * 0.42, -R * 0.36);
+    ctx.moveTo(R * 0.32, R * 0.38);
+    ctx.quadraticCurveTo(-R * 0.05, R * 0.2, -R * 0.42, R * 0.36);
+    ctx.moveTo(R * 0.05, -R * 0.24);
+    ctx.lineTo(R * 0.05, R * 0.24);
+    ctx.stroke();
+    // 꽃게 pattern: soft pale flecks.
+    ctx.fillStyle = "rgba(255,255,255,0.2)";
+    for (const [px, py, pr] of [[-5, -10, 2.4], [-7, 9, 2.1], [-12, -3, 1.8], [-1, 13, 1.5], [-1, -14, 1.5], [-13, 6, 1.4]] as const) {
       ctx.beginPath();
-      ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      ctx.ellipse(px, py, pr * 1.3, pr, 0.4, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.strokeStyle = "rgba(0,0,0,0.18)";
-    ctx.lineWidth = 1.2;
+    // Specular gloss.
+    const sg = ctx.createRadialGradient(R * 0.05, -R * 0.42, 0, R * 0.05, -R * 0.42, R * 0.55);
+    sg.addColorStop(0, "rgba(255,255,255,0.5)");
+    sg.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = sg;
     ctx.beginPath();
-    ctx.moveTo(4, -6);
-    ctx.quadraticCurveTo(-4, 0, 4, 6);
-    ctx.stroke();
+    ctx.ellipse(R * 0.05, -R * 0.42, R * 0.5, R * 0.24, -0.15, 0, Math.PI * 2);
+    ctx.fill();
   }
   if (pose.build?.shell) {
     // 소라게: spiral whelk shell riding on the back.
     ctx.save();
     ctx.translate(-R * 0.55, 0);
-    const sg = ctx.createRadialGradient(-3, -4, 2, 0, 0, R * 0.95);
-    sg.addColorStop(0, pose.flash ? "#fff" : "#fdf4e3");
-    sg.addColorStop(0.6, pose.flash ? "#fff" : "#e7c9a0");
-    sg.addColorStop(1, pose.flash ? "#eee" : "#a47148");
-    ctx.fillStyle = sg;
+    const wg = ctx.createRadialGradient(-3, -4, 2, 0, 0, R * 0.95);
+    wg.addColorStop(0, pose.flash ? "#fff" : "#fdf4e3");
+    wg.addColorStop(0.6, pose.flash ? "#fff" : "#e7c9a0");
+    wg.addColorStop(1, pose.flash ? "#eee" : "#a47148");
+    ctx.fillStyle = wg;
+    ctx.strokeStyle = "rgba(110,60,25,0.9)";
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.ellipse(0, 0, R * 0.95, R * 0.85, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.stroke();
     ctx.strokeStyle = "rgba(120,70,30,0.7)";
     ctx.lineWidth = 1.6;
     ctx.beginPath();
@@ -1339,27 +1394,83 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
       else ctx.lineTo(x, y);
     }
     ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.beginPath();
+    ctx.ellipse(-2, -R * 0.45, R * 0.4, R * 0.14, -0.2, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
-  // Eye stalks.
+  // Eye stalks: rimmed stalks, glossy black eyes with a catch-light.
   for (const e of [-1, 1]) {
+    ctx.lineCap = "round";
     ctx.strokeStyle = dark;
-    ctx.lineWidth = 2.4;
+    ctx.lineWidth = 3.2;
     ctx.beginPath();
     ctx.moveTo(R * 0.6, e * 4);
     ctx.lineTo(R * 0.92, e * 6.5);
     ctx.stroke();
-    ctx.fillStyle = "#111";
+    ctx.strokeStyle = shell;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    const eg = ctx.createRadialGradient(R * 0.95 + 0.8, e * 6.8 - 0.9, 0.2, R * 0.95, e * 6.8, 3.2);
+    eg.addColorStop(0, "#4b5563");
+    eg.addColorStop(1, "#0b0b0f");
+    ctx.fillStyle = eg;
     ctx.beginPath();
-    ctx.arc(R * 0.95, e * 6.8, 3, 0, Math.PI * 2);
+    ctx.arc(R * 0.95, e * 6.8, 3.1, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "#fff";
     ctx.beginPath();
-    ctx.arc(R * 0.95 + 0.9, e * 6.8 - 0.9, 1.1, 0, Math.PI * 2);
+    ctx.arc(R * 0.95 + 1, e * 6.8 - 1, 1.05, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
   ctx.lineCap = "butt";
+}
+
+/** A tapered limb segment: a quad from width w1 at (x1,y1) to w2 at (x2,y2) with rounded ends. */
+function limb(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, w1: number, w2: number, color: string) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const l = Math.hypot(dx, dy) || 1;
+  const nx = -dy / l, ny = dx / l;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x1 + (nx * w1) / 2, y1 + (ny * w1) / 2);
+  ctx.lineTo(x2 + (nx * w2) / 2, y2 + (ny * w2) / 2);
+  ctx.lineTo(x2 - (nx * w2) / 2, y2 - (ny * w2) / 2);
+  ctx.lineTo(x1 - (nx * w1) / 2, y1 - (ny * w1) / 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x1, y1, w1 / 2, 0, Math.PI * 2);
+  ctx.arc(x2, y2, w2 / 2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+const carapaceCache = new Map<number, Path2D>();
+/** Swimming-crab carapace outline (facing +x): serrated front, a long spine on each flank. */
+function carapacePath(R: number): Path2D {
+  let p = carapaceCache.get(R);
+  if (p) return p;
+  p = new Path2D();
+  const N = 120;
+  for (let i = 0; i <= N; i++) {
+    const a = -Math.PI + (i / N) * Math.PI * 2;
+    const abs = Math.abs(a);
+    let r = 1;
+    // Nine small anterolateral teeth across the front.
+    if (abs < 1.18) r += 0.07 * (1 - (((abs / 1.18) * 4.5) % 1));
+    // The long lateral spine.
+    r += 0.36 * Math.exp(-(((abs - 1.27) / 0.06) ** 2));
+    // Slightly flattened, tucked rear.
+    if (abs > 2.2) r -= 0.08 * (abs - 2.2);
+    const x = Math.cos(a) * R * 0.84 * r, y = Math.sin(a) * R * 1.1 * r;
+    if (i === 0) p.moveTo(x, y);
+    else p.lineTo(x, y);
+  }
+  p.closePath();
+  carapaceCache.set(R, p);
+  return p;
 }
 
 function drawWeapon(ctx: CanvasRenderingContext2D, kind: WeaponKind) {
