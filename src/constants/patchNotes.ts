@@ -90,7 +90,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "crab-survival",
         type: "IMPROVE",
-        desc: "화면 흔들림 끄기·깜빡임 줄이기 옵션(기기 '동작 줄이기' 설정 시 기본 적용), 킹 크랩 등극 금빛·왕관 빼앗김 붉은 화면 연출, 15초 안에 왕관 도둑을 쓰러뜨리면 역습 보너스",
+        desc: "화면 흔들림 끄기·깜빡임 줄이기 옵션, 왕관 등극·빼앗김·탈환 화면 연출, 15초 안에 왕관 도둑을 쓰러뜨리는 역습 보너스와 봇의 복수 추격",
       },
       {
         game: "hungry-shark",

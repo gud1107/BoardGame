@@ -868,3 +868,69 @@ describe("역습 보너스", () => {
     expect(w.stats.revenges).toBe(0);
   });
 });
+
+describe("복수심 AI + 탈환 + 역습 기록", () => {
+  it("a dethroned bot holds a grudge on the thief and goes after it over a richer target", () => {
+    const w = bare(3);
+    const [me, exKing, thief, juicy] = w.crabs;
+    me.x = 5000;
+    w.time = 20;
+    exKing.score = 50_000;
+    thief.score = 100;
+    juicy.score = 100;
+    updateLeaderboard(w);
+    thief.score = 80_000;
+    updateLeaderboard(w);
+    expect(exKing.brain!.grudgeId).toBe(thief.id);
+    expect(exKing.brain!.grudgeT).toBeGreaterThan(14);
+    // Make both targets beatable, put the thief farther away than a juicy alternative.
+    exKing.hp = exKing.maxHp = 50_000;
+    thief.hp = juicy.hp = 50;
+    thief.x = 700;
+    juicy.x = 250;
+    juicy.score = 60_000;
+    thief.brain = juicy.brain = null;
+    exKing.brain!.think = 0;
+    botThink(w, exKing, 1 / 60);
+    expect(exKing.brain!.targetId).toBe(thief.id);
+  });
+
+  it("the player taking a bot's crown is warned that it's coming for revenge", () => {
+    const w = bare(1);
+    const [me, bot] = w.crabs;
+    w.time = 20;
+    bot.score = 50_000;
+    me.score = 100;
+    updateLeaderboard(w);
+    me.score = 80_000;
+    updateLeaderboard(w);
+    expect(w.events.some((e) => e.type === "hunted" && e.by === bot.name)).toBe(true);
+  });
+
+  it("winning the crown back after losing it is a 탈환 with a longer flourish", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    w.time = 20;
+    me.score = 50_000;
+    foe.score = 100;
+    updateLeaderboard(w);
+    expect(w.kingRecap).toBe(false);
+    foe.score = 80_000;
+    updateLeaderboard(w);
+    w.events.length = 0;
+    me.score = 120_000;
+    updateLeaderboard(w);
+    expect(w.events.some((e) => e.type === "kingNew" && e.player && e.recapture)).toBe(true);
+    expect(w.kingRecap).toBe(true);
+    expect(w.kingFx).toBeGreaterThan(2);
+  });
+
+  it("keeps the best 역습 count per species", () => {
+    const a = nextSpeciesRecord(EMPTY_RECORD, { score: 1, rank: 2, maxLevel: 3, revenges: 2 });
+    expect(a.record.bestRevenges).toBe(2);
+    expect(a.revengeRecord).toBe(true);
+    const b = nextSpeciesRecord(a.record, { score: 1, rank: 2, maxLevel: 3, revenges: 1 });
+    expect(b.record.bestRevenges).toBe(2);
+    expect(b.revengeRecord).toBe(false);
+  });
+});

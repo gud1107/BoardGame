@@ -6,7 +6,7 @@
  */
 
 import { BOXES, CRAB_RADIUS, epicBounty, EPIC_WANTED, EVO_REVEAL, FOODS, KING_FX, USURP_FX, USURP_STRONG, SHELL_STYLE, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
-import { crabRadius, hasMut, holdsEpic, penaltyLeft, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
+import { crabRadius, hasMut, holdsEpic, kingFxDuration, penaltyLeft, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
 
 export const TILT = 0.72;
 
@@ -2559,6 +2559,8 @@ interface EvoFx {
   /** Evolution levels (Lv4/8/11) hit harder. */
   big: boolean;
   shake: number;
+  /** 탈환: sunburst rays + gold/crimson triple ripples on top of the glow. */
+  recapture?: boolean;
 }
 
 /** Screen FX state for the player's own level-up reveal (null when idle or dead). */
@@ -2582,9 +2584,9 @@ function crownLostFx(w: World, me: Crab): EvoFx | null {
 /** The gold flourish when the player takes the crown — same shape as the evolution glow, longer. */
 function kingFx(w: World, me: Crab): EvoFx | null {
   if (!me.alive || w.kingFx <= 0) return null;
-  const k = 1 - w.kingFx / KING_FX;
+  const k = 1 - w.kingFx / kingFxDuration(w.kingRecap);
   const env = k < 0.25 ? k / 0.25 : Math.max(0, 1 - (k - 0.25) / 0.75) ** 1.5;
-  return { k, env, big: true, shake: 2.6 };
+  return { k, env, big: true, shake: w.kingRecap ? 3.6 : 2.6, recapture: w.kingRecap };
 }
 
 /**
@@ -2600,7 +2602,7 @@ function drawEvoGlow(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: n
       : me.level >= 8
         ? [251, 191, 36]
         : hexRgb(me.color.shell);
-  const peak = (fx.big ? 0.42 : 0.2) * (calm ? 0.4 : 1);
+  const peak = (fx.recapture ? 0.55 : fx.big ? 0.42 : 0.2) * (calm ? 0.4 : 1);
   const a = peak * fx.env;
   ctx.save();
   // Edge vignette in the evolution colour.
@@ -2617,12 +2619,35 @@ function drawEvoGlow(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: n
   bg.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
   ctx.fillStyle = bg;
   ctx.fillRect(sx - R * 3.2, sy - R * 3.2, R * 6.4, R * 6.4);
-  // Ripple ring(s) expanding outward on the ground plane.
-  for (const delay of fx.big ? [0, 0.25] : [0]) {
+  // 탈환: a slowly turning sunburst behind the crab.
+  if (fx.recapture) {
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(calm ? 0 : t * 0.6);
+    const L = R * 7;
+    for (let i = 0; i < 14; i++) {
+      const a0 = (i / 14) * Math.PI * 2;
+      const rg = ctx.createLinearGradient(0, 0, Math.cos(a0) * L, Math.sin(a0) * L);
+      rg.addColorStop(0, `rgba(253,224,71,${a * 0.9})`);
+      rg.addColorStop(1, "rgba(253,224,71,0)");
+      ctx.fillStyle = rg;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(a0 - 0.07) * L, Math.sin(a0 - 0.07) * L * TILT);
+      ctx.lineTo(Math.cos(a0 + 0.07) * L, Math.sin(a0 + 0.07) * L * TILT);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  // Ripple ring(s) expanding outward on the ground plane (탈환 alternates gold and crimson).
+  const delays = fx.recapture ? [0, 0.18, 0.36] : fx.big ? [0, 0.25] : [0];
+  for (const [di, delay] of delays.entries()) {
     const p = (fx.k - delay) / (1 - delay);
     if (p <= 0) continue;
     const rr = R * (1.2 + p * 5);
-    ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(1 - p) * (fx.big ? 0.8 : 0.5) * (calm ? 0.45 : 1)})`;
+    const c = fx.recapture && di === 1 ? [239, 68, 68] : rgb;
+    ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${(1 - p) * (fx.big ? 0.8 : 0.5) * (calm ? 0.45 : 1)})`;
     ctx.lineWidth = Math.max(1.5, (fx.big ? 5 : 3) * (1 - p));
     ctx.beginPath();
     ctx.ellipse(sx, sy, rr, rr * TILT, 0, 0, Math.PI * 2);

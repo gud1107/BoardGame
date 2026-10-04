@@ -31,6 +31,7 @@ interface MatchResult {
   /** New species records for bounty points / legendary carry time this match. */
   bountyRecord: boolean;
   epicRecord: boolean;
+  revengeRecord: boolean;
   unlocked: SpeciesId[];
 }
 
@@ -68,7 +69,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
     const trophies = trophiesFor(s.rank, s.total);
     const newBest = s.score > save.best;
     const prevRec = save.speciesStats[species] ?? EMPTY_RECORD;
-    const { record, bountyRecord, epicRecord } = nextSpeciesRecord(prevRec, { score: s.score, rank: s.rank, ...s.stats });
+    const { record, bountyRecord, epicRecord, revengeRecord } = nextSpeciesRecord(prevRec, { score: s.score, rank: s.rank, ...s.stats });
     const unlocked = SPECIES_LIST.filter((sp) => !isUnlocked(sp.id, save.trophies) && isUnlocked(sp.id, save.trophies + trophies)).map((sp) => sp.id);
     update((sv) => ({
       ...sv,
@@ -90,6 +91,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
       speciesBest: s.score > prevRec.best && prevRec.matches > 0,
       bountyRecord,
       epicRecord,
+      revengeRecord,
       unlocked,
     });
     setScreen("results");
@@ -355,7 +357,7 @@ function ResultsPanel({
   onRetry: () => void;
   onMenu: () => void;
 }) {
-  const { s, newBest, trophies, species, record, speciesBest, bountyRecord, epicRecord, unlocked } = result;
+  const { s, newBest, trophies, species, record, speciesBest, bountyRecord, epicRecord, revengeRecord, unlocked } = result;
   const sp = SPECIES[species];
   const lv = roadmap(species)[Math.max(0, s.stats.maxLevel - 1)];
   const title = s.rank === 1 ? "👑 섬의 왕!" : s.rank <= 3 ? "🥈 포디움 입성!" : s.endedByDeath ? "뒤집혔지만 잘 싸웠다!" : "생존 완료!";
@@ -375,6 +377,7 @@ function ResultsPanel({
           {speciesBest && <span className="rounded-full bg-pink-400 px-3 py-0.5 text-xs font-black text-slate-900">🧬 {sp.name} 신기록!</span>}
           {bountyRecord && <span className="rounded-full bg-amber-400 px-3 py-0.5 text-xs font-black text-slate-900">💰 현상금 신기록!</span>}
           {epicRecord && <span className="rounded-full bg-yellow-200 px-3 py-0.5 text-xs font-black text-slate-900">🌟 전설 보유 신기록!</span>}
+          {revengeRecord && <span className="rounded-full bg-rose-400 px-3 py-0.5 text-xs font-black text-slate-900">⚔️ 역습 신기록!</span>}
           <span className="rounded-full bg-orange-500/20 px-3 py-0.5 text-xs font-black text-orange-200 light:text-orange-700">트로피 +{trophies}</span>
         </div>
         <p className="mt-2 text-xs text-white/50 light:text-slate-500">
@@ -393,13 +396,14 @@ function ResultsPanel({
         <div className="mb-1.5 text-xs font-semibold text-white/50 light:text-slate-500">
           🧬 {sp.name}({sp.role}) 전적
         </div>
-        <div className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
+        <div className="grid grid-cols-4 gap-2 text-center sm:grid-cols-7">
           <Stat label="최고 점수" value={fmtK(record.best)} />
           <Stat label="1위" value={`${record.wins}회`} />
           <Stat label="플레이" value={`${record.matches}판`} />
           <Stat label="최대 성장" value={`Lv${record.maxLevel}`} />
           <Stat label="💰 최다 현상금" value={record.bestBounty ? fmtK(record.bestBounty) : "—"} />
           <Stat label="🌟 최장 전설 보유" value={record.longestEpic ? `${record.longestEpic}초` : "—"} />
+          <Stat label="⚔️ 최다 역습" value={record.bestRevenges ? `${record.bestRevenges}회` : "—"} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
@@ -628,11 +632,9 @@ function SpeciesPicker({
                 {rec && rec.matches > 0 ? (
                   <>
                     📊 최고 <b className="text-white/85 light:text-slate-800">{fmtK(rec.best)}</b> · 1위 {rec.wins}회 · {rec.matches}판
-                    {(rec.bestBounty || rec.longestEpic) ? (
+                    {rec.bestBounty || rec.longestEpic || rec.bestRevenges ? (
                       <div>
-                        {rec.bestBounty ? <>💰 {fmtK(rec.bestBounty)}</> : null}
-                        {rec.bestBounty && rec.longestEpic ? " · " : ""}
-                        {rec.longestEpic ? <>🌟 {rec.longestEpic}초</> : null}
+                        {[rec.bestBounty ? `💰 ${fmtK(rec.bestBounty)}` : "", rec.longestEpic ? `🌟 ${rec.longestEpic}초` : "", rec.bestRevenges ? `⚔️ ${rec.bestRevenges}회` : ""].filter(Boolean).join(" · ")}
                       </div>
                     ) : null}
                   </>
@@ -650,7 +652,7 @@ function SpeciesPicker({
 
 /** Best bounty haul / longest legendary carry across every species, with the species that set it. */
 function OverallRecords({ stats }: { stats: CrabSave["speciesStats"] }) {
-  const best = (key: "bestBounty" | "longestEpic") => {
+  const best = (key: "bestBounty" | "longestEpic" | "bestRevenges") => {
     let top: { v: number; id: SpeciesId } | null = null;
     for (const sp of SPECIES_LIST) {
       const v = stats[sp.id]?.[key] ?? 0;
@@ -658,8 +660,8 @@ function OverallRecords({ stats }: { stats: CrabSave["speciesStats"] }) {
     }
     return top;
   };
-  const bounty = best("bestBounty"), epic = best("longestEpic");
-  if (!bounty && !epic) return null;
+  const bounty = best("bestBounty"), epic = best("longestEpic"), revenge = best("bestRevenges");
+  if (!bounty && !epic && !revenge) return null;
   return (
     <div className="flex flex-wrap justify-end gap-1">
       {bounty && (
@@ -670,6 +672,11 @@ function OverallRecords({ stats }: { stats: CrabSave["speciesStats"] }) {
       {epic && (
         <span className="rounded-full bg-black/35 px-2 py-0.5 text-[10px] font-bold text-yellow-100" title="한 판에 전설 무기를 들고 버틴 최장 시간 (모든 게 종류)">
           🌟 최장 전설 보유 {epic.v}초 · {SPECIES[epic.id].name}
+        </span>
+      )}
+      {revenge && (
+        <span className="rounded-full bg-black/35 px-2 py-0.5 text-[10px] font-bold text-rose-200" title="한 판에 성공한 역습 최다 기록 (모든 게 종류)">
+          ⚔️ 최다 역습 {revenge.v}회 · {SPECIES[revenge.id].name}
         </span>
       )}
     </div>

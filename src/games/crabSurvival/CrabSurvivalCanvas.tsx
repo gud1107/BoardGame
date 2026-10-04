@@ -480,9 +480,15 @@ export default function CrabSurvivalCanvas({
             if (ev.player) a?.guard();
             break;
           case "kingNew":
-            a?.fanfare();
+            if (ev.recapture) a?.recapture();
+            else a?.fanfare();
             if (a) a.king = ev.player;
-            pushBanner({ text: ev.player ? "👑 당신이 킹 크랩!" : `👑 ${ev.name} 킹 크랩 등극!`, sub: ev.player ? "모두가 당신을 노립니다. 살아남으세요!" : "왕관을 쓴 게를 쓰러뜨리면 막대한 보너스!", tone: "king" });
+            if (ev.recapture) pushBanner({ text: "👑 왕관 탈환!", sub: "다시 섬의 왕이 되었습니다 — 이번엔 지켜내세요!", tone: "king" });
+            else pushBanner({ text: ev.player ? "👑 당신이 킹 크랩!" : `👑 ${ev.name} 킹 크랩 등극!`, sub: ev.player ? "모두가 당신을 노립니다. 살아남으세요!" : "왕관을 쓴 게를 쓰러뜨리면 막대한 보너스!", tone: "king" });
+            break;
+          case "hunted":
+            pushFeed(`⚔️ ${ev.by} 복수 추격 중`, true);
+            pushBanner({ text: `⚔️ ${ev.by}이(가) 복수하러 옵니다!`, sub: `왕관을 빼앗긴 게가 ${USURP_FX}초 동안 당신을 쫓습니다`, tone: "down" });
             break;
           case "kingDown":
             a?.kingDown();

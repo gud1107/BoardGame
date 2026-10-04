@@ -128,6 +128,9 @@ export interface Brain {
   stuck: number;
   lastX: number;
   lastY: number;
+  /** 복수심: the crab that took this bot's crown, hunted while grudgeT > 0. */
+  grudgeId?: number;
+  grudgeT?: number;
 }
 
 export interface Crab {
@@ -393,7 +396,8 @@ export type GameEvent =
   | { type: "equip"; name: string; emoji: string }
   | { type: "key" }
   | { type: "levelUp"; level: number; name: string; player: boolean; species: SpeciesId; x: number; y: number }
-  | { type: "kingNew"; name: string; player: boolean }
+  | { type: "kingNew"; name: string; player: boolean; recapture: boolean }
+  | { type: "hunted"; by: string }
   | { type: "crownLost"; by: string }
   | { type: "revenge"; victim: string; bonus: number }
   | { type: "kingDown"; name: string; by: string | null; player: boolean; byPlayer: boolean }
@@ -474,6 +478,10 @@ export interface World {
   /** Seconds left in the 역습 window on the crab that took your crown. */
   usurpFx: number;
   usurperId: number;
+  /** The player has lost the crown at least once this match (next crowning is a 탈환). */
+  crownLostOnce: boolean;
+  /** The current kingFx is a 탈환 (recapture) — longer and grander. */
+  kingRecap: boolean;
   playerId: number;
   /** Player is flipped over, waiting for the revive/end choice. */
   playerDown: boolean;
@@ -643,6 +651,8 @@ export function createWorld(opts: MatchOptions): World {
     crownLostFx: 0,
     usurpFx: 0,
     usurperId: 0,
+    crownLostOnce: false,
+    kingRecap: false,
     playerId: 0,
     playerDown: false,
     deathSnapshot: null,
@@ -1472,6 +1482,12 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
       floatText(w, by.x, by.y - 84 * by.scale, `⚔️ 역습 보너스 +${bonus.toLocaleString()}`, "#fca5a5", 21, 1.8);
       burst(w, "star", v.x, v.y, 26, 300, "#f87171", 5, 1, 260);
       w.events.push({ type: "revenge", victim: v.name, bonus });
+    } else if (!by.isPlayer && by.brain && by.brain.grudgeId === v.id && (by.brain.grudgeT ?? 0) > 0) {
+      // Bots cash in on revenge too — and the player hears about it if they were the thief.
+      const bonus = revengeBonus(score);
+      reward += bonus;
+      by.brain.grudgeT = 0;
+      floatText(w, by.x, by.y - 70 * by.scale, "⚔️ 역습!", "#fca5a5", 16, 1.4);
     }
     addScore(w, by, reward);
     floatText(w, by.x, by.y - 40 * by.scale, `+${Math.round(reward).toLocaleString()}`, "#fde047", wasKing ? 26 : 18, 1.4);
@@ -1949,15 +1965,36 @@ export function updateLeaderboard(w: World, initial = false) {
     w.crownLostFx = KING_FX;
     w.usurpFx = USURP_FX;
     w.usurperId = top.id;
+    w.crownLostOnce = true;
     w.events.push({ type: "crownLost", by: top.name });
+  }
+  // 복수심: a dethroned bot hunts whoever took its crown for the same window.
+  if (cur && !cur.isPlayer && cur.alive && cur.brain && !initial && w.time >= 10) {
+    cur.brain.grudgeId = top.id;
+    cur.brain.grudgeT = USURP_FX;
+    cur.brain.think = 0;
+    if (top.isPlayer) w.events.push({ type: "hunted", by: cur.name });
   }
   w.kingId = top.id;
   // The opening seconds reshuffle a lot — crown silently until things settle.
   if (!initial && w.time >= 10) {
-    w.events.push({ type: "kingNew", name: top.name, player: top.isPlayer });
-    if (top.isPlayer) w.kingFx = KING_FX;
+    const recapture = top.isPlayer && w.crownLostOnce;
+    w.events.push({ type: "kingNew", name: top.name, player: top.isPlayer, recapture });
+    if (top.isPlayer) {
+      w.kingRecap = recapture;
+      w.kingFx = kingFxDuration(recapture);
+      if (recapture) {
+        burst(w, "gold", top.x, top.y, 40, 340, "#facc15", 6, 1.4, 320);
+        burst(w, "star", top.x, top.y, 18, 260, "#f87171", 5, 1.1, 260);
+      }
+    }
     burst(w, "gold", top.x, top.y, 24, 240, "#facc15", 5, 1, 240);
   }
+}
+
+/** The crowning flourish runs longer when it's a 탈환. */
+export function kingFxDuration(recapture: boolean): number {
+  return recapture ? KING_FX * 1.6 : KING_FX;
 }
 
 export function rankOf(w: World, id: number): number {
@@ -2030,6 +2067,7 @@ export function botThink(w: World, c: Crab, dt: number): CrabInput {
   const br = c.brain;
   if (!br) return IDLE;
   br.think -= dt;
+  if (br.grudgeT) br.grudgeT = Math.max(0, br.grudgeT - dt);
   const r = crabRadius(c);
   const hpFrac = c.hp / c.maxHp;
 
@@ -2196,12 +2234,14 @@ function decide(w: World, c: Crab, br: Brain, hpFrac: number) {
     const d = Math.hypot(o.x - c.x, o.y - c.y);
     const isKing = o.id === w.kingId;
     const epic = holdsEpic(o);
-    if (d > vision * (isKing ? 1.8 : epic ? EPIC_HUNT_VISION : 1)) continue;
+    // 복수심: the thief of this bot's crown is tracked across the island and chased harder.
+    const grudge = (br.grudgeT ?? 0) > 0 && br.grudgeId === o.id;
+    if (d > vision * (grudge ? 3 : isKing ? 1.8 : epic ? EPIC_HUNT_VISION : 1)) continue;
     const mine = timeToKill(c, o), theirs = timeToKill(o, c);
-    if (mine > theirs * (0.55 + br.aggression * 0.55)) continue;
+    if (mine > theirs * (0.55 + br.aggression * 0.55) * (grudge ? 1.6 : 1)) continue;
     // Big crabs mostly ignore small fry — not worth the chase.
     const smallFry = o.level < c.level - 3 ? 0.25 : 1;
-    const payoff = (o.score * 0.6 + 200 * o.level * lv.gain) * smallFry + (isKing ? o.score * 0.5 + 10_000 : 0) + (epic ? EPIC_HUNT_PAYOFF * lv.gain : 0);
+    const payoff = (o.score * 0.6 + 200 * o.level * lv.gain) * smallFry + (isKing ? o.score * 0.5 + 10_000 : 0) + (epic ? EPIC_HUNT_PAYOFF * lv.gain : 0) + (grudge ? 12_000 * lv.gain : 0);
     consider("crab", o.id, o.x, o.y, (payoff * (0.4 + br.aggression)) / (d + 150));
   }
   for (const cr of w.creatures) {

@@ -40,9 +40,11 @@ export interface SpeciesRecord {
   bestBounty?: number;
   /** Longest legendary carry in a single match, seconds. */
   longestEpic?: number;
+  /** Most 역습 (crown-thief flips) in a single match. */
+  bestRevenges?: number;
 }
 
-export const EMPTY_RECORD: SpeciesRecord = { best: 0, wins: 0, matches: 0, maxLevel: 1, bestBounty: 0, longestEpic: 0 };
+export const EMPTY_RECORD: SpeciesRecord = { best: 0, wins: 0, matches: 0, maxLevel: 1, bestBounty: 0, longestEpic: 0, bestRevenges: 0 };
 
 const KEY = "crab-survival-save-v1";
 
@@ -99,10 +101,11 @@ export function writeSave(save: CrabSave) {
 /** Fold one finished match into a species record; flags which per-species records it broke. */
 export function nextSpeciesRecord(
   prev: SpeciesRecord,
-  m: { score: number; rank: number; maxLevel: number; bountyPoints?: number; epicSeconds?: number },
-): { record: SpeciesRecord; bountyRecord: boolean; epicRecord: boolean } {
+  m: { score: number; rank: number; maxLevel: number; bountyPoints?: number; epicSeconds?: number; revenges?: number },
+): { record: SpeciesRecord; bountyRecord: boolean; epicRecord: boolean; revengeRecord: boolean } {
   const bounty = m.bountyPoints ?? 0;
   const epic = Math.round(m.epicSeconds ?? 0);
+  const revenges = m.revenges ?? 0;
   return {
     record: {
       best: Math.max(prev.best, m.score),
@@ -111,9 +114,11 @@ export function nextSpeciesRecord(
       maxLevel: Math.max(prev.maxLevel, m.maxLevel),
       bestBounty: Math.max(prev.bestBounty ?? 0, bounty),
       longestEpic: Math.max(prev.longestEpic ?? 0, epic),
+      bestRevenges: Math.max(prev.bestRevenges ?? 0, revenges),
     },
     bountyRecord: bounty > 0 && bounty > (prev.bestBounty ?? 0),
     epicRecord: epic > 0 && epic > (prev.longestEpic ?? 0),
+    revengeRecord: revenges > 0 && revenges > (prev.bestRevenges ?? 0),
   };
 }
 

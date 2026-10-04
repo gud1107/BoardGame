@@ -290,6 +290,17 @@ export class CrabAudio {
       this.tone(f / 2, this.now + i * 0.13, 0.3, "triangle", 0.12);
     });
   }
+  /** 탈환: the crowning fanfare, bigger — a rising run into a held major chord with a sparkle. */
+  recapture() {
+    if (!this.ctx) return;
+    const at = this.now;
+    [392, 523, 659, 784].forEach((f, i) => this.tone(f, at + i * 0.08, 0.2, "square", 0.07));
+    [523, 659, 784, 1047].forEach((f) => {
+      this.tone(f, at + 0.36, 0.9, "triangle", 0.09);
+      this.tone(f / 2, at + 0.36, 0.9, "sine", 0.08);
+    });
+    for (let i = 0; i < 6; i++) this.tone(2093 + i * 260, at + 0.5 + i * 0.06, 0.15, "sine", 0.05);
+  }
   kingDown() {
     if (!this.ctx) return;
     [784, 659, 523, 392].forEach((f, i) => this.tone(f, this.now + i * 0.12, 0.3, "triangle", 0.15));
