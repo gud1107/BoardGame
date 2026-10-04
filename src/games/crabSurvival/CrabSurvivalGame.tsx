@@ -206,6 +206,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
                 </div>
               </div>
               <RoadmapChips species={species} />
+              <GrowthLooks color={color} species={species} />
             </div>
           </div>
 
@@ -264,6 +265,7 @@ function CrabPreview({
   weapon,
   shield,
   crown,
+  level,
 }: {
   color: CrabColor;
   species?: SpeciesId;
@@ -273,6 +275,7 @@ function CrabPreview({
   weapon?: WeaponKind;
   shield?: ShieldKind;
   crown?: boolean;
+  level?: number;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -286,12 +289,12 @@ function CrabPreview({
     let raf = 0;
     const draw = (t: number) => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawCrabPreview(ctx, color, width, height, animate ? t / 1000 : 0.4, { weapon, shield, crown, species });
+      drawCrabPreview(ctx, color, width, height, animate ? t / 1000 : 0.4, { weapon, shield, crown, species, level });
       if (animate) raf = requestAnimationFrame(draw);
     };
     draw(0);
     return () => cancelAnimationFrame(raf);
-  }, [color, species, width, height, animate, weapon, shield, crown]);
+  }, [color, species, width, height, animate, weapon, shield, crown, level]);
   return <canvas ref={ref} style={{ width, height, maxWidth: "100%" }} className="mx-auto block" />;
 }
 
@@ -324,7 +327,7 @@ function ResultsPanel({
     <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 p-5 light:border-slate-200 light:from-white light:to-slate-50">
       <div className="flex flex-col items-center text-center">
         <div className="text-xs font-bold tracking-[0.3em] text-white/40 light:text-slate-400">MATCH RESULT</div>
-        <CrabPreview color={color} species={species} width={160} height={100} animate crown={s.rank === 1} />
+        <CrabPreview color={color} species={species} width={160} height={100} animate crown={s.rank === 1} level={s.stats.maxLevel} />
         <div className="text-lg font-black text-white light:text-slate-900">{title}</div>
         <div className="mt-1 text-4xl font-black text-white tabular-nums light:text-slate-900">
           {s.rank}
@@ -411,6 +414,29 @@ function ResultsPanel({
         <button onClick={onMenu} className="flex-1 rounded-xl bg-white/10 py-3 font-black text-white hover:bg-white/20 light:bg-slate-200 light:text-slate-800">
           🏝️ 로비로
         </button>
+      </div>
+    </div>
+  );
+}
+
+/** 성장 외형: what the shell pattern looks like at each evolution tier. */
+function GrowthLooks({ color, species }: { color: CrabColor; species: SpeciesId }) {
+  const steps: [number, string][] = [
+    [1, "Lv1 기본"],
+    [4, "Lv4 줄무늬"],
+    [8, "Lv8 황금 장식"],
+    [11, "Lv11 오색 광채"],
+  ];
+  return (
+    <div className="rounded-lg bg-black/20 p-2 light:bg-slate-50">
+      <div className="mb-1 text-[11px] font-bold text-white/80 light:text-slate-700">✨ 성장 외형 — 진화할수록 등딱지가 화려해져요</div>
+      <div className="grid grid-cols-4 gap-1">
+        {steps.map(([lv, label]) => (
+          <div key={lv} className="flex flex-col items-center rounded bg-gradient-to-b from-amber-100 to-amber-200 py-0.5">
+            <CrabPreview color={color} species={species} width={70} height={48} level={lv} animate={lv >= 11} />
+            <span className="text-[9px] font-semibold text-slate-700">{label}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -1011,6 +1011,8 @@ function drawCrabWorld(ctx: CanvasRenderingContext2D, c: Crab, t: number, king: 
       shield: c.shield?.kind ?? null,
       guard: c.guardFlash > 0,
       king,
+      level: c.level,
+      t,
     });
     const saw = c.gear.find((g) => g.kind === "saw");
     if (saw) {
@@ -1090,6 +1092,10 @@ export interface CrabPose {
   king?: boolean;
   /** Species proportions (claw sizes, leg length, shell size). */
   build?: SpeciesDef["build"];
+  /** Growth level: the carapace pattern gets fancier with each evolution tier. */
+  level?: number;
+  /** Seconds, for the Tier 4 shimmer. */
+  t?: number;
 }
 
 /**
@@ -1359,6 +1365,7 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
       ctx.ellipse(px, py, pr * 1.3, pr, 0.4, 0, Math.PI * 2);
       ctx.fill();
     }
+    drawShellOrnament(ctx, R, shellPath, pose.level ?? 1, pose.t ?? 0, col);
     // Specular gloss.
     const sg = ctx.createRadialGradient(R * 0.05, -R * 0.42, 0, R * 0.05, -R * 0.42, R * 0.55);
     sg.addColorStop(0, "rgba(255,255,255,0.5)");
@@ -1426,6 +1433,162 @@ export function drawCrabBody(ctx: CanvasRenderingContext2D, col: CrabColor, pose
   }
   ctx.restore();
   ctx.lineCap = "butt";
+}
+
+/**
+ * 성장 외형: the carapace pattern escalates with each evolution tier.
+ *   Tier 1 (Lv1-3)  plain flecks only (drawn by the caller)
+ *   Tier 2 (Lv4-7)  dark chevron bands (one more per level) + a pale rim band from Lv6
+ *   Tier 3 (Lv8-10) gilded spine tips, a gold rosette and gold beads along the front teeth
+ *   Tier 4 (Lv11+)  an iridescent shimmer sweeping across the shell, glowing grooves and a centre gem
+ */
+function drawShellOrnament(ctx: CanvasRenderingContext2D, R: number, shellPath: Path2D, level: number, t: number, col: CrabColor) {
+  if (level < 4) return;
+  ctx.save();
+  ctx.clip(shellPath);
+  // Chevron bands across the back.
+  const bands = Math.min(4, level - 2);
+  ctx.lineCap = "round";
+  for (let i = 0; i < bands; i++) {
+    const x = -R * 0.72 + i * R * 0.19;
+    // A dark band with a pale highlight riding just in front of it — tiger-stripe chevrons.
+    for (const [dx, w, c] of [[0, 3, col.dark], [2.4, 1.3, "rgba(255,255,255,0.4)"]] as const) {
+      ctx.strokeStyle = c;
+      ctx.globalAlpha = dx === 0 ? 0.6 : 1;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(x + dx - 3, -R * 0.95);
+      ctx.quadraticCurveTo(x + dx + 6, 0, x + dx - 3, R * 0.95);
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+  // A pair of pale ocelli on the shoulders.
+  for (const e of [-1, 1]) {
+    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(-R * 0.05, e * R * 0.55, 3.2, 2.6, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = col.dark;
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath();
+    ctx.arc(-R * 0.05, e * R * 0.55, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  if (level >= 6) {
+    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.lineWidth = 3.4;
+    ctx.stroke(shellPath);
+    ctx.strokeStyle = col.dark;
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 1;
+    ctx.save();
+    ctx.scale(0.86, 0.88);
+    ctx.stroke(shellPath);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+  if (level >= 11) {
+    // Iridescent sheen sweeping front-to-back.
+    const sweep = ((t * 0.45) % 1) * R * 3 - R * 1.5;
+    const ig = ctx.createLinearGradient(sweep - R * 0.6, -R, sweep + R * 0.6, R);
+    ig.addColorStop(0, "rgba(34,211,238,0)");
+    ig.addColorStop(0.35, "rgba(34,211,238,0.28)");
+    ig.addColorStop(0.5, "rgba(244,114,182,0.32)");
+    ig.addColorStop(0.65, "rgba(250,204,21,0.28)");
+    ig.addColorStop(1, "rgba(250,204,21,0)");
+    ctx.fillStyle = ig;
+    ctx.fillRect(-R * 1.5, -R * 1.6, R * 3, R * 3.2);
+    // Glowing grooves.
+    const pulse = 0.55 + 0.35 * Math.sin(t * 3);
+    for (const [w, c] of [[3, `rgba(103,232,249,${0.35 * pulse})`], [1.1, `rgba(236,254,255,${0.9 * pulse})`]] as const) {
+      ctx.strokeStyle = c;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(R * 0.32, -R * 0.38);
+      ctx.quadraticCurveTo(-R * 0.05, -R * 0.2, -R * 0.42, -R * 0.36);
+      ctx.moveTo(R * 0.32, R * 0.38);
+      ctx.quadraticCurveTo(-R * 0.05, R * 0.2, -R * 0.42, R * 0.36);
+      ctx.moveTo(R * 0.05, -R * 0.24);
+      ctx.lineTo(R * 0.05, R * 0.24);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  if (level >= 8) {
+    const gold = (x: number, y: number, r: number) => {
+      const gg = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, 0, x, y, r);
+      gg.addColorStop(0, "#fff7cc");
+      gg.addColorStop(0.5, "#fbbf24");
+      gg.addColorStop(1, "#a16207");
+      ctx.fillStyle = gg;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    // Gilded flank-spine tips.
+    for (const e of [-1, 1]) {
+      const a = 1.27 * e;
+      gold(Math.cos(a) * R * 0.84 * 1.3, Math.sin(a) * R * 1.1 * 1.3, 2.1);
+    }
+    // Gold beads along the front teeth.
+    for (let i = -3; i <= 3; i++) {
+      const a = (i / 3) * 0.95;
+      gold(Math.cos(a) * R * 0.84 * 0.93, Math.sin(a) * R * 1.1 * 0.93, i === 0 ? 1.5 : 1.15);
+    }
+    // Rosette on the back.
+    const cx = -R * 0.3;
+    ctx.strokeStyle = "rgba(120,53,15,0.7)";
+    ctx.lineWidth = 0.8;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      ctx.save();
+      ctx.translate(cx + Math.cos(a) * 3.2, Math.sin(a) * 3.2);
+      ctx.rotate(a);
+      const pg = ctx.createLinearGradient(-2.6, 0, 2.6, 0);
+      pg.addColorStop(0, "#a16207");
+      pg.addColorStop(0.5, "#fde68a");
+      pg.addColorStop(1, "#ca8a04");
+      ctx.fillStyle = pg;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 2.8, 1.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    gold(cx, 0, 1.8);
+  }
+  if (level >= 11) {
+    // Centre gem.
+    const gx = R * 0.1;
+    ctx.fillStyle = "#0e7490";
+    ctx.beginPath();
+    ctx.moveTo(gx + 4, 0);
+    ctx.lineTo(gx, -3);
+    ctx.lineTo(gx - 4, 0);
+    ctx.lineTo(gx, 3);
+    ctx.closePath();
+    ctx.fill();
+    const gg = ctx.createLinearGradient(gx - 4, -3, gx + 4, 3);
+    gg.addColorStop(0, "#ecfeff");
+    gg.addColorStop(0.5, "#22d3ee");
+    gg.addColorStop(1, "#155e75");
+    ctx.fillStyle = gg;
+    ctx.beginPath();
+    ctx.moveTo(gx + 3, 0);
+    ctx.lineTo(gx, -2.2);
+    ctx.lineTo(gx - 3, 0);
+    ctx.lineTo(gx, 2.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = `rgba(255,255,255,${0.6 + 0.4 * Math.sin(t * 5)})`;
+    ctx.beginPath();
+    ctx.arc(gx - 0.8, -0.8, 0.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 /** A tapered limb segment: a quad from width w1 at (x1,y1) to w2 at (x2,y2) with rounded ends. */
@@ -2179,7 +2342,7 @@ export function drawMinimap(ctx: CanvasRenderingContext2D, w: World, size: numbe
 }
 
 /** Standalone preview (menu): one crab, idle-animated, optional gear/crown. */
-export function drawCrabPreview(ctx: CanvasRenderingContext2D, col: CrabColor, W: number, H: number, t: number, opts: { weapon?: WeaponKind | null; shield?: ShieldKind | null; crown?: boolean; species?: SpeciesId } = {}) {
+export function drawCrabPreview(ctx: CanvasRenderingContext2D, col: CrabColor, W: number, H: number, t: number, opts: { weapon?: WeaponKind | null; shield?: ShieldKind | null; crown?: boolean; species?: SpeciesId; level?: number } = {}) {
   ctx.clearRect(0, 0, W, H);
   const s = Math.min(W, H) / 70;
   ctx.save();
@@ -2191,7 +2354,7 @@ export function drawCrabPreview(ctx: CanvasRenderingContext2D, col: CrabColor, W
   ctx.scale(s, s * TILT);
   ctx.rotate(-Math.PI / 2);
   const sp = (t * 0.8) % 2.2;
-  drawCrabBody(ctx, col, { walk: t * 6, swing: sp < 1 ? sp : -1, swingSide: 1, weapon: opts.weapon ?? null, shield: opts.shield ?? null, build: SPECIES[opts.species ?? "flower"].build });
+  drawCrabBody(ctx, col, { walk: t * 6, swing: sp < 1 ? sp : -1, swingSide: 1, weapon: opts.weapon ?? null, shield: opts.shield ?? null, build: SPECIES[opts.species ?? "flower"].build, level: opts.level, t });
   ctx.restore();
   if (opts.crown) drawCrown(ctx, W / 2, H / 2 - 22 * s, 7 * s, t);
 }

@@ -181,7 +181,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className={H3}>진화 티어 · 게딱지 특수기</h3>
           <p className={`mb-2 text-xs ${P}`}>
-            레벨이 오르면 4단계로 <b>진화</b>합니다. 티어 보너스는 누적되며, 티어마다 <b>E 키(모바일 노란 버튼)</b>로 쓰는 특수기가 바뀝니다. 기획서의 Tier 4(Lv15)는 최대 레벨(12)을 넘으므로 Lv11에서 열립니다.
+            레벨이 오르면 4단계로 <b>진화</b>합니다. 티어 보너스는 누적되며, 티어마다 <b>E 키(모바일 노란 버튼)</b>로 쓰는 특수기가 바뀝니다. 기획서의 Tier 4(Lv15)는 최대 레벨(12)을 넘으므로 Lv11에서 열립니다. 진화할수록 <b>등딱지 무늬도 화려해집니다</b> — Lv4 줄무늬와 원 무늬, Lv6 테두리 띠, Lv8 황금 장식, Lv11 오색 광채와 보석.
           </p>
           <div className="grid gap-1.5 text-xs sm:grid-cols-2">
             {Object.values(TIERS).map((t) => (
