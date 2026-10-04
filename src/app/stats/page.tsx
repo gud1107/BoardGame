@@ -232,7 +232,10 @@ function MyStats({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilt
         </>
       )}
 
-      {stats !== null && stats.length > 0 && <BotLevelTable stats={stats} />}
+      {/* Solo games have no opponents or bots — they'd only show up as fake 100% "사람끼리" wins here. */}
+      {stats !== null && stats.some((t) => !SOLO_GAME_IDS.has(t.gameId)) && (
+        <BotLevelTable stats={stats.filter((t) => !SOLO_GAME_IDS.has(t.gameId))} />
+      )}
     </>
   );
 }
