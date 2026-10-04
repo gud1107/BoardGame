@@ -43,6 +43,10 @@ export default function MapProfile({ map, compact = false }: { map: MapDef; comp
   const zoneLines = ZONES.slice(0, -1).filter((z) => z.to < g.floorMax);
   const chests = approxChestSpots(map);
   const zoneName = (to: number) => ZONES.find((z) => z.from === to)?.name ?? "";
+  // Zone labels go over the deepest point, the one column every boundary crosses in open water.
+  let deepX = 0;
+  for (let x = 0; x <= W; x += step) if (geoFloor(g, x) > geoFloor(g, deepX)) deepX = x;
+  const labelX = Math.max(900, Math.min(W - 900, deepX));
 
   return (
     <figure className={compact ? "mt-1.5" : "mt-1.5"}>
@@ -65,14 +69,15 @@ export default function MapProfile({ map, compact = false }: { map: MapDef; comp
         {zoneLines.map((z) => (
           <g key={z.id}>
             <line x1={0} x2={W} y1={z.to} y2={z.to} stroke="rgba(255,255,255,0.35)" strokeWidth={compact ? 18 : 12} strokeDasharray="120 90" />
-            {!compact && (
-              <text x={W - 60} y={z.to - 40} fontSize={170} textAnchor="end" fill="rgba(255,255,255,0.75)">
-                {Math.round(z.to / 10)}m · {zoneName(z.to)}
-              </text>
-            )}
           </g>
         ))}
         <path d={floorPath} fill={map.palette.sand[0]} stroke="rgba(0,0,0,0.35)" strokeWidth={14} />
+        {!compact &&
+          zoneLines.map((z) => (
+            <text key={`l${z.id}`} x={labelX} y={z.to - 40} fontSize={170} textAnchor="middle" fill="rgba(255,255,255,0.8)">
+              {Math.round(z.to / 10)}m · {zoneName(z.to)}
+            </text>
+          ))}
         {ice.map(([a, b]) => (
           <rect key={a} x={a} y={ICE_TOP - 20} width={b - a} height={g.ice!.thickness + 40} fill="#f0f9ff" opacity={0.95} />
         ))}
