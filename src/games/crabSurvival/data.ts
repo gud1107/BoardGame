@@ -469,6 +469,11 @@ export const KING_FX = 1.3;
  */
 export const USURP_FX = 15;
 export const USURP_STRONG = 4;
+/** 복수의 분노: a grudging bot's buffs while it hunts its crown thief. */
+export const GRUDGE_SPEED = 1.25;
+export const GRUDGE_ATK = 1.3;
+export const GRUDGE_ARMOR = 0.85;
+
 export function revengeBonus(usurperScore: number): number {
   return 5_000 + Math.floor(usurperScore * 0.15);
 }

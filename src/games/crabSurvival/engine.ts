@@ -43,6 +43,9 @@ import {
   KING_FX,
   USURP_FX,
   revengeBonus,
+  GRUDGE_ARMOR,
+  GRUDGE_ATK,
+  GRUDGE_SPEED,
   EPIC_HUNT_VISION,
   GIANT_SCALE,
   MAGNET_BASE,
@@ -413,6 +416,13 @@ export type GameEvent =
   | { type: "playerDeath"; by: string }
   | { type: "matchEnd" };
 
+export interface CrownLogEntry {
+  t: number;
+  /** crown = first crowning, recapture = crowned again after losing it, lost = overtaken, down = flipped while king. */
+  kind: "crown" | "recapture" | "lost" | "down";
+  by?: string;
+}
+
 export interface MatchStats {
   kills: number;
   bestCombo: number;
@@ -482,6 +492,8 @@ export interface World {
   crownLostOnce: boolean;
   /** The current kingFx is a 탈환 (recapture) — longer and grander. */
   kingRecap: boolean;
+  /** The player's crown history this match, for the results timeline. */
+  crownLog: CrownLogEntry[];
   playerId: number;
   /** Player is flipped over, waiting for the revive/end choice. */
   playerDown: boolean;
@@ -548,11 +560,17 @@ export function atkMult(c: Crab): number {
   let m = TIERS[tierOf(c)].atk;
   for (const s of c.muts) m *= MUTATIONS[s.kind].atk;
   if (c.surge > 0 && c.species === "fiddler") m *= PERK_ATK;
+  if (enraged(c)) m *= GRUDGE_ATK;
   return m;
+}
+/** 복수의 분노: a bot hunting the crab that took its crown. */
+export function enraged(c: Crab): boolean {
+  return !!c.brain && (c.brain.grudgeT ?? 0) > 0;
 }
 /** Incoming damage multiplier from tier armor and mutations (<1 = tougher). */
 export function armorMult(c: Crab): number {
   let m = TIERS[tierOf(c)].armor;
+  if (enraged(c)) m *= GRUDGE_ARMOR;
   for (const s of c.muts) m *= MUTATIONS[s.kind].armor;
   if (c.surge > 0 && c.species === "snow") m *= PERK_ARMOR;
   return m;
@@ -653,6 +671,7 @@ export function createWorld(opts: MatchOptions): World {
     usurperId: 0,
     crownLostOnce: false,
     kingRecap: false,
+    crownLog: [],
     playerId: 0,
     playerDown: false,
     deathSnapshot: null,
@@ -1198,6 +1217,7 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
 
   let speed = lv.speed * (c.boosting ? BOOST_MULT : 1) * TIERS[tierOf(c)].speed;
   for (const m of c.muts) if (!MUTATIONS[m.kind].risk || penaltyLeft(c, m.kind) > 0) speed *= MUTATIONS[m.kind].speed;
+  if (enraged(c)) speed *= GRUDGE_SPEED;
   if (c.burrow > 0) speed *= 0.85;
   if (c.surge > 0 && c.species === "ghost") speed *= PERK_SPEED;
   if (isShallow(c.x, c.y)) speed *= SHALLOW_SLOW;
@@ -1454,6 +1474,8 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
   v.hasKey = false;
   v.score = 0;
   clearPowers(v);
+  // A grudge dies with the crab — a fresh Lv1 respawn shouldn't hunt a king.
+  if (v.brain) v.brain.grudgeT = 0;
   burst(w, "splash", v.x, v.y, 16, 200, v.color.shell, 5, 0.8, 180);
 
   let bounty = 0;
@@ -1496,6 +1518,10 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
   if (w.usurpFx > 0 && v.id === w.usurperId) w.usurpFx = 0;
   w.events.push({ type: "kill", killer: killerName, victim: v.name, byPlayer: !!by?.isPlayer, victimPlayer: v.isPlayer, bounty });
   if (wasKing) {
+    if (v.isPlayer) {
+      w.crownLostOnce = true;
+      w.crownLog.push({ t: w.time, kind: "down", by: by?.name ?? sourceName ?? "바다" });
+    }
     w.kingId = null;
     w.events.push({ type: "kingDown", name: v.name, by: by?.name ?? null, player: v.isPlayer, byPlayer: !!by?.isPlayer });
     burst(w, "gold", v.x, v.y, 30, 300, "#facc15", 5, 1.2, 260);
@@ -1966,6 +1992,7 @@ export function updateLeaderboard(w: World, initial = false) {
     w.usurpFx = USURP_FX;
     w.usurperId = top.id;
     w.crownLostOnce = true;
+    w.crownLog.push({ t: w.time, kind: "lost", by: top.name });
     w.events.push({ type: "crownLost", by: top.name });
   }
   // 복수심: a dethroned bot hunts whoever took its crown for the same window.
@@ -1981,6 +2008,7 @@ export function updateLeaderboard(w: World, initial = false) {
     const recapture = top.isPlayer && w.crownLostOnce;
     w.events.push({ type: "kingNew", name: top.name, player: top.isPlayer, recapture });
     if (top.isPlayer) {
+      w.crownLog.push({ t: w.time, kind: recapture ? "recapture" : "crown" });
       w.kingRecap = recapture;
       w.kingFx = kingFxDuration(recapture);
       if (recapture) {
@@ -2160,8 +2188,8 @@ export function botThink(w: World, c: Crab, dt: number): CrabInput {
     dy = sy;
   }
 
-  const chasing = br.goal === "crab" && dist < 420 && dist > reach;
-  const boost = (br.goal === "flee" || (chasing && c.stamina > 35)) && c.stamina > 5;
+  const chasing = br.goal === "crab" && dist > reach && (dist < 420 || enraged(c));
+  const boost = (br.goal === "flee" || (chasing && c.stamina > (enraged(c) ? 15 : 35))) && c.stamina > 5;
   const skill = c.skillCd <= 0 && rand(w) < dt * (1 + 3 * br.skill) && botWantsSkill(w, c, br, dist, tr, reach, attackable);
   return { moveX: dx, moveY: dy, faceX: attack || (attackable && dist < reach * 1.5) ? faceX : undefined, faceY: attack || (attackable && dist < reach * 1.5) ? faceY : undefined, boost, attack, skill };
 }
@@ -2192,6 +2220,19 @@ function botWantsSkill(w: World, c: Crab, br: Brain, dist: number, tr: number, r
 function decide(w: World, c: Crab, br: Brain, hpFrac: number) {
   const vision = 480 + 160 * c.scale;
   const lv = levelDef(c);
+
+  // 0) 복수의 분노: while the grudge lasts, the crown thief is the only target — unless nearly dead.
+  if ((br.grudgeT ?? 0) > 0 && hpFrac >= 0.25) {
+    const thief = w.crabs.find((o) => o.id === br.grudgeId && o.alive);
+    if (thief) {
+      br.goal = "crab";
+      br.targetId = thief.id;
+      br.gx = thief.x;
+      br.gy = thief.y;
+      return;
+    }
+    br.grudgeT = 0;
+  }
 
   // 1) Threat assessment.
   let threat: Crab | null = null, threatD = Infinity;
@@ -2929,6 +2970,9 @@ export interface MatchSummary {
   top: { name: string; score: number; isPlayer: boolean; level: number }[];
   endedByDeath: boolean;
   killedBy: string | null;
+  /** The player's crown history and the match length it spans (results timeline). */
+  crownLog: CrownLogEntry[];
+  duration: number;
 }
 
 export function summarize(w: World): MatchSummary {
@@ -2945,5 +2989,7 @@ export function summarize(w: World): MatchSummary {
     top: all.slice(0, 10),
     endedByDeath: !me.alive,
     killedBy: !me.alive ? (w.deathSnapshot?.by ?? null) : null,
+    crownLog: [...w.crownLog],
+    duration: w.duration,
   };
 }

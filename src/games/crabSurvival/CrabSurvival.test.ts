@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BUBBLE_STUN, epicBounty, revengeBonus, gearDropOdds, GEARS, isUnlocked, MUTATIONS, LEVELS, tierForLevel, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
+import { BUBBLE_STUN, epicBounty, GRUDGE_ARMOR, GRUDGE_ATK, revengeBonus, gearDropOdds, GEARS, isUnlocked, MUTATIONS, LEVELS, tierForLevel, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
 import { EMPTY_RECORD, nextSpeciesRecord } from "./save";
-import { addScore, applyMutation, armorMult, atkMult, botThink, createWorld, equipGear, penaltyLeft, player, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
+import { addScore, applyMutation, armorMult, atkMult, enraged, botThink, createWorld, equipGear, penaltyLeft, player, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
 
 const idle: CrabInput = { moveX: 0, moveY: 0, boost: false, attack: false };
 
@@ -932,5 +932,44 @@ describe("복수심 AI + 탈환 + 역습 기록", () => {
     const b = nextSpeciesRecord(a.record, { score: 1, rank: 2, maxLevel: 3, revenges: 1 });
     expect(b.record.bestRevenges).toBe(2);
     expect(b.revengeRecord).toBe(false);
+  });
+});
+
+describe("복수의 분노 + 왕관 기록", () => {
+  it("a grudging bot is faster, hits harder and takes less damage — and loses the grudge when it dies", () => {
+    const w = bare(1);
+    const bot = w.crabs[1];
+    const atk0 = atkMult(bot), armor0 = armorMult(bot);
+    bot.brain!.grudgeId = player(w).id;
+    bot.brain!.grudgeT = 10;
+    expect(enraged(bot)).toBe(true);
+    expect(atkMult(bot)).toBeCloseTo(atk0 * GRUDGE_ATK, 5);
+    expect(armorMult(bot)).toBeCloseTo(armor0 * GRUDGE_ARMOR, 5);
+    const me = player(w);
+    me.x = 40;
+    bot.hp = 1;
+    face(me, bot);
+    swing(w, me);
+    expect(bot.alive).toBe(false);
+    expect(bot.brain!.grudgeT).toBe(0);
+  });
+
+  it("logs crowning, losing and recapturing for the results timeline", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    w.time = 20;
+    me.score = 50_000;
+    foe.score = 100;
+    updateLeaderboard(w);
+    w.time = 40;
+    foe.score = 80_000;
+    updateLeaderboard(w);
+    w.time = 60;
+    me.score = 120_000;
+    updateLeaderboard(w);
+    const s = summarize(w);
+    expect(s.crownLog.map((e) => e.kind)).toEqual(["crown", "lost", "recapture"]);
+    expect(s.crownLog[1].by).toBe(foe.name);
+    expect(s.duration).toBe(600);
   });
 });

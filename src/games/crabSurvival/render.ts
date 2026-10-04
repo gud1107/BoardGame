@@ -6,7 +6,7 @@
  */
 
 import { BOXES, CRAB_RADIUS, epicBounty, EPIC_WANTED, EVO_REVEAL, FOODS, KING_FX, USURP_FX, USURP_STRONG, SHELL_STYLE, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
-import { crabRadius, hasMut, holdsEpic, kingFxDuration, penaltyLeft, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
+import { crabRadius, enraged, hasMut, holdsEpic, kingFxDuration, penaltyLeft, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
 
 export const TILT = 0.72;
 
@@ -997,6 +997,17 @@ function drawCrabWorld(ctx: CanvasRenderingContext2D, c: Crab, t: number, king: 
     return;
   }
   if (c.alive && c.muts.length) drawMutationAura(ctx, c, t);
+  if (c.alive && enraged(c)) {
+    // 복수의 분노: a flickering red aura while it hunts its crown thief.
+    const R = CRAB_RADIUS * s * (1.75 + (calm ? 0 : 0.12 * Math.sin(t * 16)));
+    const g = ctx.createRadialGradient(c.x, c.y, R * 0.3, c.x, c.y, R);
+    g.addColorStop(0, "rgba(239,68,68,0)");
+    g.addColorStop(1, "rgba(220,38,38,0.55)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
+    ctx.fill();
+  }
   if (holdsEpic(c)) {
     const r = CRAB_RADIUS * s;
     ctx.strokeStyle = `rgba(251,191,36,${0.55 + 0.25 * Math.sin(t * 6)})`;
@@ -2156,6 +2167,7 @@ function drawCrabOverlay(ctx: CanvasRenderingContext2D, cam: Camera, W: number, 
   }
   const icons = [...c.gear.map((g) => GEARS[g.kind].emoji), ...c.muts.filter((m) => m.kind !== "oil").map((m) => MUTATIONS[m.kind].emoji)];
   if (c.slide) icons.push("🛢️");
+  if (enraged(c)) icons.unshift("😡");
   if (penaltyLeft(c, "rum") > 0) {
     // Drunken swirl over the head.
     ctx.fillStyle = "#c084fc";

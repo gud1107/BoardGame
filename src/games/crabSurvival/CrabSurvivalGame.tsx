@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { CRAB_COLORS, EVO_REVEAL, isUnlocked, MATCH_LENGTHS, roadmap, SHELL_BAND_LABEL, SHELL_PIECE_LABEL, SHELL_STYLE, SPECIES, SPECIES_LIST, type CrabColor, type ShieldKind, type SpeciesId, type WeaponKind } from "./data";
-import type { MatchSummary } from "./engine";
+import type { CrownLogEntry, MatchSummary } from "./engine";
 import CrabSurvivalCanvas from "./CrabSurvivalCanvas";
 import RulebookModal from "./RulebookModal";
 import { CrabAudio } from "./audio";
@@ -421,6 +421,7 @@ function ResultsPanel({
         <Stat label="🛡 생존 보상" value={s.stats.survivalBonus ? `+${s.stats.survivalBonus.toLocaleString()}` : "—"} />
         {(s.stats.revenges ?? 0) > 0 && <Stat label="⚔️ 역습 성공" value={`${s.stats.revenges}회`} />}
       </div>
+      {(s.crownLog?.length ?? 0) > 0 && <CrownTimeline log={s.crownLog} duration={s.duration || s.seconds} seconds={s.seconds} />}
       <div>
         <div className="mb-1.5 text-xs font-semibold text-white/50 light:text-slate-500">최종 순위</div>
         <div className="flex flex-col gap-0.5">
@@ -513,6 +514,59 @@ function GrowthLooks({ color, species, muted }: { color: CrabColor; species: Spe
               {lv > 1 && " 🔊"}
             </span>
           </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 왕관 기록: when the player held the crown this match, with crownings, losses and recaptures marked. */
+function CrownTimeline({ log, duration, seconds }: { log: CrownLogEntry[]; duration: number; seconds: number }) {
+  const end = Math.max(1, Math.min(duration, seconds));
+  // Reign intervals: a crown/recapture opens one, a lost/down closes it.
+  const reigns: [number, number][] = [];
+  let open: number | null = null;
+  for (const e of log) {
+    if (e.kind === "crown" || e.kind === "recapture") open ??= e.t;
+    else if (open !== null) {
+      reigns.push([open, e.t]);
+      open = null;
+    }
+  }
+  if (open !== null) reigns.push([open, end]);
+  const count = (k: CrownLogEntry["kind"]) => log.filter((e) => e.kind === k).length;
+  const pct = (t: number) => `${Math.min(100, (t / end) * 100)}%`;
+  const mm = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+  const icon: Record<CrownLogEntry["kind"], string> = { crown: "👑", recapture: "🔁", lost: "💔", down: "☠️" };
+  const label: Record<CrownLogEntry["kind"], string> = { crown: "등극", recapture: "탈환", lost: "빼앗김", down: "쓰러짐" };
+  return (
+    <div className="rounded-xl bg-white/5 p-3 light:bg-slate-100">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-1">
+        <span className="text-xs font-semibold text-white/50 light:text-slate-500">👑 왕관 기록</span>
+        <span className="text-[11px] font-bold text-white/70 light:text-slate-600">
+          등극 {count("crown")} · 빼앗김 {count("lost") + count("down")} · 탈환 {count("recapture")} · 재위 {Math.round(reigns.reduce((a, [s0, s1]) => a + s1 - s0, 0))}초
+        </span>
+      </div>
+      <div className="relative mt-5 h-3 rounded-full bg-black/30 light:bg-slate-300">
+        {reigns.map(([a, b], i) => (
+          <div key={i} className="absolute inset-y-0 rounded-full bg-gradient-to-r from-amber-300 to-yellow-500" style={{ left: pct(a), width: `calc(${pct(b)} - ${pct(a)})` }} />
+        ))}
+        {log.map((e, i) => (
+          <div key={i} className="absolute -top-5 -translate-x-1/2 text-sm leading-none" style={{ left: pct(e.t) }} title={`${mm(e.t)} ${label[e.kind]}${e.by ? ` (${e.by})` : ""}`}>
+            {icon[e.kind]}
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex justify-between text-[9px] text-white/40 light:text-slate-400">
+        <span>0:00</span>
+        <span>{mm(end)}</span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-white/60 light:text-slate-500">
+        {log.map((e, i) => (
+          <span key={i}>
+            {mm(e.t)} {icon[e.kind]} {label[e.kind]}
+            {e.by ? ` · ${e.by}` : ""}
+          </span>
         ))}
       </div>
     </div>
