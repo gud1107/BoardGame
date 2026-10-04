@@ -7,7 +7,15 @@ import type { StatTotalsRecord } from "@/lib/db/types";
 import { STAT_DETAIL_ROWS } from "@/lib/stats/details";
 import { fetchLeaderboard, fetchMetricLeaderboard, type LeaderboardSort } from "@/lib/stats/leaderboard";
 import { formatRankMetric, STAT_RANK_METRICS } from "@/lib/stats/presentation";
-import { BOT_FILTER_SINCE, isDefaultBotFilter, pickSlice, useStatsBotFilter, type StatsBotFilter } from "@/lib/stats/botFilter";
+import {
+  BOT_FILTER_SINCE,
+  botLevelRows,
+  isDefaultBotFilter,
+  pickSlice,
+  unclassifiedCount,
+  useStatsBotFilter,
+  type StatsBotFilter,
+} from "@/lib/stats/botFilter";
 import { countPendingStats, listPlayerStats, STATS_CHANGED_EVENT, syncPlayerStats } from "@/lib/stats/playerStats";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
 import { useProfileStore } from "@/store/profileStore";
@@ -121,6 +129,14 @@ function MyStats({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilt
         </p>
       )}
 
+      {stats !== null && unclassifiedCount(stats) > 0 && (
+        <p className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-white/55 light:border-slate-200 light:bg-slate-50 light:text-slate-500">
+          🕒 봇이 있었는지 구분되지 않은 이전 기록 <b className="text-white/80 light:text-slate-700">{unclassifiedCount(stats)}판</b>
+          {isDefaultBotFilter(filter) ? "도 위 집계에 포함돼 있어요." : "은 지금 필터에서 빠져 있어요."} 봇 구분은{" "}
+          {BOT_FILTER_SINCE} 이후 판부터 기록돼요.
+        </p>
+      )}
+
       {stats === null ? (
         <p className="text-sm text-white/40 light:text-slate-400">불러오는 중...</p>
       ) : shown.length === 0 ? (
@@ -199,7 +215,89 @@ function MyStats({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilt
           </div>
         </>
       )}
+
+      {stats !== null && stats.length > 0 && <BotLevelTable stats={stats} />}
     </>
+  );
+}
+
+function BotLevelTable({ stats }: { stats: StatTotalsRecord[] }) {
+  const [gameId, setGameId] = useState("");
+  const games = stats.filter((t) => (t.noBot?.played ?? 0) > 0 || Object.keys(t.byBotLevel ?? {}).length > 0);
+  // A game picked earlier may have no rows any more (e.g. after logout).
+  const selected = games.some((t) => t.gameId === gameId) ? gameId : "";
+  const rows = botLevelRows(stats, selected || null);
+  const maxPlayed = Math.max(1, ...rows.map((r) => r.played));
+
+  return (
+    <section className="mt-6">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-bold text-white/85 light:text-slate-800">🤖 봇 레벨별 승률</h2>
+        {games.length > 0 && (
+          <select
+            aria-label="게임 선택"
+            value={selected}
+            onChange={(e) => setGameId(e.target.value)}
+            className="rounded-lg border border-white/15 bg-zinc-900 px-2 py-1 text-xs text-white light:border-slate-300 light:bg-white light:text-slate-900"
+          >
+            <option value="">전체 게임</option>
+            {games.map((t) => (
+              <option key={t.gameId} value={t.gameId}>
+                {getGameMeta(t.gameId)?.name ?? t.gameId}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      <p className="mb-2 text-[11px] text-white/40 light:text-slate-400">
+        판마다 테이블에 있던 가장 강한 봇의 레벨로 묶어요. 도중에 들어온 교체 봇은 레벨이 없어 표에 넣지 않아요. ({BOT_FILTER_SINCE} 이후 기록)
+      </p>
+      <div className="overflow-hidden rounded-2xl border border-white/10 light:border-slate-200">
+        <table className="w-full text-sm">
+          <thead className="bg-white/5 text-xs text-white/50 light:bg-slate-50 light:text-slate-500">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium">상대</th>
+              <th className="px-2 py-2 text-right font-medium">판</th>
+              <th className="px-2 py-2 text-right font-medium">승</th>
+              <th className="px-2 py-2 text-right font-medium">패</th>
+              <th className="w-[38%] px-3 py-2 text-left font-medium">승률</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const empty = r.played === 0;
+              const rate = empty ? 0 : Math.round((r.wins / r.played) * 100);
+              return (
+                <tr
+                  key={r.level ?? "human"}
+                  className={`border-t border-white/5 light:border-slate-100 ${empty ? "text-white/25 light:text-slate-300" : "text-white/75 light:text-slate-700"}`}
+                >
+                  <td className="px-3 py-1.5">{r.level === null ? "👥 사람끼리" : `Lv.${r.level}`}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{empty ? "-" : r.played}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{empty ? "-" : r.wins}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{empty ? "-" : r.losses}</td>
+                  <td className="px-3 py-1.5">
+                    {empty ? (
+                      "-"
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
+                          <div
+                            className="h-full rounded-full bg-rose-400"
+                            style={{ width: `${rate}%`, opacity: 0.45 + 0.55 * (r.played / maxPlayed) }}
+                          />
+                        </div>
+                        <span className="w-9 text-right text-xs tabular-nums text-white/85 light:text-slate-800">{rate}%</span>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

@@ -78,3 +78,33 @@ export function pickSlice(t: StatTotalsRecord, f: StatsBotFilter): StatSlice | n
   const s = !f.includeBots ? t.noBot : f.botLevel !== null ? t.byBotLevel?.[String(f.botLevel)] : t;
   return s && s.played > 0 ? s : null;
 }
+
+/** Matches recorded before the bot flag existed (only counted under "all"). */
+export function unclassifiedCount(stats: readonly StatTotalsRecord[]): number {
+  return stats.reduce((n, t) => n + Math.max(0, t.played - (t.classified ?? 0)), 0);
+}
+
+export interface BotLevelRow {
+  /** null = bot-free matches ("사람끼리"). */
+  level: number | null;
+  played: number;
+  wins: number;
+  losses: number;
+}
+
+/** 사람끼리 + Lv.1..10 rows, summed over every game or just `gameId`. */
+export function botLevelRows(stats: readonly StatTotalsRecord[], gameId: string | null): BotLevelRow[] {
+  const games = gameId ? stats.filter((t) => t.gameId === gameId) : stats;
+  const sum = (pick: (t: StatTotalsRecord) => StatSlice | undefined) =>
+    games.reduce(
+      (acc, t) => {
+        const s = pick(t);
+        return s ? { played: acc.played + s.played, wins: acc.wins + s.wins, losses: acc.losses + s.losses } : acc;
+      },
+      { played: 0, wins: 0, losses: 0 },
+    );
+  return [
+    { level: null, ...sum((t) => t.noBot) },
+    ...Array.from({ length: 10 }, (_, i) => ({ level: i + 1, ...sum((t) => t.byBotLevel?.[String(i + 1)]) })),
+  ];
+}

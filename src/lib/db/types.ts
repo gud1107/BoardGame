@@ -133,6 +133,8 @@ export interface StatTotalsRecord extends StatSlice {
   noBot?: StatSlice;
   /** Matches keyed by the highest lobby-bot level at the table ("1".."10"; from 2026-10-04). */
   byBotLevel?: Record<string, StatSlice>;
+  /** Matches whose bot flag is known; `played - classified` predates the flag (absent = 0). */
+  classified?: number;
 }
 
 /**

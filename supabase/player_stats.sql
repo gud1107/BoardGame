@@ -170,10 +170,12 @@ create or replace aggregate stat_details_agg(jsonb) (
 
 -- Earlier versions (6 args = pre-details, 7 = pre-bot-filter, 8 = pre-bot-level),
 -- if an earlier copy of this file ran. Clients that send fewer args land on
--- the new version's defaults (with bots = unknown → off the no-bots board).
+-- the new version's defaults (with_bots null = unknown → off the no-bots board).
 drop function if exists record_match_stats(text, text, boolean, integer, integer, timestamptz);
 drop function if exists record_match_stats(text, text, boolean, integer, integer, timestamptz, jsonb);
 drop function if exists record_match_stats(text, text, boolean, integer, integer, timestamptz, jsonb, boolean);
+-- Re-created (not replaced) so the p_with_bots default can change.
+drop function if exists record_match_stats(text, text, boolean, integer, integer, timestamptz, jsonb, boolean, integer);
 
 -- Returns true when the match was counted, false when it was already counted.
 create or replace function record_match_stats(
@@ -184,7 +186,7 @@ create or replace function record_match_stats(
   p_player_count integer,
   p_played_at timestamptz,
   p_details jsonb default '{}'::jsonb,
-  p_with_bots boolean default true,
+  p_with_bots boolean default null,
   p_bot_level integer default null
 ) returns boolean as $$
 declare
@@ -232,7 +234,7 @@ begin
   end if;
 
   insert into player_match_log (user_id, match_id, game_id, won, rank, player_count, played_at, details, with_bots, bot_level)
-  values (v_uid, p_match_id, p_game_id, p_won, p_rank, p_player_count, p_played_at, v_details, coalesce(p_with_bots, true), p_bot_level)
+  values (v_uid, p_match_id, p_game_id, p_won, p_rank, p_player_count, p_played_at, v_details, p_with_bots, p_bot_level)
   on conflict (user_id, match_id) do nothing;
   get diagnostics v_inserted = row_count;
   if v_inserted = 0 then
@@ -302,6 +304,19 @@ $$ language sql stable security definer set search_path = public;
 
 revoke all on function my_bot_level_stats() from public, anon;
 grant execute on function my_bot_level_stats() to authenticated;
+
+-- The caller's matches per game whose bot flag is known (내 전적 → "구분 안 된
+-- 이전 기록" = played - classified).
+create or replace function my_classified_counts()
+returns table (game_id text, classified integer) as $$
+  select l.game_id, count(*)::integer
+  from player_match_log l
+  where l.user_id = auth.uid() and l.with_bots is not null
+  group by l.game_id;
+$$ language sql stable security definer set search_path = public;
+
+revoke all on function my_classified_counts() from public, anon;
+grant execute on function my_classified_counts() to authenticated;
 
 -- Public leaderboard. p_game_id null = all games combined.
 -- p_sort 'wins' (default) = most wins; 'rate' = win rate among players with

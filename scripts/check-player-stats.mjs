@@ -74,6 +74,9 @@ line(!missing(rec), "record_match_stats (9인자, 봇 필터·레벨)", missing(
 const mine = await rpc("my_bot_level_stats", {});
 line(!missing(mine), "my_bot_level_stats", missing(mine) ? "없음 — 최신 player_stats.sql 미적용" : "존재");
 
+const cls = await rpc("my_classified_counts", {});
+line(!missing(cls), "my_classified_counts", missing(cls) ? "없음 — 최신 player_stats.sql 미적용" : "존재");
+
 const name = await rpc("set_my_public_name", { p_name: null });
 line(!missing(name), "set_my_public_name", missing(name) ? "없음 — 최신 player_stats.sql 미적용" : "존재");
 

@@ -46,6 +46,7 @@ function addToSlice(s: StatSlice, m: MatchFacts): StatSlice {
 /** Adds one match to every slice it belongs to. `withBots` absent = unknown → not in `noBot`. */
 function applyMatch(t: StatTotalsRecord, m: MatchFacts): StatTotalsRecord {
   const out: StatTotalsRecord = { ...t, ...addToSlice(t, m) };
+  if (typeof m.withBots === "boolean") out.classified = (t.classified ?? 0) + 1;
   if (m.withBots === false) out.noBot = addToSlice(t.noBot ?? EMPTY_SLICE, m);
   if (typeof m.botLevel === "number") {
     const key = String(m.botLevel);
@@ -161,8 +162,8 @@ async function runSync(): Promise<void> {
         p_player_count: p.playerCount,
         p_played_at: p.playedAt,
         p_details: p.details ?? {},
-        // Queued before this flag existed → unknown, so keep it out of the no-bots board.
-        p_with_bots: p.withBots ?? true,
+        // Queued before this flag existed → null (unknown): off the no-bots board.
+        p_with_bots: p.withBots ?? null,
         p_bot_level: p.botLevel ?? null,
       });
       if (error) {
@@ -176,10 +177,11 @@ async function runSync(): Promise<void> {
     }
     if (uploadFailed) return;
 
-    const [all, noBot, byLevel] = await Promise.all([
+    const [all, noBot, byLevel, classified] = await Promise.all([
       supabase.from("player_game_stats").select("game_id, played, wins, losses, best_rank, details, updated_at").eq("user_id", userId),
       supabase.from("player_game_stats_nobot").select("game_id, played, wins, losses, best_rank, details").eq("user_id", userId),
       supabase.rpc("my_bot_level_stats"),
+      supabase.rpc("my_classified_counts"),
     ]);
     if (all.error || !all.data) return;
 
@@ -192,8 +194,12 @@ async function runSync(): Promise<void> {
         gameId: row.game_id,
         ...toSlice(row),
         updatedAt: row.updated_at,
-        ...(noBot.error || byLevel.error
-          ? { noBot: previous.get(row.game_id)?.noBot, byBotLevel: previous.get(row.game_id)?.byBotLevel }
+        ...(noBot.error || byLevel.error || classified.error
+          ? {
+              noBot: previous.get(row.game_id)?.noBot,
+              byBotLevel: previous.get(row.game_id)?.byBotLevel,
+              classified: previous.get(row.game_id)?.classified,
+            }
           : {}),
       });
     }
@@ -207,6 +213,12 @@ async function runSync(): Promise<void> {
       for (const row of byLevel.data as (SliceRow & { bot_level: number })[]) {
         const t = byGame.get(row.game_id);
         if (t) t.byBotLevel = { ...t.byBotLevel, [String(row.bot_level)]: toSlice(row) };
+      }
+    }
+    if (!classified.error && Array.isArray(classified.data)) {
+      for (const row of classified.data as { game_id: string; classified: number }[]) {
+        const t = byGame.get(row.game_id);
+        if (t) t.classified = row.classified;
       }
     }
     // Re-add anything still queued (e.g. another account's matches) so they stay visible.
