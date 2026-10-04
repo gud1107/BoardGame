@@ -467,6 +467,7 @@ export function drawEntityIcon(ctx: CanvasRenderingContext2D, kind: EntityKind, 
     : kind === "helicopter" ? 3.4
     : kind === "iceberg" ? 2.4
     : kind === "iceShard" ? 3
+    : kind === "mastDebris" ? 3.6
     : kind === "orca" || kind === "narwhal" ? 3.4
     : kind === "giantSquid" || kind === "moray" ? 3.2
     : kind === "barracuda" || kind === "seal" ? 3
@@ -1983,6 +1984,53 @@ function drawEntity(ctx: CanvasRenderingContext2D, e: Entity, t: number, gold: b
       ctx.beginPath();
       ctx.arc(r * 0.2, -r * 0.2, r * 0.08, 0, Math.PI * 2);
       ctx.fill();
+      break;
+    }
+    case "mastDebris": {
+      const hanging = e.timer > 0 && e.vy === 0;
+      if (hanging) {
+        ctx.translate(Math.sin(e.phase * 40) * 1.8, 0);
+        ctx.strokeStyle = `rgba(248,113,113,${0.35 + 0.3 * Math.sin(e.phase * 16)})`;
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([10, 9]);
+        ctx.beginPath();
+        ctx.moveTo(0, r);
+        ctx.lineTo(0, r + 600);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.rotate(e.angle);
+      // A splintered chunk of yard arm with a scrap of sail and rope.
+      ctx.fillStyle = gold ? GOLD : e.hitFlash > 0 ? "#fecaca" : "#5b3a1e";
+      ctx.beginPath();
+      ctx.moveTo(-r * 1.6, -r * 0.28);
+      ctx.lineTo(r * 1.3, -r * 0.34);
+      ctx.lineTo(r * 1.6, -r * 0.05);
+      ctx.lineTo(r * 1.35, r * 0.1);
+      ctx.lineTo(r * 1.55, r * 0.3);
+      ctx.lineTo(-r * 1.5, r * 0.3);
+      ctx.lineTo(-r * 1.75, r * 0.05);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "rgba(30,20,10,0.6)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-r * 1.4, -r * 0.05);
+      ctx.lineTo(r * 1.2, -r * 0.1);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(203,213,225,0.35)";
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.6, r * 0.3);
+      ctx.quadraticCurveTo(-r * 0.2, r * 1.3, r * 0.4, r * 0.9);
+      ctx.lineTo(r * 0.5, r * 0.3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#a8a29e";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(r * 1.1, r * 0.2);
+      ctx.quadraticCurveTo(r * 1.4, r * 0.9, r * 0.9, r * 1.3);
+      ctx.stroke();
       break;
     }
     case "iceShard": {

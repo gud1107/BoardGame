@@ -315,6 +315,7 @@ export default function HungrySharkCanvas({
           case "coin": a?.coin(); break;
           case "torpedo": a?.torpedo(); break;
           case "icicle": a?.icicle(); break;
+          case "creak": a?.creak(); break;
           case "skill": a?.skill(ev.id); break;
           case "skillReady": a?.skillReady(); break;
           case "goldStart":

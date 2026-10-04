@@ -5,7 +5,7 @@
  * to trust anyway). Corrupt/tampered saves fall back to a fresh profile.
  */
 
-import { evolutionPath, SHARKS, type MapId, type UpgradeLevels } from "./data";
+import { evolutionPath, MAPS, SHARKS, type MapId, type UpgradeLevels } from "./data";
 
 /** Shark picker sort keys ("tree" = the evolution-tree layout). */
 export const PICKER_SORTS = ["tree", "cost", "tier", "health", "speed", "gold", "boostEff", "best"] as const;
@@ -18,6 +18,13 @@ export interface PickerPrefs {
   hideOwned: boolean;
   /** Only sharks that can be unlocked right now (parent owned + enough coins). */
   buyableOnly: boolean;
+}
+
+/** Best dive ever on one map (any shark). */
+export interface MapRecord {
+  score: number;
+  sharkId: string;
+  seconds: number;
 }
 
 export interface SharkSave {
@@ -36,6 +43,10 @@ export interface SharkSave {
   mapId: MapId;
   /** Shark picker sort/filter (older saves lack it → tree, no filters). */
   picker: PickerPrefs;
+  /** Best dive per map (older saves lack it → none yet). */
+  mapBest: Partial<Record<MapId, MapRecord>>;
+  /** How each dive ended, per map: cause → count (results screen "자주 당한 원인"). */
+  deaths: Partial<Record<MapId, Record<string, number>>>;
 }
 
 const KEY = "hungry-shark-save-v1";
@@ -55,6 +66,8 @@ export function freshSave(): SharkSave {
     markers: true,
     mapId: "deepBlue",
     picker: { sort: "tree", dir: "desc", hideOwned: false, buyableOnly: false },
+    mapBest: {},
+    deaths: {},
   };
 }
 
@@ -130,7 +143,19 @@ export function migrateSave(save: SharkSave): SharkSave {
     hideOwned: !!p.hideOwned,
     buyableOnly: !!p.buyableOnly,
   };
-  return { ...save, coins, owned: SHARKS.map((s) => s.id).filter((id) => owned.has(id)), selected, upgrades, best, picker };
+  const mapBest: SharkSave["mapBest"] = {};
+  const deaths: SharkSave["deaths"] = {};
+  for (const m of MAPS) {
+    const r = save.mapBest?.[m.id];
+    if (r && Number.isFinite(r.score) && typeof r.sharkId === "string") mapBest[m.id] = { score: r.score, sharkId: known.has(r.sharkId) ? r.sharkId : SHARKS[0].id, seconds: Number(r.seconds) || 0 };
+    const d = save.deaths?.[m.id];
+    if (d && typeof d === "object") {
+      const clean: Record<string, number> = {};
+      for (const [k, v] of Object.entries(d)) if (Number.isFinite(v) && v > 0) clean[k] = Math.floor(v);
+      deaths[m.id] = clean;
+    }
+  }
+  return { ...save, coins, owned: SHARKS.map((s) => s.id).filter((id) => owned.has(id)), selected, upgrades, best, picker, mapBest, deaths };
 }
 
 export function loadSave(): SharkSave {

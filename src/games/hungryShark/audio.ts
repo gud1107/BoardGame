@@ -149,6 +149,12 @@ export class SharkAudio {
     this.tone(2600, 0.12, "triangle", 0.05, 1800, 0.05, true);
     this.tone(2100, 0.1, "triangle", 0.04, 1500, 0.14, true);
   }
+  /** Old timber groaning, then a snap (난파선 무덤 falling mast debris). */
+  creak() {
+    this.tone(95, 0.55, "sawtooth", 0.07, 70);
+    this.tone(132, 0.45, "sawtooth", 0.05, 104, 0.12);
+    this.noise(0.12, 900, 2, 0.4, 300, "bandpass");
+  }
   torpedo() {
     this.tone(900, 0.4, "sawtooth", 0.06, 400);
   }

@@ -130,7 +130,7 @@ export function habitatLabel(kind: EntityKind): string {
     case "crawl": return "해저 바닥";
     case "static": return "해저 바닥 (맵마다 9~20곳)";
     case "torpedo": return "잠수함 주변";
-    case "rock": return kind === "iceShard" ? "빙판 밑 고드름 아래" : "해구 (250m~)";
+    case "rock": return kind === "iceShard" ? "빙판 밑 고드름 아래" : kind === "mastDebris" ? "침몰선 돛대 아래" : "해구 (250m~)";
     default: return `${M(def.depth[0])}~${M(def.depth[1])}m`;
   }
 }
@@ -145,7 +145,7 @@ export const BESTIARY_ORDER: EntityKind[] = [
   "ghostShark", "yacht", "helicopter",
   "penguin", "seal", "narwhal", "orca",
   "treasureHunter", "barracuda", "moray", "giantSquid",
-  "greenJelly", "redJelly", "mineS", "mineM", "mineL", "mineXL", "torpedo", "rock", "iceberg", "iceShard",
+  "greenJelly", "redJelly", "mineS", "mineM", "mineL", "mineXL", "torpedo", "rock", "iceberg", "iceShard", "mastDebris",
 ];
 
 /** Maps this kind actually shows up on (roster, plus kinds that only come from something else). */
@@ -154,6 +154,7 @@ export function mapsWhere(kind: EntityKind): MapDef[] {
   if (kind === "chest") return MAPS;
   if (kind === "rock") return MAPS.filter((m) => m.feature === "coral");
   if (kind === "iceShard") return MAPS.filter((m) => m.feature === "iceSheet");
+  if (kind === "mastDebris") return MAPS.filter((m) => m.feature === "wrecks");
   const src = from[kind];
   return MAPS.filter((m) => (m.spawns[kind] ?? 0) > 0 || (src && (m.spawns[src] ?? 0) > 0) || (kind === "sailor" && (m.spawns.fishingBoat ?? 0) > 0));
 }
@@ -196,6 +197,7 @@ export const BESTIARY_TIPS: Partial<Record<EntityKind, string>> = {
   torpedo: "6초간 상어를 추적한 뒤 폭발합니다.",
   rock: "해구에서 위로부터 떨어집니다.",
   iceberg: "얼음 해협의 숨구멍에 떠다니는 빙산. 해롭진 않지만 부딪히면 튕겨 나가고 점프를 막습니다.",
+  mastDebris: "침몰선 돛대 근처를 지나면 삐걱 소리와 함께 활대가 부러집니다. 1초간 흔들리며 빨간 낙하선을 보여준 뒤 굴러떨어지니 옆으로 피하세요.",
   iceShard: "빙판 밑을 헤엄치면 머리 위 고드름 끝이 부러집니다. 잠깐 떨리며 빨간 낙하선을 보여준 뒤 떨어지니 옆으로 피하세요.",
   penguin: "얼음 해협 빙판 아래를 떼 지어 헤엄칩니다. 먹으면 부스트가 조금 찹니다.",
   seal: "재빠른 물범. 빙판 아래 얕은 물에서 상어를 피해 다닙니다.",

@@ -562,7 +562,7 @@ describe("mid-dive evolution", () => {
 describe("map invariant sweep", () => {
   const MAP_IDS = ["deepBlue", "frozenStrait", "shipwreck"] as const;
   // Spawned by something else, not by the roster.
-  const ALWAYS_OK = new Set(["chest", "torpedo", "sailor", "passenger", "rock", "iceShard"]);
+  const ALWAYS_OK = new Set(["chest", "torpedo", "sailor", "passenger", "rock", "iceShard", "mastDebris"]);
   it.each(MAP_IDS.flatMap((m) => SHARKS.map((s) => [m, s.id] as const)))(
     "%s × %s: 45s dive with skills + mid-dive evolution keeps every invariant",
     async (mapId, sharkId) => {
@@ -746,5 +746,73 @@ describe("frozen strait falling icicles", () => {
       step(w, idle, 1 / 60);
     }
     expect(w.shark.hp).toBeLessThan(hp0 - 20);
+  });
+});
+
+describe("shipwreck falling mast debris", () => {
+  it("only breaks off masts on the shipwreck map, creaks ~1s, then falls and hurts", async () => {
+    const data = await import("./data");
+    const creaks = (id: "deepBlue" | "frozenStrait" | "shipwreck") => {
+      const w = createWorld(sharkById("reef"), NO_UPGRADES, 91, id);
+      const masts = data.activeGeometry().structures.filter((st) => st.kind === "mast");
+      let seen = 0;
+      for (let i = 0; i < 60 * 30; i++) {
+        const m = masts[Math.floor(i / 300) % Math.max(1, masts.length)];
+        if (m) { w.shark.x = m.x + Math.sin(i / 60) * 200; w.shark.y = data.seabedY(w.shark.x) - 120; }
+        w.shark.hp = 9999;
+        step(w, idle, 1 / 60);
+        if (w.events.some((e) => e.type === "creak")) seen++;
+        w.events.length = 0;
+      }
+      return seen;
+    };
+    expect(creaks("deepBlue")).toBe(0);
+    expect(creaks("frozenStrait")).toBe(0);
+    expect(creaks("shipwreck")).toBeGreaterThan(3);
+
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 92, "shipwreck");
+    isolate(w);
+    w.shark.x = 1200;
+    w.shark.y = 300;
+    const chunk = place(w, "mastDebris", w.shark.x, w.shark.y - 200);
+    chunk.timer = 1.0;
+    const y0 = chunk.y;
+    for (let i = 0; i < 40; i++) step(w, idle, 1 / 60);
+    expect(chunk.y).toBe(y0);
+    const hp0 = w.shark.hp;
+    for (let i = 0; i < 120 && chunk.alive; i++) {
+      w.shark.vx = 0;
+      w.shark.vy = 0;
+      step(w, idle, 1 / 60);
+    }
+    expect(w.shark.hp).toBeLessThan(hp0 - 25);
+  });
+});
+
+describe("economy + records", () => {
+  it("frozen strait pays T4 sharks less, other tiers the plain bonus", async () => {
+    const { mapById, mapCoinBonus } = await import("./data");
+    expect(mapCoinBonus(mapById("frozenStrait"), 3)).toBeCloseTo(1.1);
+    expect(mapCoinBonus(mapById("frozenStrait"), 4)).toBeCloseTo(0.825);
+    expect(mapCoinBonus(mapById("deepBlue"), 4)).toBe(1);
+  });
+
+  it("map records + death counts round-trip and junk is dropped", () => {
+    const s = {
+      ...freshSave(),
+      mapBest: { shipwreck: { score: 12345, sharkId: "mako", seconds: 99 } },
+      deaths: { frozenStrait: { 굶주림: 3, "떨어지는 고드름": 1 } },
+    };
+    const back = decodeSave(encodeSave(s));
+    expect(back.mapBest).toEqual(s.mapBest);
+    expect(back.deaths).toEqual(s.deaths);
+    const junk = { ...freshSave(), mapBest: { deepBlue: { score: "x", sharkId: 5 }, nowhere: { score: 1, sharkId: "reef", seconds: 1 } }, deaths: { deepBlue: { a: -1, b: 2 } } } as unknown as typeof s;
+    const j = decodeSave(encodeSave(junk));
+    expect(j.mapBest).toEqual({});
+    expect(j.deaths).toEqual({ deepBlue: { b: 2 } });
+    const old = { ...freshSave() } as Partial<typeof s>;
+    delete old.mapBest;
+    delete old.deaths;
+    expect(decodeSave(encodeSave(old as typeof s)).mapBest).toEqual({});
   });
 });

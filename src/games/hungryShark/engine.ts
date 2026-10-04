@@ -32,6 +32,7 @@ import {
   isUnderIce,
   MEGA_EVERY,
   mapById,
+  mapCoinBonus,
   MEGA_GOLD_RUSH_DURATION,
   mineExplosionRadius,
   MISSIONS,
@@ -147,6 +148,7 @@ export type GameEvent =
   | { type: "mission"; label: string; reward: number }
   | { type: "torpedo" }
   | { type: "icicle" }
+  | { type: "creak" }
   | { type: "skill"; id: SkillId }
   | { type: "skillReady" }
   | { type: "preyFx"; label: string }
@@ -899,22 +901,28 @@ function updateEntities(w: World, dt: number) {
       }
       case "rock": {
         const ice = e.kind === "iceShard";
-        if (ice && e.timer > 0) {
-          // Hanging under its icicle, trembling: the dodge window.
+        const wood = e.kind === "mastDebris";
+        if ((ice || wood) && e.timer > 0) {
+          // Hanging (icicle tip / cracked yard arm), trembling: the dodge window.
           e.timer -= dt;
           break;
         }
-        e.vy += (ice ? 520 : 240) * dt;
+        e.vy += (ice ? 520 : wood ? 330 : 240) * dt;
         e.x += e.vx * dt;
         e.y += e.vy * dt;
-        if (!ice) e.angle += dt * 2;
+        if (!ice) e.angle += dt * (wood ? 1.4 * e.dir : 2);
         if (rand(w) < 0.4)
           addParticle(w, ice
             ? { kind: "bubble", x: e.x, y: e.y - 12, vx: range(w, -10, 10), vy: -30, life: 0.7, maxLife: 0.7, size: range(w, 2, 3.5), color: "#e0f2fe", gravity: 0 }
-            : { kind: "smoke", x: e.x, y: e.y, vx: range(w, -10, 10), vy: -20, life: 1, maxLife: 1, size: range(w, 4, 8), color: "#44403c", gravity: 0 });
-        if (e.y > seabedY(e.x) - e.def.radius || (ice && insideAny(activeGeometry(), e.x, e.y + e.def.radius, 2, scratchC))) {
+            : wood
+              ? { kind: "bubble", x: e.x + range(w, -14, 14), y: e.y, vx: range(w, -10, 10), vy: -40, life: 0.8, maxLife: 0.8, size: range(w, 2, 4), color: "#cbd5e1", gravity: 0 }
+              : { kind: "smoke", x: e.x, y: e.y, vx: range(w, -10, 10), vy: -20, life: 1, maxLife: 1, size: range(w, 4, 8), color: "#44403c", gravity: 0 });
+        if (e.y > seabedY(e.x) - e.def.radius || ((ice || wood) && insideAny(activeGeometry(), e.x, e.y + e.def.radius, 2, scratchC))) {
           if (ice) burst(w, "spark", e.x, e.y, 14, 220, "#e0f2fe", 3.5, 0.6);
-          else {
+          else if (wood) {
+            burst(w, "chunk", e.x, e.y, 14, 200, "#78350f", 4.5, 0.9, 260);
+            burst(w, "smoke", e.x, e.y, 8, 80, "#57534e", 8, 1.3);
+          } else {
             burst(w, "smoke", e.x, e.y, 8, 90, "#57534e", 7, 1.2);
             burst(w, "spark", e.x, e.y, 8, 200, "#fb923c", 3, 0.5);
           }
@@ -1120,7 +1128,7 @@ function consume(w: World, e: Entity) {
   let coins = 0;
   const frenzy = goldOn ? 1 : frenzyMultiplier(w.combo);
   if (e.kind === "chest") {
-    coins = Math.round((def.coins + Math.floor(rand(w) * 200)) * w.stats.goldMultiplier * w.map.coinBonus);
+    coins = Math.round((def.coins + Math.floor(rand(w) * 200)) * w.stats.goldMultiplier * mapCoinBonus(w.map, w.def.tier));
     w.run.chests++;
     w.events.push({ type: "chest", amount: coins });
     burst(w, "gold", e.x, e.y, 30, 260, "#facc15", 4, 1.2);
@@ -1129,7 +1137,7 @@ function consume(w: World, e: Entity) {
     if (e.kind === "goldenTuna") base = def.coins + Math.floor(rand(w) * 151);
     else if (goldOn) base = Math.max(1, def.coins) * GOLD_RUSH_COIN_MULT * (w.gold.mega ? 2 : 1);
     else if (rand(w) < def.coinChance) base = def.coins;
-    if (base > 0) coins = Math.round(base * frenzy * w.stats.goldMultiplier * w.map.coinBonus);
+    if (base > 0) coins = Math.round(base * frenzy * w.stats.goldMultiplier * mapCoinBonus(w.map, w.def.tier));
   }
   if (frenzy > 1 && coins > 0) floatText(w, e.x, e.y + 14, `🪙×${frenzy} FRENZY`, "#fde047", 13);
   if (coins > 0) {
@@ -1709,6 +1717,7 @@ function runSpawner(w: World, initial: boolean) {
   }
   // Abyss volcano: falling rocks rain down while the player is deep.
   if (!initial && w.map.feature === "iceSheet" && rand(w) < ICICLE_DROP_CHANCE) dropIcicle(w);
+  if (!initial && w.map.feature === "wrecks" && rand(w) < MAST_DROP_CHANCE) dropMastDebris(w);
   if (!initial && w.map.feature === "coral" && s.y > 2350 && rand(w) < 0.22) {
     const r = spawn(w, "rock", s.x + range(w, -700, 700), Math.max(2250, s.y - 650));
     r.vx = range(w, -40, 40);
@@ -1737,6 +1746,37 @@ function dropIcicle(w: World) {
   e.angle = 0;
   e.timer = 0.9;
   w.events.push({ type: "icicle" });
+}
+
+/** Per spawner tick (0.2s) near a mast: ≈ one falling yard-arm chunk every ~3s while you pass under the rigging. */
+const MAST_DROP_CHANCE = 0.07;
+
+/** 난파선 무덤 hazard: a sunken mast's yard arm above the shark cracks (creak ~1s), then a heavy chunk tumbles down. */
+function dropMastDebris(w: World) {
+  const s = w.shark;
+  if (s.airborne) return;
+  const geo = activeGeometry();
+  const spots: { x: number; y: number }[] = [];
+  for (const st of geo.structures) {
+    if (st.kind !== "mast") continue;
+    // Yard arm sits 70% up the mast (same as drawMast); chunks break off either end.
+    const yx = st.x + Math.sin(st.angle) * st.len * 0.7;
+    const yy = st.y - Math.cos(st.angle) * st.len * 0.7;
+    for (const side of [-1, 1]) {
+      const x = yx + side * 62;
+      if (Math.abs(x - s.x) < 420 && yy < s.y - 60 && !insideAny(geo, x, yy, 22, scratchC)) spots.push({ x, y: yy });
+    }
+  }
+  if (!spots.length) return;
+  const ahead = spots.filter((p) => (p.x - s.x) * Math.sign(s.vx || 1) > -80);
+  const pool = ahead.length ? ahead : spots;
+  const p = pool[Math.floor(rand(w) * pool.length)];
+  const e = spawn(w, "mastDebris", p.x, p.y);
+  e.vx = range(w, -25, 25);
+  e.vy = 0;
+  e.angle = range(w, -0.3, 0.3);
+  e.timer = 1.0;
+  w.events.push({ type: "creak" });
 }
 
 function despawnFar(w: World) {

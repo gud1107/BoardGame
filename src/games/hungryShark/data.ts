@@ -56,6 +56,8 @@ export interface MapDef {
   ice: IceSpec | null;
   /** Coin multiplier for everything earned on this map. */
   coinBonus: number;
+  /** Per-tier override multiplied on top of coinBonus (얼음 해협 T4 over-earned ~1.8× 딥 블루 in the bot sim). */
+  tierCoinBonus?: Partial<Record<SharkTier, number>>;
   /** Whole-map population factor on top of POPULATION_SCALE. */
   density: number;
   /** Extra factor for kinds that can hurt the shark (damage > 0) — the map's difficulty knob, tuned by bot sim. */
@@ -118,6 +120,8 @@ export const MAPS: MapDef[] = [
     // Bot sim 2026-10-04 (6 seeds, Lv.3): the shallow shelf packs prey together, so per-dive income already
     // beats 딥 블루 (T3 ≈1.4×, T4 ≈1.8× at ×1.0) — the bonus stays small.
     coinBonus: 1.1,
+    // Megalodon-class sharks vacuum up the packed shelf: ×0.75 brings T4 from ≈1.8× to ≈1.35× 딥 블루.
+    tierCoinBonus: { 4: 0.75 },
     density: 1,
     threatDensity: 0.7,
     spawns: {
@@ -165,6 +169,11 @@ export const MAPS: MapDef[] = [
     },
   },
 ];
+
+/** Effective coin multiplier of a map for a shark tier. */
+export function mapCoinBonus(map: MapDef, tier: number): number {
+  return map.coinBonus * (map.tierCoinBonus?.[tier as SharkTier] ?? 1);
+}
 
 export function mapById(id: string | undefined): MapDef {
   return MAPS.find((m) => m.id === id) ?? MAPS[0];
@@ -589,6 +598,7 @@ export type EntityKind =
   | "goldenTuna"
   | "iceberg"
   | "iceShard"
+  | "mastDebris"
   // 얼음 해협 exclusives
   | "penguin" | "seal" | "narwhal" | "orca"
   // 난파선 무덤 exclusives
@@ -659,6 +669,8 @@ export const ENTITY_DEFS: Record<EntityKind, EntityDef> = {
   iceberg: D({ kind: "iceberg", name: "빙산", requiredTier: NEVER, heal: 60, score: 900, coins: 40, coinChance: 1, radius: 70, speed: 18, toughness: 1, behavior: "surfaceBoat", damage: 0, damageKind: "contact", depth: [0, 0], color: "#e0f2fe" }),
   // Falls from a ceiling icicle above the shark (hangs ~0.9s trembling first) — 얼음 해협's falling-rock.
   iceShard: D({ kind: "iceShard", name: "떨어지는 고드름", requiredTier: NEVER, heal: 20, score: 300, coins: 18, coinChance: 1, radius: 13, speed: 0, toughness: 1, behavior: "rock", damage: 26, damageKind: "contact", depth: [0, 0], color: "#e0f2fe" }),
+  // Snaps off a sunken mast's yard arm above the shark (creaks ~1s first) — 난파선 무덤's falling hazard.
+  mastDebris: D({ kind: "mastDebris", name: "무너지는 돛대 파편", requiredTier: NEVER, heal: 25, score: 350, coins: 20, coinChance: 1, radius: 20, speed: 0, toughness: 1, behavior: "rock", damage: 34, damageKind: "contact", depth: [0, 0], color: "#78350f" }),
   // ── 얼음 해협 ──
   penguin: D({ kind: "penguin", name: "펭귄", requiredTier: 1, heal: 10, score: 40, coins: 4, coinChance: 0.45, radius: 9, speed: 135, toughness: 1, behavior: "boid", damage: 0, damageKind: "contact", depth: [110, 700], color: "#1e293b" }),
   seal: D({ kind: "seal", name: "물범", requiredTier: 2, heal: 34, score: 165, coins: 10, coinChance: 0.7, radius: 17, speed: 170, toughness: 1, behavior: "wander", damage: 0, damageKind: "contact", depth: [120, 1100], color: "#9ca3af" }),

@@ -7,6 +7,7 @@ import {
   BRANCH_INFO,
   MAPS,
   mapById,
+  mapCoinBonus,
   effectiveStats,
   ENTITY_DEFS,
   MAX_UPGRADE_LEVEL,
@@ -25,7 +26,7 @@ import BestiaryPanel from "./BestiaryPanel";
 import { mapExclusives } from "./markers";
 import Overlay from "@/components/Overlay";
 import { drawSharkShape } from "./render";
-import { freshSave, loadSave, upgradesFor, writeSave, type PickerPrefs, type PickerSort, type SharkSave } from "./save";
+import { freshSave, loadSave, upgradesFor, writeSave, type MapRecord, type PickerPrefs, type PickerSort, type SharkSave } from "./save";
 import SharkEvolutionModal, { BranchBadge } from "./SharkEvolutionModal";
 
 /**
@@ -44,7 +45,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
   const [screen, setScreen] = useState<Screen>("menu");
   const [viewId, setViewId] = useState(() => save.selected);
   const [runKey, setRunKey] = useState(0);
-  const [summary, setSummary] = useState<{ s: RunSummary; newBest: boolean; missionCoins: number } | null>(null);
+  const [summary, setSummary] = useState<DiveSummary | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [showBestiary, setShowBestiary] = useState(false);
   const [showEvolve, setShowEvolve] = useState(false);
@@ -87,15 +88,20 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
     const prevBest = save.best[s.sharkId] ?? 0;
     const missionCoins = s.missions.filter((m) => m.done).reduce((a, m) => a + m.reward, 0);
     const eaten = Object.values(s.run.eaten).reduce((a, n) => a + (n ?? 0), 0);
+    const prevMapBest = save.mapBest[s.mapId] ?? null;
+    const newMapBest = s.score > (prevMapBest?.score ?? 0);
+    const causeCount = (save.deaths[s.mapId]?.[s.cause] ?? 0) + 1;
     update((sv) => ({
       ...sv,
       coins: sv.coins + s.coins,
       best: { ...sv.best, [s.sharkId]: Math.max(prevBest, s.score) },
       totalRuns: sv.totalRuns + 1,
       totalEaten: sv.totalEaten + eaten,
+      mapBest: newMapBest ? { ...sv.mapBest, [s.mapId]: { score: s.score, sharkId: s.sharkId, seconds: s.seconds } } : sv.mapBest,
+      deaths: { ...sv.deaths, [s.mapId]: { ...sv.deaths[s.mapId], [s.cause]: causeCount } },
     }));
     setBestThisSession((b) => Math.max(b, s.score));
-    setSummary({ s, newBest: s.score > prevBest, missionCoins });
+    setSummary({ s, newBest: s.score > prevBest, missionCoins, prevMapBest, newMapBest, causeCount });
     setScreen("results");
   };
 
@@ -145,6 +151,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
       {screen === "results" && summary && (
         <ResultsPanel
           summary={summary}
+          save={save}
           onRetry={() => {
             trackGameEvent("hungry-shark", "game_start", { isHost: true });
             setRunKey((k) => k + 1);
@@ -338,6 +345,8 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                       <span>↔ {(m.width / 10).toLocaleString()}m</span>
                       <span>🎁 상자 {m.chestCount}개</span>
                       {m.coinBonus > 1 && <span className="text-yellow-200">🪙 ×{m.coinBonus}</span>}
+                      {m.tierCoinBonus?.[4] && <span className="text-yellow-200/80">T4 ×{mapCoinBonus(m, 4).toFixed(2)}</span>}
+                      {save.mapBest[m.id] && <span>🏆 {save.mapBest[m.id]!.score.toLocaleString()}</span>}
                     </div>
                     <div className={`mt-1 text-[10px] font-semibold text-white/80 ${active ? "pr-16" : ""}`}>
                       🐾 전용: {mapExclusives(m).map((k) => ENTITY_DEFS[k].name).join(" · ")}
@@ -655,19 +664,48 @@ const EATEN_LABEL_ORDER: EntityKind[] = [
   "smallFish", "crab", "swimmer", "goldenTuna", "puffer", "pelican", "diver", "grouper", "ray", "tuna", "sailor", "angler",
   "fishingBoat", "passenger", "smallShark", "cageDiver", "submarine", "ghostShark", "yacht", "helicopter",
   "penguin", "seal", "narwhal", "orca", "treasureHunter", "barracuda", "moray", "giantSquid",
-  "greenJelly", "redJelly", "mineS", "mineM", "mineL", "mineXL", "torpedo", "rock", "iceberg", "iceShard", "chest",
+  "greenJelly", "redJelly", "mineS", "mineM", "mineL", "mineXL", "torpedo", "rock", "iceberg", "iceShard", "mastDebris", "chest",
 ];
+
+interface DiveSummary {
+  s: RunSummary;
+  newBest: boolean;
+  missionCoins: number;
+  /** This map's record before this dive (null = first dive here). */
+  prevMapBest: MapRecord | null;
+  newMapBest: boolean;
+  /** How many dives on this map have now ended this way (incl. this one). */
+  causeCount: number;
+}
+
+/** One-line advice for how a dive ended. */
+function deathTip(cause: string): string {
+  if (cause === "굶주림") return "허기는 시간이 지날수록 빨라집니다. 체력이 절반 아래면 물고기 떼·작은 먹이부터 챙기고, 골드 러시 중엔 허기가 멈춰요.";
+  if (cause === "해파리 독") return "해파리는 메가 골드 러시 때만 먹을 수 있어요. 빨간 링 ☠가 보이면 크게 돌아가세요.";
+  if (cause.includes("기뢰") || cause === "어뢰") return "폭발은 가까울수록 아픕니다. 기뢰는 반경 밖으로 돌아가고, 어뢰는 급선회로 빗나가게 하세요.";
+  if (cause === "떨어지는 고드름" || cause === "무너지는 돛대 파편") return "흔들림과 빨간 점선이 보이면 낙하 지점에서 옆으로 비키세요.";
+  if (cause === "화산 암석") return "해구에서는 위에서 암석이 떨어집니다. 머리 위를 자주 확인하세요.";
+  const hunter = Object.values(ENTITY_DEFS).find((d) => d.name === cause && d.behavior === "hunter");
+  if (hunter) return `${hunter.name}은(는) T${hunter.requiredTier}부터 사냥 가능해요. 빨간 화살표가 보이면 부스트로 벌리세요 — 5초 쫓고 나면 지쳐서 물러납니다.`;
+  return "도감(📖)에서 위험한 생물의 정보를 확인해 보세요.";
+}
 
 function ResultsPanel({
   summary,
+  save,
   onRetry,
   onMenu,
 }: {
-  summary: { s: RunSummary; newBest: boolean; missionCoins: number };
+  summary: DiveSummary;
+  save: SharkSave;
   onRetry: () => void;
   onMenu: () => void;
 }) {
-  const { s, newBest, missionCoins } = summary;
+  const { s, newBest, missionCoins, prevMapBest, newMapBest, causeCount } = summary;
+  const map = mapById(s.mapId);
+  const topCauses = Object.entries(save.deaths[s.mapId] ?? {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
   const def = sharkById(s.sharkId);
   const eaten = EATEN_LABEL_ORDER.filter((k) => (s.run.eaten[k] ?? 0) > 0);
   return (
@@ -679,6 +717,55 @@ function ResultsPanel({
         <p className="mt-2 text-xs text-white/50 light:text-slate-500">
           {mapById(s.mapId).emoji} {mapById(s.mapId).name} · {def.name} · {Math.floor(s.seconds / 60)}분 {s.seconds % 60}초 생존 · 사인: {s.cause}
         </p>
+      </div>
+      {/* Dive analysis: how it ended + this map's record */}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-xl border border-red-400/20 bg-red-500/10 p-3 light:border-red-200 light:bg-red-50">
+          <div className="text-[10px] font-bold tracking-widest text-red-300/80 light:text-red-600">이번 잠수 사망 원인</div>
+          <div className="mt-0.5 text-lg font-black text-white light:text-slate-900">
+            💀 {s.cause}
+            <span className="ml-1.5 text-xs font-semibold text-white/50 light:text-slate-500">
+              {map.name}에서 {causeCount}번째
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] leading-snug text-white/65 light:text-slate-600">💡 {deathTip(s.cause)}</p>
+          {topCauses.length > 1 && (
+            <div className="mt-1.5 flex flex-wrap gap-1 text-[10px] text-white/55 light:text-slate-500">
+              자주 당한 원인:
+              {topCauses.map(([c, n]) => (
+                <span key={c} className="rounded-full bg-black/25 px-1.5 light:bg-white">
+                  {c} ×{n}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="rounded-xl border border-yellow-400/20 bg-yellow-500/10 p-3 light:border-yellow-200 light:bg-yellow-50">
+          <div className="text-[10px] font-bold tracking-widest text-yellow-300/80 light:text-yellow-700">맵별 최고 기록</div>
+          {newMapBest && (
+            <div className="mt-0.5 text-xs font-black text-yellow-300 light:text-yellow-700">
+              🏆 {map.emoji} {map.name} 새 기록!{prevMapBest ? ` (이전 ${prevMapBest.score.toLocaleString()})` : " (첫 기록)"}
+            </div>
+          )}
+          <div className="mt-1 flex flex-col gap-0.5">
+            {MAPS.map((m) => {
+              const r = save.mapBest[m.id];
+              return (
+                <div
+                  key={m.id}
+                  className={`flex items-center justify-between rounded px-1.5 py-0.5 text-[11px] ${m.id === s.mapId ? "bg-black/25 font-bold text-white light:bg-white light:text-slate-900" : "text-white/60 light:text-slate-600"}`}
+                >
+                  <span>
+                    {m.emoji} {m.name}
+                  </span>
+                  <span className="tabular-nums">
+                    {r ? `${r.score.toLocaleString()} · ${sharkById(r.sharkId).name} · ${Math.floor(r.seconds / 60)}:${String(r.seconds % 60).padStart(2, "0")}` : "기록 없음"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
         <Stat label="획득 코인" value={`🪙 ${s.coins.toLocaleString()}`} sub={missionCoins > 0 ? `미션 보상 ${missionCoins} 포함` : undefined} />
