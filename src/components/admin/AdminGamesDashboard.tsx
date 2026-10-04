@@ -13,6 +13,7 @@ import HoursTab from "./tabs/HoursTab";
 import DropOffTab from "./tabs/DropOffTab";
 import RoomsTab from "./tabs/RoomsTab";
 import SourcesTab from "./tabs/SourcesTab";
+import ThemeTab from "./tabs/ThemeTab";
 import BugReportsTab from "./tabs/BugReportsTab";
 import NoticeTab from "./tabs/NoticeTab";
 import GameVisibilityTab from "./tabs/GameVisibilityTab";
@@ -23,7 +24,7 @@ import IpLabelsTab from "./tabs/IpLabelsTab";
 import { useIpLabels } from "./useIpLabels";
 import LabeledActivityPanel from "./LabeledActivityPanel";
 
-type TabKey = "games" | "monthly" | "trend" | "hours" | "dropoff" | "rooms" | "sources" | "ips" | "bugs" | "notice" | "visibility" | "changelog";
+type TabKey = "games" | "monthly" | "trend" | "hours" | "dropoff" | "rooms" | "sources" | "theme" | "ips" | "bugs" | "notice" | "visibility" | "changelog";
 
 /** `period`: whether the 전체/30일/7일/오늘 filter applies. `stats`: whether "내 기록 제외" applies. */
 const TABS: { key: TabKey; label: string; period: boolean; stats: boolean }[] = [
@@ -34,6 +35,7 @@ const TABS: { key: TabKey; label: string; period: boolean; stats: boolean }[] = 
   { key: "dropoff", label: "🪜 이탈 분석", period: true, stats: true },
   { key: "rooms", label: "🚪 방 기록", period: true, stats: true },
   { key: "sources", label: "🧭 유입 경로", period: true, stats: true },
+  { key: "theme", label: "🌗 테마", period: true, stats: true },
   { key: "ips", label: "🏷️ IP 관리", period: true, stats: false },
   { key: "bugs", label: "🐛 버그 리포트", period: false, stats: false },
   { key: "notice", label: "📢 공지", period: false, stats: false },
@@ -325,6 +327,7 @@ function AdminHub() {
         {tab === "dropoff" && <DropOffTab since={since} exclude={exclude} reloadKey={reloadKey} />}
         {tab === "rooms" && <RoomsTab since={since} exclude={exclude} reloadKey={reloadKey} />}
         {tab === "sources" && <SourcesTab since={since} exclude={exclude} reloadKey={reloadKey} />}
+        {tab === "theme" && <ThemeTab since={since} exclude={exclude} reloadKey={reloadKey} />}
         {tab === "ips" && (
           <IpLabelsTab since={since} myIp={myIp} labels={ipLabels} onLabelsChanged={reloadIpLabels} reloadKey={reloadKey} />
         )}

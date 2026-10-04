@@ -29,10 +29,10 @@ export function rate(part: number, whole: number): string {
   return Number(whole) > 0 ? `${Math.round((Number(part) / Number(whole)) * 100)}%` : "—";
 }
 
-export function adminErrorMessage(code: string | undefined): string {
+export function adminErrorMessage(code: string | undefined, sqlFile = "supabase/admin_suite.sql"): string {
   if (code === "42501") return "관리자 계정만 볼 수 있습니다. freedom_03@naver.com으로 로그인했는지 확인하세요.";
   if (code === "PGRST202" || code === "PGRST205" || code === "42P01")
-    return "이 기능용 DB가 아직 없습니다. supabase/admin_suite.sql을 Supabase SQL Editor에서 실행하세요.";
+    return `이 기능용 DB가 아직 없습니다. ${sqlFile}을 Supabase SQL Editor에서 실행하세요.`;
   return `불러오지 못했습니다 (${code ?? "unknown"}).`;
 }
 
@@ -46,13 +46,15 @@ export async function adminRpc<T>(
   name: string,
   args: Record<string, unknown>,
   exclude?: ExcludeMe | null,
+  /** The supabase/*.sql file that creates `name`, for the "not set up yet" message. */
+  sqlFile?: string,
 ): Promise<{ data: T[] } | { error: string }> {
   const supabase = getAuthSupabase();
   if (!supabase) return { error: "Supabase 설정이 없습니다." };
   const withExclude = exclude ? { ...args, p_ex_ip: exclude.ip, p_ex_device: exclude.device } : args;
   let { data, error } = await supabase.rpc(name, withExclude);
   if (error?.code === "PGRST202" && exclude) ({ data, error } = await supabase.rpc(name, args));
-  if (error) return { error: adminErrorMessage(error.code) };
+  if (error) return { error: adminErrorMessage(error.code, sqlFile) };
   return { data: (data ?? []) as T[] };
 }
 

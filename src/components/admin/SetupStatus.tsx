@@ -61,6 +61,13 @@ const CHECKS = [
     effect: "클로드 테스트를 공개 플레이 횟수·알림에서 빼는 처리 (실행 전에는 클로드 게임 시작이 공개 횟수에 섞일 수 있음)",
     destructive: false,
   },
+  {
+    file: "supabase/theme_prefs.sql",
+    rpc: "admin_theme_stats",
+    args: {},
+    effect: "🌗 테마 탭(신규 방문자 라이트/다크 비율) 기록",
+    destructive: false,
+  },
 ];
 
 export default function SetupStatus() {

@@ -2884,6 +2884,21 @@ GitHub 웹훅 자동 배포로 프로덕션 반영 확인(`dpl_3r6q5CG54vbM1dhq9
   불일치가 없다. API 변경: `toggleTheme`/`setTheme` → `cyclePreference`/`setPreference`, `preference` 추가.
   계정 동기화·다크 변형 테마는 보류. 헤드리스 검증: 신규+OS 라이트→라이트, OS 실시간 전환, 순환 3회,
   새로고침 유지, 기존 방문자→다크, 기존 "light" 저장값 유지, 하이드레이션 에러 0.
+- **2026-10-04 드롭다운·계정 동기화·관리자 통계** (위 3단 순환을 같은 날 대체):
+  - **드롭다운**: `ThemeToggle.tsx` 아이콘 버튼 → 🌙 다크 / ☀️ 라이트 / 🖥️ 시스템(지금은 …) 메뉴. `position: fixed`로
+    버튼 위치에서 계산 후 화면 안으로 clamp(모바일 헤더 줄바꿈 대응), Esc·바깥 클릭 닫힘, ↑↓ 이동, 열면 선택 항목에 포커스.
+    하단에 로그인 여부별 "다른 기기에서도 똑같이 적용" 안내. `cyclePreference`는 제거, `setPreference`만 남음.
+  - **계정 동기화**: Supabase Auth `user_metadata.theme_pref`(**테이블/SQL 불필요**). 직접 고를 때 `updateUser`로 저장,
+    `INITIAL_SESSION`/`SIGNED_IN` 때 계정 값이 있으면 그 값이 이 기기를 덮어씀(계정 우선). 계정에 값이 없으면 이 기기에서
+    **직접 고른 값일 때만**(`bgh_theme_chosen` 또는 예전 토글 사용자) 올림 — 자동 기본값이 계정을 오염시키지 않게.
+    `onAuthStateChange` 콜백 안의 auth 호출은 Supabase 교착 방지로 `setTimeout(0)` 지연.
+  - **관리자 🌗 테마 탭**: `supabase/theme_prefs.sql`(**사용자가 SQL Editor에서 실행해야 함**, SetupStatus 경고에 추가) —
+    `visitor_themes`(브라우저별 첫 테마·OS 설정·지금 선택·변경 횟수) + `record_visitor_theme`(anon) + `admin_theme_stats`(관리자 전용).
+    클라이언트는 브라우저당 1회 `first` + 직접 바꿀 때마다 `change`를 `/api/analytics/theme`로 보냄(운영 전용, 자동화 브라우저는
+    클로드 포함 전부 제외). `bgh_theme_origin` = new(시스템 기본) / returning(다크 고정) / 없음=legacy. 탭은 "신규 방문자 중 첫 화면
+    라이트 비율", 전체 OS 라이트 비율, 직접 바꾼 비율, 구분별 지금 선택 막대를 보여줌.
+  - 검증: SQL은 로컬 embedded-postgres로 실행(중복 무시·변경 반영·잘못된 값 거부·권한·내 기기 제외), 헤드리스로 메뉴 위치(390px)·
+    키보드·닫힘·선택 저장·beacon 2건(first/change) 확인. **계정 동기화는 실제 로그인이 필요해 헤드리스로 검증하지 못함.**
 
 _최종 갱신: 2026-09-14 (**보드게임허브 & 전 게임 공통 — 실시간 블랙/화이트 테마 토글 시스템** — 위
 "🌗 실시간 블랙/화이트 테마 토글 시스템" 섹션 참고. 요청 범위(로비 헤더 + 전 인게임 원터치 토글,
