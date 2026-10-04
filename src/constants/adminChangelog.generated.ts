@@ -3,6 +3,13 @@ import type { AdminCommitEntry } from "./adminChangelog";
 
 export const ADMIN_COMMITS: AdminCommitEntry[] = [
   {
+    "hash": "9db267c",
+    "date": "2026-10-04",
+    "type": "FEAT",
+    "scope": "admin",
+    "desc": "auto-collect admin-scoped commits into the 변경 기록 tab, add type/month/source filters, make patch-note length limit a constant"
+  },
+  {
     "hash": "d7105f4",
     "date": "2026-10-02",
     "type": "FEAT",

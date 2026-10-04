@@ -5,6 +5,11 @@
 // file by hand. Runs as `prebuild` (so every deploy picks up new commits)
 // and by hand: npm run gen:admin-changelog
 //
+// Korean text: add an `Admin-Ko:` trailer as the last paragraph of the commit
+// message (e.g. `Admin-Ko: 월별 통계 탭 추가`) and the tab shows it instead of
+// the English subject. Older commits are translated in ADMIN_COMMIT_KO
+// (src/constants/adminChangelog.ts).
+//
 // Rows already in the generated file are kept and merged by commit hash:
 // Vercel builds from a shallow clone, so the local git log may only reach the
 // last few commits, and older rows must not disappear. If git is unavailable
@@ -27,17 +32,23 @@ if (existsSync(OUT)) {
 
 let log;
 try {
-  log = execSync("git log --format=%h%x09%cs%x09%s", { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  // %x1e ends each record; the last field is the optional Admin-Ko trailer.
+  log = execSync("git log --format=%h%x09%cs%x09%s%x09%(trailers:key=Admin-Ko,valueonly,separator=%x20)%x1e", {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
 } catch {
   console.warn("gen-admin-changelog: git log unavailable — keeping the existing file");
   process.exit(0);
 }
 
-for (const line of log.split("\n")) {
-  const [hash, date, subject] = line.split("\t");
+for (const record of log.split("\x1e")) {
+  const [hash, date, subject, ko] = record.trim().split("\t");
   const m = subject?.match(SUBJECT);
   if (!m || SKIP_TYPES.has(m[1])) continue;
-  existing.set(hash, { hash, date, type: TYPE_MAP[m[1]] ?? "IMPROVE", scope: m[2], desc: m[3].trim() });
+  const row = { hash, date, type: TYPE_MAP[m[1]] ?? "IMPROVE", scope: m[2], desc: m[3].trim() };
+  const koText = ko?.trim() || existing.get(hash)?.ko;
+  existing.set(hash, koText ? { ...row, ko: koText } : row);
 }
 
 const rows = [...existing.values()].sort((a, b) => b.date.localeCompare(a.date) || 0);
