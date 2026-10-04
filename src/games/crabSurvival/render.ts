@@ -102,12 +102,14 @@ type Drawable =
 
 export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, W: number, H: number, t: number, dpr: number) {
   const z = cam.zoom;
+  const me = player(w);
+  const evo = evoFx(me);
   const shake = w.shake > 0 ? w.shake * w.shake * 14 : 0;
-  const shx = shake ? Math.sin(t * 91) * shake : 0;
-  const shy = shake ? Math.cos(t * 77) * shake : 0;
+  // My own evolution adds a soft rumble that swells and settles with the reveal.
+  const shx = (shake ? Math.sin(t * 91) * shake : 0) + (evo ? Math.sin(t * 47) * evo.env * evo.shake : 0);
+  const shy = (shake ? Math.cos(t * 77) * shake : 0) + (evo ? Math.cos(t * 39) * evo.env * evo.shake * 0.6 : 0);
   const cx = cam.x - shx / z, cy = cam.y - shy / (z * TILT);
   const view: Camera = { x: cx, y: cy, zoom: z };
-  const me = player(w);
 
   // Sea.
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -414,6 +416,8 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
   }
+
+  if (evo) drawEvoGlow(ctx, view, W, H, me, evo, t);
 
   // 방사능: green-warped vision. 럼주: a woozy purple swirl at the edges.
   if (me.alive && penaltyLeft(me, "toxic") > 0) {
@@ -2422,6 +2426,82 @@ function drawKingMarker(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H
   ctx.strokeText(label, lx, ly);
   ctx.fillStyle = "#fde047";
   ctx.fillText(label, lx, ly);
+}
+
+interface EvoFx {
+  /** 0..1 reveal progress. */
+  k: number;
+  /** Swell-and-settle envelope (0 → 1 → 0). */
+  env: number;
+  /** Evolution levels (Lv4/8/11) hit harder. */
+  big: boolean;
+  shake: number;
+}
+
+/** Screen FX state for the player's own level-up reveal (null when idle or dead). */
+function evoFx(me: Crab): EvoFx | null {
+  if (!me.alive || me.evoT <= 0) return null;
+  const k = 1 - me.evoT / EVO_REVEAL;
+  const big = me.level === 4 || me.level === 8 || me.level === 11;
+  // Fast attack, slower release — peaks around 30% through the reveal.
+  const env = k < 0.3 ? k / 0.3 : Math.max(0, 1 - (k - 0.3) / 0.7) ** 1.5;
+  return { k, env, big, shake: big ? 3.2 : 1.4 };
+}
+
+/**
+ * The player's evolution glow: a vignette tinted to the new look (shell colour → gold at Lv8+ →
+ * cycling iridescence at Lv11+) plus a light ring rippling out from the crab.
+ */
+function drawEvoGlow(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: number, me: Crab, fx: EvoFx, t: number) {
+  const [sx, sy] = toScreen(cam, W, H, me.x, me.y);
+  const rgb =
+    me.level >= 11
+      ? hueRgb((t * 180) % 360)
+      : me.level >= 8
+        ? [251, 191, 36]
+        : hexRgb(me.color.shell);
+  const peak = fx.big ? 0.42 : 0.2;
+  const a = peak * fx.env;
+  ctx.save();
+  // Edge vignette in the evolution colour.
+  const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.75);
+  vg.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
+  vg.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`);
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+  // A soft bloom on the crab itself.
+  const R = crabRadius(me) * cam.zoom;
+  const bg = ctx.createRadialGradient(sx, sy, 0, sx, sy, R * 3.2);
+  bg.addColorStop(0, `rgba(255,255,240,${a * 0.9})`);
+  bg.addColorStop(0.4, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a * 0.6})`);
+  bg.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
+  ctx.fillStyle = bg;
+  ctx.fillRect(sx - R * 3.2, sy - R * 3.2, R * 6.4, R * 6.4);
+  // Ripple ring(s) expanding outward on the ground plane.
+  for (const delay of fx.big ? [0, 0.25] : [0]) {
+    const p = (fx.k - delay) / (1 - delay);
+    if (p <= 0) continue;
+    const rr = R * (1.2 + p * 5);
+    ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(1 - p) * (fx.big ? 0.8 : 0.5)})`;
+    ctx.lineWidth = Math.max(1.5, (fx.big ? 5 : 3) * (1 - p));
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, rr, rr * TILT, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function hexRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function hueRgb(h: number): [number, number, number] {
+  const f = (n: number) => {
+    const k = (n + h / 60) % 6;
+    return Math.round(255 * (1 - 0.55 * Math.max(0, Math.min(k, 4 - k, 1))));
+  };
+  return [f(5), f(3), f(1)];
 }
 
 /**
