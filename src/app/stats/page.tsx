@@ -211,7 +211,8 @@ function Ranking({ loggedIn }: { loggedIn: boolean }) {
   const metrics = gameId ? (STAT_RANK_METRICS[gameId] ?? []) : [];
   const metric = metrics.find((m) => m.id === sort) ?? null;
   const effectiveSort = metric ? metric.id : sort === "rate" ? "rate" : "wins";
-  const key = `${gameId}|${effectiveSort}`;
+  const [includeBots, setIncludeBots] = useState(true);
+  const key = `${gameId}|${effectiveSort}|${includeBots ? "bots" : "nobots"}`;
   // Result tagged with the query it answers, so switching game/sort shows
   // "loading" without resetting state inside the effect.
   const [result, setResult] = useState<{ key: string; rows: BoardRow[] | "not-installed" | null } | null>(null);
@@ -221,14 +222,14 @@ function Ranking({ loggedIn }: { loggedIn: boolean }) {
     let cancelled = false;
     const load = async (): Promise<BoardRow[] | "not-installed" | null> => {
       if (metric) {
-        const r = await fetchMetricLeaderboard(gameId, metric);
+        const r = await fetchMetricLeaderboard(gameId, metric, includeBots);
         if (!Array.isArray(r)) return r;
         return r.map((x) => ({
           ...x,
           right: <b className="text-sm text-white light:text-slate-900">{formatRankMetric(metric, x.value, x.num, x.den)}</b>,
         }));
       }
-      const r = await fetchLeaderboard(gameId || null, effectiveSort as LeaderboardSort);
+      const r = await fetchLeaderboard(gameId || null, effectiveSort as LeaderboardSort, includeBots);
       if (!Array.isArray(r)) return r;
       return r.map((x) => ({
         ...x,
@@ -246,7 +247,7 @@ function Ranking({ loggedIn }: { loggedIn: boolean }) {
     return () => {
       cancelled = true;
     };
-    // `metric` is derived from gameId + sort, both already covered by `key`.
+    // `metric` / `includeBots` are derived from or part of `key`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
@@ -289,11 +290,33 @@ function Ranking({ loggedIn }: { loggedIn: boolean }) {
         </div>
       )}
 
+      <button
+        type="button"
+        role="switch"
+        aria-checked={includeBots}
+        onClick={() => setIncludeBots((v) => !v)}
+        className="mb-3 flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left light:border-slate-200 light:bg-white"
+      >
+        <span className="min-w-0 text-sm text-white/80 light:text-slate-700">
+          🤖 봇과 한 판 포함
+          <span className="ml-1.5 text-xs text-white/40 light:text-slate-400">
+            {includeBots ? "봇이 한 명이라도 있던 판까지 모두 집계" : "사람끼리만 한 판으로 집계"}
+          </span>
+        </span>
+        <span
+          aria-hidden
+          className={`relative h-5 w-9 shrink-0 rounded-full transition ${includeBots ? "bg-rose-500" : "bg-white/20 light:bg-slate-300"}`}
+        >
+          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${includeBots ? "left-[18px]" : "left-0.5"}`} />
+        </span>
+      </button>
+
       {loggedIn && <MyRankingName />}
 
       <p className="mb-3 text-xs text-white/40 light:text-slate-400">
         로그인한 회원의 기록만 올라가요. 결과는 각 플레이어 기기에서 계산되므로 참고용 랭킹입니다.
         {metric?.minDen && metric.minDen > 1 && ` 이 순위는 ${metric.den === "played" ? `${metric.minDen}판` : `${metric.minDen}번`} 이상 기록한 회원만 들어가요.`}
+        {!includeBots && " 봇 제외 집계는 2026-10-04 이후 기록부터 반영돼요."}
         {!loggedIn && " 내 기록을 올리려면 로그인하세요."}
       </p>
 

@@ -1025,7 +1025,7 @@ export default function PerudoGame({ onComplete }: PlayableGameProps) {
     const rankings = computeRankings(gameState);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, botTakeover.takeovers, (seat, rank) => perudoStatDetails(gameState, seat, rank)),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats }, (seat, rank) => perudoStatDetails(gameState, seat, rank)),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerName: names[rankings[0].seat] });

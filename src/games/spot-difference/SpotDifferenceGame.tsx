@@ -904,7 +904,7 @@ export default function SpotDifferenceGame({ onComplete }: PlayableGameProps) {
     const tied = teamRanks.filter((r) => r.rank === 1).length > 1;
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, botTakeover.takeovers, (seat, rank) =>
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats }, (seat, rank) =>
         spotDifferenceStatDetails(
           gameState,
           seat,

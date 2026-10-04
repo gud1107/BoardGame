@@ -807,7 +807,7 @@ export default function SplendorGame({ onComplete }: PlayableGameProps) {
     const rankings = computeRankings(gameState);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, botTakeover.takeovers),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats }),
       finishedAt: new Date().toISOString(),
     });
     const winner = rankings.find((r) => r.rank === 1)!;

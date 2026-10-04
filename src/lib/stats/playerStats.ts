@@ -66,6 +66,7 @@ export async function recordMatchStat(gameId: string, self: GameSelfResult, play
       playerCount: self.playerCount,
       playedAt,
       details: self.details,
+      withBots: self.withBots,
       userId,
     };
     const db = await getDb();
@@ -128,6 +129,8 @@ async function runSync(): Promise<void> {
         p_player_count: p.playerCount,
         p_played_at: p.playedAt,
         p_details: p.details ?? {},
+        // Queued before this flag existed → unknown, so keep it out of the no-bots board.
+        p_with_bots: p.withBots ?? true,
       });
       if (error) {
         // Table/function not installed yet, offline, rate limit… keep the

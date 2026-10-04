@@ -770,7 +770,7 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
     const rankings = computeRankings(gameState);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, botTakeover.takeovers),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats }),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerNames: gameState.winnerSeats.map((s) => names[s]).join(", ") });

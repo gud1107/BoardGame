@@ -9,7 +9,7 @@ const rankings = [
 
 describe("selfResult", () => {
   it("finds this device's seat rank", () => {
-    expect(selfResult(0, rankings)).toEqual({ rank: 2, playerCount: 3, botPlayed: false });
+    expect(selfResult(0, rankings)).toEqual({ rank: 2, playerCount: 3, botPlayed: false, withBots: false });
     expect(selfResult(2, rankings)?.rank).toBe(1);
   });
 
@@ -19,7 +19,14 @@ describe("selfResult", () => {
   });
 
   it("flags a seat a takeover bot finished", () => {
-    expect(selfResult(1, rankings, { "1": { originalUserId: "x" } })?.botPlayed).toBe(true);
-    expect(selfResult(0, rankings, { "1": { originalUserId: "x" } })?.botPlayed).toBe(false);
+    expect(selfResult(1, rankings, { takeovers: { "1": { originalUserId: "x" } } })?.botPlayed).toBe(true);
+    expect(selfResult(0, rankings, { takeovers: { "1": { originalUserId: "x" } } })?.botPlayed).toBe(false);
+  });
+
+  it("flags games with a lobby bot or another seat's takeover bot", () => {
+    expect(selfResult(0, rankings, { botSeats: [2] })?.withBots).toBe(true);
+    expect(selfResult(0, rankings, { takeovers: { "1": {} } })?.withBots).toBe(true);
+    // Only my own seat taken over → no bot opponents.
+    expect(selfResult(1, rankings, { takeovers: { "1": {} } })?.withBots).toBe(false);
   });
 });

@@ -142,6 +142,8 @@ export interface PendingMatchStat {
   playerCount: number;
   playedAt: string;
   details?: Record<string, number>;
+  /** A bot sat at the table (absent on matches queued before this flag existed). */
+  withBots?: boolean;
   /** Account that was logged in when it was played; null = guest (goes to whoever logs in next). */
   userId: string | null;
 }

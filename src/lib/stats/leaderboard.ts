@@ -46,8 +46,14 @@ function classify(error: { code?: string } | null): "not-installed" | null {
 /**
  * Public leaderboard via the `public_leaderboard` RPC (supabase/player_stats.sql).
  * Uses the auth-aware client so the caller's own row comes back flagged `isMe`.
+ * `includeBots = false` ranks only matches that had no bot at the table.
  */
-export async function fetchLeaderboard(gameId: string | null, sort: LeaderboardSort, limit = 50): Promise<LeaderboardResult<LeaderboardRow>> {
+export async function fetchLeaderboard(
+  gameId: string | null,
+  sort: LeaderboardSort,
+  includeBots = true,
+  limit = 50,
+): Promise<LeaderboardResult<LeaderboardRow>> {
   const supabase = getAuthSupabase();
   if (!supabase) return null;
   const { data, error } = await supabase.rpc("public_leaderboard", {
@@ -55,6 +61,9 @@ export async function fetchLeaderboard(gameId: string | null, sort: LeaderboardS
     p_sort: sort,
     p_min_played: RATE_MIN_PLAYED,
     p_limit: limit,
+    // Sent only when filtering, so the default view also works against a
+    // project still on the pre-bot-filter SQL.
+    ...(includeBots ? {} : { p_include_bots: false }),
   });
   if (error || !Array.isArray(data)) return classify(error);
   return data.map((r) => ({
@@ -75,6 +84,7 @@ export async function fetchLeaderboard(gameId: string | null, sort: LeaderboardS
 export async function fetchMetricLeaderboard(
   gameId: string,
   metric: RankMetric,
+  includeBots = true,
   limit = 50,
 ): Promise<LeaderboardResult<MetricLeaderboardRow>> {
   const supabase = getAuthSupabase();
@@ -86,6 +96,9 @@ export async function fetchMetricLeaderboard(
     p_asc: !!metric.asc,
     p_min_den: metric.minDen ?? 1,
     p_limit: limit,
+    // Sent only when filtering, so the default view also works against a
+    // project still on the pre-bot-filter SQL.
+    ...(includeBots ? {} : { p_include_bots: false }),
   });
   if (error || !Array.isArray(data)) return classify(error);
   return data.map((r) => ({
