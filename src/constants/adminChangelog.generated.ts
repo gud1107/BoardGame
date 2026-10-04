@@ -3,6 +3,14 @@ import type { AdminCommitEntry } from "./adminChangelog";
 
 export const ADMIN_COMMITS: AdminCommitEntry[] = [
   {
+    "hash": "ddba187",
+    "date": "2026-10-04",
+    "type": "FIX",
+    "scope": "admin",
+    "desc": "read Admin-Ko from anywhere in the commit body, keep same-day commit order",
+    "ko": "자동 기록의 한국어 요약(Admin-Ko 줄)을 커밋 본문 어디서든 읽도록 수정, 같은 날 기록을 커밋 순서대로 정렬"
+  },
+  {
     "hash": "7c77770",
     "date": "2026-10-04",
     "type": "FEAT",

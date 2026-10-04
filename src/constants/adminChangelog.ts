@@ -66,6 +66,16 @@ export const ADMIN_COMMIT_KO: Record<string, string> = {
 
 export const ADMIN_CHANGELOG: AdminChangelogEntry[] = [
   {
+    date: "2026-10-04",
+    type: "FEAT",
+    desc: "🗒 변경 기록 탭 신설 — 공개 패치노트에서 뺀 관리자 기록 모음, admin·visitors·analytics 커밋을 배포 때마다 자동 수집(커밋 본문의 Admin-Ko 줄로 한국어 표시), 종류·월·출처 필터와 겹치는 기록을 숨기는 기본 보기",
+  },
+  {
+    date: "2026-10-04",
+    type: "IMPROVE",
+    desc: "공개 패치노트 규칙을 테스트로 고정 — 관리자 항목 금지, 한 줄 120자 제한(PATCH_NOTE_DESC_MAX), 한국어 요약이 없는 관리자 커밋 검출",
+  },
+  {
     date: "2026-10-02",
     type: "FEAT",
     desc: "월별 통계 탭, 자주 오는 IP 이름 붙이기(IP 관리 탭), 이름 붙인 사람 재방문·게임 시작 휴대폰 알림(ntfy), '보기 대상' 필터(이름 붙인 IP만 / 한 사람만)와 '이름 붙인 IP 제외'",

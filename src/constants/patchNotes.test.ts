@@ -6,7 +6,8 @@ import {
   PATCH_NOTE_DESC_MAX,
   getPatchNoteGameMeta,
 } from "./patchNotes";
-import { ADMIN_CHANGELOG } from "./adminChangelog";
+import { ADMIN_CHANGELOG, ADMIN_COMMIT_KO } from "./adminChangelog";
+import { ADMIN_COMMITS } from "./adminChangelog.generated";
 
 /**
  * This project's `<Game>Board.tsx`/header-level components have no
@@ -109,5 +110,19 @@ describe("ADMIN_CHANGELOG", () => {
     for (let i = 1; i < ADMIN_CHANGELOG.length; i++) {
       expect(ADMIN_CHANGELOG[i - 1].date >= ADMIN_CHANGELOG[i].date).toBe(true);
     }
+  });
+
+  /**
+   * Every auto-collected admin commit should read in Korean on the 변경 기록
+   * tab. Fix a failure by putting `Admin-Ko: <한국어 요약>` in the commit body
+   * next time; for a commit that's already pushed, add its hash to
+   * ADMIN_COMMIT_KO. (Rows appear once `npm run gen:admin-changelog` or a
+   * build regenerates adminChangelog.generated.ts.)
+   */
+  it("has Korean text for every auto-collected admin commit", () => {
+    const missing = ADMIN_COMMITS.filter((c) => !c.ko && !ADMIN_COMMIT_KO[c.hash]).map(
+      (c) => `${c.hash} ${c.date} ${c.scope}: ${c.desc}`,
+    );
+    expect(missing, "Admin-Ko 줄이 없는 관리자 커밋 — ADMIN_COMMIT_KO에 한국어 추가").toEqual([]);
   });
 });
