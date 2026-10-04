@@ -101,11 +101,14 @@ export default function GameShowcaseCard({
             {genreTags.map((genre) => (
               <span
                 key={genre}
-                className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold"
-                style={{
-                  color: GENRE_META[genre].accent,
-                  backgroundColor: `${GENRE_META[genre].accent}1a`,
-                }}
+                className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold light:text-(color:--genre-ink)!"
+                style={
+                  {
+                    color: GENRE_META[genre].accent,
+                    backgroundColor: `${GENRE_META[genre].accent}1a`,
+                    "--genre-ink": GENRE_META[genre].accentInk,
+                  } as React.CSSProperties
+                }
               >
                 {GENRE_META[genre].emoji} {GENRE_META[genre].label}
               </span>

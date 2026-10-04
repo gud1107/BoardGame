@@ -44,24 +44,47 @@
    existing ThemeProvider + no-flash head script already own `data-theme`
    and persistence (`bgh_theme`), and a parallel one would fight them. */
 [data-theme="light"] {
-  --background: #f1f5f9;
+  /* 2026-10-04 저자극 톤 재조정 — measured, not guessed: headless Chromium /
+     Firefox / WebKit screenshots of GitHub, YouTube, Notion, Slack, Naver and
+     Wikipedia in light mode average 0.86–0.98 relative luminance (nearly all
+     on pure #fff), and our patch-notes page sat right with them at 0.88 —
+     the old #f1f5f9 / #fbfcfd tones were only ~1–4% under white. These
+     values put our large surfaces ~15–20% under that norm (L* ≈ 89–94)
+     while keeping a lighter-panel-on-darker-backdrop hierarchy. */
+  --background: #dde2e8;
   --foreground: #1e293b;
-  --page-bg-gradient: radial-gradient(circle at 50% 10%, #f8fafc 0%, #f1f5f9 45%, #e2e8f0 100%);
-  /* Tone that light-mode "panel white" resolves to — see the rule below. */
-  --panel-surface: #fbfcfd;
+  --page-bg-gradient: radial-gradient(circle at 50% 10%, #e6eaef 0%, #dde2e8 45%, #d3d9e1 100%);
+  /* What light-mode surface utilities resolve to — see the rules below. */
+  --panel-surface: #eceff3; /* light:bg-white[/NN] — panels, header, modals */
+  --panel-subtle: #e4e8ed; /* light:bg-slate-50 — cards, insets */
+  --panel-muted: #d9dfe6; /* light:bg-slate-100 — chips, tracks, hovers */
+  --panel-border: #c5cdd8; /* light:border-slate-200 — must stay darker than the surfaces above */
+  /* Secondary text, darkened to keep (or improve) contrast on the dimmer
+     surfaces: slate-500 ≥ 4.5:1 on every surface, slate-400 ≥ 3:1. */
+  --text-secondary: #4f5b6c;
+  --text-tertiary: #5d6878;
+  --text-amber: #a34a08; /* light:text-amber-600 */
+  --text-amber-strong: #92400e; /* light:text-amber-700 */
+  --text-orange: #b23c0a; /* light:text-orange-600 */
   color-scheme: light;
   /* The dark theme's white-alpha thumb is invisible on the slate backdrop. */
   --scrollbar-thumb: rgba(30, 41, 59, 0.22);
 }
 
-/* Light-mode HUD/panel de-glare in ONE place instead of ~430 call sites:
-   every `light:bg-white[/NN]` utility (the classes written specifically as
-   light-mode panel backgrounds) reads `var(--color-white)`, so re-pointing
-   that variable on just those elements softens pure #fff panels without
+/* Light-mode surface de-glare in ONE place instead of ~700 call sites: the
+   `light:`-prefixed utilities below are the classes written specifically as
+   light-mode surfaces/text, and they read Tailwind's `var(--color-*)`, so
+   re-pointing that variable on just those elements dims them without
    touching card faces / boards / canvases drawn with unprefixed `bg-white`
-   or their own hex fills. Setting a custom property (rather than a competing
-   `background-color`) means no cascade-layer fight with `light:hover:*`
-   states. Inherits to descendants, which is harmless at this ~1% shift. */
+   etc. or their own hex fills. Setting a custom property (rather than a
+   competing `background-color`) means no cascade-layer fight with
+   `light:hover:*` states.
+
+   Custom properties inherit, so the first rule hands every child the stock
+   Tailwind values back — otherwise a white card face or `text-white` label
+   inside a dimmed panel would turn gray too. It must come BEFORE the
+   overrides: an element that is both a child and a dimmed surface matches
+   both at equal specificity, and the later rule wins. */
 [data-theme="light"]
   :is(
     .light\:bg-white,
@@ -72,9 +95,57 @@
     .light\:bg-white\/80,
     .light\:bg-white\/85,
     .light\:bg-white\/90,
-    .light\:bg-white\/95
+    .light\:bg-white\/95,
+    .light\:hover\:bg-white,
+    .light\:bg-slate-50,
+    .light\:hover\:bg-slate-50,
+    .light\:bg-slate-100,
+    .light\:hover\:bg-slate-100
+  )
+  > * {
+  --color-white: #fff;
+  --color-slate-50: oklch(98.4% 0.003 247.858);
+  --color-slate-100: oklch(96.8% 0.007 247.896);
+}
+
+[data-theme="light"]
+  :is(
+    .light\:bg-white,
+    .light\:bg-white\/40,
+    .light\:bg-white\/50,
+    .light\:bg-white\/60,
+    .light\:bg-white\/70,
+    .light\:bg-white\/80,
+    .light\:bg-white\/85,
+    .light\:bg-white\/90,
+    .light\:bg-white\/95,
+    .light\:hover\:bg-white
   ) {
   --color-white: var(--panel-surface);
+}
+[data-theme="light"] :is(.light\:bg-slate-50, .light\:hover\:bg-slate-50) {
+  --color-slate-50: var(--panel-subtle);
+}
+[data-theme="light"] :is(.light\:bg-slate-100, .light\:hover\:bg-slate-100) {
+  --color-slate-100: var(--panel-muted);
+}
+[data-theme="light"] .light\:border-slate-200 {
+  --color-slate-200: var(--panel-border);
+}
+[data-theme="light"] .light\:text-slate-500 {
+  --color-slate-500: var(--text-secondary);
+}
+[data-theme="light"] .light\:text-slate-400 {
+  --color-slate-400: var(--text-tertiary);
+}
+[data-theme="light"] .light\:text-amber-600 {
+  --color-amber-600: var(--text-amber);
+}
+[data-theme="light"] .light\:text-amber-700 {
+  --color-amber-700: var(--text-amber-strong);
+}
+[data-theme="light"] .light\:text-orange-600 {
+  --color-orange-600: var(--text-orange);
 }
 
 @theme inline {

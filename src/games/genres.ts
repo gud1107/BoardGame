@@ -9,37 +9,49 @@ import type { GameGenre } from "./types";
  */
 export const GENRE_META: Record<
   GameGenre,
-  { label: string; emoji: string; description: string; accent: string }
+  {
+    label: string;
+    emoji: string;
+    description: string;
+    accent: string;
+    /** Darker text shade of `accent` for light mode — the pastel accent reads at ~1.5–2:1 on light surfaces. */
+    accentInk: string;
+  }
 > = {
   strategy: {
     label: "전략",
     emoji: "🧠",
     description: "장기적인 계획과 최적화가 승패를 가르는 게임",
     accent: "#38bdf8",
+    accentInk: "#0369a1",
   },
   bluffing: {
     label: "속임수",
     emoji: "🎭",
     description: "거짓말, 추리, 심리전으로 상대를 흔드는 게임",
     accent: "#f472b6",
+    accentInk: "#be185d",
   },
   luck: {
     label: "운빨",
     emoji: "🎲",
     description: "주사위와 카드 운이 승부를 뒤집는 게임",
     accent: "#fbbf24",
+    accentInk: "#a16207",
   },
   party: {
     label: "파티",
     emoji: "🎉",
     description: "다같이 왁자지껄 즐기는 대인원 파티 게임",
     accent: "#a78bfa",
+    accentInk: "#6d28d9",
   },
   family: {
     label: "가족",
     emoji: "🎈",
     description: "규칙이 쉬워 누구나 금방 어울려 즐기는 게임",
     accent: "#34d399",
+    accentInk: "#047857",
   },
 };
 

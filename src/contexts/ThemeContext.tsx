@@ -56,7 +56,7 @@ const META_KEY = "theme_pref";
 /** Mobile browser chrome (address bar / status bar) tint per theme — matches
  *  each theme's `--background` in globals.css so the bar doesn't sit as a
  *  dark-navy stripe above the light page (or vice versa). */
-export const THEME_COLORS: Record<Theme, string> = { dark: "#0b0b12", light: "#f1f5f9" };
+export const THEME_COLORS: Record<Theme, string> = { dark: "#0b0b12", light: "#dde2e8" };
 
 interface ThemeContextValue {
   /** What's actually painted right now. */

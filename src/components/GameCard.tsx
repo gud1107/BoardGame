@@ -95,8 +95,8 @@ export default function GameCard({
               return (
                 <span
                   key={genre}
-                  className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                  style={{ color: meta.accent, backgroundColor: `${meta.accent}1a` }}
+                  className="rounded-full px-2 py-0.5 text-[10px] font-medium light:text-(color:--genre-ink)!"
+                  style={{ color: meta.accent, backgroundColor: `${meta.accent}1a`, "--genre-ink": meta.accentInk } as React.CSSProperties}
                 >
                   {meta.emoji} {meta.label}
                 </span>
