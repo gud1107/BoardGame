@@ -127,6 +127,8 @@ export const MAPS: MapDef[] = [
     coinBonus: 1.1,
     // Megalodon-class sharks vacuum up the packed shelf: ×0.75 brings T4 from ≈1.8× to ≈1.35× 딥 블루.
     tierCoinBonus: { 4: 0.75 },
+    // Same rule as 난파선: 일각고래(T3) eases off for T1, 범고래(T4) for T1/T2.
+    lowTierMercy: { spawn: 0.5, aggro: 0.75 },
     density: 1,
     threatDensity: 0.7,
     spawns: {
@@ -160,9 +162,9 @@ export const MAPS: MapDef[] = [
     density: 1,
     threatDensity: 0.55,
     spawns: {
-      ...COMMON_SPAWNS, tuna: 0.5, smallFish: 1.4,
+      ...COMMON_SPAWNS, tuna: 0.5, smallFish: 1.8,
       barracuda: 1, moray: 1, treasureHunter: 1, giantSquid: 1,
-      crab: 1.8, puffer: 1, greenJelly: 1.4,
+      crab: 2.5, puffer: 1, greenJelly: 1.4,
       mineS: 1.5, mineM: 1.6, mineL: 1.6, mineXL: 1.2,
       diver: 1.2, sailor: 0.8, fishingBoat: 1, angler: 1.4, smallShark: 1, submarine: 1.3, ghostShark: 1.3,
     },

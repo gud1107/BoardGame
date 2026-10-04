@@ -24,6 +24,7 @@ import type { RunSummary } from "./engine";
 import HungrySharkCanvas from "./HungrySharkCanvas";
 import RulebookModal from "./RulebookModal";
 import BestiaryPanel from "./BestiaryPanel";
+import RecordCelebration from "./RecordCelebration";
 import { mapExclusives } from "./markers";
 import Overlay from "@/components/Overlay";
 import { drawSharkShape } from "./render";
@@ -708,6 +709,7 @@ function ResultsPanel({
   onMenu: () => void;
 }) {
   const { s, newBest, missionCoins, prevMapBest, newMapBest, causeCount } = summary;
+  const celebrate = s.score > 0 && (newMapBest || newBest);
   const map = mapById(s.mapId);
   const topCauses = Object.entries(save.deaths[s.mapId] ?? {})
     .sort((a, b) => b[1] - a[1])
@@ -715,11 +717,16 @@ function ResultsPanel({
   const def = sharkById(s.sharkId);
   const eaten = EATEN_LABEL_ORDER.filter((k) => (s.run.eaten[k] ?? 0) > 0);
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 p-5 light:border-slate-200 light:from-white light:to-slate-50">
+    <div className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 p-5 light:border-slate-200 light:from-white light:to-slate-50">
+      {celebrate && <RecordCelebration big={newMapBest} muted={save.muted} />}
       <div className="text-center">
         <div className="text-xs font-bold tracking-[0.3em] text-white/40 light:text-slate-400">DIVE RESULT</div>
         <div className="mt-1 text-4xl font-black text-white tabular-nums light:text-slate-900">{s.score.toLocaleString()}</div>
-        {newBest && <div className="mt-1 inline-block animate-bounce rounded-full bg-yellow-400 px-3 py-0.5 text-xs font-black text-slate-900">🏆 신기록!</div>}
+        {celebrate && (
+          <div className="mt-1 inline-block animate-bounce rounded-full bg-yellow-400 px-3 py-0.5 text-xs font-black text-slate-900 shadow-[0_0_18px_rgba(250,204,21,0.6)]">
+            {newMapBest ? `🏆 ${mapById(s.mapId).name} 신기록!` : `🏆 ${def.name} 개인 최고 기록!`}
+          </div>
+        )}
         <p className="mt-2 text-xs text-white/50 light:text-slate-500">
           {mapById(s.mapId).emoji} {mapById(s.mapId).name} · {def.name} · {Math.floor(s.seconds / 60)}분 {s.seconds % 60}초 생존 · 사인: {s.cause}
         </p>

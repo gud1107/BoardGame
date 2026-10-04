@@ -14,8 +14,8 @@ export class SharkAudio {
   private lastHeartbeat = 0;
   muted = false;
 
-  /** Must be called from a user gesture (browser autoplay policy). */
-  unlock() {
+  /** Must be called from a user gesture (browser autoplay policy). `ambient` = start the underwater noise bed. */
+  unlock(ambient = true) {
     if (this.ctx) {
       if (this.ctx.state === "suspended") void this.ctx.resume();
       return;
@@ -40,7 +40,7 @@ export class SharkAudio {
       last = (last + (Math.random() * 2 - 1) * 0.08) * 0.985;
       d[i] = last * 3;
     }
-    this.startAmbient();
+    if (ambient) this.startAmbient();
   }
 
   setMuted(m: boolean) {
@@ -161,6 +161,15 @@ export class SharkAudio {
   goldRush(mega: boolean) {
     const notes = mega ? [523, 659, 784, 1047, 1319, 1568] : [523, 659, 784, 1047];
     notes.forEach((n, i) => this.tone(n, 0.25, "triangle", 0.18, undefined, i * 0.08, true));
+  }
+  /** Results-screen record fanfare: a rising arpeggio into a held major chord (+ sparkles); `big` = map record. */
+  fanfare(big: boolean) {
+    const run = big ? [523, 659, 784, 1047, 1319] : [523, 659, 784, 1047];
+    run.forEach((n, i) => this.tone(n, 0.16, "square", 0.06, undefined, i * 0.09, true));
+    const at = run.length * 0.09 + 0.04;
+    const chord = big ? [523, 659, 784, 1047] : [659, 784, 1047];
+    chord.forEach((n) => this.tone(n, big ? 1.1 : 0.7, "triangle", 0.12, undefined, at, true));
+    if (big) [1568, 2093, 1760, 2349].forEach((n, i) => this.tone(n, 0.09, "sine", 0.05, undefined, at + 0.25 + i * 0.12, true));
   }
   goldEnd() {
     [784, 659, 523].forEach((n, i) => this.tone(n, 0.2, "triangle", 0.1, undefined, i * 0.08, true));

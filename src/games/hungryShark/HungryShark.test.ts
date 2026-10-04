@@ -864,3 +864,24 @@ describe("shipwreck low-tier mercy + records + killer ranking", () => {
     expect(r.killers.find((k) => k.cause === "범고래")?.kind).toBe("orca");
   });
 });
+
+describe("frozen strait low-tier mercy", () => {
+  it("범고래 shows up less around a T1 shark than around a T3 shark", () => {
+    const orcas = (sharkId: string) => {
+      let n = 0;
+      for (const seed of [1, 2, 3]) {
+        const w = createWorld(sharkById(sharkId), NO_UPGRADES, 400 + seed, "frozenStrait");
+        for (let i = 0; i < 60 * 20; i++) {
+          w.shark.x = 8900;
+          w.shark.y = 1500;
+          w.shark.hp = 99999;
+          step(w, idle, 1 / 60);
+          w.events.length = 0;
+        }
+        n += w.entities.filter((e) => e.alive && e.kind === "orca").length;
+      }
+      return n;
+    };
+    expect(orcas("reef")).toBeLessThan(orcas("white"));
+  });
+});
