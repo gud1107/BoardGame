@@ -249,6 +249,8 @@ export interface World {
   run: RunStats;
   over: boolean;
   deathCause: string | null;
+  /** Last damage source + when (world time) — a starvation tick that finishes a freshly hurt shark is credited to it. */
+  lastHit: { cause: string; time: number } | null;
   spawnTimer: number;
   bounceCd: number;
   skill: SkillState;
@@ -356,6 +358,7 @@ export function createWorld(def: SharkDef, upgrades: UpgradeLevels, seed = Date.
     },
     over: false,
     deathCause: null,
+    lastHit: null,
     spawnTimer: 0,
     bounceCd: 0,
     skill: { id: def.skill.id, cooldown: 0, active: 0, ambush: false, reveal: 0, vortex: null },
@@ -710,7 +713,7 @@ function stepShark(w: World, input: SharkInput, dt: number) {
   // Starvation (spec §1-1) — paused during Gold Rush.
   if (!w.gold.active) {
     s.hp -= drainPerSecond(st.baseDrainRate, w.time) * dt;
-    if (s.hp <= 0) w.deathCause = "굶주림";
+    if (s.hp <= 0) w.deathCause = w.lastHit && w.time - w.lastHit.time < HIT_CREDIT_SECONDS ? w.lastHit.cause : "굶주림";
   }
 
   // Jellyfish poison DoT (spec §6-2).
@@ -781,6 +784,9 @@ function collideLevel(w: World, prevX: number, prevY: number, dt: number) {
   }
 }
 
+/** A hunger death within this many seconds of taking damage counts as death by that damage (death stats). */
+const HIT_CREDIT_SECONDS = 5;
+
 function hurt(w: World, amount: number, cause: string, silent = false) {
   if (isInvulnerable(w) || amount <= 0) return;
   const s = w.shark;
@@ -791,6 +797,7 @@ function hurt(w: World, amount: number, cause: string, silent = false) {
   floatText(w, s.x, s.y - 30, `-${Math.round(amount)}`, "#f87171", silent ? 14 : 20);
   if (!silent) burst(w, "blood", s.x, s.y, 10, 160, "#dc2626", 4, 0.8);
   w.events.push({ type: "hurt", amount });
+  w.lastHit = { cause, time: w.time };
   if (s.hp <= 0) w.deathCause = cause;
 }
 

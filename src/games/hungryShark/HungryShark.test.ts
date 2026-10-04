@@ -885,3 +885,23 @@ describe("frozen strait low-tier mercy", () => {
     expect(orcas("reef")).toBeLessThan(orcas("white"));
   });
 });
+
+describe("death cause credit", () => {
+  it("a hunger tick right after a hit is credited to the hit; long after, it's starvation", () => {
+    const die = (gap: number) => {
+      const w = createWorld(sharkById("reef"), NO_UPGRADES, 500);
+      isolate(w);
+      const jelly = place(w, "barracuda", w.shark.x + 10, w.shark.y);
+      jelly.attackCd = 0;
+      for (let i = 0; i < 10 && !w.lastHit; i++) step(w, idle, 1 / 60);
+      jelly.alive = false;
+      expect(w.lastHit?.cause).toBe("꼬치고기");
+      for (let i = 0; i < gap * 60; i++) { w.shark.hp = Math.max(w.shark.hp, 5); step(w, idle, 1 / 60); }
+      w.shark.hp = 0.01;
+      for (let i = 0; i < 30 && !w.over; i++) step(w, idle, 1 / 60);
+      return summarize(w).cause;
+    };
+    expect(die(1)).toBe("꼬치고기");
+    expect(die(7)).toBe("굶주림");
+  });
+});
