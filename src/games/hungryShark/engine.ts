@@ -13,6 +13,8 @@
  */
 
 import {
+  activeGeometry,
+  ceilingY,
   COMBO_WINDOW,
   comboMultiplier,
   drainPerSecond,
@@ -27,6 +29,7 @@ import {
   goldGaugeCapacity,
   goldRushMultiplier,
   healGain,
+  isUnderIce,
   MEGA_EVERY,
   mapById,
   MEGA_GOLD_RUSH_DURATION,
@@ -54,6 +57,7 @@ import {
   type SkillId,
   type UpgradeLevels,
 } from "./data";
+import { ICE_TOP, insideAny, nearestHole, resolveCircle, type Circle } from "./mapGeometry";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -367,7 +371,10 @@ export function createWorld(def: SharkDef, upgrades: UpgradeLevels, seed = Date.
 
   // Treasure chests: fixed seabed spots for this run (not respawned).
   for (let i = 0; i < map.chestCount; i++) {
-    const x = ((i + 0.5) / map.chestCount) * WORLD_W + range(w, -300, 300);
+    let x = ((i + 0.5) / map.chestCount) * WORLD_W + range(w, -300, 300);
+    // Never bury a chest inside a hull / ice pillar: slide along until clear.
+    for (let k = 0; k < 40 && insideAny(activeGeometry(), x, seabedY(x) - 18, 22, scratchC); k++) x += 45;
+    x = Math.max(80, Math.min(WORLD_W - 80, x));
     const e = spawn(w, "chest", x, 0);
     e.y = seabedY(x) - e.def.radius + 4;
   }
@@ -448,6 +455,7 @@ function queryGrid(x: number, y: number, r: number, out: Entity[]): Entity[] {
 }
 
 const scratchA: Entity[] = [];
+const scratchC: Circle[] = [];
 const scratchB: Entity[] = [];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -661,11 +669,13 @@ function stepShark(w: World, input: SharkInput, dt: number) {
     s.boost = Math.min(st.boostDuration, s.boost + dt * st.boostRegen * 0.5);
   }
 
+  const prevX = s.x, prevY = s.y;
   s.x += s.vx * dt;
   s.y += s.vy * dt;
+  collideLevel(w, prevX, prevY, dt);
 
   // Water volume transitions (spec §6-1).
-  if (!wasAirborne && s.y < SURFACE_Y - 2) {
+  if (!wasAirborne && s.y < SURFACE_Y - 2 && !isUnderIce(s.x)) {
     s.airborne = true;
     // Breaching bonus so a boosted jump can actually reach pelicans/helicopters.
     if (s.vy < 0) s.vy *= s.boosting || w.gold.active ? BREACH_BONUS : 1.1;
@@ -709,6 +719,62 @@ function stepShark(w: World, input: SharkInput, dt: number) {
       if (!w.gold.active) hurt(w, st.maxHealth * s.poison.pct, "해파리 독", true);
     }
     if (s.poison.remaining <= 0) s.poison = null;
+  }
+}
+
+/**
+ * Level geometry vs. the shark: the ice sheet (a ceiling while swimming, a
+ * floor to slide on while airborne) and solid structures (hulls, masts,
+ * icicles, ice pillars) — tested at three points along the spine.
+ */
+function collideLevel(w: World, prevX: number, prevY: number, dt: number) {
+  const s = w.shark;
+  const L = bodyLength(w);
+  const r = L * 0.3;
+  if (isUnderIce(s.x)) {
+    const ceil = ceilingY(s.x);
+    if (s.airborne) {
+      // Landed on the ice: bounce, then skid toward the nearest breathing hole.
+      const top = ICE_TOP - r * 0.5;
+      if (s.y > top) {
+        s.y = top;
+        s.vy = Math.abs(s.vy) > 120 ? -Math.abs(s.vy) * 0.3 : 0;
+        const hole = nearestHole(activeGeometry(), s.x);
+        s.vx = s.vx * 0.96 + Math.sign(hole - s.x) * 700 * dt;
+      }
+    } else if (s.y < ceil + r) {
+      if (isUnderIce(prevX) || prevY >= ceilingY(prevX) + r - 2) {
+        s.y = ceil + r;
+        s.vy = Math.max(0, s.vy);
+      } else {
+        // Swam sideways out of a breathing hole into the ice edge: a wall.
+        s.x = prevX;
+        s.vx = -s.vx * 0.3;
+      }
+    }
+  }
+  const geo = activeGeometry();
+  if (!geo.colliders.length) return;
+  const hx = Math.cos(s.angle), hy = Math.sin(s.angle);
+  const bodyR = L * 0.2;
+  for (const off of [0.38, 0, -0.38]) {
+    const p = { x: s.x + hx * L * off, y: s.y + hy * L * off };
+    const hit = resolveCircle(geo, p, bodyR, scratchC);
+    if (!hit) continue;
+    s.x = p.x - hx * L * off;
+    s.y = p.y - hy * L * off;
+    const nl = Math.hypot(hit.nx, hit.ny) || 1;
+    const nx = hit.nx / nl, ny = hit.ny / nl;
+    const inward = s.vx * nx + s.vy * ny;
+    if (inward < 0) {
+      s.vx -= nx * inward * 1.3;
+      s.vy -= ny * inward * 1.3;
+      if (inward < -260 && w.bounceCd <= 0) {
+        w.bounceCd = 0.5;
+        w.shake = Math.max(w.shake, 5);
+        w.events.push({ type: "bounce" });
+      }
+    }
   }
 }
 
@@ -759,7 +825,9 @@ function updateEntities(w: World, dt: number) {
         e.timer -= dt;
         if (e.timer <= 0) { e.timer = range(w, 2, 5); e.dir = rand(w) < 0.5 ? -1 : 1; }
         const d = panic ? Math.sign(dx) || e.dir : e.dir;
-        e.x += d * e.def.speed * (panic ? 1.7 : 1) * dt;
+        const nx = e.x + d * e.def.speed * (panic ? 1.7 : 1) * dt;
+        if (isUnderIce(nx)) e.dir = -d as 1 | -1;
+        else e.x = nx;
         e.y = SURFACE_Y + 5 + Math.sin(e.phase * 2) * 2.5;
         e.angle = d > 0 ? 0 : Math.PI;
         break;
@@ -780,7 +848,9 @@ function updateEntities(w: World, dt: number) {
         break;
       }
       case "surfaceBoat": {
-        e.x += e.dir * e.def.speed * dt;
+        // Boats / icebergs stay inside their breathing hole on the ice map.
+        if (isUnderIce(e.x + e.dir * (e.def.radius + e.def.speed * dt))) e.dir = -e.dir as 1 | -1;
+        else e.x += e.dir * e.def.speed * dt;
         e.y = SURFACE_Y - 4 + Math.sin(e.phase * 1.3) * 3;
         if (e.x < 150 || e.x > WORLD_W - 150) e.dir = e.x < 150 ? 1 : -1;
         e.angle = e.dir > 0 ? 0 : Math.PI;
@@ -797,7 +867,7 @@ function updateEntities(w: World, dt: number) {
         e.timer -= dt;
         if (rand(w) < 0.6)
           addParticle(w, { kind: "bubble", x: e.x - Math.cos(e.angle) * 12, y: e.y - Math.sin(e.angle) * 12, vx: 0, vy: -30, life: 0.6, maxLife: 0.6, size: 2.5, color: "#e2e8f0", gravity: 0 });
-        if (e.timer <= 0 || e.y < SURFACE_Y || e.y > seabedY(e.x)) explode(w, e);
+        if (e.timer <= 0 || e.y < ceilingY(e.x) || e.y > seabedY(e.x) || insideAny(activeGeometry(), e.x, e.y, e.def.radius, scratchC)) explode(w, e);
         break;
       }
       case "sub": {
@@ -845,9 +915,17 @@ function updateEntities(w: World, dt: number) {
     // Keep swimmers inside the water column.
     const b = e.def.behavior;
     if (b === "boid" || b === "wander" || b === "hunter" || b === "jelly" || b === "sub") {
+      const geo = activeGeometry();
+      if (geo.colliders.length && resolveCircle(geo, e, e.def.radius, scratchC) && b !== "boid") {
+        // Bumped a hull / icicle: turn around instead of grinding along it.
+        e.dir = -e.dir as 1 | -1;
+        e.vx = -e.vx;
+        e.vy = -e.vy;
+      }
       const floor = seabedY(e.x) - e.def.radius - 6;
       if (e.y > floor) { e.y = floor; e.vy = -Math.abs(e.vy) * 0.5; }
-      if (e.y < SURFACE_Y + e.def.radius + 6) { e.y = SURFACE_Y + e.def.radius + 6; e.vy = Math.abs(e.vy) * 0.5; }
+      const ceil = ceilingY(e.x) + e.def.radius + 6;
+      if (e.y < ceil) { e.y = ceil; e.vy = Math.abs(e.vy) * 0.5; }
     }
     // Nobody may leave the world horizontally (fleeing swimmers/crabs used to
     // run off the left edge and become uncatchable forever).
@@ -925,10 +1003,14 @@ function updateWander(w: World, e: Entity, dist: number, dx: number, dy: number,
   if (Math.abs(mx) > 1) e.angle = Math.atan2(my * 0.4, mx);
 }
 
+const HUNTER_AGGRO: Partial<Record<EntityKind, number>> = {
+  angler: 360, ghostShark: 600, orca: 580, giantSquid: 520, moray: 260, barracuda: 380,
+};
+
 /** Enemy shark / anglerfish FSM: patrol → chase (if player is prey) / flee (if predator). */
 function updateHunter(w: World, e: Entity, dist: number, dx: number, dy: number, dt: number) {
   const danger = isDangerous(w, e) && !isCloaked(w);
-  const aggro = e.kind === "angler" ? 360 : e.kind === "ghostShark" ? 600 : 440;
+  const aggro = HUNTER_AGGRO[e.kind] ?? 440;
   if (danger && dist < aggro && !w.shark.airborne && e.attackCd <= 0.4) {
     // Stamina: a chase lasts ~5s, then the hunter tires and backs off.
     if (e.state !== "chase") e.timer = 5;
@@ -1003,6 +1085,9 @@ function resolveBites(w: World) {
   }
 }
 
+/** What counts for the "물고기 N마리" mission (penguins/seals count on the ice map, which has fewer fish). */
+const FISH_KINDS = new Set<EntityKind>(["smallFish", "grouper", "tuna", "ray", "puffer", "penguin", "seal", "barracuda", "moray"]);
+
 function consume(w: World, e: Entity) {
   const s = w.shark;
   const def = e.def;
@@ -1042,7 +1127,7 @@ function consume(w: World, e: Entity) {
   }
 
   w.run.eaten[e.kind] = (w.run.eaten[e.kind] ?? 0) + 1;
-  if (e.kind === "smallFish" || e.kind === "grouper" || e.kind === "tuna" || e.kind === "ray" || e.kind === "puffer") w.run.fish++;
+  if (FISH_KINDS.has(e.kind)) w.run.fish++;
   if (def.human) w.run.humans++;
   if (def.toughness > 1) w.run.bigKills++;
 
@@ -1564,7 +1649,9 @@ function runSpawner(w: World, initial: boolean) {
   const counts = countKinds(w);
   const s = w.shark;
   for (const kind of Object.keys(targets) as EntityKind[]) {
-    const want = Math.round((targets[kind] ?? 0) * (w.map.population[kind] ?? 1));
+    const mul = w.map.spawns[kind];
+    if (!mul) continue; // not on this map's roster
+    const want = Math.round((targets[kind] ?? 0) * mul);
     if ((counts[kind] ?? 0) >= want) continue;
     // Golden tuna: rolled in rarely (≈ once a minute on average), never at start.
     if (kind === "goldenTuna" && (initial || rand(w) > 0.0035)) continue;
@@ -1576,6 +1663,8 @@ function runSpawner(w: World, initial: boolean) {
     if (x < 80 || x > WORLD_W - 80) x = s.x - side * off;
     x = Math.max(80, Math.min(WORLD_W - 80, x));
     const floor = seabedY(x);
+    const surfaceKind = def.behavior === "surfaceSwim" || def.behavior === "surfaceBoat";
+    if (surfaceKind && isUnderIce(x)) continue; // only in breathing holes
     let y: number;
     switch (def.behavior) {
       case "crawl": y = floor - def.radius; break;
@@ -1583,12 +1672,13 @@ function runSpawner(w: World, initial: boolean) {
       case "surfaceBoat": y = SURFACE_Y - 4; break;
       case "fly": case "heli": y = range(w, def.depth[0], def.depth[1]); break;
       default: {
-        const lo = Math.max(SURFACE_Y + 40, def.depth[0]);
+        const lo = Math.max(ceilingY(x) + 40, def.depth[0]);
         const hi = Math.min(floor - 40, def.depth[1]);
         if (hi <= lo) continue;
         y = range(w, lo, hi);
       }
     }
+    if (!surfaceKind && def.behavior !== "fly" && def.behavior !== "heli" && insideAny(activeGeometry(), x, y, def.radius + 10, scratchC)) continue;
     if (def.behavior === "boid") {
       const n = 8 + Math.floor(rand(w) * 7);
       const dir = rand(w) < 0.5 ? -1 : 1;
@@ -1605,7 +1695,7 @@ function runSpawner(w: World, initial: boolean) {
     }
   }
   // Abyss volcano: falling rocks rain down while the player is deep.
-  if (!initial && s.y > 2350 && rand(w) < 0.22) {
+  if (!initial && w.map.feature === "coral" && s.y > 2350 && rand(w) < 0.22) {
     const r = spawn(w, "rock", s.x + range(w, -700, 700), Math.max(2250, s.y - 650));
     r.vx = range(w, -40, 40);
     r.vy = range(w, 40, 120);

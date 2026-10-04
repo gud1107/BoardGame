@@ -7,6 +7,19 @@
 
 import { evolutionPath, SHARKS, type MapId, type UpgradeLevels } from "./data";
 
+/** Shark picker sort keys ("tree" = the evolution-tree layout). */
+export const PICKER_SORTS = ["tree", "cost", "tier", "health", "speed", "gold", "boostEff", "best"] as const;
+export type PickerSort = (typeof PICKER_SORTS)[number];
+
+/** Shark picker sort/filter choices, remembered across visits. */
+export interface PickerPrefs {
+  sort: PickerSort;
+  dir: "desc" | "asc";
+  hideOwned: boolean;
+  /** Only sharks that can be unlocked right now (parent owned + enough coins). */
+  buyableOnly: boolean;
+}
+
 export interface SharkSave {
   version: 1;
   coins: number;
@@ -21,6 +34,8 @@ export interface SharkSave {
   markers: boolean;
   /** Last chosen dive map (older saves lack it → 딥 블루 오션). */
   mapId: MapId;
+  /** Shark picker sort/filter (older saves lack it → tree, no filters). */
+  picker: PickerPrefs;
 }
 
 const KEY = "hungry-shark-save-v1";
@@ -39,6 +54,7 @@ export function freshSave(): SharkSave {
     muted: false,
     markers: true,
     mapId: "deepBlue",
+    picker: { sort: "tree", dir: "desc", hideOwned: false, buyableOnly: false },
   };
 }
 
@@ -107,7 +123,14 @@ export function migrateSave(save: SharkSave): SharkSave {
   owned.add(SHARKS[0].id);
   let selected = RETIRED[save.selected]?.to ?? save.selected;
   if (!owned.has(selected)) selected = SHARKS[0].id;
-  return { ...save, coins, owned: SHARKS.map((s) => s.id).filter((id) => owned.has(id)), selected, upgrades, best };
+  const p = { ...freshSave().picker, ...save.picker };
+  const picker: PickerPrefs = {
+    sort: (PICKER_SORTS as readonly string[]).includes(p.sort) ? p.sort : "tree",
+    dir: p.dir === "asc" ? "asc" : "desc",
+    hideOwned: !!p.hideOwned,
+    buyableOnly: !!p.buyableOnly,
+  };
+  return { ...save, coins, owned: SHARKS.map((s) => s.id).filter((id) => owned.has(id)), selected, upgrades, best, picker };
 }
 
 export function loadSave(): SharkSave {

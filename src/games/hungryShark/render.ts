@@ -5,7 +5,8 @@
  * same as `worm/WormCanvas.tsx`.
  */
 
-import { ENTITY_DEFS, seabedExtent, seabedY, SEABED_BASE, SKY_TOP, SURFACE_Y, WORLD_W, worldBottom, type EntityKind, type SharkDef } from "./data";
+import { activeGeometry, ceilingY, ENTITY_DEFS, isUnderIce, seabedExtent, seabedY, SEABED_BASE, SKY_TOP, SURFACE_Y, WORLD_W, worldBottom, type EntityKind, type SharkDef } from "./data";
+import { ICE_TOP, type Structure } from "./mapGeometry";
 import { bodyLength, bodyScale, isCloaked, isDangerous, isEdible, mouthPos, type Entity, type World } from "./engine";
 import { MARKER_COLORS, type Marker } from "./markers";
 
@@ -86,12 +87,15 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
         ctx.fill();
       }
     }
-    // Distant shoreline on the left edge of the world.
-    ctx.fillStyle = "#fde68a";
-    ctx.beginPath();
-    ctx.moveTo(-400, SURFACE_Y);
-    ctx.quadraticCurveTo(0, -60, 240, SURFACE_Y);
-    ctx.fill();
+    if (w.map.feature === "coral") {
+      // Distant shoreline on the left edge of the world.
+      ctx.fillStyle = "#fde68a";
+      ctx.beginPath();
+      ctx.moveTo(-400, SURFACE_Y);
+      ctx.quadraticCurveTo(0, -60, 240, SURFACE_Y);
+      ctx.fill();
+    } else if (w.map.feature === "iceSheet") drawAurora(ctx, left, right, top, t, cam.x);
+    else drawStorm(ctx, left, right, top, t);
   }
 
   // ── Water column ──
@@ -122,9 +126,11 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     if (top < 900) {
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
+      const rayK = w.map.feature === "wrecks" ? 0.45 : 1;
       for (let i = Math.floor(left / 260) - 1; i < right / 260 + 1; i++) {
         const bx = i * 260 + Math.sin(t * 0.3 + i) * 40;
-        const a = 0.05 + 0.04 * Math.sin(t * 0.7 + i * 1.7);
+        if (isUnderIce(bx + 30)) continue; // light only falls through breathing holes
+        const a = (0.05 + 0.04 * Math.sin(t * 0.7 + i * 1.7)) * rayK;
         const g = ctx.createLinearGradient(0, SURFACE_Y, 0, 900);
         g.addColorStop(0, `rgba(186,230,253,${a})`);
         g.addColorStop(1, "rgba(186,230,253,0)");
@@ -152,8 +158,10 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     for (let x = Math.floor(left / step) * step; x <= right + step; x += step) ctx.lineTo(x, seabedY(x));
     ctx.lineTo(right + step, bottom + 400);
     ctx.fill();
-    // Kelp, coral and vents.
-    for (let i = Math.floor(left / 110); i < right / 110; i++) {
+    if (w.map.feature === "iceSheet") drawIceFloorDecor(ctx, left, right, t);
+    else if (w.map.feature === "wrecks") drawWreckFloorDecor(ctx, left, right, t);
+    // Kelp, coral and vents (딥 블루 only).
+    for (let i = Math.floor(left / 110); i < right / 110 && w.map.feature === "coral"; i++) {
       const x = i * 110 + h01(i) * 60;
       const y = seabedY(x);
       const r = h01(i + 0.5);
@@ -192,8 +200,8 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     }
   }
 
-  if (w.map.feature === "wrecks" && bottom > SEABED_BASE - 600) drawWrecks(ctx, left, right, t);
-  if (w.map.feature === "icebergs" && top < SURFACE_Y + 200) drawIceShelf(ctx, left, right);
+  drawStructures(ctx, left, right, top, bottom, t);
+  if (w.map.feature === "iceSheet" && top < 260) drawIceSheet(ctx, left, right, t);
 
   // ── Entities ──
   const goldOn = w.gold.active;
@@ -317,6 +325,8 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
         : e.kind === "ghostShark" ? "rgba(186,230,253,0.25)"
         : e.kind === "rock" ? "rgba(249,115,22,0.5)"
         : e.kind === "goldenTuna" ? "rgba(250,204,21,0.55)"
+        : e.kind === "giantSquid" ? "rgba(248,113,113,0.4)"
+        : e.kind === "moray" ? "rgba(190,242,100,0.3)"
         : null;
       if (!glow) continue;
       const ex = (e.x - cam.x) * z + vw / 2;
@@ -456,6 +466,9 @@ export function drawEntityIcon(ctx: CanvasRenderingContext2D, kind: EntityKind, 
     : kind === "fishingBoat" || kind === "yacht" || kind === "submarine" ? 2.8
     : kind === "helicopter" ? 3.4
     : kind === "iceberg" ? 2.4
+    : kind === "orca" || kind === "narwhal" ? 3.4
+    : kind === "giantSquid" || kind === "moray" ? 3.2
+    : kind === "barracuda" || kind === "seal" ? 3
     : kind === "ray" || kind === "pelican" ? 3.2
     : kind.startsWith("mine") ? 2.8
     : 2.6;
@@ -518,9 +531,16 @@ function drawMinimap(ctx: CanvasRenderingContext2D, w: World, vw: number, vh: nu
   ctx.fillStyle = "rgba(120,113,108,0.8)";
   ctx.beginPath();
   ctx.moveTo(mx, my + mh);
-  for (let x = 0; x <= WORLD_W; x += 300) ctx.lineTo(mx + x * kx, my + (seabedY(x) - SKY_TOP) * ky);
+  for (let x = 0; x <= WORLD_W; x += 100) ctx.lineTo(mx + x * kx, my + (seabedY(x) - SKY_TOP) * ky);
   ctx.lineTo(mx + mw, my + mh);
   ctx.fill();
+  const geo = activeGeometry();
+  if (geo.ice) {
+    ctx.fillStyle = "rgba(240,249,255,0.85)";
+    for (let x = 0; x < WORLD_W; x += 60) if (isUnderIce(x + 30)) ctx.fillRect(mx + x * kx, my + (SURFACE_Y - SKY_TOP) * ky - 1, 60 * kx + 0.5, 2.5);
+  }
+  ctx.fillStyle = "rgba(148,163,184,0.75)";
+  for (const c of geo.colliders) ctx.fillRect(mx + c.x * kx - 0.75, my + (c.y - SKY_TOP) * ky - 0.75, 1.5, 1.5);
   for (const e of w.entities) {
     if (!e.alive) continue;
     let c: string | null = null;
@@ -539,67 +559,350 @@ function drawMinimap(ctx: CanvasRenderingContext2D, w: World, vw: number, vh: nu
 
 // ── Map scenery ─────────────────────────────────────────────────────────────
 
-/** 난파선 무덤: broken hulls and masts half-buried in the seabed (render only). */
-function drawWrecks(ctx: CanvasRenderingContext2D, left: number, right: number, t: number) {
-  const SPAN = 1300;
-  for (let i = Math.floor(left / SPAN) - 1; i <= right / SPAN + 1; i++) {
-    if (h01(i * 7.3) < 0.25) continue;
-    const x = i * SPAN + h01(i) * 600;
-    const y = seabedY(x);
-    const L = 260 + h01(i + 3) * 220;
-    const tilt = (h01(i + 9) - 0.5) * 0.5;
-    ctx.save();
-    ctx.translate(x, y - 20);
-    ctx.rotate(tilt);
-    ctx.fillStyle = "#2a2118";
-    ctx.beginPath();
-    ctx.moveTo(-L / 2, -40);
-    ctx.lineTo(L / 2, -55);
-    ctx.lineTo(L / 2 - 50, 30);
-    ctx.lineTo(-L / 2 + 30, 30);
-    ctx.closePath();
-    ctx.fill();
-    // Hull planks + a gaping hole.
-    ctx.strokeStyle = "rgba(120,90,60,0.5)";
-    ctx.lineWidth = 3;
-    for (let k = 0; k < 3; k++) {
-      ctx.beginPath();
-      ctx.moveTo(-L / 2 + 10, -25 + k * 18);
-      ctx.lineTo(L / 2 - 20, -38 + k * 18);
-      ctx.stroke();
+/** Solid level structures (icicles, ice pillars, hulls, masts) — same shapes physics collides with. */
+function drawStructures(ctx: CanvasRenderingContext2D, left: number, right: number, top: number, bottom: number, t: number) {
+  for (const st of activeGeometry().structures) {
+    const span = st.kind === "hull" ? st.len : st.kind === "mast" ? st.len * 0.6 : st.thick + 40;
+    if (st.x + span < left || st.x - span > right) continue;
+    const yTop = st.kind === "icicle" ? st.y : st.kind === "hull" ? st.y - st.len : st.y - st.len;
+    const yBot = st.kind === "icicle" ? st.y + st.len : st.y + st.thick;
+    if (yBot < top - 40 || yTop > bottom + 40) continue;
+    switch (st.kind) {
+      case "icicle": drawIcicle(ctx, st, t); break;
+      case "icePillar": drawIcePillar(ctx, st); break;
+      case "hull": drawHull(ctx, st, t); break;
+      case "mast": drawMast(ctx, st, t); break;
     }
-    ctx.fillStyle = "#07080a";
-    ctx.beginPath();
-    ctx.ellipse(L * 0.12, -8, 26, 18, 0.3, 0, Math.PI * 2);
-    ctx.fill();
-    // Broken mast with tattered sail.
-    ctx.strokeStyle = "#3b2f22";
-    ctx.lineWidth = 7;
-    ctx.beginPath();
-    ctx.moveTo(-L * 0.1, -45);
-    ctx.lineTo(-L * 0.18, -200 - h01(i + 5) * 80);
-    ctx.stroke();
-    ctx.fillStyle = "rgba(203,213,225,0.18)";
-    ctx.beginPath();
-    ctx.moveTo(-L * 0.12, -90);
-    ctx.quadraticCurveTo(-L * 0.02 + Math.sin(t + i) * 8, -130, -L * 0.16, -170);
-    ctx.lineTo(-L * 0.12, -90);
-    ctx.fill();
-    ctx.restore();
   }
 }
 
-/** 얼음 해협: thin drift-ice crust along the surface. */
-function drawIceShelf(ctx: CanvasRenderingContext2D, left: number, right: number) {
-  ctx.fillStyle = "rgba(240,249,255,0.55)";
-  const STEP = 180;
-  for (let i = Math.floor(left / STEP); i <= right / STEP; i++) {
-    if (h01(i * 3.1) < 0.45) continue;
-    const x = i * STEP + h01(i) * 60;
-    const wdt = 50 + h01(i + 1) * 90;
+function drawIcicle(ctx: CanvasRenderingContext2D, st: Structure, t: number) {
+  const hw = st.thick / 2;
+  const g = ctx.createLinearGradient(st.x - hw, 0, st.x + hw, 0);
+  g.addColorStop(0, "rgba(186,230,253,0.85)");
+  g.addColorStop(0.5, "rgba(240,249,255,0.95)");
+  g.addColorStop(1, "rgba(125,211,252,0.8)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(st.x - hw, st.y);
+  ctx.lineTo(st.x - hw * 0.35, st.y + st.len * 0.55);
+  ctx.lineTo(st.x, st.y + st.len);
+  ctx.lineTo(st.x + hw * 0.4, st.y + st.len * 0.6);
+  ctx.lineTo(st.x + hw, st.y);
+  ctx.closePath();
+  ctx.fill();
+  // Glint running down the edge.
+  const k = (t * 0.25 + h01(st.seed)) % 1;
+  ctx.fillStyle = "rgba(255,255,255,0.8)";
+  ctx.beginPath();
+  ctx.arc(st.x - hw * 0.3 * (1 - k), st.y + st.len * k * 0.9, 2.2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawIcePillar(ctx: CanvasRenderingContext2D, st: Structure) {
+  const hw = st.thick / 2;
+  const g = ctx.createLinearGradient(0, st.y, 0, st.y - st.len);
+  g.addColorStop(0, "rgba(14,116,144,0.95)");
+  g.addColorStop(1, "rgba(165,243,252,0.85)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(st.x - hw, st.y);
+  for (let k = 1; k <= 6; k++) {
+    const f = k / 6;
+    ctx.lineTo(st.x - hw * (1 - f * 0.7) + (h01(st.seed * 7 + k) - 0.5) * 14, st.y - st.len * f);
+  }
+  ctx.lineTo(st.x + (h01(st.seed + 0.3) - 0.5) * 10, st.y - st.len - 26);
+  for (let k = 6; k >= 1; k--) {
+    const f = k / 6;
+    ctx.lineTo(st.x + hw * (1 - f * 0.7) + (h01(st.seed * 5 + k) - 0.5) * 14, st.y - st.len * f);
+  }
+  ctx.lineTo(st.x + hw, st.y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "rgba(240,249,255,0.5)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(st.x - hw * 0.4, st.y - 10);
+  ctx.lineTo(st.x - hw * 0.15, st.y - st.len * 0.9);
+  ctx.stroke();
+}
+
+function drawHull(ctx: CanvasRenderingContext2D, st: Structure, t: number) {
+  const L = st.len, H = st.thick;
+  ctx.save();
+  ctx.translate(st.x, st.y);
+  ctx.rotate(st.angle);
+  // Keel-up hull silhouette: flat deck line on top, rounded bilge below.
+  ctx.fillStyle = "#2a2118";
+  ctx.beginPath();
+  ctx.moveTo(-L / 2, -H * 0.45);
+  ctx.lineTo(L / 2 - H * 0.2, -H * 0.55);
+  ctx.quadraticCurveTo(L / 2 + H * 0.35, -H * 0.5, L / 2 + H * 0.05, H * 0.1);
+  ctx.quadraticCurveTo(L * 0.3, H * 0.55, 0, H * 0.55);
+  ctx.quadraticCurveTo(-L * 0.4, H * 0.55, -L / 2, H * 0.15);
+  ctx.closePath();
+  ctx.fill();
+  // Planks.
+  ctx.strokeStyle = "rgba(120,90,60,0.45)";
+  ctx.lineWidth = 3;
+  for (let k = 0; k < 4; k++) {
     ctx.beginPath();
-    ctx.ellipse(x, SURFACE_Y + 3, wdt / 2, 6, 0, 0, Math.PI * 2);
+    ctx.moveTo(-L / 2 + 12, -H * 0.3 + k * H * 0.2);
+    ctx.lineTo(L / 2 - 24, -H * 0.38 + k * H * 0.2);
+    ctx.stroke();
+  }
+  // Portholes + a gaping torpedo hole with a faint glow inside.
+  ctx.fillStyle = "#07080a";
+  const ports = Math.max(3, Math.floor(L / 110));
+  for (let k = 0; k < ports; k++) {
+    ctx.beginPath();
+    ctx.arc(-L * 0.38 + (k / ports) * L * 0.75, -H * 0.18, Math.max(5, H * 0.06), 0, Math.PI * 2);
     ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.ellipse(L * 0.14, H * 0.12, H * 0.28, H * 0.22, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  const glow = 0.25 + 0.15 * Math.sin(t * 2 + st.seed);
+  ctx.fillStyle = `rgba(250,204,21,${glow})`;
+  ctx.beginPath();
+  ctx.arc(L * 0.14, H * 0.15, H * 0.07, 0, Math.PI * 2);
+  ctx.fill();
+  // Barnacles / rust streaks.
+  ctx.fillStyle = "rgba(161,98,7,0.35)";
+  for (let k = 0; k < 7; k++) {
+    ctx.beginPath();
+    ctx.arc(-L / 2 + h01(st.seed * 3 + k) * L, H * (0.1 + h01(st.seed + k) * 0.35), 4 + h01(k + st.seed) * 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawMast(ctx: CanvasRenderingContext2D, st: Structure, t: number) {
+  const dx = Math.sin(st.angle), dy = -Math.cos(st.angle);
+  const ex = st.x + dx * st.len, ey = st.y + dy * st.len;
+  ctx.strokeStyle = "#3b2f22";
+  ctx.lineWidth = st.thick;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(st.x, st.y);
+  ctx.lineTo(ex, ey);
+  ctx.stroke();
+  // Yard arm + tattered sail.
+  const yx = st.x + dx * st.len * 0.7, yy = st.y + dy * st.len * 0.7;
+  ctx.lineWidth = st.thick * 0.5;
+  ctx.beginPath();
+  ctx.moveTo(yx - 70, yy + 8);
+  ctx.lineTo(yx + 70, yy - 8);
+  ctx.stroke();
+  ctx.lineCap = "butt";
+  ctx.fillStyle = "rgba(203,213,225,0.16)";
+  ctx.beginPath();
+  ctx.moveTo(yx - 60, yy + 10);
+  ctx.quadraticCurveTo(yx + Math.sin(t + st.seed) * 14, yy + 90, yx - 30, yy + 150);
+  ctx.lineTo(yx + 40, yy + 70 + Math.sin(t * 1.3 + st.seed) * 8);
+  ctx.lineTo(yx + 60, yy - 6);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/** 얼음 해협: the solid ice sheet with its jagged underside and breathing holes. */
+function drawIceSheet(ctx: CanvasRenderingContext2D, left: number, right: number, t: number) {
+  const step = 16;
+  let x = Math.floor(left / step) * step;
+  while (x <= right + step) {
+    if (!isUnderIce(x)) { x += step; continue; }
+    // One continuous ice run.
+    const x0 = x;
+    ctx.beginPath();
+    ctx.moveTo(x0, ICE_TOP);
+    const under: [number, number][] = [];
+    while (x <= right + step && isUnderIce(x)) { under.push([x, ceilingY(x)]); x += step; }
+    const x1 = x - step;
+    ctx.lineTo(x1, ICE_TOP);
+    for (let k = under.length - 1; k >= 0; k--) ctx.lineTo(under[k][0], under[k][1]);
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, ICE_TOP, 0, 120);
+    g.addColorStop(0, "#f8fafc");
+    g.addColorStop(0.35, "#bae6fd");
+    g.addColorStop(1, "#38bdf8");
+    ctx.fillStyle = g;
+    ctx.fill();
+    // Snow crust on top + cracks.
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(x0, ICE_TOP - 6, x1 - x0, 7);
+    ctx.strokeStyle = "rgba(14,116,144,0.35)";
+    ctx.lineWidth = 2;
+    for (let cx = Math.ceil(x0 / 170) * 170; cx < x1; cx += 170) {
+      ctx.beginPath();
+      ctx.moveTo(cx, ICE_TOP);
+      ctx.lineTo(cx + 18, ICE_TOP + 30);
+      ctx.lineTo(cx + 6, ceilingY(cx) - 6);
+      ctx.stroke();
+    }
+  }
+  void t;
+}
+
+/** Aurora curtains + snowfall over the frozen strait. */
+function drawAurora(ctx: CanvasRenderingContext2D, left: number, right: number, top: number, t: number, camX: number) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let band = 0; band < 3; band++) {
+    ctx.beginPath();
+    const base = SKY_TOP + 160 + band * 70;
+    ctx.moveTo(left, base);
+    for (let x = left; x <= right + 40; x += 40) {
+      const wx = x * 0.8 + camX * 0.2;
+      ctx.lineTo(x, base + Math.sin(wx * 0.003 + t * 0.4 + band) * 50 + Math.sin(wx * 0.011 - t * 0.7) * 16);
+    }
+    ctx.lineTo(right + 40, base + 220);
+    ctx.lineTo(left, base + 220);
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, base - 60, 0, base + 220);
+    const c = band === 1 ? "167,139,250" : "74,222,128";
+    g.addColorStop(0, `rgba(${c},0)`);
+    g.addColorStop(0.3, `rgba(${c},0.22)`);
+    g.addColorStop(1, `rgba(${c},0)`);
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.fillStyle = "rgba(255,255,255,0.8)";
+  const y0 = Math.max(SKY_TOP, top);
+  for (let i = 0; i < 70; i++) {
+    const sx = left + ((h01(i) * 1.3 + t * 0.02 * (0.5 + h01(i + 1))) % 1) * (right - left);
+    const sy = y0 + ((h01(i + 2) + t * 0.08 * (0.6 + h01(i + 3))) % 1) * (SURFACE_Y - y0);
+    ctx.fillRect(sx, sy, 3, 3);
+  }
+}
+
+/** Storm clouds, rain and the odd lightning flash over the wreck graveyard. */
+function drawStorm(ctx: CanvasRenderingContext2D, left: number, right: number, top: number, t: number) {
+  const flash = Math.max(0, Math.sin(t * 0.9) * Math.sin(t * 7.3)) > 0.93;
+  if (flash) {
+    ctx.fillStyle = "rgba(226,232,240,0.35)";
+    ctx.fillRect(left, Math.max(SKY_TOP - 400, top), right - left, SURFACE_Y - Math.max(SKY_TOP - 400, top));
+  }
+  ctx.fillStyle = "rgba(15,23,42,0.55)";
+  for (let i = Math.floor(left / 500) - 1; i < right / 500 + 1; i++) {
+    const cx = i * 500 + ((t * 14) % 500);
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      ctx.ellipse(cx + k * 90, SKY_TOP + 130 + h01(i) * 60 + (k % 2) * 25, 130, 55, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.strokeStyle = "rgba(148,163,184,0.35)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  const y0 = Math.max(SKY_TOP + 160, top);
+  for (let i = 0; i < 90; i++) {
+    const rx = left + h01(i * 1.9) * (right - left);
+    const ry = y0 + ((h01(i) + t * 1.4) % 1) * (SURFACE_Y - y0);
+    ctx.moveTo(rx, ry);
+    ctx.lineTo(rx - 8, ry + 28);
+  }
+  ctx.stroke();
+}
+
+/** 얼음 해협 seabed: frosted boulders, ice crystals, pale sea grass. */
+function drawIceFloorDecor(ctx: CanvasRenderingContext2D, left: number, right: number, t: number) {
+  for (let i = Math.floor(left / 130); i < right / 130; i++) {
+    const x = i * 130 + h01(i * 1.3) * 70;
+    const y = seabedY(x);
+    const r = h01(i + 0.7);
+    if (r < 0.3) {
+      ctx.fillStyle = "#64748b";
+      ctx.beginPath();
+      ctx.ellipse(x, y - 8, 26 + r * 40, 18 + r * 20, 0, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = "rgba(241,245,249,0.85)";
+      ctx.beginPath();
+      ctx.ellipse(x - 4, y - 18 - r * 18, 18 + r * 30, 7, 0, Math.PI, 0);
+      ctx.fill();
+    } else if (r < 0.5) {
+      ctx.fillStyle = "rgba(165,243,252,0.75)";
+      for (let k = 0; k < 4; k++) {
+        const a = -Math.PI / 2 + (k - 1.5) * 0.35;
+        const hgt = 30 + h01(i * 3 + k) * 40;
+        ctx.beginPath();
+        ctx.moveTo(x + k * 8 - 12, y);
+        ctx.lineTo(x + k * 8 - 12 + Math.cos(a) * hgt - 5, y + Math.sin(a) * hgt);
+        ctx.lineTo(x + k * 8 - 12 + Math.cos(a) * hgt + 5, y + Math.sin(a) * hgt);
+        ctx.closePath();
+        ctx.fill();
+      }
+    } else if (r < 0.65) {
+      ctx.strokeStyle = "rgba(204,251,241,0.45)";
+      ctx.lineWidth = 3;
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath();
+        ctx.moveTo(x + k * 9, y);
+        ctx.quadraticCurveTo(x + k * 9 + Math.sin(t + i + k) * 8, y - 30, x + k * 9 + Math.sin(t * 1.3 + i) * 12, y - 60 - k * 10);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+/** 난파선 무덤 seabed: bones, anchors, barrels, dead kelp. */
+function drawWreckFloorDecor(ctx: CanvasRenderingContext2D, left: number, right: number, t: number) {
+  for (let i = Math.floor(left / 120); i < right / 120; i++) {
+    const x = i * 120 + h01(i * 2.1) * 60;
+    const y = seabedY(x);
+    const r = h01(i + 0.3);
+    if (r < 0.18) {
+      // Anchor.
+      ctx.strokeStyle = "#57534e";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 70);
+      ctx.lineTo(x, y - 6);
+      ctx.moveTo(x - 26, y - 22);
+      ctx.quadraticCurveTo(x, y + 6, x + 26, y - 22);
+      ctx.moveTo(x - 14, y - 60);
+      ctx.lineTo(x + 14, y - 60);
+      ctx.stroke();
+    } else if (r < 0.34) {
+      // Barrel on its side.
+      ctx.fillStyle = "#5b4636";
+      ctx.beginPath();
+      ctx.ellipse(x, y - 13, 22, 14, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#292524";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(x - 9, y - 26);
+      ctx.lineTo(x - 7, y);
+      ctx.moveTo(x + 8, y - 26);
+      ctx.lineTo(x + 10, y);
+      ctx.stroke();
+    } else if (r < 0.48) {
+      // Fish skeleton / bones.
+      ctx.strokeStyle = "rgba(231,229,228,0.6)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - 24, y - 6);
+      ctx.lineTo(x + 20, y - 6);
+      for (let k = -2; k <= 2; k++) {
+        ctx.moveTo(x + k * 8, y - 14);
+        ctx.lineTo(x + k * 8, y + 2);
+      }
+      ctx.stroke();
+      ctx.fillStyle = "rgba(231,229,228,0.6)";
+      ctx.beginPath();
+      ctx.arc(x + 24, y - 6, 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (r < 0.72) {
+      // Dead, drooping kelp.
+      ctx.strokeStyle = "rgba(101,84,46,0.6)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      const hgt = 60 + h01(i * 3) * 110;
+      for (let k = 1; k <= 5; k++) ctx.lineTo(x + Math.sin(t * 0.8 + k * 0.9 + i) * 7 * (k / 5) + k * 4, y - (hgt * k) / 5);
+      ctx.stroke();
+    }
   }
 }
 
@@ -1390,6 +1693,295 @@ function drawEntity(ctx: CanvasRenderingContext2D, e: Entity, t: number, gold: b
       ctx.moveTo(-r * 0.35, -r * 0.45);
       ctx.lineTo(-r * 0.1, -r * 0.1);
       ctx.stroke();
+      break;
+    }
+    case "penguin": {
+      ctx.rotate(e.angle);
+      if (faceLeft) ctx.scale(1, -1);
+      const flap = Math.sin(e.phase * 16) * 0.5;
+      ctx.fillStyle = gold ? GOLD : "#0f172a";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * 1.3, r * 0.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = gold ? "#fde68a" : "#f8fafc";
+      ctx.beginPath();
+      ctx.ellipse(r * 0.1, r * 0.22, r * 1.05, r * 0.42, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#f59e0b";
+      ctx.beginPath();
+      ctx.moveTo(r * 1.25, -r * 0.1);
+      ctx.lineTo(r * 1.75, r * 0.05);
+      ctx.lineTo(r * 1.25, r * 0.15);
+      ctx.fill();
+      ctx.fillStyle = gold ? GOLD : "#0f172a";
+      ctx.save();
+      ctx.translate(r * 0.1, -r * 0.2);
+      ctx.rotate(flap);
+      ctx.beginPath();
+      ctx.ellipse(-r * 0.4, 0, r * 0.6, r * 0.18, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(r * 0.85, -r * 0.25, Math.max(1.2, r * 0.13), 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "seal": {
+      ctx.rotate(e.angle);
+      if (faceLeft) ctx.scale(1, -1);
+      const wag = Math.sin(e.phase * 8) * 0.35;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * 1.25, r * 0.55, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(r * 1.05, -r * 0.08, r * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.save();
+      ctx.translate(-r * 1.15, 0);
+      ctx.rotate(wag);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-r * 0.6, -r * 0.4);
+      ctx.lineTo(-r * 0.5, 0);
+      ctx.lineTo(-r * 0.6, r * 0.4);
+      ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = "rgba(71,85,105,0.5)";
+      for (let k = 0; k < 5; k++) {
+        ctx.beginPath();
+        ctx.arc(-r * 0.6 + k * r * 0.35, -r * 0.15 + (k % 2) * r * 0.2, r * 0.08, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#0f172a";
+      ctx.beginPath();
+      ctx.arc(r * 1.2, -r * 0.2, Math.max(1.5, r * 0.1), 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "narwhal":
+    case "orca": {
+      ctx.rotate(e.angle);
+      if (faceLeft) ctx.scale(1, -1);
+      if (e.state === "chase" && !gold) {
+        ctx.shadowColor = "#ef4444";
+        ctx.shadowBlur = 16;
+      }
+      const orca = e.kind === "orca";
+      const wag = Math.sin(e.phase * (e.state === "chase" ? 10 : 5)) * 0.25;
+      ctx.fillStyle = gold ? GOLD : orca ? "#0f172a" : e.hitFlash > 0 ? "#fecaca" : "#94a3b8";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * 1.45, r * 0.55, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Flukes.
+      ctx.save();
+      ctx.translate(-r * 1.35, 0);
+      ctx.rotate(wag);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(-r * 0.4, -r * 0.6, -r * 0.7, -r * 0.55);
+      ctx.lineTo(-r * 0.45, 0);
+      ctx.lineTo(-r * 0.7, r * 0.55);
+      ctx.quadraticCurveTo(-r * 0.4, r * 0.6, 0, 0);
+      ctx.fill();
+      ctx.restore();
+      // Dorsal fin.
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.2, -r * 0.45);
+      ctx.lineTo(orca ? -r * 0.35 : -r * 0.25, orca ? -r * 1.35 : -r * 0.75);
+      ctx.lineTo(r * 0.25, -r * 0.45);
+      ctx.fill();
+      if (orca) {
+        ctx.fillStyle = gold ? "#fde68a" : e.hitFlash > 0 ? "#fecaca" : "#f8fafc";
+        ctx.beginPath();
+        ctx.ellipse(r * 0.85, -r * 0.18, r * 0.28, r * 0.12, 0.1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(r * 0.1, r * 0.3, r * 1.0, r * 0.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Spiral tusk + mottling.
+        ctx.strokeStyle = gold ? "#fde68a" : "#f5f5f4";
+        ctx.lineWidth = Math.max(2, r * 0.1);
+        ctx.beginPath();
+        ctx.moveTo(r * 1.35, -r * 0.05);
+        ctx.lineTo(r * 2.6, -r * 0.2);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(51,65,85,0.45)";
+        for (let k = 0; k < 6; k++) {
+          ctx.beginPath();
+          ctx.arc(-r * 0.8 + k * r * 0.35, -r * 0.2 + (k % 2) * r * 0.15, r * 0.09, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.fillStyle = "#020617";
+      ctx.beginPath();
+      ctx.arc(r * 1.05, -r * 0.08, Math.max(1.6, r * 0.07), 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "barracuda": {
+      ctx.rotate(e.angle);
+      if (faceLeft) ctx.scale(1, -1);
+      if (e.state === "chase" && !gold) {
+        ctx.shadowColor = "#ef4444";
+        ctx.shadowBlur = 12;
+      }
+      const wag = Math.sin(e.phase * 16) * 0.3;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(r * 1.9, 0);
+      ctx.quadraticCurveTo(r * 0.6, -r * 0.5, -r * 1.3, -r * 0.2);
+      ctx.lineTo(-r * 1.3, r * 0.2);
+      ctx.quadraticCurveTo(r * 0.6, r * 0.5, r * 1.9, 0);
+      ctx.fill();
+      ctx.save();
+      ctx.translate(-r * 1.3, 0);
+      ctx.rotate(wag);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-r * 0.6, -r * 0.5);
+      ctx.lineTo(-r * 0.6, r * 0.5);
+      ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = "rgba(41,37,36,0.5)";
+      ctx.lineWidth = 1.5;
+      for (let k = 0; k < 5; k++) {
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.8 + k * r * 0.4, -r * 0.3);
+        ctx.lineTo(-r * 0.9 + k * r * 0.4, r * 0.05);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#f5f5f4";
+      for (let k = 0; k < 4; k++) {
+        ctx.beginPath();
+        ctx.moveTo(r * 1.2 + k * 3, r * 0.08);
+        ctx.lineTo(r * 1.25 + k * 3, r * 0.25);
+        ctx.lineTo(r * 1.3 + k * 3, r * 0.08);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#facc15";
+      ctx.beginPath();
+      ctx.arc(r * 1.2, -r * 0.12, Math.max(1.5, r * 0.12), 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "moray": {
+      ctx.rotate(e.angle);
+      if (faceLeft) ctx.scale(1, -1);
+      if (e.state === "chase" && !gold) {
+        ctx.shadowColor = "#ef4444";
+        ctx.shadowBlur = 12;
+      }
+      // Undulating eel body as a thick stroked spline.
+      ctx.strokeStyle = col;
+      ctx.lineCap = "round";
+      ctx.lineWidth = r * 0.75;
+      ctx.beginPath();
+      ctx.moveTo(r * 1.2, 0);
+      for (let k = 1; k <= 8; k++) ctx.lineTo(r * 1.2 - k * r * 0.45, Math.sin(e.phase * 6 - k * 0.8) * r * 0.25 * (k / 8 + 0.3));
+      ctx.stroke();
+      ctx.lineCap = "butt";
+      ctx.fillStyle = gold ? "#fde68a" : "#a3e635";
+      ctx.globalAlpha = 0.5;
+      for (let k = 1; k < 8; k++) {
+        ctx.beginPath();
+        ctx.arc(r * 1.2 - k * r * 0.45, Math.sin(e.phase * 6 - k * 0.8) * r * 0.25 * (k / 8 + 0.3) - r * 0.1, r * 0.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      const open = e.state === "chase" ? 0.35 : 0.12;
+      ctx.fillStyle = gold ? GOLD : col;
+      ctx.beginPath();
+      ctx.moveTo(r * 1.0, -r * 0.35);
+      ctx.lineTo(r * 1.75, -r * (0.05 + open));
+      ctx.lineTo(r * 1.0, 0);
+      ctx.lineTo(r * 1.7, r * (0.05 + open));
+      ctx.lineTo(r * 1.0, r * 0.35);
+      ctx.fill();
+      ctx.fillStyle = "#fef08a";
+      ctx.beginPath();
+      ctx.arc(r * 1.25, -r * 0.18, Math.max(1.5, r * 0.1), 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "treasureHunter": {
+      if (faceLeft) ctx.scale(-1, 1);
+      const kick = Math.sin(e.phase * 5) * 4;
+      ctx.fillStyle = gold ? GOLD : "#7c2d12";
+      ctx.fillRect(-12, -4, 20, 8);
+      ctx.fillStyle = gold ? "#fde68a" : "#94a3b8";
+      ctx.fillRect(-10, -10, 14, 6); // tank
+      // Brass helmet.
+      ctx.fillStyle = gold ? GOLD : "#d97706";
+      ctx.beginPath();
+      ctx.arc(11, -1, 6.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#1e293b";
+      ctx.beginPath();
+      ctx.arc(13, -1, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = gold ? GOLD : "#7c2d12";
+      ctx.beginPath();
+      ctx.moveTo(-12, -2);
+      ctx.lineTo(-22, -4 + kick);
+      ctx.lineTo(-22, 4 + kick);
+      ctx.fill();
+      // Loot sack.
+      ctx.fillStyle = "#a16207";
+      ctx.beginPath();
+      ctx.arc(0, 9, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fde047";
+      ctx.fillRect(-1, 5, 2, 2);
+      break;
+    }
+    case "giantSquid": {
+      ctx.rotate(e.angle);
+      if (faceLeft) ctx.scale(1, -1);
+      if (e.state === "chase" && !gold) {
+        ctx.shadowColor = "#ef4444";
+        ctx.shadowBlur = 18;
+      }
+      const c = gold ? GOLD : e.hitFlash > 0 ? "#fecaca" : "#b91c1c";
+      // Mantle points backwards; tentacles trail ahead of the eye (jet-swimming squid moves mantle-first,
+      // but this reads better as a monster: tentacles reach toward the target).
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.moveTo(-r * 1.6, 0);
+      ctx.quadraticCurveTo(-r * 0.6, -r * 0.75, r * 0.4, -r * 0.45);
+      ctx.lineTo(r * 0.4, r * 0.45);
+      ctx.quadraticCurveTo(-r * 0.6, r * 0.75, -r * 1.6, 0);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-r * 1.6, 0);
+      ctx.lineTo(-r * 1.95, -r * 0.45);
+      ctx.lineTo(-r * 1.3, -r * 0.2);
+      ctx.moveTo(-r * 1.6, 0);
+      ctx.lineTo(-r * 1.95, r * 0.45);
+      ctx.lineTo(-r * 1.3, r * 0.2);
+      ctx.fill();
+      ctx.strokeStyle = c;
+      ctx.lineCap = "round";
+      for (let k = 0; k < 6; k++) {
+        const off = (k - 2.5) * r * 0.13;
+        const len = k === 1 || k === 4 ? r * 1.9 : r * 1.3;
+        ctx.lineWidth = Math.max(2, r * (k === 1 || k === 4 ? 0.09 : 0.12));
+        ctx.beginPath();
+        ctx.moveTo(r * 0.35, off);
+        for (let j = 1; j <= 5; j++) ctx.lineTo(r * 0.35 + (len * j) / 5, off * (1 + j * 0.25) + Math.sin(e.phase * 5 + k + j * 0.9) * r * 0.12 * (j / 5));
+        ctx.stroke();
+      }
+      ctx.lineCap = "butt";
+      ctx.fillStyle = "#fef3c7";
+      ctx.beginPath();
+      ctx.arc(r * 0.15, -r * 0.2, r * 0.17, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#0f172a";
+      ctx.beginPath();
+      ctx.arc(r * 0.2, -r * 0.2, r * 0.08, 0, Math.PI * 2);
+      ctx.fill();
       break;
     }
     case "chest": {

@@ -8,6 +8,8 @@
  * the water surface is y = 0, the sky is negative y, the seabed is ~3300.
  */
 
+import { buildGeometry, geoCeil, geoFloor, underIce, type IceSpec, type MapGeometry, type TerrainSpec } from "./mapGeometry";
+
 // ── World layout ────────────────────────────────────────────────────────────
 
 export const SKY_TOP = -900;
@@ -32,9 +34,11 @@ export function zoneAt(y: number): ZoneId {
 // ── Maps (selectable dive sites) ────────────────────────────────────────────
 //
 // Every map keeps the same depth bands (ZONES) so prey depth ranges still
-// mean the same thing; maps differ in width, terrain, palette, spawn mix,
-// coin bonus and one gimmick. `createWorld` activates the chosen map, which
-// updates the live `WORLD_W` binding + `seabedY` for engine and renderer.
+// mean the same thing, but each has its own level geometry (`mapGeometry.ts`:
+// seabed profile, ice ceiling, solid structures), its own monster roster
+// (`spawns` — kinds not listed never appear there), coin bonus and palette.
+// `createWorld` activates the chosen map, which updates the live `WORLD_W`
+// binding + `seabedY`/`ceilingY` for engine and renderer.
 
 export type MapId = "deepBlue" | "frozenStrait" | "shipwreck";
 
@@ -47,15 +51,16 @@ export interface MapDef {
   recommendedTier: number;
   width: number;
   chestCount: number;
-  /** Seabed undulation: [amplitude, frequency, phase] × 3 octaves. */
-  terrain: [number, number, number][];
+  terrain: TerrainSpec;
+  /** Solid ice sheet over the surface (얼음 해협). */
+  ice: IceSpec | null;
   /** Coin multiplier for everything earned on this map. */
   coinBonus: number;
-  /** Spawn-count multiplier per kind (missing = ×1). */
-  population: Partial<Record<EntityKind, number>>;
+  /** Monster roster: spawn-count multiplier per kind. Kinds missing here never spawn on this map. */
+  spawns: Partial<Record<EntityKind, number>>;
   /** Depth (world y) where the deep-water darkness starts. */
   darknessStart: number;
-  feature: "none" | "icebergs" | "wrecks";
+  feature: "coral" | "iceSheet" | "wrecks";
   palette: {
     sky: [string, string, string];
     water: [string, string, string, string, string];
@@ -65,13 +70,27 @@ export interface MapDef {
   };
 }
 
+/** Shared by every map: generic fish, jellies, mines, the golden tuna. */
+const COMMON_SPAWNS: Partial<Record<EntityKind, number>> = {
+  smallFish: 1, grouper: 1, ray: 1, tuna: 1, goldenTuna: 1,
+};
+
 export const MAPS: MapDef[] = [
   {
     id: "deepBlue", name: "딥 블루 오션", emoji: "🌊", recommendedTier: 1,
-    desc: "산호초부터 화산 해구까지 이어지는 넓은 기본 바다. 균형 잡힌 먹이 분포.",
+    desc: "완만한 산호 언덕이 화산 해구까지 이어지는 탁 트인 바다. 해변 피서객·요트·헬기가 몰려드는 기본 사냥터.",
     width: 14000, chestCount: 11,
-    terrain: [[140, 0.0011, 0], [60, 0.0037, 1.3], [14, 0.013, 0.4]],
-    coinBonus: 1, population: {}, darknessStart: 1100, feature: "none",
+    terrain: { kind: "rolling", base: SEABED_BASE, octaves: [[140, 0.0011, 0], [60, 0.0037, 1.3], [14, 0.013, 0.4]] },
+    ice: null,
+    coinBonus: 1,
+    spawns: {
+      ...COMMON_SPAWNS,
+      crab: 1, swimmer: 1, puffer: 1, greenJelly: 1, redJelly: 1,
+      mineS: 1, mineM: 1, mineL: 1, mineXL: 1,
+      pelican: 1, diver: 1, sailor: 1, angler: 1, fishingBoat: 1, passenger: 1,
+      smallShark: 1, cageDiver: 1, submarine: 1, ghostShark: 1, yacht: 1, helicopter: 1,
+    },
+    darknessStart: 1100, feature: "coral",
     palette: {
       sky: ["#0ea5e9", "#7dd3fc", "#e0f2fe"],
       water: ["#22b8e8", "#0679b8", "#0a4a78", "#082b4a", "#020617"],
@@ -82,15 +101,24 @@ export const MAPS: MapDef[] = [
   },
   {
     id: "frozenStrait", name: "얼음 해협", emoji: "🧊", recommendedTier: 2,
-    desc: "떠다니는 빙산이 수면을 막는 차가운 바다. 참치·가오리·상어가 많고 수영객은 드뭅니다. 코인 ×1.4.",
+    desc: "수면이 두꺼운 빙판으로 덮여 숨구멍에서만 점프할 수 있는 바다. 얕은 대륙붕 사이로 깊은 해구 두 개가 갈라지고, 고드름과 얼음 기둥이 길을 막습니다. 펭귄·물범·일각고래·범고래 서식. 코인 ×1.4.",
     width: 12000, chestCount: 9,
-    terrain: [[220, 0.0008, 0.7], [90, 0.0029, 2.1], [20, 0.011, 1.1]],
-    // Sim (8 seeds × 5 sharks): ×1.25 left per-dive income ≈ 딥 블루 despite more deaths → ×1.4.
+    terrain: {
+      kind: "profile",
+      points: [[0, 850], [1700, 950], [2150, 3300], [4300, 3450], [4750, 1200], [6200, 1100], [6500, 2200], [7400, 2250], [7800, 3500], [10000, 3400], [10450, 1000], [12000, 900]],
+      octaves: [[40, 0.004, 0.3], [12, 0.02, 1]],
+    },
+    ice: { holes: [[1400, 700], [3300, 520], [5500, 620], [8900, 520], [11200, 640]], thickness: 80 },
     coinBonus: 1.4,
-    population: { swimmer: 0.3, crab: 0.5, pelican: 0.5, tuna: 1.6, ray: 1.5, smallShark: 1.4, grouper: 1.3, redJelly: 1.4, iceberg: 1 },
-    darknessStart: 1000, feature: "icebergs",
+    spawns: {
+      ...COMMON_SPAWNS, smallFish: 0.8, tuna: 1.3,
+      penguin: 1, seal: 1, narwhal: 1, orca: 1,
+      redJelly: 1.3, mineS: 0.6, mineM: 0.6, diver: 0.8, pelican: 0.5,
+      fishingBoat: 0.6, sailor: 0.6, submarine: 1, smallShark: 0.7, angler: 0.8, iceberg: 1,
+    },
+    darknessStart: 1000, feature: "iceSheet",
     palette: {
-      sky: ["#94a3b8", "#cbd5e1", "#f1f5f9"],
+      sky: ["#334155", "#94a3b8", "#e2e8f0"],
       water: ["#67e8f9", "#0e7490", "#164e63", "#0c2a3a", "#020617"],
       ridge: "rgba(22,78,99,0.55)",
       sand: ["#94a3b8", "#1e293b"],
@@ -99,18 +127,29 @@ export const MAPS: MapDef[] = [
   },
   {
     id: "shipwreck", name: "난파선 무덤", emoji: "⚓", recommendedTier: 3,
-    desc: "침몰선이 잠든 어두운 바다. 보물 상자가 두 배지만 기뢰·아귀·유령 상어도 득실거립니다. 코인 ×1.35.",
+    desc: "계단처럼 꺼지는 해저 단구를 따라 거대한 침몰선 선체와 부러진 돛대가 벽처럼 놓인 어두운 바다. 보물 상자가 두 배지만 꼬치고기·곰치·대왕오징어와 기뢰가 득실거립니다. 코인 ×1.35.",
     width: 13000, chestCount: 20,
-    terrain: [[110, 0.0015, 2.2], [120, 0.0045, 0.3], [30, 0.017, 2.7]],
+    terrain: {
+      kind: "profile",
+      points: [[0, 700], [1500, 720], [1750, 1300], [3300, 1320], [3550, 2000], [5000, 2050], [5300, 2900], [6000, 3400], [7400, 3400], [7700, 2700], [8900, 2650], [9200, 1900], [10600, 1850], [10850, 1100], [13000, 900]],
+      octaves: [[25, 0.006, 0.7], [10, 0.03, 2]],
+    },
+    ice: null,
     coinBonus: 1.35,
-    population: { mineS: 1.5, mineM: 1.6, mineL: 1.6, angler: 1.6, ghostShark: 1.5, greenJelly: 1.4, diver: 1.6, submarine: 1.5, swimmer: 0.6 },
-    darknessStart: 600, feature: "wrecks",
+    spawns: {
+      ...COMMON_SPAWNS, tuna: 0.5,
+      barracuda: 1, moray: 1, treasureHunter: 1, giantSquid: 1,
+      crab: 1, puffer: 1, greenJelly: 1.4,
+      mineS: 1.5, mineM: 1.6, mineL: 1.6, mineXL: 1.2,
+      diver: 1.2, sailor: 0.8, fishingBoat: 1, angler: 1.4, smallShark: 1, submarine: 1.3, ghostShark: 1.3,
+    },
+    darknessStart: 500, feature: "wrecks",
     palette: {
-      sky: ["#475569", "#64748b", "#cbd5e1"],
+      sky: ["#1e293b", "#475569", "#94a3b8"],
       water: ["#2d8a7a", "#155e63", "#123a46", "#0b1f2a", "#020617"],
       ridge: "rgba(18,58,70,0.6)",
       sand: ["#3b3524", "#0a0907"],
-      sun: "rgba(226,232,240,0.6)",
+      sun: "rgba(226,232,240,0.45)",
     },
   },
 ];
@@ -119,12 +158,24 @@ export function mapById(id: string | undefined): MapDef {
   return MAPS.find((m) => m.id === id) ?? MAPS[0];
 }
 
+const geometryCache = new Map<MapId, MapGeometry>();
+function geometryFor(map: MapDef): MapGeometry {
+  let g = geometryCache.get(map.id);
+  if (!g) {
+    g = buildGeometry(map.width, map.terrain, map.ice, map.feature);
+    geometryCache.set(map.id, g);
+  }
+  return g;
+}
+
 let activeMap: MapDef = MAPS[0];
+let activeGeo: MapGeometry = geometryFor(activeMap);
 /** Width of the active map (live binding — updated by `setActiveMap`). */
 export let WORLD_W = activeMap.width;
 
 export function setActiveMap(map: MapDef) {
   activeMap = map;
+  activeGeo = geometryFor(map);
   WORLD_W = map.width;
 }
 
@@ -132,10 +183,14 @@ export function getActiveMap(): MapDef {
   return activeMap;
 }
 
-/** Shallowest / deepest the active map's seabed can get (sum of octave amplitudes). */
+/** Level geometry (structures, colliders, ice) of the active map. */
+export function activeGeometry(): MapGeometry {
+  return activeGeo;
+}
+
+/** Shallowest / deepest the active map's seabed gets. */
 export function seabedExtent(): { min: number; max: number } {
-  const amp = activeMap.terrain.reduce((a, [amp]) => a + amp, 0);
-  return { min: SEABED_BASE - amp, max: SEABED_BASE + amp };
+  return { min: activeGeo.floorMin, max: activeGeo.floorMax };
 }
 
 /** Lowest world y the camera / minimap must be able to show on the active map. */
@@ -143,11 +198,19 @@ export function worldBottom(): number {
   return Math.max(SEABED_BASE + 260, seabedExtent().max + 90);
 }
 
-/** Rolling seabed profile of the active map — deterministic, so render and physics agree. */
+/** Seabed profile of the active map — deterministic, so render and physics agree. */
 export function seabedY(x: number): number {
-  let y = SEABED_BASE;
-  for (const [a, f, ph] of activeMap.terrain) y += Math.sin(x * f + ph) * a;
-  return y;
+  return geoFloor(activeGeo, x);
+}
+
+/** Highest point water reaches at x: the surface, or the ice sheet's underside (얼음 해협). */
+export function ceilingY(x: number): number {
+  return geoCeil(activeGeo, x, SURFACE_Y);
+}
+
+/** True where the surface is covered by ice (no jumping, no boats). */
+export function isUnderIce(x: number): boolean {
+  return underIce(activeGeo, x);
 }
 
 // ── Sharks: 3-branch evolution tree (Tier 1 → 2 → 3 → 4) ─────────────────────
@@ -242,7 +305,7 @@ export const SHARKS: SharkDef[] = [
     id: "sandTiger", tier: 2, branch: "BRUTE", parentId: "reef", nextIds: ["white"],
     name: "샌드타이거 상어", nameEn: "Sand Tiger",
     maxHealth: 180, baseDrainRate: 3.6, swimSpeed: 260, boostMultiplier: 1.85, boostDuration: 2.4,
-    biteForce: 18, eatRadius: 24, length: 100, cost: 1200,
+    biteForce: 18, eatRadius: 24, length: 100, cost: 1560,
     goldMultiplier: 1.2, magnetRadius: 50, boostEfficiency: 0.9,
     skill: { id: "crush", name: "크러시 바이트", cooldown: 8, desc: "4초간 기뢰·해파리·어뢰를 씹어서 무력화하고 먹어 치웁니다." },
     passive: null,
@@ -253,7 +316,7 @@ export const SHARKS: SharkDef[] = [
     id: "white", tier: 3, branch: "BRUTE", parentId: "sandTiger", nextIds: ["megalodon"],
     name: "백상아리", nameEn: "Great White",
     maxHealth: 300, baseDrainRate: 5.0, swimSpeed: 290, boostMultiplier: 1.9, boostDuration: 2.8,
-    biteForce: 36, eatRadius: 34, length: 150, cost: 4500,
+    biteForce: 36, eatRadius: 34, length: 150, cost: 5850,
     goldMultiplier: 1.5, magnetRadius: 70, boostEfficiency: 1.1,
     skill: { id: "surgeRam", name: "서지 램 (충격 돌진)", cooldown: 9, desc: "무적 상태로 돌진하며 광역 충격파 — 먹이는 큰 피해, 기뢰는 유폭, 포식자는 기절." },
     passive: null,
@@ -264,7 +327,7 @@ export const SHARKS: SharkDef[] = [
     id: "megalodon", tier: 4, branch: "BRUTE", parentId: "white", nextIds: [],
     name: "메갈로돈", nameEn: "Megalodon",
     maxHealth: 460, baseDrainRate: 7.0, swimSpeed: 310, boostMultiplier: 1.85, boostDuration: 3.2,
-    biteForce: 60, eatRadius: 44, length: 215, cost: 16000,
+    biteForce: 60, eatRadius: 44, length: 215, cost: 20800,
     goldMultiplier: 2.0, magnetRadius: 110, boostEfficiency: 1.4,
     skill: { id: "titanRoar", name: "타이탄의 포효", cooldown: 15, desc: "주변 모든 생물을 3초간 경직시키고, 6초간 크기 2배 + 무적 돌진." },
     passive: null,
@@ -276,7 +339,7 @@ export const SHARKS: SharkDef[] = [
     id: "mako", tier: 2, branch: "SPEED", parentId: "reef", nextIds: ["hammer"],
     name: "청상아리", nameEn: "Mako Shark",
     maxHealth: 130, baseDrainRate: 3.2, swimSpeed: 305, boostMultiplier: 2.0, boostDuration: 2.6,
-    biteForce: 14, eatRadius: 20, length: 86, cost: 1200,
+    biteForce: 14, eatRadius: 20, length: 86, cost: 1560,
     goldMultiplier: 1.25, magnetRadius: 45, boostEfficiency: 1.6,
     skill: { id: "sonicBreak", name: "음속 돌파", cooldown: 5, desc: "0.9초간 2.4배 속도 + 무적으로 꿰뚫고 지나갑니다." },
     passive: { id: "ballistics", name: "수중 탄도학", desc: "부스트 속도 +45%, 부스트 소모량 −30%" },
@@ -287,7 +350,7 @@ export const SHARKS: SharkDef[] = [
     id: "hammer", tier: 3, branch: "SPEED", parentId: "mako", nextIds: ["phantom"],
     name: "귀상어", nameEn: "Hammerhead",
     maxHealth: 220, baseDrainRate: 4.4, swimSpeed: 320, boostMultiplier: 2.0, boostDuration: 3.0,
-    biteForce: 28, eatRadius: 28, length: 120, cost: 4500,
+    biteForce: 28, eatRadius: 28, length: 120, cost: 5850,
     goldMultiplier: 1.6, magnetRadius: 80, boostEfficiency: 1.8,
     skill: { id: "sonar", name: "360° 소나 펄스", cooldown: 7, desc: "8초간 보물 상자·황금 참치·대어의 위치를 화면 가장자리 레이더로 탐지합니다." },
     passive: null,
@@ -298,7 +361,7 @@ export const SHARKS: SharkDef[] = [
     id: "phantom", tier: 4, branch: "SPEED", parentId: "hammer", nextIds: [],
     name: "나이트메어 팬텀", nameEn: "Nightmare Phantom",
     maxHealth: 340, baseDrainRate: 6.0, swimSpeed: 345, boostMultiplier: 2.05, boostDuration: 3.6,
-    biteForce: 48, eatRadius: 36, length: 175, cost: 16000,
+    biteForce: 48, eatRadius: 36, length: 175, cost: 20800,
     goldMultiplier: 2.2, magnetRadius: 90, boostEfficiency: 2.5,
     skill: { id: "shadowCloak", name: "그림자 은신", cooldown: 12, desc: "4초간 무적 은신(포식자·어뢰가 추적 불가). 은신 후 첫 물기는 500% 피해." },
     passive: null,
@@ -310,7 +373,7 @@ export const SHARKS: SharkDef[] = [
     id: "elecShark", tier: 2, branch: "VOID", parentId: "reef", nextIds: ["goblin"],
     name: "일렉트릭 레이 상어", nameEn: "Electric Ray Shark",
     maxHealth: 150, baseDrainRate: 3.4, swimSpeed: 270, boostMultiplier: 1.9, boostDuration: 2.5,
-    biteForce: 15, eatRadius: 22, length: 92, cost: 1400,
+    biteForce: 15, eatRadius: 22, length: 92, cost: 1820,
     goldMultiplier: 1.3, magnetRadius: 85, boostEfficiency: 1.2,
     skill: { id: "emp", name: "EMP 정전기 방출", cooldown: 6, desc: "주변을 3초간 마비(기뢰 무력화)시키고 체인 라이트닝으로 작은 먹이 최대 6마리를 즉시 포식." },
     passive: { id: "staticField", name: "정전기 유도", desc: "주변 작은 먹이가 자석처럼 입으로 2배 강하게 빨려 들어옵니다." },
@@ -321,7 +384,7 @@ export const SHARKS: SharkDef[] = [
     id: "goblin", tier: 3, branch: "VOID", parentId: "elecShark", nextIds: ["leviathan"],
     name: "심해 고블린 상어", nameEn: "Goblin Shark",
     maxHealth: 250, baseDrainRate: 4.6, swimSpeed: 285, boostMultiplier: 1.9, boostDuration: 2.8,
-    biteForce: 30, eatRadius: 30, length: 135, cost: 4800,
+    biteForce: 30, eatRadius: 30, length: 135, cost: 6240,
     goldMultiplier: 1.7, magnetRadius: 110, boostEfficiency: 1.3,
     skill: { id: "snapJaw", name: "스냅 조 (원거리 턱 사출)", cooldown: 8, desc: "턱을 투사체처럼 사출해 전방 먼 거리의 먹이를 3배 피해로 물어 끌어옵니다." },
     passive: null,
@@ -332,7 +395,7 @@ export const SHARKS: SharkDef[] = [
     id: "leviathan", tier: 4, branch: "VOID", parentId: "goblin", nextIds: [],
     name: "아비스 레비아탄", nameEn: "Abyss Leviathan",
     maxHealth: 400, baseDrainRate: 6.6, swimSpeed: 300, boostMultiplier: 1.85, boostDuration: 3.3,
-    biteForce: 54, eatRadius: 40, length: 200, cost: 17500,
+    biteForce: 54, eatRadius: 40, length: 200, cost: 22750,
     goldMultiplier: 2.4, magnetRadius: 160, boostEfficiency: 1.5,
     skill: { id: "blackHole", name: "심해의 블랙홀 소용돌이", cooldown: 14, desc: "전방에 4초간 중력 특이점을 열어 반경 안의 먹이를 흡입·포식하고 위험물은 분쇄합니다." },
     passive: null,
@@ -513,6 +576,10 @@ export type EntityKind =
   | "yacht" | "helicopter" | "rock"
   | "goldenTuna"
   | "iceberg"
+  // 얼음 해협 exclusives
+  | "penguin" | "seal" | "narwhal" | "orca"
+  // 난파선 무덤 exclusives
+  | "barracuda" | "moray" | "treasureHunter" | "giantSquid"
   | "chest";
 
 export type Behavior =
@@ -577,6 +644,16 @@ export const ENTITY_DEFS: Record<EntityKind, EntityDef> = {
   rock: D({ kind: "rock", name: "화산 암석", requiredTier: NEVER, heal: 30, score: 400, coins: 24, coinChance: 1, radius: 16, speed: 0, toughness: 1, behavior: "rock", damage: 30, damageKind: "contact", depth: [2400, 2400], color: "#7c2d12" }),
   goldenTuna: D({ kind: "goldenTuna", name: "황금 참치", requiredTier: 1, heal: 30, score: 300, coins: 150, coinChance: 1, radius: 15, speed: 235, toughness: 1, behavior: "wander", damage: 0, damageKind: "contact", depth: [200, 2200], color: "#facc15" }),
   iceberg: D({ kind: "iceberg", name: "빙산", requiredTier: NEVER, heal: 60, score: 900, coins: 40, coinChance: 1, radius: 70, speed: 18, toughness: 1, behavior: "surfaceBoat", damage: 0, damageKind: "contact", depth: [0, 0], color: "#e0f2fe" }),
+  // ── 얼음 해협 ──
+  penguin: D({ kind: "penguin", name: "펭귄", requiredTier: 1, heal: 10, score: 40, coins: 4, coinChance: 0.45, radius: 9, speed: 135, toughness: 1, behavior: "boid", damage: 0, damageKind: "contact", depth: [110, 700], color: "#1e293b" }),
+  seal: D({ kind: "seal", name: "물범", requiredTier: 2, heal: 34, score: 165, coins: 10, coinChance: 0.7, radius: 17, speed: 170, toughness: 1, behavior: "wander", damage: 0, damageKind: "contact", depth: [120, 1100], color: "#9ca3af" }),
+  narwhal: D({ kind: "narwhal", name: "일각고래", requiredTier: 3, heal: 60, score: 520, coins: 26, coinChance: 0.9, radius: 26, speed: 185, toughness: 45, behavior: "hunter", damage: 20, damageKind: "contact", depth: [300, 2000], color: "#cbd5e1" }),
+  orca: D({ kind: "orca", name: "범고래", requiredTier: 4, heal: 130, score: 2400, coins: 120, coinChance: 1, radius: 40, speed: 230, toughness: 160, behavior: "hunter", damage: 40, damageKind: "contact", depth: [200, 2800], color: "#0f172a" }),
+  // ── 난파선 무덤 ──
+  barracuda: D({ kind: "barracuda", name: "꼬치고기", requiredTier: 2, heal: 30, score: 150, coins: 9, coinChance: 0.7, radius: 14, speed: 210, toughness: 1, behavior: "hunter", damage: 10, damageKind: "contact", depth: [200, 1900], color: "#a8a29e" }),
+  moray: D({ kind: "moray", name: "곰치", requiredTier: 3, heal: 50, score: 420, coins: 22, coinChance: 0.85, radius: 20, speed: 150, toughness: 35, behavior: "hunter", damage: 20, damageKind: "contact", depth: [600, 3200], color: "#4d7c0f" }),
+  treasureHunter: D({ kind: "treasureHunter", name: "보물 사냥꾼", requiredTier: 2, heal: 30, score: 140, coins: 16, coinChance: 0.85, radius: 12, speed: 55, toughness: 1, behavior: "wander", damage: 0, damageKind: "contact", depth: [150, 1700], human: true, color: "#f97316" }),
+  giantSquid: D({ kind: "giantSquid", name: "대왕오징어", requiredTier: 4, heal: 140, score: 2600, coins: 130, coinChance: 1, radius: 38, speed: 210, toughness: 170, behavior: "hunter", damage: 42, damageKind: "contact", depth: [1500, 3300], color: "#b91c1c" }),
   chest: D({ kind: "chest", name: "보물 상자", requiredTier: 1, heal: 0, score: 500, coins: 300, coinChance: 1, radius: 18, speed: 0, toughness: 1, behavior: "static", damage: 0, damageKind: "contact", depth: [0, 0], color: "#ca8a04" }),
 };
 
@@ -628,6 +705,14 @@ export const PREY_EFFECTS: Partial<Record<EntityKind, PreyEffect>> = {
   submarine: { type: "skill" },
   yacht: { type: "skill" },
   goldenTuna: { type: "rush" },
+  penguin: { type: "boost", amount: 0.05 },
+  seal: { type: "heal", amount: 0.1 },
+  narwhal: { type: "shield", seconds: 2 },
+  barracuda: { type: "heal", amount: 0.08 },
+  moray: { type: "shield", seconds: 2 },
+  treasureHunter: { type: "gauge", amount: 0.2 },
+  orca: { type: "skill" },
+  giantSquid: { type: "skill" },
 };
 
 export function preyEffectLabel(fx: PreyEffect): string {
@@ -651,9 +736,11 @@ export const POISON_SLOW = 0.4;
  * Tier-gated so a Reef Shark isn't swarmed by submarines, and bigger sharks
  * see more of the prey that actually feeds them.
  */
+/** Global "more monsters" factor applied to every kind except the fish schools (2026-10-04: ×1.4). */
+export const POPULATION_SCALE = 1.4;
+
 export function populationTargets(tier: SharkTier): Partial<Record<EntityKind, number>> {
-  return {
-    smallFish: 80,
+  const base: Partial<Record<EntityKind, number>> = {
     crab: 8,
     swimmer: 7,
     puffer: 7,
@@ -678,10 +765,23 @@ export function populationTargets(tier: SharkTier): Partial<Record<EntityKind, n
     ghostShark: 2,
     yacht: tier >= 3 ? 2 : 1,
     helicopter: tier >= 3 ? 2 : 1,
-    // Rare: the spawner only rolls it in occasionally (see engine runSpawner).
-    goldenTuna: 1,
-    iceberg: activeMap.feature === "icebergs" ? 6 : 0,
+    iceberg: 3,
+    seal: 7,
+    narwhal: tier <= 1 ? 2 : 3,
+    orca: 2,
+    barracuda: tier <= 1 ? 4 : 6,
+    moray: 4,
+    treasureHunter: 5,
+    giantSquid: 2,
   };
+  const out: Partial<Record<EntityKind, number>> = {};
+  for (const k of Object.keys(base) as EntityKind[]) out[k] = Math.round((base[k] ?? 0) * POPULATION_SCALE);
+  // Schools are already dense; only nudged up.
+  out.smallFish = 100;
+  out.penguin = 60;
+  // Rare: the spawner only rolls it in occasionally (see engine runSpawner).
+  out.goldenTuna = 1;
+  return out;
 }
 
 // ── Missions (addition: per-run objectives that pay coins) ──────────────────

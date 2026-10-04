@@ -22,9 +22,10 @@ import type { RunSummary } from "./engine";
 import HungrySharkCanvas from "./HungrySharkCanvas";
 import RulebookModal from "./RulebookModal";
 import BestiaryPanel from "./BestiaryPanel";
+import { mapExclusives } from "./markers";
 import Overlay from "@/components/Overlay";
 import { drawSharkShape } from "./render";
-import { freshSave, loadSave, upgradesFor, writeSave, type SharkSave } from "./save";
+import { freshSave, loadSave, upgradesFor, writeSave, type PickerPrefs, type PickerSort, type SharkSave } from "./save";
 import SharkEvolutionModal, { BranchBadge } from "./SharkEvolutionModal";
 
 /**
@@ -48,9 +49,6 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
   const [showBestiary, setShowBestiary] = useState(false);
   const [showEvolve, setShowEvolve] = useState(false);
   const [bestThisSession, setBestThisSession] = useState(0);
-  const [sortKey, setSortKey] = useState<SortKey>("tree");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [hideOwned, setHideOwned] = useState(false);
 
   const update = (fn: (s: SharkSave) => SharkSave) => {
     setSave((prev) => {
@@ -65,7 +63,10 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
   const ups = upgradesFor(save, viewId);
   const parent = viewDef.parentId ? sharkById(viewDef.parentId) : null;
   const parentOwned = !parent || save.owned.includes(parent.id);
-  const listedSharks = listSharks(save, sortKey, sortDir, hideOwned);
+  const picker = save.picker;
+  const sortKey = picker.sort;
+  const setPicker = (p: Partial<PickerPrefs>) => update((s) => ({ ...s, picker: { ...s.picker, ...p } }));
+  const listedSharks = listSharks(save, picker);
 
   const unlock = (def: SharkDef) =>
     update((s) =>
@@ -175,23 +176,16 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
             <BubbleDecor />
           </div>
 
-          {/* List controls: 진화 트리 or a stat sorted 높은/낮은 순 + 보유 상어 숨기기 */}
-          <SharkListControls
-            sortKey={sortKey}
-            sortDir={sortDir}
-            hideOwned={hideOwned}
-            onSortKey={setSortKey}
-            onSortDir={setSortDir}
-            onHideOwned={setHideOwned}
-          />
+          {/* List controls: 진화 트리 or a stat sorted 높은/낮은 순 + filters — saved with the profile */}
+          <SharkListControls picker={picker} onChange={setPicker} />
 
           {/* Evolution tree picker: T1 root, then 3 branch columns × T2..T4 — or a flat sorted grid */}
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-2 light:border-slate-200 light:bg-white">
             {listedSharks.length === 0 ? (
               <div className="py-6 text-center text-sm font-bold text-white/70 light:text-slate-600">
-                🎉 모든 상어를 보유 중입니다!
+                {emptyPickerMessage(save)}
                 <div className="mt-1 text-[11px] font-normal text-white/40 light:text-slate-400">
-                  &quot;보유 상어 숨기기&quot;를 끄면 전체 목록을 볼 수 있어요.
+                  필터를 끄면 전체 목록을 볼 수 있어요.
                 </div>
               </div>
             ) : sortKey === "tree" ? (
@@ -345,6 +339,9 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                       <span>🎁 상자 {m.chestCount}개</span>
                       {m.coinBonus > 1 && <span className="text-yellow-200">🪙 ×{m.coinBonus}</span>}
                     </div>
+                    <div className={`mt-1 text-[10px] font-semibold text-white/80 ${active ? "pr-16" : ""}`}>
+                      🐾 전용: {mapExclusives(m).map((k) => ENTITY_DEFS[k].name).join(" · ")}
+                    </div>
                     {active && <span className="absolute right-2 bottom-2 text-xs font-black text-cyan-200">✔ 선택됨</span>}
                   </button>
                 );
@@ -447,11 +444,10 @@ function SharkPreview({ def, width, height, dim, animate }: { def: SharkDef; wid
   return <canvas ref={ref} style={{ width, height, maxWidth: "100%" }} className="mx-auto block" />;
 }
 
-type SortKey = "tree" | "cost" | "tier" | "health" | "speed" | "best";
-type SortDir = "desc" | "asc";
+type StatSort = Exclude<PickerSort, "tree">;
 
 const SORT_OPTIONS: Record<
-  Exclude<SortKey, "tree">,
+  StatSort,
   { label: string; value: (sh: SharkDef, save: SharkSave) => number; format: (sh: SharkDef, save: SharkSave) => string }
 > = {
   cost: { label: "가격", value: (sh) => sh.cost, format: (sh) => `${sh.cost.toLocaleString()}🪙` },
@@ -466,37 +462,47 @@ const SORT_OPTIONS: Record<
     value: (sh, save) => effectiveStats(sh, upgradesFor(save, sh.id)).swimSpeed,
     format: (sh, save) => `${Math.round(effectiveStats(sh, upgradesFor(save, sh.id)).swimSpeed)}`,
   },
+  gold: { label: "골드", value: (sh) => sh.goldMultiplier, format: (sh) => `×${sh.goldMultiplier.toFixed(1)}` },
+  boostEff: { label: "부스트 효율", value: (sh) => sh.boostEfficiency, format: (sh) => `×${sh.boostEfficiency.toFixed(1)}` },
   best: { label: "최고", value: (sh, save) => save.best[sh.id] ?? 0, format: (sh, save) => (save.best[sh.id] ?? 0).toLocaleString() },
 };
 
+const SORT_MENU_LABEL: Partial<Record<StatSort, string>> = { gold: "골드 배율", best: "최고 점수" };
+
+/** Unlockable right now: not owned, parent owned, enough coins. */
+function canBuyNow(sh: SharkDef, save: SharkSave): boolean {
+  return !save.owned.includes(sh.id) && (!sh.parentId || save.owned.includes(sh.parentId)) && save.coins >= sh.cost;
+}
+
+function emptyPickerMessage(save: SharkSave): string {
+  if (save.owned.length === SHARKS.length) return "🎉 모든 상어를 보유 중입니다!";
+  if (save.picker.buyableOnly) {
+    const next = SHARKS.filter((sh) => !save.owned.includes(sh.id) && (!sh.parentId || save.owned.includes(sh.parentId)))
+      .sort((a, b) => a.cost - b.cost)[0];
+    return next
+      ? `🪙 지금 살 수 있는 상어가 없어요 — ${next.name}까지 ${(next.cost - save.coins).toLocaleString()}🪙 남았습니다.`
+      : "지금 살 수 있는 상어가 없어요.";
+  }
+  return "조건에 맞는 상어가 없어요.";
+}
+
 /** Picker contents. "tree" keeps SHARKS order (the tree layout groups it); stat ties fall back to tree order. */
-function listSharks(save: SharkSave, sortKey: SortKey, sortDir: SortDir, hideOwned: boolean): SharkDef[] {
-  const list = hideOwned ? SHARKS.filter((sh) => !save.owned.includes(sh.id)) : [...SHARKS];
-  if (sortKey === "tree") return list;
-  const { value } = SORT_OPTIONS[sortKey];
-  const sign = sortDir === "desc" ? -1 : 1;
+function listSharks(save: SharkSave, picker: PickerPrefs): SharkDef[] {
+  const list = SHARKS.filter(
+    (sh) => !(picker.hideOwned && save.owned.includes(sh.id)) && !(picker.buyableOnly && !canBuyNow(sh, save)),
+  );
+  if (picker.sort === "tree") return list;
+  const { value } = SORT_OPTIONS[picker.sort];
+  const sign = picker.dir === "desc" ? -1 : 1;
   return list.sort((a, b) => sign * (value(a, save) - value(b, save)) || SHARKS.indexOf(a) - SHARKS.indexOf(b));
 }
 
-function SharkListControls({
-  sortKey,
-  sortDir,
-  hideOwned,
-  onSortKey,
-  onSortDir,
-  onHideOwned,
-}: {
-  sortKey: SortKey;
-  sortDir: SortDir;
-  hideOwned: boolean;
-  onSortKey: (k: SortKey) => void;
-  onSortDir: (d: SortDir) => void;
-  onHideOwned: (v: boolean) => void;
-}) {
-  const dirBtn = (d: SortDir, label: string) => (
+function SharkListControls({ picker, onChange }: { picker: PickerPrefs; onChange: (p: Partial<PickerPrefs>) => void }) {
+  const { sort: sortKey, dir: sortDir } = picker;
+  const dirBtn = (d: PickerPrefs["dir"], label: string) => (
     <button
       type="button"
-      onClick={() => onSortDir(d)}
+      onClick={() => onChange({ dir: d })}
       disabled={sortKey === "tree"}
       aria-pressed={sortKey !== "tree" && sortDir === d}
       className={`rounded-md px-2 py-1 font-bold transition disabled:opacity-40 ${
@@ -515,13 +521,13 @@ function SharkListControls({
           정렬
           <select
             value={sortKey}
-            onChange={(e) => onSortKey(e.target.value as SortKey)}
+            onChange={(e) => onChange({ sort: e.target.value as PickerSort })}
             className="rounded-md border border-white/15 bg-slate-900 px-1.5 py-1 font-bold text-white light:border-slate-300 light:bg-white light:text-slate-800"
           >
             <option value="tree">진화 트리</option>
-            {(Object.keys(SORT_OPTIONS) as Exclude<SortKey, "tree">[]).map((k) => (
+            {(Object.keys(SORT_OPTIONS) as StatSort[]).map((k) => (
               <option key={k} value={k}>
-                {k === "best" ? "최고 점수" : SORT_OPTIONS[k].label}
+                {SORT_MENU_LABEL[k] ?? SORT_OPTIONS[k].label}
               </option>
             ))}
           </select>
@@ -531,10 +537,16 @@ function SharkListControls({
           {dirBtn("asc", "낮은 순")}
         </div>
       </div>
-      <label className="flex cursor-pointer items-center gap-1.5 font-bold text-white/70 select-none light:text-slate-600">
-        <input type="checkbox" checked={hideOwned} onChange={(e) => onHideOwned(e.target.checked)} className="accent-sky-500" />
-        보유 상어 숨기기
-      </label>
+      <div className="flex items-center gap-3">
+        <label className="flex cursor-pointer items-center gap-1.5 font-bold text-white/70 select-none light:text-slate-600">
+          <input type="checkbox" checked={picker.buyableOnly} onChange={(e) => onChange({ buyableOnly: e.target.checked })} className="accent-amber-500" />
+          지금 살 수 있는 상어만
+        </label>
+        <label className="flex cursor-pointer items-center gap-1.5 font-bold text-white/70 select-none light:text-slate-600">
+          <input type="checkbox" checked={picker.hideOwned} onChange={(e) => onChange({ hideOwned: e.target.checked })} className="accent-sky-500" />
+          보유 상어 숨기기
+        </label>
+      </div>
     </div>
   );
 }
@@ -642,6 +654,7 @@ function EdibleList({ def }: { def: SharkDef }) {
 const EATEN_LABEL_ORDER: EntityKind[] = [
   "smallFish", "crab", "swimmer", "goldenTuna", "puffer", "pelican", "diver", "grouper", "ray", "tuna", "sailor", "angler",
   "fishingBoat", "passenger", "smallShark", "cageDiver", "submarine", "ghostShark", "yacht", "helicopter",
+  "penguin", "seal", "narwhal", "orca", "treasureHunter", "barracuda", "moray", "giantSquid",
   "greenJelly", "redJelly", "mineS", "mineM", "mineL", "mineXL", "torpedo", "rock", "iceberg", "chest",
 ];
 

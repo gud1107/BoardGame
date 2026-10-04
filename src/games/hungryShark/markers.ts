@@ -10,7 +10,7 @@
  *   blocked 🔴 red ring    ✖ "T4 뱀상어 필요" — harmless, you just bounce off
  */
 
-import { GOLD_RUSH_COIN_MULT, healGain, NEVER, PREY_EFFECTS, preyEffectLabel, sharksOfTier, ENTITY_DEFS, type EntityDef, type EntityKind } from "./data";
+import { GOLD_RUSH_COIN_MULT, healGain, NEVER, PREY_EFFECTS, preyEffectLabel, sharksOfTier, ENTITY_DEFS, type EntityDef, type EntityKind, MAPS, type MapDef } from "./data";
 import { isEdible, mouthPos, type Entity, type World } from "./engine";
 
 export type MarkerKind = "edible" | "gold" | "mega" | "danger" | "blocked";
@@ -143,8 +143,27 @@ export const BESTIARY_ORDER: EntityKind[] = [
   "angler", "fishingBoat", "passenger", "smallShark",
   "cageDiver", "submarine",
   "ghostShark", "yacht", "helicopter",
+  "penguin", "seal", "narwhal", "orca",
+  "treasureHunter", "barracuda", "moray", "giantSquid",
   "greenJelly", "redJelly", "mineS", "mineM", "mineL", "mineXL", "torpedo", "rock", "iceberg",
 ];
+
+/** Maps this kind actually shows up on (roster, plus kinds that only come from something else). */
+export function mapsWhere(kind: EntityKind): MapDef[] {
+  const from: Partial<Record<EntityKind, EntityKind>> = { torpedo: "submarine", passenger: "yacht" };
+  if (kind === "chest") return MAPS;
+  if (kind === "rock") return MAPS.filter((m) => m.feature === "coral");
+  const src = from[kind];
+  return MAPS.filter((m) => (m.spawns[kind] ?? 0) > 0 || (src && (m.spawns[src] ?? 0) > 0) || (kind === "sailor" && (m.spawns.fishingBoat ?? 0) > 0));
+}
+
+/** Kinds that spawn on exactly this one map (shown on the map picker). */
+export function mapExclusives(map: MapDef): EntityKind[] {
+  return BESTIARY_ORDER.filter((k) => {
+    const where = mapsWhere(k);
+    return where.length === 1 && where[0].id === map.id && ENTITY_DEFS[k].behavior !== "rock";
+  });
+}
 
 export const BESTIARY_TIPS: Partial<Record<EntityKind, string>> = {
   smallFish: "떼로 몰려다니며 상어가 다가오면 흩어집니다. 콤보 쌓기에 최고.",
@@ -175,5 +194,13 @@ export const BESTIARY_TIPS: Partial<Record<EntityKind, string>> = {
   mineXL: "폭발 반경 280. 해구의 최대 위험.",
   torpedo: "6초간 상어를 추적한 뒤 폭발합니다.",
   rock: "해구에서 위로부터 떨어집니다.",
-  iceberg: "얼음 해협에만 떠다니는 빙산. 해롭진 않지만 부딪히면 튕겨 나가고 점프를 막습니다.",
+  iceberg: "얼음 해협의 숨구멍에 떠다니는 빙산. 해롭진 않지만 부딪히면 튕겨 나가고 점프를 막습니다.",
+  penguin: "얼음 해협 빙판 아래를 떼 지어 헤엄칩니다. 먹으면 부스트가 조금 찹니다.",
+  seal: "재빠른 물범. 빙판 아래 얕은 물에서 상어를 피해 다닙니다.",
+  narwhal: "엄니로 들이받는 일각고래. T2 이하 상어를 5초간 쫓아옵니다.",
+  orca: "바다의 최상위 포식자. 멀리서도 알아채고 쫓아오며 한 번에 크게 물어뜯습니다.",
+  treasureHunter: "난파선을 뒤지는 잠수부. 먹으면 골드 게이지가 크게 찹니다.",
+  barracuda: "빠르게 돌진하는 꼬치고기. 암초상어에겐 따끔한 위협입니다.",
+  moray: "선체 틈에 숨어 있다가 가까이 오면 튀어나와 뭅니다.",
+  giantSquid: "심해 단구의 괴물. 긴 촉수로 붙잡아 큰 피해를 줍니다. T4만 사냥 가능.",
 };

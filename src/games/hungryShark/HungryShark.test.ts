@@ -561,6 +561,8 @@ describe("mid-dive evolution", () => {
 
 describe("map invariant sweep", () => {
   const MAP_IDS = ["deepBlue", "frozenStrait", "shipwreck"] as const;
+  // Spawned by something else, not by the roster.
+  const ALWAYS_OK = new Set(["chest", "torpedo", "sailor", "passenger", "rock"]);
   it.each(MAP_IDS.flatMap((m) => SHARKS.map((s) => [m, s.id] as const)))(
     "%s × %s: 45s dive with skills + mid-dive evolution keeps every invariant",
     async (mapId, sharkId) => {
@@ -580,12 +582,20 @@ describe("map invariant sweep", () => {
         if (s.x < 0 || s.x > data.WORLD_W) throw new Error(`shark x out of world: ${s.x}`);
         if (s.y > data.seabedY(s.x) + 1) throw new Error(`shark below seabed: ${s.y} > ${data.seabedY(s.x)}`);
         if (s.y < data.SKY_TOP) throw new Error(`shark above sky: ${s.y}`);
+        if (!s.airborne && data.isUnderIce(s.x) && s.y < data.ceilingY(s.x) - 1) throw new Error(`shark inside the ice sheet: ${s.y}`);
+        for (const c of data.activeGeometry().colliders) {
+          if (Math.hypot(s.x - c.x, s.y - c.y) < c.r * 0.6) throw new Error(`shark stuck inside a structure @${i}`);
+        }
         if (i % 30 === 0) {
           for (const e of w.entities) {
             if (!e.alive) continue;
             if (!Number.isFinite(e.x) || !Number.isFinite(e.y)) throw new Error(`non-finite ${e.kind}`);
             if (e.x < 0 || e.x > data.WORLD_W) throw new Error(`${e.kind} x out of world: ${e.x}`);
             if (e.kind === "iceberg" && mapId !== "frozenStrait") throw new Error("iceberg on wrong map");
+            if (!ALWAYS_OK.has(e.kind) && !(w.map.spawns[e.kind] ?? 0)) throw new Error(`${e.kind} is not on the ${mapId} roster`);
+            const b = e.def.behavior;
+            if ((b === "surfaceSwim" || b === "surfaceBoat") && data.isUnderIce(e.x)) throw new Error(`${e.kind} under the ice`);
+            if ((b === "wander" || b === "hunter" || b === "boid") && e.y < data.ceilingY(e.x) - 1) throw new Error(`${e.kind} above the ice ceiling`);
           }
           if (w.entities.filter((e) => e.kind === "chest" && e.alive).length > chests0) throw new Error("chests respawned");
         }
@@ -612,5 +622,93 @@ describe("map invariant sweep", () => {
       const screenY = (w.shark.y - cam.y) * cam.zoom + vh / 2;
       expect(screenY, `${m.id} shark off-screen at floor y=${by.toFixed(0)}`).toBeLessThan(vh - 10);
     }
+  });
+});
+
+describe("distinct map geometry + rosters", () => {
+  it("each map has its own level structure, not a recolor", async () => {
+    const data = await import("./data");
+    const geo = (id: "deepBlue" | "frozenStrait" | "shipwreck") => {
+      createWorld(sharkById("reef"), NO_UPGRADES, 70, id);
+      const g = data.activeGeometry();
+      return { g, floor: (x: number) => data.seabedY(x), ice: (x: number) => data.isUnderIce(x) };
+    };
+    const blue = geo("deepBlue");
+    expect(blue.g.ice).toBeNull();
+    expect(blue.g.colliders).toHaveLength(0);
+
+    const ice = geo("frozenStrait");
+    // Solid ice sheet over most of the surface, with breathing holes.
+    let covered = 0;
+    for (let x = 0; x < 12000; x += 50) if (ice.ice(x)) covered++;
+    expect(covered / 240).toBeGreaterThan(0.6);
+    expect(ice.ice(1400)).toBe(false);
+    // Shallow shelf vs. deep trench.
+    expect(ice.floor(800)).toBeLessThan(1100);
+    expect(ice.floor(3200)).toBeGreaterThan(3200);
+    expect(ice.g.structures.some((st) => st.kind === "icicle")).toBe(true);
+    expect(ice.g.structures.some((st) => st.kind === "icePillar")).toBe(true);
+
+    const wreck = geo("shipwreck");
+    expect(wreck.g.ice).toBeNull();
+    expect(wreck.g.structures.filter((st) => st.kind === "hull").length).toBeGreaterThanOrEqual(6);
+    // Terraces: flat steps separated by cliffs.
+    expect(Math.abs(wreck.floor(2400) - wreck.floor(3000))).toBeLessThan(80);
+    expect(wreck.floor(3800) - wreck.floor(3000)).toBeGreaterThan(500);
+  });
+
+  it("every map has exclusive monsters and none of another map's exclusives", async () => {
+    const { MAPS } = await import("./data");
+    const { mapExclusives } = await import("./markers");
+    const ex = Object.fromEntries(MAPS.map((m) => [m.id, mapExclusives(m)]));
+    expect(ex.frozenStrait).toEqual(expect.arrayContaining(["penguin", "seal", "narwhal", "orca"]));
+    expect(ex.shipwreck).toEqual(expect.arrayContaining(["barracuda", "moray", "treasureHunter", "giantSquid"]));
+    expect(ex.deepBlue).toEqual(expect.arrayContaining(["swimmer", "helicopter"]));
+    for (const m of MAPS) for (const k of Object.values(ex).flat()) if (!ex[m.id].includes(k)) expect(m.spawns[k] ?? 0).toBe(0);
+  });
+
+  it("a breaching shark can't jump through the ice and lands back in a hole", async () => {
+    const data = await import("./data");
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 71, "frozenStrait");
+    isolate(w);
+    // Under the ice: swimming straight up stops at the ice underside.
+    w.shark.x = 2600;
+    w.shark.y = 400;
+    for (let i = 0; i < 120; i++) step(w, { dirX: 0, dirY: -1, boost: true }, 1 / 60);
+    expect(w.shark.airborne).toBe(false);
+    expect(w.shark.y).toBeGreaterThanOrEqual(data.ceilingY(w.shark.x) - 1);
+    // In a hole: jump out, drift over the ice, slide back into the water.
+    w.shark.x = 1400;
+    w.shark.y = 300;
+    w.shark.hp = 9999;
+    for (let i = 0; i < 90; i++) step(w, { dirX: 0.35, dirY: -1, boost: true }, 1 / 60);
+    let wasAir = w.shark.airborne;
+    for (let i = 0; i < 60 * 8; i++) {
+      step(w, idle, 1 / 60);
+      wasAir = wasAir || w.shark.airborne;
+      w.shark.hp = 9999;
+    }
+    expect(wasAir).toBe(true);
+    expect(w.shark.airborne).toBe(false);
+  });
+
+  it("population grew ×1.4 and shark unlocks cost ×1.3", async () => {
+    const { populationTargets } = await import("./data");
+    expect(populationTargets(2).grouper).toBe(14);
+    expect(populationTargets(2).smallFish).toBe(100);
+    expect(sharkById("sandTiger").cost).toBe(1560);
+    expect(sharkById("megalodon").cost).toBe(20800);
+  });
+});
+
+describe("picker prefs", () => {
+  it("round-trip through the save and fall back on junk", () => {
+    const s = { ...freshSave(), picker: { sort: "gold" as const, dir: "asc" as const, hideOwned: true, buyableOnly: true } };
+    expect(decodeSave(encodeSave(s)).picker).toEqual(s.picker);
+    const junk = { ...freshSave(), picker: { sort: "nope", dir: "sideways", hideOwned: 1, buyableOnly: 0 } } as unknown as typeof s;
+    expect(decodeSave(encodeSave(junk)).picker).toEqual({ sort: "tree", dir: "desc", hideOwned: true, buyableOnly: false });
+    const old = { ...freshSave() } as Partial<typeof s>;
+    delete old.picker;
+    expect(decodeSave(encodeSave(old as typeof s)).picker.sort).toBe("tree");
   });
 });

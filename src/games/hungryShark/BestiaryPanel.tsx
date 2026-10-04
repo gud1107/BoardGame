@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ENTITY_DEFS, healGain, NEVER, PREY_EFFECTS, preyEffectLabel, type EntityKind } from "./data";
-import { BESTIARY_ORDER, BESTIARY_TIPS, habitatLabel, hazardTip, tierLabel } from "./markers";
+import { BESTIARY_ORDER, BESTIARY_TIPS, habitatLabel, hazardTip, mapsWhere, tierLabel } from "./markers";
 import { drawEntityIcon } from "./render";
 
 /**
@@ -103,6 +103,7 @@ export default function BestiaryPanel({
                 <span>⭐ {def.score.toLocaleString()}점</span>
                 <span>🪙 {def.coins}{def.coinChance < 1 ? ` (${Math.round(def.coinChance * 100)}%)` : ""}</span>
                 <span>🌊 {habitatLabel(kind)}</span>
+                <span>📍 {mapsWhere(kind).length === 3 ? "모든 지역" : mapsWhere(kind).map((m) => m.emoji + " " + m.name).join(" · ")}</span>
                 {def.toughness > 1 && <span>🦷 여러 번 물기</span>}
                 {PREY_EFFECTS[kind] && <span className="text-amber-300 light:text-amber-700">✨ {preyEffectLabel(PREY_EFFECTS[kind]!)}</span>}
                 {eaten?.[kind] ? <span className="text-sky-300 light:text-sky-600">이번 잠수 ×{eaten[kind]}</span> : null}
