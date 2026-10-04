@@ -37,7 +37,7 @@ export const GENRE_META: Record<
     emoji: "🎲",
     description: "주사위와 카드 운이 승부를 뒤집는 게임",
     accent: "#fbbf24",
-    accentInk: "#a16207",
+    accentInk: "#854d0e",
   },
   party: {
     label: "파티",

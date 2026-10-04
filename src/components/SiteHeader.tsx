@@ -84,10 +84,10 @@ export default function SiteHeader() {
             ✦
           </span>
           <span className="flex flex-col leading-none">
-            <span className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 bg-clip-text font-serif text-sm font-bold tracking-wide text-transparent sm:text-base">
+            <span className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 bg-clip-text font-serif text-sm font-bold tracking-wide text-transparent sm:text-base light:from-amber-700 light:via-amber-600 light:to-orange-700">
               보드게임 허브
             </span>
-            <span className="hidden text-[9px] font-medium tracking-[0.2em] text-amber-500/50 uppercase sm:block">
+            <span className="hidden text-[9px] font-medium tracking-[0.2em] text-amber-500/50 uppercase sm:block light:text-amber-800">
               Private Lounge
             </span>
           </span>
@@ -113,7 +113,7 @@ export default function SiteHeader() {
                   : undefined
               }
             >
-              <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 font-semibold text-rose-200">
+              <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 font-semibold text-rose-200 light:bg-rose-100 light:text-rose-700">
                 {userId ? (tier ? TIER_LABELS[tier] : "…") : "게스트"}
               </span>
               {/* TEMP: 무료 이용 횟수(N/N회) 배지 임시 숨김 — 요청에 따라 비활성화. 되돌리려면 이 블록 복원.

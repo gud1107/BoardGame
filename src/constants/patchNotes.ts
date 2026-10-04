@@ -65,6 +65,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "common",
         type: "IMPROVE",
+        desc: "라이트 모드에서 하얗게 남아 있던 게임판·연한 색 패널(하나미코지·아발론·뱅·페루도 등)을 차분한 톤으로 맞추고, 헤더 로고·게스트 표시·빈 별 글씨를 진하게",
+      },
+      {
+        game: "common",
+        type: "IMPROVE",
         desc: "라이트 모드를 덜 눈부시게 조정 — 다른 사이트들과 화면 밝기를 직접 재서 바탕·패널을 차분한 회색으로 낮추고(약 16%), 흐린 글씨·장르 태그는 더 진하게",
       },
       {
