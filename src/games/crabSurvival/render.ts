@@ -434,6 +434,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
   }
 
   drawKingMarker(ctx, view, W, H, w, t);
+  drawWantedMarkers(ctx, view, W, H, w, t);
 }
 
 function drawShot(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: number, s: Shot) {
@@ -1913,6 +1914,61 @@ function drawKingMarker(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H
   ctx.strokeText(label, lx, ly);
   ctx.fillStyle = "#fde047";
   ctx.fillText(label, lx, ly);
+}
+
+/**
+ * Edge arrows for off-screen 🚨 WANTED carriers (bounty ≥ EPIC_WANTED), like the
+ * king tracker but red — at most the two nearest, so the edges don't clutter.
+ */
+function drawWantedMarkers(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: number, w: World, t: number) {
+  const me = player(w);
+  const m = 34;
+  const list = w.crabs
+    .filter((c) => !c.isPlayer && c.id !== w.kingId && holdsEpic(c) && epicBounty(c.level, c.epicT) >= EPIC_WANTED)
+    .map((c) => ({ c, sxy: toScreen(cam, W, H, c.x, c.y), d: Math.hypot(c.x - me.x, c.y - me.y) }))
+    .filter(({ sxy: [sx, sy] }) => !(sx > m && sx < W - m && sy > m && sy < H - m))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, 2);
+  const cx = W / 2, cy = H / 2;
+  for (const { c, sxy: [sx, sy], d } of list) {
+    const dx = sx - cx, dy = sy - cy;
+    const s = Math.min((W / 2 - m) / Math.abs(dx || 1), (H / 2 - m) / Math.abs(dy || 1));
+    const px = cx + dx * s, py = cy + dy * s;
+    const a = Math.atan2(dy, dx);
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.fillStyle = `rgba(239,68,68,${0.75 + 0.25 * Math.sin(t * 8)})`;
+    ctx.save();
+    ctx.rotate(a);
+    ctx.beginPath();
+    ctx.moveTo(22, 0);
+    ctx.lineTo(8, -10);
+    ctx.lineTo(8, 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.strokeStyle = "#fbbf24";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.drawImage(emojiSprite("🚨"), -10, -10, 20, 20);
+    ctx.restore();
+    ctx.font = "800 11px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,0.7)";
+    const label = `${c.name} 💰${epicBounty(c.level, c.epicT).toLocaleString()} ${Math.round(d / 10)}m`;
+    const ly = py + (py > H / 2 ? -34 : 18);
+    const half = ctx.measureText(label).width / 2 + 4;
+    const lx = Math.min(W - half, Math.max(half, px));
+    ctx.strokeText(label, lx, ly);
+    ctx.fillStyle = "#fca5a5";
+    ctx.fillText(label, lx, ly);
+  }
 }
 
 /** Minimap: island, pools, gold chests, you, and the king ping. */

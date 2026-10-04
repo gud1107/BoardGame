@@ -138,6 +138,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
                 <div className="text-[11px] font-semibold text-slate-800/80">
                   {save.matches}판 · 1위 {save.wins}회 · 최고 {save.best.toLocaleString()}점
                 </div>
+                <OverallRecords stats={save.speciesStats} />
               </div>
             </div>
           </div>
@@ -225,6 +226,15 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
             >
               📖 룰북
             </button>
+            {save.tipsDismissed && (
+              <button
+                onClick={() => update((s) => ({ ...s, tipsDismissed: false }))}
+                className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white/80 hover:border-white/40 light:border-slate-300 light:text-slate-700"
+                title="처음 플레이 팁 카드를 다시 펼칩니다"
+              >
+                💡 팁 다시 보기
+              </button>
+            )}
             <button
               onClick={finish}
               className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white/60 hover:border-white/40 light:border-slate-300 light:text-slate-600"
@@ -535,6 +545,34 @@ function SpeciesPicker({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** Best bounty haul / longest legendary carry across every species, with the species that set it. */
+function OverallRecords({ stats }: { stats: CrabSave["speciesStats"] }) {
+  const best = (key: "bestBounty" | "longestEpic") => {
+    let top: { v: number; id: SpeciesId } | null = null;
+    for (const sp of SPECIES_LIST) {
+      const v = stats[sp.id]?.[key] ?? 0;
+      if (v > 0 && (!top || v > top.v)) top = { v, id: sp.id };
+    }
+    return top;
+  };
+  const bounty = best("bestBounty"), epic = best("longestEpic");
+  if (!bounty && !epic) return null;
+  return (
+    <div className="flex flex-wrap justify-end gap-1">
+      {bounty && (
+        <span className="rounded-full bg-black/35 px-2 py-0.5 text-[10px] font-bold text-amber-200" title="한 판에 받은 현상금 합계 최고 기록 (모든 게 종류)">
+          💰 최다 현상금 {fmtK(bounty.v)} · {SPECIES[bounty.id].name}
+        </span>
+      )}
+      {epic && (
+        <span className="rounded-full bg-black/35 px-2 py-0.5 text-[10px] font-bold text-yellow-100" title="한 판에 전설 무기를 들고 버틴 최장 시간 (모든 게 종류)">
+          🌟 최장 전설 보유 {epic.v}초 · {SPECIES[epic.id].name}
+        </span>
+      )}
     </div>
   );
 }
