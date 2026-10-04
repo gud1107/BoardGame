@@ -424,16 +424,24 @@ export interface CrownLogEntry {
   /** crown = first crowning, recapture = crowned again after losing it, lost = overtaken, down = flipped while king. */
   kind: "crown" | "recapture" | "lost" | "down";
   by?: string;
+  /** The player's score at that moment. */
+  score?: number;
 }
 
 export interface MomentEntry {
   t: number;
   kind: "kill" | "evolve" | "epic" | "revenge" | "death" | "revive";
   label: string;
+  /** The player's score right after the moment, and what the moment itself was worth. */
+  score: number;
+  delta?: number;
+  /** Extra context for the timeline's detail card (e.g. "킹 크랩 처치 · 현상금 +7,500"). */
+  detail?: string;
 }
 
-function logMoment(w: World, kind: MomentEntry["kind"], label: string) {
-  if (w.moments.length < 300) w.moments.push({ t: w.time, kind, label });
+function logMoment(w: World, kind: MomentEntry["kind"], label: string, extra: { delta?: number; detail?: string; score?: number } = {}) {
+  if (w.moments.length >= 300) return;
+  w.moments.push({ t: w.time, kind, label, score: extra.score ?? player(w).score, delta: extra.delta, detail: extra.detail });
 }
 
 export interface MatchStats {
@@ -1013,8 +1021,8 @@ export function addScore(w: World, c: Crab, pts: number) {
     if (c.isPlayer) {
       w.stats.maxLevel = Math.max(w.stats.maxLevel, c.level);
       const tier = tierForLevel(c.level);
-      if (tier > tierForLevel(before)) logMoment(w, "evolve", `Lv${c.level} ${TIERS[tier].name}`);
-      else if (c.level === 12) logMoment(w, "evolve", `Lv12 ${levelDef(c).name}`);
+      if (tier > tierForLevel(before)) logMoment(w, "evolve", `Lv${c.level} ${TIERS[tier].name}`, { detail: `Tier ${tier} 진화 · ${TIERS[tier].skillIcon} ${TIERS[tier].skillName} 해금` });
+      else if (c.level === 12) logMoment(w, "evolve", `Lv12 ${levelDef(c).name}`, { detail: "최대 성장 도달" });
     }
   }
 }
@@ -1485,7 +1493,7 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
   const killerName = by?.name ?? sourceName ?? "바다";
   if (v.isPlayer) {
     w.deathSnapshot = { score, weapon: v.weapon ? { ...v.weapon } : null, shield: v.shield ? { ...v.shield } : null, by: killerName };
-    logMoment(w, "death", `${killerName}에게 쓰러짐`);
+    logMoment(w, "death", `${killerName}에게 쓰러짐`, { score: 0, delta: -score, detail: `${score.toLocaleString()}점을 들고 쓰러짐` });
     w.playerDown = true;
     w.stats.deaths++;
     w.events.push({ type: "playerDeath", by: killerName });
@@ -1505,10 +1513,8 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
   let bounty = 0;
   if (by) {
     by.kills++;
-    if (by.isPlayer) {
-      w.stats.kills++;
-      logMoment(w, "kill", v.name);
-    }
+    if (by.isPlayer) w.stats.kills++;
+    const before = by.score;
     let reward = Math.floor(score * 0.2) + 75 * v.level;
     if (wasKing) reward += Math.floor(score * 0.3) + 10_000;
     // 전설 현상금: flat bounty for flipping a legendary carrier.
@@ -1531,7 +1537,7 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
       floatText(w, by.x, by.y - 84 * by.scale, `⚔️ 역습 보너스 +${bonus.toLocaleString()}`, "#fca5a5", 21, 1.8);
       burst(w, "star", v.x, v.y, 26, 300, "#f87171", 5, 1, 260);
       w.events.push({ type: "revenge", victim: v.name, bonus });
-      logMoment(w, "revenge", `역습 · ${v.name}`);
+      logMoment(w, "revenge", `역습 · ${v.name}`, { delta: bonus, detail: `왕관을 가져간 지 ${Math.round(USURP_FX - w.usurpFx)}초 만에 · 역습 보너스 +${bonus.toLocaleString()}` });
     } else if (!by.isPlayer && by.brain && by.brain.grudgeId === v.id && (by.brain.grudgeT ?? 0) > 0) {
       // Bots cash in on revenge too — and the player hears about it if they were the thief.
       const bonus = revengeBonus(score);
@@ -1541,6 +1547,12 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
     }
     addScore(w, by, reward);
     floatText(w, by.x, by.y - 40 * by.scale, `+${Math.round(reward).toLocaleString()}`, "#fde047", wasKing ? 26 : 18, 1.4);
+    if (by.isPlayer) {
+      const tags = [`Lv${v.level} · 상대 점수 ${score.toLocaleString()}`];
+      if (wasKing) tags.push("👑 킹 크랩 처치");
+      if (bounty) tags.push(`💰 현상금 +${bounty.toLocaleString()}`);
+      logMoment(w, "kill", v.name, { delta: by.score - before, detail: tags.join(" · ") });
+    }
   }
   // Someone else flipped the usurper: the revenge window closes.
   if (w.usurpFx > 0 && v.id === w.usurperId) w.usurpFx = 0;
@@ -1548,7 +1560,7 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
   if (wasKing) {
     if (v.isPlayer) {
       w.crownLostOnce = true;
-      w.crownLog.push({ t: w.time, kind: "down", by: by?.name ?? sourceName ?? "바다" });
+      w.crownLog.push({ t: w.time, kind: "down", by: by?.name ?? sourceName ?? "바다", score });
     }
     w.kingId = null;
     w.events.push({ type: "kingDown", name: v.name, by: by?.name ?? null, player: v.isPlayer, byPlayer: !!by?.isPlayer });
@@ -2020,7 +2032,7 @@ export function updateLeaderboard(w: World, initial = false) {
     w.usurpFx = USURP_FX;
     w.usurperId = top.id;
     w.crownLostOnce = true;
-    w.crownLog.push({ t: w.time, kind: "lost", by: top.name });
+    w.crownLog.push({ t: w.time, kind: "lost", by: top.name, score: cur.score });
     // Fair's fair: the player gets the same 분노 a dethroned bot does.
     cur.rageT = PLAYER_RAGE;
     w.events.push({ type: "crownLost", by: top.name });
@@ -2038,7 +2050,7 @@ export function updateLeaderboard(w: World, initial = false) {
     const recapture = top.isPlayer && w.crownLostOnce;
     w.events.push({ type: "kingNew", name: top.name, player: top.isPlayer, recapture });
     if (top.isPlayer) {
-      w.crownLog.push({ t: w.time, kind: recapture ? "recapture" : "crown" });
+      w.crownLog.push({ t: w.time, kind: recapture ? "recapture" : "crown", score: top.score });
       w.kingRecap = recapture;
       w.kingFx = kingFxDuration(recapture);
       if (recapture) {
@@ -2089,7 +2101,6 @@ export function revivePlayer(w: World): boolean {
   const me = player(w);
   const snap = w.deathSnapshot;
   w.revivesLeft--;
-  logMoment(w, "revive", "부활");
   w.playerDown = false;
   const p = randomLandPoint(w, 30, true, 0.85);
   me.alive = true;
@@ -2097,6 +2108,7 @@ export function revivePlayer(w: World): boolean {
   me.y = p.y;
   me.vx = me.vy = 0;
   me.score = Math.floor((snap?.score ?? 0) * 0.5);
+  logMoment(w, "revive", "부활", { score: me.score, delta: me.score, detail: "하트 1개 사용 · 점수 50%와 장비(내구도 절반) 유지" });
   syncLevel(me, true);
   me.hp = me.maxHp;
   me.stamina = STAMINA_MAX;
@@ -2482,7 +2494,7 @@ export function equipGear(w: World, c: Crab, kind: GearKind): boolean {
     if (!same) floatText(w, c.x, c.y - 34 * c.scale, `${def.emoji} ${def.name}!`, "#a5f3fc", 16, 1.2);
   }
   // A fresh legendary is announced to the whole island — its holder becomes the hunted.
-  if (def.rarity === "epic" && !hadEpic && c.isPlayer) logMoment(w, "epic", def.name);
+  if (def.rarity === "epic" && !hadEpic && c.isPlayer) logMoment(w, "epic", def.name, { detail: `${def.emoji} 전설 무기 획득 · 섬 전체 현상수배 시작` });
   if (def.rarity === "epic" && !hadEpic) {
     w.events.push({ type: "epicAlert", who: c.name, gear: def.name, emoji: def.emoji, player: c.isPlayer });
     burst(w, "gold", c.x, c.y, 24, 260, "#fbbf24", 5, 1, 260);

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { recordSoloRun } from "@/lib/stats/soloResult";
 import { CRAB_COLORS, EVO_REVEAL, isUnlocked, MATCH_LENGTHS, roadmap, SHELL_BAND_LABEL, SHELL_PIECE_LABEL, SHELL_STYLE, SPECIES, SPECIES_LIST, type CrabColor, type ShieldKind, type SpeciesId, type WeaponKind } from "./data";
 import type { CrownLogEntry, MatchSummary, MomentEntry } from "./engine";
+import { CROWN_ICON, exportMatchCard, MOMENT_ICON, mmss, reignSpans, timelineRows, type TimelineRow } from "./timelineImage";
 import CrabSurvivalCanvas from "./CrabSurvivalCanvas";
 import RulebookModal from "./RulebookModal";
 import { CrabAudio } from "./audio";
@@ -141,7 +142,7 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
 
   return (
     <div className="flex flex-col gap-4">
-      {screen === "results" && result && <ResultsPanel result={result} color={color} onRetry={start} onMenu={() => setScreen("menu")} />}
+      {screen === "results" && result && <ResultsPanel result={result} color={color} name={save.name.trim() || "나"} onRetry={start} onMenu={() => setScreen("menu")} />}
 
       {screen === "menu" && (
         <>
@@ -365,11 +366,13 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 function ResultsPanel({
   result,
   color,
+  name,
   onRetry,
   onMenu,
 }: {
   result: MatchResult;
   color: CrabColor;
+  name: string;
   onRetry: () => void;
   onMenu: () => void;
 }) {
@@ -437,7 +440,7 @@ function ResultsPanel({
         <Stat label="🛡 생존 보상" value={s.stats.survivalBonus ? `+${s.stats.survivalBonus.toLocaleString()}` : "—"} />
         {(s.stats.revenges ?? 0) > 0 && <Stat label="⚔️ 역습 성공" value={`${s.stats.revenges}회`} />}
       </div>
-      {((s.crownLog?.length ?? 0) > 0 || (s.moments?.length ?? 0) > 0) && <MatchTimeline log={s.crownLog ?? []} moments={s.moments ?? []} duration={s.duration || s.seconds} seconds={s.seconds} />}
+      <MatchTimeline s={s} who={{ name, species: `${sp.name}(${sp.role})`, shell: color.shell }} />
       <div>
         <div className="mb-1.5 text-xs font-semibold text-white/50 light:text-slate-500">최종 순위</div>
         <div className="flex flex-col gap-0.5">
@@ -539,73 +542,114 @@ function GrowthLooks({ color, species, muted }: { color: CrabColor; species: Spe
 /**
  * 경기 타임라인: the crown reign bar (gold spans, crown events above) plus the match's key moments —
  * evolutions, legendary pickups, revenges, deaths/revives below, and every kill as a red tick on the bar.
+ * Tap any marker for a detail card (opponent, score at that moment, what it was worth); the whole
+ * card can be saved as a PNG or shared.
  */
-function MatchTimeline({ log, moments, duration, seconds }: { log: CrownLogEntry[]; moments: MomentEntry[]; duration: number; seconds: number }) {
-  const end = Math.max(1, Math.min(duration, seconds));
-  // Reign intervals: a crown/recapture opens one, a lost/down closes it.
-  const reigns: [number, number][] = [];
-  let open: number | null = null;
-  for (const e of log) {
-    if (e.kind === "crown" || e.kind === "recapture") open ??= e.t;
-    else if (open !== null) {
-      reigns.push([open, e.t]);
-      open = null;
-    }
-  }
-  if (open !== null) reigns.push([open, end]);
+function MatchTimeline({ s, who }: { s: MatchSummary; who: { name: string; species: string; shell: string } }) {
+  const log = s.crownLog ?? [];
+  const moments = s.moments ?? [];
+  const end = Math.max(1, Math.min(s.duration || s.seconds, s.seconds));
+  const reigns = reignSpans(log, end);
+  const [sel, setSel] = useState<TimelineRow | null>(null);
+  const [busy, setBusy] = useState<"" | "save" | "share">("");
+  const [note, setNote] = useState("");
+  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
   const count = (k: CrownLogEntry["kind"]) => log.filter((e) => e.kind === k).length;
   const pct = (t: number) => `${Math.min(100, (t / end) * 100)}%`;
-  const mm = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
-  const crownIcon: Record<CrownLogEntry["kind"], string> = { crown: "👑", recapture: "🔁", lost: "💔", down: "☠️" };
-  const crownLabel: Record<CrownLogEntry["kind"], string> = { crown: "등극", recapture: "탈환", lost: "빼앗김", down: "왕관 잃고 쓰러짐" };
-  const momentIcon: Record<MomentEntry["kind"], string> = { kill: "✂️", evolve: "🧬", epic: "🌟", revenge: "⚔️", death: "☠️", revive: "❤️" };
   const kills = moments.filter((m) => m.kind === "kill");
   const marks = moments.filter((m) => m.kind !== "kill");
-  // One merged, time-ordered list (kills are summarised by count, not listed).
-  const list = [
-    ...log.map((e) => ({ t: e.t, icon: crownIcon[e.kind], text: `${crownLabel[e.kind]}${e.by ? ` · ${e.by}` : ""}`, crown: true })),
-    ...marks.map((m) => ({ t: m.t, icon: momentIcon[m.kind], text: m.label, crown: false })),
-  ].sort((a, b) => a.t - b.t);
+  const list = timelineRows(log, moments, false);
   const reign = Math.round(reigns.reduce((a, [s0, s1]) => a + s1 - s0, 0));
+  const rowOf = (m: MomentEntry): TimelineRow => timelineRows([], [m], true)[0];
+  const rowOfCrown = (e: CrownLogEntry): TimelineRow => timelineRows([e], [], false)[0];
+  const exportCard = async (mode: "save" | "share") => {
+    setBusy(mode);
+    try {
+      const r = await exportMatchCard(s, who, mode);
+      setNote(r === "shared" ? "공유했어요" : r === "saved" ? "이미지를 저장했어요" : "");
+    } finally {
+      setBusy("");
+    }
+  };
+  const marker = (row: TimelineRow, key: string, cls: string, content: ReactNode) => (
+    <button
+      key={key}
+      type="button"
+      onClick={() => setSel((p) => (p && p.t === row.t && p.text === row.text ? null : row))}
+      className={`absolute -translate-x-1/2 leading-none transition hover:scale-125 ${cls} ${sel && sel.t === row.t && sel.text === row.text ? "scale-125 drop-shadow-[0_0_4px_rgba(253,224,71,0.9)]" : ""}`}
+      style={{ left: pct(row.t) }}
+      title={`${mmss(row.t)} ${row.text}`}
+    >
+      {content}
+    </button>
+  );
   return (
     <div className="rounded-xl bg-white/5 p-3 light:bg-slate-100">
-      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-1">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-1.5">
         <span className="text-xs font-semibold text-white/50 light:text-slate-500">📈 경기 타임라인</span>
         <span className="text-[11px] font-bold text-white/70 light:text-slate-600">
           {log.length > 0 && <>👑 등극 {count("crown")} · 빼앗김 {count("lost") + count("down")} · 탈환 {count("recapture")} · 재위 {reign}초 · </>}✂️ 처치 {kills.length}
         </span>
       </div>
-      <div className="relative mt-5 mb-5 h-3 rounded-full bg-black/30 light:bg-slate-300">
+      <div className="relative mt-6 mb-6 h-3 rounded-full bg-black/30 light:bg-slate-300">
         {reigns.map(([a, b], i) => (
-          <div key={i} className="absolute inset-y-0 rounded-full bg-gradient-to-r from-amber-300 to-yellow-500" style={{ left: pct(a), width: `calc(${pct(b)} - ${pct(a)})` }} />
+          <div key={i} className="pointer-events-none absolute inset-y-0 rounded-full bg-gradient-to-r from-amber-300 to-yellow-500" style={{ left: pct(a), width: `calc(${pct(b)} - ${pct(a)})` }} />
         ))}
-        {kills.map((k, i) => (
-          <div key={`k${i}`} className="absolute inset-y-0 w-px bg-rose-500/80" style={{ left: pct(k.t) }} title={`${mm(k.t)} ✂️ ${k.label}`} />
-        ))}
-        {log.map((e, i) => (
-          <div key={`c${i}`} className="absolute -top-5 -translate-x-1/2 text-sm leading-none" style={{ left: pct(e.t) }} title={`${mm(e.t)} ${crownLabel[e.kind]}${e.by ? ` (${e.by})` : ""}`}>
-            {crownIcon[e.kind]}
-          </div>
-        ))}
-        {marks.map((m, i) => (
-          <div key={`m${i}`} className="absolute top-4 -translate-x-1/2 text-xs leading-none" style={{ left: pct(m.t) }} title={`${mm(m.t)} ${m.label}`}>
-            {momentIcon[m.kind]}
-          </div>
-        ))}
+        {kills.map((k, i) => marker(rowOf(k), `k${i}`, "inset-y-[-3px] w-2 flex justify-center", <span className="block h-full w-px bg-rose-500" />))}
+        {log.map((e, i) => marker(rowOfCrown(e), `c${i}`, "-top-6 text-sm", CROWN_ICON[e.kind]))}
+        {marks.map((m, i) => marker(rowOf(m), `m${i}`, "top-4 text-xs", MOMENT_ICON[m.kind]))}
       </div>
       <div className="flex justify-between text-[9px] text-white/40 light:text-slate-400">
         <span>0:00</span>
-        <span>{mm(end)}</span>
+        <span>{mmss(end)}</span>
       </div>
+      {sel ? (
+        <div className="mt-2 rounded-lg bg-black/30 p-2.5 text-xs light:bg-white">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className={`font-black ${sel.crown ? "text-amber-200 light:text-amber-700" : "text-white light:text-slate-800"}`}>
+              {sel.icon} {sel.text}
+            </span>
+            <span className="shrink-0 font-mono text-white/50 light:text-slate-400">{mmss(sel.t)}</span>
+          </div>
+          {sel.detail && <div className="mt-0.5 text-white/65 light:text-slate-600">{sel.detail}</div>}
+          <div className="mt-1 flex gap-3 text-[11px]">
+            {sel.score !== undefined && <span className="text-white/70 light:text-slate-600">그때 점수 {sel.score.toLocaleString()}</span>}
+            {sel.delta ? <span className={sel.delta > 0 ? "font-bold text-emerald-300 light:text-emerald-600" : "font-bold text-rose-300 light:text-rose-600"}>{sel.delta > 0 ? "+" : ""}{sel.delta.toLocaleString()}점</span> : null}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1 text-center text-[10px] text-white/35 light:text-slate-400">아이콘이나 빨간 처치 눈금을 누르면 그 순간을 자세히 볼 수 있어요</div>
+      )}
       {list.length > 0 && (
         <div className="mt-1.5 flex max-h-24 flex-wrap gap-x-2.5 gap-y-0.5 overflow-y-auto text-[10px] text-white/60 light:text-slate-500">
           {list.map((e, i) => (
-            <span key={i} className={e.crown ? "text-amber-200/90 light:text-amber-700" : ""}>
-              {mm(e.t)} {e.icon} {e.text}
-            </span>
+            <button key={i} type="button" onClick={() => setSel(e)} className={`text-left hover:underline ${e.crown ? "text-amber-200/90 light:text-amber-700" : ""}`}>
+              {mmss(e.t)} {e.icon} {e.text}
+            </button>
           ))}
         </div>
       )}
+      <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5">
+        {note && <span className="mr-auto text-[10px] text-emerald-300 light:text-emerald-600">{note}</span>}
+        <button
+          type="button"
+          disabled={!!busy}
+          onClick={() => exportCard("save")}
+          className="rounded-lg border border-white/15 px-2.5 py-1 text-[11px] font-semibold text-white/80 hover:border-white/40 disabled:opacity-50 light:border-slate-300 light:text-slate-700"
+        >
+          {busy === "save" ? "저장 중…" : "🖼️ 이미지로 저장"}
+        </button>
+        {canShare && (
+          <button
+            type="button"
+            disabled={!!busy}
+            onClick={() => exportCard("share")}
+            className="rounded-lg bg-cyan-500/25 px-2.5 py-1 text-[11px] font-bold text-cyan-100 hover:bg-cyan-500/40 disabled:opacity-50 light:bg-cyan-100 light:text-cyan-800"
+          >
+            {busy === "share" ? "준비 중…" : "📤 공유하기"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

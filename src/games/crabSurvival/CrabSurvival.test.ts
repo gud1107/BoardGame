@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BUBBLE_STUN, epicBounty, GRUDGE_ARMOR, GRUDGE_ATK, revengeBonus, gearDropOdds, GEARS, isUnlocked, MUTATIONS, LEVELS, tierForLevel, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
 import { EMPTY_RECORD, nextSpeciesRecord } from "./save";
+import { timelineRows } from "./timelineImage";
 import { addScore, applyMutation, armorMult, atkMult, enraged, botThink, createWorld, equipGear, penaltyLeft, player, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
 
 const idle: CrabInput = { moveX: 0, moveY: 0, boost: false, attack: false };
@@ -1013,5 +1014,36 @@ describe("player 분노 + match moments", () => {
     expect(w.playerDown).toBe(true);
     revivePlayer(w);
     expect(summarize(w).moments.map((m) => m.kind)).toEqual(["evolve", "epic", "kill", "death", "revive"]);
+  });
+});
+
+describe("timeline detail", () => {
+  it("each moment carries the score then and what it was worth", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    foe.brain = null;
+    foe.score = 4_000;
+    foe.level = 4;
+    foe.x = 40;
+    foe.hp = 1;
+    face(me, foe);
+    swing(w, me);
+    const kill = w.moments.find((m) => m.kind === "kill")!;
+    expect(kill.delta).toBeGreaterThan(0);
+    expect(kill.score).toBe(me.score);
+    expect(kill.detail).toContain("상대 점수 4,000");
+  });
+
+  it("builds a merged, time-ordered row list (kills optional)", () => {
+    const rows = timelineRows(
+      [{ t: 30, kind: "crown", score: 5000 }],
+      [
+        { t: 10, kind: "kill", label: "A", score: 100, delta: 100 },
+        { t: 20, kind: "evolve", label: "Lv4 갯벌 돌방게", score: 1300 },
+      ],
+      false,
+    );
+    expect(rows.map((r) => r.icon)).toEqual(["🧬", "👑"]);
+    expect(timelineRows([], [{ t: 10, kind: "kill", label: "A", score: 100 }], true)[0].text).toBe("처치 · A");
   });
 });
