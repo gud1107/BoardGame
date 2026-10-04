@@ -2876,6 +2876,14 @@ GitHub 웹훅 자동 배포로 프로덕션 반영 확인(`dpl_3r6q5CG54vbM1dhq9
   thumb를 `--scrollbar-thumb` 토큰으로(라이트에서 안 보이던 흰색 반투명 → 슬레이트), 모바일 주소창
   색 `<meta name="theme-color">`를 `THEME_INIT_SCRIPT`가 주입·`applyTheme`가 갱신(`THEME_COLORS`),
   `prefers-reduced-motion`이면 body 배경 전환 애니메이션 끔.
+- **2026-10-04 3단 테마 선택 (다크/라이트/시스템)**: YouTube·GitHub·Discord·Slack 방식. 헤더 버튼 한 개가
+  🌙 다크 → ☀️ 라이트 → 🖥️ 시스템(OS `prefers-color-scheme` 실시간 추종) 순으로 순환. `bgh_theme` 값에
+  `"system"` 추가. **기본값 규칙**: 저장된 테마가 없을 때 `bg_device_id`가 있으면(=기존 방문자) `"dark"`로
+  고정 저장, 없으면(=신규 방문자) `"system"` — `THEME_INIT_SCRIPT`가 하이드레이션 전에 결정·저장한다.
+  `ThemeProvider`는 `useSyncExternalStore`(서버 스냅샷 = 다크)로 바뀌어 라이트 사용자 아이콘의 하이드레이션
+  불일치가 없다. API 변경: `toggleTheme`/`setTheme` → `cyclePreference`/`setPreference`, `preference` 추가.
+  계정 동기화·다크 변형 테마는 보류. 헤드리스 검증: 신규+OS 라이트→라이트, OS 실시간 전환, 순환 3회,
+  새로고침 유지, 기존 방문자→다크, 기존 "light" 저장값 유지, 하이드레이션 에러 0.
 
 _최종 갱신: 2026-09-14 (**보드게임허브 & 전 게임 공통 — 실시간 블랙/화이트 테마 토글 시스템** — 위
 "🌗 실시간 블랙/화이트 테마 토글 시스템" 섹션 참고. 요청 범위(로비 헤더 + 전 인게임 원터치 토글,

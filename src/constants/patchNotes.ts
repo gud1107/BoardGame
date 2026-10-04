@@ -64,6 +64,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     changes: [
       {
         game: "common",
+        type: "FEAT",
+        desc: "테마 버튼이 🌙 다크 → ☀️ 라이트 → 🖥️ 시스템 3단으로 바뀜 — '시스템'은 기기의 다크/라이트 설정을 실시간으로 따라감, 처음 방문하는 사람은 기기 설정을 따르고 기존 방문자는 쓰던 테마 그대로 유지",
+      },
+      {
+        game: "common",
         type: "IMPROVE",
         desc: "선택 상자·날짜 선택기·스크롤바 등 브라우저 기본 UI와 모바일 주소창 색이 테마를 따라가도록 개선, '동작 줄이기' 설정 시 테마 전환 애니메이션 생략",
       },
