@@ -928,15 +928,20 @@ function drawSafeZone(ctx: CanvasRenderingContext2D, w: World, t: number) {
   ctx.globalAlpha = a * 0.07;
   ctx.fillStyle = "#5eead4";
   ctx.fill();
+  // The ring (650u) is wider than a small shark's view, so the countdown rides above the shark while it's inside.
+  const s = w.shark;
+  const inside = Math.hypot(s.x - sf.x, s.y - sf.y) < sf.r;
+  const lx = inside ? s.x : sf.x;
+  const ly = inside ? s.y - bodyLength(w) * 0.6 - 26 : sf.y - sf.r - 14;
   ctx.globalAlpha = a;
-  ctx.font = "900 26px system-ui, sans-serif";
+  ctx.font = "900 20px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.lineWidth = 5;
   ctx.strokeStyle = "rgba(0,0,0,0.55)";
   const label = `🛡 안전 구역 ${Math.ceil(left)}초`;
-  ctx.strokeText(label, sf.x, sf.y - sf.r - 14);
+  ctx.strokeText(label, lx, ly);
   ctx.fillStyle = "#99f6e4";
-  ctx.fillText(label, sf.x, sf.y - sf.r - 14);
+  ctx.fillText(label, lx, ly);
   ctx.restore();
 }
 
