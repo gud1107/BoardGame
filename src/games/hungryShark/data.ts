@@ -56,6 +56,11 @@ export interface MapDef {
   ice: IceSpec | null;
   /** Coin multiplier for everything earned on this map. */
   coinBonus: number;
+  /**
+   * Gentler for under-tiered sharks: hunters needing ≥2 tiers more than the player's shark spawn
+   * `spawn`× as often and notice it from `aggro`× the range (난파선 deep zone vs. T1/T2).
+   */
+  lowTierMercy?: { spawn: number; aggro: number };
   /** Per-tier override multiplied on top of coinBonus (얼음 해협 T4 over-earned ~1.8× 딥 블루 in the bot sim). */
   tierCoinBonus?: Partial<Record<SharkTier, number>>;
   /** Whole-map population factor on top of POPULATION_SCALE. */
@@ -150,6 +155,8 @@ export const MAPS: MapDef[] = [
     },
     ice: null,
     coinBonus: 1.25,
+    // Bot sim: T1/T2 deaths here were mostly 대왕오징어 / 유령 상어 / 곰치 / 아귀 in the deep terraces.
+    lowTierMercy: { spawn: 0.4, aggro: 0.7 },
     density: 1,
     threatDensity: 0.55,
     spawns: {

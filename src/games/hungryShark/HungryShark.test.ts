@@ -816,3 +816,51 @@ describe("economy + records", () => {
     expect(decodeSave(encodeSave(old as typeof s)).mapBest).toEqual({});
   });
 });
+
+describe("shipwreck low-tier mercy + records + killer ranking", () => {
+  it("out-of-reach deep hunters are rarer around a T1/T2 shark on the shipwreck", () => {
+    const deepHunters = (sharkId: string) => {
+      let peak = 0;
+      for (const seed of [1, 2, 3]) {
+        const w = createWorld(sharkById(sharkId), NO_UPGRADES, 300 + seed, "shipwreck");
+        for (let i = 0; i < 60 * 20; i++) {
+          w.shark.x = 6700;
+          w.shark.y = 3000;
+          w.shark.hp = 99999;
+          step(w, idle, 1 / 60);
+          w.events.length = 0;
+        }
+        peak += w.entities.filter((e) => e.alive && (e.kind === "giantSquid" || e.kind === "ghostShark")).length;
+      }
+      return peak;
+    };
+    // 대왕오징어/유령 상어 need T4: a reef shark (T1) gets the mercy, a white shark (T3) doesn't.
+    expect(deepHunters("reef")).toBeLessThan(deepHunters("white"));
+  });
+
+  it("per-shark map records round-trip, drop junk, and seed from an older overall best", () => {
+    const s = {
+      ...freshSave(),
+      mapBest: { frozenStrait: { score: 900, sharkId: "mako", seconds: 80 } },
+      mapSharkBest: { frozenStrait: { reef: { score: 500, sharkId: "reef", seconds: 60 }, ghost: { score: 9, sharkId: "ghost", seconds: 1 } } },
+    };
+    const back = decodeSave(encodeSave(s));
+    expect(back.mapSharkBest.frozenStrait).toEqual({
+      reef: { score: 500, sharkId: "reef", seconds: 60 },
+      mako: { score: 900, sharkId: "mako", seconds: 80 },
+    });
+  });
+
+  it("killer ranking sums every map, keeps starvation separate and maps jelly poison to a jelly", async () => {
+    const { killerRanking } = await import("./BestiaryPanel");
+    const r = killerRanking({
+      deepBlue: { 굶주림: 4, "해파리 독": 2, 범고래: 0 },
+      frozenStrait: { 범고래: 3, "해파리 독": 1 },
+      shipwreck: { 대왕오징어: 1 },
+    });
+    expect(r.starved).toBe(4);
+    expect(r.killers.map((k) => [k.cause, k.total])).toEqual([["해파리 독", 3], ["범고래", 3], ["대왕오징어", 1]]);
+    expect(r.killers[0].kind).toBe("greenJelly");
+    expect(r.killers.find((k) => k.cause === "범고래")?.kind).toBe("orca");
+  });
+});

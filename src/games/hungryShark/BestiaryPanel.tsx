@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ENTITY_DEFS, healGain, NEVER, PREY_EFFECTS, preyEffectLabel, type EntityKind } from "./data";
+import { ENTITY_DEFS, healGain, MAPS, NEVER, PREY_EFFECTS, preyEffectLabel, type EntityKind, type MapId } from "./data";
 import { BESTIARY_ORDER, BESTIARY_TIPS, habitatLabel, hazardTip, mapsWhere, tierLabel } from "./markers";
 import { drawEntityIcon } from "./render";
 
@@ -11,35 +11,73 @@ import { drawEntityIcon } from "./render";
  * `document.body` portal would be invisible there.
  */
 
-type Filter = "all" | "edible" | "locked" | "danger";
+type Filter = "all" | "edible" | "locked" | "danger" | "killers";
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "전체" },
   { id: "edible", label: "🟢 사냥 가능" },
   { id: "locked", label: "🔴 티어 부족" },
   { id: "danger", label: "☠ 위험" },
+  { id: "killers", label: "💀 나를 죽인" },
 ];
+
+/** Saved death causes per map (cause → count), see `SharkSave.deaths`. */
+export type DeathStats = Partial<Record<MapId, Record<string, number>>>;
+
+/** Which bestiary kinds a death cause string points at ("해파리 독" covers both jellies). */
+function kindsForCause(cause: string): EntityKind[] {
+  if (cause === "해파리 독") return ["greenJelly", "redJelly"];
+  return BESTIARY_ORDER.filter((k) => ENTITY_DEFS[k].name === cause);
+}
+
+interface Killer {
+  cause: string;
+  kind: EntityKind | null;
+  total: number;
+  perMap: { emoji: string; n: number }[];
+}
+
+/** Death causes summed over every map, most lethal first (starvation kept separate — it isn't a creature). */
+export function killerRanking(deaths: DeathStats | undefined): { killers: Killer[]; starved: number } {
+  const byCause = new Map<string, Killer>();
+  let starved = 0;
+  for (const m of MAPS) {
+    for (const [cause, n] of Object.entries(deaths?.[m.id] ?? {})) {
+      if (cause === "굶주림") { starved += n; continue; }
+      const k = byCause.get(cause) ?? { cause, kind: kindsForCause(cause)[0] ?? null, total: 0, perMap: [] };
+      k.total += n;
+      k.perMap.push({ emoji: m.emoji, n });
+      byCause.set(cause, k);
+    }
+  }
+  return { killers: [...byCause.values()].sort((a, b) => b.total - a.total), starved };
+}
 
 export default function BestiaryPanel({
   tier,
   sharkName,
   biteLevel,
   eaten,
+  deaths,
 }: {
   tier: number;
   sharkName: string;
   biteLevel: number;
   /** This dive's eat counts, when opened mid-dive. */
   eaten?: Partial<Record<EntityKind, number>>;
+  deaths?: DeathStats;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
+  const { killers, starved } = killerRanking(deaths);
+  const killsOf = (kind: EntityKind) => killers.filter((k) => kindsForCause(k.cause).includes(kind)).reduce((a, k) => a + k.total, 0);
   const rows = BESTIARY_ORDER.map((kind) => {
     const def = ENTITY_DEFS[kind];
     const edible = def.requiredTier <= tier;
     return { kind, def, edible, danger: !edible && def.damage > 0 };
   }).filter((r) =>
-    filter === "all" ? true : filter === "edible" ? r.edible : filter === "locked" ? !r.edible : r.danger,
+    filter === "all" ? true : filter === "edible" ? r.edible : filter === "locked" ? !r.edible : filter === "killers" ? killsOf(r.kind) > 0 : r.danger,
   );
+  if (filter === "killers") rows.sort((a, b) => killsOf(b.kind) - killsOf(a.kind));
   const edibleCount = BESTIARY_ORDER.filter((k) => ENTITY_DEFS[k].requiredTier <= tier).length;
 
   return (
@@ -69,7 +107,36 @@ export default function BestiaryPanel({
         </div>
       </div>
 
+      {(killers.length > 0 || starved > 0) && (
+        <div className="rounded-xl border border-red-500/25 bg-red-500/[0.06] p-2.5 light:border-red-200 light:bg-red-50">
+          <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-1">
+            <span className="text-xs font-black text-red-300 light:text-red-700">💀 나를 가장 많이 죽인 생물</span>
+            {starved > 0 && <span className="text-[10px] text-white/50 light:text-slate-500">🍖 굶주림 ×{starved} (생물 아님 · 순위 제외)</span>}
+          </div>
+          {killers.length === 0 ? (
+            <div className="text-[11px] text-white/50 light:text-slate-500">아직 생물에게 당한 적이 없어요.</div>
+          ) : (
+            <ol className="flex flex-col gap-1">
+              {killers.slice(0, 5).map((k, i) => (
+                <li key={k.cause} className="flex items-center gap-2 text-[11px]">
+                  <span className="w-5 shrink-0 text-center font-black text-white/70 light:text-slate-600">{i === 0 ? "👑" : i + 1}</span>
+                  <span className="relative h-7 w-7 shrink-0 overflow-hidden rounded-md bg-gradient-to-b from-sky-700/70 to-slate-900/90">
+                    {k.kind && <PreyIcon kind={k.kind} size={28} />}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-bold text-white light:text-slate-800">{k.cause}</span>
+                  <span className="shrink-0 text-white/45 light:text-slate-500">{k.perMap.map((p) => `${p.emoji}${p.n}`).join(" ")}</span>
+                  <span className="w-10 shrink-0 text-right font-black text-red-300 tabular-nums light:text-red-700">×{k.total}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {rows.length === 0 && filter === "killers" && (
+          <div className="col-span-full py-4 text-center text-xs text-white/50 light:text-slate-500">아직 생물에게 당한 기록이 없어요. 🦈</div>
+        )}
         {rows.map(({ kind, def, edible, danger }) => (
           <div
             key={kind}
@@ -107,6 +174,7 @@ export default function BestiaryPanel({
                 {def.toughness > 1 && <span>🦷 여러 번 물기</span>}
                 {PREY_EFFECTS[kind] && <span className="text-amber-300 light:text-amber-700">✨ {preyEffectLabel(PREY_EFFECTS[kind]!)}</span>}
                 {eaten?.[kind] ? <span className="text-sky-300 light:text-sky-600">이번 잠수 ×{eaten[kind]}</span> : null}
+                {killsOf(kind) > 0 && <span className="font-bold text-red-300 light:text-red-700">💀 나를 {killsOf(kind)}번 죽임</span>}
               </div>
               {(danger || BESTIARY_TIPS[kind]) && (
                 <div className={`mt-1 text-[11px] ${danger ? "text-red-300 light:text-red-700" : "text-white/45 light:text-slate-500"}`}>

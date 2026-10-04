@@ -45,6 +45,8 @@ export interface SharkSave {
   picker: PickerPrefs;
   /** Best dive per map (older saves lack it → none yet). */
   mapBest: Partial<Record<MapId, MapRecord>>;
+  /** Best dive per map per shark: map → sharkId → record (results screen expandable rows). */
+  mapSharkBest: Partial<Record<MapId, Record<string, MapRecord>>>;
   /** How each dive ended, per map: cause → count (results screen "자주 당한 원인"). */
   deaths: Partial<Record<MapId, Record<string, number>>>;
 }
@@ -67,6 +69,7 @@ export function freshSave(): SharkSave {
     mapId: "deepBlue",
     picker: { sort: "tree", dir: "desc", hideOwned: false, buyableOnly: false },
     mapBest: {},
+    mapSharkBest: {},
     deaths: {},
   };
 }
@@ -144,10 +147,24 @@ export function migrateSave(save: SharkSave): SharkSave {
     buyableOnly: !!p.buyableOnly,
   };
   const mapBest: SharkSave["mapBest"] = {};
+  const mapSharkBest: SharkSave["mapSharkBest"] = {};
   const deaths: SharkSave["deaths"] = {};
+  const cleanRecord = (r: MapRecord | undefined, sharkId?: string): MapRecord | null =>
+    r && Number.isFinite(r.score) && r.score > 0 && known.has(sharkId ?? r.sharkId)
+      ? { score: r.score, sharkId: sharkId ?? r.sharkId, seconds: Number(r.seconds) || 0 }
+      : null;
   for (const m of MAPS) {
     const r = save.mapBest?.[m.id];
     if (r && Number.isFinite(r.score) && typeof r.sharkId === "string") mapBest[m.id] = { score: r.score, sharkId: known.has(r.sharkId) ? r.sharkId : SHARKS[0].id, seconds: Number(r.seconds) || 0 };
+    const per: Record<string, MapRecord> = {};
+    for (const [id, r] of Object.entries(save.mapSharkBest?.[m.id] ?? {})) {
+      const c = cleanRecord(r, id);
+      if (c) per[id] = c;
+    }
+    // Saves from before per-shark records: seed from the map's overall best.
+    const top = mapBest[m.id];
+    if (top && (!per[top.sharkId] || per[top.sharkId].score < top.score)) per[top.sharkId] = top;
+    if (Object.keys(per).length) mapSharkBest[m.id] = per;
     const d = save.deaths?.[m.id];
     if (d && typeof d === "object") {
       const clean: Record<string, number> = {};
@@ -155,7 +172,7 @@ export function migrateSave(save: SharkSave): SharkSave {
       deaths[m.id] = clean;
     }
   }
-  return { ...save, coins, owned: SHARKS.map((s) => s.id).filter((id) => owned.has(id)), selected, upgrades, best, picker, mapBest, deaths };
+  return { ...save, coins, owned: SHARKS.map((s) => s.id).filter((id) => owned.has(id)), selected, upgrades, best, picker, mapBest, mapSharkBest, deaths };
 }
 
 export function loadSave(): SharkSave {

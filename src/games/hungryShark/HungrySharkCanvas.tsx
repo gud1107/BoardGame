@@ -5,7 +5,7 @@ import { frenzyMultiplier, mapById, sharkById, ZONES, zoneAt, type MapId, type S
 import { createWorld, depthMeters, evolveWorld, step, summarize, type MissionState, type RunSummary, type SharkInput, type World } from "./engine";
 import { drawWorld, updateCamera, viewHeightFor, type Camera } from "./render";
 import { SharkAudio } from "./audio";
-import BestiaryPanel from "./BestiaryPanel";
+import BestiaryPanel, { type DeathStats } from "./BestiaryPanel";
 import { selectMarkers } from "./markers";
 import SharkEvolutionModal from "./SharkEvolutionModal";
 
@@ -67,6 +67,7 @@ export default function HungrySharkCanvas({
   onToggleMarkers,
   onEnd,
   onQuit,
+  deaths,
 }: {
   def: SharkDef;
   upgrades: UpgradeLevels;
@@ -81,6 +82,8 @@ export default function HungrySharkCanvas({
   onToggleMarkers: () => void;
   onEnd: (summary: RunSummary) => void;
   onQuit: () => void;
+  /** Saved per-map death causes, for the bestiary's "가장 많이 죽인 생물" ranking. */
+  deaths?: DeathStats;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -709,7 +712,7 @@ export default function HungrySharkCanvas({
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            <BestiaryPanel tier={cur.def.tier} sharkName={cur.def.name} biteLevel={cur.upgrades.bite} eaten={bestiary.eaten} />
+            <BestiaryPanel tier={cur.def.tier} sharkName={cur.def.name} biteLevel={cur.upgrades.bite} eaten={bestiary.eaten} deaths={deaths} />
           </div>
         </div>
       )}

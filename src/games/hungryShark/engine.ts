@@ -1023,6 +1023,11 @@ function updateWander(w: World, e: Entity, dist: number, dx: number, dy: number,
   if (Math.abs(mx) > 1) e.angle = Math.atan2(my * 0.4, mx);
 }
 
+/** A hunter two or more tiers out of the player's reach (the targets of `MapDef.lowTierMercy`). */
+function outclasses(w: World, def: EntityDef): boolean {
+  return def.behavior === "hunter" && def.requiredTier < NEVER && def.requiredTier >= w.def.tier + 2;
+}
+
 const HUNTER_AGGRO: Partial<Record<EntityKind, number>> = {
   angler: 360, ghostShark: 600, orca: 480, giantSquid: 520, moray: 260, barracuda: 380,
 };
@@ -1030,7 +1035,8 @@ const HUNTER_AGGRO: Partial<Record<EntityKind, number>> = {
 /** Enemy shark / anglerfish FSM: patrol → chase (if player is prey) / flee (if predator). */
 function updateHunter(w: World, e: Entity, dist: number, dx: number, dy: number, dt: number) {
   const danger = isDangerous(w, e) && !isCloaked(w);
-  const aggro = HUNTER_AGGRO[e.kind] ?? 440;
+  let aggro = HUNTER_AGGRO[e.kind] ?? 440;
+  if (w.map.lowTierMercy && outclasses(w, e.def)) aggro *= w.map.lowTierMercy.aggro;
   if (danger && dist < aggro && !w.shark.airborne && e.attackCd <= 0.4) {
     // Stamina: a chase lasts ~5s, then the hunter tires and backs off.
     if (e.state !== "chase") e.timer = 5;
@@ -1671,7 +1677,8 @@ function runSpawner(w: World, initial: boolean) {
   for (const kind of Object.keys(targets) as EntityKind[]) {
     const mul = w.map.spawns[kind];
     if (!mul) continue; // not on this map's roster
-    const dens = kind === "goldenTuna" ? 1 : w.map.density * (ENTITY_DEFS[kind].damage > 0 ? w.map.threatDensity : 1);
+    let dens = kind === "goldenTuna" ? 1 : w.map.density * (ENTITY_DEFS[kind].damage > 0 ? w.map.threatDensity : 1);
+    if (w.map.lowTierMercy && outclasses(w, ENTITY_DEFS[kind])) dens *= w.map.lowTierMercy.spawn;
     const want = Math.round((targets[kind] ?? 0) * mul * dens);
     if ((counts[kind] ?? 0) >= want) continue;
     // Golden tuna: rolled in rarely (≈ once a minute on average), never at start.

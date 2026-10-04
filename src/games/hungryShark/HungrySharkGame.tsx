@@ -16,6 +16,7 @@ import {
   UPGRADE_LABELS,
   upgradeCost,
   type EntityKind,
+  type MapId,
   type SharkDef,
   type UpgradeKind,
 } from "./data";
@@ -98,6 +99,10 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
       totalRuns: sv.totalRuns + 1,
       totalEaten: sv.totalEaten + eaten,
       mapBest: newMapBest ? { ...sv.mapBest, [s.mapId]: { score: s.score, sharkId: s.sharkId, seconds: s.seconds } } : sv.mapBest,
+      mapSharkBest:
+        s.score > (sv.mapSharkBest[s.mapId]?.[s.sharkId]?.score ?? 0)
+          ? { ...sv.mapSharkBest, [s.mapId]: { ...sv.mapSharkBest[s.mapId], [s.sharkId]: { score: s.score, sharkId: s.sharkId, seconds: s.seconds } } }
+          : sv.mapSharkBest,
       deaths: { ...sv.deaths, [s.mapId]: { ...sv.deaths[s.mapId], [s.cause]: causeCount } },
     }));
     setBestThisSession((b) => Math.max(b, s.score));
@@ -138,6 +143,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
         }}
         muted={save.muted}
         onToggleMute={() => update((s) => ({ ...s, muted: !s.muted }))}
+        deaths={save.deaths}
         markersOn={save.markers}
         onToggleMarkers={() => update((s) => ({ ...s, markers: !s.markers }))}
         onEnd={handleEnd}
@@ -417,7 +423,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
       )}
       {showBestiary && (
         <Overlay title="📖 해양 생태계 먹이 도감" onClose={() => setShowBestiary(false)} wide>
-          <BestiaryPanel tier={viewDef.tier} sharkName={viewDef.name} biteLevel={ups.bite} />
+          <BestiaryPanel tier={viewDef.tier} sharkName={viewDef.name} biteLevel={ups.bite} deaths={save.deaths} />
         </Overlay>
       )}
     </div>
@@ -747,24 +753,7 @@ function ResultsPanel({
               🏆 {map.emoji} {map.name} 새 기록!{prevMapBest ? ` (이전 ${prevMapBest.score.toLocaleString()})` : " (첫 기록)"}
             </div>
           )}
-          <div className="mt-1 flex flex-col gap-0.5">
-            {MAPS.map((m) => {
-              const r = save.mapBest[m.id];
-              return (
-                <div
-                  key={m.id}
-                  className={`flex items-center justify-between rounded px-1.5 py-0.5 text-[11px] ${m.id === s.mapId ? "bg-black/25 font-bold text-white light:bg-white light:text-slate-900" : "text-white/60 light:text-slate-600"}`}
-                >
-                  <span>
-                    {m.emoji} {m.name}
-                  </span>
-                  <span className="tabular-nums">
-                    {r ? `${r.score.toLocaleString()} · ${sharkById(r.sharkId).name} · ${Math.floor(r.seconds / 60)}:${String(r.seconds % 60).padStart(2, "0")}` : "기록 없음"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <MapRecords save={save} currentMap={s.mapId} currentShark={s.sharkId} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
@@ -804,6 +793,69 @@ function ResultsPanel({
           🛒 상점 · 업그레이드
         </button>
       </div>
+    </div>
+  );
+}
+
+const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+
+/** Per-map best records; each map row expands into that map's per-shark bests. */
+function MapRecords({ save, currentMap, currentShark }: { save: SharkSave; currentMap: MapId; currentShark: string }) {
+  const [open, setOpen] = useState<Set<MapId>>(() => new Set([currentMap]));
+  const toggle = (id: MapId) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  return (
+    <div className="mt-1 flex flex-col gap-0.5">
+      {MAPS.map((m) => {
+        const r = save.mapBest[m.id];
+        const per = Object.values(save.mapSharkBest[m.id] ?? {}).sort((a, b) => b.score - a.score);
+        const isOpen = open.has(m.id);
+        return (
+          <div key={m.id}>
+            <button
+              type="button"
+              onClick={() => toggle(m.id)}
+              aria-expanded={isOpen}
+              className={`flex w-full items-center justify-between rounded px-1.5 py-0.5 text-left text-[11px] ${m.id === currentMap ? "bg-black/25 font-bold text-white light:bg-white light:text-slate-900" : "text-white/60 hover:bg-black/15 light:text-slate-600 light:hover:bg-white/70"}`}
+            >
+              <span>
+                <span className="inline-block w-3 text-white/40 light:text-slate-400">{isOpen ? "▾" : "▸"}</span>
+                {m.emoji} {m.name}
+              </span>
+              <span className="tabular-nums">{r ? `${r.score.toLocaleString()} · ${sharkById(r.sharkId).name} · ${clock(r.seconds)}` : "기록 없음"}</span>
+            </button>
+            {isOpen && (
+              <div className="mt-0.5 mb-1 ml-4 flex flex-col gap-0.5 border-l border-white/10 pl-2 light:border-slate-300">
+                {per.length === 0 ? (
+                  <div className="text-[10px] text-white/40 light:text-slate-400">아직 이 지역 기록이 없어요.</div>
+                ) : (
+                  per.map((rec, i) => {
+                    const sh = sharkById(rec.sharkId);
+                    return (
+                      <div
+                        key={rec.sharkId}
+                        className={`flex justify-between text-[10px] tabular-nums ${rec.sharkId === currentShark && m.id === currentMap ? "font-bold text-yellow-200 light:text-yellow-700" : "text-white/60 light:text-slate-600"}`}
+                      >
+                        <span>
+                          {i === 0 ? "👑" : `${i + 1}.`} T{sh.tier} {sh.name}
+                        </span>
+                        <span>
+                          {rec.score.toLocaleString()} · {clock(rec.seconds)}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
