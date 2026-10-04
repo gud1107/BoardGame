@@ -5,7 +5,15 @@ import Link from "next/link";
 import { getGameMeta, GAME_REGISTRY } from "@/games/registry";
 import type { StatTotalsRecord } from "@/lib/db/types";
 import { STAT_DETAIL_ROWS } from "@/lib/stats/details";
-import { fetchLeaderboard, fetchMetricLeaderboard, type LeaderboardSort } from "@/lib/stats/leaderboard";
+import {
+  fetchBotLevelBoard,
+  fetchLeaderboard,
+  fetchMetricLeaderboard,
+  LEVEL_BOARD_MIN_PLAYED,
+  type BotLevelBoardRow,
+  type LeaderboardResult,
+  type LeaderboardSort,
+} from "@/lib/stats/leaderboard";
 import { formatRankMetric, STAT_RANK_METRICS } from "@/lib/stats/presentation";
 import {
   BOT_FILTER_SINCE,
@@ -58,7 +66,7 @@ export default function StatsPage() {
 
       <BotFilterBar filter={botFilter} onChange={setBotFilter} />
 
-      {tab === "mine" ? <MyStats loggedIn={!!userId} filter={botFilter} /> : <Ranking loggedIn={!!userId} filter={botFilter} />}
+      {tab === "mine" ? <MyStats loggedIn={!!userId} filter={botFilter} /> : <Ranking loggedIn={!!userId} filter={botFilter} onFilterChange={setBotFilter} />}
     </div>
   );
 }
@@ -221,6 +229,10 @@ function MyStats({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilt
   );
 }
 
+function levelLabel(level: number | null): string {
+  return level === null || level < 0 ? "👥 사람끼리" : level === 0 ? "🔄 도중 교체 봇" : `Lv.${level}`;
+}
+
 function BotLevelTable({ stats }: { stats: StatTotalsRecord[] }) {
   const [gameId, setGameId] = useState("");
   const games = stats.filter((t) => (t.noBot?.played ?? 0) > 0 || Object.keys(t.byBotLevel ?? {}).length > 0);
@@ -250,7 +262,7 @@ function BotLevelTable({ stats }: { stats: StatTotalsRecord[] }) {
         )}
       </div>
       <p className="mb-2 text-[11px] text-white/40 light:text-slate-400">
-        판마다 테이블에 있던 가장 강한 봇의 레벨로 묶어요. 도중에 들어온 교체 봇은 레벨이 없어 표에 넣지 않아요. ({BOT_FILTER_SINCE} 이후 기록)
+        판마다 테이블에 있던 가장 강한 봇의 레벨로 묶어요. 레벨 없는 교체 봇만 있던 판은 &lsquo;도중 교체 봇&rsquo;으로 따로 모아요. ({BOT_FILTER_SINCE} 이후 기록)
       </p>
       <div className="overflow-hidden rounded-2xl border border-white/10 light:border-slate-200">
         <table className="w-full text-sm">
@@ -272,7 +284,7 @@ function BotLevelTable({ stats }: { stats: StatTotalsRecord[] }) {
                   key={r.level ?? "human"}
                   className={`border-t border-white/5 light:border-slate-100 ${empty ? "text-white/25 light:text-slate-300" : "text-white/75 light:text-slate-700"}`}
                 >
-                  <td className="px-3 py-1.5">{r.level === null ? "👥 사람끼리" : `Lv.${r.level}`}</td>
+                  <td className="px-3 py-1.5">{levelLabel(r.level)}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{empty ? "-" : r.played}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{empty ? "-" : r.wins}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{empty ? "-" : r.losses}</td>
@@ -311,13 +323,22 @@ interface BoardRow {
   right: ReactNode;
 }
 
-function Ranking({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilter }) {
+function Ranking({
+  loggedIn,
+  filter,
+  onFilterChange,
+}: {
+  loggedIn: boolean;
+  filter: StatsBotFilter;
+  onFilterChange: (next: StatsBotFilter) => void;
+}) {
   const [gameId, setGameId] = useState<string>("");
-  // "wins" | "rate" | a STAT_RANK_METRICS id for the selected game.
+  // "wins" | "rate" | "levels" (봇 레벨별 비교) | a STAT_RANK_METRICS id for the selected game.
   const [sort, setSort] = useState<string>("wins");
   const metrics = gameId ? (STAT_RANK_METRICS[gameId] ?? []) : [];
   const metric = metrics.find((m) => m.id === sort) ?? null;
-  const effectiveSort = metric ? metric.id : sort === "rate" ? "rate" : "wins";
+  const effectiveSort = metric ? metric.id : sort === "rate" || sort === "levels" ? sort : "wins";
+  const comparing = effectiveSort === "levels";
   const key = `${gameId}|${effectiveSort}|${filter.includeBots ? "bots" : "nobots"}|${filter.botLevel ?? "all"}`;
   // Result tagged with the query it answers, so switching game/sort shows
   // "loading" without resetting state inside the effect.
@@ -325,6 +346,7 @@ function Ranking({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilt
   const rows = result?.key === key ? result.rows : undefined;
 
   useEffect(() => {
+    if (comparing) return;
     let cancelled = false;
     const load = async (): Promise<BoardRow[] | "not-installed" | null> => {
       if (metric) {
@@ -387,6 +409,7 @@ function Ranking({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilt
         <div className="flex gap-1 rounded-xl border border-white/10 p-1 light:border-slate-200">
           {chip("wins", "승수")}
           {chip("rate", "승률 (10판↑)")}
+          {chip("levels", "🤖 레벨별 비교")}
         </div>
       </div>
       {metrics.length > 0 && (
@@ -398,66 +421,79 @@ function Ranking({ loggedIn, filter }: { loggedIn: boolean; filter: StatsBotFilt
 
       {loggedIn && <MyRankingName />}
 
-      <p className="mb-3 text-xs text-white/40 light:text-slate-400">
-        로그인한 회원의 기록만 올라가요. 결과는 각 플레이어 기기에서 계산되므로 참고용 랭킹입니다.
-        {metric?.minDen && metric.minDen > 1 && ` 이 순위는 ${metric.den === "played" ? `${metric.minDen}판` : `${metric.minDen}번`} 이상 기록한 회원만 들어가요.`}
-        {!isDefaultBotFilter(filter) && ` 봇 필터는 ${BOT_FILTER_SINCE} 이후 판부터 집계돼요.`}
-        {!loggedIn && " 내 기록을 올리려면 로그인하세요."}
-      </p>
-
-      {rows === "not-installed" ? (
-        <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-6 text-center text-sm text-amber-200 light:text-amber-700">
-          랭킹 서버 설정이 아직 끝나지 않았어요. 곧 열릴 예정이에요! (기록은 지금도 계속 쌓이고 있어요)
-        </p>
-      ) : rows === null ? (
-        <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
-          랭킹을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
-        </p>
-      ) : rows === undefined ? (
-        <p className="text-sm text-white/40 light:text-slate-400">불러오는 중...</p>
-      ) : rows.length === 0 ? (
-        <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
-          {effectiveSort === "rate"
-            ? "아직 10판 이상 플레이한 회원이 없어요."
-            : metric
-              ? "아직 이 기록으로 순위에 오른 회원이 없어요."
-              : "아직 랭킹에 오른 회원이 없어요. 첫 번째 주인공이 되어보세요!"}
-        </p>
+      {comparing ? (
+        <LevelCompareBoard
+          gameId={gameId || null}
+          loggedIn={loggedIn}
+          onPick={(level) => {
+            onFilterChange(level < 0 ? { includeBots: false, botLevel: null } : { includeBots: true, botLevel: level });
+            setSort("wins");
+          }}
+        />
       ) : (
-        <ol className="flex flex-col gap-1.5">
-          {rows.map((r, i) => {
-            const gap = i > 0 && r.isMe && r.rank > rows[i - 1].rank + 1;
-            return (
-              <Fragment key={`${r.rank}-${r.nickname}-${i}`}>
-                {gap && <li className="py-1 text-center text-xs text-white/30 light:text-slate-400">⋯</li>}
-                <li
-                  className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${
-                    r.isMe
-                      ? "border-rose-400/60 bg-rose-500/10 light:border-rose-400 light:bg-rose-50"
-                      : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white"
-                  }`}
-                >
-                  <span className="w-8 shrink-0 text-center text-sm font-bold tabular-nums text-white/80 light:text-slate-700">
-                    {r.rank <= 3 ? ["🥇", "🥈", "🥉"][r.rank - 1] : r.rank}
-                  </span>
-                  {r.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={r.avatarUrl} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
-                  ) : (
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs light:bg-slate-200">
-                      👤
-                    </span>
-                  )}
-                  <span className="min-w-0 flex-1 truncate text-sm text-white light:text-slate-900">
-                    {r.nickname}
-                    {r.isMe && <span className="ml-1.5 text-xs font-semibold text-rose-300 light:text-rose-600">나</span>}
-                  </span>
-                  <span className="shrink-0 text-right text-xs tabular-nums text-white/60 light:text-slate-500">{r.right}</span>
-                </li>
-              </Fragment>
-            );
-          })}
-        </ol>
+        <>
+          <p className="mb-3 text-xs text-white/40 light:text-slate-400">
+            로그인한 회원의 기록만 올라가요. 결과는 각 플레이어 기기에서 계산되므로 참고용 랭킹입니다.
+            {metric?.minDen && metric.minDen > 1 && ` 이 순위는 ${metric.den === "played" ? `${metric.minDen}판` : `${metric.minDen}번`} 이상 기록한 회원만 들어가요.`}
+            {!isDefaultBotFilter(filter) && ` 봇 필터는 ${BOT_FILTER_SINCE} 이후 판부터 집계돼요.`}
+            {!loggedIn && " 내 기록을 올리려면 로그인하세요."}
+          </p>
+
+          {rows === "not-installed" ? (
+            <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-6 text-center text-sm text-amber-200 light:text-amber-700">
+              랭킹 서버 설정이 아직 끝나지 않았어요. 곧 열릴 예정이에요! (기록은 지금도 계속 쌓이고 있어요)
+            </p>
+          ) : rows === null ? (
+            <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
+              랭킹을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
+            </p>
+          ) : rows === undefined ? (
+            <p className="text-sm text-white/40 light:text-slate-400">불러오는 중...</p>
+          ) : rows.length === 0 ? (
+            <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400">
+              {effectiveSort === "rate"
+                ? "아직 10판 이상 플레이한 회원이 없어요."
+                : metric
+                  ? "아직 이 기록으로 순위에 오른 회원이 없어요."
+                  : "아직 랭킹에 오른 회원이 없어요. 첫 번째 주인공이 되어보세요!"}
+            </p>
+          ) : (
+            <ol className="flex flex-col gap-1.5">
+              {rows.map((r, i) => {
+                const gap = i > 0 && r.isMe && r.rank > rows[i - 1].rank + 1;
+                return (
+                  <Fragment key={`${r.rank}-${r.nickname}-${i}`}>
+                    {gap && <li className="py-1 text-center text-xs text-white/30 light:text-slate-400">⋯</li>}
+                    <li
+                      className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${
+                        r.isMe
+                          ? "border-rose-400/60 bg-rose-500/10 light:border-rose-400 light:bg-rose-50"
+                          : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white"
+                      }`}
+                    >
+                      <span className="w-8 shrink-0 text-center text-sm font-bold tabular-nums text-white/80 light:text-slate-700">
+                        {r.rank <= 3 ? ["🥇", "🥈", "🥉"][r.rank - 1] : r.rank}
+                      </span>
+                      {r.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={r.avatarUrl} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
+                      ) : (
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs light:bg-slate-200">
+                          👤
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-sm text-white light:text-slate-900">
+                        {r.nickname}
+                        {r.isMe && <span className="ml-1.5 text-xs font-semibold text-rose-300 light:text-rose-600">나</span>}
+                      </span>
+                      <span className="shrink-0 text-right text-xs tabular-nums text-white/60 light:text-slate-500">{r.right}</span>
+                    </li>
+                  </Fragment>
+                );
+              })}
+            </ol>
+          )}
+        </>
       )}
     </>
   );
@@ -479,7 +515,13 @@ function BotFilterBar({ filter, onChange }: { filter: StatsBotFilter; onChange: 
         <span className="min-w-0 text-sm text-white/80 light:text-slate-700">
           🤖 봇과 한 판 포함
           <span className="ml-1.5 text-xs text-white/40 light:text-slate-400">
-            {!includeBots ? "사람끼리만 한 판" : botLevel === null ? "봇 있던 판까지 모두" : `가장 강한 봇이 Lv.${botLevel}였던 판만`}
+            {!includeBots
+              ? "사람끼리만 한 판"
+              : botLevel === null
+                ? "봇 있던 판까지 모두"
+                : botLevel === 0
+                  ? "도중에 봇이 대신 들어온 판만"
+                  : `가장 강한 봇이 Lv.${botLevel}였던 판만`}
           </span>
         </span>
         <span
@@ -497,6 +539,7 @@ function BotFilterBar({ filter, onChange }: { filter: StatsBotFilter; onChange: 
         className="rounded-lg border border-white/15 bg-zinc-900 px-2 py-1 text-xs text-white disabled:opacity-40 light:border-slate-300 light:bg-white light:text-slate-900"
       >
         <option value="">봇 레벨 전체</option>
+        <option value="0">도중 교체 봇</option>
         {BOT_LEVEL_OPTIONS.map((lv) => (
           <option key={lv} value={lv}>
             Lv.{lv} 봇
@@ -504,6 +547,117 @@ function BotFilterBar({ filter, onChange }: { filter: StatsBotFilter; onChange: 
         ))}
       </select>
     </div>
+  );
+}
+
+function LevelCompareBoard({
+  gameId,
+  loggedIn,
+  onPick,
+}: {
+  gameId: string | null;
+  loggedIn: boolean;
+  onPick: (level: number) => void;
+}) {
+  const key = gameId ?? "";
+  const [result, setResult] = useState<{ key: string; rows: LeaderboardResult<BotLevelBoardRow> } | null>(null);
+  const rows = result?.key === key ? result.rows : undefined;
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchBotLevelBoard(gameId).then((r) => {
+      if (!cancelled) setResult({ key, rows: r });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [key, gameId]);
+
+  const box = "rounded-xl border p-6 text-center text-sm";
+  if (rows === "not-installed")
+    return (
+      <p className={`${box} border-amber-400/30 bg-amber-400/10 text-amber-200 light:text-amber-700`}>
+        레벨별 비교는 서버 설정을 마친 뒤 열려요. (기록은 지금도 계속 쌓이고 있어요)
+      </p>
+    );
+  if (rows === null)
+    return (
+      <p className={`${box} border-white/10 bg-white/5 text-white/40 light:border-slate-200 light:bg-slate-50 light:text-slate-400`}>
+        불러오지 못했어요. 잠시 후 다시 시도해 주세요.
+      </p>
+    );
+  if (rows === undefined) return <p className="text-sm text-white/40 light:text-slate-400">불러오는 중...</p>;
+
+  const rate = (wins: number, played: number) => (played > 0 ? Math.round((wins / played) * 100) : null);
+
+  return (
+    <>
+      <p className="mb-3 text-xs text-white/40 light:text-slate-400">
+        상대한 봇 레벨마다 모든 회원의 평균 승률, 1위, 내 기록을 나란히 비교해요. 1위와 내 순위는 그 레벨에서 {LEVEL_BOARD_MIN_PLAYED}판
+        이상 한 회원끼리 매겨요. 줄을 누르면 그 레벨의 전체 순위표로 넘어가요. ({BOT_FILTER_SINCE} 이후 기록, 위 봇 필터와는 별개)
+        {!loggedIn && " 내 기록을 비교하려면 로그인하세요."}
+      </p>
+      <div className="overflow-x-auto rounded-2xl border border-white/10 light:border-slate-200">
+        <table className="w-full min-w-[480px] text-sm">
+          <thead className="bg-white/5 text-xs text-white/50 light:bg-slate-50 light:text-slate-500">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium">상대</th>
+              <th className="px-2 py-2 text-right font-medium">평균 승률</th>
+              <th className="px-2 py-2 text-left font-medium">1위</th>
+              <th className="px-2 py-2 text-right font-medium">내 승률</th>
+              <th className="px-3 py-2 text-right font-medium">내 순위</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const empty = r.players === 0;
+              const avg = rate(r.wins, r.played);
+              const mine = r.me ? rate(r.me.wins, r.me.played) : null;
+              const ahead = mine !== null && avg !== null && mine > avg;
+              return (
+                <tr
+                  key={r.level}
+                  onClick={empty ? undefined : () => onPick(r.level)}
+                  className={`border-t border-white/5 light:border-slate-100 ${
+                    empty
+                      ? "text-white/25 light:text-slate-300"
+                      : "cursor-pointer text-white/75 hover:bg-white/[0.04] light:text-slate-700 light:hover:bg-slate-50"
+                  } ${r.me ? "bg-rose-500/[0.06] light:bg-rose-50/60" : ""}`}
+                >
+                  <td className="px-3 py-1.5 whitespace-nowrap">{levelLabel(r.level)}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">
+                    {avg === null ? "-" : `${avg}%`}
+                    {!empty && <span className="ml-1 text-[10px] text-white/35 light:text-slate-400">{r.players}명</span>}
+                  </td>
+                  <td className="max-w-[9rem] truncate px-2 py-1.5">
+                    {r.top ? (
+                      <>
+                        {r.top.nickname} <span className="tabular-nums text-white/50 light:text-slate-500">{Math.round(r.top.winRate)}%</span>
+                      </>
+                    ) : empty ? (
+                      "-"
+                    ) : (
+                      <span className="text-xs text-white/35 light:text-slate-400">{LEVEL_BOARD_MIN_PLAYED}판↑ 없음</span>
+                    )}
+                  </td>
+                  <td
+                    className={`px-2 py-1.5 text-right tabular-nums ${
+                      ahead ? "font-semibold text-emerald-300 light:text-emerald-600" : ""
+                    }`}
+                  >
+                    {mine === null ? "-" : `${mine}%`}
+                    {r.me && <span className="ml-1 text-[10px] text-white/35 light:text-slate-400">{r.me.played}판</span>}
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">
+                    {r.me?.rank ? `${r.me.rank} / ${r.rankedPlayers}` : r.me ? `${LEVEL_BOARD_MIN_PLAYED}판↑부터` : "-"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

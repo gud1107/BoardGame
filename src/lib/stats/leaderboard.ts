@@ -120,3 +120,39 @@ export async function fetchMetricLeaderboard(
     isMe: !!r.is_me,
   }));
 }
+
+export interface BotLevelBoardRow {
+  /** -1 = 사람끼리, 0 = 도중 교체 봇, 1..10 = strongest lobby bot. */
+  level: number;
+  players: number;
+  played: number;
+  wins: number;
+  /** Best win rate among players with >= minPlayed matches at this level. */
+  top: { nickname: string; avatarUrl: string | null; played: number; winRate: number } | null;
+  /** Caller's own numbers (null when they never played this level / aren't logged in). */
+  me: { played: number; wins: number; rank: number | null } | null;
+  rankedPlayers: number;
+}
+
+/** Minimum matches at a level to be ranked on the level-comparison board. */
+export const LEVEL_BOARD_MIN_PLAYED = 5;
+
+/** 봇 레벨별 비교 board (`public_bot_level_board` RPC). */
+export async function fetchBotLevelBoard(gameId: string | null): Promise<LeaderboardResult<BotLevelBoardRow>> {
+  const supabase = getAuthSupabase();
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc("public_bot_level_board", { p_game_id: gameId, p_min_played: LEVEL_BOARD_MIN_PLAYED });
+  if (error || !Array.isArray(data)) return classify(error);
+  return data.map((r) => ({
+    level: Number(r.level),
+    players: Number(r.players),
+    played: Number(r.played),
+    wins: Number(r.wins),
+    top:
+      r.top_nickname === null
+        ? null
+        : { nickname: String(r.top_nickname), avatarUrl: r.top_avatar_url ?? null, played: Number(r.top_played), winRate: Number(r.top_win_rate) },
+    me: r.my_played === null ? null : { played: Number(r.my_played), wins: Number(r.my_wins), rank: r.my_rank === null ? null : Number(r.my_rank) },
+    rankedPlayers: Number(r.ranked_players),
+  }));
+}

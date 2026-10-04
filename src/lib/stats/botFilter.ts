@@ -6,8 +6,9 @@ import type { StatSlice, StatTotalsRecord } from "@/lib/db/types";
 /**
  * /stats bot filter, shared by 내 전적 and 공개 랭킹.
  * - includeBots false → only matches with no bot at the table
- * - botLevel set      → only matches whose strongest lobby bot was that level
- *   (only meaningful with includeBots on)
+ * - botLevel 1..10    → only matches whose strongest lobby bot was that level
+ * - botLevel 0         → only matches whose bots were all mid-game takeovers
+ *   (both only meaningful with includeBots on)
  */
 export interface StatsBotFilter {
   includeBots: boolean;
@@ -25,7 +26,7 @@ function parse(raw: string | null): StatsBotFilter {
   try {
     const v = raw ? JSON.parse(raw) : null;
     if (!v || typeof v.includeBots !== "boolean") return DEFAULT_BOT_FILTER;
-    const level = Number.isInteger(v.botLevel) && v.botLevel >= 1 && v.botLevel <= 10 ? (v.botLevel as number) : null;
+    const level = Number.isInteger(v.botLevel) && v.botLevel >= 0 && v.botLevel <= 10 ? (v.botLevel as number) : null;
     return { includeBots: v.includeBots, botLevel: v.includeBots ? level : null };
   } catch {
     return DEFAULT_BOT_FILTER;
@@ -85,14 +86,14 @@ export function unclassifiedCount(stats: readonly StatTotalsRecord[]): number {
 }
 
 export interface BotLevelRow {
-  /** null = bot-free matches ("사람끼리"). */
+  /** null = bot-free matches ("사람끼리"), 0 = takeover bots only. */
   level: number | null;
   played: number;
   wins: number;
   losses: number;
 }
 
-/** 사람끼리 + Lv.1..10 rows, summed over every game or just `gameId`. */
+/** 사람끼리 + 도중 교체 봇 + Lv.1..10 rows, summed over every game or just `gameId`. */
 export function botLevelRows(stats: readonly StatTotalsRecord[], gameId: string | null): BotLevelRow[] {
   const games = gameId ? stats.filter((t) => t.gameId === gameId) : stats;
   const sum = (pick: (t: StatTotalsRecord) => StatSlice | undefined) =>
@@ -105,6 +106,6 @@ export function botLevelRows(stats: readonly StatTotalsRecord[], gameId: string 
     );
   return [
     { level: null, ...sum((t) => t.noBot) },
-    ...Array.from({ length: 10 }, (_, i) => ({ level: i + 1, ...sum((t) => t.byBotLevel?.[String(i + 1)]) })),
+    ...Array.from({ length: 11 }, (_, level) => ({ level, ...sum((t) => t.byBotLevel?.[String(level)]) })),
   ];
 }

@@ -270,7 +270,8 @@ revoke all on function record_match_stats(text, text, boolean, integer, integer,
 grant execute on function record_match_stats(text, text, boolean, integer, integer, timestamptz, jsonb, boolean, integer) to authenticated;
 
 -- Per-user, per-game totals the rankings read, for the chosen filter:
---   p_bot_level set  → matches whose strongest lobby bot was that level (from the log)
+--   p_bot_level 1..10 → matches whose strongest lobby bot was that level (from the log)
+--   p_bot_level 0     → matches whose only bots were mid-game takeovers (no level)
 --   p_include_bots   → every match (true) or bot-free matches only (false)
 -- Internal: exposes user ids, so only the security-definer RPCs below call it.
 create or replace function stats_source(p_include_bots boolean, p_bot_level integer)
@@ -286,19 +287,20 @@ returns table (user_id uuid, game_id text, played integer, wins integer, losses 
   select l.user_id, l.game_id, count(*)::integer, count(*) filter (where l.won)::integer,
          count(*) filter (where not l.won)::integer, min(l.rank), stat_details_agg(l.details order by l.played_at)
   from player_match_log l
-  where p_bot_level is not null and l.bot_level = p_bot_level
+  where p_bot_level is not null and l.with_bots and coalesce(l.bot_level, 0) = p_bot_level
   group by l.user_id, l.game_id;
 $$ language sql stable security definer set search_path = public;
 
 revoke all on function stats_source(boolean, integer) from public, anon, authenticated;
 
--- The caller's own totals per game and bot level (내 전적 → 봇 레벨 filter).
+-- The caller's own totals per game and bot level (내 전적 → 봇 레벨 filter);
+-- bot_level 0 = only mid-game takeover bots at the table.
 create or replace function my_bot_level_stats()
 returns table (game_id text, bot_level smallint, played integer, wins integer, losses integer, best_rank integer, details jsonb) as $$
-  select l.game_id, l.bot_level, count(*)::integer, count(*) filter (where l.won)::integer,
+  select l.game_id, coalesce(l.bot_level, 0)::smallint, count(*)::integer, count(*) filter (where l.won)::integer,
          count(*) filter (where not l.won)::integer, min(l.rank), stat_details_agg(l.details order by l.played_at)
   from player_match_log l
-  where l.user_id = auth.uid() and l.bot_level is not null
+  where l.user_id = auth.uid() and l.with_bots
   group by l.game_id, l.bot_level;
 $$ language sql stable security definer set search_path = public;
 
@@ -449,3 +451,81 @@ create or replace function public_metric_leaderboard(
 $$ language sql stable security definer set search_path = public;
 
 grant execute on function public_metric_leaderboard(text, text, text, boolean, integer, integer, boolean, integer) to anon, authenticated;
+
+-- 봇 레벨별 비교 (공개 랭킹). One row per bucket — level -1 = 사람끼리,
+-- 0 = mid-game takeover bots only, 1..10 = strongest lobby bot — with the
+-- community totals, the best win rate among players with >= p_min_played
+-- matches in that bucket, and the caller's own numbers / rank. Same exposure
+-- as public_leaderboard: public_name / public_avatar_url only.
+drop function if exists public_bot_level_board(text, integer);
+create or replace function public_bot_level_board(
+  p_game_id text default null,
+  p_min_played integer default 5
+) returns table (
+  level integer,
+  players integer,
+  played integer,
+  wins integer,
+  top_nickname text,
+  top_avatar_url text,
+  top_played integer,
+  top_win_rate numeric,
+  my_played integer,
+  my_wins integer,
+  my_rank bigint,
+  ranked_players integer
+) as $$
+  with per as (
+    select s.user_id, -1 as level, sum(s.played)::integer as played, sum(s.wins)::integer as wins
+    from player_game_stats_nobot s
+    where p_game_id is null or s.game_id = p_game_id
+    group by s.user_id
+    union all
+    select l.user_id, coalesce(l.bot_level, 0)::integer, count(*)::integer, count(*) filter (where l.won)::integer
+    from player_match_log l
+    where l.with_bots and (p_game_id is null or l.game_id = p_game_id)
+    group by l.user_id, coalesce(l.bot_level, 0)
+  ),
+  scored as (
+    select p.*,
+           round(p.wins::numeric * 100 / nullif(p.played, 0), 1) as win_rate,
+           p.played >= greatest(coalesce(p_min_played, 1), 1) as eligible
+    from per p
+  ),
+  ranked as (
+    select s.*,
+           case when s.eligible
+             then rank() over (partition by s.level, s.eligible order by s.win_rate desc, s.wins desc)
+           end as rnk
+    from scored s
+  ),
+  agg as (
+    select r.level, count(*)::integer as players, sum(r.played)::integer as played, sum(r.wins)::integer as wins,
+           (count(*) filter (where r.eligible))::integer as ranked_players
+    from ranked r
+    group by r.level
+  ),
+  top as (
+    select distinct on (r.level) r.level, r.user_id, r.played, r.win_rate
+    from ranked r
+    where r.eligible
+    order by r.level, r.rnk, r.played desc
+  ),
+  me as (
+    select r.level, r.played, r.wins, r.rnk from ranked r where r.user_id = auth.uid()
+  )
+  select b.level,
+         coalesce(a.players, 0), coalesce(a.played, 0), coalesce(a.wins, 0),
+         case when t.user_id is null then null
+              else coalesce(p.public_name, '게이머_' || substring(t.user_id::text from 1 for 6)) end::text,
+         p.public_avatar_url, t.played, t.win_rate,
+         m.played, m.wins, m.rnk, coalesce(a.ranked_players, 0)
+  from generate_series(-1, 10) as b(level)
+  left join agg a on a.level = b.level
+  left join top t on t.level = b.level
+  left join public.user_profiles p on p.id = t.user_id
+  left join me m on m.level = b.level
+  order by b.level;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function public_bot_level_board(text, integer) to anon, authenticated;

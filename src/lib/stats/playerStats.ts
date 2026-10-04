@@ -48,8 +48,10 @@ function applyMatch(t: StatTotalsRecord, m: MatchFacts): StatTotalsRecord {
   const out: StatTotalsRecord = { ...t, ...addToSlice(t, m) };
   if (typeof m.withBots === "boolean") out.classified = (t.classified ?? 0) + 1;
   if (m.withBots === false) out.noBot = addToSlice(t.noBot ?? EMPTY_SLICE, m);
-  if (typeof m.botLevel === "number") {
-    const key = String(m.botLevel);
+  // Level 0 = only mid-game takeover bots (they have no level).
+  const level = typeof m.botLevel === "number" ? m.botLevel : m.withBots === true ? 0 : null;
+  if (level !== null) {
+    const key = String(level);
     out.byBotLevel = { ...t.byBotLevel, [key]: addToSlice(t.byBotLevel?.[key] ?? EMPTY_SLICE, m) };
   }
   return out;
