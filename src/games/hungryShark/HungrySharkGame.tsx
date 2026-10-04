@@ -88,7 +88,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
 
   const handleEnd = (s: RunSummary) => {
     const prevBest = save.best[s.sharkId] ?? 0;
-    const missionCoins = s.missions.filter((m) => m.done).reduce((a, m) => a + m.reward, 0);
+    const missionCoins = s.missions.filter((m) => m.done).reduce((a, m) => a + m.reward, 0) + s.missionBonus;
     const eaten = Object.values(s.run.eaten).reduce((a, n) => a + (n ?? 0), 0);
     const prevMapBest = save.mapBest[s.mapId] ?? null;
     const newMapBest = s.score > (prevMapBest?.score ?? 0);
@@ -732,7 +732,7 @@ function ResultsPanel({
           )}
           {allMissions && (
             <div className="mt-1 inline-block animate-bounce rounded-full bg-emerald-400 px-3 py-0.5 text-xs font-black text-slate-900 shadow-[0_0_18px_rgba(52,211,153,0.6)] [animation-delay:150ms]">
-              🎯 미션 {s.missions.length}개 모두 완료! +{missionCoins.toLocaleString()}🪙
+              🎯 미션 {s.missions.length}개 모두 완료! 보너스 +{s.missionBonus.toLocaleString()}🪙
             </div>
           )}
         </div>

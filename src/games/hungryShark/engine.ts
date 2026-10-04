@@ -36,6 +36,7 @@ import {
   MEGA_GOLD_RUSH_DURATION,
   mineExplosionRadius,
   MISSIONS,
+  ALL_MISSIONS_BONUS_RATE,
   NEVER,
   POISON_DURATION,
   POISON_SLOW,
@@ -149,6 +150,7 @@ export type GameEvent =
   | { type: "torpedo" }
   | { type: "icicle" }
   | { type: "creak" }
+  | { type: "missionsAll"; bonus: number }
   | { type: "skill"; id: SkillId }
   | { type: "skillReady" }
   | { type: "preyFx"; label: string }
@@ -249,6 +251,8 @@ export interface World {
   run: RunStats;
   over: boolean;
   deathCause: string | null;
+  /** Coins paid for clearing every mission this dive (0 until then). */
+  missionBonus: number;
   /** Hunter-free bubble around the start point while `w.time < until` (MapDef.safeStart). */
   safe: { x: number; y: number; r: number; until: number } | null;
   /** Last damage source + when (world time) — a starvation tick that finishes a freshly hurt shark is credited to it. */
@@ -360,6 +364,7 @@ export function createWorld(def: SharkDef, upgrades: UpgradeLevels, seed = Date.
     },
     over: false,
     deathCause: null,
+    missionBonus: 0,
     safe: null,
     lastHit: null,
     spawnTimer: 0,
@@ -1710,6 +1715,14 @@ function updateMissions(w: World) {
       w.events.push({ type: "mission", label: m.label, reward: m.reward });
     }
   }
+  if (!w.missionBonus && w.missions.length && w.missions.every((m) => m.done)) {
+    const bonus = Math.round(w.missions.reduce((a, m) => a + m.reward, 0) * ALL_MISSIONS_BONUS_RATE);
+    w.missionBonus = bonus;
+    w.coins += bonus;
+    floatText(w, w.shark.x, w.shark.y - 90, `🎯 미션 올클리어! +${bonus}🪙`, "#fde047", 24);
+    burst(w, "gold", w.shark.x, w.shark.y, 24, 240, "#facc15", 4, 1.1);
+    w.events.push({ type: "missionsAll", bonus });
+  }
 }
 
 // ── Spawner (spec §7 zone streaming) ────────────────────────────────────────
@@ -1856,6 +1869,8 @@ export interface RunSummary {
   cause: string;
   run: RunStats;
   missions: MissionState[];
+  /** All-missions-cleared bonus already included in `coins` (0 if not every mission was done). */
+  missionBonus: number;
 }
 
 export function summarize(w: World): RunSummary {
@@ -1868,6 +1883,7 @@ export function summarize(w: World): RunSummary {
     cause: w.deathCause ?? "굶주림",
     run: w.run,
     missions: w.missions,
+    missionBonus: w.missionBonus,
   };
 }
 

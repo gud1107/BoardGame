@@ -1,7 +1,27 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { BRANCH_INFO, ENTITY_DEFS, MAPS, FRENZY_STEPS, NEVER, PREY_EFFECTS, preyEffectLabel, SHARKS, sharksOfTier, type EntityKind } from "./data";
+import { ALL_MISSIONS_BONUS_RATE, BRANCH_INFO, ENTITY_DEFS, MAPS, FRENZY_STEPS, mapCoinBonus, MISSIONS, NEVER, PREY_EFFECTS, preyEffectLabel, SHARKS, sharksOfTier, type EntityKind, type MapDef } from "./data";
+import { mapExclusives } from "./markers";
+
+/** Level layout + map-only rules, one line each (data-driven where the numbers live in MapDef). */
+const MAP_FEATURES: Record<MapDef["id"], string[]> = {
+  deepBlue: [
+    "지형: 완만한 산호 언덕이 화산 해구까지 이어지는 탁 트인 바다. 수면 어디서나 점프할 수 있습니다.",
+    "고유 위험: 수심 250m 아래 해구에서 화산 암석이 떨어집니다.",
+  ],
+  frozenStrait: [
+    "지형: 수면 전체가 두꺼운 빙판 — 빙판 밑은 천장이라 숨구멍(5곳)에서만 점프할 수 있고, 공중에서 빙판에 떨어지면 튕긴 뒤 가까운 숨구멍으로 미끄러집니다. 배·선원·빙산도 숨구멍 안에만 있습니다.",
+    "얕은 대륙붕(약 90m) 사이로 깊은 해구 두 개가 갈라집니다. 심해로 가려면 해구를 찾아야 합니다.",
+    "장애물: 천장의 고드름, 해구 바닥에서 솟은 얼음 기둥 — 부딪히면 막힙니다.",
+    "고유 위험: 빙판 밑을 지나면 머리 위 고드름 끝이 부러집니다(0.9초 흔들림 + 빨간 낙하선 → 낙하, 피해 26).",
+  ],
+  shipwreck: [
+    "지형: 계단처럼 꺼지는 해저 단구를 따라 심연(약 340m)까지 내려갔다가 다시 올라옵니다.",
+    "장애물: 단구마다 거대한 침몰선 선체와 부러진 돛대가 벽처럼 놓여 있습니다. 보물 상자는 선체 주변에 많습니다.",
+    "고유 위험: 돛대 아래를 지나면 활대가 부러져 떨어집니다(1초 삐걱 + 빨간 낙하선 → 낙하, 피해 34).",
+  ],
+};
 
 const H3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
 const P = "text-white/70 light:text-slate-600";
@@ -65,7 +85,8 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             <li><span className="font-bold text-red-400">🔴 ☠ 적색 링(깜빡임)</span>: 티어 부족 + 위험 — 필요한 상어(예: &quot;T3 귀상어 필요&quot;)와 위험 종류. 새 위협이 링 안에 들어오면 경고 비프음. 쫓아오는 포식자·어뢰·낙석은 뒤쪽에 있어도 표시.</li>
             <li><span className="font-bold text-red-300">🔴 ✖ 적색 링</span>: 티어 부족이지만 무해 — 부딪히면 튕겨 나갈 뿐입니다.</li>
             <li><span className="font-bold text-yellow-300">🟡 황금 링</span>: 골드 러시 중 먹을 수 있는 대상(코인 드롭 + 체력 완전 회복). 메가 골드 러시에선 분홍빛으로 모든 대상이 바뀝니다.</li>
-            <li>🎯 버튼으로 인디케이터를 끄고 켤 수 있습니다. 📖 버튼·일시정지 메뉴·<b>B</b> 키로 <b>먹이 도감</b>을 열면 현재 티어 기준 사냥 가능/티어 부족/위험 생물을 필터링해 회복량·점수·코인·출몰 수심을 볼 수 있습니다.</li>
+            <li>🎯 버튼으로 인디케이터를 끄고 켤 수 있습니다. 📖 버튼·일시정지 메뉴·<b>B</b> 키로 <b>먹이 도감</b>을 열면 현재 티어 기준 사냥 가능/티어 부족/위험 생물을 필터링해 회복량·점수·코인·출몰 수심·<b>서식 지역(📍)</b>을 볼 수 있습니다.</li>
+            <li>도감 맨 위 <b>💀 나를 가장 많이 죽인 생물</b>: 지금까지의 사망 원인을 모든 지역에 걸쳐 합산한 상위 5(지역별 횟수 포함). 굶주림은 생물이 아니라 따로 표시합니다. 각 생물 카드에 &quot;💀 나를 N번 죽임&quot;, 필터 <b>💀 나를 죽인</b>(많이 죽인 순).</li>
           </ul>
         </section>
 
@@ -118,14 +139,38 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
 
         <section>
           <h3 className={H3}>잠수 지역 (맵)</h3>
-          <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
+          <p className={`mb-2 ${P}`}>세 지역은 색만 다른 게 아니라 <b>지형·장애물·몬스터·고유 위험</b>이 모두 다릅니다. 지역 전용 몬스터는 다른 지역에 나오지 않습니다.</p>
+          <div className="flex flex-col gap-2">
             {MAPS.map((m) => (
-              <li key={m.id}>
-                <b>{m.emoji} {m.name}</b> (가로 {(m.width / 10).toLocaleString()}m · 보물 상자 {m.chestCount}개{m.coinBonus > 1 ? ` · 코인 ×${m.coinBonus}` : ""}): {m.desc}
-              </li>
+              <div key={m.id} className="rounded-lg border border-white/10 p-2.5 light:border-slate-200">
+                <div className="font-bold text-white light:text-slate-900">
+                  {m.emoji} {m.name}{" "}
+                  <span className="text-xs font-normal text-white/50 light:text-slate-500">
+                    권장 T{m.recommendedTier}+ · 가로 {(m.width / 10).toLocaleString()}m · 보물 상자 {m.chestCount}개 · 코인 ×{m.coinBonus}
+                    {m.tierCoinBonus?.[4] ? ` (T4 ×${mapCoinBonus(m, 4).toFixed(2)})` : ""}
+                  </span>
+                </div>
+                <ul className={`mt-1 list-disc space-y-0.5 pl-4 text-xs ${P}`}>
+                  {MAP_FEATURES[m.id].map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                  <li>전용 몬스터: {mapExclusives(m).map((k) => ENTITY_DEFS[k].name).join(" · ")}</li>
+                  {m.safeStart && (
+                    <li>
+                      🛡 <b>시작 안전 구역</b>: 잠수 시작 후 {m.safeStart.seconds}초 동안 시작 지점 주변(반경 {m.safeStart.radius})에 포식자가 들어오지 않습니다(기뢰·해파리는 그대로).
+                    </li>
+                  )}
+                  {m.lowTierMercy && (
+                    <li>
+                      <b>저티어 배려</b>: 내 상어보다 2티어 이상 높은 포식자는 덜 나오고(×{m.lowTierMercy.spawn}) 덜 쫓아오며(추격 거리 ×{m.lowTierMercy.aggro})
+                      {m.lowTierMercy.near ? `, 1티어 높은 포식자도 조금 덜 나옵니다(×${m.lowTierMercy.near.spawn})` : ""}.
+                    </li>
+                  )}
+                </ul>
+              </div>
             ))}
-          </ul>
-          <p className={`mt-1 text-xs ${P}`}>상점 아래 &quot;잠수 지역 선택&quot;에서 고릅니다. 권장 티어는 참고용이며 모든 지역이 처음부터 열려 있습니다.</p>
+          </div>
+          <p className={`mt-1 text-xs ${P}`}>상점 아래 &quot;잠수 지역 선택&quot;에서 고릅니다. 권장 티어는 참고용이며 모든 지역이 처음부터 열려 있습니다. 얼음 해협은 먹이가 얕은 대륙붕에 몰려 있어 대형(T4) 상어의 코인 배율이 낮습니다.</p>
         </section>
 
         <section>
@@ -179,9 +224,11 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <h3 className={H3}>위험 요소</h3>
           <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
             <li><b>기뢰</b>: 가까이 가면 폭발. 피해 = 최대 피해 × (1 − 거리 ÷ 폭발 반경). 폭발은 주변 작은 물고기를 죽이고 근처 기뢰를 연쇄 폭발시킵니다. 수심이 깊을수록 더 큰 기뢰가 있습니다.</li>
-            <li><b>해파리</b>: 닿으면 3초간(붉은 해파리 4초) 0.5초마다 최대 체력의 5%(붉은 8%) 피해 + 이동 속도 40% 감소.</li>
-            <li><b>잠수함</b>은 티어 3 이하 상어에게 유도 어뢰를 발사합니다. <b>소형 상어·심해 아귀·유령 상어</b>는 나보다 강하면 쫓아와 물어뜯습니다(화면 가장자리 빨간 화살표로 경고).</li>
-            <li>수심 250m 아래 <b>해구(화산 지대)</b>에서는 화산 암석이 떨어집니다. 깊을수록 어두워지고 시야가 좁아집니다.</li>
+            <li><b>해파리</b>: 닿으면 3초간(붉은 해파리 3.5초) 0.5초마다 최대 체력의 5%(붉은 6%) 피해 + 이동 속도 40% 감소.</li>
+            <li><b>잠수함</b>은 티어 3 이하 상어에게 유도 어뢰를 발사합니다. <b>소형 상어·심해 아귀·유령 상어·꼬치고기·곰치·대왕오징어·일각고래·범고래</b>는 나보다 강하면 쫓아와 물어뜯습니다(약 5초 쫓다 지쳐서 물러남)(화면 가장자리 빨간 화살표로 경고).</li>
+            <li><b>딥 블루 오션</b> 수심 250m 아래 해구(화산 지대)에서는 화산 암석이 떨어집니다. 깊을수록 어두워지고 시야가 좁아집니다.</li>
+            <li><b>떨어지는 고드름</b>(얼음 해협)·<b>무너지는 돛대 파편</b>(난파선 무덤): 머리 위에서 흔들리며 빨간 점선으로 떨어질 자리를 보여준 뒤 떨어집니다. 점선 아래에서 옆으로 비키세요. 메가 골드 러시 중엔 먹을 수 있습니다.</li>
+            <li><b>지형 장애물</b>(빙판 천장·고드름·얼음 기둥·침몰선 선체·돛대)은 통과할 수 없고, 세게 부딪히면 튕겨 나옵니다.</li>
             <li>체력이 25% 아래로 떨어지면 화면이 붉게 맥동하며 심장 박동 경고음이 울립니다.</li>
           </ul>
         </section>
@@ -199,9 +246,28 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <h3 className={H3}>코인 · 미션 · 보물 상자</h3>
           <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
             <li>먹이를 먹으면 확률적으로 코인이 나옵니다(골드 러시 중엔 100%). 코인은 잠수가 끝나도 유지됩니다.</li>
-            <li>잠수마다 <b>무작위 미션 3개</b>가 주어지고, 달성 즉시 보너스 코인을 받습니다.</li>
+            <li>잠수마다 <b>무작위 미션 3개</b>가 주어지고, 달성 즉시 보상 코인을 받습니다(기본 {Math.min(...MISSIONS.map((m) => m.reward))}~{Math.max(...MISSIONS.map((m) => m.reward))}🪙, 티어가 높을수록 목표와 보상이 커짐).</li>
+            <li>한 잠수에서 <b>미션 3개를 모두 완료</b>하면 그 세 보상 합계의 {Math.round(ALL_MISSIONS_BONUS_RATE * 100)}%를 <b>올클리어 보너스</b>로 추가로 받습니다.</li>
             <li>해저 곳곳에 <b>보물 상자</b>(지역마다 9~20개)가 숨어 있습니다(미니맵의 노란 점). 입으로 물면 코인이 쏟아집니다.</li>
             <li>상점에서 상어마다 <b>물어뜯기 · 속도 · 부스트</b>를 각각 10레벨까지 강화할 수 있습니다. 진행 상황은 이 브라우저에 저장됩니다.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3 className={H3}>상점 · 상어 목록 정렬/필터</h3>
+          <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
+            <li><b>정렬</b>: 진화 트리(기본) / 가격 / 티어 / 체력 / 속도 / 골드 배율 / 부스트 효율 / 최고 점수 — [높은 순 | 낮은 순]. 진화 트리 외 기준을 고르면 카드가 한 줄 목록으로 바뀌고 기준 수치가 표시됩니다(체력·속도는 업그레이드 반영).</li>
+            <li><b>필터</b>: &quot;지금 살 수 있는 상어만&quot;(이전 단계 보유 + 코인 충분), &quot;보유 상어 숨기기&quot;. 해당 상어가 없으면 다음 상어까지 남은 코인을 알려 줍니다.</li>
+            <li>정렬·필터 선택은 저장되어 다음 방문에도 유지됩니다.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3 className={H3}>결과 화면 · 기록</h3>
+          <ul className={`list-disc space-y-1.5 pl-4 ${P}`}>
+            <li><b>이번 잠수 사망 원인</b>: 무엇에 당했는지, 이 지역에서 몇 번째인지, 원인별 대처 팁, 이 지역에서 자주 당한 원인 상위 3. 피해를 입고 5초 안에 굶주려 죽으면 굶주림이 아니라 그 피해 원인으로 기록됩니다.</li>
+            <li><b>맵별 최고 기록</b>: 세 지역의 최고 점수·상어·생존 시간. 지역 줄을 누르면 그 지역의 <b>상어별 최고 기록</b>이 펼쳐집니다(👑 1위).</li>
+            <li><b>축하 연출</b>: 지역 신기록(색종이 + 금화 + 긴 팡파르), 상어 개인 최고 기록, 미션 올클리어(초록 색종이 + 차임)마다 연출이 나옵니다. 음소거·움직임 줄이기 설정을 따릅니다.</li>
           </ul>
         </section>
       </div>

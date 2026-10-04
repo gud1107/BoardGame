@@ -891,6 +891,7 @@ describe("death cause credit", () => {
     const die = (gap: number) => {
       const w = createWorld(sharkById("reef"), NO_UPGRADES, 500);
       isolate(w);
+      w.safe = null; // the start bubble would keep the hunter away
       const jelly = place(w, "barracuda", w.shark.x + 10, w.shark.y);
       jelly.attackCd = 0;
       for (let i = 0; i < 10 && !w.lastHit; i++) step(w, idle, 1 / 60);
@@ -926,8 +927,12 @@ describe("shipwreck safe start + near-tier mercy", () => {
     expect(w.shark.hp).toBeLessThan(hp0); // only hunger
     for (let i = 0; i < 60 * 6; i++) step(w, idle, 1 / 60);
     expect(safeZoneActive(w)).toBe(false);
-    // Other maps have no bubble.
-    expect(createWorld(sharkById("reef"), NO_UPGRADES, 601, "deepBlue").safe).toBeNull();
+    // The other maps get a shorter, smaller bubble.
+    for (const id of ["deepBlue", "frozenStrait"] as const) {
+      const o = createWorld(sharkById("reef"), NO_UPGRADES, 601, id).safe;
+      expect(o && o.until).toBe(8);
+      expect(o && o.r).toBeLessThan(sf.r);
+    }
   });
 
   it("one-tier-gap hunters (꼬치고기 vs T1) also thin out on the shipwreck", () => {
@@ -948,5 +953,30 @@ describe("shipwreck safe start + near-tier mercy", () => {
     };
     // T1 reef gets the `near` mercy vs 꼬치고기(T2); T2 mako eats them (no mercy).
     expect(barracudas("reef")).toBeLessThan(barracudas("mako"));
+  });
+});
+
+describe("all-missions bonus", () => {
+  it("clearing every mission pays 50% of their rewards once, and only then", async () => {
+    const { ALL_MISSIONS_BONUS_RATE } = await import("./data");
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 800);
+    isolate(w);
+    const total = w.missions.reduce((a, m) => a + m.reward, 0);
+    // Two of three done: no bonus yet.
+    w.missions[0].goal = 0;
+    w.missions[1].goal = 0;
+    step(w, idle, 1 / 60);
+    expect(w.missionBonus).toBe(0);
+    const coins0 = w.coins;
+    w.missions[2].goal = 0;
+    step(w, idle, 1 / 60);
+    const bonus = Math.round(total * ALL_MISSIONS_BONUS_RATE);
+    expect(w.missionBonus).toBe(bonus);
+    expect(w.coins - coins0).toBe(w.missions[2].reward + bonus);
+    expect(w.events.some((e) => e.type === "missionsAll")).toBe(true);
+    const c1 = w.coins;
+    for (let i = 0; i < 30; i++) step(w, idle, 1 / 60);
+    expect(w.coins).toBe(c1); // paid once
+    expect(summarize(w).missionBonus).toBe(bonus);
   });
 });

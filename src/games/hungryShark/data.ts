@@ -98,6 +98,7 @@ export const MAPS: MapDef[] = [
     coinBonus: 1,
     density: 1,
     threatDensity: 1,
+    safeStart: { seconds: 8, radius: 500 },
     spawns: {
       ...COMMON_SPAWNS,
       crab: 1, swimmer: 1, puffer: 1, greenJelly: 1, redJelly: 1,
@@ -132,6 +133,7 @@ export const MAPS: MapDef[] = [
     // Same rule as 난파선: 일각고래(T3) eases off for T1, 범고래(T4) for T1/T2.
     // `near` = the milder version for hunters only one tier out of reach (일각고래 vs T2).
     lowTierMercy: { spawn: 0.5, aggro: 0.75, near: { spawn: 0.8, aggro: 0.85 } },
+    safeStart: { seconds: 8, radius: 500 },
     density: 1,
     threatDensity: 0.7,
     spawns: {
@@ -837,6 +839,9 @@ export interface MissionDef {
   goals: number[];
   reward: number;
 }
+
+/** Clearing every mission of a dive pays this share of their rewards on top (2026-10-04). */
+export const ALL_MISSIONS_BONUS_RATE = 0.5;
 
 export const MISSIONS: MissionDef[] = [
   { id: "eatFish", label: (g) => `물고기 ${g}마리 먹기`, goals: [25, 50, 90], reward: 190 },

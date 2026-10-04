@@ -329,6 +329,7 @@ export default function HungrySharkCanvas({
             break;
           case "goldEnd": a?.goldEnd(); break;
           case "mission": a?.mission(); pushBanner({ text: "미션 완료!", sub: `${ev.label} · +${ev.reward}🪙`, tone: "mission" }); break;
+          case "missionsAll": a?.goldRush(false); pushBanner({ text: "🎯 미션 올클리어!", sub: `보너스 +${ev.bonus}🪙`, tone: "mission" }); break;
           case "chest": pushBanner({ text: "보물 상자 발견!", sub: `+${ev.amount}🪙`, tone: "chest" }); break;
           case "death": a?.death(); break;
           case "evolve": {
