@@ -8,7 +8,7 @@
  * the water surface is y = 0, the sky is negative y, the seabed is ~3300.
  */
 
-import { buildGeometry, geoCeil, geoFloor, underIce, type IceSpec, type MapGeometry, type TerrainSpec } from "./mapGeometry";
+import { buildGeometry, geoCeil, geoFloor, insideAny, underIce, type Circle, type IceSpec, type MapGeometry, type TerrainSpec } from "./mapGeometry";
 
 // ── World layout ────────────────────────────────────────────────────────────
 
@@ -205,6 +205,23 @@ export function geometryFor(map: MapDef): MapGeometry {
     geometryCache.set(map.id, g);
   }
   return g;
+}
+
+/**
+ * Where a map's treasure chests sit, give or take the ±300 (±30m) jitter each dive adds — the
+ * same evenly spaced seabed spots `createWorld` starts from, slid off hulls/pillars the same way.
+ */
+export function approxChestSpots(map: MapDef): { x: number; y: number }[] {
+  const g = geometryFor(map);
+  const scratch: Circle[] = [];
+  const out: { x: number; y: number }[] = [];
+  for (let i = 0; i < map.chestCount; i++) {
+    let x = ((i + 0.5) / map.chestCount) * map.width;
+    for (let k = 0; k < 40 && insideAny(g, x, geoFloor(g, x) - 18, 22, scratch); k++) x += 45;
+    x = Math.max(80, Math.min(map.width - 80, x));
+    out.push({ x, y: geoFloor(g, x) - 18 });
+  }
+  return out;
 }
 
 let activeMap: MapDef = MAPS[0];

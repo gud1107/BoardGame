@@ -1013,3 +1013,22 @@ describe("mission all-clear streak", () => {
     for (const m of MAPS) for (const c of geometryFor(m).colliders) expect(c.kind).toBeDefined();
   });
 });
+
+describe("rulebook cross-section chest spots", () => {
+  it("each drawn chest spot has a real chest within the per-dive jitter, on every map", async () => {
+    const { MAPS, approxChestSpots, geometryFor } = await import("./data");
+    for (const m of MAPS) {
+      const spots = approxChestSpots(m);
+      expect(spots).toHaveLength(m.chestCount);
+      for (const seed of [11, 12]) {
+        const w = createWorld(sharkById("reef"), NO_UPGRADES, seed, m.id);
+        const real = w.entities.filter((e) => e.kind === "chest").map((e) => e.x).sort((a, b) => a - b);
+        spots.forEach((sp, i) => {
+          // Next to a hull/pillar the chest may slide off to either side (up to a hull length away).
+          const nearStructure = geometryFor(m).colliders.some((c) => Math.abs(c.x - sp.x) < 1300);
+          expect(Math.abs(real[i] - sp.x), `${m.id} chest ${i}`).toBeLessThan(nearStructure ? 300 + 1300 : 301);
+        });
+      }
+    }
+  });
+});

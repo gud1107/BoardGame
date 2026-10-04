@@ -28,6 +28,7 @@ import RulebookModal from "./RulebookModal";
 import BestiaryPanel from "./BestiaryPanel";
 import RecordCelebration from "./RecordCelebration";
 import { mapExclusives } from "./markers";
+import MapProfile from "./MapProfile";
 import Overlay from "@/components/Overlay";
 import { drawSharkShape } from "./render";
 import { freshSave, loadSave, upgradesFor, writeSave, type MapRecord, type PickerPrefs, type PickerSort, type SharkSave } from "./save";
@@ -113,7 +114,11 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
       bestMissionStreak: Math.max(sv.bestMissionStreak, streak),
     }));
     setBestThisSession((b) => Math.max(b, s.score));
-    setSummary({ s, newBest: s.score > prevBest, missionCoins, prevMapBest, newMapBest, causeCount, streak, brokenStreak: allClear ? 0 : save.missionStreak });
+    setSummary({
+      s, newBest: s.score > prevBest, missionCoins, prevMapBest, newMapBest, causeCount, streak,
+      brokenStreak: allClear ? 0 : save.missionStreak,
+      prevBestStreak: save.bestMissionStreak,
+    });
     setScreen("results");
   };
 
@@ -196,6 +201,9 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                   <div className="text-[11px] font-bold text-amber-200">
                     🔥 미션 연속 올클리어 {save.missionStreak}회 · 다음 보너스 {Math.round(allMissionsBonusRate(save.missionStreak) * 100)}%
                   </div>
+                )}
+                {save.bestMissionStreak > 0 && (
+                  <div className="text-[11px] text-sky-100/70">🏅 최고 연속 올클리어 {save.bestMissionStreak}회</div>
                 )}
               </div>
             </div>
@@ -359,6 +367,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                         권장 T{m.recommendedTier}+
                       </span>
                     </div>
+                    <MapProfile map={m} compact />
                     <p className="mt-1 text-[11px] leading-snug text-white/85 drop-shadow">{m.desc}</p>
                     <div className="mt-1.5 flex flex-wrap gap-x-2 text-[10px] font-semibold text-white/75">
                       <span>↔ {(m.width / 10).toLocaleString()}m</span>
@@ -699,6 +708,8 @@ interface DiveSummary {
   streak: number;
   /** Streak this dive ended (when it didn't clear every mission), for a "연속 기록 종료" note. */
   brokenStreak: number;
+  /** Best all-clear streak before this dive. */
+  prevBestStreak: number;
 }
 
 /** One-line advice for how a dive ended. */
@@ -724,7 +735,9 @@ function ResultsPanel({
   onRetry: () => void;
   onMenu: () => void;
 }) {
-  const { s, newBest, missionCoins, prevMapBest, newMapBest, causeCount, streak, brokenStreak } = summary;
+  const { s, newBest, missionCoins, prevMapBest, newMapBest, causeCount, streak, brokenStreak, prevBestStreak } = summary;
+  const newBestStreak = streak > prevBestStreak && streak > 1;
+  const bestStreak = Math.max(prevBestStreak, streak);
   const allMissions = s.missions.length > 0 && s.missions.every((m) => m.done);
   const record = s.score > 0 && (newMapBest || newBest);
   const celebrate = record || allMissions;
@@ -751,6 +764,11 @@ function ResultsPanel({
               🎯 미션 {s.missions.length}개 모두 완료! 보너스 +{s.missionBonus.toLocaleString()}🪙{streak > 1 ? ` · 🔥${streak}연속` : ""}
             </div>
           )}
+          {newBestStreak && (
+            <div className="mt-1 inline-block animate-bounce rounded-full bg-orange-400 px-3 py-0.5 text-xs font-black text-slate-900 shadow-[0_0_18px_rgba(251,146,60,0.6)] [animation-delay:300ms]">
+              🏅 최고 연속 기록 경신! {streak}회
+            </div>
+          )}
         </div>
         <div className="mt-1 text-[11px] text-white/50 light:text-slate-500">
           {streak > 0
@@ -758,6 +776,7 @@ function ResultsPanel({
             : brokenStreak > 0
               ? `🔥 미션 연속 올클리어 ${brokenStreak}회에서 끊겼어요 — 다음 올클리어 보너스는 다시 50%부터`
               : null}
+          {bestStreak > 0 && (streak > 0 || brokenStreak > 0) && <span className="ml-1">· 🏅 최고 {bestStreak}회</span>}
         </div>
         <p className="mt-2 text-xs text-white/50 light:text-slate-500">
           {mapById(s.mapId).emoji} {mapById(s.mapId).name} · {def.name} · {Math.floor(s.seconds / 60)}분 {s.seconds % 60}초 생존 · 사인: {s.cause}
