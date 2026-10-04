@@ -12,7 +12,6 @@ import {
   MAX_UPGRADE_LEVEL,
   SHARKS,
   sharkById,
-  sharksOfTier,
   UPGRADE_LABELS,
   upgradeCost,
   type EntityKind,
@@ -49,6 +48,9 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
   const [showBestiary, setShowBestiary] = useState(false);
   const [showEvolve, setShowEvolve] = useState(false);
   const [bestThisSession, setBestThisSession] = useState(0);
+  const [sortKey, setSortKey] = useState<SortKey>("tree");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [hideOwned, setHideOwned] = useState(false);
 
   const update = (fn: (s: SharkSave) => SharkSave) => {
     setSave((prev) => {
@@ -63,6 +65,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
   const ups = upgradesFor(save, viewId);
   const parent = viewDef.parentId ? sharkById(viewDef.parentId) : null;
   const parentOwned = !parent || save.owned.includes(parent.id);
+  const listedSharks = listSharks(save, sortKey, sortDir, hideOwned);
 
   const unlock = (def: SharkDef) =>
     update((s) =>
@@ -172,28 +175,67 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
             <BubbleDecor />
           </div>
 
-          {/* Evolution tree picker: T1 root, then 3 branch columns × T2..T4 */}
+          {/* List controls: 진화 트리 or a stat sorted 높은/낮은 순 + 보유 상어 숨기기 */}
+          <SharkListControls
+            sortKey={sortKey}
+            sortDir={sortDir}
+            hideOwned={hideOwned}
+            onSortKey={setSortKey}
+            onSortDir={setSortDir}
+            onHideOwned={setHideOwned}
+          />
+
+          {/* Evolution tree picker: T1 root, then 3 branch columns × T2..T4 — or a flat sorted grid */}
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-2 light:border-slate-200 light:bg-white">
-            <div className="mb-2 flex justify-center">
-              {sharksOfTier(1).map((sh) => (
-                <SharkCard key={sh.id} sh={sh} save={save} active={sh.id === viewId} onClick={() => setViewId(sh.id)} />
-              ))}
-            </div>
-            <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-              {(["BRUTE", "SPEED", "VOID"] as const).map((br) => (
-                <div key={br} className="flex flex-col gap-1.5">
-                  <div className="text-center text-[10px] font-black text-white/60 light:text-slate-500">
-                    {BRANCH_INFO[br].emoji} {BRANCH_INFO[br].name}
-                    <div className="hidden text-[9px] font-semibold text-white/35 sm:block light:text-slate-400">{BRANCH_INFO[br].desc}</div>
-                  </div>
-                  {SHARKS.filter((x) => x.branch === br)
-                    .sort((a, b) => a.tier - b.tier)
-                    .map((sh) => (
-                      <SharkCard key={sh.id} sh={sh} save={save} active={sh.id === viewId} onClick={() => setViewId(sh.id)} />
-                    ))}
+            {listedSharks.length === 0 ? (
+              <div className="py-6 text-center text-sm font-bold text-white/70 light:text-slate-600">
+                🎉 모든 상어를 보유 중입니다!
+                <div className="mt-1 text-[11px] font-normal text-white/40 light:text-slate-400">
+                  &quot;보유 상어 숨기기&quot;를 끄면 전체 목록을 볼 수 있어요.
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : sortKey === "tree" ? (
+              <>
+                {listedSharks.some((sh) => sh.tier === 1) && (
+                  <div className="mb-2 flex justify-center">
+                    {listedSharks
+                      .filter((sh) => sh.tier === 1)
+                      .map((sh) => (
+                        <SharkCard key={sh.id} sh={sh} save={save} active={sh.id === viewId} onClick={() => setViewId(sh.id)} />
+                      ))}
+                  </div>
+                )}
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                  {(["BRUTE", "SPEED", "VOID"] as const).map((br) => (
+                    <div key={br} className="flex flex-col gap-1.5">
+                      <div className="text-center text-[10px] font-black text-white/60 light:text-slate-500">
+                        {BRANCH_INFO[br].emoji} {BRANCH_INFO[br].name}
+                        <div className="hidden text-[9px] font-semibold text-white/35 sm:block light:text-slate-400">{BRANCH_INFO[br].desc}</div>
+                      </div>
+                      {listedSharks
+                        .filter((x) => x.branch === br)
+                        .sort((a, b) => a.tier - b.tier)
+                        .map((sh) => (
+                          <SharkCard key={sh.id} sh={sh} save={save} active={sh.id === viewId} onClick={() => setViewId(sh.id)} />
+                        ))}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 sm:gap-2">
+                {listedSharks.map((sh) => (
+                  <SharkCard
+                    key={sh.id}
+                    sh={sh}
+                    save={save}
+                    active={sh.id === viewId}
+                    onClick={() => setViewId(sh.id)}
+                    metric={`${SORT_OPTIONS[sortKey].label} ${SORT_OPTIONS[sortKey].format(sh, save)}`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Detail + upgrades */}
@@ -405,7 +447,112 @@ function SharkPreview({ def, width, height, dim, animate }: { def: SharkDef; wid
   return <canvas ref={ref} style={{ width, height, maxWidth: "100%" }} className="mx-auto block" />;
 }
 
-function SharkCard({ sh, save, active, onClick }: { sh: SharkDef; save: SharkSave; active: boolean; onClick: () => void }) {
+type SortKey = "tree" | "cost" | "tier" | "health" | "speed" | "best";
+type SortDir = "desc" | "asc";
+
+const SORT_OPTIONS: Record<
+  Exclude<SortKey, "tree">,
+  { label: string; value: (sh: SharkDef, save: SharkSave) => number; format: (sh: SharkDef, save: SharkSave) => string }
+> = {
+  cost: { label: "가격", value: (sh) => sh.cost, format: (sh) => `${sh.cost.toLocaleString()}🪙` },
+  tier: { label: "티어", value: (sh) => sh.tier, format: (sh) => `T${sh.tier}` },
+  health: {
+    label: "체력",
+    value: (sh, save) => effectiveStats(sh, upgradesFor(save, sh.id)).maxHealth,
+    format: (sh, save) => `${effectiveStats(sh, upgradesFor(save, sh.id)).maxHealth}`,
+  },
+  speed: {
+    label: "속도",
+    value: (sh, save) => effectiveStats(sh, upgradesFor(save, sh.id)).swimSpeed,
+    format: (sh, save) => `${Math.round(effectiveStats(sh, upgradesFor(save, sh.id)).swimSpeed)}`,
+  },
+  best: { label: "최고", value: (sh, save) => save.best[sh.id] ?? 0, format: (sh, save) => (save.best[sh.id] ?? 0).toLocaleString() },
+};
+
+/** Picker contents. "tree" keeps SHARKS order (the tree layout groups it); stat ties fall back to tree order. */
+function listSharks(save: SharkSave, sortKey: SortKey, sortDir: SortDir, hideOwned: boolean): SharkDef[] {
+  const list = hideOwned ? SHARKS.filter((sh) => !save.owned.includes(sh.id)) : [...SHARKS];
+  if (sortKey === "tree") return list;
+  const { value } = SORT_OPTIONS[sortKey];
+  const sign = sortDir === "desc" ? -1 : 1;
+  return list.sort((a, b) => sign * (value(a, save) - value(b, save)) || SHARKS.indexOf(a) - SHARKS.indexOf(b));
+}
+
+function SharkListControls({
+  sortKey,
+  sortDir,
+  hideOwned,
+  onSortKey,
+  onSortDir,
+  onHideOwned,
+}: {
+  sortKey: SortKey;
+  sortDir: SortDir;
+  hideOwned: boolean;
+  onSortKey: (k: SortKey) => void;
+  onSortDir: (d: SortDir) => void;
+  onHideOwned: (v: boolean) => void;
+}) {
+  const dirBtn = (d: SortDir, label: string) => (
+    <button
+      type="button"
+      onClick={() => onSortDir(d)}
+      disabled={sortKey === "tree"}
+      aria-pressed={sortKey !== "tree" && sortDir === d}
+      className={`rounded-md px-2 py-1 font-bold transition disabled:opacity-40 ${
+        sortKey !== "tree" && sortDir === d
+          ? "bg-sky-500 text-white"
+          : "text-white/60 hover:text-white light:text-slate-500 light:hover:text-slate-800"
+      }`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="-mb-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px]">
+      <div className="flex items-center gap-1.5">
+        <label className="flex items-center gap-1 text-white/60 light:text-slate-500">
+          정렬
+          <select
+            value={sortKey}
+            onChange={(e) => onSortKey(e.target.value as SortKey)}
+            className="rounded-md border border-white/15 bg-slate-900 px-1.5 py-1 font-bold text-white light:border-slate-300 light:bg-white light:text-slate-800"
+          >
+            <option value="tree">진화 트리</option>
+            {(Object.keys(SORT_OPTIONS) as Exclude<SortKey, "tree">[]).map((k) => (
+              <option key={k} value={k}>
+                {k === "best" ? "최고 점수" : SORT_OPTIONS[k].label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex rounded-lg border border-white/15 p-0.5 light:border-slate-300">
+          {dirBtn("desc", "높은 순")}
+          {dirBtn("asc", "낮은 순")}
+        </div>
+      </div>
+      <label className="flex cursor-pointer items-center gap-1.5 font-bold text-white/70 select-none light:text-slate-600">
+        <input type="checkbox" checked={hideOwned} onChange={(e) => onHideOwned(e.target.checked)} className="accent-sky-500" />
+        보유 상어 숨기기
+      </label>
+    </div>
+  );
+}
+
+function SharkCard({
+  sh,
+  save,
+  active,
+  onClick,
+  metric,
+}: {
+  sh: SharkDef;
+  save: SharkSave;
+  active: boolean;
+  onClick: () => void;
+  /** Sorted-grid mode: the value being sorted on, shown under the status line. */
+  metric?: string;
+}) {
   const own = save.owned.includes(sh.id);
   const reachable = !sh.parentId || save.owned.includes(sh.parentId);
   return (
@@ -415,7 +562,7 @@ function SharkCard({ sh, save, active, onClick }: { sh: SharkDef; save: SharkSav
         active
           ? "border-sky-400 bg-sky-500/15 ring-2 ring-sky-400/50"
           : "border-white/10 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-white"
-      } ${sh.tier === 1 ? "max-w-[11rem]" : ""}`}
+      } ${sh.tier === 1 && !metric ? "max-w-[11rem]" : ""}`}
     >
       <span className="absolute top-1 left-1.5 text-[9px] font-black text-white/50 light:text-slate-400">T{sh.tier}</span>
       <SharkPreview def={sh} width={88} height={40} dim={!own} />
@@ -423,6 +570,7 @@ function SharkCard({ sh, save, active, onClick }: { sh: SharkDef; save: SharkSav
       <span className="text-[10px] text-white/50 light:text-slate-500">
         {own ? `최고 ${(save.best[sh.id] ?? 0).toLocaleString()}` : reachable ? `🔒 ${sh.cost.toLocaleString()}🪙` : "🔒 이전 단계 필요"}
       </span>
+      {metric && <span className="text-[10px] font-bold text-sky-300 light:text-sky-600">{metric}</span>}
     </button>
   );
 }
