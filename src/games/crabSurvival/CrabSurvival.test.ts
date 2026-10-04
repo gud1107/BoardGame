@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUBBLE_STUN, epicBounty, gearDropOdds, GEARS, isUnlocked, MUTATIONS, LEVELS, tierForLevel, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
+import { BUBBLE_STUN, epicBounty, revengeBonus, gearDropOdds, GEARS, isUnlocked, MUTATIONS, LEVELS, tierForLevel, levelForScore, MAX_LEVEL, PERK_ARMOR, POOL_HEAL_RATE, roadmap, SHIELDS, SPECIES, SPECIES_LIST, STAMINA_MAX } from "./data";
 import { EMPTY_RECORD, nextSpeciesRecord } from "./save";
 import { addScore, applyMutation, armorMult, atkMult, botThink, createWorld, equipGear, penaltyLeft, player, revivePlayer, step, summarize, swing, updateLeaderboard, type Crab, type CrabInput, type World } from "./engine";
 
@@ -824,9 +824,47 @@ describe("crown lost", () => {
     updateLeaderboard(w);
     expect(w.kingId).toBe(foe.id);
     expect(w.crownLostFx).toBeGreaterThan(1);
-    expect(w.usurpFx).toBeGreaterThan(3); // the new king stays highlighted for a few seconds
+    expect(w.usurpFx).toBeGreaterThan(14); // the 15s 역습 window opens on the usurper
+    expect(w.usurperId).toBe(foe.id);
     expect(w.events.some((e) => e.type === "crownLost" && e.by === foe.name)).toBe(true);
-    for (let i = 0; i < 60 * 4.2; i++) step(w, idle, 1 / 60);
+    for (let i = 0; i < 60 * 15.2; i++) step(w, idle, 1 / 60);
     expect(w.usurpFx).toBe(0);
+  });
+});
+
+describe("역습 보너스", () => {
+  const setup = () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    foe.brain = null;
+    w.time = 20;
+    me.score = 50_000;
+    foe.score = 100;
+    updateLeaderboard(w);
+    foe.score = 80_000;
+    updateLeaderboard(w);
+    foe.x = 40;
+    foe.hp = 1;
+    face(me, foe);
+    return { w, me, foe };
+  };
+
+  it("flipping the usurper inside the window pays the revenge bonus and closes it", () => {
+    const { w, me } = setup();
+    const before = me.score;
+    swing(w, me);
+    const ev = w.events.find((e) => e.type === "revenge");
+    expect(ev && ev.type === "revenge" ? ev.bonus : 0).toBe(revengeBonus(80_000));
+    expect(w.usurpFx).toBe(0);
+    expect(w.stats.revenges).toBe(1);
+    expect(me.score - before).toBeGreaterThanOrEqual(revengeBonus(80_000));
+  });
+
+  it("no bonus once the window has run out", () => {
+    const { w, me } = setup();
+    w.usurpFx = 0;
+    swing(w, me);
+    expect(w.events.some((e) => e.type === "revenge")).toBe(false);
+    expect(w.stats.revenges).toBe(0);
   });
 });

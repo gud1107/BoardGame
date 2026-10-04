@@ -461,8 +461,17 @@ export const SHELL_PIECE_LABEL: Record<ShellPiece, string> = { rosette: "황금 
 
 /** Seconds of the gold screen flourish when you take the crown. */
 export const KING_FX = 1.3;
-/** Seconds the new king stays highlighted (arrow/ring) after taking your crown. */
-export const USURP_FX = 4;
+/**
+ * 역습 window: after a crab takes your crown it stays marked for USURP_FX seconds (a strong callout for
+ * the first USURP_STRONG, then a countdown marker). Flip it inside the window for the 역습 보너스.
+ * Bot sims: half of crown changes happen >1,000u away and ex-kings that did strike back took 10–40s,
+ * so 15s is tight but winnable (the first cut, 4s, was never met).
+ */
+export const USURP_FX = 15;
+export const USURP_STRONG = 4;
+export function revengeBonus(usurperScore: number): number {
+  return 5_000 + Math.floor(usurperScore * 0.15);
+}
 
 /** Seconds the level-up "new shell pattern paints itself on" reveal lasts. */
 export const EVO_REVEAL = 0.9;

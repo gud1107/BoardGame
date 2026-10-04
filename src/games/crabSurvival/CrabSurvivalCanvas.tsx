@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { epicBounty, EPIC_SURVIVE_EVERY, GEAR_RARITY, GEARS, MUTATIONS, roadmap, SHIELDS, SPECIES, STAMINA_MAX, TIERS, tierForLevel, WEAPONS, comboMultiplier, type CrabTier, type MutationKind, type SpeciesId } from "./data";
+import { epicBounty, EPIC_SURVIVE_EVERY, USURP_FX, GEAR_RARITY, GEARS, MUTATIONS, roadmap, SHIELDS, SPECIES, STAMINA_MAX, TIERS, tierForLevel, WEAPONS, comboMultiplier, type CrabTier, type MutationKind, type SpeciesId } from "./data";
 import {
   attackReach,
   createWorld,
@@ -457,8 +457,13 @@ export default function CrabSurvivalCanvas({
           case "crownLost":
             a?.kingDown();
             if (a) a.king = false;
-            pushBanner({ text: "💔 왕관을 빼앗겼습니다!", sub: `${ev.by}에게 1위를 내줬어요 — 다시 점수를 모아 되찾으세요`, tone: "down" });
+            pushBanner({ text: "💔 왕관을 빼앗겼습니다!", sub: `${ev.by}을(를) ${USURP_FX}초 안에 뒤집으면 ⚔️ 역습 보너스!`, tone: "down" });
             if (navigator.vibrate) navigator.vibrate([40, 50, 40]);
+            break;
+          case "revenge":
+            a?.fanfare();
+            pushBanner({ text: `⚔️ 역습 성공! +${ev.bonus.toLocaleString()}`, sub: `왕관을 가져간 ${ev.victim}을(를) 곧바로 뒤집었습니다`, tone: "king" });
+            pushFeed(`⚔️ 역습! ${ev.victim}`, true);
             break;
           case "epicAlert":
             pushFeed(`🌟 ${ev.who} ${ev.emoji} ${ev.gear} 획득`, ev.player);

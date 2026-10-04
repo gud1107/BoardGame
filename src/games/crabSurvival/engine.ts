@@ -42,6 +42,7 @@ import {
   EVO_REVEAL,
   KING_FX,
   USURP_FX,
+  revengeBonus,
   EPIC_HUNT_VISION,
   GIANT_SCALE,
   MAGNET_BASE,
@@ -394,6 +395,7 @@ export type GameEvent =
   | { type: "levelUp"; level: number; name: string; player: boolean; species: SpeciesId; x: number; y: number }
   | { type: "kingNew"; name: string; player: boolean }
   | { type: "crownLost"; by: string }
+  | { type: "revenge"; victim: string; bonus: number }
   | { type: "kingDown"; name: string; by: string | null; player: boolean; byPlayer: boolean }
   | { type: "kill"; killer: string; victim: string; byPlayer: boolean; victimPlayer: boolean; bounty: number }
   | { type: "counter" }
@@ -417,6 +419,8 @@ export interface MatchStats {
   peakScore: number;
   deaths: number;
   damageDealt: number;
+  /** 역습: crown-thieves the player flipped inside the window. */
+  revenges: number;
   /** Legendary bounties the player cashed in (count / points). */
   bounties: number;
   bountyPoints: number;
@@ -467,8 +471,9 @@ export interface World {
   kingFx: number;
   /** Seconds left on the red "your crown was taken" flourish (visual). */
   crownLostFx: number;
-  /** Seconds left highlighting the crab that just took your crown (visual). */
+  /** Seconds left in the 역습 window on the crab that took your crown. */
   usurpFx: number;
+  usurperId: number;
   playerId: number;
   /** Player is flipped over, waiting for the revive/end choice. */
   playerDown: boolean;
@@ -637,6 +642,7 @@ export function createWorld(opts: MatchOptions): World {
     kingFx: 0,
     crownLostFx: 0,
     usurpFx: 0,
+    usurperId: 0,
     playerId: 0,
     playerDown: false,
     deathSnapshot: null,
@@ -645,7 +651,7 @@ export function createWorld(opts: MatchOptions): World {
     ranking: [],
     lbTimer: 0,
     spawnTimer: 0,
-    stats: { kills: 0, bestCombo: 0, maxLevel: 1, boxes: 0, eaten: 0, kingSeconds: 0, peakScore: 0, deaths: 0, damageDealt: 0, bounties: 0, bountyPoints: 0, bestStar: 0, epicSeconds: 0, survivalBonus: 0 },
+    stats: { kills: 0, bestCombo: 0, maxLevel: 1, boxes: 0, eaten: 0, kingSeconds: 0, peakScore: 0, deaths: 0, damageDealt: 0, revenges: 0, bounties: 0, bountyPoints: 0, bestStar: 0, epicSeconds: 0, survivalBonus: 0 },
     over: false,
     finalScore: 0,
   };
@@ -1457,9 +1463,21 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
       floatText(w, by.x, by.y - 62 * by.scale, `💰 현상금 +${bounty.toLocaleString()}`, "#fbbf24", 20, 1.6);
       burst(w, "gold", v.x, v.y, 22, 260, "#fbbf24", 5, 1, 240);
     }
+    // 역습 보너스: flipping the crab that took your crown while the window is open.
+    if (by.isPlayer && w.usurpFx > 0 && v.id === w.usurperId) {
+      const bonus = revengeBonus(score);
+      reward += bonus;
+      w.usurpFx = 0;
+      w.stats.revenges++;
+      floatText(w, by.x, by.y - 84 * by.scale, `⚔️ 역습 보너스 +${bonus.toLocaleString()}`, "#fca5a5", 21, 1.8);
+      burst(w, "star", v.x, v.y, 26, 300, "#f87171", 5, 1, 260);
+      w.events.push({ type: "revenge", victim: v.name, bonus });
+    }
     addScore(w, by, reward);
     floatText(w, by.x, by.y - 40 * by.scale, `+${Math.round(reward).toLocaleString()}`, "#fde047", wasKing ? 26 : 18, 1.4);
   }
+  // Someone else flipped the usurper: the revenge window closes.
+  if (w.usurpFx > 0 && v.id === w.usurperId) w.usurpFx = 0;
   w.events.push({ type: "kill", killer: killerName, victim: v.name, byPlayer: !!by?.isPlayer, victimPlayer: v.isPlayer, bounty });
   if (wasKing) {
     w.kingId = null;
@@ -1930,6 +1948,7 @@ export function updateLeaderboard(w: World, initial = false) {
   if (cur && cur.isPlayer && cur.alive && !initial && w.time >= 10) {
     w.crownLostFx = KING_FX;
     w.usurpFx = USURP_FX;
+    w.usurperId = top.id;
     w.events.push({ type: "crownLost", by: top.name });
   }
   w.kingId = top.id;

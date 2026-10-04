@@ -415,6 +415,7 @@ function ResultsPanel({
         <Stat label="최고 무기 ★" value={s.stats.bestStar ? "★".repeat(s.stats.bestStar) : "—"} />
         <Stat label="🌟 전설 보유" value={`${Math.round(s.stats.epicSeconds ?? 0)}초`} />
         <Stat label="🛡 생존 보상" value={s.stats.survivalBonus ? `+${s.stats.survivalBonus.toLocaleString()}` : "—"} />
+        {(s.stats.revenges ?? 0) > 0 && <Stat label="⚔️ 역습 성공" value={`${s.stats.revenges}회`} />}
       </div>
       <div>
         <div className="mb-1.5 text-xs font-semibold text-white/50 light:text-slate-500">최종 순위</div>
