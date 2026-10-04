@@ -2244,96 +2244,265 @@ function drawCreature(ctx: CanvasRenderingContext2D, cr: Creature, t: number) {
       break;
     case "fish": {
       const wig = Math.sin(t * 12 + cr.id) * 0.3;
-      ctx.fillStyle = flash ? "#fff" : cr.def.color;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, r * 1.2, r * 0.6, 0, 0, Math.PI * 2);
-      ctx.fill();
+      const base = flash ? "#ffffff" : cr.def.color;
+      const deep = flash ? "#e2e8f0" : "#0369a1";
+      // Tail fin (behind the body), forked.
       ctx.save();
-      ctx.translate(-r * 1.1, 0);
+      ctx.translate(-r * 1.05, 0);
       ctx.rotate(wig);
+      ctx.fillStyle = deep;
+      ctx.strokeStyle = "rgba(12,74,110,0.8)";
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.lineTo(-r * 0.8, -r * 0.6);
-      ctx.lineTo(-r * 0.8, r * 0.6);
+      ctx.quadraticCurveTo(-r * 0.5, -r * 0.2, -r * 0.95, -r * 0.7);
+      ctx.quadraticCurveTo(-r * 0.6, 0, -r * 0.95, r * 0.7);
+      ctx.quadraticCurveTo(-r * 0.5, r * 0.2, 0, 0);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+      // Dorsal + pectoral fins.
+      ctx.fillStyle = deep;
+      ctx.beginPath();
+      ctx.moveTo(r * 0.3, -r * 0.5);
+      ctx.quadraticCurveTo(-r * 0.2, -r * 1.05, -r * 0.6, -r * 0.45);
       ctx.closePath();
       ctx.fill();
-      ctx.restore();
-      ctx.fillStyle = "#0c4a6e";
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(r * 0.25, s * r * 0.5, r * 0.32, r * 0.13, s * (0.6 + wig * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Body with a light belly gradient and a lateral stripe.
+      const bg = ctx.createLinearGradient(0, -r * 0.6, 0, r * 0.6);
+      bg.addColorStop(0, deep);
+      bg.addColorStop(0.45, base);
+      bg.addColorStop(1, flash ? "#fff" : "#e0f2fe");
+      ctx.fillStyle = bg;
+      ctx.strokeStyle = "rgba(12,74,110,0.8)";
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.arc(r * 0.7, -r * 0.2, 2, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, r * 1.2, r * 0.62, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.stroke();
+      if (!flash) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(0, 0, r * 1.2, r * 0.62, 0, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
+        ctx.lineWidth = 0.8;
+        for (let i = 0; i < 6; i++) {
+          const x = -r * 0.7 + i * r * 0.3;
+          ctx.beginPath();
+          ctx.arc(x, 0, r * 0.35, -1, 1);
+          ctx.stroke();
+        }
+        ctx.fillStyle = "rgba(250,204,21,0.55)";
+        ctx.fillRect(-r * 1.1, -r * 0.06, r * 1.8, r * 0.12);
+        ctx.restore();
+        // Gill line + gloss.
+        ctx.strokeStyle = "rgba(12,74,110,0.6)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(r * 0.45, 0, r * 0.4, -1.1, 1.1);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        ctx.beginPath();
+        ctx.ellipse(0, -r * 0.28, r * 0.6, r * 0.12, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Eye.
+      ctx.fillStyle = "#fff";
       ctx.beginPath();
-      ctx.ellipse(0, -r * 0.2, r * 0.7, r * 0.18, 0, 0, Math.PI * 2);
+      ctx.arc(r * 0.78, -r * 0.18, r * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#0b1120";
+      ctx.beginPath();
+      ctx.arc(r * 0.82, -r * 0.18, r * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(r * 0.85, -r * 0.22, r * 0.04, 0, Math.PI * 2);
       ctx.fill();
       break;
     }
     case "crayfish":
     case "lobster": {
+      const big = cr.kind === "lobster";
       const k = r / 15;
       ctx.scale(k, k);
       const col = flash ? "#fff" : cr.def.color;
-      const dk = flash ? "#eee" : "#7f1d1d";
-      // Tail segments.
-      ctx.fillStyle = col;
-      for (let i = 0; i < 4; i++) {
-        ctx.beginPath();
-        ctx.ellipse(-8 - i * 5, 0, 5 - i * 0.6, 7 - i * 0.9, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.beginPath();
-      ctx.moveTo(-26, 0);
-      ctx.lineTo(-33, -7);
-      ctx.lineTo(-33, 7);
-      ctx.closePath();
-      ctx.fill();
-      // Legs.
-      ctx.strokeStyle = dk;
-      ctx.lineWidth = 1.6;
+      const dk = flash ? "#e5e7eb" : big ? "#450a0a" : "#7f1d1d";
+      const lite = flash ? "#fff" : big ? "#f87171" : "#fca5a5";
+      // Walking legs: tapered and rimmed, like the crabs'.
       for (const s of [-1, 1])
-        for (let i = 0; i < 3; i++) {
-          const sw = Math.sin(cr.walk + i + (s > 0 ? 1.5 : 0)) * 2;
+        for (let i = 0; i < 4; i++) {
+          const sw = Math.sin(cr.walk + i * 1.3 + (s > 0 ? 1.5 : 0)) * 2.2;
+          const bx = 4 - i * 4.2, by = s * 5;
+          const kx = bx - 2 + sw * 0.5, ky = s * 10;
+          const fx = kx - 3 + sw, fy = s * 14.5;
+          limb(ctx, bx, by, kx, ky, 2.8, 2.2, dk);
+          limb(ctx, kx, ky, fx, fy, 2.2, 0.9, dk);
+          limb(ctx, bx, by, kx, ky, 1.7, 1.3, col);
+        }
+      // Segmented tail: overlapping tergites from the back forward, each shaded and rimmed.
+      for (let i = 4; i >= 0; i--) {
+        const x = -9 - i * 4.6, w = 6.6 - i * 0.75;
+        const tg = ctx.createLinearGradient(x, -w, x, w);
+        tg.addColorStop(0, dk);
+        tg.addColorStop(0.35, col);
+        tg.addColorStop(0.6, col);
+        tg.addColorStop(1, dk);
+        ctx.fillStyle = tg;
+        ctx.strokeStyle = dk;
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.ellipse(x, 0, 3.6, w, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        if (!flash) {
+          ctx.fillStyle = "rgba(255,255,255,0.25)";
           ctx.beginPath();
-          ctx.moveTo(-i * 4, s * 5);
-          ctx.lineTo(-i * 4 - 3 + sw, s * 12);
+          ctx.ellipse(x + 0.8, -w * 0.35, 1.4, w * 0.3, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      // Tail fan: telson + two pairs of uropods.
+      ctx.fillStyle = col;
+      ctx.strokeStyle = dk;
+      ctx.lineWidth = 0.9;
+      for (const a of [-0.55, -0.22, 0, 0.22, 0.55]) {
+        ctx.save();
+        ctx.translate(-30, 0);
+        ctx.rotate(a);
+        ctx.beginPath();
+        ctx.moveTo(0, -1.6);
+        ctx.quadraticCurveTo(-7, -2.8, -8.5, 0);
+        ctx.quadraticCurveTo(-7, 2.8, 0, 1.6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+      // Claw arms → chelae (the lobster's are huge crushers).
+      for (const s of [-1, 1]) {
+        const cs = big ? 1.35 : 1;
+        limb(ctx, 7, s * 4.5, 13, s * 9, 4.2 * cs, 3.6 * cs, dk);
+        limb(ctx, 13, s * 9, 18, s * 9.5, 3.6 * cs, 4 * cs, dk);
+        limb(ctx, 7, s * 4.5, 13, s * 9, 3 * cs, 2.5 * cs, col);
+        limb(ctx, 13, s * 9, 18, s * 9.5, 2.5 * cs, 2.9 * cs, col);
+        ctx.save();
+        ctx.translate(18, s * 9.5);
+        ctx.rotate(s * 0.12);
+        ctx.scale(cs, cs);
+        // Fingers with dark tips.
+        for (const f of [-1, 1]) {
+          const fg = ctx.createLinearGradient(5, 0, 14, 0);
+          fg.addColorStop(0, col);
+          fg.addColorStop(0.55, dk);
+          fg.addColorStop(1, flash ? "#ddd" : "#1c0a0a");
+          ctx.fillStyle = fg;
+          ctx.strokeStyle = dk;
+          ctx.lineWidth = 0.8;
+          ctx.beginPath();
+          ctx.moveTo(5, f * 0.6);
+          ctx.quadraticCurveTo(10, f * 3.4, 14, f * 0.8);
+          ctx.quadraticCurveTo(10, f * 0.4, 5, f * 2.2);
+          ctx.closePath();
+          ctx.fill();
           ctx.stroke();
         }
-      // Body + big claws.
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.ellipse(2, 0, 10, 7, 0, 0, Math.PI * 2);
-      ctx.fill();
-      for (const s of [-1, 1]) {
-        ctx.strokeStyle = col;
-        ctx.lineWidth = 3;
+        const pg = ctx.createRadialGradient(1.5, -1.6, 0.3, 2.5, 0, 6.5);
+        pg.addColorStop(0, lite);
+        pg.addColorStop(0.6, col);
+        pg.addColorStop(1, dk);
+        ctx.fillStyle = pg;
+        ctx.strokeStyle = dk;
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(8, s * 4);
-        ctx.lineTo(16, s * 9);
-        ctx.stroke();
-        ctx.fillStyle = col;
-        ctx.beginPath();
-        ctx.ellipse(22, s * 10, 7, 4.5, s * 0.25, 0, Math.PI * 2);
+        ctx.ellipse(2.5, 0, 5.8, 3.9, 0, 0, Math.PI * 2);
         ctx.fill();
+        ctx.stroke();
+        if (big && !flash) {
+          // Crusher knobs.
+          ctx.fillStyle = "rgba(255,237,213,0.7)";
+          for (let i = 0; i < 4; i++) {
+            ctx.beginPath();
+            ctx.arc(0.5 + i * 1.6, -2 + (i % 2), 0.55, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
+      // Carapace with a pointed rostrum.
+      const cg = ctx.createRadialGradient(2, -2.5, 1, 1, 0, 11);
+      cg.addColorStop(0, lite);
+      cg.addColorStop(0.55, col);
+      cg.addColorStop(1, dk);
+      ctx.fillStyle = cg;
+      ctx.strokeStyle = dk;
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(15, 0);
+      ctx.quadraticCurveTo(11, -2.2, 9, -5.5);
+      ctx.quadraticCurveTo(0, -8.2, -7.5, -6.2);
+      ctx.quadraticCurveTo(-9.5, 0, -7.5, 6.2);
+      ctx.quadraticCurveTo(0, 8.2, 9, 5.5);
+      ctx.quadraticCurveTo(11, 2.2, 15, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      if (!flash) {
+        // Cervical groove, spines (lobster), gloss.
+        ctx.strokeStyle = "rgba(0,0,0,0.25)";
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(1, -6.5);
+        ctx.quadraticCurveTo(-1, 0, 1, 6.5);
+        ctx.stroke();
+        if (big) {
+          ctx.fillStyle = "rgba(255,237,213,0.75)";
+          for (const [sx, sy] of [[5, -3.5], [5, 3.5], [-2, -4.8], [-2, 4.8], [-5, -2.5], [-5, 2.5]] as const) {
+            ctx.beginPath();
+            ctx.arc(sx, sy, 0.7, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.fillStyle = "rgba(255,255,255,0.35)";
+        ctx.beginPath();
+        ctx.ellipse(2, -3, 5, 1.4, -0.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Antennae (long, whippy) + antennules.
+      ctx.strokeStyle = dk;
+      ctx.lineCap = "round";
+      for (const s of [-1, 1]) {
+        ctx.lineWidth = big ? 1.3 : 1;
+        ctx.beginPath();
+        ctx.moveTo(13, s * 1.6);
+        ctx.quadraticCurveTo(28, s * 5, (big ? 44 : 38), s * (15 + Math.sin(t * 3 + cr.id + s) * 3));
+        ctx.stroke();
+        ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(14, s * 0.8);
+        ctx.lineTo(20, s * 3.2);
+        ctx.stroke();
+      }
+      ctx.lineCap = "butt";
+      // Eyes on short stalks.
+      for (const s of [-1, 1]) {
         ctx.fillStyle = dk;
         ctx.beginPath();
-        ctx.moveTo(26, s * 9);
-        ctx.lineTo(32, s * 8);
-        ctx.lineTo(27, s * 11);
+        ctx.ellipse(11.5, s * 2.8, 1.4, 0.9, 0, 0, Math.PI * 2);
         ctx.fill();
-      }
-      // Antennae.
-      ctx.strokeStyle = dk;
-      ctx.lineWidth = 1;
-      for (const s of [-1, 1]) {
+        ctx.fillStyle = "#0b0b0f";
         ctx.beginPath();
-        ctx.moveTo(10, s * 2);
-        ctx.quadraticCurveTo(26, s * 4, 36, s * (14 + Math.sin(t * 3 + cr.id) * 3));
-        ctx.stroke();
-      }
-      ctx.fillStyle = "#111";
-      for (const s of [-1, 1]) {
+        ctx.arc(12.6, s * 3.2, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#fff";
         ctx.beginPath();
-        ctx.arc(10, s * 3, 1.4, 0, Math.PI * 2);
+        ctx.arc(13, s * 3.2 - 0.5, 0.5, 0, Math.PI * 2);
         ctx.fill();
       }
       break;
@@ -2342,33 +2511,107 @@ function drawCreature(ctx: CanvasRenderingContext2D, cr: Creature, t: number) {
       const k = r / 32;
       ctx.scale(k, k);
       const pad = Math.sin(cr.walk * 2) * 0.4;
-      ctx.fillStyle = flash ? "#fff" : "#84cc16";
-      for (const [fx, fy, a] of [[14, -22, -0.6 + pad], [14, 22, 0.6 - pad], [-16, -18, -2.4 - pad], [-16, 18, 2.4 + pad]] as const) {
+      const skin = flash ? "#ffffff" : "#84cc16";
+      const skinDk = flash ? "#e5e7eb" : "#3f6212";
+      // Flippers: long tapered paddles with a rim and freckles.
+      for (const [fx, fy, a, len] of [[14, -22, -0.6 + pad, 1.25], [14, 22, 0.6 - pad, 1.25], [-16, -18, -2.4 - pad, 0.85], [-16, 18, 2.4 + pad, 0.85]] as const) {
         ctx.save();
         ctx.translate(fx, fy);
         ctx.rotate(a);
+        ctx.scale(len, 1);
+        ctx.fillStyle = skin;
+        ctx.strokeStyle = skinDk;
+        ctx.lineWidth = 1.4;
         ctx.beginPath();
-        ctx.ellipse(8, 0, 11, 5, 0, 0, Math.PI * 2);
+        ctx.moveTo(-2, -5);
+        ctx.quadraticCurveTo(12, -8, 20, -1);
+        ctx.quadraticCurveTo(12, 5, -2, 5);
+        ctx.closePath();
         ctx.fill();
+        ctx.stroke();
+        if (!flash) {
+          ctx.fillStyle = "rgba(63,98,18,0.55)";
+          for (const [px, py] of [[5, -1.5], [9, 1], [13, -1]] as const) {
+            ctx.beginPath();
+            ctx.arc(px, py, 1.2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
         ctx.restore();
       }
+      // Tail.
+      ctx.fillStyle = skin;
       ctx.beginPath();
-      ctx.ellipse(34, 0, 10, 8, 0, 0, Math.PI * 2);
+      ctx.moveTo(-26, -3);
+      ctx.lineTo(-36, 0);
+      ctx.lineTo(-26, 3);
       ctx.fill();
-      ctx.fillStyle = "#111";
+      // Head on a neck.
+      const hg = ctx.createRadialGradient(36, -3, 1, 34, 0, 11);
+      hg.addColorStop(0, flash ? "#fff" : "#bef264");
+      hg.addColorStop(1, skin);
+      ctx.fillStyle = hg;
+      ctx.strokeStyle = skinDk;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.arc(39, -4, 1.8, 0, Math.PI * 2);
-      ctx.arc(39, 4, 1.8, 0, Math.PI * 2);
+      ctx.ellipse(35, 0, 10.5, 8.5, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = flash ? "#fff" : "#4d7c0f";
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 28, 24, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "#365314";
-      ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.fillStyle = flash ? "#fff" : "#65a30d";
+      if (!flash) {
+        ctx.strokeStyle = "rgba(63,98,18,0.5)";
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(30, -5);
+        ctx.lineTo(34, -2.5);
+        ctx.moveTo(30, 5);
+        ctx.lineTo(34, 2.5);
+        ctx.stroke();
+      }
+      for (const s of [-1, 1]) {
+        ctx.fillStyle = "#0b0b0f";
+        ctx.beginPath();
+        ctx.arc(40, s * 4, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(40.6, s * 4 - 0.7, 0.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Shell: a domed carapace with marginal scutes around a central pattern.
+      const shellCol = flash ? "#ffffff" : "#4d7c0f";
+      const sg = ctx.createRadialGradient(-3, -7, 3, 0, 0, 30);
+      sg.addColorStop(0, flash ? "#fff" : "#a3b85a");
+      sg.addColorStop(0.55, shellCol);
+      sg.addColorStop(1, flash ? "#e5e7eb" : "#2d4a0a");
+      ctx.fillStyle = sg;
+      ctx.strokeStyle = "#1a2e05";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 28.5, 24.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // Marginal scutes (the scalloped rim).
+      if (!flash) {
+        ctx.strokeStyle = "rgba(26,46,5,0.6)";
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 22; i++) {
+          const a = (i / 22) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * 23.5, Math.sin(a) * 19.8);
+          ctx.lineTo(Math.cos(a) * 28.3, Math.sin(a) * 24.3);
+          ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 23.5, 19.8, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       const hex = (hx: number, hy: number, s: number) => {
+        const hg2 = ctx.createRadialGradient(hx - s * 0.3, hy - s * 0.3, 0, hx, hy, s);
+        hg2.addColorStop(0, flash ? "#fff" : "#a3e635");
+        hg2.addColorStop(1, flash ? "#eee" : "#4d7c0f");
+        ctx.fillStyle = hg2;
+        ctx.strokeStyle = "#1a2e05";
+        ctx.lineWidth = 1.4;
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2;
@@ -2378,10 +2621,16 @@ function drawCreature(ctx: CanvasRenderingContext2D, cr: Creature, t: number) {
         ctx.fill();
         ctx.stroke();
       };
-      hex(0, 0, 9);
+      hex(0, 0, 8.5);
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
-        hex(Math.cos(a) * 16, Math.sin(a) * 14, 6.5);
+        hex(Math.cos(a) * 14.5, Math.sin(a) * 12.5, 6);
+      }
+      if (!flash) {
+        ctx.fillStyle = "rgba(255,255,255,0.28)";
+        ctx.beginPath();
+        ctx.ellipse(-4, -11, 13, 4, -0.15, 0, Math.PI * 2);
+        ctx.fill();
       }
       break;
     }
