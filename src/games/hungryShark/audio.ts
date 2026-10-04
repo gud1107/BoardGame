@@ -143,6 +143,12 @@ export class SharkAudio {
     this.tone(600, 0.3, "sine", 0.15, 300);
     this.tone(640, 0.3, "sine", 0.1, 330, 0.05);
   }
+  /** Ice cracking overhead (얼음 해협 falling icicle). */
+  icicle() {
+    this.noise(0.18, 4200, 3, 0.35, 2400, "bandpass");
+    this.tone(2600, 0.12, "triangle", 0.05, 1800, 0.05, true);
+    this.tone(2100, 0.1, "triangle", 0.04, 1500, 0.14, true);
+  }
   torpedo() {
     this.tone(900, 0.4, "sawtooth", 0.06, 400);
   }

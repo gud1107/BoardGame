@@ -532,7 +532,7 @@ describe("maps", () => {
       return w.coins - c0;
     };
     expect(coinsOn("deepBlue")).toBe(10);
-    expect(coinsOn("shipwreck")).toBe(Math.round(10 * 1.35));
+    expect(coinsOn("shipwreck")).toBe(Math.round(10 * 1.25));
   });
 });
 
@@ -562,7 +562,7 @@ describe("mid-dive evolution", () => {
 describe("map invariant sweep", () => {
   const MAP_IDS = ["deepBlue", "frozenStrait", "shipwreck"] as const;
   // Spawned by something else, not by the roster.
-  const ALWAYS_OK = new Set(["chest", "torpedo", "sailor", "passenger", "rock"]);
+  const ALWAYS_OK = new Set(["chest", "torpedo", "sailor", "passenger", "rock", "iceShard"]);
   it.each(MAP_IDS.flatMap((m) => SHARKS.map((s) => [m, s.id] as const)))(
     "%s × %s: 45s dive with skills + mid-dive evolution keeps every invariant",
     async (mapId, sharkId) => {
@@ -710,5 +710,41 @@ describe("picker prefs", () => {
     const old = { ...freshSave() } as Partial<typeof s>;
     delete old.picker;
     expect(decodeSave(encodeSave(old as typeof s)).picker.sort).toBe("tree");
+  });
+});
+
+describe("frozen strait falling icicles", () => {
+  it("only fall under the ice, hang ~0.9s, then plunge and hurt a shark below", async () => {
+    const countShards = (id: "deepBlue" | "frozenStrait" | "shipwreck") => {
+      const w = createWorld(sharkById("reef"), NO_UPGRADES, 81, id);
+      let seen = 0;
+      for (let i = 0; i < 60 * 30; i++) {
+        w.shark.x = 2600 + Math.sin(i / 90) * 400;
+        w.shark.y = 420;
+        w.shark.hp = 9999;
+        step(w, idle, 1 / 60);
+        if (w.events.some((e) => e.type === "icicle")) seen++;
+        w.events.length = 0;
+      }
+      return seen;
+    };
+    expect(countShards("deepBlue")).toBe(0);
+    expect(countShards("shipwreck")).toBe(0);
+    expect(countShards("frozenStrait")).toBeGreaterThan(3);
+
+    const w = createWorld(sharkById("reef"), NO_UPGRADES, 82, "frozenStrait");
+    isolate(w);
+    const shard = place(w, "iceShard", w.shark.x, w.shark.y - 160);
+    shard.timer = 0.9;
+    const y0 = shard.y;
+    for (let i = 0; i < 30; i++) step(w, idle, 1 / 60);
+    expect(shard.y).toBe(y0); // still hanging
+    const hp0 = w.shark.hp;
+    for (let i = 0; i < 90 && shard.alive; i++) {
+      w.shark.vx = 0;
+      w.shark.vy = 0;
+      step(w, idle, 1 / 60);
+    }
+    expect(w.shark.hp).toBeLessThan(hp0 - 20);
   });
 });

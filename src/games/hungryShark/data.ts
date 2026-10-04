@@ -56,6 +56,10 @@ export interface MapDef {
   ice: IceSpec | null;
   /** Coin multiplier for everything earned on this map. */
   coinBonus: number;
+  /** Whole-map population factor on top of POPULATION_SCALE. */
+  density: number;
+  /** Extra factor for kinds that can hurt the shark (damage > 0) — the map's difficulty knob, tuned by bot sim. */
+  threatDensity: number;
   /** Monster roster: spawn-count multiplier per kind. Kinds missing here never spawn on this map. */
   spawns: Partial<Record<EntityKind, number>>;
   /** Depth (world y) where the deep-water darkness starts. */
@@ -83,6 +87,8 @@ export const MAPS: MapDef[] = [
     terrain: { kind: "rolling", base: SEABED_BASE, octaves: [[140, 0.0011, 0], [60, 0.0037, 1.3], [14, 0.013, 0.4]] },
     ice: null,
     coinBonus: 1,
+    density: 1,
+    threatDensity: 1,
     spawns: {
       ...COMMON_SPAWNS,
       crab: 1, swimmer: 1, puffer: 1, greenJelly: 1, redJelly: 1,
@@ -101,7 +107,7 @@ export const MAPS: MapDef[] = [
   },
   {
     id: "frozenStrait", name: "얼음 해협", emoji: "🧊", recommendedTier: 2,
-    desc: "수면이 두꺼운 빙판으로 덮여 숨구멍에서만 점프할 수 있는 바다. 얕은 대륙붕 사이로 깊은 해구 두 개가 갈라지고, 고드름과 얼음 기둥이 길을 막습니다. 펭귄·물범·일각고래·범고래 서식. 코인 ×1.4.",
+    desc: "수면이 두꺼운 빙판으로 덮여 숨구멍에서만 점프할 수 있는 바다. 얕은 대륙붕 사이로 깊은 해구 두 개가 갈라지고, 고드름과 얼음 기둥이 길을 막고, 빙판 밑을 지나면 고드름이 떨어집니다. 펭귄·물범·일각고래·범고래 서식. 코인 ×1.1.",
     width: 12000, chestCount: 9,
     terrain: {
       kind: "profile",
@@ -109,9 +115,13 @@ export const MAPS: MapDef[] = [
       octaves: [[40, 0.004, 0.3], [12, 0.02, 1]],
     },
     ice: { holes: [[1400, 700], [3300, 520], [5500, 620], [8900, 520], [11200, 640]], thickness: 80 },
-    coinBonus: 1.4,
+    // Bot sim 2026-10-04 (6 seeds, Lv.3): the shallow shelf packs prey together, so per-dive income already
+    // beats 딥 블루 (T3 ≈1.4×, T4 ≈1.8× at ×1.0) — the bonus stays small.
+    coinBonus: 1.1,
+    density: 1,
+    threatDensity: 0.7,
     spawns: {
-      ...COMMON_SPAWNS, smallFish: 0.8, tuna: 1.3,
+      ...COMMON_SPAWNS, smallFish: 1.2, tuna: 1.3, grouper: 1.4,
       penguin: 1, seal: 1, narwhal: 1, orca: 1,
       redJelly: 1.3, mineS: 0.6, mineM: 0.6, diver: 0.8, pelican: 0.5,
       fishingBoat: 0.6, sailor: 0.6, submarine: 1, smallShark: 0.7, angler: 0.8, iceberg: 1,
@@ -127,7 +137,7 @@ export const MAPS: MapDef[] = [
   },
   {
     id: "shipwreck", name: "난파선 무덤", emoji: "⚓", recommendedTier: 3,
-    desc: "계단처럼 꺼지는 해저 단구를 따라 거대한 침몰선 선체와 부러진 돛대가 벽처럼 놓인 어두운 바다. 보물 상자가 두 배지만 꼬치고기·곰치·대왕오징어와 기뢰가 득실거립니다. 코인 ×1.35.",
+    desc: "계단처럼 꺼지는 해저 단구를 따라 거대한 침몰선 선체와 부러진 돛대가 벽처럼 놓인 어두운 바다. 보물 상자가 두 배지만 꼬치고기·곰치·대왕오징어와 기뢰가 득실거립니다. 코인 ×1.25.",
     width: 13000, chestCount: 20,
     terrain: {
       kind: "profile",
@@ -135,11 +145,13 @@ export const MAPS: MapDef[] = [
       octaves: [[25, 0.006, 0.7], [10, 0.03, 2]],
     },
     ice: null,
-    coinBonus: 1.35,
+    coinBonus: 1.25,
+    density: 1,
+    threatDensity: 0.55,
     spawns: {
-      ...COMMON_SPAWNS, tuna: 0.5,
+      ...COMMON_SPAWNS, tuna: 0.5, smallFish: 1.4,
       barracuda: 1, moray: 1, treasureHunter: 1, giantSquid: 1,
-      crab: 1, puffer: 1, greenJelly: 1.4,
+      crab: 1.8, puffer: 1, greenJelly: 1.4,
       mineS: 1.5, mineM: 1.6, mineL: 1.6, mineXL: 1.2,
       diver: 1.2, sailor: 0.8, fishingBoat: 1, angler: 1.4, smallShark: 1, submarine: 1.3, ghostShark: 1.3,
     },
@@ -576,6 +588,7 @@ export type EntityKind =
   | "yacht" | "helicopter" | "rock"
   | "goldenTuna"
   | "iceberg"
+  | "iceShard"
   // 얼음 해협 exclusives
   | "penguin" | "seal" | "narwhal" | "orca"
   // 난파선 무덤 exclusives
@@ -644,6 +657,8 @@ export const ENTITY_DEFS: Record<EntityKind, EntityDef> = {
   rock: D({ kind: "rock", name: "화산 암석", requiredTier: NEVER, heal: 30, score: 400, coins: 24, coinChance: 1, radius: 16, speed: 0, toughness: 1, behavior: "rock", damage: 30, damageKind: "contact", depth: [2400, 2400], color: "#7c2d12" }),
   goldenTuna: D({ kind: "goldenTuna", name: "황금 참치", requiredTier: 1, heal: 30, score: 300, coins: 150, coinChance: 1, radius: 15, speed: 235, toughness: 1, behavior: "wander", damage: 0, damageKind: "contact", depth: [200, 2200], color: "#facc15" }),
   iceberg: D({ kind: "iceberg", name: "빙산", requiredTier: NEVER, heal: 60, score: 900, coins: 40, coinChance: 1, radius: 70, speed: 18, toughness: 1, behavior: "surfaceBoat", damage: 0, damageKind: "contact", depth: [0, 0], color: "#e0f2fe" }),
+  // Falls from a ceiling icicle above the shark (hangs ~0.9s trembling first) — 얼음 해협's falling-rock.
+  iceShard: D({ kind: "iceShard", name: "떨어지는 고드름", requiredTier: NEVER, heal: 20, score: 300, coins: 18, coinChance: 1, radius: 13, speed: 0, toughness: 1, behavior: "rock", damage: 26, damageKind: "contact", depth: [0, 0], color: "#e0f2fe" }),
   // ── 얼음 해협 ──
   penguin: D({ kind: "penguin", name: "펭귄", requiredTier: 1, heal: 10, score: 40, coins: 4, coinChance: 0.45, radius: 9, speed: 135, toughness: 1, behavior: "boid", damage: 0, damageKind: "contact", depth: [110, 700], color: "#1e293b" }),
   seal: D({ kind: "seal", name: "물범", requiredTier: 2, heal: 34, score: 165, coins: 10, coinChance: 0.7, radius: 17, speed: 170, toughness: 1, behavior: "wander", damage: 0, damageKind: "contact", depth: [120, 1100], color: "#9ca3af" }),
@@ -766,9 +781,9 @@ export function populationTargets(tier: SharkTier): Partial<Record<EntityKind, n
     yacht: tier >= 3 ? 2 : 1,
     helicopter: tier >= 3 ? 2 : 1,
     iceberg: 3,
-    seal: 7,
+    seal: 9,
     narwhal: tier <= 1 ? 2 : 3,
-    orca: 2,
+    orca: tier <= 2 ? 1 : 2,
     barracuda: tier <= 1 ? 4 : 6,
     moray: 4,
     treasureHunter: 5,
@@ -778,7 +793,7 @@ export function populationTargets(tier: SharkTier): Partial<Record<EntityKind, n
   for (const k of Object.keys(base) as EntityKind[]) out[k] = Math.round((base[k] ?? 0) * POPULATION_SCALE);
   // Schools are already dense; only nudged up.
   out.smallFish = 100;
-  out.penguin = 60;
+  out.penguin = 80;
   // Rare: the spawner only rolls it in occasionally (see engine runSpawner).
   out.goldenTuna = 1;
   return out;
@@ -797,15 +812,15 @@ export interface MissionDef {
 }
 
 export const MISSIONS: MissionDef[] = [
-  { id: "eatFish", label: (g) => `물고기 ${g}마리 먹기`, goals: [25, 50, 90], reward: 150 },
-  { id: "eatHumans", label: (g) => `사람 ${g}명 먹기`, goals: [3, 6, 10], reward: 200 },
-  { id: "reachDepth", label: (g) => `수심 ${g}m 도달`, goals: [80, 160, 260], reward: 180 },
-  { id: "survive", label: (g) => `${g}초 생존`, goals: [90, 150, 240], reward: 220 },
-  { id: "goldRush", label: (g) => `골드 러시 ${g}회 발동`, goals: [1, 2, 4], reward: 250 },
-  { id: "score", label: (g) => `점수 ${g.toLocaleString()}점 달성`, goals: [3000, 8000, 20000], reward: 300 },
-  { id: "boatBreaker", label: (g) => `여러 번 물어야 하는 대형 먹잇감 ${g}개 파괴`, goals: [1, 2, 4], reward: 350 },
-  { id: "chest", label: (g) => `보물 상자 ${g}개 찾기`, goals: [1, 2, 3], reward: 300 },
-  { id: "jump", label: (g) => `수면 위로 ${g}번 점프`, goals: [3, 6, 12], reward: 120 },
+  { id: "eatFish", label: (g) => `물고기 ${g}마리 먹기`, goals: [25, 50, 90], reward: 190 },
+  { id: "eatHumans", label: (g) => `사람 ${g}명 먹기`, goals: [3, 6, 10], reward: 250 },
+  { id: "reachDepth", label: (g) => `수심 ${g}m 도달`, goals: [80, 160, 260], reward: 225 },
+  { id: "survive", label: (g) => `${g}초 생존`, goals: [90, 150, 240], reward: 275 },
+  { id: "goldRush", label: (g) => `골드 러시 ${g}회 발동`, goals: [1, 2, 4], reward: 310 },
+  { id: "score", label: (g) => `점수 ${g.toLocaleString()}점 달성`, goals: [3000, 8000, 20000], reward: 375 },
+  { id: "boatBreaker", label: (g) => `여러 번 물어야 하는 대형 먹잇감 ${g}개 파괴`, goals: [1, 2, 4], reward: 440 },
+  { id: "chest", label: (g) => `보물 상자 ${g}개 찾기`, goals: [1, 2, 3], reward: 375 },
+  { id: "jump", label: (g) => `수면 위로 ${g}번 점프`, goals: [3, 6, 12], reward: 150 },
 ];
 
 /** 10 world units = 1 m for the depth readout. */

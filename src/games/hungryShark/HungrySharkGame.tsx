@@ -655,7 +655,7 @@ const EATEN_LABEL_ORDER: EntityKind[] = [
   "smallFish", "crab", "swimmer", "goldenTuna", "puffer", "pelican", "diver", "grouper", "ray", "tuna", "sailor", "angler",
   "fishingBoat", "passenger", "smallShark", "cageDiver", "submarine", "ghostShark", "yacht", "helicopter",
   "penguin", "seal", "narwhal", "orca", "treasureHunter", "barracuda", "moray", "giantSquid",
-  "greenJelly", "redJelly", "mineS", "mineM", "mineL", "mineXL", "torpedo", "rock", "iceberg", "chest",
+  "greenJelly", "redJelly", "mineS", "mineM", "mineL", "mineXL", "torpedo", "rock", "iceberg", "iceShard", "chest",
 ];
 
 function ResultsPanel({

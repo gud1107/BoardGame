@@ -146,6 +146,7 @@ export type GameEvent =
   | { type: "chest"; amount: number }
   | { type: "mission"; label: string; reward: number }
   | { type: "torpedo" }
+  | { type: "icicle" }
   | { type: "skill"; id: SkillId }
   | { type: "skillReady" }
   | { type: "preyFx"; label: string }
@@ -897,15 +898,26 @@ function updateEntities(w: World, dt: number) {
         break;
       }
       case "rock": {
-        e.vy += 240 * dt;
+        const ice = e.kind === "iceShard";
+        if (ice && e.timer > 0) {
+          // Hanging under its icicle, trembling: the dodge window.
+          e.timer -= dt;
+          break;
+        }
+        e.vy += (ice ? 520 : 240) * dt;
         e.x += e.vx * dt;
         e.y += e.vy * dt;
-        e.angle += dt * 2;
+        if (!ice) e.angle += dt * 2;
         if (rand(w) < 0.4)
-          addParticle(w, { kind: "smoke", x: e.x, y: e.y, vx: range(w, -10, 10), vy: -20, life: 1, maxLife: 1, size: range(w, 4, 8), color: "#44403c", gravity: 0 });
-        if (e.y > seabedY(e.x) - e.def.radius) {
-          burst(w, "smoke", e.x, e.y, 8, 90, "#57534e", 7, 1.2);
-          burst(w, "spark", e.x, e.y, 8, 200, "#fb923c", 3, 0.5);
+          addParticle(w, ice
+            ? { kind: "bubble", x: e.x, y: e.y - 12, vx: range(w, -10, 10), vy: -30, life: 0.7, maxLife: 0.7, size: range(w, 2, 3.5), color: "#e0f2fe", gravity: 0 }
+            : { kind: "smoke", x: e.x, y: e.y, vx: range(w, -10, 10), vy: -20, life: 1, maxLife: 1, size: range(w, 4, 8), color: "#44403c", gravity: 0 });
+        if (e.y > seabedY(e.x) - e.def.radius || (ice && insideAny(activeGeometry(), e.x, e.y + e.def.radius, 2, scratchC))) {
+          if (ice) burst(w, "spark", e.x, e.y, 14, 220, "#e0f2fe", 3.5, 0.6);
+          else {
+            burst(w, "smoke", e.x, e.y, 8, 90, "#57534e", 7, 1.2);
+            burst(w, "spark", e.x, e.y, 8, 200, "#fb923c", 3, 0.5);
+          }
           release(w, e);
         }
         break;
@@ -1004,7 +1016,7 @@ function updateWander(w: World, e: Entity, dist: number, dx: number, dy: number,
 }
 
 const HUNTER_AGGRO: Partial<Record<EntityKind, number>> = {
-  angler: 360, ghostShark: 600, orca: 580, giantSquid: 520, moray: 260, barracuda: 380,
+  angler: 360, ghostShark: 600, orca: 480, giantSquid: 520, moray: 260, barracuda: 380,
 };
 
 /** Enemy shark / anglerfish FSM: patrol → chase (if player is prey) / flee (if predator). */
@@ -1651,7 +1663,8 @@ function runSpawner(w: World, initial: boolean) {
   for (const kind of Object.keys(targets) as EntityKind[]) {
     const mul = w.map.spawns[kind];
     if (!mul) continue; // not on this map's roster
-    const want = Math.round((targets[kind] ?? 0) * mul);
+    const dens = kind === "goldenTuna" ? 1 : w.map.density * (ENTITY_DEFS[kind].damage > 0 ? w.map.threatDensity : 1);
+    const want = Math.round((targets[kind] ?? 0) * mul * dens);
     if ((counts[kind] ?? 0) >= want) continue;
     // Golden tuna: rolled in rarely (≈ once a minute on average), never at start.
     if (kind === "goldenTuna" && (initial || rand(w) > 0.0035)) continue;
@@ -1695,11 +1708,35 @@ function runSpawner(w: World, initial: boolean) {
     }
   }
   // Abyss volcano: falling rocks rain down while the player is deep.
+  if (!initial && w.map.feature === "iceSheet" && rand(w) < ICICLE_DROP_CHANCE) dropIcicle(w);
   if (!initial && w.map.feature === "coral" && s.y > 2350 && rand(w) < 0.22) {
     const r = spawn(w, "rock", s.x + range(w, -700, 700), Math.max(2250, s.y - 650));
     r.vx = range(w, -40, 40);
     r.vy = range(w, 40, 120);
   }
+}
+
+/** Per spawner tick (0.2s) while the shark swims under the ice sheet: ≈ one icicle every ~3.5s. */
+const ICICLE_DROP_CHANCE = 0.06;
+
+/** 얼음 해협 hazard: a ceiling icicle above the shark sheds its tip, hangs trembling ~0.9s, then plunges. */
+function dropIcicle(w: World) {
+  const s = w.shark;
+  if (s.airborne || s.y > 1500) return;
+  const over = activeGeometry().structures.filter(
+    (st) => st.kind === "icicle" && Math.abs(st.x - s.x) < 520 && st.y + st.len < s.y - 40,
+  );
+  if (!over.length) return;
+  // Bias toward icicles ahead of the shark so the drop lands in its path.
+  const ahead = over.filter((st) => (st.x - s.x) * Math.sign(s.vx || 1) > -80);
+  const pool = ahead.length ? ahead : over;
+  const st = pool[Math.floor(rand(w) * pool.length)];
+  const e = spawn(w, "iceShard", st.x, st.y + st.len - 14);
+  e.vx = 0;
+  e.vy = 0;
+  e.angle = 0;
+  e.timer = 0.9;
+  w.events.push({ type: "icicle" });
 }
 
 function despawnFar(w: World) {

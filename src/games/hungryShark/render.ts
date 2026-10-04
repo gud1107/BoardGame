@@ -466,6 +466,7 @@ export function drawEntityIcon(ctx: CanvasRenderingContext2D, kind: EntityKind, 
     : kind === "fishingBoat" || kind === "yacht" || kind === "submarine" ? 2.8
     : kind === "helicopter" ? 3.4
     : kind === "iceberg" ? 2.4
+    : kind === "iceShard" ? 3
     : kind === "orca" || kind === "narwhal" ? 3.4
     : kind === "giantSquid" || kind === "moray" ? 3.2
     : kind === "barracuda" || kind === "seal" ? 3
@@ -1981,6 +1982,35 @@ function drawEntity(ctx: CanvasRenderingContext2D, e: Entity, t: number, gold: b
       ctx.fillStyle = "#0f172a";
       ctx.beginPath();
       ctx.arc(r * 0.2, -r * 0.2, r * 0.08, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "iceShard": {
+      const hanging = e.timer > 0 && e.vy === 0;
+      if (hanging) {
+        // Tremble + a faint drop line showing where it will fall.
+        ctx.translate(Math.sin(e.phase * 60) * 2.2, 0);
+        ctx.strokeStyle = `rgba(248,113,113,${0.35 + 0.3 * Math.sin(e.phase * 18)})`;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 8]);
+        ctx.beginPath();
+        ctx.moveTo(0, r * 1.4);
+        ctx.lineTo(0, r * 1.4 + 520);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      const g = ctx.createLinearGradient(-r, 0, r, 0);
+      g.addColorStop(0, gold ? GOLD : "#bae6fd");
+      g.addColorStop(0.5, "#ffffff");
+      g.addColorStop(1, gold ? GOLD : "#7dd3fc");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.75, -r * 1.3);
+      ctx.lineTo(r * 0.75, -r * 1.3);
+      ctx.lineTo(r * 0.2, r * 0.4);
+      ctx.lineTo(0, r * 1.5);
+      ctx.lineTo(-r * 0.25, r * 0.5);
+      ctx.closePath();
       ctx.fill();
       break;
     }

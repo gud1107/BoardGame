@@ -130,9 +130,9 @@ export function buildGeometry(width: number, terrain: TerrainSpec, ice: IceSpec 
   const structures: Structure[] = [];
   if (feature === "iceSheet" && ice) {
     // Icicles hang from the ice sheet (never inside a breathing hole).
-    for (let i = 0; i * 230 < width; i++) {
-      const x = i * 230 + h01(i * 1.7) * 120;
-      if (h01(i * 3.3) < 0.42 || ceilAt(x) <= 1) continue;
+    for (let i = 0; i * 180 < width; i++) {
+      const x = i * 180 + h01(i * 1.7) * 90;
+      if (h01(i * 0.731 + 17.3) < 0.28 || ceilAt(x) <= 1) continue;
       if (ice.holes.some(([cx, wd]) => Math.abs(x - cx) < wd / 2 + 60)) continue;
       structures.push({ kind: "icicle", x, y: ceilAt(x) - 6, len: 70 + h01(i + 0.4) * 150, thick: 26 + h01(i + 0.9) * 22, angle: 0, seed: i });
     }
