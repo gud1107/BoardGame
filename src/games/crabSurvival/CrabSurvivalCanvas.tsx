@@ -92,6 +92,8 @@ export default function CrabSurvivalCanvas({
   onToggleMute,
   noShake,
   onToggleShake,
+  reduceFlash,
+  onToggleFlash,
   followMouse,
   onToggleFollow,
   onEnd,
@@ -104,6 +106,8 @@ export default function CrabSurvivalCanvas({
   onToggleMute: () => void;
   noShake: boolean;
   onToggleShake: () => void;
+  reduceFlash: boolean;
+  onToggleFlash: () => void;
   followMouse: boolean;
   onToggleFollow: () => void;
   onEnd: (s: MatchSummary) => void;
@@ -118,9 +122,11 @@ export default function CrabSurvivalCanvas({
   const sizeRef = useRef({ w: 800, h: 500, dpr: 1 });
   const pausedRef = useRef(false);
   const noShakeRef = useRef(noShake);
+  const reduceFlashRef = useRef(reduceFlash);
   useEffect(() => {
     noShakeRef.current = noShake;
-  }, [noShake]);
+    reduceFlashRef.current = reduceFlash;
+  }, [noShake, reduceFlash]);
   const followRef = useRef(followMouse);
   useEffect(() => {
     followRef.current = followMouse;
@@ -448,6 +454,12 @@ export default function CrabSurvivalCanvas({
               pushBanner({ text: `🚨 ${ev.who} 현상수배!`, sub: `현상금 ${ev.bounty.toLocaleString()}점 — 미니맵의 빨간 표시를 쫓으세요`, tone: "down" });
             }
             break;
+          case "crownLost":
+            a?.kingDown();
+            if (a) a.king = false;
+            pushBanner({ text: "💔 왕관을 빼앗겼습니다!", sub: `${ev.by}에게 1위를 내줬어요 — 다시 점수를 모아 되찾으세요`, tone: "down" });
+            if (navigator.vibrate) navigator.vibrate([40, 50, 40]);
+            break;
           case "epicAlert":
             pushFeed(`🌟 ${ev.who} ${ev.emoji} ${ev.gear} 획득`, ev.player);
             if (!ev.player && world.time - lastEpicBanner > 30) {
@@ -509,7 +521,7 @@ export default function CrabSurvivalCanvas({
         handleEvents();
         updateCamera(camRef.current, world, w, h, dt);
       }
-      drawWorld(ctx, world, camRef.current, w, h, now / 1000, dpr, { noShake: noShakeRef.current });
+      drawWorld(ctx, world, camRef.current, w, h, now / 1000, dpr, { noShake: noShakeRef.current, reduceFlash: reduceFlashRef.current });
       const mini = miniRef.current;
       if (mini) {
         const mctx = mini.getContext("2d");
@@ -728,6 +740,15 @@ export default function CrabSurvivalCanvas({
           >
             {noShake ? "🚫" : "📳"}
           </button>
+          <button
+            onClick={onToggleFlash}
+            className={`${hardBtn} ${reduceFlash ? "bg-slate-600/80" : ""}`}
+            title={reduceFlash ? "깜빡임·번쩍임 줄이기: 켜짐" : "깜빡임·번쩍임 줄이기: 꺼짐"}
+            aria-label="깜빡임·번쩍임 줄이기"
+            aria-pressed={reduceFlash}
+          >
+            {reduceFlash ? "🔅" : "🔆"}
+          </button>
           <button onClick={onToggleMute} className={hardBtn} aria-label="소리">
             {muted ? "🔇" : "🔊"}
           </button>
@@ -761,7 +782,7 @@ export default function CrabSurvivalCanvas({
                   <span className="text-sm leading-none">{g.emoji}</span>
                   {g.lv > 1 && <span className="text-[9px] text-amber-300">{"★".repeat(g.lv)}</span>}
                   {!compact && <span className="max-w-[78px] truncate font-bold" style={{ color: g.color }}>{g.name}</span>}
-                  <span className={`font-mono tabular-nums ${g.t < 5 ? "animate-pulse text-rose-300" : "text-cyan-300"}`}>{Math.ceil(g.t)}s</span>
+                  <span className={`font-mono tabular-nums ${g.t < 5 ? `${reduceFlash ? "" : "animate-pulse "}text-rose-300` : "text-cyan-300"}`}>{Math.ceil(g.t)}s</span>
                 </div>
               ))}
               {hud.muts.map((m) => {
@@ -769,7 +790,7 @@ export default function CrabSurvivalCanvas({
                 return (
                   <div
                     key={m.kind}
-                    className={`flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[10px] font-bold ring-1 ${m.pen > 0 ? "animate-pulse bg-rose-950/85 text-rose-200 ring-rose-500" : def.risk ? "bg-amber-950/85 text-amber-200 ring-amber-500" : "bg-emerald-950/85 text-emerald-200 ring-emerald-500"}`}
+                    className={`flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[10px] font-bold ring-1 ${m.pen > 0 ? `${reduceFlash ? "" : "animate-pulse "}bg-rose-950/85 text-rose-200 ring-rose-500` : def.risk ? "bg-amber-950/85 text-amber-200 ring-amber-500" : "bg-emerald-950/85 text-emerald-200 ring-emerald-500"}`}
                     title={`${def.name} — ${def.good}${def.bad ? ` / ${def.bad}` : ""}`}
                   >
                     <span>{m.pen > 0 ? "⚠️" : "🔼"}</span>
@@ -803,7 +824,7 @@ export default function CrabSurvivalCanvas({
           </div>
           <div className="relative h-3.5 overflow-hidden rounded-full bg-black/50 ring-1 ring-white/20">
             <div
-              className={`h-full rounded-full transition-[width] duration-100 ${hud.inPool ? "bg-gradient-to-r from-emerald-300 to-teal-500" : hpPct < 0.3 ? "animate-pulse bg-gradient-to-r from-red-500 to-rose-700" : "bg-gradient-to-r from-lime-400 to-green-600"}`}
+              className={`h-full rounded-full transition-[width] duration-100 ${hud.inPool ? "bg-gradient-to-r from-emerald-300 to-teal-500" : hpPct < 0.3 ? `${reduceFlash ? "" : "animate-pulse "}bg-gradient-to-r from-red-500 to-rose-700` : "bg-gradient-to-r from-lime-400 to-green-600"}`}
               style={{ width: `${hpPct * 100}%` }}
             />
             <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white drop-shadow">

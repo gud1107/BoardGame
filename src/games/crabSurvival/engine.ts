@@ -392,6 +392,7 @@ export type GameEvent =
   | { type: "key" }
   | { type: "levelUp"; level: number; name: string; player: boolean; species: SpeciesId; x: number; y: number }
   | { type: "kingNew"; name: string; player: boolean }
+  | { type: "crownLost"; by: string }
   | { type: "kingDown"; name: string; by: string | null; player: boolean; byPlayer: boolean }
   | { type: "kill"; killer: string; victim: string; byPlayer: boolean; victimPlayer: boolean; bounty: number }
   | { type: "counter" }
@@ -463,6 +464,8 @@ export interface World {
   shake: number;
   /** Seconds left on the player's "you took the crown" gold flourish (visual). */
   kingFx: number;
+  /** Seconds left on the red "your crown was taken" flourish (visual). */
+  crownLostFx: number;
   playerId: number;
   /** Player is flipped over, waiting for the revive/end choice. */
   playerDown: boolean;
@@ -629,6 +632,7 @@ export function createWorld(opts: MatchOptions): World {
     hitStop: 0,
     shake: 0,
     kingFx: 0,
+    crownLostFx: 0,
     playerId: 0,
     playerDown: false,
     deathSnapshot: null,
@@ -1024,6 +1028,7 @@ export function step(w: World, input: CrabInput, rawDt: number): void {
   const dt = Math.min(0.05, rawDt);
   w.shake = Math.max(0, w.shake - dt * 3);
   w.kingFx = Math.max(0, w.kingFx - dt);
+  w.crownLostFx = Math.max(0, w.crownLostFx - dt);
   if (w.hitStop > 0) {
     w.hitStop -= dt;
     return;
@@ -1916,6 +1921,11 @@ export function updateLeaderboard(w: World, initial = false) {
   // Hysteresis: a challenger must beat the sitting king by 5% (and 300 pts) to take the crown.
   if (cur && cur.alive && cur !== top && (top.score < cur.score * 1.05 || top.score - cur.score < 300)) return;
   if (cur === top) return;
+  // Overtaken while still alive (a death is handled by kingDown + the death screen).
+  if (cur && cur.isPlayer && cur.alive && !initial && w.time >= 10) {
+    w.crownLostFx = KING_FX;
+    w.events.push({ type: "crownLost", by: top.name });
+  }
   w.kingId = top.id;
   // The opening seconds reshuffle a lot — crown silently until things settle.
   if (!initial && w.time >= 10) {

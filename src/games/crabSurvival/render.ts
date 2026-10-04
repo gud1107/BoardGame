@@ -100,15 +100,32 @@ type Drawable =
   | { y: number; k: "box"; o: Box }
   | { y: number; k: "pickup"; o: Pickup };
 
-export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, W: number, H: number, t: number, dpr: number, opts: { noShake?: boolean } = {}) {
+/**
+ * "깜빡임·번쩍임 줄이기": set per frame from drawWorld's options and read by the draw helpers —
+ * no white hit flashes, no strobing blinks, steady (not pulsing) overlays, dimmer glows.
+ */
+let calm = false;
+
+export function drawWorld(
+  ctx: CanvasRenderingContext2D,
+  w: World,
+  cam: Camera,
+  W: number,
+  H: number,
+  t: number,
+  dpr: number,
+  opts: { noShake?: boolean; reduceFlash?: boolean } = {},
+) {
+  calm = !!opts.reduceFlash;
   const z = cam.zoom;
   const me = player(w);
   const evo = evoFx(me);
   const king = kingFx(w, me);
+  const lost = crownLostFx(w, me);
   // "화면 흔들림 끄기" zeroes every camera shake source; the glows still play.
   const shake = !opts.noShake && w.shake > 0 ? w.shake * w.shake * 14 : 0;
   // My own evolution / crowning adds a soft rumble that swells and settles.
-  const rumble = opts.noShake ? 0 : (evo ? evo.env * evo.shake : 0) + (king ? king.env * king.shake : 0);
+  const rumble = opts.noShake ? 0 : (evo ? evo.env * evo.shake : 0) + (king ? king.env * king.shake : 0) + (lost ? lost.env * lost.shake : 0);
   const shx = (shake ? Math.sin(t * 91) * shake : 0) + Math.sin(t * 47) * rumble;
   const shy = (shake ? Math.cos(t * 77) * shake : 0) + Math.cos(t * 39) * rumble * 0.6;
   const cx = cam.x - shx / z, cy = cam.y - shy / (z * TILT);
@@ -193,7 +210,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
   for (const m of w.mines) {
     if (!inView(m.x, m.y)) continue;
     const armed = m.arm <= 0;
-    const blink = armed && Math.sin(t * 10 + m.id) > 0.4;
+    const blink = !calm && armed && Math.sin(t * 10 + m.id) > 0.4;
     const gold = (m.lv ?? 1) >= 3;
     ctx.fillStyle = "rgba(60,40,10,0.25)";
     ctx.beginPath();
@@ -267,6 +284,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
         break;
       case "pickup":
         drawPickup(ctx, view, W, H, dpr, d.o, t);
+        ctx.globalAlpha = 1; // the calm-mode expiry fade must not leak into the next drawable
         break;
       case "creature":
         ground();
@@ -415,17 +433,18 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
     const k = 1 - me.hp / me.maxHp / 0.3;
     const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7);
     g.addColorStop(0, "rgba(220,20,20,0)");
-    g.addColorStop(1, `rgba(220,20,20,${0.25 + 0.2 * k * (0.5 + 0.5 * Math.sin(t * 6))})`);
+    g.addColorStop(1, `rgba(220,20,20,${0.25 + 0.2 * k * (calm ? 0.5 : 0.5 + 0.5 * Math.sin(t * 6))})`);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
   }
 
   if (evo) drawEvoGlow(ctx, view, W, H, me, evo, t);
   if (king) drawEvoGlow(ctx, view, W, H, me, king, t, [250, 204, 21]);
+  if (lost) drawEvoGlow(ctx, view, W, H, me, lost, t, [239, 68, 68]);
 
   // 방사능: green-warped vision. 럼주: a woozy purple swirl at the edges.
   if (me.alive && penaltyLeft(me, "toxic") > 0) {
-    ctx.fillStyle = `rgba(101,163,13,${0.16 + 0.05 * Math.sin(t * 5)})`;
+    ctx.fillStyle = `rgba(101,163,13,${calm ? 0.14 : 0.16 + 0.05 * Math.sin(t * 5)})`;
     ctx.fillRect(0, 0, W, H);
     const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.7);
     g.addColorStop(0, "rgba(132,204,22,0)");
@@ -436,7 +455,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, cam: Camera, 
   if (me.alive && penaltyLeft(me, "rum") > 0) {
     const g = ctx.createRadialGradient(W / 2 + Math.sin(t * 2) * 40, H / 2 + Math.cos(t * 1.7) * 30, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7);
     g.addColorStop(0, "rgba(168,85,247,0)");
-    g.addColorStop(1, `rgba(126,34,206,${0.25 + 0.1 * Math.sin(t * 3)})`);
+    g.addColorStop(1, `rgba(126,34,206,${calm ? 0.22 : 0.25 + 0.1 * Math.sin(t * 3)})`);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
   }
@@ -811,10 +830,10 @@ function drawBox(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: numbe
   const hgt = s * 1.35;
   const topD = s * 0.9 * TILT;
   // Front face.
-  ctx.fillStyle = b.hitFlash > 0 ? "#fff" : gold ? "#d4a017" : "#a0622d";
+  ctx.fillStyle = b.hitFlash > 0 && !calm ? "#fff" : gold ? "#d4a017" : "#a0622d";
   ctx.fillRect(bx, fy - hgt + topD * 0.4, s * 2, hgt);
   // Top face.
-  ctx.fillStyle = b.hitFlash > 0 ? "#fff" : gold ? "#f7d154" : "#c17f43";
+  ctx.fillStyle = b.hitFlash > 0 && !calm ? "#fff" : gold ? "#f7d154" : "#c17f43";
   ctx.fillRect(bx, fy - hgt - topD * 0.6, s * 2, topD);
   ctx.strokeStyle = gold ? "#8a6508" : "#6b3d17";
   ctx.lineWidth = Math.max(1, 2 * z);
@@ -861,8 +880,12 @@ function drawPickup(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: nu
   const [x, y] = toScreen(cam, W, H, p.x, p.y, p.z + bob);
   const [gx, gy] = toScreen(cam, W, H, p.x, p.y);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.globalAlpha = 1;
   // Blink before expiry.
-  if (p.ttl !== Infinity && p.ttl - p.age < 6 && Math.sin(t * 18) > 0.3) return;
+  if (p.ttl !== Infinity && p.ttl - p.age < 6) {
+    if (calm) ctx.globalAlpha = 0.35 + 0.65 * Math.max(0, (p.ttl - p.age) / 6);
+    else if (Math.sin(t * 18) > 0.3) return;
+  }
   ctx.fillStyle = "rgba(60,40,10,0.22)";
   ctx.beginPath();
   ctx.ellipse(gx, gy + 2, p.radius * z * 0.9, p.radius * z * 0.4, 0, 0, Math.PI * 2);
@@ -1008,11 +1031,11 @@ function drawCrabWorld(ctx: CanvasRenderingContext2D, c: Crab, t: number, king: 
     ctx.globalAlpha = fade;
     drawCrabBody(ctx, c.color, { walk: t * 12, dead: true, flipT: Math.min(1, c.deadT * 3), build: SPECIES[c.species].build });
   } else {
-    if (c.invuln > 0 && Math.sin(t * 30) > 0) ctx.globalAlpha = 0.45;
+    if (c.invuln > 0 && (calm || Math.sin(t * 30) > 0)) ctx.globalAlpha = calm ? 0.6 : 0.45;
     drawCrabBody(ctx, c.color, {
       build: SPECIES[c.species].build,
       walk: c.moving ? c.walk : 0,
-      flash: c.hitFlash > 0,
+      flash: c.hitFlash > 0 && !calm,
       swing: c.swing > 0 ? 1 - c.swing / 0.24 : -1,
       swingSide: c.swingSide,
       weapon: c.weapon?.kind ?? null,
@@ -2200,7 +2223,7 @@ function drawCreature(ctx: CanvasRenderingContext2D, cr: Creature, t: number) {
   ctx.ellipse(3, 4, r * 1.1, r * 0.9, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.rotate(cr.angle);
-  const flash = cr.hitFlash > 0;
+  const flash = cr.hitFlash > 0 && !calm;
   switch (cr.kind) {
     case "babyCrab":
       ctx.scale(r / CRAB_RADIUS, r / CRAB_RADIUS);
@@ -2452,6 +2475,14 @@ function evoFx(me: Crab): EvoFx | null {
   return { k, env, big, shake: big ? 3.2 : 1.4 };
 }
 
+/** The red flourish when another crab overtakes the player for the crown. */
+function crownLostFx(w: World, me: Crab): EvoFx | null {
+  if (!me.alive || w.crownLostFx <= 0) return null;
+  const k = 1 - w.crownLostFx / KING_FX;
+  const env = k < 0.15 ? k / 0.15 : Math.max(0, 1 - (k - 0.15) / 0.85) ** 1.3;
+  return { k, env, big: true, shake: 2.2 };
+}
+
 /** The gold flourish when the player takes the crown — same shape as the evolution glow, longer. */
 function kingFx(w: World, me: Crab): EvoFx | null {
   if (!me.alive || w.kingFx <= 0) return null;
@@ -2469,11 +2500,11 @@ function drawEvoGlow(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: n
   const rgb = tint
     ? tint
     : me.level >= 11
-      ? hueRgb((t * 180) % 360)
+      ? hueRgb((t * (calm ? 40 : 180)) % 360)
       : me.level >= 8
         ? [251, 191, 36]
         : hexRgb(me.color.shell);
-  const peak = fx.big ? 0.42 : 0.2;
+  const peak = (fx.big ? 0.42 : 0.2) * (calm ? 0.4 : 1);
   const a = peak * fx.env;
   ctx.save();
   // Edge vignette in the evolution colour.
@@ -2495,7 +2526,7 @@ function drawEvoGlow(ctx: CanvasRenderingContext2D, cam: Camera, W: number, H: n
     const p = (fx.k - delay) / (1 - delay);
     if (p <= 0) continue;
     const rr = R * (1.2 + p * 5);
-    ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(1 - p) * (fx.big ? 0.8 : 0.5)})`;
+    ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(1 - p) * (fx.big ? 0.8 : 0.5) * (calm ? 0.45 : 1)})`;
     ctx.lineWidth = Math.max(1.5, (fx.big ? 5 : 3) * (1 - p));
     ctx.beginPath();
     ctx.ellipse(sx, sy, rr, rr * TILT, 0, 0, Math.PI * 2);

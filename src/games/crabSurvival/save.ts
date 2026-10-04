@@ -27,6 +27,8 @@ export interface CrabSave {
   tipsDismissed: boolean;
   /** 화면 흔들림 끄기: no camera shake (glows/flashes stay). */
   noShake: boolean;
+  /** 깜빡임·번쩍임 줄이기: no white hit flashes or strobing blinks, steadier/dimmer glows. */
+  reduceFlash: boolean;
 }
 
 export interface SpeciesRecord {
@@ -63,8 +65,13 @@ export function freshSave(): CrabSave {
     speciesStats: {},
     tipsDismissed: false,
     // Start with shake off for anyone whose OS asks for reduced motion.
-    noShake: typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
+    noShake: prefersReducedMotion(),
+    reduceFlash: prefersReducedMotion(),
   };
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
 export function loadSave(): CrabSave {

@@ -112,6 +112,8 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
         onToggleMute={() => update((s) => ({ ...s, muted: !s.muted }))}
         noShake={save.noShake}
         onToggleShake={() => update((s) => ({ ...s, noShake: !s.noShake }))}
+        reduceFlash={save.reduceFlash}
+        onToggleFlash={() => update((s) => ({ ...s, reduceFlash: !s.reduceFlash }))}
         followMouse={save.followMouse}
         onToggleFollow={() => update((s) => ({ ...s, followMouse: !s.followMouse }))}
         onEnd={handleEnd}
@@ -216,6 +218,17 @@ export default function CrabSurvivalGame({ participants, onComplete }: PlayableG
                   type="checkbox"
                   checked={!save.noShake}
                   onChange={() => update((s) => ({ ...s, noShake: !s.noShake }))}
+                  className="h-4 w-4 accent-orange-500"
+                />
+              </label>
+              <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-black/20 px-2.5 py-2 text-xs light:bg-slate-50">
+                <span className="font-semibold text-white/75 light:text-slate-600">
+                  🔅 깜빡임·번쩍임 줄이기 <span className="font-normal text-white/45 light:text-slate-400">(피격 번쩍임·깜빡이는 효과)</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={save.reduceFlash}
+                  onChange={() => update((s) => ({ ...s, reduceFlash: !s.reduceFlash }))}
                   className="h-4 w-4 accent-orange-500"
                 />
               </label>

@@ -809,3 +809,21 @@ describe("crown flourish", () => {
     expect(w.kingFx).toBe(0);
   });
 });
+
+describe("crown lost", () => {
+  it("being overtaken while alive plays the red flourish and tells the UI who took it", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    w.time = 20;
+    me.score = 50_000;
+    foe.score = 100;
+    updateLeaderboard(w);
+    expect(w.kingId).toBe(me.id);
+    w.events.length = 0;
+    foe.score = 80_000;
+    updateLeaderboard(w);
+    expect(w.kingId).toBe(foe.id);
+    expect(w.crownLostFx).toBeGreaterThan(1);
+    expect(w.events.some((e) => e.type === "crownLost" && e.by === foe.name)).toBe(true);
+  });
+});

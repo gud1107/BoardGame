@@ -80,7 +80,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "crab-survival",
         type: "IMPROVE",
-        desc: "화면 흔들림 끄기 옵션(로비·경기 중 버튼, 기기 '동작 줄이기' 설정 시 기본 꺼짐), 킹 크랩 등극 시 금빛 화면 연출",
+        desc: "화면 흔들림 끄기·깜빡임 줄이기 옵션(기기 '동작 줄이기' 설정 시 기본 적용), 킹 크랩 등극 금빛·왕관 빼앗김 붉은 화면 연출",
       },
       {
         game: "hungry-shark",
