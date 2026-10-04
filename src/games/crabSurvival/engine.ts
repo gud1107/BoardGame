@@ -46,6 +46,7 @@ import {
   GRUDGE_ARMOR,
   GRUDGE_ATK,
   GRUDGE_SPEED,
+  PLAYER_RAGE,
   EPIC_HUNT_VISION,
   GIANT_SCALE,
   MAGNET_BASE,
@@ -181,6 +182,8 @@ export interface Crab {
   inPool: boolean;
   /** Seconds left on the species level-up surge (see SpeciesDef.perk). */
   surge: number;
+  /** Seconds of 분노 left for the player after losing the crown (bots use brain.grudgeT). */
+  rageT: number;
   /** Auto-firing field weapons (max 2), each with its own timer + cooldown. */
   gear: GearSlot[];
   /** Active buff / risk mutations. */
@@ -423,6 +426,16 @@ export interface CrownLogEntry {
   by?: string;
 }
 
+export interface MomentEntry {
+  t: number;
+  kind: "kill" | "evolve" | "epic" | "revenge" | "death" | "revive";
+  label: string;
+}
+
+function logMoment(w: World, kind: MomentEntry["kind"], label: string) {
+  if (w.moments.length < 300) w.moments.push({ t: w.time, kind, label });
+}
+
 export interface MatchStats {
   kills: number;
   bestCombo: number;
@@ -494,6 +507,8 @@ export interface World {
   kingRecap: boolean;
   /** The player's crown history this match, for the results timeline. */
   crownLog: CrownLogEntry[];
+  /** The player's other key moments (kills, evolutions, legendaries, revenges, deaths) for the timeline. */
+  moments: MomentEntry[];
   playerId: number;
   /** Player is flipped over, waiting for the revive/end choice. */
   playerDown: boolean;
@@ -565,7 +580,7 @@ export function atkMult(c: Crab): number {
 }
 /** 복수의 분노: a bot hunting the crab that took its crown. */
 export function enraged(c: Crab): boolean {
-  return !!c.brain && (c.brain.grudgeT ?? 0) > 0;
+  return c.rageT > 0 || (!!c.brain && (c.brain.grudgeT ?? 0) > 0);
 }
 /** Incoming damage multiplier from tier armor and mutations (<1 = tougher). */
 export function armorMult(c: Crab): number {
@@ -672,6 +687,7 @@ export function createWorld(opts: MatchOptions): World {
     crownLostOnce: false,
     kingRecap: false,
     crownLog: [],
+    moments: [],
     playerId: 0,
     playerDown: false,
     deathSnapshot: null,
@@ -758,6 +774,7 @@ function makeCrab(w: World, name: string, color: CrabColor, isPlayer: boolean, s
     lastAttacker: null,
     inPool: false,
     surge: 0,
+    rageT: 0,
     gear: [],
     muts: [],
     pearl: 0,
@@ -993,7 +1010,12 @@ export function addScore(w: World, c: Crab, pts: number) {
     burst(w, "star", c.x, c.y, 12, 220, "#fde047", 5, 0.9, 200);
     speciesSurge(w, c);
     c.evoT = EVO_REVEAL;
-    if (c.isPlayer) w.stats.maxLevel = Math.max(w.stats.maxLevel, c.level);
+    if (c.isPlayer) {
+      w.stats.maxLevel = Math.max(w.stats.maxLevel, c.level);
+      const tier = tierForLevel(c.level);
+      if (tier > tierForLevel(before)) logMoment(w, "evolve", `Lv${c.level} ${TIERS[tier].name}`);
+      else if (c.level === 12) logMoment(w, "evolve", `Lv12 ${levelDef(c).name}`);
+    }
   }
 }
 
@@ -1159,6 +1181,7 @@ function moveCrab(w: World, c: Crab, inp: CrabInput, dt: number) {
   c.surge = Math.max(0, c.surge - dt);
   c.skillCd = Math.max(0, c.skillCd - dt);
   c.dashT = Math.max(0, c.dashT - dt);
+  c.rageT = Math.max(0, c.rageT - dt);
   c.evoT = Math.max(0, c.evoT - dt);
   c.burnT = Math.max(0, c.burnT - dt);
   c.sinceHurt += dt;
@@ -1462,6 +1485,7 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
   const killerName = by?.name ?? sourceName ?? "바다";
   if (v.isPlayer) {
     w.deathSnapshot = { score, weapon: v.weapon ? { ...v.weapon } : null, shield: v.shield ? { ...v.shield } : null, by: killerName };
+    logMoment(w, "death", `${killerName}에게 쓰러짐`);
     w.playerDown = true;
     w.stats.deaths++;
     w.events.push({ type: "playerDeath", by: killerName });
@@ -1481,7 +1505,10 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
   let bounty = 0;
   if (by) {
     by.kills++;
-    if (by.isPlayer) w.stats.kills++;
+    if (by.isPlayer) {
+      w.stats.kills++;
+      logMoment(w, "kill", v.name);
+    }
     let reward = Math.floor(score * 0.2) + 75 * v.level;
     if (wasKing) reward += Math.floor(score * 0.3) + 10_000;
     // 전설 현상금: flat bounty for flipping a legendary carrier.
@@ -1504,6 +1531,7 @@ function killCrab(w: World, v: Crab, by: Crab | null, sourceName?: string) {
       floatText(w, by.x, by.y - 84 * by.scale, `⚔️ 역습 보너스 +${bonus.toLocaleString()}`, "#fca5a5", 21, 1.8);
       burst(w, "star", v.x, v.y, 26, 300, "#f87171", 5, 1, 260);
       w.events.push({ type: "revenge", victim: v.name, bonus });
+      logMoment(w, "revenge", `역습 · ${v.name}`);
     } else if (!by.isPlayer && by.brain && by.brain.grudgeId === v.id && (by.brain.grudgeT ?? 0) > 0) {
       // Bots cash in on revenge too — and the player hears about it if they were the thief.
       const bonus = revengeBonus(score);
@@ -1993,6 +2021,8 @@ export function updateLeaderboard(w: World, initial = false) {
     w.usurperId = top.id;
     w.crownLostOnce = true;
     w.crownLog.push({ t: w.time, kind: "lost", by: top.name });
+    // Fair's fair: the player gets the same 분노 a dethroned bot does.
+    cur.rageT = PLAYER_RAGE;
     w.events.push({ type: "crownLost", by: top.name });
   }
   // 복수심: a dethroned bot hunts whoever took its crown for the same window.
@@ -2059,6 +2089,7 @@ export function revivePlayer(w: World): boolean {
   const me = player(w);
   const snap = w.deathSnapshot;
   w.revivesLeft--;
+  logMoment(w, "revive", "부활");
   w.playerDown = false;
   const p = randomLandPoint(w, 30, true, 0.85);
   me.alive = true;
@@ -2370,6 +2401,7 @@ function clearPowers(c: Crab) {
   c.skillCd = 0;
   c.dashT = 0;
   c.epicT = 0;
+  c.rageT = 0;
 }
 
 /** Rarity-weighted weapon roll; `minRarity` restricts the pool (golden chests / lobsters: rare+). */
@@ -2450,6 +2482,7 @@ export function equipGear(w: World, c: Crab, kind: GearKind): boolean {
     if (!same) floatText(w, c.x, c.y - 34 * c.scale, `${def.emoji} ${def.name}!`, "#a5f3fc", 16, 1.2);
   }
   // A fresh legendary is announced to the whole island — its holder becomes the hunted.
+  if (def.rarity === "epic" && !hadEpic && c.isPlayer) logMoment(w, "epic", def.name);
   if (def.rarity === "epic" && !hadEpic) {
     w.events.push({ type: "epicAlert", who: c.name, gear: def.name, emoji: def.emoji, player: c.isPlayer });
     burst(w, "gold", c.x, c.y, 24, 260, "#fbbf24", 5, 1, 260);
@@ -2972,6 +3005,7 @@ export interface MatchSummary {
   killedBy: string | null;
   /** The player's crown history and the match length it spans (results timeline). */
   crownLog: CrownLogEntry[];
+  moments: MomentEntry[];
   duration: number;
 }
 
@@ -2990,6 +3024,7 @@ export function summarize(w: World): MatchSummary {
     endedByDeath: !me.alive,
     killedBy: !me.alive ? (w.deathSnapshot?.by ?? null) : null,
     crownLog: [...w.crownLog],
+    moments: [...w.moments],
     duration: w.duration,
   };
 }

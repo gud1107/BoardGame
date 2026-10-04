@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { epicBounty, EPIC_SURVIVE_EVERY, USURP_FX, GEAR_RARITY, GEARS, MUTATIONS, roadmap, SHIELDS, SPECIES, STAMINA_MAX, TIERS, tierForLevel, WEAPONS, comboMultiplier, type CrabTier, type MutationKind, type SpeciesId } from "./data";
+import { epicBounty, EPIC_SURVIVE_EVERY, PLAYER_RAGE, USURP_FX, GEAR_RARITY, GEARS, MUTATIONS, roadmap, SHIELDS, SPECIES, STAMINA_MAX, TIERS, tierForLevel, WEAPONS, comboMultiplier, type CrabTier, type MutationKind, type SpeciesId } from "./data";
 import {
   attackReach,
   createWorld,
@@ -64,6 +64,8 @@ interface Hud {
   /** Bounty on my own shell while I carry a legendary (0 = none) + seconds to the next 생존 보상. */
   myBounty: number;
   nextSurvive: number;
+  /** Seconds of my 분노 left (after losing the crown). */
+  rage: number;
 }
 
 interface Banner {
@@ -457,7 +459,7 @@ export default function CrabSurvivalCanvas({
           case "crownLost":
             a?.kingDown();
             if (a) a.king = false;
-            pushBanner({ text: "💔 왕관을 빼앗겼습니다!", sub: `${ev.by}을(를) ${USURP_FX}초 안에 뒤집으면 ⚔️ 역습 보너스!`, tone: "down" });
+            pushBanner({ text: "💔 왕관을 빼앗겼습니다!", sub: `😡 분노 ${PLAYER_RAGE}초(이동·공격 강화) — ${ev.by}을(를) ${USURP_FX}초 안에 뒤집으면 ⚔️ 역습 보너스!`, tone: "down" });
             if (navigator.vibrate) navigator.vibrate([40, 50, 40]);
             break;
           case "revenge":
@@ -577,6 +579,7 @@ export default function CrabSurvivalCanvas({
           pearl: me.pearl,
           myBounty: holdsEpic(me) ? epicBounty(me.level, me.epicT) : 0,
           nextSurvive: EPIC_SURVIVE_EVERY - (me.epicT % EPIC_SURVIVE_EVERY),
+          rage: me.rageT,
         });
       }
       if (world.over && endTimer === null) {
@@ -780,8 +783,14 @@ export default function CrabSurvivalCanvas({
       {/* ── Player status (bottom-left): field weapons + mutations on top ── */}
       {hud && hud.alive && (
         <div className={`pointer-events-none absolute left-2 flex w-[min(62%,300px)] flex-col gap-1 bottom-2`}>
-          {(hud.gear.length > 0 || hud.muts.length > 0) && (
+          {(hud.gear.length > 0 || hud.muts.length > 0 || hud.rage > 0) && (
             <div className="flex flex-wrap items-center gap-1">
+              {hud.rage > 0 && (
+                <div className="flex items-center gap-1 rounded-lg bg-red-950/85 px-1.5 py-0.5 text-[10px] font-bold text-red-200 ring-1 ring-red-500" title="왕관을 빼앗긴 분노: 이동 +25% · 공격 +30% · 받는 피해 -15%">
+                  <span>😡 분노</span>
+                  <span className="font-mono tabular-nums">{Math.ceil(hud.rage)}s</span>
+                </div>
+              )}
               {hud.myBounty > 0 && (
                 <div className="flex items-center gap-1 rounded-lg bg-amber-950/85 px-1.5 py-0.5 text-[10px] font-bold text-amber-200 ring-1 ring-amber-400" title="전설 무기를 들고 버틸수록 내 현상금과 생존 보상이 쌓입니다">
                   <span>💰 현상금 {hud.myBounty.toLocaleString()}</span>

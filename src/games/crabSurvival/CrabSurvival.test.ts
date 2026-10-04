@@ -973,3 +973,45 @@ describe("복수의 분노 + 왕관 기록", () => {
     expect(s.duration).toBe(600);
   });
 });
+
+describe("player 분노 + match moments", () => {
+  it("losing the crown alive gives the player 10s of the same rage buffs, then it wears off", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    w.time = 20;
+    me.score = 50_000;
+    foe.score = 100;
+    updateLeaderboard(w);
+    const atk0 = atkMult(me);
+    foe.score = 80_000;
+    updateLeaderboard(w);
+    expect(me.rageT).toBe(10);
+    expect(enraged(me)).toBe(true);
+    expect(atkMult(me)).toBeCloseTo(atk0 * GRUDGE_ATK, 5);
+    foe.x = 5000;
+    foe.brain = null;
+    for (let i = 0; i < 60 * 10.2; i++) step(w, idle, 1 / 60);
+    expect(enraged(me)).toBe(false);
+  });
+
+  it("logs kills, tier evolutions, legendary pickups, deaths and revives for the timeline", () => {
+    const w = bare(1);
+    const [me, foe] = w.crabs;
+    foe.brain = null;
+    addScore(w, me, 1_300); // Lv4 → Tier 2
+    equipGear(w, me, "trident");
+    foe.x = 40;
+    foe.hp = 1;
+    face(me, foe);
+    swing(w, me);
+    me.hp = 1;
+    foe.alive = true;
+    foe.hp = foe.maxHp = 10_000;
+    me.invuln = 0;
+    face(foe, me);
+    swing(w, foe);
+    expect(w.playerDown).toBe(true);
+    revivePlayer(w);
+    expect(summarize(w).moments.map((m) => m.kind)).toEqual(["evolve", "epic", "kill", "death", "revive"]);
+  });
+});
