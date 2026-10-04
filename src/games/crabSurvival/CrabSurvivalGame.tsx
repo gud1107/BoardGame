@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
-import { CRAB_COLORS, isUnlocked, MATCH_LENGTHS, roadmap, SPECIES, SPECIES_LIST, type CrabColor, type ShieldKind, type SpeciesId, type WeaponKind } from "./data";
+import { CRAB_COLORS, EVO_REVEAL, isUnlocked, MATCH_LENGTHS, roadmap, SHELL_BAND_LABEL, SHELL_PIECE_LABEL, SHELL_STYLE, SPECIES, SPECIES_LIST, type CrabColor, type ShieldKind, type SpeciesId, type WeaponKind } from "./data";
 import type { MatchSummary } from "./engine";
 import CrabSurvivalCanvas from "./CrabSurvivalCanvas";
 import RulebookModal from "./RulebookModal";
@@ -266,6 +266,7 @@ function CrabPreview({
   shield,
   crown,
   level,
+  revealLoop,
 }: {
   color: CrabColor;
   species?: SpeciesId;
@@ -276,6 +277,8 @@ function CrabPreview({
   shield?: ShieldKind;
   crown?: boolean;
   level?: number;
+  /** Replay the level-up pattern reveal on a loop (seconds per cycle, phase offset). */
+  revealLoop?: { period: number; offset: number };
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -289,12 +292,18 @@ function CrabPreview({
     let raf = 0;
     const draw = (t: number) => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawCrabPreview(ctx, color, width, height, animate ? t / 1000 : 0.4, { weapon, shield, crown, species, level });
-      if (animate) raf = requestAnimationFrame(draw);
+      const sec = t / 1000;
+      let reveal: number | undefined;
+      if (revealLoop) {
+        const ph = (sec + revealLoop.offset) % revealLoop.period;
+        if (ph < EVO_REVEAL) reveal = ph / EVO_REVEAL;
+      }
+      drawCrabPreview(ctx, color, width, height, animate || revealLoop ? sec : 0.4, { weapon, shield, crown, species, level, reveal });
+      if (animate || revealLoop) raf = requestAnimationFrame(draw);
     };
     draw(0);
     return () => cancelAnimationFrame(raf);
-  }, [color, species, width, height, animate, weapon, shield, crown, level]);
+  }, [color, species, width, height, animate, weapon, shield, crown, level, revealLoop]);
   return <canvas ref={ref} style={{ width, height, maxWidth: "100%" }} className="mx-auto block" />;
 }
 
@@ -419,12 +428,20 @@ function ResultsPanel({
   );
 }
 
+/** Staggered so the three evolving previews don't flash in unison (stable refs for the effect deps). */
+const LOOKS_LOOP: Record<number, { period: number; offset: number }> = {
+  4: { period: 2.6, offset: 0 },
+  8: { period: 2.6, offset: 1.73 },
+  11: { period: 2.6, offset: 0.87 },
+};
+
 /** 성장 외형: what the shell pattern looks like at each evolution tier. */
 function GrowthLooks({ color, species }: { color: CrabColor; species: SpeciesId }) {
+  const style = SHELL_STYLE[species];
   const steps: [number, string][] = [
     [1, "Lv1 기본"],
-    [4, "Lv4 줄무늬"],
-    [8, "Lv8 황금 장식"],
+    [4, `Lv4 ${SHELL_BAND_LABEL[style.band]}`],
+    [8, `Lv8 ${SHELL_PIECE_LABEL[style.piece]}`],
     [11, "Lv11 오색 광채"],
   ];
   return (
@@ -433,7 +450,7 @@ function GrowthLooks({ color, species }: { color: CrabColor; species: SpeciesId 
       <div className="grid grid-cols-4 gap-1">
         {steps.map(([lv, label]) => (
           <div key={lv} className="flex flex-col items-center rounded bg-gradient-to-b from-amber-100 to-amber-200 py-0.5">
-            <CrabPreview color={color} species={species} width={70} height={48} level={lv} animate={lv >= 11} />
+            <CrabPreview color={color} species={species} width={70} height={48} level={lv} animate={lv >= 11} revealLoop={lv > 1 ? LOOKS_LOOP[lv] : undefined} />
             <span className="text-[9px] font-semibold text-slate-700">{label}</span>
           </div>
         ))}

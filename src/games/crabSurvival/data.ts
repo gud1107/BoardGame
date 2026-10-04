@@ -441,6 +441,24 @@ export function tierForLevel(level: number): CrabTier {
   return level >= TIERS[4].level ? 4 : level >= TIERS[3].level ? 3 : level >= TIERS[2].level ? 2 : 1;
 }
 
+export type ShellBand = "chevron" | "streak" | "hex" | "dots";
+export type ShellPiece = "rosette" | "star" | "rivets" | "coin";
+
+/** Shell pattern flavour per species: Tier 2 band style and Tier 3 centrepiece (render + evolution SFX). */
+export const SHELL_STYLE: Record<SpeciesId, { band: ShellBand; piece: ShellPiece }> = {
+  flower: { band: "chevron", piece: "rosette" },
+  fiddler: { band: "chevron", piece: "star" },
+  ghost: { band: "streak", piece: "star" },
+  snow: { band: "hex", piece: "rivets" },
+  hermit: { band: "dots", piece: "rosette" },
+  mitten: { band: "dots", piece: "rosette" },
+  hairy: { band: "streak", piece: "rivets" },
+  redsnow: { band: "dots", piece: "coin" },
+};
+
+export const SHELL_BAND_LABEL: Record<ShellBand, string> = { chevron: "줄무늬", streak: "속도선", hex: "육각 갑옷", dots: "물방울" };
+export const SHELL_PIECE_LABEL: Record<ShellPiece, string> = { rosette: "황금 꽃", star: "황금 별", rivets: "황금 리벳", coin: "황금 동전" };
+
 /** Seconds the level-up "new shell pattern paints itself on" reveal lasts. */
 export const EVO_REVEAL = 0.9;
 

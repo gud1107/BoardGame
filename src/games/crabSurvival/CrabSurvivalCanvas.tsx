@@ -382,6 +382,7 @@ export default function CrabSurvivalCanvas({
           case "levelUp":
             if (ev.player) {
               a?.levelUp(ev.species);
+              a?.evolve(ev.species, ev.level);
               const perk = SPECIES[ev.species].perk;
               const tier = tierForLevel(ev.level);
               if (tier > tierForLevel(ev.level - 1)) {

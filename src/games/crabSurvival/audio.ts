@@ -4,7 +4,7 @@
  * bed plus a light marimba-ish loop that picks up tempo while you're king.
  */
 
-import type { SpeciesId } from "./data";
+import { EVO_REVEAL, SHELL_STYLE, type SpeciesId } from "./data";
 
 export class CrabAudio {
   private ctx: AudioContext | null = null;
@@ -299,6 +299,75 @@ export class CrabAudio {
     if (!this.ctx) return;
     this.tone(880, this.now, 0.25, "sine", 0.08, undefined, 1320);
   }
+  /**
+   * 진화 연출 SFX, timed to the 0.9s shell-pattern reveal and themed by the species' pattern:
+   * chevron = bright plucked strokes, streak = a fast whoosh with ticks, hex = metallic plate clinks,
+   * dots = bubbly pops. Evolution levels (Lv4/8/11) add a tier flourish: stripes / gold chimes / shimmer pad.
+   */
+  evolve(species: SpeciesId, level: number) {
+    if (!this.ctx) return;
+    const at = this.now + 0.12;
+    const D = EVO_REVEAL;
+    const style = SHELL_STYLE[species];
+    // The brush itself: a filtered noise sweep across the reveal.
+    this.noiseAt(at, D, 900, 1.4, 0.12, "bandpass", 4200);
+    const n = 6;
+    for (let i = 0; i < n; i++) {
+      const tt = at + (i / n) * D;
+      switch (style.band) {
+        case "chevron":
+          this.tone(midi(72 + [0, 4, 7, 12, 7, 16][i]), tt, 0.16, "triangle", 0.09);
+          break;
+        case "streak":
+          this.tone(2600 + i * 260, tt, 0.04, "square", 0.035);
+          break;
+        case "hex":
+          this.tone(1900 + (i % 2) * 380, tt, 0.12, "triangle", 0.07, undefined, 1500);
+          this.tone(3800, tt, 0.05, "sine", 0.03);
+          break;
+        case "dots":
+          this.tone(420 + i * 90, tt, 0.07, "sine", 0.13, undefined, 900 + i * 120);
+          break;
+      }
+    }
+    if (style.band === "streak") this.noiseAt(at, 0.35, 700, 1, 0.25, "bandpass", 6000);
+    const end = at + D;
+    if (level === 8) {
+      // Gold: a little chime cascade (coins jingle for the coin emblem).
+      const notes = style.piece === "coin" ? [2637, 3136, 2794, 3520, 3136] : [1568, 1976, 2349, 2637, 3136];
+      notes.forEach((f, i) => this.tone(f, end + i * 0.055, 0.32, style.piece === "coin" ? "square" : "sine", style.piece === "coin" ? 0.03 : 0.08));
+    } else if (level === 11) {
+      // Iridescent shimmer: a detuned major pad swelling under a high sparkle.
+      [523, 659, 784, 1047].forEach((f) => {
+        this.tone(f, end, 1.1, "sine", 0.06);
+        this.tone(f * 1.006, end + 0.02, 1.1, "sine", 0.05);
+      });
+      for (let i = 0; i < 6; i++) this.tone(3136 + i * 240, end + 0.15 + i * 0.07, 0.12, "sine", 0.04);
+    } else if (level === 4) {
+      this.tone(midi(84), end, 0.25, "triangle", 0.08);
+      this.tone(midi(88), end + 0.06, 0.3, "triangle", 0.07);
+    }
+  }
+
+  private noiseAt(at: number, dur: number, freq: number, q: number, gain: number, type: BiquadFilterType, sweepTo?: number) {
+    const ctx = this.ctx;
+    if (!ctx || !this.noiseBuf || !this.master) return;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const f = ctx.createBiquadFilter();
+    f.type = type;
+    f.frequency.setValueAtTime(freq, at);
+    if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, at + dur);
+    f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(gain, at + dur * 0.4);
+    g.gain.exponentialRampToValueAtTime(0.001, at + dur);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(at, Math.random() * 1.5);
+    src.stop(at + dur + 0.05);
+  }
+
   /** Field weapon picked up: a bright mechanical "ka-chunk". */
   gear() {
     if (!this.ctx) return;

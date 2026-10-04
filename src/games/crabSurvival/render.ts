@@ -5,7 +5,7 @@
  * crabs walk behind/in front of props correctly.
  */
 
-import { BOXES, CRAB_RADIUS, epicBounty, EPIC_WANTED, EVO_REVEAL, FOODS, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
+import { BOXES, CRAB_RADIUS, epicBounty, EPIC_WANTED, EVO_REVEAL, FOODS, SHELL_STYLE, GEAR_RARITY, GEARS, islandRadiusAt, MUTATIONS, SHALLOW_W, SHIELDS, SPECIES, WEAPONS, type CrabColor, type ShieldKind, type SpeciesDef, type SpeciesId, type WeaponKind } from "./data";
 import { crabRadius, hasMut, holdsEpic, penaltyLeft, player, type Beam, type Box, type Crab, type Creature, type Palm, type Pickup, type Rock, type Shot, type World } from "./engine";
 
 export const TILT = 0.72;
@@ -1777,17 +1777,6 @@ function drawShellOrnament(ctx: CanvasRenderingContext2D, R: number, shellPath: 
   }
 }
 
-/** Shell pattern flavour per species: Tier 2 band style and Tier 3 centrepiece. */
-const SHELL_STYLE: Record<SpeciesId, { band: "chevron" | "streak" | "hex" | "dots"; piece: "rosette" | "star" | "rivets" | "coin" }> = {
-  flower: { band: "chevron", piece: "rosette" },
-  fiddler: { band: "chevron", piece: "star" },
-  ghost: { band: "streak", piece: "star" },
-  snow: { band: "hex", piece: "rivets" },
-  hermit: { band: "dots", piece: "rosette" },
-  mitten: { band: "dots", piece: "rosette" },
-  hairy: { band: "streak", piece: "rivets" },
-  redsnow: { band: "dots", piece: "coin" },
-};
 
 function goldDot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
   const gg = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, 0, x, y, r);
