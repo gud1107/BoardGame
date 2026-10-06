@@ -4,7 +4,7 @@ import { BRANCH_INFO, sharkById, type SharkBranch, type SharkDef } from "./data"
 
 /**
  * 진화 분기 선택 모달 — shows the current shark's next evolution choices
- * (3 branches from the reef shark, one per branch after that) with stat
+ * (5 branches from the reef shark, one per branch after that) with stat
  * deltas, skill and passive, and an evolve button gated on coins.
  */
 
@@ -13,6 +13,8 @@ const BRANCH_BADGE: Record<SharkBranch, string> = {
   BRUTE: "bg-rose-950 text-rose-300 border-rose-600",
   SPEED: "bg-sky-950 text-sky-300 border-sky-600",
   VOID: "bg-purple-950 text-purple-300 border-purple-600",
+  FROST: "bg-cyan-950 text-cyan-200 border-cyan-500",
+  VENOM: "bg-lime-950 text-lime-300 border-lime-600",
 };
 
 export function BranchBadge({ branch }: { branch: SharkBranch }) {

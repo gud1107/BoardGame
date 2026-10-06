@@ -6,6 +6,7 @@ import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { recordSoloRun } from "@/lib/stats/soloResult";
 import {
   BRANCH_INFO,
+  BRANCH_ORDER,
   MAPS,
   mapById,
   mapCoinBonus,
@@ -223,7 +224,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
           {/* List controls: 진화 트리 or a stat sorted 높은/낮은 순 + filters — saved with the profile */}
           <SharkListControls picker={picker} onChange={setPicker} />
 
-          {/* Evolution tree picker: T1 root, then 3 branch columns × T2..T4 — or a flat sorted grid */}
+          {/* Evolution tree picker: T1 root, then 5 branch columns × T2..T4 — or a flat sorted grid */}
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-2 light:border-slate-200 light:bg-white">
             {listedSharks.length === 0 ? (
               <div className="py-6 text-center text-sm font-bold text-white/70 light:text-slate-600">
@@ -243,8 +244,8 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                       ))}
                   </div>
                 )}
-                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-                  {(["BRUTE", "SPEED", "VOID"] as const).map((br) => (
+                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 sm:gap-2">
+                  {BRANCH_ORDER.map((br) => (
                     <div key={br} className="flex flex-col gap-1.5">
                       <div className="text-center text-[10px] font-black text-white/60 light:text-slate-500">
                         {BRANCH_INFO[br].emoji} {BRANCH_INFO[br].name}

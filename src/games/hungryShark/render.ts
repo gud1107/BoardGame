@@ -1001,6 +1001,26 @@ function drawSkillFx(ctx: CanvasRenderingContext2D, w: World, t: number) {
     ctx.shadowBlur = 0;
   }
   ctx.globalAlpha = 1;
+  if (w.skill.id === "blizzard" && w.skill.active > 0) {
+    const fade = Math.min(1, w.skill.active / 0.5);
+    const bx = w.shark.x, by = w.shark.y;
+    const g = ctx.createRadialGradient(bx, by, 60, bx, by, 520);
+    g.addColorStop(0, `rgba(224,242,254,${0.05 * fade})`);
+    g.addColorStop(0.55, `rgba(186,230,253,${0.16 * fade})`);
+    g.addColorStop(1, "rgba(186,230,253,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(bx, by, 520, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(224,242,254,${0.45 * fade})`;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      const a0 = -t * 3 + (i * Math.PI * 2) / 3;
+      ctx.arc(bx, by, 280 + i * 80, a0, a0 + 1.2);
+      ctx.stroke();
+    }
+  }
   const v = w.skill.vortex;
   if (v) {
     const fade = Math.min(1, v.remaining / 0.5);
@@ -1137,6 +1157,15 @@ export function drawSharkShape(
   ctx.quadraticCurveTo(-0.13 * u, 0.06 * u, -0.15 * u, 0.15 * u);
   ctx.quadraticCurveTo(-0.06 * u, 0.06 * u, 0.02 * u, 0.03 * u);
   ctx.fill();
+  if (def.id === "thresher") {
+    // 환도상어: scythe-like upper lobe almost as long as the body.
+    ctx.beginPath();
+    ctx.moveTo(0.02 * u, -0.03 * u);
+    ctx.quadraticCurveTo(-0.2 * u, -0.1 * u, -0.48 * u, -0.3 * u);
+    ctx.quadraticCurveTo(-0.22 * u, -0.06 * u, -0.08 * u, 0);
+    ctx.closePath();
+    ctx.fill();
+  }
   ctx.restore();
 
   // Dorsal + pectoral fins.
@@ -1227,6 +1256,58 @@ export function drawSharkShape(
     ctx.ellipse(0.46 * u, -0.02 * u, 0.06 * u, 0.13 * u, 0, 0, Math.PI * 2);
     ctx.fill();
   }
+  if ((def.id === "greenland" || def.id === "sleeper" || def.id === "cryodon") && !gold) {
+    // Frost crystals scattered along the back.
+    ctx.fillStyle = def.id === "cryodon" ? `rgba(165,243,252,${0.7 + 0.3 * Math.sin(phase * 1.5)})` : "rgba(224,242,254,0.55)";
+    const n = def.id === "greenland" ? 5 : 7;
+    for (let i = 0; i < n; i++) {
+      const cx = 0.2 * u - i * 0.075 * u, cy = -0.12 * u + i * 0.008 * u, r = 0.016 * u;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r * 1.6);
+      ctx.lineTo(cx + r, cy);
+      ctx.lineTo(cx, cy + r * 1.2);
+      ctx.lineTo(cx - r, cy);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  if (def.id === "cryodon" && !gold) {
+    // Icicle fangs jutting from the upper jaw.
+    ctx.fillStyle = "rgba(224,242,254,0.9)";
+    for (let i = 0; i < 3; i++) {
+      const x = 0.3 * u + i * 0.05 * u;
+      ctx.beginPath();
+      ctx.moveTo(x - 0.012 * u, 0.04 * u);
+      ctx.lineTo(x + 0.012 * u, 0.04 * u);
+      ctx.lineTo(x, 0.1 * u);
+      ctx.fill();
+    }
+  }
+  if ((def.id === "bullShark" || def.id === "thresher" || def.id === "basilisk") && !gold) {
+    // Toxic stripes; the basilisk's pulse.
+    const glow = def.id === "basilisk" ? 0.55 + 0.4 * Math.sin(phase * 2.2) : 0.5;
+    ctx.strokeStyle = `rgba(163,230,53,${glow})`;
+    ctx.lineWidth = 0.014 * u;
+    for (let i = 0; i < (def.id === "bullShark" ? 3 : 5); i++) {
+      const x = 0.12 * u - i * 0.08 * u;
+      ctx.beginPath();
+      ctx.moveTo(x, -0.13 * u + i * 0.006 * u);
+      ctx.lineTo(x - 0.035 * u, -0.04 * u);
+      ctx.stroke();
+    }
+  }
+  if (def.id === "basilisk" && !gold) {
+    // Crest spines on the head.
+    ctx.fillStyle = accent;
+    for (let i = 0; i < 4; i++) {
+      const x = 0.32 * u - i * 0.06 * u;
+      ctx.beginPath();
+      ctx.moveTo(x - 0.02 * u, -0.14 * u + i * 0.004 * u);
+      ctx.lineTo(x - 0.05 * u, -0.22 * u);
+      ctx.lineTo(x + 0.01 * u, -0.145 * u);
+      ctx.fill();
+    }
+  }
   if (def.id === "megalodon" && !gold) {
     ctx.strokeStyle = "rgba(127,29,29,0.7)";
     ctx.lineWidth = 0.012 * u;
@@ -1289,7 +1370,7 @@ export function drawSharkShape(
   ctx.fill();
 
   // Eye.
-  ctx.fillStyle = (def.id === "leviathan" || def.id === "phantom") && !gold ? accent : "#020617";
+  ctx.fillStyle = (def.id === "leviathan" || def.id === "phantom" || def.id === "cryodon" || def.id === "basilisk") && !gold ? accent : "#020617";
   ctx.beginPath();
   ctx.arc(0.34 * u, -0.045 * u, 0.024 * u, 0, Math.PI * 2);
   ctx.fill();

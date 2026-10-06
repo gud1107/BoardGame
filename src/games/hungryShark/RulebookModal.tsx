@@ -99,9 +99,9 @@ export default function RulebookModal({ onClose, focusMap }: { onClose: () => vo
         </section>
 
         <section>
-          <h3 className={H3}>진화 트리 (3계통 · 10종)</h3>
+          <h3 className={H3}>진화 트리 (5계통 · 16종)</h3>
           <p className={`mb-2 ${P}`}>
-            암초상어에서 출발해 2티어부터 <b>세 갈래 계통</b> 중 하나로 진화합니다. 상위 상어를 해금하려면 바로 이전 단계를 먼저 보유해야
+            암초상어에서 출발해 2티어부터 <b>다섯 갈래 계통</b> 중 하나로 진화합니다. 상위 상어를 해금하려면 바로 이전 단계를 먼저 보유해야
             하며, 다른 계통도 언제든 따로 키울 수 있습니다. 같은 티어의 상어는 같은 먹이를 먹고, 계통마다 능력치·패시브·고유 스킬이 다릅니다.
           </p>
           <div className="overflow-x-auto">

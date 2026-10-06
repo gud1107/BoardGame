@@ -599,6 +599,7 @@ export function step(w: World, input: SharkInput, rawDt: number): void {
   updateEntities(w, dt);
   applyMagnet(w, dt);
   updateVortex(w, dt);
+  updateBlizzard(w, dt);
   buildGrid(w);
   resolveBites(w);
   resolveContacts(w, dt);
@@ -1319,6 +1320,12 @@ const SKILL_ACTIVE: Record<SkillId, number> = {
   emp: 0,
   snapJaw: 0,
   blackHole: 0,
+  frostNova: 0,
+  iceArmor: 4,
+  blizzard: 5,
+  venomSpit: 0,
+  tailWhip: 0,
+  plague: 0,
 };
 
 function skillSpeedMul(w: World): number {
@@ -1444,10 +1451,124 @@ export function castSkill(w: World) {
       }
       break;
     }
+    case "frostNova": {
+      const frozen = freezeAround(w, s.x, s.y, 400, 3, "#bae6fd");
+      const small = frozen.filter((e) => e.def.toughness <= 1 && isEdible(w, e) && Math.hypot(e.x - s.x, e.y - s.y) < 300);
+      small.sort((a, b) => Math.hypot(a.x - s.x, a.y - s.y) - Math.hypot(b.x - s.x, b.y - s.y));
+      for (const e of small.slice(0, 4)) {
+        w.beams.push({ x1: m.x, y1: m.y, x2: e.x, y2: e.y, life: 0.3, maxLife: 0.3, color: "#e0f2fe", zigzag: false });
+        consume(w, e);
+      }
+      break;
+    }
+    case "iceArmor":
+      s.shield = Math.max(s.shield, 4);
+      freezeAround(w, s.x, s.y, 300, 2, "#7dd3fc");
+      break;
+    case "blizzard":
+      w.rings.push({ x: s.x, y: s.y, radius: 520, life: 0.8, maxLife: 0.8, color: "#e0f2fe" });
+      w.shake = Math.max(w.shake, 12);
+      break;
+    case "venomSpit": {
+      // Three darts in a fan; each one hits the closest edible thing on its line.
+      const reach = 340 + w.stats.length;
+      const taken = new Set<Entity>();
+      for (const off of [-0.32, 0, 0.32]) {
+        const ax = Math.cos(s.angle + off), ay = Math.sin(s.angle + off);
+        let best: Entity | null = null;
+        let bestD = Infinity;
+        for (const e of w.entities) {
+          if (!e.alive || taken.has(e) || e.kind === "chest" || !isEdible(w, e)) continue;
+          const dx = e.x - m.x, dy = e.y - m.y;
+          const along = dx * ax + dy * ay;
+          if (along < 0 || along > reach + e.def.radius) continue;
+          if (Math.abs(dx * ay - dy * ax) > 34 + e.def.radius) continue;
+          if (along < bestD) { bestD = along; best = e; }
+        }
+        const ex = best ? best.x : m.x + ax * reach, ey = best ? best.y : m.y + ay * reach;
+        w.beams.push({ x1: m.x, y1: m.y, x2: ex, y2: ey, life: 0.35, maxLife: 0.35, color: "#a3e635", zigzag: false });
+        if (!best) continue;
+        taken.add(best);
+        burst(w, "spark", best.x, best.y, 8, 140, "#84cc16", 3, 0.5);
+        hitPrey(w, best, w.stats.biteForce * 2.5);
+      }
+      break;
+    }
+    case "tailWhip":
+      // Thresher-style whack around the body — damage like a shockwave, no dash / i-frames.
+      shockwave(w, s.x - Math.cos(s.angle) * w.stats.length * 0.3, s.y - Math.sin(s.angle) * w.stats.length * 0.3, 320, w.stats.biteForce * 3, 2.5);
+      break;
+    case "plague": {
+      const reach = 560;
+      let kills = 0;
+      for (const e of w.entities.slice()) {
+        if (!e.alive || e.kind === "chest") continue;
+        const dx = e.x - m.x, dy = e.y - m.y;
+        const d = Math.hypot(dx, dy) || 1;
+        if (d > reach + e.def.radius || (hx * dx + hy * dy) / d < 0.6) continue;
+        if (isEdible(w, e)) {
+          if (hitPrey(w, e, w.stats.biteForce * 4)) kills++;
+        } else e.stun = Math.max(e.stun, 4);
+      }
+      for (let i = 0; i < 26; i++) {
+        const a = s.angle + range(w, -0.6, 0.6);
+        const sp = range(w, 200, 520);
+        addParticle(w, { kind: "smoke", x: m.x, y: m.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, maxLife: 1, size: 12, color: "#65a30d", gravity: 0 });
+      }
+      if (kills > 0) {
+        s.hp = Math.min(w.stats.maxHealth, s.hp + w.stats.maxHealth * 0.04 * kills);
+        floatText(w, s.x, s.y - 90, `🧪 +${kills} 흡혈`, "#bef264", 16);
+      }
+      break;
+    }
     case "blackHole":
       sk.vortex = { x: m.x + hx * 160, y: Math.max(SURFACE_Y + 60, m.y + hy * 160), remaining: 4, radius: 240 };
       w.shake = Math.max(w.shake, 10);
       break;
+  }
+}
+
+/** Stun everything (not chests) inside R; returns what got frozen. */
+function freezeAround(w: World, x: number, y: number, R: number, seconds: number, color: string): Entity[] {
+  const out: Entity[] = [];
+  for (const e of w.entities) {
+    if (!e.alive || e.kind === "chest") continue;
+    if (Math.hypot(e.x - x, e.y - y) > R + e.def.radius) continue;
+    e.stun = Math.max(e.stun, seconds);
+    out.push(e);
+  }
+  w.rings.push({ x, y, radius: R, life: 0.7, maxLife: 0.7, color });
+  burst(w, "spark", x, y, 28, R * 0.9, color, 3, 0.7);
+  return out;
+}
+
+/** Ranged skill hit on edible prey: small prey is eaten, tough prey loses hp. True if it got eaten. */
+function hitPrey(w: World, e: Entity, damage: number): boolean {
+  if (e.def.toughness > 1) {
+    e.hp -= damage;
+    e.hitFlash = 0.2;
+    if (e.hp > 0) return false;
+  }
+  consume(w, e);
+  return true;
+}
+
+/** 절대영도 블리자드: keeps everything nearby frozen and grinds down prey close in. */
+function updateBlizzard(w: World, dt: number) {
+  const sk = w.skill;
+  if (sk.id !== "blizzard" || sk.active <= 0) return;
+  const s = w.shark;
+  if (rand(w) < 0.8)
+    addParticle(w, { kind: "spark", x: s.x + range(w, -520, 520), y: s.y + range(w, -400, 400), vx: range(w, -60, 60), vy: range(w, 20, 90), life: 0.7, maxLife: 0.7, size: 2.5, color: "#e0f2fe", gravity: 0 });
+  for (const e of w.entities.slice()) {
+    if (!e.alive || e.kind === "chest") continue;
+    const d = Math.hypot(e.x - s.x, e.y - s.y);
+    if (d > 520 + e.def.radius) continue;
+    e.stun = Math.max(e.stun, 0.4);
+    if (d < 280 + e.def.radius && isEdible(w, e) && e.def.toughness > 1) {
+      e.hp -= w.stats.biteForce * 1.5 * dt;
+      if (e.hp <= 0) consume(w, e);
+    }
   }
 }
 

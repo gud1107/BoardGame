@@ -214,6 +214,26 @@ export class SharkAudio {
         this.tone(700, 0.12, "triangle", 0.15, 1400);
         this.crunch(false);
         break;
+      case "frostNova":
+      case "iceArmor":
+        [1568, 1319, 1047].forEach((n, i) => this.tone(n, 0.35, "sine", 0.1, undefined, i * 0.06, true));
+        this.noise(0.5, 5000, 2, 0.3, 2500);
+        break;
+      case "blizzard":
+        this.noise(1.4, 3000, 1.2, 0.45, 600);
+        this.tone(880, 1.2, "sine", 0.08, 440);
+        break;
+      case "venomSpit":
+        [0, 0.07, 0.14].forEach((d) => this.tone(900, 0.08, "triangle", 0.1, 1500, d, true));
+        break;
+      case "tailWhip":
+        this.noise(0.25, 2500, 1, 0.6, 500);
+        this.tone(160, 0.3, "square", 0.12, 60);
+        break;
+      case "plague":
+        this.noise(1.0, 900, 1.5, 0.5, 200, "lowpass");
+        this.tone(130, 0.9, "sawtooth", 0.12, 90);
+        break;
       case "blackHole":
         this.tone(220, 1.6, "sine", 0.3, 30);
         this.noise(1.6, 300, 1.5, 0.5, 60, "lowpass");

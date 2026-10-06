@@ -332,16 +332,18 @@ describe("target feed indicator", () => {
 });
 
 describe("evolution tree", () => {
-  it("has 10 sharks: 1 root + 3 branches × tiers 2-4, each child points at its parent", async () => {
+  it("has 16 sharks: 1 root + 5 branches × tiers 2-4, each child points at its parent", async () => {
     const { evolutionPath } = await import("./data");
-    expect(SHARKS).toHaveLength(10);
-    expect(sharkById("reef").nextIds).toEqual(["sandTiger", "mako", "elecShark"]);
+    expect(SHARKS).toHaveLength(16);
+    expect(sharkById("reef").nextIds).toEqual(["sandTiger", "mako", "elecShark", "greenland", "bullShark"]);
     for (const s of SHARKS) {
       for (const n of s.nextIds) expect(sharkById(n).parentId).toBe(s.id);
       if (s.parentId) expect(sharkById(s.parentId).tier).toBe(s.tier - 1);
     }
     expect(evolutionPath("megalodon").map((s) => s.id)).toEqual(["reef", "sandTiger", "white", "megalodon"]);
     expect(evolutionPath("leviathan").map((s) => s.branch)).toEqual(["BASE", "VOID", "VOID", "VOID"]);
+    expect(evolutionPath("cryodon").map((s) => s.id)).toEqual(["reef", "greenland", "sleeper", "cryodon"]);
+    expect(evolutionPath("basilisk").map((s) => s.branch)).toEqual(["BASE", "VENOM", "VENOM", "VENOM"]);
   });
 
   it("migrates old linear-ladder saves: tiger → sandTiger + refund, ancestors filled in", async () => {

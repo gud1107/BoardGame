@@ -278,19 +278,24 @@ export function isUnderIce(x: number): boolean {
 //   T3 백상아리            T3 귀상어              T3 심해 고블린 상어
 //   T4 메갈로돈            T4 나이트메어 팬텀      T4 아비스 레비아탄
 //
+//   + FROST 빙하 수호자 (그린란드 → 잠꾸러기 → 크라이오돈)
+//   + VENOM 맹독 사냥꾼 (황소상어 → 환도상어 → 바실리스크)
+//
 // `tier` is also the prey food-chain tier (EntityDef.requiredTier), so every
 // branch at the same tier eats the same things — branches differ in stats,
 // passives and the active skill (`skill`, cast with Space / ⚡ button).
 
 export type SharkTier = 1 | 2 | 3 | 4;
-export type SharkBranch = "BASE" | "BRUTE" | "SPEED" | "VOID";
+export type SharkBranch = "BASE" | "BRUTE" | "SPEED" | "VOID" | "FROST" | "VENOM";
 
 export type SkillId =
   | "sprint" | "crush" | "surgeRam" | "titanRoar"
   | "sonicBreak" | "sonar" | "shadowCloak"
-  | "emp" | "snapJaw" | "blackHole";
+  | "emp" | "snapJaw" | "blackHole"
+  | "frostNova" | "iceArmor" | "blizzard"
+  | "venomSpit" | "tailWhip" | "plague";
 
-export type PassiveId = "appetite" | "ballistics" | "staticField";
+export type PassiveId = "appetite" | "ballistics" | "staticField" | "coldBlood" | "bloodlust";
 
 export interface SharkSkill {
   id: SkillId;
@@ -342,11 +347,16 @@ export const BRANCH_INFO: Record<SharkBranch, { name: string; short: string; emo
   BRUTE: { name: "브루트 포식자", short: "포식자 계통", emoji: "🩸", desc: "대형 · 체력 · 광역 파괴" },
   SPEED: { name: "스피드 암살자", short: "스피드 암살", emoji: "⚡", desc: "기동성 · 탐지 · 일격" },
   VOID: { name: "심해 사이오닉", short: "심해 사이오닉", emoji: "🌀", desc: "스킬 · 끌어당김 · 상태이상" },
+  FROST: { name: "빙하 수호자", short: "빙하 수호", emoji: "🧊", desc: "빙결 · 보호막 · 장기 생존" },
+  VENOM: { name: "맹독 사냥꾼", short: "맹독 사냥", emoji: "🧪", desc: "원거리 독 · 광역 · 흡혈" },
 };
+
+/** Branch columns in tree order (the reef shark sits above them). */
+export const BRANCH_ORDER = ["BRUTE", "SPEED", "VOID", "FROST", "VENOM"] as const;
 
 export const SHARKS: SharkDef[] = [
   {
-    id: "reef", tier: 1, branch: "BASE", parentId: null, nextIds: ["sandTiger", "mako", "elecShark"],
+    id: "reef", tier: 1, branch: "BASE", parentId: null, nextIds: ["sandTiger", "mako", "elecShark", "greenland", "bullShark"],
     name: "암초상어", nameEn: "Reef Shark",
     maxHealth: 100, baseDrainRate: 3.0, swimSpeed: 250, boostMultiplier: 1.9, boostDuration: 2.4,
     biteForce: 10, eatRadius: 18, length: 70, cost: 0,
@@ -354,7 +364,7 @@ export const SHARKS: SharkDef[] = [
     skill: { id: "sprint", name: "스프린트 대시", cooldown: 6, desc: "0.6초간 2배 속도로 돌진합니다 (부스트 소모 없음)." },
     passive: { id: "appetite", name: "왕성한 식욕", desc: "먹이 섭취 시 체력 회복량 +20%" },
     colors: ["#64748b", "#e2e8f0", "#0f172a"],
-    blurb: "작지만 민첩한 연안의 사냥꾼. 2티어부터 세 갈래 진화 경로 중 하나를 고를 수 있습니다.",
+    blurb: "작지만 민첩한 연안의 사냥꾼. 2티어부터 다섯 갈래 진화 경로 중 하나를 고를 수 있습니다.",
   },
   // ── Branch A: Brute ──
   {
@@ -458,6 +468,74 @@ export const SHARKS: SharkDef[] = [
     colors: ["#1e1b4b", "#818cf8", "#a855f7"],
     blurb: "중력 특이점을 열어 반경 내 모든 물고기와 잠수함을 빨아들입니다.",
   },
+  // ── Branch D: Frost ──
+  {
+    id: "greenland", tier: 2, branch: "FROST", parentId: "reef", nextIds: ["sleeper"],
+    name: "그린란드 상어", nameEn: "Greenland Shark",
+    maxHealth: 200, baseDrainRate: 3.4, swimSpeed: 240, boostMultiplier: 1.8, boostDuration: 2.4,
+    biteForce: 15, eatRadius: 22, length: 104, cost: 1690,
+    goldMultiplier: 1.2, magnetRadius: 50, boostEfficiency: 1.0,
+    skill: { id: "frostNova", name: "서리 파동", cooldown: 7, desc: "주변 400 반경을 3초간 얼려 멈추고, 얼어붙은 작은 먹이 최대 4마리를 즉시 포식합니다." },
+    passive: { id: "coldBlood", name: "냉혈 대사", desc: "배고픔(체력 감소) 속도 −20%" },
+    colors: ["#475569", "#e0f2fe", "#7dd3fc"],
+    blurb: "얼음 바다에서 수백 년을 사는 느림보. 느리지만 굶주림에 강해 오래 버팁니다.",
+  },
+  {
+    id: "sleeper", tier: 3, branch: "FROST", parentId: "greenland", nextIds: ["cryodon"],
+    name: "태평양 잠꾸러기상어", nameEn: "Pacific Sleeper",
+    maxHealth: 330, baseDrainRate: 4.6, swimSpeed: 270, boostMultiplier: 1.85, boostDuration: 2.8,
+    biteForce: 32, eatRadius: 32, length: 145, cost: 6050,
+    goldMultiplier: 1.55, magnetRadius: 75, boostEfficiency: 1.1,
+    skill: { id: "iceArmor", name: "빙결 갑옷", cooldown: 11, desc: "4초간 얼음 갑옷으로 모든 피해를 막고, 주변 300 반경을 2초간 얼립니다." },
+    passive: { id: "coldBlood", name: "냉혈 대사", desc: "배고픔(체력 감소) 속도 −20%" },
+    colors: ["#334155", "#cbd5e1", "#38bdf8"],
+    blurb: "두꺼운 피부에 얼음 갑옷을 두르는 심해의 거구. 위험한 바다에서도 버텨 냅니다.",
+  },
+  {
+    id: "cryodon", tier: 4, branch: "FROST", parentId: "sleeper", nextIds: [],
+    name: "빙하 군주 크라이오돈", nameEn: "Glacier Cryodon",
+    maxHealth: 480, baseDrainRate: 6.6, swimSpeed: 295, boostMultiplier: 1.85, boostDuration: 3.2,
+    biteForce: 52, eatRadius: 42, length: 205, cost: 21450,
+    goldMultiplier: 2.1, magnetRadius: 110, boostEfficiency: 1.3,
+    skill: { id: "blizzard", name: "절대영도 블리자드", cooldown: 14, desc: "5초간 몸 주위에 눈보라 — 반경 520 안 모든 생물이 얼어붙고, 반경 280 안 먹이는 계속 피해를 입습니다." },
+    passive: { id: "coldBlood", name: "냉혈 대사", desc: "배고픔(체력 감소) 속도 −20%" },
+    colors: ["#1e3a5f", "#e0f2fe", "#67e8f9"],
+    blurb: "빙하기에서 깨어난 전설. 주변 바다를 통째로 얼려 버리는 서리의 정점 포식자.",
+  },
+  // ── Branch E: Venom ──
+  {
+    id: "bullShark", tier: 2, branch: "VENOM", parentId: "reef", nextIds: ["thresher"],
+    name: "황소상어", nameEn: "Bull Shark",
+    maxHealth: 160, baseDrainRate: 3.5, swimSpeed: 275, boostMultiplier: 1.9, boostDuration: 2.5,
+    biteForce: 17, eatRadius: 22, length: 96, cost: 1690,
+    goldMultiplier: 1.25, magnetRadius: 50, boostEfficiency: 1.1,
+    skill: { id: "venomSpit", name: "독침 사출", cooldown: 6, desc: "전방 부채꼴로 독침 3발을 쏴 먹이를 맞히고(2.5배 피해), 작은 먹이는 바로 삼킵니다." },
+    passive: { id: "bloodlust", name: "흡혈 본능", desc: "먹이 섭취 시 체력 회복량 +30%" },
+    colors: ["#57534e", "#f5f5f4", "#84cc16"],
+    blurb: "강과 바다를 가리지 않는 공격적인 사냥꾼. 멀리서 독침으로 먹이를 쓰러뜨립니다.",
+  },
+  {
+    id: "thresher", tier: 3, branch: "VENOM", parentId: "bullShark", nextIds: ["basilisk"],
+    name: "환도상어", nameEn: "Thresher Shark",
+    maxHealth: 240, baseDrainRate: 4.5, swimSpeed: 305, boostMultiplier: 1.95, boostDuration: 2.9,
+    biteForce: 30, eatRadius: 28, length: 140, cost: 6050,
+    goldMultiplier: 1.6, magnetRadius: 75, boostEfficiency: 1.4,
+    skill: { id: "tailWhip", name: "꼬리 채찍", cooldown: 7, desc: "긴 꼬리를 휘둘러 주변 320 반경에 3배 피해 — 작은 먹이는 기절해 삼켜지고, 포식자는 2.5초 기절." },
+    passive: { id: "bloodlust", name: "흡혈 본능", desc: "먹이 섭취 시 체력 회복량 +30%" },
+    colors: ["#6d28d9", "#ede9fe", "#a3e635"],
+    blurb: "몸길이만 한 꼬리를 채찍처럼 휘둘러 물고기 떼를 한 번에 기절시킵니다.",
+  },
+  {
+    id: "basilisk", tier: 4, branch: "VENOM", parentId: "thresher", nextIds: [],
+    name: "역병의 바실리스크", nameEn: "Plague Basilisk",
+    maxHealth: 380, baseDrainRate: 6.4, swimSpeed: 320, boostMultiplier: 1.95, boostDuration: 3.3,
+    biteForce: 50, eatRadius: 38, length: 190, cost: 21450,
+    goldMultiplier: 2.2, magnetRadius: 100, boostEfficiency: 1.6,
+    skill: { id: "plague", name: "역병의 숨결", cooldown: 12, desc: "전방 560 거리에 독 숨결 — 범위 안 먹이에 4배 피해, 위험물은 4초 마비. 쓰러뜨린 먹이마다 체력 회복." },
+    passive: { id: "bloodlust", name: "흡혈 본능", desc: "먹이 섭취 시 체력 회복량 +30%" },
+    colors: ["#14532d", "#d9f99d", "#a3e635"],
+    blurb: "독안개를 내뿜어 앞을 가로막는 모든 것을 녹여 버리는 맹독의 정점 포식자.",
+  },
 ];
 
 export function sharkById(id: string): SharkDef {
@@ -545,7 +623,6 @@ export function effectiveStats(shark: SharkDef, up: UpgradeLevels): EffectiveSta
   const ballistics = p === "ballistics";
   return {
     maxHealth: shark.maxHealth,
-    baseDrainRate: shark.baseDrainRate,
     swimSpeed: shark.swimSpeed * (1 + up.speed * 0.03),
     // 수중 탄도학: the boost's extra speed is 45% bigger.
     boostMultiplier: ballistics ? 1 + (shark.boostMultiplier - 1) * 1.45 : shark.boostMultiplier,
@@ -557,9 +634,11 @@ export function effectiveStats(shark: SharkDef, up: UpgradeLevels): EffectiveSta
     length: shark.length,
     goldMultiplier: shark.goldMultiplier,
     magnetRadius: shark.magnetRadius,
+    // 냉혈 대사: hunger drains 20% slower.
+    baseDrainRate: shark.baseDrainRate * (p === "coldBlood" ? 0.8 : 1),
     magnetPower: p === "staticField" ? 2 : 1,
     boostDrain: (ballistics ? 0.7 : 1) / shark.boostEfficiency,
-    healMul: p === "appetite" ? 1.2 : 1,
+    healMul: p === "appetite" ? 1.2 : p === "bloodlust" ? 1.3 : 1,
   };
 }
 
