@@ -16,9 +16,20 @@
  *    hanamikoji's opponent-hand visibility).
  *  - Open (matching) phase can target ANY plate, but only reveals it to the
  *    guesser — so recalling the opponent's half still matters.
- *  - A successful match deducts the matched total from the GUESSER's own
- *    stock pile (rulebook-literal: "자신의 배치 토큰을 소진"). First to 0
- *    wins. Accumulating enough failed-match penalties loses instead.
+ *  - Scoring (2026-10-07 rework, replacing the original "first to empty
+ *    your own stock" race): a successful match CLAIMS both plates for the
+ *    guesser and scores every token on them. Claimed plates leave play, so
+ *    the same pair can never score twice. The match ends once no two
+ *    unclaimed, non-empty plates share a total; higher score wins, fewer
+ *    penalties breaks a tie, otherwise it's a draw. Accumulating enough
+ *    failed-match penalties still loses outright.
+ *    Why the rework: the stock race was only winnable because matched
+ *    plates stayed selectable (re-matching one known pair drained the
+ *    whole stock). Without that loophole, all disjoint equal pairs together
+ *    hold only ~half of the two players' combined tokens, so emptying your
+ *    own stock is structurally impossible.
+ *  - Empty plates (total 0) can't be guessed in the open phase — two empty
+ *    plates used to count as a free, endless "match".
  *  - Placement (all rounds) completes fully before the open/guessing phase
  *    begins — the two phases never interleave.
  *
@@ -89,8 +100,8 @@ export const DIFFICULTY_LABEL: Record<Difficulty, string> = {
   hard: "어려움 (원작)",
 };
 
-/** Sum of 1..totalRounds — every token a player will place over the whole placement phase, and their starting stock. */
-export function totalStock(difficulty: Difficulty): number {
+/** Sum of 1..totalRounds — every token a player will place over the whole placement phase. */
+export function tokensPerPlayer(difficulty: Difficulty): number {
   const { totalRounds } = DIFFICULTY_CONFIG[difficulty];
   return (totalRounds * (totalRounds + 1)) / 2;
 }
@@ -99,14 +110,33 @@ export interface PlateState {
   p1Count: number;
   p2Count: number;
   revealedTo: Record<Seat, boolean>;
+  /** Who matched (and scored) this plate — claimed plates are out of play. */
+  claimedBy: Seat | null;
 }
 
 function emptyPlate(): PlateState {
-  return { p1Count: 0, p2Count: 0, revealedTo: { p1: false, p2: false } };
+  return { p1Count: 0, p2Count: 0, revealedTo: { p1: false, p2: false }, claimedBy: null };
 }
 
 export function plateTotal(plate: PlateState): number {
   return plate.p1Count + plate.p2Count;
+}
+
+/** Whether a plate can still be picked in the open phase: unclaimed and not empty. */
+export function isPlateInPlay(plate: PlateState): boolean {
+  return plate.claimedBy === null && plateTotal(plate) > 0;
+}
+
+/** Whether at least one scorable pair is still on the board — the match ends once this turns false. */
+export function hasRemainingPair(plates: PlateState[]): boolean {
+  const seen = new Set<number>();
+  for (const plate of plates) {
+    if (!isPlateInPlay(plate)) continue;
+    const total = plateTotal(plate);
+    if (seen.has(total)) return true;
+    seen.add(total);
+  }
+  return false;
 }
 
 export interface PlacementFlash {
@@ -119,7 +149,8 @@ export interface PlacementFlash {
 
 export type GamePhase = "placement" | "open" | "match-end";
 
-export type LoseReason = "stock" | "penalty" | null;
+/** "score" = no pairs left, decided on points (winner null = draw); "penalty" = loser hit the threshold. */
+export type EndReason = "score" | "penalty" | null;
 
 export interface MemoryFeastState {
   difficulty: Difficulty;
@@ -130,20 +161,21 @@ export interface MemoryFeastState {
   /** 0 = p1 hasn't placed yet this round, 1 = p1 has placed, waiting on p2. */
   placerTurn: 0 | 1;
   activePlacer: Seat | null;
-  stock: Record<Seat, number>;
+  /** Tokens on every plate this seat has claimed. */
+  score: Record<Seat, number>;
   penalties: Record<Seat, number>;
   activeGuesser: Seat | null;
   lastFlash: PlacementFlash | null;
   flashSeq: number;
   /** Bumped on every resolved guess/timeout — lets the UI restart its per-turn countdown even across a "연속 턴" (same guesser again after a success). */
   guessSeq: number;
+  /** Null while playing, and also on a drawn "score" ending. */
   winner: Seat | null;
-  loseReason: LoseReason;
+  endReason: EndReason;
 }
 
 export function startGame(difficulty: Difficulty): MemoryFeastState {
   const { plateCount } = DIFFICULTY_CONFIG[difficulty];
-  const stock = totalStock(difficulty);
   return {
     difficulty,
     phase: "placement",
@@ -151,15 +183,24 @@ export function startGame(difficulty: Difficulty): MemoryFeastState {
     round: 1,
     placerTurn: 0,
     activePlacer: "p1",
-    stock: { p1: stock, p2: stock },
+    score: { p1: 0, p2: 0 },
     penalties: { p1: 0, p2: 0 },
     activeGuesser: null,
     lastFlash: null,
     flashSeq: 0,
     guessSeq: 0,
     winner: null,
-    loseReason: null,
+    endReason: null,
   };
+}
+
+/** Decide a "score" ending: more points wins, then fewer penalties, else a draw. */
+function endOnScore(state: MemoryFeastState): MemoryFeastState {
+  const { score, penalties } = state;
+  let winner: Seat | null = null;
+  if (score.p1 !== score.p2) winner = score.p1 > score.p2 ? "p1" : "p2";
+  else if (penalties.p1 !== penalties.p2) winner = penalties.p1 < penalties.p2 ? "p1" : "p2";
+  return { ...state, phase: "match-end", winner, endReason: "score", activeGuesser: null };
 }
 
 function seatKey(seat: Seat): "p1Count" | "p2Count" {
@@ -186,7 +227,7 @@ export function placeToken(state: MemoryFeastState, plateIndex: number): MemoryF
 
   // p2 just placed; round is complete.
   if (state.round >= totalRounds) {
-    return {
+    const opened: MemoryFeastState = {
       ...state,
       plates,
       lastFlash,
@@ -196,6 +237,7 @@ export function placeToken(state: MemoryFeastState, plateIndex: number): MemoryF
       phase: "open",
       activeGuesser: "p1",
     };
+    return hasRemainingPair(plates) ? opened : endOnScore(opened);
   }
   return {
     ...state,
@@ -212,9 +254,9 @@ function revealBoth(plates: PlateState[], plateA: number, plateB: number, to: Se
   return plates.map((p, i) => (i === plateA || i === plateB ? { ...p, revealedTo: { ...p.revealedTo, [to]: true } } : p));
 }
 
-function revealForBothSeats(plates: PlateState[], plateA: number, plateB: number): PlateState[] {
+function claimForGuesser(plates: PlateState[], plateA: number, plateB: number, guesser: Seat): PlateState[] {
   return plates.map((p, i) =>
-    i === plateA || i === plateB ? { ...p, revealedTo: { p1: true, p2: true } } : p,
+    i === plateA || i === plateB ? { ...p, revealedTo: { p1: true, p2: true }, claimedBy: guesser } : p,
   );
 }
 
@@ -223,6 +265,7 @@ export function guess(state: MemoryFeastState, plateA: number, plateB: number): 
   if (plateA === plateB) return state;
   const count = state.plates.length;
   if (plateA < 0 || plateA >= count || plateB < 0 || plateB >= count) return state;
+  if (!isPlateInPlay(state.plates[plateA]) || !isPlateInPlay(state.plates[plateB])) return state;
 
   const guesser = state.activeGuesser;
   const totalA = plateTotal(state.plates[plateA]);
@@ -230,23 +273,11 @@ export function guess(state: MemoryFeastState, plateA: number, plateB: number): 
   const guessSeq = state.guessSeq + 1;
 
   if (totalA === totalB) {
-    const plates = revealForBothSeats(state.plates, plateA, plateB);
-    const nextStock = Math.max(0, state.stock[guesser] - totalA);
-    const stock = { ...state.stock, [guesser]: nextStock };
-    if (nextStock === 0) {
-      return {
-        ...state,
-        plates,
-        stock,
-        guessSeq,
-        phase: "match-end",
-        winner: guesser,
-        loseReason: "stock",
-        activeGuesser: null,
-      };
-    }
-    // Match success grants an extra (연속) turn — same guesser continues.
-    return { ...state, plates, stock, guessSeq };
+    const plates = claimForGuesser(state.plates, plateA, plateB, guesser);
+    const score = { ...state.score, [guesser]: state.score[guesser] + totalA + totalB };
+    const next = { ...state, plates, score, guessSeq };
+    // Match success grants an extra (연속) turn — same guesser continues — unless the board has no pairs left.
+    return hasRemainingPair(plates) ? next : endOnScore(next);
   }
 
   // Failed match: only the guesser personally learns the true values.
@@ -261,7 +292,7 @@ export function guess(state: MemoryFeastState, plateA: number, plateB: number): 
       guessSeq,
       phase: "match-end",
       winner: other(guesser),
-      loseReason: "penalty",
+      endReason: "penalty",
       activeGuesser: null,
     };
   }
@@ -282,7 +313,7 @@ export function timeoutFail(state: MemoryFeastState): MemoryFeastState {
       guessSeq,
       phase: "match-end",
       winner: other(guesser),
-      loseReason: "penalty",
+      endReason: "penalty",
       activeGuesser: null,
     };
   }
@@ -345,9 +376,9 @@ export function getValidMoves(state: MemoryFeastState, seat: Seat): EngineAction
   }
   if (state.phase === "open") {
     if (state.activeGuesser !== seat) return [];
-    return platePairs(state.plates.length).map(
-      ([a, b]) => ({ type: "guess", plateA: a, plateB: b }) as EngineAction,
-    );
+    return platePairs(state.plates.length)
+      .filter(([a, b]) => isPlateInPlay(state.plates[a]) && isPlateInPlay(state.plates[b]))
+      .map(([a, b]) => ({ type: "guess", plateA: a, plateB: b }) as EngineAction);
   }
   return [];
 }

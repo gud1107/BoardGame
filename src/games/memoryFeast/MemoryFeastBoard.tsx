@@ -5,6 +5,7 @@ import Tooltip from "@/components/Tooltip";
 import RulebookModal from "./RulebookModal";
 import {
   DIFFICULTY_CONFIG,
+  isPlateInPlay,
   other,
   plateTotal,
   type EngineAction,
@@ -25,7 +26,8 @@ export interface MemoryFeastBoardProps {
   ids: Record<Seat, string>;
   opponentConnected: boolean;
   onAction: (action: EngineAction) => void;
-  onGameEnd: (winnerId: string) => void;
+  /** `null` = draw. */
+  onGameEnd: (winnerId: string | null) => void;
 }
 
 const TABLE_PANEL =
@@ -40,7 +42,7 @@ function TableTexture() {
   );
 }
 
-function StockBar({ label, value, max, accent }: { label: string; value: number; max: number; accent: string }) {
+function ScoreBar({ label, value, max, accent }: { label: string; value: number; max: number; accent: string }) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
   return (
     <div className="flex flex-1 flex-col gap-1">
@@ -65,6 +67,7 @@ function PlateTile({
   selected,
   flashing,
   flashAmount,
+  outOfPlay,
   onClick,
 }: {
   index: number;
@@ -75,8 +78,42 @@ function PlateTile({
   selected: boolean;
   flashing: boolean;
   flashAmount: number | null;
+  /** Open phase only: a plate someone already claimed, or an empty one — neither can be picked. */
+  outOfPlay: { kind: "claimed"; ownerName: string; mine: boolean } | { kind: "empty" } | null;
   onClick: () => void;
 }) {
+  if (outOfPlay) {
+    const claimed = outOfPlay.kind === "claimed";
+    return (
+      <Tooltip
+        text={
+          claimed
+            ? `접시 ${index + 1} · ${outOfPlay.ownerName}님이 가져감 (${total}개)`
+            : `접시 ${index + 1} · 빈 접시 (고를 수 없음)`
+        }
+      >
+        <div
+          className={`relative flex aspect-square w-full flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-dashed text-xs font-semibold ${
+            claimed
+              ? outOfPlay.mine
+                ? "border-emerald-400/30 bg-emerald-500/5 text-emerald-200/70"
+                : "border-rose-400/30 bg-rose-500/5 text-rose-200/70"
+              : "border-white/5 bg-transparent text-white/20"
+          }`}
+        >
+          <span className="absolute left-1 top-1 text-[9px] text-white/20">{index + 1}</span>
+          {claimed ? (
+            <>
+              <span className="text-lg leading-none">{total}</span>
+              <span className="max-w-full truncate px-1 text-[9px] font-normal">{outOfPlay.ownerName}</span>
+            </>
+          ) : (
+            <span className="text-[10px] font-normal">빈 접시</span>
+          )}
+        </div>
+      </Tooltip>
+    );
+  }
   const tooltip = known
     ? `접시 ${index + 1} · 실제 총합 ${total}개`
     : selfCount > 0
@@ -219,21 +256,29 @@ export default function MemoryFeastBoard({
     return `grid gap-2 ${cols}`;
   }, [state.plates.length]);
 
-  if (state.phase === "match-end" && state.winner) {
-    const winnerName = names[state.winner];
-    const iWon = state.winner === viewerRole;
+  if (state.phase === "match-end") {
+    const { winner, score, penalties } = state;
+    const iWon = winner === viewerRole;
+    const scoreLine = `${names.p1} ${score.p1}점 : ${names.p2} ${score.p2}점`;
+    const reason =
+      state.endReason === "penalty" && winner
+        ? `${names[other(winner)]}님의 매칭 실패 벌점이 임계치에 도달했습니다.`
+        : !winner
+          ? "더 맞힐 접시 쌍이 없고, 점수와 벌점까지 같아 무승부입니다."
+          : score.p1 === score.p2
+            ? `점수가 같아 벌점이 더 적은 쪽이 이겼습니다 (벌점 ${penalties[winner]} : ${penalties[other(winner)]}).`
+            : "더 맞힐 접시 쌍이 남지 않아 점수로 결판났습니다.";
     return (
       <div className={`${TABLE_PANEL} flex flex-col items-center gap-6 p-10 text-center`}>
         <TableTexture />
-        <span className="relative z-10 text-5xl">{iWon ? "🏆" : "🍽️"}</span>
-        <h2 className="relative z-10 text-2xl font-bold text-white">{winnerName}님 승리!</h2>
-        <p className="relative z-10 text-sm text-white/60">
-          {state.loseReason === "stock"
-            ? "저장고를 먼저 모두 비웠습니다."
-            : `${names[other(state.winner)]}님의 매칭 실패 벌점이 임계치에 도달했습니다.`}
-        </p>
+        <span className="relative z-10 text-5xl">{!winner ? "🤝" : iWon ? "🏆" : "🍽️"}</span>
+        <h2 className="relative z-10 text-2xl font-bold text-white">
+          {winner ? `${names[winner]}님 승리!` : "무승부!"}
+        </h2>
+        <p className="relative z-10 text-base font-semibold text-amber-200">{scoreLine}</p>
+        <p className="relative z-10 text-sm text-white/60">{reason}</p>
         <button
-          onClick={() => onGameEnd(ids[state.winner!])}
+          onClick={() => onGameEnd(winner ? ids[winner] : null)}
           className="relative z-10 rounded-full bg-emerald-500 px-8 py-3 font-medium text-white transition hover:bg-emerald-400"
         >
           결과 확정하고 계속하기
@@ -242,7 +287,7 @@ export default function MemoryFeastBoard({
     );
   }
 
-  const stockMax = Math.max(state.stock.p1, state.stock.p2, 1);
+  const scoreMax = Math.max(state.score.p1, state.score.p2, 1);
 
   return (
     <div className={`${TABLE_PANEL} flex flex-col gap-4 p-3 sm:p-4`}>
@@ -260,8 +305,8 @@ export default function MemoryFeastBoard({
         {connectionBanner}
 
         <div className="flex gap-3">
-          <StockBar label={`${names.p1} 저장고`} value={state.stock.p1} max={stockMax} accent="#f43f5e" />
-          <StockBar label={`${names.p2} 저장고`} value={state.stock.p2} max={stockMax} accent="#38bdf8" />
+          <ScoreBar label={`${names.p1} 점수`} value={state.score.p1} max={scoreMax} accent="#f43f5e" />
+          <ScoreBar label={`${names.p2} 점수`} value={state.score.p2} max={scoreMax} accent="#38bdf8" />
         </div>
         <div className="flex justify-center gap-4 text-[11px] text-white/50">
           <span>{names.p1} 벌점 {state.penalties.p1}/{cfg.penaltyLossThreshold}</span>
@@ -283,6 +328,12 @@ export default function MemoryFeastBoard({
             const selfCount = viewerRole === "p1" ? plate.p1Count : plate.p2Count;
             const flashing =
               visibleFlashSeq !== null && state.lastFlash?.seq === visibleFlashSeq && state.lastFlash?.plateIndex === i;
+            const outOfPlay =
+              state.phase !== "open" || isPlateInPlay(plate)
+                ? null
+                : plate.claimedBy
+                  ? { kind: "claimed" as const, ownerName: names[plate.claimedBy], mine: plate.claimedBy === viewerRole }
+                  : { kind: "empty" as const };
             return (
               <PlateTile
                 key={i}
@@ -294,6 +345,7 @@ export default function MemoryFeastBoard({
                 selected={selected.includes(i)}
                 flashing={flashing}
                 flashAmount={state.lastFlash?.amount ?? null}
+                outOfPlay={outOfPlay}
                 onClick={() => (myTurnToPlace ? onAction({ type: "place", plateIndex: i }) : togglePlateSelection(i))}
               />
             );

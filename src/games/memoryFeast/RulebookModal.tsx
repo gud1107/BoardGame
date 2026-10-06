@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { DIFFICULTY_CONFIG, DIFFICULTY_LABEL, DIFFICULTY_ORDER, totalStock } from "./engine";
+import { DIFFICULTY_CONFIG, DIFFICULTY_LABEL, DIFFICULTY_ORDER, tokensPerPlayer } from "./engine";
 
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
   return (
@@ -27,8 +27,8 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <p className="text-white/70">
             배치가 전부 끝나면 턴제로 전환됩니다. 내 차례에 접시 2개를 지정해 공개합니다. 두
             접시의 실제 총합(내가 넣은 개수 + 상대가 넣은 개수)이 같으면 <span className="text-emerald-300">매칭
-            성공</span> — 그 총합만큼 내 개인 토큰 저장고에서 차감되고 연속으로 한 번 더 턴을
-            얻습니다. 총합이 다르면 <span className="text-rose-300">매칭 실패</span> — 벌점이
+            성공</span> — 두 접시를 가져가 그 위의 토큰 전부가 내 점수가 되고, 연속으로 한 번 더
+            턴을 얻습니다. 가져간 접시는 판에서 빠지고, 빈 접시(토큰 0개)는 고를 수 없습니다. 총합이 다르면 <span className="text-rose-300">매칭 실패</span> — 벌점이
             쌓이고 턴이 상대에게 넘어갑니다. 한 번 열어본 접시는 실패하더라도 나에게는 그 값을
             영구히 기억하게 됩니다(상대에게는 다시 가려짐).
           </p>
@@ -39,8 +39,9 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             승리 / 패배 조건
           </h3>
           <p className="text-white/70">
-            내 저장고를 먼저 <span className="text-emerald-300">0개</span>로 만들면 즉시 승리합니다.
-            반대로 매칭 실패 벌점이 난이도별 임계치 이상 쌓이면 즉시 패배합니다. 오픈 단계 제한
+            총합이 같은 접시 쌍이 판에 더 남지 않으면 게임이 끝나고,{" "}
+            <span className="text-emerald-300">점수가 높은 쪽</span>이 승리합니다(점수가 같으면 벌점이
+            적은 쪽, 그것도 같으면 무승부). 매칭 실패 벌점이 난이도별 임계치 이상 쌓이면 즉시 패배합니다. 오픈 단계 제한
             시간을 넘기면 자동으로 1회 실패 처리됩니다.
           </p>
         </section>
@@ -57,7 +58,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
                   <p className="mb-1 font-medium text-white">{DIFFICULTY_LABEL[d]}</p>
                   <ul className="space-y-0.5 text-xs text-white/60">
                     <li>접시 {cfg.plateCount}개 · {cfg.totalRounds}라운드</li>
-                    <li>저장고 {totalStock(d)}개</li>
+                    <li>1인당 토큰 {tokensPerPlayer(d)}개</li>
                     <li>제한시간 {Math.round(cfg.timeLimitMs / 1000)}초</li>
                     <li>벌점 패배 {cfg.penaltyLossThreshold}회</li>
                     {cfg.allowMemoPad && <li className="text-amber-300">개인 메모장 사용 가능</li>}

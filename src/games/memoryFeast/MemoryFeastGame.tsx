@@ -113,7 +113,7 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
   const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
   const [gameState, setGameState] = useState<MemoryFeastState | null>(null);
-  const [finalResult, setFinalResult] = useState<{ winnerId: string; winnerName: string } | null>(null);
+  const [finalResult, setFinalResult] = useState<{ winnerId: string | null; winnerName: string | null } | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatCooldownUntil, setChatCooldownUntil] = useState<number | null>(null);
   const chatThrottleRef = useRef<ThrottleState>(INITIAL_THROTTLE_STATE);
@@ -576,8 +576,20 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
     return occupants.filter((o) => o.role !== role && !botRoles.includes(o.role as Seat) && !takenOverRoles.has(o.role)).length;
   }
 
-  function handleGameEnd(winnerId: string) {
+  function handleGameEnd(winnerId: string | null) {
     if (!gameState || !myRole) return;
+    if (!winnerId) {
+      onComplete({
+        rankings: [
+          { playerId: ids.p1, rank: 1 },
+          { playerId: ids.p2, rank: 1 },
+        ],
+        finishedAt: new Date().toISOString(),
+      });
+      setFinalResult({ winnerId: null, winnerName: null });
+      setPhase("post-game");
+      return;
+    }
     const winnerRole = winnerId === ids.p1 ? "p1" : "p2";
     const loserId = winnerId === ids.p1 ? ids.p2 : ids.p1;
     onComplete({
@@ -904,8 +916,10 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
     return withGuard(
       <>
       <div className="flex flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
-        <span className="text-4xl">🏆</span>
-        <p className="text-white/80">{finalResult.winnerName}님 승리로 게임이 끝났어요.</p>
+        <span className="text-4xl">{finalResult.winnerName ? "🏆" : "🤝"}</span>
+        <p className="text-white/80">
+          {finalResult.winnerName ? `${finalResult.winnerName}님 승리로 게임이 끝났어요.` : "무승부로 게임이 끝났어요."}
+        </p>
         <div className="flex gap-2">
           <button
             onClick={handleLeave}
