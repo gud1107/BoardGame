@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import type { GameMeta } from "@/games/types";
-import { useActiveRooms } from "@/games/shared/room/useActiveRooms";
+import type { ActiveRoomRecord } from "@/lib/activeRooms/types";
+import PublicRoomBrowser from "./PublicRoomBrowser";
 import { PLAYER_FILTERS } from "@/constants/playerFilters";
 import type { SortOption } from "@/constants/sortOptions";
 import GameShowcaseCard from "./GameShowcaseCard";
@@ -65,6 +66,7 @@ export default function DesktopDashboard({
   onSortChange,
   monthPlays,
   now,
+  rooms,
 }: {
   games: GameMeta[];
   totalCount: number;
@@ -78,8 +80,9 @@ export default function DesktopDashboard({
   /** This month's real starts per game (shown as "🔥 10월 N회 플레이"). */
   monthPlays: ReadonlyMap<string, number>;
   now: number;
+  /** Live waiting rooms, subscribed once in `page.tsx` and shared with the mobile layout. */
+  rooms: ActiveRoomRecord[];
 }) {
-  const rooms = useActiveRooms();
 
   const liveCountByGame = useMemo(() => {
     const map = new Map<string, number>();
@@ -130,6 +133,8 @@ export default function DesktopDashboard({
             <SortFilterChips value={sortOption} onChange={onSortChange} className="shrink-0" />
           </div>
         </div>
+
+        <PublicRoomBrowser rooms={rooms} className="mt-3 shrink-0" />
 
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
           {games.length > 0 ? (

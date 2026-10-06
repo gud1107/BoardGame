@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { deleteActiveRoom, upsertActiveRoom } from "@/lib/activeRooms/repository";
+import { getRoomVisibility } from "@/lib/activeRooms/visibility";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 
 /**
@@ -59,6 +60,10 @@ export function useActiveRoomListing({
   useEffect(() => {
     if (!shouldPublish || !roomCode) return;
 
+    // The 🌐/🔒 choice the host made on the room-creation screen
+    // (`RulebookGate`), fixed for this room's lifetime.
+    const isPublic = getRoomVisibility(gameId) === "public";
+
     const publish = () => {
       void upsertActiveRoom({
         gameId,
@@ -66,6 +71,7 @@ export function useActiveRoomListing({
         hostName: latest.current.hostName,
         playerCount: latest.current.playerCount,
         maxPlayers: latest.current.maxPlayers,
+        isPublic,
       });
     };
 

@@ -11,5 +11,12 @@ export interface ActiveRoomRecord {
   hostName: string | null;
   playerCount: number;
   maxPlayers: number;
+  /**
+   * True for a 🌐 공개방 — listed in the lobby's public-room browser and
+   * one-click joinable. False for a 🔒 비공개방, which stays reachable only
+   * by its invite code (the row still exists so code lookup / per-game room
+   * counts keep working). See `src/lib/activeRooms/visibility.ts`.
+   */
+  isPublic: boolean;
   updatedAt: string;
 }

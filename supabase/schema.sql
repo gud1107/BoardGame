@@ -476,6 +476,19 @@ create policy "anon update active_rooms" on active_rooms
   for update to anon, authenticated using (true);
 create policy "anon delete active_rooms" on active_rooms
   for delete to anon, authenticated using (true);
+-- 🌐 공개방 / 🔒 비공개방 (2026-10-07). Only public rooms are listed in the
+-- lobby's room browser; private ones stay reachable by invite code only.
+-- `add column if not exists` covers a table created before this column.
+alter table active_rooms add column if not exists is_public boolean not null default true;
+-- Live room-list updates (Realtime postgres_changes). The client also polls
+-- every 15s, so this only makes new rooms show up faster.
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'active_rooms') then
+    alter publication supabase_realtime add table active_rooms;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- game_play_counts — durable all-time play counter per game (2026-10-01).

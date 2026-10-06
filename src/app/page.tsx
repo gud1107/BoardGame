@@ -7,6 +7,8 @@ import type { GameGenre } from "@/games/types";
 import GameGrid from "@/components/GameGrid";
 import CollectionShowcase from "@/components/CollectionShowcase";
 import DesktopDashboard from "@/components/lobby/DesktopDashboard";
+import PublicRoomBrowser from "@/components/lobby/PublicRoomBrowser";
+import { useActiveRooms } from "@/games/shared/room/useActiveRooms";
 import { PLAYER_FILTERS } from "@/constants/playerFilters";
 import { DEFAULT_SORT_OPTION, type SortOption, sortGamesBy } from "@/constants/sortOptions";
 import SortFilterChips from "@/components/lobby/SortFilterChips";
@@ -200,6 +202,9 @@ export default function DashboardPage() {
   }, [baseFiltered, genreFilter, sortOption, playCounts]);
 
   const playableCount = catalog.filter((g) => g.playable).length;
+  // One Realtime subscription for both layouts' 🌐 공개방 browser and the
+  // desktop cards' live room-count badges.
+  const rooms = useActiveRooms();
 
   return (
     <>
@@ -222,6 +227,7 @@ export default function DashboardPage() {
         onSortChange={setSortOption}
         monthPlays={monthPlays}
         now={now}
+        rooms={rooms}
       />
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 xl:hidden">
@@ -303,6 +309,8 @@ export default function DashboardPage() {
           총 {catalog.length}종 · 플레이 가능 {playableCount}종 · 1~10명, 폰이나 데스크톱으로 즐기세요
         </p>
       </div>
+
+      <PublicRoomBrowser rooms={rooms} className="mb-2" />
 
       {/* 2026-09-16: the Netflix-style horizontal-scroll category carousel
           that used to render here (curated preview above the full catalog)

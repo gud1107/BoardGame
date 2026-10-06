@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import RulebookSummaryCard from "./RulebookSummaryCard";
+import PublicRoomBrowser from "./PublicRoomBrowser";
+import { useActiveRooms } from "@/games/shared/room/useActiveRooms";
+import { setRoomVisibility, useRoomVisibility, type RoomVisibility } from "@/lib/activeRooms/visibility";
 
 /**
  * Wraps a game's room-creation "choose" screen (방만들기/참여하기 선택
@@ -45,6 +48,7 @@ export default function RulebookGate({
 }) {
   const [tab, setTab] = useState<"settings" | "rulebook">("settings");
   const [mobileRulebookOpen, setMobileRulebookOpen] = useState(false);
+  const rooms = useActiveRooms();
 
   return (
     <div className={`flex w-full flex-col items-center gap-4 rounded-2xl border p-6 text-center md:p-8 ${containerClassName}`}>
@@ -92,8 +96,50 @@ export default function RulebookGate({
         {description}
       </div>
 
+      {/* 🌐 공개방 / 🔒 비공개방 for the room this host is about to create —
+          read by `useActiveRoomListing` when it publishes the room. */}
+      <RoomVisibilityToggle gameId={gameId} />
+
       {/* Always accessible regardless of tab/accordion state */}
       {actions}
+
+      <PublicRoomBrowser rooms={rooms} gameId={gameId} className="max-w-md" />
+    </div>
+  );
+}
+
+const VISIBILITY_OPTIONS: { value: RoomVisibility; label: string; hint: string }[] = [
+  { value: "public", label: "🌐 공개방", hint: "로비 공개방 목록에 보여서 누구나 바로 들어올 수 있어요" },
+  { value: "private", label: "🔒 비공개방", hint: "초대 코드를 아는 사람만 들어올 수 있어요" },
+];
+
+function RoomVisibilityToggle({ gameId }: { gameId: string }) {
+  const visibility = useRoomVisibility(gameId);
+  const current = VISIBILITY_OPTIONS.find((o) => o.value === visibility) ?? VISIBILITY_OPTIONS[0];
+  return (
+    <div className="flex w-full max-w-xs flex-col gap-1.5">
+      <span className="text-[11px] font-semibold text-white/50 light:text-slate-500">방 만들 때 입장 방식</span>
+      <div role="radiogroup" aria-label="방 입장 방식" className="grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-black/20 p-1 light:border-slate-200 light:bg-slate-100">
+        {VISIBILITY_OPTIONS.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={visibility === o.value}
+            onClick={() => setRoomVisibility(gameId, o.value)}
+            className={`rounded-lg py-1.5 text-xs font-bold transition ${
+              visibility === o.value
+                ? o.value === "public"
+                  ? "bg-emerald-500 text-neutral-950 shadow"
+                  : "bg-rose-500/90 text-white shadow"
+                : "text-white/50 hover:text-white/80 light:text-slate-500 light:hover:text-slate-800"
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <span className="text-[11px] break-keep text-white/40 light:text-slate-500">{current.hint}</span>
     </div>
   );
 }

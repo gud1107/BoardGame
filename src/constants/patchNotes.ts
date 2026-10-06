@@ -58,6 +58,23 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.53.0",
+    releaseDate: "2026-10-07",
+    title: "🌐 공개방 — 로비에서 방 목록 보고 바로 입장",
+    changes: [
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "방 만들 때 🌐 공개방 / 🔒 비공개방 선택 — 공개방은 로비와 게임 화면의 공개방 목록에 떠서 누구나 눌러서 바로 입장, 비공개방은 지금처럼 초대 코드로만",
+      },
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "로비 공개방 목록: 게임별 필터, 인원/만원 표시, ⚡ 빠른 참가(빈자리 있는 공개방 중 사람이 가장 많은 방으로 바로 입장)",
+      },
+    ],
+  },
+  {
     version: "v1.52.0",
     releaseDate: "2026-10-04",
     title: "꽃게 서바이벌 현상수배·종류별 기록·첫 플레이 팁, 배고픈 상어 맵 지형 분리·맵 전용 몬스터",

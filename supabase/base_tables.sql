@@ -10,7 +10,7 @@
 -- lobby chat history start working as designed.
 --   app_settings  — site settings (guest mode ON, play limits OFF by default)
 --   guest_usage   — per-device daily usage for guests (only enforced if limits are turned on)
---   active_rooms  — joinable rooms, shown on the desktop lobby cards
+--   active_rooms  — joinable rooms: lobby "N개 방 오픈" badges + 🌐 공개방 list
 --   chat_messages — lobby chat history
 -- Note: the editor may ask to confirm because of the word "delete" (the
 -- active_rooms policy, and the 30-day chat pruning at the end) — expected;
@@ -57,6 +57,19 @@ create table if not exists active_rooms (
 create index if not exists active_rooms_updated_idx on active_rooms (updated_at desc);
 create index if not exists active_rooms_game_idx on active_rooms (game_id);
 alter table active_rooms enable row level security;
+-- 🌐 공개방 / 🔒 비공개방 (2026-10-07). Only public rooms are listed in the
+-- lobby's room browser; private ones stay reachable by invite code only.
+-- `add column if not exists` covers a table created before this column.
+alter table active_rooms add column if not exists is_public boolean not null default true;
+-- Live room-list updates (Realtime postgres_changes). The client also polls
+-- every 15s, so this only makes new rooms show up faster.
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'active_rooms') then
+    alter publication supabase_realtime add table active_rooms;
+  end if;
+end $$;
 
 -- ── chat_messages ──
 create table if not exists chat_messages (

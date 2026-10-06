@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ACTIVE_ROOM_STALE_MS, subscribeActiveRooms } from "@/lib/activeRooms/repository";
+import { listActiveRooms, subscribeActiveRooms } from "@/lib/activeRooms/repository";
 import type { ActiveRoomRecord } from "@/lib/activeRooms/types";
 
 /**
- * Re-applies the staleness filter even when no DB write happens — a room
- * can go quiet (host's tab died) with no event ever firing, so this is the
- * only thing that eventually clears it out of the panel client-side.
+ * Periodic re-fetch on top of the Realtime subscription. Re-applies the
+ * staleness filter even when no DB write happens (a host's tab can die with
+ * no event ever firing), and keeps the 🌐 공개방 list live on a project
+ * where `active_rooms` isn't in the Realtime publication yet.
  */
-const RESTALE_CHECK_MS = 15_000;
+const REFRESH_MS = 15_000;
 
 /**
  * Live list of every currently-joinable room across all games, for the
@@ -23,14 +24,12 @@ export function useActiveRooms(): ActiveRoomRecord[] {
 
   useEffect(() => {
     const unsubscribe = subscribeActiveRooms(setRooms);
-    const restale = setInterval(() => {
-      setRooms((prev) =>
-        prev.filter((r) => Date.now() - new Date(r.updatedAt).getTime() < ACTIVE_ROOM_STALE_MS),
-      );
-    }, RESTALE_CHECK_MS);
+    const refresh = setInterval(() => {
+      if (document.visibilityState === "visible") void listActiveRooms().then(setRooms);
+    }, REFRESH_MS);
     return () => {
       unsubscribe();
-      clearInterval(restale);
+      clearInterval(refresh);
     };
   }, []);
 

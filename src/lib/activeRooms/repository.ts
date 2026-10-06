@@ -16,8 +16,12 @@ interface ActiveRoomRow {
   host_name: string | null;
   player_count: number;
   max_players: number;
+  /** Absent when the live table predates the 2026-10-07 `is_public` column. */
+  is_public?: boolean | null;
   updated_at: string;
 }
+
+const BASE_COLUMNS = "id, game_id, room_code, host_name, player_count, max_players, updated_at";
 
 function fromRow(row: ActiveRoomRow): ActiveRoomRecord {
   return {
@@ -27,6 +31,9 @@ function fromRow(row: ActiveRoomRow): ActiveRoomRecord {
     hostName: row.host_name,
     playerCount: row.player_count,
     maxPlayers: row.max_players,
+    // A table without the column can't tell 공개 from 비공개, so nothing is
+    // advertised as public until the migration in schema.sql is applied.
+    isPublic: row.is_public === true,
     updatedAt: row.updated_at,
   };
 }
@@ -48,11 +55,12 @@ export async function upsertActiveRoom(input: {
   hostName?: string | null;
   playerCount: number;
   maxPlayers: number;
+  isPublic: boolean;
 }): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
   try {
-    await supabase.from("active_rooms").upsert({
+    const row = {
       id: `${input.gameId}:${input.roomCode}`,
       game_id: input.gameId,
       room_code: input.roomCode,
@@ -60,7 +68,11 @@ export async function upsertActiveRoom(input: {
       player_count: input.playerCount,
       max_players: input.maxPlayers,
       updated_at: new Date().toISOString(),
-    });
+    };
+    const { error } = await supabase.from("active_rooms").upsert({ ...row, is_public: input.isPublic });
+    // Table created before the `is_public` column existed — keep the room
+    // findable by code rather than dropping the listing entirely.
+    if (error) await supabase.from("active_rooms").upsert(row);
   } catch {
     // Best-effort only.
   }
@@ -82,13 +94,12 @@ export async function listActiveRooms(): Promise<ActiveRoomRecord[]> {
   const supabase = getSupabase();
   if (!supabase) return [];
   try {
-    const { data, error } = await supabase
-      .from("active_rooms")
-      .select("id, game_id, room_code, host_name, player_count, max_players, updated_at")
-      .order("updated_at", { ascending: false })
-      .limit(50);
+    const query = (columns: string) =>
+      supabase.from("active_rooms").select(columns).order("updated_at", { ascending: false }).limit(100);
+    let { data, error } = await query(`${BASE_COLUMNS}, is_public`);
+    if (error) ({ data, error } = await query(BASE_COLUMNS));
     if (error || !data) return [];
-    return (data as ActiveRoomRow[]).map(fromRow).filter((r) => isFresh(r.updatedAt));
+    return (data as unknown as ActiveRoomRow[]).map(fromRow).filter((r) => isFresh(r.updatedAt));
   } catch {
     return [];
   }
@@ -105,12 +116,9 @@ export async function findActiveRoomsByCode(roomCode: string): Promise<ActiveRoo
   const supabase = getSupabase();
   if (!supabase) return [];
   try {
-    const { data, error } = await supabase
-      .from("active_rooms")
-      .select("id, game_id, room_code, host_name, player_count, max_players, updated_at")
-      .eq("room_code", roomCode.trim());
+    const { data, error } = await supabase.from("active_rooms").select(BASE_COLUMNS).eq("room_code", roomCode.trim());
     if (error || !data) return [];
-    return (data as ActiveRoomRow[]).map(fromRow).filter((r) => isFresh(r.updatedAt));
+    return (data as unknown as ActiveRoomRow[]).map(fromRow).filter((r) => isFresh(r.updatedAt));
   } catch {
     return [];
   }
@@ -132,8 +140,12 @@ export function subscribeActiveRooms(onChange: (rooms: ActiveRoomRecord[]) => vo
     void listActiveRooms().then(onChange);
   };
 
+  // Unique topic per subscriber: supabase-js hands back an already-joined
+  // channel for a repeated topic, and adding `.on()` to that one throws —
+  // e.g. when a game's room-creation screen remounts before the old channel
+  // has finished tearing down.
   const channel = supabase
-    .channel("active-rooms-watch")
+    .channel(`active-rooms-watch-${Math.random().toString(36).slice(2, 10)}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "active_rooms" }, refresh)
     .subscribe();
 
