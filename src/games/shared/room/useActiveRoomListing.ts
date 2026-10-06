@@ -1,6 +1,13 @@
 import { useEffect, useRef } from "react";
 import { deleteActiveRoom, upsertActiveRoom } from "@/lib/activeRooms/repository";
-import { getRoomVisibility } from "@/lib/activeRooms/visibility";
+import {
+  clearHostedRoom,
+  getRoomTitle,
+  getRoomVisibility,
+  normalizeRoomTitle,
+  setHostedRoom,
+  subscribeRoomSettings,
+} from "@/lib/activeRooms/visibility";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 
 /**
@@ -60,10 +67,12 @@ export function useActiveRoomListing({
   useEffect(() => {
     if (!shouldPublish || !roomCode) return;
 
-    // The 🌐/🔒 choice the host made on the room-creation screen
-    // (`RulebookGate`), fixed for this room's lifetime.
-    const isPublic = getRoomVisibility(gameId) === "public";
+    const hosted = { gameId, roomCode };
+    setHostedRoom(hosted);
 
+    // 🌐/🔒 and the title are read fresh on every publish — set on the
+    // room-creation screen (`RulebookGate`), changeable from the waiting
+    // room via the global `HostedRoomControls` pill.
     const publish = () => {
       void upsertActiveRoom({
         gameId,
@@ -71,15 +80,30 @@ export function useActiveRoomListing({
         hostName: latest.current.hostName,
         playerCount: latest.current.playerCount,
         maxPlayers: latest.current.maxPlayers,
-        isPublic,
+        isPublic: getRoomVisibility(gameId) === "public",
+        title: normalizeRoomTitle(getRoomTitle(gameId)),
       });
     };
 
     publish();
     const timer = setInterval(publish, HEARTBEAT_INTERVAL_MS);
 
+    // Re-publish shortly after a settings change (debounced for title typing).
+    let last = `${getRoomVisibility(gameId)}|${getRoomTitle(gameId)}`;
+    let pending: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = subscribeRoomSettings(() => {
+      const next = `${getRoomVisibility(gameId)}|${getRoomTitle(gameId)}`;
+      if (next === last) return;
+      last = next;
+      clearTimeout(pending);
+      pending = setTimeout(publish, 600);
+    });
+
     return () => {
       clearInterval(timer);
+      clearTimeout(pending);
+      unsubscribe();
+      clearHostedRoom(hosted);
       void deleteActiveRoom(gameId, roomCode);
     };
   }, [gameId, roomCode, shouldPublish]);

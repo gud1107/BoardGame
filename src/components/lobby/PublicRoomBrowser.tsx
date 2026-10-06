@@ -129,7 +129,10 @@ function RoomCard({ room, showGame }: { room: ActiveRoomRecord; showGame: boolea
           {meta?.thumbnail.emoji} {meta?.name}
         </span>
       )}
-      <span className="truncate text-sm font-bold text-white light:text-slate-900">{room.hostName ? `${room.hostName}님의 방` : "공개방"}</span>
+      <span className="truncate text-sm font-bold text-white light:text-slate-900" title={room.title ?? undefined}>
+        {room.title ?? (room.hostName ? `${room.hostName}님의 방` : "공개방")}
+      </span>
+      {room.title && room.hostName && <span className="-mt-1 truncate text-[11px] text-white/40 light:text-slate-500">방장 {room.hostName}</span>}
       <span className="flex items-center justify-between text-[11px]">
         <span className="text-white/50 light:text-slate-500">
           인원 <strong className={full ? "text-rose-400" : "text-emerald-400 light:text-emerald-600"}>{room.playerCount}</strong>/{room.maxPlayers}

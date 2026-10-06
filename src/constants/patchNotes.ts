@@ -60,7 +60,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.53.0",
     releaseDate: "2026-10-07",
-    title: "🌐 공개방 — 로비에서 방 목록 보고 바로 입장",
+    title: "🌐 공개방 — 로비에서 방 목록 보고 바로 입장, 배고픈 상어 신규 상어 6종",
     changes: [
       {
         game: "common",
@@ -71,6 +71,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         game: "common",
         type: "FEAT",
         desc: "로비 공개방 목록: 게임별 필터, 인원/만원 표시, ⚡ 빠른 참가(빈자리 있는 공개방 중 사람이 가장 많은 방으로 바로 입장)",
+      },
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "공개방 제목 입력(최대 30자, 목록에 표시) + 방장은 대기실 오른쪽 위 🌐/🔒 버튼으로 공개·비공개와 제목을 언제든 바꿀 수 있어요",
+      },
+      {
+        game: "hungry-shark",
+        type: "FEAT",
+        desc: "새 진화 계통 2개·상어 6종 추가 — 🧊 빙하 수호자(그린란드→잠꾸러기→크라이오돈), 🧪 맹독 사냥꾼(황소→환도→바실리스크), 각자 고유 스킬",
       },
     ],
   },

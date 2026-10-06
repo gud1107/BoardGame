@@ -18,5 +18,7 @@ export interface ActiveRoomRecord {
    * counts keep working). See `src/lib/activeRooms/visibility.ts`.
    */
   isPublic: boolean;
+  /** Host-typed room title (≤30 chars), or null — the UI falls back to "<host>님의 방". */
+  title: string | null;
   updatedAt: string;
 }

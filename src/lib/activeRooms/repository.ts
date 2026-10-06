@@ -18,6 +18,8 @@ interface ActiveRoomRow {
   max_players: number;
   /** Absent when the live table predates the 2026-10-07 `is_public` column. */
   is_public?: boolean | null;
+  /** Absent when the live table predates the 2026-10-07 `title` column. */
+  title?: string | null;
   updated_at: string;
 }
 
@@ -34,6 +36,7 @@ function fromRow(row: ActiveRoomRow): ActiveRoomRecord {
     // A table without the column can't tell 공개 from 비공개, so nothing is
     // advertised as public until the migration in schema.sql is applied.
     isPublic: row.is_public === true,
+    title: row.title?.trim() || null,
     updatedAt: row.updated_at,
   };
 }
@@ -56,6 +59,7 @@ export async function upsertActiveRoom(input: {
   playerCount: number;
   maxPlayers: number;
   isPublic: boolean;
+  title?: string | null;
 }): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
@@ -69,10 +73,18 @@ export async function upsertActiveRoom(input: {
       max_players: input.maxPlayers,
       updated_at: new Date().toISOString(),
     };
-    const { error } = await supabase.from("active_rooms").upsert({ ...row, is_public: input.isPublic });
-    // Table created before the `is_public` column existed — keep the room
-    // findable by code rather than dropping the listing entirely.
-    if (error) await supabase.from("active_rooms").upsert(row);
+    // Newest columns first; a table created before `title` / `is_public`
+    // existed rejects the unknown column, so step down rather than dropping
+    // the listing entirely (the room stays findable by code).
+    const attempts = [
+      { ...row, is_public: input.isPublic, title: input.title ?? null },
+      { ...row, is_public: input.isPublic },
+      row,
+    ];
+    for (const attempt of attempts) {
+      const { error } = await supabase.from("active_rooms").upsert(attempt);
+      if (!error) break;
+    }
   } catch {
     // Best-effort only.
   }
@@ -96,7 +108,8 @@ export async function listActiveRooms(): Promise<ActiveRoomRecord[]> {
   try {
     const query = (columns: string) =>
       supabase.from("active_rooms").select(columns).order("updated_at", { ascending: false }).limit(100);
-    let { data, error } = await query(`${BASE_COLUMNS}, is_public`);
+    let { data, error } = await query(`${BASE_COLUMNS}, is_public, title`);
+    if (error) ({ data, error } = await query(`${BASE_COLUMNS}, is_public`));
     if (error) ({ data, error } = await query(BASE_COLUMNS));
     if (error || !data) return [];
     return (data as unknown as ActiveRoomRow[]).map(fromRow).filter((r) => isFresh(r.updatedAt));
