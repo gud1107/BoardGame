@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { deleteActiveRoom, upsertActiveRoom } from "@/lib/activeRooms/repository";
+import { announcePresenceRoom } from "@/lib/activeRooms/presence";
 import {
   clearHostedRoom,
   getRoomTitle,
@@ -63,6 +64,11 @@ export function useActiveRoomListing({
   });
 
   const shouldPublish = isHost && isWaiting && !!roomCode;
+  // Lets a seat filling up reach the room lists now, not at the next heartbeat.
+  const publishNow = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    publishNow.current?.();
+  }, [hostName, playerCount, maxPlayers]);
 
   useEffect(() => {
     if (!shouldPublish || !roomCode) return;
@@ -73,19 +79,25 @@ export function useActiveRoomListing({
     // 🌐/🔒 and the title are read fresh on every publish — set on the
     // room-creation screen (`RulebookGate`), changeable from the waiting
     // room via the global `HostedRoomControls` pill.
+    // Table row + table-free Presence announcement (see presence.ts — the
+    // live project may not have the `active_rooms` table at all).
+    const presence = announcePresenceRoom();
     const publish = () => {
-      void upsertActiveRoom({
+      const room = {
         gameId,
         roomCode,
-        hostName: latest.current.hostName,
+        hostName: latest.current.hostName ?? null,
         playerCount: latest.current.playerCount,
         maxPlayers: latest.current.maxPlayers,
         isPublic: getRoomVisibility(gameId) === "public",
         title: normalizeRoomTitle(getRoomTitle(gameId)),
-      });
+      };
+      void upsertActiveRoom(room);
+      presence.update(room);
     };
 
     publish();
+    publishNow.current = publish;
     const timer = setInterval(publish, HEARTBEAT_INTERVAL_MS);
 
     // Re-publish shortly after a settings change (debounced for title typing).
@@ -104,6 +116,8 @@ export function useActiveRoomListing({
       clearTimeout(pending);
       unsubscribe();
       clearHostedRoom(hosted);
+      presence.withdraw();
+      publishNow.current = null;
       void deleteActiveRoom(gameId, roomCode);
     };
   }, [gameId, roomCode, shouldPublish]);

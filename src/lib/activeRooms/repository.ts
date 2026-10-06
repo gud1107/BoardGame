@@ -23,6 +23,18 @@ interface ActiveRoomRow {
   updated_at: string;
 }
 
+/**
+ * Set once the live project answers "no such table" (PostgREST PGRST205 —
+ * `base_tables.sql` never run). Every later call skips the network, so a
+ * lobby left open doesn't log a 404 every 15s; the Presence path in
+ * `presence.ts` carries the room list instead. Resets on reload.
+ */
+let tableMissing = false;
+
+function noteError(error: { code?: string } | null): void {
+  if (error?.code === "PGRST205" || error?.code === "42P01") tableMissing = true;
+}
+
 const BASE_COLUMNS = "id, game_id, room_code, host_name, player_count, max_players, updated_at";
 
 function fromRow(row: ActiveRoomRow): ActiveRoomRecord {
@@ -62,7 +74,7 @@ export async function upsertActiveRoom(input: {
   title?: string | null;
 }): Promise<void> {
   const supabase = getSupabase();
-  if (!supabase) return;
+  if (!supabase || tableMissing) return;
   try {
     const row = {
       id: `${input.gameId}:${input.roomCode}`,
@@ -84,6 +96,8 @@ export async function upsertActiveRoom(input: {
     for (const attempt of attempts) {
       const { error } = await supabase.from("active_rooms").upsert(attempt);
       if (!error) break;
+      noteError(error);
+      if (tableMissing) break;
     }
   } catch {
     // Best-effort only.
@@ -93,7 +107,7 @@ export async function upsertActiveRoom(input: {
 /** Removes a room's listing (game started, room closed, host left). */
 export async function deleteActiveRoom(gameId: string, roomCode: string): Promise<void> {
   const supabase = getSupabase();
-  if (!supabase) return;
+  if (!supabase || tableMissing) return;
   try {
     await supabase.from("active_rooms").delete().eq("id", `${gameId}:${roomCode}`);
   } catch {
@@ -104,11 +118,13 @@ export async function deleteActiveRoom(gameId: string, roomCode: string): Promis
 /** Current joinable rooms, freshest first, with stale (abandoned) rows filtered out. Never throws. */
 export async function listActiveRooms(): Promise<ActiveRoomRecord[]> {
   const supabase = getSupabase();
-  if (!supabase) return [];
+  if (!supabase || tableMissing) return [];
   try {
     const query = (columns: string) =>
       supabase.from("active_rooms").select(columns).order("updated_at", { ascending: false }).limit(100);
     let { data, error } = await query(`${BASE_COLUMNS}, is_public, title`);
+    noteError(error);
+    if (tableMissing) return [];
     if (error) ({ data, error } = await query(`${BASE_COLUMNS}, is_public`));
     if (error) ({ data, error } = await query(BASE_COLUMNS));
     if (error || !data) return [];
