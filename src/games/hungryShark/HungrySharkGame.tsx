@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { recordSoloRun } from "@/lib/stats/soloResult";
@@ -17,6 +17,7 @@ import {
   MAX_UPGRADE_LEVEL,
   SHARKS,
   sharkById,
+  TREE_ORDER,
   UPGRADE_LABELS,
   upgradeCost,
   type EntityKind,
@@ -253,9 +254,14 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                       </div>
                       {listedSharks
                         .filter((x) => x.branch === br)
-                        .sort((a, b) => a.tier - b.tier)
+                        .sort((a, b) => TREE_ORDER.indexOf(a.id) - TREE_ORDER.indexOf(b.id))
                         .map((sh) => (
-                          <SharkCard key={sh.id} sh={sh} save={save} active={sh.id === viewId} onClick={() => setViewId(sh.id)} />
+                          <Fragment key={sh.id}>
+                            {sh.tier === 3 && sh.parentId && sharkById(sh.parentId).nextIds.indexOf(sh.id) > 0 && (
+                              <div className="mt-1 text-center text-[9px] font-bold text-white/40 light:text-slate-400">↳ 갈래 {sharkById(sh.parentId).nextIds.indexOf(sh.id) + 1}</div>
+                            )}
+                            <SharkCard sh={sh} save={save} active={sh.id === viewId} onClick={() => setViewId(sh.id)} />
+                          </Fragment>
                         ))}
                     </div>
                   ))}

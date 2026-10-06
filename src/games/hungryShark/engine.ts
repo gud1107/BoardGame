@@ -508,7 +508,7 @@ export function isInvulnerable(w: World): boolean {
   if (w.gold.active || w.shark.shield > 0) return true;
   const sk = w.skill;
   if (sk.active <= 0) return false;
-  return sk.id === "surgeRam" || sk.id === "sonicBreak" || sk.id === "titanRoar" || sk.id === "shadowCloak";
+  return sk.id === "surgeRam" || sk.id === "sonicBreak" || sk.id === "titanRoar" || sk.id === "shadowCloak" || sk.id === "bladeDash";
 }
 
 /** 그림자 은신 active: hunters and submarines lose track of the shark. */
@@ -1326,6 +1326,16 @@ const SKILL_ACTIVE: Record<SkillId, number> = {
   venomSpit: 0,
   tailWhip: 0,
   plague: 0,
+  frenzyBite: 0,
+  sawWhorl: 0,
+  slipstream: 1.5,
+  bladeDash: 0.8,
+  lure: 0,
+  starburst: 0,
+  iceSpear: 0,
+  auroraVeil: 0,
+  spineBurst: 0,
+  hydraFangs: 0,
 };
 
 function skillSpeedMul(w: World): number {
@@ -1337,6 +1347,8 @@ function skillSpeedMul(w: World): number {
     case "surgeRam": return 2.6;
     case "titanRoar": return 1.25;
     case "shadowCloak": return 1.15;
+    case "slipstream": return 1.9;
+    case "bladeDash": return 2.6;
     default: return 1;
   }
 }
@@ -1423,34 +1435,9 @@ export function castSkill(w: World) {
       burst(w, "spark", s.x, s.y, 30, 380, "#67e8f9", 3, 0.5);
       break;
     }
-    case "snapJaw": {
-      // Best target in a narrow forward cone, 3× the normal bite reach.
-      const range = 380 + w.stats.length;
-      let best: Entity | null = null;
-      let bestScore = -1;
-      for (const e of w.entities) {
-        if (!e.alive || !isEdible(w, e)) continue;
-        const dx = e.x - m.x, dy = e.y - m.y;
-        const d = Math.hypot(dx, dy) || 1;
-        if (d > range + e.def.radius || (hx * dx + hy * dy) / d < 0.75) continue;
-        const score = e.def.score / (1 + d / 300);
-        if (score > bestScore) { bestScore = score; best = e; }
-      }
-      if (best) {
-        w.beams.push({ x1: m.x, y1: m.y, x2: best.x, y2: best.y, life: 0.4, maxLife: 0.4, color: "#f9a8d4", zigzag: false });
-        burst(w, "blood", best.x, best.y, 10, 160, "#dc2626", 4, 0.7);
-        if (best.def.toughness > 1) {
-          best.hp -= w.stats.biteForce * 3;
-          best.hitFlash = 0.2;
-          best.x += (m.x - best.x) * 0.5;
-          best.y += (m.y - best.y) * 0.5;
-          if (best.hp <= 0) consume(w, best);
-        } else consume(w, best);
-      } else {
-        w.beams.push({ x1: m.x, y1: m.y, x2: m.x + hx * range, y2: m.y + hy * range, life: 0.3, maxLife: 0.3, color: "#f9a8d4", zigzag: false });
-      }
+    case "snapJaw":
+      grabForward(w, s.angle, 380 + w.stats.length, "#f9a8d4");
       break;
-    }
     case "frostNova": {
       const frozen = freezeAround(w, s.x, s.y, 400, 3, "#bae6fd");
       const small = frozen.filter((e) => e.def.toughness <= 1 && isEdible(w, e) && Math.hypot(e.x - s.x, e.y - s.y) < 300);
@@ -1521,10 +1508,124 @@ export function castSkill(w: World) {
       }
       break;
     }
+    case "frenzyBite": {
+      const near = w.entities
+        .filter((e) => e.alive && e.kind !== "chest" && isEdible(w, e) && Math.hypot(e.x - m.x, e.y - m.y) < 300 + e.def.radius)
+        .sort((a, b) => Math.hypot(a.x - m.x, a.y - m.y) - Math.hypot(b.x - m.x, b.y - m.y))
+        .slice(0, 5);
+      for (const e of near) {
+        w.beams.push({ x1: m.x, y1: m.y, x2: e.x, y2: e.y, life: 0.3, maxLife: 0.3, color: "#fca5a5", zigzag: false });
+        burst(w, "blood", e.x, e.y, 8, 140, "#dc2626", 4, 0.6);
+        hitPrey(w, e, w.stats.biteForce * 2);
+        s.hp = Math.min(w.stats.maxHealth, s.hp + w.stats.maxHealth * 0.03);
+      }
+      break;
+    }
+    case "sawWhorl":
+      s.shield = Math.max(s.shield, 2);
+      shockwave(w, s.x, s.y, 380, w.stats.biteForce * 3.5, 2);
+      break;
+    case "slipstream":
+      s.boost = w.stats.boostDuration;
+      s.vx = hx * w.stats.swimSpeed * 1.8;
+      s.vy = hy * w.stats.swimSpeed * 1.8;
+      burst(w, "bubble", s.x, s.y, 20, 220, "#bae6fd", 3.5, 0.8);
+      break;
+    case "bladeDash":
+      lineStrike(w, m.x, m.y, hx, hy, 560, 60, w.stats.biteForce * 3, 2, "#facc15");
+      s.vx = hx * w.stats.swimSpeed * 2.4;
+      s.vy = hy * w.stats.swimSpeed * 2.4;
+      break;
+    case "lure":
+      for (const e of w.entities) {
+        if (!e.alive || e.kind === "chest" || !isEdible(w, e)) continue;
+        if (Math.hypot(e.x - s.x, e.y - s.y) > 600 + e.def.radius) continue;
+        e.x += (m.x - e.x) * 0.6;
+        e.y += (m.y - e.y) * 0.6;
+        e.stun = Math.max(e.stun, 1.5);
+      }
+      w.rings.push({ x: s.x, y: s.y, radius: 600, life: 0.9, maxLife: 0.9, color: "#4ade80" });
+      break;
+    case "starburst": {
+      const frozen = freezeAround(w, s.x, s.y, 700, 2.5, "#fef08a");
+      const small = frozen.filter((e) => e.def.toughness <= 1 && isEdible(w, e) && Math.hypot(e.x - s.x, e.y - s.y) < 450);
+      small.sort((a, b) => Math.hypot(a.x - s.x, a.y - s.y) - Math.hypot(b.x - s.x, b.y - s.y));
+      for (const e of small.slice(0, 10)) {
+        w.beams.push({ x1: m.x, y1: m.y, x2: e.x, y2: e.y, life: 0.35, maxLife: 0.35, color: "#86efac", zigzag: true });
+        consume(w, e);
+      }
+      w.shake = Math.max(w.shake, 10);
+      break;
+    }
+    case "iceSpear":
+      lineStrike(w, m.x, m.y, hx, hy, 700, 40, w.stats.biteForce * 3, 3, "#bae6fd");
+      break;
+    case "auroraVeil":
+      s.shield = Math.max(s.shield, 3);
+      s.hp = Math.min(w.stats.maxHealth, s.hp + w.stats.maxHealth * 0.25);
+      freezeAround(w, s.x, s.y, 450, 3, "#c084fc");
+      break;
+    case "spineBurst":
+      shockwave(w, s.x, s.y, 300, w.stats.biteForce * 2.5, 3);
+      burst(w, "spark", s.x, s.y, 24, 320, "#a3e635", 3, 0.6);
+      break;
+    case "hydraFangs": {
+      let kills = 0;
+      for (const off of [-0.55, 0, 0.55]) if (grabForward(w, s.angle + off, 360 + w.stats.length, "#bef264")) kills++;
+      if (kills > 0) s.hp = Math.min(w.stats.maxHealth, s.hp + w.stats.maxHealth * 0.05 * kills);
+      break;
+    }
     case "blackHole":
       sk.vortex = { x: m.x + hx * 160, y: Math.max(SURFACE_Y + 60, m.y + hy * 160), remaining: 4, radius: 240 };
       w.shake = Math.max(w.shake, 10);
       break;
+  }
+}
+
+/** 스냅 조 / 세 머리 독니: grab the best edible target in a narrow cone. True if it got eaten. */
+function grabForward(w: World, angle: number, reach: number, color: string): boolean {
+  const m = mouthPos(w);
+  const hx = Math.cos(angle), hy = Math.sin(angle);
+  let best: Entity | null = null;
+  let bestScore = -1;
+  for (const e of w.entities) {
+    if (!e.alive || !isEdible(w, e)) continue;
+    const dx = e.x - m.x, dy = e.y - m.y;
+    const d = Math.hypot(dx, dy) || 1;
+    if (d > reach + e.def.radius || (hx * dx + hy * dy) / d < 0.75) continue;
+    const score = e.def.score / (1 + d / 300);
+    if (score > bestScore) { bestScore = score; best = e; }
+  }
+  if (!best) {
+    w.beams.push({ x1: m.x, y1: m.y, x2: m.x + hx * reach, y2: m.y + hy * reach, life: 0.3, maxLife: 0.3, color, zigzag: false });
+    return false;
+  }
+  w.beams.push({ x1: m.x, y1: m.y, x2: best.x, y2: best.y, life: 0.4, maxLife: 0.4, color, zigzag: false });
+  burst(w, "blood", best.x, best.y, 10, 160, "#dc2626", 4, 0.7);
+  if (best.def.toughness > 1) {
+    best.hp -= w.stats.biteForce * 3;
+    best.hitFlash = 0.2;
+    best.x += (m.x - best.x) * 0.5;
+    best.y += (m.y - best.y) * 0.5;
+    if (best.hp > 0) return false;
+  }
+  consume(w, best);
+  return true;
+}
+
+/** Piercing line (빙창 / 칼날 질주): edible prey on it is hit, everything else is stunned. */
+function lineStrike(w: World, x: number, y: number, hx: number, hy: number, reach: number, width: number, damage: number, stun: number, color: string) {
+  w.beams.push({ x1: x, y1: y, x2: x + hx * reach, y2: y + hy * reach, life: 0.4, maxLife: 0.4, color, zigzag: false });
+  for (const e of w.entities.slice()) {
+    if (!e.alive || e.kind === "chest") continue;
+    const dx = e.x - x, dy = e.y - y;
+    const along = dx * hx + dy * hy;
+    if (along < 0 || along > reach + e.def.radius) continue;
+    if (Math.abs(dx * hy - dy * hx) > width + e.def.radius) continue;
+    if (isEdible(w, e)) {
+      burst(w, "spark", e.x, e.y, 6, 120, color, 3, 0.4);
+      hitPrey(w, e, damage);
+    } else e.stun = Math.max(e.stun, stun);
   }
 }
 
@@ -1553,9 +1654,22 @@ function hitPrey(w: World, e: Entity, damage: number): boolean {
   return true;
 }
 
-/** 절대영도 블리자드: keeps everything nearby frozen and grinds down prey close in. */
+/** 절대영도 블리자드: keeps everything nearby frozen and grinds down prey close in (+ 슬립스트림's wake suction). */
 function updateBlizzard(w: World, dt: number) {
   const sk = w.skill;
+  if (sk.id === "slipstream" && sk.active > 0) {
+    const m = mouthPos(w);
+    for (const e of w.entities) {
+      if (!e.alive || e.kind === "chest" || e.def.toughness > 1 || !isEdible(w, e)) continue;
+      const dx = m.x - e.x, dy = m.y - e.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d > 260) continue;
+      const pull = Math.min(d, 420 * dt);
+      e.x += (dx / d) * pull;
+      e.y += (dy / d) * pull;
+    }
+    return;
+  }
   if (sk.id !== "blizzard" || sk.active <= 0) return;
   const s = w.shark;
   if (rand(w) < 0.8)

@@ -187,19 +187,24 @@ export class SharkAudio {
     switch (id) {
       case "sprint":
       case "sonicBreak":
+      case "slipstream":
+      case "bladeDash":
         this.noise(0.35, 1800, 0.8, 0.5, 6000);
         this.tone(440, 0.25, "sawtooth", 0.08, 1320);
         break;
       case "crush":
+      case "frenzyBite":
         this.crunch(true);
         this.tone(90, 0.3, "square", 0.15, 50);
         break;
       case "surgeRam":
       case "titanRoar":
+      case "sawWhorl":
         this.explosion(id === "titanRoar");
         this.tone(55, 0.9, "sawtooth", 0.25, 35);
         break;
       case "sonar":
+      case "lure":
         [880, 660, 440].forEach((n, i) => this.tone(n, 0.5, "sine", 0.12, undefined, i * 0.18, true));
         break;
       case "shadowCloak":
@@ -207,15 +212,19 @@ export class SharkAudio {
         this.noise(0.6, 600, 2, 0.3, 150);
         break;
       case "emp":
+      case "starburst":
         this.noise(0.4, 4000, 3, 0.6, 800);
         this.tone(1200, 0.3, "square", 0.06, 200, 0, true);
         break;
       case "snapJaw":
+      case "hydraFangs":
         this.tone(700, 0.12, "triangle", 0.15, 1400);
         this.crunch(false);
         break;
       case "frostNova":
       case "iceArmor":
+      case "iceSpear":
+      case "auroraVeil":
         [1568, 1319, 1047].forEach((n, i) => this.tone(n, 0.35, "sine", 0.1, undefined, i * 0.06, true));
         this.noise(0.5, 5000, 2, 0.3, 2500);
         break;
@@ -227,6 +236,7 @@ export class SharkAudio {
         [0, 0.07, 0.14].forEach((d) => this.tone(900, 0.08, "triangle", 0.1, 1500, d, true));
         break;
       case "tailWhip":
+      case "spineBurst":
         this.noise(0.25, 2500, 1, 0.6, 500);
         this.tone(160, 0.3, "square", 0.12, 60);
         break;

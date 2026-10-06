@@ -4,7 +4,7 @@ import { BRANCH_INFO, sharkById, type SharkBranch, type SharkDef } from "./data"
 
 /**
  * 진화 분기 선택 모달 — shows the current shark's next evolution choices
- * (5 branches from the reef shark, one per branch after that) with stat
+ * (5 branches from the reef shark, 2 sub-lines from each T2, then one) with stat
  * deltas, skill and passive, and an evolve button gated on coins.
  */
 
@@ -25,6 +25,16 @@ export function BranchBadge({ branch }: { branch: SharkBranch }) {
     </span>
   );
 }
+
+/** One row for every choice: 5 T2 branches from the reef shark, 2 sub-lines from each T2. */
+const GRID_COLS: Record<number, string> = {
+  0: "grid-cols-1",
+  1: "grid-cols-1",
+  2: "grid-cols-1 sm:grid-cols-2",
+  3: "grid-cols-1 sm:grid-cols-3",
+  4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
+  5: "grid-cols-1 sm:grid-cols-3 lg:grid-cols-5",
+};
 
 function delta(n: number) {
   return n >= 0 ? `+${n}` : `${n}`;
@@ -50,11 +60,12 @@ export default function SharkEvolutionModal({
 }) {
   const current = sharkById(currentSharkId);
   const nextOptions = current.nextIds.map(sharkById);
+  const compact = nextOptions.length > 3;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md select-none" onClick={onClose}>
       <div
-        className="flex max-h-[92vh] w-full max-w-3xl flex-col gap-5 overflow-y-auto rounded-3xl border border-neutral-700 bg-neutral-900 p-5 text-white shadow-2xl sm:p-6"
+        className={`flex max-h-[92vh] w-full ${nextOptions.length > 3 ? "max-w-7xl" : "max-w-3xl"} flex-col gap-5 overflow-y-auto rounded-3xl border border-neutral-700 bg-neutral-900 p-5 text-white shadow-2xl sm:p-6`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 border-b border-neutral-800 pb-4">
@@ -80,28 +91,40 @@ export default function SharkEvolutionModal({
                 : "최종 진화 정점에 도달했습니다!"}
           </h3>
 
-          <div className={`grid grid-cols-1 gap-4 ${nextOptions.length > 1 ? "md:grid-cols-3" : ""}`}>
+          <div className={`grid gap-3 ${GRID_COLS[Math.min(nextOptions.length, 5)]}`}>
             {nextOptions.map((shark) => {
               const have = owned.includes(shark.id);
               const canAfford = playerGold >= shark.cost;
+              // Many choices on a phone: compact rows so every option fits on one screen.
+              const full = compact ? "hidden sm:block" : "";
               return (
                 <div
                   key={shark.id}
-                  className={`flex flex-col justify-between rounded-2xl border p-4 transition-all ${
+                  className={`flex justify-between rounded-2xl border transition-all ${compact ? "flex-row items-center gap-2 p-2.5 sm:flex-col sm:items-stretch sm:gap-0 sm:p-3" : "flex-col p-4"} ${
                     have || canAfford
                       ? "border-neutral-600 bg-neutral-800/90 hover:scale-[1.02] hover:border-amber-400"
                       : "border-neutral-800 bg-neutral-950/60 opacity-60"
                   }`}
                 >
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-start justify-between gap-2">
+                  <div className={`flex min-w-0 flex-col ${compact ? "gap-0.5 sm:gap-2" : "gap-2"}`}>
+                    <div className={`items-start justify-between gap-2 ${compact ? "hidden sm:flex" : "flex"}`}>
                       <span className="font-mono text-xs font-bold text-neutral-400">Tier {shark.tier}</span>
                       <BranchBadge branch={shark.branch} />
                     </div>
-                    <h4 className="text-base font-bold text-neutral-100">{shark.name}</h4>
-                    <p className="line-clamp-2 text-xs text-neutral-400">{shark.blurb}</p>
+                    <h4 className={`font-bold text-neutral-100 ${compact ? "flex items-center gap-1.5 text-sm sm:text-base" : "text-base"}`}>
+                      <span className="truncate">{shark.name}</span>
+                      {compact && <span className="shrink-0 sm:hidden"><BranchBadge branch={shark.branch} /></span>}
+                    </h4>
+                    <p className={`line-clamp-2 text-xs text-neutral-400 ${full}`}>{shark.blurb}</p>
+                    {compact && (
+                      <div className="font-mono text-[11px] text-neutral-300 sm:hidden">
+                        <span className="text-rose-300">❤ {shark.maxHealth}</span> · <span className="text-sky-300">💨 {shark.swimSpeed}</span> ·{" "}
+                        <span className="text-orange-300">🦷 {shark.biteForce}</span> · <span className="text-amber-300">×{shark.goldMultiplier.toFixed(1)}</span>
+                        <div className="truncate font-bold text-purple-300">⚡ {shark.skill.name} ({shark.skill.cooldown}s)</div>
+                      </div>
+                    )}
 
-                    <div className="mt-1 space-y-1 rounded-xl border border-white/5 bg-black/40 p-2 font-mono text-[11px]">
+                    <div className={`mt-1 space-y-1 ${full} rounded-xl border border-white/5 bg-black/40 p-2 font-mono text-[11px]`}>
                       <div className="flex justify-between text-rose-300">
                         <span>체력</span>
                         <span>{shark.maxHealth} ({delta(shark.maxHealth - current.maxHealth)})</span>
@@ -139,7 +162,7 @@ export default function SharkEvolutionModal({
                   <button
                     disabled={!have && !canAfford}
                     onClick={() => onEvolve(shark)}
-                    className={`mt-4 w-full rounded-xl py-2.5 text-xs font-bold shadow-md transition-all ${
+                    className={`${compact ? "w-24 shrink-0 px-2 py-2 sm:mt-4 sm:w-full sm:py-2.5" : "mt-4 w-full py-2.5"} rounded-xl text-xs font-bold shadow-md transition-all ${
                       have
                         ? "bg-emerald-500 text-neutral-950 hover:bg-emerald-400 active:scale-95"
                         : canAfford

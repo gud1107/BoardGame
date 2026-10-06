@@ -281,6 +281,9 @@ export function isUnderIce(x: number): boolean {
 //   + FROST 빙하 수호자 (그린란드 → 잠꾸러기 → 크라이오돈)
 //   + VENOM 맹독 사냥꾼 (황소상어 → 환도상어 → 바실리스크)
 //
+// Every T2 also splits into a second T3 → T4 line (뱀상어/헬리코프리온,
+// 청새리/블레이드, 랜턴/심연 등불, 빙창/오로라, 수염/히드라).
+//
 // `tier` is also the prey food-chain tier (EntityDef.requiredTier), so every
 // branch at the same tier eats the same things — branches differ in stats,
 // passives and the active skill (`skill`, cast with Space / ⚡ button).
@@ -293,7 +296,10 @@ export type SkillId =
   | "sonicBreak" | "sonar" | "shadowCloak"
   | "emp" | "snapJaw" | "blackHole"
   | "frostNova" | "iceArmor" | "blizzard"
-  | "venomSpit" | "tailWhip" | "plague";
+  | "venomSpit" | "tailWhip" | "plague"
+  | "frenzyBite" | "sawWhorl" | "slipstream" | "bladeDash"
+  | "lure" | "starburst" | "iceSpear" | "auroraVeil"
+  | "spineBurst" | "hydraFangs";
 
 export type PassiveId = "appetite" | "ballistics" | "staticField" | "coldBlood" | "bloodlust";
 
@@ -368,7 +374,7 @@ export const SHARKS: SharkDef[] = [
   },
   // ── Branch A: Brute ──
   {
-    id: "sandTiger", tier: 2, branch: "BRUTE", parentId: "reef", nextIds: ["white"],
+    id: "sandTiger", tier: 2, branch: "BRUTE", parentId: "reef", nextIds: ["white", "tigerShark"],
     name: "샌드타이거 상어", nameEn: "Sand Tiger",
     maxHealth: 180, baseDrainRate: 3.6, swimSpeed: 260, boostMultiplier: 1.85, boostDuration: 2.4,
     biteForce: 18, eatRadius: 24, length: 100, cost: 1560,
@@ -402,7 +408,7 @@ export const SHARKS: SharkDef[] = [
   },
   // ── Branch B: Speed ──
   {
-    id: "mako", tier: 2, branch: "SPEED", parentId: "reef", nextIds: ["hammer"],
+    id: "mako", tier: 2, branch: "SPEED", parentId: "reef", nextIds: ["hammer", "blueShark"],
     name: "청상아리", nameEn: "Mako Shark",
     maxHealth: 130, baseDrainRate: 3.2, swimSpeed: 305, boostMultiplier: 2.0, boostDuration: 2.6,
     biteForce: 14, eatRadius: 20, length: 86, cost: 1560,
@@ -436,7 +442,7 @@ export const SHARKS: SharkDef[] = [
   },
   // ── Branch C: Void / Psionic ──
   {
-    id: "elecShark", tier: 2, branch: "VOID", parentId: "reef", nextIds: ["goblin"],
+    id: "elecShark", tier: 2, branch: "VOID", parentId: "reef", nextIds: ["goblin", "lantern"],
     name: "일렉트릭 레이 상어", nameEn: "Electric Ray Shark",
     maxHealth: 150, baseDrainRate: 3.4, swimSpeed: 270, boostMultiplier: 1.9, boostDuration: 2.5,
     biteForce: 15, eatRadius: 22, length: 92, cost: 1820,
@@ -470,7 +476,7 @@ export const SHARKS: SharkDef[] = [
   },
   // ── Branch D: Frost ──
   {
-    id: "greenland", tier: 2, branch: "FROST", parentId: "reef", nextIds: ["sleeper"],
+    id: "greenland", tier: 2, branch: "FROST", parentId: "reef", nextIds: ["sleeper", "iceLance"],
     name: "그린란드 상어", nameEn: "Greenland Shark",
     maxHealth: 200, baseDrainRate: 3.4, swimSpeed: 240, boostMultiplier: 1.8, boostDuration: 2.4,
     biteForce: 15, eatRadius: 22, length: 104, cost: 1690,
@@ -504,7 +510,7 @@ export const SHARKS: SharkDef[] = [
   },
   // ── Branch E: Venom ──
   {
-    id: "bullShark", tier: 2, branch: "VENOM", parentId: "reef", nextIds: ["thresher"],
+    id: "bullShark", tier: 2, branch: "VENOM", parentId: "reef", nextIds: ["thresher", "wobbegong"],
     name: "황소상어", nameEn: "Bull Shark",
     maxHealth: 160, baseDrainRate: 3.5, swimSpeed: 275, boostMultiplier: 1.9, boostDuration: 2.5,
     biteForce: 17, eatRadius: 22, length: 96, cost: 1690,
@@ -536,11 +542,133 @@ export const SHARKS: SharkDef[] = [
     colors: ["#14532d", "#d9f99d", "#a3e635"],
     blurb: "독안개를 내뿜어 앞을 가로막는 모든 것을 녹여 버리는 맹독의 정점 포식자.",
   },
+  // ── Second T3 → T4 line of every branch ──
+  {
+    id: "tigerShark", tier: 3, branch: "BRUTE", parentId: "sandTiger", nextIds: ["helicoprion"],
+    name: "뱀상어", nameEn: "Tiger Shark",
+    maxHealth: 280, baseDrainRate: 4.9, swimSpeed: 285, boostMultiplier: 1.9, boostDuration: 2.8,
+    biteForce: 34, eatRadius: 34, length: 145, cost: 5850,
+    goldMultiplier: 1.5, magnetRadius: 80, boostEfficiency: 1.1,
+    skill: { id: "frenzyBite", name: "광란의 연속 물기", cooldown: 7, desc: "입 주변 300 반경의 먹이를 최대 5마리까지 연달아 물어뜯습니다(2배 피해). 물 때마다 체력 회복." },
+    passive: { id: "appetite", name: "왕성한 식욕", desc: "먹이 섭취 시 체력 회복량 +20%" },
+    colors: ["#78716c", "#fafaf9", "#292524"],
+    blurb: "무엇이든 먹어 치우는 바다의 쓰레기통. 한 번 물면 주변 먹이를 연달아 삼킵니다.",
+  },
+  {
+    id: "helicoprion", tier: 4, branch: "BRUTE", parentId: "tigerShark", nextIds: [],
+    name: "헬리코프리온", nameEn: "Helicoprion",
+    maxHealth: 440, baseDrainRate: 6.8, swimSpeed: 305, boostMultiplier: 1.85, boostDuration: 3.2,
+    biteForce: 58, eatRadius: 44, length: 210, cost: 20800,
+    goldMultiplier: 2.0, magnetRadius: 110, boostEfficiency: 1.4,
+    skill: { id: "sawWhorl", name: "회전 톱날 턱", cooldown: 12, desc: "나선형 톱니 턱을 회전시켜 주변 380 반경에 3.5배 피해, 2초간 무적." },
+    passive: null,
+    colors: ["#57534e", "#e7e5e4", "#b45309"],
+    blurb: "나선형 톱날 이빨을 가진 고생대의 괴물. 주변을 통째로 갈아 버립니다.",
+  },
+  {
+    id: "blueShark", tier: 3, branch: "SPEED", parentId: "mako", nextIds: ["bladeShark"],
+    name: "청새리상어", nameEn: "Blue Shark",
+    maxHealth: 200, baseDrainRate: 4.3, swimSpeed: 330, boostMultiplier: 2.0, boostDuration: 3.0,
+    biteForce: 26, eatRadius: 28, length: 125, cost: 5850,
+    goldMultiplier: 1.6, magnetRadius: 75, boostEfficiency: 2.0,
+    skill: { id: "slipstream", name: "슬립스트림", cooldown: 8, desc: "부스트를 가득 채우고 1.5초간 1.9배 속도로 해류를 탑니다. 지나가는 길의 작은 먹이는 빨려 들어옵니다." },
+    passive: { id: "ballistics", name: "수중 탄도학", desc: "부스트 속도 +45%, 부스트 소모량 −30%" },
+    colors: ["#1d4ed8", "#e0f2fe", "#38bdf8"],
+    blurb: "대양을 가로지르는 장거리 여행자. 해류를 타고 끝없이 달립니다.",
+  },
+  {
+    id: "bladeShark", tier: 4, branch: "SPEED", parentId: "blueShark", nextIds: [],
+    name: "썬더 블레이드", nameEn: "Thunder Blade",
+    maxHealth: 320, baseDrainRate: 5.9, swimSpeed: 355, boostMultiplier: 2.05, boostDuration: 3.6,
+    biteForce: 46, eatRadius: 36, length: 175, cost: 20800,
+    goldMultiplier: 2.2, magnetRadius: 90, boostEfficiency: 2.6,
+    skill: { id: "bladeDash", name: "칼날 질주", cooldown: 9, desc: "무적 상태로 2.6배 속도 돌진 — 앞쪽 일직선 560 거리의 먹이를 베어 3배 피해, 위험물은 기절." },
+    passive: null,
+    colors: ["#0f172a", "#e2e8f0", "#facc15"],
+    blurb: "번개처럼 바다를 가르는 칼날 지느러미. 지나간 자리에 먹이만 남습니다.",
+  },
+  {
+    id: "lantern", tier: 3, branch: "VOID", parentId: "elecShark", nextIds: ["abyssLantern"],
+    name: "랜턴상어", nameEn: "Lanternshark",
+    maxHealth: 230, baseDrainRate: 4.5, swimSpeed: 285, boostMultiplier: 1.9, boostDuration: 2.8,
+    biteForce: 28, eatRadius: 30, length: 130, cost: 6240,
+    goldMultiplier: 1.7, magnetRadius: 120, boostEfficiency: 1.3,
+    skill: { id: "lure", name: "발광 유인", cooldown: 8, desc: "몸의 빛으로 600 반경의 먹이를 입 앞으로 끌어당기고 1.5초간 홀립니다." },
+    passive: { id: "staticField", name: "정전기 유도", desc: "주변 작은 먹이가 자석처럼 입으로 2배 강하게 빨려 들어옵니다." },
+    colors: ["#1e293b", "#94a3b8", "#4ade80"],
+    blurb: "배에서 빛을 내는 심해의 작은 등불. 빛에 홀린 먹이가 스스로 다가옵니다.",
+  },
+  {
+    id: "abyssLantern", tier: 4, branch: "VOID", parentId: "lantern", nextIds: [],
+    name: "심연의 등불 군주", nameEn: "Abyssal Lantern Lord",
+    maxHealth: 390, baseDrainRate: 6.5, swimSpeed: 300, boostMultiplier: 1.85, boostDuration: 3.3,
+    biteForce: 52, eatRadius: 40, length: 200, cost: 22750,
+    goldMultiplier: 2.4, magnetRadius: 160, boostEfficiency: 1.5,
+    skill: { id: "starburst", name: "심해 별빛 폭발", cooldown: 13, desc: "눈부신 빛으로 700 반경 모든 생물을 2.5초 기절시키고, 450 반경의 작은 먹이 최대 10마리를 즉시 포식." },
+    passive: null,
+    colors: ["#020617", "#64748b", "#86efac"],
+    blurb: "심연 전체를 밝히는 빛의 군주. 빛 한 번에 먹이 떼가 사라집니다.",
+  },
+  {
+    id: "iceLance", tier: 3, branch: "FROST", parentId: "greenland", nextIds: ["aurora"],
+    name: "빙창 상어", nameEn: "Ice Lance Shark",
+    maxHealth: 290, baseDrainRate: 4.5, swimSpeed: 285, boostMultiplier: 1.9, boostDuration: 2.8,
+    biteForce: 34, eatRadius: 30, length: 140, cost: 6050,
+    goldMultiplier: 1.55, magnetRadius: 70, boostEfficiency: 1.2,
+    skill: { id: "iceSpear", name: "빙창 투척", cooldown: 7, desc: "전방 700 거리로 관통하는 얼음 창 — 맞은 먹이는 3배 피해, 위험물은 3초간 얼어붙습니다." },
+    passive: { id: "coldBlood", name: "냉혈 대사", desc: "배고픔(체력 감소) 속도 −20%" },
+    colors: ["#64748b", "#f0f9ff", "#bae6fd"],
+    blurb: "주둥이 끝에 얼음 창을 기르는 북극 상어. 멀리서 꿰뚫어 사냥합니다.",
+  },
+  {
+    id: "aurora", tier: 4, branch: "FROST", parentId: "iceLance", nextIds: [],
+    name: "오로라 리바이어던", nameEn: "Aurora Leviathan",
+    maxHealth: 460, baseDrainRate: 6.4, swimSpeed: 300, boostMultiplier: 1.85, boostDuration: 3.3,
+    biteForce: 50, eatRadius: 42, length: 205, cost: 21450,
+    goldMultiplier: 2.1, magnetRadius: 120, boostEfficiency: 1.4,
+    skill: { id: "auroraVeil", name: "오로라 장막", cooldown: 13, desc: "3초간 무적 장막 + 체력 25% 회복, 주변 450 반경을 3초간 얼립니다." },
+    passive: { id: "coldBlood", name: "냉혈 대사", desc: "배고픔(체력 감소) 속도 −20%" },
+    colors: ["#134e4a", "#ccfbf1", "#c084fc"],
+    blurb: "극지의 하늘빛을 두른 신비한 거구. 오로라 장막 안에서는 무엇도 닿지 않습니다.",
+  },
+  {
+    id: "wobbegong", tier: 3, branch: "VENOM", parentId: "bullShark", nextIds: ["hydra"],
+    name: "수염상어", nameEn: "Wobbegong",
+    maxHealth: 270, baseDrainRate: 4.4, swimSpeed: 280, boostMultiplier: 1.9, boostDuration: 2.8,
+    biteForce: 30, eatRadius: 32, length: 135, cost: 6050,
+    goldMultiplier: 1.6, magnetRadius: 80, boostEfficiency: 1.2,
+    skill: { id: "spineBurst", name: "독가시 폭발", cooldown: 7, desc: "몸의 독가시를 사방으로 터뜨려 300 반경에 2.5배 피해, 위험물은 3초 마비." },
+    passive: { id: "bloodlust", name: "흡혈 본능", desc: "먹이 섭취 시 체력 회복량 +30%" },
+    colors: ["#854d0e", "#fef3c7", "#65a30d"],
+    blurb: "해초처럼 위장해 숨어 있다가 독가시로 주변을 덮치는 매복의 달인.",
+  },
+  {
+    id: "hydra", tier: 4, branch: "VENOM", parentId: "wobbegong", nextIds: [],
+    name: "히드라 상어", nameEn: "Hydra Shark",
+    maxHealth: 400, baseDrainRate: 6.4, swimSpeed: 310, boostMultiplier: 1.95, boostDuration: 3.3,
+    biteForce: 50, eatRadius: 38, length: 195, cost: 21450,
+    goldMultiplier: 2.2, magnetRadius: 100, boostEfficiency: 1.6,
+    skill: { id: "hydraFangs", name: "세 머리 독니", cooldown: 9, desc: "세 방향으로 독니를 사출해 각각 먼 거리의 먹이를 3배 피해로 물어 끌어옵니다. 쓰러뜨린 먹이마다 체력 회복." },
+    passive: { id: "bloodlust", name: "흡혈 본능", desc: "먹이 섭취 시 체력 회복량 +30%" },
+    colors: ["#3f6212", "#ecfccb", "#facc15"],
+    blurb: "베어도 다시 자라는 세 개의 독니. 한 번에 세 마리를 낚아챕니다.",
+  },
 ];
 
 export function sharkById(id: string): SharkDef {
   return SHARKS.find((s) => s.id === id) ?? SHARKS[0];
 }
+
+/** Depth-first ids from the reef shark — each sub-line's T3 → T4 stay together. */
+export const TREE_ORDER: string[] = (() => {
+  const out: string[] = [];
+  const walk = (id: string) => {
+    out.push(id);
+    for (const n of sharkById(id).nextIds) walk(n);
+  };
+  walk(SHARKS[0].id);
+  return out;
+})();
 
 /** Root → ... → this shark (inclusive). */
 export function evolutionPath(id: string): SharkDef[] {

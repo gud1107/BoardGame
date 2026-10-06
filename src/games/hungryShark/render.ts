@@ -1308,6 +1308,111 @@ export function drawSharkShape(
       ctx.fill();
     }
   }
+  if (def.id === "tigerShark" && !gold) {
+    // Dark tiger bars across the back.
+    ctx.strokeStyle = "rgba(41,37,36,0.55)";
+    ctx.lineWidth = 0.018 * u;
+    for (let i = 0; i < 6; i++) {
+      const x = 0.18 * u - i * 0.075 * u;
+      ctx.beginPath();
+      ctx.moveTo(x, -0.14 * u + i * 0.01 * u);
+      ctx.lineTo(x - 0.02 * u, -0.05 * u);
+      ctx.stroke();
+    }
+  }
+  if (def.id === "lantern" || def.id === "abyssLantern") {
+    // Glowing photophores along the belly.
+    ctx.fillStyle = gold ? "#fde68a" : `rgba(134,239,172,${0.6 + 0.4 * Math.sin(phase * 1.8)})`;
+    for (let i = 0; i < 8; i++) {
+      ctx.beginPath();
+      ctx.arc(0.22 * u - i * 0.075 * u, 0.09 * u - i * 0.004 * u, 0.011 * u, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (def.id === "abyssLantern") {
+    // Angler-style lure stalk with a glowing orb.
+    ctx.strokeStyle = gold ? "#eab308" : back;
+    ctx.lineWidth = 0.012 * u;
+    ctx.beginPath();
+    ctx.moveTo(0.3 * u, -0.13 * u);
+    ctx.quadraticCurveTo(0.45 * u, -0.34 * u, 0.6 * u, -0.2 * u + Math.sin(phase) * 0.02 * u);
+    ctx.stroke();
+    ctx.fillStyle = gold ? "#fef08a" : `rgba(187,247,208,${0.75 + 0.25 * Math.sin(phase * 2)})`;
+    ctx.beginPath();
+    ctx.arc(0.6 * u, -0.2 * u + Math.sin(phase) * 0.02 * u, 0.03 * u, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (def.id === "blueShark" && !gold) {
+    // Pale speed streak along the flank.
+    ctx.strokeStyle = "rgba(186,230,253,0.7)";
+    ctx.lineWidth = 0.012 * u;
+    ctx.beginPath();
+    ctx.moveTo(0.3 * u, -0.02 * u);
+    ctx.quadraticCurveTo(0.0, -0.06 * u, -0.38 * u, -0.01 * u);
+    ctx.stroke();
+  }
+  if (def.id === "bladeShark" && !gold) {
+    // Lightning edge down the spine.
+    ctx.strokeStyle = `rgba(250,204,21,${0.7 + 0.3 * Math.sin(phase * 3)})`;
+    ctx.lineWidth = 0.014 * u;
+    ctx.beginPath();
+    ctx.moveTo(0.3 * u, -0.14 * u);
+    for (let i = 1; i <= 8; i++) ctx.lineTo(0.3 * u - i * 0.08 * u, -0.13 * u + (i % 2 ? 0.03 : 0) * u + i * 0.008 * u);
+    ctx.stroke();
+  }
+  if (def.id === "iceLance") {
+    // Long icy lance snout.
+    ctx.fillStyle = gold ? "#eab308" : "rgba(224,242,254,0.95)";
+    ctx.beginPath();
+    ctx.moveTo(0.42 * u, -0.06 * u);
+    ctx.lineTo(0.8 * u, -0.02 * u);
+    ctx.lineTo(0.43 * u, 0.0);
+    ctx.closePath();
+    ctx.fill();
+  }
+  if (def.id === "aurora" && !gold) {
+    // Shimmering aurora bands.
+    const bands = ["rgba(45,212,191,0.45)", "rgba(192,132,252,0.45)", "rgba(134,239,172,0.4)"];
+    ctx.lineWidth = 0.02 * u;
+    bands.forEach((c, i) => {
+      ctx.strokeStyle = c;
+      ctx.beginPath();
+      ctx.moveTo(0.28 * u, -0.1 * u + i * 0.03 * u);
+      ctx.quadraticCurveTo(0.0, -0.13 * u + i * 0.03 * u + Math.sin(phase + i) * 0.02 * u, -0.36 * u, -0.05 * u + i * 0.025 * u);
+      ctx.stroke();
+    });
+  }
+  if (def.id === "wobbegong" && !gold) {
+    // Camouflage blotches + beard tassels under the snout.
+    ctx.fillStyle = "rgba(101,163,13,0.45)";
+    for (let i = 0; i < 7; i++) {
+      ctx.beginPath();
+      ctx.ellipse(0.2 * u - i * 0.08 * u, -0.08 * u + (i % 2) * 0.03 * u, 0.03 * u, 0.018 * u, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 0.01 * u;
+    for (let i = 0; i < 4; i++) {
+      const x = 0.32 * u + i * 0.035 * u;
+      ctx.beginPath();
+      ctx.moveTo(x, 0.1 * u);
+      ctx.lineTo(x - 0.01 * u, 0.15 * u + Math.sin(phase + i) * 0.01 * u);
+      ctx.stroke();
+    }
+  }
+  if (def.id === "hydra") {
+    // Two extra heads sprouting above and below the main one.
+    for (const dy of [-0.2, 0.17]) {
+      ctx.fillStyle = gold ? "#eab308" : back;
+      ctx.beginPath();
+      ctx.ellipse(0.3 * u, dy * u, 0.13 * u, 0.045 * u, dy < 0 ? -0.35 : 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = gold ? "#fde68a" : accent;
+      ctx.beginPath();
+      ctx.arc(0.36 * u, dy * u + (dy < 0 ? -0.01 : 0.01) * u, 0.014 * u, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   if (def.id === "megalodon" && !gold) {
     ctx.strokeStyle = "rgba(127,29,29,0.7)";
     ctx.lineWidth = 0.012 * u;
@@ -1369,8 +1474,27 @@ export function drawSharkShape(
   ctx.closePath();
   ctx.fill();
 
+  if (def.id === "helicoprion") {
+    // Spiral tooth-whorl on the lower jaw, spinning.
+    const cx = 0.36 * u, cy = 0.08 * u, r = 0.06 * u;
+    ctx.fillStyle = gold ? "#ca8a04" : "#78350f";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fef3c7";
+    for (let i = 0; i < 10; i++) {
+      const a = phase * 2 + (i * Math.PI * 2) / 10;
+      const rr = r * (0.55 + i * 0.05);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * rr * 0.7, cy + Math.sin(a) * rr * 0.7);
+      ctx.lineTo(cx + Math.cos(a + 0.25) * rr * 0.7, cy + Math.sin(a + 0.25) * rr * 0.7);
+      ctx.lineTo(cx + Math.cos(a + 0.12) * (rr + 0.02 * u), cy + Math.sin(a + 0.12) * (rr + 0.02 * u));
+      ctx.fill();
+    }
+  }
+
   // Eye.
-  ctx.fillStyle = (def.id === "leviathan" || def.id === "phantom" || def.id === "cryodon" || def.id === "basilisk") && !gold ? accent : "#020617";
+  ctx.fillStyle = (def.id === "leviathan" || def.id === "phantom" || def.id === "cryodon" || def.id === "basilisk" || def.id === "abyssLantern" || def.id === "aurora" || def.id === "bladeShark") && !gold ? accent : "#020617";
   ctx.beginPath();
   ctx.arc(0.34 * u, -0.045 * u, 0.024 * u, 0, Math.PI * 2);
   ctx.fill();

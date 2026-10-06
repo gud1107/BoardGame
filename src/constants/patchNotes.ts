@@ -60,7 +60,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.53.0",
     releaseDate: "2026-10-07",
-    title: "🌐 공개방 — 로비에서 방 목록 보고 바로 입장, 배고픈 상어 신규 상어 6종",
+    title: "🌐 공개방 — 로비에서 방 목록 보고 바로 입장, 배고픈 상어 신규 상어 16종",
     changes: [
       {
         game: "common",
@@ -86,6 +86,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         game: "hungry-shark",
         type: "FEAT",
         desc: "새 진화 계통 2개·상어 6종 추가 — 🧊 빙하 수호자(그린란드→잠꾸러기→크라이오돈), 🧪 맹독 사냥꾼(황소→환도→바실리스크), 각자 고유 스킬",
+      },
+      {
+        game: "hungry-shark",
+        type: "FEAT",
+        desc: "모든 계통이 3티어에서 두 갈래로 나뉘어 상어 10종 추가(총 26종, 상어마다 다른 스킬) — 뱀상어·헬리코프리온·히드라 상어 등, 진화 선택 창은 한 화면에 모두 표시",
       },
     ],
   },
