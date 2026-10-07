@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { INK_COLORS, MAX_POINTS_PER_STROKE, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
+import { INK_COLORS, MAX_POINTS_PER_STROKE, MAX_STROKES, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
 import {
   Ambient,
   characterFor,
@@ -76,7 +76,19 @@ function nearestEnemy(players: readonly Player[], seat: number): Player | null {
   return best;
 }
 
-const WORD: Record<ShotEvent["stats"]["kind"], string> = { spear: "푸욱!", bomb: "콰광!", lightning: "지지직!", boomerang: "휘리릭 퍽!", club: "빠악!" };
+const WORD: Record<ShotEvent["stats"]["kind"], string> = {
+  spear: "푸욱!",
+  bomb: "콰광!",
+  rocket: "슈우웅 쾅!",
+  anvil: "쿠웅!!",
+  shuriken: "슈슉!",
+  lightning: "지지직!",
+  boomerang: "휘리릭 퍽!",
+  drill: "드드드 쾅!",
+  wave: "철썩!",
+  cluster: "파파팡!",
+  club: "빠악!",
+};
 
 /** Character art index for a seat (older states without `characters` fall back to the seat). */
 function charOf(state: InkDuelState, seat: number): number {
@@ -178,7 +190,10 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
         if (ev.impact) {
           const ink = INK_COLORS[ev.stats.shape[0]?.c ?? 0];
           const power = ev.hits.reduce((s, h) => s + h.dmg, 0);
-          fx.explode(ev.impact.x, ev.impact.y, Math.max(18, ev.stats.blastRadius), ev.stats.element, ink, { dirt: ev.craterRadius > 0, power });
+          const pts = ev.pelletPoints?.length ? ev.pelletPoints : [ev.impact.x, ev.impact.y];
+          for (let k = 0; k < pts.length; k += 2) {
+            fx.explode(pts[k], pts[k + 1], Math.max(18, ev.stats.blastRadius), ev.stats.element, ink, { dirt: ev.craterRadius > 0, power: pts.length > 2 ? power / 3 : power });
+          }
         }
       }
       if (anim && clock && inFlight && !clock.launched) {
@@ -392,7 +407,7 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
     if (anim) return;
     const [x, y] = toWorld(e);
     if (wallDraft) {
-      if (wallDraft.strokes.length >= 16) return;
+      if (wallDraft.strokes.length >= MAX_STROKES) return;
       e.currentTarget.setPointerCapture(e.pointerId);
       drawingRef.current = [Math.max(0, Math.min(WORLD_W, x)), Math.max(0, Math.min(WORLD_H, y))];
       return;

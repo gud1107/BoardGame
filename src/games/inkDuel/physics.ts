@@ -135,6 +135,9 @@ export function simulateFlight(
   // Boomerangs are pulled back toward the side they were thrown from.
   const throwDir = vx >= 0 ? 1 : -1;
   const boomerang = stats.returnAcc > 0;
+  let bouncesLeft = stats.bounces;
+  let digLeft = stats.dig;
+  let digging = false;
   let theta = 0;
   let c = 1;
   let s = 0;
@@ -273,6 +276,18 @@ export function simulateFlight(
       return { frames, impact: { x, y }, directSeat: null, wallStop: w.id, pierced, ticks: tick };
     }
 
+    // 🌀 Tunnelling: slows down underground and blows up when the drill runs out.
+    if (digging) {
+      vx *= 0.9;
+      vy *= 0.9;
+      digLeft--;
+      if (digLeft <= 0 || y > WORLD_H - 30) {
+        frames.push(r2(x), r2(y), r2(c), r2(s));
+        return { frames, impact: { x, y }, directSeat: null, wallStop: null, pierced, ticks: tick };
+      }
+      continue;
+    }
+
     // Terrain.
     if (y + R >= minTerrain) {
       let ground = false;
@@ -289,6 +304,18 @@ export function simulateFlight(
           }
           if (ground) break;
         }
+      }
+      if (ground && bouncesLeft > 0) {
+        // ✴️ Ricochet: flip upward, lose some speed, lift clear of the ground.
+        bouncesLeft--;
+        vy = -Math.abs(vy) * 0.65 - 1;
+        vx *= 0.85;
+        y = Math.min(y, surfaceY(terrain, x) - R - 1);
+        continue;
+      }
+      if (ground && digLeft > 0) {
+        digging = true;
+        continue;
       }
       if (ground) {
         frames.push(r2(x), r2(y), r2(c), r2(s));

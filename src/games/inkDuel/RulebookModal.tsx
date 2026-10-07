@@ -24,13 +24,19 @@ export default function InkDuelRulebookModal({ onClose }: { onClose: () => void 
         </section>
 
         <section>
-          <h3 className={h3}>① 모양 → 무기 (가장 긴 선 기준)</h3>
+          <h3 className={h3}>① 모양 → 무기 11종 (가장 긴 선 기준)</h3>
           <div className="grid gap-2 sm:grid-cols-2">
-            <div className={box}>🗡️ <b>창</b> — 곧게 쭉 그은 선. 벽을 <b>관통</b>하고 빠르게 날아가지만 직격해야만 피해(높은 피해).</div>
-            <div className={box}>💣 <b>폭탄</b> — 시작점과 끝점이 만나는 닫힌 도형. 넓게 그릴수록 폭발 반경↑, 지형을 파내요.</div>
-            <div className={box}>⚡ <b>번개</b> — 지그재그. 맞은 곳에서 가까운 적에게 연쇄 피해 (꺾을수록 연쇄↑).</div>
-            <div className={box}>🪃 <b>부메랑</b> — 부드럽게 휜 C자 호(닫히지 않게). 나갔다가 되돌아와요 — 오갈 때 모두 맞힐 수 있고, 돌아오면 내가 받아내요.</div>
-            <div className={box}>🪨 <b>몽둥이</b> — 그 밖의 자유 낙서. 작은 범위의 묵직한 둔기 피해.</div>
+            <div className={box}>🗡️ <b>창</b> — 곧게 쭉 그은 선. 벽을 <b>관통</b>, 직격해야 피해(높은 피해).</div>
+            <div className={box}>💣 <b>폭탄</b> — 둥근 닫힌 도형. 넓을수록 폭발↑, 지형을 파내요.</div>
+            <div className={box}>🚀 <b>로켓</b> — 세모. 중력을 덜 받아 뾰족한 쪽으로 쭉 날아가요.</div>
+            <div className={box}>🔨 <b>모루</b> — 네모·오각형. 무겁게 뚝 떨어져 큰 피해.</div>
+            <div className={box}>✴️ <b>표창</b> — 뾰족한 별 또는 엇갈린 두 직선. 땅에 두 번 튕기고 치명타가 잘 나요.</div>
+            <div className={box}>⚡ <b>번개</b> — 지그재그. 가까운 적에게 연쇄 피해 (꺾을수록 연쇄↑).</div>
+            <div className={box}>🪃 <b>부메랑</b> — 부드러운 C자 호. 나갔다가 돌아와 내가 받아요 — 오갈 때 모두 맞혀요.</div>
+            <div className={box}>🌀 <b>드릴</b> — 한 바퀴 반 이상 감은 소용돌이. 땅을 파고 들어가 큰 구덩이를 내며 폭발.</div>
+            <div className={box}>🌊 <b>파도</b> — S자 물결. 맞은 상대를 50px 밀어내요 (맵 끝으로 밀어붙이기!).</div>
+            <div className={box}>🎆 <b>산탄</b> — 작은 낙서 4개 이상. 흩어지며 여러 번 터져요.</div>
+            <div className={box}>🪨 <b>몽둥이</b> — 그 밖의 낙서(작은 덩어리 등). 묵직한 둔기 피해.</div>
           </div>
           <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-white/60 light:text-slate-500">
             <li>뾰족한 꼭짓점이 많을수록 <b>치명타</b> 확률↑ (×1.6, 최대 45%).</li>
@@ -49,6 +55,7 @@ export default function InkDuelRulebookModal({ onClose }: { onClose: () => void 
               <li>🟢 초록 — 독: 3턴 동안 턴 시작마다 −4</li>
               <li>🟡 노랑 — 전기: 연쇄 +1회</li>
             </ul>
+            <p className="mt-1.5 text-xs text-white/60 light:text-slate-500">🎨 두 번째로 많이 쓴 색이 잉크의 35% 이상이면 그 효과도 함께 붙어요 (예: 빨강+파랑 = 화상+빙결).</p>
           </div>
         </section>
 

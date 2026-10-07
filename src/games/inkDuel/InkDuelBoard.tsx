@@ -65,6 +65,16 @@ function StatBar({ label, value, max, text }: { label: string; value: number; ma
 export function WeaponCard({ stats, compact = false }: { stats: WeaponStats; compact?: boolean }) {
   const label = WEAPON_LABEL[stats.kind];
   const theme = ELEMENT_CARD[stats.element];
+  const traits = [
+    stats.element2 ? `+ ${ELEMENT_LABEL[stats.element2].split(" (")[0]}` : null,
+    stats.bounces > 0 ? `튕김 ${stats.bounces}회` : null,
+    stats.dig > 0 ? "땅 파고들기" : null,
+    stats.knockback > 0 ? `밀쳐내기 ${stats.knockback}` : null,
+    stats.pellets > 0 ? `산탄 ${stats.pellets}발` : null,
+    stats.returnAcc > 0 ? "되돌아옴" : null,
+    stats.gravityMul < 0.5 && stats.returnAcc === 0 ? "중력 ↓" : null,
+    stats.gravityMul > 1.5 ? "무거움" : null,
+  ].filter((t): t is string => t !== null);
   const bars = (
     <div className="flex flex-col gap-1">
       <StatBar label="피해" value={stats.damage} max={40} text={`${stats.damage}`} />
@@ -72,6 +82,15 @@ export function WeaponCard({ stats, compact = false }: { stats: WeaponStats; com
       {stats.chains > 0 && <StatBar label="연쇄" value={stats.chains} max={4} text={`${stats.chains}회`} />}
       <StatBar label="치명타" value={stats.critChance} max={0.45} text={`${Math.round(stats.critChance * 100)}%`} />
       <StatBar label="속도" value={stats.speedMul} max={1.35} text={`×${stats.speedMul.toFixed(2)}`} />
+      {traits.length > 0 && (
+        <div className="mt-0.5 flex flex-wrap gap-1">
+          {traits.map((t) => (
+            <span key={t} className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[9px] font-semibold text-white">
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
   const art = (size: number) => (
@@ -517,7 +536,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
               <div className="w-full max-w-[220px]">
                 <WeaponPad strokes={mode === "shield" ? shield : weapon} color={color} budget={budget} onChange={mode === "shield" ? setShield : setWeapon} onScribble={playScribbleTick} />
                 <p className="mt-1 hidden text-center text-[10px] text-white/40 sm:block light:text-slate-400">
-                  {mode === "shield" ? "그린 모양이 그대로 방패가 돼요" : "곧은 선=창 · 닫힌 도형=폭탄 · 지그재그=번개 · C자 호=부메랑 · 색=속성"}
+                  {mode === "shield" ? "그린 모양이 그대로 방패가 돼요" : "선·원·세모·네모·별·지그재그·C자·소용돌이·S자·점점이 — 모양마다 다른 무기, 두 색을 섞으면 효과 2개"}
                 </p>
               </div>
               {mode === "shield" ? (
@@ -561,7 +580,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                 ) : (
                   <div className="rounded-xl border border-dashed border-white/20 p-3 text-center text-xs text-white/50 sm:p-4 light:border-slate-300 light:text-slate-500">
                     ← 공책에 무기를 그려보세요 ✏️
-                    <span className="mt-1 block text-[10px] sm:hidden">곧은 선=창 · 닫힌 도형=폭탄 · 지그재그=번개</span>
+                    <span className="mt-1 block text-[10px] sm:hidden">선·원·세모·네모·별·지그재그·C자·소용돌이·S자·점점이</span>
                   </div>
                 )}
                 <label className="flex items-center gap-2 text-xs text-white/70 light:text-slate-600">

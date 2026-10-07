@@ -69,6 +69,22 @@ export const SHIELD_GUARD = 0.6;
 const BURN_DMG = 6;
 const POISON_DMG = 4;
 const CHAIN_RANGE = 240;
+const PELLET_SPREAD = 28;
+/** Crater radius per weapon kind, as a fraction of its blast radius (or a fixed size). */
+const CRATER_FACTOR: Record<WeaponStats["kind"], number> = {
+  spear: 0,
+  bomb: 0.85,
+  rocket: 0.7,
+  anvil: 0.8,
+  shuriken: 0,
+  lightning: 0,
+  boomerang: 0,
+  drill: 1.25,
+  wave: 0,
+  cluster: 0.55,
+  club: 0.5,
+};
+const CRATER_FIXED: Partial<Record<WeaponStats["kind"], number>> = { lightning: 10, boomerang: 10, shuriken: 8 };
 const DIRECT_BONUS = 1.2;
 const CRIT_MUL = 1.6;
 const SELF_DMG_MUL = 0.5;
@@ -111,6 +127,8 @@ export type InkEvent =
       hits: HitRecord[];
       /** Flat x,y of the lightning chain jumps (starting at the impact point). */
       chainPath: number[];
+      /** Flat x,y of 🎆 scatter sub-blasts (empty for single-impact weapons). */
+      pelletPoints: number[];
       wallsBroken: number[];
       craterRadius: number;
       hpBefore: number[];
@@ -499,6 +517,7 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
   let terrain = state.terrain;
   const hits: HitRecord[] = [];
   const chainPath: number[] = [];
+  const pelletPoints: number[] = [];
   let crit = false;
   let craterRadius = 0;
 
@@ -508,17 +527,28 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
     crit = rng() < stats.critChance;
     const mul = crit ? CRIT_MUL : 1;
     const blast = stats.blastRadius;
+    // 🎆 Scatter shots burst at several points spread around the impact.
+    const centers: number[] = [];
+    if (stats.pellets > 0) {
+      for (let i = 0; i < stats.pellets; i++) centers.push(ix + (i - (stats.pellets - 1) / 2) * PELLET_SPREAD, iy - (i % 2) * 10);
+    } else {
+      centers.push(ix, iy);
+    }
+    pelletPoints.push(...(stats.pellets > 0 ? centers.map((v) => Math.round(v)) : []));
     for (const p of players) {
       if (!p.alive) continue;
       let dmg = 0;
       const direct = flight.directSeat === p.seat;
       if (direct) dmg = stats.damage * DIRECT_BONUS;
-      else if (blast > 0) {
-        const dx = p.x - ix;
-        const dy = p.y - PLAYER_R - iy;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        const reach = blast + PLAYER_R;
-        if (d < reach) dmg = stats.damage * (1 - (0.6 * d) / reach);
+      if (blast > 0) {
+        for (let k = 0; k < centers.length; k += 2) {
+          if (direct && k === 0) continue;
+          const dx = p.x - centers[k];
+          const dy = p.y - PLAYER_R - centers[k + 1];
+          const d = Math.sqrt(dx * dx + dy * dy);
+          const reach = blast + PLAYER_R;
+          if (d < reach) dmg += stats.damage * (1 - (0.6 * d) / reach);
+        }
       }
       if (dmg <= 0) continue;
       if (p.seat === seat) dmg *= SELF_DMG_MUL;
@@ -554,19 +584,27 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
     for (const w of walls) {
       if (w.hp <= 0) continue;
       if (flight.wallStop === w.id) w.hp -= stats.damage * 1.5;
-      else if (blast > 0 && wallTouchesCircle(w, ix, iy, blast)) w.hp -= stats.damage;
+      else if (blast > 0) {
+        for (let k = 0; k < centers.length; k += 2) if (wallTouchesCircle(w, centers[k], centers[k + 1], blast)) w.hp -= stats.damage;
+      }
     }
-    craterRadius = stats.kind === "bomb" ? stats.blastRadius * 0.85 : stats.kind === "club" ? stats.blastRadius * 0.5 : stats.kind === "lightning" || stats.kind === "boomerang" ? 10 : 0;
-    craterRadius *= MAPS[state.map].craterMul;
-    if (craterRadius > 0) terrain = carveCrater(terrain, ix, iy, craterRadius);
+    craterRadius = (CRATER_FACTOR[stats.kind] * stats.blastRadius || CRATER_FIXED[stats.kind] || 0) * MAPS[state.map].craterMul;
+    if (craterRadius > 0) for (let k = 0; k < centers.length; k += 2) terrain = carveCrater(terrain, centers[k], centers[k + 1], craterRadius);
   }
 
   for (const h of hits) {
     const p = players[h.seat];
     p.hp = Math.max(0, p.hp - h.dmg);
-    if (stats.element === "fire") p.burn = 2;
-    else if (stats.element === "ice") p.frozen = true;
-    else if (stats.element === "poison") p.poison = 3;
+    for (const el of [stats.element, stats.element2]) {
+      if (el === "fire") p.burn = 2;
+      else if (el === "ice") p.frozen = true;
+      else if (el === "poison") p.poison = 3;
+    }
+    // 🌊 Knockback: shove hit players (not the shooter) away from the impact.
+    if (stats.knockback > 0 && flight.impact && h.seat !== seat && !h.chain) {
+      const dir = p.x >= flight.impact.x ? 1 : -1;
+      p.x = Math.round(Math.max(20, Math.min(WORLD_W - 20, p.x + dir * stats.knockback)));
+    }
   }
   const wallsBroken = walls.filter((w) => w.hp <= 0 && state.walls.some((o) => o.id === w.id && o.hp > 0)).map((w) => w.id);
   walls = walls.filter((w) => w.hp > 0).map((w) => ({ ...w, hp: Math.round(w.hp * 10) / 10 }));
@@ -594,6 +632,7 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
       crit,
       hits,
       chainPath,
+      pelletPoints,
       wallsBroken,
       craterRadius,
       hpBefore,
@@ -694,48 +733,115 @@ function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terra
 // Bots (ARCHITECTURE.md §7)
 // ---------------------------------------------------------------------------
 
-type Template = "spear" | "bomb" | "lightning" | "boomerang" | "club";
+type Template = WeaponStats["kind"];
 
 /** Procedurally "draws" a doodle of one archetype on the pad, fitting `budget` ink. */
 export function botDoodle(template: Template, color: InkColor, budget: number, rng: () => number): Stroke[] {
   const j = (v: number) => Math.round(Math.max(0, Math.min(PAD_SIZE, v + (rng() * 2 - 1) * 2)));
-  const pts: number[] = [];
-  const fit = (scale: number): Stroke[] => {
+  const HALF_PI = 1.5707963267948966;
+  const TAU = 6.283185307179586;
+  const polys: number[][] = [];
+  const ring = (cx: number, cy: number, r: number, steps: number) => {
     const p: number[] = [];
-    for (let i = 0; i < pts.length; i += 2) p.push(j(100 + (pts[i] - 100) * scale), j(100 + (pts[i + 1] - 100) * scale));
-    return [{ c: color, p }];
+    for (let t = 0; t <= steps; t++) {
+      const a = (t / steps) * TAU;
+      p.push(cx + r * dsin(a + HALF_PI), cy + r * dsin(a));
+    }
+    return p;
+  };
+  const polygon = (corners: number[]) => {
+    const p: number[] = [];
+    const n = corners.length / 2;
+    for (let k = 0; k <= n; k++) {
+      const a = k % n;
+      const b = (k + 1) % n;
+      if (k === n) {
+        p.push(corners[a * 2], corners[a * 2 + 1]);
+        break;
+      }
+      for (let t = 0; t < 4; t++) p.push(corners[a * 2] + ((corners[b * 2] - corners[a * 2]) * t) / 4, corners[a * 2 + 1] + ((corners[b * 2 + 1] - corners[a * 2 + 1]) * t) / 4);
+    }
+    return p;
   };
   switch (template) {
-    case "spear":
-      for (let t = 0; t <= 16; t++) pts.push(20 + t * 10, 100 + (t % 2) * 2);
-      break;
-    case "bomb": {
-      const r = 45 + rng() * 25;
-      for (let t = 0; t <= 24; t++) {
-        const a = (t / 24) * 6.283185307179586;
-        pts.push(100 + r * dsin(a + 1.5707963267948966), 100 + r * dsin(a));
-      }
+    case "spear": {
+      const p: number[] = [];
+      for (let t = 0; t <= 16; t++) p.push(20 + t * 10, 100 + (t % 2) * 2);
+      polys.push(p);
       break;
     }
-    case "lightning":
-      for (let t = 0; t <= 8; t++) pts.push(30 + t * 18, t % 2 === 0 ? 70 : 130);
+    case "bomb":
+      polys.push(ring(100, 100, 45 + rng() * 25, 24));
       break;
+    case "rocket":
+      polys.push(polygon([100, 30, 165, 160, 35, 160]));
+      break;
+    case "anvil":
+      polys.push(polygon([45, 55, 155, 55, 155, 145, 45, 145]));
+      break;
+    case "shuriken": {
+      const c: number[] = [];
+      for (let k = 0; k < 10; k++) {
+        const a = -HALF_PI + (k / 10) * TAU;
+        const r = k % 2 === 0 ? 75 : 25;
+        c.push(100 + r * dsin(a + HALF_PI), 100 + r * dsin(a));
+      }
+      polys.push(polygon(c));
+      break;
+    }
+    case "lightning": {
+      const p: number[] = [];
+      for (let t = 0; t <= 8; t++) p.push(30 + t * 18, t % 2 === 0 ? 70 : 130);
+      polys.push(p);
+      break;
+    }
     case "boomerang": {
       // Smooth "C" arc (~200°).
       const r = 55 + rng() * 15;
+      const p: number[] = [];
       for (let t = 0; t <= 20; t++) {
         const a = -1.7 + (t / 20) * 3.5;
-        pts.push(100 + r * dsin(a + 1.5707963267948966), 100 + r * dsin(a));
+        p.push(100 + r * dsin(a + HALF_PI), 100 + r * dsin(a));
       }
+      polys.push(p);
       break;
     }
-    default:
-      for (let t = 0; t <= 14; t++) {
-        const a = t * 1.9;
-        const r = 20 + (t % 3) * 14;
-        pts.push(100 + r * dsin(a + 1.5707963267948966), 100 + r * dsin(a));
+    case "drill": {
+      // Two-turn spiral from the centre outwards.
+      const p: number[] = [];
+      for (let t = 0; t <= 48; t++) {
+        const a = (t / 48) * 2 * TAU;
+        const r = 10 + (t / 48) * 70;
+        p.push(100 + r * dsin(a + HALF_PI), 100 + r * dsin(a));
       }
+      polys.push(p);
+      break;
+    }
+    case "wave": {
+      const p: number[] = [];
+      for (let x = 20; x <= 180; x += 6) p.push(x, 100 + 30 * dsin(x * 0.045));
+      polys.push(p);
+      break;
+    }
+    case "cluster":
+      for (const [cx, cy] of [
+        [50, 60],
+        [150, 60],
+        [100, 100],
+        [50, 140],
+        [150, 140],
+      ]) polys.push(ring(cx, cy, 12, 10));
+      break;
+    default:
+      // Club: a small, dense lump (closed but too small to be a bomb).
+      polys.push(ring(100, 100, 15, 12));
   }
+  const fit = (scale: number): Stroke[] =>
+    polys.map((poly) => {
+      const p: number[] = [];
+      for (let i = 0; i < poly.length; i += 2) p.push(j(100 + (poly[i] - 100) * scale), j(100 + (poly[i + 1] - 100) * scale));
+      return { c: color, p };
+    });
   let scale = 1;
   let strokes = fit(scale);
   while (totalInk(strokes) > budget - 1 && scale > 0.3) {
@@ -745,7 +851,7 @@ export function botDoodle(template: Template, color: InkColor, budget: number, r
   return strokes;
 }
 
-const TEMPLATES: readonly Template[] = ["spear", "bomb", "lightning", "boomerang", "club"];
+const TEMPLATES: readonly Template[] = ["spear", "bomb", "rocket", "anvil", "shuriken", "lightning", "boomerang", "drill", "wave", "cluster", "club"];
 
 /**
  * Situational preference for each weapon kind, added on top of the simulated
@@ -767,7 +873,16 @@ function kindBonus(state: InkDuelState, seat: SeatIndex, t: Template): number {
     case "bomb":
       return enemyWalls ? 3 : 0;
     case "boomerang":
+    case "rocket":
+    case "shuriken":
+    case "drill":
+    case "cluster":
       return 3;
+    case "anvil":
+      return 4;
+    case "wave":
+      // Shoving someone toward the arena edge is worth a bit more.
+      return 2 + (enemies.some((e) => e.x < 120 || e.x > WORLD_W - 120) ? 4 : 0);
     default:
       return 1;
   }
@@ -853,7 +968,9 @@ export function chooseBotAction(state: InkDuelState, seat: SeatIndex, level: Bot
 
   // Per-turn "mood": a random lean toward each weapon kind, so equally good
   // options don't always resolve to the same kind.
-  const mood: Record<Template, number> = { spear: rng() * 8, bomb: rng() * 8, lightning: rng() * 8, boomerang: rng() * 8, club: rng() * 8 };
+  const mood = Object.fromEntries(TEMPLATES.map((t) => [t, rng() * 8])) as Record<Template, number>;
+  // Evaluate a random 5 of the 11 weapon kinds per turn — keeps think time low and play varied.
+  const kinds = shuffle([...TEMPLATES], rng).slice(0, 5);
   // Walk options: stronger bots reposition for a better angle (walking eats ink).
   const walks = level >= 4 ? [0, -60, -30, 30, 60] : [0];
   const scored: { move: Extract<EngineAction, { type: "fire" }>; score: number }[] = [];
@@ -863,13 +980,13 @@ export function chooseBotAction(state: InkDuelState, seat: SeatIndex, level: Bot
     if (!s || (walk !== 0 && s.players[seat].x === me.x)) continue;
     const self = s.players[seat];
     const bodyList = bodies(s);
-    for (const t of TEMPLATES) {
+    for (const t of kinds) {
       const strokes = botDoodle(t, botColor(s, seat, t, rng), s.inkBudget, rng);
       if (totalInk(strokes) < MIN_INK) continue;
       const stats = analyzeWeapon(strokes);
       const quick: { action: Extract<EngineAction, { type: "fire" }>; q: number }[] = [];
-      for (let angle = 6; angle <= 174; angle += 5) {
-        for (let power = 24; power <= 100; power += 6) {
+      for (let angle = 6; angle <= 174; angle += 6) {
+        for (let power = 24; power <= 100; power += 8) {
           const f = simulateFlight(s.terrain, bodyList, s.walls, { seat, x: self.x, y: self.y, alive: true }, stats, angle, power, s.wind, true);
           if (!f.impact) continue;
           let q = 0;

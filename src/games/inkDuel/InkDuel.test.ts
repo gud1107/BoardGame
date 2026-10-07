@@ -142,6 +142,37 @@ function arc(c: Stroke["c"] = 0): Stroke {
   return { c, p };
 }
 
+describe("shape freedom", () => {
+  it("every archetype's reference doodle is classified as that weapon", () => {
+    const rng = seededRng(5);
+    for (const kind of ["spear", "bomb", "rocket", "anvil", "shuriken", "lightning", "boomerang", "drill", "wave", "cluster", "club"] as const) {
+      expect([kind, analyzeWeapon(botDoodle(kind, 0, 100, rng)).kind]).toEqual([kind, kind]);
+    }
+  });
+
+  it("two crossed straight lines make a shuriken; a strong second color adds a second element", () => {
+    expect(analyzeWeapon([line(20, 20, 180, 180), line(20, 180, 180, 20)]).kind).toBe("shuriken");
+    const dual = analyzeWeapon([{ ...circle(50, 1) }, { ...circle(40, 2) }]);
+    expect(dual.element).toBe("fire");
+    expect(dual.element2).toBe("ice");
+  });
+
+  it("scatter bursts several times, wave shoves the target away", () => {
+    let s = startGame(2, 11);
+    const shooter = s.turnSeat;
+    const target = 1 - shooter;
+    s = { ...s, players: s.players.map((p) => (p.seat === target ? { ...p, x: s.players[shooter].x + 8, y: surfaceY(s.terrain, s.players[shooter].x + 8) } : p)) };
+    const scatter = applyAction(s, { type: "fire", seat: shooter, strokes: botDoodle("cluster", 0, 100, seededRng(1)), angle: 90, power: 40 }).lastEvent;
+    if (scatter?.kind !== "shot") throw new Error("shot expected");
+    expect(scatter.stats.kind).toBe("cluster");
+    expect(scatter.pelletPoints.length).toBeGreaterThanOrEqual(6);
+    const waved = applyAction(s, { type: "fire", seat: shooter, strokes: botDoodle("wave", 0, 100, seededRng(1)), angle: 90, power: 40 });
+    const ev = waved.lastEvent;
+    if (ev?.kind !== "shot") throw new Error("shot expected");
+    if (ev.hits.some((h) => h.seat === target)) expect(waved.players[target].x).not.toBe(s.players[target].x);
+  });
+});
+
 describe("boomerang", () => {
   it("classifies a smooth C arc as a boomerang (not a club)", () => {
     const s = analyzeWeapon([arc()]);

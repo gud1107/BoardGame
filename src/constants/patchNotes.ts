@@ -60,7 +60,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.54.0",
     releaseDate: "2026-10-08",
-    title: "🎲 랜덤 합성 디펜스 신규 추가, ✏️ 낙서 결투 그래픽 개편·캐릭터·맵·새 무기",
+    title: "🎲 랜덤 합성 디펜스 신규 추가, ✏️ 낙서 결투 그래픽 개편·캐릭터·맵·무기 11종",
     changes: [
       {
         game: "common",
@@ -101,6 +101,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         game: "ink-duel",
         type: "FIX",
         desc: "모바일에서 🎲 버튼이 발사 버튼을 가리던 문제 수정",
+      },
+      {
+        game: "ink-duel",
+        type: "FEAT",
+        desc: "그릴 수 있는 무기 11종으로 확대 — 세모=로켓, 네모=모루, 별=표창, 소용돌이=드릴, S자=파도, 점점이=산탄 추가 · 두 색을 섞으면 효과 2개",
+      },
+      {
+        game: "ink-duel",
+        type: "FIX",
+        desc: "그림판에 그릴 때 선이 손가락보다 살짝 위·아래로 그려지던 문제 수정, 빠르게 그려도 선이 매끄럽게",
       },
       {
         game: "hungry-shark",

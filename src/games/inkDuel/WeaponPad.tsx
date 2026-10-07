@@ -61,11 +61,29 @@ export default function WeaponPad({ strokes, color, budget, disabled, onChange, 
     redraw();
   });
 
-  function toPad(e: React.PointerEvent<HTMLCanvasElement>): [number, number] {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = Math.round(((e.clientX - rect.left) / rect.width) * PAD_SIZE);
-    const y = Math.round(((e.clientY - rect.top) / rect.height) * PAD_SIZE);
+  /**
+   * Pointer → pad coordinates. Measured against the canvas *content box*:
+   * the dashed 2px border is part of getBoundingClientRect, and mapping
+   * against the border box shifted strokes a few pixels up/down and
+   * stretched them (the reported "그리면 살짝 위/아래로 그려져요").
+   */
+  function toPad(canvas: HTMLCanvasElement, clientX: number, clientY: number): [number, number] {
+    const rect = canvas.getBoundingClientRect();
+    const left = rect.left + canvas.clientLeft;
+    const top = rect.top + canvas.clientTop;
+    const x = Math.round(((clientX - left) / canvas.clientWidth) * PAD_SIZE);
+    const y = Math.round(((clientY - top) / canvas.clientHeight) * PAD_SIZE);
     return [Math.max(0, Math.min(PAD_SIZE, x)), Math.max(0, Math.min(PAD_SIZE, y))];
+  }
+
+  function addPoint(live: Stroke, x: number, y: number): boolean {
+    const lx = live.p[live.p.length - 2];
+    const ly = live.p[live.p.length - 1];
+    if ((x - lx) * (x - lx) + (y - ly) * (y - ly) < 4 || live.p.length >= MAX_POINTS_PER_STROKE * 2) return false;
+    const candidate = { c: live.c, p: [...live.p, x, y] };
+    if (totalInk(strokes) + strokeInk(candidate) > budget) return false;
+    live.p.push(x, y);
+    return true;
   }
 
   return (
@@ -76,20 +94,22 @@ export default function WeaponPad({ strokes, color, budget, disabled, onChange, 
         if (disabled || strokes.length >= MAX_STROKES) return;
         if (totalInk(strokes) + 2 > budget) return;
         e.currentTarget.setPointerCapture(e.pointerId);
-        const [x, y] = toPad(e);
+        const [x, y] = toPad(e.currentTarget, e.clientX, e.clientY);
         liveRef.current = { c: color, p: [x, y] };
         redraw();
       }}
       onPointerMove={(e) => {
         const live = liveRef.current;
         if (!live) return;
-        const [x, y] = toPad(e);
-        const lx = live.p[live.p.length - 2];
-        const ly = live.p[live.p.length - 1];
-        if ((x - lx) * (x - lx) + (y - ly) * (y - ly) < 9 || live.p.length >= MAX_POINTS_PER_STROKE * 2) return;
-        const candidate = { c: live.c, p: [...live.p, x, y] };
-        if (totalInk(strokes) + strokeInk(candidate) > budget) return;
-        live.p.push(x, y);
+        // Coalesced events keep fast strokes smooth (browsers batch moves per frame).
+        const native = e.nativeEvent;
+        const samples = typeof native.getCoalescedEvents === "function" ? native.getCoalescedEvents() : [];
+        let added = false;
+        for (const ev of samples.length > 0 ? samples : [native]) {
+          const [x, y] = toPad(e.currentTarget, ev.clientX, ev.clientY);
+          if (addPoint(live, x, y)) added = true;
+        }
+        if (!added) return;
         const now = performance.now();
         if (onScribble && now - lastTickRef.current > 90) {
           lastTickRef.current = now;
