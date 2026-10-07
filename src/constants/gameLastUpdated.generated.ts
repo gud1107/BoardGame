@@ -3,6 +3,7 @@
 import type { GameId } from "@/games/types";
 
 export const GAME_LAST_UPDATED: Partial<Record<GameId, string>> = {
+  "merge-defense": "2026-10-08T02:21:30+09:00",
   "ink-duel": "2026-10-08T01:48:57+09:00",
   "hungry-shark": "2026-10-07T02:34:19+09:00",
   "memory-feast": "2026-10-07T02:19:16+09:00",
@@ -45,6 +46,7 @@ export const GAME_LAST_UPDATED: Partial<Record<GameId, string>> = {
 
 /** First commit that touched each game — drives the lobby's NEW badge. */
 export const GAME_ADDED: Partial<Record<GameId, string>> = {
+  "merge-defense": "2026-10-08T02:21:30+09:00",
   "ink-duel": "2026-10-07T22:03:43+09:00",
   "crab-survival": "2026-09-27T14:53:13+09:00",
   "doodle-phone": "2026-09-27T14:10:24+09:00",
