@@ -46,3 +46,7 @@ export function playOut() {
 export function playVictory() {
   getSoundEngine().playFinishFanfare();
 }
+
+export function playSendUnit() {
+  getSoundEngine().playCardDrawWhoosh();
+}

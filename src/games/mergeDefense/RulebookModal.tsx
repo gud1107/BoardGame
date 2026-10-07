@@ -21,8 +21,15 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <h3 className={h3}>진행</h3>
           <ol className="list-decimal space-y-1.5 pl-4 text-white/70 light:text-slate-600">
             <li>
-              <b>🎲 소환</b>: 골드를 내고 빈칸에 무작위 유닛을 불러요. 소환할수록 값이 조금씩 올라가고, 6% 확률로 처음부터 희귀
-              등급이 나와요.
+              <b>🏗️ 건설 위치</b>: 빈 칸을 눌러 고른 뒤 <b>🎲 소환</b>을 누르면 그 칸에 무작위 유닛이 세워져요. 소환할수록 값이 조금씩
+              올라가고, 6% 확률로 처음부터 희귀 등급이 나와요.
+            </li>
+            <li>
+              <b>🎯 사거리</b>: 유닛은 점선 원 안을 지나는 몬스터만 공격해요. 길과 가까운 칸일수록 오래 때려요 — 특히 왼쪽·오른쪽
+              가운데 칸이 길을 가장 넓게 덮어요.
+            </li>
+            <li>
+              <b>↔️ 이동</b>: 유닛을 끌어 다른 칸에 놓거나(겹치면 자리 교환), 유닛을 고른 뒤 빈 칸을 눌러 옮길 수 있어요.
             </li>
             <li>
               <b>🔀 합성</b>: <b>종류와 등급이 같은</b> 유닛 2개를 겹치면(드래그하거나 차례로 탭) 한 단계 높은 등급의{" "}
@@ -65,6 +72,15 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             <li>
               몬스터를 {SEND_EVERY}마리 잡을 때마다 다음 상대에게 <b>🔥 정예 몬스터</b>가 넘어가요. 잘 막을수록 상대가 힘들어져요.
             </li>
+          </ul>
+        </section>
+
+        <section>
+          <h3 className={h3}>⚔️ 유닛 대결 모드</h3>
+          <ul className="list-disc space-y-1.5 pl-4 text-white/70 light:text-slate-600">
+            <li>내 유닛을 고르고 <b>⚔️ 보내기</b>를 누르면 그 유닛이 내 판에서 사라지고 상대 길에 <b>침략자</b>로 나타나요.</li>
+            <li>등급이 높을수록 침략자가 단단하고 무거워요(무게 = 1 + 등급×2). 보낸 뒤 3초 동안은 다시 보낼 수 없어요.</li>
+            <li>3~4인전에서는 위쪽 상대 판을 눌러 🎯 대상을 바꿀 수 있어요.</li>
           </ul>
         </section>
 

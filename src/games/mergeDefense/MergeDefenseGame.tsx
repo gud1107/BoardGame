@@ -35,6 +35,7 @@ import {
   stepGame,
   TICK_MS,
   type Action,
+  type GameMode,
   type MergeDefenseState,
   type RankedSeat,
   type SeatIndex,
@@ -65,6 +66,7 @@ type Occupant = {
   playerId?: string;
   isHost?: boolean;
   targetPlayerCount?: number;
+  mode?: GameMode;
   botSeats?: number[];
 };
 type Phase = "choose" | "enter-name" | "connecting" | "waiting" | "playing" | "post-game" | "room-full" | "supabase-missing" | "channel-error";
@@ -110,6 +112,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [targetPlayerCount, setTargetPlayerCount] = useState(2);
+  const [mode, setMode] = useState<GameMode>("survival");
   const [formError, setFormError] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -129,6 +132,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   }
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
+  const modeRef = useRef<GameMode>(mode);
   const botSeatsRef = useRef<number[]>([]);
   const isHost = intent === "create";
 
@@ -179,6 +183,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       return;
     }
     playerCountRef.current = targetPlayerCount;
+    modeRef.current = mode;
     setMyName(name);
     setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
     setRoomCode(code);
@@ -186,7 +191,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   }
 
   function hostPresence(): Partial<Occupant> {
-    return isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, botSeats: botSeatsRef.current } : {};
+    return isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, botSeats: botSeatsRef.current, mode: modeRef.current } : {};
   }
 
   useEffect(() => {
@@ -212,7 +217,9 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       endHandledRef.current = false;
       botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
-      const state = startGame(playerCount, seed, botSeats);
+      const startMode: GameMode = payload?.mode === "versus" ? "versus" : "survival";
+      modeRef.current = startMode;
+      const state = startGame(playerCount, seed, botSeats, startMode);
       simRef.current = state;
       setGameState(state);
       setFinalRankings(null);
@@ -427,7 +434,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     if (mySeatRef.current !== null) {
       channelRef.current?.track({ deviceId, seat: mySeatRef.current, name: myName, playerId: myPlayerId, ...hostPresence() } satisfies Occupant);
     }
-    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed: randomSeed(), playerCount: target, botSeats } });
+    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed: randomSeed(), playerCount: target, botSeats, mode: modeRef.current } });
   }
 
   useEffect(() => {
@@ -741,6 +748,34 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           </label>
         )}
         {intent === "create" && (
+          <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
+            모드
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ["survival", "🛡️ 생존전", "같은 웨이브를 막으며 버티기"],
+                  ["versus", "⚔️ 유닛 대결", "내 유닛을 상대 길로 보내 공격"],
+                ] as const
+              ).map(([value, label, desc]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setMode(value)}
+                  aria-pressed={mode === value}
+                  className={`rounded-xl border px-3 py-2 text-left transition ${
+                    mode === value
+                      ? "border-orange-400 bg-orange-500/15 text-white light:bg-orange-50 light:text-slate-900"
+                      : "border-white/10 text-white/60 hover:border-white/30 light:border-slate-200 light:text-slate-500"
+                  }`}
+                >
+                  <span className="block text-sm font-bold">{label}</span>
+                  <span className="block text-[11px] opacity-75">{desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {intent === "create" && (
           <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
             {practice ? `AI 포함 인원 (${MIN_PLAYERS}~${MAX_PLAYERS}명)` : `인원 수 (${MIN_PLAYERS}~${MAX_PLAYERS}명)`}
             <div className="flex items-center gap-3">
@@ -803,6 +838,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
                 );
               })}
             </div>
+            <p className="text-xs font-semibold text-orange-200 light:text-orange-700">{host?.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"}</p>
             <p className="text-xs text-white/40 light:text-slate-400">{knownTargetPlayerCount}명이 모이면 자동으로 시작해요.</p>
             {isHost && occupants.length < knownTargetPlayerCount && (
               <button onClick={sendGameStart} className="rounded-full bg-orange-600 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-500">

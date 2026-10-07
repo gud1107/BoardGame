@@ -17,6 +17,7 @@ import {
   ROWS,
   SEND_EVERY,
   TICK_MS,
+  TICKS_PER_SEC,
   UNIT_KINDS,
   UNITS,
   WAVE_TICKS,
@@ -28,6 +29,7 @@ import {
   slotCenter,
   summonCost,
   upgradeCost,
+  invaderWeight,
   type Action,
   type MergeDefenseState,
   type SeatIndex,
@@ -87,6 +89,10 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const prevRef = useRef<MergeDefenseState>(state);
 
   const [rawSelected, setSelected] = useState<number | null>(null);
+  const [rawBuildSlot, setBuildSlot] = useState<number | null>(null);
+  const buildSlotRef = useRef<number | null>(null);
+  const [rawTarget, setTarget] = useState<SeatIndex | null>(null);
+  const aimRef = useRef<Record<number, number>>({});
   const selectedRef = useRef<number | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
   const dropTargetRef = useRef<number | null>(null);
@@ -106,11 +112,23 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   }, [resolvedView]);
   const others = state.boards.map((_, i) => i).filter((i) => i !== resolvedView);
 
-  // A selection goes stale once that slot empties (merged away, etc.).
+  // A selection goes stale once that slot empties (merged away, etc.); a
+  // build spot once something stands on it.
   const selected = rawSelected !== null && me.units[rawSelected] ? rawSelected : null;
+  const buildSlot = rawBuildSlot !== null && !me.units[rawBuildSlot] ? rawBuildSlot : null;
   useEffect(() => {
     selectedRef.current = selected;
-  }, [selected]);
+    buildSlotRef.current = buildSlot;
+  }, [selected, buildSlot]);
+  // 유닛 대결 target: the chosen opponent while alive, else the next living one.
+  const nextAlive = (() => {
+    for (let i = 1; i < state.playerCount; i++) {
+      const seat = (mySeat + i) % state.playerCount;
+      if (state.boards[seat].alive) return seat;
+    }
+    return null;
+  })();
+  const target = rawTarget !== null && rawTarget !== mySeat && state.boards[rawTarget]?.alive ? rawTarget : nextAlive;
   useEffect(() => {
     dropTargetRef.current = dropTarget;
   }, [dropTarget]);
@@ -137,14 +155,17 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     if (state.tick !== prev.tick && board) {
       for (const shot of board.shots) {
         if (shot.pts.length < 2) continue;
-        fx.push({ type: "shot", kind: shot.kind, grade: shot.grade, from: slotCenter(shot.slot), pts: shot.pts, t0: now, dur: shot.kind === "mage" ? 380 : 220 });
+        const c = slotCenter(shot.slot);
+        const from = { x: c.x, y: c.y + 6 + (shot.kind === "archer" ? -19 : 0) };
+        aimRef.current[shot.slot] = Math.atan2(shot.pts[1] - from.y, shot.pts[0] - from.x);
+        fx.push({ type: "shot", kind: shot.kind, grade: shot.grade, from, pts: shot.pts, t0: now, dur: shot.kind === "mage" ? 380 : shot.kind === "archer" ? 260 : 220 });
       }
       if (prevBoard && prevBoard.mobs.length > 0) {
         const alive = new Set(board.mobs.map((m) => m.id));
         for (const m of prevBoard.mobs) {
           if (alive.has(m.id)) continue;
           const p = pathPoint(m.trav);
-          const color = m.kind === "boss" ? "#c084fc" : m.kind === "elite" ? "#f87171" : "#bef264";
+          const color = m.kind === "boss" ? "#c084fc" : m.kind === "elite" || m.kind === "invader" ? "#f87171" : m.kind === "fast" ? "#fcd34d" : m.kind === "tank" ? "#cbd5e1" : "#bef264";
           fx.push({ type: "spark", x: p.x, y: p.y, color, t0: now, dur: m.kind === "boss" ? 900 : 380, seed: m.id });
           if (m.kind === "boss") fx.push({ type: "ring", x: p.x, y: p.y, color: "#facc15", r0: 10, r1: 70, t0: now, dur: 700 });
         }
@@ -167,6 +188,17 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
       if (ev.type === "send" && ev.to === mySeat) {
         showBanner({ text: `🔥 ${names[ev.seat] ?? "상대"}님이 정예 몬스터를 보냈어요!`, tone: "danger" });
         if (audible) audio.playEliteIncoming();
+        continue;
+      }
+      if (ev.type === "invade") {
+        const what = `${GRADE_NAMES[ev.grade]} ${UNITS[ev.kind].name}`;
+        if (ev.to === mySeat) {
+          showBanner({ text: `⚔️ ${names[ev.seat] ?? "상대"}님이 ${what}를 보냈어요!`, sub: `무게 ${invaderWeight(ev.grade)} · 막아내세요`, tone: "danger" });
+          if (audible) audio.playEliteIncoming();
+        } else if (ev.seat === mySeat) {
+          showBanner({ text: `⚔️ ${what} → ${names[ev.to] ?? "상대"}`, tone: "good" });
+          if (audible) audio.playSendUnit();
+        }
         continue;
       }
       if (ev.type === "out") {
@@ -250,7 +282,15 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           const sel = view === mySeat ? selectedRef.current : null;
           const highlight = new Set<number>();
           if (sel !== null) board.units.forEach((_, i) => canMerge(board, sel, i) && highlight.add(i));
-          drawBoard(ctx, board, { alpha: s.phase === "playing" ? alpha : 0, now, selected: sel, highlight, dropTarget: dropTargetRef.current });
+          drawBoard(ctx, board, {
+            alpha: s.phase === "playing" ? alpha : 0,
+            now,
+            selected: sel,
+            buildSlot: view === mySeat ? buildSlotRef.current : null,
+            highlight,
+            dropTarget: dropTargetRef.current,
+            aim: aimRef.current,
+          });
           drawFx(ctx, fxRef.current, now);
         }
       }
@@ -295,7 +335,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     if (from === null) return;
     const { x, y } = toLogical(e);
     const slot = slotAt(x, y);
-    const next = slot !== null && slot !== from && canMerge(me, from, slot) ? slot : null;
+    const next = slot !== null && slot !== from ? slot : null;
     if (next !== dropTargetRef.current) setDropTarget(next);
   }
 
@@ -306,19 +346,30 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     setDropTarget(null);
     const { x, y } = toLogical(e);
     const slot = slotAt(x, y);
-    // Drag onto a matching unit → merge.
+    // Drag onto a matching unit → merge; anywhere else on the grid → move/swap.
     if (from !== null && slot !== null && slot !== from) {
-      if (canMerge(me, from, slot)) {
-        onAction({ type: "merge", a: from, b: slot });
-        setSelected(null);
-      }
-      return;
-    }
-    // Tap logic.
-    if (slot === null || !me.units[slot]) {
+      onAction(canMerge(me, from, slot) ? { type: "merge", a: from, b: slot } : { type: "move", a: from, b: slot });
       setSelected(null);
+      setBuildSlot(null);
       return;
     }
+    // Tap logic: an empty cell becomes the build spot.
+    if (slot === null) {
+      setSelected(null);
+      setBuildSlot(null);
+      return;
+    }
+    if (!me.units[slot]) {
+      if (selected !== null) {
+        // Selected unit + tap on an empty cell → move it there.
+        onAction({ type: "move", a: selected, b: slot });
+        setSelected(null);
+        return;
+      }
+      setBuildSlot(buildSlot === slot ? null : slot);
+      return;
+    }
+    setBuildSlot(null);
     if (selected === null || selected === slot) {
       setSelected(selected === slot ? null : slot);
       return;
@@ -336,6 +387,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const cost = summonCost(me);
   const freeSlots = me.units.filter((u) => !u).length;
   const pairs = useMemo(() => mergePairs(me), [me]);
+  const versus = state.mode === "versus";
+  const sendCdSec = Math.ceil(me.sendCd / TICKS_PER_SEC);
+  const canSend = interactive && versus && selected !== null && me.sendCd === 0 && state.wave >= 1 && target !== null;
   const waveLeftTicks = state.tick < PREP_TICKS ? PREP_TICKS - state.tick : WAVE_TICKS - ((state.tick - PREP_TICKS) % WAVE_TICKS);
   const nextWave = state.tick < PREP_TICKS ? 1 : state.wave + 1;
   const nextIsBoss = isBossWave(nextWave);
@@ -367,11 +421,16 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           const b = state.boards[seat];
           const l = Math.min(1, fieldLoad(b) / LOAD_LIMIT);
           return (
-            <div key={seat} className="flex w-[min(32%,170px)] flex-col gap-0.5">
+            <div
+              key={seat}
+              onClick={() => versus && seat !== mySeat && b.alive && setTarget(seat)}
+              className={`flex w-[min(32%,170px)] flex-col gap-0.5 rounded-lg ${versus && seat === target ? "ring-2 ring-rose-400 ring-offset-2 ring-offset-transparent" : ""} ${versus && seat !== mySeat ? "cursor-pointer" : ""}`}
+            >
               <div className="flex items-center gap-1 text-[11px] text-white/70 light:text-slate-600">
                 <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: SEAT_COLORS[seat] }} />
                 <span className="truncate">{names[seat]}</span>
                 {seat === mySeat && <span className="text-white/40">(나)</span>}
+                {versus && seat === target && <span className="ml-auto text-[10px] font-bold text-rose-300">🎯</span>}
               </div>
               <canvas
                 ref={(el) => {
@@ -439,27 +498,33 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         </div>
       </div>
 
-      {selectedUnit && (
-        <p className="text-center text-xs text-white/70 light:text-slate-600">
-          <span style={{ color: GRADE_COLORS[selectedUnit.grade] }}>{GRADE_NAMES[selectedUnit.grade]}</span> {UNITS[selectedUnit.kind].emoji}{" "}
-          {UNITS[selectedUnit.kind].name} — {UNITS[selectedUnit.kind].desc}
-          {selectedUnit.grade < MAX_GRADE ? " · 같은 유닛을 눌러 합성" : " · 최고 등급"}
-        </p>
-      )}
+      <p className="min-h-[1rem] text-center text-xs text-white/70 light:text-slate-600">
+        {selectedUnit ? (
+          <>
+            <span style={{ color: GRADE_COLORS[selectedUnit.grade] }}>{GRADE_NAMES[selectedUnit.grade]}</span> {UNITS[selectedUnit.kind].emoji}{" "}
+            {UNITS[selectedUnit.kind].name} — {UNITS[selectedUnit.kind].desc}
+            {selectedUnit.grade < MAX_GRADE ? " · 같은 유닛을 눌러 합성 · 빈 칸을 눌러 이동" : " · 최고 등급 · 빈 칸을 눌러 이동"}
+          </>
+        ) : buildSlot !== null ? (
+          "🏗️ 이 칸에 건설해요 — 소환 또는 도박을 누르세요 (점선 원 = 사거리)"
+        ) : (
+          "빈 칸을 눌러 건설 위치를 고르세요 · 유닛을 끌어서 옮기거나 같은 유닛 위에 놓아 합성"
+        )}
+      </p>
 
       {/* Actions */}
-      <div className="grid grid-cols-[2fr_1fr_1fr] gap-2">
+      <div className={`grid gap-2 ${versus ? "grid-cols-[1.6fr_1fr_1fr_1fr]" : "grid-cols-[2fr_1fr_1fr]"}`}>
         <button
-          disabled={!interactive || me.gold < cost || freeSlots === 0}
-          onClick={() => onAction({ type: "summon" })}
+          disabled={!interactive || me.gold < cost || buildSlot === null}
+          onClick={() => buildSlot !== null && onAction({ type: "summon", slot: buildSlot })}
           className="rounded-xl bg-gradient-to-b from-amber-400 to-orange-600 py-3 text-sm font-black text-white shadow-[0_4px_0_#9a3412] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40"
         >
           🎲 소환 <span className="font-mono">🪙{cost}</span>
-          {freeSlots === 0 && <span className="block text-[10px] font-semibold">자리 없음 — 합성하세요</span>}
+          <span className="block text-[10px] font-semibold">{freeSlots === 0 ? "자리 없음 — 합성하세요" : buildSlot === null ? "빈 칸을 먼저 선택" : "선택한 칸에 건설"}</span>
         </button>
         <button
-          disabled={!interactive || me.gems < 1 || freeSlots === 0}
-          onClick={() => onAction({ type: "gamble" })}
+          disabled={!interactive || me.gems < 1 || buildSlot === null}
+          onClick={() => buildSlot !== null && onAction({ type: "gamble", slot: buildSlot })}
           className="rounded-xl bg-gradient-to-b from-sky-400 to-indigo-600 py-3 text-xs font-black text-white shadow-[0_4px_0_#312e81] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40"
         >
           💎 도박
@@ -477,6 +542,22 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           🔀 합성
           <span className="block text-[10px] font-semibold opacity-80">{pairs.length}쌍 가능</span>
         </button>
+        {versus && (
+          <button
+            disabled={!canSend}
+            onClick={() => {
+              if (selected === null || target === null) return;
+              onAction({ type: "send", slot: selected, to: target });
+              setSelected(null);
+            }}
+            className="rounded-xl bg-gradient-to-b from-rose-500 to-red-800 py-3 text-xs font-black text-white shadow-[0_4px_0_#7f1d1d] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40"
+          >
+            ⚔️ 보내기
+            <span className="block truncate px-1 text-[10px] font-semibold opacity-80">
+              {me.sendCd > 0 ? `${sendCdSec}초` : state.wave < 1 ? "1웨이브부터" : selected === null ? "유닛 선택" : `→ ${target !== null ? names[target] : "-"}`}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Upgrades */}

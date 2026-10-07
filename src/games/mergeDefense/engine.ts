@@ -65,15 +65,17 @@ export interface UnitDef {
   dmg: number;
   /** Ticks between attacks at grade 1. */
   interval: number;
+  /** Attack reach from the unit's cell centre at grade 1 (board units). */
+  range: number;
   desc: string;
 }
 
 export const UNITS: Record<UnitKind, UnitDef> = {
-  archer: { name: "궁수", emoji: "🏹", color: "#f97316", dmg: 11, interval: 12, desc: "빠른 단일 공격" },
-  mage: { name: "마법사", emoji: "🔮", color: "#a855f7", dmg: 9, interval: 22, desc: "범위 폭발" },
-  frost: { name: "서리", emoji: "❄️", color: "#38bdf8", dmg: 6, interval: 18, desc: "둔화" },
-  thunder: { name: "번개", emoji: "⚡", color: "#facc15", dmg: 8, interval: 20, desc: "연쇄 공격" },
-  poison: { name: "독", emoji: "☠️", color: "#22c55e", dmg: 4, interval: 24, desc: "최대 체력 % 독 (보스 특효)" },
+  archer: { name: "궁수", emoji: "🏹", color: "#f97316", dmg: 11, interval: 12, range: 150, desc: "빠른 단일 공격 · 긴 사거리" },
+  mage: { name: "마법사", emoji: "🔮", color: "#a855f7", dmg: 9, interval: 22, range: 125, desc: "범위 폭발" },
+  frost: { name: "서리", emoji: "❄️", color: "#38bdf8", dmg: 6, interval: 18, range: 135, desc: "둔화" },
+  thunder: { name: "번개", emoji: "⚡", color: "#facc15", dmg: 8, interval: 20, range: 135, desc: "연쇄 공격" },
+  poison: { name: "독", emoji: "☠️", color: "#22c55e", dmg: 4, interval: 24, range: 140, desc: "최대 체력 % 독 (보스 특효)" },
 };
 
 export const GRADE_NAMES = ["", "일반", "희귀", "영웅", "전설", "신화"];
@@ -89,7 +91,7 @@ export interface Unit {
   cd: number;
 }
 
-export type MobKind = "normal" | "fast" | "tank" | "boss" | "elite";
+export type MobKind = "normal" | "fast" | "tank" | "boss" | "elite" | "invader";
 
 export interface Mob {
   id: number;
@@ -104,8 +106,11 @@ export interface Mob {
   slowPct: number;
   poisonT: number;
   poisonDps: number;
-  /** Seat that sent this elite (for colour/labels); -1 for wave mobs. */
+  /** Seat that sent this elite/invader (for colour/labels); -1 for wave mobs. */
   from: SeatIndex;
+  /** 유닛 대결 invaders only: the unit that was sent (drawn as a corrupted tower). */
+  unitKind?: UnitKind;
+  grade?: number;
 }
 
 export interface Shot {
@@ -130,6 +135,8 @@ export interface Board {
   outAt: number | null;
   outWave: number;
   bot: boolean;
+  /** Ticks until this board may send another unit (유닛 대결 only). */
+  sendCd: number;
   /** Attacks fired during the most recent tick — for FX only. */
   shots: Shot[];
 }
@@ -141,12 +148,24 @@ export type GameEvent =
   | { id: number; tick: number; seat: SeatIndex; type: "gamble-fail" }
   | { id: number; tick: number; seat: SeatIndex; type: "upgrade"; kind: UnitKind; level: number }
   | { id: number; tick: number; seat: SeatIndex; type: "send"; to: SeatIndex }
+  | { id: number; tick: number; seat: SeatIndex; type: "invade"; to: SeatIndex; kind: UnitKind; grade: number }
+  | { id: number; tick: number; seat: SeatIndex; type: "move"; a: number; b: number }
   | { id: number; tick: number; seat: SeatIndex; type: "boss-kill" }
   | { id: number; tick: number; seat: SeatIndex; type: "out" }
   | { id: number; tick: number; seat: -1; type: "wave"; wave: number; boss: boolean };
 
+/**
+ * "survival" (생존전): only the automatic elite pressure.
+ * "versus" (유닛 대결): players may also sacrifice their own units — a sent
+ * unit leaves your board and walks the target's road as an invader whose
+ * strength scales with its grade.
+ */
+export type GameMode = "survival" | "versus";
+export const GAME_MODES: GameMode[] = ["survival", "versus"];
+
 export interface MergeDefenseState {
   phase: "playing" | "gameOver";
+  mode: GameMode;
   playerCount: number;
   tick: number;
   /** 0 during the prep countdown, then 1, 2, … */
@@ -159,10 +178,16 @@ export interface MergeDefenseState {
 }
 
 export type Action =
-  | { type: "summon" }
-  | { type: "gamble" }
+  | { type: "summon"; slot?: number }
+  | { type: "gamble"; slot?: number }
   | { type: "merge"; a: number; b: number }
-  | { type: "upgrade"; kind: UnitKind };
+  /** Moves unit `a` to cell `b` (swapping if `b` is occupied). */
+  | { type: "move"; a: number; b: number }
+  | { type: "upgrade"; kind: UnitKind }
+  /** 유닛 대결: sacrifice the unit in `slot` onto `to`'s road. */
+  | { type: "send"; slot: number; to?: SeatIndex };
+
+export const SEND_COOLDOWN_TICKS = 3 * 20;
 
 // ---------------------------------------------------------------------------
 // RNG — mulberry32 over `state.rng`.
@@ -216,12 +241,12 @@ export function upgradeCost(level: number): number {
 }
 
 export function waveHp(wave: number): number {
-  return Math.round(28 * Math.pow(1.2, wave - 1));
+  return Math.round(60 * Math.pow(1.17, wave - 1));
 }
 
 export function killGold(kind: MobKind, wave: number): number {
   if (kind === "boss") return 40 + wave * 4;
-  if (kind === "elite") return 4 + Math.floor(wave / 4);
+  if (kind === "elite" || kind === "invader") return 4 + Math.floor(wave / 4);
   return 2 + Math.floor(wave / 6);
 }
 
@@ -241,6 +266,37 @@ export function unitDamage(unit: Unit, board: Board): number {
 
 export function unitInterval(unit: Unit): number {
   return Math.max(4, Math.round(UNITS[unit.kind].interval * (1 - 0.07 * (unit.grade - 1))));
+}
+
+export function unitRange(unit: Unit): number {
+  return UNITS[unit.kind].range + (unit.grade - 1) * 8;
+}
+
+/** Share of the road (0..1) within `range` of a cell — how good a cell is for building. */
+export function slotCoverage(slot: number, range: number): number {
+  const c = slotCenter(slot);
+  let hit = 0;
+  const steps = 120;
+  for (let i = 0; i < steps; i++) {
+    const p = pathPoint((i / steps) * PATH_LEN);
+    const dx = p.x - c.x;
+    const dy = p.y - c.y;
+    if (dx * dx + dy * dy <= range * range) hit++;
+  }
+  return hit / steps;
+}
+
+/** Cells ordered best-coverage first (for the base range) — used by bots. */
+export const SLOT_PREFERENCE: number[] = Array.from({ length: SLOTS }, (_, i) => i).sort(
+  (a, b) => slotCoverage(b, 140) - slotCoverage(a, 140) || a - b,
+);
+
+export function invaderHp(grade: number, wave: number): number {
+  return Math.round(waveHp(Math.max(2, wave)) * 3 * Math.pow(2.3, grade - 1));
+}
+
+export function invaderWeight(grade: number): number {
+  return 1 + grade * 2;
 }
 
 export function waveCount(wave: number): number {
@@ -269,14 +325,16 @@ function emptyBoard(bot: boolean): Board {
     outAt: null,
     outWave: 0,
     bot,
+    sendCd: 0,
     shots: [],
   };
 }
 
-export function startGame(playerCount: number, seed: number, botSeats: readonly number[] = []): MergeDefenseState {
+export function startGame(playerCount: number, seed: number, botSeats: readonly number[] = [], mode: GameMode = "survival"): MergeDefenseState {
   const n = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.floor(playerCount)));
   return {
     phase: "playing",
+    mode: GAME_MODES.includes(mode) ? mode : "survival",
     playerCount: n,
     tick: 0,
     wave: 0,
@@ -324,12 +382,18 @@ function emptySlots(board: Board): number[] {
 export function sanitizeAction(raw: unknown): Action | null {
   if (!raw || typeof raw !== "object") return null;
   const a = raw as Record<string, unknown>;
-  if (a.type === "summon" || a.type === "gamble") return { type: a.type };
-  if (a.type === "merge" && Number.isInteger(a.a) && Number.isInteger(a.b)) {
-    const x = a.a as number;
-    const y = a.b as number;
-    if (x < 0 || y < 0 || x >= SLOTS || y >= SLOTS || x === y) return null;
-    return { type: "merge", a: x, b: y };
+  const isSlot = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) < SLOTS;
+  if (a.type === "summon" || a.type === "gamble") {
+    if (a.slot === undefined || a.slot === null) return { type: a.type };
+    return isSlot(a.slot) ? { type: a.type, slot: a.slot } : null;
+  }
+  if ((a.type === "merge" || a.type === "move") && isSlot(a.a) && isSlot(a.b)) {
+    if (a.a === a.b) return null;
+    return { type: a.type, a: a.a, b: a.b };
+  }
+  if (a.type === "send" && isSlot(a.slot)) {
+    if (a.to === undefined || a.to === null) return { type: "send", slot: a.slot };
+    return Number.isInteger(a.to) && (a.to as number) >= 0 && (a.to as number) < MAX_PLAYERS ? { type: "send", slot: a.slot, to: a.to as number } : null;
   }
   if (a.type === "upgrade" && UNIT_KINDS.includes(a.kind as UnitKind)) return { type: "upgrade", kind: a.kind as UnitKind };
   return null;
@@ -349,11 +413,12 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
 
   if (action.type === "summon") {
     if (cur.gold < summonCost(cur) || emptySlots(cur).length === 0) return state;
+    if (action.slot !== undefined && cur.units[action.slot]) return state;
     const s = cloneState(state);
     const board = s.boards[seat];
     board.gold -= summonCost(board);
     board.summons += 1;
-    const slot = pick(s, emptySlots(board));
+    const slot = action.slot ?? pick(s, emptySlots(board));
     const lucky = rand(s) < 0.06;
     const grade = lucky ? 2 : 1;
     board.units[slot] = { kind: pick(s, UNIT_KINDS), grade, cd: 0 };
@@ -363,6 +428,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
 
   if (action.type === "gamble") {
     if (cur.gems < 1 || emptySlots(cur).length === 0) return state;
+    if (action.slot !== undefined && cur.units[action.slot]) return state;
     const s = cloneState(state);
     const board = s.boards[seat];
     board.gems -= 1;
@@ -372,7 +438,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
       pushEvent(s, { seat, type: "gamble-fail" });
       return s;
     }
-    const slot = pick(s, emptySlots(board));
+    const slot = action.slot ?? pick(s, emptySlots(board));
     board.units[slot] = { kind: pick(s, UNIT_KINDS), grade, cd: 0 };
     pushEvent(s, { seat, type: "gamble", slot, grade });
     return s;
@@ -386,6 +452,47 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     board.units[action.a] = null;
     board.units[action.b] = { kind: pick(s, UNIT_KINDS), grade, cd: 0 };
     pushEvent(s, { seat, type: "merge", slot: action.b, grade });
+    return s;
+  }
+
+  if (action.type === "move") {
+    if (!cur.units[action.a]) return state;
+    const s = cloneState(state);
+    const board = s.boards[seat];
+    const moving = board.units[action.a];
+    board.units[action.a] = board.units[action.b];
+    board.units[action.b] = moving;
+    pushEvent(s, { seat, type: "move", a: action.a, b: action.b });
+    return s;
+  }
+
+  if (action.type === "send") {
+    const unit = cur.units[action.slot];
+    if (state.mode !== "versus" || !unit || cur.sendCd > 0 || state.wave < 1) return state;
+    const to = action.to !== undefined && action.to !== seat && state.boards[action.to]?.alive ? action.to : nextAliveOpponent(state, seat);
+    if (to === null) return state;
+    const s = cloneState(state);
+    const board = s.boards[seat];
+    board.units[action.slot] = null;
+    board.sendCd = SEND_COOLDOWN_TICKS;
+    const hp = invaderHp(unit.grade, s.wave);
+    s.boards[to].mobs.push({
+      id: s.nextMobId++,
+      kind: "invader",
+      hp,
+      maxHp: hp,
+      trav: 0,
+      speed: 72,
+      weight: invaderWeight(unit.grade),
+      slowT: 0,
+      slowPct: 0,
+      poisonT: 0,
+      poisonDps: 0,
+      from: seat,
+      unitKind: unit.kind,
+      grade: unit.grade,
+    });
+    pushEvent(s, { seat, type: "invade", to, kind: unit.kind, grade: unit.grade });
     return s;
   }
 
@@ -412,6 +519,7 @@ function makeMob(s: MergeDefenseState, kind: MobKind, wave: number, from: SeatIn
     tank: { hp: 2.8, speed: 40, weight: 2 },
     boss: { hp: 45, speed: 32, weight: 15 },
     elite: { hp: 4, speed: 70, weight: 3 },
+    invader: { hp: 3, speed: 72, weight: 3 },
   };
   const k = spec[kind];
   const hp = Math.round(base * k.hp);
@@ -544,20 +652,27 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
       }
     }
 
-    // Attacks — oldest mob first.
+    if (board.sendCd > 0) board.sendCd -= 1;
+
+    // Attacks — each unit hits the oldest live mob inside its own range.
     const ordered = board.mobs.filter((m) => m.hp > 0).sort((a, b) => b.trav - a.trav);
+    const pos = ordered.map((m) => pathPoint(m.trav));
     board.units.forEach((unit, slot) => {
       if (!unit) return;
       if (unit.cd > 0) unit.cd -= 1;
       if (unit.cd > 0) return;
-      const live = ordered.length > 0 && ordered[0].hp <= 0 ? ordered.filter((m) => m.hp > 0) : ordered;
-      if (live.length === 0) return;
-      attack(s, board, slot, unit, live);
+      const c = slotCenter(slot);
+      const r2 = unitRange(unit) * unitRange(unit);
+      const inRange: Mob[] = [];
+      ordered.forEach((m, i) => {
+        if (m.hp <= 0) return;
+        const dx = pos[i].x - c.x;
+        const dy = pos[i].y - c.y;
+        if (dx * dx + dy * dy <= r2) inRange.push(m);
+      });
+      if (inRange.length === 0) return;
+      attack(s, board, slot, unit, inRange);
       unit.cd = unitInterval(unit);
-      if (live !== ordered) {
-        ordered.length = 0;
-        ordered.push(...live);
-      }
     });
 
     // Deaths + rewards.
@@ -671,10 +786,32 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Acti
   if (!board || !board.alive || state.phase !== "playing") return null;
   const free = emptySlots(board).length;
   const cost = summonCost(board);
-  if (board.gems >= 1 && free > 0) return { type: "gamble" };
-  if (free > 0 && board.gold >= cost) return { type: "summon" };
+  const bestEmpty = SLOT_PREFERENCE.find((i) => !board.units[i]);
+  if (board.gems >= 1 && bestEmpty !== undefined) return { type: "gamble", slot: bestEmpty };
+  if (bestEmpty !== undefined && board.gold >= cost) return { type: "summon", slot: bestEmpty };
   const pairs = mergePairs(board);
-  if (free === 0 && pairs.length > 0) return { type: "merge", a: pairs[0][0], b: pairs[0][1] };
+  if (free === 0 && pairs.length > 0) {
+    // Keep the merged unit on the better of the two cells.
+    const [a, b] = pairs[0];
+    const keep = SLOT_PREFERENCE.indexOf(a) < SLOT_PREFERENCE.indexOf(b) ? a : b;
+    return { type: "merge", a: keep === a ? b : a, b: keep };
+  }
+  // 유닛 대결: a full, unmergeable board throws its weakest unit at the
+  // opponent (also frees a cell for a fresh summon).
+  if (state.mode === "versus" && free === 0 && board.sendCd === 0 && state.wave >= 3) {
+    let weakest = -1;
+    board.units.forEach((u, i) => {
+      if (u && u.grade <= 2 && (weakest < 0 || u.grade < board.units[weakest]!.grade)) weakest = i;
+    });
+    if (weakest >= 0) return { type: "send", slot: weakest };
+  }
+  // Strongest unit not on a top cell → swap it there.
+  const strongest = board.units.reduce((best, u, i) => (u && (best < 0 || u.grade > board.units[best]!.grade) ? i : best), -1);
+  if (strongest >= 0) {
+    const rank = SLOT_PREFERENCE.indexOf(strongest);
+    const target = SLOT_PREFERENCE.slice(0, rank).find((i) => !board.units[i] || board.units[i]!.grade < board.units[strongest]!.grade);
+    if (target !== undefined) return { type: "move", a: strongest, b: target };
+  }
   // Spare gold → upgrade the kind with the most total grade on board.
   const weight: Record<UnitKind, number> = { archer: 0, mage: 0, frost: 0, thunder: 0, poison: 0 };
   for (const u of board.units) if (u) weight[u.kind] += Math.pow(GRADE_MULT, u.grade - 1);

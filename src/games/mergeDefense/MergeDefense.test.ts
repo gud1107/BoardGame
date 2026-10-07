@@ -5,6 +5,10 @@ import {
   chooseBotAction,
   computeRankings,
   fieldLoad,
+  invaderWeight,
+  SEND_COOLDOWN_TICKS,
+  slotCenter,
+  unitRange,
   LOAD_LIMIT,
   MAX_GRADE,
   pathPoint,
@@ -17,8 +21,8 @@ import {
   type MergeDefenseState,
 } from "./engine";
 
-function runBots(n: number, seed: number, maxTicks = 20 * 60 * 25): MergeDefenseState {
-  let s = startGame(n, seed, []);
+function runBots(n: number, seed: number, maxTicks = 20 * 60 * 25, mode: "survival" | "versus" = "survival"): MergeDefenseState {
+  let s = startGame(n, seed, [], mode);
   while (s.phase === "playing" && s.tick < maxTicks) {
     for (let seat = 0; seat < n; seat++) {
       if ((s.tick + seat * 3) % 10 !== 0) continue;
@@ -52,6 +56,58 @@ describe("merge defense engine", () => {
     expect(applyAction(s, 0, { type: "merge", a: 0, b: 2 })).toBe(s);
   });
 
+  it("builds on the chosen empty cell and refuses an occupied one", () => {
+    const s0 = startGame(2, 3);
+    const s1 = applyAction(s0, 0, { type: "summon", slot: 7 });
+    expect(s1.boards[0].units[7]).not.toBeNull();
+    expect(s1.boards[0].units.filter(Boolean)).toHaveLength(1);
+    expect(applyAction(s1, 0, { type: "summon", slot: 7 })).toBe(s1);
+  });
+
+  it("moves a unit to an empty cell and swaps with an occupied one", () => {
+    const s = startGame(2, 3);
+    s.boards[0].units[0] = { kind: "archer", grade: 1, cd: 0 };
+    s.boards[0].units[1] = { kind: "mage", grade: 2, cd: 0 };
+    const moved = applyAction(s, 0, { type: "move", a: 0, b: 5 });
+    expect(moved.boards[0].units[0]).toBeNull();
+    expect(moved.boards[0].units[5]!.kind).toBe("archer");
+    const swapped = applyAction(s, 0, { type: "move", a: 0, b: 1 });
+    expect(swapped.boards[0].units[0]!.kind).toBe("mage");
+    expect(swapped.boards[0].units[1]!.kind).toBe("archer");
+  });
+
+  it("units only shoot monsters inside their range", () => {
+    let s = startGame(2, 9);
+    // Centre cell (row 1, col 2) — the top road at the spawn corner is out of reach.
+    s.boards[0].units[7] = { kind: "archer", grade: 1, cd: 0 };
+    const c = slotCenter(7);
+    expect(Math.hypot(c.x - 20, c.y - 20)).toBeGreaterThan(unitRange(s.boards[0].units[7]!));
+    while (s.tick < 120 + 3) s = stepGame(s); // wave 1 starts at tick 120
+    expect(s.boards[0].mobs.length).toBeGreaterThan(0);
+    expect(s.boards[0].shots).toHaveLength(0);
+    expect(s.boards[0].mobs.every((m) => m.hp === m.maxHp)).toBe(true);
+  });
+
+  it("유닛 대결: sending a unit removes it and drops an invader on the target's road", () => {
+    let s = startGame(2, 21, [], "versus");
+    while (s.wave < 1) s = stepGame(s);
+    s.boards[0].units[3] = { kind: "thunder", grade: 3, cd: 0 };
+    const before = s.boards[1].mobs.length;
+    const sent = applyAction(s, 0, { type: "send", slot: 3 });
+    expect(sent.boards[0].units[3]).toBeNull();
+    expect(sent.boards[0].sendCd).toBe(SEND_COOLDOWN_TICKS);
+    const inv = sent.boards[1].mobs.find((m) => m.kind === "invader")!;
+    expect(sent.boards[1].mobs.length).toBe(before + 1);
+    expect(inv.unitKind).toBe("thunder");
+    expect(inv.weight).toBe(invaderWeight(3));
+    // Cooldown blocks a second send; survival mode never allows it.
+    sent.boards[0].units[4] = { kind: "mage", grade: 1, cd: 0 };
+    expect(applyAction(sent, 0, { type: "send", slot: 4 })).toBe(sent);
+    const surv = startGame(2, 21);
+    surv.boards[0].units[3] = { kind: "thunder", grade: 3, cd: 0 };
+    expect(applyAction({ ...surv, wave: 2 }, 0, { type: "send", slot: 3 }).boards[0].units[3]).not.toBeNull();
+  });
+
   it("refuses to merge max-grade units", () => {
     const s = startGame(2, 1);
     s.boards[0].units[0] = { kind: "poison", grade: MAX_GRADE, cd: 0 };
@@ -65,6 +121,10 @@ describe("merge defense engine", () => {
     expect(sanitizeAction({ type: "upgrade", kind: "laser" })).toBeNull();
     expect(sanitizeAction({ type: "summon", extra: 1 })).toEqual({ type: "summon" });
     expect(sanitizeAction(null)).toBeNull();
+    expect(sanitizeAction({ type: "summon", slot: 99 })).toBeNull();
+    expect(sanitizeAction({ type: "summon", slot: 4 })).toEqual({ type: "summon", slot: 4 });
+    expect(sanitizeAction({ type: "move", a: 0, b: 0 })).toBeNull();
+    expect(sanitizeAction({ type: "send", slot: 2, to: 9 })).toBeNull();
   });
 
   it("walks the road as a closed loop", () => {
@@ -93,12 +153,14 @@ describe("merge defense engine", () => {
   });
 
   it("bot-vs-bot games end with one winner in a reasonable time", () => {
-    for (const [n, seed] of [
-      [2, 11],
-      [3, 12],
-      [4, 13],
+    for (const [n, seed, mode] of [
+      [2, 11, "survival"],
+      [3, 12, "survival"],
+      [4, 13, "survival"],
+      [2, 14, "versus"],
+      [4, 15, "versus"],
     ] as const) {
-      const s = runBots(n, seed);
+      const s = runBots(n, seed, 20 * 60 * 25, mode);
       expect(s.phase).toBe("gameOver");
       const minutes = (s.tick - PREP_TICKS) / 20 / 60;
       expect(minutes).toBeGreaterThan(4);
