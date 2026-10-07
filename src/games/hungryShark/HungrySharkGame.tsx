@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { recordSoloRun } from "@/lib/stats/soloResult";
@@ -17,7 +17,6 @@ import {
   MAX_UPGRADE_LEVEL,
   SHARKS,
   sharkById,
-  TREE_ORDER,
   UPGRADE_LABELS,
   upgradeCost,
   type EntityKind,
@@ -245,25 +244,9 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                       ))}
                   </div>
                 )}
-                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 sm:gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                   {BRANCH_ORDER.map((br) => (
-                    <div key={br} className="flex flex-col gap-1.5">
-                      <div className="text-center text-[10px] font-black text-white/60 light:text-slate-500">
-                        {BRANCH_INFO[br].emoji} {BRANCH_INFO[br].name}
-                        <div className="hidden text-[9px] font-semibold text-white/35 sm:block light:text-slate-400">{BRANCH_INFO[br].desc}</div>
-                      </div>
-                      {listedSharks
-                        .filter((x) => x.branch === br)
-                        .sort((a, b) => TREE_ORDER.indexOf(a.id) - TREE_ORDER.indexOf(b.id))
-                        .map((sh) => (
-                          <Fragment key={sh.id}>
-                            {sh.tier === 3 && sh.parentId && sharkById(sh.parentId).nextIds.indexOf(sh.id) > 0 && (
-                              <div className="mt-1 text-center text-[9px] font-bold text-white/40 light:text-slate-400">↳ 갈래 {sharkById(sh.parentId).nextIds.indexOf(sh.id) + 1}</div>
-                            )}
-                            <SharkCard sh={sh} save={save} active={sh.id === viewId} onClick={() => setViewId(sh.id)} />
-                          </Fragment>
-                        ))}
-                    </div>
+                    <BranchColumn key={br} branch={br} listed={listedSharks} save={save} viewId={viewId} onPick={setViewId} />
                   ))}
                 </div>
               </>
@@ -620,6 +603,99 @@ function SharkListControls({ picker, onChange }: { picker: PickerPrefs; onChange
           보유 상어 숨기기
         </label>
       </div>
+    </div>
+  );
+}
+
+/** Branch column frame (solid) and its sub-line boxes (dashed), one color per branch. */
+const BRANCH_FRAME: Record<(typeof BRANCH_ORDER)[number], { column: string; line: string; label: string; arrow: string }> = {
+  BRUTE: {
+    column: "border-rose-500/60 bg-rose-500/[0.07] light:border-rose-300 light:bg-rose-50",
+    line: "border-rose-400/45 bg-rose-950/20 light:border-rose-300 light:bg-white",
+    label: "text-rose-300 light:text-rose-600",
+    arrow: "text-rose-400/70 light:text-rose-400",
+  },
+  SPEED: {
+    column: "border-sky-500/60 bg-sky-500/[0.07] light:border-sky-300 light:bg-sky-50",
+    line: "border-sky-400/45 bg-sky-950/20 light:border-sky-300 light:bg-white",
+    label: "text-sky-300 light:text-sky-600",
+    arrow: "text-sky-400/70 light:text-sky-400",
+  },
+  VOID: {
+    column: "border-purple-500/60 bg-purple-500/[0.07] light:border-purple-300 light:bg-purple-50",
+    line: "border-purple-400/45 bg-purple-950/20 light:border-purple-300 light:bg-white",
+    label: "text-purple-300 light:text-purple-600",
+    arrow: "text-purple-400/70 light:text-purple-400",
+  },
+  FROST: {
+    column: "border-cyan-400/60 bg-cyan-400/[0.07] light:border-cyan-300 light:bg-cyan-50",
+    line: "border-cyan-300/45 bg-cyan-950/20 light:border-cyan-300 light:bg-white",
+    label: "text-cyan-200 light:text-cyan-700",
+    arrow: "text-cyan-300/70 light:text-cyan-500",
+  },
+  VENOM: {
+    column: "border-lime-500/60 bg-lime-500/[0.07] light:border-lime-300 light:bg-lime-50",
+    line: "border-lime-400/45 bg-lime-950/20 light:border-lime-300 light:bg-white",
+    label: "text-lime-300 light:text-lime-700",
+    arrow: "text-lime-400/70 light:text-lime-500",
+  },
+};
+
+/**
+ * One evolution branch drawn as a framed column: the T2 shark on top, then every T3 sub-line (갈래)
+ * in its own dashed box with its T4 evolution(s) inside — so each line reads as one unit.
+ * Sharks hidden by the list filters are skipped; an empty 갈래 box disappears.
+ */
+function BranchColumn({
+  branch,
+  listed,
+  save,
+  viewId,
+  onPick,
+}: {
+  branch: (typeof BRANCH_ORDER)[number];
+  listed: SharkDef[];
+  save: SharkSave;
+  viewId: string;
+  onPick: (id: string) => void;
+}) {
+  const shown = new Set(listed.map((sh) => sh.id));
+  const root = SHARKS.find((sh) => sh.tier === 2 && sh.branch === branch);
+  if (!root) return null;
+  const lines = root.nextIds.map((id) => {
+    const t3 = sharkById(id);
+    return { t3, t4s: t3.nextIds.map(sharkById) };
+  });
+  const visibleLines = lines.filter((l) => shown.has(l.t3.id) || l.t4s.some((t4) => shown.has(t4.id)));
+  if (!shown.has(root.id) && visibleLines.length === 0) return null;
+  const f = BRANCH_FRAME[branch];
+  const card = (sh: SharkDef) => <SharkCard key={sh.id} sh={sh} save={save} active={sh.id === viewId} onClick={() => onPick(sh.id)} />;
+  return (
+    <div className={`flex min-w-0 flex-col gap-1.5 rounded-2xl border-2 p-1.5 ${f.column}`}>
+      <div className={`text-center text-[11px] font-black ${f.label}`}>
+        {BRANCH_INFO[branch].emoji} {BRANCH_INFO[branch].name}
+        <div className="text-[9px] font-semibold opacity-70">{BRANCH_INFO[branch].desc}</div>
+      </div>
+      {shown.has(root.id) && card(root)}
+      {visibleLines.length > 0 && <div className={`text-center text-[10px] leading-none font-black ${f.arrow}`}>▼ {lines.length}갈래로 분기</div>}
+      {lines.map((l, i) => {
+        if (!visibleLines.includes(l)) return null;
+        const t4s = l.t4s.filter((t4) => shown.has(t4.id));
+        return (
+          <div key={l.t3.id} className={`flex flex-col gap-1 rounded-xl border border-dashed p-1 ${f.line}`}>
+            <div className={`text-center text-[9px] font-black ${f.label}`}>
+              {String.fromCharCode(9312 + i)} {l.t3.name} 라인
+            </div>
+            {shown.has(l.t3.id) && card(l.t3)}
+            {t4s.length > 0 && (
+              <div className={`text-center text-[10px] leading-none font-black ${f.arrow}`}>
+                ▼{t4s.length > 1 ? " 둘 중 하나로 진화" : ""}
+              </div>
+            )}
+            {t4s.map(card)}
+          </div>
+        );
+      })}
     </div>
   );
 }

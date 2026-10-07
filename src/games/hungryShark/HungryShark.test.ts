@@ -332,11 +332,11 @@ describe("target feed indicator", () => {
 });
 
 describe("evolution tree", () => {
-  it("has 26 sharks: 1 root + 5 branches, each T2 splitting into 2 T3 → T4 lines", async () => {
+  it("has 41 sharks: 1 root + 5 branches, each T2 splitting into 3 T3 lines (the third forks into 2 T4s)", async () => {
     const { evolutionPath, TREE_ORDER } = await import("./data");
-    expect(SHARKS).toHaveLength(26);
+    expect(SHARKS).toHaveLength(41);
     expect([...TREE_ORDER].sort()).toEqual(SHARKS.map((s) => s.id).sort());
-    for (const s of SHARKS.filter((x) => x.tier === 2)) expect(s.nextIds).toHaveLength(2);
+    for (const s of SHARKS.filter((x) => x.tier === 2)) expect(s.nextIds).toHaveLength(3);
     expect(new Set(SHARKS.map((s) => s.skill.id)).size).toBe(SHARKS.length);
     expect(sharkById("reef").nextIds).toEqual(["sandTiger", "mako", "elecShark", "greenland", "bullShark"]);
     for (const s of SHARKS) {
@@ -348,6 +348,8 @@ describe("evolution tree", () => {
     expect(evolutionPath("cryodon").map((s) => s.id)).toEqual(["reef", "greenland", "sleeper", "cryodon"]);
     expect(evolutionPath("basilisk").map((s) => s.branch)).toEqual(["BASE", "VENOM", "VENOM", "VENOM"]);
     expect(evolutionPath("hydra").map((s) => s.id)).toEqual(["reef", "bullShark", "wobbegong", "hydra"]);
+    expect(evolutionPath("snowQueen").map((s) => s.id)).toEqual(["reef", "greenland", "frostfang", "snowQueen"]);
+    expect(sharkById("whitetip").nextIds).toEqual(["dunkleosteus", "crimsonTyrant"]);
   });
 
   it("migrates old linear-ladder saves: tiger → sandTiger + refund, ancestors filled in", async () => {
@@ -482,6 +484,34 @@ describe("active skills", () => {
     step(w, { ...idle, skill: true }, 1 / 60);
     expect(bodyScale(w)).toBe(2);
     expect(h.stun).toBeGreaterThan(2);
+  });
+
+  it("가시 연사 fires 5 darts that eat small prey across the fan", () => {
+    const w = cast("spinyDogfish", 46);
+    const fish = [-0.5, 0, 0.5].map((a) => place(w, "crab", w.shark.x + Math.cos(a) * 260, w.shark.y + Math.sin(a) * 260));
+    step(w, { ...idle, skill: true }, 1 / 60);
+    expect(fish.every((f) => !f.alive)).toBe(true);
+  });
+
+  it("진홍 해일 eats prey all around and heals per kill; hazards get stunned", () => {
+    const w = cast("crimsonTyrant", 47);
+    w.shark.hp = 100;
+    const fish = [0, 2, 4].map((a) => place(w, "grouper", w.shark.x + Math.cos(a) * 300, w.shark.y + Math.sin(a) * 300));
+    const jelly = place(w, "redJelly", w.shark.x - 250, w.shark.y);
+    step(w, { ...idle, skill: true }, 1 / 60);
+    expect(fish.every((f) => !f.alive)).toBe(true);
+    expect(w.shark.hp).toBeGreaterThan(100 + w.stats.maxHealth * 0.06 * 3 - 5);
+    expect(jelly.alive && jelly.stun > 0).toBe(true);
+  });
+
+  it("강철 턱 / 폭풍 회오리 / 잔상 분신 / 서리 왕관 grant a damage shield", () => {
+    for (const id of ["dunkleosteus", "stormRider", "mirage", "snowQueen"]) {
+      const w = cast(id, 48);
+      step(w, { ...idle, skill: true }, 1 / 60);
+      const hp0 = w.shark.hp;
+      explode(w, place(w, "mineL", w.shark.x + 40, w.shark.y));
+      expect(w.shark.hp, id).toBe(hp0);
+    }
   });
 
   it.each(SHARKS.map((s) => s.id))("%s survives a 60s dive spamming its skill", (id) => {

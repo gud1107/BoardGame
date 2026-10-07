@@ -299,7 +299,12 @@ export type SkillId =
   | "venomSpit" | "tailWhip" | "plague"
   | "frenzyBite" | "sawWhorl" | "slipstream" | "bladeDash"
   | "lure" | "starburst" | "iceSpear" | "auroraVeil"
-  | "spineBurst" | "hydraFangs";
+  | "spineBurst" | "hydraFangs"
+  | "bloodScent" | "ironJaw" | "crimsonTide"
+  | "zigzagDash" | "tempest" | "afterimage"
+  | "leechBite" | "riftPull" | "mindWave"
+  | "hailstorm" | "glacialCrash" | "frostCrown"
+  | "quillVolley" | "acidPool" | "toxicBloom";
 
 export type PassiveId = "appetite" | "ballistics" | "staticField" | "coldBlood" | "bloodlust";
 
@@ -370,11 +375,11 @@ export const SHARKS: SharkDef[] = [
     skill: { id: "sprint", name: "스프린트 대시", cooldown: 6, desc: "0.6초간 2배 속도로 돌진합니다 (부스트 소모 없음)." },
     passive: { id: "appetite", name: "왕성한 식욕", desc: "먹이 섭취 시 체력 회복량 +20%" },
     colors: ["#64748b", "#e2e8f0", "#0f172a"],
-    blurb: "작지만 민첩한 연안의 사냥꾼. 2티어부터 다섯 갈래 진화 경로 중 하나를 고를 수 있습니다.",
+    blurb: "작지만 민첩한 연안의 사냥꾼. 2티어부터 다섯 계통 진화 경로 중 하나를 고를 수 있습니다.",
   },
   // ── Branch A: Brute ──
   {
-    id: "sandTiger", tier: 2, branch: "BRUTE", parentId: "reef", nextIds: ["white", "tigerShark"],
+    id: "sandTiger", tier: 2, branch: "BRUTE", parentId: "reef", nextIds: ["white", "tigerShark", "whitetip"],
     name: "샌드타이거 상어", nameEn: "Sand Tiger",
     maxHealth: 180, baseDrainRate: 3.6, swimSpeed: 260, boostMultiplier: 1.85, boostDuration: 2.4,
     biteForce: 18, eatRadius: 24, length: 100, cost: 1560,
@@ -408,7 +413,7 @@ export const SHARKS: SharkDef[] = [
   },
   // ── Branch B: Speed ──
   {
-    id: "mako", tier: 2, branch: "SPEED", parentId: "reef", nextIds: ["hammer", "blueShark"],
+    id: "mako", tier: 2, branch: "SPEED", parentId: "reef", nextIds: ["hammer", "blueShark", "silky"],
     name: "청상아리", nameEn: "Mako Shark",
     maxHealth: 130, baseDrainRate: 3.2, swimSpeed: 305, boostMultiplier: 2.0, boostDuration: 2.6,
     biteForce: 14, eatRadius: 20, length: 86, cost: 1560,
@@ -442,7 +447,7 @@ export const SHARKS: SharkDef[] = [
   },
   // ── Branch C: Void / Psionic ──
   {
-    id: "elecShark", tier: 2, branch: "VOID", parentId: "reef", nextIds: ["goblin", "lantern"],
+    id: "elecShark", tier: 2, branch: "VOID", parentId: "reef", nextIds: ["goblin", "lantern", "cookiecutter"],
     name: "일렉트릭 레이 상어", nameEn: "Electric Ray Shark",
     maxHealth: 150, baseDrainRate: 3.4, swimSpeed: 270, boostMultiplier: 1.9, boostDuration: 2.5,
     biteForce: 15, eatRadius: 22, length: 92, cost: 1820,
@@ -476,7 +481,7 @@ export const SHARKS: SharkDef[] = [
   },
   // ── Branch D: Frost ──
   {
-    id: "greenland", tier: 2, branch: "FROST", parentId: "reef", nextIds: ["sleeper", "iceLance"],
+    id: "greenland", tier: 2, branch: "FROST", parentId: "reef", nextIds: ["sleeper", "iceLance", "frostfang"],
     name: "그린란드 상어", nameEn: "Greenland Shark",
     maxHealth: 200, baseDrainRate: 3.4, swimSpeed: 240, boostMultiplier: 1.8, boostDuration: 2.4,
     biteForce: 15, eatRadius: 22, length: 104, cost: 1690,
@@ -510,7 +515,7 @@ export const SHARKS: SharkDef[] = [
   },
   // ── Branch E: Venom ──
   {
-    id: "bullShark", tier: 2, branch: "VENOM", parentId: "reef", nextIds: ["thresher", "wobbegong"],
+    id: "bullShark", tier: 2, branch: "VENOM", parentId: "reef", nextIds: ["thresher", "wobbegong", "spinyDogfish"],
     name: "황소상어", nameEn: "Bull Shark",
     maxHealth: 160, baseDrainRate: 3.5, swimSpeed: 275, boostMultiplier: 1.9, boostDuration: 2.5,
     biteForce: 17, eatRadius: 22, length: 96, cost: 1690,
@@ -652,6 +657,172 @@ export const SHARKS: SharkDef[] = [
     passive: { id: "bloodlust", name: "흡혈 본능", desc: "먹이 섭취 시 체력 회복량 +30%" },
     colors: ["#3f6212", "#ecfccb", "#facc15"],
     blurb: "베어도 다시 자라는 세 개의 독니. 한 번에 세 마리를 낚아챕니다.",
+  },
+  // ── Third T3 line of every branch — its T3 forks into two T4s ──
+  {
+    id: "whitetip", tier: 3, branch: "BRUTE", parentId: "sandTiger", nextIds: ["dunkleosteus", "crimsonTyrant"],
+    name: "장완흉상어", nameEn: "Oceanic Whitetip",
+    maxHealth: 270, baseDrainRate: 4.8, swimSpeed: 295, boostMultiplier: 1.9, boostDuration: 2.8,
+    biteForce: 33, eatRadius: 32, length: 140, cost: 5850,
+    goldMultiplier: 1.5, magnetRadius: 75, boostEfficiency: 1.2,
+    skill: { id: "bloodScent", name: "피 냄새 추적", cooldown: 8, desc: "1.2초간 1.6배 속도로 돌진하고, 5초간 보물 상자·황금 참치·대어의 위치를 감지합니다. 주변 450 반경 먹이는 1초 기절." },
+    passive: { id: "appetite", name: "왕성한 식욕", desc: "먹이 섭취 시 체력 회복량 +20%" },
+    colors: ["#6b7280", "#f9fafb", "#f8fafc"],
+    blurb: "하얀 지느러미 끝을 가진 외양의 방랑자. 수 킬로미터 밖의 피 냄새도 놓치지 않습니다.",
+  },
+  {
+    id: "dunkleosteus", tier: 4, branch: "BRUTE", parentId: "whitetip", nextIds: [],
+    name: "둔클레오스테우스", nameEn: "Dunkleosteus",
+    maxHealth: 480, baseDrainRate: 7.0, swimSpeed: 295, boostMultiplier: 1.8, boostDuration: 3.0,
+    biteForce: 62, eatRadius: 44, length: 210, cost: 20800,
+    goldMultiplier: 2.0, magnetRadius: 100, boostEfficiency: 1.3,
+    skill: { id: "ironJaw", name: "강철 턱 분쇄", cooldown: 11, desc: "3초간 갑주로 모든 피해를 막고, 전방 340 거리 부채꼴에 5배 피해 — 위험물은 3초 기절." },
+    passive: null,
+    colors: ["#44403c", "#d6d3d1", "#a8a29e"],
+    blurb: "뼈 갑옷을 두른 데본기의 폭군. 칼날 같은 턱뼈로 무엇이든 두 동강 냅니다.",
+  },
+  {
+    id: "crimsonTyrant", tier: 4, branch: "BRUTE", parentId: "whitetip", nextIds: [],
+    name: "진홍의 폭군", nameEn: "Crimson Tyrant",
+    maxHealth: 450, baseDrainRate: 6.9, swimSpeed: 310, boostMultiplier: 1.85, boostDuration: 3.2,
+    biteForce: 58, eatRadius: 42, length: 205, cost: 20800,
+    goldMultiplier: 2.0, magnetRadius: 110, boostEfficiency: 1.4,
+    skill: { id: "crimsonTide", name: "진홍 해일", cooldown: 13, desc: "피의 해일을 일으켜 주변 440 반경 먹이에 3배 피해, 위험물은 2.5초 기절. 쓰러뜨린 먹이마다 체력 6% 회복." },
+    passive: { id: "appetite", name: "왕성한 식욕", desc: "먹이 섭취 시 체력 회복량 +20%" },
+    colors: ["#7f1d1d", "#fecaca", "#ef4444"],
+    blurb: "피로 물든 바다를 지배하는 광포한 군주. 사냥할수록 더 강해집니다.",
+  },
+  {
+    id: "silky", tier: 3, branch: "SPEED", parentId: "mako", nextIds: ["stormRider", "mirage"],
+    name: "미흑점상어", nameEn: "Silky Shark",
+    maxHealth: 210, baseDrainRate: 4.3, swimSpeed: 325, boostMultiplier: 2.0, boostDuration: 3.0,
+    biteForce: 27, eatRadius: 28, length: 122, cost: 5850,
+    goldMultiplier: 1.6, magnetRadius: 75, boostEfficiency: 1.9,
+    skill: { id: "zigzagDash", name: "지그재그 연격", cooldown: 7, desc: "1초간 1.8배 속도로 질주하며 전방 세 방향으로 400 거리를 베어 2배 피해, 위험물은 1.5초 기절." },
+    passive: { id: "ballistics", name: "수중 탄도학", desc: "부스트 속도 +45%, 부스트 소모량 −30%" },
+    colors: ["#475569", "#e2e8f0", "#a5b4fc"],
+    blurb: "비단처럼 매끄러운 피부의 외양 질주자. 물고기 떼 사이를 지그재그로 가릅니다.",
+  },
+  {
+    id: "stormRider", tier: 4, branch: "SPEED", parentId: "silky", nextIds: [],
+    name: "폭풍 질주자", nameEn: "Storm Rider",
+    maxHealth: 330, baseDrainRate: 5.9, swimSpeed: 350, boostMultiplier: 2.05, boostDuration: 3.6,
+    biteForce: 47, eatRadius: 36, length: 175, cost: 20800,
+    goldMultiplier: 2.2, magnetRadius: 90, boostEfficiency: 2.5,
+    skill: { id: "tempest", name: "폭풍 회오리", cooldown: 10, desc: "주변 300 반경에 회오리 충격(2.5배 피해) 후 1.2초간 무적 + 2.2배 속도로 폭풍처럼 돌진합니다." },
+    passive: null,
+    colors: ["#1e3a8a", "#dbeafe", "#38bdf8"],
+    blurb: "태풍의 눈에서 태어난 상어. 지나간 자리에 소용돌이만 남습니다.",
+  },
+  {
+    id: "mirage", tier: 4, branch: "SPEED", parentId: "silky", nextIds: [],
+    name: "신기루 상어", nameEn: "Mirage Shark",
+    maxHealth: 320, baseDrainRate: 5.8, swimSpeed: 345, boostMultiplier: 2.05, boostDuration: 3.6,
+    biteForce: 46, eatRadius: 36, length: 172, cost: 20800,
+    goldMultiplier: 2.2, magnetRadius: 95, boostEfficiency: 2.5,
+    skill: { id: "afterimage", name: "잔상 분신", cooldown: 12, desc: "2.5초간 잔상을 남기며 무적 + 1.5배 속도, 4초간 보물·대어 위치 감지. 출발 지점 220 반경의 생물은 잔상에 홀려 2초 기절." },
+    passive: null,
+    colors: ["#701a75", "#fae8ff", "#f0abfc"],
+    blurb: "아지랑이처럼 일렁이는 몸. 눈에 보이는 건 이미 지나간 잔상뿐입니다.",
+  },
+  {
+    id: "cookiecutter", tier: 3, branch: "VOID", parentId: "elecShark", nextIds: ["voidMaw", "psyShark"],
+    name: "쿠키커터상어", nameEn: "Cookiecutter Shark",
+    maxHealth: 240, baseDrainRate: 4.5, swimSpeed: 290, boostMultiplier: 1.9, boostDuration: 2.8,
+    biteForce: 30, eatRadius: 30, length: 128, cost: 6240,
+    goldMultiplier: 1.7, magnetRadius: 110, boostEfficiency: 1.3,
+    skill: { id: "leechBite", name: "흡착 물기", cooldown: 8, desc: "450 반경에서 가장 큰 먹잇감에 달라붙어 5배 피해를 주고 체력 12%를 흡수합니다." },
+    passive: { id: "staticField", name: "정전기 유도", desc: "주변 작은 먹이가 자석처럼 입으로 2배 강하게 빨려 들어옵니다." },
+    colors: ["#3f3f46", "#a1a1aa", "#2dd4bf"],
+    blurb: "자기보다 큰 사냥감에 달라붙어 쿠키처럼 동그랗게 살점을 도려내는 심해의 기생자.",
+  },
+  {
+    id: "voidMaw", tier: 4, branch: "VOID", parentId: "cookiecutter", nextIds: [],
+    name: "공허의 아가리", nameEn: "Void Maw",
+    maxHealth: 400, baseDrainRate: 6.6, swimSpeed: 300, boostMultiplier: 1.85, boostDuration: 3.3,
+    biteForce: 54, eatRadius: 42, length: 200, cost: 22750,
+    goldMultiplier: 2.4, magnetRadius: 160, boostEfficiency: 1.5,
+    skill: { id: "riftPull", name: "차원 균열", cooldown: 13, desc: "입 앞에 균열을 열어 700 반경의 먹이를 끌어당긴 뒤, 균열을 닫아 240 반경에 3배 피해를 줍니다." },
+    passive: null,
+    colors: ["#0f0a1e", "#6d28d9", "#22d3ee"],
+    blurb: "입속이 다른 차원으로 이어진 존재. 균열 너머로 먹이 떼를 통째로 삼킵니다.",
+  },
+  {
+    id: "psyShark", tier: 4, branch: "VOID", parentId: "cookiecutter", nextIds: [],
+    name: "사이킥 오버로드", nameEn: "Psychic Overlord",
+    maxHealth: 390, baseDrainRate: 6.5, swimSpeed: 305, boostMultiplier: 1.85, boostDuration: 3.3,
+    biteForce: 52, eatRadius: 40, length: 195, cost: 22750,
+    goldMultiplier: 2.4, magnetRadius: 150, boostEfficiency: 1.5,
+    skill: { id: "mindWave", name: "정신 파동", cooldown: 13, desc: "정신 파동으로 800 반경 모든 생물을 3.5초 마비시키고, 400 반경 먹이에 2.5배 피해를 줍니다." },
+    passive: { id: "staticField", name: "정전기 유도", desc: "주변 작은 먹이가 자석처럼 입으로 2배 강하게 빨려 들어옵니다." },
+    colors: ["#4c1d95", "#ddd6fe", "#f472b6"],
+    blurb: "부풀어 오른 머리에 깃든 초능력. 생각만으로 바다 전체를 멈춰 세웁니다.",
+  },
+  {
+    id: "frostfang", tier: 3, branch: "FROST", parentId: "greenland", nextIds: ["glacierTitan", "snowQueen"],
+    name: "서리송곳니 상어", nameEn: "Frostfang Shark",
+    maxHealth: 300, baseDrainRate: 4.5, swimSpeed: 280, boostMultiplier: 1.9, boostDuration: 2.8,
+    biteForce: 33, eatRadius: 31, length: 142, cost: 6050,
+    goldMultiplier: 1.55, magnetRadius: 72, boostEfficiency: 1.15,
+    skill: { id: "hailstorm", name: "우박 세례", cooldown: 8, desc: "전방 부채꼴로 우박 5발을 쏘아 420 거리의 먹이에 1.8배 피해, 위험물은 2초간 얼립니다." },
+    passive: { id: "coldBlood", name: "냉혈 대사", desc: "배고픔(체력 감소) 속도 −20%" },
+    colors: ["#334155", "#f1f5f9", "#a5f3fc"],
+    blurb: "입 밖으로 삐져나온 얼음 송곳니. 숨을 내쉴 때마다 우박이 쏟아집니다.",
+  },
+  {
+    id: "glacierTitan", tier: 4, branch: "FROST", parentId: "frostfang", nextIds: [],
+    name: "빙산 타이탄", nameEn: "Glacier Titan",
+    maxHealth: 500, baseDrainRate: 6.7, swimSpeed: 285, boostMultiplier: 1.8, boostDuration: 3.0,
+    biteForce: 54, eatRadius: 44, length: 215, cost: 21450,
+    goldMultiplier: 2.1, magnetRadius: 110, boostEfficiency: 1.3,
+    skill: { id: "glacialCrash", name: "빙하 붕괴", cooldown: 14, desc: "빙하를 무너뜨려 주변 420 반경에 3.5배 피해, 위험물은 3초간 얼어붙습니다." },
+    passive: { id: "coldBlood", name: "냉혈 대사", desc: "배고픔(체력 감소) 속도 −20%" },
+    colors: ["#1e293b", "#e0f2fe", "#93c5fd"],
+    blurb: "등에 빙산을 짊어진 거대한 수호자. 몸을 뒤틀면 빙하가 통째로 무너집니다.",
+  },
+  {
+    id: "snowQueen", tier: 4, branch: "FROST", parentId: "frostfang", nextIds: [],
+    name: "눈의 여왕", nameEn: "Snow Queen",
+    maxHealth: 440, baseDrainRate: 6.3, swimSpeed: 305, boostMultiplier: 1.85, boostDuration: 3.3,
+    biteForce: 50, eatRadius: 40, length: 198, cost: 21450,
+    goldMultiplier: 2.1, magnetRadius: 125, boostEfficiency: 1.4,
+    skill: { id: "frostCrown", name: "서리 왕관", cooldown: 13, desc: "2초간 무적 + 주변 480 반경을 3초간 얼리고, 얼어붙은 작은 먹이 최대 8마리를 즉시 포식합니다." },
+    passive: { id: "coldBlood", name: "냉혈 대사", desc: "배고픔(체력 감소) 속도 −20%" },
+    colors: ["#94a3b8", "#ffffff", "#7dd3fc"],
+    blurb: "눈송이 왕관을 쓴 백색의 여제. 그녀가 지나간 바다는 영원히 얼어붙습니다.",
+  },
+  {
+    id: "spinyDogfish", tier: 3, branch: "VENOM", parentId: "bullShark", nextIds: ["chimera", "nightshade"],
+    name: "곱상어", nameEn: "Spiny Dogfish",
+    maxHealth: 250, baseDrainRate: 4.4, swimSpeed: 300, boostMultiplier: 1.95, boostDuration: 2.9,
+    biteForce: 29, eatRadius: 29, length: 132, cost: 6050,
+    goldMultiplier: 1.6, magnetRadius: 78, boostEfficiency: 1.3,
+    skill: { id: "quillVolley", name: "가시 연사", cooldown: 7, desc: "전방 부채꼴로 독가시 5발을 연사해 먹이에 2배 피해를 주고, 작은 먹이는 바로 삼킵니다." },
+    passive: { id: "bloodlust", name: "흡혈 본능", desc: "먹이 섭취 시 체력 회복량 +30%" },
+    colors: ["#57534e", "#e7e5e4", "#bef264"],
+    blurb: "등지느러미마다 독가시를 숨긴 작은 사냥꾼. 떼로 몰려와 가시를 퍼붓습니다.",
+  },
+  {
+    id: "chimera", tier: 4, branch: "VENOM", parentId: "spinyDogfish", nextIds: [],
+    name: "키메라 상어", nameEn: "Chimera Shark",
+    maxHealth: 400, baseDrainRate: 6.4, swimSpeed: 315, boostMultiplier: 1.95, boostDuration: 3.3,
+    biteForce: 50, eatRadius: 38, length: 192, cost: 21450,
+    goldMultiplier: 2.2, magnetRadius: 100, boostEfficiency: 1.6,
+    skill: { id: "acidPool", name: "산성 웅덩이", cooldown: 11, desc: "입 앞 220 거리에 산성액을 쏟아 340 반경 먹이에 3배 피해, 위험물은 3초 마비. 쓰러뜨린 먹이마다 체력 회복." },
+    passive: { id: "bloodlust", name: "흡혈 본능", desc: "먹이 섭취 시 체력 회복량 +30%" },
+    colors: ["#365314", "#ecfccb", "#facc15"],
+    blurb: "여러 생물을 이어 붙인 듯한 기묘한 몸. 입에서는 바위도 녹이는 산이 흐릅니다.",
+  },
+  {
+    id: "nightshade", tier: 4, branch: "VENOM", parentId: "spinyDogfish", nextIds: [],
+    name: "나이트셰이드", nameEn: "Nightshade",
+    maxHealth: 380, baseDrainRate: 6.3, swimSpeed: 320, boostMultiplier: 1.95, boostDuration: 3.3,
+    biteForce: 48, eatRadius: 38, length: 188, cost: 21450,
+    goldMultiplier: 2.2, magnetRadius: 105, boostEfficiency: 1.6,
+    skill: { id: "toxicBloom", name: "독꽃 개화", cooldown: 12, desc: "몸 주위에 독꽃을 피워 460 반경 먹이에 2.5배 피해, 위험물은 3.5초 마비. 쓰러뜨린 먹이마다 체력 회복." },
+    passive: { id: "bloodlust", name: "흡혈 본능", desc: "먹이 섭취 시 체력 회복량 +30%" },
+    colors: ["#3b0764", "#f3e8ff", "#a3e635"],
+    blurb: "밤에만 피는 독꽃을 몸에 두른 상어. 그 향기를 맡은 먹이는 다시 깨어나지 못합니다.",
   },
 ];
 

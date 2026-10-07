@@ -1336,6 +1336,21 @@ const SKILL_ACTIVE: Record<SkillId, number> = {
   auroraVeil: 0,
   spineBurst: 0,
   hydraFangs: 0,
+  bloodScent: 1.2,
+  ironJaw: 0,
+  crimsonTide: 0,
+  zigzagDash: 1,
+  tempest: 1.2,
+  afterimage: 2.5,
+  leechBite: 0,
+  riftPull: 0,
+  mindWave: 0,
+  hailstorm: 0,
+  glacialCrash: 0,
+  frostCrown: 0,
+  quillVolley: 0,
+  acidPool: 0,
+  toxicBloom: 0,
 };
 
 function skillSpeedMul(w: World): number {
@@ -1349,6 +1364,10 @@ function skillSpeedMul(w: World): number {
     case "shadowCloak": return 1.15;
     case "slipstream": return 1.9;
     case "bladeDash": return 2.6;
+    case "bloodScent": return 1.6;
+    case "zigzagDash": return 1.8;
+    case "tempest": return 2.2;
+    case "afterimage": return 1.5;
     default: return 1;
   }
 }
@@ -1456,31 +1475,9 @@ export function castSkill(w: World) {
       w.rings.push({ x: s.x, y: s.y, radius: 520, life: 0.8, maxLife: 0.8, color: "#e0f2fe" });
       w.shake = Math.max(w.shake, 12);
       break;
-    case "venomSpit": {
-      // Three darts in a fan; each one hits the closest edible thing on its line.
-      const reach = 340 + w.stats.length;
-      const taken = new Set<Entity>();
-      for (const off of [-0.32, 0, 0.32]) {
-        const ax = Math.cos(s.angle + off), ay = Math.sin(s.angle + off);
-        let best: Entity | null = null;
-        let bestD = Infinity;
-        for (const e of w.entities) {
-          if (!e.alive || taken.has(e) || e.kind === "chest" || !isEdible(w, e)) continue;
-          const dx = e.x - m.x, dy = e.y - m.y;
-          const along = dx * ax + dy * ay;
-          if (along < 0 || along > reach + e.def.radius) continue;
-          if (Math.abs(dx * ay - dy * ax) > 34 + e.def.radius) continue;
-          if (along < bestD) { bestD = along; best = e; }
-        }
-        const ex = best ? best.x : m.x + ax * reach, ey = best ? best.y : m.y + ay * reach;
-        w.beams.push({ x1: m.x, y1: m.y, x2: ex, y2: ey, life: 0.35, maxLife: 0.35, color: "#a3e635", zigzag: false });
-        if (!best) continue;
-        taken.add(best);
-        burst(w, "spark", best.x, best.y, 8, 140, "#84cc16", 3, 0.5);
-        hitPrey(w, best, w.stats.biteForce * 2.5);
-      }
+    case "venomSpit":
+      dartFan(w, [-0.32, 0, 0.32], 340 + w.stats.length, w.stats.biteForce * 2.5, "#a3e635", "#84cc16");
       break;
-    }
     case "tailWhip":
       // Thresher-style whack around the body — damage like a shockwave, no dash / i-frames.
       shockwave(w, s.x - Math.cos(s.angle) * w.stats.length * 0.3, s.y - Math.sin(s.angle) * w.stats.length * 0.3, 320, w.stats.biteForce * 3, 2.5);
@@ -1575,11 +1572,166 @@ export function castSkill(w: World) {
       if (kills > 0) s.hp = Math.min(w.stats.maxHealth, s.hp + w.stats.maxHealth * 0.05 * kills);
       break;
     }
+    case "bloodScent":
+      sk.reveal = 5;
+      s.vx = hx * w.stats.swimSpeed * 1.6;
+      s.vy = hy * w.stats.swimSpeed * 1.6;
+      freezeAround(w, s.x, s.y, 450, 1, "#fca5a5");
+      burst(w, "blood", m.x, m.y, 14, 180, "#dc2626", 4, 0.7);
+      break;
+    case "ironJaw":
+      s.shield = Math.max(s.shield, 3);
+      areaStrike(w, m.x, m.y, hx, hy, 340, 0.5, w.stats.biteForce * 5, 3, "#d6d3d1");
+      w.shake = Math.max(w.shake, 14);
+      break;
+    case "crimsonTide":
+      leech(w, areaStrike(w, s.x, s.y, hx, hy, 440, -1, w.stats.biteForce * 3, 2.5, "#ef4444"), 0.06, "🩸");
+      w.shake = Math.max(w.shake, 14);
+      break;
+    case "zigzagDash":
+      for (const off of [-0.45, 0, 0.45]) {
+        const a = s.angle + off;
+        lineStrike(w, m.x, m.y, Math.cos(a), Math.sin(a), 400, 36, w.stats.biteForce * 2, 1.5, "#a5b4fc");
+      }
+      s.vx = hx * w.stats.swimSpeed * 1.7;
+      s.vy = hy * w.stats.swimSpeed * 1.7;
+      break;
+    case "tempest":
+      shockwave(w, s.x, s.y, 300, w.stats.biteForce * 2.5, 2);
+      s.shield = Math.max(s.shield, 1.2);
+      s.vx = hx * w.stats.swimSpeed * 2.1;
+      s.vy = hy * w.stats.swimSpeed * 2.1;
+      burst(w, "bubble", s.x, s.y, 30, 320, "#bae6fd", 4, 0.9);
+      break;
+    case "afterimage":
+      s.shield = Math.max(s.shield, 2.5);
+      sk.reveal = 4;
+      freezeAround(w, s.x, s.y, 220, 2, "#f0abfc");
+      burst(w, "smoke", s.x, s.y, 20, 160, "#f0abfc", 9, 1);
+      break;
+    case "leechBite": {
+      let best: Entity | null = null;
+      for (const e of w.entities) {
+        if (!e.alive || e.kind === "chest" || !isEdible(w, e)) continue;
+        if (Math.hypot(e.x - m.x, e.y - m.y) > 450 + e.def.radius) continue;
+        if (!best || e.def.score > best.def.score) best = e;
+      }
+      if (best) {
+        w.beams.push({ x1: m.x, y1: m.y, x2: best.x, y2: best.y, life: 0.45, maxLife: 0.45, color: "#2dd4bf", zigzag: false });
+        burst(w, "blood", best.x, best.y, 12, 160, "#dc2626", 4, 0.7);
+        hitPrey(w, best, w.stats.biteForce * 5);
+        s.hp = Math.min(w.stats.maxHealth, s.hp + w.stats.maxHealth * 0.12);
+        floatText(w, s.x, s.y - 90, "🩸 흡착 +12%", "#5eead4", 16);
+      }
+      break;
+    }
+    case "riftPull": {
+      const rx = m.x + hx * 120, ry = Math.max(SURFACE_Y + 60, m.y + hy * 120);
+      for (const e of w.entities) {
+        if (!e.alive || e.kind === "chest" || !isEdible(w, e)) continue;
+        if (Math.hypot(e.x - rx, e.y - ry) > 700 + e.def.radius) continue;
+        e.x += (rx - e.x) * 0.75;
+        e.y += (ry - e.y) * 0.75;
+      }
+      w.rings.push({ x: rx, y: ry, radius: 700, life: 0.9, maxLife: 0.9, color: "#a78bfa" });
+      areaStrike(w, rx, ry, hx, hy, 240, -1, w.stats.biteForce * 3, 2, "#22d3ee");
+      break;
+    }
+    case "mindWave":
+      freezeAround(w, s.x, s.y, 800, 3.5, "#f472b6");
+      areaStrike(w, s.x, s.y, hx, hy, 400, -1, w.stats.biteForce * 2.5, 3.5, "#f9a8d4");
+      w.shake = Math.max(w.shake, 10);
+      break;
+    case "hailstorm":
+      for (const off of [-0.5, -0.25, 0, 0.25, 0.5]) {
+        const a = s.angle + off;
+        lineStrike(w, m.x, m.y, Math.cos(a), Math.sin(a), 420, 26, w.stats.biteForce * 1.8, 2, "#e0f2fe");
+      }
+      break;
+    case "glacialCrash":
+      shockwave(w, s.x, s.y, 420, w.stats.biteForce * 3.5, 3);
+      freezeAround(w, s.x, s.y, 420, 3, "#93c5fd");
+      break;
+    case "frostCrown": {
+      s.shield = Math.max(s.shield, 2);
+      const frozen = freezeAround(w, s.x, s.y, 480, 3, "#e0f2fe");
+      const small = frozen.filter((e) => e.def.toughness <= 1 && isEdible(w, e) && Math.hypot(e.x - s.x, e.y - s.y) < 380);
+      small.sort((a, b) => Math.hypot(a.x - s.x, a.y - s.y) - Math.hypot(b.x - s.x, b.y - s.y));
+      for (const e of small.slice(0, 8)) {
+        w.beams.push({ x1: m.x, y1: m.y, x2: e.x, y2: e.y, life: 0.3, maxLife: 0.3, color: "#e0f2fe", zigzag: false });
+        consume(w, e);
+      }
+      break;
+    }
+    case "quillVolley":
+      dartFan(w, [-0.5, -0.25, 0, 0.25, 0.5], 360 + w.stats.length, w.stats.biteForce * 2, "#bef264", "#84cc16");
+      break;
+    case "acidPool":
+      leech(w, areaStrike(w, m.x + hx * 220, m.y + hy * 220, hx, hy, 340, -1, w.stats.biteForce * 3, 3, "#facc15"), 0.04, "🧪");
+      break;
+    case "toxicBloom":
+      leech(w, areaStrike(w, s.x, s.y, hx, hy, 460, -1, w.stats.biteForce * 2.5, 3.5, "#a3e635"), 0.04, "🧪");
+      break;
     case "blackHole":
       sk.vortex = { x: m.x + hx * 160, y: Math.max(SURFACE_Y + 60, m.y + hy * 160), remaining: 4, radius: 240 };
       w.shake = Math.max(w.shake, 10);
       break;
   }
+}
+
+/** Fan of darts (독침 사출 / 가시 연사): each one hits the closest edible thing on its line. */
+function dartFan(w: World, offsets: number[], reach: number, damage: number, color: string, hitColor: string) {
+  const s = w.shark;
+  const m = mouthPos(w);
+  const taken = new Set<Entity>();
+  for (const off of offsets) {
+    const ax = Math.cos(s.angle + off), ay = Math.sin(s.angle + off);
+    let best: Entity | null = null;
+    let bestD = Infinity;
+    for (const e of w.entities) {
+      if (!e.alive || taken.has(e) || e.kind === "chest" || !isEdible(w, e)) continue;
+      const dx = e.x - m.x, dy = e.y - m.y;
+      const along = dx * ax + dy * ay;
+      if (along < 0 || along > reach + e.def.radius) continue;
+      if (Math.abs(dx * ay - dy * ax) > 34 + e.def.radius) continue;
+      if (along < bestD) { bestD = along; best = e; }
+    }
+    const ex = best ? best.x : m.x + ax * reach, ey = best ? best.y : m.y + ay * reach;
+    w.beams.push({ x1: m.x, y1: m.y, x2: ex, y2: ey, life: 0.35, maxLife: 0.35, color, zigzag: false });
+    if (!best) continue;
+    taken.add(best);
+    burst(w, "spark", best.x, best.y, 8, 140, hitColor, 3, 0.5);
+    hitPrey(w, best, damage);
+  }
+}
+
+/**
+ * Area hit around (x, y): edible prey takes `damage`, everything else is stunned. `minCos` limits it to a
+ * cone along (hx, hy) (−1 = full circle). Returns how many prey got eaten.
+ */
+function areaStrike(w: World, x: number, y: number, hx: number, hy: number, R: number, minCos: number, damage: number, stun: number, color: string): number {
+  let kills = 0;
+  for (const e of w.entities.slice()) {
+    if (!e.alive || e.kind === "chest") continue;
+    const dx = e.x - x, dy = e.y - y;
+    const d = Math.hypot(dx, dy) || 1;
+    if (d > R + e.def.radius || (minCos > -1 && (hx * dx + hy * dy) / d < minCos)) continue;
+    if (isEdible(w, e)) {
+      burst(w, "spark", e.x, e.y, 6, 120, color, 3, 0.4);
+      if (hitPrey(w, e, damage)) kills++;
+    } else e.stun = Math.max(e.stun, stun);
+  }
+  w.rings.push({ x, y, radius: R, life: 0.6, maxLife: 0.6, color });
+  burst(w, "spark", x, y, 22, R * 0.9, color, 3, 0.6);
+  return kills;
+}
+
+/** Heal a share of max HP per prey a skill took down. */
+function leech(w: World, kills: number, perKill: number, icon: string) {
+  if (kills <= 0) return;
+  const s = w.shark;
+  s.hp = Math.min(w.stats.maxHealth, s.hp + w.stats.maxHealth * perKill * kills);
+  floatText(w, s.x, s.y - 90, `${icon} +${kills} 흡혈`, "#bef264", 16);
 }
 
 /** 스냅 조 / 세 머리 독니: grab the best edible target in a narrow cone. True if it got eaten. */

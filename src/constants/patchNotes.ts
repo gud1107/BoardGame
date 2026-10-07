@@ -102,6 +102,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         type: "FIX",
         desc: "모바일에서 🎲 버튼이 발사 버튼을 가리던 문제 수정",
       },
+      {
+        game: "hungry-shark",
+        type: "FEAT",
+        desc: "계통마다 상어 3종씩 15종 추가(총 41종) — 3티어 세 번째 갈래가 4티어에서 다시 둘로 갈라져요(장완흉상어→둔클레오스테우스/진홍의 폭군 등), 모두 고유 스킬",
+      },
+      {
+        game: "hungry-shark",
+        type: "IMPROVE",
+        desc: "진화 트리에 계통별 색 테두리와 갈래(라인)별 점선 상자를 그려 어떤 상어가 어디서 이어지는지 한눈에 보여요",
+      },
     ],
   },
   {

@@ -1132,6 +1132,9 @@ function nearPreyOpen(w: World): number {
   return 0.08;
 }
 
+/** Newer apex sharks whose eye glows in their accent color. */
+const GLOW_EYES = new Set(["crimsonTyrant", "stormRider", "mirage", "voidMaw", "psyShark", "snowQueen", "nightshade"]);
+
 export function drawSharkShape(
   ctx: CanvasRenderingContext2D,
   def: Pick<SharkDef, "id" | "colors">,
@@ -1413,6 +1416,189 @@ export function drawSharkShape(
       ctx.fill();
     }
   }
+  if (def.id === "whitetip" && !gold) {
+    // Rounded fins with bright white tips.
+    ctx.fillStyle = "rgba(248,250,252,0.95)";
+    ctx.beginPath();
+    ctx.arc(-0.1 * u, -0.31 * u, 0.03 * u, 0, Math.PI * 2);
+    ctx.arc(-0.03 * u, 0.25 * u, 0.028 * u, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (def.id === "dunkleosteus") {
+    // Bony armor plates over the head + blade-like jaw plates.
+    ctx.fillStyle = gold ? "#eab308" : "#78716c";
+    ctx.beginPath();
+    ctx.moveTo(0.5 * u, 0.0);
+    ctx.quadraticCurveTo(0.42 * u, -0.17 * u, 0.12 * u, -0.16 * u);
+    ctx.lineTo(0.1 * u, 0.02 * u);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = gold ? "#fde68a" : "rgba(28,25,23,0.6)";
+    ctx.lineWidth = 0.01 * u;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(0.18 * u + i * 0.09 * u, -0.15 * u);
+      ctx.lineTo(0.16 * u + i * 0.09 * u, 0.0);
+      ctx.stroke();
+    }
+  }
+  if (def.id === "crimsonTyrant" && !gold) {
+    // Pulsing blood veins along the flank.
+    ctx.strokeStyle = `rgba(239,68,68,${0.55 + 0.35 * Math.sin(phase * 1.6)})`;
+    ctx.lineWidth = 0.012 * u;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(0.26 * u, -0.06 * u + i * 0.04 * u);
+      ctx.quadraticCurveTo(0.0, -0.1 * u + i * 0.05 * u + Math.sin(phase + i) * 0.015 * u, -0.34 * u, -0.02 * u + i * 0.02 * u);
+      ctx.stroke();
+    }
+  }
+  if (def.id === "silky" && !gold) {
+    // Silky sheen.
+    ctx.strokeStyle = "rgba(199,210,254,0.55)";
+    ctx.lineWidth = 0.02 * u;
+    ctx.beginPath();
+    ctx.moveTo(0.34 * u, -0.1 * u);
+    ctx.quadraticCurveTo(0.0, -0.15 * u, -0.34 * u, -0.05 * u);
+    ctx.stroke();
+  }
+  if (def.id === "stormRider" && !gold) {
+    // Swirling wind arcs.
+    ctx.strokeStyle = `rgba(125,211,252,${0.6 + 0.3 * Math.sin(phase * 2.5)})`;
+    ctx.lineWidth = 0.012 * u;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(0.1 * u - i * 0.14 * u, -0.02 * u, 0.07 * u, phase + i, phase + i + Math.PI * 1.2);
+      ctx.stroke();
+    }
+  }
+  if (def.id === "mirage" && !gold) {
+    // Faint afterimage trailing the body.
+    ctx.fillStyle = "rgba(240,171,252,0.22)";
+    for (let i = 1; i <= 2; i++) {
+      ctx.beginPath();
+      ctx.ellipse(-0.08 * u - i * 0.12 * u, Math.sin(phase + i) * 0.02 * u, 0.32 * u, 0.12 * u, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (def.id === "cookiecutter" && !gold) {
+    // Dark collar band + glowing belly.
+    ctx.fillStyle = "rgba(24,24,27,0.7)";
+    ctx.fillRect(0.16 * u, -0.14 * u, 0.06 * u, 0.26 * u);
+    ctx.fillStyle = `rgba(45,212,191,${0.35 + 0.25 * Math.sin(phase * 1.5)})`;
+    ctx.beginPath();
+    ctx.ellipse(-0.06 * u, 0.09 * u, 0.24 * u, 0.025 * u, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (def.id === "voidMaw" && !gold) {
+    // Swirling rift on the flank.
+    ctx.strokeStyle = `rgba(34,211,238,${0.6 + 0.3 * Math.sin(phase * 2)})`;
+    ctx.lineWidth = 0.012 * u;
+    ctx.beginPath();
+    for (let i = 0; i < 24; i++) {
+      const a = phase * 1.5 + i * 0.5, rr = 0.005 * u + i * 0.0032 * u;
+      const x = -0.05 * u + Math.cos(a) * rr, y = -0.01 * u + Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  if (def.id === "psyShark") {
+    // Bulging brain dome with psychic rings.
+    ctx.fillStyle = gold ? "#fde68a" : "rgba(244,114,182,0.75)";
+    ctx.beginPath();
+    ctx.ellipse(0.26 * u, -0.15 * u, 0.12 * u, 0.07 * u, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+    if (!gold) {
+      ctx.strokeStyle = `rgba(249,168,212,${0.3 + 0.3 * Math.sin(phase * 2)})`;
+      ctx.lineWidth = 0.008 * u;
+      ctx.beginPath();
+      ctx.arc(0.26 * u, -0.17 * u, 0.15 * u + Math.sin(phase) * 0.01 * u, Math.PI * 1.1, Math.PI * 1.9);
+      ctx.stroke();
+    }
+  }
+  if (def.id === "frostfang") {
+    // Long icy fangs jutting below the jaw.
+    ctx.fillStyle = gold ? "#fde68a" : "rgba(224,242,254,0.95)";
+    for (const x of [0.34, 0.42]) {
+      ctx.beginPath();
+      ctx.moveTo(x * u - 0.014 * u, 0.05 * u);
+      ctx.lineTo(x * u + 0.014 * u, 0.05 * u);
+      ctx.lineTo(x * u, 0.15 * u);
+      ctx.fill();
+    }
+  }
+  if (def.id === "glacierTitan") {
+    // Iceberg chunks riding on the back.
+    ctx.fillStyle = gold ? "#eab308" : "rgba(219,234,254,0.92)";
+    for (let i = 0; i < 3; i++) {
+      const x = 0.18 * u - i * 0.13 * u, h = (0.12 - i * 0.02) * u;
+      ctx.beginPath();
+      ctx.moveTo(x - 0.06 * u, -0.13 * u);
+      ctx.lineTo(x - 0.01 * u, -0.13 * u - h);
+      ctx.lineTo(x + 0.05 * u, -0.13 * u - h * 0.6);
+      ctx.lineTo(x + 0.06 * u, -0.13 * u);
+      ctx.fill();
+    }
+  }
+  if (def.id === "snowQueen") {
+    // Snowflake crown on the head.
+    ctx.fillStyle = gold ? "#fde68a" : `rgba(186,230,253,${0.8 + 0.2 * Math.sin(phase * 1.4)})`;
+    for (let i = 0; i < 5; i++) {
+      const x = 0.2 * u + i * 0.04 * u, h = (i === 2 ? 0.11 : i % 2 ? 0.07 : 0.05) * u;
+      ctx.beginPath();
+      ctx.moveTo(x - 0.016 * u, -0.145 * u);
+      ctx.lineTo(x, -0.145 * u - h);
+      ctx.lineTo(x + 0.016 * u, -0.145 * u);
+      ctx.fill();
+    }
+  }
+  if (def.id === "spinyDogfish" && !gold) {
+    // White spots + venom spine in front of the dorsal fin.
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    for (let i = 0; i < 6; i++) {
+      ctx.beginPath();
+      ctx.arc(0.14 * u - i * 0.08 * u, -0.08 * u + (i % 2) * 0.02 * u, 0.012 * u, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 0.012 * u;
+    ctx.beginPath();
+    ctx.moveTo(0.08 * u, -0.14 * u);
+    ctx.lineTo(0.04 * u, -0.27 * u);
+    ctx.stroke();
+  }
+  if (def.id === "chimera") {
+    // Ram horn + venom-tipped tail spike.
+    ctx.strokeStyle = gold ? "#eab308" : accent;
+    ctx.lineWidth = 0.022 * u;
+    ctx.beginPath();
+    ctx.arc(0.26 * u, -0.17 * u, 0.05 * u, Math.PI * 0.9, Math.PI * 2.1);
+    ctx.stroke();
+    ctx.fillStyle = gold ? "#eab308" : "#a3e635";
+    ctx.beginPath();
+    ctx.moveTo(-0.38 * u, -0.03 * u);
+    ctx.lineTo(-0.3 * u, -0.17 * u);
+    ctx.lineTo(-0.28 * u, -0.04 * u);
+    ctx.fill();
+  }
+  if (def.id === "nightshade" && !gold) {
+    // Poison blossoms along the back.
+    for (let i = 0; i < 4; i++) {
+      const cx = 0.18 * u - i * 0.12 * u, cy = -0.12 * u + i * 0.01 * u;
+      ctx.fillStyle = `rgba(192,132,252,${0.75 + 0.2 * Math.sin(phase + i)})`;
+      for (let k = 0; k < 5; k++) {
+        const a = (k * Math.PI * 2) / 5 + phase * 0.3;
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(a) * 0.016 * u, cy + Math.sin(a) * 0.016 * u, 0.012 * u, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#a3e635";
+      ctx.beginPath();
+      ctx.arc(cx, cy, 0.008 * u, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   if (def.id === "megalodon" && !gold) {
     ctx.strokeStyle = "rgba(127,29,29,0.7)";
     ctx.lineWidth = 0.012 * u;
@@ -1494,7 +1680,7 @@ export function drawSharkShape(
   }
 
   // Eye.
-  ctx.fillStyle = (def.id === "leviathan" || def.id === "phantom" || def.id === "cryodon" || def.id === "basilisk" || def.id === "abyssLantern" || def.id === "aurora" || def.id === "bladeShark") && !gold ? accent : "#020617";
+  ctx.fillStyle = (def.id === "leviathan" || def.id === "phantom" || def.id === "cryodon" || def.id === "basilisk" || def.id === "abyssLantern" || def.id === "aurora" || def.id === "bladeShark" || GLOW_EYES.has(def.id)) && !gold ? accent : "#020617";
   ctx.beginPath();
   ctx.arc(0.34 * u, -0.045 * u, 0.024 * u, 0, Math.PI * 2);
   ctx.fill();

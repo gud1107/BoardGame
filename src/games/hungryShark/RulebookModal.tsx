@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Overlay from "@/components/Overlay";
-import { ALL_MISSIONS_BONUS_RATE, allMissionsBonusRate, MISSION_STREAK_CAP, MISSION_STREAK_STEP, BRANCH_INFO, ENTITY_DEFS, MAPS, FRENZY_STEPS, mapCoinBonus, MISSIONS, NEVER, PREY_EFFECTS, preyEffectLabel, SHARKS, sharksOfTier, type EntityKind, type MapDef } from "./data";
+import { ALL_MISSIONS_BONUS_RATE, allMissionsBonusRate, MISSION_STREAK_CAP, MISSION_STREAK_STEP, BRANCH_INFO, ENTITY_DEFS, MAPS, FRENZY_STEPS, mapCoinBonus, MISSIONS, NEVER, PREY_EFFECTS, preyEffectLabel, SHARKS, sharksOfTier, TREE_ORDER, type EntityKind, type MapDef } from "./data";
 import { mapExclusives } from "./markers";
 import MapProfile from "./MapProfile";
 
@@ -99,9 +99,9 @@ export default function RulebookModal({ onClose, focusMap }: { onClose: () => vo
         </section>
 
         <section>
-          <h3 className={H3}>진화 트리 (5계통 · 26종)</h3>
+          <h3 className={H3}>진화 트리 (5계통 · 41종)</h3>
           <p className={`mb-2 ${P}`}>
-            암초상어에서 출발해 2티어부터 <b>다섯 갈래 계통</b> 중 하나로 진화하고, 3티어에서 계통마다 <b>두 갈래</b>로 한 번 더 나뉩니다. 상위 상어를 해금하려면 바로 이전 단계를 먼저 보유해야
+            암초상어에서 출발해 2티어부터 <b>다섯 갈래 계통</b> 중 하나로 진화하고, 3티어에서 계통마다 <b>세 갈래</b>로 한 번 더 나뉩니다. 세 번째 갈래는 4티어에서 다시 <b>둘 중 하나</b>를 고릅니다. 상위 상어를 해금하려면 바로 이전 단계를 먼저 보유해야
             하며, 다른 계통도 언제든 따로 키울 수 있습니다. 같은 티어의 상어는 같은 먹이를 먹고, 계통마다 능력치·패시브·고유 스킬이 다릅니다.
           </p>
           <div className="overflow-x-auto">
@@ -115,7 +115,7 @@ export default function RulebookModal({ onClose, focusMap }: { onClose: () => vo
                 </tr>
               </thead>
               <tbody className="text-white/75 light:text-slate-700">
-                {SHARKS.map((s) => (
+                {[...SHARKS].sort((a, b) => TREE_ORDER.indexOf(a.id) - TREE_ORDER.indexOf(b.id)).map((s) => (
                   <tr key={s.id} className="border-t border-white/5 align-top light:border-slate-200">
                     <td className="py-1.5 pr-2 font-bold whitespace-nowrap">T{s.tier} {s.name}</td>
                     <td className="py-1.5 pr-2 whitespace-nowrap">{BRANCH_INFO[s.branch].emoji} {BRANCH_INFO[s.branch].short}</td>

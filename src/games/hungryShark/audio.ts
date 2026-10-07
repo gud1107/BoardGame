@@ -189,35 +189,43 @@ export class SharkAudio {
       case "sonicBreak":
       case "slipstream":
       case "bladeDash":
+      case "zigzagDash":
+      case "tempest":
         this.noise(0.35, 1800, 0.8, 0.5, 6000);
         this.tone(440, 0.25, "sawtooth", 0.08, 1320);
         break;
       case "crush":
       case "frenzyBite":
+      case "ironJaw":
         this.crunch(true);
         this.tone(90, 0.3, "square", 0.15, 50);
         break;
       case "surgeRam":
       case "titanRoar":
       case "sawWhorl":
+      case "crimsonTide":
         this.explosion(id === "titanRoar");
         this.tone(55, 0.9, "sawtooth", 0.25, 35);
         break;
       case "sonar":
       case "lure":
+      case "bloodScent":
         [880, 660, 440].forEach((n, i) => this.tone(n, 0.5, "sine", 0.12, undefined, i * 0.18, true));
         break;
       case "shadowCloak":
+      case "afterimage":
         this.tone(300, 0.6, "sine", 0.15, 90);
         this.noise(0.6, 600, 2, 0.3, 150);
         break;
       case "emp":
       case "starburst":
+      case "mindWave":
         this.noise(0.4, 4000, 3, 0.6, 800);
         this.tone(1200, 0.3, "square", 0.06, 200, 0, true);
         break;
       case "snapJaw":
       case "hydraFangs":
+      case "leechBite":
         this.tone(700, 0.12, "triangle", 0.15, 1400);
         this.crunch(false);
         break;
@@ -225,6 +233,9 @@ export class SharkAudio {
       case "iceArmor":
       case "iceSpear":
       case "auroraVeil":
+      case "hailstorm":
+      case "glacialCrash":
+      case "frostCrown":
         [1568, 1319, 1047].forEach((n, i) => this.tone(n, 0.35, "sine", 0.1, undefined, i * 0.06, true));
         this.noise(0.5, 5000, 2, 0.3, 2500);
         break;
@@ -233,6 +244,7 @@ export class SharkAudio {
         this.tone(880, 1.2, "sine", 0.08, 440);
         break;
       case "venomSpit":
+      case "quillVolley":
         [0, 0.07, 0.14].forEach((d) => this.tone(900, 0.08, "triangle", 0.1, 1500, d, true));
         break;
       case "tailWhip":
@@ -241,10 +253,13 @@ export class SharkAudio {
         this.tone(160, 0.3, "square", 0.12, 60);
         break;
       case "plague":
+      case "acidPool":
+      case "toxicBloom":
         this.noise(1.0, 900, 1.5, 0.5, 200, "lowpass");
         this.tone(130, 0.9, "sawtooth", 0.12, 90);
         break;
       case "blackHole":
+      case "riftPull":
         this.tone(220, 1.6, "sine", 0.3, 30);
         this.noise(1.6, 300, 1.5, 0.5, 60, "lowpass");
         break;
