@@ -60,12 +60,17 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.54.0",
     releaseDate: "2026-10-08",
-    title: "✏️ 낙서 결투 그래픽 전면 개편 + 이동 기능",
+    title: "🎲 랜덤 합성 디펜스 신규 추가, ✏️ 낙서 결투 그래픽 전면 개편 + 이동 기능",
     changes: [
       {
         game: "common",
         type: "FEAT",
         desc: "온라인 대기실 입장 효과음 — 내가 들어오면 맑은 도어벨, 다른 플레이어 입장 시 통통 튀는 팝, 퇴장 시 부드러운 노크",
+      },
+      {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "랜덤 합성 디펜스 신규 추가 — 소환·합성으로 같은 웨이브를 막는 2~4인 실시간 생존전(정예 몬스터 전송, 보스, 💎 도박, AI 봇)",
       },
       {
         game: "ink-duel",

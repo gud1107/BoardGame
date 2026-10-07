@@ -74,6 +74,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "merge-defense",
+    name: "랜덤 합성 디펜스",
+    nameEn: "Merge Defense",
+    description:
+      "소환 버튼 한 번에 무작위 유닛 등장! 같은 유닛 둘을 합치면 한 단계 높은 등급의 무작위 유닛이 돼요. 모두가 같은 웨이브를 동시에 막는 2~4인 실시간 생존 대결 — 몬스터를 많이 잡을수록 상대에게 정예 몬스터가 넘어가고, 길 위의 몬스터가 넘치면 탈락. 마지막까지 버티면 승리!",
+    players: { min: 2, max: 4 },
+    playTime: { minMinutes: 8, maxMinutes: 15 },
+    category: "party",
+    thumbnail: { emoji: "🎲", gradient: ["#f97316", "#312e81"] },
+    tags: ["디펜스", "실시간", "합성", "운빨", "AI봇"],
+    genres: ["luck", "strategy"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "ink-duel",
     name: "낙서 결투",
     nameEn: "Ink Duel",

@@ -21,6 +21,7 @@ export const GAME_DIFFICULTY: Record<string, 1 | 2 | 3 | 4 | 5> = {
   "splendor-duel": 3,
   "lotr-duel": 4,
   "city-chase": 2,
+  "merge-defense": 1,
   "ink-duel": 2,
   "doodle-phone": 1,
   "avalon": 3,
