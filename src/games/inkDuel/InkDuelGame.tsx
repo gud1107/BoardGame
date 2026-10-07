@@ -12,6 +12,9 @@ import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
+import { CharacterPicker, MapPicker, mapLabel } from "./LobbyPickers";
+import { CharacterAvatar } from "./ArenaCanvas";
+import { isMapId, MAP_IDS, type MapId } from "./maps";
 import {
   applyAction,
   chooseBotAction,
@@ -62,6 +65,10 @@ type Occupant = {
   playerId?: string;
   isHost?: boolean;
   targetPlayerCount?: number;
+  /** Character this player picked (null/undefined = no preference). */
+  character?: number;
+  /** Host only: the map choice for the next match. */
+  mapPick?: MapId | "random";
 };
 type Phase =
   | "choose"
@@ -102,6 +109,10 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const [targetPlayerCount, setTargetPlayerCount] = useState(2);
   const [formError, setFormError] = useState<string | null>(null);
   const [showRulebook, setShowRulebook] = useState(false);
+  const [myChar, setMyChar] = useState<number | null>(null);
+  const myCharRef = useRef<number | null>(null);
+  const [mapPick, setMapPick] = useState<MapId | "random">("random");
+  const mapPickRef = useRef<MapId | "random">("random");
   const [animating, setAnimating] = useState(false);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -204,7 +215,9 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       setBotLevels(levels);
       botTakeoverRef.current = INITIAL_BOT_TAKEOVER_STATE;
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
-      setGameState(startGame(playerCount, seed));
+      const characters = (payload?.characters as (number | null)[] | undefined) ?? [];
+      const map = isMapId(payload?.map) ? payload.map : undefined;
+      setGameState(startGame(playerCount, seed, { map, characters }));
       setFinalResult(null);
       setPhase("playing");
     });
@@ -331,7 +344,8 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
           seat,
           name: myName,
           playerId: myPlayerId,
-          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
+          character: myCharRef.current ?? undefined,
+          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current } : {}),
         } satisfies Occupant);
         requestStateSync();
         setPhase((p) => (p === "connecting" ? "waiting" : p));
@@ -349,6 +363,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const deviceId = typeof window !== "undefined" ? getDeviceId() : "";
   const host = occupants.find((o) => o.isHost);
   const knownTargetPlayerCount = host?.targetPlayerCount ?? targetPlayerCount;
+  const hostMapLabel = mapLabel(host?.mapPick);
   const reclaimAttemptsRef = useRef(0);
 
   useEffect(() => {
@@ -375,7 +390,8 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       seat: next,
       name: myName,
       playerId: myPlayerId,
-      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current } : {}),
+      character: myCharRef.current ?? undefined,
+      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current } : {}),
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
@@ -384,12 +400,36 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     // Early start ("지금 시작") may leave target seats empty — only count the
     // filled ones so no phantom seat ever gets a turn (see RatATatCat).
     const filledCount = Math.min(playerCountRef.current, occupantsRef.current.length + botSeatsRef.current.length);
+    const characters = Array.from({ length: filledCount }, (_, seat) => occupantsRef.current.find((o) => o.seat === seat)?.character ?? null);
+    const pick = mapPickRef.current;
+    const map = pick === "random" ? MAP_IDS[Math.floor(Math.random() * MAP_IDS.length)] : pick;
     channelRef.current?.send({
       type: "broadcast",
       event: "game-start",
-      payload: { seed: Math.floor(Math.random() * 2 ** 31), playerCount: filledCount, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current },
+      payload: { seed: Math.floor(Math.random() * 2 ** 31), playerCount: filledCount, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, characters, map },
     });
   }, []);
+
+  /** Re-publish my presence after changing my character (or, as host, the map). */
+  const retrack = (next: { character?: number | null; map?: MapId | "random" }) => {
+    if (next.character !== undefined) {
+      myCharRef.current = next.character;
+      setMyChar(next.character);
+    }
+    if (next.map !== undefined) {
+      mapPickRef.current = next.map;
+      setMapPick(next.map);
+    }
+    if (mySeat === null || !channelRef.current) return;
+    channelRef.current.track({
+      deviceId,
+      seat: mySeat,
+      name: myName,
+      playerId: myPlayerId,
+      character: myCharRef.current ?? undefined,
+      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current } : {}),
+    } satisfies Occupant);
+  };
 
   useEffect(() => {
     if (phase !== "waiting" || !isHost || startSentRef.current) return;
@@ -771,6 +811,28 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
             </div>
           </label>
         )}
+        <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
+          내 캐릭터 <span className="text-[11px] text-white/40 light:text-slate-400">(대기실에서도 바꿀 수 있어요 · 겹치면 먼저 고른 사람 우선)</span>
+          <CharacterPicker
+            value={myChar}
+            onChange={(c) => {
+              myCharRef.current = c;
+              setMyChar(c);
+            }}
+          />
+        </div>
+        {intent === "create" && (
+          <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
+            맵
+            <MapPicker
+              value={mapPick}
+              onChange={(m) => {
+                mapPickRef.current = m;
+                setMapPick(m);
+              }}
+            />
+          </div>
+        )}
         {formError && <p className="rounded-lg bg-rose-500/10 light:bg-rose-50 px-3 py-2 text-xs text-rose-300 light:text-rose-700">{formError}</p>}
         <div className="flex gap-2">
           <button onClick={() => setPhase("choose")} className="flex-1 rounded-xl border border-white/15 light:border-slate-300 py-2.5 text-sm text-white/70 light:text-slate-600 hover:border-white/30 light:hover:border-slate-400">
@@ -813,7 +875,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
                 return (
                   <div key={seat} className="flex items-center justify-between gap-3 text-sm text-white/70 light:text-slate-600">
                     <span className="flex items-center gap-1.5">
-                      {occ && <Avatar size={20} />}
+                      {occ && (occ.character !== undefined && occ.character !== null ? <CharacterAvatar char={occ.character} size={24} /> : <Avatar size={20} />)}
                       {seat === mySeat ? "나" : `${seat + 1}번`}: {occ ? occ.name : isBot ? <BotSeatBadge label={botLabel(botIdx, botLevels[botIdx])} /> : <span className="text-white/30 light:text-slate-400">대기 중...</span>}
                     </span>
                     {isHost && seat !== mySeat && !occ && (isBot ? <RemoveBotButton onClick={() => removeBotAtSeat(seat)} /> : <AddBotButton onAddWithLevel={(level) => addBotAtSeat(seat, level)} />)}
@@ -821,6 +883,24 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
                 );
               })}
             </div>
+            <div className="mt-1 flex w-full max-w-md flex-col gap-1.5 text-left text-xs text-white/60 light:text-slate-500">
+              내 캐릭터
+              <CharacterPicker
+                value={myChar}
+                onChange={(c) => retrack({ character: c })}
+                takenBy={Object.fromEntries(
+                  occupants.filter((o) => o.deviceId !== deviceId && typeof o.character === "number").map((o) => [o.character as number, o.name]),
+                )}
+              />
+            </div>
+            {isHost ? (
+              <div className="flex w-full max-w-md flex-col gap-1.5 text-left text-xs text-white/60 light:text-slate-500">
+                맵
+                <MapPicker value={mapPick} onChange={(m) => retrack({ map: m })} />
+              </div>
+            ) : (
+              hostMapLabel && <p className="text-xs text-white/60 light:text-slate-500">맵: {hostMapLabel}</p>
+            )}
             <p className="text-xs text-white/40 light:text-slate-400">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다. AI 봇으로도 채울 수 있어요.</p>
             {isHost && occupants.length + botSeats.length >= MIN_PLAYERS && occupants.length + botSeats.length < knownTargetPlayerCount && (
               <button onClick={sendGameStart} className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500">

@@ -29,6 +29,8 @@ export interface Wall {
   hp: number;
   maxHp: number;
   color: number;
+  /** Set for a 🛡️ shield: it guards this seat and vanishes when that seat's next turn starts. */
+  shieldOf?: number;
 }
 
 export interface Body {
@@ -48,6 +50,8 @@ export interface FlightResult {
   /** Walls a spear went through. */
   pierced: number[];
   ticks: number;
+  /** A boomerang came back and the thrower caught it (no impact). */
+  caught?: boolean;
 }
 
 export function surfaceY(terrain: readonly number[], x: number): number {
@@ -128,6 +132,9 @@ export function simulateFlight(
   let x = shooter.x;
   let y = shooter.y - MUZZLE_Y;
   let { vx, vy } = launchVelocity(angleDeg, power, stats.speedMul);
+  // Boomerangs are pulled back toward the side they were thrown from.
+  const throwDir = vx >= 0 ? 1 : -1;
+  const boomerang = stats.returnAcc > 0;
   let theta = 0;
   let c = 1;
   let s = 0;
@@ -154,7 +161,18 @@ export function simulateFlight(
 
   for (let tick = 1; tick <= MAX_TICKS; tick++) {
     vx += wind;
-    vy += GRAVITY;
+    if (boomerang && tick > 10) {
+      if (vx * throwDir > 0) {
+        vx -= throwDir * stats.returnAcc;
+      } else {
+        // On the way back it homes in (spring + damping) on the thrower's hands.
+        vx += (shooter.x - x) * 0.004;
+        vy += (shooter.y - MUZZLE_Y - y) * 0.004;
+        vx *= 0.985;
+        vy *= 0.985;
+      }
+    }
+    vy += GRAVITY * stats.gravityMul;
     x += vx;
     y += vy;
     if (stats.spin === 0) {
@@ -165,7 +183,7 @@ export function simulateFlight(
       c = stats.axisX * ux + stats.axisY * uy;
       s = stats.axisX * uy - stats.axisY * ux;
     } else {
-      theta += vx >= 0 ? stats.spin : -stats.spin;
+      theta += (boomerang ? throwDir : vx >= 0 ? 1 : -1) * stats.spin;
       c = dcos(theta);
       s = dsin(theta);
     }
@@ -190,6 +208,15 @@ export function simulateFlight(
       const by = b.y - PLAYER_R;
       const dx = b.x - x;
       const dy = by - y;
+      if (boomerang && b.seat === shooter.seat) {
+        // The thrower catches a returning boomerang instead of being hit by it.
+        const catchR = PLAYER_R + R * 0.6 + 10;
+        if (dx * dx + dy * dy <= catchR * catchR) {
+          frames.push(r2(x), r2(y), r2(c), r2(s));
+          return { frames, impact: null, directSeat: null, wallStop: null, pierced, ticks: tick, caught: true };
+        }
+        continue;
+      }
       const reach = R + PLAYER_R;
       if (dx * dx + dy * dy > reach * reach) continue;
       if (fast) {

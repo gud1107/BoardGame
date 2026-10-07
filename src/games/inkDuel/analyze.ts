@@ -99,12 +99,13 @@ export function degToRad(deg: number): number {
 // Shape analysis
 // ---------------------------------------------------------------------------
 
-export type WeaponKind = "spear" | "bomb" | "lightning" | "club";
+export type WeaponKind = "spear" | "bomb" | "lightning" | "boomerang" | "club";
 
 export const WEAPON_LABEL: Record<WeaponKind, { emoji: string; name: string; hint: string }> = {
   spear: { emoji: "🗡️", name: "창", hint: "곧은 선 — 벽을 관통하고 빠르게 날아가요" },
   bomb: { emoji: "💣", name: "폭탄", hint: "닫힌 도형 — 넓을수록 큰 폭발, 지형을 파요" },
   lightning: { emoji: "⚡", name: "번개", hint: "지그재그 — 주변 적에게 연쇄 피해" },
+  boomerang: { emoji: "🪃", name: "부메랑", hint: "부드러운 C자 호 — 나갔다가 돌아와요, 오갈 때 모두 맞힐 수 있어요" },
   club: { emoji: "🪨", name: "몽둥이", hint: "자유 낙서 — 묵직한 둔기 피해" },
 };
 
@@ -133,6 +134,10 @@ export interface WeaponStats {
   pierce: boolean;
   /** Spin in radians per tick (0 for spears, which align with velocity instead). */
   spin: number;
+  /** Boomerang: horizontal pull back toward the thrower (px/tick²), 0 for everything else. */
+  returnAcc: number;
+  /** Gravity multiplier (boomerangs float). */
+  gravityMul: number;
 }
 
 /** Pad → world scale for weapons (a full 200px pad doodle ≈ 70px in the arena). */
@@ -190,6 +195,25 @@ function countTurns(pts: number[]): { turns: number; spikes: number; zigzag: num
   return { turns, spikes, zigzag };
 }
 
+/**
+ * Signed total turning of a polyline, as the sum of sin(turn) per step —
+ * deterministic arithmetic only. A smooth half circle ≈ ±π.
+ */
+function curl(pts: number[]): number {
+  let total = 0;
+  for (let i = 2; i + 3 < pts.length; i += 2) {
+    const ax = pts[i] - pts[i - 2];
+    const ay = pts[i + 1] - pts[i - 1];
+    const bx = pts[i + 2] - pts[i];
+    const by = pts[i + 3] - pts[i + 1];
+    const la = Math.sqrt(ax * ax + ay * ay);
+    const lb = Math.sqrt(bx * bx + by * by);
+    if (la < 1e-6 || lb < 1e-6) continue;
+    total += (ax * by - ay * bx) / (la * lb);
+  }
+  return total;
+}
+
 function polygonArea(pts: number[]): number {
   let a = 0;
   const n = pts.length / 2;
@@ -244,10 +268,14 @@ export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
     zigzag += t.zigzag;
   }
 
+  const mainTurns = countTurns(rs).turns;
+  const mainCurl = curl(rs);
   let kind: WeaponKind;
   if (straightness >= 0.85 && mainLen >= 70) kind = "spear";
   else if (closed && area >= 900) kind = "bomb";
   else if (zigzag >= 3) kind = "lightning";
+  // A smooth, open arc that bends one way by ≳110° with almost no sharp corners.
+  else if (!closed && mainLen >= 60 && Math.abs(mainCurl) >= 1.9 && mainTurns <= 2 && straightness >= 0.15 && straightness < 0.85) kind = "boomerang";
   else kind = "club";
 
   // Centroid (ink-weighted by resampled points), then scale to world units.
@@ -293,6 +321,8 @@ export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
   let speedMul = 1.15 - 0.35 * weight;
   let pierce = false;
   let spin = 0.04 + 0.1 * (1 - straightness);
+  let returnAcc = 0;
+  let gravityMul = 1;
   switch (kind) {
     case "spear":
       damage = 28 * wf;
@@ -309,6 +339,14 @@ export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
       damage = 13 * wf;
       blastRadius = 20;
       chains = clamp(Math.floor(zigzag / 3), 1, 3);
+      break;
+    case "boomerang":
+      damage = 19 * wf;
+      blastRadius = 16;
+      speedMul += 0.1;
+      spin = 0.3;
+      returnAcc = 0.13;
+      gravityMul = 0.45;
       break;
     default:
       damage = 17 * wf;
@@ -339,5 +377,7 @@ export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
     speedMul,
     pierce,
     spin,
+    returnAcc,
+    gravityMul,
   };
 }

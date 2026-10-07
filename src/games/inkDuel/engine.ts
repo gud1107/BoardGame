@@ -17,6 +17,8 @@ import { seededRng, shuffle } from "@/lib/rng";
 import { pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import {
   analyzeWeapon,
+  dcos,
+  degToRad,
   dsin,
   INK_PER_TURN,
   PAD_SIZE,
@@ -39,6 +41,7 @@ import {
   type Body,
   type Wall,
 } from "./physics";
+import { CHARACTER_COUNT, MAPS, type MapId } from "./maps";
 
 export type SeatIndex = number;
 
@@ -59,6 +62,10 @@ export const MOVE_INK_PER_PX = 0.25;
 const MOVE_PERSONAL_SPACE = 36;
 /** …or through a wall point lower than this above the ground. */
 const WALL_BLOCK_HEIGHT = 40;
+/** 🛡️ Shield: drawn doodle scaled up and stood next to the player; damage to its owner ×SHIELD_GUARD while it stands. */
+const SHIELD_SCALE = 1.3;
+const SHIELD_HP_PER_INK = 1.3;
+export const SHIELD_GUARD = 0.6;
 const BURN_DMG = 6;
 const POISON_DMG = 4;
 const CHAIN_RANGE = 240;
@@ -110,8 +117,11 @@ export type InkEvent =
       killed: SeatIndex[];
       dots: DotRecord[];
       move?: MoveRecord;
+      /** A boomerang came back to its thrower. */
+      caught?: boolean;
     }
   | { kind: "wall"; id: number; seat: SeatIndex; wallId: number; dots: DotRecord[]; move?: MoveRecord }
+  | { kind: "shield"; id: number; seat: SeatIndex; wallId: number; dots: DotRecord[]; move?: MoveRecord }
   | { kind: "pass"; id: number; seat: SeatIndex; dots: DotRecord[]; move?: MoveRecord };
 
 /** The acting player walked from `from` to `to` (x) before acting this turn. */
@@ -123,6 +133,9 @@ export interface MoveRecord {
 export interface InkDuelState {
   seed: number;
   playerCount: number;
+  map: MapId;
+  /** Character art index per seat (unique; see arenaArt CHARACTERS). */
+  characters: number[];
   players: Player[];
   terrain: number[];
   walls: Wall[];
@@ -149,37 +162,66 @@ export interface InkDuelState {
 export type EngineAction =
   | { type: "fire"; seat: SeatIndex; strokes: Stroke[]; angle: number; power: number; move?: number }
   | { type: "wall"; seat: SeatIndex; strokes: Stroke[]; move?: number }
+  | { type: "shield"; seat: SeatIndex; strokes: Stroke[]; angle: number; move?: number }
   | { type: "pass"; seat: SeatIndex; move?: number };
 
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
 
-function windFor(seed: number, turnNo: number): number {
+function windFor(seed: number, turnNo: number, map: MapId): number {
   const rng = seededRng((seed + turnNo * 7919) | 0);
-  return Math.round((rng() * 2 - 1) * 40) / 1000;
+  return Math.round((rng() * 2 - 1) * 40 * MAPS[map].windMul) / 1000;
 }
 
-function generateTerrain(rng: () => number): number[] {
-  const f1 = 0.004 + rng() * 0.004;
-  const f2 = 0.012 + rng() * 0.01;
-  const f3 = 0.03 + rng() * 0.02;
+function generateTerrain(rng: () => number, map: MapId): number[] {
+  const t = MAPS[map].terrain;
+  // The meadow keeps the original generator so existing seeds stay identical.
+  const f1 = map === "meadow" ? 0.004 + rng() * 0.004 : t.freqs[0] * (0.7 + rng() * 0.6);
+  const f2 = map === "meadow" ? 0.012 + rng() * 0.01 : t.freqs[1] * (0.7 + rng() * 0.6);
+  const f3 = map === "meadow" ? 0.03 + rng() * 0.02 : t.freqs[2] * (0.7 + rng() * 0.6);
   const p1 = rng() * 6;
   const p2 = rng() * 6;
   const p3 = rng() * 6;
   const out: number[] = [];
   for (let i = 0; i < TERRAIN_COLS; i++) {
     const x = i * COL_W;
-    const h = 400 + 45 * dsin(x * f1 + p1) + 24 * dsin(x * f2 + p2) + 8 * dsin(x * f3 + p3);
+    const h = t.base + t.amps[0] * dsin(x * f1 + p1) + t.amps[1] * dsin(x * f2 + p2) + t.amps[2] * dsin(x * f3 + p3);
     out.push(Math.round(Math.max(300, Math.min(480, h)) * 10) / 10);
   }
   return out;
 }
 
-export function startGame(playerCount: number, seed: number): InkDuelState {
+/** Each seat gets its requested character if nobody earlier claimed it; the rest are dealt from what's left. */
+function resolveCharacters(count: number, seed: number, requested: readonly (number | null | undefined)[] | undefined): number[] {
+  const out = new Array<number>(count).fill(-1);
+  const used = new Set<number>();
+  for (let seat = 0; seat < count; seat++) {
+    const c = requested?.[seat];
+    if (typeof c === "number" && Number.isInteger(c) && c >= 0 && c < CHARACTER_COUNT && !used.has(c)) {
+      out[seat] = c;
+      used.add(c);
+    }
+  }
+  const free = shuffle(
+    Array.from({ length: CHARACTER_COUNT }, (_, i) => i).filter((c) => !used.has(c)),
+    seededRng((seed ^ 0x5bd1e995) | 0),
+  );
+  for (let seat = 0; seat < count; seat++) if (out[seat] < 0) out[seat] = free.shift() ?? seat % CHARACTER_COUNT;
+  return out;
+}
+
+export interface StartOptions {
+  map?: MapId;
+  /** Requested character per seat (null/undefined = no preference). */
+  characters?: readonly (number | null | undefined)[];
+}
+
+export function startGame(playerCount: number, seed: number, options: StartOptions = {}): InkDuelState {
   const count = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, playerCount));
+  const map: MapId = options.map && MAPS[options.map] ? options.map : "meadow";
   const rng = seededRng(seed);
-  let terrain = generateTerrain(rng);
+  let terrain = generateTerrain(rng, map);
   const order = shuffle(
     Array.from({ length: count }, (_, i) => i),
     rng,
@@ -214,6 +256,8 @@ export function startGame(playerCount: number, seed: number): InkDuelState {
   return {
     seed,
     playerCount: count,
+    map,
+    characters: resolveCharacters(count, seed, options.characters),
     players,
     terrain,
     walls: [],
@@ -222,7 +266,7 @@ export function startGame(playerCount: number, seed: number): InkDuelState {
     turnSeat: first,
     turnNo: 0,
     round: 1,
-    wind: windFor(seed, 0),
+    wind: windFor(seed, 0, map),
     inkBudget: INK_PER_TURN,
     deathGroups: [],
     lastEvent: null,
@@ -339,6 +383,42 @@ export function applyMove(state: InkDuelState, seat: SeatIndex, dx: number): Ink
   return { ...state, players, inkBudget: Math.round((state.inkBudget - cost) * 100) / 100 };
 }
 
+/**
+ * The wall a 🛡️ shield doodle becomes: the pad drawing scaled up and stood
+ * beside the player in the `angle` direction (0 = right, 90 = up). Shared by
+ * the reducer and the UI preview.
+ */
+export function shieldWall(state: InkDuelState, seat: SeatIndex, strokes: readonly Stroke[], angle: number): Wall {
+  const me = state.players[seat];
+  const stats = analyzeWeapon(strokes);
+  const a = degToRad(angle);
+  const dist = PLAYER_R + 14 + stats.radius * SHIELD_SCALE * 0.35;
+  const cx = me.x + dcos(a) * dist;
+  const cy = me.y - 20 - dsin(a) * dist;
+  const hp = Math.round(totalInk(strokes) * SHIELD_HP_PER_INK * 10) / 10;
+  const colorInk = [0, 0, 0, 0, 0];
+  for (const s of strokes) colorInk[s.c] += s.p.length;
+  let color = 0;
+  for (let i = 1; i < colorInk.length; i++) if (colorInk[i] > colorInk[color]) color = i;
+  return {
+    id: state.nextWallId,
+    owner: seat,
+    shieldOf: seat,
+    strokes: stats.shape.map((st) => {
+      const out: number[] = [];
+      for (let i = 0; i < st.p.length; i += 2) out.push(Math.round((cx + st.p[i] * SHIELD_SCALE) * 10) / 10, Math.round((cy + st.p[i + 1] * SHIELD_SCALE) * 10) / 10);
+      return out;
+    }),
+    hp,
+    maxHp: hp,
+    color,
+  };
+}
+
+export function hasShield(walls: readonly Wall[], seat: SeatIndex): boolean {
+  return walls.some((w) => w.shieldOf === seat && w.hp > 0);
+}
+
 // ---------------------------------------------------------------------------
 // Reducer
 // ---------------------------------------------------------------------------
@@ -379,6 +459,16 @@ function applyActionInPlace(state: InkDuelState, action: EngineAction): InkDuelS
     const wall: Wall = { id: state.nextWallId, owner: action.seat, strokes: action.strokes.map((s) => s.p.slice()), hp, maxHp: hp, color };
     const next = { ...state, walls: [...state.walls, wall], nextWallId: state.nextWallId + 1 };
     return endTurn(next, { kind: "wall", id: state.seq + 1, seat: action.seat, wallId: wall.id, dots: [] }, next.players, next.terrain, next.walls);
+  }
+
+  if (action.type === "shield") {
+    if (!strokesValid(action.strokes, PAD_SIZE, PAD_SIZE) || !validInk(state, action.strokes)) return state;
+    if (!Number.isInteger(action.angle) || action.angle < 0 || action.angle > 180) return state;
+    const wall = shieldWall(state, action.seat, action.strokes, action.angle);
+    // A fresh shield replaces any leftover one (there shouldn't be — they expire on the owner's turn).
+    const walls = [...state.walls.filter((w) => w.shieldOf !== action.seat), wall];
+    const next = { ...state, walls, nextWallId: state.nextWallId + 1 };
+    return endTurn(next, { kind: "shield", id: state.seq + 1, seat: action.seat, wallId: wall.id, dots: [] }, next.players, next.terrain, next.walls);
   }
 
   // fire
@@ -432,6 +522,7 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
       }
       if (dmg <= 0) continue;
       if (p.seat === seat) dmg *= SELF_DMG_MUL;
+      if (hasShield(walls, p.seat)) dmg *= SHIELD_GUARD;
       hits.push({ seat: p.seat, dmg: Math.round(dmg * mul), direct, chain: false });
     }
     // Lightning chains: jump to the nearest living, not-yet-hit enemy.
@@ -453,7 +544,7 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
           }
         }
         if (!best) break;
-        hits.push({ seat: best.seat, dmg: Math.round(stats.damage * 0.5 * mul), direct: false, chain: true });
+        hits.push({ seat: best.seat, dmg: Math.round(stats.damage * 0.5 * mul * (hasShield(walls, best.seat) ? SHIELD_GUARD : 1)), direct: false, chain: true });
         lx = best.x;
         ly = best.y - PLAYER_R;
         chainPath.push(Math.round(lx), Math.round(ly));
@@ -465,7 +556,8 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
       if (flight.wallStop === w.id) w.hp -= stats.damage * 1.5;
       else if (blast > 0 && wallTouchesCircle(w, ix, iy, blast)) w.hp -= stats.damage;
     }
-    craterRadius = stats.kind === "bomb" ? stats.blastRadius * 0.85 : stats.kind === "club" ? stats.blastRadius * 0.5 : stats.kind === "lightning" ? 10 : 0;
+    craterRadius = stats.kind === "bomb" ? stats.blastRadius * 0.85 : stats.kind === "club" ? stats.blastRadius * 0.5 : stats.kind === "lightning" || stats.kind === "boomerang" ? 10 : 0;
+    craterRadius *= MAPS[state.map].craterMul;
     if (craterRadius > 0) terrain = carveCrater(terrain, ix, iy, craterRadius);
   }
 
@@ -507,6 +599,7 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
       hpBefore,
       killed,
       dots: [],
+      ...(flight.caught ? { caught: true } : {}),
     },
   };
 }
@@ -525,7 +618,8 @@ function resolveShot(state: InkDuelState, seat: SeatIndex, stats: WeaponStats, a
 }
 
 /** Advances to the next living seat, applying start-of-turn burn/poison (which can kill and skip). */
-function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terrain: number[], walls: Wall[]): InkDuelState {
+function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terrain: number[], walls0: Wall[]): InkDuelState {
+  let walls = walls0;
   const players = players0.map((p) => ({ ...p }));
   let deathGroups = state.deathGroups;
   const dots: DotRecord[] = [];
@@ -546,7 +640,7 @@ function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terra
     turnSeat: seat,
     turnNo,
     round,
-    wind: windFor(state.seed, turnNo),
+    wind: windFor(state.seed, turnNo, state.map),
     inkBudget: phase === "playing" && players[seat]?.frozen ? FROZEN_INK : INK_PER_TURN,
     lastEvent: { ...event, dots },
     seq: state.seq + 1,
@@ -567,6 +661,10 @@ function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terra
     round = Math.floor(turnNo / n) + 1;
     seat = next;
     if (round > MAX_ROUNDS) return finish("gameOver");
+    const startingSeat = seat;
+    if (walls.some((w) => w.shieldOf === startingSeat || (w.shieldOf !== undefined && !players[w.shieldOf]?.alive))) {
+      walls = walls.filter((w) => w.shieldOf !== startingSeat && (w.shieldOf === undefined || players[w.shieldOf]?.alive));
+    }
     const p = players[seat];
     let tick = 0;
     if (p.burn > 0) {
@@ -596,7 +694,7 @@ function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terra
 // Bots (ARCHITECTURE.md §7)
 // ---------------------------------------------------------------------------
 
-type Template = "spear" | "bomb" | "lightning" | "club";
+type Template = "spear" | "bomb" | "lightning" | "boomerang" | "club";
 
 /** Procedurally "draws" a doodle of one archetype on the pad, fitting `budget` ink. */
 export function botDoodle(template: Template, color: InkColor, budget: number, rng: () => number): Stroke[] {
@@ -622,6 +720,15 @@ export function botDoodle(template: Template, color: InkColor, budget: number, r
     case "lightning":
       for (let t = 0; t <= 8; t++) pts.push(30 + t * 18, t % 2 === 0 ? 70 : 130);
       break;
+    case "boomerang": {
+      // Smooth "C" arc (~200°).
+      const r = 55 + rng() * 15;
+      for (let t = 0; t <= 20; t++) {
+        const a = -1.7 + (t / 20) * 3.5;
+        pts.push(100 + r * dsin(a + 1.5707963267948966), 100 + r * dsin(a));
+      }
+      break;
+    }
     default:
       for (let t = 0; t <= 14; t++) {
         const a = t * 1.9;
@@ -638,7 +745,7 @@ export function botDoodle(template: Template, color: InkColor, budget: number, r
   return strokes;
 }
 
-const TEMPLATES: readonly Template[] = ["spear", "bomb", "lightning", "club"];
+const TEMPLATES: readonly Template[] = ["spear", "bomb", "lightning", "boomerang", "club"];
 
 /**
  * Situational preference for each weapon kind, added on top of the simulated
@@ -659,6 +766,8 @@ function kindBonus(state: InkDuelState, seat: SeatIndex, t: Template): number {
     }
     case "bomb":
       return enemyWalls ? 3 : 0;
+    case "boomerang":
+      return 3;
     default:
       return 1;
   }
@@ -681,10 +790,11 @@ export function getValidMoves(state: InkDuelState, seat: SeatIndex): EngineActio
   if (currentActor(state) !== seat) return [];
   const rng = seededRng((state.seed + state.seq * 31) | 0);
   const moves: EngineAction[] = [{ type: "pass", seat }];
-  for (const t of ["spear", "bomb", "lightning", "club"] as Template[]) {
+  for (const t of TEMPLATES) {
     const strokes = botDoodle(t, 0, state.inkBudget, rng);
     for (const angle of [30, 60, 90, 120, 150]) moves.push({ type: "fire", seat, strokes, angle, power: 60 });
   }
+  moves.push({ type: "shield", seat, strokes: botDoodle("bomb", 2, state.inkBudget, rng), angle: 90 });
   return moves;
 }
 
@@ -728,16 +838,22 @@ export function chooseBotAction(state: InkDuelState, seat: SeatIndex, level: Bot
   const enemies = state.players.filter((p) => p.alive && p.seat !== seat);
   if (enemies.length === 0) return { type: "pass", seat };
 
-  // Defensive wall when hurt and unprotected.
-  const hasWall = state.walls.some((w) => w.owner === seat && w.hp > 15);
-  if (level >= 3 && !hasWall && me.hp <= 55 && rng() < 0.3) {
+  // Defensive wall or shield when hurt and unprotected.
+  const hasWall = state.walls.some((w) => w.owner === seat && w.shieldOf === undefined && w.hp > 15);
+  if (level >= 3 && !hasWall && me.hp <= 55 && rng() < 0.35) {
+    if (rng() < 0.5) {
+      // Bubble shield facing the closest enemy.
+      const near = enemies.reduce((a, b) => (Math.abs(b.x - me.x) < Math.abs(a.x - me.x) ? b : a));
+      const strokes = botDoodle("bomb", 2, Math.min(state.inkBudget, 60), rng);
+      if (totalInk(strokes) >= MIN_INK) return { type: "shield", seat, strokes, angle: near.x < me.x ? 150 : 30 };
+    }
     const wall = botWall(state, seat, rng);
     if (wall) return { type: "wall", seat, strokes: wall };
   }
 
   // Per-turn "mood": a random lean toward each weapon kind, so equally good
   // options don't always resolve to the same kind.
-  const mood: Record<Template, number> = { spear: rng() * 8, bomb: rng() * 8, lightning: rng() * 8, club: rng() * 8 };
+  const mood: Record<Template, number> = { spear: rng() * 8, bomb: rng() * 8, lightning: rng() * 8, boomerang: rng() * 8, club: rng() * 8 };
   // Walk options: stronger bots reposition for a better angle (walking eats ink).
   const walks = level >= 4 ? [0, -60, -30, 30, 60] : [0];
   const scored: { move: Extract<EngineAction, { type: "fire" }>; score: number }[] = [];

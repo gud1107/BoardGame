@@ -13,12 +13,15 @@ import {
   currentActor,
   FROZEN_INK,
   getValidMoves,
+  hasShield,
+  SHIELD_GUARD,
   startGame,
   wallPlacementError,
   type EngineAction,
   type InkDuelState,
 } from "./engine";
 import { surfaceY } from "./physics";
+import { MAP_IDS } from "./maps";
 
 function line(x0: number, y0: number, x1: number, y1: number, steps = 20, c: Stroke["c"] = 0): Stroke {
   const p: number[] = [];
@@ -126,6 +129,96 @@ describe("reducer", () => {
     expect(next.walls).toHaveLength(1);
     const far = [line(me.x < 480 ? 900 : 20, 50, me.x < 480 ? 900 : 20, 120, 8)];
     expect(wallPlacementError(s, s.turnSeat, far)).not.toBeNull();
+  });
+});
+
+function arc(c: Stroke["c"] = 0): Stroke {
+  // Smooth ~200° "C" arc.
+  const p: number[] = [];
+  for (let i = 0; i <= 24; i++) {
+    const a = -1.75 + (i / 24) * 3.5;
+    p.push(Math.round(100 + 60 * Math.cos(a)), Math.round(100 + 60 * Math.sin(a)));
+  }
+  return { c, p };
+}
+
+describe("boomerang", () => {
+  it("classifies a smooth C arc as a boomerang (not a club)", () => {
+    const s = analyzeWeapon([arc()]);
+    expect(s.kind).toBe("boomerang");
+    expect(s.returnAcc).toBeGreaterThan(0);
+  });
+
+  it("comes back: thrown straight out with nobody in the way, it reverses and the thrower catches it", () => {
+    let s = startGame(2, 31);
+    const seat = s.turnSeat;
+    // Park the other player far away on the opposite side so the throw meets nobody.
+    const me = s.players[seat];
+    const dir = me.x < 480 ? 1 : -1;
+    s = { ...s, wind: 0, players: s.players.map((p) => (p.seat === seat ? p : { ...p, x: me.x < 480 ? 20 : 940 })) };
+    const next = applyAction(s, { type: "fire", seat, strokes: [arc()], angle: dir > 0 ? 60 : 120, power: 60 });
+    const ev = next.lastEvent;
+    expect(ev?.kind).toBe("shot");
+    if (ev?.kind !== "shot") return;
+    const xs = ev.frames.filter((_, i) => i % 4 === 0);
+    const far = dir > 0 ? Math.max(...xs) : Math.min(...xs);
+    expect(Math.abs(far - me.x)).toBeGreaterThan(40);
+    // It turns around and comes back into the thrower's hands.
+    expect(ev.caught).toBe(true);
+    expect(Math.abs(xs[xs.length - 1] - me.x)).toBeLessThan(40);
+  });
+});
+
+describe("shield", () => {
+  it("stands next to the player, cuts damage taken, and expires when the owner's turn comes back", () => {
+    let s = startGame(2, 41);
+    const a = s.turnSeat;
+    const b = 1 - a;
+    const shieldAction: EngineAction = { type: "shield", seat: a, strokes: [circle(45, 2)], angle: 90 };
+    s = applyAction(s, shieldAction);
+    expect(s.lastEvent?.kind).toBe("shield");
+    expect(s.walls.filter((w) => w.shieldOf === a)).toHaveLength(1);
+    expect(hasShield(s.walls, a)).toBe(true);
+    // b passes → a's turn starts → shield is gone.
+    s = applyAction(s, { type: "pass", seat: b });
+    expect(s.turnSeat).toBe(a);
+    expect(s.walls.some((w) => w.shieldOf === a)).toBe(false);
+  });
+
+  it("damage to a shielded player is reduced by SHIELD_GUARD", () => {
+    const base = startGame(2, 11);
+    const shooter = base.turnSeat;
+    const target = 1 - shooter;
+    const s = { ...base, players: base.players.map((p) => (p.seat === target ? { ...p, x: base.players[shooter].x + 8, y: surfaceY(base.terrain, base.players[shooter].x + 8) } : p)) };
+    const fire: EngineAction = { type: "fire", seat: shooter, strokes: [circle(60, 0)], angle: 90, power: 40 };
+    const plain = applyAction(s, fire).lastEvent;
+    // A far-away dummy shield still grants the guard (it's an aura while the shield stands).
+    const guarded = applyAction({ ...s, walls: [{ id: 99, owner: target, shieldOf: target, strokes: [[5, 5, 6, 6]], hp: 50, maxHp: 50, color: 2 }] }, fire).lastEvent;
+    if (plain?.kind !== "shot" || guarded?.kind !== "shot") throw new Error("expected shots");
+    const p = plain.hits.find((h) => h.seat === target)!.dmg;
+    const g = guarded.hits.find((h) => h.seat === target)!.dmg;
+    expect(g).toBeLessThan(p);
+    expect(Math.abs(g - p * SHIELD_GUARD)).toBeLessThanOrEqual(1.5);
+  });
+});
+
+describe("characters & maps", () => {
+  it("honours unique picks and deals the rest deterministically without duplicates", () => {
+    const s = startGame(4, 7, { characters: [3, 3, null, 5] });
+    expect(s.characters[0]).toBe(3);
+    expect(s.characters[3]).toBe(5);
+    expect(new Set(s.characters).size).toBe(4);
+    expect(startGame(4, 7, { characters: [3, 3, null, 5] }).characters).toEqual(s.characters);
+  });
+
+  it("each map changes the terrain, the meadow stays identical to the legacy generator", () => {
+    const meadow = startGame(2, 99).terrain;
+    expect(startGame(2, 99, { map: "meadow" }).terrain).toEqual(meadow);
+    for (const m of MAP_IDS) {
+      const s = startGame(2, 99, { map: m });
+      expect(s.map).toBe(m);
+      if (m !== "meadow") expect(s.terrain).not.toEqual(meadow);
+    }
   });
 });
 

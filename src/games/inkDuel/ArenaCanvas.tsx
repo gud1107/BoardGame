@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { INK_COLORS, MAX_POINTS_PER_STROKE, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
 import {
+  Ambient,
   characterFor,
   crayon,
   drawAimArrow,
@@ -12,6 +13,7 @@ import {
   drawDamageNumber,
   drawNameplate,
   drawProjectile,
+  drawShieldArt,
   drawTombstone,
   drawTurnMarker,
   drawWallArt,
@@ -21,8 +23,9 @@ import {
   WindStreaks,
 } from "./arenaArt";
 import { WALL_RANGE, type InkDuelState, type InkEvent, type Player } from "./engine";
+import type { MapId } from "./maps";
 import { playImpactSound, playLaunchSound } from "./inkDuelAudio";
-import { GRAVITY, launchVelocity, MUZZLE_Y, surfaceY, WORLD_H, WORLD_W } from "./physics";
+import { GRAVITY, launchVelocity, MUZZLE_Y, surfaceY, WORLD_H, WORLD_W, type Wall } from "./physics";
 
 /** Seat accent colors (HUD chips etc.) — the character body colors. */
 export const SEAT_COLORS = ["#8b5cf6", "#fb923c", "#14b8a6", "#f472b6"];
@@ -53,12 +56,14 @@ interface Props {
   onAnimDone: () => void;
   names: Record<number, string>;
   turnSeat: number | null;
-  /** Aim preview for the seat about to fire (viewer's own turn, weapon mode). */
-  aim: { seat: number; angle: number; power: number; speedMul: number } | null;
+  /** Aim preview for the seat about to act. `noArc` (shield mode) keeps the drag-to-aim but hides the trajectory. */
+  aim: { seat: number; angle: number; power: number; speedMul: number; noArc?: boolean } | null;
   onAim?: (angle: number, power: number) => void;
   wallDraft: WallDraft | null;
   /** While previewing a walk: where the walker started (drawn as a faint ghost + footprints). */
   walkFrom?: { seat: number; x: number } | null;
+  /** Shield being drawn this turn, shown as a dashed bubble. */
+  shieldPreview?: Wall | null;
 }
 
 function nearestEnemy(players: readonly Player[], seat: number): Player | null {
@@ -71,13 +76,18 @@ function nearestEnemy(players: readonly Player[], seat: number): Player | null {
   return best;
 }
 
-const WORD: Record<ShotEvent["stats"]["kind"], string> = { spear: "푸욱!", bomb: "콰광!", lightning: "지지직!", club: "빠악!" };
+const WORD: Record<ShotEvent["stats"]["kind"], string> = { spear: "푸욱!", bomb: "콰광!", lightning: "지지직!", boomerang: "휘리릭 퍽!", club: "빠악!" };
 
-export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, aim, onAim, wallDraft, walkFrom = null }: Props) {
+/** Character art index for a seat (older states without `characters` fall back to the seat). */
+function charOf(state: InkDuelState, seat: number): number {
+  return state.characters?.[seat] ?? seat;
+}
+
+export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, aim, onAim, wallDraft, walkFrom = null, shieldPreview = null }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const propsRef = useRef({ view, anim, names, turnSeat, aim, wallDraft, walkFrom });
+  const propsRef = useRef({ view, anim, names, turnSeat, aim, wallDraft, walkFrom, shieldPreview });
   useEffect(() => {
-    propsRef.current = { view, anim, names, turnSeat, aim, wallDraft, walkFrom };
+    propsRef.current = { view, anim, names, turnSeat, aim, wallDraft, walkFrom, shieldPreview };
   });
   const onAnimDoneRef = useRef(onAnimDone);
   useEffect(() => {
@@ -95,12 +105,22 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas.width = WORLD_W * dpr;
     canvas.height = WORLD_H * dpr;
-    const background = renderBackground(dpr);
+    const backgrounds = new Map<MapId, HTMLCanvasElement>();
+    const backgroundFor = (map: MapId) => {
+      let bg = backgrounds.get(map);
+      if (!bg) {
+        bg = renderBackground(dpr, map);
+        backgrounds.set(map, bg);
+      }
+      return bg;
+    };
+    let ambient: Ambient | null = null;
+    let ambientMap: MapId | null = null;
     const terrainCache = new Map<readonly number[], HTMLCanvasElement>();
-    const terrainLayer = (terrain: readonly number[]) => {
+    const terrainLayer = (terrain: readonly number[], map: MapId) => {
       let layer = terrainCache.get(terrain);
       if (!layer) {
-        layer = renderTerrain(terrain, dpr);
+        layer = renderTerrain(terrain, dpr, map);
         terrainCache.set(terrain, layer);
         if (terrainCache.size > 4) terrainCache.delete(terrainCache.keys().next().value!);
       }
@@ -116,7 +136,12 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
       raf = requestAnimationFrame(loop);
       const dt = lastNow ? Math.min(0.05, (now - lastNow) / 1000) : 0.016;
       lastNow = now;
-      const { view, anim, names, turnSeat, aim, wallDraft, walkFrom } = propsRef.current;
+      const { view, anim, names, turnSeat, aim, wallDraft, walkFrom, shieldPreview } = propsRef.current;
+      const map: MapId = view.map ?? "meadow";
+      if (ambientMap !== map) {
+        ambient = new Ambient(map);
+        ambientMap = map;
+      }
       fx.update(now);
 
       let clock = animClockRef.current;
@@ -164,7 +189,7 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.save();
       if (fx.shake > 0) ctx.translate((Math.random() - 0.5) * fx.shake, (Math.random() - 0.5) * fx.shake);
-      ctx.drawImage(background, -8, -8, WORLD_W + 16, WORLD_H + 16);
+      ctx.drawImage(backgroundFor(map), -8, -8, WORLD_W + 16, WORLD_H + 16);
       wind.draw(ctx, scene.wind, now);
 
       // Wall-zone hint while drawing walls.
@@ -181,9 +206,10 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
         ctx.restore();
       }
 
-      ctx.drawImage(terrainLayer(scene.terrain), 0, 0, WORLD_W, WORLD_H);
+      ctx.drawImage(terrainLayer(scene.terrain, map), 0, 0, WORLD_W, WORLD_H);
       fx.drawSplats(ctx);
-      drawWallArt(ctx, scene.walls);
+      drawWallArt(ctx, scene.walls, now);
+      if (shieldPreview && !anim) drawShieldArt(ctx, shieldPreview, 1, true, now);
 
       // Walk preview: translucent ghost at the start + footprints.
       if (walkFrom && !anim) {
@@ -191,10 +217,10 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
         const tx = scene.players[walkFrom.seat].x;
         ctx.save();
         ctx.globalAlpha = 0.32;
-        drawCharacter(ctx, { seat: walkFrom.seat, x: gx, y: surfaceY(scene.terrain, gx), now, facing: tx > gx ? 1 : -1 });
+        drawCharacter(ctx, { seat: walkFrom.seat, char: charOf(scene, walkFrom.seat), x: gx, y: surfaceY(scene.terrain, gx), now, facing: tx > gx ? 1 : -1 });
         ctx.restore();
         ctx.save();
-        ctx.fillStyle = characterFor(walkFrom.seat).dark;
+        ctx.fillStyle = characterFor(charOf(scene, walkFrom.seat)).dark;
         ctx.globalAlpha = 0.45;
         const step = tx > gx ? 10 : -10;
         let n = 0;
@@ -211,7 +237,7 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
       const projY = inFlight && ev ? ev.frames[idx * 4 + 1] : null;
       for (const p of scene.players) {
         if (!p.alive && !(anim && inImpact && ev?.killed.includes(p.seat) && impactT < HURT_MS)) {
-          drawTombstone(ctx, p.x, p.y, p.seat, now);
+          drawTombstone(ctx, p.x, p.y, charOf(scene, p.seat), now);
           continue;
         }
         const enemy = nearestEnemy(scene.players, p.seat);
@@ -236,6 +262,7 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
         const hurt = hit ? Math.max(0, 1 - impactT / HURT_MS) : 0;
         drawCharacter(ctx, {
           seat: p.seat,
+          char: charOf(scene, p.seat),
           x: p.x,
           y: p.y,
           now,
@@ -251,9 +278,11 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
       }
       for (const p of scene.players) {
         if (!p.alive) continue;
-        drawNameplate(ctx, p.x, p.y, p.seat, names[p.seat] ?? `P${p.seat + 1}`, hp[p.seat] ?? p.hp, ghostHp[p.seat] ?? p.hp);
+        drawNameplate(ctx, p.x, p.y, charOf(scene, p.seat), names[p.seat] ?? `P${p.seat + 1}`, hp[p.seat] ?? p.hp, ghostHp[p.seat] ?? p.hp);
         if (!anim && turnSeat === p.seat) drawTurnMarker(ctx, p.x, p.y, now);
       }
+
+      ambient?.draw(ctx, scene.wind, now);
 
       // Wall drafts in progress.
       if (wallDraft) {
@@ -264,7 +293,7 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
       }
 
       // Aim: short dotted arc + arrow.
-      if (aim && !anim) {
+      if (aim && !anim && !aim.noArc) {
         const me = view.players[aim.seat];
         let x = me.x;
         let y = me.y - MUZZLE_Y;
@@ -281,14 +310,14 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = characterFor(aim.seat).dark;
+            ctx.fillStyle = characterFor(charOf(view, aim.seat)).dark;
             ctx.beginPath();
             ctx.arc(x, y, 2.6, 0, Math.PI * 2);
             ctx.fill();
           }
         }
         ctx.restore();
-        drawAimArrow(ctx, me.x, me.y - MUZZLE_Y, aim.angle, aim.power, characterFor(aim.seat).base, now);
+        drawAimArrow(ctx, me.x, me.y - MUZZLE_Y, aim.angle, aim.power, characterFor(charOf(view, aim.seat)).base, now);
       }
 
       // Projectile in flight: afterimages + glowing doodle + element trail.
@@ -316,6 +345,9 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
         if (ev.impact) {
           const word = ev.hits.length === 0 ? "퍽!" : ev.crit ? "크리티컬!!" : WORD[ev.stats.kind];
           drawComicText(ctx, word, ev.impact.x, Math.min(WORLD_H - 30, ev.impact.y + Math.max(26, ev.stats.blastRadius * 0.6) + 14), impactT, ev.hits.length === 0 ? "#9ca3af" : ev.crit ? "#f59e0b" : "#ef4444", ev.crit ? 36 : 30);
+        } else if (ev.caught) {
+          const me = anim.target.players[ev.seat];
+          drawComicText(ctx, "탁! 받았다", me.x, me.y - 130, impactT, "#0ea5e9", 24);
         } else {
           const lx = Math.max(60, Math.min(WORLD_W - 60, ev.frames[(frameCount - 1) * 4]));
           drawComicText(ctx, "휘익~ 빗나감", lx, 90, impactT, "#94a3b8", 24);
@@ -415,7 +447,7 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
 }
 
 /** Static character portrait for HUD chips and result cards. */
-export function CharacterAvatar({ seat, size = 32, dead = false }: { seat: number; size?: number; dead?: boolean }) {
+export function CharacterAvatar({ char, size = 32, dead = false }: { char: number; size?: number; dead?: boolean }) {
   const ref = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
     const c = ref.current;
@@ -429,7 +461,7 @@ export function CharacterAvatar({ seat, size = 32, dead = false }: { seat: numbe
     ctx.clearRect(0, 0, 50, 50);
     ctx.globalAlpha = dead ? 0.4 : 1;
     // Frame the head/body: character spans roughly y-48..y and x±22.
-    drawCharacter(ctx, { seat, x: 25, y: 50, now: 1000, facing: 1, look: { x: 60, y: 30 }, scale: 1 });
-  }, [seat, size, dead]);
+    drawCharacter(ctx, { seat: char, char, x: 25, y: 50, now: 1000, facing: 1, look: { x: 60, y: 30 }, scale: 1 });
+  }, [char, size, dead]);
   return <canvas ref={ref} style={{ width: size, height: size }} className={dead ? "grayscale" : ""} />;
 }

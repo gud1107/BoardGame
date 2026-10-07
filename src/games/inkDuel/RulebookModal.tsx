@@ -29,6 +29,7 @@ export default function InkDuelRulebookModal({ onClose }: { onClose: () => void 
             <div className={box}>🗡️ <b>창</b> — 곧게 쭉 그은 선. 벽을 <b>관통</b>하고 빠르게 날아가지만 직격해야만 피해(높은 피해).</div>
             <div className={box}>💣 <b>폭탄</b> — 시작점과 끝점이 만나는 닫힌 도형. 넓게 그릴수록 폭발 반경↑, 지형을 파내요.</div>
             <div className={box}>⚡ <b>번개</b> — 지그재그. 맞은 곳에서 가까운 적에게 연쇄 피해 (꺾을수록 연쇄↑).</div>
+            <div className={box}>🪃 <b>부메랑</b> — 부드럽게 휜 C자 호(닫히지 않게). 나갔다가 되돌아와요 — 오갈 때 모두 맞힐 수 있고, 돌아오면 내가 받아내요.</div>
             <div className={box}>🪨 <b>몽둥이</b> — 그 밖의 자유 낙서. 작은 범위의 묵직한 둔기 피해.</div>
           </div>
           <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-white/60 light:text-slate-500">
@@ -52,15 +53,32 @@ export default function InkDuelRulebookModal({ onClose }: { onClose: () => void 
         </section>
 
         <section>
-          <h3 className={h3}>③ 내 차례에 할 수 있는 일 (둘 중 하나)</h3>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <h3 className={h3}>③ 내 차례에 할 수 있는 일 (셋 중 하나)</h3>
+          <div className="grid gap-2 sm:grid-cols-3">
             <div className={box}>⚔️ <b>무기 그리기</b> — 공책 패드에 그리고, 각도·힘을 정해 발사. 경기장을 드래그해서 조준할 수도 있어요. 점선은 궤적의 앞부분만 보여줘요.</div>
+            <div className={box}>🛡️ <b>방패</b> — 공책 패드에 그린 모양이 내 옆(정한 방향)에 방패로 서요. 내구도 = 잉크 ×1.3, 다음 내 차례까지 받는 피해 −40%.</div>
             <div className={box}>🧱 <b>벽 그리기</b> — 내 주변 파란 영역에 직접 선을 그어 벽 생성. 내구도 = 사용한 잉크. 상대 바로 옆에는 그릴 수 없어요.</div>
           </div>
           <p className="mt-2 text-xs text-white/60 light:text-slate-500">
             🚶 <b>이동</b> — 행동 전에 좌우로 최대 80px 걸을 수 있어요. 4px 걸을 때마다 잉크 1이 들어서(80px = 잉크 20), 많이 걸을수록 그릴 잉크가 줄어요. 상대나 땅에 붙은 벽은 지나갈 수 없어요.
           </p>
           <p className="mt-2 text-xs text-white/50 light:text-slate-500">🌬️ 바람은 매 턴 바뀌어요. 제한 시간 45초가 지나면 그려둔 무기가 자동 발사되고, 없으면 패스합니다.</p>
+        </section>
+
+        <section>
+          <h3 className={h3}>④ 캐릭터 & 맵</h3>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className={box}>🎭 <b>캐릭터 6종</b> — 마법사·고양이·개구리·토끼·병아리·펭귄. 방에 들어가기 전이나 대기실에서 고르고, 겹치면 먼저 고른 사람이 우선이에요 (능력 차이 없음).</div>
+            <div className={box}>
+              🗺️ <b>맵 4종</b> (방장이 선택, 랜덤 가능)
+              <ul className="mt-1 space-y-0.5 text-xs text-white/60 light:text-slate-500">
+                <li>🌼 공책 들판 — 기본</li>
+                <li>🏜️ 모래 사막 — 바람 1.6배</li>
+                <li>❄️ 눈 덮인 산 — 구덩이 1.4배</li>
+                <li>🌋 불꽃 화산 — 구덩이 0.7배, 들쭉날쭉한 지형</li>
+              </ul>
+            </div>
+          </div>
         </section>
       </div>
     </Overlay>

@@ -60,7 +60,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.54.0",
     releaseDate: "2026-10-08",
-    title: "🎲 랜덤 합성 디펜스 신규 추가, ✏️ 낙서 결투 그래픽 전면 개편 + 이동 기능",
+    title: "🎲 랜덤 합성 디펜스 신규 추가, ✏️ 낙서 결투 그래픽 개편·캐릭터·맵·새 무기",
     changes: [
       {
         game: "common",
@@ -86,6 +86,21 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         game: "ink-duel",
         type: "IMPROVE",
         desc: "AI 봇이 상황에 따라 창·폭탄·번개를 골고루 쓰고, 더 좋은 각도를 찾아 이동해요 · 모바일에서 경기장과 그림판이 한 화면에",
+      },
+      {
+        game: "ink-duel",
+        type: "FEAT",
+        desc: "캐릭터 6종 중 직접 선택(병아리·펭귄 추가) + 맵 4종(들판·사막·눈 덮인 산·화산) — 맵마다 바람·구덩이 규칙과 날씨가 달라요",
+      },
+      {
+        game: "ink-duel",
+        type: "FEAT",
+        desc: "새 무기 🪃 부메랑(C자 호 — 돌아와서 내가 받아요)과 🛡️ 방패(그린 모양이 방패로 서고 다음 차례까지 받는 피해 −40%)",
+      },
+      {
+        game: "ink-duel",
+        type: "FIX",
+        desc: "모바일에서 🎲 버튼이 발사 버튼을 가리던 문제 수정",
       },
     ],
   },

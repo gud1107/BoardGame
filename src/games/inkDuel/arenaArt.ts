@@ -8,6 +8,7 @@
  */
 
 import { INK_COLORS, type Element } from "./analyze";
+import type { MapId } from "./maps";
 import { surfaceY, WORLD_H, WORLD_W, type Wall } from "./physics";
 
 // ---------------------------------------------------------------------------
@@ -20,7 +21,7 @@ export interface CharacterArt {
   light: string;
   dark: string;
   belly: string;
-  kind: "wizard" | "cat" | "frog" | "bunny";
+  kind: "wizard" | "cat" | "frog" | "bunny" | "chick" | "penguin";
 }
 
 export const CHARACTERS: CharacterArt[] = [
@@ -28,6 +29,8 @@ export const CHARACTERS: CharacterArt[] = [
   { name: "귤 고양이", base: "#fb923c", light: "#fed7aa", dark: "#9a3412", belly: "#fff7ed", kind: "cat" },
   { name: "민트 개구리", base: "#14b8a6", light: "#99f6e4", dark: "#115e59", belly: "#f0fdfa", kind: "frog" },
   { name: "딸기 토끼", base: "#f472b6", light: "#fbcfe8", dark: "#9d174d", belly: "#fdf2f8", kind: "bunny" },
+  { name: "레몬 병아리", base: "#facc15", light: "#fef08a", dark: "#a16207", belly: "#fefce8", kind: "chick" },
+  { name: "바다 펭귄", base: "#2563eb", light: "#93c5fd", dark: "#172554", belly: "#ffffff", kind: "penguin" },
 ];
 
 export function characterFor(seat: number): CharacterArt {
@@ -107,28 +110,34 @@ function wash(ctx: CanvasRenderingContext2D, pts: readonly number[], color: stri
 // Background (paper + scenery) — rendered once
 // ---------------------------------------------------------------------------
 
-export function renderBackground(dpr: number): HTMLCanvasElement {
+export function renderBackground(dpr: number, map: MapId = "meadow"): HTMLCanvasElement {
   const [c, ctx] = makeCanvas(WORLD_W, WORLD_H, dpr);
   const rng = mulberry(7);
 
-  // Paper + soft sky wash.
+  // Paper + sky wash in the map's palette.
   ctx.fillStyle = "#fbf7ec";
   ctx.fillRect(0, 0, WORLD_W, WORLD_H);
-  const sky = ctx.createLinearGradient(0, 0, 0, WORLD_H * 0.75);
-  sky.addColorStop(0, "rgba(125, 196, 245, 0.38)");
-  sky.addColorStop(0.55, "rgba(186, 225, 250, 0.18)");
+  const skyStops: Record<MapId, [string, string]> = {
+    meadow: ["rgba(125, 196, 245, 0.38)", "rgba(186, 225, 250, 0.18)"],
+    desert: ["rgba(251, 146, 60, 0.42)", "rgba(253, 224, 71, 0.2)"],
+    snow: ["rgba(148, 163, 184, 0.45)", "rgba(203, 213, 225, 0.22)"],
+    volcano: ["rgba(127, 29, 29, 0.85)", "rgba(68, 64, 60, 0.55)"],
+  };
+  const sky = ctx.createLinearGradient(0, 0, 0, WORLD_H * 0.8);
+  sky.addColorStop(0, skyStops[map][0]);
+  sky.addColorStop(0.55, skyStops[map][1]);
   sky.addColorStop(1, "rgba(255, 255, 255, 0)");
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, WORLD_W, WORLD_H);
 
   // Paper grain.
   for (let i = 0; i < 5000; i++) {
-    ctx.fillStyle = rng() < 0.5 ? "rgba(120, 100, 70, 0.05)" : "rgba(255, 255, 255, 0.25)";
+    ctx.fillStyle = rng() < 0.5 ? "rgba(120, 100, 70, 0.05)" : "rgba(255, 255, 255, 0.2)";
     ctx.fillRect(rng() * WORLD_W, rng() * WORLD_H, 1 + rng() * 1.5, 1 + rng());
   }
 
   // Ruled lines + margin.
-  ctx.strokeStyle = "rgba(96, 140, 210, 0.22)";
+  ctx.strokeStyle = map === "volcano" ? "rgba(253, 186, 116, 0.14)" : "rgba(96, 140, 210, 0.22)";
   ctx.lineWidth = 1;
   for (let y = 46; y < WORLD_H; y += 28) {
     ctx.beginPath();
@@ -156,36 +165,39 @@ export function renderBackground(dpr: number): HTMLCanvasElement {
     ctx.stroke();
   }
 
-  // Sun with a smiley.
-  const sx = WORLD_W - 110;
-  const sy = 82;
-  const sun = ctx.createRadialGradient(sx, sy, 6, sx, sy, 52);
-  sun.addColorStop(0, "rgba(253, 224, 71, 0.55)");
-  sun.addColorStop(1, "rgba(253, 224, 71, 0)");
-  ctx.fillStyle = sun;
-  ctx.beginPath();
-  ctx.arc(sx, sy, 52, 0, Math.PI * 2);
-  ctx.fill();
-  const ring: number[] = [];
-  for (let i = 0; i <= 28; i++) {
-    const a = (i / 28) * Math.PI * 2;
-    ring.push(sx + Math.cos(a) * 24, sy + Math.sin(a) * 24);
-  }
-  wash(ctx, ring, "#fde047", rng, 0.35);
-  crayon(ctx, ring, "#f59e0b", 3, rng);
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2 + 0.2;
-    crayon(ctx, [sx + Math.cos(a) * 32, sy + Math.sin(a) * 32, sx + Math.cos(a) * (42 + (i % 2) * 7), sy + Math.sin(a) * (42 + (i % 2) * 7)], "#f59e0b", 2.6, rng);
-  }
-  ctx.fillStyle = "#92400e";
-  ctx.beginPath();
-  ctx.arc(sx - 8, sy - 4, 2.4, 0, Math.PI * 2);
-  ctx.arc(sx + 8, sy - 4, 2.4, 0, Math.PI * 2);
-  ctx.fill();
-  crayon(ctx, [sx - 9, sy + 6, sx - 4, sy + 10, sx + 4, sy + 10, sx + 9, sy + 6], "#92400e", 2, rng);
-
-  // Clouds.
-  const cloud = (cx: number, cy: number, s: number) => {
+  const circle = (x: number, y: number, r: number, n = 28) => {
+    const pts: number[] = [];
+    for (let i = 0; i <= n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      pts.push(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    }
+    return pts;
+  };
+  const sunWithFace = (sx: number, sy: number, r: number, fill: string, line: string, rays: boolean) => {
+    const glow = ctx.createRadialGradient(sx, sy, 6, sx, sy, r * 2.2);
+    glow.addColorStop(0, fill.replace("1)", "0.55)"));
+    glow.addColorStop(1, fill.replace("1)", "0)"));
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    const ring = circle(sx, sy, r);
+    wash(ctx, ring, fill, rng, 0.4);
+    crayon(ctx, ring, line, 3, rng);
+    if (rays) {
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + 0.2;
+        crayon(ctx, [sx + Math.cos(a) * (r + 8), sy + Math.sin(a) * (r + 8), sx + Math.cos(a) * (r + 18 + (i % 2) * 7), sy + Math.sin(a) * (r + 18 + (i % 2) * 7)], line, 2.6, rng);
+      }
+    }
+    ctx.fillStyle = "#92400e";
+    ctx.beginPath();
+    ctx.arc(sx - r * 0.33, sy - r * 0.16, 2.4, 0, Math.PI * 2);
+    ctx.arc(sx + r * 0.33, sy - r * 0.16, 2.4, 0, Math.PI * 2);
+    ctx.fill();
+    crayon(ctx, [sx - r * 0.38, sy + r * 0.25, sx - r * 0.16, sy + r * 0.42, sx + r * 0.16, sy + r * 0.42, sx + r * 0.38, sy + r * 0.25], "#92400e", 2, rng);
+  };
+  const cloud = (cx: number, cy: number, s: number, fill: string, line: string) => {
     const pts: number[] = [];
     const bumps = [
       [-1.6, 0.25, 0.7],
@@ -202,49 +214,146 @@ export function renderBackground(dpr: number): HTMLCanvasElement {
     }
     pts.push(cx + 2.1 * s * 20, cy + 0.55 * s * 20, cx - 2.1 * s * 20, cy + 0.55 * s * 20);
     ctx.save();
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fillStyle = fill;
     ctx.beginPath();
     ctx.moveTo(pts[0], pts[1]);
     for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
-    crayon(ctx, [...pts, pts[0], pts[1]], "#7dd3fc", 2.2, rng);
+    crayon(ctx, [...pts, pts[0], pts[1]], line, 2.2, rng);
   };
-  cloud(220, 92, 1.1);
-  cloud(520, 60, 0.85);
-  cloud(700, 140, 0.7);
-
-  // Birds + doodle stars.
-  for (const [bx, by] of [
-    [360, 120],
-    [385, 108],
-    [600, 190],
-  ]) {
-    crayon(ctx, [bx - 8, by - 3, bx - 3, by, bx, by - 4, bx + 3, by, bx + 8, by - 3], "#475569", 1.8, rng);
-  }
-  for (const [stx, sty] of [
-    [130, 190],
-    [860, 210],
-  ]) {
-    const st: number[] = [];
-    for (let i = 0; i <= 10; i++) {
-      const a = -Math.PI / 2 + (i / 10) * Math.PI * 2;
-      const r = i % 2 === 0 ? 9 : 4;
-      st.push(stx + Math.cos(a) * r, sty + Math.sin(a) * r);
-    }
-    crayon(ctx, st, "#fbbf24", 1.8, rng, 0.8);
-  }
-
-  // Distant watercolor hills (two layers).
   const hills = (base: number, amp: number, freq: number, phase: number, color: string, alpha: number) => {
     const pts: number[] = [0, WORLD_H];
     for (let x = 0; x <= WORLD_W; x += 16) pts.push(x, base - Math.sin(x * freq + phase) * amp - Math.sin(x * freq * 2.7 + phase * 2) * amp * 0.35);
     pts.push(WORLD_W, WORLD_H);
     wash(ctx, pts, color, rng, alpha);
   };
-  hills(300, 34, 0.007, 1.2, "#a5b4fc", 0.16);
-  hills(340, 26, 0.011, 3.1, "#86efac", 0.16);
+  const bird = (bx: number, by: number, color: string) => crayon(ctx, [bx - 8, by - 3, bx - 3, by, bx, by - 4, bx + 3, by, bx + 8, by - 3], color, 1.8, rng);
+  const star = (stx: number, sty: number, color: string, r = 9) => {
+    const st: number[] = [];
+    for (let i = 0; i <= 10; i++) {
+      const a = -Math.PI / 2 + (i / 10) * Math.PI * 2;
+      st.push(stx + Math.cos(a) * (i % 2 === 0 ? r : r * 0.45), sty + Math.sin(a) * (i % 2 === 0 ? r : r * 0.45));
+    }
+    crayon(ctx, st, color, 1.8, rng, 0.85);
+  };
+
+  if (map === "meadow") {
+    sunWithFace(WORLD_W - 110, 82, 24, "rgba(253, 224, 71, 1)", "#f59e0b", true);
+    cloud(220, 92, 1.1, "rgba(255,255,255,0.85)", "#7dd3fc");
+    cloud(520, 60, 0.85, "rgba(255,255,255,0.85)", "#7dd3fc");
+    cloud(700, 140, 0.7, "rgba(255,255,255,0.85)", "#7dd3fc");
+    bird(360, 120, "#475569");
+    bird(385, 108, "#475569");
+    bird(600, 190, "#475569");
+    star(130, 190, "#fbbf24");
+    star(860, 210, "#fbbf24");
+    hills(300, 34, 0.007, 1.2, "#a5b4fc", 0.16);
+    hills(340, 26, 0.011, 3.1, "#86efac", 0.16);
+  } else if (map === "desert") {
+    sunWithFace(WORLD_W - 150, 100, 34, "rgba(251, 146, 60, 1)", "#c2410c", true);
+    // Mesas + pyramids on the horizon.
+    hills(330, 18, 0.006, 0.4, "#fb923c", 0.14);
+    for (const [px, base, w] of [
+      [250, 320, 120],
+      [360, 330, 80],
+    ]) {
+      const tri = [px - w / 2, base, px, base - w * 0.62, px + w / 2, base, px - w / 2, base];
+      wash(ctx, tri, "#f59e0b", rng, 0.22);
+      crayon(ctx, tri, "#b45309", 2, rng, 0.7);
+      crayon(ctx, [px, base - w * 0.62, px + w * 0.12, base], "#b45309", 1.4, rng, 0.5);
+    }
+    const mesa = [620, 330, 640, 280, 760, 280, 790, 330];
+    wash(ctx, mesa, "#ea580c", rng, 0.18);
+    crayon(ctx, mesa, "#9a3412", 2, rng, 0.6);
+    // Distant cactus silhouettes.
+    for (const cx of [140, 500, 880]) {
+      crayon(ctx, [cx, 345, cx, 300], "#65a30d", 7, rng, 0.45);
+      crayon(ctx, [cx, 322, cx - 10, 322, cx - 10, 308], "#65a30d", 5, rng, 0.45);
+      crayon(ctx, [cx, 316, cx + 10, 316, cx + 10, 302], "#65a30d", 5, rng, 0.45);
+    }
+    bird(430, 140, "#7c2d12");
+    bird(455, 150, "#7c2d12");
+    // Heat shimmer lines.
+    for (let i = 0; i < 6; i++) {
+      const y = 200 + i * 22;
+      const x = 100 + rng() * 700;
+      crayon(ctx, [x, y, x + 15, y - 3, x + 30, y, x + 45, y - 3], "rgba(234, 88, 12, 0.35)", 1.4, rng);
+    }
+  } else if (map === "snow") {
+    // Pale winter sun behind haze.
+    const sx = WORLD_W - 140;
+    const sy = 90;
+    const ring = circle(sx, sy, 26);
+    wash(ctx, ring, "#fef9c3", rng, 0.5);
+    crayon(ctx, ring, "#e2e8f0", 2.4, rng);
+    cloud(240, 80, 1.2, "rgba(241,245,249,0.9)", "#94a3b8");
+    cloud(560, 110, 0.9, "rgba(241,245,249,0.9)", "#94a3b8");
+    // Snowy peaks.
+    for (const [px, base, w, h] of [
+      [180, 360, 300, 170],
+      [470, 360, 360, 210],
+      [800, 360, 300, 160],
+    ]) {
+      const peak = [px - w / 2, base, px, base - h, px + w / 2, base];
+      wash(ctx, [...peak, px - w / 2, base], "#64748b", rng, 0.22);
+      const cap = [px - w * 0.18, base - h * 0.64, px, base - h, px + w * 0.18, base - h * 0.64, px + w * 0.08, base - h * 0.58, px - w * 0.04, base - h * 0.66, px - w * 0.12, base - h * 0.58];
+      ctx.save();
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.beginPath();
+      ctx.moveTo(cap[0], cap[1]);
+      for (let i = 2; i < cap.length; i += 2) ctx.lineTo(cap[i], cap[i + 1]);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      crayon(ctx, peak, "#475569", 2, rng, 0.55);
+    }
+    // Pine trees.
+    for (const tx of [120, 300, 560, 700, 880]) {
+      const base = 372;
+      for (let k = 0; k < 3; k++) {
+        const w = 22 - k * 5;
+        const y = base - k * 12;
+        const tri = [tx - w, y, tx, y - 18, tx + w, y, tx - w, y];
+        wash(ctx, tri, "#166534", rng, 0.35);
+        crayon(ctx, [tx - w * 0.6, y - 6, tx, y - 18, tx + w * 0.6, y - 6], "#ffffff", 2.2, rng, 0.85);
+      }
+      crayon(ctx, [tx, base, tx, base + 8], "#78350f", 3, rng, 0.5);
+    }
+  } else {
+    // Volcano: glowing crater, smoke plumes, lava streaks, ember stars.
+    const vx = 620;
+    const base = 360;
+    const cone = [vx - 230, base, vx - 46, base - 190, vx + 46, base - 190, vx + 230, base];
+    wash(ctx, [...cone, vx - 230, base], "#1c1917", rng, 0.55);
+    crayon(ctx, cone, "#0c0a09", 2.4, rng, 0.8);
+    const glow = ctx.createRadialGradient(vx, base - 190, 4, vx, base - 190, 90);
+    glow.addColorStop(0, "rgba(251, 146, 60, 0.9)");
+    glow.addColorStop(1, "rgba(251, 146, 60, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(vx, base - 190, 90, 0, Math.PI * 2);
+    ctx.fill();
+    for (const off of [-30, 0, 26]) {
+      crayon(ctx, [vx + off * 0.4, base - 188, vx + off, base - 140, vx + off * 1.6, base - 80, vx + off * 2.1, base - 20], "#f97316", 3, rng, 0.75);
+    }
+    for (let k = 0; k < 4; k++) {
+      cloud(vx - 30 + k * 26, base - 230 - k * 40, 0.7 + k * 0.25, "rgba(87, 83, 78, 0.55)", "rgba(41, 37, 36, 0.6)");
+    }
+    hills(345, 22, 0.009, 2.2, "#292524", 0.4);
+    // Crescent moon.
+    const mx = 170;
+    const my = 90;
+    wash(ctx, circle(mx, my, 22), "#fde68a", rng, 0.55);
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(mx + 10, my - 6, 20, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    for (let i = 0; i < 9; i++) star(100 + rng() * 760, 40 + rng() * 150, "#fdba74", 4 + rng() * 3);
+  }
 
   // Masking tape on the top corners.
   const tape = (x: number, y: number, rot: number) => {
@@ -263,7 +372,7 @@ export function renderBackground(dpr: number): HTMLCanvasElement {
   // Vignette.
   const v = ctx.createRadialGradient(WORLD_W / 2, WORLD_H / 2, WORLD_H * 0.45, WORLD_W / 2, WORLD_H / 2, WORLD_W * 0.7);
   v.addColorStop(0, "rgba(0,0,0,0)");
-  v.addColorStop(1, "rgba(80, 60, 30, 0.16)");
+  v.addColorStop(1, map === "volcano" ? "rgba(20, 5, 5, 0.4)" : "rgba(80, 60, 30, 0.16)");
   ctx.fillStyle = v;
   ctx.fillRect(0, 0, WORLD_W, WORLD_H);
   return c;
@@ -273,9 +382,44 @@ export function renderBackground(dpr: number): HTMLCanvasElement {
 // Terrain — re-rendered only when the height array changes (craters)
 // ---------------------------------------------------------------------------
 
-export function renderTerrain(terrain: readonly number[], dpr: number): HTMLCanvasElement {
+interface TerrainPalette {
+  soil: [string, string, string];
+  hatch: string;
+  strata: [string, string, string];
+  pebbles: [string, string];
+}
+
+const TERRAIN_PALETTE: Record<MapId, TerrainPalette> = {
+  meadow: {
+    soil: ["#d9b27c", "#b9834d", "#7c4a24"],
+    hatch: "rgba(92, 52, 20, 0.16)",
+    strata: ["rgba(120, 72, 32, 0.35)", "rgba(110, 64, 28, 0.3)", "rgba(90, 50, 20, 0.3)"],
+    pebbles: ["rgba(120, 113, 108, 0.55)", "rgba(168, 162, 158, 0.6)"],
+  },
+  desert: {
+    soil: ["#fde68a", "#fbbf24", "#b45309"],
+    hatch: "rgba(180, 83, 9, 0.12)",
+    strata: ["rgba(217, 119, 6, 0.35)", "rgba(194, 65, 12, 0.25)", "rgba(154, 52, 18, 0.25)"],
+    pebbles: ["rgba(180, 83, 9, 0.35)", "rgba(254, 243, 199, 0.6)"],
+  },
+  snow: {
+    soil: ["#cbd5e1", "#64748b", "#1e293b"],
+    hatch: "rgba(30, 41, 59, 0.14)",
+    strata: ["rgba(125, 211, 252, 0.45)", "rgba(56, 189, 248, 0.3)", "rgba(14, 116, 144, 0.3)"],
+    pebbles: ["rgba(71, 85, 105, 0.55)", "rgba(226, 232, 240, 0.6)"],
+  },
+  volcano: {
+    soil: ["#57534e", "#292524", "#0c0a09"],
+    hatch: "rgba(0, 0, 0, 0.25)",
+    strata: ["rgba(249, 115, 22, 0.55)", "rgba(234, 88, 12, 0.45)", "rgba(194, 65, 12, 0.4)"],
+    pebbles: ["rgba(28, 25, 23, 0.8)", "rgba(120, 113, 108, 0.5)"],
+  },
+};
+
+export function renderTerrain(terrain: readonly number[], dpr: number, map: MapId = "meadow"): HTMLCanvasElement {
   const [c, ctx] = makeCanvas(WORLD_W, WORLD_H, dpr);
   const rng = mulberry(31);
+  const pal = TERRAIN_PALETTE[map];
   const outline = () => {
     ctx.beginPath();
     ctx.moveTo(0, WORLD_H);
@@ -287,15 +431,15 @@ export function renderTerrain(terrain: readonly number[], dpr: number): HTMLCanv
   ctx.save();
   outline();
   const soil = ctx.createLinearGradient(0, 300, 0, WORLD_H);
-  soil.addColorStop(0, "#d9b27c");
-  soil.addColorStop(0.45, "#b9834d");
-  soil.addColorStop(1, "#7c4a24");
+  soil.addColorStop(0, pal.soil[0]);
+  soil.addColorStop(0.45, pal.soil[1]);
+  soil.addColorStop(1, pal.soil[2]);
   ctx.fillStyle = soil;
   ctx.fill();
   ctx.clip();
 
   // Colored-pencil hatching.
-  ctx.strokeStyle = "rgba(92, 52, 20, 0.16)";
+  ctx.strokeStyle = pal.hatch;
   ctx.lineWidth = 1.3;
   for (let x = -WORLD_H; x < WORLD_W; x += 7) {
     ctx.beginPath();
@@ -303,62 +447,202 @@ export function renderTerrain(terrain: readonly number[], dpr: number): HTMLCanv
     ctx.lineTo(x + WORLD_H * 0.8, 0);
     ctx.stroke();
   }
-  // Strata following the surface.
-  for (const [off, col] of [
-    [26, "rgba(120, 72, 32, 0.35)"],
-    [62, "rgba(110, 64, 28, 0.3)"],
-    [108, "rgba(90, 50, 20, 0.3)"],
-  ] as const) {
+  // Strata following the surface (sand ripples / ice seams / lava veins).
+  const offsets = map === "desert" ? [14, 30, 48, 70, 96, 128] : [26, 62, 108];
+  offsets.forEach((off, k) => {
     const pts: number[] = [];
-    for (let x = 0; x <= WORLD_W; x += 10) pts.push(x, surfaceY(terrain, x) + off + Math.sin(x * 0.05 + off) * 4);
-    crayon(ctx, pts, col, 3, rng);
-  }
-  // Pebbles + fossils.
-  for (let i = 0; i < 90; i++) {
+    for (let x = 0; x <= WORLD_W; x += 10) pts.push(x, surfaceY(terrain, x) + off + Math.sin(x * (map === "desert" ? 0.09 : 0.05) + off) * (map === "volcano" ? 9 : 4));
+    if (map === "volcano") {
+      ctx.save();
+      ctx.shadowColor = "#f97316";
+      ctx.shadowBlur = 10;
+      crayon(ctx, pts, pal.strata[k % 3], 2.6, rng);
+      ctx.restore();
+    } else {
+      crayon(ctx, pts, pal.strata[k % 3], map === "desert" ? 1.8 : 3, rng);
+    }
+  });
+  // Pebbles.
+  for (let i = 0; i < (map === "desert" ? 30 : 90); i++) {
     const x = rng() * WORLD_W;
     const top = surfaceY(terrain, x) + 14;
     const y = top + rng() * (WORLD_H - top);
     const r = 2 + rng() * 4;
-    ctx.fillStyle = rng() < 0.5 ? "rgba(120, 113, 108, 0.55)" : "rgba(168, 162, 158, 0.6)";
+    ctx.fillStyle = rng() < 0.5 ? pal.pebbles[0] : pal.pebbles[1];
     ctx.beginPath();
-    ctx.ellipse(x, y, r * 1.3, r, rng() * 3, 0, Math.PI * 2);
+    if (map === "volcano") {
+      // Sharp obsidian shards.
+      ctx.moveTo(x, y - r * 1.4);
+      ctx.lineTo(x + r, y + r);
+      ctx.lineTo(x - r, y + r * 0.6);
+      ctx.closePath();
+    } else {
+      ctx.ellipse(x, y, r * 1.3, r, rng() * 3, 0, Math.PI * 2);
+    }
     ctx.fill();
-    ctx.strokeStyle = "rgba(68, 64, 60, 0.35)";
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.25)";
     ctx.lineWidth = 1;
     ctx.stroke();
   }
   ctx.restore();
 
-  // Grass band + tufts along the surface.
   const top: number[] = [];
   for (let x = 0; x <= WORLD_W; x += 6) top.push(x, surfaceY(terrain, x));
-  crayon(ctx, top, "#4d7c0f", 9, rng);
-  crayon(ctx, top, "#84cc16", 5, rng);
-  for (let x = 2; x < WORLD_W; x += 5 + rng() * 4) {
-    const y = surfaceY(terrain, x);
-    const h = 4 + rng() * 6;
-    const lean = (rng() - 0.5) * 5;
-    crayon(ctx, [x, y + 1, x + lean, y - h], rng() < 0.5 ? "#65a30d" : "#3f6212", 1.6, rng);
-  }
-  // Occasional flowers.
-  for (let i = 0; i < 14; i++) {
-    const x = 80 + rng() * (WORLD_W - 160);
-    const y = surfaceY(terrain, x);
-    crayon(ctx, [x, y, x + 1, y - 10], "#3f6212", 1.4, rng);
-    const col = ["#f472b6", "#facc15", "#ffffff", "#a78bfa"][i % 4];
-    for (let k = 0; k < 5; k++) {
-      const a = (k / 5) * Math.PI * 2;
-      ctx.fillStyle = col;
+
+  if (map === "meadow") {
+    crayon(ctx, top, "#4d7c0f", 9, rng);
+    crayon(ctx, top, "#84cc16", 5, rng);
+    for (let x = 2; x < WORLD_W; x += 5 + rng() * 4) {
+      const y = surfaceY(terrain, x);
+      const h = 4 + rng() * 6;
+      const lean = (rng() - 0.5) * 5;
+      crayon(ctx, [x, y + 1, x + lean, y - h], rng() < 0.5 ? "#65a30d" : "#3f6212", 1.6, rng);
+    }
+    for (let i = 0; i < 14; i++) {
+      const x = 80 + rng() * (WORLD_W - 160);
+      const y = surfaceY(terrain, x);
+      crayon(ctx, [x, y, x + 1, y - 10], "#3f6212", 1.4, rng);
+      const col = ["#f472b6", "#facc15", "#ffffff", "#a78bfa"][i % 4];
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * Math.PI * 2;
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.arc(x + 1 + Math.cos(a) * 2.6, y - 11 + Math.sin(a) * 2.6, 1.9, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#f59e0b";
       ctx.beginPath();
-      ctx.arc(x + 1 + Math.cos(a) * 2.6, y - 11 + Math.sin(a) * 2.6, 1.9, 0, Math.PI * 2);
+      ctx.arc(x + 1, y - 11, 1.3, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.fillStyle = "#f59e0b";
+  } else if (map === "desert") {
+    crayon(ctx, top, "#d97706", 7, rng);
+    crayon(ctx, top, "#fde68a", 3, rng);
+    // Little cacti + a skull doodle.
+    for (let i = 0; i < 7; i++) {
+      const x = 90 + rng() * (WORLD_W - 180);
+      const y = surfaceY(terrain, x);
+      const h = 14 + rng() * 10;
+      crayon(ctx, [x, y + 2, x, y - h], "#166534", 7, rng);
+      crayon(ctx, [x, y + 2, x, y - h], "#4ade80", 4, rng);
+      crayon(ctx, [x, y - h * 0.5, x - 7, y - h * 0.5, x - 7, y - h * 0.8], "#166534", 4.5, rng);
+      crayon(ctx, [x, y - h * 0.65, x + 7, y - h * 0.65, x + 7, y - h * 0.95], "#166534", 4.5, rng);
+      if (i % 3 === 0) {
+        ctx.fillStyle = "#f472b6";
+        ctx.beginPath();
+        ctx.arc(x, y - h - 2, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  } else if (map === "snow") {
+    // Thick snow cap with a blue shadow underneath, plus icicles.
+    ctx.save();
     ctx.beginPath();
-    ctx.arc(x + 1, y - 11, 1.3, 0, Math.PI * 2);
+    ctx.moveTo(0, surfaceY(terrain, 0) - 3);
+    for (let x = 0; x <= WORLD_W; x += 6) ctx.lineTo(x, surfaceY(terrain, x) - 3);
+    for (let x = WORLD_W; x >= 0; x -= 6) ctx.lineTo(x, surfaceY(terrain, x) + 10 + Math.sin(x * 0.11) * 3);
+    ctx.closePath();
+    ctx.fillStyle = "#ffffff";
     ctx.fill();
+    ctx.restore();
+    const under: number[] = [];
+    for (let x = 0; x <= WORLD_W; x += 6) under.push(x, surfaceY(terrain, x) + 10 + Math.sin(x * 0.11) * 3);
+    crayon(ctx, under, "#7dd3fc", 2.4, rng);
+    crayon(ctx, top, "#e2e8f0", 3, rng);
+    for (let x = 12; x < WORLD_W; x += 18 + rng() * 26) {
+      const y = surfaceY(terrain, x) + 10 + Math.sin(x * 0.11) * 3;
+      const h = 4 + rng() * 9;
+      ctx.fillStyle = "rgba(224, 242, 254, 0.95)";
+      ctx.beginPath();
+      ctx.moveTo(x - 2.5, y);
+      ctx.lineTo(x, y + h);
+      ctx.lineTo(x + 2.5, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+  } else {
+    // Volcanic crust with a hot glowing rim.
+    crayon(ctx, top, "#0c0a09", 8, rng);
+    ctx.save();
+    ctx.shadowColor = "#fb923c";
+    ctx.shadowBlur = 12;
+    crayon(ctx, top, "#f97316", 2.2, rng);
+    ctx.restore();
+    for (let i = 0; i < 10; i++) {
+      const x = 80 + rng() * (WORLD_W - 160);
+      const y = surfaceY(terrain, x);
+      crayon(ctx, [x - 6, y - 1, x - 2, y - 7, x + 3, y - 4, x + 6, y - 1], "#292524", 3, rng);
+    }
   }
   return c;
+}
+
+/** Map weather drawn every frame: snowfall, drifting sand, rising embers, floating petals. */
+export class Ambient {
+  private bits: { x: number; y: number; v: number; s: number; p: number }[];
+  private last = 0;
+
+  constructor(private map: MapId) {
+    const n = map === "snow" ? 70 : map === "volcano" ? 40 : map === "desert" ? 36 : 10;
+    this.bits = Array.from({ length: n }, () => ({ x: Math.random() * WORLD_W, y: Math.random() * WORLD_H, v: 0.5 + Math.random(), s: 1 + Math.random() * 2.2, p: Math.random() * 6 }));
+  }
+
+  draw(ctx: CanvasRenderingContext2D, wind: number, now: number) {
+    const dt = this.last ? Math.min(0.05, (now - this.last) / 1000) : 0.016;
+    this.last = now;
+    const drift = wind * 2500;
+    ctx.save();
+    for (const b of this.bits) {
+      switch (this.map) {
+        case "snow":
+          b.y += (18 + b.v * 22) * dt;
+          b.x += (drift + Math.sin(now / 700 + b.p) * 12) * dt;
+          ctx.globalAlpha = 0.85;
+          ctx.fillStyle = "#ffffff";
+          ctx.strokeStyle = "rgba(148, 163, 184, 0.6)";
+          ctx.lineWidth = 0.8;
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.s, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          break;
+        case "desert":
+          b.x += (40 + drift * 2 + b.v * 40) * dt * (wind < 0 ? -1 : 1);
+          b.y += Math.sin(now / 300 + b.p) * 6 * dt;
+          ctx.globalAlpha = 0.5;
+          ctx.fillStyle = "#d97706";
+          ctx.fillRect(b.x, b.y, b.s * 1.6, b.s * 0.7);
+          break;
+        case "volcano": {
+          b.y -= (24 + b.v * 30) * dt;
+          b.x += (drift + Math.sin(now / 400 + b.p) * 10) * dt;
+          const flicker = 0.5 + 0.5 * Math.sin(now / 90 + b.p * 3);
+          ctx.globalAlpha = 0.5 + flicker * 0.5;
+          ctx.fillStyle = flicker > 0.5 ? "#fb923c" : "#fde047";
+          ctx.shadowColor = "#f97316";
+          ctx.shadowBlur = 6;
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.s * 0.8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          break;
+        }
+        default:
+          b.y += (8 + b.v * 8) * dt;
+          b.x += (drift + 14 + Math.sin(now / 500 + b.p) * 20) * dt;
+          ctx.globalAlpha = 0.75;
+          ctx.fillStyle = b.p > 3 ? "#f9a8d4" : "#fde68a";
+          ctx.beginPath();
+          ctx.ellipse(b.x, b.y, b.s * 1.6, b.s * 0.9, now / 600 + b.p, 0, Math.PI * 2);
+          ctx.fill();
+      }
+      if (b.y > WORLD_H + 10) b.y = -10;
+      if (b.y < -10) b.y = WORLD_H + 10;
+      if (b.x > WORLD_W + 10) b.x = -10;
+      if (b.x < -10) b.x = WORLD_W + 10;
+    }
+    ctx.restore();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -386,6 +670,8 @@ export interface CharacterPose {
   blinkSeed?: number;
   /** Size multiplier around the feet (default CHAR_SCALE; avatars pass 1). */
   scale?: number;
+  /** Character art index (defaults to the seat). */
+  char?: number;
 }
 
 /** Characters are drawn larger than their 15px hitbox so they read at phone size. */
@@ -442,7 +728,8 @@ export function drawCharacter(ctx: CanvasRenderingContext2D, pose: CharacterPose
 }
 
 function drawCharacterBody(ctx: CanvasRenderingContext2D, pose: CharacterPose) {
-  const art = characterFor(pose.seat);
+  const art = characterFor(pose.char ?? pose.seat);
+  const beaked = art.kind === "chick" || art.kind === "penguin";
   const { x, y, now } = pose;
   const hurt = pose.hurt ?? 0;
   const breathe = Math.sin(now / 420 + pose.seat) * 0.8;
@@ -515,7 +802,7 @@ function drawCharacterBody(ctx: CanvasRenderingContext2D, pose: CharacterPose) {
 
   // Feet.
   for (const s of [-1, 1]) {
-    ctx.fillStyle = art.dark;
+    ctx.fillStyle = beaked ? "#f59e0b" : art.dark;
     ctx.beginPath();
     ctx.ellipse(cx + s * 6, y - 2, 5.5, 3.2, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -545,6 +832,22 @@ function drawCharacterBody(ctx: CanvasRenderingContext2D, pose: CharacterPose) {
   ctx.beginPath();
   ctx.ellipse(cx - 7, cy - 9, 3.2, 2, -0.6, 0, Math.PI * 2);
   ctx.fill();
+
+  if (art.kind === "penguin") {
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy - 1, rx * 0.72, ry * 0.58, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (art.kind === "chick") {
+    for (const [dx, h] of [
+      [-3, 7],
+      [0, 10],
+      [3, 7],
+    ] as const) {
+      crayon(ctx, [cx + dx, cy - ry + 1, cx + dx * 1.6 + Math.sin(now / 300) * 1.2, cy - ry - h], art.dark, 2, () => 0.5);
+    }
+  }
 
   // Frog eye bumps sit on top of the head.
   const eyeY = art.kind === "frog" ? cy - ry + 2 : cy - 3;
@@ -608,7 +911,27 @@ function drawCharacterBody(ctx: CanvasRenderingContext2D, pose: CharacterPose) {
     ctx.fill();
   }
   const my = art.kind === "frog" ? cy + 1 : cy + 4;
-  if (hurt > 0.15) {
+  if (beaked) {
+    const bx = cx + f * 1.5;
+    const open = hurt > 0.15 ? 2.5 : 0;
+    ctx.fillStyle = "#f59e0b";
+    ctx.strokeStyle = "#b45309";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(bx - 4, my - 1 - open);
+    ctx.lineTo(bx + f * 6, my + 0.5);
+    ctx.lineTo(bx + 4, my - 1 - open);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(bx - 3.5, my + open);
+    ctx.lineTo(bx + f * 5, my + 1.2 + open);
+    ctx.lineTo(bx + 3.5, my + open);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else if (hurt > 0.15) {
     ctx.fillStyle = "#1f2937";
     ctx.beginPath();
     ctx.ellipse(cx, my + 1.5, 2.6, 3.2, 0, 0, Math.PI * 2);
@@ -881,10 +1204,50 @@ export function drawTurnMarker(ctx: CanvasRenderingContext2D, x: number, y: numb
 // Walls & projectile
 // ---------------------------------------------------------------------------
 
-export function drawWallArt(ctx: CanvasRenderingContext2D, walls: readonly Wall[]) {
+/** 🛡️ Shield: glassy bubble glow around the drawn outline, flickering as it weakens. */
+export function drawShieldArt(ctx: CanvasRenderingContext2D, w: Wall, ratio: number, preview = false, now = 0) {
+  const color = INK_COLORS[w.color] ?? INK_COLORS[0];
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const flicker = ratio < 0.4 ? 0.6 + 0.4 * Math.abs(Math.sin(now / 70)) : 1;
+  ctx.globalAlpha = (preview ? 0.55 : 0.5 + 0.5 * ratio) * flicker;
+  for (const s of w.strokes) {
+    if (s.length < 4) continue;
+    const path = () => {
+      ctx.beginPath();
+      ctx.moveTo(s[0], s[1]);
+      for (let i = 2; i < s.length; i += 2) ctx.lineTo(s[i], s[i + 1]);
+    };
+    ctx.shadowColor = "#38bdf8";
+    ctx.shadowBlur = 16;
+    ctx.strokeStyle = "rgba(186, 230, 253, 0.85)";
+    ctx.lineWidth = 11;
+    if (preview) ctx.setLineDash([10, 7]);
+    path();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.setLineDash([]);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    path();
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = 1.4;
+    path();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+export function drawWallArt(ctx: CanvasRenderingContext2D, walls: readonly Wall[], now = 0) {
   for (const w of walls) {
     const ratio = Math.max(0.2, Math.min(1, w.hp / w.maxHp));
     const color = INK_COLORS[w.color] ?? INK_COLORS[0];
+    if (w.shieldOf !== undefined) {
+      drawShieldArt(ctx, w, ratio, false, now);
+      continue;
+    }
     ctx.save();
     ctx.globalAlpha = 0.4 + 0.6 * ratio;
     ctx.lineCap = "round";

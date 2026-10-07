@@ -12,6 +12,8 @@ import {
   MIN_INK,
   moveInk,
   resolveMove,
+  SHIELD_GUARD,
+  shieldWall,
   wallPlacementError,
   type EngineAction,
   type InkDuelState,
@@ -20,6 +22,7 @@ import {
 } from "./engine";
 import { playCardRevealSound, playMyTurnSound, playScribbleTick, playVictorySound, playWallSound } from "./inkDuelAudio";
 import WeaponPad, { DoodleSvg } from "./WeaponPad";
+import { MAPS } from "./maps";
 
 export const TURN_SECONDS = 45;
 
@@ -34,7 +37,7 @@ interface Props {
   onGameEnd: () => void;
 }
 
-type Mode = "weapon" | "wall";
+type Mode = "weapon" | "wall" | "shield";
 
 const COLOR_NAMES = ["검정", "빨강", "파랑", "초록", "노랑"];
 
@@ -126,9 +129,11 @@ function eventCaption(ev: InkEvent | null, names: Record<SeatIndex, string>): st
   if (ev.move) out.push(`🚶 ${who} 님이 ${ev.move.to > ev.move.from ? "오른쪽" : "왼쪽"}으로 ${Math.abs(ev.move.to - ev.move.from)}px 이동`);
   if (ev.kind === "pass") out.push(`💤 ${who} 님이 턴을 넘겼어요`);
   else if (ev.kind === "wall") out.push(`🧱 ${who} 님이 잉크 벽을 세웠어요`);
+  else if (ev.kind === "shield") out.push(`🛡️ ${who} 님이 방패를 세웠어요 (다음 차례까지 받는 피해 −${Math.round((1 - SHIELD_GUARD) * 100)}%)`);
   else {
     const w = WEAPON_LABEL[ev.stats.kind];
-    if (ev.hits.length === 0) out.push(`${w.emoji} ${who} 님의 ${w.name} — 빗나감!`);
+    if (ev.caught) out.push(`🪃 ${who} 님의 부메랑이 돌아와 손에 쏙! (빗나감)`);
+    else if (ev.hits.length === 0) out.push(`${w.emoji} ${who} 님의 ${w.name} — 빗나감!`);
     else
       out.push(
         `${w.emoji} ${who} 님의 ${w.name}${ev.crit ? " (치명타!)" : ""} → ${ev.hits.map((h) => `${names[h.seat] ?? "?"} −${h.dmg}`).join(", ")}`,
@@ -187,7 +192,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
   const lastWallEventRef = useRef<number | null>(null);
   useEffect(() => {
     const ev = shown.lastEvent;
-    if (ev?.kind === "wall" && lastWallEventRef.current !== ev.id) {
+    if ((ev?.kind === "wall" || ev?.kind === "shield") && lastWallEventRef.current !== ev.id) {
       lastWallEventRef.current = ev.id;
       playWallSound();
     }
@@ -199,6 +204,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
   const [mode, setMode] = useState<Mode>("weapon");
   const [weapon, setWeapon] = useState<Stroke[]>([]);
   const [wall, setWall] = useState<Stroke[]>([]);
+  const [shield, setShield] = useState<Stroke[]>([]);
   const [color, setColor] = useState<InkColor>(0);
   const defaultAngle = () => {
     const me = state.players[viewerSeat];
@@ -214,6 +220,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
     setDraftSeq(state.seq);
     setWeapon([]);
     setWall([]);
+    setShield([]);
     setMode("weapon");
     setAngle(defaultAngle());
     setTimeLeft(TURN_SECONDS);
@@ -223,10 +230,13 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
   // Everything this turn is previewed from where the walk would leave me (ink already deducted).
   const preview = useMemo(() => (walk !== 0 && state.phase === "playing" ? (applyMove(state, viewerSeat, walk) ?? state) : state), [state, viewerSeat, walk]);
   const budget = preview.inkBudget;
-  const activeStrokes = mode === "weapon" ? weapon : wall;
+  const activeStrokes = mode === "weapon" ? weapon : mode === "shield" ? shield : wall;
+  const setActive = mode === "weapon" ? setWeapon : mode === "shield" ? setShield : setWall;
   const inkUsed = totalInk(activeStrokes);
   const stats = useMemo(() => (weapon.length > 0 && totalInk(weapon) >= MIN_INK ? analyzeWeapon(weapon) : null), [weapon]);
   const wallError = wall.length > 0 ? wallPlacementError(preview, viewerSeat, wall) : null;
+  const shieldReady = shield.length > 0 && totalInk(shield) >= MIN_INK;
+  const shieldPreview = useMemo(() => (shieldReady ? shieldWall(preview, viewerSeat, shield, angle) : null), [shieldReady, preview, viewerSeat, shield, angle]);
   const walked = preview.players[viewerSeat].x - state.players[viewerSeat].x;
   const canWalk = (next: number) => {
     if (Math.abs(next) > MAX_MOVE) return false;
@@ -240,6 +250,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
     if (!myTurn) return;
     if (mode === "weapon" && stats) onAction(withWalk({ type: "fire", seat: viewerSeat, strokes: weapon, angle, power }));
     else if (mode === "wall" && wall.length > 0 && !wallError && totalInk(wall) >= MIN_INK) onAction(withWalk({ type: "wall", seat: viewerSeat, strokes: wall }));
+    else if (mode === "shield" && shieldReady) onAction(withWalk({ type: "shield", seat: viewerSeat, strokes: shield, angle }));
     else if (auto) {
       if (stats) onAction(withWalk({ type: "fire", seat: viewerSeat, strokes: weapon, angle, power }));
       else onAction(withWalk({ type: "pass", seat: viewerSeat }));
@@ -280,6 +291,8 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
   const captions = eventCaption(viewState.lastEvent, names);
   const rankings = over ? computeRankings(shown) : [];
   const hpShown = anim ? anim.event.hpBefore : viewState.players.map((p) => p.hp);
+  const charOf = (seat: SeatIndex) => state.characters?.[seat] ?? seat;
+  const mapInfo = MAPS[state.map ?? "meadow"];
 
   return (
     <div className="flex flex-col gap-3">
@@ -292,8 +305,8 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
               turnSeat === p.seat ? "border-amber-400 bg-amber-400/15 light:bg-amber-50" : "border-white/10 light:border-slate-200"
             } ${p.alive ? "" : "opacity-40 line-through"}`}
           >
-            <span className="-my-1 -ml-1.5 rounded-full p-0.5" style={{ background: characterFor(p.seat).light }} title={characterFor(p.seat).name}>
-              <CharacterAvatar seat={p.seat} size={26} dead={!p.alive} />
+            <span className="-my-1 -ml-1.5 rounded-full p-0.5" style={{ background: characterFor(charOf(p.seat)).light }} title={characterFor(charOf(p.seat)).name}>
+              <CharacterAvatar char={charOf(p.seat)} size={26} dead={!p.alive} />
             </span>
             <span className="max-w-[7rem] truncate font-semibold text-white light:text-slate-800">
               {names[p.seat]}
@@ -303,7 +316,10 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
             {!connectedSeats.has(p.seat) && <span title="연결 끊김">📡</span>}
           </div>
         ))}
-        <span className="ml-auto flex items-center gap-2">
+        <span className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <span className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-slate-300 light:text-slate-600" title={mapInfo.rule}>
+            {mapInfo.emoji} {mapInfo.name}
+          </span>
           <span className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-slate-300 light:text-slate-600">
             라운드 {Math.min(viewState.round, MAX_ROUNDS)}/{MAX_ROUNDS}
           </span>
@@ -320,7 +336,8 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
           names={names}
           turnSeat={turnSeat}
           walkFrom={myTurn && walked !== 0 ? { seat: viewerSeat, x: state.players[viewerSeat].x } : null}
-          aim={myTurn && mode === "weapon" ? { seat: viewerSeat, angle, power, speedMul: stats?.speedMul ?? 1 } : null}
+          aim={myTurn && mode !== "wall" ? { seat: viewerSeat, angle, power, speedMul: stats?.speedMul ?? 1, noArc: mode === "shield" } : null}
+          shieldPreview={myTurn && mode === "shield" ? shieldPreview : null}
           onAim={(a, p) => {
             setAngle(a);
             setPower(p);
@@ -348,7 +365,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                   .filter((r) => r.rank === 1)
                   .map((r) => (
                     <span key={r.seat} className="animate-[inkwin_0.9s_ease-in-out_infinite_alternate]">
-                      <CharacterAvatar seat={r.seat} size={64} />
+                      <CharacterAvatar char={charOf(r.seat)} size={64} />
                     </span>
                   ))}
               </div>
@@ -365,7 +382,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                   <li key={r.seat} className="flex justify-between gap-2">
                     <span className="flex items-center gap-1.5">
                       <b className="w-6">{r.rank}위</b>
-                      <CharacterAvatar seat={r.seat} size={22} dead={r.rank > 1} />
+                      <CharacterAvatar char={charOf(r.seat)} size={22} dead={r.rank > 1} />
                       {names[r.seat]}
                     </span>
                     <span className="text-xs text-slate-500">
@@ -404,13 +421,14 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
               {(
                 [
                   ["weapon", "⚔️ 무기", " 그리기"],
+                  ["shield", "🛡️ 방패", ""],
                   ["wall", "🧱 벽", " 그리기"],
                 ] as const
               ).map(([m, label, more]) => (
                 <button
                   key={m}
                   onClick={() => setMode(m)}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold transition sm:px-3 ${
                     mode === m ? "bg-amber-500 text-white" : "text-white/60 hover:text-white light:text-slate-600"
                   }`}
                 >
@@ -479,14 +497,14 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
             <div className="ml-auto flex gap-1.5 sm:ml-0">
               <button
                 title="되돌리기"
-                onClick={() => (mode === "weapon" ? setWeapon((s) => s.slice(0, -1)) : setWall((s) => s.slice(0, -1)))}
+                onClick={() => setActive((s) => s.slice(0, -1))}
                 className="rounded-lg border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-slate-300 light:text-slate-600"
               >
                 ↶<span className="hidden sm:inline"> 되돌리기</span>
               </button>
               <button
                 title="지우기"
-                onClick={() => (mode === "weapon" ? setWeapon([]) : setWall([]))}
+                onClick={() => setActive([])}
                 className="rounded-lg border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-slate-300 light:text-slate-600"
               >
                 🗑<span className="hidden sm:inline"> 지우기</span>
@@ -494,12 +512,46 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
             </div>
           </div>
 
-          {mode === "weapon" ? (
+          {mode !== "wall" ? (
             <div className="grid grid-cols-[minmax(0,44%)_1fr] gap-2 sm:grid-cols-[minmax(0,220px)_1fr] sm:gap-3">
               <div className="w-full max-w-[220px]">
-                <WeaponPad strokes={weapon} color={color} budget={budget} onChange={setWeapon} onScribble={playScribbleTick} />
-                <p className="mt-1 hidden text-center text-[10px] text-white/40 sm:block light:text-slate-400">곧은 선=창 · 닫힌 도형=폭탄 · 지그재그=번개 · 색=속성</p>
+                <WeaponPad strokes={mode === "shield" ? shield : weapon} color={color} budget={budget} onChange={mode === "shield" ? setShield : setWeapon} onScribble={playScribbleTick} />
+                <p className="mt-1 hidden text-center text-[10px] text-white/40 sm:block light:text-slate-400">
+                  {mode === "shield" ? "그린 모양이 그대로 방패가 돼요" : "곧은 선=창 · 닫힌 도형=폭탄 · 지그재그=번개 · C자 호=부메랑 · 색=속성"}
+                </p>
               </div>
+              {mode === "shield" ? (
+                <div className="flex flex-col gap-2">
+                  <div className="rounded-xl border border-sky-400/40 bg-sky-400/10 p-2.5 text-xs text-white/80 light:bg-sky-50 light:text-slate-700">
+                    <p className="font-bold">🛡️ 방패</p>
+                    <p className="mt-0.5 text-[11px] text-white/60 light:text-slate-500">
+                      그린 모양이 내 옆에 서서 공격을 막아요. 다음 내 차례까지 받는 피해 −{Math.round((1 - SHIELD_GUARD) * 100)}%.
+                    </p>
+                    {shieldPreview && <p className="mt-1 font-mono text-[11px]">내구도 {shieldPreview.hp}</p>}
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-white/70 light:text-slate-600">
+                    <span className="w-7 shrink-0 sm:w-10">방향</span>
+                    <input type="range" min={0} max={180} value={angle} onChange={(e) => setAngle(Number(e.target.value))} className="min-w-0 flex-1 accent-sky-500" style={{ direction: "rtl" }} />
+                    <span className="w-10 text-right font-mono">{angle}°</span>
+                  </label>
+                  <p className="hidden text-[10px] text-white/40 sm:block light:text-slate-400">경기장을 드래그해서 방패 방향을 정할 수도 있어요</p>
+                  <div className="mr-14 flex gap-2 sm:mr-0">
+                    <button
+                      onClick={() => onAction(withWalk({ type: "pass", seat: viewerSeat }))}
+                      className="rounded-xl border border-white/15 px-2.5 py-2.5 text-xs text-white/60 sm:px-3 light:border-slate-300 light:text-slate-500"
+                    >
+                      패스
+                    </button>
+                    <button
+                      disabled={!shieldReady}
+                      onClick={() => submit()}
+                      className="flex-1 rounded-xl bg-sky-600 py-2.5 text-sm font-bold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      🛡️ 방패 세우기
+                    </button>
+                  </div>
+                </div>
+              ) : (
               <div className="flex flex-col gap-2">
                 {stats ? (
                   <>
@@ -523,7 +575,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                   <span className="w-10 text-right font-mono">{power}</span>
                 </label>
                 <p className="hidden text-[10px] text-white/40 sm:block light:text-slate-400">경기장을 드래그해서 조준할 수도 있어요 (점선은 궤적의 앞부분만 보여줘요)</p>
-                <div className="flex gap-2">
+                <div className="mr-14 flex gap-2 sm:mr-0">
                   <button
                     onClick={() => onAction(withWalk({ type: "pass", seat: viewerSeat }))}
                     className="rounded-xl border border-white/15 px-2.5 py-2.5 text-xs text-white/60 sm:px-3 light:border-slate-300 light:text-slate-500"
@@ -539,6 +591,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                   </button>
                 </div>
               </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -546,7 +599,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                 경기장 위 파란 영역 안에 직접 선을 그어 벽을 세우세요. 벽 내구도 = 사용한 잉크. 창은 벽을 관통하고, 폭탄은 벽을 부숴요.
               </p>
               {wallError && <p className="text-xs font-semibold text-rose-400">⚠️ {wallError}</p>}
-              <div className="flex gap-2">
+              <div className="mr-14 flex gap-2 sm:mr-0">
                 <button
                   onClick={() => onAction(withWalk({ type: "pass", seat: viewerSeat }))}
                   className="rounded-xl border border-white/15 px-3 py-2.5 text-xs text-white/60 light:border-slate-300 light:text-slate-500"
@@ -565,6 +618,8 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
           )}
         </div>
       )}
+      {/* Room to scroll the action buttons above the site's floating 🎲 / bug-report buttons on phones. */}
+      {myTurn && <div aria-hidden className="h-16 sm:hidden" />}
     </div>
   );
 }
