@@ -3,23 +3,25 @@
 import type { GameId } from "@/games/types";
 
 export const GAME_LAST_UPDATED: Partial<Record<GameId, string>> = {
+  "ink-duel": "2026-10-07T22:03:43+09:00",
+  "hungry-shark": "2026-10-07T02:34:19+09:00",
+  "memory-feast": "2026-10-07T02:19:16+09:00",
+  "crab-survival": "2026-10-04T21:58:48+09:00",
+  "for-sale": "2026-10-02T02:30:49+09:00",
+  "great-legacy": "2026-10-02T02:30:49+09:00",
   "spot-difference": "2026-09-30T02:29:56+09:00",
   "doodle-phone": "2026-09-30T00:41:25+09:00",
   "las-vegas": "2026-09-28T21:06:30+09:00",
   "perudo": "2026-09-28T05:36:36+09:00",
   "dalmuti": "2026-09-28T05:29:40+09:00",
-  "great-legacy": "2026-09-28T05:22:38+09:00",
   "five-cucumbers": "2026-09-27T22:04:47+09:00",
   "rat-a-tat-cat": "2026-09-27T21:46:44+09:00",
   "coyote": "2026-09-27T21:44:58+09:00",
   "century": "2026-09-27T21:42:52+09:00",
-  "crab-survival": "2026-09-27T16:47:30+09:00",
   "splendor-duel": "2026-09-27T14:13:08+09:00",
   "lotr-duel": "2026-09-27T01:19:25+09:00",
-  "hungry-shark": "2026-09-26T22:51:11+09:00",
   "city-chase": "2026-09-25T14:06:32+09:00",
   "mafia": "2026-09-23T00:57:16+09:00",
-  "memory-feast": "2026-09-13T20:41:03+09:00",
   "hill-of-truth": "2026-09-11T00:07:54+09:00",
   "mal-dalli-ja": "2026-09-10T23:09:41+09:00",
   "worm": "2026-09-08T21:30:04+09:00",
@@ -30,7 +32,6 @@ export const GAME_LAST_UPDATED: Partial<Record<GameId, string>> = {
   "mine-of-oblivion": "2026-09-01T21:05:35+09:00",
   "love-wins-all": "2026-09-01T11:45:48+09:00",
   "show-me-the-coin": "2026-09-01T00:36:46+09:00",
-  "for-sale": "2026-08-31T23:45:04+09:00",
   "summoners-rift": "2026-08-30T11:25:01+09:00",
   "grid-poker": "2026-08-29T23:18:31+09:00",
   "pieces-of-language": "2026-08-29T21:49:14+09:00",
@@ -44,6 +45,7 @@ export const GAME_LAST_UPDATED: Partial<Record<GameId, string>> = {
 
 /** First commit that touched each game — drives the lobby's NEW badge. */
 export const GAME_ADDED: Partial<Record<GameId, string>> = {
+  "ink-duel": "2026-10-07T22:03:43+09:00",
   "crab-survival": "2026-09-27T14:53:13+09:00",
   "doodle-phone": "2026-09-27T14:10:24+09:00",
   "hungry-shark": "2026-09-26T21:52:39+09:00",
