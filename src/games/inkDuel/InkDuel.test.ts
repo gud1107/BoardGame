@@ -3,7 +3,11 @@ import { seededRng } from "@/lib/rng";
 import { analyzeWeapon, dcos, dsin, totalInk, type Stroke } from "./analyze";
 import {
   applyAction,
+  applyMove,
   botDoodle,
+  MAX_MOVE,
+  MOVE_INK_PER_PX,
+  resolveMove,
   chooseBotAction,
   computeRankings,
   currentActor,
@@ -122,6 +126,45 @@ describe("reducer", () => {
     expect(next.walls).toHaveLength(1);
     const far = [line(me.x < 480 ? 900 : 20, 50, me.x < 480 ? 900 : 20, 120, 8)];
     expect(wallPlacementError(s, s.turnSeat, far)).not.toBeNull();
+  });
+});
+
+describe("movement", () => {
+  it("walking costs ink, moves the shooter, and is recorded on the event", () => {
+    const s = startGame(2, 21);
+    const seat = s.turnSeat;
+    const me = s.players[seat];
+    const dir = me.x < 480 ? -1 : 1; // walk away from the middle so nobody blocks
+    const moved = applyMove(s, seat, dir * 40);
+    expect(moved).not.toBeNull();
+    expect(moved!.players[seat].x).toBe(me.x + dir * 40);
+    expect(moved!.inkBudget).toBe(100 - 40 * MOVE_INK_PER_PX);
+    const next = applyAction(s, { type: "pass", seat, move: dir * 40 });
+    expect(next.players[seat].x).toBe(me.x + dir * 40);
+    expect(next.lastEvent?.move).toEqual({ from: me.x, to: me.x + dir * 40 });
+  });
+
+  it("rejects walks beyond MAX_MOVE and walks whose ink + doodle exceed the budget", () => {
+    const s = startGame(2, 22);
+    const seat = s.turnSeat;
+    expect(applyAction(s, { type: "pass", seat, move: MAX_MOVE + 1 })).toBe(s);
+    const heavy: Stroke[] = [line(0, 10, 200, 10, 20), line(0, 60, 200, 60, 20)];
+    expect(totalInk(heavy)).toBeGreaterThan(100 - MAX_MOVE * MOVE_INK_PER_PX);
+    expect(totalInk(heavy)).toBeLessThanOrEqual(100);
+    const dir = s.players[seat].x < 480 ? -1 : 1;
+    expect(applyAction(s, { type: "fire", seat, strokes: heavy, angle: 45, power: 50, move: dir * MAX_MOVE })).toBe(s);
+  });
+
+  it("stops short of other players and ground-standing walls", () => {
+    let s = startGame(2, 23);
+    const seat = s.turnSeat;
+    const other = 1 - seat;
+    const me = s.players[seat];
+    s = { ...s, players: s.players.map((p) => (p.seat === other ? { ...p, x: me.x + 50 } : p)) };
+    expect(resolveMove(s, seat, 80)).toBe(me.x + 50 - 36);
+    const g = Math.round(surfaceY(s.terrain, me.x - 30));
+    s = { ...s, walls: [{ id: 1, owner: other, strokes: [[me.x - 30, g - 2, me.x - 30, g - 60]], hp: 20, maxHp: 20, color: 0 }] };
+    expect(resolveMove(s, seat, -80)).toBe(me.x - 30 + 10);
   });
 });
 

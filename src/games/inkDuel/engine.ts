@@ -18,7 +18,6 @@ import { pickByLevel, type BotLevel } from "@/games/shared/bot/botDifficulty";
 import {
   analyzeWeapon,
   dsin,
-  INK_COLORS,
   INK_PER_TURN,
   PAD_SIZE,
   strokesValid,
@@ -53,6 +52,13 @@ export const FROZEN_INK = 65;
 export const WALL_RANGE = 230;
 /** …and this far from every other living player (no entombing). */
 export const WALL_KEEPOUT = 40;
+/** Max walk per turn (px) and its ink price — a full 80px walk costs 20 ink. */
+export const MAX_MOVE = 80;
+export const MOVE_INK_PER_PX = 0.25;
+/** Can't walk closer than this to another living player… */
+const MOVE_PERSONAL_SPACE = 36;
+/** …or through a wall point lower than this above the ground. */
+const WALL_BLOCK_HEIGHT = 40;
 const BURN_DMG = 6;
 const POISON_DMG = 4;
 const CHAIN_RANGE = 240;
@@ -103,9 +109,16 @@ export type InkEvent =
       hpBefore: number[];
       killed: SeatIndex[];
       dots: DotRecord[];
+      move?: MoveRecord;
     }
-  | { kind: "wall"; id: number; seat: SeatIndex; wallId: number; dots: DotRecord[] }
-  | { kind: "pass"; id: number; seat: SeatIndex; dots: DotRecord[] };
+  | { kind: "wall"; id: number; seat: SeatIndex; wallId: number; dots: DotRecord[]; move?: MoveRecord }
+  | { kind: "pass"; id: number; seat: SeatIndex; dots: DotRecord[]; move?: MoveRecord };
+
+/** The acting player walked from `from` to `to` (x) before acting this turn. */
+export interface MoveRecord {
+  from: number;
+  to: number;
+}
 
 export interface InkDuelState {
   seed: number;
@@ -129,10 +142,14 @@ export interface InkDuelState {
   seq: number;
 }
 
+/**
+ * Every action may carry `move`: a signed horizontal walk (px) taken before
+ * acting. Walking costs ink (MOVE_INK_PER_PX), so it competes with the doodle.
+ */
 export type EngineAction =
-  | { type: "fire"; seat: SeatIndex; strokes: Stroke[]; angle: number; power: number }
-  | { type: "wall"; seat: SeatIndex; strokes: Stroke[] }
-  | { type: "pass"; seat: SeatIndex };
+  | { type: "fire"; seat: SeatIndex; strokes: Stroke[]; angle: number; power: number; move?: number }
+  | { type: "wall"; seat: SeatIndex; strokes: Stroke[]; move?: number }
+  | { type: "pass"; seat: SeatIndex; move?: number };
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -278,6 +295,50 @@ export function wallPlacementError(state: InkDuelState, seat: SeatIndex, strokes
   return null;
 }
 
+/**
+ * Where a walk of `dx` actually ends: clamped to the arena, stopped short of
+ * other living players and of walls standing on the ground in the way.
+ */
+export function resolveMove(state: InkDuelState, seat: SeatIndex, dx: number): number {
+  const me = state.players[seat];
+  if (dx === 0) return me.x;
+  const dir = dx > 0 ? 1 : -1;
+  let to = Math.max(20, Math.min(WORLD_W - 20, me.x + dx));
+  for (const p of state.players) {
+    if (!p.alive || p.seat === seat) continue;
+    if (dir > 0 && p.x > me.x && p.x - MOVE_PERSONAL_SPACE < to) to = p.x - MOVE_PERSONAL_SPACE;
+    if (dir < 0 && p.x < me.x && p.x + MOVE_PERSONAL_SPACE > to) to = p.x + MOVE_PERSONAL_SPACE;
+  }
+  for (const w of state.walls) {
+    for (const st of w.strokes) {
+      for (let i = 0; i < st.length; i += 2) {
+        const x = st[i];
+        if (st[i + 1] < surfaceY(state.terrain, x) - WALL_BLOCK_HEIGHT) continue;
+        if (dir > 0 && x > me.x && x - 10 < to) to = x - 10;
+        if (dir < 0 && x < me.x && x + 10 > to) to = x + 10;
+      }
+    }
+  }
+  to = dir > 0 ? Math.max(me.x, to) : Math.min(me.x, to);
+  return Math.round(to);
+}
+
+export function moveInk(from: number, to: number): number {
+  return Math.abs(to - from) * MOVE_INK_PER_PX;
+}
+
+/** State after `seat` walks `dx` (ink deducted). Returns null if the walk is illegal. */
+export function applyMove(state: InkDuelState, seat: SeatIndex, dx: number): InkDuelState | null {
+  if (!Number.isInteger(dx) || Math.abs(dx) > MAX_MOVE) return null;
+  if (dx === 0) return state;
+  const me = state.players[seat];
+  const to = resolveMove(state, seat, dx);
+  const cost = moveInk(me.x, to);
+  if (cost > state.inkBudget) return null;
+  const players = state.players.map((p) => (p.seat === seat ? { ...p, x: to, y: surfaceY(state.terrain, to) } : p));
+  return { ...state, players, inkBudget: Math.round((state.inkBudget - cost) * 100) / 100 };
+}
+
 // ---------------------------------------------------------------------------
 // Reducer
 // ---------------------------------------------------------------------------
@@ -291,7 +352,17 @@ export function applyAction(state: InkDuelState, action: EngineAction): InkDuelS
   if (state.phase !== "playing" || action.seat !== state.turnSeat) return state;
   const me = state.players[action.seat];
   if (!me || !me.alive) return state;
+  const dx = action.move ?? 0;
+  if (dx === 0) return applyActionInPlace(state, action);
+  const moved = applyMove(state, action.seat, dx);
+  if (!moved) return state;
+  const next = applyActionInPlace(moved, action);
+  if (next === moved || !next.lastEvent) return state;
+  const move: MoveRecord = { from: me.x, to: moved.players[action.seat].x };
+  return { ...next, lastEvent: { ...next.lastEvent, move } };
+}
 
+function applyActionInPlace(state: InkDuelState, action: EngineAction): InkDuelState {
   if (action.type === "pass") {
     return endTurn(state, { kind: "pass", id: state.seq + 1, seat: action.seat, dots: [] }, state.players, state.terrain, state.walls);
   }
@@ -567,14 +638,42 @@ export function botDoodle(template: Template, color: InkColor, budget: number, r
   return strokes;
 }
 
-function templateFor(state: InkDuelState, seat: SeatIndex, rng: () => number): Template[] {
+const TEMPLATES: readonly Template[] = ["spear", "bomb", "lightning", "club"];
+
+/**
+ * Situational preference for each weapon kind, added on top of the simulated
+ * damage. Without it bombs win almost every comparison (their splash forgives
+ * aim), so the bot looked one-note. Spears punch through enemy walls,
+ * lightning shines when enemies stand close together, bombs break walls.
+ */
+function kindBonus(state: InkDuelState, seat: SeatIndex, t: Template): number {
   const enemies = state.players.filter((p) => p.alive && p.seat !== seat);
-  const out: Template[] = ["bomb", "club"];
-  const wallBetween = state.walls.some((w) => w.owner !== seat);
-  if (wallBetween) out.push("spear");
-  if (enemies.length >= 2) out.push("lightning");
-  if (out.length < 3) out.push(rng() < 0.5 ? "spear" : "lightning");
-  return out;
+  const enemyWalls = state.walls.some((w) => w.owner !== seat && w.hp > 0);
+  switch (t) {
+    case "spear":
+      return enemyWalls ? 9 : 3;
+    case "lightning": {
+      let pairs = 0;
+      for (let i = 0; i < enemies.length; i++) for (let j = i + 1; j < enemies.length; j++) if (Math.abs(enemies[i].x - enemies[j].x) < CHAIN_RANGE) pairs++;
+      return 2 + pairs * 6;
+    }
+    case "bomb":
+      return enemyWalls ? 3 : 0;
+    default:
+      return 1;
+  }
+}
+
+/** Ink color for a bot doodle: shock for lightning half the time, otherwise skip elements the target already suffers. */
+function botColor(state: InkDuelState, seat: SeatIndex, t: Template, rng: () => number): InkColor {
+  if (t === "lightning" && rng() < 0.5) return 4;
+  const enemies = state.players.filter((p) => p.alive && p.seat !== seat);
+  const options: InkColor[] = [0, 1, 2, 3, 4].filter((c) => {
+    if (c === 1) return !enemies.every((e) => e.burn > 0);
+    if (c === 3) return !enemies.every((e) => e.poison > 0);
+    return true;
+  }) as InkColor[];
+  return options[Math.floor(rng() * options.length)];
 }
 
 /** A representative set of legal moves (doodles are continuous, so this samples rather than enumerates). */
@@ -636,41 +735,56 @@ export function chooseBotAction(state: InkDuelState, seat: SeatIndex, level: Bot
     if (wall) return { type: "wall", seat, strokes: wall };
   }
 
-  const color = Math.floor(rng() * INK_COLORS.length) as InkColor;
-  const candidates: { action: EngineAction; quick: number }[] = [];
-  const bodyList = bodies(state);
-  for (const t of templateFor(state, seat, rng)) {
-    const strokes = botDoodle(t, color, state.inkBudget, rng);
-    const stats = analyzeWeapon(strokes);
-    for (let angle = 6; angle <= 174; angle += 4) {
-      for (let power = 25; power <= 100; power += 5) {
-        const f = simulateFlight(state.terrain, bodyList, state.walls, { seat, x: me.x, y: me.y, alive: true }, stats, angle, power, state.wind, true);
-        if (!f.impact) continue;
-        let quick = 0;
-        for (const e of enemies) {
-          const dx = e.x - f.impact.x;
-          const dy = e.y - PLAYER_R - f.impact.y;
-          const d = Math.sqrt(dx * dx + dy * dy);
-          quick += Math.max(0, 1 - d / (stats.blastRadius + PLAYER_R + 40));
+  // Per-turn "mood": a random lean toward each weapon kind, so equally good
+  // options don't always resolve to the same kind.
+  const mood: Record<Template, number> = { spear: rng() * 8, bomb: rng() * 8, lightning: rng() * 8, club: rng() * 8 };
+  // Walk options: stronger bots reposition for a better angle (walking eats ink).
+  const walks = level >= 4 ? [0, -60, -30, 30, 60] : [0];
+  const scored: { move: Extract<EngineAction, { type: "fire" }>; score: number }[] = [];
+  const randomPool: { action: Extract<EngineAction, { type: "fire" }>; s: InkDuelState }[] = [];
+  for (const walk of walks) {
+    const s = applyMove(state, seat, walk);
+    if (!s || (walk !== 0 && s.players[seat].x === me.x)) continue;
+    const self = s.players[seat];
+    const bodyList = bodies(s);
+    for (const t of TEMPLATES) {
+      const strokes = botDoodle(t, botColor(s, seat, t, rng), s.inkBudget, rng);
+      if (totalInk(strokes) < MIN_INK) continue;
+      const stats = analyzeWeapon(strokes);
+      const quick: { action: Extract<EngineAction, { type: "fire" }>; q: number }[] = [];
+      for (let angle = 6; angle <= 174; angle += 5) {
+        for (let power = 24; power <= 100; power += 6) {
+          const f = simulateFlight(s.terrain, bodyList, s.walls, { seat, x: self.x, y: self.y, alive: true }, stats, angle, power, s.wind, true);
+          if (!f.impact) continue;
+          let q = 0;
+          for (const e of enemies) {
+            const dx = e.x - f.impact.x;
+            const dy = e.y - PLAYER_R - f.impact.y;
+            q += Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy) / (stats.blastRadius + PLAYER_R + 40));
+          }
+          const sdx = self.x - f.impact.x;
+          const sdy = self.y - f.impact.y;
+          if (sdx * sdx + sdy * sdy < (stats.blastRadius + 30) * (stats.blastRadius + 30)) q -= 2;
+          const action = { type: "fire" as const, seat, strokes, angle, power, ...(walk !== 0 ? { move: walk } : {}) };
+          quick.push({ action, q });
+          if (walk === 0 && rng() < 0.01) randomPool.push({ action, s });
         }
-        const sdx = me.x - f.impact.x;
-        const sdy = me.y - f.impact.y;
-        if (sdx * sdx + sdy * sdy < (stats.blastRadius + 30) * (stats.blastRadius + 30)) quick -= 2;
-        candidates.push({ action: { type: "fire", seat, strokes, angle, power }, quick });
+      }
+      quick.sort((a, b) => b.q - a.q);
+      const bonus = kindBonus(s, seat, t) + mood[t] - Math.abs(walk) * 0.04;
+      for (const c of quick.slice(0, 3)) {
+        const out = computeShot(s, seat, stats, c.action.angle, c.action.power);
+        scored.push({ move: c.action, score: scoreOutcome(s, seat, out) + bonus });
       }
     }
   }
-  if (candidates.length === 0) return { type: "pass", seat };
-  candidates.sort((a, b) => b.quick - a.quick);
-  const shortlist = candidates.slice(0, 8);
-  // A few random ones so pickByLevel's "mistake" path has something to grab.
-  for (let k = 0; k < 3; k++) shortlist.push(candidates[Math.floor(rng() * candidates.length)]);
-  const scored = shortlist.map((c) => {
-    const a = c.action as Extract<EngineAction, { type: "fire" }>;
-    const out = computeShot(state, seat, analyzeWeapon(a.strokes), a.angle, a.power);
-    return { move: c.action, score: scoreOutcome(state, seat, out) };
-  });
-  const picked = pickByLevel(scored, level, rng) as Extract<EngineAction, { type: "fire" }>;
+  if (scored.length === 0) return { type: "pass", seat };
+  // A few random shots so pickByLevel's "mistake" path has something to grab.
+  for (const r of randomPool.slice(0, 3)) {
+    const out = computeShot(r.s, seat, analyzeWeapon(r.action.strokes), r.action.angle, r.action.power);
+    scored.push({ move: r.action, score: scoreOutcome(r.s, seat, out) });
+  }
+  const picked = pickByLevel(scored, level, rng);
   // Human-ish aim wobble for lower levels.
   const wobble = Math.round((rng() * 2 - 1) * Math.max(0, 10 - level) * 1.2);
   const angle = Math.max(0, Math.min(180, picked.angle + wobble));

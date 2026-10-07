@@ -58,6 +58,28 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.54.0",
+    releaseDate: "2026-10-08",
+    title: "✏️ 낙서 결투 그래픽 전면 개편 + 이동 기능",
+    changes: [
+      {
+        game: "ink-duel",
+        type: "IMPROVE",
+        desc: "그래픽 전면 개편 — 캐릭터 4종(마법사·고양이·개구리·토끼), 수채화 배경·지층 지형, 잉크 폭발 파티클·화면 흔들림·속성 이펙트, 카드형 무기 판정",
+      },
+      {
+        game: "ink-duel",
+        type: "FEAT",
+        desc: "턴마다 잉크를 써서 좌우로 최대 80px 이동 가능 — 많이 걸을수록 그릴 잉크가 줄어요",
+      },
+      {
+        game: "ink-duel",
+        type: "IMPROVE",
+        desc: "AI 봇이 상황에 따라 창·폭탄·번개를 골고루 쓰고, 더 좋은 각도를 찾아 이동해요 · 모바일에서 경기장과 그림판이 한 화면에",
+      },
+    ],
+  },
+  {
     version: "v1.53.0",
     releaseDate: "2026-10-07",
     title: "✏️ 낙서 결투 신규 추가, 🌐 공개방 — 로비에서 방 목록 보고 바로 입장, 배고픈 상어 신규 상어 16종",

@@ -2,8 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { analyzeWeapon, ELEMENT_LABEL, INK_COLORS, totalInk, WEAPON_LABEL, type InkColor, type Stroke, type WeaponStats } from "./analyze";
-import ArenaCanvas, { CARD_MS, SEAT_COLORS, type ArenaAnim } from "./ArenaCanvas";
-import { computeRankings, MAX_ROUNDS, MIN_INK, wallPlacementError, type EngineAction, type InkDuelState, type InkEvent, type SeatIndex } from "./engine";
+import ArenaCanvas, { CARD_MS, CharacterAvatar, type ArenaAnim } from "./ArenaCanvas";
+import { characterFor } from "./arenaArt";
+import {
+  applyMove,
+  computeRankings,
+  MAX_MOVE,
+  MAX_ROUNDS,
+  MIN_INK,
+  moveInk,
+  resolveMove,
+  wallPlacementError,
+  type EngineAction,
+  type InkDuelState,
+  type InkEvent,
+  type SeatIndex,
+} from "./engine";
 import { playCardRevealSound, playMyTurnSound, playScribbleTick, playVictorySound, playWallSound } from "./inkDuelAudio";
 import WeaponPad, { DoodleSvg } from "./WeaponPad";
 
@@ -24,32 +38,81 @@ type Mode = "weapon" | "wall";
 
 const COLOR_NAMES = ["검정", "빨강", "파랑", "초록", "노랑"];
 
+const ELEMENT_CARD: Record<WeaponStats["element"], { from: string; to: string; foil: string }> = {
+  none: { from: "#475569", to: "#1e293b", foil: "#cbd5e1" },
+  fire: { from: "#f97316", to: "#b91c1c", foil: "#fde68a" },
+  ice: { from: "#38bdf8", to: "#1d4ed8", foil: "#e0f2fe" },
+  poison: { from: "#22c55e", to: "#15803d", foil: "#dcfce7" },
+  shock: { from: "#facc15", to: "#ca8a04", foil: "#fef9c3" },
+};
+
+function StatBar({ label, value, max, text }: { label: string; value: number; max: number; text: string }) {
+  return (
+    <div className="flex items-center gap-1.5 text-[10px]">
+      <span className="w-9 shrink-0 text-slate-500">{label}</span>
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
+        <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-rose-500" style={{ width: `${Math.min(100, (value / max) * 100)}%` }} />
+      </div>
+      <b className="w-8 shrink-0 text-right font-mono text-slate-700">{text}</b>
+    </div>
+  );
+}
+
+/** Trading-card style readout of a doodle's weapon stats. */
 export function WeaponCard({ stats, compact = false }: { stats: WeaponStats; compact?: boolean }) {
   const label = WEAPON_LABEL[stats.kind];
-  const rows: [string, string][] = [
-    ["피해", `${stats.damage}`],
-    ...(stats.blastRadius > 0 ? ([["폭발 반경", `${Math.round(stats.blastRadius)}`]] as [string, string][]) : []),
-    ...(stats.chains > 0 ? ([["연쇄", `${stats.chains}회`]] as [string, string][]) : []),
-    ["치명타", `${Math.round(stats.critChance * 100)}%`],
-    ["속도", `×${stats.speedMul.toFixed(2)}`],
-  ];
-  return (
-    <div className={`flex items-center gap-3 rounded-xl border-2 border-slate-700 bg-[#fffdf6] text-slate-800 shadow-md ${compact ? "p-2" : "p-3"}`}>
-      <div className="rounded-lg border border-slate-300 bg-white p-1">
-        <DoodleSvg strokes={stats.shape} size={compact ? 56 : 80} />
+  const theme = ELEMENT_CARD[stats.element];
+  const bars = (
+    <div className="flex flex-col gap-1">
+      <StatBar label="피해" value={stats.damage} max={40} text={`${stats.damage}`} />
+      {stats.blastRadius > 0 && <StatBar label="폭발" value={stats.blastRadius} max={80} text={`${Math.round(stats.blastRadius)}`} />}
+      {stats.chains > 0 && <StatBar label="연쇄" value={stats.chains} max={4} text={`${stats.chains}회`} />}
+      <StatBar label="치명타" value={stats.critChance} max={0.45} text={`${Math.round(stats.critChance * 100)}%`} />
+      <StatBar label="속도" value={stats.speedMul} max={1.35} text={`×${stats.speedMul.toFixed(2)}`} />
+    </div>
+  );
+  const art = (size: number) => (
+    <div
+      className="relative overflow-hidden rounded-lg border-2 border-white/80 shadow-inner"
+      style={{ background: `radial-gradient(circle at 30% 25%, ${theme.foil}, #fffdf6 70%)` }}
+    >
+      <DoodleSvg strokes={stats.shape} size={size} />
+      <div className="pointer-events-none absolute inset-0 animate-[inkfoil_2.6s_linear_infinite] bg-[linear-gradient(115deg,transparent_35%,rgba(255,255,255,0.75)_50%,transparent_65%)] bg-[length:250%_100%]" />
+    </div>
+  );
+  if (compact) {
+    return (
+      <div className="flex items-stretch gap-2.5 rounded-xl p-[3px] shadow-md" style={{ background: `linear-gradient(135deg, ${theme.from}, ${theme.to})` }}>
+        <div className="hidden p-0.5 sm:block">{art(60)}</div>
+        <div className="min-w-0 flex-1 rounded-[10px] bg-[#fffdf6] p-2 text-slate-800 sm:rounded-l-none">
+          <p className="flex items-center gap-1 text-sm font-black">
+            <span className="text-base">{label.emoji}</span> {label.name}
+            {stats.pierce && <span className="ml-1 rounded bg-slate-800 px-1.5 py-0.5 text-[9px] text-white">관통</span>}
+            <span className="ml-auto truncate text-[10px] font-semibold text-slate-500">{ELEMENT_LABEL[stats.element].split(" (")[0]}</span>
+          </p>
+          <div className="mt-1">{bars}</div>
+        </div>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className={`font-bold ${compact ? "text-sm" : "text-lg"}`}>
-          {label.emoji} {label.name}
-          {stats.pierce && <span className="ml-1.5 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-white">관통</span>}
-        </p>
-        <p className="text-[11px] text-slate-500">{ELEMENT_LABEL[stats.element]}</p>
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
-          {rows.map(([k, v]) => (
-            <span key={k}>
-              <span className="text-slate-500">{k}</span> <b>{v}</b>
-            </span>
-          ))}
+    );
+  }
+  return (
+    <div className="rounded-2xl p-[4px] shadow-2xl" style={{ background: `linear-gradient(135deg, ${theme.from}, ${theme.to})` }}>
+      <div className="rounded-[13px] bg-[#fffdf6] p-3 text-slate-800">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full text-xl shadow" style={{ background: theme.foil }}>
+            {label.emoji}
+          </span>
+          <div className="min-w-0">
+            <p className="text-lg leading-tight font-black">
+              {label.name}
+              {stats.pierce && <span className="ml-1.5 rounded bg-slate-800 px-1.5 py-0.5 align-middle text-[10px] text-white">관통</span>}
+            </p>
+            <p className="text-[11px] text-slate-500">{ELEMENT_LABEL[stats.element]}</p>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          {art(88)}
+          <div className="min-w-0 flex-1 self-center">{bars}</div>
         </div>
       </div>
     </div>
@@ -60,6 +123,7 @@ function eventCaption(ev: InkEvent | null, names: Record<SeatIndex, string>): st
   if (!ev) return [];
   const out: string[] = [];
   const who = names[ev.seat] ?? "누군가";
+  if (ev.move) out.push(`🚶 ${who} 님이 ${ev.move.to > ev.move.from ? "오른쪽" : "왼쪽"}으로 ${Math.abs(ev.move.to - ev.move.from)}px 이동`);
   if (ev.kind === "pass") out.push(`💤 ${who} 님이 턴을 넘겼어요`);
   else if (ev.kind === "wall") out.push(`🧱 ${who} 님이 잉크 벽을 세웠어요`);
   else {
@@ -145,6 +209,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
   const [angle, setAngle] = useState(defaultAngle);
   const [power, setPower] = useState(60);
   const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
+  const [walk, setWalk] = useState(0);
   if (draftSeq !== state.seq) {
     setDraftSeq(state.seq);
     setWeapon([]);
@@ -152,22 +217,32 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
     setMode("weapon");
     setAngle(defaultAngle());
     setTimeLeft(TURN_SECONDS);
+    setWalk(0);
   }
 
-  const budget = state.inkBudget;
+  // Everything this turn is previewed from where the walk would leave me (ink already deducted).
+  const preview = useMemo(() => (walk !== 0 && state.phase === "playing" ? (applyMove(state, viewerSeat, walk) ?? state) : state), [state, viewerSeat, walk]);
+  const budget = preview.inkBudget;
   const activeStrokes = mode === "weapon" ? weapon : wall;
   const inkUsed = totalInk(activeStrokes);
   const stats = useMemo(() => (weapon.length > 0 && totalInk(weapon) >= MIN_INK ? analyzeWeapon(weapon) : null), [weapon]);
-  const wallError = wall.length > 0 ? wallPlacementError(state, viewerSeat, wall) : null;
+  const wallError = wall.length > 0 ? wallPlacementError(preview, viewerSeat, wall) : null;
+  const walked = preview.players[viewerSeat].x - state.players[viewerSeat].x;
+  const canWalk = (next: number) => {
+    if (Math.abs(next) > MAX_MOVE) return false;
+    const to = resolveMove(state, viewerSeat, next);
+    return moveInk(state.players[viewerSeat].x, to) + inkUsed <= state.inkBudget;
+  };
+  const withWalk = <A extends EngineAction>(a: A): A => (walk !== 0 ? { ...a, move: walk } : a);
 
   const submitRef = useRef<() => void>(() => {});
   const submit = (auto = false) => {
     if (!myTurn) return;
-    if (mode === "weapon" && stats) onAction({ type: "fire", seat: viewerSeat, strokes: weapon, angle, power });
-    else if (mode === "wall" && wall.length > 0 && !wallError && totalInk(wall) >= MIN_INK) onAction({ type: "wall", seat: viewerSeat, strokes: wall });
+    if (mode === "weapon" && stats) onAction(withWalk({ type: "fire", seat: viewerSeat, strokes: weapon, angle, power }));
+    else if (mode === "wall" && wall.length > 0 && !wallError && totalInk(wall) >= MIN_INK) onAction(withWalk({ type: "wall", seat: viewerSeat, strokes: wall }));
     else if (auto) {
-      if (stats) onAction({ type: "fire", seat: viewerSeat, strokes: weapon, angle, power });
-      else onAction({ type: "pass", seat: viewerSeat });
+      if (stats) onAction(withWalk({ type: "fire", seat: viewerSeat, strokes: weapon, angle, power }));
+      else onAction(withWalk({ type: "pass", seat: viewerSeat }));
     }
   };
   useEffect(() => {
@@ -217,7 +292,9 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
               turnSeat === p.seat ? "border-amber-400 bg-amber-400/15 light:bg-amber-50" : "border-white/10 light:border-slate-200"
             } ${p.alive ? "" : "opacity-40 line-through"}`}
           >
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: SEAT_COLORS[p.seat % SEAT_COLORS.length] }} />
+            <span className="-my-1 -ml-1.5 rounded-full p-0.5" style={{ background: characterFor(p.seat).light }} title={characterFor(p.seat).name}>
+              <CharacterAvatar seat={p.seat} size={26} dead={!p.alive} />
+            </span>
             <span className="max-w-[7rem] truncate font-semibold text-white light:text-slate-800">
               {names[p.seat]}
               {p.seat === viewerSeat ? " (나)" : ""}
@@ -237,11 +314,12 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
       {/* Arena */}
       <div className="relative">
         <ArenaCanvas
-          view={viewState}
+          view={myTurn ? preview : viewState}
           anim={anim}
           onAnimDone={handleAnimDone}
           names={names}
           turnSeat={turnSeat}
+          walkFrom={myTurn && walked !== 0 ? { seat: viewerSeat, x: state.players[viewerSeat].x } : null}
           aim={myTurn && mode === "weapon" ? { seat: viewerSeat, angle, power, speedMul: stats?.speedMul ?? 1 } : null}
           onAim={(a, p) => {
             setAngle(a);
@@ -251,7 +329,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
         />
         {cardVisible && anim && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-3">
-            <div className="w-full max-w-xs animate-[inkcard_0.35s_ease-out]">
+            <div className="w-full max-w-xs animate-[inkcard_0.5s_cubic-bezier(.2,.9,.3,1.3)]">
               <p className="mb-1 text-center text-xs font-bold text-slate-700 drop-shadow">{names[anim.event.seat]} 님의 낙서 판정!</p>
               <WeaponCard stats={anim.event.stats} />
             </div>
@@ -265,7 +343,16 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
         {over && (
           <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-slate-900/55 p-3">
             <div className="w-full max-w-xs rounded-2xl border-2 border-slate-700 bg-[#fffdf6] p-4 text-center text-slate-800 shadow-xl">
-              <p className="text-3xl">🏆</p>
+              <div className="flex justify-center gap-1">
+                {rankings
+                  .filter((r) => r.rank === 1)
+                  .map((r) => (
+                    <span key={r.seat} className="animate-[inkwin_0.9s_ease-in-out_infinite_alternate]">
+                      <CharacterAvatar seat={r.seat} size={64} />
+                    </span>
+                  ))}
+              </div>
+              <p className="text-2xl">🏆</p>
               <p className="mt-1 text-lg font-bold">
                 {rankings
                   .filter((r) => r.rank === 1)
@@ -276,8 +363,10 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
               <ol className="mt-3 space-y-1 text-left text-sm">
                 {rankings.map((r) => (
                   <li key={r.seat} className="flex justify-between gap-2">
-                    <span>
-                      {r.rank}위 {names[r.seat]}
+                    <span className="flex items-center gap-1.5">
+                      <b className="w-6">{r.rank}위</b>
+                      <CharacterAvatar seat={r.seat} size={22} dead={r.rank > 1} />
+                      {names[r.seat]}
                     </span>
                     <span className="text-xs text-slate-500">
                       가한 피해 {shown.damageDealt[r.seat]} · 최고 {shown.bestHit[r.seat]}
@@ -292,7 +381,11 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
           </div>
         )}
       </div>
-      <style>{`@keyframes inkcard { from { transform: scale(0.6) rotate(-6deg); opacity: 0 } to { transform: none; opacity: 1 } }`}</style>
+      <style>{`
+        @keyframes inkcard { 0% { transform: scale(0.4) rotate(-14deg); opacity: 0 } 60% { transform: scale(1.06) rotate(2deg); opacity: 1 } 100% { transform: none } }
+        @keyframes inkfoil { from { background-position: 150% 0 } to { background-position: -100% 0 } }
+        @keyframes inkwin { from { transform: translateY(0) rotate(-4deg) } to { transform: translateY(-6px) rotate(4deg) } }
+      `}</style>
 
       {captions.length > 0 && !anim && (
         <div className="flex flex-col gap-0.5 rounded-lg bg-white/5 px-3 py-2 text-xs text-white/80 light:bg-slate-100 light:text-slate-700">
@@ -304,16 +397,16 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
 
       {/* Turn controls */}
       {myTurn && (
-        <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/40 bg-amber-400/5 p-3 light:bg-amber-50/60">
+        <div className="flex flex-col gap-2 rounded-2xl border border-amber-400/40 bg-amber-400/5 p-2.5 sm:gap-3 sm:p-3 light:bg-amber-50/60">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-bold text-amber-300 light:text-amber-700">내 차례!</span>
             <div className="flex rounded-full border border-white/15 p-0.5 light:border-slate-300">
               {(
                 [
-                  ["weapon", "⚔️ 무기 그리기"],
-                  ["wall", "🧱 벽 그리기"],
+                  ["weapon", "⚔️ 무기", " 그리기"],
+                  ["wall", "🧱 벽", " 그리기"],
                 ] as const
-              ).map(([m, label]) => (
+              ).map(([m, label, more]) => (
                 <button
                   key={m}
                   onClick={() => setMode(m)}
@@ -322,15 +415,48 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                   }`}
                 >
                   {label}
+                  <span className="hidden sm:inline">{more}</span>
                 </button>
               ))}
             </div>
             <span className={`ml-auto font-mono text-sm font-bold ${timeLeft <= 10 ? "text-rose-400" : "text-white/70 light:text-slate-600"}`}>⏱ {timeLeft}s</span>
           </div>
 
+          {/* Walk: spend ink to reposition before acting */}
+          <div className="flex flex-wrap items-center gap-2 text-xs text-white/70 light:text-slate-600">
+            <span>🚶 이동</span>
+            {(
+              [
+                [-20, "◀◀"],
+                [-10, "◀"],
+                [10, "▶"],
+                [20, "▶▶"],
+              ] as const
+            ).map(([d, label]) => (
+              <button
+                key={label}
+                disabled={!canWalk(walk + d)}
+                onClick={() => setWalk((w) => w + d)}
+                className="min-w-[2rem] rounded-lg border border-white/15 px-1.5 py-0.5 font-mono transition hover:border-white/30 disabled:opacity-30 sm:min-w-[2.25rem] sm:px-2 sm:py-1 light:border-slate-300"
+              >
+                {label}
+              </button>
+            ))}
+            <span className="font-mono">
+              {walked === 0 ? "제자리" : `${walked > 0 ? "→" : "←"} ${Math.abs(walked)}px`}
+              {walked !== 0 && <span className="text-white/45 light:text-slate-400"> (잉크 −{moveInk(0, walked)})</span>}
+            </span>
+            {walk !== 0 && (
+              <button onClick={() => setWalk(0)} className="rounded-lg px-2 py-1 text-white/50 underline light:text-slate-500">
+                되돌리기
+              </button>
+            )}
+            {walk !== 0 && walked !== walk && <span className="text-amber-300 light:text-amber-700">벽이나 상대에 막혔어요</span>}
+          </div>
+
           {/* Ink gauge + palette */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex min-w-[10rem] flex-1 items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="flex w-full items-center gap-2 sm:w-auto sm:min-w-[10rem] sm:flex-1">
               <span className="text-xs text-white/60 light:text-slate-500">🖋️ 잉크</span>
               <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
                 <div className="h-full rounded-full bg-slate-300 transition-all light:bg-slate-700" style={{ width: `${Math.max(0, 100 - (inkUsed / budget) * 100)}%` }} />
@@ -345,59 +471,62 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                   key={c}
                   title={COLOR_NAMES[i]}
                   onClick={() => setColor(i as InkColor)}
-                  className={`h-7 w-7 rounded-full border-2 transition ${color === i ? "scale-110 border-amber-400" : "border-white/20 light:border-slate-300"}`}
+                  className={`h-6 w-6 rounded-full border-2 transition sm:h-7 sm:w-7 ${color === i ? "scale-110 border-amber-400" : "border-white/20 light:border-slate-300"}`}
                   style={{ background: c }}
                 />
               ))}
             </div>
-            <div className="flex gap-1.5">
+            <div className="ml-auto flex gap-1.5 sm:ml-0">
               <button
+                title="되돌리기"
                 onClick={() => (mode === "weapon" ? setWeapon((s) => s.slice(0, -1)) : setWall((s) => s.slice(0, -1)))}
                 className="rounded-lg border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-slate-300 light:text-slate-600"
               >
-                ↶ 되돌리기
+                ↶<span className="hidden sm:inline"> 되돌리기</span>
               </button>
               <button
+                title="지우기"
                 onClick={() => (mode === "weapon" ? setWeapon([]) : setWall([]))}
                 className="rounded-lg border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-slate-300 light:text-slate-600"
               >
-                🗑 지우기
+                🗑<span className="hidden sm:inline"> 지우기</span>
               </button>
             </div>
           </div>
 
           {mode === "weapon" ? (
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,220px)_1fr]">
-              <div className="mx-auto w-full max-w-[220px]">
+            <div className="grid grid-cols-[minmax(0,44%)_1fr] gap-2 sm:grid-cols-[minmax(0,220px)_1fr] sm:gap-3">
+              <div className="w-full max-w-[220px]">
                 <WeaponPad strokes={weapon} color={color} budget={budget} onChange={setWeapon} onScribble={playScribbleTick} />
-                <p className="mt-1 text-center text-[10px] text-white/40 light:text-slate-400">곧은 선=창 · 닫힌 도형=폭탄 · 지그재그=번개 · 색=속성</p>
+                <p className="mt-1 hidden text-center text-[10px] text-white/40 sm:block light:text-slate-400">곧은 선=창 · 닫힌 도형=폭탄 · 지그재그=번개 · 색=속성</p>
               </div>
               <div className="flex flex-col gap-2">
                 {stats ? (
                   <>
                     <WeaponCard stats={stats} compact />
-                    <p className="text-[11px] text-white/50 light:text-slate-500">{WEAPON_LABEL[stats.kind].hint}</p>
+                    <p className="hidden text-[11px] text-white/50 sm:block light:text-slate-500">{WEAPON_LABEL[stats.kind].hint}</p>
                   </>
                 ) : (
-                  <div className="rounded-xl border border-dashed border-white/20 p-4 text-center text-xs text-white/50 light:border-slate-300 light:text-slate-500">
-                    왼쪽 공책에 무기를 그려보세요 ✏️
+                  <div className="rounded-xl border border-dashed border-white/20 p-3 text-center text-xs text-white/50 sm:p-4 light:border-slate-300 light:text-slate-500">
+                    ← 공책에 무기를 그려보세요 ✏️
+                    <span className="mt-1 block text-[10px] sm:hidden">곧은 선=창 · 닫힌 도형=폭탄 · 지그재그=번개</span>
                   </div>
                 )}
                 <label className="flex items-center gap-2 text-xs text-white/70 light:text-slate-600">
-                  <span className="w-10">각도</span>
-                  <input type="range" min={0} max={180} value={angle} onChange={(e) => setAngle(Number(e.target.value))} className="flex-1 accent-amber-500" style={{ direction: "rtl" }} />
+                  <span className="w-7 shrink-0 sm:w-10">각도</span>
+                  <input type="range" min={0} max={180} value={angle} onChange={(e) => setAngle(Number(e.target.value))} className="min-w-0 flex-1 accent-amber-500" style={{ direction: "rtl" }} />
                   <span className="w-10 text-right font-mono">{angle}°</span>
                 </label>
                 <label className="flex items-center gap-2 text-xs text-white/70 light:text-slate-600">
-                  <span className="w-10">힘</span>
-                  <input type="range" min={10} max={100} value={power} onChange={(e) => setPower(Number(e.target.value))} className="flex-1 accent-amber-500" />
+                  <span className="w-7 shrink-0 sm:w-10">힘</span>
+                  <input type="range" min={10} max={100} value={power} onChange={(e) => setPower(Number(e.target.value))} className="min-w-0 flex-1 accent-amber-500" />
                   <span className="w-10 text-right font-mono">{power}</span>
                 </label>
-                <p className="text-[10px] text-white/40 light:text-slate-400">경기장을 드래그해서 조준할 수도 있어요 (점선은 궤적의 앞부분만 보여줘요)</p>
+                <p className="hidden text-[10px] text-white/40 sm:block light:text-slate-400">경기장을 드래그해서 조준할 수도 있어요 (점선은 궤적의 앞부분만 보여줘요)</p>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => onAction({ type: "pass", seat: viewerSeat })}
-                    className="rounded-xl border border-white/15 px-3 py-2.5 text-xs text-white/60 light:border-slate-300 light:text-slate-500"
+                    onClick={() => onAction(withWalk({ type: "pass", seat: viewerSeat }))}
+                    className="rounded-xl border border-white/15 px-2.5 py-2.5 text-xs text-white/60 sm:px-3 light:border-slate-300 light:text-slate-500"
                   >
                     패스
                   </button>
@@ -419,7 +548,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
               {wallError && <p className="text-xs font-semibold text-rose-400">⚠️ {wallError}</p>}
               <div className="flex gap-2">
                 <button
-                  onClick={() => onAction({ type: "pass", seat: viewerSeat })}
+                  onClick={() => onAction(withWalk({ type: "pass", seat: viewerSeat }))}
                   className="rounded-xl border border-white/15 px-3 py-2.5 text-xs text-white/60 light:border-slate-300 light:text-slate-500"
                 >
                   패스

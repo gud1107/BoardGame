@@ -57,6 +57,9 @@ export default function InkDuelRulebookModal({ onClose }: { onClose: () => void 
             <div className={box}>⚔️ <b>무기 그리기</b> — 공책 패드에 그리고, 각도·힘을 정해 발사. 경기장을 드래그해서 조준할 수도 있어요. 점선은 궤적의 앞부분만 보여줘요.</div>
             <div className={box}>🧱 <b>벽 그리기</b> — 내 주변 파란 영역에 직접 선을 그어 벽 생성. 내구도 = 사용한 잉크. 상대 바로 옆에는 그릴 수 없어요.</div>
           </div>
+          <p className="mt-2 text-xs text-white/60 light:text-slate-500">
+            🚶 <b>이동</b> — 행동 전에 좌우로 최대 80px 걸을 수 있어요. 4px 걸을 때마다 잉크 1이 들어서(80px = 잉크 20), 많이 걸을수록 그릴 잉크가 줄어요. 상대나 땅에 붙은 벽은 지나갈 수 없어요.
+          </p>
           <p className="mt-2 text-xs text-white/50 light:text-slate-500">🌬️ 바람은 매 턴 바뀌어요. 제한 시간 45초가 지나면 그려둔 무기가 자동 발사되고, 없으면 패스합니다.</p>
         </section>
       </div>
