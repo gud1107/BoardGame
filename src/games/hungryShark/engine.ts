@@ -1619,9 +1619,9 @@ export function castSkill(w: World) {
       if (best) {
         w.beams.push({ x1: m.x, y1: m.y, x2: best.x, y2: best.y, life: 0.45, maxLife: 0.45, color: "#2dd4bf", zigzag: false });
         burst(w, "blood", best.x, best.y, 12, 160, "#dc2626", 4, 0.7);
-        hitPrey(w, best, w.stats.biteForce * 5);
-        s.hp = Math.min(w.stats.maxHealth, s.hp + w.stats.maxHealth * 0.12);
-        floatText(w, s.x, s.y - 90, "🩸 흡착 +12%", "#5eead4", 16);
+        hitPrey(w, best, w.stats.biteForce * 4);
+        s.hp = Math.min(w.stats.maxHealth, s.hp + w.stats.maxHealth * 0.08);
+        floatText(w, s.x, s.y - 90, "🩸 흡착 +8%", "#5eead4", 16);
       }
       break;
     }
@@ -1629,17 +1629,17 @@ export function castSkill(w: World) {
       const rx = m.x + hx * 120, ry = Math.max(SURFACE_Y + 60, m.y + hy * 120);
       for (const e of w.entities) {
         if (!e.alive || e.kind === "chest" || !isEdible(w, e)) continue;
-        if (Math.hypot(e.x - rx, e.y - ry) > 700 + e.def.radius) continue;
-        e.x += (rx - e.x) * 0.75;
-        e.y += (ry - e.y) * 0.75;
+        if (Math.hypot(e.x - rx, e.y - ry) > 480 + e.def.radius) continue;
+        e.x += (rx - e.x) * 0.5;
+        e.y += (ry - e.y) * 0.5;
       }
-      w.rings.push({ x: rx, y: ry, radius: 700, life: 0.9, maxLife: 0.9, color: "#a78bfa" });
-      areaStrike(w, rx, ry, hx, hy, 240, -1, w.stats.biteForce * 3, 2, "#22d3ee");
+      w.rings.push({ x: rx, y: ry, radius: 480, life: 0.9, maxLife: 0.9, color: "#a78bfa" });
+      areaStrike(w, rx, ry, hx, hy, 220, -1, w.stats.biteForce * 2.2, 2, "#22d3ee");
       break;
     }
     case "mindWave":
       freezeAround(w, s.x, s.y, 800, 3.5, "#f472b6");
-      areaStrike(w, s.x, s.y, hx, hy, 400, -1, w.stats.biteForce * 2.5, 3.5, "#f9a8d4");
+      areaStrike(w, s.x, s.y, hx, hy, 320, -1, w.stats.biteForce * 2.5, 3.5, "#f9a8d4");
       w.shake = Math.max(w.shake, 10);
       break;
     case "hailstorm":
