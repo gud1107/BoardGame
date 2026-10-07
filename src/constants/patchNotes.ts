@@ -60,8 +60,13 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.53.0",
     releaseDate: "2026-10-07",
-    title: "🌐 공개방 — 로비에서 방 목록 보고 바로 입장, 배고픈 상어 신규 상어 16종",
+    title: "✏️ 낙서 결투 신규 추가, 🌐 공개방 — 로비에서 방 목록 보고 바로 입장, 배고픈 상어 신규 상어 16종",
     changes: [
+      {
+        game: "ink-duel",
+        type: "FEAT",
+        desc: "낙서 결투 신규 추가 — 그린 낙서가 그대로 무기가 되는 2~4인 턴제 포격전(창·폭탄·번개·몽둥이, 색 속성, 잉크 벽, AI 봇)",
+      },
       {
         game: "common",
         type: "FEAT",

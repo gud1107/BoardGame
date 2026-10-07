@@ -74,6 +74,22 @@ export const GAME_REGISTRY: GameMeta[] = [
     onlineMultiplayer: true,
   },
   {
+    id: "ink-duel",
+    name: "낙서 결투",
+    nameEn: "Ink Duel",
+    description:
+      "공책에 그린 낙서가 그대로 무기가 되는 2~4인 턴제 포격전. 곧게 그은 선은 벽을 뚫는 창, 닫힌 도형은 지형을 파내는 폭탄, 지그재그는 연쇄 번개! 색으로 화염·빙결·독·전기 속성을 입히고, 잉크로 벽을 세워 막아내세요. 마지막까지 살아남으면 승리.",
+    players: { min: 2, max: 4 },
+    playTime: { minMinutes: 10, maxMinutes: 20 },
+    category: "party",
+    thumbnail: { emoji: "✏️", gradient: ["#fde68a", "#1f2937"] },
+    tags: ["그림게임", "포격전", "물리", "턴제", "AI봇"],
+    genres: ["party", "strategy"],
+    playable: true,
+    supportsAutoRanking: true,
+    onlineMultiplayer: true,
+  },
+  {
     id: "city-chase",
     name: "시티 체이스: 경찰 vs 도둑",
     nameEn: "City Chase",
