@@ -42,6 +42,17 @@ import {
   type Wall,
 } from "./physics";
 import { CHARACTER_COUNT, MAPS, type MapId } from "./maps";
+import {
+  activeStatuses,
+  hasLifesteal,
+  LIFESTEAL,
+  statusesForHit,
+  TURN_DURATION,
+  VULNERABLE_MUL,
+  WEAKEN_MUL,
+  type StatusId,
+  type StatusMap,
+} from "./status";
 
 export type SeatIndex = number;
 
@@ -95,9 +106,10 @@ export interface Player {
   y: number;
   hp: number;
   alive: boolean;
-  burn: number;
-  poison: number;
-  frozen: boolean;
+  /** Active status effects → remaining turns of this player (see status.ts). */
+  status: StatusMap;
+  /** Just sat out a stun: can't be stunned again until after their next real turn. */
+  stunImmune: boolean;
 }
 
 export interface HitRecord {
@@ -110,7 +122,7 @@ export interface HitRecord {
 export interface DotRecord {
   seat: SeatIndex;
   dmg: number;
-  kind: "burn" | "poison";
+  kind: "burn" | "poison" | "stun";
 }
 
 export type InkEvent =
@@ -137,6 +149,12 @@ export type InkEvent =
       move?: MoveRecord;
       /** A boomerang came back to its thrower. */
       caught?: boolean;
+      /** Statuses inflicted, per victim seat. */
+      inflicted: { seat: SeatIndex; statuses: StatusId[] }[];
+      /** 🩷 Lifesteal heal for the shooter. */
+      heal: number;
+      /** 😵 The shooter was confused: the angle they actually fired at. */
+      confusedAngle?: number;
     }
   | { kind: "wall"; id: number; seat: SeatIndex; wallId: number; dots: DotRecord[]; move?: MoveRecord }
   | { kind: "shield"; id: number; seat: SeatIndex; wallId: number; dots: DotRecord[]; move?: MoveRecord }
@@ -266,9 +284,8 @@ export function startGame(playerCount: number, seed: number, options: StartOptio
     y: surfaceY(terrain, x),
     hp: START_HP,
     alive: true,
-    burn: 0,
-    poison: 0,
-    frozen: false,
+    status: {},
+    stunImmune: false,
   }));
   const first = Math.floor(rng() * count);
   return {
@@ -310,7 +327,8 @@ export function aliveSeats(state: InkDuelState): SeatIndex[] {
   return state.players.filter((p) => p.alive).map((p) => p.seat);
 }
 
-export function computeRankings(state: InkDuelState): { seat: SeatIndex; rank: number }[] {
+/** Works for both modes: only reads living players' HP and the elimination order. */
+export function computeRankings(state: { players: readonly { seat: SeatIndex; alive: boolean; hp: number }[]; deathGroups: readonly (readonly SeatIndex[])[] }): { seat: SeatIndex; rank: number }[] {
   const out: { seat: SeatIndex; rank: number }[] = [];
   const alive = state.players.filter((p) => p.alive).sort((a, b) => b.hp - a.hp);
   let rank = 1;
@@ -338,7 +356,7 @@ function bodies(state: InkDuelState): Body[] {
 }
 
 /** Wall placement rule shared by the reducer and the UI's live preview. */
-export function wallPlacementError(state: InkDuelState, seat: SeatIndex, strokes: readonly Stroke[]): string | null {
+export function wallPlacementError(state: { players: readonly { seat: SeatIndex; x: number; y: number; alive: boolean }[]; terrain: readonly number[] }, seat: SeatIndex, strokes: readonly Stroke[]): string | null {
   const me = state.players[seat];
   for (const s of strokes) {
     for (let i = 0; i < s.p.length; i += 2) {
@@ -390,12 +408,16 @@ export function moveInk(from: number, to: number): number {
 }
 
 /** State after `seat` walks `dx` (ink deducted). Returns null if the walk is illegal. */
+export function maxMoveFor(state: InkDuelState, seat: SeatIndex): number {
+  return (state.players[seat]?.status.slow ?? 0) > 0 ? MAX_MOVE / 2 : MAX_MOVE;
+}
+
 export function applyMove(state: InkDuelState, seat: SeatIndex, dx: number): InkDuelState | null {
-  if (!Number.isInteger(dx) || Math.abs(dx) > MAX_MOVE) return null;
+  if (!Number.isInteger(dx) || Math.abs(dx) > maxMoveFor(state, seat)) return null;
   if (dx === 0) return state;
   const me = state.players[seat];
   const to = resolveMove(state, seat, dx);
-  const cost = moveInk(me.x, to);
+  const cost = moveInk(me.x, to) * ((me.status.slow ?? 0) > 0 ? 2 : 1);
   if (cost > state.inkBudget) return null;
   const players = state.players.map((p) => (p.seat === seat ? { ...p, x: to, y: surfaceY(state.terrain, to) } : p));
   return { ...state, players, inkBudget: Math.round((state.inkBudget - cost) * 100) / 100 };
@@ -406,7 +428,7 @@ export function applyMove(state: InkDuelState, seat: SeatIndex, dx: number): Ink
  * beside the player in the `angle` direction (0 = right, 90 = up). Shared by
  * the reducer and the UI preview.
  */
-export function shieldWall(state: InkDuelState, seat: SeatIndex, strokes: readonly Stroke[], angle: number): Wall {
+export function shieldWall(state: { players: readonly { x: number; y: number }[]; nextWallId: number }, seat: SeatIndex, strokes: readonly Stroke[], angle: number): Wall {
   const me = state.players[seat];
   const stats = analyzeWeapon(strokes);
   const a = degToRad(angle);
@@ -493,7 +515,17 @@ function applyActionInPlace(state: InkDuelState, action: EngineAction): InkDuelS
   if (!strokesValid(action.strokes, PAD_SIZE, PAD_SIZE) || !validInk(state, action.strokes)) return state;
   if (!Number.isInteger(action.angle) || action.angle < 0 || action.angle > 180) return state;
   if (!Number.isInteger(action.power) || action.power < 10 || action.power > 100) return state;
-  return resolveShot(state, action.seat, analyzeWeapon(action.strokes), action.angle, action.power);
+  let angle = action.angle;
+  let confusedAngle: number | undefined;
+  if ((state.players[action.seat].status.confuse ?? 0) > 0) {
+    const r = seededRng((state.seed + (state.seq + 1) * 7477) | 0);
+    const off = Math.round(8 + r() * 14) * (r() < 0.5 ? -1 : 1);
+    angle = Math.max(0, Math.min(180, angle + off));
+    confusedAngle = angle;
+  }
+  const next = resolveShot(state, action.seat, analyzeWeapon(action.strokes), angle, action.power);
+  if (confusedAngle === undefined || next.lastEvent?.kind !== "shot") return next;
+  return { ...next, lastEvent: { ...next.lastEvent, confusedAngle } };
 }
 
 interface ShotOutcome {
@@ -503,18 +535,60 @@ interface ShotOutcome {
   event: Extract<InkEvent, { kind: "shot" }>;
 }
 
-/** Pure shot resolution, also used by the bot to evaluate candidates. */
-export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponStats, angle: number, power: number): ShotOutcome {
-  const shooter = state.players[seat];
-  const flight = simulateFlight(state.terrain, bodies(state), state.walls, { seat, x: shooter.x, y: shooter.y, alive: true }, stats, angle, power, state.wind);
-  const hpBefore = state.players.map((p) => p.hp);
-  let walls = state.walls.map((w) => ({ ...w }));
+/** The bits of a player the impact rules read and write (shared by both modes). */
+export interface ImpactBody {
+  seat: SeatIndex;
+  x: number;
+  y: number;
+  hp: number;
+  alive: boolean;
+  status: StatusMap;
+  stunImmune: boolean;
+}
+
+export interface ImpactResult {
+  hits: HitRecord[];
+  chainPath: number[];
+  pelletPoints: number[];
+  crit: boolean;
+  craterRadius: number;
+  wallsBroken: number[];
+  killed: SeatIndex[];
+  inflicted: { seat: SeatIndex; statuses: StatusId[] }[];
+  heal: number;
+  walls: Wall[];
+  terrain: number[];
+}
+
+/**
+ * Applies one landed (or missed) shot to the world: damage with all the
+ * modifiers, lightning chains, scatter sub-blasts, wall damage, craters,
+ * status effects, lifesteal and knockback. Mutates `players` in place (pass
+ * copies). Shared by 🛑 stop mode (computeShot) and 🏃 moving mode
+ * (realtime.ts) — they differ only in how long a status lasts (`duration`)
+ * and where randomness comes from.
+ */
+export function resolveImpact<P extends ImpactBody>(
+  players: P[],
+  walls0: readonly Wall[],
+  terrain0: readonly number[],
+  map: MapId,
+  seat: SeatIndex,
+  stats: WeaponStats,
+  flight: { impact: { x: number; y: number } | null; directSeat: number | null; wallStop: number | null; pierced: readonly number[] },
+  critRoll: number,
+  statusRoll: () => number,
+  duration: (st: StatusId) => number,
+  /** Global damage scale (moving mode hits softer because shots come faster). */
+  dmgScale = 1,
+): ImpactResult {
+  const shooter = players[seat];
+  let walls = walls0.map((w) => ({ ...w }));
   for (const id of flight.pierced) {
     const w = walls.find((x) => x.id === id);
     if (w) w.hp -= 25;
   }
-  const players = state.players.map((p) => ({ ...p }));
-  let terrain = state.terrain;
+  let terrain = terrain0 as number[];
   const hits: HitRecord[] = [];
   const chainPath: number[] = [];
   const pelletPoints: number[] = [];
@@ -523,9 +597,8 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
 
   if (flight.impact) {
     const { x: ix, y: iy } = flight.impact;
-    const rng = seededRng((state.seed + (state.seq + 1) * 1013) | 0);
-    crit = rng() < stats.critChance;
-    const mul = crit ? CRIT_MUL : 1;
+    crit = critRoll < stats.critChance;
+    const mul = (crit ? CRIT_MUL : 1) * dmgScale;
     const blast = stats.blastRadius;
     // 🎆 Scatter shots burst at several points spread around the impact.
     const centers: number[] = [];
@@ -553,6 +626,7 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
       if (dmg <= 0) continue;
       if (p.seat === seat) dmg *= SELF_DMG_MUL;
       if (hasShield(walls, p.seat)) dmg *= SHIELD_GUARD;
+      dmg *= dmgMods(shooter.status, p.status);
       hits.push({ seat: p.seat, dmg: Math.round(dmg * mul), direct, chain: false });
     }
     // Lightning chains: jump to the nearest living, not-yet-hit enemy.
@@ -561,7 +635,7 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
       let ly = iy;
       chainPath.push(Math.round(lx), Math.round(ly));
       for (let k = 0; k < stats.chains; k++) {
-        let best: Player | null = null;
+        let best: P | null = null;
         let bestD = CHAIN_RANGE * CHAIN_RANGE;
         for (const p of players) {
           if (!p.alive || p.seat === seat || hits.some((h) => h.seat === p.seat)) continue;
@@ -574,7 +648,7 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
           }
         }
         if (!best) break;
-        hits.push({ seat: best.seat, dmg: Math.round(stats.damage * 0.5 * mul * (hasShield(walls, best.seat) ? SHIELD_GUARD : 1)), direct: false, chain: true });
+        hits.push({ seat: best.seat, dmg: Math.round(stats.damage * 0.5 * mul * (hasShield(walls, best.seat) ? SHIELD_GUARD : 1) * dmgMods(shooter.status, best.status)), direct: false, chain: true });
         lx = best.x;
         ly = best.y - PLAYER_R;
         chainPath.push(Math.round(lx), Math.round(ly));
@@ -588,27 +662,33 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
         for (let k = 0; k < centers.length; k += 2) if (wallTouchesCircle(w, centers[k], centers[k + 1], blast)) w.hp -= stats.damage;
       }
     }
-    craterRadius = (CRATER_FACTOR[stats.kind] * stats.blastRadius || CRATER_FIXED[stats.kind] || 0) * MAPS[state.map].craterMul;
+    craterRadius = (CRATER_FACTOR[stats.kind] * stats.blastRadius || CRATER_FIXED[stats.kind] || 0) * MAPS[map].craterMul;
     if (craterRadius > 0) for (let k = 0; k < centers.length; k += 2) terrain = carveCrater(terrain, centers[k], centers[k + 1], craterRadius);
   }
 
+  const inflicted: { seat: SeatIndex; statuses: StatusId[] }[] = [];
+  let heal = 0;
   for (const h of hits) {
     const p = players[h.seat];
     p.hp = Math.max(0, p.hp - h.dmg);
-    for (const el of [stats.element, stats.element2]) {
-      if (el === "fire") p.burn = 2;
-      else if (el === "ice") p.frozen = true;
-      else if (el === "poison") p.poison = 3;
+    if (h.seat !== seat && hasLifesteal(stats)) heal += h.dmg * LIFESTEAL;
+    const got: StatusId[] = [];
+    for (const st of statusesForHit(stats, statusRoll())) {
+      if (st === "stun" && p.stunImmune) continue;
+      p.status = { ...p.status, [st]: Math.max(p.status[st] ?? 0, duration(st)) };
+      got.push(st);
     }
+    if (got.length > 0) inflicted.push({ seat: h.seat, statuses: got });
     // 🌊 Knockback: shove hit players (not the shooter) away from the impact.
     if (stats.knockback > 0 && flight.impact && h.seat !== seat && !h.chain) {
       const dir = p.x >= flight.impact.x ? 1 : -1;
       p.x = Math.round(Math.max(20, Math.min(WORLD_W - 20, p.x + dir * stats.knockback)));
     }
   }
-  const wallsBroken = walls.filter((w) => w.hp <= 0 && state.walls.some((o) => o.id === w.id && o.hp > 0)).map((w) => w.id);
+  heal = Math.round(heal);
+  if (heal > 0 && shooter.alive) shooter.hp = Math.min(START_HP, shooter.hp + heal);
+  const wallsBroken = walls.filter((w) => w.hp <= 0 && walls0.some((o) => o.id === w.id && o.hp > 0)).map((w) => w.id);
   walls = walls.filter((w) => w.hp > 0).map((w) => ({ ...w, hp: Math.round(w.hp * 10) / 10 }));
-  for (const p of players) p.y = surfaceY(terrain, p.x);
   const killed: SeatIndex[] = [];
   for (const p of players) {
     if (p.alive && p.hp <= 0) {
@@ -616,10 +696,33 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
       killed.push(p.seat);
     }
   }
+  return { hits, chainPath, pelletPoints, crit, craterRadius, wallsBroken, killed, inflicted, heal, walls, terrain };
+}
+
+/** Pure shot resolution, also used by the bot to evaluate candidates. */
+export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponStats, angle: number, power: number): ShotOutcome {
+  const shooter = state.players[seat];
+  const flight = simulateFlight(state.terrain, bodies(state), state.walls, { seat, x: shooter.x, y: shooter.y, alive: true }, stats, angle, power, state.wind);
+  const hpBefore = state.players.map((p) => p.hp);
+  const players = state.players.map((p) => ({ ...p }));
+  const critRng = seededRng((state.seed + (state.seq + 1) * 1013) | 0);
+  const r = resolveImpact(
+    players,
+    state.walls,
+    state.terrain,
+    state.map,
+    seat,
+    stats,
+    flight,
+    flight.impact ? critRng() : 1,
+    seededRng((state.seed + (state.seq + 1) * 3571) | 0),
+    (st) => TURN_DURATION[st],
+  );
+  for (const p of players) p.y = surfaceY(r.terrain, p.x);
   return {
     players,
-    terrain,
-    walls,
+    terrain: r.terrain,
+    walls: r.walls,
     event: {
       kind: "shot",
       id: state.seq + 1,
@@ -629,18 +732,25 @@ export function computeShot(state: InkDuelState, seat: SeatIndex, stats: WeaponS
       power,
       frames: flight.frames,
       impact: flight.impact ? { x: Math.round(flight.impact.x * 10) / 10, y: Math.round(flight.impact.y * 10) / 10 } : null,
-      crit,
-      hits,
-      chainPath,
-      pelletPoints,
-      wallsBroken,
-      craterRadius,
+      crit: r.crit,
+      hits: r.hits,
+      chainPath: r.chainPath,
+      pelletPoints: r.pelletPoints,
+      wallsBroken: r.wallsBroken,
+      craterRadius: r.craterRadius,
       hpBefore,
-      killed,
+      killed: r.killed,
       dots: [],
       ...(flight.caught ? { caught: true } : {}),
+      inflicted: r.inflicted,
+      heal: r.heal,
     },
   };
+}
+
+/** Damage multiplier from the shooter's ⬇️ weaken and the target's 💔 vulnerable. */
+function dmgMods(shooter: StatusMap, target: StatusMap): number {
+  return ((shooter.weaken ?? 0) > 0 ? WEAKEN_MUL : 1) * ((target.vulnerable ?? 0) > 0 ? VULNERABLE_MUL : 1);
 }
 
 function resolveShot(state: InkDuelState, seat: SeatIndex, stats: WeaponStats, angle: number, power: number): InkDuelState {
@@ -666,8 +776,16 @@ function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terra
   let turnNo = state.turnNo;
   let round = state.round;
   const n = state.playerCount;
-  // The player who just acted spent their frozen debuff this turn.
-  if (players[seat]) players[seat].frozen = false;
+  // The player who just acted used up one turn of each timed debuff (DoTs tick at turn start instead).
+  if (players[seat]) {
+    const st: StatusMap = {};
+    for (const k of activeStatuses(players[seat].status)) {
+      const left = (players[seat].status[k] ?? 0) - (k === "burn" || k === "poison" ? 0 : 1);
+      if (left > 0) st[k] = left;
+    }
+    players[seat].status = st;
+    players[seat].stunImmune = false;
+  }
 
   const finish = (phase: "playing" | "gameOver"): InkDuelState => ({
     ...state,
@@ -680,12 +798,12 @@ function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terra
     turnNo,
     round,
     wind: windFor(state.seed, turnNo, state.map),
-    inkBudget: phase === "playing" && players[seat]?.frozen ? FROZEN_INK : INK_PER_TURN,
+    inkBudget: phase === "playing" && (players[seat]?.status.freeze ?? 0) > 0 ? FROZEN_INK : INK_PER_TURN,
     lastEvent: { ...event, dots },
     seq: state.seq + 1,
   });
 
-  for (let guard = 0; guard < n * 3; guard++) {
+  for (let guard = 0; guard < n * 6; guard++) {
     if (players.filter((p) => p.alive).length <= 1) return finish("gameOver");
     // Next living seat.
     let next = seat;
@@ -706,16 +824,18 @@ function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terra
     }
     const p = players[seat];
     let tick = 0;
-    if (p.burn > 0) {
+    const status: StatusMap = { ...p.status };
+    if ((status.burn ?? 0) > 0) {
       dots.push({ seat, dmg: BURN_DMG, kind: "burn" });
       tick += BURN_DMG;
-      p.burn -= 1;
+      status.burn = (status.burn ?? 0) - 1;
     }
-    if (p.poison > 0) {
+    if ((status.poison ?? 0) > 0) {
       dots.push({ seat, dmg: POISON_DMG, kind: "poison" });
       tick += POISON_DMG;
-      p.poison -= 1;
+      status.poison = (status.poison ?? 0) - 1;
     }
+    p.status = status;
     if (tick > 0) {
       p.hp = Math.max(0, p.hp - tick);
       if (p.hp <= 0) {
@@ -723,6 +843,13 @@ function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terra
         deathGroups = [...deathGroups, [seat]];
         continue;
       }
+    }
+    // 💫 Stunned: this turn is skipped outright, then a turn of immunity.
+    if ((status.stun ?? 0) > 0) {
+      dots.push({ seat, dmg: 0, kind: "stun" });
+      p.status = { ...status, stun: 0 };
+      p.stunImmune = true;
+      continue;
     }
     return finish("playing");
   }
@@ -851,7 +978,7 @@ export function botDoodle(template: Template, color: InkColor, budget: number, r
   return strokes;
 }
 
-const TEMPLATES: readonly Template[] = ["spear", "bomb", "rocket", "anvil", "shuriken", "lightning", "boomerang", "drill", "wave", "cluster", "club"];
+export const BOT_WEAPON_KINDS: readonly Template[] = ["spear", "bomb", "rocket", "anvil", "shuriken", "lightning", "boomerang", "drill", "wave", "cluster", "club"];
 
 /**
  * Situational preference for each weapon kind, added on top of the simulated
@@ -892,10 +1019,10 @@ function kindBonus(state: InkDuelState, seat: SeatIndex, t: Template): number {
 function botColor(state: InkDuelState, seat: SeatIndex, t: Template, rng: () => number): InkColor {
   if (t === "lightning" && rng() < 0.5) return 4;
   const enemies = state.players.filter((p) => p.alive && p.seat !== seat);
-  const options: InkColor[] = [0, 1, 2, 3, 4].filter((c) => {
-    if (c === 1) return !enemies.every((e) => e.burn > 0);
-    if (c === 3) return !enemies.every((e) => e.poison > 0);
-    return true;
+  const statusOfColor: Partial<Record<number, StatusId>> = { 1: "burn", 2: "freeze", 3: "poison", 5: "slow", 6: "stun", 7: "weaken", 8: "vulnerable", 10: "confuse", 11: "blind" };
+  const options = Array.from({ length: 12 }, (_, c) => c).filter((c) => {
+    const st = statusOfColor[c];
+    return !st || !enemies.every((e) => (e.status[st] ?? 0) > 0);
   }) as InkColor[];
   return options[Math.floor(rng() * options.length)];
 }
@@ -905,7 +1032,7 @@ export function getValidMoves(state: InkDuelState, seat: SeatIndex): EngineActio
   if (currentActor(state) !== seat) return [];
   const rng = seededRng((state.seed + state.seq * 31) | 0);
   const moves: EngineAction[] = [{ type: "pass", seat }];
-  for (const t of TEMPLATES) {
+  for (const t of BOT_WEAPON_KINDS) {
     const strokes = botDoodle(t, 0, state.inkBudget, rng);
     for (const angle of [30, 60, 90, 120, 150]) moves.push({ type: "fire", seat, strokes, angle, power: 60 });
   }
@@ -968,9 +1095,9 @@ export function chooseBotAction(state: InkDuelState, seat: SeatIndex, level: Bot
 
   // Per-turn "mood": a random lean toward each weapon kind, so equally good
   // options don't always resolve to the same kind.
-  const mood = Object.fromEntries(TEMPLATES.map((t) => [t, rng() * 8])) as Record<Template, number>;
+  const mood = Object.fromEntries(BOT_WEAPON_KINDS.map((t) => [t, rng() * 8])) as Record<Template, number>;
   // Evaluate a random 5 of the 11 weapon kinds per turn — keeps think time low and play varied.
-  const kinds = shuffle([...TEMPLATES], rng).slice(0, 5);
+  const kinds = shuffle([...BOT_WEAPON_KINDS], rng).slice(0, 5);
   // Walk options: stronger bots reposition for a better angle (walking eats ink).
   const walks = level >= 4 ? [0, -60, -30, 30, 60] : [0];
   const scored: { move: Extract<EngineAction, { type: "fire" }>; score: number }[] = [];

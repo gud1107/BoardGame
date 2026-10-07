@@ -114,9 +114,239 @@ function r2(v: number): number {
   return Math.round(v * 100) / 100;
 }
 
+/** A doodle in flight — advanced one tick at a time by moveFlyer + collideFlyer. */
+export interface Flyer {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  theta: number;
+  c: number;
+  s: number;
+  tick: number;
+  throwDir: number;
+  bouncesLeft: number;
+  digLeft: number;
+  digging: boolean;
+  pierced: number[];
+  /** Where a returning boomerang homes in (the thrower's hands; moving mode updates it every tick). */
+  homeX: number;
+  homeY: number;
+}
+
+export interface FlyerOutcome {
+  impact: { x: number; y: number } | null;
+  directSeat: number | null;
+  wallStop: number | null;
+  caught?: boolean;
+}
+
+export function launchFlyer(shooter: Body, stats: WeaponStats, angleDeg: number, power: number): Flyer {
+  const { vx, vy } = launchVelocity(angleDeg, power, stats.speedMul);
+  return {
+    x: shooter.x,
+    y: shooter.y - MUZZLE_Y,
+    vx,
+    vy,
+    theta: 0,
+    c: 1,
+    s: 0,
+    tick: 0,
+    // Boomerangs are pulled back toward the side they were thrown from.
+    throwDir: vx >= 0 ? 1 : -1,
+    bouncesLeft: stats.bounces,
+    digLeft: stats.dig,
+    digging: false,
+    pierced: [],
+    homeX: shooter.x,
+    homeY: shooter.y - MUZZLE_Y,
+  };
+}
+
+/** Integrates one tick of motion + rotation. */
+export function moveFlyer(f: Flyer, stats: WeaponStats, wind: number) {
+  f.tick++;
+  const boomerang = stats.returnAcc > 0;
+  f.vx += wind;
+  if (boomerang && f.tick > 10) {
+    if (f.vx * f.throwDir > 0) {
+      f.vx -= f.throwDir * stats.returnAcc;
+    } else {
+      // On the way back it homes in (spring + damping) on the thrower's hands.
+      f.vx += (f.homeX - f.x) * 0.004;
+      f.vy += (f.homeY - f.y) * 0.004;
+      f.vx *= 0.985;
+      f.vy *= 0.985;
+    }
+  }
+  f.vy += GRAVITY * stats.gravityMul;
+  f.x += f.vx;
+  f.y += f.vy;
+  if (stats.spin === 0) {
+    // Spear/rocket: keep the drawn axis aligned with the velocity (rotation from axis → velocity, no trig).
+    const vl = Math.sqrt(f.vx * f.vx + f.vy * f.vy);
+    const ux = vl > 0 ? f.vx / vl : 1;
+    const uy = vl > 0 ? f.vy / vl : 0;
+    f.c = stats.axisX * ux + stats.axisY * uy;
+    f.s = stats.axisX * uy - stats.axisY * ux;
+  } else {
+    f.theta += (boomerang ? f.throwDir : f.vx >= 0 ? 1 : -1) * stats.spin;
+    f.c = dcos(f.theta);
+    f.s = dsin(f.theta);
+  }
+}
+
 /**
- * Flies `stats.shape` from `shooter`. `fast` skips the per-segment shape
- * tests and treats the doodle as a circle of `stats.radius` (bot aim search).
+ * Collision tests for the flyer's current pose. Returns an outcome when the
+ * flight ends (hit / out of bounds / caught), null to keep flying. `fast`
+ * treats the doodle as a circle of `stats.radius` (bot aim search).
+ */
+export function collideFlyer(
+  f: Flyer,
+  stats: WeaponStats,
+  terrain: readonly number[],
+  bodies: readonly Body[],
+  walls: readonly Wall[],
+  shooterSeat: number,
+  fast: boolean,
+  minTerrain: number,
+  bounds?: readonly { x0: number; y0: number; x1: number; y1: number }[],
+): FlyerOutcome | null {
+  const x = f.x;
+  const y = f.y;
+  const c = f.c;
+  const s = f.s;
+  if (x < -160 || x > WORLD_W + 160 || y > WORLD_H + 80) return { impact: null, directSeat: null, wallStop: null };
+  const boomerang = stats.returnAcc > 0;
+  const R = stats.radius;
+  const shape = stats.shape;
+  let world: number[][] | null = null;
+  const ensure = (): number[][] => {
+    if (!world) {
+      world = shape.map((st) => {
+        const out = new Array<number>(st.p.length);
+        for (let i = 0; i < st.p.length; i += 2) {
+          out[i] = x + st.p[i] * c - st.p[i + 1] * s;
+          out[i + 1] = y + st.p[i] * s + st.p[i + 1] * c;
+        }
+        return out;
+      });
+    }
+    return world;
+  };
+
+  // Players.
+  for (const b of bodies) {
+    if (!b.alive) continue;
+    if (b.seat === shooterSeat && f.tick < SELF_GRACE_TICKS) continue;
+    const by = b.y - PLAYER_R;
+    const dx = b.x - x;
+    const dy = by - y;
+    if (boomerang && b.seat === shooterSeat) {
+      // The thrower catches a returning boomerang instead of being hit by it.
+      const catchR = PLAYER_R + R * 0.6 + 10;
+      if (dx * dx + dy * dy <= catchR * catchR) return { impact: null, directSeat: null, wallStop: null, caught: true };
+      continue;
+    }
+    const reach = R + PLAYER_R;
+    if (dx * dx + dy * dy > reach * reach) continue;
+    if (fast) return { impact: { x, y }, directSeat: b.seat, wallStop: null };
+    for (const st of ensure()) {
+      // analyzeWeapon guarantees ≥ 2 points per stroke.
+      for (let i = 0; i + 3 < st.length; i += 2) {
+        if (segPointDist2(st[i], st[i + 1], st[i + 2], st[i + 3], b.x, by) <= PLAYER_R * PLAYER_R) return { impact: { x, y }, directSeat: b.seat, wallStop: null };
+      }
+    }
+  }
+
+  // Ink walls.
+  for (let wi = 0; wi < walls.length; wi++) {
+    const w = walls[wi];
+    if (w.hp <= 0 || f.pierced.includes(w.id)) continue;
+    const bb = bounds?.[wi] ?? wallBounds(w);
+    if (x + R < bb.x0 - WALL_CONTACT || x - R > bb.x1 + WALL_CONTACT || y + R < bb.y0 - WALL_CONTACT || y - R > bb.y1 + WALL_CONTACT) continue;
+    let hit = false;
+    if (fast) {
+      for (const ws of w.strokes) {
+        for (let j = 0; j + 3 < ws.length && !hit; j += 2) {
+          if (segPointDist2(ws[j], ws[j + 1], ws[j + 2], ws[j + 3], x, y) <= R * R) hit = true;
+        }
+        if (hit) break;
+      }
+    } else {
+      outer: for (const st of ensure()) {
+        for (let i = 0; i + 3 < st.length; i += 2) {
+          for (const ws of w.strokes) {
+            for (let j = 0; j + 3 < ws.length; j += 2) {
+              if (segSegDist2(st[i], st[i + 1], st[i + 2], st[i + 3], ws[j], ws[j + 1], ws[j + 2], ws[j + 3]) <= WALL_CONTACT * WALL_CONTACT) {
+                hit = true;
+                break outer;
+              }
+            }
+          }
+        }
+      }
+    }
+    if (!hit) continue;
+    if (stats.pierce) {
+      f.pierced.push(w.id);
+      continue;
+    }
+    return { impact: { x, y }, directSeat: null, wallStop: w.id };
+  }
+
+  // 🌀 Tunnelling: slows down underground and blows up when the drill runs out.
+  if (f.digging) {
+    f.vx *= 0.9;
+    f.vy *= 0.9;
+    f.digLeft--;
+    if (f.digLeft <= 0 || y > WORLD_H - 30) return { impact: { x, y }, directSeat: null, wallStop: null };
+    return null;
+  }
+
+  // Terrain.
+  if (y + R >= minTerrain) {
+    let ground = false;
+    if (fast) {
+      ground = y + R * 0.5 >= surfaceY(terrain, x);
+    } else {
+      for (const st of ensure()) {
+        for (let i = 0; i < st.length; i += 2) {
+          if (st[i + 1] >= surfaceY(terrain, st[i])) {
+            ground = true;
+            break;
+          }
+        }
+        if (ground) break;
+      }
+    }
+    if (ground && f.bouncesLeft > 0) {
+      // ✴️ Ricochet: flip upward, lose some speed, lift clear of the ground.
+      f.bouncesLeft--;
+      f.vy = -Math.abs(f.vy) * 0.65 - 1;
+      f.vx *= 0.85;
+      f.y = Math.min(f.y, surfaceY(terrain, x) - R - 1);
+      return null;
+    }
+    if (ground && f.digLeft > 0) {
+      f.digging = true;
+      return null;
+    }
+    if (ground) return { impact: { x, y }, directSeat: null, wallStop: null };
+  }
+  return null;
+}
+
+export function minHeight(terrain: readonly number[]): number {
+  let m = Infinity;
+  for (const h of terrain) if (h < m) m = h;
+  return m;
+}
+
+/**
+ * Flies `stats.shape` from `shooter` to the end (stop mode: the whole flight
+ * resolves inside the reducer). `fast` skips the per-segment shape tests and
+ * treats the doodle as a circle of `stats.radius` (bot aim search).
  */
 export function simulateFlight(
   terrain: readonly number[],
@@ -129,201 +359,20 @@ export function simulateFlight(
   wind: number,
   fast = false,
 ): FlightResult {
-  let x = shooter.x;
-  let y = shooter.y - MUZZLE_Y;
-  let { vx, vy } = launchVelocity(angleDeg, power, stats.speedMul);
-  // Boomerangs are pulled back toward the side they were thrown from.
-  const throwDir = vx >= 0 ? 1 : -1;
-  const boomerang = stats.returnAcc > 0;
-  let bouncesLeft = stats.bounces;
-  let digLeft = stats.dig;
-  let digging = false;
-  let theta = 0;
-  let c = 1;
-  let s = 0;
+  const f = launchFlyer(shooter, stats, angleDeg, power);
   const frames: number[] = [];
-  const pierced: number[] = [];
   const bounds = walls.map(wallBounds);
-  let minTerrain = Infinity;
-  for (const h of terrain) if (h < minTerrain) minTerrain = h;
-  const R = stats.radius;
-  const shape = stats.shape;
-  // World-space shape buffer reused every tick.
-  const world: number[][] = shape.map((st) => new Array<number>(st.p.length));
-
-  const transform = () => {
-    for (let k = 0; k < shape.length; k++) {
-      const src = shape[k].p;
-      const dst = world[k];
-      for (let i = 0; i < src.length; i += 2) {
-        dst[i] = x + src[i] * c - src[i + 1] * s;
-        dst[i + 1] = y + src[i] * s + src[i + 1] * c;
-      }
-    }
-  };
-
+  const minTerrain = minHeight(terrain);
+  const frame = () => frames.push(r2(f.x), r2(f.y), r2(f.c), r2(f.s));
   for (let tick = 1; tick <= MAX_TICKS; tick++) {
-    vx += wind;
-    if (boomerang && tick > 10) {
-      if (vx * throwDir > 0) {
-        vx -= throwDir * stats.returnAcc;
-      } else {
-        // On the way back it homes in (spring + damping) on the thrower's hands.
-        vx += (shooter.x - x) * 0.004;
-        vy += (shooter.y - MUZZLE_Y - y) * 0.004;
-        vx *= 0.985;
-        vy *= 0.985;
-      }
-    }
-    vy += GRAVITY * stats.gravityMul;
-    x += vx;
-    y += vy;
-    if (stats.spin === 0) {
-      // Spear: keep the drawn axis aligned with the velocity (rotation from axis → velocity, no trig).
-      const vl = Math.sqrt(vx * vx + vy * vy);
-      const ux = vl > 0 ? vx / vl : 1;
-      const uy = vl > 0 ? vy / vl : 0;
-      c = stats.axisX * ux + stats.axisY * uy;
-      s = stats.axisX * uy - stats.axisY * ux;
-    } else {
-      theta += (boomerang ? throwDir : vx >= 0 ? 1 : -1) * stats.spin;
-      c = dcos(theta);
-      s = dsin(theta);
-    }
-    if (tick % 2 === 0) frames.push(r2(x), r2(y), r2(c), r2(s));
-
-    if (x < -160 || x > WORLD_W + 160 || y > WORLD_H + 80) {
-      return { frames, impact: null, directSeat: null, wallStop: null, pierced, ticks: tick };
-    }
-
-    let transformed = false;
-    const ensure = () => {
-      if (!transformed) {
-        transform();
-        transformed = true;
-      }
-    };
-
-    // Players.
-    for (const b of bodies) {
-      if (!b.alive) continue;
-      if (b.seat === shooter.seat && tick < SELF_GRACE_TICKS) continue;
-      const by = b.y - PLAYER_R;
-      const dx = b.x - x;
-      const dy = by - y;
-      if (boomerang && b.seat === shooter.seat) {
-        // The thrower catches a returning boomerang instead of being hit by it.
-        const catchR = PLAYER_R + R * 0.6 + 10;
-        if (dx * dx + dy * dy <= catchR * catchR) {
-          frames.push(r2(x), r2(y), r2(c), r2(s));
-          return { frames, impact: null, directSeat: null, wallStop: null, pierced, ticks: tick, caught: true };
-        }
-        continue;
-      }
-      const reach = R + PLAYER_R;
-      if (dx * dx + dy * dy > reach * reach) continue;
-      if (fast) {
-        frames.push(r2(x), r2(y), r2(c), r2(s));
-        return { frames, impact: { x, y }, directSeat: b.seat, wallStop: null, pierced, ticks: tick };
-      }
-      ensure();
-      for (const st of world) {
-        // analyzeWeapon guarantees ≥ 2 points per stroke.
-        for (let i = 0; i + 3 < st.length; i += 2) {
-          if (segPointDist2(st[i], st[i + 1], st[i + 2], st[i + 3], b.x, by) <= PLAYER_R * PLAYER_R) {
-            frames.push(r2(x), r2(y), r2(c), r2(s));
-            return { frames, impact: { x, y }, directSeat: b.seat, wallStop: null, pierced, ticks: tick };
-          }
-        }
-      }
-    }
-
-    // Ink walls.
-    for (let wi = 0; wi < walls.length; wi++) {
-      const w = walls[wi];
-      if (w.hp <= 0 || pierced.includes(w.id)) continue;
-      const bb = bounds[wi];
-      if (x + R < bb.x0 - WALL_CONTACT || x - R > bb.x1 + WALL_CONTACT || y + R < bb.y0 - WALL_CONTACT || y - R > bb.y1 + WALL_CONTACT) continue;
-      let hit = false;
-      if (fast) {
-        for (const ws of w.strokes) {
-          for (let j = 0; j + 3 < ws.length && !hit; j += 2) {
-            if (segPointDist2(ws[j], ws[j + 1], ws[j + 2], ws[j + 3], x, y) <= R * R) hit = true;
-          }
-          if (hit) break;
-        }
-      } else {
-        ensure();
-        outer: for (const st of world) {
-          for (let i = 0; i + 3 < st.length; i += 2) {
-            for (const ws of w.strokes) {
-              for (let j = 0; j + 3 < ws.length; j += 2) {
-                if (segSegDist2(st[i], st[i + 1], st[i + 2], st[i + 3], ws[j], ws[j + 1], ws[j + 2], ws[j + 3]) <= WALL_CONTACT * WALL_CONTACT) {
-                  hit = true;
-                  break outer;
-                }
-              }
-            }
-          }
-        }
-      }
-      if (!hit) continue;
-      if (stats.pierce) {
-        pierced.push(w.id);
-        continue;
-      }
-      frames.push(r2(x), r2(y), r2(c), r2(s));
-      return { frames, impact: { x, y }, directSeat: null, wallStop: w.id, pierced, ticks: tick };
-    }
-
-    // 🌀 Tunnelling: slows down underground and blows up when the drill runs out.
-    if (digging) {
-      vx *= 0.9;
-      vy *= 0.9;
-      digLeft--;
-      if (digLeft <= 0 || y > WORLD_H - 30) {
-        frames.push(r2(x), r2(y), r2(c), r2(s));
-        return { frames, impact: { x, y }, directSeat: null, wallStop: null, pierced, ticks: tick };
-      }
-      continue;
-    }
-
-    // Terrain.
-    if (y + R >= minTerrain) {
-      let ground = false;
-      if (fast) {
-        ground = y + R * 0.5 >= surfaceY(terrain, x);
-      } else {
-        ensure();
-        for (const st of world) {
-          for (let i = 0; i < st.length; i += 2) {
-            if (st[i + 1] >= surfaceY(terrain, st[i])) {
-              ground = true;
-              break;
-            }
-          }
-          if (ground) break;
-        }
-      }
-      if (ground && bouncesLeft > 0) {
-        // ✴️ Ricochet: flip upward, lose some speed, lift clear of the ground.
-        bouncesLeft--;
-        vy = -Math.abs(vy) * 0.65 - 1;
-        vx *= 0.85;
-        y = Math.min(y, surfaceY(terrain, x) - R - 1);
-        continue;
-      }
-      if (ground && digLeft > 0) {
-        digging = true;
-        continue;
-      }
-      if (ground) {
-        frames.push(r2(x), r2(y), r2(c), r2(s));
-        return { frames, impact: { x, y }, directSeat: null, wallStop: null, pierced, ticks: tick };
-      }
-    }
+    moveFlyer(f, stats, wind);
+    if (tick % 2 === 0) frame();
+    const out = collideFlyer(f, stats, terrain, bodies, walls, shooter.seat, fast, minTerrain, bounds);
+    if (!out) continue;
+    if (out.impact || out.caught) frame();
+    return { frames, impact: out.impact, directSeat: out.directSeat, wallStop: out.wallStop, pierced: f.pierced, ticks: tick, ...(out.caught ? { caught: true } : {}) };
   }
-  return { frames, impact: null, directSeat: null, wallStop: null, pierced, ticks: MAX_TICKS };
+  return { frames, impact: null, directSeat: null, wallStop: null, pierced: f.pierced, ticks: MAX_TICKS };
 }
 
 /** Carves a round crater (y grows downward) and returns the new terrain. */

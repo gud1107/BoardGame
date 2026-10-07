@@ -12,7 +12,10 @@ import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
-import { CharacterPicker, MapPicker, mapLabel } from "./LobbyPickers";
+import { CharacterPicker, MapPicker, mapLabel, ModePicker, modeLabel, type GameMode } from "./LobbyPickers";
+import RealtimeBoard, { type CommandBody } from "./RealtimeBoard";
+import { newBotMemory, rtBotThink, startRealtime, stepRealtime, type RtBotMemory, type RtCommand, type RtInput, type RtState } from "./realtime";
+import { RtClientBuffer, snapFromState, viewFromState, type RtSnap, type RtView } from "./rtView";
 import { CharacterAvatar } from "./ArenaCanvas";
 import { isMapId, MAP_IDS, type MapId } from "./maps";
 import {
@@ -69,6 +72,8 @@ type Occupant = {
   character?: number;
   /** Host only: the map choice for the next match. */
   mapPick?: MapId | "random";
+  /** Host only: 🛑 stop (turn-based) or 🏃 moving (real-time). */
+  modePick?: GameMode;
 };
 type Phase =
   | "choose"
@@ -113,6 +118,19 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const myCharRef = useRef<number | null>(null);
   const [mapPick, setMapPick] = useState<MapId | "random">("random");
   const mapPickRef = useRef<MapId | "random">("random");
+  const [modePick, setModePick] = useState<GameMode>("stop");
+  const modePickRef = useRef<GameMode>("stop");
+  // The running match's mode + 🏃 moving-mode plumbing (host simulates, guests interpolate snapshots).
+  const [gameMode, setGameMode] = useState<GameMode>("stop");
+  const gameModeRef = useRef<GameMode>("stop");
+  const [matchCount, setMatchCount] = useState(0);
+  const rtRef = useRef<RtState | null>(null);
+  const rtBufferRef = useRef(new RtClientBuffer());
+  const [rtHud, setRtHud] = useState<RtView | null>(null);
+  const rtHudAtRef = useRef(0);
+  const rtInputsRef = useRef<Record<number, RtInput>>({});
+  const rtCommandsRef = useRef<RtCommand[]>([]);
+  const rtBotMemRef = useRef<Record<number, RtBotMemory>>({});
   const [animating, setAnimating] = useState(false);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -217,9 +235,57 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
       const characters = (payload?.characters as (number | null)[] | undefined) ?? [];
       const map = isMapId(payload?.map) ? payload.map : undefined;
-      setGameState(startGame(playerCount, seed, { map, characters }));
+      const mode: GameMode = payload?.mode === "moving" ? "moving" : "stop";
+      gameModeRef.current = mode;
+      setGameMode(mode);
+      setMatchCount(playerCount);
+      if (mode === "moving") {
+        rtInputsRef.current = {};
+        rtCommandsRef.current = [];
+        rtBotMemRef.current = {};
+        rtBufferRef.current = new RtClientBuffer();
+        rtRef.current = isHost ? startRealtime(playerCount, seed, { map, characters }) : null;
+        setRtHud(rtRef.current ? viewFromState(rtRef.current) : null);
+        setGameState(null);
+      } else {
+        rtRef.current = null;
+        setRtHud(null);
+        setGameState(startGame(playerCount, seed, { map, characters }));
+      }
       setFinalResult(null);
       setPhase("playing");
+    });
+
+    // 🏃 Moving mode: the host is the only simulator (docs/cloud-sync.md §5).
+    channel.on("broadcast", { event: "rt-snapshot" }, ({ payload }) => {
+      if (isHost) return;
+      const snap = payload?.snap as RtSnap | undefined;
+      if (!snap) return;
+      rtBufferRef.current.push(snap, performance.now());
+      if (gameModeRef.current !== "moving") {
+        gameModeRef.current = "moving";
+        setGameMode("moving");
+        setMatchCount(snap.players.length);
+      }
+      const now = performance.now();
+      if (now - rtHudAtRef.current > 120 || snap.phase === "gameOver") {
+        rtHudAtRef.current = now;
+        setRtHud(rtBufferRef.current.view(now));
+      }
+      // A late joiner (or a guest that missed game-start) drops straight into the match.
+      setPhase((p) => (p === "waiting" || p === "connecting" ? "playing" : p));
+    });
+    channel.on("broadcast", { event: "rt-input" }, ({ payload }) => {
+      if (!isHost) return;
+      const seat = payload?.seat as number;
+      const input = payload?.input as RtInput | undefined;
+      if (!Number.isInteger(seat) || !input || botSeatsRef.current.includes(seat)) return;
+      rtInputsRef.current[seat] = { left: !!input.left, right: !!input.right, jump: !!input.jump };
+    });
+    channel.on("broadcast", { event: "rt-command" }, ({ payload }) => {
+      if (!isHost) return;
+      const command = payload?.command as RtCommand | undefined;
+      if (command && Number.isInteger(command.seat)) rtCommandsRef.current.push(command);
     });
 
     channel.on("broadcast", { event: "bot-roster" }, ({ payload }) => {
@@ -253,6 +319,17 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     });
 
     channel.on("broadcast", { event: "state-request" }, () => {
+      if (gameModeRef.current === "moving") {
+        // Only the host knows the live real-time state.
+        if (isHost && rtRef.current) {
+          channel.send({
+            type: "broadcast",
+            event: "state-sync",
+            payload: { rt: snapFromState(rtRef.current, { full: true }), botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, botTakeover: botTakeoverRef.current },
+          });
+        }
+        return;
+      }
       if (gameStateRef.current) {
         channel.send({
           type: "broadcast",
@@ -265,6 +342,24 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     });
 
     channel.on("broadcast", { event: "state-sync" }, ({ payload }) => {
+      const rt = payload?.rt as RtSnap | undefined;
+      if (rt) {
+        if (isHost) return;
+        rtBufferRef.current.push(rt, performance.now());
+        gameModeRef.current = "moving";
+        setGameMode("moving");
+        setMatchCount(rt.players.length);
+        const roster = (payload?.botSeats as SeatIndex[] | undefined) ?? [];
+        botSeatsRef.current = roster;
+        setBotSeats(roster);
+        const takeover = (payload?.botTakeover as BotTakeoverState | undefined) ?? INITIAL_BOT_TAKEOVER_STATE;
+        botTakeoverRef.current = takeover;
+        setBotTakeover(takeover);
+        setRtHud(rtBufferRef.current.view(performance.now()));
+        setFinalResult(null);
+        setPhase("playing");
+        return;
+      }
       const state = payload?.state as InkDuelState | undefined;
       if (!state) return;
       // See engine.ts's `isStateSyncStale` doc — rejects a snapshot that
@@ -345,7 +440,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
           name: myName,
           playerId: myPlayerId,
           character: myCharRef.current ?? undefined,
-          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current } : {}),
+          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current } : {}),
         } satisfies Occupant);
         requestStateSync();
         setPhase((p) => (p === "connecting" ? "waiting" : p));
@@ -364,6 +459,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const host = occupants.find((o) => o.isHost);
   const knownTargetPlayerCount = host?.targetPlayerCount ?? targetPlayerCount;
   const hostMapLabel = mapLabel(host?.mapPick);
+  const hostModeLabel = modeLabel(host?.modePick);
   const reclaimAttemptsRef = useRef(0);
 
   useEffect(() => {
@@ -391,7 +487,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       name: myName,
       playerId: myPlayerId,
       character: myCharRef.current ?? undefined,
-      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current } : {}),
+      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current } : {}),
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
@@ -406,12 +502,16 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({
       type: "broadcast",
       event: "game-start",
-      payload: { seed: Math.floor(Math.random() * 2 ** 31), playerCount: filledCount, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, characters, map },
+      payload: { seed: Math.floor(Math.random() * 2 ** 31), playerCount: filledCount, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, characters, map, mode: modePickRef.current },
     });
   }, []);
 
   /** Re-publish my presence after changing my character (or, as host, the map). */
-  const retrack = (next: { character?: number | null; map?: MapId | "random" }) => {
+  const retrack = (next: { character?: number | null; map?: MapId | "random"; mode?: GameMode }) => {
+    if (next.mode !== undefined) {
+      modePickRef.current = next.mode;
+      setModePick(next.mode);
+    }
     if (next.character !== undefined) {
       myCharRef.current = next.character;
       setMyChar(next.character);
@@ -427,7 +527,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       name: myName,
       playerId: myPlayerId,
       character: myCharRef.current ?? undefined,
-      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current } : {}),
+      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current } : {}),
     } satisfies Occupant);
   };
 
@@ -508,6 +608,78 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({ type: "broadcast", event: "game-action", payload: { action } });
   }, []);
 
+  // 🏃 Moving mode host loop: bots think, the world steps, snapshots go out ~12/s.
+  useEffect(() => {
+    if (!(phase === "playing" && gameMode === "moving" && isHost)) return;
+    let raf = 0;
+    let last = performance.now();
+    let lastSnap = 0;
+    let lastHud = 0;
+    let terrainVer = -1;
+    let wallsVer = -1;
+    let terrainFreshUntil = 0;
+    let wallsFreshUntil = 0;
+    const loop = (now: number) => {
+      raf = requestAnimationFrame(loop);
+      const s = rtRef.current;
+      if (!s) return;
+      const dt = Math.min(100, now - last);
+      last = now;
+      const cmds = rtCommandsRef.current.splice(0);
+      const botSet = new Set<number>([...botSeatsRef.current, ...Object.keys(botTakeoverRef.current.takeovers).map(Number)]);
+      for (const seat of botSet) {
+        if (!s.players[seat]) continue;
+        const mem = (rtBotMemRef.current[seat] ??= newBotMemory(Math.random));
+        const idx = botSeatsRef.current.indexOf(seat);
+        const level = idx >= 0 ? (botLevelsRef.current[idx] ?? DEFAULT_BOT_LEVEL) : DEFAULT_BOT_LEVEL;
+        const c = rtBotThink(s, seat, level, mem, Math.random);
+        if (c) cmds.push(c);
+        rtInputsRef.current[seat] = mem.input;
+      }
+      stepRealtime(s, dt, rtInputsRef.current, cmds);
+      if (s.terrainVer !== terrainVer) {
+        terrainVer = s.terrainVer;
+        terrainFreshUntil = now + 1000;
+      }
+      if (s.wallsVer !== wallsVer) {
+        wallsVer = s.wallsVer;
+        wallsFreshUntil = now + 1000;
+      }
+      if (now - lastSnap >= 80) {
+        lastSnap = now;
+        channelRef.current?.send({ type: "broadcast", event: "rt-snapshot", payload: { snap: snapFromState(s, { terrainFresh: now < terrainFreshUntil, wallsFresh: now < wallsFreshUntil }) } });
+      }
+      if (now - lastHud >= 120) {
+        lastHud = now;
+        setRtHud(viewFromState(s));
+      }
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [phase, gameMode, isHost]);
+
+  const getRtView = useCallback(
+    (now: number): RtView | null => (isHost ? (rtRef.current ? viewFromState(rtRef.current) : null) : rtBufferRef.current.view(now)),
+    [isHost],
+  );
+  const sendRtInput = useCallback(
+    (input: RtInput) => {
+      if (mySeat === null) return;
+      if (isHost) rtInputsRef.current[mySeat] = input;
+      else channelRef.current?.send({ type: "broadcast", event: "rt-input", payload: { seat: mySeat, input } });
+    },
+    [isHost, mySeat],
+  );
+  const sendRtCommand = useCallback(
+    (cmd: CommandBody) => {
+      if (mySeat === null) return;
+      const command = { ...cmd, seat: mySeat } as RtCommand;
+      if (isHost) rtCommandsRef.current.push(command);
+      else channelRef.current?.send({ type: "broadcast", event: "rt-command", payload: { command } });
+    },
+    [isHost, mySeat],
+  );
+
   function castTakeoverVote(seatKey: string) {
     channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "vote-cast", seatKey, voterDeviceId: deviceId } } });
   }
@@ -577,17 +749,17 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
 
   const ids: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
-    const count = gameState?.playerCount ?? knownTargetPlayerCount;
+    const count = gameState?.playerCount ?? (matchCount || knownTargetPlayerCount);
     for (let seat = 0; seat < count; seat++) {
       const occ = occupants.find((o) => o.seat === seat);
       map[seat] = botTakeover.takeovers[seat]?.originalUserId ?? occ?.playerId ?? `${roomCode}:${seat}`;
     }
     return map;
-  }, [roomCode, gameState, knownTargetPlayerCount, occupants, botTakeover]);
+  }, [roomCode, gameState, matchCount, knownTargetPlayerCount, occupants, botTakeover]);
 
   const names: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
-    const count = gameState?.playerCount ?? knownTargetPlayerCount;
+    const count = gameState?.playerCount ?? (matchCount || knownTargetPlayerCount);
     for (let seat = 0; seat < count; seat++) {
       const takeover = botTakeover.takeovers[seat];
       if (takeover) {
@@ -599,7 +771,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       map[seat] = seat === mySeat ? myName : (occ?.name ?? (botIdx >= 0 ? botDisplayName(botIdx, botLevels[botIdx]) : "상대"));
     }
     return map;
-  }, [occupants, mySeat, myName, gameState, knownTargetPlayerCount, botSeats, botLevels, botTakeover]);
+  }, [occupants, mySeat, myName, gameState, matchCount, knownTargetPlayerCount, botSeats, botLevels, botTakeover]);
   useEffect(() => {
     namesRef.current = names;
   }, [names]);
@@ -612,8 +784,10 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   }
 
   function handleGameEnd() {
-    if (!gameState || gameState.phase !== "gameOver") return;
-    const rankings = computeRankings(gameState);
+    const src = gameMode === "moving" ? rtHud : gameState;
+    if (!src || src.phase !== "gameOver") return;
+    const rankings = computeRankings(src);
+    const dealt = (seat: SeatIndex) => (gameMode === "moving" ? (rtHud?.players[seat]?.damageDealt ?? 0) : (gameState?.damageDealt[seat] ?? 0));
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
       self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }),
@@ -623,7 +797,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       lines: rankings
         .slice()
         .sort((a, b) => a.rank - b.rank)
-        .map((r) => `${r.rank === 1 ? "🏆" : `${r.rank}위`} ${names[r.seat]} — 가한 피해 ${gameState.damageDealt[r.seat]}`),
+        .map((r) => `${r.rank === 1 ? "🏆" : `${r.rank}위`} ${names[r.seat]} — 가한 피해 ${dealt(r.seat)}`),
     });
     setPhase("post-game");
   }
@@ -643,6 +817,10 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     setMySeat(null);
     setOccupants([]);
     setGameState(null);
+    rtRef.current = null;
+    setRtHud(null);
+    gameModeRef.current = "stop";
+    setGameMode("stop");
     setFinalResult(null);
     setIdentity({ name: "" });
     setMyPlayerId(undefined);
@@ -824,6 +1002,18 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
         </div>
         {intent === "create" && (
           <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
+            모드
+            <ModePicker
+              value={modePick}
+              onChange={(m) => {
+                modePickRef.current = m;
+                setModePick(m);
+              }}
+            />
+          </div>
+        )}
+        {intent === "create" && (
+          <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
             맵
             <MapPicker
               value={mapPick}
@@ -896,11 +1086,17 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
             </div>
             {isHost ? (
               <div className="flex w-full max-w-md flex-col gap-1.5 text-left text-xs text-white/60 light:text-slate-500">
+                모드
+                <ModePicker value={modePick} onChange={(m) => retrack({ mode: m })} />
                 맵
                 <MapPicker value={mapPick} onChange={(m) => retrack({ map: m })} />
               </div>
             ) : (
-              hostMapLabel && <p className="text-xs text-white/60 light:text-slate-500">맵: {hostMapLabel}</p>
+              (hostMapLabel || hostModeLabel) && (
+                <p className="text-xs text-white/60 light:text-slate-500">
+                  {hostModeLabel} {hostMapLabel && `· 맵: ${hostMapLabel}`}
+                </p>
+              )
             )}
             <p className="text-xs text-white/40 light:text-slate-400">{knownTargetPlayerCount}명이 모이면 자동으로 게임이 시작됩니다. AI 봇으로도 채울 수 있어요.</p>
             {isHost && occupants.length + botSeats.length >= MIN_PLAYERS && occupants.length + botSeats.length < knownTargetPlayerCount && (
@@ -914,6 +1110,45 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
           </>
         )}
       </div>
+    );
+  }
+
+  if (phase === "playing" && mySeat !== null && gameMode === "moving") {
+    const myVoteAsTarget = activeVoteFor(botTakeover, String(mySeat));
+    const iAmTakenOver = isSeatTakenOver(botTakeover, String(mySeat));
+    const voteToShow = Object.values(botTakeover.votes).find((v) => v.seatKey !== String(mySeat) && `${v.seatKey}:${v.startedAt}` !== dismissedVoteKey);
+    return withGuard(
+      <>
+        {myVoteAsTarget && <BotTakeoverSelfBanner mode="prove-presence" onConfirm={() => proveStillHereOrReclaim(String(mySeat))} />}
+        {!myVoteAsTarget && iAmTakenOver && <BotTakeoverSelfBanner mode="reclaim" onConfirm={() => proveStillHereOrReclaim(String(mySeat))} />}
+        {voteToShow && (
+          <BotTakeoverVoteModal
+            targetName={names[Number(voteToShow.seatKey)] ?? voteToShow.originalName}
+            reason={voteToShow.reason}
+            yesCount={voteToShow.yesVoterDeviceIds.length}
+            eligibleVoterCount={eligibleVoterCountFor(voteToShow.seatKey)}
+            hasVoted={voteToShow.yesVoterDeviceIds.includes(deviceId)}
+            onVoteYes={() => castTakeoverVote(voteToShow.seatKey)}
+            onDismiss={() => setDismissedVoteKey(`${voteToShow.seatKey}:${voteToShow.startedAt}`)}
+          />
+        )}
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-bold text-amber-300 light:text-amber-700">🏃 무빙 모드 — 실시간</span>
+          <button onClick={() => setShowRulebook(true)} className="rounded-full border border-white/10 light:border-slate-200 px-3 py-1 text-[11px] text-white/50 light:text-slate-500 hover:border-white/25 light:hover:border-slate-400">
+            📖 룰북
+          </button>
+        </div>
+        <RealtimeBoard
+          getView={getRtView}
+          hud={rtHud}
+          viewerSeat={mySeat}
+          names={names}
+          connectedSeats={connectedSeats}
+          onInput={sendRtInput}
+          onCommand={sendRtCommand}
+          onGameEnd={handleGameEnd}
+        />
+      </>
     );
   }
 

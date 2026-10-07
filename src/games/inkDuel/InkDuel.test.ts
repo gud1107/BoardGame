@@ -6,6 +6,7 @@ import {
   applyMove,
   botDoodle,
   MAX_MOVE,
+  maxMoveFor,
   MOVE_INK_PER_PX,
   resolveMove,
   chooseBotAction,
@@ -22,6 +23,8 @@ import {
 } from "./engine";
 import { surfaceY } from "./physics";
 import { MAP_IDS } from "./maps";
+import { newBotMemory, RT_INK_MAX, RT_SHIELD_MS, rtBotThink, startRealtime, stepRealtime } from "./realtime";
+import { RtClientBuffer, snapFromState } from "./rtView";
 
 function line(x0: number, y0: number, x1: number, y1: number, steps = 20, c: Stroke["c"] = 0): Stroke {
   const p: number[] = [];
@@ -112,7 +115,7 @@ describe("reducer", () => {
     expect(ev.impact).not.toBeNull();
     expect(ev.hits.some((h) => h.seat === target && h.dmg > 0)).toBe(true);
     expect(next.players[target].hp).toBeLessThan(100);
-    expect(next.players[target].frozen).toBe(true);
+    expect(next.players[target].status.freeze).toBeGreaterThan(0);
     expect(next.turnSeat).toBe(target);
     expect(next.inkBudget).toBe(FROZEN_INK);
     expect(ev.craterRadius).toBeGreaterThan(0);
@@ -141,6 +144,58 @@ function arc(c: Stroke["c"] = 0): Stroke {
   }
   return { c, p };
 }
+
+describe("status effects (stop mode)", () => {
+  /** Two players side by side so a straight-down lob always hits the target. */
+  function closeRange(seed: number) {
+    const base = startGame(2, seed);
+    const shooter = base.turnSeat;
+    const target = 1 - shooter;
+    const tx = base.players[shooter].x + 8;
+    const s = { ...base, players: base.players.map((p) => (p.seat === target ? { ...p, x: tx, y: surfaceY(base.terrain, tx) } : p)) };
+    return { s, shooter, target };
+  }
+  const lob = (seat: number, c: Stroke["c"]): EngineAction => ({ type: "fire", seat, strokes: [circle(60, c)], angle: 90, power: 40 });
+
+  it("brown ink stuns: the victim's next turn is skipped, then they're immune once", () => {
+    const { s, shooter, target } = closeRange(11);
+    const hit = applyAction(s, lob(shooter, 6));
+    // Turn went past the stunned target straight back to the shooter.
+    expect(hit.turnSeat).toBe(shooter);
+    expect(hit.lastEvent?.dots.some((d) => d.kind === "stun" && d.seat === target)).toBe(true);
+    expect(hit.players[target].stunImmune).toBe(true);
+  });
+
+  it("pink ink heals the shooter by 40% of the damage dealt", () => {
+    const { s, shooter } = closeRange(11);
+    const hurt = { ...s, players: s.players.map((p) => (p.seat === shooter ? { ...p, hp: 50 } : p)) };
+    const after = applyAction(hurt, lob(shooter, 9));
+    const ev = after.lastEvent;
+    if (ev?.kind !== "shot") throw new Error("shot expected");
+    expect(ev.heal).toBeGreaterThan(0);
+  });
+
+  it("orange ink makes the target vulnerable, which raises the next hit's damage", () => {
+    const { s, shooter, target } = closeRange(11);
+    const plain = applyAction(s, lob(shooter, 0)).lastEvent;
+    const vuln = applyAction({ ...s, players: s.players.map((p) => (p.seat === target ? { ...p, status: { vulnerable: 2 } } : p)) }, lob(shooter, 0)).lastEvent;
+    if (plain?.kind !== "shot" || vuln?.kind !== "shot") throw new Error("shots expected");
+    expect(vuln.hits.find((h) => h.seat === target)!.dmg).toBeGreaterThan(plain.hits.find((h) => h.seat === target)!.dmg);
+  });
+
+  it("slow halves the walk range; confuse knocks the fired angle off", () => {
+    const s = startGame(2, 21);
+    const seat = s.turnSeat;
+    const slowed = { ...s, players: s.players.map((p) => (p.seat === seat ? { ...p, status: { slow: 1 } } : p)) };
+    expect(maxMoveFor(slowed, seat)).toBe(MAX_MOVE / 2);
+    expect(applyMove(slowed, seat, MAX_MOVE)).toBeNull();
+    const confused = { ...s, players: s.players.map((p) => (p.seat === seat ? { ...p, status: { confuse: 1 } } : p)) };
+    const ev = applyAction(confused, { type: "fire", seat, strokes: [circle(40)], angle: 90, power: 50 }).lastEvent;
+    if (ev?.kind !== "shot") throw new Error("shot expected");
+    expect(ev.confusedAngle).toBeDefined();
+    expect(ev.angle).not.toBe(90);
+  });
+});
 
 describe("shape freedom", () => {
   it("every archetype's reference doodle is classified as that weapon", () => {
@@ -339,5 +394,66 @@ describe("bots", () => {
       expect(ranks).toHaveLength(count);
       expect(ranks.some((r) => r.rank === 1)).toBe(true);
     }
+  }, 60_000);
+});
+
+describe("moving mode (realtime)", () => {
+  const still = { left: false, right: false, jump: false };
+
+  it("walks with held keys; slow halves the pace; stun freezes the player", () => {
+    const run = (status: Record<string, number>) => {
+      const s = startRealtime(2, 3);
+      const seat = 0;
+      s.players[seat].x = 300;
+      s.players[seat].y = surfaceY(s.terrain, 300);
+      s.players[seat].status = status;
+      const x0 = s.players[seat].x;
+      for (let i = 0; i < 30; i++) stepRealtime(s, 1000 / 60, { [seat]: { ...still, right: true } }, [], () => 0.5);
+      return s.players[seat].x - x0;
+    };
+    const normal = run({});
+    expect(normal).toBeGreaterThan(20);
+    expect(run({ slow: 99999 })).toBeLessThan(normal * 0.7);
+    expect(run({ stun: 99999 })).toBe(0);
+  });
+
+  it("firing spends ink, starts the cooldown and spawns a doodle; too little ink is refused", () => {
+    const s = startRealtime(2, 4);
+    const strokes = [circle(50)];
+    stepRealtime(s, 16, {}, [{ type: "fire", seat: 0, strokes, angle: 60, power: 60 }], () => 0.5);
+    expect(s.projectiles).toHaveLength(1);
+    expect(s.players[0].ink).toBeLessThan(RT_INK_MAX);
+    expect(s.players[0].cooldownMs).toBeGreaterThan(0);
+    const broke = startRealtime(2, 4);
+    broke.players[0].ink = 5;
+    stepRealtime(broke, 16, {}, [{ type: "fire", seat: 0, strokes, angle: 60, power: 60 }], () => 0.5);
+    expect(broke.projectiles).toHaveLength(0);
+  });
+
+  it("a shield fades out after RT_SHIELD_MS", () => {
+    const s = startRealtime(2, 5);
+    stepRealtime(s, 16, {}, [{ type: "shield", seat: 0, strokes: [circle(40)], angle: 90 }], () => 0.5);
+    expect(s.walls.some((w) => w.shieldOf === 0)).toBe(true);
+    for (let t = 0; t < RT_SHIELD_MS + 500; t += 100) stepRealtime(s, 100, {}, [], () => 0.5);
+    expect(s.walls.some((w) => w.shieldOf === 0)).toBe(false);
+  });
+
+  it("bot-vs-bot real-time matches end, and snapshots rebuild the world on a guest", () => {
+    const rng = seededRng(9);
+    const s = startRealtime(3, 21);
+    const mems = s.players.map(() => newBotMemory(rng));
+    let steps = 0;
+    while (s.phase === "playing" && steps < 20000) {
+      const cmds = s.players.map((p) => rtBotThink(s, p.seat, 7, mems[p.seat], rng)).filter((c) => c !== null);
+      stepRealtime(s, 1000 / 60, Object.fromEntries(s.players.map((p) => [p.seat, mems[p.seat].input])), cmds, rng);
+      steps++;
+    }
+    expect(s.phase).toBe("gameOver");
+    expect(computeRankings(s).some((r) => r.rank === 1)).toBe(true);
+    const buf = new RtClientBuffer();
+    buf.push(snapFromState(s, { full: true }), 0);
+    const view = buf.view(500)!;
+    expect(view.terrain).toEqual(s.terrain);
+    expect(view.players.map((p) => p.hp)).toEqual(s.players.map((p) => Math.round(p.hp)));
   }, 60_000);
 });

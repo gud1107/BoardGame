@@ -8,6 +8,7 @@
  */
 
 import { INK_COLORS, type Element } from "./analyze";
+import { STATUS_INFO, type StatusId } from "./status";
 import type { MapId } from "./maps";
 import { surfaceY, WORLD_H, WORLD_W, type Wall } from "./physics";
 
@@ -43,6 +44,13 @@ export const ELEMENT_GLOW: Record<Element, string> = {
   ice: "#38bdf8",
   poison: "#22c55e",
   shock: "#facc15",
+  slow: "#22d3ee",
+  stun: "#b45309",
+  curse: "#a855f7",
+  crush: "#fb923c",
+  vampire: "#f472b6",
+  chaos: "#cbd5e1",
+  dark: "#4338ca",
 };
 
 const FONT = "'Gaegu', 'Jua', 'Comic Sans MS', sans-serif";
@@ -666,6 +674,8 @@ export interface CharacterPose {
   frozen?: boolean;
   burn?: boolean;
   poison?: boolean;
+  /** Every active status (drives stun stars, blindfold, slime and the icon row). */
+  statuses?: readonly StatusId[];
   /** Seat-specific blink offset so characters don't blink in sync. */
   blinkSeed?: number;
   /** Size multiplier around the feet (default CHAR_SCALE; avatars pass 1). */
@@ -1020,6 +1030,71 @@ function drawCharacterBody(ctx: CanvasRenderingContext2D, pose: CharacterPose) {
   ctx.restore();
 
   // Status visuals.
+  const sts = pose.statuses ?? [];
+  if (sts.includes("blind")) {
+    // Blindfold across the eyes.
+    ctx.save();
+    ctx.fillStyle = "#1e1b4b";
+    ctx.beginPath();
+    ctx.roundRect(cx - rx, cy - 7, rx * 2, 7, 3);
+    ctx.fill();
+    ctx.restore();
+  }
+  if (sts.includes("stun")) {
+    // Stars circling the head.
+    for (let k = 0; k < 3; k++) {
+      const a = now / 260 + (k * Math.PI * 2) / 3;
+      const sx = cx + Math.cos(a) * 14;
+      const sy = cy - ry - 6 + Math.sin(a) * 4;
+      ctx.save();
+      ctx.fillStyle = "#facc15";
+      ctx.strokeStyle = "#a16207";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const r = i % 2 === 0 ? 4 : 1.8;
+        const b = -Math.PI / 2 + (i * Math.PI) / 5;
+        if (i === 0) ctx.moveTo(sx + Math.cos(b) * r, sy + Math.sin(b) * r);
+        else ctx.lineTo(sx + Math.cos(b) * r, sy + Math.sin(b) * r);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+  if (sts.includes("slow")) {
+    // Sticky slime puddle at the feet.
+    ctx.save();
+    ctx.fillStyle = "rgba(34, 211, 238, 0.45)";
+    ctx.beginPath();
+    ctx.ellipse(x, y, 17, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    for (let k = -1; k <= 1; k++) {
+      ctx.beginPath();
+      ctx.ellipse(x + k * 9, y - 2 + Math.sin(now / 300 + k) * 1.5, 2.5, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  if (sts.includes("confuse")) {
+    ctx.save();
+    ctx.font = `bold 13px ${FONT}`;
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#64748b";
+    ctx.fillText("?", cx + Math.sin(now / 200) * 9, cy - ry - 6);
+    ctx.fillText("?", cx - Math.sin(now / 200) * 9, cy - ry - 12);
+    ctx.restore();
+  }
+  if (sts.includes("weaken") || sts.includes("vulnerable")) {
+    ctx.save();
+    ctx.globalAlpha = 0.18 + 0.1 * Math.sin(now / 200);
+    ctx.fillStyle = sts.includes("vulnerable") ? "#f97316" : "#a855f7";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx + 5, ry + 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
   if (pose.frozen) {
     ctx.save();
     ctx.globalAlpha = 0.45;
@@ -1134,7 +1209,7 @@ function drawTombstoneBody(ctx: CanvasRenderingContext2D, x: number, y: number, 
 }
 
 /** Name pill + HP bar with a trailing "ghost" chunk for recent damage. */
-export function drawNameplate(ctx: CanvasRenderingContext2D, x: number, y: number, seat: number, name: string, hp: number, ghostHp: number) {
+export function drawNameplate(ctx: CanvasRenderingContext2D, x: number, y: number, seat: number, name: string, hp: number, ghostHp: number, statuses: readonly StatusId[] = []) {
   const art = characterFor(seat);
   ctx.save();
   ctx.font = `bold 13px ${FONT}`;
@@ -1152,6 +1227,17 @@ export function drawNameplate(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.stroke();
   ctx.fillStyle = "#ffffff";
   ctx.fillText(label, x, top + 9.5);
+  if (statuses.length > 0) {
+    // Status icon row above the name pill.
+    ctx.font = "12px sans-serif";
+    const icons = statuses.map((s) => STATUS_INFO[s].emoji);
+    const w2 = icons.length * 15;
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.beginPath();
+    ctx.roundRect(x - w2 / 2 - 3, top - 18, w2 + 6, 16, 8);
+    ctx.fill();
+    icons.forEach((ic, i) => ctx.fillText(ic, x - w2 / 2 + 7.5 + i * 15, top - 9.5));
+  }
 
   const bw = 46;
   const by = top + 22;
@@ -1184,8 +1270,8 @@ export function drawNameplate(ctx: CanvasRenderingContext2D, x: number, y: numbe
 }
 
 /** Bouncing "your turn" arrow. */
-export function drawTurnMarker(ctx: CanvasRenderingContext2D, x: number, y: number, now: number) {
-  const b = Math.sin(now / 160) * 3;
+export function drawTurnMarker(ctx: CanvasRenderingContext2D, x: number, y: number, now: number, lift = 0) {
+  const b = Math.sin(now / 160) * 3 - lift;
   ctx.save();
   ctx.fillStyle = "#fbbf24";
   ctx.strokeStyle = "#92400e";

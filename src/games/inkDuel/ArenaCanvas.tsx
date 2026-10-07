@@ -24,6 +24,7 @@ import {
 } from "./arenaArt";
 import { WALL_RANGE, type InkDuelState, type InkEvent, type Player } from "./engine";
 import type { MapId } from "./maps";
+import { activeStatuses } from "./status";
 import { playImpactSound, playLaunchSound } from "./inkDuelAudio";
 import { GRAVITY, launchVelocity, MUZZLE_Y, surfaceY, WORLD_H, WORLD_W, type Wall } from "./physics";
 
@@ -286,15 +287,16 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
           hurt,
           holdAngle,
           active: !anim && turnSeat === p.seat,
-          frozen: p.frozen,
-          burn: p.burn > 0,
-          poison: p.poison > 0,
+          frozen: (p.status?.freeze ?? 0) > 0,
+          burn: (p.status?.burn ?? 0) > 0,
+          poison: (p.status?.poison ?? 0) > 0,
+          statuses: activeStatuses(p.status),
         });
       }
       for (const p of scene.players) {
         if (!p.alive) continue;
-        drawNameplate(ctx, p.x, p.y, charOf(scene, p.seat), names[p.seat] ?? `P${p.seat + 1}`, hp[p.seat] ?? p.hp, ghostHp[p.seat] ?? p.hp);
-        if (!anim && turnSeat === p.seat) drawTurnMarker(ctx, p.x, p.y, now);
+        drawNameplate(ctx, p.x, p.y, charOf(scene, p.seat), names[p.seat] ?? `P${p.seat + 1}`, hp[p.seat] ?? p.hp, ghostHp[p.seat] ?? p.hp, activeStatuses(p.status));
+        if (!anim && turnSeat === p.seat) drawTurnMarker(ctx, p.x, p.y, now, activeStatuses(p.status).length > 0 ? 20 : 0);
       }
 
       ambient?.draw(ctx, scene.wind, now);

@@ -60,7 +60,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.54.0",
     releaseDate: "2026-10-08",
-    title: "🎲 랜덤 합성 디펜스 신규 추가, ✏️ 낙서 결투 그래픽 개편·캐릭터·맵·무기 11종",
+    title: "🎲 랜덤 합성 디펜스 신규 추가, ✏️ 낙서 결투 무빙 모드·효과 12종·무기 11종·캐릭터·맵",
     changes: [
       {
         game: "common",
@@ -121,6 +121,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         game: "ink-duel",
         type: "FIX",
         desc: "그림판에 그릴 때 선이 손가락보다 살짝 위·아래로 그려지던 문제 수정, 빠르게 그려도 선이 매끄럽게",
+      },
+      {
+        game: "ink-duel",
+        type: "FEAT",
+        desc: "🏃 무빙 모드 추가 — 모두 동시에 실시간으로 뛰어다니며 공격(이동·점프, 잉크 자동 충전, 드래그 후 놓으면 발사, 3분) · 기존 방식은 🛑 스탑 모드",
+      },
+      {
+        game: "ink-duel",
+        type: "FEAT",
+        desc: "색 12종 = 효과 12종 — 기절·느려짐·약화·취약·흡혈·혼란·실명 추가(화상·빙결·독·전기·강철 포함), 머리 위 아이콘과 연출로 표시",
       },
       {
         game: "hungry-shark",

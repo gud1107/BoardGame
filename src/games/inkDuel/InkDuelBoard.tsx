@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { analyzeWeapon, ELEMENT_LABEL, INK_COLORS, totalInk, WEAPON_LABEL, type InkColor, type Stroke, type WeaponStats } from "./analyze";
+import { analyzeWeapon, COLOR_NAMES, ELEMENT_LABEL, INK_COLORS, totalInk, WEAPON_LABEL, type InkColor, type Stroke, type WeaponStats } from "./analyze";
 import ArenaCanvas, { CARD_MS, CharacterAvatar, type ArenaAnim } from "./ArenaCanvas";
 import { characterFor } from "./arenaArt";
 import {
   applyMove,
   computeRankings,
-  MAX_MOVE,
+  maxMoveFor,
   MAX_ROUNDS,
   MIN_INK,
   moveInk,
@@ -23,6 +23,7 @@ import {
 import { playCardRevealSound, playMyTurnSound, playScribbleTick, playVictorySound, playWallSound } from "./inkDuelAudio";
 import WeaponPad, { DoodleSvg } from "./WeaponPad";
 import { MAPS } from "./maps";
+import { activeStatuses, STATUS_INFO } from "./status";
 
 export const TURN_SECONDS = 45;
 
@@ -39,14 +40,19 @@ interface Props {
 
 type Mode = "weapon" | "wall" | "shield";
 
-const COLOR_NAMES = ["검정", "빨강", "파랑", "초록", "노랑"];
-
 const ELEMENT_CARD: Record<WeaponStats["element"], { from: string; to: string; foil: string }> = {
   none: { from: "#475569", to: "#1e293b", foil: "#cbd5e1" },
   fire: { from: "#f97316", to: "#b91c1c", foil: "#fde68a" },
   ice: { from: "#38bdf8", to: "#1d4ed8", foil: "#e0f2fe" },
   poison: { from: "#22c55e", to: "#15803d", foil: "#dcfce7" },
   shock: { from: "#facc15", to: "#ca8a04", foil: "#fef9c3" },
+  slow: { from: "#22d3ee", to: "#0e7490", foil: "#cffafe" },
+  stun: { from: "#b45309", to: "#78350f", foil: "#fde68a" },
+  curse: { from: "#a855f7", to: "#6b21a8", foil: "#f3e8ff" },
+  crush: { from: "#fb923c", to: "#c2410c", foil: "#ffedd5" },
+  vampire: { from: "#f472b6", to: "#be185d", foil: "#fce7f3" },
+  chaos: { from: "#cbd5e1", to: "#64748b", foil: "#f1f5f9" },
+  dark: { from: "#4338ca", to: "#1e1b4b", foil: "#e0e7ff" },
 };
 
 function StatBar({ label, value, max, text }: { label: string; value: number; max: number; text: string }) {
@@ -157,9 +163,15 @@ function eventCaption(ev: InkEvent | null, names: Record<SeatIndex, string>): st
       out.push(
         `${w.emoji} ${who} 님의 ${w.name}${ev.crit ? " (치명타!)" : ""} → ${ev.hits.map((h) => `${names[h.seat] ?? "?"} −${h.dmg}`).join(", ")}`,
       );
+    if (ev.confusedAngle !== undefined) out.push(`😵 혼란! ${who} 님의 조준이 ${ev.confusedAngle}°로 빗나갔어요`);
+    for (const inf of ev.inflicted ?? []) out.push(`${names[inf.seat] ?? "?"} → ${inf.statuses.map((s) => `${STATUS_INFO[s].emoji} ${STATUS_INFO[s].name}`).join(" · ")}`);
+    if (ev.heal > 0) out.push(`🩷 흡혈! ${who} 님 +${ev.heal}`);
     for (const k of ev.killed) out.push(`💀 ${names[k] ?? "?"} 님 탈락`);
   }
-  for (const d of ev.dots) out.push(`${d.kind === "burn" ? "🔥 화상" : "☠️ 중독"} ${names[d.seat] ?? "?"} −${d.dmg}`);
+  for (const d of ev.dots) {
+    if (d.kind === "stun") out.push(`💫 ${names[d.seat] ?? "?"} 님은 기절해서 이번 턴을 쉬어요`);
+    else out.push(`${d.kind === "burn" ? "🔥 화상" : "☠️ 중독"} ${names[d.seat] ?? "?"} −${d.dmg}`);
+  }
   return out;
 }
 
@@ -258,11 +270,14 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
   const shieldPreview = useMemo(() => (shieldReady ? shieldWall(preview, viewerSeat, shield, angle) : null), [shieldReady, preview, viewerSeat, shield, angle]);
   const walked = preview.players[viewerSeat].x - state.players[viewerSeat].x;
   const canWalk = (next: number) => {
-    if (Math.abs(next) > MAX_MOVE) return false;
+    if (Math.abs(next) > maxMoveFor(state, viewerSeat)) return false;
     const to = resolveMove(state, viewerSeat, next);
-    return moveInk(state.players[viewerSeat].x, to) + inkUsed <= state.inkBudget;
+    return moveInk(state.players[viewerSeat].x, to) * (iAmSlow ? 2 : 1) + inkUsed <= state.inkBudget;
   };
   const withWalk = <A extends EngineAction>(a: A): A => (walk !== 0 ? { ...a, move: walk } : a);
+  const myStatus = state.players[viewerSeat]?.status ?? {};
+  const iAmSlow = (myStatus.slow ?? 0) > 0;
+  const iAmBlind = (myStatus.blind ?? 0) > 0;
 
   const submitRef = useRef<() => void>(() => {});
   const submit = (auto = false) => {
@@ -332,6 +347,9 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
               {p.seat === viewerSeat ? " (나)" : ""}
             </span>
             <span className="font-mono text-white/70 light:text-slate-600">♥{Math.round(hpShown[p.seat])}</span>
+            {activeStatuses(p.status).length > 0 && (
+              <span title={activeStatuses(p.status).map((s) => STATUS_INFO[s].name).join(", ")}>{activeStatuses(p.status).map((s) => STATUS_INFO[s].emoji).join("")}</span>
+            )}
             {!connectedSeats.has(p.seat) && <span title="연결 끊김">📡</span>}
           </div>
         ))}
@@ -342,7 +360,11 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
           <span className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-slate-300 light:text-slate-600">
             라운드 {Math.min(viewState.round, MAX_ROUNDS)}/{MAX_ROUNDS}
           </span>
-          <WindBadge wind={viewState.wind} />
+          {myTurn && iAmBlind ? (
+            <span className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-slate-300 light:text-slate-600">🕶️ 바람 ???</span>
+          ) : (
+            <WindBadge wind={viewState.wind} />
+          )}
         </span>
       </div>
 
@@ -355,7 +377,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
           names={names}
           turnSeat={turnSeat}
           walkFrom={myTurn && walked !== 0 ? { seat: viewerSeat, x: state.players[viewerSeat].x } : null}
-          aim={myTurn && mode !== "wall" ? { seat: viewerSeat, angle, power, speedMul: stats?.speedMul ?? 1, noArc: mode === "shield" } : null}
+          aim={myTurn && mode !== "wall" ? { seat: viewerSeat, angle, power, speedMul: stats?.speedMul ?? 1, noArc: mode === "shield" || iAmBlind } : null}
           shieldPreview={myTurn && mode === "shield" ? shieldPreview : null}
           onAim={(a, p) => {
             setAngle(a);
@@ -502,7 +524,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                 {Math.max(0, Math.floor(budget - inkUsed))}/{budget}
               </span>
             </div>
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap gap-1">
               {INK_COLORS.map((c, i) => (
                 <button
                   key={c}

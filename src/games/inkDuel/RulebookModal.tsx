@@ -46,16 +46,23 @@ export default function InkDuelRulebookModal({ onClose }: { onClose: () => void 
         </section>
 
         <section>
-          <h3 className={h3}>② 색 → 속성 (가장 많이 쓴 색)</h3>
+          <h3 className={h3}>② 색 → 효과 12종 (가장 많이 쓴 색)</h3>
           <div className={box}>
-            <ul className="space-y-1 text-xs text-white/70 light:text-slate-600">
+            <ul className="grid gap-1 text-xs text-white/70 sm:grid-cols-2 light:text-slate-600">
               <li>⚫ 검정 — 강철: 피해 +10%</li>
-              <li>🔴 빨강 — 화염: 맞은 상대가 2턴 동안 턴 시작마다 −6</li>
-              <li>🔵 파랑 — 빙결: 맞은 상대의 다음 턴 잉크가 65로 줄어듦</li>
-              <li>🟢 초록 — 독: 3턴 동안 턴 시작마다 −4</li>
-              <li>🟡 노랑 — 전기: 연쇄 +1회</li>
+              <li>🔴 빨강 — 🔥 화상: 지속 피해</li>
+              <li>🔵 파랑 — ❄️ 빙결: 잉크 감소 / 무빙에선 1.2초 꽁꽁</li>
+              <li>🟢 초록 — ☠️ 중독: 긴 지속 피해</li>
+              <li>🟡 노랑 — 전기: 연쇄 +1, 30% 확률 💫 기절</li>
+              <li>🩵 하늘 — 🐌 느려짐: 이동 절반</li>
+              <li>🟤 갈색 — 💫 기절: 스탑에선 한 턴 쉼, 무빙에선 1.5초 행동 불가 (피해 −20%)</li>
+              <li>🟣 보라 — ⬇️ 약화: 주는 피해 −30%</li>
+              <li>🟠 주황 — 💔 취약: 받는 피해 +25%</li>
+              <li>🩷 분홍 — 흡혈: 준 피해의 40% 회복</li>
+              <li>⚪ 회색 — 😵 혼란: 스탑에선 다음 발사 각도가 빗나감, 무빙에선 좌우 조작 반대</li>
+              <li>🔷 남색 — 🕶️ 실명: 조준선·바람이 안 보이고 시야가 어두워짐</li>
             </ul>
-            <p className="mt-1.5 text-xs text-white/60 light:text-slate-500">🎨 두 번째로 많이 쓴 색이 잉크의 35% 이상이면 그 효과도 함께 붙어요 (예: 빨강+파랑 = 화상+빙결).</p>
+            <p className="mt-1.5 text-xs text-white/60 light:text-slate-500">🎨 두 번째로 많이 쓴 색이 잉크의 35% 이상이면 그 효과도 함께 붙어요. 기절은 연속으로 걸리지 않아요.</p>
           </div>
         </section>
 
@@ -73,7 +80,17 @@ export default function InkDuelRulebookModal({ onClose }: { onClose: () => void 
         </section>
 
         <section>
-          <h3 className={h3}>④ 캐릭터 & 맵</h3>
+          <h3 className={h3}>④ 모드</h3>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className={box}>🛑 <b>스탑 모드</b> — 포트리스처럼 한 명씩 차례로. 턴마다 잉크 100, 이동·무기·방패·벽 중 하나. 10라운드.</div>
+            <div className={box}>
+              🏃 <b>무빙 모드</b> — 모두 동시에 실시간! ←/→(A/D) 이동, ↑/W/스페이스 점프. 경기장을 드래그해 조준하고 놓으면 발사(F/Enter도 발사). 잉크는 초당 16씩 차오르고(최대 100), 발사 후 1.8초 재장전. 그린 무기는 남아 있어 계속 다시 쏠 수 있어요. 방패는 6초, 3분이 지나면 체력 높은 순.
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h3 className={h3}>⑤ 캐릭터 & 맵</h3>
           <div className="grid gap-2 sm:grid-cols-2">
             <div className={box}>🎭 <b>캐릭터 6종</b> — 마법사·고양이·개구리·토끼·병아리·펭귄. 방에 들어가기 전이나 대기실에서 고르고, 겹치면 먼저 고른 사람이 우선이에요 (능력 차이 없음).</div>
             <div className={box}>

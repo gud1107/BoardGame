@@ -5,17 +5,38 @@
  * atan2/hypot are not guaranteed identical across JS engines — see `dsin`).
  */
 
-/** Ink colors. Index = element (see ELEMENTS). */
-export const INK_COLORS = ["#1f2937", "#dc2626", "#2563eb", "#16a34a", "#eab308"] as const;
-export type InkColor = 0 | 1 | 2 | 3 | 4;
-export const ELEMENTS = ["none", "fire", "ice", "poison", "shock"] as const;
+/** Ink colors. Index = element (see ELEMENTS) — the color you draw with decides the effect. */
+export const INK_COLORS = [
+  "#1f2937", // 0 steel
+  "#dc2626", // 1 fire
+  "#2563eb", // 2 ice
+  "#16a34a", // 3 poison
+  "#eab308", // 4 shock
+  "#06b6d4", // 5 slow
+  "#92400e", // 6 stun
+  "#9333ea", // 7 curse
+  "#f97316", // 8 crush
+  "#ec4899", // 9 vampire
+  "#9ca3af", // 10 chaos
+  "#3730a3", // 11 dark
+] as const;
+export type InkColor = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+export const ELEMENTS = ["none", "fire", "ice", "poison", "shock", "slow", "stun", "curse", "crush", "vampire", "chaos", "dark"] as const;
 export type Element = (typeof ELEMENTS)[number];
+export const COLOR_NAMES = ["검정", "빨강", "파랑", "초록", "노랑", "하늘", "갈색", "보라", "주황", "분홍", "회색", "남색"];
 export const ELEMENT_LABEL: Record<Element, string> = {
-  none: "⚫ 강철 (+10% 피해)",
-  fire: "🔴 화염 (2턴 화상)",
-  ice: "🔵 빙결 (다음 턴 잉크 −35)",
-  poison: "🟢 독 (3턴 중독)",
-  shock: "🟡 전기 (연쇄 +1)",
+  none: "⚫ 강철 (피해 +10%)",
+  fire: "🔴 화염 (🔥 화상)",
+  ice: "🔵 빙결 (❄️ 얼어붙음)",
+  poison: "🟢 독 (☠️ 중독)",
+  shock: "🟡 전기 (연쇄 +1 · 30% 💫 기절)",
+  slow: "🩵 끈적 (🐌 느려짐)",
+  stun: "🟤 충격 (💫 기절, 피해 −20%)",
+  curse: "🟣 저주 (⬇️ 약화)",
+  crush: "🟠 분쇄 (💔 취약)",
+  vampire: "🩷 흡혈 (준 피해의 40% 회복)",
+  chaos: "⚪ 혼돈 (😵 혼란)",
+  dark: "🔷 어둠 (🕶️ 실명)",
 };
 
 /** A stroke: color + flat [x0,y0,x1,y1,...] integer coordinates. */
@@ -552,7 +573,8 @@ export function analyzeWeapon(strokes: readonly Stroke[]): WeaponStats {
       blastRadius = clamp(radius * 0.6, 18, 42);
       break;
   }
-  if (element === "none") damage *= 1.1;
+  if (element === "none" || element2 === "none") damage *= 1.1;
+  if (element === "stun" || element2 === "stun") damage *= 0.8;
   if (element === "shock" || element2 === "shock") chains += 1;
   const critChance = clamp(spikes * 0.07 + critBonus, 0, 0.45);
 

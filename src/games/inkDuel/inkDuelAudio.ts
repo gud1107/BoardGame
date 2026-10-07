@@ -1,4 +1,5 @@
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import type { WeaponKind } from "./analyze";
 import type { InkEvent } from "./engine";
 
 /**
@@ -17,16 +18,21 @@ export function playLaunchSound() {
 }
 
 export function playImpactSound(ev: ShotEvent) {
+  playImpactKind(ev.stats.kind, ev.hits.length, ev.killed.length, ev.crit);
+}
+
+/** Impact cue from the bare facts (moving mode's events carry no full ShotEvent). */
+export function playImpactKind(kind: WeaponKind, hitCount: number, killedCount: number, crit: boolean) {
   const sfx = getSoundEngine();
-  if (ev.killed.length > 0) {
+  if (killedCount > 0) {
     sfx.playEliminationSlam();
     return;
   }
-  if (ev.hits.length === 0) {
+  if (hitCount === 0) {
     sfx.playPassWhiff();
     return;
   }
-  switch (ev.stats.kind) {
+  switch (kind) {
     case "bomb":
       sfx.playMineBlast();
       return;
@@ -37,7 +43,7 @@ export function playImpactSound(ev: ShotEvent) {
       sfx.playCardSubmitImpact();
       return;
     default:
-      sfx.playCardSlam(ev.crit);
+      sfx.playCardSlam(crit);
   }
 }
 

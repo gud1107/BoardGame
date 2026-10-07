@@ -60,6 +60,41 @@ export function MapPicker({ value, onChange }: { value: MapId | "random"; onChan
   );
 }
 
+export type GameMode = "stop" | "moving";
+
+const MODES: { id: GameMode; emoji: string; name: string; desc: string }[] = [
+  { id: "stop", emoji: "🛑", name: "스탑 모드", desc: "포트리스처럼 한 명씩 차례대로 — 천천히 그리고 조준" },
+  { id: "moving", emoji: "🏃", name: "무빙 모드", desc: "모두 동시에 실시간으로 뛰어다니며 공격 · 3분" },
+];
+
+export function ModePicker({ value, onChange }: { value: GameMode; onChange: (m: GameMode) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-1.5">
+      {MODES.map((m) => (
+        <button
+          key={m.id}
+          type="button"
+          onClick={() => onChange(m.id)}
+          className={`flex flex-col items-start gap-0.5 rounded-xl border-2 px-2.5 py-2 text-left transition ${
+            value === m.id ? "border-amber-400 bg-amber-500/15 light:bg-amber-50" : "border-white/10 hover:border-white/30 light:border-slate-200 light:hover:border-slate-400"
+          }`}
+        >
+          <span className="text-sm font-bold text-white light:text-slate-800">
+            {m.emoji} {m.name}
+          </span>
+          <span className="text-[10px] leading-tight text-white/50 light:text-slate-500">{m.desc}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function modeLabel(m: GameMode | undefined): string {
+  if (!m) return "";
+  const info = MODES.find((x) => x.id === m)!;
+  return `${info.emoji} ${info.name}`;
+}
+
 export function mapLabel(m: MapId | "random" | undefined): string {
   if (!m) return "";
   return m === "random" ? "🎲 랜덤 맵" : `${MAPS[m].emoji} ${MAPS[m].name}`;
