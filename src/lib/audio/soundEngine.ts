@@ -3182,6 +3182,74 @@ class SoundEngine {
     bell.start(now + 1.9);
     bell.stop(now + 3.25);
   }
+
+  /**
+   * 대기실 입장 SFX (2026-10-08) — `useActiveRoomListing`이 모든 온라인
+   * 게임의 대기실에서 호출한다. 내가 방에 들어온 순간: 맑은 도어벨 챠임
+   * (F5→A5→C6→E6 메이저7 분산화음, 사인파 소프트 어택).
+   */
+  playRoomJoinChime() {
+    if (!this.gate("roomJoinChime", 400)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [698.46, 880.0, 1046.5, 1318.51].forEach((freq, i) => {
+      const at = now + i * 0.06;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, at);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.linearRampToValueAtTime(0.18, at + 0.02);
+      gain.gain.setTargetAtTime(0.0001, at + 0.05, 0.16);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.8);
+    });
+  }
+
+  /** 다른 플레이어가 대기실에 들어왔을 때 — 통통 튀는 마림바 버블 팝 (C5→G5→C6, 살짝 위로 피치 벤딩). */
+  playRoomJoinPop() {
+    if (!this.gate("roomJoinPop", 250)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    [523.25, 783.99, 1046.5].forEach((freq, i) => {
+      const at = now + i * 0.07;
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, at);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.08, at + 0.04);
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 1600;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.linearRampToValueAtTime(0.2, at + 0.015);
+      gain.gain.setTargetAtTime(0.0001, at + 0.03, 0.08);
+      osc.connect(filter).connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.45);
+    });
+  }
+
+  /** 다른 플레이어가 대기실에서 나갔을 때 — 요란하지 않은 묵직한 우드 노크. */
+  playRoomLeave() {
+    if (!this.gate("roomLeave", 250)) return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(320, now);
+    osc.frequency.exponentialRampToValueAtTime(140, now + 0.09);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.18, now);
+    gain.gain.setTargetAtTime(0.0001, now + 0.02, 0.05);
+    osc.connect(gain).connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.3);
+  }
 }
 
 let instance: SoundEngine | null = null;

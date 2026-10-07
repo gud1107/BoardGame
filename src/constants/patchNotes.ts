@@ -63,6 +63,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
     title: "✏️ 낙서 결투 그래픽 전면 개편 + 이동 기능",
     changes: [
       {
+        game: "common",
+        type: "FEAT",
+        desc: "온라인 대기실 입장 효과음 — 내가 들어오면 맑은 도어벨, 다른 플레이어 입장 시 통통 튀는 팝, 퇴장 시 부드러운 노크",
+      },
+      {
         game: "ink-duel",
         type: "IMPROVE",
         desc: "그래픽 전면 개편 — 캐릭터 4종(마법사·고양이·개구리·토끼), 수채화 배경·지층 지형, 잉크 폭발 파티클·화면 흔들림·속성 이펙트, 카드형 무기 판정",

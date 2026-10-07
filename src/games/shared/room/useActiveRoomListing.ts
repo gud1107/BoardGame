@@ -10,6 +10,7 @@ import {
   subscribeRoomSettings,
 } from "@/lib/activeRooms/visibility";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
+import { getSoundEngine } from "@/lib/audio/soundEngine";
 
 /**
  * Re-upsert cadence while a room stays in its waiting lobby. Comfortably
@@ -54,6 +55,7 @@ export function useActiveRoomListing({
   maxPlayers,
 }: UseActiveRoomListingInput): void {
   useRoomFunnelEvents({ gameId, roomCode, isHost, isWaiting, isPlaying });
+  useWaitingRoomSounds({ roomCode, isWaiting, playerCount });
 
   // Heartbeat reads the latest counts without needing to restart the
   // interval every time they change. Synced in its own effect (not during
@@ -187,4 +189,51 @@ function useRoomFunnelEvents({
     },
     [],
   );
+}
+
+/**
+ * After entering a room, the seat count can still jump while this tab's
+ * state syncs in (a guest first sees only itself) — those aren't real
+ * arrivals, so diffs inside this window only move the baseline.
+ */
+const ROOM_SOUND_SETTLE_MS = 1500;
+
+/**
+ * Waiting-room entry SFX (2026-10-08), for every online game at once since
+ * they all pass their seat count through here: a doorbell chime when this
+ * tab enters a room's waiting lobby, a bubble pop when someone else joins,
+ * a soft knock when someone leaves. Silent once the match starts, and
+ * subject to the site-wide SFX mute like every other `soundEngine` effect.
+ */
+function useWaitingRoomSounds({
+  roomCode,
+  isWaiting,
+  playerCount,
+}: {
+  roomCode: string | null | undefined;
+  isWaiting: boolean;
+  playerCount: number;
+}): void {
+  const room = useRef<{ code: string; count: number; settleUntil: number } | null>(null);
+
+  useEffect(() => {
+    if (!roomCode || !isWaiting) {
+      // Leaving the lobby (match start / room left) — the next lobby visit,
+      // even of the same room after a match, starts a fresh baseline.
+      if (!roomCode) room.current = null;
+      else if (room.current) room.current.count = playerCount;
+      return;
+    }
+    const now = Date.now();
+    if (room.current?.code !== roomCode) {
+      room.current = { code: roomCode, count: playerCount, settleUntil: now + ROOM_SOUND_SETTLE_MS };
+      getSoundEngine().playRoomJoinChime();
+      return;
+    }
+    const prev = room.current.count;
+    room.current.count = playerCount;
+    if (now < room.current.settleUntil || playerCount === prev) return;
+    if (playerCount > prev) getSoundEngine().playRoomJoinPop();
+    else getSoundEngine().playRoomLeave();
+  }, [roomCode, isWaiting, playerCount]);
 }
