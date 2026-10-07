@@ -3,8 +3,8 @@
 import type { GameId } from "@/games/types";
 
 export const GAME_LAST_UPDATED: Partial<Record<GameId, string>> = {
+  "ink-duel": "2026-10-08T02:22:44+09:00",
   "merge-defense": "2026-10-08T02:21:30+09:00",
-  "ink-duel": "2026-10-08T01:48:57+09:00",
   "hungry-shark": "2026-10-07T02:34:19+09:00",
   "memory-feast": "2026-10-07T02:19:16+09:00",
   "crab-survival": "2026-10-04T21:58:48+09:00",
