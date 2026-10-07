@@ -11,6 +11,7 @@ import {
 } from "@/lib/activeRooms/visibility";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { getSoundEngine } from "@/lib/audio/soundEngine";
+import { pushRoomToast } from "@/lib/activeRooms/roomToasts";
 
 /**
  * Re-upsert cadence while a room stays in its waiting lobby. Comfortably
@@ -34,6 +35,17 @@ interface UseActiveRoomListingInput {
   hostName?: string | null;
   playerCount: number;
   maxPlayers: number;
+  /**
+   * Who's in the room (presence occupants — real devices, never bots). Lets
+   * the waiting room toast the nickname of whoever joins/leaves; without it
+   * only the join/leave sounds play, off `playerCount` alone.
+   */
+  occupants?: readonly RoomOccupant[];
+}
+
+interface RoomOccupant {
+  deviceId: string;
+  name: string;
 }
 
 /**
@@ -53,9 +65,10 @@ export function useActiveRoomListing({
   hostName,
   playerCount,
   maxPlayers,
+  occupants,
 }: UseActiveRoomListingInput): void {
   useRoomFunnelEvents({ gameId, roomCode, isHost, isWaiting, isPlaying });
-  useWaitingRoomSounds({ roomCode, isWaiting, playerCount });
+  useWaitingRoomArrivals({ roomCode, isWaiting, playerCount, occupants });
 
   // Heartbeat reads the latest counts without needing to restart the
   // interval every time they change. Synced in its own effect (not during
@@ -199,41 +212,69 @@ function useRoomFunnelEvents({
 const ROOM_SOUND_SETTLE_MS = 1500;
 
 /**
- * Waiting-room entry SFX (2026-10-08), for every online game at once since
- * they all pass their seat count through here: a doorbell chime when this
- * tab enters a room's waiting lobby, a bubble pop when someone else joins,
- * a soft knock when someone leaves. Silent once the match starts, and
- * subject to the site-wide SFX mute like every other `soundEngine` effect.
+ * Waiting-room arrivals (2026-10-08), for every online game at once since
+ * they all pass their seats through here: a doorbell chime when this tab
+ * enters a room's waiting lobby, a fanfare pop + "OO님이 입장했어요" toast
+ * when someone else joins, a knock + toast when someone leaves. Silent once
+ * the match starts; sounds follow the site-wide SFX mute like every other
+ * `soundEngine` effect, toasts show regardless.
  */
-function useWaitingRoomSounds({
+function useWaitingRoomArrivals({
   roomCode,
   isWaiting,
   playerCount,
+  occupants,
 }: {
   roomCode: string | null | undefined;
   isWaiting: boolean;
   playerCount: number;
+  occupants?: readonly RoomOccupant[];
 }): void {
-  const room = useRef<{ code: string; count: number; settleUntil: number } | null>(null);
+  const room = useRef<{ code: string; count: number; people: Map<string, string>; settleUntil: number } | null>(null);
+  // Content key, so a fresh-but-identical presence array doesn't re-run the diff.
+  const occupantKey = occupants ? occupants.map((o) => `${o.deviceId}\u0000${o.name}`).join("\u0001") : null;
+  const latestOccupants = useRef(occupants);
+  useEffect(() => {
+    latestOccupants.current = occupants;
+  });
 
   useEffect(() => {
+    const list = latestOccupants.current;
+    const people = new Map((list ?? []).map((o) => [o.deviceId, o.name]));
     if (!roomCode || !isWaiting) {
       // Leaving the lobby (match start / room left) — the next lobby visit,
       // even of the same room after a match, starts a fresh baseline.
       if (!roomCode) room.current = null;
-      else if (room.current) room.current.count = playerCount;
+      else if (room.current) Object.assign(room.current, { count: playerCount, people });
       return;
     }
     const now = Date.now();
     if (room.current?.code !== roomCode) {
-      room.current = { code: roomCode, count: playerCount, settleUntil: now + ROOM_SOUND_SETTLE_MS };
+      room.current = { code: roomCode, count: playerCount, people, settleUntil: now + ROOM_SOUND_SETTLE_MS };
       getSoundEngine().playRoomJoinChime();
       return;
     }
-    const prev = room.current.count;
-    room.current.count = playerCount;
-    if (now < room.current.settleUntil || playerCount === prev) return;
-    if (playerCount > prev) getSoundEngine().playRoomJoinPop();
-    else getSoundEngine().playRoomLeave();
-  }, [roomCode, isWaiting, playerCount]);
+    const prev = room.current;
+    room.current = { ...prev, count: playerCount, people };
+    if (now < prev.settleUntil) return;
+
+    let joined = 0;
+    let left = 0;
+    if (list) {
+      people.forEach((name, id) => {
+        if (prev.people.has(id)) return;
+        joined++;
+        pushRoomToast("join", name);
+      });
+      prev.people.forEach((name, id) => {
+        if (people.has(id)) return;
+        left++;
+        pushRoomToast("leave", name);
+      });
+    } else if (playerCount > prev.count) joined = 1;
+    else if (playerCount < prev.count) left = 1;
+
+    if (joined > 0) getSoundEngine().playRoomJoinPop();
+    else if (left > 0) getSoundEngine().playRoomLeave();
+  }, [roomCode, isWaiting, playerCount, occupantKey]);
 }

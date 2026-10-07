@@ -7,6 +7,7 @@ import BettingSidebar from "@/components/betting/BettingSidebar";
 import AnalyticsVisitTracker from "@/components/AnalyticsVisitTracker";
 import PlayerStatsSync from "@/components/stats/PlayerStatsSync";
 import HostedRoomControls from "@/components/lobby/HostedRoomControls";
+import RoomEntryToasts from "@/components/lobby/RoomEntryToasts";
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/contexts/ThemeContext";
 import { KAKAO_INAPP_ESCAPE_SCRIPT } from "@/lib/kakaoInAppEscape";
 
@@ -54,6 +55,7 @@ export default function RootLayout({
           <main className="flex-1">{children}</main>
           <BettingSidebar />
           <HostedRoomControls />
+          <RoomEntryToasts />
         </ThemeProvider>
       </body>
     </html>

@@ -65,7 +65,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       {
         game: "common",
         type: "FEAT",
-        desc: "온라인 대기실 입장 효과음 — 내가 들어오면 맑은 도어벨, 다른 플레이어 입장 시 통통 튀는 팝, 퇴장 시 부드러운 노크",
+        desc: "온라인 대기실 입장 알림 — \"OO님이 입장했어요/나갔어요\" 닉네임 토스트 + 더 길고 힘찬 도어벨·팝·노크 효과음",
       },
       {
         game: "merge-defense",

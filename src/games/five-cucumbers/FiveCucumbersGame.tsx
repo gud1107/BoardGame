@@ -855,6 +855,7 @@ export default function FiveCucumbersGame({ onComplete }: PlayableGameProps) {
     isPlaying: phase === "playing",
     hostName: myName,
     playerCount: occupants.length,
+    occupants,
     maxPlayers: knownTargetPlayerCount,
   });
 

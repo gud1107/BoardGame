@@ -713,6 +713,7 @@ export default function DoodlePhoneGame({ onComplete }: PlayableGameProps) {
     isPlaying: phase === "playing",
     hostName: myName,
     playerCount: occupants.length,
+    occupants,
     maxPlayers: knownTargetPlayerCount,
   });
 

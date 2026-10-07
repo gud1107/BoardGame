@@ -979,6 +979,7 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
     isPlaying: phase === "playing",
     hostName: myName,
     playerCount: occupants.length,
+    occupants,
     maxPlayers: knownTargetPlayerCount,
   });
 

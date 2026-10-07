@@ -885,6 +885,7 @@ export default function BangGame({ onComplete }: PlayableGameProps) {
     isPlaying: phase === "playing",
     hostName: myName,
     playerCount: occupants.length,
+    occupants,
     maxPlayers: knownTargetPlayerCount,
   });
 

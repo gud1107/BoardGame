@@ -659,6 +659,7 @@ export default function RatATatCatGame({ onComplete }: PlayableGameProps) {
     isPlaying: phase === "playing",
     hostName: myName,
     playerCount: occupants.length,
+    occupants,
     maxPlayers: knownTargetPlayerCount,
   });
 

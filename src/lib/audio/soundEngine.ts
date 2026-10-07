@@ -3185,70 +3185,131 @@ class SoundEngine {
 
   /**
    * 대기실 입장 SFX (2026-10-08) — `useActiveRoomListing`이 모든 온라인
-   * 게임의 대기실에서 호출한다. 내가 방에 들어온 순간: 맑은 도어벨 챠임
-   * (F5→A5→C6→E6 메이저7 분산화음, 사인파 소프트 어택).
+   * 게임의 대기실에서 호출한다. 같은 날 "더 길고 강렬하게" 요청으로 재조정:
+   * 각 음에 한 옥타브 위 배음을 겹치고, 잔향을 늘리고, 끝에 화음 전체를
+   * 다시 울려 ~1.8초짜리로 만들었다.
+   *
+   * 내가 방에 들어온 순간: 도어벨 챠임 (F5→A5→C6→E6 메이저7 분산화음 +
+   * 반짝이 노이즈 + 마무리 화음 스웰).
    */
   playRoomJoinChime() {
-    if (!this.gate("roomJoinChime", 400)) return;
+    if (!this.gate("roomJoinChime", 600)) return;
     const ctx = this.ensureContext();
     if (!ctx || !this.sfxGain) return;
     const now = ctx.currentTime;
-    [698.46, 880.0, 1046.5, 1318.51].forEach((freq, i) => {
-      const at = now + i * 0.06;
-      const osc = ctx.createOscillator();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, at);
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.0001, at);
-      gain.gain.linearRampToValueAtTime(0.18, at + 0.02);
-      gain.gain.setTargetAtTime(0.0001, at + 0.05, 0.16);
-      osc.connect(gain).connect(this.sfxGain!);
-      osc.start(at);
-      osc.stop(at + 0.8);
-    });
+    const notes = [698.46, 880.0, 1046.5, 1318.51];
+    const bell = (freq: number, at: number, peak: number, tau: number, stopAfter: number) => {
+      [
+        { mult: 1, type: "sine" as OscillatorType, level: 1 },
+        { mult: 2, type: "triangle" as OscillatorType, level: 0.35 },
+      ].forEach(({ mult, type, level }) => {
+        const osc = ctx.createOscillator();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq * mult, at);
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.linearRampToValueAtTime(peak * level, at + 0.012);
+        gain.gain.setTargetAtTime(0.0001, at + 0.04, tau * (mult === 1 ? 1 : 0.5));
+        osc.connect(gain).connect(this.sfxGain!);
+        osc.start(at);
+        osc.stop(at + stopAfter);
+      });
+    };
+    notes.forEach((freq, i) => bell(freq, now + i * 0.09, 0.3, 0.3, 1.6));
+    // 마무리: 네 음을 한 번에 다시 울리는 화음 스웰.
+    const chordAt = now + notes.length * 0.09 + 0.05;
+    notes.forEach((freq) => bell(freq, chordAt, 0.14, 0.45, 1.9));
+    // 첫 타격의 반짝이 — 고역 밴드패스 노이즈.
+    const sparkle = ctx.createBufferSource();
+    sparkle.buffer = noiseBuffer(ctx);
+    const hp = ctx.createBiquadFilter();
+    hp.type = "bandpass";
+    hp.frequency.value = 7000;
+    hp.Q.value = 1.2;
+    const sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.0001, now);
+    sg.gain.linearRampToValueAtTime(0.09, now + 0.01);
+    sg.gain.setTargetAtTime(0.0001, now + 0.02, 0.08);
+    sparkle.connect(hp).connect(sg).connect(this.sfxGain);
+    sparkle.start(now);
+    sparkle.stop(now + 0.3);
   }
 
-  /** 다른 플레이어가 대기실에 들어왔을 때 — 통통 튀는 마림바 버블 팝 (C5→G5→C6, 살짝 위로 피치 벤딩). */
+  /** 다른 플레이어가 대기실에 들어왔을 때 — 저음 "둥" 킥 위로 통통 튀어 오르는 마림바 팝 (C5→E5→G5→C6, 피치 벤딩) + 마지막 음 길게. */
   playRoomJoinPop() {
-    if (!this.gate("roomJoinPop", 250)) return;
+    if (!this.gate("roomJoinPop", 350)) return;
     const ctx = this.ensureContext();
     if (!ctx || !this.sfxGain) return;
     const now = ctx.currentTime;
-    [523.25, 783.99, 1046.5].forEach((freq, i) => {
-      const at = now + i * 0.07;
+
+    const kick = ctx.createOscillator();
+    kick.type = "sine";
+    kick.frequency.setValueAtTime(150, now);
+    kick.frequency.exponentialRampToValueAtTime(55, now + 0.18);
+    const kickGain = ctx.createGain();
+    kickGain.gain.setValueAtTime(0.0001, now);
+    kickGain.gain.linearRampToValueAtTime(0.38, now + 0.008);
+    kickGain.gain.setTargetAtTime(0.0001, now + 0.03, 0.09);
+    kick.connect(kickGain).connect(this.sfxGain);
+    kick.start(now);
+    kick.stop(now + 0.5);
+
+    const pitches = [523.25, 659.25, 783.99, 1046.5];
+    pitches.forEach((freq, i) => {
+      const at = now + 0.03 + i * 0.085;
+      const last = i === pitches.length - 1;
       const osc = ctx.createOscillator();
       osc.type = "triangle";
-      osc.frequency.setValueAtTime(freq, at);
-      osc.frequency.exponentialRampToValueAtTime(freq * 1.08, at + 0.04);
+      osc.frequency.setValueAtTime(freq * 0.94, at);
+      osc.frequency.exponentialRampToValueAtTime(freq, at + 0.05);
       const filter = ctx.createBiquadFilter();
       filter.type = "lowpass";
-      filter.frequency.value = 1600;
+      filter.frequency.setValueAtTime(3200, at);
+      filter.frequency.setTargetAtTime(1400, at + 0.05, 0.2);
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0.0001, at);
-      gain.gain.linearRampToValueAtTime(0.2, at + 0.015);
-      gain.gain.setTargetAtTime(0.0001, at + 0.03, 0.08);
+      gain.gain.linearRampToValueAtTime(last ? 0.32 : 0.26, at + 0.01);
+      gain.gain.setTargetAtTime(0.0001, at + 0.03, last ? 0.32 : 0.12);
       osc.connect(filter).connect(gain).connect(this.sfxGain!);
       osc.start(at);
-      osc.stop(at + 0.45);
+      osc.stop(at + (last ? 1.6 : 0.6));
     });
   }
 
-  /** 다른 플레이어가 대기실에서 나갔을 때 — 요란하지 않은 묵직한 우드 노크. */
+  /** 다른 플레이어가 대기실에서 나갔을 때 — 묵직한 우드 노크 두 번 + 내려앉는 저음 (G4→C4). */
   playRoomLeave() {
-    if (!this.gate("roomLeave", 250)) return;
+    if (!this.gate("roomLeave", 350)) return;
     const ctx = this.ensureContext();
     if (!ctx || !this.sfxGain) return;
     const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(320, now);
-    osc.frequency.exponentialRampToValueAtTime(140, now + 0.09);
+    [0, 0.16].forEach((offset, i) => {
+      const at = now + offset;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(i === 0 ? 340 : 280, at);
+      osc.frequency.exponentialRampToValueAtTime(120, at + 0.1);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.linearRampToValueAtTime(0.3, at + 0.005);
+      gain.gain.setTargetAtTime(0.0001, at + 0.02, 0.07);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(at);
+      osc.stop(at + 0.4);
+    });
+    const fall = ctx.createOscillator();
+    fall.type = "triangle";
+    fall.frequency.setValueAtTime(392.0, now + 0.3);
+    fall.frequency.exponentialRampToValueAtTime(261.63, now + 0.75);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 900;
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.18, now);
-    gain.gain.setTargetAtTime(0.0001, now + 0.02, 0.05);
-    osc.connect(gain).connect(this.sfxGain);
-    osc.start(now);
-    osc.stop(now + 0.3);
+    gain.gain.setValueAtTime(0.0001, now + 0.3);
+    gain.gain.linearRampToValueAtTime(0.16, now + 0.36);
+    gain.gain.setTargetAtTime(0.0001, now + 0.6, 0.18);
+    fall.connect(filter).connect(gain).connect(this.sfxGain);
+    fall.start(now + 0.3);
+    fall.stop(now + 1.5);
   }
 }
 

@@ -748,6 +748,7 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
     isPlaying: phase === "playing",
     hostName: myName,
     playerCount: occupants.length,
+    occupants,
     maxPlayers: 2,
   });
 

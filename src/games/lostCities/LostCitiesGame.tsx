@@ -547,6 +547,7 @@ export default function LostCitiesGame({ onComplete }: PlayableGameProps) {
     isPlaying: phase === "playing",
     hostName: myName,
     playerCount: occupants.length,
+    occupants,
     maxPlayers: 2,
   });
 
