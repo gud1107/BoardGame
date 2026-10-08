@@ -164,6 +164,7 @@ function eventCaption(ev: InkEvent | null, names: Record<SeatIndex, string>): st
         `${w.emoji} ${who} 님의 ${w.name}${ev.crit ? " (치명타!)" : ""} → ${ev.hits.map((h) => `${names[h.seat] ?? "?"} −${h.dmg}`).join(", ")}`,
       );
     if (ev.confusedAngle !== undefined) out.push(`😵 혼란! ${who} 님의 조준이 ${ev.confusedAngle}°로 빗나갔어요`);
+    if (ev.bentPower !== undefined) out.push(`🐌/🕶️ ${who} 님의 발사 힘이 ${ev.bentPower}(으)로 흐트러졌어요`);
     for (const inf of ev.inflicted ?? []) out.push(`${names[inf.seat] ?? "?"} → ${inf.statuses.map((s) => `${STATUS_INFO[s].emoji} ${STATUS_INFO[s].name}`).join(" · ")}`);
     if (ev.heal > 0) out.push(`🩷 흡혈! ${who} 님 +${ev.heal}`);
     for (const k of ev.killed) out.push(`💀 ${names[k] ?? "?"} 님 탈락`);

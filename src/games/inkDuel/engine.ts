@@ -45,6 +45,8 @@ import { CHARACTER_COUNT, MAPS, type MapId } from "./maps";
 import {
   activeStatuses,
   lifestealRate,
+  BLIND_POWER_JITTER,
+  SLOW_POWER_MUL_TURN,
   statusesForHit,
   TURN_DURATION,
   VULNERABLE_MUL,
@@ -77,6 +79,8 @@ const SHIELD_SCALE = 1.3;
 const SHIELD_HP_PER_INK = 1.3;
 export const SHIELD_GUARD = 0.6;
 const BURN_DMG = 5;
+/** Shot-bending statuses: re-applying them every hit locked the victim out, so they skip a turn after landing. */
+const LOCK_STATUSES: StatusId[] = ["confuse", "slow", "blind"];
 const POISON_DMG = 4;
 const CHAIN_RANGE = 240;
 const PELLET_SPREAD = 28;
@@ -109,8 +113,8 @@ export interface Player {
   status: StatusMap;
   /** Just sat out a stun: can't be stunned again until after their next real turn. */
   stunImmune: boolean;
-  /** Was confused during their last turn: can't be confused again until after the next one. */
-  confuseImmune?: boolean;
+  /** 😵/🐌/🕶️ that were active during their last turn: can't land again until after the next one. */
+  lockImmune?: StatusId[];
 }
 
 export interface HitRecord {
@@ -156,6 +160,8 @@ export type InkEvent =
       heal: number;
       /** 😵 The shooter was confused: the angle they actually fired at. */
       confusedAngle?: number;
+      /** 🐌 slow / 🕶️ blind changed the power the shooter asked for: what actually flew. */
+      bentPower?: number;
     }
   | { kind: "wall"; id: number; seat: SeatIndex; wallId: number; dots: DotRecord[]; move?: MoveRecord }
   | { kind: "shield"; id: number; seat: SeatIndex; wallId: number; dots: DotRecord[]; move?: MoveRecord }
@@ -524,9 +530,18 @@ function applyActionInPlace(state: InkDuelState, action: EngineAction): InkDuelS
     angle = Math.max(0, Math.min(180, angle + off));
     confusedAngle = angle;
   }
-  const next = resolveShot(state, action.seat, analyzeWeapon(action.strokes), angle, action.power);
-  if (confusedAngle === undefined || next.lastEvent?.kind !== "shot") return next;
-  return { ...next, lastEvent: { ...next.lastEvent, confusedAngle } };
+  let power = action.power;
+  const st = state.players[action.seat].status;
+  if ((st.slow ?? 0) > 0) power *= SLOW_POWER_MUL_TURN;
+  if ((st.blind ?? 0) > 0) {
+    const r = seededRng((state.seed + (state.seq + 1) * 9173) | 0);
+    power += Math.round(BLIND_POWER_JITTER[0] + r() * (BLIND_POWER_JITTER[1] - BLIND_POWER_JITTER[0])) * (r() < 0.5 ? -1 : 1);
+  }
+  power = Math.max(10, Math.min(100, Math.round(power)));
+  const bentPower = power !== action.power ? power : undefined;
+  const next = resolveShot(state, action.seat, analyzeWeapon(action.strokes), angle, power);
+  if ((confusedAngle === undefined && bentPower === undefined) || next.lastEvent?.kind !== "shot") return next;
+  return { ...next, lastEvent: { ...next.lastEvent, ...(confusedAngle !== undefined ? { confusedAngle } : {}), ...(bentPower !== undefined ? { bentPower } : {}) } };
 }
 
 interface ShotOutcome {
@@ -545,7 +560,7 @@ export interface ImpactBody {
   alive: boolean;
   status: StatusMap;
   stunImmune: boolean;
-  confuseImmune?: boolean;
+  lockImmune?: StatusId[];
 }
 
 export interface ImpactResult {
@@ -677,7 +692,7 @@ export function resolveImpact<P extends ImpactBody>(
     const got: StatusId[] = [];
     for (const st of statusesForHit(stats, statusRoll())) {
       if (st === "stun" && p.stunImmune) continue;
-      if (st === "confuse" && p.confuseImmune) continue;
+      if (p.lockImmune?.includes(st)) continue;
       p.status = { ...p.status, [st]: Math.max(p.status[st] ?? 0, duration(st)) };
       got.push(st);
     }
@@ -787,7 +802,7 @@ function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terra
       if (left > 0) st[k] = left;
     }
     // A confusion that was active this turn grants a turn of immunity (no confuse-lock).
-    players[seat].confuseImmune = (players[seat].status.confuse ?? 0) > 0;
+    players[seat].lockImmune = LOCK_STATUSES.filter((k) => (players[seat].status[k] ?? 0) > 0);
     players[seat].status = st;
     players[seat].stunImmune = false;
   }

@@ -12,9 +12,9 @@ import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
-import { CharacterPicker, MapPicker, mapLabel, ModePicker, modeLabel, type GameMode } from "./LobbyPickers";
+import { CharacterPicker, MapPicker, mapLabel, ModePicker, modeLabel, RtRulesPicker, rtRulesLabel, type GameMode } from "./LobbyPickers";
 import RealtimeBoard, { type CommandBody } from "./RealtimeBoard";
-import { newBotMemory, rtBotThink, startRealtime, stepRealtime, type RtBotMemory, type RtCommand, type RtInput, type RtState } from "./realtime";
+import { DEFAULT_RT_RULES, newBotMemory, rtBotThink, sanitizeRules, startRealtime, stepRealtime, type RtBotMemory, type RtCommand, type RtInput, type RtRules, type RtState } from "./realtime";
 import { RtClientBuffer, snapFromState, viewFromState, type RtSnap, type RtView } from "./rtView";
 import { CharacterAvatar } from "./ArenaCanvas";
 import { isMapId, MAP_IDS, type MapId } from "./maps";
@@ -74,6 +74,8 @@ type Occupant = {
   mapPick?: MapId | "random";
   /** Host only: 🛑 stop (turn-based) or 🏃 moving (real-time). */
   modePick?: GameMode;
+  /** Host only: 🏃 moving-mode tuning. */
+  rtRules?: RtRules;
 };
 type Phase =
   | "choose"
@@ -120,6 +122,8 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const mapPickRef = useRef<MapId | "random">("random");
   const [modePick, setModePick] = useState<GameMode>("stop");
   const modePickRef = useRef<GameMode>("stop");
+  const [rtRules, setRtRules] = useState<RtRules>(DEFAULT_RT_RULES);
+  const rtRulesRef = useRef<RtRules>(DEFAULT_RT_RULES);
   // The running match's mode + 🏃 moving-mode plumbing (host simulates, guests interpolate snapshots).
   const [gameMode, setGameMode] = useState<GameMode>("stop");
   const gameModeRef = useRef<GameMode>("stop");
@@ -261,7 +265,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
         rtCommandsRef.current = [];
         rtBotMemRef.current = {};
         rtBufferRef.current = new RtClientBuffer();
-        rtRef.current = isHost ? startRealtime(playerCount, seed, { map, characters }) : null;
+        rtRef.current = isHost ? startRealtime(playerCount, seed, { map, characters }, sanitizeRules(payload?.rules)) : null;
         setSimHost(isHost);
         epochRef.current = 0;
         simHostSeatRef.current = null;
@@ -481,7 +485,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
           name: myName,
           playerId: myPlayerId,
           character: myCharRef.current ?? undefined,
-          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current } : {}),
+          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current, rtRules: rtRulesRef.current } : {}),
         } satisfies Occupant);
         requestStateSync();
         setPhase((p) => (p === "connecting" ? "waiting" : p));
@@ -501,6 +505,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const knownTargetPlayerCount = host?.targetPlayerCount ?? targetPlayerCount;
   const hostMapLabel = mapLabel(host?.mapPick);
   const hostModeLabel = modeLabel(host?.modePick);
+  const hostRulesLabel = host?.modePick === "moving" ? rtRulesLabel(host?.rtRules) : "";
   const reclaimAttemptsRef = useRef(0);
 
   useEffect(() => {
@@ -528,7 +533,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       name: myName,
       playerId: myPlayerId,
       character: myCharRef.current ?? undefined,
-      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current } : {}),
+      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current, rtRules: rtRulesRef.current } : {}),
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
@@ -543,12 +548,16 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({
       type: "broadcast",
       event: "game-start",
-      payload: { seed: Math.floor(Math.random() * 2 ** 31), playerCount: filledCount, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, characters, map, mode: modePickRef.current },
+      payload: { seed: Math.floor(Math.random() * 2 ** 31), playerCount: filledCount, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, characters, map, mode: modePickRef.current, rules: rtRulesRef.current },
     });
   }, []);
 
   /** Re-publish my presence after changing my character (or, as host, the map). */
-  const retrack = (next: { character?: number | null; map?: MapId | "random"; mode?: GameMode }) => {
+  const retrack = (next: { character?: number | null; map?: MapId | "random"; mode?: GameMode; rules?: RtRules }) => {
+    if (next.rules !== undefined) {
+      rtRulesRef.current = next.rules;
+      setRtRules(next.rules);
+    }
     if (next.mode !== undefined) {
       modePickRef.current = next.mode;
       setModePick(next.mode);
@@ -568,7 +577,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       name: myName,
       playerId: myPlayerId,
       character: myCharRef.current ?? undefined,
-      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current } : {}),
+      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current, rtRules: rtRulesRef.current } : {}),
     } satisfies Occupant);
   };
 
@@ -1085,6 +1094,15 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
                 setModePick(m);
               }}
             />
+            {modePick === "moving" && (
+              <RtRulesPicker
+                value={rtRules}
+                onChange={(r) => {
+                  rtRulesRef.current = r;
+                  setRtRules(r);
+                }}
+              />
+            )}
           </div>
         )}
         {intent === "create" && (
@@ -1163,13 +1181,19 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
               <div className="flex w-full max-w-md flex-col gap-1.5 text-left text-xs text-white/60 light:text-slate-500">
                 모드
                 <ModePicker value={modePick} onChange={(m) => retrack({ mode: m })} />
+                {modePick === "moving" && (
+                  <>
+                    무빙 모드 설정
+                    <RtRulesPicker value={rtRules} onChange={(r) => retrack({ rules: r })} />
+                  </>
+                )}
                 맵
                 <MapPicker value={mapPick} onChange={(m) => retrack({ map: m })} />
               </div>
             ) : (
               (hostMapLabel || hostModeLabel) && (
                 <p className="text-xs text-white/60 light:text-slate-500">
-                  {hostModeLabel} {hostMapLabel && `· 맵: ${hostMapLabel}`}
+                  {hostModeLabel} {hostMapLabel && `· 맵: ${hostMapLabel}`} {hostRulesLabel && `· ${hostRulesLabel}`}
                 </p>
               )
             )}

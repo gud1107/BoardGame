@@ -27,7 +27,7 @@ import {
 import type { MapId } from "./maps";
 import { MAPS } from "./maps";
 import { collideFlyer, GRAVITY, launchFlyer, minHeight, moveFlyer, MUZZLE_Y, PLAYER_R, simulateFlight, surfaceY, WORLD_H, WORLD_W, type Flyer, type Wall } from "./physics";
-import { activeStatuses, LIVE_DURATION_MS, type StatusId } from "./status";
+import { activeStatuses, BLIND_POWER_JITTER, LIVE_DURATION_MS, SLOW_POWER_MUL_LIVE, type StatusId } from "./status";
 
 /** Physics tick — the same per-tick constants as stop mode, at 120 ticks/s. */
 export const RT_TICK_MS = 1000 / 120;
@@ -93,8 +93,53 @@ export type RtEvent =
   | { id: number; at: number; kind: "caught"; seat: SeatIndex; x: number; y: number }
   | { id: number; at: number; kind: "fire" | "wall" | "shield"; seat: SeatIndex };
 
+/** Per-match tuning the host picks in the waiting room (defaults = the constants above). */
+export interface RtRules {
+  /** Walk speed, px/s. */
+  speed: number;
+  /** Reload after firing / building, ms. */
+  cooldownMs: number;
+  /** Damage multiplier vs stop mode. */
+  damageScale: number;
+  /** Ink regained per second. */
+  inkRegen: number;
+  /** Match length, ms. */
+  matchMs: number;
+}
+
+export const DEFAULT_RT_RULES: RtRules = {
+  speed: RT_SPEED,
+  cooldownMs: RT_COOLDOWN_MS,
+  damageScale: RT_DAMAGE_SCALE,
+  inkRegen: RT_INK_REGEN_PER_S,
+  matchMs: RT_MATCH_MS,
+};
+
+/** The choices offered in the waiting room (middle option = default). */
+export const RT_RULE_OPTIONS: { [K in keyof RtRules]: { label: string; title: string; options: { label: string; value: number }[] } } = {
+  speed: { label: "🏃 이동 속도", title: "캐릭터가 걷는 속도", options: [{ label: "느림", value: 55 }, { label: "보통", value: RT_SPEED }, { label: "빠름", value: 105 }] },
+  cooldownMs: { label: "⏳ 재장전", title: "한 번 쏜 뒤 다시 쏠 수 있을 때까지", options: [{ label: "1초", value: 1000 }, { label: "1.8초", value: RT_COOLDOWN_MS }, { label: "3초", value: 3000 }] },
+  damageScale: { label: "💥 피해량", title: "맞았을 때 들어가는 피해", options: [{ label: "약하게", value: 0.4 }, { label: "보통", value: RT_DAMAGE_SCALE }, { label: "세게", value: 0.9 }] },
+  inkRegen: { label: "🖋️ 잉크 충전", title: "초당 다시 차오르는 잉크", options: [{ label: "느림", value: 10 }, { label: "보통", value: RT_INK_REGEN_PER_S }, { label: "빠름", value: 26 }] },
+  matchMs: { label: "⏱ 시간", title: "한 판 길이", options: [{ label: "2분", value: 120_000 }, { label: "3분", value: RT_MATCH_MS }, { label: "5분", value: 300_000 }] },
+};
+
+/** Clamp untrusted rules (they arrive over the network) into sane ranges. */
+export function sanitizeRules(raw: unknown): RtRules {
+  const r = (raw ?? {}) as Partial<Record<keyof RtRules, unknown>>;
+  const num = (v: unknown, d: number, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d);
+  return {
+    speed: num(r.speed, RT_SPEED, 30, 160),
+    cooldownMs: num(r.cooldownMs, RT_COOLDOWN_MS, 400, 6000),
+    damageScale: num(r.damageScale, RT_DAMAGE_SCALE, 0.2, 1.5),
+    inkRegen: num(r.inkRegen, RT_INK_REGEN_PER_S, 4, 50),
+    matchMs: num(r.matchMs, RT_MATCH_MS, 60_000, 600_000),
+  };
+}
+
 export interface RtState {
   mode: "moving";
+  rules: RtRules;
   seed: number;
   map: MapId;
   characters: number[];
@@ -132,10 +177,11 @@ export type RtCommand =
 
 export const NO_INPUT: RtInput = { left: false, right: false, jump: false };
 
-export function startRealtime(playerCount: number, seed: number, options: StartOptions = {}): RtState {
+export function startRealtime(playerCount: number, seed: number, options: StartOptions = {}, rules: RtRules = DEFAULT_RT_RULES): RtState {
   const base = startGame(playerCount, seed, options);
   return {
     mode: "moving",
+    rules: sanitizeRules(rules),
     seed,
     map: base.map,
     characters: base.characters,
@@ -205,7 +251,10 @@ function applyCommand(state: RtState, cmd: RtCommand, rng: () => number) {
   if (cmd.type === "fire") {
     if (!Number.isFinite(cmd.angle) || !Number.isFinite(cmd.power)) return;
     let angle = Math.max(0, Math.min(180, Math.round(cmd.angle)));
-    const power = Math.max(10, Math.min(100, Math.round(cmd.power)));
+    let power = cmd.power;
+    if ((p.status.slow ?? 0) > 0) power *= SLOW_POWER_MUL_LIVE;
+    if ((p.status.blind ?? 0) > 0) power += (BLIND_POWER_JITTER[0] + rng() * (BLIND_POWER_JITTER[1] - BLIND_POWER_JITTER[0])) * (rng() < 0.5 ? -1 : 1);
+    power = Math.max(10, Math.min(100, Math.round(power)));
     if ((p.status.confuse ?? 0) > 0) angle = Math.max(0, Math.min(180, angle + Math.round(4 + rng() * 5) * (rng() < 0.5 ? -1 : 1)));
     const stats = analyzeWeapon(cmd.strokes);
     const id = state.nextId++;
@@ -233,7 +282,7 @@ function applyCommand(state: RtState, cmd: RtCommand, rng: () => number) {
     pushEvent(state, { kind: "shield", seat: cmd.seat });
   }
   p.ink -= ink;
-  p.cooldownMs = RT_COOLDOWN_MS;
+  p.cooldownMs = state.rules.cooldownMs;
 }
 
 function movePlayer(state: RtState, p: RtPlayer, input: RtInput, dt: number) {
@@ -242,7 +291,7 @@ function movePlayer(state: RtState, p: RtPlayer, input: RtInput, dt: number) {
   if ((p.status.confuse ?? 0) > 0) dir = -dir;
   if (dir !== 0) {
     p.facing = dir > 0 ? 1 : -1;
-    const speed = RT_SPEED * ((p.status.slow ?? 0) > 0 ? 0.5 : 1);
+    const speed = state.rules.speed * ((p.status.slow ?? 0) > 0 ? 0.5 : 1);
     let to = Math.max(15, Math.min(WORLD_W - 15, p.x + (dir * speed * dt) / 1000));
     to = wallBlocks(state, p.x, to);
     if (p.onGround && surfaceY(state.terrain, to) < p.y - MAX_STEP_UP) to = p.x; // too steep to climb
@@ -289,7 +338,7 @@ function tickStatuses(state: RtState, p: RtPlayer, dt: number) {
   } else {
     p.dotMs = 0;
   }
-  p.ink = Math.min(RT_INK_MAX, p.ink + (RT_INK_REGEN_PER_S * dt) / 1000);
+  p.ink = Math.min(RT_INK_MAX, p.ink + (state.rules.inkRegen * dt) / 1000);
   p.cooldownMs = Math.max(0, p.cooldownMs - dt);
 }
 
@@ -358,7 +407,7 @@ function tick(state: RtState, inputs: Record<number, RtInput>, rng: () => number
       rng(),
       rng,
       (st) => LIVE_DURATION_MS[st],
-      RT_DAMAGE_SCALE,
+      state.rules.damageScale,
     );
     if (r.terrain !== state.terrain) state.terrainVer++;
     if (r.walls.length !== state.walls.length || r.walls.some((w, i) => w.hp !== state.walls[i]?.hp)) state.wallsVer++;
@@ -404,7 +453,7 @@ function tick(state: RtState, inputs: Record<number, RtInput>, rng: () => number
   // Ground under living players may have been blown away.
   for (const p of state.players) if (p.alive && p.onGround && surfaceY(state.terrain, p.x) > p.y + MAX_STEP_UP) p.onGround = false;
 
-  if (state.players.filter((p) => p.alive).length <= 1 || state.timeMs >= RT_MATCH_MS) {
+  if (state.players.filter((p) => p.alive).length <= 1 || state.timeMs >= state.rules.matchMs) {
     state.phase = "gameOver";
     state.projectiles = [];
   }

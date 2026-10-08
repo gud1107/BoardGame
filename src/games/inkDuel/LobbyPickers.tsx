@@ -3,6 +3,7 @@
 import { CHARACTERS } from "./arenaArt";
 import { CharacterAvatar } from "./ArenaCanvas";
 import { MAP_IDS, MAPS, type MapId } from "./maps";
+import { DEFAULT_RT_RULES, RT_RULE_OPTIONS, type RtRules } from "./realtime";
 
 /** Grid of the selectable characters; `takenBy` greys out ones another player already picked. */
 export function CharacterPicker({ value, onChange, takenBy = {} }: { value: number | null; onChange: (c: number) => void; takenBy?: Record<number, string> }) {
@@ -87,6 +88,48 @@ export function ModePicker({ value, onChange }: { value: GameMode; onChange: (m:
       ))}
     </div>
   );
+}
+
+/** 🏃 Moving-mode tuning: one segmented row per rule (host only). */
+export function RtRulesPicker({ value, onChange }: { value: RtRules; onChange: (r: RtRules) => void }) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-xl border border-amber-400/30 bg-amber-400/5 p-2 light:bg-amber-50/60">
+      {(Object.keys(RT_RULE_OPTIONS) as (keyof RtRules)[]).map((key) => {
+        const row = RT_RULE_OPTIONS[key];
+        return (
+          <div key={key} className="flex items-center gap-2" title={row.title}>
+            <span className="w-20 shrink-0 text-[11px] font-semibold text-white/70 light:text-slate-600">{row.label}</span>
+            <div className="grid flex-1 grid-cols-3 gap-1">
+              {row.options.map((o) => (
+                <button
+                  key={o.label}
+                  type="button"
+                  onClick={() => onChange({ ...value, [key]: o.value })}
+                  className={`rounded-lg border px-1 py-1 text-[11px] font-semibold transition ${
+                    value[key] === o.value ? "border-amber-400 bg-amber-500/20 text-white light:text-amber-800" : "border-white/10 text-white/60 hover:border-white/30 light:border-slate-200 light:text-slate-600"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Short summary of non-default moving-mode rules for guests (empty when all default). */
+export function rtRulesLabel(r: RtRules | undefined): string {
+  if (!r) return "";
+  return (Object.keys(RT_RULE_OPTIONS) as (keyof RtRules)[])
+    .map((key) => {
+      const opt = RT_RULE_OPTIONS[key].options.find((o) => o.value === r[key]);
+      return opt && opt.value !== DEFAULT_RT_RULES[key] ? `${RT_RULE_OPTIONS[key].label} ${opt.label}` : null;
+    })
+    .filter((x): x is string => x !== null)
+    .join(" · ");
 }
 
 export function modeLabel(m: GameMode | undefined): string {

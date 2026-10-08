@@ -23,7 +23,7 @@ import {
 } from "./engine";
 import { surfaceY } from "./physics";
 import { MAP_IDS } from "./maps";
-import { newBotMemory, RT_INK_MAX, RT_SHIELD_MS, rtBotThink, startRealtime, stepRealtime } from "./realtime";
+import { DEFAULT_RT_RULES, newBotMemory, RT_INK_MAX, RT_SHIELD_MS, rtBotThink, sanitizeRules, startRealtime, stepRealtime } from "./realtime";
 import { RtClientBuffer, snapFromState } from "./rtView";
 
 function line(x0: number, y0: number, x1: number, y1: number, steps = 20, c: Stroke["c"] = 0): Stroke {
@@ -463,4 +463,23 @@ describe("moving mode (realtime)", () => {
     expect(view.terrain).toEqual(s.terrain);
     expect(view.players.map((p) => p.hp)).toEqual(s.players.map((p) => Math.round(p.hp)));
   }, 60_000);
+});
+
+describe("moving mode rules (host settings)", () => {
+  it("speed, reload, ink regen and match length follow the room's rules; junk is clamped", () => {
+    const walk = (speed: number) => {
+      const s = startRealtime(2, 3, {}, { ...DEFAULT_RT_RULES, speed });
+      s.players[0].x = 300;
+      s.players[0].y = surfaceY(s.terrain, 300);
+      for (let i = 0; i < 30; i++) stepRealtime(s, 1000 / 60, { 0: { left: false, right: true, jump: false } }, [], () => 0.5);
+      return s.players[0].x - 300;
+    };
+    expect(walk(105)).toBeGreaterThan(walk(55) * 1.5);
+    const quick = startRealtime(2, 4, {}, { ...DEFAULT_RT_RULES, cooldownMs: 1000, matchMs: 60_000 });
+    stepRealtime(quick, 16, {}, [{ type: "fire", seat: 0, strokes: [circle(50)], angle: 60, power: 60 }], () => 0.5);
+    expect(quick.players[0].cooldownMs).toBeLessThanOrEqual(1000);
+    for (let t = 0; t < 61_000 && quick.phase === "playing"; t += 100) stepRealtime(quick, 100, {}, [], () => 0.5);
+    expect(quick.phase).toBe("gameOver");
+    expect(sanitizeRules({ speed: 99999, cooldownMs: -5, damageScale: "x" })).toMatchObject({ speed: 160, cooldownMs: 400, damageScale: DEFAULT_RT_RULES.damageScale });
+  });
 });

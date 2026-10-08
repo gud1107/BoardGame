@@ -60,8 +60,23 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.55.0",
     releaseDate: "2026-10-09",
-    title: "✏️ 낙서 결투 무빙 모드 방장 이어받기·모바일 조작 개선·상태효과 밸런스",
+    title: "✏️ 낙서 결투 무빙 모드 방장 이어받기·설정·그림판 배치, 상태효과 밸런스",
     changes: [
+      {
+        game: "ink-duel",
+        type: "FEAT",
+        desc: "무빙 모드 설정 — 방장이 대기실에서 이동 속도·재장전·피해량·잉크 충전·시간(2/3/5분)을 고를 수 있어요",
+      },
+      {
+        game: "ink-duel",
+        type: "IMPROVE",
+        desc: "무빙 모드 그림판을 경기장 바로 아래 이동·발사 버튼 옆으로 — 스크롤 없이 그리고 움직이고 쏘기",
+      },
+      {
+        game: "ink-duel",
+        type: "IMPROVE",
+        desc: "🐌 느려짐·🕶️ 실명 상향 — 이제 발사 힘도 약해지거나 흔들려요(50% 확률, 연속으로는 안 걸림)",
+      },
       {
         game: "ink-duel",
         type: "FEAT",

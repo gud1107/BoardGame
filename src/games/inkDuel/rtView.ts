@@ -12,7 +12,7 @@ import type { Element, Stroke } from "./analyze";
 import type { SeatIndex } from "./engine";
 import type { MapId } from "./maps";
 import type { Wall } from "./physics";
-import type { RtEvent, RtState } from "./realtime";
+import { DEFAULT_RT_RULES, type RtEvent, type RtRules, type RtState } from "./realtime";
 import type { StatusMap } from "./status";
 
 export interface RtViewPlayer {
@@ -43,6 +43,7 @@ export interface RtViewProjectile {
 
 export interface RtView {
   timeMs: number;
+  rules: RtRules;
   map: MapId;
   characters: number[];
   players: RtViewPlayer[];
@@ -57,6 +58,7 @@ export interface RtView {
 
 export interface RtSnap {
   t: number;
+  rules?: RtRules;
   seq: number;
   /** Bumped every time a guest takes over the simulation after the host vanished. */
   epoch?: number;
@@ -100,6 +102,7 @@ function viewPlayers(s: RtState): RtViewPlayer[] {
 export function viewFromState(s: RtState): RtView {
   return {
     timeMs: s.timeMs,
+    rules: s.rules ?? DEFAULT_RT_RULES,
     map: s.map,
     characters: s.characters,
     players: viewPlayers(s),
@@ -122,6 +125,7 @@ export function snapFromState(s: RtState, opts: { full?: boolean; terrainFresh?:
   for (const pr of s.projectiles) if (opts.full || s.timeMs - pr.spawnedAt < 900) shapes[pr.id] = pr.stats.shape;
   return {
     t: Math.round(s.timeMs),
+    rules: s.rules,
     seq: s.seq,
     map: s.map,
     characters: s.characters,
@@ -205,6 +209,7 @@ export class RtClientBuffer {
     });
     return {
       timeMs: lerp(p?.t ?? c.t, c.t),
+      rules: c.rules ?? DEFAULT_RT_RULES,
       map: c.map,
       characters: c.characters,
       players,

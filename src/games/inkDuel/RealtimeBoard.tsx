@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { analyzeWeapon, COLOR_NAMES, INK_COLORS, MAX_POINTS_PER_STROKE, MAX_STROKES, strokeInk, totalInk, WEAPON_LABEL, type InkColor, type Stroke } from "./analyze";
+import { analyzeWeapon, COLOR_NAMES, INK_COLORS, MAX_POINTS_PER_STROKE, MAX_STROKES, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
 import {
   Ambient,
   characterFor,
@@ -27,7 +27,7 @@ import { playImpactKind, playLaunchSound, playScribbleTick, playVictorySound, pl
 import { WeaponCard } from "./InkDuelBoard";
 import { MAPS, type MapId } from "./maps";
 import { GRAVITY, launchVelocity, MUZZLE_Y, WORLD_H, WORLD_W } from "./physics";
-import { RT_COOLDOWN_MS, RT_INK_MAX, RT_MATCH_MS, type RtCommand, type RtInput } from "./realtime";
+import { DEFAULT_RT_RULES, RT_INK_MAX, type RtCommand, type RtInput } from "./realtime";
 import type { RtView, RtViewPlayer } from "./rtView";
 import { activeStatuses, STATUS_INFO } from "./status";
 import WeaponPad from "./WeaponPad";
@@ -457,13 +457,15 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
       onPointerUp={() => setKey(k, false)}
       onPointerCancel={() => setKey(k, false)}
       onContextMenu={(e) => e.preventDefault()}
-      className="h-12 min-w-[3.25rem] touch-none select-none rounded-xl border-2 border-white/20 bg-white/10 text-lg font-bold text-white active:scale-95 active:bg-amber-500/40 light:border-slate-300 light:bg-white light:text-slate-700"
+      className="h-11 min-w-0 flex-1 touch-none select-none rounded-xl border-2 border-white/20 bg-white/10 text-lg font-bold text-white active:scale-95 active:bg-amber-500/40 light:border-slate-300 light:bg-white light:text-slate-700"
     >
       {label}
     </button>
   );
 
-  const timeLeft = RT_MATCH_MS - (hud?.timeMs ?? 0);
+  const rules = hud?.rules ?? DEFAULT_RT_RULES;
+  const playing = !!me?.alive && hud?.phase === "playing";
+  const timeLeft = rules.matchMs - (hud?.timeMs ?? 0);
   const mapInfo = MAPS[hud?.map ?? "meadow"];
 
   return (
@@ -499,8 +501,15 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
         </span>
       </div>
 
-      {/* Arena */}
-      <div className="relative">
+      {/* Arena on top, then the pad | buttons side by side right under it (no scrolling to draw/move/fire), tools last. */}
+      <div
+        className={
+          playing
+            ? "grid grid-cols-[38%_minmax(0,1fr)] gap-2 [grid-template-areas:'arena_arena'_'pad_ctrl'_'tools_tools'] sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-3"
+            : "grid [grid-template-areas:'arena']"
+        }
+      >
+      <div className="relative self-start [grid-area:arena]">
         <canvas
           ref={canvasRef}
           onPointerDown={(e) => {
@@ -595,45 +604,68 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
           </div>
         )}
       </div>
-      <style>{`@keyframes inkwin { from { transform: translateY(0) rotate(-4deg) } to { transform: translateY(-6px) rotate(4deg) } }`}</style>
 
-      {/* Controls */}
-      {me?.alive && hud?.phase === "playing" && (
-        <div className="flex flex-col gap-2 rounded-2xl border border-amber-400/40 bg-amber-400/5 p-2.5 sm:p-3 light:bg-amber-50/60">
-          <div className="flex flex-wrap items-center gap-2">
+      {/* Controls: the pad and the buttons sit side by side right under the arena. */}
+      {playing && (
+        <div className="flex min-w-0 flex-col gap-1.5 [grid-area:pad]">
+          {mode === "wall" ? (
+            <div className="flex aspect-square w-full items-center justify-center rounded-lg border-2 border-dashed border-sky-400/50 p-2 text-center text-[11px] text-white/60 light:text-slate-500">
+              🧱 경기장 위 내 주변(파란 영역)에 직접 선을 그은 뒤 🧱 버튼으로 세워요.
+            </div>
+          ) : (
+            <WeaponPad strokes={mode === "shield" ? shield : weapon} color={color} budget={RT_INK_MAX} onChange={mode === "shield" ? setShield : setWeapon} onScribble={playScribbleTick} />
+          )}
+        </div>
+      )}
+      {playing && me && (
+        <div className="flex min-w-0 flex-col gap-1.5 [grid-area:ctrl]">
+          <div className="flex items-center gap-1.5">
             {holdBtn("left", "◀")}
             {holdBtn("right", "▶")}
             {holdBtn("jump", "⤒")}
-            {/* Ink + reload bars: own full-width line on phones, inline on wider screens. */}
-            <div className="order-last flex min-w-0 basis-full flex-col gap-1 sm:order-none sm:ml-1 sm:basis-auto sm:flex-1">
-              <div className="flex items-center gap-2 text-[11px] text-white/60 light:text-slate-500">
-                🖋️
-                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
-                  <div className="h-full rounded-full bg-sky-400 transition-[width] duration-150" style={{ width: `${(myInk / RT_INK_MAX) * 100}%` }} />
-                </div>
-                <span className="w-12 text-right font-mono">{Math.floor(myInk)}</span>
-              </div>
-              <div className="flex items-center gap-2 text-[11px] text-white/60 light:text-slate-500">
-                ⏳
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
-                  <div className="h-full rounded-full bg-amber-400" style={{ width: `${(1 - (me.cooldownMs ?? 0) / RT_COOLDOWN_MS) * 100}%` }} />
-                </div>
-                <span className="w-12 text-right font-mono">{cost > 0 ? `−${Math.ceil(cost)}` : ""}</span>
-              </div>
-            </div>
-            <button
-              disabled={!ready || (mode === "wall" && !!wallError)}
-              onClick={fire}
-              className="ml-auto h-12 shrink-0 rounded-xl bg-rose-600 px-4 text-sm font-bold text-white transition hover:bg-rose-500 disabled:opacity-40 sm:ml-0"
-            >
-              {mode === "weapon" ? "🚀 발사" : mode === "shield" ? "🛡️ 방패" : "🧱 벽"}
-            </button>
           </div>
-          <p className="hidden text-[10px] text-white/40 sm:block light:text-slate-400">
-            ←/→ 또는 A/D 이동 · ↑/W/스페이스 점프 · 경기장을 드래그해서 조준하고 놓으면 발사 · F/Enter 발사. 그린 무기는 계속 남아서 잉크만 있으면 다시 쏠 수 있어요.
-          </p>
-
-          <div className="flex flex-wrap items-center gap-2">
+          <button
+            disabled={!ready || (mode === "wall" && !!wallError)}
+            onClick={fire}
+            className="h-11 w-full rounded-xl bg-rose-600 text-sm font-bold text-white transition hover:bg-rose-500 disabled:opacity-40"
+          >
+            {mode === "weapon" ? "🚀 발사" : mode === "shield" ? "🛡️ 방패" : "🧱 벽 세우기"}
+          </button>
+          <div className="flex items-center gap-1.5 text-[11px] text-white/60 light:text-slate-500">
+            🖋️
+            <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
+              <div className="h-full rounded-full bg-sky-400 transition-[width] duration-150" style={{ width: `${(myInk / RT_INK_MAX) * 100}%` }} />
+            </div>
+            <span className="w-8 text-right font-mono">{Math.floor(myInk)}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] text-white/60 light:text-slate-500">
+            ⏳
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
+              <div className="h-full rounded-full bg-amber-400" style={{ width: `${(1 - (me.cooldownMs ?? 0) / rules.cooldownMs) * 100}%` }} />
+            </div>
+            <span className="w-8 text-right font-mono">{cost > 0 ? `−${Math.ceil(cost)}` : ""}</span>
+          </div>
+          {mode !== "wall" && (
+            <label className="flex items-center gap-1.5 text-[11px] text-white/70 light:text-slate-600">
+              <span className="w-6 shrink-0">각도</span>
+              <input type="range" min={0} max={180} value={angle} onChange={(e) => setAngle(Number(e.target.value))} className="min-w-0 flex-1 accent-amber-500" style={{ direction: "rtl" }} />
+              <span className="w-8 text-right font-mono">{angle}°</span>
+            </label>
+          )}
+          {mode === "weapon" && (
+            <label className="flex items-center gap-1.5 text-[11px] text-white/70 light:text-slate-600">
+              <span className="w-6 shrink-0">힘</span>
+              <input type="range" min={10} max={100} value={power} onChange={(e) => setPower(Number(e.target.value))} className="min-w-0 flex-1 accent-amber-500" />
+              <span className="w-8 text-right font-mono">{power}</span>
+            </label>
+          )}
+          {cost > myInk + 0.5 && <p className="text-[10px] font-semibold text-rose-400">잉크 충전 중 ({Math.floor(myInk)}/{Math.ceil(cost)})</p>}
+          {wallError && <p className="text-[10px] font-semibold text-rose-400">⚠️ {wallError}</p>}
+        </div>
+      )}
+      {playing && (
+        <div className="flex min-w-0 flex-col gap-2 [grid-area:tools]">
+          <div className="flex flex-wrap items-center gap-1.5">
             <div className="flex rounded-full border border-white/15 p-0.5 light:border-slate-300">
               {(
                 [
@@ -642,14 +674,9 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
                   ["wall", "🧱 벽"],
                 ] as const
               ).map(([m, label]) => (
-                <button key={m} onClick={() => setMode(m)} className={`rounded-full px-2.5 py-1 text-xs font-semibold transition sm:px-3 ${mode === m ? "bg-amber-500 text-white" : "text-white/60 hover:text-white light:text-slate-600"}`}>
+                <button key={m} onClick={() => setMode(m)} className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${mode === m ? "bg-amber-500 text-white" : "text-white/60 hover:text-white light:text-slate-600"}`}>
                   {label}
                 </button>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {INK_COLORS.map((c, i) => (
-                <button key={c} title={COLOR_NAMES[i]} onClick={() => setColor(i as InkColor)} className={`h-6 w-6 rounded-full border-2 transition ${color === i ? "scale-110 border-amber-400" : "border-white/20 light:border-slate-300"}`} style={{ background: c }} />
               ))}
             </div>
             <div className="ml-auto flex gap-1.5">
@@ -661,51 +688,19 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
               </button>
             </div>
           </div>
-
-          {mode === "wall" ? (
-            <p className="text-xs text-white/60 light:text-slate-500">
-              경기장 위 내 주변(파란 영역)에 직접 선을 그은 뒤 🧱 버튼으로 세워요. {wallError && <b className="text-rose-400">⚠️ {wallError}</b>}
-            </p>
-          ) : (
-            <div className="grid grid-cols-[minmax(0,40%)_1fr] gap-2 sm:grid-cols-[minmax(0,200px)_1fr] sm:gap-3">
-              <div className="w-full max-w-[200px]">
-                <WeaponPad strokes={mode === "shield" ? shield : weapon} color={color} budget={RT_INK_MAX} onChange={mode === "shield" ? setShield : setWeapon} onScribble={playScribbleTick} />
-              </div>
-              <div className="flex min-w-0 flex-col gap-2">
-                {mode === "weapon" ? (
-                  stats ? (
-                    <>
-                      <WeaponCard stats={stats} compact />
-                      <p className="hidden text-[11px] text-white/50 sm:block light:text-slate-500">{WEAPON_LABEL[stats.kind].hint}</p>
-                    </>
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-white/20 p-3 text-center text-xs text-white/50 light:border-slate-300 light:text-slate-500">← 공책에 무기를 그려 장전하세요 ✏️</div>
-                  )
-                ) : (
-                  <div className="rounded-xl border border-sky-400/40 bg-sky-400/10 p-2.5 text-xs text-white/80 light:bg-sky-50 light:text-slate-700">
-                    🛡️ 그린 모양이 6초 동안 방패로 서요. 서 있는 동안 받는 피해 −40%. 경기장을 드래그해 방향을 정하세요.
-                  </div>
-                )}
-                {cost > myInk + 0.5 && <p className="text-[11px] font-semibold text-rose-400">잉크가 차오르길 기다리세요 ({Math.floor(myInk)}/{Math.ceil(cost)})</p>}
-                {(
-                  <label className="flex items-center gap-2 text-xs text-white/70 light:text-slate-600">
-                    <span className="w-7 shrink-0">각도</span>
-                    <input type="range" min={0} max={180} value={angle} onChange={(e) => setAngle(Number(e.target.value))} className="min-w-0 flex-1 accent-amber-500" style={{ direction: "rtl" }} />
-                    <span className="w-9 text-right font-mono">{angle}°</span>
-                  </label>
-                )}
-                {mode === "weapon" && (
-                  <label className="flex items-center gap-2 text-xs text-white/70 light:text-slate-600">
-                    <span className="w-7 shrink-0">힘</span>
-                    <input type="range" min={10} max={100} value={power} onChange={(e) => setPower(Number(e.target.value))} className="min-w-0 flex-1 accent-amber-500" />
-                    <span className="w-9 text-right font-mono">{power}</span>
-                  </label>
-                )}
-              </div>
-            </div>
-          )}
+          <div className="flex flex-wrap gap-1">
+            {INK_COLORS.map((c, i) => (
+              <button key={c} title={COLOR_NAMES[i]} onClick={() => setColor(i as InkColor)} className={`h-6 w-6 rounded-full border-2 transition ${color === i ? "scale-110 border-amber-400" : "border-white/20 light:border-slate-300"}`} style={{ background: c }} />
+            ))}
+          </div>
+          {mode === "weapon" && stats && <WeaponCard stats={stats} compact />}
+          {mode === "weapon" && !stats && <p className="text-[11px] text-white/50 light:text-slate-500">✏️ 공책에 무기를 그려 장전하세요 — 모양마다 다른 무기, 그린 무기는 계속 다시 쏠 수 있어요.</p>}
+          {mode === "shield" && <p className="text-[11px] text-white/60 light:text-slate-500">🛡️ 그린 모양이 6초 동안 방패로 서요 (받는 피해 −40%). 경기장을 드래그해 방향을 정하세요.</p>}
+          <p className="hidden text-[10px] text-white/40 sm:block light:text-slate-400">←/→·A/D 이동 · ↑/W/스페이스 점프 · 경기장 드래그 후 놓으면 발사 · F/Enter 발사</p>
         </div>
       )}
+    </div>
+      <style>{`@keyframes inkwin { from { transform: translateY(0) rotate(-4deg) } to { transform: translateY(-6px) rotate(4deg) } }`}</style>
       <div aria-hidden className="h-16 sm:hidden" />
     </div>
   );
