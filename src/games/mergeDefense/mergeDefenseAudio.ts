@@ -209,7 +209,8 @@ export function playMinionCall(boss: boolean) {
  */
 let lastCritAt = 0;
 
-export function playTowerHit(kind: UnitKind, grade: number, far = false, crit = false) {
+/** `critPitch` lifts the crit "ting" as a crit combo climbs. */
+export function playTowerHit(kind: UnitKind, grade: number, far = false, crit = false, critPitch = 1) {
   const settings = useAudioSettingsStore.getState();
   if (isSfxEffectivelyMuted(settings) || settings.sfxVolume <= 0 || hitVolume <= 0) return;
   // Critical hit on your own board: a bright "ting!" on its own sparse limiter.
@@ -218,8 +219,8 @@ export function playTowerHit(kind: UnitKind, grade: number, far = false, crit = 
     if (c) {
       lastCritAt = performance.now();
       c.bus.gain.value = HIT_LEVEL * settings.sfxVolume * hitVolume;
-      tone(c.ctx, env(c.ctx, c.bus, 0.55, 0.002, 0.14), "triangle", 2600, 1900, 0.15);
-      tone(c.ctx, env(c.ctx, c.bus, 0.3, 0.002, 0.1), "square", 1300, 1100, 0.1);
+      tone(c.ctx, env(c.ctx, c.bus, 0.55, 0.002, 0.14), "triangle", 2600 * critPitch, 1900 * critPitch, 0.15);
+      tone(c.ctx, env(c.ctx, c.bus, 0.3, 0.002, 0.1), "square", 1300 * critPitch, 1100 * critPitch, 0.1);
     }
   }
   const th = far ? FAR : NEAR;

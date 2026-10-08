@@ -605,6 +605,11 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         maxWave: rankings.find((r) => r.seat === seat)?.wave ?? 0,
         kills: sim.boards[seat]?.kills ?? 0,
         rageKills: sim.boards[seat]?.rageKills ?? 0,
+        // Board upgrades: highest level reached (max) + running totals for averages.
+        maxFocus: sim.boards[seat]?.focus ?? 0,
+        maxBrace: sim.boards[seat]?.brace ?? 0,
+        focusTotal: sim.boards[seat]?.focus ?? 0,
+        braceTotal: sim.boards[seat]?.brace ?? 0,
         // Per mode × difficulty bests (`max…` keys keep the highest across games).
         [`maxWave${sim.mode === "versus" ? "Versus" : "Survival"}${{ easy: "Easy", normal: "Normal", hard: "Hard" }[sanitizeDifficulty(sim.difficulty)]}`]:
           rankings.find((r) => r.seat === seat)?.wave ?? 0,

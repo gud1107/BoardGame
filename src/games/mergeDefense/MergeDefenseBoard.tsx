@@ -76,8 +76,11 @@ interface FxPrefs {
 }
 const FX_PREFS_KEY = "merge-defense:fx";
 const FX_DEFAULT: FxPrefs = { shake: true, numbers: true, hitstop: true, slowmo: true };
-/** Berserk kill slow motion: playback rate, length (real ms) and peak zoom. */
-const SLOWMO = { rate: 0.25, ms: 700, zoom: 0.14 };
+/** Slow motion: playback rate and peak zoom; each trigger sets its own length and tint. */
+const SLOWMO = { rate: 0.25, zoom: 0.14 };
+/** Crit combo: crits on your board less than this apart chain; shown from COMBO_MIN. */
+const COMBO_GAP_MS = 500;
+const COMBO_MIN = 4;
 function loadFxPrefs(): FxPrefs {
   try {
     const v = JSON.parse(window.localStorage.getItem(FX_PREFS_KEY) ?? "null");
@@ -179,8 +182,17 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const [fxPrefs, setFxPrefs] = useState<FxPrefs>(() => (typeof window === "undefined" ? FX_DEFAULT : loadFxPrefs()));
   const fxPrefsRef = useRef(fxPrefs);
   const [fxMenuOpen, setFxMenuOpen] = useState(false);
-  /** Slow motion: from `start` (real ms) for SLOWMO.ms the main board replays `state` at SLOWMO.rate, zoomed on (x, y). */
-  const slowRef = useRef<{ start: number; state: MergeDefenseState | null; x: number; y: number }>({ start: 0, state: null, x: 0, y: 0 });
+  /** Slow motion: from `start` (real ms) for `ms` the main board replays `state` at SLOWMO.rate, zoomed on (x, y), edges tinted `tint`. */
+  const slowRef = useRef<{ start: number; ms: number; state: MergeDefenseState | null; x: number; y: number; tint: string }>({
+    start: 0,
+    ms: 0,
+    state: null,
+    x: 0,
+    y: 0,
+    tint: "20,0,0",
+  });
+  /** Crit combo on my board: chain length, last crit time, when the count last rose. */
+  const comboRef = useRef({ count: 0, last: 0, best: 0 });
   /** White flash that hides the snap back to live play after slow motion. */
   const flashRef = useRef(0);
   useEffect(() => {
@@ -323,7 +335,15 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         const from = { x: c.x, y: c.y + 6 + (shot.kind === "archer" ? -19 : 0) };
         aimRef.current[shot.slot] = Math.atan2(shot.pts[1] - from.y, shot.pts[0] - from.x);
         fx.push({ type: "shot", kind: shot.kind, grade: shot.grade, from, pts: shot.pts, t0: now, dur: shot.kind === "mage" ? 380 : shot.kind === "archer" ? 260 : 220 });
-        if (audible) audio.playTowerHit(shot.kind, shot.grade, false, !!shot.crit && view === mySeat);
+        let critPitch = 1;
+        if (shot.crit && view === mySeat) {
+          const cb = comboRef.current;
+          cb.count = now - cb.last <= COMBO_GAP_MS ? cb.count + 1 : 1;
+          cb.last = now;
+          cb.best = Math.max(cb.best, cb.count);
+          critPitch = 1 + Math.min(cb.count - 1, 12) * 0.05;
+        }
+        if (audible) audio.playTowerHit(shot.kind, shot.grade, false, !!shot.crit && view === mySeat, critPitch);
         firedRef.current[shot.slot] = now;
         if (fx.length < MAX_FX - 40) {
           const t0 = now + (shot.kind === "archer" ? 140 : 60);
@@ -436,6 +456,12 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           fx.push({ type: "evolve", x: c.x, y: c.y + 4, color, grade: ev.grade, t0: now + 180, dur: 900 + ev.grade * 120 });
           bornAtRef.current[ev.slot] = { t: now + 200, big: true };
           if (ev.grade >= 4) shake(ev.grade >= 5 ? 5 : 3, 320);
+          // 신화 merge on my board: let the evolution pillar land in slow motion.
+          if (ev.grade >= 5 && mine && fxPrefsRef.current.slowmo && !(typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches)) {
+            slowRef.current = { start: now + 150, ms: 800, state, x: c.x, y: c.y, tint: "60,10,30" };
+            flashRef.current = now + 950;
+            shakeRef.current = { ...shakeRef.current, t0: now + 950 };
+          }
           fx.push({ type: "spark", x: c.x, y: c.y, color: GRADE_COLORS[ev.grade], t0: now, dur: 650, seed: ev.id });
           fx.push({ type: "ring", x: c.x, y: c.y, color: GRADE_COLORS[ev.grade], r0: 10, r1: 46, t0: now, dur: 550 });
           fx.push({ type: "text", x: c.x, y: c.y - 22, text: `진화! ${GRADE_NAMES[ev.grade]}`, color, t0: now + 200, dur: 1100, size: ev.grade >= 4 ? 20 : 15 });
@@ -503,9 +529,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             if (ev.rage && fxPrefsRef.current.slowmo && !calm) {
               const fell = prevBoard?.mobs.find((m) => (m.kind === "boss" || m.kind === "warlord") && !board.mobs.some((b) => b.id === m.id));
               const p = fell ? pathPoint(fell.trav) : { x: BOARD_W / 2, y: BOARD_H / 2 };
-              slowRef.current = { start: now + stop, state, x: p.x, y: p.y };
-              flashRef.current = now + stop + SLOWMO.ms;
-              shakeRef.current = { ...shakeRef.current, t0: now + stop + SLOWMO.ms };
+              slowRef.current = { start: now + stop, ms: 700, state, x: p.x, y: p.y, tint: "20,0,0" };
+              flashRef.current = now + stop + 700;
+              shakeRef.current = { ...shakeRef.current, t0: now + stop + 700 };
             } else if (stop) {
               shakeRef.current = { ...shakeRef.current, t0: now + stop };
             }
@@ -567,7 +593,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
       const hs = hitStopRef.current;
       const frozen = real < hs.until && hs.state !== null;
       const sl = slowRef.current;
-      const slowT = !frozen && sl.state && real >= sl.start && real < sl.start + SLOWMO.ms ? (real - sl.start) / SLOWMO.ms : -1;
+      const slowT = !frozen && sl.state && real >= sl.start && real < sl.start + sl.ms ? (real - sl.start) / sl.ms : -1;
       const slow = slowT >= 0;
       const now = frozen ? hs.at : slow ? sl.start + (real - sl.start) * SLOWMO.rate : real;
       const s = frozen ? hs.state! : slow ? sl.state! : stateRef.current;
@@ -618,6 +644,28 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             limit: eliminationLimit(s),
           });
           drawFx(ctx, fxRef.current, now);
+          const cb = comboRef.current;
+          const comboAge = real - cb.last;
+          if (view === mySeat && cb.count >= COMBO_MIN && comboAge < COMBO_GAP_MS + 500) {
+            // 치명타 콤보: pops on every new crit, warms from gold to red as it climbs.
+            ctx.save();
+            ctx.setTransform(k, 0, 0, k, 0, 0);
+            const pop = 1 + 0.35 * Math.max(0, 1 - comboAge / 160);
+            const fade = comboAge < COMBO_GAP_MS ? 1 : 1 - (comboAge - COMBO_GAP_MS) / 500;
+            ctx.globalAlpha = Math.max(0, fade);
+            ctx.translate(BOARD_W / 2, BOARD_H * 0.3);
+            ctx.scale(pop, pop);
+            ctx.font = `900 ${Math.min(26, 16 + cb.count)}px system-ui, sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = "rgba(0,0,0,0.75)";
+            const label = `치명타 ${cb.count} 콤보!`;
+            ctx.strokeText(label, 0, 0);
+            ctx.fillStyle = cb.count >= 10 ? "#f43f5e" : cb.count >= 7 ? "#fb923c" : "#fde047";
+            ctx.fillText(label, 0, 0);
+            ctx.restore();
+          }
           if (frozen) {
             // A faint white wash sells the freeze.
             ctx.fillStyle = "rgba(255,255,255,0.12)";
@@ -628,7 +676,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             ctx.setTransform(k, 0, 0, k, 0, 0);
             const v = ctx.createRadialGradient(BOARD_W / 2, BOARD_H / 2, BOARD_H * 0.35, BOARD_W / 2, BOARD_H / 2, BOARD_W * 0.75);
             v.addColorStop(0, "rgba(0,0,0,0)");
-            v.addColorStop(1, `rgba(20,0,0,${0.45 * Math.sin(slowT * Math.PI)})`);
+            v.addColorStop(1, `rgba(${sl.tint},${0.45 * Math.sin(slowT * Math.PI)})`);
             ctx.fillStyle = v;
             ctx.fillRect(0, 0, BOARD_W, BOARD_H);
           }
@@ -807,7 +855,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
                     ["shake", "📳 화면 흔들림"],
                     ["numbers", "🔢 데미지 숫자 (내 보드)"],
                     ["hitstop", "⏸️ 보스 처치 멈춤"],
-                    ["slowmo", "🎬 광폭 보스 슬로모션"],
+                    ["slowmo", "🎬 슬로모션 (광폭 보스·신화)"],
                   ] as const
                 ).map(([key, label]) => (
                   <button
