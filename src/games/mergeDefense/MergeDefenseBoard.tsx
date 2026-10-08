@@ -30,6 +30,7 @@ import {
   summonCost,
   upgradeCost,
   killGold,
+  MINION_CAP,
   HIRE_KINDS,
   HIRES,
   hireCost,
@@ -256,7 +257,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     for (const ev of fresh) {
       if (ev.type === "wave") {
         if (ev.boss) {
-          showBanner({ text: `👑 WAVE ${ev.wave} — 보스 등장!`, sub: "4초마다 졸개를 불러요(최대 4마리) — 빨리 잡으세요", tone: "boss" });
+          showBanner({ text: `👑 WAVE ${ev.wave} — 보스 등장!`, sub: `4초마다 졸개를 불러요(최대 ${MINION_CAP[state.difficulty ?? "normal"]}마리) → 그다음엔 광폭화`, tone: "boss" });
           if (audible) audio.playBossWave();
         } else if (ev.wave === 1 || ev.wave % 5 === 1) {
           showBanner({ text: `WAVE ${ev.wave}`, tone: "wave" });
@@ -342,6 +343,20 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: `${UNITS[ev.kind].emoji} 강화 Lv.${ev.level}`, color: UNITS[ev.kind].color, t0: now, dur: 900, size: 18 });
           if (mine && audible) audio.playUpgrade();
           break;
+        case "rage": {
+          const p = pathPoint(ev.trav);
+          fx.push({ type: "ring", x: p.x, y: p.y, color: "#ef4444", r0: 8, r1: 46, t0: now, dur: 700 });
+          fx.push({ type: "text", x: p.x, y: p.y < 45 ? p.y + 34 : p.y - 34, text: "광폭화!", color: "#fca5a5", t0: now, dur: 1200, size: 14 });
+          if (mine) showBanner({ text: `😡 ${ev.boss ? "보스" : "전쟁군주"} 광폭화!`, sub: "졸개를 다 불렀어요 — 이제 6초마다 가까운 타워를 2초 기절시켜요", tone: "danger" });
+          break;
+        }
+        case "smash": {
+          const p = pathPoint(ev.trav);
+          const t = slotCenter(ev.slot);
+          fx.push({ type: "smash", x: p.x, y: p.y + 6, tx: t.x, ty: t.y + 6, t0: now, dur: 650, seed: ev.id });
+          if (mine && audible) audio.playBossSmash();
+          break;
+        }
         case "split": {
           const p = pathPoint(ev.trav);
           fx.push({ type: "split", x: p.x, y: p.y, t0: now, dur: 750, seed: ev.id });
@@ -719,7 +734,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             {load}/<span className="text-rose-300 light:text-rose-600">{limit}</span>
           </span>
         </div>
-        <p className="text-[10px] leading-tight text-white/45 light:text-slate-400">보스·전쟁군주는 졸개를 최대 4마리까지 불러요 · 골렘은 쓰러지면 2마리로 갈라져요</p>
+        <p className="text-[10px] leading-tight text-white/45 light:text-slate-400">보스·전쟁군주는 졸개를 다 부르면 광폭화해 타워를 기절시켜요 · 골렘은 쓰러지면 2마리로 갈라져요</p>
         <div className="flex items-center justify-between text-sm font-bold text-white light:text-slate-900">
           <span className="relative">
             <span key={goldPop?.key ?? 0} className={`inline-block ${goldPop ? "animate-[md-gold-glow_0.6s_ease-out] text-amber-300 light:text-amber-600" : ""}`}>

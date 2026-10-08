@@ -253,7 +253,8 @@ describe("merge defense engine", () => {
       if (s.wave > 10) break;
     }
     const boss = s.boards[0].mobs.find((m) => m.kind === "boss");
-    expect(boss?.calls).toBe(MINION_CAP.boss);
+    expect(boss?.calls).toBe(MINION_CAP.normal);
+    expect(boss?.rage).toBe(true);
   });
 
   it("a dying golem announces its split", () => {

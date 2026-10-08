@@ -31,6 +31,8 @@ const ratio = (hit: number | undefined, total: number | undefined) =>
 const avg = (sum: number | undefined, count: number, digits = 1) =>
   count > 0 && sum !== undefined ? (sum / count).toFixed(digits) : null;
 
+const waves3 = (...v: (number | undefined)[]) => (v.some((x) => x) ? v.map((x) => (x ? `W${n(x)}` : "-")).join(" · ") : null);
+
 /** One-line headline per 1-player game for the /stats 솔로 기록 table. */
 export const SOLO_HEADLINE: Record<string, (d: StatDetails) => string> = {
   "hungry-shark": (d) => `최고 ${n(d.maxScore)}점 · 🔥 최고 연속 올클리어 ${n(d.maxMissionStreak)}회`,
@@ -129,6 +131,18 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "누적 잠수", value: (d) => `${n(d.dives)}회` },
     { label: "미션 올클리어", value: (d) => ratio(d.missionAllClears, d.dives) },
     { label: "최고 연속 미션 올클리어", value: (d) => `${n(d.maxMissionStreak)}회` },
+  ],
+  "merge-defense": [
+    { label: "최고 웨이브 (전체)", value: (d) => (d.maxWave ? `WAVE ${n(d.maxWave)}` : null) },
+    {
+      label: "🛡️ 생존전 최고 (쉬움 · 보통 · 어려움)",
+      value: (d) => waves3(d.maxWaveSurvivalEasy, d.maxWaveSurvivalNormal, d.maxWaveSurvivalHard),
+    },
+    {
+      label: "⚔️ 유닛 대결 최고 (쉬움 · 보통 · 어려움)",
+      value: (d) => waves3(d.maxWaveVersusEasy, d.maxWaveVersusNormal, d.maxWaveVersusHard),
+    },
+    { label: "처치 (누적 · 판당 평균)", value: (d, played) => `${n(d.kills)} · ${avg(d.kills, played) ?? "-"}` },
   ],
   "for-sale": [
     { label: "최고 최종 자산", value: (d) => `$${n(d.maxTotal)}` },

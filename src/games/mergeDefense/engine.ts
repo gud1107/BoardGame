@@ -87,11 +87,16 @@ const BOSS_MINION_EVERY = 4 * 20;
 const WARLORD_MINION_EVERY = 5 * 20;
 const GOLEM_SPLIT = 2;
 /**
- * Most minions one caller may summon. Uncapped, a board that couldn't kill the
- * wave-10 boss fast got buried in endless minions (bot sim: ~4% of games ended
- * at wave 11–12 on normal AND hard); a cap of 4 removed every such collapse.
+ * Most minions one boss / warlord may summon, by difficulty. Uncapped, a board
+ * that couldn't kill the wave-10 boss fast got buried in endless minions (bot
+ * sim: ~4% of games ended at wave 11–12 on normal AND hard); a cap of 4 on
+ * normal removed every such collapse.
  */
-export const MINION_CAP = { boss: 4, warlord: 4 };
+export const MINION_CAP: Record<Difficulty, number> = { easy: 2, normal: 4, hard: 6 };
+/** Once out of minions a caller goes berserk: every SMASH_EVERY it stuns the nearest tower. */
+export const SMASH_EVERY = 6 * 20;
+export const SMASH_STUN = 2 * 20;
+const SMASH_REACH = 150;
 export const SEND_EVERY = 12;
 export const MAX_GRADE = 5;
 export const MAX_UPGRADE = 10;
@@ -135,6 +140,8 @@ export interface Unit {
   grade: number;
   /** Ticks until the next attack. */
   cd: number;
+  /** Ticks left stunned by a berserk boss's smash (can't attack). */
+  stun?: number;
 }
 
 export type MobKind = "normal" | "fast" | "tank" | "boss" | "elite" | "invader" | "golem" | "wraith" | "warlord";
@@ -161,7 +168,7 @@ export const HIRES: Record<HireKind, HireDef> = {
   swarm: { name: "박쥐 떼", emoji: "🦇", desc: `빠른 박쥐 ${SWARM_SIZE}마리가 한꺼번에`, base: 45, perWave: 4, minWave: 1 },
   wraith: { name: "망령", emoji: "👻", desc: "아주 빠름 · 둔화 면역", base: 60, perWave: 5, minWave: 2 },
   golem: { name: "바위 골렘", emoji: "🪨", desc: "체력 9배 · 느림 · 쓰러지면 돌멩이 2마리로 분열", base: 80, perWave: 6, minWave: 3 },
-  warlord: { name: "전쟁군주", emoji: "👹", desc: "미니 보스 · 체력 20배 · 5초마다 졸개 소환(최대 4)", base: 170, perWave: 12, minWave: 5 },
+  warlord: { name: "전쟁군주", emoji: "👹", desc: "미니 보스 · 체력 20배 · 졸개 소환 후 광폭화(타워 기절)", base: 170, perWave: 12, minWave: 5 },
 };
 
 export function hireCost(kind: HireKind, wave: number): number {
@@ -187,6 +194,8 @@ export interface Mob {
   grade?: number;
   /** Boss / warlord: minions called so far (capped by MINION_CAP). */
   calls?: number;
+  /** Out of minions → berserk: smashes the nearest tower every SMASH_EVERY ticks. */
+  rage?: boolean;
 }
 
 export interface Shot {
@@ -230,6 +239,10 @@ export type GameEvent =
   | { id: number; tick: number; seat: SeatIndex; type: "boss-kill" }
   /** A golem at road distance `trav` just broke into pebbles. */
   | { id: number; tick: number; seat: SeatIndex; type: "split"; trav: number }
+  /** A boss / warlord used up its minions and went berserk. */
+  | { id: number; tick: number; seat: SeatIndex; type: "rage"; trav: number; boss: boolean }
+  /** A berserk boss / warlord at `trav` stunned the tower in `slot`. */
+  | { id: number; tick: number; seat: SeatIndex; type: "smash"; trav: number; slot: number }
   /** A boss / warlord at road distance `trav` just called a minion. */
   | { id: number; tick: number; seat: SeatIndex; type: "call"; trav: number; boss: boolean }
   | { id: number; tick: number; seat: SeatIndex; type: "out" }
@@ -799,8 +812,12 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
     for (const m of board.mobs) {
       const every = m.kind === "boss" ? BOSS_MINION_EVERY : m.kind === "warlord" ? WARLORD_MINION_EVERY : 0;
       if (!every || m.hp <= 0 || (s.tick + m.id) % every !== 0) continue;
-      if ((m.calls ?? 0) >= (m.kind === "boss" ? MINION_CAP.boss : MINION_CAP.warlord)) continue;
+      if (m.rage) continue;
       m.calls = (m.calls ?? 0) + 1;
+      if (m.calls >= MINION_CAP[difficultyOf(s)]) {
+        m.rage = true;
+        pushEvent(s, { seat, type: "rage", trav: Math.round(m.trav), boss: m.kind === "boss" });
+      }
       const minion = makeMob(s, "normal", Math.max(1, s.wave), m.from);
       minion.trav = Math.max(0, m.trav - 6);
       called.push(minion);
@@ -808,11 +825,35 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
     }
     board.mobs.push(...called);
 
+    // Berserk callers smash the closest tower in reach, stunning it.
+    for (const m of board.mobs) {
+      if (!m.rage || m.hp <= 0 || (s.tick + m.id) % SMASH_EVERY !== 0) continue;
+      const p = pathPoint(m.trav);
+      let best = -1;
+      let bestD = SMASH_REACH * SMASH_REACH;
+      board.units.forEach((u, slot) => {
+        if (!u) return;
+        const c = slotCenter(slot);
+        const d = (c.x - p.x) ** 2 + (c.y - p.y) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          best = slot;
+        }
+      });
+      if (best < 0) continue;
+      board.units[best]!.stun = SMASH_STUN;
+      pushEvent(s, { seat, type: "smash", trav: Math.round(m.trav), slot: best });
+    }
+
     // Attacks — each unit hits the oldest live mob inside its own range.
     const ordered = board.mobs.filter((m) => m.hp > 0).sort((a, b) => b.trav - a.trav);
     const pos = ordered.map((m) => pathPoint(m.trav));
     board.units.forEach((unit, slot) => {
       if (!unit) return;
+      if (unit.stun) {
+        unit.stun -= 1;
+        return;
+      }
       if (unit.cd > 0) unit.cd -= 1;
       if (unit.cd > 0) return;
       const c = slotCenter(slot);

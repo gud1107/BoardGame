@@ -382,6 +382,7 @@ export function drawBoard(ctx: Ctx, board: Board, opts: DrawOptions) {
       return;
     }
     drawTower(ctx, c.x, c.y + 6, u, now, { mini, lifted: opts.selected === slot, aim: opts.aim?.[slot] });
+    if (u.stun) drawStun(ctx, c.x, c.y, now, !!mini);
   });
 
   // Mobs (oldest drawn last so the front of the line stays on top)
@@ -851,6 +852,18 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean) {
     ctx.lineWidth = 2;
     ellipse(ctx, 0, size * 0.6, size * 1.15, size * 0.45);
     ctx.stroke();
+  }
+
+  // Berserk boss / warlord: flickering red aura.
+  if (m.rage) {
+    const pulse = 0.55 + 0.45 * Math.sin(now / 90 + m.id);
+    const aura = ctx.createRadialGradient(0, -size * 0.3, size * 0.4, 0, -size * 0.3, size * 1.9);
+    aura.addColorStop(0, `rgba(239,68,68,${0.45 * pulse})`);
+    aura.addColorStop(1, "rgba(239,68,68,0)");
+    ctx.fillStyle = aura;
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.3, size * 1.9, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   ctx.save();
@@ -1351,6 +1364,8 @@ export type Fx =
   | { type: "text"; x: number; y: number; text: string; color: string; t0: number; dur: number; size: number }
   /** Merge/gamble evolution: light pillar + spinning rays + rising motes, scaled by grade. */
   | { type: "evolve"; x: number; y: number; color: string; grade: number; t0: number; dur: number }
+  /** A berserk boss slamming a tower: jagged quake line from the boss to the tower + impact ring. */
+  | { type: "smash"; x: number; y: number; tx: number; ty: number; t0: number; dur: number; seed: number }
   /** A golem crumbling: stone shards flung out, a dust ring and two pebbles dropping. */
   | { type: "split"; x: number; y: number; t0: number; dur: number; seed: number }
   /** A boss / warlord calling a minion: rune circle, dark updraft, tether to the spawn. */
@@ -1387,6 +1402,7 @@ export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
     else if (f.type === "portal") drawPortalBurst(ctx, f, k);
     else if (f.type === "call") drawMinionCall(ctx, f, k);
     else if (f.type === "split") drawGolemSplit(ctx, f, k);
+    else if (f.type === "smash") drawSmash(ctx, f, k);
     else if (f.type === "absorb") {
       const dx = f.to.x - f.from.x;
       const dy = f.to.y - f.from.y;
@@ -1418,6 +1434,61 @@ export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
     }
     ctx.restore();
   }
+}
+
+function drawSmash(ctx: Ctx, f: Extract<Fx, { type: "smash" }>, k: number) {
+  const fade = 1 - k;
+  // Quake crack racing from the boss to the tower.
+  const reach = Math.min(1, k * 3);
+  const dx = f.tx - f.x;
+  const dy = f.ty - f.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
+  ctx.strokeStyle = `rgba(251,146,60,${0.95 * fade})`;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(f.x, f.y);
+  const steps = 8;
+  for (let i = 1; i <= steps * reach; i++) {
+    const t = i / steps;
+    const j = (((i * 7 + f.seed) % 5) - 2) * 3;
+    ctx.lineTo(f.x + dx * t + nx * j, f.y + dy * t + ny * j);
+  }
+  ctx.stroke();
+  // Impact at the tower once the crack lands.
+  if (k > 0.3) {
+    const kk = (k - 0.3) / 0.7;
+    ctx.strokeStyle = `rgba(254,215,170,${1 - kk})`;
+    ctx.lineWidth = 3 * (1 - kk) + 0.5;
+    ctx.beginPath();
+    ctx.arc(f.tx, f.ty, 8 + kk * 26, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = kk < 0.7 ? 1 : (1 - kk) / 0.3;
+    ctx.font = "900 12px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,0.7)";
+    ctx.strokeText("기절!", f.tx, f.ty - 30 - kk * 6);
+    ctx.fillStyle = "#fde047";
+    ctx.fillText("기절!", f.tx, f.ty - 30 - kk * 6);
+  }
+}
+
+/** Stunned tower: grey veil + stars circling the top. */
+function drawStun(ctx: Ctx, x: number, y: number, now: number, mini: boolean) {
+  ctx.save();
+  ctx.fillStyle = "rgba(15,23,42,0.35)";
+  roundRect(ctx, x - 24, y - 24, 48, 48, 10);
+  ctx.fill();
+  if (!mini) {
+    for (let i = 0; i < 3; i++) {
+      const a = now / 220 + (i * Math.PI * 2) / 3;
+      star(ctx, x + Math.cos(a) * 13, y - 22 + Math.sin(a) * 4, 3, "#fde047");
+    }
+  }
+  ctx.restore();
 }
 
 function drawGolemSplit(ctx: Ctx, f: Extract<Fx, { type: "split" }>, k: number) {

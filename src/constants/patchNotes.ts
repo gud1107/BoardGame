@@ -143,6 +143,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "🏅 최고 웨이브 기록을 생존전·유닛 대결로 나눠서 저장",
       },
       {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "졸개를 다 부른 보스·전쟁군주 😡 광폭화 — 6초마다 가까운 타워 2초 기절 · 졸개 상한 난이도별(쉬움 2 · 보통 4 · 어려움 6)",
+      },
+      {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "/stats 전적에 랜덤 합성 디펜스 상세 기록 — 모드·난이도별 최고 웨이브, 누적 처치",
+      },
+      {
         game: "ink-duel",
         type: "IMPROVE",
         desc: "그래픽 전면 개편 — 캐릭터 4종(마법사·고양이·개구리·토끼), 수채화 배경·지층 지형, 잉크 폭발 파티클·화면 흔들림·속성 이펙트, 카드형 무기 판정",

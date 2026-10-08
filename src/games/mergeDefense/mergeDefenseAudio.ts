@@ -164,6 +164,18 @@ function noise(ctx: AudioContext, buf: AudioBuffer, out: GainNode, type: BiquadF
   src.stop(t + dur);
 }
 
+/** Berserk boss slamming a tower: a short, muffled ground thud. */
+export function playBossSmash() {
+  const settings = useAudioSettingsStore.getState();
+  if (isSfxEffectivelyMuted(settings) || settings.sfxVolume <= 0) return;
+  const a = hitAudio();
+  if (!a) return;
+  const { ctx, bus, noise: buf } = a;
+  bus.gain.value = HIT_LEVEL * settings.sfxVolume * Math.max(0.6, hitVolume);
+  tone(ctx, env(ctx, bus, 1, 0.005, 0.28), "sine", 90, 40, 0.3);
+  noise(ctx, buf, env(ctx, bus, 0.6, 0.004, 0.18), "lowpass", 400, 0.7, 0.22);
+}
+
 /** Golem crumbling into pebbles: a quiet gravelly crunch. */
 export function playGolemSplit() {
   const settings = useAudioSettingsStore.getState();
