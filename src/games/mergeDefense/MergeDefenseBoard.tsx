@@ -28,6 +28,7 @@ import {
   pathPoint,
   slotCenter,
   summonCost,
+  wakeCost,
   upgradeCost,
   killGold,
   MINION_CAP,
@@ -374,8 +375,21 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           break;
         }
         case "boss-kill":
-          fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2 - 10, text: "보스 처치! +💎2", color: "#facc15", t0: now, dur: 1500, size: 22 });
+          if (ev.rage) {
+            // Berserk kill: bigger, redder callout with the bonus spelled out.
+            const who = ev.warlord ? "광폭 전쟁군주 처치!" : "광폭 보스 처치!";
+            fx.push({ type: "ring", x: BOARD_W / 2, y: BOARD_H / 2, color: "#f87171", r0: 20, r1: 120, t0: now, dur: 900 });
+            fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2 - 16, text: who, color: "#fca5a5", t0: now, dur: 1700, size: 22 });
+            fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2 + 12, text: `보너스 +${ev.gold ?? 0}골드 · 보석 +${ev.gems ?? 1}`, color: "#fde047", t0: now + 150, dur: 1600, size: 15 });
+          } else {
+            fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2 - 10, text: "보스 처치! +💎2", color: "#facc15", t0: now, dur: 1500, size: 22 });
+          }
           if (mine && audible) audio.playBossKill();
+          break;
+        case "wake":
+          fx.push({ type: "ring", x: BOARD_W / 2, y: BOARD_H / 2, color: "#fde047", r0: 10, r1: 90, t0: now, dur: 600 });
+          fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: `기절 해제! ×${ev.count}`, color: "#fde047", t0: now, dur: 1000, size: 18 });
+          if (mine && audible) audio.playUpgrade();
           break;
       }
     }
@@ -533,6 +547,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const load = fieldLoad(me);
   const loadPct = Math.min(1, load / limit);
   const cost = summonCost(me);
+  const stunnedCount = me.units.filter((u) => u?.stun).length;
+  const wakeNow = wakeCost(state.wave);
   const freeSlots = me.units.filter((u) => !u).length;
   const pairs = useMemo(() => mergePairs(me), [me]);
   const versus = state.mode === "versus";
@@ -693,6 +709,16 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             setDropTarget(null);
           }}
         />
+        {interactive && stunnedCount > 0 && (
+          <button
+            onClick={() => onAction({ type: "wake" })}
+            disabled={me.gold < wakeNow}
+            className="absolute top-2 right-2 animate-pulse rounded-full border border-amber-200/70 bg-gradient-to-b from-amber-400 to-orange-600 px-3 py-1.5 text-xs font-black text-white shadow-lg transition active:scale-95 disabled:animate-none disabled:opacity-50"
+            title="광폭화한 보스에게 기절당한 타워를 모두 바로 깨워요"
+          >
+            ⚡ 기절 해제 ×{stunnedCount} <span className="font-mono">🪙{wakeNow}</span>
+          </button>
+        )}
         {resolvedView !== mySeat && (
           <div className="pointer-events-none absolute top-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-[11px] text-white">
             👀 {names[resolvedView]} 관전 중

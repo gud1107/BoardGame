@@ -97,6 +97,12 @@ export const MINION_CAP: Record<Difficulty, number> = { easy: 2, normal: 4, hard
 export const SMASH_EVERY = 6 * 20;
 export const SMASH_STUN = 2 * 20;
 const SMASH_REACH = 150;
+/** Gold to shake every stunned tower awake at once. */
+export function wakeCost(wave: number): number {
+  return 10 + 2 * Math.max(1, wave);
+}
+/** Killing a berserk boss / warlord pays this share of its gold again, plus one extra gem. */
+export const RAGE_GOLD_BONUS = 0.5;
 export const SEND_EVERY = 12;
 export const MAX_GRADE = 5;
 export const MAX_UPGRADE = 10;
@@ -236,7 +242,9 @@ export type GameEvent =
   | { id: number; tick: number; seat: SeatIndex; type: "invade"; to: SeatIndex; kind: UnitKind; grade: number }
   | { id: number; tick: number; seat: SeatIndex; type: "hire"; to: SeatIndex; mob: HireKind }
   | { id: number; tick: number; seat: SeatIndex; type: "move"; a: number; b: number }
-  | { id: number; tick: number; seat: SeatIndex; type: "boss-kill" }
+  /** `rage` = it was berserk (bonus paid); `warlord` = a bought mini boss (only announced when berserk). */
+  | { id: number; tick: number; seat: SeatIndex; type: "boss-kill"; rage?: boolean; warlord?: boolean; gold?: number; gems?: number }
+  | { id: number; tick: number; seat: SeatIndex; type: "wake"; count: number }
   /** A golem at road distance `trav` just broke into pebbles. */
   | { id: number; tick: number; seat: SeatIndex; type: "split"; trav: number }
   /** A boss / warlord used up its minions and went berserk. */
@@ -284,6 +292,8 @@ export type Action =
   | { type: "upgrade"; kind: UnitKind }
   /** 유닛 대결: sacrifice the unit in `slot` onto `to`'s road. */
   | { type: "send"; slot: number; to?: SeatIndex }
+  /** Pay gold to clear every stun on your board. */
+  | { type: "wake" }
   /** 유닛 대결: buy a monster with gold and drop it on `to`'s road. */
   | { type: "hire"; mob: HireKind; to?: SeatIndex };
 
@@ -510,6 +520,7 @@ export function sanitizeAction(raw: unknown): Action | null {
     if (a.to === undefined || a.to === null) return { type: "send", slot: a.slot };
     return Number.isInteger(a.to) && (a.to as number) >= 0 && (a.to as number) < MAX_PLAYERS ? { type: "send", slot: a.slot, to: a.to as number } : null;
   }
+  if (a.type === "wake") return { type: "wake" };
   if (a.type === "hire" && HIRE_KINDS.includes(a.mob as HireKind)) {
     if (a.to === undefined || a.to === null) return { type: "hire", mob: a.mob as HireKind };
     return Number.isInteger(a.to) && (a.to as number) >= 0 && (a.to as number) < MAX_PLAYERS ? { type: "hire", mob: a.mob as HireKind, to: a.to as number } : null;
@@ -611,6 +622,17 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
       grade: unit.grade,
     });
     pushEvent(s, { seat, type: "invade", to, kind: unit.kind, grade: unit.grade });
+    return s;
+  }
+
+  if (action.type === "wake") {
+    const stunned = cur.units.filter((u) => u?.stun).length;
+    if (stunned === 0 || cur.gold < wakeCost(state.wave)) return state;
+    const s = cloneState(state);
+    const board = s.boards[seat];
+    board.gold -= wakeCost(s.wave);
+    for (const u of board.units) if (u?.stun) u.stun = 0;
+    pushEvent(s, { seat, type: "wake", count: stunned });
     return s;
   }
 
@@ -879,6 +901,11 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
       }
       board.kills += 1;
       board.gold += killGold(m.kind, s.wave);
+      const rageGold = m.rage ? Math.round(killGold(m.kind, s.wave) * RAGE_GOLD_BONUS) : 0;
+      if (m.rage) {
+        board.gold += rageGold;
+        board.gems += 1;
+      }
       if (m.kind === "golem") {
         pushEvent(s, { seat, type: "split", trav: Math.round(m.trav) });
         for (let i = 0; i < GOLEM_SPLIT; i++) {
@@ -889,7 +916,9 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
       }
       if (m.kind === "boss") {
         board.gems += 2;
-        pushEvent(s, { seat, type: "boss-kill" });
+        pushEvent(s, m.rage ? { seat, type: "boss-kill", rage: true, gold: rageGold, gems: 3 } : { seat, type: "boss-kill" });
+      } else if (m.kind === "warlord" && m.rage) {
+        pushEvent(s, { seat, type: "boss-kill", rage: true, warlord: true, gold: rageGold, gems: 1 });
       }
       board.sendMeter += 1;
       if (board.sendMeter >= SEND_EVERY) {
@@ -1008,6 +1037,8 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Acti
     });
     if (weakest >= 0) return { type: "send", slot: weakest };
   }
+  // A stunned strong tower is worth waking if gold is comfortable.
+  if (board.units.some((u) => u?.stun && u.stun > 10 && u.grade >= 3) && board.gold >= wakeCost(state.wave) * 2) return { type: "wake" };
   // 유닛 대결: rich and nothing left to build → buy the priciest monster we
   // can comfortably afford for the next opponent.
   if (state.mode === "versus" && free === 0 && board.sendCd === 0 && state.wave >= 4) {

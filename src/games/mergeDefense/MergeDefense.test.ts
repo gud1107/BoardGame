@@ -11,6 +11,8 @@ import {
   slotCenter,
   unitRange,
   loadLimit,
+  wakeCost,
+  killGold,
   MINION_CAP,
   eliminationLimit,
   MAX_GRADE,
@@ -255,6 +257,41 @@ describe("merge defense engine", () => {
     const boss = s.boards[0].mobs.find((m) => m.kind === "boss");
     expect(boss?.calls).toBe(MINION_CAP.normal);
     expect(boss?.rage).toBe(true);
+  });
+
+  it("wake clears every stun for gold; refused with nothing stunned or too little gold", () => {
+    let s = startGame(2, 81);
+    while (s.wave < 1) s = stepGame(s);
+    s.boards[0].units[0] = { kind: "archer", grade: 2, cd: 0, stun: 30 };
+    s.boards[0].units[1] = { kind: "mage", grade: 1, cd: 0, stun: 12 };
+    s.boards[0].gold = 100;
+    const woke = applyAction(s, 0, { type: "wake" });
+    expect(woke.boards[0].units[0]!.stun).toBe(0);
+    expect(woke.boards[0].units[1]!.stun).toBe(0);
+    expect(woke.boards[0].gold).toBe(100 - wakeCost(s.wave));
+    expect(applyAction(woke, 0, { type: "wake" })).toBe(woke);
+    s.boards[0].gold = 1;
+    expect(applyAction(s, 0, { type: "wake" })).toBe(s);
+  });
+
+  it("killing a berserk boss pays a gold bonus and an extra gem", () => {
+    let s = startGame(2, 82);
+    while (s.wave < 10) {
+      for (const b of s.boards) b.mobs = b.mobs.filter((m) => m.kind === "boss");
+      s = stepGame(s);
+    }
+    const boss = s.boards[0].mobs.find((m) => m.kind === "boss")!;
+    boss.rage = true;
+    boss.hp = 0.01;
+    boss.poisonT = 5;
+    boss.poisonDps = 1e6;
+    s.boards[0].mobs = [boss];
+    const gold0 = s.boards[0].gold;
+    const gems0 = s.boards[0].gems;
+    s = stepGame(s);
+    expect(s.boards[0].gems).toBe(gems0 + 3);
+    expect(s.boards[0].gold).toBeGreaterThanOrEqual(gold0 + Math.round(killGold("boss", s.wave) * 1.5));
+    expect(s.events.some((e) => e.type === "boss-kill" && e.rage)).toBe(true);
   });
 
   it("a dying golem announces its split", () => {

@@ -153,6 +153,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "/stats 전적에 랜덤 합성 디펜스 상세 기록 — 모드·난이도별 최고 웨이브, 누적 처치",
       },
       {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "⚡ 기절 해제(골드로 기절한 타워 즉시 깨우기) · 광폭화 보스·전쟁군주 처치 시 골드 50% 보너스 + 💎1 · /stats 공개 랭킹(최고 웨이브·난이도별·누적 처치)",
+      },
+      {
         game: "ink-duel",
         type: "IMPROVE",
         desc: "그래픽 전면 개편 — 캐릭터 4종(마법사·고양이·개구리·토끼), 수채화 배경·지층 지형, 잉크 폭발 파티클·화면 흔들림·속성 이펙트, 카드형 무기 판정",

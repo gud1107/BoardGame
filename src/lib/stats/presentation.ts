@@ -181,6 +181,13 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "sd-perfect", label: "퍼펙트 판", num: "perfectGames", format: "count", unit: "판" },
     { id: "sd-lv10", label: "Lv.10 봇 격파", num: "lv10BotWins", format: "count", unit: "번" },
   ],
+  "merge-defense": [
+    { id: "md-wave", label: "최고 웨이브", num: "maxWave", format: "count", unit: "웨이브" },
+    { id: "md-s-hard", label: "생존전 어려움 최고", num: "maxWaveSurvivalHard", format: "count", unit: "웨이브" },
+    { id: "md-s-normal", label: "생존전 보통 최고", num: "maxWaveSurvivalNormal", format: "count", unit: "웨이브" },
+    { id: "md-v-hard", label: "유닛 대결 어려움 최고", num: "maxWaveVersusHard", format: "count", unit: "웨이브" },
+    { id: "md-kills", label: "누적 처치", num: "kills", format: "count", unit: "마리" },
+  ],
   "doodle-phone": [
     { id: "dp-react", label: "받은 반응", num: "reactionsReceived", format: "count", unit: "개" },
     { id: "dp-exact", label: "정확히 맞힘", num: "exactGuesses", format: "count", unit: "번" },
