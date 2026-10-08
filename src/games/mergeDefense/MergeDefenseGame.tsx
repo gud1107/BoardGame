@@ -128,8 +128,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const [limitChoice, setLimitChoice] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
   const best = useBestWaves();
-  /** This match's best-wave result for me: difficulty, wave reached, previous record. */
-  const [myRecord, setMyRecord] = useState<{ difficulty: Difficulty; wave: number; prev: number } | null>(null);
+  /** This match's best-wave result for me: mode, difficulty, wave reached, previous record. */
+  const [myRecord, setMyRecord] = useState<{ mode: GameMode; difficulty: Difficulty; wave: number; prev: number } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -611,7 +611,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     const mine = rankings.find((r) => r.seat === mySeat);
     if (mine && mine.wave > 0) {
       const d = sanitizeDifficulty(sim.difficulty);
-      setMyRecord({ difficulty: d, wave: mine.wave, prev: recordBestWave(d, mine.wave) });
+      setMyRecord({ mode: sim.mode, difficulty: d, wave: mine.wave, prev: recordBestWave(sim.mode, d, mine.wave) });
     } else {
       setMyRecord(null);
     }
@@ -799,7 +799,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           <RoomSettings
             mode={mode}
             onMode={setMode}
-            best={best}
+            best={best[mode]}
             difficulty={difficulty}
             limit={limitChoice}
             playerCount={targetPlayerCount}
@@ -881,7 +881,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
                   compact
                   mode={mode}
                   onMode={(m) => updateRoomSettings({ mode: m })}
-                  best={best}
+                  best={best[mode]}
                   difficulty={difficulty}
                   limit={limitChoice}
                   playerCount={knownTargetPlayerCount}
@@ -946,7 +946,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
             }`}
           >
             <style>{`@keyframes md-record{0%{transform:scale(.7);opacity:0}70%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}`}</style>
-            {DIFFICULTY_LABEL[myRecord.difficulty].emoji} {DIFFICULTY_LABEL[myRecord.difficulty].name} ·{" "}
+            {myRecord.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"} · {DIFFICULTY_LABEL[myRecord.difficulty].emoji} {DIFFICULTY_LABEL[myRecord.difficulty].name} ·{" "}
             {myRecord.wave > myRecord.prev ? (
               <b>
                 🏅 최고 기록 갱신! WAVE {myRecord.wave}
@@ -991,7 +991,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
               compact
               mode={mode}
               onMode={(m) => updateRoomSettings({ mode: m })}
-              best={best}
+              best={best[mode]}
               difficulty={difficulty}
               limit={limitChoice}
               playerCount={playerCount}
@@ -1083,7 +1083,7 @@ function RoomSettings({
               </span>
               <span className="block text-[10px] opacity-75">{DIFFICULTY_LABEL[d].desc}</span>
               <span className={`block text-[10px] font-semibold ${best[d] ? "text-amber-300 light:text-amber-600" : "opacity-40"}`}>
-                🏅 {best[d] ? `최고 W${best[d]}` : "기록 없음"}
+                🏅 {best[d] ? `${mode === "versus" ? "대결" : "생존"} 최고 W${best[d]}` : "기록 없음"}
               </span>
             </button>
           ))}

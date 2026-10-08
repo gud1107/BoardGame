@@ -133,6 +133,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "대기실·결과 화면에서 방장이 모드도 변경 · 🔥 어려움은 몬스터 체력 ×1.2 + 수 ×1.25 · 난이도별 🏅 최고 웨이브 기록(이 기기)",
       },
       {
+        game: "merge-defense",
+        type: "FIX",
+        desc: "10웨이브 보스를 못 잡으면 졸개가 끝없이 불어나 초반에 무너지던 문제 — 보스·전쟁군주 졸개 소환 최대 4마리",
+      },
+      {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "🏅 최고 웨이브 기록을 생존전·유닛 대결로 나눠서 저장",
+      },
+      {
         game: "ink-duel",
         type: "IMPROVE",
         desc: "그래픽 전면 개편 — 캐릭터 4종(마법사·고양이·개구리·토끼), 수채화 배경·지층 지형, 잉크 폭발 파티클·화면 흔들림·속성 이펙트, 카드형 무기 판정",

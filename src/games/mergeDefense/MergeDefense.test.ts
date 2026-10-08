@@ -11,6 +11,7 @@ import {
   slotCenter,
   unitRange,
   loadLimit,
+  MINION_CAP,
   eliminationLimit,
   MAX_GRADE,
   pathPoint,
@@ -238,6 +239,21 @@ describe("merge defense engine", () => {
       return n;
     };
     expect(spawned("hard")).toBeGreaterThan(spawned("normal"));
+  });
+
+  it("a boss stops calling minions after the cap", () => {
+    let s = startGame(2, 71);
+    while (s.wave < 10) {
+      for (const b of s.boards) b.mobs = b.mobs.filter((m) => m.kind === "boss");
+      s = stepGame(s);
+    }
+    for (let i = 0; i < 20 * 40; i++) {
+      for (const b of s.boards) b.mobs = b.mobs.filter((m) => m.kind === "boss" || m.from === -1);
+      s = stepGame(s);
+      if (s.wave > 10) break;
+    }
+    const boss = s.boards[0].mobs.find((m) => m.kind === "boss");
+    expect(boss?.calls).toBe(MINION_CAP.boss);
   });
 
   it("a dying golem announces its split", () => {

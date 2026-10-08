@@ -256,7 +256,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     for (const ev of fresh) {
       if (ev.type === "wave") {
         if (ev.boss) {
-          showBanner({ text: `👑 WAVE ${ev.wave} — 보스 등장!`, sub: "4초마다 졸개를 불러요 — 빨리 잡으세요", tone: "boss" });
+          showBanner({ text: `👑 WAVE ${ev.wave} — 보스 등장!`, sub: "4초마다 졸개를 불러요(최대 4마리) — 빨리 잡으세요", tone: "boss" });
           if (audible) audio.playBossWave();
         } else if (ev.wave === 1 || ev.wave % 5 === 1) {
           showBanner({ text: `WAVE ${ev.wave}`, tone: "wave" });
@@ -719,7 +719,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             {load}/<span className="text-rose-300 light:text-rose-600">{limit}</span>
           </span>
         </div>
-        <p className="text-[10px] leading-tight text-white/45 light:text-slate-400">보스·전쟁군주는 졸개를 계속 불러요 · 골렘은 쓰러지면 2마리로 갈라져요</p>
+        <p className="text-[10px] leading-tight text-white/45 light:text-slate-400">보스·전쟁군주는 졸개를 최대 4마리까지 불러요 · 골렘은 쓰러지면 2마리로 갈라져요</p>
         <div className="flex items-center justify-between text-sm font-bold text-white light:text-slate-900">
           <span className="relative">
             <span key={goldPop?.key ?? 0} className={`inline-block ${goldPop ? "animate-[md-gold-glow_0.6s_ease-out] text-amber-300 light:text-amber-600" : ""}`}>

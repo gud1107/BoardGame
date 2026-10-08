@@ -15,7 +15,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             정해진 마릿수에 닿으면 탈락하고, 마지막까지 버틴 사람이 승리해요. 탈락 기준은 인원에 따라 달라요 — 2인{" "}
             <b className="text-rose-300 light:text-rose-600">{loadLimit(2)}마리</b> · 3인{" "}
             <b className="text-rose-300 light:text-rose-600">{loadLimit(3)}마리</b> · 4인{" "}
-            <b className="text-rose-300 light:text-rose-600">{loadLimit(4)}마리</b>(인원이 많을수록 끝까지 남는 데 오래 걸리니 기준이 낮아요). 방장이 방을 만들 때(또는 대기실에서 시작 전까지) 35·45·55·70마리 중에서 직접 정할 수도 있어요. 웨이브 난이도도 🌱 쉬움(몬스터 체력 ×0.7) · ⚖️ 보통 · 🔥 어려움(몬스터 체력 ×1.2 + 웨이브당 몬스터 수 ×1.25) 중에서 고를 수 있어요. 난이도별 내 최고 웨이브 기록이 이 기기에 저장돼요.
+            <b className="text-rose-300 light:text-rose-600">{loadLimit(4)}마리</b>(인원이 많을수록 끝까지 남는 데 오래 걸리니 기준이 낮아요). 방장이 방을 만들 때(또는 대기실에서 시작 전까지) 35·45·55·70마리 중에서 직접 정할 수도 있어요. 웨이브 난이도도 🌱 쉬움(몬스터 체력 ×0.7) · ⚖️ 보통 · 🔥 어려움(몬스터 체력 ×1.2 + 웨이브당 몬스터 수 ×1.25) 중에서 고를 수 있어요. 모드·난이도별 내 최고 웨이브 기록이 이 기기에 저장돼요.
           </p>
         </section>
 
@@ -73,7 +73,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className={h3}>웨이브 & 대결</h3>
           <ul className="list-disc space-y-1.5 pl-4 text-white/70 light:text-slate-600">
-            <li>웨이브는 20초마다 오고 갈수록 단단해져요. {BOSS_EVERY}웨이브마다 보스가 나와요 — 살아 있는 동안 4초마다 졸개를 불러요.</li>
+            <li>웨이브는 20초마다 오고 갈수록 단단해져요. {BOSS_EVERY}웨이브마다 보스가 나와요 — 살아 있는 동안 4초마다 졸개를 불러요(보스 1마리당 최대 4마리).</li>
             <li>몬스터는 길을 따라 계속 돌아요 — 잡지 못하면 쌓여요. 종류와 상관없이 1마리 = 1로 세요.</li>
             <li>
               몬스터를 {SEND_EVERY}마리 잡을 때마다 다음 상대에게 <b>🔥 정예 몬스터</b>가 넘어가요. 잘 막을수록 상대가 힘들어져요.
