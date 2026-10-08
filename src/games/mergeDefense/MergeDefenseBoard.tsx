@@ -38,7 +38,6 @@ import {
   upgradeCost,
   killGold,
   COMBO,
-  COMBO_GAP_TICKS,
   MINION_CAP,
   HIRE_KINDS,
   HIRES,
@@ -81,7 +80,7 @@ const FX_DEFAULT: FxPrefs = { shake: true, numbers: true, hitstop: true, slowmo:
 /** Slow motion: playback rate and peak zoom; each trigger sets its own length and tint. */
 const SLOWMO = { rate: 0.25, zoom: 0.14 };
 /** Crit combo callout (the chain itself is counted by the engine); shown from COMBO_MIN. */
-const COMBO_GAP_MS = COMBO_GAP_TICKS * TICK_MS;
+const COMBO_GAP_MS = COMBO.gapTicks * TICK_MS;
 const COMBO_MIN = 4;
 function loadFxPrefs(): FxPrefs {
   try {
@@ -194,7 +193,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     tint: "20,0,0",
   });
   /** Crit combo on my board: chain length, last crit time, when the count last rose. */
-  const comboRef = useRef({ count: 0, last: 0, best: 0 });
+  const comboRef = useRef({ count: 0, last: 0, best: 0, settled: true });
   /** White flash that hides the snap back to live play after slow motion. */
   const flashRef = useRef(0);
   useEffect(() => {
@@ -344,6 +343,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           cb.count = board.critChain ?? 1;
           cb.last = now;
           cb.best = Math.max(cb.best, cb.count);
+          cb.settled = false;
           critPitch = 1 + Math.min(cb.count - 1, 12) * 0.05;
         }
         if (audible) audio.playTowerHit(shot.kind, shot.grade, false, !!shot.crit && view === mySeat, critPitch);
@@ -416,6 +416,23 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         } else if (ev.seat === mySeat) {
           showBanner({ text: `⚔️ ${what} → ${names[ev.to] ?? "상대"}`, tone: "good" });
           if (audible) audio.playSendUnit();
+        }
+        continue;
+      }
+      if (ev.type === "jam") {
+        // 유닛 대결 combo harassment: bolts drop onto the stunned towers.
+        if (ev.to === view) {
+          for (const slot of ev.slots) {
+            const t = slotCenter(slot);
+            fx.push({ type: "smash", x: t.x + 6, y: -6, tx: t.x, ty: t.y + 6, t0: now, dur: 600, seed: ev.id + slot });
+          }
+          shake(3, 240);
+        }
+        if (ev.to === mySeat) {
+          showBanner({ text: `⚡ ${names[ev.seat] ?? "상대"}님의 치명타 콤보 견제!`, sub: `타워 ${ev.slots.length}개 기절 — ⚡ 기절 해제로 깨울 수 있어요`, tone: "danger" });
+          if (audible) audio.playBossSmash();
+        } else if (ev.seat === mySeat) {
+          showBanner({ text: `⚡ 콤보 견제 → ${names[ev.to] ?? "상대"}`, sub: `상대 타워 ${ev.slots.length}개 기절`, tone: "good" });
         }
         continue;
       }
@@ -657,7 +674,17 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           drawFx(ctx, fxRef.current, now);
           const cb = comboRef.current;
           const comboAge = real - cb.last;
-          if (view === mySeat && cb.count >= COMBO_MIN && comboAge < COMBO_GAP_MS + 500) {
+          // Chain just broke → one settlement callout ("콤보 종료 ×N", gold if it's this match's best).
+          if (!cb.settled && comboAge > COMBO_GAP_MS) {
+            cb.settled = true;
+            if (view === mySeat && cb.count >= COMBO_MIN) {
+              const best = cb.count >= cb.best && cb.count >= COMBO.goldAt;
+              fxRef.current.push({ type: "ring", x: BOARD_W / 2, y: BOARD_H * 0.3, color: best ? "#facc15" : "#e5e7eb", r0: 30, r1: 70, t0: real, dur: 420 });
+              fxRef.current.push({ type: "text", x: BOARD_W / 2, y: BOARD_H * 0.3, text: `콤보 종료 ×${cb.count}`, color: best ? "#facc15" : "#e5e7eb", t0: real, dur: 1000, size: best ? 18 : 15 });
+              if (best) fxRef.current.push({ type: "text", x: BOARD_W / 2, y: BOARD_H * 0.3 + 22, text: "이번 판 최고 콤보!", color: "#fde68a", t0: real + 120, dur: 1000, size: 11 });
+            }
+          }
+          if (view === mySeat && cb.count >= COMBO_MIN && comboAge <= COMBO_GAP_MS) {
             // 치명타 콤보: pops on every new crit, warms from gold to red as it climbs.
             ctx.save();
             ctx.setTransform(k, 0, 0, k, 0, 0);

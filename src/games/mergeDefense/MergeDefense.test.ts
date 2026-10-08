@@ -372,6 +372,31 @@ describe("merge defense engine", () => {
     for (const p of paid) if (p.gold) expect(p.gold).toBe(comboGold(p.wave));
   });
 
+  it("유닛 대결: a combo milestone stuns the next opponent's strongest towers", () => {
+    let s = startGame(2, 94, [], "versus");
+    while (s.wave < 15) {
+      for (const b of s.boards) b.mobs = [];
+      s = stepGame(s);
+    }
+    for (let i = 0; i < 15; i++) s.boards[0].units[i] = { kind: "archer", grade: 3, cd: 0 };
+    s.boards[0].focus = 5;
+    s.boards[1].units[3] = { kind: "mage", grade: 5, cd: 0 };
+    s.boards[1].units[4] = { kind: "frost", grade: 4, cd: 0 };
+    s.boards[1].units[5] = { kind: "poison", grade: 1, cd: 0 };
+    let jam: { slots: number[] } | null = null;
+    let last = 0;
+    for (let i = 0; i < 20 * 120 && !jam; i++) {
+      s.boards[1].mobs = [];
+      s = stepGame(s);
+      for (const e of s.events) if (e.id > last && e.type === "jam" && e.seat === 0) jam = e;
+      last = s.nextEventId - 1;
+    }
+    expect(jam).not.toBeNull();
+    expect(jam!.slots.slice(0, 2).sort()).toEqual([3, 4]);
+    // Survival never jams.
+    expect(startGame(2, 1).mode).toBe("survival");
+  });
+
   it("a dying golem announces its split", () => {
     let s = startGame(2, 52, [], "versus");
     while (s.wave < 3) {

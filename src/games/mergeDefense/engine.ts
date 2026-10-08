@@ -116,14 +116,17 @@ export function critStats(focus: number): { chance: number; mult: number } {
   return { chance: CRIT.chance + FOCUS_STEP.chance * f, mult: CRIT.mult + FOCUS_STEP.mult * f };
 }
 /**
- * Crit combo: crits on one board less than COMBO_GAP_TICKS apart chain.
+ * Crit combo: crits on one board less than COMBO.gapTicks apart chain.
  * Reaching COMBO.goldAt pays comboGold, reaching COMBO.gemAt pays a gem — each
  * at most once per wave, since a big late board chains almost endlessly.
+ * Tuned so a full board cashes the gold milestone in ~38% of waves from W10
+ * (was 10% at 6 ticks / 10 combo) without moving median waves beyond noise.
+ * 유닛 대결: each milestone also jams the next opponent (COMBO.jam towers stunned).
  */
-export const COMBO_GAP_TICKS = 6;
-export const COMBO = { goldAt: 10, gemAt: 20, gems: true };
+export const COMBO = { gapTicks: 9, goldAt: 8, gemAt: 20, gems: true, jam: { gold: 2, gem: 3 } };
+export const COMBO_GOLD = { base: 6, perWave: 1.5 };
 export function comboGold(wave: number): number {
-  return 10 + 2 * Math.max(1, wave);
+  return Math.round(COMBO_GOLD.base + COMBO_GOLD.perWave * Math.max(1, wave));
 }
 /** Stun ticks a smash inflicts on a board with this 결속 level. */
 export function stunTicks(brace: number): number {
@@ -304,6 +307,8 @@ export type GameEvent =
   | { id: number; tick: number; seat: SeatIndex; type: "focus"; level: number }
   /** A crit chain hit a reward milestone (`count` is the chain length). */
   | { id: number; tick: number; seat: SeatIndex; type: "combo"; count: number; gold: number; gems: number }
+  /** 유닛 대결: `seat`'s combo milestone stunned these towers on `to`'s board. */
+  | { id: number; tick: number; seat: SeatIndex; type: "jam"; to: SeatIndex; slots: number[] }
   /** A golem at road distance `trav` just broke into pebbles. */
   | { id: number; tick: number; seat: SeatIndex; type: "split"; trav: number }
   /** A boss / warlord used up its minions and went berserk. */
@@ -830,7 +835,7 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
   const cs = critStats(board.focus ?? 0);
   const crit = rand(s) < cs.chance;
   if (crit) {
-    const chain = s.tick - (board.lastCritTick ?? -999) <= COMBO_GAP_TICKS ? (board.critChain ?? 0) + 1 : 1;
+    const chain = s.tick - (board.lastCritTick ?? -999) <= COMBO.gapTicks ? (board.critChain ?? 0) + 1 : 1;
     board.critChain = chain;
     board.lastCritTick = s.tick;
     board.bestCombo = Math.max(board.bestCombo ?? 0, chain);
@@ -843,7 +848,24 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
       if (gemDue) board.comboGemWave = s.wave;
       board.gold += gold;
       board.gems += gems;
-      pushEvent(s, { seat: s.boards.indexOf(board), type: "combo", count: chain, gold, gems });
+      const seat = s.boards.indexOf(board);
+      pushEvent(s, { seat, type: "combo", count: chain, gold, gems });
+      // 유닛 대결: the combo also rattles the next opponent's strongest towers.
+      const to = s.mode === "versus" ? nextAliveOpponent(s, seat) : null;
+      if (to !== null) {
+        const foe = s.boards[to];
+        const ticks = stunTicks(foe.brace ?? 0);
+        const slots = foe.units
+          .map((u, i) => ({ u, i }))
+          .filter((x): x is { u: Unit; i: number } => !!x.u)
+          .sort((a, b) => b.u.grade - a.u.grade || a.i - b.i)
+          .slice(0, gemDue ? COMBO.jam.gem : COMBO.jam.gold)
+          .map((x) => x.i);
+        if (ticks > 0 && slots.length > 0) {
+          for (const i of slots) foe.units[i]!.stun = Math.max(foe.units[i]!.stun ?? 0, ticks);
+          pushEvent(s, { seat, type: "jam", to, slots });
+        }
+      }
     }
   }
   const dmg = unitDamage(unit, board) * (crit ? cs.mult : 1);
