@@ -367,23 +367,27 @@ describe("evolution tree", () => {
   });
 });
 
-describe("recommended upgrade build", () => {
-  it("leads with the build's main stat and walks every stat to max", async () => {
-    const { nextRecommendedUpgrade, recommendedBuild, MAX_UPGRADE_LEVEL } = await import("./data");
+describe("recommended evolution", () => {
+  it("every non-apex shark recommends one of its own children, along a full path to an apex", async () => {
+    const { recommendedEvolution, recommendedPath, SIM_DIVE_INCOME } = await import("./data");
     for (const sh of SHARKS) {
-      const order = recommendedBuild(sh).order;
-      expect(new Set(order).size).toBe(3);
-      const up = { bite: 0, speed: 0, boost: 0 };
-      expect(nextRecommendedUpgrade(sh, up)).toBe(order[0]);
-      let steps = 0;
-      for (let k = nextRecommendedUpgrade(sh, up); k; k = nextRecommendedUpgrade(sh, up)) {
-        up[k]++;
-        steps++;
-      }
-      expect(steps).toBe(MAX_UPGRADE_LEVEL * 3);
+      expect(SIM_DIVE_INCOME[sh.id], sh.id).toBeTypeOf("number");
+      const r = recommendedEvolution(sh.id);
+      if (sh.nextIds.length === 0) expect(r).toBeNull();
+      else expect(sh.nextIds).toContain(r!.id);
+      const path = recommendedPath(sh.id);
+      if (path.length) expect(path[path.length - 1].nextIds).toHaveLength(0);
     }
-    expect(recommendedBuild(sharkById("megalodon")).order[0]).toBe("bite");
-    expect(recommendedBuild(sharkById("white")).order[0]).toBe("speed");
+    // Line 3 forks: the richer T4 wins.
+    expect(recommendedEvolution("cookiecutter")!.id).toBe("psyShark");
+  });
+
+  it("highlights the next step only at the tip of each owned line", async () => {
+    const { evolutionFrontier, recommendedEvolution } = await import("./data");
+    expect([...evolutionFrontier(["reef"])]).toEqual([recommendedEvolution("reef")!.id]);
+    const f = evolutionFrontier(["reef", "sandTiger", "white"]);
+    expect(f.has("megalodon")).toBe(true);
+    expect(f.size).toBe(1);
   });
 });
 

@@ -15,8 +15,9 @@ import {
   effectiveStats,
   ENTITY_DEFS,
   MAX_UPGRADE_LEVEL,
-  nextRecommendedUpgrade,
-  recommendedBuild,
+  evolutionFrontier,
+  recommendedPath,
+  SIM_DIVE_INCOME,
   SHARKS,
   sharkById,
   UPGRADE_LABELS,
@@ -289,31 +290,20 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
 
             <div className="flex flex-col gap-2">
               <StatBars def={viewDef} save={save} />
-              {owned && <BuildBox def={viewDef} next={nextRecommendedUpgrade(viewDef, ups)} />}
+              {owned && <EvolutionBox def={viewDef} save={save} onView={setViewId} />}
               {owned ? (
                 (Object.keys(UPGRADE_LABELS) as UpgradeKind[]).map((k) => {
                   const lvl = ups[k];
                   const maxed = lvl >= MAX_UPGRADE_LEVEL;
                   const cost = upgradeCost(viewDef, k, lvl);
                   const afford = save.coins >= cost;
-                  const recommended = nextRecommendedUpgrade(viewDef, ups) === k;
                   return (
-                    <div
-                      key={k}
-                      className={`flex items-center gap-2 rounded-lg px-2.5 py-2 ${
-                        recommended
-                          ? "bg-amber-400/15 ring-2 ring-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.35)] light:bg-amber-50"
-                          : "bg-black/20 light:bg-slate-50"
-                      }`}
-                    >
+                    <div key={k} className="flex items-center gap-2 rounded-lg bg-black/20 px-2.5 py-2 light:bg-slate-50">
                       <span className="text-xl">{UPGRADE_LABELS[k].emoji}</span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 text-sm font-bold text-white light:text-slate-800">
                           {UPGRADE_LABELS[k].name}
                           <span className="text-[10px] font-semibold text-sky-300 light:text-sky-600">Lv.{lvl}/{MAX_UPGRADE_LEVEL}</span>
-                          {recommended && (
-                            <span className="rounded-full bg-amber-400 px-1.5 py-0.5 text-[9px] font-black text-slate-900">🎯 추천</span>
-                          )}
                         </div>
                         <div className="mt-1 flex gap-0.5">
                           {Array.from({ length: MAX_UPGRADE_LEVEL }, (_, i) => (
@@ -736,14 +726,16 @@ function SharkCard({
 }) {
   const own = save.owned.includes(sh.id);
   const reachable = !sh.parentId || save.owned.includes(sh.parentId);
-  const nextUp = own ? nextRecommendedUpgrade(sh, upgradesFor(save, sh.id)) : null;
+  const recommended = !own && !metric && evolutionFrontier(save.owned).has(sh.id);
   return (
     <button
       onClick={onClick}
       className={`group relative flex w-full min-w-0 flex-col items-center rounded-xl border p-1.5 transition sm:p-2 ${
         active
           ? "border-sky-400 bg-sky-500/15 ring-2 ring-sky-400/50"
-          : "border-white/10 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-white"
+          : recommended
+            ? "border-amber-400 bg-amber-400/10 ring-2 ring-amber-400/70 shadow-[0_0_14px_rgba(251,191,36,0.4)] light:bg-amber-50"
+            : "border-white/10 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-white"
       } ${sh.tier === 1 && !metric ? "max-w-[11rem]" : ""}`}
     >
       <span className="absolute top-1 left-1.5 text-[9px] font-black text-white/50 light:text-slate-400">T{sh.tier}</span>
@@ -754,38 +746,49 @@ function SharkCard({
         {own ? `최고 ${(save.best[sh.id] ?? 0).toLocaleString()}` : reachable ? `🔒 ${sh.cost.toLocaleString()}🪙` : "🔒 이전 단계 필요"}
       </span>
       {metric && <span className="text-[10px] font-bold text-sky-300 light:text-sky-600">{metric}</span>}
-      {own && !metric && nextUp && (
-        <span className="mt-0.5 rounded-full bg-amber-400/20 px-1.5 text-[9px] font-black text-amber-300 light:bg-amber-100 light:text-amber-700">
-          🎯 추천 강화 {UPGRADE_LABELS[nextUp].emoji}
-        </span>
+      {recommended && (
+        <span className="mt-0.5 rounded-full bg-amber-400 px-1.5 text-[9px] font-black text-slate-900">🎯 추천 진화</span>
       )}
     </button>
   );
 }
 
-/** Recommended upgrade build for the shark being viewed, with the next step highlighted. */
-function BuildBox({ def, next }: { def: SharkDef; next: UpgradeKind | null }) {
-  const build = recommendedBuild(def);
+/** 🎯 추천 진화 for an owned shark: the best next step (bot-sim income) and the route to its apex. */
+function EvolutionBox({ def, save, onView }: { def: SharkDef; save: SharkSave; onView: (id: string) => void }) {
+  const path = recommendedPath(def.id);
+  if (path.length === 0) {
+    return (
+      <div className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-[11px] font-bold text-amber-300 light:border-amber-300 light:bg-amber-50 light:text-amber-700">
+        👑 최종 진화 단계입니다 — 강화로 더 강해질 수 있어요.
+      </div>
+    );
+  }
+  const next = path[0];
+  const apex = path[path.length - 1];
+  const choices = def.nextIds.length;
   return (
     <div className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-[11px] light:border-amber-300 light:bg-amber-50">
-      <div className="font-black text-amber-300 light:text-amber-700">🎯 추천 빌드 · {build.name}</div>
+      <div className="font-black text-amber-300 light:text-amber-700">🎯 추천 진화{choices > 1 ? ` (${choices}갈래 중)` : ""}</div>
       <div className="mt-1 flex flex-wrap items-center gap-1">
-        {build.order.map((k, i) => (
-          <Fragment key={k}>
+        {path.map((s, i) => (
+          <Fragment key={s.id}>
             {i > 0 && <span className="text-amber-300/60 light:text-amber-500">→</span>}
-            <span
+            <button
+              onClick={() => onView(s.id)}
               className={`rounded px-1.5 py-0.5 font-bold ${
-                k === next ? "bg-amber-400 text-slate-900" : "bg-black/25 text-white/75 light:bg-white light:text-slate-600"
+                i === 0 ? "bg-amber-400 text-slate-900" : "bg-black/25 text-white/75 hover:bg-black/40 light:bg-white light:text-slate-600"
               }`}
             >
-              {UPGRADE_LABELS[k].emoji} {UPGRADE_LABELS[k].name}
-            </span>
+              T{s.tier} {s.name}
+              {save.owned.includes(s.id) ? " ✓" : ""}
+            </button>
           </Fragment>
         ))}
       </div>
-      <div className="mt-1 text-white/60 light:text-slate-600">{build.reason}</div>
-      <div className="mt-0.5 text-amber-200/80 light:text-amber-700">
-        {next ? `다음 추천 강화: ${UPGRADE_LABELS[next].emoji} ${UPGRADE_LABELS[next].name}` : "모든 강화를 마쳤습니다!"}
+      <div className="mt-1 text-white/60 light:text-slate-600">
+        봇 시뮬레이션 잠수당 수익 기준
+        {SIM_DIVE_INCOME[next.id] ? ` — ${next.name} 약 ${SIM_DIVE_INCOME[next.id].toFixed(1)}k🪙` : ""}
+        {apex.id !== next.id ? `, 최종 ${apex.name} 약 ${SIM_DIVE_INCOME[apex.id].toFixed(1)}k🪙` : ""}
       </div>
     </div>
   );

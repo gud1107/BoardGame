@@ -1,6 +1,6 @@
 "use client";
 
-import { BRANCH_INFO, sharkById, type SharkBranch, type SharkDef } from "./data";
+import { BRANCH_INFO, recommendedEvolution, sharkById, type SharkBranch, type SharkDef } from "./data";
 
 /**
  * 진화 분기 선택 모달 — shows the current shark's next evolution choices
@@ -78,6 +78,7 @@ export default function SharkEvolutionModal({
   const current = sharkById(currentSharkId);
   const nextOptions = current.nextIds.map(sharkById);
   const compact = nextOptions.length > 3;
+  const pick = nextOptions.length > 1 ? recommendedEvolution(current.id) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md select-none" onClick={onClose}>
@@ -132,7 +133,7 @@ export default function SharkEvolutionModal({
                     key={shark.id}
                     className={`flex justify-between rounded-2xl border-2 transition-all ${compact ? "flex-row items-center gap-2 p-2.5 sm:flex-col sm:items-stretch sm:gap-0 sm:p-3" : "flex-col p-4"} ${BRANCH_FRAME[shark.branch].card} ${
                       have || canAfford ? "bg-neutral-800/90 hover:scale-[1.02]" : "bg-neutral-950/60 opacity-60"
-                    }`}
+                    } ${pick?.id === shark.id ? "ring-2 ring-amber-400 shadow-[0_0_18px_rgba(251,191,36,0.45)]" : ""}`}
                   >
                     <div className={`flex min-w-0 flex-col ${compact ? "gap-0.5 sm:gap-2" : "gap-2"}`}>
                       <div className={`items-start justify-between gap-2 ${compact ? "hidden sm:flex" : "flex"}`}>
@@ -142,6 +143,9 @@ export default function SharkEvolutionModal({
                       {caption && <div className={`truncate text-[10px] font-black ${BRANCH_FRAME[shark.branch].label}`}>{caption}</div>}
                       <h4 className={`font-bold text-neutral-100 ${compact ? "flex items-center gap-1.5 text-sm sm:text-base" : "text-base"}`}>
                         <span className="truncate">{shark.name}</span>
+                        {pick?.id === shark.id && (
+                          <span className="shrink-0 rounded-full bg-amber-400 px-1.5 py-0.5 text-[9px] font-black text-slate-900">🎯 추천</span>
+                        )}
                         {compact && <span className="shrink-0 sm:hidden"><BranchBadge branch={shark.branch} /></span>}
                       </h4>
                       <p className={`line-clamp-2 text-xs text-neutral-400 ${full}`}>{shark.blurb}</p>

@@ -889,48 +889,59 @@ export function upgradeCost(shark: SharkDef, kind: UpgradeKind, currentLevel: nu
   return Math.round((base * tierFactor * Math.pow(1.42, currentLevel)) / 10) * 10;
 }
 
-/** A recommended upgrade build: which stat to pour coins into first, and why. */
-export interface UpgradeBuild {
-  name: string;
-  order: [UpgradeKind, UpgradeKind, UpgradeKind];
-  reason: string;
+/**
+ * Bot-sim per-dive income (coins + mission rewards, ×1000) — 2026-10-08, 4 seeds × 3 maps, upgrades 3/3/3.
+ * Drives the 🎯 추천 진화 pick; re-run the sim and update these after any balance change.
+ */
+export const SIM_DIVE_INCOME: Record<string, number> = {
+  reef: 0,
+  sandTiger: 5.6, mako: 6.0, elecShark: 10.4, greenland: 6.1, bullShark: 6.7,
+  white: 20.5, tigerShark: 24.5, whitetip: 13.7,
+  hammer: 12.8, blueShark: 14.3, silky: 13.1,
+  goblin: 20.3, lantern: 19.5, cookiecutter: 25.3,
+  sleeper: 15.4, iceLance: 12.8, frostfang: 19.0,
+  thresher: 23.2, wobbegong: 22.6, spinyDogfish: 13.0,
+  megalodon: 58.7, helicoprion: 51.3, dunkleosteus: 42.9, crimsonTyrant: 52.3,
+  phantom: 34.7, bladeShark: 38.5, stormRider: 38.9, mirage: 35.9,
+  leviathan: 60.9, abyssLantern: 57.8, voidMaw: 55.6, psyShark: 62.5,
+  cryodon: 59.0, aurora: 39.5, glacierTitan: 50.6, snowQueen: 38.4,
+  basilisk: 47.1, hydra: 45.9, chimera: 54.3, nightshade: 49.3,
+};
+
+/** Value of evolving into `id`: its own income plus the best line after it (near-term and endgame both count). */
+function pathValue(id: string): number {
+  const s = sharkById(id);
+  return (SIM_DIVE_INCOME[id] ?? 0) + Math.max(0, ...s.nextIds.map(pathValue));
+}
+
+/** The best next evolution from `id` (null at an apex). */
+export function recommendedEvolution(id: string): SharkDef | null {
+  const next = sharkById(id).nextIds;
+  if (next.length === 0) return null;
+  return sharkById(next.reduce((best, n) => (pathValue(n) > pathValue(best) ? n : best)));
+}
+
+/** The recommended route from `id` down to an apex (excluding `id`). */
+export function recommendedPath(id: string): SharkDef[] {
+  const out: SharkDef[] = [];
+  for (let n = recommendedEvolution(id); n; n = recommendedEvolution(n.id)) out.push(n);
+  return out;
 }
 
 /**
- * Recommended builds from the 2026-10-08 bot sim (3 seeds × 3 maps, same total levels with one stat at 6):
- * every T4 earned most with 물어뜯기 first (메갈로돈 +41%, 레비아탄 +19%, 크라이오돈 +18%, 바실리스크 +15%,
- * 팬텀 ≈ tie), while T2/T3 split by branch (백상아리/귀상어 속도, 환도상어 부스트, 고블린/잠꾸러기 물기).
+ * Sharks to highlight as 🎯 추천 진화: for every owned shark at the tip of its line (no owned
+ * evolution yet), its recommended next step.
  */
-const EARLY_BUILDS: Record<SharkBranch, UpgradeBuild> = {
-  BASE: { name: "생존 사냥", order: ["bite", "speed", "boost"], reason: "회복량이 늘어 오래 버티며 먹이를 쌓습니다. 속도로 사냥감을 따라잡으세요." },
-  BRUTE: { name: "추격 포식", order: ["speed", "boost", "bite"], reason: "2·3티어 브루트는 속도 집중 빌드가 가장 많이 벌었습니다(백상아리 +18%). 먹이를 더 많이 쫓는 쪽이 이득." },
-  SPEED: { name: "질주 사냥", order: ["speed", "bite", "boost"], reason: "스피드 계통은 속도를 먼저 올릴 때 수익이 가장 높았습니다(귀상어 +12%). 물기로 회복을 보충하세요." },
-  VOID: { name: "스킬 포식", order: ["bite", "speed", "boost"], reason: "스킬 피해가 물기 피해에 비례해 물기 집중이 압도적이었습니다(고블린 +52%)." },
-  FROST: { name: "장기 생존", order: ["bite", "speed", "boost"], reason: "물기 회복량으로 냉혈 대사와 함께 오래 버틸 때 가장 많이 벌었습니다(잠꾸러기 +11%)." },
-  VENOM: { name: "기동 독사냥", order: ["boost", "bite", "speed"], reason: "부스트로 독 스킬 사이를 오가며 먹이를 쓸 때 가장 많이 벌었습니다(환도상어 +11%, 생존 시간도 최장)." },
-};
-
-const APEX_BUILDS: Record<SharkBranch, UpgradeBuild> = {
-  BASE: EARLY_BUILDS.BASE,
-  BRUTE: { name: "정점 파괴자", order: ["bite", "speed", "boost"], reason: "4티어는 물기 집중이 압도적입니다(메갈로돈 +41%). 큰 먹이를 빨리 부수고 회복도 늘어납니다." },
-  SPEED: { name: "일격 암살", order: ["bite", "speed", "boost"], reason: "4티어에선 세 빌드가 비슷하지만 물기 집중이 근소하게 앞섰습니다. 일격 피해를 키우세요." },
-  VOID: { name: "심연 포식", order: ["bite", "speed", "boost"], reason: "스킬 피해가 물기에 비례해 4티어도 물기 집중이 1위였습니다(레비아탄 +19%)." },
-  FROST: { name: "빙하 군림", order: ["bite", "speed", "boost"], reason: "물기 집중이 4티어 1위(크라이오돈 +18%). 회복이 늘어 위험한 바다도 버팁니다." },
-  VENOM: { name: "역병 군주", order: ["bite", "boost", "speed"], reason: "4티어는 물기 집중이 1위(바실리스크 +15%), 그다음 부스트로 기동성을 챙기세요." },
-};
-
-export function recommendedBuild(shark: SharkDef): UpgradeBuild {
-  return (shark.tier >= 4 ? APEX_BUILDS : EARLY_BUILDS)[shark.branch];
-}
-
-/** Level targets in buy order: [rank in build order, level to reach]. Main stat leads, the rest follow. */
-const BUILD_STAGES: [number, number][] = [[0, 3], [1, 2], [0, 6], [1, 4], [2, 3], [0, 10], [1, 7], [2, 6], [1, 10], [2, 10]];
-
-/** The upgrade to buy next under the recommended build (null once everything is maxed). */
-export function nextRecommendedUpgrade(shark: SharkDef, up: UpgradeLevels): UpgradeKind | null {
-  const { order } = recommendedBuild(shark);
-  for (const [rank, target] of BUILD_STAGES) if (up[order[rank]] < target) return order[rank];
-  return null;
+export function evolutionFrontier(owned: string[]): Set<string> {
+  const have = new Set(owned);
+  const out = new Set<string>();
+  for (const id of owned) {
+    const s = sharkById(id);
+    if (s.nextIds.some((n) => have.has(n))) continue;
+    const r = recommendedEvolution(id);
+    if (r && !have.has(r.id)) out.add(r.id);
+  }
+  return out;
 }
 
 export interface UpgradeLevels {
