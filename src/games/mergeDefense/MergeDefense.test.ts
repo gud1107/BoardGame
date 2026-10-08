@@ -6,7 +6,6 @@ import {
   computeRankings,
   fieldLoad,
   hireCost,
-  invaderWeight,
   SWARM_SIZE,
   SEND_COOLDOWN_TICKS,
   slotCenter,
@@ -101,7 +100,7 @@ describe("merge defense engine", () => {
     const inv = sent.boards[1].mobs.find((m) => m.kind === "invader")!;
     expect(sent.boards[1].mobs.length).toBe(before + 1);
     expect(inv.unitKind).toBe("thunder");
-    expect(inv.weight).toBe(invaderWeight(3));
+    expect(inv.grade).toBe(3);
     // Cooldown blocks a second send; survival mode never allows it.
     sent.boards[0].units[4] = { kind: "mage", grade: 1, cd: 0 };
     expect(applyAction(sent, 0, { type: "send", slot: 4 })).toBe(sent);
@@ -151,6 +150,32 @@ describe("merge defense engine", () => {
       expect(w.slowT).toBe(0);
     }
     expect(frostHits).toBeGreaterThan(0);
+  });
+
+  it("elimination counts heads: bosses call minions and golems split", () => {
+    let s = startGame(2, 31, [], "versus");
+    // Idle boards would be overrun before wave 5 — keep the roads clear.
+    while (s.wave < 5) {
+      for (const b of s.boards) b.mobs = [];
+      s = stepGame(s);
+    }
+    s.boards[1].units = s.boards[1].units.map(() => null);
+    s.boards[1].mobs = [];
+    s.boards[0].gold = 5000;
+    s = applyAction(s, 0, { type: "hire", mob: "warlord" });
+    expect(fieldLoad(s.boards[1])).toBe(1);
+    for (let i = 0; i < 20 * 11; i++) s = stepGame(s);
+    expect(s.boards[1].mobs.filter((m) => m.kind === "normal" && m.from === 0).length).toBeGreaterThanOrEqual(2);
+    expect(fieldLoad(s.boards[1])).toBe(s.boards[1].mobs.length);
+    // A golem that dies leaves two pebbles behind.
+    s.boards[0].sendCd = 0;
+    s.boards[1].mobs = [];
+    s = applyAction(s, 0, { type: "hire", mob: "golem" });
+    s.boards[1].mobs[0].hp = 0.01;
+    s.boards[1].mobs[0].poisonT = 5;
+    s.boards[1].mobs[0].poisonDps = 1000;
+    s = stepGame(s);
+    expect(s.boards[1].mobs.filter((m) => m.kind === "normal").length).toBe(2);
   });
 
   it("refuses to merge max-grade units", () => {

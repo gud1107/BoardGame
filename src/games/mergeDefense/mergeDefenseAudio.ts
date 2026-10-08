@@ -60,16 +60,53 @@ export function playSendUnit() {
 // Mute/volume follow the site-wide SFX settings.
 // ---------------------------------------------------------------------------
 
-/** Peak gain at SFX slider = 1 — deliberately far below the shared cues. */
+/** Peak gain at SFX slider = 1 and hit volume "보통" — deliberately far below the shared cues. */
 const HIT_LEVEL = 0.07;
 const HIT_KIND_GAP_MS: Record<UnitKind, number> = { archer: 110, mage: 160, frost: 150, thunder: 150, poison: 190 };
 const HIT_GLOBAL_GAP_MS = 45;
+/** Opponent boards: much quieter, muffled, and sparser so they never mask your own board. */
+const FAR_LEVEL = 0.3;
+const FAR_GLOBAL_GAP_MS = 140;
+
+/** In-game hit volume steps (multiplies HIT_LEVEL); the SFX slider still applies on top. */
+export const HIT_VOLUMES = [
+  { label: "끔", value: 0 },
+  { label: "작게", value: 0.5 },
+  { label: "보통", value: 1 },
+  { label: "크게", value: 1.8 },
+] as const;
+const HIT_VOL_KEY = "merge-defense:hit-volume";
+let hitVolume = 1;
+try {
+  const saved = typeof window !== "undefined" ? Number(window.localStorage.getItem(HIT_VOL_KEY)) : NaN;
+  if (HIT_VOLUMES.some((v) => v.value === saved) && window.localStorage.getItem(HIT_VOL_KEY) !== null) hitVolume = saved;
+} catch {
+  /* storage blocked — default volume */
+}
+
+export function getHitVolume(): number {
+  return hitVolume;
+}
+
+export function setHitVolume(v: number) {
+  hitVolume = v;
+  try {
+    window.localStorage.setItem(HIT_VOL_KEY, String(v));
+  } catch {
+    /* not remembered */
+  }
+}
 
 let hitCtx: AudioContext | null = null;
 let hitBus: GainNode | null = null;
 let hitNoise: AudioBuffer | null = null;
-let lastHitAt = 0;
-const lastHitKindAt: Partial<Record<UnitKind, number>> = {};
+interface Throttle {
+  last: number;
+  gap: number;
+  kinds: Partial<Record<UnitKind, number>>;
+}
+const NEAR: Throttle = { last: 0, gap: HIT_GLOBAL_GAP_MS, kinds: {} };
+const FAR: Throttle = { last: 0, gap: FAR_GLOBAL_GAP_MS, kinds: {} };
 
 function hitAudio(): { ctx: AudioContext; bus: GainNode; noise: AudioBuffer } | null {
   if (typeof window === "undefined") return null;
@@ -127,19 +164,35 @@ function noise(ctx: AudioContext, buf: AudioBuffer, out: GainNode, type: BiquadF
   src.stop(t + dur);
 }
 
-/** One soft hit for a tower attack; silently skipped when rate-limited or muted. */
-export function playTowerHit(kind: UnitKind, grade: number) {
+/**
+ * One soft hit for a tower attack; silently skipped when rate-limited or muted.
+ * `far` = an opponent's board: quieter, muffled and on its own (sparser) rate limit.
+ */
+export function playTowerHit(kind: UnitKind, grade: number, far = false) {
   const settings = useAudioSettingsStore.getState();
-  if (isSfxEffectivelyMuted(settings) || settings.sfxVolume <= 0) return;
+  if (isSfxEffectivelyMuted(settings) || settings.sfxVolume <= 0 || hitVolume <= 0) return;
+  const th = far ? FAR : NEAR;
   const nowMs = performance.now();
-  if (nowMs - lastHitAt < HIT_GLOBAL_GAP_MS) return;
-  if (nowMs - (lastHitKindAt[kind] ?? -1e9) < HIT_KIND_GAP_MS[kind]) return;
+  if (nowMs - th.last < th.gap) return;
+  if (nowMs - (th.kinds[kind] ?? -1e9) < HIT_KIND_GAP_MS[kind] * (far ? 2 : 1)) return;
   const a = hitAudio();
   if (!a) return;
-  lastHitAt = nowMs;
-  lastHitKindAt[kind] = nowMs;
-  const { ctx, bus, noise: buf } = a;
-  bus.gain.value = HIT_LEVEL * settings.sfxVolume;
+  th.last = nowMs;
+  th.kinds[kind] = nowMs;
+  const { ctx, noise: buf } = a;
+  let bus = a.bus;
+  bus.gain.value = HIT_LEVEL * settings.sfxVolume * hitVolume;
+  if (far) {
+    // Distant board: a per-sound lowpass + trim in front of the shared bus.
+    const trim = ctx.createGain();
+    trim.gain.value = FAR_LEVEL;
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 1400;
+    trim.connect(lp).connect(bus);
+    bus = trim;
+    window.setTimeout(() => trim.disconnect(), 400);
+  }
   // Higher grades ring a little brighter; slight random detune keeps repeats from droning.
   const p = (1 + (grade - 1) * 0.06) * (0.96 + Math.random() * 0.08);
   switch (kind) {

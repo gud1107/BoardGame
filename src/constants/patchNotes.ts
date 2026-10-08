@@ -98,6 +98,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "모바일에서 🎲 버튼이 ⚔️ 보내기 버튼을 가리던 문제 — 공격 버튼을 상대 판 바로 아래로 옮김",
       },
       {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "탈락 기준을 무게 80 → 몬스터 50마리(순수 마릿수)로 변경 · 보스·전쟁군주는 졸개 소환, 골렘은 쓰러지면 2마리로 분열",
+      },
+      {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "🔉 타격음 크기 4단계 조절 · 상대 판 타격음 작게 · 상대가 보낸 몬스터 포털 등장 연출 · 🧭 가이드 자동(3웨이브까지) 모드",
+      },
+      {
         game: "ink-duel",
         type: "IMPROVE",
         desc: "그래픽 전면 개편 — 캐릭터 4종(마법사·고양이·개구리·토끼), 수채화 배경·지층 지형, 잉크 폭발 파티클·화면 흔들림·속성 이펙트, 카드형 무기 판정",

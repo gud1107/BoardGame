@@ -1350,6 +1350,8 @@ export type Fx =
   | { type: "text"; x: number; y: number; text: string; color: string; t0: number; dur: number; size: number }
   /** Merge/gamble evolution: light pillar + spinning rays + rising motes, scaled by grade. */
   | { type: "evolve"; x: number; y: number; color: string; grade: number; t0: number; dur: number }
+  /** A bought/sent monster bursting out of the portal onto this road. */
+  | { type: "portal"; color: string; label: string; t0: number; dur: number; seed: number }
   /** The consumed unit's energy streaming into the merge cell. */
   | { type: "absorb"; from: { x: number; y: number }; to: { x: number; y: number }; color: string; t0: number; dur: number };
 
@@ -1377,6 +1379,7 @@ export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
         ctx.fill();
       }
     } else if (f.type === "evolve") drawEvolve(ctx, f, k);
+    else if (f.type === "portal") drawPortalBurst(ctx, f, k);
     else if (f.type === "absorb") {
       const dx = f.to.x - f.from.x;
       const dy = f.to.y - f.from.y;
@@ -1408,6 +1411,66 @@ export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
     }
     ctx.restore();
   }
+}
+
+function drawPortalBurst(ctx: Ctx, f: Extract<Fx, { type: "portal" }>, k: number) {
+  const x = ROAD.x0;
+  const y = ROAD.y0;
+  const fade = k < 0.1 ? k / 0.1 : 1 - (k - 0.1) / 0.9;
+  // Red flash over the whole board in the first instant.
+  if (k < 0.18) {
+    ctx.fillStyle = rgba(f.color, 0.22 * (1 - k / 0.18));
+    ctx.fillRect(0, 0, BOARD_W, BOARD_H);
+  }
+  // Dark vortex swelling at the portal.
+  const r = 16 + 30 * Math.min(1, k * 2.5);
+  const g = ctx.createRadialGradient(x, y, 2, x, y, r);
+  g.addColorStop(0, `rgba(10,0,10,${0.9 * fade})`);
+  g.addColorStop(0.55, rgba(f.color, 0.65 * fade));
+  g.addColorStop(1, rgba(f.color, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  // Expanding shock rings.
+  for (let i = 0; i < 3; i++) {
+    const kk = k * 1.4 - i * 0.18;
+    if (kk <= 0 || kk >= 1) continue;
+    ctx.strokeStyle = rgba(f.color, (1 - kk) * 0.9);
+    ctx.lineWidth = 3 * (1 - kk) + 0.5;
+    ctx.beginPath();
+    ctx.arc(x, y, 10 + kk * 70, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // Jagged lightning cracks.
+  ctx.strokeStyle = `rgba(254,226,226,${0.9 * fade})`;
+  ctx.lineWidth = 1.4;
+  for (let i = 0; i < 5; i++) {
+    const a = f.seed * 1.7 + i * 1.256 + k * 0.6;
+    let px = x;
+    let py = y;
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    for (let j = 1; j <= 4; j++) {
+      const d = j * 9 * (0.5 + k);
+      const jitter = ((i * 7 + j * 13 + f.seed) % 5) - 2;
+      px = x + Math.cos(a + jitter * 0.12) * d;
+      py = y + Math.sin(a + jitter * 0.12) * d;
+      ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+  // Warning label sliding in next to the portal.
+  ctx.globalAlpha = Math.max(0, fade);
+  ctx.font = "900 15px system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = "rgba(0,0,0,0.75)";
+  const lx = x + 30 + (1 - Math.min(1, k * 4)) * -14;
+  ctx.strokeText(f.label, lx, y + 32);
+  ctx.fillStyle = "#fecaca";
+  ctx.fillText(f.label, lx, y + 32);
 }
 
 function drawEvolve(ctx: Ctx, f: Extract<Fx, { type: "evolve" }>, k: number) {

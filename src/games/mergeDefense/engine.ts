@@ -5,7 +5,7 @@
  * every road at the same time; units on the board shoot them automatically.
  * Summoning gives a random unit, two identical units (same kind + grade)
  * merge into ONE random unit of the next grade — the luck is in what comes
- * out. When the monsters on your road outweigh `LOAD_LIMIT` you're out; the
+ * out. When `LOAD_LIMIT` monsters are on your road at once you're out; the
  * last board standing wins. Every `SEND_EVERY` kills drops an elite onto the
  * next living opponent's road, so a strong board pressures the others.
  *
@@ -45,7 +45,12 @@ export const PREP_TICKS = 6 * TICKS_PER_SEC;
 export const WAVE_TICKS = 20 * TICKS_PER_SEC;
 const SPAWN_GAP = 12;
 export const BOSS_EVERY = 5;
-export const LOAD_LIMIT = 80;
+/** Monsters (head count) on one road that knock a player out. */
+export const LOAD_LIMIT = 50;
+/** Bosses / warlords call a minion onto the road this often; golems split in two on death. */
+const BOSS_MINION_EVERY = 4 * 20;
+const WARLORD_MINION_EVERY = 5 * 20;
+const GOLEM_SPLIT = 2;
 export const SEND_EVERY = 12;
 export const MAX_GRADE = 5;
 export const MAX_UPGRADE = 10;
@@ -112,10 +117,10 @@ export interface HireDef {
 }
 
 export const HIRES: Record<HireKind, HireDef> = {
-  swarm: { name: "박쥐 떼", emoji: "🦇", desc: `빠른 박쥐 ${SWARM_SIZE}마리 · 무게 1×${SWARM_SIZE}`, base: 45, perWave: 4, minWave: 1 },
-  wraith: { name: "망령", emoji: "👻", desc: "아주 빠름 · 둔화 면역 · 무게 3", base: 60, perWave: 5, minWave: 2 },
-  golem: { name: "바위 골렘", emoji: "🪨", desc: "체력 9배 · 느림 · 무게 5", base: 80, perWave: 6, minWave: 3 },
-  warlord: { name: "전쟁군주", emoji: "👹", desc: "미니 보스 · 체력 20배 · 무게 9", base: 170, perWave: 12, minWave: 5 },
+  swarm: { name: "박쥐 떼", emoji: "🦇", desc: `빠른 박쥐 ${SWARM_SIZE}마리가 한꺼번에`, base: 45, perWave: 4, minWave: 1 },
+  wraith: { name: "망령", emoji: "👻", desc: "아주 빠름 · 둔화 면역", base: 60, perWave: 5, minWave: 2 },
+  golem: { name: "바위 골렘", emoji: "🪨", desc: "체력 9배 · 느림 · 쓰러지면 돌멩이 2마리로 분열", base: 80, perWave: 6, minWave: 3 },
+  warlord: { name: "전쟁군주", emoji: "👹", desc: "미니 보스 · 체력 20배 · 5초마다 졸개 소환", base: 170, perWave: 12, minWave: 5 },
 };
 
 export function hireCost(kind: HireKind, wave: number): number {
@@ -130,7 +135,6 @@ export interface Mob {
   /** Total distance travelled — position is `trav % PATH_LEN`; larger = older = targeted first. */
   trav: number;
   speed: number;
-  weight: number;
   slowT: number;
   slowPct: number;
   poisonT: number;
@@ -289,7 +293,7 @@ export function waveBonus(wave: number): number {
 
 export function fieldLoad(board: Board): number {
   let load = 0;
-  for (const m of board.mobs) load += m.weight;
+  for (const m of board.mobs) if (m.hp > 0) load += 1;
   return load;
 }
 
@@ -326,10 +330,6 @@ export const SLOT_PREFERENCE: number[] = Array.from({ length: SLOTS }, (_, i) =>
 
 export function invaderHp(grade: number, wave: number): number {
   return Math.round(waveHp(Math.max(2, wave)) * 3 * Math.pow(2.3, grade - 1));
-}
-
-export function invaderWeight(grade: number): number {
-  return 1 + grade * 2;
 }
 
 export function waveCount(wave: number): number {
@@ -520,7 +520,6 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
       maxHp: hp,
       trav: 0,
       speed: 72,
-      weight: invaderWeight(unit.grade),
       slowT: 0,
       slowPct: 0,
       poisonT: 0,
@@ -575,20 +574,20 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
 
 function makeMob(s: MergeDefenseState, kind: MobKind, wave: number, from: SeatIndex = -1): Mob {
   const base = waveHp(Math.max(1, wave));
-  const spec: Record<MobKind, { hp: number; speed: number; weight: number }> = {
-    normal: { hp: 1, speed: 60, weight: 1 },
-    fast: { hp: 0.6, speed: 105, weight: 1 },
-    tank: { hp: 2.8, speed: 40, weight: 2 },
-    boss: { hp: 45, speed: 32, weight: 15 },
-    elite: { hp: 4, speed: 70, weight: 3 },
-    invader: { hp: 3, speed: 72, weight: 3 },
-    golem: { hp: 9, speed: 34, weight: 5 },
-    wraith: { hp: 2.2, speed: 112, weight: 3 },
-    warlord: { hp: 20, speed: 38, weight: 9 },
+  const spec: Record<MobKind, { hp: number; speed: number }> = {
+    normal: { hp: 1, speed: 60 },
+    fast: { hp: 0.6, speed: 105 },
+    tank: { hp: 2.8, speed: 40 },
+    boss: { hp: 45, speed: 32 },
+    elite: { hp: 4, speed: 70 },
+    invader: { hp: 3, speed: 72 },
+    golem: { hp: 9, speed: 34 },
+    wraith: { hp: 2.2, speed: 112 },
+    warlord: { hp: 20, speed: 38 },
   };
   const k = spec[kind];
   const hp = Math.round(base * k.hp);
-  return { id: s.nextMobId++, kind, hp, maxHp: hp, trav: 0, speed: k.speed, weight: k.weight, slowT: 0, slowPct: 0, poisonT: 0, poisonDps: 0, from };
+  return { id: s.nextMobId++, kind, hp, maxHp: hp, trav: 0, speed: k.speed, slowT: 0, slowPct: 0, poisonT: 0, poisonDps: 0, from };
 }
 
 function spawnKindFor(wave: number, index: number): MobKind {
@@ -722,6 +721,18 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
 
     if (board.sendCd > 0) board.sendCd -= 1;
 
+    // Bosses / warlords keep calling minions — big monsters count as one head
+    // but still swell the road.
+    const called: Mob[] = [];
+    for (const m of board.mobs) {
+      const every = m.kind === "boss" ? BOSS_MINION_EVERY : m.kind === "warlord" ? WARLORD_MINION_EVERY : 0;
+      if (!every || m.hp <= 0 || (s.tick + m.id) % every !== 0) continue;
+      const minion = makeMob(s, "normal", Math.max(1, s.wave), m.from);
+      minion.trav = Math.max(0, m.trav - 6);
+      called.push(minion);
+    }
+    board.mobs.push(...called);
+
     // Attacks — each unit hits the oldest live mob inside its own range.
     const ordered = board.mobs.filter((m) => m.hp > 0).sort((a, b) => b.trav - a.trav);
     const pos = ordered.map((m) => pathPoint(m.trav));
@@ -752,6 +763,13 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
       }
       board.kills += 1;
       board.gold += killGold(m.kind, s.wave);
+      if (m.kind === "golem") {
+        for (let i = 0; i < GOLEM_SPLIT; i++) {
+          const pebble = makeMob(s, "normal", Math.max(1, s.wave), m.from);
+          pebble.trav = Math.max(0, m.trav - i * 8);
+          survivors.push(pebble);
+        }
+      }
       if (m.kind === "boss") {
         board.gems += 2;
         pushEvent(s, { seat, type: "boss-kill" });

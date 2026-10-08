@@ -29,7 +29,6 @@ import {
   slotCenter,
   summonCost,
   upgradeCost,
-  invaderWeight,
   killGold,
   HIRE_KINDS,
   HIRES,
@@ -61,8 +60,13 @@ const MAX_FX = 260;
 /** Gold gains this close together stack into one "+N" pop. */
 const GOLD_POP_MERGE_MS = 700;
 const GUIDE_KEY = "merge-defense:guide";
+/** 🧭 "자동": the guide shows through the prep and these opening waves, then hides itself. */
+const GUIDE_AUTO_WAVES = 3;
+type GuideMode = "auto" | "on" | "off";
+const GUIDE_NEXT: Record<GuideMode, GuideMode> = { auto: "on", on: "off", off: "auto" };
 /** Attack range the guide assumes for a new build (grade-1 average). */
 const BUILD_RANGE = 140;
+const HIRE_FX_COLOR: Record<(typeof HIRE_KINDS)[number], string> = { swarm: "#f59e0b", wraith: "#818cf8", golem: "#a8a29e", warlord: "#dc2626" };
 const MOB_SPARK: Record<string, string> = {
   boss: "#c084fc",
   elite: "#f87171",
@@ -129,22 +133,24 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const bannerKey = useRef(0);
   const [goldPop, setGoldPop] = useState<GoldPop | null>(null);
   const bornAtRef = useRef<Record<number, { t: number; big: boolean }>>({});
-  const [guide, setGuide] = useState(() => {
+  const [guide, setGuide] = useState<GuideMode>(() => {
     try {
-      return typeof window === "undefined" || window.localStorage.getItem(GUIDE_KEY) !== "off";
+      const v = typeof window === "undefined" ? null : window.localStorage.getItem(GUIDE_KEY);
+      return v === "on" || v === "off" ? v : "auto";
     } catch {
-      return true;
+      return "auto";
     }
   });
   const guideRef = useRef(guide);
   useEffect(() => {
     guideRef.current = guide;
     try {
-      window.localStorage.setItem(GUIDE_KEY, guide ? "on" : "off");
+      window.localStorage.setItem(GUIDE_KEY, guide);
     } catch {
       /* storage blocked — guide just won't be remembered */
     }
   }, [guide]);
+  const [hitVol, setHitVol] = useState(audio.getHitVolume);
 
   useCanvasSize(mainRef);
 
@@ -218,6 +224,14 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         fx.push({ type: "shot", kind: shot.kind, grade: shot.grade, from, pts: shot.pts, t0: now, dur: shot.kind === "mage" ? 380 : shot.kind === "archer" ? 260 : 220 });
         if (audible) audio.playTowerHit(shot.kind, shot.grade);
       }
+      // Other living boards: a faint, muffled patter so you can hear them fight.
+      if (audible) {
+        state.boards.forEach((b, seat) => {
+          if (seat === view || !b.alive) return;
+          const shot = b.shots[0];
+          if (shot) audio.playTowerHit(shot.kind, shot.grade, true);
+        });
+      }
       if (prevBoard && prevBoard.mobs.length > 0) {
         const alive = new Set(board.mobs.map((m) => m.id));
         for (const m of prevBoard.mobs) {
@@ -236,7 +250,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     for (const ev of fresh) {
       if (ev.type === "wave") {
         if (ev.boss) {
-          showBanner({ text: `👑 WAVE ${ev.wave} — 보스 등장!`, sub: "보스 1마리 = 몬스터 15마리 무게", tone: "boss" });
+          showBanner({ text: `👑 WAVE ${ev.wave} — 보스 등장!`, sub: "4초마다 졸개를 불러요 — 빨리 잡으세요", tone: "boss" });
           if (audible) audio.playBossWave();
         } else if (ev.wave === 1 || ev.wave % 5 === 1) {
           showBanner({ text: `WAVE ${ev.wave}`, tone: "wave" });
@@ -251,7 +265,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
       if (ev.type === "invade") {
         const what = `${GRADE_NAMES[ev.grade]} ${UNITS[ev.kind].name}`;
         if (ev.to === mySeat) {
-          showBanner({ text: `⚔️ ${names[ev.seat] ?? "상대"}님이 ${what}를 보냈어요!`, sub: `무게 ${invaderWeight(ev.grade)} · 막아내세요`, tone: "danger" });
+          showBanner({ text: `⚔️ ${names[ev.seat] ?? "상대"}님이 ${what}를 보냈어요!`, sub: "막아내세요!", tone: "danger" });
+          if (ev.to === view) fx.push({ type: "portal", color: "#ef4444", label: `침략자 ${GRADE_NAMES[ev.grade]} ${UNITS[ev.kind].name}`, t0: now, dur: 1400, seed: ev.id });
           if (audible) audio.playEliteIncoming();
         } else if (ev.seat === mySeat) {
           showBanner({ text: `⚔️ ${what} → ${names[ev.to] ?? "상대"}`, tone: "good" });
@@ -268,6 +283,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           showBanner({ text: `👾 ${what} → ${names[ev.to] ?? "상대"}`, tone: "good" });
           if (audible) audio.playSendUnit();
         }
+        if (ev.to === view) fx.push({ type: "portal", color: HIRE_FX_COLOR[ev.mob], label: `${HIRES[ev.mob].name} 등장!`, t0: now, dur: 1500, seed: ev.id });
         continue;
       }
       if (ev.type === "out") {
@@ -370,7 +386,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           const mine = view === mySeat && s.phase === "playing" && board.alive;
           const moving = dragFromRef.current ?? sel;
           const movingUnit = moving !== null ? board.units[moving] : null;
-          const coverage = mine && guideRef.current ? coverageFor(movingUnit ? unitRange(movingUnit) : BUILD_RANGE) : null;
+          const g = guideRef.current;
+          const guideOn = g === "on" || (g === "auto" && s.wave <= GUIDE_AUTO_WAVES);
+          const coverage = mine && guideOn ? coverageFor(movingUnit ? unitRange(movingUnit) : BUILD_RANGE) : null;
           drawBoard(ctx, board, {
             alpha: s.phase === "playing" ? alpha : 0,
             now,
@@ -473,6 +491,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     }
   }
 
+  const guideShown = guide === "on" || (guide === "auto" && state.wave <= GUIDE_AUTO_WAVES);
   const load = fieldLoad(me);
   const loadPct = Math.min(1, load / LOAD_LIMIT);
   const cost = summonCost(me);
@@ -503,12 +522,24 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         </span>
         <span className="flex gap-1">
           <button
-            onClick={() => setGuide((g) => !g)}
-            aria-pressed={guide}
-            title="빈 칸마다 길을 얼마나 덮는지(%) 보여줘요 — ★가 가장 좋은 자리"
-            className={`rounded-full border px-2 py-0.5 text-[11px] ${guide ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-200 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700" : "border-white/15 hover:border-white/30 light:border-slate-300"}`}
+            onClick={() => {
+              const i = audio.HIT_VOLUMES.findIndex((v) => v.value === hitVol);
+              const next = audio.HIT_VOLUMES[(i + 1) % audio.HIT_VOLUMES.length].value;
+              audio.setHitVolume(next);
+              setHitVol(next);
+              if (next > 0) audio.playTowerHit("archer", 1);
+            }}
+            title="타워 타격음 크기 (사이트 효과음 볼륨과 곱해져요)"
+            className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] hover:border-white/30 light:border-slate-300"
           >
-            🧭 가이드 {guide ? "ON" : "OFF"}
+            {hitVol === 0 ? "🔇" : hitVol < 1 ? "🔈" : hitVol > 1 ? "🔊" : "🔉"} 타격음 {audio.HIT_VOLUMES.find((v) => v.value === hitVol)?.label}
+          </button>
+          <button
+            onClick={() => setGuide((g) => GUIDE_NEXT[g])}
+            title={`빈 칸마다 길을 얼마나 덮는지(%) 보여줘요 — ★가 가장 좋은 자리. 자동 = ${GUIDE_AUTO_WAVES}웨이브까지만 표시`}
+            className={`rounded-full border px-2 py-0.5 text-[11px] ${guideShown ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-200 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700" : "border-white/15 hover:border-white/30 light:border-slate-300"}`}
+          >
+            🧭 가이드 {guide === "auto" ? `자동(~W${GUIDE_AUTO_WAVES})` : guide === "on" ? "ON" : "OFF"}
           </button>
           <button onClick={() => setRulebookOpen(true)} className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] hover:border-white/30 light:border-slate-300">
             📖 룰
@@ -546,10 +577,10 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
               <div className="flex items-center justify-between gap-1 font-mono text-[10px] leading-tight">
                 {b.alive ? (
                   <>
-                    <span className="text-white/70 light:text-slate-600">👾 {b.mobs.length}마리</span>
+                    <span className="text-white/70 light:text-slate-600">👾 몬스터</span>
                     <span className={`font-bold ${l > 0.75 ? "animate-pulse text-rose-300 light:text-rose-600" : l > 0.5 ? "text-amber-300 light:text-amber-600" : "text-white/80 light:text-slate-700"}`}>
                       {oppLoad}
-                      <span className="text-rose-300/90 light:text-rose-600">/{LOAD_LIMIT}</span>
+                      <span className="text-rose-300/90 light:text-rose-600">/{LOAD_LIMIT}마리</span>
                     </span>
                   </>
                 ) : (
@@ -636,14 +667,15 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
       <div className="flex flex-col gap-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2 light:border-slate-200 light:bg-white">
         <div className="flex items-center justify-between gap-2 text-[11px]">
           <span className="font-semibold text-white/80 light:text-slate-700">
-            👾 몬스터 <b className="font-mono text-white light:text-slate-900">{me.mobs.length}</b>마리 · 무게{" "}
-            <b className={`font-mono ${loadPct > 0.75 ? "text-rose-300 light:text-rose-600" : loadPct > 0.5 ? "text-amber-300 light:text-amber-600" : "text-white light:text-slate-900"}`}>{load}</b>
+            👾 내 길의 몬스터{" "}
+            <b className={`font-mono text-sm ${loadPct > 0.75 ? "text-rose-300 light:text-rose-600" : loadPct > 0.5 ? "text-amber-300 light:text-amber-600" : "text-white light:text-slate-900"}`}>{load}</b>
+            마리
           </span>
           <span
             className={`rounded-full border px-2 py-0.5 font-black ${loadPct > 0.75 ? "animate-pulse border-rose-300 bg-rose-600 text-white" : "border-rose-400/60 bg-rose-500/20 text-rose-200 light:border-rose-300 light:bg-rose-50 light:text-rose-600"}`}
-            title="일반·빠른 몬스터 1 · 탱커 2 · 정예/침입 유닛 3 · 보스 15"
+            title="종류와 상관없이 몬스터 1마리 = 1"
           >
-            💀 무게 {LOAD_LIMIT} 되면 탈락
+            💀 {LOAD_LIMIT}마리 되면 탈락
           </span>
         </div>
         <div className="flex items-center gap-2 text-xs">
@@ -657,7 +689,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             {load}/<span className="text-rose-300 light:text-rose-600">{LOAD_LIMIT}</span>
           </span>
         </div>
-        <p className="text-[10px] leading-tight text-white/45 light:text-slate-400">일반·빠른 1 · 탱커 2 · 정예/침입 3 · 보스 15</p>
+        <p className="text-[10px] leading-tight text-white/45 light:text-slate-400">보스·전쟁군주는 졸개를 계속 불러요 · 골렘은 쓰러지면 2마리로 갈라져요</p>
         <div className="flex items-center justify-between text-sm font-bold text-white light:text-slate-900">
           <span className="relative">
             <span key={goldPop?.key ?? 0} className={`inline-block ${goldPop ? "animate-[md-gold-glow_0.6s_ease-out] text-amber-300 light:text-amber-600" : ""}`}>

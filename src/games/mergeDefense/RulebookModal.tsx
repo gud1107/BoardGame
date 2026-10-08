@@ -11,8 +11,8 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className={h3}>목표</h3>
           <p className="text-white/70 light:text-slate-600">
-            모두가 똑같은 웨이브를 동시에 막는 실시간 생존 대결이에요. 내 길 위의 몬스터 무게가{" "}
-            <b className="text-rose-300 light:text-rose-600">{LOAD_LIMIT}</b>에 닿으면 탈락하고, 마지막까지 버틴 사람이
+            모두가 똑같은 웨이브를 동시에 막는 실시간 생존 대결이에요. 내 길 위의 몬스터가{" "}
+            <b className="text-rose-300 light:text-rose-600">{LOAD_LIMIT}마리</b>에 닿으면 탈락하고, 마지막까지 버틴 사람이
             승리해요.
           </p>
         </section>
@@ -71,8 +71,8 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section>
           <h3 className={h3}>웨이브 & 대결</h3>
           <ul className="list-disc space-y-1.5 pl-4 text-white/70 light:text-slate-600">
-            <li>웨이브는 20초마다 오고 갈수록 단단해져요. {BOSS_EVERY}웨이브마다 보스가 나와요(무게 15).</li>
-            <li>몬스터는 길을 따라 계속 돌아요 — 잡지 못하면 쌓여요. 일반 1 · 탱커 2 · 정예 3 무게.</li>
+            <li>웨이브는 20초마다 오고 갈수록 단단해져요. {BOSS_EVERY}웨이브마다 보스가 나와요 — 살아 있는 동안 4초마다 졸개를 불러요.</li>
+            <li>몬스터는 길을 따라 계속 돌아요 — 잡지 못하면 쌓여요. 종류와 상관없이 1마리 = 1로 세요.</li>
             <li>
               몬스터를 {SEND_EVERY}마리 잡을 때마다 다음 상대에게 <b>🔥 정예 몬스터</b>가 넘어가요. 잘 막을수록 상대가 힘들어져요.
             </li>
@@ -83,7 +83,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <h3 className={h3}>⚔️ 유닛 대결 모드</h3>
           <ul className="list-disc space-y-1.5 pl-4 text-white/70 light:text-slate-600">
             <li>내 유닛을 고르고 <b>⚔️ 보내기</b>를 누르면 그 유닛이 내 판에서 사라지고 상대 길에 <b>침략자</b>로 나타나요.</li>
-            <li>등급이 높을수록 침략자가 단단하고 무거워요(무게 = 1 + 등급×2). 보낸 뒤 3초 동안은 다시 보낼 수 없어요.</li>
+            <li>등급이 높을수록 침략자가 단단해요. 보낸 뒤 3초 동안은 다시 보낼 수 없어요.</li>
             <li>
               <b>👾 몬스터 구매</b>: 골드로 몬스터를 사서 상대 길에 보낼 수 있어요 — 🦇 박쥐 떼(빠른 6마리), 👻 망령(아주 빠름·둔화 면역, 2웨이브~), 🪨
               바위 골렘(아주 단단함, 3웨이브~), 👹 전쟁군주(미니 보스, 5웨이브~). 가격은 웨이브마다 올라가고, 유닛 보내기와 3초 재사용 대기시간을 같이 써요.
