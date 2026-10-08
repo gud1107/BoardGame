@@ -25,7 +25,7 @@ import {
 } from "./engine";
 import { surfaceY } from "./physics";
 import { MAP_IDS } from "./maps";
-import { DEFAULT_RT_RULES, newBotMemory, RT_INK_MAX, RT_SHIELD_MS, rtBotThink, sanitizeRules, startRealtime, stepRealtime } from "./realtime";
+import { DEFAULT_RT_RULES, newBotMemory, RT_INK_MAX, RT_SHIELD_COOLDOWN_MS, RT_SHIELD_MS, rtBotThink, sanitizeRules, startRealtime, stepRealtime } from "./realtime";
 import { RtClientBuffer, snapFromState } from "./rtView";
 import { decodePreset, encodePreset, MAX_PRESETS, PRESET_NAME_MAX, sanitizeStored } from "./roomPrefs";
 
@@ -574,5 +574,44 @@ describe("sharing a preset by code / link", () => {
     }
     expect(decodePreset("not-a-code")).toBeNull();
     expect(decodePreset("")).toBeNull();
+  });
+});
+
+describe("moving-mode shields skip the shot reload", () => {
+  it("a shield can go up right after a shot, but not twice within its own timer", () => {
+    const s = startRealtime(2, 6);
+    s.players[0].ink = 100;
+    stepRealtime(s, 16, {}, [{ type: "fire", seat: 0, strokes: [line(20, 100, 120, 100)], angle: 60, power: 60 }], () => 0.5);
+    expect(s.players[0].cooldownMs).toBeGreaterThan(0);
+    stepRealtime(s, 16, {}, [{ type: "shield", seat: 0, strokes: [circle(25)], angle: 30 }], () => 0.5);
+    expect(s.walls.some((w) => w.shieldOf === 0)).toBe(true);
+    const shieldsBefore = s.walls.filter((w) => w.shieldOf === 0).map((w) => w.id);
+    s.players[0].ink = 100;
+    stepRealtime(s, 16, {}, [{ type: "shield", seat: 0, strokes: [circle(25)], angle: 30 }], () => 0.5);
+    expect(s.walls.filter((w) => w.shieldOf === 0).map((w) => w.id)).toEqual(shieldsBefore);
+    expect(s.players[0].shieldCdMs).toBeGreaterThan(RT_SHIELD_COOLDOWN_MS - 100);
+  });
+});
+
+describe("bot shield choice", () => {
+  const hurt = (seed: number, myHp: number, enemyHp: number) => {
+    const s = startGame(2, seed);
+    const me = s.turnSeat;
+    return { me, s: { ...s, players: s.players.map((p) => ({ ...p, hp: p.seat === me ? myHp : enemyHp })) } };
+  };
+  it("a strong bot losing the HP race sometimes hides behind a solid shield-only turn", () => {
+    const kinds = new Set<string>();
+    for (let seed = 1; seed <= 12; seed++) {
+      const { me, s } = hurt(seed, 25, 90);
+      const a = chooseBotAction(s, me, 8, seededRng(seed));
+      kinds.add(a?.type === "fire" && a.shield ? "light" : (a?.type ?? "none"));
+    }
+    expect(kinds.has("shield")).toBe(true);
+  });
+  it("in an even fight it fires (with a light shield at most), never a shield-only turn", () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const { me, s } = hurt(seed, 40, 45);
+      expect(chooseBotAction(s, me, 8, seededRng(seed))?.type).not.toBe("shield");
+    }
   });
 });

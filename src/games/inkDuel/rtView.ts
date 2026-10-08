@@ -24,6 +24,7 @@ export interface RtViewPlayer {
   status: StatusMap;
   ink: number;
   cooldownMs: number;
+  shieldCdMs: number;
   facing: 1 | -1;
   damageDealt: number;
   bestHit: number;
@@ -92,6 +93,7 @@ function viewPlayers(s: RtState): RtViewPlayer[] {
     status: Object.fromEntries(Object.entries(p.status).map(([k, v]) => [k, Math.round(v ?? 0)])) as StatusMap,
     ink: Math.floor(p.ink),
     cooldownMs: Math.round(p.cooldownMs),
+    shieldCdMs: Math.round(p.shieldCdMs ?? 0),
     facing: p.facing,
     damageDealt: p.damageDealt,
     bestHit: p.bestHit,

@@ -1200,9 +1200,17 @@ export function chooseBotAction(state: InkDuelState, seat: SeatIndex, level: Bot
   if (currentActor(state) !== seat) return null;
   const me = state.players[seat];
   const enemies = state.players.filter((p) => p.alive && p.seat !== seat);
-  // Hurt and unshielded: put a small bubble shield up and fire with the ink that's left.
-  if (level >= 3 && enemies.length > 0 && me.hp <= 60 && !hasShield(state.walls, seat) && rng() < 0.45) {
-    const near = enemies.reduce((a, b) => (Math.abs(b.x - me.x) < Math.abs(a.x - me.x) ? b : a));
+  const unshielded = enemies.length > 0 && !hasShield(state.walls, seat);
+  const near = enemies.length > 0 ? enemies.reduce((a, b) => (Math.abs(b.x - me.x) < Math.abs(a.x - me.x) ? b : a)) : null;
+  // Losing the HP race badly (nobody is close to finishing): skip the shot and raise
+  // a big solid shield — it actually stops shots, unlike the light one below.
+  const weakestEnemy = enemies.reduce((m, e) => Math.min(m, e.hp), Infinity);
+  if (level >= 5 && unshielded && near && me.hp <= 35 && weakestEnemy >= me.hp + 25 && rng() < 0.5) {
+    const strokes = botDoodle("bomb", 2, Math.min(80, state.inkBudget), rng);
+    if (totalInk(strokes) >= MIN_INK) return { type: "shield", seat, strokes, angle: near.x < me.x ? 150 : 30 };
+  }
+  // Hurt and unshielded: put a small light shield up and fire with the ink that's left.
+  if (level >= 3 && unshielded && near && me.hp <= 60 && rng() < 0.45) {
     const strokes = botDoodle("bomb", 2, Math.min(35, state.inkBudget - 30), rng);
     const ink = totalInk(strokes);
     if (ink >= MIN_INK && state.inkBudget - ink >= 25) {

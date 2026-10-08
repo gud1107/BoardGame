@@ -923,7 +923,20 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
         {sharedPreset.map !== "random" && ` · 맵 ${mapLabel(sharedPreset.map)}`}
         {sharedPreset.playerCount ? ` · ${sharedPreset.playerCount}인` : ""}
       </p>
-      <div className="flex gap-1.5">
+      <button
+        type="button"
+        onClick={() => {
+          // One tap: take the friend's settings and go straight to the nickname step.
+          applyMyPreset(sharedPreset);
+          setIntent("create");
+          setPhase("enter-name");
+          dismissShared();
+        }}
+        className="rounded-xl bg-emerald-600 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
+      >
+        🎲 이 설정으로 바로 방 만들기
+      </button>
+      <div className="flex flex-wrap gap-1.5">
         <button
           type="button"
           onClick={() => {

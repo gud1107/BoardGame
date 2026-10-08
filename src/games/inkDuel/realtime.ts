@@ -40,7 +40,12 @@ export const RT_DAMAGE_SCALE = 0.6;
 export const RT_SPEED = 75;
 export const RT_JUMP_VY = -4.4;
 export const RT_WIND_EVERY_MS = 10_000;
-export const RT_SHIELD_MS = 6000;
+export const RT_SHIELD_MS = 4000;
+/**
+ * 🛡️ Shields don't use the shot reload (so you can fire and cover in the same
+ * breath) — only ink and their own short timer, which stops shield spam.
+ */
+export const RT_SHIELD_COOLDOWN_MS = 6000;
 const STUN_IMMUNE_MS = 2000;
 const DOT_PULSE_MS = 500;
 const BURN_PULSE = 2;
@@ -55,6 +60,8 @@ export interface RtPlayer extends ImpactBody {
   facing: 1 | -1;
   ink: number;
   cooldownMs: number;
+  /** Separate 🛡️ timer (shields skip the shot reload). */
+  shieldCdMs: number;
   stunImmuneMs: number;
   dotMs: number;
   damageDealt: number;
@@ -223,6 +230,7 @@ export function startRealtime(playerCount: number, seed: number, options: StartO
       facing: p.x < WORLD_W / 2 ? 1 : -1,
       ink: RT_INK_MAX,
       cooldownMs: 0,
+      shieldCdMs: 0,
       stunImmuneMs: 0,
       dotMs: 0,
       damageDealt: 0,
@@ -274,7 +282,8 @@ function pushEvent(state: RtState, ev: NewEvent) {
 
 function applyCommand(state: RtState, cmd: RtCommand, rng: () => number) {
   const p = state.players[cmd.seat];
-  if (!p || !canAct(p) || p.cooldownMs > 0) return;
+  if (!p || !canAct(p)) return;
+  if (cmd.type === "shield" ? (p.shieldCdMs ?? 0) > 0 : p.cooldownMs > 0) return;
   if (!strokesValid(cmd.strokes, cmd.type === "wall" ? WORLD_W : PAD_SIZE, cmd.type === "wall" ? WORLD_H : PAD_SIZE)) return;
   const ink = totalInk(cmd.strokes);
   if (ink < MIN_INK || ink > p.ink + 0.5) return;
@@ -312,7 +321,8 @@ function applyCommand(state: RtState, cmd: RtCommand, rng: () => number) {
     pushEvent(state, { kind: "shield", seat: cmd.seat });
   }
   p.ink -= ink;
-  p.cooldownMs = state.rules.cooldownMs;
+  if (cmd.type === "shield") p.shieldCdMs = RT_SHIELD_COOLDOWN_MS;
+  else p.cooldownMs = state.rules.cooldownMs;
 }
 
 function movePlayer(state: RtState, p: RtPlayer, input: RtInput, dt: number) {
@@ -370,6 +380,7 @@ function tickStatuses(state: RtState, p: RtPlayer, dt: number) {
   }
   p.ink = Math.min(RT_INK_MAX, p.ink + (state.rules.inkRegen * dt) / 1000);
   p.cooldownMs = Math.max(0, p.cooldownMs - dt);
+  p.shieldCdMs = Math.max(0, (p.shieldCdMs ?? 0) - dt);
 }
 
 /**

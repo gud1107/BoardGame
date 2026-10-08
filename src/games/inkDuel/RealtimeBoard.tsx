@@ -27,7 +27,7 @@ import { playImpactKind, playLaunchSound, playScribbleTick, playVictorySound, pl
 import { WeaponCard } from "./InkDuelBoard";
 import { MAPS, type MapId } from "./maps";
 import { GRAVITY, launchVelocity, MUZZLE_Y, WORLD_H, WORLD_W } from "./physics";
-import { DEFAULT_RT_RULES, RT_INK_MAX, type RtCommand, type RtInput } from "./realtime";
+import { DEFAULT_RT_RULES, RT_INK_MAX, RT_SHIELD_COOLDOWN_MS, type RtCommand, type RtInput } from "./realtime";
 import type { RtView, RtViewPlayer } from "./rtView";
 import { activeStatuses, STATUS_INFO } from "./status";
 import WeaponPad, { InkPalette } from "./WeaponPad";
@@ -90,7 +90,8 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
   const stats = useMemo(() => (weapon.length > 0 && totalInk(weapon) >= MIN_INK ? analyzeWeapon(weapon) : null), [weapon]);
   const me = hud?.players[viewerSeat] ?? null;
   const myInk = me?.ink ?? 0;
-  const cooling = (me?.cooldownMs ?? 0) > 0;
+  // Shields run on their own short timer, shots on the reload.
+  const cooling = mode === "shield" ? (me?.shieldCdMs ?? 0) > 0 : (me?.cooldownMs ?? 0) > 0;
   const stunned = me ? (me.status.stun ?? 0) > 0 || (me.status.freeze ?? 0) > 0 : false;
   const blind = me ? (me.status.blind ?? 0) > 0 : false;
   const activeStrokes = mode === "weapon" ? weapon : mode === "shield" ? shield : wall;
@@ -641,7 +642,7 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
           <div className="flex items-center gap-1.5 text-[11px] text-white/60 light:text-slate-500">
             ⏳
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
-              <div className="h-full rounded-full bg-amber-400" style={{ width: `${(1 - (me.cooldownMs ?? 0) / rules.cooldownMs) * 100}%` }} />
+              <div className="h-full rounded-full bg-amber-400" style={{ width: `${(1 - (mode === "shield" ? (me.shieldCdMs ?? 0) / RT_SHIELD_COOLDOWN_MS : (me.cooldownMs ?? 0) / rules.cooldownMs)) * 100}%` }} />
             </div>
             <span className="w-8 text-right font-mono">{cost > 0 ? `−${Math.ceil(cost)}` : ""}</span>
           </div>
@@ -691,7 +692,7 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
           </div>
           {mode === "weapon" && stats && <WeaponCard stats={stats} compact />}
           {mode === "weapon" && !stats && <p className="text-[11px] text-white/50 light:text-slate-500">✏️ 공책에 무기를 그려 장전하세요 — 모양마다 다른 무기, 그린 무기는 계속 다시 쏠 수 있어요.</p>}
-          {mode === "shield" && <p className="text-[11px] text-white/60 light:text-slate-500">🛡️ 그린 모양이 6초 동안 방패로 서요 (받는 피해 −40%). 경기장을 드래그해 방향을 정하세요.</p>}
+          {mode === "shield" && <p className="text-[11px] text-white/60 light:text-slate-500">🛡️ 그린 모양이 4초 동안 방패로 서요 — 재장전 없이 바로 세울 수 있고(방패끼리는 6초 간격), 받는 피해는 잉크에 비례해 줄어요. 경기장을 드래그해 방향을 정하세요.</p>}
           <p className="hidden text-[10px] text-white/40 sm:block light:text-slate-400">←/→·A/D 이동 · ↑/W/스페이스 점프 · 경기장 드래그 후 놓으면 발사 · F/Enter 발사</p>
         </div>
       )}
