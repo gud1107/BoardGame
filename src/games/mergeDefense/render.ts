@@ -48,6 +48,10 @@ export interface DrawOptions {
   aim?: Record<number, number>;
   /** 배치 가이드: road coverage (0..1) per slot, drawn on empty cells. */
   coverage?: number[] | null;
+  /** 타격감: performance.now() of each mob's latest hit (white flash + squash). */
+  hits?: Map<number, number>;
+  /** 타격감: performance.now() each slot last fired (tower recoil punch). */
+  firedAt?: Record<number, number>;
   /** Elimination head count for this table (vignette threshold). */
   limit?: number;
   /** performance.now() when a unit appeared per slot — drives the pop-in / evolve scale. */
@@ -381,7 +385,19 @@ export function drawBoard(ctx: Ctx, board: Board, opts: DrawOptions) {
       ctx.restore();
       return;
     }
-    drawTower(ctx, c.x, c.y + 6, u, now, { mini, lifted: opts.selected === slot, aim: opts.aim?.[slot] });
+    const fired = opts.firedAt?.[slot];
+    const kick = fired !== undefined && !mini ? 1 - (now - fired) / 130 : 0;
+    if (kick > 0) {
+      // Recoil punch: squash down then spring back.
+      ctx.save();
+      ctx.translate(c.x, c.y + 18);
+      ctx.scale(1 + 0.07 * kick, 1 - 0.09 * kick);
+      ctx.translate(-c.x, -(c.y + 18));
+      drawTower(ctx, c.x, c.y + 6, u, now, { mini, lifted: opts.selected === slot, aim: opts.aim?.[slot] });
+      ctx.restore();
+    } else {
+      drawTower(ctx, c.x, c.y + 6, u, now, { mini, lifted: opts.selected === slot, aim: opts.aim?.[slot] });
+    }
     if (u.stun) drawStun(ctx, c.x, c.y, now, !!mini);
   });
 
@@ -390,7 +406,7 @@ export function drawBoard(ctx: Ctx, board: Board, opts: DrawOptions) {
   for (const m of mobs) {
     const slow = m.slowT > 0 ? m.slowPct : 0;
     const trav = m.trav + (m.speed * (1 - slow) * opts.alpha) / TICKS_PER_SEC;
-    drawMob(ctx, m, trav, now, !!mini);
+    drawMob(ctx, m, trav, now, !!mini, opts.hits?.get(m.id));
   }
 
   if (!board.alive) {
@@ -833,7 +849,7 @@ function drawPoison(ctx: Ctx, now: number, firing: boolean, mini: boolean) {
 // Monsters
 // ---------------------------------------------------------------------------
 
-function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean) {
+function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean, hitAt?: number) {
   const p = pathPoint(trav);
   const ahead = pathPoint(trav + 4);
   const dx = ahead.x - p.x;
@@ -866,7 +882,13 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean) {
     ctx.fill();
   }
 
+  // 타격감: a fresh hit knocks the body back a hair and squashes it.
+  const hit = hitAt !== undefined && !mini ? Math.max(0, 1 - (now - hitAt) / 140) : 0;
   ctx.save();
+  if (hit > 0) {
+    ctx.translate(-facing * 2.2 * hit, 0);
+    ctx.scale(1 + 0.16 * hit, 1 - 0.13 * hit);
+  }
   ctx.scale(facing, 1);
   switch (m.kind) {
     case "normal":
@@ -898,6 +920,20 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean) {
       break;
   }
   ctx.restore();
+
+  if (hit > 0) {
+    // White hit flash, added on top of the body.
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const flash = ctx.createRadialGradient(0, -size * 0.25, 1, 0, -size * 0.25, size * 1.2);
+    flash.addColorStop(0, `rgba(255,255,255,${0.85 * hit})`);
+    flash.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = flash;
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.25, size * 1.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
   // Status overlays
   if (m.slowT > 0) {
@@ -1364,6 +1400,10 @@ export type Fx =
   | { type: "text"; x: number; y: number; text: string; color: string; t0: number; dur: number; size: number }
   /** Merge/gamble evolution: light pillar + spinning rays + rising motes, scaled by grade. */
   | { type: "evolve"; x: number; y: number; color: string; grade: number; t0: number; dur: number }
+  /** 타격감: a short spark burst where a shot lands. */
+  | { type: "impact"; x: number; y: number; color: string; size: number; t0: number; dur: number; seed: number }
+  /** 타격감: a coin flung from a kill toward the gold counter below the board. */
+  | { type: "coin"; x: number; y: number; tx: number; ty: number; t0: number; dur: number; seed: number }
   /** A berserk boss slamming a tower: jagged quake line from the boss to the tower + impact ring. */
   | { type: "smash"; x: number; y: number; tx: number; ty: number; t0: number; dur: number; seed: number }
   /** A golem crumbling: stone shards flung out, a dust ring and two pebbles dropping. */
@@ -1403,6 +1443,40 @@ export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
     else if (f.type === "call") drawMinionCall(ctx, f, k);
     else if (f.type === "split") drawGolemSplit(ctx, f, k);
     else if (f.type === "smash") drawSmash(ctx, f, k);
+    else if (f.type === "impact") {
+      ctx.globalAlpha = 1 - k;
+      ctx.strokeStyle = f.color;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = f.seed + (i / 6) * Math.PI * 2;
+        const r0 = 2 + k * f.size * 0.6;
+        const r1 = r0 + f.size * (1 - k) * 0.7 + 2;
+        ctx.moveTo(f.x + Math.cos(a) * r0, f.y + Math.sin(a) * r0);
+        ctx.lineTo(f.x + Math.cos(a) * r1, f.y + Math.sin(a) * r1);
+      }
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.globalAlpha = (1 - k) * 0.9;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, 2.5 * (1 - k) + 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (f.type === "coin") {
+      // Hop up, then dive toward the counter.
+      const e = k * k;
+      const x = f.x + (f.tx - f.x) * e + Math.cos(f.seed) * 14 * Math.sin(k * Math.PI);
+      const y = f.y + (f.ty - f.y) * e - Math.sin(k * Math.PI) * 22;
+      ctx.globalAlpha = k < 0.85 ? 1 : (1 - k) / 0.15;
+      ctx.translate(x, y);
+      ctx.scale(Math.abs(Math.cos(k * 14 + f.seed)) * 0.8 + 0.2, 1);
+      ctx.fillStyle = "#facc15";
+      ctx.strokeStyle = "#a16207";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(0, 0, 3.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
     else if (f.type === "absorb") {
       const dx = f.to.x - f.from.x;
       const dy = f.to.y - f.from.y;

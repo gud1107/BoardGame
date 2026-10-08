@@ -61,7 +61,10 @@ interface Banner {
   tone: "wave" | "boss" | "danger" | "good";
 }
 
-const MAX_FX = 260;
+const MAX_FX = 320;
+/** 타격감: damage numbers for one mob are grouped over this window. */
+const DMG_NUMBER_MS = 280;
+const fmtDmg = (v: number) => (v >= 10000 ? `${(v / 1000).toFixed(0)}k` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`);
 /** Gold gains this close together stack into one "+N" pop. */
 const GOLD_POP_MERGE_MS = 700;
 const GUIDE_KEY = "merge-defense:guide";
@@ -144,6 +147,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const bannerKey = useRef(0);
   const [goldPop, setGoldPop] = useState<GoldPop | null>(null);
   const bornAtRef = useRef<Record<number, { t: number; big: boolean }>>({});
+  // 타격감 state (render-only): hit flashes, grouped damage numbers, tower recoil, screen shake.
+  const hitsRef = useRef(new Map<number, number>());
+  const dmgRef = useRef(new Map<number, { acc: number; shown: number }>());
+  const firedRef = useRef<Record<number, number>>({});
+  const shakeRef = useRef({ t0: 0, dur: 0, amp: 0 });
   const [guide, setGuide] = useState<GuideMode>(() => {
     try {
       const v = typeof window === "undefined" ? null : window.localStorage.getItem(GUIDE_KEY);
@@ -226,7 +234,40 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
       );
     }
 
+    const shake = (amp: number, dur: number) => {
+      const cur = shakeRef.current;
+      const left = cur.amp * Math.max(0, 1 - (now - cur.t0) / (cur.dur || 1));
+      if (amp >= left) shakeRef.current = { t0: now, dur, amp };
+    };
+
     if (state.tick !== prev.tick && board) {
+      // Hits: every mob that lost HP since the last state flashes; damage is
+      // pooled per mob and shown as a number at most every DMG_NUMBER_MS.
+      if (prevBoard) {
+        const before = new Map(prevBoard.mobs.map((m) => [m.id, m.hp]));
+        for (const m of board.mobs) {
+          const was = before.get(m.id);
+          if (was === undefined || m.hp >= was) continue;
+          const lost = was - Math.max(0, m.hp);
+          hitsRef.current.set(m.id, now);
+          const d = dmgRef.current.get(m.id) ?? { acc: 0, shown: 0 };
+          d.acc += lost;
+          if (now - d.shown >= DMG_NUMBER_MS && d.acc >= 1) {
+            const p = pathPoint(m.trav);
+            const big = d.acc >= m.maxHp * 0.2;
+            fx.push({ type: "text", x: p.x + ((m.id * 7) % 11) - 5, y: p.y - 16, text: fmtDmg(d.acc), color: big ? "#fb923c" : "#f8fafc", t0: now, dur: big ? 700 : 520, size: big ? 13 : 9 });
+            d.acc = 0;
+            d.shown = now;
+          }
+          dmgRef.current.set(m.id, d);
+        }
+        // Forget mobs that are long gone.
+        if (dmgRef.current.size > 200) {
+          const live = new Set(board.mobs.map((m) => m.id));
+          for (const id of dmgRef.current.keys()) if (!live.has(id)) dmgRef.current.delete(id);
+          for (const id of hitsRef.current.keys()) if (!live.has(id)) hitsRef.current.delete(id);
+        }
+      }
       for (const shot of board.shots) {
         if (shot.pts.length < 2) continue;
         const c = slotCenter(shot.slot);
@@ -234,6 +275,10 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         aimRef.current[shot.slot] = Math.atan2(shot.pts[1] - from.y, shot.pts[0] - from.x);
         fx.push({ type: "shot", kind: shot.kind, grade: shot.grade, from, pts: shot.pts, t0: now, dur: shot.kind === "mage" ? 380 : shot.kind === "archer" ? 260 : 220 });
         if (audible) audio.playTowerHit(shot.kind, shot.grade);
+        firedRef.current[shot.slot] = now;
+        if (fx.length < MAX_FX - 40) {
+          fx.push({ type: "impact", x: shot.pts[0], y: shot.pts[1] - 4, color: UNITS[shot.kind].color, size: 8 + shot.grade * 2, t0: now + (shot.kind === "archer" ? 140 : 60), dur: 180, seed: shot.slot + state.tick });
+        }
       }
       // Other living boards: a faint, muffled patter so you can hear them fight.
       if (audible) {
@@ -245,8 +290,21 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
       }
       if (prevBoard && prevBoard.mobs.length > 0) {
         const alive = new Set(board.mobs.map((m) => m.id));
+        let coins = 0;
         for (const m of prevBoard.mobs) {
           if (alive.has(m.id)) continue;
+          // Kill pop + coins flying toward the gold counter (own board only).
+          {
+            const q = pathPoint(m.trav);
+            fx.push({ type: "ring", x: q.x, y: q.y, color: "#ffffff", r0: 3, r1: m.kind === "boss" ? 40 : 16, t0: now, dur: 220 });
+            if (view === mySeat && coins < 4) {
+              const n = m.kind === "boss" || m.kind === "warlord" ? 6 : m.kind === "normal" || m.kind === "fast" ? 1 : 2;
+              for (let i = 0; i < n && coins < 8; i++, coins++) {
+                fx.push({ type: "coin", x: q.x, y: q.y, tx: 46, ty: BOARD_H + 18, t0: now + i * 40, dur: 620, seed: m.id + i * 1.7 });
+              }
+            }
+            if (m.kind === "tank" || m.kind === "elite" || m.kind === "golem" || m.kind === "invader") shake(1.6, 140);
+          }
           const p = pathPoint(m.trav);
           const color = MOB_SPARK[m.kind] ?? "#bef264";
           fx.push({ type: "spark", x: p.x, y: p.y, color, t0: now, dur: m.kind === "boss" || m.kind === "warlord" ? 900 : 380, seed: m.id });
@@ -261,6 +319,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     for (const ev of fresh) {
       if (ev.type === "wave") {
         if (ev.boss) {
+          shake(3.5, 380);
           showBanner({ text: `👑 WAVE ${ev.wave} — 보스 등장!`, sub: `4초마다 졸개를 불러요(최대 ${MINION_CAP[state.difficulty ?? "normal"]}마리) → 그다음엔 광폭화`, tone: "boss" });
           if (audible) audio.playBossWave();
         } else if (ev.wave === 1 || ev.wave % 5 === 1) {
@@ -324,6 +383,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           if (ev.from !== undefined) fx.push({ type: "absorb", from: slotCenter(ev.from), to: c, color: GRADE_COLORS[ev.grade - 1], t0: now, dur: 380 });
           fx.push({ type: "evolve", x: c.x, y: c.y + 4, color, grade: ev.grade, t0: now + 180, dur: 900 + ev.grade * 120 });
           bornAtRef.current[ev.slot] = { t: now + 200, big: true };
+          if (ev.grade >= 4) shake(ev.grade >= 5 ? 5 : 3, 320);
           fx.push({ type: "spark", x: c.x, y: c.y, color: GRADE_COLORS[ev.grade], t0: now, dur: 650, seed: ev.id });
           fx.push({ type: "ring", x: c.x, y: c.y, color: GRADE_COLORS[ev.grade], r0: 10, r1: 46, t0: now, dur: 550 });
           fx.push({ type: "text", x: c.x, y: c.y - 22, text: `진화! ${GRADE_NAMES[ev.grade]}`, color, t0: now + 200, dur: 1100, size: ev.grade >= 4 ? 20 : 15 });
@@ -358,12 +418,14 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           const p = pathPoint(ev.trav);
           const t = slotCenter(ev.slot);
           fx.push({ type: "smash", x: p.x, y: p.y + 6, tx: t.x, ty: t.y + 6, t0: now, dur: 650, seed: ev.id });
+          shake(3, 220);
           if (mine && audible) audio.playBossSmash();
           break;
         }
         case "split": {
           const p = pathPoint(ev.trav);
           fx.push({ type: "split", x: p.x, y: p.y, t0: now, dur: 750, seed: ev.id });
+          shake(2.4, 200);
           if (mine && audible) audio.playGolemSplit();
           break;
         }
@@ -378,6 +440,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           break;
         }
         case "boss-kill":
+          shake(ev.rage ? 8 : 6, ev.rage ? 520 : 420);
           if (ev.rage) {
             // Berserk kill: bigger, redder callout with the bonus spelled out.
             const who = ev.warlord ? "광폭 전쟁군주 처치!" : "광폭 보스 처치!";
@@ -423,6 +486,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   // Render loop.
   useEffect(() => {
     let raf = 0;
+    const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const loop = () => {
       const now = performance.now();
       const s = stateRef.current;
@@ -435,7 +499,12 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           const k = main.width / BOARD_W;
           ctx.setTransform(1, 0, 0, 1, 0, 0);
           ctx.clearRect(0, 0, main.width, main.height);
-          ctx.setTransform(k, 0, 0, k, 0, 0);
+          // Screen shake (skipped for "reduce motion").
+          const sh = shakeRef.current;
+          const sk = sh.dur > 0 && !reduceMotion ? Math.max(0, 1 - (now - sh.t0) / sh.dur) : 0;
+          const ox = sk > 0 ? (Math.random() * 2 - 1) * sh.amp * sk : 0;
+          const oy = sk > 0 ? (Math.random() * 2 - 1) * sh.amp * sk : 0;
+          ctx.setTransform(k, 0, 0, k, ox * k, oy * k);
           const board = s.boards[view];
           const sel = view === mySeat ? selectedRef.current : null;
           const highlight = new Set<number>();
@@ -456,6 +525,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             aim: aimRef.current,
             coverage,
             bornAt: bornAtRef.current,
+            hits: hitsRef.current,
+            firedAt: firedRef.current,
             limit: eliminationLimit(s),
           });
           drawFx(ctx, fxRef.current, now);
