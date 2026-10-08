@@ -875,17 +875,20 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     <div className="mx-auto flex w-full max-w-[640px] flex-col gap-2 pb-20 select-none sm:pb-0" onPointerDown={audio.unlockHitSounds}>
       <style>{`@keyframes md-pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}@keyframes md-gold-rise{0%{transform:translateY(4px) scale(.8);opacity:0}15%{transform:translateY(0) scale(1.15);opacity:1}70%{opacity:1}100%{transform:translateY(-14px) scale(1);opacity:0}}@keyframes md-gold-glow{0%{text-shadow:0 0 0 rgba(250,204,21,0);transform:scale(1)}25%{text-shadow:0 0 12px rgba(250,204,21,.95);transform:scale(1.18)}100%{text-shadow:0 0 0 rgba(250,204,21,0);transform:scale(1)}}`}</style>
       {/* Wave HUD */}
-      <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-white/80 light:border-slate-200 light:bg-white light:text-slate-700">
+      {/* Phone widths: labels collapse to icons (checked at 375px) — full words come back from sm. */}
+      <div className="flex items-center justify-between gap-1.5 rounded-xl border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs whitespace-nowrap text-white/80 sm:gap-2 sm:px-3 light:border-slate-200 light:bg-white light:text-slate-700">
         <span className="font-bold text-white light:text-slate-900">
           {state.wave === 0 ? "준비 시간" : `🌊 WAVE ${state.wave}`}
           {state.difficulty && state.difficulty !== "normal" && (
             <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${state.difficulty === "hard" ? "bg-rose-500/25 text-rose-200 light:text-rose-700" : "bg-emerald-500/25 text-emerald-200 light:text-emerald-700"}`}>
-              {state.difficulty === "hard" ? "🔥 어려움" : "🌱 쉬움"}
+              {state.difficulty === "hard" ? "🔥" : "🌱"}
+              <span className="hidden sm:inline"> {state.difficulty === "hard" ? "어려움" : "쉬움"}</span>
             </span>
           )}
         </span>
         <span className={nextIsBoss ? "font-semibold text-amber-300 light:text-amber-600" : ""}>
-          {nextIsBoss ? "👑 보스" : "다음 웨이브"} {Math.ceil(waveLeftTicks / (1000 / TICK_MS))}초
+          {nextIsBoss ? "👑 보스" : "⏱"}
+          <span className="hidden sm:inline">{nextIsBoss ? "" : " 다음 웨이브"}</span> {Math.ceil(waveLeftTicks / (1000 / TICK_MS))}초
         </span>
         <span className="flex gap-1">
           <button
@@ -899,14 +902,15 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             title="타워 타격음 크기 (사이트 효과음 볼륨과 곱해져요)"
             className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] hover:border-white/30 light:border-slate-300"
           >
-            {hitVol === 0 ? "🔇" : hitVol < 1 ? "🔈" : hitVol > 1 ? "🔊" : "🔉"} 타격음 {audio.HIT_VOLUMES.find((v) => v.value === hitVol)?.label}
+            {hitVol === 0 ? "🔇" : hitVol < 1 ? "🔈" : hitVol > 1 ? "🔊" : "🔉"}
+            <span className="hidden sm:inline"> 타격음 {audio.HIT_VOLUMES.find((v) => v.value === hitVol)?.label}</span>
           </button>
           <button
             onClick={() => setGuide((g) => GUIDE_CYCLE[(GUIDE_CYCLE.indexOf(g) + 1) % GUIDE_CYCLE.length])}
             title="빈 칸마다 길을 얼마나 덮는지(%) 보여줘요 — ★가 가장 좋은 자리. 누를 때마다 자동(2·3·5웨이브까지) → 항상 ON → OFF"
             className={`rounded-full border px-2 py-0.5 text-[11px] ${guideShown ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-200 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700" : "border-white/15 hover:border-white/30 light:border-slate-300"}`}
           >
-            🧭 가이드 {typeof guide === "number" ? `자동(~W${guide})` : guide === "on" ? "ON" : "OFF"}
+            🧭<span className="hidden sm:inline"> 가이드</span> {typeof guide === "number" ? `~W${guide}` : guide === "on" ? "ON" : "OFF"}
           </button>
           <span className="relative">
             <button
@@ -944,7 +948,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             )}
           </span>
           <button onClick={() => setRulebookOpen(true)} className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] hover:border-white/30 light:border-slate-300">
-            📖 룰
+            📖<span className="hidden sm:inline"> 룰</span>
           </button>
         </span>
       </div>

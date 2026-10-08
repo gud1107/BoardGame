@@ -30,7 +30,13 @@ import {
   type UnitKind,
 } from "./engine";
 
-export const SEAT_COLORS = ["#38bdf8", "#f472b6", "#a3e635", "#fbbf24"];
+/**
+ * Seat identity colors (mini boards, sender rings, results chart). The dataviz
+ * reference categorical slots 1–4, dark steps — validated on the game and
+ * results surfaces (worst adjacent CVD ΔE 8.4, normal 19.8). The previous
+ * lime/amber pair was ΔE 1.4 for deuteranopes.
+ */
+export const SEAT_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500"];
 
 export interface DrawOptions {
   /** 0..1 fraction of a tick elapsed since this state arrived — for smooth mob motion. */

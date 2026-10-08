@@ -40,6 +40,7 @@ import {
   type Difficulty,
   loadLimit,
   LIMIT_CHOICES,
+  eliminationLimit,
   COMBO,
   stepGame,
   TICK_MS,
@@ -52,6 +53,8 @@ import {
 import MergeDefenseBoard from "./MergeDefenseBoard";
 import { playVictory } from "./mergeDefenseAudio";
 import { recordBestWave, useBestWaves, type BestWaves } from "./bestWave";
+import WaveChart, { type WaveSeries } from "./WaveChart";
+import { SEAT_COLORS } from "./render";
 
 /**
  * Online-room entry point for 랜덤 합성 디펜스.
@@ -130,6 +133,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
   const best = useBestWaves();
   /** This match's best-wave result for me: mode, difficulty, wave reached, previous record. */
+  /** Results chart: each seat's peak monsters per wave, captured at game end. */
+  const [waveHistory, setWaveHistory] = useState<{ series: Omit<WaveSeries, "name" | "me">[]; limit: number } | null>(null);
   const [myRecord, setMyRecord] = useState<{ mode: GameMode; difficulty: Difficulty; wave: number; prev: number } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -626,6 +631,16 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       finishedAt: new Date().toISOString(),
     });
     if (rankings.find((r) => r.seat === mySeat)?.rank === 1) playVictory();
+    setWaveHistory({
+      limit: eliminationLimit(sim),
+      series: sim.boards.map((b, seat) => ({
+        seat,
+        color: SEAT_COLORS[seat] ?? "#94a3b8",
+        // Survivors' current wave hasn't been closed out yet — append its running peak.
+        values: b.alive ? [...(b.loadHistory ?? []), b.wavePeak ?? 0] : (b.loadHistory ?? []),
+        out: !b.alive,
+      })),
+    });
     const mine = rankings.find((r) => r.seat === mySeat);
     if (mine && mine.wave > 0) {
       const d = sanitizeDifficulty(sim.difficulty);
@@ -1044,6 +1059,12 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
             </p>
           )}
         </div>
+        {waveHistory && waveHistory.series.some((s) => s.values.length > 1) && (
+          <WaveChart
+            limit={waveHistory.limit}
+            series={waveHistory.series.map((s) => ({ ...s, name: names[s.seat] ?? `${s.seat + 1}번`, me: s.seat === mySeat }))}
+          />
+        )}
         {isHost && (
           <div className="w-full max-w-sm text-left">
             <p className="mb-1 text-[11px] text-white/40">⚙️ 다음 판 설정</p>
@@ -1080,9 +1101,9 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
 }
 
 const DIFFICULTY_LABEL: Record<Difficulty, { emoji: string; name: string; desc: string }> = {
-  easy: { emoji: "🌱", name: "쉬움", desc: `체력 ×${DIFFICULTY_HP.easy}` },
+  easy: { emoji: "🌱", name: "쉬움", desc: `체력 ×${DIFFICULTY_HP.easy}` },
   normal: { emoji: "⚖️", name: "보통", desc: "기본" },
-  hard: { emoji: "🔥", name: "어려움", desc: `체력 ×${DIFFICULTY_HP.hard} · 수 ×${DIFFICULTY_COUNT.hard}` },
+  hard: { emoji: "🔥", name: "어려움", desc: `체력 ×${DIFFICULTY_HP.hard} · 수 ×${DIFFICULTY_COUNT.hard}` },
 };
 
 /** Difficulty + elimination-limit pickers, shared by the create form and the host's waiting room. */
@@ -1116,7 +1137,7 @@ function RoomSettings({
         : "border-white/10 text-white/60 hover:border-white/30 light:border-slate-200 light:text-slate-500"
     }`;
   return (
-    <div className={`flex flex-col ${compact ? "gap-2" : "gap-4"} text-sm text-white/70 light:text-slate-600`}>
+    <div className={`flex flex-col ${compact ? "gap-2" : "gap-4"} text-sm break-keep text-white/70 light:text-slate-600`}>
       <div className="flex flex-col gap-1.5">
         모드
         <div className="grid grid-cols-2 gap-1.5">

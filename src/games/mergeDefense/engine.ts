@@ -309,6 +309,9 @@ export interface Board {
   reflectsTaken?: number;
   /** Times a berserk boss / warlord smash stunned one of this board's towers. */
   smashesTaken?: number;
+  /** Peak monsters on the road per finished wave (index = wave − 1) and the running peak of the current wave. */
+  loadHistory?: number[];
+  wavePeak?: number;
   /** Waves from W10 this board started alive, and how many of them paid the combo gold milestone (for /stats). */
   lateWaves?: number;
   comboBonusWaves?: number;
@@ -843,6 +846,11 @@ function spawnWaves(s: MergeDefenseState) {
       if (!board.alive) continue;
       if (wave > 1) board.gold += waveBonus(wave - 1);
       if (wave >= LATE_WAVE) board.lateWaves = (board.lateWaves ?? 0) + 1;
+      if (wave > 1) {
+        // Close out the previous wave's peak (immutable append — states share arrays).
+        board.loadHistory = [...(board.loadHistory ?? []), board.wavePeak ?? 0];
+        board.wavePeak = fieldLoad(board);
+      }
       if (boss) board.mobs.push(makeMob(s, "boss", wave));
     }
   }
@@ -1124,6 +1132,8 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
     pushEvent(s, { seat: from, type: "send", to });
   }
 
+  for (const board of s.boards) if (board.alive) board.wavePeak = Math.max(board.wavePeak ?? 0, fieldLoad(board));
+
   // Eliminations — everyone over the limit this tick goes out together.
   const out: SeatIndex[] = [];
   s.boards.forEach((board, seat) => {
@@ -1140,6 +1150,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
     board.alive = false;
     board.outAt = s.tick;
     board.outWave = s.wave;
+    board.loadHistory = [...(board.loadHistory ?? []), board.wavePeak ?? 0];
     pushEvent(s, { seat, type: "out" });
   }
   if (s.boards.filter((b) => b.alive).length <= 1) s.phase = "gameOver";

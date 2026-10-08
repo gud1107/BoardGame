@@ -421,6 +421,16 @@ describe("merge defense engine", () => {
     expect(startGame(2, 1).mode).toBe("survival");
   });
 
+  it("records each wave's peak road load; eliminated boards end at the limit", () => {
+    const s = runBots(2, 77, 20 * 60 * 25);
+    expect(s.phase).toBe("gameOver");
+    const out = s.boards.find((b) => !b.alive)!;
+    const hist = out.loadHistory ?? [];
+    expect(hist.length).toBe(out.outWave);
+    expect(hist[hist.length - 1]).toBeGreaterThanOrEqual(eliminationLimit(s));
+    expect(hist.every((v) => Number.isInteger(v) && v >= 0)).toBe(true);
+  });
+
   it("a dying golem announces its split", () => {
     let s = startGame(2, 52, [], "versus");
     while (s.wave < 3) {
