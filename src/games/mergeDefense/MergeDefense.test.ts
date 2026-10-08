@@ -393,6 +393,26 @@ describe("merge defense engine", () => {
     }
     expect(jam).not.toBeNull();
     expect(jam!.slots.slice(0, 2).sort()).toEqual([3, 4]);
+    expect(s.boards[0].jamsSent).toBeGreaterThanOrEqual(1);
+    expect(s.boards[1].jamsTaken).toBeGreaterThanOrEqual(1);
+    expect(s.boards[0].lateWaves).toBeGreaterThanOrEqual(1);
+    expect(s.boards[0].comboBonusWaves).toBeGreaterThanOrEqual(1);
+    // Max 결속: later jams bounce off and stun nothing.
+    s.boards[1].brace = BRACE_MAX;
+    for (const u of s.boards[1].units) if (u) u.stun = 0;
+    let blocked = false;
+    for (let i = 0; i < 20 * 200 && !blocked; i++) {
+      s.boards[1].mobs = [];
+      s = stepGame(s);
+      for (const e of s.events) if (e.id > last && e.type === "jam" && e.seat === 0) {
+        expect(e.blocked).toBe(true);
+        expect(e.slots).toEqual([]);
+        blocked = true;
+      }
+      last = s.nextEventId - 1;
+    }
+    expect(blocked).toBe(true);
+    expect(s.boards[1].jamsBlocked).toBeGreaterThanOrEqual(1);
     // Survival never jams.
     expect(startGame(2, 1).mode).toBe("survival");
   });

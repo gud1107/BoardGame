@@ -125,6 +125,8 @@ export function critStats(focus: number): { chance: number; mult: number } {
  */
 export const COMBO = { gapTicks: 9, goldAt: 8, gemAt: 20, gems: true, jam: { gold: 2, gem: 3 } };
 export const COMBO_GOLD = { base: 6, perWave: 1.5 };
+/** From this wave on, combo-bonus coverage is tracked for /stats (matches the tuning target). */
+export const LATE_WAVE = 10;
 export function comboGold(wave: number): number {
   return Math.round(COMBO_GOLD.base + COMBO_GOLD.perWave * Math.max(1, wave));
 }
@@ -286,6 +288,13 @@ export interface Board {
   comboGemWave?: number;
   lastCritTick?: number;
   bestCombo?: number;
+  /** 유닛 대결 combo jams this board landed / suffered / shrugged off (max 결속). */
+  jamsSent?: number;
+  jamsTaken?: number;
+  jamsBlocked?: number;
+  /** Waves from W10 this board started alive, and how many of them paid the combo gold milestone (for /stats). */
+  lateWaves?: number;
+  comboBonusWaves?: number;
   /** Attacks fired during the most recent tick — for FX only. */
   shots: Shot[];
 }
@@ -308,7 +317,7 @@ export type GameEvent =
   /** A crit chain hit a reward milestone (`count` is the chain length). */
   | { id: number; tick: number; seat: SeatIndex; type: "combo"; count: number; gold: number; gems: number }
   /** 유닛 대결: `seat`'s combo milestone stunned these towers on `to`'s board. */
-  | { id: number; tick: number; seat: SeatIndex; type: "jam"; to: SeatIndex; slots: number[] }
+  | { id: number; tick: number; seat: SeatIndex; type: "jam"; to: SeatIndex; slots: number[]; blocked?: boolean }
   /** A golem at road distance `trav` just broke into pebbles. */
   | { id: number; tick: number; seat: SeatIndex; type: "split"; trav: number }
   /** A boss / warlord used up its minions and went berserk. */
@@ -516,6 +525,11 @@ function emptyBoard(bot: boolean): Board {
     critChain: 0,
     lastCritTick: -999,
     bestCombo: 0,
+    jamsSent: 0,
+    jamsTaken: 0,
+    jamsBlocked: 0,
+    lateWaves: 0,
+    comboBonusWaves: 0,
     shots: [],
   };
 }
@@ -810,6 +824,7 @@ function spawnWaves(s: MergeDefenseState) {
     for (const board of s.boards) {
       if (!board.alive) continue;
       if (wave > 1) board.gold += waveBonus(wave - 1);
+      if (wave >= LATE_WAVE) board.lateWaves = (board.lateWaves ?? 0) + 1;
       if (boss) board.mobs.push(makeMob(s, "boss", wave));
     }
   }
@@ -844,7 +859,10 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
     if (goldDue || gemDue) {
       const gold = goldDue ? comboGold(s.wave) : 0;
       const gems = gemDue ? 1 : 0;
-      if (goldDue) board.comboGoldWave = s.wave;
+      if (goldDue) {
+        board.comboGoldWave = s.wave;
+        if (s.wave >= LATE_WAVE) board.comboBonusWaves = (board.comboBonusWaves ?? 0) + 1;
+      }
       if (gemDue) board.comboGemWave = s.wave;
       board.gold += gold;
       board.gems += gems;
@@ -861,8 +879,14 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
           .sort((a, b) => b.u.grade - a.u.grade || a.i - b.i)
           .slice(0, gemDue ? COMBO.jam.gem : COMBO.jam.gold)
           .map((x) => x.i);
-        if (ticks > 0 && slots.length > 0) {
+        if ((foe.brace ?? 0) >= BRACE_MAX) {
+          // Max 결속 shrugs combo jams off entirely.
+          foe.jamsBlocked = (foe.jamsBlocked ?? 0) + 1;
+          pushEvent(s, { seat, type: "jam", to, slots: [], blocked: true });
+        } else if (ticks > 0 && slots.length > 0) {
           for (const i of slots) foe.units[i]!.stun = Math.max(foe.units[i]!.stun ?? 0, ticks);
+          board.jamsSent = (board.jamsSent ?? 0) + 1;
+          foe.jamsTaken = (foe.jamsTaken ?? 0) + 1;
           pushEvent(s, { seat, type: "jam", to, slots });
         }
       }
@@ -1106,6 +1130,10 @@ export interface RankedSeat {
   kills: number;
   /** Longest crit chain this match. */
   combo: number;
+  /** 유닛 대결 combo jams landed / suffered / blocked. */
+  jamsSent: number;
+  jamsTaken: number;
+  jamsBlocked: number;
 }
 
 /** Survivors rank first; then later elimination is better; same-tick eliminations tie-break on kills. */
@@ -1116,6 +1144,9 @@ export function computeRankings(state: MergeDefenseState): RankedSeat[] {
     wave: b.alive ? state.wave : b.outWave,
     kills: b.kills,
     combo: b.bestCombo ?? 0,
+    jamsSent: b.jamsSent ?? 0,
+    jamsTaken: b.jamsTaken ?? 0,
+    jamsBlocked: b.jamsBlocked ?? 0,
   }));
   const sorted = [...rows].sort((a, b) => b.out - a.out || b.kills - a.kills);
   const ranked: RankedSeat[] = [];
@@ -1123,7 +1154,7 @@ export function computeRankings(state: MergeDefenseState): RankedSeat[] {
   sorted.forEach((r, i) => {
     const prev = sorted[i - 1];
     if (i > 0 && (prev.out !== r.out || prev.kills !== r.kills)) rank = i + 1;
-    ranked.push({ seat: r.seat, rank, wave: r.wave, kills: r.kills, combo: r.combo });
+    ranked.push({ seat: r.seat, rank, wave: r.wave, kills: r.kills, combo: r.combo, jamsSent: r.jamsSent, jamsTaken: r.jamsTaken, jamsBlocked: r.jamsBlocked });
   });
   return ranked;
 }

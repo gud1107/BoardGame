@@ -189,6 +189,7 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "md-kills", label: "누적 처치", num: "kills", format: "count", unit: "마리" },
     { id: "md-rage", label: "광폭 보스 처치", num: "rageKills", format: "count", unit: "회" },
     { id: "md-combo", label: "최고 치명타 콤보", num: "maxCritCombo", format: "count", unit: "콤보" },
+    { id: "md-bonus", label: "콤보 보너스 달성률", num: "comboBonusWaves", den: "lateWaves", minDen: 30, format: "percent" },
   ],
   "doodle-phone": [
     { id: "dp-react", label: "받은 반응", num: "reactionsReceived", format: "count", unit: "개" },

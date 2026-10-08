@@ -419,6 +419,16 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         }
         continue;
       }
+      if (ev.type === "jam" && ev.blocked) {
+        // Max 결속: the jam bounces off a shield.
+        if (ev.to === view) {
+          fx.push({ type: "ring", x: BOARD_W / 2, y: BOARD_H / 2, color: "#93c5fd", r0: 20, r1: 110, t0: now, dur: 600 });
+          fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: "결속 — 견제 막음!", color: "#bfdbfe", t0: now, dur: 1100, size: 17 });
+        }
+        if (ev.to === mySeat) showBanner({ text: `🛡️ ${names[ev.seat] ?? "상대"}님의 콤보 견제를 막았어요!`, sub: "결속 3단계 = 견제 면역", tone: "good" });
+        else if (ev.seat === mySeat) showBanner({ text: `🛡️ ${names[ev.to] ?? "상대"}님의 결속에 견제가 막혔어요`, tone: "danger" });
+        continue;
+      }
       if (ev.type === "jam") {
         // 유닛 대결 combo harassment: bolts drop onto the stunned towers.
         if (ev.to === view) {
@@ -1193,13 +1203,15 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         <button
           disabled={!interactive || braceLevel >= BRACE_MAX || me.gold < braceCost(braceLevel)}
           onClick={() => onAction({ type: "brace" })}
-          title="🛡️ 결속: 광폭화 보스의 기절 시간을 단계마다 25%씩 줄여요"
+          title="🛡️ 결속: 광폭화 보스의 기절 시간을 단계마다 25%씩 줄여요 · 3단계(MAX)는 유닛 대결 콤보 견제 면역"
           className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-left text-white transition hover:border-white/30 disabled:opacity-40 light:border-slate-200 light:bg-white light:text-slate-900"
           style={{ boxShadow: "inset 0 -3px 0 #94a3b8" }}
         >
           <span className="flex flex-col leading-tight">
             <span className="text-[12px] font-bold">🛡️ 결속 {braceLevel}/{BRACE_MAX}</span>
-            <span className="text-[10px] opacity-70">기절 {(stunTicks(braceLevel) / 20).toFixed(1)}초</span>
+            <span className="text-[10px] opacity-70">
+              기절 {(stunTicks(braceLevel) / 20).toFixed(1)}초{versus && braceLevel >= BRACE_MAX ? " · 견제 면역" : ""}
+            </span>
           </span>
           <span className="font-mono text-[10px] opacity-80">{braceLevel >= BRACE_MAX ? "MAX" : `🪙${braceCost(braceLevel)}`}</span>
         </button>

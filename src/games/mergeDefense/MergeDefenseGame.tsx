@@ -606,6 +606,12 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         kills: sim.boards[seat]?.kills ?? 0,
         rageKills: sim.boards[seat]?.rageKills ?? 0,
         maxCritCombo: sim.boards[seat]?.bestCombo ?? 0,
+        // Real-play combo coverage (tuning target ~38% of waves from W10).
+        lateWaves: sim.boards[seat]?.lateWaves ?? 0,
+        comboBonusWaves: sim.boards[seat]?.comboBonusWaves ?? 0,
+        jamsSent: sim.boards[seat]?.jamsSent ?? 0,
+        jamsTaken: sim.boards[seat]?.jamsTaken ?? 0,
+        jamsBlocked: sim.boards[seat]?.jamsBlocked ?? 0,
         // Board upgrades: highest level reached (max) + running totals for averages.
         maxFocus: sim.boards[seat]?.focus ?? 0,
         maxBrace: sim.boards[seat]?.brace ?? 0,
@@ -978,10 +984,15 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
                 <th className="border-b border-white/10 px-2 py-2 text-right">버틴 웨이브</th>
                 <th className="border-b border-white/10 px-2 py-2 text-right">처치</th>
                 <th className="border-b border-white/10 px-2 py-2 text-right">최고 콤보</th>
+                {gameState?.mode === "versus" && (
+                  <th className="border-b border-white/10 px-2 py-2 text-right" title="콤보 견제를 건 횟수 / 당한 횟수 / 결속으로 막은 횟수">
+                    견제 건·당함·막음
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
-              {finalRankings.map(({ seat, rank, wave, kills, combo }) => (
+              {finalRankings.map(({ seat, rank, wave, kills, combo, jamsSent, jamsTaken, jamsBlocked }) => (
                 <tr key={seat} className={rank === 1 ? "bg-amber-400/10" : ""}>
                   <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-amber-200">{rank === 1 ? "🏆 1" : rank}</td>
                   <td className="border-b border-white/5 px-2 py-2 text-left text-white">
@@ -997,6 +1008,12 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
                   >
                     {combo > 0 ? `⚡ ${combo}` : "-"}
                   </td>
+                  {gameState?.mode === "versus" && (
+                    <td className="border-b border-white/5 px-2 py-2 text-right font-mono text-white/70">
+                      <span className="text-emerald-300">{jamsSent}</span> · <span className="text-rose-300">{jamsTaken}</span> ·{" "}
+                      <span className="text-sky-300">{jamsBlocked}</span>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
