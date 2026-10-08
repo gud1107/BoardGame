@@ -15,7 +15,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             정해진 마릿수에 닿으면 탈락하고, 마지막까지 버틴 사람이 승리해요. 탈락 기준은 인원에 따라 달라요 — 2인{" "}
             <b className="text-rose-300 light:text-rose-600">{loadLimit(2)}마리</b> · 3인{" "}
             <b className="text-rose-300 light:text-rose-600">{loadLimit(3)}마리</b> · 4인{" "}
-            <b className="text-rose-300 light:text-rose-600">{loadLimit(4)}마리</b>(인원이 많을수록 끝까지 남는 데 오래 걸리니 기준이 낮아요). 방장이 방을 만들 때(또는 대기실에서 시작 전까지) 35·45·55·70마리 중에서 직접 정할 수도 있어요. 웨이브 난이도도 🌱 쉬움(몬스터 체력 ×0.7) · ⚖️ 보통 · 🔥 어려움(×1.3) 중에서 고를 수 있어요.
+            <b className="text-rose-300 light:text-rose-600">{loadLimit(4)}마리</b>(인원이 많을수록 끝까지 남는 데 오래 걸리니 기준이 낮아요). 방장이 방을 만들 때(또는 대기실에서 시작 전까지) 35·45·55·70마리 중에서 직접 정할 수도 있어요. 웨이브 난이도도 🌱 쉬움(몬스터 체력 ×0.7) · ⚖️ 보통 · 🔥 어려움(몬스터 체력 ×1.2 + 웨이브당 몬스터 수 ×1.25) 중에서 고를 수 있어요. 난이도별 내 최고 웨이브 기록이 이 기기에 저장돼요.
           </p>
         </section>
 

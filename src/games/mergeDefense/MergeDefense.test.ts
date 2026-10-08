@@ -225,6 +225,19 @@ describe("merge defense engine", () => {
     expect(hpAt("easy")).toBeLessThan(hpAt("normal"));
     expect(hpAt("hard")).toBeGreaterThan(hpAt("normal"));
     expect(startGame(2, 1, [], "survival", null, "nightmare" as never).difficulty).toBe("normal");
+    // Hard also sends a bigger crowd per wave.
+    const spawned = (d: "normal" | "hard") => {
+      let s = startGame(2, 62, [], "survival", null, d);
+      let n = 0;
+      while (s.wave < 2) {
+        const before = s.nextMobId;
+        s = stepGame(s);
+        if (s.wave === 1) n += (s.nextMobId - before) / 2;
+        for (const b of s.boards) b.mobs = [];
+      }
+      return n;
+    };
+    expect(spawned("hard")).toBeGreaterThan(spawned("normal"));
   });
 
   it("a dying golem announces its split", () => {

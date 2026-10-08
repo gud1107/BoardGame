@@ -36,6 +36,7 @@ import {
   sanitizeDifficulty,
   DIFFICULTIES,
   DIFFICULTY_HP,
+  DIFFICULTY_COUNT,
   type Difficulty,
   loadLimit,
   LIMIT_CHOICES,
@@ -49,6 +50,7 @@ import {
 } from "./engine";
 import MergeDefenseBoard from "./MergeDefenseBoard";
 import { playVictory } from "./mergeDefenseAudio";
+import { recordBestWave, useBestWaves, type BestWaves } from "./bestWave";
 
 /**
  * Online-room entry point for 랜덤 합성 디펜스.
@@ -125,6 +127,9 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const [mode, setMode] = useState<GameMode>("survival");
   const [limitChoice, setLimitChoice] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
+  const best = useBestWaves();
+  /** This match's best-wave result for me: difficulty, wave reached, previous record. */
+  const [myRecord, setMyRecord] = useState<{ difficulty: Difficulty; wave: number; prev: number } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -440,8 +445,12 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
   /** Waiting room: the host retunes the room; presence carries it to everyone. */
-  function updateRoomSettings(patch: { limit?: number | null; difficulty?: Difficulty }) {
+  function updateRoomSettings(patch: { mode?: GameMode; limit?: number | null; difficulty?: Difficulty }) {
     if (!isHost) return;
+    if (patch.mode !== undefined) {
+      modeRef.current = patch.mode;
+      setMode(patch.mode);
+    }
     if (patch.limit !== undefined) {
       limitRef.current = patch.limit;
       setLimitChoice(patch.limit);
@@ -599,6 +608,13 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       finishedAt: new Date().toISOString(),
     });
     if (rankings.find((r) => r.seat === mySeat)?.rank === 1) playVictory();
+    const mine = rankings.find((r) => r.seat === mySeat);
+    if (mine && mine.wave > 0) {
+      const d = sanitizeDifficulty(sim.difficulty);
+      setMyRecord({ difficulty: d, wave: mine.wave, prev: recordBestWave(d, mine.wave) });
+    } else {
+      setMyRecord(null);
+    }
     setFinalRankings(rankings);
     setPhase("post-game");
   }
@@ -780,35 +796,10 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           </label>
         )}
         {intent === "create" && (
-          <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
-            모드
-            <div className="grid grid-cols-2 gap-2">
-              {(
-                [
-                  ["survival", "🛡️ 생존전", "같은 웨이브를 막으며 버티기"],
-                  ["versus", "⚔️ 유닛 대결", "내 유닛을 상대 길로 보내 공격"],
-                ] as const
-              ).map(([value, label, desc]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setMode(value)}
-                  aria-pressed={mode === value}
-                  className={`rounded-xl border px-3 py-2 text-left transition ${
-                    mode === value
-                      ? "border-orange-400 bg-orange-500/15 text-white light:bg-orange-50 light:text-slate-900"
-                      : "border-white/10 text-white/60 hover:border-white/30 light:border-slate-200 light:text-slate-500"
-                  }`}
-                >
-                  <span className="block text-sm font-bold">{label}</span>
-                  <span className="block text-[11px] opacity-75">{desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {intent === "create" && (
           <RoomSettings
+            mode={mode}
+            onMode={setMode}
+            best={best}
             difficulty={difficulty}
             limit={limitChoice}
             playerCount={targetPlayerCount}
@@ -888,6 +879,9 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
                 <p className="mb-1 text-[11px] text-white/40 light:text-slate-400">⚙️ 방장 설정 — 시작 전까지 바꿀 수 있어요</p>
                 <RoomSettings
                   compact
+                  mode={mode}
+                  onMode={(m) => updateRoomSettings({ mode: m })}
+                  best={best}
                   difficulty={difficulty}
                   limit={limitChoice}
                   playerCount={knownTargetPlayerCount}
@@ -896,7 +890,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
                 />
               </div>
             ) : (
-              <p className="text-[11px] text-white/40 light:text-slate-400">방장이 시작 전까지 난이도·탈락 기준을 바꿀 수 있어요.</p>
+              <p className="text-[11px] text-white/40 light:text-slate-400">방장이 시작 전까지 모드·난이도·탈락 기준을 바꿀 수 있어요.</p>
             )}
             <p className="text-xs text-white/40 light:text-slate-400">{knownTargetPlayerCount}명이 모이면 자동으로 시작해요.</p>
             {isHost && occupants.length < knownTargetPlayerCount && (
@@ -945,6 +939,26 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         <span className="text-5xl">{iWon ? "🏆" : "🛡️"}</span>
         <h2 className="text-2xl font-bold text-amber-100">{winner ? `${names[winner.seat]}님 승리!` : "무승부!"}</h2>
         <p className="text-xs text-white/50">마지막까지 방어선을 지킨 사람이 승리합니다.</p>
+        {myRecord && (
+          <div
+            className={`rounded-xl border px-4 py-2 text-sm ${
+              myRecord.wave > myRecord.prev ? "animate-[md-record_0.6s_ease-out] border-amber-300/70 bg-amber-400/15 text-amber-100" : "border-white/10 bg-white/5 text-white/70"
+            }`}
+          >
+            <style>{`@keyframes md-record{0%{transform:scale(.7);opacity:0}70%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}`}</style>
+            {DIFFICULTY_LABEL[myRecord.difficulty].emoji} {DIFFICULTY_LABEL[myRecord.difficulty].name} ·{" "}
+            {myRecord.wave > myRecord.prev ? (
+              <b>
+                🏅 최고 기록 갱신! WAVE {myRecord.wave}
+                {myRecord.prev > 0 && <span className="ml-1 text-xs font-normal opacity-75">(이전 {myRecord.prev})</span>}
+              </b>
+            ) : (
+              <>
+                이번 WAVE {myRecord.wave} · 최고 기록 WAVE {myRecord.prev}
+              </>
+            )}
+          </div>
+        )}
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[320px] border-collapse text-xs">
             <thead>
@@ -970,6 +984,22 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
             </tbody>
           </table>
         </div>
+        {isHost && (
+          <div className="w-full max-w-sm text-left">
+            <p className="mb-1 text-[11px] text-white/40">⚙️ 다음 판 설정</p>
+            <RoomSettings
+              compact
+              mode={mode}
+              onMode={(m) => updateRoomSettings({ mode: m })}
+              best={best}
+              difficulty={difficulty}
+              limit={limitChoice}
+              playerCount={playerCount}
+              onDifficulty={(d) => updateRoomSettings({ difficulty: d })}
+              onLimit={(l) => updateRoomSettings({ limit: l })}
+            />
+          </div>
+        )}
         <div className="flex gap-2">
           <button onClick={handleLeave} className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30">
             나가기
@@ -990,13 +1020,16 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
 }
 
 const DIFFICULTY_LABEL: Record<Difficulty, { emoji: string; name: string; desc: string }> = {
-  easy: { emoji: "🌱", name: "쉬움", desc: "몬스터 체력" },
+  easy: { emoji: "🌱", name: "쉬움", desc: `체력 ×${DIFFICULTY_HP.easy}` },
   normal: { emoji: "⚖️", name: "보통", desc: "기본" },
-  hard: { emoji: "🔥", name: "어려움", desc: "몬스터 체력" },
+  hard: { emoji: "🔥", name: "어려움", desc: `체력 ×${DIFFICULTY_HP.hard} · 수 ×${DIFFICULTY_COUNT.hard}` },
 };
 
 /** Difficulty + elimination-limit pickers, shared by the create form and the host's waiting room. */
 function RoomSettings({
+  mode,
+  onMode,
+  best,
   difficulty,
   limit,
   playerCount,
@@ -1004,6 +1037,9 @@ function RoomSettings({
   onLimit,
   compact = false,
 }: {
+  mode: GameMode;
+  onMode: (m: GameMode) => void;
+  best: BestWaves;
   difficulty: Difficulty;
   limit: number | null;
   playerCount: number;
@@ -1022,6 +1058,22 @@ function RoomSettings({
   return (
     <div className={`flex flex-col ${compact ? "gap-2" : "gap-4"} text-sm text-white/70 light:text-slate-600`}>
       <div className="flex flex-col gap-1.5">
+        모드
+        <div className="grid grid-cols-2 gap-1.5">
+          {(
+            [
+              ["survival", "🛡️ 생존전", "같은 웨이브를 막으며 버티기"],
+              ["versus", "⚔️ 유닛 대결", "유닛·몬스터를 상대 길로 보내 공격"],
+            ] as const
+          ).map(([value, label, desc]) => (
+            <button key={value} type="button" onClick={() => onMode(value)} aria-pressed={mode === value} className={`${pill(mode === value, "orange")} px-2 text-left`}>
+              <span className="block text-sm font-bold">{label}</span>
+              {!compact && <span className="block text-[11px] opacity-75">{desc}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5">
         🌊 웨이브 난이도
         <div className="grid grid-cols-3 gap-1.5">
           {DIFFICULTIES.map((d) => (
@@ -1029,8 +1081,9 @@ function RoomSettings({
               <span className="block text-sm font-bold">
                 {DIFFICULTY_LABEL[d].emoji} {DIFFICULTY_LABEL[d].name}
               </span>
-              <span className="block text-[10px] opacity-75">
-                {d === "normal" ? DIFFICULTY_LABEL[d].desc : `${DIFFICULTY_LABEL[d].desc} ×${DIFFICULTY_HP[d]}`}
+              <span className="block text-[10px] opacity-75">{DIFFICULTY_LABEL[d].desc}</span>
+              <span className={`block text-[10px] font-semibold ${best[d] ? "text-amber-300 light:text-amber-600" : "opacity-40"}`}>
+                🏅 {best[d] ? `최고 W${best[d]}` : "기록 없음"}
               </span>
             </button>
           ))}

@@ -55,7 +55,9 @@ export function loadLimit(playerCount: number): number {
 /** Host-picked wave difficulty — scales every monster's HP (bot-sim tuned). */
 export type Difficulty = "easy" | "normal" | "hard";
 export const DIFFICULTIES: Difficulty[] = ["easy", "normal", "hard"];
-export const DIFFICULTY_HP: Record<Difficulty, number> = { easy: 0.7, normal: 1, hard: 1.3 };
+export const DIFFICULTY_HP: Record<Difficulty, number> = { easy: 0.7, normal: 1, hard: 1.2 };
+/** Monsters per wave multiplier (spawned closer together so the wave still fits its 20s). */
+export const DIFFICULTY_COUNT: Record<Difficulty, number> = { easy: 1, normal: 1, hard: 1.25 };
 export function difficultyOf(state: Pick<MergeDefenseState, "difficulty">): Difficulty {
   return state.difficulty && DIFFICULTIES.includes(state.difficulty) ? state.difficulty : "normal";
 }
@@ -664,9 +666,12 @@ function spawnWaves(s: MergeDefenseState) {
       if (boss) board.mobs.push(makeMob(s, "boss", wave));
     }
   }
-  if (inWave % SPAWN_GAP !== 0) return;
-  const index = inWave / SPAWN_GAP;
-  const count = isBossWave(wave) ? Math.floor(waveCount(wave) / 2) : waveCount(wave);
+  const crowd = DIFFICULTY_COUNT[difficultyOf(s)];
+  const gap = Math.max(6, Math.round(SPAWN_GAP / crowd));
+  if (inWave % gap !== 0) return;
+  const index = inWave / gap;
+  const base = Math.round(waveCount(wave) * crowd);
+  const count = isBossWave(wave) ? Math.floor(base / 2) : base;
   if (index >= count) return;
   const kind = spawnKindFor(wave, index);
   for (const board of s.boards) {
