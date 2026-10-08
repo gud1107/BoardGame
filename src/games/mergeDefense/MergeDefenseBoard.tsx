@@ -10,7 +10,7 @@ import {
   GRADE_NAMES,
   GRID_X,
   GRID_Y,
-  loadLimit,
+  eliminationLimit,
   MAX_GRADE,
   MAX_UPGRADE,
   PREP_TICKS,
@@ -342,12 +342,19 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: `${UNITS[ev.kind].emoji} 강화 Lv.${ev.level}`, color: UNITS[ev.kind].color, t0: now, dur: 900, size: 18 });
           if (mine && audible) audio.playUpgrade();
           break;
+        case "split": {
+          const p = pathPoint(ev.trav);
+          fx.push({ type: "split", x: p.x, y: p.y, t0: now, dur: 750, seed: ev.id });
+          if (mine && audible) audio.playGolemSplit();
+          break;
+        }
         case "call": {
           // Find the minion that just appeared behind the caller for the tether end.
           const p = pathPoint(ev.trav);
           const s2 = pathPoint(Math.max(0, ev.trav - 6));
           fx.push({ type: "call", x: p.x, y: p.y, sx: s2.x, sy: s2.y + 4, color: ev.boss ? "#a855f7" : "#dc2626", t0: now, dur: 800, seed: ev.id });
-          fx.push({ type: "text", x: p.x, y: p.y - (ev.boss ? 36 : 30), text: "졸개 소환!", color: ev.boss ? "#e9d5ff" : "#fecaca", t0: now, dur: 800, size: 11 });
+          // Top road: put the label under the caller so it stays on the board.
+          fx.push({ type: "text", x: p.x, y: p.y < 45 ? p.y + 34 : p.y - (ev.boss ? 36 : 30), text: "졸개 소환!", color: ev.boss ? "#e9d5ff" : "#fecaca", t0: now, dur: 800, size: 11 });
           if (mine && audible) audio.playMinionCall(ev.boss);
           break;
         }
@@ -413,7 +420,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             aim: aimRef.current,
             coverage,
             bornAt: bornAtRef.current,
-            limit: loadLimit(s.playerCount),
+            limit: eliminationLimit(s),
           });
           drawFx(ctx, fxRef.current, now);
         }
@@ -431,7 +438,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, w, h);
         ctx.setTransform(k, 0, 0, k, 0, 0);
-        drawBoard(ctx, s.boards[seat], { alpha: s.phase === "playing" ? alpha : 0, now, mini: true, limit: loadLimit(s.playerCount) });
+        drawBoard(ctx, s.boards[seat], { alpha: s.phase === "playing" ? alpha : 0, now, mini: true, limit: eliminationLimit(s) });
       });
       raf = requestAnimationFrame(loop);
     };
@@ -507,7 +514,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   }
 
   const guideShown = guideVisible(guide, state.wave);
-  const limit = loadLimit(state.playerCount);
+  const limit = eliminationLimit(state);
   const load = fieldLoad(me);
   const loadPct = Math.min(1, load / limit);
   const cost = summonCost(me);
@@ -689,7 +696,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           </span>
           <span
             className={`rounded-full border px-2 py-0.5 font-black ${loadPct > 0.75 ? "animate-pulse border-rose-300 bg-rose-600 text-white" : "border-rose-400/60 bg-rose-500/20 text-rose-200 light:border-rose-300 light:bg-rose-50 light:text-rose-600"}`}
-            title={`종류와 상관없이 몬스터 1마리 = 1 · 탈락 기준: 2인 ${loadLimit(2)} · 3인 ${loadLimit(3)} · 4인 ${loadLimit(4)}마리`}
+            title={`종류와 상관없이 몬스터 1마리 = 1 · ${state.limit ? "방장이 정한 기준" : "인원별 기본 기준"}`}
           >
             💀 {limit}마리 되면 탈락
           </span>

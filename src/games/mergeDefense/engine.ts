@@ -52,6 +52,18 @@ export const LOAD_LIMITS: Record<number, number> = { 2: 55, 3: 50, 4: 45 };
 export function loadLimit(playerCount: number): number {
   return LOAD_LIMITS[playerCount] ?? LOAD_LIMITS[2];
 }
+/** Host-picked elimination bars offered when creating a room (null = by player count). */
+export const LIMIT_CHOICES = [35, 45, 55, 70] as const;
+export const LIMIT_MIN = 20;
+export const LIMIT_MAX = 100;
+/** The bar actually in force for this match (room setting, else the per-seat default). */
+export function eliminationLimit(state: Pick<MergeDefenseState, "limit" | "playerCount">): number {
+  return state.limit ?? loadLimit(state.playerCount);
+}
+/** Validates a host-sent limit; anything odd falls back to the per-seat default. */
+export function sanitizeLimit(raw: unknown): number | null {
+  return Number.isInteger(raw) && (raw as number) >= LIMIT_MIN && (raw as number) <= LIMIT_MAX ? (raw as number) : null;
+}
 /** Bosses / warlords call a minion onto the road this often; golems split in two on death. */
 const BOSS_MINION_EVERY = 4 * 20;
 const WARLORD_MINION_EVERY = 5 * 20;
@@ -190,6 +202,8 @@ export type GameEvent =
   | { id: number; tick: number; seat: SeatIndex; type: "hire"; to: SeatIndex; mob: HireKind }
   | { id: number; tick: number; seat: SeatIndex; type: "move"; a: number; b: number }
   | { id: number; tick: number; seat: SeatIndex; type: "boss-kill" }
+  /** A golem at road distance `trav` just broke into pebbles. */
+  | { id: number; tick: number; seat: SeatIndex; type: "split"; trav: number }
   /** A boss / warlord at road distance `trav` just called a minion. */
   | { id: number; tick: number; seat: SeatIndex; type: "call"; trav: number; boss: boolean }
   | { id: number; tick: number; seat: SeatIndex; type: "out" }
@@ -208,6 +222,8 @@ export interface MergeDefenseState {
   phase: "playing" | "gameOver";
   mode: GameMode;
   playerCount: number;
+  /** Room-chosen elimination head count; null/absent = `loadLimit(playerCount)`. */
+  limit?: number | null;
   tick: number;
   /** 0 during the prep countdown, then 1, 2, … */
   wave: number;
@@ -283,8 +299,17 @@ export function upgradeCost(level: number): number {
   return 40 + level * 40;
 }
 
+/**
+ * Wave HP: +17% per wave up to `knee`, then a gentler +12% so the late game
+ * stops spiking (bot sim: median game ~9 → ~10.5 min, wider comeback window).
+ * Exported as a mutable object so balance sims can sweep it.
+ */
+export const WAVE_CURVE = { base: 60, growth: 1.17, knee: 15, late: 1.12 };
 export function waveHp(wave: number): number {
-  return Math.round(60 * Math.pow(1.17, wave - 1));
+  const c = WAVE_CURVE;
+  const early = Math.min(wave, c.knee) - 1;
+  const late = Math.max(0, wave - c.knee);
+  return Math.round(c.base * Math.pow(c.growth, early) * Math.pow(c.late, late));
 }
 
 export function killGold(kind: MobKind, wave: number): number {
@@ -370,12 +395,19 @@ function emptyBoard(bot: boolean): Board {
   };
 }
 
-export function startGame(playerCount: number, seed: number, botSeats: readonly number[] = [], mode: GameMode = "survival"): MergeDefenseState {
+export function startGame(
+  playerCount: number,
+  seed: number,
+  botSeats: readonly number[] = [],
+  mode: GameMode = "survival",
+  limit: number | null = null,
+): MergeDefenseState {
   const n = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.floor(playerCount)));
   return {
     phase: "playing",
     mode: GAME_MODES.includes(mode) ? mode : "survival",
     playerCount: n,
+    limit: sanitizeLimit(limit),
     tick: 0,
     wave: 0,
     boards: Array.from({ length: n }, (_, seat) => emptyBoard(botSeats.includes(seat))),
@@ -772,6 +804,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
       board.kills += 1;
       board.gold += killGold(m.kind, s.wave);
       if (m.kind === "golem") {
+        pushEvent(s, { seat, type: "split", trav: Math.round(m.trav) });
         for (let i = 0; i < GOLEM_SPLIT; i++) {
           const pebble = makeMob(s, "normal", Math.max(1, s.wave), m.from);
           pebble.trav = Math.max(0, m.trav - i * 8);
@@ -801,7 +834,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
   // Eliminations — everyone over the limit this tick goes out together.
   const out: SeatIndex[] = [];
   s.boards.forEach((board, seat) => {
-    if (board.alive && fieldLoad(board) >= loadLimit(s.playerCount)) out.push(seat);
+    if (board.alive && fieldLoad(board) >= eliminationLimit(s)) out.push(seat);
   });
   const aliveBefore = s.boards.filter((b) => b.alive).length;
   if (out.length > 0 && out.length === aliveBefore) {

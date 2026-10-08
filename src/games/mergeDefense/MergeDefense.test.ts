@@ -11,6 +11,7 @@ import {
   slotCenter,
   unitRange,
   loadLimit,
+  eliminationLimit,
   MAX_GRADE,
   pathPoint,
   PATH_LEN,
@@ -203,6 +204,33 @@ describe("merge defense engine", () => {
       calls += t.events.filter((e) => e.id >= before && e.type === "call").length;
     }
     expect(calls).toBeGreaterThanOrEqual(2);
+  });
+
+  it("a room-chosen limit overrides the per-seat default; junk falls back", () => {
+    expect(eliminationLimit(startGame(2, 1, [], "survival", 35))).toBe(35);
+    expect(eliminationLimit(startGame(4, 1))).toBe(loadLimit(4));
+    expect(eliminationLimit(startGame(2, 1, [], "survival", 7))).toBe(loadLimit(2));
+    let s = startGame(2, 51, [], "survival", 35);
+    while (s.boards[0].mobs.length === 0) s = stepGame(s);
+    s.boards[0].mobs = Array.from({ length: 35 }, (_, i) => ({ ...s.boards[0].mobs[0], id: 9000 + i }));
+    expect(stepGame(s).boards[0].alive).toBe(false);
+  });
+
+  it("a dying golem announces its split", () => {
+    let s = startGame(2, 52, [], "versus");
+    while (s.wave < 3) {
+      for (const b of s.boards) b.mobs = [];
+      s = stepGame(s);
+    }
+    s.boards[0].gold = 1000;
+    s.boards[1].mobs = [];
+    s = applyAction(s, 0, { type: "hire", mob: "golem" });
+    s.boards[1].mobs[0].hp = 0.01;
+    s.boards[1].mobs[0].poisonT = 5;
+    s.boards[1].mobs[0].poisonDps = 1000;
+    const before = s.nextEventId;
+    s = stepGame(s);
+    expect(s.events.some((e) => e.id >= before && e.type === "split" && e.seat === 1)).toBe(true);
   });
 
   it("refuses to merge max-grade units", () => {

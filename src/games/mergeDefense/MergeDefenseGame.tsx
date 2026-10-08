@@ -32,6 +32,9 @@ import {
   MIN_PLAYERS,
   sanitizeAction,
   startGame,
+  sanitizeLimit,
+  loadLimit,
+  LIMIT_CHOICES,
   stepGame,
   TICK_MS,
   type Action,
@@ -67,6 +70,8 @@ type Occupant = {
   isHost?: boolean;
   targetPlayerCount?: number;
   mode?: GameMode;
+  /** Host-chosen elimination head count (null = by player count). */
+  limit?: number | null;
   botSeats?: number[];
 };
 type Phase = "choose" | "enter-name" | "connecting" | "waiting" | "playing" | "post-game" | "room-full" | "supabase-missing" | "channel-error";
@@ -113,6 +118,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [targetPlayerCount, setTargetPlayerCount] = useState(2);
   const [mode, setMode] = useState<GameMode>("survival");
+  const [limitChoice, setLimitChoice] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -133,6 +139,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const startSentRef = useRef(false);
   const playerCountRef = useRef(targetPlayerCount);
   const modeRef = useRef<GameMode>(mode);
+  const limitRef = useRef<number | null>(limitChoice);
   const botSeatsRef = useRef<number[]>([]);
   const isHost = intent === "create";
 
@@ -184,6 +191,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     }
     playerCountRef.current = targetPlayerCount;
     modeRef.current = mode;
+    limitRef.current = limitChoice;
     setMyName(name);
     setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
     setRoomCode(code);
@@ -191,7 +199,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   }
 
   function hostPresence(): Partial<Occupant> {
-    return isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, botSeats: botSeatsRef.current, mode: modeRef.current } : {};
+    return isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, botSeats: botSeatsRef.current, mode: modeRef.current, limit: limitRef.current } : {};
   }
 
   useEffect(() => {
@@ -219,7 +227,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
       const startMode: GameMode = payload?.mode === "versus" ? "versus" : "survival";
       modeRef.current = startMode;
-      const state = startGame(playerCount, seed, botSeats, startMode);
+      const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit));
       simRef.current = state;
       setGameState(state);
       setFinalRankings(null);
@@ -434,7 +442,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     if (mySeatRef.current !== null) {
       channelRef.current?.track({ deviceId, seat: mySeatRef.current, name: myName, playerId: myPlayerId, ...hostPresence() } satisfies Occupant);
     }
-    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed: randomSeed(), playerCount: target, botSeats, mode: modeRef.current } });
+    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed: randomSeed(), playerCount: target, botSeats, mode: modeRef.current, limit: limitRef.current } });
   }
 
   useEffect(() => {
@@ -776,6 +784,34 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           </div>
         )}
         {intent === "create" && (
+          <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
+            💀 탈락 기준 (내 길의 몬스터 수)
+            <div className="grid grid-cols-5 gap-1.5">
+              {([null, ...LIMIT_CHOICES] as (number | null)[]).map((value) => (
+                <button
+                  key={value ?? "auto"}
+                  type="button"
+                  onClick={() => setLimitChoice(value)}
+                  aria-pressed={limitChoice === value}
+                  className={`rounded-xl border px-1 py-1.5 text-center transition ${
+                    limitChoice === value
+                      ? "border-rose-400 bg-rose-500/15 text-white light:bg-rose-50 light:text-slate-900"
+                      : "border-white/10 text-white/60 hover:border-white/30 light:border-slate-200 light:text-slate-500"
+                  }`}
+                >
+                  <span className="block text-sm font-bold">{value === null ? "자동" : value}</span>
+                  <span className="block text-[10px] opacity-75">
+                    {value === null ? `${loadLimit(targetPlayerCount)}마리` : value <= 35 ? "짧게" : value <= 45 ? "빠듯" : value <= 55 ? "보통" : "여유"}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] text-white/40 light:text-slate-400">
+              자동 = 인원별 기본값(2인 {loadLimit(2)} · 3인 {loadLimit(3)} · 4인 {loadLimit(4)}마리). 낮을수록 빨리 끝나요.
+            </span>
+          </div>
+        )}
+        {intent === "create" && (
           <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
             {practice ? `AI 포함 인원 (${MIN_PLAYERS}~${MAX_PLAYERS}명)` : `인원 수 (${MIN_PLAYERS}~${MAX_PLAYERS}명)`}
             <div className="flex items-center gap-3">
@@ -838,7 +874,9 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
                 );
               })}
             </div>
-            <p className="text-xs font-semibold text-orange-200 light:text-orange-700">{host?.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"}</p>
+            <p className="text-xs font-semibold text-orange-200 light:text-orange-700">
+              {host?.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"} · 💀 {host?.limit ? `${host.limit}마리` : `${loadLimit(knownTargetPlayerCount)}마리(인원별)`}에서 탈락
+            </p>
             <p className="text-xs text-white/40 light:text-slate-400">{knownTargetPlayerCount}명이 모이면 자동으로 시작해요.</p>
             {isHost && occupants.length < knownTargetPlayerCount && (
               <button onClick={sendGameStart} className="rounded-full bg-orange-600 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-500">

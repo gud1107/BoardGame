@@ -164,6 +164,19 @@ function noise(ctx: AudioContext, buf: AudioBuffer, out: GainNode, type: BiquadF
   src.stop(t + dur);
 }
 
+/** Golem crumbling into pebbles: a quiet gravelly crunch. */
+export function playGolemSplit() {
+  const settings = useAudioSettingsStore.getState();
+  if (isSfxEffectivelyMuted(settings) || settings.sfxVolume <= 0) return;
+  const a = hitAudio();
+  if (!a) return;
+  const { ctx, bus, noise: buf } = a;
+  bus.gain.value = HIT_LEVEL * settings.sfxVolume * Math.max(0.6, hitVolume);
+  noise(ctx, buf, env(ctx, bus, 0.9, 0.004, 0.22), "bandpass", 700, 1.2, 0.26);
+  noise(ctx, buf, env(ctx, bus, 0.5, 0.002, 0.08), "highpass", 2200, 0.8, 0.1);
+  tone(ctx, env(ctx, bus, 0.6, 0.004, 0.18), "triangle", 110, 55, 0.2);
+}
+
 /** Boss / warlord calling a minion: a short low growl, kept quiet (it repeats every few seconds). */
 export function playMinionCall(boss: boolean) {
   const settings = useAudioSettingsStore.getState();

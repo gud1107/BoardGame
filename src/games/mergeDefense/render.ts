@@ -1351,6 +1351,8 @@ export type Fx =
   | { type: "text"; x: number; y: number; text: string; color: string; t0: number; dur: number; size: number }
   /** Merge/gamble evolution: light pillar + spinning rays + rising motes, scaled by grade. */
   | { type: "evolve"; x: number; y: number; color: string; grade: number; t0: number; dur: number }
+  /** A golem crumbling: stone shards flung out, a dust ring and two pebbles dropping. */
+  | { type: "split"; x: number; y: number; t0: number; dur: number; seed: number }
   /** A boss / warlord calling a minion: rune circle, dark updraft, tether to the spawn. */
   | { type: "call"; x: number; y: number; sx: number; sy: number; color: string; t0: number; dur: number; seed: number }
   /** A bought/sent monster bursting out of the portal onto this road. */
@@ -1384,6 +1386,7 @@ export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
     } else if (f.type === "evolve") drawEvolve(ctx, f, k);
     else if (f.type === "portal") drawPortalBurst(ctx, f, k);
     else if (f.type === "call") drawMinionCall(ctx, f, k);
+    else if (f.type === "split") drawGolemSplit(ctx, f, k);
     else if (f.type === "absorb") {
       const dx = f.to.x - f.from.x;
       const dy = f.to.y - f.from.y;
@@ -1415,6 +1418,64 @@ export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
     }
     ctx.restore();
   }
+}
+
+function drawGolemSplit(ctx: Ctx, f: Extract<Fx, { type: "split" }>, k: number) {
+  const fade = 1 - k;
+  // Dust ring hugging the ground.
+  ctx.save();
+  ctx.translate(f.x, f.y + 8);
+  ctx.scale(1, 0.4);
+  ctx.strokeStyle = `rgba(214,211,209,${0.75 * fade})`;
+  ctx.lineWidth = 6 * fade + 1;
+  ctx.beginPath();
+  ctx.arc(0, 0, 8 + k * 34, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+  // Flash crack at the core.
+  if (k < 0.25) {
+    ctx.strokeStyle = `rgba(103,232,249,${1 - k / 0.25})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(f.x - 2, f.y - 16);
+    ctx.lineTo(f.x + 3, f.y - 6);
+    ctx.lineTo(f.x - 3, f.y + 2);
+    ctx.lineTo(f.x + 2, f.y + 10);
+    ctx.stroke();
+  }
+  // Stone shards on little arcs (gravity pulls them back down).
+  for (let i = 0; i < 9; i++) {
+    const a = f.seed * 0.7 + (i / 9) * Math.PI * 2;
+    const v = 22 + (i % 3) * 10;
+    const x = f.x + Math.cos(a) * v * k;
+    const y = f.y - 6 + Math.sin(a) * v * 0.5 * k - (1 - (2 * k - 1) ** 2) * 14 + k * k * 10;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(k * 6 + i);
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = i % 3 === 0 ? "#a8a29e" : i % 3 === 1 ? "#78716c" : "#d6d3d1";
+    const r = 3.6 - (i % 3) * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(-r, -r * 0.6);
+    ctx.lineTo(r * 0.8, -r);
+    ctx.lineTo(r, r * 0.7);
+    ctx.lineTo(-r * 0.7, r);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  // Label.
+  ctx.globalAlpha = k < 0.7 ? 1 : (1 - k) / 0.3;
+  ctx.font = "900 12px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(0,0,0,0.7)";
+  // On the top road the label would leave the board — drop it below instead.
+  const ly = f.y < 40 ? f.y + 30 - k * 6 : f.y - 24 - k * 10;
+  ctx.strokeText("분열! ×2", f.x, ly);
+  ctx.fillStyle = "#e7e5e4";
+  ctx.fillText("분열! ×2", f.x, ly);
 }
 
 function drawMinionCall(ctx: Ctx, f: Extract<Fx, { type: "call" }>, k: number) {
