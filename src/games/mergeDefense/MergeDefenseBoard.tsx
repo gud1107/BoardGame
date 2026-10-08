@@ -64,6 +64,22 @@ interface Banner {
 const MAX_FX = 320;
 /** 타격감: damage numbers for one mob are grouped over this window. */
 const DMG_NUMBER_MS = 280;
+/** Per-viewer 타격감 toggles (remembered in localStorage). */
+interface FxPrefs {
+  shake: boolean;
+  numbers: boolean;
+  hitstop: boolean;
+}
+const FX_PREFS_KEY = "merge-defense:fx";
+const FX_DEFAULT: FxPrefs = { shake: true, numbers: true, hitstop: true };
+function loadFxPrefs(): FxPrefs {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(FX_PREFS_KEY) ?? "null");
+    return v && typeof v === "object" ? { ...FX_DEFAULT, ...v } : FX_DEFAULT;
+  } catch {
+    return FX_DEFAULT;
+  }
+}
 const fmtDmg = (v: number) => (v >= 10000 ? `${(v / 1000).toFixed(0)}k` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`);
 /** Gold gains this close together stack into one "+N" pop. */
 const GOLD_POP_MERGE_MS = 700;
@@ -152,6 +168,19 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const dmgRef = useRef(new Map<number, { acc: number; shown: number }>());
   const firedRef = useRef<Record<number, number>>({});
   const shakeRef = useRef({ t0: 0, dur: 0, amp: 0 });
+  /** Hit-stop: while performance.now() < until, the main board renders this frozen frame. */
+  const hitStopRef = useRef<{ until: number; at: number; alpha: number; state: MergeDefenseState | null }>({ until: 0, at: 0, alpha: 0, state: null });
+  const [fxPrefs, setFxPrefs] = useState<FxPrefs>(() => (typeof window === "undefined" ? FX_DEFAULT : loadFxPrefs()));
+  const fxPrefsRef = useRef(fxPrefs);
+  const [fxMenuOpen, setFxMenuOpen] = useState(false);
+  useEffect(() => {
+    fxPrefsRef.current = fxPrefs;
+    try {
+      window.localStorage.setItem(FX_PREFS_KEY, JSON.stringify(fxPrefs));
+    } catch {
+      /* not remembered */
+    }
+  }, [fxPrefs]);
   const [guide, setGuide] = useState<GuideMode>(() => {
     try {
       const v = typeof window === "undefined" ? null : window.localStorage.getItem(GUIDE_KEY);
@@ -235,14 +264,17 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     }
 
     const shake = (amp: number, dur: number) => {
+      if (!fxPrefsRef.current.shake) return;
       const cur = shakeRef.current;
       const left = cur.amp * Math.max(0, 1 - (now - cur.t0) / (cur.dur || 1));
       if (amp >= left) shakeRef.current = { t0: now, dur, amp };
     };
 
     if (state.tick !== prev.tick && board) {
+      const crits = new Set(board.shots.filter((sh) => sh.crit && sh.target !== undefined).map((sh) => sh.target!));
       // Hits: every mob that lost HP since the last state flashes; damage is
-      // pooled per mob and shown as a number at most every DMG_NUMBER_MS.
+      // pooled per mob and shown as a number at most every DMG_NUMBER_MS
+      // (a critical hit flushes at once, in gold with a "!").
       if (prevBoard) {
         const before = new Map(prevBoard.mobs.map((m) => [m.id, m.hp]));
         for (const m of board.mobs) {
@@ -252,10 +284,17 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           hitsRef.current.set(m.id, now);
           const d = dmgRef.current.get(m.id) ?? { acc: 0, shown: 0 };
           d.acc += lost;
-          if (now - d.shown >= DMG_NUMBER_MS && d.acc >= 1) {
+          const crit = crits.has(m.id);
+          if ((crit || now - d.shown >= DMG_NUMBER_MS) && d.acc >= 1) {
             const p = pathPoint(m.trav);
             const big = d.acc >= m.maxHp * 0.2;
-            fx.push({ type: "text", x: p.x + ((m.id * 7) % 11) - 5, y: p.y - 16, text: fmtDmg(d.acc), color: big ? "#fb923c" : "#f8fafc", t0: now, dur: big ? 700 : 520, size: big ? 13 : 9 });
+            if (fxPrefsRef.current.numbers) {
+              fx.push(
+                crit
+                  ? { type: "text", x: p.x + ((m.id * 7) % 11) - 5, y: p.y - 20, text: `${fmtDmg(d.acc)}!`, color: "#facc15", t0: now, dur: 800, size: big ? 17 : 14 }
+                  : { type: "text", x: p.x + ((m.id * 7) % 11) - 5, y: p.y - 16, text: fmtDmg(d.acc), color: big ? "#fb923c" : "#f8fafc", t0: now, dur: big ? 700 : 520, size: big ? 13 : 9 },
+              );
+            }
             d.acc = 0;
             d.shown = now;
           }
@@ -274,11 +313,14 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         const from = { x: c.x, y: c.y + 6 + (shot.kind === "archer" ? -19 : 0) };
         aimRef.current[shot.slot] = Math.atan2(shot.pts[1] - from.y, shot.pts[0] - from.x);
         fx.push({ type: "shot", kind: shot.kind, grade: shot.grade, from, pts: shot.pts, t0: now, dur: shot.kind === "mage" ? 380 : shot.kind === "archer" ? 260 : 220 });
-        if (audible) audio.playTowerHit(shot.kind, shot.grade);
+        if (audible) audio.playTowerHit(shot.kind, shot.grade, false, !!shot.crit && view === mySeat);
         firedRef.current[shot.slot] = now;
         if (fx.length < MAX_FX - 40) {
-          fx.push({ type: "impact", x: shot.pts[0], y: shot.pts[1] - 4, color: UNITS[shot.kind].color, size: 8 + shot.grade * 2, t0: now + (shot.kind === "archer" ? 140 : 60), dur: 180, seed: shot.slot + state.tick });
+          const t0 = now + (shot.kind === "archer" ? 140 : 60);
+          fx.push({ type: "impact", x: shot.pts[0], y: shot.pts[1] - 4, color: shot.crit ? "#facc15" : UNITS[shot.kind].color, size: (8 + shot.grade * 2) * (shot.crit ? 1.8 : 1), t0, dur: shot.crit ? 260 : 180, seed: shot.slot + state.tick });
+          if (shot.crit) fx.push({ type: "ring", x: shot.pts[0], y: shot.pts[1] - 4, color: "#fde047", r0: 4, r1: 22, t0, dur: 240 });
         }
+        if (shot.crit && shot.grade >= 3) shake(1.2, 90);
       }
       // Other living boards: a faint, muffled patter so you can hear them fight.
       if (audible) {
@@ -441,6 +483,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         }
         case "boss-kill":
           shake(ev.rage ? 8 : 6, ev.rage ? 520 : 420);
+          // Hit-stop: hold the killing frame for a beat before the shake kicks in.
+          if (fxPrefsRef.current.hitstop && !(typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches)) {
+            hitStopRef.current = { until: now + (ev.rage ? 170 : 110), at: now + 50, alpha: 1, state };
+            shakeRef.current = { ...shakeRef.current, t0: now + (ev.rage ? 170 : 110) };
+          }
           if (ev.rage) {
             // Berserk kill: bigger, redder callout with the bonus spelled out.
             const who = ev.warlord ? "광폭 전쟁군주 처치!" : "광폭 보스 처치!";
@@ -488,9 +535,12 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     let raf = 0;
     const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const loop = () => {
-      const now = performance.now();
-      const s = stateRef.current;
-      const alpha = Math.min(1, (now - stateAtRef.current) / TICK_MS);
+      const real = performance.now();
+      const hs = hitStopRef.current;
+      const frozen = real < hs.until && hs.state !== null;
+      const now = frozen ? hs.at : real;
+      const s = frozen ? hs.state! : stateRef.current;
+      const alpha = frozen ? hs.alpha : Math.min(1, (now - stateAtRef.current) / TICK_MS);
       const view = viewRef.current;
       const main = mainRef.current;
       if (main) {
@@ -530,6 +580,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             limit: eliminationLimit(s),
           });
           drawFx(ctx, fxRef.current, now);
+          if (frozen) {
+            // A faint white wash sells the freeze.
+            ctx.fillStyle = "rgba(255,255,255,0.12)";
+            ctx.fillRect(-10, -10, BOARD_W + 20, BOARD_H + 20);
+          }
         }
       }
       miniRefs.current.forEach((c, seat) => {
@@ -681,6 +736,40 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           >
             🧭 가이드 {typeof guide === "number" ? `자동(~W${guide})` : guide === "on" ? "ON" : "OFF"}
           </button>
+          <span className="relative">
+            <button
+              onClick={() => setFxMenuOpen((o) => !o)}
+              aria-expanded={fxMenuOpen}
+              title="타격감 연출 설정"
+              className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] hover:border-white/30 light:border-slate-300"
+            >
+              ⚙️
+            </button>
+            {fxMenuOpen && (
+              <div className="absolute top-7 right-0 z-30 flex w-44 flex-col gap-1 rounded-xl border border-white/15 bg-slate-900/95 p-2 text-[12px] text-white shadow-xl light:border-slate-200 light:bg-white light:text-slate-800">
+                <p className="px-1 text-[10px] font-semibold text-white/50 light:text-slate-400">타격감 연출</p>
+                {(
+                  [
+                    ["shake", "📳 화면 흔들림"],
+                    ["numbers", "🔢 데미지 숫자"],
+                    ["hitstop", "⏸️ 보스 처치 멈춤"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setFxPrefs((p) => ({ ...p, [key]: !p[key] }))}
+                    aria-pressed={fxPrefs[key]}
+                    className="flex items-center justify-between rounded-lg px-2 py-1 hover:bg-white/10 light:hover:bg-slate-100"
+                  >
+                    <span>{label}</span>
+                    <span className={`rounded-full px-1.5 text-[10px] font-bold ${fxPrefs[key] ? "bg-emerald-500/30 text-emerald-200 light:text-emerald-700" : "bg-white/10 text-white/50 light:bg-slate-100 light:text-slate-400"}`}>
+                      {fxPrefs[key] ? "ON" : "OFF"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </span>
           <button onClick={() => setRulebookOpen(true)} className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] hover:border-white/30 light:border-slate-300">
             📖 룰
           </button>

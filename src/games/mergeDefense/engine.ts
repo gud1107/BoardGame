@@ -220,7 +220,17 @@ export interface Shot {
   grade: number;
   /** Hit positions flattened [x0, y0, x1, y1, …] — first is the main target. */
   pts: number[];
+  /** Critical hit (rolled from state.rng): this attack dealt CRIT_MULT damage. */
+  crit?: boolean;
+  /** Main target's mob id (lets the UI pin crit numbers to the right mob). */
+  target?: number;
 }
+
+/**
+ * Every attack rolls for a critical hit. 12% × 2 adds ~12% DPS, offset by
+ * WAVE_CURVE.base 60 → 66 (bot sim: median waves unchanged on normal/hard).
+ */
+export const CRIT = { chance: 0.12, mult: 2 };
 
 export interface Board {
   units: (Unit | null)[];
@@ -372,7 +382,7 @@ export function upgradeCost(level: number): number {
  * stops spiking (bot sim: median game ~9 → ~10.5 min, wider comeback window).
  * Exported as a mutable object so balance sims can sweep it.
  */
-export const WAVE_CURVE = { base: 60, growth: 1.17, knee: 15, late: 1.12 };
+export const WAVE_CURVE = { base: 66, growth: 1.17, knee: 15, late: 1.12 };
 export function waveHp(wave: number): number {
   const c = WAVE_CURVE;
   const early = Math.min(wave, c.knee) - 1;
@@ -765,7 +775,8 @@ function damage(mob: Mob, amount: number) {
 
 function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, ordered: Mob[]) {
   const target = ordered[0];
-  const dmg = unitDamage(unit, board);
+  const crit = rand(s) < CRIT.chance;
+  const dmg = unitDamage(unit, board) * (crit ? CRIT.mult : 1);
   const hits: number[] = [target.id];
   switch (unit.kind) {
     case "archer":
@@ -821,7 +832,7 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
     const p = pathPoint(m.trav);
     pts.push(Math.round(p.x), Math.round(p.y));
   }
-  board.shots.push({ slot, kind: unit.kind, grade: unit.grade, pts });
+  board.shots.push({ slot, kind: unit.kind, grade: unit.grade, pts, target: target.id, ...(crit ? { crit: true } : {}) });
   void s;
 }
 

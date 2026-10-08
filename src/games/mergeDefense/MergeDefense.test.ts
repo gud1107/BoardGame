@@ -12,6 +12,7 @@ import {
   unitRange,
   loadLimit,
   wakeCost,
+  CRIT,
   braceCost,
   stunTicks,
   BRACE_MAX,
@@ -307,6 +308,24 @@ describe("merge defense engine", () => {
     expect(s.boards[0].brace).toBe(BRACE_MAX);
     expect(s.boards[0].gold).toBe(10_000 - [0, 1, 2].reduce((t, l) => t + braceCost(l), 0));
     expect(applyAction(s, 0, { type: "brace" })).toBe(s);
+  });
+
+  it("critical hits land at roughly CRIT.chance and are flagged on the shot", () => {
+    let s = startGame(2, 91);
+    for (let i = 0; i < 8; i++) s.boards[0].units[i] = { kind: "archer", grade: 2, cd: 0 };
+    let shots = 0;
+    let crits = 0;
+    for (let i = 0; i < 20 * 120 && s.phase === "playing"; i++) {
+      s = stepGame(s);
+      for (const sh of s.boards[0].shots) {
+        shots++;
+        if (sh.crit) crits++;
+        expect(sh.target).toBeTypeOf("number");
+      }
+    }
+    expect(shots).toBeGreaterThan(100);
+    expect(crits / shots).toBeGreaterThan(CRIT.chance * 0.6);
+    expect(crits / shots).toBeLessThan(CRIT.chance * 1.5);
   });
 
   it("a dying golem announces its split", () => {

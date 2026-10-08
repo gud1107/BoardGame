@@ -207,9 +207,21 @@ export function playMinionCall(boss: boolean) {
  * One soft hit for a tower attack; silently skipped when rate-limited or muted.
  * `far` = an opponent's board: quieter, muffled and on its own (sparser) rate limit.
  */
-export function playTowerHit(kind: UnitKind, grade: number, far = false) {
+let lastCritAt = 0;
+
+export function playTowerHit(kind: UnitKind, grade: number, far = false, crit = false) {
   const settings = useAudioSettingsStore.getState();
   if (isSfxEffectivelyMuted(settings) || settings.sfxVolume <= 0 || hitVolume <= 0) return;
+  // Critical hit on your own board: a bright "ting!" on its own sparse limiter.
+  if (crit && !far && performance.now() - lastCritAt >= 90) {
+    const c = hitAudio();
+    if (c) {
+      lastCritAt = performance.now();
+      c.bus.gain.value = HIT_LEVEL * settings.sfxVolume * hitVolume;
+      tone(c.ctx, env(c.ctx, c.bus, 0.55, 0.002, 0.14), "triangle", 2600, 1900, 0.15);
+      tone(c.ctx, env(c.ctx, c.bus, 0.3, 0.002, 0.1), "square", 1300, 1100, 0.1);
+    }
+  }
   const th = far ? FAR : NEAR;
   const nowMs = performance.now();
   if (nowMs - th.last < th.gap) return;
