@@ -144,6 +144,7 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     },
     { label: "처치 (누적 · 판당 평균)", value: (d, played) => `${n(d.kills)} · ${avg(d.kills, played) ?? "-"}` },
     { label: "😡 광폭화 보스·전쟁군주 처치", value: (d) => `${n(d.rageKills)}회` },
+    { label: "⚡ 최고 치명타 콤보", value: (d) => (d.maxCritCombo ? `${n(d.maxCritCombo)}콤보` : null) },
     { label: "🎯 집중 단계 (판당 평균 · 최고)", value: (d, played) => `${avg(d.focusTotal, played) ?? "-"} · ${n(d.maxFocus)}` },
     { label: "🛡️ 결속 단계 (판당 평균 · 최고)", value: (d, played) => `${avg(d.braceTotal, played) ?? "-"} · ${n(d.maxBrace)}` },
   ],

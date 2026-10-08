@@ -115,6 +115,16 @@ export function critStats(focus: number): { chance: number; mult: number } {
   const f = Math.max(0, Math.min(FOCUS_MAX, focus));
   return { chance: CRIT.chance + FOCUS_STEP.chance * f, mult: CRIT.mult + FOCUS_STEP.mult * f };
 }
+/**
+ * Crit combo: crits on one board less than COMBO_GAP_TICKS apart chain.
+ * Reaching COMBO.goldAt pays comboGold, reaching COMBO.gemAt pays a gem — each
+ * at most once per wave, since a big late board chains almost endlessly.
+ */
+export const COMBO_GAP_TICKS = 6;
+export const COMBO = { goldAt: 10, gemAt: 20, gems: true };
+export function comboGold(wave: number): number {
+  return 10 + 2 * Math.max(1, wave);
+}
 /** Stun ticks a smash inflicts on a board with this 결속 level. */
 export function stunTicks(brace: number): number {
   return Math.round(SMASH_STUN * (1 - 0.25 * Math.min(BRACE_MAX, brace)));
@@ -266,6 +276,13 @@ export interface Board {
   focus?: number;
   /** Berserk bosses / warlords this board killed (for /stats). */
   rageKills?: number;
+  /** Current crit chain, the tick of its last crit, and this match's longest chain. */
+  critChain?: number;
+  /** Wave in which this board last cashed a combo gold / gem milestone. */
+  comboGoldWave?: number;
+  comboGemWave?: number;
+  lastCritTick?: number;
+  bestCombo?: number;
   /** Attacks fired during the most recent tick — for FX only. */
   shots: Shot[];
 }
@@ -285,6 +302,8 @@ export type GameEvent =
   | { id: number; tick: number; seat: SeatIndex; type: "wake"; count: number }
   | { id: number; tick: number; seat: SeatIndex; type: "brace"; level: number }
   | { id: number; tick: number; seat: SeatIndex; type: "focus"; level: number }
+  /** A crit chain hit a reward milestone (`count` is the chain length). */
+  | { id: number; tick: number; seat: SeatIndex; type: "combo"; count: number; gold: number; gems: number }
   /** A golem at road distance `trav` just broke into pebbles. */
   | { id: number; tick: number; seat: SeatIndex; type: "split"; trav: number }
   /** A boss / warlord used up its minions and went berserk. */
@@ -489,6 +508,9 @@ function emptyBoard(bot: boolean): Board {
     brace: 0,
     focus: 0,
     rageKills: 0,
+    critChain: 0,
+    lastCritTick: -999,
+    bestCombo: 0,
     shots: [],
   };
 }
@@ -807,6 +829,23 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
   const target = ordered[0];
   const cs = critStats(board.focus ?? 0);
   const crit = rand(s) < cs.chance;
+  if (crit) {
+    const chain = s.tick - (board.lastCritTick ?? -999) <= COMBO_GAP_TICKS ? (board.critChain ?? 0) + 1 : 1;
+    board.critChain = chain;
+    board.lastCritTick = s.tick;
+    board.bestCombo = Math.max(board.bestCombo ?? 0, chain);
+    const goldDue = chain === COMBO.goldAt && board.comboGoldWave !== s.wave;
+    const gemDue = COMBO.gems && chain === COMBO.gemAt && board.comboGemWave !== s.wave;
+    if (goldDue || gemDue) {
+      const gold = goldDue ? comboGold(s.wave) : 0;
+      const gems = gemDue ? 1 : 0;
+      if (goldDue) board.comboGoldWave = s.wave;
+      if (gemDue) board.comboGemWave = s.wave;
+      board.gold += gold;
+      board.gems += gems;
+      pushEvent(s, { seat: s.boards.indexOf(board), type: "combo", count: chain, gold, gems });
+    }
+  }
   const dmg = unitDamage(unit, board) * (crit ? cs.mult : 1);
   const hits: number[] = [target.id];
   switch (unit.kind) {
@@ -1043,6 +1082,8 @@ export interface RankedSeat {
   rank: number;
   wave: number;
   kills: number;
+  /** Longest crit chain this match. */
+  combo: number;
 }
 
 /** Survivors rank first; then later elimination is better; same-tick eliminations tie-break on kills. */
@@ -1052,6 +1093,7 @@ export function computeRankings(state: MergeDefenseState): RankedSeat[] {
     out: b.alive ? Number.POSITIVE_INFINITY : (b.outAt ?? 0),
     wave: b.alive ? state.wave : b.outWave,
     kills: b.kills,
+    combo: b.bestCombo ?? 0,
   }));
   const sorted = [...rows].sort((a, b) => b.out - a.out || b.kills - a.kills);
   const ranked: RankedSeat[] = [];
@@ -1059,7 +1101,7 @@ export function computeRankings(state: MergeDefenseState): RankedSeat[] {
   sorted.forEach((r, i) => {
     const prev = sorted[i - 1];
     if (i > 0 && (prev.out !== r.out || prev.kills !== r.kills)) rank = i + 1;
-    ranked.push({ seat: r.seat, rank, wave: r.wave, kills: r.kills });
+    ranked.push({ seat: r.seat, rank, wave: r.wave, kills: r.kills, combo: r.combo });
   });
   return ranked;
 }

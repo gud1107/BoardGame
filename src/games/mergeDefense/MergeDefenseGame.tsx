@@ -605,6 +605,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         maxWave: rankings.find((r) => r.seat === seat)?.wave ?? 0,
         kills: sim.boards[seat]?.kills ?? 0,
         rageKills: sim.boards[seat]?.rageKills ?? 0,
+        maxCritCombo: sim.boards[seat]?.bestCombo ?? 0,
         // Board upgrades: highest level reached (max) + running totals for averages.
         maxFocus: sim.boards[seat]?.focus ?? 0,
         maxBrace: sim.boards[seat]?.brace ?? 0,
@@ -976,10 +977,11 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
                 <th className="border-b border-white/10 px-2 py-2 text-left">플레이어</th>
                 <th className="border-b border-white/10 px-2 py-2 text-right">버틴 웨이브</th>
                 <th className="border-b border-white/10 px-2 py-2 text-right">처치</th>
+                <th className="border-b border-white/10 px-2 py-2 text-right">최고 콤보</th>
               </tr>
             </thead>
             <tbody>
-              {finalRankings.map(({ seat, rank, wave, kills }) => (
+              {finalRankings.map(({ seat, rank, wave, kills, combo }) => (
                 <tr key={seat} className={rank === 1 ? "bg-amber-400/10" : ""}>
                   <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-amber-200">{rank === 1 ? "🏆 1" : rank}</td>
                   <td className="border-b border-white/5 px-2 py-2 text-left text-white">
@@ -988,6 +990,13 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
                   </td>
                   <td className="border-b border-white/5 px-2 py-2 text-right text-amber-200">🌊 {wave}</td>
                   <td className="border-b border-white/5 px-2 py-2 text-right text-white/70">{kills}</td>
+                  <td
+                    className={`border-b border-white/5 px-2 py-2 text-right ${
+                      combo > 0 && combo === Math.max(...finalRankings.map((r) => r.combo)) ? "font-bold text-amber-300" : "text-white/70"
+                    }`}
+                  >
+                    {combo > 0 ? `⚡ ${combo}` : "-"}
+                  </td>
                 </tr>
               ))}
             </tbody>

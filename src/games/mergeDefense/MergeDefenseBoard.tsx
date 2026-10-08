@@ -37,6 +37,8 @@ import {
   stunTicks,
   upgradeCost,
   killGold,
+  COMBO,
+  COMBO_GAP_TICKS,
   MINION_CAP,
   HIRE_KINDS,
   HIRES,
@@ -78,8 +80,8 @@ const FX_PREFS_KEY = "merge-defense:fx";
 const FX_DEFAULT: FxPrefs = { shake: true, numbers: true, hitstop: true, slowmo: true };
 /** Slow motion: playback rate and peak zoom; each trigger sets its own length and tint. */
 const SLOWMO = { rate: 0.25, zoom: 0.14 };
-/** Crit combo: crits on your board less than this apart chain; shown from COMBO_MIN. */
-const COMBO_GAP_MS = 500;
+/** Crit combo callout (the chain itself is counted by the engine); shown from COMBO_MIN. */
+const COMBO_GAP_MS = COMBO_GAP_TICKS * TICK_MS;
 const COMBO_MIN = 4;
 function loadFxPrefs(): FxPrefs {
   try {
@@ -337,8 +339,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         fx.push({ type: "shot", kind: shot.kind, grade: shot.grade, from, pts: shot.pts, t0: now, dur: shot.kind === "mage" ? 380 : shot.kind === "archer" ? 260 : 220 });
         let critPitch = 1;
         if (shot.crit && view === mySeat) {
+          // The engine owns the chain (it pays rewards); the callout just mirrors it.
           const cb = comboRef.current;
-          cb.count = now - cb.last <= COMBO_GAP_MS ? cb.count + 1 : 1;
+          cb.count = board.critChain ?? 1;
           cb.last = now;
           cb.best = Math.max(cb.best, cb.count);
           critPitch = 1 + Math.min(cb.count - 1, 12) * 0.05;
@@ -553,6 +556,14 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           if (mine && audible) audio.playUpgrade();
           break;
         }
+        case "combo": {
+          const label = ev.gems ? `${ev.count} 콤보! 보석 +${ev.gems}` : `${ev.count} 콤보 보너스! +${ev.gold}골드`;
+          fx.push({ type: "ring", x: BOARD_W / 2, y: BOARD_H * 0.3, color: ev.gems ? "#e879f9" : "#facc15", r0: 10, r1: 80, t0: now, dur: 600 });
+          fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H * 0.3 + 34, text: label, color: ev.gems ? "#f5d0fe" : "#fde047", t0: now, dur: 1300, size: 15 });
+          shake(2.2, 160);
+          if (mine && audible) audio.playSummon(true);
+          break;
+        }
         case "brace":
           fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: `결속 Lv.${ev.level} — 기절 ${(stunTicks(ev.level) / 20).toFixed(1)}초`, color: "#cbd5e1", t0: now, dur: 1100, size: 17 });
           if (mine && audible) audio.playUpgrade();
@@ -662,8 +673,20 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             ctx.strokeStyle = "rgba(0,0,0,0.75)";
             const label = `치명타 ${cb.count} 콤보!`;
             ctx.strokeText(label, 0, 0);
-            ctx.fillStyle = cb.count >= 10 ? "#f43f5e" : cb.count >= 7 ? "#fb923c" : "#fde047";
+            ctx.fillStyle = cb.count >= COMBO.gemAt ? "#e879f9" : cb.count >= COMBO.goldAt ? "#f43f5e" : cb.count >= 7 ? "#fb923c" : "#fde047";
             ctx.fillText(label, 0, 0);
+            // Next milestone still open this wave.
+            const meB = s.boards[mySeat];
+            const goldOpen = meB?.comboGoldWave !== s.wave && cb.count < COMBO.goldAt;
+            const gemOpen = COMBO.gems && meB?.comboGemWave !== s.wave && cb.count < COMBO.gemAt;
+            const hint = goldOpen ? `${COMBO.goldAt}콤보 보너스까지 ${COMBO.goldAt - cb.count}` : gemOpen ? `${COMBO.gemAt}콤보 보석까지 ${COMBO.gemAt - cb.count}` : "";
+            if (hint) {
+              ctx.font = "800 10px system-ui, sans-serif";
+              ctx.lineWidth = 3;
+              ctx.strokeText(hint, 0, 18);
+              ctx.fillStyle = "#e5e7eb";
+              ctx.fillText(hint, 0, 18);
+            }
             ctx.restore();
           }
           if (frozen) {

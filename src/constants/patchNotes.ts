@@ -183,6 +183,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "치명타 콤보 표시(연속 치명타마다 숫자·음높이 상승) · 신화 합성 슬로모션 · /stats에 집중·결속 단계(평균·최고) 기록",
       },
       {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "치명타 콤보 보상 — 10콤보 골드 보너스 · 20콤보 💎1(웨이브마다 한 번) · 결과 화면 최고 콤보 · /stats 최고 콤보 기록·랭킹",
+      },
+      {
         game: "ink-duel",
         type: "IMPROVE",
         desc: "그래픽 전면 개편 — 캐릭터 4종(마법사·고양이·개구리·토끼), 수채화 배경·지층 지형, 잉크 폭발 파티클·화면 흔들림·속성 이펙트, 카드형 무기 판정",

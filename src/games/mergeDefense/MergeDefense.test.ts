@@ -12,6 +12,8 @@ import {
   unitRange,
   loadLimit,
   wakeCost,
+  COMBO,
+  comboGold,
   critStats,
   FOCUS_MAX,
   focusCost,
@@ -341,6 +343,33 @@ describe("merge defense engine", () => {
     expect(s.boards[0].focus).toBe(FOCUS_MAX);
     expect(s.boards[0].gold).toBe(10_000 - Array.from({ length: FOCUS_MAX }, (_, l) => focusCost(l)).reduce((a, b) => a + b, 0));
     expect(applyAction(s, 0, { type: "focus" })).toBe(s);
+  });
+
+  it("crit combos pay their milestone once per wave and record the best chain", () => {
+    let s = startGame(2, 93);
+    // Skip to tougher waves (mobs live long enough for crits to chain).
+    while (s.wave < 15) {
+      for (const b of s.boards) b.mobs = [];
+      s = stepGame(s);
+    }
+    for (let i = 0; i < 15; i++) s.boards[0].units[i] = { kind: "archer", grade: 3, cd: 0 };
+    s.boards[0].focus = 5;
+    const paid: { wave: number; gold: number; gems: number }[] = [];
+    let last = 0;
+    for (let i = 0; i < 20 * 200 && s.phase === "playing"; i++) {
+      for (const b of s.boards) if (b !== s.boards[0]) b.mobs = [];
+      s = stepGame(s);
+      for (const e of s.events) if (e.id > last && e.type === "combo" && e.seat === 0) paid.push({ wave: s.wave, gold: e.gold, gems: e.gems });
+      last = s.nextEventId - 1;
+    }
+    expect(s.boards[0].bestCombo).toBeGreaterThanOrEqual(COMBO.goldAt);
+    expect(paid.length).toBeGreaterThan(0);
+    // Never two gold (or two gem) payouts in one wave.
+    for (const kind of ["gold", "gems"] as const) {
+      const waves = paid.filter((p) => p[kind] > 0).map((p) => p.wave);
+      expect(new Set(waves).size).toBe(waves.length);
+    }
+    for (const p of paid) if (p.gold) expect(p.gold).toBe(comboGold(p.wave));
   });
 
   it("a dying golem announces its split", () => {
