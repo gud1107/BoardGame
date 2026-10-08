@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { INK_COLORS, MAX_POINTS_PER_STROKE, MAX_STROKES, PAD_SIZE, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
+import { useEffect, useRef, useState } from "react";
+import { COLOR_NAMES, INK_COLORS, MAX_POINTS_PER_STROKE, MAX_STROKES, PAD_SIZE, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
 
 interface Props {
   strokes: Stroke[];
@@ -166,5 +166,50 @@ export function DoodleSvg({ strokes, size = 72 }: { strokes: readonly Stroke[]; 
         />
       ))}
     </svg>
+  );
+}
+
+/**
+ * Ink colors. On phones the 12 dots collapse into one swatch of the current
+ * color that pops the grid open (saves a whole row under the pad); from sm up
+ * they stay inline.
+ */
+export function InkPalette({ color, onChange }: { color: InkColor; onChange: (c: InkColor) => void }) {
+  const [open, setOpen] = useState(false);
+  const dot = (c: string, i: number, size: string) => (
+    <button
+      key={c}
+      type="button"
+      title={COLOR_NAMES[i]}
+      onClick={() => {
+        onChange(i as InkColor);
+        setOpen(false);
+      }}
+      className={`${size} rounded-full border-2 transition ${color === i ? "scale-110 border-amber-400" : "border-white/20 light:border-slate-300"}`}
+      style={{ background: c }}
+    />
+  );
+  return (
+    <>
+      <div className="relative sm:hidden">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          title={`색: ${COLOR_NAMES[color]}`}
+          className="flex h-8 items-center gap-1 rounded-full border border-white/15 py-0.5 pr-2 pl-0.5 text-[11px] text-white/70 light:border-slate-300 light:text-slate-600"
+        >
+          <span className="h-6 w-6 rounded-full border-2 border-amber-400" style={{ background: INK_COLORS[color] }} />
+          🎨{open ? "▴" : "▾"}
+        </button>
+        {open && (
+          // Centered on the screen (not the swatch) so it never spills off a narrow phone.
+          <div className="fixed bottom-24 left-1/2 z-40 grid w-max -translate-x-1/2 grid-cols-6 gap-2 rounded-2xl border border-white/15 bg-slate-900/95 p-2.5 shadow-2xl light:border-slate-300 light:bg-white">
+            {INK_COLORS.map((c, i) => dot(c, i, "h-8 w-8"))}
+          </div>
+        )}
+      </div>
+      <div className="hidden flex-wrap gap-1 sm:flex">{INK_COLORS.map((c, i) => dot(c, i, "h-6 w-6"))}</div>
+    </>
   );
 }

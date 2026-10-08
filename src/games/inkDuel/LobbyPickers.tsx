@@ -3,7 +3,8 @@
 import { CHARACTERS } from "./arenaArt";
 import { CharacterAvatar } from "./ArenaCanvas";
 import { MAP_IDS, MAPS, type MapId } from "./maps";
-import { DEFAULT_RT_RULES, RT_RULE_OPTIONS, type RtRules } from "./realtime";
+import { DEFAULT_STOP_RULES, STOP_RULE_OPTIONS, type StopRules } from "./engine";
+import { DEFAULT_RT_RULES, RT_PRESETS, RT_RULE_OPTIONS, sameRules, type RtRules } from "./realtime";
 
 /** Grid of the selectable characters; `takenBy` greys out ones another player already picked. */
 export function CharacterPicker({ value, onChange, takenBy = {} }: { value: number | null; onChange: (c: number) => void; takenBy?: Record<number, string> }) {
@@ -90,14 +91,16 @@ export function ModePicker({ value, onChange }: { value: GameMode; onChange: (m:
   );
 }
 
-/** 🏃 Moving-mode tuning: one segmented row per rule (host only). */
-export function RtRulesPicker({ value, onChange }: { value: RtRules; onChange: (r: RtRules) => void }) {
+type RuleRow = { label: string; title: string; options: { label: string; value: number }[] };
+
+/** One segmented row per setting (shared by both modes' settings pickers). */
+function RuleRows<T extends object>({ rows, value, onChange }: { rows: { [K in keyof T]: RuleRow }; value: T; onChange: (r: T) => void }) {
   return (
-    <div className="flex flex-col gap-1.5 rounded-xl border border-amber-400/30 bg-amber-400/5 p-2 light:bg-amber-50/60">
-      {(Object.keys(RT_RULE_OPTIONS) as (keyof RtRules)[]).map((key) => {
-        const row = RT_RULE_OPTIONS[key];
+    <>
+      {(Object.keys(rows) as (keyof T)[]).map((key) => {
+        const row = rows[key];
         return (
-          <div key={key} className="flex items-center gap-2" title={row.title}>
+          <div key={String(key)} className="flex items-center gap-2" title={row.title}>
             <span className="w-20 shrink-0 text-[11px] font-semibold text-white/70 light:text-slate-600">{row.label}</span>
             <div className="grid flex-1 grid-cols-3 gap-1">
               {row.options.map((o) => (
@@ -106,7 +109,7 @@ export function RtRulesPicker({ value, onChange }: { value: RtRules; onChange: (
                   type="button"
                   onClick={() => onChange({ ...value, [key]: o.value })}
                   className={`rounded-lg border px-1 py-1 text-[11px] font-semibold transition ${
-                    value[key] === o.value ? "border-amber-400 bg-amber-500/20 text-white light:text-amber-800" : "border-white/10 text-white/60 hover:border-white/30 light:border-slate-200 light:text-slate-600"
+                    (value[key] as unknown as number) === o.value ? "border-amber-400 bg-amber-500/20 text-white light:text-amber-800" : "border-white/10 text-white/60 hover:border-white/30 light:border-slate-200 light:text-slate-600"
                   }`}
                 >
                   {o.label}
@@ -116,20 +119,69 @@ export function RtRulesPicker({ value, onChange }: { value: RtRules; onChange: (
           </div>
         );
       })}
+    </>
+  );
+}
+
+/** 🏃 Moving-mode tuning: preset buttons + one segmented row per rule (host only). */
+export function RtRulesPicker({ value, onChange }: { value: RtRules; onChange: (r: RtRules) => void }) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-xl border border-amber-400/30 bg-amber-400/5 p-2 light:bg-amber-50/60">
+      <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+        {RT_PRESETS.map((p) => {
+          const on = sameRules(value, p.rules);
+          return (
+            <button
+              key={p.id}
+              type="button"
+              title={p.desc}
+              onClick={() => onChange(p.rules)}
+              className={`flex flex-col items-start rounded-lg border-2 px-2 py-1 text-left transition ${
+                on ? "border-amber-400 bg-amber-500/20" : "border-white/10 hover:border-white/30 light:border-slate-200 light:hover:border-slate-400"
+              }`}
+            >
+              <span className="text-xs font-bold text-white light:text-slate-800">
+                {p.emoji} {p.name}
+              </span>
+              <span className="text-[9px] leading-tight text-white/50 light:text-slate-500">{p.desc}</span>
+            </button>
+          );
+        })}
+      </div>
+      <RuleRows rows={RT_RULE_OPTIONS} value={value} onChange={onChange} />
     </div>
   );
 }
 
-/** Short summary of non-default moving-mode rules for guests (empty when all default). */
-export function rtRulesLabel(r: RtRules | undefined): string {
-  if (!r) return "";
-  return (Object.keys(RT_RULE_OPTIONS) as (keyof RtRules)[])
+/** 🛑 Stop-mode settings (host only). */
+export function StopRulesPicker({ value, onChange }: { value: StopRules; onChange: (r: StopRules) => void }) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-xl border border-sky-400/30 bg-sky-400/5 p-2 light:bg-sky-50/60">
+      <RuleRows rows={STOP_RULE_OPTIONS} value={value} onChange={onChange} />
+    </div>
+  );
+}
+
+function nonDefault<T extends object>(rows: { [K in keyof T]: RuleRow }, value: T, defaults: T): string {
+  return (Object.keys(rows) as (keyof T)[])
     .map((key) => {
-      const opt = RT_RULE_OPTIONS[key].options.find((o) => o.value === r[key]);
-      return opt && opt.value !== DEFAULT_RT_RULES[key] ? `${RT_RULE_OPTIONS[key].label} ${opt.label}` : null;
+      const v = value[key] as unknown as number;
+      const opt = rows[key].options.find((o) => o.value === v);
+      return opt && v !== (defaults[key] as unknown as number) ? `${rows[key].label} ${opt.label}` : null;
     })
     .filter((x): x is string => x !== null)
     .join(" · ");
+}
+
+/** Guest-facing summary of the moving-mode settings: the preset name, or the non-default rows. */
+export function rtRulesLabel(r: RtRules | undefined): string {
+  if (!r) return "";
+  const preset = RT_PRESETS.find((p) => p.id !== "default" && sameRules(p.rules, r));
+  return preset ? `${preset.emoji} ${preset.name}` : nonDefault(RT_RULE_OPTIONS, r, DEFAULT_RT_RULES);
+}
+
+export function stopRulesLabel(r: StopRules | undefined): string {
+  return r ? nonDefault(STOP_RULE_OPTIONS, r, DEFAULT_STOP_RULES) : "";
 }
 
 export function modeLabel(m: GameMode | undefined): string {

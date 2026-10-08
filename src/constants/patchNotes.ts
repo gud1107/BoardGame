@@ -69,6 +69,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       },
       {
         game: "ink-duel",
+        type: "FEAT",
+        desc: "무빙 모드 프리셋(🧘 기본·⚔️ 난전·🎯 저격전·⚡ 속공전) + 🛑 스탑 모드 설정(턴 시간·라운드 수·턴당 잉크)",
+      },
+      {
+        game: "ink-duel",
+        type: "IMPROVE",
+        desc: "휴대폰에서 색 팔레트를 한 개의 색 버튼으로 접어 스크롤 없이 — 누르면 12색이 화면 가운데에 펼쳐져요",
+      },
+      {
+        game: "ink-duel",
         type: "IMPROVE",
         desc: "무빙 모드 그림판을 경기장 바로 아래 이동·발사 버튼 옆으로 — 스크롤 없이 그리고 움직이고 쏘기",
       },

@@ -9,6 +9,7 @@ import {
   maxMoveFor,
   MOVE_INK_PER_PX,
   resolveMove,
+  sanitizeStopRules,
   chooseBotAction,
   computeRankings,
   currentActor,
@@ -481,5 +482,25 @@ describe("moving mode rules (host settings)", () => {
     for (let t = 0; t < 61_000 && quick.phase === "playing"; t += 100) stepRealtime(quick, 100, {}, [], () => 0.5);
     expect(quick.phase).toBe("gameOver");
     expect(sanitizeRules({ speed: 99999, cooldownMs: -5, damageScale: "x" })).toMatchObject({ speed: 160, cooldownMs: 400, damageScale: DEFAULT_RT_RULES.damageScale });
+  });
+});
+
+describe("stop mode rules (host settings)", () => {
+  it("ink per turn, round count and freeze scale with the room's rules; junk is clamped", () => {
+    const s = startGame(2, 8, { stopRules: { rounds: 5, ink: 130, turnSeconds: 30 } });
+    expect(s.inkBudget).toBe(130);
+    expect(s.rules).toEqual({ rounds: 5, ink: 130, turnSeconds: 30 });
+    // Everyone passes: the game ends after round 5 instead of 10.
+    let g = s;
+    let turns = 0;
+    while (g.phase === "playing" && turns < 100) {
+      g = applyAction(g, { type: "pass", seat: g.turnSeat });
+      turns++;
+    }
+    expect(turns).toBe(5 * 2);
+    // Freeze trims the bigger ink pool by the same 28%.
+    const frozen = { ...s, players: s.players.map((p) => ({ ...p, status: { freeze: 1 } })) };
+    expect(applyAction(frozen, { type: "pass", seat: s.turnSeat }).inkBudget).toBe(Math.round((130 * FROZEN_INK) / 100));
+    expect(sanitizeStopRules({ rounds: 999, ink: -3, turnSeconds: "x" })).toEqual({ rounds: 30, ink: 30, turnSeconds: 45 });
   });
 });

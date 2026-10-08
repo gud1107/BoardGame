@@ -63,6 +63,40 @@ export const START_HP = 100;
 export const MAX_ROUNDS = 10;
 export const MIN_INK = 6;
 export const FROZEN_INK = 72;
+
+/** 🛑 Stop-mode tuning the host picks in the waiting room. */
+export interface StopRules {
+  rounds: number;
+  /** Ink handed out at the start of every turn. */
+  ink: number;
+  /** Per-turn timer (UI-side auto-submit; kept in state so every client shows the same clock). */
+  turnSeconds: number;
+}
+
+export const DEFAULT_STOP_RULES: StopRules = { rounds: MAX_ROUNDS, ink: INK_PER_TURN, turnSeconds: 45 };
+
+export const STOP_RULE_OPTIONS: { [K in keyof StopRules]: { label: string; title: string; options: { label: string; value: number }[] } } = {
+  turnSeconds: { label: "⏱ 턴 시간", title: "한 사람이 그리고 쏘는 데 쓸 수 있는 시간", options: [{ label: "30초", value: 30 }, { label: "45초", value: 45 }, { label: "60초", value: 60 }] },
+  rounds: { label: "🔁 라운드", title: "이 라운드가 끝나면 체력 높은 순", options: [{ label: "5", value: 5 }, { label: "10", value: MAX_ROUNDS }, { label: "15", value: 15 }] },
+  ink: { label: "🖋️ 턴당 잉크", title: "매 턴 받는 잉크 (많을수록 크고 강한 무기)", options: [{ label: "70", value: 70 }, { label: "100", value: INK_PER_TURN }, { label: "130", value: 130 }] },
+};
+
+/** Clamp untrusted rules (they arrive over the network). */
+export function sanitizeStopRules(raw: unknown): StopRules {
+  const r = (raw ?? {}) as Partial<Record<keyof StopRules, unknown>>;
+  const num = (v: unknown, d: number, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) ? Math.round(Math.max(lo, Math.min(hi, v))) : d);
+  return {
+    rounds: num(r.rounds, DEFAULT_STOP_RULES.rounds, 1, 30),
+    ink: num(r.ink, DEFAULT_STOP_RULES.ink, 30, 200),
+    turnSeconds: num(r.turnSeconds, DEFAULT_STOP_RULES.turnSeconds, 15, 120),
+  };
+}
+
+/** Ink at the start of a turn (❄️ freeze trims it by the same 28% at any setting). */
+function turnInk(rules: StopRules | undefined, frozen: boolean): number {
+  const ink = rules?.ink ?? INK_PER_TURN;
+  return frozen ? Math.round((ink * FROZEN_INK) / INK_PER_TURN) : ink;
+}
 /** Wall points must stay within this horizontal distance of the builder… */
 export const WALL_RANGE = 230;
 /** …and this far from every other living player (no entombing). */
@@ -190,6 +224,8 @@ export interface InkDuelState {
   round: number;
   wind: number;
   inkBudget: number;
+  /** Host-chosen settings (optional only so older synced states still load). */
+  rules?: StopRules;
   /** Seats in the order they were eliminated (earliest first); same-event deaths share one entry group. */
   deathGroups: SeatIndex[][];
   lastEvent: InkEvent | null;
@@ -256,6 +292,8 @@ function resolveCharacters(count: number, seed: number, requested: readonly (num
 
 export interface StartOptions {
   map?: MapId;
+  /** 🛑 stop-mode settings (rounds / ink / turn timer). */
+  stopRules?: StopRules;
   /** Requested character per seat (null/undefined = no preference). */
   characters?: readonly (number | null | undefined)[];
 }
@@ -309,7 +347,8 @@ export function startGame(playerCount: number, seed: number, options: StartOptio
     turnNo: 0,
     round: 1,
     wind: windFor(seed, 0, map),
-    inkBudget: INK_PER_TURN,
+    rules: sanitizeStopRules(options.stopRules),
+    inkBudget: sanitizeStopRules(options.stopRules).ink,
     deathGroups: [],
     lastEvent: null,
     damageDealt: new Array(count).fill(0),
@@ -818,7 +857,7 @@ function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terra
     turnNo,
     round,
     wind: windFor(state.seed, turnNo, state.map),
-    inkBudget: phase === "playing" && (players[seat]?.status.freeze ?? 0) > 0 ? FROZEN_INK : INK_PER_TURN,
+    inkBudget: turnInk(state.rules, phase === "playing" && (players[seat]?.status.freeze ?? 0) > 0),
     lastEvent: { ...event, dots },
     seq: state.seq + 1,
   });
@@ -837,7 +876,7 @@ function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terra
     turnNo += 1;
     round = Math.floor(turnNo / n) + 1;
     seat = next;
-    if (round > MAX_ROUNDS) return finish("gameOver");
+    if (round > (state.rules?.rounds ?? MAX_ROUNDS)) return finish("gameOver");
     const startingSeat = seat;
     if (walls.some((w) => w.shieldOf === startingSeat || (w.shieldOf !== undefined && !players[w.shieldOf]?.alive))) {
       walls = walls.filter((w) => w.shieldOf !== startingSeat && (w.shieldOf === undefined || players[w.shieldOf]?.alive));

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { analyzeWeapon, COLOR_NAMES, INK_COLORS, MAX_POINTS_PER_STROKE, MAX_STROKES, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
+import { analyzeWeapon, INK_COLORS, MAX_POINTS_PER_STROKE, MAX_STROKES, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
 import {
   Ambient,
   characterFor,
@@ -30,7 +30,7 @@ import { GRAVITY, launchVelocity, MUZZLE_Y, WORLD_H, WORLD_W } from "./physics";
 import { DEFAULT_RT_RULES, RT_INK_MAX, type RtCommand, type RtInput } from "./realtime";
 import type { RtView, RtViewPlayer } from "./rtView";
 import { activeStatuses, STATUS_INFO } from "./status";
-import WeaponPad from "./WeaponPad";
+import WeaponPad, { InkPalette } from "./WeaponPad";
 
 type Mode = "weapon" | "shield" | "wall";
 type CommandBody = RtCommand extends infer C ? (C extends RtCommand ? Omit<C, "seat"> : never) : never;
@@ -679,6 +679,7 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
                 </button>
               ))}
             </div>
+            <InkPalette color={color} onChange={setColor} />
             <div className="ml-auto flex gap-1.5">
               <button onClick={() => (mode === "weapon" ? setWeapon : mode === "shield" ? setShield : setWall)((s) => s.slice(0, -1))} className="rounded-lg border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-slate-300 light:text-slate-600">
                 ↶
@@ -687,11 +688,6 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
                 🗑
               </button>
             </div>
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {INK_COLORS.map((c, i) => (
-              <button key={c} title={COLOR_NAMES[i]} onClick={() => setColor(i as InkColor)} className={`h-6 w-6 rounded-full border-2 transition ${color === i ? "scale-110 border-amber-400" : "border-white/20 light:border-slate-300"}`} style={{ background: c }} />
-            ))}
           </div>
           {mode === "weapon" && stats && <WeaponCard stats={stats} compact />}
           {mode === "weapon" && !stats && <p className="text-[11px] text-white/50 light:text-slate-500">✏️ 공책에 무기를 그려 장전하세요 — 모양마다 다른 무기, 그린 무기는 계속 다시 쏠 수 있어요.</p>}

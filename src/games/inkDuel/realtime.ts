@@ -124,6 +124,36 @@ export const RT_RULE_OPTIONS: { [K in keyof RtRules]: { label: string; title: st
   matchMs: { label: "⏱ 시간", title: "한 판 길이", options: [{ label: "2분", value: 120_000 }, { label: "3분", value: RT_MATCH_MS }, { label: "5분", value: 300_000 }] },
 };
 
+/** One-tap presets for the moving-mode settings (values are all from RT_RULE_OPTIONS). */
+export const RT_PRESETS: { id: string; emoji: string; name: string; desc: string; rules: RtRules }[] = [
+  { id: "default", emoji: "🧘", name: "기본", desc: "보통 속도·1.8초 재장전·3분", rules: DEFAULT_RT_RULES },
+  {
+    id: "brawl",
+    emoji: "⚔️",
+    name: "난전",
+    desc: "빠르게 뛰고 1초마다 쏘지만 한 방은 약하게",
+    rules: { speed: 105, cooldownMs: 1000, damageScale: 0.4, inkRegen: 26, matchMs: RT_MATCH_MS },
+  },
+  {
+    id: "sniper",
+    emoji: "🎯",
+    name: "저격전",
+    desc: "느리게 움직이고 3초에 한 발, 대신 한 방이 셈 · 5분",
+    rules: { speed: 55, cooldownMs: 3000, damageScale: 0.9, inkRegen: 10, matchMs: 300_000 },
+  },
+  {
+    id: "blitz",
+    emoji: "⚡",
+    name: "속공전",
+    desc: "빠르고 세고 짧게 — 2분 안에 끝장",
+    rules: { speed: 105, cooldownMs: 1000, damageScale: 0.9, inkRegen: 26, matchMs: 120_000 },
+  },
+];
+
+export function sameRules(a: RtRules, b: RtRules): boolean {
+  return (Object.keys(a) as (keyof RtRules)[]).every((k) => a[k] === b[k]);
+}
+
 /** Clamp untrusted rules (they arrive over the network) into sane ranges. */
 export function sanitizeRules(raw: unknown): RtRules {
   const r = (raw ?? {}) as Partial<Record<keyof RtRules, unknown>>;

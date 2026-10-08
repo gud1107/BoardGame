@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { analyzeWeapon, COLOR_NAMES, ELEMENT_LABEL, INK_COLORS, totalInk, WEAPON_LABEL, type InkColor, type Stroke, type WeaponStats } from "./analyze";
+import { analyzeWeapon, ELEMENT_LABEL, totalInk, WEAPON_LABEL, type InkColor, type Stroke, type WeaponStats } from "./analyze";
 import ArenaCanvas, { CARD_MS, CharacterAvatar, type ArenaAnim } from "./ArenaCanvas";
 import { characterFor } from "./arenaArt";
 import {
@@ -21,7 +21,7 @@ import {
   type SeatIndex,
 } from "./engine";
 import { playCardRevealSound, playMyTurnSound, playScribbleTick, playVictorySound, playWallSound } from "./inkDuelAudio";
-import WeaponPad, { DoodleSvg } from "./WeaponPad";
+import WeaponPad, { DoodleSvg, InkPalette } from "./WeaponPad";
 import { MAPS } from "./maps";
 import { activeStatuses, STATUS_INFO } from "./status";
 
@@ -246,7 +246,8 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
   };
   const [angle, setAngle] = useState(defaultAngle);
   const [power, setPower] = useState(60);
-  const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
+  const turnSeconds = state.rules?.turnSeconds ?? TURN_SECONDS;
+  const [timeLeft, setTimeLeft] = useState(turnSeconds);
   const [walk, setWalk] = useState(0);
   if (draftSeq !== state.seq) {
     setDraftSeq(state.seq);
@@ -255,7 +256,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
     setShield([]);
     setMode("weapon");
     setAngle(defaultAngle());
-    setTimeLeft(TURN_SECONDS);
+    setTimeLeft(turnSeconds);
     setWalk(0);
   }
 
@@ -301,7 +302,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
     const start = Date.now();
     let fired = false;
     const id = window.setInterval(() => {
-      const left = Math.max(0, TURN_SECONDS - Math.floor((Date.now() - start) / 1000));
+      const left = Math.max(0, turnSeconds - Math.floor((Date.now() - start) / 1000));
       setTimeLeft(left);
       if (left <= 0 && !fired) {
         fired = true;
@@ -309,7 +310,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
       }
     }, 250);
     return () => window.clearInterval(id);
-  }, [myTurn, state.seq]);
+  }, [myTurn, state.seq, turnSeconds]);
 
   // Victory fanfare once the final state is on screen.
   const over = shown.phase === "gameOver" && !anim;
@@ -359,7 +360,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
             {mapInfo.emoji} {mapInfo.name}
           </span>
           <span className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-slate-300 light:text-slate-600">
-            라운드 {Math.min(viewState.round, MAX_ROUNDS)}/{MAX_ROUNDS}
+            라운드 {Math.min(viewState.round, viewState.rules?.rounds ?? MAX_ROUNDS)}/{viewState.rules?.rounds ?? MAX_ROUNDS}
           </span>
           {myTurn && iAmBlind ? (
             <span className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/70 light:border-slate-300 light:text-slate-600">🕶️ 바람 ???</span>
@@ -525,17 +526,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                 {Math.max(0, Math.floor(budget - inkUsed))}/{budget}
               </span>
             </div>
-            <div className="flex flex-wrap gap-1">
-              {INK_COLORS.map((c, i) => (
-                <button
-                  key={c}
-                  title={COLOR_NAMES[i]}
-                  onClick={() => setColor(i as InkColor)}
-                  className={`h-6 w-6 rounded-full border-2 transition sm:h-7 sm:w-7 ${color === i ? "scale-110 border-amber-400" : "border-white/20 light:border-slate-300"}`}
-                  style={{ background: c }}
-                />
-              ))}
-            </div>
+            <InkPalette color={color} onChange={setColor} />
             <div className="ml-auto flex gap-1.5 sm:ml-0">
               <button
                 title="되돌리기"

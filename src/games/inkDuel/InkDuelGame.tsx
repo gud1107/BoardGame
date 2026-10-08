@@ -12,7 +12,7 @@ import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
-import { CharacterPicker, MapPicker, mapLabel, ModePicker, modeLabel, RtRulesPicker, rtRulesLabel, type GameMode } from "./LobbyPickers";
+import { CharacterPicker, MapPicker, mapLabel, ModePicker, modeLabel, RtRulesPicker, rtRulesLabel, StopRulesPicker, stopRulesLabel, type GameMode } from "./LobbyPickers";
 import RealtimeBoard, { type CommandBody } from "./RealtimeBoard";
 import { DEFAULT_RT_RULES, newBotMemory, rtBotThink, sanitizeRules, startRealtime, stepRealtime, type RtBotMemory, type RtCommand, type RtInput, type RtRules, type RtState } from "./realtime";
 import { RtClientBuffer, snapFromState, viewFromState, type RtSnap, type RtView } from "./rtView";
@@ -26,9 +26,12 @@ import {
   isStateSyncStale,
   MAX_PLAYERS,
   MIN_PLAYERS,
+  DEFAULT_STOP_RULES,
+  sanitizeStopRules,
   startGame,
   type EngineAction,
   type InkDuelState,
+  type StopRules,
   type SeatIndex,
 } from "./engine";
 import InkDuelBoard from "./InkDuelBoard";
@@ -76,6 +79,8 @@ type Occupant = {
   modePick?: GameMode;
   /** Host only: 🏃 moving-mode tuning. */
   rtRules?: RtRules;
+  /** Host only: 🛑 stop-mode settings. */
+  stopRules?: StopRules;
 };
 type Phase =
   | "choose"
@@ -124,6 +129,8 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const modePickRef = useRef<GameMode>("stop");
   const [rtRules, setRtRules] = useState<RtRules>(DEFAULT_RT_RULES);
   const rtRulesRef = useRef<RtRules>(DEFAULT_RT_RULES);
+  const [stopRules, setStopRules] = useState<StopRules>(DEFAULT_STOP_RULES);
+  const stopRulesRef = useRef<StopRules>(DEFAULT_STOP_RULES);
   // The running match's mode + 🏃 moving-mode plumbing (host simulates, guests interpolate snapshots).
   const [gameMode, setGameMode] = useState<GameMode>("stop");
   const gameModeRef = useRef<GameMode>("stop");
@@ -277,7 +284,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       } else {
         rtRef.current = null;
         setRtHud(null);
-        setGameState(startGame(playerCount, seed, { map, characters }));
+        setGameState(startGame(playerCount, seed, { map, characters, stopRules: sanitizeStopRules(payload?.stopRules) }));
       }
       setFinalResult(null);
       setPhase("playing");
@@ -485,7 +492,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
           name: myName,
           playerId: myPlayerId,
           character: myCharRef.current ?? undefined,
-          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current, rtRules: rtRulesRef.current } : {}),
+          ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current, rtRules: rtRulesRef.current, stopRules: stopRulesRef.current } : {}),
         } satisfies Occupant);
         requestStateSync();
         setPhase((p) => (p === "connecting" ? "waiting" : p));
@@ -505,7 +512,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const knownTargetPlayerCount = host?.targetPlayerCount ?? targetPlayerCount;
   const hostMapLabel = mapLabel(host?.mapPick);
   const hostModeLabel = modeLabel(host?.modePick);
-  const hostRulesLabel = host?.modePick === "moving" ? rtRulesLabel(host?.rtRules) : "";
+  const hostRulesLabel = host?.modePick === "moving" ? rtRulesLabel(host?.rtRules) : stopRulesLabel(host?.stopRules);
   const reclaimAttemptsRef = useRef(0);
 
   useEffect(() => {
@@ -533,7 +540,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       name: myName,
       playerId: myPlayerId,
       character: myCharRef.current ?? undefined,
-      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current, rtRules: rtRulesRef.current } : {}),
+      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current, rtRules: rtRulesRef.current, stopRules: stopRulesRef.current } : {}),
     } satisfies Occupant);
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
@@ -548,12 +555,16 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     channelRef.current?.send({
       type: "broadcast",
       event: "game-start",
-      payload: { seed: Math.floor(Math.random() * 2 ** 31), playerCount: filledCount, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, characters, map, mode: modePickRef.current, rules: rtRulesRef.current },
+      payload: { seed: Math.floor(Math.random() * 2 ** 31), playerCount: filledCount, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, characters, map, mode: modePickRef.current, rules: rtRulesRef.current, stopRules: stopRulesRef.current },
     });
   }, []);
 
   /** Re-publish my presence after changing my character (or, as host, the map). */
-  const retrack = (next: { character?: number | null; map?: MapId | "random"; mode?: GameMode; rules?: RtRules }) => {
+  const retrack = (next: { character?: number | null; map?: MapId | "random"; mode?: GameMode; rules?: RtRules; stopRules?: StopRules }) => {
+    if (next.stopRules !== undefined) {
+      stopRulesRef.current = next.stopRules;
+      setStopRules(next.stopRules);
+    }
     if (next.rules !== undefined) {
       rtRulesRef.current = next.rules;
       setRtRules(next.rules);
@@ -577,7 +588,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       name: myName,
       playerId: myPlayerId,
       character: myCharRef.current ?? undefined,
-      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current, rtRules: rtRulesRef.current } : {}),
+      ...(isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, mapPick: mapPickRef.current, modePick: modePickRef.current, rtRules: rtRulesRef.current, stopRules: stopRulesRef.current } : {}),
     } satisfies Occupant);
   };
 
@@ -1094,12 +1105,20 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
                 setModePick(m);
               }}
             />
-            {modePick === "moving" && (
+            {modePick === "moving" ? (
               <RtRulesPicker
                 value={rtRules}
                 onChange={(r) => {
                   rtRulesRef.current = r;
                   setRtRules(r);
+                }}
+              />
+            ) : (
+              <StopRulesPicker
+                value={stopRules}
+                onChange={(r) => {
+                  stopRulesRef.current = r;
+                  setStopRules(r);
                 }}
               />
             )}
@@ -1181,10 +1200,15 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
               <div className="flex w-full max-w-md flex-col gap-1.5 text-left text-xs text-white/60 light:text-slate-500">
                 모드
                 <ModePicker value={modePick} onChange={(m) => retrack({ mode: m })} />
-                {modePick === "moving" && (
+                {modePick === "moving" ? (
                   <>
                     무빙 모드 설정
                     <RtRulesPicker value={rtRules} onChange={(r) => retrack({ rules: r })} />
+                  </>
+                ) : (
+                  <>
+                    스탑 모드 설정
+                    <StopRulesPicker value={stopRules} onChange={(r) => retrack({ stopRules: r })} />
                   </>
                 )}
                 맵
