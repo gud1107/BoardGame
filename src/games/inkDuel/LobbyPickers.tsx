@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { CHARACTERS } from "./arenaArt";
 import { CharacterAvatar } from "./ArenaCanvas";
 import { MAP_IDS, MAPS, type MapId } from "./maps";
 import { DEFAULT_STOP_RULES, sameStopRules, STOP_PRESETS, STOP_RULE_OPTIONS, type StopRules } from "./engine";
 import { DEFAULT_RT_RULES, RT_PRESETS, RT_RULE_OPTIONS, sameRules, type RtRules } from "./realtime";
+import { MAX_PRESETS, PRESET_NAME_MAX, type MyPreset } from "./roomPrefs";
 
 /** Grid of the selectable characters; `takenBy` greys out ones another player already picked. */
 export function CharacterPicker({ value, onChange, takenBy = {} }: { value: number | null; onChange: (c: number) => void; takenBy?: Record<number, string> }) {
@@ -192,6 +194,89 @@ export function stopRulesLabel(r: StopRules | undefined): string {
   if (!r) return "";
   const preset = STOP_PRESETS.find((p) => p.id !== "default" && sameStopRules(p.rules, r));
   return preset ? `${preset.emoji} ${preset.name}` : nonDefault(STOP_RULE_OPTIONS, r, DEFAULT_STOP_RULES);
+}
+
+/**
+ * ⭐ 내 프리셋: tap a chip to load it, × to delete, "+ 지금 설정 저장" to name the
+ * current combo (mode, map, both modes' settings). Saved per device, and to
+ * the account when signed in (roomPrefs.ts).
+ */
+export function MyPresetsBar({
+  presets,
+  isActive,
+  onApply,
+  onDelete,
+  onSave,
+  synced,
+}: {
+  presets: MyPreset[];
+  isActive: (p: MyPreset) => boolean;
+  onApply: (p: MyPreset) => void;
+  onDelete: (id: string) => void;
+  onSave: (name: string) => void;
+  synced: boolean;
+}) {
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState("");
+  const commit = () => {
+    if (!name.trim()) return;
+    onSave(name);
+    setName("");
+    setNaming(false);
+  };
+  return (
+    <div className="flex flex-col gap-1.5 rounded-xl border border-violet-400/30 bg-violet-400/5 p-2 light:bg-violet-50/60">
+      <div className="flex flex-wrap items-center gap-x-2 text-[11px] font-semibold text-white/70 light:text-slate-600">
+        ⭐ 내 프리셋
+        <span className="font-normal text-white/40 light:text-slate-400">{synced ? "☁️ 계정에 저장돼 다른 기기에서도 보여요" : "이 기기에 저장 · 로그인하면 다른 기기에서도"}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {presets.map((p) => (
+          <span
+            key={p.id}
+            className={`flex items-center overflow-hidden rounded-full border text-[11px] font-semibold ${
+              isActive(p) ? "border-violet-400 bg-violet-500/25 text-white light:text-violet-900" : "border-white/15 text-white/70 light:border-slate-300 light:text-slate-700"
+            }`}
+          >
+            <button type="button" onClick={() => onApply(p)} className="py-1 pr-1 pl-2.5" title={`${p.mode === "moving" ? "🏃 무빙" : "🛑 스탑"} 모드 설정 불러오기`}>
+              {p.mode === "moving" ? "🏃" : "🛑"} {p.name}
+            </button>
+            <button type="button" onClick={() => onDelete(p.id)} className="px-1.5 py-1 text-white/40 hover:text-rose-400 light:text-slate-400" title="삭제">
+              ×
+            </button>
+          </span>
+        ))}
+        {presets.length < MAX_PRESETS &&
+          (naming ? (
+            <span className="flex items-center gap-1">
+              <input
+                autoFocus
+                value={name}
+                maxLength={PRESET_NAME_MAX}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    commit();
+                  }
+                  if (e.key === "Escape") setNaming(false);
+                }}
+                placeholder="이름 (예: 친구들이랑)"
+                className="w-36 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-white placeholder:text-white/30 focus:border-violet-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-800"
+              />
+              <button type="button" onClick={commit} disabled={!name.trim()} className="rounded-full bg-violet-600 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-40">
+                저장
+              </button>
+            </span>
+          ) : (
+            <button type="button" onClick={() => setNaming(true)} className="rounded-full border border-dashed border-violet-400/60 px-2.5 py-1 text-[11px] font-semibold text-violet-300 hover:bg-violet-500/15 light:text-violet-700">
+              + 지금 설정 저장
+            </button>
+          ))}
+        {presets.length >= MAX_PRESETS && <span className="text-[10px] text-white/40 light:text-slate-400">최대 {MAX_PRESETS}개 — 하나를 지우면 새로 저장할 수 있어요</span>}
+      </div>
+    </div>
+  );
 }
 
 export function modeLabel(m: GameMode | undefined): string {

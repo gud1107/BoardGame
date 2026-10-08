@@ -26,6 +26,7 @@ import { surfaceY } from "./physics";
 import { MAP_IDS } from "./maps";
 import { DEFAULT_RT_RULES, newBotMemory, RT_INK_MAX, RT_SHIELD_MS, rtBotThink, sanitizeRules, startRealtime, stepRealtime } from "./realtime";
 import { RtClientBuffer, snapFromState } from "./rtView";
+import { MAX_PRESETS, PRESET_NAME_MAX, sanitizeStored } from "./roomPrefs";
 
 function line(x0: number, y0: number, x1: number, y1: number, steps = 20, c: Stroke["c"] = 0): Stroke {
   const p: number[] = [];
@@ -502,5 +503,30 @@ describe("stop mode rules (host settings)", () => {
     const frozen = { ...s, players: s.players.map((p) => ({ ...p, status: { freeze: 1 } })) };
     expect(applyAction(frozen, { type: "pass", seat: s.turnSeat }).inkBudget).toBe(Math.round((130 * FROZEN_INK) / 100));
     expect(sanitizeStopRules({ rounds: 999, ink: -3, turnSeconds: "x" })).toEqual({ rounds: 30, ink: 30, turnSeconds: 45 });
+  });
+});
+
+describe("remembered settings + 내 프리셋 (roomPrefs)", () => {
+  it("re-validates stored data: junk dropped, 6-preset cap, names trimmed to 16 chars", () => {
+    const raw = {
+      prefs: { playerCount: 99, character: 42, map: "moon", mode: "moving", rtRules: { speed: 9999 }, stopRules: { rounds: 15, ink: 130, turnSeconds: 60 } },
+      presets: [
+        ...Array.from({ length: 8 }, (_, i) => ({ id: `x${i}`, name: `  프리셋 이름이 아주아주아주 길어요 ${i}  `, mode: "stop", map: "snow" })),
+        { name: "" },
+        "garbage",
+      ],
+      t: 123,
+    };
+    const s = sanitizeStored(raw)!;
+    expect(s.prefs.playerCount).toBe(4);
+    expect(s.prefs.character).toBeNull();
+    expect(s.prefs.map).toBe("random");
+    expect(s.prefs.mode).toBe("moving");
+    expect(s.prefs.rtRules.speed).toBe(160);
+    expect(s.prefs.stopRules).toEqual({ rounds: 15, ink: 130, turnSeconds: 60 });
+    expect(s.presets).toHaveLength(MAX_PRESETS);
+    expect(s.presets.every((p) => p.name.length <= PRESET_NAME_MAX && p.map === "snow")).toBe(true);
+    expect(s.t).toBe(123);
+    expect(sanitizeStored("nope")).toBeNull();
   });
 });

@@ -12,12 +12,13 @@ import { useActiveRoomListing } from "@/games/shared/room/useActiveRoomListing";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
-import { CharacterPicker, MapPicker, mapLabel, ModePicker, modeLabel, RtRulesPicker, rtRulesLabel, StopRulesPicker, stopRulesLabel, type GameMode } from "./LobbyPickers";
+import { CharacterPicker, MapPicker, mapLabel, ModePicker, modeLabel, MyPresetsBar, RtRulesPicker, rtRulesLabel, StopRulesPicker, stopRulesLabel, type GameMode } from "./LobbyPickers";
+import { DEFAULT_PREFS, loadStored, MAX_PRESETS, newPresetId, PRESET_NAME_MAX, pushToAccount, saveLocal, watchAccount, type MyPreset, type RoomPrefs, type StoredPrefs } from "./roomPrefs";
 import RealtimeBoard, { type CommandBody } from "./RealtimeBoard";
-import { DEFAULT_RT_RULES, newBotMemory, rtBotThink, sanitizeRules, startRealtime, stepRealtime, type RtBotMemory, type RtCommand, type RtInput, type RtRules, type RtState } from "./realtime";
+import { newBotMemory, rtBotThink, sameRules, sanitizeRules, startRealtime, stepRealtime, type RtBotMemory, type RtCommand, type RtInput, type RtRules, type RtState } from "./realtime";
 import { RtClientBuffer, snapFromState, viewFromState, type RtSnap, type RtView } from "./rtView";
 import { CharacterAvatar } from "./ArenaCanvas";
-import { CHARACTER_COUNT, isMapId, MAP_IDS, type MapId } from "./maps";
+import { isMapId, MAP_IDS, type MapId } from "./maps";
 import {
   applyAction,
   chooseBotAction,
@@ -26,7 +27,7 @@ import {
   isStateSyncStale,
   MAX_PLAYERS,
   MIN_PLAYERS,
-  DEFAULT_STOP_RULES,
+  sameStopRules,
   sanitizeStopRules,
   startGame,
   type EngineAction,
@@ -108,53 +109,13 @@ function storeSeat(code: string, seat: number) {
   window.localStorage.setItem(`ink-duel-seat-${code}`, String(seat));
 }
 
-/** Room-creation choices remembered on this device (browser storage only — never synced). */
-const PREFS_KEY = "ink-duel-room-prefs-v1";
-
-interface RoomPrefs {
-  playerCount: number;
-  character: number | null;
-  map: MapId | "random";
-  mode: GameMode;
-  rtRules: RtRules;
-  stopRules: StopRules;
-}
-
-const DEFAULT_PREFS: RoomPrefs = { playerCount: 2, character: null, map: "random", mode: "stop", rtRules: DEFAULT_RT_RULES, stopRules: DEFAULT_STOP_RULES };
-
-/** Reads + re-validates saved prefs (storage can be stale, edited or unavailable). */
-function loadPrefs(): { prefs: RoomPrefs; saved: boolean } {
-  try {
-    const raw = typeof window === "undefined" ? null : window.localStorage.getItem(PREFS_KEY);
-    if (!raw) return { prefs: DEFAULT_PREFS, saved: false };
-    const p = JSON.parse(raw) as Partial<RoomPrefs>;
-    return {
-      saved: true,
-      prefs: {
-        playerCount: typeof p.playerCount === "number" ? Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.round(p.playerCount))) : 2,
-        character: typeof p.character === "number" && Number.isInteger(p.character) && p.character >= 0 && p.character < CHARACTER_COUNT ? p.character : null,
-        map: p.map === "random" || isMapId(p.map) ? p.map : "random",
-        mode: p.mode === "moving" ? "moving" : "stop",
-        rtRules: sanitizeRules(p.rtRules),
-        stopRules: sanitizeStopRules(p.stopRules),
-      },
-    };
-  } catch {
-    return { prefs: DEFAULT_PREFS, saved: false };
-  }
-}
-
-function savePrefs(prefs: RoomPrefs) {
-  try {
-    window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
-  } catch {
-    // Private mode / blocked storage: just don't remember.
-  }
-}
-
 export default function InkDuelGame({ onComplete }: PlayableGameProps) {
-  const [initialPrefs] = useState(loadPrefs);
-  const [prefsRestored, setPrefsRestored] = useState(initialPrefs.saved);
+  const [initialStored] = useState(loadStored);
+  const initialPrefs = { prefs: initialStored.stored.prefs };
+  const [prefsRestored, setPrefsRestored] = useState(initialStored.saved);
+  const [myPresets, setMyPresets] = useState<MyPreset[]>(initialStored.stored.presets);
+  const [accountSync, setAccountSync] = useState(false);
+  const storedRef = useRef<StoredPrefs>(initialStored.stored);
   const [roomFromUrl] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("room");
@@ -177,28 +138,71 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const rtRulesRef = useRef<RtRules>(initialPrefs.prefs.rtRules);
   const [stopRules, setStopRules] = useState<StopRules>(initialPrefs.prefs.stopRules);
   const stopRulesRef = useRef<StopRules>(initialPrefs.prefs.stopRules);
-  // Remember the latest choices for the next room on this device.
+  // Remember the latest choices (+ 내 프리셋) on this device and, when signed in, on the account.
   const prefsTouchedRef = useRef(false);
+  const pushTimerRef = useRef<number | null>(null);
   useEffect(() => {
     if (!prefsTouchedRef.current) {
       prefsTouchedRef.current = true;
       return;
     }
-    savePrefs({ playerCount: targetPlayerCount, character: myChar, map: mapPick, mode: modePick, rtRules, stopRules });
-  }, [targetPlayerCount, myChar, mapPick, modePick, rtRules, stopRules]);
+    const stored: StoredPrefs = {
+      prefs: { playerCount: targetPlayerCount, character: myChar, map: mapPick, mode: modePick, rtRules, stopRules },
+      presets: myPresets,
+      t: Date.now(),
+    };
+    storedRef.current = stored;
+    saveLocal(stored);
+    // Debounced: tapping through settings shouldn't fire an account update per tap.
+    if (pushTimerRef.current !== null) window.clearTimeout(pushTimerRef.current);
+    pushTimerRef.current = window.setTimeout(() => void pushToAccount(stored), 1500);
+  }, [targetPlayerCount, myChar, mapPick, modePick, rtRules, stopRules, myPresets]);
+  /** Puts saved prefs on screen (sets state + refs; `retrack` is used later once a room is open). */
+  const applyPrefs = (p: Partial<RoomPrefs>) => {
+    if (p.playerCount !== undefined) setTargetPlayerCount(p.playerCount);
+    if (p.character !== undefined) {
+      myCharRef.current = p.character;
+      setMyChar(p.character);
+    }
+    if (p.map !== undefined) {
+      mapPickRef.current = p.map;
+      setMapPick(p.map);
+    }
+    if (p.mode !== undefined) {
+      modePickRef.current = p.mode;
+      setModePick(p.mode);
+    }
+    if (p.rtRules !== undefined) {
+      rtRulesRef.current = p.rtRules;
+      setRtRules(p.rtRules);
+    }
+    if (p.stopRules !== undefined) {
+      stopRulesRef.current = p.stopRules;
+      setStopRules(p.stopRules);
+    }
+  };
+  const applyPrefsRef = useRef(applyPrefs);
+  useEffect(() => {
+    applyPrefsRef.current = applyPrefs;
+  });
+  // Account sync: a newer account copy (set on another device) replaces this device's.
+  useEffect(
+    () =>
+      watchAccount(
+        () => storedRef.current,
+        (remote) => {
+          storedRef.current = remote;
+          saveLocal(remote);
+          applyPrefsRef.current(remote.prefs);
+          setMyPresets(remote.presets);
+          setPrefsRestored(true);
+        },
+        setAccountSync,
+      ),
+    [],
+  );
   const resetPrefs = () => {
-    const d = DEFAULT_PREFS;
-    setTargetPlayerCount(d.playerCount);
-    myCharRef.current = d.character;
-    setMyChar(d.character);
-    mapPickRef.current = d.map;
-    setMapPick(d.map);
-    modePickRef.current = d.mode;
-    setModePick(d.mode);
-    rtRulesRef.current = d.rtRules;
-    setRtRules(d.rtRules);
-    stopRulesRef.current = d.stopRules;
-    setStopRules(d.stopRules);
+    applyPrefs(DEFAULT_PREFS);
     setPrefsRestored(false);
   };
   // The running match's mode + 🏃 moving-mode plumbing (host simulates, guests interpolate snapshots).
@@ -842,6 +846,18 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     [simHost, mySeat],
   );
 
+  const presetIsActive = (p: MyPreset) => p.mode === modePick && p.map === mapPick && sameRules(p.rtRules, rtRules) && sameStopRules(p.stopRules, stopRules);
+  const saveMyPreset = (name: string) => {
+    const clean = name.trim().slice(0, PRESET_NAME_MAX);
+    if (!clean || myPresets.length >= MAX_PRESETS) return;
+    setMyPresets((list) => [...list, { id: newPresetId(), name: clean, mode: modePick, map: mapPick, rtRules, stopRules }]);
+  };
+  const applyMyPreset = (p: MyPreset) => retrack({ mode: p.mode, map: p.map, rules: p.rtRules, stopRules: p.stopRules });
+  const deleteMyPreset = (id: string) => setMyPresets((list) => list.filter((p) => p.id !== id));
+  const myPresetsBar = (
+    <MyPresetsBar presets={myPresets} isActive={presetIsActive} onApply={applyMyPreset} onDelete={deleteMyPreset} onSave={saveMyPreset} synced={accountSync} />
+  );
+
   function castTakeoverVote(seatKey: string) {
     channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "vote-cast", seatKey, voterDeviceId: deviceId } } });
   }
@@ -1200,6 +1216,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
                 }}
               />
             )}
+            {myPresetsBar}
           </div>
         )}
         {intent === "create" && (
@@ -1291,6 +1308,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
                 )}
                 맵
                 <MapPicker value={mapPick} onChange={(m) => retrack({ map: m })} />
+                {myPresetsBar}
               </div>
             ) : (
               (hostMapLabel || hostModeLabel) && (

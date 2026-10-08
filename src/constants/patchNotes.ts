@@ -84,6 +84,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       },
       {
         game: "ink-duel",
+        type: "FEAT",
+        desc: "⭐ 내 프리셋 — 지금 설정에 이름을 붙여 6개까지 저장, 로그인하면 기억한 설정·프리셋이 다른 기기에서도 그대로",
+      },
+      {
+        game: "ink-duel",
         type: "IMPROVE",
         desc: "무빙 모드 그림판을 경기장 바로 아래 이동·발사 버튼 옆으로 — 스크롤 없이 그리고 움직이고 쏘기",
       },
