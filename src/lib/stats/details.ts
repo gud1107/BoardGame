@@ -143,6 +143,7 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
       value: (d) => waves3(d.maxWaveVersusEasy, d.maxWaveVersusNormal, d.maxWaveVersusHard),
     },
     { label: "처치 (누적 · 판당 평균)", value: (d, played) => `${n(d.kills)} · ${avg(d.kills, played) ?? "-"}` },
+    { label: "😡 광폭화 보스·전쟁군주 처치", value: (d) => `${n(d.rageKills)}회` },
   ],
   "for-sale": [
     { label: "최고 최종 자산", value: (d) => `$${n(d.maxTotal)}` },

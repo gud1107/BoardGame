@@ -12,6 +12,9 @@ import {
   unitRange,
   loadLimit,
   wakeCost,
+  braceCost,
+  stunTicks,
+  BRACE_MAX,
   killGold,
   MINION_CAP,
   eliminationLimit,
@@ -292,6 +295,18 @@ describe("merge defense engine", () => {
     expect(s.boards[0].gems).toBe(gems0 + 3);
     expect(s.boards[0].gold).toBeGreaterThanOrEqual(gold0 + Math.round(killGold("boss", s.wave) * 1.5));
     expect(s.events.some((e) => e.type === "boss-kill" && e.rage)).toBe(true);
+    expect(s.boards[0].rageKills).toBe(1);
+  });
+
+  it("결속 shortens smash stuns per level and caps at BRACE_MAX", () => {
+    expect(stunTicks(1)).toBeLessThan(stunTicks(0));
+    expect(stunTicks(BRACE_MAX)).toBeGreaterThan(0);
+    let s = startGame(2, 83);
+    s.boards[0].gold = 10_000;
+    for (let i = 0; i < BRACE_MAX; i++) s = applyAction(s, 0, { type: "brace" });
+    expect(s.boards[0].brace).toBe(BRACE_MAX);
+    expect(s.boards[0].gold).toBe(10_000 - [0, 1, 2].reduce((t, l) => t + braceCost(l), 0));
+    expect(applyAction(s, 0, { type: "brace" })).toBe(s);
   });
 
   it("a dying golem announces its split", () => {

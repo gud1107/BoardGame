@@ -29,6 +29,9 @@ import {
   slotCenter,
   summonCost,
   wakeCost,
+  BRACE_MAX,
+  braceCost,
+  stunTicks,
   upgradeCost,
   killGold,
   MINION_CAP,
@@ -386,6 +389,10 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           }
           if (mine && audible) audio.playBossKill();
           break;
+        case "brace":
+          fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: `결속 Lv.${ev.level} — 기절 ${(stunTicks(ev.level) / 20).toFixed(1)}초`, color: "#cbd5e1", t0: now, dur: 1100, size: 17 });
+          if (mine && audible) audio.playUpgrade();
+          break;
         case "wake":
           fx.push({ type: "ring", x: BOARD_W / 2, y: BOARD_H / 2, color: "#fde047", r0: 10, r1: 90, t0: now, dur: 600 });
           fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: `기절 해제! ×${ev.count}`, color: "#fde047", t0: now, dur: 1000, size: 18 });
@@ -549,6 +556,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const cost = summonCost(me);
   const stunnedCount = me.units.filter((u) => u?.stun).length;
   const wakeNow = wakeCost(state.wave);
+  const braceLevel = me.brace ?? 0;
   const freeSlots = me.units.filter((u) => !u).length;
   const pairs = useMemo(() => mergePairs(me), [me]);
   const versus = state.mode === "versus";
@@ -831,7 +839,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
       </div>
 
       {/* Upgrades */}
-      <div className="grid grid-cols-5 gap-1.5">
+      <div className="grid grid-cols-6 gap-1.5">
         {UNIT_KINDS.map((kind) => {
           const level = me.upgrades[kind];
           const maxed = level >= MAX_UPGRADE;
@@ -850,6 +858,17 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             </button>
           );
         })}
+        <button
+          disabled={!interactive || braceLevel >= BRACE_MAX || me.gold < braceCost(braceLevel)}
+          onClick={() => onAction({ type: "brace" })}
+          title={`🛡️ 결속: 광폭화 보스의 기절 시간을 25%씩 줄여요 (지금 ${(stunTicks(braceLevel) / 20).toFixed(1)}초)`}
+          className="flex flex-col items-center rounded-lg border border-white/10 bg-white/5 py-1.5 text-white transition hover:border-white/30 disabled:opacity-40 light:border-slate-200 light:bg-white light:text-slate-900"
+          style={{ boxShadow: "inset 0 -3px 0 #94a3b8" }}
+        >
+          <span className="text-base leading-none">🛡️</span>
+          <span className="text-[10px] font-bold">결속 {braceLevel}</span>
+          <span className="font-mono text-[10px] opacity-70">{braceLevel >= BRACE_MAX ? "MAX" : `🪙${braceCost(braceLevel)}`}</span>
+        </button>
       </div>
 
       {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} />}

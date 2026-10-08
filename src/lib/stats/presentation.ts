@@ -187,6 +187,7 @@ export const STAT_RANK_METRICS: Record<string, RankMetric[]> = {
     { id: "md-s-normal", label: "생존전 보통 최고", num: "maxWaveSurvivalNormal", format: "count", unit: "웨이브" },
     { id: "md-v-hard", label: "유닛 대결 어려움 최고", num: "maxWaveVersusHard", format: "count", unit: "웨이브" },
     { id: "md-kills", label: "누적 처치", num: "kills", format: "count", unit: "마리" },
+    { id: "md-rage", label: "광폭 보스 처치", num: "rageKills", format: "count", unit: "회" },
   ],
   "doodle-phone": [
     { id: "dp-react", label: "받은 반응", num: "reactionsReceived", format: "count", unit: "개" },
