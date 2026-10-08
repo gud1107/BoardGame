@@ -220,6 +220,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "🛡️ 결속 3단계 = 콤보 견제 면역 · 결과 화면에 견제 건·당함·막음 횟수 · /stats에 콤보 보너스 달성률·견제 기록",
       },
       {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "견제 반격 — 결속 3단계로 콤보 견제를 막으면 보낸 사람의 가장 강한 타워가 0.7초 기절",
+      },
+      {
         game: "ink-duel",
         type: "IMPROVE",
         desc: "그래픽 전면 개편 — 캐릭터 4종(마법사·고양이·개구리·토끼), 수채화 배경·지층 지형, 잉크 폭발 파티클·화면 흔들림·속성 이펙트, 카드형 무기 판정",

@@ -407,6 +407,9 @@ describe("merge defense engine", () => {
       for (const e of s.events) if (e.id > last && e.type === "jam" && e.seat === 0) {
         expect(e.blocked).toBe(true);
         expect(e.slots).toEqual([]);
+        // Reflect: the sender's strongest tower got a short stun.
+        expect(e.reflected).toBeTypeOf("number");
+        expect(s.boards[0].units[e.reflected!]!.stun).toBeGreaterThan(0);
         blocked = true;
       }
       last = s.nextEventId - 1;

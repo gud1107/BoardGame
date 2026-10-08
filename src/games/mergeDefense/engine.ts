@@ -99,7 +99,14 @@ export const SMASH_STUN = 2 * 20;
 const SMASH_REACH = 150;
 /** 🛡️ 결속: a permanent board upgrade, each level cuts smash stun time by 25%. */
 export const BRACE_MAX = 3;
-const BRACE_COSTS = [80, 160, 280];
+export const BRACE_COSTS = [80, 160, 280];
+/**
+ * A jam blocked by max 결속 reflects: the sender's strongest tower is stunned
+ * this many ticks (0 = off). Controlled sim (one seat rushing 결속 3 in 2p/3p
+ * versus): no reflect 38% wins, 0.7s reflect ~47%, fair share ~42% (±5 noise)
+ * — so the 280 third level stays and the reflect is a modest payoff.
+ */
+export const JAM_REFLECT = { ticks: 14 };
 export function braceCost(level: number): number {
   return BRACE_COSTS[Math.min(level, BRACE_COSTS.length - 1)];
 }
@@ -317,7 +324,7 @@ export type GameEvent =
   /** A crit chain hit a reward milestone (`count` is the chain length). */
   | { id: number; tick: number; seat: SeatIndex; type: "combo"; count: number; gold: number; gems: number }
   /** 유닛 대결: `seat`'s combo milestone stunned these towers on `to`'s board. */
-  | { id: number; tick: number; seat: SeatIndex; type: "jam"; to: SeatIndex; slots: number[]; blocked?: boolean }
+  | { id: number; tick: number; seat: SeatIndex; type: "jam"; to: SeatIndex; slots: number[]; blocked?: boolean; reflected?: number }
   /** A golem at road distance `trav` just broke into pebbles. */
   | { id: number; tick: number; seat: SeatIndex; type: "split"; trav: number }
   /** A boss / warlord used up its minions and went berserk. */
@@ -880,9 +887,14 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
           .slice(0, gemDue ? COMBO.jam.gem : COMBO.jam.gold)
           .map((x) => x.i);
         if ((foe.brace ?? 0) >= BRACE_MAX) {
-          // Max 결속 shrugs combo jams off entirely.
+          // Max 결속 shrugs combo jams off entirely — and bounces a short stun
+          // back onto the sender's strongest tower (shortened by the sender's own 결속).
           foe.jamsBlocked = (foe.jamsBlocked ?? 0) + 1;
-          pushEvent(s, { seat, type: "jam", to, slots: [], blocked: true });
+          const back = Math.round(JAM_REFLECT.ticks * (stunTicks(board.brace ?? 0) / stunTicks(0)));
+          const strongest = board.units.reduce((best, u, i) => (u && (best < 0 || u.grade > board.units[best]!.grade) ? i : best), -1);
+          const reflected = back > 0 && strongest >= 0 ? strongest : undefined;
+          if (reflected !== undefined) board.units[reflected]!.stun = Math.max(board.units[reflected]!.stun ?? 0, back);
+          pushEvent(s, { seat, type: "jam", to, slots: [], blocked: true, ...(reflected !== undefined ? { reflected } : {}) });
         } else if (ticks > 0 && slots.length > 0) {
           for (const i of slots) foe.units[i]!.stun = Math.max(foe.units[i]!.stun ?? 0, ticks);
           board.jamsSent = (board.jamsSent ?? 0) + 1;

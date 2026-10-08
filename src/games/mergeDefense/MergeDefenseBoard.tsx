@@ -420,13 +420,23 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         continue;
       }
       if (ev.type === "jam" && ev.blocked) {
-        // Max 결속: the jam bounces off a shield.
+        // Max 결속: the jam bounces off a shield — and back onto the sender.
         if (ev.to === view) {
           fx.push({ type: "ring", x: BOARD_W / 2, y: BOARD_H / 2, color: "#93c5fd", r0: 20, r1: 110, t0: now, dur: 600 });
           fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: "결속 — 견제 막음!", color: "#bfdbfe", t0: now, dur: 1100, size: 17 });
         }
-        if (ev.to === mySeat) showBanner({ text: `🛡️ ${names[ev.seat] ?? "상대"}님의 콤보 견제를 막았어요!`, sub: "결속 3단계 = 견제 면역", tone: "good" });
-        else if (ev.seat === mySeat) showBanner({ text: `🛡️ ${names[ev.to] ?? "상대"}님의 결속에 견제가 막혔어요`, tone: "danger" });
+        if (ev.seat === view && ev.reflected !== undefined) {
+          const t = slotCenter(ev.reflected);
+          fx.push({ type: "smash", x: t.x - 6, y: -6, tx: t.x, ty: t.y + 6, t0: now, dur: 600, seed: ev.id });
+          fx.push({ type: "text", x: t.x, y: t.y - 30, text: "반격!", color: "#93c5fd", t0: now + 150, dur: 900, size: 13 });
+          shake(2.4, 200);
+        }
+        if (ev.to === mySeat) {
+          showBanner({ text: `🛡️ ${names[ev.seat] ?? "상대"}님의 콤보 견제를 막았어요!`, sub: ev.reflected !== undefined ? "반격 — 상대의 가장 강한 타워를 잠깐 기절시켰어요" : "결속 3단계 = 견제 면역", tone: "good" });
+        } else if (ev.seat === mySeat) {
+          showBanner({ text: `🛡️ ${names[ev.to] ?? "상대"}님의 결속에 견제가 막혔어요`, sub: ev.reflected !== undefined ? "반격당해 내 가장 강한 타워가 잠깐 기절!" : undefined, tone: "danger" });
+          if (audible && ev.reflected !== undefined) audio.playBossSmash();
+        }
         continue;
       }
       if (ev.type === "jam") {
