@@ -639,6 +639,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         load: b.alive ? [...(b.loadHistory ?? []), b.wavePeak ?? 0] : (b.loadHistory ?? []),
         gold: b.alive ? [...(b.goldHistory ?? []), Math.round(b.goldEarned ?? 0)] : (b.goldHistory ?? []),
         kills: b.alive ? [...(b.killHistory ?? []), b.kills] : (b.killHistory ?? []),
+        upgrades: b.upgradeLog ?? [],
       })),
     });
     const mine = rankings.find((r) => r.seat === mySeat);

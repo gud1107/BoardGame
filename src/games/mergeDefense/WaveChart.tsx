@@ -21,7 +21,12 @@ export interface WaveSeries {
   load: number[];
   gold: number[];
   kills: number[];
+  /** Board upgrades bought (shown for the viewer's own line only). */
+  upgrades?: { wave: number; kind: "focus" | "brace"; level: number }[];
 }
+
+const UPGRADE_ICON = { focus: "🎯", brace: "🛡️" } as const;
+const UPGRADE_NAME = { focus: "집중", brace: "결속" } as const;
 
 type Tab = "load" | "gold" | "kills";
 const TABS: { id: Tab; label: string; title: string }[] = [
@@ -31,8 +36,9 @@ const TABS: { id: Tab; label: string; title: string }[] = [
 ];
 
 const W = 320;
-const H = 168;
-const PAD = { l: 30, r: 62, t: 14, b: 20 };
+const H = 178;
+/** Bottom pad holds the upgrade-marker strip above the wave labels. */
+const PAD = { l: 30, r: 62, t: 14, b: 30 };
 /** Direct labels keep to a few characters so they fit the right margin; the legend has full names. */
 const short = (name: string) => {
   const bare = name.replace(/^[^\p{L}\p{N}]+/u, "") || name; // drop a leading emoji like "🤖 "
@@ -61,6 +67,9 @@ export default function WaveChart({ series, limit, bossEvery }: { series: WaveSe
   const yTicks = tab === "load" ? [0, Math.round(limit / 2)] : [0, Math.round(peak / 2), Math.round(peak)];
   const bosses = Array.from({ length: Math.floor(waves / bossEvery) }, (_, k) => (k + 1) * bossEvery - 1);
   const meta = TABS.find((t) => t.id === tab)!;
+  const mine = series.find((s) => s.me);
+  const marks = mine?.upgrades ?? [];
+  const markY = H - PAD.b + 10;
 
   // End labels: sorted by height, nudged apart so they never overlap.
   const ends = data
@@ -187,29 +196,56 @@ export default function WaveChart({ series, limit, bossEvery }: { series: WaveSe
               </g>
             );
           })}
+          {/* My board upgrades: icon on the strip under the plot + a faint guide up through it */}
+          {marks.map((m, k) => {
+            const sameWave = marks.filter((o) => o.wave === m.wave);
+            const nth = sameWave.indexOf(m);
+            const mx = x(Math.min(waves - 1, m.wave - 1)) + (nth - (sameWave.length - 1) / 2) * 9;
+            return (
+              <g key={k}>
+                {nth === 0 && <line x1={mx} x2={mx} y1={PAD.t} y2={H - PAD.b} stroke={mine?.color} strokeWidth={1} strokeDasharray="1 3" opacity={0.45} />}
+                <text x={mx} y={markY + 3} textAnchor="middle" fontSize={8}>
+                  {UPGRADE_ICON[m.kind]}
+                </text>
+              </g>
+            );
+          })}
           {/* Crosshair */}
           {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={PAD.t} y2={H - PAD.b} stroke="rgba(255,255,255,0.35)" strokeWidth={1} />}
         </svg>
-        {hover !== null && rows.length > 0 && (
-          <div
-            className="pointer-events-none absolute top-1 z-10 rounded-lg border border-white/15 bg-black/85 px-2 py-1 text-[11px] whitespace-nowrap text-white shadow-lg"
-            style={{ left: `${(x(hover) / W) * 100}%`, transform: `translateX(${x(hover) > W / 2 ? "-105%" : "5%"})` }}
-          >
-            <p className="mb-0.5 font-bold">
+      </div>
+      {/* Readout under the plot (never covers the lines); fixed height so the card doesn't jump. */}
+      <div className="mt-1 min-h-[2.6rem] rounded-lg bg-black/25 px-2 py-1 text-[11px]" aria-live="polite">
+        {hover === null || rows.length === 0 ? (
+          <p className="pt-2 text-center text-white/40">
+            그래프를 누르거나 올리면 웨이브별 수치가 여기 나와요{marks.length > 0 ? " · 🎯 집중 🛡️ 결속 = 내가 올린 시점" : ""}
+          </p>
+        ) : (
+          <>
+            <p className="font-bold text-white/85">
               WAVE {hover + 1}
               {(hover + 1) % bossEvery === 0 && " 👑"}
+              {marks
+                .filter((m) => m.wave === hover + 1)
+                .map((m, k) => (
+                  <span key={k} className="ml-1.5 font-normal text-white/60">
+                    {UPGRADE_ICON[m.kind]} {UPGRADE_NAME[m.kind]} {m.level}단계
+                  </span>
+                ))}
             </p>
-            {rows.map(({ s, v }) => (
-              <p key={s.seat} className="flex items-center gap-1.5">
-                <span className="inline-block h-2 w-2 rounded-full" style={{ background: s.color }} />
-                <span className="text-white/70">{s.me ? "나" : s.name}</span>
-                <span className="ml-auto pl-2 font-mono">
-                  {fmt(v[hover]!)}
-                  {s.out && hover === v.length - 1 ? " ✕" : ""}
+            <p className="flex flex-wrap gap-x-3 gap-y-0.5">
+              {rows.map(({ s, v }) => (
+                <span key={s.seat} className="inline-flex items-center gap-1 whitespace-nowrap">
+                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: s.color }} />
+                  <span className="text-white/60">{s.me ? "나" : short(s.name)}</span>
+                  <span className="font-mono text-white">
+                    {fmt(v[hover]!)}
+                    {s.out && hover === v.length - 1 ? " ✕" : ""}
+                  </span>
                 </span>
-              </p>
-            ))}
-          </div>
+              ))}
+            </p>
+          </>
         )}
       </div>
       <details className="mt-1 text-[11px] text-white/50">

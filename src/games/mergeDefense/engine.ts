@@ -316,6 +316,8 @@ export interface Board {
   killHistory?: number[];
   /** Running total of gold earned this match. */
   goldEarned?: number;
+  /** Board upgrades bought, in order: wave + which (for the results chart). */
+  upgradeLog?: { wave: number; kind: "focus" | "brace"; level: number }[];
   wavePeak?: number;
   /** Waves from W10 this board started alive, and how many of them paid the combo gold milestone (for /stats). */
   lateWaves?: number;
@@ -748,6 +750,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     const board = s.boards[seat];
     board.gold -= focusCost(level);
     board.focus = level + 1;
+    board.upgradeLog = [...(board.upgradeLog ?? []), { wave: Math.max(1, s.wave), kind: "focus", level: level + 1 }];
     pushEvent(s, { seat, type: "focus", level: level + 1 });
     return s;
   }
@@ -759,6 +762,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     const board = s.boards[seat];
     board.gold -= braceCost(level);
     board.brace = level + 1;
+    board.upgradeLog = [...(board.upgradeLog ?? []), { wave: Math.max(1, s.wave), kind: "brace", level: level + 1 }];
     pushEvent(s, { seat, type: "brace", level: level + 1 });
     return s;
   }

@@ -280,6 +280,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "결과 그래프에 👑 보스 웨이브 표시 · 👾 몬스터 / 🪙 누적 골드 / ⚔️ 웨이브별 처치 탭",
       },
       {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "결과 그래프 수치를 그래프 아래로 옮겨 선을 가리지 않게 · 내가 🎯 집중·🛡️ 결속을 올린 시점 표시",
+      },
+      {
         game: "ink-duel",
         type: "IMPROVE",
         desc: "그래픽 전면 개편 — 캐릭터 4종(마법사·고양이·개구리·토끼), 수채화 배경·지층 지형, 잉크 폭발 파티클·화면 흔들림·속성 이펙트, 카드형 무기 판정",
