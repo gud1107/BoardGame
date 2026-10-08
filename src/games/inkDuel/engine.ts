@@ -44,8 +44,7 @@ import {
 import { CHARACTER_COUNT, MAPS, type MapId } from "./maps";
 import {
   activeStatuses,
-  hasLifesteal,
-  LIFESTEAL,
+  lifestealRate,
   statusesForHit,
   TURN_DURATION,
   VULNERABLE_MUL,
@@ -61,7 +60,7 @@ export const MAX_PLAYERS = 4;
 export const START_HP = 100;
 export const MAX_ROUNDS = 10;
 export const MIN_INK = 6;
-export const FROZEN_INK = 65;
+export const FROZEN_INK = 72;
 /** Wall points must stay within this horizontal distance of the builder… */
 export const WALL_RANGE = 230;
 /** …and this far from every other living player (no entombing). */
@@ -77,7 +76,7 @@ const WALL_BLOCK_HEIGHT = 40;
 const SHIELD_SCALE = 1.3;
 const SHIELD_HP_PER_INK = 1.3;
 export const SHIELD_GUARD = 0.6;
-const BURN_DMG = 6;
+const BURN_DMG = 5;
 const POISON_DMG = 4;
 const CHAIN_RANGE = 240;
 const PELLET_SPREAD = 28;
@@ -110,6 +109,8 @@ export interface Player {
   status: StatusMap;
   /** Just sat out a stun: can't be stunned again until after their next real turn. */
   stunImmune: boolean;
+  /** Was confused during their last turn: can't be confused again until after the next one. */
+  confuseImmune?: boolean;
 }
 
 export interface HitRecord {
@@ -519,7 +520,7 @@ function applyActionInPlace(state: InkDuelState, action: EngineAction): InkDuelS
   let confusedAngle: number | undefined;
   if ((state.players[action.seat].status.confuse ?? 0) > 0) {
     const r = seededRng((state.seed + (state.seq + 1) * 7477) | 0);
-    const off = Math.round(8 + r() * 14) * (r() < 0.5 ? -1 : 1);
+    const off = Math.round(4 + r() * 5) * (r() < 0.5 ? -1 : 1);
     angle = Math.max(0, Math.min(180, angle + off));
     confusedAngle = angle;
   }
@@ -544,6 +545,7 @@ export interface ImpactBody {
   alive: boolean;
   status: StatusMap;
   stunImmune: boolean;
+  confuseImmune?: boolean;
 }
 
 export interface ImpactResult {
@@ -671,10 +673,11 @@ export function resolveImpact<P extends ImpactBody>(
   for (const h of hits) {
     const p = players[h.seat];
     p.hp = Math.max(0, p.hp - h.dmg);
-    if (h.seat !== seat && hasLifesteal(stats)) heal += h.dmg * LIFESTEAL;
+    if (h.seat !== seat) heal += h.dmg * lifestealRate(stats);
     const got: StatusId[] = [];
     for (const st of statusesForHit(stats, statusRoll())) {
       if (st === "stun" && p.stunImmune) continue;
+      if (st === "confuse" && p.confuseImmune) continue;
       p.status = { ...p.status, [st]: Math.max(p.status[st] ?? 0, duration(st)) };
       got.push(st);
     }
@@ -783,6 +786,8 @@ function endTurn(state: InkDuelState, event: InkEvent, players0: Player[], terra
       const left = (players[seat].status[k] ?? 0) - (k === "burn" || k === "poison" ? 0 : 1);
       if (left > 0) st[k] = left;
     }
+    // A confusion that was active this turn grants a turn of immunity (no confuse-lock).
+    players[seat].confuseImmune = (players[seat].status.confuse ?? 0) > 0;
     players[seat].status = st;
     players[seat].stunImmune = false;
   }

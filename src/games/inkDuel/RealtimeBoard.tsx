@@ -600,11 +600,12 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
       {/* Controls */}
       {me?.alive && hud?.phase === "playing" && (
         <div className="flex flex-col gap-2 rounded-2xl border border-amber-400/40 bg-amber-400/5 p-2.5 sm:p-3 light:bg-amber-50/60">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {holdBtn("left", "◀")}
             {holdBtn("right", "▶")}
             {holdBtn("jump", "⤒")}
-            <div className="ml-1 flex min-w-0 flex-1 flex-col gap-1">
+            {/* Ink + reload bars: own full-width line on phones, inline on wider screens. */}
+            <div className="order-last flex min-w-0 basis-full flex-col gap-1 sm:order-none sm:ml-1 sm:basis-auto sm:flex-1">
               <div className="flex items-center gap-2 text-[11px] text-white/60 light:text-slate-500">
                 🖋️
                 <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
@@ -623,7 +624,7 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
             <button
               disabled={!ready || (mode === "wall" && !!wallError)}
               onClick={fire}
-              className="mr-14 h-12 shrink-0 rounded-xl bg-rose-600 px-4 text-sm font-bold text-white transition hover:bg-rose-500 disabled:opacity-40 sm:mr-0"
+              className="ml-auto h-12 shrink-0 rounded-xl bg-rose-600 px-4 text-sm font-bold text-white transition hover:bg-rose-500 disabled:opacity-40 sm:ml-0"
             >
               {mode === "weapon" ? "🚀 발사" : mode === "shield" ? "🛡️ 방패" : "🧱 벽"}
             </button>

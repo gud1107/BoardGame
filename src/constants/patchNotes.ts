@@ -58,6 +58,28 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
+    version: "v1.55.0",
+    releaseDate: "2026-10-09",
+    title: "✏️ 낙서 결투 무빙 모드 방장 이어받기·모바일 조작 개선·상태효과 밸런스",
+    changes: [
+      {
+        game: "ink-duel",
+        type: "FEAT",
+        desc: "무빙 모드에서 방장이 나가도 게임이 계속돼요 — 남은 사람이 자동으로 이어받아 진행(최대 0.5초 되감김)",
+      },
+      {
+        game: "ink-duel",
+        type: "IMPROVE",
+        desc: "상태효과 밸런스 조정 — 혼란 무한 반복·확정 기절이 너무 강해 확률로 변경, 두 번째 색 효과는 50% 확률, 흡혈·약화·화상 소폭 하향",
+      },
+      {
+        game: "ink-duel",
+        type: "FIX",
+        desc: "휴대폰에서 무빙 모드 잉크·재장전 막대가 찌그러져 숫자가 발사 버튼과 겹치던 문제 수정",
+      },
+    ],
+  },
+  {
     version: "v1.54.0",
     releaseDate: "2026-10-08",
     title: "🎲 랜덤 합성 디펜스 신규 추가, ✏️ 낙서 결투 무빙 모드·효과 12종·무기 11종·캐릭터·맵",

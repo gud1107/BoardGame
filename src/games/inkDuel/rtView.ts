@@ -58,6 +58,10 @@ export interface RtView {
 export interface RtSnap {
   t: number;
   seq: number;
+  /** Bumped every time a guest takes over the simulation after the host vanished. */
+  epoch?: number;
+  /** Seat currently running the simulation. */
+  hostSeat?: number;
   map: MapId;
   characters: number[];
   players: RtViewPlayer[];
@@ -149,7 +153,13 @@ export class RtClientBuffer {
   private events = new Map<number, RtEvent>();
 
   push(snap: RtSnap, now: number) {
-    if (this.curr && snap.seq <= this.curr.snap.seq) return;
+    if (this.curr) {
+      const curEpoch = this.curr.snap.epoch ?? 0;
+      const epoch = snap.epoch ?? 0;
+      // A new simulation host restarts from a slightly older backup (lower seq): accept it by epoch.
+      if (epoch < curEpoch || (epoch === curEpoch && snap.seq <= this.curr.snap.seq)) return;
+      if (epoch > curEpoch) this.prev = null;
+    }
     if (snap.terrain && snap.terrainVer >= this.terrainVer) {
       this.terrain = snap.terrain;
       this.terrainVer = snap.terrainVer;
@@ -164,7 +174,7 @@ export class RtClientBuffer {
     for (const [id, e] of this.events) if (e.at < snap.t - 3000) this.events.delete(id);
     const live = new Set(snap.projectiles.map((p) => p.id));
     for (const id of this.shapes.keys()) if (!live.has(id) && !snap.shapes?.[id]) this.shapes.delete(id);
-    this.prev = this.curr;
+    this.prev = this.curr && (this.curr.snap.epoch ?? 0) === (snap.epoch ?? 0) ? this.curr : null;
     this.curr = { snap, at: now };
   }
 

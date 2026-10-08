@@ -206,7 +206,7 @@ function applyCommand(state: RtState, cmd: RtCommand, rng: () => number) {
     if (!Number.isFinite(cmd.angle) || !Number.isFinite(cmd.power)) return;
     let angle = Math.max(0, Math.min(180, Math.round(cmd.angle)));
     const power = Math.max(10, Math.min(100, Math.round(cmd.power)));
-    if ((p.status.confuse ?? 0) > 0) angle = Math.max(0, Math.min(180, angle + Math.round(8 + rng() * 14) * (rng() < 0.5 ? -1 : 1)));
+    if ((p.status.confuse ?? 0) > 0) angle = Math.max(0, Math.min(180, angle + Math.round(4 + rng() * 5) * (rng() < 0.5 ? -1 : 1)));
     const stats = analyzeWeapon(cmd.strokes);
     const id = state.nextId++;
     state.projectiles.push({ id, owner: cmd.seat, stats, f: launchFlyer({ seat: cmd.seat, x: p.x, y: p.y, alive: true }, stats, angle, power), spawnedAt: state.timeMs });

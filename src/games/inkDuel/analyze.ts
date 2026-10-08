@@ -29,13 +29,13 @@ export const ELEMENT_LABEL: Record<Element, string> = {
   fire: "🔴 화염 (🔥 화상)",
   ice: "🔵 빙결 (❄️ 얼어붙음)",
   poison: "🟢 독 (☠️ 중독)",
-  shock: "🟡 전기 (연쇄 +1 · 30% 💫 기절)",
+  shock: "🟡 전기 (연쇄 +1 · 20% 💫 기절)",
   slow: "🩵 끈적 (🐌 느려짐)",
-  stun: "🟤 충격 (💫 기절, 피해 −20%)",
+  stun: "🟤 충격 (45% 💫 기절, 피해 −20%)",
   curse: "🟣 저주 (⬇️ 약화)",
   crush: "🟠 분쇄 (💔 취약)",
-  vampire: "🩷 흡혈 (준 피해의 40% 회복)",
-  chaos: "⚪ 혼돈 (😵 혼란)",
+  vampire: "🩷 흡혈 (준 피해의 30% 회복)",
+  chaos: "⚪ 혼돈 (50% 😵 혼란)",
   dark: "🔷 어둠 (🕶️ 실명)",
 };
 

@@ -157,9 +157,16 @@ describe("status effects (stop mode)", () => {
   }
   const lob = (seat: number, c: Stroke["c"]): EngineAction => ({ type: "fire", seat, strokes: [circle(60, c)], angle: 90, power: 40 });
 
-  it("brown ink stuns: the victim's next turn is skipped, then they're immune once", () => {
-    const { s, shooter, target } = closeRange(11);
-    const hit = applyAction(s, lob(shooter, 6));
+  it("brown ink can stun (45%): the victim's next turn is skipped, then they're immune once", () => {
+    // Stun is a chance now — find a seed where it lands.
+    let found: { hit: InkDuelState; shooter: number; target: number } | null = null;
+    for (let seed = 11; seed < 80 && !found; seed++) {
+      const r = closeRange(seed);
+      const hit = applyAction(r.s, lob(r.shooter, 6));
+      if (hit.lastEvent?.dots.some((d) => d.kind === "stun")) found = { hit, shooter: r.shooter, target: r.target };
+    }
+    expect(found).not.toBeNull();
+    const { hit, shooter, target } = found!;
     // Turn went past the stunned target straight back to the shooter.
     expect(hit.turnSeat).toBe(shooter);
     expect(hit.lastEvent?.dots.some((d) => d.kind === "stun" && d.seat === target)).toBe(true);

@@ -128,6 +128,20 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const rtBufferRef = useRef(new RtClientBuffer());
   const [rtHud, setRtHud] = useState<RtView | null>(null);
   const rtHudAtRef = useRef(0);
+  // Who runs the 🏃 simulation. Starts as the room host; if the host vanishes mid-match the
+  // lowest connected seat takes over from the latest backup (epoch +1; higher epoch always wins).
+  const [simHost, setSimHostState] = useState(false);
+  const simHostRef = useRef(false);
+  const setSimHost = (v: boolean) => {
+    simHostRef.current = v;
+    setSimHostState(v);
+  };
+  const epochRef = useRef(0);
+  const simHostSeatRef = useRef<number | null>(null);
+  const lastSnapAtRef = useRef(0);
+  const rtBackupRef = useRef<RtState | null>(null);
+  const mySeatRef = useRef<SeatIndex | null>(null);
+  const [tookOver, setTookOver] = useState(false);
   const rtInputsRef = useRef<Record<number, RtInput>>({});
   const rtCommandsRef = useRef<RtCommand[]>([]);
   const rtBotMemRef = useRef<Record<number, RtBotMemory>>({});
@@ -135,6 +149,9 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [mySeat, setMySeat] = useState<SeatIndex | null>(null);
+  useEffect(() => {
+    mySeatRef.current = mySeat;
+  }, [mySeat]);
   const [myName, setMyName] = useState("");
   const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [occupants, setOccupants] = useState<Occupant[]>([]);
@@ -245,6 +262,12 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
         rtBotMemRef.current = {};
         rtBufferRef.current = new RtClientBuffer();
         rtRef.current = isHost ? startRealtime(playerCount, seed, { map, characters }) : null;
+        setSimHost(isHost);
+        epochRef.current = 0;
+        simHostSeatRef.current = null;
+        rtBackupRef.current = null;
+        lastSnapAtRef.current = performance.now();
+        setTookOver(false);
         setRtHud(rtRef.current ? viewFromState(rtRef.current) : null);
         setGameState(null);
       } else {
@@ -258,9 +281,20 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
 
     // 🏃 Moving mode: the host is the only simulator (docs/cloud-sync.md §5).
     channel.on("broadcast", { event: "rt-snapshot" }, ({ payload }) => {
-      if (isHost) return;
       const snap = payload?.snap as RtSnap | undefined;
       if (!snap) return;
+      const epoch = snap.epoch ?? 0;
+      if (simHostRef.current) {
+        // Someone else is simulating too: the newer epoch (or, on a tie, the lower seat) keeps it.
+        const mine = mySeatRef.current ?? 99;
+        if (snap.hostSeat === mine || epoch < epochRef.current || (epoch === epochRef.current && (snap.hostSeat ?? 99) > mine)) return;
+        setSimHost(false);
+        rtRef.current = null;
+      }
+      if (epoch < epochRef.current) return;
+      epochRef.current = epoch;
+      simHostSeatRef.current = snap.hostSeat ?? null;
+      lastSnapAtRef.current = performance.now();
       rtBufferRef.current.push(snap, performance.now());
       if (gameModeRef.current !== "moving") {
         gameModeRef.current = "moving";
@@ -275,15 +309,20 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       // A late joiner (or a guest that missed game-start) drops straight into the match.
       setPhase((p) => (p === "waiting" || p === "connecting" ? "playing" : p));
     });
+    channel.on("broadcast", { event: "rt-backup" }, ({ payload }) => {
+      if (simHostRef.current) return;
+      const state = payload?.state as RtState | undefined;
+      if (state && (payload?.epoch ?? 0) >= epochRef.current) rtBackupRef.current = state;
+    });
     channel.on("broadcast", { event: "rt-input" }, ({ payload }) => {
-      if (!isHost) return;
+      if (!simHostRef.current) return;
       const seat = payload?.seat as number;
       const input = payload?.input as RtInput | undefined;
       if (!Number.isInteger(seat) || !input || botSeatsRef.current.includes(seat)) return;
       rtInputsRef.current[seat] = { left: !!input.left, right: !!input.right, jump: !!input.jump };
     });
     channel.on("broadcast", { event: "rt-command" }, ({ payload }) => {
-      if (!isHost) return;
+      if (!simHostRef.current) return;
       const command = payload?.command as RtCommand | undefined;
       if (command && Number.isInteger(command.seat)) rtCommandsRef.current.push(command);
     });
@@ -321,11 +360,11 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     channel.on("broadcast", { event: "state-request" }, () => {
       if (gameModeRef.current === "moving") {
         // Only the host knows the live real-time state.
-        if (isHost && rtRef.current) {
+        if (simHostRef.current && rtRef.current) {
           channel.send({
             type: "broadcast",
             event: "state-sync",
-            payload: { rt: snapFromState(rtRef.current, { full: true }), botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, botTakeover: botTakeoverRef.current },
+            payload: { rt: { ...snapFromState(rtRef.current, { full: true }), epoch: epochRef.current, hostSeat: mySeatRef.current ?? undefined }, botSeats: botSeatsRef.current, botLevels: botLevelsRef.current, botTakeover: botTakeoverRef.current },
           });
         }
         return;
@@ -344,7 +383,9 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     channel.on("broadcast", { event: "state-sync" }, ({ payload }) => {
       const rt = payload?.rt as RtSnap | undefined;
       if (rt) {
-        if (isHost) return;
+        if (simHostRef.current) return;
+        epochRef.current = Math.max(epochRef.current, rt.epoch ?? 0);
+        lastSnapAtRef.current = performance.now();
         rtBufferRef.current.push(rt, performance.now());
         gameModeRef.current = "moving";
         setGameMode("moving");
@@ -610,11 +651,12 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
 
   // 🏃 Moving mode host loop: bots think, the world steps, snapshots go out ~12/s.
   useEffect(() => {
-    if (!(phase === "playing" && gameMode === "moving" && isHost)) return;
+    if (!(phase === "playing" && gameMode === "moving" && simHost)) return;
     let raf = 0;
     let last = performance.now();
     let lastSnap = 0;
     let lastHud = 0;
+    let lastBackup = 0;
     let terrainVer = -1;
     let wallsVer = -1;
     let terrainFreshUntil = 0;
@@ -647,7 +689,13 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
       }
       if (now - lastSnap >= 80) {
         lastSnap = now;
-        channelRef.current?.send({ type: "broadcast", event: "rt-snapshot", payload: { snap: snapFromState(s, { terrainFresh: now < terrainFreshUntil, wallsFresh: now < wallsFreshUntil }) } });
+        const snap = { ...snapFromState(s, { terrainFresh: now < terrainFreshUntil, wallsFresh: now < wallsFreshUntil }), epoch: epochRef.current, hostSeat: mySeatRef.current ?? undefined };
+        channelRef.current?.send({ type: "broadcast", event: "rt-snapshot", payload: { snap } });
+      }
+      if (now - lastBackup >= 500 && s.phase === "playing") {
+        // Full state for a guest to resume from if this tab disappears (events stripped — they're cosmetic).
+        lastBackup = now;
+        channelRef.current?.send({ type: "broadcast", event: "rt-backup", payload: { state: { ...s, events: [] }, epoch: epochRef.current } });
       }
       if (now - lastHud >= 120) {
         lastHud = now;
@@ -656,28 +704,52 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [phase, gameMode, isHost]);
+  }, [phase, gameMode, simHost]);
+
+  // Guests watch for a silent simulation host and the lowest connected seat takes over.
+  useEffect(() => {
+    if (!(phase === "playing" && gameMode === "moving" && !simHost)) return;
+    const id = window.setInterval(() => {
+      const backup = rtBackupRef.current;
+      const me = mySeatRef.current;
+      if (!backup || me === null || backup.phase !== "playing") return;
+      if (performance.now() - lastSnapAtRef.current < 2500) return;
+      const silent = simHostSeatRef.current;
+      const humans = occupantsRef.current.map((o) => o.seat).filter((seat) => seat !== silent && !botSeatsRef.current.includes(seat));
+      if (humans.length === 0 || Math.min(...humans) !== me) return;
+      rtRef.current = JSON.parse(JSON.stringify(backup)) as RtState;
+      rtInputsRef.current = {};
+      rtCommandsRef.current = [];
+      rtBotMemRef.current = {};
+      epochRef.current += 1;
+      simHostSeatRef.current = me;
+      lastSnapAtRef.current = performance.now();
+      setSimHost(true);
+      setTookOver(true);
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [phase, gameMode, simHost]);
 
   const getRtView = useCallback(
-    (now: number): RtView | null => (isHost ? (rtRef.current ? viewFromState(rtRef.current) : null) : rtBufferRef.current.view(now)),
-    [isHost],
+    (now: number): RtView | null => (simHost ? (rtRef.current ? viewFromState(rtRef.current) : null) : rtBufferRef.current.view(now)),
+    [simHost],
   );
   const sendRtInput = useCallback(
     (input: RtInput) => {
       if (mySeat === null) return;
-      if (isHost) rtInputsRef.current[mySeat] = input;
+      if (simHost) rtInputsRef.current[mySeat] = input;
       else channelRef.current?.send({ type: "broadcast", event: "rt-input", payload: { seat: mySeat, input } });
     },
-    [isHost, mySeat],
+    [simHost, mySeat],
   );
   const sendRtCommand = useCallback(
     (cmd: CommandBody) => {
       if (mySeat === null) return;
       const command = { ...cmd, seat: mySeat } as RtCommand;
-      if (isHost) rtCommandsRef.current.push(command);
+      if (simHost) rtCommandsRef.current.push(command);
       else channelRef.current?.send({ type: "broadcast", event: "rt-command", payload: { command } });
     },
-    [isHost, mySeat],
+    [simHost, mySeat],
   );
 
   function castTakeoverVote(seatKey: string) {
@@ -821,6 +893,9 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     setRtHud(null);
     gameModeRef.current = "stop";
     setGameMode("stop");
+    setSimHost(false);
+    rtBackupRef.current = null;
+    setTookOver(false);
     setFinalResult(null);
     setIdentity({ name: "" });
     setMyPlayerId(undefined);
@@ -1134,6 +1209,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
         )}
         <div className="mb-2 flex items-center justify-between gap-2">
           <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-bold text-amber-300 light:text-amber-700">🏃 무빙 모드 — 실시간</span>
+          {tookOver && simHost && <span className="rounded-full bg-sky-500/15 px-2.5 py-1 text-[11px] font-semibold text-sky-300 light:text-sky-700">📡 방장 연결이 끊겨 내 기기가 게임을 이어서 진행 중</span>}
           <button onClick={() => setShowRulebook(true)} className="rounded-full border border-white/10 light:border-slate-200 px-3 py-1 text-[11px] text-white/50 light:text-slate-500 hover:border-white/25 light:hover:border-slate-400">
             📖 룰북
           </button>
