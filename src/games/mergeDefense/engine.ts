@@ -107,6 +107,12 @@ export const BRACE_COSTS = [80, 160, 280];
  * — so the 280 third level stays and the reflect is a modest payoff.
  */
 export const JAM_REFLECT = { ticks: 14 };
+/**
+ * Bots chase max 결속 once they've been combo-jammed this many times. Sim
+ * (versus 2p/4p): 2 → ~95% of bots maxed it and 2/3 of jams bounced; 6 → ~45%
+ * of bots, 13–20% of jams blocked, game length unchanged.
+ */
+export const BOT_BRACE = { afterJams: 6 };
 export function braceCost(level: number): number {
   return BRACE_COSTS[Math.min(level, BRACE_COSTS.length - 1)];
 }
@@ -299,6 +305,8 @@ export interface Board {
   jamsSent?: number;
   jamsTaken?: number;
   jamsBlocked?: number;
+  /** Times this board's blocked jam bounced back onto it. */
+  reflectsTaken?: number;
   /** Waves from W10 this board started alive, and how many of them paid the combo gold milestone (for /stats). */
   lateWaves?: number;
   comboBonusWaves?: number;
@@ -535,6 +543,7 @@ function emptyBoard(bot: boolean): Board {
     jamsSent: 0,
     jamsTaken: 0,
     jamsBlocked: 0,
+    reflectsTaken: 0,
     lateWaves: 0,
     comboBonusWaves: 0,
     shots: [],
@@ -893,7 +902,10 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
           const back = Math.round(JAM_REFLECT.ticks * (stunTicks(board.brace ?? 0) / stunTicks(0)));
           const strongest = board.units.reduce((best, u, i) => (u && (best < 0 || u.grade > board.units[best]!.grade) ? i : best), -1);
           const reflected = back > 0 && strongest >= 0 ? strongest : undefined;
-          if (reflected !== undefined) board.units[reflected]!.stun = Math.max(board.units[reflected]!.stun ?? 0, back);
+          if (reflected !== undefined) {
+            board.units[reflected]!.stun = Math.max(board.units[reflected]!.stun ?? 0, back);
+            board.reflectsTaken = (board.reflectsTaken ?? 0) + 1;
+          }
           pushEvent(s, { seat, type: "jam", to, slots: [], blocked: true, ...(reflected !== undefined ? { reflected } : {}) });
         } else if (ticks > 0 && slots.length > 0) {
           for (const i of slots) foe.units[i]!.stun = Math.max(foe.units[i]!.stun ?? 0, ticks);
@@ -1146,6 +1158,7 @@ export interface RankedSeat {
   jamsSent: number;
   jamsTaken: number;
   jamsBlocked: number;
+  reflectsTaken: number;
 }
 
 /** Survivors rank first; then later elimination is better; same-tick eliminations tie-break on kills. */
@@ -1159,6 +1172,7 @@ export function computeRankings(state: MergeDefenseState): RankedSeat[] {
     jamsSent: b.jamsSent ?? 0,
     jamsTaken: b.jamsTaken ?? 0,
     jamsBlocked: b.jamsBlocked ?? 0,
+    reflectsTaken: b.reflectsTaken ?? 0,
   }));
   const sorted = [...rows].sort((a, b) => b.out - a.out || b.kills - a.kills);
   const ranked: RankedSeat[] = [];
@@ -1166,7 +1180,7 @@ export function computeRankings(state: MergeDefenseState): RankedSeat[] {
   sorted.forEach((r, i) => {
     const prev = sorted[i - 1];
     if (i > 0 && (prev.out !== r.out || prev.kills !== r.kills)) rank = i + 1;
-    ranked.push({ seat: r.seat, rank, wave: r.wave, kills: r.kills, combo: r.combo, jamsSent: r.jamsSent, jamsTaken: r.jamsTaken, jamsBlocked: r.jamsBlocked });
+    ranked.push({ seat: r.seat, rank, wave: r.wave, kills: r.kills, combo: r.combo, jamsSent: r.jamsSent, jamsTaken: r.jamsTaken, jamsBlocked: r.jamsBlocked, reflectsTaken: r.reflectsTaken });
   });
   return ranked;
 }
@@ -1203,6 +1217,12 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Acti
   const cost = summonCost(board);
   const bestEmpty = SLOT_PREFERENCE.find((i) => !board.units[i]);
   if (board.gems >= 1 && bestEmpty !== undefined) return { type: "gamble", slot: bestEmpty };
+  // 유닛 대결: a board that keeps getting combo-jammed saves up for max 결속
+  // (immunity + reflect) before anything else.
+  const braceNow = board.brace ?? 0;
+  if (state.mode === "versus" && state.wave >= 8 && braceNow < BRACE_MAX && (board.jamsTaken ?? 0) >= BOT_BRACE.afterJams) {
+    return board.gold >= braceCost(braceNow) ? { type: "brace" } : null;
+  }
   if (bestEmpty !== undefined && board.gold >= cost) return { type: "summon", slot: bestEmpty };
   const pairs = mergePairs(board);
   if (free === 0 && pairs.length > 0) {

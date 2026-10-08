@@ -240,6 +240,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "견제 반격 — 결속 3단계로 콤보 견제를 막으면 보낸 사람의 가장 강한 타워가 0.7초 기절",
       },
       {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "AI가 콤보 견제를 자주 당하면 결속 3단계를 노림 · 결과 화면·/stats에 반격당한 횟수",
+      },
+      {
         game: "ink-duel",
         type: "IMPROVE",
         desc: "그래픽 전면 개편 — 캐릭터 4종(마법사·고양이·개구리·토끼), 수채화 배경·지층 지형, 잉크 폭발 파티클·화면 흔들림·속성 이펙트, 카드형 무기 판정",

@@ -147,8 +147,11 @@ export const STAT_DETAIL_ROWS: Record<string, DetailRow[]> = {
     { label: "⚡ 최고 치명타 콤보", value: (d) => (d.maxCritCombo ? `${n(d.maxCritCombo)}콤보` : null) },
     { label: "8콤보 보너스 달성률 (10웨이브 이후)", value: (d) => ratio(d.comboBonusWaves, d.lateWaves) },
     {
-      label: "⚔️ 콤보 견제 (건 · 당함 · 막음)",
-      value: (d) => (d.jamsSent || d.jamsTaken || d.jamsBlocked ? `${n(d.jamsSent)} · ${n(d.jamsTaken)} · ${n(d.jamsBlocked)}` : null),
+      label: "⚔️ 콤보 견제 (건 · 당함 · 막음 · 반격당함)",
+      value: (d) =>
+        d.jamsSent || d.jamsTaken || d.jamsBlocked || d.reflectsTaken
+          ? `${n(d.jamsSent)} · ${n(d.jamsTaken)} · ${n(d.jamsBlocked)} · ${n(d.reflectsTaken)}`
+          : null,
     },
     { label: "🎯 집중 단계 (판당 평균 · 최고)", value: (d, played) => `${avg(d.focusTotal, played) ?? "-"} · ${n(d.maxFocus)}` },
     { label: "🛡️ 결속 단계 (판당 평균 · 최고)", value: (d, played) => `${avg(d.braceTotal, played) ?? "-"} · ${n(d.maxBrace)}` },

@@ -416,6 +416,7 @@ describe("merge defense engine", () => {
     }
     expect(blocked).toBe(true);
     expect(s.boards[1].jamsBlocked).toBeGreaterThanOrEqual(1);
+    expect(s.boards[0].reflectsTaken).toBeGreaterThanOrEqual(1);
     // Survival never jams.
     expect(startGame(2, 1).mode).toBe("survival");
   });
