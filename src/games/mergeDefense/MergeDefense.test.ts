@@ -216,6 +216,17 @@ describe("merge defense engine", () => {
     expect(stepGame(s).boards[0].alive).toBe(false);
   });
 
+  it("difficulty scales monster HP; junk difficulty falls back to normal", () => {
+    const hpAt = (d: "easy" | "normal" | "hard") => {
+      let s = startGame(2, 61, [], "survival", null, d);
+      while (s.boards[0].mobs.length === 0) s = stepGame(s);
+      return s.boards[0].mobs[0].maxHp;
+    };
+    expect(hpAt("easy")).toBeLessThan(hpAt("normal"));
+    expect(hpAt("hard")).toBeGreaterThan(hpAt("normal"));
+    expect(startGame(2, 1, [], "survival", null, "nightmare" as never).difficulty).toBe("normal");
+  });
+
   it("a dying golem announces its split", () => {
     let s = startGame(2, 52, [], "versus");
     while (s.wave < 3) {

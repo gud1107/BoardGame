@@ -52,6 +52,16 @@ export const LOAD_LIMITS: Record<number, number> = { 2: 55, 3: 50, 4: 45 };
 export function loadLimit(playerCount: number): number {
   return LOAD_LIMITS[playerCount] ?? LOAD_LIMITS[2];
 }
+/** Host-picked wave difficulty — scales every monster's HP (bot-sim tuned). */
+export type Difficulty = "easy" | "normal" | "hard";
+export const DIFFICULTIES: Difficulty[] = ["easy", "normal", "hard"];
+export const DIFFICULTY_HP: Record<Difficulty, number> = { easy: 0.7, normal: 1, hard: 1.3 };
+export function difficultyOf(state: Pick<MergeDefenseState, "difficulty">): Difficulty {
+  return state.difficulty && DIFFICULTIES.includes(state.difficulty) ? state.difficulty : "normal";
+}
+export function sanitizeDifficulty(raw: unknown): Difficulty {
+  return DIFFICULTIES.includes(raw as Difficulty) ? (raw as Difficulty) : "normal";
+}
 /** Host-picked elimination bars offered when creating a room (null = by player count). */
 export const LIMIT_CHOICES = [35, 45, 55, 70] as const;
 export const LIMIT_MIN = 20;
@@ -222,6 +232,8 @@ export interface MergeDefenseState {
   phase: "playing" | "gameOver";
   mode: GameMode;
   playerCount: number;
+  /** Room-chosen wave difficulty; absent = normal. */
+  difficulty?: Difficulty;
   /** Room-chosen elimination head count; null/absent = `loadLimit(playerCount)`. */
   limit?: number | null;
   tick: number;
@@ -401,6 +413,7 @@ export function startGame(
   botSeats: readonly number[] = [],
   mode: GameMode = "survival",
   limit: number | null = null,
+  difficulty: Difficulty = "normal",
 ): MergeDefenseState {
   const n = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.floor(playerCount)));
   return {
@@ -408,6 +421,7 @@ export function startGame(
     mode: GAME_MODES.includes(mode) ? mode : "survival",
     playerCount: n,
     limit: sanitizeLimit(limit),
+    difficulty: sanitizeDifficulty(difficulty),
     tick: 0,
     wave: 0,
     boards: Array.from({ length: n }, (_, seat) => emptyBoard(botSeats.includes(seat))),
@@ -551,7 +565,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     const board = s.boards[seat];
     board.units[action.slot] = null;
     board.sendCd = SEND_COOLDOWN_TICKS;
-    const hp = invaderHp(unit.grade, s.wave);
+    const hp = Math.round(invaderHp(unit.grade, s.wave) * DIFFICULTY_HP[difficultyOf(s)]);
     s.boards[to].mobs.push({
       id: s.nextMobId++,
       kind: "invader",
@@ -612,7 +626,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
 // ---------------------------------------------------------------------------
 
 function makeMob(s: MergeDefenseState, kind: MobKind, wave: number, from: SeatIndex = -1): Mob {
-  const base = waveHp(Math.max(1, wave));
+  const base = waveHp(Math.max(1, wave)) * DIFFICULTY_HP[difficultyOf(s)];
   const spec: Record<MobKind, { hp: number; speed: number }> = {
     normal: { hp: 1, speed: 60 },
     fast: { hp: 0.6, speed: 105 },

@@ -33,6 +33,10 @@ import {
   sanitizeAction,
   startGame,
   sanitizeLimit,
+  sanitizeDifficulty,
+  DIFFICULTIES,
+  DIFFICULTY_HP,
+  type Difficulty,
   loadLimit,
   LIMIT_CHOICES,
   stepGame,
@@ -72,6 +76,7 @@ type Occupant = {
   mode?: GameMode;
   /** Host-chosen elimination head count (null = by player count). */
   limit?: number | null;
+  difficulty?: Difficulty;
   botSeats?: number[];
 };
 type Phase = "choose" | "enter-name" | "connecting" | "waiting" | "playing" | "post-game" | "room-full" | "supabase-missing" | "channel-error";
@@ -119,6 +124,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const [targetPlayerCount, setTargetPlayerCount] = useState(2);
   const [mode, setMode] = useState<GameMode>("survival");
   const [limitChoice, setLimitChoice] = useState<number | null>(null);
+  const [difficulty, setDifficulty] = useState<Difficulty>("normal");
   const [formError, setFormError] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -140,6 +146,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const playerCountRef = useRef(targetPlayerCount);
   const modeRef = useRef<GameMode>(mode);
   const limitRef = useRef<number | null>(limitChoice);
+  const difficultyRef = useRef<Difficulty>(difficulty);
   const botSeatsRef = useRef<number[]>([]);
   const isHost = intent === "create";
 
@@ -192,6 +199,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     playerCountRef.current = targetPlayerCount;
     modeRef.current = mode;
     limitRef.current = limitChoice;
+    difficultyRef.current = difficulty;
     setMyName(name);
     setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
     setRoomCode(code);
@@ -199,7 +207,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   }
 
   function hostPresence(): Partial<Occupant> {
-    return isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, botSeats: botSeatsRef.current, mode: modeRef.current, limit: limitRef.current } : {};
+    return isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, botSeats: botSeatsRef.current, mode: modeRef.current, limit: limitRef.current, difficulty: difficultyRef.current } : {};
   }
 
   useEffect(() => {
@@ -227,7 +235,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
       const startMode: GameMode = payload?.mode === "versus" ? "versus" : "survival";
       modeRef.current = startMode;
-      const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit));
+      const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit), sanitizeDifficulty(payload?.difficulty));
       simRef.current = state;
       setGameState(state);
       setFinalRankings(null);
@@ -431,6 +439,22 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
+  /** Waiting room: the host retunes the room; presence carries it to everyone. */
+  function updateRoomSettings(patch: { limit?: number | null; difficulty?: Difficulty }) {
+    if (!isHost) return;
+    if (patch.limit !== undefined) {
+      limitRef.current = patch.limit;
+      setLimitChoice(patch.limit);
+    }
+    if (patch.difficulty !== undefined) {
+      difficultyRef.current = patch.difficulty;
+      setDifficulty(patch.difficulty);
+    }
+    if (mySeatRef.current !== null) {
+      channelRef.current?.track({ deviceId, seat: mySeatRef.current, name: myName, playerId: myPlayerId, ...hostPresence() } satisfies Occupant);
+    }
+  }
+
   /** Starts (or restarts) the match; every seat without a person becomes an AI. */
   function sendGameStart() {
     if (!isHost) return;
@@ -442,7 +466,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     if (mySeatRef.current !== null) {
       channelRef.current?.track({ deviceId, seat: mySeatRef.current, name: myName, playerId: myPlayerId, ...hostPresence() } satisfies Occupant);
     }
-    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed: randomSeed(), playerCount: target, botSeats, mode: modeRef.current, limit: limitRef.current } });
+    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed: randomSeed(), playerCount: target, botSeats, mode: modeRef.current, limit: limitRef.current, difficulty: difficultyRef.current } });
   }
 
   useEffect(() => {
@@ -784,32 +808,13 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           </div>
         )}
         {intent === "create" && (
-          <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
-            💀 탈락 기준 (내 길의 몬스터 수)
-            <div className="grid grid-cols-5 gap-1.5">
-              {([null, ...LIMIT_CHOICES] as (number | null)[]).map((value) => (
-                <button
-                  key={value ?? "auto"}
-                  type="button"
-                  onClick={() => setLimitChoice(value)}
-                  aria-pressed={limitChoice === value}
-                  className={`rounded-xl border px-1 py-1.5 text-center transition ${
-                    limitChoice === value
-                      ? "border-rose-400 bg-rose-500/15 text-white light:bg-rose-50 light:text-slate-900"
-                      : "border-white/10 text-white/60 hover:border-white/30 light:border-slate-200 light:text-slate-500"
-                  }`}
-                >
-                  <span className="block text-sm font-bold">{value === null ? "자동" : value}</span>
-                  <span className="block text-[10px] opacity-75">
-                    {value === null ? `${loadLimit(targetPlayerCount)}마리` : value <= 35 ? "짧게" : value <= 45 ? "빠듯" : value <= 55 ? "보통" : "여유"}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <span className="text-[11px] text-white/40 light:text-slate-400">
-              자동 = 인원별 기본값(2인 {loadLimit(2)} · 3인 {loadLimit(3)} · 4인 {loadLimit(4)}마리). 낮을수록 빨리 끝나요.
-            </span>
-          </div>
+          <RoomSettings
+            difficulty={difficulty}
+            limit={limitChoice}
+            playerCount={targetPlayerCount}
+            onDifficulty={setDifficulty}
+            onLimit={setLimitChoice}
+          />
         )}
         {intent === "create" && (
           <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
@@ -875,8 +880,24 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
               })}
             </div>
             <p className="text-xs font-semibold text-orange-200 light:text-orange-700">
-              {host?.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"} · 💀 {host?.limit ? `${host.limit}마리` : `${loadLimit(knownTargetPlayerCount)}마리(인원별)`}에서 탈락
+              {host?.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"} · {DIFFICULTY_LABEL[sanitizeDifficulty(host?.difficulty)].emoji}{" "}
+              {DIFFICULTY_LABEL[sanitizeDifficulty(host?.difficulty)].name} · 💀 {host?.limit ? `${host.limit}마리` : `${loadLimit(knownTargetPlayerCount)}마리(인원별)`}에서 탈락
             </p>
+            {isHost ? (
+              <div className="w-full max-w-sm text-left">
+                <p className="mb-1 text-[11px] text-white/40 light:text-slate-400">⚙️ 방장 설정 — 시작 전까지 바꿀 수 있어요</p>
+                <RoomSettings
+                  compact
+                  difficulty={difficulty}
+                  limit={limitChoice}
+                  playerCount={knownTargetPlayerCount}
+                  onDifficulty={(d) => updateRoomSettings({ difficulty: d })}
+                  onLimit={(l) => updateRoomSettings({ limit: l })}
+                />
+              </div>
+            ) : (
+              <p className="text-[11px] text-white/40 light:text-slate-400">방장이 시작 전까지 난이도·탈락 기준을 바꿀 수 있어요.</p>
+            )}
             <p className="text-xs text-white/40 light:text-slate-400">{knownTargetPlayerCount}명이 모이면 자동으로 시작해요.</p>
             {isHost && occupants.length < knownTargetPlayerCount && (
               <button onClick={sendGameStart} className="rounded-full bg-orange-600 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-500">
@@ -966,4 +987,73 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   }
 
   return withGuard(null);
+}
+
+const DIFFICULTY_LABEL: Record<Difficulty, { emoji: string; name: string; desc: string }> = {
+  easy: { emoji: "🌱", name: "쉬움", desc: "몬스터 체력" },
+  normal: { emoji: "⚖️", name: "보통", desc: "기본" },
+  hard: { emoji: "🔥", name: "어려움", desc: "몬스터 체력" },
+};
+
+/** Difficulty + elimination-limit pickers, shared by the create form and the host's waiting room. */
+function RoomSettings({
+  difficulty,
+  limit,
+  playerCount,
+  onDifficulty,
+  onLimit,
+  compact = false,
+}: {
+  difficulty: Difficulty;
+  limit: number | null;
+  playerCount: number;
+  onDifficulty: (d: Difficulty) => void;
+  onLimit: (l: number | null) => void;
+  compact?: boolean;
+}) {
+  const pill = (on: boolean, tone: "orange" | "rose") =>
+    `rounded-xl border px-1 py-1.5 text-center transition ${
+      on
+        ? tone === "orange"
+          ? "border-orange-400 bg-orange-500/15 text-white light:bg-orange-50 light:text-slate-900"
+          : "border-rose-400 bg-rose-500/15 text-white light:bg-rose-50 light:text-slate-900"
+        : "border-white/10 text-white/60 hover:border-white/30 light:border-slate-200 light:text-slate-500"
+    }`;
+  return (
+    <div className={`flex flex-col ${compact ? "gap-2" : "gap-4"} text-sm text-white/70 light:text-slate-600`}>
+      <div className="flex flex-col gap-1.5">
+        🌊 웨이브 난이도
+        <div className="grid grid-cols-3 gap-1.5">
+          {DIFFICULTIES.map((d) => (
+            <button key={d} type="button" onClick={() => onDifficulty(d)} aria-pressed={difficulty === d} className={pill(difficulty === d, "orange")}>
+              <span className="block text-sm font-bold">
+                {DIFFICULTY_LABEL[d].emoji} {DIFFICULTY_LABEL[d].name}
+              </span>
+              <span className="block text-[10px] opacity-75">
+                {d === "normal" ? DIFFICULTY_LABEL[d].desc : `${DIFFICULTY_LABEL[d].desc} ×${DIFFICULTY_HP[d]}`}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        💀 탈락 기준 (내 길의 몬스터 수)
+        <div className="grid grid-cols-5 gap-1.5">
+          {([null, ...LIMIT_CHOICES] as (number | null)[]).map((value) => (
+            <button key={value ?? "auto"} type="button" onClick={() => onLimit(value)} aria-pressed={limit === value} className={pill(limit === value, "rose")}>
+              <span className="block text-sm font-bold">{value === null ? "자동" : value}</span>
+              <span className="block text-[10px] opacity-75">
+                {value === null ? `${loadLimit(playerCount)}마리` : value <= 35 ? "짧게" : value <= 45 ? "빠듯" : value <= 55 ? "보통" : "여유"}
+              </span>
+            </button>
+          ))}
+        </div>
+        {!compact && (
+          <span className="text-[11px] text-white/40 light:text-slate-400">
+            자동 = 인원별 기본값(2인 {loadLimit(2)} · 3인 {loadLimit(3)} · 4인 {loadLimit(4)}마리). 낮을수록 빨리 끝나요.
+          </span>
+        )}
+      </div>
+    </div>
+  );
 }

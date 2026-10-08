@@ -539,7 +539,14 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
       <style>{`@keyframes md-pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}@keyframes md-gold-rise{0%{transform:translateY(4px) scale(.8);opacity:0}15%{transform:translateY(0) scale(1.15);opacity:1}70%{opacity:1}100%{transform:translateY(-14px) scale(1);opacity:0}}@keyframes md-gold-glow{0%{text-shadow:0 0 0 rgba(250,204,21,0);transform:scale(1)}25%{text-shadow:0 0 12px rgba(250,204,21,.95);transform:scale(1.18)}100%{text-shadow:0 0 0 rgba(250,204,21,0);transform:scale(1)}}`}</style>
       {/* Wave HUD */}
       <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-white/80 light:border-slate-200 light:bg-white light:text-slate-700">
-        <span className="font-bold text-white light:text-slate-900">{state.wave === 0 ? "준비 시간" : `🌊 WAVE ${state.wave}`}</span>
+        <span className="font-bold text-white light:text-slate-900">
+          {state.wave === 0 ? "준비 시간" : `🌊 WAVE ${state.wave}`}
+          {state.difficulty && state.difficulty !== "normal" && (
+            <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${state.difficulty === "hard" ? "bg-rose-500/25 text-rose-200 light:text-rose-700" : "bg-emerald-500/25 text-emerald-200 light:text-emerald-700"}`}>
+              {state.difficulty === "hard" ? "🔥 어려움" : "🌱 쉬움"}
+            </span>
+          )}
+        </span>
         <span className={nextIsBoss ? "font-semibold text-amber-300 light:text-amber-600" : ""}>
           {nextIsBoss ? "👑 보스" : "다음 웨이브"} {Math.ceil(waveLeftTicks / (1000 / TICK_MS))}초
         </span>
