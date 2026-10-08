@@ -3,45 +3,69 @@
 import { useRef, useState } from "react";
 
 /**
- * Results-screen line chart: peak monsters on each player's road per wave,
- * with the elimination limit as a dashed rule. Colors are the seat identity
- * colors (SEAT_COLORS, validated as a categorical set); text stays in text
- * tones. Hover / touch shows a crosshair + per-wave values; a table view
- * carries the same numbers without color.
+ * Results-screen line chart with three views of the same match, one line per
+ * seat: peak monsters on the road per wave (with the elimination limit as a
+ * dashed rule), cumulative gold earned, and kills per wave. Boss waves get a
+ * faint band + 👑. Colors are the seat identity colors (SEAT_COLORS,
+ * validated as a categorical set); text stays in text tones. Hover / touch
+ * shows a crosshair + per-wave values; a table view carries the same numbers.
  */
 
 export interface WaveSeries {
   seat: number;
   name: string;
   color: string;
-  /** Peak monsters per wave, index = wave − 1. */
-  values: number[];
-  out: boolean;
   me: boolean;
+  out: boolean;
+  /** Per wave (index = wave − 1): peak monsters on the road, cumulative gold earned, cumulative kills. */
+  load: number[];
+  gold: number[];
+  kills: number[];
 }
+
+type Tab = "load" | "gold" | "kills";
+const TABS: { id: Tab; label: string; title: string }[] = [
+  { id: "load", label: "👾 몬스터", title: "웨이브별 최대 몬스터 수" },
+  { id: "gold", label: "🪙 골드", title: "누적 획득 골드" },
+  { id: "kills", label: "⚔️ 처치", title: "웨이브별 처치 수" },
+];
 
 const W = 320;
 const H = 168;
-const PAD = { l: 26, r: 62, t: 12, b: 20 };
+const PAD = { l: 30, r: 62, t: 14, b: 20 };
 /** Direct labels keep to a few characters so they fit the right margin; the legend has full names. */
 const short = (name: string) => {
   const bare = name.replace(/^[^\p{L}\p{N}]+/u, "") || name; // drop a leading emoji like "🤖 "
   return bare.length > 4 ? `${bare.slice(0, 3)}…` : bare;
 };
+const fmt = (v: number) => (v >= 10000 ? `${Math.round(v / 1000)}k` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`);
 
-export default function WaveChart({ series, limit }: { series: WaveSeries[]; limit: number }) {
+function valuesFor(s: WaveSeries, tab: Tab): number[] {
+  if (tab === "load") return s.load;
+  if (tab === "gold") return s.gold;
+  return s.kills.map((k, i) => k - (i > 0 ? s.kills[i - 1] : 0));
+}
+
+export default function WaveChart({ series, limit, bossEvery }: { series: WaveSeries[]; limit: number; bossEvery: number }) {
+  const [tab, setTab] = useState<Tab>("load");
   const [hover, setHover] = useState<number | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
-  const waves = Math.max(1, ...series.map((s) => s.values.length));
-  const top = Math.max(limit, ...series.flatMap((s) => s.values)) * 1.08;
-  const x = (i: number) => PAD.l + (waves === 1 ? 0 : (i / (waves - 1)) * (W - PAD.l - PAD.r));
+  const data = series.map((s) => ({ s, v: valuesFor(s, tab) }));
+  const waves = Math.max(1, ...data.map((d) => d.v.length));
+  const peak = Math.max(1, ...data.flatMap((d) => d.v));
+  const top = (tab === "load" ? Math.max(limit, peak) : peak) * 1.08;
+  const step = waves === 1 ? 0 : (W - PAD.l - PAD.r) / (waves - 1);
+  const x = (i: number) => PAD.l + i * step;
   const y = (v: number) => PAD.t + (1 - v / top) * (H - PAD.t - PAD.b);
   const xTicks = Array.from(new Set([0, Math.round((waves - 1) / 2), waves - 1]));
+  const yTicks = tab === "load" ? [0, Math.round(limit / 2)] : [0, Math.round(peak / 2), Math.round(peak)];
+  const bosses = Array.from({ length: Math.floor(waves / bossEvery) }, (_, k) => (k + 1) * bossEvery - 1);
+  const meta = TABS.find((t) => t.id === tab)!;
 
   // End labels: sorted by height, nudged apart so they never overlap.
-  const ends = series
-    .filter((s) => s.values.length > 0)
-    .map((s) => ({ s, i: s.values.length - 1, yv: y(s.values[s.values.length - 1]) }))
+  const ends = data
+    .filter((d) => d.v.length > 0)
+    .map((d) => ({ ...d, i: d.v.length - 1, yv: y(d.v[d.v.length - 1]) }))
     .sort((a, b) => a.yv - b.yv);
   for (let k = 1; k < ends.length; k++) if (ends[k].yv - ends[k - 1].yv < 11) ends[k].yv = ends[k - 1].yv + 11;
 
@@ -54,12 +78,34 @@ export default function WaveChart({ series, limit }: { series: WaveSeries[]; lim
     setHover(Math.max(0, Math.min(waves - 1, i)));
   }
 
-  const rows = hover === null ? [] : series.filter((s) => s.values[hover] !== undefined).sort((a, b) => b.values[hover]! - a.values[hover]!);
+  const rows = hover === null ? [] : data.filter((d) => d.v[hover] !== undefined).sort((a, b) => b.v[hover]! - a.v[hover]!);
 
   return (
     <figure className="w-full text-left">
+      <div className="mb-1.5 flex gap-1" role="tablist" aria-label="그래프 종류">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => {
+              setTab(t.id);
+              setHover(null);
+            }}
+            className={`rounded-full border px-2.5 py-0.5 text-[11px] whitespace-nowrap transition ${
+              tab === t.id ? "border-amber-300/60 bg-amber-400/15 font-bold text-amber-100" : "border-white/10 text-white/55 hover:border-white/30"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
       <figcaption className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-white/60">
-        <span className="font-semibold text-white/80">웨이브별 최대 몬스터 수</span>
+        <span className="font-semibold text-white/80">
+          {meta.title}
+          {/* The match ends mid-wave, so the last point only counts that wave's start. */}
+          {tab === "kills" && <span className="ml-1 font-normal text-white/40">(마지막 웨이브는 끝난 순간까지)</span>}
+        </span>
         {series.map((s) => (
           <span key={s.seat} className="inline-flex items-center gap-1">
             <span className="inline-block h-[3px] w-3 rounded-full" style={{ background: s.color }} />
@@ -74,13 +120,22 @@ export default function WaveChart({ series, limit }: { series: WaveSeries[]; lim
         onPointerDown={(e) => pick(e.clientX)}
         onPointerLeave={() => setHover(null)}
       >
-        <svg viewBox={`0 0 ${W} ${H}`} className="block w-full" role="img" aria-label="웨이브별 최대 몬스터 수 선 그래프">
+        <svg viewBox={`0 0 ${W} ${H}`} className="block w-full" role="img" aria-label={`${meta.title} 선 그래프`}>
+          {/* Boss waves: faint band + crown */}
+          {bosses.map((i) => (
+            <g key={i}>
+              <rect x={x(i) - Math.max(2, step * 0.35)} y={PAD.t} width={Math.max(4, step * 0.7)} height={H - PAD.t - PAD.b} fill="rgba(250,204,21,0.07)" />
+              <text x={x(i)} y={PAD.t - 3} textAnchor="middle" fontSize={8}>
+                👑
+              </text>
+            </g>
+          ))}
           {/* Recessive grid + axis labels */}
-          {[0, Math.round(limit / 2)].map((v) => (
+          {yTicks.map((v) => (
             <g key={v}>
               <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
               <text x={PAD.l - 4} y={y(v) + 3} textAnchor="end" fontSize={9} fill="rgba(255,255,255,0.45)">
-                {v}
+                {fmt(v)}
               </text>
             </g>
           ))}
@@ -89,33 +144,36 @@ export default function WaveChart({ series, limit }: { series: WaveSeries[]; lim
               W{i + 1}
             </text>
           ))}
-          {/* Elimination limit */}
-          <line x1={PAD.l} x2={W - PAD.r} y1={y(limit)} y2={y(limit)} stroke="#f87171" strokeWidth={1.2} strokeDasharray="4 3" opacity={0.8} />
-          <text x={PAD.l - 4} y={y(limit) + 3} textAnchor="end" fontSize={9} fill="#fca5a5">
-            {limit}
-          </text>
-          <text x={PAD.l + 3} y={y(limit) - 3} fontSize={8} fill="#fca5a5">
-            탈락
-          </text>
+          {tab === "load" && (
+            <>
+              <line x1={PAD.l} x2={W - PAD.r} y1={y(limit)} y2={y(limit)} stroke="#f87171" strokeWidth={1.2} strokeDasharray="4 3" opacity={0.8} />
+              <text x={PAD.l - 4} y={y(limit) + 3} textAnchor="end" fontSize={9} fill="#fca5a5">
+                {limit}
+              </text>
+              <text x={PAD.l + 3} y={y(limit) - 3} fontSize={8} fill="#fca5a5">
+                탈락
+              </text>
+            </>
+          )}
           {/* Series */}
-          {series.map((s) =>
-            s.values.length === 0 ? null : (
+          {data.map(({ s, v }) =>
+            v.length === 0 ? null : (
               <polyline
                 key={s.seat}
-                points={s.values.map((v, i) => `${x(i)},${y(v)}`).join(" ")}
+                points={v.map((val, i) => `${x(i)},${y(val)}`).join(" ")}
                 fill="none"
                 stroke={s.color}
                 strokeWidth={s.me ? 2.5 : 2}
                 strokeLinejoin="round"
                 strokeLinecap="round"
-                opacity={hover === null || s.values[hover] !== undefined ? 1 : 0.35}
+                opacity={hover === null || v[hover] !== undefined ? 1 : 0.35}
               />
             ),
           )}
           {/* End markers (✕ = eliminated) + direct labels */}
-          {ends.map(({ s, i, yv }) => {
+          {ends.map(({ s, v, i, yv }) => {
             const ex = x(i);
-            const ey = y(s.values[i]);
+            const ey = y(v[i]);
             return (
               <g key={s.seat}>
                 {s.out ? (
@@ -124,7 +182,7 @@ export default function WaveChart({ series, limit }: { series: WaveSeries[]; lim
                   <circle cx={ex} cy={ey} r={4} fill={s.color} stroke="#1c1206" strokeWidth={2} />
                 )}
                 <text x={W - PAD.r + 6} y={yv + 3} fontSize={9} fill="rgba(255,255,255,0.75)">
-                  {s.me ? "나" : short(s.name)} {s.values[i]}
+                  {s.me ? "나" : short(s.name)} {fmt(v[i])}
                 </text>
               </g>
             );
@@ -137,14 +195,17 @@ export default function WaveChart({ series, limit }: { series: WaveSeries[]; lim
             className="pointer-events-none absolute top-1 z-10 rounded-lg border border-white/15 bg-black/85 px-2 py-1 text-[11px] whitespace-nowrap text-white shadow-lg"
             style={{ left: `${(x(hover) / W) * 100}%`, transform: `translateX(${x(hover) > W / 2 ? "-105%" : "5%"})` }}
           >
-            <p className="mb-0.5 font-bold">WAVE {hover + 1}</p>
-            {rows.map((s) => (
+            <p className="mb-0.5 font-bold">
+              WAVE {hover + 1}
+              {(hover + 1) % bossEvery === 0 && " 👑"}
+            </p>
+            {rows.map(({ s, v }) => (
               <p key={s.seat} className="flex items-center gap-1.5">
                 <span className="inline-block h-2 w-2 rounded-full" style={{ background: s.color }} />
                 <span className="text-white/70">{s.me ? "나" : s.name}</span>
                 <span className="ml-auto pl-2 font-mono">
-                  {s.values[hover]}
-                  {s.out && hover === s.values.length - 1 ? " ✕" : ""}
+                  {fmt(v[hover]!)}
+                  {s.out && hover === v.length - 1 ? " ✕" : ""}
                 </span>
               </p>
             ))}
@@ -168,11 +229,14 @@ export default function WaveChart({ series, limit }: { series: WaveSeries[]; lim
             <tbody>
               {Array.from({ length: waves }, (_, i) => (
                 <tr key={i} className="text-white/70">
-                  <td className="px-1 text-left">W{i + 1}</td>
-                  {series.map((s) => (
+                  <td className="px-1 text-left">
+                    W{i + 1}
+                    {(i + 1) % bossEvery === 0 && " 👑"}
+                  </td>
+                  {data.map(({ s, v }) => (
                     <td key={s.seat} className="px-1 font-mono">
-                      {s.values[i] ?? ""}
-                      {s.out && i === s.values.length - 1 ? " ✕" : ""}
+                      {v[i] !== undefined ? fmt(v[i]) : ""}
+                      {s.out && i === v.length - 1 ? " ✕" : ""}
                     </td>
                   ))}
                 </tr>

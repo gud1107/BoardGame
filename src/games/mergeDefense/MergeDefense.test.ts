@@ -429,6 +429,12 @@ describe("merge defense engine", () => {
     expect(hist.length).toBe(out.outWave);
     expect(hist[hist.length - 1]).toBeGreaterThanOrEqual(eliminationLimit(s));
     expect(hist.every((v) => Number.isInteger(v) && v >= 0)).toBe(true);
+    // Gold earned and kills are recorded alongside, never decreasing.
+    for (const h of [out.goldHistory ?? [], out.killHistory ?? []]) {
+      expect(h.length).toBe(hist.length);
+      for (let i = 1; i < h.length; i++) expect(h[i]).toBeGreaterThanOrEqual(h[i - 1]);
+    }
+    expect((out.goldHistory ?? [])[hist.length - 1]).toBeLessThanOrEqual(Math.round(out.goldEarned ?? 0));
   });
 
   it("a dying golem announces its split", () => {

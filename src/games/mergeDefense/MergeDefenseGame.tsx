@@ -34,14 +34,9 @@ import {
   startGame,
   sanitizeLimit,
   sanitizeDifficulty,
-  DIFFICULTIES,
-  DIFFICULTY_HP,
-  DIFFICULTY_COUNT,
   type Difficulty,
-  loadLimit,
-  LIMIT_CHOICES,
   eliminationLimit,
-  COMBO,
+  BOSS_EVERY,
   stepGame,
   TICK_MS,
   type Action,
@@ -52,8 +47,10 @@ import {
 } from "./engine";
 import MergeDefenseBoard from "./MergeDefenseBoard";
 import { playVictory } from "./mergeDefenseAudio";
-import { recordBestWave, useBestWaves, type BestWaves } from "./bestWave";
-import WaveChart, { type WaveSeries } from "./WaveChart";
+import { recordBestWave, useBestWaves } from "./bestWave";
+import MergeDefenseResults, { type MatchRecord, type WaveHistory } from "./MergeDefenseResults";
+import WaitingRoomPanel from "./WaitingRoomPanel";
+import RoomSettings from "./RoomSettings";
 import { SEAT_COLORS } from "./render";
 
 /**
@@ -134,8 +131,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const best = useBestWaves();
   /** This match's best-wave result for me: mode, difficulty, wave reached, previous record. */
   /** Results chart: each seat's peak monsters per wave, captured at game end. */
-  const [waveHistory, setWaveHistory] = useState<{ series: Omit<WaveSeries, "name" | "me">[]; limit: number } | null>(null);
-  const [myRecord, setMyRecord] = useState<{ mode: GameMode; difficulty: Difficulty; wave: number; prev: number } | null>(null);
+  const [waveHistory, setWaveHistory] = useState<WaveHistory | null>(null);
+  const [myRecord, setMyRecord] = useState<MatchRecord | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -633,12 +630,15 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     if (rankings.find((r) => r.seat === mySeat)?.rank === 1) playVictory();
     setWaveHistory({
       limit: eliminationLimit(sim),
+      bossEvery: BOSS_EVERY,
       series: sim.boards.map((b, seat) => ({
         seat,
         color: SEAT_COLORS[seat] ?? "#94a3b8",
-        // Survivors' current wave hasn't been closed out yet — append its running peak.
-        values: b.alive ? [...(b.loadHistory ?? []), b.wavePeak ?? 0] : (b.loadHistory ?? []),
         out: !b.alive,
+        // Survivors' current wave hasn't been closed out yet — append its running values.
+        load: b.alive ? [...(b.loadHistory ?? []), b.wavePeak ?? 0] : (b.loadHistory ?? []),
+        gold: b.alive ? [...(b.goldHistory ?? []), Math.round(b.goldEarned ?? 0)] : (b.goldHistory ?? []),
+        kills: b.alive ? [...(b.killHistory ?? []), b.kills] : (b.killHistory ?? []),
       })),
     });
     const mine = rankings.find((r) => r.seat === mySeat);
@@ -749,6 +749,18 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       </div>,
     );
   }
+
+  /** Host pickers shared by the waiting room and the post-game "next round" panel. */
+  const roomSettingsProps = {
+    mode,
+    onMode: (m: GameMode) => updateRoomSettings({ mode: m }),
+    best: best[mode],
+    difficulty,
+    limit: limitChoice,
+    playerCount,
+    onDifficulty: (d: Difficulty) => updateRoomSettings({ difficulty: d }),
+    onLimit: (l: number | null) => updateRoomSettings({ limit: l }),
+  };
 
   if (phase === "choose") {
     return withGuard(
@@ -881,57 +893,17 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         {phase === "connecting" || practice ? (
           <p className="text-sm text-white/50 light:text-slate-500">{practice ? "전장을 준비하는 중..." : "연결하는 중..."}</p>
         ) : (
-          <>
-            <p className="text-sm text-white/50 light:text-slate-500">초대 코드</p>
-            <p className="text-4xl font-bold tracking-[0.3em] text-white light:text-slate-900">{roomCode}</p>
-            <button
-              onClick={() => navigator.clipboard?.writeText(shareUrl)}
-              className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600"
-            >
-              🔗 초대 링크 복사
-            </button>
-            <p className="text-xs text-white/50 light:text-slate-500">
-              {occupants.length} / {knownTargetPlayerCount}명 참여 중
-            </p>
-            <div className="mt-2 flex flex-col gap-1.5">
-              {Array.from({ length: knownTargetPlayerCount }, (_, seat) => {
-                const occ = occupants.find((o) => o.seat === seat);
-                return (
-                  <p key={seat} className="text-sm text-white/70 light:text-slate-600">
-                    {seat === mySeat ? "나" : `${seat + 1}번`}: {occ ? occ.name : <span className="text-white/30 light:text-slate-400">대기 중...</span>}
-                  </p>
-                );
-              })}
-            </div>
-            <p className="text-xs font-semibold text-orange-200 light:text-orange-700">
-              {host?.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"} · {DIFFICULTY_LABEL[sanitizeDifficulty(host?.difficulty)].emoji}{" "}
-              {DIFFICULTY_LABEL[sanitizeDifficulty(host?.difficulty)].name} · 💀 {host?.limit ? `${host.limit}마리` : `${loadLimit(knownTargetPlayerCount)}마리(인원별)`}에서 탈락
-            </p>
-            {isHost ? (
-              <div className="w-full max-w-sm text-left">
-                <p className="mb-1 text-[11px] text-white/40 light:text-slate-400">⚙️ 방장 설정 — 시작 전까지 바꿀 수 있어요</p>
-                <RoomSettings
-                  compact
-                  mode={mode}
-                  onMode={(m) => updateRoomSettings({ mode: m })}
-                  best={best[mode]}
-                  difficulty={difficulty}
-                  limit={limitChoice}
-                  playerCount={knownTargetPlayerCount}
-                  onDifficulty={(d) => updateRoomSettings({ difficulty: d })}
-                  onLimit={(l) => updateRoomSettings({ limit: l })}
-                />
-              </div>
-            ) : (
-              <p className="text-[11px] text-white/40 light:text-slate-400">방장이 시작 전까지 모드·난이도·탈락 기준을 바꿀 수 있어요.</p>
-            )}
-            <p className="text-xs text-white/40 light:text-slate-400">{knownTargetPlayerCount}명이 모이면 자동으로 시작해요.</p>
-            {isHost && occupants.length < knownTargetPlayerCount && (
-              <button onClick={sendGameStart} className="rounded-full bg-orange-600 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-500">
-                🤖 빈자리 AI로 채우고 시작
-              </button>
-            )}
-          </>
+          <WaitingRoomPanel
+            roomCode={roomCode}
+            shareUrl={shareUrl}
+            seats={Array.from({ length: knownTargetPlayerCount }, (_, seat) => occupants.find((o) => o.seat === seat)?.name ?? null)}
+            joined={occupants.length}
+            mySeat={mySeat}
+            hostRules={{ mode: host?.mode, difficulty: host?.difficulty, limit: host?.limit }}
+            isHost={isHost}
+            settings={{ ...roomSettingsProps, playerCount: knownTargetPlayerCount }}
+            onFillWithAi={sendGameStart}
+          />
         )}
       </div>,
     );
@@ -962,232 +934,21 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   }
 
   if (phase === "post-game" && finalRankings) {
-    const winner = finalRankings.find((r) => r.rank === 1);
-    const iWon = winner?.seat === mySeat;
     return withGuard(
-      <div
-        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 px-3 py-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
-        style={{ background: "linear-gradient(160deg,#3b1d06 0%,#1c1206 55%,#0a0703 100%)" }}
-      >
-        <span className="text-5xl">{iWon ? "🏆" : "🛡️"}</span>
-        <h2 className="text-2xl font-bold text-amber-100">{winner ? `${names[winner.seat]}님 승리!` : "무승부!"}</h2>
-        <p className="text-xs text-white/50">마지막까지 방어선을 지킨 사람이 승리합니다.</p>
-        {myRecord && (
-          <div
-            className={`rounded-xl border px-4 py-2 text-sm break-keep ${
-              myRecord.wave > myRecord.prev ? "animate-[md-record_0.6s_ease-out] border-amber-300/70 bg-amber-400/15 text-amber-100" : "border-white/10 bg-white/5 text-white/70"
-            }`}
-          >
-            <style>{`@keyframes md-record{0%{transform:scale(.7);opacity:0}70%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}`}</style>
-            {myRecord.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"} · {DIFFICULTY_LABEL[myRecord.difficulty].emoji} {DIFFICULTY_LABEL[myRecord.difficulty].name} ·{" "}
-            {myRecord.wave > myRecord.prev ? (
-              <b>
-                🏅 최고 기록 갱신! WAVE {myRecord.wave}
-                {myRecord.prev > 0 && <span className="ml-1 text-xs font-normal opacity-75">(이전 {myRecord.prev})</span>}
-              </b>
-            ) : (
-              <>
-                이번 WAVE {myRecord.wave} · 최고 기록 WAVE {myRecord.prev}
-              </>
-            )}
-          </div>
-        )}
-        {(() => {
-          // This match's combo-bonus coverage (waves from W10 that paid the gold milestone).
-          const me = finalRankings.find((r) => r.seat === mySeat);
-          if (!me || me.lateWaves === 0) return null;
-          const pct = Math.round((me.comboBonusWaves / me.lateWaves) * 100);
-          return (
-            <p className="-mt-2 text-xs text-white/60">
-              ⚡ {COMBO.goldAt}콤보 보너스 <b className="text-amber-200">{me.comboBonusWaves}</b>/{me.lateWaves} 웨이브 ({pct}%)
-              <span className="ml-1 text-[10px] text-white/40">· 10웨이브 이후</span>
-            </p>
-          );
-        })()}
-        <div className="w-full overflow-x-auto">
-          {/* Short headers + nowrap cells keep this to one screen width on phones (checked at 375px). */}
-          <table className="w-full border-collapse text-xs whitespace-nowrap">
-            <thead>
-              <tr className="text-white/50">
-                <th className="border-b border-white/10 px-1.5 py-2 text-left sm:px-2">#</th>
-                <th className="border-b border-white/10 px-1.5 py-2 text-left sm:px-2">플레이어</th>
-                <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2" title="버틴 웨이브">
-                  🌊<span className="hidden sm:inline"> 웨이브</span>
-                </th>
-                <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2">처치</th>
-                <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2" title="최고 치명타 콤보">
-                  ⚡<span className="hidden sm:inline"> 콤보</span>
-                </th>
-                {gameState?.mode === "versus" && (
-                  <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2" title="콤보 견제를 건 횟수 / 당한 횟수 / 결속으로 막은 횟수 / 막혀서 반격당한 횟수">
-                    견제
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {finalRankings.map(({ seat, rank, wave, kills, combo, jamsSent, jamsTaken, jamsBlocked, reflectsTaken }) => (
-                <tr key={seat} className={rank === 1 ? "bg-amber-400/10" : ""}>
-                  <td className="border-b border-white/5 px-1.5 py-2 text-left font-bold text-amber-200 sm:px-2">{rank === 1 ? "🏆" : rank}</td>
-                  <td className="max-w-[7.5rem] truncate border-b border-white/5 px-1.5 py-2 text-left text-white sm:max-w-none sm:px-2" title={names[seat]}>
-                    {seat === mySeat && <span className="mr-1 text-amber-200">나</span>}
-                    {names[seat]}
-                  </td>
-                  <td className="border-b border-white/5 px-1.5 py-2 text-right text-amber-200 sm:px-2">{wave}</td>
-                  <td className="border-b border-white/5 px-1.5 py-2 text-right text-white/70 sm:px-2">{kills.toLocaleString("ko-KR")}</td>
-                  <td
-                    className={`border-b border-white/5 px-1.5 py-2 text-right sm:px-2 ${
-                      combo > 0 && combo === Math.max(...finalRankings.map((r) => r.combo)) ? "font-bold text-amber-300" : "text-white/70"
-                    }`}
-                  >
-                    {combo > 0 ? combo : "-"}
-                  </td>
-                  {gameState?.mode === "versus" && (
-                    <td className="border-b border-white/5 px-1.5 py-2 text-right font-mono text-[11px] text-white/70 sm:px-2">
-                      <span className="text-emerald-300">{jamsSent}</span>/<span className="text-rose-300">{jamsTaken}</span>/
-                      <span className="text-sky-300">{jamsBlocked}</span>/<span className="text-violet-300">{reflectsTaken}</span>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {gameState?.mode === "versus" && (
-            <p className="mt-1 text-right text-[10px] text-white/40">
-              견제 = <span className="text-emerald-300">건</span>/<span className="text-rose-300">당함</span>/<span className="text-sky-300">막음</span>/
-              <span className="text-violet-300">반격당함</span>
-            </p>
-          )}
-        </div>
-        {waveHistory && waveHistory.series.some((s) => s.values.length > 1) && (
-          <WaveChart
-            limit={waveHistory.limit}
-            series={waveHistory.series.map((s) => ({ ...s, name: names[s.seat] ?? `${s.seat + 1}번`, me: s.seat === mySeat }))}
-          />
-        )}
-        {isHost && (
-          <div className="w-full max-w-sm text-left">
-            <p className="mb-1 text-[11px] text-white/40">⚙️ 다음 판 설정</p>
-            <RoomSettings
-              compact
-              mode={mode}
-              onMode={(m) => updateRoomSettings({ mode: m })}
-              best={best[mode]}
-              difficulty={difficulty}
-              limit={limitChoice}
-              playerCount={playerCount}
-              onDifficulty={(d) => updateRoomSettings({ difficulty: d })}
-              onLimit={(l) => updateRoomSettings({ limit: l })}
-            />
-          </div>
-        )}
-        <div className="flex gap-2">
-          <button onClick={handleLeave} className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 hover:border-white/30">
-            나가기
-          </button>
-          {isHost ? (
-            <button onClick={sendGameStart} className="rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-500">
-              다시하기
-            </button>
-          ) : (
-            <span className="self-center text-xs text-white/50">방장이 다시하기를 누르면 시작해요</span>
-          )}
-        </div>
-      </div>,
+      <MergeDefenseResults
+        rankings={finalRankings}
+        names={names}
+        mySeat={mySeat}
+        mode={gameState?.mode}
+        myRecord={myRecord}
+        history={waveHistory}
+        isHost={isHost}
+        settings={{ ...roomSettingsProps, playerCount }}
+        onLeave={handleLeave}
+        onRestart={sendGameStart}
+      />,
     );
   }
 
   return withGuard(null);
-}
-
-const DIFFICULTY_LABEL: Record<Difficulty, { emoji: string; name: string; desc: string }> = {
-  easy: { emoji: "🌱", name: "쉬움", desc: `체력 ×${DIFFICULTY_HP.easy}` },
-  normal: { emoji: "⚖️", name: "보통", desc: "기본" },
-  hard: { emoji: "🔥", name: "어려움", desc: `체력 ×${DIFFICULTY_HP.hard} · 수 ×${DIFFICULTY_COUNT.hard}` },
-};
-
-/** Difficulty + elimination-limit pickers, shared by the create form and the host's waiting room. */
-function RoomSettings({
-  mode,
-  onMode,
-  best,
-  difficulty,
-  limit,
-  playerCount,
-  onDifficulty,
-  onLimit,
-  compact = false,
-}: {
-  mode: GameMode;
-  onMode: (m: GameMode) => void;
-  best: BestWaves;
-  difficulty: Difficulty;
-  limit: number | null;
-  playerCount: number;
-  onDifficulty: (d: Difficulty) => void;
-  onLimit: (l: number | null) => void;
-  compact?: boolean;
-}) {
-  const pill = (on: boolean, tone: "orange" | "rose") =>
-    `rounded-xl border px-1 py-1.5 text-center transition ${
-      on
-        ? tone === "orange"
-          ? "border-orange-400 bg-orange-500/15 text-white light:bg-orange-50 light:text-slate-900"
-          : "border-rose-400 bg-rose-500/15 text-white light:bg-rose-50 light:text-slate-900"
-        : "border-white/10 text-white/60 hover:border-white/30 light:border-slate-200 light:text-slate-500"
-    }`;
-  return (
-    <div className={`flex flex-col ${compact ? "gap-2" : "gap-4"} text-sm break-keep text-white/70 light:text-slate-600`}>
-      <div className="flex flex-col gap-1.5">
-        모드
-        <div className="grid grid-cols-2 gap-1.5">
-          {(
-            [
-              ["survival", "🛡️ 생존전", "같은 웨이브를 막으며 버티기"],
-              ["versus", "⚔️ 유닛 대결", "유닛·몬스터를 상대 길로 보내 공격"],
-            ] as const
-          ).map(([value, label, desc]) => (
-            <button key={value} type="button" onClick={() => onMode(value)} aria-pressed={mode === value} className={`${pill(mode === value, "orange")} px-2 text-left`}>
-              <span className="block text-sm font-bold">{label}</span>
-              {!compact && <span className="block text-[11px] opacity-75">{desc}</span>}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        🌊 웨이브 난이도
-        <div className="grid grid-cols-3 gap-1.5">
-          {DIFFICULTIES.map((d) => (
-            <button key={d} type="button" onClick={() => onDifficulty(d)} aria-pressed={difficulty === d} className={pill(difficulty === d, "orange")}>
-              <span className="block text-sm font-bold">
-                {DIFFICULTY_LABEL[d].emoji} {DIFFICULTY_LABEL[d].name}
-              </span>
-              <span className="block text-[10px] opacity-75">{DIFFICULTY_LABEL[d].desc}</span>
-              <span className={`block text-[10px] font-semibold ${best[d] ? "text-amber-300 light:text-amber-600" : "opacity-40"}`}>
-                🏅 {best[d] ? `${mode === "versus" ? "대결" : "생존"} 최고 W${best[d]}` : "기록 없음"}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        💀 탈락 기준 (내 길의 몬스터 수)
-        <div className="grid grid-cols-5 gap-1.5">
-          {([null, ...LIMIT_CHOICES] as (number | null)[]).map((value) => (
-            <button key={value ?? "auto"} type="button" onClick={() => onLimit(value)} aria-pressed={limit === value} className={pill(limit === value, "rose")}>
-              <span className="block text-sm font-bold">{value === null ? "자동" : value}</span>
-              <span className="block text-[10px] opacity-75">
-                {value === null ? `${loadLimit(playerCount)}마리` : value <= 35 ? "짧게" : value <= 45 ? "빠듯" : value <= 55 ? "보통" : "여유"}
-              </span>
-            </button>
-          ))}
-        </div>
-        {!compact && (
-          <span className="text-[11px] text-white/40 light:text-slate-400">
-            자동 = 인원별 기본값(2인 {loadLimit(2)} · 3인 {loadLimit(3)} · 4인 {loadLimit(4)}마리). 낮을수록 빨리 끝나요.
-          </span>
-        )}
-      </div>
-    </div>
-  );
 }

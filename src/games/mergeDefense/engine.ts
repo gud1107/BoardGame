@@ -311,6 +311,11 @@ export interface Board {
   smashesTaken?: number;
   /** Peak monsters on the road per finished wave (index = wave − 1) and the running peak of the current wave. */
   loadHistory?: number[];
+  /** Cumulative gold earned (all income, before spending) and kills at each closed wave — same indexing as loadHistory. */
+  goldHistory?: number[];
+  killHistory?: number[];
+  /** Running total of gold earned this match. */
+  goldEarned?: number;
   wavePeak?: number;
   /** Waves from W10 this board started alive, and how many of them paid the combo gold milestone (for /stats). */
   lateWaves?: number;
@@ -844,11 +849,11 @@ function spawnWaves(s: MergeDefenseState) {
     pushEvent(s, { seat: -1, type: "wave", wave, boss });
     for (const board of s.boards) {
       if (!board.alive) continue;
-      if (wave > 1) board.gold += waveBonus(wave - 1);
+      if (wave > 1) earn(board, waveBonus(wave - 1));
       if (wave >= LATE_WAVE) board.lateWaves = (board.lateWaves ?? 0) + 1;
       if (wave > 1) {
         // Close out the previous wave's peak (immutable append — states share arrays).
-        board.loadHistory = [...(board.loadHistory ?? []), board.wavePeak ?? 0];
+        closeWave(board);
         board.wavePeak = fieldLoad(board);
       }
       if (boss) board.mobs.push(makeMob(s, "boss", wave));
@@ -865,6 +870,19 @@ function spawnWaves(s: MergeDefenseState) {
   for (const board of s.boards) {
     if (board.alive) board.mobs.push(makeMob(s, kind, wave));
   }
+}
+
+/** Income of any kind: adds to the purse and to the match's earned total. */
+function earn(board: Board, amount: number) {
+  board.gold += amount;
+  board.goldEarned = (board.goldEarned ?? 0) + amount;
+}
+
+/** Appends this wave's peak load / earned gold / kills (immutable — states share arrays). */
+function closeWave(board: Board) {
+  board.loadHistory = [...(board.loadHistory ?? []), board.wavePeak ?? 0];
+  board.goldHistory = [...(board.goldHistory ?? []), Math.round(board.goldEarned ?? 0)];
+  board.killHistory = [...(board.killHistory ?? []), board.kills];
 }
 
 function damage(mob: Mob, amount: number) {
@@ -890,7 +908,7 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
         if (s.wave >= LATE_WAVE) board.comboBonusWaves = (board.comboBonusWaves ?? 0) + 1;
       }
       if (gemDue) board.comboGemWave = s.wave;
-      board.gold += gold;
+      earn(board, gold);
       board.gems += gems;
       const seat = s.boards.indexOf(board);
       pushEvent(s, { seat, type: "combo", count: chain, gold, gems });
@@ -1095,11 +1113,11 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
         continue;
       }
       board.kills += 1;
-      board.gold += killGold(m.kind, s.wave);
+      earn(board, killGold(m.kind, s.wave));
       const rageGold = m.rage ? Math.round(killGold(m.kind, s.wave) * RAGE_GOLD_BONUS) : 0;
       if (m.rage) {
         board.rageKills = (board.rageKills ?? 0) + 1;
-        board.gold += rageGold;
+        earn(board, rageGold);
         board.gems += 1;
       }
       if (m.kind === "golem") {
@@ -1150,7 +1168,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
     board.alive = false;
     board.outAt = s.tick;
     board.outWave = s.wave;
-    board.loadHistory = [...(board.loadHistory ?? []), board.wavePeak ?? 0];
+    closeWave(board);
     pushEvent(s, { seat, type: "out" });
   }
   if (s.boards.filter((b) => b.alive).length <= 1) s.phase = "gameOver";
