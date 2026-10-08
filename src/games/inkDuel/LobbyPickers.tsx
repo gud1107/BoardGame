@@ -207,6 +207,8 @@ export function MyPresetsBar({
   onApply,
   onDelete,
   onSave,
+  onShare,
+  onImport,
   synced,
 }: {
   presets: MyPreset[];
@@ -214,10 +216,21 @@ export function MyPresetsBar({
   onApply: (p: MyPreset) => void;
   onDelete: (id: string) => void;
   onSave: (name: string) => void;
+  /** Copies the preset's share link; resolves false when the clipboard isn't available. */
+  onShare: (p: MyPreset) => Promise<boolean>;
+  /** Adds a preset from a pasted link/code; returns an error message or null. */
+  onImport: (text: string) => string | null;
   synced: boolean;
 }) {
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [code, setCode] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  const flash = (msg: string) => {
+    setNote(msg);
+    window.setTimeout(() => setNote((n) => (n === msg ? null : n)), 2500);
+  };
   const commit = () => {
     if (!name.trim()) return;
     onSave(name);
@@ -238,8 +251,21 @@ export function MyPresetsBar({
               isActive(p) ? "border-violet-400 bg-violet-500/25 text-white light:text-violet-900" : "border-white/15 text-white/70 light:border-slate-300 light:text-slate-700"
             }`}
           >
-            <button type="button" onClick={() => onApply(p)} className="py-1 pr-1 pl-2.5" title={`${p.mode === "moving" ? "🏃 무빙" : "🛑 스탑"} 모드 설정 불러오기`}>
+            <button
+              type="button"
+              onClick={() => onApply(p)}
+              className="py-1 pr-1 pl-2.5"
+              title={`${p.mode === "moving" ? "🏃 무빙" : "🛑 스탑"} 모드${p.playerCount ? ` · ${p.playerCount}인` : ""}${typeof p.character === "number" ? ` · ${CHARACTERS[p.character]?.name ?? ""}` : ""} 불러오기`}
+            >
               {p.mode === "moving" ? "🏃" : "🛑"} {p.name}
+            </button>
+            <button
+              type="button"
+              onClick={async () => flash((await onShare(p)) ? `🔗 '${p.name}' 공유 링크를 복사했어요` : "복사하지 못했어요 — 브라우저가 클립보드를 막았어요")}
+              className="px-1 py-1 text-white/40 hover:text-violet-300 light:text-slate-400"
+              title="친구에게 보낼 링크 복사"
+            >
+              🔗
             </button>
             <button type="button" onClick={() => onDelete(p.id)} className="px-1.5 py-1 text-white/40 hover:text-rose-400 light:text-slate-400" title="삭제">
               ×
@@ -274,7 +300,39 @@ export function MyPresetsBar({
             </button>
           ))}
         {presets.length >= MAX_PRESETS && <span className="text-[10px] text-white/40 light:text-slate-400">최대 {MAX_PRESETS}개 — 하나를 지우면 새로 저장할 수 있어요</span>}
+        {importing ? (
+          <span className="flex items-center gap-1">
+            <input
+              autoFocus
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="친구가 보낸 링크나 코드"
+              className="w-44 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-white placeholder:text-white/30 focus:border-violet-400 focus:outline-none light:border-slate-300 light:bg-white light:text-slate-800"
+            />
+            <button
+              type="button"
+              disabled={!code.trim()}
+              onClick={() => {
+                const err = onImport(code);
+                if (err) flash(err);
+                else {
+                  flash("📥 프리셋을 가져왔어요");
+                  setCode("");
+                  setImporting(false);
+                }
+              }}
+              className="rounded-full bg-violet-600 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-40"
+            >
+              가져오기
+            </button>
+          </span>
+        ) : (
+          <button type="button" onClick={() => setImporting(true)} className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/60 hover:border-white/30 light:border-slate-300 light:text-slate-600">
+            📥 가져오기
+          </button>
+        )}
       </div>
+      {note && <p className="text-[11px] font-semibold text-violet-300 light:text-violet-700">{note}</p>}
     </div>
   );
 }

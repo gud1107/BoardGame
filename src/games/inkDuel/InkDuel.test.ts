@@ -17,6 +17,7 @@ import {
   getValidMoves,
   hasShield,
   SHIELD_GUARD,
+  shieldGuardMul,
   startGame,
   wallPlacementError,
   type EngineAction,
@@ -26,7 +27,7 @@ import { surfaceY } from "./physics";
 import { MAP_IDS } from "./maps";
 import { DEFAULT_RT_RULES, newBotMemory, RT_INK_MAX, RT_SHIELD_MS, rtBotThink, sanitizeRules, startRealtime, stepRealtime } from "./realtime";
 import { RtClientBuffer, snapFromState } from "./rtView";
-import { MAX_PRESETS, PRESET_NAME_MAX, sanitizeStored } from "./roomPrefs";
+import { decodePreset, encodePreset, MAX_PRESETS, PRESET_NAME_MAX, sanitizeStored } from "./roomPrefs";
 
 function line(x0: number, y0: number, x1: number, y1: number, steps = 20, c: Stroke["c"] = 0): Stroke {
   const p: number[] = [];
@@ -528,5 +529,50 @@ describe("remembered settings + 내 프리셋 (roomPrefs)", () => {
     expect(s.presets.every((p) => p.name.length <= PRESET_NAME_MAX && p.map === "snow")).toBe(true);
     expect(s.t).toBe(123);
     expect(sanitizeStored("nope")).toBeNull();
+  });
+});
+
+describe("shield + shot in the same turn", () => {
+  it("raises a light shield (guard scales with ink, shots pass through) and still fires; shared ink is enforced", () => {
+    const s = startGame(2, 41);
+    const seat = s.turnSeat;
+    const small = [circle(20, 2)];
+    const shot: EngineAction = { type: "fire", seat, strokes: [line(10, 100, 120, 100)], angle: 45, power: 60, shield: { strokes: small, angle: 30 } };
+    const next = applyAction(s, shot);
+    const ev = next.lastEvent;
+    expect(ev?.kind).toBe("shot");
+    if (ev?.kind !== "shot") return;
+    expect(ev.shieldWallId).toBeDefined();
+    const wall = next.walls.find((w) => w.id === ev.shieldWallId)!;
+    expect(wall.light).toBe(true);
+    expect(wall.guard!).toBeLessThan(1 - SHIELD_GUARD);
+    expect(shieldGuardMul(next.walls, seat)).toBeCloseTo(1 - wall.guard!, 5);
+    // Weapon + shield together may not exceed the turn's ink.
+    const greedy: EngineAction = { ...shot, strokes: [line(0, 20, 200, 20, 20), line(0, 60, 200, 60, 20)], shield: { strokes: [circle(60)], angle: 30 } };
+    expect(applyAction(s, greedy)).toBe(s);
+  });
+});
+
+describe("sharing a preset by code / link", () => {
+  it("round-trips through a code or a full link, drops the personal character, rejects junk", () => {
+    const p = {
+      id: "p1",
+      name: "주말 난전 🎉",
+      mode: "moving" as const,
+      map: "snow" as const,
+      rtRules: { speed: 105, cooldownMs: 1000, damageScale: 0.4, inkRegen: 26, matchMs: 180_000 },
+      stopRules: { rounds: 15, ink: 130, turnSeconds: 60 },
+      playerCount: 3,
+      character: 4,
+    };
+    const code = encodePreset(p);
+    expect(code).toMatch(/^[A-Za-z0-9_-]+$/);
+    for (const input of [code, `https://example.com/games/ink-duel?preset=${code}`]) {
+      const back = decodePreset(input)!;
+      expect(back).toMatchObject({ name: p.name, mode: "moving", map: "snow", rtRules: p.rtRules, stopRules: p.stopRules, playerCount: 3 });
+      expect(back.character).toBeUndefined();
+    }
+    expect(decodePreset("not-a-code")).toBeNull();
+    expect(decodePreset("")).toBeNull();
   });
 });

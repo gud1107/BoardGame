@@ -1297,7 +1297,8 @@ export function drawShieldArt(ctx: CanvasRenderingContext2D, w: Wall, ratio: num
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   const flicker = ratio < 0.4 ? 0.6 + 0.4 * Math.abs(Math.sin(now / 70)) : 1;
-  ctx.globalAlpha = (preview ? 0.55 : 0.5 + 0.5 * ratio) * flicker;
+  // Light (same-turn) shields are a faint, thin bubble — shots fly through them.
+  ctx.globalAlpha = (preview ? 0.55 : 0.5 + 0.5 * ratio) * flicker * (w.light ? 0.5 : 1);
   for (const s of w.strokes) {
     if (s.length < 4) continue;
     const path = () => {
@@ -1308,7 +1309,7 @@ export function drawShieldArt(ctx: CanvasRenderingContext2D, w: Wall, ratio: num
     ctx.shadowColor = "#38bdf8";
     ctx.shadowBlur = 16;
     ctx.strokeStyle = "rgba(186, 230, 253, 0.85)";
-    ctx.lineWidth = 11;
+    ctx.lineWidth = w.light ? 6 : 11;
     if (preview) ctx.setLineDash([10, 7]);
     path();
     ctx.stroke();

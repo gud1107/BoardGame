@@ -154,9 +154,10 @@ function eventCaption(ev: InkEvent | null, names: Record<SeatIndex, string>): st
   if (ev.move) out.push(`🚶 ${who} 님이 ${ev.move.to > ev.move.from ? "오른쪽" : "왼쪽"}으로 ${Math.abs(ev.move.to - ev.move.from)}px 이동`);
   if (ev.kind === "pass") out.push(`💤 ${who} 님이 턴을 넘겼어요`);
   else if (ev.kind === "wall") out.push(`🧱 ${who} 님이 잉크 벽을 세웠어요`);
-  else if (ev.kind === "shield") out.push(`🛡️ ${who} 님이 방패를 세웠어요 (다음 차례까지 받는 피해 −${Math.round((1 - SHIELD_GUARD) * 100)}%)`);
+  else if (ev.kind === "shield") out.push(`🛡️ ${who} 님이 방패를 세웠어요`);
   else {
     const w = WEAPON_LABEL[ev.stats.kind];
+    if (ev.shieldWallId !== undefined) out.push(`🛡️ ${who} 님이 가벼운 방패를 세우고 쐈어요`);
     if (ev.caught) out.push(`🪃 ${who} 님의 부메랑이 돌아와 손에 쏙! (빗나감)`);
     else if (ev.hits.length === 0) out.push(`${w.emoji} ${who} 님의 ${w.name} — 빗나감!`);
     else
@@ -237,6 +238,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
   const [weapon, setWeapon] = useState<Stroke[]>([]);
   const [wall, setWall] = useState<Stroke[]>([]);
   const [shield, setShield] = useState<Stroke[]>([]);
+  const [shieldAngle, setShieldAngle] = useState(() => (state.players[viewerSeat] && state.players.some((p) => p.alive && p.seat !== viewerSeat && p.x < state.players[viewerSeat].x) ? 150 : 30));
   const [color, setColor] = useState<InkColor>(0);
   const defaultAngle = () => {
     const me = state.players[viewerSeat];
@@ -256,6 +258,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
     setShield([]);
     setMode("weapon");
     setAngle(defaultAngle());
+    setShieldAngle(defaultAngle() > 90 ? 150 : 30);
     setTimeLeft(turnSeconds);
     setWalk(0);
   }
@@ -265,11 +268,16 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
   const budget = preview.inkBudget;
   const activeStrokes = mode === "weapon" ? weapon : mode === "shield" ? shield : wall;
   const setActive = mode === "weapon" ? setWeapon : mode === "shield" ? setShield : setWall;
-  const inkUsed = totalInk(activeStrokes);
+  const weaponInk = totalInk(weapon);
+  const shieldInk = totalInk(shield);
+  // Weapon + shield share the turn's ink (they can go up together); a wall is on its own.
+  const inkUsed = mode === "wall" ? totalInk(activeStrokes) : weaponInk + shieldInk;
   const stats = useMemo(() => (weapon.length > 0 && totalInk(weapon) >= MIN_INK ? analyzeWeapon(weapon) : null), [weapon]);
   const wallError = wall.length > 0 ? wallPlacementError(preview, viewerSeat, wall) : null;
   const shieldReady = shield.length > 0 && totalInk(shield) >= MIN_INK;
-  const shieldPreview = useMemo(() => (shieldReady ? shieldWall(preview, viewerSeat, shield, angle) : null), [shieldReady, preview, viewerSeat, shield, angle]);
+  const shieldPreview = useMemo(() => (shieldReady ? shieldWall(preview, viewerSeat, shield, shieldAngle) : null), [shieldReady, preview, viewerSeat, shield, shieldAngle]);
+  const shieldGuardPct = Math.round(Math.min(1, shieldInk / 100) * (1 - SHIELD_GUARD) * 100);
+  const withShield = shieldReady ? { shield: { strokes: shield, angle: shieldAngle } } : {};
   const walked = preview.players[viewerSeat].x - state.players[viewerSeat].x;
   const canWalk = (next: number) => {
     if (Math.abs(next) > maxMoveFor(state, viewerSeat)) return false;
@@ -284,11 +292,11 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
   const submitRef = useRef<() => void>(() => {});
   const submit = (auto = false) => {
     if (!myTurn) return;
-    if (mode === "weapon" && stats) onAction(withWalk({ type: "fire", seat: viewerSeat, strokes: weapon, angle, power }));
+    if (mode === "weapon" && stats) onAction(withWalk({ type: "fire", seat: viewerSeat, strokes: weapon, angle, power, ...withShield }));
     else if (mode === "wall" && wall.length > 0 && !wallError && totalInk(wall) >= MIN_INK) onAction(withWalk({ type: "wall", seat: viewerSeat, strokes: wall }));
-    else if (mode === "shield" && shieldReady) onAction(withWalk({ type: "shield", seat: viewerSeat, strokes: shield, angle }));
+    else if (mode === "shield" && shieldReady) onAction(withWalk({ type: "shield", seat: viewerSeat, strokes: shield, angle: shieldAngle }));
     else if (auto) {
-      if (stats) onAction(withWalk({ type: "fire", seat: viewerSeat, strokes: weapon, angle, power }));
+      if (stats) onAction(withWalk({ type: "fire", seat: viewerSeat, strokes: weapon, angle, power, ...withShield }));
       else onAction(withWalk({ type: "pass", seat: viewerSeat }));
     }
   };
@@ -379,9 +387,13 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
           names={names}
           turnSeat={turnSeat}
           walkFrom={myTurn && walked !== 0 ? { seat: viewerSeat, x: state.players[viewerSeat].x } : null}
-          aim={myTurn && mode !== "wall" ? { seat: viewerSeat, angle, power, speedMul: stats?.speedMul ?? 1, noArc: mode === "shield" || iAmBlind } : null}
-          shieldPreview={myTurn && mode === "shield" ? shieldPreview : null}
+          aim={myTurn && mode !== "wall" ? { seat: viewerSeat, angle: mode === "shield" ? shieldAngle : angle, power, speedMul: stats?.speedMul ?? 1, noArc: mode === "shield" || iAmBlind } : null}
+          shieldPreview={myTurn && shieldPreview && mode !== "wall" ? (mode === "weapon" ? { ...shieldPreview, light: true } : shieldPreview) : null}
           onAim={(a, p) => {
+            if (mode === "shield") {
+              setShieldAngle(a);
+              return;
+            }
             setAngle(a);
             setPower(p);
           }}
@@ -548,7 +560,13 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
           {mode !== "wall" ? (
             <div className="grid grid-cols-[minmax(0,44%)_1fr] gap-2 sm:grid-cols-[minmax(0,220px)_1fr] sm:gap-3">
               <div className="w-full max-w-[220px]">
-                <WeaponPad strokes={mode === "shield" ? shield : weapon} color={color} budget={budget} onChange={mode === "shield" ? setShield : setWeapon} onScribble={playScribbleTick} />
+                <WeaponPad
+                  strokes={mode === "shield" ? shield : weapon}
+                  color={color}
+                  budget={mode === "shield" ? budget - weaponInk : budget - shieldInk}
+                  onChange={mode === "shield" ? setShield : setWeapon}
+                  onScribble={playScribbleTick}
+                />
                 <p className="mt-1 hidden text-center text-[10px] text-white/40 sm:block light:text-slate-400">
                   {mode === "shield" ? "그린 모양이 그대로 방패가 돼요" : "선·원·세모·네모·별·지그재그·C자·소용돌이·S자·점점이 — 모양마다 다른 무기, 두 색을 섞으면 효과 2개"}
                 </p>
@@ -558,14 +576,26 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                   <div className="rounded-xl border border-sky-400/40 bg-sky-400/10 p-2.5 text-xs text-white/80 light:bg-sky-50 light:text-slate-700">
                     <p className="font-bold">🛡️ 방패</p>
                     <p className="mt-0.5 text-[11px] text-white/60 light:text-slate-500">
-                      그린 모양이 내 옆에 서서 공격을 막아요. 다음 내 차례까지 받는 피해 −{Math.round((1 - SHIELD_GUARD) * 100)}%.
+                      그린 모양이 내 옆에 서요. 받는 피해가 잉크에 비례해 줄어요 (잉크 100 = −{Math.round((1 - SHIELD_GUARD) * 100)}%).
                     </p>
-                    {shieldPreview && <p className="mt-1 font-mono text-[11px]">내구도 {shieldPreview.hp}</p>}
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-white/60 light:text-slate-500">
+                      <li>
+                        <b>방패만 세우기</b>: 턴을 쓰는 대신 단단해서 날아오는 공격을 막아요
+                      </li>
+                      <li>
+                        <b>⚔️ 무기 탭에서 그리고 쏘기</b>: 같은 턴에 쏠 수 있지만 가벼운 방패라 공격은 통과하고 피해만 줄어요
+                      </li>
+                    </ul>
+                    {shieldPreview && (
+                      <p className="mt-1 font-mono text-[11px]">
+                        내구도 {shieldPreview.hp} · 피해 −{shieldGuardPct}%
+                      </p>
+                    )}
                   </div>
                   <label className="flex items-center gap-2 text-xs text-white/70 light:text-slate-600">
                     <span className="w-7 shrink-0 sm:w-10">방향</span>
-                    <input type="range" min={0} max={180} value={angle} onChange={(e) => setAngle(Number(e.target.value))} className="min-w-0 flex-1 accent-sky-500" style={{ direction: "rtl" }} />
-                    <span className="w-10 text-right font-mono">{angle}°</span>
+                    <input type="range" min={0} max={180} value={shieldAngle} onChange={(e) => setShieldAngle(Number(e.target.value))} className="min-w-0 flex-1 accent-sky-500" style={{ direction: "rtl" }} />
+                    <span className="w-10 text-right font-mono">{shieldAngle}°</span>
                   </label>
                   <p className="hidden text-[10px] text-white/40 sm:block light:text-slate-400">경기장을 드래그해서 방패 방향을 정할 수도 있어요</p>
                   <div className="mr-14 flex gap-2 sm:mr-0">
@@ -580,7 +610,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                       onClick={() => submit()}
                       className="flex-1 rounded-xl bg-sky-600 py-2.5 text-sm font-bold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      🛡️ 방패 세우기
+                      🛡️ 방패만 세우기
                     </button>
                   </div>
                 </div>
@@ -595,6 +625,16 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                   <div className="rounded-xl border border-dashed border-white/20 p-3 text-center text-xs text-white/50 sm:p-4 light:border-slate-300 light:text-slate-500">
                     ← 공책에 무기를 그려보세요 ✏️
                     <span className="mt-1 block text-[10px] sm:hidden">선·원·세모·네모·별·지그재그·C자·소용돌이·S자·점점이</span>
+                  </div>
+                )}
+                {shieldReady && (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-sky-400/40 bg-sky-400/10 px-2 py-1 text-[11px] text-white/80 light:bg-sky-50 light:text-slate-700">
+                    <span>
+                      🛡️ 가벼운 방패도 함께 (잉크 −{Math.ceil(shieldInk)} · 피해 −{shieldGuardPct}%)
+                    </span>
+                    <button type="button" onClick={() => setShield([])} className="rounded-full border border-white/20 px-2 py-0.5 text-[10px] light:border-slate-300">
+                      빼기
+                    </button>
                   </div>
                 )}
                 <label className="flex items-center gap-2 text-xs text-white/70 light:text-slate-600">
@@ -620,7 +660,7 @@ export default function InkDuelBoard({ state, viewerSeat, names, connectedSeats,
                     onClick={() => submit()}
                     className="flex-1 rounded-xl bg-rose-600 py-2.5 text-sm font-bold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    🚀 발사!
+                    {shieldReady ? "🛡️+🚀 발사!" : "🚀 발사!"}
                   </button>
                 </div>
               </div>

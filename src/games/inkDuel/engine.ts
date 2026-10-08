@@ -120,7 +120,13 @@ export const MOVE_INK_PER_PX = 0.25;
 const MOVE_PERSONAL_SPACE = 36;
 /** …or through a wall point lower than this above the ground. */
 const WALL_BLOCK_HEIGHT = 40;
-/** 🛡️ Shield: drawn doodle scaled up and stood next to the player; damage to its owner ×SHIELD_GUARD while it stands. */
+/**
+ * 🛡️ Shield: drawn doodle scaled up and stood next to the player. While it
+ * stands its owner takes less damage — up to SHIELD_GUARD (×0.6) for a
+ * 100-ink shield, proportionally less for a smaller one. (2026-10-09: once
+ * shields could go up in the same turn as a shot, a flat −40% made a 20-ink
+ * dot win 90% of duels.)
+ */
 const SHIELD_SCALE = 1.3;
 const SHIELD_HP_PER_INK = 1.3;
 export const SHIELD_GUARD = 0.6;
@@ -208,6 +214,8 @@ export type InkEvent =
       confusedAngle?: number;
       /** 🐌 slow / 🕶️ blind changed the power the shooter asked for: what actually flew. */
       bentPower?: number;
+      /** 🛡️ A shield went up in the same turn as this shot. */
+      shieldWallId?: number;
     }
   | { kind: "wall"; id: number; seat: SeatIndex; wallId: number; dots: DotRecord[]; move?: MoveRecord }
   | { kind: "shield"; id: number; seat: SeatIndex; wallId: number; dots: DotRecord[]; move?: MoveRecord }
@@ -251,7 +259,16 @@ export interface InkDuelState {
  * acting. Walking costs ink (MOVE_INK_PER_PX), so it competes with the doodle.
  */
 export type EngineAction =
-  | { type: "fire"; seat: SeatIndex; strokes: Stroke[]; angle: number; power: number; move?: number }
+  | {
+      type: "fire";
+      seat: SeatIndex;
+      strokes: Stroke[];
+      angle: number;
+      power: number;
+      move?: number;
+      /** 🛡️ Raise a shield in the same turn; its ink comes out of the same turn budget. */
+      shield?: { strokes: Stroke[]; angle: number };
+    }
   | { type: "wall"; seat: SeatIndex; strokes: Stroke[]; move?: number }
   | { type: "shield"; seat: SeatIndex; strokes: Stroke[]; angle: number; move?: number }
   | { type: "pass"; seat: SeatIndex; move?: number };
@@ -493,7 +510,9 @@ export function shieldWall(state: { players: readonly { x: number; y: number }[]
   const dist = PLAYER_R + 14 + stats.radius * SHIELD_SCALE * 0.35;
   const cx = me.x + dcos(a) * dist;
   const cy = me.y - 20 - dsin(a) * dist;
-  const hp = Math.round(totalInk(strokes) * SHIELD_HP_PER_INK * 10) / 10;
+  const ink = totalInk(strokes);
+  const hp = Math.round(ink * SHIELD_HP_PER_INK * 10) / 10;
+  const guard = Math.round(Math.min(1, ink / INK_PER_TURN) * (1 - SHIELD_GUARD) * 100) / 100;
   const colorInk = [0, 0, 0, 0, 0];
   for (const s of strokes) colorInk[s.c] += s.p.length;
   let color = 0;
@@ -502,6 +521,7 @@ export function shieldWall(state: { players: readonly { x: number; y: number }[]
     id: state.nextWallId,
     owner: seat,
     shieldOf: seat,
+    guard,
     strokes: stats.shape.map((st) => {
       const out: number[] = [];
       for (let i = 0; i < st.p.length; i += 2) out.push(Math.round((cx + st.p[i] * SHIELD_SCALE) * 10) / 10, Math.round((cy + st.p[i + 1] * SHIELD_SCALE) * 10) / 10);
@@ -511,6 +531,13 @@ export function shieldWall(state: { players: readonly { x: number; y: number }[]
     maxHp: hp,
     color,
   };
+}
+
+/** Damage multiplier from the strongest shield `seat` has standing (1 = none). */
+export function shieldGuardMul(walls: readonly Wall[], seat: SeatIndex): number {
+  let best = 0;
+  for (const w of walls) if (w.shieldOf === seat && w.hp > 0) best = Math.max(best, w.guard ?? 1 - SHIELD_GUARD);
+  return 1 - best;
 }
 
 export function hasShield(walls: readonly Wall[], seat: SeatIndex): boolean {
@@ -569,10 +596,26 @@ function applyActionInPlace(state: InkDuelState, action: EngineAction): InkDuelS
     return endTurn(next, { kind: "shield", id: state.seq + 1, seat: action.seat, wallId: wall.id, dots: [] }, next.players, next.terrain, next.walls);
   }
 
-  // fire
-  if (!strokesValid(action.strokes, PAD_SIZE, PAD_SIZE) || !validInk(state, action.strokes)) return state;
+  // fire (optionally with a 🛡️ shield raised first, sharing the turn's ink)
+  if (!strokesValid(action.strokes, PAD_SIZE, PAD_SIZE)) return state;
   if (!Number.isInteger(action.angle) || action.angle < 0 || action.angle > 180) return state;
   if (!Number.isInteger(action.power) || action.power < 10 || action.power > 100) return state;
+  const weaponInk = totalInk(action.strokes);
+  let shieldInk = 0;
+  if (action.shield) {
+    if (!strokesValid(action.shield.strokes, PAD_SIZE, PAD_SIZE) || !Number.isInteger(action.shield.angle) || action.shield.angle < 0 || action.shield.angle > 180) return state;
+    shieldInk = totalInk(action.shield.strokes);
+    if (shieldInk < MIN_INK) return state;
+  }
+  if (weaponInk < MIN_INK || weaponInk + shieldInk > state.inkBudget + 0.5) return state;
+  let shieldWallId: number | undefined;
+  if (action.shield) {
+    // Same-turn shields are light: they cut damage but don't stop shots (a solid one
+    // here won 76% of duels — in 1v1 it ate the opponent's only shot every round).
+    const wall = { ...shieldWall(state, action.seat, action.shield.strokes, action.shield.angle), light: true };
+    shieldWallId = wall.id;
+    state = { ...state, walls: [...state.walls.filter((w) => w.shieldOf !== action.seat), wall], nextWallId: state.nextWallId + 1 };
+  }
   let angle = action.angle;
   let confusedAngle: number | undefined;
   if ((state.players[action.seat].status.confuse ?? 0) > 0) {
@@ -591,8 +634,16 @@ function applyActionInPlace(state: InkDuelState, action: EngineAction): InkDuelS
   power = Math.max(10, Math.min(100, Math.round(power)));
   const bentPower = power !== action.power ? power : undefined;
   const next = resolveShot(state, action.seat, analyzeWeapon(action.strokes), angle, power);
-  if ((confusedAngle === undefined && bentPower === undefined) || next.lastEvent?.kind !== "shot") return next;
-  return { ...next, lastEvent: { ...next.lastEvent, ...(confusedAngle !== undefined ? { confusedAngle } : {}), ...(bentPower !== undefined ? { bentPower } : {}) } };
+  if ((confusedAngle === undefined && bentPower === undefined && shieldWallId === undefined) || next.lastEvent?.kind !== "shot") return next;
+  return {
+    ...next,
+    lastEvent: {
+      ...next.lastEvent,
+      ...(confusedAngle !== undefined ? { confusedAngle } : {}),
+      ...(bentPower !== undefined ? { bentPower } : {}),
+      ...(shieldWallId !== undefined ? { shieldWallId } : {}),
+    },
+  };
 }
 
 interface ShotOutcome {
@@ -693,7 +744,7 @@ export function resolveImpact<P extends ImpactBody>(
       }
       if (dmg <= 0) continue;
       if (p.seat === seat) dmg *= SELF_DMG_MUL;
-      if (hasShield(walls, p.seat)) dmg *= SHIELD_GUARD;
+      dmg *= shieldGuardMul(walls, p.seat);
       dmg *= dmgMods(shooter.status, p.status);
       hits.push({ seat: p.seat, dmg: Math.round(dmg * mul), direct, chain: false });
     }
@@ -716,7 +767,7 @@ export function resolveImpact<P extends ImpactBody>(
           }
         }
         if (!best) break;
-        hits.push({ seat: best.seat, dmg: Math.round(stats.damage * 0.5 * mul * (hasShield(walls, best.seat) ? SHIELD_GUARD : 1) * dmgMods(shooter.status, best.status)), direct: false, chain: true });
+        hits.push({ seat: best.seat, dmg: Math.round(stats.damage * 0.5 * mul * shieldGuardMul(walls, best.seat) * dmgMods(shooter.status, best.status)), direct: false, chain: true });
         lx = best.x;
         ly = best.y - PLAYER_R;
         chainPath.push(Math.round(lx), Math.round(ly));
@@ -1149,17 +1200,27 @@ export function chooseBotAction(state: InkDuelState, seat: SeatIndex, level: Bot
   if (currentActor(state) !== seat) return null;
   const me = state.players[seat];
   const enemies = state.players.filter((p) => p.alive && p.seat !== seat);
+  // Hurt and unshielded: put a small bubble shield up and fire with the ink that's left.
+  if (level >= 3 && enemies.length > 0 && me.hp <= 60 && !hasShield(state.walls, seat) && rng() < 0.45) {
+    const near = enemies.reduce((a, b) => (Math.abs(b.x - me.x) < Math.abs(a.x - me.x) ? b : a));
+    const strokes = botDoodle("bomb", 2, Math.min(35, state.inkBudget - 30), rng);
+    const ink = totalInk(strokes);
+    if (ink >= MIN_INK && state.inkBudget - ink >= 25) {
+      const core = chooseBotActionCore({ ...state, inkBudget: Math.round((state.inkBudget - ink) * 100) / 100 }, seat, level, rng);
+      if (core?.type === "fire") return { ...core, shield: { strokes, angle: near.x < me.x ? 150 : 30 } };
+    }
+  }
+  return chooseBotActionCore(state, seat, level, rng);
+}
+
+function chooseBotActionCore(state: InkDuelState, seat: SeatIndex, level: BotLevel, rng: () => number): EngineAction | null {
+  const me = state.players[seat];
+  const enemies = state.players.filter((p) => p.alive && p.seat !== seat);
   if (enemies.length === 0) return { type: "pass", seat };
 
-  // Defensive wall or shield when hurt and unprotected.
+  // Defensive wall when hurt and unprotected.
   const hasWall = state.walls.some((w) => w.owner === seat && w.shieldOf === undefined && w.hp > 15);
-  if (level >= 3 && !hasWall && me.hp <= 55 && rng() < 0.35) {
-    if (rng() < 0.5) {
-      // Bubble shield facing the closest enemy.
-      const near = enemies.reduce((a, b) => (Math.abs(b.x - me.x) < Math.abs(a.x - me.x) ? b : a));
-      const strokes = botDoodle("bomb", 2, Math.min(state.inkBudget, 60), rng);
-      if (totalInk(strokes) >= MIN_INK) return { type: "shield", seat, strokes, angle: near.x < me.x ? 150 : 30 };
-    }
+  if (level >= 3 && !hasWall && me.hp <= 55 && rng() < 0.2) {
     const wall = botWall(state, seat, rng);
     if (wall) return { type: "wall", seat, strokes: wall };
   }

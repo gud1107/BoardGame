@@ -13,7 +13,21 @@ import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import RoomNicknameField, { type RoomIdentityValue } from "@/components/identity/RoomNicknameField";
 import type { PlayableGameProps } from "@/games/types";
 import { CharacterPicker, MapPicker, mapLabel, ModePicker, modeLabel, MyPresetsBar, RtRulesPicker, rtRulesLabel, StopRulesPicker, stopRulesLabel, type GameMode } from "./LobbyPickers";
-import { DEFAULT_PREFS, loadStored, MAX_PRESETS, newPresetId, PRESET_NAME_MAX, pushToAccount, saveLocal, watchAccount, type MyPreset, type RoomPrefs, type StoredPrefs } from "./roomPrefs";
+import {
+  decodePreset,
+  DEFAULT_PREFS,
+  loadStored,
+  MAX_PRESETS,
+  newPresetId,
+  PRESET_NAME_MAX,
+  presetShareLink,
+  pushToAccount,
+  saveLocal,
+  watchAccount,
+  type MyPreset,
+  type RoomPrefs,
+  type StoredPrefs,
+} from "./roomPrefs";
 import RealtimeBoard, { type CommandBody } from "./RealtimeBoard";
 import { newBotMemory, rtBotThink, sameRules, sanitizeRules, startRealtime, stepRealtime, type RtBotMemory, type RtCommand, type RtInput, type RtRules, type RtState } from "./realtime";
 import { RtClientBuffer, snapFromState, viewFromState, type RtSnap, type RtView } from "./rtView";
@@ -116,6 +130,17 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const [myPresets, setMyPresets] = useState<MyPreset[]>(initialStored.stored.presets);
   const [accountSync, setAccountSync] = useState(false);
   const storedRef = useRef<StoredPrefs>(initialStored.stored);
+  const [sharedPreset, setSharedPreset] = useState<MyPreset | null>(() => {
+    if (typeof window === "undefined") return null;
+    const code = new URLSearchParams(window.location.search).get("preset");
+    return code ? decodePreset(code) : null;
+  });
+  const dismissShared = () => {
+    setSharedPreset(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("preset");
+    window.history.replaceState(null, "", url.pathname + url.search);
+  };
   const [roomFromUrl] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("room");
@@ -850,12 +875,75 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const saveMyPreset = (name: string) => {
     const clean = name.trim().slice(0, PRESET_NAME_MAX);
     if (!clean || myPresets.length >= MAX_PRESETS) return;
-    setMyPresets((list) => [...list, { id: newPresetId(), name: clean, mode: modePick, map: mapPick, rtRules, stopRules }]);
+    setMyPresets((list) => [...list, { id: newPresetId(), name: clean, mode: modePick, map: mapPick, rtRules, stopRules, playerCount: targetPlayerCount, character: myChar }]);
   };
-  const applyMyPreset = (p: MyPreset) => retrack({ mode: p.mode, map: p.map, rules: p.rtRules, stopRules: p.stopRules });
+  const applyMyPreset = (p: MyPreset) => {
+    retrack({ mode: p.mode, map: p.map, rules: p.rtRules, stopRules: p.stopRules, ...(p.character !== undefined ? { character: p.character } : {}) });
+    // The player count is only adjustable before the room exists.
+    if (p.playerCount && !roomCode) setTargetPlayerCount(p.playerCount);
+  };
+  const shareMyPreset = async (p: MyPreset) => {
+    try {
+      await navigator.clipboard.writeText(presetShareLink(p));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const addPreset = (p: MyPreset): string | null => {
+    if (myPresets.length >= MAX_PRESETS) return `내 프리셋은 ${MAX_PRESETS}개까지예요 — 하나를 지우고 다시 해보세요`;
+    const name = myPresets.some((x) => x.name === p.name) ? `${p.name.slice(0, PRESET_NAME_MAX - 2)} 2` : p.name;
+    setMyPresets((list) => [...list, { ...p, id: newPresetId(), name }]);
+    return null;
+  };
+  const importPreset = (text: string): string | null => {
+    const p = decodePreset(text);
+    return p ? addPreset(p) : "올바른 프리셋 링크·코드가 아니에요";
+  };
   const deleteMyPreset = (id: string) => setMyPresets((list) => list.filter((p) => p.id !== id));
   const myPresetsBar = (
-    <MyPresetsBar presets={myPresets} isActive={presetIsActive} onApply={applyMyPreset} onDelete={deleteMyPreset} onSave={saveMyPreset} synced={accountSync} />
+    <MyPresetsBar
+      presets={myPresets}
+      isActive={presetIsActive}
+      onApply={applyMyPreset}
+      onDelete={deleteMyPreset}
+      onSave={saveMyPreset}
+      onShare={shareMyPreset}
+      onImport={importPreset}
+      synced={accountSync}
+    />
+  );
+  const sharedPresetCard = sharedPreset && (
+    <div className="flex flex-col gap-1.5 rounded-xl border-2 border-violet-400/60 bg-violet-500/10 p-3 text-left text-xs text-white/80 light:bg-violet-50 light:text-slate-700">
+      <p className="font-bold">
+        🎁 친구가 공유한 프리셋 「{sharedPreset.name}」
+      </p>
+      <p className="text-[11px] text-white/60 light:text-slate-500">
+        {sharedPreset.mode === "moving" ? `🏃 무빙 모드 · ${rtRulesLabel(sharedPreset.rtRules) || "기본 설정"}` : `🛑 스탑 모드 · ${stopRulesLabel(sharedPreset.stopRules) || "기본 설정"}`}
+        {sharedPreset.map !== "random" && ` · 맵 ${mapLabel(sharedPreset.map)}`}
+        {sharedPreset.playerCount ? ` · ${sharedPreset.playerCount}인` : ""}
+      </p>
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={() => {
+            const err = addPreset(sharedPreset);
+            if (err) {
+              setFormError(err);
+              return;
+            }
+            applyMyPreset(sharedPreset);
+            dismissShared();
+          }}
+          className="rounded-full bg-violet-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-violet-500"
+        >
+          ⭐ 내 프리셋에 추가하고 적용
+        </button>
+        <button type="button" onClick={dismissShared} className="rounded-full border border-white/20 px-3 py-1 text-[11px] light:border-slate-300">
+          닫기
+        </button>
+      </div>
+    </div>
   );
 
   function castTakeoverVote(seatKey: string) {
@@ -1092,9 +1180,10 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
         gameId="ink-duel"
         icon="✏️"
         title="낙서 결투 온라인 대전"
-        description={<p className="text-sm text-white/50 light:text-slate-500">2~4인 턴제 포격전. 공책에 그린 낙서가 그대로 무기가 되어 날아가요 — 곧은 선은 창, 닫힌 도형은 폭탄, 지그재그는 번개! AI 봇과 혼자서도 즐길 수 있어요.</p>}
+        description={<p className="text-sm text-white/50 light:text-slate-500">2~4인 낙서 포격전. 공책에 그린 낙서가 그대로 무기가 되어 날아가요 — 선·원·세모·별·소용돌이… 모양마다 다른 무기 11종, 색마다 다른 효과 12종! 🛑 턴제 스탑 모드와 🏃 실시간 무빙 모드, AI 봇과 혼자서도 즐길 수 있어요.</p>}
         actions={
           <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
+            {sharedPresetCard}
             <button
               onClick={() => {
                 setIntent("create");
@@ -1127,6 +1216,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     return withGuard(
       <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white/90 light:shadow-sm p-6">
         <h2 className="text-base font-bold text-white light:text-slate-900">{intent === "create" ? "방 만들기" : "초대 코드로 참여"}</h2>
+        {intent === "create" && sharedPresetCard}
         <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
           내 닉네임
           <RoomNicknameField value={identity} onChange={setIdentity} onEnter={enterRoom} accent="emerald" />

@@ -31,6 +31,10 @@ export interface Wall {
   color: number;
   /** Set for a 🛡️ shield: it guards this seat and vanishes when that seat's next turn starts. */
   shieldOf?: number;
+  /** 🛡️ Damage reduction (0..0.4) its owner gets while it stands — scales with the ink spent. */
+  guard?: number;
+  /** 🛡️ A light shield (raised in the same turn as a shot): guard only, projectiles pass through. */
+  light?: boolean;
 }
 
 export interface Body {
@@ -262,7 +266,8 @@ export function collideFlyer(
   // Ink walls.
   for (let wi = 0; wi < walls.length; wi++) {
     const w = walls[wi];
-    if (w.hp <= 0 || f.pierced.includes(w.id)) continue;
+    // Your own 🛡️ never blocks your own shots (it now goes up in the same turn you fire).
+    if (w.hp <= 0 || f.pierced.includes(w.id) || w.shieldOf === shooterSeat || w.light) continue;
     const bb = bounds?.[wi] ?? wallBounds(w);
     if (x + R < bb.x0 - WALL_CONTACT || x - R > bb.x1 + WALL_CONTACT || y + R < bb.y0 - WALL_CONTACT || y - R > bb.y1 + WALL_CONTACT) continue;
     let hit = false;

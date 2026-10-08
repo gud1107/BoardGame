@@ -38,6 +38,10 @@ export interface MyPreset {
   map: MapId | "random";
   rtRules: RtRules;
   stopRules: StopRules;
+  /** Player count to open the room with (applied on the create form only). */
+  playerCount?: number;
+  /** My character (personal — never included in a shared code). */
+  character?: number | null;
 }
 
 export interface StoredPrefs {
@@ -74,7 +78,63 @@ function sanitizePreset(raw: unknown, i: number): MyPreset | null {
     map: p.map === "random" || isMapId(p.map) ? p.map : "random",
     rtRules: sanitizeRules(p.rtRules),
     stopRules: sanitizeStopRules(p.stopRules),
+    ...(typeof p.playerCount === "number" ? { playerCount: Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.round(p.playerCount))) } : {}),
+    ...(typeof p.character === "number" && Number.isInteger(p.character) && p.character >= 0 && p.character < CHARACTER_COUNT ? { character: p.character } : {}),
   };
+}
+
+// --- Sharing: a preset as a short URL-safe code (character left out — it's personal). ---
+
+function toBase64Url(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function fromBase64Url(code: string): string {
+  const b64 = code.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((code.length + 3) % 4);
+  const bin = atob(b64);
+  return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+}
+
+export function encodePreset(p: MyPreset): string {
+  const r = p.rtRules;
+  const st = p.stopRules;
+  return toBase64Url(
+    JSON.stringify([1, p.name, p.mode === "moving" ? 1 : 0, p.map, r.speed, r.cooldownMs, Math.round(r.damageScale * 100), r.inkRegen, Math.round(r.matchMs / 1000), st.rounds, st.ink, st.turnSeconds, p.playerCount ?? 0]),
+  );
+}
+
+/** Accepts a bare code or a whole share link; null when it isn't a valid preset. */
+export function decodePreset(input: string): MyPreset | null {
+  try {
+    const text = input.trim();
+    const code = text.includes("preset=") ? (new URL(text, "https://x.invalid").searchParams.get("preset") ?? "") : text;
+    if (!code || code.length > 400) return null;
+    const a = JSON.parse(fromBase64Url(code)) as unknown[];
+    if (!Array.isArray(a) || a[0] !== 1) return null;
+    const n = (i: number) => (typeof a[i] === "number" ? (a[i] as number) : undefined);
+    return sanitizePreset(
+      {
+        id: newPresetId(),
+        name: a[1],
+        mode: a[2] === 1 ? "moving" : "stop",
+        map: a[3],
+        rtRules: { speed: n(4), cooldownMs: n(5), damageScale: n(6) !== undefined ? n(6)! / 100 : undefined, inkRegen: n(7), matchMs: n(8) !== undefined ? n(8)! * 1000 : undefined },
+        stopRules: { rounds: n(9), ink: n(10), turnSeconds: n(11) },
+        ...(n(12) ? { playerCount: n(12) } : {}),
+      },
+      0,
+    );
+  } catch {
+    return null;
+  }
+}
+
+export function presetShareLink(p: MyPreset): string {
+  const base = typeof window === "undefined" ? "" : `${window.location.origin}${window.location.pathname}`;
+  return `${base}?preset=${encodePreset(p)}`;
 }
 
 /** Re-validates anything read back from storage or the account (it can be stale or edited). */

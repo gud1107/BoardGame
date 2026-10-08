@@ -89,6 +89,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       },
       {
         game: "ink-duel",
+        type: "FEAT",
+        desc: "🛡️ 방패를 무기와 같은 턴에 — 잉크를 나눠 쓰는 가벼운 방패(공격은 통과, 피해만 줄임), 방패 효과는 잉크에 비례",
+      },
+      {
+        game: "ink-duel",
+        type: "FEAT",
+        desc: "내 프리셋 🔗 링크 공유·📥 가져오기, 프리셋에 인원 수와 캐릭터도 함께 저장",
+      },
+      {
+        game: "ink-duel",
         type: "IMPROVE",
         desc: "무빙 모드 그림판을 경기장 바로 아래 이동·발사 버튼 옆으로 — 스크롤 없이 그리고 움직이고 쏘기",
       },
