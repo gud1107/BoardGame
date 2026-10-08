@@ -117,7 +117,7 @@ export const ROOM_RULEBOOK_SUMMARIES: Record<string, RoomRulebookSummary> = {
     ],
     specialRules: [
       "🔥 12마리 처치마다 다음 상대에게 정예 몬스터 전송",
-      "⚔️ 유닛 대결 모드: 내 유닛을 상대 길에 침략자로 보내기",
+      "⚔️ 유닛 대결 모드: 내 유닛을 상대 길에 침략자로 보내기 + 골드로 몬스터(박쥐 떼·망령·골렘·전쟁군주) 사서 보내기",
       "🤖 빈자리는 AI로 채워 바로 시작 가능",
     ],
   },

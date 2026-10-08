@@ -5,7 +5,9 @@ import {
   chooseBotAction,
   computeRankings,
   fieldLoad,
+  hireCost,
   invaderWeight,
+  SWARM_SIZE,
   SEND_COOLDOWN_TICKS,
   slotCenter,
   unitRange,
@@ -108,6 +110,49 @@ describe("merge defense engine", () => {
     expect(applyAction({ ...surv, wave: 2 }, 0, { type: "send", slot: 3 }).boards[0].units[3]).not.toBeNull();
   });
 
+  it("유닛 대결: buying monsters charges gold, drops them on the target and shares the send cooldown", () => {
+    let s = startGame(2, 22, [], "versus");
+    while (s.wave < 1) s = stepGame(s);
+    s.boards[0].gold = 1000;
+    const before = s.boards[1].mobs.length;
+    const swarm = applyAction(s, 0, { type: "hire", mob: "swarm" });
+    expect(swarm.boards[0].gold).toBe(1000 - hireCost("swarm", s.wave));
+    expect(swarm.boards[0].sendCd).toBe(SEND_COOLDOWN_TICKS);
+    expect(swarm.boards[1].mobs.length).toBe(before + SWARM_SIZE);
+    expect(swarm.boards[1].mobs.slice(-SWARM_SIZE).every((m) => m.from === 0)).toBe(true);
+    // Cooldown blocks the next buy; locked tiers wait for their wave; survival never allows it.
+    expect(applyAction(swarm, 0, { type: "hire", mob: "swarm" })).toBe(swarm);
+    expect(applyAction(s, 0, { type: "hire", mob: "warlord" })).toBe(s);
+    const later = { ...s, wave: 5 };
+    const lord = applyAction(later, 0, { type: "hire", mob: "warlord" });
+    expect(lord.boards[1].mobs.some((m) => m.kind === "warlord")).toBe(true);
+    const surv = startGame(2, 22);
+    surv.boards[0].gold = 1000;
+    expect(applyAction({ ...surv, wave: 3 }, 0, { type: "hire", mob: "swarm" }).boards[0].gold).toBe(1000);
+    // Not enough gold → nothing happens.
+    const poor = applyAction({ ...s, boards: s.boards.map((b, i) => (i === 0 ? { ...b, gold: 10 } : b)) }, 0, { type: "hire", mob: "swarm" });
+    expect(poor.boards[1].mobs.length).toBe(before);
+  });
+
+  it("frost never slows a wraith", () => {
+    let s = startGame(2, 23, [], "versus");
+    while (s.wave < 2) s = stepGame(s);
+    s.boards[0].gold = 1000;
+    s.boards[1].mobs = [];
+    s.boards[1].units[5] = { kind: "frost", grade: 3, cd: 0 };
+    s = applyAction(s, 0, { type: "hire", mob: "wraith" });
+    let frostHits = 0;
+    for (let i = 0; i < 120; i++) {
+      s = stepGame(s);
+      s.boards[1].mobs = s.boards[1].mobs.filter((m) => m.kind === "wraith");
+      const w = s.boards[1].mobs[0];
+      if (!w) break;
+      frostHits += s.boards[1].shots.filter((sh) => sh.kind === "frost").length;
+      expect(w.slowT).toBe(0);
+    }
+    expect(frostHits).toBeGreaterThan(0);
+  });
+
   it("refuses to merge max-grade units", () => {
     const s = startGame(2, 1);
     s.boards[0].units[0] = { kind: "poison", grade: MAX_GRADE, cd: 0 };
@@ -117,6 +162,8 @@ describe("merge defense engine", () => {
 
   it("sanitizes untrusted network actions", () => {
     expect(sanitizeAction({ type: "merge", a: 1, b: 1 })).toBeNull();
+    expect(sanitizeAction({ type: "hire", mob: "swarm", to: 1 })).toEqual({ type: "hire", mob: "swarm", to: 1 });
+    expect(sanitizeAction({ type: "hire", mob: "dragon" })).toBeNull();
     expect(sanitizeAction({ type: "merge", a: -1, b: 2 })).toBeNull();
     expect(sanitizeAction({ type: "upgrade", kind: "laser" })).toBeNull();
     expect(sanitizeAction({ type: "summon", extra: 1 })).toEqual({ type: "summon" });

@@ -22,6 +22,7 @@ import {
   fieldLoad,
   pathPoint,
   slotCenter,
+  slotCoverage,
   unitInterval,
   unitRange,
   type Board,
@@ -46,6 +47,21 @@ export interface DrawOptions {
   dropTarget?: number | null;
   /** Last aim angle per slot (radians), from recent shots. */
   aim?: Record<number, number>;
+  /** 배치 가이드: road coverage (0..1) per slot, drawn on empty cells. */
+  coverage?: number[] | null;
+  /** performance.now() when a unit appeared per slot — drives the pop-in / evolve scale. */
+  bornAt?: Record<number, { t: number; big: boolean }>;
+}
+
+const coverageCache = new Map<number, number[]>();
+/** Road coverage of every cell for one attack range (cached — ranges come from a small set). */
+export function coverageFor(range: number): number[] {
+  let c = coverageCache.get(range);
+  if (!c) {
+    c = Array.from({ length: SLOTS }, (_, i) => slotCoverage(i, range));
+    coverageCache.set(range, c);
+  }
+  return c;
 }
 
 type Ctx = CanvasRenderingContext2D;
@@ -287,6 +303,41 @@ export function drawBoard(ctx: Ctx, board: Board, opts: DrawOptions) {
     }
   }
 
+  // 배치 가이드: tint every empty cell by how much road it reaches.
+  if (opts.coverage && !mini) {
+    const cov = opts.coverage;
+    const empties = cov.map((v, i) => (board.units[i] ? -1 : v));
+    const vals = empties.filter((v) => v >= 0);
+    const lo = Math.min(...vals);
+    const hi = Math.max(...vals);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    empties.forEach((v, slot) => {
+      if (v < 0) return;
+      const t = hi > lo ? (v - lo) / (hi - lo) : 1;
+      const c = slotCenter(slot);
+      const sz = CELL - 12;
+      // red (weak) → amber → green (best)
+      const hue = Math.round(t * 130);
+      ctx.fillStyle = `hsla(${hue}, 85%, 50%, ${0.16 + t * 0.14})`;
+      roundRect(ctx, c.x - sz / 2, c.y - sz / 2, sz, sz, 9);
+      ctx.fill();
+      ctx.font = "800 11px system-ui, sans-serif";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(0,0,0,0.6)";
+      const label = `${Math.round(v * 100)}%`;
+      const y = c.y + (opts.buildSlot === slot ? 16 : 0);
+      ctx.strokeText(label, c.x, y);
+      ctx.fillStyle = `hsl(${hue}, 90%, 72%)`;
+      ctx.fillText(label, c.x, y);
+      if (t >= 0.999 && vals.length > 1) {
+        ctx.font = "900 10px system-ui, sans-serif";
+        ctx.fillStyle = "#fde047";
+        ctx.fillText("★", c.x, c.y - 14);
+      }
+    });
+  }
+
   // Range preview for the selected unit / build spot.
   const rangeSlot = opts.selected ?? opts.buildSlot ?? null;
   if (rangeSlot !== null && !mini) {
@@ -308,6 +359,27 @@ export function drawBoard(ctx: Ctx, board: Board, opts: DrawOptions) {
   board.units.forEach((u, slot) => {
     if (!u) return;
     const c = slotCenter(slot);
+    const born = opts.bornAt?.[slot];
+    const age = born ? (now - born.t) / (born.big ? 650 : 320) : 1;
+    // Evolution: cell stays empty while the absorb streak flies in.
+    if (age < 0) return;
+    if (age < 1) {
+      // Pop in with an overshoot (bigger + a white flash for an evolution).
+      const k = age < 0.6 ? (age / 0.6) * 1.18 : 1.18 - ((age - 0.6) / 0.4) * 0.18;
+      ctx.save();
+      ctx.translate(c.x, c.y + 14);
+      ctx.scale(Math.max(0.05, k), Math.max(0.05, k));
+      ctx.translate(-c.x, -(c.y + 14));
+      drawTower(ctx, c.x, c.y + 6, u, now, { mini, lifted: opts.selected === slot, aim: opts.aim?.[slot] });
+      if (born?.big && age < 0.5) {
+        ctx.globalAlpha = 0.85 * (1 - age / 0.5);
+        ctx.fillStyle = "#ffffff";
+        ellipse(ctx, c.x, c.y - 2, 16, 20);
+        ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
     drawTower(ctx, c.x, c.y + 6, u, now, { mini, lifted: opts.selected === slot, aim: opts.aim?.[slot] });
   });
 
@@ -767,12 +839,12 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean) {
   ctx.save();
   ctx.translate(p.x, p.y);
 
-  const size = { normal: 9, fast: 8, tank: 12, boss: 19, elite: 12, invader: 13 }[m.kind];
+  const size = { normal: 9, fast: 8, tank: 12, boss: 19, elite: 12, invader: 13, golem: 14, wraith: 11, warlord: 16 }[m.kind];
   ctx.fillStyle = "rgba(0,0,0,0.3)";
   ellipse(ctx, 0, size * 0.75, size * 0.95, size * 0.32);
   ctx.fill();
 
-  if ((m.kind === "elite" || m.kind === "invader") && m.from >= 0) {
+  if (m.from >= 0) {
     const pulse = 0.6 + 0.4 * Math.sin(now / 150 + m.id);
     ctx.strokeStyle = rgba(SEAT_COLORS[m.from] ?? "#ffffff", pulse);
     ctx.lineWidth = 2;
@@ -801,6 +873,15 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean) {
     case "invader":
       drawInvader(ctx, m, now, mini);
       break;
+    case "golem":
+      drawGolem(ctx, m, now, mini);
+      break;
+    case "wraith":
+      drawWraith(ctx, m, now, mini);
+      break;
+    case "warlord":
+      drawWarlord(ctx, m, now, mini);
+      break;
   }
   ctx.restore();
 
@@ -825,8 +906,9 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean) {
 
   // HP bar
   if (m.hp < m.maxHp) {
-    const w = m.kind === "boss" ? 46 : Math.max(16, size * 2.2);
-    const top = -size - (m.kind === "boss" ? 20 : 9);
+    const big = m.kind === "boss" || m.kind === "warlord";
+    const w = big ? 46 : Math.max(16, size * 2.2);
+    const top = -size - (big ? 20 : 9);
     ctx.fillStyle = "rgba(0,0,0,0.65)";
     roundRect(ctx, -w / 2 - 1, top - 1, w + 2, 5, 2);
     ctx.fill();
@@ -1129,6 +1211,105 @@ function drawOgre(ctx: Ctx, m: Mob, now: number, mini: boolean) {
   }
 }
 
+function drawGolem(ctx: Ctx, m: Mob, now: number, mini: boolean) {
+  // Lumbering pile of boulders with mossy shoulders and glowing rune eyes.
+  const stomp = Math.abs(Math.sin(now / 260 + m.id));
+  ctx.translate(0, -stomp * 1.2);
+  const stone = (x: number, y: number, rx: number, ry: number, light: string, dark: string) => {
+    const g = ctx.createRadialGradient(x - rx * 0.4, y - ry * 0.4, 1, x, y, Math.max(rx, ry));
+    g.addColorStop(0, light);
+    g.addColorStop(1, dark);
+    ctx.fillStyle = g;
+    ellipse(ctx, x, y, rx, ry);
+    ctx.fill();
+  };
+  stone(-8, 4 + stomp, 5, 6, "#a8a29e", "#44403c");
+  stone(8, 4 - stomp, 5, 6, "#a8a29e", "#44403c");
+  stone(0, -4, 13, 11, "#d6d3d1", "#57534e");
+  stone(0, -15, 7, 6, "#e7e5e4", "#78716c");
+  ctx.fillStyle = "#4d7c0f";
+  ellipse(ctx, -9, -11, 5, 2.5);
+  ctx.fill();
+  ellipse(ctx, 9, -11, 5, 2.5);
+  ctx.fill();
+  if (!mini) {
+    ctx.strokeStyle = "rgba(41,37,36,0.8)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-6, -6);
+    ctx.lineTo(-1, 0);
+    ctx.lineTo(4, -3);
+    ctx.stroke();
+    ctx.fillStyle = "#67e8f9";
+    ctx.shadowColor = "#22d3ee";
+    ctx.shadowBlur = 6;
+    ctx.fillRect(1, -17, 2.5, 2);
+    ctx.fillRect(5, -17, 2.5, 2);
+    ctx.shadowBlur = 0;
+  }
+}
+
+function drawWraith(ctx: Ctx, m: Mob, now: number, mini: boolean) {
+  // Translucent hooded spirit with a wispy, flickering tail.
+  const hover = Math.sin(now / 180 + m.id) * 2;
+  ctx.translate(0, hover - 3);
+  ctx.globalAlpha = 0.85;
+  const g = ctx.createLinearGradient(0, -12, 0, 12);
+  g.addColorStop(0, "#e0e7ff");
+  g.addColorStop(0.6, "#818cf8");
+  g.addColorStop(1, "rgba(79,70,229,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, -12);
+  ctx.bezierCurveTo(10, -12, 10, 0, 9, 6);
+  for (let i = 0; i < 4; i++) {
+    const x = 9 - (i + 1) * 4.5;
+    ctx.quadraticCurveTo(x + 2.2, 12 + Math.sin(now / 90 + i + m.id) * 2.5, x, 6);
+  }
+  ctx.bezierCurveTo(-10, 0, -10, -12, 0, -12);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#1e1b4b";
+  ellipse(ctx, 2, -5, 5.5, 4.5);
+  ctx.fill();
+  if (!mini) {
+    ctx.fillStyle = "#a5f3fc";
+    ctx.shadowColor = "#67e8f9";
+    ctx.shadowBlur = 5;
+    ellipse(ctx, 0.5, -5, 1.2, 1.4);
+    ctx.fill();
+    ellipse(ctx, 4.5, -5, 1.2, 1.4);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+}
+
+function drawWarlord(ctx: Ctx, m: Mob, now: number, mini: boolean) {
+  // A big ogre in a dark cape with a spiked crown — the buyable mini boss.
+  const sway = Math.sin(now / 220 + m.id) * 2;
+  ctx.fillStyle = "#3b0764";
+  ctx.beginPath();
+  ctx.moveTo(-14, -8);
+  ctx.quadraticCurveTo(-21, 6 + sway, -13, 14);
+  ctx.lineTo(11, 14);
+  ctx.quadraticCurveTo(17, 4, 13, -8);
+  ctx.fill();
+  ctx.save();
+  ctx.scale(1.35, 1.35);
+  drawOgre(ctx, m, now, mini);
+  ctx.restore();
+  ctx.fillStyle = "#facc15";
+  ctx.strokeStyle = "#78350f";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-8, -15);
+  for (let i = 0; i <= 4; i++) ctx.lineTo(-8 + i * 4, i % 2 === 0 ? -24 : -18);
+  ctx.lineTo(8, -15);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
 function drawInvader(ctx: Ctx, m: Mob, now: number, mini: boolean) {
   // A corrupted copy of the tower that was sent, floating on dark smoke.
   const hover = Math.sin(now / 240 + m.id) * 1.5;
@@ -1166,7 +1347,11 @@ export type Fx =
   | { type: "shot"; kind: UnitKind; grade: number; from: { x: number; y: number }; pts: number[]; t0: number; dur: number }
   | { type: "ring"; x: number; y: number; color: string; r0: number; r1: number; t0: number; dur: number }
   | { type: "spark"; x: number; y: number; color: string; t0: number; dur: number; seed: number }
-  | { type: "text"; x: number; y: number; text: string; color: string; t0: number; dur: number; size: number };
+  | { type: "text"; x: number; y: number; text: string; color: string; t0: number; dur: number; size: number }
+  /** Merge/gamble evolution: light pillar + spinning rays + rising motes, scaled by grade. */
+  | { type: "evolve"; x: number; y: number; color: string; grade: number; t0: number; dur: number }
+  /** The consumed unit's energy streaming into the merge cell. */
+  | { type: "absorb"; from: { x: number; y: number }; to: { x: number; y: number }; color: string; t0: number; dur: number };
 
 export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
   for (const f of fx) {
@@ -1191,6 +1376,24 @@ export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
         ctx.arc(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, 2.6 * (1 - k) + 0.6, 0, Math.PI * 2);
         ctx.fill();
       }
+    } else if (f.type === "evolve") drawEvolve(ctx, f, k);
+    else if (f.type === "absorb") {
+      const dx = f.to.x - f.from.x;
+      const dy = f.to.y - f.from.y;
+      const len = Math.hypot(dx, dy) || 1;
+      for (let i = 0; i < 7; i++) {
+        const p = Math.min(1, Math.max(0, k * 1.6 - i * 0.08));
+        if (p <= 0 || p >= 1) continue;
+        const e = p * p;
+        const bow = Math.sin(p * Math.PI) * (i % 2 ? 14 : -14);
+        const x = f.from.x + dx * e + (-dy / len) * bow;
+        const y = f.from.y + dy * e + (dx / len) * bow;
+        ctx.globalAlpha = 1 - p * 0.4;
+        ctx.fillStyle = i === 0 ? "#ffffff" : f.color;
+        ctx.beginPath();
+        ctx.arc(x, y, 3.2 - i * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
     } else {
       ctx.globalAlpha = k < 0.75 ? 1 : (1 - k) * 4;
       ctx.font = `900 ${f.size}px system-ui, sans-serif`;
@@ -1204,6 +1407,47 @@ export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
       ctx.fillText(f.text, f.x, y);
     }
     ctx.restore();
+  }
+}
+
+function drawEvolve(ctx: Ctx, f: Extract<Fx, { type: "evolve" }>, k: number) {
+  const fade = k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85;
+  // Light pillar dropping onto the cell.
+  const pw = (10 + f.grade * 3) * (1 - k * 0.6);
+  const pillar = ctx.createLinearGradient(0, f.y - 90, 0, f.y + 10);
+  pillar.addColorStop(0, rgba(f.color, 0));
+  pillar.addColorStop(0.7, rgba(f.color, 0.55 * fade));
+  pillar.addColorStop(1, `rgba(255,255,255,${0.8 * fade})`);
+  ctx.fillStyle = pillar;
+  ctx.fillRect(f.x - pw / 2, f.y - 90, pw, 100);
+  // Spinning rays — more and longer for higher grades.
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.rotate(k * 2.2);
+  ctx.globalAlpha = 0.55 * fade;
+  ctx.fillStyle = f.color;
+  const rays = 6 + f.grade * 2;
+  const r = (22 + f.grade * 6) * (0.4 + k * 0.8);
+  for (let i = 0; i < rays; i++) {
+    const a = (i / rays) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(a - 0.08) * r, Math.sin(a - 0.08) * r);
+    ctx.lineTo(Math.cos(a + 0.08) * r, Math.sin(a + 0.08) * r);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+  // Rising motes.
+  ctx.globalAlpha = Math.max(0, fade);
+  for (let i = 0; i < 6 + f.grade * 2; i++) {
+    const a = i * 2.39996;
+    const rr = 8 + (i % 4) * 5;
+    const y = f.y + 8 - k * (30 + (i % 3) * 14);
+    ctx.fillStyle = i % 3 === 0 ? "#ffffff" : f.color;
+    ctx.beginPath();
+    ctx.arc(f.x + Math.cos(a) * rr, y, 1.8 * (1 - k) + 0.6, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 

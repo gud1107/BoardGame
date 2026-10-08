@@ -91,7 +91,36 @@ export interface Unit {
   cd: number;
 }
 
-export type MobKind = "normal" | "fast" | "tank" | "boss" | "elite" | "invader";
+export type MobKind = "normal" | "fast" | "tank" | "boss" | "elite" | "invader" | "golem" | "wraith" | "warlord";
+
+/**
+ * 유닛 대결: monsters a player may buy with gold and drop on an opponent's
+ * road. Shares the unit-send cooldown. Each costs more than the gold the
+ * defender earns by killing it, so hiring is pressure, not a gold engine.
+ */
+export type HireKind = "swarm" | "wraith" | "golem" | "warlord";
+export const HIRE_KINDS: HireKind[] = ["swarm", "wraith", "golem", "warlord"];
+export const SWARM_SIZE = 6;
+
+export interface HireDef {
+  name: string;
+  emoji: string;
+  desc: string;
+  base: number;
+  perWave: number;
+  minWave: number;
+}
+
+export const HIRES: Record<HireKind, HireDef> = {
+  swarm: { name: "박쥐 떼", emoji: "🦇", desc: `빠른 박쥐 ${SWARM_SIZE}마리 · 무게 1×${SWARM_SIZE}`, base: 45, perWave: 4, minWave: 1 },
+  wraith: { name: "망령", emoji: "👻", desc: "아주 빠름 · 둔화 면역 · 무게 3", base: 60, perWave: 5, minWave: 2 },
+  golem: { name: "바위 골렘", emoji: "🪨", desc: "체력 9배 · 느림 · 무게 5", base: 80, perWave: 6, minWave: 3 },
+  warlord: { name: "전쟁군주", emoji: "👹", desc: "미니 보스 · 체력 20배 · 무게 9", base: 170, perWave: 12, minWave: 5 },
+};
+
+export function hireCost(kind: HireKind, wave: number): number {
+  return HIRES[kind].base + HIRES[kind].perWave * Math.max(1, wave);
+}
 
 export interface Mob {
   id: number;
@@ -143,12 +172,13 @@ export interface Board {
 
 export type GameEvent =
   | { id: number; tick: number; seat: SeatIndex; type: "summon"; slot: number; grade: number; lucky: boolean }
-  | { id: number; tick: number; seat: SeatIndex; type: "merge"; slot: number; grade: number }
+  | { id: number; tick: number; seat: SeatIndex; type: "merge"; slot: number; grade: number; from: number }
   | { id: number; tick: number; seat: SeatIndex; type: "gamble"; slot: number; grade: number }
   | { id: number; tick: number; seat: SeatIndex; type: "gamble-fail" }
   | { id: number; tick: number; seat: SeatIndex; type: "upgrade"; kind: UnitKind; level: number }
   | { id: number; tick: number; seat: SeatIndex; type: "send"; to: SeatIndex }
   | { id: number; tick: number; seat: SeatIndex; type: "invade"; to: SeatIndex; kind: UnitKind; grade: number }
+  | { id: number; tick: number; seat: SeatIndex; type: "hire"; to: SeatIndex; mob: HireKind }
   | { id: number; tick: number; seat: SeatIndex; type: "move"; a: number; b: number }
   | { id: number; tick: number; seat: SeatIndex; type: "boss-kill" }
   | { id: number; tick: number; seat: SeatIndex; type: "out" }
@@ -185,7 +215,9 @@ export type Action =
   | { type: "move"; a: number; b: number }
   | { type: "upgrade"; kind: UnitKind }
   /** 유닛 대결: sacrifice the unit in `slot` onto `to`'s road. */
-  | { type: "send"; slot: number; to?: SeatIndex };
+  | { type: "send"; slot: number; to?: SeatIndex }
+  /** 유닛 대결: buy a monster with gold and drop it on `to`'s road. */
+  | { type: "hire"; mob: HireKind; to?: SeatIndex };
 
 export const SEND_COOLDOWN_TICKS = 3 * 20;
 
@@ -246,7 +278,8 @@ export function waveHp(wave: number): number {
 
 export function killGold(kind: MobKind, wave: number): number {
   if (kind === "boss") return 40 + wave * 4;
-  if (kind === "elite" || kind === "invader") return 4 + Math.floor(wave / 4);
+  if (kind === "warlord") return 12 + wave;
+  if (kind === "elite" || kind === "invader" || kind === "golem" || kind === "wraith") return 4 + Math.floor(wave / 4);
   return 2 + Math.floor(wave / 6);
 }
 
@@ -395,6 +428,10 @@ export function sanitizeAction(raw: unknown): Action | null {
     if (a.to === undefined || a.to === null) return { type: "send", slot: a.slot };
     return Number.isInteger(a.to) && (a.to as number) >= 0 && (a.to as number) < MAX_PLAYERS ? { type: "send", slot: a.slot, to: a.to as number } : null;
   }
+  if (a.type === "hire" && HIRE_KINDS.includes(a.mob as HireKind)) {
+    if (a.to === undefined || a.to === null) return { type: "hire", mob: a.mob as HireKind };
+    return Number.isInteger(a.to) && (a.to as number) >= 0 && (a.to as number) < MAX_PLAYERS ? { type: "hire", mob: a.mob as HireKind, to: a.to as number } : null;
+  }
   if (a.type === "upgrade" && UNIT_KINDS.includes(a.kind as UnitKind)) return { type: "upgrade", kind: a.kind as UnitKind };
   return null;
 }
@@ -451,7 +488,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     const grade = board.units[action.a]!.grade + 1;
     board.units[action.a] = null;
     board.units[action.b] = { kind: pick(s, UNIT_KINDS), grade, cd: 0 };
-    pushEvent(s, { seat, type: "merge", slot: action.b, grade });
+    pushEvent(s, { seat, type: "merge", slot: action.b, grade, from: action.a });
     return s;
   }
 
@@ -496,6 +533,31 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     return s;
   }
 
+  if (action.type === "hire") {
+    const price = hireCost(action.mob, state.wave);
+    if (state.mode !== "versus" || cur.sendCd > 0 || state.wave < Math.max(1, HIRES[action.mob].minWave) || cur.gold < price) return state;
+    const to = action.to !== undefined && action.to !== seat && state.boards[action.to]?.alive ? action.to : nextAliveOpponent(state, seat);
+    if (to === null) return state;
+    const s = cloneState(state);
+    const board = s.boards[seat];
+    board.gold -= price;
+    board.sendCd = SEND_COOLDOWN_TICKS;
+    const road = s.boards[to].mobs;
+    if (action.mob === "swarm") {
+      // Slightly staggered so the flock reads as a line, not one blob.
+      for (let i = 0; i < SWARM_SIZE; i++) {
+        const m = makeMob(s, "fast", s.wave, seat);
+        m.hp = m.maxHp = Math.round(m.maxHp * 1.3);
+        m.trav = (SWARM_SIZE - 1 - i) * 9;
+        road.push(m);
+      }
+    } else {
+      road.push(makeMob(s, action.mob, s.wave, seat));
+    }
+    pushEvent(s, { seat, type: "hire", to, mob: action.mob });
+    return s;
+  }
+
   // upgrade
   const level = cur.upgrades[action.kind];
   if (level >= MAX_UPGRADE || cur.gold < upgradeCost(level)) return state;
@@ -520,6 +582,9 @@ function makeMob(s: MergeDefenseState, kind: MobKind, wave: number, from: SeatIn
     boss: { hp: 45, speed: 32, weight: 15 },
     elite: { hp: 4, speed: 70, weight: 3 },
     invader: { hp: 3, speed: 72, weight: 3 },
+    golem: { hp: 9, speed: 34, weight: 5 },
+    wraith: { hp: 2.2, speed: 112, weight: 3 },
+    warlord: { hp: 20, speed: 38, weight: 9 },
   };
   const k = spec[kind];
   const hp = Math.round(base * k.hp);
@@ -588,8 +653,11 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
     case "frost": {
       const pct = Math.min(0.7, 0.35 + unit.grade * 0.07);
       damage(target, dmg);
-      target.slowT = Math.max(target.slowT, 40);
-      target.slowPct = Math.max(target.slowPct, target.kind === "boss" ? pct / 2 : pct);
+      // Wraiths shrug off the chill.
+      if (target.kind !== "wraith") {
+        target.slowT = Math.max(target.slowT, 40);
+        target.slowPct = Math.max(target.slowPct, target.kind === "boss" ? pct / 2 : pct);
+      }
       break;
     }
     case "thunder": {
@@ -804,6 +872,12 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Acti
       if (u && u.grade <= 2 && (weakest < 0 || u.grade < board.units[weakest]!.grade)) weakest = i;
     });
     if (weakest >= 0) return { type: "send", slot: weakest };
+  }
+  // 유닛 대결: rich and nothing left to build → buy the priciest monster we
+  // can comfortably afford for the next opponent.
+  if (state.mode === "versus" && free === 0 && board.sendCd === 0 && state.wave >= 4) {
+    const hire = [...HIRE_KINDS].reverse().find((k) => state.wave >= HIRES[k].minWave && board.gold >= hireCost(k, state.wave) * 2);
+    if (hire) return { type: "hire", mob: hire };
   }
   // Strongest unit not on a top cell → swap it there.
   const strongest = board.units.reduce((best, u, i) => (u && (best < 0 || u.grade > board.units[best]!.grade) ? i : best), -1);

@@ -31,11 +31,15 @@ import {
   upgradeCost,
   invaderWeight,
   killGold,
+  HIRE_KINDS,
+  HIRES,
+  hireCost,
+  unitRange,
   type Action,
   type MergeDefenseState,
   type SeatIndex,
 } from "./engine";
-import { drawBoard, drawFx, SEAT_COLORS, type Fx } from "./render";
+import { coverageFor, drawBoard, drawFx, SEAT_COLORS, type Fx } from "./render";
 import * as audio from "./mergeDefenseAudio";
 import RulebookModal from "./RulebookModal";
 
@@ -56,6 +60,19 @@ interface Banner {
 const MAX_FX = 260;
 /** Gold gains this close together stack into one "+N" pop. */
 const GOLD_POP_MERGE_MS = 700;
+const GUIDE_KEY = "merge-defense:guide";
+/** Attack range the guide assumes for a new build (grade-1 average). */
+const BUILD_RANGE = 140;
+const MOB_SPARK: Record<string, string> = {
+  boss: "#c084fc",
+  elite: "#f87171",
+  invader: "#f87171",
+  fast: "#fcd34d",
+  tank: "#cbd5e1",
+  golem: "#a8a29e",
+  wraith: "#a5b4fc",
+  warlord: "#facc15",
+};
 
 interface GoldPop {
   key: number;
@@ -111,6 +128,23 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const bannerKey = useRef(0);
   const [goldPop, setGoldPop] = useState<GoldPop | null>(null);
+  const bornAtRef = useRef<Record<number, { t: number; big: boolean }>>({});
+  const [guide, setGuide] = useState(() => {
+    try {
+      return typeof window === "undefined" || window.localStorage.getItem(GUIDE_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  });
+  const guideRef = useRef(guide);
+  useEffect(() => {
+    guideRef.current = guide;
+    try {
+      window.localStorage.setItem(GUIDE_KEY, guide ? "on" : "off");
+    } catch {
+      /* storage blocked — guide just won't be remembered */
+    }
+  }, [guide]);
 
   useCanvasSize(mainRef);
 
@@ -189,8 +223,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         for (const m of prevBoard.mobs) {
           if (alive.has(m.id)) continue;
           const p = pathPoint(m.trav);
-          const color = m.kind === "boss" ? "#c084fc" : m.kind === "elite" || m.kind === "invader" ? "#f87171" : m.kind === "fast" ? "#fcd34d" : m.kind === "tank" ? "#cbd5e1" : "#bef264";
-          fx.push({ type: "spark", x: p.x, y: p.y, color, t0: now, dur: m.kind === "boss" ? 900 : 380, seed: m.id });
+          const color = MOB_SPARK[m.kind] ?? "#bef264";
+          fx.push({ type: "spark", x: p.x, y: p.y, color, t0: now, dur: m.kind === "boss" || m.kind === "warlord" ? 900 : 380, seed: m.id });
           if (m.kind === "boss") fx.push({ type: "ring", x: p.x, y: p.y, color: "#facc15", r0: 10, r1: 70, t0: now, dur: 700 });
           if (view === mySeat) fx.push({ type: "text", x: p.x, y: p.y - 10, text: `+${killGold(m.kind, state.wave)}`, color: "#fde047", t0: now, dur: 750, size: m.kind === "boss" ? 16 : 11 });
         }
@@ -225,6 +259,17 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         }
         continue;
       }
+      if (ev.type === "hire") {
+        const what = `${HIRES[ev.mob].emoji} ${HIRES[ev.mob].name}`;
+        if (ev.to === mySeat) {
+          showBanner({ text: `👾 ${names[ev.seat] ?? "상대"}님이 ${what}을(를) 보냈어요!`, sub: HIRES[ev.mob].desc, tone: "danger" });
+          if (audible) audio.playEliteIncoming();
+        } else if (ev.seat === mySeat) {
+          showBanner({ text: `👾 ${what} → ${names[ev.to] ?? "상대"}`, tone: "good" });
+          if (audible) audio.playSendUnit();
+        }
+        continue;
+      }
       if (ev.type === "out") {
         if (ev.seat === mySeat) {
           showBanner({ text: "💀 방어선 붕괴!", sub: "다른 플레이어를 관전합니다", tone: "danger" });
@@ -240,21 +285,29 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         case "summon": {
           const c = slotCenter(ev.slot);
           fx.push({ type: "ring", x: c.x, y: c.y, color: GRADE_COLORS[ev.grade], r0: 6, r1: 32, t0: now, dur: 380 });
+          bornAtRef.current[ev.slot] = { t: now, big: false };
           if (ev.lucky) fx.push({ type: "text", x: c.x, y: c.y - 20, text: "행운! 희귀", color: GRADE_COLORS[2], t0: now, dur: 1100, size: 15 });
           if (mine && audible) audio.playSummon(ev.lucky);
           break;
         }
         case "merge": {
           const c = slotCenter(ev.slot);
+          const color = GRADE_COLORS[ev.grade];
+          // Evolution: the spent unit streams in, then a light pillar crowns the new grade.
+          if (ev.from !== undefined) fx.push({ type: "absorb", from: slotCenter(ev.from), to: c, color: GRADE_COLORS[ev.grade - 1], t0: now, dur: 380 });
+          fx.push({ type: "evolve", x: c.x, y: c.y + 4, color, grade: ev.grade, t0: now + 180, dur: 900 + ev.grade * 120 });
+          bornAtRef.current[ev.slot] = { t: now + 200, big: true };
           fx.push({ type: "spark", x: c.x, y: c.y, color: GRADE_COLORS[ev.grade], t0: now, dur: 650, seed: ev.id });
           fx.push({ type: "ring", x: c.x, y: c.y, color: GRADE_COLORS[ev.grade], r0: 10, r1: 46, t0: now, dur: 550 });
-          fx.push({ type: "text", x: c.x, y: c.y - 22, text: GRADE_NAMES[ev.grade], color: GRADE_COLORS[ev.grade], t0: now, dur: 1000, size: ev.grade >= 4 ? 20 : 15 });
+          fx.push({ type: "text", x: c.x, y: c.y - 22, text: `진화! ${GRADE_NAMES[ev.grade]}`, color, t0: now + 200, dur: 1100, size: ev.grade >= 4 ? 20 : 15 });
           if (mine && audible) audio.playMerge(ev.grade);
           break;
         }
         case "gamble": {
           const c = slotCenter(ev.slot);
           fx.push({ type: "spark", x: c.x, y: c.y, color: GRADE_COLORS[ev.grade], t0: now, dur: 800, seed: ev.id });
+          fx.push({ type: "evolve", x: c.x, y: c.y + 4, color: GRADE_COLORS[ev.grade], grade: ev.grade, t0: now, dur: 800 + ev.grade * 120 });
+          bornAtRef.current[ev.slot] = { t: now, big: true };
           fx.push({ type: "text", x: c.x, y: c.y - 22, text: `💎 ${GRADE_NAMES[ev.grade]}!`, color: GRADE_COLORS[ev.grade], t0: now, dur: 1200, size: 18 });
           if (mine && audible) audio.playGamble(true);
           break;
@@ -313,6 +366,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           const sel = view === mySeat ? selectedRef.current : null;
           const highlight = new Set<number>();
           if (sel !== null) board.units.forEach((_, i) => canMerge(board, sel, i) && highlight.add(i));
+          // Guide range: the unit being moved (selected / dragged), else a fresh build.
+          const mine = view === mySeat && s.phase === "playing" && board.alive;
+          const moving = dragFromRef.current ?? sel;
+          const movingUnit = moving !== null ? board.units[moving] : null;
+          const coverage = mine && guideRef.current ? coverageFor(movingUnit ? unitRange(movingUnit) : BUILD_RANGE) : null;
           drawBoard(ctx, board, {
             alpha: s.phase === "playing" ? alpha : 0,
             now,
@@ -321,6 +379,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             highlight,
             dropTarget: dropTargetRef.current,
             aim: aimRef.current,
+            coverage,
+            bornAt: bornAtRef.current,
           });
           drawFx(ctx, fxRef.current, now);
         }
@@ -441,9 +501,19 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         <span className={nextIsBoss ? "font-semibold text-amber-300 light:text-amber-600" : ""}>
           {nextIsBoss ? "👑 보스" : "다음 웨이브"} {Math.ceil(waveLeftTicks / (1000 / TICK_MS))}초
         </span>
-        <button onClick={() => setRulebookOpen(true)} className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] hover:border-white/30 light:border-slate-300">
-          📖 룰
-        </button>
+        <span className="flex gap-1">
+          <button
+            onClick={() => setGuide((g) => !g)}
+            aria-pressed={guide}
+            title="빈 칸마다 길을 얼마나 덮는지(%) 보여줘요 — ★가 가장 좋은 자리"
+            className={`rounded-full border px-2 py-0.5 text-[11px] ${guide ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-200 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700" : "border-white/15 hover:border-white/30 light:border-slate-300"}`}
+          >
+            🧭 가이드 {guide ? "ON" : "OFF"}
+          </button>
+          <button onClick={() => setRulebookOpen(true)} className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] hover:border-white/30 light:border-slate-300">
+            📖 룰
+          </button>
+        </span>
       </div>
 
       {/* Opponents */}
@@ -490,6 +560,49 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           );
         })}
       </div>
+
+      {/* 유닛 대결: send a unit / buy monsters — kept up here, beside the target picker, so the site's 🎲 button never covers it on mobile. */}
+      {versus && (
+        <div className="flex flex-col gap-1 rounded-xl border border-rose-400/25 bg-rose-950/30 px-2 py-1.5 light:border-rose-200 light:bg-rose-50">
+          <div className="flex items-center justify-between text-[11px] text-rose-100/80 light:text-rose-700">
+            <span className="font-bold">⚔️ 공격 → {target !== null ? names[target] : "-"}</span>
+            <span className="opacity-80">{me.sendCd > 0 ? `재사용 ${sendCdSec}초` : state.wave < 1 ? "1웨이브부터" : "상대 미니맵을 눌러 대상 변경"}</span>
+          </div>
+          <div className="grid grid-cols-5 gap-1">
+            <button
+              disabled={!canSend}
+              onClick={() => {
+                if (selected === null || target === null) return;
+                onAction({ type: "send", slot: selected, to: target });
+                setSelected(null);
+              }}
+              className="flex flex-col items-center rounded-lg bg-gradient-to-b from-rose-500 to-red-800 py-1 text-white shadow-[0_3px_0_#7f1d1d] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40"
+            >
+              <span className="text-[13px] leading-tight font-black">⚔️ 보내기</span>
+              <span className="text-[9px] font-semibold opacity-85">{selected === null ? "유닛 선택" : "선택 유닛"}</span>
+            </button>
+            {HIRE_KINDS.map((kind) => {
+              const def = HIRES[kind];
+              const price = hireCost(kind, state.wave);
+              const locked = state.wave < def.minWave;
+              const ok = interactive && me.sendCd === 0 && state.wave >= 1 && !locked && me.gold >= price && target !== null;
+              return (
+                <button
+                  key={kind}
+                  disabled={!ok}
+                  title={def.desc}
+                  onClick={() => target !== null && onAction({ type: "hire", mob: kind, to: target })}
+                  className="flex flex-col items-center rounded-lg border border-rose-300/25 bg-black/30 py-1 text-white transition hover:border-rose-300/60 disabled:opacity-40 light:border-rose-200 light:bg-white light:text-slate-900"
+                >
+                  <span className="text-[13px] leading-tight">{def.emoji}</span>
+                  <span className="text-[9px] leading-tight font-bold">{def.name}</span>
+                  <span className="font-mono text-[9px] opacity-75">{locked ? `W${def.minWave}~` : `🪙${price}`}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Main board */}
       <div className="relative">
@@ -583,7 +696,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
       </p>
 
       {/* Actions */}
-      <div className={`grid gap-2 ${versus ? "grid-cols-[1.6fr_1fr_1fr_1fr]" : "grid-cols-[2fr_1fr_1fr]"}`}>
+      <div className="grid grid-cols-[2fr_1fr_1fr] gap-2">
         <button
           disabled={!interactive || me.gold < cost || buildSlot === null}
           onClick={() => buildSlot !== null && onAction({ type: "summon", slot: buildSlot })}
@@ -612,22 +725,6 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           🔀 합성
           <span className="block text-[10px] font-semibold opacity-80">{pairs.length}쌍 가능</span>
         </button>
-        {versus && (
-          <button
-            disabled={!canSend}
-            onClick={() => {
-              if (selected === null || target === null) return;
-              onAction({ type: "send", slot: selected, to: target });
-              setSelected(null);
-            }}
-            className="rounded-xl bg-gradient-to-b from-rose-500 to-red-800 py-3 text-xs font-black text-white shadow-[0_4px_0_#7f1d1d] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40"
-          >
-            ⚔️ 보내기
-            <span className="block truncate px-1 text-[10px] font-semibold opacity-80">
-              {me.sendCd > 0 ? `${sendCdSec}초` : state.wave < 1 ? "1웨이브부터" : selected === null ? "유닛 선택" : `→ ${target !== null ? names[target] : "-"}`}
-            </span>
-          </button>
-        )}
       </div>
 
       {/* Upgrades */}
