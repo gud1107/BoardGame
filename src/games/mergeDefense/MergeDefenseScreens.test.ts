@@ -55,7 +55,13 @@ function history(waves: number): WaveHistory {
       load: ramp(waves - s, (i) => Math.min(45, 5 + i * 2)),
       gold: ramp(waves - s, (i) => i * 100),
       kills: ramp(waves - s, (i) => i * 20),
-      upgrades: s === 0 ? [{ wave: 8, kind: "focus" as const, level: 1 }, { wave: 12, kind: "brace" as const, level: 1 }] : [],
+      upgrades:
+        s === 0
+          ? [{ wave: 8, kind: "focus" as const, level: 1 }, { wave: 12, kind: "brace" as const, level: 1 }]
+          : s === 1
+            ? [{ wave: 9, kind: "focus" as const, level: 1 }]
+            : [],
+      bossKills: s === 3 ? [{ wave: 5, at: 5 }, { wave: 10, at: 11 }] : [],
     })),
   };
 }
@@ -125,6 +131,32 @@ describe("merge defense screens", () => {
     expect(html).not.toContain("absolute top-1");
     // Table view carries the numbers without color.
     expect(html).toContain("표로 보기");
+  });
+
+  it("chart: others' upgrades stay hidden until the 강화 toggle; toggle only offered when they exist", () => {
+    const series: WaveSeries[] = history(23).series.map((s) => ({ ...s, name: names[s.seat as 0 | 1 | 2 | 3], me: s.seat === 0 }));
+    const html = renderToStaticMarkup(h(WaveChart, { series, limit: 45, bossEvery: 5 }));
+    expect(html).toContain("강화 나만");
+    // Default: only my two marks (🎯 W8, 🛡️ W12), not seat 1's 🎯 W9.
+    expect(html.match(/>🎯</g)).toHaveLength(1);
+    const solo = series.map((s) => (s.me ? s : { ...s, upgrades: [] }));
+    expect(renderToStaticMarkup(h(WaveChart, { series: solo, limit: 45, bossEvery: 5 }))).not.toContain("강화 나만");
+  });
+
+  it("engine records which wave's boss each board killed", async () => {
+    const { startGame, stepGame } = await import("./engine");
+    let s = startGame(2, 5);
+    while (s.wave < 5) {
+      for (const b of s.boards) b.mobs = [];
+      s = stepGame(s);
+    }
+    const boss = s.boards[0].mobs.find((m) => m.kind === "boss")!;
+    expect(boss.bornWave).toBe(5);
+    boss.hp = 0.01;
+    boss.poisonT = 5;
+    boss.poisonDps = 1e6;
+    s = stepGame(s);
+    expect(s.boards[0].bossKills).toEqual([{ wave: 5, at: 5 }]);
   });
 
   it("waiting room: host controls vs guest note, empty seats, long names truncated", () => {

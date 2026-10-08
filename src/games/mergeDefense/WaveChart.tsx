@@ -21,8 +21,10 @@ export interface WaveSeries {
   load: number[];
   gold: number[];
   kills: number[];
-  /** Board upgrades bought (shown for the viewer's own line only). */
+  /** Board upgrades bought (the viewer's own by default; everyone's with the toggle). */
   upgrades?: { wave: number; kind: "focus" | "brace"; level: number }[];
+  /** Wave bosses this seat killed: which wave's boss, and the wave it fell in. */
+  bossKills?: { wave: number; at: number }[];
 }
 
 const UPGRADE_ICON = { focus: "🎯", brace: "🛡️" } as const;
@@ -55,6 +57,7 @@ function valuesFor(s: WaveSeries, tab: Tab): number[] {
 export default function WaveChart({ series, limit, bossEvery }: { series: WaveSeries[]; limit: number; bossEvery: number }) {
   const [tab, setTab] = useState<Tab>("load");
   const [hover, setHover] = useState<number | null>(null);
+  const [allMarks, setAllMarks] = useState(false);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const data = series.map((s) => ({ s, v: valuesFor(s, tab) }));
   const waves = Math.max(1, ...data.map((d) => d.v.length));
@@ -68,7 +71,11 @@ export default function WaveChart({ series, limit, bossEvery }: { series: WaveSe
   const bosses = Array.from({ length: Math.floor(waves / bossEvery) }, (_, k) => (k + 1) * bossEvery - 1);
   const meta = TABS.find((t) => t.id === tab)!;
   const mine = series.find((s) => s.me);
-  const marks = mine?.upgrades ?? [];
+  // Upgrade marks: mine only by default, every seat's (in its color) with the toggle.
+  const marks = series
+    .filter((s) => allMarks || s.me)
+    .flatMap((s) => (s.upgrades ?? []).map((u) => ({ ...u, seat: s.seat, color: s.color, who: s.me ? "나" : short(s.name) })));
+  const anyOtherMarks = series.some((s) => !s.me && (s.upgrades?.length ?? 0) > 0);
   const markY = H - PAD.b + 10;
 
   // End labels: sorted by height, nudged apart so they never overlap.
@@ -92,6 +99,18 @@ export default function WaveChart({ series, limit, bossEvery }: { series: WaveSe
   return (
     <figure className="w-full text-left">
       <div className="mb-1.5 flex gap-1" role="tablist" aria-label="그래프 종류">
+        {anyOtherMarks && (
+          <button
+            onClick={() => setAllMarks((v) => !v)}
+            aria-pressed={allMarks}
+            title="그래프 아래 🎯 집중 · 🛡️ 결속 표시를 내 것만 / 모든 플레이어로 바꿔요"
+            className={`order-last ml-auto rounded-full border px-2 py-0.5 text-[10px] whitespace-nowrap ${
+              allMarks ? "border-sky-300/50 bg-sky-400/15 text-sky-100" : "border-white/10 text-white/50 hover:border-white/30"
+            }`}
+          >
+            강화 {allMarks ? "모두" : "나만"}
+          </button>
+        )}
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -203,10 +222,12 @@ export default function WaveChart({ series, limit, bossEvery }: { series: WaveSe
             const mx = x(Math.min(waves - 1, m.wave - 1)) + (nth - (sameWave.length - 1) / 2) * 9;
             return (
               <g key={k}>
-                {nth === 0 && <line x1={mx} x2={mx} y1={PAD.t} y2={H - PAD.b} stroke={mine?.color} strokeWidth={1} strokeDasharray="1 3" opacity={0.45} />}
+                {m.seat === mine?.seat && <line x1={mx} x2={mx} y1={PAD.t} y2={H - PAD.b} stroke={m.color} strokeWidth={1} strokeDasharray="1 3" opacity={0.45} />}
                 <text x={mx} y={markY + 3} textAnchor="middle" fontSize={8}>
                   {UPGRADE_ICON[m.kind]}
                 </text>
+                {/* Whose upgrade: a short bar in the seat's color under the icon. */}
+                <line x1={mx - 3} x2={mx + 3} y1={markY + 7} y2={markY + 7} stroke={m.color} strokeWidth={2} strokeLinecap="round" />
               </g>
             );
           })}
@@ -229,10 +250,32 @@ export default function WaveChart({ series, limit, bossEvery }: { series: WaveSe
                 .filter((m) => m.wave === hover + 1)
                 .map((m, k) => (
                   <span key={k} className="ml-1.5 font-normal text-white/60">
+                    {allMarks ? `${m.who} ` : ""}
                     {UPGRADE_ICON[m.kind]} {UPGRADE_NAME[m.kind]} {m.level}단계
                   </span>
                 ))}
             </p>
+            {(hover + 1) % bossEvery === 0 && (
+              // Boss wave: who brought that wave's boss down (and when), who never did.
+              <p className="flex flex-wrap gap-x-2.5 text-white/60">
+                <span>👑 보스</span>
+                {series
+                  .filter((s) => valuesFor(s, "load").length > hover)
+                  .map((s) => {
+                    const kill = s.bossKills?.find((b) => b.wave === hover + 1);
+                    return (
+                      <span key={s.seat} className="whitespace-nowrap">
+                        {s.me ? "나" : short(s.name)}{" "}
+                        {kill ? (
+                          <span className="text-emerald-300">✓{kill.at !== kill.wave ? `(W${kill.at})` : ""}</span>
+                        ) : (
+                          <span className="text-rose-300">✗</span>
+                        )}
+                      </span>
+                    );
+                  })}
+              </p>
+            )}
             <p className="flex flex-wrap gap-x-3 gap-y-0.5">
               {rows.map(({ s, v }) => (
                 <span key={s.seat} className="inline-flex items-center gap-1 whitespace-nowrap">
@@ -256,8 +299,8 @@ export default function WaveChart({ series, limit, bossEvery }: { series: WaveSe
               <tr>
                 <th className="px-1 text-left font-normal">웨이브</th>
                 {series.map((s) => (
-                  <th key={s.seat} className="px-1 font-normal">
-                    {s.me ? "나" : s.name}
+                  <th key={s.seat} className="px-1 font-normal" title={s.name}>
+                    {s.me ? "나" : short(s.name)}
                   </th>
                 ))}
               </tr>

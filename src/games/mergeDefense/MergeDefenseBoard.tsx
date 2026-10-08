@@ -876,7 +876,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
       <style>{`@keyframes md-pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}@keyframes md-gold-rise{0%{transform:translateY(4px) scale(.8);opacity:0}15%{transform:translateY(0) scale(1.15);opacity:1}70%{opacity:1}100%{transform:translateY(-14px) scale(1);opacity:0}}@keyframes md-gold-glow{0%{text-shadow:0 0 0 rgba(250,204,21,0);transform:scale(1)}25%{text-shadow:0 0 12px rgba(250,204,21,.95);transform:scale(1.18)}100%{text-shadow:0 0 0 rgba(250,204,21,0);transform:scale(1)}}`}</style>
       {/* Wave HUD */}
       {/* Phone widths: labels collapse to icons (checked at 375px) — full words come back from sm. */}
-      <div className="flex items-center justify-between gap-1.5 rounded-xl border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs whitespace-nowrap text-white/80 sm:gap-2 sm:px-3 light:border-slate-200 light:bg-white light:text-slate-700">
+      <div className="flex flex-wrap items-center justify-between gap-1.5 rounded-xl border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs whitespace-nowrap text-white/80 sm:gap-2 sm:px-3 light:border-slate-200 light:bg-white light:text-slate-700">
         <span className="font-bold text-white light:text-slate-900">
           {state.wave === 0 ? "준비 시간" : `🌊 WAVE ${state.wave}`}
           {state.difficulty && state.difficulty !== "normal" && (

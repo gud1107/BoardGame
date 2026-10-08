@@ -92,7 +92,8 @@ export default function MergeDefenseResults({
               <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2" title="버틴 웨이브">
                 🌊<span className="hidden sm:inline"> 웨이브</span>
               </th>
-              <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2">처치</th>
+              {/* The narrowest phones (≈320px) drop this column; it's on the chart's 처치 tab too. */}
+              <th className="border-b border-white/10 px-1.5 py-2 text-right max-[350px]:hidden sm:px-2">처치</th>
               <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2" title="최고 치명타 콤보">
                 ⚡<span className="hidden sm:inline"> 콤보</span>
               </th>
@@ -112,7 +113,7 @@ export default function MergeDefenseResults({
                   {names[seat]}
                 </td>
                 <td className="border-b border-white/5 px-1.5 py-2 text-right text-amber-200 sm:px-2">{wave}</td>
-                <td className="border-b border-white/5 px-1.5 py-2 text-right text-white/70 sm:px-2">{kills.toLocaleString("ko-KR")}</td>
+                <td className="border-b border-white/5 px-1.5 py-2 text-right text-white/70 max-[350px]:hidden sm:px-2">{kills.toLocaleString("ko-KR")}</td>
                 <td className={`border-b border-white/5 px-1.5 py-2 text-right sm:px-2 ${combo > 0 && combo === bestCombo ? "font-bold text-amber-300" : "text-white/70"}`}>
                   {combo > 0 ? combo : "-"}
                 </td>

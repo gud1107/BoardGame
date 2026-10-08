@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:bench": "vitest run --config vitest.bench.config.mts",
     "gen:last-updated": "node scripts/gen-game-last-updated.mjs",
-    "gen:admin-changelog": "node scripts/gen-admin-changelog.mjs"
+    "gen:admin-changelog": "node scripts/gen-admin-changelog.mjs",
+    "check:ui-width": "node scripts/ui-width-check/run.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
@@ -32,6 +33,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
+    "playwright-core": "^1.64.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.10"

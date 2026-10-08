@@ -250,6 +250,8 @@ export interface Mob {
   grade?: number;
   /** Boss / warlord: minions called so far (capped by MINION_CAP). */
   calls?: number;
+  /** Bosses only: the wave they arrived with (a wave-10 boss may die in wave 11). */
+  bornWave?: number;
   /** Out of minions → berserk: smashes the nearest tower every SMASH_EVERY ticks. */
   rage?: boolean;
 }
@@ -318,6 +320,8 @@ export interface Board {
   goldEarned?: number;
   /** Board upgrades bought, in order: wave + which (for the results chart). */
   upgradeLog?: { wave: number; kind: "focus" | "brace"; level: number }[];
+  /** Wave bosses this board killed: which wave's boss, and in which wave it fell. */
+  bossKills?: { wave: number; at: number }[];
   wavePeak?: number;
   /** Waves from W10 this board started alive, and how many of them paid the combo gold milestone (for /stats). */
   lateWaves?: number;
@@ -833,7 +837,20 @@ function makeMob(s: MergeDefenseState, kind: MobKind, wave: number, from: SeatIn
   };
   const k = spec[kind];
   const hp = Math.round(base * k.hp);
-  return { id: s.nextMobId++, kind, hp, maxHp: hp, trav: 0, speed: k.speed, slowT: 0, slowPct: 0, poisonT: 0, poisonDps: 0, from };
+  return {
+    id: s.nextMobId++,
+    kind,
+    hp,
+    maxHp: hp,
+    trav: 0,
+    speed: k.speed,
+    slowT: 0,
+    slowPct: 0,
+    poisonT: 0,
+    poisonDps: 0,
+    from,
+    ...(kind === "boss" ? { bornWave: wave } : {}),
+  };
 }
 
 function spawnKindFor(wave: number, index: number): MobKind {
@@ -1134,6 +1151,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
       }
       if (m.kind === "boss") {
         board.gems += 2;
+        board.bossKills = [...(board.bossKills ?? []), { wave: m.bornWave ?? s.wave, at: s.wave }];
         pushEvent(s, m.rage ? { seat, type: "boss-kill", rage: true, gold: rageGold, gems: 3 } : { seat, type: "boss-kill" });
       } else if (m.kind === "warlord" && m.rage) {
         pushEvent(s, { seat, type: "boss-kill", rage: true, warlord: true, gold: rageGold, gems: 1 });
