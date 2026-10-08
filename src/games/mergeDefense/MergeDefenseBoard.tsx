@@ -30,6 +30,7 @@ import {
   summonCost,
   upgradeCost,
   invaderWeight,
+  killGold,
   type Action,
   type MergeDefenseState,
   type SeatIndex,
@@ -53,6 +54,15 @@ interface Banner {
 }
 
 const MAX_FX = 260;
+/** Gold gains this close together stack into one "+N" pop. */
+const GOLD_POP_MERGE_MS = 700;
+
+interface GoldPop {
+  key: number;
+  amount: number;
+  at: number;
+  bonus: boolean;
+}
 
 function useCanvasSize(ref: React.RefObject<HTMLCanvasElement | null>) {
   useEffect(() => {
@@ -100,6 +110,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const [banner, setBanner] = useState<Banner | null>(null);
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const bannerKey = useRef(0);
+  const [goldPop, setGoldPop] = useState<GoldPop | null>(null);
 
   useCanvasSize(mainRef);
 
@@ -151,6 +162,18 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     const fx = fxRef.current;
     const board = state.boards[view];
     const prevBoard = prev.boards[view];
+    const audible = typeof document !== "undefined" && document.visibilityState === "visible";
+
+    // Gold earned (kills, wave bonus) — positive deltas only; spending isn't highlighted.
+    const gained = Math.floor(state.boards[mySeat].gold) - Math.floor(prev.boards[mySeat]?.gold ?? 0);
+    if (gained > 0 && state.tick !== prev.tick) {
+      const bonus = state.events.some((e) => e.id > lastEventIdRef.current && e.type === "wave");
+      setGoldPop((g) =>
+        g && now - g.at < GOLD_POP_MERGE_MS && g.bonus === bonus
+          ? { key: g.key, amount: g.amount + gained, at: now, bonus }
+          : { key: (g?.key ?? 0) + 1, amount: gained, at: now, bonus },
+      );
+    }
 
     if (state.tick !== prev.tick && board) {
       for (const shot of board.shots) {
@@ -159,6 +182,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         const from = { x: c.x, y: c.y + 6 + (shot.kind === "archer" ? -19 : 0) };
         aimRef.current[shot.slot] = Math.atan2(shot.pts[1] - from.y, shot.pts[0] - from.x);
         fx.push({ type: "shot", kind: shot.kind, grade: shot.grade, from, pts: shot.pts, t0: now, dur: shot.kind === "mage" ? 380 : shot.kind === "archer" ? 260 : 220 });
+        if (audible) audio.playTowerHit(shot.kind, shot.grade);
       }
       if (prevBoard && prevBoard.mobs.length > 0) {
         const alive = new Set(board.mobs.map((m) => m.id));
@@ -168,13 +192,13 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           const color = m.kind === "boss" ? "#c084fc" : m.kind === "elite" || m.kind === "invader" ? "#f87171" : m.kind === "fast" ? "#fcd34d" : m.kind === "tank" ? "#cbd5e1" : "#bef264";
           fx.push({ type: "spark", x: p.x, y: p.y, color, t0: now, dur: m.kind === "boss" ? 900 : 380, seed: m.id });
           if (m.kind === "boss") fx.push({ type: "ring", x: p.x, y: p.y, color: "#facc15", r0: 10, r1: 70, t0: now, dur: 700 });
+          if (view === mySeat) fx.push({ type: "text", x: p.x, y: p.y - 10, text: `+${killGold(m.kind, state.wave)}`, color: "#fde047", t0: now, dur: 750, size: m.kind === "boss" ? 16 : 11 });
         }
       }
     }
 
     const fresh = state.events.filter((e) => e.id > lastEventIdRef.current);
     if (fresh.length > 0) lastEventIdRef.current = fresh[fresh.length - 1].id;
-    const audible = typeof document !== "undefined" && document.visibilityState === "visible";
     for (const ev of fresh) {
       if (ev.type === "wave") {
         if (ev.boss) {
@@ -254,6 +278,13 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     const live = fx.filter((f) => now - f.t0 < f.dur);
     fxRef.current = live.length > MAX_FX ? live.slice(live.length - MAX_FX) : live;
   }, [state, mySeat, names]);
+
+  // Fade the "+N gold" pop shortly after the last gain.
+  useEffect(() => {
+    if (!goldPop) return;
+    const t = window.setTimeout(() => setGoldPop((g) => (g?.key === goldPop.key && g.at === goldPop.at ? null : g)), 1300);
+    return () => window.clearTimeout(t);
+  }, [goldPop]);
 
   // Clear banners after a moment.
   useEffect(() => {
@@ -402,8 +433,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[640px] flex-col gap-2 pb-20 select-none sm:pb-0">
-      <style>{`@keyframes md-pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}`}</style>
+    <div className="mx-auto flex w-full max-w-[640px] flex-col gap-2 pb-20 select-none sm:pb-0" onPointerDown={audio.unlockHitSounds}>
+      <style>{`@keyframes md-pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}@keyframes md-gold-rise{0%{transform:translateY(4px) scale(.8);opacity:0}15%{transform:translateY(0) scale(1.15);opacity:1}70%{opacity:1}100%{transform:translateY(-14px) scale(1);opacity:0}}@keyframes md-gold-glow{0%{text-shadow:0 0 0 rgba(250,204,21,0);transform:scale(1)}25%{text-shadow:0 0 12px rgba(250,204,21,.95);transform:scale(1.18)}100%{text-shadow:0 0 0 rgba(250,204,21,0);transform:scale(1)}}`}</style>
       {/* Wave HUD */}
       <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-white/80 light:border-slate-200 light:bg-white light:text-slate-700">
         <span className="font-bold text-white light:text-slate-900">{state.wave === 0 ? "준비 시간" : `🌊 WAVE ${state.wave}`}</span>
@@ -419,7 +450,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
       <div className="flex justify-center gap-2">
         {others.map((seat) => {
           const b = state.boards[seat];
-          const l = Math.min(1, fieldLoad(b) / LOAD_LIMIT);
+          const oppLoad = fieldLoad(b);
+          const l = Math.min(1, oppLoad / LOAD_LIMIT);
           return (
             <div
               key={seat}
@@ -440,6 +472,19 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
               />
               <div className="h-1.5 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
                 <div className={`h-full ${l > 0.75 ? "bg-rose-500" : l > 0.5 ? "bg-amber-400" : "bg-emerald-400"}`} style={{ width: `${l * 100}%` }} />
+              </div>
+              <div className="flex items-center justify-between gap-1 font-mono text-[10px] leading-tight">
+                {b.alive ? (
+                  <>
+                    <span className="text-white/70 light:text-slate-600">👾 {b.mobs.length}마리</span>
+                    <span className={`font-bold ${l > 0.75 ? "animate-pulse text-rose-300 light:text-rose-600" : l > 0.5 ? "text-amber-300 light:text-amber-600" : "text-white/80 light:text-slate-700"}`}>
+                      {oppLoad}
+                      <span className="text-rose-300/90 light:text-rose-600">/{LOAD_LIMIT}</span>
+                    </span>
+                  </>
+                ) : (
+                  <span className="w-full text-center font-sans font-bold text-rose-300/80 light:text-rose-600">💀 탈락</span>
+                )}
               </div>
             </div>
           );
@@ -476,20 +521,45 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
 
       {/* My stats */}
       <div className="flex flex-col gap-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2 light:border-slate-200 light:bg-white">
+        <div className="flex items-center justify-between gap-2 text-[11px]">
+          <span className="font-semibold text-white/80 light:text-slate-700">
+            👾 몬스터 <b className="font-mono text-white light:text-slate-900">{me.mobs.length}</b>마리 · 무게{" "}
+            <b className={`font-mono ${loadPct > 0.75 ? "text-rose-300 light:text-rose-600" : loadPct > 0.5 ? "text-amber-300 light:text-amber-600" : "text-white light:text-slate-900"}`}>{load}</b>
+          </span>
+          <span
+            className={`rounded-full border px-2 py-0.5 font-black ${loadPct > 0.75 ? "animate-pulse border-rose-300 bg-rose-600 text-white" : "border-rose-400/60 bg-rose-500/20 text-rose-200 light:border-rose-300 light:bg-rose-50 light:text-rose-600"}`}
+            title="일반·빠른 몬스터 1 · 탱커 2 · 정예/침입 유닛 3 · 보스 15"
+          >
+            💀 무게 {LOAD_LIMIT} 되면 탈락
+          </span>
+        </div>
         <div className="flex items-center gap-2 text-xs">
-          <span className="w-16 shrink-0 text-white/60 light:text-slate-500">몬스터</span>
           <div className="relative h-3 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
             <div
               className={`h-full transition-[width] duration-200 ${loadPct > 0.75 ? "animate-pulse bg-rose-500" : loadPct > 0.5 ? "bg-amber-400" : "bg-emerald-400"}`}
               style={{ width: `${loadPct * 100}%` }}
             />
           </div>
-          <span className={`w-12 text-right font-mono font-bold ${loadPct > 0.75 ? "text-rose-300 light:text-rose-600" : "text-white light:text-slate-900"}`}>
-            {load}/{LOAD_LIMIT}
+          <span className={`w-14 text-right font-mono font-bold ${loadPct > 0.75 ? "text-rose-300 light:text-rose-600" : "text-white light:text-slate-900"}`}>
+            {load}/<span className="text-rose-300 light:text-rose-600">{LOAD_LIMIT}</span>
           </span>
         </div>
+        <p className="text-[10px] leading-tight text-white/45 light:text-slate-400">일반·빠른 1 · 탱커 2 · 정예/침입 3 · 보스 15</p>
         <div className="flex items-center justify-between text-sm font-bold text-white light:text-slate-900">
-          <span>🪙 {Math.floor(me.gold)}</span>
+          <span className="relative">
+            <span key={goldPop?.key ?? 0} className={`inline-block ${goldPop ? "animate-[md-gold-glow_0.6s_ease-out] text-amber-300 light:text-amber-600" : ""}`}>
+              🪙 {Math.floor(me.gold)}
+            </span>
+            {goldPop && (
+              <span
+                key={`${goldPop.key}-${goldPop.amount}`}
+                className="pointer-events-none absolute -top-4 left-full ml-1 animate-[md-gold-rise_1.2s_ease-out_forwards] whitespace-nowrap rounded-full bg-amber-400/90 px-1.5 text-[11px] font-black text-amber-950 shadow"
+              >
+                +{goldPop.amount}
+                {goldPop.bonus && <span className="ml-0.5 text-[9px] font-bold">웨이브 보너스</span>}
+              </span>
+            )}
+          </span>
           <span>💎 {me.gems}</span>
           <span className="text-xs font-semibold text-white/60 light:text-slate-500" title="이만큼 처치하면 다음 상대에게 정예 몬스터를 보내요">
             🔥 {me.sendMeter}/{SEND_EVERY}
