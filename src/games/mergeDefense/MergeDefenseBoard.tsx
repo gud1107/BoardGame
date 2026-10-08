@@ -31,6 +31,9 @@ import {
   wakeCost,
   BRACE_MAX,
   braceCost,
+  FOCUS_MAX,
+  focusCost,
+  critStats,
   stunTicks,
   upgradeCost,
   killGold,
@@ -69,9 +72,12 @@ interface FxPrefs {
   shake: boolean;
   numbers: boolean;
   hitstop: boolean;
+  slowmo: boolean;
 }
 const FX_PREFS_KEY = "merge-defense:fx";
-const FX_DEFAULT: FxPrefs = { shake: true, numbers: true, hitstop: true };
+const FX_DEFAULT: FxPrefs = { shake: true, numbers: true, hitstop: true, slowmo: true };
+/** Berserk kill slow motion: playback rate, length (real ms) and peak zoom. */
+const SLOWMO = { rate: 0.25, ms: 700, zoom: 0.14 };
 function loadFxPrefs(): FxPrefs {
   try {
     const v = JSON.parse(window.localStorage.getItem(FX_PREFS_KEY) ?? "null");
@@ -173,6 +179,10 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const [fxPrefs, setFxPrefs] = useState<FxPrefs>(() => (typeof window === "undefined" ? FX_DEFAULT : loadFxPrefs()));
   const fxPrefsRef = useRef(fxPrefs);
   const [fxMenuOpen, setFxMenuOpen] = useState(false);
+  /** Slow motion: from `start` (real ms) for SLOWMO.ms the main board replays `state` at SLOWMO.rate, zoomed on (x, y). */
+  const slowRef = useRef<{ start: number; state: MergeDefenseState | null; x: number; y: number }>({ start: 0, state: null, x: 0, y: 0 });
+  /** White flash that hides the snap back to live play after slow motion. */
+  const flashRef = useRef(0);
   useEffect(() => {
     fxPrefsRef.current = fxPrefs;
     try {
@@ -288,7 +298,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           if ((crit || now - d.shown >= DMG_NUMBER_MS) && d.acc >= 1) {
             const p = pathPoint(m.trav);
             const big = d.acc >= m.maxHp * 0.2;
-            if (fxPrefsRef.current.numbers) {
+            if (fxPrefsRef.current.numbers && view === mySeat) {
               fx.push(
                 crit
                   ? { type: "text", x: p.x + ((m.id * 7) % 11) - 5, y: p.y - 20, text: `${fmtDmg(d.acc)}!`, color: "#facc15", t0: now, dur: 800, size: big ? 17 : 14 }
@@ -484,9 +494,21 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         case "boss-kill":
           shake(ev.rage ? 8 : 6, ev.rage ? 520 : 420);
           // Hit-stop: hold the killing frame for a beat before the shake kicks in.
-          if (fxPrefsRef.current.hitstop && !(typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches)) {
-            hitStopRef.current = { until: now + (ev.rage ? 170 : 110), at: now + 50, alpha: 1, state };
-            shakeRef.current = { ...shakeRef.current, t0: now + (ev.rage ? 170 : 110) };
+          {
+            const calm = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+            const stop = fxPrefsRef.current.hitstop && !calm ? (ev.rage ? 170 : 110) : 0;
+            if (stop) hitStopRef.current = { until: now + stop, at: now + 50, alpha: 1, state };
+            // Berserk kill: after the freeze, replay the moment in slow motion,
+            // zoomed on where the boss fell, then flash back to live play.
+            if (ev.rage && fxPrefsRef.current.slowmo && !calm) {
+              const fell = prevBoard?.mobs.find((m) => (m.kind === "boss" || m.kind === "warlord") && !board.mobs.some((b) => b.id === m.id));
+              const p = fell ? pathPoint(fell.trav) : { x: BOARD_W / 2, y: BOARD_H / 2 };
+              slowRef.current = { start: now + stop, state, x: p.x, y: p.y };
+              flashRef.current = now + stop + SLOWMO.ms;
+              shakeRef.current = { ...shakeRef.current, t0: now + stop + SLOWMO.ms };
+            } else if (stop) {
+              shakeRef.current = { ...shakeRef.current, t0: now + stop };
+            }
           }
           if (ev.rage) {
             // Berserk kill: bigger, redder callout with the bonus spelled out.
@@ -499,6 +521,12 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           }
           if (mine && audible) audio.playBossKill();
           break;
+        case "focus": {
+          const cs = critStats(ev.level);
+          fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: `집중 Lv.${ev.level} — 치명타 ${Math.round(cs.chance * 100)}% ×${cs.mult.toFixed(2)}`, color: "#facc15", t0: now, dur: 1100, size: 16 });
+          if (mine && audible) audio.playUpgrade();
+          break;
+        }
         case "brace":
           fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: `결속 Lv.${ev.level} — 기절 ${(stunTicks(ev.level) / 20).toFixed(1)}초`, color: "#cbd5e1", t0: now, dur: 1100, size: 17 });
           if (mine && audible) audio.playUpgrade();
@@ -538,9 +566,15 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
       const real = performance.now();
       const hs = hitStopRef.current;
       const frozen = real < hs.until && hs.state !== null;
-      const now = frozen ? hs.at : real;
-      const s = frozen ? hs.state! : stateRef.current;
-      const alpha = frozen ? hs.alpha : Math.min(1, (now - stateAtRef.current) / TICK_MS);
+      const sl = slowRef.current;
+      const slowT = !frozen && sl.state && real >= sl.start && real < sl.start + SLOWMO.ms ? (real - sl.start) / SLOWMO.ms : -1;
+      const slow = slowT >= 0;
+      const now = frozen ? hs.at : slow ? sl.start + (real - sl.start) * SLOWMO.rate : real;
+      const s = frozen ? hs.state! : slow ? sl.state! : stateRef.current;
+      // Slow motion extrapolates mobs forward from the kill state at the slowed clock.
+      const alpha = frozen ? hs.alpha : slow ? 1 + ((real - sl.start) * SLOWMO.rate) / TICK_MS : Math.min(1, (now - stateAtRef.current) / TICK_MS);
+      const live = stateRef.current;
+      const liveAlpha = Math.min(1, (real - stateAtRef.current) / TICK_MS);
       const view = viewRef.current;
       const main = mainRef.current;
       if (main) {
@@ -554,7 +588,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           const sk = sh.dur > 0 && !reduceMotion ? Math.max(0, 1 - (now - sh.t0) / sh.dur) : 0;
           const ox = sk > 0 ? (Math.random() * 2 - 1) * sh.amp * sk : 0;
           const oy = sk > 0 ? (Math.random() * 2 - 1) * sh.amp * sk : 0;
-          ctx.setTransform(k, 0, 0, k, ox * k, oy * k);
+          // Slow-motion zoom eases in and back out around the fallen boss.
+          const z = slow ? 1 + SLOWMO.zoom * Math.sin(slowT * Math.PI) : 1;
+          const zx = slow ? sl.x - sl.x * z : 0;
+          const zy = slow ? sl.y - sl.y * z : 0;
+          ctx.setTransform(k * z, 0, 0, k * z, (ox + zx) * k, (oy + zy) * k);
           const board = s.boards[view];
           const sel = view === mySeat ? selectedRef.current : null;
           const highlight = new Set<number>();
@@ -585,6 +623,21 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             ctx.fillStyle = "rgba(255,255,255,0.12)";
             ctx.fillRect(-10, -10, BOARD_W + 20, BOARD_H + 20);
           }
+          if (slow) {
+            // Cinematic vignette while time crawls.
+            ctx.setTransform(k, 0, 0, k, 0, 0);
+            const v = ctx.createRadialGradient(BOARD_W / 2, BOARD_H / 2, BOARD_H * 0.35, BOARD_W / 2, BOARD_H / 2, BOARD_W * 0.75);
+            v.addColorStop(0, "rgba(0,0,0,0)");
+            v.addColorStop(1, `rgba(20,0,0,${0.45 * Math.sin(slowT * Math.PI)})`);
+            ctx.fillStyle = v;
+            ctx.fillRect(0, 0, BOARD_W, BOARD_H);
+          }
+          const fl = real - flashRef.current;
+          if (fl >= 0 && fl < 220) {
+            ctx.setTransform(k, 0, 0, k, 0, 0);
+            ctx.fillStyle = `rgba(255,255,255,${0.45 * (1 - fl / 220)})`;
+            ctx.fillRect(0, 0, BOARD_W, BOARD_H);
+          }
         }
       }
       miniRefs.current.forEach((c, seat) => {
@@ -600,7 +653,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, w, h);
         ctx.setTransform(k, 0, 0, k, 0, 0);
-        drawBoard(ctx, s.boards[seat], { alpha: s.phase === "playing" ? alpha : 0, now, mini: true, limit: eliminationLimit(s) });
+        drawBoard(ctx, live.boards[seat], { alpha: live.phase === "playing" ? liveAlpha : 0, now: real, mini: true, limit: eliminationLimit(live) });
       });
       raf = requestAnimationFrame(loop);
     };
@@ -683,6 +736,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const stunnedCount = me.units.filter((u) => u?.stun).length;
   const wakeNow = wakeCost(state.wave);
   const braceLevel = me.brace ?? 0;
+  const focusLevel = me.focus ?? 0;
   const freeSlots = me.units.filter((u) => !u).length;
   const pairs = useMemo(() => mergePairs(me), [me]);
   const versus = state.mode === "versus";
@@ -751,8 +805,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
                 {(
                   [
                     ["shake", "📳 화면 흔들림"],
-                    ["numbers", "🔢 데미지 숫자"],
+                    ["numbers", "🔢 데미지 숫자 (내 보드)"],
                     ["hitstop", "⏸️ 보스 처치 멈춤"],
+                    ["slowmo", "🎬 광폭 보스 슬로모션"],
                   ] as const
                 ).map(([key, label]) => (
                   <button
@@ -999,7 +1054,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
       </div>
 
       {/* Upgrades */}
-      <div className="grid grid-cols-6 gap-1.5">
+      <div className="grid grid-cols-5 gap-1.5">
         {UNIT_KINDS.map((kind) => {
           const level = me.upgrades[kind];
           const maxed = level >= MAX_UPGRADE;
@@ -1018,16 +1073,37 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             </button>
           );
         })}
+      </div>
+
+      {/* Board-wide upgrades */}
+      <div className="grid grid-cols-2 gap-1.5">
+        <button
+          disabled={!interactive || focusLevel >= FOCUS_MAX || me.gold < focusCost(focusLevel)}
+          onClick={() => onAction({ type: "focus" })}
+          title="🎯 집중: 모든 타워의 치명타 확률 +3%p, 치명타 배율 +0.15 (단계마다)"
+          className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-left text-white transition hover:border-white/30 disabled:opacity-40 light:border-slate-200 light:bg-white light:text-slate-900"
+          style={{ boxShadow: "inset 0 -3px 0 #facc15" }}
+        >
+          <span className="flex flex-col leading-tight">
+            <span className="text-[12px] font-bold">🎯 집중 {focusLevel}/{FOCUS_MAX}</span>
+            <span className="text-[10px] opacity-70">
+              치명타 {Math.round(critStats(focusLevel).chance * 100)}% ×{critStats(focusLevel).mult.toFixed(2)}
+            </span>
+          </span>
+          <span className="font-mono text-[10px] opacity-80">{focusLevel >= FOCUS_MAX ? "MAX" : `🪙${focusCost(focusLevel)}`}</span>
+        </button>
         <button
           disabled={!interactive || braceLevel >= BRACE_MAX || me.gold < braceCost(braceLevel)}
           onClick={() => onAction({ type: "brace" })}
-          title={`🛡️ 결속: 광폭화 보스의 기절 시간을 25%씩 줄여요 (지금 ${(stunTicks(braceLevel) / 20).toFixed(1)}초)`}
-          className="flex flex-col items-center rounded-lg border border-white/10 bg-white/5 py-1.5 text-white transition hover:border-white/30 disabled:opacity-40 light:border-slate-200 light:bg-white light:text-slate-900"
+          title="🛡️ 결속: 광폭화 보스의 기절 시간을 단계마다 25%씩 줄여요"
+          className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-left text-white transition hover:border-white/30 disabled:opacity-40 light:border-slate-200 light:bg-white light:text-slate-900"
           style={{ boxShadow: "inset 0 -3px 0 #94a3b8" }}
         >
-          <span className="text-base leading-none">🛡️</span>
-          <span className="text-[10px] font-bold">결속 {braceLevel}</span>
-          <span className="font-mono text-[10px] opacity-70">{braceLevel >= BRACE_MAX ? "MAX" : `🪙${braceCost(braceLevel)}`}</span>
+          <span className="flex flex-col leading-tight">
+            <span className="text-[12px] font-bold">🛡️ 결속 {braceLevel}/{BRACE_MAX}</span>
+            <span className="text-[10px] opacity-70">기절 {(stunTicks(braceLevel) / 20).toFixed(1)}초</span>
+          </span>
+          <span className="font-mono text-[10px] opacity-80">{braceLevel >= BRACE_MAX ? "MAX" : `🪙${braceCost(braceLevel)}`}</span>
         </button>
       </div>
 

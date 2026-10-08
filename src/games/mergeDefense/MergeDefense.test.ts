@@ -12,6 +12,9 @@ import {
   unitRange,
   loadLimit,
   wakeCost,
+  critStats,
+  FOCUS_MAX,
+  focusCost,
   CRIT,
   braceCost,
   stunTicks,
@@ -326,6 +329,18 @@ describe("merge defense engine", () => {
     expect(shots).toBeGreaterThan(100);
     expect(crits / shots).toBeGreaterThan(CRIT.chance * 0.6);
     expect(crits / shots).toBeLessThan(CRIT.chance * 1.5);
+  });
+
+  it("집중 raises crit chance and damage per level, capped at FOCUS_MAX", () => {
+    expect(critStats(1).chance).toBeGreaterThan(critStats(0).chance);
+    expect(critStats(FOCUS_MAX).mult).toBeGreaterThan(critStats(0).mult);
+    expect(critStats(FOCUS_MAX + 3)).toEqual(critStats(FOCUS_MAX));
+    let s = startGame(2, 92);
+    s.boards[0].gold = 10_000;
+    for (let i = 0; i < FOCUS_MAX; i++) s = applyAction(s, 0, { type: "focus" });
+    expect(s.boards[0].focus).toBe(FOCUS_MAX);
+    expect(s.boards[0].gold).toBe(10_000 - Array.from({ length: FOCUS_MAX }, (_, l) => focusCost(l)).reduce((a, b) => a + b, 0));
+    expect(applyAction(s, 0, { type: "focus" })).toBe(s);
   });
 
   it("a dying golem announces its split", () => {

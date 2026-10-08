@@ -103,6 +103,18 @@ const BRACE_COSTS = [80, 160, 280];
 export function braceCost(level: number): number {
   return BRACE_COSTS[Math.min(level, BRACE_COSTS.length - 1)];
 }
+/** 🎯 집중: a permanent board upgrade raising crit chance and crit damage. */
+export const FOCUS_MAX = 5;
+export const FOCUS_STEP = { chance: 0.03, mult: 0.15 };
+const FOCUS_COSTS = [70, 120, 180, 260, 360];
+export function focusCost(level: number): number {
+  return FOCUS_COSTS[Math.min(level, FOCUS_COSTS.length - 1)];
+}
+/** Crit chance / multiplier for a board at this 집중 level. */
+export function critStats(focus: number): { chance: number; mult: number } {
+  const f = Math.max(0, Math.min(FOCUS_MAX, focus));
+  return { chance: CRIT.chance + FOCUS_STEP.chance * f, mult: CRIT.mult + FOCUS_STEP.mult * f };
+}
 /** Stun ticks a smash inflicts on a board with this 결속 level. */
 export function stunTicks(brace: number): number {
   return Math.round(SMASH_STUN * (1 - 0.25 * Math.min(BRACE_MAX, brace)));
@@ -250,6 +262,8 @@ export interface Board {
   sendCd: number;
   /** 🛡️ 결속 level (0..BRACE_MAX) — shortens smash stuns. */
   brace?: number;
+  /** 🎯 집중 level (0..FOCUS_MAX) — raises crit chance and damage. */
+  focus?: number;
   /** Berserk bosses / warlords this board killed (for /stats). */
   rageKills?: number;
   /** Attacks fired during the most recent tick — for FX only. */
@@ -270,6 +284,7 @@ export type GameEvent =
   | { id: number; tick: number; seat: SeatIndex; type: "boss-kill"; rage?: boolean; warlord?: boolean; gold?: number; gems?: number }
   | { id: number; tick: number; seat: SeatIndex; type: "wake"; count: number }
   | { id: number; tick: number; seat: SeatIndex; type: "brace"; level: number }
+  | { id: number; tick: number; seat: SeatIndex; type: "focus"; level: number }
   /** A golem at road distance `trav` just broke into pebbles. */
   | { id: number; tick: number; seat: SeatIndex; type: "split"; trav: number }
   /** A boss / warlord used up its minions and went berserk. */
@@ -321,6 +336,8 @@ export type Action =
   | { type: "wake" }
   /** Buy the next 🛡️ 결속 level. */
   | { type: "brace" }
+  /** Buy the next 🎯 집중 level. */
+  | { type: "focus" }
   /** 유닛 대결: buy a monster with gold and drop it on `to`'s road. */
   | { type: "hire"; mob: HireKind; to?: SeatIndex };
 
@@ -470,6 +487,7 @@ function emptyBoard(bot: boolean): Board {
     bot,
     sendCd: 0,
     brace: 0,
+    focus: 0,
     rageKills: 0,
     shots: [],
   };
@@ -551,6 +569,7 @@ export function sanitizeAction(raw: unknown): Action | null {
   }
   if (a.type === "wake") return { type: "wake" };
   if (a.type === "brace") return { type: "brace" };
+  if (a.type === "focus") return { type: "focus" };
   if (a.type === "hire" && HIRE_KINDS.includes(a.mob as HireKind)) {
     if (a.to === undefined || a.to === null) return { type: "hire", mob: a.mob as HireKind };
     return Number.isInteger(a.to) && (a.to as number) >= 0 && (a.to as number) < MAX_PLAYERS ? { type: "hire", mob: a.mob as HireKind, to: a.to as number } : null;
@@ -652,6 +671,17 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
       grade: unit.grade,
     });
     pushEvent(s, { seat, type: "invade", to, kind: unit.kind, grade: unit.grade });
+    return s;
+  }
+
+  if (action.type === "focus") {
+    const level = cur.focus ?? 0;
+    if (level >= FOCUS_MAX || cur.gold < focusCost(level)) return state;
+    const s = cloneState(state);
+    const board = s.boards[seat];
+    board.gold -= focusCost(level);
+    board.focus = level + 1;
+    pushEvent(s, { seat, type: "focus", level: level + 1 });
     return s;
   }
 
@@ -775,8 +805,9 @@ function damage(mob: Mob, amount: number) {
 
 function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, ordered: Mob[]) {
   const target = ordered[0];
-  const crit = rand(s) < CRIT.chance;
-  const dmg = unitDamage(unit, board) * (crit ? CRIT.mult : 1);
+  const cs = critStats(board.focus ?? 0);
+  const crit = rand(s) < cs.chance;
+  const dmg = unitDamage(unit, board) * (crit ? cs.mult : 1);
   const hits: number[] = [target.id];
   switch (unit.kind) {
     case "archer":
@@ -1082,6 +1113,9 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Acti
     });
     if (weakest >= 0) return { type: "send", slot: weakest };
   }
+  // A full board with spare gold sharpens its crits.
+  const focus = board.focus ?? 0;
+  if (state.wave >= 6 && free === 0 && focus < FOCUS_MAX && board.gold >= focusCost(focus) * 2.5) return { type: "focus" };
   // After the first boss, brace against berserk smashes once the board is full.
   const brace = board.brace ?? 0;
   if (state.wave >= 10 && free === 0 && brace < BRACE_MAX && board.gold >= braceCost(brace) * 2) return { type: "brace" };
