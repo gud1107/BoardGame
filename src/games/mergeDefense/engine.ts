@@ -5,7 +5,7 @@
  * every road at the same time; units on the board shoot them automatically.
  * Summoning gives a random unit, two identical units (same kind + grade)
  * merge into ONE random unit of the next grade — the luck is in what comes
- * out. When `LOAD_LIMIT` monsters are on your road at once you're out; the
+ * out. When `loadLimit(playerCount)` monsters are on your road at once you're out; the
  * last board standing wins. Every `SEND_EVERY` kills drops an elite onto the
  * next living opponent's road, so a strong board pressures the others.
  *
@@ -45,8 +45,13 @@ export const PREP_TICKS = 6 * TICKS_PER_SEC;
 export const WAVE_TICKS = 20 * TICKS_PER_SEC;
 const SPAWN_GAP = 12;
 export const BOSS_EVERY = 5;
-/** Monsters (head count) on one road that knock a player out. */
-export const LOAD_LIMIT = 50;
+/** Monsters (head count) on one road that knock a player out, by player count (bot-sim tuned). */
+// More players take longer to whittle down to one survivor, so the bar drops
+// as seats rise — every table size lands on a ~8.5–9 min median bot game.
+export const LOAD_LIMITS: Record<number, number> = { 2: 55, 3: 50, 4: 45 };
+export function loadLimit(playerCount: number): number {
+  return LOAD_LIMITS[playerCount] ?? LOAD_LIMITS[2];
+}
 /** Bosses / warlords call a minion onto the road this often; golems split in two on death. */
 const BOSS_MINION_EVERY = 4 * 20;
 const WARLORD_MINION_EVERY = 5 * 20;
@@ -185,6 +190,8 @@ export type GameEvent =
   | { id: number; tick: number; seat: SeatIndex; type: "hire"; to: SeatIndex; mob: HireKind }
   | { id: number; tick: number; seat: SeatIndex; type: "move"; a: number; b: number }
   | { id: number; tick: number; seat: SeatIndex; type: "boss-kill" }
+  /** A boss / warlord at road distance `trav` just called a minion. */
+  | { id: number; tick: number; seat: SeatIndex; type: "call"; trav: number; boss: boolean }
   | { id: number; tick: number; seat: SeatIndex; type: "out" }
   | { id: number; tick: number; seat: -1; type: "wave"; wave: number; boss: boolean };
 
@@ -730,6 +737,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
       const minion = makeMob(s, "normal", Math.max(1, s.wave), m.from);
       minion.trav = Math.max(0, m.trav - 6);
       called.push(minion);
+      pushEvent(s, { seat, type: "call", trav: Math.round(m.trav), boss: m.kind === "boss" });
     }
     board.mobs.push(...called);
 
@@ -793,7 +801,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
   // Eliminations — everyone over the limit this tick goes out together.
   const out: SeatIndex[] = [];
   s.boards.forEach((board, seat) => {
-    if (board.alive && fieldLoad(board) >= LOAD_LIMIT) out.push(seat);
+    if (board.alive && fieldLoad(board) >= loadLimit(s.playerCount)) out.push(seat);
   });
   const aliveBefore = s.boards.filter((b) => b.alive).length;
   if (out.length > 0 && out.length === aliveBefore) {

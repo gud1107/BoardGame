@@ -164,6 +164,20 @@ function noise(ctx: AudioContext, buf: AudioBuffer, out: GainNode, type: BiquadF
   src.stop(t + dur);
 }
 
+/** Boss / warlord calling a minion: a short low growl, kept quiet (it repeats every few seconds). */
+export function playMinionCall(boss: boolean) {
+  const settings = useAudioSettingsStore.getState();
+  if (isSfxEffectivelyMuted(settings) || settings.sfxVolume <= 0) return;
+  const a = hitAudio();
+  if (!a) return;
+  const { ctx, bus, noise: buf } = a;
+  bus.gain.value = HIT_LEVEL * settings.sfxVolume * Math.max(0.6, hitVolume);
+  const base = boss ? 120 : 150;
+  tone(ctx, env(ctx, bus, 0.9, 0.03, 0.35), "sawtooth", base, base * 0.55, 0.4);
+  tone(ctx, env(ctx, bus, 0.5, 0.02, 0.3), "sine", base * 2, base * 1.2, 0.32);
+  noise(ctx, buf, env(ctx, bus, 0.35, 0.05, 0.3), "lowpass", 500, 0.8, 0.38);
+}
+
 /**
  * One soft hit for a tower attack; silently skipped when rate-limited or muted.
  * `far` = an opponent's board: quieter, muffled and on its own (sparser) rate limit.

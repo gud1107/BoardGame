@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { BOSS_EVERY, GRADE_COLORS, GRADE_NAMES, LOAD_LIMIT, SEND_EVERY, UNIT_KINDS, UNITS } from "./engine";
+import { BOSS_EVERY, GRADE_COLORS, GRADE_NAMES, loadLimit, SEND_EVERY, UNIT_KINDS, UNITS } from "./engine";
 
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
   const h3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
@@ -12,8 +12,10 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <h3 className={h3}>목표</h3>
           <p className="text-white/70 light:text-slate-600">
             모두가 똑같은 웨이브를 동시에 막는 실시간 생존 대결이에요. 내 길 위의 몬스터가{" "}
-            <b className="text-rose-300 light:text-rose-600">{LOAD_LIMIT}마리</b>에 닿으면 탈락하고, 마지막까지 버틴 사람이
-            승리해요.
+            정해진 마릿수에 닿으면 탈락하고, 마지막까지 버틴 사람이 승리해요. 탈락 기준은 인원에 따라 달라요 — 2인{" "}
+            <b className="text-rose-300 light:text-rose-600">{loadLimit(2)}마리</b> · 3인{" "}
+            <b className="text-rose-300 light:text-rose-600">{loadLimit(3)}마리</b> · 4인{" "}
+            <b className="text-rose-300 light:text-rose-600">{loadLimit(4)}마리</b>(인원이 많을수록 끝까지 남는 데 오래 걸리니 기준이 낮아요).
           </p>
         </section>
 

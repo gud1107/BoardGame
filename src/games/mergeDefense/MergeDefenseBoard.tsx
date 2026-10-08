@@ -10,7 +10,7 @@ import {
   GRADE_NAMES,
   GRID_X,
   GRID_Y,
-  LOAD_LIMIT,
+  loadLimit,
   MAX_GRADE,
   MAX_UPGRADE,
   PREP_TICKS,
@@ -60,10 +60,16 @@ const MAX_FX = 260;
 /** Gold gains this close together stack into one "+N" pop. */
 const GOLD_POP_MERGE_MS = 700;
 const GUIDE_KEY = "merge-defense:guide";
-/** 🧭 "자동": the guide shows through the prep and these opening waves, then hides itself. */
-const GUIDE_AUTO_WAVES = 3;
-type GuideMode = "auto" | "on" | "off";
-const GUIDE_NEXT: Record<GuideMode, GuideMode> = { auto: "on", on: "off", off: "auto" };
+/**
+ * 🧭 guide: a number = "자동" — shown through the prep and that many opening
+ * waves, then it hides itself. The button cycles 자동 2 → 3 → 5 → ON → OFF.
+ */
+type GuideMode = 2 | 3 | 5 | "on" | "off";
+const GUIDE_CYCLE: GuideMode[] = [2, 3, 5, "on", "off"];
+const GUIDE_DEFAULT: GuideMode = 3;
+function guideVisible(mode: GuideMode, wave: number): boolean {
+  return mode === "on" || (typeof mode === "number" && wave <= mode);
+}
 /** Attack range the guide assumes for a new build (grade-1 average). */
 const BUILD_RANGE = 140;
 const HIRE_FX_COLOR: Record<(typeof HIRE_KINDS)[number], string> = { swarm: "#f59e0b", wraith: "#818cf8", golem: "#a8a29e", warlord: "#dc2626" };
@@ -136,16 +142,16 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const [guide, setGuide] = useState<GuideMode>(() => {
     try {
       const v = typeof window === "undefined" ? null : window.localStorage.getItem(GUIDE_KEY);
-      return v === "on" || v === "off" ? v : "auto";
+      return GUIDE_CYCLE.find((m) => String(m) === v) ?? GUIDE_DEFAULT;
     } catch {
-      return "auto";
+      return GUIDE_DEFAULT;
     }
   });
   const guideRef = useRef(guide);
   useEffect(() => {
     guideRef.current = guide;
     try {
-      window.localStorage.setItem(GUIDE_KEY, guide);
+      window.localStorage.setItem(GUIDE_KEY, String(guide));
     } catch {
       /* storage blocked — guide just won't be remembered */
     }
@@ -336,6 +342,15 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: `${UNITS[ev.kind].emoji} 강화 Lv.${ev.level}`, color: UNITS[ev.kind].color, t0: now, dur: 900, size: 18 });
           if (mine && audible) audio.playUpgrade();
           break;
+        case "call": {
+          // Find the minion that just appeared behind the caller for the tether end.
+          const p = pathPoint(ev.trav);
+          const s2 = pathPoint(Math.max(0, ev.trav - 6));
+          fx.push({ type: "call", x: p.x, y: p.y, sx: s2.x, sy: s2.y + 4, color: ev.boss ? "#a855f7" : "#dc2626", t0: now, dur: 800, seed: ev.id });
+          fx.push({ type: "text", x: p.x, y: p.y - (ev.boss ? 36 : 30), text: "졸개 소환!", color: ev.boss ? "#e9d5ff" : "#fecaca", t0: now, dur: 800, size: 11 });
+          if (mine && audible) audio.playMinionCall(ev.boss);
+          break;
+        }
         case "boss-kill":
           fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2 - 10, text: "보스 처치! +💎2", color: "#facc15", t0: now, dur: 1500, size: 22 });
           if (mine && audible) audio.playBossKill();
@@ -386,8 +401,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           const mine = view === mySeat && s.phase === "playing" && board.alive;
           const moving = dragFromRef.current ?? sel;
           const movingUnit = moving !== null ? board.units[moving] : null;
-          const g = guideRef.current;
-          const guideOn = g === "on" || (g === "auto" && s.wave <= GUIDE_AUTO_WAVES);
+          const guideOn = guideVisible(guideRef.current, s.wave);
           const coverage = mine && guideOn ? coverageFor(movingUnit ? unitRange(movingUnit) : BUILD_RANGE) : null;
           drawBoard(ctx, board, {
             alpha: s.phase === "playing" ? alpha : 0,
@@ -399,6 +413,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             aim: aimRef.current,
             coverage,
             bornAt: bornAtRef.current,
+            limit: loadLimit(s.playerCount),
           });
           drawFx(ctx, fxRef.current, now);
         }
@@ -416,7 +431,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, w, h);
         ctx.setTransform(k, 0, 0, k, 0, 0);
-        drawBoard(ctx, s.boards[seat], { alpha: s.phase === "playing" ? alpha : 0, now, mini: true });
+        drawBoard(ctx, s.boards[seat], { alpha: s.phase === "playing" ? alpha : 0, now, mini: true, limit: loadLimit(s.playerCount) });
       });
       raf = requestAnimationFrame(loop);
     };
@@ -491,9 +506,10 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
     }
   }
 
-  const guideShown = guide === "on" || (guide === "auto" && state.wave <= GUIDE_AUTO_WAVES);
+  const guideShown = guideVisible(guide, state.wave);
+  const limit = loadLimit(state.playerCount);
   const load = fieldLoad(me);
-  const loadPct = Math.min(1, load / LOAD_LIMIT);
+  const loadPct = Math.min(1, load / limit);
   const cost = summonCost(me);
   const freeSlots = me.units.filter((u) => !u).length;
   const pairs = useMemo(() => mergePairs(me), [me]);
@@ -535,11 +551,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             {hitVol === 0 ? "🔇" : hitVol < 1 ? "🔈" : hitVol > 1 ? "🔊" : "🔉"} 타격음 {audio.HIT_VOLUMES.find((v) => v.value === hitVol)?.label}
           </button>
           <button
-            onClick={() => setGuide((g) => GUIDE_NEXT[g])}
-            title={`빈 칸마다 길을 얼마나 덮는지(%) 보여줘요 — ★가 가장 좋은 자리. 자동 = ${GUIDE_AUTO_WAVES}웨이브까지만 표시`}
+            onClick={() => setGuide((g) => GUIDE_CYCLE[(GUIDE_CYCLE.indexOf(g) + 1) % GUIDE_CYCLE.length])}
+            title="빈 칸마다 길을 얼마나 덮는지(%) 보여줘요 — ★가 가장 좋은 자리. 누를 때마다 자동(2·3·5웨이브까지) → 항상 ON → OFF"
             className={`rounded-full border px-2 py-0.5 text-[11px] ${guideShown ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-200 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-700" : "border-white/15 hover:border-white/30 light:border-slate-300"}`}
           >
-            🧭 가이드 {guide === "auto" ? `자동(~W${GUIDE_AUTO_WAVES})` : guide === "on" ? "ON" : "OFF"}
+            🧭 가이드 {typeof guide === "number" ? `자동(~W${guide})` : guide === "on" ? "ON" : "OFF"}
           </button>
           <button onClick={() => setRulebookOpen(true)} className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] hover:border-white/30 light:border-slate-300">
             📖 룰
@@ -552,7 +568,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         {others.map((seat) => {
           const b = state.boards[seat];
           const oppLoad = fieldLoad(b);
-          const l = Math.min(1, oppLoad / LOAD_LIMIT);
+          const l = Math.min(1, oppLoad / limit);
           return (
             <div
               key={seat}
@@ -580,7 +596,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
                     <span className="text-white/70 light:text-slate-600">👾 몬스터</span>
                     <span className={`font-bold ${l > 0.75 ? "animate-pulse text-rose-300 light:text-rose-600" : l > 0.5 ? "text-amber-300 light:text-amber-600" : "text-white/80 light:text-slate-700"}`}>
                       {oppLoad}
-                      <span className="text-rose-300/90 light:text-rose-600">/{LOAD_LIMIT}마리</span>
+                      <span className="text-rose-300/90 light:text-rose-600">/{limit}마리</span>
                     </span>
                   </>
                 ) : (
@@ -673,9 +689,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           </span>
           <span
             className={`rounded-full border px-2 py-0.5 font-black ${loadPct > 0.75 ? "animate-pulse border-rose-300 bg-rose-600 text-white" : "border-rose-400/60 bg-rose-500/20 text-rose-200 light:border-rose-300 light:bg-rose-50 light:text-rose-600"}`}
-            title="종류와 상관없이 몬스터 1마리 = 1"
+            title={`종류와 상관없이 몬스터 1마리 = 1 · 탈락 기준: 2인 ${loadLimit(2)} · 3인 ${loadLimit(3)} · 4인 ${loadLimit(4)}마리`}
           >
-            💀 {LOAD_LIMIT}마리 되면 탈락
+            💀 {limit}마리 되면 탈락
           </span>
         </div>
         <div className="flex items-center gap-2 text-xs">
@@ -686,7 +702,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             />
           </div>
           <span className={`w-14 text-right font-mono font-bold ${loadPct > 0.75 ? "text-rose-300 light:text-rose-600" : "text-white light:text-slate-900"}`}>
-            {load}/<span className="text-rose-300 light:text-rose-600">{LOAD_LIMIT}</span>
+            {load}/<span className="text-rose-300 light:text-rose-600">{limit}</span>
           </span>
         </div>
         <p className="text-[10px] leading-tight text-white/45 light:text-slate-400">보스·전쟁군주는 졸개를 계속 불러요 · 골렘은 쓰러지면 2마리로 갈라져요</p>

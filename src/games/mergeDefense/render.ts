@@ -13,7 +13,6 @@ import {
   BOARD_W,
   CELL,
   GRADE_COLORS,
-  LOAD_LIMIT,
   PATH_LEN,
   ROAD,
   SLOTS,
@@ -49,6 +48,8 @@ export interface DrawOptions {
   aim?: Record<number, number>;
   /** 배치 가이드: road coverage (0..1) per slot, drawn on empty cells. */
   coverage?: number[] | null;
+  /** Elimination head count for this table (vignette threshold). */
+  limit?: number;
   /** performance.now() when a unit appeared per slot — drives the pop-in / evolve scale. */
   bornAt?: Record<number, { t: number; big: boolean }>;
 }
@@ -258,7 +259,7 @@ export function drawBoard(ctx: Ctx, board: Board, opts: DrawOptions) {
   drawPortal(ctx, now, !!mini);
 
   // Danger vignette
-  const load = fieldLoad(board) / LOAD_LIMIT;
+  const load = fieldLoad(board) / (opts.limit ?? 50);
   if (board.alive && load > 0.65) {
     const a = (load - 0.65) * 1.8 * (0.6 + 0.4 * Math.sin(now / 160));
     ctx.strokeStyle = `rgba(239,68,68,${Math.min(0.8, a)})`;
@@ -1350,6 +1351,8 @@ export type Fx =
   | { type: "text"; x: number; y: number; text: string; color: string; t0: number; dur: number; size: number }
   /** Merge/gamble evolution: light pillar + spinning rays + rising motes, scaled by grade. */
   | { type: "evolve"; x: number; y: number; color: string; grade: number; t0: number; dur: number }
+  /** A boss / warlord calling a minion: rune circle, dark updraft, tether to the spawn. */
+  | { type: "call"; x: number; y: number; sx: number; sy: number; color: string; t0: number; dur: number; seed: number }
   /** A bought/sent monster bursting out of the portal onto this road. */
   | { type: "portal"; color: string; label: string; t0: number; dur: number; seed: number }
   /** The consumed unit's energy streaming into the merge cell. */
@@ -1380,6 +1383,7 @@ export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
       }
     } else if (f.type === "evolve") drawEvolve(ctx, f, k);
     else if (f.type === "portal") drawPortalBurst(ctx, f, k);
+    else if (f.type === "call") drawMinionCall(ctx, f, k);
     else if (f.type === "absorb") {
       const dx = f.to.x - f.from.x;
       const dy = f.to.y - f.from.y;
@@ -1410,6 +1414,60 @@ export function drawFx(ctx: Ctx, fx: Fx[], now: number) {
       ctx.fillText(f.text, f.x, y);
     }
     ctx.restore();
+  }
+}
+
+function drawMinionCall(ctx: Ctx, f: Extract<Fx, { type: "call" }>, k: number) {
+  const fade = k < 0.12 ? k / 0.12 : 1 - (k - 0.12) / 0.88;
+  // Rune circle on the ground under the caller, spinning as it grows.
+  ctx.save();
+  ctx.translate(f.x, f.y + 8);
+  ctx.scale(1, 0.45);
+  ctx.rotate(k * 3);
+  const r = 12 + 14 * Math.min(1, k * 3);
+  ctx.strokeStyle = rgba(f.color, 0.9 * fade);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for (let i = 0; i <= 5; i++) {
+    const a = (i * 4 * Math.PI) / 5;
+    const px = Math.cos(a) * r * 0.8;
+    const py = Math.sin(a) * r * 0.8;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+  ctx.restore();
+  // Dark updraft motes.
+  ctx.globalAlpha = Math.max(0, fade);
+  for (let i = 0; i < 8; i++) {
+    const a = f.seed + i * 0.785;
+    const lift = ((k * 1.3 + i * 0.13) % 1) * 30;
+    ctx.fillStyle = i % 2 ? rgba(f.color, 0.9) : "rgba(20,0,30,0.85)";
+    ctx.beginPath();
+    ctx.arc(f.x + Math.cos(a) * 10, f.y + 6 - lift, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Tether to where the minion crawls out, plus a pop there.
+  ctx.strokeStyle = rgba(f.color, 0.7 * fade);
+  ctx.setLineDash([3, 3]);
+  ctx.lineDashOffset = -k * 30;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(f.x, f.y);
+  ctx.lineTo(f.sx, f.sy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  if (k > 0.25) {
+    const kk = (k - 0.25) / 0.75;
+    ctx.strokeStyle = rgba(f.color, 1 - kk);
+    ctx.lineWidth = 2 * (1 - kk) + 0.5;
+    ctx.beginPath();
+    ctx.arc(f.sx, f.sy, 4 + kk * 14, 0, Math.PI * 2);
+    ctx.stroke();
   }
 }
 

@@ -10,7 +10,7 @@ import {
   SEND_COOLDOWN_TICKS,
   slotCenter,
   unitRange,
-  LOAD_LIMIT,
+  loadLimit,
   MAX_GRADE,
   pathPoint,
   PATH_LEN,
@@ -178,6 +178,33 @@ describe("merge defense engine", () => {
     expect(s.boards[1].mobs.filter((m) => m.kind === "normal").length).toBe(2);
   });
 
+  it("elimination bar drops as seats rise and is announced when a minion is called", () => {
+    expect(loadLimit(2)).toBeGreaterThan(loadLimit(3));
+    expect(loadLimit(3)).toBeGreaterThan(loadLimit(4));
+    // The same crowd that a 2p board survives knocks a 4p board out.
+    let s = startGame(4, 41);
+    while (s.boards[0].mobs.length === 0) s = stepGame(s);
+    const crowd = (n: number) => Array.from({ length: n }, (_, i) => ({ ...s.boards[0].mobs[0], id: 9000 + i }));
+    s.boards[0].mobs = crowd(loadLimit(4));
+    expect(stepGame(s).boards[0].alive).toBe(false);
+    let two = startGame(2, 41);
+    while (two.boards[0].mobs.length === 0) two = stepGame(two);
+    two.boards[0].mobs = crowd(loadLimit(4));
+    expect(stepGame(two).boards[0].alive).toBe(true);
+    let t = startGame(2, 42, [], "versus");
+    while (t.wave < 5) {
+      for (const b of t.boards) b.mobs = [];
+      t = stepGame(t);
+    }
+    let calls = 0;
+    for (let i = 0; i < 20 * 9; i++) {
+      const before = t.nextEventId;
+      t = stepGame(t);
+      calls += t.events.filter((e) => e.id >= before && e.type === "call").length;
+    }
+    expect(calls).toBeGreaterThanOrEqual(2);
+  });
+
   it("refuses to merge max-grade units", () => {
     const s = startGame(2, 1);
     s.boards[0].units[0] = { kind: "poison", grade: MAX_GRADE, cd: 0 };
@@ -241,7 +268,7 @@ describe("merge defense engine", () => {
       expect(ranks).toHaveLength(n);
       expect(ranks.filter((r) => r.rank === 1).length).toBeGreaterThanOrEqual(1);
       for (const b of s.boards) if (!b.alive) expect(b.outAt).not.toBeNull();
-      for (const b of s.boards) if (b.alive) expect(fieldLoad(b)).toBeLessThan(LOAD_LIMIT);
+      for (const b of s.boards) if (b.alive) expect(fieldLoad(b)).toBeLessThan(loadLimit(n));
     }
   });
 });
