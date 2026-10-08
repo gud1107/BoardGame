@@ -157,6 +157,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         type: "IMPROVE",
         desc: "진화 트리에 계통별 색 테두리와 갈래(라인)별 점선 상자를 그려 어떤 상어가 어디서 이어지는지 한눈에 보여요",
       },
+      {
+        game: "hungry-shark",
+        type: "IMPROVE",
+        desc: "진화 트리를 티어별 가로 줄로 정렬(①②③ 라인 표시), 진화 선택 창에도 계통 색 테두리",
+      },
+      {
+        game: "hungry-shark",
+        type: "FEAT",
+        desc: "보유 상어마다 🎯 추천 강화 빌드 — 다음에 올릴 강화를 금색으로 강조(시뮬레이션 기준, 4티어는 물어뜯기 우선)",
+      },
     ],
   },
   {

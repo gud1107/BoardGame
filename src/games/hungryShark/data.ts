@@ -889,6 +889,50 @@ export function upgradeCost(shark: SharkDef, kind: UpgradeKind, currentLevel: nu
   return Math.round((base * tierFactor * Math.pow(1.42, currentLevel)) / 10) * 10;
 }
 
+/** A recommended upgrade build: which stat to pour coins into first, and why. */
+export interface UpgradeBuild {
+  name: string;
+  order: [UpgradeKind, UpgradeKind, UpgradeKind];
+  reason: string;
+}
+
+/**
+ * Recommended builds from the 2026-10-08 bot sim (3 seeds × 3 maps, same total levels with one stat at 6):
+ * every T4 earned most with 물어뜯기 first (메갈로돈 +41%, 레비아탄 +19%, 크라이오돈 +18%, 바실리스크 +15%,
+ * 팬텀 ≈ tie), while T2/T3 split by branch (백상아리/귀상어 속도, 환도상어 부스트, 고블린/잠꾸러기 물기).
+ */
+const EARLY_BUILDS: Record<SharkBranch, UpgradeBuild> = {
+  BASE: { name: "생존 사냥", order: ["bite", "speed", "boost"], reason: "회복량이 늘어 오래 버티며 먹이를 쌓습니다. 속도로 사냥감을 따라잡으세요." },
+  BRUTE: { name: "추격 포식", order: ["speed", "boost", "bite"], reason: "2·3티어 브루트는 속도 집중 빌드가 가장 많이 벌었습니다(백상아리 +18%). 먹이를 더 많이 쫓는 쪽이 이득." },
+  SPEED: { name: "질주 사냥", order: ["speed", "bite", "boost"], reason: "스피드 계통은 속도를 먼저 올릴 때 수익이 가장 높았습니다(귀상어 +12%). 물기로 회복을 보충하세요." },
+  VOID: { name: "스킬 포식", order: ["bite", "speed", "boost"], reason: "스킬 피해가 물기 피해에 비례해 물기 집중이 압도적이었습니다(고블린 +52%)." },
+  FROST: { name: "장기 생존", order: ["bite", "speed", "boost"], reason: "물기 회복량으로 냉혈 대사와 함께 오래 버틸 때 가장 많이 벌었습니다(잠꾸러기 +11%)." },
+  VENOM: { name: "기동 독사냥", order: ["boost", "bite", "speed"], reason: "부스트로 독 스킬 사이를 오가며 먹이를 쓸 때 가장 많이 벌었습니다(환도상어 +11%, 생존 시간도 최장)." },
+};
+
+const APEX_BUILDS: Record<SharkBranch, UpgradeBuild> = {
+  BASE: EARLY_BUILDS.BASE,
+  BRUTE: { name: "정점 파괴자", order: ["bite", "speed", "boost"], reason: "4티어는 물기 집중이 압도적입니다(메갈로돈 +41%). 큰 먹이를 빨리 부수고 회복도 늘어납니다." },
+  SPEED: { name: "일격 암살", order: ["bite", "speed", "boost"], reason: "4티어에선 세 빌드가 비슷하지만 물기 집중이 근소하게 앞섰습니다. 일격 피해를 키우세요." },
+  VOID: { name: "심연 포식", order: ["bite", "speed", "boost"], reason: "스킬 피해가 물기에 비례해 4티어도 물기 집중이 1위였습니다(레비아탄 +19%)." },
+  FROST: { name: "빙하 군림", order: ["bite", "speed", "boost"], reason: "물기 집중이 4티어 1위(크라이오돈 +18%). 회복이 늘어 위험한 바다도 버팁니다." },
+  VENOM: { name: "역병 군주", order: ["bite", "boost", "speed"], reason: "4티어는 물기 집중이 1위(바실리스크 +15%), 그다음 부스트로 기동성을 챙기세요." },
+};
+
+export function recommendedBuild(shark: SharkDef): UpgradeBuild {
+  return (shark.tier >= 4 ? APEX_BUILDS : EARLY_BUILDS)[shark.branch];
+}
+
+/** Level targets in buy order: [rank in build order, level to reach]. Main stat leads, the rest follow. */
+const BUILD_STAGES: [number, number][] = [[0, 3], [1, 2], [0, 6], [1, 4], [2, 3], [0, 10], [1, 7], [2, 6], [1, 10], [2, 10]];
+
+/** The upgrade to buy next under the recommended build (null once everything is maxed). */
+export function nextRecommendedUpgrade(shark: SharkDef, up: UpgradeLevels): UpgradeKind | null {
+  const { order } = recommendedBuild(shark);
+  for (const [rank, target] of BUILD_STAGES) if (up[order[rank]] < target) return order[rank];
+  return null;
+}
+
 export interface UpgradeLevels {
   bite: number;
   speed: number;

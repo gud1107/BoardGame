@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { PlayableGameProps } from "../types";
 import { trackGameEvent } from "@/lib/analytics/gameEvents";
 import { recordSoloRun } from "@/lib/stats/soloResult";
@@ -15,6 +15,8 @@ import {
   effectiveStats,
   ENTITY_DEFS,
   MAX_UPGRADE_LEVEL,
+  nextRecommendedUpgrade,
+  recommendedBuild,
   SHARKS,
   sharkById,
   UPGRADE_LABELS,
@@ -244,7 +246,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
                       ))}
                   </div>
                 )}
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
                   {BRANCH_ORDER.map((br) => (
                     <BranchColumn key={br} branch={br} listed={listedSharks} save={save} viewId={viewId} onPick={setViewId} />
                   ))}
@@ -287,19 +289,31 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
 
             <div className="flex flex-col gap-2">
               <StatBars def={viewDef} save={save} />
+              {owned && <BuildBox def={viewDef} next={nextRecommendedUpgrade(viewDef, ups)} />}
               {owned ? (
                 (Object.keys(UPGRADE_LABELS) as UpgradeKind[]).map((k) => {
                   const lvl = ups[k];
                   const maxed = lvl >= MAX_UPGRADE_LEVEL;
                   const cost = upgradeCost(viewDef, k, lvl);
                   const afford = save.coins >= cost;
+                  const recommended = nextRecommendedUpgrade(viewDef, ups) === k;
                   return (
-                    <div key={k} className="flex items-center gap-2 rounded-lg bg-black/20 px-2.5 py-2 light:bg-slate-50">
+                    <div
+                      key={k}
+                      className={`flex items-center gap-2 rounded-lg px-2.5 py-2 ${
+                        recommended
+                          ? "bg-amber-400/15 ring-2 ring-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.35)] light:bg-amber-50"
+                          : "bg-black/20 light:bg-slate-50"
+                      }`}
+                    >
                       <span className="text-xl">{UPGRADE_LABELS[k].emoji}</span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 text-sm font-bold text-white light:text-slate-800">
                           {UPGRADE_LABELS[k].name}
                           <span className="text-[10px] font-semibold text-sky-300 light:text-sky-600">Lv.{lvl}/{MAX_UPGRADE_LEVEL}</span>
+                          {recommended && (
+                            <span className="rounded-full bg-amber-400 px-1.5 py-0.5 text-[9px] font-black text-slate-900">🎯 추천</span>
+                          )}
                         </div>
                         <div className="mt-1 flex gap-0.5">
                           {Array.from({ length: MAX_UPGRADE_LEVEL }, (_, i) => (
@@ -642,9 +656,9 @@ const BRANCH_FRAME: Record<(typeof BRANCH_ORDER)[number], { column: string; line
 };
 
 /**
- * One evolution branch drawn as a framed column: the T2 shark on top, then every T3 sub-line (갈래)
- * in its own dashed box with its T4 evolution(s) inside — so each line reads as one unit.
- * Sharks hidden by the list filters are skipped; an empty 갈래 box disappears.
+ * One evolution branch drawn as a framed column, laid out by tier: the column is a CSS subgrid
+ * spanning the parent's 4 rows (header / T2 / T3 / T4), so every tier lines up across branches.
+ * ①②③ marks tie each T4 back to its T3 line. Filtered-out sharks are skipped; an empty tier row keeps its slot.
  */
 function BranchColumn({
   branch,
@@ -662,40 +676,41 @@ function BranchColumn({
   const shown = new Set(listed.map((sh) => sh.id));
   const root = SHARKS.find((sh) => sh.tier === 2 && sh.branch === branch);
   if (!root) return null;
-  const lines = root.nextIds.map((id) => {
-    const t3 = sharkById(id);
-    return { t3, t4s: t3.nextIds.map(sharkById) };
-  });
-  const visibleLines = lines.filter((l) => shown.has(l.t3.id) || l.t4s.some((t4) => shown.has(t4.id)));
-  if (!shown.has(root.id) && visibleLines.length === 0) return null;
+  const t3s = root.nextIds.map(sharkById);
+  const t4s = t3s.flatMap((t3, i) => t3.nextIds.map((id) => ({ sh: sharkById(id), line: i })));
+  const mark = (i: number) => String.fromCharCode(9312 + i);
+  const rows: { tier: number; cards: { sh: SharkDef; line?: number }[] }[] = [
+    { tier: 2, cards: [{ sh: root }] },
+    { tier: 3, cards: t3s.map((sh, i) => ({ sh, line: i })) },
+    { tier: 4, cards: t4s },
+  ].map((r) => ({ ...r, cards: r.cards.filter((c) => shown.has(c.sh.id)) }));
+  if (rows.every((r) => r.cards.length === 0)) return null;
   const f = BRANCH_FRAME[branch];
-  const card = (sh: SharkDef) => <SharkCard key={sh.id} sh={sh} save={save} active={sh.id === viewId} onClick={() => onPick(sh.id)} />;
   return (
-    <div className={`flex min-w-0 flex-col gap-1.5 rounded-2xl border-2 p-1.5 ${f.column}`}>
+    <div className={`row-span-4 grid min-w-0 grid-rows-subgrid gap-y-1.5 rounded-2xl border-2 p-1.5 ${f.column}`}>
       <div className={`text-center text-[11px] font-black ${f.label}`}>
         {BRANCH_INFO[branch].emoji} {BRANCH_INFO[branch].name}
         <div className="text-[9px] font-semibold opacity-70">{BRANCH_INFO[branch].desc}</div>
       </div>
-      {shown.has(root.id) && card(root)}
-      {visibleLines.length > 0 && <div className={`text-center text-[10px] leading-none font-black ${f.arrow}`}>▼ {lines.length}갈래로 분기</div>}
-      {lines.map((l, i) => {
-        if (!visibleLines.includes(l)) return null;
-        const t4s = l.t4s.filter((t4) => shown.has(t4.id));
-        return (
-          <div key={l.t3.id} className={`flex flex-col gap-1 rounded-xl border border-dashed p-1 ${f.line}`}>
-            <div className={`text-center text-[9px] font-black ${f.label}`}>
-              {String.fromCharCode(9312 + i)} {l.t3.name} 라인
-            </div>
-            {shown.has(l.t3.id) && card(l.t3)}
-            {t4s.length > 0 && (
-              <div className={`text-center text-[10px] leading-none font-black ${f.arrow}`}>
-                ▼{t4s.length > 1 ? " 둘 중 하나로 진화" : ""}
-              </div>
-            )}
-            {t4s.map(card)}
+      {rows.map((r) => (
+        <div key={r.tier} className={`flex flex-col gap-1 rounded-xl border border-dashed p-1 ${f.line}`}>
+          <div className={`text-center text-[9px] font-black ${f.label}`}>
+            T{r.tier} · {r.tier}티어{r.tier === 3 ? ` (${t3s.length}갈래)` : ""}
           </div>
-        );
-      })}
+          {r.cards.length === 0 && <div className="py-2 text-center text-[10px] text-white/30 light:text-slate-400">—</div>}
+          {r.cards.map((c) => (
+            <SharkCard
+              key={c.sh.id}
+              sh={c.sh}
+              save={save}
+              active={c.sh.id === viewId}
+              onClick={() => onPick(c.sh.id)}
+              lineMark={c.line === undefined ? undefined : r.tier === 3 ? `${mark(c.line)} 라인` : `${mark(c.line)} ${t3s[c.line].name}`}
+              lineClass={f.label}
+            />
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -706,6 +721,8 @@ function SharkCard({
   active,
   onClick,
   metric,
+  lineMark,
+  lineClass,
 }: {
   sh: SharkDef;
   save: SharkSave;
@@ -713,9 +730,13 @@ function SharkCard({
   onClick: () => void;
   /** Sorted-grid mode: the value being sorted on, shown under the status line. */
   metric?: string;
+  /** Tree mode: which T3 line (①②③) this card belongs to. */
+  lineMark?: string;
+  lineClass?: string;
 }) {
   const own = save.owned.includes(sh.id);
   const reachable = !sh.parentId || save.owned.includes(sh.parentId);
+  const nextUp = own ? nextRecommendedUpgrade(sh, upgradesFor(save, sh.id)) : null;
   return (
     <button
       onClick={onClick}
@@ -726,13 +747,47 @@ function SharkCard({
       } ${sh.tier === 1 && !metric ? "max-w-[11rem]" : ""}`}
     >
       <span className="absolute top-1 left-1.5 text-[9px] font-black text-white/50 light:text-slate-400">T{sh.tier}</span>
+      {lineMark && <span className={`absolute top-1 right-1.5 max-w-[70%] truncate text-[9px] font-black ${lineClass ?? ""}`}>{lineMark}</span>}
       <SharkPreview def={sh} width={88} height={40} dim={!own} />
       <span className="mt-0.5 w-full truncate text-center text-[11px] font-bold text-white sm:text-xs light:text-slate-800">{sh.name}</span>
       <span className="text-[10px] text-white/50 light:text-slate-500">
         {own ? `최고 ${(save.best[sh.id] ?? 0).toLocaleString()}` : reachable ? `🔒 ${sh.cost.toLocaleString()}🪙` : "🔒 이전 단계 필요"}
       </span>
       {metric && <span className="text-[10px] font-bold text-sky-300 light:text-sky-600">{metric}</span>}
+      {own && !metric && nextUp && (
+        <span className="mt-0.5 rounded-full bg-amber-400/20 px-1.5 text-[9px] font-black text-amber-300 light:bg-amber-100 light:text-amber-700">
+          🎯 추천 강화 {UPGRADE_LABELS[nextUp].emoji}
+        </span>
+      )}
     </button>
+  );
+}
+
+/** Recommended upgrade build for the shark being viewed, with the next step highlighted. */
+function BuildBox({ def, next }: { def: SharkDef; next: UpgradeKind | null }) {
+  const build = recommendedBuild(def);
+  return (
+    <div className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-[11px] light:border-amber-300 light:bg-amber-50">
+      <div className="font-black text-amber-300 light:text-amber-700">🎯 추천 빌드 · {build.name}</div>
+      <div className="mt-1 flex flex-wrap items-center gap-1">
+        {build.order.map((k, i) => (
+          <Fragment key={k}>
+            {i > 0 && <span className="text-amber-300/60 light:text-amber-500">→</span>}
+            <span
+              className={`rounded px-1.5 py-0.5 font-bold ${
+                k === next ? "bg-amber-400 text-slate-900" : "bg-black/25 text-white/75 light:bg-white light:text-slate-600"
+              }`}
+            >
+              {UPGRADE_LABELS[k].emoji} {UPGRADE_LABELS[k].name}
+            </span>
+          </Fragment>
+        ))}
+      </div>
+      <div className="mt-1 text-white/60 light:text-slate-600">{build.reason}</div>
+      <div className="mt-0.5 text-amber-200/80 light:text-amber-700">
+        {next ? `다음 추천 강화: ${UPGRADE_LABELS[next].emoji} ${UPGRADE_LABELS[next].name}` : "모든 강화를 마쳤습니다!"}
+      </div>
+    </div>
   );
 }
 

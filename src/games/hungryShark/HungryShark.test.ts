@@ -367,6 +367,26 @@ describe("evolution tree", () => {
   });
 });
 
+describe("recommended upgrade build", () => {
+  it("leads with the build's main stat and walks every stat to max", async () => {
+    const { nextRecommendedUpgrade, recommendedBuild, MAX_UPGRADE_LEVEL } = await import("./data");
+    for (const sh of SHARKS) {
+      const order = recommendedBuild(sh).order;
+      expect(new Set(order).size).toBe(3);
+      const up = { bite: 0, speed: 0, boost: 0 };
+      expect(nextRecommendedUpgrade(sh, up)).toBe(order[0]);
+      let steps = 0;
+      for (let k = nextRecommendedUpgrade(sh, up); k; k = nextRecommendedUpgrade(sh, up)) {
+        up[k]++;
+        steps++;
+      }
+      expect(steps).toBe(MAX_UPGRADE_LEVEL * 3);
+    }
+    expect(recommendedBuild(sharkById("megalodon")).order[0]).toBe("bite");
+    expect(recommendedBuild(sharkById("white")).order[0]).toBe("speed");
+  });
+});
+
 describe("economy overhaul", () => {
   it("frenzy multiplier steps ×2 → ×5 with consecutive eats", async () => {
     const { frenzyMultiplier } = await import("./data");
