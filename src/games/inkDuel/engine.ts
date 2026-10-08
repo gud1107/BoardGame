@@ -81,6 +81,18 @@ export const STOP_RULE_OPTIONS: { [K in keyof StopRules]: { label: string; title
   ink: { label: "🖋️ 턴당 잉크", title: "매 턴 받는 잉크 (많을수록 크고 강한 무기)", options: [{ label: "70", value: 70 }, { label: "100", value: INK_PER_TURN }, { label: "130", value: 130 }] },
 };
 
+/** One-tap stop-mode presets. Ink 130 was checked by sim (2026-10-09): same damage cap, blast radius +18% at most. */
+export const STOP_PRESETS: { id: string; emoji: string; name: string; desc: string; rules: StopRules }[] = [
+  { id: "default", emoji: "🧘", name: "기본", desc: "45초 · 10라운드 · 잉크 100", rules: DEFAULT_STOP_RULES },
+  { id: "quick", emoji: "⚡", name: "빠른 대결", desc: "30초 · 5라운드 — 10분 안에 끝", rules: { turnSeconds: 30, rounds: 5, ink: INK_PER_TURN } },
+  { id: "long", emoji: "🏰", name: "장기전", desc: "60초 · 15라운드 — 천천히 그리고 끝까지", rules: { turnSeconds: 60, rounds: 15, ink: INK_PER_TURN } },
+  { id: "big", emoji: "🎨", name: "큰 그림", desc: "잉크 130 · 60초 — 크고 화려한 낙서", rules: { turnSeconds: 60, rounds: MAX_ROUNDS, ink: 130 } },
+];
+
+export function sameStopRules(a: StopRules, b: StopRules): boolean {
+  return a.rounds === b.rounds && a.ink === b.ink && a.turnSeconds === b.turnSeconds;
+}
+
 /** Clamp untrusted rules (they arrive over the network). */
 export function sanitizeStopRules(raw: unknown): StopRules {
   const r = (raw ?? {}) as Partial<Record<keyof StopRules, unknown>>;

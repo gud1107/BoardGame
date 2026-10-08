@@ -3,7 +3,7 @@
 import { CHARACTERS } from "./arenaArt";
 import { CharacterAvatar } from "./ArenaCanvas";
 import { MAP_IDS, MAPS, type MapId } from "./maps";
-import { DEFAULT_STOP_RULES, STOP_RULE_OPTIONS, type StopRules } from "./engine";
+import { DEFAULT_STOP_RULES, sameStopRules, STOP_PRESETS, STOP_RULE_OPTIONS, type StopRules } from "./engine";
 import { DEFAULT_RT_RULES, RT_PRESETS, RT_RULE_OPTIONS, sameRules, type RtRules } from "./realtime";
 
 /** Grid of the selectable characters; `takenBy` greys out ones another player already picked. */
@@ -123,31 +123,38 @@ function RuleRows<T extends object>({ rows, value, onChange }: { rows: { [K in k
   );
 }
 
+/** One-tap preset row (shared by both modes); the preset matching the current values lights up. */
+function PresetButtons<T>({ presets, isOn, onPick }: { presets: { id: string; emoji: string; name: string; desc: string; rules: T }[]; isOn: (rules: T) => boolean; onPick: (rules: T) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+      {presets.map((p) => {
+        const on = isOn(p.rules);
+        return (
+          <button
+            key={p.id}
+            type="button"
+            title={p.desc}
+            onClick={() => onPick(p.rules)}
+            className={`flex flex-col items-start rounded-lg border-2 px-2 py-1 text-left transition ${
+              on ? "border-amber-400 bg-amber-500/20" : "border-white/10 hover:border-white/30 light:border-slate-200 light:hover:border-slate-400"
+            }`}
+          >
+            <span className="text-xs font-bold text-white light:text-slate-800">
+              {p.emoji} {p.name}
+            </span>
+            <span className="text-[9px] leading-tight text-white/50 light:text-slate-500">{p.desc}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** 🏃 Moving-mode tuning: preset buttons + one segmented row per rule (host only). */
 export function RtRulesPicker({ value, onChange }: { value: RtRules; onChange: (r: RtRules) => void }) {
   return (
     <div className="flex flex-col gap-1.5 rounded-xl border border-amber-400/30 bg-amber-400/5 p-2 light:bg-amber-50/60">
-      <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
-        {RT_PRESETS.map((p) => {
-          const on = sameRules(value, p.rules);
-          return (
-            <button
-              key={p.id}
-              type="button"
-              title={p.desc}
-              onClick={() => onChange(p.rules)}
-              className={`flex flex-col items-start rounded-lg border-2 px-2 py-1 text-left transition ${
-                on ? "border-amber-400 bg-amber-500/20" : "border-white/10 hover:border-white/30 light:border-slate-200 light:hover:border-slate-400"
-              }`}
-            >
-              <span className="text-xs font-bold text-white light:text-slate-800">
-                {p.emoji} {p.name}
-              </span>
-              <span className="text-[9px] leading-tight text-white/50 light:text-slate-500">{p.desc}</span>
-            </button>
-          );
-        })}
-      </div>
+      <PresetButtons presets={RT_PRESETS} isOn={(p) => sameRules(value, p)} onPick={onChange} />
       <RuleRows rows={RT_RULE_OPTIONS} value={value} onChange={onChange} />
     </div>
   );
@@ -157,6 +164,7 @@ export function RtRulesPicker({ value, onChange }: { value: RtRules; onChange: (
 export function StopRulesPicker({ value, onChange }: { value: StopRules; onChange: (r: StopRules) => void }) {
   return (
     <div className="flex flex-col gap-1.5 rounded-xl border border-sky-400/30 bg-sky-400/5 p-2 light:bg-sky-50/60">
+      <PresetButtons presets={STOP_PRESETS} isOn={(p) => sameStopRules(value, p)} onPick={onChange} />
       <RuleRows rows={STOP_RULE_OPTIONS} value={value} onChange={onChange} />
     </div>
   );
@@ -181,7 +189,9 @@ export function rtRulesLabel(r: RtRules | undefined): string {
 }
 
 export function stopRulesLabel(r: StopRules | undefined): string {
-  return r ? nonDefault(STOP_RULE_OPTIONS, r, DEFAULT_STOP_RULES) : "";
+  if (!r) return "";
+  const preset = STOP_PRESETS.find((p) => p.id !== "default" && sameStopRules(p.rules, r));
+  return preset ? `${preset.emoji} ${preset.name}` : nonDefault(STOP_RULE_OPTIONS, r, DEFAULT_STOP_RULES);
 }
 
 export function modeLabel(m: GameMode | undefined): string {

@@ -17,7 +17,7 @@ import RealtimeBoard, { type CommandBody } from "./RealtimeBoard";
 import { DEFAULT_RT_RULES, newBotMemory, rtBotThink, sanitizeRules, startRealtime, stepRealtime, type RtBotMemory, type RtCommand, type RtInput, type RtRules, type RtState } from "./realtime";
 import { RtClientBuffer, snapFromState, viewFromState, type RtSnap, type RtView } from "./rtView";
 import { CharacterAvatar } from "./ArenaCanvas";
-import { isMapId, MAP_IDS, type MapId } from "./maps";
+import { CHARACTER_COUNT, isMapId, MAP_IDS, type MapId } from "./maps";
 import {
   applyAction,
   chooseBotAction,
@@ -108,7 +108,53 @@ function storeSeat(code: string, seat: number) {
   window.localStorage.setItem(`ink-duel-seat-${code}`, String(seat));
 }
 
+/** Room-creation choices remembered on this device (browser storage only — never synced). */
+const PREFS_KEY = "ink-duel-room-prefs-v1";
+
+interface RoomPrefs {
+  playerCount: number;
+  character: number | null;
+  map: MapId | "random";
+  mode: GameMode;
+  rtRules: RtRules;
+  stopRules: StopRules;
+}
+
+const DEFAULT_PREFS: RoomPrefs = { playerCount: 2, character: null, map: "random", mode: "stop", rtRules: DEFAULT_RT_RULES, stopRules: DEFAULT_STOP_RULES };
+
+/** Reads + re-validates saved prefs (storage can be stale, edited or unavailable). */
+function loadPrefs(): { prefs: RoomPrefs; saved: boolean } {
+  try {
+    const raw = typeof window === "undefined" ? null : window.localStorage.getItem(PREFS_KEY);
+    if (!raw) return { prefs: DEFAULT_PREFS, saved: false };
+    const p = JSON.parse(raw) as Partial<RoomPrefs>;
+    return {
+      saved: true,
+      prefs: {
+        playerCount: typeof p.playerCount === "number" ? Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.round(p.playerCount))) : 2,
+        character: typeof p.character === "number" && Number.isInteger(p.character) && p.character >= 0 && p.character < CHARACTER_COUNT ? p.character : null,
+        map: p.map === "random" || isMapId(p.map) ? p.map : "random",
+        mode: p.mode === "moving" ? "moving" : "stop",
+        rtRules: sanitizeRules(p.rtRules),
+        stopRules: sanitizeStopRules(p.stopRules),
+      },
+    };
+  } catch {
+    return { prefs: DEFAULT_PREFS, saved: false };
+  }
+}
+
+function savePrefs(prefs: RoomPrefs) {
+  try {
+    window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // Private mode / blocked storage: just don't remember.
+  }
+}
+
 export default function InkDuelGame({ onComplete }: PlayableGameProps) {
+  const [initialPrefs] = useState(loadPrefs);
+  const [prefsRestored, setPrefsRestored] = useState(initialPrefs.saved);
   const [roomFromUrl] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("room");
@@ -118,19 +164,43 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
   const [intent, setIntent] = useState<"create" | "join">(roomFromUrl ? "join" : "create");
   const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
-  const [targetPlayerCount, setTargetPlayerCount] = useState(2);
+  const [targetPlayerCount, setTargetPlayerCount] = useState(initialPrefs.prefs.playerCount);
   const [formError, setFormError] = useState<string | null>(null);
   const [showRulebook, setShowRulebook] = useState(false);
-  const [myChar, setMyChar] = useState<number | null>(null);
-  const myCharRef = useRef<number | null>(null);
-  const [mapPick, setMapPick] = useState<MapId | "random">("random");
-  const mapPickRef = useRef<MapId | "random">("random");
-  const [modePick, setModePick] = useState<GameMode>("stop");
-  const modePickRef = useRef<GameMode>("stop");
-  const [rtRules, setRtRules] = useState<RtRules>(DEFAULT_RT_RULES);
-  const rtRulesRef = useRef<RtRules>(DEFAULT_RT_RULES);
-  const [stopRules, setStopRules] = useState<StopRules>(DEFAULT_STOP_RULES);
-  const stopRulesRef = useRef<StopRules>(DEFAULT_STOP_RULES);
+  const [myChar, setMyChar] = useState<number | null>(initialPrefs.prefs.character);
+  const myCharRef = useRef<number | null>(initialPrefs.prefs.character);
+  const [mapPick, setMapPick] = useState<MapId | "random">(initialPrefs.prefs.map);
+  const mapPickRef = useRef<MapId | "random">(initialPrefs.prefs.map);
+  const [modePick, setModePick] = useState<GameMode>(initialPrefs.prefs.mode);
+  const modePickRef = useRef<GameMode>(initialPrefs.prefs.mode);
+  const [rtRules, setRtRules] = useState<RtRules>(initialPrefs.prefs.rtRules);
+  const rtRulesRef = useRef<RtRules>(initialPrefs.prefs.rtRules);
+  const [stopRules, setStopRules] = useState<StopRules>(initialPrefs.prefs.stopRules);
+  const stopRulesRef = useRef<StopRules>(initialPrefs.prefs.stopRules);
+  // Remember the latest choices for the next room on this device.
+  const prefsTouchedRef = useRef(false);
+  useEffect(() => {
+    if (!prefsTouchedRef.current) {
+      prefsTouchedRef.current = true;
+      return;
+    }
+    savePrefs({ playerCount: targetPlayerCount, character: myChar, map: mapPick, mode: modePick, rtRules, stopRules });
+  }, [targetPlayerCount, myChar, mapPick, modePick, rtRules, stopRules]);
+  const resetPrefs = () => {
+    const d = DEFAULT_PREFS;
+    setTargetPlayerCount(d.playerCount);
+    myCharRef.current = d.character;
+    setMyChar(d.character);
+    mapPickRef.current = d.map;
+    setMapPick(d.map);
+    modePickRef.current = d.mode;
+    setModePick(d.mode);
+    rtRulesRef.current = d.rtRules;
+    setRtRules(d.rtRules);
+    stopRulesRef.current = d.stopRules;
+    setStopRules(d.stopRules);
+    setPrefsRestored(false);
+  };
   // The running match's mode + 🏃 moving-mode plumbing (host simulates, guests interpolate snapshots).
   const [gameMode, setGameMode] = useState<GameMode>("stop");
   const gameModeRef = useRef<GameMode>("stop");
@@ -1062,6 +1132,14 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
               className="rounded-lg border border-white/10 bg-white/5 light:border-slate-300 light:bg-white px-3 py-2 text-center text-lg font-semibold tracking-[0.3em] text-white light:text-slate-900 placeholder:text-white/20 light:placeholder:text-slate-400 focus:border-emerald-400 focus:outline-none"
             />
           </label>
+        )}
+        {intent === "create" && prefsRestored && (
+          <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-500/10 px-3 py-1.5 text-[11px] text-emerald-200 light:bg-emerald-50 light:text-emerald-800">
+            💾 지난번에 고른 설정을 불러왔어요
+            <button type="button" onClick={resetPrefs} className="rounded-full border border-emerald-400/40 px-2 py-0.5 font-semibold hover:bg-emerald-500/20">
+              기본값으로
+            </button>
+          </div>
         )}
         {intent === "create" && (
           <label className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
