@@ -255,6 +255,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         desc: "AI가 콤보 견제를 자주 당하면 결속 3단계를 노림 · 결과 화면·/stats에 반격당한 횟수",
       },
       {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "생존전 AI도 광폭 보스 강타를 자주 맞으면 결속 강화 · 결과 화면에 이번 판 8콤보 보너스 달성률 · 모바일 결과 표 한 화면에 맞춤",
+      },
+      {
         game: "ink-duel",
         type: "IMPROVE",
         desc: "그래픽 전면 개편 — 캐릭터 4종(마법사·고양이·개구리·토끼), 수채화 배경·지층 지형, 잉크 폭발 파티클·화면 흔들림·속성 이펙트, 카드형 무기 판정",

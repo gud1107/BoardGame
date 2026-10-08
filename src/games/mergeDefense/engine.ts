@@ -112,7 +112,7 @@ export const JAM_REFLECT = { ticks: 14 };
  * (versus 2p/4p): 2 → ~95% of bots maxed it and 2/3 of jams bounced; 6 → ~45%
  * of bots, 13–20% of jams blocked, game length unchanged.
  */
-export const BOT_BRACE = { afterJams: 6 };
+export const BOT_BRACE = { afterJams: 6, afterSmashes: 10 };
 export function braceCost(level: number): number {
   return BRACE_COSTS[Math.min(level, BRACE_COSTS.length - 1)];
 }
@@ -307,6 +307,8 @@ export interface Board {
   jamsBlocked?: number;
   /** Times this board's blocked jam bounced back onto it. */
   reflectsTaken?: number;
+  /** Times a berserk boss / warlord smash stunned one of this board's towers. */
+  smashesTaken?: number;
   /** Waves from W10 this board started alive, and how many of them paid the combo gold milestone (for /stats). */
   lateWaves?: number;
   comboBonusWaves?: number;
@@ -1048,6 +1050,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
       const ticks = stunTicks(board.brace ?? 0);
       if (ticks <= 0) continue;
       board.units[best]!.stun = ticks;
+      board.smashesTaken = (board.smashesTaken ?? 0) + 1;
       pushEvent(s, { seat, type: "smash", trav: Math.round(m.trav), slot: best });
     }
 
@@ -1159,6 +1162,9 @@ export interface RankedSeat {
   jamsTaken: number;
   jamsBlocked: number;
   reflectsTaken: number;
+  /** Waves from W10 started alive / of those, waves that paid the combo gold milestone. */
+  lateWaves: number;
+  comboBonusWaves: number;
 }
 
 /** Survivors rank first; then later elimination is better; same-tick eliminations tie-break on kills. */
@@ -1173,6 +1179,8 @@ export function computeRankings(state: MergeDefenseState): RankedSeat[] {
     jamsTaken: b.jamsTaken ?? 0,
     jamsBlocked: b.jamsBlocked ?? 0,
     reflectsTaken: b.reflectsTaken ?? 0,
+    lateWaves: b.lateWaves ?? 0,
+    comboBonusWaves: b.comboBonusWaves ?? 0,
   }));
   const sorted = [...rows].sort((a, b) => b.out - a.out || b.kills - a.kills);
   const ranked: RankedSeat[] = [];
@@ -1180,7 +1188,7 @@ export function computeRankings(state: MergeDefenseState): RankedSeat[] {
   sorted.forEach((r, i) => {
     const prev = sorted[i - 1];
     if (i > 0 && (prev.out !== r.out || prev.kills !== r.kills)) rank = i + 1;
-    ranked.push({ seat: r.seat, rank, wave: r.wave, kills: r.kills, combo: r.combo, jamsSent: r.jamsSent, jamsTaken: r.jamsTaken, jamsBlocked: r.jamsBlocked, reflectsTaken: r.reflectsTaken });
+    ranked.push({ seat: r.seat, rank, wave: r.wave, kills: r.kills, combo: r.combo, jamsSent: r.jamsSent, jamsTaken: r.jamsTaken, jamsBlocked: r.jamsBlocked, reflectsTaken: r.reflectsTaken, lateWaves: r.lateWaves, comboBonusWaves: r.comboBonusWaves });
   });
   return ranked;
 }
@@ -1222,6 +1230,13 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Acti
   const braceNow = board.brace ?? 0;
   if (state.mode === "versus" && state.wave >= 8 && braceNow < BRACE_MAX && (board.jamsTaken ?? 0) >= BOT_BRACE.afterJams) {
     return board.gold >= braceCost(braceNow) ? { type: "brace" } : null;
+  }
+  // Any mode: a board that berserk bosses keep smashing raises 결속 next
+  // (one level per BOT_BRACE.afterSmashes smashes taken). Survival sim: boards
+  // take ~35–49 smashes a game; at 10 per level ~96% of normal / ~50% of hard
+  // bots max it, and median waves don't move — 결속 eases play, doesn't decide it.
+  if (braceNow < BRACE_MAX && (board.smashesTaken ?? 0) >= BOT_BRACE.afterSmashes * (braceNow + 1) && board.gold >= braceCost(braceNow)) {
+    return { type: "brace" };
   }
   if (bestEmpty !== undefined && board.gold >= cost) return { type: "summon", slot: bestEmpty };
   const pairs = mergePairs(board);

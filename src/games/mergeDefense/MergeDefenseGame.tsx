@@ -40,6 +40,7 @@ import {
   type Difficulty,
   loadLimit,
   LIMIT_CHOICES,
+  COMBO,
   stepGame,
   TICK_MS,
   type Action,
@@ -950,7 +951,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     const iWon = winner?.seat === mySeat;
     return withGuard(
       <div
-        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 p-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
+        className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 px-3 py-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
         style={{ background: "linear-gradient(160deg,#3b1d06 0%,#1c1206 55%,#0a0703 100%)" }}
       >
         <span className="text-5xl">{iWon ? "🏆" : "🛡️"}</span>
@@ -958,7 +959,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         <p className="text-xs text-white/50">마지막까지 방어선을 지킨 사람이 승리합니다.</p>
         {myRecord && (
           <div
-            className={`rounded-xl border px-4 py-2 text-sm ${
+            className={`rounded-xl border px-4 py-2 text-sm break-keep ${
               myRecord.wave > myRecord.prev ? "animate-[md-record_0.6s_ease-out] border-amber-300/70 bg-amber-400/15 text-amber-100" : "border-white/10 bg-white/5 text-white/70"
             }`}
           >
@@ -976,18 +977,35 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
             )}
           </div>
         )}
+        {(() => {
+          // This match's combo-bonus coverage (waves from W10 that paid the gold milestone).
+          const me = finalRankings.find((r) => r.seat === mySeat);
+          if (!me || me.lateWaves === 0) return null;
+          const pct = Math.round((me.comboBonusWaves / me.lateWaves) * 100);
+          return (
+            <p className="-mt-2 text-xs text-white/60">
+              ⚡ {COMBO.goldAt}콤보 보너스 <b className="text-amber-200">{me.comboBonusWaves}</b>/{me.lateWaves} 웨이브 ({pct}%)
+              <span className="ml-1 text-[10px] text-white/40">· 10웨이브 이후</span>
+            </p>
+          );
+        })()}
         <div className="w-full overflow-x-auto">
-          <table className="w-full min-w-[320px] border-collapse text-xs">
+          {/* Short headers + nowrap cells keep this to one screen width on phones (checked at 375px). */}
+          <table className="w-full border-collapse text-xs whitespace-nowrap">
             <thead>
               <tr className="text-white/50">
-                <th className="border-b border-white/10 px-2 py-2 text-left">순위</th>
-                <th className="border-b border-white/10 px-2 py-2 text-left">플레이어</th>
-                <th className="border-b border-white/10 px-2 py-2 text-right">버틴 웨이브</th>
-                <th className="border-b border-white/10 px-2 py-2 text-right">처치</th>
-                <th className="border-b border-white/10 px-2 py-2 text-right">최고 콤보</th>
+                <th className="border-b border-white/10 px-1.5 py-2 text-left sm:px-2">#</th>
+                <th className="border-b border-white/10 px-1.5 py-2 text-left sm:px-2">플레이어</th>
+                <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2" title="버틴 웨이브">
+                  🌊<span className="hidden sm:inline"> 웨이브</span>
+                </th>
+                <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2">처치</th>
+                <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2" title="최고 치명타 콤보">
+                  ⚡<span className="hidden sm:inline"> 콤보</span>
+                </th>
                 {gameState?.mode === "versus" && (
-                  <th className="border-b border-white/10 px-2 py-2 text-right" title="콤보 견제를 건 횟수 / 당한 횟수 / 결속으로 막은 횟수 / 막혀서 반격당한 횟수">
-                    견제 건·당함·막음·반격당함
+                  <th className="border-b border-white/10 px-1.5 py-2 text-right sm:px-2" title="콤보 견제를 건 횟수 / 당한 횟수 / 결속으로 막은 횟수 / 막혀서 반격당한 횟수">
+                    견제
                   </th>
                 )}
               </tr>
@@ -995,30 +1013,36 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
             <tbody>
               {finalRankings.map(({ seat, rank, wave, kills, combo, jamsSent, jamsTaken, jamsBlocked, reflectsTaken }) => (
                 <tr key={seat} className={rank === 1 ? "bg-amber-400/10" : ""}>
-                  <td className="border-b border-white/5 px-2 py-2 text-left font-bold text-amber-200">{rank === 1 ? "🏆 1" : rank}</td>
-                  <td className="border-b border-white/5 px-2 py-2 text-left text-white">
+                  <td className="border-b border-white/5 px-1.5 py-2 text-left font-bold text-amber-200 sm:px-2">{rank === 1 ? "🏆" : rank}</td>
+                  <td className="max-w-[7.5rem] truncate border-b border-white/5 px-1.5 py-2 text-left text-white sm:max-w-none sm:px-2" title={names[seat]}>
+                    {seat === mySeat && <span className="mr-1 text-amber-200">나</span>}
                     {names[seat]}
-                    {seat === mySeat && <span className="ml-1 text-amber-200">(나)</span>}
                   </td>
-                  <td className="border-b border-white/5 px-2 py-2 text-right text-amber-200">🌊 {wave}</td>
-                  <td className="border-b border-white/5 px-2 py-2 text-right text-white/70">{kills}</td>
+                  <td className="border-b border-white/5 px-1.5 py-2 text-right text-amber-200 sm:px-2">{wave}</td>
+                  <td className="border-b border-white/5 px-1.5 py-2 text-right text-white/70 sm:px-2">{kills.toLocaleString("ko-KR")}</td>
                   <td
-                    className={`border-b border-white/5 px-2 py-2 text-right ${
+                    className={`border-b border-white/5 px-1.5 py-2 text-right sm:px-2 ${
                       combo > 0 && combo === Math.max(...finalRankings.map((r) => r.combo)) ? "font-bold text-amber-300" : "text-white/70"
                     }`}
                   >
-                    {combo > 0 ? `⚡ ${combo}` : "-"}
+                    {combo > 0 ? combo : "-"}
                   </td>
                   {gameState?.mode === "versus" && (
-                    <td className="border-b border-white/5 px-2 py-2 text-right font-mono text-white/70">
-                      <span className="text-emerald-300">{jamsSent}</span> · <span className="text-rose-300">{jamsTaken}</span> ·{" "}
-                      <span className="text-sky-300">{jamsBlocked}</span> · <span className="text-violet-300">{reflectsTaken}</span>
+                    <td className="border-b border-white/5 px-1.5 py-2 text-right font-mono text-[11px] text-white/70 sm:px-2">
+                      <span className="text-emerald-300">{jamsSent}</span>/<span className="text-rose-300">{jamsTaken}</span>/
+                      <span className="text-sky-300">{jamsBlocked}</span>/<span className="text-violet-300">{reflectsTaken}</span>
                     </td>
                   )}
                 </tr>
               ))}
             </tbody>
           </table>
+          {gameState?.mode === "versus" && (
+            <p className="mt-1 text-right text-[10px] text-white/40">
+              견제 = <span className="text-emerald-300">건</span>/<span className="text-rose-300">당함</span>/<span className="text-sky-300">막음</span>/
+              <span className="text-violet-300">반격당함</span>
+            </p>
+          )}
         </div>
         {isHost && (
           <div className="w-full max-w-sm text-left">
