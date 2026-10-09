@@ -182,6 +182,21 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         type: "IMPROVE",
         desc: "강화 버튼에 타워 이름·보드 위 개수 표시, 유닛을 고르면 공격력·공속·사거리·초당 피해가 보여요",
       },
+      {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "💰 타워 판매 — 그 유닛에 골드로 쓴 금액의 80% 환급(합성 유닛은 재료 합계, 보석 몫 제외)",
+      },
+      {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "📣 웨이브 예고 — 탱커·날쌘·보스 웨이브 5초 전 구성과 물리/마법 추천, 데미지 숫자 물리 주황·마법 보라",
+      },
+      {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "🤖 자동·AI가 몬스터 방어력·마법 저항을 보고 잘 통하는 쪽 타워를 골라 강화해요",
+      },
     ],
   },
   {

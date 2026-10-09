@@ -29,7 +29,7 @@ mkdirSync(out, { recursive: true });
 
 const widths = process.argv.slice(2).map(Number).filter((n) => n > 0);
 const WIDTHS = widths.length > 0 ? widths : [320, 360, 375, 414];
-const SCREENS = ["board-survival", "board-versus", "board-mob", "board-plaza", "board-figure8", "board-diamond", "board-intro", "record-card", "lobby", "lobby-create", "lobby-shared", "waiting-host", "waiting-guest", "results-versus", "results-survival"];
+const SCREENS = ["board-survival", "board-versus", "board-mob", "board-unit", "board-plaza", "board-figure8", "board-diamond", "board-intro", "record-card", "lobby", "lobby-create", "lobby-shared", "waiting-host", "waiting-guest", "results-versus", "results-survival"];
 
 function findChromium() {
   if (process.env.CHROMIUM_PATH && existsSync(process.env.CHROMIUM_PATH)) return process.env.CHROMIUM_PATH;
@@ -104,18 +104,18 @@ try {
       await page.waitForSelector("#root > *", { timeout: 30_000 });
       if (name.startsWith("results")) await page.waitForSelector("figure", { timeout: 60_000 });
       if (name === "lobby-create") await page.locator('button:has-text("방 만들기")').first().click();
-      if (name === "board-mob") {
-        // Tap the first live monster on the main (largest) canvas → its info card.
-        const tap = await page.evaluate(() => {
-          const t = window.__mobTap;
+      if (name === "board-mob" || name === "board-unit") {
+        // Tap the first live monster (→ its info card) or the 3★ archer's pad (→ stats + 판매) on the main canvas.
+        const tap = await page.evaluate((key) => {
+          const t = window[key];
           const c = [...document.querySelectorAll("canvas")].sort((a, b) => b.clientWidth - a.clientWidth)[0];
           if (!t || !c) return null;
           const r = c.getBoundingClientRect();
           return { x: r.left + r.width * t.fx, y: r.top + r.height * t.fy };
-        });
+        }, name === "board-mob" ? "__mobTap" : "__unitTap");
         if (tap) {
           await page.mouse.click(tap.x, tap.y);
-          await page.waitForSelector('[aria-label="몬스터 정보 닫기"]', { timeout: 5_000 });
+          await page.waitForSelector(name === "board-mob" ? '[aria-label="몬스터 정보 닫기"]' : 'button:has-text("판매")', { timeout: 5_000 });
         }
       }
       await page.waitForTimeout(300);

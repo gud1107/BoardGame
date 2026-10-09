@@ -15,6 +15,7 @@ import {
   BOARD_H,
   BOARD_W,
   pathPoint,
+  slotCenter,
   applyAction,
   chooseBotAction,
   computeRankings,
@@ -98,6 +99,8 @@ function board(mode: GameMode, map: MapId = "classic"): ReactNode {
     const p = pathPoint(mob.trav);
     (window as unknown as { __mobTap?: { fx: number; fy: number } }).__mobTap = { fx: p.x / BOARD_W, fy: p.y / BOARD_H };
   }
+  const pad = slotCenter(6);
+  (window as unknown as { __unitTap?: { fx: number; fy: number } }).__unitTap = { fx: pad.x / BOARD_W, fy: pad.y / BOARD_H };
   return <MergeDefenseBoard state={s} mySeat={0} names={names} onAction={noop} />;
 }
 
@@ -121,6 +124,7 @@ const SCREENS: Record<string, () => ReactNode> = {
   "board-survival": () => board("survival"),
   "board-versus": () => board("versus"),
   "board-mob": () => board("survival"),
+  "board-unit": () => board("survival"),
   "board-plaza": () => board("survival", "plaza"),
   "board-figure8": () => board("versus", "figure8"),
   "board-diamond": () => board("survival", "diamond"),

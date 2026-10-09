@@ -688,4 +688,45 @@ describe("merge defense engine", () => {
     const base = UNITS.archer.dmg * (1 - MOB_INFO.tank.armor);
     expect([base, base * 2].some((v) => Math.abs(v - lost) < 1e-6)).toBe(true);
   });
+
+  it("판매 refunds 80% of the gold spent (merges add up, gems count 0)", async () => {
+    const { sellValue, waveComposition, defenceProfile } = await import("./engine");
+    let s = startGame(2, 80);
+    const cost = summonCost(s.boards[0]);
+    s = applyAction(s, 0, { type: "summon", slot: 3 });
+    expect(s.boards[0].units[3]?.paid).toBe(cost);
+    const gold = s.boards[0].gold;
+    s = applyAction(s, 0, { type: "sell", slot: 3 });
+    expect(s.boards[0].units[3]).toBeNull();
+    expect(s.boards[0].gold).toBe(gold + Math.floor(cost * 0.8));
+    expect(s.events.some((e) => e.type === "sell")).toBe(true);
+    // Merge result carries both ingredients' gold.
+    const m = startGame(2, 81);
+    m.boards[0].units[0] = { kind: "archer", grade: 1, cd: 0, paid: 20 };
+    m.boards[0].units[1] = { kind: "archer", grade: 1, cd: 0, paid: 22 };
+    const merged = applyAction(m, 0, { type: "merge", a: 0, b: 1 });
+    expect(merged.boards[0].units[1]?.paid).toBe(42);
+    expect(sellValue({ kind: "mage", grade: 3, cd: 0 })).toBe(0);
+    // Selling an empty pad does nothing.
+    expect(applyAction(m, 0, { type: "sell", slot: 9 })).toBe(m);
+    expect(sanitizeAction({ type: "sell", slot: 2 })).toEqual({ type: "sell", slot: 2 });
+    // Wave preview: wave 10 brings tanks, fast monsters and a boss; armor outweighs resist.
+    const comp = waveComposition(m, 10);
+    expect(comp.boss).toBe(1);
+    expect(comp.tank).toBeGreaterThan(0);
+    expect(comp.fast).toBeGreaterThan(0);
+    expect(defenceProfile({ tank: 5 }).armor).toBeGreaterThan(defenceProfile({ tank: 5 }).resist);
+    expect(defenceProfile({ fast: 5 }).resist).toBeGreaterThan(defenceProfile({ fast: 5 }).armor);
+  });
+
+  it("bots lean their upgrades toward what the monsters don't block", () => {
+    const s = startGame(2, 82);
+    s.wave = 5; // before 🎯 집중 (W6+) competes for the gold
+    const b = s.boards[0];
+    b.units = b.units.map((_, i) => (i % 2 ? { kind: "archer" as const, grade: 2, cd: 0 } : { kind: "mage" as const, grade: 2, cd: 0 }));
+    b.gold = 5000;
+    b.mobs = Array.from({ length: 20 }, (_, i) => ({ id: 500 + i, kind: "tank" as const, hp: 100, maxHp: 100, trav: i * 10, speed: 40, slowT: 0, slowPct: 0, poisonT: 0, poisonDps: 0, from: -1 }));
+    const a = chooseBotAction(s, 0, { parts: new Set<AutoPart>(["upgrade"]) });
+    expect(a).toEqual({ type: "upgrade", kind: "mage" });
+  });
 });

@@ -51,6 +51,10 @@ import {
   type AutoPart,
   DAMAGE_TYPE_LABEL,
   MOB_INFO,
+  sellValue,
+  waveComposition,
+  defenceProfile,
+  type MobKind,
   unitDamage,
   unitInterval,
   type Action,
@@ -247,7 +251,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const bornAtRef = useRef<Record<number, { t: number; big: boolean }>>({});
   // 타격감 state (render-only): hit flashes, grouped damage numbers, tower recoil, screen shake.
   const hitsRef = useRef(new Map<number, number>());
-  const dmgRef = useRef(new Map<number, { acc: number; shown: number }>());
+  const dmgRef = useRef(new Map<number, { acc: number; shown: number; magic?: number }>());
   const firedRef = useRef<Record<number, number>>({});
   const shakeRef = useRef({ t0: 0, dur: 0, amp: 0 });
   /** Hit-stop: while performance.now() < until, the main board renders this frozen frame. */
@@ -258,6 +262,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const [autoMenuOpen, setAutoMenuOpen] = useState(false);
   /** Tapped monster (info card) — by id, so it follows the monster until it dies. */
   const [selectedMobId, setSelectedMobId] = useState<number | null>(null);
+  /** 판매 is two taps: the first arms it for this slot (button turns into "정말 판매?"). */
+  const [sellArm, setSellArm] = useState<number | null>(null);
   // Only a board that mounts at the very start of a match plays the map intro (not a reconnect).
   const [introOn] = useState(() => state.tick < 2 * TICKS_PER_SEC);
   /** Slow motion: from `start` (real ms) for `ms` the main board replays `state` at SLOWMO.rate, zoomed on (x, y), edges tinted `tint`. */
@@ -372,6 +378,11 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
 
     if (state.tick !== prev.tick && board) {
       const crits = new Set(board.shots.filter((sh) => sh.crit && sh.target !== undefined).map((sh) => sh.target!));
+      // Which damage type hit each mob this tick: its shot's type for a main target, else
+      // (splash / chain) this tick's latest shot, else (no shots — poison ticks) magic.
+      const hitType = new Map<number, "physical" | "magic">();
+      for (const sh of board.shots) if (sh.target !== undefined) hitType.set(sh.target, UNITS[sh.kind].dmgType);
+      const tickType = board.shots.length ? UNITS[board.shots[board.shots.length - 1].kind].dmgType : null;
       // Hits: every mob that lost HP since the last state flashes; damage is
       // pooled per mob and shown as a number at most every DMG_NUMBER_MS
       // (a critical hit flushes at once, in gold with a "!").
@@ -382,8 +393,10 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           if (was === undefined || m.hp >= was) continue;
           const lost = was - Math.max(0, m.hp);
           hitsRef.current.set(m.id, now);
-          const d = dmgRef.current.get(m.id) ?? { acc: 0, shown: 0 };
+          const d = dmgRef.current.get(m.id) ?? { acc: 0, shown: 0, magic: 0 };
           d.acc += lost;
+          const type = hitType.get(m.id) ?? tickType ?? "magic";
+          if (type === "magic") d.magic = (d.magic ?? 0) + lost;
           const crit = crits.has(m.id);
           if ((crit || now - d.shown >= DMG_NUMBER_MS) && d.acc >= 1) {
             const p = pathPoint(m.trav);
@@ -392,10 +405,21 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
               fx.push(
                 crit
                   ? { type: "text", x: p.x + ((m.id * 7) % 11) - 5, y: p.y - 20, text: `${fmtDmg(d.acc)}!`, color: "#facc15", t0: now, dur: 800, size: big ? 17 : 14 }
-                  : { type: "text", x: p.x + ((m.id * 7) % 11) - 5, y: p.y - 16, text: fmtDmg(d.acc), color: big ? "#fb923c" : "#f8fafc", t0: now, dur: big ? 700 : 520, size: big ? 13 : 9 },
+                  : {
+                      type: "text",
+                      x: p.x + ((m.id * 7) % 11) - 5,
+                      y: p.y - 16,
+                      text: fmtDmg(d.acc),
+                      // 물리 orange / 마법 violet (by most of the pooled damage); bigger chunks brighter.
+                      color: (d.magic ?? 0) * 2 > d.acc ? (big ? "#c084fc" : "#e9d5ff") : big ? "#fb923c" : "#fed7aa",
+                      t0: now,
+                      dur: big ? 700 : 520,
+                      size: big ? 13 : 9,
+                    },
               );
             }
             d.acc = 0;
+            d.magic = 0;
             d.shown = now;
           }
           dmgRef.current.set(m.id, d);
@@ -598,6 +622,13 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: "💎 꽝…", color: "#e5e7eb", t0: now, dur: 1100, size: 22 });
           if (mine && audible) audio.playGamble(false);
           break;
+        case "sell": {
+          const c = slotCenter(ev.slot);
+          fx.push({ type: "ring", x: c.x, y: c.y, color: "#facc15", r0: 6, r1: 34, t0: now, dur: 450 });
+          fx.push({ type: "text", x: c.x, y: c.y - 18, text: `판매 +🪙${ev.gold}`, color: "#fde047", t0: now, dur: 1000, size: 15 });
+          if (mine && audible) audio.playUpgrade();
+          break;
+        }
         case "upgrade":
           fx.push({ type: "text", x: BOARD_W / 2, y: BOARD_H / 2, text: `${UNITS[ev.kind].emoji} 강화 Lv.${ev.level}`, color: UNITS[ev.kind].color, t0: now, dur: 900, size: 18 });
           if (mine && audible) audio.playUpgrade();
@@ -962,6 +993,24 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const waveLeftTicks = state.tick < PREP_TICKS ? PREP_TICKS - state.tick : WAVE_TICKS - ((state.tick - PREP_TICKS) % WAVE_TICKS);
   const nextWave = state.tick < PREP_TICKS ? 1 : state.wave + 1;
   const nextIsBoss = isBossWave(nextWave);
+
+  // 웨이브 예고: 5s before a wave that brings more than plain monsters, say what's coming
+  // and which damage type it shrugs off (HP-weighted armor vs resist).
+  const previewWave = state.phase === "playing" && waveLeftTicks <= 5 * TICKS_PER_SEC && waveLeftTicks > 4 * TICKS_PER_SEC ? nextWave : null;
+  useEffect(() => {
+    if (previewWave === null) return;
+    const comp = waveComposition(state, previewWave);
+    const special = (Object.keys(comp) as MobKind[]).filter((k) => k !== "normal");
+    if (special.length === 0) return;
+    const order: MobKind[] = ["boss", "tank", "fast", "normal"];
+    const parts = order.filter((k) => comp[k]).map((k) => `${MOB_INFO[k].emoji} ${MOB_INFO[k].name} ${comp[k]}`);
+    const def = defenceProfile(comp);
+    const gap = def.armor - def.resist;
+    const tip =
+      gap >= 0.05 ? "방어력 높음 → ✨ 마법 타워 추천" : gap <= -0.05 ? "마법 저항 높음 → ⚔️ 물리 타워 추천" : "방어력·마법 저항 비슷 → 고르게";
+    showBanner({ text: `다음 WAVE ${previewWave}: ${parts.join(" · ")}`, sub: tip, tone: comp.boss ? "boss" : "wave" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewWave]);
 
   const bannerTone: Record<Banner["tone"], string> = {
     wave: "border-sky-300/40 bg-sky-500/25 text-sky-50",
@@ -1457,6 +1506,26 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                   <span className="rounded-full bg-white/10 px-2 py-0.5 light:bg-slate-100">⏱️ 공속 <b>{st.perSec.toFixed(2)}</b>회/초</span>
                   <span className="rounded-full bg-white/10 px-2 py-0.5 light:bg-slate-100">🎯 사거리 <b>{Math.round(st.range)}</b></span>
                   <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-amber-100 light:bg-amber-100 light:text-amber-800">💥 초당 피해 <b>{fmt1(st.dps)}</b></span>
+                  {interactive && selected !== null && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (sellArm === selected) {
+                          onAction({ type: "sell", slot: selected });
+                          setSelected(null);
+                          setSellArm(null);
+                          return;
+                        }
+                        const slot = selected;
+                        setSellArm(slot);
+                        window.setTimeout(() => setSellArm((a) => (a === slot ? null : a)), 2500);
+                      }}
+                      title={`골드로 쓴 금액(🪙${selectedUnit.paid ?? 0})의 80%를 돌려받아요 · 보석으로 뽑은 몫은 환급 없음 · 강화 레벨은 그대로`}
+                      className={`rounded-full px-2.5 py-0.5 font-bold ${sellArm === selected ? "bg-rose-600 text-white motion-safe:animate-pulse" : "bg-yellow-500/25 text-yellow-100 light:bg-yellow-100 light:text-yellow-800"}`}
+                    >
+                      {sellArm === selected ? `정말 판매? +🪙${sellValue(selectedUnit)}` : `💰 판매 +🪙${sellValue(selectedUnit)}`}
+                    </button>
+                  )}
                 </span>
               );
             })()}

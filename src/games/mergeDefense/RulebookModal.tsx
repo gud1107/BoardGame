@@ -60,6 +60,14 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               <b>⬆️ 강화</b>: 골드로 종류별 공격력을 영구히 올려요(레벨당 +15%, 최대 Lv.10).
             </li>
             <li>
+              <b>💰 판매</b>: 유닛을 고르고 💰 판매를 두 번 누르면, 그 유닛에 <b>골드로 쓴 금액의 80%</b>를 돌려받아요(합성한 유닛은 재료들의 소환 비용 합계 기준).
+              💎 도박으로 뽑은 몫은 환급되지 않고, 강화 레벨은 그대로 남아요.
+            </li>
+            <li>
+              <b>📣 웨이브 예고</b>: 탱커·날쌘 몬스터·보스가 섞인 웨이브는 시작 5초 전에 구성과 추천 피해 유형(물리/마법)을 알려줘요. 데미지 숫자는
+              물리 <span className="text-orange-300">주황</span> · 마법 <span className="text-violet-300">보라</span> · 치명타 <span className="text-yellow-300">금색</span>이에요.
+            </li>
+            <li>
               <b>✨ 하이라이트</b>: 지금 누를 수 있는 버튼(소환·도박·합성·강화·집중·결속)은 흰 테두리로 반짝여요.
             </li>
             <li>

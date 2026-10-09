@@ -318,6 +318,14 @@ export interface Unit {
   cd: number;
   /** Ticks left stunned by a berserk boss's smash (can't attack). */
   stun?: number;
+  /** Gold spent on this unit (summon costs, summed through merges; gems count 0) — 판매 refunds SELL_REFUND of it. */
+  paid?: number;
+}
+
+/** Share of a unit's gold (`Unit.paid`) that 판매 gives back. */
+export const SELL_REFUND = 0.8;
+export function sellValue(unit: Unit): number {
+  return Math.floor((unit.paid ?? 0) * SELL_REFUND);
 }
 
 export type MobKind = "normal" | "fast" | "tank" | "boss" | "elite" | "invader" | "golem" | "wraith" | "warlord";
@@ -338,6 +346,19 @@ export const MOB_INFO: Record<MobKind, { name: string; emoji: string; armor: num
   golem: { name: "바위 골렘", emoji: "🪨", armor: 0.5, resist: 0, trait: "쓰러지면 작은 몬스터로 쪼개짐" },
   wraith: { name: "망령", emoji: "👻", armor: 0.1, resist: 0.45, trait: "아주 빠름 · 둔화 면역" },
   warlord: { name: "전쟁군주", emoji: "👹", armor: 0.3, resist: 0.15, trait: "미니 보스 · 졸개 소환" },
+};
+
+/** HP (× the wave's base) and speed per monster kind. */
+export const MOB_SPEC: Record<MobKind, { hp: number; speed: number }> = {
+  normal: { hp: 1, speed: 60 },
+  fast: { hp: 0.6, speed: 105 },
+  tank: { hp: 2.8, speed: 40 },
+  boss: { hp: 45, speed: 32 },
+  elite: { hp: 4, speed: 70 },
+  invader: { hp: 3, speed: 72 },
+  golem: { hp: 9, speed: 34 },
+  wraith: { hp: 2.2, speed: 112 },
+  warlord: { hp: 20, speed: 38 },
 };
 
 /** Damage that lands on `kind` after its armor / resist. */
@@ -480,6 +501,7 @@ export type GameEvent =
   | { id: number; tick: number; seat: SeatIndex; type: "gamble"; slot: number; grade: number }
   | { id: number; tick: number; seat: SeatIndex; type: "gamble-fail" }
   | { id: number; tick: number; seat: SeatIndex; type: "upgrade"; kind: UnitKind; level: number }
+  | { id: number; tick: number; seat: SeatIndex; type: "sell"; slot: number; gold: number }
   | { id: number; tick: number; seat: SeatIndex; type: "send"; to: SeatIndex }
   | { id: number; tick: number; seat: SeatIndex; type: "invade"; to: SeatIndex; kind: UnitKind; grade: number }
   | { id: number; tick: number; seat: SeatIndex; type: "hire"; to: SeatIndex; mob: HireKind }
@@ -540,6 +562,8 @@ export type Action =
   /** Moves unit `a` to cell `b` (swapping if `b` is occupied). */
   | { type: "move"; a: number; b: number }
   | { type: "upgrade"; kind: UnitKind }
+  /** 판매: remove the unit in `slot` for SELL_REFUND of the gold spent on it. */
+  | { type: "sell"; slot: number }
   /** 유닛 대결: sacrifice the unit in `slot` onto `to`'s road. */
   | { type: "send"; slot: number; to?: SeatIndex }
   /** Pay gold to clear every stun on your board. */
@@ -797,6 +821,7 @@ export function sanitizeAction(raw: unknown): Action | null {
     if (a.to === undefined || a.to === null) return { type: "send", slot: a.slot };
     return Number.isInteger(a.to) && (a.to as number) >= 0 && (a.to as number) < MAX_PLAYERS ? { type: "send", slot: a.slot, to: a.to as number } : null;
   }
+  if (a.type === "sell" && isSlot(a.slot)) return { type: "sell", slot: a.slot };
   if (a.type === "wake") return { type: "wake" };
   if (a.type === "brace") return { type: "brace" };
   if (a.type === "focus") return { type: "focus" };
@@ -830,12 +855,13 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     if (action.slot !== undefined && cur.units[action.slot]) return state;
     const s = cloneState(state);
     const board = s.boards[seat];
-    board.gold -= summonCost(board);
+    const paid = summonCost(board);
+    board.gold -= paid;
     board.summons += 1;
     const slot = action.slot ?? pick(s, emptySlots(board));
     const lucky = rand(s) < 0.06;
     const grade = lucky ? 2 : 1;
-    board.units[slot] = { kind: pick(s, UNIT_KINDS), grade, cd: 0 };
+    board.units[slot] = { kind: pick(s, UNIT_KINDS), grade, cd: 0, paid };
     pushEvent(s, { seat, type: "summon", slot, grade, lucky });
     return s;
   }
@@ -863,9 +889,22 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     const s = cloneState(state);
     const board = s.boards[seat];
     const grade = board.units[action.a]!.grade + 1;
+    const paid = (board.units[action.a]!.paid ?? 0) + (board.units[action.b]!.paid ?? 0);
     board.units[action.a] = null;
-    board.units[action.b] = { kind: pick(s, UNIT_KINDS), grade, cd: 0 };
+    board.units[action.b] = { kind: pick(s, UNIT_KINDS), grade, cd: 0, ...(paid ? { paid } : {}) };
     pushEvent(s, { seat, type: "merge", slot: action.b, grade, from: action.a });
+    return s;
+  }
+
+  if (action.type === "sell") {
+    const unit = cur.units[action.slot];
+    if (!unit) return state;
+    const s = cloneState(state);
+    const board = s.boards[seat];
+    const gold = sellValue(unit);
+    board.units[action.slot] = null;
+    board.gold += gold;
+    pushEvent(s, { seat, type: "sell", slot: action.slot, gold });
     return s;
   }
 
@@ -986,18 +1025,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
 
 function makeMob(s: MergeDefenseState, kind: MobKind, wave: number, from: SeatIndex = -1): Mob {
   const base = waveHp(Math.max(1, wave)) * difficultyHp(s);
-  const spec: Record<MobKind, { hp: number; speed: number }> = {
-    normal: { hp: 1, speed: 60 },
-    fast: { hp: 0.6, speed: 105 },
-    tank: { hp: 2.8, speed: 40 },
-    boss: { hp: 45, speed: 32 },
-    elite: { hp: 4, speed: 70 },
-    invader: { hp: 3, speed: 72 },
-    golem: { hp: 9, speed: 34 },
-    wraith: { hp: 2.2, speed: 112 },
-    warlord: { hp: 20, speed: 38 },
-  };
-  const k = spec[kind];
+  const k = MOB_SPEC[kind];
   const hp = Math.round(base * k.hp);
   return {
     id: s.nextMobId++,
@@ -1019,6 +1047,33 @@ function spawnKindFor(wave: number, index: number): MobKind {
   if (wave >= 6 && index % 5 === 4) return "tank";
   if (wave >= 3 && index % 4 === 2) return "fast";
   return "normal";
+}
+
+/** What wave `wave` will send down every road (deterministic — spawnKindFor + the boss), for the 예고 banner and bots. */
+export function waveComposition(state: Pick<MergeDefenseState, "difficulty">, wave: number): Partial<Record<MobKind, number>> {
+  const out: Partial<Record<MobKind, number>> = {};
+  const base = Math.round(waveCount(wave) * difficultyCount(state));
+  const count = isBossWave(wave) ? Math.floor(base / 2) : base;
+  for (let i = 0; i < count; i++) {
+    const k = spawnKindFor(wave, i);
+    out[k] = (out[k] ?? 0) + 1;
+  }
+  if (isBossWave(wave)) out.boss = 1;
+  return out;
+}
+
+/** HP-weighted average armor / resist of a set of monsters — which damage type they're weak to. */
+export function defenceProfile(kinds: Partial<Record<MobKind, number>>): { armor: number; resist: number } {
+  let hp = 0;
+  let armor = 0;
+  let resist = 0;
+  for (const [k, n] of Object.entries(kinds) as [MobKind, number][]) {
+    const w = n * MOB_SPEC[k].hp;
+    hp += w;
+    armor += w * MOB_INFO[k].armor;
+    resist += w * MOB_INFO[k].resist;
+  }
+  return hp > 0 ? { armor: armor / hp, resist: resist / hp } : { armor: 0, resist: 0 };
 }
 
 function spawnWaves(s: MergeDefenseState) {
@@ -1534,9 +1589,15 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, auto:
     const target = slotPref.slice(0, rank).find((i) => !board.units[i] || board.units[i]!.grade < board.units[strongest]!.grade);
     if (target !== undefined) return { type: "move", a: strongest, b: target };
   }
-  // Spare gold → upgrade the kind with the most total grade on board.
+  // Spare gold → upgrade the kind with the most total grade on board, leaning
+  // toward the damage type that the monsters on the road + the next wave
+  // defend least against (armor cuts 물리, resist cuts 마법).
   const weight: Record<UnitKind, number> = { archer: 0, mage: 0, frost: 0, thunder: 0, poison: 0 };
   for (const u of board.units) if (u) weight[u.kind] += Math.pow(GRADE_MULT, u.grade - 1);
+  const facing = waveComposition(state, Math.max(1, state.wave + 1));
+  for (const m of board.mobs) if (m.hp > 0) facing[m.kind] = (facing[m.kind] ?? 0) + 1;
+  const def = defenceProfile(facing);
+  for (const k of UNIT_KINDS) weight[k] *= 1 - (UNITS[k].dmgType === "physical" ? def.armor : def.resist);
   const best = [...UNIT_KINDS].filter((k) => board.upgrades[k] < MAX_UPGRADE).sort((a, b) => weight[b] - weight[a])[0];
   if (ok("upgrade") && best && weight[best] > 0 && board.gold >= upgradeCost(board.upgrades[best]) && (free === 0 || !building || board.gold >= cost + upgradeCost(board.upgrades[best]))) {
     return { type: "upgrade", kind: best };
