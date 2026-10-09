@@ -208,4 +208,28 @@ describe("merge defense screens", () => {
       w.window = had;
     }
   });
+
+  it("자동 settings: old per-key saves load, junk is cleaned, presets round-trip", async () => {
+    const store = new Map<string, string>([
+      ["merge-defense:auto-parts", JSON.stringify(["merge", "nope"])],
+      ["merge-defense:auto-upgrade-gold", "500"],
+      ["merge-defense:auto-gamble-save", "7"],
+    ]);
+    const w = globalThis as unknown as { window?: unknown };
+    const had = w.window;
+    w.window = { localStorage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) } };
+    try {
+      const a = await import("./autoSettings");
+      const cfg = a.loadAutoConfig();
+      expect(cfg).toEqual({ parts: ["merge"], upgradeMinGold: 500, gambleSave: 1 });
+      a.saveAutoPresets([{ name: "  합성 전용 아주긴이름입니다  ", ...cfg }]);
+      const presets = a.loadAutoPresets();
+      expect(presets).toHaveLength(1);
+      expect(presets[0].name.length).toBeLessThanOrEqual(a.AUTO_PRESET_NAME_MAX);
+      expect(a.sameAutoConfig(presets[0], cfg)).toBe(true);
+      expect(a.sameAutoConfig(presets[0], a.AUTO_DEFAULT)).toBe(false);
+    } finally {
+      w.window = had;
+    }
+  });
 });

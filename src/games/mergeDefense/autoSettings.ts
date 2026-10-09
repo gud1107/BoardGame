@@ -1,0 +1,94 @@
+import { AUTO_GAMBLE_SAVE, AUTO_PARTS, AUTO_UPGRADE_MIN_GOLD, type AutoPart } from "./engine";
+
+/**
+ * 🤖 자동 setup this device remembers (localStorage): what the bot may do,
+ * its two conditions, and the player's named presets of all three.
+ */
+export interface AutoConfig {
+  parts: AutoPart[];
+  /** Upgrades wait for this much gold (0 = any time). */
+  upgradeMinGold: number;
+  /** Gems banked before gambling them all (1 = right away). */
+  gambleSave: number;
+}
+export interface AutoPreset extends AutoConfig {
+  name: string;
+}
+
+export const AUTO_DEFAULT: AutoConfig = { parts: [...AUTO_PARTS], upgradeMinGold: 0, gambleSave: 1 };
+export const MAX_AUTO_PRESETS = 6;
+export const AUTO_PRESET_NAME_MAX = 10;
+
+const PARTS_KEY = "merge-defense:auto-parts";
+const GOLD_KEY = "merge-defense:auto-upgrade-gold";
+const GEMS_KEY = "merge-defense:auto-gamble-save";
+const PRESETS_KEY = "merge-defense:auto-presets";
+
+function get(key: string): string | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function set(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* storage blocked — just not remembered */
+  }
+}
+
+/** Coerces anything stored (or pasted) into a valid config. */
+export function sanitizeAutoConfig(raw: unknown): AutoConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const parts = Array.isArray(r.parts) ? AUTO_PARTS.filter((p) => (r.parts as unknown[]).includes(p)) : [...AUTO_DEFAULT.parts];
+  const gold = Number(r.upgradeMinGold);
+  const gems = Number(r.gambleSave);
+  return {
+    parts,
+    upgradeMinGold: AUTO_UPGRADE_MIN_GOLD.includes(gold) ? gold : AUTO_DEFAULT.upgradeMinGold,
+    gambleSave: AUTO_GAMBLE_SAVE.includes(gems) ? gems : AUTO_DEFAULT.gambleSave,
+  };
+}
+
+export function loadAutoConfig(): AutoConfig {
+  let parts: unknown;
+  try {
+    parts = JSON.parse(get(PARTS_KEY) ?? "null");
+  } catch {
+    parts = null;
+  }
+  return sanitizeAutoConfig({
+    parts: Array.isArray(parts) ? parts : undefined,
+    upgradeMinGold: get(GOLD_KEY) ?? undefined,
+    gambleSave: get(GEMS_KEY) ?? undefined,
+  });
+}
+
+export function saveAutoConfig(c: AutoConfig) {
+  set(PARTS_KEY, JSON.stringify(c.parts));
+  set(GOLD_KEY, String(c.upgradeMinGold));
+  set(GEMS_KEY, String(c.gambleSave));
+}
+
+export function loadAutoPresets(): AutoPreset[] {
+  try {
+    const v: unknown = JSON.parse(get(PRESETS_KEY) ?? "[]");
+    if (!Array.isArray(v)) return [];
+    return v
+      .filter((p): p is Record<string, unknown> => !!p && typeof p === "object" && typeof (p as { name?: unknown }).name === "string")
+      .slice(0, MAX_AUTO_PRESETS)
+      .map((p) => ({ ...sanitizeAutoConfig(p), name: String(p.name).trim().slice(0, AUTO_PRESET_NAME_MAX) || "프리셋" }));
+  } catch {
+    return [];
+  }
+}
+
+export function saveAutoPresets(list: AutoPreset[]) {
+  set(PRESETS_KEY, JSON.stringify(list.slice(0, MAX_AUTO_PRESETS)));
+}
+
+export function sameAutoConfig(a: AutoConfig, b: AutoConfig): boolean {
+  return a.upgradeMinGold === b.upgradeMinGold && a.gambleSave === b.gambleSave && a.parts.length === b.parts.length && a.parts.every((p) => b.parts.includes(p));
+}

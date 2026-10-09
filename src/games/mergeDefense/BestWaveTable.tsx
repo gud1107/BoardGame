@@ -6,7 +6,16 @@ import type { BestByMode } from "./bestWave";
 import { DIFFICULTY_LABEL } from "./RoomSettings";
 
 /** Lobby card: this device's best wave for every map × difficulty, one mode at a time. A cell starts an AI match on that setup. */
-export default function BestWaveTable({ best, onPick }: { best: BestByMode; onPick?: (mode: GameMode, map: MapId, difficulty: Difficulty) => void }) {
+export default function BestWaveTable({
+  best,
+  onPick,
+  quickName = "",
+}: {
+  best: BestByMode;
+  onPick?: (mode: GameMode, map: MapId, difficulty: Difficulty) => void;
+  /** Nickname a cell tap starts with (empty = it asks for one first). */
+  quickName?: string;
+}) {
   const [mode, setMode] = useState<GameMode>("survival");
   const rows = best[mode];
   const any = MAP_IDS.some((id) => DIFFICULTIES.some((d) => rows[id][d] > 0));
@@ -71,7 +80,7 @@ export default function BestWaveTable({ best, onPick }: { best: BestByMode; onPi
         </tbody>
       </table>
       <p className="mt-1 text-center text-[10px] text-white/40 light:text-slate-400">
-        {any ? "" : "아직 기록이 없어요 — "}칸을 누르면 그 맵·난이도로 AI와 대결해요
+        {any ? "" : "아직 기록이 없어요 — "}칸을 누르면 그 맵·난이도로 {quickName ? `‘${quickName}’(으)로 바로 ` : ""}AI와 대결해요
       </p>
     </div>
   );

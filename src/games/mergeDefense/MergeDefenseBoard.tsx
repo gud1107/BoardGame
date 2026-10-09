@@ -21,6 +21,7 @@ import {
   GAMBLE_ODDS,
   MAPS,
   sanitizeMap,
+  sanitizeDifficulty,
   selectMap,
   slotAtPoint,
   fieldLoad,
@@ -56,6 +57,7 @@ import { coverageFor, drawBoard, drawFx, SEAT_COLORS, type Fx } from "./render";
 import * as audio from "./mergeDefenseAudio";
 import RulebookModal from "./RulebookModal";
 import MapIntro from "./MapIntro";
+import { AUTO_DEFAULT, AUTO_PRESET_NAME_MAX, MAX_AUTO_PRESETS, sameAutoConfig, type AutoConfig, type AutoPreset } from "./autoSettings";
 
 interface Props {
   state: MergeDefenseState;
@@ -65,17 +67,15 @@ interface Props {
   /** 🤖 자동: the bot plays my board (driven by the game component). */
   autoPlay?: boolean;
   onToggleAuto?: () => void;
-  /** Which kinds of action 자동 may take. */
-  autoParts?: AutoPart[];
-  onAutoParts?: (parts: AutoPart[]) => void;
+  /** What 자동 may do + its conditions, and the player's saved presets. */
+  autoConfig?: AutoConfig;
+  onAutoConfig?: (c: AutoConfig) => void;
+  autoPresets?: AutoPreset[];
+  onAutoPresets?: (list: AutoPreset[]) => void;
   /** The room picked 🎲 — the intro card spins before landing on the map. */
   randomMap?: boolean;
-  /** 자동 upgrades wait for this much gold (0 = any time). */
-  autoUpgradeGold?: number;
-  onAutoUpgradeGold?: (gold: number) => void;
-  /** 자동 banks this many gems before gambling them all (1 = right away). */
-  autoGambleSave?: number;
-  onAutoGambleSave?: (gems: number) => void;
+  /** My best wave on this match's map/mode/difficulty, for the intro card. */
+  mapBest?: number;
 }
 
 const AUTO_PART_LABEL: Record<AutoPart, string> = {
@@ -177,7 +177,12 @@ const slotAt = slotAtPoint;
 
 const GAMBLE_ODDS_TEXT = GAMBLE_ODDS.map((o) => `${o.grade ? GRADE_NAMES[o.grade] : "꽝"} ${o.pct}%`).join(" · ");
 
-export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto, autoParts = AUTO_PARTS, onAutoParts, randomMap = false, autoUpgradeGold = 0, onAutoUpgradeGold, autoGambleSave = 1, onAutoGambleSave }: Props) {
+export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto, autoConfig = AUTO_DEFAULT, onAutoConfig, autoPresets = [], onAutoPresets, randomMap = false, mapBest }: Props) {
+  const { parts: autoParts, upgradeMinGold: autoUpgradeGold, gambleSave: autoGambleSave } = autoConfig;
+  const onAutoParts = onAutoConfig && ((parts: AutoPart[]) => onAutoConfig({ ...autoConfig, parts }));
+  const onAutoUpgradeGold = onAutoConfig && ((upgradeMinGold: number) => onAutoConfig({ ...autoConfig, upgradeMinGold }));
+  const onAutoGambleSave = onAutoConfig && ((gambleSave: number) => onAutoConfig({ ...autoConfig, gambleSave }));
+  const [presetName, setPresetName] = useState("");
   // Geometry helpers read the active map — point them at this match's before anything draws.
   selectMap(state.map);
   const map = MAPS[sanitizeMap(state.map)];
@@ -1025,6 +1030,51 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                       </button>
                     ))}
                   </div>
+                  {onAutoPresets && (
+                    <div className="mt-1 flex flex-col gap-1 border-t border-white/10 pt-1.5 light:border-slate-200">
+                      <span className="px-1 text-[10px] font-semibold text-white/50 light:text-slate-400">📌 내 프리셋 (맡길 일 + 조건)</span>
+                      {autoPresets.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {autoPresets.map((p, i) => (
+                            <span
+                              key={`${p.name}-${i}`}
+                              className={`flex items-center rounded-full border text-[11px] ${sameAutoConfig(p, autoConfig) ? "border-emerald-300 bg-emerald-500/20 text-emerald-50 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-800" : "border-white/15 light:border-slate-300"}`}
+                            >
+                              <button onClick={() => onAutoConfig?.({ parts: [...p.parts], upgradeMinGold: p.upgradeMinGold, gambleSave: p.gambleSave })} className="py-0.5 pr-1 pl-2" title="이 프리셋 적용">
+                                {p.name}
+                              </button>
+                              <button onClick={() => onAutoPresets(autoPresets.filter((_, k) => k !== i))} className="py-0.5 pr-1.5 opacity-50 hover:opacity-100" aria-label={`${p.name} 프리셋 삭제`}>
+                                ✕
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <form
+                        className="flex gap-1"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const name = presetName.trim().slice(0, AUTO_PRESET_NAME_MAX);
+                          if (!name) return;
+                          // Same name overwrites; otherwise append (oldest dropped past the cap).
+                          const rest = autoPresets.filter((p) => p.name !== name);
+                          onAutoPresets([...rest, { name, ...autoConfig, parts: [...autoConfig.parts] }].slice(-MAX_AUTO_PRESETS));
+                          setPresetName("");
+                        }}
+                      >
+                        <input
+                          value={presetName}
+                          onChange={(e) => setPresetName(e.target.value)}
+                          maxLength={AUTO_PRESET_NAME_MAX}
+                          placeholder="지금 설정 이름"
+                          className="min-w-0 flex-1 rounded-md border border-white/15 bg-black/30 px-1.5 py-0.5 text-[11px] text-white placeholder:text-white/30 light:border-slate-300 light:bg-white light:text-slate-900"
+                        />
+                        <button type="submit" disabled={!presetName.trim()} className="rounded-md border border-white/20 px-2 text-[11px] font-semibold disabled:opacity-40 light:border-slate-300">
+                          저장
+                        </button>
+                      </form>
+                    </div>
+                  )}
                   {autoParts.length === 0 && <p className="px-1 text-[10px] text-amber-300 light:text-amber-600">맡길 것이 없어서 켜도 아무것도 안 해요.</p>}
                 </div>
               )}
@@ -1194,7 +1244,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
             👀 {names[resolvedView]} 관전 중
           </div>
         )}
-        {introOn && <MapIntro map={sanitizeMap(state.map)} random={randomMap} />}
+        {introOn && <MapIntro map={sanitizeMap(state.map)} random={randomMap} best={mapBest} difficulty={sanitizeDifficulty(state.difficulty)} />}
         {banner && (
           <div key={banner.key} className="pointer-events-none absolute inset-x-0 top-[38%] flex justify-center px-4">
             <div className={`animate-[md-pop_0.35s_ease-out] rounded-2xl border px-4 py-2 text-center shadow-lg backdrop-blur-sm ${bannerTone[banner.tone]}`}>

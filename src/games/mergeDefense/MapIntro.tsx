@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MAP_IDS, MAPS, type MapId } from "./engine";
-import { MapThumb } from "./RoomSettings";
+import { MAP_IDS, MAPS, type Difficulty, type MapId } from "./engine";
+import { DIFFICULTY_LABEL, MapThumb } from "./RoomSettings";
 import * as audio from "./mergeDefenseAudio";
 
 const SPIN_MS = 1100;
@@ -14,7 +14,18 @@ const HOLD_MS = 1700;
  * drawn one (a click per flip, a bell 'ding' on landing). Click-through, gone
  * after ~3s; reduced motion skips the spin.
  */
-export default function MapIntro({ map, random }: { map: MapId; random: boolean }) {
+export default function MapIntro({
+  map,
+  random,
+  best,
+  difficulty,
+}: {
+  map: MapId;
+  random: boolean;
+  /** My best wave on this map at this mode + difficulty (0 = none yet); omitted = not shown. */
+  best?: number;
+  difficulty?: Difficulty;
+}) {
   const [shown, setShown] = useState<MapId>(() => (random ? MAP_IDS[(MAP_IDS.indexOf(map) + 1) % MAP_IDS.length] : map));
   const [landed, setLanded] = useState(!random);
   const [fading, setFading] = useState(false);
@@ -65,13 +76,19 @@ export default function MapIntro({ map, random }: { map: MapId; random: boolean 
         }`}
       >
         <p className="text-[11px] font-bold tracking-wide text-amber-200/90">{random ? (landed ? "🎲 이번 맵은…" : "🎲 맵 뽑는 중…") : "🗺️ 이번 맵"}</p>
-        <div className="w-[55%] max-w-[130px]">
+        <div className="w-[38%] max-w-[130px] sm:w-[55%]">
           <MapThumb id={shown} className={landed ? "" : "opacity-70 blur-[1px]"} />
         </div>
         <p className="text-xl font-black text-white sm:text-2xl">
           {m.emoji} {m.name}
         </p>
-        {landed && <p className="text-[11px] break-keep text-white/70">{m.desc}</p>}
+        {landed && <p className="hidden text-[11px] break-keep text-white/70 sm:block">{m.desc}</p>}
+        {landed && best !== undefined && (
+          <p className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${best ? "bg-amber-400/20 text-amber-200" : "bg-white/10 text-white/70"}`}>
+            {difficulty && `${DIFFICULTY_LABEL[difficulty].emoji} `}
+            {best ? `🏅 내 최고 기록 WAVE ${best}` : "🏅 첫 도전 — 기록을 세워 보세요!"}
+          </p>
+        )}
       </div>
     </div>
   );

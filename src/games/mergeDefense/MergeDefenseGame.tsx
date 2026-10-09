@@ -37,9 +37,6 @@ import {
   sanitizeMap,
   type Difficulty,
   type MapId,
-  AUTO_PARTS,
-  AUTO_UPGRADE_MIN_GOLD,
-  AUTO_GAMBLE_SAVE,
   MAP_IDS,
   type AutoPart,
   eliminationLimit,
@@ -56,6 +53,8 @@ import MergeDefenseBoard from "./MergeDefenseBoard";
 import { playVictory } from "./mergeDefenseAudio";
 import { recordBestWave, useBestWaves } from "./bestWave";
 import BestWaveTable from "./BestWaveTable";
+import { getVisitorNickname } from "@/lib/identity/lastNickname";
+import { loadAutoConfig, loadAutoPresets, saveAutoConfig, saveAutoPresets, type AutoConfig, type AutoPreset } from "./autoSettings";
 import type { MapChoice } from "./RoomSettings";
 import MergeDefenseResults, { type MatchRecord, type WaveHistory } from "./MergeDefenseResults";
 import WaitingRoomPanel from "./WaitingRoomPanel";
@@ -119,38 +118,6 @@ function randomSeed(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
 
-const AUTO_PARTS_KEY = "merge-defense:auto-parts";
-function loadAutoParts(): AutoPart[] {
-  try {
-    const raw = typeof window === "undefined" ? null : window.localStorage.getItem(AUTO_PARTS_KEY);
-    const v: unknown = raw ? JSON.parse(raw) : null;
-    if (Array.isArray(v)) return AUTO_PARTS.filter((p) => v.includes(p));
-  } catch {
-    /* fall back to everything */
-  }
-  return [...AUTO_PARTS];
-}
-
-const AUTO_GOLD_KEY = "merge-defense:auto-upgrade-gold";
-function loadAutoGold(): number {
-  try {
-    const v = Number(typeof window === "undefined" ? 0 : window.localStorage.getItem(AUTO_GOLD_KEY));
-    return AUTO_UPGRADE_MIN_GOLD.includes(v) ? v : 0;
-  } catch {
-    return 0;
-  }
-}
-
-const AUTO_GEMS_KEY = "merge-defense:auto-gamble-save";
-function loadAutoGems(): number {
-  try {
-    const v = Number(typeof window === "undefined" ? 1 : window.localStorage.getItem(AUTO_GEMS_KEY));
-    return AUTO_GAMBLE_SAVE.includes(v) ? v : 1;
-  } catch {
-    return 1;
-  }
-}
-
 function aliveCount(s: MergeDefenseState): number {
   return s.boards.filter((b) => b.alive).length;
 }
@@ -173,44 +140,23 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const [mapChoice, setMapChoice] = useState<MapChoice>("classic");
   /** 🤖 자동: the bot plays my own board until I switch it off. */
   const [autoPlay, setAutoPlay] = useState(false);
-  /** Which kinds of action 자동 may take (remembered on this device). */
-  const [autoParts, setAutoParts] = useState<AutoPart[]>(loadAutoParts);
-  const autoPartsRef = useRef<ReadonlySet<AutoPart>>(new Set(autoParts));
-  /** 자동 buys upgrades only at or above this much gold (0 = any time). */
-  const [autoGold, setAutoGold] = useState<number>(loadAutoGold);
-  const autoGoldRef = useRef(autoGold);
-  function changeAutoGold(gold: number) {
-    autoGoldRef.current = gold;
-    setAutoGold(gold);
-    try {
-      window.localStorage.setItem(AUTO_GOLD_KEY, String(gold));
-    } catch {
-      /* not remembered */
-    }
-  }
-  /** 자동 banks gems until this many, then gambles them all (1 = right away). */
-  const [autoGems, setAutoGems] = useState<number>(loadAutoGems);
-  const autoGemsRef = useRef(autoGems);
+  /** What 자동 may do + its conditions, and the named presets (remembered on this device). */
+  const [autoConfig, setAutoConfig] = useState<AutoConfig>(loadAutoConfig);
+  const autoConfigRef = useRef(autoConfig);
+  const autoPartsRef = useRef<ReadonlySet<AutoPart>>(new Set(autoConfig.parts));
+  const [autoPresets, setAutoPresets] = useState<AutoPreset[]>(loadAutoPresets);
   /** True while 자동 is spending a full bank of gems. */
   const gemSpendingRef = useRef(false);
-  function changeAutoGems(n: number) {
-    autoGemsRef.current = n;
-    gemSpendingRef.current = false;
-    setAutoGems(n);
-    try {
-      window.localStorage.setItem(AUTO_GEMS_KEY, String(n));
-    } catch {
-      /* not remembered */
-    }
+  function changeAutoConfig(next: AutoConfig) {
+    if (next.gambleSave !== autoConfigRef.current.gambleSave) gemSpendingRef.current = false;
+    autoConfigRef.current = next;
+    autoPartsRef.current = new Set(next.parts);
+    setAutoConfig(next);
+    saveAutoConfig(next);
   }
-  function changeAutoParts(parts: AutoPart[]) {
-    autoPartsRef.current = new Set(parts);
-    setAutoParts(parts);
-    try {
-      window.localStorage.setItem(AUTO_PARTS_KEY, JSON.stringify(parts));
-    } catch {
-      /* storage blocked — the choice just isn't remembered */
-    }
+  function changeAutoPresets(list: AutoPreset[]) {
+    setAutoPresets(list);
+    saveAutoPresets(list);
   }
   const best = useBestWaves();
   /** This match's best-wave result for me: mode, difficulty, wave reached, previous record. */
@@ -279,27 +225,38 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     mySeatRef.current = mySeat;
   }, [mySeat]);
 
-  function enterRoom() {
+  /**
+   * `quick` = the lobby record table's one-tap AI match: its name and setup
+   * stand in for the form (state set alongside hasn't rendered yet).
+   */
+  function enterRoom(quick?: { name: string; mode: GameMode; map: MapId; difficulty: Difficulty }) {
     setFormError(null);
     if (!getSupabase()) {
       setPhase("supabase-missing");
       return;
     }
-    const name = identity.name.trim() || "플레이어";
-    const code = intent === "create" ? generateRoomCode() : codeInput.trim();
-    if (intent === "join" && !/^\d{4}$/.test(code)) {
+    const name = (quick?.name ?? identity.name).trim() || "플레이어";
+    const creating = quick !== undefined || intent === "create";
+    const code = creating ? generateRoomCode() : codeInput.trim();
+    if (!creating && !/^\d{4}$/.test(code)) {
       setFormError("4자리 초대 코드를 정확히 입력하세요.");
       return;
     }
-    playerCountRef.current = targetPlayerCount;
-    modeRef.current = mode;
+    playerCountRef.current = quick ? 2 : targetPlayerCount;
+    modeRef.current = quick?.mode ?? mode;
     limitRef.current = limitChoice;
-    difficultyRef.current = difficulty;
-    mapRef.current = mapChoice;
+    difficultyRef.current = quick?.difficulty ?? difficulty;
+    mapRef.current = quick?.map ?? mapChoice;
     setMyName(name);
-    setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
+    setMyPlayerId(!quick && identity.name.trim() ? identity.playerId : undefined);
     setRoomCode(code);
     setPhase("connecting");
+  }
+
+  /** Puts this device's last room nickname in an empty name field. */
+  function prefillName() {
+    const name = getVisitorNickname();
+    if (name && !identity.name.trim()) setIdentity({ name });
   }
 
   function hostPresence(): Partial<Occupant> {
@@ -664,12 +621,13 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         if (isSeatTakenOver(botTakeoverRef.current, String(seat))) return;
         // Bank → spend: once the bank is full, gamble down to empty before saving again.
         const gems = sim.boards[seat]?.gems ?? 0;
-        if (gems >= autoGemsRef.current) gemSpendingRef.current = true;
+        const cfg = autoConfigRef.current;
+        if (gems >= cfg.gambleSave) gemSpendingRef.current = true;
         else if (gems < 1) gemSpendingRef.current = false;
         const a = chooseBotAction(sim, seat, {
           parts: autoPartsRef.current,
-          upgradeMinGold: autoGoldRef.current,
-          gambleMinGems: gemSpendingRef.current ? 1 : autoGemsRef.current,
+          upgradeMinGold: cfg.upgradeMinGold,
+          gambleMinGems: gemSpendingRef.current ? 1 : cfg.gambleSave,
         });
         if (a) handleAction(a);
       },
@@ -895,6 +853,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   };
 
   if (phase === "choose") {
+    const lastName = getVisitorNickname();
     return withGuard(
       <RulebookGate
         gameId={GAME_ID}
@@ -912,6 +871,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
                 setIntent("create");
                 setPractice(true);
                 setTargetPlayerCount(2);
+                prefillName();
                 setPhase("enter-name");
               }}
               className={primaryBtn}
@@ -922,6 +882,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
               onClick={() => {
                 setIntent("create");
                 setPractice(false);
+                prefillName();
                 setPhase("enter-name");
               }}
               className={ghostBtn}
@@ -933,6 +894,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
                 setIntent("join");
                 setPractice(false);
                 trackGameEvent(GAME_ID, "invite_click");
+                prefillName();
                 setPhase("enter-name");
               }}
               className={ghostBtn}
@@ -941,15 +903,21 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
             </button>
             <BestWaveTable
               best={best}
+              quickName={lastName}
               onPick={(m, id, d) => {
-                // Same as "AI와 바로 대결", with the picked record's setup filled in.
+                // Same as "AI와 바로 대결", with the picked record's setup filled in —
+                // and straight into the match when this device remembers a nickname.
                 setMode(m);
                 setMapChoice(id);
                 setDifficulty(d);
                 setIntent("create");
                 setPractice(true);
                 setTargetPlayerCount(2);
-                setPhase("enter-name");
+                const name = getVisitorNickname();
+                if (name) {
+                  setIdentity({ name });
+                  enterRoom({ name, mode: m, map: id, difficulty: d });
+                } else setPhase("enter-name");
               }}
             />
           </div>
@@ -1026,7 +994,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           <button onClick={() => setPhase("choose")} className="flex-1 rounded-xl border border-white/15 py-2.5 text-sm text-white/70 hover:border-white/30 light:border-slate-300 light:text-slate-600">
             뒤로
           </button>
-          <button onClick={enterRoom} className="flex-1 rounded-xl bg-orange-600 py-2.5 text-sm font-semibold text-white hover:bg-orange-500">
+          <button onClick={() => enterRoom()} className="flex-1 rounded-xl bg-orange-600 py-2.5 text-sm font-semibold text-white hover:bg-orange-500">
             {intent === "join" ? "참여하기" : practice ? "시작하기" : "방 만들기"}
           </button>
         </div>
@@ -1082,13 +1050,12 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           onAction={handleAction}
           autoPlay={autoPlay}
           onToggleAuto={() => setAutoPlay((v) => !v)}
-          autoParts={autoParts}
+          autoConfig={autoConfig}
+          onAutoConfig={changeAutoConfig}
+          autoPresets={autoPresets}
+          onAutoPresets={changeAutoPresets}
           randomMap={(isHost ? mapChoice : host?.map) === "random"}
-          onAutoParts={changeAutoParts}
-          autoUpgradeGold={autoGold}
-          onAutoUpgradeGold={changeAutoGold}
-          autoGambleSave={autoGems}
-          onAutoGambleSave={changeAutoGems}
+          mapBest={best[gameState.mode]?.[sanitizeMap(gameState.map)]?.[sanitizeDifficulty(gameState.difficulty)] ?? 0}
         />
       </div>,
     );
