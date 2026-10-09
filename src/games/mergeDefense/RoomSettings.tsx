@@ -4,7 +4,10 @@ import {
   DIFFICULTY_HP,
   LIMIT_CHOICES,
   loadLimit,
+  MAP_IDS,
+  MAPS,
   type Difficulty,
+  type MapId,
   type GameMode,
 } from "./engine";
 import type { BestWaves } from "./bestWave";
@@ -15,7 +18,22 @@ export const DIFFICULTY_LABEL: Record<Difficulty, { emoji: string; name: string;
   hard: { emoji: "🔥", name: "어려움", desc: `체력 ×${DIFFICULTY_HP.hard} · 수 ×${DIFFICULTY_COUNT.hard}` },
 };
 
-/** Difficulty + elimination-limit pickers, shared by the create form and the host's waiting room. */
+/** Tiny road + pad sketch of a map, for the picker. */
+export function MapThumb({ id, className = "" }: { id: MapId; className?: string }) {
+  const m = MAPS[id];
+  return (
+    <svg viewBox="0 0 400 280" className={`h-auto w-full rounded-md ${className}`} aria-hidden>
+      <rect width="400" height="280" rx="24" fill={m.grass[1]} />
+      <polygon points={m.path.map((p) => p.join(",")).join(" ")} fill="none" stroke="#c8a06a" strokeWidth="30" strokeLinejoin="round" />
+      {m.slots.map(([x, y], i) => (
+        <rect key={i} x={x - 22} y={y - 22} width="44" height="44" rx="9" fill="#94a3b8" opacity="0.9" />
+      ))}
+      <circle cx={m.path[0][0]} cy={m.path[0][1]} r="20" fill="#a855f7" />
+    </svg>
+  );
+}
+
+/** Map + difficulty + elimination-limit pickers, shared by the create form and the host's waiting room. */
 export default function RoomSettings({
   mode,
   onMode,
@@ -25,6 +43,8 @@ export default function RoomSettings({
   playerCount,
   onDifficulty,
   onLimit,
+  map,
+  onMap,
   compact = false,
 }: {
   mode: GameMode;
@@ -35,6 +55,8 @@ export default function RoomSettings({
   playerCount: number;
   onDifficulty: (d: Difficulty) => void;
   onLimit: (l: number | null) => void;
+  map: MapId;
+  onMap: (m: MapId) => void;
   compact?: boolean;
 }) {
   const pill = (on: boolean, tone: "orange" | "rose") =>
@@ -62,6 +84,21 @@ export default function RoomSettings({
             </button>
           ))}
         </div>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        🗺️ 맵
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+          {MAP_IDS.map((id) => (
+            <button key={id} type="button" onClick={() => onMap(id)} aria-pressed={map === id} className={`${pill(map === id, "orange")} flex flex-col items-center gap-1 px-1.5`}>
+              {!compact && <MapThumb id={id} />}
+              <span className="block text-sm font-bold">
+                {MAPS[id].emoji} {MAPS[id].name}
+              </span>
+              <span className="block text-[10px] opacity-75">칸 {MAPS[id].slots.length}개</span>
+            </button>
+          ))}
+        </div>
+        {!compact && <span className="text-[11px] text-white/40 light:text-slate-400">{MAPS[map].desc}</span>}
       </div>
       <div className="flex flex-col gap-1.5">
         🌊 웨이브 난이도

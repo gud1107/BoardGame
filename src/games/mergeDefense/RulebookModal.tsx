@@ -1,7 +1,8 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { BOSS_EVERY, GRADE_COLORS, GRADE_NAMES, loadLimit, SEND_EVERY, UNIT_KINDS, UNITS } from "./engine";
+import { BOSS_EVERY, GAMBLE_COST, GAMBLE_ODDS, GRADE_COLORS, GRADE_NAMES, loadLimit, MAP_IDS, MAPS, SEND_EVERY, UNIT_KINDS, UNITS } from "./engine";
+import { MapThumb } from "./RoomSettings";
 
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
   const h3 = "mb-2 text-xs font-semibold tracking-wide text-white/50 uppercase light:text-slate-500";
@@ -27,8 +28,8 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               올라가고, 6% 확률로 처음부터 희귀 등급이 나와요.
             </li>
             <li>
-              <b>🎯 사거리</b>: 유닛은 점선 원 안을 지나는 몬스터만 공격해요. 길과 가까운 칸일수록 오래 때려요 — 특히 왼쪽·오른쪽
-              가운데 칸이 길을 가장 넓게 덮어요.
+              <b>🎯 사거리</b>: 유닛은 점선 원 안을 지나는 몬스터만 공격해요. 길과 가까운 칸일수록 오래 때려요 — 맵마다 좋은 칸이 달라요(🧭 배치
+              가이드가 알려줘요).
             </li>
             <li>
               <b>🧭 배치 가이드</b>: 켜 두면 빈 칸마다 길을 얼마나 덮는지 %로 보여줘요(★ = 가장 좋은 자리). 유닛을 고르거나 끌고 있을 때는 그 유닛의 사거리
@@ -38,16 +39,51 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               <b>↔️ 이동</b>: 유닛을 끌어 다른 칸에 놓거나(겹치면 자리 교환), 유닛을 고른 뒤 빈 칸을 눌러 옮길 수 있어요.
             </li>
             <li>
-              <b>🔀 합성</b>: <b>종류와 등급이 같은</b> 유닛 2개를 겹치면(드래그하거나 차례로 탭) 한 단계 높은 등급의{" "}
+              <b>🔀 합성 (무료)</b>: <b>종류와 등급이 같은</b> 유닛 2개를 겹치면(드래그하거나 차례로 탭) 한 단계 높은 등급의{" "}
               <b>무작위 종류</b> 유닛 1개가 돼요. 무엇이 나올지는 운!
             </li>
             <li>
-              <b>💎 도박</b>: 보석 1개로 희귀~전설 유닛을 노려요(20%는 꽝). 보석은 시작할 때 1개, 보스를 잡을 때마다 2개 받아요.
+              <b>💎 도박</b>: 보석 {GAMBLE_COST}개로 희귀~전설 유닛을 노려요. 보석은 시작할 때 1개, 보스를 잡을 때마다 2개 받아요.
+              <span className="mt-1 flex flex-wrap gap-1.5 text-xs">
+                {GAMBLE_ODDS.map((o) => (
+                  <span
+                    key={o.grade}
+                    className="rounded-md border border-white/10 px-1.5 py-0.5 light:border-slate-200"
+                    style={o.grade ? { color: GRADE_COLORS[o.grade] } : undefined}
+                  >
+                    {o.grade ? GRADE_NAMES[o.grade] : "꽝"} <b>{o.pct}%</b>
+                  </span>
+                ))}
+              </span>
             </li>
             <li>
               <b>⬆️ 강화</b>: 골드로 종류별 공격력을 영구히 올려요(레벨당 +15%, 최대 Lv.10).
             </li>
+            <li>
+              <b>✨ 하이라이트</b>: 지금 누를 수 있는 버튼(소환·도박·합성·강화·집중·결속)은 흰 테두리로 반짝여요.
+            </li>
+            <li>
+              <b>🤖 자동</b>: 위쪽 줄의 <b>🤖 자동</b> 버튼을 켜면 AI가 내 보드를 대신 운영해요(소환·도박·합성·강화·배치). 다시 누르면 꺼지고, 판이 새로
+              시작되면 꺼진 상태로 돌아가요.
+            </li>
           </ol>
+        </section>
+
+        <section>
+          <h3 className={h3}>맵</h3>
+          <p className="mb-2 text-white/70 light:text-slate-600">방장이 방을 만들 때(또는 대기실에서) 고를 수 있어요. 길 모양과 칸 수가 달라서 좋은 자리도 달라요. 보라색 점이 몬스터가 나오는 포털이에요.</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {MAP_IDS.map((id) => (
+              <div key={id} className="flex flex-col gap-1 text-xs">
+                <MapThumb id={id} />
+                <b>
+                  {MAPS[id].emoji} {MAPS[id].name}
+                </b>
+                <span className="text-white/60 light:text-slate-500">{MAPS[id].desc}</span>
+                {MAPS[id].hp !== 1 && <span className="text-white/40 light:text-slate-400">몬스터 체력 ×{MAPS[id].hp}</span>}
+              </div>
+            ))}
+          </div>
         </section>
 
         <section>

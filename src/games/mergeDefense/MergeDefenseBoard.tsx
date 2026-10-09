@@ -4,17 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BOARD_H,
   BOARD_W,
-  CELL,
-  COLS,
   GRADE_COLORS,
   GRADE_NAMES,
-  GRID_X,
-  GRID_Y,
   eliminationLimit,
   MAX_GRADE,
   MAX_UPGRADE,
   PREP_TICKS,
-  ROWS,
   SEND_EVERY,
   TICK_MS,
   TICKS_PER_SEC,
@@ -23,6 +18,11 @@ import {
   WAVE_TICKS,
   canMerge,
   GAMBLE_COST,
+  GAMBLE_ODDS,
+  MAPS,
+  sanitizeMap,
+  selectMap,
+  slotAtPoint,
   fieldLoad,
   isBossWave,
   mergePairs,
@@ -57,6 +57,9 @@ interface Props {
   mySeat: SeatIndex;
   names: Record<SeatIndex, string>;
   onAction: (action: Action) => void;
+  /** 🤖 자동: the bot plays my board (driven by the game component). */
+  autoPlay?: boolean;
+  onToggleAuto?: () => void;
 }
 
 interface Banner {
@@ -146,14 +149,14 @@ function useCanvasSize(ref: React.RefObject<HTMLCanvasElement | null>) {
   }, [ref]);
 }
 
-function slotAt(x: number, y: number): number | null {
-  const c = Math.floor((x - GRID_X) / CELL);
-  const r = Math.floor((y - GRID_Y) / CELL);
-  if (c < 0 || r < 0 || c >= COLS || r >= ROWS) return null;
-  return r * COLS + c;
-}
+const slotAt = slotAtPoint;
 
-export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Props) {
+const GAMBLE_ODDS_TEXT = GAMBLE_ODDS.map((o) => `${o.grade ? GRADE_NAMES[o.grade] : "꽝"} ${o.pct}%`).join(" · ");
+
+export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto }: Props) {
+  // Geometry helpers read the active map — point them at this match's before anything draws.
+  selectMap(state.map);
+  const map = MAPS[sanitizeMap(state.map)];
   const mainRef = useRef<HTMLCanvasElement | null>(null);
   const miniRefs = useRef<(HTMLCanvasElement | null)[]>([]);
   const stateRef = useRef(state);
@@ -896,6 +899,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           {nextIsBoss ? "👑 보스" : "⏱"}
           <span className="hidden sm:inline">{nextIsBoss ? "" : " 다음 웨이브"}</span> {Math.ceil(waveLeftTicks / (1000 / TICK_MS))}초
         </span>
+        <span className="hidden text-white/60 sm:inline light:text-slate-500" title={map.desc}>
+          {map.emoji} {map.name}
+        </span>
         <span className="flex gap-1">
           <button
             onClick={() => {
@@ -911,6 +917,16 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
             {hitVol === 0 ? "🔇" : hitVol < 1 ? "🔈" : hitVol > 1 ? "🔊" : "🔉"}
             <span className="hidden sm:inline"> 타격음 {audio.HIT_VOLUMES.find((v) => v.value === hitVol)?.label}</span>
           </button>
+          {onToggleAuto && (
+            <button
+              onClick={onToggleAuto}
+              aria-pressed={autoPlay}
+              title="🤖 자동 모드: 켜면 AI가 내 보드를 대신 운영해요(소환·도박·합성·강화). 다시 누르면 꺼져요."
+              className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${autoPlay ? "border-sky-300/70 bg-sky-500/30 text-sky-50 light:border-sky-400 light:bg-sky-50 light:text-sky-700" : "border-white/15 hover:border-white/30 light:border-slate-300"}`}
+            >
+              🤖<span className="hidden sm:inline"> 자동</span> {autoPlay ? "ON" : "OFF"}
+            </button>
+          )}
           <button
             onClick={() => setGuide((g) => GUIDE_CYCLE[(GUIDE_CYCLE.indexOf(g) + 1) % GUIDE_CYCLE.length])}
             title="빈 칸마다 길을 얼마나 덮는지(%) 보여줘요 — ★가 가장 좋은 자리. 누를 때마다 자동(2·3·5웨이브까지) → 항상 ON → OFF"
@@ -1161,11 +1177,12 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         </button>
         <button
           disabled={!canGamble}
+          title={`💎 도박 확률 — ${GAMBLE_ODDS_TEXT}`}
           onClick={() => buildSlot !== null && onAction({ type: "gamble", slot: buildSlot })}
           className={`rounded-xl bg-gradient-to-b from-sky-400 to-indigo-600 py-3 text-xs font-black text-white shadow-[0_4px_0_#312e81] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40 ${canGamble ? READY_RING : ""}`}
         >
           💎 도박 <span className="font-mono">💎{GAMBLE_COST}</span>
-          <span className="block text-[10px] font-semibold opacity-80">{me.gems < GAMBLE_COST ? "보석 부족" : "희귀~전설"}</span>
+          <span className="block text-[10px] font-semibold opacity-80">{me.gems < GAMBLE_COST ? "보석 부족" : `전설 ${GAMBLE_ODDS.find((o) => o.grade === 4)?.pct}% · 꽝 ${GAMBLE_ODDS.find((o) => o.grade === 0)?.pct}%`}</span>
         </button>
         <button
           disabled={!canMergeNow}
@@ -1192,7 +1209,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
               key={kind}
               disabled={!interactive || maxed || me.gold < price}
               onClick={() => onAction({ type: "upgrade", kind })}
-              className="flex flex-col items-center rounded-lg border border-white/10 bg-white/5 py-1.5 text-white transition hover:border-white/30 disabled:opacity-40 light:border-slate-200 light:bg-white light:text-slate-900"
+              className={`${interactive && !maxed && me.gold >= price ? READY_RING : ""} flex flex-col items-center rounded-lg border border-white/10 bg-white/5 py-1.5 text-white transition hover:border-white/30 disabled:opacity-40 light:border-slate-200 light:bg-white light:text-slate-900`}
               style={{ boxShadow: `inset 0 -3px 0 ${UNITS[kind].color}` }}
             >
               <span className="text-base leading-none">{UNITS[kind].emoji}</span>
@@ -1209,7 +1226,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           disabled={!interactive || focusLevel >= FOCUS_MAX || me.gold < focusCost(focusLevel)}
           onClick={() => onAction({ type: "focus" })}
           title="🎯 집중: 모든 타워의 치명타 확률 +3%p, 치명타 배율 +0.15 (단계마다)"
-          className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-left text-white transition hover:border-white/30 disabled:opacity-40 light:border-slate-200 light:bg-white light:text-slate-900"
+          className={`flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-left text-white transition hover:border-white/30 disabled:opacity-40 light:border-slate-200 light:bg-white light:text-slate-900 ${!interactive || focusLevel >= FOCUS_MAX || me.gold < focusCost(focusLevel) ? "" : READY_RING}`}
           style={{ boxShadow: "inset 0 -3px 0 #facc15" }}
         >
           <span className="flex flex-col leading-tight">
@@ -1224,7 +1241,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
           disabled={!interactive || braceLevel >= BRACE_MAX || me.gold < braceCost(braceLevel)}
           onClick={() => onAction({ type: "brace" })}
           title="🛡️ 결속: 광폭화 보스의 기절 시간을 단계마다 25%씩 줄여요 · 3단계(MAX)는 유닛 대결 콤보 견제 면역"
-          className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-left text-white transition hover:border-white/30 disabled:opacity-40 light:border-slate-200 light:bg-white light:text-slate-900"
+          className={`flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-left text-white transition hover:border-white/30 disabled:opacity-40 light:border-slate-200 light:bg-white light:text-slate-900 ${!interactive || braceLevel >= BRACE_MAX || me.gold < braceCost(braceLevel) ? "" : READY_RING}`}
           style={{ boxShadow: "inset 0 -3px 0 #94a3b8" }}
         >
           <span className="flex flex-col leading-tight">

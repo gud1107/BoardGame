@@ -26,20 +26,126 @@ export const TICKS_PER_SEC = 1000 / TICK_MS;
 /** Board geometry (logical units — the canvas scales this). */
 export const BOARD_W = 400;
 export const BOARD_H = 280;
-export const COLS = 5;
-export const ROWS = 3;
-export const SLOTS = COLS * ROWS;
+/** Build-pad pitch; pads are drawn CELL − 8 wide and tapped within ±(CELL − 8)/2. */
 export const CELL = 60;
-export const GRID_X = (BOARD_W - COLS * CELL) / 2; // 50
-export const GRID_Y = (BOARD_H - ROWS * CELL) / 2; // 50
-const ROAD_X0 = 20;
-const ROAD_Y0 = 20;
-const ROAD_X1 = BOARD_W - 20;
-const ROAD_Y1 = BOARD_H - 20;
-const ROAD_W = ROAD_X1 - ROAD_X0;
-const ROAD_H = ROAD_Y1 - ROAD_Y0;
-export const PATH_LEN = 2 * (ROAD_W + ROAD_H);
-export const ROAD = { x0: ROAD_X0, y0: ROAD_Y0, x1: ROAD_X1, y1: ROAD_Y1 };
+
+/**
+ * Maps — each one is a closed road (monsters loop it forever) plus its own
+ * build pads. They differ in shape, not just paint: the road can ring the
+ * pads, sit inside them, cross itself, or cut the board diagonally, and the
+ * pad count changes with it. `hp` evens the maps out (bot-sim, 2 bots ×16
+ * games each: every map's median bot elimination lands on wave 33–34).
+ */
+export type MapId = "classic" | "plaza" | "figure8" | "diamond";
+export interface MapDef {
+  id: MapId;
+  name: string;
+  emoji: string;
+  desc: string;
+  /** Closed road polyline, travelled in order; point 0 is the portal. */
+  path: readonly (readonly [number, number])[];
+  slots: readonly (readonly [number, number])[];
+  /** Monster HP multiplier on this map. */
+  hp: number;
+  /** Grass gradient [centre, edge]. */
+  grass: readonly [string, string];
+}
+
+const GRID_5x3: [number, number][] = [];
+for (let r = 0; r < 3; r++) for (let c = 0; c < 5; c++) GRID_5x3.push([80 + c * 60, 80 + r * 60]);
+
+export const MAPS: Record<MapId, MapDef> = {
+  classic: {
+    id: "classic",
+    name: "순환로",
+    emoji: "🔲",
+    desc: "길이 바깥을 한 바퀴 — 5×3 칸 15개",
+    path: [[20, 20], [380, 20], [380, 260], [20, 260]],
+    slots: GRID_5x3,
+    hp: 1,
+    grass: ["#3f8a3a", "#1f4d24"],
+  },
+  plaza: {
+    id: "plaza",
+    name: "중앙 광장",
+    emoji: "⭕",
+    desc: "가운데 작은 고리를 칸 15개가 둘러싸요 — 짧은 길, 집중 사격",
+    path: [[120, 92], [280, 92], [280, 188], [120, 188]],
+    slots: [
+      [40, 40], [104, 40], [168, 40], [232, 40], [296, 40], [360, 40],
+      [52, 140], [200, 140], [348, 140],
+      [40, 240], [104, 240], [168, 240], [232, 240], [296, 240], [360, 240],
+    ],
+    hp: 1.08,
+    grass: ["#b59a5c", "#6b5530"],
+  },
+  figure8: {
+    id: "figure8",
+    name: "8자 교차로",
+    emoji: "♾️",
+    desc: "길이 가운데서 엇갈려요 — 가장 긴 길, 칸 12개",
+    path: [[18, 18], [168, 18], [232, 262], [382, 262], [382, 18], [232, 18], [168, 262], [18, 262]],
+    slots: [
+      [68, 72], [126, 72], [68, 140], [126, 140], [68, 208], [126, 208],
+      [274, 72], [332, 72], [274, 140], [332, 140], [274, 208], [332, 208],
+    ],
+    hp: 0.7,
+    grass: ["#7a8a34", "#3b4a1c"],
+  },
+  diamond: {
+    id: "diamond",
+    name: "마름모 요새",
+    emoji: "🔷",
+    desc: "대각선 길 안쪽 5칸 + 네 모서리 8칸 — 칸 13개",
+    path: [[200, 14], [386, 140], [200, 266], [14, 140]],
+    slots: [
+      [140, 140], [200, 140], [260, 140], [200, 82], [200, 198],
+      [34, 34], [94, 28], [306, 28], [366, 34],
+      [34, 246], [94, 252], [306, 252], [366, 246],
+    ],
+    hp: 1,
+    grass: ["#3a7f86", "#173c45"],
+  },
+};
+export const MAP_IDS: MapId[] = ["classic", "plaza", "figure8", "diamond"];
+export function sanitizeMap(v: unknown): MapId {
+  return typeof v === "string" && (MAP_IDS as string[]).includes(v) ? (v as MapId) : "classic";
+}
+/** Most pads any map has (action validation bound). */
+export const MAX_SLOTS = Math.max(...MAP_IDS.map((id) => MAPS[id].slots.length));
+
+/*
+ * The active map's geometry, as live bindings: a client only ever runs one
+ * match, so the engine entry points (`startGame`, `applyAction`, `stepGame`,
+ * `chooseBotAction`) and the board call `selectMap(state.map)` and every
+ * geometry helper reads these.
+ */
+export let MAP: MapDef = MAPS.classic;
+export let SLOTS = MAP.slots.length;
+export let PATH_LEN = 0;
+let segStart: number[] = [];
+let segLen: number[] = [];
+let slotPref: number[] = [];
+
+export function selectMap(id: MapId | undefined) {
+  const next = MAPS[sanitizeMap(id)];
+  if (next === MAP && segLen.length) return;
+  MAP = next;
+  SLOTS = next.slots.length;
+  segStart = [];
+  segLen = [];
+  let total = 0;
+  next.path.forEach(([x, y], i) => {
+    const [nx, ny] = next.path[(i + 1) % next.path.length];
+    segStart.push(total);
+    const len = Math.hypot(nx - x, ny - y);
+    segLen.push(len);
+    total += len;
+  });
+  PATH_LEN = total;
+  slotPref = Array.from({ length: SLOTS }, (_, i) => i).sort((a, b) => slotCoverage(b, 140) - slotCoverage(a, 140) || a - b);
+}
+selectMap("classic");
 
 export const PREP_TICKS = 6 * TICKS_PER_SEC;
 export const WAVE_TICKS = 20 * TICKS_PER_SEC;
@@ -58,8 +164,8 @@ export const DIFFICULTIES: Difficulty[] = ["easy", "normal", "hard"];
 export const DIFFICULTY_HP: Record<Difficulty, number> = { easy: 0.7, normal: 1, hard: 1.2 };
 /** Monsters per wave multiplier (spawned closer together so the wave still fits its 20s). */
 export const DIFFICULTY_COUNT: Record<Difficulty, number> = { easy: 1, normal: 1, hard: 1.25 };
-export function difficultyHp(s: Pick<MergeDefenseState, "difficulty">): number {
-  return DIFFICULTY_HP[difficultyOf(s)];
+export function difficultyHp(s: Pick<MergeDefenseState, "difficulty" | "map">): number {
+  return DIFFICULTY_HP[difficultyOf(s)] * MAPS[sanitizeMap(s.map)].hp;
 }
 export function difficultyCount(s: Pick<MergeDefenseState, "difficulty">): number {
   return DIFFICULTY_COUNT[difficultyOf(s)];
@@ -160,6 +266,13 @@ export const START_GOLD = 100;
 export const START_GEMS = 1;
 /** Gems spent per 💎 gamble. */
 export const GAMBLE_COST = 1;
+/** 💎 gamble outcomes in percent (grade 0 = 꽝, nothing built). Shown on the button and in the rulebook. */
+export const GAMBLE_ODDS: readonly { grade: number; pct: number }[] = [
+  { grade: 0, pct: 20 },
+  { grade: 2, pct: 48 },
+  { grade: 3, pct: 26 },
+  { grade: 4, pct: 6 },
+];
 const MAX_EVENTS = 40;
 
 export type SeatIndex = number;
@@ -377,6 +490,8 @@ export interface MergeDefenseState {
   playerCount: number;
   /** Room-chosen wave difficulty; absent = normal. */
   difficulty?: Difficulty;
+  /** Room-chosen map; absent = classic. */
+  map?: MapId;
   /** Room-chosen elimination head count; null/absent = `loadLimit(playerCount)`. */
   limit?: number | null;
   tick: number;
@@ -429,23 +544,31 @@ function pick<T>(s: MergeDefenseState, list: readonly T[]): T {
 // Geometry helpers (shared with the renderer).
 // ---------------------------------------------------------------------------
 
-/** Point on the road for a distance travelled (clockwise from top-left). */
+/** Point on the road for a distance travelled (from the portal, along `MAP.path`). */
 export function pathPoint(trav: number): { x: number; y: number } {
   let d = trav % PATH_LEN;
   if (d < 0) d += PATH_LEN;
-  if (d < ROAD_W) return { x: ROAD_X0 + d, y: ROAD_Y0 };
-  d -= ROAD_W;
-  if (d < ROAD_H) return { x: ROAD_X1, y: ROAD_Y0 + d };
-  d -= ROAD_H;
-  if (d < ROAD_W) return { x: ROAD_X1 - d, y: ROAD_Y1 };
-  d -= ROAD_W;
-  return { x: ROAD_X0, y: ROAD_Y1 - d };
+  let i = segLen.length - 1;
+  while (i > 0 && segStart[i] > d) i--;
+  const [x0, y0] = MAP.path[i];
+  const [x1, y1] = MAP.path[(i + 1) % MAP.path.length];
+  const k = segLen[i] ? (d - segStart[i]) / segLen[i] : 0;
+  return { x: x0 + (x1 - x0) * k, y: y0 + (y1 - y0) * k };
 }
 
 export function slotCenter(slot: number): { x: number; y: number } {
-  const c = slot % COLS;
-  const r = Math.floor(slot / COLS);
-  return { x: GRID_X + c * CELL + CELL / 2, y: GRID_Y + r * CELL + CELL / 2 };
+  const p = MAP.slots[slot] ?? MAP.slots[0];
+  return { x: p[0], y: p[1] };
+}
+
+/** The pad under a board point, or null. */
+export function slotAtPoint(x: number, y: number): number | null {
+  const half = (CELL - 8) / 2;
+  for (let i = 0; i < SLOTS; i++) {
+    const [cx, cy] = MAP.slots[i];
+    if (Math.abs(x - cx) <= half && Math.abs(y - cy) <= half) return i;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -516,10 +639,10 @@ export function slotCoverage(slot: number, range: number): number {
   return hit / steps;
 }
 
-/** Cells ordered best-coverage first (for the base range) — used by bots. */
-export const SLOT_PREFERENCE: number[] = Array.from({ length: SLOTS }, (_, i) => i).sort(
-  (a, b) => slotCoverage(b, 140) - slotCoverage(a, 140) || a - b,
-);
+/** Cells ordered best-coverage first (for the base range, on the active map) — used by bots. */
+export function slotPreference(): number[] {
+  return slotPref;
+}
 
 export function invaderHp(grade: number, wave: number): number {
   return Math.round(waveHp(Math.max(2, wave)) * 3 * Math.pow(2.3, grade - 1));
@@ -575,9 +698,12 @@ export function startGame(
   mode: GameMode = "survival",
   limit: number | null = null,
   difficulty: Difficulty = "normal",
+  map: MapId = "classic",
 ): MergeDefenseState {
   const n = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.floor(playerCount)));
+  selectMap(map);
   return {
+    map: sanitizeMap(map),
     phase: "playing",
     mode: GAME_MODES.includes(mode) ? mode : "survival",
     playerCount: n,
@@ -629,7 +755,7 @@ function emptySlots(board: Board): number[] {
 export function sanitizeAction(raw: unknown): Action | null {
   if (!raw || typeof raw !== "object") return null;
   const a = raw as Record<string, unknown>;
-  const isSlot = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) < SLOTS;
+  const isSlot = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) < MAX_SLOTS;
   if (a.type === "summon" || a.type === "gamble") {
     if (a.slot === undefined || a.slot === null) return { type: a.type };
     return isSlot(a.slot) ? { type: a.type, slot: a.slot } : null;
@@ -664,6 +790,11 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
   if (state.phase !== "playing") return state;
   const cur = state.boards[seat];
   if (!cur || !cur.alive) return state;
+  selectMap(state.map);
+  // Pads past this map's count (an action sanitized against a bigger map).
+  const n = cur.units.length;
+  if ("slot" in action && action.slot !== undefined && action.slot >= n) return state;
+  if ("a" in action && (action.a >= n || action.b >= n)) return state;
 
   if (action.type === "summon") {
     if (cur.gold < summonCost(cur) || emptySlots(cur).length === 0) return state;
@@ -686,8 +817,8 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
     const s = cloneState(state);
     const board = s.boards[seat];
     board.gems -= GAMBLE_COST;
-    const r = rand(s);
-    const grade = r < 0.2 ? 0 : r < 0.68 ? 2 : r < 0.94 ? 3 : 4;
+    let roll = rand(s) * 100;
+    const grade = (GAMBLE_ODDS.find((o) => (roll -= o.pct) < 0) ?? GAMBLE_ODDS[GAMBLE_ODDS.length - 1]).grade;
     if (grade === 0) {
       pushEvent(s, { seat, type: "gamble-fail" });
       return s;
@@ -1036,6 +1167,7 @@ function nextAliveOpponent(s: MergeDefenseState, seat: SeatIndex): SeatIndex | n
 }
 
 export function stepGame(state: MergeDefenseState): MergeDefenseState {
+  selectMap(state.map);
   if (state.phase !== "playing") return state;
   const s = cloneState(state);
   s.tick += 1;
@@ -1274,9 +1406,10 @@ export function mergePairs(board: Board): [number, number][] {
 export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Action | null {
   const board = state.boards[seat];
   if (!board || !board.alive || state.phase !== "playing") return null;
+  selectMap(state.map);
   const free = emptySlots(board).length;
   const cost = summonCost(board);
-  const bestEmpty = SLOT_PREFERENCE.find((i) => !board.units[i]);
+  const bestEmpty = slotPref.find((i) => !board.units[i]);
   if (board.gems >= GAMBLE_COST && bestEmpty !== undefined) return { type: "gamble", slot: bestEmpty };
   // 유닛 대결: a board that keeps getting combo-jammed saves up for max 결속
   // (immunity + reflect) before anything else.
@@ -1296,7 +1429,7 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Acti
   if (free === 0 && pairs.length > 0) {
     // Keep the merged unit on the better of the two cells.
     const [a, b] = pairs[0];
-    const keep = SLOT_PREFERENCE.indexOf(a) < SLOT_PREFERENCE.indexOf(b) ? a : b;
+    const keep = slotPref.indexOf(a) < slotPref.indexOf(b) ? a : b;
     return { type: "merge", a: keep === a ? b : a, b: keep };
   }
   // 유닛 대결: a full, unmergeable board throws its weakest unit at the
@@ -1325,8 +1458,8 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Acti
   // Strongest unit not on a top cell → swap it there.
   const strongest = board.units.reduce((best, u, i) => (u && (best < 0 || u.grade > board.units[best]!.grade) ? i : best), -1);
   if (strongest >= 0) {
-    const rank = SLOT_PREFERENCE.indexOf(strongest);
-    const target = SLOT_PREFERENCE.slice(0, rank).find((i) => !board.units[i] || board.units[i]!.grade < board.units[strongest]!.grade);
+    const rank = slotPref.indexOf(strongest);
+    const target = slotPref.slice(0, rank).find((i) => !board.units[i] || board.units[i]!.grade < board.units[strongest]!.grade);
     if (target !== undefined) return { type: "move", a: strongest, b: target };
   }
   // Spare gold → upgrade the kind with the most total grade on board.

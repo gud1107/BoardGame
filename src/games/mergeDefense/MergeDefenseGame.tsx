@@ -34,7 +34,9 @@ import {
   startGame,
   sanitizeLimit,
   sanitizeDifficulty,
+  sanitizeMap,
   type Difficulty,
+  type MapId,
   eliminationLimit,
   BOSS_EVERY,
   stepGame,
@@ -80,6 +82,7 @@ type Occupant = {
   /** Host-chosen elimination head count (null = by player count). */
   limit?: number | null;
   difficulty?: Difficulty;
+  map?: MapId;
   botSeats?: number[];
 };
 type Phase = "choose" | "enter-name" | "connecting" | "waiting" | "playing" | "post-game" | "room-full" | "supabase-missing" | "channel-error";
@@ -128,6 +131,9 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const [mode, setMode] = useState<GameMode>("survival");
   const [limitChoice, setLimitChoice] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
+  const [mapChoice, setMapChoice] = useState<MapId>("classic");
+  /** 🤖 자동: the bot plays my own board until I switch it off. */
+  const [autoPlay, setAutoPlay] = useState(false);
   const best = useBestWaves();
   /** This match's best-wave result for me: mode, difficulty, wave reached, previous record. */
   /** Results chart: each seat's peak monsters per wave, captured at game end. */
@@ -155,6 +161,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const modeRef = useRef<GameMode>(mode);
   const limitRef = useRef<number | null>(limitChoice);
   const difficultyRef = useRef<Difficulty>(difficulty);
+  const mapRef = useRef<MapId>(mapChoice);
   const botSeatsRef = useRef<number[]>([]);
   const isHost = intent === "create";
 
@@ -208,6 +215,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     modeRef.current = mode;
     limitRef.current = limitChoice;
     difficultyRef.current = difficulty;
+    mapRef.current = mapChoice;
     setMyName(name);
     setMyPlayerId(identity.name.trim() ? identity.playerId : undefined);
     setRoomCode(code);
@@ -215,7 +223,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   }
 
   function hostPresence(): Partial<Occupant> {
-    return isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, botSeats: botSeatsRef.current, mode: modeRef.current, limit: limitRef.current, difficulty: difficultyRef.current } : {};
+    return isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, botSeats: botSeatsRef.current, mode: modeRef.current, limit: limitRef.current, difficulty: difficultyRef.current, map: mapRef.current } : {};
   }
 
   useEffect(() => {
@@ -243,7 +251,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
       const startMode: GameMode = payload?.mode === "versus" ? "versus" : "survival";
       modeRef.current = startMode;
-      const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit), sanitizeDifficulty(payload?.difficulty));
+      setAutoPlay(false);
+      const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit), sanitizeDifficulty(payload?.difficulty), sanitizeMap(payload?.map));
       simRef.current = state;
       setGameState(state);
       setFinalRankings(null);
@@ -448,7 +457,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
   /** Waiting room: the host retunes the room; presence carries it to everyone. */
-  function updateRoomSettings(patch: { mode?: GameMode; limit?: number | null; difficulty?: Difficulty }) {
+  function updateRoomSettings(patch: { mode?: GameMode; limit?: number | null; difficulty?: Difficulty; map?: MapId }) {
     if (!isHost) return;
     if (patch.mode !== undefined) {
       modeRef.current = patch.mode;
@@ -461,6 +470,10 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     if (patch.difficulty !== undefined) {
       difficultyRef.current = patch.difficulty;
       setDifficulty(patch.difficulty);
+    }
+    if (patch.map !== undefined) {
+      mapRef.current = patch.map;
+      setMapChoice(patch.map);
     }
     if (mySeatRef.current !== null) {
       channelRef.current?.track({ deviceId, seat: mySeatRef.current, name: myName, playerId: myPlayerId, ...hostPresence() } satisfies Occupant);
@@ -478,7 +491,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     if (mySeatRef.current !== null) {
       channelRef.current?.track({ deviceId, seat: mySeatRef.current, name: myName, playerId: myPlayerId, ...hostPresence() } satisfies Occupant);
     }
-    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed: randomSeed(), playerCount: target, botSeats, mode: modeRef.current, limit: limitRef.current, difficulty: difficultyRef.current } });
+    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed: randomSeed(), playerCount: target, botSeats, mode: modeRef.current, limit: limitRef.current, difficulty: difficultyRef.current, map: mapRef.current } });
   }
 
   useEffect(() => {
@@ -545,11 +558,30 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   }, [isHost, phase]);
 
   function handleAction(action: Action) {
-    const seat = mySeat;
+    const seat = mySeatRef.current ?? mySeat;
     if (seat === null) return;
     if (isHost) pendingRef.current.push({ seat, action });
     else channelRef.current?.send({ type: "broadcast", event: "player-input", payload: { seat, action } });
   }
+
+  // 🤖 자동: ask the bot for my next move every half second (a guest waits a
+  // little longer — its own action only shows up with the host's next snapshot).
+  useEffect(() => {
+    if (phase !== "playing" || !autoPlay) return;
+    const interval = window.setInterval(
+      () => {
+        const sim = simRef.current;
+        const seat = mySeatRef.current;
+        if (!sim || seat === null || sim.phase !== "playing") return;
+        if (isSeatTakenOver(botTakeoverRef.current, String(seat))) return;
+        const a = chooseBotAction(sim, seat);
+        if (a) handleAction(a);
+      },
+      isHost ? 500 : 700,
+    );
+    return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, autoPlay, isHost]);
 
   function castTakeoverVote(seatKey: string) {
     channelRef.current?.send({ type: "broadcast", event: "bot-takeover-event", payload: { event: { type: "vote-cast", seatKey, voterDeviceId: deviceId } } });
@@ -762,6 +794,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     playerCount,
     onDifficulty: (d: Difficulty) => updateRoomSettings({ difficulty: d }),
     onLimit: (l: number | null) => updateRoomSettings({ limit: l }),
+    map: mapChoice,
+    onMap: (m: MapId) => updateRoomSettings({ map: m }),
   };
 
   if (phase === "choose") {
@@ -852,6 +886,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
             playerCount={targetPlayerCount}
             onDifficulty={setDifficulty}
             onLimit={setLimitChoice}
+            map={mapChoice}
+            onMap={setMapChoice}
           />
         )}
         {intent === "create" && (
@@ -901,7 +937,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
             seats={Array.from({ length: knownTargetPlayerCount }, (_, seat) => occupants.find((o) => o.seat === seat)?.name ?? null)}
             joined={occupants.length}
             mySeat={mySeat}
-            hostRules={{ mode: host?.mode, difficulty: host?.difficulty, limit: host?.limit }}
+            hostRules={{ mode: host?.mode, difficulty: host?.difficulty, limit: host?.limit, map: host?.map }}
             isHost={isHost}
             settings={{ ...roomSettingsProps, playerCount: knownTargetPlayerCount }}
             onFillWithAi={sendGameStart}
@@ -930,7 +966,14 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
             onDismiss={() => setDismissedVoteKey(`${voteToShow.seatKey}:${voteToShow.startedAt}`)}
           />
         )}
-        <MergeDefenseBoard state={gameState} mySeat={mySeat} names={names} onAction={handleAction} />
+        <MergeDefenseBoard
+          state={gameState}
+          mySeat={mySeat}
+          names={names}
+          onAction={handleAction}
+          autoPlay={autoPlay}
+          onToggleAuto={() => setAutoPlay((v) => !v)}
+        />
       </div>,
     );
   }

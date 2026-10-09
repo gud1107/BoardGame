@@ -23,6 +23,8 @@ const settings = {
   playerCount: 4,
   onDifficulty: noop,
   onLimit: noop,
+  map: "figure8" as const,
+  onMap: noop,
 };
 const names = { 0: "초록고양이", 1: "🤖 AI 2", 2: "길고긴닉네임플레이어", 3: "🤖 AI 4" };
 

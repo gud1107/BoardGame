@@ -13,8 +13,8 @@ import {
   BOARD_W,
   CELL,
   GRADE_COLORS,
+  MAP,
   PATH_LEN,
-  ROAD,
   SLOTS,
   TICKS_PER_SEC,
   UNITS,
@@ -64,13 +64,14 @@ export interface DrawOptions {
   bornAt?: Record<number, { t: number; big: boolean }>;
 }
 
-const coverageCache = new Map<number, number[]>();
-/** Road coverage of every cell for one attack range (cached — ranges come from a small set). */
+const coverageCache = new Map<string, number[]>();
+/** Road coverage of every cell for one attack range on the active map (cached — ranges come from a small set). */
 export function coverageFor(range: number): number[] {
-  let c = coverageCache.get(range);
+  const key = `${MAP.id}:${range}`;
+  let c = coverageCache.get(key);
   if (!c) {
     c = Array.from({ length: SLOTS }, (_, i) => slotCoverage(i, range));
-    coverageCache.set(range, c);
+    coverageCache.set(key, c);
   }
   return c;
 }
@@ -124,7 +125,7 @@ const bgCache = new Map<string, HTMLCanvasElement>();
 function fieldCanvas(scale: number, alive: boolean, mini: boolean): HTMLCanvasElement | null {
   if (typeof document === "undefined") return null;
   const px = Math.max(1, Math.round(BOARD_W * scale));
-  const key = `${px}:${alive ? 1 : 0}:${mini ? 1 : 0}`;
+  const key = `${MAP.id}:${px}:${alive ? 1 : 0}:${mini ? 1 : 0}`;
   const hit = bgCache.get(key);
   if (hit) return hit;
   const c = document.createElement("canvas");
@@ -143,8 +144,8 @@ function paintField(ctx: Ctx, alive: boolean, mini: boolean) {
   const rnd = seeded(20261008);
   // Grass
   const g = ctx.createRadialGradient(BOARD_W / 2, BOARD_H / 2, 40, BOARD_W / 2, BOARD_H / 2, BOARD_W * 0.7);
-  g.addColorStop(0, alive ? "#3f8a3a" : "#55565c");
-  g.addColorStop(1, alive ? "#1f4d24" : "#2c2d31");
+  g.addColorStop(0, alive ? MAP.grass[0] : "#55565c");
+  g.addColorStop(1, alive ? MAP.grass[1] : "#2c2d31");
   ctx.fillStyle = g;
   roundRect(ctx, 0, 0, BOARD_W, BOARD_H, 18);
   ctx.fill();
@@ -190,26 +191,35 @@ function paintField(ctx: Ctx, alive: boolean, mini: boolean) {
   }
 
   // Cobbled road: dark kerb, packed earth, then stones.
-  const rw = ROAD.x1 - ROAD.x0;
-  const rh = ROAD.y1 - ROAD.y0;
+  const road = (dy: number) => {
+    ctx.beginPath();
+    MAP.path.forEach(([x, y], i) => (i ? ctx.lineTo(x, y + dy) : ctx.moveTo(x, y + dy)));
+    ctx.closePath();
+    ctx.stroke();
+  };
   ctx.lineJoin = "round";
   ctx.strokeStyle = "rgba(0,0,0,0.35)";
   ctx.lineWidth = 36;
-  ctx.strokeRect(ROAD.x0, ROAD.y0 + 2, rw, rh);
+  road(2);
   ctx.strokeStyle = alive ? "#6b5134" : "#4b4b4b";
   ctx.lineWidth = 32;
-  ctx.strokeRect(ROAD.x0, ROAD.y0, rw, rh);
+  road(0);
   ctx.strokeStyle = alive ? "#b48a58" : "#6f6f6f";
   ctx.lineWidth = 26;
-  ctx.strokeRect(ROAD.x0, ROAD.y0, rw, rh);
+  road(0);
   if (!mini) {
     for (let d = 0; d < PATH_LEN; d += 7) {
       const p = pathPoint(d);
+      const q = pathPoint(d + 1);
+      // Unit tangent (tx, ty) and normal (-ty, tx) of the road here.
+      const tl = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+      const tx = (q.x - p.x) / tl;
+      const ty = (q.y - p.y) / tl;
       for (let k = 0; k < 2; k++) {
         const off = (rnd() - 0.5) * 20;
-        const horizontal = p.y === ROAD.y0 || p.y === ROAD.y1;
-        const x = p.x + (horizontal ? (rnd() - 0.5) * 4 : off);
-        const y = p.y + (horizontal ? off : (rnd() - 0.5) * 4);
+        const along = (rnd() - 0.5) * 4;
+        const x = p.x + tx * along - ty * off;
+        const y = p.y + ty * along + tx * off;
         const tone = 0.75 + rnd() * 0.3;
         ctx.fillStyle = alive ? `rgb(${Math.round(205 * tone)},${Math.round(178 * tone)},${Math.round(132 * tone)})` : `rgb(${Math.round(140 * tone)},${Math.round(140 * tone)},${Math.round(140 * tone)})`;
         roundRect(ctx, x - 3, y - 2.4, 5.5 + rnd() * 2, 4.4 + rnd() * 1.5, 2);
@@ -428,8 +438,7 @@ export function drawBoard(ctx: Ctx, board: Board, opts: DrawOptions) {
 }
 
 function drawPortal(ctx: Ctx, now: number, mini: boolean) {
-  const x = ROAD.x0;
-  const y = ROAD.y0;
+  const { x, y } = pathPoint(0);
   const glow = ctx.createRadialGradient(x, y, 2, x, y, 24);
   glow.addColorStop(0, "rgba(245,208,254,0.95)");
   glow.addColorStop(0.45, "rgba(168,85,247,0.7)");
@@ -1684,8 +1693,7 @@ function drawMinionCall(ctx: Ctx, f: Extract<Fx, { type: "call" }>, k: number) {
 }
 
 function drawPortalBurst(ctx: Ctx, f: Extract<Fx, { type: "portal" }>, k: number) {
-  const x = ROAD.x0;
-  const y = ROAD.y0;
+  const { x, y } = pathPoint(0);
   const fade = k < 0.1 ? k / 0.1 : 1 - (k - 0.1) / 0.9;
   // Red flash over the whole board in the first instant.
   if (k < 0.18) {

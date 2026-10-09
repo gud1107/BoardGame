@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentProps } from "react";
-import { loadLimit, sanitizeDifficulty, type Difficulty, type GameMode } from "./engine";
+import { loadLimit, MAPS, sanitizeDifficulty, sanitizeMap, type Difficulty, type GameMode, type MapId } from "./engine";
 import RoomSettings, { DIFFICULTY_LABEL } from "./RoomSettings";
 
 /** Invite code, seat list and room rules while players gather (props only — the room hook lives in MergeDefenseGame). */
@@ -23,7 +23,7 @@ export default function WaitingRoomPanel({
   joined: number;
   mySeat: number | null;
   /** What the host has announced (what everyone will play). */
-  hostRules: { mode?: GameMode; difficulty?: Difficulty; limit?: number | null };
+  hostRules: { mode?: GameMode; difficulty?: Difficulty; limit?: number | null; map?: MapId };
   isHost: boolean;
   /** The host's own pickers; only rendered for the host. */
   settings: ComponentProps<typeof RoomSettings>;
@@ -52,7 +52,7 @@ export default function WaitingRoomPanel({
         ))}
       </div>
       <p className="text-xs font-semibold break-keep text-orange-200 light:text-orange-700">
-        {hostRules.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"} · {diff.emoji} {diff.name} · 💀{" "}
+        {hostRules.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"} · {MAPS[sanitizeMap(hostRules.map)].emoji} {MAPS[sanitizeMap(hostRules.map)].name} · {diff.emoji} {diff.name} · 💀{" "}
         {hostRules.limit ? `${hostRules.limit}마리` : `${loadLimit(target)}마리(인원별)`}에서 탈락
       </p>
       {isHost ? (
@@ -61,7 +61,7 @@ export default function WaitingRoomPanel({
           <RoomSettings {...settings} compact />
         </div>
       ) : (
-        <p className="text-[11px] break-keep text-white/40 light:text-slate-400">방장이 시작 전까지 모드·난이도·탈락 기준을 바꿀 수 있어요.</p>
+        <p className="text-[11px] break-keep text-white/40 light:text-slate-400">방장이 시작 전까지 모드·맵·난이도·탈락 기준을 바꿀 수 있어요.</p>
       )}
       <p className="text-xs text-white/40 light:text-slate-400">{target}명이 모이면 자동으로 시작해요.</p>
       {isHost && joined < target && (

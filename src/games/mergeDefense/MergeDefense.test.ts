@@ -32,11 +32,17 @@ import {
   startGame,
   stepGame,
   summonCost,
+  GAMBLE_ODDS,
+  MAP_IDS,
+  MAPS,
+  selectMap,
+  slotAtPoint,
+  type MapId,
   type MergeDefenseState,
 } from "./engine";
 
-function runBots(n: number, seed: number, maxTicks = 20 * 60 * 25, mode: "survival" | "versus" = "survival"): MergeDefenseState {
-  let s = startGame(n, seed, [], mode);
+function runBots(n: number, seed: number, maxTicks = 20 * 60 * 25, mode: "survival" | "versus" = "survival", map: MapId = "classic"): MergeDefenseState {
+  let s = startGame(n, seed, [], mode, null, "normal", map);
   while (s.phase === "playing" && s.tick < maxTicks) {
     for (let seat = 0; seat < n; seat++) {
       if ((s.tick + seat * 3) % 10 !== 0) continue;
@@ -519,5 +525,52 @@ describe("merge defense engine", () => {
       for (const b of s.boards) if (!b.alive) expect(b.outAt).not.toBeNull();
       for (const b of s.boards) if (b.alive) expect(fieldLoad(b)).toBeLessThan(loadLimit(n));
     }
+  });
+
+  it("gamble odds add up to 100%", () => {
+    expect(GAMBLE_ODDS.reduce((t, o) => t + o.pct, 0)).toBe(100);
+  });
+
+  it("every map keeps its pads off the road, apart, and on the board", () => {
+    const segDist = (px: number, py: number, [ax, ay]: readonly number[], [bx, by]: readonly number[]) => {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+      return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+    };
+    for (const id of MAP_IDS) {
+      const m = MAPS[id];
+      selectMap(id);
+      m.slots.forEach(([x, y], i) => {
+        expect(x - 26).toBeGreaterThanOrEqual(0);
+        expect(y - 26).toBeGreaterThanOrEqual(0);
+        expect(x + 26).toBeLessThanOrEqual(400);
+        expect(y + 26).toBeLessThanOrEqual(280);
+        const road = Math.min(...m.path.map((a, k) => segDist(x, y, a, m.path[(k + 1) % m.path.length])));
+        expect(road).toBeGreaterThanOrEqual(46);
+        m.slots.forEach(([x2, y2], j) => j > i && expect(Math.hypot(x2 - x, y2 - y)).toBeGreaterThanOrEqual(56));
+        expect(slotAtPoint(x + 10, y - 10)).toBe(i);
+      });
+      const [px, py] = m.path[0];
+      expect(pathPoint(0)).toEqual({ x: px, y: py });
+      expect(pathPoint(PATH_LEN / 2).x).toBeGreaterThan(0);
+    }
+    selectMap("classic");
+  });
+
+  it("each map plays a full bot game with its own pad count", () => {
+    for (const id of MAP_IDS) {
+      const s = runBots(2, 31, 20 * 60 * 25, "survival", id);
+      expect(s.map).toBe(id);
+      expect(s.phase).toBe("gameOver");
+      for (const b of s.boards) expect(b.units).toHaveLength(MAPS[id].slots.length);
+    }
+  });
+
+  it("rejects a pad index past this map's pads", () => {
+    const s = startGame(2, 5, [], "survival", null, "normal", "figure8");
+    expect(applyAction(s, 0, { type: "summon", slot: 13 })).toBe(s);
+    expect(applyAction(s, 0, { type: "summon", slot: 11 })).not.toBe(s);
+    selectMap("classic");
   });
 });

@@ -18,6 +18,7 @@ import {
   startGame,
   stepGame,
   type GameMode,
+  type MapId,
   type MergeDefenseState,
 } from "@/games/mergeDefense/engine";
 
@@ -33,6 +34,8 @@ const settings = {
   playerCount: 4,
   onDifficulty: noop,
   onLimit: noop,
+  map: "figure8" as const,
+  onMap: noop,
 };
 
 function botGame(mode: GameMode): MergeDefenseState {
@@ -80,8 +83,8 @@ function results(mode: GameMode): ReactNode {
   );
 }
 
-function board(mode: GameMode): ReactNode {
-  let s = startGame(4, 3, [1, 2, 3], mode, null, "hard");
+function board(mode: GameMode, map: MapId = "classic"): ReactNode {
+  let s = startGame(4, 3, [1, 2, 3], mode, null, "hard", map);
   while (s.wave < 3) s = stepGame(s);
   s.boards[0].units[6] = { kind: "archer", grade: 3, cd: 0, stun: 30 };
   s.boards[0].gold = 340;
@@ -107,6 +110,9 @@ const waiting = (isHost: boolean) => (
 const SCREENS: Record<string, () => ReactNode> = {
   "board-survival": () => board("survival"),
   "board-versus": () => board("versus"),
+  "board-plaza": () => board("survival", "plaza"),
+  "board-figure8": () => board("versus", "figure8"),
+  "board-diamond": () => board("survival", "diamond"),
   lobby: () => <MergeDefenseGame participants={[]} onComplete={noop} />,
   "waiting-host": () => waiting(true),
   "waiting-guest": () => waiting(false),
