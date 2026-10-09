@@ -1,13 +1,15 @@
 "use client";
 
 import type { ComponentProps } from "react";
-import { COMBO, type Difficulty, type GameMode, type RankedSeat } from "./engine";
+import { COMBO, MAPS, sanitizeMap, type Difficulty, type GameMode, type MapId, type RankedSeat } from "./engine";
 import RoomSettings, { DIFFICULTY_LABEL } from "./RoomSettings";
 import WaveChart, { type WaveSeries } from "./WaveChart";
 
 export interface MatchRecord {
   mode: GameMode;
   difficulty: Difficulty;
+  /** Records are kept per map; absent = 순환로 (older callers). */
+  map?: MapId;
   wave: number;
   prev: number;
 }
@@ -53,7 +55,7 @@ export default function MergeDefenseResults({
       style={{ background: "linear-gradient(160deg,#3b1d06 0%,#1c1206 55%,#0a0703 100%)" }}
     >
       <span className="text-5xl">{iWon ? "🏆" : "🛡️"}</span>
-      <h2 className="text-2xl font-bold break-keep text-amber-100">{winner ? `${names[winner.seat]}님 승리!` : "무승부!"}</h2>
+      <h2 className="text-2xl font-bold break-keep text-amber-100 [overflow-wrap:anywhere]">{winner ? `${names[winner.seat]}님 승리!` : "무승부!"}</h2>
       <p className="text-xs text-white/50">마지막까지 방어선을 지킨 사람이 승리합니다.</p>
       {myRecord && (
         <div
@@ -62,7 +64,7 @@ export default function MergeDefenseResults({
           }`}
         >
           <style>{`@keyframes md-record{0%{transform:scale(.7);opacity:0}70%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}`}</style>
-          {myRecord.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"} · {DIFFICULTY_LABEL[myRecord.difficulty].emoji} {DIFFICULTY_LABEL[myRecord.difficulty].name} ·{" "}
+          {myRecord.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"} · {MAPS[sanitizeMap(myRecord.map)].emoji} {MAPS[sanitizeMap(myRecord.map)].name} · {DIFFICULTY_LABEL[myRecord.difficulty].emoji} {DIFFICULTY_LABEL[myRecord.difficulty].name} ·{" "}
           {myRecord.wave > myRecord.prev ? (
             <b>
               🏅 최고 기록 갱신! WAVE {myRecord.wave}

@@ -1,8 +1,8 @@
 "use client";
 
 import type { ComponentProps } from "react";
-import { loadLimit, MAPS, sanitizeDifficulty, sanitizeMap, type Difficulty, type GameMode, type MapId } from "./engine";
-import RoomSettings, { DIFFICULTY_LABEL } from "./RoomSettings";
+import { loadLimit, MAPS, sanitizeDifficulty, sanitizeMap, type Difficulty, type GameMode } from "./engine";
+import RoomSettings, { DIFFICULTY_LABEL, type MapChoice } from "./RoomSettings";
 
 /** Invite code, seat list and room rules while players gather (props only — the room hook lives in MergeDefenseGame). */
 export default function WaitingRoomPanel({
@@ -23,7 +23,7 @@ export default function WaitingRoomPanel({
   joined: number;
   mySeat: number | null;
   /** What the host has announced (what everyone will play). */
-  hostRules: { mode?: GameMode; difficulty?: Difficulty; limit?: number | null; map?: MapId };
+  hostRules: { mode?: GameMode; difficulty?: Difficulty; limit?: number | null; map?: MapChoice };
   isHost: boolean;
   /** The host's own pickers; only rendered for the host. */
   settings: ComponentProps<typeof RoomSettings>;
@@ -52,7 +52,7 @@ export default function WaitingRoomPanel({
         ))}
       </div>
       <p className="text-xs font-semibold break-keep text-orange-200 light:text-orange-700">
-        {hostRules.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"} · {MAPS[sanitizeMap(hostRules.map)].emoji} {MAPS[sanitizeMap(hostRules.map)].name} · {diff.emoji} {diff.name} · 💀{" "}
+        {hostRules.mode === "versus" ? "⚔️ 유닛 대결" : "🛡️ 생존전"} · {hostRules.map === "random" ? "🎲 랜덤 맵" : `${MAPS[sanitizeMap(hostRules.map)].emoji} ${MAPS[sanitizeMap(hostRules.map)].name}`} · {diff.emoji} {diff.name} · 💀{" "}
         {hostRules.limit ? `${hostRules.limit}마리` : `${loadLimit(target)}마리(인원별)`}에서 탈락
       </p>
       {isHost ? (

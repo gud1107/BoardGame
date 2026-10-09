@@ -1402,31 +1402,60 @@ export function mergePairs(board: Board): [number, number][] {
   return pairs;
 }
 
-/** A simple greedy bot: gamble gems, fill the board, merge when full, upgrade with spare gold. */
-export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Action | null {
+/**
+ * 🤖 자동 parts a player can hand to the bot one by one. `actionPart` maps
+ * every action to the part that owns it.
+ */
+export type AutoPart = "build" | "merge" | "upgrade" | "move" | "attack";
+export const AUTO_PARTS: AutoPart[] = ["build", "merge", "upgrade", "move", "attack"];
+export function actionPart(a: Action): AutoPart {
+  switch (a.type) {
+    case "summon":
+    case "gamble":
+      return "build";
+    case "merge":
+      return "merge";
+    case "move":
+      return "move";
+    case "send":
+    case "hire":
+      return "attack";
+    default:
+      return "upgrade";
+  }
+}
+
+/**
+ * A simple greedy bot: gamble gems, fill the board, merge when full, upgrade with spare gold.
+ * `parts` limits it to some kinds of action (partial 🤖 자동); with building
+ * off it merges any pair right away and stops saving gold for summons.
+ */
+export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, parts?: ReadonlySet<AutoPart>): Action | null {
   const board = state.boards[seat];
   if (!board || !board.alive || state.phase !== "playing") return null;
   selectMap(state.map);
+  const ok = (p: AutoPart) => !parts || parts.has(p);
+  const building = ok("build");
   const free = emptySlots(board).length;
   const cost = summonCost(board);
   const bestEmpty = slotPref.find((i) => !board.units[i]);
-  if (board.gems >= GAMBLE_COST && bestEmpty !== undefined) return { type: "gamble", slot: bestEmpty };
+  if (building && board.gems >= GAMBLE_COST && bestEmpty !== undefined) return { type: "gamble", slot: bestEmpty };
   // 유닛 대결: a board that keeps getting combo-jammed saves up for max 결속
   // (immunity + reflect) before anything else.
   const braceNow = board.brace ?? 0;
-  if (state.mode === "versus" && state.wave >= 8 && braceNow < BRACE_MAX && (board.jamsTaken ?? 0) >= BOT_BRACE.afterJams) {
+  if (ok("upgrade") && state.mode === "versus" && state.wave >= 8 && braceNow < BRACE_MAX && (board.jamsTaken ?? 0) >= BOT_BRACE.afterJams) {
     return board.gold >= braceCost(braceNow) ? { type: "brace" } : null;
   }
   // Any mode: a board that berserk bosses keep smashing raises 결속 next
   // (one level per BOT_BRACE.afterSmashes smashes taken). Survival sim: boards
   // take ~35–49 smashes a game; at 10 per level ~96% of normal / ~50% of hard
   // bots max it, and median waves don't move — 결속 eases play, doesn't decide it.
-  if (braceNow < BRACE_MAX && (board.smashesTaken ?? 0) >= BOT_BRACE.afterSmashes * (braceNow + 1) && board.gold >= braceCost(braceNow)) {
+  if (ok("upgrade") && braceNow < BRACE_MAX && (board.smashesTaken ?? 0) >= BOT_BRACE.afterSmashes * (braceNow + 1) && board.gold >= braceCost(braceNow)) {
     return { type: "brace" };
   }
-  if (bestEmpty !== undefined && board.gold >= cost) return { type: "summon", slot: bestEmpty };
+  if (building && bestEmpty !== undefined && board.gold >= cost) return { type: "summon", slot: bestEmpty };
   const pairs = mergePairs(board);
-  if (free === 0 && pairs.length > 0) {
+  if (ok("merge") && (free === 0 || !building) && pairs.length > 0) {
     // Keep the merged unit on the better of the two cells.
     const [a, b] = pairs[0];
     const keep = slotPref.indexOf(a) < slotPref.indexOf(b) ? a : b;
@@ -1434,7 +1463,7 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Acti
   }
   // 유닛 대결: a full, unmergeable board throws its weakest unit at the
   // opponent (also frees a cell for a fresh summon).
-  if (state.mode === "versus" && free === 0 && board.sendCd === 0 && state.wave >= 3) {
+  if (ok("attack") && state.mode === "versus" && free === 0 && board.sendCd === 0 && state.wave >= 3) {
     let weakest = -1;
     board.units.forEach((u, i) => {
       if (u && u.grade <= 2 && (weakest < 0 || u.grade < board.units[weakest]!.grade)) weakest = i;
@@ -1443,21 +1472,21 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Acti
   }
   // A full board with spare gold sharpens its crits.
   const focus = board.focus ?? 0;
-  if (state.wave >= 6 && free === 0 && focus < FOCUS_MAX && board.gold >= focusCost(focus) * 2.5) return { type: "focus" };
+  if (ok("upgrade") && state.wave >= 6 && free === 0 && focus < FOCUS_MAX && board.gold >= focusCost(focus) * 2.5) return { type: "focus" };
   // After the first boss, brace against berserk smashes once the board is full.
   const brace = board.brace ?? 0;
-  if (state.wave >= 10 && free === 0 && brace < BRACE_MAX && board.gold >= braceCost(brace) * 2) return { type: "brace" };
+  if (ok("upgrade") && state.wave >= 10 && free === 0 && brace < BRACE_MAX && board.gold >= braceCost(brace) * 2) return { type: "brace" };
   // A stunned strong tower is worth waking if gold is comfortable.
-  if (board.units.some((u) => u?.stun && u.stun > 10 && u.grade >= 3) && board.gold >= wakeCost(state.wave) * 2) return { type: "wake" };
+  if (ok("upgrade") && board.units.some((u) => u?.stun && u.stun > 10 && u.grade >= 3) && board.gold >= wakeCost(state.wave) * 2) return { type: "wake" };
   // 유닛 대결: rich and nothing left to build → buy the priciest monster we
   // can comfortably afford for the next opponent.
-  if (state.mode === "versus" && free === 0 && board.sendCd === 0 && state.wave >= 4) {
+  if (ok("attack") && state.mode === "versus" && free === 0 && board.sendCd === 0 && state.wave >= 4) {
     const hire = [...HIRE_KINDS].reverse().find((k) => state.wave >= HIRES[k].minWave && board.gold >= hireCost(k, state.wave) * 2);
     if (hire) return { type: "hire", mob: hire };
   }
   // Strongest unit not on a top cell → swap it there.
   const strongest = board.units.reduce((best, u, i) => (u && (best < 0 || u.grade > board.units[best]!.grade) ? i : best), -1);
-  if (strongest >= 0) {
+  if (ok("move") && strongest >= 0) {
     const rank = slotPref.indexOf(strongest);
     const target = slotPref.slice(0, rank).find((i) => !board.units[i] || board.units[i]!.grade < board.units[strongest]!.grade);
     if (target !== undefined) return { type: "move", a: strongest, b: target };
@@ -1466,7 +1495,7 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Acti
   const weight: Record<UnitKind, number> = { archer: 0, mage: 0, frost: 0, thunder: 0, poison: 0 };
   for (const u of board.units) if (u) weight[u.kind] += Math.pow(GRADE_MULT, u.grade - 1);
   const best = [...UNIT_KINDS].filter((k) => board.upgrades[k] < MAX_UPGRADE).sort((a, b) => weight[b] - weight[a])[0];
-  if (best && weight[best] > 0 && board.gold >= upgradeCost(board.upgrades[best]) && (free === 0 || board.gold >= cost + upgradeCost(board.upgrades[best]))) {
+  if (ok("upgrade") && best && weight[best] > 0 && board.gold >= upgradeCost(board.upgrades[best]) && (free === 0 || !building || board.gold >= cost + upgradeCost(board.upgrades[best]))) {
     return { type: "upgrade", kind: best };
   }
   return null;

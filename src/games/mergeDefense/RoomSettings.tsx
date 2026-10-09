@@ -10,7 +10,10 @@ import {
   type MapId,
   type GameMode,
 } from "./engine";
-import type { BestWaves } from "./bestWave";
+import { bestAcrossMaps, type BestByMap } from "./bestWave";
+
+/** What the host picked: a map, or 🎲 — a random map drawn when the match starts. */
+export type MapChoice = MapId | "random";
 
 export const DIFFICULTY_LABEL: Record<Difficulty, { emoji: string; name: string; desc: string }> = {
   easy: { emoji: "🌱", name: "쉬움", desc: `체력 ×${DIFFICULTY_HP.easy}` },
@@ -18,8 +21,16 @@ export const DIFFICULTY_LABEL: Record<Difficulty, { emoji: string; name: string;
   hard: { emoji: "🔥", name: "어려움", desc: `체력 ×${DIFFICULTY_HP.hard} · 수 ×${DIFFICULTY_COUNT.hard}` },
 };
 
-/** Tiny road + pad sketch of a map, for the picker. */
-export function MapThumb({ id, className = "" }: { id: MapId; className?: string }) {
+/** Tiny road + pad sketch of a map, for the picker (🎲 = a question-mark card). */
+export function MapThumb({ id, className = "" }: { id: MapChoice; className?: string }) {
+  if (id === "random") {
+    return (
+      <svg viewBox="0 0 400 280" className={`h-auto w-full rounded-md ${className}`} aria-hidden>
+        <rect width="400" height="280" rx="24" fill="#3b2a5c" />
+        <text x="200" y="185" textAnchor="middle" fontSize="150" fontWeight="900" fill="#e9d5ff">?</text>
+      </svg>
+    );
+  }
   const m = MAPS[id];
   return (
     <svg viewBox="0 0 400 280" className={`h-auto w-full rounded-md ${className}`} aria-hidden>
@@ -49,14 +60,15 @@ export default function RoomSettings({
 }: {
   mode: GameMode;
   onMode: (m: GameMode) => void;
-  best: BestWaves;
+  /** This mode's records per map. */
+  best: BestByMap;
   difficulty: Difficulty;
   limit: number | null;
   playerCount: number;
   onDifficulty: (d: Difficulty) => void;
   onLimit: (l: number | null) => void;
-  map: MapId;
-  onMap: (m: MapId) => void;
+  map: MapChoice;
+  onMap: (m: MapChoice) => void;
   compact?: boolean;
 }) {
   const pill = (on: boolean, tone: "orange" | "rose") =>
@@ -67,6 +79,8 @@ export default function RoomSettings({
           : "border-rose-400 bg-rose-500/15 text-white light:bg-rose-50 light:text-slate-900"
         : "border-white/10 text-white/60 hover:border-white/30 light:border-slate-200 light:text-slate-500"
     }`;
+  const shownBest = map === "random" ? bestAcrossMaps(best) : best[map];
+  const bestWhere = map === "random" ? "전 맵 " : "";
   return (
     <div className={`flex flex-col ${compact ? "gap-2" : "gap-4"} text-sm break-keep text-white/70 light:text-slate-600`}>
       <div className="flex flex-col gap-1.5">
@@ -87,18 +101,26 @@ export default function RoomSettings({
       </div>
       <div className="flex flex-col gap-1.5">
         🗺️ 맵
-        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-          {MAP_IDS.map((id) => (
-            <button key={id} type="button" onClick={() => onMap(id)} aria-pressed={map === id} className={`${pill(map === id, "orange")} flex flex-col items-center gap-1 px-1.5`}>
-              {!compact && <MapThumb id={id} />}
-              <span className="block text-sm font-bold">
-                {MAPS[id].emoji} {MAPS[id].name}
-              </span>
-              <span className="block text-[10px] opacity-75">칸 {MAPS[id].slots.length}개</span>
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+          {[...MAP_IDS, "random" as const].map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onMap(id)}
+              aria-pressed={map === id}
+              className={`${pill(map === id, "orange")} flex flex-col items-center gap-1 px-1.5 ${id === "random" ? "col-span-2 sm:col-span-1" : ""}`}
+            >
+              {!compact && <MapThumb id={id} className={id === "random" ? "max-w-[50%] sm:max-w-none" : ""} />}
+              <span className="block text-sm font-bold">{id === "random" ? "🎲 랜덤 맵" : `${MAPS[id].emoji} ${MAPS[id].name}`}</span>
+              <span className="block text-[10px] opacity-75">{id === "random" ? "시작할 때 뽑아요" : `칸 ${MAPS[id].slots.length}개`}</span>
             </button>
           ))}
         </div>
-        {!compact && <span className="text-[11px] text-white/40 light:text-slate-400">{MAPS[map].desc}</span>}
+        {!compact && (
+          <span className="text-[11px] text-white/40 light:text-slate-400">
+            {map === "random" ? "게임이 시작될 때 4개 맵 중 하나를 무작위로 골라요(바로 전 판 맵은 빼고)." : MAPS[map].desc} 최고 기록은 맵마다 따로 저장돼요.
+          </span>
+        )}
       </div>
       <div className="flex flex-col gap-1.5">
         🌊 웨이브 난이도
@@ -109,8 +131,8 @@ export default function RoomSettings({
                 {DIFFICULTY_LABEL[d].emoji} {DIFFICULTY_LABEL[d].name}
               </span>
               <span className="block text-[10px] opacity-75">{DIFFICULTY_LABEL[d].desc}</span>
-              <span className={`block text-[10px] font-semibold ${best[d] ? "text-amber-300 light:text-amber-600" : "opacity-40"}`}>
-                🏅 {best[d] ? `${mode === "versus" ? "대결" : "생존"} 최고 W${best[d]}` : "기록 없음"}
+              <span className={`block text-[10px] font-semibold ${shownBest[d] ? "text-amber-300 light:text-amber-600" : "opacity-40"}`}>
+                🏅 {shownBest[d] ? `${bestWhere}${mode === "versus" ? "대결" : "생존"} 최고 W${shownBest[d]}` : "기록 없음"}
               </span>
             </button>
           ))}

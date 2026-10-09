@@ -33,6 +33,8 @@ import {
   stepGame,
   summonCost,
   GAMBLE_ODDS,
+  actionPart,
+  type AutoPart,
   MAP_IDS,
   MAPS,
   selectMap,
@@ -572,5 +574,38 @@ describe("merge defense engine", () => {
     expect(applyAction(s, 0, { type: "summon", slot: 13 })).toBe(s);
     expect(applyAction(s, 0, { type: "summon", slot: 11 })).not.toBe(s);
     selectMap("classic");
+  });
+
+  it("partial 자동 only takes the allowed kinds of action", () => {
+    const only = (parts: AutoPart[], seed: number) => {
+      const allow = new Set(parts);
+      let s = startGame(2, seed, [1]);
+      const seen = new Set<AutoPart>();
+      while (s.phase === "playing" && s.wave < 12) {
+        if (s.tick % 10 === 0) {
+          // A human summons now and then so 합성만 has pairs to work on.
+          if (!allow.has("build") && s.tick % 40 === 0) s = applyAction(s, 0, { type: "summon" });
+          const a = chooseBotAction(s, 0, allow);
+          if (a) {
+            seen.add(actionPart(a));
+            s = applyAction(s, 0, a);
+          }
+          const b = chooseBotAction(s, 1);
+          if (b) s = applyAction(s, 1, b);
+        }
+        s = stepGame(s);
+      }
+      return { seen, s };
+    };
+    expect([...only(["build"], 41).seen]).toEqual(["build"]);
+    const merges = only(["merge"], 42);
+    expect([...merges.seen]).toEqual(["merge"]);
+    // With building left to the player, a pair merges even while pads are free.
+    const s0 = startGame(2, 43);
+    s0.boards[0].units[0] = { kind: "archer", grade: 1, cd: 0 };
+    s0.boards[0].units[1] = { kind: "archer", grade: 1, cd: 0 };
+    expect(chooseBotAction(s0, 0, new Set(["merge"]))?.type).toBe("merge");
+    expect(chooseBotAction(s0, 0)?.type).not.toBe("merge");
+    expect(chooseBotAction(s0, 0, new Set())).toBeNull();
   });
 });

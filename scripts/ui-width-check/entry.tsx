@@ -28,7 +28,7 @@ const names = { 0: "초록고양이", 1: "🤖 AI 2", 2: "길고긴닉네임플�
 const settings = {
   mode: "versus" as GameMode,
   onMode: noop,
-  best: { easy: 0, normal: 31, hard: 0 },
+  best: { classic: { easy: 0, normal: 31, hard: 0 }, plaza: { easy: 0, normal: 0, hard: 0 }, figure8: { easy: 0, normal: 27, hard: 0 }, diamond: { easy: 0, normal: 0, hard: 0 } },
   difficulty: "hard" as const,
   limit: null,
   playerCount: 4,

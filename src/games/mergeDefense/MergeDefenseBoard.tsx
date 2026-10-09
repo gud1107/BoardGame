@@ -44,6 +44,8 @@ import {
   HIRES,
   hireCost,
   unitRange,
+  AUTO_PARTS,
+  type AutoPart,
   type Action,
   type MergeDefenseState,
   type SeatIndex,
@@ -60,7 +62,18 @@ interface Props {
   /** 🤖 자동: the bot plays my board (driven by the game component). */
   autoPlay?: boolean;
   onToggleAuto?: () => void;
+  /** Which kinds of action 자동 may take. */
+  autoParts?: AutoPart[];
+  onAutoParts?: (parts: AutoPart[]) => void;
 }
+
+const AUTO_PART_LABEL: Record<AutoPart, string> = {
+  build: "🎲 소환·💎 도박",
+  merge: "🔀 합성",
+  upgrade: "⬆️ 강화·집중·결속·기절 해제",
+  move: "↔️ 좋은 칸으로 옮기기",
+  attack: "⚔️ 보내기·몬스터 구매",
+};
 
 interface Banner {
   key: number;
@@ -153,7 +166,7 @@ const slotAt = slotAtPoint;
 
 const GAMBLE_ODDS_TEXT = GAMBLE_ODDS.map((o) => `${o.grade ? GRADE_NAMES[o.grade] : "꽝"} ${o.pct}%`).join(" · ");
 
-export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto }: Props) {
+export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto, autoParts = AUTO_PARTS, onAutoParts }: Props) {
   // Geometry helpers read the active map — point them at this match's before anything draws.
   selectMap(state.map);
   const map = MAPS[sanitizeMap(state.map)];
@@ -189,6 +202,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const [fxPrefs, setFxPrefs] = useState<FxPrefs>(() => (typeof window === "undefined" ? FX_DEFAULT : loadFxPrefs()));
   const fxPrefsRef = useRef(fxPrefs);
   const [fxMenuOpen, setFxMenuOpen] = useState(false);
+  const [autoMenuOpen, setAutoMenuOpen] = useState(false);
   /** Slow motion: from `start` (real ms) for `ms` the main board replays `state` at SLOWMO.rate, zoomed on (x, y), edges tinted `tint`. */
   const slowRef = useRef<{ start: number; ms: number; state: MergeDefenseState | null; x: number; y: number; tint: string }>({
     start: 0,
@@ -863,6 +877,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const focusLevel = me.focus ?? 0;
   const freeSlots = me.units.filter((u) => !u).length;
   const pairs = useMemo(() => mergePairs(me), [me]);
+  // 보내기·구매 only exist in 유닛 대결 — leave them out of the 자동 menu otherwise.
+  const shownParts = AUTO_PARTS.filter((p) => p !== "attack" || state.mode === "versus");
+  const autoPartial = shownParts.some((p) => !autoParts.includes(p));
   const canSummon = interactive && me.gold >= cost && buildSlot !== null;
   const canGamble = interactive && me.gems >= GAMBLE_COST && buildSlot !== null;
   const canMergeNow = interactive && pairs.length > 0;
@@ -899,7 +916,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           {nextIsBoss ? "👑 보스" : "⏱"}
           <span className="hidden sm:inline">{nextIsBoss ? "" : " 다음 웨이브"}</span> {Math.ceil(waveLeftTicks / (1000 / TICK_MS))}초
         </span>
-        <span className="hidden text-white/60 sm:inline light:text-slate-500" title={map.desc}>
+        <span className={`${state.wave === 0 ? "inline" : "hidden sm:inline"} text-white/60 light:text-slate-500`} title={map.desc}>
           {map.emoji} {map.name}
         </span>
         <span className="flex gap-1">
@@ -918,14 +935,53 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
             <span className="hidden sm:inline"> 타격음 {audio.HIT_VOLUMES.find((v) => v.value === hitVol)?.label}</span>
           </button>
           {onToggleAuto && (
-            <button
-              onClick={onToggleAuto}
-              aria-pressed={autoPlay}
-              title="🤖 자동 모드: 켜면 AI가 내 보드를 대신 운영해요(소환·도박·합성·강화). 다시 누르면 꺼져요."
-              className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${autoPlay ? "border-sky-300/70 bg-sky-500/30 text-sky-50 light:border-sky-400 light:bg-sky-50 light:text-sky-700" : "border-white/15 hover:border-white/30 light:border-slate-300"}`}
-            >
-              🤖<span className="hidden sm:inline"> 자동</span> {autoPlay ? "ON" : "OFF"}
-            </button>
+            <span className="relative">
+              <button
+                onClick={() => setAutoMenuOpen((o) => !o)}
+                aria-expanded={autoMenuOpen}
+                title="🤖 자동 모드: AI가 내 보드를 대신 운영해요 — 무엇을 맡길지 고를 수 있어요"
+                className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${autoPlay ? "border-sky-300/70 bg-sky-500/30 text-sky-50 light:border-sky-400 light:bg-sky-50 light:text-sky-700" : "border-white/15 hover:border-white/30 light:border-slate-300"}`}
+              >
+                🤖<span className="hidden sm:inline"> 자동</span> {autoPlay ? (autoPartial ? "부분" : "ON") : "OFF"}
+              </button>
+              {autoMenuOpen && (
+                <div className="absolute top-7 left-0 z-30 flex w-52 flex-col gap-1 rounded-xl border border-white/15 bg-slate-900/95 p-2 text-[12px] whitespace-normal text-white shadow-xl light:border-slate-200 light:bg-white light:text-slate-800">
+                  <button
+                    onClick={onToggleAuto}
+                    aria-pressed={autoPlay}
+                    className={`rounded-lg px-2 py-1.5 text-left font-bold ${autoPlay ? "bg-sky-500/30 text-sky-50 light:bg-sky-100 light:text-sky-800" : "bg-white/10 light:bg-slate-100"}`}
+                  >
+                    🤖 자동 {autoPlay ? "켜짐 — 눌러서 끄기" : "꺼짐 — 눌러서 켜기"}
+                  </button>
+                  <p className="px-1 pt-1 text-[10px] font-semibold text-white/50 light:text-slate-400">AI에게 맡길 것</p>
+                  {shownParts.map((part) => (
+                    <button
+                      key={part}
+                      onClick={() => onAutoParts?.(autoParts.includes(part) ? autoParts.filter((p) => p !== part) : [...autoParts, part])}
+                      aria-pressed={autoParts.includes(part)}
+                      className="flex items-center justify-between gap-2 rounded-lg px-2 py-1 text-left hover:bg-white/10 light:hover:bg-slate-100"
+                    >
+                      <span>{AUTO_PART_LABEL[part]}</span>
+                      <span className={autoParts.includes(part) ? "text-emerald-300 light:text-emerald-600" : "opacity-40"}>{autoParts.includes(part) ? "ON" : "OFF"}</span>
+                    </button>
+                  ))}
+                  <div className="mt-1 grid grid-cols-3 gap-1 text-[11px]">
+                    {(
+                      [
+                        ["전부", AUTO_PARTS],
+                        ["소환만", ["build"]],
+                        ["합성만", ["merge"]],
+                      ] as const
+                    ).map(([label, parts]) => (
+                      <button key={label} onClick={() => onAutoParts?.([...parts])} className="rounded-md border border-white/15 py-1 hover:border-white/40 light:border-slate-300">
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {autoParts.length === 0 && <p className="px-1 text-[10px] text-amber-300 light:text-amber-600">맡길 것이 없어서 켜도 아무것도 안 해요.</p>}
+                </div>
+              )}
+            </span>
           )}
           <button
             onClick={() => setGuide((g) => GUIDE_CYCLE[(GUIDE_CYCLE.indexOf(g) + 1) % GUIDE_CYCLE.length])}

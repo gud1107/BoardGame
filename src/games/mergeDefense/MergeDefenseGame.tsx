@@ -37,6 +37,9 @@ import {
   sanitizeMap,
   type Difficulty,
   type MapId,
+  AUTO_PARTS,
+  MAP_IDS,
+  type AutoPart,
   eliminationLimit,
   BOSS_EVERY,
   stepGame,
@@ -50,6 +53,7 @@ import {
 import MergeDefenseBoard from "./MergeDefenseBoard";
 import { playVictory } from "./mergeDefenseAudio";
 import { recordBestWave, useBestWaves } from "./bestWave";
+import type { MapChoice } from "./RoomSettings";
 import MergeDefenseResults, { type MatchRecord, type WaveHistory } from "./MergeDefenseResults";
 import WaitingRoomPanel from "./WaitingRoomPanel";
 import RoomSettings from "./RoomSettings";
@@ -82,7 +86,7 @@ type Occupant = {
   /** Host-chosen elimination head count (null = by player count). */
   limit?: number | null;
   difficulty?: Difficulty;
-  map?: MapId;
+  map?: MapChoice;
   botSeats?: number[];
 };
 type Phase = "choose" | "enter-name" | "connecting" | "waiting" | "playing" | "post-game" | "room-full" | "supabase-missing" | "channel-error";
@@ -112,6 +116,18 @@ function randomSeed(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
 
+const AUTO_PARTS_KEY = "merge-defense:auto-parts";
+function loadAutoParts(): AutoPart[] {
+  try {
+    const raw = typeof window === "undefined" ? null : window.localStorage.getItem(AUTO_PARTS_KEY);
+    const v: unknown = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(v)) return AUTO_PARTS.filter((p) => v.includes(p));
+  } catch {
+    /* fall back to everything */
+  }
+  return [...AUTO_PARTS];
+}
+
 function aliveCount(s: MergeDefenseState): number {
   return s.boards.filter((b) => b.alive).length;
 }
@@ -131,9 +147,21 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const [mode, setMode] = useState<GameMode>("survival");
   const [limitChoice, setLimitChoice] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
-  const [mapChoice, setMapChoice] = useState<MapId>("classic");
+  const [mapChoice, setMapChoice] = useState<MapChoice>("classic");
   /** 🤖 자동: the bot plays my own board until I switch it off. */
   const [autoPlay, setAutoPlay] = useState(false);
+  /** Which kinds of action 자동 may take (remembered on this device). */
+  const [autoParts, setAutoParts] = useState<AutoPart[]>(loadAutoParts);
+  const autoPartsRef = useRef<ReadonlySet<AutoPart>>(new Set(autoParts));
+  function changeAutoParts(parts: AutoPart[]) {
+    autoPartsRef.current = new Set(parts);
+    setAutoParts(parts);
+    try {
+      window.localStorage.setItem(AUTO_PARTS_KEY, JSON.stringify(parts));
+    } catch {
+      /* storage blocked — the choice just isn't remembered */
+    }
+  }
   const best = useBestWaves();
   /** This match's best-wave result for me: mode, difficulty, wave reached, previous record. */
   /** Results chart: each seat's peak monsters per wave, captured at game end. */
@@ -161,7 +189,9 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const modeRef = useRef<GameMode>(mode);
   const limitRef = useRef<number | null>(limitChoice);
   const difficultyRef = useRef<Difficulty>(difficulty);
-  const mapRef = useRef<MapId>(mapChoice);
+  const mapRef = useRef<MapChoice>(mapChoice);
+  /** The map the last match was played on — 🎲 skips it. */
+  const lastMapRef = useRef<MapId | null>(null);
   const botSeatsRef = useRef<number[]>([]);
   const isHost = intent === "create";
 
@@ -252,7 +282,9 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       const startMode: GameMode = payload?.mode === "versus" ? "versus" : "survival";
       modeRef.current = startMode;
       setAutoPlay(false);
-      const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit), sanitizeDifficulty(payload?.difficulty), sanitizeMap(payload?.map));
+      const startMap = sanitizeMap(payload?.map);
+      lastMapRef.current = startMap;
+      const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit), sanitizeDifficulty(payload?.difficulty), startMap);
       simRef.current = state;
       setGameState(state);
       setFinalRankings(null);
@@ -457,7 +489,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
   /** Waiting room: the host retunes the room; presence carries it to everyone. */
-  function updateRoomSettings(patch: { mode?: GameMode; limit?: number | null; difficulty?: Difficulty; map?: MapId }) {
+  function updateRoomSettings(patch: { mode?: GameMode; limit?: number | null; difficulty?: Difficulty; map?: MapChoice }) {
     if (!isHost) return;
     if (patch.mode !== undefined) {
       modeRef.current = patch.mode;
@@ -491,7 +523,13 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     if (mySeatRef.current !== null) {
       channelRef.current?.track({ deviceId, seat: mySeatRef.current, name: myName, playerId: myPlayerId, ...hostPresence() } satisfies Occupant);
     }
-    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed: randomSeed(), playerCount: target, botSeats, mode: modeRef.current, limit: limitRef.current, difficulty: difficultyRef.current, map: mapRef.current } });
+    // 🎲 랜덤 맵 is drawn here, once, by the host — everyone gets the concrete map.
+    let map: MapId;
+    if (mapRef.current === "random") {
+      const pool = MAP_IDS.filter((id) => id !== lastMapRef.current);
+      map = pool[Math.floor(Math.random() * pool.length)];
+    } else map = mapRef.current;
+    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed: randomSeed(), playerCount: target, botSeats, mode: modeRef.current, limit: limitRef.current, difficulty: difficultyRef.current, map } });
   }
 
   useEffect(() => {
@@ -574,7 +612,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         const seat = mySeatRef.current;
         if (!sim || seat === null || sim.phase !== "playing") return;
         if (isSeatTakenOver(botTakeoverRef.current, String(seat))) return;
-        const a = chooseBotAction(sim, seat);
+        const a = chooseBotAction(sim, seat, autoPartsRef.current);
         if (a) handleAction(a);
       },
       isHost ? 500 : 700,
@@ -678,7 +716,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     const mine = rankings.find((r) => r.seat === mySeat);
     if (mine && mine.wave > 0) {
       const d = sanitizeDifficulty(sim.difficulty);
-      setMyRecord({ mode: sim.mode, difficulty: d, wave: mine.wave, prev: recordBestWave(sim.mode, d, mine.wave) });
+      setMyRecord({ mode: sim.mode, difficulty: d, map: sim.map, wave: mine.wave, prev: recordBestWave(sim.mode, sim.map, d, mine.wave) });
     } else {
       setMyRecord(null);
     }
@@ -795,7 +833,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     onDifficulty: (d: Difficulty) => updateRoomSettings({ difficulty: d }),
     onLimit: (l: number | null) => updateRoomSettings({ limit: l }),
     map: mapChoice,
-    onMap: (m: MapId) => updateRoomSettings({ map: m }),
+    onMap: (m: MapChoice) => updateRoomSettings({ map: m }),
   };
 
   if (phase === "choose") {
@@ -973,6 +1011,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           onAction={handleAction}
           autoPlay={autoPlay}
           onToggleAuto={() => setAutoPlay((v) => !v)}
+          autoParts={autoParts}
+          onAutoParts={changeAutoParts}
         />
       </div>,
     );

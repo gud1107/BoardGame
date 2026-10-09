@@ -17,7 +17,7 @@ const noop = () => {};
 const settings = {
   mode: "versus" as const,
   onMode: noop,
-  best: { easy: 0, normal: 31, hard: 0 },
+  best: { classic: { easy: 0, normal: 31, hard: 0 }, plaza: { easy: 0, normal: 0, hard: 0 }, figure8: { easy: 0, normal: 27, hard: 0 }, diamond: { easy: 0, normal: 0, hard: 0 } },
   difficulty: "hard" as const,
   limit: null,
   playerCount: 4,
@@ -183,5 +183,29 @@ describe("merge defense screens", () => {
     expect(guest).toContain("방장이 시작 전까지");
     const full = renderToStaticMarkup(h(WaitingRoomPanel, { ...base, seats: ["a", "b", "c", "d"], joined: 4, mySeat: 0, isHost: true }));
     expect(full).not.toContain("빈자리 AI로 채우고 시작");
+  });
+
+  it("best waves: kept per map, old records count as 순환로", async () => {
+    const store = new Map<string, string>([["merge-defense:best-wave", JSON.stringify({ survival: { easy: 0, normal: 22, hard: 0 }, versus: { easy: 0, normal: 0, hard: 9 } })]]);
+    const w = globalThis as unknown as { window?: unknown };
+    const had = w.window;
+    w.window = {
+      localStorage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) },
+      addEventListener: noop,
+      removeEventListener: noop,
+    };
+    try {
+      const { recordBestWave, bestAcrossMaps } = await import("./bestWave");
+      expect(recordBestWave("survival", "classic", "normal", 20)).toBe(22);
+      expect(recordBestWave("survival", "plaza", "normal", 18)).toBe(0);
+      expect(recordBestWave("versus", "classic", "hard", 10)).toBe(9);
+      const saved = JSON.parse(store.get("merge-defense:best-wave")!);
+      expect(saved.survival.classic.normal).toBe(22);
+      expect(saved.survival.plaza.normal).toBe(18);
+      expect(saved.versus.classic.hard).toBe(10);
+      expect(bestAcrossMaps(saved.survival).normal).toBe(22);
+    } finally {
+      w.window = had;
+    }
   });
 });
