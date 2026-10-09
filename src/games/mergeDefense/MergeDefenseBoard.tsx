@@ -49,7 +49,14 @@ import {
   AUTO_UPGRADE_MIN_GOLD,
   AUTO_GAMBLE_SAVE,
   type AutoPart,
+  DAMAGE_TYPE_LABEL,
+  MOB_INFO,
+  unitDamage,
+  unitInterval,
   type Action,
+  type Board,
+  type Mob,
+  type Unit,
   type MergeDefenseState,
   type SeatIndex,
 } from "./engine";
@@ -178,6 +185,31 @@ function useCanvasSize(ref: React.RefObject<HTMLCanvasElement | null>) {
 
 const slotAt = slotAtPoint;
 
+/** Attack numbers for one unit on `board` (upgrades included): per hit, hits/s, reach, damage/s. */
+function unitStats(u: Unit, board: Board) {
+  const dmg = unitDamage(u, board);
+  const perSec = TICKS_PER_SEC / unitInterval(u);
+  return { dmg, perSec, range: unitRange(u), dps: dmg * perSec, type: DAMAGE_TYPE_LABEL[UNITS[u.kind].dmgType] };
+}
+const fmt1 = (v: number) => (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(1).replace(/\.0$/, ""));
+
+/** The live monster under a tap on `board`'s road (bigger reach for bosses), or null. */
+function mobAt(board: Board | undefined, x: number, y: number): Mob | null {
+  let best: Mob | null = null;
+  let bestD = Infinity;
+  for (const m of board?.mobs ?? []) {
+    if (m.hp <= 0) continue;
+    const p = pathPoint(m.trav);
+    const d = Math.hypot(p.x - x, p.y - y);
+    const reach = m.kind === "boss" || m.kind === "warlord" || m.kind === "golem" ? 24 : 17;
+    if (d <= reach && d < bestD) {
+      best = m;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
 const GAMBLE_ODDS_TEXT = GAMBLE_ODDS.map((o) => `${o.grade ? GRADE_NAMES[o.grade] : "꽝"} ${o.pct}%`).join(" · ");
 
 export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto, autoConfig = AUTO_DEFAULT, onAutoConfig, autoPresets = [], onAutoPresets, autoOnStart = false, onAutoOnStart, randomMap = false, mapBest }: Props) {
@@ -224,6 +256,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const fxPrefsRef = useRef(fxPrefs);
   const [fxMenuOpen, setFxMenuOpen] = useState(false);
   const [autoMenuOpen, setAutoMenuOpen] = useState(false);
+  /** Tapped monster (info card) — by id, so it follows the monster until it dies. */
+  const [selectedMobId, setSelectedMobId] = useState<number | null>(null);
   // Only a board that mounts at the very start of a match plays the map intro (not a reconnect).
   const [introOn] = useState(() => state.tick < 2 * TICKS_PER_SEC);
   /** Slow motion: from `start` (real ms) for `ms` the main board replays `state` at SLOWMO.rate, zoomed on (x, y), edges tinted `tint`. */
@@ -847,6 +881,19 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   }
 
   function handlePointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
+    // A tap on the road (not a pad) opens that monster's card — also while spectating.
+    if (dragFromRef.current === null) {
+      const p = toLogical(e);
+      if (slotAt(p.x, p.y) === null) {
+        const mob = mobAt(state.boards[resolvedView], p.x, p.y);
+        setSelectedMobId(mob ? mob.id : null);
+        if (mob) {
+          setSelected(null);
+          setBuildSlot(null);
+          return;
+        }
+      }
+    }
     if (!interactive) return;
     const from = dragFromRef.current;
     dragFromRef.current = null;
@@ -900,6 +947,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const focusLevel = me.focus ?? 0;
   const freeSlots = me.units.filter((u) => !u).length;
   const pairs = useMemo(() => mergePairs(me), [me]);
+  const onBoard = Object.fromEntries(UNIT_KINDS.map((k) => [k, me.units.filter((u) => u?.kind === k).length])) as Record<(typeof UNIT_KINDS)[number], number>;
+  const viewBoard = state.boards[resolvedView];
+  const selectedMob = selectedMobId !== null ? (viewBoard?.mobs.find((m) => m.id === selectedMobId && m.hp > 0) ?? null) : null;
   // 보내기·구매 only exist in 유닛 대결 — leave them out of the 자동 menu otherwise.
   const shownParts = AUTO_PARTS.filter((p) => p !== "attack" || state.mode === "versus");
   const autoPartial = shownParts.some((p) => !autoParts.includes(p));
@@ -1280,6 +1330,59 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           </div>
         )}
         {introOn && <MapIntro map={sanitizeMap(state.map)} random={randomMap} best={mapBest} difficulty={sanitizeDifficulty(state.difficulty)} />}
+        {selectedMob &&
+          (() => {
+            const info = MOB_INFO[selectedMob.kind];
+            const p = pathPoint(selectedMob.trav);
+            const hpPct = Math.max(0, Math.min(1, selectedMob.hp / selectedMob.maxHp));
+            const speed = selectedMob.speed * (selectedMob.slowT > 0 ? 1 - selectedMob.slowPct : 1);
+            const pct = (v: number) => `${Math.round(v * 100)}%`;
+            const tip =
+              info.armor - info.resist >= 0.15 ? "✨ 마법 타워가 잘 통해요" : info.resist - info.armor >= 0.15 ? "⚔️ 물리 타워가 잘 통해요" : null;
+            // On the left half of the board the card sits right, and vice versa, so it never covers the monster.
+            const side = p.x < BOARD_W / 2 ? "right-1.5" : "left-1.5";
+            return (
+              <>
+                <span
+                  className="pointer-events-none absolute h-9 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_10px_rgba(255,255,255,0.8)] motion-safe:animate-pulse"
+                  style={{ left: `${(p.x / BOARD_W) * 100}%`, top: `${(p.y / BOARD_H) * 100}%` }}
+                />
+                <div className={`absolute top-1.5 ${side} z-10 w-48 rounded-xl border border-white/20 bg-slate-950/90 p-2 text-left text-[11px] text-white shadow-xl backdrop-blur-sm`}>
+                  <div className="flex items-center justify-between gap-1">
+                    <b className="truncate text-xs">
+                      {selectedMob.unitKind ? UNITS[selectedMob.unitKind].emoji : info.emoji} {info.name}
+                      {selectedMob.grade ? ` ${GRADE_NAMES[selectedMob.grade]}` : ""}
+                      {selectedMob.rage ? " 😡" : ""}
+                    </b>
+                    <button onClick={() => setSelectedMobId(null)} className="px-1 text-white/60 hover:text-white" aria-label="몬스터 정보 닫기">
+                      ✕
+                    </button>
+                  </div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/15">
+                    <div className="h-full rounded-full bg-rose-500" style={{ width: `${hpPct * 100}%` }} />
+                  </div>
+                  <p className="mt-0.5 font-mono">
+                    ❤️ {Math.ceil(selectedMob.hp).toLocaleString()} / {selectedMob.maxHp.toLocaleString()}
+                  </p>
+                  <div className="mt-1 grid grid-cols-2 gap-1">
+                    <span className="rounded-md bg-orange-500/20 px-1 py-0.5 whitespace-nowrap" title="물리 피해(🏹 궁수·⚡ 번개)를 이만큼 덜 받아요">
+                      🛡️ 방어력 <b>{pct(info.armor)}</b>
+                    </span>
+                    <span className="rounded-md bg-violet-500/25 px-1 py-0.5 whitespace-nowrap" title="마법 피해(🔮 마법사·❄️ 서리·☠️ 독)를 이만큼 덜 받아요">
+                      ✨ 마저 <b>{pct(info.resist)}</b>
+                    </span>
+                  </div>
+                  <p className="mt-1 text-white/75">
+                    👟 속도 {Math.round(speed)}
+                    {selectedMob.slowT > 0 && <span className="text-sky-300"> · ❄️ 둔화 {pct(selectedMob.slowPct)}</span>}
+                    {selectedMob.poisonT > 0 && <span className="text-emerald-300"> · ☠️ 독 {fmt1(selectedMob.poisonDps)}/초</span>}
+                  </p>
+                  {info.trait && <p className="mt-0.5 break-keep text-white/60">{info.trait}</p>}
+                  {tip && <p className="mt-0.5 font-semibold text-amber-200">{tip}</p>}
+                </div>
+              </>
+            );
+          })()}
         {banner && (
           <div key={banner.key} className="pointer-events-none absolute inset-x-0 top-[38%] flex justify-center px-4">
             <div className={`animate-[md-pop_0.35s_ease-out] rounded-2xl border px-4 py-2 text-center shadow-lg backdrop-blur-sm ${bannerTone[banner.tone]}`}>
@@ -1346,6 +1449,17 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
             <span style={{ color: GRADE_COLORS[selectedUnit.grade] }}>{GRADE_NAMES[selectedUnit.grade]}</span> {UNITS[selectedUnit.kind].emoji}{" "}
             {UNITS[selectedUnit.kind].name} — {UNITS[selectedUnit.kind].desc}
             {selectedUnit.grade < MAX_GRADE ? " · 같은 유닛을 눌러 합성 · 빈 칸을 눌러 이동" : " · 최고 등급 · 빈 칸을 눌러 이동"}
+            {(() => {
+              const st = unitStats(selectedUnit, me);
+              return (
+                <span className="mt-1 flex flex-wrap justify-center gap-1 text-[11px]">
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 light:bg-slate-100">⚔️ 공격력 <b>{fmt1(st.dmg)}</b> ({st.type})</span>
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 light:bg-slate-100">⏱️ 공속 <b>{st.perSec.toFixed(2)}</b>회/초</span>
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 light:bg-slate-100">🎯 사거리 <b>{Math.round(st.range)}</b></span>
+                  <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-amber-100 light:bg-amber-100 light:text-amber-800">💥 초당 피해 <b>{fmt1(st.dps)}</b></span>
+                </span>
+              );
+            })()}
           </>
         ) : buildSlot !== null ? (
           "🏗️ 이 칸에 건설해요 — 소환 또는 도박을 누르세요 (점선 원 = 사거리)"
@@ -1398,16 +1512,29 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
               key={kind}
               disabled={!interactive || maxed || me.gold < price}
               onClick={() => onAction({ type: "upgrade", kind })}
-              className={`${interactive && !maxed && me.gold >= price ? READY_RING : ""} flex flex-col items-center rounded-lg border border-white/10 bg-white/5 py-1.5 text-white transition hover:border-white/30 disabled:opacity-40 light:border-slate-200 light:bg-white light:text-slate-900`}
+              title={`${UNITS[kind].emoji} ${UNITS[kind].name} 강화 Lv.${level}${maxed ? " (MAX)" : ` → ${level + 1}: 공격력 +15%`} · ${DAMAGE_TYPE_LABEL[UNITS[kind].dmgType]} 피해 · ${UNITS[kind].desc}`}
+              className={`${interactive && !maxed && me.gold >= price ? READY_RING : ""} relative flex min-w-0 flex-col items-center rounded-lg border border-white/10 bg-white/5 pt-1 pb-1.5 text-white transition hover:border-white/30 disabled:opacity-55 light:border-slate-200 light:bg-white light:text-slate-900`}
               style={{ boxShadow: `inset 0 -3px 0 ${UNITS[kind].color}` }}
             >
+              {onBoard[kind] > 0 && (
+                <span className="absolute -top-1.5 -right-1 rounded-full bg-slate-900 px-1 text-[9px] font-bold text-white ring-1 ring-white/30" title={`내 보드에 ${onBoard[kind]}개`}>
+                  ×{onBoard[kind]}
+                </span>
+              )}
               <span className="text-base leading-none">{UNITS[kind].emoji}</span>
+              <span className="max-w-full truncate text-[11px] leading-tight font-black" style={{ color: UNITS[kind].color }}>
+                {UNITS[kind].name}
+              </span>
               <span className="text-[10px] font-bold">Lv.{level}</span>
               <span className="font-mono text-[10px] opacity-70">{maxed ? "MAX" : `🪙${price}`}</span>
             </button>
           );
         })}
       </div>
+
+      <p className="-mt-0.5 text-center text-[10px] break-keep text-white/50 light:text-slate-500">
+        ⚔️ 물리: 🏹 궁수 · ⚡ 번개 (방어력에 막힘) &nbsp;|&nbsp; ✨ 마법: 🔮 마법사 · ❄️ 서리 · ☠️ 독 (마법 저항에 막힘)
+      </p>
 
       {/* Board-wide upgrades */}
       <div className="grid grid-cols-2 gap-1.5">

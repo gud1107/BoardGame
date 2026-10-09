@@ -12,6 +12,9 @@ import WaitingRoomPanel from "@/games/mergeDefense/WaitingRoomPanel";
 import { SEAT_COLORS } from "@/games/mergeDefense/render";
 import {
   BOSS_EVERY,
+  BOARD_H,
+  BOARD_W,
+  pathPoint,
   applyAction,
   chooseBotAction,
   computeRankings,
@@ -89,6 +92,12 @@ function board(mode: GameMode, map: MapId = "classic"): ReactNode {
   while (s.wave < 3) s = stepGame(s);
   s.boards[0].units[6] = { kind: "archer", grade: 3, cd: 0, stun: 30 };
   s.boards[0].gold = 340;
+  // Where run.mjs taps for the monster-card screen (fractions of the main canvas).
+  const mob = s.boards[0].mobs.find((m) => m.hp > 0);
+  if (mob) {
+    const p = pathPoint(mob.trav);
+    (window as unknown as { __mobTap?: { fx: number; fy: number } }).__mobTap = { fx: p.x / BOARD_W, fy: p.y / BOARD_H };
+  }
   return <MergeDefenseBoard state={s} mySeat={0} names={names} onAction={noop} />;
 }
 
@@ -111,6 +120,7 @@ const waiting = (isHost: boolean) => (
 const SCREENS: Record<string, () => ReactNode> = {
   "board-survival": () => board("survival"),
   "board-versus": () => board("versus"),
+  "board-mob": () => board("survival"),
   "board-plaza": () => board("survival", "plaza"),
   "board-figure8": () => board("versus", "figure8"),
   "board-diamond": () => board("survival", "diamond"),

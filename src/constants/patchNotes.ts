@@ -172,6 +172,16 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         type: "FIX",
         desc: "AI와 바로 대결한 판이 플레이 횟수에 잡히지 않던 문제 — 이제 게임 카드의 '이번 달 N회 플레이'에 함께 집계돼요",
       },
+      {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "몬스터 방어력·마법 저항 추가 — 궁수·번개는 물리, 마법사·서리·독은 마법 피해. 길 위 몬스터를 누르면 체력·방어력·마저 정보",
+      },
+      {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "강화 버튼에 타워 이름·보드 위 개수 표시, 유닛을 고르면 공격력·공속·사거리·초당 피해가 보여요",
+      },
     ],
   },
   {

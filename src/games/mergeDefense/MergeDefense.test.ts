@@ -665,4 +665,27 @@ describe("merge defense engine", () => {
     s0.boards[0].units[1] = { kind: "archer", grade: 1, cd: 0 };
     expect(autoPowerShare(s0.boards[0], new Set([0]))).toBeCloseTo(0.5);
   });
+
+  it("armor cuts physical hits, resist cuts magic ones", async () => {
+    const { mitigated, MOB_INFO, UNITS } = await import("./engine");
+    expect(UNITS.archer.dmgType).toBe("physical");
+    expect(UNITS.mage.dmgType).toBe("magic");
+    expect(mitigated("golem", 100, "physical")).toBeCloseTo(100 * (1 - MOB_INFO.golem.armor));
+    expect(mitigated("golem", 100, "magic")).toBeCloseTo(100 * (1 - MOB_INFO.golem.resist));
+    expect(mitigated("normal", 100, "physical")).toBe(100);
+    // One archer hit on a tank in range lands at (1 − armor) — ×2 if it crit.
+    const s = startGame(2, 70);
+    s.wave = 1;
+    s.tick = PREP_TICKS + 5;
+    s.boards[0].units[7] = { kind: "archer", grade: 1, cd: 0 };
+    s.boards[0].mobs = [{ id: 999, kind: "tank", hp: 10_000, maxHp: 10_000, trav: 180, speed: 0, slowT: 0, slowPct: 0, poisonT: 0, poisonDps: 0, from: -1 }];
+    let t = s;
+    let lost = 0;
+    for (let i = 0; i < 40 && !lost; i++) {
+      t = stepGame(t);
+      lost = 10_000 - (t.boards[0].mobs.find((m) => m.id === 999)?.hp ?? 10_000);
+    }
+    const base = UNITS.archer.dmg * (1 - MOB_INFO.tank.armor);
+    expect([base, base * 2].some((v) => Math.abs(v - lost) < 1e-6)).toBe(true);
+  });
 });

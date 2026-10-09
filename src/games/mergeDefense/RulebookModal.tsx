@@ -1,7 +1,7 @@
 "use client";
 
 import Overlay from "@/components/Overlay";
-import { BOSS_EVERY, GAMBLE_COST, GAMBLE_ODDS, GRADE_COLORS, GRADE_NAMES, loadLimit, MAP_IDS, MAPS, SEND_EVERY, UNIT_KINDS, UNITS } from "./engine";
+import { BOSS_EVERY, DAMAGE_TYPE_LABEL, MOB_INFO, TICKS_PER_SEC, GAMBLE_COST, GAMBLE_ODDS, GRADE_COLORS, GRADE_NAMES, loadLimit, MAP_IDS, MAPS, SEND_EVERY, UNIT_KINDS, UNITS } from "./engine";
 import { MapThumb } from "./RoomSettings";
 
 export default function RulebookModal({ onClose }: { onClose: () => void }) {
@@ -93,7 +93,11 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
           <ul className="space-y-1 text-white/70 light:text-slate-600">
             {UNIT_KINDS.map((k) => (
               <li key={k}>
-                {UNITS[k].emoji} <b>{UNITS[k].name}</b> — {UNITS[k].desc}
+                {UNITS[k].emoji} <b style={{ color: UNITS[k].color }}>{UNITS[k].name}</b>{" "}
+                <span className="rounded bg-white/10 px-1 text-[11px] light:bg-slate-100">{DAMAGE_TYPE_LABEL[UNITS[k].dmgType]}</span> — {UNITS[k].desc}
+                <span className="ml-1 text-xs text-white/50 light:text-slate-400">
+                  (일반 등급: 공격력 {UNITS[k].dmg} · 공속 {(TICKS_PER_SEC / UNITS[k].interval).toFixed(2)}회/초 · 사거리 {UNITS[k].range})
+                </span>
               </li>
             ))}
           </ul>
@@ -106,6 +110,34 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             ))}
             <span className="text-white/50 light:text-slate-500">(한 단계마다 공격력 ×2.5)</span>
           </p>
+        </section>
+
+        <section>
+          <h3 className={h3}>몬스터 방어력 · 마법 저항</h3>
+          <p className="mb-2 text-white/70 light:text-slate-600">
+            ⚔️ <b>물리</b>(🏹 궁수 · ⚡ 번개)는 <b>방어력</b>만큼, ✨ <b>마법</b>(🔮 마법사 · ❄️ 서리 · ☠️ 독)은 <b>마법 저항</b>만큼 피해가 줄어요. 한 종류로만
+            채우면 막히는 몬스터가 생겨요. 길 위의 몬스터를 누르면 체력·방어력·마법 저항·상태를 볼 수 있어요.
+          </p>
+          <table className="w-full text-xs text-white/70 light:text-slate-600">
+            <thead>
+              <tr className="text-white/40 light:text-slate-400">
+                <th className="text-left font-normal">몬스터</th>
+                <th className="font-normal">🛡️ 방어력</th>
+                <th className="font-normal">✨ 마법 저항</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.values(MOB_INFO).map((m) => (
+                <tr key={m.name} className="border-t border-white/5 light:border-slate-200">
+                  <td className="py-0.5">
+                    {m.emoji} {m.name}
+                  </td>
+                  <td className="text-center font-mono">{Math.round(m.armor * 100)}%</td>
+                  <td className="text-center font-mono">{Math.round(m.resist * 100)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </section>
 
         <section>

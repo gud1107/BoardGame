@@ -289,15 +289,20 @@ export interface UnitDef {
   interval: number;
   /** Attack reach from the unit's cell centre at grade 1 (board units). */
   range: number;
+  /** 물리 hits are cut by a monster's 방어력, 마법 hits by its 마법 저항. */
+  dmgType: DamageType;
   desc: string;
 }
 
+export type DamageType = "physical" | "magic";
+export const DAMAGE_TYPE_LABEL: Record<DamageType, string> = { physical: "물리", magic: "마법" };
+
 export const UNITS: Record<UnitKind, UnitDef> = {
-  archer: { name: "궁수", emoji: "🏹", color: "#f97316", dmg: 11, interval: 12, range: 150, desc: "빠른 단일 공격 · 긴 사거리" },
-  mage: { name: "마법사", emoji: "🔮", color: "#a855f7", dmg: 9, interval: 22, range: 125, desc: "범위 폭발" },
-  frost: { name: "서리", emoji: "❄️", color: "#38bdf8", dmg: 6, interval: 18, range: 135, desc: "둔화" },
-  thunder: { name: "번개", emoji: "⚡", color: "#facc15", dmg: 8, interval: 20, range: 135, desc: "연쇄 공격" },
-  poison: { name: "독", emoji: "☠️", color: "#22c55e", dmg: 4, interval: 24, range: 140, desc: "최대 체력 % 독 (보스 특효)" },
+  archer: { name: "궁수", emoji: "🏹", color: "#f97316", dmg: 11, interval: 12, range: 150, dmgType: "physical", desc: "빠른 단일 공격 · 긴 사거리" },
+  mage: { name: "마법사", emoji: "🔮", color: "#a855f7", dmg: 9, interval: 22, range: 125, dmgType: "magic", desc: "범위 폭발" },
+  frost: { name: "서리", emoji: "❄️", color: "#38bdf8", dmg: 6, interval: 18, range: 135, dmgType: "magic", desc: "둔화" },
+  thunder: { name: "번개", emoji: "⚡", color: "#facc15", dmg: 8, interval: 20, range: 135, dmgType: "physical", desc: "연쇄 공격" },
+  poison: { name: "독", emoji: "☠️", color: "#22c55e", dmg: 4, interval: 24, range: 140, dmgType: "magic", desc: "최대 체력 % 독 (보스 특효)" },
 };
 
 export const GRADE_NAMES = ["", "일반", "희귀", "영웅", "전설", "신화"];
@@ -316,6 +321,30 @@ export interface Unit {
 }
 
 export type MobKind = "normal" | "fast" | "tank" | "boss" | "elite" | "invader" | "golem" | "wraith" | "warlord";
+
+/**
+ * Per-kind defences (fractions of damage removed): `armor` cuts 물리 hits
+ * (궁수·번개), `resist` cuts 마법 hits (마법사·서리·독, poison ticks too).
+ * Tanks/golems want magic, fast monsters/wraiths want physical, so a board
+ * of one damage type has a weak spot. Shown on the monster info card.
+ */
+export const MOB_INFO: Record<MobKind, { name: string; emoji: string; armor: number; resist: number; trait?: string }> = {
+  normal: { name: "몬스터", emoji: "👾", armor: 0, resist: 0 },
+  fast: { name: "날쌘 몬스터", emoji: "💨", armor: 0, resist: 0.25, trait: "빠름" },
+  tank: { name: "탱커", emoji: "🛡️", armor: 0.35, resist: 0, trait: "느리지만 단단함" },
+  boss: { name: "보스", emoji: "👑", armor: 0.2, resist: 0.2, trait: "졸개 소환 · 다 부르면 광폭화(타워 기절) · 둔화 절반" },
+  elite: { name: "정예 몬스터", emoji: "🔥", armor: 0.15, resist: 0.15, trait: "상대가 보낸 압박" },
+  invader: { name: "침략자", emoji: "😈", armor: 0.1, resist: 0.1, trait: "상대가 보낸 유닛 — 등급이 높을수록 단단함" },
+  golem: { name: "바위 골렘", emoji: "🪨", armor: 0.5, resist: 0, trait: "쓰러지면 작은 몬스터로 쪼개짐" },
+  wraith: { name: "망령", emoji: "👻", armor: 0.1, resist: 0.45, trait: "아주 빠름 · 둔화 면역" },
+  warlord: { name: "전쟁군주", emoji: "👹", armor: 0.3, resist: 0.15, trait: "미니 보스 · 졸개 소환" },
+};
+
+/** Damage that lands on `kind` after its armor / resist. */
+export function mitigated(kind: MobKind, amount: number, type: DamageType): number {
+  const info = MOB_INFO[kind];
+  return amount * (1 - (type === "physical" ? info.armor : info.resist));
+}
 
 /**
  * 유닛 대결: monsters a player may buy with gold and drop on an opponent's
@@ -1039,8 +1068,8 @@ function closeWave(board: Board) {
   board.killHistory = [...(board.killHistory ?? []), board.kills];
 }
 
-function damage(mob: Mob, amount: number) {
-  mob.hp -= amount;
+function damage(mob: Mob, amount: number, type: DamageType) {
+  mob.hp -= mitigated(mob.kind, amount, type);
 }
 
 function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, ordered: Mob[]) {
@@ -1099,12 +1128,13 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
     }
   }
   const dmg = unitDamage(unit, board) * (crit ? cs.mult : 1);
+  const type = UNITS[unit.kind].dmgType;
   const hits: number[] = [target.id];
   switch (unit.kind) {
     case "archer":
-      damage(target, dmg);
+      damage(target, dmg, type);
       if (unit.grade >= 3 && ordered[1]) {
-        damage(ordered[1], dmg * 0.6);
+        damage(ordered[1], dmg * 0.6, type);
         hits.push(ordered[1].id);
       }
       break;
@@ -1114,7 +1144,7 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
         let gap = Math.abs((m.trav % PATH_LEN) - (target.trav % PATH_LEN));
         gap = Math.min(gap, PATH_LEN - gap);
         if (gap <= radius) {
-          damage(m, dmg);
+          damage(m, dmg, type);
           if (m !== target) hits.push(m.id);
         }
       }
@@ -1122,7 +1152,7 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
     }
     case "frost": {
       const pct = Math.min(0.7, 0.35 + unit.grade * 0.07);
-      damage(target, dmg);
+      damage(target, dmg, type);
       // Wraiths shrug off the chill.
       if (target.kind !== "wraith") {
         target.slowT = Math.max(target.slowT, 40);
@@ -1133,13 +1163,13 @@ function attack(s: MergeDefenseState, board: Board, slot: number, unit: Unit, or
     case "thunder": {
       const chain = 2 + Math.floor(unit.grade / 2);
       ordered.slice(0, chain + 1).forEach((m, i) => {
-        damage(m, dmg * (i === 0 ? 1 : 0.7));
+        damage(m, dmg * (i === 0 ? 1 : 0.7), type);
         if (i > 0) hits.push(m.id);
       });
       break;
     }
     case "poison": {
-      damage(target, dmg);
+      damage(target, dmg, type);
       const pct = 0.025 + unit.grade * 0.01;
       const cap = dmg * 6;
       target.poisonDps = Math.max(target.poisonDps, Math.min(target.maxHp * pct, cap));
@@ -1185,7 +1215,7 @@ export function stepGame(state: MergeDefenseState): MergeDefenseState {
       if (m.slowT > 0) m.slowT -= 1;
       if (m.slowT === 0) m.slowPct = 0;
       if (m.poisonT > 0) {
-        damage(m, m.poisonDps / TICKS_PER_SEC);
+        damage(m, m.poisonDps / TICKS_PER_SEC, "magic");
         m.poisonT -= 1;
         if (m.poisonT === 0) m.poisonDps = 0;
       }
