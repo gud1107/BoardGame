@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { DIFFICULTIES, MAP_IDS, MAPS, type GameMode } from "./engine";
+import { DIFFICULTIES, MAP_IDS, MAPS, type Difficulty, type GameMode, type MapId } from "./engine";
 import type { BestByMode } from "./bestWave";
 import { DIFFICULTY_LABEL } from "./RoomSettings";
 
-/** Lobby card: this device's best wave for every map × difficulty, one mode at a time. */
-export default function BestWaveTable({ best }: { best: BestByMode }) {
+/** Lobby card: this device's best wave for every map × difficulty, one mode at a time. A cell starts an AI match on that setup. */
+export default function BestWaveTable({ best, onPick }: { best: BestByMode; onPick?: (mode: GameMode, map: MapId, difficulty: Difficulty) => void }) {
   const [mode, setMode] = useState<GameMode>("survival");
   const rows = best[mode];
   const any = MAP_IDS.some((id) => DIFFICULTIES.some((d) => rows[id][d] > 0));
@@ -51,8 +51,18 @@ export default function BestWaveTable({ best }: { best: BestByMode }) {
               {DIFFICULTIES.map((d) => {
                 const w = rows[id][d];
                 return (
-                  <td key={d} className={`py-1 text-center font-mono ${w && w === top[d] ? "font-bold text-amber-300 light:text-amber-600" : w ? "" : "opacity-30"}`}>
-                    {w ? `W${w}` : "—"}
+                  <td key={d} className="p-0.5 text-center">
+                    <button
+                      type="button"
+                      disabled={!onPick}
+                      onClick={() => onPick?.(mode, id, d)}
+                      title={`${MAPS[id].name} · ${DIFFICULTY_LABEL[d].name}${mode === "versus" ? " · 유닛 대결" : ""} — AI와 바로 대결`}
+                      className={`w-full rounded-md py-0.5 font-mono transition enabled:hover:bg-amber-400/20 enabled:active:scale-95 light:enabled:hover:bg-amber-100 ${
+                        w && w === top[d] ? "font-bold text-amber-300 light:text-amber-600" : w ? "" : "opacity-40"
+                      }`}
+                    >
+                      {w ? `W${w}` : "—"}
+                    </button>
                   </td>
                 );
               })}
@@ -60,7 +70,9 @@ export default function BestWaveTable({ best }: { best: BestByMode }) {
           ))}
         </tbody>
       </table>
-      {!any && <p className="mt-1 text-center text-[10px] text-white/40 light:text-slate-400">아직 기록이 없어요 — 한 판 해보세요!</p>}
+      <p className="mt-1 text-center text-[10px] text-white/40 light:text-slate-400">
+        {any ? "" : "아직 기록이 없어요 — "}칸을 누르면 그 맵·난이도로 AI와 대결해요
+      </p>
     </div>
   );
 }

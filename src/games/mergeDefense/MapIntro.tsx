@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { MAP_IDS, MAPS, type MapId } from "./engine";
 import { MapThumb } from "./RoomSettings";
+import * as audio from "./mergeDefenseAudio";
 
 const SPIN_MS = 1100;
 const HOLD_MS = 1700;
@@ -10,7 +11,8 @@ const HOLD_MS = 1700;
 /**
  * Match-start card over the battlefield: the map's sketch, name and blurb.
  * A 🎲 room first spins through the maps like a slot reel and slows onto the
- * drawn one. Click-through, gone after ~3s; reduced motion skips the spin.
+ * drawn one (a click per flip, a bell 'ding' on landing). Click-through, gone
+ * after ~3s; reduced motion skips the spin.
  */
 export default function MapIntro({ map, random }: { map: MapId; random: boolean }) {
   const [shown, setShown] = useState<MapId>(() => (random ? MAP_IDS[(MAP_IDS.indexOf(map) + 1) % MAP_IDS.length] : map));
@@ -30,7 +32,12 @@ export default function MapIntro({ map, random }: { map: MapId; random: boolean 
         t += gap;
         i += 1;
         const id = MAP_IDS[i % MAP_IDS.length];
-        timers.push(window.setTimeout(() => setShown(id), t));
+        timers.push(
+          window.setTimeout(() => {
+            setShown(id);
+            audio.playReelTick();
+          }, t),
+        );
       }
       spin = SPIN_MS;
     }
@@ -38,6 +45,7 @@ export default function MapIntro({ map, random }: { map: MapId; random: boolean 
       window.setTimeout(() => {
         setShown(map);
         setLanded(true);
+        audio.playReelDing(random);
       }, spin),
     );
     timers.push(window.setTimeout(() => setFading(true), spin + HOLD_MS - 350));

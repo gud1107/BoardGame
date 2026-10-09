@@ -292,3 +292,31 @@ export function playTowerHit(kind: UnitKind, grade: number, far = false, crit = 
     }
   }
 }
+
+/** Map-intro reel: one dry wooden click per name that flips past. */
+export function playReelTick() {
+  const settings = useAudioSettingsStore.getState();
+  if (isSfxEffectivelyMuted(settings) || settings.sfxVolume <= 0) return;
+  const a = hitAudio();
+  if (!a) return;
+  const { ctx, bus, noise: buf } = a;
+  bus.gain.value = HIT_LEVEL * settings.sfxVolume * 2.2;
+  noise(ctx, buf, env(ctx, bus, 0.7, 0.001, 0.035), "bandpass", 3200, 4, 0.05);
+  tone(ctx, env(ctx, bus, 0.35, 0.001, 0.03), "square", 1500, 1100, 0.04);
+}
+
+/** Map-intro landing: a bright two-note bell 'ding' (a fuller chord after a 🎲 spin). */
+export function playReelDing(big: boolean) {
+  const settings = useAudioSettingsStore.getState();
+  if (isSfxEffectivelyMuted(settings) || settings.sfxVolume <= 0) return;
+  const a = hitAudio();
+  if (!a) return;
+  const { ctx, bus } = a;
+  bus.gain.value = HIT_LEVEL * settings.sfxVolume * 2.5;
+  const notes = big ? [1318.5, 1975.5, 2637] : [1318.5, 1975.5];
+  notes.forEach((f, i) => {
+    tone(ctx, env(ctx, bus, 0.55 / (i + 1), 0.004, big ? 1.1 : 0.7), "sine", f, f * 0.998, big ? 1.15 : 0.75);
+    // A faint inharmonic partial makes it read as a bell rather than a beep.
+    tone(ctx, env(ctx, bus, 0.12 / (i + 1), 0.002, 0.25), "sine", f * 2.76, f * 2.74, 0.3);
+  });
+}

@@ -39,6 +39,7 @@ import {
   type MapId,
   AUTO_PARTS,
   AUTO_UPGRADE_MIN_GOLD,
+  AUTO_GAMBLE_SAVE,
   MAP_IDS,
   type AutoPart,
   eliminationLimit,
@@ -140,6 +141,16 @@ function loadAutoGold(): number {
   }
 }
 
+const AUTO_GEMS_KEY = "merge-defense:auto-gamble-save";
+function loadAutoGems(): number {
+  try {
+    const v = Number(typeof window === "undefined" ? 1 : window.localStorage.getItem(AUTO_GEMS_KEY));
+    return AUTO_GAMBLE_SAVE.includes(v) ? v : 1;
+  } catch {
+    return 1;
+  }
+}
+
 function aliveCount(s: MergeDefenseState): number {
   return s.boards.filter((b) => b.alive).length;
 }
@@ -173,6 +184,21 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     setAutoGold(gold);
     try {
       window.localStorage.setItem(AUTO_GOLD_KEY, String(gold));
+    } catch {
+      /* not remembered */
+    }
+  }
+  /** 자동 banks gems until this many, then gambles them all (1 = right away). */
+  const [autoGems, setAutoGems] = useState<number>(loadAutoGems);
+  const autoGemsRef = useRef(autoGems);
+  /** True while 자동 is spending a full bank of gems. */
+  const gemSpendingRef = useRef(false);
+  function changeAutoGems(n: number) {
+    autoGemsRef.current = n;
+    gemSpendingRef.current = false;
+    setAutoGems(n);
+    try {
+      window.localStorage.setItem(AUTO_GEMS_KEY, String(n));
     } catch {
       /* not remembered */
     }
@@ -636,7 +662,15 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         const seat = mySeatRef.current;
         if (!sim || seat === null || sim.phase !== "playing") return;
         if (isSeatTakenOver(botTakeoverRef.current, String(seat))) return;
-        const a = chooseBotAction(sim, seat, { parts: autoPartsRef.current, upgradeMinGold: autoGoldRef.current });
+        // Bank → spend: once the bank is full, gamble down to empty before saving again.
+        const gems = sim.boards[seat]?.gems ?? 0;
+        if (gems >= autoGemsRef.current) gemSpendingRef.current = true;
+        else if (gems < 1) gemSpendingRef.current = false;
+        const a = chooseBotAction(sim, seat, {
+          parts: autoPartsRef.current,
+          upgradeMinGold: autoGoldRef.current,
+          gambleMinGems: gemSpendingRef.current ? 1 : autoGemsRef.current,
+        });
         if (a) handleAction(a);
       },
       isHost ? 500 : 700,
@@ -905,7 +939,19 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
             >
               🔑 초대 코드로 참여
             </button>
-            <BestWaveTable best={best} />
+            <BestWaveTable
+              best={best}
+              onPick={(m, id, d) => {
+                // Same as "AI와 바로 대결", with the picked record's setup filled in.
+                setMode(m);
+                setMapChoice(id);
+                setDifficulty(d);
+                setIntent("create");
+                setPractice(true);
+                setTargetPlayerCount(2);
+                setPhase("enter-name");
+              }}
+            />
           </div>
         }
       />,
@@ -1041,6 +1087,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           onAutoParts={changeAutoParts}
           autoUpgradeGold={autoGold}
           onAutoUpgradeGold={changeAutoGold}
+          autoGambleSave={autoGems}
+          onAutoGambleSave={changeAutoGems}
         />
       </div>,
     );

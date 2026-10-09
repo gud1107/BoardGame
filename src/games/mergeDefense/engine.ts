@@ -1430,12 +1430,16 @@ export function actionPart(a: Action): AutoPart {
  * `auto` is the player's 🤖 자동 setup: `parts` limits it to some kinds of
  * action (with building off it merges any pair right away and stops saving
  * gold for summons), `upgradeMinGold` holds every upgrade-part buy until the
- * board has at least that much gold.
+ * board has at least that much gold, and `gambleMinGems` holds 💎 도박 until
+ * that many gems are banked (the caller lowers it to 1 to spend a full bank).
  */
 export interface AutoOptions {
   parts?: ReadonlySet<AutoPart>;
   upgradeMinGold?: number;
+  gambleMinGems?: number;
 }
+/** 🤖 자동 "도박은 보석 N개 모일 때까지 아끼기" choices (1 = gamble right away). */
+export const AUTO_GAMBLE_SAVE = [1, 2, 3, 5];
 /** 🤖 자동 "강화는 골드 N 이상일 때만" choices (0 = no condition). */
 export const AUTO_UPGRADE_MIN_GOLD = [0, 200, 500, 1000, 2000];
 
@@ -1448,7 +1452,7 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, auto:
   const free = emptySlots(board).length;
   const cost = summonCost(board);
   const bestEmpty = slotPref.find((i) => !board.units[i]);
-  if (building && board.gems >= GAMBLE_COST && bestEmpty !== undefined) return { type: "gamble", slot: bestEmpty };
+  if (building && board.gems >= Math.max(GAMBLE_COST, auto.gambleMinGems ?? 0) && bestEmpty !== undefined) return { type: "gamble", slot: bestEmpty };
   // 유닛 대결: a board that keeps getting combo-jammed saves up for max 결속
   // (immunity + reflect) before anything else.
   const braceNow = board.brace ?? 0;

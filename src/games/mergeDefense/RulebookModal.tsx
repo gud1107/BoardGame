@@ -64,14 +64,15 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
             </li>
             <li>
               <b>🤖 자동</b>: 위쪽 줄의 <b>🤖 자동</b> 버튼을 켜면 AI가 내 보드를 대신 운영해요(소환·도박·합성·강화·배치). 다시 누르면 꺼지고, 판이 새로
-              시작되면 꺼진 상태로 돌아가요.
+              시작되면 꺼진 상태로 돌아가요. 메뉴에서 맡길 일(소환·도박 / 합성 / 강화 / 배치 / 공격)을 골라 부분만 맡길 수 있고, “💎 보석이 N개 모이면
+              한꺼번에 도박”, “⬆️ 골드가 N 이상일 때만 강화” 조건도 걸 수 있어요.
             </li>
           </ol>
         </section>
 
         <section>
           <h3 className={h3}>맵</h3>
-          <p className="mb-2 text-white/70 light:text-slate-600">방장이 방을 만들 때(또는 대기실에서) 고를 수 있어요. 길 모양과 칸 수가 달라서 좋은 자리도 달라요. 보라색 점이 몬스터가 나오는 포털이에요.</p>
+          <p className="mb-2 text-white/70 light:text-slate-600">방장이 방을 만들 때(또는 대기실에서) 고를 수 있어요. 로비의 🏅 기록표 칸을 누르면 그 맵·난이도로 바로 AI와 대결해요. 길 모양과 칸 수가 달라서 좋은 자리도 달라요. 보라색 점이 몬스터가 나오는 포털이에요.</p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {MAP_IDS.map((id) => (
               <div key={id} className="flex flex-col gap-1 text-xs">

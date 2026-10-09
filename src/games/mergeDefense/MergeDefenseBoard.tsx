@@ -46,6 +46,7 @@ import {
   unitRange,
   AUTO_PARTS,
   AUTO_UPGRADE_MIN_GOLD,
+  AUTO_GAMBLE_SAVE,
   type AutoPart,
   type Action,
   type MergeDefenseState,
@@ -72,6 +73,9 @@ interface Props {
   /** 자동 upgrades wait for this much gold (0 = any time). */
   autoUpgradeGold?: number;
   onAutoUpgradeGold?: (gold: number) => void;
+  /** 자동 banks this many gems before gambling them all (1 = right away). */
+  autoGambleSave?: number;
+  onAutoGambleSave?: (gems: number) => void;
 }
 
 const AUTO_PART_LABEL: Record<AutoPart, string> = {
@@ -173,7 +177,7 @@ const slotAt = slotAtPoint;
 
 const GAMBLE_ODDS_TEXT = GAMBLE_ODDS.map((o) => `${o.grade ? GRADE_NAMES[o.grade] : "꽝"} ${o.pct}%`).join(" · ");
 
-export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto, autoParts = AUTO_PARTS, onAutoParts, randomMap = false, autoUpgradeGold = 0, onAutoUpgradeGold }: Props) {
+export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto, autoParts = AUTO_PARTS, onAutoParts, randomMap = false, autoUpgradeGold = 0, onAutoUpgradeGold, autoGambleSave = 1, onAutoGambleSave }: Props) {
   // Geometry helpers read the active map — point them at this match's before anything draws.
   selectMap(state.map);
   const map = MAPS[sanitizeMap(state.map)];
@@ -974,6 +978,23 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                       <span className={autoParts.includes(part) ? "text-emerald-300 light:text-emerald-600" : "opacity-40"}>{autoParts.includes(part) ? "ON" : "OFF"}</span>
                     </button>
                   ))}
+                  {autoParts.includes("build") && onAutoGambleSave && (
+                    <div className="flex flex-col gap-1 rounded-lg bg-white/5 px-2 py-1.5 light:bg-slate-50">
+                      <span className="text-[10px] font-semibold text-white/60 light:text-slate-500">💎 도박은 보석이 이만큼 모이면 한꺼번에</span>
+                      <div className="grid grid-cols-4 gap-1 text-[10px]">
+                        {AUTO_GAMBLE_SAVE.map((n) => (
+                          <button
+                            key={n}
+                            onClick={() => onAutoGambleSave(n)}
+                            aria-pressed={autoGambleSave === n}
+                            className={`rounded-md border py-0.5 ${autoGambleSave === n ? "border-sky-300 bg-sky-400/25 text-sky-50 light:border-sky-400 light:bg-sky-50 light:text-sky-800" : "border-white/15 light:border-slate-300"}`}
+                          >
+                            {n === 1 ? "바로" : `💎${n}`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {autoParts.includes("upgrade") && onAutoUpgradeGold && (
                     <div className="flex flex-col gap-1 rounded-lg bg-white/5 px-2 py-1.5 light:bg-slate-50">
                       <span className="text-[10px] font-semibold text-white/60 light:text-slate-500">⬆️ 강화는 골드가 이만큼 있을 때만</span>

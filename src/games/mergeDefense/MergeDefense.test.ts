@@ -619,4 +619,15 @@ describe("merge defense engine", () => {
     s.boards[0].gold = 600;
     expect(chooseBotAction(s, 0, { parts, upgradeMinGold: 500 })?.type).toBe("upgrade");
   });
+
+  it("자동 gem bank holds gambles until enough gems", () => {
+    const s = startGame(2, 45);
+    s.boards[0].gems = 2;
+    s.boards[0].gold = 0;
+    const parts = new Set<AutoPart>(["build"]);
+    expect(chooseBotAction(s, 0, { parts })?.type).toBe("gamble");
+    expect(chooseBotAction(s, 0, { parts, gambleMinGems: 3 })).toBeNull();
+    s.boards[0].gems = 3;
+    expect(chooseBotAction(s, 0, { parts, gambleMinGems: 3 })?.type).toBe("gamble");
+  });
 });
