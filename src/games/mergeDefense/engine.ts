@@ -158,6 +158,8 @@ export const MAX_GRADE = 5;
 export const MAX_UPGRADE = 10;
 export const START_GOLD = 100;
 export const START_GEMS = 1;
+/** Gems spent per 💎 gamble. */
+export const GAMBLE_COST = 1;
 const MAX_EVENTS = 40;
 
 export type SeatIndex = number;
@@ -679,11 +681,11 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
   }
 
   if (action.type === "gamble") {
-    if (cur.gems < 1 || emptySlots(cur).length === 0) return state;
+    if (cur.gems < GAMBLE_COST || emptySlots(cur).length === 0) return state;
     if (action.slot !== undefined && cur.units[action.slot]) return state;
     const s = cloneState(state);
     const board = s.boards[seat];
-    board.gems -= 1;
+    board.gems -= GAMBLE_COST;
     const r = rand(s);
     const grade = r < 0.2 ? 0 : r < 0.68 ? 2 : r < 0.94 ? 3 : 4;
     if (grade === 0) {
@@ -1275,7 +1277,7 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex): Acti
   const free = emptySlots(board).length;
   const cost = summonCost(board);
   const bestEmpty = SLOT_PREFERENCE.find((i) => !board.units[i]);
-  if (board.gems >= 1 && bestEmpty !== undefined) return { type: "gamble", slot: bestEmpty };
+  if (board.gems >= GAMBLE_COST && bestEmpty !== undefined) return { type: "gamble", slot: bestEmpty };
   // 유닛 대결: a board that keeps getting combo-jammed saves up for max 결속
   // (immunity + reflect) before anything else.
   const braceNow = board.brace ?? 0;

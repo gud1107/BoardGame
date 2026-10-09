@@ -22,6 +22,7 @@ import {
   UNITS,
   WAVE_TICKS,
   canMerge,
+  GAMBLE_COST,
   fieldLoad,
   isBossWave,
   mergePairs,
@@ -93,6 +94,8 @@ function loadFxPrefs(): FxPrefs {
 const fmtDmg = (v: number) => (v >= 10000 ? `${(v / 1000).toFixed(0)}k` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`);
 /** Gold gains this close together stack into one "+N" pop. */
 const GOLD_POP_MERGE_MS = 700;
+/** Ring + gentle pulse on an action button that can be pressed right now. */
+const READY_RING = "ring-2 ring-white/80 ring-offset-1 ring-offset-transparent motion-safe:animate-[md-ready_1.4s_ease-in-out_infinite] light:ring-slate-900/60";
 const GUIDE_KEY = "merge-defense:guide";
 /**
  * 🧭 guide: a number = "자동" — shown through the prep and that many opening
@@ -857,6 +860,9 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
   const focusLevel = me.focus ?? 0;
   const freeSlots = me.units.filter((u) => !u).length;
   const pairs = useMemo(() => mergePairs(me), [me]);
+  const canSummon = interactive && me.gold >= cost && buildSlot !== null;
+  const canGamble = interactive && me.gems >= GAMBLE_COST && buildSlot !== null;
+  const canMergeNow = interactive && pairs.length > 0;
   const versus = state.mode === "versus";
   const sendCdSec = Math.ceil(me.sendCd / TICKS_PER_SEC);
   const canSend = interactive && versus && selected !== null && me.sendCd === 0 && state.wave >= 1 && target !== null;
@@ -873,7 +879,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
 
   return (
     <div className="mx-auto flex w-full max-w-[640px] flex-col gap-2 pb-20 select-none sm:pb-0" onPointerDown={audio.unlockHitSounds}>
-      <style>{`@keyframes md-pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}@keyframes md-gold-rise{0%{transform:translateY(4px) scale(.8);opacity:0}15%{transform:translateY(0) scale(1.15);opacity:1}70%{opacity:1}100%{transform:translateY(-14px) scale(1);opacity:0}}@keyframes md-gold-glow{0%{text-shadow:0 0 0 rgba(250,204,21,0);transform:scale(1)}25%{text-shadow:0 0 12px rgba(250,204,21,.95);transform:scale(1.18)}100%{text-shadow:0 0 0 rgba(250,204,21,0);transform:scale(1)}}`}</style>
+      <style>{`@keyframes md-pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}@keyframes md-gold-rise{0%{transform:translateY(4px) scale(.8);opacity:0}15%{transform:translateY(0) scale(1.15);opacity:1}70%{opacity:1}100%{transform:translateY(-14px) scale(1);opacity:0}}@keyframes md-ready{0%,100%{filter:brightness(1)}50%{filter:brightness(1.18)}}@keyframes md-gold-glow{0%{text-shadow:0 0 0 rgba(250,204,21,0);transform:scale(1)}25%{text-shadow:0 0 12px rgba(250,204,21,.95);transform:scale(1.18)}100%{text-shadow:0 0 0 rgba(250,204,21,0);transform:scale(1)}}`}</style>
       {/* Wave HUD */}
       {/* Phone widths: labels collapse to icons (checked at 375px) — full words come back from sm. */}
       <div className="flex flex-wrap items-center justify-between gap-1.5 rounded-xl border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs whitespace-nowrap text-white/80 sm:gap-2 sm:px-3 light:border-slate-200 light:bg-white light:text-slate-700">
@@ -1143,34 +1149,34 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction }: Pr
         )}
       </p>
 
-      {/* Actions */}
+      {/* Actions — a usable button gets a white ring + soft pulse so it's obvious at a glance. */}
       <div className="grid grid-cols-[2fr_1fr_1fr] gap-2">
         <button
-          disabled={!interactive || me.gold < cost || buildSlot === null}
+          disabled={!canSummon}
           onClick={() => buildSlot !== null && onAction({ type: "summon", slot: buildSlot })}
-          className="rounded-xl bg-gradient-to-b from-amber-400 to-orange-600 py-3 text-sm font-black text-white shadow-[0_4px_0_#9a3412] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40"
+          className={`rounded-xl bg-gradient-to-b from-amber-400 to-orange-600 py-3 text-sm font-black text-white shadow-[0_4px_0_#9a3412] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40 ${canSummon ? READY_RING : ""}`}
         >
           🎲 소환 <span className="font-mono">🪙{cost}</span>
           <span className="block text-[10px] font-semibold">{freeSlots === 0 ? "자리 없음 — 합성하세요" : buildSlot === null ? "빈 칸을 먼저 선택" : "선택한 칸에 건설"}</span>
         </button>
         <button
-          disabled={!interactive || me.gems < 1 || buildSlot === null}
+          disabled={!canGamble}
           onClick={() => buildSlot !== null && onAction({ type: "gamble", slot: buildSlot })}
-          className="rounded-xl bg-gradient-to-b from-sky-400 to-indigo-600 py-3 text-xs font-black text-white shadow-[0_4px_0_#312e81] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40"
+          className={`rounded-xl bg-gradient-to-b from-sky-400 to-indigo-600 py-3 text-xs font-black text-white shadow-[0_4px_0_#312e81] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40 ${canGamble ? READY_RING : ""}`}
         >
-          💎 도박
-          <span className="block text-[10px] font-semibold opacity-80">희귀~전설</span>
+          💎 도박 <span className="font-mono">💎{GAMBLE_COST}</span>
+          <span className="block text-[10px] font-semibold opacity-80">{me.gems < GAMBLE_COST ? "보석 부족" : "희귀~전설"}</span>
         </button>
         <button
-          disabled={!interactive || pairs.length === 0}
+          disabled={!canMergeNow}
           onClick={() => {
             const [a, b] = pairs[0];
             onAction({ type: "merge", a, b });
             setSelected(null);
           }}
-          className="rounded-xl bg-gradient-to-b from-fuchsia-400 to-purple-700 py-3 text-xs font-black text-white shadow-[0_4px_0_#581c87] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40"
+          className={`rounded-xl bg-gradient-to-b from-fuchsia-400 to-purple-700 py-3 text-xs font-black text-white shadow-[0_4px_0_#581c87] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40 ${canMergeNow ? READY_RING : ""}`}
         >
-          🔀 합성
+          🔀 합성 <span className="rounded bg-emerald-400/90 px-1 text-[10px] text-emerald-950">무료</span>
           <span className="block text-[10px] font-semibold opacity-80">{pairs.length}쌍 가능</span>
         </button>
       </div>
