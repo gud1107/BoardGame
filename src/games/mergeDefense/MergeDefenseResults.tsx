@@ -1,10 +1,11 @@
 "use client";
 
-import type { ComponentProps } from "react";
-import { COMBO, MAPS, sanitizeMap, type Difficulty, type GameMode, type MapId, type RankedSeat } from "./engine";
+import { useState, type ComponentProps } from "react";
+import { COMBO, MAPS, sanitizeMap, type Action, type Difficulty, type GameMode, type MapId, type RankedSeat } from "./engine";
 import RoomSettings, { DIFFICULTY_LABEL } from "./RoomSettings";
 import WaveChart, { type WaveSeries } from "./WaveChart";
 import RecordBurst from "./RecordBurst";
+import { recordCardBlob, recordCardFileName, type RecordCardInput } from "./recordCard";
 
 export interface MatchRecord {
   mode: GameMode;
@@ -13,6 +14,82 @@ export interface MatchRecord {
   map?: MapId;
   wave: number;
   prev: number;
+}
+
+/** What 🤖 자동 sent this match: actions by type and how long it was on. */
+export interface AutoSummary {
+  counts: Partial<Record<Action["type"], number>>;
+  ms: number;
+}
+
+const AUTO_ACTION_LABEL: [Action["type"], string][] = [
+  ["summon", "🎲 소환"],
+  ["gamble", "💎 도박"],
+  ["merge", "🔀 합성"],
+  ["upgrade", "⬆️ 강화"],
+  ["focus", "🎯 집중"],
+  ["brace", "🛡️ 결속"],
+  ["wake", "⚡ 기절 해제"],
+  ["move", "↔️ 이동"],
+  ["send", "⚔️ 보내기"],
+  ["hire", "👾 구매"],
+];
+
+function fmtDuration(ms: number): string {
+  const sec = Math.round(ms / 1000);
+  const m = Math.floor(sec / 60);
+  return m > 0 ? `${m}분 ${sec % 60}초` : `${sec}초`;
+}
+
+/** 📷 저장 / 📤 공유 for a broken record — the share button only where the browser can share files. */
+function RecordShareButtons({ card }: { card: RecordCardInput }) {
+  const [note, setNote] = useState<string | null>(null);
+  const flash = (t: string) => {
+    setNote(t);
+    window.setTimeout(() => setNote((n) => (n === t ? null : n)), 1800);
+  };
+  const canShareFiles =
+    typeof navigator !== "undefined" &&
+    typeof navigator.canShare === "function" &&
+    navigator.canShare({ files: [new File([new Blob()], "x.png", { type: "image/png" })] });
+  async function save() {
+    const blob = await recordCardBlob(card);
+    if (!blob) return flash("이미지를 만들지 못했어요");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = recordCardFileName(card);
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    flash("저장했어요");
+  }
+  async function share() {
+    const blob = await recordCardBlob(card);
+    if (!blob) return flash("이미지를 만들지 못했어요");
+    try {
+      await navigator.share({
+        files: [new File([blob], recordCardFileName(card), { type: "image/png" })],
+        title: "랜덤 합성 디펜스 신기록",
+        text: `랜덤 합성 디펜스에서 WAVE ${card.wave} 기록을 세웠어요!`,
+      });
+    } catch {
+      /* cancelled */
+    }
+  }
+  const btn = "rounded-full border border-amber-200/40 bg-black/30 px-3 py-1 text-xs font-semibold text-amber-50 hover:border-amber-200/80";
+  return (
+    <div className="flex items-center justify-center gap-2">
+      <button type="button" onClick={save} className={btn}>
+        📷 이미지 저장
+      </button>
+      {canShareFiles && (
+        <button type="button" onClick={share} className={btn}>
+          📤 공유
+        </button>
+      )}
+      {note && <span className="text-[11px] text-amber-100/80">{note}</span>}
+    </div>
+  );
 }
 
 export interface WaveHistory {
@@ -28,6 +105,7 @@ export default function MergeDefenseResults({
   mySeat,
   mode,
   myRecord,
+  autoSummary = null,
   history,
   isHost,
   settings,
@@ -39,6 +117,7 @@ export default function MergeDefenseResults({
   mySeat: number | null;
   mode: GameMode | undefined;
   myRecord: MatchRecord | null;
+  autoSummary?: AutoSummary | null;
   history: WaveHistory | null;
   isHost: boolean;
   settings: ComponentProps<typeof RoomSettings>;
@@ -75,6 +154,9 @@ export default function MergeDefenseResults({
             WAVE {mapRecord.prev} → <span className="text-amber-300">{mapRecord.wave}</span>
             <span className="ml-1.5 rounded-full bg-emerald-500/30 px-2 py-0.5 text-sm text-emerald-100">+{mapRecord.wave - mapRecord.prev}</span>
           </p>
+          <div className="relative mt-2">
+            <RecordShareButtons card={{ ...mapRecord, name: mySeat !== null ? (names[mySeat] ?? "") : "" }} />
+          </div>
         </div>
       )}
       {myRecord && !mapRecord && (
@@ -94,6 +176,29 @@ export default function MergeDefenseResults({
             <>
               이번 WAVE {myRecord.wave} · 최고 기록 WAVE {myRecord.prev}
             </>
+          )}
+          {myRecord.wave > myRecord.prev && (
+            <div className="mt-1.5">
+              <RecordShareButtons card={{ ...myRecord, name: mySeat !== null ? (names[mySeat] ?? "") : "" }} />
+            </div>
+          )}
+        </div>
+      )}
+      {autoSummary && (
+        <div className="w-full max-w-sm rounded-xl border border-sky-300/30 bg-sky-500/10 px-3 py-2 text-left text-xs">
+          <p className="font-bold text-sky-100">
+            🤖 자동이 한 일 <span className="font-normal text-sky-100/60">· {fmtDuration(autoSummary.ms)} 동안 켜짐</span>
+          </p>
+          {AUTO_ACTION_LABEL.some(([t]) => autoSummary.counts[t]) ? (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {AUTO_ACTION_LABEL.filter(([t]) => autoSummary.counts[t]).map(([t, label]) => (
+                <span key={t} className="rounded-full bg-black/30 px-2 py-0.5 whitespace-nowrap text-white/80">
+                  {label} <b className="font-mono text-white">{autoSummary.counts[t]}</b>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-0.5 text-white/50">켜져 있었지만 할 일이 없었어요.</p>
           )}
         </div>
       )}

@@ -253,4 +253,35 @@ describe("merge defense screens", () => {
     expect(a.decodeAutoPreset("")).toBeNull();
     expect(a.describeAutoConfig({ parts: ["merge", "upgrade"], upgradeMinGold: 1000, gambleSave: 3 })).toBe("합성·강화 · 💎3개 모아 도박 · 골드 1000+ 강화");
   });
+
+  it("results: 자동 summary and record image buttons", () => {
+    const html = results({ autoSummary: { counts: { summon: 12, merge: 20, gamble: 0 }, ms: 200_000 } });
+    expect(html).toContain("🤖 자동이 한 일");
+    expect(html).toContain("3분 20초 동안 켜짐");
+    expect(html).toContain("🎲 소환 <b");
+    expect(html).not.toContain("💎 도박 <b");
+    expect(html).toContain("📷 이미지 저장");
+    expect(results({ autoSummary: { counts: {}, ms: 5000 } })).toContain("할 일이 없었어요");
+    // No record broken → no image buttons.
+    expect(results({ myRecord: { mode: "versus", difficulty: "hard", wave: 20, prev: 24 } })).not.toContain("📷 이미지 저장");
+  });
+
+  it("waiting room: a preset can ride on the invite link", () => {
+    const html = renderToStaticMarkup(
+      h(WaitingRoomPanel, {
+        roomCode: "4821",
+        shareUrl: "https://example.com/games/merge-defense?room=4821",
+        seats: ["a", null],
+        joined: 1,
+        mySeat: 0,
+        hostRules: { mode: "survival" as const, difficulty: "normal" as const, limit: null },
+        isHost: true,
+        settings,
+        onFillWithAi: noop,
+        autoPresets: [{ name: "합성러", parts: ["merge"], upgradeMinGold: 0, gambleSave: 1 }],
+      }),
+    );
+    expect(html).toContain("초대 링크에 내 자동 프리셋 붙이기");
+    expect(html).toContain("📌 합성러 — 합성");
+  });
 });

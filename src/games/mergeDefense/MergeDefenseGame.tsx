@@ -69,7 +69,7 @@ import {
   type AutoPreset,
 } from "./autoSettings";
 import type { MapChoice } from "./RoomSettings";
-import MergeDefenseResults, { type MatchRecord, type WaveHistory } from "./MergeDefenseResults";
+import MergeDefenseResults, { type AutoSummary, type MatchRecord, type WaveHistory } from "./MergeDefenseResults";
 import WaitingRoomPanel from "./WaitingRoomPanel";
 import RoomSettings from "./RoomSettings";
 import { SEAT_COLORS } from "./render";
@@ -144,7 +144,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const [phase, setPhase] = useState<Phase>(roomFromUrl ? "enter-name" : "choose");
   const [intent, setIntent] = useState<"create" | "join">(roomFromUrl ? "join" : "create");
   const [practice, setPractice] = useState(false);
-  const [identity, setIdentity] = useState<RoomIdentityValue>({ name: "" });
+  // An invite link lands on the name step — start it with this device's last nickname, so joining is one tap.
+  const [identity, setIdentity] = useState<RoomIdentityValue>(() => ({ name: roomFromUrl && typeof window !== "undefined" ? getVisitorNickname() : "" }));
   const [codeInput, setCodeInput] = useState(roomFromUrl ?? "");
   const [targetPlayerCount, setTargetPlayerCount] = useState(2);
   const [mode, setMode] = useState<GameMode>("survival");
@@ -200,6 +201,9 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   /** Results chart: each seat's peak monsters per wave, captured at game end. */
   const [waveHistory, setWaveHistory] = useState<WaveHistory | null>(null);
   const [myRecord, setMyRecord] = useState<MatchRecord | null>(null);
+  /** What 🤖 자동 sent for me this match (results card); counted as it sends. */
+  const autoStatsRef = useRef<AutoSummary>({ counts: {}, ms: 0 });
+  const [autoSummary, setAutoSummary] = useState<AutoSummary | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -284,6 +288,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     limitRef.current = limitChoice;
     difficultyRef.current = quick?.difficulty ?? difficulty;
     mapRef.current = quick?.map ?? mapChoice;
+    // A friend's preset still on screen comes along — 닫기 is how to turn it down.
+    if (sharedPreset) closeSharedPreset(true);
     setMyName(name);
     setMyPlayerId(!quick && identity.name.trim() ? identity.playerId : undefined);
     setRoomCode(code);
@@ -326,6 +332,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       const startMode: GameMode = payload?.mode === "versus" ? "versus" : "survival";
       modeRef.current = startMode;
       setAutoPlay(autoOnStartRef.current);
+      autoStatsRef.current = { counts: {}, ms: 0 };
       const startMap = sanitizeMap(payload?.map);
       lastMapRef.current = startMap;
       const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit), sanitizeDifficulty(payload?.difficulty), startMap);
@@ -656,6 +663,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         const seat = mySeatRef.current;
         if (!sim || seat === null || sim.phase !== "playing") return;
         if (isSeatTakenOver(botTakeoverRef.current, String(seat))) return;
+        const stats = autoStatsRef.current;
+        stats.ms += isHost ? 500 : 700;
         // Bank → spend: once the bank is full, gamble down to empty before saving again.
         const gems = sim.boards[seat]?.gems ?? 0;
         const cfg = autoConfigRef.current;
@@ -666,7 +675,10 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           upgradeMinGold: cfg.upgradeMinGold,
           gambleMinGems: gemSpendingRef.current ? 1 : cfg.gambleSave,
         });
-        if (a) handleAction(a);
+        if (a) {
+          stats.counts[a.type] = (stats.counts[a.type] ?? 0) + 1;
+          handleAction(a);
+        }
       },
       isHost ? 500 : 700,
     );
@@ -773,6 +785,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     } else {
       setMyRecord(null);
     }
+    const auto = autoStatsRef.current;
+    setAutoSummary(auto.ms > 0 ? { counts: { ...auto.counts }, ms: auto.ms } : null);
     setFinalRankings(rankings);
     setPhase("post-game");
   }
@@ -889,6 +903,27 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     onMap: (m: MapChoice) => updateRoomSettings({ map: m }),
   };
 
+  /** Import card for a preset that came in on the link (lobby and the invite's name step). */
+  const sharedPresetCard = sharedPreset && (
+    <div className="rounded-xl border border-sky-300/50 bg-sky-500/10 p-3 text-left text-sm light:border-sky-300 light:bg-sky-50">
+      <p className="text-[11px] font-semibold text-sky-200 light:text-sky-700">🔗 친구가 보낸 🤖 자동 프리셋</p>
+      <p className="font-bold text-white light:text-slate-900">📌 {sharedPreset.name}</p>
+      <p className="text-[11px] text-white/60 light:text-slate-500">{describeAutoConfig(sharedPreset)}</p>
+      <div className="mt-2 flex gap-2">
+        <button onClick={() => closeSharedPreset(true)} className="flex-1 rounded-lg bg-sky-600 py-1.5 text-xs font-bold text-white hover:bg-sky-500">
+          가져오기
+        </button>
+        <button onClick={() => closeSharedPreset(false)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 light:border-slate-300 light:text-slate-600">
+          닫기
+        </button>
+      </div>
+      <p className="mt-1 text-[10px] text-white/45 light:text-slate-400">닫지 않고 시작·입장하면 자동으로 가져와요.</p>
+      {autoPresets.some((p) => p.name === sharedPreset.name) && (
+        <p className="mt-1 text-[10px] text-amber-300 light:text-amber-600">같은 이름의 내 프리셋을 덮어써요.</p>
+      )}
+    </div>
+  );
+
   if (phase === "choose") {
     const lastName = getVisitorNickname();
     return withGuard(
@@ -903,24 +938,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         }
         actions={
           <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
-            {sharedPreset && (
-              <div className="rounded-xl border border-sky-300/50 bg-sky-500/10 p-3 text-left text-sm light:border-sky-300 light:bg-sky-50">
-                <p className="text-[11px] font-semibold text-sky-200 light:text-sky-700">🔗 친구가 보낸 🤖 자동 프리셋</p>
-                <p className="font-bold text-white light:text-slate-900">📌 {sharedPreset.name}</p>
-                <p className="text-[11px] text-white/60 light:text-slate-500">{describeAutoConfig(sharedPreset)}</p>
-                <div className="mt-2 flex gap-2">
-                  <button onClick={() => closeSharedPreset(true)} className="flex-1 rounded-lg bg-sky-600 py-1.5 text-xs font-bold text-white hover:bg-sky-500">
-                    가져오기
-                  </button>
-                  <button onClick={() => closeSharedPreset(false)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 light:border-slate-300 light:text-slate-600">
-                    닫기
-                  </button>
-                </div>
-                {autoPresets.some((p) => p.name === sharedPreset.name) && (
-                  <p className="mt-1 text-[10px] text-amber-300 light:text-amber-600">같은 이름의 내 프리셋을 덮어써요.</p>
-                )}
-              </div>
-            )}
+            {sharedPresetCard}
             <button
               onClick={() => {
                 setIntent("create");
@@ -986,6 +1004,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     return withGuard(
       <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6 light:border-slate-200 light:bg-white light:shadow-sm">
         <h2 className="text-base font-bold text-white light:text-slate-900">{title}</h2>
+        {sharedPresetCard}
         <div className="flex flex-col gap-1.5 text-sm text-white/70 light:text-slate-600">
           내 닉네임
           <RoomNicknameField value={identity} onChange={setIdentity} onEnter={enterRoom} accent="amber" />
@@ -1066,6 +1085,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           <WaitingRoomPanel
             roomCode={roomCode}
             shareUrl={shareUrl}
+            autoPresets={autoPresets}
             seats={Array.from({ length: knownTargetPlayerCount }, (_, seat) => occupants.find((o) => o.seat === seat)?.name ?? null)}
             joined={occupants.length}
             mySeat={mySeat}
@@ -1126,6 +1146,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         mySeat={mySeat}
         mode={gameState?.mode}
         myRecord={myRecord}
+        autoSummary={autoSummary}
         history={waveHistory}
         isHost={isHost}
         settings={{ ...roomSettingsProps, playerCount }}

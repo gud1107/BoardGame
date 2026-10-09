@@ -29,7 +29,7 @@ mkdirSync(out, { recursive: true });
 
 const widths = process.argv.slice(2).map(Number).filter((n) => n > 0);
 const WIDTHS = widths.length > 0 ? widths : [320, 360, 375, 414];
-const SCREENS = ["board-survival", "board-versus", "board-plaza", "board-figure8", "board-diamond", "board-intro", "lobby", "lobby-create", "lobby-shared", "waiting-host", "waiting-guest", "results-versus", "results-survival"];
+const SCREENS = ["board-survival", "board-versus", "board-plaza", "board-figure8", "board-diamond", "board-intro", "record-card", "lobby", "lobby-create", "lobby-shared", "waiting-host", "waiting-guest", "results-versus", "results-survival"];
 
 function findChromium() {
   if (process.env.CHROMIUM_PATH && existsSync(process.env.CHROMIUM_PATH)) return process.env.CHROMIUM_PATH;

@@ -4,6 +4,7 @@
  */
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { drawRecordCard } from "@/games/mergeDefense/recordCard";
 import MergeDefenseBoard from "@/games/mergeDefense/MergeDefenseBoard";
 import MergeDefenseGame from "@/games/mergeDefense/MergeDefenseGame";
 import MergeDefenseResults from "@/games/mergeDefense/MergeDefenseResults";
@@ -113,6 +114,10 @@ const SCREENS: Record<string, () => ReactNode> = {
   "board-plaza": () => board("survival", "plaza"),
   "board-figure8": () => board("versus", "figure8"),
   "board-diamond": () => board("survival", "diamond"),
+  "record-card": () => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img alt="" className="w-full" src={drawRecordCard({ map: "figure8", mode: "survival", difficulty: "hard", wave: 31, prev: 27, name: "초록고양이" }).toDataURL()} />
+  ),
   "board-intro": () => <MergeDefenseBoard state={startGame(2, 5, [1], "survival", null, "normal", "plaza")} mySeat={0} names={names} onAction={noop} mapBest={27} />,
   lobby: () => <MergeDefenseGame participants={[]} onComplete={noop} />,
   "waiting-host": () => waiting(true),

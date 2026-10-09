@@ -60,7 +60,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.55.0",
     releaseDate: "2026-10-09",
-    title: "✏️ 낙서 결투 무빙 모드 방장 이어받기·설정·그림판 배치, 상태효과 밸런스",
+    title: "✏️ 낙서 결투 무빙 모드 방장 이어받기·설정·그림판 배치, 🎲 랜덤 합성 디펜스 새 맵 3종·자동 모드",
     changes: [
       {
         game: "ink-duel",
@@ -136,6 +136,31 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         game: "ink-duel",
         type: "FIX",
         desc: "휴대폰에서 무빙 모드 잉크·재장전 막대가 찌그러져 숫자가 발사 버튼과 겹치던 문제 수정",
+      },
+      {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "새 맵 3종 — ⭕ 중앙 광장·♾️ 8자 교차로·🔷 마름모 요새(길 모양과 칸 수가 달라요) + 🎲 랜덤 맵과 맵 등장 카드",
+      },
+      {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "🤖 자동 모드 — 전부 또는 소환·합성·강화 등 골라 맡기기, 보석 모아 도박·골드 조건 강화, 📌 프리셋·🔗 링크 공유",
+      },
+      {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "맵별 최고 기록 + 로비 기록표(칸을 누르면 그 맵·난이도로 바로 AI 대결), 신기록 축하와 📷 기록 이미지 저장·공유",
+      },
+      {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "도박 비용·확률(전설 6%·꽝 20%)과 합성 무료 표시, 지금 누를 수 있는 버튼은 반짝여요",
+      },
+      {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "결과 화면에 🤖 자동이 한 일 요약, 초대 링크에 내 자동 프리셋을 붙여 보낼 수 있어요",
       },
     ],
   },
