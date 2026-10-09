@@ -1427,14 +1427,23 @@ export function actionPart(a: Action): AutoPart {
 
 /**
  * A simple greedy bot: gamble gems, fill the board, merge when full, upgrade with spare gold.
- * `parts` limits it to some kinds of action (partial 🤖 자동); with building
- * off it merges any pair right away and stops saving gold for summons.
+ * `auto` is the player's 🤖 자동 setup: `parts` limits it to some kinds of
+ * action (with building off it merges any pair right away and stops saving
+ * gold for summons), `upgradeMinGold` holds every upgrade-part buy until the
+ * board has at least that much gold.
  */
-export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, parts?: ReadonlySet<AutoPart>): Action | null {
+export interface AutoOptions {
+  parts?: ReadonlySet<AutoPart>;
+  upgradeMinGold?: number;
+}
+/** 🤖 자동 "강화는 골드 N 이상일 때만" choices (0 = no condition). */
+export const AUTO_UPGRADE_MIN_GOLD = [0, 200, 500, 1000, 2000];
+
+export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, auto: AutoOptions = {}): Action | null {
   const board = state.boards[seat];
   if (!board || !board.alive || state.phase !== "playing") return null;
   selectMap(state.map);
-  const ok = (p: AutoPart) => !parts || parts.has(p);
+  const ok = (p: AutoPart) => (!auto.parts || auto.parts.has(p)) && (p !== "upgrade" || board.gold >= (auto.upgradeMinGold ?? 0));
   const building = ok("build");
   const free = emptySlots(board).length;
   const cost = summonCost(board);

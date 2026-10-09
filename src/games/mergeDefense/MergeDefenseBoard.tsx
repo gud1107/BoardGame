@@ -45,6 +45,7 @@ import {
   hireCost,
   unitRange,
   AUTO_PARTS,
+  AUTO_UPGRADE_MIN_GOLD,
   type AutoPart,
   type Action,
   type MergeDefenseState,
@@ -53,6 +54,7 @@ import {
 import { coverageFor, drawBoard, drawFx, SEAT_COLORS, type Fx } from "./render";
 import * as audio from "./mergeDefenseAudio";
 import RulebookModal from "./RulebookModal";
+import MapIntro from "./MapIntro";
 
 interface Props {
   state: MergeDefenseState;
@@ -65,6 +67,11 @@ interface Props {
   /** Which kinds of action 자동 may take. */
   autoParts?: AutoPart[];
   onAutoParts?: (parts: AutoPart[]) => void;
+  /** The room picked 🎲 — the intro card spins before landing on the map. */
+  randomMap?: boolean;
+  /** 자동 upgrades wait for this much gold (0 = any time). */
+  autoUpgradeGold?: number;
+  onAutoUpgradeGold?: (gold: number) => void;
 }
 
 const AUTO_PART_LABEL: Record<AutoPart, string> = {
@@ -166,7 +173,7 @@ const slotAt = slotAtPoint;
 
 const GAMBLE_ODDS_TEXT = GAMBLE_ODDS.map((o) => `${o.grade ? GRADE_NAMES[o.grade] : "꽝"} ${o.pct}%`).join(" · ");
 
-export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto, autoParts = AUTO_PARTS, onAutoParts }: Props) {
+export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto, autoParts = AUTO_PARTS, onAutoParts, randomMap = false, autoUpgradeGold = 0, onAutoUpgradeGold }: Props) {
   // Geometry helpers read the active map — point them at this match's before anything draws.
   selectMap(state.map);
   const map = MAPS[sanitizeMap(state.map)];
@@ -203,6 +210,8 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
   const fxPrefsRef = useRef(fxPrefs);
   const [fxMenuOpen, setFxMenuOpen] = useState(false);
   const [autoMenuOpen, setAutoMenuOpen] = useState(false);
+  // Only a board that mounts at the very start of a match plays the map intro (not a reconnect).
+  const [introOn] = useState(() => state.tick < 2 * TICKS_PER_SEC);
   /** Slow motion: from `start` (real ms) for `ms` the main board replays `state` at SLOWMO.rate, zoomed on (x, y), edges tinted `tint`. */
   const slowRef = useRef<{ start: number; ms: number; state: MergeDefenseState | null; x: number; y: number; tint: string }>({
     start: 0,
@@ -965,6 +974,23 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                       <span className={autoParts.includes(part) ? "text-emerald-300 light:text-emerald-600" : "opacity-40"}>{autoParts.includes(part) ? "ON" : "OFF"}</span>
                     </button>
                   ))}
+                  {autoParts.includes("upgrade") && onAutoUpgradeGold && (
+                    <div className="flex flex-col gap-1 rounded-lg bg-white/5 px-2 py-1.5 light:bg-slate-50">
+                      <span className="text-[10px] font-semibold text-white/60 light:text-slate-500">⬆️ 강화는 골드가 이만큼 있을 때만</span>
+                      <div className="grid grid-cols-5 gap-1 text-[10px]">
+                        {AUTO_UPGRADE_MIN_GOLD.map((g) => (
+                          <button
+                            key={g}
+                            onClick={() => onAutoUpgradeGold(g)}
+                            aria-pressed={autoUpgradeGold === g}
+                            className={`rounded-md border py-0.5 font-mono ${autoUpgradeGold === g ? "border-amber-300 bg-amber-400/25 text-amber-100 light:border-amber-400 light:bg-amber-50 light:text-amber-800" : "border-white/15 light:border-slate-300"}`}
+                          >
+                            {g === 0 ? "항상" : g >= 1000 ? `${g / 1000}k` : g}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="mt-1 grid grid-cols-3 gap-1 text-[11px]">
                     {(
                       [
@@ -1147,6 +1173,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
             👀 {names[resolvedView]} 관전 중
           </div>
         )}
+        {introOn && <MapIntro map={sanitizeMap(state.map)} random={randomMap} />}
         {banner && (
           <div key={banner.key} className="pointer-events-none absolute inset-x-0 top-[38%] flex justify-center px-4">
             <div className={`animate-[md-pop_0.35s_ease-out] rounded-2xl border px-4 py-2 text-center shadow-lg backdrop-blur-sm ${bannerTone[banner.tone]}`}>

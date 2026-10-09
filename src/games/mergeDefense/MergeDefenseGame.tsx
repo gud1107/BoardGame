@@ -38,6 +38,7 @@ import {
   type Difficulty,
   type MapId,
   AUTO_PARTS,
+  AUTO_UPGRADE_MIN_GOLD,
   MAP_IDS,
   type AutoPart,
   eliminationLimit,
@@ -53,6 +54,7 @@ import {
 import MergeDefenseBoard from "./MergeDefenseBoard";
 import { playVictory } from "./mergeDefenseAudio";
 import { recordBestWave, useBestWaves } from "./bestWave";
+import BestWaveTable from "./BestWaveTable";
 import type { MapChoice } from "./RoomSettings";
 import MergeDefenseResults, { type MatchRecord, type WaveHistory } from "./MergeDefenseResults";
 import WaitingRoomPanel from "./WaitingRoomPanel";
@@ -128,6 +130,16 @@ function loadAutoParts(): AutoPart[] {
   return [...AUTO_PARTS];
 }
 
+const AUTO_GOLD_KEY = "merge-defense:auto-upgrade-gold";
+function loadAutoGold(): number {
+  try {
+    const v = Number(typeof window === "undefined" ? 0 : window.localStorage.getItem(AUTO_GOLD_KEY));
+    return AUTO_UPGRADE_MIN_GOLD.includes(v) ? v : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function aliveCount(s: MergeDefenseState): number {
   return s.boards.filter((b) => b.alive).length;
 }
@@ -153,6 +165,18 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   /** Which kinds of action 자동 may take (remembered on this device). */
   const [autoParts, setAutoParts] = useState<AutoPart[]>(loadAutoParts);
   const autoPartsRef = useRef<ReadonlySet<AutoPart>>(new Set(autoParts));
+  /** 자동 buys upgrades only at or above this much gold (0 = any time). */
+  const [autoGold, setAutoGold] = useState<number>(loadAutoGold);
+  const autoGoldRef = useRef(autoGold);
+  function changeAutoGold(gold: number) {
+    autoGoldRef.current = gold;
+    setAutoGold(gold);
+    try {
+      window.localStorage.setItem(AUTO_GOLD_KEY, String(gold));
+    } catch {
+      /* not remembered */
+    }
+  }
   function changeAutoParts(parts: AutoPart[]) {
     autoPartsRef.current = new Set(parts);
     setAutoParts(parts);
@@ -612,7 +636,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         const seat = mySeatRef.current;
         if (!sim || seat === null || sim.phase !== "playing") return;
         if (isSeatTakenOver(botTakeoverRef.current, String(seat))) return;
-        const a = chooseBotAction(sim, seat, autoPartsRef.current);
+        const a = chooseBotAction(sim, seat, { parts: autoPartsRef.current, upgradeMinGold: autoGoldRef.current });
         if (a) handleAction(a);
       },
       isHost ? 500 : 700,
@@ -881,6 +905,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
             >
               🔑 초대 코드로 참여
             </button>
+            <BestWaveTable best={best} />
           </div>
         }
       />,
@@ -1012,7 +1037,10 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           autoPlay={autoPlay}
           onToggleAuto={() => setAutoPlay((v) => !v)}
           autoParts={autoParts}
+          randomMap={(isHost ? mapChoice : host?.map) === "random"}
           onAutoParts={changeAutoParts}
+          autoUpgradeGold={autoGold}
+          onAutoUpgradeGold={changeAutoGold}
         />
       </div>,
     );

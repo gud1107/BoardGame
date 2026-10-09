@@ -113,6 +113,7 @@ const SCREENS: Record<string, () => ReactNode> = {
   "board-plaza": () => board("survival", "plaza"),
   "board-figure8": () => board("versus", "figure8"),
   "board-diamond": () => board("survival", "diamond"),
+  "board-intro": () => <MergeDefenseBoard state={startGame(2, 5, [1], "survival", null, "normal", "plaza")} mySeat={0} names={names} onAction={noop} />,
   lobby: () => <MergeDefenseGame participants={[]} onComplete={noop} />,
   "waiting-host": () => waiting(true),
   "waiting-guest": () => waiting(false),

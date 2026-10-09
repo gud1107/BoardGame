@@ -585,7 +585,7 @@ describe("merge defense engine", () => {
         if (s.tick % 10 === 0) {
           // A human summons now and then so 합성만 has pairs to work on.
           if (!allow.has("build") && s.tick % 40 === 0) s = applyAction(s, 0, { type: "summon" });
-          const a = chooseBotAction(s, 0, allow);
+          const a = chooseBotAction(s, 0, { parts: allow });
           if (a) {
             seen.add(actionPart(a));
             s = applyAction(s, 0, a);
@@ -604,8 +604,19 @@ describe("merge defense engine", () => {
     const s0 = startGame(2, 43);
     s0.boards[0].units[0] = { kind: "archer", grade: 1, cd: 0 };
     s0.boards[0].units[1] = { kind: "archer", grade: 1, cd: 0 };
-    expect(chooseBotAction(s0, 0, new Set(["merge"]))?.type).toBe("merge");
+    expect(chooseBotAction(s0, 0, { parts: new Set(["merge"]) })?.type).toBe("merge");
     expect(chooseBotAction(s0, 0)?.type).not.toBe("merge");
-    expect(chooseBotAction(s0, 0, new Set())).toBeNull();
+    expect(chooseBotAction(s0, 0, { parts: new Set() })).toBeNull();
+  });
+
+  it("자동 upgrade gold floor holds upgrades until the board is rich enough", () => {
+    const s = startGame(2, 44);
+    s.boards[0].units = s.boards[0].units.map(() => ({ kind: "archer" as const, grade: MAX_GRADE, cd: 0 }));
+    s.boards[0].gold = 300;
+    const parts = new Set<AutoPart>(["upgrade"]);
+    expect(chooseBotAction(s, 0, { parts })?.type).toBe("upgrade");
+    expect(chooseBotAction(s, 0, { parts, upgradeMinGold: 500 })).toBeNull();
+    s.boards[0].gold = 600;
+    expect(chooseBotAction(s, 0, { parts, upgradeMinGold: 500 })?.type).toBe("upgrade");
   });
 });
