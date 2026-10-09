@@ -20,6 +20,9 @@ export interface MatchRecord {
 export interface AutoSummary {
   counts: Partial<Record<Action["type"], number>>;
   ms: number;
+  /** Estimated kills by 자동-made units (see autoCredit.ts) and my total kills. */
+  creditedKills?: number;
+  kills?: number;
 }
 
 const AUTO_ACTION_LABEL: [Action["type"], string][] = [
@@ -132,6 +135,8 @@ export default function MergeDefenseResults({
   // Beat the record the map-intro card showed → the big celebration.
   const mapRecord = myRecord && myRecord.prev > 0 && myRecord.wave > myRecord.prev ? myRecord : null;
   const recordMap = MAPS[sanitizeMap(myRecord?.map)];
+  // The results chart's monster lines, for the 📷 record image.
+  const cardChart = history ? { limit: history.limit, bossEvery: history.bossEvery, series: history.series.map((x) => ({ load: x.load, color: x.color, me: x.seat === mySeat })) } : undefined;
   return (
     <div
       className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 px-3 py-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
@@ -155,7 +160,7 @@ export default function MergeDefenseResults({
             <span className="ml-1.5 rounded-full bg-emerald-500/30 px-2 py-0.5 text-sm text-emerald-100">+{mapRecord.wave - mapRecord.prev}</span>
           </p>
           <div className="relative mt-2">
-            <RecordShareButtons card={{ ...mapRecord, name: mySeat !== null ? (names[mySeat] ?? "") : "" }} />
+            <RecordShareButtons card={{ ...mapRecord, name: mySeat !== null ? (names[mySeat] ?? "") : "", chart: cardChart }} />
           </div>
         </div>
       )}
@@ -179,7 +184,7 @@ export default function MergeDefenseResults({
           )}
           {myRecord.wave > myRecord.prev && (
             <div className="mt-1.5">
-              <RecordShareButtons card={{ ...myRecord, name: mySeat !== null ? (names[mySeat] ?? "") : "" }} />
+              <RecordShareButtons card={{ ...myRecord, name: mySeat !== null ? (names[mySeat] ?? "") : "", chart: cardChart }} />
             </div>
           )}
         </div>
@@ -199,6 +204,15 @@ export default function MergeDefenseResults({
             </div>
           ) : (
             <p className="mt-0.5 text-white/50">켜져 있었지만 할 일이 없었어요.</p>
+          )}
+          {!!autoSummary.kills && autoSummary.creditedKills !== undefined && (
+            <p
+              className="mt-1.5 text-white/80"
+              title="추정치: 처치마다 그 순간 내 보드 화력(초당 피해) 중 자동이 세운 유닛의 비율만큼 자동 몫으로 셌어요. 직접 옮기거나 합성한 유닛은 내 몫이에요."
+            >
+              🛡️ 자동이 세운 유닛이 막은 몬스터 <b className="font-mono text-white">≈ {autoSummary.creditedKills}</b>마리
+              <span className="ml-1 text-white/50">(내 처치 {autoSummary.kills}마리의 {Math.round((autoSummary.creditedKills / autoSummary.kills) * 100)}%)</span>
+            </p>
           )}
         </div>
       )}

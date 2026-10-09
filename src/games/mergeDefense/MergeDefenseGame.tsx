@@ -53,6 +53,7 @@ import MergeDefenseBoard from "./MergeDefenseBoard";
 import { playVictory } from "./mergeDefenseAudio";
 import { recordBestWave, useBestWaves } from "./bestWave";
 import BestWaveTable from "./BestWaveTable";
+import { newAutoCredit, sampleCredit, trackAction, type AutoCredit } from "./autoCredit";
 import { getVisitorNickname } from "@/lib/identity/lastNickname";
 import {
   AUTO_PRESET_PARAM,
@@ -203,6 +204,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const [myRecord, setMyRecord] = useState<MatchRecord | null>(null);
   /** What 🤖 자동 sent for me this match (results card); counted as it sends. */
   const autoStatsRef = useRef<AutoSummary>({ counts: {}, ms: 0 });
+  /** Which pads hold 자동-made units + kills credited to them (estimate, see autoCredit.ts). */
+  const autoCreditRef = useRef<AutoCredit>(newAutoCredit());
   const [autoSummary, setAutoSummary] = useState<AutoSummary | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -333,6 +336,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       modeRef.current = startMode;
       setAutoPlay(autoOnStartRef.current);
       autoStatsRef.current = { counts: {}, ms: 0 };
+      autoCreditRef.current = newAutoCredit();
       const startMap = sanitizeMap(payload?.map);
       lastMapRef.current = startMap;
       const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit), sanitizeDifficulty(payload?.difficulty), startMap);
@@ -646,12 +650,23 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     return () => cancelAnimationFrame(raf);
   }, [isHost, phase]);
 
-  function handleAction(action: Action) {
+  function handleAction(action: Action, byAuto = false) {
     const seat = mySeatRef.current ?? mySeat;
     if (seat === null) return;
+    trackAction(autoCreditRef.current, action, byAuto);
     if (isHost) pendingRef.current.push({ seat, action });
     else channelRef.current?.send({ type: "broadcast", event: "player-input", payload: { seat, action } });
   }
+
+  // 자동 credit: once a second, split my new kills by how much firepower 자동-made units carry.
+  useEffect(() => {
+    if (phase !== "playing") return;
+    const interval = window.setInterval(() => {
+      const board = mySeatRef.current !== null ? simRef.current?.boards[mySeatRef.current] : undefined;
+      if (board) sampleCredit(autoCreditRef.current, board);
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [phase]);
 
   // 🤖 자동: ask the bot for my next move every half second (a guest waits a
   // little longer — its own action only shows up with the host's next snapshot).
@@ -677,7 +692,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         });
         if (a) {
           stats.counts[a.type] = (stats.counts[a.type] ?? 0) + 1;
-          handleAction(a);
+          handleAction(a, true);
         }
       },
       isHost ? 500 : 700,
@@ -786,7 +801,11 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       setMyRecord(null);
     }
     const auto = autoStatsRef.current;
-    setAutoSummary(auto.ms > 0 ? { counts: { ...auto.counts }, ms: auto.ms } : null);
+    const myBoard = mySeat !== null ? sim.boards[mySeat] : undefined;
+    if (myBoard) sampleCredit(autoCreditRef.current, myBoard);
+    setAutoSummary(
+      auto.ms > 0 ? { counts: { ...auto.counts }, ms: auto.ms, creditedKills: Math.round(autoCreditRef.current.kills), kills: myBoard?.kills ?? 0 } : null,
+    );
     setFinalRankings(rankings);
     setPhase("post-game");
   }

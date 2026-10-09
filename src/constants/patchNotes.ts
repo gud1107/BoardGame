@@ -162,6 +162,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         type: "IMPROVE",
         desc: "결과 화면에 🤖 자동이 한 일 요약, 초대 링크에 내 자동 프리셋을 붙여 보낼 수 있어요",
       },
+      {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "자동 요약에 '자동이 세운 유닛이 막은 몬스터' 추정치, 📷 기록 이미지에 그 판의 웨이브 그래프",
+      },
     ],
   },
   {

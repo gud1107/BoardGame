@@ -116,7 +116,7 @@ const SCREENS: Record<string, () => ReactNode> = {
   "board-diamond": () => board("survival", "diamond"),
   "record-card": () => (
     // eslint-disable-next-line @next/next/no-img-element
-    <img alt="" className="w-full" src={drawRecordCard({ map: "figure8", mode: "survival", difficulty: "hard", wave: 31, prev: 27, name: "초록고양이" }).toDataURL()} />
+    <img alt="" className="w-full" src={drawRecordCard({ map: "figure8", mode: "survival", difficulty: "hard", wave: 31, prev: 27, name: "초록고양이", chart: { limit: 45, bossEvery: 5, series: [{ load: Array.from({ length: 31 }, (_, i) => Math.min(45, 4 + i * 1.4 + (i % 5 === 4 ? 6 : 0))), color: "#3987e5", me: true }, { load: Array.from({ length: 24 }, (_, i) => Math.min(45, 5 + i * 1.9)), color: "#d95926", me: false }] } }).toDataURL()} />
   ),
   "board-intro": () => <MergeDefenseBoard state={startGame(2, 5, [1], "survival", null, "normal", "plaza")} mySeat={0} names={names} onAction={noop} mapBest={27} />,
   lobby: () => <MergeDefenseGame participants={[]} onComplete={noop} />,

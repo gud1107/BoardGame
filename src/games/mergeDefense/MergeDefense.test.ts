@@ -630,4 +630,39 @@ describe("merge defense engine", () => {
     s.boards[0].gems = 3;
     expect(chooseBotAction(s, 0, { parts, gambleMinGems: 3 })?.type).toBe("gamble");
   });
+
+  it("자동 credit: all-auto board earns ~every kill, all-manual earns none, moves carry the mark", async () => {
+    const { newAutoCredit, trackAction, sampleCredit, autoPowerShare } = await import("./autoCredit");
+    for (const byAuto of [true, false]) {
+      const credit = newAutoCredit();
+      let s = startGame(2, 61, [1]);
+      while (s.phase === "playing" && s.wave < 8) {
+        if (s.tick % 10 === 0) {
+          const a = chooseBotAction(s, 0);
+          if (a) {
+            trackAction(credit, a, byAuto);
+            s = applyAction(s, 0, a);
+          }
+          const b = chooseBotAction(s, 1);
+          if (b) s = applyAction(s, 1, b);
+        }
+        s = stepGame(s);
+        if (s.tick % 20 === 0) sampleCredit(credit, s.boards[0]);
+      }
+      sampleCredit(credit, s.boards[0]);
+      expect(s.boards[0].kills).toBeGreaterThan(50);
+      if (byAuto) expect(credit.kills / s.boards[0].kills).toBeGreaterThan(0.95);
+      else expect(credit.kills).toBe(0);
+    }
+    const c = newAutoCredit();
+    trackAction(c, { type: "summon", slot: 2 }, true);
+    trackAction(c, { type: "move", a: 2, b: 7 }, false);
+    expect([...c.slots]).toEqual([7]);
+    trackAction(c, { type: "merge", a: 7, b: 4 }, false);
+    expect(c.slots.size).toBe(0);
+    const s0 = startGame(2, 62);
+    s0.boards[0].units[0] = { kind: "archer", grade: 1, cd: 0 };
+    s0.boards[0].units[1] = { kind: "archer", grade: 1, cd: 0 };
+    expect(autoPowerShare(s0.boards[0], new Set([0]))).toBeCloseTo(0.5);
+  });
 });
