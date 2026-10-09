@@ -197,6 +197,21 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         type: "IMPROVE",
         desc: "🤖 자동·AI가 몬스터 방어력·마법 저항을 보고 잘 통하는 쪽 타워를 골라 강화해요",
       },
+      {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "몬스터가 강해질수록 생김새가 바뀌어요 — W10 강화·W20 정예·W30 심연, 보스는 갑주·날개·심연의 군주로 변신",
+      },
+      {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "💎 숫자를 누르면 보석 얻는 법(보스·광폭화·20콤보)과 다음 보스까지 남은 웨이브를 보여줘요",
+      },
+      {
+        game: "merge-defense",
+        type: "IMPROVE",
+        desc: "🤖 자동이 보석이 있는데 빈 칸이 없으면 일반 유닛을 팔아 도박할 자리를 만들어요",
+      },
     ],
   },
   {

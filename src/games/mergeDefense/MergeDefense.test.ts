@@ -43,6 +43,8 @@ import {
   type MergeDefenseState,
 } from "./engine";
 
+const UNIT_KIND_LIST = ["archer", "mage", "frost", "thunder", "poison"] as const;
+
 function runBots(n: number, seed: number, maxTicks = 20 * 60 * 25, mode: "survival" | "versus" = "survival", map: MapId = "classic"): MergeDefenseState {
   let s = startGame(n, seed, [], mode, null, "normal", map);
   while (s.phase === "playing" && s.tick < maxTicks) {
@@ -728,5 +730,25 @@ describe("merge defense engine", () => {
     b.mobs = Array.from({ length: 20 }, (_, i) => ({ id: 500 + i, kind: "tank" as const, hp: 100, maxHp: 100, trav: i * 10, speed: 40, slowT: 0, slowPct: 0, poisonT: 0, poisonDps: 0, from: -1 }));
     const a = chooseBotAction(s, 0, { parts: new Set<AutoPart>(["upgrade"]) });
     expect(a).toEqual({ type: "upgrade", kind: "mage" });
+  });
+
+  it("player 자동 sells a 일반 unit to make room for a gamble; AI opponents don't", async () => {
+    const { mobTier } = await import("./engine");
+    const s = startGame(2, 90);
+    const b = s.boards[0];
+    // A full board with no pairs: every pad a different kind/grade mix, one 일반.
+    b.units = b.units.map((_, i) => ({ kind: UNIT_KIND_LIST[i % 5], grade: 2 + Math.floor(i / 5), cd: 0 }));
+    b.units[4] = { kind: "poison", grade: 1, cd: 0, paid: 20 };
+    b.gems = 1;
+    b.gold = 0;
+    const auto = chooseBotAction(s, 0, { parts: new Set<AutoPart>(["build"]), sellForGamble: true });
+    expect(auto).toEqual({ type: "sell", slot: 4 });
+    expect(chooseBotAction(s, 0, { parts: new Set<AutoPart>(["build"]) })?.type).not.toBe("sell");
+    // Look tiers follow the wave a monster was made for.
+    expect([1, 9, 10, 25, 31].map((w) => mobTier({ bornWave: w }))).toEqual([0, 0, 1, 2, 3]);
+    // Spawned monsters remember their wave (bounded loop — an empty board can lose before W2).
+    let t = startGame(2, 91);
+    for (let i = 0; i < 2000 && t.phase === "playing" && t.boards[0].mobs.length === 0; i++) t = stepGame(t);
+    expect(t.boards[0].mobs[0]?.bornWave).toBe(1);
   });
 });

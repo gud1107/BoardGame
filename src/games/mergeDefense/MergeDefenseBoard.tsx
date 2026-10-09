@@ -68,6 +68,7 @@ import { coverageFor, drawBoard, drawFx, SEAT_COLORS, type Fx } from "./render";
 import * as audio from "./mergeDefenseAudio";
 import RulebookModal from "./RulebookModal";
 import MapIntro from "./MapIntro";
+import GemGuide from "./GemGuide";
 import { AUTO_DEFAULT, AUTO_PRESET_NAME_MAX, autoPresetLink, describeAutoConfig, sameAutoConfig, upsertAutoPreset, type AutoConfig, type AutoPreset } from "./autoSettings";
 
 interface Props {
@@ -93,7 +94,7 @@ interface Props {
 }
 
 const AUTO_PART_LABEL: Record<AutoPart, string> = {
-  build: "🎲 소환·💎 도박",
+  build: "🎲 소환·💎 도박 (도박 자리 없으면 일반 유닛 판매)",
   merge: "🔀 합성",
   upgrade: "⬆️ 강화·집중·결속·기절 해제",
   move: "↔️ 좋은 칸으로 옮기기",
@@ -1484,7 +1485,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
               </span>
             )}
           </span>
-          <span>💎 {me.gems}</span>
+          <GemGuide board={me} wave={state.wave} />
           <span className="text-xs font-semibold text-white/60 light:text-slate-500" title="이만큼 처치하면 다음 상대에게 정예 몬스터를 보내요">
             🔥 {me.sendMeter}/{SEND_EVERY}
           </span>
@@ -1554,7 +1555,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
           className={`rounded-xl bg-gradient-to-b from-sky-400 to-indigo-600 py-3 text-xs font-black text-white shadow-[0_4px_0_#312e81] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40 ${canGamble ? READY_RING : ""}`}
         >
           💎 도박 <span className="font-mono">💎{GAMBLE_COST}</span>
-          <span className="block text-[10px] font-semibold opacity-80">{me.gems < GAMBLE_COST ? "보석 부족" : `전설 ${GAMBLE_ODDS.find((o) => o.grade === 4)?.pct}% · 꽝 ${GAMBLE_ODDS.find((o) => o.grade === 0)?.pct}%`}</span>
+          <span className="block text-[10px] font-semibold opacity-80">{me.gems < GAMBLE_COST ? `보석 부족 · 보스 잡으면 +💎2` : `전설 ${GAMBLE_ODDS.find((o) => o.grade === 4)?.pct}% · 꽝 ${GAMBLE_ODDS.find((o) => o.grade === 0)?.pct}%`}</span>
         </button>
         <button
           disabled={!canMergeNow}

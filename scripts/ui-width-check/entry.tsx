@@ -9,7 +9,7 @@ import MergeDefenseBoard from "@/games/mergeDefense/MergeDefenseBoard";
 import MergeDefenseGame from "@/games/mergeDefense/MergeDefenseGame";
 import MergeDefenseResults from "@/games/mergeDefense/MergeDefenseResults";
 import WaitingRoomPanel from "@/games/mergeDefense/WaitingRoomPanel";
-import { SEAT_COLORS } from "@/games/mergeDefense/render";
+import { SEAT_COLORS, drawMobAt } from "@/games/mergeDefense/render";
 import {
   BOSS_EVERY,
   BOARD_H,
@@ -120,6 +120,33 @@ const waiting = (isHost: boolean) => (
   </div>
 );
 
+/** Every look tier (rows W1 / W10 / W20 / W30) of the common monsters + the boss, drawn once. */
+function MonsterTiers() {
+  return (
+    <canvas
+      width={880}
+      height={760}
+      className="w-full rounded-xl"
+      style={{ background: "#2f5d2a" }}
+      ref={(c) => {
+        const ctx = c?.getContext("2d");
+        if (!c || !ctx) return;
+        ctx.setTransform(2, 0, 0, 2, 0, 0);
+        ctx.fillStyle = "#e5e7eb";
+        ctx.font = "bold 11px sans-serif";
+        const kinds = ["normal", "fast", "tank", "boss"] as const;
+        [1, 10, 20, 30].forEach((w, row) => {
+          ctx.fillText(`W${w}`, 6, 60 + row * 92);
+          kinds.forEach((kind, col) => {
+            const mob = { id: row * 4 + col, kind, hp: 80, maxHp: 100, trav: 100, speed: 0, slowT: 0, slowPct: 0, poisonT: 0, poisonDps: 0, from: -1, bornWave: w };
+            drawMobAt(ctx, mob, 70 + col * (kind === "boss" ? 95 : 85), 66 + row * 92, 1200);
+          });
+        });
+      }}
+    />
+  );
+}
+
 const SCREENS: Record<string, () => ReactNode> = {
   "board-survival": () => board("survival"),
   "board-versus": () => board("versus"),
@@ -132,6 +159,7 @@ const SCREENS: Record<string, () => ReactNode> = {
     // eslint-disable-next-line @next/next/no-img-element
     <img alt="" className="w-full" src={drawRecordCard({ map: "figure8", mode: "survival", difficulty: "hard", wave: 31, prev: 27, name: "초록고양이", chart: { limit: 45, bossEvery: 5, series: [{ load: Array.from({ length: 31 }, (_, i) => Math.min(45, 4 + i * 1.4 + (i % 5 === 4 ? 6 : 0))), color: "#3987e5", me: true }, { load: Array.from({ length: 24 }, (_, i) => Math.min(45, 5 + i * 1.9)), color: "#d95926", me: false }] } }).toDataURL()} />
   ),
+  "monster-tiers": () => <MonsterTiers />,
   "board-intro": () => <MergeDefenseBoard state={startGame(2, 5, [1], "survival", null, "normal", "plaza")} mySeat={0} names={names} onAction={noop} mapBest={27} />,
   lobby: () => <MergeDefenseGame participants={[]} onComplete={noop} />,
   "waiting-host": () => waiting(true),

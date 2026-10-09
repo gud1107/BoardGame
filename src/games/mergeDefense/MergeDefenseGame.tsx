@@ -689,6 +689,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           parts: autoPartsRef.current,
           upgradeMinGold: cfg.upgradeMinGold,
           gambleMinGems: gemSpendingRef.current ? 1 : cfg.gambleSave,
+          sellForGamble: true,
         });
         if (a) {
           stats.counts[a.type] = (stats.counts[a.type] ?? 0) + 1;

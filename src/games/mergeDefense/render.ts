@@ -19,6 +19,7 @@ import {
   TICKS_PER_SEC,
   UNITS,
   fieldLoad,
+  mobTier,
   pathPoint,
   slotCenter,
   slotCoverage,
@@ -864,6 +865,114 @@ function drawPoison(ctx: Ctx, now: number, firing: boolean, mini: boolean) {
 // Monsters
 // ---------------------------------------------------------------------------
 
+/**
+ * Look tiers (engine `mobTier`: W10 강화 · W20 정예 · W30 심연). One visual
+ * language for every kind: a metal ground ring (silver → gold → crimson),
+ * rank chevrons over the head, dorsal spikes from 정예, and for 심연 a dark
+ * aura with drifting embers. The common critters also change palette, and
+ * the boss changes form (see drawDemon).
+ */
+const TIER_STYLE = [
+  null,
+  { ring: "#e2e8f0", glow: "rgba(226,232,240,0.55)", scale: 1.06 },
+  { ring: "#fbbf24", glow: "rgba(251,191,36,0.6)", scale: 1.12 },
+  { ring: "#fb7185", glow: "rgba(244,63,94,0.7)", scale: 1.18 },
+] as const;
+
+function tierGround(ctx: Ctx, tier: number, size: number, now: number, mini: boolean) {
+  const st = TIER_STYLE[tier];
+  if (!st) return;
+  if (tier === 3) {
+    // 심연: a slow-breathing dark aura behind everything.
+    const r = size * (2 + 0.12 * Math.sin(now / 420));
+    const aura = ctx.createRadialGradient(0, -size * 0.3, size * 0.3, 0, -size * 0.3, r);
+    aura.addColorStop(0, "rgba(15,5,20,0.55)");
+    aura.addColorStop(0.6, "rgba(136,19,55,0.22)");
+    aura.addColorStop(1, "rgba(136,19,55,0)");
+    ctx.fillStyle = aura;
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.3, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.save();
+  ctx.strokeStyle = st.ring;
+  ctx.globalAlpha = 0.85;
+  ctx.lineWidth = mini ? 1 : 1.3;
+  ellipse(ctx, 0, size * 0.75, size * 1.05, size * 0.36);
+  ctx.stroke();
+  if (!mini && tier >= 2) {
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 3;
+    ellipse(ctx, 0, size * 0.75, size * 1.05, size * 0.36);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Spikes along the top of the silhouette (정예+), drawn in the body's facing frame. */
+function tierSpikes(ctx: Ctx, tier: number, size: number) {
+  if (tier < 2) return;
+  const n = tier === 3 ? 4 : 3;
+  const g = ctx.createLinearGradient(0, -size * 1.5, 0, -size * 0.8);
+  g.addColorStop(0, tier === 3 ? "#fda4af" : "#fde68a");
+  g.addColorStop(1, tier === 3 ? "#1c0a0f" : "#3f2a06");
+  ctx.fillStyle = g;
+  for (let i = 0; i < n; i++) {
+    const x = (i - (n - 1) / 2) * size * 0.42 - size * 0.12;
+    const h = size * (0.42 + (i === Math.floor(n / 2) ? 0.16 : 0));
+    ctx.beginPath();
+    ctx.moveTo(x - size * 0.14, -size * 0.9);
+    ctx.quadraticCurveTo(x - size * 0.02, -size * 0.9 - h * 0.6, x + size * 0.1, -size * 0.9 - h);
+    ctx.lineTo(x + size * 0.16, -size * 0.88);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+/** Rank chevrons over the head + 심연 embers, drawn unflipped after the body. */
+function tierCrest(ctx: Ctx, tier: number, size: number, now: number, mini: boolean, seed: number, big: boolean) {
+  const st = TIER_STYLE[tier];
+  if (!st || mini) return;
+  const top = -size - (big ? 28 + tier * 7 : 15);
+  ctx.save();
+  ctx.shadowColor = st.glow;
+  ctx.shadowBlur = 6;
+  ctx.strokeStyle = st.ring;
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (let i = 0; i < tier; i++) {
+    const y = top - i * 2.6;
+    ctx.beginPath();
+    ctx.moveTo(-3.2, y + 1.6);
+    ctx.lineTo(0, y - 0.6);
+    ctx.lineTo(3.2, y + 1.6);
+    ctx.stroke();
+  }
+  ctx.restore();
+  if (tier === 3) {
+    for (let i = 0; i < 4; i++) {
+      const a = now / 700 + i * 1.57 + seed;
+      const r = size * (1.15 + 0.15 * Math.sin(now / 300 + i));
+      const x = Math.cos(a) * r;
+      const y = -size * 0.4 + Math.sin(a) * r * 0.45 - ((now / 25 + i * 40 + seed * 10) % 18) * 0.3;
+      ctx.fillStyle = `rgba(253,164,175,${0.55 + 0.4 * Math.sin(now / 160 + i)})`;
+      ctx.beginPath();
+      ctx.arc(x, y, 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+/** One monster at board point (x, y) — for previews (rulebook / checks), outside a board. */
+export function drawMobAt(ctx: Ctx, m: Mob, x: number, y: number, now: number) {
+  const p = pathPoint(m.trav);
+  ctx.save();
+  ctx.translate(x - p.x, y - p.y);
+  drawMob(ctx, m, m.trav, now, false);
+  ctx.restore();
+}
+
 function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean, hitAt?: number) {
   const p = pathPoint(trav);
   const ahead = pathPoint(trav + 4);
@@ -872,10 +981,13 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean, hit
   ctx.save();
   ctx.translate(p.x, p.y);
 
-  const size = { normal: 9, fast: 8, tank: 12, boss: 19, elite: 12, invader: 13, golem: 14, wraith: 11, warlord: 16 }[m.kind];
+  const tier = mobTier(m);
+  const tierScale = TIER_STYLE[tier]?.scale ?? 1;
+  const size = { normal: 9, fast: 8, tank: 12, boss: 19, elite: 12, invader: 13, golem: 14, wraith: 11, warlord: 16 }[m.kind] * tierScale;
   ctx.fillStyle = "rgba(0,0,0,0.3)";
   ellipse(ctx, 0, size * 0.75, size * 0.95, size * 0.32);
   ctx.fill();
+  tierGround(ctx, tier, size, now, mini);
 
   if (m.from >= 0) {
     const pulse = 0.6 + 0.4 * Math.sin(now / 150 + m.id);
@@ -904,19 +1016,20 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean, hit
     ctx.translate(-facing * 2.2 * hit, 0);
     ctx.scale(1 + 0.16 * hit, 1 - 0.13 * hit);
   }
-  ctx.scale(facing, 1);
+  ctx.scale(facing * tierScale, tierScale);
+  if (m.kind !== "boss") tierSpikes(ctx, tier, size / tierScale);
   switch (m.kind) {
     case "normal":
-      drawSlime(ctx, m, now, mini);
+      drawSlime(ctx, m, now, mini, tier);
       break;
     case "fast":
-      drawBat(ctx, m, now, mini);
+      drawBat(ctx, m, now, mini, tier);
       break;
     case "tank":
-      drawBeetle(ctx, m, now, mini);
+      drawBeetle(ctx, m, now, mini, tier);
       break;
     case "boss":
-      drawDemon(ctx, m, now, mini);
+      drawDemon(ctx, m, now, mini, tier);
       break;
     case "elite":
       drawOgre(ctx, m, now, mini);
@@ -950,6 +1063,8 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean, hit
     ctx.restore();
   }
 
+  tierCrest(ctx, tier, size, now, mini, m.id, m.kind === "boss" || m.kind === "warlord");
+
   // Status overlays
   if (m.slowT > 0) {
     ctx.strokeStyle = "rgba(186,230,253,0.9)";
@@ -973,7 +1088,8 @@ function drawMob(ctx: Ctx, m: Mob, trav: number, now: number, mini: boolean, hit
   if (m.hp < m.maxHp) {
     const big = m.kind === "boss" || m.kind === "warlord";
     const w = big ? 46 : Math.max(16, size * 2.2);
-    const top = -size - (big ? 20 : 9);
+    // Bosses grow taller horns / a shard halo with tier — lift the bar clear of them.
+    const top = -size - (big ? 20 + (m.kind === "boss" ? tier * 7 : 0) : 9);
     ctx.fillStyle = "rgba(0,0,0,0.65)";
     roundRect(ctx, -w / 2 - 1, top - 1, w + 2, 5, 2);
     ctx.fill();
@@ -1003,14 +1119,35 @@ function eyes(ctx: Ctx, x: number, y: number, gap: number, r: number, iris = "#1
   }
 }
 
-function drawSlime(ctx: Ctx, m: Mob, now: number, mini: boolean) {
+/** [highlight, mid, deep] per tier — lime → teal → violet → obsidian-rose. */
+const SLIME_PAL = [
+  ["#d9f99d", "#65a30d", "#365314"],
+  ["#a5f3fc", "#0891b2", "#164e63"],
+  ["#e9d5ff", "#7e22ce", "#3b0764"],
+  ["#fecdd3", "#4c0519", "#0a0a0a"],
+];
+const BAT_PAL = [
+  { hi: "#fcd34d", lo: "#b45309", wing: "#7c2d12", eye: "#fef08a" },
+  { hi: "#fca5a5", lo: "#b91c1c", wing: "#450a0a", eye: "#fef08a" },
+  { hi: "#c7d2fe", lo: "#4338ca", wing: "#1e1b4b", eye: "#a5f3fc" },
+  { hi: "#fde68a", lo: "#18181b", wing: "#09090b", eye: "#fb7185" },
+];
+const BEETLE_PAL = [
+  { a: "#cbd5e1", b: "#64748b", c: "#1e293b", head: "#334155", horn: "#e2e8f0", stud: "#94a3b8" },
+  { a: "#fde68a", b: "#b45309", c: "#451a03", head: "#78350f", horn: "#fef3c7", stud: "#fcd34d" },
+  { a: "#a7f3d0", b: "#047857", c: "#022c22", head: "#064e3b", horn: "#d1fae5", stud: "#6ee7b7" },
+  { a: "#52525b", b: "#18181b", c: "#09090b", head: "#27272a", horn: "#fbbf24", stud: "#fbbf24" },
+];
+
+function drawSlime(ctx: Ctx, m: Mob, now: number, mini: boolean, tier = 0) {
+  const pal = SLIME_PAL[tier];
   const t = Math.sin(now / 130 + m.id);
   const sx = 1 + t * 0.09;
   const sy = 1 - t * 0.09;
   const g = ctx.createRadialGradient(-3, -5, 1, 0, -1, 12);
-  g.addColorStop(0, "#d9f99d");
-  g.addColorStop(0.5, "#65a30d");
-  g.addColorStop(1, "#365314");
+  g.addColorStop(0, pal[0]);
+  g.addColorStop(0.5, pal[1]);
+  g.addColorStop(1, pal[2]);
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.moveTo(-9 * sx, 6);
@@ -1021,9 +1158,21 @@ function drawSlime(ctx: Ctx, m: Mob, now: number, mini: boolean) {
   ctx.fillStyle = "rgba(255,255,255,0.55)";
   ellipse(ctx, -3.5, -7 * sy, 2.6, 1.6);
   ctx.fill();
+  if (!mini && tier === 3) {
+    // 심연: glowing ember veins across the obsidian.
+    ctx.strokeStyle = `rgba(251,113,133,${0.55 + 0.35 * Math.sin(now / 240 + m.id)})`;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(-6, 3);
+    ctx.lineTo(-3, -3);
+    ctx.lineTo(-5, -7);
+    ctx.moveTo(4, 4);
+    ctx.lineTo(6, -2);
+    ctx.stroke();
+  }
   if (!mini) {
-    eyes(ctx, 1, -2, 3.2, 2);
-    ctx.strokeStyle = "#1a2e05";
+    eyes(ctx, 1, -2, 3.2, 2, tier >= 2 ? "#f43f5e" : "#111827", tier === 3 ? "#fde68a" : "#ffffff");
+    ctx.strokeStyle = tier === 0 ? "#1a2e05" : pal[2];
     ctx.lineWidth = 0.9;
     ctx.beginPath();
     ctx.arc(1.5, 2, 1.8, 0.2, Math.PI - 0.2);
@@ -1031,12 +1180,17 @@ function drawSlime(ctx: Ctx, m: Mob, now: number, mini: boolean) {
   }
 }
 
-function drawBat(ctx: Ctx, m: Mob, now: number, mini: boolean) {
+function drawBat(ctx: Ctx, m: Mob, now: number, mini: boolean, tier = 0) {
+  const pal = BAT_PAL[tier];
   const flap = Math.sin(now / 55 + m.id);
   const lift = -3 + flap * 1.5;
   ctx.translate(0, lift - 3);
   // Wings
-  ctx.fillStyle = "#7c2d12";
+  ctx.fillStyle = pal.wing;
+  if (tier === 3 && !mini) {
+    ctx.strokeStyle = "rgba(251,191,36,0.85)";
+    ctx.lineWidth = 0.7;
+  }
   for (const s of [-1, 1]) {
     ctx.beginPath();
     ctx.moveTo(0, 0);
@@ -1046,11 +1200,12 @@ function drawBat(ctx: Ctx, m: Mob, now: number, mini: boolean) {
     ctx.lineTo(s * 5, 0);
     ctx.closePath();
     ctx.fill();
+    if (tier === 3 && !mini) ctx.stroke();
   }
   // Body
   const g = ctx.createRadialGradient(-1, -2, 0.5, 0, 0, 7);
-  g.addColorStop(0, "#fcd34d");
-  g.addColorStop(1, "#b45309");
+  g.addColorStop(0, pal.hi);
+  g.addColorStop(1, pal.lo);
   ctx.fillStyle = g;
   ellipse(ctx, 0, 0, 5.5, 6);
   ctx.fill();
@@ -1063,7 +1218,7 @@ function drawBat(ctx: Ctx, m: Mob, now: number, mini: boolean) {
   ctx.lineTo(2.5, -9);
   ctx.lineTo(0.8, -5);
   ctx.fill();
-  if (!mini) eyes(ctx, 0.8, -1, 2.2, 1.5, "#7f1d1d", "#fef08a");
+  if (!mini) eyes(ctx, 0.8, -1, 2.2, 1.5, "#7f1d1d", pal.eye);
   // Speed streaks
   ctx.strokeStyle = "rgba(253,230,138,0.5)";
   ctx.lineWidth = 1;
@@ -1075,7 +1230,8 @@ function drawBat(ctx: Ctx, m: Mob, now: number, mini: boolean) {
   ctx.stroke();
 }
 
-function drawBeetle(ctx: Ctx, m: Mob, now: number, mini: boolean) {
+function drawBeetle(ctx: Ctx, m: Mob, now: number, mini: boolean, tier = 0) {
+  const pal = BEETLE_PAL[tier];
   const step = Math.sin(now / 110 + m.id);
   // Legs
   ctx.strokeStyle = "#1e293b";
@@ -1089,9 +1245,9 @@ function drawBeetle(ctx: Ctx, m: Mob, now: number, mini: boolean) {
   }
   // Armoured shell
   const g = ctx.createLinearGradient(0, -14, 0, 6);
-  g.addColorStop(0, "#cbd5e1");
-  g.addColorStop(0.5, "#64748b");
-  g.addColorStop(1, "#1e293b");
+  g.addColorStop(0, pal.a);
+  g.addColorStop(0.5, pal.b);
+  g.addColorStop(1, pal.c);
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.moveTo(-13, 4);
@@ -1108,7 +1264,16 @@ function drawBeetle(ctx: Ctx, m: Mob, now: number, mini: boolean) {
     ctx.moveTo(-9, -6);
     ctx.quadraticCurveTo(-1, -4, 10, -7);
     ctx.stroke();
-    ctx.fillStyle = "#94a3b8";
+    if (tier === 3) {
+      // Gold filigree trim along the shell's rim.
+      ctx.strokeStyle = "rgba(251,191,36,0.9)";
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(-12, 3);
+      ctx.bezierCurveTo(-12, -10, 10, -12.5, 12, 1.5);
+      ctx.stroke();
+    }
+    ctx.fillStyle = pal.stud;
     for (const [rx, ry] of [
       [-7, -2],
       [4, -3],
@@ -1119,10 +1284,10 @@ function drawBeetle(ctx: Ctx, m: Mob, now: number, mini: boolean) {
     }
   }
   // Head + horn
-  ctx.fillStyle = "#334155";
+  ctx.fillStyle = pal.head;
   ellipse(ctx, 13, 0, 5, 4.5);
   ctx.fill();
-  ctx.fillStyle = "#e2e8f0";
+  ctx.fillStyle = pal.horn;
   ctx.beginPath();
   ctx.moveTo(15, -3);
   ctx.quadraticCurveTo(21, -8, 19, -12);
@@ -1136,18 +1301,67 @@ function drawBeetle(ctx: Ctx, m: Mob, now: number, mini: boolean) {
   }
 }
 
-function drawDemon(ctx: Ctx, m: Mob, now: number, mini: boolean) {
+/**
+ * Boss forms by tier: 마왕 (violet) → 갑주 마왕 (crimson, steel pauldrons) →
+ * 날개 대마왕 (indigo, bat wings, silver crown) → 심연의 군주 (obsidian with
+ * glowing gold cracks, ember-edged wings, a ring of orbiting shards).
+ */
+const DEMON_FORM = [
+  { body: ["#c084fc", "#6d28d9", "#2e1065"], aura: "124,58,237", cape: "#450a0a", horn: "#fef3c7", crown: "#facc15", crownEdge: "#78350f", gem: "#ef4444", eye: "#fef08a", eyeGlow: "#facc15" },
+  { body: ["#fca5a5", "#b91c1c", "#450a0a"], aura: "220,38,38", cape: "#1c1917", horn: "#e7e5e4", crown: "#facc15", crownEdge: "#78350f", gem: "#22d3ee", eye: "#fef08a", eyeGlow: "#f97316" },
+  { body: ["#a5b4fc", "#3730a3", "#0f0a2e"], aura: "79,70,229", cape: "#0b1026", horn: "#e0e7ff", crown: "#e2e8f0", crownEdge: "#334155", gem: "#22d3ee", eye: "#a5f3fc", eyeGlow: "#22d3ee" },
+  { body: ["#52525b", "#18181b", "#000000"], aura: "190,18,60", cape: "#09090b", horn: "#fbbf24", crown: "#fb7185", crownEdge: "#4c0519", gem: "#fde68a", eye: "#fecdd3", eyeGlow: "#fb7185" },
+] as const;
+
+function demonWings(ctx: Ctx, now: number, tier: number, mini: boolean) {
+  const beat = Math.sin(now / 260) * 0.12;
+  for (const s of [-1, 1]) {
+    ctx.save();
+    ctx.scale(s, 1);
+    ctx.rotate(-beat);
+    const g = ctx.createLinearGradient(0, -30, 34, 6);
+    g.addColorStop(0, tier === 3 ? "#27272a" : "#312e81");
+    g.addColorStop(1, tier === 3 ? "#000000" : "#0f0a2e");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(8, -12);
+    ctx.quadraticCurveTo(22, -34, 38, -26);
+    ctx.lineTo(33, -16);
+    ctx.quadraticCurveTo(30, -10, 34, -4);
+    ctx.quadraticCurveTo(26, -6, 24, 0);
+    ctx.quadraticCurveTo(18, -4, 12, 2);
+    ctx.closePath();
+    ctx.fill();
+    if (!mini) {
+      // Bone struts, ember-lit on the 심연 form.
+      ctx.strokeStyle = tier === 3 ? `rgba(251,113,133,${0.6 + 0.3 * Math.sin(now / 200)})` : "rgba(165,180,252,0.55)";
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(9, -11);
+      ctx.lineTo(37, -25);
+      ctx.moveTo(10, -10);
+      ctx.lineTo(33, -5);
+      ctx.moveTo(10, -9);
+      ctx.lineTo(24, 0);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+function drawDemon(ctx: Ctx, m: Mob, now: number, mini: boolean, tier = 0) {
+  const f = DEMON_FORM[tier];
   const breathe = 1 + Math.sin(now / 400) * 0.04;
-  // Dark aura
-  const aura = ctx.createRadialGradient(0, -4, 6, 0, -4, 30);
-  aura.addColorStop(0, "rgba(124,58,237,0.45)");
-  aura.addColorStop(1, "rgba(124,58,237,0)");
+  // Aura
+  const aura = ctx.createRadialGradient(0, -4, 6, 0, -4, 30 + tier * 3);
+  aura.addColorStop(0, `rgba(${f.aura},0.45)`);
+  aura.addColorStop(1, `rgba(${f.aura},0)`);
   ctx.fillStyle = aura;
   ctx.beginPath();
-  ctx.arc(0, -4, 30, 0, Math.PI * 2);
+  ctx.arc(0, -4, 30 + tier * 3, 0, Math.PI * 2);
   ctx.fill();
   if (!mini) {
-    ctx.strokeStyle = `rgba(216,180,254,${0.4 + 0.3 * Math.sin(now / 200)})`;
+    ctx.strokeStyle = tier >= 2 ? `rgba(${f.aura},${0.5 + 0.3 * Math.sin(now / 200)})` : `rgba(216,180,254,${0.4 + 0.3 * Math.sin(now / 200)})`;
     ctx.lineWidth = 1.2;
     ctx.setLineDash([3, 4]);
     ctx.lineDashOffset = now / 40;
@@ -1155,8 +1369,9 @@ function drawDemon(ctx: Ctx, m: Mob, now: number, mini: boolean) {
     ctx.stroke();
     ctx.setLineDash([]);
   }
+  if (tier >= 2) demonWings(ctx, now, tier, mini);
   // Cape
-  ctx.fillStyle = "#450a0a";
+  ctx.fillStyle = f.cape;
   ctx.beginPath();
   ctx.moveTo(-14, -6);
   ctx.quadraticCurveTo(-24, 8 + Math.sin(now / 160) * 2, -16, 14);
@@ -1168,9 +1383,9 @@ function drawDemon(ctx: Ctx, m: Mob, now: number, mini: boolean) {
   ctx.save();
   ctx.scale(breathe, breathe);
   const g = ctx.createRadialGradient(-5, -10, 2, 0, -2, 20);
-  g.addColorStop(0, "#c084fc");
-  g.addColorStop(0.55, "#6d28d9");
-  g.addColorStop(1, "#2e1065");
+  g.addColorStop(0, f.body[0]);
+  g.addColorStop(0.55, f.body[1]);
+  g.addColorStop(1, f.body[2]);
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.moveTo(-15, 12);
@@ -1178,40 +1393,109 @@ function drawDemon(ctx: Ctx, m: Mob, now: number, mini: boolean) {
   ctx.bezierCurveTo(10, -19, 19, -8, 15, 12);
   ctx.quadraticCurveTo(0, 16, -15, 12);
   ctx.fill();
+  if (tier === 3 && !mini) {
+    // Molten gold cracks across the obsidian hide.
+    ctx.save();
+    ctx.shadowColor = "#fbbf24";
+    ctx.shadowBlur = 6;
+    ctx.strokeStyle = `rgba(251,191,36,${0.65 + 0.3 * Math.sin(now / 260)})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-11, 8);
+    ctx.lineTo(-7, 1);
+    ctx.lineTo(-9, -6);
+    ctx.lineTo(-4, -12);
+    ctx.moveTo(-7, 1);
+    ctx.lineTo(-2, 3);
+    ctx.moveTo(9, 9);
+    ctx.lineTo(6, 2);
+    ctx.lineTo(10, -4);
+    ctx.moveTo(6, 2);
+    ctx.lineTo(1, 6);
+    ctx.stroke();
+    ctx.restore();
+  }
   ctx.restore();
-  // Horns
-  ctx.fillStyle = "#fef3c7";
+  if (tier >= 1) {
+    // Steel pauldrons with a bright rim and rivets.
+    for (const s of [-1, 1]) {
+      const pg = ctx.createLinearGradient(s * 10, -14, s * 18, -2);
+      pg.addColorStop(0, tier === 3 ? "#71717a" : "#e2e8f0");
+      pg.addColorStop(1, tier === 3 ? "#18181b" : "#475569");
+      ctx.fillStyle = pg;
+      ctx.beginPath();
+      ctx.moveTo(s * 8, -13);
+      ctx.quadraticCurveTo(s * 20, -16, s * 19, -4);
+      ctx.quadraticCurveTo(s * 14, -6, s * 9, -6);
+      ctx.closePath();
+      ctx.fill();
+      if (!mini) {
+        ctx.strokeStyle = tier === 3 ? "rgba(251,191,36,0.85)" : "rgba(255,255,255,0.7)";
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+        ctx.fillStyle = tier === 3 ? "#fbbf24" : "#cbd5e1";
+        ellipse(ctx, s * 15, -10, 0.9, 0.9);
+        ctx.fill();
+      }
+    }
+  }
+  // Horns — longer and curling with each form.
+  ctx.fillStyle = f.horn;
+  const reach = 32 + tier * 3;
   for (const s of [-1, 1]) {
     ctx.beginPath();
     ctx.moveTo(s * 8, -16);
-    ctx.quadraticCurveTo(s * 18, -22, s * 17, -32);
+    if (tier >= 2) ctx.bezierCurveTo(s * 22, -20, s * 24, -reach, s * 14, -reach - 2);
+    else ctx.quadraticCurveTo(s * 18, -22, s * 17, -reach);
     ctx.quadraticCurveTo(s * 13, -23, s * 4, -18);
     ctx.closePath();
     ctx.fill();
   }
   // Crown
-  ctx.fillStyle = "#facc15";
-  ctx.strokeStyle = "#78350f";
+  ctx.fillStyle = f.crown;
+  ctx.strokeStyle = f.crownEdge;
   ctx.lineWidth = 0.8;
+  if (tier === 3 && !mini) {
+    ctx.shadowColor = "#fb7185";
+    ctx.shadowBlur = 8;
+  }
   ctx.beginPath();
   ctx.moveTo(-7, -18);
   ctx.lineTo(-7, -25);
   ctx.lineTo(-3.5, -21);
-  ctx.lineTo(0, -27);
+  ctx.lineTo(0, -27 - tier);
   ctx.lineTo(3.5, -21);
   ctx.lineTo(7, -25);
   ctx.lineTo(7, -18);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = "#ef4444";
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = f.gem;
   ellipse(ctx, 0, -20.5, 1.3, 1.3);
   ctx.fill();
+  if (tier === 3 && !mini) {
+    // A slow ring of obsidian shards orbiting above the crown.
+    for (let i = 0; i < 6; i++) {
+      const a = now / 900 + (i * Math.PI) / 3;
+      const x = Math.cos(a) * 15;
+      const y = -31 + Math.sin(a) * 4;
+      const front = Math.sin(a) > 0;
+      ctx.fillStyle = front ? "#fda4af" : "rgba(253,164,175,0.45)";
+      ctx.beginPath();
+      ctx.moveTo(x, y - 2.4);
+      ctx.lineTo(x + 1.3, y);
+      ctx.lineTo(x, y + 2.4);
+      ctx.lineTo(x - 1.3, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
   // Glowing eyes + fangs
   for (const s of [-1, 1]) {
-    ctx.fillStyle = "#fef08a";
-    ctx.shadowColor = "#facc15";
-    ctx.shadowBlur = mini ? 0 : 8;
+    ctx.fillStyle = f.eye;
+    ctx.shadowColor = f.eyeGlow;
+    ctx.shadowBlur = mini ? 0 : 8 + tier * 2;
     ctx.beginPath();
     ctx.moveTo(s * 2 + 2, -8);
     ctx.lineTo(s * 8 + 2, -11);

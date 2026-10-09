@@ -361,6 +361,13 @@ export const MOB_SPEC: Record<MobKind, { hp: number; speed: number }> = {
   warlord: { hp: 20, speed: 38 },
 };
 
+/** Look tier by the wave a monster was made for: 0 W1–9 · 1 강화 W10+ · 2 정예 W20+ · 3 심연 W30+. */
+export function mobTier(m: Pick<Mob, "bornWave">): 0 | 1 | 2 | 3 {
+  const w = m.bornWave ?? 1;
+  return w >= 30 ? 3 : w >= 20 ? 2 : w >= 10 ? 1 : 0;
+}
+export const MOB_TIER_NAMES = ["", "강화", "정예", "심연"] as const;
+
 /** Damage that lands on `kind` after its armor / resist. */
 export function mitigated(kind: MobKind, amount: number, type: DamageType): number {
   const info = MOB_INFO[kind];
@@ -415,7 +422,7 @@ export interface Mob {
   grade?: number;
   /** Boss / warlord: minions called so far (capped by MINION_CAP). */
   calls?: number;
-  /** Bosses only: the wave they arrived with (a wave-10 boss may die in wave 11). */
+  /** The wave this monster was made for (a wave-10 boss may die in wave 11) — drives its look tier too. */
   bornWave?: number;
   /** Out of minions → berserk: smashes the nearest tower every SMASH_EVERY ticks. */
   rage?: boolean;
@@ -943,6 +950,7 @@ export function applyAction(state: MergeDefenseState, seat: SeatIndex, action: A
       from: seat,
       unitKind: unit.kind,
       grade: unit.grade,
+      bornWave: s.wave,
     });
     pushEvent(s, { seat, type: "invade", to, kind: unit.kind, grade: unit.grade });
     return s;
@@ -1039,7 +1047,7 @@ function makeMob(s: MergeDefenseState, kind: MobKind, wave: number, from: SeatIn
     poisonT: 0,
     poisonDps: 0,
     from,
-    ...(kind === "boss" ? { bornWave: wave } : {}),
+    bornWave: wave,
   };
 }
 
@@ -1497,6 +1505,7 @@ export function actionPart(a: Action): AutoPart {
   switch (a.type) {
     case "summon":
     case "gamble":
+    case "sell":
       return "build";
     case "merge":
       return "merge";
@@ -1522,6 +1531,12 @@ export interface AutoOptions {
   parts?: ReadonlySet<AutoPart>;
   upgradeMinGold?: number;
   gambleMinGems?: number;
+  /**
+   * Sell a 일반 unit to free a cell for a gamble when the board is full. Player
+   * 🤖 자동 only — it lifts bot median waves from ~34 to ~37–42 (more on
+   * small maps), so AI opponents keep playing without it.
+   */
+  sellForGamble?: boolean;
 }
 /** 🤖 자동 "도박은 보석 N개 모일 때까지 아끼기" choices (1 = gamble right away). */
 export const AUTO_GAMBLE_SAVE = [1, 2, 3, 5];
@@ -1537,7 +1552,15 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, auto:
   const free = emptySlots(board).length;
   const cost = summonCost(board);
   const bestEmpty = slotPref.find((i) => !board.units[i]);
-  if (building && board.gems >= Math.max(GAMBLE_COST, auto.gambleMinGems ?? 0) && bestEmpty !== undefined) return { type: "gamble", slot: bestEmpty };
+  const canGamble = building && board.gems >= Math.max(GAMBLE_COST, auto.gambleMinGems ?? 0);
+  if (canGamble && bestEmpty !== undefined) return { type: "gamble", slot: bestEmpty };
+  // Gems ready but the board is full with nothing to merge: sell the 일반 unit on the
+  // worst cell to make room for the gamble (a gamble lands 희귀+ 80% of the time, so
+  // this never trades down; a plain summon never triggers it, so no sell↔summon churn).
+  if (auto.sellForGamble && canGamble && bestEmpty === undefined && mergePairs(board).length === 0) {
+    const weakest = [...slotPref].reverse().find((i) => board.units[i]?.grade === 1);
+    if (weakest !== undefined) return { type: "sell", slot: weakest };
+  }
   // 유닛 대결: a board that keeps getting combo-jammed saves up for max 결속
   // (immunity + reflect) before anything else.
   const braceNow = board.brace ?? 0;

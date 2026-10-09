@@ -34,6 +34,7 @@ const AUTO_ACTION_LABEL: [Action["type"], string][] = [
   ["brace", "🛡️ 결속"],
   ["wake", "⚡ 기절 해제"],
   ["move", "↔️ 이동"],
+  ["sell", "💰 판매"],
   ["send", "⚔️ 보내기"],
   ["hire", "👾 구매"],
 ];

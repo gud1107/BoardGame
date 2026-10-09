@@ -43,7 +43,7 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               <b>무작위 종류</b> 유닛 1개가 돼요. 무엇이 나올지는 운!
             </li>
             <li>
-              <b>💎 도박</b>: 보석 {GAMBLE_COST}개로 희귀~전설 유닛을 노려요. 보석은 시작할 때 1개, 보스를 잡을 때마다 2개 받아요.
+              <b>💎 도박</b>: 보석 {GAMBLE_COST}개로 희귀~전설 유닛을 노려요. 보석은 🎁 시작할 때 1개, 👑 보스 처치 +2, 😡 광폭화한 보스·전쟁군주 처치 +1, ⚡ 치명타 20콤보 +1(웨이브마다 1번)로 얻어요 — 화면의 💎 숫자를 누르면 지금 진행 상황과 함께 볼 수 있어요.
               <span className="mt-1 flex flex-wrap gap-1.5 text-xs">
                 {GAMBLE_ODDS.map((o) => (
                   <span
@@ -117,6 +117,14 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
               </span>
             ))}
             <span className="text-white/50 light:text-slate-500">(한 단계마다 공격력 ×2.5)</span>
+          </p>
+        </section>
+
+        <section>
+          <h3 className={h3}>몬스터가 강해지면</h3>
+          <p className="text-white/70 light:text-slate-600">
+            웨이브가 깊어질수록 몬스터 생김새가 바뀌어요 — <b>W10 강화</b>(은빛 고리 ▲) · <b>W20 정예</b>(금빛 고리 ▲▲, 등 가시) ·{" "}
+            <b>W30 심연</b>(붉은 고리 ▲▲▲, 검은 오라와 불티). 보스는 보라 마왕 → 갑주 마왕 → 날개 대마왕 → 심연의 군주로 모습이 달라져요.
           </p>
         </section>
 
