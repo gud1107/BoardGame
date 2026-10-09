@@ -4,6 +4,7 @@ import type { ComponentProps } from "react";
 import { COMBO, MAPS, sanitizeMap, type Difficulty, type GameMode, type MapId, type RankedSeat } from "./engine";
 import RoomSettings, { DIFFICULTY_LABEL } from "./RoomSettings";
 import WaveChart, { type WaveSeries } from "./WaveChart";
+import RecordBurst from "./RecordBurst";
 
 export interface MatchRecord {
   mode: GameMode;
@@ -49,6 +50,9 @@ export default function MergeDefenseResults({
   const me = rankings.find((r) => r.seat === mySeat);
   const versus = mode === "versus";
   const bestCombo = Math.max(...rankings.map((r) => r.combo));
+  // Beat the record the map-intro card showed → the big celebration.
+  const mapRecord = myRecord && myRecord.prev > 0 && myRecord.wave > myRecord.prev ? myRecord : null;
+  const recordMap = MAPS[sanitizeMap(myRecord?.map)];
   return (
     <div
       className="relative flex flex-col items-center gap-5 rounded-[28px] border border-black/60 px-3 py-6 text-center shadow-[0_25px_60px_-25px_rgba(0,0,0,0.95)] sm:p-8"
@@ -57,7 +61,23 @@ export default function MergeDefenseResults({
       <span className="text-5xl">{iWon ? "🏆" : "🛡️"}</span>
       <h2 className="text-2xl font-bold break-keep text-amber-100 [overflow-wrap:anywhere]">{winner ? `${names[winner.seat]}님 승리!` : "무승부!"}</h2>
       <p className="text-xs text-white/50">마지막까지 방어선을 지킨 사람이 승리합니다.</p>
-      {myRecord && (
+      {mapRecord && <RecordBurst />}
+      {mapRecord && (
+        <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border-2 border-amber-300/80 bg-gradient-to-b from-amber-400/30 to-orange-600/20 px-4 py-3 shadow-[0_0_40px_-8px_rgba(251,191,36,0.8)] motion-safe:animate-[md-record-big_0.7s_cubic-bezier(.2,1.6,.4,1)]">
+          <style>{`@keyframes md-record-big{0%{transform:scale(.4) rotate(-6deg);opacity:0}100%{transform:scale(1) rotate(0)}}@keyframes md-record-shine{0%{transform:translateX(-120%) skewX(-20deg)}100%{transform:translateX(260%) skewX(-20deg)}}`}</style>
+          <span className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/30 to-transparent motion-safe:animate-[md-record-shine_1.6s_ease-in-out_0.5s_2]" />
+          <p className="text-xs font-bold tracking-wide text-amber-200">
+            {recordMap.emoji} {recordMap.name} · {DIFFICULTY_LABEL[mapRecord.difficulty].emoji} {DIFFICULTY_LABEL[mapRecord.difficulty].name} ·{" "}
+            {mapRecord.mode === "versus" ? "유닛 대결" : "생존전"}
+          </p>
+          <p className="text-3xl font-black break-keep text-amber-50 drop-shadow-[0_2px_0_rgba(0,0,0,0.5)] sm:text-4xl">🏆 이 맵 신기록!</p>
+          <p className="mt-1 font-mono text-lg font-bold text-white">
+            WAVE {mapRecord.prev} → <span className="text-amber-300">{mapRecord.wave}</span>
+            <span className="ml-1.5 rounded-full bg-emerald-500/30 px-2 py-0.5 text-sm text-emerald-100">+{mapRecord.wave - mapRecord.prev}</span>
+          </p>
+        </div>
+      )}
+      {myRecord && !mapRecord && (
         <div
           className={`rounded-xl border px-4 py-2 text-sm break-keep ${
             myRecord.wave > myRecord.prev ? "animate-[md-record_0.6s_ease-out] border-amber-300/70 bg-amber-400/15 text-amber-100" : "border-white/10 bg-white/5 text-white/70"

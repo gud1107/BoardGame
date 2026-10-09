@@ -26,15 +26,15 @@ export default function BestWaveTable({
       type="button"
       onClick={() => setMode(m)}
       aria-pressed={mode === m}
-      className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${mode === m ? "bg-amber-400/25 text-amber-100 light:bg-amber-100 light:text-amber-800" : "text-white/50 hover:text-white/80 light:text-slate-500"}`}
+      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap ${mode === m ? "bg-amber-400/25 text-amber-100 light:bg-amber-100 light:text-amber-800" : "text-white/50 hover:text-white/80 light:text-slate-500"}`}
     >
       {label}
     </button>
   );
   return (
     <div className="mt-3 w-full max-w-xs rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-left light:border-slate-200 light:bg-slate-50">
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <span className="text-xs font-bold text-white/80 light:text-slate-700">🏅 내 최고 기록</span>
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <span className="text-xs font-bold whitespace-nowrap text-white/80 light:text-slate-700">🏅 내 최고 기록</span>
         <span className="flex gap-0.5">
           {tab("survival", "🛡️ 생존전")}
           {tab("versus", "⚔️ 대결")}
@@ -45,8 +45,9 @@ export default function BestWaveTable({
           <tr className="text-white/40 light:text-slate-400">
             <th className="w-[40%] pb-1 text-left font-normal">맵</th>
             {DIFFICULTIES.map((d) => (
-              <th key={d} className="pb-1 text-center font-normal">
-                {DIFFICULTY_LABEL[d].emoji} {DIFFICULTY_LABEL[d].name}
+              <th key={d} className="pb-1 text-center font-normal whitespace-nowrap" title={DIFFICULTY_LABEL[d].name}>
+                {DIFFICULTY_LABEL[d].emoji}
+                <span className="hidden min-[360px]:inline"> {DIFFICULTY_LABEL[d].name}</span>
               </th>
             ))}
           </tr>

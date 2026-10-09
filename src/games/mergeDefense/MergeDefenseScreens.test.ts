@@ -90,7 +90,16 @@ describe("merge defense screens", () => {
   it("results: winner, record banner, combo coverage, phone-safe table", () => {
     const html = results();
     expect(html).toContain("AI 4님 승리!");
-    expect(html).toContain("최고 기록 갱신! WAVE 26");
+    // Beat a map record the intro card showed → the big banner.
+    expect(html).toContain("이 맵 신기록!");
+    expect(html).toContain("WAVE 24 → ");
+    expect(html).not.toContain("최고 기록 갱신!");
+    // First ever record on a map → the regular banner, no burst.
+    const first = results({ myRecord: { mode: "versus", difficulty: "hard", map: "plaza", wave: 12, prev: 0 } });
+    expect(first).toContain("최고 기록 갱신! WAVE 12");
+    expect(first).not.toContain("이 맵 신기록!");
+    // Not beaten → plain line.
+    expect(results({ myRecord: { mode: "versus", difficulty: "hard", wave: 20, prev: 24 } })).toContain("최고 기록 WAVE 24");
     expect(html).toContain("8콤보 보너스");
     expect(html).toContain("(36%)"); // 5 / 14
     // Phone guards on the ranking table.
@@ -231,5 +240,17 @@ describe("merge defense screens", () => {
     } finally {
       w.window = had;
     }
+  });
+
+  it("자동 preset share links round-trip, junk is rejected", async () => {
+    const a = await import("./autoSettings");
+    const p = { name: "합성러🔀", parts: ["merge", "upgrade"] as const, upgradeMinGold: 1000, gambleSave: 3 };
+    const code = a.encodeAutoPreset({ ...p, parts: [...p.parts] });
+    expect(code).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(a.decodeAutoPreset(code)).toEqual({ ...p, parts: [...p.parts] });
+    expect(a.decodeAutoPreset(`https://example.com/games/merge-defense?autopreset=${code}`)?.name).toBe("합성러🔀");
+    expect(a.decodeAutoPreset("not-a-preset")).toBeNull();
+    expect(a.decodeAutoPreset("")).toBeNull();
+    expect(a.describeAutoConfig({ parts: ["merge", "upgrade"], upgradeMinGold: 1000, gambleSave: 3 })).toBe("합성·강화 · 💎3개 모아 도박 · 골드 1000+ 강화");
   });
 });

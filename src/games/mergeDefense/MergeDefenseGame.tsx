@@ -54,7 +54,20 @@ import { playVictory } from "./mergeDefenseAudio";
 import { recordBestWave, useBestWaves } from "./bestWave";
 import BestWaveTable from "./BestWaveTable";
 import { getVisitorNickname } from "@/lib/identity/lastNickname";
-import { loadAutoConfig, loadAutoPresets, saveAutoConfig, saveAutoPresets, type AutoConfig, type AutoPreset } from "./autoSettings";
+import {
+  AUTO_PRESET_PARAM,
+  decodeAutoPreset,
+  describeAutoConfig,
+  loadAutoConfig,
+  loadAutoOnStart,
+  loadAutoPresets,
+  saveAutoConfig,
+  saveAutoOnStart,
+  saveAutoPresets,
+  upsertAutoPreset,
+  type AutoConfig,
+  type AutoPreset,
+} from "./autoSettings";
 import type { MapChoice } from "./RoomSettings";
 import MergeDefenseResults, { type MatchRecord, type WaveHistory } from "./MergeDefenseResults";
 import WaitingRoomPanel from "./WaitingRoomPanel";
@@ -157,6 +170,30 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   function changeAutoPresets(list: AutoPreset[]) {
     setAutoPresets(list);
     saveAutoPresets(list);
+  }
+  /** Switch 자동 on by itself at every match start (remembered). */
+  const [autoOnStart, setAutoOnStart] = useState<boolean>(loadAutoOnStart);
+  const autoOnStartRef = useRef(autoOnStart);
+  function changeAutoOnStart(on: boolean) {
+    autoOnStartRef.current = on;
+    setAutoOnStart(on);
+    saveAutoOnStart(on);
+  }
+  /** A preset a friend's link brought in (`?autopreset=`), waiting for 가져오기/닫기. */
+  const [sharedPreset, setSharedPreset] = useState<AutoPreset | null>(() => {
+    if (typeof window === "undefined") return null;
+    const code = new URLSearchParams(window.location.search).get(AUTO_PRESET_PARAM);
+    return code ? decodeAutoPreset(code) : null;
+  });
+  function closeSharedPreset(take: boolean) {
+    if (take && sharedPreset) {
+      changeAutoPresets(upsertAutoPreset(autoPresets, sharedPreset));
+      changeAutoConfig({ parts: [...sharedPreset.parts], upgradeMinGold: sharedPreset.upgradeMinGold, gambleSave: sharedPreset.gambleSave });
+    }
+    setSharedPreset(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete(AUTO_PRESET_PARAM);
+    window.history.replaceState(null, "", url.pathname + url.search);
   }
   const best = useBestWaves();
   /** This match's best-wave result for me: mode, difficulty, wave reached, previous record. */
@@ -288,7 +325,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       setBotTakeover(INITIAL_BOT_TAKEOVER_STATE);
       const startMode: GameMode = payload?.mode === "versus" ? "versus" : "survival";
       modeRef.current = startMode;
-      setAutoPlay(false);
+      setAutoPlay(autoOnStartRef.current);
       const startMap = sanitizeMap(payload?.map);
       lastMapRef.current = startMap;
       const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit), sanitizeDifficulty(payload?.difficulty), startMap);
@@ -866,6 +903,24 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         }
         actions={
           <div className="mt-2 flex w-full max-w-xs flex-col gap-2">
+            {sharedPreset && (
+              <div className="rounded-xl border border-sky-300/50 bg-sky-500/10 p-3 text-left text-sm light:border-sky-300 light:bg-sky-50">
+                <p className="text-[11px] font-semibold text-sky-200 light:text-sky-700">🔗 친구가 보낸 🤖 자동 프리셋</p>
+                <p className="font-bold text-white light:text-slate-900">📌 {sharedPreset.name}</p>
+                <p className="text-[11px] text-white/60 light:text-slate-500">{describeAutoConfig(sharedPreset)}</p>
+                <div className="mt-2 flex gap-2">
+                  <button onClick={() => closeSharedPreset(true)} className="flex-1 rounded-lg bg-sky-600 py-1.5 text-xs font-bold text-white hover:bg-sky-500">
+                    가져오기
+                  </button>
+                  <button onClick={() => closeSharedPreset(false)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 light:border-slate-300 light:text-slate-600">
+                    닫기
+                  </button>
+                </div>
+                {autoPresets.some((p) => p.name === sharedPreset.name) && (
+                  <p className="mt-1 text-[10px] text-amber-300 light:text-amber-600">같은 이름의 내 프리셋을 덮어써요.</p>
+                )}
+              </div>
+            )}
             <button
               onClick={() => {
                 setIntent("create");
@@ -1054,6 +1109,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
           onAutoConfig={changeAutoConfig}
           autoPresets={autoPresets}
           onAutoPresets={changeAutoPresets}
+          autoOnStart={autoOnStart}
+          onAutoOnStart={changeAutoOnStart}
           randomMap={(isHost ? mapChoice : host?.map) === "random"}
           mapBest={best[gameState.mode]?.[sanitizeMap(gameState.map)]?.[sanitizeDifficulty(gameState.difficulty)] ?? 0}
         />

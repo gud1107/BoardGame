@@ -57,7 +57,7 @@ import { coverageFor, drawBoard, drawFx, SEAT_COLORS, type Fx } from "./render";
 import * as audio from "./mergeDefenseAudio";
 import RulebookModal from "./RulebookModal";
 import MapIntro from "./MapIntro";
-import { AUTO_DEFAULT, AUTO_PRESET_NAME_MAX, MAX_AUTO_PRESETS, sameAutoConfig, type AutoConfig, type AutoPreset } from "./autoSettings";
+import { AUTO_DEFAULT, AUTO_PRESET_NAME_MAX, autoPresetLink, describeAutoConfig, sameAutoConfig, upsertAutoPreset, type AutoConfig, type AutoPreset } from "./autoSettings";
 
 interface Props {
   state: MergeDefenseState;
@@ -72,6 +72,9 @@ interface Props {
   onAutoConfig?: (c: AutoConfig) => void;
   autoPresets?: AutoPreset[];
   onAutoPresets?: (list: AutoPreset[]) => void;
+  /** 자동 switches itself on at each match start. */
+  autoOnStart?: boolean;
+  onAutoOnStart?: (on: boolean) => void;
   /** The room picked 🎲 — the intro card spins before landing on the map. */
   randomMap?: boolean;
   /** My best wave on this match's map/mode/difficulty, for the intro card. */
@@ -177,12 +180,14 @@ const slotAt = slotAtPoint;
 
 const GAMBLE_ODDS_TEXT = GAMBLE_ODDS.map((o) => `${o.grade ? GRADE_NAMES[o.grade] : "꽝"} ${o.pct}%`).join(" · ");
 
-export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto, autoConfig = AUTO_DEFAULT, onAutoConfig, autoPresets = [], onAutoPresets, randomMap = false, mapBest }: Props) {
+export default function MergeDefenseBoard({ state, mySeat, names, onAction, autoPlay = false, onToggleAuto, autoConfig = AUTO_DEFAULT, onAutoConfig, autoPresets = [], onAutoPresets, autoOnStart = false, onAutoOnStart, randomMap = false, mapBest }: Props) {
   const { parts: autoParts, upgradeMinGold: autoUpgradeGold, gambleSave: autoGambleSave } = autoConfig;
   const onAutoParts = onAutoConfig && ((parts: AutoPart[]) => onAutoConfig({ ...autoConfig, parts }));
   const onAutoUpgradeGold = onAutoConfig && ((upgradeMinGold: number) => onAutoConfig({ ...autoConfig, upgradeMinGold }));
   const onAutoGambleSave = onAutoConfig && ((gambleSave: number) => onAutoConfig({ ...autoConfig, gambleSave }));
   const [presetName, setPresetName] = useState("");
+  /** Name of the preset whose share link was just copied (brief ✓). */
+  const [copiedPreset, setCopiedPreset] = useState<string | null>(null);
   // Geometry helpers read the active map — point them at this match's before anything draws.
   selectMap(state.map);
   const map = MAPS[sanitizeMap(state.map)];
@@ -971,6 +976,17 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                   >
                     🤖 자동 {autoPlay ? "켜짐 — 눌러서 끄기" : "꺼짐 — 눌러서 켜기"}
                   </button>
+                  {onAutoOnStart && (
+                    <button
+                      onClick={() => onAutoOnStart(!autoOnStart)}
+                      aria-pressed={autoOnStart}
+                      className="flex items-center justify-between gap-2 rounded-lg px-2 py-1 text-left text-[11px] hover:bg-white/10 light:hover:bg-slate-100"
+                      title="다음 판부터, 판이 시작되면 지금(마지막) 설정 그대로 자동이 켜져요"
+                    >
+                      <span>▶ 판 시작 때 자동 켜기</span>
+                      <span className={autoOnStart ? "text-emerald-300 light:text-emerald-600" : "opacity-40"}>{autoOnStart ? "ON" : "OFF"}</span>
+                    </button>
+                  )}
                   <p className="px-1 pt-1 text-[10px] font-semibold text-white/50 light:text-slate-400">AI에게 맡길 것</p>
                   {shownParts.map((part) => (
                     <button
@@ -1040,8 +1056,28 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                               key={`${p.name}-${i}`}
                               className={`flex items-center rounded-full border text-[11px] ${sameAutoConfig(p, autoConfig) ? "border-emerald-300 bg-emerald-500/20 text-emerald-50 light:border-emerald-400 light:bg-emerald-50 light:text-emerald-800" : "border-white/15 light:border-slate-300"}`}
                             >
-                              <button onClick={() => onAutoConfig?.({ parts: [...p.parts], upgradeMinGold: p.upgradeMinGold, gambleSave: p.gambleSave })} className="py-0.5 pr-1 pl-2" title="이 프리셋 적용">
+                              <button
+                                onClick={() => onAutoConfig?.({ parts: [...p.parts], upgradeMinGold: p.upgradeMinGold, gambleSave: p.gambleSave })}
+                                className="py-0.5 pr-1 pl-2"
+                                title={`이 프리셋 적용 — ${describeAutoConfig(p)}`}
+                              >
                                 {p.name}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard
+                                    ?.writeText(autoPresetLink(p))
+                                    .then(() => {
+                                      setCopiedPreset(p.name);
+                                      window.setTimeout(() => setCopiedPreset((n) => (n === p.name ? null : n)), 1500);
+                                    })
+                                    .catch(() => {});
+                                }}
+                                className="py-0.5 pr-1 opacity-60 hover:opacity-100"
+                                aria-label={`${p.name} 프리셋 공유 링크 복사`}
+                                title="친구에게 보낼 링크 복사"
+                              >
+                                {copiedPreset === p.name ? "✓" : "🔗"}
                               </button>
                               <button onClick={() => onAutoPresets(autoPresets.filter((_, k) => k !== i))} className="py-0.5 pr-1.5 opacity-50 hover:opacity-100" aria-label={`${p.name} 프리셋 삭제`}>
                                 ✕
@@ -1057,8 +1093,7 @@ export default function MergeDefenseBoard({ state, mySeat, names, onAction, auto
                           const name = presetName.trim().slice(0, AUTO_PRESET_NAME_MAX);
                           if (!name) return;
                           // Same name overwrites; otherwise append (oldest dropped past the cap).
-                          const rest = autoPresets.filter((p) => p.name !== name);
-                          onAutoPresets([...rest, { name, ...autoConfig, parts: [...autoConfig.parts] }].slice(-MAX_AUTO_PRESETS));
+                          onAutoPresets(upsertAutoPreset(autoPresets, { name, ...autoConfig }));
                           setPresetName("");
                         }}
                       >
