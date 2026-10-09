@@ -32,6 +32,12 @@ interface UseActiveRoomListingInput {
   isWaiting: boolean;
   /** True while a match is in progress (`phase === "playing"`) — its rising edge is logged as a game start. */
   isPlaying?: boolean;
+  /**
+   * Keep this room out of the room lists (e.g. a solo "AI와 바로 대결" room)
+   * while still counting it — pass the real `isWaiting` so its start is
+   * logged; gating `isWaiting` itself would drop the play count too.
+   */
+  unlisted?: boolean;
   hostName?: string | null;
   playerCount: number;
   maxPlayers: number;
@@ -62,6 +68,7 @@ export function useActiveRoomListing({
   isHost,
   isWaiting,
   isPlaying = false,
+  unlisted = false,
   hostName,
   playerCount,
   maxPlayers,
@@ -78,7 +85,7 @@ export function useActiveRoomListing({
     latest.current = { hostName, playerCount, maxPlayers };
   });
 
-  const shouldPublish = isHost && isWaiting && !!roomCode;
+  const shouldPublish = isHost && isWaiting && !unlisted && !!roomCode;
   // Lets a seat filling up reach the room lists now, not at the next heartbeat.
   const publishNow = useRef<(() => void) | null>(null);
   useEffect(() => {

@@ -850,7 +850,9 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     gameId: GAME_ID,
     roomCode,
     isHost,
-    isWaiting: phase === "waiting" && !practice,
+    // A practice room never shows in the room lists, but its match still counts as a play.
+    isWaiting: phase === "waiting",
+    unlisted: practice,
     isPlaying: phase === "playing",
     hostName: myName,
     playerCount: occupants.length,

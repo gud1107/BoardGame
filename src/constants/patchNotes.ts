@@ -167,6 +167,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         type: "IMPROVE",
         desc: "자동 요약에 '자동이 세운 유닛이 막은 몬스터' 추정치, 📷 기록 이미지에 그 판의 웨이브 그래프",
       },
+      {
+        game: "merge-defense",
+        type: "FIX",
+        desc: "AI와 바로 대결한 판이 플레이 횟수에 잡히지 않던 문제 — 이제 게임 카드의 '이번 달 N회 플레이'에 함께 집계돼요",
+      },
     ],
   },
   {
