@@ -751,4 +751,23 @@ describe("merge defense engine", () => {
     for (let i = 0; i < 2000 && t.phase === "playing" && t.boards[0].mobs.length === 0; i++) t = stepGame(t);
     expect(t.boards[0].mobs[0]?.bornWave).toBe(1);
   });
+
+  it("AI 실력: levels change pace and play; the state remembers the level", async () => {
+    const { botPlan, AI_LEVELS, sanitizeAiLevel } = await import("./engine");
+    const every = AI_LEVELS.map((l) => botPlan(l).every);
+    expect([...every].sort((a, b) => b - a)).toEqual(every); // higher level decides at least as often
+    expect(sanitizeAiLevel(9)).toBe(3);
+    expect(startGame(2, 1, [1], "survival", null, "normal", "classic", 5).aiLevel).toBe(5);
+    // 입문 builds on the worst cell first and never upgrades.
+    const s = startGame(2, 100);
+    s.boards[0].gold = 5000;
+    s.boards[0].gems = 0;
+    const first = chooseBotAction(s, 0, botPlan(1).auto);
+    const best = chooseBotAction(s, 0, botPlan(3).auto);
+    expect(first?.type).toBe("summon");
+    expect(best?.type).toBe("summon");
+    expect(first).not.toEqual(best);
+    s.boards[0].units = s.boards[0].units.map((_, i) => (i < 9 ? { kind: UNIT_KIND_LIST[i % 5], grade: 2 + Math.floor(i / 5), cd: 0 } : null));
+    expect(chooseBotAction(s, 0, botPlan(1).auto)).toBeNull(); // at its 9-unit cap, nothing to merge, no upgrades
+  });
 });

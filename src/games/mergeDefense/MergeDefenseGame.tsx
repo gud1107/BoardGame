@@ -37,6 +37,10 @@ import {
   sanitizeMap,
   type Difficulty,
   type MapId,
+  AI_LEVEL_INFO,
+  botPlan,
+  sanitizeAiLevel,
+  type AiLevel,
   MAP_IDS,
   type AutoPart,
   eliminationLimit,
@@ -102,6 +106,7 @@ type Occupant = {
   /** Host-chosen elimination head count (null = by player count). */
   limit?: number | null;
   difficulty?: Difficulty;
+  aiLevel?: AiLevel;
   map?: MapChoice;
   botSeats?: number[];
 };
@@ -109,7 +114,6 @@ type Phase = "choose" | "enter-name" | "connecting" | "waiting" | "playing" | "p
 
 const GAME_ID = "merge-defense";
 const BROADCAST_INTERVAL_MS = 250;
-const BOT_DELAY_TICKS = 10; // a bot decides every 0.5s
 const PING_MS = 5000;
 const IDLE_VOTE_THRESHOLD_MS = 45_000;
 
@@ -152,6 +156,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const [mode, setMode] = useState<GameMode>("survival");
   const [limitChoice, setLimitChoice] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
+  /** Lobby AI skill the host picks (bots only — a taken-over seat always plays at 보통). */
+  const [aiLevel, setAiLevel] = useState<AiLevel>(3);
   const [mapChoice, setMapChoice] = useState<MapChoice>("classic");
   /** 🤖 자동: the bot plays my own board until I switch it off. */
   const [autoPlay, setAutoPlay] = useState(false);
@@ -229,6 +235,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const modeRef = useRef<GameMode>(mode);
   const limitRef = useRef<number | null>(limitChoice);
   const difficultyRef = useRef<Difficulty>(difficulty);
+  const aiLevelRef = useRef<AiLevel>(aiLevel);
   const mapRef = useRef<MapChoice>(mapChoice);
   /** The map the last match was played on — 🎲 skips it. */
   const lastMapRef = useRef<MapId | null>(null);
@@ -290,6 +297,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     modeRef.current = quick?.mode ?? mode;
     limitRef.current = limitChoice;
     difficultyRef.current = quick?.difficulty ?? difficulty;
+    aiLevelRef.current = aiLevel;
     mapRef.current = quick?.map ?? mapChoice;
     // A friend's preset still on screen comes along — 닫기 is how to turn it down.
     if (sharedPreset) closeSharedPreset(true);
@@ -306,7 +314,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   }
 
   function hostPresence(): Partial<Occupant> {
-    return isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, botSeats: botSeatsRef.current, mode: modeRef.current, limit: limitRef.current, difficulty: difficultyRef.current, map: mapRef.current } : {};
+    return isHost ? { isHost: true, targetPlayerCount: playerCountRef.current, botSeats: botSeatsRef.current, mode: modeRef.current, limit: limitRef.current, difficulty: difficultyRef.current, aiLevel: aiLevelRef.current, map: mapRef.current } : {};
   }
 
   useEffect(() => {
@@ -339,7 +347,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       autoCreditRef.current = newAutoCredit();
       const startMap = sanitizeMap(payload?.map);
       lastMapRef.current = startMap;
-      const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit), sanitizeDifficulty(payload?.difficulty), startMap);
+      const state = startGame(playerCount, seed, botSeats, startMode, sanitizeLimit(payload?.limit), sanitizeDifficulty(payload?.difficulty), startMap, sanitizeAiLevel(payload?.aiLevel));
       simRef.current = state;
       setGameState(state);
       setFinalRankings(null);
@@ -544,7 +552,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   }, [occupants, mySeat, phase, deviceId, roomCode, myName, myPlayerId, isHost]);
 
   /** Waiting room: the host retunes the room; presence carries it to everyone. */
-  function updateRoomSettings(patch: { mode?: GameMode; limit?: number | null; difficulty?: Difficulty; map?: MapChoice }) {
+  function updateRoomSettings(patch: { mode?: GameMode; limit?: number | null; difficulty?: Difficulty; aiLevel?: AiLevel; map?: MapChoice }) {
     if (!isHost) return;
     if (patch.mode !== undefined) {
       modeRef.current = patch.mode;
@@ -557,6 +565,10 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     if (patch.difficulty !== undefined) {
       difficultyRef.current = patch.difficulty;
       setDifficulty(patch.difficulty);
+    }
+    if (patch.aiLevel !== undefined) {
+      aiLevelRef.current = patch.aiLevel;
+      setAiLevel(patch.aiLevel);
     }
     if (patch.map !== undefined) {
       mapRef.current = patch.map;
@@ -584,7 +596,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       const pool = MAP_IDS.filter((id) => id !== lastMapRef.current);
       map = pool[Math.floor(Math.random() * pool.length)];
     } else map = mapRef.current;
-    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed: randomSeed(), playerCount: target, botSeats, mode: modeRef.current, limit: limitRef.current, difficulty: difficultyRef.current, map } });
+    channelRef.current?.send({ type: "broadcast", event: "game-start", payload: { seed: randomSeed(), playerCount: target, botSeats, mode: modeRef.current, limit: limitRef.current, difficulty: difficultyRef.current, aiLevel: aiLevelRef.current, map } });
   }
 
   useEffect(() => {
@@ -617,9 +629,13 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
         if (isHost) {
           for (const { seat, action } of pendingRef.current.splice(0)) sim = applyAction(sim, seat, action);
           for (let seat = 0; seat < sim.playerCount; seat++) {
-            const botSeat = sim.boards[seat].bot || isSeatTakenOver(botTakeoverRef.current, String(seat));
-            if (!botSeat || (sim.tick + seat * 3) % BOT_DELAY_TICKS !== 0) continue;
-            const a = chooseBotAction(sim, seat);
+            const lobbyBot = sim.boards[seat].bot;
+            const botSeat = lobbyBot || isSeatTakenOver(botTakeoverRef.current, String(seat));
+            if (!botSeat) continue;
+            // Lobby bots play at the room's AI skill; a taken-over human seat stays at 보통.
+            const plan = botPlan(lobbyBot ? sim.aiLevel : 3);
+            if ((sim.tick + seat * 3) % plan.every !== 0) continue;
+            const a = chooseBotAction(sim, seat, plan.auto);
             if (a) sim = applyAction(sim, seat, a);
           }
           sim = stepGame(sim);
@@ -718,6 +734,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
   const playerCount = gameState?.playerCount ?? knownTargetPlayerCount;
   const lobbyBots = useMemo(() => (gameState ? gameState.boards.map((b, i) => (b.bot ? i : -1)).filter((i) => i >= 0) : []), [gameState]);
   const lobbyBotKey = lobbyBots.join(",");
+  const lobbyAiLevel = sanitizeAiLevel(gameState?.aiLevel);
 
   const ids: Record<SeatIndex, string> = useMemo(() => {
     const map: Record<SeatIndex, string> = {};
@@ -734,7 +751,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     const bots = new Set(lobbyBotKey ? lobbyBotKey.split(",").map(Number) : []);
     for (let seat = 0; seat < playerCount; seat++) {
       if (bots.has(seat)) {
-        map[seat] = `🤖 AI ${seat + 1}`;
+        map[seat] = `🤖 AI ${seat + 1} · ${AI_LEVEL_INFO[lobbyAiLevel].name}`;
         continue;
       }
       const takeover = botTakeover.takeovers[seat];
@@ -746,7 +763,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
       map[seat] = seat === mySeat ? myName : (occ?.name ?? "상대");
     }
     return map;
-  }, [occupants, mySeat, myName, playerCount, botTakeover, lobbyBotKey]);
+  }, [occupants, mySeat, myName, playerCount, botTakeover, lobbyBotKey, lobbyAiLevel]);
 
   function handleGameEnd() {
     const sim = simRef.current;
@@ -920,6 +937,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
     limit: limitChoice,
     playerCount,
     onDifficulty: (d: Difficulty) => updateRoomSettings({ difficulty: d }),
+    aiLevel,
+    onAiLevel: (l: AiLevel) => updateRoomSettings({ aiLevel: l }),
     onLimit: (l: number | null) => updateRoomSettings({ limit: l }),
     map: mapChoice,
     onMap: (m: MapChoice) => updateRoomSettings({ map: m }),
@@ -1055,6 +1074,8 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
             onMode={setMode}
             best={best[mode]}
             difficulty={difficulty}
+            aiLevel={aiLevel}
+            onAiLevel={setAiLevel}
             limit={limitChoice}
             playerCount={targetPlayerCount}
             onDifficulty={setDifficulty}
@@ -1111,7 +1132,7 @@ export default function MergeDefenseGame({ onComplete }: PlayableGameProps) {
             seats={Array.from({ length: knownTargetPlayerCount }, (_, seat) => occupants.find((o) => o.seat === seat)?.name ?? null)}
             joined={occupants.length}
             mySeat={mySeat}
-            hostRules={{ mode: host?.mode, difficulty: host?.difficulty, limit: host?.limit, map: host?.map }}
+            hostRules={{ mode: host?.mode, difficulty: host?.difficulty, limit: host?.limit, map: host?.map, aiLevel: host?.aiLevel }}
             isHost={isHost}
             settings={{ ...roomSettingsProps, playerCount: knownTargetPlayerCount }}
             onFillWithAi={sendGameStart}

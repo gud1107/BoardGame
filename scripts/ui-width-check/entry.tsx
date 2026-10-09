@@ -41,6 +41,8 @@ const settings = {
   onLimit: noop,
   map: "figure8" as const,
   onMap: noop,
+  aiLevel: 4 as const,
+  onAiLevel: noop,
 };
 
 function botGame(mode: GameMode): MergeDefenseState {

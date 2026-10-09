@@ -212,6 +212,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         type: "IMPROVE",
         desc: "🤖 자동이 보석이 있는데 빈 칸이 없으면 일반 유닛을 팔아 도박할 자리를 만들어요",
       },
+      {
+        game: "merge-defense",
+        type: "FEAT",
+        desc: "🤖 AI 실력 5단계(입문·초보·보통·고수·달인) — 방장이 빈자리 AI의 판단 속도·배치·강화 수준을 골라요",
+      },
     ],
   },
   {

@@ -183,7 +183,9 @@ export default function RulebookModal({ onClose }: { onClose: () => void }) {
         <section className="rounded-xl border border-amber-300/20 bg-amber-400/5 p-3 light:border-amber-300 light:bg-amber-50">
           <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-amber-200/90 uppercase light:text-amber-700">참고</h3>
           <p className="text-xs text-white/60 light:text-slate-600">
-            방을 만든 사람의 기기가 전투를 계산해요(호스트). 호스트가 탭을 닫으면 그 판은 멈춰요. 빈자리는 AI로 채울 수 있어요.
+            방을 만든 사람의 기기가 전투를 계산해요(호스트). 호스트가 탭을 닫으면 그 판은 멈춰요. 빈자리는 AI로 채울 수 있고, 방장이 🤖 AI 실력을
+            🐣 입문 · 🌱 초보 · ⚖️ 보통 · 🔥 고수 · 👑 달인 중에서 고를 수 있어요(입문은 느리고 자리 배치를 못 하고, 달인은 가장 빠르게 강화·도박까지 챙겨요).
+            접속이 끊겨 AI가 대신하는 자리는 항상 보통 실력으로 플레이해요.
           </p>
         </section>
       </div>

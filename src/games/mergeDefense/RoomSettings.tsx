@@ -5,6 +5,9 @@ import {
   LIMIT_CHOICES,
   loadLimit,
   MAP_IDS,
+  AI_LEVELS,
+  AI_LEVEL_INFO,
+  type AiLevel,
   MAPS,
   type Difficulty,
   type MapId,
@@ -56,6 +59,8 @@ export default function RoomSettings({
   onLimit,
   map,
   onMap,
+  aiLevel = 3,
+  onAiLevel,
   compact = false,
 }: {
   mode: GameMode;
@@ -69,6 +74,9 @@ export default function RoomSettings({
   onLimit: (l: number | null) => void;
   map: MapChoice;
   onMap: (m: MapChoice) => void;
+  /** Lobby AI skill (empty seats are filled with bots at this level). */
+  aiLevel?: AiLevel;
+  onAiLevel?: (l: AiLevel) => void;
   compact?: boolean;
 }) {
   const pill = (on: boolean, tone: "orange" | "rose") =>
@@ -138,6 +146,20 @@ export default function RoomSettings({
           ))}
         </div>
       </div>
+      {onAiLevel && (
+        <div className="flex flex-col gap-1.5">
+          🤖 AI 실력 <span className="-mt-1 text-[11px] text-white/40 light:text-slate-400">빈자리를 채우는 AI의 실력이에요</span>
+          <div className="grid grid-cols-5 gap-1.5">
+            {AI_LEVELS.map((l) => (
+              <button key={l} type="button" onClick={() => onAiLevel(l)} aria-pressed={aiLevel === l} className={pill(aiLevel === l, "orange")} title={AI_LEVEL_INFO[l].desc}>
+                <span className="block text-base leading-tight">{AI_LEVEL_INFO[l].emoji}</span>
+                <span className="block text-[11px] font-bold whitespace-nowrap">{AI_LEVEL_INFO[l].name}</span>
+              </button>
+            ))}
+          </div>
+          {!compact && <span className="text-[11px] text-white/40 light:text-slate-400">{AI_LEVEL_INFO[aiLevel].emoji} {AI_LEVEL_INFO[aiLevel].name} — {AI_LEVEL_INFO[aiLevel].desc}</span>}
+        </div>
+      )}
       <div className="flex flex-col gap-1.5">
         💀 탈락 기준 (내 길의 몬스터 수)
         <div className="grid grid-cols-5 gap-1.5">

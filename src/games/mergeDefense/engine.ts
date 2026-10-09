@@ -164,6 +164,39 @@ export const DIFFICULTIES: Difficulty[] = ["easy", "normal", "hard"];
 export const DIFFICULTY_HP: Record<Difficulty, number> = { easy: 0.7, normal: 1, hard: 1.2 };
 /** Monsters per wave multiplier (spawned closer together so the wave still fits its 20s). */
 export const DIFFICULTY_COUNT: Record<Difficulty, number> = { easy: 1, normal: 1, hard: 1.25 };
+/**
+ * Lobby AI skill (host-picked). Each level is how often a bot decides
+ * (`every` ticks) plus which 자동 options it plays with — 입문 never
+ * upgrades or repositions, 고수/달인 also sell a 일반 unit to free a cell for
+ * a gamble. Bot-sim median elimination waves are noted per level.
+ */
+export type AiLevel = 1 | 2 | 3 | 4 | 5;
+export const AI_LEVELS: AiLevel[] = [1, 2, 3, 4, 5];
+export const AI_LEVEL_INFO: Record<AiLevel, { emoji: string; name: string; desc: string }> = {
+  1: { emoji: "🐣", name: "입문", desc: "느리게 소환·합성만" },
+  2: { emoji: "🌱", name: "초보", desc: "강화도 하지만 느긋해요" },
+  3: { emoji: "⚖️", name: "보통", desc: "기본 AI" },
+  4: { emoji: "🔥", name: "고수", desc: "빠르고 도박 자리까지 만들어요" },
+  5: { emoji: "👑", name: "달인", desc: "가장 빠르고 빈틈없어요" },
+};
+export function sanitizeAiLevel(v: unknown): AiLevel {
+  return AI_LEVELS.includes(v as AiLevel) ? (v as AiLevel) : 3;
+}
+export function botPlan(level: AiLevel | undefined): { every: number; auto: AutoOptions } {
+  switch (sanitizeAiLevel(level)) {
+    case 1:
+      return { every: 40, auto: { parts: new Set<AutoPart>(["build", "merge"]), placement: "worst", maxUnits: 9 } };
+    case 2:
+      return { every: 24, auto: { parts: new Set<AutoPart>(["build", "merge", "upgrade"]), placement: "middle", maxUnits: 12 } };
+    case 4:
+      return { every: 7, auto: { sellForGamble: true, eagerUpgrade: true } };
+    case 5:
+      return { every: 4, auto: { sellForGamble: true, eagerUpgrade: true, eagerBoard: true } };
+    default:
+      return { every: 10, auto: {} };
+  }
+}
+
 export function difficultyHp(s: Pick<MergeDefenseState, "difficulty" | "map">): number {
   return DIFFICULTY_HP[difficultyOf(s)] * MAPS[sanitizeMap(s.map)].hp;
 }
@@ -550,6 +583,8 @@ export interface MergeDefenseState {
   difficulty?: Difficulty;
   /** Room-chosen map; absent = classic. */
   map?: MapId;
+  /** Room-chosen lobby AI skill; absent = 3 (보통). */
+  aiLevel?: AiLevel;
   /** Room-chosen elimination head count; null/absent = `loadLimit(playerCount)`. */
   limit?: number | null;
   tick: number;
@@ -759,11 +794,13 @@ export function startGame(
   limit: number | null = null,
   difficulty: Difficulty = "normal",
   map: MapId = "classic",
+  aiLevel: AiLevel = 3,
 ): MergeDefenseState {
   const n = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.floor(playerCount)));
   selectMap(map);
   return {
     map: sanitizeMap(map),
+    aiLevel: sanitizeAiLevel(aiLevel),
     phase: "playing",
     mode: GAME_MODES.includes(mode) ? mode : "survival",
     playerCount: n,
@@ -1537,6 +1574,14 @@ export interface AutoOptions {
    * small maps), so AI opponents keep playing without it.
    */
   sellForGamble?: boolean;
+  /** Lobby AI skill only: build on the worst cells first ("worst") or mid-ranked ones ("middle"). */
+  placement?: "worst" | "middle";
+  /** Lobby AI skill only: stop summoning once this many units stand. */
+  maxUnits?: number;
+  /** Lobby AI skill only: buy upgrades as soon as affordable instead of saving for the next summon. */
+  eagerUpgrade?: boolean;
+  /** Lobby AI skill only: buy 🎯 집중 / 🛡️ 결속 with less spare gold. */
+  eagerBoard?: boolean;
 }
 /** 🤖 자동 "도박은 보석 N개 모일 때까지 아끼기" choices (1 = gamble right away). */
 export const AUTO_GAMBLE_SAVE = [1, 2, 3, 5];
@@ -1551,7 +1596,9 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, auto:
   const building = ok("build");
   const free = emptySlots(board).length;
   const cost = summonCost(board);
-  const bestEmpty = slotPref.find((i) => !board.units[i]);
+  const order = auto.placement === "worst" ? [...slotPref].reverse() : auto.placement === "middle" ? [...slotPref.slice(Math.floor(slotPref.length / 3)), ...slotPref.slice(0, Math.floor(slotPref.length / 3))] : slotPref;
+  const capped = auto.maxUnits !== undefined && board.units.filter(Boolean).length >= auto.maxUnits;
+  const bestEmpty = capped ? undefined : order.find((i) => !board.units[i]);
   const canGamble = building && board.gems >= Math.max(GAMBLE_COST, auto.gambleMinGems ?? 0);
   if (canGamble && bestEmpty !== undefined) return { type: "gamble", slot: bestEmpty };
   // Gems ready but the board is full with nothing to merge: sell the 일반 unit on the
@@ -1576,7 +1623,7 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, auto:
   }
   if (building && bestEmpty !== undefined && board.gold >= cost) return { type: "summon", slot: bestEmpty };
   const pairs = mergePairs(board);
-  if (ok("merge") && (free === 0 || !building) && pairs.length > 0) {
+  if (ok("merge") && (free === 0 || !building || capped) && pairs.length > 0) {
     // Keep the merged unit on the better of the two cells.
     const [a, b] = pairs[0];
     const keep = slotPref.indexOf(a) < slotPref.indexOf(b) ? a : b;
@@ -1593,10 +1640,10 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, auto:
   }
   // A full board with spare gold sharpens its crits.
   const focus = board.focus ?? 0;
-  if (ok("upgrade") && state.wave >= 6 && free === 0 && focus < FOCUS_MAX && board.gold >= focusCost(focus) * 2.5) return { type: "focus" };
+  if (ok("upgrade") && state.wave >= 6 && free === 0 && focus < FOCUS_MAX && board.gold >= focusCost(focus) * (auto.eagerBoard ? 1.2 : 2.5)) return { type: "focus" };
   // After the first boss, brace against berserk smashes once the board is full.
   const brace = board.brace ?? 0;
-  if (ok("upgrade") && state.wave >= 10 && free === 0 && brace < BRACE_MAX && board.gold >= braceCost(brace) * 2) return { type: "brace" };
+  if (ok("upgrade") && state.wave >= 10 && free === 0 && brace < BRACE_MAX && board.gold >= braceCost(brace) * (auto.eagerBoard ? 1.2 : 2)) return { type: "brace" };
   // A stunned strong tower is worth waking if gold is comfortable.
   if (ok("upgrade") && board.units.some((u) => u?.stun && u.stun > 10 && u.grade >= 3) && board.gold >= wakeCost(state.wave) * 2) return { type: "wake" };
   // 유닛 대결: rich and nothing left to build → buy the priciest monster we
@@ -1622,7 +1669,7 @@ export function chooseBotAction(state: MergeDefenseState, seat: SeatIndex, auto:
   const def = defenceProfile(facing);
   for (const k of UNIT_KINDS) weight[k] *= 1 - (UNITS[k].dmgType === "physical" ? def.armor : def.resist);
   const best = [...UNIT_KINDS].filter((k) => board.upgrades[k] < MAX_UPGRADE).sort((a, b) => weight[b] - weight[a])[0];
-  if (ok("upgrade") && best && weight[best] > 0 && board.gold >= upgradeCost(board.upgrades[best]) && (free === 0 || !building || board.gold >= cost + upgradeCost(board.upgrades[best]))) {
+  if (ok("upgrade") && best && weight[best] > 0 && board.gold >= upgradeCost(board.upgrades[best]) && (free === 0 || !building || capped || auto.eagerUpgrade || board.gold >= cost + upgradeCost(board.upgrades[best]))) {
     return { type: "upgrade", kind: best };
   }
   return null;
