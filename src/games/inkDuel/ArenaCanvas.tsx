@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { INK_COLORS, JOIN_DIST, MAX_POINTS_PER_STROKE, MAX_STROKES, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
-import { brushCursor, drawJoinMarks, nearLineEnd, prefersTouch } from "./penAids";
+import { penCursor, usePenCursor, drawJoinMarks, nearLineEnd, prefersTouch } from "./penAids";
 import {
   Ambient,
   characterFor,
@@ -110,6 +110,7 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
   const animClockRef = useRef<{ id: number; start: number; launched: boolean; impacted: boolean; done: boolean } | null>(null);
   const drawingRef = useRef<number[] | null>(null);
   const aimDragRef = useRef(false);
+  const cursorKind = usePenCursor();
   /** Wall pen: line end under the mouse a new wall would continue from / last input was a finger. */
   const wallJoinRef = useRef<[number, number] | null>(null);
   const touchRef = useRef(false);
@@ -481,7 +482,7 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
         wallJoinRef.current = null;
       }}
       className="block aspect-[16/9] w-full touch-none select-none rounded-2xl shadow-[0_10px_30px_-8px_rgba(60,40,10,0.45)] ring-1 ring-black/10"
-      style={{ cursor: wallDraft ? brushCursor(INK_COLORS[wallDraft.color]) : aim ? "pointer" : "default" }}
+      style={{ cursor: wallDraft ? penCursor(INK_COLORS[wallDraft.color], cursorKind) : aim ? "pointer" : "default" }}
     />
   );
 }

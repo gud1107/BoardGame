@@ -74,6 +74,11 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
       },
       {
         game: "ink-duel",
+        type: "IMPROVE",
+        desc: "색 팔레트 옆 🖌️ 붓 / ✏️ 연필 버튼으로 마우스 커서 모양 선택(이 브라우저에 기억), 휴대폰 동그라미는 최근 두 선 끝에만",
+      },
+      {
+        game: "ink-duel",
         type: "FIX",
         desc: "마우스를 뗐다가 끝점에서 이어 그린 선도 한 도형으로 인식해요 (세 줄 삼각형 = 로켓, 네 줄 네모 = 모루)",
       },

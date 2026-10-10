@@ -22,7 +22,7 @@ import {
   WindStreaks,
 } from "./arenaArt";
 import { CharacterAvatar, penScale } from "./ArenaCanvas";
-import { brushCursor, drawJoinMarks, nearLineEnd, prefersTouch } from "./penAids";
+import { penCursor, usePenCursor, drawJoinMarks, nearLineEnd, prefersTouch } from "./penAids";
 import { computeRankings, MIN_INK, shieldWall, wallPlacementError, type SeatIndex } from "./engine";
 import { playImpactKind, playLaunchSound, playScribbleTick, playVictorySound, playWallSound } from "./inkDuelAudio";
 import { WeaponCard } from "./InkDuelBoard";
@@ -172,6 +172,7 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
   // --- Canvas loop ---
   const drawingRef = useRef<number[] | null>(null);
   const aimingRef = useRef(false);
+  const cursorKind = usePenCursor();
   /** Wall pen: line end under the mouse a new wall would continue from / last input was a finger. */
   const wallJoinRef = useRef<[number, number] | null>(null);
   const touchRef = useRef(false);
@@ -581,7 +582,7 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
             wallJoinRef.current = null;
           }}
           className="block aspect-[16/9] w-full touch-none select-none rounded-2xl shadow-[0_10px_30px_-8px_rgba(60,40,10,0.45)] ring-1 ring-black/10"
-          style={{ cursor: mode === "wall" ? brushCursor(INK_COLORS[color]) : "pointer" }}
+          style={{ cursor: mode === "wall" ? penCursor(INK_COLORS[color], cursorKind) : "pointer" }}
         />
         {me && !me.alive && hud?.phase === "playing" && (
           <div className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-slate-900/75 px-3 py-1 text-xs text-white">💀 탈락 — 남은 싸움을 관전 중</div>

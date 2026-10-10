@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { COLOR_NAMES, INK_COLORS, JOIN_DIST, MAX_POINTS_PER_STROKE, MAX_STROKES, PAD_SIZE, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
-import { brushCursor, drawJoinMarks, nearLineEnd, prefersTouch } from "./penAids";
+import { penCursor, setPenCursor, usePenCursor, drawJoinMarks, nearLineEnd, prefersTouch } from "./penAids";
 
 interface Props {
   strokes: Stroke[];
@@ -42,6 +42,7 @@ export default function WeaponPad({ strokes, color, budget, disabled, onChange, 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const liveRef = useRef<Stroke | null>(null);
   const lastTickRef = useRef(0);
+  const cursorKind = usePenCursor();
   /** Line end under the hovering mouse/pen that a new stroke would continue from. */
   const joinRef = useRef<[number, number] | null>(null);
   /** Last input was a finger (no hover) → show every continuable line end instead. */
@@ -106,7 +107,7 @@ export default function WeaponPad({ strokes, color, budget, disabled, onChange, 
     <canvas
       ref={canvasRef}
       className={`aspect-square w-full touch-none select-none rounded-lg border-2 border-dashed ${disabled ? "border-slate-400/40 opacity-60" : "border-slate-500/60"}`}
-      style={disabled ? undefined : { cursor: brushCursor(INK_COLORS[color]) }}
+      style={disabled ? undefined : { cursor: penCursor(INK_COLORS[color], cursorKind) }}
       onPointerDown={(e) => {
         if (disabled || strokes.length >= MAX_STROKES) return;
         if (totalInk(strokes) + 2 > budget) return;
@@ -212,6 +213,7 @@ export function DoodleSvg({ strokes, size = 72 }: { strokes: readonly Stroke[]; 
  */
 export function InkPalette({ color, onChange }: { color: InkColor; onChange: (c: InkColor) => void }) {
   const [open, setOpen] = useState(false);
+  const cursorKind = usePenCursor();
   const dot = (c: string, i: number, size: string) => (
     <button
       key={c}
@@ -245,7 +247,18 @@ export function InkPalette({ color, onChange }: { color: InkColor; onChange: (c:
           </div>
         )}
       </div>
-      <div className="hidden flex-wrap gap-1 sm:flex">{INK_COLORS.map((c, i) => dot(c, i, "h-6 w-6"))}</div>
+      <div className="hidden flex-wrap items-center gap-1 sm:flex">
+        {INK_COLORS.map((c, i) => dot(c, i, "h-6 w-6"))}
+        {/* Mouse cursor look (phones have no cursor, so desktop only). */}
+        <button
+          type="button"
+          onClick={() => setPenCursor(cursorKind === "brush" ? "pencil" : "brush")}
+          title="마우스 커서 모양 바꾸기"
+          className="ml-1 flex h-6 items-center gap-0.5 rounded-full border border-white/15 px-2 text-[11px] text-white/70 hover:bg-white/10 light:border-slate-300 light:text-slate-600 light:hover:bg-slate-100"
+        >
+          {cursorKind === "brush" ? "🖌️ 붓" : "✏️ 연필"}
+        </button>
+      </div>
     </>
   );
 }
