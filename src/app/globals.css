@@ -2105,6 +2105,52 @@ html {
   }
 }
 
+/* 판정 표시: 좌석 위 "🐺 코요테!" / "📢 선언 N" 역할 태그가 톡 떨어져 붙음. */
+@keyframes coyote-role-tag-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.6);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 판정 표시: 하트를 잃은 쪽에 "💔 −1"이 튀어나왔다 자리 잡음. */
+@keyframes coyote-heart-loss-pop {
+  0% {
+    opacity: 0;
+    scale: 0.3;
+  }
+  60% {
+    opacity: 1;
+    scale: 1.35;
+  }
+  100% {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+/* 판정 표시: 방금 잃은 하트 칸이 흔들리며 💔로 깨짐. */
+@keyframes coyote-heart-break {
+  0% {
+    transform: scale(1.6) rotate(0deg);
+    filter: drop-shadow(0 0 6px rgba(244, 63, 94, 1));
+  }
+  20% {
+    transform: scale(1.6) rotate(-15deg);
+  }
+  40% {
+    transform: scale(1.5) rotate(12deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    filter: none;
+  }
+}
+
 /* 2단계: 카드 위로 붉은 플래시 글로우가 확 번졌다 사라짐 — 파편과 동시 재생. */
 @keyframes coyote-death-shatter-flash {
   0% {

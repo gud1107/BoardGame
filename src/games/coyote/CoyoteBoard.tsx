@@ -158,6 +158,10 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
   const [countingActive, setCountingActive] = useState(false);
   const [showFormula, setShowFormula] = useState(false);
   const [displayedTotal, setDisplayedTotal] = useState(0);
+  // 판정 결과(누가 하트를 잃었나)를 좌석/패널에 찍는 시점 — 카운트업이 끝나고
+  // 트롬본이 울리는 순간(탈락이면 데스 연출 시작, 스킵이면 즉시)에 맞춘다. 그
+  // 전엔 "외친 사람 / 선언한 사람" 역할 표시만 보여서 결과를 미리 스포하지 않는다.
+  const [verdictShown, setVerdictShown] = useState(false);
   const skippedRef = useRef(false);
   // Coyote Sound Suite: whether this resolution's heart-loss trombone already
   // played — the skip button plays it early, the timer must not repeat it.
@@ -169,6 +173,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     setMaxZeroStage(hasMaxZeroStage ? "pending" : "done");
     setDeathStage(hasDeathStage ? "pending" : "done");
     setRevealSettled(false);
+    setVerdictShown(false);
     setDisplayedTotal(0);
     setCountingActive(noSpecialStages); // no special-card stage to play -> count up right away
     setShowFormula(noSpecialStages);
@@ -232,6 +237,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     // The verdict: the loser's sad trombone once the count-up lands. An
     // elimination skips it — the shake → shatter → skull chain has its own stings.
     if (!hasDeathStage) timers.push(window.setTimeout(playHeartSting, t + 600));
+    timers.push(window.setTimeout(() => setVerdictShown(true), t + 600));
     if (hasDeathStage) {
       const deathStartAt = hasQuestionStage ? QUESTION_PULSE_MS + QUESTION_POPUP_MS + 100 : 150;
       timers.push(
@@ -291,6 +297,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
     setCountingActive(true);
     setShowFormula(true);
     if (res) setDisplayedTotal(res.finalTotal);
+    setVerdictShown(true);
     setRevealSettled(true);
   }
 
@@ -440,8 +447,34 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
       (res.maxZeroTarget.seat === seat || (seat === qSeat && res.maxZeroTarget.card === questionResolvedCard));
     const maxZeroStruck = isMaxZeroSeat && maxZeroStage !== "pending";
 
+    // 판정 역할 표시 — 누가 "코요테!"를 외쳤고 누구의 선언이 걸렸는지, 그리고
+    // (verdictShown 이후) 누가 하트를 잃었는지를 좌석 위에 바로 찍는다.
+    const showRoles = revealed && res !== null;
+    const isCaller = showRoles && seat === res!.callerSeat;
+    const isBidder = showRoles && seat === res!.bid.seat;
+    const isLoser = showRoles && verdictShown && seat === res!.loserSeat;
+    const isWinner = showRoles && verdictShown && (isCaller || isBidder) && !isLoser;
+
     return (
       <div key={seat} className="absolute flex flex-col items-center gap-1" style={style}>
+        {(isCaller || isBidder) && (
+          <span
+            className={`pointer-events-none absolute -top-5 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-full border px-1.5 py-0.5 font-black shadow-lg ${compact ? "text-[8px]" : "text-[10px]"} ${
+              isCaller ? "border-rose-300/70 bg-rose-600 text-white" : "border-amber-200/70 bg-amber-400 text-black"
+            }`}
+            style={{ animation: "coyote-role-tag-in 0.35s ease-out both" }}
+          >
+            {isCaller ? "🐺 코요테!" : `📢 선언 ${res!.bid.number}`}
+          </span>
+        )}
+        {isLoser && (
+          <span
+            className={`pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2 whitespace-nowrap rounded-full border-2 border-white bg-rose-600 px-2 py-0.5 font-black text-white shadow-[0_0_18px_rgba(244,63,94,0.9)] ${compact ? "text-xs" : "text-sm"}`}
+            style={{ animation: "coyote-heart-loss-pop 0.6s cubic-bezier(.2,1.6,.4,1) both" }}
+          >
+            💔 −1
+          </span>
+        )}
         {showPermanentSkull ? (
           <EliminatedFace size={compact ? "xs" : "sm"} />
         ) : (
@@ -460,7 +493,11 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
         )}
         <div
           className={`flex flex-col items-center gap-0.5 rounded-xl border text-center ${compact ? "max-w-[70px] px-1.5 py-0.5 text-[9px]" : "px-2 py-1 text-[10px]"} ${
-            isActive ? "border-amber-300/60 bg-amber-400/10 light:border-amber-400 light:bg-amber-50" : "border-white/10 bg-black/30 light:border-slate-200 light:bg-white/90 light:shadow-sm"
+            isLoser
+              ? "border-rose-400 bg-rose-600/30 ring-2 ring-rose-500/70 light:border-rose-500 light:bg-rose-100"
+              : isWinner
+                ? "border-emerald-300/70 bg-emerald-500/15 light:border-emerald-500 light:bg-emerald-50"
+                : isActive ? "border-amber-300/60 bg-amber-400/10 light:border-amber-400 light:bg-amber-50" : "border-white/10 bg-black/30 light:border-slate-200 light:bg-white/90 light:shadow-sm"
           } ${showPermanentSkull ? "opacity-70" : ""}`}
           style={cardFlashingRed ? { animation: "coyote-death-flash 0.35s ease-in-out" } : undefined}
         >
@@ -477,7 +514,7 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
             )}
           </span>
           {!isEliminated && <PlusOneChanceBadge used={state.plusOneUsedSeats.includes(seat)} compact={compact} />}
-          <HeartPips hearts={player.hearts} max={STARTING_HEARTS} />
+          <HeartPips hearts={player.hearts} max={STARTING_HEARTS} lostIndex={isLoser ? player.hearts : undefined} />
         </div>
       </div>
     );
@@ -590,12 +627,14 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
           handleSkipReveal이 즉시 최종 계산식+하이라이트 완료 화면으로 전환). */}
       {state.phase === "reveal" && res && (
         <div className="relative z-10 flex flex-col gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-center text-xs light:border-rose-300 light:bg-rose-50">
-          <p className="break-keep font-semibold text-rose-200 light:text-rose-700">🐺 {names[res.callerSeat]}님이 &quot;코요테!&quot;를 외쳤습니다</p>
-          <p className="break-keep text-white/70 light:text-slate-600">
-            직전 선언: <b className="text-amber-300 light:text-amber-700">{res.bid.number}</b> ({names[res.bid.seat]})
-          </p>
+          <ShowdownMatchup
+            callerName={names[res.callerSeat]}
+            bidderName={names[res.bid.seat]}
+            bidNumber={res.bid.number}
+            verdict={verdictShown ? (res.loserWasBidder ? "bidder" : "caller") : null}
+          />
           {res.nightCardHolderSeat !== null && <p className="break-keep text-white/60 light:text-slate-500">🌙 {names[res.nightCardHolderSeat]}님이 다음 라운드의 선이 됩니다</p>}
-          <p className="break-keep font-semibold text-white light:text-slate-900">
+          <p className={`break-keep font-semibold text-white transition-opacity light:text-slate-900 ${verdictShown ? "opacity-100" : "opacity-0"}`}>
             {res.loserWasBidder
               ? `${names[res.bid.seat]}님이 오버 배팅으로 하트 1개를 잃었습니다.`
               : `${names[res.callerSeat]}님이 잘못된 코요테 외침으로 하트 1개를 잃었습니다.`}
@@ -640,6 +679,65 @@ export default function CoyoteBoard({ state, viewerSeat, names, connectedSeats, 
         <QuestionRevealPopup card={res.extraDrawnCards[res.extraDrawnCards.length - 1] ?? res.tableCards[qSeat]} />
       )}
       {deathStage === "skull" && justEliminatedSeatValue !== null && <DeathStampOverlay name={names[justEliminatedSeatValue]} />}
+    </div>
+  );
+}
+
+/**
+ * 판정 패널 상단의 "외친 사람 vs 선언한 사람" 대진표 — 문장만으로는 누가
+ * 누구를 지목했고 누가 졌는지 한눈에 안 들어와서, 두 사람을 양쪽 카드로
+ * 나란히 놓고 결과가 나오면 진 쪽에 💔 하트 −1, 이긴 쪽에 ✓ 를 찍는다.
+ */
+function ShowdownMatchup({
+  callerName,
+  bidderName,
+  bidNumber,
+  verdict,
+}: {
+  callerName: string;
+  bidderName: string;
+  bidNumber: number;
+  /** 하트를 잃은 쪽 — null이면 아직 판정 전(카운트업 중). */
+  verdict: "caller" | "bidder" | null;
+}) {
+  function side(role: "caller" | "bidder") {
+    const lost = verdict === role;
+    const won = verdict !== null && !lost;
+    const isCaller = role === "caller";
+    return (
+      <div
+        className={`relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl border-2 px-2 py-2 transition-all duration-300 ${
+          lost
+            ? "border-rose-400 bg-rose-600/30 light:border-rose-500 light:bg-rose-100"
+            : won
+              ? "border-emerald-300/70 bg-emerald-500/15 light:border-emerald-500 light:bg-emerald-50"
+              : isCaller
+                ? "border-rose-300/40 bg-black/30 light:border-rose-200 light:bg-white"
+                : "border-amber-300/40 bg-black/30 light:border-amber-200 light:bg-white"
+        }`}
+      >
+        <span className={`text-[10px] font-bold ${isCaller ? "text-rose-200 light:text-rose-700" : "text-amber-200 light:text-amber-700"}`}>
+          {isCaller ? "🐺 코요테! 외침" : "📢 선언"}
+        </span>
+        <span className="max-w-full truncate text-sm font-black text-white light:text-slate-900">{isCaller ? callerName : bidderName}</span>
+        {!isCaller && <span className="text-lg leading-none font-black text-amber-300 light:text-amber-700">{bidNumber}</span>}
+        {lost && (
+          <span
+            className="mt-0.5 rounded-full bg-rose-600 px-2 py-0.5 text-xs font-black text-white shadow-[0_0_12px_rgba(244,63,94,0.8)]"
+            style={{ animation: "coyote-heart-loss-pop 0.6s cubic-bezier(.2,1.6,.4,1) both" }}
+          >
+            💔 하트 −1
+          </span>
+        )}
+        {won && <span className="mt-0.5 text-xs font-bold text-emerald-300 light:text-emerald-700">✓ 판정 승리</span>}
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-stretch gap-2">
+      {side("caller")}
+      <span className="self-center text-xs font-black text-white/50 light:text-slate-400">VS</span>
+      {side("bidder")}
     </div>
   );
 }

@@ -145,14 +145,21 @@ export function EliminatedFace({ className = "", size = "md" }: { className?: st
 }
 
 /** Heart (life) pips — "하트(목숨)" framing, backed by the rulebook's "벌점 토큰 = 탈락" (see engine.ts module doc #5 for the 3→2 house-rule count). */
-export function HeartPips({ hearts, max }: { hearts: number; max: number }) {
+/** `lostIndex` = 방금 잃은 하트의 칸 — 💔로 깨지는 연출을 그 칸에만 건다. */
+export function HeartPips({ hearts, max, lostIndex }: { hearts: number; max: number; lostIndex?: number }) {
   return (
     <span className="inline-flex items-center gap-0.5">
-      {Array.from({ length: max }, (_, i) => (
-        <span key={i} className={i < hearts ? "text-rose-400" : "text-white/15 light:text-slate-300"}>
-          {i < hearts ? "❤️" : "🤍"}
-        </span>
-      ))}
+      {Array.from({ length: max }, (_, i) =>
+        i === lostIndex ? (
+          <span key={i} className="inline-block" style={{ animation: "coyote-heart-break 0.9s ease-out both" }}>
+            💔
+          </span>
+        ) : (
+          <span key={i} className={i < hearts ? "text-rose-400" : "text-white/15 light:text-slate-300"}>
+            {i < hearts ? "❤️" : "🤍"}
+          </span>
+        ),
+      )}
     </span>
   );
 }
