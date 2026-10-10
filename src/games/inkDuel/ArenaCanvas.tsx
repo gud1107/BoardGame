@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { INK_COLORS, MAX_POINTS_PER_STROKE, MAX_STROKES, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
+import { INK_COLORS, JOIN_DIST, MAX_POINTS_PER_STROKE, MAX_STROKES, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
+import { brushCursor, drawJoinMarks, nearLineEnd, prefersTouch } from "./penAids";
 import {
   Ambient,
   characterFor,
@@ -109,6 +110,12 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
   const animClockRef = useRef<{ id: number; start: number; launched: boolean; impacted: boolean; done: boolean } | null>(null);
   const drawingRef = useRef<number[] | null>(null);
   const aimDragRef = useRef(false);
+  /** Wall pen: line end under the mouse a new wall would continue from / last input was a finger. */
+  const wallJoinRef = useRef<[number, number] | null>(null);
+  const touchRef = useRef(false);
+  useEffect(() => {
+    if (prefersTouch()) touchRef.current = true;
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -307,6 +314,7 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
         for (const s of wallDraft.strokes) crayon(ctx, s.p, col(s.c), 7, () => 0.5, 0.85);
         const live = drawingRef.current;
         if (live && live.length >= 4) crayon(ctx, live, col(wallDraft.color), 7, () => 0.5, 0.85);
+        else if (!live) drawJoinMarks(ctx, wallDraft.strokes, col(wallDraft.color), penScale(canvas), wallJoinRef.current, touchRef.current);
       }
 
       // Aim: short dotted arc + arrow.
@@ -394,6 +402,11 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
     return [Math.round(((e.clientX - rect.left) / rect.width) * WORLD_W), Math.round(((e.clientY - rect.top) / rect.height) * WORLD_H)];
   }
 
+  /** Wall pen: snapping onto an earlier wall's end, at the same on-screen reach as the weapon pad. */
+  function wallJoinAt(e: React.PointerEvent<HTMLCanvasElement>, x: number, y: number): [number, number] | null {
+    return wallDraft ? nearLineEnd(wallDraft.strokes, x, y, JOIN_DIST * penScale(e.currentTarget), penScale(e.currentTarget)) : null;
+  }
+
   function aimFrom(x: number, y: number) {
     if (!aim || !onAim) return;
     const me = view.players[aim.seat];
@@ -411,7 +424,9 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
     if (wallDraft) {
       if (wallDraft.strokes.length >= MAX_STROKES) return;
       e.currentTarget.setPointerCapture(e.pointerId);
-      drawingRef.current = [Math.max(0, Math.min(WORLD_W, x)), Math.max(0, Math.min(WORLD_H, y))];
+      touchRef.current = e.pointerType === "touch";
+      wallJoinRef.current = null;
+      drawingRef.current = wallJoinAt(e, x, y) ?? [Math.max(0, Math.min(WORLD_W, x)), Math.max(0, Math.min(WORLD_H, y))];
       return;
     }
     if (aim && onAim) {
@@ -437,6 +452,11 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
       pts.push(cx, cy);
       return;
     }
+    if (wallDraft && !pts && e.pointerType !== "touch") {
+      touchRef.current = false;
+      wallJoinRef.current = wallJoinAt(e, x, y);
+      return;
+    }
     if (aimDragRef.current) aimFrom(x, y);
   }
 
@@ -457,10 +477,18 @@ export default function ArenaCanvas({ view, anim, onAnimDone, names, turnSeat, a
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onPointerLeave={() => {
+        wallJoinRef.current = null;
+      }}
       className="block aspect-[16/9] w-full touch-none select-none rounded-2xl shadow-[0_10px_30px_-8px_rgba(60,40,10,0.45)] ring-1 ring-black/10"
-      style={{ cursor: wallDraft ? "crosshair" : aim ? "pointer" : "default" }}
+      style={{ cursor: wallDraft ? brushCursor(INK_COLORS[wallDraft.color]) : aim ? "pointer" : "default" }}
     />
   );
+}
+
+/** World units per on-screen pixel, so pen aids (snap reach, rings) feel the same size as on the pad. */
+export function penScale(canvas: HTMLCanvasElement): number {
+  return Math.max(1, WORLD_W / (canvas.clientWidth || WORLD_W));
 }
 
 /** Static character portrait for HUD chips and result cards. */

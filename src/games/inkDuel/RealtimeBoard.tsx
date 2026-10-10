@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { analyzeWeapon, INK_COLORS, MAX_POINTS_PER_STROKE, MAX_STROKES, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
+import { analyzeWeapon, INK_COLORS, JOIN_DIST, MAX_POINTS_PER_STROKE, MAX_STROKES, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
 import {
   Ambient,
   characterFor,
@@ -21,7 +21,8 @@ import {
   renderTerrain,
   WindStreaks,
 } from "./arenaArt";
-import { CharacterAvatar } from "./ArenaCanvas";
+import { CharacterAvatar, penScale } from "./ArenaCanvas";
+import { brushCursor, drawJoinMarks, nearLineEnd, prefersTouch } from "./penAids";
 import { computeRankings, MIN_INK, shieldWall, wallPlacementError, type SeatIndex } from "./engine";
 import { playImpactKind, playLaunchSound, playScribbleTick, playVictorySound, playWallSound } from "./inkDuelAudio";
 import { WeaponCard } from "./InkDuelBoard";
@@ -171,6 +172,12 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
   // --- Canvas loop ---
   const drawingRef = useRef<number[] | null>(null);
   const aimingRef = useRef(false);
+  /** Wall pen: line end under the mouse a new wall would continue from / last input was a finger. */
+  const wallJoinRef = useRef<[number, number] | null>(null);
+  const touchRef = useRef(false);
+  useEffect(() => {
+    if (prefersTouch()) touchRef.current = true;
+  }, []);
   const getViewRef = useRef(getView);
   useEffect(() => {
     getViewRef.current = getView;
@@ -344,6 +351,7 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
         for (const s of l.wall) crayon(ctx, s.p, INK_COLORS[s.c], 7, () => 0.5, 0.85);
         const d = drawingRef.current;
         if (d && d.length >= 4) crayon(ctx, d, INK_COLORS[l.color], 7, () => 0.5, 0.85);
+        else if (!d && mePl?.alive) drawJoinMarks(ctx, l.wall, INK_COLORS[l.color], penScale(canvas), wallJoinRef.current, touchRef.current);
       }
 
       // Aim guide (hidden while blind).
@@ -423,6 +431,11 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
   function toWorld(e: React.PointerEvent<HTMLCanvasElement>): [number, number] {
     const rect = e.currentTarget.getBoundingClientRect();
     return [Math.round(((e.clientX - rect.left) / rect.width) * WORLD_W), Math.round(((e.clientY - rect.top) / rect.height) * WORLD_H)];
+  }
+  /** Wall pen: snapping onto an earlier wall's end, at the same on-screen reach as the weapon pad. */
+  function wallJoinAt(e: React.PointerEvent<HTMLCanvasElement>, x: number, y: number): [number, number] | null {
+    const k = penScale(e.currentTarget);
+    return nearLineEnd(wall, x, y, JOIN_DIST * k, k);
   }
   function aimFrom(x: number, y: number) {
     const v = getViewRef.current(performance.now());
@@ -519,7 +532,9 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
             e.currentTarget.setPointerCapture(e.pointerId);
             if (mode === "wall") {
               if (wall.length >= MAX_STROKES) return;
-              drawingRef.current = [Math.max(0, Math.min(WORLD_W, x)), Math.max(0, Math.min(WORLD_H, y))];
+              touchRef.current = e.pointerType === "touch";
+              wallJoinRef.current = null;
+              drawingRef.current = wallJoinAt(e, x, y) ?? [Math.max(0, Math.min(WORLD_W, x)), Math.max(0, Math.min(WORLD_H, y))];
               return;
             }
             aimingRef.current = true;
@@ -536,6 +551,11 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
               if ((cx - lx) ** 2 + (cy - ly) ** 2 < 16 || pts.length >= MAX_POINTS_PER_STROKE * 2) return;
               if (totalInk(wall) + strokeInk({ c: color, p: [...pts, cx, cy] }) > myInk) return;
               pts.push(cx, cy);
+              return;
+            }
+            if (mode === "wall" && !pts && e.pointerType !== "touch") {
+              touchRef.current = false;
+              wallJoinRef.current = wallJoinAt(e, x, y);
               return;
             }
             if (aimingRef.current) aimFrom(x, y);
@@ -557,8 +577,11 @@ export default function RealtimeBoard({ getView, hud, viewerSeat, names, connect
             drawingRef.current = null;
             aimingRef.current = false;
           }}
+          onPointerLeave={() => {
+            wallJoinRef.current = null;
+          }}
           className="block aspect-[16/9] w-full touch-none select-none rounded-2xl shadow-[0_10px_30px_-8px_rgba(60,40,10,0.45)] ring-1 ring-black/10"
-          style={{ cursor: mode === "wall" ? "crosshair" : "pointer" }}
+          style={{ cursor: mode === "wall" ? brushCursor(INK_COLORS[color]) : "pointer" }}
         />
         {me && !me.alive && hud?.phase === "playing" && (
           <div className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-slate-900/75 px-3 py-1 text-xs text-white">💀 탈락 — 남은 싸움을 관전 중</div>

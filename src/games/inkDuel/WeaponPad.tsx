@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { COLOR_NAMES, INK_COLORS, JOIN_DIST, MAX_POINTS_PER_STROKE, MAX_STROKES, PAD_SIZE, strokeInk, strokeLength, totalInk, type InkColor, type Stroke } from "./analyze";
+import { COLOR_NAMES, INK_COLORS, JOIN_DIST, MAX_POINTS_PER_STROKE, MAX_STROKES, PAD_SIZE, strokeInk, totalInk, type InkColor, type Stroke } from "./analyze";
+import { brushCursor, drawJoinMarks, nearLineEnd, prefersTouch } from "./penAids";
 
 interface Props {
   strokes: Stroke[];
@@ -12,13 +13,7 @@ interface Props {
   onScribble?: () => void;
 }
 
-/** Brush-shaped mouse cursor dipped in the current ink; the hotspot is the bristle tip. */
-function brushCursor(ink: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><path d="M25 3 14.5 13.5" stroke="#6b4423" stroke-width="4" stroke-linecap="round"/><path d="M25 3 14.5 13.5" stroke="#a8743f" stroke-width="2" stroke-linecap="round"/><path d="m12.2 12.6 3.2 3.2-1.6 1.6-3.2-3.2z" fill="#c9ccd3" stroke="#555" stroke-width=".8"/><path d="M10.6 14.2c-3 .4-5 2.6-5.6 5.6L3 25l5.2-2c3-.6 5.2-2.6 5.6-5.6z" fill="${ink}" stroke="#222" stroke-width="1"/></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 3 25, crosshair`;
-}
-
-function draw(ctx: CanvasRenderingContext2D, strokes: readonly Stroke[], live: Stroke | null, joinAt: { x: number; y: number; ink: string } | null) {
+function draw(ctx: CanvasRenderingContext2D, strokes: readonly Stroke[], live: Stroke | null) {
   ctx.fillStyle = "#fffdf6";
   ctx.fillRect(0, 0, PAD_SIZE, PAD_SIZE);
   ctx.strokeStyle = "rgba(96, 140, 210, 0.22)";
@@ -40,20 +35,6 @@ function draw(ctx: CanvasRenderingContext2D, strokes: readonly Stroke[], live: S
     for (let i = 2; i < s.p.length; i += 2) ctx.lineTo(s.p[i], s.p[i + 1]);
     ctx.stroke();
   }
-  // "You'll keep drawing from here": a ring in the current ink on the line end the pen will snap to.
-  if (joinAt && !live) {
-    ctx.strokeStyle = joinAt.ink;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([3, 2]);
-    ctx.beginPath();
-    ctx.arc(joinAt.x, joinAt.y, 8, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = joinAt.ink;
-    ctx.beginPath();
-    ctx.arc(joinAt.x, joinAt.y, 3, 0, Math.PI * 2);
-    ctx.fill();
-  }
 }
 
 /** Square doodle pad (PAD_SIZE logical px) with a hard ink limit. */
@@ -63,19 +44,22 @@ export default function WeaponPad({ strokes, color, budget, disabled, onChange, 
   const lastTickRef = useRef(0);
   /** Line end under the hovering mouse/pen that a new stroke would continue from. */
   const joinRef = useRef<[number, number] | null>(null);
+  /** Last input was a finger (no hover) → show every continuable line end instead. */
+  const touchRef = useRef(false);
 
   const redraw = () => {
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const j = joinRef.current;
-    draw(ctx, strokes, liveRef.current, j ? { x: j[0], y: j[1], ink: INK_COLORS[color] } : null);
+    draw(ctx, strokes, liveRef.current);
+    if (!liveRef.current && !disabled) drawJoinMarks(ctx, strokes, INK_COLORS[color], 1, joinRef.current, touchRef.current);
   };
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (prefersTouch()) touchRef.current = true;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     if (canvas.width !== PAD_SIZE * dpr) {
       canvas.width = PAD_SIZE * dpr;
@@ -104,24 +88,8 @@ export default function WeaponPad({ strokes, color, budget, disabled, onChange, 
    * stopped — a mouse can't land on the same pixel twice, and the analyzer
    * reads joined lines as one shape (triangle in 3 lines = rocket).
    */
-  function snapToEnd(x: number, y: number): [number, number] {
-    return nearEnd(x, y) ?? [x, y];
-  }
-
   function nearEnd(x: number, y: number): [number, number] | null {
-    let best: [number, number] | null = null;
-    let bestD = JOIN_DIST * JOIN_DIST;
-    for (const s of strokes) {
-      if (strokeLength(s) < 6) continue;
-      for (const i of [0, s.p.length - 2]) {
-        const d = (s.p[i] - x) ** 2 + (s.p[i + 1] - y) ** 2;
-        if (d <= bestD) {
-          bestD = d;
-          best = [s.p[i], s.p[i + 1]];
-        }
-      }
-    }
-    return best;
+    return nearLineEnd(strokes, x, y, JOIN_DIST);
   }
 
   function addPoint(live: Stroke, x: number, y: number): boolean {
@@ -143,7 +111,11 @@ export default function WeaponPad({ strokes, color, budget, disabled, onChange, 
         if (disabled || strokes.length >= MAX_STROKES) return;
         if (totalInk(strokes) + 2 > budget) return;
         e.currentTarget.setPointerCapture(e.pointerId);
-        const [x, y] = snapToEnd(...toPad(e.currentTarget, e.clientX, e.clientY));
+        touchRef.current = e.pointerType === "touch";
+        // Starting near an earlier line's end picks up exactly where it stopped
+        // (nobody lands on the same pixel twice; joined lines read as one shape).
+        const [rx, ry] = toPad(e.currentTarget, e.clientX, e.clientY);
+        const [x, y] = nearEnd(rx, ry) ?? [rx, ry];
         liveRef.current = { c: color, p: [x, y] };
         joinRef.current = null;
         redraw();
@@ -152,6 +124,7 @@ export default function WeaponPad({ strokes, color, budget, disabled, onChange, 
         const live = liveRef.current;
         if (!live) {
           if (disabled || e.pointerType === "touch") return;
+          touchRef.current = false;
           const j = nearEnd(...toPad(e.currentTarget, e.clientX, e.clientY));
           const prev = joinRef.current;
           if (j?.[0] === prev?.[0] && j?.[1] === prev?.[1]) return;
