@@ -28,8 +28,9 @@ import { countPendingStats, listPlayerStats, STATS_CHANGED_EVENT, syncPlayerStat
 import { useSubscriptionStore } from "@/store/subscriptionStore";
 import { useProfileStore } from "@/store/profileStore";
 import ProfileModal from "@/components/profile/ProfileModal";
+import { ACHIEVEMENT_GAME_IDS, evaluateAchievements, type AchievementStatus } from "@/lib/stats/achievements";
 
-type Tab = "mine" | "ranking";
+type Tab = "mine" | "achievements" | "ranking";
 
 export default function StatsPage() {
   const userId = useSubscriptionStore((s) => s.userId);
@@ -47,6 +48,7 @@ export default function StatsPage() {
         {(
           [
             ["mine", "내 전적"],
+            ["achievements", "🏅 업적"],
             ["ranking", "공개 랭킹"],
           ] as const
         ).map(([id, label]) => (
@@ -64,10 +66,132 @@ export default function StatsPage() {
         ))}
       </div>
 
-      <BotFilterBar filter={botFilter} onChange={setBotFilter} />
+      {tab !== "achievements" && <BotFilterBar filter={botFilter} onChange={setBotFilter} />}
 
-      {tab === "mine" ? <MyStats loggedIn={!!userId} filter={botFilter} /> : <Ranking loggedIn={!!userId} filter={botFilter} onFilterChange={setBotFilter} />}
+      {tab === "mine" ? (
+        <MyStats loggedIn={!!userId} filter={botFilter} />
+      ) : tab === "achievements" ? (
+        <Achievements />
+      ) : (
+        <Ranking loggedIn={!!userId} filter={botFilter} onFilterChange={setBotFilter} />
+      )}
     </div>
+  );
+}
+
+/** 🏅 업적 — every game's achievements, computed from the same synced totals as 내 전적. */
+function Achievements() {
+  const [stats, setStats] = useState<StatTotalsRecord[] | null>(null);
+  const [onlyUnlocked, setOnlyUnlocked] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = () => void listPlayerStats().then(setStats);
+    load();
+    void syncPlayerStats();
+    window.addEventListener(STATS_CHANGED_EVENT, load);
+    return () => window.removeEventListener(STATS_CHANGED_EVENT, load);
+  }, []);
+
+  if (stats === null) return <p className="text-sm text-white/50 light:text-slate-500">불러오는 중…</p>;
+
+  const byGame = new Map(stats.map((t) => [t.gameId, t]));
+  const groups = ACHIEVEMENT_GAME_IDS.map((gameId) => {
+    const t = byGame.get(gameId);
+    const list = evaluateAchievements(gameId, t);
+    return { gameId, played: t?.played ?? 0, list, done: list.filter((a) => a.unlocked).length };
+  }).sort((a, b) => b.done - a.done || b.played - a.played);
+  const total = groups.reduce((n, g) => n + g.list.length, 0);
+  const done = groups.reduce((n, g) => n + g.done, 0);
+  const shown = onlyUnlocked ? groups.filter((g) => g.done > 0) : groups;
+
+  return (
+    <>
+      <div className="mb-4 rounded-2xl border border-amber-300/30 bg-amber-300/[0.07] p-4 light:border-amber-300 light:bg-amber-50">
+        <p className="text-sm font-semibold text-amber-200 light:text-amber-800">달성한 업적</p>
+        <p className="mt-0.5 text-2xl font-bold tabular-nums text-white light:text-slate-900">
+          {done} <span className="text-base font-semibold text-white/50 light:text-slate-500">/ {total}</span>
+        </p>
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10 light:bg-amber-100">
+          <div className="h-full rounded-full bg-amber-400" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
+        </div>
+        <p className="mt-2 text-xs text-white/50 light:text-slate-500">
+          전적에 쌓인 기록으로 계산돼요. 봇이 대신 둔 판은 빠지고, 로그인하면 다른 기기에서도 같은 업적이 보여요.
+        </p>
+      </div>
+
+      <label className="mb-3 flex items-center gap-2 text-xs text-white/60 light:text-slate-600">
+        <input type="checkbox" checked={onlyUnlocked} onChange={(e) => setOnlyUnlocked(e.target.checked)} />
+        달성한 업적이 있는 게임만
+      </label>
+
+      <div className="flex flex-col gap-2">
+        {shown.map((g) => {
+          const isOpen = open === g.gameId;
+          return (
+            <div key={g.gameId} className="rounded-xl border border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-white">
+              <button
+                onClick={() => setOpen(isOpen ? null : g.gameId)}
+                aria-expanded={isOpen}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white light:text-slate-900">
+                  {getGameMeta(g.gameId)?.name ?? g.gameId}
+                </span>
+                <span className="flex shrink-0 gap-0.5 text-sm" aria-hidden>
+                  {g.list.map((a) => (
+                    <span key={a.id} className={a.unlocked ? "" : "opacity-20 grayscale"}>
+                      {a.emoji}
+                    </span>
+                  ))}
+                </span>
+                <span className="w-10 shrink-0 text-right text-xs tabular-nums text-white/60 light:text-slate-500">
+                  {g.done}/{g.list.length}
+                </span>
+                <span className="text-xs text-white/40 light:text-slate-400">{isOpen ? "▲" : "▼"}</span>
+              </button>
+              {isOpen && (
+                <ul className="grid gap-2 border-t border-white/10 p-3 sm:grid-cols-2 light:border-slate-200">
+                  {g.list.map((a) => (
+                    <AchievementItem key={a.id} a={a} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function AchievementItem({ a }: { a: AchievementStatus }) {
+  return (
+    <li
+      className={`flex items-start gap-2.5 rounded-lg border px-3 py-2 ${
+        a.unlocked
+          ? "border-amber-300/40 bg-amber-300/10 light:border-amber-300 light:bg-amber-50"
+          : "border-white/10 bg-white/[0.02] light:border-slate-200 light:bg-slate-50"
+      }`}
+    >
+      <span className={`text-xl leading-none ${a.unlocked ? "" : "opacity-30 grayscale"}`}>{a.emoji}</span>
+      <div className="min-w-0 flex-1">
+        <p className={`text-sm font-semibold ${a.unlocked ? "text-amber-100 light:text-amber-900" : "text-white/70 light:text-slate-600"}`}>
+          {a.title} {a.unlocked && <span className="text-xs">✓</span>}
+        </p>
+        <p className="text-xs text-white/50 light:text-slate-500">{a.desc}</p>
+        {!a.unlocked && a.goal > 1 && (
+          <div className="mt-1 flex items-center gap-2">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10 light:bg-slate-200">
+              <div className="h-full rounded-full bg-amber-400/70" style={{ width: `${(a.progress / a.goal) * 100}%` }} />
+            </div>
+            <span className="text-[10px] tabular-nums text-white/45 light:text-slate-500">
+              {a.progress.toLocaleString("ko-KR")}/{a.goal.toLocaleString("ko-KR")}
+            </span>
+          </div>
+        )}
+      </div>
+    </li>
   );
 }
 

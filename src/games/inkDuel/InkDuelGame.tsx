@@ -1069,7 +1069,7 @@ export default function InkDuelGame({ onComplete }: PlayableGameProps) {
     const dealt = (seat: SeatIndex) => (gameMode === "moving" ? (rtHud?.players[seat]?.damageDealt ?? 0) : (gameState?.damageDealt[seat] ?? 0));
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat) => ({ damage: Math.max(0, Math.round(dealt(seat))), maxDamage: Math.max(0, Math.round(dealt(seat))) })),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({

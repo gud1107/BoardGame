@@ -606,7 +606,10 @@ export default function WormGame({ onComplete }: PlayableGameProps) {
     const rankings = computeRankings(sim);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers }),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers }, (seat) => {
+        const me = rankings.find((r) => r.seat === seat)!;
+        return { maxScore: Math.max(0, Math.round(me.score)), maxLength: Math.max(0, Math.round(me.bestLength)) };
+      }),
       finishedAt: new Date().toISOString(),
     });
     setFinalRankings(rankings);

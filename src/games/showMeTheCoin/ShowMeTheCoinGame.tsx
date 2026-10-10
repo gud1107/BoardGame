@@ -26,6 +26,7 @@ import {
 import ShowMeTheCoinBoard, { COUNT_REVEAL_SECONDS, SHOWDOWN_SECONDS } from "./ShowMeTheCoinBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { roleSelfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -688,6 +689,10 @@ export default function ShowMeTheCoinGame({ onComplete }: PlayableGameProps) {
             { playerId: ids.p1, rank: 1 },
             { playerId: ids.p2, rank: 1 },
           ],
+      self: roleSelfResult(myRole, winnerSeat ? [{ role: winnerSeat, rank: 1 }, { role: otherSeat(winnerSeat), rank: 2 }] : [{ role: "p1" as const, rank: 1 }, { role: "p2" as const, rank: 1 }], { takeovers: botTakeover.takeovers, botRoles, botLevels }, (role, rank): Record<string, number> => ({
+        maxChips: Math.max(0, gameState.chips[role]),
+        ...(rank === 1 ? { minWinRounds: gameState.round } : {}),
+      })),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerId, winnerName });

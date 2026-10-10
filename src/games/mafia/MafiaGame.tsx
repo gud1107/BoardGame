@@ -30,6 +30,7 @@ import {
 import MafiaBoard from "./MafiaBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { selfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -844,8 +845,21 @@ export default function MafiaGame({ onComplete }: PlayableGameProps) {
   function handleGameEnd() {
     if (!gameState || !gameState.winner) return;
     const winner = gameState.winner;
-    const rankings = computeRankings(gameState).map((r) => ({ playerId: ids[r.seat], rank: r.rank }));
-    onComplete({ rankings, finishedAt: new Date().toISOString() });
+    const seatRanks = computeRankings(gameState);
+    const rankings = seatRanks.map((r) => ({ playerId: ids[r.seat], rank: r.rank }));
+    onComplete({
+      rankings,
+      self: selfResult(mySeat, seatRanks, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat, rank) => {
+        const me = gameState.players[seat];
+        const won = rank === 1 ? 1 : 0;
+        return {
+          mafiaWins: me.team === "mafia" ? won : 0,
+          citizenWins: me.team === "citizen" ? won : 0,
+          survivedWins: won && me.alive ? 1 : 0,
+        };
+      }),
+      finishedAt: new Date().toISOString(),
+    });
     setFinalResult({ winner });
     setPhase("post-game");
   }

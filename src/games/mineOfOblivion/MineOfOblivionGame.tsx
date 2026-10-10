@@ -18,6 +18,7 @@ import MineOfOblivionBoard from "./MineOfOblivionBoard";
 import MineOfOblivionRulebookModal from "./RulebookModal";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { roleSelfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -513,8 +514,16 @@ export default function MineOfOblivionGame({ onComplete }: PlayableGameProps) {
           { playerId: gameState.winner === "p1" ? ids.p1 : ids.p2, rank: 1 },
           { playerId: gameState.winner === "p1" ? ids.p2 : ids.p1, rank: 2 },
         ];
-    onComplete({ rankings, finishedAt: new Date().toISOString() });
-  }, [gameState, ids, onComplete]);
+    const winnerRole = gameState.isDraw ? null : gameState.winner;
+    onComplete({
+      rankings,
+      self: roleSelfResult(myRole, winnerRole ? [{ role: winnerRole, rank: 1 }, { role: otherSeat(winnerRole), rank: 2 }] : [{ role: "p1" as const, rank: 1 }, { role: "p2" as const, rank: 1 }], { takeovers: botTakeoverRef.current.takeovers, botRoles: botRolesRef.current, botLevels: botLevelsRef.current }, (role, rank) => {
+        const me = gameState.players[role];
+        return { maxScore: Math.max(0, me.score), treasures: me.treasuresClaimed, flawlessWins: rank === 1 && me.mineHitsTaken === 0 ? 1 : 0 };
+      }),
+      finishedAt: new Date().toISOString(),
+    });
+  }, [gameState, ids, onComplete, myRole]);
 
   function handleRematch() {
     startSentRef.current = true;

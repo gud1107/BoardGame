@@ -900,7 +900,10 @@ export default function NoThanksGame({ onComplete }: PlayableGameProps) {
     const winners = rankings.filter((r) => r.rank === 1);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat, rank) => {
+        const score = rankings.find((r) => r.seat === seat)!.score;
+        return { maxChipsLeft: score.chips, zeroCardWins: rank === 1 && score.cards.length === 0 ? 1 : 0 };
+      }),
       finishedAt: new Date().toISOString(),
     });
     if (roomBettingRef.current.active) {

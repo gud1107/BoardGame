@@ -593,7 +593,15 @@ export default function CityChaseGame({ onComplete }: PlayableGameProps) {
     const rankings = computeRankings(gameState);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat, rank): Record<string, number> => {
+        const thief = seat === gameState.thiefSeat;
+        const won = rank === 1;
+        return {
+          thiefWins: thief && won ? 1 : 0,
+          policeWins: !thief && won ? 1 : 0,
+          ...(won && !thief ? { minCatchRound: gameState.round } : {}),
+        };
+      }),
       finishedAt: new Date().toISOString(),
     });
     const thiefWon = gameState.winner === "thief";

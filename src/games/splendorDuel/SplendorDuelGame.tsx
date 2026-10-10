@@ -17,6 +17,7 @@ import SplendorDuelBoard from "./SplendorDuelBoard";
 import SplendorDuelRulebookModal from "./RulebookModal";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { roleSelfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -484,8 +485,15 @@ export default function SplendorDuelGame({ onComplete }: PlayableGameProps) {
       { playerId: ids[winner], rank: 1 },
       { playerId: ids[otherSeat(winner)], rank: 2 },
     ];
-    onComplete({ rankings, finishedAt: new Date().toISOString() });
-  }, [gameState, ids, onComplete]);
+    const reason = gameState.winReason;
+    onComplete({
+      rankings,
+      self: roleSelfResult(myRole, [{ role: winner, rank: 1 }, { role: otherSeat(winner), rank: 2 }], { takeovers: botTakeoverRef.current.takeovers, botRoles: botRolesRef.current, botLevels: botLevelsRef.current }, (_role, rank): Record<string, number> =>
+        rank === 1 ? { prestigeWins: reason === "prestige" ? 1 : 0, crownWins: reason === "crowns" ? 1 : 0, colorWins: reason === "singleColor" ? 1 : 0 } : {},
+      ),
+      finishedAt: new Date().toISOString(),
+    });
+  }, [gameState, ids, onComplete, myRole]);
 
   function handleRematch() {
     startSentRef.current = true;

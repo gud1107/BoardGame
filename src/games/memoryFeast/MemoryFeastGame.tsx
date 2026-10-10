@@ -28,6 +28,7 @@ import {
 import MemoryFeastBoard from "./MemoryFeastBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { roleSelfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -578,12 +579,19 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
 
   function handleGameEnd(winnerId: string | null) {
     if (!gameState || !myRole) return;
+    const final = gameState;
+    const feastDetails = (role: Seat, rank: number) => ({
+      maxScore: Math.max(0, final.score[role]),
+      perfectWins: rank === 1 && final.penalties[role] === 0 ? 1 : 0,
+      hardWins: rank === 1 && final.difficulty === "hard" ? 1 : 0,
+    });
     if (!winnerId) {
       onComplete({
         rankings: [
           { playerId: ids.p1, rank: 1 },
           { playerId: ids.p2, rank: 1 },
         ],
+        self: roleSelfResult(myRole, [{ role: "p1", rank: 1 }, { role: "p2", rank: 1 }], { takeovers: botTakeover.takeovers, botRoles, botLevels }, feastDetails),
         finishedAt: new Date().toISOString(),
       });
       setFinalResult({ winnerId: null, winnerName: null });
@@ -597,6 +605,7 @@ export default function MemoryFeastGame({ onComplete }: PlayableGameProps) {
         { playerId: winnerId, rank: 1 },
         { playerId: loserId, rank: 2 },
       ],
+      self: roleSelfResult(myRole, [{ role: winnerRole, rank: 1 }, { role: winnerRole === "p1" ? "p2" : "p1", rank: 2 }], { takeovers: botTakeover.takeovers, botRoles, botLevels }, feastDetails),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerId, winnerName: names[winnerRole] });

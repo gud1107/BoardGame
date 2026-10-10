@@ -266,8 +266,8 @@ export default function GamePlayPage() {
     if (res.self && !res.self.botPlayed) {
       const self = res.self;
       const gameId = game!.id;
-      void recordMatchStat(gameId, self, res.finishedAt).then((totals) =>
-        setMatchRecord({ id: `${gameId}-${res.finishedAt}`, gameId, self, totals }),
+      void recordMatchStat(gameId, self, res.finishedAt).then((r) =>
+        setMatchRecord({ id: `${gameId}-${res.finishedAt}`, gameId, self, totals: r?.totals ?? null, previous: r?.previous ?? null }),
       );
     }
     await saveGameResult({

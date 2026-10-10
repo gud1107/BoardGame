@@ -32,3 +32,27 @@ export function selfResult(
     ...(details ? { details: details(mySeat, mine.rank) } : {}),
   };
 }
+
+/**
+ * `selfResult` for the 2-player games that key seats by role string
+ * ("p1"/"p2" — hanamikoji, lostCities, …) instead of a numeric seat.
+ * `takeovers` is keyed by that same role string; `botRoles`/`botLevels` are
+ * the lobby-bot roster (parallel arrays).
+ */
+export function roleSelfResult<R extends string>(
+  myRole: R | null,
+  rankings: readonly { role: R; rank: number }[],
+  bots: { takeovers?: Readonly<Record<string, unknown>>; botRoles?: readonly R[]; botLevels?: readonly number[] } = {},
+  details?: (role: R, rank: number) => Record<string, number>,
+): GameSelfResult | undefined {
+  const roles = rankings.map((r) => r.role);
+  const seatOf = (role: string) => roles.indexOf(role as R);
+  const takeovers: Record<string, unknown> = {};
+  for (const [role, v] of Object.entries(bots.takeovers ?? {})) if (seatOf(role) >= 0) takeovers[String(seatOf(role))] = v;
+  return selfResult(
+    myRole === null ? null : seatOf(myRole),
+    rankings.map((r, seat) => ({ seat, rank: r.rank })),
+    { takeovers, botSeats: (bots.botRoles ?? []).map(seatOf), botLevels: bots.botLevels },
+    details ? (seat, rank) => details(roles[seat], rank) : undefined,
+  );
+}

@@ -15,6 +15,7 @@ import { applyAction, chooseBotAction, startGame, type AvalonState, type EngineA
 import AvalonBoard from "./AvalonBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { selfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -796,7 +797,23 @@ export default function AvalonGame({ onComplete }: PlayableGameProps) {
       playerId: ids[p.seat],
       rank: p.team === winner ? 1 : 2,
     }));
-    onComplete({ rankings, finishedAt: new Date().toISOString() });
+    const seatRanks = gameState.players.map((p) => ({ seat: p.seat, rank: p.team === winner ? 1 : 2 }));
+    const reason = gameState.winReason;
+    onComplete({
+      rankings,
+      self: selfResult(mySeat, seatRanks, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat, rank) => {
+        const me = gameState.players[seat];
+        const won = rank === 1 ? 1 : 0;
+        return {
+          goodWins: me.team === "good" ? won : 0,
+          evilWins: me.team === "evil" ? won : 0,
+          merlinWins: me.role === "merlin" ? won : 0,
+          assassinSnipes: me.role === "assassin" && reason === "assassin-correct" ? 1 : 0,
+          flawlessQuests: won && me.team === "good" && gameState.questFails === 0 ? 1 : 0,
+        };
+      }),
+      finishedAt: new Date().toISOString(),
+    });
     setFinalResult({ winner });
     setPhase("post-game");
   }

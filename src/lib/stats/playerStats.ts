@@ -79,12 +79,17 @@ function notifyChanged() {
 
 /**
  * Called once per finished match from the game page. Never throws. Resolves
- * to this game's updated local totals (for the post-game card), or null when
- * nothing was recorded.
+ * to this game's local totals before and after the match (the post-game card
+ * diffs them for newly unlocked achievements), or null when nothing was recorded.
  */
-export async function recordMatchStat(gameId: string, self: GameSelfResult, playedAt: string): Promise<StatTotalsRecord | null> {
+export async function recordMatchStat(
+  gameId: string,
+  self: GameSelfResult,
+  playedAt: string,
+): Promise<{ previous: StatTotalsRecord | null; totals: StatTotalsRecord } | null> {
   if (self.botPlayed) return null;
   let updated: StatTotalsRecord;
+  let previous: StatTotalsRecord | null;
   try {
     const userId = await currentUserId();
     const pending: PendingMatchStat = {
@@ -101,7 +106,9 @@ export async function recordMatchStat(gameId: string, self: GameSelfResult, play
     };
     const db = await getDb();
     const tx = db.transaction(["statTotals", "statPending"], "readwrite");
-    const totals = (await tx.objectStore("statTotals").get(gameId)) ?? emptyTotals(gameId);
+    const stored = await tx.objectStore("statTotals").get(gameId);
+    previous = stored ?? null;
+    const totals = stored ?? emptyTotals(gameId);
     updated = { ...applyMatch(totals, pending), updatedAt: new Date().toISOString() };
     await tx.objectStore("statTotals").put(updated);
     await tx.objectStore("statPending").put(pending);
@@ -112,7 +119,7 @@ export async function recordMatchStat(gameId: string, self: GameSelfResult, play
     return null;
   }
   void syncPlayerStats();
-  return updated;
+  return { previous, totals: updated };
 }
 
 let syncInFlight: Promise<void> | null = null;

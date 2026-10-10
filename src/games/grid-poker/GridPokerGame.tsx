@@ -32,6 +32,7 @@ import {
 import GridPokerBoard from "./GridPokerBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { selfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -987,7 +988,15 @@ export default function GridPokerGame({ onComplete }: PlayableGameProps) {
       const higherCount = gameState.players.filter((o) => o.score > p.score).length;
       return { playerId: ids[p.seat], rank: higherCount + 1 };
     });
-    onComplete({ rankings, finishedAt: new Date().toISOString() });
+    const seatRanks = gameState.players.map((p, i) => ({ seat: p.seat, rank: rankings[i].rank }));
+    onComplete({
+      rankings,
+      self: selfResult(mySeat, seatRanks, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat) => {
+        const score = Math.max(0, gameState.players.find((p) => p.seat === seat)?.score ?? 0);
+        return { maxScore: score, totalScore: score };
+      }),
+      finishedAt: new Date().toISOString(),
+    });
     if (roomBettingRef.current.active) {
       const ranksBySeat: Record<string, number> = {};
       for (const p of gameState.players) {

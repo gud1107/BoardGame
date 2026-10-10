@@ -770,7 +770,14 @@ export default function LoveLetterGame({ onComplete }: PlayableGameProps) {
     const rankings = computeRankings(gameState);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat, rank) => {
+        const me = gameState.players.find((p) => p.seat === seat);
+        const won = rank === 1;
+        return {
+          princessWins: won && me?.hand[0]?.number === 8 ? 1 : 0,
+          eliminationWins: won && gameState.endReason === "elimination" ? 1 : 0,
+        };
+      }),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerNames: gameState.winnerSeats.map((s) => names[s]).join(", ") });

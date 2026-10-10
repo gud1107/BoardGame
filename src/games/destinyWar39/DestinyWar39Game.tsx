@@ -925,7 +925,11 @@ export default function DestinyWar39Game({ onComplete }: PlayableGameProps) {
     }
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat) => {
+        const me = gameState.players.find((p) => p.seat === seat);
+        const exact = me ? me.predictions.filter((p, i) => p !== null && p === me.actualWins[i]).length : 0;
+        return { maxScore: Math.max(0, gameState.finalScores?.[seat] ?? 0), exactRounds: exact, maxExactRounds: exact };
+      }),
       finishedAt: new Date().toISOString(),
     });
     const winnerNames = rankings.filter((r) => r.rank === 1).map((r) => names[r.seat]);

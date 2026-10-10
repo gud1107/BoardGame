@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selfResult } from "./selfResult";
+import { roleSelfResult, selfResult } from "./selfResult";
 
 const rankings = [
   { seat: 2, rank: 1 },
@@ -34,5 +34,25 @@ describe("selfResult", () => {
     expect(selfResult(0, rankings, { botSeats: [2, 1], botLevels: [3, 9] })?.botLevel).toBe(9);
     expect(selfResult(0, rankings, { botSeats: [2, 7], botLevels: [3, 10] })?.botLevel).toBe(3);
     expect(selfResult(0, rankings, { takeovers: { "1": {} } })?.botLevel).toBeNull();
+  });
+});
+
+describe("roleSelfResult", () => {
+  it("maps p1/p2 roles onto selfResult", () => {
+    const r = [
+      { role: "p1" as const, rank: 2 },
+      { role: "p2" as const, rank: 1 },
+    ];
+    expect(roleSelfResult("p2", r, { botRoles: ["p1"], botLevels: [7] })).toEqual({
+      rank: 1,
+      playerCount: 2,
+      botPlayed: false,
+      withBots: true,
+      botLevel: 7,
+    });
+    expect(roleSelfResult("p1", r, { takeovers: { p1: {} } })?.botPlayed).toBe(true);
+    expect(roleSelfResult("p1", r, { takeovers: { p2: {} } })?.withBots).toBe(true);
+    expect(roleSelfResult(null, r)).toBeUndefined();
+    expect(roleSelfResult("p1", r, {}, (role, rank) => ({ [`${role}x`]: rank }))?.details).toEqual({ p1x: 2 });
   });
 });

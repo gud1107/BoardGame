@@ -28,6 +28,7 @@ import {
 import LoveWinsAllBoard, { REVEAL_SECONDS } from "./LoveWinsAllBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { roleSelfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -679,6 +680,10 @@ export default function LoveWinsAllGame({ onComplete }: PlayableGameProps) {
             { playerId: ids.p1, rank: 1 },
             { playerId: ids.p2, rank: 1 },
           ],
+      self: roleSelfResult(myRole, winnerSeat ? [{ role: winnerSeat, rank: 1 }, { role: otherSeat(winnerSeat), rank: 2 }] : [{ role: "p1" as const, rank: 1 }, { role: "p2" as const, rank: 1 }], { takeovers: botTakeover.takeovers, botRoles, botLevels }, (role, rank) => ({
+        maxChips: Math.max(0, gameState.chips[role]),
+        lwa2Wins: rank === 1 && gameState.variant === "lwa2" ? 1 : 0,
+      })),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerId, winnerName });

@@ -60,8 +60,18 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.56.0",
     releaseDate: "2026-10-11",
-    title: "✏️ 낙서 결투 이어 그리기 인식 개선·붓 커서, 🦈 배고픈 상어 각성·내 빌드, 📋 패치노트 게임별 묶기",
+    title: "🏅 전적 업적·모든 게임 전적 기록, ✏️ 낙서 결투 이어 그리기 인식 개선·붓 커서, 🦈 배고픈 상어 각성·내 빌드, 📋 패치노트 게임별 묶기",
     changes: [
+      {
+        game: "common",
+        type: "FIX",
+        desc: "아발론·뱅·마피아·하나미코지 등 15개 게임의 승패가 전적에 안 쌓이던 문제 수정 — 이제 모든 게임 결과가 기록돼요",
+      },
+      {
+        game: "common",
+        type: "FEAT",
+        desc: "전적에 🏅 업적 탭 추가 — 게임마다 첫 승·Lv.10 봇 격파와 특수 조건 업적, 판이 끝나면 새로 딴 업적을 알려줘요",
+      },
       {
         game: "ink-duel",
         type: "FEAT",

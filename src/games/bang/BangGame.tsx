@@ -16,6 +16,7 @@ import BangBoard from "./BangBoard";
 import { deriveCenterEvent, type CenterPlayEvent } from "./BangEffects";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { selfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, FillEmptySeatsButton, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -830,7 +831,22 @@ export default function BangGame({ onComplete }: PlayableGameProps) {
             : p.role === "sheriff" || p.role === "deputy";
       return { playerId: ids[seat], rank: isWinner ? 1 : 2 };
     });
-    onComplete({ rankings, finishedAt: new Date().toISOString() });
+    const seatRanks = gameState.turnOrder.map((seat, i) => ({ seat, rank: rankings[i].rank }));
+    onComplete({
+      rankings,
+      self: selfResult(mySeat, seatRanks, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat, rank) => {
+        const me = gameState.players[seat];
+        const won = rank === 1 ? 1 : 0;
+        return {
+          sheriffWins: me.role === "sheriff" ? won : 0,
+          deputyWins: me.role === "deputy" ? won : 0,
+          outlawWins: me.role === "outlaw" ? won : 0,
+          renegadeWins: me.role === "renegade" ? won : 0,
+          survivedWins: won && me.alive ? 1 : 0,
+        };
+      }),
+      finishedAt: new Date().toISOString(),
+    });
     setFinalResult({ winner });
     setPhase("post-game");
   }

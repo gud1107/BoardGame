@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { GameSelfResult } from "@/games/types";
 import type { StatTotalsRecord } from "@/lib/db/types";
 import { matchSummaryLines } from "@/lib/stats/presentation";
+import { newlyUnlocked } from "@/lib/stats/achievements";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
 
 export interface MatchRecord {
@@ -13,6 +14,8 @@ export interface MatchRecord {
   gameId: string;
   self: GameSelfResult;
   totals: StatTotalsRecord | null;
+  /** This game's totals before the match — diffed against `totals` for new achievements. */
+  previous?: StatTotalsRecord | null;
 }
 
 const AUTO_HIDE_MS = 20_000;
@@ -45,6 +48,7 @@ export default function MatchRecordCard({ record, onClose }: { record: MatchReco
   const won = self.rank === 1;
   const lines = matchSummaryLines(record.gameId, self.details);
   const winRate = totals && totals.played > 0 ? Math.round((totals.wins / totals.played) * 100) : null;
+  const unlocked = totals ? newlyUnlocked(record.gameId, record.previous ?? null, totals) : [];
 
   return (
     <div
@@ -96,6 +100,20 @@ export default function MatchRecordCard({ record, onClose }: { record: MatchReco
             </div>
           ))}
         </dl>
+      )}
+
+      {unlocked.length > 0 && (
+        <div className="mt-2 rounded-xl border border-amber-300/40 bg-amber-300/10 px-2.5 py-2 light:border-amber-400 light:bg-amber-50">
+          <p className="text-[11px] font-bold text-amber-200 light:text-amber-700">🏅 새 업적 달성!</p>
+          <ul className="mt-1 flex flex-col gap-0.5">
+            {unlocked.map((a) => (
+              <li key={a.id} className="text-xs text-white light:text-slate-900">
+                <span className="mr-1">{a.emoji}</span>
+                <b>{a.title}</b> <span className="text-white/55 light:text-slate-500">· {a.desc}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {totals && (

@@ -26,6 +26,7 @@ import {
 import PiecesOfLanguageBoard from "./PiecesOfLanguageBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { roleSelfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -711,6 +712,7 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
           { playerId: ids.p1, rank: 1 },
           { playerId: ids.p2, rank: 1 },
         ],
+        self: roleSelfResult(myRole, [{ role: "p1", rank: 1 }, { role: "p2", rank: 1 }], { takeovers: botTakeover.takeovers, botRoles, botLevels }),
         finishedAt: new Date().toISOString(),
       });
       setFinalResult({ winnerId: null, winnerName: "", isDraw: true });
@@ -722,6 +724,9 @@ export default function PiecesOfLanguageGame({ onComplete }: PlayableGameProps) 
           { playerId: result.winnerId, rank: 1 },
           { playerId: loserId, rank: 2 },
         ],
+        self: roleSelfResult(myRole, [{ role: winnerSeat, rank: 1 }, { role: winnerSeat === "p1" ? "p2" : "p1", rank: 2 }], { takeovers: botTakeover.takeovers, botRoles, botLevels }, (role, rank): Record<string, number> =>
+          rank === 1 ? { minWinGuesses: gameState.history.filter((h) => h.seat === role).length } : {},
+        ),
         finishedAt: new Date().toISOString(),
       });
       setFinalResult({ winnerId: result.winnerId, winnerName: names[winnerSeat], isDraw: false });

@@ -817,7 +817,10 @@ export default function LasVegasGame({ onComplete }: PlayableGameProps) {
     const winners = rankings.filter((r) => r.rank === 1);
     onComplete({
       rankings: rankings.map((r) => ({ playerId: ids[r.seat], rank: r.rank })),
-      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }),
+      self: selfResult(mySeat, rankings, { takeovers: botTakeover.takeovers, botSeats, botLevels }, (seat) => {
+        const money = gameState.players.find((p) => p.seat === seat)?.money ?? [];
+        return { maxMoney: money.reduce((a, b) => a + b, 0), maxBill: money.length ? Math.max(...money) : 0 };
+      }),
       finishedAt: new Date().toISOString(),
     });
     if (roomBettingRef.current.active) {

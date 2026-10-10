@@ -18,6 +18,7 @@ import LotrDuelBoard, { type CardFocus } from "./LotrDuelBoard";
 import LotrRulebookModal from "./RulebookModal";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { roleSelfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -512,8 +513,22 @@ export default function LotrDuelGame({ onComplete }: PlayableGameProps) {
       { playerId: ids[winner], rank: 1 },
       { playerId: ids[otherSeat(winner)], rank: 2 },
     ];
-    onComplete({ rankings, finishedAt: new Date().toISOString() });
-  }, [gameState, ids, onComplete]);
+    const winType = gameState.winType;
+    onComplete({
+      rankings,
+      self: roleSelfResult(myRole, [{ role: winner, rank: 1 }, { role: otherSeat(winner), rank: 2 }], { takeovers: botTakeoverRef.current.takeovers, botRoles: botRolesRef.current, botLevels: botLevelsRef.current }, (role, rank): Record<string, number> => {
+        if (rank !== 1) return {};
+        const fellowship = seatOf(gameState, "FELLOWSHIP") === role;
+        return {
+          fellowshipWins: fellowship ? 1 : 0,
+          sauronWins: fellowship ? 0 : 1,
+          ringQuestWins: winType === "RING_QUEST" ? 1 : 0,
+          conquestWins: winType === "CONQUEST" ? 1 : 0,
+        };
+      }),
+      finishedAt: new Date().toISOString(),
+    });
+  }, [gameState, ids, onComplete, myRole]);
 
   // Rematch swaps sides — the other seat plays the Fellowship this time.
   function handleRematch() {

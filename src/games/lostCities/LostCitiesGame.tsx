@@ -18,6 +18,7 @@ import LostCitiesBoard from "./LostCitiesBoard";
 import LostCitiesRulebookModal from "./RulebookModal";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { roleSelfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -496,8 +497,17 @@ export default function LostCitiesGame({ onComplete }: PlayableGameProps) {
           { playerId: p1Total > p2Total ? ids.p1 : ids.p2, rank: 1 },
           { playerId: p1Total > p2Total ? ids.p2 : ids.p1, rank: 2 },
         ];
-    onComplete({ rankings, finishedAt: new Date().toISOString() });
-  }, [gameState, ids, onComplete]);
+    const totals = { p1: p1Total, p2: p2Total };
+    const winnerRole: Seat | null = gameState.isDraw ? null : p1Total > p2Total ? "p1" : "p2";
+    onComplete({
+      rankings,
+      self: roleSelfResult(myRole, winnerRole ? [{ role: winnerRole, rank: 1 }, { role: otherSeat(winnerRole), rank: 2 }] : [{ role: "p1" as const, rank: 1 }, { role: "p2" as const, rank: 1 }], { takeovers: botTakeoverRef.current.takeovers, botRoles: botRolesRef.current, botLevels: botLevelsRef.current }, (role) => {
+        const score = Math.max(0, totals[role]);
+        return { maxScore: score, totalScore: score };
+      }),
+      finishedAt: new Date().toISOString(),
+    });
+  }, [gameState, ids, onComplete, myRole]);
 
   function handleRematch() {
     startSentRef.current = true;

@@ -25,6 +25,7 @@ import {
 import HanamikojiBoard from "./HanamikojiBoard";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { roleSelfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -710,11 +711,16 @@ export default function HanamikojiGame({ onComplete }: PlayableGameProps) {
     if (!gameState || !myRole) return;
     const winnerRole = winnerId === ids.p1 ? "p1" : "p2";
     const loserId = winnerId === ids.p1 ? ids.p2 : ids.p1;
+    const loserRole = winnerRole === "p1" ? "p2" : "p1";
     onComplete({
       rankings: [
         { playerId: winnerId, rank: 1 },
         { playerId: loserId, rank: 2 },
       ],
+      self: roleSelfResult(myRole, [{ role: winnerRole, rank: 1 }, { role: loserRole, rank: 2 }], { takeovers: botTakeover.takeovers, botRoles, botLevels }, (role, rank) => {
+        const geishas = Object.values(gameState.geishaOwnership).filter((o) => o === role).length;
+        return { maxGeishas: geishas, firstRoundWins: rank === 1 && gameState.roundNumber === 1 ? 1 : 0 };
+      }),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerId, winnerName: names[winnerRole] });

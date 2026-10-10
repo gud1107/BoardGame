@@ -27,6 +27,7 @@ import MalDalliJaBoard from "./MalDalliJaBoard";
 import { useGameBgm } from "@/lib/audio/useGameBgm";
 import { useBotAutoplay } from "@/games/shared/bot/useBotAutoplay";
 import { botDisplayName, botLabel } from "@/games/shared/bot/botNaming";
+import { roleSelfResult } from "@/games/shared/selfResult";
 import { AddBotButton, BotSeatBadge, RemoveBotButton } from "@/components/lobby/BotSeatControls";
 import RulebookGate from "@/components/lobby/RulebookGate";
 import { BotTakeoverSelfBanner, BotTakeoverVoteModal } from "@/components/lobby/BotTakeoverVoteModal";
@@ -785,6 +786,9 @@ export default function MalDalliJaGame({ onComplete }: PlayableGameProps) {
         { playerId: winnerId, rank: 1 },
         { playerId: loserId, rank: 2 },
       ],
+      self: roleSelfResult(myRole, [{ role: winnerSeat, rank: 1 }, { role: loserSeat, rank: 2 }], { takeovers: botTakeover.takeovers, botRoles, botLevels }, (_role, rank): Record<string, number> =>
+        rank === 1 ? { minWinTurns: gameState.turnNumber } : {},
+      ),
       finishedAt: new Date().toISOString(),
     });
     setFinalResult({ winnerId, winnerName: names[winnerSeat] });
