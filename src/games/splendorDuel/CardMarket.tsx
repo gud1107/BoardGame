@@ -4,7 +4,7 @@ import { COLOR_ACCENT, DuelToken, TOKEN_LABEL, TokenCount } from "./DuelToken";
 import { AbilityJewel, cardFrameStyle, CrownRow, FiligreeCorners, GemWindow, GoldNumeral, royalFrameStyle, WaxSeal } from "./LuxuryArt";
 import CardScene, { sceneFor } from "./CardScene";
 import RoyalPortrait from "./RoyalPortrait";
-import { crownsOf, GEM_ORDER, ROYAL_CROWN_THRESHOLDS, type CardAbility, type DuelCard, type Level, type PlayerState, type RoyalCard, type SplendorDuelState } from "./engine";
+import { crownsOf, GEM_ORDER, goldNeeded, shortfallByColor, ROYAL_CROWN_THRESHOLDS, type CardAbility, type DuelCard, type Level, type PlayerState, type RoyalCard, type SplendorDuelState } from "./engine";
 
 export const ABILITY_META: Record<CardAbility, { icon: string; label: string; desc: string }> = {
   extraTurn: { icon: "↻", label: "추가 턴", desc: "이번 턴이 끝나면 즉시 한 턴 더 진행" },
@@ -31,15 +31,24 @@ export function DuelCardView({
   affordable = false,
   onClick,
   boundColor,
+  viewer,
 }: {
   card: DuelCard;
   compact?: boolean;
   affordable?: boolean;
   onClick?: () => void;
   boundColor?: DuelCard["color"];
+  /** When set, the card shows whether this player can buy it and which cost colors are short. */
+  viewer?: PlayerState;
 }) {
   const color = boundColor ?? card.color;
   const costEntries = ([...GEM_ORDER, "pearl"] as const).filter((c) => (card.cost[c] ?? 0) > 0);
+  const short = viewer ? shortfallByColor(card, viewer) : {};
+  const goldUse = viewer ? goldNeeded(card, viewer) : 0;
+  const goldHeld = viewer?.tokens.gold ?? 0;
+  const buyable = !!viewer && goldUse <= goldHeld;
+  // Short colors: amber when held gold covers the gap, red when the card is still out of reach.
+  const shortClass = `ml-px rounded-sm px-px leading-none font-mono font-black ${buyable ? "bg-amber-400 text-black" : "bg-rose-500 text-white"}`;
   const scene = sceneFor(card);
   return (
     <button
@@ -65,9 +74,15 @@ export function DuelCardView({
         {compact && (
           <div className="relative flex flex-col gap-px">
             {costEntries.map((c) => (
-              <span key={c} className="inline-flex items-center gap-px rounded-sm bg-black/70 pr-0.5 font-mono text-[9px] leading-none font-bold text-amber-50 ring-1 ring-amber-300/25">
+              <span
+                key={c}
+                className={`inline-flex items-center gap-px rounded-sm bg-black/70 pr-0.5 font-mono text-[9px] leading-none font-bold text-amber-50 ring-1 ${
+                  short[c] ? (buyable ? "ring-amber-300/80" : "ring-rose-400/80") : "ring-amber-300/25"
+                }`}
+              >
                 <DuelToken color={c} className="h-2.5 w-2.5" />
                 {card.cost[c]}
+                {short[c] ? <span className={shortClass}>−{short[c]}</span> : null}
               </span>
             ))}
           </div>
@@ -81,11 +96,30 @@ export function DuelCardView({
           {card.bonus > 1 && <span className="absolute -right-0.5 bottom-0 rounded bg-black/70 px-0.5 text-[9px] font-bold text-amber-100">×{card.bonus}</span>}
         </span>
       </div>
+      {viewer && (
+        <span
+          className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 rounded-full px-1 leading-tight font-bold whitespace-nowrap shadow ${
+            compact ? "top-[38%] text-[8px]" : "top-[42%] text-[10px]"
+          } ${buyable ? "bg-emerald-500/90 text-white" : "bg-black/75 text-rose-300 ring-1 ring-rose-400/60"}`}
+          title={
+            buyable
+              ? goldUse > 0
+                ? `구매 가능 — 황금 ${goldUse}개 사용`
+                : "구매 가능"
+              : `보석 ${goldUse - goldHeld}개 부족 (부족분 ${goldUse}개, 보유 황금 ${goldHeld}개)`
+          }
+        >
+          {buyable ? (goldUse > 0 ? `✓ 황금${goldUse}` : "✓ 구매") : `${goldUse - goldHeld}개 부족`}
+        </span>
+      )}
       <FiligreeCorners lit={affordable || card.level === 3} className={compact ? "h-2 w-2" : "h-3.5 w-3.5"} />
       {!compact && (
         <div className="flex flex-wrap gap-x-1 gap-y-0.5 border-t border-amber-200/20 bg-black/50 px-0.5 pb-0.5">
           {costEntries.map((c) => (
-            <TokenCount key={c} color={c} count={card.cost[c]!} size="h-3 w-3" />
+            <span key={c} className="inline-flex items-center">
+              <TokenCount color={c} count={card.cost[c]!} size="h-3 w-3" />
+              {short[c] ? <span className={`text-[10px] ${shortClass}`}>−{short[c]}</span> : null}
+            </span>
           ))}
         </div>
       )}
@@ -221,7 +255,7 @@ export default function CardMarket({
           <div className="grid flex-1 grid-cols-6 gap-1 md:grid-cols-5">
             {state.market[level].map((card, i) =>
               card ? (
-                <DuelCardView key={card.id} card={card} compact={compact} affordable={isAffordable(card)} onClick={onCardClick ? () => onCardClick(card, level, i) : undefined} />
+                <DuelCardView key={card.id} card={card} compact={compact} viewer={viewer} affordable={isAffordable(card)} onClick={onCardClick ? () => onCardClick(card, level, i) : undefined} />
               ) : (
                 <div key={`empty-${level}-${i}`} className="aspect-[5/7] rounded-lg border border-dashed border-white/10" />
               ),

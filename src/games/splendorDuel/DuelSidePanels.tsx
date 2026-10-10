@@ -183,6 +183,9 @@ export function BeginnerGuide({ focus }: { focus: GuideTopic | null }) {
       <GuideCard icon="💰" title="카드 사기" active={focus === "buy"}>
         <p>카드 아래 적힌 보석을 내고 사요. 반짝이는 테두리 = 지금 살 수 있는 카드.</p>
         <p>
+          카드 가운데 배지: <b>✓ 구매</b>(바로 살 수 있음) · <b>✓ 황금n</b>(황금 n개를 쓰면 살 수 있음) · <b>n개 부족</b>. 비용 옆 빨간 <b>−n</b>은 그 색이 몇 개 모자란지예요.
+        </p>
+        <p>
           산 카드의 보석 그림은 <b>영구 할인</b>! 예: 사파이어 카드 2장이 있으면 사파이어 비용이 항상 2개 싸져요.
         </p>
       </GuideCard>

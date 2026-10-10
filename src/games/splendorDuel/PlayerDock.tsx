@@ -221,7 +221,7 @@ export default function PlayerDock({
             return (
               <div key={card.id} className="flex-1">
                 {isMe ? (
-                  <DuelCardView card={card} compact affordable={canBuyReserved?.(card)} onClick={onReservedClick ? () => onReservedClick(card) : undefined} />
+                  <DuelCardView card={card} compact viewer={player} affordable={canBuyReserved?.(card)} onClick={onReservedClick ? () => onReservedClick(card) : undefined} />
                 ) : (
                   <CardBack level={card.level} compact />
                 )}

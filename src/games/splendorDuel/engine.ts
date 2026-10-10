@@ -259,6 +259,16 @@ export function effectiveCost(card: DuelCard, player: PlayerState): Partial<Reco
   return out;
 }
 
+/** Per color: gems/pearls still missing after bonuses and held tokens (only colors that are short). */
+export function shortfallByColor(card: DuelCard, player: PlayerState): Partial<Record<GemColor | "pearl", number>> {
+  const out: Partial<Record<GemColor | "pearl", number>> = {};
+  for (const [color, need] of Object.entries(effectiveCost(card, player)) as [GemColor | "pearl", number][]) {
+    const short = need - (player.tokens[color] ?? 0);
+    if (short > 0) out[color] = short;
+  }
+  return out;
+}
+
 /** Gems/pearls still missing after bonuses and held tokens — exactly how many gold this purchase would need. */
 export function goldNeeded(card: DuelCard, player: PlayerState): number {
   let short = 0;
