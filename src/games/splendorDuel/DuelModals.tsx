@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ABILITY_META, DuelCardView, RoyalCardView } from "./CardMarket";
 import { sceneFor } from "./CardScene";
 import { AbilityJewel } from "./LuxuryArt";
 import { DuelToken, TOKEN_LABEL } from "./DuelToken";
+import { getSplendorDuelSound } from "./splendorDuelSound";
 import {
   autoPayment,
   goldNeeded,
@@ -27,10 +28,13 @@ import {
   type WinReason,
 } from "./engine";
 
+/** How many times the gold ring pulses when a choice sheet lights up (each pulse 0.8s). */
+const SPOTLIGHT_PULSES = 4;
+
 const SPOTLIGHT_CSS = `@keyframes sd-spot-glow{0%,100%{box-shadow:0 0 0 0 rgba(253,224,71,0),0 25px 50px -12px rgba(0,0,0,.6)}50%{box-shadow:0 0 0 4px rgba(253,224,71,.95),0 0 36px 10px rgba(251,191,36,.7)}}
 @keyframes sd-spot-bounce{0%{transform:scale(.92)}35%{transform:scale(1.04)}60%{transform:scale(.99)}100%{transform:scale(1)}}
 @keyframes sd-spot-badge{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,-4px)}}
-.sd-spot{animation:sd-spot-bounce .45s ease-out,sd-spot-glow .8s ease-in-out .1s 4}
+.sd-spot{animation:sd-spot-bounce .45s ease-out,sd-spot-glow .8s ease-in-out .1s ${SPOTLIGHT_PULSES}}
 .sd-spot-badge{animation:sd-spot-badge .9s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){.sd-spot,.sd-spot-badge{animation:none}.sd-spot{box-shadow:0 0 0 3px rgba(253,224,71,.9)}}`;
 
@@ -153,10 +157,15 @@ export function PendingPanel({
   state: SplendorDuelState;
   seat: Seat;
   onAction: (a: EngineAction) => void;
-  /** Just surfaced from behind the royal ceremony — glow + "지금 고르세요!" so it isn't missed. */
+  /** Visible to the player (not hidden behind the royal ceremony) — glow + "지금 고르세요!" + a chime so it isn't missed. */
   spotlight?: boolean;
 }) {
   const step = state.pending[0];
+  // The board remounts this panel for every new choice, so this chimes once per choice as it lights up.
+  const chimes = spotlight && !!step;
+  useEffect(() => {
+    if (chimes) getSplendorDuelSound().attention();
+  }, [chimes]);
   const me = state.players[seat];
   const opp = state.players[otherSeat(seat)];
   const [discard, setDiscard] = useState<TokenBundle>({});

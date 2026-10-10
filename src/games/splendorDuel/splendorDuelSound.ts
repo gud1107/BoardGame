@@ -458,6 +458,17 @@ class SplendorDuelSound {
     [81, 86, 90, 93].forEach((m, i) => this.crystal(t + i * 0.06, hz(m), 0.1, -0.3 + i * 0.2));
   }
 
+  /** "Your pick!" — a choice sheet just lit up: rising two-bell call + a quick sparkle, ~0.5s.
+   *  Starts a beat late so it sits after the buy/royal cue that usually opened the sheet. */
+  attention() {
+    const ctx = this.ready("sfx");
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.22;
+    this.bell(t, hz(81), 0.16, 0.9);
+    this.bell(t + 0.12, hz(88), 0.18, 1.1);
+    [93, 96].forEach((m, i) => this.crystal(t + 0.2 + i * 0.05, hz(m), 0.07, i ? 0.25 : -0.25));
+  }
+
   private reserve(gainedGold: boolean) {
     const ctx = this.ready("sfx");
     if (!ctx) return;
