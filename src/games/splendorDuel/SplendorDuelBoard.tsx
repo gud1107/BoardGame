@@ -334,6 +334,7 @@ export default function SplendorDuelBoard({
   const [seenRoyalsKey, setSeenRoyalsKey] = useState(royalsKey);
   const [ceremony, setCeremony] = useState<{ royal: RoyalCard; seat: Seat; key: number; quick: boolean } | null>(null);
   const [seenAlertSeq, setSeenAlertSeq] = useState(state.eventSeq);
+  const [spotlightSeq, setSpotlightSeq] = useState(-1);
   const [alert, setAlert] = useState<(AbilityAlert & { key: number }) | null>(null);
   if (seenRoyalsKey !== royalsKey || seenAlertSeq !== state.eventSeq) {
     let claimed: { royal: RoyalCard; seat: Seat } | null = null;
@@ -708,7 +709,11 @@ export default function SplendorDuelBoard({
             who={names[ceremony.seat]}
             isMe={ceremony.seat === viewerSeat}
             quick={ceremony.quick}
-            onDone={() => setCeremony(null)}
+            onDone={() => {
+              setCeremony(null);
+              // A choice was waiting behind the ceremony → make it pop when it surfaces.
+              if (pendingHead) setSpotlightSeq(state.eventSeq);
+            }}
           />
         )}
 
@@ -813,6 +818,7 @@ export default function SplendorDuelBoard({
             state={state}
             seat={viewerSeat}
             onAction={onAction}
+            spotlight={spotlightSeq === state.eventSeq}
           />
         )}
 

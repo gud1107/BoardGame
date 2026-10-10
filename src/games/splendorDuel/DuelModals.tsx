@@ -27,13 +27,26 @@ import {
   type WinReason,
 } from "./engine";
 
-function Sheet({ children, onClose }: { children: React.ReactNode; onClose?: () => void }) {
+const SPOTLIGHT_CSS = `@keyframes sd-spot-glow{0%,100%{box-shadow:0 0 0 0 rgba(253,224,71,0),0 25px 50px -12px rgba(0,0,0,.6)}50%{box-shadow:0 0 0 4px rgba(253,224,71,.95),0 0 36px 10px rgba(251,191,36,.7)}}
+@keyframes sd-spot-bounce{0%{transform:scale(.92)}35%{transform:scale(1.04)}60%{transform:scale(.99)}100%{transform:scale(1)}}
+@keyframes sd-spot-badge{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,-4px)}}
+.sd-spot{animation:sd-spot-bounce .45s ease-out,sd-spot-glow .8s ease-in-out .1s 4}
+.sd-spot-badge{animation:sd-spot-badge .9s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.sd-spot,.sd-spot-badge{animation:none}.sd-spot{box-shadow:0 0 0 3px rgba(253,224,71,.9)}}`;
+
+function Sheet({ children, onClose, spotlight = false }: { children: React.ReactNode; onClose?: () => void; spotlight?: boolean }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center" onClick={onClose}>
+      {spotlight && <style>{SPOTLIGHT_CSS}</style>}
       <div
-        className="w-full max-w-sm rounded-3xl border border-amber-400/30 bg-gradient-to-b from-stone-900 to-black p-4 text-white shadow-2xl light:border-amber-500/40 light:from-white light:to-amber-50 light:text-slate-900"
+        className={`relative w-full max-w-sm rounded-3xl ${spotlight ? "sd-spot" : ""} border border-amber-400/30 bg-gradient-to-b from-stone-900 to-black p-4 text-white shadow-2xl light:border-amber-500/40 light:from-white light:to-amber-50 light:text-slate-900`}
         onClick={(e) => e.stopPropagation()}
       >
+        {spotlight && (
+          <span className="sd-spot-badge pointer-events-none absolute -top-3 left-1/2 rounded-full bg-gradient-to-r from-amber-400 to-yellow-200 px-2.5 py-0.5 text-xs font-black whitespace-nowrap text-stone-900 shadow-[0_0_14px_rgba(253,224,71,0.9)]">
+            👉 지금 고르세요!
+          </span>
+        )}
         {children}
       </div>
     </div>
@@ -135,10 +148,13 @@ export function PendingPanel({
   state,
   seat,
   onAction,
+  spotlight = false,
 }: {
   state: SplendorDuelState;
   seat: Seat;
   onAction: (a: EngineAction) => void;
+  /** Just surfaced from behind the royal ceremony — glow + "지금 고르세요!" so it isn't missed. */
+  spotlight?: boolean;
 }) {
   const step = state.pending[0];
   const me = state.players[seat];
@@ -148,7 +164,7 @@ export function PendingPanel({
 
   if (step.kind === "chooseRoyal") {
     return (
-      <Sheet>
+      <Sheet spotlight={spotlight}>
         <p className="text-center font-serif text-lg font-black text-amber-200 light:text-amber-700">👑 왕관 {crownsOf(me)}개 달성!</p>
         <p className="mb-3 text-center text-xs text-white/60 light:text-slate-500">왕실 카드 1장을 골라 가져오세요</p>
         <div className="grid grid-cols-4 gap-2">
@@ -168,7 +184,7 @@ export function PendingPanel({
   if (step.kind === "copyBonus") {
     const colors = GEM_ORDER.filter((c) => me.cards.some((card) => card.id !== step.cardId && card.boundColor === c));
     return (
-      <Sheet>
+      <Sheet spotlight={spotlight}>
         <p className="text-center font-serif text-base font-black text-amber-200 light:text-amber-700">? 보너스 복사</p>
         <p className="mb-3 text-center text-xs text-white/60 light:text-slate-500">복사할 내 보석 카드 색을 고르세요</p>
         <div className="flex justify-center gap-3">
@@ -186,7 +202,7 @@ export function PendingPanel({
   if (step.kind === "stealToken") {
     const colors = ([...GEM_ORDER, "pearl"] as (GemColor | "pearl")[]).filter((c) => (opp.tokens[c] ?? 0) > 0);
     return (
-      <Sheet>
+      <Sheet spotlight={spotlight}>
         <p className="text-center font-serif text-base font-black text-rose-300">✋ 토큰 강탈</p>
         <p className="mb-3 text-center text-xs text-white/60 light:text-slate-500">상대에게서 빼앗을 토큰을 고르세요 (황금 제외)</p>
         <div className="flex flex-wrap justify-center gap-3">
@@ -207,7 +223,7 @@ export function PendingPanel({
     const over = tokenTotal(me.tokens) - TOKEN_LIMIT;
     const chosen = tokenTotal(discard);
     return (
-      <Sheet>
+      <Sheet spotlight={spotlight}>
         <p className="text-center font-serif text-base font-black text-amber-200 light:text-amber-700">토큰 {TOKEN_LIMIT}개 초과</p>
         <p className="mb-3 text-center text-xs text-white/60 light:text-slate-500">
           버릴 토큰 {over}개를 고르세요 ({chosen}/{over})
