@@ -1,7 +1,9 @@
 import {
   PATCH_NOTES,
   getPatchNoteGameMeta,
+  type PatchNoteChange,
   type PatchNoteChangeType,
+  type PatchNoteGameTag,
 } from "@/constants/patchNotes";
 
 const TYPE_META: Record<PatchNoteChangeType, { label: string; className: string }> = {
@@ -9,6 +11,17 @@ const TYPE_META: Record<PatchNoteChangeType, { label: string; className: string 
   IMPROVE: { label: "IMPROVE", className: "bg-sky-500/20 text-sky-300 light:bg-sky-100 light:text-sky-800" },
   FIX: { label: "FIX", className: "bg-rose-500/20 text-rose-300 light:bg-rose-100 light:text-rose-800" },
 };
+
+/** Same-game changes within one release, in first-appearance order. */
+function groupByGame(changes: PatchNoteChange[]) {
+  const groups = new Map<PatchNoteGameTag, PatchNoteChange[]>();
+  for (const change of changes) {
+    const group = groups.get(change.game);
+    if (group) group.push(change);
+    else groups.set(change.game, [change]);
+  }
+  return [...groups];
+}
 
 /**
  * Full release timeline — one card per `PatchNoteEntry`, newest on top
@@ -18,6 +31,8 @@ const TYPE_META: Record<PatchNoteChangeType, { label: string; className: string 
  * `PatchNoteButton`'s `Overlay` popup (2026-09-09 — reverted back to also
  * backing a modal so opening it in-game doesn't navigate away and unmount
  * the current game room; see `PatchNoteButton.tsx`'s doc comment).
+ * Changes for the same game in one release share a single game badge
+ * (2026-10-11) instead of repeating it on every line.
  */
 export default function PatchNoteList() {
   return (
@@ -32,23 +47,31 @@ export default function PatchNoteList() {
             <span className="text-sm font-semibold text-white light:text-slate-900">{entry.title}</span>
           </div>
           <ul className="flex flex-col gap-1.5">
-            {entry.changes.map((change, i) => {
-              const gameMeta = getPatchNoteGameMeta(change.game);
-              const typeMeta = TYPE_META[change.type];
+            {groupByGame(entry.changes).map(([game, changes]) => {
+              const gameMeta = getPatchNoteGameMeta(game);
               return (
                 <li
-                  key={i}
+                  key={game}
                   className="flex flex-wrap items-start gap-1.5 text-xs leading-relaxed text-white/70 sm:text-[13px] light:text-slate-600"
                 >
                   <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-white/70 light:bg-slate-200 light:text-slate-600">
                     {gameMeta.emoji} {gameMeta.label}
                   </span>
-                  <span
-                    className={`shrink-0 rounded-full px-1.5 py-0.5 font-semibold ${typeMeta.className}`}
-                  >
-                    {typeMeta.label}
-                  </span>
-                  <span className="flex-1 basis-40">{change.desc}</span>
+                  <ul className="flex flex-1 basis-60 flex-col gap-1">
+                    {changes.map((change, i) => {
+                      const typeMeta = TYPE_META[change.type];
+                      return (
+                        <li key={i} className="flex items-start gap-1.5">
+                          <span
+                            className={`shrink-0 rounded-full px-1.5 py-0.5 font-semibold ${typeMeta.className}`}
+                          >
+                            {typeMeta.label}
+                          </span>
+                          <span className="flex-1">{change.desc}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </li>
               );
             })}
