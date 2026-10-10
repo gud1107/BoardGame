@@ -12,6 +12,25 @@ const TYPE_META: Record<PatchNoteChangeType, { label: string; className: string 
   FIX: { label: "FIX", className: "bg-rose-500/20 text-rose-300 light:bg-rose-100 light:text-rose-800" },
 };
 
+/**
+ * A same-game group longer than this folds its extra lines behind a
+ * "N개 더 보기" toggle, showing only the first `COLLAPSED_VISIBLE` lines.
+ */
+const COLLAPSE_OVER = 4;
+const COLLAPSED_VISIBLE = 3;
+
+function ChangeLine({ change }: { change: PatchNoteChange }) {
+  const typeMeta = TYPE_META[change.type];
+  return (
+    <li className="flex items-start gap-1.5">
+      <span className={`shrink-0 rounded-full px-1.5 py-0.5 font-semibold ${typeMeta.className}`}>
+        {typeMeta.label}
+      </span>
+      <span className="flex-1">{change.desc}</span>
+    </li>
+  );
+}
+
 /** Same-game changes within one release, in first-appearance order. */
 function groupByGame(changes: PatchNoteChange[]) {
   const groups = new Map<PatchNoteGameTag, PatchNoteChange[]>();
@@ -32,7 +51,8 @@ function groupByGame(changes: PatchNoteChange[]) {
  * backing a modal so opening it in-game doesn't navigate away and unmount
  * the current game room; see `PatchNoteButton.tsx`'s doc comment).
  * Changes for the same game in one release share a single game badge
- * (2026-10-11) instead of repeating it on every line.
+ * (2026-10-11) instead of repeating it on every line; long groups fold
+ * behind a native `<details>` so this stays a server component.
  */
 export default function PatchNoteList() {
   return (
@@ -57,21 +77,30 @@ export default function PatchNoteList() {
                   <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-white/70 light:bg-slate-200 light:text-slate-600">
                     {gameMeta.emoji} {gameMeta.label}
                   </span>
-                  <ul className="flex flex-1 basis-60 flex-col gap-1">
-                    {changes.map((change, i) => {
-                      const typeMeta = TYPE_META[change.type];
-                      return (
-                        <li key={i} className="flex items-start gap-1.5">
-                          <span
-                            className={`shrink-0 rounded-full px-1.5 py-0.5 font-semibold ${typeMeta.className}`}
-                          >
-                            {typeMeta.label}
+                  <div className="flex flex-1 basis-60 flex-col gap-1">
+                    <ul className="flex flex-col gap-1">
+                      {(changes.length > COLLAPSE_OVER ? changes.slice(0, COLLAPSED_VISIBLE) : changes).map(
+                        (change, i) => (
+                          <ChangeLine key={i} change={change} />
+                        ),
+                      )}
+                    </ul>
+                    {changes.length > COLLAPSE_OVER && (
+                      <details className="group">
+                        <summary className="w-fit cursor-pointer list-none rounded-full px-1.5 py-0.5 text-white/50 hover:bg-white/10 hover:text-white/80 light:text-slate-500 light:hover:bg-slate-200 light:hover:text-slate-700 [&::-webkit-details-marker]:hidden">
+                          <span className="group-open:hidden">
+                            ▾ {changes.length - COLLAPSED_VISIBLE}개 더 보기
                           </span>
-                          <span className="flex-1">{change.desc}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                          <span className="hidden group-open:inline">▴ 접기</span>
+                        </summary>
+                        <ul className="mt-1 flex flex-col gap-1">
+                          {changes.slice(COLLAPSED_VISIBLE).map((change, i) => (
+                            <ChangeLine key={i} change={change} />
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
                 </li>
               );
             })}

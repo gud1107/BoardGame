@@ -60,7 +60,7 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
   {
     version: "v1.56.0",
     releaseDate: "2026-10-11",
-    title: "✏️ 낙서 결투 이어 그리기 인식 개선·붓 커서",
+    title: "✏️ 낙서 결투 이어 그리기 인식 개선·붓 커서, 🦈 배고픈 상어 각성·내 빌드, 📋 패치노트 게임별 묶기",
     changes: [
       {
         game: "ink-duel",
@@ -71,6 +71,26 @@ export const PATCH_NOTES: PatchNoteEntry[] = [
         game: "ink-duel",
         type: "FIX",
         desc: "마우스를 뗐다가 끝점에서 이어 그린 선도 한 도형으로 인식해요 (세 줄 삼각형 = 로켓, 네 줄 네모 = 모루)",
+      },
+      {
+        game: "hungry-shark",
+        type: "FEAT",
+        desc: "🌟 각성 — 4티어 상어를 5단계까지 각성(체력·골드·스킬 쿨타임·배고픔·크기·자석), 단계마다 몸을 감싼 오라가 커지고 5단계엔 왕관",
+      },
+      {
+        game: "hungry-shark",
+        type: "FEAT",
+        desc: "내 빌드 — 처음 산 갈래 상어로 상점·진화 선택지를 그 갈래만 보여줘요, 🔄 빌드 다시 고르기로 전체 보기",
+      },
+      {
+        game: "hungry-shark",
+        type: "IMPROVE",
+        desc: "가장 센 상어 표시 — 전체 1위 👑 최강 상어, 티어별 ⭐ 최고 뱃지, 상세 창에 전체 순위(N위)",
+      },
+      {
+        game: "common",
+        type: "IMPROVE",
+        desc: "패치노트에서 같은 게임 변경사항을 한 묶음으로 보여주고, 많으면 「N개 더 보기」로 접어 둬요",
       },
     ],
   },
