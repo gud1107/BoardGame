@@ -8,6 +8,8 @@ import {
   canAfford,
   checkVictory,
   chooseBotAction,
+  crownsToNextRoyal,
+  shortfallByColor,
   effectiveCost,
   getValidMoves,
   isValidSelection,
@@ -424,5 +426,25 @@ describe("bot self-play", () => {
   it("offers at least one legal line on a fresh board", () => {
     expect(allSelections(startGame(1).grid).length).toBeGreaterThan(22);
     expect(prestigeOf(startGame(1).players.p1)).toBe(0);
+  });
+});
+
+describe("royal / purchase hints", () => {
+  it("crownsToNextRoyal counts down to 3, then 6, then 0 once both royals are claimed", () => {
+    const s = startGame(3);
+    expect(crownsToNextRoyal(s, "p1")).toBe(3);
+    const p1 = { ...s.players.p1, cards: [owned({ color: "red", crowns: 2 })] };
+    expect(crownsToNextRoyal({ ...s, players: { ...s.players, p1 } }, "p1")).toBe(1);
+    const one = { ...p1, royals: [s.royals[0]] };
+    expect(crownsToNextRoyal({ ...s, players: { ...s.players, p1: one } }, "p1")).toBe(4);
+    const two = { ...one, royals: [s.royals[0], s.royals[1]] };
+    expect(crownsToNextRoyal({ ...s, players: { ...s.players, p1: two } }, "p1")).toBe(0);
+    expect(crownsToNextRoyal({ ...s, royals: [] }, "p1")).toBe(0);
+  });
+
+  it("shortfallByColor reports only the colors still missing after bonuses and tokens", () => {
+    const card: DuelCard = { id: "sf", level: 1, color: "red", points: 0, crowns: 0, bonus: 1, cost: { blue: 3, white: 2, pearl: 1 } };
+    const player: PlayerState = { tokens: { blue: 1, pearl: 1 }, cards: [owned({ color: "blue" })], reserved: [], royals: [], scrolls: 0 };
+    expect(shortfallByColor(card, player)).toEqual({ blue: 1, white: 2 });
   });
 });

@@ -7,6 +7,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { AbilityToast, RoyalCeremony } from "./AbilityAlerts";
 import CardMarket from "./CardMarket";
 import { CardActionSheet, PendingPanel, VictoryModal } from "./DuelModals";
 import { DuelToken, TOKEN_LABEL } from "./DuelToken";
@@ -23,6 +24,7 @@ import { playDuelEventSound, playDuelVictorySound } from "./splendorDuelAudio";
 import { getSplendorDuelSound, matchTension } from "./splendorDuelSound";
 import {
   canAfford,
+  crownsToNextRoyal,
   getValidMoves,
   GOLD_SUPPLY,
   goldOnBoard,
@@ -34,6 +36,7 @@ import {
   type DuelEvent,
   type EngineAction,
   type Level,
+  type RoyalCard,
   type ScrollSource,
   type Seat,
   type SplendorDuelState,
@@ -62,6 +65,33 @@ function useIsDesktop() {
     () => window.matchMedia("(min-width: 768px)").matches,
     () => true,
   );
+}
+
+type AbilityAlert = { icon: string; title: string; detail: string; mine: boolean };
+
+/** Ability effects worth a banner (card or royal) — null for plain events. */
+function abilityAlertFor(e: DuelEvent, state: SplendorDuelState, names: Record<Seat, string>, viewerSeat: Seat): AbilityAlert | null {
+  const who = names[e.seat];
+  const opp = names[otherSeat(e.seat)];
+  const mine = e.seat === viewerSeat;
+  switch (e.kind) {
+    case "steal":
+      return { icon: "✋", title: "토큰 강탈 발동!", detail: `${who}이(가) ${opp}의 ${TOKEN_LABEL[e.color]} 1개를 빼앗았어요`, mine };
+    case "extraTurn":
+      return { icon: "↻", title: "추가 턴 발동!", detail: `${who}이(가) 한 턴 더 진행해요`, mine };
+    case "takeMatching":
+      return { icon: "⬇", title: "토큰 획득 발동!", detail: `${who}: 보드에서 ${TOKEN_LABEL[e.color]} 1개 추가`, mine };
+    case "copy":
+      return { icon: "?", title: "보너스 복사 발동!", detail: `${who}: ${TOKEN_LABEL[e.color]} 보너스로 등록`, mine };
+    case "buy": {
+      const card = state.players[e.seat].cards.find((c) => c.id === e.cardId);
+      if (card?.ability !== "gainPrivilege") return null;
+      const from = e.scrollFrom === "opponent" ? ` (${opp}에게서 빼앗음)` : e.scrollFrom === "table" ? "" : " (받을 스크롤이 없음)";
+      return { icon: "📜", title: "특권 획득 발동!", detail: `${who} 특권 스크롤 +1${from}`, mine };
+    }
+    default:
+      return null;
+  }
 }
 
 function scrollNote(from: ScrollSource, gainer: string) {
@@ -298,6 +328,33 @@ export default function SplendorDuelBoard({
     if (pendingHead?.kind === "takeToken") setMobileTab("board");
   }
 
+  // Royal claims are detected from the royals count (the "royal" event itself can be overwritten by a
+  // following "extraTurn" event in the same action), ability banners from each new engine event.
+  const royalsKey = `${state.players.p1.royals.length},${state.players.p2.royals.length}`;
+  const [seenRoyalsKey, setSeenRoyalsKey] = useState(royalsKey);
+  const [ceremony, setCeremony] = useState<{ royal: RoyalCard; seat: Seat; key: number } | null>(null);
+  const [seenAlertSeq, setSeenAlertSeq] = useState(state.eventSeq);
+  const [alert, setAlert] = useState<(AbilityAlert & { key: number }) | null>(null);
+  if (seenRoyalsKey !== royalsKey || seenAlertSeq !== state.eventSeq) {
+    let claimed: { royal: RoyalCard; seat: Seat } | null = null;
+    if (seenRoyalsKey !== royalsKey) {
+      const [a, b] = seenRoyalsKey.split(",").map(Number);
+      setSeenRoyalsKey(royalsKey);
+      for (const [seat, before] of [["p1", a], ["p2", b]] as [Seat, number][]) {
+        const royals = state.players[seat].royals;
+        if (royals.length > before) claimed = { royal: royals[royals.length - 1], seat };
+      }
+      if (claimed) setCeremony({ ...claimed, key: state.eventSeq });
+    }
+    if (seenAlertSeq !== state.eventSeq) {
+      setSeenAlertSeq(state.eventSeq);
+      const e = state.lastEvent;
+      const next = e ? abilityAlertFor(e, state, names, viewerSeat) : null;
+      // The ceremony already announces a royal's own extra turn.
+      if (next && !(claimed && e?.kind === "extraTurn")) setAlert({ ...next, key: state.eventSeq });
+    }
+  }
+
   // Lute BGM plays while the board is mounted (and BGM is unmuted).
   useEffect(() => {
     const sound = getSplendorDuelSound();
@@ -312,12 +369,16 @@ export default function SplendorDuelBoard({
 
   // Sound for every new engine event; skip whatever event was already there on mount/resync.
   const lastSoundSeq = useRef(state.eventSeq);
+  const lastRoyalsSound = useRef(state.players.p1.royals.length + state.players.p2.royals.length);
   useEffect(() => {
     if (state.eventSeq === lastSoundSeq.current) return;
     lastSoundSeq.current = state.eventSeq;
     const e = state.lastEvent;
     if (!e) return;
     playDuelEventSound(e);
+    const royalsNow = state.players.p1.royals.length + state.players.p2.royals.length;
+    if (royalsNow > lastRoyalsSound.current && e.kind !== "royal") playDuelEventSound({ kind: "royal", seat: e.seat, royalId: "", scrollFrom: null });
+    lastRoyalsSound.current = royalsNow;
     // Physical gold: the picked board cell -> reserver's dock, or spender's dock -> the bag.
     // The phone market tab hides the board (cells + bag counter) - fall back to the market's rect.
     const visible = (el: Element | null | undefined) => {
@@ -344,7 +405,7 @@ export default function SplendorDuelBoard({
       const to = visible(bagRef.current);
       if (from && to) flyGold(from, to, k * 140);
     }
-  }, [state.eventSeq, state.lastEvent]);
+  }, [state.eventSeq, state.lastEvent, state.players]);
   const wasOver = useRef(state.phase === "gameOver");
   useEffect(() => {
     if (state.phase === "gameOver" && !wasOver.current) playDuelVictorySound();
@@ -590,6 +651,8 @@ export default function SplendorDuelBoard({
       <CardMarket
         state={state}
         viewer={me}
+        crownsToRoyal={crownsToNextRoyal(state, viewerSeat)}
+        oppCrownsToRoyal={crownsToNextRoyal(state, oppSeat)}
         compact={!isDesktop}
         isAffordable={(c) => canMain && canAfford(c, me)}
         onCardClick={
@@ -635,6 +698,16 @@ export default function SplendorDuelBoard({
         @keyframes sd-pop { 0% { opacity: 0; transform: scale(0.8); } 60% { transform: scale(1.04); } 100% { opacity: 1; transform: none; } }
         .sd-victory-pop { animation: sd-pop 0.5s cubic-bezier(.2,.9,.3,1.2) both; }
       `}</style>
+        {alert && <AbilityToast key={alert.key} icon={alert.icon} title={alert.title} detail={alert.detail} mine={alert.mine} onDone={() => setAlert(null)} />}
+        {ceremony && (
+          <RoyalCeremony
+            key={ceremony.key}
+            royal={ceremony.royal}
+            who={names[ceremony.seat]}
+            isMe={ceremony.seat === viewerSeat}
+            onDone={() => setCeremony(null)}
+          />
+        )}
 
         <div ref={oppSeat === "p1" ? p1DockRef : p2DockRef}>
           <PlayerDock
@@ -699,6 +772,7 @@ export default function SplendorDuelBoard({
             name={names[viewerSeat]}
             isMe
             isActive={myTurn}
+            crownsToRoyal={crownsToNextRoyal(state, viewerSeat)}
             compact={!isDesktop}
             canBuyReserved={(c) => canMain && canAfford(c, me)}
             onReservedClick={

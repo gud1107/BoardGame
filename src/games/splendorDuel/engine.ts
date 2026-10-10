@@ -569,6 +569,14 @@ function royalDue(state: SplendorDuelState, seat: Seat): boolean {
   return crownsOf(p) >= ROYAL_CROWN_THRESHOLDS[claimed];
 }
 
+/** Crowns this seat still needs for its next royal card (3, then 6) — 0 when no royal card is left to claim. */
+export function crownsToNextRoyal(state: SplendorDuelState, seat: Seat): number {
+  const p = state.players[seat];
+  const claimed = p.royals.length;
+  if (claimed >= ROYAL_CROWN_THRESHOLDS.length || state.royals.length === 0) return 0;
+  return Math.max(0, ROYAL_CROWN_THRESHOLDS[claimed] - crownsOf(p));
+}
+
 /** Can this pending step actually be acted on? If not it's silently skipped (rulebook: "획득 불가"/"보너스 없이 등록"). */
 function pendingIsActionable(state: SplendorDuelState, seat: Seat, step: Pending): boolean {
   const p = state.players[seat];

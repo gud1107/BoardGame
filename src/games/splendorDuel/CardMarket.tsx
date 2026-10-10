@@ -32,6 +32,7 @@ export function DuelCardView({
   onClick,
   boundColor,
   viewer,
+  crownsToRoyal = 0,
 }: {
   card: DuelCard;
   compact?: boolean;
@@ -40,6 +41,8 @@ export function DuelCardView({
   boundColor?: DuelCard["color"];
   /** When set, the card shows whether this player can buy it and which cost colors are short. */
   viewer?: PlayerState;
+  /** Crowns the viewer still needs for the next royal card — a card carrying that many gets a "👑 왕실!" tag. */
+  crownsToRoyal?: number;
 }) {
   const color = boundColor ?? card.color;
   const costEntries = ([...GEM_ORDER, "pearl"] as const).filter((c) => (card.cost[c] ?? 0) > 0);
@@ -112,6 +115,16 @@ export function DuelCardView({
           {buyable ? (goldUse > 0 ? `✓ 황금${goldUse}` : "✓ 구매") : `${goldUse - goldHeld}개 부족`}
         </span>
       )}
+      {crownsToRoyal > 0 && card.crowns >= crownsToRoyal && (
+        <span
+          className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 animate-pulse rounded-full bg-gradient-to-r from-fuchsia-600 to-amber-500 px-1 leading-tight font-black whitespace-nowrap text-white shadow-[0_0_8px_rgba(232,121,249,0.8)] ${
+            compact ? "top-[23%] text-[8px]" : "top-[27%] text-[10px]"
+          }`}
+          title={`이 카드를 사면 왕관 ${crownsToRoyal}개를 채워 왕실 카드를 받아요`}
+        >
+          {compact ? "👑왕실" : "👑 왕실!"}
+        </span>
+      )}
       <FiligreeCorners lit={affordable || card.level === 3} className={compact ? "h-2 w-2" : "h-3.5 w-3.5"} />
       {!compact && (
         <div className="flex flex-wrap gap-x-1 gap-y-0.5 border-t border-amber-200/20 bg-black/50 px-0.5 pb-0.5">
@@ -181,10 +194,12 @@ export function RoyalCardView({ royal, onClick, compact = false }: { royal: Roya
  * the moment the viewer's crowns reach 3, then again at 6 — every multiple
  * of 3, max 2. Marked at the bottom-left ("3") and bottom-right ("6") ends.
  */
-function CrownTrack({ viewer }: { viewer: PlayerState }) {
+function CrownTrack({ viewer, toRoyal, oppToRoyal }: { viewer: PlayerState; toRoyal: number; oppToRoyal: number }) {
   const crowns = crownsOf(viewer);
   const claimed = viewer.royals.length;
   const pct = Math.min(100, (crowns / ROYAL_CROWN_THRESHOLDS[1]) * 100);
+  const near = toRoyal > 0 && toRoyal <= 2;
+  const oppNear = oppToRoyal > 0 && oppToRoyal <= 2;
   const mark = (n: number, i: number) => {
     const done = claimed > i;
     const ready = !done && crowns >= n;
@@ -204,9 +219,26 @@ function CrownTrack({ viewer }: { viewer: PlayerState }) {
     <div className="flex flex-col gap-0.5">
       <div className="flex items-center gap-1">
         {mark(ROYAL_CROWN_THRESHOLDS[0], 0)}
-        <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-          <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-yellow-200 transition-all duration-500" style={{ width: `${pct}%` }} />
-          <span className="absolute top-0 left-1/2 h-full w-px bg-amber-200/80" />
+        <div className="relative flex-1">
+          <div className={`relative h-1.5 overflow-hidden rounded-full bg-white/10 ${near ? "shadow-[0_0_8px_rgba(232,121,249,0.8)]" : ""}`}>
+            <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-yellow-200 transition-all duration-500" style={{ width: `${pct}%` }} />
+            <span className="absolute top-0 left-1/2 h-full w-px bg-amber-200/80" />
+          </div>
+          {/* Near a threshold: a pill floats over the bar (no extra row — the phone market tab has zero vertical slack). */}
+          {(near || oppNear) && (
+            <span className="pointer-events-none absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 gap-1 whitespace-nowrap">
+              {near && (
+                <span className="animate-pulse rounded-full bg-gradient-to-r from-fuchsia-600 to-amber-500 px-1.5 text-[9px] leading-tight font-black text-white shadow md:text-[10px]">
+                  👑 {toRoyal}개만 더 → 왕실 카드!
+                </span>
+              )}
+              {oppNear && (
+                <span className="rounded-full bg-rose-900/90 px-1.5 text-[9px] leading-tight font-bold text-rose-100 ring-1 ring-rose-400/60 md:text-[10px]">
+                  ⚠ 상대 {oppToRoyal}개 남음
+                </span>
+              )}
+            </span>
+          )}
         </div>
         {mark(ROYAL_CROWN_THRESHOLDS[1], 1)}
       </div>
@@ -225,9 +257,13 @@ export default function CardMarket({
   onCardClick,
   onDeckClick,
   viewer,
+  crownsToRoyal = 0,
+  oppCrownsToRoyal = 0,
 }: {
   state: SplendorDuelState;
   viewer: PlayerState;
+  crownsToRoyal?: number;
+  oppCrownsToRoyal?: number;
   compact: boolean;
   isAffordable: (card: DuelCard) => boolean;
   onCardClick?: (card: DuelCard, level: Level, index: number) => void;
@@ -243,7 +279,7 @@ export default function CardMarket({
           ))}
           {state.royals.length === 0 && <p className="col-span-4 py-2 text-center text-[10px] text-white/40">왕실 카드가 모두 주인을 찾았습니다</p>}
           <div className="col-span-6 md:col-span-4">
-            <CrownTrack viewer={viewer} />
+            <CrownTrack viewer={viewer} toRoyal={crownsToRoyal} oppToRoyal={oppCrownsToRoyal} />
           </div>
         </div>
       </div>
@@ -255,7 +291,7 @@ export default function CardMarket({
           <div className="grid flex-1 grid-cols-6 gap-1 md:grid-cols-5">
             {state.market[level].map((card, i) =>
               card ? (
-                <DuelCardView key={card.id} card={card} compact={compact} viewer={viewer} affordable={isAffordable(card)} onClick={onCardClick ? () => onCardClick(card, level, i) : undefined} />
+                <DuelCardView key={card.id} card={card} compact={compact} viewer={viewer} crownsToRoyal={crownsToRoyal} affordable={isAffordable(card)} onClick={onCardClick ? () => onCardClick(card, level, i) : undefined} />
               ) : (
                 <div key={`empty-${level}-${i}`} className="aspect-[5/7] rounded-lg border border-dashed border-white/10" />
               ),
