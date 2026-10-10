@@ -1,6 +1,8 @@
 "use client";
 
-import { CardBack, DuelCardView } from "./CardMarket";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { CardBack, DuelCardView, RoyalCardView } from "./CardMarket";
 import { DuelToken, GEM_PALETTE, TOKEN_LABEL } from "./DuelToken";
 import {
   bonusCounts,
@@ -147,6 +149,97 @@ export function ScrollPips({ count }: { count: number }) {
   );
 }
 
+const SHINE_CSS = `@keyframes sd-owned-shine{0%{transform:translateX(-120%) skewX(-20deg)}55%,100%{transform:translateX(220%) skewX(-20deg)}}`;
+
+/** "카드 N" in the dock header — glints while there is something to look at, opens the owned-cards sheet. */
+function OwnedCardsButton({ count, onClick }: { count: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="가지고 있는 카드 보기"
+      className={`relative overflow-hidden rounded-full border px-1.5 text-[10px] leading-tight font-bold transition hover:brightness-125 ${
+        count > 0
+          ? "border-amber-300/70 bg-amber-500/20 text-amber-100 shadow-[0_0_8px_rgba(251,191,36,0.45)] light:text-amber-800"
+          : "border-white/15 text-white/50 light:text-slate-500"
+      }`}
+    >
+      {count > 0 && (
+        <>
+          <style>{SHINE_CSS}</style>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-transparent via-white/70 to-transparent motion-reduce:hidden"
+            style={{ animation: "sd-owned-shine 2.4s ease-in-out infinite" }}
+          />
+        </>
+      )}
+      <span className="relative">🃏 카드 {count}</span>
+    </button>
+  );
+}
+
+/** Every card the player has bought, grouped by the color it counts as, plus claimed royal cards. */
+function OwnedCardsModal({ player, name, isMe, onClose }: { player: PlayerState; name: string; isMe: boolean; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const pts = colorPoints(player);
+  const groups = [...GEM_ORDER, null].map((color) => ({ color, cards: player.cards.filter((c) => c.boundColor === color) })).filter((g) => g.cards.length > 0);
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center" onClick={onClose}>
+      <div
+        className="flex max-h-[85dvh] w-full max-w-lg flex-col rounded-3xl border border-amber-400/30 bg-gradient-to-b from-stone-900 to-black p-4 text-white shadow-2xl light:border-amber-500/40 light:from-white light:to-amber-50 light:text-slate-900"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="font-serif text-base font-black text-amber-200 light:text-amber-700">
+            🃏 {isMe ? "내가 가진 카드" : `${name}의 카드`} <span className="text-sm text-white/60 light:text-slate-500">{player.cards.length}장</span>
+          </h3>
+          <button type="button" onClick={onClose} className="rounded-full px-2 py-0.5 text-lg leading-none text-white/60 hover:bg-white/10 light:text-slate-500" aria-label="닫기">
+            ✕
+          </button>
+        </div>
+        <p className="mb-2 font-mono text-[11px] text-white/60 light:text-slate-500">
+          ⭐ 위신 {prestigeOf(player)}/{WIN_PRESTIGE} · 👑 왕관 {crownsOf(player)}/{WIN_CROWNS}
+        </p>
+        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto pr-1">
+          {groups.length === 0 && player.royals.length === 0 && <p className="py-6 text-center text-sm text-white/50 light:text-slate-500">아직 산 카드가 없어요.</p>}
+          {groups.map(({ color, cards }) => (
+            <section key={color ?? "none"}>
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-bold">
+                {color ? <DuelToken color={color} className="h-4 w-4" /> : <span>⚪</span>}
+                <span>{color ? TOKEN_LABEL[color] : "보너스 없음"}</span>
+                <span className="text-white/50 light:text-slate-500">
+                  {cards.length}장{color && ` · 할인 ${bonusCounts(player)[color]} · ★${pts[color]}`}
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5">
+                {cards.map((c) => (
+                  <DuelCardView key={c.id} card={c} boundColor={c.boundColor} compact />
+                ))}
+              </div>
+            </section>
+          ))}
+          {player.royals.length > 0 && (
+            <section>
+              <div className="mb-1 text-xs font-bold">👑 왕실 카드 {player.royals.length}장</div>
+              <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5">
+                {player.royals.map((r) => (
+                  <RoyalCardView key={r.id} royal={r} compact />
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export default function PlayerDock({
   player,
   name,
@@ -164,6 +257,7 @@ export default function PlayerDock({
   canBuyReserved?: (card: DuelCard) => boolean;
   onReservedClick?: (card: DuelCard) => void;
 }) {
+  const [showOwned, setShowOwned] = useState(false);
   return (
     <div
       className={`flex flex-col gap-1.5 rounded-2xl border p-2 transition ${
@@ -182,7 +276,7 @@ export default function PlayerDock({
           <TokenLimitBadge total={tokenTotal(player.tokens)} />
           <ScrollPips count={player.scrolls} />
           {player.royals.length > 0 && <span className="text-[10px] text-amber-200">👑×{player.royals.length}</span>}
-          <span className="text-[10px] text-white/50 light:text-slate-500">카드 {player.cards.length}</span>
+          <OwnedCardsButton count={player.cards.length} onClick={() => setShowOwned(true)} />
         </span>
       </div>
       {compact && !isMe ? (
@@ -230,6 +324,7 @@ export default function PlayerDock({
           })}
         </div>
       </div>
+      {showOwned && <OwnedCardsModal player={player} name={name} isMe={isMe} onClose={() => setShowOwned(false)} />}
     </div>
   );
 }
