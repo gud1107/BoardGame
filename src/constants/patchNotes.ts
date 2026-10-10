@@ -58,10 +58,15 @@ export const PATCH_NOTE_DESC_MAX = 120;
 
 export const PATCH_NOTES: PatchNoteEntry[] = [
   {
-    version: "v1.55.1",
+    version: "v1.56.0",
     releaseDate: "2026-10-11",
-    title: "✏️ 낙서 결투 이어 그리기 인식 개선",
+    title: "✏️ 낙서 결투 이어 그리기 인식 개선·붓 커서",
     changes: [
+      {
+        game: "ink-duel",
+        type: "FEAT",
+        desc: "그림판 커서가 지금 잉크 색 붓으로 바뀌고, 이어 그릴 수 있는 선 끝에 다가가면 동그라미로 이어질 자리를 알려줘요",
+      },
       {
         game: "ink-duel",
         type: "FIX",
