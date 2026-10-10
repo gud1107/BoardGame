@@ -18,6 +18,10 @@ import {
   evolutionFrontier,
   recommendedPath,
   SIM_DIVE_INCOME,
+  SHARK_POWER_RANK,
+  sharkPowerRank,
+  STRONGEST_SHARK_ID,
+  TIER_BEST_IDS,
   SHARKS,
   sharkById,
   UPGRADE_LABELS,
@@ -290,6 +294,7 @@ export default function HungrySharkGame({ participants, onComplete }: PlayableGa
 
             <div className="flex flex-col gap-2">
               <StatBars def={viewDef} save={save} />
+              <PowerRankBox def={viewDef} />
               {owned && <EvolutionBox def={viewDef} save={save} onView={setViewId} />}
               {owned ? (
                 (Object.keys(UPGRADE_LABELS) as UpgradeKind[]).map((k) => {
@@ -727,6 +732,8 @@ function SharkCard({
   const own = save.owned.includes(sh.id);
   const reachable = !sh.parentId || save.owned.includes(sh.parentId);
   const recommended = !own && !metric && evolutionFrontier(save.owned).has(sh.id);
+  const strongest = sh.id === STRONGEST_SHARK_ID;
+  const tierBest = !strongest && TIER_BEST_IDS.has(sh.id);
   return (
     <button
       onClick={onClick}
@@ -735,7 +742,11 @@ function SharkCard({
           ? "border-sky-400 bg-sky-500/15 ring-2 ring-sky-400/50"
           : recommended
             ? "border-amber-400 bg-amber-400/10 ring-2 ring-amber-400/70 shadow-[0_0_14px_rgba(251,191,36,0.4)] light:bg-amber-50"
-            : "border-white/10 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-white"
+            : strongest
+              ? "border-fuchsia-400 bg-fuchsia-500/15 ring-2 ring-fuchsia-400/70 shadow-[0_0_16px_rgba(232,121,249,0.5)] light:bg-fuchsia-50"
+              : tierBest
+                ? "border-violet-400/80 bg-violet-500/10 ring-1 ring-violet-400/60 light:bg-violet-50"
+                : "border-white/10 bg-white/[0.03] hover:border-white/30 light:border-slate-200 light:bg-white"
       } ${sh.tier === 1 && !metric ? "max-w-[11rem]" : ""}`}
     >
       <span className="absolute top-1 left-1.5 text-[9px] font-black text-white/50 light:text-slate-400">T{sh.tier}</span>
@@ -746,10 +757,43 @@ function SharkCard({
         {own ? `최고 ${(save.best[sh.id] ?? 0).toLocaleString()}` : reachable ? `🔒 ${sh.cost.toLocaleString()}🪙` : "🔒 이전 단계 필요"}
       </span>
       {metric && <span className="text-[10px] font-bold text-sky-300 light:text-sky-600">{metric}</span>}
+      {strongest && (
+        <span className="mt-0.5 rounded-full bg-fuchsia-400 px-1.5 text-[9px] font-black text-slate-900">👑 최강 상어</span>
+      )}
+      {tierBest && (
+        <span className="mt-0.5 rounded-full bg-violet-400 px-1.5 text-[9px] font-black text-slate-900">⭐ T{sh.tier} 최고</span>
+      )}
       {recommended && (
         <span className="mt-0.5 rounded-full bg-amber-400 px-1.5 text-[9px] font-black text-slate-900">🎯 추천 진화</span>
       )}
     </button>
+  );
+}
+
+/** 💪 강함 순위: overall rank by bot-sim per-dive income, with 👑/⭐ callouts. */
+function PowerRankBox({ def }: { def: SharkDef }) {
+  const rank = sharkPowerRank(def.id);
+  if (rank === 0) return null;
+  const strongest = def.id === STRONGEST_SHARK_ID;
+  const tierBest = TIER_BEST_IDS.has(def.id);
+  return (
+    <div
+      className={`rounded-lg border p-2 text-[11px] ${
+        strongest
+          ? "border-fuchsia-400/60 bg-fuchsia-500/15 light:border-fuchsia-300 light:bg-fuchsia-50"
+          : "border-white/10 bg-white/[0.03] light:border-slate-200 light:bg-slate-50"
+      }`}
+    >
+      <div className="font-black text-white light:text-slate-800">
+        {strongest ? "👑 전체 최강 상어!" : tierBest ? `⭐ 티어 ${def.tier} 최고 상어` : "💪 강함 순위"}{" "}
+        <span className="text-white/60 light:text-slate-500">
+          {rank}위 / {SHARK_POWER_RANK.length}종
+        </span>
+      </div>
+      <div className="mt-0.5 text-white/60 light:text-slate-600">
+        봇 시뮬레이션 잠수당 수익 약 {SIM_DIVE_INCOME[def.id].toFixed(1)}k🪙 기준
+      </div>
+    </div>
   );
 }
 

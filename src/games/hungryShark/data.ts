@@ -908,6 +908,24 @@ export const SIM_DIVE_INCOME: Record<string, number> = {
   basilisk: 47.1, hydra: 45.9, chimera: 54.3, nightshade: 49.3,
 };
 
+/** Sharks ranked by bot-sim per-dive income, strongest first (reef has no sim value and is left out). */
+export const SHARK_POWER_RANK: string[] = Object.keys(SIM_DIVE_INCOME)
+  .filter((id) => SIM_DIVE_INCOME[id] > 0)
+  .sort((a, b) => SIM_DIVE_INCOME[b] - SIM_DIVE_INCOME[a]);
+
+/** 👑 최강: the single best shark overall. */
+export const STRONGEST_SHARK_ID = SHARK_POWER_RANK[0];
+
+/** ⭐ best shark of each tier (T2~T4) by sim income. */
+export const TIER_BEST_IDS: Set<string> = new Set(
+  [2, 3, 4].map((tier) => SHARK_POWER_RANK.find((id) => sharkById(id).tier === tier)).filter((id): id is string => !!id),
+);
+
+/** 1-based overall power rank, or 0 when the shark has no sim value. */
+export function sharkPowerRank(id: string): number {
+  return SHARK_POWER_RANK.indexOf(id) + 1;
+}
+
 /** Value of evolving into `id`: its own income plus the best line after it (near-term and endgame both count). */
 function pathValue(id: string): number {
   const s = sharkById(id);

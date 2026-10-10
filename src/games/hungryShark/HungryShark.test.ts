@@ -1104,3 +1104,20 @@ describe("/stats details", () => {
     expect(shown).toEqual(["9,000", "10회", "40% (4/10)", "3회"]);
   });
 });
+
+describe("강함 하이라이트", () => {
+  it("picks the top-income shark overall and per tier", async () => {
+    const d = await import("./data");
+    const top = d.SHARK_POWER_RANK[0];
+    expect(d.STRONGEST_SHARK_ID).toBe(top);
+    expect(d.sharkPowerRank(top)).toBe(1);
+    expect(d.sharkPowerRank("reef")).toBe(0);
+    for (const tier of [2, 3, 4]) {
+      const best = d.SHARKS.filter((s) => s.tier === tier).reduce((a, b) =>
+        (d.SIM_DIVE_INCOME[b.id] ?? 0) > (d.SIM_DIVE_INCOME[a.id] ?? 0) ? b : a,
+      );
+      expect(d.TIER_BEST_IDS.has(best.id)).toBe(true);
+    }
+    expect(d.TIER_BEST_IDS.size).toBe(3);
+  });
+});
