@@ -149,33 +149,59 @@ export function ScrollPips({ count }: { count: number }) {
   );
 }
 
-const SHINE_CSS = `@keyframes sd-owned-shine{0%{transform:translateX(-120%) skewX(-20deg)}55%,100%{transform:translateX(220%) skewX(-20deg)}}`;
+const SHINE_CSS = `@keyframes sd-owned-shine{0%{transform:translateX(-120%) skewX(-20deg)}55%,100%{transform:translateX(220%) skewX(-20deg)}}
+@keyframes sd-owned-burst{0%{transform:scale(1);box-shadow:0 0 0 0 rgba(253,224,71,0)}18%{transform:scale(1.35);box-shadow:0 0 18px 6px rgba(253,224,71,.95);background:rgba(251,191,36,.75);color:#1c1917}45%{transform:scale(1.1);box-shadow:0 0 12px 4px rgba(253,224,71,.7)}70%{transform:scale(1.22);box-shadow:0 0 16px 5px rgba(253,224,71,.9);background:rgba(251,191,36,.6);color:#1c1917}100%{transform:scale(1);box-shadow:0 0 8px rgba(251,191,36,.45)}}
+@keyframes sd-owned-plus{0%{opacity:0;transform:translate(-50%,4px) scale(.6)}20%{opacity:1;transform:translate(-50%,-6px) scale(1.15)}75%{opacity:1;transform:translate(-50%,-12px) scale(1)}100%{opacity:0;transform:translate(-50%,-18px) scale(.9)}}
+.sd-owned-burst{animation:sd-owned-burst 1.1s ease-out 2}
+.sd-owned-plus{animation:sd-owned-plus 2.2s ease-out forwards}
+@media (prefers-reduced-motion:reduce){.sd-owned-burst,.sd-owned-plus{animation:none}.sd-owned-plus{display:none}}`;
 
-/** "카드 N" in the dock header — glints while there is something to look at, opens the owned-cards sheet. */
+/**
+ * "카드 N" in the dock header — glints while there is something to look at, opens the owned-cards sheet.
+ * Right after a purchase (count went up) it flares twice with a floating "+N"; the burst ends on animationend.
+ */
 function OwnedCardsButton({ count, onClick }: { count: number; onClick: () => void }) {
+  // Count the player has already "seen" — mounting at N never bursts, only later increases do.
+  const [seen, setSeen] = useState(count);
+  // A rematch can reset the count below `seen` — resync during render so the next purchase bursts again.
+  if (count < seen) setSeen(count);
+  const gained = count - seen;
+  const burst = gained > 0;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title="가지고 있는 카드 보기"
-      className={`relative overflow-hidden rounded-full border px-1.5 text-[10px] leading-tight font-bold transition hover:brightness-125 ${
-        count > 0
-          ? "border-amber-300/70 bg-amber-500/20 text-amber-100 shadow-[0_0_8px_rgba(251,191,36,0.45)] light:text-amber-800"
-          : "border-white/15 text-white/50 light:text-slate-500"
-      }`}
-    >
-      {count > 0 && (
-        <>
-          <style>{SHINE_CSS}</style>
+    <span className="relative inline-flex">
+      {count > 0 && <style>{SHINE_CSS}</style>}
+      <button
+        type="button"
+        onClick={onClick}
+        onAnimationEnd={(e) => {
+          if (e.target === e.currentTarget) setSeen(count);
+        }}
+        title="가지고 있는 카드 보기"
+        className={`relative z-10 overflow-hidden rounded-full border px-1.5 text-[10px] leading-tight font-bold transition hover:brightness-125 ${
+          count > 0
+            ? "border-amber-300/70 bg-amber-500/20 text-amber-100 shadow-[0_0_8px_rgba(251,191,36,0.45)] light:text-amber-800"
+            : "border-white/15 text-white/50 light:text-slate-500"
+        } ${burst ? "sd-owned-burst" : ""}`}
+      >
+        {count > 0 && (
           <span
             aria-hidden="true"
             className="pointer-events-none absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-transparent via-white/70 to-transparent motion-reduce:hidden"
-            style={{ animation: "sd-owned-shine 2.4s ease-in-out infinite" }}
+            style={{ animation: `sd-owned-shine ${burst ? "0.55s" : "2.4s"} ease-in-out infinite` }}
           />
-        </>
+        )}
+        <span className="relative">🃏 카드 {count}</span>
+      </button>
+      {burst && (
+        <span
+          key={count}
+          aria-hidden="true"
+          className="sd-owned-plus pointer-events-none absolute -top-3 left-1/2 z-20 rounded-full bg-amber-300 px-1 text-[10px] leading-tight font-black whitespace-nowrap text-stone-900 shadow-[0_0_10px_rgba(253,224,71,0.9)]"
+        >
+          +{gained}
+        </span>
       )}
-      <span className="relative">🃏 카드 {count}</span>
-    </button>
+    </span>
   );
 }
 
